@@ -36,6 +36,10 @@ static INBV_DISPLAY_STRING_FILTER InbvDisplayFilter = NULL;
 static KSPIN_LOCK InbvLock;
 static KIRQL InbvOldIrql;
 
+/* Set while a stopped machine draws past a holder it has frozen */
+static BOOLEAN InbvLockBypassed;
+static KIRQL InbvBypassOldIrql;
+
 /* The screen as it was when the snapshot was taken, and the room for it */
 static PUCHAR InbvSnapshotBuffer = NULL;
 static ULONG InbvSnapshotWidth = 0;
@@ -176,7 +180,19 @@ InbvAcquireLock(VOID)
 
     if (OldIrql < DISPATCH_LEVEL) KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
-    KeAcquireSpinLockAtDpcLevel(&InbvLock);
+    while (!KeTryToAcquireSpinLockAtDpcLevel(&InbvLock))
+    {
+        /* Inside the debugger or a bug check the holder may be a frozen processor */
+        if (KdEnteredDebugger || KeBugCheckActive)
+        {
+            InbvBypassOldIrql = OldIrql;
+            InbvLockBypassed = TRUE;
+            return;
+        }
+
+        YieldProcessor();
+    }
+
     InbvOldIrql = OldIrql;
 }
 
@@ -184,9 +200,18 @@ VOID
 NTAPI
 InbvReleaseLock(VOID)
 {
-    KIRQL OldIrql = InbvOldIrql;
+    KIRQL OldIrql;
 
-    KeReleaseSpinLockFromDpcLevel(&InbvLock);
+    if (InbvLockBypassed)
+    {
+        InbvLockBypassed = FALSE;
+        OldIrql = InbvBypassOldIrql;
+    }
+    else
+    {
+        OldIrql = InbvOldIrql;
+        KeReleaseSpinLockFromDpcLevel(&InbvLock);
+    }
 
     if (OldIrql < DISPATCH_LEVEL) KeLowerIrql(OldIrql);
 }

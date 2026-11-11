@@ -976,6 +976,7 @@ KdbEnterDebuggerException(
 
     KbdDisableMouse();
     DisplayAcquired = KdpScreenEnterStop(TRUE);
+    KdpScreenHoldOutput(TRUE);
 
     KdbpPagerReset();
     KdbpCliMainLoop(EnteredOnSingleStep);

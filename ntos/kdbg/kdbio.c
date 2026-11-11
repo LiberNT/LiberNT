@@ -100,13 +100,19 @@ KdbPrompt(
     _Out_ PCHAR Buffer,
     _In_ SIZE_T Size)
 {
+    SIZE_T Length;
+
     if ((Buffer == NULL) || (Size == 0))
         return 0;
 
     if (Prompt != NULL)
         KdbPuts(Prompt);
 
-    return KdIoReadLine(Buffer, Size);
+    KdpScreenHoldOutput(FALSE);
+    Length = KdIoReadLine(Buffer, Size);
+    KdpScreenHoldOutput(KdbActive);
+
+    return Length;
 }
 
 USHORT
@@ -122,8 +128,10 @@ KdbPromptString(
     if ((PromptString != NULL) && (PromptString->Buffer != NULL))
         KdbPutsN(PromptString->Buffer, PromptString->Length);
 
+    KdpScreenHoldOutput(FALSE);
     Length = KdIoReadLine(ResponseString->Buffer,
                           ResponseString->MaximumLength);
+    KdpScreenHoldOutput(KdbActive);
 
     ResponseString->Length = (USHORT)Length;
     return (USHORT)Length;

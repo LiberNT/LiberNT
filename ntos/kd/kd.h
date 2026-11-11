@@ -92,6 +92,10 @@ VOID
 KdpScreenEnterBugCheck(
     _In_ BOOLEAN FollowPrints);
 
+VOID
+KdpScreenHoldOutput(
+    _In_ BOOLEAN Hold);
+
 NTSTATUS
 NTAPI
 KdpScreenInit(

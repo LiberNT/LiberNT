@@ -145,6 +145,7 @@ KdbpPager(
         if (!KdbActive || (KdbpLinesPrinted + 1 < Rows))
             continue;
 
+        KdpScreenHoldOutput(FALSE);
         KdIoPuts("--- Press any key to go on, q to stop ---");
 
         {
@@ -152,6 +153,7 @@ KdbpPager(
             CHAR Key = KdpReadTermKey(&ScanCode);
 
             KdIoPuts("\r                                        \r");
+            KdpScreenHoldOutput(TRUE);
 
             if ((Key == 'q') || (Key == 'Q') || (Key == 0x03))
             {
