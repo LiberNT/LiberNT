@@ -738,6 +738,51 @@ NtDeleteAtom(
  * Says what is known about one name, or lists the numbers the table has handed
  * out. Both are written into room the caller set aside.
  */
+static
+NTSTATUS
+ExpCopyAtomBasicInformation(
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_reads_(NameLength) PCWSTR Name,
+    _In_ ULONG NameLength,
+    _In_ USHORT UsageCount,
+    _In_ BOOLEAN Pinned)
+{
+    PATOM_BASIC_INFORMATION Info = Buffer;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Fits;
+    ULONG Copy;
+
+    Fits = (Length - (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name)) /
+           (ULONG)sizeof(WCHAR);
+
+    _SEH2_TRY
+    {
+        Info->UsageCount = UsageCount;
+        Info->Flags = Pinned ? 1 : 0;
+        Info->NameLength = (USHORT)(NameLength * sizeof(WCHAR));
+
+        if (Fits < 2 && NameLength != 0)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            Copy = min(NameLength, Fits - 1);
+            Info->NameLength = (USHORT)(Copy * sizeof(WCHAR));
+            RtlCopyMemory(Info->Name, Name, Copy * sizeof(WCHAR));
+            Info->Name[Copy] = UNICODE_NULL;
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtQueryInformationAtom(
@@ -864,53 +909,50 @@ NtQueryInformationAtom(
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    ExpLockAtomTable(Table, FALSE);
+    if (Atom == 0) return STATUS_INVALID_PARAMETER;
 
-    Entry = ExpFindAtomByNumber(Table, Atom);
-    if (Entry == NULL)
+    if (Atom < EXP_ATOM_FIRST)
     {
-        ExpUnlockAtomTable(Table);
-        return STATUS_INVALID_HANDLE;
+        WCHAR Digits[8];
+        UNICODE_STRING Number;
+
+        Digits[0] = L'#';
+        RtlInitEmptyUnicodeString(&Number, &Digits[1], sizeof(Digits) - sizeof(WCHAR));
+        RtlIntegerToUnicodeString(Atom, 10, &Number);
+
+        Required = (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name) +
+                   Number.Length + 2 * (ULONG)sizeof(WCHAR);
+
+        Status = ExpCopyAtomBasicInformation(AtomInformation,
+                                             AtomInformationLength,
+                                             Digits,
+                                             Number.Length / sizeof(WCHAR) + 1,
+                                             1,
+                                             TRUE);
     }
-
-    Required = (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name) +
-               (Entry->NameLength + 1) * (ULONG)sizeof(WCHAR);
-
-    _SEH2_TRY
+    else
     {
-        PATOM_BASIC_INFORMATION Info = AtomInformation;
-        ULONG Room;
-        ULONG Fits;
+        ExpLockAtomTable(Table, FALSE);
 
-        Info->UsageCount = Entry->ReferenceCount;
-        Info->Flags = Entry->Pinned ? 1 : 0;
-        Info->NameLength = (USHORT)(Entry->NameLength * sizeof(WCHAR));
-
-        Room = AtomInformationLength -
-               (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name);
-        Fits = Room / (ULONG)sizeof(WCHAR);
-
-        if (Fits != 0)
+        Entry = ExpFindAtomByNumber(Table, Atom);
+        if (Entry == NULL)
         {
-            ULONG Copy = Entry->NameLength;
-
-            if (Copy > Fits - 1)
-            {
-                Copy = Fits - 1;
-                Info->NameLength = (USHORT)(Copy * sizeof(WCHAR));
-            }
-
-            RtlCopyMemory(Info->Name, Entry->Name, Copy * sizeof(WCHAR));
-            Info->Name[Copy] = UNICODE_NULL;
+            ExpUnlockAtomTable(Table);
+            return STATUS_INVALID_HANDLE;
         }
-    }
-    _SEH2_EXCEPT(ExSystemExceptionFilter())
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
 
-    ExpUnlockAtomTable(Table);
+        Required = (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name) +
+                   (Entry->NameLength + 1) * (ULONG)sizeof(WCHAR);
+
+        Status = ExpCopyAtomBasicInformation(AtomInformation,
+                                             AtomInformationLength,
+                                             Entry->Name,
+                                             Entry->NameLength,
+                                             Entry->ReferenceCount,
+                                             Entry->Pinned);
+
+        ExpUnlockAtomTable(Table);
+    }
 
     if (ReturnLength != NULL)
     {
