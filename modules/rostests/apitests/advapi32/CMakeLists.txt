@@ -14,6 +14,7 @@ list(APPEND SOURCE
     InitiateShutdown.c
     IntegrityLabels.c
     LogonSession.c
+    LogonSessionEnd.c
     LogonUserNetwork.c
     IsTextUnicode.c
     LockServiceDatabase.c

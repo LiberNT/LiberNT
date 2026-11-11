@@ -30,7 +30,8 @@ typedef enum _LSAP_API_NUMBER
 {
     LsapAdtWriteLogApi = 1,
     LsapComponentTestApi,
-    LsapAsyncApi
+    LsapAsyncApi,
+    LsapLogonSessionDeletedApi
 } LSAP_API_NUMBER;
 
 typedef struct _LSAP_RM_API_MESSAGE
@@ -44,7 +45,7 @@ typedef struct _LSAP_RM_API_MESSAGE
         {
             ULONG Info1;
         } WriteLog;
-
+        LUID LogonLuid;
     } u;
 } LSAP_RM_API_MESSAGE, *PLSAP_RM_API_MESSAGE;
 

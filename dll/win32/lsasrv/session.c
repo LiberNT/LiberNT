@@ -67,6 +67,8 @@ LsapCopyString32(PUNICODE_STRING32 Destination, const UNICODE_STRING *Source)
 LIST_ENTRY SessionListHead;
 ULONG SessionCount;
 
+static RTL_SRWLOCK LogonSessionLock;
+
 /* FUNCTIONS ***************************************************************/
 
 VOID
@@ -74,6 +76,18 @@ LsapInitLogonSessions(VOID)
 {
     InitializeListHead(&SessionListHead);
     SessionCount = 0;
+}
+
+VOID
+LsapLockLogonSessions(VOID)
+{
+    RtlAcquireSRWLockExclusive(&LogonSessionLock);
+}
+
+VOID
+LsapUnlockLogonSessions(VOID)
+{
+    RtlReleaseSRWLockExclusive(&LogonSessionLock);
 }
 
 
@@ -354,6 +368,14 @@ LsapEnumLogonSessions(IN OUT PLSA_API_MSG RequestMsg)
     if (RequestMsg->EnumLogonSessions.Request.PointerSize != sizeof(ULONG) &&
         RequestMsg->EnumLogonSessions.Request.PointerSize != sizeof(ULONGLONG))
         return STATUS_INVALID_PARAMETER;
+
+    if (SessionCount == 0)
+    {
+        RequestMsg->EnumLogonSessions.Reply.LogonSessionCount = 0;
+        RequestMsg->EnumLogonSessions.Reply.Reserved = 0;
+        RequestMsg->EnumLogonSessions.Reply.LogonSessionBuffer = 0;
+        return STATUS_SUCCESS;
+    }
 
     Length = SessionCount * sizeof(LUID);
     SessionList = RtlAllocateHeap(RtlGetProcessHeap(),

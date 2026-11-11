@@ -44,6 +44,23 @@ LsapAsync(
 }
 
 static
+VOID
+LsapLogonSessionDeleted(
+    PLSAP_RM_API_MESSAGE Message)
+{
+    static const LUID SystemLuid = SYSTEM_LUID;
+    PLUID LogonId = &Message->u.LogonLuid;
+
+    /* The well-known sessions, the system's own and the service accounts', stay */
+    if (LogonId->HighPart == 0 && LogonId->LowPart <= SystemLuid.LowPart)
+        return;
+
+    LsapLockLogonSessions();
+    LsapDeleteLogonSession(LogonId);
+    LsapUnlockLogonSessions();
+}
+
+static
 DWORD
 WINAPI
 LsapRmServerThread(
@@ -155,6 +172,10 @@ LsapRmServerThread(
 
                 case LsapComponentTestApi:
                     LsapComponentTest(&Message);
+                    break;
+
+                case LsapLogonSessionDeletedApi:
+                    LsapLogonSessionDeleted(&Message);
                     break;
 
                 default:

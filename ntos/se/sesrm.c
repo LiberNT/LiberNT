@@ -22,6 +22,12 @@ typedef struct _SEP_TERMINATION_NOTIFY
     PSE_LOGON_SESSION_TERMINATED_ROUTINE Routine;
 } SEP_TERMINATION_NOTIFY, *PSEP_TERMINATION_NOTIFY;
 
+typedef struct _SEP_LSA_NOTICE
+{
+    LIST_ENTRY Entry;
+    LUID LogonId;
+} SEP_LSA_NOTICE, *PSEP_LSA_NOTICE;
+
 static PSEP_LOGON_SESSION_REFERENCES SepLogonSessions = NULL;
 static KGUARDED_MUTEX SepLogonSessionLock;
 
@@ -31,6 +37,12 @@ static KGUARDED_MUTEX SepTerminationNotifyLock;
 static HANDLE SepRmCommandPort = NULL;
 static HANDLE SepRmCommandMessagePort = NULL;
 static HANDLE SepLsaInitEvent = NULL;
+
+static LIST_ENTRY SepLsaNoticeList;
+static KGUARDED_MUTEX SepLsaNoticeLock;
+static WORK_QUEUE_ITEM SepLsaNoticeWorkItem;
+static BOOLEAN SepLsaNoticeQueued = FALSE;
+static HANDLE SepLsaCommandPort = NULL;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -180,6 +192,125 @@ SepDeleteLogonSession(
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+SepTellLsaSessionUnused(
+    _In_ PLUID LogonId)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\SeLsaCommandPort");
+    ALPC_PORT_ATTRIBUTES PortAttributes;
+    LSAP_RM_API_MESSAGE Message;
+    LSAP_RM_API_MESSAGE Reply;
+    SIZE_T Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (SepLsaCommandPort == NULL)
+    {
+        RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
+        PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
+        PortAttributes.SecurityQos.Length = sizeof(SECURITY_QUALITY_OF_SERVICE);
+        PortAttributes.SecurityQos.ImpersonationLevel = SecurityIdentification;
+        PortAttributes.SecurityQos.ContextTrackingMode = SECURITY_DYNAMIC_TRACKING;
+        PortAttributes.SecurityQos.EffectiveOnly = TRUE;
+
+        Status = NtAlpcConnectPort(&SepLsaCommandPort,
+                                   &Name,
+                                   NULL,
+                                   &PortAttributes,
+                                   ALPC_SYNC_CONNECTION,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("SE: could not reach the authority's command port (0x%08lx)\n", Status);
+            SepLsaCommandPort = NULL;
+            return;
+        }
+    }
+
+    RtlZeroMemory(&Message, sizeof(Message));
+    Message.Header.u1.s1.TotalLength = (CSHORT)(sizeof(PORT_MESSAGE) + sizeof(ULONG) + sizeof(LUID));
+    Message.Header.u1.s1.DataLength = Message.Header.u1.s1.TotalLength - (CSHORT)sizeof(PORT_MESSAGE);
+    Message.ApiNumber = LsapLogonSessionDeletedApi;
+    Message.u.LogonLuid = *LogonId;
+
+    Length = sizeof(Reply);
+    Status = NtAlpcSendWaitReceivePort(SepLsaCommandPort,
+                                       ALPC_MSGFLG_SYNC_REQUEST,
+                                       &Message.Header,
+                                       NULL,
+                                       &Reply.Header,
+                                       &Length,
+                                       NULL,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("SE: the authority did not take an ended session (0x%08lx)\n", Status);
+}
+
+static
+VOID
+NTAPI
+SepLsaNoticeWorker(
+    _In_ PVOID Context)
+{
+    PSEP_LSA_NOTICE Notice;
+    PLIST_ENTRY Entry;
+
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(Context);
+
+    for (;;)
+    {
+        KeAcquireGuardedMutex(&SepLsaNoticeLock);
+
+        if (IsListEmpty(&SepLsaNoticeList))
+        {
+            SepLsaNoticeQueued = FALSE;
+            KeReleaseGuardedMutex(&SepLsaNoticeLock);
+            return;
+        }
+
+        Entry = RemoveHeadList(&SepLsaNoticeList);
+        KeReleaseGuardedMutex(&SepLsaNoticeLock);
+
+        Notice = CONTAINING_RECORD(Entry, SEP_LSA_NOTICE, Entry);
+        SepTellLsaSessionUnused(&Notice->LogonId);
+        ExFreePoolWithTag(Notice, TAG_SE);
+    }
+}
+
+static
+VOID
+SepQueueLsaNotice(
+    _In_ PLUID LogonId)
+{
+    PSEP_LSA_NOTICE Notice;
+    BOOLEAN Queue;
+
+    PAGED_CODE();
+
+    Notice = ExAllocatePoolWithTag(PagedPool, sizeof(*Notice), TAG_SE);
+    /* FIXME: without memory the authority is not told, and the session lasts until it ends it */
+    if (Notice == NULL) return;
+
+    Notice->LogonId = *LogonId;
+
+    KeAcquireGuardedMutex(&SepLsaNoticeLock);
+    InsertTailList(&SepLsaNoticeList, &Notice->Entry);
+    Queue = !SepLsaNoticeQueued;
+    SepLsaNoticeQueued = TRUE;
+    KeReleaseGuardedMutex(&SepLsaNoticeLock);
+
+    if (Queue) ExQueueWorkItem(&SepLsaNoticeWorkItem, DelayedWorkQueue);
+}
+
 /*
  * Serves the authority that decides who is logged on. It says when a session
  * begins and when it is over, and every command is answered.
@@ -307,6 +438,10 @@ SepRmInitializeSessions(VOID)
     KeInitializeGuardedMutex(&SepTerminationNotifyLock);
     InitializeListHead(&SepTerminationNotifyList);
 
+    KeInitializeGuardedMutex(&SepLsaNoticeLock);
+    InitializeListHead(&SepLsaNoticeList);
+    ExInitializeWorkItem(&SepLsaNoticeWorkItem, SepLsaNoticeWorker, NULL);
+
     /*
      * The system and the anonymous logon are there before anything could log
      * anyone on, because the tokens built during start-up belong to them.
@@ -382,8 +517,7 @@ SeRmInitPhase1(VOID)
      * Nothing waits for the authority to arrive: it starts later, and the
      * system has to come up whether or not it ever does.
      */
-    /* TODO: the authority's own command port is never connected to, so no
-     * audit record is handed to it; the records are dropped */
+    /* TODO: no audit record is handed to the authority; the records are dropped */
     Status = PsCreateSystemThread(&ThreadHandle,
                                   THREAD_ALL_ACCESS,
                                   NULL,
@@ -430,6 +564,7 @@ SepRmDereferenceLogonSession(
     PSEP_LOGON_SESSION_REFERENCES *Link;
     PDEVICE_MAP DeviceMap = NULL;
     BOOLEAN Notify = FALSE;
+    BOOLEAN TellLsa;
     LUID Ended;
 
     PAGED_CODE();
@@ -447,7 +582,12 @@ SepRmDereferenceLogonSession(
 
     if (Session->ReferenceCount != 0)
     {
+        /* The one reference left is the authority's own: no token holds the session any more */
+        TellLsa = (Session->ReferenceCount == 1);
+        Ended = Session->LogonId;
         KeReleaseGuardedMutex(&SepLogonSessionLock);
+
+        if (TellLsa) SepQueueLsaNotice(&Ended);
         return STATUS_SUCCESS;
     }
 
