@@ -275,13 +275,20 @@ CmpOpenOrCreateKey(
         _SEH2_TRY
         {
             ProbeForWriteHandle(KeyHandle);
+            *KeyHandle = NULL;
             if (Disposition != NULL) ProbeForWriteUlong(Disposition);
+            ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
+            (VOID)*(volatile ULONG *)&ObjectAttributes->Length;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
             _SEH2_YIELD(return _SEH2_GetExceptionCode());
         }
         _SEH2_END;
+    }
+    else
+    {
+        *KeyHandle = NULL;
     }
 
     _SEH2_TRY
