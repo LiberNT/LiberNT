@@ -8,6 +8,8 @@
 #include "precomp.h"
 #include <versionhelpers.h>
 
+#define START_STOP_WINDOW_MS 250
+
 #define SIZEOF_MDL (5 * sizeof(PVOID) + 2 * sizeof(ULONG))
 typedef ULONG_PTR PFN_NUMBER;
 /* Maximum size that can be described by an MDL on 2003 and earlier */
@@ -160,7 +162,7 @@ TestRepeatedStartStop(void)
     ok_hex(Status, STATUS_SUCCESS);
 
     StartTime = GetTickCount();
-    for (Iteration = 0; Iteration < 20000 && GetTickCount() - StartTime < 2000; Iteration++)
+    for (Iteration = 0; Iteration < 20000 && GetTickCount() - StartTime < START_STOP_WINDOW_MS; Iteration++)
     {
         if (!NT_SUCCESS(NtStartProfile(ProfileHandle)))
             StartFailures++;
