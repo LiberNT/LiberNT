@@ -2372,6 +2372,7 @@ ObDuplicateObject(
     if ((Options & DUPLICATE_CLOSE_SOURCE) &&
         (SourceProcess == TargetProcess) &&
         ((Granted & ~SourceAccess) == 0) &&
+        !(HandleInformation.HandleAttributes & OBJ_PROTECT_CLOSE) &&
         (ObpIsKernelHandle(SourceHandle, PreviousMode) == KernelHandle))
     {
         Status = ObpReuseHandleForDuplicate(SourceHandle,
