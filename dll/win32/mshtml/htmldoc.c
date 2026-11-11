@@ -5507,6 +5507,8 @@ static HRESULT HTMLDocumentNode_invoke(DispatchEx *dispex, DISPID id, LCID lcid,
     unsigned i;
     HRESULT hres;
 
+    if(flags == DISPATCH_PROPERTYPUT && This->node.event_target.dispex.jsdisp)
+        return S_FALSE;
     if(flags != DISPATCH_PROPERTYGET && flags != (DISPATCH_METHOD|DISPATCH_PROPERTYGET))
         return MSHTML_E_INVALID_PROPERTY;
 
