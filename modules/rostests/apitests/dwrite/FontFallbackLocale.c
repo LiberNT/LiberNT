@@ -135,6 +135,58 @@ static void TestFullMapping(IDWriteFontFallback *pFallback, const WCHAR *pszName
     }
 }
 
+static IDWriteFont *MapOne(IDWriteFontFallback *pFallback, const WCHAR *pszText, const WCHAR *pszLocale)
+{
+    LOCALE_SOURCE source = { { &SourceVtbl }, pszText, (UINT32)wcslen(pszText), pszLocale };
+    IDWriteFont *pFont = NULL;
+    UINT32 cchMapped = 0;
+    FLOAT scale = 0.0f;
+
+    IDWriteFontFallback_MapCharacters(pFallback, &source.IDWriteTextAnalysisSource_iface, 0, source.cchText, NULL, NULL,
+                                      DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                      &cchMapped, &pFont, &scale);
+    return pFont;
+}
+
+static void GetFamilyName(IDWriteFont *pFont, WCHAR *pszName, UINT32 cchName)
+{
+    IDWriteFontFamily *pFamily = NULL;
+    IDWriteLocalizedStrings *pNames = NULL;
+
+    pszName[0] = 0;
+    if (SUCCEEDED(IDWriteFont_GetFontFamily(pFont, &pFamily)) &&
+        SUCCEEDED(IDWriteFontFamily_GetFamilyNames(pFamily, &pNames)))
+    {
+        IDWriteLocalizedStrings_GetString(pNames, 0, pszName, cchName);
+    }
+    if (pNames)
+        IDWriteLocalizedStrings_Release(pNames);
+    if (pFamily)
+        IDWriteFontFamily_Release(pFamily);
+}
+
+static void TestParentLocale(IDWriteFontFallback *pFallback, const WCHAR *pszText, const WCHAR *pszLocale,
+                             const WCHAR *pszParent)
+{
+    IDWriteFont *pFont = MapOne(pFallback, pszText, pszLocale);
+    IDWriteFont *pParentFont = MapOne(pFallback, pszText, pszParent);
+    WCHAR szFamily[64], szParentFamily[64];
+
+    ok(pFont != NULL, "U+%04X %ls: no font\n", pszText[0], pszLocale);
+    ok(pParentFont != NULL, "U+%04X %ls: no font\n", pszText[0], pszParent);
+    if (pFont && pParentFont)
+    {
+        GetFamilyName(pFont, szFamily, _countof(szFamily));
+        GetFamilyName(pParentFont, szParentFamily, _countof(szParentFamily));
+        ok(!wcscmp(szFamily, szParentFamily), "U+%04X: %ls maps to %ls, %ls to %ls\n", pszText[0], pszLocale,
+           szFamily, pszParent, szParentFamily);
+    }
+    if (pFont)
+        IDWriteFont_Release(pFont);
+    if (pParentFont)
+        IDWriteFont_Release(pParentFont);
+}
+
 static BOOL IsUserLocale(const WCHAR *pszLocale)
 {
     WCHAR szUser[LOCALE_NAME_MAX_LENGTH];
@@ -164,6 +216,11 @@ START_TEST(FontFallbackLocale)
         TestFullMapping(pFallback, L"mixed, zh-Hans", szMixed, L"zh-Hans");
         if (IsUserLocale(L"zh-CN"))
             TestFullMapping(pFallback, L"mixed, no locale, zh-CN user", szMixed, NULL);
+        TestParentLocale(pFallback, L"\xfe30", L"ja-JP", L"ja");
+        TestParentLocale(pFallback, L"\xfe30", L"ko-KR", L"ko");
+        TestParentLocale(pFallback, L"\x4e3b", L"zh-TW", L"zh-Hant");
+        TestParentLocale(pFallback, L"\x4e3b", L"zh-HK", L"zh-Hant");
+        TestParentLocale(pFallback, L"\x4e3b", L"zh-SG", L"zh-Hans");
         IDWriteFontFallback_Release(pFallback);
     }
     IDWriteFactory2_Release(pFactory);
