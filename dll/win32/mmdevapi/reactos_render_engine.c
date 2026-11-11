@@ -25,13 +25,15 @@
 #endif
 
 #define RENDER_REGION_MAGIC 0x52415352 /* RSAR */
-#define RENDER_REGION_VERSION 2
+#define RENDER_REGION_VERSION 3
 #define RENDER_CLIENT_CAPACITY 16
 #define RENDER_RING_FRAMES 8192
 #define RENDER_MAX_FRAME_SIZE 32
 #define RENDER_PENDING_CHUNK_CAPACITY 64
 #define RENDER_WORKER_INTERVAL_MS 5
 #define RENDER_OWNER_RETRY_MS 100
+#define RENDER_PREEMPT_TIMEOUT_MS 2000
+#define RENDER_PREEMPT_POLL_MS 5
 
 struct shared_render_slot
 {
@@ -61,6 +63,9 @@ struct shared_render_region
     DWORD owner_process_id;
     FILETIME owner_process_start_time;
     LONG owner_ready;
+    DWORD exclusive_process_id;
+    FILETIME exclusive_process_start_time;
+    LONG exclusive_generation;
     struct shared_render_slot clients[RENDER_CLIENT_CAPACITY];
 };
 
@@ -97,6 +102,7 @@ struct reactos_shared_render_client
     struct local_render_endpoint *endpoint;
     DWORD slot_index;
     DWORD token;
+    LONG exclusive_generation;
     HANDLE event;
 };
 
@@ -319,6 +325,19 @@ owner_is_alive_locked(const struct local_render_endpoint *endpoint)
         endpoint->region->owner_process_id, &endpoint->region->owner_process_start_time, &endpoint->process_start_time);
 }
 
+static BOOL
+exclusive_is_alive_locked(const struct local_render_endpoint *endpoint)
+{
+    return process_record_is_alive(endpoint->region->exclusive_process_id,
+                                   &endpoint->region->exclusive_process_start_time, &endpoint->process_start_time);
+}
+
+static BOOL
+client_preempted_locked(const struct reactos_shared_render_client *client)
+{
+    return client->endpoint->region->exclusive_generation != client->exclusive_generation;
+}
+
 static void
 clear_owner_locked(struct local_render_endpoint *endpoint)
 {
@@ -354,10 +373,15 @@ validate_region_locked(struct local_render_endpoint *endpoint)
     remove_stale_clients_locked(endpoint);
     if (region->owner_process_id && !owner_is_alive_locked(endpoint))
         clear_owner_locked(endpoint);
+    if (region->exclusive_process_id && !exclusive_is_alive_locked(endpoint))
+    {
+        region->exclusive_process_id = 0;
+        ZeroMemory(&region->exclusive_process_start_time, sizeof(region->exclusive_process_start_time));
+    }
 
     if (!formats_equal(&region->format, &endpoint->format))
     {
-        if (region_has_clients(region) || region->owner_process_id)
+        if (region_has_clients(region) || region->owner_process_id || region->exclusive_process_id)
             return AUDCLNT_E_UNSUPPORTED_FORMAT;
         initialize_region_locked(endpoint);
     }
@@ -429,6 +453,12 @@ create_transport(struct local_render_endpoint *endpoint, BOOL require_success)
     {
         unlock_endpoint(endpoint);
         return hr;
+    }
+
+    if (exclusive_is_alive_locked(endpoint))
+    {
+        unlock_endpoint(endpoint);
+        return require_success ? AUDCLNT_E_DEVICE_IN_USE : S_OK;
     }
 
     if (!endpoint->region->owner_process_id)
@@ -879,6 +909,24 @@ render_worker(void *parameter)
         if (!endpoint->transport)
             continue;
 
+        if (lock_endpoint(endpoint))
+        {
+            BOOL preempted = exclusive_is_alive_locked(endpoint);
+
+            unlock_endpoint(endpoint);
+            if (preempted)
+            {
+                stop_and_destroy_transport(endpoint);
+                if (lock_endpoint(endpoint))
+                {
+                    if (owner_is_current_process_locked(endpoint))
+                        clear_owner_locked(endpoint);
+                    unlock_endpoint(endpoint);
+                }
+                continue;
+            }
+        }
+
         retire_completed_chunks(endpoint);
 
         if (lock_endpoint(endpoint))
@@ -1001,7 +1049,7 @@ create_local_endpoint(
     if (!get_current_process_start_time(&endpoint->process_start_time))
         ZeroMemory(&endpoint->process_start_time, sizeof(endpoint->process_start_time));
 
-    swprintf(mapping_name, ARRAY_SIZE(mapping_name), L"Local\\ReactOS.CoreAudio.Render.%lu.v2", endpoint_index);
+    swprintf(mapping_name, ARRAY_SIZE(mapping_name), L"Local\\ReactOS.CoreAudio.Render.%lu.v3", endpoint_index);
     swprintf(mutex_name, ARRAY_SIZE(mutex_name), L"%s.Lock", mapping_name);
     swprintf(wake_name, ARRAY_SIZE(wake_name), L"%s.Wake", mapping_name);
 
@@ -1104,8 +1152,11 @@ reactos_shared_render_create(
         goto failed_locked;
     }
     hr = validate_region_locked(endpoint);
+    if (SUCCEEDED(hr) && exclusive_is_alive_locked(endpoint))
+        hr = AUDCLNT_E_DEVICE_IN_USE;
     if (SUCCEEDED(hr))
         hr = allocate_client_slot_locked(endpoint, capacity_frames, &slot_index, &token);
+    new_client->exclusive_generation = endpoint->region->exclusive_generation;
     unlock_endpoint(endpoint);
     if (FAILED(hr))
         goto failed_locked;
@@ -1121,7 +1172,7 @@ reactos_shared_render_create(
         goto failed_client_locked;
     }
 
-    if (new_endpoint)
+    if (!endpoint->worker_thread)
     {
         hr = create_transport(endpoint, TRUE);
         if (FAILED(hr))
@@ -1213,6 +1264,133 @@ reactos_shared_render_release(struct reactos_shared_render_client *client)
         destroy_local_endpoint(endpoint);
 }
 
+static void
+release_local_endpoint(struct local_render_endpoint *endpoint)
+{
+    BOOL destroy = FALSE;
+
+    EnterCriticalSection(&endpoint_list_lock);
+    if (endpoint->reference_count && !--endpoint->reference_count)
+    {
+        struct local_render_endpoint **link = &endpoint_list;
+
+        while (*link && *link != endpoint)
+            link = &(*link)->next;
+        if (*link)
+            *link = endpoint->next;
+        destroy = TRUE;
+    }
+    LeaveCriticalSection(&endpoint_list_lock);
+    if (destroy)
+        destroy_local_endpoint(endpoint);
+}
+
+HRESULT
+reactos_shared_render_open_exclusive(
+    DWORD endpoint_index,
+    const WAVEFORMATEXTENSIBLE *format,
+    const struct reactos_render_transport_ops *transport_ops,
+    struct reactos_shared_render_exclusive **exclusive)
+{
+    struct local_render_endpoint *endpoint;
+    ULONGLONG deadline;
+    UINT32 i;
+    HRESULT hr;
+
+    if (!format || !transport_ops || !exclusive || !format->Format.nBlockAlign ||
+        format->Format.nBlockAlign > RENDER_MAX_FRAME_SIZE)
+        return E_INVALIDARG;
+    if (FAILED(hr = ensure_endpoint_list()))
+        return hr;
+
+    EnterCriticalSection(&endpoint_list_lock);
+    endpoint = find_local_endpoint(endpoint_index, format);
+    if (!endpoint)
+    {
+        hr = create_local_endpoint(endpoint_index, format, transport_ops, &endpoint);
+        if (FAILED(hr))
+        {
+            LeaveCriticalSection(&endpoint_list_lock);
+            return hr;
+        }
+        endpoint->next = endpoint_list;
+        endpoint_list = endpoint;
+    }
+    ++endpoint->reference_count;
+    LeaveCriticalSection(&endpoint_list_lock);
+
+    if (!lock_endpoint(endpoint))
+    {
+        release_local_endpoint(endpoint);
+        return E_FAIL;
+    }
+    hr = validate_region_locked(endpoint);
+    if (SUCCEEDED(hr) && exclusive_is_alive_locked(endpoint))
+        hr = AUDCLNT_E_DEVICE_IN_USE;
+    if (FAILED(hr))
+    {
+        unlock_endpoint(endpoint);
+        release_local_endpoint(endpoint);
+        return hr;
+    }
+    InterlockedIncrement(&endpoint->region->exclusive_generation);
+    endpoint->region->exclusive_process_id = GetCurrentProcessId();
+    endpoint->region->exclusive_process_start_time = endpoint->process_start_time;
+    for (i = 0; i < RENDER_CLIENT_CAPACITY; ++i)
+        endpoint->region->clients[i].started = FALSE;
+    unlock_endpoint(endpoint);
+    SetEvent(endpoint->wake_event);
+
+    deadline = GetTickCount64() + RENDER_PREEMPT_TIMEOUT_MS;
+    for (;;)
+    {
+        BOOL owned;
+
+        if (!lock_endpoint(endpoint))
+        {
+            hr = E_FAIL;
+            break;
+        }
+        owned = endpoint->region->owner_process_id && owner_is_alive_locked(endpoint);
+        unlock_endpoint(endpoint);
+        if (!owned)
+        {
+            *exclusive = (struct reactos_shared_render_exclusive *)endpoint;
+            return S_OK;
+        }
+        if (GetTickCount64() >= deadline)
+        {
+            hr = AUDCLNT_E_DEVICE_IN_USE;
+            break;
+        }
+        Sleep(RENDER_PREEMPT_POLL_MS);
+    }
+    reactos_shared_render_close_exclusive((struct reactos_shared_render_exclusive *)endpoint);
+    return hr;
+}
+
+void
+reactos_shared_render_close_exclusive(struct reactos_shared_render_exclusive *exclusive)
+{
+    struct local_render_endpoint *endpoint = (struct local_render_endpoint *)exclusive;
+
+    if (!endpoint)
+        return;
+    if (lock_endpoint(endpoint))
+    {
+        if (endpoint->region->exclusive_process_id == GetCurrentProcessId() &&
+            file_times_equal(&endpoint->region->exclusive_process_start_time, &endpoint->process_start_time))
+        {
+            endpoint->region->exclusive_process_id = 0;
+            ZeroMemory(&endpoint->region->exclusive_process_start_time,
+                       sizeof(endpoint->region->exclusive_process_start_time));
+        }
+        unlock_endpoint(endpoint);
+    }
+    SetEvent(endpoint->wake_event);
+    release_local_endpoint(endpoint);
+}
+
 HRESULT
 reactos_shared_render_start(struct reactos_shared_render_client *client)
 {
@@ -1221,7 +1399,7 @@ reactos_shared_render_start(struct reactos_shared_render_client *client)
     if (!client || !lock_endpoint(client->endpoint))
         return AUDCLNT_E_DEVICE_INVALIDATED;
     slot = find_client_slot_locked(client);
-    if (!slot)
+    if (!slot || client_preempted_locked(client))
     {
         unlock_endpoint(client->endpoint);
         return AUDCLNT_E_DEVICE_INVALIDATED;
@@ -1305,7 +1483,7 @@ reactos_shared_render_write(struct reactos_shared_render_client *client, const B
     if (!client || (!data && frames) || !lock_endpoint(client->endpoint))
         return E_INVALIDARG;
     slot = find_client_slot_locked(client);
-    if (!slot)
+    if (!slot || client_preempted_locked(client))
     {
         unlock_endpoint(client->endpoint);
         return AUDCLNT_E_DEVICE_INVALIDATED;
@@ -1346,7 +1524,7 @@ reactos_shared_render_get_padding(struct reactos_shared_render_client *client, U
     if (!client || !padding || !lock_endpoint(client->endpoint))
         return E_INVALIDARG;
     slot = find_client_slot_locked(client);
-    if (!slot)
+    if (!slot || client_preempted_locked(client))
     {
         unlock_endpoint(client->endpoint);
         return AUDCLNT_E_DEVICE_INVALIDATED;
@@ -1366,7 +1544,7 @@ reactos_shared_render_get_position(struct reactos_shared_render_client *client, 
     if (!client || !position || !lock_endpoint(client->endpoint))
         return E_INVALIDARG;
     slot = find_client_slot_locked(client);
-    if (!slot)
+    if (!slot || client_preempted_locked(client))
     {
         unlock_endpoint(client->endpoint);
         return AUDCLNT_E_DEVICE_INVALIDATED;
