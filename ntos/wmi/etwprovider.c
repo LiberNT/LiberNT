@@ -43,7 +43,14 @@ typedef struct _ETWP_PROVIDER
     volatile ULONG LoggerId;
 } ETWP_PROVIDER, *PETWP_PROVIDER;
 
-static PETWP_PROVIDER EtwpProviderSlots[ETWP_PROVIDER_SLOTS];
+typedef struct _ETWP_PROVIDER_BLOCK
+{
+    struct _ETWP_PROVIDER_BLOCK *Next;
+    PETWP_PROVIDER Slots[ETWP_PROVIDER_SLOTS];
+} ETWP_PROVIDER_BLOCK, *PETWP_PROVIDER_BLOCK;
+
+/* The first block of slots; a full block is chained to another, and none is ever freed */
+static ETWP_PROVIDER_BLOCK EtwpProviderBlock;
 static EX_PUSH_LOCK EtwpProviderLock;
 static ULONG EtwpProviderCookieSeed = 1;
 
@@ -55,19 +62,41 @@ static volatile LONGLONG EtwpActivityIdSequence;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+/* Where a slot lives, or NULL past the last block */
+static
+PETWP_PROVIDER *
+EtwpSlotAddress(
+    _In_ ULONG Slot)
+{
+    PETWP_PROVIDER_BLOCK Block = &EtwpProviderBlock;
+
+    while (Slot >= ETWP_PROVIDER_SLOTS)
+    {
+        Block = ReadPointerAcquire((PVOID volatile *)&Block->Next);
+        if (Block == NULL) return NULL;
+
+        Slot -= ETWP_PROVIDER_SLOTS;
+    }
+
+    return &Block->Slots[Slot];
+}
+
 static
 PETWP_PROVIDER
 EtwpProviderFromHandle(
     _In_ REGHANDLE RegHandle)
 {
+    PETWP_PROVIDER *Entry;
     PETWP_PROVIDER Provider;
     ULONG Cookie = (ULONG)(RegHandle >> 32);
     ULONG Slot = (ULONG)(RegHandle & MAXULONG);
 
-    if (Slot >= ETWP_PROVIDER_SLOTS) return NULL;
     if (!ETWP_COOKIE_IS_LIVE(Cookie)) return NULL;
 
-    Provider = ReadPointerAcquire((PVOID volatile *)&EtwpProviderSlots[Slot]);
+    Entry = EtwpSlotAddress(Slot);
+    if (Entry == NULL) return NULL;
+
+    Provider = ReadPointerAcquire((PVOID volatile *)Entry);
     if (Provider == NULL) return NULL;
 
     if (ReadULongNoFence(&Provider->Cookie) != Cookie) return NULL;
@@ -154,41 +183,59 @@ NTSTATUS
 EtwpClaimProvider(
     _Outptr_ PETWP_PROVIDER *Claimed)
 {
+    PETWP_PROVIDER_BLOCK Block = &EtwpProviderBlock;
+    PETWP_PROVIDER_BLOCK Next;
     PETWP_PROVIDER Provider;
-    ULONG Slot;
+    ULONG Base = 0;
+    ULONG i;
 
     *Claimed = NULL;
 
-    for (Slot = 0; Slot < ETWP_PROVIDER_SLOTS; Slot++)
+    for (;;)
     {
-        Provider = EtwpProviderSlots[Slot];
-
-        if (Provider == NULL)
+        for (i = 0; i < ETWP_PROVIDER_SLOTS; i++)
         {
-            Provider = ExAllocatePoolZero(NonPagedPoolNx,
-                                          sizeof(ETWP_PROVIDER),
-                                          ETWP_PROVIDER_TAG);
-            if (Provider == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+            Provider = Block->Slots[i];
 
-            Provider->Slot = Slot;
-            Provider->Cookie = EtwpProviderCookieSeed++ * 2;
+            if (Provider == NULL)
+            {
+                Provider = ExAllocatePoolZero(NonPagedPoolNx,
+                                              sizeof(ETWP_PROVIDER),
+                                              ETWP_PROVIDER_TAG);
+                if (Provider == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-            WritePointerRelease((PVOID volatile *)&EtwpProviderSlots[Slot],
-                                Provider);
+                Provider->Slot = Base + i;
+                Provider->Cookie = EtwpProviderCookieSeed++ * 2;
+
+                WritePointerRelease((PVOID volatile *)&Block->Slots[i],
+                                    Provider);
+            }
+            else if (ETWP_COOKIE_IS_LIVE(Provider->Cookie))
+            {
+                continue;
+            }
+
+            WriteULongNoFence(&Provider->Cookie, Provider->Cookie + 1);
+
+            *Claimed = Provider;
+            return STATUS_SUCCESS;
         }
-        else if (ETWP_COOKIE_IS_LIVE(Provider->Cookie))
+
+        Next = Block->Next;
+
+        if (Next == NULL)
         {
-            continue;
+            Next = ExAllocatePoolZero(NonPagedPoolNx,
+                                      sizeof(ETWP_PROVIDER_BLOCK),
+                                      ETWP_PROVIDER_TAG);
+            if (Next == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+            WritePointerRelease((PVOID volatile *)&Block->Next, Next);
         }
 
-        WriteULongNoFence(&Provider->Cookie, Provider->Cookie + 1);
-
-        *Claimed = Provider;
-        return STATUS_SUCCESS;
+        Block = Next;
+        Base += ETWP_PROVIDER_SLOTS;
     }
-
-    /* TODO: grow past ETWP_PROVIDER_SLOTS registrations at once */
-    return STATUS_INSUFFICIENT_RESOURCES;
 }
 
 /* Does the work both ways of registering, which differ only in the type */
@@ -308,6 +355,7 @@ EtwpEnableProvider(
     _In_opt_ PEVENT_FILTER_DESCRIPTOR FilterData)
 {
     PETWENABLECALLBACK Callback;
+    PETWP_PROVIDER *Entry;
     PETWP_PROVIDER Provider;
     PVOID Context;
     GUID Source;
@@ -317,12 +365,21 @@ EtwpEnableProvider(
 
     if (ProviderId == NULL) return;
 
-    for (Slot = 0; Slot < ETWP_PROVIDER_SLOTS; Slot++)
+    for (Slot = 0; ; Slot++)
     {
         KeEnterCriticalRegion();
         ExAcquirePushLockExclusive(&EtwpProviderLock);
 
-        Provider = EtwpProviderSlots[Slot];
+        Entry = EtwpSlotAddress(Slot);
+
+        if (Entry == NULL)
+        {
+            ExReleasePushLockExclusive(&EtwpProviderLock);
+            KeLeaveCriticalRegion();
+            break;
+        }
+
+        Provider = *Entry;
 
         if (Provider == NULL ||
             !ETWP_COOKIE_IS_LIVE(Provider->Cookie) ||
