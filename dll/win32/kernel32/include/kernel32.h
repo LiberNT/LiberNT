@@ -602,12 +602,3 @@ BasepCheckWinSaferRestrictions(
     OUT PHANDLE NewToken,
     OUT PHANDLE JobHandle
 );
-
-HANDLE
-WINAPI
-FindFirstFileNameW(
-    IN LPCWSTR lpFileName,
-    IN DWORD dwFlags,
-    IN OUT LPDWORD StringLength,
-    OUT PWSTR LinkName
-);
