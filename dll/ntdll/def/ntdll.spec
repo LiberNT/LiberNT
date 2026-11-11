@@ -694,7 +694,7 @@
 @ stdcall -version=0x600+ RtlAddIntegrityLabelToBoundaryDescriptor(ptr ptr) ; not present in Win11
 @ stdcall RtlAddVectoredContinueHandler(long ptr)
 @ stdcall RtlAddVectoredExceptionHandler(long ptr)
-@ stdcall -stub RtlAddressInSectionTable(ptr ptr long)
+@ stdcall RtlAddressInSectionTable(ptr ptr long)
 @ stdcall RtlAdjustPrivilege(long long long ptr)
 @ stdcall RtlAllocateActivationContextStack(ptr) ; CHECKME
 @ stdcall RtlAllocateAndInitializeSid(ptr long long long long long long long long long ptr)
@@ -766,7 +766,7 @@
 @ stdcall -version=0xA00+ RtlCopyContext(ptr long ptr)
 @ stdcall -version=0x600+ RtlCopyExtendedContext(ptr long ptr)
 @ cdecl -version=0x600+ -arch=x86_64,riscv64,arm64 RtlCopyMemory(ptr ptr long) memmove
-@ stdcall -stub -version=0x600+ -arch=win64 RtlCopyMemoryNonTemporal(ptr ptr long)
+@ stdcall -version=0x600+ -arch=win64 RtlCopyMemoryNonTemporal(ptr ptr long) memmove
 @ stdcall RtlCopyMemoryStreamTo(ptr ptr int64 ptr ptr)
 @ stdcall RtlCopyOutOfProcessMemoryStreamTo(ptr ptr int64 ptr ptr) RtlCopyMemoryStreamTo
 @ stdcall RtlCopySecurityDescriptor(ptr ptr)

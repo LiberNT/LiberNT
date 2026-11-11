@@ -191,7 +191,9 @@ list(APPEND SOURCE
     RtlLocale.c
     RtlMemoryStream.c
     PfxPrefixTable.c
+    RtlAddressInSectionTable.c
     RtlCompareAltitudes.c
+    RtlCopyMemoryNonTemporal.c
     RtlEnumerateGenericTableLikeADirectory.c
     RtlMemIoResource.c
     RtlMultipleAllocateHeap.c

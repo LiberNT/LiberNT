@@ -385,6 +385,16 @@ RtlImageRvaToVa(
                    (ULONG_PTR)SWAPD(Section->VirtualAddress));
 }
 
+PVOID
+NTAPI
+RtlAddressInSectionTable(
+    _In_ PIMAGE_NT_HEADERS NtHeader,
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Rva)
+{
+    return RtlImageRvaToVa(NtHeader, BaseAddress, Rva, NULL);
+}
+
 PIMAGE_BASE_RELOCATION
 NTAPI
 LdrProcessRelocationBlockLongLong(
