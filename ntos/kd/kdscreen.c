@@ -505,7 +505,8 @@ KdpScreenInit(
         KeInitializeDpc(&KdpScreenDpc, KdpScreenDpcRoutine, NULL);
         KdpScreenDpcReady = TRUE;
 
-        KdpScreenAcquire();
+        if (!KdpScreenAcquire())
+            KdpScreenSetConsole(TRUE);
         KdpScreenInitialised = TRUE;
 
         InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);

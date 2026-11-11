@@ -128,6 +128,12 @@ KdShowShutdownLog(
     VOID
 );
 
+BOOLEAN
+NTAPI
+KdScreenIsBootLog(
+    VOID
+);
+
 VOID
 NTAPI
 KdEnableBugCheckDebugger(

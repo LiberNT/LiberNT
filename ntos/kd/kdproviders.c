@@ -398,4 +398,11 @@ KdShowShutdownLog(VOID)
     return (KdpDebugMode.Screen && KdDebuggerEnabled);
 }
 
+BOOLEAN
+NTAPI
+KdScreenIsBootLog(VOID)
+{
+    return KdpDebugMode.Screen;
+}
+
 /* EOF */

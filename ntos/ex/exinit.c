@@ -1082,6 +1082,9 @@ ExpStartBootDisplay(
         return;
     }
 
+    if (KdScreenIsBootLog())
+        return;
+
     DisplayBootBitmap();
 
     /* TODO: SOS only enables the status text; nothing names the drivers as they load */
