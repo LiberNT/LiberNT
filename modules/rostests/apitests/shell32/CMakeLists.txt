@@ -44,6 +44,7 @@ list(APPEND SOURCE
     SHGetFolderPathToken.cpp
     RealShellExecuteEx.cpp
     RecentDocs.cpp
+    RegItemDisplayName.cpp
     RegItemParse.cpp
     SearchFolder.cpp
     SHAppBarMessage.cpp

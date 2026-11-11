@@ -45,6 +45,7 @@ extern void func_ProgramFilesDir(void);
 extern void func_SHGetFolderPathToken(void);
 extern void func_PIDL(void);
 extern void func_RealShellExecuteEx(void);
+extern void func_RegItemDisplayName(void);
 extern void func_RegItemParse(void);
 extern void func_SHAppBarMessage(void);
 extern void func_SHChangeNotify(void);
@@ -140,6 +141,7 @@ const struct test winetest_testlist[] =
     { "SHGetFolderPathToken", func_SHGetFolderPathToken },
     { "PIDL", func_PIDL },
     { "RealShellExecuteEx", func_RealShellExecuteEx },
+    { "RegItemDisplayName", func_RegItemDisplayName },
     { "RegItemParse", func_RegItemParse },
     { "SHAppBarMessage", func_SHAppBarMessage },
     { "SHChangeNotify", func_SHChangeNotify },
