@@ -109,9 +109,9 @@ PspGetOrSetContextKernelRoutine(
             Request->Context.ContextFlags |= CONTEXT_EXCEPTION_REQUEST |
                                              CONTEXT_EXCEPTION_REPORTING;
 
-            if (Frame->ExceptionActive == 0)
+            if (Frame->ExceptionActive == KEXCEPTION_ACTIVE_SERVICE_FRAME)
                 Request->Context.ContextFlags |= CONTEXT_SERVICE_ACTIVE;
-            else if (Frame->ExceptionActive == 1)
+            else if (Frame->ExceptionActive == KEXCEPTION_ACTIVE_EXCEPTION_FRAME)
                 Request->Context.ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
         }
     }
