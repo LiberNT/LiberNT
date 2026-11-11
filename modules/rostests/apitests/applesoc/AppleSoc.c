@@ -5392,12 +5392,25 @@ TestAtcphy(VOID)
     ok_hex(PIPE(0x14), 0x00000000);
     ok_hex(PIPE(0x20), 0x00009002);
 
-    AppleAtcphyStopUsb2Host(&Phy);
+    Status = AppleAtcphyStopUsb2Host(&Phy);
+    ok_hex(Status, STATUS_SUCCESS);
     ok_hex(PIPE(0x1c) & 0x11, 0x10);
     ok_hex(PIPE(0x0c), 0x00000022);
     ok_hex(USB2PHY(0x00), 0x00000004);
     ok_hex(USB2PHY(0x04) & 0x0f, 0x0000000b);
     ok_hex(USB2PHY(0x1c) & 0x60000000, 0x60000000);
+    ok_hex(ATC(0x20000), 0x00000004);
+    ok_hex(ATC(0x20004), 0x00000000);
+    ok_hex(ATC(0x20008) & 0x5, 0x00000000);
+
+    SimAtcStuck = TRUE;
+    ATC(0x20000) = 0x0000001b;
+    ATC(0x20004) = 0x00000003;
+    SimStalledMicroseconds = 0;
+    Status = AppleAtcphyStopUsb2Host(&Phy);
+    ok_hex(Status, STATUS_IO_TIMEOUT);
+    ok(SimStalledMicroseconds < 5000, "A stuck PHY stalled the power-down for %lu us\n", SimStalledMicroseconds);
+    SimAtcStuck = FALSE;
 
     SimAtcStuck = TRUE;
     ATC(0x20004) = 0;

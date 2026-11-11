@@ -206,16 +206,22 @@ AppleDwc3PowerDown(
 {
     FDT_DRIVER_TREE Tree;
     APPLE_ATCPHY Phy;
+    NTSTATUS Status;
 
+    ASSERT(!Extension->HostRunning);
     if (!NT_SUCCESS(FdtDriverOpen(Extension->PhysicalDevice, &Tree)))
         return;
-    if (NT_SUCCESS(AppleAtcphyOpen(&Tree, Tree.Node, &Phy)))
+    Status = AppleAtcphyOpen(&Tree, Tree.Node, &Phy);
+    if (NT_SUCCESS(Status))
     {
-        AppleAtcphyStopUsb2Host(&Phy);
+        Status = ApplePmgrPowerOnDevice(&Tree, Phy.Node);
+        if (NT_SUCCESS(Status))
+            Status = AppleAtcphyStopUsb2Host(&Phy);
         AppleAtcphyClose(&Phy);
     }
     FdtDriverClose(&Tree);
-    DbgPrint("appledwc3: %I64x controller held in reset, USB2 PHY off\n", Extension->CoreBase);
+    DbgPrint("appledwc3: %I64x controller held in reset, USB2 PHY off, Type-C PHY asleep: %lx\n", Extension->CoreBase,
+             Status);
 }
 
 static
@@ -693,6 +699,9 @@ AppleDwc3FdoPnp(
             {
                 if (Extension->RoleSwitch)
                 {
+                    ExAcquireFastMutex(&Extension->StateLock);
+                    AppleDwc3PowerDown(Extension);
+                    ExReleaseFastMutex(&Extension->StateLock);
                     DbgPrint("appledwc3: %I64x waits for a USB-C data connection\n", Extension->CoreBase);
                     AppleDwc3ListenForRole(Extension);
                 }

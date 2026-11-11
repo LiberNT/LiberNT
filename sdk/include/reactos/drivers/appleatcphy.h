@@ -49,7 +49,7 @@ NTAPI
 AppleAtcphySelectDummyPipe(
     _Inout_ PAPPLE_ATCPHY Phy);
 
-VOID
+NTSTATUS
 NTAPI
 AppleAtcphyStopUsb2Host(
     _Inout_ PAPPLE_ATCPHY Phy);

@@ -441,12 +441,16 @@ AppleAtcphySelectDummyPipe(
     return Locked ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
 }
 
-VOID
+NTSTATUS
 NTAPI
 AppleAtcphyStopUsb2Host(
     _Inout_ PAPPLE_ATCPHY Phy)
 {
+    NTSTATUS PipeStatus, Status;
+
     AtcAssertDwc3Reset(Phy);
-    AppleAtcphySelectDummyPipe(Phy);
+    PipeStatus = AppleAtcphySelectDummyPipe(Phy);
     AtcUsb2PowerOff(Phy);
+    Status = AtcPowerOff(Phy);
+    return NT_SUCCESS(PipeStatus) ? Status : PipeStatus;
 }
