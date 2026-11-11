@@ -6,6 +6,7 @@ extern void func_CatalogV2(void);
 extern void func_FindCerts(void);
 extern void func_Internals(void);
 extern void func_IssuerConfidence(void);
+extern void func_MsiSip(void);
 extern void func_Registration(void);
 extern void func_SignedCatalog(void);
 extern void func_SipCaps(void);
@@ -19,6 +20,7 @@ const struct test winetest_testlist[] =
     { "FindCerts", func_FindCerts },
     { "Internals", func_Internals },
     { "IssuerConfidence", func_IssuerConfidence },
+    { "MsiSip", func_MsiSip },
     { "Registration", func_Registration },
     { "SignedCatalog", func_SignedCatalog },
     { "SipCaps", func_SipCaps },
