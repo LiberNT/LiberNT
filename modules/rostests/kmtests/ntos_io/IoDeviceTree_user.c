@@ -127,6 +127,22 @@ CheckAcpiInstances(VOID)
     }
 }
 
+/* The root Basic Display fallback is started even when another display adapter holds the boot display, as on Windows 11 */
+static
+VOID
+CheckBasicDisplayFallback(VOID)
+{
+    DEVINST Node;
+
+    if (skip(CM_Locate_DevNodeW(&Node, (DEVINSTID_W)L"ROOT\\BASICDISPLAY\\0000", CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS,
+             "No Basic Display fallback\n"))
+    {
+        return;
+    }
+
+    LocateStarted(L"ROOT\\BASICDISPLAY\\0000", &Node);
+}
+
 START_TEST(IoDeviceTree)
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
@@ -134,4 +150,5 @@ START_TEST(IoDeviceTree)
 #endif
     CheckRootDevices();
     CheckAcpiInstances();
+    CheckBasicDisplayFallback();
 }
