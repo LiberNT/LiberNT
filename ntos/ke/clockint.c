@@ -80,6 +80,9 @@ static BOOLEAN KiQuantumCalibrated;
 static volatile KSYSTEM_TIME KiInterruptTimeValue;
 static volatile KSYSTEM_TIME KiSystemTimeValue;
 
+/* The clock owner's tick reads and writes the system time back; a set from another processor must not fall in between */
+static KSPIN_LOCK KiSystemTimeLock;
+
 /* How much interrupt time has been left out of the bias-free reading, which is
    what a caller measuring elapsed time while the machine slept has to exclude. */
 static ULONGLONG KiInterruptTimeBias;
@@ -596,11 +599,13 @@ KiUpdateSharedTime(
      * outside reference is applied without the clock period changing. With no
      * slew in force it moves by exactly the period that just elapsed.
      */
+    KxAcquireSpinLock(&KiSystemTimeLock);
     System.QuadPart = (LONGLONG)(KiGetSystemTime() +
                                  (KiTimeAdjustmentEnabled ? KeTimeAdjustment
                                                           : Increment));
     KiWriteSystemTime(&KiSystemTimeValue, System);
     KiPublishSystemTimeWithBaseline(Interrupt, System);
+    KxReleaseSpinLock(&KiSystemTimeLock);
 
     /* The tick count only advances on a whole default-length period */
     if (KeMaximumIncrement == 0)
@@ -928,7 +933,7 @@ KeSetSystemTime(
     _In_ BOOLEAN FixInterruptTime,
     _In_opt_ PLARGE_INTEGER HalTime)
 {
-    KIRQL OldIrql;
+    KIRQL OldIrql, ClockIrql;
     PKSPIN_LOCK_QUEUE LockQueue;
     LIST_ENTRY AbsoluteList;
     LARGE_INTEGER Difference, Previous, NewTime;
@@ -943,12 +948,19 @@ KeSetSystemTime(
 
     OldIrql = KiAcquireDispatcherLock();
 
+    /* Above the clock, so the tick on this processor cannot wait for the lock it holds */
+    ClockIrql = KfRaiseIrql(CLOCK_LEVEL);
+    KxAcquireSpinLock(&KiSystemTimeLock);
+
     Previous.QuadPart = (LONGLONG)KiGetSystemTime();
     NewTime = *NewSystemTime;
     Difference.QuadPart = NewTime.QuadPart - Previous.QuadPart;
 
     KiWriteSystemTime(&KiSystemTimeValue, NewTime);
     KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, SystemTime), NewTime);
+
+    KxReleaseSpinLock(&KiSystemTimeLock);
+    KeLowerIrql(ClockIrql);
 
     /* The moment the machine started moves with the clock it is measured on */
     KeBootTime.QuadPart += Difference.QuadPart;
