@@ -727,6 +727,14 @@ ObpIncrementHandleCount(
             AccessState->RemainingDesiredAccess = 0;
         }
         else if (AccessMode != KernelMode && CheckObjectAccess &&
+                 OpenReason == ObOpenHandle &&
+                 AccessState->RemainingDesiredAccess == 0 &&
+                 AccessState->PreviouslyGrantedAccess == 0)
+        {
+            /* An open for no access at all is refused, though a duplicate may carry none */
+            return STATUS_ACCESS_DENIED;
+        }
+        else if (AccessMode != KernelMode && CheckObjectAccess &&
                  AccessState->RemainingDesiredAccess != 0)
         {
             /*
@@ -1860,17 +1868,7 @@ ObOpenObjectByName(
                                  AccessState,
                                  &TempBuffer->LookupContext,
                                  &Object);
-    /* An object the walk found itself cannot be opened for no access at all */
-    if (NT_SUCCESS(Status) &&
-        AccessMode != KernelMode &&
-        TempBuffer->LookupContext.Object == Object &&
-        AccessState->RemainingDesiredAccess == 0 &&
-        AccessState->PreviouslyGrantedAccess == 0)
-    {
-        ObDereferenceObject(Object);
-        Status = STATUS_ACCESS_DENIED;
-    }
-    else if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status))
     {
         Status = ObpCreateHandle(ObOpenHandle,
                                  Object,
