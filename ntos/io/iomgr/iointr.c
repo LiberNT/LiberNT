@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "../ioint.h"
 #include "../pnpio.h"
+#include <reactos/hal/msi.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -117,51 +118,30 @@ IopConnectInterruptExLineBased(
                               Parameters->LineBased.FloatingSave);
 }
 
-NTSTATUS
-IopConnectInterruptExMessageBased(
-    _Inout_ PIO_CONNECT_INTERRUPT_PARAMETERS Parameters)
+static
+BOOLEAN
+NTAPI
+IopServiceInterruptMessage(
+    _In_ PKINTERRUPT Interrupt,
+    _In_opt_ PVOID ServiceContext)
 {
-    IO_CONNECT_INTERRUPT_PARAMETERS LineBased;
-    NTSTATUS Status;
+    PKMESSAGE_SERVICE_ROUTINE MessageServiceRoutine;
 
-    if (Parameters->MessageBased.FallBackServiceRoutine == NULL)
-    {
-        return STATUS_NOT_SUPPORTED;
-    }
+    MessageServiceRoutine =
+        (PKMESSAGE_SERVICE_ROUTINE)Interrupt->MessageServiceRoutine;
 
-    RtlZeroMemory(&LineBased, sizeof(LineBased));
-
-    LineBased.Version = CONNECT_LINE_BASED;
-    LineBased.LineBased.PhysicalDeviceObject =
-        Parameters->MessageBased.PhysicalDeviceObject;
-    LineBased.LineBased.InterruptObject =
-        Parameters->MessageBased.ConnectionContext.InterruptObject;
-    LineBased.LineBased.ServiceRoutine =
-        Parameters->MessageBased.FallBackServiceRoutine;
-    LineBased.LineBased.ServiceContext =
-        Parameters->MessageBased.ServiceContext;
-    LineBased.LineBased.SpinLock = Parameters->MessageBased.SpinLock;
-    LineBased.LineBased.SynchronizeIrql =
-        Parameters->MessageBased.SynchronizeIrql;
-    LineBased.LineBased.FloatingSave =
-        Parameters->MessageBased.FloatingSave;
-
-    /* TODO: no message-signalled arbiter; the line-based fallback is used */
-    Status = IopConnectInterruptExLineBased(&LineBased);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Parameters->Version = CONNECT_LINE_BASED;
-
-    return STATUS_SUCCESS;
+    return MessageServiceRoutine(Interrupt,
+                                 ServiceContext,
+                                 Interrupt->MessageIndex);
 }
 
-/* PUBLIC FUNCTIONS ***********************************************************/
-
+static
 NTSTATUS
-NTAPI
-IoConnectInterrupt(
+IopConnectInterruptObjects(
     _Out_ PKINTERRUPT *InterruptObject,
     _In_ PKSERVICE_ROUTINE ServiceRoutine,
+    _In_opt_ PKMESSAGE_SERVICE_ROUTINE MessageServiceRoutine,
+    _In_ ULONG MessageIndex,
     _In_opt_ PVOID ServiceContext,
     _In_opt_ PKSPIN_LOCK SpinLock,
     _In_ ULONG Vector,
@@ -177,8 +157,6 @@ IoConnectInterrupt(
     KAFFINITY Affinity;
     ULONG Processor;
     ULONG Count = 0;
-
-    PAGED_CODE();
 
     Affinity = ProcessorEnableMask & KeQueryActiveProcessors();
     if (Affinity == 0) return STATUS_INVALID_PARAMETER;
@@ -232,6 +210,13 @@ IoConnectInterrupt(
                               (CCHAR)Processor,
                               FloatingSave);
 
+        if (MessageServiceRoutine != NULL)
+        {
+            Interrupt->MessageServiceRoutine =
+                (PKSERVICE_ROUTINE)MessageServiceRoutine;
+            Interrupt->MessageIndex = MessageIndex;
+        }
+
         if (!KeConnectInterrupt(Interrupt))
         {
             if (Count != 0) ExFreePoolWithTag(Interrupt, TAG_IO_INTERRUPT);
@@ -246,6 +231,292 @@ IoConnectInterrupt(
     *InterruptObject = &IoInterrupt->FirstInterrupt;
 
     return STATUS_SUCCESS;
+}
+
+static
+VOID
+IopDisconnectInterruptMessages(
+    _In_ PIO_INTERRUPT_MESSAGE_INFO MessageTable)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < MessageTable->MessageCount; Index++)
+    {
+        PKINTERRUPT Interrupt = MessageTable->MessageInfo[Index].InterruptObject;
+
+        if (Interrupt == NULL) continue;
+
+        IoDisconnectInterrupt(Interrupt);
+    }
+
+    ExFreePoolWithTag(MessageTable, TAG_IO_INTERRUPT);
+}
+
+/* Only the raw descriptor carries the message count, the translated one the vector and level */
+static
+ULONG
+IopCountInterruptMessages(
+    _In_ PCM_RESOURCE_LIST Raw,
+    _In_ PCM_RESOURCE_LIST Translated,
+    _Inout_ PKIRQL UnifiedIrql)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR RawDescriptor;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONG MessageCount = 0;
+    ULONG Index;
+
+    RawDescriptor = Raw->List[0].PartialResourceList.PartialDescriptors;
+    Descriptor = Translated->List[0].PartialResourceList.PartialDescriptors;
+
+    for (Index = 0;
+         Index < Translated->List[0].PartialResourceList.Count;
+         Index++)
+    {
+        if (Descriptor->Type == CmResourceTypeInterrupt &&
+            (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+        {
+            MessageCount += RawDescriptor->u.MessageInterrupt.Raw.MessageCount;
+
+            if (*UnifiedIrql < (KIRQL)Descriptor->u.MessageInterrupt.Translated.Level)
+            {
+                *UnifiedIrql = (KIRQL)Descriptor->u.MessageInterrupt.Translated.Level;
+            }
+        }
+
+        RawDescriptor = PipGetNextCmPartialDescriptor(RawDescriptor);
+        Descriptor = PipGetNextCmPartialDescriptor(Descriptor);
+    }
+
+    return MessageCount;
+}
+
+static
+NTSTATUS
+IopConnectInterruptMessage(
+    _In_ PIO_CONNECT_INTERRUPT_MESSAGE_BASED_PARAMETERS Parameters,
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ ULONG Message,
+    _In_ ULONG MessageIndex,
+    _In_ KIRQL UnifiedIrql,
+    _Out_ PIO_INTERRUPT_MESSAGE_INFO_ENTRY Entry)
+{
+    HAL_MESSAGE_ROUTING_INFO RoutingInfo;
+    KINTERRUPT_MODE Mode;
+    KIRQL Synchronize;
+    NTSTATUS Status;
+
+    Entry->Vector = Descriptor->u.MessageInterrupt.Translated.Vector + Message;
+    Entry->Irql = (KIRQL)Descriptor->u.MessageInterrupt.Translated.Level;
+    Entry->TargetProcessorSet = Descriptor->u.MessageInterrupt.Translated.Affinity;
+
+    Mode = (Descriptor->Flags & CM_RESOURCE_INTERRUPT_LATCHED) ? Latched
+                                                               : LevelSensitive;
+    Entry->Mode = Mode;
+    Entry->Polarity = InterruptPolarityUnknown;
+
+    RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
+    RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
+    RoutingInfo.MessageCount = 1;
+    RoutingInfo.Vector = Entry->Vector;
+    RoutingInfo.Irql = Entry->Irql;
+    RoutingInfo.TargetProcessors = Entry->TargetProcessorSet;
+
+    Status = HalpGetMessageRoutingInfo(&RoutingInfo);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Entry->MessageAddress = RoutingInfo.MessageAddress;
+    Entry->MessageData = RoutingInfo.MessageData;
+
+    if (Parameters->SpinLock != NULL)
+    {
+        Synchronize = UnifiedIrql;
+    }
+    else
+    {
+        Synchronize = Parameters->SynchronizeIrql;
+        if (Synchronize < Entry->Irql) Synchronize = Entry->Irql;
+    }
+
+    return IopConnectInterruptObjects(&Entry->InterruptObject,
+                                      IopServiceInterruptMessage,
+                                      Parameters->MessageServiceRoutine,
+                                      MessageIndex,
+                                      Parameters->ServiceContext,
+                                      Parameters->SpinLock,
+                                      Entry->Vector,
+                                      Entry->Irql,
+                                      Synchronize,
+                                      Mode,
+                                      (Descriptor->ShareDisposition ==
+                                       CmResourceShareShared),
+                                      Entry->TargetProcessorSet,
+                                      Parameters->FloatingSave);
+}
+
+static
+NTSTATUS
+IopConnectInterruptMessages(
+    _In_ PIO_CONNECT_INTERRUPT_MESSAGE_BASED_PARAMETERS Parameters,
+    _In_ PCM_RESOURCE_LIST Raw,
+    _In_ PCM_RESOURCE_LIST Translated,
+    _In_ ULONG MessageCount,
+    _In_ KIRQL UnifiedIrql)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR RawDescriptor;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    PIO_INTERRUPT_MESSAGE_INFO MessageTable;
+    ULONG MessageIndex = 0;
+    ULONG Message;
+    ULONG Index;
+    NTSTATUS Status;
+
+    MessageTable = ExAllocatePoolZero(NonPagedPool,
+                                      FIELD_OFFSET(IO_INTERRUPT_MESSAGE_INFO,
+                                                   MessageInfo[MessageCount]),
+                                      TAG_IO_INTERRUPT);
+    if (MessageTable == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    MessageTable->UnifiedIrql = UnifiedIrql;
+    MessageTable->MessageCount = MessageCount;
+
+    RawDescriptor = Raw->List[0].PartialResourceList.PartialDescriptors;
+    Descriptor = Translated->List[0].PartialResourceList.PartialDescriptors;
+
+    for (Index = 0;
+         Index < Translated->List[0].PartialResourceList.Count;
+         Index++)
+    {
+        if (Descriptor->Type == CmResourceTypeInterrupt &&
+            (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+        {
+            for (Message = 0;
+                 Message < RawDescriptor->u.MessageInterrupt.Raw.MessageCount;
+                 Message++)
+            {
+                Status = IopConnectInterruptMessage(
+                    Parameters,
+                    Descriptor,
+                    Message,
+                    MessageIndex,
+                    UnifiedIrql,
+                    &MessageTable->MessageInfo[MessageIndex]);
+                if (!NT_SUCCESS(Status))
+                {
+                    IopDisconnectInterruptMessages(MessageTable);
+                    return Status;
+                }
+
+                MessageIndex++;
+            }
+        }
+
+        RawDescriptor = PipGetNextCmPartialDescriptor(RawDescriptor);
+        Descriptor = PipGetNextCmPartialDescriptor(Descriptor);
+    }
+
+    *Parameters->ConnectionContext.InterruptMessageTable = MessageTable;
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+IopConnectInterruptExMessageBased(
+    _Inout_ PIO_CONNECT_INTERRUPT_PARAMETERS Parameters)
+{
+    IO_CONNECT_INTERRUPT_PARAMETERS LineBased;
+    PCM_RESOURCE_LIST Translated;
+    PDEVICE_NODE DeviceNode;
+    PCM_RESOURCE_LIST Raw;
+    ULONG MessageCount = 0;
+    KIRQL UnifiedIrql;
+    NTSTATUS Status;
+
+    DeviceNode = IopGetDeviceNode(Parameters->MessageBased.PhysicalDeviceObject);
+    if (DeviceNode == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+
+    Raw = DeviceNode->ResourceList;
+    Translated = DeviceNode->ResourceListTranslated;
+    UnifiedIrql = Parameters->MessageBased.SynchronizeIrql;
+
+    if (Raw != NULL && Translated != NULL &&
+        Raw->Count != 0 && Translated->Count != 0 &&
+        Raw->List[0].PartialResourceList.Count ==
+        Translated->List[0].PartialResourceList.Count)
+    {
+        MessageCount = IopCountInterruptMessages(Raw, Translated, &UnifiedIrql);
+    }
+
+    if (MessageCount != 0)
+    {
+        return IopConnectInterruptMessages(&Parameters->MessageBased,
+                                           Raw,
+                                           Translated,
+                                           MessageCount,
+                                           UnifiedIrql);
+    }
+
+    if (Parameters->MessageBased.FallBackServiceRoutine == NULL)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    RtlZeroMemory(&LineBased, sizeof(LineBased));
+
+    LineBased.Version = CONNECT_LINE_BASED;
+    LineBased.LineBased.PhysicalDeviceObject =
+        Parameters->MessageBased.PhysicalDeviceObject;
+    LineBased.LineBased.InterruptObject =
+        Parameters->MessageBased.ConnectionContext.InterruptObject;
+    LineBased.LineBased.ServiceRoutine =
+        Parameters->MessageBased.FallBackServiceRoutine;
+    LineBased.LineBased.ServiceContext =
+        Parameters->MessageBased.ServiceContext;
+    LineBased.LineBased.SpinLock = Parameters->MessageBased.SpinLock;
+    LineBased.LineBased.SynchronizeIrql =
+        Parameters->MessageBased.SynchronizeIrql;
+    LineBased.LineBased.FloatingSave =
+        Parameters->MessageBased.FloatingSave;
+
+    Status = IopConnectInterruptExLineBased(&LineBased);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Parameters->Version = CONNECT_LINE_BASED;
+
+    return STATUS_SUCCESS;
+}
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+NTSTATUS
+NTAPI
+IoConnectInterrupt(
+    _Out_ PKINTERRUPT *InterruptObject,
+    _In_ PKSERVICE_ROUTINE ServiceRoutine,
+    _In_opt_ PVOID ServiceContext,
+    _In_opt_ PKSPIN_LOCK SpinLock,
+    _In_ ULONG Vector,
+    _In_ KIRQL Irql,
+    _In_ KIRQL SynchronizeIrql,
+    _In_ KINTERRUPT_MODE InterruptMode,
+    _In_ BOOLEAN ShareVector,
+    _In_ KAFFINITY ProcessorEnableMask,
+    _In_ BOOLEAN FloatingSave)
+{
+    PAGED_CODE();
+
+    return IopConnectInterruptObjects(InterruptObject,
+                                      ServiceRoutine,
+                                      NULL,
+                                      0,
+                                      ServiceContext,
+                                      SpinLock,
+                                      Vector,
+                                      Irql,
+                                      SynchronizeIrql,
+                                      InterruptMode,
+                                      ShareVector,
+                                      ProcessorEnableMask,
+                                      FloatingSave);
 }
 
 VOID
@@ -323,8 +594,8 @@ IoDisconnectInterruptEx(
             break;
 
         case CONNECT_MESSAGE_BASED:
-            /* TODO: no message table is produced, so there is none to free */
-            IoDisconnectInterrupt(Parameters->ConnectionContext.InterruptObject);
+            IopDisconnectInterruptMessages(
+                Parameters->ConnectionContext.InterruptMessageTable);
             break;
 
         default:
