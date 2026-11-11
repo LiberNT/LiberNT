@@ -127,7 +127,10 @@ KiUnwindFrame(
                      &EstablisherFrame,
                      NULL);
 
-    return (Context->Rsp > OldRsp) && (Context->Rip != 0);
+    /* A kernel-mode caller below the system range is past the start of the thread */
+    return (Context->Rsp > OldRsp) &&
+           (Context->Rip != 0) &&
+           (((Context->SegCs & MODE_MASK) != KernelMode) || (Context->Rip >= (ULONG64)MM_SYSTEM_RANGE_START));
 }
 
 /* EOF */
