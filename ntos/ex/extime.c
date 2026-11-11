@@ -547,14 +547,8 @@ NTAPI
 ExpSetHighResolutionClock(
     _In_ BOOLEAN Active)
 {
-    /* FIXME: the clock's rate never changes (no HalSetTimeIncrement, whose faster ticks KiUpdateRunTime would charge as whole periods), and going back overwrites KeMinimumIncrement */
-    if (Active)
-    {
-        KeSetTimeIncrement(KeMaximumIncrement, KeMinimumIncrement);
-        return;
-    }
-
-    KeSetTimeIncrement(KeMaximumIncrement, KeMaximumIncrement);
+    /* FIXME: the clock's rate never changes (no HalSetTimeIncrement, whose faster ticks KiUpdateRunTime would charge as whole periods), so the current resolution stays the default */
+    UNREFERENCED_PARAMETER(Active);
 }
 
 VOID
