@@ -267,6 +267,48 @@ static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
         ok(InstallChild(InfPath), "Installing the child again failed\n");
 }
 
+/* A child plugged in again while its old stack still has an open handle starts at once under its instance ID, as
+ * Windows 11 does; the old stack gets its remove request after the close. The waits only bound a lost request */
+static VOID CheckReplug(DEVINST Bus)
+{
+    WCHAR Before[MAX_DEVICE_ID_LEN] = L"", After[MAX_DEVICE_ID_LEN] = L"";
+    DWORD Start, Removes = 0, Value = 0;
+    DEVINST Child;
+    HANDLE File;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        CM_Get_Device_IDW(Child, Before, RTL_NUMBER_OF(Before), 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to plug in again\n");
+        return;
+    }
+    if (!ReadValue(L"ChildFdoRemoves", &Removes))
+        Removes = 0;
+
+    File = OpenDevice(Child);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    SetRequest(L"HideChild", 1);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    SetRequest(L"HideChild", 0);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok(ChildStarted(Bus, 1000), "The child plugged in again did not start while the old stack was open\n");
+    ok(CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS &&
+       CM_Get_Device_IDW(Child, After, RTL_NUMBER_OF(After), 0) == CR_SUCCESS && !wcscmp(Before, After),
+       "The child plugged in again is %ls, not %ls\n", After, Before);
+    ok(!ReadValue(L"ChildFdoRemoves", &Value) || Value == Removes, "The old stack was removed while a handle was open\n");
+
+    CloseHandle(File);
+
+    Start = GetTickCount();
+    while ((!ReadValue(L"ChildFdoRemoves", &Value) || Value == Removes) && GetTickCount() - Start < 1000)
+        Sleep(10);
+    ok(Value == Removes + 1, "The old stack was not removed after its last close (%lu removals)\n", Value);
+    ok(ChildStarted(Bus, 0), "The child plugged in again stopped when the old stack went\n");
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -370,6 +412,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReenumerate(Device->DevInst);
         CheckSurpriseRemoval(Device->DevInst);
         CheckReinstall(Device->DevInst, InfPath);
+        CheckReplug(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }

@@ -309,6 +309,47 @@ PiSaveContainerId(
     RtlFreeUnicodeString(&ContainerId);
 }
 
+/* A device plugged in again while its old stack still waits for its last close takes the instance name, and the
+ * old node waits on without one (Windows 11) */
+static
+VOID
+PiTakeInstanceName(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PDEVICE_NODE Node = IopRootDeviceNode;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&IopDeviceTreeResource, TRUE);
+
+    while (Node != NULL)
+    {
+        if (Node != DeviceNode &&
+            (Node->State == DeviceNodeRemovePendingCloses || Node->State == DeviceNodeDeletePendingCloses) &&
+            PiCompareInstancePath(&Node->InstancePath, &DeviceNode->InstancePath) == 0)
+        {
+            Node->InstancePath.Length = 0;
+        }
+
+        if (Node->Child != NULL)
+        {
+            Node = Node->Child;
+            continue;
+        }
+
+        while (Node != NULL && Node->Sibling == NULL)
+        {
+            Node = Node->Parent;
+        }
+
+        if (Node != NULL) Node = Node->Sibling;
+    }
+
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
+}
+
 static
 NTSTATUS
 PiQueryAndSaveIds(
@@ -350,8 +391,15 @@ PiQueryAndSaveIds(
     }
 
     /* A removed node that is set up again keeps the instance path it was enumerated with */
-    Status = (DeviceNode->InstancePath.Length != 0) ? STATUS_SUCCESS :
-             PiBuildInstancePath(DeviceNode, DeviceId, InstanceId, UniqueId);
+    if (DeviceNode->InstancePath.Length != 0)
+    {
+        Status = STATUS_SUCCESS;
+    }
+    else
+    {
+        Status = PiBuildInstancePath(DeviceNode, DeviceId, InstanceId, UniqueId);
+        if (NT_SUCCESS(Status)) PiTakeInstanceName(DeviceNode);
+    }
 
     if (InstanceId != NULL) ExFreePool(InstanceId);
     ExFreePool(DeviceId);
@@ -1217,9 +1265,13 @@ PiSendRemoval(
         PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
     }
 
-    IopQueueTargetDeviceEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
-                                       : &GUID_DEVICE_SAFE_REMOVAL,
-                              &DeviceNode->InstancePath);
+    /* A node that gave its instance name to a device plugged in again has nothing left to report */
+    if (DeviceNode->InstancePath.Length != 0)
+    {
+        IopQueueTargetDeviceEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
+                                           : &GUID_DEVICE_SAFE_REMOVAL,
+                                  &DeviceNode->InstancePath);
+    }
 }
 
 /* A node out of the tree lives as long as its device object, whose delete routine frees it */

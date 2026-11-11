@@ -484,6 +484,11 @@ PiControlGetRelatedDevice(
     Related = (Data->Relation == PNP_GET_PARENT_DEVICE) ? DeviceNode->Parent :
               (Data->Relation == PNP_GET_CHILD_DEVICE) ? DeviceNode->Child :
               DeviceNode->Sibling;
+    /* A node that gave its instance name to a device plugged in again is no device user mode can name */
+    while ((Data->Relation != PNP_GET_PARENT_DEVICE) && (Related != NULL) && (Related->InstancePath.Length == 0))
+    {
+        Related = Related->Sibling;
+    }
     if ((Related != NULL) && (Related->PhysicalDeviceObject != NULL))
     {
         RelatedObject = Related->PhysicalDeviceObject;

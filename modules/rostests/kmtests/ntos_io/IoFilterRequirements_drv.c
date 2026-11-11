@@ -26,18 +26,17 @@ typedef struct _TEST_EXTENSION
     PDEVICE_OBJECT Lower;
     PDEVICE_OBJECT Child;
     PDEVICE_OBJECT Pdo;
-    PVOID Bus;
     LONG Starts;
     BOOLEAN ReportChange;
+    BOOLEAN Removed;
+    BOOLEAN Missing;
 } TEST_EXTENSION, *PTEST_EXTENSION;
 
 static WCHAR ServicePath[260];
-static BOOLEAN ChildRemoved;
 static BOOLEAN EjectRequested;
 static ULONG RelationsQueried;
 static ULONG BusStateQueried;
 static BOOLEAN FailRequested;
-static BOOLEAN ChildHidden;
 static ULONG ChildFdoRemoves;
 static ULONG BusFdoRemoves;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
@@ -256,9 +255,14 @@ static NTSTATUS ReportChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
     ULONG Count = Existing ? Existing->Count : 0;
     NTSTATUS Status;
 
-    ChildHidden = Requested(L"HideChild");
-    if (ChildHidden)
+    /* The bus forgets a child it stops reporting; that child goes with its remove request */
+    if (Requested(L"HideChild"))
     {
+        if (Extension->Child != NULL)
+        {
+            ((PTEST_EXTENSION)Extension->Child->DeviceExtension)->Missing = TRUE;
+            Extension->Child = NULL;
+        }
         Irp->IoStatus.Status = STATUS_SUCCESS;
         return Pass(Extension, Irp);
     }
@@ -272,8 +276,6 @@ static NTSTATUS ReportChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
         ChildExtension = Extension->Child->DeviceExtension;
         RtlZeroMemory(ChildExtension, sizeof(*ChildExtension));
         ChildExtension->Kind = TestChildPdo;
-        ChildExtension->Bus = Extension;
-        ChildRemoved = FALSE;
         Extension->Child->Flags |= DO_POWER_PAGABLE;
         Extension->Child->Flags &= ~DO_DEVICE_INITIALIZING;
     }
@@ -382,6 +384,7 @@ static NTSTATUS ChildPdoQueryId(PIRP Irp, BUS_QUERY_ID_TYPE Type)
 
 static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
+    PTEST_EXTENSION Extension = DeviceObject->DeviceExtension;
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PDEVICE_RELATIONS Relations;
     PIO_RESOURCE_REQUIREMENTS_LIST Requirements;
@@ -411,19 +414,15 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_EJECT:
-            Record(L"EjectAfterRemove", ChildRemoved);
+            Record(L"EjectAfterRemove", Extension->Removed);
             Status = STATUS_SUCCESS;
             break;
 
         case IRP_MN_REMOVE_DEVICE:
-            ChildRemoved = TRUE;
+            Extension->Removed = TRUE;
             Complete(Irp, STATUS_SUCCESS);
-            /* A child the bus no longer reports goes away with its remove request */
-            if (ChildHidden)
-            {
-                ((PTEST_EXTENSION)((PTEST_EXTENSION)DeviceObject->DeviceExtension)->Bus)->Child = NULL;
+            if (Extension->Missing)
                 IoDeleteDevice(DeviceObject);
-            }
             return STATUS_SUCCESS;
 
         case IRP_MN_QUERY_DEVICE_RELATIONS:
@@ -447,7 +446,7 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_START_DEVICE:
-            ChildRemoved = FALSE;
+            Extension->Removed = FALSE;
             Status = STATUS_SUCCESS;
             break;
 
