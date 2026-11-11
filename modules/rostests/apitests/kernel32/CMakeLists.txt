@@ -75,6 +75,7 @@ list(APPEND SOURCE
     SharedMemoryTransfer.c
     StarvationBoost.c
     SystemTimeChangeTimers.c
+    TzSpecificLocalTimeEx.c
     StdHandleInheritance.c
     LocaleNameToLCID.c
     lstrcpynW.c

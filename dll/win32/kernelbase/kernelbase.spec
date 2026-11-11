@@ -1300,7 +1300,7 @@
 @ stdcall SwitchToThread() kernel32.SwitchToThread
 @ stdcall SystemTimeToFileTime(ptr ptr) kernel32.SystemTimeToFileTime
 @ stdcall SystemTimeToTzSpecificLocalTime(ptr ptr ptr) kernel32.SystemTimeToTzSpecificLocalTime
-@ stub SystemTimeToTzSpecificLocalTimeEx
+@ stdcall SystemTimeToTzSpecificLocalTimeEx(ptr ptr ptr) kernel32.SystemTimeToTzSpecificLocalTimeEx
 @ stdcall TerminateProcess(ptr long) kernel32.TerminateProcess
 @ stdcall TerminateThread(ptr long) kernel32.TerminateThread
 @ stdcall TlsAlloc() kernel32.TlsAlloc
@@ -1317,7 +1317,7 @@
 @ stdcall TryEnterCriticalSection(ptr) ntdll.RtlTryEnterCriticalSection
 @ stdcall TrySubmitThreadpoolCallback(ptr ptr ptr)
 @ stdcall TzSpecificLocalTimeToSystemTime(ptr ptr ptr) kernel32.TzSpecificLocalTimeToSystemTime
-@ stub TzSpecificLocalTimeToSystemTimeEx
+@ stdcall TzSpecificLocalTimeToSystemTimeEx(ptr ptr ptr) kernel32.TzSpecificLocalTimeToSystemTimeEx
 @ stdcall UnhandledExceptionFilter(ptr) kernel32.UnhandledExceptionFilter
 @ stdcall UnlockFile(long long long long long) kernel32.UnlockFile
 @ stdcall UnlockFileEx(long long long long ptr) kernel32.UnlockFileEx

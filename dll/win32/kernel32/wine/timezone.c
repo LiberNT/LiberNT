@@ -448,4 +448,132 @@ TzSpecificLocalTimeToSystemTime(CONST TIME_ZONE_INFORMATION *lpTimeZoneInformati
     return FileTimeToSystemTime(&ft, lpUniversalTime);
 }
 
+static
+VOID
+TIME_GetTimeZoneInformationForYear(CONST DYNAMIC_TIME_ZONE_INFORMATION *pDynamicInfo,
+                                   USHORT wYear,
+                                   LPTIME_ZONE_INFORMATION pInfo)
+{
+    DWORD LastError;
+
+    if (!pDynamicInfo->DynamicDaylightTimeDisabled)
+    {
+        LastError = GetLastError();
+        if (GetTimeZoneInformationForYear(wYear, (PDYNAMIC_TIME_ZONE_INFORMATION)pDynamicInfo, pInfo))
+            return;
+        SetLastError(LastError);
+    }
+
+    pInfo->Bias = pDynamicInfo->Bias;
+    RtlCopyMemory(pInfo->StandardName, pDynamicInfo->StandardName, sizeof(pInfo->StandardName));
+    pInfo->StandardDate = pDynamicInfo->StandardDate;
+    pInfo->StandardBias = pDynamicInfo->StandardBias;
+    RtlCopyMemory(pInfo->DaylightName, pDynamicInfo->DaylightName, sizeof(pInfo->DaylightName));
+    pInfo->DaylightDate = pDynamicInfo->DaylightDate;
+    pInfo->DaylightBias = pDynamicInfo->DaylightBias;
+}
+
+BOOL
+WINAPI
+SystemTimeToTzSpecificLocalTimeEx(CONST DYNAMIC_TIME_ZONE_INFORMATION *lpTimeZoneInformation,
+                                  CONST SYSTEMTIME *lpUniversalTime,
+                                  LPSYSTEMTIME lpLocalTime)
+{
+    DYNAMIC_TIME_ZONE_INFORMATION DynamicInfo;
+    TIME_ZONE_INFORMATION TzInfo;
+    FILETIME FileTime, LocalFileTime;
+    SYSTEMTIME LocalTime;
+    LONGLONG llTime, llLocal;
+    LONG lBias;
+    USHORT wYear;
+    ULONG Pass;
+
+    if (!lpUniversalTime || !lpLocalTime)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (!lpTimeZoneInformation)
+    {
+        if (GetDynamicTimeZoneInformation(&DynamicInfo) == TIME_ZONE_ID_INVALID)
+            return FALSE;
+        lpTimeZoneInformation = &DynamicInfo;
+    }
+
+    if (!SystemTimeToFileTime(lpUniversalTime, &FileTime))
+        return FALSE;
+    FILETIME2LL(&FileTime, llTime)
+
+    wYear = lpUniversalTime->wYear;
+    for (Pass = 0; Pass < 2; Pass++)
+    {
+        TIME_GetTimeZoneInformationForYear(lpTimeZoneInformation, wYear, &TzInfo);
+        if (!TIME_GetTimezoneBias(&TzInfo, &FileTime, FALSE, &lBias))
+            return FALSE;
+
+        llLocal = llTime - (LONGLONG)lBias * TICKSPERMIN;
+        LL2FILETIME(llLocal, &LocalFileTime)
+        if (!FileTimeToSystemTime(&LocalFileTime, &LocalTime))
+            return FALSE;
+
+        if (LocalTime.wYear == wYear)
+            break;
+        wYear = LocalTime.wYear;
+    }
+
+    *lpLocalTime = LocalTime;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+TzSpecificLocalTimeToSystemTimeEx(CONST DYNAMIC_TIME_ZONE_INFORMATION *lpTimeZoneInformation,
+                                  CONST SYSTEMTIME *lpLocalTime,
+                                  LPSYSTEMTIME lpUniversalTime)
+{
+    DYNAMIC_TIME_ZONE_INFORMATION DynamicInfo;
+    TIME_ZONE_INFORMATION TzInfo;
+    FILETIME FileTime, ProbeFileTime;
+    LONGLONG llTime, llProbe;
+    LONG lBias;
+    DWORD ZoneId;
+
+    if (!lpLocalTime || !lpUniversalTime)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (!lpTimeZoneInformation)
+    {
+        if (GetDynamicTimeZoneInformation(&DynamicInfo) == TIME_ZONE_ID_INVALID)
+            return FALSE;
+        lpTimeZoneInformation = &DynamicInfo;
+    }
+
+    if (!SystemTimeToFileTime(lpLocalTime, &FileTime))
+        return FALSE;
+    FILETIME2LL(&FileTime, llTime)
+
+    TIME_GetTimeZoneInformationForYear(lpTimeZoneInformation, lpLocalTime->wYear, &TzInfo);
+
+    /* Probing under the daylight bias makes a repeated local time daylight and a skipped one standard */
+    llProbe = llTime + (LONGLONG)(TzInfo.Bias + TzInfo.DaylightBias) * TICKSPERMIN;
+    LL2FILETIME(llProbe, &ProbeFileTime)
+    ZoneId = TIME_CompTimeZoneID(&TzInfo, &ProbeFileTime, FALSE);
+    if (ZoneId == TIME_ZONE_ID_INVALID)
+        return FALSE;
+
+    lBias = TzInfo.Bias;
+    if (ZoneId == TIME_ZONE_ID_DAYLIGHT)
+        lBias += TzInfo.DaylightBias;
+    else if (ZoneId == TIME_ZONE_ID_STANDARD)
+        lBias += TzInfo.StandardBias;
+
+    llTime += (LONGLONG)lBias * TICKSPERMIN;
+    LL2FILETIME(llTime, &FileTime)
+    return FileTimeToSystemTime(&FileTime, lpUniversalTime);
+}
+
 /* EOF */
