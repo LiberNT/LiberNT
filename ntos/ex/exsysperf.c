@@ -693,6 +693,8 @@ ExpQueryLogicalProcessorInformation(
     return STATUS_SUCCESS;
 }
 
+SYSTEM_BOOT_ENVIRONMENT_INFORMATION ExpBootEnvironmentInformation;
+
 NTSTATUS
 NTAPI
 ExpQueryBootEnvironmentInformation(
@@ -706,12 +708,7 @@ ExpQueryBootEnvironmentInformation(
 
     RtlZeroMemory(Info, sizeof(*Info));
 
-    if ((KeLoaderBlock != NULL) && (KeLoaderBlock->Extension != NULL))
-    {
-        Info->BootIdentifier =
-            KeLoaderBlock->Extension->BootIdentifier;
-    }
-
+    Info->BootIdentifier = ExpBootEnvironmentInformation.BootIdentifier;
     Info->FirmwareType = ExGetFirmwareType();
     Info->BootFlags = 0;
 

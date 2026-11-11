@@ -307,6 +307,7 @@ KMT_TESTFUNC Test_MmWddmRotateValid;
 KMT_TESTFUNC Test_MmReservedMapping;
 KMT_TESTFUNC Test_MmSelfMap;
 KMT_TESTFUNC Test_MmUserLayout;
+KMT_TESTFUNC Test_MmLoaderBlock;
 KMT_TESTFUNC Test_NdisIfProvider;
 KMT_TESTFUNC Test_NdisRwLock;
 KMT_TESTFUNC Test_NdisProcessorGroup;
@@ -681,6 +682,7 @@ const KMT_TEST TestList[] =
     { "MmReservedMapping",                  Test_MmReservedMapping },
     { "MmSelfMap",                          Test_MmSelfMap },
     { "MmUserLayout",                       Test_MmUserLayout },
+    { "MmLoaderBlock",                      Test_MmLoaderBlock },
     { "NdisIfProvider",                     Test_NdisIfProvider },
     { "NdisRwLock",                         Test_NdisRwLock },
     { "NdisProcessorGroup",                 Test_NdisProcessorGroup },

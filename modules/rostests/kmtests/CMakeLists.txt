@@ -263,6 +263,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_mm/MmMdl.c
     ntos_mm/MmMdlDispatch.c
     ntos_mm/MmLargePages.c
+    ntos_mm/MmLoaderBlock.c
     ntos_mm/MmMapReserve.c
     ntos_mm/MmPhysical.c
     ntos_mm/MmPrefetchPages.c

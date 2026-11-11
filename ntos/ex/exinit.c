@@ -927,6 +927,7 @@ ExpInitializeExecutive(
 
     ExpReadLoadOptions(LoaderBlock);
     ExpFirmwareType = LoaderBlock->FirmwareInformation.FirmwareTypeEfi ? FirmwareTypeUefi : FirmwareTypeBios;
+    ExpBootEnvironmentInformation.BootIdentifier = LoaderBlock->Extension->BootIdentifier;
     /* The boot path is read through the code page tables */
     if (!ExpInitNls(LoaderBlock))
     {
@@ -1240,6 +1241,9 @@ Phase1InitializationDiscard(
     ObCloseHandle(ProcessInformation.ProcessHandle, KernelMode);
 
     MmArmInitSystem(2, LoaderBlock);
+
+    KeLoaderBlock = NULL;
+    MmFreeLoaderBlock(LoaderBlock);
 
     ExpInitializationPhase = 2;
 }

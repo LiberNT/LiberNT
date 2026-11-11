@@ -746,5 +746,6 @@ IoInitSystem(
 
     IoPublishCrashDumpArtifacts();
 
+    IopLoaderBlock = NULL;
     return TRUE;
 }

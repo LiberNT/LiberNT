@@ -47,6 +47,15 @@ MiMemoryTypeIsInvisible(
 }
 
 static
+BOOLEAN
+MiMemoryTypeIsLoaderData(
+    _In_ TYPE_OF_MEMORY MemoryType)
+{
+    return (BOOLEAN)(MemoryType == LoaderOsloaderHeap || MemoryType == LoaderRegistryData ||
+                     MemoryType == LoaderNlsData);
+}
+
+static
 PMEMORY_ALLOCATION_DESCRIPTOR
 MiScanMemoryDescriptors(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -671,12 +680,150 @@ MiArm64UnmapEarlyDeviceAliases(
     MiArchBootClearUserHalf(MiBootRootFrame);
 }
 
+static
+BOOLEAN
+MiIsLoaderDataFrame(
+    _In_ ULONG Frame)
+{
+    PMI_PFN Entry;
+
+    if (Frame >= MiSystem.Pfn.FrameCount)
+        return FALSE;
+
+    Entry = &MiSystem.Pfn.Pfn[Frame];
+    return (BOOLEAN)(Entry->State == MiPageActive && Entry->ShareCount == 1 && Entry->ReferenceCount == 1 &&
+                     Entry->PteAddress == 0 &&
+                     !(MI_PFN_FLAGS(Entry) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PINNED)));
+}
+
+static
+PMI_PTE
+MiLoaderAliasSlot(
+    _In_ ULONG Frame,
+    _Out_ PULONG TableFrame,
+    _Out_ PBOOLEAN Mapped)
+{
+    PMI_ADDRESS_SPACE Space = &MiSystem.SystemSpace;
+    ULONG64 Alias = MiArchBootFrameAlias(Frame);
+    ULONG64 Physical;
+    PMI_PTE Slot;
+    MI_PTE Pte;
+
+    *TableFrame = 0;
+    *Mapped = FALSE;
+    if (Alias == 0 || (Frame < MiSystem.Pfn.DirectFrames && Alias == (ULONG64)(ULONG_PTR)MiArchMapFrame(Frame)))
+        return NULL;
+
+    Slot = MiPtLookup(Space, Alias, TableFrame);
+    if (Slot == NULL)
+    {
+        *Mapped = (BOOLEAN)(MiPtTranslate(Space, Alias, &Physical, NULL) && (Physical >> PAGE_SHIFT) == Frame);
+        return NULL;
+    }
+
+    Pte = MiArchPteRead(Slot);
+    *Mapped = (BOOLEAN)(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
+    return *Mapped ? Slot : NULL;
+}
+
 VOID
 NTAPI
 MmFreeLoaderBlock(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    UNREFERENCED_PARAMETER(LoaderBlock);
+    PMI_ADDRESS_SPACE Space = &MiSystem.SystemSpace;
+    PMI_PHYSICAL_RANGE Ranges;
+    ULONG Count = 0, Index, Frame, TableFrame;
+    ULONG64 Freed = 0, Cleared = 0;
+    PLIST_ENTRY Entry;
+    BOOLEAN Mapped;
+    PMI_PTE Slot;
+
+    for (Entry = LoaderBlock->MemoryDescriptorListHead.Flink;
+         Entry != &LoaderBlock->MemoryDescriptorListHead;
+         Entry = Entry->Flink)
+    {
+        PMEMORY_ALLOCATION_DESCRIPTOR Descriptor = CONTAINING_RECORD(Entry, MEMORY_ALLOCATION_DESCRIPTOR,
+                                                                     ListEntry);
+
+        if (Descriptor->PageCount != 0 && MiMemoryTypeIsLoaderData(Descriptor->MemoryType))
+            Count++;
+    }
+
+    if (Count == 0)
+        return;
+
+    Ranges = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(*Ranges), 'dLmM');
+    if (Ranges == NULL)
+        return;
+
+    Index = 0;
+    for (Entry = LoaderBlock->MemoryDescriptorListHead.Flink;
+         Entry != &LoaderBlock->MemoryDescriptorListHead && Index < Count;
+         Entry = Entry->Flink)
+    {
+        PMEMORY_ALLOCATION_DESCRIPTOR Descriptor = CONTAINING_RECORD(Entry, MEMORY_ALLOCATION_DESCRIPTOR,
+                                                                     ListEntry);
+
+        if (Descriptor->PageCount == 0 || !MiMemoryTypeIsLoaderData(Descriptor->MemoryType))
+            continue;
+
+        Ranges[Index].BasePage = Descriptor->BasePage;
+        Ranges[Index].PageCount = Descriptor->PageCount;
+        Ranges[Index].Flags = 0;
+        Index++;
+    }
+    Count = Index;
+
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Frame = (ULONG)Ranges[Index].BasePage;
+             Frame < Ranges[Index].BasePage + Ranges[Index].PageCount;
+             Frame++)
+        {
+            if (!MiIsLoaderDataFrame(Frame))
+                continue;
+
+            Slot = MiLoaderAliasSlot(Frame, &TableFrame, &Mapped);
+            if (Slot == NULL)
+                continue;
+
+            MiPtWrite(Space, MiArchBootFrameAlias(Frame), Slot, TableFrame, 0);
+            Cleared++;
+        }
+    }
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+
+    if (Cleared != 0)
+        MiArchTlbInvalidateAll(TRUE);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Frame = (ULONG)Ranges[Index].BasePage;
+             Frame < Ranges[Index].BasePage + Ranges[Index].PageCount;
+             Frame++)
+        {
+            if (!MiIsLoaderDataFrame(Frame))
+                continue;
+
+            MiLoaderAliasSlot(Frame, &TableFrame, &Mapped);
+            if (Mapped)
+                continue;
+
+            MiPfnShareDecrement(&MiSystem.Pfn, Frame, TRUE);
+            Freed++;
+        }
+    }
+
+    ExFreePoolWithTag(Ranges, 'dLmM');
+
+    MmResidentAvailablePages += (PFN_NUMBER)Freed;
+    MmAvailablePages = (PFN_NUMBER)MiPfnAvailablePages(&MiSystem.Pfn);
+    MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)Freed);
+    MmTotalCommitLimit = (SIZE_T)MI_ATOMIC_READ64(&MiSystem.CommitLimit);
+    MmTotalCommitLimitMaximum += (SIZE_T)Freed;
+    MmtotalCommitLimitMaximum = MmTotalCommitLimitMaximum;
 }
 
 VOID

@@ -33,6 +33,7 @@ extern ERESOURCE ExpFirmwareTableResource;
 extern ERESOURCE ExpTimeRefreshLock;
 extern LIST_ENTRY ExpFirmwareTableProviderListHead;
 extern FIRMWARE_TYPE ExpFirmwareType;
+extern SYSTEM_BOOT_ENVIRONMENT_INFORMATION ExpBootEnvironmentInformation;
 extern BOOLEAN ExpIsWinPEMode;
 extern ULONG ExpResourceTimeoutCount;
 extern LIST_ENTRY ExpSystemResourcesList;

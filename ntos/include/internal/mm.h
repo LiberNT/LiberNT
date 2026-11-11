@@ -845,6 +845,11 @@ NTAPI
 MmInitSystem(IN ULONG Phase,
              IN PLOADER_PARAMETER_BLOCK LoaderBlock);
 
+VOID
+NTAPI
+MmFreeLoaderBlock(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
 
 /* pagefile.c ****************************************************************/
 
