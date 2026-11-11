@@ -22,7 +22,220 @@
 #define NDEBUG
 #include <debug.h>
 
+/* PRIVATE DATA ***************************************************************/
+
+#define KDP_FILE_IO_POLL_US         10
+#define KDP_FILE_IO_SERIAL_POLLS    100000
+#define KDP_FILE_IO_NET_POLLS       400000
+#define KDP_FILE_IO_MAXIMUM_SKIPPED (4 * PACKET_MAX_SIZE)
+
+static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
+
 /* PRIVATE FUNCTIONS **********************************************************/
+
+static
+VOID
+KdpFileIoPut(
+    _In_reads_bytes_(Length) PCCH Buffer,
+    _In_ ULONG Length)
+{
+    if (KdpDebugMode.Serial)
+        KdPortPutBufferEx(&SerialPortInfo, Buffer, Length);
+
+    if (KdpDebugMode.Net)
+        KdpNetSendBytes(Buffer, Length);
+}
+
+static
+BOOLEAN
+KdpFileIoGetByte(
+    _Out_ PUCHAR Byte)
+{
+    ULONG Polls = KdpDebugMode.Net ? KDP_FILE_IO_NET_POLLS : KDP_FILE_IO_SERIAL_POLLS;
+    ULONG Poll;
+
+    for (Poll = 0; Poll < Polls; Poll++)
+    {
+        if (KdpDebugMode.Serial && KdPortGetByteEx(&SerialPortInfo, Byte))
+            return TRUE;
+
+        if (KdpDebugMode.Net && KdpNetGetByte(Byte))
+            return TRUE;
+
+        KeStallExecutionProcessor(KDP_FILE_IO_POLL_US);
+    }
+
+    return FALSE;
+}
+
+static
+ULONG
+KdpFileIoChecksum(
+    _In_reads_bytes_(Length) PCCH Buffer,
+    _In_ ULONG Length)
+{
+    ULONG Checksum = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < Length; Index++)
+        Checksum += (UCHAR)Buffer[Index];
+
+    return Checksum;
+}
+
+static
+VOID
+KdpSendFileIoPacket(
+    _In_ PSTRING MessageHeader,
+    _In_opt_ PSTRING MessageData)
+{
+    KD_PACKET Packet;
+    UCHAR Trailer = PACKET_TRAILING_BYTE;
+    ULONG DataLength = 0;
+
+    if ((MessageHeader == NULL) ||
+        (MessageHeader->Buffer == NULL) ||
+        (MessageHeader->Length != sizeof(DBGKD_FILE_IO)) ||
+        (!KdpDebugMode.Serial && !KdpDebugMode.Net))
+    {
+        return;
+    }
+
+    if ((MessageData != NULL) && (MessageData->Buffer != NULL))
+        DataLength = MessageData->Length;
+
+    if (MessageHeader->Length + DataLength > PACKET_MAX_SIZE)
+        return;
+
+    KdpFileIoPacketId++;
+
+    Packet.PacketLeader = PACKET_LEADER;
+    Packet.PacketType = PACKET_TYPE_KD_FILE_IO;
+    Packet.ByteCount = (USHORT)(MessageHeader->Length + DataLength);
+    Packet.PacketId = KdpFileIoPacketId;
+    Packet.Checksum = KdpFileIoChecksum(MessageHeader->Buffer, MessageHeader->Length);
+    if (DataLength != 0)
+        Packet.Checksum += KdpFileIoChecksum(MessageData->Buffer, DataLength);
+
+    KdpFileIoPut((PCCH)&Packet, sizeof(Packet));
+    KdpFileIoPut(MessageHeader->Buffer, MessageHeader->Length);
+    if (DataLength != 0)
+        KdpFileIoPut(MessageData->Buffer, DataLength);
+    KdpFileIoPut((PCCH)&Trailer, sizeof(Trailer));
+}
+
+static
+BOOLEAN
+KdpFileIoFindLeader(
+    _Out_ PUCHAR NextByte,
+    _Inout_ PULONG Skipped)
+{
+    ULONG Matched = 0;
+    UCHAR Byte;
+
+    while (*Skipped < KDP_FILE_IO_MAXIMUM_SKIPPED)
+    {
+        if (!KdpFileIoGetByte(&Byte))
+            return FALSE;
+
+        (*Skipped)++;
+
+        if (Byte == (UCHAR)PACKET_LEADER)
+        {
+            Matched++;
+            continue;
+        }
+
+        if (Matched >= sizeof(ULONG))
+        {
+            *NextByte = Byte;
+            return TRUE;
+        }
+
+        Matched = 0;
+    }
+
+    return FALSE;
+}
+
+static
+KDSTATUS
+KdpReceiveFileIoPacket(
+    _Out_ PSTRING MessageHeader,
+    _Out_ PSTRING MessageData,
+    _Out_opt_ PULONG DataLength)
+{
+    KD_PACKET Packet;
+    PUCHAR Fields = (PUCHAR)&Packet.PacketType;
+    ULONG Skipped = 0;
+    ULONG Index;
+    ULONG Copied;
+    ULONG Checksum;
+    UCHAR Byte;
+
+    if ((MessageHeader == NULL) ||
+        (MessageHeader->Buffer == NULL) ||
+        (MessageHeader->MaximumLength < sizeof(DBGKD_FILE_IO)) ||
+        (MessageData == NULL) ||
+        (MessageData->Buffer == NULL) ||
+        (!KdpDebugMode.Serial && !KdpDebugMode.Net))
+    {
+        return KdPacketTimedOut;
+    }
+
+    while (KdpFileIoFindLeader(&Fields[0], &Skipped))
+    {
+        for (Index = 1; Index < sizeof(Packet) - FIELD_OFFSET(KD_PACKET, PacketType); Index++)
+        {
+            if (!KdpFileIoGetByte(&Fields[Index]))
+                return KdPacketTimedOut;
+        }
+
+        Skipped += Index;
+
+        if ((Packet.PacketType != PACKET_TYPE_KD_FILE_IO) ||
+            (Packet.ByteCount < sizeof(DBGKD_FILE_IO)) ||
+            (Packet.ByteCount > PACKET_MAX_SIZE))
+        {
+            continue;
+        }
+
+        Checksum = 0;
+        Copied = 0;
+        for (Index = 0; Index < Packet.ByteCount; Index++)
+        {
+            if (!KdpFileIoGetByte(&Byte))
+                return KdPacketTimedOut;
+
+            Checksum += Byte;
+            if (Index < sizeof(DBGKD_FILE_IO))
+                MessageHeader->Buffer[Index] = (CHAR)Byte;
+            else if (Copied < MessageData->MaximumLength)
+                MessageData->Buffer[Copied++] = (CHAR)Byte;
+        }
+
+        if (!KdpFileIoGetByte(&Byte))
+            return KdPacketTimedOut;
+
+        Skipped += Packet.ByteCount + 1;
+
+        if ((Byte != PACKET_TRAILING_BYTE) ||
+            (Checksum != Packet.Checksum) ||
+            (Packet.PacketId != KdpFileIoPacketId))
+        {
+            continue;
+        }
+
+        MessageHeader->Length = sizeof(DBGKD_FILE_IO);
+        MessageData->Length = (USHORT)Copied;
+        if (DataLength != NULL)
+            *DataLength = Packet.ByteCount - sizeof(DBGKD_FILE_IO);
+
+        return KdPacketReceived;
+    }
+
+    return KdPacketTimedOut;
+}
 
 /*
  * Says what stopped the machine, for a machine with nobody attached to tell.
@@ -101,9 +314,12 @@ KdSendPacket(
             KdpReportStopOnProviders(MessageHeader);
             return;
 
+        case PACKET_TYPE_KD_FILE_IO:
+            KdpSendFileIoPacket(MessageHeader, MessageData);
+            return;
+
         default:
-            /* TODO: trace output, control requests and host file I/O have
-             * nowhere to go without a host and are dropped */
+            /* TODO: trace output and control requests have nowhere to go without a host and are dropped */
             return;
     }
 }
@@ -194,6 +410,9 @@ KdReceivePacket(
 
             return KdPacketReceived;
         }
+
+        case PACKET_TYPE_KD_FILE_IO:
+            return KdpReceiveFileIoPacket(MessageHeader, MessageData, DataLength);
 
         default:
             return KdPacketTimedOut;

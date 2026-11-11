@@ -1523,6 +1523,30 @@ KdbpCmdCondition(
     return TRUE;
 }
 
+static
+BOOLEAN
+KdbpCmdKdFiles(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    BOOLEAN Pull = (_stricmp(Argv[0], "!kdpull") == 0);
+    NTSTATUS Status;
+
+    if (Argc != 2)
+    {
+        KdbpPrint("%s needs %s\n", Argv[0], Pull ? "the NT path of a file" : "the name of a service");
+        return TRUE;
+    }
+
+    Status = KdQueueFileRequest(Pull ? KD_FILE_REQUEST_PULL : KD_FILE_REQUEST_RELOAD, Argv[1]);
+    if (NT_SUCCESS(Status))
+        KdbpPrint("%s %s runs after cont\n", Argv[0], Argv[1]);
+    else
+        KdbpPrint("%s %s was refused (0x%08lx)\n", Argv[0], Argv[1], Status);
+
+    return TRUE;
+}
+
 /* THE COMMANDS ***************************************************************/
 
 static const KDB_COMMAND KdbpCommands[] =
@@ -1566,6 +1590,8 @@ static const KDB_COMMAND KdbpCommands[] =
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
     {"bugcheck", "bugcheck", "Crashes the machine on purpose", KdbpCmdBugCheck},
     {"reboot", "reboot", "Restarts the machine", KdbpCmdReboot},
+    {"!kdpull", "!kdpull <file>", "After cont, replaces a file with the host's .kdfiles copy", KdbpCmdKdFiles},
+    {"!kdreload", "!kdreload <service>", "After cont, restarts a driver from the host's .kdfiles copy", KdbpCmdKdFiles},
 
 #ifdef KDBG
     {"!pte", "!pte <address>", "Shows the page table entry for an address", ExpKdbgExtPte},
