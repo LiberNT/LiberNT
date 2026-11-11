@@ -1056,13 +1056,26 @@ LANGID
 WINAPI
 SetThreadUILanguage(IN LANGID LangId)
 {
+    static const WCHAR HexDigits[] = L"0123456789abcdef";
+    WCHAR Languages[6];
+    NTSTATUS Status;
+    INT i;
+
     /* LangId == 0 selects a language best supporting the console; keep the
      * thread's current UI language in that case, like modern Windows. */
     if (LangId == 0)
-        return LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale);
+        return GetThreadUILanguage();
 
-    /* The thread UI language lives in the TEB. */
-    NtCurrentTeb()->CurrentLocale = MAKELCID(LangId, SORT_DEFAULT);
+    for (i = 0; i < 4; i++)
+        Languages[i] = HexDigits[(LangId >> (12 - 4 * i)) & 0xF];
+    Languages[4] = UNICODE_NULL;
+    Languages[5] = UNICODE_NULL;
+    Status = RtlSetThreadPreferredUILanguages(MUI_LANGUAGE_ID, Languages, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return GetThreadUILanguage();
+    }
     return LangId;
 }
 

@@ -774,6 +774,12 @@ LANGID
 WINAPI
 GetThreadUILanguage(VOID)
 {
+    WCHAR Languages[32];
+    ULONG Count = 0, Size = _countof(Languages);
+
+    if (NT_SUCCESS(RtlGetThreadPreferredUILanguages(MUI_LANGUAGE_ID, &Count, Languages, &Size)) && Count)
+        return (LANGID)wcstoul(Languages, NULL, 16);
+
     return GetUserDefaultUILanguage();
 }
 

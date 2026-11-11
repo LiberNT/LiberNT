@@ -1299,7 +1299,7 @@
 @ stdcall RtlSetThreadErrorMode(long ptr)
 @ cdecl RtlSetThreadIsCritical(long ptr long)
 @ stdcall RtlSetThreadPoolStartFunc(ptr ptr)
-@ stdcall -stub -version=0x600+ RtlSetThreadPreferredUILanguages(long ptr ptr)
+@ stdcall -version=0x600+ RtlSetThreadPreferredUILanguages(long ptr ptr)
 @ stdcall RtlSetTimeZoneInformation(ptr)
 @ stdcall RtlSetTimer(ptr ptr ptr ptr long long long)
 @ stdcall RtlSetUnhandledExceptionFilter(ptr)

@@ -1471,6 +1471,12 @@ LdrShutdownThread(VOID)
     /* Free the activation context stack */
     RtlFreeThreadActivationContextStack();
 
+    if (Teb->PreferredLanguages)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->PreferredLanguages);
+        Teb->PreferredLanguages = NULL;
+    }
+
 #if defined(_M_ARM64)
     /* CHPE: notify the emulator that this thread is terminating */
     if (ChpeIsChpeProcess())

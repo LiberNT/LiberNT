@@ -94,6 +94,7 @@ list(APPEND SOURCE
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
+    ResourceUILanguage.c
     RemoteThreadInit.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c

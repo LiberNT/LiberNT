@@ -1,0 +1,28 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Strings in three languages for the ResourceUILanguage test
+ * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
+ */
+
+#include <windef.h>
+
+#define IDS_RESOURCE_UI_LANGUAGE 4700
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+STRINGTABLE
+BEGIN
+    IDS_RESOURCE_UI_LANGUAGE "en"
+END
+
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_RESOURCE_UI_LANGUAGE "ja"
+END
+
+LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
+STRINGTABLE
+BEGIN
+    IDS_RESOURCE_UI_LANGUAGE "de"
+END

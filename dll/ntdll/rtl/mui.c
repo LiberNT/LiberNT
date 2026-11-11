@@ -20,6 +20,13 @@ typedef struct _RTL_MUI_REGISTRY_VALUE
 
 #define RTL_MUI_MAX_PROCESS_LANGUAGES 5
 
+typedef struct _RTLP_THREAD_PREFERRED_LANGUAGES
+{
+    LANGID FirstLanguage;
+    ULONG CharacterCount;
+    WCHAR Languages[ANYSIZE_ARRAY];
+} RTLP_THREAD_PREFERRED_LANGUAGES, *PRTLP_THREAD_PREFERRED_LANGUAGES;
+
 static PWSTR RtlpProcessPreferredLanguages;
 static ULONG RtlpProcessPreferredLanguageCharacters;
 
@@ -508,7 +515,71 @@ NTSTATUS
 NTAPI
 RtlGetThreadPreferredUILanguages(DWORD Flags, PULONG Count, PWSTR Buffer, PULONG Size)
 {
+    PRTLP_THREAD_PREFERRED_LANGUAGES Thread = NtCurrentTeb()->PreferredLanguages;
+
     if (!Count || !Size) return STATUS_INVALID_PARAMETER;
 
+    if (Thread)
+        return RtlpWritePreferredLanguages(Flags, Thread->Languages, Thread->CharacterCount, Count, Buffer, Size);
+
     return RtlpGetDefaultPreferredLanguage(Flags, Count, Buffer, Size);
+}
+
+NTSTATUS
+NTAPI
+RtlSetThreadPreferredUILanguages(DWORD Flags, PCZZWSTR Buffer, PULONG Count)
+{
+    PRTLP_THREAD_PREFERRED_LANGUAGES Thread = NULL, OldThread;
+    PWSTR Languages = NULL;
+    ULONG CharacterCount = 0;
+    ULONG LanguageCount = 0;
+    LCID Locale;
+    NTSTATUS Status;
+
+    if ((Flags & ~(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID)) ||
+        ((Flags & MUI_LANGUAGE_NAME) && (Flags & MUI_LANGUAGE_ID)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Buffer)
+    {
+        Status = RtlpNormalizeProcessPreferredLanguages(Flags, Buffer, &Languages, &CharacterCount, &LanguageCount);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+
+    if (Languages)
+    {
+        Status = RtlLocaleNameToLcid(Languages, &Locale, RTL_LOCALE_ALLOW_NEUTRAL_NAMES);
+        if (NT_SUCCESS(Status))
+        {
+            Thread = RtlAllocateHeap(RtlGetProcessHeap(), 0,
+                                     FIELD_OFFSET(RTLP_THREAD_PREFERRED_LANGUAGES, Languages[CharacterCount]));
+            if (!Thread) Status = STATUS_NO_MEMORY;
+        }
+        if (!NT_SUCCESS(Status))
+        {
+            RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+            return Status;
+        }
+        Thread->FirstLanguage = LANGIDFROMLCID(Locale);
+        Thread->CharacterCount = CharacterCount;
+        RtlCopyMemory(Thread->Languages, Languages, CharacterCount * sizeof(WCHAR));
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+    }
+
+    OldThread = NtCurrentTeb()->PreferredLanguages;
+    NtCurrentTeb()->PreferredLanguages = Thread;
+    if (OldThread) RtlFreeHeap(RtlGetProcessHeap(), 0, OldThread);
+    if (Buffer && Count) *Count = LanguageCount;
+    return STATUS_SUCCESS;
+}
+
+LANGID
+NTAPI
+RtlpGetThreadUILanguage(VOID)
+{
+    PRTLP_THREAD_PREFERRED_LANGUAGES Thread = NtCurrentTeb()->PreferredLanguages;
+
+    return Thread ? Thread->FirstLanguage : 0;
 }
