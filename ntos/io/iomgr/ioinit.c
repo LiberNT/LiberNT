@@ -737,6 +737,7 @@ IoInitSystem(
     IoAssignDriveLetters(LoaderBlock, &NtDeviceName, (PUCHAR)SystemPath, &SystemPathString);
     RtlFreeAnsiString(&NtDeviceName);
     IopPublishSystemRoot(&SystemPathString);
+    KdSystemRootAvailable();
 
     KdInitializeBootLog(LoaderBlock);
     KdInitializeFileService();

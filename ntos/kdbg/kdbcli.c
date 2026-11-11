@@ -1750,7 +1750,8 @@ KdbpCliInterpretInitFile(VOID)
             continue;
 
         KdbpPrint("kdb:> %s\n", Line);
-        KdbpCliInterpretCommand(Line);
+        if (KdbpCliInterpretCommand(Line))
+            return;
     }
 }
 
@@ -1824,7 +1825,10 @@ KdbpCliMainLoop(
     KdbpReportStop(EnteredOnSingleStep);
 
     /* Whatever the machine was told to do at the first stop is done here */
+    KdbpLeaveLoop = FALSE;
     KdbpCliInterpretInitFile();
+    if (KdbpLeaveLoop)
+        return;
 
     for (;;)
     {
