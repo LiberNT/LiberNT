@@ -281,6 +281,25 @@ Done:
     if (Previous) CloseHandle(Previous);
 }
 
+static
+VOID
+SetTokenBadPointerTests(
+    _In_ HANDLE Token)
+{
+    TOKEN_MANDATORY_LABEL Label;
+    TOKEN_OWNER Owner;
+    NTSTATUS Status;
+
+    Owner.Owner = (PSID)(ULONG_PTR)0x10;
+    Status = NtSetInformationToken(Token, TokenOwner, &Owner, sizeof(Owner));
+    ok_ntstatus(Status, STATUS_ACCESS_VIOLATION);
+
+    Label.Label.Sid = (PSID)(ULONG_PTR)0x10;
+    Label.Label.Attributes = SE_GROUP_INTEGRITY;
+    Status = NtSetInformationToken(Token, TokenIntegrityLevel, &Label, sizeof(Label));
+    ok_ntstatus(Status, STATUS_ACCESS_VIOLATION);
+}
+
 START_TEST(NtSetInformationToken)
 {
     NTSTATUS Status;
@@ -313,6 +332,7 @@ START_TEST(NtSetInformationToken)
     /* Now perform tests for each class */
     SetTokenDefaultDaclTests(Token);
     SetTokenSessionIdTests(Token);
+    SetTokenBadPointerTests(Token);
 
     CloseHandle(Token);
 }

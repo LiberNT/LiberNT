@@ -967,6 +967,77 @@ NtQueryInformationToken(
  * Changes one of the few things about a token that may be changed once it
  * exists. What a token says about who it speaks for never can.
  */
+static
+NTSTATUS
+SepCaptureTokenInformationPointers(
+    _In_ TOKEN_INFORMATION_CLASS TokenInformationClass,
+    _Inout_opt_ PVOID Given,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PSID *CapturedSid,
+    _Out_ PACL *CapturedAcl)
+{
+    PSID *SidField = NULL;
+    PACL *AclField = NULL;
+    NTSTATUS Status;
+
+    *CapturedSid = NULL;
+    *CapturedAcl = NULL;
+
+    switch (TokenInformationClass)
+    {
+        case TokenOwner:
+            if (Given == NULL || Length < sizeof(TOKEN_OWNER)) return STATUS_INFO_LENGTH_MISMATCH;
+            SidField = &((PTOKEN_OWNER)Given)->Owner;
+            break;
+
+        case TokenPrimaryGroup:
+            if (Given == NULL || Length < sizeof(TOKEN_PRIMARY_GROUP)) return STATUS_INFO_LENGTH_MISMATCH;
+            SidField = &((PTOKEN_PRIMARY_GROUP)Given)->PrimaryGroup;
+            break;
+
+        case TokenIntegrityLevel:
+            if (Given == NULL || Length < sizeof(TOKEN_MANDATORY_LABEL)) return STATUS_INFO_LENGTH_MISMATCH;
+            SidField = &((PTOKEN_MANDATORY_LABEL)Given)->Label.Sid;
+            break;
+
+        case TokenDefaultDacl:
+            if (Given == NULL || Length < sizeof(TOKEN_DEFAULT_DACL)) return STATUS_INFO_LENGTH_MISMATCH;
+            AclField = &((PTOKEN_DEFAULT_DACL)Given)->DefaultDacl;
+            break;
+
+        default:
+            return STATUS_SUCCESS;
+    }
+
+    if (SidField != NULL && *SidField != NULL)
+    {
+        Status = SepCaptureSid(*SidField, PreviousMode, PagedPool, FALSE, CapturedSid);
+        if (!NT_SUCCESS(Status)) return Status;
+        *SidField = *CapturedSid;
+    }
+
+    if (AclField != NULL && *AclField != NULL)
+    {
+        Status = SepCaptureAcl(*AclField, PreviousMode, PagedPool, FALSE, CapturedAcl);
+        if (!NT_SUCCESS(Status)) return Status;
+        *AclField = *CapturedAcl;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+SepReleaseTokenInformationPointers(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_opt_ PSID CapturedSid,
+    _In_opt_ PACL CapturedAcl)
+{
+    if (CapturedSid != NULL) SepReleaseSid(CapturedSid, PreviousMode, FALSE);
+    if (CapturedAcl != NULL) SepReleaseAcl(CapturedAcl, PreviousMode, FALSE);
+}
+
 __kernel_entry
 NTSTATUS
 NTAPI
@@ -982,6 +1053,8 @@ NtSetInformationToken(
     PVOID Given = NULL;
     PSID Named = NULL;
     PACL Dacl = NULL;
+    PSID CapturedSid = NULL;
+    PACL CapturedAcl = NULL;
     NTSTATUS Status;
     ULONG i;
 
@@ -1033,6 +1106,21 @@ NtSetInformationToken(
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
+        if (Given != NULL) ExFreePoolWithTag(Given, TAG_SE);
+        return Status;
+    }
+
+    /* The SID or ACL the record points at is still in the caller's memory */
+    Status = SepCaptureTokenInformationPointers(TokenInformationClass,
+                                                Given,
+                                                TokenInformationLength,
+                                                PreviousMode,
+                                                &CapturedSid,
+                                                &CapturedAcl);
+    if (!NT_SUCCESS(Status))
+    {
+        SepReleaseTokenInformationPointers(PreviousMode, CapturedSid, CapturedAcl);
+        ObDereferenceObject(Token);
         if (Given != NULL) ExFreePoolWithTag(Given, TAG_SE);
         return Status;
     }
@@ -1242,6 +1330,7 @@ NtSetInformationToken(
     SepReleaseTokenLock(Token);
     ObDereferenceObject(Token);
 
+    SepReleaseTokenInformationPointers(PreviousMode, CapturedSid, CapturedAcl);
     if (Given != NULL) ExFreePoolWithTag(Given, TAG_SE);
 
     return Status;
