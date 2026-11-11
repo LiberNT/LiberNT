@@ -57,6 +57,6 @@ START_TEST(WerRegisterFile)
     }
     CloseHandle(Thread);
 
-    ok(RegisterResult == S_OK || RegisterResult == E_NOTIMPL, "WerRegisterFile returned 0x%lx\n", RegisterResult);
-    ok(UnregisterResult == S_OK || UnregisterResult == E_NOTIMPL, "WerUnregisterFile returned 0x%lx\n", UnregisterResult);
+    ok_hex(RegisterResult, S_OK);
+    ok_hex(UnregisterResult, S_OK);
 }

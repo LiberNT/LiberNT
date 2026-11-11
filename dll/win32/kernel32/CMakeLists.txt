@@ -9,6 +9,7 @@ spec2def(kernel32.dll kernel32.spec ADD_IMPORTLIB)
 add_library(kernel32_shared
     client/shared_utils.c
     client/file/fileutils.c
+    client/werreg.c
 )
 target_link_libraries(kernel32_shared PRIVATE pseh)
 add_dependencies(kernel32_shared psdk)

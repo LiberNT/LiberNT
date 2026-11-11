@@ -5,6 +5,7 @@
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
 extern void func_ApiSetCoreSynch(void);
+extern void func_ApplicationRecovery(void);
 extern void func_AuditAlarmApis(void);
 extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
@@ -145,6 +146,7 @@ extern void func_UEFIFirmware(void);
 extern void func_WaitFileHandle(void);
 extern void func_WaitForMultipleObjects(void);
 extern void func_WerRegisterFile(void);
+extern void func_WerRegistration(void);
 extern void func_WideCharToMultiByte(void);
 extern void func_Wow64GetThreadContext(void);
 extern void func_Wow64ChildProcess(void);
@@ -161,6 +163,7 @@ const struct test winetest_testlist[] =
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
+    { "ApplicationRecovery",         func_ApplicationRecovery },
     { "AuditAlarmApis",              func_AuditAlarmApis },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
@@ -298,6 +301,7 @@ const struct test winetest_testlist[] =
     { "WaitFileHandle",              func_WaitFileHandle },
     { "WaitForMultipleObjects",      func_WaitForMultipleObjects },
     { "WerRegisterFile",             func_WerRegisterFile },
+    { "WerRegistration",             func_WerRegistration },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },
     { "Wow64ChildProcess",           func_Wow64ChildProcess },
     { "Wow64GetThreadContext",       func_Wow64GetThreadContext },

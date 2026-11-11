@@ -7,8 +7,8 @@
 
 #include <windows.h>
 #include <winternl.h>
-
-#define WER_MAX_REGISTERED_RUNTIME_EXCEPTION_MODULES 16
+#include <werapi.h>
+#include <basewer.h>
 
 typedef struct _WER_RUNTIME_MODULE
 {
@@ -49,6 +49,7 @@ WerRegisterRuntimeExceptionModule(
     SIZE_T AllocationSize;
 
     if (!DllName) return E_INVALIDARG;
+    if (BaseWerGetState() & BASE_WER_RECOVERY_IN_PROGRESS) return WER_E_INVALID_STATE;
     RtlInitUnicodeString(&Name, DllName);
     AllocationSize = sizeof(*Module) + Name.Length + sizeof(WCHAR);
     Module = RtlAllocateHeap(NtCurrentTeb()->Peb->ProcessHeap, 0, AllocationSize);
@@ -91,6 +92,7 @@ WerUnregisterRuntimeExceptionModule(
     UNICODE_STRING Name;
 
     if (!DllName) return E_INVALIDARG;
+    if (BaseWerGetState() & BASE_WER_RECOVERY_IN_PROGRESS) return WER_E_INVALID_STATE;
     RtlInitUnicodeString(&Name, DllName);
 
     RtlAcquireSRWLockExclusive(&WerRuntimeLock);
@@ -98,7 +100,7 @@ WerUnregisterRuntimeExceptionModule(
     if (!Module)
     {
         RtlReleaseSRWLockExclusive(&WerRuntimeLock);
-        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+        return WER_E_NOT_FOUND;
     }
 
     RemoveEntryList(&Module->Entry);

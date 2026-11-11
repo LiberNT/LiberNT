@@ -260,6 +260,11 @@ BasepArchUnwindFrame(
     _Out_ PULONG_PTR ReturnAddress);
 
 VOID
+WINAPI
+BasepRunApplicationRecovery(
+    _In_ NTSTATUS ExitStatus);
+
+VOID
 NTAPI
 BasepFreeActivationContextActivationBlock(
     IN PBASEP_ACTCTX_BLOCK ActivationBlock

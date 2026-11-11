@@ -134,64 +134,10 @@ QueryFullProcessImageNameA(
  */
 HRESULT
 WINAPI
-GetApplicationRecoveryCallback(IN HANDLE hProcess,
-                               OUT APPLICATION_RECOVERY_CALLBACK* pRecoveryCallback,
-                               OUT PVOID* ppvParameter,
-                               PDWORD dwPingInterval,
-                               PDWORD dwFlags)
-{
-    UNIMPLEMENTED;
-    return E_FAIL;
-}
-
-
-/*
- * @unimplemented
- */
-HRESULT
-WINAPI
 GetApplicationRestart(IN HANDLE hProcess,
                       OUT PWSTR pwzCommandline  OPTIONAL,
                       IN OUT PDWORD pcchSize,
                       OUT PDWORD pdwFlags  OPTIONAL)
-{
-    UNIMPLEMENTED;
-    return E_FAIL;
-}
-
-
-/*
- * @unimplemented
- */
-VOID
-WINAPI
-ApplicationRecoveryFinished(IN BOOL bSuccess)
-{
-    UNIMPLEMENTED;
-}
-
-
-/*
- * @unimplemented
- */
-HRESULT
-WINAPI
-ApplicationRecoveryInProgress(OUT PBOOL pbCancelled)
-{
-    UNIMPLEMENTED;
-    return E_FAIL;
-}
-
-
-/*
- * @unimplemented
- */
-HRESULT
-WINAPI
-RegisterApplicationRecoveryCallback(IN APPLICATION_RECOVERY_CALLBACK pRecoveryCallback,
-                                    IN PVOID pvParameter  OPTIONAL,
-                                    DWORD dwPingInterval,
-                                    DWORD dwFlags)
 {
     UNIMPLEMENTED;
     return E_FAIL;

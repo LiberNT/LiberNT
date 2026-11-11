@@ -8,6 +8,7 @@ list(APPEND SOURCE
     ActCtxDependencyVersions.c
     ConsoleAlias.c
     ApiSetCoreSynch.c
+    ApplicationRecovery.c
     AuditAlarmApis.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c
@@ -148,6 +149,7 @@ list(APPEND SOURCE
     WaitFileHandle.c
     WaitForMultipleObjects.c
     WerRegisterFile.c
+    WerRegistration.c
     WideCharToMultiByte.c
     Wow64GetThreadContext.c
     Wow64ChildProcess.c

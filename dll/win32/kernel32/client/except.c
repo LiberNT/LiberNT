@@ -530,6 +530,7 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
         (RtlGetThreadErrorMode() & RTL_SEM_NOGPFAULTERRORBOX))
     {
         /* Do not display the pop-up error box, just transfer control to the exception handler */
+        BasepRunApplicationRecovery(ExceptionRecord->ExceptionCode);
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
@@ -844,6 +845,8 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
 
 
 Quit:
+    BasepRunApplicationRecovery(ExceptionRecord->ExceptionCode);
+
     /* If this is a second chance exception, kill the process */
     if (IsSecondChance)
         NtTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);

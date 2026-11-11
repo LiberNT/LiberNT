@@ -28,6 +28,7 @@ add_library(kernelbase MODULE
     SyncObjects.c
     VirtualAlloc2.c
     VolumeInformation.c
+    WerRegistration.c
     WerRuntime.c
     Wow64Directory.c
     XState.c

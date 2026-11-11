@@ -54,6 +54,32 @@ extern "C" {
 #define WER_SUBMIT_ARCHIVE_PARAMETERS_ONLY  0x1000
 #define WER_SUBMIT_REPORT_MACHINE_ID        0x2000
 
+#define WER_FAULT_REPORTING_FLAG_NOHEAP                     1
+#define WER_FAULT_REPORTING_FLAG_QUEUE                      2
+#define WER_FAULT_REPORTING_FLAG_DISABLE_THREAD_SUSPENSION  4
+#define WER_FAULT_REPORTING_FLAG_QUEUE_UPLOAD               8
+#define WER_FAULT_REPORTING_ALWAYS_SHOW_UI                  16
+#define WER_FAULT_REPORTING_NO_UI                           32
+#define WER_FAULT_REPORTING_FLAG_NO_HEAP_ON_QUEUE           64
+#define WER_FAULT_REPORTING_DISABLE_SNAPSHOT_CRASH          128
+#define WER_FAULT_REPORTING_DISABLE_SNAPSHOT_HANG           256
+#define WER_FAULT_REPORTING_CRITICAL                        512
+#define WER_FAULT_REPORTING_DURABLE                         1024
+
+#define WER_MAX_MEM_BLOCK_SIZE (64 * 1024)
+
+#define WER_E_INSUFFICIENT_BUFFER   (HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER))
+#define WER_E_NOT_FOUND             (HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
+#define WER_E_LENGTH_EXCEEDED       (HRESULT_FROM_WIN32(ERROR_PARAMETER_QUOTA_EXCEEDED))
+#define WER_E_INVALID_STATE         (HRESULT_FROM_WIN32(ERROR_INVALID_STATE))
+
+#define WER_FILE_DELETE_WHEN_DONE   1
+#define WER_FILE_ANONYMOUS_DATA     2
+#define WER_FILE_COMPRESSED         4
+
+#define WER_MAX_REGISTERED_ENTRIES                      512
+#define WER_MAX_REGISTERED_RUNTIME_EXCEPTION_MODULES    16
+
 /* #### */
 
 typedef HANDLE HREPORT;
@@ -113,12 +139,19 @@ typedef enum _WER_SUBMIT_RESULT
 /* #### */
 
 HRESULT WINAPI WerAddExcludedApplication(PCWSTR, BOOL);
+HRESULT WINAPI WerGetFlags(HANDLE process, DWORD *flags);
 HRESULT WINAPI WerRegisterFile(PCWSTR file, WER_REGISTER_FILE_TYPE regfiletype, DWORD flags);
+HRESULT WINAPI WerRegisterMemoryBlock(void *block, DWORD size);
+HRESULT WINAPI WerRegisterRuntimeExceptionModule(PCWSTR callbackdll, void *context);
 HRESULT WINAPI WerRemoveExcludedApplication(PCWSTR, BOOL);
 HRESULT WINAPI WerReportCloseHandle(HREPORT);
 HRESULT WINAPI WerReportCreate(PCWSTR, WER_REPORT_TYPE, PWER_REPORT_INFORMATION, HREPORT*);
 HRESULT WINAPI WerReportSetParameter(HREPORT, DWORD, PCWSTR, PCWSTR);
 HRESULT WINAPI WerReportSubmit(HREPORT, WER_CONSENT, DWORD, PWER_SUBMIT_RESULT);
+HRESULT WINAPI WerSetFlags(DWORD flags);
+HRESULT WINAPI WerUnregisterFile(PCWSTR file);
+HRESULT WINAPI WerUnregisterMemoryBlock(void *block);
+HRESULT WINAPI WerUnregisterRuntimeExceptionModule(PCWSTR callbackdll, void *context);
 
 #ifdef __cplusplus
 }

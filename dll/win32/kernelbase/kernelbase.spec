@@ -333,6 +333,7 @@
 @ stdcall GetAclInformation(ptr ptr long long)
 @ stdcall GetAppContainerAce(ptr long ptr ptr)
 @ stdcall GetAppContainerNamedObjectPath(ptr ptr long ptr ptr)
+@ stdcall -version=0x600+ GetApplicationRecoveryCallback(ptr ptr ptr ptr ptr) kernel32.GetApplicationRecoveryCallback
 @ stdcall -version=0x600+ GetApplicationRestartSettings(ptr ptr ptr ptr) kernel32.GetApplicationRestartSettings
 @ stdcall GetApplicationUserModelIdFromToken(ptr ptr ptr)
 @ stub GetCPFileNameFromRegistry
