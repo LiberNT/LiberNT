@@ -10,6 +10,7 @@
 #include <ntstrsafe.h>
 #include <reactos/drivers/fdtdrv.h>
 #include <reactos/drivers/applertkit.h>
+#include <reactos/drivers/appleadmac.h>
 #include <reactos/drivers/applesmc.h>
 #include <reactos/drivers/dumpstor.h>
 
@@ -45,6 +46,8 @@
 
 #define DC_IRQ_MASK                 0x0
 #define DC_IRQ_FLAG                 0x4
+#define DC_CONFIG_TX_THRESH         0x0
+#define DC_CONFIG_RX_THRESH         0x4
 #define DC_DATA_TX8                 0x04
 #define DC_DATA_TX32                0x10
 #define DC_DATA_TX_FREE             0x14
@@ -92,6 +95,7 @@
 #define MTP_COMMAND_TIMEOUT_MS      1000
 #define MTP_BOOT_TIMEOUT_MS         2000
 #define MTP_KEYBOARD_TIMEOUT_MS     4000
+#define MTP_POLL_MS                 1
 #define MTP_MAX_BUFFERS             8
 
 #pragma pack(push, 1)
@@ -250,8 +254,18 @@ typedef struct _MTP_DEVICE
 
     PKTHREAD Thread;
     KEVENT StopEvent;
+    KEVENT DataEvent;
     volatile LONG Stop;
     BOOLEAN Started;
+
+    PKINTERRUPT Interrupt;
+    KDPC Dpc;
+    ULONG FifoGsi;
+    BOOLEAN FifoEdge;
+    ULONG RxIrqBit;
+    ULONG TxIrqBit;
+    volatile LONG Interrupts;
+    volatile LONG InterruptLogged;
 
     KSPIN_LOCK QueueLock;
     LIST_ENTRY PendingReads;
@@ -1050,6 +1064,154 @@ MtpHandlePacket(
 }
 
 static
+NTSTATUS
+MtpQueryNodeInterrupt(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    const UCHAR *Interrupts;
+    const CHAR *Compatible;
+    ULONG Length, CompatibleLength, Parent, CellCount, Cell, Phandle;
+    ULONG Cells[4];
+    ULONG64 Value;
+
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+    if (!FdtReadU32(&Tree->Fdt, Node, "interrupt-parent", &Phandle))
+        return STATUS_NOT_FOUND;
+    Parent = FdtDriverFindPhandle(Tree, Phandle);
+    if (Parent == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, Parent, "#interrupt-cells", &CellCount) ||
+        CellCount == 0 || CellCount > RTL_NUMBER_OF(Cells))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    Interrupts = FdtGetProperty(&Tree->Fdt, Node, "interrupts", &Length);
+    if (!Interrupts || Length < CellCount * sizeof(ULONG))
+        return STATUS_NOT_FOUND;
+    for (Cell = 0; Cell < CellCount; ++Cell)
+    {
+        if (!FdtReadCells(Interrupts, Length, Cell, 1, &Value))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Cells[Cell] = (ULONG)Value;
+    }
+    Compatible = FdtGetProperty(&Tree->Fdt, Parent, "compatible", &CompatibleLength);
+    if (!Compatible ||
+        !HalArm64TranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, CellCount,
+                                              Gsi, EdgeTriggered))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    return STATUS_SUCCESS;
+}
+
+/* The DockChannel demultiplexes one SoC interrupt into two bits per channel,
+ * and the HID child names them, so its own cells give the bit numbers. */
+static
+VOID
+MtpQueryChannelIrqBits(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _Inout_ PMTP_DEVICE Device)
+{
+    const UCHAR *Interrupts;
+    const CHAR *Names;
+    ULONG Length, NamesLength, Offset = 0, Index = 0;
+    ULONG64 Value;
+
+    Interrupts = FdtGetProperty(&Tree->Fdt, Node, "interrupts", &Length);
+    Names = FdtGetProperty(&Tree->Fdt, Node, "interrupt-names", &NamesLength);
+    if (!Interrupts || !Names)
+        return;
+    while (Offset < NamesLength && (Index + 1) * 2 * sizeof(ULONG) <= Length)
+    {
+        const CHAR *Name = Names + Offset;
+        SIZE_T NameLength = strnlen(Name, NamesLength - Offset);
+
+        if (!FdtReadCells(Interrupts, Length, Index * 2, 1, &Value))
+            return;
+        if (NameLength == 2 && Name[0] == 'r' && Name[1] == 'x')
+            Device->RxIrqBit = 1u << (ULONG)Value;
+        else if (NameLength == 2 && Name[0] == 't' && Name[1] == 'x')
+            Device->TxIrqBit = 1u << (ULONG)Value;
+        Offset += NameLength + 1;
+        Index++;
+    }
+}
+
+static
+VOID
+NTAPI
+MtpDpcRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID Context,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    PMTP_DEVICE Device = Context;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(Argument1);
+    UNREFERENCED_PARAMETER(Argument2);
+    ASSERT(Device && KeGetCurrentIrql() == DISPATCH_LEVEL);
+    if (!InterlockedExchange(&Device->InterruptLogged, 1))
+        DbgPrint("applemtp: DockChannel interrupt fired\n");
+    KeSetEvent(&Device->DataEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* The receive flag is a level built from the FIFO threshold, so it is masked
+ * here and re-armed once the worker thread has drained the FIFO. */
+static
+BOOLEAN
+NTAPI
+MtpIsr(
+    _In_ PKINTERRUPT Interrupt,
+    _In_opt_ PVOID Context)
+{
+    PMTP_DEVICE Device = Context;
+    ULONG Pending, Handled;
+
+    UNREFERENCED_PARAMETER(Interrupt);
+    if (!Device || !Device->FifoIrq)
+        return FALSE;
+
+    Pending = MtpRead32(Device->FifoIrq, DC_IRQ_FLAG);
+    Handled = Pending & (Device->RxIrqBit | Device->TxIrqBit);
+    if (!Handled)
+        return FALSE;
+
+    MtpWrite32(Device->FifoIrq, DC_IRQ_MASK,
+               MtpRead32(Device->FifoIrq, DC_IRQ_MASK) & ~Handled);
+    MtpWrite32(Device->FifoIrq, DC_IRQ_FLAG, Handled);
+    InterlockedIncrement(&Device->Interrupts);
+    KeInsertQueueDpc(&Device->Dpc, NULL, NULL);
+    return TRUE;
+}
+
+static
+BOOLEAN
+NTAPI
+MtpArmReceiveSynchronized(
+    _In_opt_ PVOID Context)
+{
+    PMTP_DEVICE Device = Context;
+
+    MtpWrite32(Device->Config, DC_CONFIG_RX_THRESH, 1);
+    MtpWrite32(Device->FifoIrq, DC_IRQ_FLAG, Device->RxIrqBit);
+    MtpWrite32(Device->FifoIrq, DC_IRQ_MASK,
+               MtpRead32(Device->FifoIrq, DC_IRQ_MASK) | Device->RxIrqBit);
+    return TRUE;
+}
+
+static
+VOID
+MtpArmReceive(
+    _Inout_ PMTP_DEVICE Device)
+{
+    if (Device->Interrupt == NULL || Device->RxIrqBit == 0)
+        return;
+    KeSynchronizeExecution(Device->Interrupt, MtpArmReceiveSynchronized, Device);
+}
+
+static
 VOID
 MtpPollFifo(
     _Inout_ PMTP_DEVICE Device)
@@ -1477,15 +1639,22 @@ MtpWorker(
 {
     PMTP_DEVICE Device = Context;
     LARGE_INTEGER Interval;
+    ULONG WaitMs;
 
-    Interval.QuadPart = -10000;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     while (!Device->Stop)
     {
         MtpDartCheckFault(Device);
         AppleRtkitPoll(&Device->Rtkit);
         MtpPollFifo(Device);
         MtpServiceInterfaces(Device);
-        KeWaitForSingleObject(&Device->StopEvent, Executive, KernelMode, FALSE, &Interval);
+        MtpArmReceive(Device);
+        WaitMs = AppleRtkitPollInterval(&Device->Rtkit, MTP_POLL_MS);
+        if (!Device->Interrupt || !Device->Interrupts)
+            WaitMs = MTP_POLL_MS;
+        Interval.QuadPart = -(LONGLONG)WaitMs * 10000;
+        KeWaitForSingleObject(&Device->DataEvent, Executive, KernelMode, FALSE,
+                              WaitMs == APPLE_RTKIT_NO_POLL ? NULL : &Interval);
     }
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -1675,10 +1844,20 @@ MtpReleaseHardware(
 
     MtpUnregisterDebuggerKeyboard(Device);
 
+    if (Device->Interrupt)
+    {
+        if (Device->FifoIrq)
+            MtpWrite32(Device->FifoIrq, DC_IRQ_MASK, 0);
+        IoDisconnectInterrupt(Device->Interrupt);
+        Device->Interrupt = NULL;
+        KeFlushQueuedDpcs();
+    }
+
     if (Device->Thread)
     {
         InterlockedExchange(&Device->Stop, 1);
         KeSetEvent(&Device->StopEvent, IO_NO_INCREMENT, FALSE);
+        KeSetEvent(&Device->DataEvent, IO_NO_INCREMENT, FALSE);
         KeWaitForSingleObject(Device->Thread, Executive, KernelMode, FALSE, NULL);
         ObDereferenceObject(Device->Thread);
         Device->Thread = NULL;
@@ -1795,6 +1974,7 @@ MtpTeardown(
     Device->DartReady = FALSE;
     MtpUnmap(&Device->Asc, Device->AscSize);
     MtpUnmap(&Device->Sram, Device->SramSize);
+    AppleRtkitDisconnectInterrupt(&Device->Rtkit);
     MtpUnmap(&Device->Mbox, Device->MboxSize);
     MtpUnmap(&Device->Dart, Device->DartSize);
     MtpUnmap(&Device->FifoIrq, Device->FifoIrqSize);
@@ -1826,13 +2006,19 @@ MtpTeardown(
 static
 NTSTATUS
 MtpStartHardware(
-    _Inout_ PMTP_DEVICE Device)
+    _Inout_ PMTP_DEVICE Device,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated)
 {
-    ULONG FifoNode, HidNode, HelperNode, MboxNode, DartNode, Phandle, Length;
+    ULONG FifoNode, HidNode, HelperNode, MboxNode, DartNode, Phandle, Length, Gsi;
     const UCHAR *Iommus;
     HANDLE ThreadHandle;
     LARGE_INTEGER Timeout;
+    BOOLEAN Edge;
     NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(!Device->Thread && !Device->Rtkit.Interrupt);
 
     Status = FdtDriverOpen(Device->Pdo, &Device->Tree);
     if (!NT_SUCCESS(Status))
@@ -1883,12 +2069,22 @@ MtpStartHardware(
     Device->PacketNeed = sizeof(DCHID_HEADER);
     RtlCopyMemory(Device->Interfaces[0].Name, "comm", 5);
 
+    KeInitializeEvent(&Device->DataEvent, SynchronizationEvent, FALSE);
+    Device->Rtkit.Mailbox = Device->Mbox;
+    Device->Rtkit.Name = "applemtp";
+    Status = AppleRtkitQueryInterrupt(&Device->Tree, HelperNode, &Gsi, &Edge);
+    if (NT_SUCCESS(Status))
+        AppleRtkitConnectInterrupt(&Device->Rtkit, Raw, Translated, Gsi, &Device->DataEvent);
+    else
+        DbgPrint("applemtp: the MTP mailbox declares no receive interrupt (%lx), polling\n", Status);
     Status = MtpBootCoprocessor(Device);
     if (!NT_SUCCESS(Status))
         return Status;
 
     KeInitializeEvent(&Device->StopEvent, NotificationEvent, FALSE);
     KeInitializeEvent(&Device->KeyboardEvent, NotificationEvent, FALSE);
+    KeInitializeDpc(&Device->Dpc, MtpDpcRoutine, Device);
+    MtpQueryChannelIrqBits(&Device->Tree, HidNode, Device);
     Device->Stop = 0;
     Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL, MtpWorker, Device);
     if (!NT_SUCCESS(Status))
@@ -2105,6 +2301,153 @@ MtpPnpCompletion(
 
 static
 NTSTATUS
+MtpFilterResourceRequirements(
+    _Inout_ PMTP_DEVICE Device,
+    _Inout_ PIRP Irp)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST Old;
+    PIO_RESOURCE_REQUIREMENTS_LIST New;
+    PIO_RESOURCE_DESCRIPTOR Descriptor;
+    FDT_DRIVER_TREE Tree;
+    ULONG Gsi, Count = 0, Size, Index;
+    BOOLEAN Edge = FALSE;
+    NTSTATUS Status;
+
+    Status = FdtDriverOpen(Device->Pdo, &Tree);
+    if (!NT_SUCCESS(Status))
+        return STATUS_NOT_SUPPORTED;
+    Status = MtpQueryNodeInterrupt(&Tree, Tree.Node, &Gsi, &Edge);
+    FdtDriverClose(&Tree);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("applemtp: the DockChannel node declares no interrupt (%lx), polling\n", Status);
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    Old = (PIO_RESOURCE_REQUIREMENTS_LIST)Irp->IoStatus.Information;
+    if (Old != NULL)
+    {
+        if (Old->AlternativeLists != 1)
+            return STATUS_NOT_SUPPORTED;
+        Count = Old->List[0].Count;
+        for (Index = 0; Index < Count; ++Index)
+        {
+            if (Old->List[0].Descriptors[Index].Type == CmResourceTypeInterrupt)
+                return STATUS_NOT_SUPPORTED;
+        }
+    }
+
+    Size = FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List[0].Descriptors) +
+           (Count + 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    New = ExAllocatePoolWithTag(PagedPool, Size, MTP_TAG);
+    if (New == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(New, Size);
+    if (Old != NULL)
+    {
+        RtlCopyMemory(New, Old, FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List[0].Descriptors) +
+                                Count * sizeof(IO_RESOURCE_DESCRIPTOR));
+    }
+    else
+    {
+        New->InterfaceType = Internal;
+        New->BusNumber = 0;
+        New->List[0].Version = 1;
+        New->List[0].Revision = 1;
+    }
+    New->ListSize = Size;
+    New->AlternativeLists = 1;
+    New->List[0].Count = Count + 1;
+    Descriptor = &New->List[0].Descriptors[Count];
+    Descriptor->Type = CmResourceTypeInterrupt;
+    Descriptor->ShareDisposition = CmResourceShareShared;
+    Descriptor->Flags = Edge ? CM_RESOURCE_INTERRUPT_LATCHED : CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE;
+    Descriptor->u.Interrupt.MinimumVector = Gsi;
+    Descriptor->u.Interrupt.MaximumVector = Gsi;
+    Device->FifoGsi = Gsi;
+    Device->FifoEdge = Edge;
+    DbgPrint("applemtp: requesting the DockChannel interrupt %lu\n", Gsi);
+
+    if (Old != NULL)
+        ExFreePool(Old);
+    Irp->IoStatus.Information = (ULONG_PTR)New;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+MtpAddMailboxRequirement(
+    _Inout_ PMTP_DEVICE Device,
+    _Inout_ PIRP Irp)
+{
+    FDT_DRIVER_TREE Tree;
+    ULONG HidNode, HelperNode = FDT_NO_NODE, Phandle, Gsi = 0;
+    BOOLEAN Edge = FALSE;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    Status = FdtDriverOpen(Device->Pdo, &Tree);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    HidNode = FdtDriverFindChild(&Tree, Tree.Node, "apple,dockchannel-hid");
+    if (HidNode != FDT_NO_NODE && FdtReadU32(&Tree.Fdt, HidNode, "apple,helper-cpu", &Phandle))
+        HelperNode = FdtDriverFindPhandle(&Tree, Phandle);
+    Status = (HelperNode != FDT_NO_NODE) ? AppleRtkitQueryInterrupt(&Tree, HelperNode, &Gsi, &Edge)
+                                         : STATUS_DEVICE_CONFIGURATION_ERROR;
+    FdtDriverClose(&Tree);
+    if (NT_SUCCESS(Status))
+        Status = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+    DbgPrint("applemtp: requesting the mailbox interrupt %lu: %lx\n", Gsi, Status);
+    return Status;
+}
+
+static
+VOID
+MtpConnectInterrupt(
+    _Inout_ PMTP_DEVICE Device,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (Device->RxIrqBit == 0)
+    {
+        DbgPrint("applemtp: the DockChannel HID names no receive interrupt, polling\n");
+        return;
+    }
+    if (Raw == NULL || Translated == NULL || Device->Interrupt != NULL ||
+        Raw->List[0].PartialResourceList.Count != Translated->List[0].PartialResourceList.Count)
+        return;
+
+    for (Index = 0; Index < Translated->List[0].PartialResourceList.Count; ++Index)
+    {
+        Partial = &Translated->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (Partial->Type != CmResourceTypeInterrupt ||
+            Raw->List[0].PartialResourceList.PartialDescriptors[Index].u.Interrupt.Vector != Device->FifoGsi)
+            continue;
+        Status = IoConnectInterrupt(&Device->Interrupt, MtpIsr, Device, NULL,
+                                    Partial->u.Interrupt.Vector,
+                                    (KIRQL)Partial->u.Interrupt.Level,
+                                    (KIRQL)Partial->u.Interrupt.Level,
+                                    (Partial->Flags & CM_RESOURCE_INTERRUPT_LATCHED) ? Latched
+                                                                                     : LevelSensitive,
+                                    TRUE, Partial->u.Interrupt.Affinity, FALSE);
+        DbgPrint("applemtp: DockChannel interrupt vector %lu level %lu connected: %lx, rx bit %08lx\n",
+                 Partial->u.Interrupt.Vector, Partial->u.Interrupt.Level, Status, Device->RxIrqBit);
+        if (NT_SUCCESS(Status))
+        {
+            MtpArmReceive(Device);
+            return;
+        }
+        Device->Interrupt = NULL;
+    }
+    DbgPrint("applemtp: no DockChannel interrupt was assigned, polling\n");
+}
+
+static
+NTSTATUS
 NTAPI
 MtpPnp(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -2117,6 +2460,27 @@ MtpPnp(
 
     switch (Stack->MinorFunction)
     {
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+            KeInitializeEvent(&Event, NotificationEvent, FALSE);
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, MtpPnpCompletion, &Event, TRUE, TRUE, TRUE);
+            Status = IoCallDriver(Device->LowerDevice, Irp);
+            if (Status == STATUS_PENDING)
+            {
+                KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+                Status = Irp->IoStatus.Status;
+            }
+            if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+            {
+                if (NT_SUCCESS(MtpFilterResourceRequirements(Device, Irp)))
+                    Status = STATUS_SUCCESS;
+                if (NT_SUCCESS(MtpAddMailboxRequirement(Device, Irp)))
+                    Status = STATUS_SUCCESS;
+            }
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+
         case IRP_MN_START_DEVICE:
             KeInitializeEvent(&Event, NotificationEvent, FALSE);
             IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -2129,8 +2493,12 @@ MtpPnp(
             }
             if (NT_SUCCESS(Status))
             {
-                Status = MtpStartHardware(Device);
-                if (!NT_SUCCESS(Status))
+                Status = MtpStartHardware(Device, Stack->Parameters.StartDevice.AllocatedResources,
+                                          Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+                if (NT_SUCCESS(Status))
+                    MtpConnectInterrupt(Device, Stack->Parameters.StartDevice.AllocatedResources,
+                                        Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+                else
                     MtpTeardown(Device);
             }
             Irp->IoStatus.Status = Status;
