@@ -311,18 +311,23 @@ NtSetInformationThread(
             if (!NT_SUCCESS(Status)) break;
 
             /*
-             * A thread moves within the band its process's class gives it.
-             * Stepping outside that band is what the real-time privilege
-             * buys, so without it the request is refused rather than
-             * quietly clamped.
+             * A thread steps at most two levels from its class's base, or
+             * saturates at either edge of the class, which is what the
+             * time-critical and idle levels ask for and needs no privilege.
+             * Only a real-time process may step further inside its band.
              */
-            if (Priority > THREAD_BASE_PRIORITY_LOWRT ||
-                Priority < THREAD_BASE_PRIORITY_IDLE)
+            if (Priority != THREAD_BASE_PRIORITY_LOWRT + 1 &&
+                Priority != THREAD_BASE_PRIORITY_IDLE - 1 &&
+                (Priority > THREAD_BASE_PRIORITY_MAX ||
+                 Priority < THREAD_BASE_PRIORITY_MIN))
             {
-                if (!SeSinglePrivilegeCheck(SeIncreaseBasePriorityPrivilege,
-                                            PreviousMode))
+                /* FIXME: SetThreadPriority documents -7..6 for real-time; the whole band is accepted and clamped */
+                if (THREAD_TO_PROCESS(Thread)->PriorityClass !=
+                        PROCESS_PRIORITY_CLASS_REALTIME ||
+                    Priority > THREAD_BASE_PRIORITY_LOWRT ||
+                    Priority < THREAD_BASE_PRIORITY_IDLE)
                 {
-                    Status = STATUS_PRIVILEGE_NOT_HELD;
+                    Status = STATUS_INVALID_PARAMETER;
                     break;
                 }
             }
