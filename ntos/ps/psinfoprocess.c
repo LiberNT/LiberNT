@@ -1173,15 +1173,20 @@ NtQueryInformationProcess(
         case ProcessPooledUsageAndLimits:
             RtlZeroMemory(&Pooled, sizeof(Pooled));
 
-            Pooled.PagedPoolUsage = Process->ProcessQuotaUsage[1];
-            Pooled.PeakPagedPoolUsage = Process->ProcessQuotaPeak[1];
-            Pooled.NonPagedPoolUsage = Process->ProcessQuotaUsage[0];
-            Pooled.PeakNonPagedPoolUsage = Process->ProcessQuotaPeak[0];
+            /* FIXME: the memory manager does not charge the block's pagefile account, so the commit charge stands in for it */
             Pooled.PagefileUsage = Process->CommitCharge << PAGE_SHIFT;
             Pooled.PeakPagefileUsage = Process->CommitChargePeak << PAGE_SHIFT;
 
             if (Process->QuotaBlock != NULL)
             {
+                Pooled.PagedPoolUsage =
+                    Process->QuotaBlock->QuotaEntry[PsPagedPool].Usage;
+                Pooled.PeakPagedPoolUsage =
+                    Process->QuotaBlock->QuotaEntry[PsPagedPool].Peak;
+                Pooled.NonPagedPoolUsage =
+                    Process->QuotaBlock->QuotaEntry[PsNonPagedPool].Usage;
+                Pooled.PeakNonPagedPoolUsage =
+                    Process->QuotaBlock->QuotaEntry[PsNonPagedPool].Peak;
                 Pooled.PagedPoolLimit =
                     Process->QuotaBlock->QuotaEntry[PsPagedPool].Limit;
                 Pooled.NonPagedPoolLimit =
