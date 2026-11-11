@@ -246,12 +246,23 @@ ObpWaitForHandleVector(
     LARGE_INTEGER Storage;
     PLARGE_INTEGER Effective;
     NTSTATUS Status;
+    ULONG Index;
 
     Status = ObpCheckWaitShape(Entries, WaitType);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = ObpFetchHandleVector(Supplied, Entries, EntrySize, Mode, Vector);
     if (!NT_SUCCESS(Status)) return Status;
+
+    /* Unlike a single wait, a vector names no pseudo handle */
+    for (Index = 0; Index < Entries; ++Index)
+    {
+        if ((Vector[Index] == NtCurrentProcess()) ||
+            (Vector[Index] == NtCurrentThread()))
+        {
+            return STATUS_INVALID_HANDLE;
+        }
+    }
 
     Status = ObpFetchTimeout(Timeout, Mode, &Storage, &Effective);
     if (!NT_SUCCESS(Status)) return Status;
