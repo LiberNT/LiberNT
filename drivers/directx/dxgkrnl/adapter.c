@@ -673,20 +673,20 @@ DxgkpRetainAndStopBasicDisplayFallback(
         return STATUS_DEVICE_BUSY;
     }
 
-    if (DxgkDisplayMapsDesktop(Owner))
+    (VOID)KeWaitForSingleObject(&Owner->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    OwnerInUse = DxgkIsDisplayAdapter(Owner) &&
+                 (InterlockedCompareExchange(&Owner->ShadowFbMapCount, 0, 0) > 0 ||
+                  Owner->RetiredShadowFb != NULL ||
+                  Owner->RetiredShadowAllocationFb != NULL);
+    KeReleaseMutex(&Owner->SharedPrimaryMutex, FALSE);
+    if (OwnerInUse)
     {
-        Status = DxgkDisplayDetachDesktop(Owner);
-        if (!NT_SUCCESS(Status))
-        {
-            DXGKRNL_WARN("POSTDISPLAY_HANDOFF: win32k still maps the desktop of "
-                         "BasicDisplay adapter %p (0x%08lX); claimant %p cannot "
-                         "take ownership\n",
-                         Owner,
-                         Status,
-                         Claimant);
-            ExReleaseRundownProtection(&Owner->RemoveRundownRef);
-            return STATUS_DEVICE_BUSY;
-        }
+        DXGKRNL_WARN("POSTDISPLAY_HANDOFF: win32k still maps the desktop of "
+                     "BasicDisplay adapter %p; claimant %p cannot take ownership\n",
+                     Owner,
+                     Claimant);
+        ExReleaseRundownProtection(&Owner->RemoveRundownRef);
+        return STATUS_DEVICE_BUSY;
     }
 
     Status = DxgkpStopPostDisplayOwner(Owner,
@@ -698,7 +698,6 @@ DxgkpRetainAndStopBasicDisplayFallback(
                     "be stopped 0x%08lX\n",
                     Owner,
                     Status);
-        DxgkDisplayAbortDetach(Owner);
         ExReleaseRundownProtection(&Owner->RemoveRundownRef);
         return Status;
     }
@@ -4676,6 +4675,7 @@ DxgkpEnsureGlobalInitialization(VOID)
     KeInitializeSpinLock(&DxgkAdapterGlobalListLock);
     InitializeListHead(&DxgkAdapterGlobalListHead);
     KeInitializeSpinLock(&g_PostDisplayOwnerLock);
+    DxgkDisplayInitialize();
     KeInitializeMutex(&g_PostDisplayOwnershipMutex, 0);
     KeInitializeMutex(&g_MiniportRegistrationMutex, 0);
     ExInitializeFastMutex(&DxgkpMapMemoryMutex);
@@ -17358,15 +17358,12 @@ DxgkpMiniportPowerDispatch(
     }
 
     /* Check for display device (\Device\Video0) — not a real power device. */
+    if (DxgkIsDisplayBridgeDevice(DeviceObject))
     {
-        extern PDEVICE_OBJECT g_DisplayDeviceObject;
-        if (g_DisplayDeviceObject != NULL && DeviceObject == g_DisplayDeviceObject)
-        {
-            PoStartNextPowerIrp(Irp);
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return STATUS_SUCCESS;
-        }
+        PoStartNextPowerIrp(Irp);
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_SUCCESS;
     }
 
     Adapter = DXGKRNL_ADAPTER_FROM_DEVOBJ(DeviceObject);

@@ -1533,6 +1533,7 @@ struct _DXGKRNL_ADAPTER
     UNICODE_STRING              DisplayAdapterInterfaceName;
     BOOLEAN                     DisplayAdapterInterfaceEnabled;
     WCHAR                       DisplayDeviceName[24];
+    struct _DXGKP_DISPLAY_BRIDGE *DisplayBridge;
 
     /* ACPI and power-state event subscriptions (acpievent.c). */
     DXGKP_ACPI_EVENTS           AcpiEvents;
@@ -3916,16 +3917,11 @@ DxgkIsDisplayAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 BOOLEAN
-DxgkDisplayMapsDesktop(
-    _In_ PDXGKRNL_ADAPTER Adapter);
-
-NTSTATUS
-DxgkDisplayDetachDesktop(
-    _In_ PDXGKRNL_ADAPTER Adapter);
+DxgkIsDisplayBridgeDevice(
+    _In_opt_ PDEVICE_OBJECT DeviceObject);
 
 VOID
-DxgkDisplayAbortDetach(
-    _In_ PDXGKRNL_ADAPTER Adapter);
+DxgkDisplayInitialize(VOID);
 
 NTSTATUS
 DxgkCreateRedirectionSurface(
