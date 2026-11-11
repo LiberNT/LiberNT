@@ -635,6 +635,7 @@
 @ stdcall GetProcessAffinityMask(long ptr ptr)
 @ stdcall -version=0x601+ GetProcessGroupAffinity(long ptr ptr)
 @ stdcall -version=0x600+ GetProcessDEPPolicy(ptr ptr ptr)
+@ stdcall -version=0xA00+ GetProcessDefaultCpuSets(ptr ptr long ptr) kernelbase.GetProcessDefaultCpuSets
 @ stdcall GetProcessHandleCount(long ptr)
 @ stdcall -norelay GetProcessHeap()
 @ stdcall GetProcessHeaps(long ptr)
@@ -712,6 +713,7 @@
 @ stdcall -version=0x600+ GetThreadPreferredUILanguages(long ptr wstr ptr) kernelbase.GetThreadPreferredUILanguages
 @ stdcall GetThreadPriority(long)
 @ stdcall GetThreadPriorityBoost(long ptr)
+@ stdcall -version=0xA00+ GetThreadSelectedCpuSets(ptr ptr long ptr) kernelbase.GetThreadSelectedCpuSets
 @ stdcall GetThreadSelectorEntry(long long ptr)
 @ stdcall GetThreadTimes(long ptr ptr ptr ptr)
 @ stdcall -version=0x600+ GetThreadUILanguage()
@@ -1248,6 +1250,7 @@
 @ stdcall SetProcessAffinityMask(long long)
 @ stdcall -version=0x600+ SetProcessAffinityUpdateMode(ptr long)
 @ stdcall -version=0x600+ SetProcessDEPPolicy(long)
+@ stdcall -version=0xA00+ SetProcessDefaultCpuSets(ptr ptr long) kernelbase.SetProcessDefaultCpuSets
 @ stdcall -version=0x602+ SetProcessInformation(long long ptr long)
 @ stdcall -version=0x602+ SetProcessMitigationPolicy(long ptr long)
 @ stdcall -version=0xA00+ SetProcessValidCallTargets(long ptr long long ptr)
@@ -1278,6 +1281,7 @@
 @ stdcall -version=0x600+ SetThreadPreferredUILanguages(long wstr ptr) kernelbase.SetThreadPreferredUILanguages
 @ stdcall SetThreadPriority(long long)
 @ stdcall SetThreadPriorityBoost(long long)
+@ stdcall -version=0xA00+ SetThreadSelectedCpuSets(ptr ptr long) kernelbase.SetThreadSelectedCpuSets
 @ stdcall SetThreadStackGuarantee(ptr)
 @ stdcall SetThreadUILanguage(long)
 @ stdcall -version=0x600+ SetThreadpoolStackInformation(ptr ptr) kernelbase.SetThreadpoolStackInformation

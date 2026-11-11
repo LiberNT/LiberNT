@@ -513,6 +513,7 @@
 @ stdcall GetPriorityClass(long) kernel32.GetPriorityClass
 @ stdcall GetPrivateObjectSecurity(ptr long ptr long ptr)
 @ stdcall GetProcAddress(long str) kernel32.GetProcAddress
+@ stdcall GetProcessDefaultCpuSets(ptr ptr long ptr)
 @ stdcall -version=0x601+ GetProcessGroupAffinity(long ptr ptr) kernel32.GetProcessGroupAffinity
 @ stdcall GetProcessHandleCount(long ptr) kernel32.GetProcessHandleCount
 @ stdcall GetProcessHeap() kernel32.GetProcessHeap
@@ -595,6 +596,7 @@
 @ stdcall GetThreadPreferredUILanguages(long ptr ptr ptr)
 @ stdcall GetThreadPriority(long) kernel32.GetThreadPriority
 @ stdcall GetThreadPriorityBoost(long ptr) kernel32.GetThreadPriorityBoost
+@ stdcall GetThreadSelectedCpuSets(ptr ptr long ptr)
 @ stdcall GetThreadTimes(long ptr ptr ptr ptr) kernel32.GetThreadTimes
 @ stdcall -version=0x600+ GetThreadUILanguage() kernel32.GetThreadUILanguage
 @ stdcall GetTickCount() kernel32.GetTickCount
@@ -1178,7 +1180,7 @@
 @ stdcall SetPrivateObjectSecurity(long ptr ptr ptr long)
 @ stdcall SetPrivateObjectSecurityEx(long ptr ptr long ptr long)
 @ stdcall SetProcessAffinityUpdateMode(ptr long) kernel32.SetProcessAffinityUpdateMode
-@ stub SetProcessDefaultCpuSets
+@ stdcall SetProcessDefaultCpuSets(ptr ptr long)
 @ stub SetProcessGroupAffinity
 @ stdcall SetProcessInformation(long long ptr long) kernel32.SetProcessInformation
 @ stdcall SetProcessMitigationPolicy(long ptr long) kernel32.SetProcessMitigationPolicy
@@ -1210,7 +1212,7 @@
 @ stdcall SetThreadPreferredUILanguages(long ptr ptr)
 @ stdcall SetThreadPriority(long long) kernel32.SetThreadPriority
 @ stdcall SetThreadPriorityBoost(long long) kernel32.SetThreadPriorityBoost
-@ stub SetThreadSelectedCpuSets
+@ stdcall SetThreadSelectedCpuSets(ptr ptr long)
 @ stdcall SetThreadStackGuarantee(ptr) kernel32.SetThreadStackGuarantee
 @ stdcall SetThreadToken(ptr ptr)
 @ stdcall SetThreadUILanguage(long) kernel32.SetThreadUILanguage

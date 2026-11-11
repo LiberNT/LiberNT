@@ -20,6 +20,7 @@ list(APPEND SOURCE
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c
     CopyContext.c
+    CpuSetsApi.c
     CreateAfterMissingName.c
     CreateDirectoryRoot.c
     CreateProcess.c

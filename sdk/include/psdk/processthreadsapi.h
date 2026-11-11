@@ -327,6 +327,44 @@ QueryProcessAffinityUpdateMode(
 
 #endif // (_WIN32_WINNT >= 0x0600) || defined(__REACTOS__)
 
+#if (_WIN32_WINNT >= 0x0A00) || defined(__REACTOS__)
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+GetProcessDefaultCpuSets(
+    _In_ HANDLE Process,
+    _Out_writes_to_opt_(CpuSetIdCount, *RequiredIdCount) PULONG CpuSetIds,
+    _In_ ULONG CpuSetIdCount,
+    _Always_(_Out_) PULONG RequiredIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+SetProcessDefaultCpuSets(
+    _In_ HANDLE Process,
+    _In_reads_opt_(CpuSetIdCount) const ULONG *CpuSetIds,
+    _In_ ULONG CpuSetIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+GetThreadSelectedCpuSets(
+    _In_ HANDLE Thread,
+    _Out_writes_to_opt_(CpuSetIdCount, *RequiredIdCount) PULONG CpuSetIds,
+    _In_ ULONG CpuSetIdCount,
+    _Always_(_Out_) PULONG RequiredIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+SetThreadSelectedCpuSets(
+    _In_ HANDLE Thread,
+    _In_reads_(CpuSetIdCount) const ULONG *CpuSetIds,
+    _In_ ULONG CpuSetIdCount);
+
+#endif // (_WIN32_WINNT >= 0x0A00) || defined(__REACTOS__)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
