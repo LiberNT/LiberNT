@@ -71,13 +71,9 @@ You may use AI tools. Tell us in the pull request which parts they helped with a
 
 ### Rules and Recommendations
 
-- *Use your __real name__ and __real email__.* We do not accept anonymous code contributions!
-  - Every commit that changes code or translations should have author's full legal name (in latin letters, diacritics allowed).
-  - It's recommended to have the same full name set in GitHub profile (in the [Name field here][GitHub Profile Settings]) that matches one specified in commits.
-- There is an exception for media changes, such as changes of art (wallpapers, themes, icons, sounds) and out-of-code documentation.
-  - In these specific cases it's allowed to use a nickname or alias as author's name, and it's recommended to have the same name set in GitHub profile (in the [Name field here][GitHub Profile Settings]) matching one specified in commits.
-- In any case the author must use a real e-mail address, this includes git commits (`user.email` setting) and GitHub [e-mail settings][GitHub Email Settings] - the checkbox "Keep my email addresses private" must be unchecked there.
-  - In order to *keep your privacy*, select appropriate "Primary email address" that will be applied to your commits in GitHub [e-mail settings][GitHub Email Settings].
+- *Use one identity and keep it.* Pick a name (your real name or a handle) and an e-mail address, and use the same pair for every commit and in your GitHub profile (in the [Name field here][GitHub Profile Settings]). We accept pseudonymous contributions, but not anonymous ones. If you ever need to change either, say so in your pull request so we can link the old and new identity.
+  - The e-mail can be your GitHub `noreply` address, found in your GitHub [e-mail settings][GitHub Email Settings], or any working address you control, such as `handle+github@yourprovider.example`. It must stay reachable.
+  - Handles in any script are welcome. If yours is not in Latin letters, consider adding a romanised form to your GitHub profile bio so others can find and mention you.
 - *Ensure your contribution is properly described.* Include the relevant issue number if applicable.
 - *Put only related changes.* It will make reviewing easier as the reviewer needs to recall less information about the existing source code that is changed.
 - *Search for similar pull requests before submitting.* It may be that a similar pull request or issue was opened previously. Comment and review on that one instead.
@@ -89,10 +85,12 @@ You may use AI tools. Tell us in the pull request which parts they helped with a
 
 You keep the copyright on what you write. LiberNT has no copyright assignment and no contributor licence agreement.
 
-- New files start with the header shown in [Code style](AGENTS.md#code-style), with your name and e-mail in the `COPYRIGHT` line and an SPDX licence identifier.
+- New files start with the header shown in [Code style](AGENTS.md#code-style), with your name or handle and your e-mail in the `COPYRIGHT` line and an SPDX licence identifier.
 - When you make a major change to an existing file, you may add your own `COPYRIGHT` line under the existing ones.
 - Never remove or change an existing copyright or licence notice, and never edit the licence texts in the top level directory.
 - Keep the licence of the files you change. Code inherited from ReactOS keeps the licence stated in its header.
+- Your `COPYRIGHT` line may carry your handle instead of your real name. The copyright stays with the person behind the handle.
+- By submitting a contribution you state that you wrote it, or that you have the right to submit it under the licence of the files it changes. Never submit code you cannot attribute or whose origin you do not know.
 - Never copy code whose licence is incompatible with the GNU GPL 3.0, and never copy GPL code from Linux.
 
 See [CREDITS.md](CREDITS.md) for the people behind LiberNT and ReactOS.
