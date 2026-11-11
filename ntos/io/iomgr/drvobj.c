@@ -1119,6 +1119,12 @@ NtUnloadDriver(
                                           DriverServiceName);
     if (!NT_SUCCESS(Status)) return Status;
 
+    if (CapturedName.Length == 0)
+    {
+        ReleaseCapturedUnicodeString(&CapturedName, PreviousMode);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
 
     Status = IopUnloadDriver(&CapturedName, FALSE);
