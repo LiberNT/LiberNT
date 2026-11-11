@@ -9,6 +9,7 @@
 #include <winuser.h>
 #include <winreg.h>
 #include <setupapi.h>
+#include <cfgmgr32.h>
 #include <newdev.h>
 
 #define TEST_REPORTED_MAGIC 0x4B465251
@@ -19,7 +20,8 @@ static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
-                                 L"StartCount", L"StopSeen", L"RestartPrivateMask" };
+                                 L"StartCount", L"StopSeen", L"RestartPrivateMask",
+                                 L"BusRelationsQueried" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -110,6 +112,16 @@ static VOID CheckRestart(VOID)
     ok(ReadValue(L"RestartPrivateMask", &Value) && Value == 3, "The restart did not carry the device's resources (mask %lu)\n", Value);
 }
 
+/* A user-mode reenumeration asks the bus driver for its children again */
+static VOID CheckReenumerate(DEVINST Bus)
+{
+    DWORD Queried = 0, Value = 0;
+
+    ok(ReadValue(L"BusRelationsQueried", &Queried), "The bus driver was never asked for its children\n");
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok(ReadValue(L"BusRelationsQueried", &Value) && Value > Queried, "Reenumerating the bus did not ask it for its children\n");
+}
+
 static VOID RemoveChild(VOID)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
@@ -142,6 +154,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         ok(InstallChild(InfPath), "Installing the child fixture failed\n");
         CheckRecorded();
         CheckRestart();
+        CheckReenumerate(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);

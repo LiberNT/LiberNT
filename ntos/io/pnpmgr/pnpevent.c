@@ -403,6 +403,9 @@ IopControlEnumerateDevice(
     DeviceObject = IopGetDeviceObjectFromDeviceInstance(&Data->DeviceInstance);
     if (DeviceObject == NULL) return STATUS_NO_SUCH_DEVICE;
 
+    /* The device is asked for its children again, as CM_Reenumerate_DevNode documents */
+    PiSetDevNodeFlag(IopGetDeviceNode(DeviceObject), DNF_REENUMERATE);
+
     Status = PiPerformSyncDeviceAction(DeviceObject, PiActionEnumDeviceTree);
 
     ObDereferenceObject(DeviceObject);

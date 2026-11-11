@@ -29,6 +29,7 @@ typedef struct _TEST_EXTENSION
 } TEST_EXTENSION, *PTEST_EXTENSION;
 
 static WCHAR ServicePath[260];
+static ULONG RelationsQueried;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstanceId[] = L"0";
@@ -239,9 +240,10 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
             return Complete(Irp, Status);
 
         case IRP_MN_QUERY_DEVICE_RELATIONS:
-            if (Stack->Parameters.QueryDeviceRelations.Type == BusRelations)
-                return ReportChild(DeviceObject, Extension, Irp);
-            return Pass(Extension, Irp);
+            if (Stack->Parameters.QueryDeviceRelations.Type != BusRelations)
+                return Pass(Extension, Irp);
+            Record(L"BusRelationsQueried", ++RelationsQueried);
+            return ReportChild(DeviceObject, Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
             Irp->IoStatus.Status = STATUS_SUCCESS;
