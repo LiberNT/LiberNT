@@ -29,6 +29,9 @@
 static DBGKD_ANY_WAIT_STATE_CHANGE KdbgStateChange;
 static BOOLEAN KdbgStateChangePending = FALSE;
 
+static BOOLEAN KdbgPromptActive = FALSE;
+static BOOLEAN KdbgPromptDisplayAcquired = FALSE;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -117,9 +120,20 @@ KdbgSendPacket(
             if ((MessageData != NULL) && (MessageData->Buffer != NULL))
             {
                 if (DebugIo->ApiNumber == DbgKdPrintStringApi)
+                {
                     KdbpCaptureOutput(MessageData->Buffer, MessageData->Length);
+                }
                 else
+                {
+                    if (!KdbgPromptActive)
+                    {
+                        KdbgPromptActive = TRUE;
+                        KbdDisableMouse();
+                        KdbgPromptDisplayAcquired = KdpScreenEnterStop(TRUE);
+                    }
+
                     KdbPutsN(MessageData->Buffer, MessageData->Length);
+                }
             }
 
             return;
@@ -149,11 +163,20 @@ KdbgReceivePacket(
 
     if (PacketType != PACKET_TYPE_KD_STATE_MANIPULATE)
     {
-        return KdReceivePacket(PacketType,
-                               MessageHeader,
-                               MessageData,
-                               DataLength,
-                               Context);
+        KDSTATUS Status = KdReceivePacket(PacketType,
+                                          MessageHeader,
+                                          MessageData,
+                                          DataLength,
+                                          Context);
+
+        if ((PacketType == PACKET_TYPE_KD_DEBUG_IO) && (Status == KdPacketReceived) && KdbgPromptActive)
+        {
+            KdbgPromptActive = FALSE;
+            KdpScreenRelease(KdbgPromptDisplayAcquired);
+            KbdEnableMouse();
+        }
+
+        return Status;
     }
 
     if ((MessageHeader == NULL) ||
