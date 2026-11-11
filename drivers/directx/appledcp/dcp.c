@@ -51,6 +51,7 @@
 #define EPIC_SERVICE_NAME_LENGTH    32
 
 #define IBOOT_SET_SURFACE           1
+#define IBOOT_SET_POWER             2
 #define IBOOT_GET_HPD               3
 #define IBOOT_GET_TIMING_MODES      4
 #define IBOOT_GET_COLOR_MODES       5
@@ -531,14 +532,22 @@ DcpPollThread(
     _In_ PVOID Parameter)
 {
     PAPPLE_DCP Dcp = Parameter;
+    PVOID Objects[2] = { &Dcp->Stop, &Dcp->Wake };
     PEPIC_QUEUE_ENTRY Entry;
     PEPIC_SUB_HEADER Sub;
     LARGE_INTEGER Interval;
     BOOLEAN Failed;
+    ULONG WaitMs;
 
-    Interval.QuadPart = -(LONGLONG)DCP_POLL_MS * 10000;
-    while (KeWaitForSingleObject(&Dcp->Stop, Executive, KernelMode, FALSE, &Interval) == STATUS_TIMEOUT)
+    for (;;)
     {
+        WaitMs = AppleRtkitPollInterval(&Dcp->Rtkit, DCP_POLL_MS);
+        Interval.QuadPart = -(LONGLONG)WaitMs * 10000;
+        if (KeWaitForMultipleObjects(RTL_NUMBER_OF(Objects), Objects, WaitAny, Executive, KernelMode, FALSE,
+                                     WaitMs == APPLE_RTKIT_NO_POLL ? NULL : &Interval, NULL) == STATUS_WAIT_0)
+        {
+            break;
+        }
         ExAcquireFastMutex(&Dcp->Lock);
         AppleRtkitPoll(&Dcp->Rtkit);
         while (Dcp->ServiceFound && !Dcp->CommandBusy && DcpEpicPeek(Dcp, &Entry))
@@ -606,6 +615,7 @@ DcpClose(
         ObDereferenceObject(Dcp->Thread);
         Dcp->Thread = NULL;
     }
+    AppleRtkitDisconnectInterrupt(&Dcp->Rtkit);
     /* The coprocessor keeps running and using its buffers, so they stay allocated. */
     AppleDartAdoptedRelease(&Dcp->DispDart);
     AppleDartAdoptedRelease(&Dcp->DcpDart);
@@ -621,6 +631,7 @@ DcpClose(
 NTSTATUS
 DcpOpen(
     _In_ PDEVICE_OBJECT Pdo,
+    _In_opt_ PDCP_INTERRUPT_RESOURCES Interrupt,
     _Outptr_ PAPPLE_DCP *Out)
 {
     ULONG MailboxPhandle, MailboxNode, Control;
@@ -633,7 +644,9 @@ DcpOpen(
     if (!Dcp)
         return STATUS_INSUFFICIENT_RESOURCES;
     ExInitializeFastMutex(&Dcp->Lock);
+    ExInitializeFastMutex(&Dcp->CommandLock);
     KeInitializeEvent(&Dcp->Stop, NotificationEvent, FALSE);
+    KeInitializeEvent(&Dcp->Wake, SynchronizationEvent, FALSE);
     Status = FdtDriverOpen(Pdo, &Dcp->Tree);
     if (!NT_SUCCESS(Status))
         goto Fail;
@@ -679,6 +692,10 @@ DcpOpen(
     Dcp->Rtkit.Context = Dcp;
     Dcp->Rtkit.ShmemSetup = DcpShmemSetup;
     Dcp->Rtkit.Receive = DcpReceive;
+    if (Interrupt && Interrupt->Valid)
+        AppleRtkitConnectInterrupt(&Dcp->Rtkit, &Interrupt->Raw, &Interrupt->Translated, Interrupt->Gsi, &Dcp->Wake);
+    else
+        DbgPrint("appledcp: no mailbox interrupt was assigned, polling\n");
     ExAcquireFastMutex(&Dcp->Lock);
     Status = AppleRtkitWake(&Dcp->Rtkit, DCP_WAKE_TIMEOUT_MS);
     ExReleaseFastMutex(&Dcp->Lock);
@@ -791,7 +808,7 @@ DcpStartDisplayService(
 
 static
 NTSTATUS
-DcpCommand(
+DcpCommandLocked(
     _Inout_ PAPPLE_DCP Dcp,
     _In_ ULONG Op,
     _In_reads_bytes_opt_(InputSize) const VOID *Input,
@@ -893,6 +910,26 @@ DcpCommand(
         return STATUS_DEVICE_PROTOCOL_ERROR;
     }
     return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+DcpCommand(
+    _Inout_ PAPPLE_DCP Dcp,
+    _In_ ULONG Op,
+    _In_reads_bytes_opt_(InputSize) const VOID *Input,
+    _In_ ULONG InputSize,
+    _Out_writes_bytes_to_opt_(OutputCapacity, *OutputSize) PVOID Output,
+    _In_ ULONG OutputCapacity,
+    _Out_opt_ PULONG OutputSize)
+{
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ExAcquireFastMutex(&Dcp->CommandLock);
+    Status = DcpCommandLocked(Dcp, Op, Input, InputSize, Output, OutputCapacity, OutputSize);
+    ExReleaseFastMutex(&Dcp->CommandLock);
+    return Status;
 }
 
 NTSTATUS
@@ -1030,15 +1067,27 @@ DcpSwapLayer(
     IBOOT_SWAP_LAYER Swap;
     NTSTATUS Status;
 
-    Status = DcpCommand(Dcp, IBOOT_SWAP_BEGIN, NULL, 0, NULL, 0, NULL);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     RtlZeroMemory(&Swap, sizeof(Swap));
     Swap.Layer = *Layer;
     Swap.Source[0] = Swap.Destination[0] = Layer->Width;
     Swap.Source[1] = Swap.Destination[1] = Layer->Height;
-    Status = DcpCommand(Dcp, IBOOT_SWAP_SET_LAYER, &Swap, sizeof(Swap), NULL, 0, NULL);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    return DcpCommand(Dcp, IBOOT_SWAP_END, End, sizeof(End), NULL, 0, NULL);
+    ExAcquireFastMutex(&Dcp->CommandLock);
+    Status = DcpCommandLocked(Dcp, IBOOT_SWAP_BEGIN, NULL, 0, NULL, 0, NULL);
+    if (NT_SUCCESS(Status))
+        Status = DcpCommandLocked(Dcp, IBOOT_SWAP_SET_LAYER, &Swap, sizeof(Swap), NULL, 0, NULL);
+    if (NT_SUCCESS(Status))
+        Status = DcpCommandLocked(Dcp, IBOOT_SWAP_END, End, sizeof(End), NULL, 0, NULL);
+    ExReleaseFastMutex(&Dcp->CommandLock);
+    return Status;
+}
+
+NTSTATUS
+DcpSetPower(
+    _Inout_ PAPPLE_DCP Dcp,
+    _In_ BOOLEAN On)
+{
+    UCHAR Power = On ? 1 : 0;
+
+    return DcpCommand(Dcp, IBOOT_SET_POWER, &Power, sizeof(Power), NULL, 0, NULL);
 }

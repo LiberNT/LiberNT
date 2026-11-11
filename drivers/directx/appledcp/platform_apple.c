@@ -5,10 +5,14 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#include <ntifs.h>
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
 #include "appledcp.h"
 #include <reactos/drivers/appleagx.h>
+
+static PDRIVER_DISPATCH DcpDxgkPnp;
+static DCP_INTERRUPT_RESOURCES DcpInterrupt;
 
 typedef struct _APPLE_DCP_CONTEXT
 {
@@ -33,6 +37,151 @@ typedef struct _APPLE_DCP_CONTEXT
 #define DCP_SCANOUT_QUEUED      1
 #define DCP_SCANOUT_DONE        2
 #define DCP_SCANOUT_CANCELLED   3
+
+static
+NTSTATUS
+NTAPI
+DcpPnpCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+    KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+NTSTATUS
+DcpQueryMailboxInterrupt(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN Edge)
+{
+    PDEVICE_OBJECT Pdo = IoGetDeviceAttachmentBaseRef(DeviceObject);
+    FDT_DRIVER_TREE Tree;
+    NTSTATUS Status;
+
+    *Gsi = 0;
+    *Edge = FALSE;
+    Status = FdtDriverOpen(Pdo, &Tree);
+    if (NT_SUCCESS(Status))
+    {
+        Status = AppleRtkitQueryInterrupt(&Tree, Tree.Node, Gsi, Edge);
+        FdtDriverClose(&Tree);
+    }
+    ObDereferenceObject(Pdo);
+    return Status;
+}
+
+static
+NTSTATUS
+DcpFilterRequirements(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PDEVICE_OBJECT Lower = IoGetLowerDeviceObject(DeviceObject);
+    BOOLEAN Edge;
+    ULONG Gsi;
+    KEVENT Event;
+    NTSTATUS Status, FilterStatus;
+
+    if (!Lower)
+        return DcpDxgkPnp(DeviceObject, Irp);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    IoCopyCurrentIrpStackLocationToNext(Irp);
+    IoSetCompletionRoutine(Irp, DcpPnpCompletion, &Event, TRUE, TRUE, TRUE);
+    Status = IoCallDriver(Lower, Irp);
+    ObDereferenceObject(Lower);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = Irp->IoStatus.Status;
+    }
+    if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+    {
+        FilterStatus = DcpQueryMailboxInterrupt(DeviceObject, &Gsi, &Edge);
+        if (NT_SUCCESS(FilterStatus))
+            FilterStatus = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+        DbgPrint("appledcp: requesting the mailbox interrupt %lu: %lx\n", Gsi, FilterStatus);
+        if (NT_SUCCESS(FilterStatus))
+            Status = STATUS_SUCCESS;
+    }
+    Irp->IoStatus.Status = Status;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return Status;
+}
+
+static
+VOID
+DcpCaptureInterrupt(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR RawPartial, Partial;
+    BOOLEAN Edge;
+    ULONG Gsi, Index;
+
+    RtlZeroMemory(&DcpInterrupt, sizeof(DcpInterrupt));
+    if (!Raw || !Translated || !Raw->Count || !Translated->Count ||
+        Raw->List[0].PartialResourceList.Count != Translated->List[0].PartialResourceList.Count ||
+        !NT_SUCCESS(DcpQueryMailboxInterrupt(DeviceObject, &Gsi, &Edge)))
+    {
+        return;
+    }
+    for (Index = 0; Index < Raw->List[0].PartialResourceList.Count; ++Index)
+    {
+        RawPartial = &Raw->List[0].PartialResourceList.PartialDescriptors[Index];
+        Partial = &Translated->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (RawPartial->Type != CmResourceTypeInterrupt || Partial->Type != CmResourceTypeInterrupt ||
+            RawPartial->u.Interrupt.Vector != Gsi)
+        {
+            continue;
+        }
+        DcpInterrupt.Gsi = Gsi;
+        DcpInterrupt.Raw.Count = 1;
+        DcpInterrupt.Raw.List[0] = Raw->List[0];
+        DcpInterrupt.Raw.List[0].PartialResourceList.Count = 1;
+        DcpInterrupt.Raw.List[0].PartialResourceList.PartialDescriptors[0] = *RawPartial;
+        DcpInterrupt.Translated.Count = 1;
+        DcpInterrupt.Translated.List[0] = Translated->List[0];
+        DcpInterrupt.Translated.List[0].PartialResourceList.Count = 1;
+        DcpInterrupt.Translated.List[0].PartialResourceList.PartialDescriptors[0] = *Partial;
+        DcpInterrupt.Valid = TRUE;
+        return;
+    }
+}
+
+static
+NTSTATUS
+NTAPI
+DcpPnp(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL && DcpDxgkPnp != NULL);
+    if (Stack->MinorFunction == IRP_MN_FILTER_RESOURCE_REQUIREMENTS)
+        return DcpFilterRequirements(DeviceObject, Irp);
+    if (Stack->MinorFunction == IRP_MN_START_DEVICE)
+    {
+        DcpCaptureInterrupt(DeviceObject, Stack->Parameters.StartDevice.AllocatedResources,
+                            Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+    }
+    return DcpDxgkPnp(DeviceObject, Irp);
+}
+
+VOID
+SoftGpuPlatformDriverEntry(
+    _Inout_ PDRIVER_OBJECT DriverObject)
+{
+    ASSERT(DriverObject->MajorFunction[IRP_MJ_PNP] != NULL);
+    DcpDxgkPnp = DriverObject->MajorFunction[IRP_MJ_PNP];
+    DriverObject->MajorFunction[IRP_MJ_PNP] = DcpPnp;
+}
 
 static
 VOID
@@ -156,7 +305,7 @@ DcpPlatformStart(
     Status = DxgkInterface->DxgkCbGetDeviceInformation(DxgkInterface->DeviceHandle, &Information);
     if (!NT_SUCCESS(Status) || !Information.PhysicalDeviceObject)
         return NT_SUCCESS(Status) ? STATUS_DEVICE_CONFIGURATION_ERROR : Status;
-    Status = DcpOpen(Information.PhysicalDeviceObject, &Context->Dcp);
+    Status = DcpOpen(Information.PhysicalDeviceObject, &DcpInterrupt, &Context->Dcp);
     if (!NT_SUCCESS(Status))
         return Status;
     Status = DcpStartDisplayService(Context->Dcp);
@@ -433,6 +582,26 @@ MEMORY_CACHING_TYPE
 SoftGpuPlatformSegmentCacheType(VOID)
 {
     return MmCached;
+}
+
+NTSTATUS
+SoftGpuPlatformSetDisplayPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN On)
+{
+    PAPPLE_DCP_CONTEXT Context = Device->PlatformContext;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!Context || !Context->Dcp)
+        return STATUS_DEVICE_NOT_READY;
+    Status = DcpSetPower(Context->Dcp, On);
+    if (NT_SUCCESS(Status) && On &&
+        InterlockedCompareExchange(&Context->ScanoutState, DCP_SCANOUT_DONE, DCP_SCANOUT_DONE) == DCP_SCANOUT_DONE)
+    {
+        Status = DcpSwapLayer(Context->Dcp, &Context->Layer);
+    }
+    return Status;
 }
 
 NTSTATUS

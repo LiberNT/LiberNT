@@ -55,6 +55,7 @@ typedef struct _APPLE_DCP
     APPLE_DART_ADOPTED DispDart;
     APPLE_RTKIT Rtkit;
     FAST_MUTEX Lock;
+    FAST_MUTEX CommandLock;
     DCP_SHARED Shared[DCP_MAX_SHARED];
     ULONG SharedCount;
     PDCP_SHARED EpicBuffer;
@@ -70,12 +71,22 @@ typedef struct _APPLE_DCP
     BOOLEAN CommandBusy;
     ULONG Channel;
     KEVENT Stop;
+    KEVENT Wake;
     PKTHREAD Thread;
 } APPLE_DCP, *PAPPLE_DCP;
+
+typedef struct _DCP_INTERRUPT_RESOURCES
+{
+    BOOLEAN Valid;
+    ULONG Gsi;
+    CM_RESOURCE_LIST Raw;
+    CM_RESOURCE_LIST Translated;
+} DCP_INTERRUPT_RESOURCES, *PDCP_INTERRUPT_RESOURCES;
 
 NTSTATUS
 DcpOpen(
     _In_ PDEVICE_OBJECT Pdo,
+    _In_opt_ PDCP_INTERRUPT_RESOURCES Interrupt,
     _Outptr_ PAPPLE_DCP *Dcp);
 
 VOID
@@ -123,3 +134,8 @@ NTSTATUS
 DcpSwapLayer(
     _Inout_ PAPPLE_DCP Dcp,
     _In_ const DCP_LAYER *Layer);
+
+NTSTATUS
+DcpSetPower(
+    _Inout_ PAPPLE_DCP Dcp,
+    _In_ BOOLEAN On);

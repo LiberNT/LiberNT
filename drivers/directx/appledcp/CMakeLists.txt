@@ -10,11 +10,14 @@ spec2def(appledcp.sys ${SOFTGPU_ENGINE_SPEC} ADD_IMPORTLIB)
 
 remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT})
 remove_definitions(-DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x0601 -DWINVER=0x0601)
-add_definitions(-DNTDDI_VERSION=0x06010000)
+add_definitions(-D_WIN32_WINNT=0x0603 -DWINVER=0x0603)
+add_definitions(-DNTDDI_VERSION=0x06030000)
 
 remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
+
+add_softgpu_engine(appledcp_softgpu DEFINITIONS
+    SOFTGPU_PLATFORM_DRIVER_ENTRY=1)
 
 add_library(appledcp MODULE
     dcp.c
@@ -23,7 +26,7 @@ add_library(appledcp MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/appledcp.def)
 
 set_module_type(appledcp kernelmodedriver)
-target_link_libraries(appledcp softgpu_engine displib applertkit fdtdrv)
+target_link_libraries(appledcp appledcp_softgpu displib applertkit fdtdrv)
 add_importlibs(appledcp ntoskrnl hal)
 add_cd_file(TARGET appledcp DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(appledcp appledcp.inf)

@@ -416,7 +416,9 @@ DriverEntry(
 #endif
 
     /* --- Interrupt / DPC ------------------------------------------------- */
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
     InitData.DxgkDdiInterruptRoutine                = SoftGpuDdiInterruptRoutine;
+#endif
     InitData.DxgkDdiDpcRoutine                      = SoftGpuDdiDpcRoutine;
 
     /* --- Memory management ----------------------------------------------- */
@@ -533,6 +535,9 @@ DriverEntry(
         return Status;
     }
 
+#if defined(SOFTGPU_PLATFORM_DRIVER_ENTRY)
+    SoftGpuPlatformDriverEntry(DriverObject);
+#endif
     DPRINT("SOFTGPU: DriverEntry success\n");
     return STATUS_SUCCESS;
 }
@@ -1458,6 +1463,7 @@ SoftGpuStartDevice(
     Device->VsyncTimerInitialized = Device->VsyncTimer != NULL;
     Device->VsyncTimerRunning = FALSE;
     Device->VsyncPhaseOrigin = 0;
+    Device->DisplayPowerOff = FALSE;
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     InterlockedExchange(&Device->VsyncEnabled, 0);
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
@@ -3234,16 +3240,34 @@ SoftGpuDdiSetPowerState(
     _In_ DEVICE_POWER_STATE DevicePowerState,
     _In_ POWER_ACTION       ActionType)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    BOOLEAN Off;
+    NTSTATUS Status;
+
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(ActionType);
 
-    if (DeviceUid != 0 && DeviceUid != 1)
+    if (DeviceUid != DISPLAY_ADAPTER_HW_ID && DeviceUid != 0 && DeviceUid != 1)
         return STATUS_INVALID_PARAMETER;
 
-    if (DevicePowerState > PowerDeviceD3)
+    if (DevicePowerState < PowerDeviceD0 || DevicePowerState > PowerDeviceD3)
         return STATUS_INVALID_PARAMETER;
 
-    return STATUS_SUCCESS;
+    if (DeviceUid != SOFTGPU_CHILD_UID)
+        return STATUS_SUCCESS;
+
+    ASSERT(Device != NULL && Device->Magic == SOFTGPU_DEVICE_MAGIC);
+    Off = DevicePowerState != PowerDeviceD0;
+    if (Off == Device->DisplayPowerOff)
+        return STATUS_SUCCESS;
+    Status = SoftGpuPlatformSetDisplayPower(Device, !Off);
+    DbgPrint("SOFTGPU: display power %s (D%d): %lx\n", Off ? "off" : "on",
+             DevicePowerState - PowerDeviceD0, Status);
+    if (Status == STATUS_NOT_SUPPORTED)
+        Status = STATUS_SUCCESS;
+    if (NT_SUCCESS(Status))
+        Device->DisplayPowerOff = Off;
+    return Status;
 }
 
 
