@@ -326,7 +326,11 @@ static HRESULT WINAPI BindStatusCallback_GetBindInfo(IBindStatusCallback *iface,
 
     TRACE("(%p)\n", This);
 
+#ifdef __REACTOS__
+    *grfBINDF = BINDF_ASYNCHRONOUS | BINDF_ASYNCSTORAGE | BINDF_PULLDATA;
+#else
     *grfBINDF = BINDF_ASYNCHRONOUS;
+#endif
     return S_OK;
 }
 
@@ -344,6 +348,10 @@ static HRESULT WINAPI BindStatusCallback_OnDataAvailable(IBindStatusCallback *if
 
     while(1) {
         hres = IStream_Read(pstgmed->pstm, buf, sizeof(buf), &read);
+#ifdef __REACTOS__
+        if(hres == E_PENDING)
+            break;
+#endif
         if(FAILED(hres))
             return hres;
         if(!read)
