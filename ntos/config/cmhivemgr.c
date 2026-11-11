@@ -438,7 +438,7 @@ CmpInitializeHive(
                                         Alternate,
                                         FileName,
                                         CheckFlags,
-                                        0);
+                                        1);
 }
 
 NTSTATUS

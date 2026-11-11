@@ -196,6 +196,17 @@ TestRegRestoreKey(VOID)
                 ok_long(QueryDword(Target, L"Kept", &Value), ERROR_SUCCESS);
                 ok_long(Value, 1);
                 ok_long(QueryDword(Target, L"Stale", &Value), ERROR_FILE_NOT_FOUND);
+
+                Error = RegOpenKeyExW(Target, L"Child", 0, KEY_READ, &Key);
+                ok_long(Error, ERROR_SUCCESS);
+                if (Error == ERROR_SUCCESS)
+                {
+                    Error = pRegRestoreKeyW(Target, File, 0);
+                    ok(Error != ERROR_SUCCESS, "restore over an open subkey succeeded\n");
+                    Error = pRegRestoreKeyW(Target, File, REG_FORCE_RESTORE);
+                    ok_long(Error, ERROR_SUCCESS);
+                    RegCloseKey(Key);
+                }
             }
 
             RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, BackupWas, FALSE, &Ignored);

@@ -484,6 +484,26 @@ CmpCmdHiveOpen(
     return Status;
 }
 
+/* Hangs a copied key under its new parent, which it then names as its parent */
+static
+BOOLEAN
+CmpLinkCopiedKey(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX Parent,
+    _In_ HCELL_INDEX Child)
+{
+    PCM_KEY_NODE Node;
+
+    if (!CmpAddSubKey(Hive, Parent, Child)) return FALSE;
+
+    Node = (PCM_KEY_NODE)HvGetCell(Hive, Child);
+    if (Node == NULL) return FALSE;
+
+    Node->Parent = Parent;
+    HvReleaseCell(Hive, Child);
+    return TRUE;
+}
+
 NTSTATUS
 NTAPI
 CmpDeepCopyKey(
@@ -527,9 +547,9 @@ CmpDeepCopyKey(
         {
             Root = NewCell;
         }
-        else if (!CmpAddSubKey(DestinationHive,
-                               Item.DestinationParent,
-                               NewCell))
+        else if (!CmpLinkCopiedKey(DestinationHive,
+                                   Item.DestinationParent,
+                                   NewCell))
         {
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
@@ -1225,6 +1245,35 @@ CmSaveMergedKeys(
     return Status;
 }
 
+/* Frees the values of a list and the list itself, all already dirty */
+static
+VOID
+CmpFreeValueList(
+    _In_ PHHIVE Hive,
+    _Inout_ PCHILD_LIST ValueList)
+{
+    PCELL_DATA List;
+    ULONG i;
+
+    if (ValueList->List == HCELL_NIL) return;
+
+    List = HvGetCell(Hive, ValueList->List);
+    if (List != NULL)
+    {
+        for (i = 0; i < ValueList->Count; i++)
+        {
+            if (!CmpFreeValue(Hive, List->u.KeyList[i]))
+                HvFreeCell(Hive, List->u.KeyList[i]);
+        }
+
+        HvReleaseCell(Hive, ValueList->List);
+    }
+
+    HvFreeCell(Hive, ValueList->List);
+    ValueList->Count = 0;
+    ValueList->List = HCELL_NIL;
+}
+
 /*
  * Throws away what a key holds and puts the contents of a hive file there
  * instead, which is how a backup is read back in.
@@ -1237,9 +1286,13 @@ CmpRestoreKeyFromFile(
     _In_ ULONG Flags)
 {
     PCM_KEY_CONTROL_BLOCK Kcb = KeyBody->KeyControlBlock;
+    HSTORAGE_TYPE Type;
+    CHILD_LIST NewValues = {0, HCELL_NIL};
+    CHILD_LIST OldValues;
     HCELL_INDEX SourceRoot;
     HCELL_INDEX NewChild;
     PCM_KEY_NODE Source;
+    PCM_KEY_NODE Target;
     PCMHIVE Loaded;
     NTSTATUS Status;
     ULONG Children;
@@ -1252,6 +1305,10 @@ CmpRestoreKeyFromFile(
 
     if (Kcb == NULL || Kcb->Delete) return STATUS_KEY_DELETED;
     if (Kcb->KeyHive->ReadOnly) return STATUS_ACCESS_DENIED;
+
+    /* TODO: REG_WHOLE_HIVE_VOLATILE restores into the key like any other restore instead of making a volatile hive */
+
+    Type = HvGetCellType(Kcb->KeyCell);
 
     Status = CmpInitializeHive(&Loaded,
                                HINIT_FILE,
@@ -1268,22 +1325,42 @@ CmpRestoreKeyFromFile(
     if (!NT_SUCCESS(Status)) return Status;
 
     SourceRoot = Loaded->Hive.BaseBlock->RootCell;
-
-    Status = CmpDeleteKeyTree(Kcb->KeyHive, Kcb->KeyCell, TRUE);
-    if (!NT_SUCCESS(Status))
+    Source = (PCM_KEY_NODE)HvGetCell(&Loaded->Hive, SourceRoot);
+    if (Source == NULL)
     {
         Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
         CmpDestroyHive(Loaded);
-        return Status;
+        return STATUS_REGISTRY_CORRUPT;
     }
 
-    Source = (PCM_KEY_NODE)HvGetCell(&Loaded->Hive, SourceRoot);
-    Children = (Source != NULL)
-                   ? Source->SubKeyCounts[Stable] +
-                         Source->SubKeyCounts[Volatile]
-                   : 0;
+    /* Keys still open under the key would be left on freed cells, so only a forced restore takes them away */
+    if (CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE) != 0)
+    {
+        if ((Flags & REG_FORCE_RESTORE) == 0)
+        {
+            HvReleaseCell(&Loaded->Hive, SourceRoot);
+            Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+            CmpDestroyHive(Loaded);
+            /* FIXME: the status Windows gives here is not verified; this is the one a hive unload gives */
+            return STATUS_CANNOT_DELETE;
+        }
 
-    for (i = 0; i < Children; i++)
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
+    }
+
+    /* The key takes the values of the saved root in place of its own */
+    Status = CmpCopyKeyValueList(&Loaded->Hive,
+                                 &Source->ValueList,
+                                 Kcb->KeyHive,
+                                 &NewValues,
+                                 Type);
+
+    if (NT_SUCCESS(Status))
+        Status = CmpDeleteKeyTree(Kcb->KeyHive, Kcb->KeyCell, TRUE);
+
+    Children = Source->SubKeyCounts[Stable] + Source->SubKeyCounts[Volatile];
+
+    for (i = 0; NT_SUCCESS(Status) && i < Children; i++)
     {
         HCELL_INDEX Child = CmpFindSubKeyByNumber(&Loaded->Hive, Source, i);
 
@@ -1292,19 +1369,45 @@ CmpRestoreKeyFromFile(
         Status = CmpDeepCopyKey(&Loaded->Hive,
                                 Child,
                                 Kcb->KeyHive,
-                                HvGetCellType(Kcb->KeyCell),
+                                Type,
                                 &NewChild);
         if (!NT_SUCCESS(Status)) break;
 
-        if (!CmpAddSubKey(Kcb->KeyHive, Kcb->KeyCell, NewChild))
+        if (!CmpLinkCopiedKey(Kcb->KeyHive, Kcb->KeyCell, NewChild))
         {
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
         }
     }
 
-    if (Source != NULL) HvReleaseCell(&Loaded->Hive, SourceRoot);
+    Target = NULL;
+    if (NT_SUCCESS(Status))
+    {
+        Target = (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell);
+        if (Target == NULL ||
+            !CmpMarkKeyDirty(Kcb->KeyHive, Kcb->KeyCell, FALSE))
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
 
+    if (NT_SUCCESS(Status))
+    {
+        OldValues = Target->ValueList;
+        Target->ValueList = NewValues;
+        Target->MaxNameLen = Source->MaxNameLen;
+        Target->MaxClassLen = Source->MaxClassLen;
+        Target->MaxValueNameLen = Source->MaxValueNameLen;
+        Target->MaxValueDataLen = Source->MaxValueDataLen;
+        NewValues.Count = 0;
+        NewValues.List = HCELL_NIL;
+        CmpFreeValueList(Kcb->KeyHive, &OldValues);
+    }
+
+    if (Target != NULL) HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+    CmpFreeValueList(Kcb->KeyHive, &NewValues);
+
+    HvReleaseCell(&Loaded->Hive, SourceRoot);
     Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
     CmpDestroyHive(Loaded);
 
@@ -1313,6 +1416,13 @@ CmpRestoreKeyFromFile(
     CmpCleanUpSubKeyInfo(Kcb);
     CmpCleanUpKcbValueCache(Kcb);
     CmpTouchKey(Kcb->KeyHive, Kcb->KeyCell);
+
+    Target = (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell);
+    if (Target != NULL)
+    {
+        CmpUpdateKcbFromNode(Kcb, Target);
+        HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+    }
 
     if (Flags & REG_NO_LAZY_FLUSH) return STATUS_SUCCESS;
 
