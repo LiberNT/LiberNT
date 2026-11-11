@@ -161,6 +161,7 @@ list(APPEND SOURCE
     ThreadPowerThrottling.c
     ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
+    TimerResolutionSleep.c
     TransactedFileApis.c
     TunnelCache.c
     UEFIFirmware.c
