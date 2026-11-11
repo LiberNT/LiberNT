@@ -292,39 +292,40 @@ struct constructor;
     XIID(IHTMLIFrameElement3) \
     XIID(IHTMLImageElementFactory) \
     XIID(IHTMLImgElement) \
+    XIID(IHTMLImgElement2) \
     XIID(IHTMLInputElement) \
+    XIID(IHTMLInputElement2) \
     XIID(IHTMLInputTextElement2) \
     XIID(IHTMLLIElement) \
     XIID(IHTMLLabelElement) \
     XIID(IHTMLListElement2) \
     XIID(IHTMLLinkElement) \
-    XIID(IHTMLImgElement2) \
+    XIID(IHTMLLinkElement2) \
+    XIID(IHTMLLinkElement3) \
     XIID(IHTMLLocation) \
-    XIID(IHTMLInputElement2) \
     XIID(IHTMLMetaElement) \
+    XIID(IHTMLMetaElement2) \
     XIID(IHTMLMimeTypesCollection) \
     XIID(IHTMLNamespaceCollection) \
     XIID(IHTMLOListElement) \
     XIID(IHTMLObjectElement) \
-    XIID(IHTMLLinkElement2) \
-    XIID(IHTMLLinkElement3) \
     XIID(IHTMLObjectElement2) \
+    XIID(IHTMLObjectElement3) \
     XIID(IHTMLOptionElement) \
-    XIID(IHTMLMetaElement2) \
+    XIID(IHTMLOptionElement3) \
     XIID(IHTMLOptionElementFactory) \
     XIID(IHTMLParaElement) \
     XIID(IHTMLPerformance) \
     XIID(IHTMLPerformanceNavigation) \
     XIID(IHTMLPerformanceTiming) \
-    XIID(IHTMLObjectElement3) \
     XIID(IHTMLPhraseElement2) \
-    XIID(IHTMLOptionElement3) \
     XIID(IHTMLPluginsCollection) \
     XIID(IHTMLRect) \
     XIID(IHTMLRect2) \
     XIID(IHTMLRectCollection) \
     XIID(IHTMLScreen) \
     XIID(IHTMLScriptElement) \
+    XIID(IHTMLScriptElement2) \
     XIID(IHTMLSelectElement) \
     XIID(IHTMLSelectionObject) \
     XIID(IHTMLSelectionObject2) \
@@ -333,7 +334,6 @@ struct constructor;
     XIID(IHTMLStyle) \
     XIID(IHTMLStyle2) \
     XIID(IHTMLStyle3) \
-    XIID(IHTMLScriptElement2) \
     XIID(IHTMLStyle4) \
     XIID(IHTMLStyle5) \
     XIID(IHTMLStyle6) \
