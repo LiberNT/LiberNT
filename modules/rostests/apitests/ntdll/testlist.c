@@ -149,6 +149,7 @@ extern void func_RtlGetLongestNtPathLength(void);
 extern void func_RtlGetNtProductType(void);
 extern void func_RtlGetProcessHeaps(void);
 extern void func_RtlGetProductInfo(void);
+extern void func_RtlGetThreadErrorMode(void);
 extern void func_RtlGetUnloadEventTrace(void);
 extern void func_RtlHandle(void);
 extern void func_RtlHeapDecommit(void);
@@ -181,6 +182,7 @@ extern void func_RtlUpcaseUnicodeStringToCountedOemString(void);
 extern void func_RtlValidateUnicodeString(void);
 extern void func_RtlWaitOnAddress(void);
 extern void func_RtlWaitOnAddressPriority(void);
+extern void func_RtlWow64EnableFsRedirectionEx(void);
 extern void func_RtlVirtualUnwind(void);
 extern void func_RtlVirtualUnwindChainedHandler(void);
 extern void func_RtlxUnicodeStringToAnsiSize(void);
@@ -353,6 +355,7 @@ const struct test winetest_testlist[] =
     { "RtlGetNtProductType",            func_RtlGetNtProductType },
     { "RtlGetProcessHeaps",             func_RtlGetProcessHeaps },
     { "RtlGetProductInfo",              func_RtlGetProductInfo },
+    { "RtlGetThreadErrorMode",          func_RtlGetThreadErrorMode },
     { "RtlGetUnloadEventTrace",         func_RtlGetUnloadEventTrace },
     { "RtlHandle",                      func_RtlHandle },
     { "RtlHeapDecommit",                func_RtlHeapDecommit },
@@ -386,6 +389,7 @@ const struct test winetest_testlist[] =
     { "RtlValidateUnicodeString",       func_RtlValidateUnicodeString },
     { "RtlWaitOnAddress",               func_RtlWaitOnAddress },
     { "RtlWaitOnAddressPriority",       func_RtlWaitOnAddressPriority },
+    { "RtlWow64EnableFsRedirectionEx",  func_RtlWow64EnableFsRedirectionEx },
     { "NtProcessDeviceMap",                func_NtProcessDeviceMap },
     { "NtQueryDirectoryObject",            func_NtQueryDirectoryObject },
     { "NtDuplicateTokenQos",               func_NtDuplicateTokenQos },

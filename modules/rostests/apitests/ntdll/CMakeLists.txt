@@ -169,6 +169,7 @@ list(APPEND SOURCE
     RtlGetNtProductType.c
     RtlGetProcessHeaps.c
     RtlGetProductInfo.c
+    RtlGetThreadErrorMode.c
     RtlGetUnloadEventTrace.c
     RtlHandle.c
     RtlHeapDecommit.c
@@ -198,6 +199,7 @@ list(APPEND SOURCE
     RtlUpcaseUnicodeStringToCountedOemString.c
     RtlValidateUnicodeString.c
     RtlWaitOnAddress.c
+    RtlWow64EnableFsRedirectionEx.c
     RtlxUnicodeStringToAnsiSize.c
     RtlxUnicodeStringToOemSize.c
     SatisfiedWait.c
