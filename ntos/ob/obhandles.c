@@ -2421,6 +2421,18 @@ ObDuplicateObject(
         AccessState.PreviouslyGrantedAccess = AccessState.RemainingDesiredAccess;
         AccessState.RemainingDesiredAccess = 0;
     }
+    else if (PreviousMode != KernelMode &&
+             ObjectType == IoFileObjectType &&
+             (AccessState.RemainingDesiredAccess & ~(SourceAccess | MAXIMUM_ALLOWED)) != 0)
+    {
+        /* What a file handle may do was settled when the file was opened */
+        SeDeleteAccessState(&AccessState);
+        if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
+        if (Options & DUPLICATE_CLOSE_SOURCE)
+            ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
+        ObDereferenceObject(Object);
+        return STATUS_ACCESS_DENIED;
+    }
 
     Status = ObpBeginHandleCallbacks(&CallbackState,
                                      ObjectType,
