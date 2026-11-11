@@ -290,21 +290,13 @@ NTAPI
 WdmAudWaveInitialize(
     IN PDEVICE_OBJECT DeviceObject);
 
-ULONG
-ClosePin(
-    IN  PWDMAUD_CLIENT ClientInfo,
-    IN  ULONG FilterId,
-    IN  ULONG PinId,
-    IN  SOUND_DEVICE_TYPE DeviceType);
-
 NTSTATUS
 InsertPinHandle(
     IN  PWDMAUD_CLIENT ClientInfo,
     IN  ULONG FilterId,
     IN  ULONG PinId,
     IN  SOUND_DEVICE_TYPE DeviceType,
-    IN  HANDLE PinHandle,
-    IN  ULONG FreeIndex);
+    IN  HANDLE PinHandle);
 
 NTSTATUS
 GetSysAudioDevicePnpName(
