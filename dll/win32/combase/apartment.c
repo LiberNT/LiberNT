@@ -1243,7 +1243,15 @@ static void apartment_dispatch_pending_calls(struct apartment *apt)
     if (!apt->win)
         return;
     while (PeekMessageW(&msg, apt->win, DM_EXECUTERPC, DM_EXECUTERPC, PM_REMOVE))
+    {
+        /* WM_QUIT passes every filter once no call is left; it belongs to the thread's own loop */
+        if (msg.message == WM_QUIT)
+        {
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
         DispatchMessageW(&msg);
+    }
 }
 #endif
 
