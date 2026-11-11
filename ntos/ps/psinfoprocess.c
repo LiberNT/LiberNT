@@ -802,7 +802,8 @@ NtQueryInformationProcess(
         ProcessInformationClass == ProcessTelemetryIdInformation ||
         ProcessInformationClass == ProcessCommandLineInformation ||
         ProcessInformationClass == ProcessPowerThrottlingState ||
-        ProcessInformationClass == ProcessInPrivate)
+        ProcessInformationClass == ProcessInPrivate ||
+        ProcessInformationClass == ProcessWow64Information)
     {
         Access = PROCESS_QUERY_LIMITED_INFORMATION;
     }
