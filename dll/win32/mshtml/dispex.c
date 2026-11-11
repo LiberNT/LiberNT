@@ -2789,9 +2789,8 @@ static HRESULT WINAPI JSDispatchHost_GetJSDispatch(IWineJSDispatchHost *iface, I
 HRESULT dispex_index_prop_desc(DispatchEx *dispex, DISPID id, struct property_info *desc)
 {
     desc->id = id;
-    desc->flags = PROPF_WRITABLE | PROPF_CONFIGURABLE;
-    if(dispex->info->vtbl->next_dispid)
-        desc->flags |= PROPF_ENUMERABLE;
+    /* TODO: next_id does not enumerate the indices of collections */
+    desc->flags = PROPF_WRITABLE | PROPF_CONFIGURABLE | PROPF_ENUMERABLE;
     desc->name = NULL;
     desc->index = id - MSHTML_DISPID_CUSTOM_MIN;
     desc->iid = 0;
