@@ -3866,6 +3866,7 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
     case CMSG_ATTR_CERT_COUNT_PARAM:
         if (msg->u.signed_data.info)
         {
+            /* TODO: attribute certificates of the certificate set are not decoded */
             DWORD attrCertCount = 0;
 
             ret = CRYPT_CopyParam(pvData, pcbData,
