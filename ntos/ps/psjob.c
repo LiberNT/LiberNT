@@ -435,7 +435,6 @@ PspExitProcessFromJob(
     }
 
     if (Job->ActiveProcesses != 0) Job->ActiveProcesses--;
-    Job->TotalTerminatedProcesses++;
 
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
@@ -1268,8 +1267,8 @@ NtQueryInformationJobObject(
             ULONG Members = 0;
             ULONG Count = 0;
 
-            if (JobInformationLength <
-                FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList))
+            /* The record has to hold at least one identifier */
+            if (JobInformationLength < sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST))
             {
                 Length = sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST);
                 Status = STATUS_INFO_LENGTH_MISMATCH;
@@ -1284,7 +1283,7 @@ NtQueryInformationJobObject(
                  Entry != &Job->ProcessListHead;
                  Entry = Entry->Flink)
             {
-                Members++;
+                if (!CONTAINING_RECORD(Entry, EPROCESS, JobLinks)->AccountingFolded) Members++;
             }
 
             if (Room > Members) Room = Members;
@@ -1307,6 +1306,9 @@ NtQueryInformationJobObject(
                 PEPROCESS Member = CONTAINING_RECORD(Entry,
                                                      EPROCESS,
                                                      JobLinks);
+
+                /* A process that has exited stays associated with the job but is no longer in it */
+                if (Member->AccountingFolded) continue;
 
                 List->ProcessIdList[Count] =
                     (ULONG_PTR)Member->UniqueProcessId;
@@ -1509,6 +1511,7 @@ NtSetInformationJobObject(
             ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
 
             Job->LimitFlags = Extended.BasicLimitInformation.LimitFlags;
+            /* TODO: the user time limits are recorded but not enforced, so no process is terminated for one and TotalTerminatedProcesses stays 0 */
             Job->PerProcessUserTimeLimit =
                 Extended.BasicLimitInformation.PerProcessUserTimeLimit;
             Job->PerJobUserTimeLimit =
