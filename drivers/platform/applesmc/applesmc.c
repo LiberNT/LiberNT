@@ -40,6 +40,8 @@
 
 #define SMC_TIMEOUT_MS              500
 #define SMC_BOOT_TIMEOUT_MS         2000
+#define SMC_POLL_MS                 50
+#define SMC_POWER_LOG_MS            30000
 
 #define SMC_GPIO_CMD_OUTPUT         (1UL << 24)
 
@@ -87,7 +89,9 @@ typedef struct _SMC_DEVICE
 
     PKTHREAD Thread;
     KEVENT StopEvent;
+    KEVENT WorkEvent;
     volatile LONG Stop;
+    BOOLEAN PowerLogging;
 } SMC_DEVICE, *PSMC_DEVICE;
 
 typedef struct _SMC_CHILD
@@ -570,21 +574,107 @@ SmcSyncClock(
 }
 
 static
+LONG
+SmcFloatToMilli(
+    _In_ ULONG Bits)
+{
+    ULONG Exponent = (Bits >> 23) & 0xff;
+    ULONG64 Value;
+    LONG Shift;
+
+    if (!Exponent)
+        return 0;
+    if (Exponent == 0xff)
+        return (Bits & 0x80000000) ? -MAXLONG : MAXLONG;
+    Value = (ULONG64)((Bits & 0x7fffff) | 0x800000) * 1000;
+    Shift = (LONG)Exponent - 150;
+    if (Shift >= 0)
+        Value = (Shift > 8) ? MAXLONG : (Value << Shift);
+    else
+        Value = (Shift <= -64) ? 0 : ((Value + (1ULL << (-Shift - 1))) >> -Shift);
+    if (Value > MAXLONG)
+        Value = MAXLONG;
+    return (Bits & 0x80000000) ? -(LONG)Value : (LONG)Value;
+}
+
+#define SMC_WATTS(Milli) ((Milli) < 0 ? "-" : ""), (LONG)(((Milli) < 0 ? -(Milli) : (Milli)) / 1000), \
+                         (LONG)(((Milli) < 0 ? -(Milli) : (Milli)) % 1000)
+
+static
+VOID
+SmcLogPower(
+    _Inout_ PSMC_DEVICE Device)
+{
+    ULONG System = 0, DcIn = 0, Charger = 0;
+    LONG Battery = 0, SystemMilli, DcInMilli;
+    UCHAR Percent = 0, Charging = 0, Full = 0;
+    PCSTR State;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ExAcquireFastMutex(&Device->Lock);
+    Status = SmcReadKey(Device, APPLE_SMC_KEY('P', 'S', 'T', 'R'), (PUCHAR)&System, sizeof(System));
+    if (NT_SUCCESS(Status))
+        Status = SmcReadKey(Device, APPLE_SMC_KEY('B', '0', 'A', 'P'), (PUCHAR)&Battery, sizeof(Battery));
+    if (NT_SUCCESS(Status))
+    {
+        SmcReadKey(Device, APPLE_SMC_KEY('P', 'D', 'T', 'R'), (PUCHAR)&DcIn, sizeof(DcIn));
+        SmcReadKey(Device, APPLE_SMC_KEY('B', 'U', 'I', 'C'), &Percent, sizeof(Percent));
+        SmcReadKey(Device, APPLE_SMC_KEY('C', 'H', 'I', 'S'), (PUCHAR)&Charger, sizeof(Charger));
+        SmcReadKey(Device, APPLE_SMC_KEY('C', 'H', 'S', 'C'), &Charging, sizeof(Charging));
+        SmcReadKey(Device, APPLE_SMC_KEY('B', 'S', 'F', 'C'), &Full, sizeof(Full));
+    }
+    ExReleaseFastMutex(&Device->Lock);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("applesmc: power keys unreadable (%lx), no power summary\n", Status);
+        Device->PowerLogging = FALSE;
+        return;
+    }
+    SystemMilli = SmcFloatToMilli(System);
+    DcInMilli = SmcFloatToMilli(DcIn);
+    if (!Charger)
+        State = "discharging";
+    else if (Full)
+        State = "full on AC";
+    else if (Charging)
+        State = "charging";
+    else
+        State = "on AC, not charging";
+    DbgPrint("applesmc: power: system %s%ld.%03ld W, DC in %s%ld.%03ld W, battery %s%ld.%03ld W at %u%%, %s\n",
+             SMC_WATTS(SystemMilli), SMC_WATTS(DcInMilli), SMC_WATTS(Battery), Percent, State);
+}
+
+static
 VOID
 NTAPI
 SmcWorker(
     _In_ PVOID Context)
 {
     PSMC_DEVICE Device = Context;
+    PVOID Objects[2] = { &Device->StopEvent, &Device->WorkEvent };
     LARGE_INTEGER Interval;
+    ULONG64 Now, PowerDue = SmcNowMs() + SMC_POWER_LOG_MS;
+    ULONG WaitMs;
 
-    Interval.QuadPart = -50 * 10000;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     while (!Device->Stop)
     {
         ExAcquireFastMutex(&Device->Lock);
         AppleRtkitPoll(&Device->Rtkit);
         ExReleaseFastMutex(&Device->Lock);
-        KeWaitForSingleObject(&Device->StopEvent, Executive, KernelMode, FALSE, &Interval);
+        Now = SmcNowMs();
+        if (Device->PowerLogging && Now >= PowerDue)
+        {
+            SmcLogPower(Device);
+            PowerDue = Now + SMC_POWER_LOG_MS;
+        }
+        WaitMs = AppleRtkitPollInterval(&Device->Rtkit, SMC_POLL_MS);
+        if (Device->PowerLogging)
+            WaitMs = (ULONG)min((ULONG64)WaitMs, PowerDue > Now ? PowerDue - Now : 0);
+        Interval.QuadPart = -(LONGLONG)WaitMs * 10000;
+        KeWaitForMultipleObjects(RTL_NUMBER_OF(Objects), Objects, WaitAny, Executive, KernelMode, FALSE,
+                                 WaitMs == APPLE_RTKIT_NO_POLL ? NULL : &Interval, NULL);
     }
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -605,6 +695,7 @@ SmcStopHardware(
         ObDereferenceObject(Device->Thread);
         Device->Thread = NULL;
     }
+    AppleRtkitDisconnectInterrupt(&Device->Rtkit);
     Device->Initialized = FALSE;
     Device->Shmem = NULL;
     if (Device->Mbox)
@@ -619,12 +710,18 @@ SmcStopHardware(
 static
 NTSTATUS
 SmcStartHardware(
-    _Inout_ PSMC_DEVICE Device)
+    _Inout_ PSMC_DEVICE Device,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated)
 {
-    ULONG MboxNode, Phandle, Data = 0;
+    ULONG MboxNode, Phandle, Data = 0, Gsi;
     ULONG64 Deadline;
     HANDLE ThreadHandle;
+    BOOLEAN Edge;
     NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(!Device->Thread && !Device->Rtkit.Interrupt);
 
     Status = FdtDriverOpen(Device->Pdo, &Device->Tree);
     if (!NT_SUCCESS(Status))
@@ -650,6 +747,12 @@ SmcStartHardware(
     Device->Rtkit.Context = Device;
     Device->Rtkit.ShmemSetup = SmcShmemSetup;
     Device->Rtkit.Receive = SmcReceive;
+    KeInitializeEvent(&Device->WorkEvent, SynchronizationEvent, FALSE);
+    Status = AppleRtkitQueryInterrupt(&Device->Tree, Device->Tree.Node, &Gsi, &Edge);
+    if (NT_SUCCESS(Status))
+        AppleRtkitConnectInterrupt(&Device->Rtkit, Raw, Translated, Gsi, &Device->WorkEvent);
+    else
+        DbgPrint("applesmc: the SMC mailbox declares no receive interrupt (%lx), polling\n", Status);
     Status = AppleRtkitWake(&Device->Rtkit, SMC_BOOT_TIMEOUT_MS);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -695,6 +798,7 @@ SmcStartHardware(
 
     KeInitializeEvent(&Device->StopEvent, NotificationEvent, FALSE);
     Device->Stop = 0;
+    Device->PowerLogging = TRUE;
     Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL, SmcWorker, Device);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -1098,6 +1202,38 @@ SmcPnp(
     Lower = Device->LowerDevice;
     switch (Stack->MinorFunction)
     {
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+            KeInitializeEvent(&Event, NotificationEvent, FALSE);
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, SmcCompletion, &Event, TRUE, TRUE, TRUE);
+            Status = IoCallDriver(Lower, Irp);
+            if (Status == STATUS_PENDING)
+            {
+                KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+                Status = Irp->IoStatus.Status;
+            }
+            if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+            {
+                FDT_DRIVER_TREE Tree;
+                ULONG Gsi = 0;
+                BOOLEAN Edge = FALSE;
+                NTSTATUS FilterStatus = FdtDriverOpen(Device->Pdo, &Tree);
+
+                if (NT_SUCCESS(FilterStatus))
+                {
+                    FilterStatus = AppleRtkitQueryInterrupt(&Tree, Tree.Node, &Gsi, &Edge);
+                    FdtDriverClose(&Tree);
+                }
+                if (NT_SUCCESS(FilterStatus))
+                    FilterStatus = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+                DbgPrint("applesmc: requesting the mailbox interrupt %lu: %lx\n", Gsi, FilterStatus);
+                if (NT_SUCCESS(FilterStatus))
+                    Status = STATUS_SUCCESS;
+            }
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+
         case IRP_MN_START_DEVICE:
             KeInitializeEvent(&Event, NotificationEvent, FALSE);
             IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -1110,7 +1246,8 @@ SmcPnp(
             }
             if (NT_SUCCESS(Status))
             {
-                Status = SmcStartHardware(Device);
+                Status = SmcStartHardware(Device, Stack->Parameters.StartDevice.AllocatedResources,
+                                          Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
                 if (!NT_SUCCESS(Status))
                     SmcStopHardware(Device);
             }
