@@ -1025,16 +1025,17 @@ NtOpenKeyedEvent(
                                 DesiredAccess,
                                 NULL,
                                 &Handle);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && PreviousMode == KernelMode)
     {
         return Status;
     }
 
     if (PreviousMode != KernelMode)
     {
+        /* A failed open still reports a cleared handle */
         _SEH2_TRY
         {
-            *KeyedEventHandle = Handle;
+            *KeyedEventHandle = NT_SUCCESS(Status) ? Handle : NULL;
         }
         _SEH2_EXCEPT(ExSystemExceptionFilter())
         {
