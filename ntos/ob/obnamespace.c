@@ -560,6 +560,9 @@ ObpLookupObjectName(
     RtlZeroMemory(&Walk, sizeof(Walk));
     Walk.Reparse = OBP_MAX_REPARSE;
 
+    if (ObpCaseInsensitive && (ObjectType == NULL || ObjectType->TypeInfo.CaseInsensitive))
+        Attributes |= OBJ_CASE_INSENSITIVE;
+
     /* An insertion is the kernel naming an object it already owns */
     if (InsertObject != NULL) CheckMode = KernelMode;
 

@@ -20,7 +20,7 @@ BOOLEAN
 ObpDirectoryIsCaseInsensitive(
     _In_ ULONG Attributes)
 {
-    return ((Attributes & OBJ_CASE_INSENSITIVE) != 0) || (ObpCaseInsensitive != 0);
+    return ((Attributes & OBJ_CASE_INSENSITIVE) != 0);
 }
 
 /*
