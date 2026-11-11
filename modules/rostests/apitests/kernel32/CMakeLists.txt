@@ -8,6 +8,7 @@ list(APPEND SOURCE
     ActCtxDependencyVersions.c
     AlternateComputerNames.c
     ComPlusPackageInstallStatus.c
+    MessageWaitingIndicator.c
     TermsrvAppInstallMode.c
     ConsoleAlias.c
     ApiSetCoreSynch.c

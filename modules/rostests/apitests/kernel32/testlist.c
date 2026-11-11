@@ -6,6 +6,7 @@ extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
 extern void func_AlternateComputerNames(void);
 extern void func_ComPlusPackageInstallStatus(void);
+extern void func_MessageWaitingIndicator(void);
 extern void func_TermsrvAppInstallMode(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_ApplicationRecovery(void);
@@ -170,6 +171,7 @@ const struct test winetest_testlist[] =
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "AlternateComputerNames",      func_AlternateComputerNames },
     { "ComPlusPackageInstallStatus",  func_ComPlusPackageInstallStatus },
+    { "MessageWaitingIndicator",      func_MessageWaitingIndicator },
     { "TermsrvAppInstallMode",        func_TermsrvAppInstallMode },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "ApplicationRecovery",         func_ApplicationRecovery },
