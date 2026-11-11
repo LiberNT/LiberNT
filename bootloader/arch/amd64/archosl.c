@@ -352,6 +352,13 @@ OslArchSwitchStack(VOID)
 }
 
 VOID
+OslArchReserveFirmwareMemory(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    UNREFERENCED_PARAMETER(LoaderBlock);
+}
+
+VOID
 FwExitBootServices(VOID)
 {
     UefiLeaveBootServices();

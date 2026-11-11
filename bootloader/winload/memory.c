@@ -155,6 +155,7 @@ WinLdrSetupMemoryLayout(
         return FALSE;
 
     OslReserveFrameBuffer();
+    OslArchReserveFirmwareMemory(LoaderBlock);
     OslArchPlaceRamdisk();
 
     Table = MmGetMemoryMap(&Count);

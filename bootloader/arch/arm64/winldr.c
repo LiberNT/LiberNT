@@ -965,6 +965,57 @@ Arm64AddDeviceTreeInterruptRanges(
     }
 }
 
+VOID
+OslArchReserveFirmwareMemory(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PPAGE_LOOKUP_TABLE_ITEM Table;
+    PFN_NUMBER Count, Page, End, Kept = 0;
+    ULONGLONG Address, Size;
+    ULONG Reserved, Node, Index, Regions = 0, Length;
+    TYPE_OF_MEMORY Type;
+    ULONG_PTR Tree;
+    FDT Fdt;
+
+    Tree = (ULONG_PTR)LoaderBlock->u.Arm64.DeviceTree;
+    if (Tree >= ARM64_KSEG0_BASE)
+        Tree -= ARM64_KSEG0_BASE;
+    if (!Tree || !FdtOpen((const VOID *)Tree, (ULONG)LoaderBlock->u.Arm64.DeviceTreeSize, &Fdt) ||
+        !FdtFindNode(&Fdt, "/reserved-memory", &Reserved, NULL))
+    {
+        return;
+    }
+    Table = MmGetMemoryMap(&Count);
+    if (!Table)
+        return;
+    for (Node = FdtFirstChild(&Fdt, Reserved); Node != FDT_NO_NODE; Node = FdtNextSibling(&Fdt, Node))
+    {
+        if (FdtGetProperty(&Fdt, Node, "reusable", &Length))
+            continue;
+        for (Index = 0; FdtReadReg(&Fdt, Node, Reserved, Index, &Address, &Size); ++Index)
+        {
+            if (!Size)
+                continue;
+            Regions++;
+            Page = (PFN_NUMBER)(Address >> MM_PAGE_SHIFT);
+            End = (PFN_NUMBER)((Address + Size + MM_PAGE_SIZE - 1) >> MM_PAGE_SHIFT);
+            Page = max(Page, MmLowestPhysicalPage);
+            End = min(End, MmLowestPhysicalPage + Count);
+            for (; Page < End; Page++)
+            {
+                Type = Table[Page - MmLowestPhysicalPage].PageAllocated;
+                if (Type == LoaderFree || Type == LoaderFirmwareTemporary)
+                {
+                    Table[Page - MmLowestPhysicalPage].PageAllocated = LoaderFirmwarePermanent;
+                    Kept++;
+                }
+            }
+        }
+    }
+    DbgPrint("winload: %lu reserved-memory regions of the device tree kept, %Iu pages taken back from reuse\n",
+             Regions, Kept);
+}
+
 static VOID
 Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
