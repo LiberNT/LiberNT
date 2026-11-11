@@ -38,8 +38,10 @@ IopCheckDeviceAccess(
     }
 
     if (!DeviceOnlyOpen &&
-        !(DeviceObject->Characteristics & FILE_DEVICE_SECURE_OPEN))
+        (!(DeviceObject->Characteristics & FILE_DEVICE_SECURE_OPEN) ||
+         DeviceObject->Vpb != NULL))
     {
+        /* TODO: no traverse check against the device of a volume */
         return STATUS_SUCCESS;
     }
 
