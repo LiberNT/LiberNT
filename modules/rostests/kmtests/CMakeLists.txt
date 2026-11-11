@@ -136,6 +136,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_cm/CmTransactions.c
     ntos_etw/EtwRegisterKM.c
     ntos_etw/EtwSessionKM.c
+    ntos_wmi/PcwKM.c
     ntos_ex/ExCallback.c
     ntos_ex/ExCallbackExtra.c
     ntos_ex/ExDoubleList.c
