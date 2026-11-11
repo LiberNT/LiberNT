@@ -584,6 +584,11 @@ list(APPEND KMTEST_SOURCE
 
     kmtest/kmtest.rc)
 
+if(ARCH STREQUAL "amd64")
+    list(APPEND KMTEST_SOURCE
+        ntos_ke/amd64/KeNonCanonicalReturn_user.c)
+endif()
+
 add_executable(kmtest ${KMTEST_SOURCE})
 set_module_type(kmtest win32cui)
 target_link_libraries(kmtest ${PSEH_LIB})

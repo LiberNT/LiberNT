@@ -36,6 +36,7 @@ KMT_TESTFUNC Test_IoReadWrite;
 KMT_TESTFUNC Test_ExHandleInformation;
 KMT_TESTFUNC Test_ExHandleListChurn;
 KMT_TESTFUNC Test_KdLiveDump;
+KMT_TESTFUNC Test_KeNonCanonicalReturn;
 KMT_TESTFUNC Test_MmMapLockedPagesSpecifyCache;
 KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
@@ -141,6 +142,7 @@ const KMT_TEST TestList[] =
     { "WfpUdp",                       Test_WfpUdp },
     { "WfpUser",                      Test_WfpUser },
 #ifdef _M_AMD64
+    { "KeNonCanonicalReturn",         Test_KeNonCanonicalReturn },
     { "RtlCaptureContextUM",          Test_RtlCaptureContext },
 #endif
     { NULL,                           NULL },

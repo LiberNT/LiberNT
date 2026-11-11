@@ -817,14 +817,6 @@ KiGeneralProtectionFaultHandler(
     /* Get Instruction Pointer */
     Instructions = (PUCHAR)TrapFrame->Rip;
 
-    /* Check for IRET */
-    if (Instructions[0] == 0x48 && Instructions[1] == 0xCF)
-    {
-        /* Not implemented */
-        UNIMPLEMENTED;
-        ASSERT(FALSE);
-    }
-
     /* Check for RDMSR/WRMSR */
     if ((Instructions[0] == 0xF) &&            // 2-byte opcode
         ((Instructions[1] == 0x30) ||        // RDMSR

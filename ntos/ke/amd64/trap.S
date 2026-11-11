@@ -498,6 +498,35 @@ ENDFUNC
 
 PUBLIC KiGeneralProtectionFault
 FUNC KiGeneralProtectionFault
+    .pushframe code
+    .endprolog
+
+    /* An IRETQ that faults on its way to user mode does so after SWAPGS */
+    test byte ptr [rsp + 8 + MfSegCs], 1
+    jnz KiGeneralProtectionFaultTrap
+    push rax
+    mov rax, [rsp + 16 + MfRip]
+    cmp word ptr [rax], HEX(0CF48)
+    jne KiGpfKernelFault
+    mov rax, [rsp + 16 + MfRsp]
+    test byte ptr [rax + MfSegCs], 1
+    jz KiGpfKernelFault
+    push rcx
+    mov rcx, [rsp + 8]
+    mov [rax - 16], rcx
+    mov rcx, [rsp + 16]
+    mov [rax - 8], rcx
+    pop rcx
+    lea rsp, [rax - 16]
+    pop rax
+    jmp KiUserIretqFault
+
+KiGpfKernelFault:
+    pop rax
+    jmp KiGeneralProtectionFaultTrap
+ENDFUNC
+
+FUNC KiGeneralProtectionFaultTrap
     /* We have an error code */
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
@@ -529,6 +558,18 @@ DispatchAccessViolation:
 
 KiGpfExit:
     /* Return */
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
+ENDFUNC
+
+FUNC KiUserIretqFault
+    EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
+
+    test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
+    jz KiUserIretqFaultDispatch
+    sti
+
+KiUserIretqFaultDispatch:
+    DispatchException STATUS_ACCESS_VIOLATION, 2, 0, -1, 0
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
@@ -1257,6 +1298,11 @@ NoUserApcPending:
     jnz SystemServiceInstrumented
 
 SystemServiceInstrumentationDone:
+    /* SYSRET to an address outside the user range faults in kernel mode on Intel CPUs */
+    mov rdx, rcx
+    shr rdx, 47
+    jnz SystemServiceIretq
+
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
 
@@ -1280,6 +1326,22 @@ SystemServiceInstrumentationDone:
 
     /* return to user mode */
     sysretq
+
+SystemServiceIretq:
+    mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip], rcx
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegCs], (KGDT64_R3_CODE OR RPL_MASK)
+    mov r8, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
+    mov r9, rbp
+    add rsp, MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip
+    swapgs
+    pxor xmm0, xmm0
+    pxor xmm1, xmm1
+    pxor xmm2, xmm2
+    pxor xmm3, xmm3
+    pxor xmm4, xmm4
+    pxor xmm5, xmm5
+    xor edx, edx
+    iretq
 
 SystemServiceInstrumented:
     mov rdx, [rdx + ThApcState + AsProcess]
