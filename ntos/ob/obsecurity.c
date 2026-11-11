@@ -78,18 +78,14 @@ ObpAccessForSettingSecurity(
     }
 
     if (SecurityInformation & (DACL_SECURITY_INFORMATION |
-                               ATTRIBUTE_SECURITY_INFORMATION |
-                               PROTECTED_DACL_SECURITY_INFORMATION |
-                               UNPROTECTED_DACL_SECURITY_INFORMATION))
+                               ATTRIBUTE_SECURITY_INFORMATION))
     {
         Access |= WRITE_DAC;
     }
 
     if (SecurityInformation & (SACL_SECURITY_INFORMATION |
                                SCOPE_SECURITY_INFORMATION |
-                               PROCESS_TRUST_LABEL_SECURITY_INFORMATION |
-                               PROTECTED_SACL_SECURITY_INFORMATION |
-                               UNPROTECTED_SACL_SECURITY_INFORMATION))
+                               PROCESS_TRUST_LABEL_SECURITY_INFORMATION))
     {
         Access |= ACCESS_SYSTEM_SECURITY;
     }

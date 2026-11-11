@@ -920,11 +920,10 @@ SeQuerySecurityDescriptorInfo(
     return Status;
 }
 
-/* The inheritance bits a list that is being set takes from the caller and from its request */
+/* The inheritance bits a list that is being set takes from the caller's descriptor; PROTECTED_* information is the Win32 layer's to turn into that control */
 static
 SECURITY_DESCRIPTOR_CONTROL
 SepSetListControl(
-    _In_ SECURITY_INFORMATION Wanted,
     _In_ SECURITY_DESCRIPTOR_CONTROL Given,
     _In_ ULONG AutoInheritFlags,
     _In_ BOOLEAN Sacl)
@@ -933,8 +932,6 @@ SepSetListControl(
     SECURITY_DESCRIPTOR_CONTROL Protected = Sacl ? SE_SACL_PROTECTED : SE_DACL_PROTECTED;
     SECURITY_DESCRIPTOR_CONTROL Inherited = Sacl ? SE_SACL_AUTO_INHERITED : SE_DACL_AUTO_INHERITED;
     SECURITY_DESCRIPTOR_CONTROL Request = Sacl ? SE_SACL_AUTO_INHERIT_REQ : SE_DACL_AUTO_INHERIT_REQ;
-    SECURITY_INFORMATION Protect = Sacl ? PROTECTED_SACL_SECURITY_INFORMATION : PROTECTED_DACL_SECURITY_INFORMATION;
-    SECURITY_INFORMATION Unprotect = Sacl ? UNPROTECTED_SACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION;
     ULONG Auto = Sacl ? SEF_SACL_AUTO_INHERIT : SEF_DACL_AUTO_INHERIT;
     SECURITY_DESCRIPTOR_CONTROL Control;
 
@@ -945,9 +942,6 @@ SepSetListControl(
         Control |= Given & (Inherited | Request);
     else if ((Given & (Inherited | Request)) == (Inherited | Request))
         Control |= Inherited;
-
-    if (Wanted & Protect) Control |= Protected;
-    else if (Wanted & Unprotect) Control &= ~Protected;
 
     return Control;
 }
@@ -1011,7 +1005,7 @@ SeSetSecurityDescriptorInfoEx(
         Next.DaclPresent = Given.DaclPresent;
         Control &= ~(SE_DACL_DEFAULTED | SE_DACL_AUTO_INHERITED |
                      SE_DACL_AUTO_INHERIT_REQ | SE_DACL_PROTECTED);
-        Control |= SepSetListControl(Wanted, Given.Control, AutoInheritFlags, FALSE);
+        Control |= SepSetListControl(Given.Control, AutoInheritFlags, FALSE);
 
         if (Given.DaclPresent && Given.Dacl != NULL)
         {
@@ -1042,7 +1036,7 @@ SeSetSecurityDescriptorInfoEx(
         Next.SaclPresent = Given.SaclPresent;
         Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED |
                      SE_SACL_AUTO_INHERIT_REQ | SE_SACL_PROTECTED);
-        Control |= SepSetListControl(Wanted, Given.Control, AutoInheritFlags, TRUE);
+        Control |= SepSetListControl(Given.Control, AutoInheritFlags, TRUE);
 
         if (Given.SaclPresent && Given.Sacl != NULL)
         {
