@@ -1330,6 +1330,12 @@ typedef struct tagTLBContext
 	void *mapping;        /* memory mapping */
 	MSFT_SegDir * pTblDir;
 	ITypeLibImpl* pLibInfo;
+#ifdef __REACTOS__
+	struct tagTLBString **names;
+	ULONG name_count;
+	struct tagTLBString **strings;
+	ULONG string_count;
+#endif
 } TLBContext;
 
 
@@ -2702,9 +2708,56 @@ static HRESULT MSFT_ReadAllNames(TLBContext *pcx)
     }
 }
 
+#ifdef __REACTOS__
+static TLBString **MSFT_IndexStrings(struct list *string_list, ULONG *count)
+{
+    TLBString *str, **index;
+    ULONG total = list_count(string_list), i = 0;
+
+    *count = 0;
+    if (!total)
+        return NULL;
+
+    index = malloc(total * sizeof(*index));
+    if (!index)
+        return NULL;
+
+    LIST_FOR_EACH_ENTRY(str, string_list, TLBString, entry)
+        index[i++] = str;
+
+    *count = total;
+    return index;
+}
+
+static TLBString *MSFT_FindIndexedString(TLBString **index, ULONG count, int offset)
+{
+    ULONG low = 0, high = count;
+
+    while (low < high)
+    {
+        ULONG mid = low + (high - low) / 2;
+
+        if (index[mid]->offset == offset)
+            return index[mid];
+        if (index[mid]->offset < offset)
+            low = mid + 1;
+        else
+            high = mid;
+    }
+
+    return NULL;
+}
+#endif
+
 static TLBString *MSFT_ReadName( TLBContext *pcx, int offset)
 {
     TLBString *tlbstr;
+
+#ifdef __REACTOS__
+    /* The tables are read in increasing offset order, so a parse looks names up by binary search */
+    if (pcx->names)
+        return MSFT_FindIndexedString(pcx->names, pcx->name_count, offset);
+#endif
 
     LIST_FOR_EACH_ENTRY(tlbstr, &pcx->pLibInfo->name_list, TLBString, entry) {
         if (tlbstr->offset == offset) {
@@ -2719,6 +2772,11 @@ static TLBString *MSFT_ReadName( TLBContext *pcx, int offset)
 static TLBString *MSFT_ReadString( TLBContext *pcx, int offset)
 {
     TLBString *tlbstr;
+
+#ifdef __REACTOS__
+    if (pcx->strings)
+        return MSFT_FindIndexedString(pcx->strings, pcx->string_count, offset);
+#endif
 
     LIST_FOR_EACH_ENTRY(tlbstr, &pcx->pLibInfo->string_list, TLBString, entry) {
         if (tlbstr->offset == offset) {
@@ -4844,6 +4902,12 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
     cx.mapping = pLib;
     cx.pLibInfo = pTypeLibImpl;
     cx.length = dwTLBLength;
+#ifdef __REACTOS__
+    cx.names = NULL;
+    cx.name_count = 0;
+    cx.strings = NULL;
+    cx.string_count = 0;
+#endif
 
     /* read header */
 #ifdef __REACTOS__
@@ -4907,6 +4971,8 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
     if (FAILED(*result)) goto failed;
     *result = MSFT_ReadAllGuids(&cx);
     if (FAILED(*result)) goto failed;
+    cx.names = MSFT_IndexStrings(&pTypeLibImpl->name_list, &cx.name_count);
+    cx.strings = MSFT_IndexStrings(&pTypeLibImpl->string_list, &cx.string_count);
 #else
     MSFT_ReadAllNames(&cx);
     MSFT_ReadAllStrings(&cx);
@@ -5322,6 +5388,8 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 
     TRACE("(%p)\n", pTypeLibImpl);
 #ifdef __REACTOS__
+    free(cx.names);
+    free(cx.strings);
     *result = S_OK;
 #endif
     return &pTypeLibImpl->ITypeLib2_iface;
@@ -5330,6 +5398,8 @@ static ITypeLib2* ITypeLib2_Constructor_MSFT(LPVOID pLib, DWORD dwTLBLength)
 invalid:
     *result = TYPE_E_CANTLOADLIBRARY;
 failed:
+    free(cx.names);
+    free(cx.strings);
     free(type_refs);
     free(type_states);
     ITypeLib2_Release(&pTypeLibImpl->ITypeLib2_iface);
