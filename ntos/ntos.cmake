@@ -265,6 +265,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsecurity.c
     ${REACTOS_SOURCE_DIR}/ntos/ob/obsync.c
     ${REACTOS_SOURCE_DIR}/ntos/po/pep.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/pobutton.c
     ${REACTOS_SOURCE_DIR}/ntos/po/pofx.c
     ${REACTOS_SOURCE_DIR}/ntos/po/powerlimit.c
     ${REACTOS_SOURCE_DIR}/ntos/po/hiber.c

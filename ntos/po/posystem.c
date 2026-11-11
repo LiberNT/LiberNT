@@ -619,6 +619,31 @@ PoUnregisterPowerSettingCallback(
     return STATUS_SUCCESS;
 }
 
+BOOLEAN
+NTAPI
+PopReadPowerSetting(
+    _In_ LPCGUID Setting,
+    _Out_writes_bytes_(Length) PVOID Value,
+    _In_ ULONG Length)
+{
+    PPOP_CACHED_SETTING Cached;
+    BOOLEAN Found = FALSE;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+
+    Cached = PopFindCachedSetting(Setting);
+    if (Cached != NULL && Cached->Value[PopPowerSource] != NULL && Cached->Length[PopPowerSource] == Length)
+    {
+        RtlCopyMemory(Value, Cached->Value[PopPowerSource], Length);
+        Found = TRUE;
+    }
+
+    KeReleaseGuardedMutex(&PopSettingLock);
+    return Found;
+}
+
 ULONG
 NTAPI
 PopGetVideoTimeout(VOID)
@@ -761,6 +786,12 @@ PoInitSystem(
         PopHiberInitialize();
         PopInitializeSleepSupport();
 
+        return TRUE;
+    }
+
+    if (BootPhase == 2)
+    {
+        PopInitializeButtons();
         return TRUE;
     }
 

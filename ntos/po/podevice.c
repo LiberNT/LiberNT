@@ -500,19 +500,6 @@ PoNotifySystemTimeSet(VOID)
     /* TODO: nothing is woken or rescheduled when the clock is put right */
 }
 
-NTSTATUS
-NTAPI
-PopAddRemoveSysCapsCallback(
-    _In_ PVOID NotificationStructure,
-    _In_ PVOID Context)
-{
-    UNREFERENCED_PARAMETER(NotificationStructure);
-    UNREFERENCED_PARAMETER(Context);
-
-    /* TODO: what the machine can do is not read from its devices */
-    return STATUS_SUCCESS;
-}
-
 /*
  * Remembers which request brought the machine back, so that whoever asks can
  * tell a wake from an ordinary power request. No published flag in a request

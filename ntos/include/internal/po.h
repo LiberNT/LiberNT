@@ -579,6 +579,20 @@ PopAddRemoveSysCapsCallback(
 
 VOID
 NTAPI
+PopInitializeButtons(
+    VOID
+);
+
+BOOLEAN
+NTAPI
+PopReadPowerSetting(
+    _In_ LPCGUID Setting,
+    _Out_writes_bytes_(Length) PVOID Value,
+    _In_ ULONG Length
+);
+
+VOID
+NTAPI
 PopInitializeEventSupport(
     VOID
 );
