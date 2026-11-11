@@ -265,6 +265,67 @@ KiChargeDpcWatchdog(
     }
 }
 
+/* Ten seconds without a clock interrupt of its own stops the system: the processor is hung */
+#define KI_CLOCK_WATCHDOG_INTERVAL 100000000ULL
+
+static
+VOID
+KiCountClockKeepAlive(
+    _In_ PKPRCB TargetPrcb,
+    _In_ ULONG Ticks)
+{
+    ULONG Timeout = (ULONG)(KI_CLOCK_WATCHDOG_INTERVAL / KeMaximumIncrement);
+
+    if ((ULONG)InterlockedExchangeAdd(&TargetPrcb->ClockKeepAlive, (LONG)Ticks) + Ticks > Timeout)
+    {
+        KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                     Timeout,
+                     0,
+                     (ULONG_PTR)TargetPrcb,
+                     TargetPrcb->Number);
+    }
+}
+
+static
+VOID
+KiCheckClockWatchdog(
+    _In_ PKPRCB Prcb,
+    _In_ ULONG Ticks)
+{
+    PKPRCB OwnerPrcb = KiClockOwnerPrcb;
+    KAFFINITY Watchers;
+    ULONG Number;
+
+    InterlockedExchange(&Prcb->ClockKeepAlive, 0);
+
+    if ((Ticks == 0) || (KeMaximumIncrement == 0) || (OwnerPrcb == NULL) ||
+        KdEnteredDebugger || KeBugCheckActive || KiInterruptTimeFrozen)
+    {
+        return;
+    }
+
+    if (Prcb == OwnerPrcb)
+    {
+        for (Number = 0; Number < (ULONG)(UCHAR)KeNumberProcessors; Number++)
+        {
+            PKPRCB TargetPrcb = KiProcessorBlock[Number];
+
+            if ((TargetPrcb != NULL) && (TargetPrcb != Prcb) &&
+                (KeActiveProcessors & TargetPrcb->SetMember))
+            {
+                KiCountClockKeepAlive(TargetPrcb, Ticks);
+            }
+        }
+
+        return;
+    }
+
+    /* The lowest of the other active processors watches the one that owns the clock */
+    Watchers = KeActiveProcessors & ~OwnerPrcb->SetMember;
+    if ((Watchers & (~Watchers + 1)) == Prcb->SetMember)
+        KiCountClockKeepAlive(OwnerPrcb, Ticks);
+}
+
 /* PUBLIC FUNCTIONS: THE CLOCK PERIOD *****************************************/
 
 /*
@@ -731,6 +792,8 @@ KiUpdateRunTime(
     PKPRCB Prcb = KeGetCurrentPrcb();
     PKTHREAD Thread = Prcb->CurrentThread;
     PKPROCESS Process;
+
+    KiCheckClockWatchdog(Prcb, Ticks);
 
     if (Thread == NULL)
         return;

@@ -226,6 +226,8 @@ KMT_TESTFUNC Test_KeStandbySteal;
 #endif
 KMT_TESTFUNC Test_KeDeferredReady;
 KMT_TESTFUNC Test_KeCacheInvalidation;
+KMT_TESTFUNC Test_KeClockKeepAlive;
+KMT_TESTFUNC Test_KeClockWatchdog;
 KMT_TESTFUNC Test_KeModern;
 #ifdef _M_ARM64
 KMT_TESTFUNC Test_HalArm64Ipi;
@@ -612,6 +614,8 @@ const KMT_TEST TestList[] =
 #endif
     { "KeDeferredReady",                    Test_KeDeferredReady },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
+    { "KeClockKeepAlive",                   Test_KeClockKeepAlive },
+    { "-KeClockWatchdog",                   Test_KeClockWatchdog },
     { "KeModern",                           Test_KeModern },
 #ifdef _M_ARM64
     { "HalArm64Ipi",                        Test_HalArm64Ipi },
