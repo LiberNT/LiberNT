@@ -21,7 +21,75 @@
  */
 static BOOLEAN KdpScreenInitialised = FALSE;
 
+static BOOLEAN KdpScreenJoinedForStop = FALSE;
+
 /* PRIVATE FUNCTIONS **********************************************************/
+
+static
+VOID
+NTAPI
+KdpScreenPrint(
+    _In_ PCCH String,
+    _In_ ULONG Length);
+
+static
+VOID
+KdpScreenSetConsole(
+    _In_ BOOLEAN Clear)
+{
+    VID_DISPLAY_INFO DisplayInfo;
+    ULONG Width = SCREEN_WIDTH;
+    ULONG Height = SCREEN_HEIGHT;
+    ULONG Right = SCREEN_WIDTH - 1;
+
+    if (InbvQueryDisplayInfo(&DisplayInfo) &&
+        (DisplayInfo.Width >= SCREEN_WIDTH) &&
+        (DisplayInfo.Height >= SCREEN_HEIGHT) &&
+        (DisplayInfo.CharacterWidth != 0))
+    {
+        Width = DisplayInfo.Width;
+        Height = DisplayInfo.Height;
+        Right = Width - (Width % DisplayInfo.CharacterWidth) - 1;
+    }
+
+    if (Clear)
+    {
+        InbvResetDisplay();
+        InbvSolidColorFill(0, 0, Width - 1, Height - 1, BV_COLOR_BLACK);
+    }
+
+    InbvSetTextColor(BV_COLOR_WHITE);
+    InbvInstallDisplayStringFilter(NULL);
+    InbvEnableDisplayString(TRUE);
+    InbvSetScrollRegion(0, 0, Right, Height - 1);
+}
+
+static
+VOID
+KdpScreenJoin(VOID)
+{
+    PKD_DISPATCH_TABLE Table = &DispatchTable[KdScreen];
+
+    if (KdpScreenInitialised)
+        return;
+
+    Table->KdpPrintRoutine = KdpScreenPrint;
+    InsertTailList(&KdProviders, &Table->KdProvidersList);
+    KdpScreenInitialised = TRUE;
+}
+
+static
+VOID
+KdpScreenPrintCallback(
+    _In_ PSTRING Output,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level)
+{
+    UNREFERENCED_PARAMETER(ComponentId);
+    UNREFERENCED_PARAMETER(Level);
+
+    KdpScreenPrint(Output->Buffer, Output->Length);
+}
 
 /*
  * Takes the display and makes it fit to read text on. Returns TRUE when it had
@@ -38,12 +106,7 @@ KdpScreenAcquire(VOID)
         return FALSE;
 
     InbvAcquireDisplayOwnership();
-    InbvResetDisplay();
-    InbvSolidColorFill(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, BV_COLOR_BLACK);
-    InbvSetTextColor(BV_COLOR_WHITE);
-    InbvInstallDisplayStringFilter(NULL);
-    InbvEnableDisplayString(TRUE);
-    InbvSetScrollRegion(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
+    KdpScreenSetConsole(TRUE);
 
     return TRUE;
 }
@@ -57,10 +120,20 @@ BOOLEAN
 KdpScreenEnterStop(
     _In_ BOOLEAN Requested)
 {
+    BOOLEAN Acquired;
+
     if (!Requested && !KdpDebugMode.Screen)
         return FALSE;
 
-    return KdpScreenAcquire();
+    Acquired = KdpScreenAcquire();
+
+    if (!KdpScreenInitialised && InbvIsBootDriverInstalled())
+    {
+        KdpScreenJoin();
+        KdpScreenJoinedForStop = TRUE;
+    }
+
+    return Acquired;
 }
 
 /*
@@ -70,10 +143,44 @@ VOID
 KdpScreenRelease(
     _In_ BOOLEAN DisplayAcquired)
 {
+    if (KdpScreenJoinedForStop)
+    {
+        RemoveEntryList(&DispatchTable[KdScreen].KdProvidersList);
+        KdpScreenInitialised = FALSE;
+        KdpScreenJoinedForStop = FALSE;
+    }
+
     if (!DisplayAcquired)
         return;
 
     InbvNotifyDisplayOwnershipLost(NULL);
+}
+
+VOID
+KdpScreenEnterBugCheck(
+    _In_ BOOLEAN FollowPrints)
+{
+    if (!InbvIsBootDriverInstalled())
+        return;
+
+    if (!KdpScreenInitialised ||
+        (InbvGetDisplayState() != INBV_DISPLAY_STATE_OWNED))
+    {
+        InbvAcquireDisplayOwnership();
+        KdpScreenSetConsole(TRUE);
+    }
+    else
+    {
+        KdpScreenSetConsole(FALSE);
+    }
+
+    KdpNetDisplayStatus();
+
+    KdpScreenJoin();
+    KdpScreenJoinedForStop = FALSE;
+
+    if (FollowPrints)
+        DbgSetDebugPrintCallback(KdpScreenPrintCallback, TRUE);
 }
 
 /*

@@ -49,10 +49,10 @@ KiParseProfileList(
     _In_ KPROFILE_SOURCE Source,
     _In_ PLIST_ENTRY ListHead);
 
-/* crash.c: the stop screen, and the pieces it is built from. */
+/* crash.c: the stop report, and the pieces it is built from. */
 VOID
 NTAPI
-KiDisplayBlueScreen(
+KiReportBugCheck(
     _In_ ULONG BugCheckCode,
     _In_opt_ PKTRAP_FRAME TrapFrame,
     _In_opt_ PCONTEXT Context);

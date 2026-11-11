@@ -65,9 +65,6 @@ static PVOID KiBugCheckImageBase;
    number. */
 #define KI_RT_MESSAGETABLE 11
 
-/* The colour of the stop screen. */
-#define KI_BUGCHECK_BACKGROUND 4
-
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -85,18 +82,15 @@ KiAddressInImage(
 }
 
 /*
- * Writes one line to everywhere a stop message has to reach: the debugger, the
- * log the boot loader keeps, and the screen. Each of the three may be absent,
- * and none of them may be allowed to stop the other two.
+ * Writes one line of the stop report. The report is debug output and nothing
+ * else: the screen is one of the debugger's outputs from the stop on, so it
+ * shows exactly what the log and every other output receive.
  */
 VOID
 KiDisplayAndLogBugCheckString(
     _In_z_ PCSTR String)
 {
     DbgPrint("%s", String);
-
-    if (InbvIsBootDriverInstalled())
-        InbvDisplayString((PCHAR)String);
 }
 
 /*
@@ -580,12 +574,12 @@ KeRosCaptureUserStackBackTrace(
 }
 
 /*
- * Puts the stop screen up. The display is taken away from whoever had it,
- * because by now nothing else is going to give it back.
+ * Says why the system stopped, as debug output. Where the screen shows it is
+ * the debugger's business, not this routine's.
  */
 VOID
 NTAPI
-KiDisplayBlueScreen(
+KiReportBugCheck(
     _In_ ULONG BugCheckCode,
     _In_opt_ PKTRAP_FRAME TrapFrame,
     _In_opt_ PCONTEXT Context)
@@ -597,33 +591,12 @@ KiDisplayBlueScreen(
     CHAR AnsiName[32];
     ULONG Index;
 
-    /* The display belongs to the stop message from here on */
-    InbvAcquireDisplayOwnership();
-    InbvResetDisplay();
-    InbvSolidColorFill(0, 0, 639, 479, KI_BUGCHECK_BACKGROUND);
-    InbvSetTextColor(15);
-    InbvInstallDisplayStringFilter(NULL);
-    InbvEnableDisplayString(TRUE);
-    InbvSetScrollRegion(0, 0, 639, 479);
-
     KiDisplayAndLogBugCheckString("\r\nThe system has been stopped to keep "
                                   "it from damaging anything further.\r\n\r\n");
 
     KeGetBugMessageText(BugCheckCode, &Message);
     if (Message.Length != 0)
-    {
         DbgPrint("%.*s\r\n", Message.Length, Message.Buffer);
-        if (InbvIsBootDriverInstalled())
-        {
-            /* The table's text is not terminated: copy out what fits */
-            ULONG Count = min(Message.Length, sizeof(Line) - 3);
-            RtlCopyMemory(Line, Message.Buffer, Count);
-            Line[Count] = '\r';
-            Line[Count + 1] = '\n';
-            Line[Count + 2] = ANSI_NULL;
-            InbvDisplayString(Line);
-        }
-    }
 
     _snprintf(Line,
               sizeof(Line),
@@ -717,9 +690,10 @@ KiBugCheckDebugBreak(
  * recorded before anything that could fault, because they are the only thing a
  * dump reader is certain to get. Then every other processor is stopped, so that
  * nothing changes underneath what follows. Then the callbacks run, an external
- * debugger gets its first look, the screen is put up and the dump is written.
- * An integrated debugger only gets the machine after that: it always counts as
- * attached and would otherwise keep the dump from ever being written.
+ * debugger gets its first look or the integrated one takes the screen as its
+ * console, the report is printed and the dump is written; an integrated
+ * debugger only gets the machine after that, as it always counts as attached
+ * and would otherwise keep the dump from ever being written.
  */
 DECLSPEC_NORETURN
 VOID
@@ -809,11 +783,13 @@ KeBugCheckWithTf(
     KiDoBugCheckReasonCallbacks(KbCallbackDumpIo);
 
 #ifdef _WINKD_
-    /* The debugger's first look, before the screen is taken over */
+    /* The debugger's first look, before the report */
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_FIRST);
+#else
+    KdEnableBugCheckDebugger();
 #endif
 
-    KiDisplayBlueScreen(BugCheckCode, TrapFrame, ContextPointer);
+    KiReportBugCheck(BugCheckCode, TrapFrame, ContextPointer);
 
     KdpWriteCrashDump();
 

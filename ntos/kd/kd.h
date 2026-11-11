@@ -88,6 +88,10 @@ VOID
 KdpScreenRelease(
     _In_ BOOLEAN DisplayAcquired);
 
+VOID
+KdpScreenEnterBugCheck(
+    _In_ BOOLEAN FollowPrints);
+
 NTSTATUS
 NTAPI
 KdpScreenInit(

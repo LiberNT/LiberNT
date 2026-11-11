@@ -339,11 +339,15 @@ KdEnableBugCheckDebugger(VOID)
     /* The terminal is about to be the only thing left running */
     KdTermCrashMode = TRUE;
 
-    if (KdPitchDebugger)
-        return;
-
-    if (!KdDebuggerEnabled)
+    if (!KdPitchDebugger && !KdDebuggerEnabled)
         KdEnableDebuggerWithLock(FALSE);
+
+#ifdef KDBG
+    if (KdDebuggerEnabled)
+        KdDebuggerNotPresent = FALSE;
+#endif
+
+    KdpScreenEnterBugCheck(!KdDebuggerEnabled);
 }
 
 /*
