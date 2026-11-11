@@ -309,6 +309,8 @@ KMT_TESTFUNC Test_ObType;
 KMT_TESTFUNC Test_ObTypeClean;
 KMT_TESTFUNC Test_ObTypeNoClean;
 KMT_TESTFUNC Test_ObTypes;
+KMT_TESTFUNC Test_PoDisplayStateOff;
+KMT_TESTFUNC Test_PoDisplayStateOn;
 KMT_TESTFUNC Test_PoFxState;
 KMT_TESTFUNC Test_PoPowerLimit;
 KMT_TESTFUNC Test_TmTransactions;
@@ -653,6 +655,8 @@ const KMT_TEST TestList[] =
     { "ObTypeClean",                        Test_ObTypeClean },
     { "ObTypeNoClean",                      Test_ObTypeNoClean },
     { "ObTypes",                            Test_ObTypes },
+    { "-PoDisplayStateOff",                 Test_PoDisplayStateOff },
+    { "-PoDisplayStateOn",                  Test_PoDisplayStateOn },
     { "PoFxState",                          Test_PoFxState },
     { "PoPowerLimit",                       Test_PoPowerLimit },
     { "TmTransactions",                     Test_TmTransactions },

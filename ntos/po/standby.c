@@ -160,6 +160,8 @@ PopPublishDisplayState(
     ULONG MonitorOn = (State != PowerMonitorOff);
     ULONG Value = State;
     ULONG Condition;
+    KAPC_STATE ApcState;
+    PVOID Session;
 
     for (Condition = PoAc; Condition < PoConditionMaximum; Condition++)
     {
@@ -171,11 +173,12 @@ PopPublishDisplayState(
     {
         PopSleepCallWin32(PowerState_MonitorOff, PowerActionSleep, PowerSystemWorking, 0);
     }
-    else if (PopEventCallout != NULL)
+    else if (PopEventCallout != NULL && PopEnterConsoleSession(&Session, &ApcState))
     {
         Parameters.EventNumber = PsW32DisplayState;
         Parameters.Code = State;
         (VOID)PopEventCallout(&Parameters);
+        PopLeaveConsoleSession(Session, &ApcState);
     }
 }
 
@@ -242,6 +245,51 @@ PopGetDisplayState(VOID)
     return (MONITOR_DISPLAY_STATE)InterlockedCompareExchange(&PopDisplayTarget, 0, 0);
 }
 
+NTSTATUS
+NTAPI
+PopSetSessionDisplayState(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength)
+{
+    ULONG State;
+
+    if (PreviousMode != KernelMode)
+        return STATUS_NOT_IMPLEMENTED;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(ULONG))
+        return STATUS_INVALID_PARAMETER;
+
+    State = *(PULONG)InputBuffer;
+    if (State > PowerMonitorDim)
+        return STATUS_INVALID_PARAMETER;
+
+    PopRequestDisplayState((MONITOR_DISPLAY_STATE)State);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PopQueryPlatformInformation(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    POWER_PLATFORM_INFORMATION Information;
+
+    if (InputBuffer != NULL || InputBufferLength != 0 || OutputBuffer == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (OutputBufferLength < sizeof(Information))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.AoAc = PopAoAc;
+    RtlCopyMemory(OutputBuffer, &Information, sizeof(Information));
+    return STATUS_SUCCESS;
+}
+
 VOID
 NTAPI
 PopNoteDisplayActivity(VOID)
@@ -306,6 +354,7 @@ PopInitializeStandby(VOID)
     KeInitializeMutex(&PopDisplayLock, 0);
     ExInitializeWorkItem(&PopDisplayWorkItem, PopDisplayWorker, NULL);
     InitializeListHead(&PopStandbyPausedList);
+    PopPublishDisplayState(PopDisplayState);
 
     PopDisplayActivityTick = (LONG)PopTickMilliseconds();
     ExInitializeWorkItem(&PopDisplayIdleWorkItem, PopDisplayIdleWorker, NULL);

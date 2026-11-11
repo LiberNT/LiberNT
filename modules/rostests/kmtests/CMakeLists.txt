@@ -276,6 +276,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ob/ObTypes.cpp
     ntos_ob/ObWait.c
     smclib/SmcLib.c
+    ntos_po/PoDisplayState.c
     ntos_po/PoFxState.c
     ntos_po/PoFxState_pnp.c
     ntos_po/PoPowerLimit.c
@@ -547,6 +548,7 @@ list(APPEND KMTEST_SOURCE
     ntos_mm/NtProcessClone.c
     ndis/NdisSgDma_user.c
     ntos_po/BatteryClassNotify_user.c
+    ntos_po/PoDisplayState_user.c
     ntos_po/PoIrp_user.c
     ntos_po/PoExecutionState_user.c
     ntos_po/PoFxState_user.c

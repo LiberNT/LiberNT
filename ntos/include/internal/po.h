@@ -364,6 +364,20 @@ PopSleepCallWin32(
 
 BOOLEAN
 NTAPI
+PopEnterConsoleSession(
+    _Out_ PVOID *Session,
+    _Out_ PKAPC_STATE ApcState
+);
+
+VOID
+NTAPI
+PopLeaveConsoleSession(
+    _In_opt_ PVOID Session,
+    _In_ PKAPC_STATE ApcState
+);
+
+BOOLEAN
+NTAPI
 PopDetectAoAc(
     VOID
 );
@@ -384,6 +398,23 @@ MONITOR_DISPLAY_STATE
 NTAPI
 PopGetDisplayState(
     VOID
+);
+
+NTSTATUS
+NTAPI
+PopSetSessionDisplayState(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopQueryPlatformInformation(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
 );
 
 VOID

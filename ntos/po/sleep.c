@@ -583,6 +583,46 @@ PopSleepSendDevices(
     return PopSleepSendToPowerDevice(&Traverse);
 }
 
+/* Win32k lives in session space, which a thread outside the console session reaches only through a process of that session */
+BOOLEAN
+NTAPI
+PopEnterConsoleSession(
+    _Out_ PVOID *Session,
+    _Out_ PKAPC_STATE ApcState)
+{
+    ULONG ConsoleId = RtlGetActiveConsoleId();
+
+    *Session = NULL;
+    if (PsGetProcessSessionIdEx(PsGetCurrentProcess()) == ConsoleId)
+        return TRUE;
+
+    *Session = MmGetSessionById(ConsoleId);
+    if (*Session == NULL)
+        return FALSE;
+
+    if (!NT_SUCCESS(MmAttachSession(*Session, ApcState)))
+    {
+        MmQuitNextSession(*Session);
+        *Session = NULL;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+VOID
+NTAPI
+PopLeaveConsoleSession(
+    _In_opt_ PVOID Session,
+    _In_ PKAPC_STATE ApcState)
+{
+    if (Session == NULL)
+        return;
+
+    MmDetachSession(Session, ApcState);
+    MmQuitNextSession(Session);
+}
+
 VOID
 PopSleepCallWin32(
     _In_ POWERSTATETASK Task,
@@ -591,6 +631,8 @@ PopSleepCallWin32(
     _In_ ULONG Flags)
 {
     WIN32_POWERSTATE_PARAMETERS Parameters;
+    KAPC_STATE ApcState;
+    PVOID Session;
     NTSTATUS Status;
 
     if (PopStateCallout == NULL)
@@ -602,7 +644,15 @@ PopSleepCallWin32(
     Parameters.Flags = Flags;
     Parameters.PowerStateTask = Task;
 
+    if (!PopEnterConsoleSession(&Session, &ApcState))
+    {
+        DPRINT1("Win32 power state task %u skipped: no console session\n", Task);
+        return;
+    }
+
     Status = PopStateCallout(&Parameters);
+    PopLeaveConsoleSession(Session, &ApcState);
+
     if (!NT_SUCCESS(Status))
         DPRINT1("Win32 power state task %u failed: 0x%08lx\n", Task, Status);
 }

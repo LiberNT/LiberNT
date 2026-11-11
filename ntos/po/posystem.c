@@ -44,7 +44,6 @@ static POP_CACHED_SETTING PopCachedSettings[POP_MAX_CACHED_POWER_SETTINGS];
 static ULONG PopCachedSettingCount;
 static SYSTEM_POWER_CONDITION PopPowerSource = PoAc;
 static ULONG PopSettingWalks;
-static ULONG PopVideoTimeout = 0;
 static EX_PUSH_LOCK PopIdlenessLock;
 static ULONG64 PopIdlenessTime;
 static ULONG64 PopIdlenessIdleTicks;
@@ -624,7 +623,19 @@ ULONG
 NTAPI
 PopGetVideoTimeout(VOID)
 {
-    return PopVideoTimeout;
+    PPOP_CACHED_SETTING Cached;
+    ULONG Timeout = 0;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+
+    Cached = PopFindCachedSetting(&GUID_VIDEO_POWERDOWN_TIMEOUT);
+    if (Cached != NULL && Cached->Length[PopPowerSource] == sizeof(ULONG))
+        Timeout = *(PULONG)Cached->Value[PopPowerSource];
+
+    KeReleaseGuardedMutex(&PopSettingLock);
+    return Timeout;
 }
 
 BOOLEAN
@@ -934,6 +945,9 @@ NtSetThreadExecutionState(
         PoSetSystemState(NewFlags);
     }
 
+    if (NewFlags & ES_DISPLAY_REQUIRED)
+        PopNoteDisplayActivity();
+
     _SEH2_TRY
     {
         if (PreviousMode != KernelMode)
@@ -1136,7 +1150,10 @@ NtPowerInformation(
             if (InputBufferLength != 0)
                 ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG));
             if (OutputBufferLength != 0)
-                ProbeForWrite(OutputBuffer, OutputBufferLength, sizeof(ULONG));
+                ProbeForWrite(OutputBuffer,
+                              OutputBufferLength,
+                              (PowerInformationLevel == PlatformInformation) ?
+                                  TYPE_ALIGNMENT(POWER_PLATFORM_INFORMATION) : sizeof(ULONG));
         }
 
         switch (PowerInformationLevel)
@@ -1192,6 +1209,19 @@ NtPowerInformation(
 
                 *(PEXECUTION_STATE)OutputBuffer =
                     PopIsDisplayRequired() ? ES_DISPLAY_REQUIRED : 0;
+                break;
+
+            case SessionDisplayState:
+                Status = PopSetSessionDisplayState(PreviousMode,
+                                                   InputBuffer,
+                                                   InputBufferLength);
+                break;
+
+            case PlatformInformation:
+                Status = PopQueryPlatformInformation(InputBuffer,
+                                                     InputBufferLength,
+                                                     OutputBuffer,
+                                                     OutputBufferLength);
                 break;
 
             default:
