@@ -36,6 +36,7 @@
 /* NOT INCLUDES ANYMORE ******************************************************/
 
 PKPRCB KiFreezeOwner;
+static PKPRCB KiFreezeActiveSetOwner;
 
 static VOID KiFreezeWaitForThaw(_In_ PKPRCB CurrentPrcb);
 
@@ -181,6 +182,73 @@ KiFreezeIfRequested(
     KeRestoreInterrupts(Enable);
 }
 
+static
+BOOLEAN
+KiAcquireFreezeActiveSet(
+    _In_ PKPRCB Prcb)
+{
+    ASSERT(Prcb != NULL);
+    ASSERT(Prcb == KeGetCurrentPrcb());
+
+    if (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                          NULL,
+                                          NULL) == Prcb)
+        return FALSE;
+
+    while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                             Prcb,
+                                             NULL) != NULL)
+    {
+        YieldProcessor();
+    }
+
+    return TRUE;
+}
+
+static
+VOID
+KiReleaseFreezeActiveSet(
+    _In_ PKPRCB Prcb,
+    _In_ BOOLEAN Acquired)
+{
+    ASSERT(Prcb == KeGetCurrentPrcb());
+    ASSERT(KiFreezeActiveSetOwner == Prcb);
+
+    if (Acquired)
+        InterlockedExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner, NULL);
+}
+
+/* Active means the processor can take an IPI, and a frozen machine takes no new processor */
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiPublishActiveProcessor(
+    _In_ PKPRCB Prcb)
+{
+    BOOLEAN Acquired;
+
+    ASSERT(Prcb != NULL);
+    ASSERT(Prcb == KeGetCurrentPrcb());
+
+    for (;;)
+    {
+        Acquired = KiAcquireFreezeActiveSet(Prcb);
+        ASSERT(Acquired);
+
+        if (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner,
+                                              NULL,
+                                              NULL) == NULL)
+        {
+            KeActiveProcessors |= Prcb->SetMember;
+            KiReleaseFreezeActiveSet(Prcb, Acquired);
+            break;
+        }
+
+        KiReleaseFreezeActiveSet(Prcb, Acquired);
+        YieldProcessor();
+    }
+}
+
 /* Mark, send to and wait for one snapshot of the published, active processors */
 static
 KAFFINITY
@@ -212,6 +280,8 @@ KxFreezeExecution(
     VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
+    BOOLEAN ReacquireActiveSet = FALSE;
+    BOOLEAN Acquired;
     KAFFINITY Targets;
 
     /* Avoid blocking on recursive debug action */
@@ -223,6 +293,16 @@ KxFreezeExecution(
     /* Try to acquire the freeze owner */
     while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner, CurrentPrcb, NULL))
     {
+        /* The owner snapshots under the active set: do not hold it while waiting for that owner */
+        if (!ReacquireActiveSet &&
+            InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
+                                              NULL,
+                                              NULL) == CurrentPrcb)
+        {
+            InterlockedExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner, NULL);
+            ReacquireActiveSet = TRUE;
+        }
+
         /* Someone else was faster. We expect an NMI to freeze any time.
            Spin here until the freeze owner is available, completing the
            freeze ourselves if that NMI never arrives. */
@@ -237,7 +317,10 @@ KxFreezeExecution(
     /* We are the owner now and active */
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
 
+    /* No processor becomes active between the snapshot and the thaw */
+    Acquired = KiAcquireFreezeActiveSet(CurrentPrcb);
     Targets = KiFreezeTargetSet(CurrentPrcb);
+    KiReleaseFreezeActiveSet(CurrentPrcb, Acquired && !ReacquireActiveSet);
 
     /* Mark exactly the snapshot */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)

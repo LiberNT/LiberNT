@@ -54,6 +54,7 @@ KeStartAllProcessors(VOID)
     KDESCRIPTOR Gdtr, Idtr;
     ULONG ProcessorCount;
     ULONG MaximumProcessors;
+    ULONG Index;
 
     MaximumProcessors = KeMaximumProcessors;
     if (KeNumprocSpecified)
@@ -152,6 +153,16 @@ KeStartAllProcessors(VOID)
 
     /* The last allocation belongs to a CPU that did not start */
     ProcessorCount--;
+
+    /* Each started processor makes itself active once it can take an IPI */
+    for (Index = 1; Index <= ProcessorCount; Index++)
+    {
+        while ((KeActiveProcessors & AFFINITY_MASK(Index)) == 0)
+        {
+            KeMemoryBarrier();
+            YieldProcessor();
+        }
+    }
 
     if (APInfo)
         ExFreePoolWithTag(APInfo, TAG_KERNEL);
