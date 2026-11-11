@@ -576,6 +576,52 @@ IopPublishSystemRoot(
     MmWriteableSharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
 }
 
+/* User mode learns the safe-boot mode from this volatile key, which only a safe boot creates */
+CODE_SEG("INIT")
+static
+VOID
+IopPublishSafeBootMode(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(
+        L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\SafeBoot\\Option");
+    UNICODE_STRING ValueName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG Value;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (InitSafeBootMode == 0) return;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    Status = ZwCreateKey(&KeyHandle, KEY_SET_VALUE, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("I/O: the safe-boot option could not be published (%lx)\n", Status);
+        return;
+    }
+
+    RtlInitUnicodeString(&ValueName, L"OptionValue");
+    Value = InitSafeBootMode;
+    ZwSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+
+    if ((LoaderBlock->LoadOptions != NULL) &&
+        (strstr(LoaderBlock->LoadOptions, "(ALTERNATESHELL)") != NULL))
+    {
+        RtlInitUnicodeString(&ValueName, L"UseAlternateShell");
+        Value = 1;
+        ZwSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value, sizeof(Value));
+    }
+
+    ZwClose(KeyHandle);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -715,6 +761,8 @@ IoInitSystem(
     {
         DPRINT("I/O: no crash dump on this boot\n");
     }
+
+    IopPublishSafeBootMode(LoaderBlock);
 
     IopInitializeBootDrivers();
 

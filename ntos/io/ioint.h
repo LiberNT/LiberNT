@@ -388,6 +388,9 @@ NTSTATUS IopTryUnloadDriver(_In_ PDRIVER_OBJECT DriverObject, _In_ BOOLEAN Force
 NTSTATUS IopNormalizeImagePath(_Inout_ PUNICODE_STRING ImagePath,
                                _In_ PUNICODE_STRING ServiceName);
 BOOLEAN IopCheckSafeBootDriver(_In_ HANDLE ServiceHandle, _In_ PUNICODE_STRING ServiceName);
+BOOLEAN IopIsSafeBootDeviceClass(_In_ PUNICODE_STRING ClassGuid);
+NTSTATUS IopLoadDriverForDevice(_In_ HANDLE ServiceHandle, _In_ BOOLEAN SafeBootClassAllowed,
+                                _Out_ PDRIVER_OBJECT *DriverObject);
 BOOLEAN NTAPI IopConfigureDeviceFromDriverDatabase(_In_ PDEVICE_NODE DeviceNode);
 
 extern LIST_ENTRY DriverReinitListHead;

@@ -399,6 +399,196 @@ IopHasSafeBootEntry(
     return TRUE;
 }
 
+static
+BOOLEAN
+IopSafeBootInstanceString(
+    _In_ HANDLE InstanceKey,
+    _In_ PWSTR ValueName,
+    _Out_ PKEY_VALUE_FULL_INFORMATION *Information,
+    _Out_ PUNICODE_STRING String)
+{
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopGetRegistryValue(InstanceKey, ValueName, Information))) return FALSE;
+
+    if (((*Information)->Type == REG_SZ) &&
+        ((*Information)->DataLength >= sizeof(WCHAR)) &&
+        ((*Information)->DataLength <= UNICODE_STRING_MAX_BYTES))
+    {
+        String->Buffer = (PWCHAR)((PUCHAR)*Information + (*Information)->DataOffset);
+        String->Length = (USHORT)((*Information)->DataLength & ~(sizeof(WCHAR) - 1));
+        while ((String->Length >= sizeof(WCHAR)) &&
+               (String->Buffer[String->Length / sizeof(WCHAR) - 1] == UNICODE_NULL))
+        {
+            String->Length -= sizeof(WCHAR);
+        }
+        String->MaximumLength = String->Length;
+
+        if (String->Length != 0) return TRUE;
+    }
+
+    ExFreePool(*Information);
+    return FALSE;
+}
+
+/* Enumerator, device and instance levels lie below Enum; Depth counts the levels left */
+static
+BOOLEAN
+IopSafeBootScanInstances(
+    _In_ HANDLE Key,
+    _In_ ULONG Depth,
+    _In_ PUNICODE_STRING ServiceName,
+    _In_ HANDLE SafeBoot)
+{
+    ULONGLONG Buffer[(sizeof(KEY_BASIC_INFORMATION) + 256 * sizeof(WCHAR)) / sizeof(ULONGLONG) + 1];
+    PKEY_BASIC_INFORMATION BasicInfo = (PKEY_BASIC_INFORMATION)Buffer;
+    PKEY_VALUE_FULL_INFORMATION ServiceInfo;
+    PKEY_VALUE_FULL_INFORMATION ClassInfo;
+    UNICODE_STRING Name;
+    UNICODE_STRING ClassGuid;
+    BOOLEAN Allowed = FALSE;
+    HANDLE SubKey;
+    ULONG Index;
+    ULONG Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Depth == 0)
+    {
+        if (!IopSafeBootInstanceString(Key, L"Service", &ServiceInfo, &Name)) return FALSE;
+
+        if (RtlEqualUnicodeString(&Name, ServiceName, TRUE) &&
+            IopSafeBootInstanceString(Key, L"ClassGUID", &ClassInfo, &ClassGuid))
+        {
+            Allowed = IopHasSafeBootEntry(SafeBoot, &ClassGuid);
+            ExFreePool(ClassInfo);
+        }
+
+        ExFreePool(ServiceInfo);
+        return Allowed;
+    }
+
+    for (Index = 0; !Allowed; Index++)
+    {
+        Status = ZwEnumerateKey(Key, Index, KeyBasicInformation, BasicInfo, sizeof(Buffer), &Length);
+        if ((Status == STATUS_BUFFER_OVERFLOW) || (Status == STATUS_BUFFER_TOO_SMALL)) continue;
+        if (!NT_SUCCESS(Status)) break;
+
+        Name.Buffer = BasicInfo->Name;
+        Name.Length = (USHORT)BasicInfo->NameLength;
+        Name.MaximumLength = Name.Length;
+
+        if (!NT_SUCCESS(IopOpenRegistryKeyEx(&SubKey, Key, &Name, KEY_READ))) continue;
+
+        Allowed = IopSafeBootScanInstances(SubKey, Depth - 1, ServiceName, SafeBoot);
+        ZwClose(SubKey);
+    }
+
+    return Allowed;
+}
+
+/* The persistent instance keys, as a service's volatile Enum list is still empty when system drivers start */
+static
+BOOLEAN
+IopSafeBootAllowsServiceDevices(
+    _In_ HANDLE SafeBoot,
+    _In_ PUNICODE_STRING ServiceName)
+{
+    UNICODE_STRING EnumRoot = RTL_CONSTANT_STRING(ENUM_ROOT);
+    BOOLEAN Allowed = FALSE;
+    HANDLE RootKey;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&RootKey, NULL, &EnumRoot, KEY_READ))) return FALSE;
+
+    Allowed = IopSafeBootScanInstances(RootKey, 3, ServiceName, SafeBoot);
+    ZwClose(RootKey);
+
+    return Allowed;
+}
+
+/* The lists name some drivers by their image file, such as dxgkrnl.sys, rather than by service */
+static
+BOOLEAN
+IopSafeBootAllowsImageName(
+    _In_ HANDLE SafeBoot,
+    _In_ HANDLE ServiceHandle,
+    _In_ PUNICODE_STRING ServiceName)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    UNICODE_STRING ImageName;
+    BOOLEAN Allowed = FALSE;
+    USHORT Index;
+    PWCHAR Buffer;
+
+    PAGED_CODE();
+
+    if (NT_SUCCESS(IopGetRegistryValue(ServiceHandle, L"ImagePath", &Information)))
+    {
+        if (((Information->Type == REG_SZ) || (Information->Type == REG_EXPAND_SZ)) &&
+            (Information->DataLength >= sizeof(WCHAR)) &&
+            (Information->DataLength <= UNICODE_STRING_MAX_BYTES))
+        {
+            ImageName.Buffer = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
+            ImageName.Length = (USHORT)(Information->DataLength & ~(sizeof(WCHAR) - 1));
+            while ((ImageName.Length >= sizeof(WCHAR)) &&
+                   (ImageName.Buffer[ImageName.Length / sizeof(WCHAR) - 1] == UNICODE_NULL))
+            {
+                ImageName.Length -= sizeof(WCHAR);
+            }
+
+            for (Index = ImageName.Length / sizeof(WCHAR); Index > 0; Index--)
+            {
+                if (ImageName.Buffer[Index - 1] == OBJ_NAME_PATH_SEPARATOR) break;
+            }
+
+            ImageName.Buffer += Index;
+            ImageName.Length -= Index * sizeof(WCHAR);
+            ImageName.MaximumLength = ImageName.Length;
+
+            if (ImageName.Length != 0) Allowed = IopHasSafeBootEntry(SafeBoot, &ImageName);
+        }
+
+        ExFreePool(Information);
+        return Allowed;
+    }
+
+    ImageName.Length = 0;
+    ImageName.MaximumLength = ServiceName->Length + 4 * sizeof(WCHAR);
+    Buffer = ExAllocatePoolWithTag(PagedPool, ImageName.MaximumLength, TAG_IO);
+    if (Buffer == NULL) return FALSE;
+
+    ImageName.Buffer = Buffer;
+    RtlAppendUnicodeStringToString(&ImageName, ServiceName);
+    RtlAppendUnicodeToString(&ImageName, L".sys");
+
+    Allowed = IopHasSafeBootEntry(SafeBoot, &ImageName);
+    ExFreePoolWithTag(Buffer, TAG_IO);
+
+    return Allowed;
+}
+
+BOOLEAN
+IopIsSafeBootDeviceClass(
+    _In_ PUNICODE_STRING ClassGuid)
+{
+    BOOLEAN Allowed;
+    HANDLE SafeBoot;
+
+    PAGED_CODE();
+
+    if (InitSafeBootMode == 0) return TRUE;
+
+    if (!NT_SUCCESS(IopOpenSafeBootKey(&SafeBoot))) return TRUE;
+
+    Allowed = IopHasSafeBootEntry(SafeBoot, ClassGuid);
+    ZwClose(SafeBoot);
+
+    return Allowed;
+}
+
 BOOLEAN
 IopCheckSafeBootDriver(
     _In_ HANDLE ServiceHandle,
@@ -417,7 +607,8 @@ IopCheckSafeBootDriver(
     Status = IopOpenSafeBootKey(&SafeBoot);
     if (!NT_SUCCESS(Status)) return TRUE;
 
-    if (IopHasSafeBootEntry(SafeBoot, ServiceName))
+    if (IopHasSafeBootEntry(SafeBoot, ServiceName) ||
+        IopSafeBootAllowsImageName(SafeBoot, ServiceHandle, ServiceName))
     {
         ZwClose(SafeBoot);
         return TRUE;
@@ -440,6 +631,8 @@ IopCheckSafeBootDriver(
 
         ExFreePool(Information);
     }
+
+    if (!Allowed) Allowed = IopSafeBootAllowsServiceDevices(SafeBoot, ServiceName);
 
     ZwClose(SafeBoot);
 
@@ -621,8 +814,9 @@ IopIsServiceDriverLoaded(
 }
 
 NTSTATUS
-IopLoadDriverForPnp(
+IopLoadDriverForDevice(
     _In_ HANDLE ServiceHandle,
+    _In_ BOOLEAN SafeBootClassAllowed,
     _Out_ PDRIVER_OBJECT *DriverObject)
 {
     UNICODE_STRING DriverName;
@@ -663,7 +857,7 @@ IopLoadDriverForPnp(
         return STATUS_DRIVER_UNABLE_TO_LOAD;
     }
 
-    if (!IopCheckSafeBootDriver(ServiceHandle, &ServiceName))
+    if (!SafeBootClassAllowed && !IopCheckSafeBootDriver(ServiceHandle, &ServiceName))
     {
         ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
         if (ServiceName.Buffer != NULL)
@@ -671,7 +865,7 @@ IopLoadDriverForPnp(
             ExFreePoolWithTag(ServiceName.Buffer, TAG_IO_DRIVER_NAME);
         }
 
-        return STATUS_DRIVER_UNABLE_TO_LOAD;
+        return STATUS_NOT_SAFE_MODE_DRIVER;
     }
 
     Status = IopLoadServiceModule(ServiceHandle, DriverObject);
@@ -683,6 +877,16 @@ IopLoadDriverForPnp(
     }
 
     return Status;
+}
+
+NTSTATUS
+IopLoadDriverForPnp(
+    _In_ HANDLE ServiceHandle,
+    _Out_ PDRIVER_OBJECT *DriverObject)
+{
+    PAGED_CODE();
+
+    return IopLoadDriverForDevice(ServiceHandle, FALSE, DriverObject);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/

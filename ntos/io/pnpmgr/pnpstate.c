@@ -473,6 +473,7 @@ static
 NTSTATUS
 PiResolveServiceDriver(
     _In_ PUNICODE_STRING ServiceName,
+    _In_ BOOLEAN SafeBootClassAllowed,
     _Out_ PDRIVER_OBJECT *DriverObject,
     _Out_opt_ PBOOLEAN NoServiceKey)
 {
@@ -497,7 +498,7 @@ PiResolveServiceDriver(
         return Status;
     }
 
-    Status = IopLoadDriverForPnp(ServiceKey, DriverObject);
+    Status = IopLoadDriverForDevice(ServiceKey, SafeBootClassAllowed, DriverObject);
     ZwClose(ServiceKey);
 
     return Status;
@@ -508,7 +509,8 @@ NTSTATUS
 PiCollectFilters(
     _Inout_ PPI_DRIVER_LIST List,
     _In_opt_ HANDLE Key,
-    _In_ PCWSTR ValueName)
+    _In_ PCWSTR ValueName,
+    _In_ BOOLEAN SafeBootClassAllowed)
 {
     PKEY_VALUE_FULL_INFORMATION Information = NULL;
     PUNICODE_STRING Filters = NULL;
@@ -530,7 +532,7 @@ PiCollectFilters(
 
     for (Index = 0; Index < FilterCount; Index++)
     {
-        Status = PiResolveServiceDriver(&Filters[Index], &DriverObject, NULL);
+        Status = PiResolveServiceDriver(&Filters[Index], SafeBootClassAllowed, &DriverObject, NULL);
         if (!NT_SUCCESS(Status))
         {
             /* Before the system drivers can load, the whole stack waits for them */
@@ -583,6 +585,7 @@ NTSTATUS
 PiCollectFunctionDriver(
     _Inout_ PDEVICE_NODE DeviceNode,
     _In_ HANDLE InstanceKey,
+    _In_ BOOLEAN SafeBootClassAllowed,
     _Inout_ PPI_DRIVER_LIST List)
 {
     PKEY_VALUE_FULL_INFORMATION Information = NULL;
@@ -628,7 +631,7 @@ PiCollectFunctionDriver(
         }
     }
 
-    Status = PiResolveServiceDriver(&ServiceName, &DriverObject, &NoServiceKey);
+    Status = PiResolveServiceDriver(&ServiceName, SafeBootClassAllowed, &DriverObject, &NoServiceKey);
     ExFreePool(Information);
 
     if (NoServiceKey)
@@ -698,6 +701,35 @@ PiOpenDeviceClassKey(
     return ClassKey;
 }
 
+/* In safe mode a device of a listed class may load every driver of its stack */
+static
+BOOLEAN
+PiIsSafeBootDeviceClass(
+    _In_ HANDLE InstanceKey)
+{
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    UNICODE_STRING ClassGuid;
+    BOOLEAN Allowed = FALSE;
+
+    PAGED_CODE();
+
+    if (InitSafeBootMode == 0) return FALSE;
+
+    if (!NT_SUCCESS(IopGetRegistryValue(InstanceKey, L"ClassGUID", &Information))) return FALSE;
+
+    if ((Information->Type == REG_SZ) && (Information->DataLength > sizeof(WCHAR)))
+    {
+        ClassGuid.Buffer = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
+        ClassGuid.Length = (USHORT)(Information->DataLength - sizeof(WCHAR));
+        ClassGuid.MaximumLength = ClassGuid.Length;
+
+        Allowed = IopIsSafeBootDeviceClass(&ClassGuid);
+    }
+
+    ExFreePool(Information);
+    return Allowed;
+}
+
 /* Every driver of the stack is found before any of them sees the device */
 static
 NTSTATUS
@@ -705,23 +737,24 @@ PiCollectDeviceDrivers(
     _Inout_ PDEVICE_NODE DeviceNode,
     _In_ HANDLE InstanceKey,
     _In_opt_ HANDLE ClassKey,
+    _In_ BOOLEAN SafeBootClassAllowed,
     _Inout_ PPI_DRIVER_LIST List)
 {
     NTSTATUS Status;
 
-    Status = PiCollectFilters(List, InstanceKey, L"LowerFilters");
+    Status = PiCollectFilters(List, InstanceKey, L"LowerFilters", SafeBootClassAllowed);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = PiCollectFilters(List, ClassKey, L"LowerFilters");
+    Status = PiCollectFilters(List, ClassKey, L"LowerFilters", SafeBootClassAllowed);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = PiCollectFunctionDriver(DeviceNode, InstanceKey, List);
+    Status = PiCollectFunctionDriver(DeviceNode, InstanceKey, SafeBootClassAllowed, List);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = PiCollectFilters(List, InstanceKey, L"UpperFilters");
+    Status = PiCollectFilters(List, InstanceKey, L"UpperFilters", SafeBootClassAllowed);
     if (!NT_SUCCESS(Status)) return Status;
 
-    return PiCollectFilters(List, ClassKey, L"UpperFilters");
+    return PiCollectFilters(List, ClassKey, L"UpperFilters", SafeBootClassAllowed);
 }
 
 static
@@ -744,7 +777,11 @@ PiAttachDeviceDrivers(
 
     ClassKey = PiOpenDeviceClassKey(InstanceKey);
 
-    Status = PiCollectDeviceDrivers(DeviceNode, InstanceKey, ClassKey, &List);
+    Status = PiCollectDeviceDrivers(DeviceNode,
+                                    InstanceKey,
+                                    ClassKey,
+                                    PiIsSafeBootDeviceClass(InstanceKey),
+                                    &List);
 
     /*
      * A device with nothing to drive it is not a device that runs: it waits

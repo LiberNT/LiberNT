@@ -366,6 +366,7 @@ KMT_TESTFUNC Test_MmMapReserve;
 KMT_TESTFUNC Test_MmPhysical;
 KMT_TESTFUNC Test_MmPrefetchPages;
 KMT_TESTFUNC Test_MmPrivatePages;
+KMT_TESTFUNC Test_IoSafeBootPolicy;
 KMT_TESTFUNC Test_IoStackKM;
 KMT_TESTFUNC Test_IoActivityId;
 KMT_TESTFUNC Test_IoAcpiCmosRegion;
@@ -635,6 +636,7 @@ const KMT_TEST TestList[] =
     { "KeArm64DpcIpi",                      Test_KeArm64DpcIpi },
 #endif
 #if defined(_M_IX86) || defined(_M_AMD64)
+    { "IoSafeBootPolicy",                   Test_IoSafeBootPolicy },
     { "IoStackKM",                          Test_IoStackKM },
     { "IoTimerKM",                          Test_IoTimerKM },
 #endif
