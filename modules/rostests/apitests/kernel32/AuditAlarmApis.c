@@ -8,18 +8,22 @@
 #include "precomp.h"
 #include <ndk/setypes.h>
 
+typedef BOOL (WINAPI *FN_AccessCheckAndAuditAlarmW)(LPCWSTR, LPVOID, LPWSTR, LPWSTR, PSECURITY_DESCRIPTOR,
+                                                   DWORD, PGENERIC_MAPPING, BOOL, LPDWORD, LPBOOL, LPBOOL);
 typedef BOOL (WINAPI *FN_ObjectCloseAuditAlarmW)(LPCWSTR, LPVOID, BOOL);
 typedef BOOL (WINAPI *FN_ObjectOpenAuditAlarmW)(LPCWSTR, LPVOID, LPWSTR, LPWSTR, PSECURITY_DESCRIPTOR, HANDLE,
                                                DWORD, DWORD, PPRIVILEGE_SET, BOOL, BOOL, LPBOOL);
 typedef BOOL (WINAPI *FN_ObjectPrivilegeAuditAlarmW)(LPCWSTR, LPVOID, HANDLE, DWORD, PPRIVILEGE_SET, BOOL);
 typedef BOOL (WINAPI *FN_PrivilegedServiceAuditAlarmW)(LPCWSTR, LPCWSTR, HANDLE, PPRIVILEGE_SET, BOOL);
 
+static FN_AccessCheckAndAuditAlarmW pAccessCheckAndAuditAlarmW;
 static FN_ObjectCloseAuditAlarmW pObjectCloseAuditAlarmW;
 static FN_ObjectCloseAuditAlarmW pObjectDeleteAuditAlarmW;
 static FN_ObjectOpenAuditAlarmW pObjectOpenAuditAlarmW;
 static FN_ObjectPrivilegeAuditAlarmW pObjectPrivilegeAuditAlarmW;
 static FN_PrivilegedServiceAuditAlarmW pPrivilegedServiceAuditAlarmW;
 
+static GENERIC_MAPPING FileMapping = {FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS};
 static WCHAR Subsystem[] = L"LiberNT audit test";
 static WCHAR ObjectType[] = L"Test object";
 static WCHAR ObjectName[] = L"AuditAlarmApis";
@@ -92,6 +96,123 @@ InitPrivilegeSet(
 }
 
 static
+BOOL
+CheckAndAudit(
+    _In_ PSECURITY_DESCRIPTOR Sd,
+    _In_opt_ LPWSTR Name,
+    _In_ DWORD Desired,
+    _Out_ DWORD *Granted,
+    _Out_ BOOL *Status,
+    _Out_ BOOL *OnClose)
+{
+    PVOID HandleId = Sd;
+
+    *Granted = 0xdeadbeef;
+    *Status = *OnClose = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    return pAccessCheckAndAuditAlarmW(Subsystem, &HandleId, ObjectType, Name, Sd, Desired, &FileMapping, FALSE,
+                                      Granted, Status, OnClose);
+}
+
+static
+VOID
+TestAccessCheckAndAuditAlarm(VOID)
+{
+    TEST_SD Test, NoOwner;
+    HANDLE ThreadToken;
+    BOOL Ret, Status, OnClose;
+    DWORD Granted;
+
+    BuildTestSd(&Test);
+    BuildTestSd(&NoOwner);
+    ok(SetSecurityDescriptorOwner(&NoOwner.Sd, NULL, FALSE), "SetSecurityDescriptorOwner failed: %lu\n", GetLastError());
+    ok(SetSecurityDescriptorGroup(&NoOwner.Sd, NULL, FALSE), "SetSecurityDescriptorGroup failed: %lu\n", GetLastError());
+
+    /* The check is made for a client, so a thread that is not impersonating one is refused */
+    Ret = CheckAndAudit(&Test.Sd, ObjectName, FILE_READ_DATA, &Granted, &Status, &OnClose);
+    ok(!Ret, "AccessCheckAndAuditAlarmW succeeded without impersonation\n");
+    ok(GetLastError() == ERROR_NO_IMPERSONATION_TOKEN, "Unexpected error %lu\n", GetLastError());
+    ok(Granted == 0xdeadbeef, "GrantedAccess 0x%lx\n", Granted);
+
+    ok(ImpersonateSelf(SecurityImpersonation), "ImpersonateSelf failed: %lu\n", GetLastError());
+
+    Ret = CheckAndAudit(&Test.Sd, ObjectName, FILE_READ_DATA, &Granted, &Status, &OnClose);
+    ok(Ret, "AccessCheckAndAuditAlarmW failed: %lu\n", GetLastError());
+    ok(Status == TRUE, "AccessStatus %d\n", Status);
+    ok(Granted == FILE_READ_DATA, "GrantedAccess 0x%lx\n", Granted);
+    ok(OnClose == FALSE, "GenerateOnClose %d\n", OnClose);
+
+    Ret = CheckAndAudit(&Test.Sd, NULL, FILE_READ_DATA, &Granted, &Status, &OnClose);
+    ok(Ret, "AccessCheckAndAuditAlarmW without object name failed: %lu\n", GetLastError());
+    ok(Status == TRUE, "AccessStatus %d\n", Status);
+    ok(Granted == FILE_READ_DATA, "GrantedAccess 0x%lx\n", Granted);
+    ok(OnClose == FALSE, "GenerateOnClose %d\n", OnClose);
+
+    Ret = CheckAndAudit(&Test.Sd, ObjectName, FILE_WRITE_DATA, &Granted, &Status, &OnClose);
+    ok(Ret, "AccessCheckAndAuditAlarmW failed: %lu\n", GetLastError());
+    ok(Status == FALSE, "AccessStatus %d\n", Status);
+    ok(Granted == 0, "GrantedAccess 0x%lx\n", Granted);
+    ok(OnClose == FALSE, "GenerateOnClose %d\n", OnClose);
+
+    /* A descriptor without owner and group is refused and the access mask is left alone */
+    Ret = CheckAndAudit(&NoOwner.Sd, ObjectName, FILE_READ_DATA, &Granted, &Status, &OnClose);
+    ok(!Ret, "AccessCheckAndAuditAlarmW succeeded without owner\n");
+    ok(GetLastError() == ERROR_INVALID_SECURITY_DESCR, "Unexpected error %lu\n", GetLastError());
+    ok(Granted == 0xdeadbeef, "GrantedAccess 0x%lx\n", Granted);
+
+    /* The audit privilege is looked for in the primary token, not in the client's */
+    ok(OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, TRUE, &ThreadToken),
+       "OpenThreadToken failed: %lu\n", GetLastError());
+    ok(SetAuditPrivilege(ThreadToken, FALSE), "Disabling the client's audit privilege failed\n");
+    Ret = CheckAndAudit(&Test.Sd, ObjectName, FILE_READ_DATA, &Granted, &Status, &OnClose);
+    ok(Ret, "AccessCheckAndAuditAlarmW failed for a client without the privilege: %lu\n", GetLastError());
+    ok(Status == TRUE, "AccessStatus %d\n", Status);
+    ok(Granted == FILE_READ_DATA, "GrantedAccess 0x%lx\n", Granted);
+    CloseHandle(ThreadToken);
+
+    ok(RevertToSelf(), "RevertToSelf failed: %lu\n", GetLastError());
+}
+
+static
+VOID
+TestClientTokenAccess(VOID)
+{
+    TEST_SD Test;
+    PVOID HandleId = &Test;
+    PRIVILEGE_SET Privileges;
+    HANDLE NoQueryToken;
+    BOOL Ret, OnClose;
+
+    BuildTestSd(&Test);
+    InitPrivilegeSet(&Privileges);
+
+    ok(ImpersonateSelf(SecurityImpersonation), "ImpersonateSelf failed: %lu\n", GetLastError());
+    ok(OpenThreadToken(GetCurrentThread(), TOKEN_IMPERSONATE, TRUE, &NoQueryToken),
+       "OpenThreadToken failed: %lu\n", GetLastError());
+    ok(RevertToSelf(), "RevertToSelf failed: %lu\n", GetLastError());
+
+    /* The client token has to be open for TOKEN_QUERY */
+    OnClose = 0xdeadbeef;
+    SetLastError(0xdeadbeef);
+    Ret = pObjectOpenAuditAlarmW(Subsystem, &HandleId, ObjectType, ObjectName, &Test.Sd, NoQueryToken,
+                                 FILE_READ_DATA, FILE_READ_DATA, &Privileges, FALSE, TRUE, &OnClose);
+    ok(!Ret, "ObjectOpenAuditAlarmW succeeded without TOKEN_QUERY\n");
+    ok(GetLastError() == ERROR_ACCESS_DENIED, "Unexpected error %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    Ret = pObjectPrivilegeAuditAlarmW(Subsystem, &HandleId, NoQueryToken, FILE_READ_DATA, &Privileges, TRUE);
+    ok(!Ret, "ObjectPrivilegeAuditAlarmW succeeded without TOKEN_QUERY\n");
+    ok(GetLastError() == ERROR_ACCESS_DENIED, "Unexpected error %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    Ret = pPrivilegedServiceAuditAlarmW(Subsystem, ServiceName, NoQueryToken, &Privileges, TRUE);
+    ok(!Ret, "PrivilegedServiceAuditAlarmW succeeded without TOKEN_QUERY\n");
+    ok(GetLastError() == ERROR_ACCESS_DENIED, "Unexpected error %lu\n", GetLastError());
+
+    CloseHandle(NoQueryToken);
+}
+
+static
 VOID
 TestAlarms(
     _In_ HANDLE ClientToken)
@@ -141,15 +262,25 @@ TestAlarms(
 static
 VOID
 TestAlarmsRefused(
-    _In_ HANDLE ClientToken)
+    _In_ HANDLE ClientToken,
+    _In_ BOOL Impersonating)
 {
     TEST_SD Test;
     PVOID HandleId = &Test;
     PRIVILEGE_SET Privileges;
-    BOOL Ret, OnClose;
+    BOOL Ret, Status, OnClose;
+    DWORD Granted;
 
     BuildTestSd(&Test);
     InitPrivilegeSet(&Privileges);
+
+    if (Impersonating)
+    {
+        Ret = CheckAndAudit(&Test.Sd, ObjectName, FILE_READ_DATA, &Granted, &Status, &OnClose);
+        ok(!Ret, "AccessCheckAndAuditAlarmW succeeded\n");
+        ok(GetLastError() == ERROR_PRIVILEGE_NOT_HELD, "Unexpected error %lu\n", GetLastError());
+        ok(Granted == 0xdeadbeef, "GrantedAccess 0x%lx\n", Granted);
+    }
 
     OnClose = 0xdeadbeef;
     SetLastError(0xdeadbeef);
@@ -204,12 +335,13 @@ START_TEST(AuditAlarmApis)
     if (!KernelBase)
         return;
 
+    pAccessCheckAndAuditAlarmW = (FN_AccessCheckAndAuditAlarmW)GetProcAddress(KernelBase, "AccessCheckAndAuditAlarmW");
     pObjectCloseAuditAlarmW = (FN_ObjectCloseAuditAlarmW)GetProcAddress(KernelBase, "ObjectCloseAuditAlarmW");
     pObjectDeleteAuditAlarmW = (FN_ObjectCloseAuditAlarmW)GetProcAddress(KernelBase, "ObjectDeleteAuditAlarmW");
     pObjectOpenAuditAlarmW = (FN_ObjectOpenAuditAlarmW)GetProcAddress(KernelBase, "ObjectOpenAuditAlarmW");
     pObjectPrivilegeAuditAlarmW = (FN_ObjectPrivilegeAuditAlarmW)GetProcAddress(KernelBase, "ObjectPrivilegeAuditAlarmW");
     pPrivilegedServiceAuditAlarmW = (FN_PrivilegedServiceAuditAlarmW)GetProcAddress(KernelBase, "PrivilegedServiceAuditAlarmW");
-    if (!pObjectCloseAuditAlarmW || !pObjectDeleteAuditAlarmW ||
+    if (!pAccessCheckAndAuditAlarmW || !pObjectCloseAuditAlarmW || !pObjectDeleteAuditAlarmW ||
         !pObjectOpenAuditAlarmW || !pObjectPrivilegeAuditAlarmW || !pPrivilegedServiceAuditAlarmW)
     {
         skip("Audit alarm functions not exported by kernelbase\n");
@@ -227,18 +359,30 @@ START_TEST(AuditAlarmApis)
     if (!SetAuditPrivilege(ProcessToken, TRUE))
     {
         TraceCaller(ProcessToken);
-        TestAlarmsRefused(ClientToken);
+        TestAlarmsRefused(ClientToken, FALSE);
+        ok(ImpersonateSelf(SecurityImpersonation), "ImpersonateSelf failed: %lu\n", GetLastError());
+        TestAlarmsRefused(ClientToken, TRUE);
+        ok(RevertToSelf(), "RevertToSelf failed: %lu\n", GetLastError());
         skip("The caller does not hold the audit privilege\n");
         CloseHandle(ClientToken);
         CloseHandle(ProcessToken);
         return;
     }
 
+    TestAccessCheckAndAuditAlarm();
     TestAlarms(ClientToken);
+    TestClientTokenAccess();
 
     /* The audit privilege has to be enabled in the primary token */
     ok(SetAuditPrivilege(ProcessToken, FALSE), "Disabling the audit privilege failed\n");
-    TestAlarmsRefused(ClientToken);
+    TestAlarmsRefused(ClientToken, FALSE);
+    ok(SetAuditPrivilege(ProcessToken, TRUE), "Enabling the audit privilege failed\n");
+
+    /* An impersonation token that holds it does not stand in for the primary token */
+    ok(ImpersonateSelf(SecurityImpersonation), "ImpersonateSelf failed: %lu\n", GetLastError());
+    ok(SetAuditPrivilege(ProcessToken, FALSE), "Disabling the audit privilege failed\n");
+    TestAlarmsRefused(ClientToken, TRUE);
+    ok(RevertToSelf(), "RevertToSelf failed: %lu\n", GetLastError());
     ok(SetAuditPrivilege(ProcessToken, TRUE), "Enabling the audit privilege failed\n");
 
     CloseHandle(ClientToken);
