@@ -83,6 +83,7 @@ ExpTakeMatchingWait(
         if ((Wait->Key == Key) && (Wait->Process == Process))
         {
             RemoveEntryList(&Wait->Link);
+            Wait->Link.Flink = NULL;
             return Wait;
         }
     }
@@ -154,15 +155,19 @@ ExpMeetOnKeyedEvent(
      */
     ExAcquirePushLockExclusive(&KeyedEvent->Locks[Bucket]);
 
-    if (ExpTakeMatchingWait(Own, Key, Process) == NULL)
+    if (Wait.Link.Flink != NULL)
     {
+        RemoveEntryList(&Wait.Link);
         ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
-        return STATUS_SUCCESS;
+        return Status;
     }
 
     ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
 
-    return Status;
+    /* The counterpart took the block and signals the event in this frame after dropping the lock */
+    KeWaitForSingleObject(&Wait.Event, WrKeyedEvent, KernelMode, FALSE, NULL);
+
+    return STATUS_SUCCESS;
 }
 
 static

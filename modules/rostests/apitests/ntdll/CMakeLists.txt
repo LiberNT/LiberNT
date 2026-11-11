@@ -100,6 +100,7 @@ list(APPEND SOURCE
     NtMapViewOfSection_ImageZeroBits.c
     NtKeDispatcherTransitions.c
     NtKeHandoff.c
+    NtKeyedEvent.c
     NtProcessDeviceMap.c
     NtQueryDirectoryObject.c
     NtDuplicateTokenQos.c
