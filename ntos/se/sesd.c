@@ -1008,7 +1008,7 @@ SeSetSecurityDescriptorInfoEx(
                                    &ReadSacl);
         Next.Sacl = ReadSacl;
         Next.SaclPresent = TRUE;
-        Control &= ~SE_SACL_DEFAULTED;
+        Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
     }
 
     if (NT_SUCCESS(Status))

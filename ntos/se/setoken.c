@@ -1259,6 +1259,7 @@ SepSecureTokenWithItself(
         if (Token->DefaultDacl != NULL)
             RtlSetDaclSecurityDescriptor(&Absolute, TRUE, Token->DefaultDacl, FALSE);
         RtlSetSaclSecurityDescriptor(&Absolute, TRUE, Sacl, FALSE);
+        RtlSetControlSecurityDescriptor(&Absolute, SE_SACL_AUTO_INHERITED, SE_SACL_AUTO_INHERITED);
 
         Status = RtlAbsoluteToSelfRelativeSD(&Absolute, NULL, &Length);
         if (Status == STATUS_BUFFER_TOO_SMALL) Status = STATUS_SUCCESS;

@@ -357,6 +357,10 @@ ObpAssignTokenSecurity(
                                     &AccessState->SubjectSecurityContext,
                                     &Type->TypeInfo.GenericMapping,
                                     PagedPool);
+
+        /* The label a token is given is kept as one that takes part in inheritance */
+        if (NT_SUCCESS(Status))
+            ((PISECURITY_DESCRIPTOR)*NewDescriptor)->Control |= SE_SACL_AUTO_INHERITED;
     }
 
     ExFreePoolWithTag(Sacl, TAG_ACL);
