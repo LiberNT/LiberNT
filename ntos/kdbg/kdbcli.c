@@ -76,6 +76,8 @@ static ULONG_PTR KdbpLastDisassembleAddress = 0;
 static CHAR KdbpCommandBuffer[KDB_COMMAND_MAX];
 static CHAR KdbpPrintBuffer[1024];
 
+static PKDB_KTRAP_FRAME KdbpProcessorContext;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -86,7 +88,7 @@ static
 PKDB_KTRAP_FRAME
 KdbpContext(VOID)
 {
-    return KdbCurrentTrapFrame;
+    return (KdbpProcessorContext != NULL) ? KdbpProcessorContext : KdbCurrentTrapFrame;
 }
 
 static
@@ -1579,6 +1581,71 @@ KdbpCmdLocks(
 
 static
 BOOLEAN
+KdbpCmdProcessor(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG_PTR Number;
+    ULONG Processor;
+    PKPRCB Prcb;
+
+    if (Argc < 2)
+    {
+        for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+        {
+            Prcb = KiProcessorBlock[Processor];
+            if (Prcb == NULL)
+                continue;
+
+            KdbpPrint("%s%lu  PRCB %p  thread %p  pc %p\n",
+                      (Processor == Current) ? "*" : " ",
+                      Processor,
+                      Prcb,
+                      Prcb->CurrentThread,
+                      (Processor == Current) ? (PVOID)KeGetContextPc(KdbCurrentTrapFrame)
+                                             : (PVOID)KeGetContextPc(&Prcb->ProcessorState.ContextFrame));
+        }
+
+        return TRUE;
+    }
+
+    if (_stricmp(Argv[1], "current") == 0)
+    {
+        Number = Current;
+    }
+    else if (!KdbpGetHexNumber(Argv[1], &Number))
+    {
+        KdbpPrint("%s is not a processor number\n", Argv[1]);
+        return TRUE;
+    }
+
+    if ((Number >= (ULONG)(UCHAR)KeNumberProcessors) || (KiProcessorBlock[Number] == NULL))
+    {
+        KdbpPrint("There is no processor %Iu\n", Number);
+        return TRUE;
+    }
+
+    Prcb = KiProcessorBlock[Number];
+    if (Number == Current)
+    {
+        KdbpProcessorContext = NULL;
+        KdbCurrentThread = KdbOriginalThread;
+        KdbCurrentProcess = (PEPROCESS)KdbOriginalThread->Tcb.ApcState.Process;
+    }
+    else
+    {
+        KdbpProcessorContext = &Prcb->ProcessorState.ContextFrame;
+        KdbCurrentThread = (PETHREAD)Prcb->CurrentThread;
+        KdbCurrentProcess = (PEPROCESS)Prcb->CurrentThread->ApcState.Process;
+    }
+
+    KdbpPrint("Processor %Iu\n", Number);
+    return TRUE;
+}
+
+static
+BOOLEAN
 KdbpCmdEvaluate(
     ULONG Argc,
     PCHAR Argv[])
@@ -1821,6 +1888,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!thread", "!thread [address]", "Shows a thread in detail", KdbpCmdThreadDetail},
     {"!apc", "!apc [address]", "Shows the APCs queued to a thread", KdbpCmdApc},
     {"!locks", "!locks [-v|address]", "Shows the resources that are held or waited on", KdbpCmdLocks},
+    {"cpu", "cpu [number|current]", "Lists the processors, or looks at a frozen one", KdbpCmdProcessor},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
@@ -2099,6 +2167,7 @@ KdbpCliMainLoop(
     static CHAR Command[KDB_COMMAND_MAX];
     static CHAR Previous[KDB_COMMAND_MAX];
 
+    KdbpProcessorContext = NULL;
     KdbpPagerReset();
     KdbpReportStop(EnteredOnSingleStep);
 
