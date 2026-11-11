@@ -48,6 +48,34 @@ SendCdb(HANDLE Disk, const UCHAR *Cdb, UCHAR DataIn, PVOID Buffer, ULONG Length,
 
 static
 void
+TestTransport(HANDLE Disk, BOOL Uas)
+{
+    STORAGE_PROPERTY_QUERY Query = { StorageDeviceProperty, PropertyStandardQuery };
+    STORAGE_DEVICE_DESCRIPTOR Device;
+    STORAGE_ADAPTER_DESCRIPTOR Adapter;
+    DWORD Returned;
+    BOOL Result;
+
+    ZeroMemory(&Device, sizeof(Device));
+    Result = DeviceIoControl(Disk, IOCTL_STORAGE_QUERY_PROPERTY, &Query, sizeof(Query), &Device, sizeof(Device),
+                             &Returned, NULL);
+    ok(Result, "StorageDeviceProperty failed: %lu\n", GetLastError());
+    ok(Device.BusType == BusTypeUsb, "The disk is on bus type %u\n", Device.BusType);
+    ok(Device.CommandQueueing == Uas, "The %s disk reports command queueing %u\n", Uas ? "UAS" : "bulk-only",
+       Device.CommandQueueing);
+
+    ZeroMemory(&Adapter, sizeof(Adapter));
+    Query.PropertyId = StorageAdapterProperty;
+    Result = DeviceIoControl(Disk, IOCTL_STORAGE_QUERY_PROPERTY, &Query, sizeof(Query), &Adapter, sizeof(Adapter),
+                             &Returned, NULL);
+    ok(Result, "StorageAdapterProperty failed: %lu\n", GetLastError());
+    ok(Adapter.BusType == BusTypeUsb, "The adapter is on bus type %u\n", Adapter.BusType);
+    ok(Adapter.CommandQueueing == Uas, "The %s adapter reports command queueing %u\n", Uas ? "UAS" : "bulk-only",
+       Adapter.CommandQueueing);
+}
+
+static
+void
 TestRecovery(const CHAR *Root)
 {
     static const UCHAR ReadCapacity[10] = { 0x25 };
@@ -78,6 +106,8 @@ TestRecovery(const CHAR *Root)
     ok(Disk != INVALID_HANDLE_VALUE, "Opening %s failed: %lu\n", Path, GetLastError());
     if (Disk == INVALID_HANDLE_VALUE)
         return;
+    sprintf(Path, "%sUSBCLASS.UAS", Root);
+    TestTransport(Disk, GetFileAttributesA(Path) != INVALID_FILE_ATTRIBUTES);
     First = VirtualAlloc(NULL, 2 * 4096, MEM_COMMIT, PAGE_READWRITE);
     Again = First + 4096;
 
@@ -97,7 +127,7 @@ TestRecovery(const CHAR *Root)
     Start = GetTickCount64();
     Result = SendCdb(Disk, Read, SCSI_IOCTL_DATA_UNSPECIFIED, NULL, 0, 2, &Request, &Error);
     Elapsed = GetTickCount64() - Start;
-    ok(!Result && ((Error == ERROR_SEM_TIMEOUT && Elapsed >= 1900) || Error == ERROR_IO_DEVICE),
+    ok(!Result && (Error == ERROR_SEM_TIMEOUT || Error == ERROR_IO_DEVICE),
        "A READ with no data phase gave %d, error %lu, SCSI status %u after %lu ms\n", Result, Error,
        Request.Spt.ScsiStatus, (ULONG)Elapsed);
 

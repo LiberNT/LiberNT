@@ -11,47 +11,118 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <netioapi.h>
+
+typedef enum _USB_ADAPTER_STATE
+{
+    NoUsbAdapter,
+    UsbAdapterWaiting,
+    UsbAdapterReady
+} USB_ADAPTER_STATE;
 
 static
 BOOL
 IsUsbAdapter(
     _In_ const IP_ADAPTER_ADDRESSES *Adapter)
 {
-    return wcsstr(Adapter->Description, L"USB") || wcsstr(Adapter->Description, L"RNDIS") ||
-           wcsstr(Adapter->Description, L"NCM") || wcsstr(Adapter->Description, L"ECM") ||
-           wcsstr(Adapter->Description, L"ASIX") || wcsstr(Adapter->Description, L"SMSC");
+    WCHAR Description[256];
+
+    lstrcpynW(Description, Adapter->Description, ARRAYSIZE(Description));
+    _wcsupr(Description);
+    return wcsstr(Description, L"USB") || wcsstr(Description, L"RNDIS") || wcsstr(Description, L"NCM") ||
+           wcsstr(Description, L"ECM") || wcsstr(Description, L"ASIX") || wcsstr(Description, L"SMSC");
+}
+
+static
+USB_ADAPTER_STATE
+FindUsbAdapter(
+    _Out_writes_bytes_(Size) PIP_ADAPTER_ADDRESSES Adapters,
+    _In_ ULONG Size,
+    _Out_ PIP_ADAPTER_ADDRESSES *Ready)
+{
+    PIP_ADAPTER_ADDRESSES Adapter;
+    USB_ADAPTER_STATE State = NoUsbAdapter;
+    ULONG Error;
+
+    *Ready = NULL;
+    Error = GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_GATEWAYS, NULL, Adapters, &Size);
+    if (Error != ERROR_SUCCESS)
+    {
+        ok(0, "GetAdaptersAddresses failed: %lu\n", Error);
+        return NoUsbAdapter;
+    }
+    for (Adapter = Adapters; Adapter; Adapter = Adapter->Next)
+    {
+        if (!IsUsbAdapter(Adapter))
+            continue;
+        if (Adapter->OperStatus == IfOperStatusUp && Adapter->FirstUnicastAddress && Adapter->FirstGatewayAddress)
+        {
+            *Ready = Adapter;
+            return UsbAdapterReady;
+        }
+        State = UsbAdapterWaiting;
+    }
+    return State;
+}
+
+static
+VOID
+NETIOAPI_API_
+AddressChanged(
+    _In_ PVOID Context,
+    _In_opt_ PMIB_UNICASTIPADDRESS_ROW Row,
+    _In_ MIB_NOTIFICATION_TYPE Type)
+{
+    SetEvent(Context);
+}
+
+static
+VOID
+NETIOAPI_API_
+RouteChanged(
+    _In_ PVOID Context,
+    _In_opt_ PMIB_IPFORWARD_ROW2 Row,
+    _In_ MIB_NOTIFICATION_TYPE Type)
+{
+    SetEvent(Context);
 }
 
 /* The adapter must have its own IPv4 address and carry a TCP connection to its gateway. */
 START_TEST(Network)
 {
     PIP_ADAPTER_ADDRESSES Adapters, Adapter;
-    ULONG Size = 64 * 1024, Waited;
+    HANDLE Changed, AddressNotify = NULL, RouteNotify = NULL;
+    ULONG Size = 64 * 1024;
+    ULONGLONG Start, Elapsed;
+    USB_ADAPTER_STATE State;
     WSADATA Wsa;
-    BOOL Found = FALSE;
 
     ok_int(WSAStartup(MAKEWORD(2, 2), &Wsa), 0);
+    Changed = CreateEventW(NULL, FALSE, FALSE, NULL);
+    ok(Changed != NULL, "CreateEvent failed: %lu\n", GetLastError());
+    ok_int(NotifyUnicastIpAddressChange(AF_INET, AddressChanged, Changed, FALSE, &AddressNotify), NO_ERROR);
+    ok_int(NotifyRouteChange2(AF_INET, RouteChanged, Changed, FALSE, &RouteNotify), NO_ERROR);
     Adapters = HeapAlloc(GetProcessHeap(), 0, Size);
-    for (Waited = 0; Waited < 15000 && !Found; Waited += 500)
+    Start = GetTickCount64();
+    while ((State = FindUsbAdapter(Adapters, Size, &Adapter)) == UsbAdapterWaiting &&
+           (Elapsed = GetTickCount64() - Start) < 15000)
     {
-        ok_int(GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_GATEWAYS, NULL, Adapters, &Size), ERROR_SUCCESS);
-        for (Adapter = Adapters; Adapter; Adapter = Adapter->Next)
-        {
-            if (IsUsbAdapter(Adapter) && Adapter->OperStatus == IfOperStatusUp && Adapter->FirstUnicastAddress &&
-                Adapter->FirstGatewayAddress)
-            {
-                Found = TRUE;
-                break;
-            }
-        }
-        if (!Found)
-            Sleep(500);
+        WaitForSingleObject(Changed, (DWORD)(15000 - Elapsed));
     }
-    if (!Found)
+    if (RouteNotify)
+        CancelMibChangeNotify2(RouteNotify);
+    if (AddressNotify)
+        CancelMibChangeNotify2(AddressNotify);
+    CloseHandle(Changed);
+    if (State == NoUsbAdapter)
+    {
+        skip("No USB network adapter is present\n");
+    }
+    else if (State == UsbAdapterWaiting)
     {
         for (Adapter = Adapters; Adapter; Adapter = Adapter->Next)
             trace("Adapter %S status %u\n", Adapter->Description, Adapter->OperStatus);
-        skip("No USB network adapter has an address and a gateway\n");
+        skip("No USB network adapter got an address and a gateway\n");
     }
     else
     {
