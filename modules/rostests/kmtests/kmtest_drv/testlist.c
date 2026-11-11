@@ -271,6 +271,7 @@ KMT_TESTFUNC Test_KeIrql;
 KMT_TESTFUNC Test_KeMutex;
 KMT_TESTFUNC Test_KeAffinityKM;
 KMT_TESTFUNC Test_KeBugCheckCbKM;
+KMT_TESTFUNC Test_KeBugCheckStop;
 KMT_TESTFUNC Test_KePcr;
 KMT_TESTFUNC Test_RtlImageKM;
 KMT_TESTFUNC Test_RtlRandomKM;
@@ -619,6 +620,7 @@ const KMT_TEST TestList[] =
 #endif
     { "KeAffinityKM",                       Test_KeAffinityKM },
     { "KeBugCheckCbKM",                     Test_KeBugCheckCbKM },
+    { "-KeBugCheckStop",                    Test_KeBugCheckStop },
     { "KeCriticalRegionKM",                 Test_KeCriticalRegionKM },
     { "KeDeviceQueue",                      Test_KeDeviceQueue },
     { "KeDpc",                              Test_KeDpc },

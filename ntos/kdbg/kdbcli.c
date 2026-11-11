@@ -857,22 +857,14 @@ KdbpCmdRegister(
  * sending it anywhere.
  */
 static
-BOOLEAN
-KdbpCmdBackTrace(
-    ULONG Argc,
-    PCHAR Argv[])
+VOID
+KdbpBackTrace(
+    _In_ PKDB_KTRAP_FRAME Context,
+    _In_ ULONG_PTR Limit)
 {
     static KDB_KTRAP_FRAME Walk;
-    PKDB_KTRAP_FRAME Context = KdbpContext();
-    ULONG_PTR Limit = 32;
     ULONG_PTR Pc;
     ULONG Depth = 0;
-
-    if (Context == NULL)
-        return TRUE;
-
-    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Limit))
-        return TRUE;
 
     Walk = *Context;
     Pc = (ULONG_PTR)KeGetContextPc(&Walk);
@@ -891,7 +883,24 @@ KdbpCmdBackTrace(
 
         Depth++;
     }
+}
 
+static
+BOOLEAN
+KdbpCmdBackTrace(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    PKDB_KTRAP_FRAME Context = KdbpContext();
+    ULONG_PTR Limit = 32;
+
+    if (Context == NULL)
+        return TRUE;
+
+    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Limit))
+        return TRUE;
+
+    KdbpBackTrace(Context, Limit);
     return TRUE;
 }
 
@@ -1777,14 +1786,28 @@ KdbpReportStop(
         KdbPuts("\nStopped\n");
     }
 
+    /* Each block is paged on its own, so a stop that nobody watches never waits for a key */
     if (Context != NULL)
     {
-        ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Context);
+        KdbpPagerReset();
+        KdbpCmdRegisters(1, NULL);
 
-        KdbpPrint("%p ", (PVOID)Pc);
-        KdbSymPrintAddress((PVOID)Pc, Context);
-        KdbPuts("\n");
+        KdbpPagerReset();
+        KdbpBackTrace(Context, KdbpScreenRows() - 3);
     }
+
+    if (KiBugCheckData[0] != 0)
+    {
+        KdbpPagerReset();
+        KdbpPrint("\n*** Fatal System Error: 0x%08lx (0x%p,0x%p,0x%p,0x%p)\n",
+                  (ULONG)KiBugCheckData[0],
+                  (PVOID)KiBugCheckData[1],
+                  (PVOID)KiBugCheckData[2],
+                  (PVOID)KiBugCheckData[3],
+                  (PVOID)KiBugCheckData[4]);
+    }
+
+    KdbpPagerReset();
 }
 
 /*
