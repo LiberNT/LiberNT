@@ -22,8 +22,14 @@ FAST_IO_DISPATCH WmipFastIoDispatch;
 
 #define WMIP_TAG 'imWD'
 
-/* How many listeners of one event are called from a single delivery */
+/* How many listeners of one event are collected without an allocation */
 #define WMIP_NOTIFY_FANOUT 16
+
+typedef struct _WMIP_LISTENER
+{
+    WMI_NOTIFICATION_CALLBACK Callback;
+    PVOID Context;
+} WMIP_LISTENER, *PWMIP_LISTENER;
 
 typedef struct _WMIP_OPEN_GUID_BLOCK
 {
@@ -477,26 +483,58 @@ WmipNotificationIrpCancel(
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
-VOID
+NTSTATUS
 NTAPI
 WmipDeliverNotification(
     _In_ PWNODE_HEADER Wnode)
 {
-    struct
-    {
-        WMI_NOTIFICATION_CALLBACK Callback;
-        PVOID Context;
-    } Callbacks[WMIP_NOTIFY_FANOUT];
+    WMIP_LISTENER Local[WMIP_NOTIFY_FANOUT];
+    PWMIP_LISTENER Listeners = Local;
     PWMIP_GUID_OBJECT GuidObject;
     PIO_STACK_LOCATION Stack;
     PLIST_ENTRY Entry;
+    ULONG Room = RTL_NUMBER_OF(Local);
     ULONG Collected = 0;
+    ULONG Needed;
     PIRP Irp;
     KIRQL OldIrql;
     ULONG Size;
     ULONG i;
 
-    ExAcquirePushLockShared(&WmipNotificationLock);
+    /* Room for every listener is made before any of them is handed the event */
+    for (;;)
+    {
+        ExAcquirePushLockShared(&WmipNotificationLock);
+
+        Needed = 0;
+        for (Entry = WmipNotificationList.Flink;
+             Entry != &WmipNotificationList;
+             Entry = Entry->Flink)
+        {
+            GuidObject = CONTAINING_RECORD(Entry,
+                                           WMIP_GUID_OBJECT,
+                                           NotificationLink);
+
+            if (GuidObject->NotificationCallback != NULL &&
+                IsEqualGUID(&GuidObject->Guid, &Wnode->Guid))
+            {
+                Needed++;
+            }
+        }
+
+        if (Needed <= Room) break;
+
+        ExReleasePushLockShared(&WmipNotificationLock);
+
+        if (Listeners != Local) ExFreePoolWithTag(Listeners, WMIP_TAG);
+
+        Listeners = ExAllocatePoolWithTag(NonPagedPoolNx,
+                                          Needed * sizeof(*Listeners),
+                                          WMIP_TAG);
+        if (Listeners == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Room = Needed;
+    }
 
     for (Entry = WmipNotificationList.Flink;
          Entry != &WmipNotificationList;
@@ -508,11 +546,10 @@ WmipDeliverNotification(
 
         if (!IsEqualGUID(&GuidObject->Guid, &Wnode->Guid)) continue;
 
-        if (GuidObject->NotificationCallback != NULL &&
-            Collected < WMIP_NOTIFY_FANOUT)
+        if (GuidObject->NotificationCallback != NULL)
         {
-            Callbacks[Collected].Callback = GuidObject->NotificationCallback;
-            Callbacks[Collected].Context = GuidObject->NotificationContext;
+            Listeners[Collected].Callback = GuidObject->NotificationCallback;
+            Listeners[Collected].Context = GuidObject->NotificationContext;
             Collected++;
         }
 
@@ -552,11 +589,14 @@ WmipDeliverNotification(
 
     ExReleasePushLockShared(&WmipNotificationLock);
 
-    /* TODO: carry on past the first WMIP_NOTIFY_FANOUT listeners of one event */
     for (i = 0; i < Collected; i++)
     {
-        Callbacks[i].Callback(Wnode, Callbacks[i].Context);
+        Listeners[i].Callback(Wnode, Listeners[i].Context);
     }
+
+    if (Listeners != Local) ExFreePoolWithTag(Listeners, WMIP_TAG);
+
+    return STATUS_SUCCESS;
 }
 
 _Function_class_(DRIVER_DISPATCH)

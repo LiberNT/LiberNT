@@ -112,7 +112,7 @@ WmipDockUndockEventCallback(
     _In_opt_ PVOID Argument2);
 
 /* Hands a notification to everybody holding the identifier it names */
-VOID
+NTSTATUS
 NTAPI
 WmipDeliverNotification(
     _In_ PWNODE_HEADER Wnode);

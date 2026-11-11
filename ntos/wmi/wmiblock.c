@@ -418,6 +418,7 @@ IoWMIWriteEvent(
 {
     PWNODE_HEADER Wnode = WnodeEventItem;
     PWNODE_HEADER Named;
+    NTSTATUS Status;
 
     if (Wnode == NULL) return STATUS_INVALID_PARAMETER;
 
@@ -453,9 +454,12 @@ IoWMIWriteEvent(
 
     KeQuerySystemTime(&Named->TimeStamp);
 
-    WmipDeliverNotification(Named);
+    Status = WmipDeliverNotification(Named);
 
     if (Named != Wnode) ExFreePool(Named);
+
+    /* An event that could not be delivered stays the caller's to free */
+    if (!NT_SUCCESS(Status)) return Status;
 
     ExFreePool(Wnode);
 

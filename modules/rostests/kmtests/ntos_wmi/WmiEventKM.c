@@ -8,10 +8,19 @@
 #include <kmt_test.h>
 #include <wmistr.h>
 
+#define KMT_WMI_LISTENER_COUNT 24
 #define KMT_WMI_TAG 'mWmK'
 
+static const GUID KmtSmBiosGuid = { 0x8f680850, 0xa584, 0x11d1, { 0xbf, 0x38, 0x00, 0xa0, 0xc9, 0x06, 0x29, 0x10 } };
 static const GUID KmtWmiEventGuid = { 0x3c71e2a4, 0x5b0d, 0x4f6e, { 0x8d, 0x12, 0x6a, 0x09, 0xe4, 0x7b, 0xc3, 0x58 } };
 static const WCHAR KmtWmiBaseName[] = L"KmtWmiEvent";
+
+typedef struct _KMT_WMI_LISTENERS
+{
+    KEVENT AllCalled;
+    volatile LONG Calls;
+    LONG Expected;
+} KMT_WMI_LISTENERS, *PKMT_WMI_LISTENERS;
 
 typedef struct _KMT_WMI_NAMED
 {
@@ -26,6 +35,21 @@ extern PDRIVER_OBJECT KmtDriverObject;
 
 static PDEVICE_OBJECT KmtWmiDevice;
 static KEVENT KmtWmiEventsEnabled;
+
+static
+VOID
+NTAPI
+KmtWmiCountCallback(
+    _In_ PVOID Wnode,
+    _In_ PVOID Context)
+{
+    PKMT_WMI_LISTENERS Listeners = Context;
+
+    UNREFERENCED_PARAMETER(Wnode);
+
+    if (InterlockedIncrement(&Listeners->Calls) == Listeners->Expected)
+        KeSetEvent(&Listeners->AllCalled, IO_NO_INCREMENT, FALSE);
+}
 
 static
 VOID
@@ -115,6 +139,77 @@ KmtWmiSystemControl(
     Irp->IoStatus.Information = Information;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return Status;
+}
+
+static
+PWNODE_HEADER
+KmtWmiAllocateEventItem(
+    _In_ LPCGUID Guid)
+{
+    PWNODE_HEADER Wnode;
+
+    Wnode = ExAllocatePoolZero(NonPagedPoolNx, sizeof(WNODE_HEADER) + sizeof(ULONG), KMT_WMI_TAG);
+    if (Wnode)
+    {
+        Wnode->BufferSize = sizeof(WNODE_HEADER) + sizeof(ULONG);
+        Wnode->Guid = *Guid;
+        Wnode->Flags = WNODE_FLAG_EVENT_ITEM;
+    }
+
+    return Wnode;
+}
+
+static
+VOID
+TestEveryListener(VOID)
+{
+    PKMT_WMI_LISTENERS Listeners;
+    PVOID Objects[KMT_WMI_LISTENER_COUNT];
+    LARGE_INTEGER Timeout;
+    PWNODE_HEADER Wnode;
+    ULONG Opened = 0, i;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Listeners = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Listeners), KMT_WMI_TAG);
+    if (skip(Listeners != NULL, "out of memory\n"))
+        return;
+
+    KeInitializeEvent(&Listeners->AllCalled, NotificationEvent, FALSE);
+    Listeners->Expected = KMT_WMI_LISTENER_COUNT;
+
+    for (i = 0; i < KMT_WMI_LISTENER_COUNT; i++)
+    {
+        Status = IoWMIOpenBlock(&KmtSmBiosGuid, WMIGUID_NOTIFICATION | SYNCHRONIZE, &Objects[i]);
+        if (!NT_SUCCESS(Status))
+            break;
+        Opened++;
+        Status = IoWMISetNotificationCallback(Objects[i], KmtWmiCountCallback, Listeners);
+        if (!NT_SUCCESS(Status))
+            break;
+    }
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Opened, (ULONG)KMT_WMI_LISTENER_COUNT);
+
+    Wnode = KmtWmiAllocateEventItem(&KmtSmBiosGuid);
+    if (!skip(Wnode != NULL, "out of memory\n"))
+    {
+        Status = IoWMIWriteEvent(Wnode);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (!NT_SUCCESS(Status))
+            ExFreePoolWithTag(Wnode, KMT_WMI_TAG);
+
+        Timeout.QuadPart = -2000 * 10000LL;
+        KeWaitForSingleObject(&Listeners->AllCalled, Executive, KernelMode, FALSE, &Timeout);
+        ok_eq_long(Listeners->Calls, (LONG)KMT_WMI_LISTENER_COUNT);
+    }
+
+    for (i = 0; i < Opened; i++)
+    {
+        IoWMISetNotificationCallback(Objects[i], NULL, NULL);
+        ObDereferenceObject(Objects[i]);
+    }
+
+    ExFreePoolWithTag(Listeners, KMT_WMI_TAG);
 }
 
 static
@@ -211,5 +306,6 @@ TestStaticInstanceName(VOID)
 
 START_TEST(WmiEventKM)
 {
+    TestEveryListener();
     TestStaticInstanceName();
 }
