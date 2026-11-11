@@ -202,10 +202,92 @@ PspArchInitializeUserThreadStartup(
     KiInstrumentTrapFrame(TrapFrame);
 }
 
+/* The full tag word of the x87 save area, rebuilt from the abridged one and the register contents */
+static
+ULONG
+PspFullFpuTagWord(
+    _In_ PXSAVE_FORMAT FxSave)
+{
+    ULONG Top = (FxSave->StatusWord >> 11) & 7;
+    ULONG TagWord = 0;
+    ULONG Physical;
+
+    for (Physical = 0; Physical < 8; Physical++)
+    {
+        PM128A Register = &FxSave->FloatRegisters[(Physical - Top) & 7];
+        ULONG Exponent = (ULONG)Register->High & 0x7fff;
+        ULONG Tag;
+
+        if (!(FxSave->TagWord & (1 << Physical)))
+            Tag = 3;
+        else if (Exponent == 0x7fff)
+            Tag = 2;
+        else if (Exponent == 0)
+            Tag = (Register->Low == 0) ? 1 : 2;
+        else
+            Tag = (Register->Low >> 63) ? 0 : 2;
+
+        TagWord |= Tag << (2 * Physical);
+    }
+
+    return TagWord;
+}
+
+static
+VOID
+PspFxSaveToFpuSave(
+    _In_ PXSAVE_FORMAT FxSave,
+    _Out_ WOW64_FLOATING_SAVE_AREA *FpuSave)
+{
+    ULONG i;
+
+    FpuSave->ControlWord = FxSave->ControlWord;
+    FpuSave->StatusWord = FxSave->StatusWord;
+    FpuSave->TagWord = PspFullFpuTagWord(FxSave);
+    FpuSave->ErrorOffset = FxSave->ErrorOffset;
+    FpuSave->ErrorSelector = FxSave->ErrorSelector | ((ULONG)(FxSave->ErrorOpcode & 0x7ff) << 16);
+    FpuSave->DataOffset = FxSave->DataOffset;
+    FpuSave->DataSelector = FxSave->DataSelector;
+    FpuSave->Cr0NpxState = 0;
+
+    for (i = 0; i < 8; i++)
+        RtlCopyMemory(&FpuSave->RegisterArea[i * 10], &FxSave->FloatRegisters[i], 10);
+}
+
+static
+VOID
+PspFpuSaveToFxSave(
+    _In_ WOW64_FLOATING_SAVE_AREA *FpuSave,
+    _Inout_ PXSAVE_FORMAT FxSave)
+{
+    ULONG i;
+
+    FxSave->ControlWord = (USHORT)FpuSave->ControlWord;
+    FxSave->StatusWord = (USHORT)FpuSave->StatusWord;
+    FxSave->TagWord = 0;
+    for (i = 0; i < 8; i++)
+    {
+        if (((FpuSave->TagWord >> (2 * i)) & 3) != 3)
+            FxSave->TagWord |= (UCHAR)(1 << i);
+    }
+    FxSave->ErrorOpcode = (USHORT)((FpuSave->ErrorSelector >> 16) & 0x7ff);
+    FxSave->ErrorOffset = FpuSave->ErrorOffset;
+    FxSave->ErrorSelector = (USHORT)FpuSave->ErrorSelector;
+    FxSave->DataOffset = FpuSave->DataOffset;
+    FxSave->DataSelector = (USHORT)FpuSave->DataSelector;
+
+    for (i = 0; i < 8; i++)
+    {
+        RtlZeroMemory(&FxSave->FloatRegisters[i], sizeof(M128A));
+        RtlCopyMemory(&FxSave->FloatRegisters[i], &FpuSave->RegisterArea[i * 10], 10);
+    }
+}
+
 /*
- * The live 32-bit state of a thread running under emulation. On this
- * architecture a 32-bit thread runs on the processor itself, so its state is
- * in its trap frame and the caller is told to read it there.
+ * The live 32-bit state of a thread. A 32-bit thread runs on the processor
+ * itself, so while it is stopped in 32-bit code its state is the one in its
+ * trap frame; stopped anywhere else, the caller is told to read the state
+ * the 32-bit code left in the CPU area.
  */
 NTSTATUS
 NTAPI
@@ -214,17 +296,119 @@ PspArchCopyLiveWow64Context(
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(SetContext);
+    ULONG Flags = Context->ContextFlags;
+    CONTEXT Native;
+    NTSTATUS Status;
 
-    return STATUS_NOT_FOUND;
+    PAGED_CODE();
+
+    /* A thread asking about itself is in a system call, so in 64-bit code */
+    if (Thread == PsGetCurrentThread()) return STATUS_NOT_FOUND;
+
+    RtlZeroMemory(&Native, sizeof(Native));
+    Native.ContextFlags = CONTEXT_ALL | CONTEXT_EXCEPTION_REQUEST;
+    Status = PsGetContextThread(Thread, &Native, UserMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Native.SegCs != (KGDT64_R3_CMCODE | RPL_MASK)) return STATUS_NOT_FOUND;
+
+    if (!SetContext)
+    {
+        if ((Flags & WOW64_CONTEXT_CONTROL) == WOW64_CONTEXT_CONTROL)
+        {
+            Context->Ebp = (ULONG)Native.Rbp;
+            Context->Eip = (ULONG)Native.Rip;
+            Context->SegCs = Native.SegCs;
+            Context->EFlags = Native.EFlags;
+            Context->Esp = (ULONG)Native.Rsp;
+            Context->SegSs = Native.SegSs;
+        }
+
+        if ((Flags & WOW64_CONTEXT_INTEGER) == WOW64_CONTEXT_INTEGER)
+        {
+            Context->Edi = (ULONG)Native.Rdi;
+            Context->Esi = (ULONG)Native.Rsi;
+            Context->Ebx = (ULONG)Native.Rbx;
+            Context->Edx = (ULONG)Native.Rdx;
+            Context->Ecx = (ULONG)Native.Rcx;
+            Context->Eax = (ULONG)Native.Rax;
+        }
+
+        if ((Flags & WOW64_CONTEXT_SEGMENTS) == WOW64_CONTEXT_SEGMENTS)
+        {
+            Context->SegGs = Native.SegGs;
+            Context->SegFs = Native.SegFs;
+            Context->SegEs = Native.SegEs;
+            Context->SegDs = Native.SegDs;
+        }
+
+        if ((Flags & WOW64_CONTEXT_FLOATING_POINT) == WOW64_CONTEXT_FLOATING_POINT)
+            PspFxSaveToFpuSave(&Native.FltSave, &Context->FloatSave);
+
+        if ((Flags & WOW64_CONTEXT_DEBUG_REGISTERS) == WOW64_CONTEXT_DEBUG_REGISTERS)
+        {
+            Context->Dr0 = (ULONG)Native.Dr0;
+            Context->Dr1 = (ULONG)Native.Dr1;
+            Context->Dr2 = (ULONG)Native.Dr2;
+            Context->Dr3 = (ULONG)Native.Dr3;
+            Context->Dr6 = (ULONG)Native.Dr6;
+            Context->Dr7 = (ULONG)Native.Dr7;
+        }
+
+        if ((Flags & WOW64_CONTEXT_EXTENDED_REGISTERS) == WOW64_CONTEXT_EXTENDED_REGISTERS)
+            RtlCopyMemory(Context->ExtendedRegisters, &Native.FltSave, sizeof(Context->ExtendedRegisters));
+
+        Context->ContextFlags = Flags & ~(CONTEXT_EXCEPTION_REPORTING |
+                                          CONTEXT_SERVICE_ACTIVE |
+                                          CONTEXT_EXCEPTION_ACTIVE);
+        if ((Flags & CONTEXT_EXCEPTION_REQUEST) != 0)
+        {
+            Context->ContextFlags |= CONTEXT_EXCEPTION_REPORTING |
+                                     (Native.ContextFlags & CONTEXT_EXCEPTION_ACTIVE);
+        }
+
+        return STATUS_SUCCESS;
+    }
+
+    if ((Flags & WOW64_CONTEXT_CONTROL) == WOW64_CONTEXT_CONTROL)
+    {
+        Native.Rbp = Context->Ebp;
+        Native.Rip = Context->Eip;
+        Native.EFlags = Context->EFlags;
+        Native.Rsp = Context->Esp;
+    }
+
+    if ((Flags & WOW64_CONTEXT_INTEGER) == WOW64_CONTEXT_INTEGER)
+    {
+        Native.Rdi = Context->Edi;
+        Native.Rsi = Context->Esi;
+        Native.Rbx = Context->Ebx;
+        Native.Rdx = Context->Edx;
+        Native.Rcx = Context->Ecx;
+        Native.Rax = Context->Eax;
+    }
+
+    if ((Flags & WOW64_CONTEXT_FLOATING_POINT) == WOW64_CONTEXT_FLOATING_POINT)
+        PspFpuSaveToFxSave(&Context->FloatSave, &Native.FltSave);
+
+    if ((Flags & WOW64_CONTEXT_EXTENDED_REGISTERS) == WOW64_CONTEXT_EXTENDED_REGISTERS)
+        RtlCopyMemory(&Native.FltSave, Context->ExtendedRegisters, sizeof(Context->ExtendedRegisters));
+
+    if ((Flags & WOW64_CONTEXT_DEBUG_REGISTERS) == WOW64_CONTEXT_DEBUG_REGISTERS)
+    {
+        Native.Dr0 = Context->Dr0;
+        Native.Dr1 = Context->Dr1;
+        Native.Dr2 = Context->Dr2;
+        Native.Dr3 = Context->Dr3;
+        Native.Dr6 = Context->Dr6;
+        Native.Dr7 = Context->Dr7;
+    }
+
+    Native.ContextFlags = CONTEXT_ALL;
+    return PsSetContextThread(Thread, &Native, UserMode);
 }
 
-/*
- * A 32-bit thread's debug registers are the processor's own, so they are
- * already in the state the caller was given.
- */
+/* A 32-bit thread's debug registers are the processor's own, which its native state holds */
 NTSTATUS
 NTAPI
 PspArchCopyWow64DebugRegisters(
@@ -232,9 +416,37 @@ PspArchCopyWow64DebugRegisters(
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(SetContext);
+    CONTEXT Native;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if ((Context->ContextFlags & WOW64_CONTEXT_DEBUG_REGISTERS) != WOW64_CONTEXT_DEBUG_REGISTERS)
+        return STATUS_SUCCESS;
+
+    RtlZeroMemory(&Native, sizeof(Native));
+    Native.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+    if (SetContext)
+    {
+        Native.Dr0 = Context->Dr0;
+        Native.Dr1 = Context->Dr1;
+        Native.Dr2 = Context->Dr2;
+        Native.Dr3 = Context->Dr3;
+        Native.Dr6 = Context->Dr6;
+        Native.Dr7 = Context->Dr7;
+        return PsSetContextThread(Thread, &Native, UserMode);
+    }
+
+    Status = PsGetContextThread(Thread, &Native, UserMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Context->Dr0 = (ULONG)Native.Dr0;
+    Context->Dr1 = (ULONG)Native.Dr1;
+    Context->Dr2 = (ULONG)Native.Dr2;
+    Context->Dr3 = (ULONG)Native.Dr3;
+    Context->Dr6 = (ULONG)Native.Dr6;
+    Context->Dr7 = (ULONG)Native.Dr7;
 
     return STATUS_SUCCESS;
 }

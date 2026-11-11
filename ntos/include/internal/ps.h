@@ -707,6 +707,20 @@ PspGetOrSetUserContext(
 
 NTSTATUS
 NTAPI
+PsGetContextThread(
+    _In_ PETHREAD Thread,
+    _Inout_ PCONTEXT ThreadContext,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
+PsSetContextThread(
+    _In_ PETHREAD Thread,
+    _In_ PCONTEXT ThreadContext,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
 PspArchCopyLiveWow64Context(
     _In_ PETHREAD Thread,
     _Inout_ PWOW64_CONTEXT Context,

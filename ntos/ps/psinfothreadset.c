@@ -861,7 +861,11 @@ NtSetInformationThread(
 
             Status = PspArchCopyLiveWow64Context(Thread, &Wow64, TRUE);
             if (Status == STATUS_NOT_FOUND)
+            {
                 Status = PspCopyWow64CpuAreaContext(Thread, &Wow64, TRUE);
+                if (NT_SUCCESS(Status))
+                    Status = PspArchCopyWow64DebugRegisters(Thread, &Wow64, TRUE);
+            }
             break;
 
         case ThreadCpuAccountingInformation:

@@ -386,7 +386,6 @@ PspCopyWow64CpuAreaContext(
 
     if (Teb == NULL) return STATUS_INVALID_PARAMETER;
 
-    /* TODO: a thread suspended while running 32-bit code keeps its live state in the trap frame, not in the CPU area */
     KeStackAttachProcess(&THREAD_TO_PROCESS(Thread)->Pcb, &ApcState);
 
     _SEH2_TRY
@@ -407,7 +406,13 @@ PspCopyWow64CpuAreaContext(
         else
         {
             *Context = CpuArea->Context;
-            Context->ContextFlags = Flags;
+            Context->ContextFlags = Flags & ~(CONTEXT_EXCEPTION_REPORTING |
+                                              CONTEXT_SERVICE_ACTIVE |
+                                              CONTEXT_EXCEPTION_ACTIVE);
+
+            /* The CPU area holds the state the 32-bit code had when it called out of 32-bit mode */
+            if ((Flags & CONTEXT_EXCEPTION_REQUEST) != 0)
+                Context->ContextFlags |= CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE;
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)

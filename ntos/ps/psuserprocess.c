@@ -954,7 +954,7 @@ PspCreateWow64CpuArea(
 
     RtlZeroMemory(&CpuInit, sizeof(CpuInit));
     CpuInit.Cpu.Machine = IMAGE_FILE_MACHINE_I386;
-    CpuInit.Context.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+    CpuInit.Context.ContextFlags = WOW64_CONTEXT_ALL;
     CpuInit.Context.FloatSave.ControlWord = 0x27F;
     CpuInit.Context.FloatSave.TagWord = 0xFFFF;
     FxSave->ControlWord = 0x27F;

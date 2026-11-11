@@ -1350,7 +1350,7 @@ static BOOL init_native_thread( CONTEXT *context )
 
     cpu = (WOW64_CPU_INIT *)((top - sizeof(*cpu)) & ~15);
     cpu->Cpu.Machine = IMAGE_FILE_MACHINE_I386;
-    cpu->Context.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+    cpu->Context.ContextFlags = WOW64_CONTEXT_ALL;
     cpu->Context.FloatSave.ControlWord = 0x27f;
     cpu->Context.FloatSave.TagWord = 0xffff;
     memset( &fxsave, 0, sizeof(fxsave) );

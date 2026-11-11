@@ -673,7 +673,11 @@ NtQueryInformationThread(
 
             Status = PspArchCopyLiveWow64Context(Thread, &Wow64, FALSE);
             if (Status == STATUS_NOT_FOUND)
+            {
                 Status = PspCopyWow64CpuAreaContext(Thread, &Wow64, FALSE);
+                if (NT_SUCCESS(Status))
+                    Status = PspArchCopyWow64DebugRegisters(Thread, &Wow64, FALSE);
+            }
             if (NT_SUCCESS(Status))
             {
                 Status = PspReturnThreadInformation(ThreadInformation,
