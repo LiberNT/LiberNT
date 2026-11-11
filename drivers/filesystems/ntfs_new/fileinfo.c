@@ -1053,9 +1053,12 @@ NtfsCheckNamespaceAccess(
     if (ParentObject && !ReplacedFile)
     {
         ParentFileCB = NtfsGetFileContext(ParentObject);
-        return ParentFileCB &&
-               (ParentFileCB->DesiredAccess & ParentAccess) == ParentAccess
-            ? STATUS_SUCCESS : STATUS_ACCESS_DENIED;
+        if (!ParentFileCB)
+            return STATUS_ACCESS_DENIED;
+        /* The I/O manager opens a rename or link target for FILE_WRITE_DATA only; other rights come from its security */
+        ParentAccess &= ~ParentFileCB->DesiredAccess;
+        if (ParentAccess == 0)
+            return STATUS_SUCCESS;
     }
 
     SeCaptureSubjectContext(&SubjectContext);
