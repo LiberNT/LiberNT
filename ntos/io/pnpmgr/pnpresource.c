@@ -242,6 +242,15 @@ IopDescribeFromRequirement(
             break;
 
         case CmResourceTypeDma:
+            /* A version 3 requirement names the one channel and request line the firmware routed */
+            if (Requirement->Flags & CM_RESOURCE_DMA_V3)
+            {
+                Descriptor->u.DmaV3.Channel = Requirement->u.DmaV3.Channel;
+                Descriptor->u.DmaV3.RequestLine = Requirement->u.DmaV3.RequestLine;
+                Descriptor->u.DmaV3.TransferWidth = (UCHAR)Requirement->u.DmaV3.TransferWidth;
+                break;
+            }
+
             Descriptor->u.Dma.Channel = Requirement->u.Dma.MinimumChannel;
             Descriptor->u.Dma.Port = 0;
             break;
@@ -317,8 +326,8 @@ IopAdvanceCandidate(
             return TRUE;
 
         case CmResourceTypeDma:
-            if (Descriptor->u.Dma.Channel >=
-                Requirement->u.Dma.MaximumChannel)
+            if ((Requirement->Flags & CM_RESOURCE_DMA_V3) ||
+                Descriptor->u.Dma.Channel >= Requirement->u.Dma.MaximumChannel)
             {
                 return FALSE;
             }

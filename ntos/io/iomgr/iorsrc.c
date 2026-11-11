@@ -178,6 +178,13 @@ IopDmaDescriptorsConflict(
     if (First->Type != CmResourceTypeDma) return FALSE;
     if (Second->Type != CmResourceTypeDma) return FALSE;
 
+    if ((First->Flags & CM_RESOURCE_DMA_V3) != (Second->Flags & CM_RESOURCE_DMA_V3)) return FALSE;
+
+    if (First->Flags & CM_RESOURCE_DMA_V3)
+    {
+        return First->u.DmaV3.RequestLine == Second->u.DmaV3.RequestLine;
+    }
+
     return First->u.Dma.Channel == Second->u.Dma.Channel;
 }
 

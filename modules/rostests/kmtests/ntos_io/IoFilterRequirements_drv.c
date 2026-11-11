@@ -10,6 +10,8 @@
 #define TEST_TAG 'qRFK'
 #define TEST_REPORTED_MAGIC 0x4B465251
 #define TEST_ADDED_MAGIC 0x4B464144
+#define TEST_DMA_CHANNEL 3
+#define TEST_DMA_REQUEST_LINE 21
 
 typedef enum _TEST_KIND
 {
@@ -77,10 +79,11 @@ static PWSTR CopyString(const WCHAR *Source, SIZE_T Size)
     return Buffer;
 }
 
-static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count)
+static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
-    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + (Count - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    PIO_RESOURCE_DESCRIPTOR Dma;
+    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + (Count + WithDma - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
     ULONG Index;
 
     List = ExAllocatePoolZero(PagedPool, Size, TEST_TAG);
@@ -98,7 +101,34 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count)
         List->List[0].Descriptors[Index].ShareDisposition = CmResourceShareDeviceExclusive;
         List->List[0].Descriptors[Index].u.DevicePrivate.Data[0] = Index ? TEST_ADDED_MAGIC : TEST_REPORTED_MAGIC;
     }
+    if (WithDma)
+    {
+        Dma = &List->List[0].Descriptors[Count];
+        Dma->Type = CmResourceTypeDma;
+        Dma->Flags = CM_RESOURCE_DMA_V3;
+        Dma->ShareDisposition = CmResourceShareDeviceExclusive;
+        Dma->u.DmaV3.Channel = TEST_DMA_CHANNEL;
+        Dma->u.DmaV3.RequestLine = TEST_DMA_REQUEST_LINE;
+        Dma->u.DmaV3.TransferWidth = Width32Bits;
+        List->List[0].Count++;
+    }
     return List;
+}
+
+static ULONG StartedDmaV3(PCM_RESOURCE_LIST Resources)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONG Index;
+
+    if (Resources == NULL || Resources->Count == 0)
+        return 0;
+    for (Index = 0; Index < Resources->List[0].PartialResourceList.Count; Index++)
+    {
+        Descriptor = &Resources->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (Descriptor->Type == CmResourceTypeDma && (Descriptor->Flags & CM_RESOURCE_DMA_V3))
+            return Descriptor->u.DmaV3.Channel | (Descriptor->u.DmaV3.RequestLine << 8) | (Descriptor->u.DmaV3.TransferWidth << 16);
+    }
+    return 0;
 }
 
 static ULONG StartedPrivateMask(PCM_RESOURCE_LIST Resources)
@@ -140,7 +170,7 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
     if (Current == NULL || Current != Supplied)
         return Complete(Irp, Status);
 
-    Filtered = BuildRequirements(2);
+    Filtered = BuildRequirements(2, TRUE);
     if (Filtered == NULL)
         return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
     ExFreePool(Current);
@@ -165,6 +195,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Record(Starts == 1 ? L"StartPrivateMask" : L"RestartPrivateMask",
                    StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartCount", (ULONG)Starts);
+            Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
             if (Starts == 1)
             {
                 Extension->ReportChange = TRUE;
@@ -366,7 +397,7 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
-            Requirements = BuildRequirements(1);
+            Requirements = BuildRequirements(1, FALSE);
             Status = Requirements ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
             if (Requirements != NULL)
                 Irp->IoStatus.Information = (ULONG_PTR)Requirements;

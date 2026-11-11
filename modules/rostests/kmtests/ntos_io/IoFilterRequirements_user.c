@@ -13,6 +13,9 @@
 #include <newdev.h>
 
 #define TEST_REPORTED_MAGIC 0x4B465251
+#define TEST_DMA_CHANNEL 3
+#define TEST_DMA_REQUEST_LINE 21
+#define TEST_DMA_WIDTH 2
 
 static const GUID TestClass = {0x4d36e97d, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}};
 static const WCHAR BusHardwareIds[] = L"ROOT\\KMTESTFILTERREQ\0";
@@ -21,7 +24,7 @@ static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
-                                 L"BusRelationsQueried" };
+                                 L"BusRelationsQueried", L"StartDmaV3" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -96,6 +99,8 @@ static VOID CheckRecorded(VOID)
     ok(Value == 1, "The bus driver did not leave IoStatus.Information as it was (%lu)\n", Value);
     ok(ReadValue(L"StartPrivateMask", &Value), "The child device did not start\n");
     ok(Value == 3, "The start resources were not the filtered requirements (mask %lu)\n", Value);
+    ok(ReadValue(L"StartDmaV3", &Value) && Value == (TEST_DMA_CHANNEL | (TEST_DMA_REQUEST_LINE << 8) | (TEST_DMA_WIDTH << 16)),
+       "The start resources lost the version 3 DMA channel, request line or width (0x%lx)\n", Value);
 }
 
 /* The function driver reports new requirements after its first start; the wait only bounds a lost restart */
