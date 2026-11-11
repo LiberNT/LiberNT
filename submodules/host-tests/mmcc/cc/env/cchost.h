@@ -69,6 +69,9 @@ typedef BOOLEAN *PBOOLEAN;
 #define UNREFERENCED_PARAMETER(p) ((void)(p))
 #define RtlZeroMemory(d, l) memset((d), 0, (l))
 #define RtlCopyMemory(d, s, l) memcpy((d), (s), (l))
+#ifndef min
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 typedef struct _LIST_ENTRY
 {

@@ -338,7 +338,7 @@ MiSessionSpaceLink(
     MiArchUnmapFrame(From);
 
     if (!Link)
-        MiArchInvalidateTlbAll(MiTlbAllProcessors);
+        MiArchTlbInvalidateAll(TRUE);
 }
 
 #if DBG || defined(MM_HOST_TEST)
