@@ -617,6 +617,26 @@ KeRosCaptureUserStackBackTrace(
 }
 
 static
+BOOLEAN
+KiIsStopTrapFrame(
+    _In_ ULONG_PTR Address)
+{
+    static KTRAP_FRAME Copy;
+    ULONG_PTR Pc;
+    UCHAR Probe;
+
+    if ((Address <= (ULONG_PTR)MmHighestUserAddress) ||
+        ((Address & (sizeof(ULONG_PTR) - 1)) != 0) ||
+        !KiReadValidMemory(&Copy, Address, sizeof(Copy)))
+    {
+        return FALSE;
+    }
+
+    Pc = KeGetTrapFramePc(&Copy);
+    return (Pc > (ULONG_PTR)MmHighestUserAddress) && KiReadValidMemory(&Probe, Pc, sizeof(Probe));
+}
+
+static
 VOID
 KiReportBugCheckBackTrace(
     _In_ PCONTEXT Context)
@@ -832,6 +852,15 @@ KeBugCheckWithTf(
     KiBugCheckData[2] = BugCheckParameter2;
     KiBugCheckData[3] = BugCheckParameter3;
     KiBugCheckData[4] = BugCheckParameter4;
+
+    /* The exception dispatcher passes the trap frame of the fault as the third parameter */
+    if ((TrapFrame == NULL) &&
+        ((BugCheckCode == KMODE_EXCEPTION_NOT_HANDLED) ||
+         (BugCheckCode == KERNEL_MODE_EXCEPTION_NOT_HANDLED)) &&
+        KiIsStopTrapFrame(BugCheckParameter3))
+    {
+        TrapFrame = (PKTRAP_FRAME)BugCheckParameter3;
+    }
 
     /* Hold every other processor where it is */
     KeFreezeExecution(TrapFrame, NULL);
