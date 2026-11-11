@@ -20,6 +20,7 @@ typedef struct _WER_REGISTERED_ENTRY
     UNICODE_STRING FileName;
 } WER_REGISTERED_ENTRY, *PWER_REGISTERED_ENTRY;
 
+/* TODO: no crash report or dump consumes the registered files and memory blocks (Windows adds them only when the server asks) */
 static SRWLOCK WerRegistrationLock = SRWLOCK_INIT;
 static LIST_ENTRY WerRegisteredFiles = {&WerRegisteredFiles, &WerRegisteredFiles};
 static LIST_ENTRY WerRegisteredMemoryBlocks = {&WerRegisteredMemoryBlocks, &WerRegisteredMemoryBlocks};

@@ -17,6 +17,7 @@ typedef struct _WER_RUNTIME_MODULE
     PVOID Context;
 } WER_RUNTIME_MODULE, *PWER_RUNTIME_MODULE;
 
+/* TODO: no WER host loads the registered modules and calls OutOfProcessExceptionEventCallback on a crash */
 static SRWLOCK WerRuntimeLock = SRWLOCK_INIT;
 static LIST_ENTRY WerRuntimeModules = {&WerRuntimeModules, &WerRuntimeModules};
 static ULONG WerRuntimeModuleCount;
