@@ -1005,18 +1005,6 @@ SetSystemFileCacheSize(IN SIZE_T MinimumFileCacheSize,
 }
 
 /*
- * @unimplemented
- */
-LONG
-WINAPI
-GetCurrentPackageId(UINT32 *BufferLength,
-                    BYTE *Buffer)
-{
-    STUB;
-    return APPMODEL_ERROR_NO_PACKAGE;
-}
-
-/*
  * @implemented
  */
 BOOL

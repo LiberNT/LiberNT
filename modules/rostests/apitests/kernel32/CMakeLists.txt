@@ -104,6 +104,7 @@ list(APPEND SOURCE
     NumaApis.c
     PerfProvider.c
     Pipes.c
+    PackageIdentity.c
     PackageNames.c
     PixeloramaCompat.c
     ProcessAffinityUpdateMode.c

@@ -100,6 +100,7 @@ extern void func_NlsStringApis(void);
 extern void func_NumaApis(void);
 extern void func_PerfProvider(void);
 extern void func_Pipes(void);
+extern void func_PackageIdentity(void);
 extern void func_PackageNames(void);
 extern void func_PixeloramaCompat(void);
 extern void func_ProcessAffinityUpdateMode(void);
@@ -254,6 +255,7 @@ const struct test winetest_testlist[] =
     { "NumaApis",                    func_NumaApis },
     { "PerfProvider",              func_PerfProvider },
     { "Pipes",                       func_Pipes },
+    { "PackageIdentity",           func_PackageIdentity },
     { "PackageNames",                func_PackageNames },
     { "PixeloramaCompat",            func_PixeloramaCompat },
     { "ProcessAffinityUpdateMode",   func_ProcessAffinityUpdateMode },

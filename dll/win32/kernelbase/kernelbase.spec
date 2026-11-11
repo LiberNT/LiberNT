@@ -391,7 +391,7 @@
 @ stdcall GetCurrentDirectoryW(long ptr) kernel32.GetCurrentDirectoryW
 @ stdcall GetCurrentPackageFamilyName(ptr ptr)
 @ stdcall -version=0x602+ GetCurrentPackageFullName(ptr ptr) kernel32.GetCurrentPackageFullName
-@ stdcall -version=0x602+ GetCurrentPackageId(ptr ptr) kernel32.GetCurrentPackageId
+@ stdcall GetCurrentPackageId(ptr ptr)
 @ stdcall GetCurrentPackageInfo(long ptr ptr ptr)
 @ stdcall GetCurrentPackagePath(ptr ptr)
 @ stdcall -norelay GetCurrentProcess() kernel32.GetCurrentProcess
