@@ -199,6 +199,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoNullDeviceKM.c
     ntos_io/IoVolume.c
     ntos_io/IoWmiAcpi.c
+    ntos_kd/KdBootLog.c
     ntos_kd/KdSystemDebugControl.c
     ntos_kd/KdUsbNetRules.c
     ksecdd/KsecBcrypt.c

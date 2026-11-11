@@ -193,6 +193,7 @@ KMT_TESTFUNC Test_IoReportRootDevice;
 KMT_TESTFUNC Test_IoTimerKM;
 #endif
 KMT_TESTFUNC Test_IoVolume;
+KMT_TESTFUNC Test_KdBootLog;
 KMT_TESTFUNC Test_KdSystemDebugControl;
 KMT_TESTFUNC Test_KdUsbNetRules;
 KMT_TESTFUNC Test_KsecBcrypt;
@@ -532,6 +533,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceNumaNode",                    Test_IoDeviceNumaNode },
     { "IoReportRootDevice",                 Test_IoReportRootDevice },
     { "IoVolume",                           Test_IoVolume },
+    { "KdBootLog",                          Test_KdBootLog },
     { "KdSystemDebugControl",               Test_KdSystemDebugControl },
     { "KdUsbNetRules",                      Test_KdUsbNetRules },
     { "KsecBcrypt",                         Test_KsecBcrypt },

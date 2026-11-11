@@ -733,6 +733,9 @@ IoInitSystem(
     RtlFreeAnsiString(&NtDeviceName);
     IopPublishSystemRoot(&SystemPathString);
 
+    KdInitializeBootLog(LoaderBlock);
+    KdInitializeFileService();
+
     IopInitializeSystemDrivers();
 
     if (!IoInitializeCrashDumpCore(LoaderBlock))
