@@ -485,6 +485,113 @@ TestCloseWithQueuedPackets(VOID)
     ok(CloseHandle(Port), "Closing a port with queued packets failed with %lu\n", GetLastError());
 }
 
+typedef struct _PORT_READ_CONTEXT
+{
+    HANDLE Pipe;
+    OVERLAPPED Overlapped;
+    CHAR Buffer[16];
+    BOOL Result;
+    DWORD Error;
+} PORT_READ_CONTEXT;
+
+static DWORD WINAPI
+PortReadThread(PVOID Parameter)
+{
+    PORT_READ_CONTEXT *Context = Parameter;
+
+    Context->Result = ReadFile(Context->Pipe, Context->Buffer, sizeof(Context->Buffer), NULL, &Context->Overlapped);
+    Context->Error = GetLastError();
+    return 0;
+}
+
+/* A port-bound read with no event belongs to the file: its thread's exit does not cancel it */
+static VOID
+TestPortReadOutlivesThread(BOOL Cancel)
+{
+    static const WCHAR PipeName[] = L"\\\\.\\pipe\\IoCompletionPortRead";
+    PORT_READ_CONTEXT Context;
+    LPOVERLAPPED Overlapped;
+    HANDLE Server, Client, Port, Thread;
+    ULONG_PTR Key;
+    DWORD Bytes, Result;
+    BOOL Success;
+
+    Server = CreateNamedPipeW(PipeName, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                              PIPE_TYPE_BYTE | PIPE_WAIT, 1, 64, 64, 0, NULL);
+    ok(Server != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed with %lu\n", GetLastError());
+    if (Server == INVALID_HANDLE_VALUE)
+        return;
+
+    Client = CreateFileW(PipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(Client != INVALID_HANDLE_VALUE, "CreateFileW failed with %lu\n", GetLastError());
+    Port = CreateIoCompletionPort(Server, NULL, 0x4321, 0);
+    ok(Port != NULL, "CreateIoCompletionPort failed with %lu\n", GetLastError());
+    if (Client == INVALID_HANDLE_VALUE || Port == NULL)
+    {
+        if (Client != INVALID_HANDLE_VALUE) CloseHandle(Client);
+        if (Port != NULL) CloseHandle(Port);
+        CloseHandle(Server);
+        return;
+    }
+
+    ZeroMemory(&Context, sizeof(Context));
+    Context.Pipe = Server;
+    Thread = CreateThread(NULL, 0, PortReadThread, &Context, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Thread != NULL)
+    {
+        Result = WaitForSingleObject(Thread, 5000);
+        ok(Result == WAIT_OBJECT_0, "The reading thread did not exit (%lu)\n", Result);
+        CloseHandle(Thread);
+    }
+    ok(!Context.Result && Context.Error == ERROR_IO_PENDING,
+       "ReadFile returned %d with %lu instead of a pending read\n", Context.Result, Context.Error);
+
+    Overlapped = NULL;
+    Success = GetQueuedCompletionStatus(Port, &Bytes, &Key, &Overlapped, 100);
+    ok(!Success && GetLastError() == WAIT_TIMEOUT,
+       "The exit of the issuing thread completed the read (%d, %lu)\n", Success, GetLastError());
+    ok(Overlapped == NULL, "Got overlapped %p after a timeout\n", Overlapped);
+
+    if (Cancel)
+    {
+        Success = CancelIoEx(Server, &Context.Overlapped);
+        ok(Success, "CancelIoEx did not find the read of the exited thread (%lu)\n", GetLastError());
+    }
+    else
+    {
+        Success = WriteFile(Client, "abc", 3, &Bytes, NULL);
+        ok(Success && Bytes == 3, "WriteFile failed with %lu\n", GetLastError());
+    }
+
+    Bytes = 0xdeadbeef;
+    Key = 0;
+    Overlapped = NULL;
+    SetLastError(0xdeadbeef);
+    Success = GetQueuedCompletionStatus(Port, &Bytes, &Key, &Overlapped, 5000);
+    ok(Key == 0x4321, "Got key %#Ix\n", Key);
+    ok(Overlapped == &Context.Overlapped, "Got overlapped %p instead of %p\n", Overlapped, &Context.Overlapped);
+    if (Cancel)
+    {
+        ok(!Success && GetLastError() == ERROR_OPERATION_ABORTED,
+           "GetQueuedCompletionStatus returned %d with %lu\n", Success, GetLastError());
+        ok(Bytes == 0, "Got %lu bytes\n", Bytes);
+        ok((NTSTATUS)Context.Overlapped.Internal == STATUS_CANCELLED, "Internal is %#Ix\n", Context.Overlapped.Internal);
+    }
+    else
+    {
+        ok(Success, "GetQueuedCompletionStatus failed with %lu\n", GetLastError());
+        ok(Bytes == 3, "Got %lu bytes\n", Bytes);
+        ok(Context.Overlapped.Internal == STATUS_SUCCESS, "Internal is %#Ix\n", Context.Overlapped.Internal);
+        ok(Context.Overlapped.InternalHigh == 3, "InternalHigh is %Iu\n", Context.Overlapped.InternalHigh);
+        ok(!memcmp(Context.Buffer, "abc", 3), "The read returned the wrong data\n");
+    }
+
+    CloseHandle(Client);
+    CloseHandle(Server);
+    CloseHandle(Port);
+}
+
 START_TEST(IoCompletion)
 {
     DEQUEUE_WAIT_CONTEXT DequeueContext;
@@ -727,4 +834,6 @@ START_TEST(IoCompletion)
     TestWorkerBlockActivatesQueue(BlockDelay);
     TestWorkerBlockActivatesQueue(BlockAddress);
     TestWorkerBlockActivatesQueue(BlockInterruptedAlertable);
+    TestPortReadOutlivesThread(FALSE);
+    TestPortReadOutlivesThread(TRUE);
 }

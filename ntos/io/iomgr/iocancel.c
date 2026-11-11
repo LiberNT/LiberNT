@@ -23,41 +23,63 @@ IoInitCancelHandling(VOID)
     KeInitializeSpinLock(&IopCancelSpinLock);
 }
 
-static
+/* A cancel routine claimed under the file's list lock cannot see its request complete; it runs once the lock is dropped */
 BOOLEAN
-IopCancelIrpsOnList(
-    _In_ PLIST_ENTRY ListHead,
-    _In_ PKSPIN_LOCK ListLock,
+IopCancelFileIrps(
+    _In_ PFILE_OBJECT FileObject,
     _In_opt_ PIO_STATUS_BLOCK Match,
-    _Out_opt_ PBOOLEAN Found)
+    _In_opt_ PETHREAD Thread,
+    _In_opt_ PEPROCESS Process)
 {
+    PDRIVER_CANCEL CancelRoutine;
+    BOOLEAN Found = FALSE;
     PLIST_ENTRY Entry;
-    BOOLEAN Any = FALSE;
+    KIRQL CancelIrql;
     KIRQL OldIrql;
-    PIRP Irp;
+    PIRP Irp = NULL;
 
-    /* FIXME: cancel routines run at DISPATCH_LEVEL under the list lock, above where a file system may take its locks */
-    KeAcquireSpinLock(ListLock, &OldIrql);
-
-    Entry = ListHead->Flink;
-    while (Entry != ListHead)
+    for (;;)
     {
-        Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
-        Entry = Entry->Flink;
+        KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
 
-        if (Match != NULL && Irp->UserIosb != Match) continue;
+        for (Entry = FileObject->IrpList.Flink;
+             Entry != &FileObject->IrpList;
+             Entry = Entry->Flink)
+        {
+            Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
 
-        Any = TRUE;
-        IoCancelIrp(Irp);
+            if (Match != NULL && Irp->UserIosb != Match) continue;
+            if (Thread != NULL && Irp->Tail.Overlay.Thread != Thread) continue;
+            if (Process != NULL &&
+                PsGetThreadProcess(Irp->Tail.Overlay.Thread) != Process)
+            {
+                continue;
+            }
 
-        if (Match != NULL) break;
+            Found = TRUE;
+            if (!Irp->Cancel) break;
+        }
+
+        if (Entry == &FileObject->IrpList)
+        {
+            KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+            return Found;
+        }
+
+        IoAcquireCancelSpinLock(&CancelIrql);
+        Irp->Cancel = TRUE;
+        CancelRoutine = IoSetCancelRoutine(Irp, NULL);
+        KeReleaseSpinLockFromDpcLevel(&FileObject->IrpListLock);
+
+        if (CancelRoutine == NULL || Irp->CurrentLocation > Irp->StackCount + 1)
+        {
+            IoReleaseCancelSpinLock(OldIrql);
+            continue;
+        }
+
+        Irp->CancelIrql = OldIrql;
+        CancelRoutine(IoGetCurrentIrpStackLocation(Irp)->DeviceObject, Irp);
     }
-
-    KeReleaseSpinLock(ListLock, OldIrql);
-
-    if (Found != NULL) *Found = Any;
-
-    return Any;
 }
 
 /*
@@ -66,11 +88,13 @@ IopCancelIrpsOnList(
  * routines run at APC_LEVEL, below which a file system may take its locks.
  */
 static
-VOID
+BOOLEAN
 IopCancelThreadIrpsForFile(
-    _In_ PFILE_OBJECT FileObject)
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PIO_STATUS_BLOCK Match)
 {
     PETHREAD Thread = PsGetCurrentThread();
+    BOOLEAN Found = FALSE;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
     PIRP Irp;
@@ -87,11 +111,15 @@ IopCancelThreadIrpsForFile(
 
         ASSERT(Irp->Tail.Overlay.Thread == Thread);
         if (Irp->Tail.Overlay.OriginalFileObject != FileObject) continue;
+        if (Match != NULL && Irp->UserIosb != Match) continue;
 
+        Found = TRUE;
         IoCancelIrp(Irp);
     }
 
     KeLowerIrql(OldIrql);
+
+    return Found;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -296,12 +324,8 @@ NtCancelIoFile(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    IopCancelThreadIrpsForFile(FileObject);
-
-    IopCancelIrpsOnList(&FileObject->IrpList,
-                        &FileObject->IrpListLock,
-                        NULL,
-                        NULL);
+    IopCancelThreadIrpsForFile(FileObject, NULL);
+    IopCancelFileIrps(FileObject, NULL, PsGetCurrentThread(), NULL);
 
     KernelIosb.Status = STATUS_SUCCESS;
     KernelIosb.Information = 0;
@@ -366,13 +390,14 @@ NtCancelIoFileEx(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    /* FIXME: requests on other threads' lists are not looked at, so a request the process issued is reported not found */
-    IopCancelIrpsOnList(&FileObject->IrpList,
-                        &FileObject->IrpListLock,
-                        IoRequestToCancel,
-                        &Found);
+    /* FIXME: the lists of the process's other threads are not looked at, so a request one of them issued is not found */
+    Found = IopCancelThreadIrpsForFile(FileObject, IoRequestToCancel);
+    if (IopCancelFileIrps(FileObject, IoRequestToCancel, NULL, PsGetCurrentProcess()))
+    {
+        Found = TRUE;
+    }
 
-    if (!Found && IoRequestToCancel != NULL)
+    if (!Found)
     {
         ObDereferenceObject(FileObject);
         return STATUS_NOT_FOUND;

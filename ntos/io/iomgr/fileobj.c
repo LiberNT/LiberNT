@@ -183,8 +183,12 @@ IopCloseFile(
     PFILE_OBJECT FileObject = Object;
     PDEVICE_OBJECT DeviceObject;
 
-    UNREFERENCED_PARAMETER(Process);
-    UNREFERENCED_PARAMETER(ProcessHandleCount);
+    /* A process's requests on a port-bound file go with its last handle; the file's last handle sends a cleanup instead */
+    if (Process != NULL && ProcessHandleCount == 1 && SystemHandleCount > 1 &&
+        FileObject->CompletionContext != NULL)
+    {
+        IopCancelFileIrps(FileObject, NULL, NULL, Process);
+    }
 
     if (SystemHandleCount != 1) return;
     if (FileObject->DeviceObject == NULL) return;

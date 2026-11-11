@@ -287,7 +287,14 @@ IopIssueRequest(
         Request->Irp->UserEvent = &LocalEvent;
     }
 
-    IopQueueIrpToThread(Request->Irp);
+    if (IopIsThreadAgnosticIrp(Request->Irp, Request->FileObject))
+    {
+        IopQueueThreadAgnosticIrp(Request->Irp, Request->FileObject);
+    }
+    else
+    {
+        IopQueueIrpToThread(Request->Irp);
+    }
 
     IopUpdateOperationCount(TransferType);
 

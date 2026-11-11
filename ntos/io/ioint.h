@@ -201,6 +201,8 @@ NTSTATUS IopSynchronousCompletion(_In_ PDEVICE_OBJECT DeviceObject,
 /* iocomplete.c */
 
 VOID IopDeadIrp(VOID);
+BOOLEAN IopIsThreadAgnosticIrp(_In_ PIRP Irp, _In_opt_ PFILE_OBJECT FileObject);
+VOID IopFinishPortIrp(_In_ PIRP Irp, _In_ BOOLEAN Report, _Out_opt_ PIO_STATUS_BLOCK IoStatus);
 VOID IopCleanupAfterException(_In_ PFILE_OBJECT FileObject,
                               _In_ PIRP Irp,
                               _In_opt_ PKEVENT Event,
@@ -220,6 +222,13 @@ NTSTATUS IopPerformSynchronousRequest(_In_ PDEVICE_OBJECT DeviceObject,
                                       _In_ BOOLEAN SynchIo,
                                       _In_ IOP_TRANSFER_TYPE TransferType);
 VOID IopFreeMiniPacket(_In_ PIOP_MINI_COMPLETION_PACKET Packet);
+
+/* iocancel.c */
+
+BOOLEAN IopCancelFileIrps(_In_ PFILE_OBJECT FileObject,
+                          _In_opt_ PIO_STATUS_BLOCK Match,
+                          _In_opt_ PETHREAD Thread,
+                          _In_opt_ PEPROCESS Process);
 
 /* iocreate.c */
 

@@ -101,7 +101,7 @@ IopDeleteIoCompletion(
             if (Packet->PacketType == IopCompletionPacketIrp)
             {
                 Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
-                IoFreeIrp(Irp);
+                IopFinishPortIrp(Irp, FALSE, NULL);
             }
             else if (Packet->PacketType == IopCompletionPacketWait)
             {
@@ -468,9 +468,8 @@ IopUnpackCompletionEntry(
 
         *Key = Irp->Tail.CompletionKey;
         *Context = Irp->Overlay.AsynchronousParameters.UserApcContext;
-        *IoStatusBlock = Irp->IoStatus;
 
-        IoFreeIrp(Irp);
+        IopFinishPortIrp(Irp, TRUE, IoStatusBlock);
         return;
     }
 

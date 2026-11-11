@@ -43,6 +43,43 @@ IopFreeMdlChain(
     }
 }
 
+/* The buffers a request carried are given back; the output reaches the caller only from its own process */
+static
+VOID
+IopReturnRequestBuffers(
+    _Inout_ PIRP Irp,
+    _In_ BOOLEAN CopyOut)
+{
+    /* A warning such as STATUS_BUFFER_OVERFLOW still returns the bytes it reports; a volume to verify returned none */
+    if (CopyOut &&
+        !NT_ERROR(Irp->IoStatus.Status) &&
+        Irp->IoStatus.Status != STATUS_VERIFY_REQUIRED &&
+        (Irp->Flags & (IRP_BUFFERED_IO | IRP_INPUT_OPERATION)) ==
+            (IRP_BUFFERED_IO | IRP_INPUT_OPERATION))
+    {
+        _SEH2_TRY
+        {
+            RtlCopyMemory(Irp->UserBuffer,
+                          Irp->AssociatedIrp.SystemBuffer,
+                          Irp->IoStatus.Information);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Irp->IoStatus.Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    if (Irp->Flags & IRP_DEALLOCATE_BUFFER)
+    {
+        ExFreePool(Irp->AssociatedIrp.SystemBuffer);
+        Irp->AssociatedIrp.SystemBuffer = NULL;
+        Irp->Flags &= ~IRP_DEALLOCATE_BUFFER;
+    }
+
+    IopFreeMdlChain(Irp);
+}
+
 VOID
 IopDeadIrp(VOID)
 {
@@ -71,6 +108,21 @@ IopDisassociateThreadIrp(VOID)
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 }
 
+/* A port-bound request with no event and no APC belongs to its file, not to the thread that issued it */
+BOOLEAN
+IopIsThreadAgnosticIrp(
+    _In_ PIRP Irp,
+    _In_opt_ PFILE_OBJECT FileObject)
+{
+    return FileObject != NULL &&
+           FileObject->CompletionContext != NULL &&
+           !(FileObject->Flags & FO_SYNCHRONOUS_IO) &&
+           !(Irp->Flags & IRP_SYNCHRONOUS_API) &&
+           Irp->UserEvent == NULL &&
+           Irp->Overlay.AsynchronousParameters.UserApcRoutine == NULL &&
+           Irp->Overlay.AsynchronousParameters.UserApcContext != NULL;
+}
+
 VOID
 NTAPI
 IopQueueThreadAgnosticIrp(
@@ -79,9 +131,44 @@ IopQueueThreadAgnosticIrp(
 {
     KIRQL OldIrql;
 
+    /* The issuing thread may exit first; the packet keeps it so the requestor can still be named */
+    ObReferenceObject(Irp->Tail.Overlay.Thread);
+
     KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
     InsertTailList(&FileObject->IrpList, &Irp->ThreadListEntry);
     KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+}
+
+/* Takes a finished request off its file; a request queued to its thread is not on the file's list */
+static
+BOOLEAN
+IopTakeThreadAgnosticIrp(
+    _In_ PIRP Irp,
+    _In_opt_ PFILE_OBJECT FileObject)
+{
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+    KIRQL OldIrql;
+
+    if (!IopIsThreadAgnosticIrp(Irp, FileObject)) return FALSE;
+
+    KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+
+    for (Entry = FileObject->IrpList.Flink;
+         Entry != &FileObject->IrpList;
+         Entry = Entry->Flink)
+    {
+        if (Entry != &Irp->ThreadListEntry) continue;
+
+        RemoveEntryList(Entry);
+        InitializeListHead(Entry);
+        Found = TRUE;
+        break;
+    }
+
+    KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+
+    return Found;
 }
 
 VOID
@@ -210,7 +297,6 @@ IopCompleteRequest(
 {
     PFILE_OBJECT FileObject;
     PIRP Irp;
-    PMDL Mdl;
     NTSTATUS Status;
     BOOLEAN Is32Bit;
     PVOID Port = NULL;
@@ -237,40 +323,7 @@ IopCompleteRequest(
      */
     Deliver = (BOOLEAN)(!NT_ERROR(Irp->IoStatus.Status) || Irp->PendingReturned);
 
-    /* A warning such as STATUS_BUFFER_OVERFLOW still returns the bytes it reports; a volume to verify returned none */
-    if (!NT_ERROR(Irp->IoStatus.Status) &&
-        Irp->IoStatus.Status != STATUS_VERIFY_REQUIRED &&
-        (Irp->Flags & (IRP_BUFFERED_IO | IRP_INPUT_OPERATION)) ==
-            (IRP_BUFFERED_IO | IRP_INPUT_OPERATION))
-    {
-        _SEH2_TRY
-        {
-            RtlCopyMemory(Irp->UserBuffer,
-                          Irp->AssociatedIrp.SystemBuffer,
-                          Irp->IoStatus.Information);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Irp->IoStatus.Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-    }
-
-    if (Irp->Flags & IRP_DEALLOCATE_BUFFER)
-    {
-        ExFreePool(Irp->AssociatedIrp.SystemBuffer);
-        Irp->AssociatedIrp.SystemBuffer = NULL;
-        Irp->Flags &= ~IRP_DEALLOCATE_BUFFER;
-    }
-
-    while (Irp->MdlAddress != NULL)
-    {
-        Mdl = Irp->MdlAddress;
-        Irp->MdlAddress = Mdl->Next;
-
-        if (Mdl->MdlFlags & MDL_PAGES_LOCKED) MmUnlockPages(Mdl);
-        IoFreeMdl(Mdl);
-    }
+    IopReturnRequestBuffers(Irp, TRUE);
 
     Status = Irp->IoStatus.Status;
 
@@ -388,6 +441,77 @@ IopCompleteDeferredIrp(
                        &SystemArgument1,
                        &SystemArgument2);
     KeLowerIrql(OldIrql);
+}
+
+/* A request that reached its port by itself is finished by the thread taking it off; a port run down reports nothing */
+VOID
+IopFinishPortIrp(
+    _In_ PIRP Irp,
+    _In_ BOOLEAN Report,
+    _Out_opt_ PIO_STATUS_BLOCK IoStatus)
+{
+    PFILE_OBJECT FileObject = Irp->Tail.Overlay.OriginalFileObject;
+    PETHREAD Thread = Irp->Tail.Overlay.Thread;
+    PEPROCESS Process = PsGetThreadProcess(Thread);
+    BOOLEAN Attached = FALSE;
+    KAPC_STATE ApcState;
+
+    PAGED_CODE();
+
+    /* The issuing process's memory is reached only while that process cannot run down its address space */
+    if (Report && Process != PsGetCurrentProcess())
+    {
+        Report = ExAcquireRundownProtection(&Process->RundownProtect);
+        if (Report)
+        {
+            KeStackAttachProcess(&Process->Pcb, &ApcState);
+            Attached = TRUE;
+        }
+    }
+
+    IopReturnRequestBuffers(Irp, Report);
+
+    FileObject->FinalStatus = Irp->IoStatus.Status;
+
+    if (Report && Irp->UserIosb != NULL)
+    {
+        if (Irp->RequestorMode == KernelMode)
+        {
+            IopWriteIoStatusBlock(Irp->UserIosb, &Irp->IoStatus, FALSE);
+        }
+        else
+        {
+            _SEH2_TRY
+            {
+                IopWriteIoStatusBlock(Irp->UserIosb,
+                                      &Irp->IoStatus,
+                                      IopIs32BitFileIo(FileObject,
+                                                       Irp->RequestorMode));
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Irp->IoStatus.Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+    }
+
+    if (Attached)
+    {
+        KeUnstackDetachProcess(&ApcState);
+        ExReleaseRundownProtection(&Process->RundownProtect);
+    }
+
+    if (!(FileObject->Flags & FO_SKIP_SET_EVENT))
+    {
+        KeSetEvent(&FileObject->Event, 0, FALSE);
+    }
+
+    if (IoStatus != NULL) *IoStatus = Irp->IoStatus;
+
+    ObDereferenceObject(FileObject);
+    ObDereferenceObject(Thread);
+    IopFreeCompletedIrp(Irp);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -526,6 +650,21 @@ IofCompleteRequest(
     }
 
     if (Irp->Tail.Overlay.IrpExtension != NULL) IopFreeIrpExtension(Irp);
+
+    if (IopTakeThreadAgnosticIrp(Irp, FileObject))
+    {
+        /* A request that pended is finished by whichever thread takes it off the port */
+        if (Irp->PendingReturned)
+        {
+            Irp->Tail.CompletionKey = FileObject->CompletionContext->Key;
+            Irp->Tail.Overlay.PacketType = IopCompletionPacketIrp;
+            KeInsertQueue((PKQUEUE)FileObject->CompletionContext->Port,
+                          &Irp->Tail.Overlay.ListEntry);
+            return;
+        }
+
+        ObDereferenceObject(Thread);
+    }
 
     if (Irp->Flags & IRP_DEFER_IO_COMPLETION && !Irp->PendingReturned) return;
 
