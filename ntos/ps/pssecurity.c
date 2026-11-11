@@ -203,6 +203,14 @@ PspSetPrimaryToken(
 
     if (NewToken == NULL) return STATUS_INVALID_PARAMETER;
 
+    /* TODO: an impersonation token at SecurityImpersonation or above is refused as STATUS_BAD_TOKEN_TYPE; the Windows 11 answer is not measured */
+    if ((SeTokenType(NewToken) == TokenImpersonation) &&
+        (SeTokenImpersonationLevel(NewToken) < SecurityImpersonation))
+    {
+        if (Referenced) ObDereferenceObject(NewToken);
+        return STATUS_BAD_IMPERSONATION_LEVEL;
+    }
+
     /*
      * A token may be given to a process only when it stands for the same
      * logon the process already belongs to, which is what being a child or a
