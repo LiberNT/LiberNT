@@ -1,4 +1,5 @@
 if(ARCH STREQUAL "arm64")
+    add_subdirectory(appleaopsensor)
     add_subdirectory(applemtp)
 endif()
 add_subdirectory(hidclass)
