@@ -199,7 +199,15 @@ PspCaptureAttributes(
                 break;
 
             case PsAttributeComponentFilter:
-                Attributes->ComponentFilter = (ULONG)Safe[Index].Value;
+                if (Safe[Index].Size != sizeof(ULONG))
+                    return STATUS_INVALID_PARAMETER;
+
+                Status = PspCaptureAttributeValue(Safe[Index].ValuePtr,
+                                                  sizeof(ULONG),
+                                                  PreviousMode,
+                                                  &Attributes->ComponentFilter);
+                if (!NT_SUCCESS(Status)) return Status;
+
                 if ((Attributes->ComponentFilter &
                      ~PSP_COMPONENT_FILTER_VALID_FLAGS) != 0)
                 {
@@ -447,6 +455,9 @@ PspApplyCreateAttributes(
 
     if (Attributes->Win32kFilter != 0)
         Process->Win32KFilterSet = Attributes->Win32kFilter;
+
+    if (Attributes->ComponentFilter != 0)
+        InterlockedOr((volatile LONG *)&Process->DisabledComponentFlags, (LONG)Attributes->ComponentFilter);
 
     if (Attributes->MitigationOptions[0] != 0 || Attributes->MitigationOptions[1] != 0)
         PspApplyCreationMitigations(Process, Attributes->MitigationOptions);
