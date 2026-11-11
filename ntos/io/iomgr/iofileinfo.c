@@ -1235,7 +1235,12 @@ NtSetInformationFile(
             return Status;
         }
 
-        StackPtr->Parameters.SetFile.DeleteHandle = TargetHandle;
+        if (FileInformationClass == FileRenameInformation ||
+            FileInformationClass == FileLinkInformation)
+        {
+            StackPtr->Parameters.SetFile.ReplaceIfExists =
+                ((PFILE_RENAME_INFORMATION)Buffer)->ReplaceIfExists;
+        }
     }
 
     KeClearEvent(&FileObject->Event);
