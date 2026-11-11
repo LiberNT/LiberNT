@@ -12,6 +12,8 @@
 #define TEST_ADDED_MAGIC 0x4B464144
 #define TEST_DMA_CHANNEL 3
 #define TEST_DMA_REQUEST_LINE 21
+#define TEST_CONNECTION_ID_LOW 0x5A7E
+#define TEST_CONNECTION_ID_HIGH 0x2
 
 typedef enum _TEST_KIND
 {
@@ -92,7 +94,8 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN Wit
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Dma;
-    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + (Count + WithDma - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    PIO_RESOURCE_DESCRIPTOR Connection;
+    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + (Count + (WithDma ? 2 : 0) - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
     ULONG Index;
 
     List = ExAllocatePoolZero(PagedPool, Size, TEST_TAG);
@@ -120,8 +123,33 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN Wit
         Dma->u.DmaV3.RequestLine = TEST_DMA_REQUEST_LINE;
         Dma->u.DmaV3.TransferWidth = Width32Bits;
         List->List[0].Count++;
+
+        Connection = &List->List[0].Descriptors[List->List[0].Count];
+        Connection->Type = CmResourceTypeConnection;
+        Connection->ShareDisposition = CmResourceShareDeviceExclusive;
+        Connection->u.Connection.Class = CM_RESOURCE_CONNECTION_CLASS_SERIAL;
+        Connection->u.Connection.Type = CM_RESOURCE_CONNECTION_TYPE_SERIAL_I2C;
+        Connection->u.Connection.IdLowPart = TEST_CONNECTION_ID_LOW;
+        Connection->u.Connection.IdHighPart = TEST_CONNECTION_ID_HIGH;
+        List->List[0].Count++;
     }
     return List;
+}
+
+static ULONG StartedConnection(PCM_RESOURCE_LIST Resources)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONG Index;
+
+    if (Resources == NULL || Resources->Count == 0)
+        return 0;
+    for (Index = 0; Index < Resources->List[0].PartialResourceList.Count; Index++)
+    {
+        Descriptor = &Resources->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (Descriptor->Type == CmResourceTypeConnection && Descriptor->u.Connection.IdHighPart == TEST_CONNECTION_ID_HIGH)
+            return Descriptor->u.Connection.Class | (Descriptor->u.Connection.Type << 8) | (Descriptor->u.Connection.IdLowPart << 16);
+    }
+    return 0;
 }
 
 static ULONG StartedDmaV3(PCM_RESOURCE_LIST Resources)
@@ -205,6 +233,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
                    StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartCount", (ULONG)Starts);
             Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
+            Record(L"StartConnection", StartedConnection(Stack->Parameters.StartDevice.AllocatedResources));
             if (Starts == 1)
             {
                 Extension->ReportChange = TRUE;

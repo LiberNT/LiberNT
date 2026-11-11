@@ -17,6 +17,7 @@
 #define TEST_DMA_CHANNEL 3
 #define TEST_DMA_REQUEST_LINE 21
 #define TEST_DMA_WIDTH 2
+#define TEST_CONNECTION_ID_LOW 0x5A7E
 
 static const GUID TestClass = {0x4d36e97d, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}};
 static const WCHAR BusHardwareIds[] = L"ROOT\\KMTESTFILTERREQ\0";
@@ -25,7 +26,7 @@ static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
-                                 L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus",
+                                 L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing" };
 
@@ -124,6 +125,9 @@ static VOID CheckRecorded(VOID)
     ok(ReadValue(L"BusStateQueried", &Value) && Value != 0, "The bus was not asked for its state after its start\n");
     ok(ReadValue(L"StartDmaV3", &Value) && Value == (TEST_DMA_CHANNEL | (TEST_DMA_REQUEST_LINE << 8) | (TEST_DMA_WIDTH << 16)),
        "The start resources lost the version 3 DMA channel, request line or width (0x%lx)\n", Value);
+    ok(ReadValue(L"StartConnection", &Value) &&
+       Value == (CM_RESOURCE_CONNECTION_CLASS_SERIAL | (CM_RESOURCE_CONNECTION_TYPE_SERIAL_I2C << 8) | (TEST_CONNECTION_ID_LOW << 16)),
+       "The start resources lost the connection class, type or ID (0x%lx)\n", Value);
 }
 
 /* The function driver reports new requirements after its first start; the wait only bounds a lost restart */

@@ -267,6 +267,13 @@ IopDescribeFromRequirement(
                           sizeof(Descriptor->u.DevicePrivate.Data));
             break;
 
+        case CmResourceTypeConnection:
+            Descriptor->u.Connection.Class = Requirement->u.Connection.Class;
+            Descriptor->u.Connection.Type = Requirement->u.Connection.Type;
+            Descriptor->u.Connection.IdLowPart = Requirement->u.Connection.IdLowPart;
+            Descriptor->u.Connection.IdHighPart = Requirement->u.Connection.IdHighPart;
+            break;
+
         default:
             break;
     }
