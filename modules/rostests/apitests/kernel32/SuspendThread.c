@@ -7,6 +7,9 @@
 #include <windows.h>
 #include <wine/test.h>
 
+#define WAITER_TIMEOUT_MS 250
+#define SUSPEND_SETTLE_MS 32
+
 static volatile LONG stop_worker, heartbeat;
 static HANDLE ready;
 
@@ -26,7 +29,7 @@ static HANDLE waiter_started, never_set;
 static DWORD WINAPI waiter(void *arg)
 {
     SetEvent(waiter_started);
-    return WaitForSingleObject(never_set, 1000);
+    return WaitForSingleObject(never_set, WAITER_TIMEOUT_MS);
 }
 
 /* A suspension delivered into a wait must not end that wait */
@@ -44,11 +47,11 @@ static void test_suspend_waiting_thread(void)
     if (!thread) return;
     result = WaitForSingleObject(waiter_started, 5000);
     ok(result == WAIT_OBJECT_0, "Waiter startup returned %#lx\n", result);
-    Sleep(50);
+    Sleep(SUSPEND_SETTLE_MS);
 
     previous = SuspendThread(thread);
     ok(previous == 0, "Suspend of the waiter returned %lu\n", previous);
-    Sleep(50);
+    Sleep(SUSPEND_SETTLE_MS);
     previous = ResumeThread(thread);
     ok(previous == 1, "Resume of the waiter returned %lu\n", previous);
 
