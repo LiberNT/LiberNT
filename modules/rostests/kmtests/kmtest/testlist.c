@@ -15,6 +15,7 @@ KMT_TESTFUNC Test_CcSetFileSizes;
 KMT_TESTFUNC Test_Example;
 KMT_TESTFUNC Test_FileAttributes;
 KMT_TESTFUNC Test_FindFile;
+KMT_TESTFUNC Test_NtFilterToken;
 KMT_TESTFUNC Test_FltMgrIo;
 KMT_TESTFUNC Test_FltMgrScan;
 KMT_TESTFUNC Test_FltMgrTx;
@@ -75,6 +76,7 @@ const KMT_TEST TestList[] =
     { "-Example",                     Test_Example },
     { "FileAttributes",               Test_FileAttributes },
     { "FindFile",                     Test_FindFile },
+    { "NtFilterToken",                Test_NtFilterToken },
     { "FltMgrIo",                     Test_FltMgrIo },
     { "FltMgrScan",                   Test_FltMgrScan },
     { "FltMgrTx",                     Test_FltMgrTx },

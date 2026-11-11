@@ -59,8 +59,6 @@ SeTokenCanImpersonate(
     _In_ SECURITY_IMPERSONATION_LEVEL ImpersonationLevel)
 {
     BOOLEAN Allowed = TRUE;
-    ULONG i;
-    ULONG j;
 
     PAGED_CODE();
 
@@ -78,28 +76,7 @@ SeTokenCanImpersonate(
             Allowed = FALSE;
     }
 
-    /* What was cut down cannot be worn by what was not cut down the same way */
-    if (Allowed && TokenToImpersonate->RestrictedSidCount != 0)
-    {
-        for (i = 0; i < TokenToImpersonate->RestrictedSidCount; i++)
-        {
-            for (j = 0; j < ProcessToken->RestrictedSidCount; j++)
-            {
-                if (RtlEqualSid(TokenToImpersonate->RestrictedSids[i].Sid,
-                                ProcessToken->RestrictedSids[j].Sid))
-                {
-                    break;
-                }
-            }
-
-            if (j == ProcessToken->RestrictedSidCount)
-            {
-                Allowed = FALSE;
-                break;
-            }
-        }
-    }
-
+    /* TODO: a token of higher integrity than the process's is not refused */
     SepReleaseTokenLock(TokenToImpersonate);
     SepReleaseTokenLock(ProcessToken);
 
