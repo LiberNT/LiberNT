@@ -46,14 +46,16 @@ typedef long LONG;
 typedef unsigned long ULONG;
 typedef void *PKTRAP_FRAME, *PKEXCEPTION_FRAME;
 typedef struct { ULONG Number; KIRQL Irql; BOOLEAN Interrupts; } KPRCB, *PKPRCB;
+enum { RUNNING, FREEZING, FROZEN, THAWING };
 static const char *Scenario;
 static KPRCB Cpus[2] = {{0, PASSIVE_LEVEL, TRUE}, {1, DISPATCH_LEVEL, TRUE}};
 static PKPRCB Current, ArchOwner;
-static ULONG KiFreezeFlag, KiFreezeDepth, Freezes, Thaws;
+static ULONG KiFreezeFlag, KiFreezeDepth, Freezes, Thaws, Debugs;
 static PKPRCB KiFreezeHolder __attribute__((unused));
 static KIRQL KiOldIrql;
 static volatile LONG KiFreezeFailure;
-static BOOLEAN TimeFrozen, ArriveDuringThaw, ArrivedDuringThaw;
+static int Others;
+static BOOLEAN TimeFrozen, NoArchOwner, DebugWhileFreezing, DebugWhileThawing, ArriveDuringThaw, ArrivedDuringThaw;
 static jmp_buf Waiting;
 static PKPRCB KeGetCurrentPrcb(void) { return Current; }
 static BOOLEAN KeDisableInterrupts(void) { BOOLEAN Old = Current->Interrupts; Current->Interrupts = FALSE; return Old; }
@@ -67,16 +69,56 @@ static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
 __attribute__((noreturn)) static void HalHaltSystem(void) { CHECK(!"halted"); exit(1); }
 static BOOLEAN KiHasFreezeFailure(void) { @HAS@ }
 static BOOLEAN KeFreezeExecution(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame);
-/* The architecture layer: one owner; anyone else waits there until the owner lets the machine go */
+static void KeThawExecution(BOOLEAN Enable);
+/* The architecture layer answers for the owner it keeps; some keep none */
+__attribute__((unused)) static BOOLEAN KxIsFreezeOwner(PKPRCB Prcb) { return !NoArchOwner && ArchOwner == Prcb; }
+/* A breakpoint or a failed assertion on the owner enters the debugger again, which freezes and thaws in turn */
+static void DebugException(void) {
+    BOOLEAN Inner = KeFreezeExecution(NULL, NULL);
+    Debugs++;
+    CHECK(Inner == FALSE && Current->Irql == HIGH_LEVEL && ArchOwner == Current);
+    KeThawExecution(Inner);
+    CHECK(Current->Irql == HIGH_LEVEL && !Current->Interrupts);
+}
+/*
+ * The architecture layer: the owner is taken first and let go last, and the owner coming back comes
+ * straight back out; anyone else waits there until the owner lets the machine go.
+ */
 static void KxFreezeExecution(void) {
     CHECK(Current->Irql == HIGH_LEVEL && !Current->Interrupts);
-    if (ArchOwner != NULL && ArchOwner != Current)
+    if (NoArchOwner) {
+        Freezes++;
+        return;
+    }
+    if (ArchOwner == Current)
+        return;
+    if (ArchOwner != NULL)
         longjmp(Waiting, 1);
     ArchOwner = Current;
     Freezes++;
+    CHECK(Others == RUNNING);
+    Others = FREEZING;
+    if (DebugWhileFreezing) {
+        DebugWhileFreezing = FALSE;
+        DebugException();
+    }
+    CHECK(ArchOwner == Current && Others == FREEZING);
+    Others = FROZEN;
 }
 static void KxThawExecution(void) {
-    CHECK(ArchOwner == Current);
+    CHECK(Current->Irql == HIGH_LEVEL && !Current->Interrupts);
+    if (NoArchOwner) {
+        Thaws++;
+        return;
+    }
+    CHECK(ArchOwner == Current && Others == FROZEN);
+    Others = THAWING;
+    if (DebugWhileThawing) {
+        DebugWhileThawing = FALSE;
+        DebugException();
+    }
+    CHECK(ArchOwner == Current && Others == THAWING);
+    Others = RUNNING;
     ArchOwner = NULL;
     Thaws++;
     /* Another processor that was waiting takes the machine as soon as it is let go */
@@ -134,6 +176,38 @@ int main(void) {
     KeThawExecution(TRUE);
     CHECK(Thaws == 2 && ArchOwner == NULL && !TimeFrozen && KiFreezeFlag == 0);
     CHECK(Cpus[1].Irql == DISPATCH_LEVEL && Cpus[1].Interrupts);
+
+    Scenario = "a debug exception on the owner while it stops the others";
+    Freezes = Thaws = 0;
+    Current = &Cpus[0];
+    DebugWhileFreezing = TRUE;
+    Enable = KeFreezeExecution(NULL, NULL);
+    CHECK(Debugs == 1 && Freezes == 1 && Thaws == 0 && ArchOwner == &Cpus[0] && Others == FROZEN);
+    CHECK(Enable == TRUE && TimeFrozen && KiFreezeFlag != 0 && Current->Irql == HIGH_LEVEL && !Current->Interrupts);
+    KeThawExecution(Enable);
+    CHECK(Thaws == 1 && ArchOwner == NULL && Others == RUNNING && !TimeFrozen && KiFreezeFlag == 0);
+    CHECK(Current->Irql == PASSIVE_LEVEL && Current->Interrupts);
+
+    Scenario = "a debug exception on the owner while it lets the others go";
+    Freezes = Thaws = Debugs = 0;
+    Current = &Cpus[0];
+    Enable = KeFreezeExecution(NULL, NULL);
+    DebugWhileThawing = TRUE;
+    KeThawExecution(Enable);
+    CHECK(Debugs == 1 && Freezes == 1 && Thaws == 1 && ArchOwner == NULL && Others == RUNNING);
+    CHECK(!TimeFrozen && KiFreezeFlag == 0 && Current->Irql == PASSIVE_LEVEL && Current->Interrupts);
+
+    Scenario = "nested where the architecture layer keeps no owner";
+    Freezes = Thaws = 0;
+    NoArchOwner = TRUE;
+    Current = &Cpus[0];
+    Enable = KeFreezeExecution(NULL, NULL);
+    Inner = KeFreezeExecution(NULL, NULL);
+    CHECK(Enable == TRUE && Inner == FALSE && Freezes == 1 && TimeFrozen && Current->Irql == HIGH_LEVEL);
+    KeThawExecution(Inner);
+    CHECK(Thaws == 0 && TimeFrozen && KiFreezeFlag != 0);
+    KeThawExecution(Enable);
+    CHECK(Thaws == 1 && !TimeFrozen && KiFreezeFlag == 0 && Current->Irql == PASSIVE_LEVEL && Current->Interrupts);
     return 0;
 }
 '''

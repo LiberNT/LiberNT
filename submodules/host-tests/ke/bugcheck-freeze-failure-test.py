@@ -83,11 +83,12 @@ static void KiSetFreezeFailure(void);
 static BOOLEAN KiHasFreezeFailure(void);
 static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb);
 static BOOLEAN KeFreezeExecution(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame) {
-    (void)TrapFrame; (void)ExceptionFrame; Freezes++; KiFreezeDepth = 1; KiFreezeHolder = Current;
+    (void)TrapFrame; (void)ExceptionFrame; Freezes++; KiFreezeHolder = Current;
     if (SimulateFailure) KiSetFreezeFailure();
     return TRUE;
 }
 static void KxThawExecution(void) { Thaws++; }
+__attribute__((unused)) static BOOLEAN KxIsFreezeOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
 static void KeRestoreInterrupts(BOOLEAN Enable) { (void)Enable; }
 static void KeLowerIrql(KIRQL Irql) { (void)Irql; }
 static void KiThawInterruptTime(void) {}

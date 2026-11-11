@@ -94,6 +94,14 @@ KxThawExecution(VOID)
     KeGetCurrentPrcb()->IpiFrozen = IPI_FROZEN_STATE_RUNNING;
 }
 
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(_In_ PKPRCB Prcb)
+{
+    UNREFERENCED_PARAMETER(Prcb);
+    return FALSE;
+}
+
 KCONTINUE_STATUS
 NTAPI
 KxSwitchKdProcessor(_In_ ULONG ProcessorIndex)

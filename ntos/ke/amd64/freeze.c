@@ -75,6 +75,14 @@ KiIsFreezeActive(VOID)
                                              NULL) != NULL;
 }
 
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb)
+{
+    return KiFreezeOwner == Prcb;
+}
+
 /* After a failed freeze only the processor that owns the stop goes on; any other one halts */
 static BOOLEAN
 KiFreezeFailureRequiresReturn(

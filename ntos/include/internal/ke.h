@@ -1357,6 +1357,11 @@ KxThawExecution(
 
 BOOLEAN
 NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb);
+
+BOOLEAN
+NTAPI
 KeFreezeExecution(IN PKTRAP_FRAME TrapFrame,
                   IN PKEXCEPTION_FRAME ExceptionFrame);
 

@@ -74,9 +74,11 @@ KeFreezeExecution(
 
     /*
      * A nested freeze does not stop the machine again: it is already stopped,
-     * and the processors that were told to hold must not be told twice.
+     * and the processors that were told to hold must not be told twice. The
+     * same goes for a freeze the architecture layer's owner meets while it is
+     * still stopping the others or already letting them go.
      */
-    if (KiFreezeHolder == Prcb)
+    if (KiFreezeHolder == Prcb || KxIsFreezeOwner(Prcb))
     {
         KiFreezeDepth++;
         return Enable;
@@ -92,7 +94,6 @@ KeFreezeExecution(
     KiFreezeInterruptTime();
 
     KiOldIrql = OldIrql;
-    KiFreezeDepth = 1;
     KiFreezeFlag = 1;
     KiFreezeHolder = Prcb;
 
@@ -123,18 +124,17 @@ KeThawExecution(
         return;
     }
 
-    ASSERT(KiFreezeDepth != 0);
-    ASSERT(KiFreezeHolder == KeGetCurrentPrcb());
+    ASSERT(KiFreezeHolder == KeGetCurrentPrcb() || KxIsFreezeOwner(KeGetCurrentPrcb()));
 
-    if (KiFreezeDepth > 1)
+    if (KiFreezeDepth != 0)
     {
         KiFreezeDepth--;
         KeRestoreInterrupts(Enable);
         return;
     }
 
+    ASSERT(KiFreezeHolder == KeGetCurrentPrcb());
     OldIrql = KiOldIrql;
-    KiFreezeDepth = 0;
     KiFreezeFlag = 0;
     KiFreezeHolder = NULL;
     KiThawInterruptTime();

@@ -297,6 +297,14 @@ KxThawExecution(
     InterlockedExchangePointer((volatile PVOID *)&KiFreezeOwner, NULL);
 }
 
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb)
+{
+    return KiFreezeOwner == Prcb;
+}
+
 KCONTINUE_STATUS
 NTAPI
 KxSwitchKdProcessor(
