@@ -492,8 +492,8 @@ PspQueryQuotaLimits(
         }
     }
 
-    Limits.MinimumWorkingSetSize = Process->Vm.Instance.MinimumWorkingSetSize;
-    Limits.MaximumWorkingSetSize = Process->Vm.Instance.MaximumWorkingSetSize;
+    Limits.MinimumWorkingSetSize = (SIZE_T)Process->Vm.Instance.MinimumWorkingSetSize << PAGE_SHIFT;
+    Limits.MaximumWorkingSetSize = (SIZE_T)Process->Vm.Instance.MaximumWorkingSetSize << PAGE_SHIFT;
     Limits.TimeLimit.QuadPart = -1LL;
 
     RtlCopyMemory(Buffer, &Limits, Length);
