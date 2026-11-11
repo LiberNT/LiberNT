@@ -109,6 +109,7 @@ extern void func_SetConsoleWindowInfo(void);
 extern void func_SetCurrentDirectory(void);
 extern void func_SetFileAllocationInfo(void);
 extern void func_SetStdHandleEx(void);
+extern void func_SecureMemoryCache(void);
 extern void func_SetThreadStackGuarantee(void);
 extern void func_SetUnhandledExceptionFilter(void);
 extern void func_SetWaitableTimerEx(void);
@@ -137,6 +138,7 @@ const struct test winetest_testlist[] =
 {
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
     { "SetStdHandleEx",              func_SetStdHandleEx },
+    { "SecureMemoryCache",           func_SecureMemoryCache },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },

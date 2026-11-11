@@ -840,7 +840,7 @@
 @ stdcall RtlDeleteTimer(ptr ptr ptr)
 @ stdcall RtlDeleteTimerQueue(ptr)
 @ stdcall RtlDeleteTimerQueueEx(ptr ptr)
-@ stdcall -stub -version=0x600+ RtlDeregisterSecureMemoryCacheCallback(ptr)
+@ stdcall RtlDeregisterSecureMemoryCacheCallback(ptr)
 @ stdcall RtlDeregisterWait(ptr)
 @ stdcall RtlDeregisterWaitEx(ptr ptr)
 @ stdcall RtlDestroyAtomTable(ptr)

@@ -13,7 +13,7 @@
 @ stdcall -version=0x600+ AddSIDToBoundaryDescriptor(ptr ptr)
 @ stdcall -version=0x600+ BasepAdjustObjectAttributesForPrivateNamespace(ptr)
 @ stdcall -version=0x600+ AddIntegrityLabelToBoundaryDescriptor(ptr ptr)
-@ stdcall -stub -version=0x600+ AddSecureMemoryCacheCallback(ptr)
+@ stdcall AddSecureMemoryCacheCallback(ptr)
 @ stdcall AddVectoredContinueHandler(long ptr) ntdll.RtlAddVectoredContinueHandler
 @ stdcall AddVectoredExceptionHandler(long ptr) ntdll.RtlAddVectoredExceptionHandler
 @ stdcall -version=0x600+ AdjustCalendarDate(ptr long long)
@@ -1110,7 +1110,7 @@
 @ stdcall -version=0x601+ RemoveDllDirectory(ptr)
 @ stdcall RemoveLocalAlternateComputerNameA(str long)
 @ stdcall RemoveLocalAlternateComputerNameW(wstr long)
-@ stub -version=0x600+ RemoveSecureMemoryCacheCallback
+@ stdcall RemoveSecureMemoryCacheCallback(ptr)
 @ stdcall RemoveVectoredContinueHandler(ptr) ntdll.RtlRemoveVectoredContinueHandler
 @ stdcall RemoveVectoredExceptionHandler(ptr) ntdll.RtlRemoveVectoredExceptionHandler
 @ stdcall ReplaceFile(wstr wstr wstr long ptr ptr) ReplaceFileW

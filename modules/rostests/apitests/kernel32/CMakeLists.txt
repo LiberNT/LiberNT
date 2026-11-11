@@ -112,6 +112,7 @@ list(APPEND SOURCE
     SetCurrentDirectory.c
     SetFileAllocationInfo.c
     SetStdHandleEx.c
+    SecureMemoryCache.c
     SetThreadStackGuarantee.c
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c

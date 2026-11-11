@@ -1401,6 +1401,9 @@ BOOL WINAPI AddAuditAccessObjectAce(PACL,DWORD,DWORD,DWORD,GUID*,GUID*,PSID,BOOL
 #if (_WIN32_WINNT >= 0x0501)
 void WINAPI AddRefActCtx(_Inout_ HANDLE);
 #endif
+#if (_WIN32_WINNT >= 0x0600)
+BOOL WINAPI AddSecureMemoryCacheCallback(_In_ PSECURE_MEMORY_CACHE_CALLBACK);
+#endif
 #if (_WIN32_WINNT >= 0x0500)
 _Ret_maybenull_ PVOID WINAPI AddVectoredExceptionHandler(_In_ ULONG, _In_ PVECTORED_EXCEPTION_HANDLER);
 _Ret_maybenull_ PVOID WINAPI AddVectoredContinueHandler(_In_ ULONG, _In_ PVECTORED_EXCEPTION_HANDLER);
@@ -2936,6 +2939,9 @@ HANDLE WINAPI ReOpenFile(_In_ HANDLE, _In_ DWORD, _In_ DWORD, _In_ DWORD);
 #endif
 BOOL WINAPI RemoveDirectoryA(LPCSTR);
 BOOL WINAPI RemoveDirectoryW(LPCWSTR);
+#if (_WIN32_WINNT >= 0x0600)
+BOOL WINAPI RemoveSecureMemoryCacheCallback(_In_ PSECURE_MEMORY_CACHE_CALLBACK);
+#endif
 #if (_WIN32_WINNT >= 0x0500)
 ULONG WINAPI RemoveVectoredExceptionHandler(_In_ PVOID);
 ULONG WINAPI RemoveVectoredContinueHandler(_In_ PVOID);

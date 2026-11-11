@@ -2572,6 +2572,7 @@ BOOLEAN NTAPI RtlFreeHeap(
                                      &BlockSize,
                                      MEM_RELEASE);
 
+        /* TODO: in user mode, flush the secure memory cache and retry when the block is secured memory */
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("HEAP: Failed releasing memory with Status 0x%08X. Heap %p, ptr %p, base address %p\n",

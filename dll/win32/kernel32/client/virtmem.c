@@ -19,6 +19,27 @@ VOID NTAPI RtlUnregisterCfgTargetRange(PVOID Base);
 /* FUNCTIONS ******************************************************************/
 
 static
+BOOLEAN
+BasepFlushSecureMemoryCache(
+    _In_ HANDLE hProcess,
+    _In_ NTSTATUS Status,
+    _In_ PVOID BaseAddress,
+    _In_ SIZE_T RegionSize)
+{
+    if (hProcess != GetCurrentProcess())
+        return FALSE;
+
+    if (Status != STATUS_INVALID_PAGE_PROTECTION &&
+        Status != STATUS_UNABLE_TO_FREE_VM &&
+        Status != STATUS_UNABLE_TO_DECOMMIT_VM)
+    {
+        return FALSE;
+    }
+
+    return RtlFlushSecureMemoryCache(BaseAddress, RegionSize);
+}
+
+static
 LPVOID
 BasepVirtualAllocEx(IN HANDLE hProcess,
                     IN LPVOID lpAddress,
@@ -147,6 +168,7 @@ VirtualFreeEx(IN HANDLE hProcess,
 {
     NTSTATUS Status;
     PVOID ReleasedAddress = lpAddress;
+    SIZE_T RequestedSize = dwSize;
 
     /* Validate size and flags */
     if (!(dwSize) || (dwFreeType != MEM_RELEASE))
@@ -156,6 +178,16 @@ VirtualFreeEx(IN HANDLE hProcess,
                                      &lpAddress,
                                      &dwSize,
                                      dwFreeType);
+        if (!NT_SUCCESS(Status) &&
+            BasepFlushSecureMemoryCache(hProcess, Status, ReleasedAddress, RequestedSize))
+        {
+            lpAddress = ReleasedAddress;
+            dwSize = RequestedSize;
+            Status = NtFreeVirtualMemory(hProcess,
+                                         &lpAddress,
+                                         &dwSize,
+                                         dwFreeType);
+        }
         if (!NT_SUCCESS(Status))
         {
             /* We failed */
@@ -221,6 +253,8 @@ VirtualProtectEx(IN HANDLE hProcess,
                  OUT PDWORD lpflOldProtect)
 {
     NTSTATUS Status;
+    PVOID BaseAddress = lpAddress;
+    SIZE_T RegionSize = dwSize;
 
     if (lpflOldProtect == NULL)
     {
@@ -234,6 +268,17 @@ VirtualProtectEx(IN HANDLE hProcess,
                                     &dwSize,
                                     flNewProtect,
                                     (PULONG)lpflOldProtect);
+    if (!NT_SUCCESS(Status) &&
+        BasepFlushSecureMemoryCache(hProcess, Status, BaseAddress, RegionSize))
+    {
+        lpAddress = BaseAddress;
+        dwSize = RegionSize;
+        Status = NtProtectVirtualMemory(hProcess,
+                                        &lpAddress,
+                                        &dwSize,
+                                        flNewProtect,
+                                        (PULONG)lpflOldProtect);
+    }
     if (!NT_SUCCESS(Status))
     {
         /* We failed */
@@ -494,6 +539,46 @@ MapUserPhysicalPagesScatter(IN PVOID *VirtualAddresses,
     Status = NtMapUserPhysicalPagesScatter(VirtualAddresses,
                                            NumberOfPages,
                                            PageArray);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
+AddSecureMemoryCacheCallback(
+    _In_ PSECURE_MEMORY_CACHE_CALLBACK pfnCallBack)
+{
+    NTSTATUS Status;
+
+    Status = RtlRegisterSecureMemoryCacheCallback((PRTL_SECURE_MEMORY_CACHE_CALLBACK)pfnCallBack);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * @implemented
+ */
+BOOL
+WINAPI
+RemoveSecureMemoryCacheCallback(
+    _In_ PSECURE_MEMORY_CACHE_CALLBACK pfnCallBack)
+{
+    NTSTATUS Status;
+
+    Status = RtlDeregisterSecureMemoryCacheCallback((PRTL_SECURE_MEMORY_CACHE_CALLBACK)pfnCallBack);
     if (!NT_SUCCESS(Status))
     {
         BaseSetLastNTError(Status);

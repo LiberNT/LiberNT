@@ -5362,6 +5362,12 @@ RtlRegisterSecureMemoryCacheCallback(
     _In_ PRTL_SECURE_MEMORY_CACHE_CALLBACK Callback);
 
 NTSYSAPI
+NTSTATUS
+NTAPI
+RtlDeregisterSecureMemoryCacheCallback(
+    _In_ PRTL_SECURE_MEMORY_CACHE_CALLBACK Callback);
+
+NTSYSAPI
 BOOLEAN
 NTAPI
 RtlFlushSecureMemoryCache(

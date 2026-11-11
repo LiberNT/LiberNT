@@ -690,7 +690,7 @@ typedef NTSTATUS
 // RTL Secure Memory callbacks
 //
 #ifdef NTOS_MODE_USER
-typedef NTSTATUS
+typedef BOOLEAN
 (NTAPI *PRTL_SECURE_MEMORY_CACHE_CALLBACK)(
     _In_ PVOID Address,
     _In_ SIZE_T Length
