@@ -721,9 +721,6 @@ IoInitSystem(
 
     IopInitializeSystemResourceMap(LoaderBlock);
 
-    /* The HAL sets up its buses and records what it owns before any device is given resources */
-    HalReportResourceUsage();
-
     if (!WmiInitialize())
     {
         DPRINT1("I/O: WMI could not come up\n");
