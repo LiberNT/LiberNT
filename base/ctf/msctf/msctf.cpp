@@ -494,9 +494,6 @@ HRESULT add_active_textservice(TF_LANGUAGEPROFILE *lp)
     if (actsvr->LanguageProfile.catid != GUID_NULL)
         deactivate_remove_conflicting_ts(actsvr->LanguageProfile.catid);
 
-    if (activated > 0)
-        activate_given_ts(actsvr, tm);
-
     entry = (AtsEntry *)cicMemAlloc(sizeof(AtsEntry));
     if (!entry)
     {
@@ -506,6 +503,9 @@ HRESULT add_active_textservice(TF_LANGUAGEPROFILE *lp)
 
     entry->ats = actsvr;
     list_add_head(&AtsList, &entry->entry);
+
+    if (activated > 0)
+        activate_given_ts(actsvr, tm);
 
     return S_OK;
 }

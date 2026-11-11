@@ -281,6 +281,69 @@ public:
     ULONG m_index;
 };
 
+static const GUID GUID_TestTipKey = {0x6b3a3f42, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
+
+class CTestTipKeySink : public ITfKeyEventSink
+{
+public:
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
+    {
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfKeyEventSink))
+        {
+            *ppv = static_cast<ITfKeyEventSink *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+    STDMETHODIMP_(ULONG) Release() override { return 1; }
+    STDMETHODIMP OnSetFocus(BOOL fForeground) override { return S_OK; }
+    STDMETHODIMP OnTestKeyDown(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) override
+    {
+        *pfEaten = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP OnTestKeyUp(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) override
+    {
+        *pfEaten = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP OnKeyDown(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) override
+    {
+        *pfEaten = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP OnKeyUp(ITfContext *pic, WPARAM wParam, LPARAM lParam, BOOL *pfEaten) override
+    {
+        *pfEaten = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP OnPreservedKey(ITfContext *pic, REFGUID rguid, BOOL *pfEaten) override
+    {
+        *pfEaten = FALSE;
+        return S_OK;
+    }
+};
+
+static CTestTipKeySink s_keySink;
+
+static void TestKeystrokeMgrInActivate(ITfThreadMgr *ptim, TfClientId tid)
+{
+    ITfKeystrokeMgr *pKeyMgr = NULL;
+    TF_PRESERVEDKEY key = { VK_F10, TF_MOD_ALT };
+    HRESULT hr = ptim->QueryInterface(IID_ITfKeystrokeMgr, (void **)&pKeyMgr);
+    g_tip.hrAdviseKeySink = hr;
+    g_tip.hrPreserveKey = hr;
+    if (!pKeyMgr)
+        return;
+    g_tip.hrAdviseKeySink = pKeyMgr->AdviseKeyEventSink(tid, &s_keySink, FALSE);
+    g_tip.hrUnadviseKeySink = pKeyMgr->UnadviseKeyEventSink(tid);
+    g_tip.hrPreserveKey = pKeyMgr->PreserveKey(tid, GUID_TestTipKey, &key, L"key", 3);
+    g_tip.hrUnpreserveKey = pKeyMgr->UnpreserveKey(GUID_TestTipKey, &key);
+    pKeyMgr->Release();
+}
+
 class CTestTip : public ITfTextInputProcessor, public ITfFunctionProvider, public ITfDisplayAttributeProvider
 {
 public:
@@ -331,6 +394,7 @@ public:
             pSource->Release();
         }
         g_tip.tid = tid;
+        TestKeystrokeMgrInActivate(ptim, tid);
         return S_OK;
     }
     STDMETHODIMP Deactivate() override
