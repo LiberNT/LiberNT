@@ -108,6 +108,32 @@ ExpReadBootVariable(
                                        NULL);
 }
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeSecureBoot(VOID)
+{
+    WCHAR Name[] = L"SecureBoot";
+    UCHAR SecureBoot = 0;
+    ULONG Length = sizeof(SecureBoot);
+    NTSTATUS Status;
+
+    if (ExpFirmwareType != FirmwareTypeUefi)
+    {
+        return;
+    }
+
+    Status = HalGetEnvironmentVariableEx(Name,
+                                         &ExpGlobalVariableGuid,
+                                         &SecureBoot,
+                                         &Length,
+                                         NULL);
+    if (NT_SUCCESS(Status) && (Length == sizeof(SecureBoot)) && (SecureBoot == 1))
+    {
+        MmWriteableSharedUserData->DbgSecureBootEnabled = 1;
+    }
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 FIRMWARE_TYPE

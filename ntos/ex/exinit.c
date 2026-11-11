@@ -834,6 +834,7 @@ NTAPI
 ExpInitSystemPhase1(VOID)
 {
     ExpInitializeWorkerThreads();
+    ExpInitializeSecureBoot();
 
     if (!ExpInitializeCallbackObjects())
     {

@@ -302,6 +302,11 @@ VOID
 NTAPI
 ExpInitializeWorkerThreads(VOID);
 
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeSecureBoot(VOID);
+
 VOID
 NTAPI
 ExSwapinWorkerThreads(IN BOOLEAN AllowSwap);

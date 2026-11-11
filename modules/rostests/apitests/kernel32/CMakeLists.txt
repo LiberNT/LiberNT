@@ -150,6 +150,7 @@ list(APPEND SOURCE
     SynchronizationBarrier.c
     SystemFirmware.c
     SystemFileCacheSize.c
+    SecureBootFlag.c
     TerminateProcess.c
     ExitedClientId.c
     ThreadPowerThrottling.c

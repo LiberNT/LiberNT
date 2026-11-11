@@ -146,6 +146,7 @@ extern void func_SuspendThread(void);
 extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
 extern void func_SystemFileCacheSize(void);
+extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
 extern void func_ExitedClientId(void);
 extern void func_ThreadPowerThrottling(void);
@@ -314,6 +315,7 @@ const struct test winetest_testlist[] =
     { "SynchronizationBarrier",      func_SynchronizationBarrier },
     { "SystemFirmware",              func_SystemFirmware },
     { "SystemFileCacheSize",         func_SystemFileCacheSize },
+    { "SecureBootFlag",              func_SecureBootFlag },
     { "TerminateProcess",            func_TerminateProcess },
     { "ExitedClientId",              func_ExitedClientId },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
