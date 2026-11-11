@@ -388,6 +388,12 @@ PspSetPrimaryToken(
     IN BOOLEAN Duplicate
 );
 
+VOID
+NTAPI
+PspLabelWithPrimaryToken(
+    _In_ PVOID Object,
+    _In_ PEPROCESS Process);
+
 NTSTATUS
 NTAPI
 PspInitializeProcessSecurity(

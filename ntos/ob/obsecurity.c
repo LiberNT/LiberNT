@@ -949,7 +949,7 @@ NtSetSecurityObject(
         !ObpLabelWithinCallerIntegrity(Captured) &&
         !SeSinglePrivilegeCheck(SeRelabelPrivilege, PreviousMode))
     {
-        Status = STATUS_PRIVILEGE_NOT_HELD;
+        Status = STATUS_INVALID_LABEL;
     }
     else
     {

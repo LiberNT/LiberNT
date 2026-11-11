@@ -820,6 +820,8 @@ PspCreateProcessFromOperands(
         return Status;
     }
 
+    PspLabelWithPrimaryToken(Process, Process);
+
     *ProcessHandle = Handle;
     ObDereferenceObject(Process);
     return STATUS_SUCCESS;

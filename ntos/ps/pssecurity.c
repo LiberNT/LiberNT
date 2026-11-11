@@ -252,6 +252,7 @@ PspSetPrimaryToken(
     {
         Process->PrimaryTokenFrozen = TRUE;
         if (OldToken != NULL) ObDereferenceObject(OldToken);
+        PspLabelWithPrimaryToken(Process, Process);
     }
 
     return Status;
@@ -267,6 +268,33 @@ PspAssignPrimaryToken(
     PAGED_CODE();
 
     return PspSetPrimaryToken(Process, TokenHandle, Token, FALSE);
+}
+
+/* Process and thread objects carry their process token's level, unreadable and unwritable from below */
+VOID
+NTAPI
+PspLabelWithPrimaryToken(
+    _In_ PVOID Object,
+    _In_ PEPROCESS Process)
+{
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    BOOLEAN Allocated = FALSE;
+    PACCESS_TOKEN Token;
+
+    PAGED_CODE();
+
+    /* An object not inserted yet has no descriptor; it is labelled once it has one */
+    if (!NT_SUCCESS(ObGetObjectSecurity(Object, &Descriptor, &Allocated)) || Descriptor == NULL) return;
+    ObReleaseObjectSecurity(Descriptor, Allocated);
+
+    Token = PsReferencePrimaryToken(Process);
+    if (Token == NULL) return;
+
+    SeSetObjectMandatoryLabel(Object,
+                              SepGetTokenIntegrityRid(Token),
+                              SYSTEM_MANDATORY_LABEL_NO_WRITE_UP | SYSTEM_MANDATORY_LABEL_NO_READ_UP);
+
+    PsDereferencePrimaryToken(Token);
 }
 
 /*

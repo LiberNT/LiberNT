@@ -659,6 +659,58 @@ SeValidSecurityDescriptor(
     return TRUE;
 }
 
+/* A creator below medium integrity marks what it makes with its own level */
+static
+NTSTATUS
+SepAddCreatorLabel(
+    _In_opt_ PTOKEN Token,
+    _Inout_ PSEP_SD_PARTS Settled)
+{
+    ULONG SidBuffer[(FIELD_OFFSET(SID, SubAuthority) + sizeof(ULONG)) / sizeof(ULONG) + 1];
+    PSID LabelSid = (PSID)SidBuffer;
+    ULONG LabelLength;
+    PACL Label;
+    PACL Sacl = NULL;
+    ULONG Rid;
+    NTSTATUS Status;
+
+    if (Token == NULL) return STATUS_SUCCESS;
+
+    Rid = SepGetTokenIntegrityRid(Token);
+    if (Rid >= SECURITY_MANDATORY_MEDIUM_RID) return STATUS_SUCCESS;
+    if (Settled->SaclPresent && SepAclHasLabel(Settled->Sacl)) return STATUS_SUCCESS;
+
+    RtlInitializeSid(LabelSid, &SeMandatoryLabelAuthority, 1);
+    *RtlSubAuthoritySid(LabelSid, 0) = Rid;
+
+    LabelLength = sizeof(ACL) + FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + RtlLengthSid(LabelSid);
+    Label = ExAllocatePoolWithTag(PagedPool, LabelLength, TAG_ACL);
+    if (Label == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlCreateAcl(Label, LabelLength, ACL_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAddMandatoryAce(Label,
+                                    ACL_REVISION,
+                                    0,
+                                    SYSTEM_MANDATORY_LABEL_NO_WRITE_UP,
+                                    SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+                                    LabelSid);
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = SepBuildLabelSacl(Label, Settled->SaclPresent ? Settled->Sacl : NULL, FALSE, &Sacl);
+
+    ExFreePoolWithTag(Label, TAG_ACL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Settled->Sacl != NULL) ExFreePoolWithTag(Settled->Sacl, TAG_ACL);
+    Settled->Sacl = Sacl;
+    Settled->SaclPresent = TRUE;
+
+    return STATUS_SUCCESS;
+}
+
 /*
  * Settles what protects a new object: what the caller asked for, then what
  * the container it is made in passes down, then what its token carries. The
@@ -774,6 +826,8 @@ SeAssignSecurityEx(
                                &SaclDefaulted);
     }
 
+    if (NT_SUCCESS(Status)) Status = SepAddCreatorLabel(Token, &Settled);
+
     if (NT_SUCCESS(Status))
     {
         if (Settled.DaclPresent) Control |= SE_DACL_PRESENT;
@@ -788,7 +842,6 @@ SeAssignSecurityEx(
             Control |= SE_SACL_AUTO_INHERITED;
         Control |= Asked.Control & (SE_DACL_PROTECTED | SE_SACL_PROTECTED);
 
-        /* TODO: an object nobody labelled is given no label of its own */
         Status = SepNewDescriptor((SECURITY_DESCRIPTOR_CONTROL)Control,
                                   &Settled,
                                   PoolType,

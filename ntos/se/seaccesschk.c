@@ -218,7 +218,6 @@ SepWalkDacl(
                 break;
 
             default:
-                /* TODO: a mandatory label in the list is not enforced */
                 break;
         }
     }
@@ -317,6 +316,56 @@ SepCheckEntry(
     return STATUS_SUCCESS;
 }
 
+/* An unlabeled object is medium with no-write-up; READ_CONTROL and SYNCHRONIZE are never taken away */
+static
+ACCESS_MASK
+SepMandatoryDeniedRights(
+    _In_ PSEP_CHECK_CONTEXT Context)
+{
+    ULONG ObjectRid = SECURITY_MANDATORY_MEDIUM_RID;
+    ULONG Policy = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+    BOOLEAN SaclPresent = FALSE;
+    BOOLEAN Defaulted;
+    ACCESS_MASK Denied = 0;
+    PACL Sacl = NULL;
+    PACE Ace;
+    ULONG Index;
+    PSID Sid;
+
+    if (Context->Token == NULL) return 0;
+
+    if (!(Context->Token->MandatoryPolicy & TOKEN_MANDATORY_POLICY_NO_WRITE_UP)) return 0;
+
+    if (NT_SUCCESS(RtlGetSaclSecurityDescriptor(Context->Descriptor, &SaclPresent, &Sacl, &Defaulted)) &&
+        SaclPresent && Sacl != NULL)
+    {
+        for (Index = 0; Index < Sacl->AceCount; Index++)
+        {
+            if (!NT_SUCCESS(RtlGetAce(Sacl, Index, (PVOID *)&Ace))) break;
+            if (Ace->Header.AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE) continue;
+            if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+            Sid = (PSID)&((PSYSTEM_MANDATORY_LABEL_ACE)Ace)->SidStart;
+            if (*RtlSubAuthorityCountSid(Sid) == 0) break;
+
+            ObjectRid = *RtlSubAuthoritySid(Sid, *RtlSubAuthorityCountSid(Sid) - 1);
+            Policy = ((PSYSTEM_MANDATORY_LABEL_ACE)Ace)->Mask & SYSTEM_MANDATORY_LABEL_VALID_MASK;
+            break;
+        }
+    }
+
+    if (SepGetTokenIntegrityRid(Context->Token) >= ObjectRid) return 0;
+
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP)
+        Denied |= Context->GenericMapping->GenericWrite | DELETE | WRITE_DAC | WRITE_OWNER;
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_READ_UP)
+        Denied |= Context->GenericMapping->GenericRead;
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP)
+        Denied |= Context->GenericMapping->GenericExecute;
+
+    return Denied & ~(READ_CONTROL | SYNCHRONIZE);
+}
+
 /*
  * Decides every entry, for the groups a token carries and then again for the
  * identifiers it was restricted to, because a restricted token may only do
@@ -334,6 +383,7 @@ SepCheckList(
 {
     BOOLEAN Restricted = (Context->Token != NULL &&
                           Context->Token->RestrictedSidCount != 0);
+    ACCESS_MASK MandatoryDenied = SepMandatoryDeniedRights(Context);
     ULONG Entry;
 
     for (Entry = 0; Entry < Entries; Entry++)
@@ -341,8 +391,17 @@ SepCheckList(
         ACCESS_MASK Granted = 0;
         NTSTATUS Status;
 
+        /* A right the integrity level takes away fails the whole ask when it is named */
+        if ((Desired & ~MAXIMUM_ALLOWED & MandatoryDenied) ||
+            (!Context->MaximumAllowed && (AlreadyGranted & MandatoryDenied)))
+        {
+            GrantedAccess[Entry] = 0;
+            AccessStatus[Entry] = STATUS_ACCESS_DENIED;
+            continue;
+        }
+
         Context->SidSet = SEP_SID_SET_GROUPS;
-        Status = SepCheckEntry(Context, Entry, Desired, AlreadyGranted,
+        Status = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
                                &Granted);
 
         if (Restricted && NT_SUCCESS(Status))
@@ -351,13 +410,16 @@ SepCheckList(
             NTSTATUS Status2;
 
             Context->SidSet = SEP_SID_SET_RESTRICTED;
-            Status2 = SepCheckEntry(Context, Entry, Desired, AlreadyGranted,
+            Status2 = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
                                     &Second);
 
             if (!NT_SUCCESS(Status2)) Status = Status2;
 
             Granted &= Second;
         }
+
+        Granted &= ~MandatoryDenied;
+        if (NT_SUCCESS(Status) && Context->MaximumAllowed && Granted == 0) Status = STATUS_ACCESS_DENIED;
 
         GrantedAccess[Entry] = Granted;
         AccessStatus[Entry] = Status;

@@ -167,12 +167,37 @@ SeSetObjectMandatoryLabel(
     _In_ ULONG Rid,
     _In_ ULONG Policy)
 {
-    UNREFERENCED_PARAMETER(Object);
-    UNREFERENCED_PARAMETER(Rid);
-    UNREFERENCED_PARAMETER(Policy);
+    ULONG SidBuffer[(FIELD_OFFSET(SID, SubAuthority) + sizeof(ULONG)) / sizeof(ULONG) + 1];
+    ULONG AclBuffer[(sizeof(ACL) + FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) +
+                     sizeof(SidBuffer)) / sizeof(ULONG) + 1];
+    PSID LabelSid = (PSID)SidBuffer;
+    PACL Sacl = (PACL)AclBuffer;
+    SECURITY_DESCRIPTOR Descriptor;
+    NTSTATUS Status;
 
-    /* TODO: an object's label is settled where the object is made, not here */
-    return STATUS_NOT_IMPLEMENTED;
+    PAGED_CODE();
+
+    if (Policy & ~SYSTEM_MANDATORY_LABEL_VALID_MASK) return STATUS_INVALID_PARAMETER;
+
+    RtlInitializeSid(LabelSid, &SeMandatoryLabelAuthority, 1);
+    *RtlSubAuthoritySid(LabelSid, 0) = Rid;
+
+    Status = RtlCreateAcl(Sacl, sizeof(AclBuffer), ACL_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAddMandatoryAce(Sacl,
+                                    ACL_REVISION,
+                                    0,
+                                    Policy,
+                                    SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+                                    LabelSid);
+    }
+
+    if (NT_SUCCESS(Status)) Status = RtlCreateSecurityDescriptor(&Descriptor, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status)) Status = RtlSetSaclSecurityDescriptor(&Descriptor, TRUE, Sacl, FALSE);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    return ObSetSecurityObjectByPointer(Object, LABEL_SECURITY_INFORMATION, &Descriptor);
 }
 
 /*

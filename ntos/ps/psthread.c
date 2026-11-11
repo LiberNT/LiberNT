@@ -391,6 +391,8 @@ PspCreateThread(
         return Status;
     }
 
+    PspLabelWithPrimaryToken(Thread, Process);
+
     if (ClientId != NULL)
     {
         if (PreviousMode != KernelMode)
