@@ -288,17 +288,28 @@ HalGetMessageRoutingInfo(
     if (RoutingInfo->Vector == 0)
         return STATUS_INVALID_PARAMETER;
 
-    /* TODO: a message's processor is not kept per vector and taken in turn over its affinity as in the x86 HAL */
-    TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-    TargetInfo.TargetProcessors = RoutingInfo->TargetProcessors;
-    TargetInfo.ProcessorNumber = 0;
-    TargetInfo.DestinationId = 0;
-    Status = HalGetInterruptTargetInformation(&TargetInfo);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (HalpArm64InterruptController && HalpArm64InterruptController->DeliversToAnyProcessor)
+    {
+        RoutingInfo->TargetProcessors &= KeQueryActiveProcessors();
+        if (RoutingInfo->TargetProcessors == 0)
+            RoutingInfo->TargetProcessors = KeQueryActiveProcessors();
+        RoutingInfo->DestinationId = 0;
+    }
+    else
+    {
+        /* TODO: a message's processor is not kept per vector and taken in turn over its affinity as in the x86 HAL */
+        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
+        TargetInfo.TargetProcessors = RoutingInfo->TargetProcessors;
+        TargetInfo.ProcessorNumber = 0;
+        TargetInfo.DestinationId = 0;
+        Status = HalGetInterruptTargetInformation(&TargetInfo);
+        if (!NT_SUCCESS(Status))
+            return Status;
 
-    RoutingInfo->TargetProcessors = TargetInfo.TargetProcessors;
-    RoutingInfo->DestinationId = TargetInfo.DestinationId;
+        RoutingInfo->TargetProcessors = TargetInfo.TargetProcessors;
+        RoutingInfo->DestinationId = TargetInfo.DestinationId;
+    }
+    ASSERT(RoutingInfo->TargetProcessors != 0);
     if (RoutingInfo->Irql == 0)
         RoutingInfo->Irql = HalConvertDeviceIdtToIrql(RoutingInfo->Vector);
     {

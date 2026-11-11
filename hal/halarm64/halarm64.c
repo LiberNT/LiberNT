@@ -3973,7 +3973,7 @@ HalpGetRootInterruptVector(
     if (HalpSecondaryIsIntId(IntId))
     {
         *OutIrql = HalpSecondaryIrql(IntId);
-        *OutAffinity = 1;
+        *OutAffinity = HalpArm64DeviceInterruptAffinity();
         return IntId;
     }
 
@@ -5675,7 +5675,7 @@ HalGetInterruptVector(
     {
         DeviceIrql = HalpSecondaryIrql(Vector);
         if (Irql) *Irql = DeviceIrql;
-        if (Affinity) *Affinity = 1;
+        if (Affinity) *Affinity = HalpArm64DeviceInterruptAffinity();
         return Vector;
     }
 
