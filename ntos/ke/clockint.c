@@ -84,10 +84,11 @@ static volatile KSYSTEM_TIME KiSystemTimeValue;
    what a caller measuring elapsed time while the machine slept has to exclude. */
 static ULONGLONG KiInterruptTimeBias;
 
-/* The interrupt time last written and the counter read with it, under a sequence that is odd while they change */
+/* The interrupt time last written, the counter read with it and the length of the period it starts, under a sequence that is odd while they change */
 static volatile LONG KiTickSnapshotSequence;
 static volatile ULONGLONG KiTickSnapshotTime;
 static volatile LONGLONG KiTickSnapshotCounter;
+static volatile ULONG KiTickSnapshotIncrement;
 
 /* Interrupt time stops moving while the debugger has the machine. */
 static BOOLEAN KiInterruptTimeFrozen;
@@ -369,6 +370,7 @@ KiCounterOffsetInPeriod(
 {
     ULONGLONG SnapshotTime;
     LONGLONG SnapshotCounter;
+    ULONG SnapshotIncrement;
     ULONGLONG Elapsed;
     LONG Sequence;
 
@@ -378,20 +380,22 @@ KiCounterOffsetInPeriod(
         KeMemoryBarrier();
         SnapshotTime = KiTickSnapshotTime;
         SnapshotCounter = KiTickSnapshotCounter;
+        SnapshotIncrement = KiTickSnapshotIncrement;
         KeMemoryBarrier();
     } while ((Sequence & 1) || (Sequence != KiTickSnapshotSequence));
 
     if (Sequence == 0) return 0;
 
-    /* The caller's tick has been overtaken since it read the counter, so the whole period has passed */
-    if (SnapshotTime != Interrupt) return KeTimeIncrement;
+    /* The caller's tick has been overtaken since it read the counter, so the clock has moved on as far as the ticks took it */
+    if (SnapshotTime != Interrupt)
+        return (SnapshotTime > Interrupt) ? (SnapshotTime - Interrupt) : 0;
 
     if (Counter.QuadPart <= SnapshotCounter) return 0;
 
     Elapsed = (ULONGLONG)(Counter.QuadPart - SnapshotCounter) * 10000000ULL /
               (ULONGLONG)Frequency.QuadPart;
 
-    return min(Elapsed, (ULONGLONG)KeTimeIncrement);
+    return min(Elapsed, (ULONGLONG)SnapshotIncrement);
 }
 
 static
@@ -404,6 +408,7 @@ KiWriteInterruptTime(
     InterlockedIncrement(&KiTickSnapshotSequence);
     KiTickSnapshotTime = (ULONGLONG)Interrupt.QuadPart;
     KiTickSnapshotCounter = Counter.QuadPart;
+    KiTickSnapshotIncrement = KeTimeIncrement;
     InterlockedIncrement(&KiTickSnapshotSequence);
 
     KiWriteSystemTime(&KiInterruptTimeValue, Interrupt);

@@ -107,6 +107,79 @@ TestPreciseTime(VOID)
     ok(S2.QuadPart >= S1.QuadPart, "precise SystemTime went backwards: %I64d -> %I64d\n", S1.QuadPart, S2.QuadPart);
 }
 
+static
+ULONGLONG
+PreciseInterruptTime(VOID)
+{
+    ULONG64 Qpc;
+
+    return KeQueryInterruptTimePrecise(&Qpc);
+}
+
+static
+VOID
+WatchPreciseTime(
+    _In_ ULONGLONG Duration,
+    _Inout_ PULONGLONG Last,
+    _Inout_ PULONG Backwards,
+    _Inout_ PULONGLONG Worst)
+{
+    ULONGLONG Start = KeQueryInterruptTime(), Now;
+
+    while (KeQueryInterruptTime() - Start < Duration)
+    {
+        Now = PreciseInterruptTime();
+        if (Now < *Last)
+        {
+            (*Backwards)++;
+            if (*Last - Now > *Worst) *Worst = *Last - Now;
+        }
+        *Last = Now;
+    }
+}
+
+static
+VOID
+TestPreciseTimeAcrossRateChange(VOID)
+{
+    ULONG Fine, Coarse, Cycle, Backwards = 0;
+    ULONGLONG Start, Plain, Before, After, Last, Worst = 0;
+
+    Fine = ExSetTimerResolution(10000, TRUE);
+    Coarse = ExSetTimerResolution(10000, FALSE);
+    if (Coarse <= Fine)
+    {
+        skip(FALSE, "The clock already runs at %lu\n", Fine);
+        return;
+    }
+
+    /* Wait until a coarse period has run longer than a fine one */
+    Start = KeQueryInterruptTime();
+    do
+    {
+        Plain = KeQueryInterruptTime();
+        Before = PreciseInterruptTime();
+    } while ((Before - Plain < 2 * Fine || KeQueryInterruptTime() != Plain) &&
+             KeQueryInterruptTime() - Start < 10 * Coarse);
+
+    /* The period in progress keeps its length when a shorter one is asked for */
+    Fine = ExSetTimerResolution(10000, TRUE);
+    After = PreciseInterruptTime();
+    ok(After >= Before, "precise InterruptTime went back from %I64u to %I64u when the clock period shortened\n", Before, After);
+
+    Last = After;
+    for (Cycle = 0; Cycle < 4; Cycle++)
+    {
+        WatchPreciseTime(2 * Fine, &Last, &Backwards, &Worst);
+        ExSetTimerResolution(10000, FALSE);
+        WatchPreciseTime(Coarse + 2 * Fine, &Last, &Backwards, &Worst);
+        ExSetTimerResolution(10000, TRUE);
+    }
+    ExSetTimerResolution(10000, FALSE);
+
+    ok(Backwards == 0, "precise InterruptTime went back %lu times, by up to %I64u, while the clock period changed\n", Backwards, Worst);
+}
+
 START_TEST(KeTime)
 {
     TestTimeIncrement();
@@ -115,4 +188,5 @@ START_TEST(KeTime)
     TestTickCount();
     TestPerformanceCounter();
     TestPreciseTime();
+    TestPreciseTimeAcrossRateChange();
 }
