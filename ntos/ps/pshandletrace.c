@@ -170,11 +170,20 @@ PspQueryHandleTracing(
 
     if (Length < Needed) return STATUS_INFO_LENGTH_MISMATCH;
 
-    RtlZeroMemory(Query, Needed);
+    /* The caller's buffer was not touched before, so a bad one faults here */
+    _SEH2_TRY
+    {
+        RtlZeroMemory(Query, Needed);
 
-    /* TODO: fill in the records once the handle table keeps them */
-    Query->Handle = NULL;
-    Query->TotalTraces = 0;
+        /* TODO: fill in the records once the handle table keeps them */
+        Query->Handle = NULL;
+        Query->TotalTraces = 0;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
 
     return STATUS_SUCCESS;
 }

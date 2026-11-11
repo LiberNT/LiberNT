@@ -315,6 +315,70 @@ PspQueryQuotaLimits(
 
 /* Information classes, which the query and the set side both describe */
 
+/*
+ * How one class of one direction checks its arguments before the handle is
+ * looked at. A class left out of a table takes any length and checks it in
+ * its handler.
+ */
+typedef enum _PSP_INFORMATION_RULE
+{
+    PspInformationAnyLength = 0,
+    PspInformationExactLength,
+    PspInformationMinimumLength,
+    PspInformationMultipleLength,
+    PspInformationWrongDirection,
+    PspInformationNotImplemented
+} PSP_INFORMATION_RULE;
+
+/* The handler writes the caller's buffer under its own guard, so the buffer is not touched beforehand */
+#define PSP_INFORMATION_GUARDED_WRITE 0x01
+
+typedef struct _PSP_INFORMATION_CLASS
+{
+    UCHAR Rule;
+    UCHAR Alignment;
+    UCHAR Flags;
+    USHORT Size;
+    USHORT AlternateSize;
+} PSP_INFORMATION_CLASS, *PPSP_INFORMATION_CLASS;
+
+#define PSP_INFO_EXACT(Size) \
+    { PspInformationExactLength, 0, 0, (USHORT)(Size), 0 }
+#define PSP_INFO_EXACT_OR(Size, Alternate) \
+    { PspInformationExactLength, 0, 0, (USHORT)(Size), (USHORT)(Alternate) }
+#define PSP_INFO_EXACT_ALIGNED(Size, Alignment) \
+    { PspInformationExactLength, (UCHAR)(Alignment), 0, (USHORT)(Size), 0 }
+#define PSP_INFO_MINIMUM(Size) \
+    { PspInformationMinimumLength, 0, 0, (USHORT)(Size), 0 }
+#define PSP_INFO_MINIMUM_ALIGNED(Size, Alignment) \
+    { PspInformationMinimumLength, (UCHAR)(Alignment), 0, (USHORT)(Size), 0 }
+#define PSP_INFO_MULTIPLE(Size) \
+    { PspInformationMultipleLength, 0, 0, (USHORT)(Size), 0 }
+#define PSP_INFO_ALIGNED(Alignment) \
+    { PspInformationAnyLength, (UCHAR)(Alignment), 0, 0, 0 }
+#define PSP_INFO_GUARDED(Rule, Size) \
+    { (Rule), 0, PSP_INFORMATION_GUARDED_WRITE, (USHORT)(Size), 0 }
+#define PSP_INFO_WRONG_DIRECTION \
+    { PspInformationWrongDirection, 0, 0, 0, 0 }
+#define PSP_INFO_NOT_IMPLEMENTED \
+    { PspInformationNotImplemented, 0, 0, 0, 0 }
+
+NTSTATUS
+NTAPI
+PspCheckInformationClass(
+    _In_ const PSP_INFORMATION_CLASS *Class,
+    _In_reads_bytes_opt_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
+PspProbeInformationForWrite(
+    _In_ const PSP_INFORMATION_CLASS *Class,
+    _Out_writes_bytes_opt_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
 NTSTATUS
 NTAPI
 PspQueryWorkingSetWatch(

@@ -17,6 +17,72 @@
 #define PSP_DYNAMIC_CODE_DISABLE 0x1
 #define PSP_DYNAMIC_CODE_OPT_OUT 0x2
 
+/*
+ * The lengths each class may be set with, checked before the thread is
+ * looked up. A class that is only ever read is refused once the buffer has
+ * been checked.
+ */
+static const PSP_INFORMATION_CLASS PspSetThreadClasses[MaxThreadInfoClass] =
+{
+    [ThreadBasicInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadTimes] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadPriority] = PSP_INFO_EXACT(sizeof(KPRIORITY)),
+    [ThreadBasePriority] = PSP_INFO_EXACT(sizeof(LONG)),
+    [ThreadAffinityMask] = PSP_INFO_EXACT(sizeof(KAFFINITY)),
+    [ThreadImpersonationToken] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ThreadDescriptorTableEntry] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadEnableAlignmentFaultFixup] = PSP_INFO_EXACT(sizeof(BOOLEAN)),
+    [ThreadEventPair_Reusable] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadQuerySetWin32StartAddress] = PSP_INFO_EXACT(sizeof(PVOID)),
+    [ThreadZeroTlsCell] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadPerformanceCount] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadAmILastThread] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadIdealProcessor] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadPriorityBoost] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadSetTlsArrayAddress] = PSP_INFO_EXACT(sizeof(PVOID)),
+    [ThreadIsIoPending] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadHideFromDebugger] = PSP_INFO_EXACT(0),
+    [ThreadBreakOnTermination] = PSP_INFO_EXACT(sizeof(ULONG)),
+    /* TODO: x86 switches a thread's legacy floating point state through this class */
+    [ThreadSwitchLegacyState] = PSP_INFO_NOT_IMPLEMENTED,
+    [ThreadIsTerminated] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadLastSystemCall] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadCycleTime] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadPagePriority] = PSP_INFO_EXACT(sizeof(PAGE_PRIORITY_INFORMATION)),
+    [ThreadActualBasePriority] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadTebInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCSwitchMon] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCSwitchPmu] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadWow64Context] = PSP_INFO_EXACT(sizeof(WOW64_CONTEXT)),
+    [ThreadGroupInformation] = PSP_INFO_EXACT(sizeof(GROUP_AFFINITY)),
+    [ThreadUmsInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCounterProfiling] = PSP_INFO_ALIGNED(sizeof(UCHAR)),
+    [ThreadIdealProcessorEx] = PSP_INFO_EXACT(sizeof(PROCESSOR_NUMBER)),
+    [ThreadCpuAccountingInformation] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ThreadSuspendCount] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadContainerId] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadNameInformation] = PSP_INFO_EXACT(sizeof(THREAD_NAME_INFORMATION)),
+    [ThreadSelectedCpuSets] = PSP_INFO_MULTIPLE(sizeof(ULONG)),
+    [ThreadSystemThreadInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadActualGroupAffinity] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadDynamicCodePolicyInfo] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadExplicitCaseSensitivity] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadWorkOnBehalfTicket] = PSP_INFO_EXACT_OR(sizeof(ALPC_WORK_ON_BEHALF_TICKET),
+                                                   sizeof(RTL_WORK_ON_BEHALF_TICKET_EX)),
+    [ThreadSubsystemInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadDbgkWerReportActive] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadAttachContainer] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ThreadManageWritesToExecutableMemory] = PSP_INFO_EXACT(sizeof(MANAGE_WRITES_TO_EXECUTABLE_MEMORY)),
+    [ThreadPowerThrottlingState] = PSP_INFO_EXACT(sizeof(THREAD_POWER_THROTTLING_STATE)),
+    [ThreadWorkloadClass] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadCreateStateChange] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadApplyStateChange] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadStrongerBadHandleChecks] = PSP_INFO_EXACT(0),
+    [ThreadEffectiveIoPriority] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadEffectivePagePriority] = PSP_INFO_WRONG_DIRECTION,
+};
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -248,6 +314,12 @@ NtSetInformationThread(
 
     if (ThreadInformationClass >= MaxThreadInfoClass)
         return STATUS_INVALID_INFO_CLASS;
+
+    Status = PspCheckInformationClass(&PspSetThreadClasses[ThreadInformationClass],
+                                      ThreadInformation,
+                                      ThreadInformationLength,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
 
     /*
      * Which right the change needs depends on what is being changed: wearing
@@ -662,11 +734,13 @@ NtSetInformationThread(
             break;
 
         case ThreadWorkOnBehalfTicket:
+            /* The ticket alone, or the ticket with the flags that follow it */
+            RtlZeroMemory(&Ticket, sizeof(Ticket));
             Status = PspCaptureThreadSetInformation(ThreadInformation,
                                                     ThreadInformationLength,
                                                     PreviousMode,
                                                     &Ticket,
-                                                    sizeof(Ticket));
+                                                    ThreadInformationLength);
             if (!NT_SUCCESS(Status)) break;
 
             /* Only the thread itself may say whose work it is doing */
@@ -705,11 +779,11 @@ NtSetInformationThread(
             Status = PspCaptureThreadSetInformation(ThreadInformation,
                                                     ThreadInformationLength,
                                                     PreviousMode,
-                                                    &Boolean,
-                                                    sizeof(Boolean));
+                                                    &Value,
+                                                    sizeof(Value));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Boolean)
+            if (Value != 0)
                 PspSetCrossThreadFlag(Thread,
                                       CT_DBG_WER_USER_REPORT_ACTIVE_BIT);
             else
@@ -771,21 +845,6 @@ NtSetInformationThread(
                 Status = PspCopyWow64CpuAreaContext(Thread, &Wow64, TRUE);
             break;
 
-        case ThreadSwitchLegacyState:
-            /*
-             * Carries nothing: asking for it is the request. Nothing in this
-             * system keeps a legacy state to switch to, so the request is
-             * accepted and changes nothing.
-             */
-            if (ThreadInformationLength != 0)
-            {
-                Status = STATUS_INFO_LENGTH_MISMATCH;
-                break;
-            }
-
-            Status = STATUS_SUCCESS;
-            break;
-
         case ThreadCpuAccountingInformation:
             Status = PspCaptureThreadSetInformation(ThreadInformation,
                                                     ThreadInformationLength,
@@ -837,23 +896,13 @@ NtSetInformationThread(
                                       : STATUS_INVALID_PARAMETER;
             break;
 
-        case ThreadCreateStateChange:
-        case ThreadApplyStateChange:
-            /* TODO: the state-change object a caller freezes a thread with */
-            Status = STATUS_NOT_SUPPORTED;
-            break;
-
-        case ThreadDescriptorTableEntry:
-            /* TODO: only x86 has a descriptor table; writing one needs an
-             * architecture hook this subsystem lacks */
-            Status = STATUS_NOT_SUPPORTED;
-            break;
-
-        case ThreadEventPair_Reusable:
-        case ThreadUmsInformation:
         case ThreadCounterProfiling:
-        case ThreadCSwitchMon:
-        case ThreadCSwitchPmu:
+            /* FIXME: counters are not kept per thread; every request is refused by length, as Windows 11 refuses the shapes tested */
+            Status = STATUS_INFO_LENGTH_MISMATCH;
+            break;
+
+        case ThreadHeterogeneousCpuPolicy:
+            /* TODO: choose the kind of core a thread runs on where the machine has more than one */
             Status = STATUS_NOT_SUPPORTED;
             break;
 
@@ -871,7 +920,6 @@ NtSetInformationThread(
         case ThreadActualBasePriority:
         case ThreadTebInformation:
         case ThreadSuspendCount:
-        case ThreadHeterogeneousCpuPolicy:
         case ThreadContainerId:
         case ThreadSystemThreadInformation:
         case ThreadActualGroupAffinity:

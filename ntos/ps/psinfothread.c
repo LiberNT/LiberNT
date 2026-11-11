@@ -10,6 +10,69 @@
 #define NDEBUG
 #include <debug.h>
 
+/*
+ * The lengths each class may be asked with, checked before the thread is
+ * looked up.
+ */
+static const PSP_INFORMATION_CLASS PspQueryThreadClasses[MaxThreadInfoClass] =
+{
+    [ThreadBasicInformation] = PSP_INFO_EXACT(sizeof(THREAD_BASIC_INFORMATION)),
+    [ThreadTimes] = PSP_INFO_EXACT(sizeof(KERNEL_USER_TIMES)),
+    [ThreadPriority] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadBasePriority] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadAffinityMask] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadImpersonationToken] = PSP_INFO_WRONG_DIRECTION,
+    /* TODO: x86 keeps a descriptor table that this class reads an entry of */
+    [ThreadDescriptorTableEntry] = PSP_INFO_NOT_IMPLEMENTED,
+    [ThreadEnableAlignmentFaultFixup] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadEventPair_Reusable] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadQuerySetWin32StartAddress] = PSP_INFO_EXACT(sizeof(PVOID)),
+    [ThreadZeroTlsCell] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadPerformanceCount] = PSP_INFO_EXACT(sizeof(LARGE_INTEGER)),
+    [ThreadAmILastThread] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadIdealProcessor] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadPriorityBoost] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadSetTlsArrayAddress] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadIsIoPending] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadHideFromDebugger] = PSP_INFO_EXACT_ALIGNED(sizeof(BOOLEAN), sizeof(UCHAR)),
+    [ThreadBreakOnTermination] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadSwitchLegacyState] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadIsTerminated] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadCycleTime] = PSP_INFO_EXACT(sizeof(THREAD_CYCLE_TIME_INFORMATION)),
+    [ThreadPagePriority] = PSP_INFO_EXACT(sizeof(PAGE_PRIORITY_INFORMATION)),
+    [ThreadActualBasePriority] = PSP_INFO_EXACT(sizeof(LONG)),
+    [ThreadCSwitchMon] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCSwitchPmu] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadWow64Context] = PSP_INFO_EXACT(sizeof(WOW64_CONTEXT)),
+    [ThreadGroupInformation] = PSP_INFO_EXACT(sizeof(GROUP_AFFINITY)),
+    [ThreadUmsInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCounterProfiling] = PSP_INFO_EXACT_ALIGNED(sizeof(BOOLEAN), sizeof(UCHAR)),
+    [ThreadIdealProcessorEx] = PSP_INFO_EXACT(sizeof(PROCESSOR_NUMBER)),
+    [ThreadCpuAccountingInformation] = PSP_INFO_EXACT_ALIGNED(sizeof(BOOLEAN), sizeof(UCHAR)),
+    [ThreadSuspendCount] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadHeterogeneousCpuPolicy] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadContainerId] = PSP_INFO_EXACT(sizeof(GUID)),
+    [ThreadNameInformation] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
+    [ThreadSelectedCpuSets] = PSP_INFO_MULTIPLE(sizeof(ULONG)),
+    [ThreadSystemThreadInformation] = PSP_INFO_EXACT(sizeof(SYSTEM_THREAD_INFORMATION)),
+    [ThreadActualGroupAffinity] = PSP_INFO_EXACT(sizeof(GROUP_AFFINITY)),
+    [ThreadDynamicCodePolicyInfo] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadExplicitCaseSensitivity] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadWorkOnBehalfTicket] = PSP_INFO_EXACT(sizeof(RTL_WORK_ON_BEHALF_TICKET_EX)),
+    [ThreadSubsystemInformation] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadDbgkWerReportActive] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadAttachContainer] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadManageWritesToExecutableMemory] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadPowerThrottlingState] = PSP_INFO_EXACT(sizeof(THREAD_POWER_THROTTLING_STATE)),
+    [ThreadWorkloadClass] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadCreateStateChange] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadApplyStateChange] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadStrongerBadHandleChecks] = PSP_INFO_WRONG_DIRECTION,
+    [ThreadEffectiveIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ThreadEffectivePagePriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+};
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -32,7 +95,8 @@ PspReturnThreadInformation(
 /*
  * The name a caller gave the thread, as a counted string followed by its own
  * characters. A thread with no name answers with an empty one, which is not
- * the same as failing: having no name is a valid answer.
+ * the same as failing: having no name is a valid answer. A buffer too small
+ * for the name is told how much it needs and is left untouched.
  */
 static
 NTSTATUS
@@ -44,39 +108,53 @@ PspQueryThreadName(
 {
     PTHREAD_NAME_INFORMATION Out = Buffer;
     PUNICODE_STRING Name;
-    ULONG Needed;
+    PWCHAR Copy = NULL;
+    USHORT NameLength = 0;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
+    /* The name is copied out from under the lock, so a bad buffer cannot fault while it is held */
     PspLockThreadSecurityShared(Thread);
 
     Name = Thread->ThreadName;
-    Needed = sizeof(THREAD_NAME_INFORMATION) +
-             ((Name != NULL) ? Name->Length : 0);
+    if (Name != NULL) NameLength = Name->Length;
 
-    if (Length < Needed)
+    *ReturnLength = sizeof(THREAD_NAME_INFORMATION) + NameLength;
+
+    if ((Length >= *ReturnLength) && (NameLength != 0))
     {
-        PspUnlockThreadSecurityShared(Thread);
-        *ReturnLength = Needed;
-        return STATUS_INFO_LENGTH_MISMATCH;
-    }
-
-    Out->ThreadName.Buffer = (PWCHAR)((PUCHAR)Buffer +
-                                      sizeof(THREAD_NAME_INFORMATION));
-    Out->ThreadName.Length = (Name != NULL) ? Name->Length : 0;
-    Out->ThreadName.MaximumLength = Out->ThreadName.Length;
-
-    if (Out->ThreadName.Length != 0)
-    {
-        RtlCopyMemory(Out->ThreadName.Buffer,
-                      Name->Buffer,
-                      Out->ThreadName.Length);
+        Copy = ExAllocatePoolWithTag(PagedPool, NameLength, TAG_THREAD_NAME);
+        if (Copy == NULL)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        else
+            RtlCopyMemory(Copy, Name->Buffer, NameLength);
     }
 
     PspUnlockThreadSecurityShared(Thread);
 
-    *ReturnLength = Needed;
-    return STATUS_SUCCESS;
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Length < *ReturnLength) return STATUS_BUFFER_TOO_SMALL;
+
+    _SEH2_TRY
+    {
+        Out->ThreadName.Buffer = (PWCHAR)((PUCHAR)Buffer +
+                                          sizeof(THREAD_NAME_INFORMATION));
+        Out->ThreadName.Length = NameLength;
+        Out->ThreadName.MaximumLength = NameLength;
+
+        if (NameLength != 0)
+            RtlCopyMemory(Out->ThreadName.Buffer, Copy, NameLength);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Copy != NULL) ExFreePoolWithTag(Copy, TAG_THREAD_NAME);
+
+    return Status;
 }
 
 /*
@@ -153,18 +231,17 @@ NtQueryInformationThread(
     if (ThreadInformationClass >= MaxThreadInfoClass)
         return STATUS_INVALID_INFO_CLASS;
 
-    if (PreviousMode != KernelMode)
+    Status = PspCheckInformationClass(&PspQueryThreadClasses[ThreadInformationClass],
+                                      ThreadInformation,
+                                      ThreadInformationLength,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if ((PreviousMode != KernelMode) && (ReturnLength != NULL))
     {
         _SEH2_TRY
         {
-            if (ThreadInformationLength != 0)
-            {
-                ProbeForWrite(ThreadInformation,
-                              ThreadInformationLength,
-                              sizeof(ULONG));
-            }
-
-            if (ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
+            ProbeForWriteUlong(ReturnLength);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -176,6 +253,8 @@ NtQueryInformationThread(
     /* What a thread is, rather than what it is doing, is open more widely */
     if (ThreadInformationClass == ThreadBasicInformation ||
         ThreadInformationClass == ThreadTimes ||
+        ThreadInformationClass == ThreadAmILastThread ||
+        ThreadInformationClass == ThreadPriorityBoost ||
         ThreadInformationClass == ThreadNameInformation ||
         ThreadInformationClass == ThreadIsTerminated ||
         ThreadInformationClass == ThreadSuspendCount ||
@@ -196,6 +275,16 @@ NtQueryInformationThread(
                                        (PVOID*)&Thread,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PspProbeInformationForWrite(&PspQueryThreadClasses[ThreadInformationClass],
+                                         ThreadInformation,
+                                         ThreadInformationLength,
+                                         PreviousMode);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(Thread);
+        return Status;
+    }
 
     switch (ThreadInformationClass)
     {
@@ -526,16 +615,6 @@ NtQueryInformationThread(
                                                 &Length);
             break;
 
-        case ThreadDbgkWerReportActive:
-            Value = Thread->DbgWerUserReportActive ? 1 : 0;
-
-            Status = PspReturnThreadInformation(ThreadInformation,
-                                                ThreadInformationLength,
-                                                &Value,
-                                                sizeof(BOOLEAN),
-                                                &Length);
-            break;
-
         case ThreadPowerThrottlingState:
             RtlZeroMemory(&Throttling, sizeof(Throttling));
             Throttling.Version = 1;
@@ -603,38 +682,38 @@ NtQueryInformationThread(
             }
             break;
 
-        case ThreadDescriptorTableEntry:
-            /* TODO: only x86 has a descriptor table, and reading an entry
-             * from one needs an architecture hook this subsystem lacks */
-            Status = STATUS_NOT_SUPPORTED;
-            break;
-
-        case ThreadEventPair_Reusable:
-        case ThreadUmsInformation:
         case ThreadCounterProfiling:
-        case ThreadCSwitchMon:
-        case ThreadCSwitchPmu:
-            /*
-             * Each of these named a facility that was taken out of the
-             * system: a caller is told it is not there rather than being
-             * given an answer that no longer means anything.
-             */
-            Status = STATUS_NOT_SUPPORTED;
-            break;
+        case ThreadCpuAccountingInformation:
+            /* Neither the thread's counters nor its time are kept for anyone else */
+            Value = 0;
 
-        case ThreadCreateStateChange:
-        case ThreadApplyStateChange:
-            /* TODO: the state-change object a caller freezes a thread with */
-            Status = STATUS_NOT_SUPPORTED;
+            Status = PspReturnThreadInformation(ThreadInformation,
+                                                ThreadInformationLength,
+                                                &Value,
+                                                sizeof(BOOLEAN),
+                                                &Length);
             break;
 
         case ThreadLastSystemCall:
+            /* An empty buffer cannot hold any answer, whatever its shape */
+            if (ThreadInformationLength == 0)
+            {
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
             /* TODO: the last call the thread made; the published headers
              * give no shape for the answer. INFO_NEEDED */
             Status = STATUS_NOT_SUPPORTED;
             break;
 
         case ThreadTebInformation:
+            if (ThreadInformationLength == 0)
+            {
+                Status = STATUS_INFO_LENGTH_MISMATCH;
+                break;
+            }
+
             /* TODO: read a span of the thread's own block; the published
              * headers give no shape for the request. INFO_NEEDED */
             Status = STATUS_NOT_SUPPORTED;
@@ -652,7 +731,6 @@ NtQueryInformationThread(
         case ThreadIdealProcessor:
         case ThreadSetTlsArrayAddress:
         case ThreadSwitchLegacyState:
-        case ThreadCpuAccountingInformation:
         case ThreadAttachContainer:
         case ThreadManageWritesToExecutableMemory:
         case ThreadWorkloadClass:

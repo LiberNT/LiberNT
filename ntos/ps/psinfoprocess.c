@@ -55,7 +55,173 @@ typedef struct _PSP_HANDLE_WALK
     ULONG Count;
 } PSP_HANDLE_WALK, *PPSP_HANDLE_WALK;
 
+/*
+ * The lengths each class may be asked with, checked before the process is
+ * looked up. A class with more than one shape names each length it accepts.
+ */
+static const PSP_INFORMATION_CLASS PspQueryProcessClasses[MaxProcessInfoClass] =
+{
+    [ProcessBasicInformation] = PSP_INFO_EXACT_OR(sizeof(PROCESS_BASIC_INFORMATION),
+                                                  sizeof(PROCESS_EXTENDED_BASIC_INFORMATION)),
+    [ProcessQuotaLimits] = PSP_INFO_EXACT_OR(sizeof(QUOTA_LIMITS), sizeof(QUOTA_LIMITS_EX)),
+    [ProcessIoCounters] = PSP_INFO_EXACT(sizeof(IO_COUNTERS)),
+    [ProcessVmCounters] = PSP_INFO_MINIMUM(sizeof(VM_COUNTERS)),
+    [ProcessTimes] = PSP_INFO_EXACT(sizeof(KERNEL_USER_TIMES)),
+    [ProcessBasePriority] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessRaisePriority] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessDebugPort] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ProcessExceptionPort] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessAccessToken] = PSP_INFO_WRONG_DIRECTION,
+    /* TODO: x86 keeps a local descriptor table that this class reads */
+    [ProcessLdtInformation] = PSP_INFO_NOT_IMPLEMENTED,
+    [ProcessLdtSize] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessDefaultHardErrorMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessIoPortHandlers] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessPooledUsageAndLimits] = PSP_INFO_EXACT(sizeof(POOLED_USAGE_AND_LIMITS)),
+    [ProcessWorkingSetWatch] = PSP_INFO_MINIMUM(sizeof(PROCESS_WS_WATCH_INFORMATION)),
+    [ProcessUserModeIOPL] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessEnableAlignmentFaultFixup] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessPriorityClass] = PSP_INFO_EXACT_ALIGNED(sizeof(PROCESS_PRIORITY_CLASS), sizeof(UCHAR)),
+    [ProcessWx86Information] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessHandleCount] = PSP_INFO_MINIMUM(sizeof(ULONG)),
+    [ProcessAffinityMask] = PSP_INFO_EXACT(sizeof(KAFFINITY)),
+    [ProcessPriorityBoost] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessDeviceMap] = PSP_INFO_EXACT_OR(RTL_FIELD_SIZE(PROCESS_DEVICEMAP_INFORMATION, Query),
+                                           sizeof(PROCESS_DEVICEMAP_INFORMATION_EX)),
+    [ProcessSessionInformation] = PSP_INFO_EXACT(sizeof(PROCESS_SESSION_INFORMATION)),
+    [ProcessForegroundInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessWow64Information] = PSP_INFO_EXACT(sizeof(ULONG_PTR)),
+    [ProcessImageFileName] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
+    [ProcessLUIDDeviceMapsEnabled] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessBreakOnTermination] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessDebugObjectHandle] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ProcessDebugFlags] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessHandleTracing] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
+    [ProcessIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessExecuteFlags] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessTlsInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessCookie] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessImageInformation] = PSP_INFO_EXACT(sizeof(SECTION_IMAGE_INFORMATION)),
+    [ProcessCycleTime] = PSP_INFO_EXACT(sizeof(PROCESS_CYCLE_TIME_INFORMATION)),
+    [ProcessPagePriority] = PSP_INFO_EXACT(sizeof(PAGE_PRIORITY_INFORMATION)),
+    [ProcessInstrumentationCallback] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessThreadStackAllocation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessImageFileNameWin32] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
+    [ProcessAffinityUpdateMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessMemoryAllocationMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessGroupInformation] = PSP_INFO_MINIMUM_ALIGNED(sizeof(USHORT), sizeof(USHORT)),
+    [ProcessTokenVirtualizationEnabled] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessMitigationPolicy] = PSP_INFO_MINIMUM(sizeof(ULONG) * 2),
+    [ProcessDynamicFunctionTableInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessHandleCheckingMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessRevokeFileHandles] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessWorkingSetControl] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessHandleTable] = PSP_INFO_MINIMUM(sizeof(ULONG)),
+    [ProcessCheckStackExtentsMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessCommandLineInformation] = PSP_INFO_GUARDED(PspInformationAnyLength, 0),
+    [ProcessProtectionInformation] = PSP_INFO_EXACT_ALIGNED(sizeof(PS_PROTECTION), sizeof(UCHAR)),
+    [ProcessMemoryExhaustion] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessFaultInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessSubsystemInformation] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessPowerThrottlingState] = PSP_INFO_EXACT(sizeof(PROCESS_POWER_THROTTLING_STATE)),
+    [ProcessManageWritesToExecutableMemory] = PSP_INFO_WRONG_DIRECTION,
+};
+
 /* PRIVATE FUNCTIONS **********************************************************/
+
+/*
+ * Checks the arguments the way every information class does before the
+ * object is looked up: where the buffer is and how it is aligned first,
+ * without reading or writing it, then whether the class goes this way and
+ * whether the length is one it accepts.
+ */
+NTSTATUS
+NTAPI
+PspCheckInformationClass(
+    _In_ const PSP_INFORMATION_CLASS *Class,
+    _In_reads_bytes_opt_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    ULONG Alignment = (Class->Alignment != 0) ? Class->Alignment : sizeof(ULONG);
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(Buffer, Length, Alignment);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    switch (Class->Rule)
+    {
+        case PspInformationWrongDirection:
+            return STATUS_INVALID_INFO_CLASS;
+
+        case PspInformationNotImplemented:
+            return STATUS_NOT_IMPLEMENTED;
+
+        case PspInformationExactLength:
+            if ((Length != Class->Size) &&
+                ((Class->AlternateSize == 0) || (Length != Class->AlternateSize)))
+            {
+                return STATUS_INFO_LENGTH_MISMATCH;
+            }
+            break;
+
+        case PspInformationMinimumLength:
+            if (Length < Class->Size) return STATUS_INFO_LENGTH_MISMATCH;
+            break;
+
+        case PspInformationMultipleLength:
+            if ((Length % Class->Size) != 0) return STATUS_INFO_LENGTH_MISMATCH;
+            break;
+
+        default:
+            break;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Makes the caller's buffer writable once the object is known, so that the
+ * answer can be copied into it without faulting. A class whose handler guards
+ * its own writes is left alone: it may refuse before writing anything.
+ */
+NTSTATUS
+NTAPI
+PspProbeInformationForWrite(
+    _In_ const PSP_INFORMATION_CLASS *Class,
+    _Out_writes_bytes_opt_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    ULONG Alignment = (Class->Alignment != 0) ? Class->Alignment : sizeof(ULONG);
+
+    if ((PreviousMode == KernelMode) || (Length == 0) ||
+        ((Class->Flags & PSP_INFORMATION_GUARDED_WRITE) != 0))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    _SEH2_TRY
+    {
+        ProbeForWrite(Buffer, Length, Alignment);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
 
 /*
  * Copies an answer out to the caller and says how long it is. A caller that
@@ -128,14 +294,23 @@ PspReturnString(
 
     if (Length < Needed) return STATUS_INFO_LENGTH_MISMATCH;
 
-    Out->Buffer = (PWCHAR)((PUCHAR)Buffer + sizeof(UNICODE_STRING));
-    Out->Length = String->Length;
-    Out->MaximumLength = (USHORT)(String->Length + sizeof(UNICODE_NULL));
+    /* The caller's buffer is not touched before this, so a bad one faults here */
+    _SEH2_TRY
+    {
+        Out->Buffer = (PWCHAR)((PUCHAR)Buffer + sizeof(UNICODE_STRING));
+        Out->Length = String->Length;
+        Out->MaximumLength = (USHORT)(String->Length + sizeof(UNICODE_NULL));
 
-    if (String->Length != 0)
-        RtlCopyMemory(Out->Buffer, String->Buffer, String->Length);
+        if (String->Length != 0)
+            RtlCopyMemory(Out->Buffer, String->Buffer, String->Length);
 
-    Out->Buffer[String->Length / sizeof(WCHAR)] = UNICODE_NULL;
+        Out->Buffer[String->Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
 
     return STATUS_SUCCESS;
 }
@@ -465,8 +640,9 @@ PspCountHandle(
 }
 
 /*
- * The handles a process holds, as their values alone. A caller uses this to
- * find what a process has open without having to read its handle table.
+ * The handles a process holds, as their 32-bit values alone. A caller uses
+ * this to find what a process has open without having to read its handle
+ * table, and a short buffer is given as many as fit.
  */
 static
 NTSTATUS
@@ -479,6 +655,8 @@ PspQueryHandleTable(
     PSP_HANDLE_WALK Walk;
     PHANDLE_TABLE Table;
     PHANDLE Captured;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Index;
     ULONG Room;
 
     PAGED_CODE();
@@ -508,19 +686,24 @@ PspQueryHandleTable(
     ObDereferenceProcessHandleTable(Process);
 
     if (Walk.Count > Room) Walk.Count = Room;
+    if (Walk.Count > Length / sizeof(ULONG)) Walk.Count = Length / sizeof(ULONG);
 
-    *ReturnLength = Walk.Count * (ULONG)sizeof(HANDLE);
-
-    if (Length < *ReturnLength)
+    _SEH2_TRY
     {
-        ExFreePoolWithTag(Captured, TAG_SEPA);
-        return STATUS_INFO_LENGTH_MISMATCH;
+        for (Index = 0; Index < Walk.Count; Index++)
+            ((PULONG)Buffer)[Index] = HandleToUlong(Captured[Index]);
     }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
-    RtlCopyMemory(Buffer, Captured, *ReturnLength);
     ExFreePoolWithTag(Captured, TAG_SEPA);
 
-    return STATUS_SUCCESS;
+    if (NT_SUCCESS(Status)) *ReturnLength = Walk.Count * (ULONG)sizeof(ULONG);
+
+    return Status;
 }
 
 /*
@@ -564,7 +747,6 @@ NtQueryInformationProcess(
     PROCESS_CYCLE_TIME_INFORMATION Cycles;
     PROCESS_POWER_THROTTLING_STATE Throttling;
     POOLED_USAGE_AND_LIMITS Pooled;
-    MANAGE_WRITES_TO_EXECUTABLE_MEMORY Writes;
     KERNEL_USER_TIMES Times;
     VM_COUNTERS_EX2 Counters;
     IO_COUNTERS Io;
@@ -582,18 +764,17 @@ NtQueryInformationProcess(
     if (ProcessInformationClass >= MaxProcessInfoClass)
         return STATUS_INVALID_INFO_CLASS;
 
-    if (PreviousMode != KernelMode)
+    Status = PspCheckInformationClass(&PspQueryProcessClasses[ProcessInformationClass],
+                                      ProcessInformation,
+                                      ProcessInformationLength,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if ((PreviousMode != KernelMode) && (ReturnLength != NULL))
     {
         _SEH2_TRY
         {
-            if (ProcessInformationLength != 0)
-            {
-                ProbeForWrite(ProcessInformation,
-                              ProcessInformationLength,
-                              sizeof(ULONG));
-            }
-
-            if (ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
+            ProbeForWriteUlong(ReturnLength);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -620,10 +801,15 @@ NtQueryInformationProcess(
         ProcessInformationClass == ProcessProtectionInformation ||
         ProcessInformationClass == ProcessTelemetryIdInformation ||
         ProcessInformationClass == ProcessCommandLineInformation ||
+        ProcessInformationClass == ProcessPowerThrottlingState ||
         ProcessInformationClass == ProcessInPrivate)
     {
         Access = PROCESS_QUERY_LIMITED_INFORMATION;
     }
+
+    /* The list of handles is what a duplicator of them needs */
+    if (ProcessInformationClass == ProcessHandleTable)
+        Access = PROCESS_QUERY_INFORMATION | PROCESS_DUP_HANDLE;
 
     /* The cookie is a process's own secret, so only it may read it */
     if (ProcessInformationClass == ProcessCookie &&
@@ -639,6 +825,16 @@ NtQueryInformationProcess(
                                        (PVOID*)&Process,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PspProbeInformationForWrite(&PspQueryProcessClasses[ProcessInformationClass],
+                                         ProcessInformation,
+                                         ProcessInformationLength,
+                                         PreviousMode);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(Process);
+        return Status;
+    }
 
     switch (ProcessInformationClass)
     {
@@ -1284,10 +1480,30 @@ NtQueryInformationProcess(
 
         case ProcessPowerThrottlingState:
         {
-            PPO_PROCESS_ENERGY_CONTEXT Energy = PspGetEnergyContext(Process);
+            PPO_PROCESS_ENERGY_CONTEXT Energy;
+
+            /* The caller says which version of the record it is asking for */
+            _SEH2_TRY
+            {
+                Value = ((PROCESS_POWER_THROTTLING_STATE *)ProcessInformation)->Version;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+            if (!NT_SUCCESS(Status)) break;
+
+            if (Value != PROCESS_POWER_THROTTLING_CURRENT_VERSION)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            Energy = PspGetEnergyContext(Process);
 
             RtlZeroMemory(&Throttling, sizeof(Throttling));
-            Throttling.Version = 1;
+            Throttling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
 
             if (Energy != NULL)
             {
@@ -1330,34 +1546,14 @@ NtQueryInformationProcess(
                                           &Length);
             break;
 
-        case ProcessManageWritesToExecutableMemory:
-            RtlZeroMemory(&Writes, sizeof(Writes));
-            Writes.Version = 1;
-            Writes.ProcessEnableWriteExceptions =
-                Process->ManageExecutableMemoryWrites;
-
-            Status = PspReturnInformation(ProcessInformation,
-                                          ProcessInformationLength,
-                                          &Writes,
-                                          sizeof(Writes),
-                                          &Length);
-            break;
-
         case ProcessWx86Information:
-            /* Nothing on this system runs through an x86 emulator layer */
-            Value = 0;
+            Value = Process->VdmAllowed;
 
             Status = PspReturnInformation(ProcessInformation,
                                           ProcessInformationLength,
                                           &Value,
                                           sizeof(Value),
                                           &Length);
-            break;
-
-        case ProcessLdtInformation:
-            /* TODO: only x86 has a local descriptor table, and reading one
-             * needs an architecture hook this subsystem does not have yet */
-            Status = STATUS_NOT_SUPPORTED;
             break;
 
         /*

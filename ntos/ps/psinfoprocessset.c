@@ -14,6 +14,70 @@
 #define PSP_AFFINITY_UPDATE_ENABLE      0x1
 #define PSP_AFFINITY_UPDATE_PERMANENT   0x2
 
+/*
+ * The lengths each class may be set with, checked before the process is
+ * looked up. A class that is only ever read is refused once the buffer has
+ * been checked.
+ */
+static const PSP_INFORMATION_CLASS PspSetProcessClasses[MaxProcessInfoClass] =
+{
+    [ProcessBasicInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessQuotaLimits] = PSP_INFO_EXACT_OR(sizeof(QUOTA_LIMITS), sizeof(QUOTA_LIMITS_EX)),
+    [ProcessIoCounters] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessVmCounters] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessTimes] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessBasePriority] = PSP_INFO_EXACT(sizeof(KPRIORITY)),
+    [ProcessRaisePriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessDebugPort] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessExceptionPort] = PSP_INFO_EXACT(sizeof(HANDLE)),
+    [ProcessAccessToken] = PSP_INFO_EXACT(sizeof(PROCESS_ACCESS_TOKEN)),
+    /* TODO: x86 keeps a local descriptor table and I/O port handlers that these classes change */
+    [ProcessLdtInformation] = PSP_INFO_NOT_IMPLEMENTED,
+    [ProcessLdtSize] = PSP_INFO_NOT_IMPLEMENTED,
+    [ProcessDefaultHardErrorMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessIoPortHandlers] = PSP_INFO_NOT_IMPLEMENTED,
+    [ProcessPooledUsageAndLimits] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessEnableAlignmentFaultFixup] = PSP_INFO_EXACT_ALIGNED(sizeof(BOOLEAN), sizeof(UCHAR)),
+    [ProcessPriorityClass] = PSP_INFO_EXACT_ALIGNED(sizeof(PROCESS_PRIORITY_CLASS), sizeof(UCHAR)),
+    [ProcessWx86Information] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessHandleCount] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessAffinityMask] = PSP_INFO_EXACT(sizeof(KAFFINITY)),
+    [ProcessPriorityBoost] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessDeviceMap] = PSP_INFO_EXACT(RTL_FIELD_SIZE(PROCESS_DEVICEMAP_INFORMATION, Set)),
+    [ProcessSessionInformation] = PSP_INFO_EXACT(sizeof(PROCESS_SESSION_INFORMATION)),
+    [ProcessForegroundInformation] = PSP_INFO_EXACT_ALIGNED(sizeof(PROCESS_FOREGROUND_BACKGROUND),
+                                                            sizeof(UCHAR)),
+    [ProcessWow64Information] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessImageFileName] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessLUIDDeviceMapsEnabled] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessBreakOnTermination] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessDebugObjectHandle] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessDebugFlags] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessIoPriority] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessExecuteFlags] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessTlsInformation] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessCookie] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessImageInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessCycleTime] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessPagePriority] = PSP_INFO_EXACT(sizeof(PAGE_PRIORITY_INFORMATION)),
+    [ProcessImageFileNameWin32] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessAffinityUpdateMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessMemoryAllocationMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessGroupInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessTokenVirtualizationEnabled] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessMitigationPolicy] = PSP_INFO_EXACT(sizeof(ULONG) * 2),
+    [ProcessHandleCheckingMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessHandleTable] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessCheckStackExtentsMode] = PSP_INFO_EXACT(sizeof(ULONG)),
+    [ProcessCommandLineInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessTelemetryIdInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessSubsystemInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessEnergyValues] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessPowerThrottlingState] = PSP_INFO_EXACT(sizeof(PROCESS_POWER_THROTTLING_STATE)),
+    [ProcessWakeInformation] = PSP_INFO_WRONG_DIRECTION,
+    [ProcessManageWritesToExecutableMemory] = PSP_INFO_EXACT(sizeof(MANAGE_WRITES_TO_EXECUTABLE_MEMORY)),
+};
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -311,6 +375,12 @@ NtSetInformationProcess(
     if (ProcessInformationClass >= MaxProcessInfoClass)
         return STATUS_INVALID_INFO_CLASS;
 
+    Status = PspCheckInformationClass(&PspSetProcessClasses[ProcessInformationClass],
+                                      ProcessInformation,
+                                      ProcessInformationLength,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
     /*
      * Which right the change needs depends on what is being changed: the
      * accounting classes are a different right from the behaviour ones, and
@@ -388,11 +458,8 @@ NtSetInformationProcess(
                                               sizeof(Value));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Value > HIGH_PRIORITY)
-            {
-                Status = STATUS_INVALID_PARAMETER;
-                break;
-            }
+            /* A boost past the top of the range is the boost to the top of it */
+            if (Value > HIGH_PRIORITY) Value = HIGH_PRIORITY;
 
             Status = PspRaiseProcessThreads(Process, (KPRIORITY)Value);
             break;
@@ -1060,14 +1127,61 @@ NtSetInformationProcess(
             Status = STATUS_NOT_SUPPORTED;
             break;
 
-        case ProcessLdtInformation:
-        case ProcessLdtSize:
-        case ProcessIoPortHandlers:
         case ProcessUserModeIOPL:
-            /* TODO: the x86 descriptor table and port classes need an
-             * architecture hook this subsystem does not have yet */
+            /* TODO: x86 lets a process do port I/O from user mode; this needs an architecture hook */
             Status = STATUS_NOT_SUPPORTED;
             break;
+
+        case ProcessWx86Information:
+            Status = PspCaptureSetInformation(ProcessInformation,
+                                              ProcessInformationLength,
+                                              PreviousMode,
+                                              &Value,
+                                              sizeof(Value));
+            if (!NT_SUCCESS(Status)) break;
+
+            if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+            {
+                Status = STATUS_PRIVILEGE_NOT_HELD;
+                break;
+            }
+
+            if (Value != 0)
+                PspSetProcessFlag(Process, PSF_VDM_ALLOWED_BIT);
+            else
+                PspClearProcessFlag(Process, PSF_VDM_ALLOWED_BIT);
+
+            Status = STATUS_SUCCESS;
+            break;
+
+        case ProcessHandleCheckingMode:
+        {
+            PHANDLE_TABLE Table;
+
+            Status = PspCaptureSetInformation(ProcessInformation,
+                                              ProcessInformationLength,
+                                              PreviousMode,
+                                              &Value,
+                                              sizeof(Value));
+            if (!NT_SUCCESS(Status)) break;
+
+            Table = ObReferenceProcessHandleTable(Process);
+            if (Table == NULL)
+            {
+                Status = STATUS_PROCESS_IS_TERMINATING;
+                break;
+            }
+
+            /* A bad handle then raises in the process instead of only failing the call */
+            if (Value != 0)
+                InterlockedOr((PLONG)&Table->Flags, OB_HANDLE_EXCEPTIONS_ENABLED);
+            else
+                InterlockedAnd((PLONG)&Table->Flags, ~OB_HANDLE_EXCEPTIONS_ENABLED);
+
+            ObDereferenceProcessHandleTable(Process);
+            Status = STATUS_SUCCESS;
+            break;
+        }
 
         /*
          * The classes below are read and never written.
@@ -1090,8 +1204,6 @@ NtSetInformationProcess(
         case ProcessCycleTime:
         case ProcessPooledUsageAndLimits:
         case ProcessGroupInformation:
-        case ProcessWx86Information:
-        case ProcessHandleCheckingMode:
         case ProcessSubsystemInformation:
         case ProcessTelemetryIdInformation:
         case ProcessEnergyValues:
