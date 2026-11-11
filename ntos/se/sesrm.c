@@ -279,7 +279,7 @@ SepTellLsaSessionUnused(
                                        &Length,
                                        NULL,
                                        &Timeout);
-    if (!NT_SUCCESS(Status))
+    if (Status != STATUS_SUCCESS)
         DPRINT1("SE: the authority did not take an ended session (0x%08lx)\n", Status);
 
     return Status;
@@ -330,16 +330,19 @@ SepLsaNoticeThread(
 
         Notice = CONTAINING_RECORD(Entry, SEP_LSA_NOTICE, Entry);
 
-        /* A timed-out request stays with the authority, which still acts on it */
         Status = SepTellLsaSessionUnused(&Notice->LogonId);
-        if (NT_SUCCESS(Status))
+        if (Status == STATUS_SUCCESS)
         {
             ExFreePoolWithTag(Notice, TAG_SE);
             continue;
         }
 
-        ZwClose(SepLsaCommandPort);
-        SepLsaCommandPort = NULL;
+        /* A request that timed out still in the queue was withdrawn, so it is sent again; a repeat finds no session */
+        if (Status != STATUS_TIMEOUT)
+        {
+            ZwClose(SepLsaCommandPort);
+            SepLsaCommandPort = NULL;
+        }
 
         KeAcquireGuardedMutex(&SepLsaNoticeLock);
         InsertHeadList(&SepLsaNoticeList, &Notice->Entry);
