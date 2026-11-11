@@ -188,6 +188,37 @@ IopAbortRequest(
 
 static
 NTSTATUS
+IopBeginRequestEitherAccess(
+    _Out_ PIOP_REQUEST Request,
+    _In_ HANDLE FileHandle,
+    _In_ ACCESS_MASK FirstAccess,
+    _In_ ACCESS_MASK SecondAccess,
+    _In_opt_ HANDLE EventHandle,
+    _In_ PIO_STATUS_BLOCK IoStatusBlock,
+    _In_ UCHAR MajorFunction)
+{
+    NTSTATUS Status;
+
+    Status = IopBeginRequest(Request,
+                             FileHandle,
+                             FirstAccess,
+                             EventHandle,
+                             IoStatusBlock,
+                             MajorFunction,
+                             TRUE);
+    if (Status != STATUS_ACCESS_DENIED) return Status;
+
+    return IopBeginRequest(Request,
+                           FileHandle,
+                           SecondAccess,
+                           EventHandle,
+                           IoStatusBlock,
+                           MajorFunction,
+                           TRUE);
+}
+
+static
+NTSTATUS
 IopIssueRequest(
     _In_ PIOP_REQUEST Request,
     _In_ IOP_TRANSFER_TYPE TransferType)
@@ -900,13 +931,13 @@ NtFlushBuffersFile(
 
     PAGED_CODE();
 
-    Status = IopBeginRequest(&Request,
-                             FileHandle,
-                             FILE_WRITE_DATA | FILE_APPEND_DATA,
-                             NULL,
-                             IoStatusBlock,
-                             IRP_MJ_FLUSH_BUFFERS,
-                             TRUE);
+    Status = IopBeginRequestEitherAccess(&Request,
+                                         FileHandle,
+                                         FILE_WRITE_DATA,
+                                         FILE_APPEND_DATA,
+                                         NULL,
+                                         IoStatusBlock,
+                                         IRP_MJ_FLUSH_BUFFERS);
     if (!NT_SUCCESS(Status)) return Status;
 
     Request.Irp->Flags = IRP_SYNCHRONOUS_API | IRP_DEFER_IO_COMPLETION;
@@ -936,13 +967,13 @@ NtFlushBuffersFileEx(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Status = IopBeginRequest(&Request,
-                             FileHandle,
-                             FILE_WRITE_DATA | FILE_APPEND_DATA,
-                             NULL,
-                             IoStatusBlock,
-                             IRP_MJ_FLUSH_BUFFERS,
-                             TRUE);
+    Status = IopBeginRequestEitherAccess(&Request,
+                                         FileHandle,
+                                         FILE_WRITE_DATA,
+                                         FILE_APPEND_DATA,
+                                         NULL,
+                                         IoStatusBlock,
+                                         IRP_MJ_FLUSH_BUFFERS);
     if (!NT_SUCCESS(Status)) return Status;
 
     Request.Irp->Flags = IRP_SYNCHRONOUS_API | IRP_DEFER_IO_COMPLETION;
@@ -972,13 +1003,13 @@ NtLockFile(
 
     PAGED_CODE();
 
-    Status = IopBeginRequest(&Request,
-                             FileHandle,
-                             FILE_READ_DATA | FILE_WRITE_DATA,
-                             Event,
-                             IoStatusBlock,
-                             IRP_MJ_LOCK_CONTROL,
-                             TRUE);
+    Status = IopBeginRequestEitherAccess(&Request,
+                                         FileHandle,
+                                         FILE_READ_DATA,
+                                         FILE_WRITE_DATA,
+                                         Event,
+                                         IoStatusBlock,
+                                         IRP_MJ_LOCK_CONTROL);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Request.PreviousMode != KernelMode)
@@ -1040,13 +1071,13 @@ NtUnlockFile(
 
     PAGED_CODE();
 
-    Status = IopBeginRequest(&Request,
-                             FileHandle,
-                             FILE_READ_DATA | FILE_WRITE_DATA,
-                             NULL,
-                             IoStatusBlock,
-                             IRP_MJ_LOCK_CONTROL,
-                             TRUE);
+    Status = IopBeginRequestEitherAccess(&Request,
+                                         FileHandle,
+                                         FILE_READ_DATA,
+                                         FILE_WRITE_DATA,
+                                         NULL,
+                                         IoStatusBlock,
+                                         IRP_MJ_LOCK_CONTROL);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Request.PreviousMode != KernelMode)
