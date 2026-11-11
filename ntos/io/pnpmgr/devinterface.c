@@ -257,6 +257,7 @@ IopFindInterface(
 VOID
 IopSetInterfaceLinked(
     _In_ PIOP_DEVICE_INTERFACE Interface,
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
     _In_ BOOLEAN Linked)
 {
     UNICODE_STRING LinkedName = RTL_CONSTANT_STRING(L"Linked");
@@ -272,7 +273,7 @@ IopSetInterfaceLinked(
 
     PAGED_CODE();
 
-    DeviceNode = IopGetDeviceNode(Interface->PhysicalDeviceObject);
+    DeviceNode = IopGetDeviceNode(PhysicalDeviceObject);
     if (DeviceNode == NULL) return;
 
     Status = IopBuildInterfaceName(&DeviceNode->InstancePath,
@@ -321,7 +322,9 @@ IoRegisterDeviceInterface(
     _In_opt_ PUNICODE_STRING ReferenceString,
     _Out_ PUNICODE_STRING SymbolicLinkName)
 {
+    PIOP_DEVICE_INTERFACE NewInterface;
     PIOP_DEVICE_INTERFACE Interface;
+    PDEVICE_OBJECT Previous = NULL;
     UNICODE_STRING RegistryName;
     UNICODE_STRING LinkName;
     UNICODE_STRING ValueName;
@@ -422,34 +425,111 @@ IoRegisterDeviceInterface(
 
     ZwClose(InstanceKey);
 
-    Interface = ExAllocatePoolZero(NonPagedPool,
-                                   sizeof(IOP_DEVICE_INTERFACE),
-                                   TAG_IO_NAME);
-    if (Interface == NULL)
+    NewInterface = ExAllocatePoolZero(NonPagedPool,
+                                      sizeof(IOP_DEVICE_INTERFACE),
+                                      TAG_IO_NAME);
+    if (NewInterface == NULL)
     {
         ExFreePoolWithTag(LinkName.Buffer, TAG_IO_NAME);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    Interface->SymbolicLinkName = LinkName;
-    Interface->ClassGuid = *InterfaceClassGuid;
-    Interface->PhysicalDeviceObject = PhysicalDeviceObject;
-    Interface->Enabled = FALSE;
+    ObReferenceObject(PhysicalDeviceObject);
 
+    /* A device object made again for the same instance takes over the interface its predecessor registered */
     KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
-    InsertTailList(&IopDeviceInterfaceListHead, &Interface->ListEntry);
+    Interface = IopFindInterface(&LinkName);
+    if (Interface != NULL)
+    {
+        Previous = Interface->PhysicalDeviceObject;
+        Interface->PhysicalDeviceObject = PhysicalDeviceObject;
+    }
+    else
+    {
+        NewInterface->SymbolicLinkName = LinkName;
+        NewInterface->ClassGuid = *InterfaceClassGuid;
+        NewInterface->PhysicalDeviceObject = PhysicalDeviceObject;
+        NewInterface->Enabled = FALSE;
+        InsertTailList(&IopDeviceInterfaceListHead, &NewInterface->ListEntry);
+    }
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+    if (Interface != NULL)
+    {
+        ObDereferenceObject(Previous);
+        ExFreePoolWithTag(NewInterface, TAG_IO_NAME);
+    }
 
     Buffer = ExAllocatePoolZero(PagedPool,
                                 LinkName.Length + sizeof(WCHAR),
                                 TAG_IO_NAME);
-    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+    if (Buffer == NULL)
+    {
+        if (Interface != NULL) ExFreePoolWithTag(LinkName.Buffer, TAG_IO_NAME);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     RtlCopyMemory(Buffer, LinkName.Buffer, LinkName.Length);
+    if (Interface != NULL) ExFreePoolWithTag(LinkName.Buffer, TAG_IO_NAME);
 
     SymbolicLinkName->Buffer = Buffer;
     SymbolicLinkName->Length = LinkName.Length;
     SymbolicLinkName->MaximumLength = LinkName.Length + sizeof(WCHAR);
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+IopLinkDeviceInterface(
+    _In_ PIOP_DEVICE_INTERFACE Interface,
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ PUNICODE_STRING SymbolicLinkName)
+{
+    POBJECT_NAME_INFORMATION NameInfo;
+    UNICODE_STRING DeviceName;
+    ULONG NameLength = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (IopGetDeviceNode(PhysicalDeviceObject) == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+
+    Status = ObQueryNameString(PhysicalDeviceObject,
+                               NULL,
+                               0,
+                               &NameLength);
+    if (Status != STATUS_INFO_LENGTH_MISMATCH &&
+        Status != STATUS_BUFFER_OVERFLOW &&
+        Status != STATUS_BUFFER_TOO_SMALL)
+    {
+        return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
+    }
+
+    NameInfo = ExAllocatePoolZero(PagedPool, NameLength, TAG_IO_NAME);
+    if (NameInfo == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = ObQueryNameString(PhysicalDeviceObject,
+                               NameInfo,
+                               NameLength,
+                               &NameLength);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
+        return Status;
+    }
+
+    DeviceName = NameInfo->Name;
+
+    IoCreateSymbolicLink(SymbolicLinkName, &DeviceName);
+
+    ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
+
+    IopSetInterfaceLinked(Interface, PhysicalDeviceObject, TRUE);
+
+    PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_ARRIVAL,
+                                  &Interface->ClassGuid,
+                                  SymbolicLinkName);
 
     return STATUS_SUCCESS;
 }
@@ -461,9 +541,8 @@ IoSetDeviceInterfaceState(
     _In_ BOOLEAN Enable)
 {
     PIOP_DEVICE_INTERFACE Interface;
-    PDEVICE_NODE DeviceNode;
-    UNICODE_STRING DeviceName;
-    NTSTATUS Status;
+    PDEVICE_OBJECT PhysicalDeviceObject;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
@@ -484,68 +563,29 @@ IoSetDeviceInterfaceState(
 
     Interface->Enabled = Enable;
 
+    PhysicalDeviceObject = Interface->PhysicalDeviceObject;
+    ObReferenceObject(PhysicalDeviceObject);
+
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
     if (Enable)
     {
-        POBJECT_NAME_INFORMATION NameInfo;
-        ULONG NameLength = 0;
+        Status = IopLinkDeviceInterface(Interface, PhysicalDeviceObject, SymbolicLinkName);
+    }
+    else
+    {
+        IoDeleteSymbolicLink(SymbolicLinkName);
 
-        DeviceNode = IopGetDeviceNode(Interface->PhysicalDeviceObject);
-        if (DeviceNode == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+        IopSetInterfaceLinked(Interface, PhysicalDeviceObject, FALSE);
 
-        Status = ObQueryNameString(Interface->PhysicalDeviceObject,
-                                   NULL,
-                                   0,
-                                   &NameLength);
-        if (Status != STATUS_INFO_LENGTH_MISMATCH &&
-            Status != STATUS_BUFFER_OVERFLOW &&
-            Status != STATUS_BUFFER_TOO_SMALL)
-        {
-            return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
-        }
-
-        NameInfo = ExAllocatePoolZero(PagedPool, NameLength, TAG_IO_NAME);
-        if (NameInfo == NULL) return STATUS_INSUFFICIENT_RESOURCES;
-
-        Status = ObQueryNameString(Interface->PhysicalDeviceObject,
-                                   NameInfo,
-                                   NameLength,
-                                   &NameLength);
-        if (!NT_SUCCESS(Status))
-        {
-            ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
-            return Status;
-        }
-
-        DeviceName = NameInfo->Name;
-
-        Status = IoCreateSymbolicLink(SymbolicLinkName, &DeviceName);
-
-        ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
-
-        if (!NT_SUCCESS(Status))
-        {
-        }
-
-        IopSetInterfaceLinked(Interface, TRUE);
-
-        PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_ARRIVAL,
+        PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
                                       &Interface->ClassGuid,
                                       SymbolicLinkName);
-
-        return STATUS_SUCCESS;
     }
 
-    IoDeleteSymbolicLink(SymbolicLinkName);
+    ObDereferenceObject(PhysicalDeviceObject);
 
-    IopSetInterfaceLinked(Interface, FALSE);
-
-    PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
-                                  &Interface->ClassGuid,
-                                  SymbolicLinkName);
-
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS

@@ -500,6 +500,7 @@ NTSTATUS IopOpenInterfaceClassKey(_In_ CONST GUID *ClassGuid,
                                   _Out_ PHANDLE KeyHandle);
 
 VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
+                           _In_ PDEVICE_OBJECT PhysicalDeviceObject,
                            _In_ BOOLEAN Linked);
 
 /* devprop.c */

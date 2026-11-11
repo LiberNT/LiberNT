@@ -867,6 +867,48 @@ IopReadStackProperty(
     return Status;
 }
 
+static
+NTSTATUS
+IopReturnInstancePath(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ ULONG Size,
+    _Out_writes_bytes_to_opt_(Size, *RequiredSize) PVOID Data,
+    _Out_ PULONG RequiredSize,
+    _Out_ PDEVPROPTYPE Type)
+{
+    NTSTATUS Status;
+    PWCHAR Text;
+    ULONG Length;
+
+    PAGED_CODE();
+
+    if (DeviceNode->InstancePath.Length == 0)
+    {
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    Length = DeviceNode->InstancePath.Length + sizeof(WCHAR);
+
+    Text = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
+    if (Text == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Text,
+                  DeviceNode->InstancePath.Buffer,
+                  DeviceNode->InstancePath.Length);
+
+    Status = IopReturnPropertyData(DEVPROP_TYPE_STRING,
+                                   Text,
+                                   Length,
+                                   Size,
+                                   Data,
+                                   RequiredSize,
+                                   Type);
+
+    ExFreePoolWithTag(Text, TAG_IO);
+
+    return Status;
+}
+
 /* What the device node itself knows; Answered tells whether the key is one of those */
 static
 NTSTATUS
@@ -880,55 +922,38 @@ IopReadDeviceNodeProperty(
     _Out_ PDEVPROPTYPE Type,
     _Out_ PBOOLEAN Answered)
 {
+    PDEVICE_OBJECT ParentObject;
     PDEVICE_NODE Parent;
     DEVPROP_BOOLEAN Flag;
     NTSTATUS Status;
-    PWCHAR Text;
     ULONG DeviceStatus;
     ULONG Problem;
-    ULONG Length;
     ULONG Value;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
     *Answered = TRUE;
 
-    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_InstanceId) ||
-        IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Parent))
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Parent))
     {
-        if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_Parent))
-        {
-            Parent = DeviceNode->Parent;
-            if (Parent == NULL) return STATUS_OBJECT_NAME_NOT_FOUND;
+        KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+        Parent = DeviceNode->Parent;
+        ParentObject = (Parent != NULL) ? Parent->PhysicalDeviceObject : NULL;
+        if (ParentObject != NULL) ObReferenceObject(ParentObject);
+        KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
-            DeviceNode = Parent;
-        }
+        if (ParentObject == NULL) return STATUS_OBJECT_NAME_NOT_FOUND;
 
-        if (DeviceNode->InstancePath.Length == 0)
-        {
-            return STATUS_OBJECT_NAME_NOT_FOUND;
-        }
+        Status = IopReturnInstancePath(Parent, Size, Data, RequiredSize, Type);
 
-        Length = DeviceNode->InstancePath.Length + sizeof(WCHAR);
-
-        Text = ExAllocatePoolZero(PagedPool, Length, TAG_IO);
-        if (Text == NULL) return STATUS_INSUFFICIENT_RESOURCES;
-
-        RtlCopyMemory(Text,
-                      DeviceNode->InstancePath.Buffer,
-                      DeviceNode->InstancePath.Length);
-
-        Status = IopReturnPropertyData(DEVPROP_TYPE_STRING,
-                                       Text,
-                                       Length,
-                                       Size,
-                                       Data,
-                                       RequiredSize,
-                                       Type);
-
-        ExFreePoolWithTag(Text, TAG_IO);
-
+        ObDereferenceObject(ParentObject);
         return Status;
+    }
+
+    if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_InstanceId))
+    {
+        return IopReturnInstancePath(DeviceNode, Size, Data, RequiredSize, Type);
     }
 
     if (IopIsSamePropertyKey(PropertyKey, &DEVPKEY_Device_DevNodeStatus) ||

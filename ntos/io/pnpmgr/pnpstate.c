@@ -1006,23 +1006,13 @@ PiProcessEnumeration(
 
 static
 VOID
-PiProcessRemoval(
+PiSendRemoval(
     _In_ PDEVICE_NODE DeviceNode,
     _In_ BOOLEAN Surprise)
 {
     IO_STACK_LOCATION StackLocation;
-    PDEVICE_NODE Child;
-    PDEVICE_NODE Next;
 
     PAGED_CODE();
-
-    Child = DeviceNode->Child;
-    while (Child != NULL)
-    {
-        Next = Child->Sibling;
-        PiProcessRemoval(Child, Surprise);
-        Child = Next;
-    }
 
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
 
@@ -1049,6 +1039,58 @@ PiProcessRemoval(
     IopQueueDeviceInstallEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
                                         : &GUID_DEVICE_SAFE_REMOVAL,
                                &DeviceNode->InstancePath);
+}
+
+/* A node out of the tree lives as long as its device object, whose delete routine frees it */
+static
+VOID
+PiDeleteDevNode(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PDEVICE_OBJECT DeviceObject = DeviceNode->PhysicalDeviceObject;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&IopDeviceTreeResource, TRUE);
+    PiUnlinkDevNode(DeviceNode);
+    PiSetDevNodeState(DeviceNode, DeviceNodeDeleted);
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
+
+    ObDereferenceObject(DeviceObject);
+}
+
+static
+VOID
+PiProcessRemoval(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ BOOLEAN Surprise,
+    _In_ BOOLEAN ParentRemoved)
+{
+    PDEVICE_NODE Child;
+    PDEVICE_NODE Next;
+
+    PAGED_CODE();
+
+    Child = DeviceNode->Child;
+    while (Child != NULL)
+    {
+        Next = Child->Sibling;
+        PiProcessRemoval(Child, Surprise, TRUE);
+        Child = Next;
+    }
+
+    if (DeviceNode->State != DeviceNodeRemoved)
+    {
+        PiSendRemoval(DeviceNode, Surprise);
+    }
+
+    /* TODO: a surprise-removed child leaves the tree once its remove request follows the last close */
+    if (ParentRemoved && !Surprise)
+    {
+        PiDeleteDevNode(DeviceNode);
+    }
 }
 
 VOID
@@ -1105,12 +1147,12 @@ PiDevNodeStateMachine(
                 break;
 
             case DeviceNodeAwaitingQueuedRemoval:
-                PiProcessRemoval(Node, FALSE);
+                PiProcessRemoval(Node, FALSE, FALSE);
                 Progress = TRUE;
                 break;
 
             case DeviceNodeAwaitingQueuedDeletion:
-                PiProcessRemoval(Node, TRUE);
+                PiProcessRemoval(Node, TRUE, FALSE);
                 Progress = TRUE;
                 break;
 
@@ -1154,7 +1196,7 @@ PiRunDeviceAction(
     PAGED_CODE();
 
     DeviceNode = IopGetDeviceNode(Request->DeviceObject);
-    if (DeviceNode == NULL)
+    if (DeviceNode == NULL || DeviceNode->State == DeviceNodeDeleted)
     {
         Status = STATUS_INVALID_DEVICE_REQUEST;
     }

@@ -322,7 +322,10 @@ IopFreeDeviceNode(
     {
         IoGetDevObjExtension(DeviceNode->PhysicalDeviceObject)->DeviceNode =
             NULL;
-        ObDereferenceObject(DeviceNode->PhysicalDeviceObject);
+        if (DeviceNode->State != DeviceNodeDeleted)
+        {
+            ObDereferenceObject(DeviceNode->PhysicalDeviceObject);
+        }
         DeviceNode->PhysicalDeviceObject = NULL;
     }
 
@@ -490,14 +493,13 @@ PiDeviceObjectClosed(
     }
 }
 
+static
 NTSTATUS
-IopTraverseDeviceTree(
+IopWalkDeviceTree(
     PDEVICETREE_TRAVERSE_CONTEXT Context)
 {
     PDEVICE_NODE Node;
     NTSTATUS Status;
-
-    PAGED_CODE();
 
     Node = Context->FirstDeviceNode;
     if (Node == NULL) return STATUS_SUCCESS;
@@ -526,6 +528,23 @@ IopTraverseDeviceTree(
 
         Node = Node->Sibling;
     }
+}
+
+NTSTATUS
+IopTraverseDeviceTree(
+    PDEVICETREE_TRAVERSE_CONTEXT Context)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&IopDeviceTreeResource, TRUE);
+    Status = IopWalkDeviceTree(Context);
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
+
+    return Status;
 }
 
 typedef struct _IOP_FIND_INSTANCE_CONTEXT

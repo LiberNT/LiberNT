@@ -35,6 +35,7 @@ typedef struct _POP_SLEEP_IRP_CONTEXT
 {
     PPOP_SLEEP_TRAVERSE Traverse;
     PDEVICE_NODE DeviceNode;
+    PDEVICE_OBJECT PhysicalDeviceObject;
     PDEVICE_OBJECT TopDeviceObject;
 } POP_SLEEP_IRP_CONTEXT, *PPOP_SLEEP_IRP_CONTEXT;
 
@@ -491,6 +492,7 @@ PopSleepIrpCompletion(
 
     PopSleepRecordStatus(Traverse, IrpContext->DeviceNode, Irp->IoStatus.Status);
     IoFreeIrp(Irp);
+    ObDereferenceObject(IrpContext->PhysicalDeviceObject);
     ObDereferenceObject(IrpContext->TopDeviceObject);
     ExFreePoolWithTag(IrpContext, POP_SLEEP_TAG);
 
@@ -535,7 +537,9 @@ PopSleepDeviceTraverse(
 
     IrpContext->Traverse = Traverse;
     IrpContext->DeviceNode = DeviceNode;
+    IrpContext->PhysicalDeviceObject = DeviceNode->PhysicalDeviceObject;
     IrpContext->TopDeviceObject = TopDeviceObject;
+    ObReferenceObject(IrpContext->PhysicalDeviceObject);
 
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
     Irp->IoStatus.Information = 0;
