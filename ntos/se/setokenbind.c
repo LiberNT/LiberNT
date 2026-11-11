@@ -477,6 +477,62 @@ NtImpersonateAnonymousToken(
     return Status;
 }
 
+static
+BOOLEAN
+SepSidSetsMatch(
+    _In_reads_(Count) PSID_AND_ATTRIBUTES First,
+    _In_reads_(Count) PSID_AND_ATTRIBUTES Second,
+    _In_ ULONG Count)
+{
+    ULONG i;
+    ULONG j;
+
+    for (i = 0; i < Count; i++)
+    {
+        for (j = 0; j < Count; j++)
+        {
+            if (First[i].Attributes == Second[j].Attributes &&
+                RtlEqualSid(First[i].Sid, Second[j].Sid))
+            {
+                break;
+            }
+        }
+
+        if (j == Count) return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+SepEnabledPrivilegesWithin(
+    _In_ PTOKEN Token,
+    _In_ PTOKEN Other)
+{
+    ULONG i;
+    ULONG j;
+
+    for (i = 0; i < Token->PrivilegeCount; i++)
+    {
+        if (!(Token->Privileges[i].Attributes & SE_PRIVILEGE_ENABLED)) continue;
+
+        for (j = 0; j < Other->PrivilegeCount; j++)
+        {
+            if ((Other->Privileges[j].Attributes & SE_PRIVILEGE_ENABLED) &&
+                RtlEqualLuid(&Token->Privileges[i].Luid,
+                             &Other->Privileges[j].Luid))
+            {
+                break;
+            }
+        }
+
+        if (j == Other->PrivilegeCount) return FALSE;
+    }
+
+    return TRUE;
+}
+
 /*
  * Whether two tokens say the same thing. Two tokens made from the same one
  * at the same moment are the same; anything either was told since is not.
@@ -493,8 +549,6 @@ NtCompareTokens(
     PTOKEN Second = NULL;
     BOOLEAN Same = FALSE;
     NTSTATUS Status;
-    ULONG i;
-    ULONG j;
 
     PAGED_CODE();
 
@@ -541,44 +595,14 @@ NtCompareTokens(
 
         Same = (BOOLEAN)(First->UserAndGroupCount == Second->UserAndGroupCount &&
                          First->RestrictedSidCount == Second->RestrictedSidCount &&
-                         First->PrivilegeCount == Second->PrivilegeCount &&
-                         RtlEqualLuid(&First->AuthenticationId,
-                                      &Second->AuthenticationId) &&
-                         First->TokenType == Second->TokenType);
-
-        for (i = 0; Same && i < First->UserAndGroupCount; i++)
-        {
-            for (j = 0; j < Second->UserAndGroupCount; j++)
-            {
-                if (First->UserAndGroups[i].Attributes !=
-                    Second->UserAndGroups[j].Attributes)
-                {
-                    continue;
-                }
-
-                if (RtlEqualSid(First->UserAndGroups[i].Sid,
-                                Second->UserAndGroups[j].Sid))
-                {
-                    break;
-                }
-            }
-
-            if (j == Second->UserAndGroupCount) Same = FALSE;
-        }
-
-        for (i = 0; Same && i < First->PrivilegeCount; i++)
-        {
-            for (j = 0; j < Second->PrivilegeCount; j++)
-            {
-                if (RtlEqualLuid(&First->Privileges[i].Luid,
-                                 &Second->Privileges[j].Luid))
-                {
-                    break;
-                }
-            }
-
-            if (j == Second->PrivilegeCount) Same = FALSE;
-        }
+                         SepSidSetsMatch(First->UserAndGroups,
+                                         Second->UserAndGroups,
+                                         First->UserAndGroupCount) &&
+                         SepSidSetsMatch(First->RestrictedSids,
+                                         Second->RestrictedSids,
+                                         First->RestrictedSidCount) &&
+                         SepEnabledPrivilegesWithin(First, Second) &&
+                         SepEnabledPrivilegesWithin(Second, First));
 
         SepReleaseTokenLock(Second);
         SepReleaseTokenLock(First);
