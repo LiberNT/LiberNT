@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     DriveLayout.c
+    PhysicalDriveRaw.c
     StorDeviceNumber.c)
 
 list(APPEND PCH_SKIP_SOURCE

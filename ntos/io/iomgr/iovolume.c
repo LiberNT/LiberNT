@@ -127,6 +127,34 @@ IopDereferenceVpbAndFree(
     if (Free) ExFreePoolWithTag(Vpb, TAG_VPB);
 }
 
+VOID
+NTAPI
+IopReleaseStorageVpb(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PVPB Vpb)
+{
+    KIRQL OldIrql;
+    BOOLEAN Free = FALSE;
+
+    KeAcquireSpinLock(&IopVpbSpinLock, &OldIrql);
+
+    /* A VPB that nothing mounted or opened goes with its device */
+    if (Vpb->ReferenceCount == 0)
+    {
+        DeviceObject->Vpb = NULL;
+        Free = TRUE;
+    }
+    else
+    {
+        /* FIXME: a VPB a file system still holds is never freed once its storage device is deleted */
+        Vpb->ReferenceCount--;
+    }
+
+    KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
+
+    if (Free) ExFreePoolWithTag(Vpb, TAG_VPB);
+}
+
 BOOLEAN
 IopReferenceVerifyVpb(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -232,7 +260,7 @@ IopMountInitializeVpb(
     }
 
     Vpb->Flags |= VPB_MOUNTED;
-    if (Raw) Vpb->Flags |= VPB_RAW_MOUNT;
+    if (Raw) Vpb->Flags |= VPB_DIRECT_WRITES_ALLOWED;
 
     /* The file system named its volume device in the VPB while mounting */
     Vpb->ReferenceCount++;
@@ -281,7 +309,7 @@ IopSendMountVolume(
     StackPtr->MinorFunction = IRP_MN_MOUNT_VOLUME;
     StackPtr->Flags = AllowRawMount ? SL_ALLOW_RAW_MOUNT : 0;
     StackPtr->Parameters.MountVolume.Vpb = DeviceObject->Vpb;
-    StackPtr->Parameters.MountVolume.DeviceObject = DeviceObject;
+    StackPtr->Parameters.MountVolume.DeviceObject = IoGetAttachedDevice(DeviceObject);
 
     Status = IoCallDriver(FileSystemDeviceObject, Irp);
     if (Status == STATUS_PENDING)
@@ -424,6 +452,13 @@ IopMountVolume(
 
             if (!AllowRawMount &&
                 RawFsIsRawFileSystemDeviceObject(FileSystemDeviceObject))
+            {
+                continue;
+            }
+
+            if (DeviceObject->Vpb != NULL &&
+                (DeviceObject->Vpb->Flags & VPB_RAW_MOUNT) &&
+                !RawFsIsRawFileSystemDeviceObject(FileSystemDeviceObject))
             {
                 continue;
             }

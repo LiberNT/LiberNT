@@ -1161,6 +1161,13 @@ IopDereferenceVpbAndFree(
 
 VOID
 NTAPI
+IopReleaseStorageVpb(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PVPB Vpb
+);
+
+VOID
+NTAPI
 IoInitFileSystemImplementation(
     VOID
 );

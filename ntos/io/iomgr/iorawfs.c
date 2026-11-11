@@ -109,8 +109,16 @@ RawCompletionRoutine(
     _In_ PIRP Irp,
     _In_ PVOID Context)
 {
+    PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
+
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Context);
+
+    if (NT_SUCCESS(Irp->IoStatus.Status))
+    {
+        StackPtr->FileObject->CurrentByteOffset.QuadPart =
+            StackPtr->Parameters.Read.ByteOffset.QuadPart + Irp->IoStatus.Information;
+    }
 
     if (Irp->PendingReturned) IoMarkIrpPending(Irp);
 
@@ -348,6 +356,7 @@ RawReadWriteDeviceControl(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp)
 {
+    PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
     PRAW_VCB Vcb = VcbVoid;
 
     UNREFERENCED_PARAMETER(DeviceObject);
@@ -356,6 +365,17 @@ RawReadWriteDeviceControl(
     {
         RawCompleteRequest(Irp, STATUS_VOLUME_DISMOUNTED, 0);
         return STATUS_VOLUME_DISMOUNTED;
+    }
+
+    /* The file position of a synchronous file follows each transfer */
+    if ((StackPtr->MajorFunction == IRP_MJ_READ || StackPtr->MajorFunction == IRP_MJ_WRITE) &&
+        StackPtr->FileObject != NULL &&
+        (StackPtr->FileObject->Flags & FO_SYNCHRONOUS_IO) &&
+        !(Irp->Flags & IRP_PAGING_IO))
+    {
+        IoCopyCurrentIrpStackLocationToNext(Irp);
+        IoSetCompletionRoutine(Irp, RawCompletionRoutine, NULL, TRUE, TRUE, TRUE);
+        return IoCallDriver(Vcb->TargetDeviceObject, Irp);
     }
 
     IoSkipCurrentIrpStackLocation(Irp);
