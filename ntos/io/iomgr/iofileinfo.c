@@ -23,7 +23,8 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
     [FilePositionInformation] = sizeof(FILE_POSITION_INFORMATION),
     [FileModeInformation] = sizeof(FILE_MODE_INFORMATION),
     [FileAlignmentInformation] = sizeof(FILE_ALIGNMENT_INFORMATION),
-    [FileAllInformation] = sizeof(FILE_ALL_INFORMATION),
+    [FileAllInformation] =
+        FIELD_OFFSET(FILE_ALL_INFORMATION, NameInformation.FileName),
     [FileAlternateNameInformation] = sizeof(FILE_NAME_INFORMATION),
     [FileStreamInformation] = sizeof(FILE_STREAM_INFORMATION),
     [FilePipeInformation] = sizeof(FILE_PIPE_INFORMATION),

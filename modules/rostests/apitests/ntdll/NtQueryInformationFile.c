@@ -22,7 +22,7 @@ typedef struct _TEST_FILE_ALL_INFORMATION
     FILE_NAME_INFORMATION NameInformation;
 } TEST_FILE_ALL_INFORMATION;
 
-static void TestAllInformationLength(HANDLE hFile)
+static void TestAllInformationLength(HANDLE hFile, BOOLEAN Ntfs)
 {
     NTSTATUS Status;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -31,15 +31,34 @@ static void TestAllInformationLength(HANDLE hFile)
     Status = NtQueryInformationFile(hFile,
                                     &IoStatusBlock,
                                     Storage,
-                                    sizeof(TEST_FILE_ALL_INFORMATION) - 1,
+                                    FIELD_OFFSET(TEST_FILE_ALL_INFORMATION, NameInformation.FileName) - 1,
                                     FileAllInformation);
     ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    if (Ntfs)
+    {
+        Status = NtQueryInformationFile(hFile,
+                                        &IoStatusBlock,
+                                        Storage,
+                                        sizeof(TEST_FILE_ALL_INFORMATION) - 1,
+                                        FileAllInformation);
+        ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    }
     Status = NtQueryInformationFile(hFile,
                                     &IoStatusBlock,
                                     Storage,
                                     sizeof(Storage),
                                     FileAllInformation);
     ok_hex(Status, STATUS_SUCCESS);
+}
+
+static BOOLEAN IsOnNtfs(PCSTR Path)
+{
+    CHAR Root[4], FileSystem[MAX_PATH];
+
+    StringCchCopyNA(Root, ARRAYSIZE(Root), Path, 3);
+    if (!GetVolumeInformationA(Root, NULL, 0, NULL, NULL, NULL, FileSystem, ARRAYSIZE(FileSystem)))
+        return FALSE;
+    return !strcmp(FileSystem, "NTFS");
 }
 
 static HANDLE OpenFatVolumeRoot(void)
@@ -126,7 +145,7 @@ START_TEST(NtQueryInformationFile)
                                     FileBasicInformation);
     ok_hex(Status, STATUS_SUCCESS);
 
-    TestAllInformationLength(hFile);
+    TestAllInformationLength(hFile, IsOnNtfs(Path));
     CloseHandle(hFile);
 
     hFile = OpenFatVolumeRoot();
@@ -135,6 +154,6 @@ START_TEST(NtQueryInformationFile)
         skip("No FAT volume\n");
         return;
     }
-    TestAllInformationLength(hFile);
+    TestAllInformationLength(hFile, FALSE);
     CloseHandle(hFile);
 }

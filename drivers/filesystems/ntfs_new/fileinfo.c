@@ -2876,11 +2876,10 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
             ULONG PartLength;
             ULONG NameLength;
 
-            /* The name is variable length and comes last, so the fixed part
-             * must fit in full before any of it is filled in. */
-            if (BufferLength < FixedLength)
+            /* A buffer with no room for the structure, first name character included, is the wrong size */
+            if (BufferLength < sizeof(FILE_ALL_INFORMATION))
             {
-                Status = STATUS_BUFFER_TOO_SMALL;
+                Status = STATUS_INFO_LENGTH_MISMATCH;
                 break;
             }
 
