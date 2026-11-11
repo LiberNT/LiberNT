@@ -227,7 +227,8 @@ PspAllocateProcess(
 
     KeInitializeProcess(&Process->Pcb,
                         PspPriorityTable[Process->PriorityClass],
-                        (KAFFINITY)-1,
+                        (Parent != NULL ? Parent->Pcb.Affinity : (KAFFINITY)-1) &
+                            KeActiveProcessors,
                         DirectoryTableBase,
                         (BOOLEAN)((Process->DefaultHardErrorProcessing &
                                    SEM_NOALIGNMENTFAULTEXCEPT) != 0));

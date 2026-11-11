@@ -339,6 +339,9 @@ NtSetInformationThread(
                                                     sizeof(Pointer));
             if (!NT_SUCCESS(Status)) break;
 
+            /* Bits naming processors the machine lacks are dropped: an all-ones mask means every processor */
+            Pointer &= (ULONG_PTR)KeActiveProcessors;
+
             /*
              * A thread may only be narrowed to processors its process is
              * already allowed to run on.
