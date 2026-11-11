@@ -4084,6 +4084,38 @@ done:
     return ret;
 }
 
+static BOOL CDecodeSignedMsg_CheckMessageDigest(CDecodeMsg *msg,
+ DWORD signerIndex)
+{
+    const CRYPT_ATTRIBUTES *attrs =
+     &msg->u.signed_data.info->rgSignerInfo[signerIndex].AuthAttrs;
+    CRYPT_DATA_BLOB *digest = NULL;
+    BYTE *hash = NULL;
+    DWORD i, size, hashSize = 0;
+    BOOL ret = FALSE;
+
+    for (i = 0; i < attrs->cAttr; i++)
+        if (!strcmp(attrs->rgAttr[i].pszObjId, szOID_RSA_messageDigest) &&
+         attrs->rgAttr[i].cValue)
+            break;
+    if (i == attrs->cAttr)
+        SetLastError(CRYPT_E_AUTH_ATTR_MISSING);
+    else if (extract_hash(msg->u.signed_data.signerHandles[signerIndex].contentHash,
+     &hash, &hashSize) &&
+     CryptDecodeObjectEx(X509_ASN_ENCODING, X509_OCTET_STRING,
+     attrs->rgAttr[i].rgValue[0].pbData, attrs->rgAttr[i].rgValue[0].cbData,
+     CRYPT_DECODE_ALLOC_FLAG, NULL, &digest, &size))
+    {
+        ret = digest->cbData == hashSize &&
+         !memcmp(digest->pbData, hash, hashSize);
+        if (!ret)
+            SetLastError(CRYPT_E_HASH_VALUE);
+        LocalFree(digest);
+    }
+    CryptMemFree(hash);
+    return ret;
+}
+
 static BOOL CDecodeSignedMsg_VerifySignatureWithKey(CDecodeMsg *msg,
  HCRYPTPROV prov, DWORD signerIndex, PCERT_PUBLIC_KEY_INFO keyInfo)
 {
@@ -4093,7 +4125,11 @@ static BOOL CDecodeSignedMsg_VerifySignatureWithKey(CDecodeMsg *msg,
     ALG_ID alg_id = 0;
 
     if (msg->u.signed_data.info->rgSignerInfo[signerIndex].AuthAttrs.cAttr)
+    {
+        if (!CDecodeSignedMsg_CheckMessageDigest(msg, signerIndex))
+            return FALSE;
         hash = msg->u.signed_data.signerHandles[signerIndex].authAttrHash;
+    }
     else
         hash = msg->u.signed_data.signerHandles[signerIndex].contentHash;
 
