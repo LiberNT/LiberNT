@@ -739,7 +739,7 @@
 @ stdcall -stub -version=0x600+ RtlCommitDebugInfo(ptr long)
 @ stdcall RtlCommitMemoryStream(ptr long)
 @ stdcall RtlCompactHeap(long long)
-@ stdcall -stub -version=0x600+ RtlCompareAltitudes(wstr wstr)
+@ stdcall -version=0x600+ RtlCompareAltitudes(ptr ptr)
 @ stdcall RtlCompareMemory(ptr ptr long)
 @ stdcall RtlCompareMemoryUlong(ptr long long)
 @ stdcall RtlCompareString(ptr ptr long)

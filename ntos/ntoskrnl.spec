@@ -3016,7 +3016,7 @@
 @ stub -arch=win64 RtlClearBitsEx
 @ stdcall RtlCmDecodeMemIoResource(ptr ptr)
 @ stdcall RtlCmEncodeMemIoResource(ptr long int64 int64)
-@ stub -arch=win64 RtlCompareAltitudes
+@ stdcall RtlCompareAltitudes(ptr ptr)
 @ stub -arch=win64 RtlCompareExchangePointerMapping
 @ stub -arch=win64 RtlCompareExchangePropertyStore
 @ stdcall RtlCompareUnicodeStrings(wstr long wstr long long)

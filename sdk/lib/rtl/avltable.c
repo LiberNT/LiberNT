@@ -279,6 +279,70 @@ RtlEnumerateGenericTableWithoutSplayingAvl(IN PRTL_AVL_TABLE Table,
     return NULL;
 }
 
+PVOID
+NTAPI
+RtlEnumerateGenericTableLikeADirectory(IN PRTL_AVL_TABLE Table,
+                                       IN PRTL_AVL_MATCH_FUNCTION MatchFunction OPTIONAL,
+                                       IN PVOID MatchData OPTIONAL,
+                                       IN ULONG NextFlag,
+                                       IN OUT PVOID *RestartKey,
+                                       IN OUT PULONG DeleteCount,
+                                       IN PVOID Buffer)
+{
+    PRTL_BALANCED_LINKS Node, Last = NULL;
+    TABLE_SEARCH_RESULT SearchResult;
+    NTSTATUS Status;
+
+    Node = *RestartKey;
+    if ((Node != NULL) && (*DeleteCount != Table->DeleteCount)) Node = NULL;
+
+    if (RtlIsGenericTableEmptyAvl(Table))
+    {
+        *RestartKey = NULL;
+        *DeleteCount = Table->DeleteCount;
+        return NULL;
+    }
+
+    if (Node != NULL)
+    {
+        if (NextFlag)
+        {
+            Last = Node;
+            Node = RtlRealSuccessorAvl(Node);
+        }
+    }
+    else
+    {
+        SearchResult = RtlpFindAvlTableNodeOrParent(Table, Buffer, &Node);
+        if (((SearchResult == TableFoundNode) && NextFlag) ||
+            (SearchResult == TableInsertAsRight))
+        {
+            Last = Node;
+            Node = RtlRealSuccessorAvl(Node);
+        }
+    }
+
+    while (Node != NULL)
+    {
+        Last = Node;
+        if (MatchFunction == NULL) break;
+
+        Status = MatchFunction(Table, &((PTABLE_ENTRY_HEADER)Node)->UserData, MatchData);
+        if (Status == STATUS_SUCCESS) break;
+        if (Status != STATUS_NO_MATCH)
+        {
+            Node = NULL;
+            break;
+        }
+
+        Node = RtlRealSuccessorAvl(Node);
+    }
+
+    *RestartKey = Last;
+    *DeleteCount = Table->DeleteCount;
+    return Node ? &((PTABLE_ENTRY_HEADER)Node)->UserData : NULL;
+}
+
 /*
  * @implemented
  */

@@ -330,6 +330,7 @@ list(APPEND KMTEST_DRV_SOURCE
     rtl/RtlRandomKM.c
     rtl/RtlRangeList.c
     rtl/RtlCmResource.c
+    rtl/RtlNameTablesKM.c
     rtl/RtlStringSupportKM.c
     win32ss/CddDisplay.c
     ${COMMON_SOURCE}

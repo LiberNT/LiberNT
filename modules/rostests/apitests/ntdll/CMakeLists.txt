@@ -190,6 +190,9 @@ list(APPEND SOURCE
     RtlIsNameLegalDOS8Dot3.c
     RtlLocale.c
     RtlMemoryStream.c
+    PfxPrefixTable.c
+    RtlCompareAltitudes.c
+    RtlEnumerateGenericTableLikeADirectory.c
     RtlMultipleAllocateHeap.c
     RtlNtPathNameToDosPathName.c
     RtlPortableOperatingSystem.c

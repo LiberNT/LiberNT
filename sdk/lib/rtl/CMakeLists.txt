@@ -41,6 +41,7 @@ list(APPEND SOURCE
     wine_debug.c
     access.c
     acl.c
+    altitude.c
     appverifier.c
     assert.c
     atom.c

@@ -170,6 +170,9 @@ extern void func_RtlIsNameInExpression(void);
 extern void func_RtlIsNameLegalDOS8Dot3(void);
 extern void func_RtlLocale(void);
 extern void func_RtlMemoryStream(void);
+extern void func_PfxPrefixTable(void);
+extern void func_RtlCompareAltitudes(void);
+extern void func_RtlEnumerateGenericTableLikeADirectory(void);
 extern void func_RtlMultipleAllocateHeap(void);
 extern void func_RtlNtPathNameToDosPathName(void);
 extern void func_RtlPortableOperatingSystem(void);
@@ -386,6 +389,9 @@ const struct test winetest_testlist[] =
     { "RtlIsNameLegalDOS8Dot3",         func_RtlIsNameLegalDOS8Dot3 },
     { "RtlLocale",                      func_RtlLocale },
     { "RtlMemoryStream",                func_RtlMemoryStream },
+    { "PfxPrefixTable", func_PfxPrefixTable },
+    { "RtlCompareAltitudes", func_RtlCompareAltitudes },
+    { "RtlEnumerateGenericTableLikeADirectory", func_RtlEnumerateGenericTableLikeADirectory },
     { "RtlMultipleAllocateHeap",        func_RtlMultipleAllocateHeap },
     { "RtlNtPathNameToDosPathName",     func_RtlNtPathNameToDosPathName },
     { "RtlPortableOperatingSystem",     func_RtlPortableOperatingSystem },

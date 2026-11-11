@@ -385,6 +385,9 @@ KMT_TESTFUNC Test_RtlTableElementKM;
 KMT_TESTFUNC Test_RtlMemory;
 KMT_TESTFUNC Test_RtlRangeList;
 KMT_TESTFUNC Test_RtlCmResource;
+KMT_TESTFUNC Test_RtlCompareAltitudesKM;
+KMT_TESTFUNC Test_RtlDirectoryEnumKM;
+KMT_TESTFUNC Test_RtlPrefixTableKM;
 KMT_TESTFUNC Test_RtlRegistry;
 KMT_TESTFUNC Test_RtlSehUnwind;
 KMT_TESTFUNC Test_RtlSplayTree;
@@ -745,6 +748,9 @@ const KMT_TEST TestList[] =
     { "RtlMemoryKM",                        Test_RtlMemory },
     { "RtlRangeList",                       Test_RtlRangeList },
     { "RtlCmResource",                      Test_RtlCmResource },
+    { "RtlCompareAltitudesKM",              Test_RtlCompareAltitudesKM },
+    { "RtlDirectoryEnumKM",                 Test_RtlDirectoryEnumKM },
+    { "RtlPrefixTableKM",                   Test_RtlPrefixTableKM },
     { "RtlRegistryKM",                      Test_RtlRegistry },
     { "RtlTimeKM",                          Test_RtlTimeKM },
     { "RtlStringSupportKM",                 Test_RtlStringSupportKM },
