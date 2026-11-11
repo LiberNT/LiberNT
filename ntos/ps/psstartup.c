@@ -773,9 +773,15 @@ PsGetVersion(
     _Out_opt_ PULONG BuildNumber,
     _Inout_opt_ PUNICODE_STRING CSDVersion)
 {
-    if (MajorVersion != NULL) *MajorVersion = NtMajorVersion;
-    if (MinorVersion != NULL) *MinorVersion = NtMinorVersion;
-    if (BuildNumber != NULL) *BuildNumber = NtBuildNumber & 0xFFFF;
+    ULONG ReportedMajor = NtMajorVersion;
+    ULONG ReportedMinor = NtMinorVersion;
+    ULONG ReportedBuild = NtBuildNumber & 0xFFFF;
+
+    PspGetLegacyXpdmVersion(_ReturnAddress(), &ReportedMajor, &ReportedMinor, &ReportedBuild);
+
+    if (MajorVersion != NULL) *MajorVersion = ReportedMajor;
+    if (MinorVersion != NULL) *MinorVersion = ReportedMinor;
+    if (BuildNumber != NULL) *BuildNumber = ReportedBuild;
 
     if (CSDVersion != NULL)
     {
@@ -802,11 +808,49 @@ PspGetLegacyXpdmVersion(
     _Out_ PULONG MinorVersion,
     _Out_ PULONG BuildNumber)
 {
-    UNREFERENCED_PARAMETER(CallerAddress);
-    UNREFERENCED_PARAMETER(MajorVersion);
-    UNREFERENCED_PARAMETER(MinorVersion);
-    UNREFERENCED_PARAMETER(BuildNumber);
+    UNICODE_STRING VideoPortName = RTL_CONSTANT_STRING(L"VIDEOPRT.SYS");
+    PIMAGE_NT_HEADERS NtHeaders;
+    PVOID ImageBase = NULL;
+    ULONG TargetMajor;
+    ULONG TargetMinor;
+    ULONG TargetBuild;
 
-    /* TODO: recognise an XPDM miniport caller and report 5.1.2600 to it */
-    return FALSE;
+    PAGED_CODE();
+
+    if ((CallerAddress == NULL) || (RtlPcToFileHeader(CallerAddress, &ImageBase) == NULL))
+        return FALSE;
+
+    NtHeaders = RtlImageNtHeader(ImageBase);
+    if ((NtHeaders == NULL) || (NtHeaders->OptionalHeader.Subsystem != IMAGE_SUBSYSTEM_NATIVE))
+        return FALSE;
+
+    /* XPDM drivers keep a 5.2 subsystem version even when they target another release, so the OS version decides */
+    TargetMajor = NtHeaders->OptionalHeader.MajorOperatingSystemVersion;
+    TargetMinor = NtHeaders->OptionalHeader.MinorOperatingSystemVersion;
+
+    if ((TargetMajor == 4) && (TargetMinor == 0))
+        TargetBuild = 1381;
+    else if ((TargetMajor == 5) && (TargetMinor == 0))
+        TargetBuild = 2195;
+    else if ((TargetMajor == 5) && (TargetMinor == 1))
+        TargetBuild = 2600;
+    else if ((TargetMajor == 5) && (TargetMinor == 2))
+        TargetBuild = 3790;
+    else
+        return FALSE;
+
+    if ((TargetMajor > NtMajorVersion) || ((TargetMajor == NtMajorVersion) && (TargetMinor >= NtMinorVersion)))
+        return FALSE;
+
+    /* A miniport may discard its PE import names after DriverEntry, so the loader's import list decides */
+    if (!MmIsSystemImageImportingModule(ImageBase, &VideoPortName))
+        return FALSE;
+
+    *MajorVersion = TargetMajor;
+    *MinorVersion = TargetMinor;
+    *BuildNumber = TargetBuild;
+
+    DPRINT("XPDM caller %p in image %p is told NT %lu.%lu build %lu\n",
+           CallerAddress, ImageBase, TargetMajor, TargetMinor, TargetBuild);
+    return TRUE;
 }

@@ -14,6 +14,7 @@ add_subdirectory(ntos_cc)
 add_subdirectory(ntos_io)
 add_subdirectory(ntos_mm)
 add_subdirectory(ntos_po)
+add_subdirectory(ntos_ps)
 add_subdirectory(tcpip)
 add_subdirectory(wfp)
 
@@ -642,6 +643,7 @@ list(APPEND KMTEST_SOURCE
     ntos_po/PoSleepInformation_user.c
     ntos_po/PoIrp_user.c
     ntos_po/PoExecutionState_user.c
+    ntos_ps/XpdmVersion_user.c
     ntos_po/PoFxState_user.c
     ntos_po/PoShutdownPersist_user.c
     ntos_po/PoShutdownTime_user.c
