@@ -1357,7 +1357,7 @@ NtDuplicateToken(
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PSECURITY_QUALITY_OF_SERVICE Qos = NULL;
-    SECURITY_IMPERSONATION_LEVEL Level = SecurityImpersonation;
+    SECURITY_IMPERSONATION_LEVEL Level = SecurityAnonymous;
     PTOKEN Token = NULL;
     PTOKEN New = NULL;
     BOOLEAN QosPresent = FALSE;
