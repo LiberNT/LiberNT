@@ -182,6 +182,17 @@ AppleAdtNextSibling(
     return Next;
 }
 
+ULONG
+NTAPI
+AppleAdtChildCount(
+    _In_ PAPPLE_ADT Adt,
+    _In_ ULONG Node)
+{
+    ULONG Properties, Children;
+
+    return AdtNodeCounts(Adt, Node, &Properties, &Children) ? Children : 0;
+}
+
 const VOID *
 NTAPI
 AppleAdtGetProperty(
@@ -236,11 +247,11 @@ AppleAdtChild(
     _In_ ULONG Node,
     _In_z_ PCSTR Name)
 {
-    ULONG Child, Index;
+    ULONG Child, Index, Seen, Count = AppleAdtChildCount(Adt, Node);
     PCSTR Found;
 
-    for (Child = AppleAdtFirstChild(Adt, Node); Child != APPLE_ADT_NO_NODE;
-         Child = AppleAdtNextSibling(Adt, Child))
+    for (Child = AppleAdtFirstChild(Adt, Node), Seen = 0; Child != APPLE_ADT_NO_NODE && Seen < Count;
+         Child = AppleAdtNextSibling(Adt, Child), ++Seen)
     {
         Found = AppleAdtNodeName(Adt, Child);
         if (!Found)

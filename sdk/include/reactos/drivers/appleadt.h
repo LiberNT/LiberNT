@@ -43,6 +43,12 @@ AppleAdtNextSibling(
 
 ULONG
 NTAPI
+AppleAdtChildCount(
+    _In_ PAPPLE_ADT Adt,
+    _In_ ULONG Node);
+
+ULONG
+NTAPI
 AppleAdtChild(
     _In_ PAPPLE_ADT Adt,
     _In_ ULONG Node,
