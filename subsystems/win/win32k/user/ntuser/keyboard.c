@@ -12,6 +12,7 @@ DBG_DEFAULT_CHANNEL(UserKbd);
 
 BYTE gafAsyncKeyState[256 * 2 / 8]; // 2 bits per key
 static BYTE gafAsyncKeyStateRecentDown[256 / 8]; // 1 bit per key
+static BYTE gafRawKeyState[256 * 2 / 8]; // 2 bits per key
 static PKEYBOARD_INDICATOR_TRANSLATION gpKeyboardIndicatorTrans = NULL;
 static KEYBOARD_INDICATOR_PARAMETERS gIndicators = {0, 0};
 KEYBOARD_ATTRIBUTES gKeyboardInfo;
@@ -49,6 +50,7 @@ InitKeyboardImpl(VOID)
 {
     RtlZeroMemory(&gafAsyncKeyState, sizeof(gafAsyncKeyState));
     RtlZeroMemory(&gafAsyncKeyStateRecentDown, sizeof(gafAsyncKeyStateRecentDown));
+    RtlZeroMemory(&gafRawKeyState, sizeof(gafRawKeyState));
     // Clear and set default information.
     RtlZeroMemory(&gKeyboardInfo, sizeof(gKeyboardInfo));
     gKeyboardInfo.KeyboardIdentifier.Type = 4; /* AT-101 */
@@ -799,8 +801,8 @@ co_CallLowLevelKeyboardHook(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjec
 {
     KBDLLHOOKSTRUCT KbdHookData;
     UINT uMsg;
-    BOOL bAltDown = (wSimpleVk == VK_MENU) ? bIsSimpleDown : IS_KEY_DOWN(gafAsyncKeyState, VK_MENU);
-    BOOL bCtrlDown = (wSimpleVk == VK_CONTROL) ? bIsSimpleDown : IS_KEY_DOWN(gafAsyncKeyState, VK_CONTROL);
+    BOOL bAltDown = (wSimpleVk == VK_MENU) ? bIsSimpleDown : IS_KEY_DOWN(gafRawKeyState, VK_MENU);
+    BOOL bCtrlDown = (wSimpleVk == VK_CONTROL) ? bIsSimpleDown : IS_KEY_DOWN(gafRawKeyState, VK_CONTROL);
 
     KbdHookData.vkCode = wVk;
     KbdHookData.scanCode = wScanCode;
@@ -1263,19 +1265,22 @@ ProcessKeyEvent(WORD wVk, WORD wScanCode, DWORD dwFlags, BOOL bInjected, DWORD d
     bIsSimpleDown = bIsDown || IS_KEY_DOWN(gafAsyncKeyState, wVk2);
     bStateOnly = (!bIsDown && bIsSimpleDown && wVk2 != wSimpleVk);
 
-    if (bIsDown)
-    {
-        /* Update keyboard LEDs */
-        IntKeyboardUpdateLeds(wSimpleVk,
-                              wScanCode);
-    }
+    SET_KEY_DOWN(gafRawKeyState, IntFixVk(wSimpleVk, bExt), bIsDown);
+    SET_KEY_DOWN(gafRawKeyState, wSimpleVk, bIsDown || IS_KEY_DOWN(gafRawKeyState, wVk2));
 
     /* Call WH_KEYBOARD_LL hook */
     if (co_CallLowLevelKeyboardHook((wVk == VK_SHIFT || wVk == VK_CONTROL || wVk == VK_MENU) ? IntFixVk(wVk, wVk != VK_SHIFT && bExt) : wVk,
                                     wScanCode, dwFlags, bInjected, dwTime, dwExtraInfo, wSimpleVk, bIsSimpleDown))
     {
         ERR("Kbd msg dropped by WH_KEYBOARD_LL hook\n");
-        bPostMsg = FALSE;
+        return TRUE;
+    }
+
+    if (bIsDown)
+    {
+        /* Update keyboard LEDs */
+        IntKeyboardUpdateLeds(wSimpleVk,
+                              wScanCode);
     }
 
     UpdateAsyncKeyState(wSimpleVk, bIsSimpleDown);

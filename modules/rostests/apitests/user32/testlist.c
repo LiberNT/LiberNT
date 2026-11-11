@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_RegisterTouchWindow(void);
+extern void func_AltTabHook(void);
 extern void func_AttachThreadInput(void);
 extern void func_CalculatePopupWindowPosition(void);
 extern void func_CallbackNesting(void);
@@ -135,6 +136,7 @@ extern void func_wsprintfApi(void);
 const struct test winetest_testlist[] =
 {
     { "RegisterTouchWindow", func_RegisterTouchWindow },
+    { "AltTabHook", func_AltTabHook },
     { "AttachThreadInput", func_AttachThreadInput },
     { "CalculatePopupWindowPosition", func_CalculatePopupWindowPosition },
     { "CallbackNesting", func_CallbackNesting },
