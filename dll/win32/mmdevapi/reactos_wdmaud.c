@@ -131,6 +131,7 @@ struct reactos_stream
     struct reactos_shared_capture_client *shared_capture;
     struct reactos_shared_capture_sink *capture_sink;
     struct reactos_shared_capture_sink *exclusive_capture;
+    struct reactos_shared_render_exclusive *exclusive_render;
     UINT64 capture_clock_base;
     UINT32 capture_packet_flags;
     UINT64 capture_packet_position;
@@ -3057,6 +3058,23 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
                 goto failed;
             }
         }
+        else
+        {
+            WAVEFORMATEXTENSIBLE engine_format;
+
+            if (!fill_mix_format(params->device, params->flow, &mix))
+            {
+                params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
+                goto failed;
+            }
+            copy_wdmaud_format(&engine_format, &mix.Format);
+            hr = reactos_shared_render_open_exclusive(stream->index, &engine_format, &shared_render_transport_ops, &stream->exclusive_render);
+            if (FAILED(hr))
+            {
+                params->result = hr;
+                goto failed;
+            }
+        }
         if (FAILED(hr = open_stream_pin(stream)))
         {
             params->result = hr;
@@ -3133,6 +3151,7 @@ failed:
     close_stream_pin(stream);
     if (stream->exclusive_capture)
         reactos_shared_capture_close_exclusive(stream->exclusive_capture);
+    reactos_shared_render_close_exclusive(stream->exclusive_render);
     DeleteCriticalSection(&stream->lock);
     if (stream->stop_event)
         CloseHandle(stream->stop_event);
@@ -3180,6 +3199,7 @@ static NTSTATUS reactos_release_stream(struct release_stream_params *params)
     close_stream_pin(stream);
     if (stream->exclusive_capture)
         reactos_shared_capture_close_exclusive(stream->exclusive_capture);
+    reactos_shared_render_close_exclusive(stream->exclusive_render);
     stream->magic = 0;
     if (stream->stop_event)
         CloseHandle(stream->stop_event);
