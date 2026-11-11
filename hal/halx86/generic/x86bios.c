@@ -92,6 +92,7 @@ HalInitializeBios(
         if (!Mdl)
         {
             ASSERT(FALSE);
+            return;
         }
 
         /* Get pointer to the pfn array */
@@ -140,6 +141,11 @@ HalInitializeBios(
         /* Map the MDL to system space */
         x86BiosMemoryMapping = MmGetSystemAddressForMdlSafe(Mdl, HighPagePriority);
         ASSERT(x86BiosMemoryMapping);
+        if (!x86BiosMemoryMapping)
+        {
+            IoFreeMdl(Mdl);
+            return;
+        }
 
         DPRINT1("*x86BiosMemoryMapping: %p, %p\n",
                 *(PVOID*)x86BiosMemoryMapping, *(PVOID*)(x86BiosMemoryMapping + 8));
