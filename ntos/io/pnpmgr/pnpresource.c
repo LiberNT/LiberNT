@@ -367,13 +367,8 @@ IopFilterResourceRequirements(
     if (Status == STATUS_NOT_SUPPORTED) return STATUS_SUCCESS;
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (Filtered != NULL && Filtered != DeviceNode->ResourceRequirements)
+    if (Filtered != DeviceNode->ResourceRequirements)
     {
-        if (DeviceNode->ResourceRequirements != NULL)
-        {
-            ExFreePool(DeviceNode->ResourceRequirements);
-        }
-
         DeviceNode->ResourceRequirements = Filtered;
     }
 

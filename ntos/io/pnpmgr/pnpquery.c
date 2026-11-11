@@ -89,6 +89,11 @@ IopSynchronousCall(
 
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
     Irp->IoStatus.Information = 0;
+    if (IoStackLocation->MinorFunction == IRP_MN_FILTER_RESOURCE_REQUIREMENTS)
+    {
+        Irp->IoStatus.Information =
+            (ULONG_PTR)IoStackLocation->Parameters.FilterResourceRequirements.IoResourceRequirementList;
+    }
     Irp->UserIosb = &IoStatusBlock;
     Irp->Flags = IRP_SYNCHRONOUS_API;
     Irp->RequestorMode = KernelMode;

@@ -25,6 +25,7 @@ KMT_TESTFUNC Test_FltMgrLoad;
 KMT_TESTFUNC Test_FltMgrReg;
 KMT_TESTFUNC Test_HidPDescription;
 KMT_TESTFUNC Test_IoAddDeviceUnload;
+KMT_TESTFUNC Test_IoFilterRequirements;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
@@ -89,6 +90,7 @@ const KMT_TEST TestList[] =
     { "-FltMgrReg",                   Test_FltMgrReg }, // TODO: WIP/untested/crashes.
     { "HidPDescription",              Test_HidPDescription },
     { "IoAddDeviceUnload",            Test_IoAddDeviceUnload },
+    { "IoFilterRequirements",         Test_IoFilterRequirements },
     { "IoCreateFile",                 Test_IoCreateFile },
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
