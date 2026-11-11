@@ -226,14 +226,6 @@ IopAbortIrpKernelApc(
 }
 
 VOID
-IopReportIncompleteSynchronousIrp(
-    _In_ PIRP Irp)
-{
-    DPRINT1("I/O: a synchronous request was abandoned while in flight (%p)\n",
-            Irp);
-}
-
-VOID
 IopCleanupAfterException(
     _In_ PFILE_OBJECT FileObject,
     _In_ PIRP Irp,
@@ -812,7 +804,8 @@ IopAbortInterruptedIrp(
     Cancelled = IoCancelIrp(Irp);
     if (!Cancelled)
     {
-        IopReportIncompleteSynchronousIrp(Irp);
+        /* A request its driver cannot cancel stays with the synchronous service until it completes */
+        KeWaitForSingleObject(EventObject, Executive, KernelMode, FALSE, NULL);
         return;
     }
 

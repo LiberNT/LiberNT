@@ -207,7 +207,6 @@ VOID IopCleanupAfterException(_In_ PFILE_OBJECT FileObject,
                               _In_ PIRP Irp,
                               _In_opt_ PKEVENT Event,
                               _In_opt_ PKEVENT LocalEvent);
-VOID IopReportIncompleteSynchronousIrp(_In_ PIRP Irp);
 NTSTATUS IopFinalizeAsynchronousIo(_In_ NTSTATUS SynchStatus,
                                    _In_ PKEVENT Event,
                                    _In_ PIRP Irp,
