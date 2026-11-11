@@ -4,6 +4,7 @@
 
 extern void func_ClassInstallParams(void);
 extern void func_devclass(void);
+extern void func_DevicePdoName(void);
 extern void func_DevicePowerOnDisable(void);
 extern void func_DeviceRemoveVeto(void);
 extern void func_InterruptAffinityPolicy(void);
@@ -22,6 +23,7 @@ const struct test winetest_testlist[] =
 {
     { "ClassInstallParams", func_ClassInstallParams },
     { "devclass", func_devclass },
+    { "DevicePdoName", func_DevicePdoName },
     { "DevicePowerOnDisable", func_DevicePowerOnDisable },
     { "DeviceRemoveVeto", func_DeviceRemoveVeto },
     { "InterruptAffinityPolicy", func_InterruptAffinityPolicy },

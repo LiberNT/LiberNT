@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     ClassInstallParams.c
     devclass.c
+    DevicePdoName.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
     InterruptAffinityPolicy.c

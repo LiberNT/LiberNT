@@ -4792,21 +4792,6 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
                 break;
         }
     }
-    else if (Property == SPDRP_PHYSICAL_DEVICE_OBJECT_NAME)
-    {
-        size = (strlenW(devInfo->Data) + 1) * sizeof(WCHAR);
-
-        if (PropertyRegDataType)
-            *PropertyRegDataType = REG_SZ;
-        if (RequiredSize)
-            *RequiredSize = size;
-        if (PropertyBufferSize >= size)
-        {
-            strcpyW((LPWSTR)PropertyBuffer, devInfo->Data);
-        }
-        else
-            lError = ERROR_INSUFFICIENT_BUFFER;
-    }
     else
     {
         size = PropertyBufferSize;
