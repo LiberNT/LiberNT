@@ -156,10 +156,22 @@ KdpInitializeStructures(VOID)
 
 static
 VOID
-KdpPublishVersion(VOID)
+KdpPublishVersion(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    ULONG_PTR KernelBase = PsNtosImageBase;
+
+    if ((LoaderBlock != NULL) && !IsListEmpty(&LoaderBlock->LoadOrderListHead))
+    {
+        PLDR_DATA_TABLE_ENTRY Kernel = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
+                                                         LDR_DATA_TABLE_ENTRY,
+                                                         InLoadOrderLinks);
+
+        KernelBase = (ULONG_PTR)Kernel->DllBase;
+    }
+
     KdVersionBlock.MinorVersion = (USHORT)(NtBuildNumber & 0xFFFF);
-    KdVersionBlock.KernBase = (ULONG64)(ULONG_PTR)PsNtosImageBase;
+    KdVersionBlock.KernBase = (ULONG64)KernelBase;
     KdVersionBlock.PsLoadedModuleList = (ULONG64)(ULONG_PTR)&PsLoadedModuleList;
     KdVersionBlock.DebuggerDataList = (ULONG64)(ULONG_PTR)&KdpDebuggerDataListHead;
 
@@ -280,7 +292,7 @@ KdInitSystem(
 
     KdpReadBootOptions(LoaderBlock);
     KdpInitializeStructures();
-    KdpPublishVersion();
+    KdpPublishVersion(LoaderBlock);
 
     /* Timing the host asks about, taken before anything else can skew it */
     KeQueryPerformanceCounter(&Frequency);

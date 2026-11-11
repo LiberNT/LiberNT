@@ -155,6 +155,36 @@ TestBugCheckCallbackList(VOID)
     ok_bool_true(KeDeregisterBugCheckCallback(&CallbackRecord), "KeDeregisterBugCheckCallback returned");
 }
 
+static
+VOID
+TestVersionKernelBase(VOID)
+{
+    PRTL_PROCESS_MODULES Modules;
+    DBGKD_GET_VERSION64 Version;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Version, sizeof(Version));
+    Status = KdSystemDebugControl(SysDbgQueryVersion, NULL, 0, &Version, sizeof(Version), &Length, KernelMode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    Status = ZwQuerySystemInformation(SystemModuleInformation, NULL, 0, &Length);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+
+    Modules = ExAllocatePoolWithTag(PagedPool, Length, 'vDdK');
+    ok(Modules != NULL, "No memory for the module list\n");
+    if (Modules == NULL)
+        return;
+
+    Status = ZwQuerySystemInformation(SystemModuleInformation, Modules, Length, &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    if (NT_SUCCESS(Status) && (Modules->NumberOfModules != 0))
+        ok_eq_ulonglong(Version.KernBase, (ULONG64)(ULONG_PTR)Modules->Modules[0].ImageBase);
+
+    ExFreePoolWithTag(Modules, 'vDdK');
+}
+
 START_TEST(KdDebuggerPresent)
 {
     BOOLEAN NotPresent;
@@ -169,6 +199,7 @@ START_TEST(KdDebuggerPresent)
     TestBusData();
     TestCheckLowMemory();
     TestBugCheckCallbackList();
+    TestVersionKernelBase();
 
     KD_DEBUGGER_NOT_PRESENT = NotPresent;
 }
