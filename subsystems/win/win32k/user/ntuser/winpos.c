@@ -1573,6 +1573,81 @@ WinPosBatchAddOwnedGroups(PWINPOS_BATCH Batch, HWND *List, PWND Owner, PWND Skip
    }
 }
 
+static PWND FASTCALL
+WinPosRootOwner(PWND Window, BOOL bSkipTopmost)
+{
+   PWND Root = Window, Owner;
+   UINT Depth;
+
+   for (Depth = 0; Depth < 64; Depth++)
+   {
+      Owner = Root->spwndOwner;
+      if (!Owner || Owner->spwndParent != Window->spwndParent || (bSkipTopmost && (Owner->ExStyle & WS_EX_TOPMOST)))
+         break;
+      Root = Owner;
+   }
+   return Root;
+}
+
+static BOOL FASTCALL
+WinPosIsOwnedBy(PWND Window, PWND Owner)
+{
+   UINT Depth;
+
+   for (Depth = 0; Window && Depth < 64; Depth++, Window = Window->spwndOwner)
+   {
+      if (Window == Owner)
+         return TRUE;
+   }
+   return FALSE;
+}
+
+static UINT FASTCALL
+WinPosListIndex(HWND *List, PWND Window)
+{
+   UINT i;
+
+   for (i = 0; List[i]; i++)
+   {
+      if (List[i] == UserHMGetHandle(Window))
+         break;
+   }
+   return i;
+}
+
+static VOID FASTCALL
+WinPosBatchAddPathGroups(PWINPOS_BATCH Batch, HWND *List, PWND Window, UINT Pivot, BOOL bSkipTopmost)
+{
+   PWND Chain[64], Child;
+   UINT Depth = 1, k, i;
+
+   Chain[0] = Window;
+   while (Depth < ARRAYSIZE(Chain) && Chain[Depth - 1]->spwndOwner &&
+          Chain[Depth - 1]->spwndOwner->spwndParent == Window->spwndParent &&
+          !(bSkipTopmost && (Chain[Depth - 1]->spwndOwner->ExStyle & WS_EX_TOPMOST)))
+   {
+      Chain[Depth] = Chain[Depth - 1]->spwndOwner;
+      Depth++;
+   }
+
+   for (k = Depth - 1; k > 0; k--)
+   {
+      for (i = 0; List[i] && i < Pivot; i++)
+      {
+         Child = ValidateHwndNoErr(List[i]);
+         if (!Child || Child == Chain[k - 1] || Child->spwndOwner != Chain[k] ||
+             (bSkipTopmost && (Child->ExStyle & WS_EX_TOPMOST)))
+         {
+            continue;
+         }
+         WinPosBatchAddOwnerGroup(Batch, List, Child, NULL, bSkipTopmost, 1);
+      }
+   }
+   WinPosBatchAddOwnerGroup(Batch, List, Window, NULL, bSkipTopmost, 0);
+   for (k = 1; k < Depth; k++)
+      WinPosBatchAddOwnerGroup(Batch, List, Chain[k], Chain[k - 1], bSkipTopmost, 0);
+}
+
 static BOOL FASTCALL
 WinPosHasTopmostOwned(PWND Window)
 {
@@ -1671,6 +1746,7 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
    BOOL bSkipTopmost = FALSE;
    BOOL bKeepPlace = FALSE;
    BOOL bAfterTopmost = FALSE;
+   BOOL bPathGroups = FALSE;
    PWND InsAfterWnd;
 
    if (hwndGroupAfter == (HWND)0xffff)
@@ -1732,8 +1808,41 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
    else if (hwndGroupAfter != HWND_BOTTOM)
       bSkipTopmost = !(Window->ExStyle & WS_EX_TOPMOST);
 
+   if (bKeepPlace)
+   {
+      PWND Root = WinPosRootOwner(Window, TRUE), Prev;
+      BOOL bOwns = (Root == Window);
+
+      for (Prev = Window->spwndParent->spwndChild; Prev && !bOwns; Prev = Prev->spwndNext)
+         bOwns = (Prev->spwndOwner == Window);
+      for (Prev = Window->spwndPrev; Prev && WinPosIsOwnedBy(Prev, Root); Prev = Prev->spwndPrev)
+         ;
+      if (Prev != Window->spwndPrev && !bOwns)
+      {
+         HWND hwndPrev = UserHMGetHandle(Window->spwndPrev);
+
+         ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
+         Entry = WinPosBatchAdd(Batch, Window);
+         if (Entry)
+            WinPosBatchSetRequest(Entry, hwndPrev, x, y, cx, cy, flags);
+         return;
+      }
+      if (Prev != Window->spwndPrev)
+      {
+         for (Prev = Window->spwndParent->spwndChild; Prev && !WinPosIsOwnedBy(Prev, Root); Prev = Prev->spwndNext)
+            ;
+         Prev = Prev ? Prev->spwndPrev : NULL;
+      }
+      hwndGroupAfter = (!Prev || (Prev->ExStyle & WS_EX_TOPMOST)) ? HWND_TOP : UserHMGetHandle(Prev);
+   }
+
    First = Batch->Count;
-   if (hwndGroupAfter == HWND_BOTTOM)
+   if (bKeepPlace)
+   {
+      WinPosBatchAddPathGroups(Batch, List, Window, WinPosListIndex(List, Window), TRUE);
+      bPathGroups = TRUE;
+   }
+   else if (hwndGroupAfter == HWND_BOTTOM)
    {
       PWND Chain[64];
       UINT Depth = 1, k;
@@ -1754,12 +1863,18 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
             WinPosBatchAdd(Batch, Chain[k]);
       }
    }
+   else if (!hwndBand && hwndGroupAfter != HWND_TOP && !(Window->ExStyle & WS_EX_TOPMOST) &&
+            (InsAfterWnd = ValidateHwndNoErr(hwndGroupAfter)))
+   {
+      WinPosBatchAddPathGroups(Batch, List, Window, WinPosListIndex(List, InsAfterWnd), bSkipTopmost);
+      bPathGroups = TRUE;
+   }
    else
    {
       WinPosBatchAddOwnerGroup(Batch, List, Window, NULL, bSkipTopmost, 0);
    }
    GroupEnd = Batch->Count;
-   if (!bKeepPlace &&
+   if (!bPathGroups &&
        (hwndGroupAfter == HWND_TOP || hwndGroupAfter == HWND_TOPMOST || hwndGroupAfter == HWND_NOTOPMOST ||
         (hwndGroupAfter != HWND_BOTTOM && !(Window->ExStyle & WS_EX_TOPMOST))))
    {
@@ -1779,13 +1894,16 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
    }
    ExFreePoolWithTag(List, USERTAG_WINDOWLIST);
 
-   if (bKeepPlace)
+   if (hwndGroupAfter == HWND_BOTTOM && Batch->Entries[First].Window != Window)
    {
-      PWND Prev;
+      PWND Last;
 
-      for (Prev = Window->spwndPrev; Prev && WinPosBatchHasFrom(Batch, First, Prev); Prev = Prev->spwndPrev)
+      for (Last = Window->spwndParent->spwndChild; Last && Last->spwndNext; Last = Last->spwndNext)
          ;
-      hwndGroupAfter = (!Prev || (Prev->ExStyle & WS_EX_TOPMOST)) ? HWND_TOP : UserHMGetHandle(Prev);
+      while (Last && WinPosBatchHasFrom(Batch, First, Last))
+         Last = Last->spwndPrev;
+      if (Last && !(Last->ExStyle & WS_EX_TOPMOST))
+         hwndGroupAfter = UserHMGetHandle(Last);
    }
    else if (hwndBand == HWND_NOTOPMOST)
    {
