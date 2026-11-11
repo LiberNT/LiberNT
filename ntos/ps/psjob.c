@@ -242,6 +242,25 @@ PspRecordJobMemoryPeaks(
     if (Job->CurrentJobMemoryUsed > Job->PeakJobMemoryUsed) Job->PeakJobMemoryUsed = Job->CurrentJobMemoryUsed;
 }
 
+static
+VOID
+PspSendJobChainMessage(
+    _In_ PEJOB Job,
+    _In_ ULONG Message,
+    _In_opt_ PVOID CompletionValue)
+{
+    ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
+
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
+        PspSendJobMessageLocked(Job, Message, CompletionValue, TRUE);
+        ExReleaseResourceLite(&Job->JobLock);
+    }
+
+    ExReleaseResourceLite(&PspJobListLock);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -498,18 +517,20 @@ PspAssignProcessToJob(
         ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
         Process->Job = Job;
         InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
-        /* TODO: charge and return commit along the whole job chain, so a nested job's ancestors keep counting it */
-        Committed = MmQueryProcessCommitCharge(Process);
-        Job->CurrentJobMemoryUsed += Committed;
-        PspRecordJobMemoryPeaks(Job, Committed);
         Status = PspAddProcessToJobLimits(Process, Job);
         ExReleaseResourceLite(&Job->JobLock);
+
+        Committed = MmQueryProcessCommitCharge(Process);
 
         for (Joined = Job; Joined != Current; Joined = Joined->ParentJob)
         {
             ExAcquireResourceExclusiveLite(&Joined->JobLock, TRUE);
             Joined->TotalProcesses++;
             Joined->ActiveProcesses++;
+            ExAcquirePushLockExclusive(&Joined->MemoryLimitsLock);
+            Joined->CurrentJobMemoryUsed += Committed;
+            PspRecordJobMemoryPeaks(Joined, Committed);
+            ExReleasePushLockExclusive(&Joined->MemoryLimitsLock);
             PspSendJobMessageLocked(Joined,
                                     JOB_OBJECT_MSG_NEW_PROCESS,
                                     Process->UniqueProcessId,
@@ -700,43 +721,68 @@ PsChargeJobCommitment(
     _In_ SIZE_T PageCount)
 {
     PEJOB Job = Process->Job;
+    PEJOB Walk;
+    PEJOB Violated = NULL;
     ULONGLONG ProcessPages;
+    ULONGLONG ProcessLimit = MAXULONGLONG;
     ULONG Message = 0;
 
     if (Job == NULL) return STATUS_SUCCESS;
 
     KeEnterCriticalRegion();
-    ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+
+    /* Taken from the process's own job outwards, and never with a job lock held */
+    for (Walk = Job; Walk != NULL; Walk = Walk->ParentJob)
+        ExAcquirePushLockExclusive(&Walk->MemoryLimitsLock);
 
     ProcessPages = MmQueryProcessCommitCharge(Process) + PageCount;
 
     /* The limits are kept in bytes, the usage in pages */
-    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_PROCESS_MEMORY) != 0 &&
-        ProcessPages > (Job->ProcessMemoryLimit >> PAGE_SHIFT))
+    for (Walk = Job; Walk != NULL; Walk = Walk->ParentJob)
+    {
+        if ((Walk->LimitFlags & JOB_OBJECT_LIMIT_PROCESS_MEMORY) != 0 &&
+            (Walk->ProcessMemoryLimit >> PAGE_SHIFT) < ProcessLimit)
+        {
+            ProcessLimit = Walk->ProcessMemoryLimit >> PAGE_SHIFT;
+            Violated = Walk;
+        }
+    }
+
+    if (ProcessPages > ProcessLimit)
     {
         Message = JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT;
     }
-    else if ((Job->LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY) != 0 &&
-             Job->CurrentJobMemoryUsed + PageCount > (Job->JobMemoryLimit >> PAGE_SHIFT))
+    else
     {
-        Message = JOB_OBJECT_MSG_JOB_MEMORY_LIMIT;
+        Violated = NULL;
+        for (Walk = Job; Walk != NULL && Violated == NULL; Walk = Walk->ParentJob)
+        {
+            if ((Walk->LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY) != 0 &&
+                Walk->CurrentJobMemoryUsed + PageCount > (Walk->JobMemoryLimit >> PAGE_SHIFT))
+            {
+                Message = JOB_OBJECT_MSG_JOB_MEMORY_LIMIT;
+                Violated = Walk;
+            }
+        }
     }
 
-    if (Message != 0)
+    for (Walk = Job; Walk != NULL; Walk = Walk->ParentJob)
     {
-        PspSendJobMessageLocked(Job, Message, Process->UniqueProcessId, TRUE);
-        ExReleaseResourceLite(&Job->JobLock);
-        KeLeaveCriticalRegion();
-        return STATUS_COMMITMENT_LIMIT;
+        if (Violated == NULL)
+        {
+            Walk->CurrentJobMemoryUsed += PageCount;
+            PspRecordJobMemoryPeaks(Walk, ProcessPages);
+        }
+
+        ExReleasePushLockExclusive(&Walk->MemoryLimitsLock);
     }
 
-    Job->CurrentJobMemoryUsed += PageCount;
-    PspRecordJobMemoryPeaks(Job, ProcessPages);
+    if (Violated != NULL)
+        PspSendJobChainMessage(Violated, Message, Process->UniqueProcessId);
 
-    ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 
-    return STATUS_SUCCESS;
+    return (Violated != NULL) ? STATUS_COMMITMENT_LIMIT : STATUS_SUCCESS;
 }
 
 VOID
@@ -745,17 +791,18 @@ PsReturnJobCommitment(
     _In_ PEPROCESS Process,
     _In_ SIZE_T PageCount)
 {
-    PEJOB Job = Process->Job;
-
-    if (Job == NULL) return;
+    PEJOB Job;
 
     KeEnterCriticalRegion();
-    ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
 
-    if (PageCount > Job->CurrentJobMemoryUsed) Job->CurrentJobMemoryUsed = 0;
-    else Job->CurrentJobMemoryUsed -= PageCount;
+    for (Job = Process->Job; Job != NULL; Job = Job->ParentJob)
+    {
+        ExAcquirePushLockExclusive(&Job->MemoryLimitsLock);
+        if (PageCount > Job->CurrentJobMemoryUsed) Job->CurrentJobMemoryUsed = 0;
+        else Job->CurrentJobMemoryUsed -= PageCount;
+        ExReleasePushLockExclusive(&Job->MemoryLimitsLock);
+    }
 
-    ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 }
 
@@ -1774,6 +1821,7 @@ NtSetInformationJobObject(
 
             KeEnterCriticalRegion();
             ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+            ExAcquirePushLockExclusive(&Job->MemoryLimitsLock);
 
             Job->LimitFlags = Extended.BasicLimitInformation.LimitFlags;
             /* TODO: the user time limits are recorded but not enforced, so no process is terminated for one and TotalTerminatedProcesses stays 0 */
@@ -1799,6 +1847,8 @@ NtSetInformationJobObject(
                 Job->ProcessMemoryLimit = Extended.ProcessMemoryLimit;
                 Job->JobMemoryLimit = Extended.JobMemoryLimit;
             }
+
+            ExReleasePushLockExclusive(&Job->MemoryLimitsLock);
 
             /* A limit that is set now reaches the processes already in */
             {
