@@ -890,6 +890,7 @@ public:
     NTSTATUS SetObjectId(_In_ const ObjectIdEx* ObjectId);
     NTSTATUS SetObjectIdExtended(_In_reads_bytes_(48) const UCHAR* ExtendedInfo);
     NTSTATUS DeleteObjectId();
+    NTSTATUS RenameDataStream(_In_opt_ PWSTR OldName, _In_opt_ PWSTR NewName, _In_ BOOLEAN ReplaceIfExists);
     NTSTATUS ReadExtendedAttributes(
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength,

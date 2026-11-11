@@ -1371,8 +1371,11 @@ NtfsSetLinkInformation(_In_ PVolumeContextBlock VolCB,
         return STATUS_OBJECT_NAME_INVALID;
     for (Index = 0; Index < LeafName.Length / sizeof(WCHAR); Index++)
     {
-        if (LeafName.Buffer[Index] == L'\\' || LeafName.Buffer[Index] == L'/')
+        if (LeafName.Buffer[Index] == L'\\' || LeafName.Buffer[Index] == L'/' ||
+            (!TargetFileObject && LeafName.Buffer[Index] == L':'))
+        {
             return STATUS_OBJECT_NAME_INVALID;
+        }
     }
 
     Status = NtfsCheckNamespaceAccess(VolCB, &ParentName, TargetFileObject,
@@ -1822,6 +1825,269 @@ NtfsCheckReplacedReadOnly(_In_ PNtfsFileRecord ReplacedFile,
     return Status;
 }
 
+typedef struct _NTFS_STREAM_RENAME
+{
+    PFileContextBlock File;
+    UNICODE_STRING FileName;
+    PWSTR StreamName;
+} NTFS_STREAM_RENAME, *PNTFS_STREAM_RENAME;
+
+static
+BOOLEAN
+NtfsIsValidStreamComponent(_In_reads_(Length) PCWSTR Name,
+                           _In_ USHORT Length)
+{
+    USHORT Index;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (Name[Index] == L'\\' || Name[Index] == L'/' || Name[Index] == L':' || Name[Index] == UNICODE_NULL)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static
+PStreamContextBlock
+NtfsFindDataStreamContext(_In_ PVolumeContextBlock VolCB,
+                          _In_ ULONGLONG FileReference,
+                          _In_ PCUNICODE_STRING StreamName)
+{
+    PLIST_ENTRY Bucket = NtfsStreamHashBucket(VolCB, FileReference);
+    PLIST_ENTRY Entry;
+
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+        if (StreamCB->FileReference == FileReference && StreamCB->RequestedType == TypeData &&
+            RtlEqualUnicodeString(&StreamCB->RequestedStream, StreamName, TRUE))
+        {
+            return StreamCB;
+        }
+    }
+    return NULL;
+}
+
+static
+VOID
+NtfsFreeStreamRenames(_In_opt_ PNTFS_STREAM_RENAME Renames,
+                      _In_ SIZE_T Count)
+{
+    SIZE_T Index;
+
+    if (!Renames)
+        return;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Renames[Index].FileName.Buffer)
+            ExFreePoolWithTag(Renames[Index].FileName.Buffer, TAG_NTFS);
+        if (Renames[Index].StreamName)
+            ExFreePoolWithTag(Renames[Index].StreamName, TAG_NTFS);
+    }
+    ExFreePoolWithTag(Renames, TAG_NTFS);
+}
+
+static
+NTSTATUS
+NtfsPrepareStreamRenames(_In_ PStreamContextBlock StreamCB,
+                         _In_ PCUNICODE_STRING NewStream,
+                         _Out_ PNTFS_STREAM_RENAME* Renames,
+                         _Out_ PSIZE_T Count)
+{
+    PNTFS_STREAM_RENAME List;
+    PLIST_ENTRY Entry;
+    SIZE_T Total = 0;
+    SIZE_T Index = 0;
+
+    *Renames = NULL;
+    *Count = 0;
+    for (Entry = StreamCB->NativeScb.CcbList.Flink; Entry != &StreamCB->NativeScb.CcbList; Entry = Entry->Flink)
+        Total++;
+    if (!Total)
+        return STATUS_SUCCESS;
+    if (Total > MAXULONG_PTR / sizeof(*List))
+        return STATUS_INSUFFICIENT_RESOURCES;
+    List = ExAllocatePoolZero(PagedPool, Total * sizeof(*List), TAG_NTFS);
+    if (!List)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Entry = StreamCB->NativeScb.CcbList.Flink;
+         Entry != &StreamCB->NativeScb.CcbList && Index < Total;
+         Entry = Entry->Flink, Index++)
+    {
+        PFileContextBlock Other =
+            CONTAINING_RECORD(CONTAINING_RECORD(Entry, NTFS_NATIVE_CCB, StreamEntry), FileContextBlock, NativeCcb);
+        USHORT Base = 0;
+        ULONG Length;
+
+        List[Index].File = Other;
+        while (Base < Other->FileName.Length / sizeof(WCHAR) && Other->FileName.Buffer[Base] != L':')
+            Base++;
+        Length = Base * sizeof(WCHAR) + (NewStream->Length ? sizeof(WCHAR) + NewStream->Length : 0);
+        if (Length > MAXUSHORT)
+        {
+            NtfsFreeStreamRenames(List, Total);
+            return STATUS_NAME_TOO_LONG;
+        }
+        List[Index].FileName.Buffer = ExAllocatePoolWithTag(PagedPool, max(Length, sizeof(WCHAR)), TAG_NTFS);
+        if (NewStream->Length)
+            List[Index].StreamName = ExAllocatePoolWithTag(PagedPool, NewStream->Length + sizeof(WCHAR), TAG_NTFS);
+        if (!List[Index].FileName.Buffer || (NewStream->Length && !List[Index].StreamName))
+        {
+            NtfsFreeStreamRenames(List, Total);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        RtlCopyMemory(List[Index].FileName.Buffer, Other->FileName.Buffer, Base * sizeof(WCHAR));
+        if (NewStream->Length)
+        {
+            List[Index].FileName.Buffer[Base] = L':';
+            RtlCopyMemory(List[Index].FileName.Buffer + Base + 1, NewStream->Buffer, NewStream->Length);
+            RtlCopyMemory(List[Index].StreamName, NewStream->Buffer, NewStream->Length);
+            List[Index].StreamName[NewStream->Length / sizeof(WCHAR)] = UNICODE_NULL;
+        }
+        List[Index].FileName.Length = List[Index].FileName.MaximumLength = (USHORT)Length;
+    }
+
+    *Renames = List;
+    *Count = Index;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NtfsRenameStream(_In_ PVolumeContextBlock VolCB,
+                 _In_ PFileContextBlock FileCB,
+                 _In_ PFILE_OBJECT FileObject,
+                 _In_ PCUNICODE_STRING NewStreamName,
+                 _In_ BOOLEAN ReplaceIfExists)
+{
+    static const UNICODE_STRING DataType = RTL_CONSTANT_STRING(L"$DATA");
+    static const UNICODE_STRING IndexType = RTL_CONSTANT_STRING(L"$INDEX_ALLOCATION");
+    UNICODE_STRING StreamName;
+    UNICODE_STRING TypeName;
+    UNICODE_STRING OldStream;
+    PNTFS_STREAM_RENAME Renames = NULL;
+    PStreamContextBlock StreamCB = FileCB->StreamCB;
+    PStreamContextBlock TargetCB;
+    PWSTR NewName = NULL;
+    SIZE_T RenameCount = 0;
+    SIZE_T Index;
+    USHORT Characters = NewStreamName->Length / sizeof(WCHAR);
+    USHORT Colons = 0;
+    USHORT Split;
+    BOOLEAN IsDirectory = !!(NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY);
+    BOOLEAN DirectoryStream;
+    NTSTATUS Status;
+
+    for (Index = 0; Index < Characters; Index++)
+    {
+        if (NewStreamName->Buffer[Index] == L':')
+            Colons++;
+    }
+    Split = 1;
+    while (Split < Characters && NewStreamName->Buffer[Split] != L':')
+        Split++;
+    StreamName.Buffer = NewStreamName->Buffer + 1;
+    StreamName.Length = StreamName.MaximumLength = (USHORT)((Split - 1) * sizeof(WCHAR));
+    TypeName.Buffer = NewStreamName->Buffer + min(Split + 1, Characters);
+    TypeName.Length = TypeName.MaximumLength =
+        (USHORT)((Characters > Split ? Characters - Split - 1 : 0) * sizeof(WCHAR));
+
+    if (NewStreamName->Buffer[Characters - 1] == L':' || Colons > 3 ||
+        !NtfsIsValidStreamComponent(StreamName.Buffer, StreamName.Length / sizeof(WCHAR)) ||
+        !NtfsIsValidStreamComponent(TypeName.Buffer, TypeName.Length / sizeof(WCHAR)) ||
+        (!StreamName.Length && !TypeName.Length) ||
+        StreamName.Length > 255 * sizeof(WCHAR) ||
+        (!StreamName.Length && IsDirectory))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    DirectoryStream = IsDirectory && !(FileCB->RequestedStream && FileCB->RequestedStream[0]);
+    if (TypeName.Length &&
+        !RtlEqualUnicodeString(&TypeName, DirectoryStream ? &IndexType : &DataType, TRUE))
+    {
+        return STATUS_OBJECT_TYPE_MISMATCH;
+    }
+    if (DirectoryStream || FileCB->RequestedType != TypeData || !StreamCB)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlInitUnicodeString(&OldStream, FileCB->RequestedStream && FileCB->RequestedStream[0] ? FileCB->RequestedStream : NULL);
+    if (RtlEqualUnicodeString(&StreamName, &OldStream, TRUE))
+        return STATUS_SUCCESS;
+
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    TargetCB = NtfsFindDataStreamContext(VolCB, StreamCB->FileReference, &StreamName);
+    Status = (ReplaceIfExists && TargetCB && TargetCB->UncleanCount) ? STATUS_INVALID_PARAMETER : STATUS_SUCCESS;
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (StreamName.Length)
+    {
+        NewName = ExAllocatePoolWithTag(PagedPool, StreamName.Length + sizeof(WCHAR), TAG_NTFS);
+        if (!NewName)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        RtlCopyMemory(NewName, StreamName.Buffer, StreamName.Length);
+        NewName[StreamName.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+    Status = NtfsPrepareStreamRenames(StreamCB, &StreamName, &Renames, &RenameCount);
+    if (NT_SUCCESS(Status) && FileObject->SectionObjectPointer && FileObject->SectionObjectPointer->SharedCacheMap)
+    {
+        IO_STATUS_BLOCK FlushStatus;
+
+        CcFlushCache(FileObject->SectionObjectPointer, NULL, 0, &FlushStatus);
+        Status = FlushStatus.Status;
+    }
+    if (NT_SUCCESS(Status))
+        Status = NtfsFileRecordRenameDataStream(FileCB->FileRec, OldStream.Length ? FileCB->RequestedStream : NULL,
+                                                NewName, ReplaceIfExists);
+    if (!NT_SUCCESS(Status))
+    {
+        NtfsFreeStreamRenames(Renames, RenameCount);
+        if (NewName)
+            ExFreePoolWithTag(NewName, TAG_NTFS);
+        return Status;
+    }
+
+    for (Index = 0; Index < RenameCount; Index++)
+    {
+        PFileContextBlock Other = Renames[Index].File;
+
+        NtfsEvictCachedRecord(VolCB, Other->FileName.Buffer, Other->FileName.Length / sizeof(WCHAR), FALSE);
+        if (Other->FileName.Buffer != Other->InlineFileName)
+            ExFreePoolWithTag(Other->FileName.Buffer, TAG_NTFS);
+        Other->FileName = Renames[Index].FileName;
+        Other->NativeCcb.FileName = Other->FileName;
+        Renames[Index].FileName.Buffer = NULL;
+        if (Other->RequestedStream)
+            ExFreePool(Other->RequestedStream);
+        Other->RequestedStream = Renames[Index].StreamName;
+        Renames[Index].StreamName = NULL;
+    }
+    NtfsFreeStreamRenames(Renames, RenameCount);
+
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    TargetCB = NtfsFindDataStreamContext(VolCB, StreamCB->FileReference, &StreamName);
+    if (TargetCB && TargetCB != StreamCB)
+    {
+        TargetCB->Deleted = TRUE;
+        TargetCB->RequestedType = TypeAttributeEndMarker;
+    }
+    if (StreamCB->RequestedStream.Buffer)
+        ExFreePool(StreamCB->RequestedStream.Buffer);
+    StreamCB->RequestedStream.Buffer = NewName;
+    StreamCB->RequestedStream.Length = StreamName.Length;
+    StreamCB->RequestedStream.MaximumLength = NewName ? StreamName.Length + sizeof(WCHAR) : 0;
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+
+    InterlockedIncrement(&VolCB->DirGeneration);
+    FileObject->Flags |= FO_FILE_MODIFIED;
+    /* TODO: no USN record is posted for a stream rename */
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
@@ -1869,6 +2135,34 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         return STATUS_NAME_TOO_LONG;
     if (!(FileCB->DesiredAccess & DELETE))
         return STATUS_ACCESS_DENIED;
+    if (!IrpSp->Parameters.SetFile.FileObject && RenameInfo->FileName[0] == L':')
+    {
+        UNICODE_STRING NewStreamName;
+
+        if (IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformationEx)
+        {
+            if (RenameInfo->Flags & ~(FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS |
+                                      FILE_RENAME_SUPPRESS_PIN_STATE_INHERITANCE |
+                                      FILE_RENAME_SUPPRESS_STORAGE_RESERVE_INHERITANCE |
+                                      FILE_RENAME_PRESERVE_AVAILABLE_SPACE |
+                                      FILE_RENAME_IGNORE_READONLY_ATTRIBUTE | FILE_RENAME_FORCE_RESIZE_SR))
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+            ReplaceIfExists = BooleanFlagOn(RenameInfo->Flags, FILE_RENAME_REPLACE_IF_EXISTS);
+        }
+        else
+        {
+            ReplaceIfExists = IrpSp->Parameters.SetFile.ReplaceIfExists || RenameInfo->ReplaceIfExists;
+        }
+        if (FileCB->IsVolumeOpen)
+            return STATUS_INVALID_PARAMETER;
+        if (FileCB->Txf)
+            return STATUS_OPERATION_NOT_SUPPORTED_IN_TRANSACTION;
+        NewStreamName.Buffer = RenameInfo->FileName;
+        NewStreamName.Length = NewStreamName.MaximumLength = (USHORT)RenameInfo->FileNameLength;
+        return NtfsRenameStream(VolCB, FileCB, FileObject, &NewStreamName, ReplaceIfExists);
+    }
     if (FileCB->DeletePending)
         return STATUS_DELETE_PENDING;
     if (FileCB->IsVolumeOpen || FileCB->FileName.Length <= sizeof(WCHAR) || FileCB->RequestedStream)
@@ -1935,8 +2229,11 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         return STATUS_OBJECT_NAME_INVALID;
     for (PrefixLength = 0; PrefixLength < LeafName.Length / sizeof(WCHAR); PrefixLength++)
     {
-        if (LeafName.Buffer[PrefixLength] == L'\\' || LeafName.Buffer[PrefixLength] == L'/')
+        if (LeafName.Buffer[PrefixLength] == L'\\' || LeafName.Buffer[PrefixLength] == L'/' ||
+            (!TargetFileObject && LeafName.Buffer[PrefixLength] == L':'))
+        {
             return STATUS_OBJECT_NAME_INVALID;
+        }
     }
 
     /* The target directory's open is a file open inside a directory moved into itself, which [MS-FSA] refuses */

@@ -31,6 +31,7 @@ add_library(ntfslib_host STATIC
     ${NTFSLIB_ROOT}/src/filerecord/write/move.cpp
     ${NTFSLIB_ROOT}/src/filerecord/write/objectid.cpp
     ${NTFSLIB_ROOT}/src/filerecord/write/reparse.cpp
+    ${NTFSLIB_ROOT}/src/filerecord/write/streamrename.cpp
     ${NTFSLIB_ROOT}/src/filerecord/filerecord.cpp
     ${NTFSLIB_ROOT}/src/filerecord/fixup.cpp
     ${NTFSLIB_ROOT}/src/lfs/lfs.cpp

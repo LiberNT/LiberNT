@@ -109,6 +109,7 @@ list(APPEND SOURCE
     SystemTimeChangeTimers.c
     TzSpecificLocalTimeEx.c
     StdHandleInheritance.c
+    StreamRename.c
     LocaleNameToLCID.c
     lstrcpynW.c
     lstrlen.c

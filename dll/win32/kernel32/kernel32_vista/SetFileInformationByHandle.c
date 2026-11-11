@@ -45,7 +45,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
         break;
     case FileRenameInfo:
     case FileRenameInfoEx:
-        if (((FILE_RENAME_INFORMATION *)info)->RootDirectory)
+        if (((FILE_RENAME_INFORMATION *)info)->RootDirectory ||
+            (size >= FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + sizeof(WCHAR) &&
+             ((FILE_RENAME_INFORMATION *)info)->FileName[0] == L':'))
         {
             status = NtSetInformationFile( file, &io, info, size,
                     class == FileRenameInfo ? FileRenameInformation : FileRenameInformationEx );
@@ -56,7 +58,6 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
             UNICODE_STRING nt_name;
             ULONG size;
 
-            /* FIXME: a new stream name starting with ':' is converted as a DOS path; NTFS does not rename streams yet */
             if ((status = RtlDosPathNameToNtPathName_U_WithStatus( ((FILE_RENAME_INFORMATION *)info)->FileName,
                                                                    &nt_name, NULL, NULL )))
                 break;

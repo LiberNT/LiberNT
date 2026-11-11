@@ -337,6 +337,18 @@ NtfsFileRecordDeleteObjectId(
 }
 
 NTSTATUS
+NtfsFileRecordRenameDataStream(
+    _In_ PNtfsFileRecord Fr,
+    _In_opt_ PWSTR OldName,
+    _In_opt_ PWSTR NewName,
+    _In_ BOOLEAN ReplaceIfExists)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->RenameDataStream(OldName, NewName, ReplaceIfExists);
+}
+
+NTSTATUS
 NtfsFileRecordReadExtendedAttributes(
     _In_ PNtfsFileRecord Fr,
     _In_opt_ PUCHAR Buffer,

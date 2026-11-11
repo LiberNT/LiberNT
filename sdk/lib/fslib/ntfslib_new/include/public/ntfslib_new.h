@@ -488,6 +488,13 @@ NTSTATUS
 NtfsFileRecordDeleteObjectId(
     _In_ NtfsFileRecord *FileRecord);
 
+NTSTATUS
+NtfsFileRecordRenameDataStream(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_opt_ PWSTR OldName,
+    _In_opt_ PWSTR NewName,
+    _In_ BOOLEAN ReplaceIfExists);
+
 /*
  * Validates and projects IO_REPARSE_TAG_SYMLINK or
  * IO_REPARSE_TAG_MOUNT_POINT data without allocating or copying strings.
