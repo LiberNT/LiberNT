@@ -926,6 +926,11 @@ ExpInitializeExecutive(
 
     ExpReadLoadOptions(LoaderBlock);
     ExpFirmwareType = LoaderBlock->FirmwareInformation.FirmwareTypeEfi ? FirmwareTypeUefi : FirmwareTypeBios;
+    /* The boot path is read through the code page tables */
+    if (!ExpInitNls(LoaderBlock))
+    {
+        KeBugCheck(PHASE0_INITIALIZATION_FAILED);
+    }
     ExpInitializeSystemRoot(LoaderBlock);
     ExpInitializeImageNumbers(LoaderBlock);
 
@@ -977,11 +982,6 @@ ExpInitializeExecutive(
     /* What the registry holds for the kernel is read from the hive the loader left in memory */
     CmGetSystemControlValues(LoaderBlock->RegistryBase, CmControlVector);
     NtGlobalFlag |= CmNtGlobalFlag;
-
-    if (!ExpInitNls(LoaderBlock))
-    {
-        KeBugCheck(PHASE0_INITIALIZATION_FAILED);
-    }
 
     if (!ObInitSystem())
     {
