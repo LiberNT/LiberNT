@@ -928,6 +928,7 @@ IopReferenceCreateTransaction(
     PKTRANSACTION Transaction;
     HANDLE Handle = NULL;
     NTSTATUS Status;
+    PTEB32 Teb32;
     PTEB Teb;
 
     PAGED_CODE();
@@ -945,7 +946,6 @@ IopReferenceCreateTransaction(
 
     if (AccessMode == KernelMode) return STATUS_SUCCESS;
 
-    /* FIXME: a WoW64 thread keeps its current transaction in its 32-bit TEB, which is not read, so its opens run untransacted */
     Teb = PsGetCurrentThreadTeb();
     if (Teb == NULL) return STATUS_SUCCESS;
 
@@ -953,6 +953,13 @@ IopReferenceCreateTransaction(
     {
         ProbeForRead(&Teb->CurrentTransactionHandle, sizeof(HANDLE), sizeof(ULONG));
         Handle = Teb->CurrentTransactionHandle;
+        ProbeForRead(&Teb->WowTebOffset, sizeof(LONG), sizeof(LONG));
+        if (Handle == NULL && Teb->WowTebOffset != 0)
+        {
+            Teb32 = (PTEB32)((PUCHAR)Teb + Teb->WowTebOffset);
+            ProbeForRead(&Teb32->CurrentTransactionHandle, sizeof(ULONG), sizeof(ULONG));
+            Handle = LongToHandle((LONG)Teb32->CurrentTransactionHandle);
+        }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
