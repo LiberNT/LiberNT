@@ -190,6 +190,7 @@ extern void func_NtQueryDirectoryObject(void);
 extern void func_NtDuplicateTokenQos(void);
 extern void func_NtWaitForObjects(void);
 extern void func_SatisfiedWait(void);
+extern void func_SharedUserData(void);
 extern void func_StackOverflow(void);
 extern void func_ScanfSecure(void);
 extern void func_StackProbe(void);
@@ -390,6 +391,7 @@ const struct test winetest_testlist[] =
     { "NtDuplicateTokenQos",               func_NtDuplicateTokenQos },
     { "NtWaitForObjects",                  func_NtWaitForObjects },
     { "SatisfiedWait",                  func_SatisfiedWait },
+    { "SharedUserData",                 func_SharedUserData },
     { "StackOverflow",                  func_StackOverflow },
     { "ScanfSecure",                    func_ScanfSecure },
     { "StackProbe",                     func_StackProbe },

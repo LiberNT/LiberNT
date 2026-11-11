@@ -202,6 +202,7 @@ list(APPEND SOURCE
     RtlxUnicodeStringToOemSize.c
     SatisfiedWait.c
     ScanfSecure.c
+    SharedUserData.c
     StackOverflow.c
     StackProbe.c
     SystemInfo.c

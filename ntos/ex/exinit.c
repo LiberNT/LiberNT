@@ -933,6 +933,7 @@ ExpInitializeExecutive(
     SharedUserData->ProductTypeIsValid = TRUE;
     SharedUserData->NtMajorVersion = NtMajorVersion;
     SharedUserData->NtMinorVersion = NtMinorVersion;
+    SharedUserData->NtBuildNumber = NtBuildNumber & 0xFFFF;
 
     if (!HalInitSystem(0, LoaderBlock))
     {
