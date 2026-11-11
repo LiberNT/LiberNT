@@ -39,21 +39,19 @@ static void _expect_ref(IUnknown* obj, ULONG ref, int line)
     ok_(__FILE__,line)(rc == ref, "expected refcount %ld, got %ld\n", ref, rc);
 }
 
-static void flush_events(void)
+/* Services the calls the thread makes into this apartment until it has finished, instead of pumping for a fixed time. */
+static DWORD wait_thread_pumping(HANDLE thread)
 {
-    int diff = 200;
-    DWORD time;
+    DWORD start = GetTickCount(), ret;
     MSG msg;
 
-    time = GetTickCount() + diff;
-    while (diff > 0)
+    while ((ret = MsgWaitForMultipleObjects(1, &thread, FALSE, 5000, QS_ALLINPUT)) == WAIT_OBJECT_0 + 1 &&
+           GetTickCount() - start < 5000)
     {
-        if (MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT) == WAIT_TIMEOUT)
-            break;
         while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE))
             DispatchMessageA(&msg);
-        diff = time - GetTickCount();
     }
+    return ret;
 }
 
 static void load_resource(const WCHAR *filename)
@@ -770,8 +768,7 @@ static void test_RoGetAgileReference(void)
                 param.unk_obj = &unk_obj.IUnknown_iface;
                 param.obj_is_agile = FALSE;
                 thread = CreateThread(NULL, 0, test_RoGetAgileReference_thread_proc, &param, 0, NULL);
-                flush_events();
-                ret = WaitForSingleObject(thread, 100);
+                ret = wait_thread_pumping(thread);
                 ok(!ret, "WaitForSingleObject failed, error %ld.\n", GetLastError());
             }
 
@@ -801,8 +798,7 @@ static void test_RoGetAgileReference(void)
                 param.unk_obj = &unk_agile_obj.IUnknown_iface;
                 param.obj_is_agile = TRUE;
                 thread = CreateThread(NULL, 0, test_RoGetAgileReference_thread_proc, &param, 0, NULL);
-                flush_events();
-                ret = WaitForSingleObject(thread, 100);
+                ret = wait_thread_pumping(thread);
                 ok(!ret, "WaitForSingleObject failed, error %ld.\n", GetLastError());
             }
 
@@ -837,8 +833,7 @@ static void test_RoGetAgileReference(void)
             winetest_push_context("to_type=%d", to_type);
             unk_ctx_impl->todo = TRUE;
             thread = CreateThread(NULL, 0, test_agile_resolve_context, &params, 0, NULL);
-            flush_events();
-            ret = WaitForSingleObject(thread, INFINITE);
+            ret = wait_thread_pumping(thread);
             ok(!ret, "got ret %lu\n", ret);
             CloseHandle(thread);
             unk_ctx_impl->todo = FALSE;
