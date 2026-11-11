@@ -259,6 +259,19 @@ CmpAttachHiveFile(
 
     Hive->FileHandles[HFILE_TYPE_PRIMARY] = Primary;
     Hive->FileHandles[HFILE_TYPE_LOG] = Log;
+
+    if (Hive->Hive.BaseBlock->BootRecover == HBOOT_BOOT_RECOVERED_BY_HIVE_LOG)
+    {
+        RtlSetAllBits(&Hive->Hive.DirtyVector);
+        Hive->Hive.DirtyCount = Hive->Hive.DirtyVector.SizeOfBitMap;
+        if (HvSyncHiveFromRecover(&Hive->Hive))
+        {
+            RtlClearAllBits(&Hive->Hive.DirtyVector);
+            Hive->Hive.DirtyCount = 0;
+            Hive->Hive.BaseBlock->BootRecover = HBOOT_NO_BOOT_RECOVER;
+        }
+    }
+
     return STATUS_SUCCESS;
 }
 

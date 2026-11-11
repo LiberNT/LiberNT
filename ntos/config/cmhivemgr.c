@@ -16,7 +16,7 @@
 static UNICODE_STRING CmpHiveListKeyName = RTL_CONSTANT_STRING(
     L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Control\\hivelist");
 
-static UNICODE_STRING CmpLogExtension = RTL_CONSTANT_STRING(L".LOG");
+static UNICODE_STRING CmpLogExtension = RTL_CONSTANT_STRING(L".LOG1");
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -527,7 +527,7 @@ CmpInitHiveFromFile(
                               &LogDisposition,
                               TRUE,
                               FALSE,
-                              TRUE,
+                              FALSE,
                               &ClusterSize);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -690,11 +690,11 @@ CmpFlushHiveToDisk(
 
     if (CmpNoWrite) return STATUS_SUCCESS;
     if (Hive->Hive.HiveFlags & HIVE_VOLATILE) return STATUS_SUCCESS;
-    if (Hive->Hive.HiveFlags & HIVE_NOLAZYFLUSH) return STATUS_SUCCESS;
+    if (!Force && (Hive->Hive.HiveFlags & HIVE_NOLAZYFLUSH)) return STATUS_SUCCESS;
     if (!Force && Hive->Hive.DirtyCount == 0) return STATUS_SUCCESS;
 
     CmpLockHiveFlusherExclusive(Hive);
-    Written = HvSyncHive(&Hive->Hive);
+    Written = Force ? HvReconcileHive(&Hive->Hive) : HvSyncHive(&Hive->Hive);
     CmpUnlockHiveFlusher(Hive);
 
     if (!Written) return STATUS_REGISTRY_IO_FAILED;
