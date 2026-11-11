@@ -726,7 +726,12 @@ ObpLookupObjectName(
             break;
         }
 
-        if (Walk.Remaining.Length == 0)
+        if (Walk.Remaining.Length == 0 ||
+            (InsertObject != NULL &&
+             (FoundType->TypeInfo.ParseProcedure != NULL ||
+              FoundType->TypeInfo.ParseProcedureEx != NULL) &&
+             Walk.Remaining.Length == sizeof(WCHAR) &&
+             Walk.Remaining.Buffer[0] == OBJ_NAME_PATH_SEPARATOR))
         {
             /* The search already parked one reference in the context, so this
              * is the one the caller takes away */
