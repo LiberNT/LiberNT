@@ -94,6 +94,7 @@ list(APPEND SOURCE
     KnownDlls.c
     LCMapString.c
     LoadLibraryExW.c
+    LockFileClose.c
     LockFileEx.c
     OpenFileByIdRename.c
     LoaderLock.c

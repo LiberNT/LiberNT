@@ -17,7 +17,8 @@ VOID
 IopSendCloseIrp(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PFILE_OBJECT FileObject,
-    _In_ UCHAR MajorFunction)
+    _In_ UCHAR MajorFunction,
+    _In_ UCHAR MinorFunction)
 {
     PIO_STACK_LOCATION StackPtr;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -39,6 +40,7 @@ IopSendCloseIrp(
 
     StackPtr = IoGetNextIrpStackLocation(Irp);
     StackPtr->MajorFunction = MajorFunction;
+    StackPtr->MinorFunction = MinorFunction;
     StackPtr->FileObject = FileObject;
     StackPtr->DeviceObject = DeviceObject;
 
@@ -112,10 +114,10 @@ IopDeleteFile(
         /* A file object that never had a handle never had its cleanup either */
         if (!(FileObject->Flags & FO_HANDLE_CREATED))
         {
-            IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP);
+            IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP, 0);
         }
 
-        IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE);
+        IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE, 0);
 
         Vpb = FileObject->Vpb;
         if (Vpb != NULL && !(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
@@ -172,6 +174,30 @@ IopDeleteFile(
     }
 }
 
+static
+VOID
+IopUnlockAllForProcess(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PEPROCESS Process)
+{
+    PFAST_IO_DISPATCH FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch;
+    IO_STATUS_BLOCK IoStatusBlock;
+
+    if (FastIoDispatch != NULL &&
+        FastIoDispatch->SizeOfFastIoDispatch > FIELD_OFFSET(FAST_IO_DISPATCH, FastIoUnlockAll) &&
+        FastIoDispatch->FastIoUnlockAll != NULL &&
+        FastIoDispatch->FastIoUnlockAll(FileObject, Process, &IoStatusBlock, DeviceObject))
+    {
+        return;
+    }
+
+    /* FIXME: IoGetRequestorProcess names the thread's own process, so a close made attached to another process leaves its locks to the cleanup */
+    if (Process != IoThreadToProcess(PsGetCurrentThread())) return;
+
+    IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_LOCK_CONTROL, IRP_MN_UNLOCK_ALL);
+}
+
 VOID
 NTAPI
 IopCloseFile(
@@ -190,20 +216,20 @@ IopCloseFile(
         IopCancelFileIrps(FileObject, NULL, NULL, Process);
     }
 
-    if (SystemHandleCount != 1) return;
     if (FileObject->DeviceObject == NULL) return;
 
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
 
     if (DeviceObject == NULL) return;
 
-    if (FileObject->LockOperation)
+    if (Process != NULL && ProcessHandleCount == 1 && FileObject->LockOperation)
     {
-        /* TODO: no fast unlock-all path; the file system is asked instead */
-        DPRINT("I/O: byte-range locks are left to the file system on close\n");
+        IopUnlockAllForProcess(DeviceObject, FileObject, Process);
     }
 
-    IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP);
+    if (SystemHandleCount != 1) return;
+
+    IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP, 0);
 
     IopDecrementDeviceObjectHandleCount(DeviceObject);
 }
