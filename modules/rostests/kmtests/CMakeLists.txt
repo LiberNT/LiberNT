@@ -551,6 +551,7 @@ list(APPEND KMTEST_SOURCE
     ntos_se/NtFilterToken.c
     ntos_se/SeLowBoxToken.c
     ntos_se/SeAuditAlarm.c
+    ntos_se/SeSecurityDirectory.c
     ntos_cc/CcCopyRead_user.c
     ntos_cc/CcCopyWrite_user.c
     ntos_cc/CcMapData_user.c

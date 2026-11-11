@@ -152,11 +152,32 @@ SepPublishSecurityDirectory(VOID)
     UNICODE_STRING DirectoryName = RTL_CONSTANT_STRING(L"\\Security");
     UNICODE_STRING EventName = RTL_CONSTANT_STRING(L"LSA_AUTHENTICATION_INITIALIZED");
     OBJECT_ATTRIBUTES ObjectAttributes;
+    SECURITY_DESCRIPTOR EventSd;
+    ULONG EventAcl[32];
+    PACL Dacl = (PACL)EventAcl;
     HANDLE DirectoryHandle;
     HANDLE EventHandle;
     NTSTATUS Status;
 
     PAGED_CODE();
+
+    /* TODO: the event's Windows 11 descriptor is unverified; any account must be able to wait on it */
+    Status = RtlCreateAcl(Dacl, sizeof(EventAcl), ACL_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, GENERIC_READ | SYNCHRONIZE, SeWorldSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, GENERIC_ALL, SeLocalSystemSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, GENERIC_ALL, SeAliasAdminsSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateSecurityDescriptor(&EventSd, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(&EventSd, TRUE, Dacl, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("SE: could not describe the authority's event (0x%08lx)\n", Status);
+        return FALSE;
+    }
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &DirectoryName,
@@ -179,7 +200,7 @@ SepPublishSecurityDirectory(VOID)
                                OBJ_CASE_INSENSITIVE | OBJ_PERMANENT |
                                    OBJ_KERNEL_HANDLE,
                                DirectoryHandle,
-                               SePublicDefaultSd);
+                               &EventSd);
 
     Status = ZwCreateEvent(&EventHandle,
                            EVENT_ALL_ACCESS,

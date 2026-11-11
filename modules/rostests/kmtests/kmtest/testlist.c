@@ -21,6 +21,7 @@ KMT_TESTFUNC Test_NtFilterToken;
 KMT_TESTFUNC Test_NtFilterTokenCapture;
 KMT_TESTFUNC Test_SeLowBoxToken;
 KMT_TESTFUNC Test_SeAuditAlarm;
+KMT_TESTFUNC Test_SeSecurityDirectory;
 KMT_TESTFUNC Test_FltMgrIo;
 KMT_TESTFUNC Test_FltMgrScan;
 KMT_TESTFUNC Test_FltMgrTx;
@@ -97,6 +98,7 @@ const KMT_TEST TestList[] =
     { "NtFilterTokenCapture",         Test_NtFilterTokenCapture },
     { "SeLowBoxToken",                Test_SeLowBoxToken },
     { "SeAuditAlarm",                 Test_SeAuditAlarm },
+    { "SeSecurityDirectory",          Test_SeSecurityDirectory },
     { "FltMgrIo",                     Test_FltMgrIo },
     { "FltMgrScan",                   Test_FltMgrScan },
     { "FltMgrTx",                     Test_FltMgrTx },
