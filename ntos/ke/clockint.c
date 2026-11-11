@@ -47,6 +47,9 @@ BOOLEAN KiRelaxedTiming;
 /* How much of the current default-length tick is left to run. */
 LONG KiTickOffset;
 
+/* What is left of the default period on each processor before its run time is charged again */
+static LONG KiRunTimeOffset[MAXIMUM_PROCESSORS];
+
 /* Where in a default-length tick the clock currently stands, so that a timer
    rounded to the default resolution lands on the same boundary as the tick. */
 volatile ULONG KiTickPhase;
@@ -253,6 +256,28 @@ KiChargeDpcWatchdog(
 /* PUBLIC FUNCTIONS: THE CLOCK PERIOD *****************************************/
 
 /*
+ * The number of default periods an increment completes, measured against an
+ * offset that holds what is left of the current one. A clock interrupt that
+ * was held off brings several at once.
+ */
+static
+ULONG
+KiTakeElapsedTicks(
+    _Inout_ PLONG Offset,
+    _In_ ULONG Increment)
+{
+    ULONG Ticks;
+
+    *Offset -= (LONG)Increment;
+    if (*Offset > 0)
+        return 0;
+
+    Ticks = 1 + ((ULONG)(-*Offset) / KeMaximumIncrement);
+    *Offset += (LONG)(Ticks * KeMaximumIncrement);
+    return Ticks;
+}
+
+/*
  * Told by the platform what its clock can do. The system runs at the longest
  * period until something asks for a finer one, because every tick costs an
  * interrupt on every processor.
@@ -263,6 +288,8 @@ KeSetTimeIncrement(
     _In_ ULONG MaxIncrement,
     _In_ ULONG MinIncrement)
 {
+    ULONG Index;
+
     ASSERT(MaxIncrement >= MinIncrement);
 
     KeMaximumIncrement = MaxIncrement;
@@ -270,6 +297,8 @@ KeSetTimeIncrement(
     KeTimeIncrement = MaxIncrement;
     KeTimeAdjustment = MaxIncrement;
     KiTickOffset = (LONG)MaxIncrement;
+    for (Index = 0; Index < MAXIMUM_PROCESSORS; Index++)
+        KiRunTimeOffset[Index] = (LONG)MaxIncrement;
 }
 
 /*
@@ -447,6 +476,7 @@ KiUpdateSharedTime(
 {
     LARGE_INTEGER Interrupt, System, Tick;
     ULONGLONG InterruptTime;
+    ULONG Ticks;
 
     if (KiInterruptTimeFrozen)
         return KiGetInterruptTime();
@@ -476,14 +506,13 @@ KiUpdateSharedTime(
     if (KeMaximumIncrement == 0)
         return InterruptTime;
 
-    KiTickOffset -= (LONG)Increment;
-    if (KiTickOffset <= 0)
+    Ticks = KiTakeElapsedTicks(&KiTickOffset, Increment);
+    if (Ticks != 0)
     {
-        KiTickOffset += (LONG)KeMaximumIncrement;
         KiTickPhase = (ULONG)(InterruptTime % KeMaximumIncrement);
 
         Tick = KiReadSystemTime(&KeTickCount);
-        Tick.QuadPart++;
+        Tick.QuadPart += Ticks;
         KiWriteSystemTime(&KeTickCount, Tick);
         KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, TickCount), Tick);
 
@@ -585,7 +614,10 @@ KeUpdateSystemTime(
 
     InterruptTime = KiUpdateSharedTime(Increment, ClockOwner);
 
-    KeUpdateRunTime(TrapFrame, OldIrql);
+    KiUpdateRunTime(TrapFrame,
+                    OldIrql,
+                    (KeMaximumIncrement != 0) ?
+                        KiTakeElapsedTicks(&KiRunTimeOffset[Prcb->Number], Increment) : 1);
 
     if (SmpDbgEnabled)
         SmpDbgRuntimeTick(Prcb->Number);
