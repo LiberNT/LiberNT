@@ -206,11 +206,14 @@ ExpQueryBasicInformation(
 static
 NTSTATUS
 ExpQueryProcessorInformation(
-    _Out_ PSYSTEM_PROCESSOR_INFORMATION Processor)
+    _Out_ PSYSTEM_PROCESSOR_INFORMATION Processor,
+    _In_ BOOLEAN Emulation)
 {
     ULONG FeatureBits = (ULONG)KeFeatureBits;
 
     Processor->ProcessorArchitecture = (USHORT)KeProcessorArchitecture;
+    if (Emulation && sizeof(PVOID) == sizeof(ULONGLONG))
+        Processor->ProcessorArchitecture = PROCESSOR_ARCHITECTURE_INTEL;
     Processor->ProcessorLevel = (USHORT)KeProcessorLevel;
     Processor->ProcessorRevision = (USHORT)KeProcessorRevision;
     Processor->MaximumProcessors = (USHORT)KeNumberProcessors;
@@ -970,7 +973,9 @@ NtQuerySystemInformation(
                     break;
                 }
 
-                Status = ExpQueryProcessorInformation(SystemInformation);
+                Status = ExpQueryProcessorInformation(SystemInformation,
+                                                      (BOOLEAN)(SystemInformationClass ==
+                                                                SystemEmulationProcessorInformation));
                 break;
             }
 
