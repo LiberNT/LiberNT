@@ -465,7 +465,6 @@ CmpNotifyChangeKey(
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (Filter == 0) return STATUS_INVALID_PARAMETER;
     if (!CmpNotifyInited) return STATUS_INSUFFICIENT_RESOURCES;
 
     if (KeyBody->KeyControlBlock == NULL) return STATUS_KEY_DELETED;

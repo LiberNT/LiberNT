@@ -1867,6 +1867,8 @@ NtNotifyChangeMultipleKeys(
             ObDereferenceObject(KeyBody);
             return Status;
         }
+
+        KeClearEvent(EventObject);
     }
 
     CmpLockRegistry();
