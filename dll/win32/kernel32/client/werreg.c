@@ -101,6 +101,31 @@ BasepWerReadRemoteAddress(
                                NULL);
 }
 
+static
+NTSTATUS
+BasepWerQueryProcess(
+    _In_ HANDLE Process,
+    _Out_ PPROCESS_BASIC_INFORMATION BasicInformation,
+    _Out_ PBOOLEAN Current)
+{
+    NTSTATUS Status;
+
+    RtlZeroMemory(BasicInformation, sizeof(*BasicInformation));
+    *Current = TRUE;
+    if (Process == NtCurrentProcess())
+        return STATUS_SUCCESS;
+
+    Status = NtQueryInformationProcess(Process,
+                                       ProcessBasicInformation,
+                                       BasicInformation,
+                                       sizeof(*BasicInformation),
+                                       NULL);
+    if (NT_SUCCESS(Status))
+        *Current = BasicInformation->UniqueProcessId == (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueProcess;
+
+    return Status;
+}
+
 HRESULT
 WINAPI
 BaseWerQueryRegistration(
@@ -110,31 +135,25 @@ BaseWerQueryRegistration(
     PROCESS_BASIC_INFORMATION BasicInformation;
     PBASE_WER_REGISTRATION Local;
     ULONG_PTR Address;
+    BOOLEAN Current;
     NTSTATUS Status;
 
     RtlZeroMemory(Registration, sizeof(*Registration));
 
-    if (Process != NtCurrentProcess())
+    Status = BasepWerQueryProcess(Process, &BasicInformation, &Current);
+    if (!NT_SUCCESS(Status))
+        return BasepWerStatusToHResult(Status);
+
+    if (!Current)
     {
-        Status = NtQueryInformationProcess(Process,
-                                           ProcessBasicInformation,
-                                           &BasicInformation,
-                                           sizeof(BasicInformation),
-                                           NULL);
-        if (!NT_SUCCESS(Status))
-            return BasepWerStatusToHResult(Status);
+        Status = BasepWerReadRemoteAddress(Process, &BasicInformation, &Address);
+        if (NT_SUCCESS(Status) && Address)
+            Status = NtReadVirtualMemory(Process, (PVOID)Address, Registration, BASE_WER_SHARED_SIZE, NULL);
 
-        if (BasicInformation.UniqueProcessId != (ULONG_PTR)NtCurrentTeb()->ClientId.UniqueProcess)
-        {
-            Status = BasepWerReadRemoteAddress(Process, &BasicInformation, &Address);
-            if (NT_SUCCESS(Status) && Address)
-                Status = NtReadVirtualMemory(Process, (PVOID)Address, Registration, BASE_WER_SHARED_SIZE, NULL);
+        if (!NT_SUCCESS(Status) || Registration->Signature != BASE_WER_REGISTRATION_SIGNATURE)
+            RtlZeroMemory(Registration, sizeof(*Registration));
 
-            if (!NT_SUCCESS(Status) || Registration->Signature != BASE_WER_REGISTRATION_SIGNATURE)
-                RtlZeroMemory(Registration, sizeof(*Registration));
-
-            return NT_SUCCESS(Status) ? S_OK : BasepWerStatusToHResult(Status);
-        }
+        return NT_SUCCESS(Status) ? S_OK : BasepWerStatusToHResult(Status);
     }
 
     Local = BaseWerGetRegistration(FALSE);
@@ -145,5 +164,38 @@ BaseWerQueryRegistration(
         RtlReleaseSRWLockShared(&Local->Lock);
     }
 
+    return S_OK;
+}
+
+HRESULT
+WINAPI
+BaseWerReadRegistrationMemory(
+    _In_ HANDLE Process,
+    _In_ ULONG64 Address,
+    _Out_writes_bytes_(Size) PVOID Buffer,
+    _In_ ULONG Size)
+{
+    PROCESS_BASIC_INFORMATION BasicInformation;
+    PBASE_WER_REGISTRATION Local;
+    BOOLEAN Current;
+    NTSTATUS Status;
+
+    Status = BasepWerQueryProcess(Process, &BasicInformation, &Current);
+    if (!NT_SUCCESS(Status))
+        return BasepWerStatusToHResult(Status);
+
+    if (!Current)
+    {
+        Status = NtReadVirtualMemory(Process, (PVOID)(ULONG_PTR)Address, Buffer, Size, NULL);
+        return NT_SUCCESS(Status) ? S_OK : BasepWerStatusToHResult(Status);
+    }
+
+    Local = BaseWerGetRegistration(FALSE);
+    if (!Local)
+        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+
+    RtlAcquireSRWLockShared(&Local->Lock);
+    RtlCopyMemory(Buffer, (PVOID)(ULONG_PTR)Address, Size);
+    RtlReleaseSRWLockShared(&Local->Lock);
     return S_OK;
 }

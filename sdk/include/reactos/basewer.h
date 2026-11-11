@@ -15,6 +15,7 @@
 #define BASE_WER_FLAGS_SET              0x00000001
 #define BASE_WER_RECOVERY_REGISTERED    0x00000002
 #define BASE_WER_RECOVERY_IN_PROGRESS   0x00000004
+#define BASE_WER_RESTART_REGISTERED     0x00000008
 
 typedef struct _BASE_WER_REGISTRATION
 {
@@ -25,6 +26,9 @@ typedef struct _BASE_WER_REGISTRATION
     ULONG64 RecoveryCallback;
     ULONG64 RecoveryParameter;
     ULONG RecoveryFlags;
+    ULONG RestartFlags;
+    ULONG64 RestartCommandLine;
+    ULONG RestartLength;
     ULONG Reserved;
     RTL_SRWLOCK Lock;
     HANDLE RecoveryPingEvent;
@@ -48,5 +52,13 @@ WINAPI
 BaseWerQueryRegistration(
     _In_ HANDLE Process,
     _Out_ PBASE_WER_REGISTRATION Registration);
+
+HRESULT
+WINAPI
+BaseWerReadRegistrationMemory(
+    _In_ HANDLE Process,
+    _In_ ULONG64 Address,
+    _Out_writes_bytes_(Size) PVOID Buffer,
+    _In_ ULONG Size);
 
 #endif /* _BASEWER_H_ */
