@@ -116,6 +116,7 @@ typedef struct _CD_FILE
     LIST_ENTRY MirrorEntry;
     LONG NoEventIrps;
     BOOLEAN Opening;
+    KEVENT WaitEvent;
 } CD_FILE, *PCD_FILE;
 
 typedef struct _CD_REQUEST
@@ -241,6 +242,14 @@ VOID
 CdSyncFileEvent(
     _In_ PCD_FILE File)
 {
+    if (File->FileObject->Flags & FO_INDIRECT_WAIT_OBJECT)
+    {
+        if (File->Mirror && File->Mirror->Signaled)
+            KeSetEvent(&File->WaitEvent, IO_NO_INCREMENT, FALSE);
+        else
+            KeClearEvent(&File->WaitEvent);
+        return;
+    }
     if (File->NoEventIrps)
         return;
     if (File->Opening)
@@ -280,7 +289,7 @@ VOID
 CdUpdateFileEvent(
     _In_ PCD_FILE File)
 {
-    if (File->FileObject->Busy)
+    if (File->FileObject->Busy && !(File->FileObject->Flags & FO_INDIRECT_WAIT_OBJECT))
         return;
     CdSyncFileEvent(File);
 }
@@ -1723,8 +1732,18 @@ CdDispatchCreate(
         }
         if (File->Type != CdFileServer && File->Type != CdFileConnection)
         {
-            KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
-            File->Opening = TRUE;
+            if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+            {
+                /* A synchronous handle waits on its own input event; the file event belongs to the I/O manager */
+                KeInitializeEvent(&File->WaitEvent, NotificationEvent, FALSE);
+                FileObject->FsContext2 = &File->WaitEvent;
+                FileObject->Flags |= FO_INDIRECT_WAIT_OBJECT;
+            }
+            else
+            {
+                KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
+                File->Opening = TRUE;
+            }
             CdSyncFileEvent(File);
         }
     }
