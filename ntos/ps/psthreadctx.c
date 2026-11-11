@@ -334,10 +334,10 @@ PspMergeWow64Context(
     {
         Target->Ebp = Source->Ebp;
         Target->Eip = Source->Eip;
-        Target->SegCs = Source->SegCs;
+        Target->SegCs = (USHORT)Source->SegCs;
         Target->EFlags = Source->EFlags;
         Target->Esp = Source->Esp;
-        Target->SegSs = Source->SegSs;
+        Target->SegSs = (USHORT)Source->SegSs;
     }
 
     if ((Flags & WOW64_CONTEXT_INTEGER) == WOW64_CONTEXT_INTEGER)
@@ -350,12 +350,13 @@ PspMergeWow64Context(
         Target->Eax = Source->Eax;
     }
 
+    /* A selector is 16 bits, as the live 64-bit context keeps it; 32-bit code stores only those */
     if ((Flags & WOW64_CONTEXT_SEGMENTS) == WOW64_CONTEXT_SEGMENTS)
     {
-        Target->SegGs = Source->SegGs;
-        Target->SegFs = Source->SegFs;
-        Target->SegEs = Source->SegEs;
-        Target->SegDs = Source->SegDs;
+        Target->SegGs = (USHORT)Source->SegGs;
+        Target->SegFs = (USHORT)Source->SegFs;
+        Target->SegEs = (USHORT)Source->SegEs;
+        Target->SegDs = (USHORT)Source->SegDs;
     }
 
     if ((Flags & WOW64_CONTEXT_FLOATING_POINT) == WOW64_CONTEXT_FLOATING_POINT)
