@@ -231,6 +231,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeDeferredReady.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeBugCheckStop.c
+    ntos_ke/KeSystemThreadException.c
     ntos_ke/KeUnhandledException.c
     ntos_ke/KeDevQueue.c
     ntos_ke/KeCriticalRegionKM.c

@@ -619,21 +619,34 @@ KeRosCaptureUserStackBackTrace(
 static
 BOOLEAN
 KiIsStopTrapFrame(
-    _In_ ULONG_PTR Address)
+    _In_ ULONG_PTR Address,
+    _In_ ULONG_PTR ExceptionAddress)
 {
     static KTRAP_FRAME Copy;
-    ULONG_PTR Pc;
-    UCHAR Probe;
+
+    return (Address > (ULONG_PTR)MmHighestUserAddress) &&
+           ((Address & (sizeof(ULONG_PTR) - 1)) == 0) &&
+           KiReadValidMemory(&Copy, Address, sizeof(Copy)) &&
+           (KeGetTrapFramePc(&Copy) == ExceptionAddress);
+}
+
+static
+PCONTEXT
+KiStopExceptionContext(
+    _In_ ULONG_PTR Address,
+    _In_ ULONG_PTR ExceptionAddress)
+{
+    static CONTEXT Copy;
 
     if ((Address <= (ULONG_PTR)MmHighestUserAddress) ||
         ((Address & (sizeof(ULONG_PTR) - 1)) != 0) ||
-        !KiReadValidMemory(&Copy, Address, sizeof(Copy)))
+        !KiReadValidMemory(&Copy, Address, sizeof(Copy)) ||
+        ((ULONG_PTR)KeGetContextPc(&Copy) != ExceptionAddress))
     {
-        return FALSE;
+        return NULL;
     }
 
-    Pc = KeGetTrapFramePc(&Copy);
-    return (Pc > (ULONG_PTR)MmHighestUserAddress) && KiReadValidMemory(&Probe, Pc, sizeof(Probe));
+    return &Copy;
 }
 
 static
@@ -814,6 +827,7 @@ KeBugCheckWithTf(
     PKPRCB Prcb;
     CONTEXT Context;
     PCONTEXT ContextPointer = NULL;
+    PCONTEXT ExceptionContext = NULL;
 
     /* Nothing on this processor may interrupt what follows */
     KfRaiseIrql(HIGH_LEVEL);
@@ -853,13 +867,16 @@ KeBugCheckWithTf(
     KiBugCheckData[3] = BugCheckParameter3;
     KiBugCheckData[4] = BugCheckParameter4;
 
-    /* The exception dispatcher passes the trap frame of the fault as the third parameter */
+    /* An unhandled exception names its fault as a trap frame in the third parameter or a context record in the fourth */
     if ((TrapFrame == NULL) &&
         ((BugCheckCode == KMODE_EXCEPTION_NOT_HANDLED) ||
-         (BugCheckCode == KERNEL_MODE_EXCEPTION_NOT_HANDLED)) &&
-        KiIsStopTrapFrame(BugCheckParameter3))
+         (BugCheckCode == KERNEL_MODE_EXCEPTION_NOT_HANDLED) ||
+         (BugCheckCode == SYSTEM_THREAD_EXCEPTION_NOT_HANDLED)))
     {
-        TrapFrame = (PKTRAP_FRAME)BugCheckParameter3;
+        if (KiIsStopTrapFrame(BugCheckParameter3, BugCheckParameter2))
+            TrapFrame = (PKTRAP_FRAME)BugCheckParameter3;
+        else
+            ExceptionContext = KiStopExceptionContext(BugCheckParameter4, BugCheckParameter2);
     }
 
     /* Hold every other processor where it is */
@@ -880,6 +897,11 @@ KeBugCheckWithTf(
     if (TrapFrame != NULL)
     {
         KeTrapFrameToContext(TrapFrame, NULL, &Context);
+        ContextPointer = &Context;
+    }
+    else if (ExceptionContext != NULL)
+    {
+        Context = *ExceptionContext;
         ContextPointer = &Context;
     }
     else

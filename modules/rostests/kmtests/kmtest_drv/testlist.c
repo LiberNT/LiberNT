@@ -276,6 +276,7 @@ KMT_TESTFUNC Test_KeMutex;
 KMT_TESTFUNC Test_KeAffinityKM;
 KMT_TESTFUNC Test_KeBugCheckCbKM;
 KMT_TESTFUNC Test_KeBugCheckStop;
+KMT_TESTFUNC Test_KeSystemThreadException;
 KMT_TESTFUNC Test_KeUnhandledException;
 KMT_TESTFUNC Test_KePcr;
 KMT_TESTFUNC Test_RtlImageKM;
@@ -639,6 +640,7 @@ const KMT_TEST TestList[] =
     { "KeAffinityKM",                       Test_KeAffinityKM },
     { "KeBugCheckCbKM",                     Test_KeBugCheckCbKM },
     { "-KeBugCheckStop",                    Test_KeBugCheckStop },
+    { "-KeSystemThreadException",           Test_KeSystemThreadException },
     { "-KeUnhandledException",              Test_KeUnhandledException },
     { "KeCriticalRegionKM",                 Test_KeCriticalRegionKM },
     { "KeDeviceQueue",                      Test_KeDeviceQueue },
