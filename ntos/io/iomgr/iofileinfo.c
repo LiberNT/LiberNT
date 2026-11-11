@@ -1115,6 +1115,8 @@ NtSetInformationFile(
 
         InterlockedOr((PLONG)&FileObject->Flags, Flags);
 
+        if (Flags & FO_SKIP_SET_EVENT) KeClearEvent(&FileObject->Event);
+
         _SEH2_TRY
         {
             IoStatusBlock->Status = STATUS_SUCCESS;
