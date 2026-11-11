@@ -1262,9 +1262,16 @@ static HRESULT name ## Constr_value(script_ctx_t *ctx, jsval_t jsthis, WORD flag
 ALL_TYPED_ARRAYS
 #undef X
 
+static const builtin_prop_t TypedArrayConstr_props[] = {
+    {L"arguments",             NULL, 0,                    Function_get_arguments},
+    {L"caller",                NULL, 0,                    Function_get_caller},
+};
+
 static const builtin_info_t TypedArrayConstr_info = {
-    .class = JSCLASS_FUNCTION,
-    .call  = Function_value,
+    .class     = JSCLASS_FUNCTION,
+    .call      = Function_value,
+    .props_cnt = ARRAY_SIZE(TypedArrayConstr_props),
+    .props     = TypedArrayConstr_props,
 };
 
 static HRESULT init_typed_array_constructor(script_ctx_t *ctx, builtin_invoke_t func, const WCHAR *name, const builtin_info_t *info)
@@ -1289,7 +1296,10 @@ static HRESULT init_typed_array_constructor(script_ctx_t *ctx, builtin_invoke_t 
         return hres;
     }
 
-    hres = create_builtin_constructor(ctx, func, name, &TypedArrayConstr_info, PROPF_CONSTR|1, &prototype->dispex, &ctx->typedarr_constr[type_idx]);
+    hres = jsdisp_define_data_property(&prototype->dispex, L"BYTES_PER_ELEMENT", 0,
+                                       jsval_number(typed_array_descs[type_idx].size));
+    if(SUCCEEDED(hres))
+        hres = create_builtin_constructor(ctx, func, name, &TypedArrayConstr_info, PROPF_CONSTR|1, &prototype->dispex, &ctx->typedarr_constr[type_idx]);
     jsdisp_release(&prototype->dispex);
     if(FAILED(hres))
         return hres;

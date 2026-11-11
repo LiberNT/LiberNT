@@ -342,7 +342,7 @@ HRESULT Function_invoke(jsdisp_t *func_this, jsval_t vthis, WORD flags, unsigned
     return function->vtbl->call(function->dispex.ctx, function, vthis, flags, argc, argv, r);
 }
 
-static HRESULT Function_get_caller(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
+HRESULT Function_get_caller(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
 {
     FunctionInstance *function = function_from_jsdisp(jsthis);
     call_frame_t *frame;
@@ -637,7 +637,7 @@ HRESULT Function_get_value(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
     return S_OK;
 }
 
-static HRESULT Function_get_arguments(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
+HRESULT Function_get_arguments(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
 {
     FunctionInstance *function = function_from_jsdisp(jsthis);
     call_frame_t *frame;

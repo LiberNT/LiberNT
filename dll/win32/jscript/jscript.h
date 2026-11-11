@@ -300,6 +300,8 @@ HRESULT create_host_function(script_ctx_t*,const struct property_info*,DWORD,jsd
 HRESULT Function_invoke(jsdisp_t*,jsval_t,WORD,unsigned,jsval_t*,jsval_t*);
 
 HRESULT Function_value(script_ctx_t*,jsval_t,WORD,unsigned,jsval_t*,jsval_t*);
+HRESULT Function_get_arguments(script_ctx_t*,jsdisp_t*,jsval_t*);
+HRESULT Function_get_caller(script_ctx_t*,jsdisp_t*,jsval_t*);
 HRESULT Function_get_value(script_ctx_t*,jsdisp_t*,jsval_t*);
 struct _function_code_t *Function_get_code(jsdisp_t*);
 
