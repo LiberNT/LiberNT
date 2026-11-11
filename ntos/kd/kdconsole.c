@@ -48,7 +48,7 @@ KdpTryGetChar(
 
     *ScanCode = 0;
 
-    if (KdTermSerial)
+    if (KdTermSerial || KdpDebugMode.Net)
     {
         Char = KdbpTryGetCharSerial(Retry);
         if (Char != (CHAR)-1)
@@ -239,6 +239,19 @@ KdpUpdateTerminalSize(
     TermSize->cx = KdTermSize.cx;
     TermSize->cy = KdTermSize.cy;
 
+    if (KdpDebugMode.Net && KdpNetQueryAttached(&Columns, &Rows))
+    {
+        KdTermConnected = TRUE;
+        if ((Columns != 0) && (Rows != 0))
+        {
+            KdTermSize.cx = (LONG)Columns;
+            KdTermSize.cy = (LONG)Rows;
+            TermSize->cx = KdTermSize.cx;
+            TermSize->cy = KdTermSize.cy;
+            return TRUE;
+        }
+    }
+
     if (!KdTermConnected || !KdTermReportsSize)
         return FALSE;
 
@@ -275,13 +288,13 @@ KdpInitTerminal(VOID)
     SIZE Size;
 
     /* A serial line is a terminal; a screen and a keyboard are one too */
-    KdTermConnected = (KdTermSerial || KdpDebugMode.Screen);
+    KdTermConnected = (KdTermSerial || KdpDebugMode.Net || KdpDebugMode.Screen);
 
     if (!KdTermConnected)
         return FALSE;
 
     /* Only something at the far end of a line can be asked about itself */
-    if (!KdTermSerial)
+    if (!KdTermSerial && !KdpDebugMode.Net)
     {
         KdTermReportsSize = FALSE;
         return TRUE;

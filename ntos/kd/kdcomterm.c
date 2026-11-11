@@ -11,6 +11,19 @@
 #define NDEBUG
 #include <debug.h>
 
+/* PRIVATE FUNCTIONS **********************************************************/
+
+static
+BOOLEAN
+KdpGetTerminalByte(
+    _Out_ PUCHAR Byte)
+{
+    if (KdpDebugMode.Serial && KdPortGetByteEx(&SerialPortInfo, Byte))
+        return TRUE;
+
+    return KdpDebugMode.Net && KdpNetGetByte(Byte);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -25,12 +38,12 @@ KdbpTryGetCharSerial(
     UCHAR Byte = 0;
     ULONG Remaining = Retry;
 
-    if (!KdpDebugMode.Serial)
+    if (!KdpDebugMode.Serial && !KdpDebugMode.Net)
         return (CHAR)-1;
 
     for (;;)
     {
-        if (KdPortGetByteEx(&SerialPortInfo, &Byte))
+        if (KdpGetTerminalByte(&Byte))
             return (CHAR)Byte;
 
         if (Remaining == 0)
@@ -54,7 +67,13 @@ VOID
 KdbpSendCommandSerial(
     _In_ PCSTR Command)
 {
-    if (!KdpDebugMode.Serial || (Command == NULL))
+    if (Command == NULL)
+        return;
+
+    if (KdpDebugMode.Net)
+        KdpNetSendCommand(Command);
+
+    if (!KdpDebugMode.Serial)
         return;
 
     while (*Command != ANSI_NULL)
