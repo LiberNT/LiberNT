@@ -14,6 +14,7 @@
 #define E1000E_ID L"PCI\\VEN_8086&DEV_10D3"
 #define MAXIMUM_MESSAGES 64
 #define POLICY_KEY L"Device Parameters\\Interrupt Management\\Affinity Policy"
+#define RESULT_KEY L"SOFTWARE\\KmtIoAffinityPolicy"
 
 typedef struct _ALLOCATION
 {
@@ -218,6 +219,61 @@ CheckMessageAffinity(
     }
 }
 
+/* Runs HalMessageState, which leaves what it reads from the adapter's configuration space under RESULT_KEY */
+static
+HKEY
+ProbeMessages(VOID)
+{
+    HKEY Key;
+
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, RESULT_KEY);
+    if (KmtRunKernelTest("HalMessageState") != ERROR_SUCCESS) return NULL;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RESULT_KEY, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS) return NULL;
+    return Key;
+}
+
+static
+VOID
+CloseProbe(
+    _In_ HKEY Key)
+{
+    RegCloseKey(Key);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, RESULT_KEY);
+}
+
+static
+ULONG
+QueryProbe(
+    _In_ HKEY Key,
+    _In_ PCWSTR Name)
+{
+    DWORD Value = MAXULONG, Size = sizeof(Value), Type;
+
+    if (RegQueryValueExW(Key, Name, NULL, &Type, (PBYTE)&Value, &Size) != ERROR_SUCCESS || Type != REG_DWORD)
+        return MAXULONG;
+
+    return Value;
+}
+
+static
+VOID
+CheckLineInterrupt(
+    _In_ PCSTR Case)
+{
+    HKEY Key = ProbeMessages();
+
+    if (Key == NULL)
+    {
+        trace("%s: the interrupt control was not read\n", Case);
+        return;
+    }
+
+    ok(QueryProbe(Key, L"MsixEnabled") == 0, "%s: MSI-X is still enabled\n", Case);
+    ok(QueryProbe(Key, L"MsiEnabled") == 0, "%s: MSI is still enabled\n", Case);
+    ok(QueryProbe(Key, L"IntxDisabled") == 0, "%s: INTx is disabled\n", Case);
+    CloseProbe(Key);
+}
+
 /* Disables and enables the xHCI controller of the test VM, so it is never part of a sweep */
 START_TEST(IoMessageRestart)
 {
@@ -332,6 +388,7 @@ START_TEST(IoAffinityPolicy)
     ReadAllocation(InstanceId, &Allocation);
     ok(Allocation.Messages == 0, "absent processor: %lu messages\n", Allocation.Messages);
     ok(Allocation.LineInterrupts == 1, "absent processor: %lu line interrupts\n", Allocation.LineInterrupts);
+    CheckLineInterrupt("absent processor");
 
     Policy = IrqPolicyAllProcessorsInMachineWhenSteered + 1;
     SetPolicy(InstanceId, TRUE, &Policy, NULL);
@@ -346,6 +403,7 @@ START_TEST(IoAffinityPolicy)
     ReadAllocation(InstanceId, &Allocation);
     ok(Allocation.Messages == 0, "unknown policy with an override: %lu messages\n", Allocation.Messages);
     ok(Allocation.LineInterrupts == 1, "unknown policy with an override: %lu line interrupts\n", Allocation.LineInterrupts);
+    CheckLineInterrupt("unknown policy with an override");
 
     SetPolicy(InstanceId, FALSE, NULL, NULL);
     Started = RestartController(InstanceId, &Problem);

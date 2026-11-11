@@ -223,6 +223,22 @@ PciPdoSetBusDataByOffset(
                              Length);
 }
 
+static
+VOID
+PciPdoClearConfigBit(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ ULONG Offset,
+    _In_ USHORT Bit)
+{
+    USHORT Value;
+
+    if (PciPdoGetBusDataByOffset(DeviceExtension, &Value, Offset, sizeof(Value)) != sizeof(Value) || !(Value & Bit))
+        return;
+
+    Value &= ~Bit;
+    PciPdoSetBusDataByOffset(DeviceExtension, &Value, Offset, sizeof(Value));
+}
+
 #define PCI_CAP_PTR_FIRST      0x40
 #define PCI_CAP_MAX_ITERATIONS 48
 #define PCI_PROGIF_USB_XHCI    0x30
@@ -4711,6 +4727,7 @@ PdoStartDevice(
     USHORT Command;
     BOOLEAN HasMemResource = FALSE;
     BOOLEAN HasIoResource = FALSE;
+    BOOLEAN HasLineInterrupt = FALSE;
 
     UNREFERENCED_PARAMETER(Irp);
 
@@ -4880,6 +4897,7 @@ PdoStartDevice(
                 if (UsingMsix || UsingMsi)
                     continue;
 
+                HasLineInterrupt = TRUE;
                 if (RawPartialDesc->u.Interrupt.Level <= 0xFF)
                 {
                     LegacyLine = (UCHAR)RawPartialDesc->u.Interrupt.Level;
@@ -4986,6 +5004,17 @@ PdoStartDevice(
         if (!NT_SUCCESS(MsiStatus))
             return MsiStatus;
         return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    /* A function left signalling messages from a previous start would never raise the line interrupt it now has */
+    if (!UsingMsix && DeviceExtension->PciDevice->MsixCapability != 0)
+        PciPdoClearConfigBit(DeviceExtension, DeviceExtension->PciDevice->MsixCapability + PCI_MSIX_FLAGS, PCI_MSIX_FLAGS_ENABLE);
+    if (!UsingMsi && DeviceExtension->PciDevice->MsiCapability != 0)
+        PciPdoClearConfigBit(DeviceExtension, DeviceExtension->PciDevice->MsiCapability + PCI_MSI_FLAGS, PCI_MSI_FLAGS_ENABLE);
+    if (HasLineInterrupt && !DisableIntx)
+    {
+        PciPdoClearConfigBit(DeviceExtension, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), PCI_COMMAND_INTX_DISABLE);
+        DeviceExtension->PciDevice->PciConfig.Command &= ~PCI_COMMAND_INTX_DISABLE;
     }
 
     Command = 0;

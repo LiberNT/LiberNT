@@ -412,6 +412,7 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
         kmtest_drv/vm_detect.S)
     list(APPEND KMTEST_DRV_SOURCE
         ${KMTEST_DRV_ASM}
+        hal/HalMessageState.c
         hal/HalPortIo.c
         ntos_io/IoTimerKM.c)
 endif()
