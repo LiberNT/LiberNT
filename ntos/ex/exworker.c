@@ -52,6 +52,11 @@ FAST_MUTEX ExpWorkerSwapinMutex;
 /* How many passes of no progress make a queue stuck rather than merely busy */
 #define EXP_WORKER_STUCK_PASSES 3
 
+/* A timer armed early in phase 1 can queue work before the queues exist; it waits here, newest first */
+static KSPIN_LOCK ExpEarlyWorkLock;
+static PLIST_ENTRY ExpEarlyWork[MaximumWorkQueue];
+static BOOLEAN ExpWorkerQueuesReady;
+
 /* The priority each queue's threads run at */
 #define EXP_CRITICAL_PRIORITY      13
 #define EXP_DELAYED_PRIORITY       12
@@ -493,6 +498,63 @@ ExpWorkerThreadBalanceManager(
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
+static
+BOOLEAN
+ExpHoldEarlyWorkItem(
+    _Inout_ PWORK_QUEUE_ITEM WorkItem,
+    _In_ WORK_QUEUE_TYPE QueueType)
+{
+    KIRQL OldIrql;
+    BOOLEAN Held;
+
+    KeAcquireSpinLock(&ExpEarlyWorkLock, &OldIrql);
+
+    Held = !ExpWorkerQueuesReady;
+    if (Held)
+    {
+        WorkItem->List.Flink = ExpEarlyWork[QueueType];
+        ExpEarlyWork[QueueType] = &WorkItem->List;
+    }
+
+    KeReleaseSpinLock(&ExpEarlyWorkLock, OldIrql);
+
+    return Held;
+}
+
+CODE_SEG("INIT")
+static
+VOID
+ExpReleaseEarlyWork(VOID)
+{
+    PLIST_ENTRY Entry, Next, Oldest;
+    KIRQL OldIrql;
+    ULONG Index;
+
+    KeAcquireSpinLock(&ExpEarlyWorkLock, &OldIrql);
+
+    for (Index = 0; Index < MaximumWorkQueue; Index++)
+    {
+        Oldest = NULL;
+        for (Entry = ExpEarlyWork[Index]; Entry != NULL; Entry = Next)
+        {
+            Next = Entry->Flink;
+            Entry->Flink = Oldest;
+            Oldest = Entry;
+        }
+        ExpEarlyWork[Index] = NULL;
+
+        for (Entry = Oldest; Entry != NULL; Entry = Next)
+        {
+            Next = Entry->Flink;
+            KeInsertQueue(&ExWorkerQueue[Index].WorkerQueue, Entry);
+        }
+    }
+
+    WriteBooleanRelease(&ExpWorkerQueuesReady, TRUE);
+
+    KeReleaseSpinLock(&ExpEarlyWorkLock, OldIrql);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -521,6 +583,8 @@ ExpInitializeWorkerThreads(VOID)
         ExWorkerQueue[Index].WorkItemsProcessedLastPass = 0;
         ExWorkerQueue[Index].QueueDepthLastPass = 0;
     }
+
+    ExpReleaseEarlyWork();
 
     /* Only the two queues that take work from anywhere are allowed to grow. */
     ExWorkerQueue[CriticalWorkQueue].Info.MakeThreadsAsNecessary = TRUE;
@@ -576,6 +640,12 @@ ExQueueWorkItem(
 {
     ASSERT(QueueType < MaximumWorkQueue);
     ASSERT(WorkItem->List.Flink == NULL);
+
+    if (!ReadBooleanAcquire(&ExpWorkerQueuesReady) &&
+        ExpHoldEarlyWorkItem(WorkItem, QueueType))
+    {
+        return;
+    }
 
     KeInsertQueue(&ExWorkerQueue[QueueType].WorkerQueue, &WorkItem->List);
 }
