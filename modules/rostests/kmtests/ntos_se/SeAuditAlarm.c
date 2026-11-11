@@ -202,8 +202,131 @@ TestNotImpersonating(VOID)
     CheckAudited(FILE_READ_DATA, STATUS_NO_IMPERSONATION_TOKEN, 0, 0);
 }
 
+static
+BOOLEAN
+SetAuditPrivilege(
+    _In_ HANDLE Token,
+    _In_ BOOLEAN Enable)
+{
+    TOKEN_PRIVILEGES Privileges;
+    NTSTATUS Status;
+
+    Privileges.PrivilegeCount = 1;
+    Privileges.Privileges[0].Luid.LowPart = SE_AUDIT_PRIVILEGE;
+    Privileges.Privileges[0].Luid.HighPart = 0;
+    Privileges.Privileges[0].Attributes = Enable ? SE_PRIVILEGE_ENABLED : 0;
+
+    Status = NtAdjustPrivilegesToken(Token, FALSE, &Privileges, 0, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    return Status == STATUS_SUCCESS;
+}
+
+/* Every alarm a caller raises for the client it serves, with its result */
+static
+VOID
+CheckAlarms(
+    _In_ HANDLE ClientToken,
+    _In_ NTSTATUS Expected)
+{
+    PRIVILEGE_SET Privileges;
+    TEST_SD Test;
+    PVOID HandleId = &Test;
+    BOOLEAN OnClose;
+    NTSTATUS Status;
+
+    BuildTestSd(&Test);
+
+    Privileges.PrivilegeCount = 1;
+    Privileges.Control = PRIVILEGE_SET_ALL_NECESSARY;
+    Privileges.Privilege[0].Luid.LowPart = SE_BACKUP_PRIVILEGE;
+    Privileges.Privilege[0].Luid.HighPart = 0;
+    Privileges.Privilege[0].Attributes = SE_PRIVILEGE_USED_FOR_ACCESS;
+
+    Status = NtOpenObjectAuditAlarm(&Subsystem, HandleId, &ObjectType, &ObjectName, &Test.Sd, ClientToken,
+                                    FILE_READ_DATA, FILE_READ_DATA, &Privileges, FALSE, TRUE, &OnClose);
+    ok(Status == Expected, "NtOpenObjectAuditAlarm: 0x%08lx, expected 0x%08lx\n", Status, Expected);
+
+    Status = NtPrivilegeObjectAuditAlarm(&Subsystem, HandleId, ClientToken, FILE_READ_DATA, &Privileges, TRUE);
+    ok(Status == Expected, "NtPrivilegeObjectAuditAlarm: 0x%08lx, expected 0x%08lx\n", Status, Expected);
+
+    Status = NtPrivilegedServiceAuditAlarm(&Subsystem, &ServiceName, ClientToken, &Privileges, TRUE);
+    ok(Status == Expected, "NtPrivilegedServiceAuditAlarm: 0x%08lx, expected 0x%08lx\n", Status, Expected);
+}
+
+/* K2: the audit privilege is asked of the caller's own process, never of the client it wears */
+static
+VOID
+TestPrimaryTokenPrivilege(VOID)
+{
+    TEST_SD Test;
+    PVOID HandleId = &Test;
+    HANDLE Process = NULL;
+    HANDLE Thread = NULL;
+    ACCESS_MASK Granted;
+    NTSTATUS AccessStatus;
+    BOOLEAN OnClose;
+    NTSTATUS Status;
+
+    BuildTestSd(&Test);
+
+    /* A client without the privilege is the ordinary case and is served */
+    if (!StartImpersonatingSelf()) return;
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, TRUE, &Thread);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status) && SetAuditPrivilege(Thread, FALSE))
+    {
+        CheckAudited(FILE_READ_DATA, STATUS_SUCCESS, STATUS_SUCCESS, FILE_READ_DATA);
+    }
+    if (Thread != NULL) NtClose(Thread);
+    StopImpersonating();
+
+    /* A process without it is refused whatever its client holds */
+    Status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &Process);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    if (!StartImpersonatingSelf())
+    {
+        NtClose(Process);
+        return;
+    }
+
+    Thread = NULL;
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_QUERY, TRUE, &Thread);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    if (NT_SUCCESS(Status) && SetAuditPrivilege(Process, FALSE))
+    {
+        CheckAudited(FILE_READ_DATA, STATUS_PRIVILEGE_NOT_HELD, 0, 0);
+        CheckAlarms(Thread, STATUS_PRIVILEGE_NOT_HELD);
+
+        Status = NtCloseObjectAuditAlarm(&Subsystem, HandleId, FALSE);
+        ok_eq_hex(Status, STATUS_PRIVILEGE_NOT_HELD);
+        Status = NtDeleteObjectAuditAlarm(&Subsystem, HandleId, FALSE);
+        ok_eq_hex(Status, STATUS_PRIVILEGE_NOT_HELD);
+
+        /* A caller may ask for the check alone when it cannot have it audited */
+        Granted = 0xdeadbeef;
+        AccessStatus = 0xdeadbeef;
+        Status = NtAccessCheckByTypeAndAuditAlarm(&Subsystem, HandleId, &ObjectType, &ObjectName, &Test.Sd,
+                                                  NULL, FILE_READ_DATA, AuditEventObjectAccess,
+                                                  AUDIT_ALLOW_NO_PRIVILEGE, NULL, 0, &FileMapping, FALSE,
+                                                  &Granted, &AccessStatus, &OnClose);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ok_eq_hex(AccessStatus, STATUS_SUCCESS);
+        ok_eq_hex(Granted, FILE_READ_DATA);
+
+        SetAuditPrivilege(Process, TRUE);
+    }
+
+    if (Thread != NULL) NtClose(Thread);
+    StopImpersonating();
+    NtClose(Process);
+}
+
 START_TEST(SeAuditAlarm)
 {
     TestAuditedChecks();
     TestNotImpersonating();
+    TestPrimaryTokenPrivilege();
 }

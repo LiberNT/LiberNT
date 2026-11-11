@@ -31,14 +31,28 @@ NTSTATUS
 SepCheckAuditCaller(VOID)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    SECURITY_SUBJECT_CONTEXT SubjectContext;
+    LUID_AND_ATTRIBUTES Privilege;
+    BOOLEAN Held;
 
     /* The log belongs to the subsystems, and the kernel does not ask here */
     if (PreviousMode == KernelMode) return STATUS_INVALID_PARAMETER;
 
-    if (!SeSinglePrivilegeCheck(SeAuditPrivilege, PreviousMode))
-        return STATUS_PRIVILEGE_NOT_HELD;
+    Privilege.Luid = SeAuditPrivilege;
+    Privilege.Attributes = 0;
 
-    return STATUS_SUCCESS;
+    /* The process is asked, so that it may impersonate the client it audits for */
+    SeCaptureSubjectContext(&SubjectContext);
+    SeLockSubjectContext(&SubjectContext);
+    Held = SepPrivilegeCheck((PTOKEN)SubjectContext.PrimaryToken,
+                             &Privilege,
+                             1,
+                             PRIVILEGE_SET_ALL_NECESSARY,
+                             PreviousMode);
+    SeUnlockSubjectContext(&SubjectContext);
+    SeReleaseSubjectContext(&SubjectContext);
+
+    return Held ? STATUS_SUCCESS : STATUS_PRIVILEGE_NOT_HELD;
 }
 
 /* A name the caller handed in has to be readable before it is used */
@@ -80,6 +94,7 @@ SepAuditedAccessCheck(
     _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
     _In_opt_ PSID PrincipalSelfSid,
     _In_ ACCESS_MASK DesiredAccess,
+    _In_ ULONG Flags,
     _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
     _In_ ULONG ObjectTypeListLength,
     _In_ PGENERIC_MAPPING GenericMapping,
@@ -96,6 +111,11 @@ SepAuditedAccessCheck(
 
 
     Status = SepCheckAuditCaller();
+
+    /* A caller that cannot have the check audited may still ask for the check */
+    if (Status == STATUS_PRIVILEGE_NOT_HELD && (Flags & AUDIT_ALLOW_NO_PRIVILEGE))
+        Status = STATUS_SUCCESS;
+
     if (!NT_SUCCESS(Status)) return Status;
 
     _SEH2_TRY
@@ -545,6 +565,7 @@ NtAccessCheckAndAuditAlarm(
                                  SecurityDescriptor,
                                  NULL,
                                  DesiredAccess,
+                                 0,
                                  NULL,
                                  0,
                                  GenericMapping,
@@ -583,6 +604,7 @@ NtAccessCheckByTypeAndAuditAlarm(
                                  SecurityDescriptor,
                                  PrincipalSelfSid,
                                  DesiredAccess,
+                                 Flags,
                                  ObjectTypeList,
                                  ObjectTypeLength,
                                  GenericMapping,
@@ -621,6 +643,7 @@ NtAccessCheckByTypeResultListAndAuditAlarm(
                                  SecurityDescriptor,
                                  PrincipalSelfSid,
                                  DesiredAccess,
+                                 Flags,
                                  ObjectTypeList,
                                  ObjectTypeListLength,
                                  GenericMapping,
@@ -663,6 +686,7 @@ NtAccessCheckByTypeResultListAndAuditAlarmByHandle(
                                  SecurityDescriptor,
                                  PrincipalSelfSid,
                                  DesiredAccess,
+                                 Flags,
                                  ObjectTypeList,
                                  ObjectTypeListLength,
                                  GenericMapping,
