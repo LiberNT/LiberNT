@@ -1445,6 +1445,148 @@ NtDuplicateToken(
     return Status;
 }
 
+static
+NTSTATUS
+SepCaptureTokenGroups(
+    _In_opt_ PTOKEN_GROUPS Groups,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Outptr_result_maybenull_ PTOKEN_GROUPS *Captured)
+{
+    PSID_AND_ATTRIBUTES Entries = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
+    PTOKEN_GROUPS Copy;
+    ULONG Count = 0;
+    ULONG Length = 0;
+    ULONG i;
+
+    PAGED_CODE();
+
+    *Captured = Groups;
+    if (Groups == NULL || PreviousMode == KernelMode) return STATUS_SUCCESS;
+
+    *Captured = NULL;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(Groups, FIELD_OFFSET(TOKEN_GROUPS, Groups), sizeof(ULONG));
+        Count = Groups->GroupCount;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = SeCaptureSidAndAttributesArray(Groups->Groups,
+                                            Count,
+                                            PreviousMode,
+                                            NULL,
+                                            0,
+                                            PagedPool,
+                                            TRUE,
+                                            &Entries,
+                                            &Length);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Copy = ExAllocatePoolWithTag(PagedPool,
+                                 FIELD_OFFSET(TOKEN_GROUPS, Groups) + (SIZE_T)Length,
+                                 TAG_SE);
+    if (Copy == NULL)
+    {
+        SeReleaseSidAndAttributesArray(Entries, PreviousMode, TRUE);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Copy->GroupCount = Count;
+
+    if (Count != 0)
+    {
+        RtlCopyMemory(Copy->Groups, Entries, Length);
+
+        for (i = 0; i < Count; i++)
+        {
+            Copy->Groups[i].Sid = (PUCHAR)Copy->Groups +
+                                  ((PUCHAR)Entries[i].Sid - (PUCHAR)Entries);
+        }
+
+        SeReleaseSidAndAttributesArray(Entries, PreviousMode, TRUE);
+    }
+
+    *Captured = Copy;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+SepCaptureTokenPrivileges(
+    _In_opt_ PTOKEN_PRIVILEGES Privileges,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Outptr_result_maybenull_ PTOKEN_PRIVILEGES *Captured)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PTOKEN_PRIVILEGES Copy;
+    ULONG Count = 0;
+    SIZE_T Size = 0;
+
+    PAGED_CODE();
+
+    *Captured = Privileges;
+    if (Privileges == NULL || PreviousMode == KernelMode) return STATUS_SUCCESS;
+
+    *Captured = NULL;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(Privileges,
+                     FIELD_OFFSET(TOKEN_PRIVILEGES, Privileges),
+                     sizeof(ULONG));
+        Count = Privileges->PrivilegeCount;
+
+        if (Count <= (MAXULONG - FIELD_OFFSET(TOKEN_PRIVILEGES, Privileges)) /
+                     sizeof(LUID_AND_ATTRIBUTES))
+        {
+            Size = FIELD_OFFSET(TOKEN_PRIVILEGES, Privileges) +
+                   (SIZE_T)Count * sizeof(LUID_AND_ATTRIBUTES);
+            ProbeForRead(Privileges, Size, sizeof(ULONG));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Size == 0) return STATUS_INVALID_PARAMETER;
+
+    Copy = ExAllocatePoolWithTag(PagedPool, Size, TAG_SE);
+    if (Copy == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Copy, Privileges, Size);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Copy, TAG_SE);
+        return Status;
+    }
+
+    /* What was measured is what is read, whatever the count says by now */
+    Copy->PrivilegeCount = Count;
+
+    *Captured = Copy;
+    return STATUS_SUCCESS;
+}
+
 __kernel_entry
 NTSTATUS
 NTAPI
@@ -1457,6 +1599,9 @@ NtFilterToken(
     _Out_ PHANDLE NewTokenHandle)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PTOKEN_GROUPS Disable = NULL;
+    PTOKEN_PRIVILEGES Delete = NULL;
+    PTOKEN_GROUPS Restrict = NULL;
     PTOKEN Token = NULL;
     PTOKEN New = NULL;
     HANDLE Handle;
@@ -1469,13 +1614,6 @@ NtFilterToken(
         _SEH2_TRY
         {
             ProbeForWriteHandle(NewTokenHandle);
-
-            if (SidsToDisable != NULL)
-                ProbeForRead(SidsToDisable, sizeof(TOKEN_GROUPS), sizeof(ULONG));
-            if (PrivilegesToDelete != NULL)
-                ProbeForRead(PrivilegesToDelete, sizeof(TOKEN_PRIVILEGES), sizeof(ULONG));
-            if (RestrictedSids != NULL)
-                ProbeForRead(RestrictedSids, sizeof(TOKEN_GROUPS), sizeof(ULONG));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -1484,23 +1622,40 @@ NtFilterToken(
         _SEH2_END;
     }
 
-    Status = ObReferenceObjectByHandle(ExistingTokenHandle,
-                                       TOKEN_DUPLICATE,
-                                       SeTokenObjectType,
-                                       PreviousMode,
-                                       (PVOID *)&Token,
-                                       NULL);
-    if (!NT_SUCCESS(Status)) return Status;
+    Status = SepCaptureTokenGroups(SidsToDisable, PreviousMode, &Disable);
+    if (NT_SUCCESS(Status))
+        Status = SepCaptureTokenPrivileges(PrivilegesToDelete, PreviousMode, &Delete);
+    if (NT_SUCCESS(Status))
+        Status = SepCaptureTokenGroups(RestrictedSids, PreviousMode, &Restrict);
 
-    /* TODO: what the caller named is read where it stands, not copied first */
-    Status = SeFilterToken(Token,
-                           Flags,
-                           SidsToDisable,
-                           PrivilegesToDelete,
-                           RestrictedSids,
-                           (PACCESS_TOKEN *)&New);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObReferenceObjectByHandle(ExistingTokenHandle,
+                                           TOKEN_DUPLICATE,
+                                           SeTokenObjectType,
+                                           PreviousMode,
+                                           (PVOID *)&Token,
+                                           NULL);
+    }
 
-    ObDereferenceObject(Token);
+    if (NT_SUCCESS(Status))
+    {
+        Status = SeFilterToken(Token,
+                               Flags,
+                               Disable,
+                               Delete,
+                               Restrict,
+                               (PACCESS_TOKEN *)&New);
+
+        ObDereferenceObject(Token);
+    }
+
+    if (PreviousMode != KernelMode)
+    {
+        if (Disable != NULL) ExFreePoolWithTag(Disable, TAG_SE);
+        if (Delete != NULL) ExFreePoolWithTag(Delete, TAG_SE);
+        if (Restrict != NULL) ExFreePoolWithTag(Restrict, TAG_SE);
+    }
 
     if (!NT_SUCCESS(Status)) return Status;
 

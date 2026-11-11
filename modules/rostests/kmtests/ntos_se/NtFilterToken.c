@@ -174,3 +174,60 @@ START_TEST(NtFilterToken)
     RtlFreeSid(World);
     NtClose(Process);
 }
+
+/* What the caller names but cannot read is the caller's fault, and said so */
+START_TEST(NtFilterTokenCapture)
+{
+    TOKEN_GROUPS Groups;
+    HANDLE Process;
+    HANDLE Filtered;
+    PVOID Unreadable = NULL;
+    SIZE_T Size = PAGE_SIZE;
+    PSID World;
+    NTSTATUS Status;
+
+    if (!OpenOwnToken(&Process, &World)) return;
+
+    /* Memory that is only reserved faults on every read */
+    Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Unreadable, 0, &Size,
+                                     MEM_RESERVE, PAGE_READWRITE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    if (NT_SUCCESS(Status))
+    {
+        Groups.GroupCount = 1;
+        Groups.Groups[0].Sid = Unreadable;
+        Groups.Groups[0].Attributes = 0;
+
+        Status = NtFilterToken(Process, 0, &Groups, NULL, NULL, &Filtered);
+        ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+        if (NT_SUCCESS(Status)) NtClose(Filtered);
+
+        Status = NtFilterToken(Process, 0, NULL, NULL, &Groups, &Filtered);
+        ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+        if (NT_SUCCESS(Status)) NtClose(Filtered);
+
+        Status = NtFilterToken(Process, 0, Unreadable, NULL, NULL, &Filtered);
+        ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+        if (NT_SUCCESS(Status)) NtClose(Filtered);
+
+        Status = NtFilterToken(Process, 0, NULL, Unreadable, NULL, &Filtered);
+        ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+        if (NT_SUCCESS(Status)) NtClose(Filtered);
+
+        Size = 0;
+        NtFreeVirtualMemory(NtCurrentProcess(), &Unreadable, &Size, MEM_RELEASE);
+    }
+
+    /* A good list still works once the bad ones were refused */
+    Groups.GroupCount = 1;
+    Groups.Groups[0].Sid = World;
+    Groups.Groups[0].Attributes = 0;
+
+    Status = NtFilterToken(Process, 0, &Groups, NULL, NULL, &Filtered);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status)) NtClose(Filtered);
+
+    RtlFreeSid(World);
+    NtClose(Process);
+}
