@@ -250,6 +250,11 @@ WdmAudDeviceInfo32ToNative(
             Target->u.Interface.DeviceInterfaceString = (LPWSTR)(ULONG_PTR)Values[0];
             Target->u.Interface.DeviceInterfaceStringSize = Values[1];
             break;
+        case IOCTL_GETWAVECONNECTOR:
+            Target->u.Connector.DeviceInterfaceString = (LPWSTR)(ULONG_PTR)Values[0];
+            Target->u.Connector.DeviceInterfaceStringSize = Values[1];
+            Target->u.Connector.PinId = Values[2];
+            break;
     }
 }
 
@@ -300,6 +305,11 @@ WdmAudDeviceInfoNativeTo32(
         case IOCTL_QUERYDEVICEINTERFACESTRING:
             Values[0] = (ULONG)(ULONG_PTR)Source->u.Interface.DeviceInterfaceString;
             Values[1] = Source->u.Interface.DeviceInterfaceStringSize;
+            break;
+        case IOCTL_GETWAVECONNECTOR:
+            Values[0] = (ULONG)(ULONG_PTR)Source->u.Connector.DeviceInterfaceString;
+            Values[1] = Source->u.Connector.DeviceInterfaceStringSize;
+            Values[2] = Source->u.Connector.PinId;
             break;
         case IOCTL_GET_MIXER_EVENT:
             Values[0] = HandleToUlong(Source->u.MixerEvent.hMixer);
@@ -698,6 +708,8 @@ WdmAudDeviceControlDispatch(
             return WdmAudGetWaveMixerId(Irp, DeviceInfo);
         case IOCTL_GETENDPOINT_STATE:
             return WdmAudGetEndpointState(Irp, DeviceInfo);
+        case IOCTL_GETWAVECONNECTOR:
+            return WdmAudGetWaveConnector(Irp, DeviceInfo);
         case IOCTL_GETPOS:
             return WdmAudGetPosition(DeviceObject, Irp, DeviceInfo);
         case IOCTL_GETDEVID:
