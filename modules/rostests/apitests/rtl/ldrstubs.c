@@ -10,6 +10,7 @@ BOOLEAN LdrpShutdownInProgress;
 HANDLE LdrpShutdownThreadId;
 RTL_CRITICAL_SECTION LdrpLoaderLock;
 RTL_SRWLOCK LdrpModuleDatatableLock;
+UNICODE_STRING LdrpKnownDllPath;
 
 VOID
 NTAPI
