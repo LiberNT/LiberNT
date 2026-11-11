@@ -452,6 +452,7 @@ ObpDeallocateObject(
     POBJECT_TYPE ObjectType = ObpGetObjectTypeFromHeader(Header);
     POBJECT_HEADER_CREATOR_INFO CreatorInfo;
     POBJECT_HEADER_NAME_INFO NameInfo;
+    ULONG PagedPoolCharge, NonPagedPoolCharge;
     PVOID Descriptor;
 
     CreatorInfo = OBJECT_HEADER_TO_CREATOR_INFO(Header);
@@ -481,8 +482,10 @@ ObpDeallocateObject(
         if (Header->ObjectCreateInfo != NULL)
             ObpFreeObjectCreateInformation(Header->ObjectCreateInfo);
     }
-    else
+    else if (Header->QuotaBlockCharged != NULL)
     {
+        ObpGetQuotaCharges(Header, ObjectType, &PagedPoolCharge, &NonPagedPoolCharge);
+        PsReturnSharedPoolQuota(Header->QuotaBlockCharged, PagedPoolCharge, NonPagedPoolCharge);
         Header->QuotaBlockCharged = NULL;
     }
 

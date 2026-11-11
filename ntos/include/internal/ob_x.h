@@ -49,6 +49,28 @@ ObpGetObjectTypeFromHeader(IN POBJECT_HEADER ObjectHeader)
 
 FORCEINLINE
 VOID
+ObpGetQuotaCharges(
+    _In_ POBJECT_HEADER ObjectHeader,
+    _In_ POBJECT_TYPE ObjectType,
+    _Out_ PULONG PagedPoolCharge,
+    _Out_ PULONG NonPagedPoolCharge)
+{
+    POBJECT_HEADER_QUOTA_INFO QuotaInfo = OBJECT_HEADER_TO_QUOTA_INFO(ObjectHeader);
+
+    if (QuotaInfo != NULL)
+    {
+        *PagedPoolCharge = QuotaInfo->PagedPoolCharge;
+        *NonPagedPoolCharge = QuotaInfo->NonPagedPoolCharge;
+    }
+    else
+    {
+        *PagedPoolCharge = ObjectType->TypeInfo.DefaultPagedPoolCharge;
+        *NonPagedPoolCharge = ObjectType->TypeInfo.DefaultNonPagedPoolCharge;
+    }
+}
+
+FORCEINLINE
+VOID
 ObpEncodeObjectTypeIndex(IN POBJECT_HEADER ObjectHeader,
                          IN POBJECT_TYPE ObjectType)
 {

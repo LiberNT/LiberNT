@@ -507,6 +507,54 @@ PspQueryQuotaLimits(
  * for it; lowering one does not. A caller that passes only the working-set
  * bounds is asking the memory manager, not the quota accounting.
  */
+static
+NTSTATUS
+PspGivePrivateQuotaBlock(
+    _Inout_ PEPROCESS Process)
+{
+    PEPROCESS_QUOTA_BLOCK Block;
+    PEPROCESS_QUOTA_ENTRY Shared;
+    PS_QUOTA_TYPE Type;
+    SIZE_T Usage;
+    KIRQL OldIrql;
+
+    Block = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Block), TAG_QUOTA_BLOCK);
+    if (Block == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Block, sizeof(*Block));
+    Block->ReferenceCount = 1;
+    Block->ProcessCount = 1;
+
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
+
+    if (Process->QuotaBlock != &PspDefaultQuotaBlock)
+    {
+        KeReleaseSpinLock(&PspQuotaLock, OldIrql);
+        ExFreePoolWithTag(Block, TAG_QUOTA_BLOCK);
+        return STATUS_SUCCESS;
+    }
+
+    /* FIXME: a charge another thread of the process has in flight can still land on the shared block */
+    for (Type = PsNonPagedPool; Type <= PsPagedPool; Type++)
+    {
+        Usage = Process->ProcessQuotaUsage[Type];
+        Shared = &PspDefaultQuotaBlock.QuotaEntry[Type];
+
+        Shared->Usage = (Usage > Shared->Usage) ? 0 : Shared->Usage - Usage;
+        Block->QuotaEntry[Type].Usage = Usage;
+        Block->QuotaEntry[Type].Peak = Usage;
+    }
+
+    PspDefaultQuotaBlock.ReferenceCount--;
+    PspDefaultQuotaBlock.ProcessCount--;
+    InsertTailList(&PspQuotaBlockList, &Block->QuotaList);
+    Process->QuotaBlock = Block;
+
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 PspSetQuotaLimits(
@@ -582,6 +630,14 @@ PspSetQuotaLimits(
 
     Block = Process->QuotaBlock;
     if (Block == NULL) return STATUS_SUCCESS;
+
+    if (Block == &PspDefaultQuotaBlock && Privileged)
+    {
+        Status = PspGivePrivateQuotaBlock(Process);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        Block = Process->QuotaBlock;
+    }
 
     KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
 

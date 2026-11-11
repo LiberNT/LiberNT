@@ -161,6 +161,7 @@ list(APPEND SOURCE
     RtlDeleteAce.c
     RtlDetermineDosPathNameType.c
     ProcessPoolQuota.c
+    ObjectQuotaLimit.c
     RtlWnfAndSqm.c
     WinSqmSession.c
     RtlCheckPortableOperatingSystem.c

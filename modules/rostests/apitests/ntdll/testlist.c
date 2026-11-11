@@ -222,6 +222,7 @@ extern void func_UserModeException(void);
 #endif
 
 extern void func_ProcessPoolQuota(void);
+extern void func_ObjectQuotaLimit(void);
 extern void func_RtlWnfAndSqm(void);
 extern void func_WinSqmSession(void);
 extern void func_RtlCheckPortableOperatingSystem(void);
@@ -453,6 +454,7 @@ const struct test winetest_testlist[] =
 #endif
 
     { "ProcessPoolQuota",               func_ProcessPoolQuota },
+    { "ObjectQuotaLimit",               func_ObjectQuotaLimit },
     { "RtlWnfAndSqm", func_RtlWnfAndSqm },
     { "WinSqmSession", func_WinSqmSession },
     { "RtlCheckPortableOperatingSystem", func_RtlCheckPortableOperatingSystem },

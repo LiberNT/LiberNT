@@ -158,8 +158,8 @@ ObpChargeQuotaForObject(
     _Out_ PBOOLEAN NewObject)
 {
     POBJECT_CREATE_INFORMATION ObjectCreateInfo = NULL;
-
-    UNREFERENCED_PARAMETER(ObjectType);
+    ULONG PagedPoolCharge, NonPagedPoolCharge;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     *NewObject = FALSE;
 
@@ -169,14 +169,26 @@ ObpChargeQuotaForObject(
         ObjectHeader->Flags &= ~OB_FLAG_CREATE_INFO;
         ObjectHeader->QuotaBlockCharged = NULL;
         *NewObject = TRUE;
+
+        ObpGetQuotaCharges(ObjectHeader, ObjectType, &PagedPoolCharge, &NonPagedPoolCharge);
+        if (PagedPoolCharge != 0 || NonPagedPoolCharge != 0)
+        {
+            ObjectHeader->QuotaBlockCharged = PsChargeSharedPoolQuota(PsGetCurrentProcess(),
+                                                                      PagedPoolCharge,
+                                                                      NonPagedPoolCharge);
+            if (ObjectHeader->QuotaBlockCharged == NULL &&
+                PsGetCurrentProcess()->QuotaBlock != NULL)
+            {
+                Status = STATUS_QUOTA_EXCEEDED;
+            }
+        }
     }
 
     if (ObjectCreateInfo != NULL)
         ObpFreeObjectCreateInformation(ObjectCreateInfo);
 
-    /* TODO: the pool charges the create information carried are not billed to
-     * the process quota block */
-    return STATUS_SUCCESS;
+    /* TODO: the security descriptor charge is not billed to a SecurityDescriptorQuotaBlock */
+    return Status;
 }
 
 /* THE HANDLE DATABASE ********************************************************/
@@ -2104,19 +2116,22 @@ ObInsertObject(
 
     if (Handle != NULL)
     {
-
-        Status = ObpCreateHandle(OpenReason,
-                                 FoundObject,
-                                 NULL,
-                                 AccessState,
-                                 ObjectPointerBias + ((FoundObject == Object) ? 1 : 0),
-                                 (ObjectCreateInfo != NULL) ?
-                                 ObjectCreateInfo->Attributes : 0,
-                                 &Context,
-                                 (Header->Flags & OB_FLAG_KERNEL_MODE) ?
-                                 KernelMode : UserMode,
-                                 NewObject,
-                                 Handle);
+        Status = ChargeStatus;
+        if (NT_SUCCESS(Status))
+        {
+            Status = ObpCreateHandle(OpenReason,
+                                     FoundObject,
+                                     NULL,
+                                     AccessState,
+                                     ObjectPointerBias + ((FoundObject == Object) ? 1 : 0),
+                                     (ObjectCreateInfo != NULL) ?
+                                     ObjectCreateInfo->Attributes : 0,
+                                     &Context,
+                                     (Header->Flags & OB_FLAG_KERNEL_MODE) ?
+                                     KernelMode : UserMode,
+                                     NewObject,
+                                     Handle);
+        }
 
         if (!NT_SUCCESS(Status))
         {
