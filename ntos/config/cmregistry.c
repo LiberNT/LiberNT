@@ -97,6 +97,10 @@ static ULONG CmpTsAppCompatLength = sizeof(ULONG);
 static ULONG CmpIgnoredLength = sizeof(ULONG);
 static ULONG CmpProtectionModeLength = sizeof(ULONG);
 static ULONG CmpCaseInsensitiveLength = sizeof(ULONG);
+static ULONG CmpDpcQueueDepthLength = sizeof(ULONG);
+static ULONG CmpMinimumDpcRateLength = sizeof(ULONG);
+static ULONG CmpAdjustDpcThresholdLength = sizeof(ULONG);
+static ULONG CmpIdealDpcRateLength = sizeof(ULONG);
 
 /* GLOBALS ********************************************************************/
 
@@ -116,7 +120,7 @@ CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         &CmpGlobalQuotaLength,
         &DummyData
     },
-    /* TODO: the memory, I/O, power and kernel settings Windows reads here are not wired yet */
+    /* TODO: the memory, I/O, power and executive settings Windows reads here are not wired yet */
     {
         L"Session Manager",
         L"ProtectionMode",
@@ -136,6 +140,35 @@ CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         L"ObUnsecureGlobalNames",
         ObpUnsecureGlobalNamesBuffer,
         &ObpUnsecureGlobalNamesLength,
+        &DummyData
+    },
+    /* FIXME: the boot processor's PRCB took the DPC defaults before these are read */
+    {
+        L"Session Manager\\kernel",
+        L"DpcQueueDepth",
+        &KiMaximumDpcQueueDepth,
+        &CmpDpcQueueDepthLength,
+        &DummyData
+    },
+    {
+        L"Session Manager\\kernel",
+        L"MinimumDpcRate",
+        &KiMinimumDpcRate,
+        &CmpMinimumDpcRateLength,
+        &DummyData
+    },
+    {
+        L"Session Manager\\kernel",
+        L"AdjustDpcThreshold",
+        &KiAdjustDpcThreshold,
+        &CmpAdjustDpcThresholdLength,
+        &DummyData
+    },
+    {
+        L"Session Manager\\kernel",
+        L"IdealDpcRate",
+        &KiIdealDpcRate,
+        &CmpIdealDpcRateLength,
         &DummyData
     },
     {

@@ -57,6 +57,7 @@ list(APPEND SOURCE
     ApiSetMap.c
     DllLoadNotification.c
     DbgCommandString.c
+    DpcBehaviorRegistry.c
     DebugRegisters.c
     FileStatInformation.c
     arm64_chpe.c

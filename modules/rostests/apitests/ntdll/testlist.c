@@ -30,6 +30,7 @@ extern void func_ApiSetMap(void);
 extern void func_DbgCommandString(void);
 extern void func_DebugRegisters(void);
 extern void func_DllLoadNotification(void);
+extern void func_DpcBehaviorRegistry(void);
 extern void func_FileStatInformation(void);
 extern void func_arm64_chpe(void);
 extern void func_wow64_startup(void);
@@ -259,6 +260,7 @@ const struct test winetest_testlist[] =
     { "DbgCommandString",               func_DbgCommandString },
     { "DebugRegisters",                 func_DebugRegisters },
     { "DllLoadNotification",            func_DllLoadNotification },
+    { "DpcBehaviorRegistry",            func_DpcBehaviorRegistry },
     { "FileStatInformation",            func_FileStatInformation },
     { "arm64_chpe",                     func_arm64_chpe },
     { "LdrEnumResources",               func_LdrEnumResources },
