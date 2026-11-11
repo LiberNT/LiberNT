@@ -2131,12 +2131,15 @@ ObpReferenceProcessObjectByHandle(
     /* The two pseudo handles always name the caller's own process or thread */
     if (Handle == NtCurrentProcess() || Handle == NtCurrentThread())
     {
-        return ObReferenceObjectByHandle(Handle,
-                                         0,
-                                         NULL,
-                                         AccessMode,
-                                         Object,
-                                         HandleInformation);
+        NTSTATUS Status = ObReferenceObjectByHandle(Handle,
+                                                    0,
+                                                    NULL,
+                                                    AccessMode,
+                                                    Object,
+                                                    HandleInformation);
+
+        if (NT_SUCCESS(Status)) *TargetAccess = HandleInformation->GrantedAccess;
+        return Status;
     }
 
     UNREFERENCED_PARAMETER(Process);
@@ -2366,6 +2369,11 @@ ObDuplicateObject(
     if (Options & DUPLICATE_SAME_ACCESS)
     {
         AccessState.PreviouslyGrantedAccess = SourceAccess;
+        AccessState.RemainingDesiredAccess = 0;
+    }
+    else if ((AccessState.RemainingDesiredAccess & ~SourceAccess) == 0)
+    {
+        AccessState.PreviouslyGrantedAccess = AccessState.RemainingDesiredAccess;
         AccessState.RemainingDesiredAccess = 0;
     }
 
