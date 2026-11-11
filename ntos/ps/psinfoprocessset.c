@@ -1155,8 +1155,14 @@ NtSetInformationProcess(
             break;
 
         case ProcessUserModeIOPL:
+            if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+            {
+                Status = STATUS_PRIVILEGE_NOT_HELD;
+                break;
+            }
+
             /* TODO: x86 lets a process do port I/O from user mode; this needs an architecture hook */
-            Status = STATUS_NOT_SUPPORTED;
+            Status = STATUS_NOT_IMPLEMENTED;
             break;
 
         case ProcessWx86Information:
