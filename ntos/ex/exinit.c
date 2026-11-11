@@ -141,6 +141,36 @@ ExpFindLoadOption(
     return NULL;
 }
 
+/* Only "Terminal Server" is a documented product suite name, and a workstation runs it for a single user */
+CODE_SEG("INIT")
+static
+ULONG
+ExpReadSuiteMask(VOID)
+{
+    static const WCHAR Terminal[] = L"Terminal Server";
+    PCWSTR Name = CmSuiteBuffer;
+    PCWSTR End;
+    ULONG SuiteMask = 0;
+    SIZE_T Length;
+
+    if (CmSuiteBufferType == REG_MULTI_SZ)
+    {
+        End = CmSuiteBuffer + min(CmSuiteBufferLength, sizeof(CmSuiteBuffer)) / sizeof(WCHAR);
+        while (Name < End && *Name != UNICODE_NULL)
+        {
+            Length = wcsnlen(Name, End - Name);
+            if (Length == RTL_NUMBER_OF(Terminal) - 1 && _wcsnicmp(Name, Terminal, Length) == 0)
+                SuiteMask |= VER_SUITE_TERMINAL;
+            Name += Length + 1;
+        }
+    }
+
+    if ((SuiteMask & VER_SUITE_TERMINAL) && CmTsAppCompat != 1)
+        SuiteMask |= VER_SUITE_SINGLEUSERTS;
+
+    return SuiteMask;
+}
+
 CODE_SEG("INIT")
 static
 VOID
@@ -984,6 +1014,8 @@ ExpInitializeExecutive(
     /* What the registry holds for the kernel is read from the hive the loader left in memory */
     CmGetSystemControlValues(LoaderBlock->RegistryBase, CmControlVector);
     NtGlobalFlag |= CmNtGlobalFlag;
+    ExSuiteMask = ExpReadSuiteMask();
+    SharedUserData->SuiteMask = ExSuiteMask;
 
     if (!ObInitSystem())
     {
