@@ -40,6 +40,7 @@ KMT_TESTFUNC Test_IoDeviceTree;
 KMT_TESTFUNC Test_IoDriverKey;
 KMT_TESTFUNC Test_IoInterfaceOrder;
 KMT_TESTFUNC Test_IoMessageRestart;
+KMT_TESTFUNC Test_IoRemovalPolicy;
 KMT_TESTFUNC Test_IoAffinityPolicy;
 KMT_TESTFUNC Test_IoRemoveChildren;
 KMT_TESTFUNC Test_IoReadWrite;
@@ -131,6 +132,7 @@ const KMT_TEST TestList[] =
     { "-IoDriverKey",                 Test_IoDriverKey },
     { "-IoInterfaceOrder",            Test_IoInterfaceOrder },
     { "-IoMessageRestart",            Test_IoMessageRestart },
+    { "-IoRemovalPolicy",             Test_IoRemovalPolicy },
     { "-IoAffinityPolicy",            Test_IoAffinityPolicy },
     { "-IoRemoveChildren",            Test_IoRemoveChildren },
     { "IoReadWrite",                  Test_IoReadWrite },

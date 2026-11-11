@@ -169,6 +169,8 @@ PipAllocateDeviceNode(
     DeviceNode->InterfaceType = InterfaceTypeUndefined;
     DeviceNode->ChildInterfaceType = InterfaceTypeUndefined;
     DeviceNode->ChildBusTypeIndex = (USHORT)-1;
+    DeviceNode->RemovalPolicy = RemovalPolicyExpectNoRemoval;
+    DeviceNode->HardwareRemovalPolicy = RemovalPolicyExpectNoRemoval;
     DeviceNode->State = DeviceNodeUninitialized;
     DeviceNode->PreviousState = DeviceNodeUnspecified;
     DeviceNode->CompletionStatus = STATUS_SUCCESS;

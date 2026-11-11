@@ -489,6 +489,7 @@ NTSTATUS PiGetDeviceRegistryProperty(_In_ PDEVICE_OBJECT DeviceObject,
 VOID PnpFreeUnicodeStringList(_In_opt_ PUNICODE_STRING UnicodeStringList,
                               _In_ ULONG StringCount);
 NTSTATUS PnpBusTypeGuidGet(_In_ USHORT Index, _Out_ LPGUID BusTypeGuid);
+VOID PiUpdateRemovalPolicy(_In_ PDEVICE_NODE DeviceNode, _In_ BOOLEAN Removable);
 USHORT IopGetBusTypeGuidIndex(_In_ LPGUID BusTypeGuid);
 
 /* devinterface.c */

@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include "../ioint.h"
+#include <wdmguid.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -393,6 +394,39 @@ PiIrpQueryPnPDeviceState(
     return STATUS_SUCCESS;
 }
 
+/* A removable device expects surprise removal on USB, 1394 and PCMCIA and orderly removal elsewhere; a fixed one keeps its parent's policy, as Windows 11 reports */
+VOID
+PiUpdateRemovalPolicy(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ BOOLEAN Removable)
+{
+    DEVICE_REMOVAL_POLICY Policy = RemovalPolicyExpectNoRemoval;
+    GUID BusTypeGuid;
+
+    PAGED_CODE();
+
+    if (Removable)
+    {
+        Policy = RemovalPolicyExpectOrderlyRemoval;
+
+        if (NT_SUCCESS(PnpBusTypeGuidGet(DeviceNode->ChildBusTypeIndex, &BusTypeGuid)) &&
+            (IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_USB) ||
+             IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_1394) ||
+             IsEqualGUID(&BusTypeGuid, &GUID_BUS_TYPE_PCMCIA)))
+        {
+            Policy = RemovalPolicyExpectSurpriseRemoval;
+        }
+    }
+    else if (DeviceNode->Parent != NULL &&
+             DeviceNode->Parent->HardwareRemovalPolicy > RemovalPolicyExpectNoRemoval)
+    {
+        Policy = DeviceNode->Parent->HardwareRemovalPolicy;
+    }
+
+    DeviceNode->HardwareRemovalPolicy = (UCHAR)Policy;
+    DeviceNode->RemovalPolicy = (UCHAR)Policy;
+}
+
 NTSTATUS
 NTAPI
 IopQueryDeviceCapabilities(
@@ -441,19 +475,7 @@ IopQueryDeviceCapabilities(
 
     /* TODO: the bit layout of DEVICE_NODE.CapabilityFlags is not published */
 
-    if (DeviceCaps->Removable)
-    {
-        DeviceNode->RemovalPolicy =
-            DeviceCaps->SurpriseRemovalOK
-                ? RemovalPolicyExpectSurpriseRemoval
-                : RemovalPolicyExpectOrderlyRemoval;
-    }
-    else
-    {
-        DeviceNode->RemovalPolicy = RemovalPolicyExpectNoRemoval;
-    }
-
-    DeviceNode->HardwareRemovalPolicy = DeviceNode->RemovalPolicy;
+    PiUpdateRemovalPolicy(DeviceNode, DeviceCaps->Removable);
 
     return STATUS_SUCCESS;
 }

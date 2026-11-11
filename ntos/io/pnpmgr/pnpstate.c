@@ -402,6 +402,9 @@ PiQueryAndSaveIds(
 
     PiQueryBusInformation(DeviceNode);
 
+    /* The capability query came before the bus was known */
+    if (HaveCapabilities) PiUpdateRemovalPolicy(DeviceNode, (BOOLEAN)Capabilities.Removable);
+
     PiSetDevNodeText(DeviceNode, EnumKey);
     IopSetDeviceInstanceData(EnumKey, DeviceNode);
 

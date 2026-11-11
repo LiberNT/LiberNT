@@ -607,6 +607,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoDriverKey_user.c
     ntos_io/IoInterfaceOrder_user.c
     ntos_io/IoMessageRestart_user.c
+    ntos_io/IoRemovalPolicy_user.c
     ntos_io/IoRemoveChildren_user.c
     ntos_io/IoReadWrite_user.c
     ntos_ps/PsThreadCpuSets_user.c
