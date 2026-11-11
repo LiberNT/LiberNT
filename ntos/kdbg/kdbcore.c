@@ -113,10 +113,6 @@ KdbpInitializeEnterConditions(VOID)
         KdbpEnterCondition[Index][1] = KdbEnterAlways;
     }
 
-    /* A breakpoint and a step are nobody's business but the debugger's */
-    KdbpEnterCondition[1][0] = KdbEnterAlways;
-    KdbpEnterCondition[3][0] = KdbEnterAlways;
-
     for (Index = 0; Index < (LONG)RTL_NUMBER_OF(KdbpHardwareOwner); Index++)
         KdbpHardwareOwner[Index] = -1;
 
@@ -820,6 +816,21 @@ KdbpStepPastBreakInstruction(
         KeSetContextPc(Context, Pc + KD_BREAKPOINT_SIZE);
 }
 
+static
+BOOLEAN
+KdbpHardwareBreakPointArmed(VOID)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpHardwareOwner); Index++)
+    {
+        if (KdbpHardwareOwner[Index] >= 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 /*
  * Where the machine stopped, and why. Everything the debugger does happens
  * inside this call: when it returns, the machine runs again.
@@ -921,8 +932,10 @@ KdbEnterDebuggerException(
         }
     }
 
+    /* A step the debugger did not take is an exception like any other */
     if ((ExceptionRecord != NULL) &&
-        (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_SINGLE_STEP))
+        (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_SINGLE_STEP) &&
+        (SteppedOverBreakPoint || (KdbNumSingleSteps != 0) || KdbpHardwareBreakPointArmed()))
     {
         EnteredOnSingleStep = TRUE;
 
