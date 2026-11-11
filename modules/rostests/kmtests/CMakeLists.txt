@@ -184,6 +184,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCsqKM.c
     ntos_io/IoDeviceInterface.c
+    ntos_io/IoDriverSection.c
     ntos_io/IoEvent.c
     ntos_io/IoStorageDumpPath.c
     ntos_io/IoFilesystem.c

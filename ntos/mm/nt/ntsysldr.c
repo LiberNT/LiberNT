@@ -1842,6 +1842,27 @@ MiLocateKernelSections(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
 }
 
 CODE_SEG("INIT")
+static
+VOID
+MiReplaceBootDriverEntry(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PLDR_DATA_TABLE_ENTRY LoaderEntry,
+    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+{
+    PBOOT_DRIVER_LIST_ENTRY BootEntry;
+    PLIST_ENTRY Link;
+
+    for (Link = LoaderBlock->BootDriverListHead.Flink;
+         Link != &LoaderBlock->BootDriverListHead;
+         Link = Link->Flink)
+    {
+        BootEntry = CONTAINING_RECORD(Link, BOOT_DRIVER_LIST_ENTRY, Link);
+        if (BootEntry->LdrEntry == LoaderEntry)
+            BootEntry->LdrEntry = Entry;
+    }
+}
+
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 MiInitializeLoadedModuleList(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
@@ -1908,6 +1929,7 @@ MiInitializeLoadedModuleList(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
                                      sizeof(WCHAR)] = UNICODE_NULL;
 
         InsertTailList(&PsLoadedModuleList, &NewEntry->InLoadOrderLinks);
+        MiReplaceBootDriverEntry(LoaderBlock, LdrEntry, NewEntry);
         NextEntry = NextEntry->Flink;
     }
 
