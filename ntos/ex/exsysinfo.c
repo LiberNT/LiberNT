@@ -1594,9 +1594,14 @@ NtQuerySystemInformation(
                                                       Room,
                                                       &TableLength);
                 }
+                else if (Request->Action == SystemFirmwareTable_Enumerate &&
+                         Request->ProviderSignature == SIG_ACPI)
+                {
+                    Status = ExpEnumerateAcpiTables(Request->TableBuffer, Room, &TableLength);
+                }
                 else if (Request->Action == SystemFirmwareTable_Enumerate)
                 {
-                    /* TODO: only the raw SMBIOS provider exists, and it has the one table */
+                    /* TODO: the firmware memory provider is not registered; the raw SMBIOS one has the one table */
                     if (Request->ProviderSignature != SIG_RSMB)
                     {
                         Status = STATUS_NOT_IMPLEMENTED;

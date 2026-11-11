@@ -158,6 +158,7 @@ list(APPEND SOURCE
     SuspendThread.c
     SynchronizationBarrier.c
     SystemFirmware.c
+    SystemFirmwareAcpi.c
     SystemFileCacheSize.c
     SecureBootFlag.c
     TerminateProcess.c

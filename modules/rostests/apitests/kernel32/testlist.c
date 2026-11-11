@@ -153,6 +153,7 @@ extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
 extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
+extern void func_SystemFirmwareAcpi(void);
 extern void func_SystemFileCacheSize(void);
 extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
@@ -344,6 +345,7 @@ const struct test winetest_testlist[] =
     { "SuspendThread",               func_SuspendThread },
     { "SynchronizationBarrier",      func_SynchronizationBarrier },
     { "SystemFirmware",              func_SystemFirmware },
+    { "SystemFirmwareAcpi",          func_SystemFirmwareAcpi },
     { "SystemFileCacheSize",         func_SystemFileCacheSize },
     { "SecureBootFlag",              func_SecureBootFlag },
     { "TerminateProcess",            func_TerminateProcess },

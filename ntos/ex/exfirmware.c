@@ -6,6 +6,9 @@
  */
 
 #include <ntoskrnl.h>
+#include <initguid.h>
+#include <reactos/drivers/acpi/acpi.h>
+#include <reactos/drivers/acpi/acpisystem.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -22,6 +25,10 @@ FIRMWARE_TYPE ExpFirmwareType = FirmwareTypeUnknown;
 
 /* The most a firmware variable may hold */
 #define EXP_FIRMWARE_VALUE_MAXIMUM (32 * 1024)
+
+/* The longest description table and the most tables taken from the ACPI driver */
+#define EXP_ACPI_TABLE_MAXIMUM (16 * 1024 * 1024)
+#define EXP_ACPI_TABLE_COUNT_MAXIMUM 4096
 
 /* The vendor the entries that say what may be started belong to */
 static const GUID ExpGlobalVariableGuid =
@@ -226,6 +233,189 @@ ExSetFirmwareEnvironmentVariable(
     return Status;
 }
 
+/* The ACPI driver keeps the description tables and lends them out through its system interface */
+static
+NTSTATUS
+ExpCallAcpiTableInterface(
+    _In_ ULONG IoControlCode,
+    _In_reads_bytes_opt_(InputLength) PVOID Input,
+    _In_ ULONG InputLength,
+    _Out_writes_bytes_(OutputLength) PVOID Output,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG Information)
+{
+    PZZWSTR Interfaces = NULL;
+    PDEVICE_OBJECT DeviceObject;
+    PFILE_OBJECT FileObject;
+    IO_STATUS_BLOCK IoStatus;
+    UNICODE_STRING Name;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *Information = 0;
+
+    Status = IoGetDeviceInterfaces(&GUID_ACPI_SYSTEM_INTERFACE, NULL, 0, &Interfaces);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Interfaces[0] == UNICODE_NULL)
+    {
+        ExFreePool(Interfaces);
+        return STATUS_NOT_FOUND;
+    }
+
+    RtlInitUnicodeString(&Name, Interfaces);
+    Status = IoGetDeviceObjectPointer(&Name, FILE_READ_DATA, &FileObject, &DeviceObject);
+    ExFreePool(Interfaces);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IoControlCode,
+                                        DeviceObject,
+                                        Input,
+                                        InputLength,
+                                        Output,
+                                        OutputLength,
+                                        FALSE,
+                                        &Event,
+                                        &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(FileObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = IoCallDriver(DeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    *Information = (ULONG)IoStatus.Information;
+    ObDereferenceObject(FileObject);
+    return Status;
+}
+
+/* The identifier is the table's signature as it lies in memory, and the first of several with it is the one handed back */
+static
+NTSTATUS
+ExpGetAcpiTable(
+    _In_ ULONG TableId,
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _Out_ PULONG ReturnLength)
+{
+    ACPI_GET_SYSTEM_TABLE_INPUT Input;
+    DESCRIPTION_HEADER Header;
+    PVOID Table;
+    ULONG Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *ReturnLength = 0;
+
+    RtlCopyMemory(Input.Signature, &TableId, sizeof(Input.Signature));
+    Input.Instance = 1;
+
+    Status = ExpCallAcpiTableInterface(IOCTL_ACPI_GET_SYSTEM_TABLE,
+                                       &Input,
+                                       sizeof(Input),
+                                       &Header,
+                                       sizeof(Header),
+                                       &Length);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) return Status;
+
+    if (Length < sizeof(Header) ||
+        Header.Length < sizeof(Header) ||
+        Header.Length > EXP_ACPI_TABLE_MAXIMUM)
+    {
+        return STATUS_ACPI_INVALID_DATA;
+    }
+
+    *ReturnLength = Header.Length;
+    if (Buffer == NULL || BufferLength < Header.Length) return STATUS_BUFFER_TOO_SMALL;
+
+    Table = ExAllocatePoolWithTag(PagedPool, Header.Length, EXP_FIRMWARE_TAG);
+    if (Table == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = ExpCallAcpiTableInterface(IOCTL_ACPI_GET_SYSTEM_TABLE,
+                                       &Input,
+                                       sizeof(Input),
+                                       Table,
+                                       Header.Length,
+                                       &Length);
+    if (NT_SUCCESS(Status) && Length != Header.Length) Status = STATUS_ACPI_INVALID_DATA;
+    if (NT_SUCCESS(Status)) RtlCopyMemory(Buffer, Table, Length);
+
+    ExFreePoolWithTag(Table, EXP_FIRMWARE_TAG);
+    return Status;
+}
+
+/* Every table is listed by its signature, a signature the firmware published twice coming twice */
+NTSTATUS
+NTAPI
+ExpEnumerateAcpiTables(
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _Out_ PULONG ReturnLength)
+{
+    PACPI_ENUM_SYSTEM_TABLES_ENTRY Entries;
+    ULONG Capacity = 32;
+    ULONG Length = 0;
+    ULONG Count;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *ReturnLength = 0;
+
+    for (;;)
+    {
+        Entries = ExAllocatePoolWithTag(PagedPool, Capacity * sizeof(*Entries), EXP_FIRMWARE_TAG);
+        if (Entries == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Status = ExpCallAcpiTableInterface(IOCTL_ACPI_ENUM_SYSTEM_TABLES,
+                                           NULL,
+                                           0,
+                                           Entries,
+                                           Capacity * sizeof(*Entries),
+                                           &Length);
+        if (Status != STATUS_BUFFER_OVERFLOW) break;
+
+        ExFreePoolWithTag(Entries, EXP_FIRMWARE_TAG);
+        if (Capacity >= EXP_ACPI_TABLE_COUNT_MAXIMUM) return STATUS_ACPI_INVALID_DATA;
+        Capacity *= 2;
+    }
+
+    if (NT_SUCCESS(Status) && (Length % sizeof(*Entries)) != 0) Status = STATUS_ACPI_INVALID_DATA;
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Entries, EXP_FIRMWARE_TAG);
+        return Status;
+    }
+
+    Count = Length / sizeof(*Entries);
+    *ReturnLength = Count * sizeof(ULONG);
+
+    if (Buffer == NULL || BufferLength < *ReturnLength)
+    {
+        Status = STATUS_BUFFER_TOO_SMALL;
+    }
+    else
+    {
+        for (Index = 0; Index < Count; Index++)
+            RtlCopyMemory((PULONG)Buffer + Index, Entries[Index].Signature, sizeof(ULONG));
+    }
+
+    ExFreePoolWithTag(Entries, EXP_FIRMWARE_TAG);
+    return Status;
+}
+
 /*
  * Hands back one of the tables the firmware published, by the signature of
  * whoever provides it and the identifier of the table within that provider.
@@ -244,10 +434,16 @@ ExGetSystemFirmwareTable(
 
     PAGED_CODE();
 
+    if (FirmwareTableProviderSignature == SIG_ACPI)
+    {
+        Status = ExpGetAcpiTable(FirmwareTableID, FirmwareTableBuffer, BufferLength, &Length);
+        if (ReturnLength != NULL) *ReturnLength = Length;
+        return Status;
+    }
+
     if (FirmwareTableProviderSignature != SIG_RSMB)
     {
-        /* TODO: only the raw table of the machine's own description is served;
-           the other providers are not registered. */
+        /* TODO: the firmware memory provider is not registered */
         return STATUS_NOT_IMPLEMENTED;
     }
 

@@ -119,6 +119,13 @@ ExpGetRawSMBiosTable(
     _Out_ ULONG *OutSize,
     _In_ ULONG BufferSize);
 
+NTSTATUS
+NTAPI
+ExpEnumerateAcpiTables(
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _Out_ PULONG ReturnLength);
+
 #ifdef _WIN64
 #define HANDLE_LOW_BITS     (PAGE_SHIFT - 4)
 #define HANDLE_HIGH_BITS    (PAGE_SHIFT - 3)
