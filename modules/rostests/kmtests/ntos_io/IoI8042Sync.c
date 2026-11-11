@@ -24,4 +24,9 @@ START_TEST(IoI8042Sync)
     ok_eq_hex(I8042CorePacketStatus(FALSE, Keyboard), STATUS_DEVICE_NOT_READY);
     ok_eq_hex(I8042CorePacketStatus(TRUE, NULL), STATUS_DEVICE_NOT_READY);
     ok_eq_hex(I8042CorePacketStatus(TRUE, Keyboard), STATUS_SUCCESS);
+
+    ok_eq_bool(I8042CorePacketTimedOut(TRUE, TRUE), TRUE);
+    ok_eq_bool(I8042CorePacketTimedOut(TRUE, FALSE), FALSE);
+    ok_eq_bool(I8042CorePacketTimedOut(FALSE, TRUE), FALSE);
+    ok_eq_bool(I8042CorePacketTimedOut(FALSE, FALSE), FALSE);
 }

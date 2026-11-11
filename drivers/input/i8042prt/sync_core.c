@@ -30,3 +30,12 @@ I8042CorePacketStatus(
         return STATUS_DEVICE_NOT_READY;
     return STATUS_SUCCESS;
 }
+
+/* Only the expiry of the timer the current packet armed fails it: a later packet re-arms the timer, which clears its state */
+BOOLEAN
+I8042CorePacketTimedOut(
+    _In_ BOOLEAN TimerSignaled,
+    _In_ BOOLEAN PacketActive)
+{
+    return TimerSignaled && PacketActive;
+}

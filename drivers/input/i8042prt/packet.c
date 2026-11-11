@@ -7,6 +7,8 @@
 
 #include "i8042prt.h"
 
+#include <debug.h>
+
 VOID
 i8042FinishPacket(
     IN PPORT_DEVICE_EXTENSION DeviceExtension,
@@ -18,6 +20,7 @@ i8042FinishPacket(
     ASSERT((Irp != NULL) == (DeviceObject != NULL));
     DeviceExtension->CurrentIrp = NULL;
     DeviceExtension->CurrentIrpDevice = NULL;
+    KeCancelTimer(&DeviceExtension->PacketTimer);
 
     if (Irp != NULL)
     {
@@ -36,4 +39,43 @@ i8042FailPacket(
     Irp->IoStatus.Status = Result;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     IoStartNextPacket(DeviceObject, FALSE);
+}
+
+/* A command byte the device never acknowledges would otherwise leave the request pending for good */
+VOID
+NTAPI
+i8042PacketTimeoutDpc(
+    IN PKDPC Dpc,
+    IN PVOID DeferredContext,
+    IN PVOID SystemArgument1,
+    IN PVOID SystemArgument2)
+{
+    PPORT_DEVICE_EXTENSION DeviceExtension = DeferredContext;
+    BOOLEAN TimedOut = FALSE;
+    UCHAR Command = 0;
+    KIRQL Irql;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (DeviceExtension->HighestDIRQLInterrupt == NULL)
+        return;
+
+    Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
+    if (I8042CorePacketTimedOut(KeReadStateTimer(&DeviceExtension->PacketTimer),
+                                DeviceExtension->Packet.State != Idle))
+    {
+        Command = DeviceExtension->Packet.Bytes[0];
+        DeviceExtension->Packet.State = Idle;
+        DeviceExtension->PacketResends = 0;
+        TimedOut = TRUE;
+    }
+    KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+
+    if (!TimedOut)
+        return;
+
+    ERR_(I8042PRT, "No acknowledgement for command 0x%02x\n", Command);
+    i8042FinishPacket(DeviceExtension, STATUS_IO_TIMEOUT);
 }

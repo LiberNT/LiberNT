@@ -18,3 +18,8 @@ NTSTATUS
 I8042CorePacketStatus(
     _In_ BOOLEAN Initialized,
     _In_opt_ PKINTERRUPT SyncInterrupt);
+
+BOOLEAN
+I8042CorePacketTimedOut(
+    _In_ BOOLEAN TimerSignaled,
+    _In_ BOOLEAN PacketActive);
