@@ -330,7 +330,7 @@ static void set_thread_context_(unsigned line, struct debugger_context *ctx, str
 }
 
 #define WAIT_EVENT_TIMEOUT 20000
-#define POLL_EVENT_TIMEOUT 200
+#define POLL_EVENT_TIMEOUT 50
 
 #define next_event(a,b) next_event_(__LINE__,a,b)
 static void next_event_(unsigned line, struct debugger_context *ctx, unsigned timeout)
@@ -1148,6 +1148,17 @@ static void close_main_windows(DWORD pid)
         PostMessageA(fmw.windows[i], WM_CLOSE, 0, 0);
 }
 
+static BOOL has_visible_window(DWORD pid)
+{
+    struct find_main_window fmw = {pid, 0};
+    unsigned i;
+
+    EnumWindows(enum_windows_callback, (LPARAM)&fmw);
+    for (i = 0; i < fmw.count; i++)
+        if (IsWindowVisible(fmw.windows[i])) return TRUE;
+    return FALSE;
+}
+
 static void test_debug_loop_wow64(void)
 {
     WCHAR buffer[MAX_PATH], *p;
@@ -1155,6 +1166,7 @@ static void test_debug_loop_wow64(void)
     STARTUPINFOW si;
     BOOL ret;
     unsigned order = 0, bp_order = 0, bpwx_order = 0, num_ntdll = 0, num_wow64 = 0;
+    DWORD last_event;
 
     /* checking conditions for running this test */
     if (GetSystemWow64DirectoryW( buffer, ARRAY_SIZE(buffer) ) && sizeof(void*) > sizeof(int) && pGetMappedFileNameW)
@@ -1173,13 +1185,21 @@ static void test_debug_loop_wow64(void)
     ret = CreateProcessW( NULL, buffer, NULL, NULL, FALSE, DEBUG_PROCESS, NULL, NULL, &si, &pi );
     ok(ret, "CreateProcess failed, last error %#lx.\n", GetLastError());
 
+    last_event = GetTickCount();
     for (;;)
     {
         DEBUG_EVENT ev;
 
         ++order;
-        ret = WaitForDebugEvent( &ev, 2000 );
-        if (!ret) break;
+        ret = WaitForDebugEvent( &ev, POLL_EVENT_TIMEOUT );
+        if (!ret)
+        {
+            /* the debuggee is settled once its main window is up and its events have stopped */
+            if (has_visible_window( pi.dwProcessId ) || GetTickCount() - last_event >= 2000) break;
+            --order;
+            continue;
+        }
+        last_event = GetTickCount();
 
         switch (ev.dwDebugEventCode)
         {
@@ -1234,7 +1254,7 @@ static void test_debug_loop_wow64(void)
         }
     }
 
-    ret = WaitForSingleObject( pi.hProcess, 2000 );
+    ret = WaitForSingleObject( pi.hProcess, 0 );
     if (ret != WAIT_OBJECT_0)
     {
         DWORD ec;
@@ -1246,7 +1266,7 @@ static void test_debug_loop_wow64(void)
     {
         DEBUG_EVENT ev;
 
-        ret = WaitForDebugEvent( &ev, 2000 );
+        ret = WaitForDebugEvent( &ev, POLL_EVENT_TIMEOUT );
         if (!ret || ev.dwDebugEventCode == EXIT_PROCESS_DEBUG_EVENT) break;
         switch (ev.dwDebugEventCode)
         {
@@ -2264,7 +2284,7 @@ static DWORD run_child_wait( char *cmd, HANDLE event )
 
     ret = CreateProcessA(NULL, cmd, NULL, NULL, TRUE, DEBUG_PROCESS, NULL, NULL, &si, &pi);
     ok(ret, "CreateProcess failed, last error %#lx.\n", GetLastError());
-    Sleep(200);
+    WaitForSingleObject( pDbgUiGetThreadDebugObject(), 1000 );
     CloseHandle( pDbgUiGetThreadDebugObject() );
     pDbgUiSetThreadDebugObject( 0 );
     SetEvent( event );
@@ -2278,6 +2298,7 @@ static DWORD run_child_wait( char *cmd, HANDLE event )
 
 static PROCESS_INFORMATION pi;
 static char *cmd;
+static HANDLE debug_ready;
 
 static DWORD WINAPI debug_and_exit(void *arg)
 {
@@ -2294,7 +2315,7 @@ static DWORD WINAPI debug_and_exit(void *arg)
                                            &val, sizeof(val), NULL );
     ok( !status, "NtSetInformationDebugObject failed %lx\n", status );
     *(HANDLE *)arg = debug;
-    Sleep(200);
+    WaitForSingleObject( debug, 1000 );
     ExitThread(0);
 }
 
@@ -2313,6 +2334,7 @@ static DWORD WINAPI debug_and_wait(void *arg)
     status = pNtSetInformationDebugObject( debug, DebugObjectKillProcessOnExitInformation,
                                            &val, sizeof(val), NULL );
     ok( !status, "NtSetInformationDebugObject failed %lx\n", status );
+    SetEvent( debug_ready );
     Sleep(INFINITE);
     ExitThread(0);
 }
@@ -2412,8 +2434,10 @@ static void test_kill_on_exit(const char *argv0)
     /* checking on forced exit */
     status = pNtCreateDebugObject( &debug, DEBUG_ALL_ACCESS, &attr, DEBUG_KILL_ON_CLOSE );
     ok( !status, "NtCreateDebugObject failed %lx\n", status );
+    debug_ready = CreateEventW(NULL, FALSE, FALSE, NULL);
     thread = CreateThread(NULL, 0, debug_and_wait, &debug, 0, &tid);
-    Sleep( 100 );
+    WaitForSingleObject( debug_ready, 1000 );
+    CloseHandle( debug_ready );
     ok( debug != 0, "no debug port\n" );
     val = DEBUG_KILL_ON_CLOSE;
     status = pNtSetInformationDebugObject( debug, DebugObjectKillProcessOnExitInformation,
