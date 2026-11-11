@@ -198,6 +198,8 @@ PspArchInitializeUserThreadStartup(
     TrapFrame->Rip = (ULONG64)PspSystemDllEntryPoint;
     TrapFrame->Rcx = (ULONG64)UserContext;
     TrapFrame->Rdx = (ULONG64)PspSystemDllBase;
+
+    KiInstrumentTrapFrame(TrapFrame);
 }
 
 /*
