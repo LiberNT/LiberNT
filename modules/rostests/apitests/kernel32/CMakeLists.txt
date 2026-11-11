@@ -8,6 +8,7 @@ list(APPEND SOURCE
     ActCtxDependencyVersions.c
     AlternateComputerNames.c
     ComPlusPackageInstallStatus.c
+    IntegratedDisplaySize.c
     MessageWaitingIndicator.c
     TermsrvAppInstallMode.c
     ConsoleAlias.c

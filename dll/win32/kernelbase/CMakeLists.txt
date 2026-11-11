@@ -20,6 +20,7 @@ add_library(kernelbase MODULE
     CpuSets.c
     DllMain.c
     AppModelToken.c
+    IntegratedDisplay.c
     MemoryApi.c
     NlsScripts.c
     PackageFamily.c
