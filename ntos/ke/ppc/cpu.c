@@ -114,3 +114,11 @@ KiQueryProcessorTopology(
     *RecordCount = 0;
     *SetCount = 0;
 }
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    RtlZeroMemory(Domains, sizeof(*Domains));
+}

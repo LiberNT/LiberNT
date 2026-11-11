@@ -1805,7 +1805,7 @@ ExpQueryLogicalProcessorRelationship(
     _SEH2_END;
 
     if ((Relationship > RelationProcessorModule) && (Relationship != RelationAll))
-        return STATUS_INVALID_PARAMETER;
+        return STATUS_UNSUCCESSFUL;
 
     /* Asked without room, the kernel only says how much the records take */
     Status = KeQueryLogicalProcessorRelationship(NULL, Relationship, NULL, &Needed);

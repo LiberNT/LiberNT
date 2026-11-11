@@ -51,6 +51,9 @@ typedef struct _KIP_CPU_SAMPLE
 {
     BOOLEAN Valid;
     ULONG ApicId;
+    ULONG CoreShift;
+    ULONG ModuleShift;
+    ULONG DieShift;
     ULONG PackageShift;        /* APIC id bits below the package */
     ULONG CacheCount;
     KIP_CPU_CACHE_SAMPLE Cache[KIP_MAX_CACHES_PER_CPU];
@@ -124,6 +127,7 @@ KipSampleCurrentProcessor(
     ULONG DetLeaf = 0;
     ULONG SubLeaf;
     BOOLEAN IsIntel, IsAmd;
+    BOOLEAN Found = FALSE, HasModule = FALSE, HasDie = FALSE;
     ULONG SmtShift = 0;
 
     RtlZeroMemory(Sample, sizeof(*Sample));
@@ -152,40 +156,85 @@ KipSampleCurrentProcessor(
      */
     if (MaxLeaf >= 0x0B)
     {
-        ULONG Leaf = (MaxLeaf >= 0x1F) ? 0x1F : 0x0B;
-        BOOLEAN Found = FALSE;
+        ULONG Leaf = 0;
+        ULONG Below = 0;
 
-        for (SubLeaf = 0; SubLeaf < 8; SubLeaf++)
+        /* A leaf whose first level counts no processor is not implemented (Intel SDM, CPUID 0x0B and 0x1F) */
+        if (MaxLeaf >= 0x1F)
         {
-            ULONG LevelType;
+            KipCpuId(0x1F, 0, Regs);
+            if ((Regs[1] & 0xFFFF) != 0)
+                Leaf = 0x1F;
+        }
+
+        if (Leaf == 0)
+        {
+            KipCpuId(0x0B, 0, Regs);
+            if ((Regs[1] & 0xFFFF) != 0)
+                Leaf = 0x0B;
+        }
+
+        for (SubLeaf = 0; (Leaf != 0) && (SubLeaf < 8); SubLeaf++)
+        {
+            ULONG LevelType, Shift;
 
             KipCpuId(Leaf, SubLeaf, Regs);
             LevelType = (Regs[2] >> 8) & 0xFF;
             if (LevelType == 0)
                 break;
 
+            Shift = Regs[0] & 0x1F;
             if (LevelType == 1)
-                SmtShift = Regs[0] & 0x1F;
+            {
+                SmtShift = Shift;
+                Sample->CoreShift = Shift;
+            }
+            else if (LevelType == 2)
+            {
+                Sample->CoreShift = Below;
+            }
+            else if (LevelType == 3)
+            {
+                Sample->ModuleShift = Below;
+                HasModule = TRUE;
+            }
+            else if (LevelType == 5)
+            {
+                Sample->DieShift = Below;
+                HasDie = TRUE;
+            }
 
-            Sample->PackageShift = Regs[0] & 0x1F;
+            Below = Shift;
+            Sample->PackageShift = Shift;
             Sample->ApicId = Regs[3];
             Found = TRUE;
         }
-
-        if (!Found)
-            Sample->PackageShift = 0;
     }
 
-    if (Sample->PackageShift == 0)
+    if (!Found)
     {
         /* legacy fallback: logical processor count from leaf 1 */
         ULONG Logical = 1;
+        ULONG Cores = 1;
 
         if (Leaf1Edx & (1UL << 28))   /* HTT */
             Logical = max((Leaf1Ebx >> 16) & 0xFF, 1UL);
 
+        if (IsIntel && (MaxLeaf >= 4))
+        {
+            KipCpuId(4, 0, Regs);
+            Cores = ((Regs[0] >> 26) & 0x3F) + 1;
+        }
+
+        /* TODO: AMD parts without leaf 0x0B give their threads per core in leaf 0x8000001E */
         Sample->PackageShift = KipCeilLog2(Logical);
+        Sample->CoreShift = KipCeilLog2(max(Logical / Cores, 1UL));
     }
+
+    if (!HasModule)
+        Sample->ModuleShift = Sample->CoreShift;
+    if (!HasDie)
+        Sample->DieShift = Sample->PackageShift;
 
     /* deterministic cache parameter leaf */
     if (IsIntel && (MaxLeaf >= 4))
@@ -279,6 +328,27 @@ KipSampleCurrentProcessor(
     Sample->Valid = TRUE;
 }
 
+static
+VOID
+KipSampleActiveProcessors(
+    _Out_writes_all_(ProcessorCount) PKIP_CPU_SAMPLE Samples,
+    _In_ ULONG ProcessorCount)
+{
+    ULONG i;
+
+    RtlZeroMemory(Samples, ProcessorCount * sizeof(*Samples));
+
+    for (i = 0; i < ProcessorCount; i++)
+    {
+        if (!(KeActiveProcessors & AFFINITY_MASK(i)))
+            continue;
+
+        KeSetSystemAffinityThread(AFFINITY_MASK(i));
+        KipSampleCurrentProcessor(&Samples[i]);
+    }
+    KeRevertToUserAffinityThread();
+}
+
 VOID
 NTAPI
 KiQueryProcessorTopology(
@@ -310,19 +380,9 @@ KiQueryProcessorTopology(
         return;
     Keys = (PKIP_CACHE_KEY)(Samples + ProcessorCount);
 
-    RtlZeroMemory(Samples, ProcessorCount * sizeof(*Samples));
-
     /* Visit every active processor once; the sweep feeds both the cache
        and the package views */
-    for (i = 0; i < ProcessorCount; i++)
-    {
-        if (!(KeActiveProcessors & AFFINITY_MASK(i)))
-            continue;
-
-        KeSetSystemAffinityThread(AFFINITY_MASK(i));
-        KipSampleCurrentProcessor(&Samples[i]);
-    }
-    KeRevertToUserAffinityThread();
+    KipSampleActiveProcessors(Samples, ProcessorCount);
 
     for (i = 0; i < ProcessorCount; i++)
     {
@@ -391,6 +451,67 @@ KiQueryProcessorTopology(
 
     *RecordCount = Records_;
     *SetCount = Sets_;
+}
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    PKIP_CPU_SAMPLE Samples;
+    PKIP_CACHE_KEY Keys;
+    ULONG ProcessorCount = (ULONG)KeNumberProcessors;
+    ULONG Shifts[KiTopologyLevels];
+    ULONG Level, i, d;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    RtlZeroMemory(Domains, sizeof(*Domains));
+
+    Samples = ExAllocatePoolWithTag(PagedPool,
+                                    (ProcessorCount * sizeof(*Samples)) +
+                                    (KiTopologyLevels * MAXIMUM_PROCESSORS * sizeof(*Keys)),
+                                    TAG_KTOPO);
+    if (Samples == NULL)
+        return;
+    Keys = (PKIP_CACHE_KEY)(Samples + ProcessorCount);
+
+    KipSampleActiveProcessors(Samples, ProcessorCount);
+
+    for (i = 0; i < ProcessorCount; i++)
+    {
+        if (!Samples[i].Valid || (KiProcessorBlock[i] == NULL))
+            continue;
+
+        Shifts[KiTopologyCore] = Samples[i].CoreShift;
+        Shifts[KiTopologyModule] = Samples[i].ModuleShift;
+        Shifts[KiTopologyDie] = Samples[i].DieShift;
+        Shifts[KiTopologyPackage] = Samples[i].PackageShift;
+
+        for (Level = 0; Level < KiTopologyLevels; Level++)
+        {
+            PKIP_CACHE_KEY LevelKeys = &Keys[Level * MAXIMUM_PROCESSORS];
+            ULONG Id = Samples[i].ApicId >> Shifts[Level];
+
+            for (d = 0; d < Domains->Count[Level]; d++)
+            {
+                if ((LevelKeys[d].ShareShift == Shifts[Level]) && (LevelKeys[d].GroupId == Id))
+                    break;
+            }
+
+            if (d == Domains->Count[Level])
+            {
+                ASSERT(d < MAXIMUM_PROCESSORS);
+                LevelKeys[d].ShareShift = Shifts[Level];
+                LevelKeys[d].GroupId = Id;
+                Domains->Count[Level]++;
+            }
+
+            Domains->Sets[Level][d] |= KiProcessorBlock[i]->SetMember;
+        }
+    }
+
+    ExFreePoolWithTag(Samples, TAG_KTOPO);
 }
 
 #endif

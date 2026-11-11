@@ -211,10 +211,31 @@ KiQueryProcessorTopology(
     _In_ ULONG MaxSets,
     _Out_ PULONG SetCount);
 
+typedef enum _KI_TOPOLOGY_LEVEL
+{
+    KiTopologyCore,
+    KiTopologyModule,
+    KiTopologyDie,
+    KiTopologyPackage,
+    KiTopologyLevels
+} KI_TOPOLOGY_LEVEL;
+
+typedef struct _KI_PROCESSOR_DOMAINS
+{
+    ULONG Count[KiTopologyLevels];
+    KAFFINITY Sets[KiTopologyLevels][MAXIMUM_PROCESSORS];
+} KI_PROCESSOR_DOMAINS, *PKI_PROCESSOR_DOMAINS;
+
+/* One set per core, module, die and package; a level the processors do not describe gets no set */
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains);
+
 CODE_SEG("INIT")
 VOID
 NTAPI
-KiCaptureProcessorCaches(VOID);
+KiCaptureProcessorTopology(VOID);
 extern ETHREAD KiInitialThread;
 extern EPROCESS KiInitialProcess;
 extern PULONG KiInterruptTemplateObject;

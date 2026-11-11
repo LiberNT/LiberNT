@@ -1373,3 +1373,12 @@ KiQueryProcessorTopology(
                                                  MaxRecords);
     }
 }
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    /* TODO: modules and dies from the ACPI PPTT; cores and packages fall back to the SMT and package sets */
+    RtlZeroMemory(Domains, sizeof(*Domains));
+}

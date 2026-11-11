@@ -263,3 +263,12 @@ KiQueryProcessorTopology(
     }
     *RecordCount = Count;
 }
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    /* TODO: cores, modules, dies and packages from the device tree cpu-map; each hart falls back to its own core in one package */
+    RtlZeroMemory(Domains, sizeof(*Domains));
+}

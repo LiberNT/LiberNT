@@ -117,9 +117,110 @@ TestNestedAffinity(VOID)
     KeRevertToUserAffinityThreadEx(Old1);
 }
 
+static
+VOID
+TestProcessorRelationships(VOID)
+{
+    static const LOGICAL_PROCESSOR_RELATIONSHIP Domains[] =
+    {
+        RelationProcessorCore, RelationProcessorModule, RelationProcessorDie, RelationProcessorPackage
+    };
+    const ULONG ProcessorSize = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Processor.GroupMask[1]);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Info, Record;
+    KAFFINITY Active = KeQueryActiveProcessors();
+    PROCESSOR_NUMBER Processor;
+    ULONG Counts[RelationProcessorModule + 1];
+    ULONG Length, Offset, i, d;
+    KAFFINITY Self, Mask;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Processor, sizeof(Processor));
+    Processor.Group = 1;
+    Length = 0;
+    Status = KeQueryLogicalProcessorRelationship(&Processor, RelationAll, NULL, &Length);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+
+    for (i = 0; i < sizeof(KAFFINITY) * 8; i++)
+    {
+        Self = (KAFFINITY)1 << i;
+        if (!(Active & Self))
+            continue;
+
+        Processor.Group = 0;
+        Processor.Number = (UCHAR)i;
+
+        for (d = 0; d < RTL_NUMBER_OF(Domains); d++)
+        {
+            Length = 0;
+            Status = KeQueryLogicalProcessorRelationship(&Processor, Domains[d], NULL, &Length);
+            ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+            ok(Length == ProcessorSize, "Processor %lu, relationship %d: %lu bytes\n", i, Domains[d], Length);
+            if (Length != ProcessorSize)
+                continue;
+
+            Info = ExAllocatePoolWithTag(NonPagedPool, Length, 'tAeK');
+            if (!skip(Info != NULL, "No memory\n"))
+            {
+                Status = KeQueryLogicalProcessorRelationship(&Processor, Domains[d], Info, &Length);
+                ok_eq_hex(Status, STATUS_SUCCESS);
+                ok_eq_ulong(Length, ProcessorSize);
+                ok(Info->Relationship == Domains[d], "Processor %lu: record of %d for %d\n", i, Info->Relationship, Domains[d]);
+                ok(Info->Processor.GroupMask[0].Mask & Self, "Processor %lu, relationship %d: mask 0x%Ix\n", i, Domains[d], Info->Processor.GroupMask[0].Mask);
+                ExFreePoolWithTag(Info, 'tAeK');
+            }
+        }
+
+        Length = 0;
+        Status = KeQueryLogicalProcessorRelationship(&Processor, RelationAll, NULL, &Length);
+        ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+        if (Length == 0)
+            continue;
+
+        Info = ExAllocatePoolWithTag(NonPagedPool, Length, 'tAeK');
+        if (skip(Info != NULL, "No memory\n"))
+            continue;
+
+        Status = KeQueryLogicalProcessorRelationship(&Processor, RelationAll, Info, &Length);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+
+        RtlZeroMemory(Counts, sizeof(Counts));
+        for (Offset = 0; (Status == STATUS_SUCCESS) && (Offset < Length); Offset += Record->Size)
+        {
+            Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)((PUCHAR)Info + Offset);
+            if (Record->Size == 0)
+            {
+                ok(0, "Processor %lu: empty record\n", i);
+                break;
+            }
+
+            if (Record->Relationship <= RelationProcessorModule)
+                Counts[Record->Relationship]++;
+
+            if (Record->Relationship == RelationCache)
+                Mask = Record->Cache.GroupMask.Mask;
+            else if (Record->Relationship == RelationNumaNode)
+                Mask = Record->NumaNode.GroupMask.Mask;
+            else if (Record->Relationship == RelationGroup)
+                Mask = Record->Group.GroupInfo[0].ActiveProcessorMask;
+            else
+                Mask = Record->Processor.GroupMask[0].Mask;
+            ok(Mask & Self, "Processor %lu: record of %d with mask 0x%Ix\n", i, Record->Relationship, Mask);
+        }
+
+        ok_eq_ulong(Counts[RelationProcessorCore], 1UL);
+        ok_eq_ulong(Counts[RelationProcessorModule], 1UL);
+        ok_eq_ulong(Counts[RelationProcessorPackage], 1UL);
+        ok_eq_ulong(Counts[RelationProcessorDie], 0UL);
+        ok_eq_ulong(Counts[RelationNumaNode], 1UL);
+        ok_eq_ulong(Counts[RelationGroup], 1UL);
+        ExFreePoolWithTag(Info, 'tAeK');
+    }
+}
+
 START_TEST(KeAffinityKM)
 {
     TestProcessorCounts();
     TestAffinityPinning();
     TestNestedAffinity();
+    TestProcessorRelationships();
 }
