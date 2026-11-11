@@ -381,11 +381,13 @@ IopCompleteRequest(
         }
     }
 
-    /* The file is the wait object of synchronous I/O and of I/O issued without an event */
+    /* The file is the wait object of synchronous I/O and of I/O issued without an event of the caller's */
     if (FileObject != NULL &&
         ((FileObject->Flags & FO_SYNCHRONOUS_IO) ?
              (Deliver || Irp->PendingReturned) :
-             (Deliver && (Irp->UserEvent == NULL) && !(FileObject->Flags & FO_SKIP_SET_EVENT))))
+             (Deliver &&
+              (Irp->UserEvent == NULL || (Irp->Flags & IRP_SYNCHRONOUS_API)) &&
+              !(FileObject->Flags & FO_SKIP_SET_EVENT))))
     {
         KeSetEvent(&FileObject->Event, 0, FALSE);
     }
