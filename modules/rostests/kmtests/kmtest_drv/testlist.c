@@ -201,6 +201,7 @@ KMT_TESTFUNC Test_IoTimerKM;
 KMT_TESTFUNC Test_IoVolume;
 KMT_TESTFUNC Test_KdBootLog;
 KMT_TESTFUNC Test_KdBreakContinue;
+KMT_TESTFUNC Test_KdbContextCommands;
 KMT_TESTFUNC Test_KdbLocks;
 KMT_TESTFUNC Test_KdbThreadApc;
 KMT_TESTFUNC Test_KdChangeOption;
@@ -589,6 +590,7 @@ const KMT_TEST TestList[] =
     { "IoVolume",                           Test_IoVolume },
     { "KdBootLog",                          Test_KdBootLog },
     { "-KdBreakContinue",                   Test_KdBreakContinue },
+    { "-KdbContextCommands",                Test_KdbContextCommands },
     { "-KdbLocks",                          Test_KdbLocks },
     { "-KdbThreadApc",                      Test_KdbThreadApc },
     { "KdChangeOption",                     Test_KdChangeOption },

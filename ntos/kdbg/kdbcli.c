@@ -76,7 +76,10 @@ static ULONG_PTR KdbpLastDisassembleAddress = 0;
 static CHAR KdbpCommandBuffer[KDB_COMMAND_MAX];
 static CHAR KdbpPrintBuffer[1024];
 
-static PKDB_KTRAP_FRAME KdbpProcessorContext;
+static PKDB_KTRAP_FRAME KdbpViewContext;
+static CONTEXT KdbpRecordContext;
+static CONTEXT KdbpFrameContext;
+static BOOLEAN KdbpFrameSelected;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -88,7 +91,10 @@ static
 PKDB_KTRAP_FRAME
 KdbpContext(VOID)
 {
-    return (KdbpProcessorContext != NULL) ? KdbpProcessorContext : KdbCurrentTrapFrame;
+    if (KdbpFrameSelected)
+        return &KdbpFrameContext;
+
+    return (KdbpViewContext != NULL) ? KdbpViewContext : KdbCurrentTrapFrame;
 }
 
 static
@@ -1627,20 +1633,186 @@ KdbpCmdProcessor(
     }
 
     Prcb = KiProcessorBlock[Number];
+    KdbpFrameSelected = FALSE;
     if (Number == Current)
     {
-        KdbpProcessorContext = NULL;
+        KdbpViewContext = NULL;
         KdbCurrentThread = KdbOriginalThread;
         KdbCurrentProcess = (PEPROCESS)KdbOriginalThread->Tcb.ApcState.Process;
     }
     else
     {
-        KdbpProcessorContext = &Prcb->ProcessorState.ContextFrame;
+        KdbpViewContext = &Prcb->ProcessorState.ContextFrame;
         KdbCurrentThread = (PETHREAD)Prcb->CurrentThread;
         KdbCurrentProcess = (PEPROCESS)Prcb->CurrentThread->ApcState.Process;
     }
 
     KdbpPrint("Processor %Iu\n", Number);
+    return TRUE;
+}
+
+static
+VOID
+KdbpUseContext(
+    _In_opt_ PKDB_KTRAP_FRAME Context,
+    _In_ PCSTR What)
+{
+    KdbpViewContext = Context;
+    KdbpFrameSelected = FALSE;
+
+    if (Context == NULL)
+    {
+        KdbPuts("Back to the context of the stop\n");
+        return;
+    }
+
+    KdbpPrint("%s, pc %p ", What, (PVOID)KeGetContextPc(Context));
+    KdbSymPrintAddress((PVOID)KeGetContextPc(Context), Context);
+    KdbPuts("\n");
+}
+
+static
+BOOLEAN
+KdbpCmdContextRecord(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG_PTR Address;
+
+    if (Argc < 2)
+    {
+        KdbpUseContext(NULL, NULL);
+        return TRUE;
+    }
+
+    if (!KdbpGetAddressExpression(Argv[1], &Address))
+        return TRUE;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&KdbpRecordContext, (PVOID)Address, sizeof(KdbpRecordContext))))
+    {
+        KdbpPrint("No context record can be read at %p\n", (PVOID)Address);
+        return TRUE;
+    }
+
+    KdbpUseContext(&KdbpRecordContext, "Context record");
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpCmdTrapFrame(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static KTRAP_FRAME TrapFrame;
+    ULONG_PTR Address;
+
+    if (Argc < 2)
+    {
+        KdbpUseContext(NULL, NULL);
+        return TRUE;
+    }
+
+    if (!KdbpGetAddressExpression(Argv[1], &Address))
+        return TRUE;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&TrapFrame, (PVOID)Address, sizeof(TrapFrame))))
+    {
+        KdbpPrint("No trap frame can be read at %p\n", (PVOID)Address);
+        return TRUE;
+    }
+
+    RtlZeroMemory(&KdbpRecordContext, sizeof(KdbpRecordContext));
+    KdbpRecordContext.ContextFlags = CONTEXT_FULL;
+    KeTrapFrameToContext(&TrapFrame, NULL, &KdbpRecordContext);
+
+    KdbpUseContext(&KdbpRecordContext, "Trap frame");
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpCmdExceptionRecord(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    EXCEPTION_RECORD Record;
+    ULONG_PTR Address;
+    ULONG Index;
+
+    if (Argc < 2)
+    {
+        if (!KdbCurrentExceptionRecordValid)
+        {
+            KdbPuts("This stop has no exception record\n");
+            return TRUE;
+        }
+
+        Record.ExceptionCode = KdbCurrentExceptionRecord.ExceptionCode;
+        Record.ExceptionFlags = KdbCurrentExceptionRecord.ExceptionFlags;
+        Record.ExceptionAddress = (PVOID)(ULONG_PTR)KdbCurrentExceptionRecord.ExceptionAddress;
+        Record.NumberParameters = KdbCurrentExceptionRecord.NumberParameters;
+        for (Index = 0; Index < EXCEPTION_MAXIMUM_PARAMETERS; Index++)
+            Record.ExceptionInformation[Index] = (ULONG_PTR)KdbCurrentExceptionRecord.ExceptionInformation[Index];
+    }
+    else
+    {
+        if (!KdbpGetAddressExpression(Argv[1], &Address))
+            return TRUE;
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Record, (PVOID)Address, sizeof(Record))))
+        {
+            KdbpPrint("No exception record can be read at %p\n", (PVOID)Address);
+            return TRUE;
+        }
+    }
+
+    KdbpPrint("ExceptionAddress: %p ", Record.ExceptionAddress);
+    KdbSymPrintAddress(Record.ExceptionAddress, NULL);
+    KdbpPrint("\nExceptionCode: %08lx\nExceptionFlags: %08lx\nNumberParameters: %lu\n",
+              Record.ExceptionCode,
+              Record.ExceptionFlags,
+              Record.NumberParameters);
+
+    for (Index = 0; (Index < Record.NumberParameters) && (Index < EXCEPTION_MAXIMUM_PARAMETERS); Index++)
+        KdbpPrint("   Parameter[%lu]: %p\n", Index, (PVOID)Record.ExceptionInformation[Index]);
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpCmdFrame(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    PKDB_KTRAP_FRAME Base = (KdbpViewContext != NULL) ? KdbpViewContext : KdbCurrentTrapFrame;
+    ULONG_PTR Number = 0;
+    ULONG Index;
+
+    if (Base == NULL)
+        return TRUE;
+
+    if ((Argc > 1) && !KdbpGetHexNumber(Argv[1], &Number))
+    {
+        KdbpPrint("%s is not a frame number\n", Argv[1]);
+        return TRUE;
+    }
+
+    KdbpFrameContext = *Base;
+    for (Index = 0; Index < Number; Index++)
+    {
+        if (!KiUnwindFrame(&KdbpFrameContext, (Index != 0)))
+        {
+            KdbpPrint("The stack has only %lu frames\n", Index + 1);
+            return TRUE;
+        }
+    }
+
+    KdbpFrameSelected = (Number != 0);
+    KdbpPrint("Frame %Iu, pc %p ", Number, (PVOID)KeGetContextPc(&KdbpFrameContext));
+    KdbSymPrintAddress((PVOID)KeGetContextPc(&KdbpFrameContext), &KdbpFrameContext);
+    KdbPuts("\n");
     return TRUE;
 }
 
@@ -1889,6 +2061,10 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!apc", "!apc [address]", "Shows the APCs queued to a thread", KdbpCmdApc},
     {"!locks", "!locks [-v|address]", "Shows the resources that are held or waited on", KdbpCmdLocks},
     {"cpu", "cpu [number|current]", "Lists the processors, or looks at a frozen one", KdbpCmdProcessor},
+    {".cxr", ".cxr [address]", "Looks at the context record at an address, or back at the stop", KdbpCmdContextRecord},
+    {".trap", ".trap [address]", "Looks at the trap frame at an address, or back at the stop", KdbpCmdTrapFrame},
+    {".exr", ".exr [address]", "Shows an exception record, or the one of the stop", KdbpCmdExceptionRecord},
+    {".frame", ".frame [number]", "Looks at a frame of the stack, or back at its top", KdbpCmdFrame},
     {"!analyze", "!analyze", "Says what stopped the machine and where", KdbpCmdAnalyze},
     {"!pci", "!pci [bus [device [function]]]", "Lists the PCI functions, or shows one in detail", KdbpCmdPci},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
@@ -2172,7 +2348,8 @@ KdbpCliMainLoop(
     static CHAR Command[KDB_COMMAND_MAX];
     static CHAR Previous[KDB_COMMAND_MAX];
 
-    KdbpProcessorContext = NULL;
+    KdbpViewContext = NULL;
+    KdbpFrameSelected = FALSE;
     KdbpPagerReset();
     KdbpReportStop(EnteredOnSingleStep);
 

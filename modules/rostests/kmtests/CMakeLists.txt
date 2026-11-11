@@ -213,6 +213,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoWmiAcpi.c
     ntos_kd/KdBootLog.c
     ntos_kd/KdBreakContinue.c
+    ntos_kd/KdbContextCommands.c
     ntos_kd/KdbLocks.c
     ntos_kd/KdbThreadApc.c
     ntos_kd/KdChangeOption.c
