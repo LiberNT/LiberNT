@@ -608,6 +608,6 @@ BOOL
 WINAPI
 TermsrvAppInstallMode(VOID)
 {
-    STUB;
+    /* TODO: RD Session Host install mode (SetTermsrvAppInstallMode shape undocumented); EXECUTE mode reported */
     return FALSE;
 }
