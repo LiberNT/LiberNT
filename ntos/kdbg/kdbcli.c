@@ -1741,6 +1741,26 @@ KdbpCliInterpretInitFile(VOID)
     }
 }
 
+static
+VOID
+KdbpReportFrozenProcessors(VOID)
+{
+    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG Processor;
+
+    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Processor];
+
+        if ((Processor == Current) || (Prcb == NULL))
+            continue;
+
+        KdbpPagerReset();
+        KdbpPrint("\nProcessor %lu\n", Processor);
+        KdbpBackTrace(&Prcb->ProcessorState.ContextFrame, KdbpScreenRows() - 5);
+    }
+}
+
 /*
  * Says where the machine stopped.
  */
@@ -1798,6 +1818,8 @@ KdbpReportStop(
 
     if (KiBugCheckData[0] != 0)
     {
+        KdbpReportFrozenProcessors();
+
         KdbpPagerReset();
         KdbpPrint("\n*** Fatal System Error: 0x%08lx (0x%p,0x%p,0x%p,0x%p)\n",
                   (ULONG)KiBugCheckData[0],
