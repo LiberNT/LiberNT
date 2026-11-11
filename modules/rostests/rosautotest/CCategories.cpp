@@ -275,6 +275,7 @@ static const CATEGORY_RULE Rules[] =
     { "oleaut32_winetest", "*", "com:ole" },
     { "oledlg_winetest", "*", "com:ole" },
     { "wine.combase.test", "*", "com:ole" },
+    { "rpcrt4_apitest", "ServerRestart", "com:rpc" },
     { "rpcrt4_winetest", "*", "com:rpc" },
     { "crtdll_apitest", "*", "core:crt" },
     { "msvcirt_winetest", "*", "core:crt" },
