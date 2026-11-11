@@ -247,6 +247,19 @@ static HRESULT get_doc_ready_state(DocHost *This, READYSTATE *ret)
     return S_OK;
 }
 
+#ifdef __REACTOS__
+BOOL is_document_loading(DocHost *This)
+{
+    READYSTATE ready_state;
+
+    if(!This->document)
+        return FALSE;
+    if(FAILED(get_doc_ready_state(This, &ready_state)))
+        return This->doc_state < READYSTATE_COMPLETE;
+    return ready_state < READYSTATE_COMPLETE;
+}
+#endif
+
 static void advise_prop_notif(DocHost *This, BOOL set)
 {
     IConnectionPointContainer *cp_container;
@@ -795,6 +808,10 @@ static HRESULT WINAPI ClOleCommandTarget_QueryStatus(IOleCommandTarget *iface,
 
     TRACE("(%p)->(%s %lu %p %p)\n", This, debugstr_guid(pguidCmdGroup), cCmds, prgCmds,
           pCmdText);
+#ifdef __REACTOS__
+    if(!pguidCmdGroup && This->olecmd)
+        return IOleCommandTarget_QueryStatus(This->olecmd, pguidCmdGroup, cCmds, prgCmds, pCmdText);
+#endif
     for(i=0; prgCmds && i < cCmds; i++)
         TRACE("unsupported command %lu (%lx)\n", prgCmds[i].cmdID, prgCmds[i].cmdf);
 
@@ -849,6 +866,17 @@ static HRESULT WINAPI ClOleCommandTarget_Exec(IOleCommandTarget *iface,
         case OLECMDID_SETDOWNLOADSTATE:
             if(pvaIn && V_VT(pvaIn) == VT_I4)
                 This->busy = V_I4(pvaIn) ? VARIANT_TRUE : VARIANT_FALSE;
+#ifdef __REACTOS__
+            if(pvaIn && V_VT(pvaIn) == VT_I4 && V_I4(pvaIn)) {
+                VARIANTARG lock_icon;
+                DISPPARAMS lock_dp = {&lock_icon, NULL, 1, 0};
+
+                /* FIXME: a page loaded over a secure connection reports its key strength */
+                V_VT(&lock_icon) = VT_I4;
+                V_I4(&lock_icon) = secureLockIconUnsecure;
+                call_sink(This->cps.wbe2, DISPID_SETSECURELOCKICON, &lock_dp);
+            }
+#endif
             if(This->olecmd)
                 return IOleCommandTarget_Exec(This->olecmd, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
 

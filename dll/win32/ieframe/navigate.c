@@ -149,8 +149,40 @@ void notify_download_state(DocHost *dochost, BOOL is_downloading)
     DISPPARAMS dwl_dp = {NULL};
     TRACE("(%x)\n", is_downloading);
     dochost->busy = is_downloading ? VARIANT_TRUE : VARIANT_FALSE;
+#ifdef __REACTOS__
+    dochost->download_begun = is_downloading;
+#endif
     call_sink(dochost->cps.wbe2, is_downloading ? DISPID_DOWNLOADBEGIN : DISPID_DOWNLOADCOMPLETE, &dwl_dp);
 }
+
+#ifdef __REACTOS__
+static void set_container_download_state(DocHost *dochost, BOOL is_downloading)
+{
+    VARIANT state;
+
+    if(!dochost->olecmd)
+        return;
+
+    V_VT(&state) = VT_I4;
+    V_I4(&state) = is_downloading ? 1 : 0;
+    IOleCommandTarget_Exec(dochost->olecmd, NULL, OLECMDID_SETDOWNLOADSTATE, OLECMDEXECOPT_DODEFAULT, &state, NULL);
+}
+
+static BOOL fire_file_download(DocHost *dochost)
+{
+    VARIANT_BOOL cancel = VARIANT_FALSE;
+    VARIANTARG params[2];
+    DISPPARAMS dispparams = {params, NULL, 2, 0};
+
+    V_VT(params) = VT_BOOL|VT_BYREF;
+    V_BOOLREF(params) = &cancel;
+    V_VT(params+1) = VT_BOOL;
+    V_BOOL(params+1) = VARIANT_TRUE;
+
+    call_sink(dochost->cps.wbe2, DISPID_FILEDOWNLOAD, &dispparams);
+    return cancel != VARIANT_FALSE;
+}
+#endif
 
 static inline BindStatusCallback *impl_from_IBindStatusCallback(IBindStatusCallback *iface)
 {
@@ -406,6 +438,10 @@ static HRESULT WINAPI BindStatusCallback_OnStopBinding(IBindStatusCallback *ifac
 
     if(!This->doc_host->olecmd)
         notify_download_state(This->doc_host, FALSE);
+#ifdef __REACTOS__
+    else
+        set_container_download_state(This->doc_host, FALSE);
+#endif
     if(FAILED(hresult))
         handle_navigation_error(This->doc_host, hresult, This->url, NULL);
 
@@ -940,6 +976,18 @@ static HRESULT navigate_bsc(DocHost *This, BindStatusCallback *bsc, IMoniker *mo
 
     notify_download_state(This, TRUE);
     This->busy = VARIANT_FALSE;
+#ifdef __REACTOS__
+    set_container_download_state(This, TRUE);
+
+    if(fire_file_download(This)) {
+        TRACE("File download canceled\n");
+        if(This->olecmd)
+            set_container_download_state(This, FALSE);
+        else
+            notify_download_state(This, FALSE);
+        return S_OK;
+    }
+#endif
 
     on_commandstate_change(This, CSC_NAVIGATEBACK, FALSE);
     on_commandstate_change(This, CSC_NAVIGATEFORWARD, FALSE);
