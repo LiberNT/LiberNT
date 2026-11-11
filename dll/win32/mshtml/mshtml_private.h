@@ -59,6 +59,7 @@
 #define NS_ERROR_NOT_AVAILABLE    ((nsresult)0x80040111L)
 #define NS_ERROR_INVALID_ARG      ((nsresult)0x80070057L) 
 #define NS_ERROR_UNEXPECTED       ((nsresult)0x8000ffffL)
+#define NS_ERROR_DOM_INVALID_CHARACTER_ERR ((nsresult)0x80530005)
 #define NS_ERROR_DOM_NO_MODIFICATION_ALLOWED_ERR ((nsresult)0x80530007)
 #define NS_ERROR_DOM_SYNTAX_ERR   ((nsresult)0x8053000c)
 
@@ -79,6 +80,7 @@
 #define MSHTML_E_SYNTAX           0x800a03ea
 #define MSHTML_E_NOT_FUNC         0x800a138a
 #define MSHTML_E_INDEX_SIZE       0x80700001
+#define MSHTML_E_INVALID_CHARACTER 0x80700005
 #define MSHTML_E_DOM_SYNTAX       0x8070000c
 
 typedef struct HTMLWindow HTMLWindow;

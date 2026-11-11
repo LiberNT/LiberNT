@@ -540,6 +540,8 @@ HRESULT create_nselem(HTMLDocumentNode *doc, const WCHAR *tag, nsIDOMElement **r
     nsAString_Finish(&tag_str);
     if(NS_FAILED(nsres)) {
         ERR("CreateElement failed: %08lx\n", nsres);
+        if(nsres == NS_ERROR_DOM_INVALID_CHARACTER_ERR && dispex_compat_mode(&doc->node.event_target.dispex) >= COMPAT_MODE_IE9)
+            return MSHTML_E_INVALID_CHARACTER;
         return E_FAIL;
     }
 
