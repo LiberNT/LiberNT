@@ -343,6 +343,12 @@ ObpBeginWalk(
                                            NULL);
         if (Status == STATUS_OBJECT_TYPE_MISMATCH)
         {
+            if (Walk->Remaining.Length != 0 &&
+                Walk->Remaining.Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
+            {
+                return STATUS_OBJECT_PATH_SYNTAX_BAD;
+            }
+
             /* Not a directory, so the object parses the rest of the path */
             Status = ObReferenceObjectByHandle(RootHandle,
                                                0,
