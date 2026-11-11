@@ -171,6 +171,7 @@ KMT_TESTFUNC Test_IoCreateSystemThread;
 KMT_TESTFUNC Test_IoDeviceInterface;
 KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
+KMT_TESTFUNC Test_IoInterfaceOrderCheck;
 KMT_TESTFUNC Test_IoStorageDumpPath;
 KMT_TESTFUNC Test_IoWmiAcpi;
 KMT_TESTFUNC Test_IoFilesystem;
@@ -551,6 +552,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },
     { "IoEvent",                            Test_IoEvent },
+    { "-IoInterfaceOrderCheck",             Test_IoInterfaceOrderCheck },
     { "IoStorageDumpPath",            Test_IoStorageDumpPath },
     { "IoFilesystem",                       Test_IoFilesystem },
     { "IoInterrupt",                        Test_IoInterrupt },

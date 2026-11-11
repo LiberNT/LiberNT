@@ -563,6 +563,13 @@ IoSetDeviceInterfaceState(
 
     Interface->Enabled = Enable;
 
+    /* Present interfaces are listed in the order they were enabled, as on Windows 11 */
+    if (Enable)
+    {
+        RemoveEntryList(&Interface->ListEntry);
+        InsertTailList(&IopDeviceInterfaceListHead, &Interface->ListEntry);
+    }
+
     PhysicalDeviceObject = Interface->PhysicalDeviceObject;
     ObReferenceObject(PhysicalDeviceObject);
 

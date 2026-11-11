@@ -192,6 +192,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoDriverSection.c
     ntos_io/IoGetRequestorProcess.c
     ntos_io/IoEvent.c
+    ntos_io/IoInterfaceOrder.c
     ntos_io/IoStorageDumpPath.c
     ntos_io/IoFilesystem.c
     ntos_io/IoInterrupt.c
@@ -602,6 +603,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoHandleAccess_user.c
     ntos_io/IoDeviceTree_user.c
     ntos_io/IoDriverKey_user.c
+    ntos_io/IoInterfaceOrder_user.c
     ntos_io/IoMessageRestart_user.c
     ntos_io/IoRemoveChildren_user.c
     ntos_io/IoReadWrite_user.c
