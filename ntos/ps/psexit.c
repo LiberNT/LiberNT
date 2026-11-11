@@ -776,6 +776,7 @@ NtTerminateProcess(
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PEPROCESS Process;
+    BOOLEAN EndCaller;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -807,10 +808,12 @@ NtTerminateProcess(
     }
 
     /* No handle ends every other thread of the caller's process and leaves the caller running */
-    Status = PspTerminateProcessThreads(Process,
-                                        ExitStatus,
-                                        (BOOLEAN)(ProcessHandle != NULL));
+    EndCaller = (ProcessHandle != NULL) && (Process == THREAD_TO_PROCESS(PsGetCurrentThread()));
+    Status = PspTerminateProcessThreads(Process, ExitStatus, FALSE);
     ObDereferenceObject(Process);
+
+    /* The caller does not come back, so it ends only once this call holds nothing */
+    if (EndCaller) PspTerminateThreadByPointer(PsGetCurrentThread(), ExitStatus, TRUE);
 
     /* Nothing was running in it, so there was nothing to end */
     if (Status == STATUS_NOTHING_TO_TERMINATE) return STATUS_SUCCESS;
@@ -865,9 +868,14 @@ NtTerminateThread(
         return STATUS_THREAD_IS_TERMINATING;
     }
 
-    Status = PspTerminateThreadByPointer(Thread,
-                                         ExitStatus,
-                                         (BOOLEAN)(Thread == Self));
+    /* A thread ending itself does not come back, so it lets go of the object first: running keeps it alive */
+    if (Thread == Self)
+    {
+        ObDereferenceObject(Thread);
+        return PspTerminateThreadByPointer(Thread, ExitStatus, TRUE);
+    }
+
+    Status = PspTerminateThreadByPointer(Thread, ExitStatus, FALSE);
     ObDereferenceObject(Thread);
     return Status;
 }
