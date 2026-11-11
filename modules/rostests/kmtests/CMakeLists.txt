@@ -547,6 +547,7 @@ list(APPEND KMTEST_SOURCE
     ndis/NdisSgDma_user.c
     ntos_po/BatteryClassNotify_user.c
     ntos_po/PoIrp_user.c
+    ntos_po/PoExecutionState_user.c
     ntos_po/PoFxState_user.c
     ntos_po/PoShutdownPersist_user.c
     tcpip/TcpIp_user.c

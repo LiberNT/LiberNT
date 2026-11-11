@@ -221,6 +221,8 @@ PspExitThread(
 
     PspTlsThreadCleanup(Thread);
     PspRundownPropertySet(&Thread->PropertySet);
+    PopReleaseThreadPowerObject(Thread->LegacyPowerObject);
+    Thread->LegacyPowerObject = NULL;
 
     /*
      * The process is finished with before the thread leaves its own list,

@@ -894,7 +894,9 @@ NtSetThreadExecutionState(
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PETHREAD Thread = PsGetCurrentThread();
+    PVOID Asked = Thread->LegacyPowerObject;
     EXECUTION_STATE Was;
+    EXECUTION_STATE Keep;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
@@ -905,12 +907,21 @@ NtSetThreadExecutionState(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Was = (EXECUTION_STATE)(ULONG_PTR)Thread->Tcb.Win32Thread;
+    Was = PopQuerySystemState(Asked) | ES_CONTINUOUS;
 
     if (NewFlags & ES_CONTINUOUS)
     {
-        Thread->Tcb.Win32Thread = (PVOID)(ULONG_PTR)NewFlags;
-        PoSetSystemState(NewFlags);
+        Keep = NewFlags & ~ES_CONTINUOUS;
+        if (Asked != NULL)
+        {
+            PoRegisterSystemState(Asked, Keep);
+        }
+        else if (Keep != 0)
+        {
+            Asked = PoRegisterSystemState(NULL, Keep);
+            if (Asked == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+            Thread->LegacyPowerObject = Asked;
+        }
     }
     else
     {

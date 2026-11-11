@@ -32,6 +32,7 @@ KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
 KMT_TESTFUNC Test_NtUserPhysicalPages;
 KMT_TESTFUNC Test_NtProcessClone;
+KMT_TESTFUNC Test_PoExecutionState;
 KMT_TESTFUNC Test_PoShutdownPersist;
 KMT_TESTFUNC Test_BatteryClassNotify;
 KMT_TESTFUNC Test_PoIrp;
@@ -90,6 +91,7 @@ const KMT_TEST TestList[] =
     { "NtSystemDebugControl",         Test_NtSystemDebugControl },
     { "NtUserPhysicalPages",          Test_NtUserPhysicalPages },
     { "NtProcessClone",               Test_NtProcessClone },
+    { "PoExecutionState",             Test_PoExecutionState },
     { "PoShutdownPersist",            Test_PoShutdownPersist },
     { "ExWddmPoFx",                    Test_ExWddmPoFx },
     { "PoFxState",                     Test_PoFxState },

@@ -450,6 +450,16 @@ PopReleaseThreadPowerObject(
     if (PowerObject != NULL) PoUnregisterSystemState(PowerObject);
 }
 
+EXECUTION_STATE
+NTAPI
+PopQuerySystemState(
+    _In_opt_ PVOID StateHandle)
+{
+    PPOP_KEEP_ON Asked = StateHandle;
+
+    return (Asked != NULL) ? Asked->Flags : 0;
+}
+
 BOOLEAN
 NTAPI
 PopIsDisplayRequired(VOID)

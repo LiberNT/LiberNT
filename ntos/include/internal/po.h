@@ -506,6 +506,12 @@ PopReleaseThreadPowerObject(
     IN PVOID PowerObject
 );
 
+EXECUTION_STATE
+NTAPI
+PopQuerySystemState(
+    IN PVOID StateHandle
+);
+
 NTSTATUS
 NTAPI
 PopAddRemoveSysCapsCallback(
