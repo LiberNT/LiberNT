@@ -26,21 +26,12 @@ ULONG ExpKernelResolutionCount = 0;
 
 /* PRIVATE DATA ***************************************************************/
 
-#define EXP_TIME_TAG 'emiT'
-
 /* How far the clock may differ from the hardware before it is pulled back */
 #define EXP_DEFAULT_CMOS_SEPARATION 60
 
 /* The days each month holds, outside a leap year */
 static const UCHAR ExpDaysInMonth[12] =
     { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-
-typedef struct _EXP_RESOLUTION_REQUEST
-{
-    LIST_ENTRY Link;
-    PEPROCESS Process;
-    ULONG Resolution;
-} EXP_RESOLUTION_REQUEST, *PEXP_RESOLUTION_REQUEST;
 
 static KSPIN_LOCK ExpResolutionLock;
 
@@ -235,12 +226,12 @@ ExpApplyTimerResolution(VOID)
          Entry != &ExpTimerResolutionListHead;
          Entry = Entry->Flink)
     {
-        PEXP_RESOLUTION_REQUEST Request =
-            CONTAINING_RECORD(Entry, EXP_RESOLUTION_REQUEST, Link);
+        PEPROCESS Process =
+            CONTAINING_RECORD(Entry, EPROCESS, TimerResolutionLink);
 
-        if ((Shortest == 0) || (Request->Resolution < Shortest))
+        if ((Shortest == 0) || (Process->RequestedTimerResolution < Shortest))
         {
-            Shortest = Request->Resolution;
+            Shortest = Process->RequestedTimerResolution;
         }
     }
 
@@ -256,26 +247,56 @@ ExpApplyTimerResolution(VOID)
 }
 
 static
-PEXP_RESOLUTION_REQUEST
-ExpFindResolutionRequest(
-    _In_ PEPROCESS Process)
+ULONG
+ExpClampTimerResolution(
+    _In_ ULONG DesiredTime)
 {
-    PLIST_ENTRY Entry;
+    if (DesiredTime < KeMinimumIncrement) return KeMinimumIncrement;
+    if (DesiredTime > KeMaximumIncrement) return KeMaximumIncrement;
+    return DesiredTime;
+}
 
-    for (Entry = ExpTimerResolutionListHead.Flink;
-         Entry != &ExpTimerResolutionListHead;
-         Entry = Entry->Flink)
+/*
+ * A process holds at most one request, kept in its own block, and answers
+ * whether it held one before this call.
+ */
+static
+BOOLEAN
+ExpSetProcessTimerResolution(
+    _Inout_ PEPROCESS Process,
+    _In_ ULONG DesiredTime,
+    _In_ BOOLEAN SetResolution)
+{
+    BOOLEAN WasSet;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&ExpResolutionLock, &OldIrql);
+
+    WasSet = (Process->Flags & PSF_SET_TIMER_RESOLUTION_BIT) != 0;
+
+    if (SetResolution)
     {
-        PEXP_RESOLUTION_REQUEST Request =
-            CONTAINING_RECORD(Entry, EXP_RESOLUTION_REQUEST, Link);
-
-        if (Request->Process == Process)
+        Process->RequestedTimerResolution = ExpClampTimerResolution(DesiredTime);
+        if (!WasSet)
         {
-            return Request;
+            InsertTailList(&ExpTimerResolutionListHead,
+                           &Process->TimerResolutionLink);
+            PspSetProcessFlag(Process, PSF_SET_TIMER_RESOLUTION_BIT);
         }
     }
+    else if (WasSet)
+    {
+        RemoveEntryList(&Process->TimerResolutionLink);
+        InitializeListHead(&Process->TimerResolutionLink);
+        Process->RequestedTimerResolution = 0;
+        PspClearProcessFlag(Process, PSF_SET_TIMER_RESOLUTION_BIT);
+    }
 
-    return NULL;
+    KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
+
+    ExpApplyTimerResolution();
+
+    return WasSet;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -526,6 +547,7 @@ NTAPI
 ExpSetHighResolutionClock(
     _In_ BOOLEAN Active)
 {
+    /* FIXME: the clock's rate never changes (no HalSetTimeIncrement, whose faster ticks KiUpdateRunTime would charge as whole periods), and going back overwrites KeMinimumIncrement */
     if (Active)
     {
         KeSetTimeIncrement(KeMaximumIncrement, KeMinimumIncrement);
@@ -557,81 +579,42 @@ ExSetTimerResolution(
     _In_ ULONG DesiredTime,
     _In_ BOOLEAN SetResolution)
 {
-    PEPROCESS Process = PsGetCurrentProcess();
-    PEXP_RESOLUTION_REQUEST Request;
-    PEXP_RESOLUTION_REQUEST New = NULL;
     KIRQL OldIrql;
+
+    /* Drivers share one counted request rather than each process's own */
+    KeAcquireSpinLock(&ExpResolutionLock, &OldIrql);
 
     if (SetResolution)
     {
-        if (DesiredTime < KeMinimumIncrement)
+        DesiredTime = ExpClampTimerResolution(DesiredTime);
+        if ((ExpKernelResolutionCount == 0) ||
+            (DesiredTime < ExpKernelRequestedResolution))
         {
-            DesiredTime = KeMinimumIncrement;
+            ExpKernelRequestedResolution = DesiredTime;
         }
-
-        if (DesiredTime > KeMaximumIncrement)
-        {
-            DesiredTime = KeMaximumIncrement;
-        }
-
-        New = ExAllocatePoolZero(NonPagedPool,
-                                 sizeof(EXP_RESOLUTION_REQUEST),
-                                 EXP_TIME_TAG);
+        ExpKernelResolutionCount++;
     }
-
-    KeAcquireSpinLock(&ExpResolutionLock, &OldIrql);
-
-    Request = ExpFindResolutionRequest(Process);
-
-    if (!SetResolution)
+    else if (ExpKernelResolutionCount != 0)
     {
-        if (Request != NULL)
-        {
-            RemoveEntryList(&Request->Link);
-        }
-
-        KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
-
-        if (Request != NULL)
-        {
-            ExFreePoolWithTag(Request, EXP_TIME_TAG);
-        }
-
-        ExpApplyTimerResolution();
-
-        return KeTimeIncrement;
+        ExpKernelResolutionCount--;
+        if (ExpKernelResolutionCount == 0) ExpKernelRequestedResolution = 0;
     }
-
-    if (Request != NULL)
-    {
-        Request->Resolution = DesiredTime;
-        KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
-
-        if (New != NULL)
-        {
-            ExFreePoolWithTag(New, EXP_TIME_TAG);
-        }
-
-        ExpApplyTimerResolution();
-
-        return KeTimeIncrement;
-    }
-
-    if (New == NULL)
-    {
-        KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
-        return KeTimeIncrement;
-    }
-
-    New->Process = Process;
-    New->Resolution = DesiredTime;
-    InsertTailList(&ExpTimerResolutionListHead, &New->Link);
 
     KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
 
     ExpApplyTimerResolution();
 
     return KeTimeIncrement;
+}
+
+/* The request a process held goes when the process does */
+VOID
+NTAPI
+ExReleaseProcessTimerResolution(
+    _Inout_ PEPROCESS Process)
+{
+    if (Process->Flags & PSF_SET_TIMER_RESOLUTION_BIT)
+        ExpSetProcessTimerResolution(Process, 0, FALSE);
 }
 
 NTSTATUS
@@ -814,31 +797,42 @@ NtSetTimerResolution(
     _In_ BOOLEAN SetResolution,
     _Out_ PULONG CurrentTime)
 {
-    ULONG Current;
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (SetResolution &&
-        ((DesiredTime < KeMinimumIncrement) ||
-         (DesiredTime > KeMaximumIncrement)))
+    if (PreviousMode != KernelMode)
     {
-        /* The clock cannot run at the step asked for; it is clamped instead. */
+        _SEH2_TRY
+        {
+            ProbeForWriteUlong(CurrentTime);
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    /* Letting go of a request the process never made is reported as such */
+    if (!ExpSetProcessTimerResolution(PsGetCurrentProcess(),
+                                      DesiredTime,
+                                      SetResolution) &&
+        !SetResolution)
+    {
         Status = STATUS_TIMER_RESOLUTION_NOT_SET;
     }
 
-    Current = ExSetTimerResolution(DesiredTime, SetResolution);
-
-    if (ExGetPreviousMode() == KernelMode)
+    if (PreviousMode == KernelMode)
     {
-        *CurrentTime = Current;
+        *CurrentTime = KeTimeIncrement;
         return Status;
     }
 
     _SEH2_TRY
     {
-        ProbeForWriteUlong(CurrentTime);
-        *CurrentTime = Current;
+        *CurrentTime = KeTimeIncrement;
     }
     _SEH2_EXCEPT(ExSystemExceptionFilter())
     {

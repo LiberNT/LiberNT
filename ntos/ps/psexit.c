@@ -308,6 +308,8 @@ PspExitProcess(
 
     PspExitProcessFromJob(Process);
 
+    ExReleaseProcessTimerResolution(Process);
+
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&PspActiveProcessLock);
     if (Process->ProcessInserted)

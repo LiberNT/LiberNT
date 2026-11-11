@@ -1688,6 +1688,12 @@ ExpSetHighResolutionClock(
 
 VOID
 NTAPI
+ExReleaseProcessTimerResolution(
+    _Inout_ PEPROCESS Process
+);
+
+VOID
+NTAPI
 ExUpdateSystemTimeFromCmos(
     IN BOOLEAN UpdateInterruptTime,
     IN ULONG MaxSepInSeconds
