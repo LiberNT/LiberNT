@@ -328,8 +328,11 @@ ObpFreeHandleDataBase(
     if (HandleInfo->HandleCountDatabase != NULL)
     {
         ExFreePoolWithTag(HandleInfo->HandleCountDatabase, TAG_OB_HANDLE);
-        HandleInfo->HandleCountDatabase = NULL;
     }
+
+    /* A handle made later from a reference starts again from the inline entry */
+    RtlZeroMemory(&HandleInfo->SingleEntry, sizeof(HandleInfo->SingleEntry));
+    ObjectHeader->Flags |= OB_FLAG_SINGLE_PROCESS;
 }
 
 /* CARRIED-OVER NT10 HELPERS **************************************************/
