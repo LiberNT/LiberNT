@@ -37,15 +37,19 @@ static BOOLEAN KdpFileIoHostAbsent;
 
 static
 BOOLEAN
+KdpFileIoNetAttached(VOID)
+{
+    return KdpDebugMode.Net && KdpNetQueryAttached(NULL, NULL);
+}
+
+static
+BOOLEAN
 KdpFileIoTransportReady(VOID)
 {
     if (KdpFileIoHostAbsent)
         return FALSE;
 
-    if (KdpDebugMode.Serial)
-        return TRUE;
-
-    return KdpDebugMode.Net && KdpNetQueryAttached(NULL, NULL);
+    return KdpDebugMode.Serial || KdpFileIoNetAttached();
 }
 
 static
@@ -57,7 +61,7 @@ KdpFileIoPut(
     if (KdpDebugMode.Serial)
         KdPortPutBufferEx(&SerialPortInfo, Buffer, Length);
 
-    if (KdpDebugMode.Net)
+    if (KdpFileIoNetAttached())
         KdpNetSendBytes(Buffer, Length);
 }
 
@@ -68,16 +72,17 @@ KdpFileIoGetByte(
 {
     LARGE_INTEGER Frequency;
     LONGLONG Deadline;
+    BOOLEAN Net = KdpFileIoNetAttached();
 
     Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
-    Deadline += Frequency.QuadPart * (KdpDebugMode.Net ? KDP_FILE_IO_NET_SECONDS : KDP_FILE_IO_SERIAL_SECONDS);
+    Deadline += Frequency.QuadPart * (Net ? KDP_FILE_IO_NET_SECONDS : KDP_FILE_IO_SERIAL_SECONDS);
 
     for (;;)
     {
         if (KdpDebugMode.Serial && KdPortGetByteEx(&SerialPortInfo, Byte))
             return TRUE;
 
-        if (KdpDebugMode.Net && KdpNetGetByte(Byte))
+        if (Net && KdpNetGetByte(Byte))
             return TRUE;
 
         if (KeQueryPerformanceCounter(NULL).QuadPart >= Deadline)
