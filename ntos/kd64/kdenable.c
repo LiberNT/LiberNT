@@ -325,6 +325,9 @@ KdSystemDebugControl(
     {
         case SysDbgQueryVersion:
 
+            if (PreviousMode != KernelMode)
+                return STATUS_NOT_IMPLEMENTED;
+
             if (OutputBufferLength < sizeof(DBGKD_GET_VERSION64))
             {
                 if (ReturnLength != NULL)
