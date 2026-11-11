@@ -293,6 +293,8 @@ PspExitThread(
 
     PspRunLegoRoutine(&Thread->Tcb);
 
+    KeDisableThreadApcQueueing(&Thread->Tcb);
+
     /* The scheduler does not come back to a terminated thread */
     KeTerminateThread(0);
 }
