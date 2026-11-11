@@ -1171,10 +1171,8 @@ static HRESULT WINAPI HTMLXMLHttpRequest_private_put_responseType(IWineXMLHttpRe
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
-    if(This->xhr.ready_state < READYSTATE_LOADING || This->xhr.ready_state > READYSTATE_INTERACTIVE) {
-        /* FIXME: Return InvalidStateError */
-        return E_FAIL;
-    }
+    if(This->xhr.ready_state < READYSTATE_LOADING || This->xhr.ready_state > READYSTATE_LOADED)
+        return MSHTML_E_INVALID_STATE;
 
     for(i = 0; i < ARRAY_SIZE(response_type_desc); i++)
         if(!wcscmp(v, response_type_desc[i].str))

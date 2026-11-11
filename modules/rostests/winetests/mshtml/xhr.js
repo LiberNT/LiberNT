@@ -396,14 +396,12 @@ async_test("responseType", function() {
         xhr.responseType = "";
         ok(false, "setting responseType before open() did not throw exception");
     }catch(ex) {
-        todo_wine.
         ok(ex.name === "InvalidStateError", "setting responseType before open() threw " + ex.name);
     }
     try {
         xhr.responseType = "invalid response type";
         ok(false, "setting invalid responseType before open() did not throw exception");
     }catch(ex) {
-        todo_wine.
         ok(ex.name === "InvalidStateError", "setting invalid responseType before open() threw " + ex.name);
     }
 
@@ -433,7 +431,6 @@ async_test("responseType", function() {
             xhr.responseType = "";
             ok(false, "setting responseType with state " + xhr.readyState + " did not throw exception");
         }catch(ex) {
-            todo_wine.
             ok(ex.name === "InvalidStateError", "setting responseType with state " + xhr.readyState + " threw " + ex.name);
         }
     }
