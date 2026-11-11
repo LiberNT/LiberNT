@@ -1406,8 +1406,7 @@ NtPowerInformation(
                     break;
                 }
 
-                *(PEXECUTION_STATE)OutputBuffer =
-                    PopIsDisplayRequired() ? ES_DISPLAY_REQUIRED : 0;
+                *(PEXECUTION_STATE)OutputBuffer = PopQueryKeptOnState();
                 break;
 
             case SessionDisplayState:

@@ -429,6 +429,12 @@ PopIsDisplayRequired(
     VOID
 );
 
+EXECUTION_STATE
+NTAPI
+PopQueryKeptOnState(
+    VOID
+);
+
 ULONG
 NTAPI
 PopGetVideoTimeout(

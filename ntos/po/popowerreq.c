@@ -11,7 +11,7 @@
 
 typedef struct _POP_POWER_REQUEST
 {
-    FAST_MUTEX Lock;
+    KSPIN_LOCK Lock;
     PVOID SystemState;
     ULONG Count[PowerRequestMaximum];
 } POP_POWER_REQUEST, *PPOP_POWER_REQUEST;
@@ -155,6 +155,86 @@ PopCheckPowerRequestReason(
     }
 }
 
+static
+NTSTATUS
+PopAllocatePowerRequest(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PPOP_POWER_REQUEST *Request)
+{
+    NTSTATUS Status;
+
+    Status = ObCreateObject(PreviousMode,
+                            PopPowerRequestObjectType,
+                            NULL,
+                            PreviousMode,
+                            NULL,
+                            sizeof(**Request),
+                            0,
+                            0,
+                            (PVOID *)Request);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    RtlZeroMemory(*Request, sizeof(**Request));
+    KeInitializeSpinLock(&(*Request)->Lock);
+
+    return STATUS_SUCCESS;
+}
+
+/* The counts of a request and the system state they hold up, at any IRQL up to DISPATCH_LEVEL */
+static
+NTSTATUS
+PopChangePowerRequest(
+    _In_ PPOP_POWER_REQUEST Request,
+    _In_ POWER_REQUEST_TYPE Type,
+    _In_ BOOLEAN Set)
+{
+    EXECUTION_STATE Flags = 0;
+    NTSTATUS Status = STATUS_SUCCESS;
+    PVOID SystemState;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Request->Lock, &OldIrql);
+
+    if (Set)
+    {
+        if (Request->Count[Type] == MAXLONG) Status = STATUS_INTEGER_OVERFLOW;
+        else Request->Count[Type]++;
+    }
+    else if (Request->Count[Type] != 0)
+    {
+        Request->Count[Type]--;
+    }
+    else
+    {
+        Status = STATUS_NOT_SUPPORTED;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        if (Request->Count[PowerRequestDisplayRequired] != 0) Flags |= ES_DISPLAY_REQUIRED;
+        if (Request->Count[PowerRequestSystemRequired] != 0) Flags |= ES_SYSTEM_REQUIRED;
+        /* TODO: away-mode and execution-required requests are counted but change no system state */
+
+        if (Flags != 0 || Request->SystemState != NULL)
+        {
+            SystemState = PoRegisterSystemState(Request->SystemState, Flags);
+            if (SystemState != NULL)
+            {
+                Request->SystemState = SystemState;
+            }
+            else
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                if (Set) Request->Count[Type]--;
+                else Request->Count[Type]++;
+            }
+        }
+    }
+
+    KeReleaseSpinLock(&Request->Lock, OldIrql);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 PopCreatePowerRequest(
@@ -179,19 +259,8 @@ PopCreatePowerRequest(
     Status = PopCheckPowerRequestReason(&Context, PreviousMode);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = ObCreateObject(PreviousMode,
-                            PopPowerRequestObjectType,
-                            NULL,
-                            PreviousMode,
-                            NULL,
-                            sizeof(*Request),
-                            0,
-                            0,
-                            (PVOID *)&Request);
+    Status = PopAllocatePowerRequest(PreviousMode, &Request);
     if (!NT_SUCCESS(Status)) return Status;
-
-    RtlZeroMemory(Request, sizeof(*Request));
-    ExInitializeFastMutex(&Request->Lock);
 
     Status = ObInsertObject(Request, NULL, STANDARD_RIGHTS_ALL, 0, NULL, &Handle);
     if (!NT_SUCCESS(Status)) return Status;
@@ -218,8 +287,6 @@ PopActOnPowerRequest(
 {
     POP_POWER_REQUEST_ACTION Action;
     PPOP_POWER_REQUEST Request;
-    EXECUTION_STATE Flags = 0;
-    PVOID SystemState;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -239,43 +306,75 @@ PopActOnPowerRequest(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    ExAcquireFastMutex(&Request->Lock);
+    Status = PopChangePowerRequest(Request, Action.RequestType, Action.SetAction != 0);
 
-    if (Action.SetAction)
-    {
-        if (Request->Count[Action.RequestType] == MAXLONG) Status = STATUS_INTEGER_OVERFLOW;
-        else Request->Count[Action.RequestType]++;
-    }
-    else if (Request->Count[Action.RequestType] != 0)
-    {
-        Request->Count[Action.RequestType]--;
-    }
-    else
-    {
-        Status = STATUS_NOT_SUPPORTED;
-    }
-
-    if (NT_SUCCESS(Status))
-    {
-        if (Request->Count[PowerRequestDisplayRequired] != 0) Flags |= ES_DISPLAY_REQUIRED;
-        if (Request->Count[PowerRequestSystemRequired] != 0) Flags |= ES_SYSTEM_REQUIRED;
-        /* TODO: away-mode and execution-required requests are counted but change no system state */
-
-        if (Flags != 0 || Request->SystemState != NULL)
-        {
-            SystemState = PoRegisterSystemState(Request->SystemState, Flags);
-            if (SystemState == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
-            else Request->SystemState = SystemState;
-        }
-
-        if (!NT_SUCCESS(Status))
-        {
-            if (Action.SetAction) Request->Count[Action.RequestType]--;
-            else Request->Count[Action.RequestType]++;
-        }
-    }
-
-    ExReleaseFastMutex(&Request->Lock);
     ObDereferenceObject(Request);
     return Status;
+}
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+NTSTATUS
+NTAPI
+PoCreatePowerRequest(
+    _Outptr_ PVOID *PowerRequest,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PCOUNTED_REASON_CONTEXT Context)
+{
+    PPOP_POWER_REQUEST Request;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *PowerRequest = NULL;
+
+    if (DeviceObject == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (Context != NULL)
+    {
+        Status = PopCheckPowerRequestReason(Context, KernelMode);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+
+    Status = PopAllocatePowerRequest(KernelMode, &Request);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    *PowerRequest = Request;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PoSetPowerRequest(
+    _Inout_ PVOID PowerRequest,
+    _In_ POWER_REQUEST_TYPE Type)
+{
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    if (Type != PowerRequestSystemRequired) return STATUS_NOT_SUPPORTED;
+
+    return PopChangePowerRequest(PowerRequest, Type, TRUE);
+}
+
+NTSTATUS
+NTAPI
+PoClearPowerRequest(
+    _Inout_ PVOID PowerRequest,
+    _In_ POWER_REQUEST_TYPE Type)
+{
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    if (Type != PowerRequestSystemRequired) return STATUS_NOT_SUPPORTED;
+
+    return PopChangePowerRequest(PowerRequest, Type, FALSE);
+}
+
+VOID
+NTAPI
+PoDeletePowerRequest(
+    _Inout_ PVOID PowerRequest)
+{
+    PAGED_CODE();
+
+    ObDereferenceObject(PowerRequest);
 }

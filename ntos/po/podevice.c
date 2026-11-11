@@ -452,6 +452,13 @@ PopIsDisplayRequired(VOID)
     return (PopKeptOn & ES_DISPLAY_REQUIRED) != 0;
 }
 
+EXECUTION_STATE
+NTAPI
+PopQueryKeptOnState(VOID)
+{
+    return PopKeptOn & (ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED | ES_AWAYMODE_REQUIRED);
+}
+
 VOID
 NTAPI
 PoSetUserPresent(
