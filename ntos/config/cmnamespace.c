@@ -843,7 +843,7 @@ CmpParseKeyWorker(
             break;
         }
 
-        if (Component.Length > CMP_KEY_NAME_MAX)
+        if (Component.Length > CMP_KEY_COMPONENT_MAX)
         {
             Status = STATUS_INVALID_PARAMETER;
             break;

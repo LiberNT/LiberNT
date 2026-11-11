@@ -311,6 +311,8 @@ CmpOpenOrCreateKey(
             if (Disposition != NULL) ProbeForWriteUlong(Disposition);
             ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
             (VOID)*(volatile ULONG *)&ObjectAttributes->Length;
+            ProbeForRead(ObjectAttributes->ObjectName, sizeof(UNICODE_STRING), sizeof(ULONG));
+            (VOID)*(volatile USHORT *)&ObjectAttributes->ObjectName->Length;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
