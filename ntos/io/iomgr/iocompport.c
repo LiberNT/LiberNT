@@ -80,6 +80,7 @@ IopDeleteIoCompletion(
 {
     PKQUEUE Queue = ObjectBody;
     PIOP_MINI_COMPLETION_PACKET Packet;
+    PLIST_ENTRY FirstEntry;
     PLIST_ENTRY Entry;
     PIRP Irp;
 
@@ -88,6 +89,7 @@ IopDeleteIoCompletion(
         Entry = KeRundownQueue(Queue);
         if (Entry == NULL) return;
 
+        FirstEntry = Entry;
         while (Entry != NULL)
         {
             PLIST_ENTRY Next = Entry->Flink;
@@ -110,7 +112,7 @@ IopDeleteIoCompletion(
                 IopFreeMiniPacket(Packet);
             }
 
-            if (Next == Entry) return;
+            if (Next == FirstEntry) return;
             Entry = Next;
         }
 

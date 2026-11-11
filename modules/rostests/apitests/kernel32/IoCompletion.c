@@ -464,6 +464,27 @@ TestPortClosedUnderBlockedWorker(VOID)
     CloseHandle(Event);
 }
 
+static VOID
+TestCloseWithQueuedPackets(VOID)
+{
+    HANDLE Port;
+    ULONG Index;
+    BOOL Success;
+
+    Port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
+    ok(Port != NULL, "CreateIoCompletionPort failed with %lu\n", GetLastError());
+    if (Port == NULL)
+        return;
+
+    for (Index = 0; Index != 3; ++Index)
+    {
+        Success = PostQueuedCompletionStatus(Port, Index, 0x7000 + Index, (LPOVERLAPPED)(ULONG_PTR)(0x7100 + Index));
+        ok(Success, "PostQueuedCompletionStatus %lu failed with %lu\n", Index, GetLastError());
+    }
+
+    ok(CloseHandle(Port), "Closing a port with queued packets failed with %lu\n", GetLastError());
+}
+
 START_TEST(IoCompletion)
 {
     DEQUEUE_WAIT_CONTEXT DequeueContext;
@@ -700,6 +721,7 @@ START_TEST(IoCompletion)
     TestCrossPortWaits(FALSE);
     TestCrossPortWaits(TRUE);
     TestPortClosedUnderBlockedWorker();
+    TestCloseWithQueuedPackets();
     TestWorkerBlockActivatesQueue(BlockSingle);
     TestWorkerBlockActivatesQueue(BlockMultiple);
     TestWorkerBlockActivatesQueue(BlockDelay);
