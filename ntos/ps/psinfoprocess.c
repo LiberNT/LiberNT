@@ -984,16 +984,20 @@ NtQueryInformationProcess(
             break;
 
         case ProcessDebugObjectHandle:
-            Status = DbgkOpenProcessDebugPort(Process, PreviousMode, &Handle);
-            if (NT_SUCCESS(Status))
-            {
-                Status = PspReturnInformation(ProcessInformation,
-                                              ProcessInformationLength,
-                                              &Handle,
-                                              sizeof(Handle),
-                                              &Length);
-            }
+        {
+            NTSTATUS OpenStatus = DbgkOpenProcessDebugPort(Process, PreviousMode, &Handle);
+
+            /* A caller that gets no debug object is still handed a NULL handle */
+            if (!NT_SUCCESS(OpenStatus)) Handle = NULL;
+
+            Status = PspReturnInformation(ProcessInformation,
+                                          ProcessInformationLength,
+                                          &Handle,
+                                          sizeof(Handle),
+                                          &Length);
+            if (NT_SUCCESS(Status)) Status = OpenStatus;
             break;
+        }
 
         case ProcessDebugFlags:
             Value = Process->NoDebugInherit ? 0 : PSP_DEBUG_INHERIT;
