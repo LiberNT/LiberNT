@@ -1509,6 +1509,19 @@ IopNotifyChangeDirectory(
 
     PAGED_CODE();
 
+    if (ExGetPreviousMode() != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWriteIoStatusBlock(IoStatusBlock);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
     if (CompletionFilter == 0 ||
         (CompletionFilter & ~FILE_NOTIFY_VALID_MASK) != 0)
     {
