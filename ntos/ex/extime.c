@@ -444,10 +444,10 @@ ExpSetTimeZoneInformation(
 
     ExpTimeZoneBias.QuadPart = Int32x32To64(Bias * 60, 10000000);
 
-    SharedUserData->TimeZoneBias.High2Time = ExpTimeZoneBias.HighPart;
-    SharedUserData->TimeZoneBias.LowPart = ExpTimeZoneBias.LowPart;
-    SharedUserData->TimeZoneBias.High1Time = ExpTimeZoneBias.HighPart;
-    SharedUserData->TimeZoneId = ExpTimeZoneId;
+    MmWriteableSharedUserData->TimeZoneBias.High2Time = ExpTimeZoneBias.HighPart;
+    MmWriteableSharedUserData->TimeZoneBias.LowPart = ExpTimeZoneBias.LowPart;
+    MmWriteableSharedUserData->TimeZoneBias.High1Time = ExpTimeZoneBias.HighPart;
+    MmWriteableSharedUserData->TimeZoneId = ExpTimeZoneId;
 
     /*
      * A clock that keeps local time rather than universal time has to be read

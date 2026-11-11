@@ -572,8 +572,8 @@ IopPublishSystemRoot(
 
     if (!NT_SUCCESS(RtlAnsiStringToUnicodeString(&NtSystemRoot, SystemPath, FALSE))) return;
 
-    RtlCopyMemory(SharedUserData->NtSystemRoot, NtSystemRoot.Buffer, NtSystemRoot.Length);
-    SharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    RtlCopyMemory(MmWriteableSharedUserData->NtSystemRoot, NtSystemRoot.Buffer, NtSystemRoot.Length);
+    MmWriteableSharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
