@@ -982,6 +982,11 @@ SimWrite(volatile ULONG *Address, ULONG Value)
     {
         Value |= (Value & 3) << 2;
     }
+    else if (Region == &SimRegions[9] && Offset >= 0x800)
+    {
+        Region->Data[Offset / sizeof(ULONG)] &= ~Value;
+        return;
+    }
     Region->Data[Offset / sizeof(ULONG)] = Value;
 }
 
@@ -1050,6 +1055,7 @@ AcePdSleepMs(ULONG Milliseconds)
 }
 
 #include "../../../../sdk/lib/drivers/applertkit/acepd.c"
+#include "../../../../drivers/wdm/audio/drivers/appleaudio/jackpolicy.c"
 #include "../hal/fdtbuild.h"
 
 #define PHANDLE_LW31        0x51
@@ -6101,6 +6107,162 @@ FindChildNode(PFDT_DRIVER_TREE Tree, ULONG Parent, const CHAR *Name)
     return FDT_NO_NODE;
 }
 
+#define PHANDLE_GPIO_AIC    0x42
+#define PHANDLE_GPIO_PINS   0x43
+
+static
+VOID
+OpenGpioInterruptTree(
+    _Out_ PFDT_DRIVER_TREE Tree)
+{
+    memset(&Builder, 0, sizeof(Builder));
+    FdtBeginNode("");
+    FdtCells("#address-cells", 1, 2);
+    FdtCells("#size-cells", 1, 2);
+    FdtBeginNode("soc");
+    FdtStrings("compatible", LIST("simple-bus"));
+    FdtCells("#address-cells", 1, 2);
+    FdtCells("#size-cells", 1, 2);
+    FdtProperty("ranges", NULL, 0);
+    FdtBeginNode("interrupt-controller@351000000");
+    FdtStrings("compatible", LIST("apple,t6030-aic3\0apple,t8122-aic3"));
+    FdtCells("#interrupt-cells", 1, 3);
+    FdtProperty("interrupt-controller", NULL, 0);
+    FdtCells("phandle", 1, PHANDLE_GPIO_AIC);
+    FdtEndNode();
+    FdtBeginNode("pinctrl@347100000");
+    FdtStrings("compatible", LIST("apple,t6030-pinctrl\0apple,t8103-pinctrl"));
+    FdtCells("reg", 4, 3, 0x47100000, 0, 0x4000);
+    FdtCells("interrupt-parent", 1, PHANDLE_GPIO_AIC);
+    FdtCells("interrupts", 21, 0, 0x111, 4, 0, 0x112, 4, 0, 0x113, 4, 0, 0x114, 4, 0, 0x115, 4, 0, 0x116, 4,
+             0, 0x117, 4);
+    FdtCells("apple,npins", 1, 0xe0);
+    FdtCells("#gpio-cells", 1, 2);
+    FdtProperty("interrupt-controller", NULL, 0);
+    FdtCells("#interrupt-cells", 1, 2);
+    FdtCells("phandle", 1, PHANDLE_GPIO_PINS);
+    FdtEndNode();
+    FdtBeginNode("codec@4b");
+    FdtStrings("compatible", LIST("cirrus,cs42l84"));
+    FdtCells("interrupts-extended", 3, PHANDLE_GPIO_PINS, 0xc4, 8);
+    FdtEndNode();
+    FdtBeginNode("codec@3a");
+    FdtStrings("compatible", LIST("ti,tas2764"));
+    FdtCells("interrupt-parent", 1, PHANDLE_GPIO_PINS);
+    FdtCells("interrupts", 2, 0x1d, 1);
+    FdtEndNode();
+    FdtBeginNode("codec@3b");
+    FdtStrings("compatible", LIST("test,bad-trigger"));
+    FdtCells("interrupts-extended", 3, PHANDLE_GPIO_PINS, 0x1e, 0x10);
+    FdtEndNode();
+    FdtEndNode();
+    FdtEndNode();
+    FdtFinish();
+    memset(Tree, 0, sizeof(*Tree));
+    Tree->Blob = Builder.Blob;
+    ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The GPIO interrupt tree did not open\n");
+}
+
+static
+VOID
+TestGpioInterrupt(VOID)
+{
+    FDT_DRIVER_TREE Tree;
+    APPLE_GPIO_INTERRUPT Irq;
+    ULONG Codec, Amp, Gsi;
+    BOOLEAN Edge;
+
+    ResetSimulation(&Tree);
+    OpenGpioInterruptTree(&Tree);
+    Codec = FindNode(&Tree, "cirrus,cs42l84");
+    Amp = FindNode(&Tree, "ti,tas2764");
+    ok_hex(AppleGpioQueryInterrupt(&Tree, Codec, 0, &Gsi, &Edge), STATUS_SUCCESS);
+    ok_int(Gsi, 32 + 0x111);
+    ok(!Edge, "The pin controller group interrupt is level triggered\n");
+    ok_int(SimMapCount, 0);
+    PINCTRL(4 * 5) = 3 << 1;
+    ok_hex(AppleGpioQueryInterrupt(&Tree, Codec, 0, &Gsi, &Edge), STATUS_SUCCESS);
+    ok_int(Gsi, 32 + 0x112);
+    ok_hex(AppleGpioQueryInterrupt(&Tree, Codec, 1, &Gsi, &Edge), STATUS_NOT_FOUND);
+    ok_hex(AppleGpioQueryInterrupt(&Tree, FindNode(&Tree, "test,bad-trigger"), 0, &Gsi, &Edge),
+           STATUS_NOT_SUPPORTED);
+    ok_int(SimMapCount, 0);
+
+    PINCTRL(4 * 0xc4) = 0x00000061;
+    ok_hex(AppleGpioOpenInterrupt(&Tree, Codec, 0, 32 + 0x200, &Irq), STATUS_NOT_FOUND);
+    ok_int(SimMapCount, 0);
+    ok_hex(AppleGpioOpenInterrupt(&Tree, Codec, 0, 32 + 0x112, &Irq), STATUS_SUCCESS);
+    ok_int(Irq.Pin, 0xc4);
+    ok_int(Irq.Group, 1);
+    ok_int(Irq.Mode, 3);
+    ok_hex(PINCTRL(4 * 0xc4), 0x0001020e);
+    ok(!AppleGpioClaimInterrupt(&Irq), "A pin with nothing pending claimed the interrupt\n");
+    AppleGpioUnmaskInterrupt(&Irq);
+    ok_hex(PINCTRL(4 * 0xc4), 0x00010206);
+    PINCTRL(0x858) = (1 << 4) | (1 << 7);
+    ok(AppleGpioClaimInterrupt(&Irq), "The pending pin did not claim the interrupt\n");
+    ok_hex(PINCTRL(4 * 0xc4), 0x0001020e);
+    ok_hex(PINCTRL(0x858), 1 << 7);
+    PINCTRL(4 * 0xc4) |= 1;
+    AppleGpioTestInterrupt(&Irq);
+    ok_hex(PINCTRL(4 * 0xc4) & 0xe, 2 << 1);
+    PINCTRL(4 * 0xc4) &= ~1;
+    AppleGpioTestInterrupt(&Irq);
+    ok_hex(PINCTRL(4 * 0xc4) & 0xe, 3 << 1);
+    AppleGpioCloseInterrupt(&Irq);
+    ok_hex(PINCTRL(4 * 0xc4) & 0xe, 7 << 1);
+    ok_int(SimMapCount, 0);
+
+    ok_hex(AppleGpioOpenInterrupt(&Tree, Amp, 0, 32 + 0x111, &Irq), STATUS_SUCCESS);
+    ok_int(Irq.Pin, 0x1d);
+    ok_int(Irq.Group, 0);
+    ok_int(Irq.Mode, 4);
+    ok_hex(PINCTRL(4 * 0x1d), 0x0000020e);
+    AppleGpioCloseInterrupt(&Irq);
+    ok_int(SimMapCount, 0);
+}
+
+static
+VOID
+TestJackPolicy(VOID)
+{
+    APPLE_AUDIO_JACK_POLICY Policy;
+
+    AppleAudioJackPolicyInitialize(&Policy);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 0, FALSE, FALSE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 0, TRUE, TRUE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1, FALSE, FALSE), APPLE_AUDIO_JACK_DELIVERY_PROVEN);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_FALLBACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1, TRUE, TRUE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_FALLBACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 3, FALSE, FALSE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_FALLBACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 4, TRUE, TRUE), APPLE_AUDIO_JACK_CODEC_PROVEN);
+    ok_int(Policy.PollMs, 0);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 5, TRUE, TRUE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(Policy.PollMs, 0);
+
+    AppleAudioJackPolicyInitialize(&Policy);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1, FALSE, TRUE), APPLE_AUDIO_JACK_CODEC_PROVEN);
+    ok_int(Policy.PollMs, 0);
+
+    AppleAudioJackPolicyInitialize(&Policy);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1, FALSE, FALSE), APPLE_AUDIO_JACK_DELIVERY_PROVEN);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 40, FALSE, TRUE), APPLE_AUDIO_JACK_CODEC_PROVEN);
+    ok_int(Policy.Spurious, 0);
+
+    AppleAudioJackPolicyInitialize(&Policy);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1, FALSE, FALSE), APPLE_AUDIO_JACK_DELIVERY_PROVEN);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 1 + APPLE_AUDIO_JACK_SPURIOUS_MAX, FALSE, FALSE),
+           APPLE_AUDIO_JACK_INTERRUPT_BROKEN);
+    ok(Policy.Broken, "An interrupt that never reports a jack change was trusted\n");
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_POLL_MS);
+    ok_int(AppleAudioJackPolicyUpdate(&Policy, 50, TRUE, TRUE), APPLE_AUDIO_JACK_NO_CHANGE);
+    ok_int(Policy.PollMs, APPLE_AUDIO_JACK_POLL_MS);
+}
+
 static
 VOID
 TestGpio(VOID)
@@ -6809,6 +6971,8 @@ START_TEST(AppleSoc)
     TestPcie();
     TestPcieLinkPower();
     TestGpio();
+    TestGpioInterrupt();
+    TestJackPolicy();
     TestI2c();
     TestNco();
     TestAdmac();

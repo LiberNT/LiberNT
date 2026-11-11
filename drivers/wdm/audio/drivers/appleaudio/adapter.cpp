@@ -25,6 +25,9 @@ CAppleAudioAdapter::CAppleAudioAdapter()
       m_InterruptSync(NULL),
       m_JackWorkItem(NULL),
       m_JackWorkQueued(0),
+      m_JackWorkAgain(0),
+      m_JackInterrupt(NULL),
+      m_JackInterrupts(0),
       m_ProtectWorkItem(NULL),
       m_ProtectWorkQueued(0),
       m_Shutdown(0),
@@ -51,6 +54,7 @@ CAppleAudioAdapter::CAppleAudioAdapter()
     }
     KeInitializeTimer(&m_JackTimer);
     KeInitializeDpc(&m_JackDpc, JackTimerDpc, this);
+    AppleAudioJackPolicyInitialize(&m_JackPolicy);
     KeInitializeTimer(&m_ProtectTimer);
     KeInitializeDpc(&m_ProtectDpc, ProtectDpc, this);
     for (Endpoint = 0; Endpoint < APPLE_AUDIO_ENDPOINTS; ++Endpoint)
@@ -84,10 +88,13 @@ CAppleAudioAdapter::QueryInterface(REFIID InterfaceId, PVOID *Interface)
 NTSTATUS
 CAppleAudioAdapter::Initialize(PDEVICE_OBJECT DeviceObject, PDEVICE_OBJECT PhysicalDeviceObject, PRESOURCELIST ResourceList)
 {
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw;
     LARGE_INTEGER DueTime;
     BOOLEAN Connected, Microphone;
+    ULONG Index, DmaIndex = MAXULONG, JackIndex = MAXULONG;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     if (!DeviceObject || !PhysicalDeviceObject || !ResourceList)
         return STATUS_INVALID_PARAMETER;
     m_DeviceObject = DeviceObject;
@@ -100,11 +107,26 @@ CAppleAudioAdapter::Initialize(PDEVICE_OBJECT DeviceObject, PDEVICE_OBJECT Physi
     Status = AppleAudioHwOpen(PhysicalDeviceObject, &m_Hardware);
     if (!NT_SUCCESS(Status))
         return Status;
-    AppleAudioHwPollJack(m_Hardware, &Connected, &Microphone);
+    AppleAudioHwPollJack(m_Hardware, &Connected, &Microphone, NULL);
     InterlockedExchange(&m_Connected, Connected);
     InterlockedExchange(&m_Microphone, Microphone);
 
-    Status = PcNewInterruptSync(&m_InterruptSync, NULL, ResourceList, 0, InterruptSyncModeNormal);
+    for (Index = 0; Index < ResourceList->NumberOfInterrupts(); ++Index)
+    {
+        Raw = ResourceList->FindUntranslatedInterrupt(Index);
+        if (!Raw)
+            continue;
+        if (DmaIndex == MAXULONG && AppleAudioHwIsDmaInterrupt(m_Hardware, Raw->u.Interrupt.Vector))
+            DmaIndex = Index;
+        else if (JackIndex == MAXULONG)
+            JackIndex = Index;
+    }
+    if (DmaIndex == MAXULONG)
+    {
+        DbgPrint("appleaudio: PnP assigned no ADMAC interrupt\n");
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    Status = PcNewInterruptSync(&m_InterruptSync, NULL, ResourceList, DmaIndex, InterruptSyncModeNormal);
     if (!NT_SUCCESS(Status))
         return Status;
     Status = m_InterruptSync->RegisterServiceRoutine(InterruptService, this, FALSE);
@@ -122,9 +144,120 @@ CAppleAudioAdapter::Initialize(PDEVICE_OBJECT DeviceObject, PDEVICE_OBJECT Physi
         if (!m_ProtectWorkItem)
             return STATUS_INSUFFICIENT_RESOURCES;
     }
-    DueTime.QuadPart = -10000LL * APPLE_AUDIO_JACK_POLL_MS;
-    KeSetTimerEx(&m_JackTimer, DueTime, APPLE_AUDIO_JACK_POLL_MS, &m_JackDpc);
+    DueTime.QuadPart = -10000LL * m_JackPolicy.PollMs;
+    KeSetTimerEx(&m_JackTimer, DueTime, m_JackPolicy.PollMs, &m_JackDpc);
+    if (JackIndex != MAXULONG)
+        ConnectJackInterrupt(ResourceList, JackIndex);
+    else
+        DbgPrint("appleaudio: no jack interrupt was assigned, the jack is polled\n");
     return STATUS_SUCCESS;
+}
+
+VOID
+CAppleAudioAdapter::ConnectJackInterrupt(PRESOURCELIST ResourceList, ULONG Index)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Raw = ResourceList->FindUntranslatedInterrupt(Index);
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Translated = ResourceList->FindTranslatedInterrupt(Index);
+    PKINTERRUPT Interrupt = NULL;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(m_Hardware && m_JackWorkItem && !m_JackInterrupt);
+    if (!Raw || !Translated)
+        return;
+    Status = AppleAudioHwOpenJackInterrupt(m_Hardware, Raw->u.Interrupt.Vector);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoConnectInterrupt(&Interrupt, JackService, this, NULL, Translated->u.Interrupt.Vector,
+                                    (KIRQL)Translated->u.Interrupt.Level, (KIRQL)Translated->u.Interrupt.Level,
+                                    (Translated->Flags & CM_RESOURCE_INTERRUPT_LATCHED) ? Latched : LevelSensitive,
+                                    Translated->ShareDisposition == CmResourceShareShared,
+                                    Translated->u.Interrupt.Affinity, FALSE);
+        if (!NT_SUCCESS(Status))
+            AppleAudioHwCloseJackInterrupt(m_Hardware);
+    }
+    DbgPrint("appleaudio: jack interrupt %lu connected: %lx\n", Raw->u.Interrupt.Vector, Status);
+    if (!NT_SUCCESS(Status))
+        return;
+    InterlockedExchangePointer(reinterpret_cast<PVOID volatile *>(&m_JackInterrupt), Interrupt);
+    KeSynchronizeExecution(Interrupt, JackTestSynchronized, this);
+}
+
+BOOLEAN
+NTAPI
+CAppleAudioAdapter::JackService(PKINTERRUPT Interrupt, PVOID Context)
+{
+    CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
+    UNREFERENCED_PARAMETER(Interrupt);
+
+    if (!Adapter->m_Hardware || !AppleAudioHwJackInterrupt(Adapter->m_Hardware))
+        return FALSE;
+    InterlockedIncrement(&Adapter->m_JackInterrupts);
+    KeInsertQueueDpc(&Adapter->m_JackDpc, NULL, NULL);
+    return TRUE;
+}
+
+BOOLEAN
+NTAPI
+CAppleAudioAdapter::JackArmSynchronized(PVOID Context)
+{
+    CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
+
+    AppleAudioHwArmJackInterrupt(Adapter->m_Hardware, FALSE);
+    return TRUE;
+}
+
+BOOLEAN
+NTAPI
+CAppleAudioAdapter::JackTestSynchronized(PVOID Context)
+{
+    CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
+
+    AppleAudioHwArmJackInterrupt(Adapter->m_Hardware, TRUE);
+    return TRUE;
+}
+
+VOID
+CAppleAudioAdapter::JackInterruptWork(BOOLEAN Changed, BOOLEAN TipLatched)
+{
+    LARGE_INTEGER DueTime;
+    ULONG Event, PollMs = m_JackPolicy.PollMs;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!m_JackInterrupt)
+        return;
+    Event = AppleAudioJackPolicyUpdate(&m_JackPolicy, InterlockedCompareExchange(&m_JackInterrupts, 0, 0), Changed,
+                                       TipLatched);
+    switch (Event)
+    {
+        case APPLE_AUDIO_JACK_DELIVERY_PROVEN:
+            DbgPrint("appleaudio: jack interrupt fired, jack polling slowed to %lu ms until the codec raises it\n",
+                     m_JackPolicy.PollMs);
+            break;
+        case APPLE_AUDIO_JACK_CODEC_PROVEN:
+            DbgPrint("appleaudio: the codec raised the jack interrupt, jack polling stopped\n");
+            break;
+        case APPLE_AUDIO_JACK_INTERRUPT_BROKEN:
+            DbgPrint("appleaudio: the jack interrupt fired %lu times without a jack change, back to polling\n",
+                     m_JackPolicy.Spurious);
+            break;
+        default:
+            break;
+    }
+    if (m_JackPolicy.PollMs != PollMs)
+    {
+        if (m_JackPolicy.PollMs)
+        {
+            DueTime.QuadPart = -10000LL * m_JackPolicy.PollMs;
+            KeSetTimerEx(&m_JackTimer, DueTime, m_JackPolicy.PollMs, &m_JackDpc);
+        }
+        else
+        {
+            KeCancelTimer(&m_JackTimer);
+        }
+    }
+    if (!m_JackPolicy.Broken)
+        KeSynchronizeExecution(m_JackInterrupt, JackArmSynchronized, this);
 }
 
 VOID
@@ -141,6 +274,14 @@ CAppleAudioAdapter::Shutdown()
     Interval.QuadPart = -10000LL;
     while (InterlockedCompareExchange(&m_JackWorkQueued, 0, 0) || InterlockedCompareExchange(&m_ProtectWorkQueued, 0, 0))
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    if (m_JackInterrupt)
+    {
+        KeCancelTimer(&m_JackTimer);
+        IoDisconnectInterrupt(m_JackInterrupt);
+        m_JackInterrupt = NULL;
+        KeFlushQueuedDpcs();
+        DbgPrint("appleaudio: jack interrupt disconnected after %ld interrupts\n", m_JackInterrupts);
+    }
     if (m_JackWorkItem)
     {
         IoFreeWorkItem(m_JackWorkItem);
@@ -533,8 +674,10 @@ CAppleAudioAdapter::JackTimerDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemA
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0) || !Adapter->m_JackWorkItem ||
-        InterlockedExchange(&Adapter->m_JackWorkQueued, 1))
+    if (InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0) || !Adapter->m_JackWorkItem)
+        return;
+    InterlockedExchange(&Adapter->m_JackWorkAgain, 1);
+    if (InterlockedExchange(&Adapter->m_JackWorkQueued, 1))
         return;
     Adapter->AddRef();
     IoQueueWorkItem(Adapter->m_JackWorkItem, JackWork, DelayedWorkQueue, Adapter);
@@ -546,27 +689,42 @@ CAppleAudioAdapter::JackWork(PDEVICE_OBJECT DeviceObject, PVOID Context)
 {
     CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
     PPORTEVENTS PortEvents;
-    BOOLEAN Changed = FALSE, Connected = FALSE, Microphone = FALSE;
+    BOOLEAN Changed, Connected, Microphone, TipLatched;
     UNREFERENCED_PARAMETER(DeviceObject);
 
-    KeWaitForSingleObject(&Adapter->m_Mutex, Executive, KernelMode, FALSE, NULL);
-    if (Adapter->m_Hardware && !InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0))
-        Changed = AppleAudioHwPollJack(Adapter->m_Hardware, &Connected, &Microphone);
-    KeReleaseMutex(&Adapter->m_Mutex, FALSE);
-    if (Changed)
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    for (;;)
     {
-        InterlockedExchange(&Adapter->m_Connected, Connected);
-        InterlockedExchange(&Adapter->m_Microphone, Microphone);
-        PortEvents = static_cast<PPORTEVENTS>(InterlockedCompareExchangePointer(&Adapter->m_JackPortEvents, NULL, NULL));
-        if (PortEvents)
+        InterlockedExchange(&Adapter->m_JackWorkAgain, 0);
+        if (InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0))
         {
-            PortEvents->GenerateEventList(const_cast<GUID *>(&KSEVENTSETID_PinCapsChange), KSEVENT_PINCAPS_JACKINFOCHANGE,
-                                          TRUE, APPLE_AUDIO_TOPOLOGY_HEADPHONE_PIN, FALSE, ULONG(-1));
-            PortEvents->GenerateEventList(const_cast<GUID *>(&KSEVENTSETID_PinCapsChange), KSEVENT_PINCAPS_JACKINFOCHANGE,
-                                          TRUE, APPLE_AUDIO_TOPOLOGY_MICROPHONE_PIN, FALSE, ULONG(-1));
+            InterlockedExchange(&Adapter->m_JackWorkQueued, 0);
+            break;
         }
+        Changed = Connected = Microphone = TipLatched = FALSE;
+        KeWaitForSingleObject(&Adapter->m_Mutex, Executive, KernelMode, FALSE, NULL);
+        if (Adapter->m_Hardware)
+            Changed = AppleAudioHwPollJack(Adapter->m_Hardware, &Connected, &Microphone, &TipLatched);
+        KeReleaseMutex(&Adapter->m_Mutex, FALSE);
+        if (Changed)
+        {
+            InterlockedExchange(&Adapter->m_Connected, Connected);
+            InterlockedExchange(&Adapter->m_Microphone, Microphone);
+            PortEvents = static_cast<PPORTEVENTS>(InterlockedCompareExchangePointer(&Adapter->m_JackPortEvents, NULL, NULL));
+            if (PortEvents)
+            {
+                PortEvents->GenerateEventList(const_cast<GUID *>(&KSEVENTSETID_PinCapsChange), KSEVENT_PINCAPS_JACKINFOCHANGE,
+                                              TRUE, APPLE_AUDIO_TOPOLOGY_HEADPHONE_PIN, FALSE, ULONG(-1));
+                PortEvents->GenerateEventList(const_cast<GUID *>(&KSEVENTSETID_PinCapsChange), KSEVENT_PINCAPS_JACKINFOCHANGE,
+                                              TRUE, APPLE_AUDIO_TOPOLOGY_MICROPHONE_PIN, FALSE, ULONG(-1));
+            }
+        }
+        Adapter->JackInterruptWork(Changed, TipLatched);
+        InterlockedExchange(&Adapter->m_JackWorkQueued, 0);
+        if (!InterlockedCompareExchange(&Adapter->m_JackWorkAgain, 0, 0) ||
+            InterlockedExchange(&Adapter->m_JackWorkQueued, 1))
+            break;
     }
-    InterlockedExchange(&Adapter->m_JackWorkQueued, 0);
     Adapter->Release();
 }
 

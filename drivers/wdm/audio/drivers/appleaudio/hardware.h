@@ -115,7 +115,42 @@ NTAPI
 AppleAudioHwPollJack(
     _In_ PAPPLE_AUDIO_HW Hardware,
     _Out_ PBOOLEAN Connected,
-    _Out_ PBOOLEAN Microphone);
+    _Out_ PBOOLEAN Microphone,
+    _Out_opt_ PBOOLEAN TipLatched);
+
+NTSTATUS
+NTAPI
+AppleAudioHwAddJackRequirement(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Inout_ PIRP Irp);
+
+BOOLEAN
+NTAPI
+AppleAudioHwIsDmaInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hardware,
+    _In_ ULONG Gsi);
+
+NTSTATUS
+NTAPI
+AppleAudioHwOpenJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hardware,
+    _In_ ULONG Gsi);
+
+VOID
+NTAPI
+AppleAudioHwCloseJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hardware);
+
+BOOLEAN
+NTAPI
+AppleAudioHwJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hardware);
+
+VOID
+NTAPI
+AppleAudioHwArmJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hardware,
+    _In_ BOOLEAN Test);
 
 BOOLEAN
 NTAPI

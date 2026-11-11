@@ -14,6 +14,7 @@
 #include <reactos/drivers/applenco.h>
 #include <reactos/drivers/appleadmac.h>
 #include <reactos/drivers/applemca.h>
+#include <reactos/drivers/applertkit.h>
 #include "hardware.h"
 #include "tas2764.h"
 #include "protect.h"
@@ -54,6 +55,7 @@
 #define CS42L84_DEVID               0x0000
 #define CS42L84_FREEZE              0x0006
 #define CS42L84_FREEZE_ENGAGE       0x01
+#define CS42L84_TSRS_PLUG_INT_STATUS 0x0400
 #define CS42L84_TSRS_PLUG_INT_MASK  0x0418
 #define CS42L84_RS_PLUG             0x01
 #define CS42L84_RS_UNPLUG           0x02
@@ -211,6 +213,7 @@ typedef struct _APPLE_AUDIO_HW
     APPLE_NCO Nco;
     APPLE_I2C I2c;
     APPLE_GPIO Reset;
+    APPLE_GPIO_INTERRUPT JackIrq;
     APPLE_ADMAC_CHANNEL Channel[APPLE_AUDIO_DMA_CHANNELS];
     ULONG Port;
     ULONG DmaChannel[APPLE_AUDIO_DMA_CHANNELS];
@@ -447,7 +450,8 @@ CodecInitialize(
         { CS42L84_HS_SWITCH_CTL, 0xff, CS42L84_HS_SWITCH_GROUNDED },
         { CS42L84_HS_DET_CTL2, CS42L84_HS_DET_SET | CS42L84_HS_DET_CTL, 2 << CS42L84_HS_DET_SET_SHIFT },
         { CS42L84_HS_CLAMP_DISABLE, 0x01, 0x01 },
-        { CS42L84_TSRS_PLUG_INT_MASK, CS42L84_RS_PLUG | CS42L84_RS_UNPLUG, CS42L84_RS_PLUG | CS42L84_RS_UNPLUG },
+        { CS42L84_TSRS_PLUG_INT_MASK, CS42L84_RS_PLUG | CS42L84_RS_UNPLUG | CS42L84_TS_PLUG | CS42L84_TS_UNPLUG,
+          CS42L84_RS_PLUG | CS42L84_RS_UNPLUG },
         { CS42L84_ASP_CTL, CS42L84_ASP_TDM_MODE, 0 },
         { CS42L84_HP_VOL_CTL, CS42L84_HP_VOL_SOFT | CS42L84_HP_VOL_ZERO_CROSS, CS42L84_HP_VOL_ZERO_CROSS },
         { CS42L84_ASP_RX_CH1_CTL1, CS42L84_SLOT_EDGE | CS42L84_SLOT_START_LSB, 0 },
@@ -1203,6 +1207,7 @@ AppleAudioHwClose(
     AppleAudioHwUnprepare(Hw, APPLE_AUDIO_CAPTURE);
     AppleAudioHwUnprepare(Hw, APPLE_AUDIO_RENDER);
     SpeakerClose(Hw);
+    AppleGpioCloseInterrupt(&Hw->JackIrq);
     if (Hw->Reset.Registers)
         AppleGpioSet(&Hw->Reset, FALSE);
     AppleGpioClose(&Hw->Reset);
@@ -1623,12 +1628,20 @@ NTAPI
 AppleAudioHwPollJack(
     _In_ PAPPLE_AUDIO_HW Hw,
     _Out_ PBOOLEAN Connected,
-    _Out_ PBOOLEAN Microphone)
+    _Out_ PBOOLEAN Microphone,
+    _Out_opt_ PBOOLEAN TipLatched)
 {
-    UCHAR Plug, Tip;
+    UCHAR Plug, Tip, Latched = 0;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     *Connected = Hw->TipState == 3;
     *Microphone = Hw->Microphone;
+    if (TipLatched)
+        *TipLatched = FALSE;
+    if (!NT_SUCCESS(CodecRead(Hw, CS42L84_TSRS_PLUG_INT_STATUS, &Latched)))
+        return FALSE;
+    if (TipLatched)
+        *TipLatched = (Latched & (CS42L84_TS_PLUG | CS42L84_TS_UNPLUG)) != 0;
     if (!NT_SUCCESS(CodecRead(Hw, CS42L84_TSRS_PLUG_STATUS, &Plug)))
         return FALSE;
     Tip = CodecTipState(Plug);
@@ -1650,4 +1663,89 @@ AppleAudioHwPollJack(
     *Microphone = Hw->Microphone;
     DbgPrint("appleaudio: %s %s\n", *Microphone ? "headset" : "headphones", *Connected ? "plugged in" : "unplugged");
     return TRUE;
+}
+
+NTSTATUS
+NTAPI
+AppleAudioHwAddJackRequirement(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Inout_ PIRP Irp)
+{
+    FDT_DRIVER_TREE Tree;
+    ULONG McaNode, Port, CodecNode, AdmacNode, DmaChannel, Gsi = 0;
+    BOOLEAN Edge = FALSE;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    Status = FdtDriverOpen(PhysicalDeviceObject, &Tree);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = AppleAudioFindNodes(&Tree, &McaNode, &Port, &CodecNode, &AdmacNode, &DmaChannel, NULL);
+    if (NT_SUCCESS(Status))
+        Status = AppleGpioQueryInterrupt(&Tree, CodecNode, 0, &Gsi, &Edge);
+    FdtDriverClose(&Tree);
+    if (NT_SUCCESS(Status))
+        Status = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+    DbgPrint("appleaudio: requesting the jack interrupt %lu: %lx\n", Gsi, Status);
+    return Status;
+}
+
+BOOLEAN
+NTAPI
+AppleAudioHwIsDmaInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hw,
+    _In_ ULONG Gsi)
+{
+    return Hw->Admac.Registers && Gsi == Hw->Admac.InterruptGsi;
+}
+
+NTSTATUS
+NTAPI
+AppleAudioHwOpenJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hw,
+    _In_ ULONG Gsi)
+{
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (Hw->JackIrq.Registers)
+        return STATUS_DEVICE_BUSY;
+    Status = AppleGpioOpenInterrupt(&Hw->Tree, Hw->CodecNode, 0, Gsi, &Hw->JackIrq);
+    if (NT_SUCCESS(Status))
+    {
+        DbgPrint("appleaudio: jack interrupt on pin %lu, group %lu of the pin controller\n", Hw->JackIrq.Pin,
+                 Hw->JackIrq.Group);
+    }
+    return Status;
+}
+
+VOID
+NTAPI
+AppleAudioHwCloseJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hw)
+{
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    AppleGpioCloseInterrupt(&Hw->JackIrq);
+}
+
+BOOLEAN
+NTAPI
+AppleAudioHwJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hw)
+{
+    return Hw->JackIrq.Registers && AppleGpioClaimInterrupt(&Hw->JackIrq);
+}
+
+VOID
+NTAPI
+AppleAudioHwArmJackInterrupt(
+    _In_ PAPPLE_AUDIO_HW Hw,
+    _In_ BOOLEAN Test)
+{
+    if (!Hw->JackIrq.Registers)
+        return;
+    if (Test)
+        AppleGpioTestInterrupt(&Hw->JackIrq);
+    else
+        AppleGpioUnmaskInterrupt(&Hw->JackIrq);
 }

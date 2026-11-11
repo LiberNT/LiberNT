@@ -12,6 +12,7 @@
 #include <portcls.h>
 #include <ksmedia.h>
 #include "hardware.h"
+#include "jackpolicy.h"
 
 #define TAG_APPLE_AUDIO 'aAPA'
 #define APPLE_AUDIO_MAX_BUFFER_SIZE (512 * 1024)
@@ -26,7 +27,7 @@
 #define APPLE_AUDIO_WAVE_RENDER_PIN 0
 #define APPLE_AUDIO_WAVE_CAPTURE_PIN 2
 #define APPLE_AUDIO_WAVE_CAPTURE_BRIDGE_PIN 3
-#define APPLE_AUDIO_JACK_POLL_MS 500
+
 #define APPLE_AUDIO_PROTECT_POLL_MS 50
 #define APPLE_AUDIO_SPEAKER_TOPOLOGY_SPEAKER_PIN 1
 
@@ -109,11 +110,16 @@ class CAppleAudioAdapter : public CUnknownImpl<IUnknown>
     static VOID NTAPI NotifyDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
     static VOID NTAPI JackTimerDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
     static VOID NTAPI JackWork(PDEVICE_OBJECT DeviceObject, PVOID Context);
+    static BOOLEAN NTAPI JackService(PKINTERRUPT Interrupt, PVOID Context);
+    static BOOLEAN NTAPI JackArmSynchronized(PVOID Context);
+    static BOOLEAN NTAPI JackTestSynchronized(PVOID Context);
     static VOID NTAPI ProtectDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
     static VOID NTAPI ProtectWork(PDEVICE_OBJECT DeviceObject, PVOID Context);
 
     VOID StopLocked(ULONG Direction);
     NTSTATUS ApplyVolumeLocked(ULONG Endpoint);
+    VOID ConnectJackInterrupt(PRESOURCELIST ResourceList, ULONG Index);
+    VOID JackInterruptWork(BOOLEAN Changed, BOOLEAN TipLatched);
 
     PDEVICE_OBJECT m_DeviceObject;
     PAPPLE_AUDIO_HW m_Hardware;
@@ -124,6 +130,10 @@ class CAppleAudioAdapter : public CUnknownImpl<IUnknown>
     KDPC m_JackDpc;
     PIO_WORKITEM m_JackWorkItem;
     volatile LONG m_JackWorkQueued;
+    volatile LONG m_JackWorkAgain;
+    PKINTERRUPT m_JackInterrupt;
+    volatile LONG m_JackInterrupts;
+    APPLE_AUDIO_JACK_POLICY m_JackPolicy;
     KTIMER m_ProtectTimer;
     KDPC m_ProtectDpc;
     PIO_WORKITEM m_ProtectWorkItem;

@@ -9,6 +9,7 @@ list(APPEND SOURCE
     adapter.cpp
     appleaudio.cpp
     hardware.c
+    jackpolicy.c
     miniport.cpp
     protect.c
     stream.cpp

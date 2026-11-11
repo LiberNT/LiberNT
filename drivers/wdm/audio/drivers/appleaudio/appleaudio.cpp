@@ -216,6 +216,7 @@ AppleAudioFilterRequirements(PDEVICE_OBJECT DeviceObject, PIRP Irp)
                 List->Descriptors[Index].u.Interrupt.MinimumVector == Gsi)
             {
                 Irp->IoStatus.Information = reinterpret_cast<ULONG_PTR>(Old);
+                AppleAudioHwAddJackRequirement(Physical, Irp);
                 Irp->IoStatus.Status = STATUS_SUCCESS;
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 return STATUS_SUCCESS;
@@ -259,6 +260,7 @@ AppleAudioFilterRequirements(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     DbgPrint("appleaudio: requesting the ADMAC interrupt %lu\n", Gsi);
 
     Irp->IoStatus.Information = reinterpret_cast<ULONG_PTR>(New);
+    AppleAudioHwAddJackRequirement(Physical, Irp);
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_SUCCESS;
