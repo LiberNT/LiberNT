@@ -555,6 +555,8 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 #define KI_PRCB_VENDOR_STRING_OFFSET 0
 #define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
 
 #ifdef __cplusplus
 extern "C" {

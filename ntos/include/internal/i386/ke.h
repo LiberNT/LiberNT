@@ -1181,6 +1181,8 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 /* TODO: this processor block has no context pointer, so the debugger data names none */
 #define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) FALSE
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
 
 #define _KeIsExecutingDpc() ((BOOLEAN)__readfsbyte(FIELD_OFFSET(KIPCR, PrcbData.DpcRoutineActive)))
 

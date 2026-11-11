@@ -82,6 +82,7 @@ list(APPEND SOURCE
     HeapLowFragmentation.c
     HighResolutionTimerClock.c
     HeapSummary.c
+    IdleClockAccounting.c
     InitOnce.c
     interlck.c
     IoCompletion.c

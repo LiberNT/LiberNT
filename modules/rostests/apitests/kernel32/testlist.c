@@ -77,6 +77,7 @@ extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
 extern void func_HighResolutionTimerClock(void);
 extern void func_HeapSummary(void);
+extern void func_IdleClockAccounting(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
 extern void func_IoCompletion(void);
@@ -279,6 +280,7 @@ const struct test winetest_testlist[] =
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
     { "HighResolutionTimerClock",    func_HighResolutionTimerClock },
     { "HeapSummary",                 func_HeapSummary },
+    { "IdleClockAccounting",         func_IdleClockAccounting },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },
     { "IoCompletion",                func_IoCompletion },

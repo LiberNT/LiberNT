@@ -774,6 +774,8 @@ KiClearDpcThreadState(
 #define KI_PRCB_VENDOR_STRING_OFFSET FIELD_OFFSET(KPRCB, VendorString)
 #define KI_PRCB_CONTEXT_OFFSET FIELD_OFFSET(KPRCB, Context)
 #define KiClockTickSuspended(Prcb) FALSE
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
 
 #define _KeIsExecutingDpc() ((BOOLEAN)__readgsbyte(FIELD_OFFSET(KIPCR, Prcb.DpcRoutineActive)))
 

@@ -56,6 +56,7 @@ ExpSumProcessorCounters(
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
 
+        KiRefreshProcessorRunTime(Prcb);
         Info->IdleProcessTime.QuadPart +=
             (LONGLONG)Prcb->IdleThread->KernelTime * KeMaximumIncrement;
 
@@ -302,6 +303,7 @@ ExpQueryProcessorIdleInformation(
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
 
+        KiRefreshProcessorRunTime(Prcb);
         Times[Index] = (ULONG64)Prcb->IdleThread->KernelTime *
                        KeMaximumIncrement;
     }
@@ -334,6 +336,7 @@ ExpQueryProcessorCycleTimeInformation(
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
 
+        KiRefreshProcessorRunTime(Prcb);
         Times[Index] = IdleOnly ? Prcb->IdleThread->CycleTime :
                                   Prcb->CycleTime;
     }

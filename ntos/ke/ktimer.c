@@ -218,7 +218,11 @@ KiInsertTimerTable(
         TableEntry->Time.QuadPart = DueTime;
 
     InterruptTime = KiQueryInterruptTimePrecise(NULL, FALSE);
-    return DueTime <= InterruptTime;
+    if (DueTime <= InterruptTime)
+        return TRUE;
+
+    KiClockTimerInserted(DueTime);
+    return FALSE;
 }
 
 /*

@@ -1469,7 +1469,10 @@ PopQueryIdleness(VOID)
     if (Now - PopIdlenessTime >= 10ULL * KeMaximumIncrement)
     {
         for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        {
+            KiRefreshProcessorRunTime(KiProcessorBlock[Index]);
             IdleTicks += KiProcessorBlock[Index]->IdleThread->KernelTime;
+        }
 
         Elapsed = (Now - PopIdlenessTime) * (ULONG)KeNumberProcessors;
         Idle = (IdleTicks - PopIdlenessIdleTicks) * KeMaximumIncrement;

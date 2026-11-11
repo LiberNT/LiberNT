@@ -1139,6 +1139,7 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
 {
     ULONG Hand;
     PKTIMER_TABLE_ENTRY TableEntry;
+    BOOLEAN WasHead;
 
     /* Remove the timer from the timer list and check if it's empty */
     Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
@@ -1147,15 +1148,22 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
     ASSERT(Timer->TimerListEntry.Flink != NULL && Timer->TimerListEntry.Blink != NULL);
     ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
     ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
+    TableEntry = &KiTimerTableListHead[Hand];
+    WasHead = (TableEntry->Entry.Flink == &Timer->TimerListEntry);
     if (RemoveEntryList(&Timer->TimerListEntry))
     {
         /* Get the respective timer table entry */
-        TableEntry = &KiTimerTableListHead[Hand];
         if (&TableEntry->Entry == TableEntry->Entry.Flink)
         {
             /* Set the entry to an infinite absolute time */
             TableEntry->Time.HighPart = 0xFFFFFFFF;
         }
+    }
+    else if (WasHead)
+    {
+        ASSERT(!IsListEmpty(&TableEntry->Entry));
+        TableEntry->Time.QuadPart =
+            CONTAINING_RECORD(TableEntry->Entry.Flink, KTIMER, TimerListEntry)->DueTime.QuadPart;
     }
 
     /* Clear the list entries on dbg builds so we can tell the timer is gone */
@@ -1327,6 +1335,7 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
     PKSPIN_LOCK_QUEUE LockQueue;
     PKTIMER_TABLE_ENTRY TimerEntry;
     BOOLEAN Removed = FALSE;
+    BOOLEAN WasHead;
 
     /* Acquire timer lock */
     LockQueue = KiAcquireTimerLock(Hand);
@@ -1346,15 +1355,22 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
             ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
             ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
         }
+        TimerEntry = &KiTimerTableListHead[Hand];
+        WasHead = (TimerEntry->Entry.Flink == &Timer->TimerListEntry);
         if (Timer->TimerListEntry.Flink && RemoveEntryList(&Timer->TimerListEntry))
         {
             /* Get the entry and check if it's empty */
-            TimerEntry = &KiTimerTableListHead[Hand];
             if (IsListEmpty(&TimerEntry->Entry))
             {
                 /* Clear the time then */
                 TimerEntry->Time.HighPart = 0xFFFFFFFF;
             }
+        }
+        else if (WasHead)
+        {
+            ASSERT(!IsListEmpty(&TimerEntry->Entry));
+            TimerEntry->Time.QuadPart =
+                CONTAINING_RECORD(TimerEntry->Entry.Flink, KTIMER, TimerListEntry)->DueTime.QuadPart;
         }
         Timer->TimerListEntry.Flink = NULL;
         Timer->TimerListEntry.Blink = NULL;

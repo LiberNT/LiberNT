@@ -293,6 +293,7 @@ ExpQueryProcessorPerformance(
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
 
+        KiRefreshProcessorRunTime(Prcb);
         RtlZeroMemory(&Performance[Index], sizeof(Performance[Index]));
 
         Performance[Index].IdleTime.QuadPart =

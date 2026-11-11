@@ -642,6 +642,13 @@ KiUpdateRunTime(
 );
 
 VOID
+FASTCALL
+KiUpdateClockTime(
+    _In_ PKPRCB Prcb,
+    _In_ ULONG Increment
+);
+
+VOID
 NTAPI
 KiExpireTimers(
     PKDPC Dpc,

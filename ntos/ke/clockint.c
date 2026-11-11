@@ -314,7 +314,8 @@ KiCheckClockWatchdog(
             PKPRCB TargetPrcb = KiProcessorBlock[Number];
 
             if ((TargetPrcb != NULL) && (TargetPrcb != Prcb) &&
-                (KeActiveProcessors & TargetPrcb->SetMember))
+                (KeActiveProcessors & TargetPrcb->SetMember) &&
+                !KiClockTickSuspended(TargetPrcb))
             {
                 KiCountClockKeepAlive(TargetPrcb, Ticks);
             }
@@ -681,6 +682,11 @@ KiCalibrateCycleQuantum(
     KiQuantumCalibrated = TRUE;
 }
 
+static
+VOID
+KiTickClockOwner(
+    _In_ ULONGLONG InterruptTime);
+
 /*
  * The clock tick. Every processor arrives here from its own clock interrupt,
  * charges the period to whatever it was doing, and the one that owns the clock
@@ -700,8 +706,6 @@ KeUpdateSystemTime(
     PKPRCB Prcb = KeGetCurrentPrcb();
     ULONGLONG InterruptTime;
     BOOLEAN ClockOwner;
-    ULONG Hand, Span, Index, Bucket;
-    BOOLEAN Due = FALSE;
 
     /*
      * Exactly one processor moves the clock. The first one to tick claims the
@@ -729,6 +733,19 @@ KeUpdateSystemTime(
 
     if (!ClockOwner)
         return;
+
+    KiTickClockOwner(InterruptTime);
+}
+
+static
+VOID
+KiTickClockOwner(
+    _In_ ULONGLONG InterruptTime)
+{
+    ULONG Hand, Span, Index, Bucket;
+    BOOLEAN Due = FALSE;
+
+    ASSERT(KiClockOwnerPrcb == KeGetCurrentPrcb());
 
     KdpLogWatchdogCheck(InterruptTime);
 
@@ -781,6 +798,21 @@ KeUpdateSystemTime(
     {
         KiTimerScanHand = Hand;
     }
+}
+
+VOID
+FASTCALL
+KiUpdateClockTime(
+    _In_ PKPRCB Prcb,
+    _In_ ULONG Increment)
+{
+    ASSERT(Prcb == KeGetCurrentPrcb());
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+
+    if (KiClockOwnerPrcb != Prcb)
+        InterlockedExchangePointer((PVOID volatile *)&KiClockOwnerPrcb, Prcb);
+
+    KiTickClockOwner(KiUpdateSharedTime(Increment, TRUE));
 }
 
 /*
