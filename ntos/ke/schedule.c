@@ -597,6 +597,7 @@ KiYieldDelayExecution(VOID)
             Next->State = Standby;
             Next->NextProcessor = Prcb->Number;
             Prcb->NextThread = Next;
+            Thread->Preempted = FALSE;
         }
     }
 

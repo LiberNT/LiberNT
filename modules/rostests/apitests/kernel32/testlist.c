@@ -161,6 +161,7 @@ extern void func_ExitedClientId(void);
 extern void func_SleepTickRounding(void);
 extern void func_SwitchToThreadPriority(void);
 extern void func_QueryInterruptTimePrecise(void);
+extern void func_SwitchToThreadRoundRobin(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
@@ -347,6 +348,7 @@ const struct test winetest_testlist[] =
     { "SleepTickRounding",           func_SleepTickRounding },
     { "SwitchToThreadPriority",      func_SwitchToThreadPriority },
     { "QueryInterruptTimePrecise",   func_QueryInterruptTimePrecise },
+    { "SwitchToThreadRoundRobin",    func_SwitchToThreadRoundRobin },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },

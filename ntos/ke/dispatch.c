@@ -281,7 +281,6 @@ KiExitDispatcher(
     NextThread->State = Running;
 
     Thread->WaitIrql = OldIrql;
-    Thread->Preempted = TRUE;
 
     /* The outgoing thread goes back on this processor's ready queues */
     Thread->NextProcessor = Prcb->Number;
