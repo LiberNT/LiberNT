@@ -94,6 +94,25 @@ TestCurrentThreadAccess(VOID)
         RtlAdjustPrivilege(SE_DEBUG_PRIVILEGE, DebugEnabled, FALSE, &DebugEnabled);
 }
 
+static VOID
+TestPseudoHandleSameAccess(HANDLE Pseudo, ACCESS_MASK Expected)
+{
+    OBJECT_BASIC_INFORMATION Basic;
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+
+    Status = NtDuplicateObject(NtCurrentProcess(), Pseudo, NtCurrentProcess(),
+                               &Handle, 0, 0, DUPLICATE_SAME_ACCESS);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = NtQueryObject(Handle, ObjectBasicInformation, &Basic, sizeof(Basic), NULL);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+        ok_hex(Basic.GrantedAccess, Expected);
+    NtClose(Handle);
+}
+
 START_TEST(NtDuplicateObject)
 {
     NTSTATUS Status;
@@ -112,6 +131,9 @@ START_TEST(NtDuplicateObject)
         "Handle = %p\n", Handle);
     Status = NtClose(Handle);
     ok_hex(Status, STATUS_HANDLE_NOT_CLOSABLE);
+
+    TestPseudoHandleSameAccess(NtCurrentProcess(), PROCESS_ALL_ACCESS);
+    TestPseudoHandleSameAccess(NtCurrentThread(), THREAD_ALL_ACCESS);
 
     TestCurrentThreadAccess();
 }
