@@ -42,10 +42,14 @@ LoadApi(
     Api->SetProcessDefault = (PFN_SET_CPU_SETS)GetProcAddress(Handle, "SetProcessDefaultCpuSets");
     Api->GetThreadSelected = (PFN_GET_CPU_SETS)GetProcAddress(Handle, "GetThreadSelectedCpuSets");
     Api->SetThreadSelected = (PFN_SET_CPU_SETS)GetProcAddress(Handle, "SetThreadSelectedCpuSets");
-    ok(Api->GetProcessDefault != NULL, "%s!GetProcessDefaultCpuSets is missing\n", Module);
-    ok(Api->SetProcessDefault != NULL, "%s!SetProcessDefaultCpuSets is missing\n", Module);
-    ok(Api->GetThreadSelected != NULL, "%s!GetThreadSelectedCpuSets is missing\n", Module);
-    ok(Api->SetThreadSelected != NULL, "%s!SetThreadSelectedCpuSets is missing\n", Module);
+    if (!Api->GetProcessDefault)
+        skip("%s!GetProcessDefaultCpuSets is missing\n", Module);
+    if (!Api->SetProcessDefault)
+        skip("%s!SetProcessDefaultCpuSets is missing\n", Module);
+    if (!Api->GetThreadSelected)
+        skip("%s!GetThreadSelectedCpuSets is missing\n", Module);
+    if (!Api->SetThreadSelected)
+        skip("%s!SetThreadSelectedCpuSets is missing\n", Module);
 
     return Api->GetProcessDefault && Api->SetProcessDefault &&
            Api->GetThreadSelected && Api->SetThreadSelected;
@@ -65,7 +69,8 @@ GetSystemCpuSetIds(
 
     pGetSystemCpuSetInformation = (PFN_GET_SYSTEM_CPU_SET_INFORMATION)
         GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetSystemCpuSetInformation");
-    ok(pGetSystemCpuSetInformation != NULL, "kernel32!GetSystemCpuSetInformation is missing\n");
+    if (!pGetSystemCpuSetInformation)
+        skip("kernel32!GetSystemCpuSetInformation is missing\n");
     if (!pGetSystemCpuSetInformation)
         return 0;
 

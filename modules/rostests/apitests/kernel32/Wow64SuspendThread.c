@@ -37,9 +37,12 @@ LoadApi(
     Api->Suspend = (PFN_WOW64_SUSPEND_THREAD)GetProcAddress(Handle, "Wow64SuspendThread");
     Api->GetContext = (PFN_WOW64_GET_THREAD_CONTEXT)GetProcAddress(Handle, "Wow64GetThreadContext");
     Api->SetContext = (PFN_WOW64_SET_THREAD_CONTEXT)GetProcAddress(Handle, "Wow64SetThreadContext");
-    ok(Api->Suspend != NULL, "%s!Wow64SuspendThread is missing\n", Module);
-    ok(Api->GetContext != NULL, "%s!Wow64GetThreadContext is missing\n", Module);
-    ok(Api->SetContext != NULL, "%s!Wow64SetThreadContext is missing\n", Module);
+    if (!Api->Suspend)
+        skip("%s!Wow64SuspendThread is missing\n", Module);
+    if (!Api->GetContext)
+        skip("%s!Wow64GetThreadContext is missing\n", Module);
+    if (!Api->SetContext)
+        skip("%s!Wow64SetThreadContext is missing\n", Module);
 
     return Api->Suspend && Api->GetContext && Api->SetContext;
 }

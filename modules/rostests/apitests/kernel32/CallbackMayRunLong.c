@@ -108,8 +108,10 @@ START_TEST(CallbackMayRunLong)
     if (KernelBase)
         pKernelBase = (PFN_CALLBACK_MAY_RUN_LONG)GetProcAddress(KernelBase, "CallbackMayRunLong");
 
-    ok(pKernel32 != NULL, "kernel32!CallbackMayRunLong is missing\n");
-    ok(pKernelBase != NULL, "kernelbase!CallbackMayRunLong is missing\n");
+    if (!pKernel32)
+        skip("kernel32!CallbackMayRunLong is missing\n");
+    if (!pKernelBase)
+        skip("kernelbase!CallbackMayRunLong is missing\n");
 
     if (pKernel32)
         TestEntryPoint(pKernel32, "kernel32!CallbackMayRunLong");

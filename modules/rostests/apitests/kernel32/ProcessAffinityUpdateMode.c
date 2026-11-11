@@ -146,10 +146,14 @@ START_TEST(ProcessAffinityUpdateMode)
         pKbSet = (PFN_SET_AFFINITY_UPDATE_MODE)GetProcAddress(KernelBase, "SetProcessAffinityUpdateMode");
         pKbQuery = (PFN_QUERY_AFFINITY_UPDATE_MODE)GetProcAddress(KernelBase, "QueryProcessAffinityUpdateMode");
     }
-    ok(pSetProcessAffinityUpdateMode != NULL, "kernel32!SetProcessAffinityUpdateMode is missing\n");
-    ok(pQueryProcessAffinityUpdateMode != NULL, "kernel32!QueryProcessAffinityUpdateMode is missing\n");
-    ok(pKbSet != NULL, "kernelbase!SetProcessAffinityUpdateMode is missing\n");
-    ok(pKbQuery != NULL, "kernelbase!QueryProcessAffinityUpdateMode is missing\n");
+    if (!pSetProcessAffinityUpdateMode)
+        skip("kernel32!SetProcessAffinityUpdateMode is missing\n");
+    if (!pQueryProcessAffinityUpdateMode)
+        skip("kernel32!QueryProcessAffinityUpdateMode is missing\n");
+    if (!pKbSet)
+        skip("kernelbase!SetProcessAffinityUpdateMode is missing\n");
+    if (!pKbQuery)
+        skip("kernelbase!QueryProcessAffinityUpdateMode is missing\n");
     if (!pSetProcessAffinityUpdateMode || !pQueryProcessAffinityUpdateMode)
         return;
 

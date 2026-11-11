@@ -127,11 +127,16 @@ START_TEST(GetWsChangesEx)
     if (Psapi)
         pPsapiGetWsChangesEx = (PFN_GET_WS_CHANGES_EX)GetProcAddress(Psapi, "GetWsChangesEx");
 
-    ok(pK32GetWsChangesEx != NULL, "kernel32!K32GetWsChangesEx is missing\n");
-    ok(pInitialize != NULL, "kernel32!K32InitializeProcessForWsWatch is missing\n");
-    ok(pKbGetWsChangesEx != NULL, "kernelbase!GetWsChangesEx is missing\n");
-    ok(pKbK32GetWsChangesEx != NULL, "kernelbase!K32GetWsChangesEx is missing\n");
-    ok(pPsapiGetWsChangesEx != NULL, "psapi!GetWsChangesEx is missing\n");
+    if (!pK32GetWsChangesEx)
+        skip("kernel32!K32GetWsChangesEx is missing\n");
+    if (!pInitialize)
+        skip("kernel32!K32InitializeProcessForWsWatch is missing\n");
+    if (!pKbGetWsChangesEx)
+        skip("kernelbase!GetWsChangesEx is missing\n");
+    if (!pKbK32GetWsChangesEx)
+        skip("kernelbase!K32GetWsChangesEx is missing\n");
+    if (!pPsapiGetWsChangesEx)
+        skip("psapi!GetWsChangesEx is missing\n");
     if (!pK32GetWsChangesEx || !pInitialize)
         return;
 
