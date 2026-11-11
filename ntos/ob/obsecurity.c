@@ -600,6 +600,9 @@ ObpCheckTraverseAccess(
     /* The kernel walks the namespace on its own authority */
     if (AccessMode == KernelMode) return TRUE;
 
+    /* SeChangeNotifyPrivilege enabled: the "Bypass traverse checking" right */
+    if ((AccessState != NULL) && (AccessState->Flags & TOKEN_HAS_TRAVERSE_PRIVILEGE)) return TRUE;
+
     if (AccessState != NULL)
     {
         Status = ObGetObjectSecurity(Object, &Descriptor, &Allocated);
