@@ -220,6 +220,14 @@ MMixerGetWaveConnectionState(
     OUT PULONG IsConnected);
 
 MIXER_STATUS
+MMixerGetWaveConnector(
+    IN PMIXER_CONTEXT MixerContext,
+    IN ULONG DeviceIndex,
+    IN ULONG bWaveIn,
+    OUT LPWSTR *DevicePath,
+    OUT PULONG PinId);
+
+MIXER_STATUS
 MMixerQueryWaveFormatSupport(
     IN PMIXER_CONTEXT MixerContext,
     IN ULONG DeviceIndex,

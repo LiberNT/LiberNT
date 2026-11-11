@@ -553,6 +553,62 @@ HRESULT reactos_endpoint_volume_initialize(
     return S_OK;
 }
 
+HRESULT reactos_wave_connector(const GUID *guid, WCHAR **path, ULONG *pin)
+{
+    WDMAUD_DEVICE_INFO info;
+    EDataFlow flow;
+    DWORD index;
+    char *device;
+    WCHAR *buffer;
+    ULONG size;
+
+    if (!guid || !path || !pin)
+        return E_POINTER;
+    *path = NULL;
+    *pin = ~0u;
+
+    if (!get_device_name_from_guid(guid, &device, &flow))
+        return AUDCLNT_E_DEVICE_INVALIDATED;
+    if (!parse_device_name(device, &flow, &index) || is_loopback_device_name(device))
+    {
+        free(device);
+        return E_NOTFOUND;
+    }
+    free(device);
+
+    if (!open_wdmaud())
+        return AUDCLNT_E_DEVICE_INVALIDATED;
+
+    ZeroMemory(&info, sizeof(info));
+    info.DeviceType = device_type_from_flow(flow);
+    info.DeviceIndex = index;
+    if (!wdmaud_ioctl(IOCTL_GETWAVECONNECTOR, &info))
+        return GetLastError() == ERROR_NOT_FOUND ? E_NOTFOUND : wdmaud_error_hresult();
+
+    size = info.u.Connector.DeviceInterfaceStringSize;
+    if (size < sizeof(WCHAR) || size % sizeof(WCHAR))
+        return E_UNEXPECTED;
+    if (!(buffer = malloc(size)))
+        return E_OUTOFMEMORY;
+
+    ZeroMemory(&info, sizeof(info));
+    info.DeviceType = device_type_from_flow(flow);
+    info.DeviceIndex = index;
+    info.u.Connector.DeviceInterfaceString = buffer;
+    info.u.Connector.DeviceInterfaceStringSize = size;
+    if (!wdmaud_ioctl(IOCTL_GETWAVECONNECTOR, &info))
+    {
+        free(buffer);
+        return wdmaud_error_hresult();
+    }
+
+    buffer[size / sizeof(WCHAR) - 1] = 0;
+    assert(info.u.Connector.PinId != ~0u);
+    *path = buffer;
+    *pin = info.u.Connector.PinId;
+    return S_OK;
+}
+
 HRESULT reactos_endpoint_volume_get(
     const struct reactos_endpoint_volume_state *state, float *levels,
     UINT count)

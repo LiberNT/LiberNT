@@ -124,6 +124,7 @@ static inline IPropertyBagImpl *impl_from_IPropertyBag(IPropertyBag *iface)
     return CONTAINING_RECORD(iface, IPropertyBagImpl, IPropertyBag_iface);
 }
 
+#ifndef __REACTOS__
 static HRESULT DeviceTopology_Create(IMMDevice *device, IDeviceTopology **ppv);
 
 static inline IConnectorImpl *impl_from_IConnector(IConnector *iface)
@@ -135,6 +136,7 @@ static inline IDeviceTopologyImpl *impl_from_IDeviceTopology(IDeviceTopology *if
 {
     return CONTAINING_RECORD(iface, IDeviceTopologyImpl, IDeviceTopology_iface);
 }
+#endif
 
 static const WCHAR propkey_formatW[] = L"{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X},%d";
 
@@ -959,7 +961,11 @@ static HRESULT WINAPI MMDevice_Activate(IMMDevice *iface, REFIID riid, DWORD cls
     }
     else if (IsEqualIID(riid, &IID_IDeviceTopology))
     {
+#ifdef __REACTOS__
+        hr = reactos_device_topology_create(This, (IDeviceTopology**)ppv);
+#else
         hr = DeviceTopology_Create(iface, (IDeviceTopology**)ppv);
+#endif
     }
     else if (IsEqualIID(riid, &IID_IDirectSound)
              || IsEqualIID(riid, &IID_IDirectSound8))
@@ -1399,6 +1405,11 @@ static HRESULT WINAPI MMDevEnum_GetDevice(IMMDeviceEnumerator *iface, const WCHA
 
     if(!name || !device)
         return E_POINTER;
+
+#ifdef __REACTOS__
+    if (!wcsncmp(name, L"{2}.", 4))
+        return reactos_filter_device_get(name, device);
+#endif
 
     LIST_FOR_EACH_ENTRY(impl, &device_list, MMDevice, entry)
     {
@@ -1908,6 +1919,7 @@ static const IPropertyBagVtbl PB_Vtbl =
     PB_Write
 };
 
+#ifndef __REACTOS__
 static HRESULT WINAPI Connector_QueryInterface(IConnector *iface, REFIID riid, void **ppv)
 {
     IConnectorImpl *This = impl_from_IConnector(iface);
@@ -2181,3 +2193,4 @@ static HRESULT DeviceTopology_Create(IMMDevice *device, IDeviceTopology **ppv)
 
     return S_OK;
 }
+#endif

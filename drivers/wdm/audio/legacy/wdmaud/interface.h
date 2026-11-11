@@ -56,6 +56,12 @@ typedef struct
             LPWSTR DeviceInterfaceString;
             ULONG DeviceInterfaceStringSize;
         }Interface;
+        struct
+        {
+            LPWSTR DeviceInterfaceString;
+            ULONG DeviceInterfaceStringSize;
+            ULONG PinId;
+        }Connector;
 
         struct
         {
@@ -442,5 +448,26 @@ typedef struct
 #define IOCTL_GETENDPOINT_STATE \
     CTL_CODE(FILE_DEVICE_SOUND, \
              21, \
+             METHOD_BUFFERED, \
+             FILE_CREATE_TREE_CONNECTION | FILE_ANY_ACCESS)
+
+/// IOCTL_GETWAVECONNECTOR
+///
+/// Description: This IOCTL returns the KS filter and pin through which a wave
+///              endpoint reaches its jack or physical connector.
+///
+/// Arguments:  DeviceType and DeviceIndex must identify a wave endpoint.
+///             u.Connector.DeviceInterfaceStringSize gives the size of the
+///             u.Connector.DeviceInterfaceString buffer in bytes; zero queries
+///             the size.
+/// Result:     The filter's device interface path is stored in the buffer,
+///             its size in u.Connector.DeviceInterfaceStringSize and the pin
+///             in u.Connector.PinId.
+/// ReturnCode: STATUS_SUCCESS indicates success, STATUS_BUFFER_OVERFLOW a
+///             buffer too small and STATUS_NOT_FOUND an endpoint without one.
+
+#define IOCTL_GETWAVECONNECTOR \
+    CTL_CODE(FILE_DEVICE_SOUND, \
+             22, \
              METHOD_BUFFERED, \
              FILE_CREATE_TREE_CONNECTION | FILE_ANY_ACCESS)

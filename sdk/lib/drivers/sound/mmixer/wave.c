@@ -734,6 +734,52 @@ MMixerGetWaveConnectionState(
 }
 
 MIXER_STATUS
+MMixerGetWaveConnector(
+    IN PMIXER_CONTEXT MixerContext,
+    IN ULONG DeviceIndex,
+    IN ULONG bWaveIn,
+    OUT LPWSTR *DevicePath,
+    OUT PULONG PinId)
+{
+    PMIXER_LIST MixerList;
+    LPMIXER_DATA ConnectorData;
+    LPWAVE_INFO WaveInfo;
+    MIXER_STATUS Status;
+    SIZE_T Length;
+
+    if (!DevicePath || !PinId)
+        return MM_STATUS_INVALID_PARAMETER;
+
+    Status = MMixerVerifyContext(MixerContext);
+    if (Status != MM_STATUS_SUCCESS)
+        return Status;
+
+    MixerList = (PMIXER_LIST)MixerContext->MixerContext;
+    Status = MMixerGetWaveInfoByIndexAndType(MixerList, DeviceIndex, bWaveIn, &WaveInfo);
+    if (Status != MM_STATUS_SUCCESS)
+        return MM_STATUS_INVALID_PARAMETER;
+
+    if (WaveInfo->ConnectorDeviceId == MAXULONG ||
+        WaveInfo->ConnectorPinId == MAXULONG)
+    {
+        return MM_STATUS_UNSUCCESSFUL;
+    }
+
+    ConnectorData = MMixerGetDataByDeviceId(MixerList, WaveInfo->ConnectorDeviceId);
+    if (!ConnectorData || !ConnectorData->DeviceName)
+        return MM_STATUS_UNSUCCESSFUL;
+
+    Length = wcslen(ConnectorData->DeviceName) + 1;
+    *DevicePath = MixerContext->Alloc(Length * sizeof(WCHAR));
+    if (!*DevicePath)
+        return MM_STATUS_NO_MEMORY;
+
+    MixerContext->Copy(*DevicePath, ConnectorData->DeviceName, Length * sizeof(WCHAR));
+    *PinId = WaveInfo->ConnectorPinId;
+    return MM_STATUS_SUCCESS;
+}
+
+MIXER_STATUS
 MMixerGetWaveFormat(
     IN PMIXER_CONTEXT MixerContext,
     IN ULONG DeviceIndex,

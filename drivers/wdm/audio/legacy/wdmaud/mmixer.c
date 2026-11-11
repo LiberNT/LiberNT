@@ -836,6 +836,82 @@ WdmAudGetEndpointState(
 }
 
 NTSTATUS
+WdmAudGetWaveConnector(
+    IN PIRP Irp,
+    IN PWDMAUD_DEVICE_INFO DeviceInfo)
+{
+    PIO_STACK_LOCATION IoStack;
+    MIXER_STATUS Status;
+    LPWSTR DevicePath;
+    ULONG PinId, Size, Length;
+    NTSTATUS Result = STATUS_SUCCESS;
+
+    PAGED_CODE();
+    ASSERT(Irp);
+    ASSERT(DeviceInfo);
+
+    IoStack = IoGetCurrentIrpStackLocation(Irp);
+    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength <
+        sizeof(WDMAUD_DEVICE_INFO))
+    {
+        return SetIrpIoStatus(Irp, STATUS_BUFFER_TOO_SMALL, 0);
+    }
+
+    if (DeviceInfo->DeviceType != WAVE_IN_DEVICE_TYPE &&
+        DeviceInfo->DeviceType != WAVE_OUT_DEVICE_TYPE)
+    {
+        return SetIrpIoStatus(Irp, STATUS_INVALID_PARAMETER, 0);
+    }
+
+    DevicePath = NULL;
+    PinId = MAXULONG;
+    Status = MMixerGetWaveConnector(&MixerContext,
+                                    DeviceInfo->DeviceIndex,
+                                    DeviceInfo->DeviceType == WAVE_IN_DEVICE_TYPE,
+                                    &DevicePath,
+                                    &PinId);
+    if (Status == MM_STATUS_INVALID_PARAMETER)
+        return SetIrpIoStatus(Irp, STATUS_INVALID_PARAMETER, 0);
+    if (Status == MM_STATUS_NO_MEMORY)
+        return SetIrpIoStatus(Irp, STATUS_INSUFFICIENT_RESOURCES, 0);
+    if (Status != MM_STATUS_SUCCESS)
+        return SetIrpIoStatus(Irp, STATUS_NOT_FOUND, 0);
+
+    ASSERT(DevicePath);
+    ASSERT(PinId != MAXULONG);
+
+    Size = DeviceInfo->u.Connector.DeviceInterfaceStringSize;
+    Length = (ULONG)(wcslen(DevicePath) + 1) * sizeof(WCHAR);
+    DeviceInfo->u.Connector.DeviceInterfaceStringSize = Length;
+    DeviceInfo->u.Connector.PinId = PinId;
+
+    if (Size && Size < Length)
+    {
+        Result = STATUS_BUFFER_OVERFLOW;
+    }
+    else if (Size)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(DeviceInfo->u.Connector.DeviceInterfaceString, Length, sizeof(WCHAR));
+            RtlCopyMemory(DeviceInfo->u.Connector.DeviceInterfaceString, DevicePath, Length);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Result = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    FreeItem(DevicePath);
+    return SetIrpIoStatus(Irp,
+                          Result,
+                          NT_SUCCESS(Result) || Result == STATUS_BUFFER_OVERFLOW
+                              ? sizeof(WDMAUD_DEVICE_INFO)
+                              : 0);
+}
+
+NTSTATUS
 WdmAudMidiCapabilities(
     IN PDEVICE_OBJECT DeviceObject,
     IN PWDMAUD_DEVICE_INFO DeviceInfo,
