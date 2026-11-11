@@ -39,7 +39,7 @@ typedef struct _RTL_BARRIER_DELETER
     PRTL_BARRIER Barrier;
     HANDLE Thread;
     DWORD ThreadId;
-    volatile LONG Calling;
+    HANDLE Started;
     volatile LONG Returned;
 } RTL_BARRIER_DELETER, *PRTL_BARRIER_DELETER;
 
@@ -74,7 +74,8 @@ RtlBarrierDeleter(
 {
     PRTL_BARRIER_DELETER Deleter = Parameter;
 
-    InterlockedExchange(&Deleter->Calling, 1);
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+    SetEvent(Deleter->Started);
     pRtlDeleteBarrier(Deleter->Barrier);
     InterlockedExchange(&Deleter->Returned, 1);
     return 0;
@@ -117,14 +118,11 @@ WaitForDeleterBlocked(
     BOOLEAN Blocked = FALSE;
     NTSTATUS Status;
 
+    if (WaitForSingleObject(Deleter->Started, BARRIER_JOIN_TIMEOUT) != WAIT_OBJECT_0)
+        return FALSE;
+
     while (!Blocked && WaitForSingleObject(Deleter->Thread, 0) == WAIT_TIMEOUT && GetTickCount64() < Deadline)
     {
-        if (!ReadAcquire(&Deleter->Calling))
-        {
-            SwitchToThread();
-            continue;
-        }
-
         if (Buffer == NULL)
         {
             Buffer = HeapAlloc(GetProcessHeap(), 0, Size);
@@ -284,15 +282,15 @@ TestDelete(
         return;
     }
 
-    ok_eq_ulong(WaitForSingleObject(Ready, BARRIER_JOIN_TIMEOUT), WAIT_OBJECT_0);
     ok(WaitForBarrierEntry(&Test.Barrier, &Initial, Waiter.Thread),
        "Flags 0x%lx: the waiter did not enter the barrier\n", WaiterFlags);
+    ok_eq_ulong(WaitForSingleObject(Ready, BARRIER_JOIN_TIMEOUT), WAIT_OBJECT_0);
 
     Deleter.Barrier = &Test.Barrier;
+    Deleter.Started = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Deleter.Started != NULL, "CreateEventW failed with %lu\n", GetLastError());
     Deleter.Thread = CreateThread(NULL, 0, RtlBarrierDeleter, &Deleter, 0, &Deleter.ThreadId);
     ok(Deleter.Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
-    if (Deleter.Thread != NULL)
-        SetThreadPriority(Deleter.Thread, THREAD_PRIORITY_ABOVE_NORMAL);
 
     if (WaiterFlags & 0x10000)
     {
@@ -308,16 +306,15 @@ TestDelete(
     }
 
     if (StartWorker(&Releaser, &Test, 0, 1, NULL))
-    {
-        SetThreadPriority(Releaser.Thread, THREAD_PRIORITY_ABOVE_NORMAL);
         JoinThread(Releaser.Thread);
-    }
 
     JoinThread(Deleter.Thread);
     JoinThread(Waiter.Thread);
     ok(Waiter.ArrivedAfterFirstRound == 2, "Flags 0x%lx: waiter left after %ld arrivals\n",
        WaiterFlags, Waiter.ArrivedAfterFirstRound);
     ok(Test.Winners == 1, "Flags 0x%lx: %ld winners\n", WaiterFlags, Test.Winners);
+    if (Deleter.Started != NULL)
+        CloseHandle(Deleter.Started);
     CloseHandle(Ready);
 }
 
