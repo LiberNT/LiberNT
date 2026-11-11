@@ -113,6 +113,7 @@ list(APPEND SOURCE
     NamedPipeClientComputerName.c
     NlsStringApis.c
     NumaApis.c
+    PerfConsumer.c
     PerfProvider.c
     Pipes.c
     PackageIdentity.c

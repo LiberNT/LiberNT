@@ -26,6 +26,7 @@
 #include "perflib.h"
 #include "winternl.h"
 #include "winperf.h"
+#include <perflibv2.h>
 
 #include "wine/debug.h"
 #include "kernelbase.h"
@@ -175,11 +176,307 @@ struct perf_provider
     unsigned int counterset_count;
 
     struct list instance_list;
+    CRITICAL_SECTION cs;
+    ULONG id;
+    BOOL local;
+    HANDLE section;
+    PERFLIBV2_SHARED *shared;
+    HANDLE channel_section;
+    PERFLIBV2_CHANNEL *channel;
+    HANDLE request_event;
+    HANDLE done_event;
+    HANDLE lock_mutex;
+    HANDLE wait;
+    CRITICAL_SECTION request_cs;
+    LONG handled_request;
 };
+
+static LONG perf_provider_ids;
 
 static struct perf_provider *perf_provider_from_handle(HANDLE prov)
 {
     return (struct perf_provider *)prov;
+}
+
+static void perf_object_name( struct perf_provider *prov, const WCHAR *base, WCHAR *name, SIZE_T count )
+{
+    swprintf( name, count, L"%s\\%s", prov->local ? L"Local" : L"Global", base );
+}
+
+static HANDLE perf_create_mapping( struct perf_provider *prov, const WCHAR *base, DWORD size, void **view )
+{
+    WCHAR name[MAX_PATH];
+    HANDLE mapping;
+
+    perf_object_name( prov, base, name, ARRAY_SIZE(name) );
+    if (!(mapping = CreateFileMappingW( INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, name ))) return NULL;
+    if (GetLastError() == ERROR_ALREADY_EXISTS || !(*view = MapViewOfFile( mapping, FILE_MAP_WRITE, 0, 0, 0 )))
+    {
+        CloseHandle( mapping );
+        return NULL;
+    }
+    return mapping;
+}
+
+static HANDLE perf_create_event( struct perf_provider *prov, const WCHAR *format )
+{
+    WCHAR base[64], name[MAX_PATH];
+    HANDLE event;
+
+    swprintf( base, ARRAY_SIZE(base), format, GetCurrentProcessId(), prov->id );
+    perf_object_name( prov, base, name, ARRAY_SIZE(name) );
+    if ((event = CreateEventW( NULL, FALSE, FALSE, name )) && GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        CloseHandle( event );
+        return NULL;
+    }
+    return event;
+}
+
+static ULONG perf_shared_size( ULONG counterset_capacity, ULONG instance_capacity )
+{
+    return (sizeof(PERFLIBV2_SHARED) + 7) / 8 * 8 + counterset_capacity
+           + instance_capacity * sizeof(PERFLIBV2_INSTANCE_ENTRY);
+}
+
+static HANDLE perf_create_shared( struct perf_provider *prov, ULONG generation, ULONG counterset_capacity,
+                                  ULONG instance_capacity, PERFLIBV2_SHARED **shared )
+{
+    ULONG size = perf_shared_size( counterset_capacity, instance_capacity );
+    FILETIME create, exit, kernel, user;
+    WCHAR base[64];
+    HANDLE section;
+
+    swprintf( base, ARRAY_SIZE(base), PERFLIBV2_DATA_FORMAT, GetCurrentProcessId(), prov->id, generation );
+    if (!(section = perf_create_mapping( prov, base, size, (void **)shared ))) return NULL;
+
+    (*shared)->Signature = PERFLIBV2_SIGNATURE;
+    (*shared)->Version = PERFLIBV2_VERSION;
+    (*shared)->SectionSize = size;
+    (*shared)->ProcessId = GetCurrentProcessId();
+    (*shared)->ProviderId = prov->id;
+    (*shared)->Generation = generation;
+    if (GetProcessTimes( GetCurrentProcess(), &create, &exit, &kernel, &user ))
+        (*shared)->ProcessCreateTime = ((ULONG64)create.dwHighDateTime << 32) | create.dwLowDateTime;
+    (*shared)->ProviderGuid = prov->guid;
+    if (prov->callback) (*shared)->Flags |= PERFLIBV2_FLAG_CALLBACK;
+    (*shared)->CounterSetOffset = (sizeof(PERFLIBV2_SHARED) + 7) / 8 * 8;
+    (*shared)->CounterSetCapacity = counterset_capacity;
+    (*shared)->InstanceOffset = (*shared)->CounterSetOffset + counterset_capacity;
+    (*shared)->InstanceCapacity = instance_capacity;
+    return section;
+}
+
+static void perf_shared_begin( PERFLIBV2_SHARED *shared )
+{
+    InterlockedIncrement( &shared->Sequence );
+}
+
+static void perf_shared_end( PERFLIBV2_SHARED *shared )
+{
+    InterlockedIncrement( &shared->Sequence );
+}
+
+static BOOL perf_shared_reserve( struct perf_provider *prov, ULONG counterset_bytes, ULONG instances )
+{
+    PERFLIBV2_SHARED *old = prov->shared, *new = NULL;
+    ULONG counterset_capacity, instance_capacity, generation;
+    HANDLE section = NULL;
+    DWORD error;
+
+    if (!old) return TRUE;
+    if (old->CounterSetBytes + counterset_bytes <= old->CounterSetCapacity
+        && old->InstanceCount + instances <= old->InstanceCapacity)
+        return TRUE;
+
+    counterset_capacity = old->CounterSetCapacity;
+    instance_capacity = old->InstanceCapacity;
+    while (old->CounterSetBytes + counterset_bytes > counterset_capacity)
+    {
+        if (counterset_capacity >= 0x1000000) return FALSE;
+        counterset_capacity *= 2;
+    }
+    while (old->InstanceCount + instances > instance_capacity)
+    {
+        if (instance_capacity >= 0x100000) return FALSE;
+        instance_capacity *= 2;
+    }
+
+    error = GetLastError();
+    for (generation = old->Generation + 1; !section && generation <= old->Generation + 4; generation++)
+        section = perf_create_shared( prov, generation, counterset_capacity, instance_capacity, &new );
+    SetLastError( error );
+    if (!section) return FALSE;
+
+    new->Flags = old->Flags;
+    new->CounterSetCount = old->CounterSetCount;
+    new->CounterSetBytes = old->CounterSetBytes;
+    new->InstanceCount = old->InstanceCount;
+    memcpy( (BYTE *)new + new->CounterSetOffset, (BYTE *)old + old->CounterSetOffset, old->CounterSetBytes );
+    memcpy( (BYTE *)new + new->InstanceOffset, (BYTE *)old + old->InstanceOffset,
+            old->InstanceCount * sizeof(PERFLIBV2_INSTANCE_ENTRY) );
+
+    perf_shared_begin( old );
+    old->Successor = new->Generation;
+    perf_shared_end( old );
+    UnmapViewOfFile( old );
+    CloseHandle( prov->section );
+    prov->section = section;
+    prov->shared = new;
+    return TRUE;
+}
+
+static BOOL perf_shared_add_counterset( struct perf_provider *prov, struct counterset_template *template )
+{
+    ULONG size = offsetof( struct counterset_template, counter[template->counterset.NumCounters] );
+    PERFLIBV2_SHARED *shared;
+
+    if (!perf_shared_reserve( prov, size, 0 )) return FALSE;
+    if (!(shared = prov->shared)) return TRUE;
+    perf_shared_begin( shared );
+    memcpy( (BYTE *)shared + shared->CounterSetOffset + shared->CounterSetBytes, template, size );
+    shared->CounterSetBytes += size;
+    shared->CounterSetCount++;
+    perf_shared_end( shared );
+    return TRUE;
+}
+
+static BOOL perf_shared_add_instance( struct perf_provider *prov, struct counterset_instance *inst )
+{
+    PERFLIBV2_INSTANCE_ENTRY *entry;
+    PERFLIBV2_SHARED *shared;
+    unsigned int i;
+
+    if (!perf_shared_reserve( prov, 0, 1 )) return FALSE;
+    if (!(shared = prov->shared)) return TRUE;
+    for (i = 0; i < prov->counterset_count; ++i)
+        if (prov->countersets[i] == inst->template) break;
+    perf_shared_begin( shared );
+    entry = (PERFLIBV2_INSTANCE_ENTRY *)((BYTE *)shared + shared->InstanceOffset) + shared->InstanceCount;
+    entry->Address = (ULONG_PTR)&inst->instance;
+    entry->Size = inst->instance.dwSize;
+    entry->CounterSet = i;
+    shared->InstanceCount++;
+    perf_shared_end( shared );
+    return TRUE;
+}
+
+static void perf_shared_remove_instance( struct perf_provider *prov, struct counterset_instance *inst )
+{
+    PERFLIBV2_SHARED *shared = prov->shared;
+    PERFLIBV2_INSTANCE_ENTRY *entries;
+    ULONG i;
+
+    if (!shared) return;
+    entries = (PERFLIBV2_INSTANCE_ENTRY *)((BYTE *)shared + shared->InstanceOffset);
+    for (i = 0; i < shared->InstanceCount; ++i)
+    {
+        if (entries[i].Address != (ULONG_PTR)&inst->instance) continue;
+        perf_shared_begin( shared );
+        memmove( &entries[i], &entries[i + 1], (shared->InstanceCount - i - 1) * sizeof(*entries) );
+        shared->InstanceCount--;
+        perf_shared_end( shared );
+        return;
+    }
+}
+
+static void CALLBACK perf_request_callback( void *context, BOOLEAN timeout )
+{
+    struct perf_provider *prov = context;
+    PERFLIBV2_CHANNEL *channel = prov->channel;
+    ULONG code = 0, size = 0, status;
+    LONG sequence = 0;
+    ULONG64 *buffer;
+    unsigned int i;
+
+    if (!(buffer = HeapAlloc( GetProcessHeap(), 0, PERFLIBV2_REQUEST_SIZE ))) return;
+    EnterCriticalSection( &prov->request_cs );
+    for (i = 0; i < 4; ++i)
+    {
+        sequence = InterlockedCompareExchange( &channel->RequestSequence, 0, 0 );
+        code = channel->RequestCode;
+        size = min( channel->RequestSize, PERFLIBV2_REQUEST_SIZE );
+        memcpy( buffer, channel->Request, size );
+        if (InterlockedCompareExchange( &channel->RequestSequence, 0, 0 ) == sequence) break;
+    }
+    if (sequence != prov->handled_request && (code == PERF_ADD_COUNTER || code == PERF_REMOVE_COUNTER
+        || code == PERF_ENUM_INSTANCES || code == PERF_COLLECT_START || code == PERF_COLLECT_END))
+    {
+        prov->handled_request = sequence;
+        status = prov->callback( code, buffer, size );
+        channel->ResponseStatus = status;
+        InterlockedExchange( &channel->ResponseSequence, sequence );
+        SetEvent( prov->done_event );
+    }
+    LeaveCriticalSection( &prov->request_cs );
+    HeapFree( GetProcessHeap(), 0, buffer );
+}
+
+static void perf_unpublish( struct perf_provider *prov )
+{
+    if (prov->wait) UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
+    if (prov->shared)
+    {
+        perf_shared_begin( prov->shared );
+        prov->shared->Flags |= PERFLIBV2_FLAG_STOPPED;
+        perf_shared_end( prov->shared );
+        UnmapViewOfFile( prov->shared );
+    }
+    if (prov->section) CloseHandle( prov->section );
+    if (prov->channel) UnmapViewOfFile( prov->channel );
+    if (prov->channel_section) CloseHandle( prov->channel_section );
+    if (prov->request_event) CloseHandle( prov->request_event );
+    if (prov->done_event) CloseHandle( prov->done_event );
+    if (prov->lock_mutex) CloseHandle( prov->lock_mutex );
+    prov->wait = NULL;
+    prov->shared = NULL;
+    prov->section = NULL;
+    prov->channel = NULL;
+    prov->channel_section = NULL;
+    prov->request_event = NULL;
+    prov->done_event = NULL;
+    prov->lock_mutex = NULL;
+}
+
+static BOOL perf_publish_objects( struct perf_provider *prov )
+{
+    WCHAR base[64], name[MAX_PATH];
+
+    if (!(prov->section = perf_create_shared( prov, 1, 0x1000, 0x100, &prov->shared ))) return FALSE;
+    if (!prov->callback) return TRUE;
+
+    swprintf( base, ARRAY_SIZE(base), PERFLIBV2_CHANNEL_FORMAT, GetCurrentProcessId(), prov->id );
+    if (!(prov->channel_section = perf_create_mapping( prov, base, sizeof(*prov->channel), (void **)&prov->channel )))
+        return FALSE;
+    prov->channel->Signature = PERFLIBV2_CHANNEL_SIGNATURE;
+    prov->channel->Version = PERFLIBV2_VERSION;
+    if (!(prov->request_event = perf_create_event( prov, PERFLIBV2_REQUEST_FORMAT ))) return FALSE;
+    if (!(prov->done_event = perf_create_event( prov, PERFLIBV2_DONE_FORMAT ))) return FALSE;
+    swprintf( base, ARRAY_SIZE(base), PERFLIBV2_LOCK_FORMAT, GetCurrentProcessId(), prov->id );
+    perf_object_name( prov, base, name, ARRAY_SIZE(name) );
+    if (!(prov->lock_mutex = CreateMutexW( NULL, FALSE, name ))) return FALSE;
+    if (GetLastError() == ERROR_ALREADY_EXISTS) return FALSE;
+    return RegisterWaitForSingleObject( &prov->wait, prov->request_event, perf_request_callback, prov,
+                                        INFINITE, WT_EXECUTEDEFAULT );
+}
+
+static void perf_publish( struct perf_provider *prov )
+{
+    DWORD error = GetLastError();
+    unsigned int i;
+
+    for (i = 0; i < 8; ++i)
+    {
+        prov->id = InterlockedIncrement( &perf_provider_ids );
+        prov->local = FALSE;
+        if (perf_publish_objects( prov )) break;
+        perf_unpublish( prov );
+        prov->local = TRUE;
+        if (perf_publish_objects( prov )) break;
+        perf_unpublish( prov );
+    }
+    if (!prov->shared) WARN( "Provider %s is not visible to consumers.\n", debugstr_guid(&prov->guid) );
+    SetLastError( error );
 }
 
 static void *perf_alloc( struct perf_provider *prov, SIZE_T size )
@@ -239,14 +536,17 @@ PERF_COUNTERSET_INSTANCE * WINAPI PerfCreateInstance( HANDLE handle, const GUID 
         return NULL;
     }
 
+    EnterCriticalSection( &prov->cs );
     if (!(template = find_counterset( prov, guid )))
     {
+        LeaveCriticalSection( &prov->cs );
         SetLastError( ERROR_NOT_FOUND );
         return NULL;
     }
 
     if (find_instance( prov, template, NULL, id ))
     {
+        LeaveCriticalSection( &prov->cs );
         SetLastError( ERROR_ALREADY_EXISTS );
         return NULL;
     }
@@ -255,6 +555,7 @@ PERF_COUNTERSET_INSTANCE * WINAPI PerfCreateInstance( HANDLE handle, const GUID 
             + (lstrlenW( name ) + 1) * sizeof(WCHAR) + 7) & ~7;
     if (!(inst = perf_alloc( prov, offsetof(struct counterset_instance, instance) + size )))
     {
+        LeaveCriticalSection( &prov->cs );
         SetLastError( ERROR_OUTOFMEMORY );
         return NULL;
     }
@@ -267,7 +568,15 @@ PERF_COUNTERSET_INSTANCE * WINAPI PerfCreateInstance( HANDLE handle, const GUID 
                                         + template->counterset.NumCounters * sizeof(UINT64);
     inst->instance.InstanceNameSize = (lstrlenW( name ) + 1) * sizeof(WCHAR);
     memcpy( (BYTE *)&inst->instance + inst->instance.InstanceNameOffset, name, inst->instance.InstanceNameSize );
+    if (!perf_shared_add_instance( prov, inst ))
+    {
+        perf_free( prov, inst );
+        LeaveCriticalSection( &prov->cs );
+        SetLastError( ERROR_OUTOFMEMORY );
+        return NULL;
+    }
     list_add_tail( &prov->instance_list, &inst->entry );
+    LeaveCriticalSection( &prov->cs );
 
     return &inst->instance;
 }
@@ -284,13 +593,17 @@ ULONG WINAPI PerfDeleteInstance(HANDLE provider, PERF_COUNTERSET_INSTANCE *block
 
     if (!prov || !block) return ERROR_INVALID_PARAMETER;
 
+    EnterCriticalSection( &prov->cs );
     LIST_FOR_EACH_ENTRY(inst, &prov->instance_list, struct counterset_instance, entry)
     {
         if (&inst->instance != block) continue;
         list_remove( &inst->entry );
+        perf_shared_remove_instance( prov, inst );
         perf_free( prov, inst );
+        LeaveCriticalSection( &prov->cs );
         return ERROR_SUCCESS;
     }
+    LeaveCriticalSection( &prov->cs );
     return ERROR_INVALID_PARAMETER;
 }
 
@@ -310,11 +623,14 @@ PERF_COUNTERSET_INSTANCE * WINAPI PerfQueryInstance( HANDLE handle, const GUID *
         SetLastError( ERROR_INVALID_PARAMETER );
         return NULL;
     }
+    EnterCriticalSection( &prov->cs );
     if (!(template = find_counterset( prov, guid )) || !(inst = find_instance( prov, template, name, id )))
     {
+        LeaveCriticalSection( &prov->cs );
         SetLastError( ERROR_NOT_FOUND );
         return NULL;
     }
+    LeaveCriticalSection( &prov->cs );
     return &inst->instance;
 }
 
@@ -335,10 +651,19 @@ ULONG WINAPI PerfSetCounterSetInfo( HANDLE handle, PERF_COUNTERSET_INFO *templat
     if (size < sizeof(*template) || (size - (sizeof(*template))) / sizeof(PERF_COUNTER_INFO) < template->NumCounters)
         return ERROR_INVALID_PARAMETER;
 
-    if (find_counterset( prov, &template->CounterSetGuid )) return ERROR_ALREADY_EXISTS;
+    EnterCriticalSection( &prov->cs );
+    if (find_counterset( prov, &template->CounterSetGuid ))
+    {
+        LeaveCriticalSection( &prov->cs );
+        return ERROR_ALREADY_EXISTS;
+    }
 
     size = offsetof( struct counterset_template, counter[template->NumCounters] );
-    if (!(new = HeapAlloc( GetProcessHeap(), 0, size ))) return ERROR_OUTOFMEMORY;
+    if (!(new = HeapAlloc( GetProcessHeap(), 0, size )))
+    {
+        LeaveCriticalSection( &prov->cs );
+        return ERROR_OUTOFMEMORY;
+    }
 
     if (prov->counterset_count)
         new_array = HeapReAlloc( GetProcessHeap(), 0, prov->countersets,
@@ -349,13 +674,21 @@ ULONG WINAPI PerfSetCounterSetInfo( HANDLE handle, PERF_COUNTERSET_INFO *templat
     if (!new_array)
     {
         HeapFree( GetProcessHeap(), 0, new );
+        LeaveCriticalSection( &prov->cs );
         return ERROR_OUTOFMEMORY;
     }
+    prov->countersets = new_array;
     memcpy( new, template, size );
     for (i = 0; i < template->NumCounters; ++i)
         new->counter[i].Offset = i * sizeof(UINT64);
+    if (!perf_shared_add_counterset( prov, new ))
+    {
+        HeapFree( GetProcessHeap(), 0, new );
+        LeaveCriticalSection( &prov->cs );
+        return ERROR_OUTOFMEMORY;
+    }
     new_array[prov->counterset_count++] = new;
-    prov->countersets = new_array;
+    LeaveCriticalSection( &prov->cs );
 
     return STATUS_SUCCESS;
 }
@@ -399,7 +732,7 @@ ULONG WINAPI PerfSetCounterRefValue(HANDLE provider, PERF_COUNTERSET_INSTANCE *i
 
     TRACE( "provider %p, instance %p, counterid %lu, address %p.\n", provider, instance, counterid, address );
 
-    if (!prov || !instance || !address) return ERROR_INVALID_PARAMETER;
+    if (!prov || !instance) return ERROR_INVALID_PARAMETER;
 
     counter = get_performance_counter_info(instance, counterid);
 
@@ -537,15 +870,17 @@ ULONG WINAPI PerfStartProviderEx( GUID *guid, PERF_PROVIDER_CONTEXT *context, HA
 
     if (!(prov = HeapAlloc( GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*prov) ))) return ERROR_OUTOFMEMORY;
     list_init( &prov->instance_list );
+    InitializeCriticalSection( &prov->cs );
+    InitializeCriticalSection( &prov->request_cs );
     memcpy( &prov->guid, guid, sizeof(prov->guid) );
     if (context)
     {
-        /* TODO: call ControlCallback once a PERFLIB consumer can query this provider */
         prov->callback = context->ControlCallback;
         prov->mem_alloc = context->MemAllocRoutine;
         prov->mem_free = context->MemFreeRoutine;
         prov->mem_context = context->pMemContext;
     }
+    perf_publish( prov );
     *provider = prov;
 
     return STATUS_SUCCESS;
@@ -567,15 +902,25 @@ ULONG WINAPI PerfStopProvider(HANDLE handle)
     if (!list_empty( &prov->instance_list ))
         WARN( "Stopping provider with active counter instances.\n" );
 
+    if (prov->wait)
+    {
+        UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
+        prov->wait = NULL;
+    }
+    EnterCriticalSection( &prov->cs );
+    perf_unpublish( prov );
     LIST_FOR_EACH_ENTRY_SAFE(inst, next, &prov->instance_list, struct counterset_instance, entry)
     {
         list_remove( &inst->entry );
         perf_free( prov, inst );
     }
+    LeaveCriticalSection( &prov->cs );
 
     for (i = 0; i < prov->counterset_count; ++i)
         HeapFree( GetProcessHeap(), 0, prov->countersets[i] );
     HeapFree( GetProcessHeap(), 0, prov->countersets );
+    DeleteCriticalSection( &prov->request_cs );
+    DeleteCriticalSection( &prov->cs );
     HeapFree( GetProcessHeap(), 0, prov );
     return STATUS_SUCCESS;
 }

@@ -474,12 +474,21 @@
 @ stdcall OpenThreadToken(long long long ptr) kernelbase.OpenThreadToken
 @ stdcall -ret64 OpenTraceA(ptr)
 @ stdcall -ret64 OpenTraceW(ptr)
+@ stdcall -version=0x600+ PerfAddCounters(ptr ptr long)
+@ stdcall -version=0x600+ PerfCloseQueryHandle(ptr)
 @ stdcall -version=0x600+ PerfCreateInstance(long ptr wstr long) kernelbase.PerfCreateInstance
 @ stdcall -version=0x600+ PerfDecrementULongCounterValue(long ptr long long) kernelbase.PerfDecrementULongCounterValue
 @ stdcall -version=0x600+ PerfDecrementULongLongCounterValue(long ptr long int64) kernelbase.PerfDecrementULongLongCounterValue
+@ stdcall -version=0x600+ PerfDeleteCounters(ptr ptr long)
 @ stdcall -version=0x600+ PerfDeleteInstance(long ptr) kernelbase.PerfDeleteInstance
+@ stdcall -version=0x600+ PerfEnumerateCounterSet(wstr ptr long ptr)
+@ stdcall -version=0x600+ PerfEnumerateCounterSetInstances(wstr ptr ptr long ptr)
 @ stdcall -version=0x600+ PerfIncrementULongCounterValue(long ptr long long) kernelbase.PerfIncrementULongCounterValue
 @ stdcall -version=0x600+ PerfIncrementULongLongCounterValue(long ptr long int64) kernelbase.PerfIncrementULongLongCounterValue
+@ stdcall -version=0x600+ PerfOpenQueryHandle(wstr ptr)
+@ stdcall -version=0x600+ PerfQueryCounterData(ptr ptr long ptr)
+@ stdcall -version=0x600+ PerfQueryCounterInfo(ptr ptr long ptr)
+@ stdcall -version=0x600+ PerfQueryCounterSetRegistrationInfo(wstr ptr long long ptr long ptr)
 @ stdcall -version=0x600+ PerfQueryInstance(long ptr wstr long) kernelbase.PerfQueryInstance
 @ stdcall -version=0x600+ PerfSetCounterRefValue(long ptr long ptr) kernelbase.PerfSetCounterRefValue
 @ stdcall -version=0x600+ PerfSetCounterSetInfo(long ptr long) kernelbase.PerfSetCounterSetInfo
