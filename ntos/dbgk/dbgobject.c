@@ -178,6 +178,32 @@ DbgkpConvertKernelToUserStateChange(
     return STATUS_SUCCESS;
 }
 
+static
+HANDLE
+DbgkpDuplicateFileHandle(
+    _In_opt_ HANDLE FileHandle)
+{
+    HANDLE Handle = NULL;
+
+    PAGED_CODE();
+
+    if (FileHandle == NULL) return NULL;
+
+    if (!NT_SUCCESS(ObDuplicateObject(PsGetCurrentProcess(),
+                                      FileHandle,
+                                      PsGetCurrentProcess(),
+                                      &Handle,
+                                      0,
+                                      0,
+                                      DUPLICATE_SAME_ACCESS,
+                                      KernelMode)))
+    {
+        return NULL;
+    }
+
+    return Handle;
+}
+
 /*
  * Hands the debugger the handles that go with what it is being told: the
  * thread and, when a process starts, the process and the file it runs.
@@ -193,6 +219,13 @@ DbgkpOpenHandles(
     HANDLE Handle;
 
     PAGED_CODE();
+
+    if (WaitStateChange->NewState == DbgLoadDllStateChange)
+    {
+        WaitStateChange->StateInfo.LoadDll.FileHandle =
+            DbgkpDuplicateFileHandle(WaitStateChange->StateInfo.LoadDll.FileHandle);
+        return STATUS_SUCCESS;
+    }
 
     if (WaitStateChange->NewState == DbgCreateThreadStateChange)
     {
@@ -239,6 +272,8 @@ DbgkpOpenHandles(
     }
 
     WaitStateChange->StateInfo.CreateProcessInfo.HandleToProcess = Handle;
+    WaitStateChange->StateInfo.CreateProcessInfo.NewProcess.FileHandle =
+        DbgkpDuplicateFileHandle(WaitStateChange->StateInfo.CreateProcessInfo.NewProcess.FileHandle);
     return STATUS_SUCCESS;
 }
 
@@ -282,8 +317,6 @@ DbgkpQueueMessage(
         /* A debugger that is only being caught up owns the list already */
         DebugObject = TargetObject;
         DebugEvent->Flags |= DEBUG_EVENT_NOWAIT;
-        ObReferenceObject(Process);
-        ObReferenceObject(Thread);
     }
     else
     {
@@ -299,10 +332,10 @@ DbgkpQueueMessage(
 
         ObReferenceObject(DebugObject);
         ExReleaseFastMutex(&DbgkpProcessDebugPortMutex);
-
-        DebugEvent->Process = NULL;
-        DebugEvent->Thread = NULL;
     }
+
+    ObReferenceObject(Process);
+    ObReferenceObject(Thread);
 
     ExAcquireFastMutex(&DebugObject->Mutex);
 
@@ -399,7 +432,11 @@ DbgkpCloseObject(
     {
         if (Debugged->DebugPort != DebugObject) continue;
 
-        DbgkClearProcessDebugObject(Debugged, DebugObject);
+        if (NT_SUCCESS(DbgkClearProcessDebugObject(Debugged, DebugObject)) &&
+            DebugObject->KillProcessOnExit)
+        {
+            PsTerminateProcess(Debugged, STATUS_DEBUGGER_INACTIVE);
+        }
     }
 }
 
@@ -576,6 +613,28 @@ NtSetInformationDebugObject(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+DbgkpProcessHasEventBefore(
+    _In_ PDEBUG_OBJECT DebugObject,
+    _In_ PDEBUG_EVENT DebugEvent)
+{
+    PDEBUG_EVENT Earlier;
+    PLIST_ENTRY Entry;
+
+    for (Entry = DebugObject->EventList.Flink;
+         Entry != &DebugEvent->EventList;
+         Entry = Entry->Flink)
+    {
+        Earlier = CONTAINING_RECORD(Entry, DEBUG_EVENT, EventList);
+
+        if (Earlier->ClientId.UniqueProcess == DebugEvent->ClientId.UniqueProcess)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 /*
  * Reads the next thing the debugger has not been told yet. What is read stays
  * on the list until the debugger says to go on, so it can be read again if
@@ -663,6 +722,8 @@ NtWaitForDebugEvent(
 
             if (Looked->Flags & (DEBUG_EVENT_READ | DEBUG_EVENT_INACTIVE))
                 continue;
+
+            if (DbgkpProcessHasEventBefore(DebugObject, Looked)) continue;
 
             DebugEvent = Looked;
             break;
@@ -777,6 +838,9 @@ NtDebugContinue(
 
         DebugEvent = Looked;
         RemoveEntryList(&DebugEvent->EventList);
+
+        if (!IsListEmpty(&DebugObject->EventList))
+            KeSetEvent(&DebugObject->EventsPresent, IO_NO_INCREMENT, FALSE);
         break;
     }
 

@@ -24,7 +24,7 @@ DbgkpSuspendProcess(VOID)
     /* A process on its way out is already as still as it will ever be */
     if (PsGetCurrentProcess()->ProcessDelete) return FALSE;
 
-    PsSuspendProcess(PsGetCurrentProcess());
+    KeFreezeAllThreads();
     return TRUE;
 }
 
@@ -34,7 +34,7 @@ DbgkpResumeProcess(VOID)
 {
     PAGED_CODE();
 
-    PsResumeProcess(PsGetCurrentProcess());
+    KeThawAllThreads();
 }
 
 /* The file a mapping was made from, as something the debugger can open */
@@ -120,6 +120,12 @@ DbgkpMarkProcessPeb(
     {
         Process->Peb->BeingDebugged =
             (BOOLEAN)(Process->DebugPort != NULL);
+
+        if (Process->WoW64Process != NULL && Process->WoW64Process->Peb != NULL)
+        {
+            ((struct _PEB32 *)Process->WoW64Process->Peb)->BeingDebugged =
+                (BOOLEAN)(Process->DebugPort != NULL);
+        }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -148,6 +154,7 @@ DbgkpPostFakeThreadMessages(
     PETHREAD Last = NULL;
     DBGKM_MSG ApiMsg;
     BOOLEAN FirstOne = TRUE;
+    ULONG Flags;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
     PAGED_CODE();
@@ -160,6 +167,9 @@ DbgkpPostFakeThreadMessages(
         First = StartThread;
         FirstOne = FALSE;
         ObReferenceObject(StartThread);
+
+        Thread = StartThread;
+        ObReferenceObject(Thread);
     }
 
     while ((Thread = PsGetNextProcessThread(Process, Thread)) != NULL)
@@ -194,15 +204,36 @@ DbgkpPostFakeThreadMessages(
             ApiMsg.CreateThread.StartAddress = Thread->StartAddress;
         }
 
+        Flags = DEBUG_EVENT_NOWAIT | DEBUG_EVENT_RELEASE;
+        if (NT_SUCCESS(PsSuspendThread(Thread, NULL))) Flags |= DEBUG_EVENT_SUSPEND;
+
         Status = DbgkpQueueMessage(Process,
                                    Thread,
                                    &ApiMsg,
-                                   DEBUG_EVENT_NOWAIT | DEBUG_EVENT_RELEASE,
+                                   Flags,
                                    DebugObject);
         if (!NT_SUCCESS(Status))
         {
+            if (Flags & DEBUG_EVENT_SUSPEND) PsResumeThread(Thread, NULL);
             ObDereferenceObject(Thread);
             break;
+        }
+
+        if (ApiMsg.ApiNumber != DbgKmCreateProcessApi) continue;
+
+        RtlZeroMemory(&ApiMsg, sizeof(ApiMsg));
+        ApiMsg.ApiNumber = DbgKmLoadDllApi;
+        ApiMsg.LoadDll.BaseOfDll = PspSystemDllBase;
+        ApiMsg.LoadDll.FileHandle = DbgkpSectionToFileHandle(PspSystemDllSection);
+
+        if (!NT_SUCCESS(DbgkpQueueMessage(Process,
+                                          Thread,
+                                          &ApiMsg,
+                                          DEBUG_EVENT_NOWAIT | DEBUG_EVENT_RELEASE,
+                                          DebugObject)) &&
+            ApiMsg.LoadDll.FileHandle != NULL)
+        {
+            ObCloseHandle(ApiMsg.LoadDll.FileHandle, KernelMode);
         }
     }
 
@@ -260,6 +291,7 @@ DbgkpPostFakeModuleMessages(
             /* The image the process runs was already told as its own coming
              * to be, so only what it loaded besides is told here */
             if (Counted++ == 0) continue;
+            if (Base == PspSystemDllBase) continue;
 
             RtlZeroMemory(&ApiMsg, sizeof(ApiMsg));
             ApiMsg.ApiNumber = DbgKmLoadDllApi;
@@ -350,6 +382,7 @@ DbgkpSetProcessDebugObject(
 
     ObReferenceObject(DebugObject);
     Process->DebugPort = DebugObject;
+    PspSetProcessFlag(Process, PSF_NO_DEBUG_INHERIT_BIT);
 
     ExReleaseFastMutex(&DbgkpProcessDebugPortMutex);
 
@@ -388,6 +421,7 @@ DbgkCreateThread(
     _In_ PVOID StartAddress)
 {
     PEPROCESS Process = PsGetThreadProcess(Thread);
+    PETHREAD FirstThread;
     DBGKM_MSG ApiMsg;
 
     PAGED_CODE();
@@ -396,10 +430,12 @@ DbgkCreateThread(
 
     RtlZeroMemory(&ApiMsg, sizeof(ApiMsg));
 
+    FirstThread = PsGetNextProcessThread(Process, NULL);
+    if (FirstThread != NULL) ObDereferenceObject(FirstThread);
+
     /* The first thread of a process is the process coming to be */
-    if (Process->Peb != NULL &&
-        PsGetCurrentProcess()->DebugPort != NULL &&
-        Thread == PsGetNextProcessThread(Process, NULL))
+    /* TODO: the image's symbol table offset and size are not reported with the process or a DLL */
+    if (Process->Peb != NULL && Thread == FirstThread)
     {
         ApiMsg.ApiNumber = DbgKmCreateProcessApi;
         ApiMsg.CreateProcess.InitialThread.StartAddress = StartAddress;
@@ -419,11 +455,20 @@ DbgkCreateThread(
 
     DbgkpSendApiMessage(&ApiMsg, TRUE);
 
-    if (ApiMsg.ApiNumber == DbgKmCreateProcessApi &&
-        ApiMsg.CreateProcess.FileHandle != NULL)
-    {
+    if (ApiMsg.ApiNumber != DbgKmCreateProcessApi) return;
+
+    if (ApiMsg.CreateProcess.FileHandle != NULL)
         ObCloseHandle(ApiMsg.CreateProcess.FileHandle, KernelMode);
-    }
+
+    RtlZeroMemory(&ApiMsg, sizeof(ApiMsg));
+    ApiMsg.ApiNumber = DbgKmLoadDllApi;
+    ApiMsg.LoadDll.BaseOfDll = PspSystemDllBase;
+    ApiMsg.LoadDll.FileHandle = DbgkpSectionToFileHandle(PspSystemDllSection);
+
+    DbgkpSendApiMessage(&ApiMsg, TRUE);
+
+    if (ApiMsg.LoadDll.FileHandle != NULL)
+        ObCloseHandle(ApiMsg.LoadDll.FileHandle, KernelMode);
 }
 
 VOID
@@ -472,6 +517,7 @@ DbgkMapViewOfSection(
     _In_ ULONG SectionOffset,
     _In_ ULONG_PTR ViewSize)
 {
+    PTEB Teb = KeGetCurrentThread()->Teb;
     DBGKM_MSG ApiMsg;
 
     PAGED_CODE();
@@ -486,6 +532,25 @@ DbgkMapViewOfSection(
     ApiMsg.LoadDll.BaseOfDll = BaseAddress;
     ApiMsg.LoadDll.DebugInfoFileOffset = SectionOffset;
     ApiMsg.LoadDll.FileHandle = DbgkpSectionToFileHandle(Section);
+
+    if (Teb != NULL)
+    {
+        ApiMsg.LoadDll.NamePointer = &Teb->NtTib.ArbitraryUserPointer;
+
+        _SEH2_TRY
+        {
+            if (PsGetCurrentProcess()->WoW64Process != NULL && Teb->WowTebOffset != 0)
+            {
+                ApiMsg.LoadDll.NamePointer =
+                    &((struct _TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset))->NtTib.ArbitraryUserPointer;
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            ApiMsg.LoadDll.NamePointer = NULL;
+        }
+        _SEH2_END;
+    }
 
     DbgkpSendApiMessage(&ApiMsg, TRUE);
 
@@ -568,9 +633,9 @@ DbgkCopyProcessDebugPort(
 
     DebugObject = Parent->DebugPort;
 
-    /* Only a port that says so is passed on, and never to a process that
-     * was told not to be watched */
-    if (DebugObject != NULL && !Process->NoDebugInherit)
+    /* Only a port that says so is passed on, and never by a process whose
+     * children were told not to be watched */
+    if (DebugObject != NULL && !Parent->NoDebugInherit)
     {
         ObReferenceObject(DebugObject);
         Process->DebugPort = DebugObject;

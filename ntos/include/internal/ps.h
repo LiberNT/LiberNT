@@ -910,6 +910,7 @@ extern PVOID PspSystemDllEntryPoint;
 extern PVOID PspRtlUserThreadStart;
 extern PVOID PspSystemDllInitBlock;
 extern PVOID PspSystemDllBase;
+extern PVOID PspSystemDllSection;
 extern BOOLEAN PspUseJobSchedulingClasses;
 extern CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES];
 extern ULONG PsRawPrioritySeparation;
