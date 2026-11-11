@@ -8738,6 +8738,7 @@ static HRESULT get_ie8_attr_ref_by_name(HTMLAttributeCollection *This, const WCH
 
 static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, attr_ref_t *ref)
 {
+    static BOOL warned;
     DISPID id = DISPID_STARTENUM;
     unsigned attr_only_pos = 0;
     LONG len = -1;
@@ -8750,7 +8751,10 @@ static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, att
     if(is_ie8_attr_col(This))
         return get_ie8_attr_ref_by_idx(This, idx, ref);
 
-    FIXME("filter non-enumerable attributes out\n");
+    if(!warned) {
+        FIXME("filter non-enumerable attributes out\n");
+        warned = TRUE;
+    }
 
     while(1) {
         hres = dispex_next_attr_id(&This->elem->node.event_target.dispex, id, &id);
