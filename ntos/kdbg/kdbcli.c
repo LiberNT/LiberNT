@@ -862,9 +862,9 @@ KdbpCmdBackTrace(
     ULONG Argc,
     PCHAR Argv[])
 {
+    static KDB_KTRAP_FRAME Walk;
     PKDB_KTRAP_FRAME Context = KdbpContext();
     ULONG_PTR Limit = 32;
-    ULONG_PTR Frame;
     ULONG_PTR Pc;
     ULONG Depth = 0;
 
@@ -874,44 +874,21 @@ KdbpCmdBackTrace(
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Limit))
         return TRUE;
 
-    Pc = (ULONG_PTR)KeGetContextPc(Context);
-    Frame = (ULONG_PTR)KeGetContextFrameRegister(Context);
+    Walk = *Context;
+    Pc = (ULONG_PTR)KeGetContextPc(&Walk);
 
     KdbpPrint("%p ", (PVOID)Pc);
     KdbSymPrintAddress((PVOID)Pc, Context);
     KdbPuts("\n");
 
-    while ((Depth < Limit) && (Frame != 0) && !KdbpIsOutputAborted())
+    while ((Depth < Limit) && !KdbpIsOutputAborted() && KdbpArchUnwindFrame(&Walk, (Depth != 0)))
     {
-        ULONG_PTR Next = 0;
-        ULONG_PTR Return = 0;
+        Pc = (ULONG_PTR)KeGetContextPc(&Walk);
 
-        if (!NT_SUCCESS(KdbpSafeReadMemory(&Next,
-                                           (PVOID)Frame,
-                                           sizeof(Next))))
-        {
-            break;
-        }
-
-        if (!NT_SUCCESS(KdbpSafeReadMemory(&Return,
-                                           (PVOID)(Frame + sizeof(ULONG_PTR)),
-                                           sizeof(Return))))
-        {
-            break;
-        }
-
-        if (Return == 0)
-            break;
-
-        KdbpPrint("%p ", (PVOID)Return);
-        KdbSymPrintAddress((PVOID)Return, Context);
+        KdbpPrint("%p ", (PVOID)Pc);
+        KdbSymPrintAddress((PVOID)Pc, Context);
         KdbPuts("\n");
 
-        /* A chain that does not climb is not a chain */
-        if (Next <= Frame)
-            break;
-
-        Frame = Next;
         Depth++;
     }
 

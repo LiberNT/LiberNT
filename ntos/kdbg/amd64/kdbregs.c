@@ -166,4 +166,118 @@ KdbpArchSetHardwareBreakPoint(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+KdbpLookupFunctionEntry(
+    _In_ ULONG64 ControlPc,
+    _Out_ PULONG64 ImageBase,
+    _Out_ PRUNTIME_FUNCTION *FunctionEntry)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    IMAGE_NT_HEADERS64 NtHeaders;
+    PRUNTIME_FUNCTION Table;
+    RUNTIME_FUNCTION Entry;
+    PUCHAR Base;
+    LONG NtOffset;
+    ULONG Low;
+    ULONG High;
+    ULONG Rva;
+
+    *FunctionEntry = NULL;
+
+    if (!KdbpSymFindModule((PVOID)(ULONG_PTR)ControlPc, 0, &LdrEntry))
+        return FALSE;
+
+    Base = LdrEntry->DllBase;
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&NtOffset, Base + FIELD_OFFSET(IMAGE_DOS_HEADER, e_lfanew), sizeof(NtOffset))) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&NtHeaders, Base + NtOffset, sizeof(NtHeaders))) ||
+        (NtHeaders.Signature != IMAGE_NT_SIGNATURE) ||
+        (NtHeaders.OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXCEPTION))
+    {
+        return FALSE;
+    }
+
+    *ImageBase = (ULONG64)(ULONG_PTR)Base;
+    Table = (PRUNTIME_FUNCTION)(Base + NtHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].VirtualAddress);
+    Rva = (ULONG)(ControlPc - *ImageBase);
+    Low = 0;
+    High = NtHeaders.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION].Size / sizeof(RUNTIME_FUNCTION);
+
+    while (Low < High)
+    {
+        ULONG Middle = Low + (High - Low) / 2;
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Entry, &Table[Middle], sizeof(Entry))))
+            return FALSE;
+
+        if (Rva < Entry.BeginAddress)
+        {
+            High = Middle;
+        }
+        else if (Rva >= Entry.EndAddress)
+        {
+            Low = Middle + 1;
+        }
+        else
+        {
+            *FunctionEntry = &Table[Middle];
+            break;
+        }
+    }
+
+    return TRUE;
+}
+
+BOOLEAN
+NTAPI
+KdbpArchUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN CallerFrame)
+{
+    PRUNTIME_FUNCTION FunctionEntry;
+    ULONG64 ImageBase = 0;
+    ULONG64 ControlPc = Context->Rip;
+    ULONG64 OldRsp = Context->Rsp;
+    ULONG64 EstablisherFrame;
+    ULONG64 ReturnAddress;
+    PVOID HandlerData;
+    UCHAR Probe;
+
+    /* A return address after a call that ends its function already lies in the next one */
+    if (!KdbpLookupFunctionEntry(CallerFrame ? ControlPc - 1 : ControlPc, &ImageBase, &FunctionEntry))
+        return FALSE;
+
+    if (FunctionEntry == NULL)
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&ReturnAddress, (PVOID)(ULONG_PTR)Context->Rsp, sizeof(ReturnAddress))))
+            return FALSE;
+
+        Context->Rip = ReturnAddress;
+        Context->Rsp += sizeof(ReturnAddress);
+        return (ReturnAddress != 0);
+    }
+
+    if (ControlPc - ImageBase >= FunctionEntry->EndAddress)
+        ControlPc--;
+
+    /* FIXME: RtlVirtualUnwind reads past the probed stack, code and unwind bytes directly */
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Probe, (PVOID)(ULONG_PTR)Context->Rsp, sizeof(Probe))) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&Probe, (PVOID)(ULONG_PTR)ControlPc, sizeof(Probe))) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&Probe, (PVOID)(ULONG_PTR)(ImageBase + FunctionEntry->UnwindData), sizeof(Probe))))
+    {
+        return FALSE;
+    }
+
+    RtlVirtualUnwind(UNW_FLAG_NHANDLER,
+                     ImageBase,
+                     ControlPc,
+                     FunctionEntry,
+                     Context,
+                     &HandlerData,
+                     &EstablisherFrame,
+                     NULL);
+
+    return (Context->Rsp > OldRsp) && (Context->Rip != 0);
+}
+
 /* EOF */
