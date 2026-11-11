@@ -481,6 +481,52 @@ PspApplyThreadAttributes(
 
 static
 NTSTATUS
+PspMoveToTokenSession(
+    _In_ PEPROCESS Process,
+    _In_ HANDLE TokenHandle,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    PACCESS_TOKEN Token;
+    KAPC_STATE ApcState;
+    ULONG SessionId;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = ObReferenceObjectByHandle(TokenHandle,
+                                       TOKEN_ASSIGN_PRIMARY,
+                                       SeTokenObjectType,
+                                       PreviousMode,
+                                       (PVOID*)&Token,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = SeQuerySessionIdToken(Token, &SessionId);
+    ObDereferenceObject(Token);
+    if (!NT_SUCCESS(Status) || SessionId == MmGetSessionId(Process)) return Status;
+
+    Status = MmSetProcessSession(Process, SessionId);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        if (Process->Peb != NULL) Process->Peb->SessionId = SessionId;
+        if (Process->WoW64Process != NULL && Process->WoW64Process->Peb != NULL)
+            ((PEB32 *)Process->WoW64Process->Peb)->SessionId = SessionId;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+
+    return Status;
+}
+
+static
+NTSTATUS
 PspSetTokenBnoIsolation(
     _In_ PEPROCESS Process,
     _In_ PPSP_CREATE_ATTRIBUTES Attributes,
@@ -1491,10 +1537,14 @@ NtCreateUserProcess(
     {
         if (Attributes.Token != NULL)
         {
-            Status = PspSetPrimaryToken(Process,
-                                        Attributes.Token,
-                                        NULL,
-                                        TRUE);
+            Status = PspMoveToTokenSession(Process, Attributes.Token, PreviousMode);
+            if (NT_SUCCESS(Status))
+            {
+                Status = PspSetPrimaryToken(Process,
+                                            Attributes.Token,
+                                            NULL,
+                                            TRUE);
+            }
         }
 
         if (NT_SUCCESS(Status) && Attributes.PriorityClass != 0)

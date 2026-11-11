@@ -159,6 +159,7 @@ list(APPEND SOURCE
     SynchronizationBarrier.c
     SystemFirmware.c
     SystemFirmwareAcpi.c
+    ProcessTokenSession.c
     SystemFileCacheSize.c
     SecureBootFlag.c
     TerminateProcess.c
