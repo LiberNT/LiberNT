@@ -1291,33 +1291,35 @@ NtYieldExecution(VOID)
         return Status;
     }
 
+    /* Handing the processor over ends this turn as a quantum end does, so a boost decays */
+    KiAcquireThreadLock(Thread);
+    KiSetThreadQuantum(Thread, Thread->QuantumReset);
+    if ((Thread->BasePriority < LOW_REALTIME_PRIORITY) && !Thread->DisableQuantum)
+        KiSetPriorityThread(Thread, KiComputeNewPriority(Thread, 1));
+    KiReleaseThreadLock(Thread);
+
     KiAcquirePrcbLock(Prcb);
 
+    /* Any thread ready on this processor takes the turn, whatever its priority */
     if (Prcb->NextThread == NULL)
     {
-        /*
-         * Yielding does not give a lower-priority thread the processor: only
-         * a thread of this thread's own priority or better takes the turn.
-         */
-        Next = KiSelectReadyThread(Thread->Priority, Prcb);
+        Next = KiSelectReadyThread(0, Prcb);
         if (Next != NULL)
         {
             Next->State = Standby;
             Next->NextProcessor = Prcb->Number;
             Prcb->NextThread = Next;
-            Thread->Preempted = FALSE;
-            Thread->WaitReason = WrYieldExecution;
-            Status = STATUS_SUCCESS;
         }
     }
-    else
+
+    if (Prcb->NextThread != NULL)
     {
+        Thread->Preempted = FALSE;
+        Thread->WaitReason = WrYieldExecution;
         Status = STATUS_SUCCESS;
     }
 
     KiReleasePrcbLock(Prcb);
-
-    KiSetThreadQuantum(Thread, Thread->QuantumReset);
 
     KiExitDispatcher(OldIrql);
     return Status;

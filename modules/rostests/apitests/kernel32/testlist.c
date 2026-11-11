@@ -157,6 +157,7 @@ extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
 extern void func_ExitedClientId(void);
 extern void func_SleepTickRounding(void);
+extern void func_SwitchToThreadPriority(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
@@ -338,6 +339,7 @@ const struct test winetest_testlist[] =
     { "TerminateProcess",            func_TerminateProcess },
     { "ExitedClientId",              func_ExitedClientId },
     { "SleepTickRounding",           func_SleepTickRounding },
+    { "SwitchToThreadPriority",      func_SwitchToThreadPriority },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
