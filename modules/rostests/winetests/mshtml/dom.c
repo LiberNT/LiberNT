@@ -14427,7 +14427,7 @@ static void test_elem_names(IHTMLDocument2 *doc)
     col = doc_get_elems_by_name(doc, L"Xxx");
     hres = IHTMLElementCollection_get_length(col, &len);
     ok(hres == S_OK, "get_length failed: %08lx\n", hres);
-    todo_wine ok(len == 1, "len = %ld\n", len);
+    ok(len == 1, "len = %ld\n", len);
     IHTMLElementCollection_Release(col);
 }
 

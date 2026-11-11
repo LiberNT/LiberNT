@@ -2655,6 +2655,8 @@ static HRESULT WINAPI HTMLDocument3_getElementsByName(IHTMLDocument3 *iface, BST
     WCHAR *selector;
     nsresult nsres;
     static const WCHAR formatW[] = L"*[id=%s],*[name=%s]";
+    static const WCHAR legacy_formatW[] = L"*[id=\"%s\" i],*[name=\"%s\" i]";
+    const WCHAR *format = dispex_compat_mode(&This->node.event_target.dispex) < COMPAT_MODE_IE9 ? legacy_formatW : formatW;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(v), ppelColl);
 
@@ -2664,10 +2666,10 @@ static HRESULT WINAPI HTMLDocument3_getElementsByName(IHTMLDocument3 *iface, BST
         return E_NOTIMPL;
     }
 
-    selector = malloc(2 * SysStringLen(v) * sizeof(WCHAR) + sizeof(formatW));
+    selector = malloc(2 * SysStringLen(v) * sizeof(WCHAR) + sizeof(legacy_formatW));
     if(!selector)
         return E_OUTOFMEMORY;
-    swprintf(selector, 2*SysStringLen(v) + ARRAY_SIZE(formatW), formatW, v, v);
+    swprintf(selector, 2*SysStringLen(v) + ARRAY_SIZE(legacy_formatW), format, v, v);
 
     /*
      * NOTE: IE getElementsByName implementation differs from Gecko. It searches both name and id attributes.
