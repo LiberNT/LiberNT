@@ -28,8 +28,7 @@ AfdRearmDatagram(PAFD_FCB FCB)
         if (!(FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS) || FCB->CleanedUp ||
             FCB->SharedData.State == SOCKET_STATE_CLOSED || FCB->TdiReceiveClosed ||
             FCB->ReceiveIrp.InFlightRequest || !FCB->AddressFile.Object ||
-            !FCB->AddressFrom || !FCB->Recv.Window ||
-            (FCB->Recv.Size ? FCB->Recv.Content >= FCB->Recv.Size : !IsListEmpty(&FCB->DatagramList)))
+            !FCB->AddressFrom || !FCB->Recv.Window)
             break;
 
         FCB->AddressFrom->Options = FCB->RecvControl;
@@ -1032,7 +1031,8 @@ PacketSocketRecvComplete(
         goto SatisfyRequests;
     }
 
-    if (Irp->IoStatus.Information > MAXULONG - FCB->Recv.Content)
+    if (Irp->IoStatus.Information > MAXULONG - FCB->Recv.Content ||
+        (FCB->Recv.Size ? FCB->Recv.Content >= FCB->Recv.Size : !IsListEmpty(&FCB->DatagramList)))
         goto SatisfyRequests;
 
     DGSize = FIELD_OFFSET(AFD_STORED_DATAGRAM, Buffer) +

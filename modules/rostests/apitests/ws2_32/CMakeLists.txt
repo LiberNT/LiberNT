@@ -26,6 +26,7 @@ list(APPEND SOURCE
     recv.c
     send.c
     sendto_neighbor.c
+    udp_queue.c
     udp_quic.c
     WSAAsync.c
     WSAIoctl.c

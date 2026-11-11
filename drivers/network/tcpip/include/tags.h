@@ -14,6 +14,7 @@
 #define TDI_ENTITY_TAG 'EidT'
 #define DATAGRAM_SEND_TAG 'StaD'
 #define DATAGRAM_RECV_TAG 'RtaD'
+#define DATAGRAM_QUEUE_TAG 'QtaD'
 #define QUERY_CONTEXT_TAG 'noCQ'
 #define IP_ADDRESS_TAG 'dAPI'
 #define IP_INTERFACE_TAG 'FIPI'

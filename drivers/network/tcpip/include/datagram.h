@@ -25,6 +25,9 @@ BOOLEAN DGRemoveIRP(
     PADDRESS_FILE AddrFile,
     PIRP Irp);
 
+VOID DGFreeQueuedDatagrams(
+    PADDRESS_FILE AddrFile);
+
 VOID DGDeliverData(
   PADDRESS_FILE AddrFile,
   PIP_ADDRESS SrcAddress,
