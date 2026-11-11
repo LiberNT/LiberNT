@@ -145,7 +145,11 @@ void update_navigation_commands(DocHost *dochost)
     unsigned pos = dochost->travellog.loading_pos == -1 ? dochost->travellog.position : dochost->travellog.loading_pos;
 
     on_commandstate_change(dochost, CSC_NAVIGATEBACK, pos > 0);
+#ifdef __REACTOS__
+    on_commandstate_change(dochost, CSC_NAVIGATEFORWARD, pos + 1 < dochost->travellog.length);
+#else
     on_commandstate_change(dochost, CSC_NAVIGATEFORWARD, pos < dochost->travellog.length);
+#endif
 }
 
 static void notif_complete(DocHost *This, DISPID dispid)
@@ -467,29 +471,78 @@ static void dump_travellog(DocHost *This)
         TRACE("%d: =>\n", i);
 }
 
+#ifdef __REACTOS__
+/* The history update comes before the page being left is replaced, while the host may already name the new URL */
+static WCHAR *get_left_page_url(DocHost *This)
+{
+    IHTMLDocument2 *doc;
+    WCHAR *url = NULL;
+    BSTR doc_url;
+
+    if(This->document && SUCCEEDED(IUnknown_QueryInterface(This->document, &IID_IHTMLDocument2, (void**)&doc))) {
+        if(SUCCEEDED(IHTMLDocument2_get_URL(doc, &doc_url)) && doc_url) {
+            url = wcsdup(doc_url);
+            SysFreeString(doc_url);
+        }
+        IHTMLDocument2_Release(doc);
+        if(url)
+            return url;
+    }
+
+    return This->url ? wcsdup(This->url) : NULL;
+}
+#endif
+
 static void update_travellog(DocHost *This)
 {
     travellog_entry_t *new_entry;
+#ifdef __REACTOS__
+    unsigned saved_pos;
+    WCHAR *url = get_left_page_url(This);
+#endif
 
     static const WCHAR about_schemeW[] = {'a','b','o','u','t',':'};
 
+#ifdef __REACTOS__
+    if(!url || !wcsnicmp(url, about_schemeW, ARRAY_SIZE(about_schemeW))) {
+        TRACE("Skipping about URL\n");
+        free(url);
+        return;
+    }
+#else
     if(This->url && !wcsnicmp(This->url, about_schemeW, ARRAY_SIZE(about_schemeW))) {
         TRACE("Skipping about URL\n");
         return;
     }
+#endif
 
     if(!This->travellog.log) {
+#ifdef __REACTOS__
+        This->travellog.log = calloc(4, sizeof(*This->travellog.log));
+        if(!This->travellog.log) {
+            free(url);
+            return;
+        }
+#else
         This->travellog.log = malloc(4 * sizeof(*This->travellog.log));
         if(!This->travellog.log)
             return;
+#endif
 
         This->travellog.size = 4;
     }else if(This->travellog.size < This->travellog.position+2) {
         travellog_entry_t *new_travellog;
 
         new_travellog = realloc(This->travellog.log, This->travellog.size * 2 * sizeof(*This->travellog.log));
+#ifdef __REACTOS__
+        if(!new_travellog) {
+            free(url);
+            return;
+        }
+#else
         if(!new_travellog)
             return;
+#endif
 
         This->travellog.log = new_travellog;
         This->travellog.size *= 2;
@@ -503,10 +556,17 @@ static void update_travellog(DocHost *This)
 
     new_entry = This->travellog.log + This->travellog.position;
 
+#ifdef __REACTOS__
+    free_travellog_entry(new_entry);
+    new_entry->url = url;
+    TRACE("Adding %s at %d\n", debugstr_w(url), This->travellog.position);
+    saved_pos = This->travellog.position;
+#else
     new_entry->url = wcsdup(This->url);
     TRACE("Adding %s at %d\n", debugstr_w(This->url), This->travellog.position);
     if(!new_entry->url)
         return;
+#endif
 
     new_entry->stream = get_travellog_stream(This);
 
@@ -519,8 +579,13 @@ static void update_travellog(DocHost *This)
          This->travellog.position = This->travellog.loading_pos;
          This->travellog.loading_pos = -1;
     }
+#ifdef __REACTOS__
+    if(saved_pos + 1 > This->travellog.length)
+        This->travellog.length = saved_pos + 1;
+#else
     if(This->travellog.position > This->travellog.length)
         This->travellog.length = This->travellog.position;
+#endif
 
     dump_travellog(This);
 }
