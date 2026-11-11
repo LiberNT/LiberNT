@@ -221,6 +221,7 @@ PspExitThread(
      */
     ExWaitForRundownProtectionRelease(&Thread->RundownProtect);
 
+    IoCancelThreadIo(Thread);
     PspDrainUserApcs(Thread);
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
