@@ -157,6 +157,7 @@ VOID
 PspDeleteKernelStack(
     _Inout_ PETHREAD Thread)
 {
+    KiDeleteCalloutStacks(&Thread->Tcb);
     MmDeleteKernelStack(Thread->Tcb.StackBase, (BOOLEAN)Thread->Tcb.LargeStack);
     KeUninitThread(&Thread->Tcb);
 }

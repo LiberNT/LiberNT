@@ -737,6 +737,11 @@ KiRunStackCallout(
 
 VOID
 NTAPI
+KiDeleteCalloutStacks(
+    _Inout_ PKTHREAD Thread);
+
+VOID
+NTAPI
 KeRundownThread(VOID);
 
 NTSTATUS

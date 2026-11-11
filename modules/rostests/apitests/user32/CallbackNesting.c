@@ -55,6 +55,39 @@ static LRESULT CALLBACK WndProcB(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
+static HWND hwndC;
+static HHOOK hExitHook;
+static int ExitDepth;
+
+/* Past the depth one kernel stack held, the callback runs on a stack of its own when its thread ends */
+static LRESULT CALLBACK ExitingGetMsgHook(int code, WPARAM wParam, LPARAM lParam)
+{
+    MSG msg;
+    LRESULT ret;
+
+    if (++ExitDepth >= 28)
+        ExitThread(28);
+    PeekMessageW(&msg, hwndC, 0, 0, PM_NOREMOVE);
+    ret = CallNextHookEx(hExitHook, code, wParam, lParam);
+    ExitDepth--;
+    return ret;
+}
+
+static DWORD WINAPI ThreadC(LPVOID Parameter)
+{
+    MSG msg;
+
+    hwndC = CreateWindowExW(0, L"CallbackNestingB", NULL, WS_POPUP, 0, 0, 10, 10,
+                            NULL, NULL, GetModuleHandleW(NULL), NULL);
+    hExitHook = SetWindowsHookExW(WH_GETMESSAGE, ExitingGetMsgHook, NULL, GetCurrentThreadId());
+    PostMessageW(hwndC, WM_USER, 0, 0);
+    PostMessageW(hwndC, WM_USER + 1, 0, 0);
+    GetMessageW(&msg, hwndC, 0, 0);
+    UnhookWindowsHookEx(hExitHook);
+    DestroyWindow(hwndC);
+    return ExitDepth;
+}
+
 static DWORD WINAPI ThreadB(LPVOID Parameter)
 {
     MSG msg;
@@ -70,7 +103,8 @@ static DWORD WINAPI ThreadB(LPVOID Parameter)
 START_TEST(CallbackNesting)
 {
     WNDCLASSW wc = { 0 };
-    HANDLE hThread;
+    HANDLE hThread, hThreadC;
+    DWORD code = 0;
     int k, depth;
 
     wc.hInstance = GetModuleHandleW(NULL);
@@ -95,6 +129,15 @@ START_TEST(CallbackNesting)
     {
         depth = (int)SendMessageW(hwndA, WM_APP + 2, k, 0);
         ok(depth == 31 - k, "%d nested sends: hook depth %d, expected %d\n", k, depth, 31 - k);
+    }
+
+    hThreadC = CreateThread(NULL, 0, ThreadC, NULL, 0, NULL);
+    ok(hThreadC != NULL, "CreateThread failed, error %lu\n", GetLastError());
+    if (hThreadC)
+    {
+        ok(WaitForSingleObject(hThreadC, 5000) == WAIT_OBJECT_0, "the nested thread did not end\n");
+        ok(GetExitCodeThread(hThreadC, &code) && code == 28, "the thread ended with %lu, expected 28\n", code);
+        CloseHandle(hThreadC);
     }
 
     PostMessageW(hwndB, WM_QUIT, 0, 0);

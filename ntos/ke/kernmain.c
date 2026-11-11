@@ -129,6 +129,7 @@ KiCalloutOnNewStack(
 {
     PKTHREAD Thread = KeGetCurrentThread();
     KI_STACK_CALLOUT Request;
+    PKSTACK_CONTROL Control;
     ULONG_PTR OldStackLimit;
     PVOID OldStackBase;
     PVOID NewStack;
@@ -146,20 +147,56 @@ KiCalloutOnNewStack(
     OldStackBase = Thread->StackBase;
     OldStackLimit = Thread->StackLimit;
 
+    /* The stack left behind, and whether a callout gave it too, is recorded on the new one, so a thread that ends there can free them all */
+    Control = (PKSTACK_CONTROL)NewStack - 1;
+    RtlZeroMemory(Control, sizeof(*Control));
+    Control->StackBase = (ULONG_PTR)NewStack;
+    Control->ActualLimit = (ULONG_PTR)NewStack - KERNEL_LARGE_STACK_SIZE;
+    if (Thread->CalloutActive) Control->ActualLimit |= KSTACK_ACTUAL_LIMIT_EXPANDED;
+    Control->Previous.StackBase = (ULONG_PTR)OldStackBase;
+    Control->Previous.StackLimit = OldStackLimit;
+    Control->Previous.InitialStack = (ULONG_PTR)Thread->InitialStack;
+
     Request.InterruptsEnabled = KeDisableInterrupts();
     Thread->StackBase = NewStack;
     Thread->StackLimit = (ULONG_PTR)NewStack - KERNEL_LARGE_STACK_COMMIT;
+    Thread->CalloutActive = TRUE;
 
-    KiCallOnKernelStack(&Request, NewStack);
+    KiCallOnKernelStack(&Request, Control);
 
     /* FIXME: an exception the callout does not handle cannot unwind past this frame to the old stack */
     ASSERT(Thread->StackBase == NewStack);
     Thread->StackBase = OldStackBase;
     Thread->StackLimit = OldStackLimit;
+    Thread->CalloutActive = (Control->ActualLimit & KSTACK_ACTUAL_LIMIT_EXPANDED) ? TRUE : FALSE;
     KeRestoreInterrupts(Request.InterruptsEnabled);
 
     MmDeleteKernelStack(NewStack, TRUE);
     return Request.Status;
+}
+
+/*
+ * A thread that ended on a stack a callout gave it leaves that stack, and any
+ * it was given before it, to be freed here; the thread's own stack is then the
+ * one it names.
+ */
+VOID
+NTAPI
+KiDeleteCalloutStacks(
+    _Inout_ PKTHREAD Thread)
+{
+    while (Thread->CalloutActive)
+    {
+        PKSTACK_CONTROL Control = (PKSTACK_CONTROL)Thread->StackBase - 1;
+        PVOID PreviousBase = (PVOID)Control->Previous.StackBase;
+        ULONG_PTR PreviousLimit = Control->Previous.StackLimit;
+        BOOLEAN PreviousExpanded = (Control->ActualLimit & KSTACK_ACTUAL_LIMIT_EXPANDED) ? TRUE : FALSE;
+
+        MmDeleteKernelStack(Thread->StackBase, TRUE);
+        Thread->StackBase = PreviousBase;
+        Thread->StackLimit = PreviousLimit;
+        Thread->CalloutActive = PreviousExpanded;
+    }
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/

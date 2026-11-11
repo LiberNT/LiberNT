@@ -1719,6 +1719,44 @@ typedef struct _UMS_CONTROL_BLOCK
 //
 // Kernel Stack Segment and Control (Win8+, layout stable through Win11 26100)
 //
+#if defined(_M_AMD64)
+// Win11 amd64 layout: ntkrnlmp.pdb 10.0.26100.8036 _KERNEL_STACK_SEGMENT (0x40) and
+// _KSTACK_CONTROL (0x50), matching the Kc* offsets of the SDK's ksamd64.inc.
+typedef struct _KERNEL_STACK_SEGMENT
+{
+    ULONG_PTR StackBase;                                 // 0x00
+    ULONG_PTR StackLimit;                                // 0x08
+    ULONG_PTR KernelStack;                               // 0x10
+    ULONG_PTR InitialStack;                              // 0x18
+    ULONG_PTR KernelShadowStackBase;                     // 0x20
+    ULONG_PTR KernelShadowStackLimit;                    // 0x28 _KERNEL_SHADOW_STACK_LIMIT
+    ULONG_PTR KernelShadowStack;                         // 0x30
+    ULONG_PTR KernelShadowStackInitial;                  // 0x38
+} KERNEL_STACK_SEGMENT, *PKERNEL_STACK_SEGMENT;
+
+typedef struct _KSTACK_CONTROL
+{
+    ULONG_PTR StackBase;                                 // 0x00
+    union                                                // 0x08
+    {
+        ULONG_PTR ActualLimit;
+        ULONG_PTR StackExpansion:1;
+    };
+    KERNEL_STACK_SEGMENT Previous;                       // 0x10
+} KSTACK_CONTROL, *PKSTACK_CONTROL;
+
+C_ASSERT(sizeof(KERNEL_STACK_SEGMENT) == 0x40);
+C_ASSERT(FIELD_OFFSET(KERNEL_STACK_SEGMENT, KernelShadowStackBase) == 0x20);
+C_ASSERT(FIELD_OFFSET(KERNEL_STACK_SEGMENT, KernelShadowStackInitial) == 0x38);
+C_ASSERT(sizeof(KSTACK_CONTROL) == 0x50);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, ActualLimit) == 0x08);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackBase) == 0x10);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackLimit) == 0x18);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelStack) == 0x20);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x28);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelShadowStackBase) == 0x30);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelShadowStackInitial) == 0x48);
+#else
 typedef struct _KERNEL_STACK_SEGMENT
 {
     ULONG_PTR StackBase;
@@ -1772,6 +1810,7 @@ C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackLimit) == 0x28);
 C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelStack) == 0x30);
 C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x38);
 #endif
+#endif /* _M_AMD64 */
 
 #define KSTACK_ACTUAL_LIMIT_EXPANDED 1
 #endif /* NTDDI_WIN8 */
