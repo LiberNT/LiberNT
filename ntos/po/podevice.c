@@ -421,12 +421,11 @@ NTAPI
 PoSetSystemState(
     _In_ EXECUTION_STATE Flags)
 {
-    KIRQL OldIrql;
-
     /* An asking that nobody holds on to counts once and is forgotten */
-    KeAcquireSpinLock(&PopKeepOnLock, &OldIrql);
-    PopKeptOn |= (Flags & ~ES_CONTINUOUS);
-    KeReleaseSpinLock(&PopKeepOnLock, OldIrql);
+    if (Flags & ES_DISPLAY_REQUIRED)
+        PopNoteDisplayActivity();
+
+    /* TODO: no system idle timer exists for ES_SYSTEM_REQUIRED to put back */
 }
 
 /* A thread's own asking goes when the thread does */

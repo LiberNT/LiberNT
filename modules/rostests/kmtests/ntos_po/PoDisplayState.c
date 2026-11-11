@@ -243,3 +243,40 @@ START_TEST(PoDisplayStateOn)
 
     Unwatch(DisplayHandle);
 }
+
+START_TEST(PoSetSystemState)
+{
+    PVOID DisplayHandle;
+    ULONG State;
+    EXECUTION_STATE Before;
+    EXECUTION_STATE After;
+    NTSTATUS Status;
+
+    DisplayHandle = Watch(&GUID_CONSOLE_DISPLAY_STATE, &DisplayWatch);
+    ok_eq_long(DisplayWatch.Value, PowerMonitorOn);
+
+    State = PowerMonitorOff;
+    Status = SetDisplayState(&State, sizeof(State));
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(WaitForValue(&DisplayWatch, PowerMonitorOff, 2000), "the display did not turn off, state %ld\n", DisplayWatch.Value);
+
+    Before = 0;
+    Status = ZwPowerInformation(SystemExecutionState, NULL, 0, &Before, sizeof(Before));
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    PoSetSystemState(ES_DISPLAY_REQUIRED);
+    ok(WaitForValue(&DisplayWatch, PowerMonitorOn, 2000), "a display requirement did not turn the display on, state %ld\n", DisplayWatch.Value);
+
+    After = 0;
+    Status = ZwPowerInformation(SystemExecutionState, NULL, 0, &After, sizeof(After));
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Before & ES_DISPLAY_REQUIRED)
+        skip(FALSE, "the display is already required by someone else\n");
+    else
+        ok(!(After & ES_DISPLAY_REQUIRED), "a passing display requirement was kept, state 0x%lx\n", After);
+
+    State = PowerMonitorOn;
+    SetDisplayState(&State, sizeof(State));
+    ok(WaitForValue(&DisplayWatch, PowerMonitorOn, 2000), "the display did not come back on, state %ld\n", DisplayWatch.Value);
+    Unwatch(DisplayHandle);
+}
