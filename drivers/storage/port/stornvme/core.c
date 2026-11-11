@@ -35,6 +35,11 @@ NvmeWaitReady(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG DesiredReady)
     {
         ULONG Status = NvmeReadRegister(Device, NVME_REG_CSTS);
 
+        if (Status == MAXULONG)
+        {
+            DPRINT1("stornvme: CSTS reads all ones, the controller is gone\n");
+            return FALSE;
+        }
         if ((Status & NVME_CSTS_RDY) == DesiredReady)
             return TRUE;
         if (DesiredReady != 0 && (Status & NVME_CSTS_CFS))
