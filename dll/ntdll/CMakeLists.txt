@@ -51,6 +51,7 @@ list(APPEND SOURCE
     rtl/mui.c
     rtl/nls.c
     rtl/telemetry.c
+    rtl/transaction.c
     rtl/userpfn.c
     rtl/wnf.c
     rtl/time.c

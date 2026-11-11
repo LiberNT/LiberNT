@@ -975,7 +975,7 @@
 @ stdcall RtlGetCurrentPeb()
 @ stdcall RtlGetCurrentProcessorNumber() ; 5.2 SP1 and higher
 @ stdcall -version=0x601+ RtlGetCurrentProcessorNumberEx(ptr)
-@ stdcall -stub -version=0x600+ RtlGetCurrentTransaction()
+@ stdcall -version=0x600+ RtlGetCurrentTransaction()
 @ stdcall RtlGetDaclSecurityDescriptor(ptr ptr ptr ptr)
 @ stdcall -version=0xA00+ RtlGetDeviceFamilyInfoEnum(ptr ptr ptr)
 @ stdcall -version=0x600+ RtlGetEnabledExtendedFeatures(int64)
@@ -1273,7 +1273,7 @@
 @ stdcall RtlSetCriticalSectionSpinCount(ptr long)
 @ stdcall RtlSetCurrentDirectory_U(ptr)
 @ stdcall RtlSetCurrentEnvironment(wstr ptr)
-@ stdcall -stub -version=0x600+ RtlSetCurrentTransaction(ptr)
+@ stdcall -version=0x600+ RtlSetCurrentTransaction(ptr)
 @ stdcall RtlSetDaclSecurityDescriptor(ptr long ptr long)
 @ stdcall -stub -version=0x600+ RtlSetDynamicTimeZoneInformation(long)
 @ stdcall RtlSetEnvironmentStrings(wstr long)

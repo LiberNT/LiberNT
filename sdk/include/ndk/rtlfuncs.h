@@ -781,6 +781,20 @@ RtlGetThreadErrorMode(
     VOID
 );
 
+NTSYSAPI
+HANDLE
+NTAPI
+RtlGetCurrentTransaction(
+    VOID
+);
+
+NTSYSAPI
+LOGICAL
+NTAPI
+RtlSetCurrentTransaction(
+    _In_opt_ HANDLE TransactionHandle
+);
+
 #endif /* NTOS_MODE_USER */
 
 NTSYSAPI

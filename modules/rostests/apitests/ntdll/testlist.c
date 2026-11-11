@@ -129,6 +129,7 @@ extern void func_RtlComputePrivatizedDllName_U(void);
 extern void func_RtlConditionVariable(void);
 extern void func_RtlCopyMappedMemory(void);
 extern void func_RtlCriticalSection(void);
+extern void func_RtlCurrentTransaction(void);
 extern void func_RtlDebugInformation(void);
 extern void func_RtlDeleteAce(void);
 extern void func_RtlDetermineDosPathNameType(void);
@@ -333,6 +334,7 @@ const struct test winetest_testlist[] =
     { "RtlConditionVariable",           func_RtlConditionVariable },
     { "RtlCopyMappedMemory",            func_RtlCopyMappedMemory },
     { "RtlCriticalSection",             func_RtlCriticalSection },
+    { "RtlCurrentTransaction",          func_RtlCurrentTransaction },
     { "RtlDebugInformation",            func_RtlDebugInformation },
     { "wow64_startup",                  func_wow64_startup },
     { "wow64_native_process",           func_wow64_native_process },
