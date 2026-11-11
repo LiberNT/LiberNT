@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Bus and function driver that records how the PnP manager filters, restarts and ejects a device
+ * PURPOSE:     Bus and function driver that records how the PnP manager filters, restarts, ejects and fails a device
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -34,6 +34,8 @@ static WCHAR ServicePath[260];
 static BOOLEAN ChildRemoved;
 static BOOLEAN EjectRequested;
 static ULONG RelationsQueried;
+static ULONG BusStateQueried;
+static BOOLEAN FailRequested;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstanceId[] = L"0";
@@ -281,6 +283,13 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
 
     switch (Stack->MinorFunction)
     {
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+            IoForwardIrpSynchronously(Extension->Lower, Irp);
+            Record(L"BusStateQueried", ++BusStateQueried);
+            if (FailRequested)
+                Irp->IoStatus.Information |= PNP_DEVICE_FAILED;
+            return Complete(Irp, STATUS_SUCCESS);
+
         case IRP_MN_START_DEVICE:
             Status = IoForwardIrpSynchronously(Extension->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
             return Complete(Irp, Status);
@@ -289,6 +298,11 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
             if (Stack->Parameters.QueryDeviceRelations.Type != BusRelations)
                 return Pass(Extension, Irp);
             Record(L"BusRelationsQueried", ++RelationsQueried);
+            if (!FailRequested && Requested(L"FailBus"))
+            {
+                FailRequested = TRUE;
+                IoInvalidateDeviceState(Extension->Pdo);
+            }
             if (!EjectRequested && Extension->Child != NULL && Requested(L"EjectChild"))
             {
                 EjectRequested = TRUE;

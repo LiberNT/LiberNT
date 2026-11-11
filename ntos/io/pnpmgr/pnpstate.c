@@ -929,6 +929,9 @@ PiProcessStartDevice(
 
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
 
+    /* The PnP manager asks a device for its state right after starting it (PNP_DEVICE_STATE documentation) */
+    PiQueueDeviceAction(DeviceNode->PhysicalDeviceObject, PiActionQueryState, NULL, NULL);
+
     PopFxNotifyDeviceStarted(DeviceNode->PhysicalDeviceObject);
 
     InbvIndicateProgress();
@@ -1325,8 +1328,14 @@ PiRunDeviceAction(
                                              DNUF_NOT_DISABLEABLE);
                 }
 
-                if (DeviceState & PNP_DEVICE_REMOVED)
+                if ((DeviceState & PNP_DEVICE_REMOVED) ||
+                    ((DeviceState & PNP_DEVICE_FAILED) && DeviceNode->State == DeviceNodeStarted))
                 {
+                    if (DeviceState & PNP_DEVICE_FAILED)
+                    {
+                        PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_POST_START);
+                    }
+
                     PiSetDevNodeState(DeviceNode,
                                       DeviceNodeAwaitingQueuedRemoval);
                     PiDevNodeStateMachine(DeviceNode);

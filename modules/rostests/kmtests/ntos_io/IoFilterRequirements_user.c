@@ -24,7 +24,7 @@ static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
-                                 L"BusRelationsQueried", L"StartDmaV3" };
+                                 L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -99,6 +99,7 @@ static VOID CheckRecorded(VOID)
     ok(Value == 1, "The bus driver did not leave IoStatus.Information as it was (%lu)\n", Value);
     ok(ReadValue(L"StartPrivateMask", &Value), "The child device did not start\n");
     ok(Value == 3, "The start resources were not the filtered requirements (mask %lu)\n", Value);
+    ok(ReadValue(L"BusStateQueried", &Value) && Value != 0, "The bus was not asked for its state after its start\n");
     ok(ReadValue(L"StartDmaV3", &Value) && Value == (TEST_DMA_CHANNEL | (TEST_DMA_REQUEST_LINE << 8) | (TEST_DMA_WIDTH << 16)),
        "The start resources lost the version 3 DMA channel, request line or width (0x%lx)\n", Value);
 }
@@ -158,6 +159,33 @@ static VOID CheckEject(DEVINST Bus)
     ok(Problem == CM_PROB_HELD_FOR_EJECT, "The ejected child has problem %lu (status 0x%lx)\n", Problem, Status);
 }
 
+/* The bus reports itself failed at the next enumeration; the wait only bounds a lost report */
+static VOID CheckFailed(DEVINST Bus)
+{
+    DWORD Start, Value = 1;
+    ULONG Status = 0, Problem = 0;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ServiceKey, 0, KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
+    {
+        ok(FALSE, "The fixture's service key is missing\n");
+        return;
+    }
+    RegSetValueExW(Key, L"FailBus", 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
+    RegCloseKey(Key);
+
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    Start = GetTickCount();
+    while ((CM_Get_DevNode_Status(&Status, &Problem, Bus, 0) != CR_SUCCESS || Problem != CM_PROB_FAILED_POST_START) &&
+           GetTickCount() - Start < 1000)
+    {
+        Sleep(10);
+    }
+
+    ok(Problem == CM_PROB_FAILED_POST_START, "The failed bus has problem %lu (status 0x%lx)\n", Problem, Status);
+}
+
 static VOID RemoveChild(VOID)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
@@ -192,6 +220,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckRestart();
         CheckReenumerate(Device->DevInst);
         CheckEject(Device->DevInst);
+        CheckFailed(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);
