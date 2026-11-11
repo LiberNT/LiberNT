@@ -564,12 +564,6 @@ PopHiberSystemHandler(
 
 VOID
 NTAPI
-PopCleanupPowerState(
-    IN PPOWER_STATE PowerState
-);
-
-VOID
-NTAPI
 PopReleaseThreadPowerObject(
     IN PVOID PowerObject
 );

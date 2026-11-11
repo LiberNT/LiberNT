@@ -180,7 +180,6 @@ PoCallDriver(
 {
     PIO_STACK_LOCATION Stack = IoGetNextIrpStackLocation(Irp);
 
-    /* TODO: power requests are not held back one behind another */
     if (Stack->MajorFunction != IRP_MJ_POWER) return STATUS_INVALID_PARAMETER;
 
     return IoCallDriver(DeviceObject, Irp);
@@ -192,8 +191,6 @@ PoStartNextPowerIrp(
     _Inout_ PIRP Irp)
 {
     UNREFERENCED_PARAMETER(Irp);
-
-    /* TODO: nothing is queued behind a power request, so nothing follows it */
 }
 
 /*
@@ -426,17 +423,6 @@ PoSetSystemState(
         PopNoteDisplayActivity();
 
     /* TODO: no system idle timer exists for ES_SYSTEM_REQUIRED to put back */
-}
-
-/* A thread's own asking goes when the thread does */
-VOID
-NTAPI
-PopCleanupPowerState(
-    _In_ PPOWER_STATE PowerState)
-{
-    UNREFERENCED_PARAMETER(PowerState);
-
-    /* TODO: a thread's asking is not kept on the thread, so none is let go */
 }
 
 VOID
