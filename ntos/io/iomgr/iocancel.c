@@ -14,6 +14,15 @@
 
 static KSPIN_LOCK IopCancelSpinLock;
 
+typedef struct _IOP_CANCEL_SWEEP
+{
+    PFILE_OBJECT FileObject;
+    PIO_STATUS_BLOCK Match;
+    KEVENT Done;
+    LONG Pending;
+    LONG Found;
+} IOP_CANCEL_SWEEP, *PIOP_CANCEL_SWEEP;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 CODE_SEG("INIT")
@@ -99,7 +108,7 @@ IopCancelThreadIrpsForFile(
     KIRQL OldIrql;
     PIRP Irp;
 
-    ASSERT(KeGetCurrentIrql() < APC_LEVEL);
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
@@ -120,6 +129,106 @@ IopCancelThreadIrpsForFile(
     KeLowerIrql(OldIrql);
 
     return Found;
+}
+
+static
+VOID
+IopEndCancelSweep(
+    _In_ PKAPC Apc)
+{
+    PIOP_CANCEL_SWEEP Sweep = Apc->SystemArgument1;
+
+    ExFreePoolWithTag(Apc, TAG_IO);
+    if (InterlockedDecrement(&Sweep->Pending) == 0)
+        KeSetEvent(&Sweep->Done, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+NTAPI
+IopCancelSweepApc(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    PIOP_CANCEL_SWEEP Sweep = *SystemArgument1;
+
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (IopCancelThreadIrpsForFile(Sweep->FileObject, Sweep->Match))
+        InterlockedExchange(&Sweep->Found, TRUE);
+    Apc->SystemArgument1 = Sweep;
+    IopEndCancelSweep(Apc);
+}
+
+static
+VOID
+NTAPI
+IopCancelSweepRundown(
+    _In_ PKAPC Apc)
+{
+    IopEndCancelSweep(Apc);
+}
+
+/*
+ * Another thread's request list changes only in that thread's context, so each
+ * thread of the process that has requests walks its own list in a special
+ * kernel APC and the caller waits for all of them to have looked.
+ */
+static
+BOOLEAN
+IopCancelOtherThreadsIrps(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PIO_STATUS_BLOCK Match)
+{
+    PETHREAD Current = PsGetCurrentThread();
+    PEPROCESS Process = PsGetCurrentProcess();
+    IOP_CANCEL_SWEEP Sweep;
+    PETHREAD Thread;
+    PKAPC Apc;
+
+    PAGED_CODE();
+
+    Sweep.FileObject = FileObject;
+    Sweep.Match = Match;
+    Sweep.Pending = 1;
+    Sweep.Found = FALSE;
+    KeInitializeEvent(&Sweep.Done, NotificationEvent, FALSE);
+
+    for (Thread = PsGetNextProcessThread(Process, NULL);
+         Thread != NULL;
+         Thread = PsGetNextProcessThread(Process, Thread))
+    {
+        if (Thread == Current || IsListEmpty(&Thread->IrpList)) continue;
+
+        Apc = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Apc), TAG_IO);
+        if (Apc == NULL) continue;
+
+        KeInitializeApc(Apc,
+                        &Thread->Tcb,
+                        OriginalApcEnvironment,
+                        IopCancelSweepApc,
+                        IopCancelSweepRundown,
+                        NULL,
+                        KernelMode,
+                        NULL);
+
+        InterlockedIncrement(&Sweep.Pending);
+        if (!KeInsertQueueApc(Apc, &Sweep, NULL, IO_NO_INCREMENT))
+        {
+            InterlockedDecrement(&Sweep.Pending);
+            ExFreePoolWithTag(Apc, TAG_IO);
+        }
+    }
+
+    if (InterlockedDecrement(&Sweep.Pending) != 0)
+        KeWaitForSingleObject(&Sweep.Done, Executive, KernelMode, FALSE, NULL);
+
+    return (BOOLEAN)Sweep.Found;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -390,8 +499,11 @@ NtCancelIoFileEx(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    /* FIXME: the lists of the process's other threads are not looked at, so a request one of them issued is not found */
     Found = IopCancelThreadIrpsForFile(FileObject, IoRequestToCancel);
+    if (IopCancelOtherThreadsIrps(FileObject, IoRequestToCancel))
+    {
+        Found = TRUE;
+    }
     if (IopCancelFileIrps(FileObject, IoRequestToCancel, NULL, PsGetCurrentProcess()))
     {
         Found = TRUE;

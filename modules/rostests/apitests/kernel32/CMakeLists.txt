@@ -83,6 +83,7 @@ list(APPEND SOURCE
     InitOnce.c
     interlck.c
     IoCompletion.c
+    CancelIoEx.c
     IsDBCSLeadByteEx.c
     JapaneseCalendar.c
     JobObject.c

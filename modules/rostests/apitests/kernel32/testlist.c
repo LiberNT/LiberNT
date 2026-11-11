@@ -79,6 +79,7 @@ extern void func_HeapSummary(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
 extern void func_IoCompletion(void);
+extern void func_CancelIoEx(void);
 extern void func_IsDBCSLeadByteEx(void);
 extern void func_JapaneseCalendar(void);
 extern void func_JobObject(void);
@@ -257,6 +258,7 @@ const struct test winetest_testlist[] =
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },
     { "IoCompletion",                func_IoCompletion },
+    { "CancelIoEx",                  func_CancelIoEx },
     { "IsDBCSLeadByteEx",            func_IsDBCSLeadByteEx },
     { "JapaneseCalendar",            func_JapaneseCalendar },
     { "JobObject",                   func_JobObject },
