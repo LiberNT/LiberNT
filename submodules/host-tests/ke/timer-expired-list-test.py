@@ -30,7 +30,7 @@ typedef void (*PKDEFERRED_ROUTINE)(PKDPC, PVOID, PVOID, PVOID);
 typedef struct { PKDPC Dpc; PKDEFERRED_ROUTINE Routine; PVOID Context; } DPC_QUEUE_ENTRY;
 static volatile int PauseExpiry, Paused, Attempted, Done, DoneDuringPause;
 static int Routines;
-static BOOLEAN CancelResult;
+static BOOLEAN CancelResult, ResetResult;
 static void TestPause(void) {
     if (!PauseExpiry || Paused) return;
     __atomic_store_n(&Paused, 1, __ATOMIC_RELEASE);
@@ -48,7 +48,8 @@ for file, name in [('ke_x.h', 'KiRemoveEntryTimer'), ('ke_x.h', 'KiComputeDueTim
                    ('ktimer.c', 'KiPeriodToInterval'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiRearmPeriodicTimer')]:
     fixture += src.definition(file, name)
 fixture += expire
-for file, name in [('ktimer.c', 'KiTimerExpiration'), ('ktimer.c', 'KeCancelTimer')]:
+for file, name in [('ktimer.c', 'KiTimerExpiration'), ('ktimer.c', 'KeCancelTimer'), ('ktimer.c', 'KiSignalTimer'),
+                   ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ktimer.c', 'KeSetTimerEx')]:
     fixture += src.definition(file, name)
 fixture += r'''
 static KTIMER Timer;
@@ -65,6 +66,16 @@ static void *Cancel(void *Unused) {
     while (!__atomic_load_n(&Paused, __ATOMIC_ACQUIRE)) sched_yield();
     __atomic_store_n(&Attempted, 1, __ATOMIC_RELEASE);
     CancelResult = KeCancelTimer(&Timer);
+    __atomic_store_n(&Done, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+static void *ResetTimer(void *Unused) {
+    LARGE_INTEGER Due;
+    (void)Unused;
+    while (!__atomic_load_n(&Paused, __ATOMIC_ACQUIRE)) sched_yield();
+    __atomic_store_n(&Attempted, 1, __ATOMIC_RELEASE);
+    Due.QuadPart = -500;
+    ResetResult = KeSetTimerEx(&Timer, Due, 0, &Dpc);
     __atomic_store_n(&Done, 1, __ATOMIC_RELEASE);
     return NULL;
 }
@@ -116,6 +127,20 @@ int main(void) {
     ExpireWithCancel();
     CHECK(CancelResult == TRUE && Timer.Header.SignalState == 1 && Routines == 1);
     CHECK(!Timer.Header.Inserted && IsListEmpty(&KiTimerTableListHead[0].Entry));
+
+    /* A reset waits for the expiry, then arms the timer afresh, unsignalled */
+    Arm("a reset arriving while a one-shot timer expires", 0, 1);
+    {
+        pthread_t ResetThread;
+        CHECK(pthread_create(&ExpireThread, NULL, Expire, NULL) == 0);
+        CHECK(pthread_create(&ResetThread, NULL, ResetTimer, NULL) == 0);
+        CHECK(pthread_join(ExpireThread, NULL) == 0);
+        CHECK(pthread_join(ResetThread, NULL) == 0);
+    }
+    CHECK(Paused && !DoneDuringPause && Done);
+    CHECK(ResetResult == FALSE && Routines == 1);
+    CHECK(Timer.Header.Inserted && Timer.Header.SignalState == 0 && Timer.DueTime.QuadPart == 600);
+    CHECK(KiTimerTableListHead[0].Entry.Flink == &Timer.TimerListEntry);
     return 0;
 }
 '''

@@ -107,7 +107,7 @@ static const char *Scenario = "setup";
 static KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
 static pthread_mutex_t DispatcherLock = PTHREAD_MUTEX_INITIALIZER, Bucket = PTHREAD_MUTEX_INITIALIZER;
 static __thread KIRQL Irql;
-static __thread int DispatcherHeld;
+static __thread int DispatcherHeld, ObjectLocks, BucketWithObject;
 static volatile int DispatcherContended;
 static volatile KSYSTEM_TIME KiSystemTimeValue;
 static KSPIN_LOCK KiSystemTimeLock __attribute__((unused));
@@ -135,9 +135,15 @@ static KIRQL KiAcquireDispatcherLock(void) {
 __attribute__((unused)) static void KiReleaseDispatcherLock(KIRQL Old) { DispatcherHeld = 0; CHECK(pthread_mutex_unlock(&DispatcherLock) == 0); KeLowerIrql(Old); }
 __attribute__((unused)) static void KiReleaseDispatcherLockFromSynchLevel(void) { DispatcherHeld = 0; CHECK(pthread_mutex_unlock(&DispatcherLock) == 0); }
 __attribute__((unused)) static void KiExitDispatcher(KIRQL Old) { KeLowerIrql(Old); }
-static void KiAcquireDispatcherObject(PDISPATCHER_HEADER h) { CHECK(pthread_mutex_lock(&h->Lock) == 0); }
-static void KiReleaseDispatcherObject(PDISPATCHER_HEADER h) { CHECK(pthread_mutex_unlock(&h->Lock) == 0); }
-static PKSPIN_LOCK_QUEUE KiAcquireTimerLock(ULONG Hand) { CHECK(Hand < TIMER_TABLE_SIZE); CHECK(pthread_mutex_lock(&Bucket) == 0); return &Bucket; }
+static void KiAcquireDispatcherObject(PDISPATCHER_HEADER h) { CHECK(pthread_mutex_lock(&h->Lock) == 0); ObjectLocks++; }
+static void KiReleaseDispatcherObject(PDISPATCHER_HEADER h) { CHECK(ObjectLocks > 0); ObjectLocks--; CHECK(pthread_mutex_unlock(&h->Lock) == 0); }
+/* Every bucket is taken under the dispatcher lock; whether an object lock came first is kept for the insertion checks */
+static PKSPIN_LOCK_QUEUE KiAcquireTimerLock(ULONG Hand) {
+    CHECK(Hand < TIMER_TABLE_SIZE && DispatcherHeld);
+    BucketWithObject = ObjectLocks > 0;
+    CHECK(pthread_mutex_lock(&Bucket) == 0);
+    return &Bucket;
+}
 static void KiReleaseTimerLock(PKSPIN_LOCK_QUEUE Queue) { CHECK(pthread_mutex_unlock(Queue) == 0); }
 static ULONG KiComputeTimerTableIndex(ULONGLONG DueTime) { (void)DueTime; return 0; }
 __attribute__((unused)) static void KxAcquireSpinLock(PKSPIN_LOCK Lock) { while (__atomic_exchange_n(Lock, 1, __ATOMIC_ACQUIRE)) sched_yield(); }

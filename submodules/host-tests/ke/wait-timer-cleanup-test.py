@@ -78,26 +78,34 @@ static void CheckCleaned(void) {
     CHECK(!Thread.Timer.Header.Inserted && IsListEmpty(&KiTimerTableListHead[0].Entry));
     CHECK(Thread.WaitPrcb == NULL && IsListEmpty(&PrcbWaitList) && !WaitLockHeld);
 }
+/* The wait lists, the timer and the processor's wait list are left under the dispatcher lock the caller holds */
+static void Unlink(LONG_PTR Status) {
+    KIRQL Old = KiAcquireDispatcherLock();
+    KiUnlinkThread(&Thread, Status);
+    KiReleaseDispatcherLock(Old);
+}
 int main(void) {
-    Irql = SYNCH_LEVEL;
+    KIRQL Old;
 
     Setup("a wait on an object with a timeout still in the table", TRUE, TRUE);
-    KiUnlinkThread(&Thread, 0x80);
+    Unlink(0x80);
     CHECK(Thread.WaitStatus == 0x80);
     CheckCleaned();
 
     Setup("a wait whose timer the expiry already took out of the table", TRUE, FALSE);
-    KiUnlinkThread(&Thread, 0);
+    Unlink(0);
     CheckCleaned();
 
     Setup("a delay wait, its timer block the whole array", FALSE, TRUE);
-    KiUnlinkThread(&Thread, 0);
+    Unlink(0);
     CheckCleaned();
 
     /* A second pass over the same thread unlinks nothing twice */
     Scenario = "a second pass";
+    Old = KiAcquireDispatcherLock();
     KiUnlinkWaitBlocks(&Thread);
-    CHECK(IsListEmpty(&Thread.Timer.Header.WaitListHead));
+    KiReleaseDispatcherLock(Old);
+    CHECK(IsListEmpty(&Thread.Timer.Header.WaitListHead) && IsListEmpty(&Object.WaitListHead));
     return 0;
 }
 '''
