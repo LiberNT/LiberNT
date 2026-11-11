@@ -231,12 +231,8 @@ NtGetCurrentProcessorNumberEx(
     _Out_opt_ PPROCESSOR_NUMBER ProcNumber)
 {
     PROCESSOR_NUMBER Local;
-    ULONG Number;
 
-    Number = KeGetCurrentProcessorNumberEx(&Local);
-
-    if (ProcNumber == NULL)
-        return (NTSTATUS)Number;
+    KeGetCurrentProcessorNumberEx(&Local);
 
     if (ExGetPreviousMode() != KernelMode)
     {
@@ -251,12 +247,12 @@ NtGetCurrentProcessorNumberEx(
         }
         _SEH2_END;
     }
-    else
+    else if (ProcNumber != NULL)
     {
         *ProcNumber = Local;
     }
 
-    return (NTSTATUS)Number;
+    return STATUS_SUCCESS;
 }
 
 /* PUBLIC FUNCTIONS: PARKING ***************************************************/
