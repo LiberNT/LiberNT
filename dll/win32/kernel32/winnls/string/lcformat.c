@@ -419,6 +419,7 @@ BOOL NLS_IsUnicodeOnlyLcid(LCID lcid)
  * DATE_USE_ALT_CALENDAR           - Requires GetCalendarInfo to work first.
  * DATE_LTRREADING/DATE_RTLREADING - Not yet implemented.
  */
+/* TODO: serve GetDateFormat and GetTimeFormat from kernelbase as Windows 11 does, once its get_date_format handles DATE_USE_ALT_CALENDAR and Japanese era years */
 static INT NLS_GetDateTimeFormatW(LCID lcid, DWORD dwFlags,
                                   const SYSTEMTIME* lpTime, LPCWSTR lpFormat,
                                   LPWSTR lpStr, INT cchOut)

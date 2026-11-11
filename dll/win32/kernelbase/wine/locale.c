@@ -6460,6 +6460,13 @@ INT WINAPI DECLSPEC_HOTPATCH GetLocaleInfoEx( const WCHAR *name, LCTYPE info, WC
 
     TRACE( "%s 0x%lx %p %d\n", debugstr_w(name), info, buffer, len );
 
+#ifdef __REACTOS__
+    if (len < 0 || (len && !buffer))
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+#endif
     if (!locale)
     {
         SetLastError( ERROR_INVALID_PARAMETER );
@@ -6632,6 +6639,13 @@ LANGID WINAPI DECLSPEC_HOTPATCH GetSystemDefaultLangID(void)
  */
 INT WINAPI DECLSPEC_HOTPATCH GetSystemDefaultLocaleName( LPWSTR name, INT count )
 {
+#ifdef __REACTOS__
+    if (count < 0 || (count && !name))
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+#endif
     return get_locale_info( system_locale, system_lcid, LOCALE_SNAME, name, count );
 }
 
@@ -6784,6 +6798,13 @@ LANGID WINAPI DECLSPEC_HOTPATCH GetUserDefaultLangID(void)
  */
 INT WINAPI DECLSPEC_HOTPATCH GetUserDefaultLocaleName( LPWSTR name, INT len )
 {
+#ifdef __REACTOS__
+    if (len < 0 || (len && !name))
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+#endif
     return get_locale_info( user_locale, user_lcid, LOCALE_SNAME, name, len );
 }
 

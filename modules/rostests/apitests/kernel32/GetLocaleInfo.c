@@ -213,6 +213,16 @@ static void Test_ConsoleFallbackName(void)
     ok(ret == 0, "ar-SA console fallback with 2 characters returned %d\n", ret);
     ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "ar-SA console fallback with 2 characters error %lu\n", GetLastError());
 
+    SetLastError(0xdeadbeef);
+    ret = pGetLocaleInfoEx(L"ar-SA", LOCALE_SCONSOLEFALLBACKNAME, NULL, 4);
+    ok(ret == 0, "ar-SA console fallback into NULL returned %d\n", ret);
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "ar-SA console fallback into NULL error %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ret = pGetLocaleInfoEx(L"ar-SA", LOCALE_SCONSOLEFALLBACKNAME, buffer, -1);
+    ok(ret == 0, "ar-SA console fallback with -1 characters returned %d\n", ret);
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "ar-SA console fallback with -1 characters error %lu\n", GetLastError());
+
     memset(buffer, 0xcc, sizeof(buffer));
     ret = GetLocaleInfoW(MAKELCID(MAKELANGID(LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA), SORT_DEFAULT),
                          LOCALE_SCONSOLEFALLBACKNAME, buffer, sizeof(buffer) / sizeof(buffer[0]));
@@ -333,6 +343,11 @@ static void Test_DefaultLocaleNames(void)
     ok(ret == 0, "GetUserDefaultLocaleName with 1 character returned %d\n", ret);
     ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetUserDefaultLocaleName with 1 character error %lu\n", GetLastError());
 
+    SetLastError(0xdeadbeef);
+    ret = pGetUserDefaultLocaleName(NULL, sizeof(name) / sizeof(name[0]));
+    ok(ret == 0, "GetUserDefaultLocaleName(NULL) returned %d\n", ret);
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "GetUserDefaultLocaleName(NULL) error %lu\n", GetLastError());
+
     expected_ret = pLCIDToLocaleName(GetSystemDefaultLCID(), expected, sizeof(expected) / sizeof(expected[0]), 0);
     ok(expected_ret > 1, "LCIDToLocaleName(system default) returned %d\n", expected_ret);
     memset(name, 0xcc, sizeof(name));
@@ -347,6 +362,11 @@ static void Test_DefaultLocaleNames(void)
     ret = pGetSystemDefaultLocaleName(name, 1);
     ok(ret == 0, "GetSystemDefaultLocaleName with 1 character returned %d\n", ret);
     ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetSystemDefaultLocaleName with 1 character error %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ret = pGetSystemDefaultLocaleName(NULL, sizeof(name) / sizeof(name[0]));
+    ok(ret == 0, "GetSystemDefaultLocaleName(NULL) returned %d\n", ret);
+    ok(GetLastError() == ERROR_INVALID_PARAMETER, "GetSystemDefaultLocaleName(NULL) error %lu\n", GetLastError());
 }
 
 static void Test_SetLocaleInfoVisible(void)
