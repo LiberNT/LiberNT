@@ -8,6 +8,7 @@
 
 #define JOB_COMPLETION_KEY ((ULONG_PTR)0x5342584a)
 #define JOB_TERMINATE_STATUS 0x5a
+#define JOB_SPIN_USER_TIME (50 * 10000)
 
 static LPPROC_THREAD_ATTRIBUTE_LIST
 CreateJobAttributeList(PHANDLE Job)
@@ -320,6 +321,92 @@ CheckUiRestrictionChain(HANDLE Outer, HANDLE Restricted, HANDLE Plain)
     CloseProcessInformation(&Info);
 }
 
+static ULONGLONG
+ProcessUserTime(HANDLE Process)
+{
+    FILETIME Creation, Exit, Kernel, User;
+    ULARGE_INTEGER Value;
+
+    if (!GetProcessTimes(Process, &Creation, &Exit, &Kernel, &User)) return 0;
+    Value.LowPart = User.dwLowDateTime;
+    Value.HighPart = User.dwHighDateTime;
+    return Value.QuadPart;
+}
+
+static void
+SpinUserTime(void)
+{
+    ULONGLONG Start = GetTickCount64();
+    volatile ULONG Sink = 0;
+    ULONG Index;
+
+    while (ProcessUserTime(GetCurrentProcess()) < JOB_SPIN_USER_TIME &&
+           GetTickCount64() - Start < 2000)
+    {
+        for (Index = 0; Index < 100000; Index++) Sink += Index;
+    }
+}
+
+static BOOL
+JobUserTimeMatches(ULONGLONG JobTime, ULONGLONG ProcessTime)
+{
+    return JobTime >= ProcessTime / 2 && JobTime <= ProcessTime * 2;
+}
+
+static void
+TestJobTimes(void)
+{
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION Accounting;
+    PROCESS_INFORMATION Info;
+    ULONGLONG ChildUser = 0;
+    ULONGLONG Start;
+    HANDLE Job;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Job = CreateJobObjectW(NULL, NULL);
+    ok(Job != NULL, "CreateJobObject failed %lu\n", GetLastError());
+    if (!Job) return;
+
+    ok(SpawnInJob(Job, "spin", 0, &Info), "spinning process launch failed %lu\n", GetLastError());
+    if (Info.hProcess)
+    {
+        Start = GetTickCount64();
+        while ((ChildUser = ProcessUserTime(Info.hProcess)) < JOB_SPIN_USER_TIME &&
+               GetTickCount64() - Start < 3000)
+        {
+            Sleep(10);
+        }
+        ok(ChildUser >= JOB_SPIN_USER_TIME, "child used %I64u of user time\n", ChildUser);
+
+        ZeroMemory(&Accounting, sizeof(Accounting));
+        ok(QueryInformationJobObject(Job, JobObjectBasicAccountingInformation,
+                                     &Accounting, sizeof(Accounting), NULL),
+           "job accounting query failed %lu\n", GetLastError());
+        ok(JobUserTimeMatches(Accounting.TotalUserTime.QuadPart, ChildUser),
+           "running process: job user time %I64d, process %I64u\n",
+           Accounting.TotalUserTime.QuadPart, ChildUser);
+
+        TerminateProcess(Info.hProcess, 0);
+        ok(WaitForSingleObject(Info.hProcess, 5000) == WAIT_OBJECT_0, "spinning process did not end\n");
+        ChildUser = ProcessUserTime(Info.hProcess);
+
+        ZeroMemory(&Accounting, sizeof(Accounting));
+        ok(QueryInformationJobObject(Job, JobObjectBasicAccountingInformation,
+                                     &Accounting, sizeof(Accounting), NULL),
+           "job accounting query failed %lu\n", GetLastError());
+        ok(JobUserTimeMatches(Accounting.TotalUserTime.QuadPart, ChildUser),
+           "exited process: job user time %I64d, process %I64u\n",
+           Accounting.TotalUserTime.QuadPart, ChildUser);
+        ok(Accounting.ThisPeriodTotalUserTime.QuadPart == Accounting.TotalUserTime.QuadPart,
+           "period user time %I64d, total %I64d\n",
+           Accounting.ThisPeriodTotalUserTime.QuadPart, Accounting.TotalUserTime.QuadPart);
+
+        CloseProcessInformation(&Info);
+    }
+
+    CloseHandle(Job);
+}
+
 static void
 TestUiRestrictionChain(void)
 {
@@ -346,6 +433,12 @@ START_TEST(JobLifecycle)
         Sleep(60000);
         ExitProcess(0);
     }
+    if (SbxIsChild(Arguments, Count, "spin"))
+    {
+        SpinUserTime();
+        Sleep(60000);
+        ExitProcess(0);
+    }
 
     TestActiveProcessLimit();
     TestTerminateJob();
@@ -353,4 +446,5 @@ START_TEST(JobLifecycle)
     TestCompletionPortLifecycle();
     TestEndOfJobTime();
     TestUiRestrictionChain();
+    TestJobTimes();
 }

@@ -145,6 +145,43 @@ PspIsJobTreeUiRestricted(
     return FALSE;
 }
 
+/* Entered with the job hierarchy lock and this job's lock held */
+static
+VOID
+PspAddRunningJobTimes(
+    _In_ PEJOB Job,
+    _Inout_ PLARGE_INTEGER KernelTime,
+    _Inout_ PLARGE_INTEGER UserTime)
+{
+    PLIST_ENTRY Entry;
+    PEPROCESS Process;
+    PEJOB Child;
+
+    for (Entry = Job->ProcessListHead.Flink;
+         Entry != &Job->ProcessListHead;
+         Entry = Entry->Flink)
+    {
+        Process = CONTAINING_RECORD(Entry, EPROCESS, JobLinks);
+
+        /* FIXME: a process that is leaving while this runs is missed until its job takes its account */
+        if ((Process->Flags2 & PSP_JOB_ACCOUNTING_FOLDED) != 0) continue;
+
+        KernelTime->QuadPart += (LONGLONG)Process->Pcb.KernelTime * KeMaximumIncrement;
+        UserTime->QuadPart += (LONGLONG)Process->Pcb.UserTime * KeMaximumIncrement;
+    }
+
+    for (Entry = Job->ChildJobListHead.Flink;
+         Entry != &Job->ChildJobListHead;
+         Entry = Entry->Flink)
+    {
+        Child = CONTAINING_RECORD(Entry, EJOB, SiblingJobLinks);
+
+        ExAcquireResourceSharedLite(&Child->JobLock, TRUE);
+        PspAddRunningJobTimes(Child, KernelTime, UserTime);
+        ExReleaseResourceLite(&Child->JobLock);
+    }
+}
+
 /* Entered with the job hierarchy lock held */
 static
 NTSTATUS
@@ -684,8 +721,10 @@ PspExitProcessFromJob(
     {
         ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
 
-        Job->TotalKernelTime.QuadPart += Process->Pcb.KernelTime;
-        Job->TotalUserTime.QuadPart += Process->Pcb.UserTime;
+        Job->TotalKernelTime.QuadPart += (LONGLONG)Process->Pcb.KernelTime * KeMaximumIncrement;
+        Job->TotalUserTime.QuadPart += (LONGLONG)Process->Pcb.UserTime * KeMaximumIncrement;
+        Job->ThisPeriodTotalKernelTime.QuadPart += (LONGLONG)Process->Pcb.KernelTime * KeMaximumIncrement;
+        Job->ThisPeriodTotalUserTime.QuadPart += (LONGLONG)Process->Pcb.UserTime * KeMaximumIncrement;
         Job->TotalPageFaultCount += Process->Vm.Instance.PageFaultCount;
         Job->ReadOperationCount +=
             (ULONGLONG)Process->ReadOperationCount.QuadPart;
@@ -1472,6 +1511,7 @@ NtQueryInformationJobObject(
     JOBOBJECT_END_OF_JOB_TIME_INFORMATION EndOfJob;
     JOBOBJECT_JOBSET_INFORMATION Set;
     PJOBOBJECT_BASIC_PROCESS_ID_LIST List = NULL;
+    LARGE_INTEGER RunningKernelTime, RunningUserTime;
     PVOID Source = NULL;
     ULONG Length = 0;
     NTSTATUS CopyStatus;
@@ -1536,12 +1576,18 @@ NtQueryInformationJobObject(
     {
         case JobObjectBasicAccountingInformation:
         case JobObjectBasicAndIoAccountingInformation:
-            BasicAndIo.BasicInfo.TotalUserTime = Job->TotalUserTime;
-            BasicAndIo.BasicInfo.TotalKernelTime = Job->TotalKernelTime;
-            BasicAndIo.BasicInfo.ThisPeriodTotalUserTime =
-                Job->ThisPeriodTotalUserTime;
-            BasicAndIo.BasicInfo.ThisPeriodTotalKernelTime =
-                Job->ThisPeriodTotalKernelTime;
+            RunningKernelTime.QuadPart = 0;
+            RunningUserTime.QuadPart = 0;
+            PspAddRunningJobTimes(Job, &RunningKernelTime, &RunningUserTime);
+
+            BasicAndIo.BasicInfo.TotalUserTime.QuadPart =
+                Job->TotalUserTime.QuadPart + RunningUserTime.QuadPart;
+            BasicAndIo.BasicInfo.TotalKernelTime.QuadPart =
+                Job->TotalKernelTime.QuadPart + RunningKernelTime.QuadPart;
+            BasicAndIo.BasicInfo.ThisPeriodTotalUserTime.QuadPart =
+                Job->ThisPeriodTotalUserTime.QuadPart + RunningUserTime.QuadPart;
+            BasicAndIo.BasicInfo.ThisPeriodTotalKernelTime.QuadPart =
+                Job->ThisPeriodTotalKernelTime.QuadPart + RunningKernelTime.QuadPart;
             BasicAndIo.BasicInfo.TotalPageFaultCount = Job->TotalPageFaultCount;
             BasicAndIo.BasicInfo.TotalProcesses = Job->TotalProcesses;
             BasicAndIo.BasicInfo.ActiveProcesses = Job->ActiveProcesses;
@@ -1905,6 +1951,7 @@ NtSetInformationJobObject(
 
             Job->LimitFlags = Extended.BasicLimitInformation.LimitFlags;
             /* TODO: the user time limits are recorded but not enforced, so no process is terminated for one and TotalTerminatedProcesses stays 0 */
+            /* TODO: a per-job user time limit set without JOB_OBJECT_LIMIT_PRESERVE_JOB_TIME does not restart ThisPeriodTotal* */
             Job->PerProcessUserTimeLimit =
                 Extended.BasicLimitInformation.PerProcessUserTimeLimit;
             Job->PerJobUserTimeLimit =
