@@ -323,7 +323,7 @@ PspExitProcess(
 }
 
 /*
- * The special kernel APC a thread runs to end itself when somebody else
+ * The kernel APC a thread runs to end itself when somebody else
  * asked for it. It runs on the thread, which is the only place the exit can
  * happen.
  */
@@ -336,8 +336,6 @@ PsExitSpecialApc(
     _Inout_ PVOID *SystemArgument1,
     _Inout_ PVOID *SystemArgument2)
 {
-    NTSTATUS ExitStatus = (NTSTATUS)(ULONG_PTR)Apc->NormalContext;
-
     UNREFERENCED_PARAMETER(NormalRoutine);
     UNREFERENCED_PARAMETER(NormalContext);
     UNREFERENCED_PARAMETER(SystemArgument1);
@@ -346,7 +344,6 @@ PsExitSpecialApc(
     PAGED_CODE();
 
     ExFreePoolWithTag(Apc, TAG_PS_APC);
-    PspExitThread(ExitStatus);
 }
 
 VOID
@@ -356,11 +353,12 @@ PspExitNormalApc(
     _In_ PVOID SystemArgument1,
     _In_ PVOID SystemArgument2)
 {
-    UNREFERENCED_PARAMETER(NormalContext);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     PAGED_CODE();
+
+    PspExitThread((NTSTATUS)(ULONG_PTR)NormalContext);
 }
 
 /*
