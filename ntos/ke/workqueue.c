@@ -39,24 +39,33 @@ KiHandQueueEntryToWaiter(
     _Inout_ PKQUEUE Queue,
     _In_opt_ PLIST_ENTRY Entry)
 {
-    PKWAIT_BLOCK WaitBlock;
+    PKWAIT_BLOCK WaitBlock = NULL;
+    PLIST_ENTRY WaitEntry;
     PKTHREAD Thread;
 
     if (!KiQueueHasRoom(Queue))
         return FALSE;
 
-    if (IsListEmpty(&Queue->Header.WaitListHead))
-        return FALSE;
-
-    WaitBlock = CONTAINING_RECORD(Queue->Header.WaitListHead.Blink,
-                                  KWAIT_BLOCK,
-                                  WaitListEntry);
-
     /*
      * A thread that waited on the queue as an ordinary dispatcher object is
      * not here to take work, so it is left to the usual satisfaction rules.
      */
-    if (WaitBlock->WaitType != WaitDequeue)
+    for (WaitEntry = Queue->Header.WaitListHead.Blink;
+         WaitEntry != &Queue->Header.WaitListHead;
+         WaitEntry = WaitEntry->Blink)
+    {
+        PKWAIT_BLOCK Candidate = CONTAINING_RECORD(WaitEntry,
+                                                   KWAIT_BLOCK,
+                                                   WaitListEntry);
+
+        if (Candidate->WaitType == WaitDequeue)
+        {
+            WaitBlock = Candidate;
+            break;
+        }
+    }
+
+    if (WaitBlock == NULL)
         return FALSE;
 
     if (Entry == NULL)
