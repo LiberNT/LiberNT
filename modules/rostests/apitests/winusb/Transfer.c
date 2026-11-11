@@ -135,6 +135,38 @@ static VOID TestBulk(PTEST_DEVICE Device)
            "Read of %lu took %lu IN transfers, last %lu\n", 2 * MaxTransfer + 512,
            After.InTransfers[1] - Before.InTransfers[1], After.InLastSize[1]);
     }
+
+    {
+        OVERLAPPED ReadOverlapped, WriteOverlapped;
+        ULONG Size = 4 * 1024 * 1024, ReadDone = 0, WriteDone = 0;
+        BOOL ReadResult, WriteResult;
+
+        FillPattern(Out, Size, 91);
+        memset(In, 0xCC, Size);
+        ZeroMemory(&ReadOverlapped, sizeof(ReadOverlapped));
+        ZeroMemory(&WriteOverlapped, sizeof(WriteOverlapped));
+        ReadOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+        WriteOverlapped.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+        ReadResult = WinUsb_ReadPipe(Device->Interface, PIPE_LOOP_IN, In, Size, NULL, &ReadOverlapped);
+        Error = GetLastError();
+        ok(!ReadResult && Error == ERROR_IO_PENDING, "Pending read of %lu: %d %lu\n", Size, ReadResult, Error);
+        WriteResult = WinUsb_WritePipe(Device->Interface, PIPE_LOOP_OUT, Out, Size, NULL, &WriteOverlapped);
+        Error = GetLastError();
+        ok(WriteResult || Error == ERROR_IO_PENDING, "Write of %lu beside a pending read: %d %lu\n", Size, WriteResult, Error);
+        ok(WaitForSingleObject(WriteOverlapped.hEvent, 5000) == WAIT_OBJECT_0, "Write of %lu did not finish\n", Size);
+        ok(WaitForSingleObject(ReadOverlapped.hEvent, 5000) == WAIT_OBJECT_0, "Read of %lu did not finish\n", Size);
+        if (!WinUsb_GetOverlappedResult(Device->Interface, &WriteOverlapped, &WriteDone, FALSE))
+            CancelIoEx(Device->File, &WriteOverlapped);
+        if (!WinUsb_GetOverlappedResult(Device->Interface, &ReadOverlapped, &ReadDone, FALSE))
+            CancelIoEx(Device->File, &ReadOverlapped);
+        ok(WriteDone == Size && ReadDone == Size, "Concurrent %lu-byte write and read moved %lu and %lu bytes\n", Size,
+           WriteDone, ReadDone);
+        ok(CheckPattern(In, ReadDone, 91), "Concurrent read data differs\n");
+        WaitForSingleObject(WriteOverlapped.hEvent, 5000);
+        WaitForSingleObject(ReadOverlapped.hEvent, 5000);
+        CloseHandle(ReadOverlapped.hEvent);
+        CloseHandle(WriteOverlapped.hEvent);
+    }
 }
 
 static VOID TestShortPackets(PTEST_DEVICE Device)
