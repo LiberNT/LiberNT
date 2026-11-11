@@ -24,6 +24,7 @@
 #include <drivers/usbport/usbmport.h>
 #include <reactos/drivers/dumpstor.h>
 #include <reactos/drivers/usbmsos20.h>
+#include <reactos/drivers/usbcapability.h>
 
 #define USB_HUB_TAG 'BUHU'
 

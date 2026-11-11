@@ -7,6 +7,7 @@
 #include <usb100.h>
 #include <usbdlib.h>
 #include <reactos/drivers/dumpstor.h>
+#include <reactos/drivers/usbcapability.h>
 #include <reactos/drivers/usbmsos20.h>
 
 #include <stdio.h>
