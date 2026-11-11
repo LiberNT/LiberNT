@@ -26,6 +26,7 @@ typedef struct _PSP_SHIM_CACHE_ENTRY
     UNICODE_STRING ImageName;
     LARGE_INTEGER LastWriteTime;
     LARGE_INTEGER FileSize;
+    BOOLEAN HasFileInfo;
 } PSP_SHIM_CACHE_ENTRY, *PPSP_SHIM_CACHE_ENTRY;
 
 static LIST_ENTRY PspShimCacheList;
@@ -101,11 +102,14 @@ static
 NTSTATUS
 PspShimCacheQueryImage(
     _In_ HANDLE ImageHandle,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PLARGE_INTEGER LastWriteTime,
     _Out_ PLARGE_INTEGER FileSize)
 {
     FILE_NETWORK_OPEN_INFORMATION Information;
     IO_STATUS_BLOCK IoStatusBlock;
+    PFILE_OBJECT FileObject;
+    HANDLE KernelHandle;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -113,11 +117,31 @@ PspShimCacheQueryImage(
     LastWriteTime->QuadPart = 0;
     FileSize->QuadPart = 0;
 
-    Status = ZwQueryInformationFile(ImageHandle,
+    /* The caller's handle is resolved in the caller's own mode, so it cannot name a kernel handle */
+    Status = ObReferenceObjectByHandle(ImageHandle,
+                                       0,
+                                       IoFileObjectType,
+                                       PreviousMode,
+                                       (PVOID*)&FileObject,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObOpenObjectByPointer(FileObject,
+                                   OBJ_KERNEL_HANDLE,
+                                   NULL,
+                                   0,
+                                   IoFileObjectType,
+                                   KernelMode,
+                                   &KernelHandle);
+    ObDereferenceObject(FileObject);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ZwQueryInformationFile(KernelHandle,
                                     &IoStatusBlock,
                                     &Information,
                                     sizeof(Information),
                                     FileNetworkOpenInformation);
+    ZwClose(KernelHandle);
     if (!NT_SUCCESS(Status)) return Status;
 
     *LastWriteTime = Information.LastWriteTime;
@@ -267,13 +291,15 @@ NtApphelpCacheControl(
     LARGE_INTEGER FileSize;
     UNICODE_STRING ImageName;
     HANDLE ImageHandle;
+    BOOLEAN HasFileInfo;
     NTSTATUS Status;
 
     PAGED_CODE();
 
     if (!PspShimCacheReady) return STATUS_NOT_SUPPORTED;
 
-    if (Service != ApphelpCacheServiceLookup &&
+    if ((Service == ApphelpCacheServiceUpdate ||
+         Service == ApphelpCacheServiceFlush) &&
         !SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
     {
         return STATUS_PRIVILEGE_NOT_HELD;
@@ -332,8 +358,22 @@ NtApphelpCacheControl(
      * is being asked about, and an image the caller cannot describe is one
      * the cache cannot answer for.
      */
-    Status = PspShimCacheQueryImage(ImageHandle, &LastWriteTime, &FileSize);
-    if (!NT_SUCCESS(Status))
+    LastWriteTime.QuadPart = 0;
+    FileSize.QuadPart = 0;
+    HasFileInfo = FALSE;
+    Status = STATUS_SUCCESS;
+
+    /* INVALID_HANDLE_VALUE names the image without describing its file */
+    if (ImageHandle != INVALID_HANDLE_VALUE)
+    {
+        Status = PspShimCacheQueryImage(ImageHandle,
+                                        PreviousMode,
+                                        &LastWriteTime,
+                                        &FileSize);
+        HasFileInfo = NT_SUCCESS(Status);
+    }
+
+    if (!NT_SUCCESS(Status) && Service != ApphelpCacheServiceLookup)
     {
         ExFreePoolWithTag(ImageName.Buffer, TAG_SHIM);
         return Status;
@@ -346,8 +386,12 @@ NtApphelpCacheControl(
         Entry = PspShimCacheFind(&ImageName);
         if (Entry != NULL)
         {
-            if (Entry->LastWriteTime.QuadPart != LastWriteTime.QuadPart ||
-                Entry->FileSize.QuadPart != FileSize.QuadPart)
+            /* A file that cannot be described, or no longer matches what was cached, drops the entry */
+            if (!NT_SUCCESS(Status) ||
+                (HasFileInfo &&
+                 (!Entry->HasFileInfo ||
+                  Entry->LastWriteTime.QuadPart != LastWriteTime.QuadPart ||
+                  Entry->FileSize.QuadPart != FileSize.QuadPart)))
             {
                 /* The file on disk is no longer the one that was cached */
                 RemoveEntryList(&Entry->Links);
@@ -381,6 +425,7 @@ NtApphelpCacheControl(
     Entry->ImageName = ImageName;
     Entry->LastWriteTime = LastWriteTime;
     Entry->FileSize = FileSize;
+    Entry->HasFileInfo = HasFileInfo;
 
     PspShimCacheAcquire(TRUE);
 
