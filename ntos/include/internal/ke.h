@@ -207,6 +207,11 @@ KiQueryProcessorTopology(
     _Out_writes_to_opt_(MaxSets, *SetCount) PKAFFINITY Sets,
     _In_ ULONG MaxSets,
     _Out_ PULONG SetCount);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiCaptureProcessorCaches(VOID);
 extern ETHREAD KiInitialThread;
 extern EPROCESS KiInitialProcess;
 extern PULONG KiInterruptTemplateObject;

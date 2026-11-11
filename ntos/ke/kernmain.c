@@ -434,6 +434,8 @@ KeInitSystem(VOID)
     /* Threaded deferred calls need a thread per processor to run on */
     KiStartDpcThreads();
 
+    KiCaptureProcessorCaches();
+
     return TRUE;
 }
 
