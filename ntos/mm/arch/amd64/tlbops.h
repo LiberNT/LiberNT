@@ -24,6 +24,20 @@ FORCEINLINE VOID MiAmd64TlbWriteCr4(ULONG64 Value) { __writecr4(Value); }
 FORCEINLINE VOID MiAmd64TlbPage(ULONG64 Address) { __invlpg((PVOID)(ULONG_PTR)Address); }
 FORCEINLINE VOID MiAmd64TlbCpuid(int Registers[4], int Leaf) { __cpuidex(Registers, Leaf, 0); }
 FORCEINLINE VOID MiAmd64TlbPause(VOID) { YieldProcessor(); }
+FORCEINLINE BOOLEAN MiAmd64TlbWatchdogEnabled(VOID) { return !KiRelaxedTiming && !KeBugCheckActive && !KdEnteredDebugger; }
+FORCEINLINE BOOLEAN MiAmd64TlbWatchdogFreezeActive(VOID) { return KiIsFreezeActive(); }
+FORCEINLINE ULONG64 MiAmd64TlbWatchdogEpoch(VOID) { return KiQueryFreezeEpoch(); }
+FORCEINLINE ULONG64 MiAmd64TlbWatchdogNow(PULONG64 Frequency)
+{
+    LARGE_INTEGER Value, Rate;
+    Value = KeQueryPerformanceCounter(&Rate);
+    *Frequency = Rate.QuadPart > 0 ? (ULONG64)Rate.QuadPart : 0;
+    return (ULONG64)Value.QuadPart;
+}
+FORCEINLINE VOID MiAmd64TlbWatchdogBugcheck(ULONG64 Frequency, ULONG64 Now, ULONG64 Baseline)
+{
+    KeBugCheckEx(IPI_WATCHDOG_TIMEOUT, Frequency, Now, Baseline, 0);
+}
 
 FORCEINLINE
 BOOLEAN
