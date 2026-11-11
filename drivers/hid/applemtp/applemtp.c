@@ -2301,11 +2301,8 @@ MtpFilterResourceRequirements(
     _Inout_ PMTP_DEVICE Device,
     _Inout_ PIRP Irp)
 {
-    PIO_RESOURCE_REQUIREMENTS_LIST Old;
-    PIO_RESOURCE_REQUIREMENTS_LIST New;
-    PIO_RESOURCE_DESCRIPTOR Descriptor;
     FDT_DRIVER_TREE Tree;
-    ULONG Gsi, Count = 0, Size, Index;
+    ULONG Gsi;
     BOOLEAN Edge = FALSE;
     NTSTATUS Status;
 
@@ -2320,54 +2317,11 @@ MtpFilterResourceRequirements(
         return STATUS_NOT_SUPPORTED;
     }
 
-    Old = (PIO_RESOURCE_REQUIREMENTS_LIST)Irp->IoStatus.Information;
-    if (Old != NULL)
-    {
-        if (Old->AlternativeLists != 1)
-            return STATUS_NOT_SUPPORTED;
-        Count = Old->List[0].Count;
-        for (Index = 0; Index < Count; ++Index)
-        {
-            if (Old->List[0].Descriptors[Index].Type == CmResourceTypeInterrupt)
-                return STATUS_NOT_SUPPORTED;
-        }
-    }
-
-    Size = FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List[0].Descriptors) +
-           (Count + 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
-    New = ExAllocatePoolWithTag(PagedPool, Size, MTP_TAG);
-    if (New == NULL)
-        return STATUS_INSUFFICIENT_RESOURCES;
-    RtlZeroMemory(New, Size);
-    if (Old != NULL)
-    {
-        RtlCopyMemory(New, Old, FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List[0].Descriptors) +
-                                Count * sizeof(IO_RESOURCE_DESCRIPTOR));
-    }
-    else
-    {
-        New->InterfaceType = Internal;
-        New->BusNumber = 0;
-        New->List[0].Version = 1;
-        New->List[0].Revision = 1;
-    }
-    New->ListSize = Size;
-    New->AlternativeLists = 1;
-    New->List[0].Count = Count + 1;
-    Descriptor = &New->List[0].Descriptors[Count];
-    Descriptor->Type = CmResourceTypeInterrupt;
-    Descriptor->ShareDisposition = CmResourceShareShared;
-    Descriptor->Flags = Edge ? CM_RESOURCE_INTERRUPT_LATCHED : CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE;
-    Descriptor->u.Interrupt.MinimumVector = Gsi;
-    Descriptor->u.Interrupt.MaximumVector = Gsi;
     Device->FifoGsi = Gsi;
     Device->FifoEdge = Edge;
-    DbgPrint("applemtp: requesting the DockChannel interrupt %lu\n", Gsi);
-
-    if (Old != NULL)
-        ExFreePool(Old);
-    Irp->IoStatus.Information = (ULONG_PTR)New;
-    return STATUS_SUCCESS;
+    Status = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+    DbgPrint("applemtp: requesting the DockChannel interrupt %lu: %lx\n", Gsi, Status);
+    return Status;
 }
 
 static
