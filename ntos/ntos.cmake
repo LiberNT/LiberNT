@@ -515,6 +515,7 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/capture.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/riscv64/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/riscv64/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/riscv64/kdsup.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/cache.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/console.c

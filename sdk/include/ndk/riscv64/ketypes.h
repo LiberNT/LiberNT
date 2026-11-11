@@ -318,6 +318,21 @@ struct _KPRCB
     volatile LONG MmCopyOnWriteCount;
     volatile LONG MmDemandZeroCount;
     volatile LONG MmTransitionCount;
+    volatile LONG MmCacheTransitionCount;
+    volatile LONG MmPageReadCount;
+    volatile LONG MmPageReadIoCount;
+    volatile LONG MmCacheReadCount;
+    volatile LONG MmCacheIoCount;
+    volatile LONG MmDirtyPagesWriteCount;
+    volatile LONG MmDirtyWriteIoCount;
+    volatile LONG MmMappedPagesWriteCount;
+    volatile LONG MmMappedWriteIoCount;
+    ULONG CcFastReadNoWait;
+    ULONG CcFastReadWait;
+    ULONG CcFastReadNotPossible;
+    ULONG CcCopyReadNoWait;
+    ULONG CcCopyReadWait;
+    ULONG CcCopyReadNoWaitMiss;
     volatile LONG IoReadOperationCount;
     volatile LONG IoWriteOperationCount;
     volatile LONG IoOtherOperationCount;
@@ -356,6 +371,8 @@ struct _KPCR
     PVOID KdVersionBlock;
     volatile LONG FenceState;
 };
+
+typedef KPCR KIPCR, *PKIPCR;
 
 /* Startup must install the PCR before calling these accessors. */
 #ifndef NTOS_MODE_USER

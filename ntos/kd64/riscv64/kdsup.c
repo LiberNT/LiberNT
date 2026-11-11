@@ -9,15 +9,13 @@
 #define NDEBUG
 #include <debug.h>
 
-/* No MSRs, ports, buses or control space are reachable through KD yet. Do
+/* No MSRs, ports or buses are reachable through KD yet. Do
  * not fabricate output data for any of them. */
 #define RISCV_KD_UNAVAILABLE(Name, Parameters) \
     NTSTATUS NTAPI Name Parameters { return STATUS_NOT_SUPPORTED; }
 
 RISCV_KD_UNAVAILABLE(KdpSysReadMsr, (ULONG Msr, PULONGLONG MsrValue))
 RISCV_KD_UNAVAILABLE(KdpSysWriteMsr, (ULONG Msr, PULONGLONG MsrValue))
-RISCV_KD_UNAVAILABLE(KdpSysReadControlSpace, (ULONG Processor, ULONG64 BaseAddress, PVOID Buffer, ULONG Length, PULONG ActualLength))
-RISCV_KD_UNAVAILABLE(KdpSysWriteControlSpace, (ULONG Processor, ULONG64 BaseAddress, PVOID Buffer, ULONG Length, PULONG ActualLength))
 RISCV_KD_UNAVAILABLE(KdpSysReadBusData, (BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, ULONG Offset, PVOID Buffer, ULONG Length, PULONG ActualLength))
 RISCV_KD_UNAVAILABLE(KdpSysWriteBusData, (BUS_DATA_TYPE BusDataType, ULONG BusNumber, ULONG SlotNumber, ULONG Offset, PVOID Buffer, ULONG Length, PULONG ActualLength))
 RISCV_KD_UNAVAILABLE(KdpSysReadIoSpace, (INTERFACE_TYPE InterfaceType, ULONG BusNumber, ULONG AddressSpace, ULONG64 IoAddress, PVOID DataValue, ULONG DataSize, PULONG ActualDataSize))
