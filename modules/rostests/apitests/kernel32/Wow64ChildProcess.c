@@ -34,7 +34,7 @@ START_TEST(Wow64ChildProcess)
     }
     StringCchPrintfW(CommandLine, RTL_NUMBER_OF(CommandLine), L"\"%s\" /c exit 7", Path);
 
-    if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_SUSPENDED | CREATE_NO_WINDOW,
+    if (!CreateProcessW(Path, CommandLine, NULL, NULL, FALSE, CREATE_SUSPENDED,
                         NULL, NULL, &StartupInfo, &ProcessInfo))
     {
         ok(FALSE, "CreateProcessW failed with %lu\n", GetLastError());
