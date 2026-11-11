@@ -901,6 +901,7 @@ IopScatterGather(
     LARGE_INTEGER CapturedOffset;
     ULONG CapturedKey = 0;
     IOP_REQUEST Request;
+    PVOID FirstPage;
     NTSTATUS Status;
     ULONG PageCount;
     PMDL Mdl;
@@ -908,9 +909,7 @@ IopScatterGather(
 
     PAGED_CODE();
 
-    if ((Length & (PAGE_SIZE - 1)) != 0) return STATUS_INVALID_PARAMETER;
-
-    PageCount = Length >> PAGE_SHIFT;
+    PageCount = BYTES_TO_PAGES(Length);
     if (PageCount == 0) return STATUS_INVALID_PARAMETER;
 
     Status = IopBeginRequest(&Request,
@@ -934,6 +933,7 @@ IopScatterGather(
             ProbeForRead(Segments,
                          PageCount * sizeof(FILE_SEGMENT_ELEMENT),
                          sizeof(ULONG_PTR));
+            FirstPage = Segments[0].Buffer;
             CapturedOffset = ProbeForReadLargeInteger(ByteOffset);
             if (Key != NULL) CapturedKey = ProbeForReadUlong(Key);
         }
@@ -951,17 +951,20 @@ IopScatterGather(
     }
     else
     {
+        FirstPage = Segments[0].Buffer;
         CapturedOffset = *ByteOffset;
         if (Key != NULL) CapturedKey = *Key;
     }
 
-    if (!(Request.FileObject->Flags & FO_NO_INTERMEDIATE_BUFFERING))
+    if ((Request.FileObject->Flags & FO_SYNCHRONOUS_IO) ||
+        !(Request.FileObject->Flags & FO_NO_INTERMEDIATE_BUFFERING) ||
+        !IopIsTransferValid(&Request, Write, FirstPage, Length, &CapturedOffset))
     {
         IopAbortRequest(&Request);
         return STATUS_INVALID_PARAMETER;
     }
 
-    Mdl = IoAllocateMdl(Segments[0].Buffer, Length, FALSE, TRUE, Irp);
+    Mdl = IoAllocateMdl(FirstPage, Length, FALSE, TRUE, Irp);
     if (Mdl == NULL)
     {
         IopAbortRequest(&Request);
