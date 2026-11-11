@@ -2237,8 +2237,10 @@ ObpReuseHandleForDuplicate(
     }
 
     Entry->GrantedAccess = GrantedAccess;
-    Entry->ObAttributes &= ~OBJ_HANDLE_ATTRIBUTES;
-    Entry->ObAttributes |= (HandleAttributes & OBJ_HANDLE_ATTRIBUTES);
+    if (HandleAttributes & OBJ_PROTECT_CLOSE)
+        Entry->GrantedAccess |= ObpAccessProtectCloseBit;
+    Entry->ObAttributes &= ~(OBJ_INHERIT | OBJ_AUDIT_OBJECT_CLOSE);
+    Entry->ObAttributes |= (HandleAttributes & (OBJ_INHERIT | OBJ_AUDIT_OBJECT_CLOSE));
 
     ExUnlockHandleTableEntry(HandleTable, Entry);
     KeLeaveCriticalRegion();
@@ -2400,8 +2402,10 @@ ObDuplicateObject(
     if (NT_SUCCESS(Status))
     {
         NewEntry.Object = Header;
-        NewEntry.ObAttributes |= (HandleAttributes & OBJ_HANDLE_ATTRIBUTES);
+        NewEntry.ObAttributes |= (HandleAttributes & (OBJ_INHERIT | OBJ_AUDIT_OBJECT_CLOSE));
         NewEntry.GrantedAccess = AccessState.PreviouslyGrantedAccess;
+        if (HandleAttributes & OBJ_PROTECT_CLOSE)
+            NewEntry.GrantedAccess |= ObpAccessProtectCloseBit;
 
         /* The handle has to be made in the context the table belongs to */
         if (KernelHandle)
