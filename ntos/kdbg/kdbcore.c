@@ -805,6 +805,21 @@ KdbpSetContinueType(
     KdbpContinueType = Type;
 }
 
+static
+VOID
+KdbpStepPastBreakInstruction(
+    _Inout_ PCONTEXT Context)
+{
+    ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Context);
+    KD_BREAKPOINT_TYPE Instruction;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Instruction, (PVOID)Pc, sizeof(Instruction))))
+        return;
+
+    if (Instruction == KD_BREAKPOINT_VALUE)
+        KeSetContextPc(Context, Pc + KD_BREAKPOINT_SIZE);
+}
+
 /*
  * Where the machine stopped, and why. Everything the debugger does happens
  * inside this call: when it returns, the machine runs again.
@@ -985,6 +1000,14 @@ KdbEnterDebuggerException(
             KdbpStepOverBreakPoint = BreakPointNr;
             KdbpArchSetSingleStep(Context, TRUE);
         }
+    }
+    else if ((BreakPointNr < 0) &&
+             (KdbpContinueType == kdContinue) &&
+             (ExceptionRecord != NULL) &&
+             (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_BREAKPOINT))
+    {
+        /* The program counter is still on a breakpoint instruction the debugger did not write, such as DbgBreakPoint's */
+        KdbpStepPastBreakInstruction(Context);
     }
 
     KdbCurrentExceptionRecordValid = FALSE;
