@@ -121,6 +121,8 @@ CmpDeleteKeyObject(
 
     if (KeyBody->Type != CM_KEY_BODY_TYPE) return;
 
+    if (KeyBody->NotifyBlock != NULL) CmpFlushNotify(KeyBody, FALSE);
+
     CmpCleanupKeyBodyContexts(KeyBody);
     CmpTransUnbindKeyBody(KeyBody);
 

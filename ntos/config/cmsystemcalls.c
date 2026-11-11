@@ -1728,6 +1728,7 @@ NtNotifyChangeMultipleKeys(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     CM_CAPTURED_ATTRIBUTES Captured;
     PCM_KEY_BODY SlaveBody = NULL;
+    PCM_KEY_BODY WatchBody = NULL;
     HANDLE SlaveHandle = NULL;
     PCM_KEY_BODY KeyBody;
     PKEVENT EventObject = NULL;
@@ -1800,6 +1801,37 @@ NtNotifyChangeMultipleKeys(
                                          &SlaveHandle,
                                          &SlaveBody);
         CmpReleaseAttributes(&Captured);
+
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(KeyBody);
+            return Status;
+        }
+
+        /* The subordinate is watched through a body of its own: closing the opened handle would end the watch */
+        CmpLockRegistry();
+
+        if (SlaveBody->KeyControlBlock == NULL ||
+            KeyBody->KeyControlBlock == NULL ||
+            SlaveBody->KeyControlBlock->KeyHive ==
+            KeyBody->KeyControlBlock->KeyHive)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        else
+        {
+            Status = CmpCreateKeyBody(SlaveBody->KeyControlBlock,
+                                      KernelMode,
+                                      NULL,
+                                      (PVOID*)&WatchBody);
+        }
+
+        CmpUnlockRegistry();
+
+        ObDereferenceObject(SlaveBody);
+        ZwClose(SlaveHandle);
+        SlaveHandle = NULL;
+        SlaveBody = WatchBody;
 
         if (!NT_SUCCESS(Status))
         {

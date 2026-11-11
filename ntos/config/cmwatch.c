@@ -32,6 +32,9 @@ typedef struct _CM_POST_COMPLETION
     KPROCESSOR_MODE Mode;
     KEVENT Finished;
     KAPC Apc;
+    KAPC UserApc;
+    PCM_KEY_BODY SlaveBody;
+    WORK_QUEUE_ITEM SlaveWorkItem;
     NTSTATUS Status;
 } CM_POST_COMPLETION, *PCM_POST_COMPLETION;
 
@@ -50,6 +53,33 @@ static BOOLEAN CmpNotifyInited = FALSE;
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static VOID CmpReleaseCompletion(_In_ PCM_POST_COMPLETION Completion);
+
+static
+VOID
+NTAPI
+CmpUserApcKernelRoutine(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    CmpReleaseCompletion(CONTAINING_RECORD(Apc, CM_POST_COMPLETION, UserApc));
+}
+
+static
+VOID
+NTAPI
+CmpUserApcRundownRoutine(
+    _In_ PKAPC Apc)
+{
+    CmpReleaseCompletion(CONTAINING_RECORD(Apc, CM_POST_COMPLETION, UserApc));
+}
 
 static
 VOID
@@ -106,6 +136,27 @@ CmpPostApcRoutine(
         ExQueueWorkItem((PWORK_QUEUE_ITEM)Completion->ApcRoutine,
                         (WORK_QUEUE_TYPE)(ULONG_PTR)Completion->ApcContext);
     }
+    else if (Completion->ApcRoutine != NULL)
+    {
+        InterlockedIncrement(&Completion->RefCount);
+
+        KeInitializeApc(&Completion->UserApc,
+                        &Completion->Thread->Tcb,
+                        OriginalApcEnvironment,
+                        CmpUserApcKernelRoutine,
+                        CmpUserApcRundownRoutine,
+                        (PKNORMAL_ROUTINE)Completion->ApcRoutine,
+                        UserMode,
+                        Completion->ApcContext);
+
+        if (!KeInsertQueueApc(&Completion->UserApc,
+                              Completion->IoStatusBlock,
+                              NULL,
+                              IO_NO_INCREMENT))
+        {
+            CmpReleaseCompletion(Completion);
+        }
+    }
 
     if (Completion->Synchronous)
     {
@@ -117,15 +168,80 @@ CmpPostApcRoutine(
 
 static
 VOID
+CmpFreeCompletion(
+    _In_ PCM_POST_COMPLETION Completion)
+{
+    if (Completion->Event != NULL) ObDereferenceObject(Completion->Event);
+    if (Completion->Thread != NULL) ObDereferenceObject(Completion->Thread);
+    if (Completion->SlaveBody != NULL) ObDereferenceObject(Completion->SlaveBody);
+
+    ExFreePool(Completion);
+}
+
+static
+VOID
+NTAPI
+CmpFreeCompletionWorker(
+    _In_ PVOID Context)
+{
+    CmpFreeCompletion(Context);
+}
+
+static
+VOID
 CmpReleaseCompletion(
     _In_ PCM_POST_COMPLETION Completion)
 {
     if (InterlockedDecrement(&Completion->RefCount) != 0) return;
 
-    if (Completion->Event != NULL) ObDereferenceObject(Completion->Event);
-    if (Completion->Thread != NULL) ObDereferenceObject(Completion->Thread);
+    /* The subordinate key's last reference tears down its notify block, which takes the locks a poster may hold */
+    if (Completion->SlaveBody != NULL)
+    {
+        ExInitializeWorkItem(&Completion->SlaveWorkItem,
+                             CmpFreeCompletionWorker,
+                             Completion);
+        ExQueueWorkItem(&Completion->SlaveWorkItem, DelayedWorkQueue);
+        return;
+    }
 
-    ExFreePool(Completion);
+    CmpFreeCompletion(Completion);
+}
+
+static
+VOID
+CmpUnlinkPostBlock(
+    _In_ PCM_POST_BLOCK Post);
+
+/* An answer given through one key takes back what it left waiting on the other */
+static
+VOID
+CmpCancelSiblingPosts(
+    _In_ PCM_POST_COMPLETION Completion)
+{
+    PCM_POST_BLOCK Post;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY Next;
+    ULONG Removed = 0;
+
+    ExAcquireFastMutex(&CmpPostLock);
+
+    for (Entry = CmpPostBlockListHead.Flink;
+         Entry != &CmpPostBlockListHead;
+         Entry = Next)
+    {
+        Next = Entry->Flink;
+        Post = CONTAINING_RECORD(Entry, CM_POST_BLOCK, GlobalList);
+
+        if (Post->Completion != Completion) continue;
+
+        CmpUnlinkPostBlock(Post);
+        ExFreePool(Post);
+        Removed++;
+    }
+
+    ExReleaseFastMutex(&CmpPostLock);
+
+    while (Removed-- != 0) CmpReleaseCompletion(Completion);
 }
 
 /* Hands the answer to the thread that asked for it, in its own context */
@@ -139,6 +255,8 @@ CmpDeliverCompletion(
 
     Completion->Status = Status;
     InterlockedIncrement(&Completion->RefCount);
+
+    if (Completion->SlaveBody != NULL) CmpCancelSiblingPosts(Completion);
 
     KeInitializeApc(&Completion->Apc,
                     &Completion->Thread->Tcb,
@@ -379,6 +497,12 @@ CmpNotifyChangeKey(
     KeInitializeEvent(&Completion->Finished, NotificationEvent, FALSE);
     ObReferenceObject(Completion->Thread);
 
+    if (SlaveKeyBody != NULL)
+    {
+        ObReferenceObject(SlaveKeyBody);
+        Completion->SlaveBody = SlaveKeyBody;
+    }
+
     if (Notify->NotifyPending != 0)
     {
         Notify->NotifyPending = 0;
@@ -483,11 +607,7 @@ CmpReportNotify(
             continue;
         }
 
-        ExReleasePushLockShared(&CmpHiveListHeadLock);
         CmpPostAllOnBlock(Notify, STATUS_NOTIFY_ENUM_DIR);
-        ExAcquirePushLockShared(&CmpHiveListHeadLock);
-
-        Next = CmHive->NotifyList.Flink;
     }
 
     ExReleasePushLockShared(&CmpHiveListHeadLock);
