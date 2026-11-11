@@ -79,10 +79,59 @@ CheckRootDevices(VOID)
     SetupDiDestroyDeviceInfoList(Devices);
 }
 
+/* An ACPI string _UID is the instance ID with the characters an ID may not hold replaced, as Windows 8.1 shows under QEMU */
+static
+VOID
+CheckAcpiInstances(VOID)
+{
+    static const PCWSTR QemuResources[] =
+    {
+        L"ACPI\\PNP0A06\\CPU_HOTPLUG_RESOURCES",
+        L"ACPI\\PNP0A06\\GPE0_RESOURCES",
+        L"ACPI\\PNP0A06\\PCI_HOTPLUG_RESOURCES",
+    };
+    WCHAR InstanceId[MAX_DEVICE_ID_LEN];
+    SP_DEVINFO_DATA Device;
+    HDEVINFO Devices;
+    BOOLEAN Qemu = FALSE;
+    CONFIGRET Result;
+    ULONG Index, Char;
+    DEVINST Node;
+
+    Devices = SetupDiGetClassDevsW(NULL, L"ACPI", NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT);
+    if (skip(Devices != INVALID_HANDLE_VALUE, "No ACPI device list\n")) return;
+
+    Device.cbSize = sizeof(Device);
+    for (Index = 0; SetupDiEnumDeviceInfo(Devices, Index, &Device); Index++)
+    {
+        if (!SetupDiGetDeviceInstanceIdW(Devices, &Device, InstanceId, RTL_NUMBER_OF(InstanceId), NULL)) continue;
+
+        if (_wcsnicmp(InstanceId, L"ACPI\\QEMU0002\\", 14) == 0) Qemu = TRUE;
+
+        for (Char = 0; InstanceId[Char] != UNICODE_NULL; Char++)
+        {
+            if (InstanceId[Char] <= L' ' || InstanceId[Char] > 0x7F || InstanceId[Char] == L',') break;
+        }
+
+        ok(InstanceId[Char] == UNICODE_NULL, "%ls holds character 0x%x\n", InstanceId, InstanceId[Char]);
+    }
+
+    SetupDiDestroyDeviceInfoList(Devices);
+
+    if (skip(Qemu, "Not a QEMU machine\n")) return;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(QemuResources); Index++)
+    {
+        Result = CM_Locate_DevNodeW(&Node, (DEVINSTID_W)QemuResources[Index], CM_LOCATE_DEVNODE_NORMAL);
+        ok(Result == CR_SUCCESS, "%ls: CM_Locate_DevNodeW returned %lu\n", QemuResources[Index], Result);
+    }
+}
+
 START_TEST(IoDeviceTree)
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
     CheckReportedHal();
 #endif
     CheckRootDevices();
+    CheckAcpiInstances();
 }

@@ -171,7 +171,7 @@ struct acpi_device_flags {
 typedef char			acpi_bus_id[8];
 typedef unsigned long		acpi_bus_address;
 typedef char			*acpi_hardware_id;
-typedef char			acpi_unique_id[9];
+typedef char			acpi_unique_id[200];
 typedef char			acpi_class_code[ACPI_PCICLS_STRING_SIZE];
 typedef char			acpi_device_name[40];
 typedef char			acpi_device_class[20];

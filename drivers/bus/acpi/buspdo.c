@@ -3002,7 +3002,12 @@ BuspBuildStableInstanceId(
             size_t len = strlen(Device->pnp.unique_id);
             if (len >= MaxChars) len = MaxChars - 1;
             for (size_t i = 0; i < len; ++i)
-                Out[i] = (WCHAR)(unsigned char)Device->pnp.unique_id[i];
+            {
+                unsigned char c = (unsigned char)Device->pnp.unique_id[i];
+
+                /* An ID may not hold a space, a comma or a non-ASCII character; Windows 8.1 lists ACPI\PNP0A06\CPU_HOTPLUG_RESOURCES */
+                Out[i] = (c <= ' ' || c > 0x7F || c == ',') ? L'_' : (WCHAR)c;
+            }
             Out[len] = UNICODE_NULL;
             return (ULONG)len;
         }
