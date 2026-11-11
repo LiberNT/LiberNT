@@ -165,6 +165,73 @@ CmpCheckCreateAccess(
     return Allowed ? STATUS_SUCCESS : AccessStatus;
 }
 
+static
+NTSTATUS
+CmpCheckOpenAccess(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _Inout_opt_ PACCESS_STATE AccessState,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_opt_ PCM_PARSE_CONTEXT Context)
+{
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    PPRIVILEGE_SET Privileges = NULL;
+    ACCESS_MASK Granted = 0;
+    NTSTATUS AccessStatus;
+    NTSTATUS Status;
+    BOOLEAN Allowed;
+
+    if (AccessMode == KernelMode || AccessState == NULL) return STATUS_SUCCESS;
+
+    if (Context != NULL && (Context->CreateOptions & REG_OPTION_BACKUP_RESTORE))
+    {
+        if (SeSinglePrivilegeCheck(SeBackupPrivilege, AccessMode))
+            Granted |= ACCESS_SYSTEM_SECURITY | KEY_READ;
+
+        if (SeSinglePrivilegeCheck(SeRestorePrivilege, AccessMode))
+            Granted |= ACCESS_SYSTEM_SECURITY | DELETE | KEY_WRITE;
+
+        if (Granted != 0)
+        {
+            AccessState->PreviouslyGrantedAccess |= Granted;
+            AccessState->RemainingDesiredAccess = 0;
+            return STATUS_SUCCESS;
+        }
+
+        /* TODO: INFO_NEEDED - the access of a backup/restore open without either privilege; the descriptor decides it */
+    }
+
+    Status = CmpGetKeySecurityDescriptor(Kcb, &Descriptor);
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Descriptor == NULL) return STATUS_SUCCESS;
+
+    SeLockSubjectContext(&AccessState->SubjectSecurityContext);
+
+    Allowed = SeAccessCheck(Descriptor,
+                            &AccessState->SubjectSecurityContext,
+                            TRUE,
+                            AccessState->RemainingDesiredAccess,
+                            AccessState->PreviouslyGrantedAccess,
+                            &Privileges,
+                            &CmpKeyObjectType->TypeInfo.GenericMapping,
+                            AccessMode,
+                            &Granted,
+                            &AccessStatus);
+
+    SeUnlockSubjectContext(&AccessState->SubjectSecurityContext);
+
+    if (Privileges != NULL)
+    {
+        SeAppendPrivileges(AccessState, Privileges);
+        SeFreePrivileges(Privileges);
+    }
+
+    if (!Allowed) return AccessStatus;
+
+    AccessState->PreviouslyGrantedAccess |= Granted;
+    AccessState->RemainingDesiredAccess = 0;
+    return STATUS_SUCCESS;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -755,6 +822,9 @@ CmpParseKeyWorker(
 
             if (Create) ParseContext->Disposition = REG_OPENED_EXISTING_KEY;
 
+            Status = CmpCheckOpenAccess(Current, AccessState, AccessMode, ParseContext);
+            if (!NT_SUCCESS(Status)) break;
+
             Status = CmpCreateKeyBody(Current, AccessMode, ParseContext, Object);
             break;
         }
@@ -903,6 +973,9 @@ CmpParseKeyWorker(
         if (!Last) continue;
 
         if (Create) ParseContext->Disposition = REG_OPENED_EXISTING_KEY;
+
+        Status = CmpCheckOpenAccess(Current, AccessState, AccessMode, ParseContext);
+        if (!NT_SUCCESS(Status)) break;
 
         Status = CmpCreateKeyBody(Current, AccessMode, ParseContext, Object);
         break;
