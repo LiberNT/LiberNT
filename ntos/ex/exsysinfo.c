@@ -81,6 +81,84 @@ ExpProbeSystemInfoBuffer(
     return Status;
 }
 
+#define EXP_BRAND_STRING_LENGTH 49
+
+static
+VOID
+ExpQueryProcessorBrandString(
+    _Out_writes_(EXP_BRAND_STRING_LENGTH) PCHAR Brand)
+{
+    RTL_QUERY_REGISTRY_TABLE Table[2];
+    WCHAR Wide[128];
+    UNICODE_STRING Name;
+    ANSI_STRING Ansi;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(Brand, EXP_BRAND_STRING_LENGTH);
+    RtlZeroMemory(Wide, sizeof(Wide));
+
+    RtlInitEmptyUnicodeString(&Name, Wide, sizeof(Wide) - sizeof(WCHAR));
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[0].Name = L"ProcessorNameString";
+    Table[0].EntryContext = &Name;
+
+    /* Every architecture records the processor's own name there while it boots */
+    if (!NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
+                                           L"\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                                           Table,
+                                           NULL,
+                                           NULL)))
+    {
+        return;
+    }
+
+    if (Name.Length > (EXP_BRAND_STRING_LENGTH - 1) * sizeof(WCHAR))
+        Name.Length = (EXP_BRAND_STRING_LENGTH - 1) * sizeof(WCHAR);
+
+    Ansi.Buffer = Brand;
+    Ansi.Length = 0;
+    Ansi.MaximumLength = EXP_BRAND_STRING_LENGTH;
+    (VOID)RtlUnicodeStringToAnsiString(&Ansi, &Name, FALSE);
+}
+
+static
+VOID
+ExpQueryDynamicTimeZone(
+    _Out_ PRTL_DYNAMIC_TIME_ZONE_INFORMATION Dynamic)
+{
+    RTL_QUERY_REGISTRY_TABLE Table[3];
+    UNICODE_STRING KeyName;
+    ULONG Disabled = 0;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(Dynamic, sizeof(*Dynamic));
+    RtlCopyMemory(Dynamic, &ExpTimeZoneInfo, sizeof(RTL_TIME_ZONE_INFORMATION));
+
+    RtlInitEmptyUnicodeString(&KeyName,
+                              Dynamic->TimeZoneKeyName,
+                              sizeof(Dynamic->TimeZoneKeyName) - sizeof(WCHAR));
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[0].Name = L"TimeZoneKeyName";
+    Table[0].EntryContext = &KeyName;
+    Table[1].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[1].Name = L"DynamicDaylightTimeDisabled";
+    Table[1].EntryContext = &Disabled;
+
+    (VOID)RtlQueryRegistryValues(RTL_REGISTRY_CONTROL,
+                                 L"TimeZoneInformation",
+                                 Table,
+                                 NULL,
+                                 NULL);
+
+    Dynamic->DynamicDaylightTimeDisabled = (Disabled != 0);
+}
+
 static
 VOID
 ExpReportLength(
@@ -176,20 +254,22 @@ ExpQueryProcessorPerformance(
     _In_ ULONG Length,
     _Out_ PULONG ReturnLength)
 {
-    ULONG Needed;
+    ULONG Count;
     ULONG Index;
 
-    Needed = KeNumberProcessors *
-             (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
-
-    *ReturnLength = Needed;
-
-    if (Length < Needed)
+    /* A buffer too small for every processor is filled with the ones that fit */
+    Count = min((ULONG)KeNumberProcessors,
+                Length / (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION));
+    if (Count == 0)
     {
+        *ReturnLength = KeNumberProcessors *
+                        (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    *ReturnLength = Count * (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
+
+    for (Index = 0; Index < Count; Index++)
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
 
@@ -292,6 +372,90 @@ ExpQueryModuleInformationWorker(
     KeLeaveCriticalRegion();
 
     return Status;
+}
+
+/* FIXME: the ndk declares NextOffset as a ULONG; the list ends with a USHORT terminator as Windows and Wine have it */
+static
+NTSTATUS
+ExpQueryModuleInformationEx(
+    _Out_opt_ PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    PRTL_PROCESS_MODULE_INFORMATION_EX Info;
+    PIMAGE_NT_HEADERS NtHeaders;
+    PLDR_DATA_TABLE_ENTRY Module;
+    PLIST_ENTRY Entry;
+    ANSI_STRING Ansi;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index = 0;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink)
+    {
+        Count++;
+    }
+
+    Needed = Count * (ULONG)sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) +
+             (ULONG)sizeof(USHORT);
+
+    *ReturnLength = Needed;
+
+    if (Buffer == NULL || Length < Needed)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink, Index++)
+    {
+        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Info = (PRTL_PROCESS_MODULE_INFORMATION_EX)Buffer + Index;
+
+        RtlZeroMemory(Info, sizeof(*Info));
+
+        Info->NextOffset = sizeof(*Info);
+        Info->BaseInfo.ImageBase = Module->DllBase;
+        Info->BaseInfo.ImageSize = Module->SizeOfImage;
+        Info->BaseInfo.Flags = Module->Flags;
+        Info->BaseInfo.LoadOrderIndex = (USHORT)Index;
+        Info->BaseInfo.LoadCount = Module->LoadCount;
+        Info->ImageCheckSum = Module->CheckSum;
+        Info->TimeDateStamp = Module->TimeDateStamp;
+
+        NtHeaders = RtlImageNtHeader(Module->DllBase);
+        if (NtHeaders != NULL)
+            Info->DefaultBase = (PVOID)(ULONG_PTR)NtHeaders->OptionalHeader.ImageBase;
+
+        Ansi.Buffer = Info->BaseInfo.FullPathName;
+        Ansi.Length = 0;
+        Ansi.MaximumLength = (USHORT)sizeof(Info->BaseInfo.FullPathName);
+
+        if (NT_SUCCESS(RtlUnicodeStringToAnsiString(&Ansi,
+                                                    &Module->FullDllName,
+                                                    FALSE)))
+        {
+            PCHAR Separator = strrchr(Info->BaseInfo.FullPathName, '\\');
+
+            Info->BaseInfo.OffsetToFileName = (Separator != NULL) ?
+                (USHORT)(Separator - Info->BaseInfo.FullPathName + 1) : 0;
+        }
+    }
+
+    *(PUSHORT)((PRTL_PROCESS_MODULE_INFORMATION_EX)Buffer + Count) = 0;
+
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS NTAPI ExpCaptureUnicodeString(_Out_ PUNICODE_STRING,
@@ -1204,7 +1368,6 @@ NtQuerySystemInformation(
             }
 
             case SystemTimeZoneInformation:
-            case SystemDynamicTimeZoneInformation:
             {
                 ResultLength = sizeof(RTL_TIME_ZONE_INFORMATION);
                 if (Length < ResultLength)
@@ -1215,6 +1378,22 @@ NtQuerySystemInformation(
 
                 *(PRTL_TIME_ZONE_INFORMATION)SystemInformation =
                     ExpTimeZoneInfo;
+                break;
+            }
+
+            case SystemDynamicTimeZoneInformation:
+            {
+                RTL_DYNAMIC_TIME_ZONE_INFORMATION Dynamic;
+
+                ResultLength = sizeof(RTL_DYNAMIC_TIME_ZONE_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ExpQueryDynamicTimeZone(&Dynamic);
+                *(PRTL_DYNAMIC_TIME_ZONE_INFORMATION)SystemInformation = Dynamic;
                 break;
             }
 
@@ -1249,11 +1428,25 @@ NtQuerySystemInformation(
 
             case SystemModuleInformationEx:
             {
-                /*
-                 * The longer form of the module list carries a per-entry offset
-                 * and an image checksum that this kernel's loader does not keep.
-                 */
-                Status = STATUS_NOT_IMPLEMENTED;
+                Status = ExpQueryModuleInformationEx(SystemInformation,
+                                                     Length,
+                                                     &ResultLength);
+                break;
+            }
+
+            case SystemProcessorBrandString:
+            {
+                CHAR Brand[EXP_BRAND_STRING_LENGTH];
+
+                ResultLength = sizeof(Brand);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ExpQueryProcessorBrandString(Brand);
+                RtlCopyMemory(SystemInformation, Brand, sizeof(Brand));
                 break;
             }
 

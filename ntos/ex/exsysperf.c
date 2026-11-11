@@ -311,7 +311,7 @@ ExpQueryProcessorCycleTimeInformation(
 
     if (Length < Needed)
     {
-        return STATUS_INFO_LENGTH_MISMATCH;
+        return IdleOnly ? STATUS_BUFFER_TOO_SMALL : STATUS_INFO_LENGTH_MISMATCH;
     }
 
     for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
@@ -331,7 +331,7 @@ ExpQueryTimeAdjustment(
     _Out_ PSYSTEM_QUERY_TIME_ADJUST_INFORMATION Info,
     _In_ ULONG Length)
 {
-    if (Length < sizeof(SYSTEM_QUERY_TIME_ADJUST_INFORMATION))
+    if (Length != sizeof(SYSTEM_QUERY_TIME_ADJUST_INFORMATION))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
     }
