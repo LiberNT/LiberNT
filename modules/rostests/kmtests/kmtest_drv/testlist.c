@@ -361,6 +361,7 @@ KMT_TESTFUNC Test_SeSddl;
 KMT_TESTFUNC Test_SeSddlListOrder;
 KMT_TESTFUNC Test_SeQueryInfoToken;
 KMT_TESTFUNC Test_SeTokenFiltering;
+KMT_TESTFUNC Test_SePrimaryTokenRelease;
 KMT_TESTFUNC Test_SeAccessState;
 KMT_TESTFUNC Test_RtlAvlTree;
 KMT_TESTFUNC Test_RtlAtomEx;
@@ -831,6 +832,7 @@ const KMT_TEST TestList[] =
     { "SeSddlListOrder",                    Test_SeSddlListOrder },
     { "SeQueryInfoToken",                   Test_SeQueryInfoToken },
     { "SeTokenFiltering",                   Test_SeTokenFiltering },
+    { "SePrimaryTokenRelease",              Test_SePrimaryTokenRelease },
     { "SeAccessState",                      Test_SeAccessState },
     { "ZwAllocateVirtualMemory",            Test_ZwAllocateVirtualMemory },
     { "ZwCreateSection",                    Test_ZwCreateSection },

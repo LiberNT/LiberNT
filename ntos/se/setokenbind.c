@@ -242,10 +242,10 @@ SeDeassignPrimaryToken(
 
     PAGED_CODE();
 
-    Token = ObFastReferenceObject(&Process->Token);
+    Token = ObFastReplaceObject(&Process->Token, NULL);
     if (Token == NULL) return;
 
-    ObFastDereferenceObject(&Process->Token, Token);
+    /* TODO: TokenInUse is not cleared when the process lets go of its token, as SeExchangePrimaryToken does; Windows 11 not measured */
     ObDereferenceObject(Token);
 }
 
