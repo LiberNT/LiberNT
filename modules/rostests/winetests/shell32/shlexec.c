@@ -148,6 +148,9 @@ static DWORD ddeInst;
 static HSZ hszTopic;
 static char ddeExec[MAX_PATH], ddeApplication[MAX_PATH];
 static BOOL post_quit_on_execute;
+#ifdef __REACTOS__
+static BOOL dde_execute_received;
+#endif
 
 /* Handle DDE for doChild() and test_dde_default_app() */
 static HDDEDATA CALLBACK ddeCb(UINT uType, UINT uFmt, HCONV hConv,
@@ -177,9 +180,21 @@ static HDDEDATA CALLBACK ddeCb(UINT uType, UINT uFmt, HCONV hConv,
             ok(size < MAX_PATH, "got size %ld\n", size);
             assert(size < MAX_PATH);
             DdeFreeDataHandle(hData);
+#ifdef __REACTOS__
+            dde_execute_received = TRUE;
+#else
             if (post_quit_on_execute)
                 PostQuitMessage(0);
+#endif
             return (HDDEDATA)DDE_FACK;
+
+#ifdef __REACTOS__
+        /* The server leaves once the client has finished the conversation it executed in */
+        case XTYP_DISCONNECT:
+            if (post_quit_on_execute && dde_execute_received)
+                PostQuitMessage(0);
+            return NULL;
+#endif
 
         default:
             return NULL;
@@ -260,8 +275,13 @@ static void doChild(int argc, char** argv)
 
             post_quit_on_execute = TRUE;
             ddeInst = 0;
+#ifdef __REACTOS__
+            rc = DdeInitializeA(&ddeInst, ddeCb, (CBF_SKIP_ALLNOTIFICATIONS & ~CBF_SKIP_DISCONNECTS) | CBF_FAIL_ADVISES |
+                                CBF_FAIL_POKES | CBF_FAIL_REQUESTS, 0);
+#else
             rc = DdeInitializeA(&ddeInst, ddeCb, CBF_SKIP_ALLNOTIFICATIONS | CBF_FAIL_ADVISES |
                                 CBF_FAIL_POKES | CBF_FAIL_REQUESTS, 0);
+#endif
             ok(rc == DMLERR_NO_ERROR, "DdeInitializeA() returned %d\n", rc);
             hszApplication = DdeCreateStringHandleA(ddeInst, shared_block, CP_WINANSI);
             ok(hszApplication != NULL, "DdeCreateStringHandleA(%s) = NULL\n", shared_block);
@@ -284,7 +304,9 @@ static void doChild(int argc, char** argv)
                 DispatchMessageA(&msg);
             }
 
+#ifndef __REACTOS__
             Sleep(500);
+#endif
             KillTimer(NULL, timer);
             hdde = DdeNameService(ddeInst, hszApplication, 0, DNS_UNREGISTER);
             ok(hdde != NULL, "DdeNameService() failed le=%lu\n", GetLastError());
