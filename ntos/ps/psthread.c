@@ -503,6 +503,13 @@ NtCreateThread(
         SafeInitialTeb = *InitialTeb;
     }
 
+    /* Only a growable stack may be named: the fixed-stack form is gone */
+    if ((SafeInitialTeb.PreviousStackBase != NULL) ||
+        (SafeInitialTeb.PreviousStackLimit != NULL))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
     if (CreateSuspended) CreateFlags |= THREAD_CREATE_FLAGS_CREATE_SUSPENDED;
 
     return PspCreateThread(ThreadHandle,
