@@ -109,6 +109,14 @@ cpp_quote("#define TF_IPP_FLAG_ACTIVE                     0x0001")
 cpp_quote("#define TF_IPP_FLAG_ENABLED                    0x0002")
 cpp_quote("#define TF_IPP_FLAG_SUBSTITUTEDBYINPUTPROCESSOR 0x0004")
 
+cpp_quote("#define TF_IPP_CAPS_DISABLEONTRANSITORY 0x00000001")
+cpp_quote("#define TF_IPP_CAPS_SECUREMODESUPPORT   0x00000002")
+cpp_quote("#define TF_IPP_CAPS_UIELEMENTENABLED    0x00000004")
+cpp_quote("#define TF_IPP_CAPS_COMLESSSUPPORT      0x00000008")
+cpp_quote("#define TF_IPP_CAPS_WOW16SUPPORT        0x00000010")
+cpp_quote("#define TF_IPP_CAPS_IMMERSIVESUPPORT    0x00010000")
+cpp_quote("#define TF_IPP_CAPS_SYSTRAYSUPPORT      0x00020000")
+
 cpp_quote("#define TF_IPSINK_FLAG_ACTIVE 0x0001")
 
 interface ITfDocumentMgr;
