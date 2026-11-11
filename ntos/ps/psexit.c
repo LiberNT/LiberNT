@@ -88,6 +88,31 @@ PspSendTerminationMessages(
 }
 
 /*
+ * Tells the port a process registered for its exceptions that its last thread
+ * is leaving, which is how a subsystem learns that a process it was told
+ * about has gone, even one whose threads never ran.
+ */
+static
+VOID
+PspNotifyExceptionPortOfExit(
+    _In_ PETHREAD Thread,
+    _In_ PEPROCESS Process)
+{
+    CLIENT_DIED_MSG Message;
+
+    PAGED_CODE();
+
+    if (Process->ExceptionPortData == NULL) return;
+
+    RtlZeroMemory(&Message, sizeof(Message));
+    Message.h.u1.s1.TotalLength = sizeof(Message);
+    Message.h.u1.s1.DataLength = sizeof(Message.CreateTime);
+    Message.h.u2.s2.Type = LPC_CLIENT_DIED;
+    Message.CreateTime = Thread->CreateTime;
+    LpcRequestPort(Process->ExceptionPortData, &Message.h);
+}
+
+/*
  * A user-mode APC that was queued but never delivered is dropped here. A
  * thread on its way out will not run one, and whoever queued it has no claim
  * on the memory the control block sits in.
@@ -225,6 +250,8 @@ PspExitThread(
 
     ExReleasePushLockExclusive(&Process->ProcessLock);
     KeLeaveCriticalRegion();
+
+    if (LastThread) PspNotifyExceptionPortOfExit(Thread, Process);
 
     /*
      * The process is finished with before the thread leaves its own list,
