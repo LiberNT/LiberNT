@@ -265,7 +265,7 @@ IopCreateFile(
         OpenPacket.DriverCreateContext = *DriverContext;
     }
 
-    /* The name may resolve to a device or a file, so no type is named and the rights are mapped as a file's */
+    /* The name may resolve to a device or a file, and either way the open makes a file object, so the rights are mapped as a file's */
     Status = SeCreateAccessState(&AccessState,
                                  &AuxData,
                                  DesiredAccess,
@@ -273,7 +273,7 @@ IopCreateFile(
     if (NT_SUCCESS(Status))
     {
         Status = ObOpenObjectByName(ObjectAttributes,
-                                    NULL,
+                                    IoFileObjectType,
                                     AccessMode,
                                     &AccessState,
                                     DesiredAccess,
