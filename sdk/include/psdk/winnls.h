@@ -1034,6 +1034,30 @@ GEOID WINAPI GetUserGeoID(_In_ GEOCLASS);
 
 #if (WINVER >= 0x0600)
 
+WINBASEAPI
+int
+WINAPI
+GetDurationFormat(
+  _In_ LCID Locale,
+  _In_ DWORD dwFlags,
+  _In_opt_ CONST SYSTEMTIME *lpDuration,
+  _In_ ULONGLONG ullDuration,
+  _In_opt_ LPCWSTR lpFormat,
+  _Out_writes_opt_(cchDuration) LPWSTR lpDurationStr,
+  _In_ int cchDuration);
+
+WINBASEAPI
+int
+WINAPI
+GetDurationFormatEx(
+  _In_opt_ LPCWSTR lpLocaleName,
+  _In_ DWORD dwFlags,
+  _In_opt_ CONST SYSTEMTIME *lpDuration,
+  _In_ ULONGLONG ullDuration,
+  _In_opt_ LPCWSTR lpFormat,
+  _Out_writes_opt_(cchDuration) LPWSTR lpDurationStr,
+  _In_ int cchDuration);
+
 int
 WINAPI
 IdnToAscii(

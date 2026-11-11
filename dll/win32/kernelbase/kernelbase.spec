@@ -411,6 +411,7 @@
 @ stdcall GetDiskFreeSpaceW(wstr ptr ptr ptr ptr) kernel32.GetDiskFreeSpaceW
 @ stdcall GetDriveTypeA(str) kernel32.GetDriveTypeA
 @ stdcall GetDriveTypeW(wstr) kernel32.GetDriveTypeW
+@ stdcall GetDurationFormatEx(wstr long ptr int64 wstr ptr long)
 @ stdcall -version=0x600+ GetDynamicTimeZoneInformation(ptr) kernel32.GetDynamicTimeZoneInformation
 @ stdcall -version=0x602+ GetDynamicTimeZoneInformationEffectiveYears(ptr ptr ptr) kernel32.GetDynamicTimeZoneInformationEffectiveYears
 @ stdcall -version=0x601+ GetEnabledXStateFeatures() kernel32.GetEnabledXStateFeatures
@@ -548,6 +549,7 @@
 @ stdcall GetSidSubAuthorityCount(ptr)
 @ stdcall GetStartupInfoW(ptr) kernel32.GetStartupInfoW
 @ stdcall GetStdHandle(long)
+@ stdcall GetStringScripts(long wstr long ptr long)
 @ stub GetStringTableEntry
 @ stdcall GetStringTypeA(long long str long ptr)
 @ stdcall GetStringTypeExW(long long wstr long ptr)
@@ -1358,6 +1360,7 @@
 @ stdcall VerLanguageNameW(long wstr long) kernel32.VerLanguageNameW
 @ stdcall VerQueryValueA(ptr str ptr ptr)
 @ stdcall VerQueryValueW(ptr wstr ptr ptr)
+@ stdcall VerifyScripts(long wstr long wstr long)
 @ stdcall PrefetchVirtualMemory(ptr ptr ptr long) kernel32.PrefetchVirtualMemory
 @ stdcall VerSetConditionMask(long long long long) ntdll.VerSetConditionMask
 @ stdcall VirtualAlloc(ptr long long long) kernel32.VirtualAlloc

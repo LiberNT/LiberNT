@@ -1915,6 +1915,7 @@ static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
         str = geo->iso3;
         break;
     case GEO_LATITUDE:
+        /* FIXME: locale.nls carries no coordinates, every location reports 0.000 */
         str = geo->latitude;
         break;
     case GEO_LONGITUDE:
@@ -1928,9 +1929,11 @@ static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
         break;
 #ifdef __REACTOS__
     case GEO_NAME:
-        str = geo->iso2;
+        if (geo->class == GEOCLASS_NATION) str = geo->iso2;
+        else swprintf( tmp, ARRAY_SIZE(tmp), L"%03u", geo->uncode );
         break;
     case GEO_FRIENDLYNAME:
+        /* FIXME: the English name is returned, not the one of the UI language */
         if (!(str = get_geo_friendly_name( geo )))
         {
             SetLastError( ERROR_INVALID_PARAMETER );
@@ -1939,9 +1942,31 @@ static int get_geo_info( const struct geo_id *geo, enum SYSGEOTYPE type,
         break;
     case GEO_RFC1766:
     case GEO_LCID:
-    case GEO_OFFICIALNAME:
+    {
+        LCID lcid = lang ? lang : GetUserDefaultLangID();
+        const NLS_LOCALE_DATA *locale = NlsValidateLocale( &lcid, 0 );
+        WCHAR *p;
+
+        if (!locale)
+        {
+            SetLastError( ERROR_INVALID_PARAMETER );
+            return 0;
+        }
+        if (type == GEO_LCID)
+        {
+            swprintf( tmp, ARRAY_SIZE(tmp), L"%08X",
+                      locale->inotneutral ? locale->ilanguage : locale->idefaultlanguage );
+            break;
+        }
+        swprintf( tmp, ARRAY_SIZE(tmp), L"%s-%s", locale_strings + locale->siso639langname + 1, geo->iso2 );
+        for (p = tmp; *p; p++) if (*p >= 'A' && *p <= 'Z') *p += 'a' - 'A';
+        break;
+    }
     case GEO_TIMEZONES:
     case GEO_OFFICIALLANGUAGES:
+        return 0;
+    case GEO_OFFICIALNAME:
+        /* TODO: GEO_OFFICIALNAME needs official country names, which locale.nls does not carry */
 #else
     case GEO_RFC1766:
     case GEO_LCID:
@@ -5369,7 +5394,7 @@ INT WINAPI DECLSPEC_HOTPATCH FindNLSString( LCID lcid, DWORD flags, const WCHAR 
         {
             WARN( "unknown locale %04lx\n", lcid );
             SetLastError( ERROR_INVALID_PARAMETER );
-            return 0;
+            return -1;
         }
         locale = locale_strings + entry->name + 1;
         break;
@@ -5387,6 +5412,7 @@ INT WINAPI DECLSPEC_HOTPATCH FindNLSStringEx( const WCHAR *locale, DWORD flags, 
                                               NLSVERSIONINFO *version, void *reserved, LPARAM handle )
 {
     const struct sortguid *sortid;
+    int pos;
 
     TRACE( "%s %lx %s %d %s %d %p %p %p %Id\n", wine_dbgstr_w(locale), flags,
            wine_dbgstr_w(src), srclen, wine_dbgstr_w(value), valuelen, found,
@@ -5406,7 +5432,9 @@ INT WINAPI DECLSPEC_HOTPATCH FindNLSStringEx( const WCHAR *locale, DWORD flags, 
     if (srclen == -1) srclen = lstrlenW(src);
     if (valuelen == -1) valuelen = lstrlenW(value);
 
-    return find_substring( sortid, flags, src, srclen, value, valuelen, found );
+    if ((pos = find_substring( sortid, flags, src, srclen, value, valuelen, found )) == -1)
+        SetLastError( ERROR_SUCCESS );
+    return pos;
 }
 
 /******************************************************************************
@@ -6195,6 +6223,160 @@ INT WINAPI DECLSPEC_HOTPATCH GetGeoInfoEx( WCHAR *location, GEOTYPE type, WCHAR 
 
     return get_geo_info( ptr, type, data, data_count, 0 );
 }
+
+#ifdef __REACTOS__
+struct duration_output
+{
+    WCHAR *buffer;
+    int    len;
+    int    pos;
+};
+
+static void duration_put_char( struct duration_output *out, WCHAR ch )
+{
+    if (out->pos < out->len) out->buffer[out->pos] = ch;
+    out->pos++;
+}
+
+static void duration_put_number( struct duration_output *out, ULONGLONG value, int digits )
+{
+    WCHAR tmp[20];
+    int count = 0;
+
+    do
+    {
+        tmp[count++] = '0' + value % 10;
+        value /= 10;
+    } while (value);
+    for (; digits > count; digits--) duration_put_char( out, '0' );
+    while (count) duration_put_char( out, tmp[--count] );
+}
+
+static int get_duration_field( WCHAR ch )
+{
+    switch (ch)
+    {
+    case 'd': return 0;
+    case 'h':
+    case 'H': return 1;
+    case 'm': return 2;
+    case 's': return 3;
+    case 'f': return 4;
+    default:  return -1;
+    }
+}
+
+static int get_duration_pattern_len( const WCHAR *format )
+{
+    int i;
+
+    if (*format == '\'')
+    {
+        for (i = 1; format[i]; i++)
+        {
+            if (format[i] != '\'') continue;
+            if (format[++i] != '\'') return i;
+        }
+        return i;
+    }
+    if (get_duration_field( *format ) < 0) return 1;
+    for (i = 1; format[i] == format[0]; i++) if (format[0] == 'f' && i == 9) break;
+    return i;
+}
+
+/******************************************************************************
+ *	GetDurationFormatEx   (kernelbase.@)
+ */
+INT WINAPI GetDurationFormatEx( const WCHAR *name, DWORD flags, const SYSTEMTIME *duration_time,
+                                ULONGLONG duration, const WCHAR *format, WCHAR *buffer, int len )
+{
+    static const ULONGLONG units[] = { 864000000000, 36000000000, 600000000, 10000000 };
+    static const ULONGLONG powers[] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000 };
+    struct duration_output out = { buffer, len, 0 };
+    const NLS_LOCALE_DATA *locale;
+    BOOL present[5] = { FALSE };
+    int i, count, field, top, larger;
+    ULONGLONG value;
+    WCHAR fmt[80];
+    const WCHAR *p;
+    LCID lcid;
+
+    TRACE( "%s %lx %p %s %s %p %d\n", debugstr_w(name), flags, duration_time,
+           wine_dbgstr_longlong(duration), debugstr_w(format), buffer, len );
+
+    if (len < 0 || (len && !buffer) || (format ? flags : (flags & ~LOCALE_NOUSEROVERRIDE)))
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(locale = get_locale_by_name( name, &lcid )))
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!format)
+    {
+        if (!get_locale_info( locale, lcid, LOCALE_SDURATION | flags, fmt, ARRAY_SIZE(fmt) )) return 0;
+        format = fmt;
+    }
+    if (duration_time)
+        duration = (((((ULONGLONG)duration_time->wDay * 24 + duration_time->wHour) * 60 +
+                     duration_time->wMinute) * 60 + duration_time->wSecond) * 1000 +
+                    duration_time->wMilliseconds) * 10000;
+
+    for (p = format; *p; p += get_duration_pattern_len( p ))
+        if ((field = get_duration_field( *p )) >= 0) present[field] = TRUE;
+    top = 0;
+    while (top < ARRAY_SIZE(present) && !present[top]) top++;
+
+    for (p = format; *p; p += count)
+    {
+        count = get_duration_pattern_len( p );
+        if (*p == '\'')
+        {
+            for (i = 1; i < count; i++)
+            {
+                if (p[i] == '\'') i++;
+                if (i < count) duration_put_char( &out, p[i] );
+            }
+            continue;
+        }
+        if ((field = get_duration_field( *p )) < 0)
+        {
+            duration_put_char( &out, *p );
+            continue;
+        }
+        if (field < ARRAY_SIZE(units))
+        {
+            value = duration / units[field];
+            if (field != top)
+            {
+                larger = field - 1;
+                while (!present[larger]) larger--;
+                value %= units[larger] / units[field];
+            }
+            duration_put_number( &out, value, count > 1 ? 2 : 0 );
+            continue;
+        }
+        if (field == top)
+            duration_put_number( &out, count < 7 ? duration / powers[7 - count] : duration, 0 );
+        else if (count < 7)
+            duration_put_number( &out, duration % powers[7] / powers[7 - count], count );
+        else
+            duration_put_number( &out, duration % powers[7], 7 );
+        for (i = 7; i < count; i++) duration_put_char( &out, '0' );
+    }
+
+    if (!len) return out.pos + 1;
+    if (out.pos >= len)
+    {
+        SetLastError( ERROR_INSUFFICIENT_BUFFER );
+        return 0;
+    }
+    buffer[out.pos] = 0;
+    return out.pos + 1;
+}
+#endif
 
 #ifndef __REACTOS__
 

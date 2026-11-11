@@ -21,6 +21,7 @@ add_library(kernelbase MODULE
     DllMain.c
     AppModelToken.c
     MemoryApi.c
+    NlsScripts.c
     PackageFamily.c
     PssSnapshot.c
     Security.c
@@ -31,6 +32,7 @@ add_library(kernelbase MODULE
     Wow64Directory.c
     XState.c
     ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/wcsnlen.c
+    ${REACTOS_SOURCE_DIR}/dll/win32/dwrite/scripts.c
     kernelbase.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/kernelbase.def)

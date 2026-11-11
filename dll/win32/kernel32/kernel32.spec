@@ -342,7 +342,7 @@
 @ stdcall FindFirstVolumeMountPointA(str ptr long)
 @ stdcall FindFirstVolumeMountPointW(wstr ptr long)
 @ stdcall FindFirstVolumeW(ptr long)
-@ stub -version=0x600+ FindNLSString
+@ stdcall -version=0x600+ FindNLSString(long long wstr long wstr long ptr) kernelbase.FindNLSString
 @ stdcall -version=0x600+ FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long) kernelbase.FindNLSStringEx
 @ stdcall FindNextChangeNotification(long)
 @ stdcall FindNextFileA(long ptr)
@@ -500,8 +500,8 @@
 @ stdcall GetDriveTypeA(str)
 @ stdcall GetDriveTypeW(wstr)
 @ stdcall -version=0x601+ -ret64 GetEnabledXStateFeatures()
-@ stub -version=0x600+ GetDurationFormat
-@ stub -version=0x600+ GetDurationFormatEx
+@ stdcall -version=0x600+ GetDurationFormat(long long ptr int64 wstr ptr long)
+@ stdcall -version=0x600+ GetDurationFormatEx(wstr long ptr int64 wstr ptr long) kernelbase.GetDurationFormatEx
 @ stdcall -version=0x600+ GetDynamicTimeZoneInformation(ptr)
 @ stdcall -version=0x602+ GetDynamicTimeZoneInformationEffectiveYears(ptr ptr ptr)
 @ stdcall GetEnvironmentStrings()
@@ -665,7 +665,7 @@
 @ stdcall GetStartupInfoA(ptr)
 @ stdcall GetStartupInfoW(ptr)
 @ stdcall GetStdHandle(long) kernelbase.GetStdHandle
-@ stub -version=0x600+ GetStringScripts
+@ stdcall -version=0x600+ GetStringScripts(long wstr long ptr long) kernelbase.GetStringScripts
 @ stdcall GetStringTypeA(long long str long ptr) kernelbase.GetStringTypeA
 @ stdcall GetStringTypeExA(long long str long ptr)
 @ stdcall GetStringTypeExW(long long wstr long ptr) kernelbase.GetStringTypeExW
@@ -1359,7 +1359,7 @@
 @ stdcall VerLanguageNameW(long wstr long)
 @ stdcall -ret64 VerSetConditionMask(long long long long) ntdll.VerSetConditionMask
 @ stdcall VerifyConsoleIoHandle(long) kernelbase.VerifyConsoleIoHandle
-@ stub -version=0x600+ VerifyScripts
+@ stdcall -version=0x600+ VerifyScripts(long wstr long wstr long) kernelbase.VerifyScripts
 @ stdcall VerifyVersionInfoA(long long double)
 @ stdcall VerifyVersionInfoW(long long double)
 @ stdcall VirtualAlloc(ptr long long long)
