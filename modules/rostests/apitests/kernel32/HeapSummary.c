@@ -7,12 +7,20 @@
 
 #include "precomp.h"
 
+typedef BOOL (WINAPI *FN_HeapSummary)(HANDLE, DWORD, LPHEAP_SUMMARY);
+
 START_TEST(HeapSummary)
 {
+    FN_HeapSummary pHeapSummary;
     HEAP_SUMMARY Summary;
     HANDLE Heap;
     PVOID Freed;
     BOOL Result;
+
+    pHeapSummary = (FN_HeapSummary)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "HeapSummary");
+    ok(pHeapSummary != NULL, "HeapSummary is missing\n");
+    if (pHeapSummary == NULL)
+        return;
 
     Heap = HeapCreate(0, 0, 0);
     ok(Heap != NULL, "HeapCreate failed with %lu\n", GetLastError());
@@ -28,19 +36,19 @@ START_TEST(HeapSummary)
 
     RtlZeroMemory(&Summary, sizeof(Summary));
     SetLastError(0xdeadbeef);
-    Result = HeapSummary(Heap, 0, &Summary);
+    Result = pHeapSummary(Heap, 0, &Summary);
     ok_eq_bool(Result, FALSE);
     ok_eq_ulong(GetLastError(), ERROR_INVALID_PARAMETER);
 
     Summary.cb = sizeof(Summary) + 1;
     SetLastError(0xdeadbeef);
-    Result = HeapSummary(Heap, 0, &Summary);
+    Result = pHeapSummary(Heap, 0, &Summary);
     ok_eq_bool(Result, FALSE);
     ok_eq_ulong(GetLastError(), ERROR_INVALID_PARAMETER);
 
     Summary.cb = sizeof(Summary);
     SetLastError(0xdeadbeef);
-    Result = HeapSummary(Heap, 0, &Summary);
+    Result = pHeapSummary(Heap, 0, &Summary);
     ok_eq_bool(Result, TRUE);
     ok_eq_ulong(GetLastError(), 0xdeadbeef);
     ok_eq_ulong(Summary.cb, sizeof(Summary));
@@ -54,7 +62,8 @@ START_TEST(HeapSummary)
 
     RtlZeroMemory(&Summary, sizeof(Summary));
     Summary.cb = sizeof(Summary);
-    ok_eq_bool(HeapSummary(GetProcessHeap(), 0, &Summary), TRUE);
+    Result = pHeapSummary(GetProcessHeap(), 0, &Summary);
+    ok_eq_bool(Result, TRUE);
     ok(Summary.cbAllocated != 0, "Process heap reports no allocated bytes\n");
     ok(Summary.cbCommitted >= Summary.cbAllocated, "cbCommitted 0x%I64x < cbAllocated 0x%I64x\n",
        (ULONGLONG)Summary.cbCommitted, (ULONGLONG)Summary.cbAllocated);

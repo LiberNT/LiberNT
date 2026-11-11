@@ -12,6 +12,12 @@
 #define FILE_CACHE_VALID_FLAGS (FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MAX_HARD_DISABLE | \
                                 FILE_CACHE_MIN_HARD_ENABLE | FILE_CACHE_MIN_HARD_DISABLE)
 
+typedef BOOL (WINAPI *FN_GetSystemFileCacheSize)(PSIZE_T, PSIZE_T, PDWORD);
+typedef BOOL (WINAPI *FN_SetSystemFileCacheSize)(SIZE_T, SIZE_T, DWORD);
+
+static FN_GetSystemFileCacheSize pGetSystemFileCacheSize;
+static FN_SetSystemFileCacheSize pSetSystemFileCacheSize;
+
 static
 VOID
 TestInvalidFlags(
@@ -32,7 +38,7 @@ TestInvalidFlags(
     for (Index = 0; Index < ARRAYSIZE(Invalid); Index++)
     {
         SetLastError(0xdeadbeef);
-        Result = SetSystemFileCacheSize(Minimum, Maximum, Invalid[Index]);
+        Result = pSetSystemFileCacheSize(Minimum, Maximum, Invalid[Index]);
         ok(Result == FALSE, "Flags 0x%lx: returned %d\n", Invalid[Index], Result);
         ok(GetLastError() == ERROR_INVALID_PARAMETER, "Flags 0x%lx: last error %lu\n",
            Invalid[Index], GetLastError());
@@ -52,8 +58,17 @@ START_TEST(SystemFileCacheSize)
     NTSTATUS Status;
     BOOL Result;
 
+    pGetSystemFileCacheSize = (FN_GetSystemFileCacheSize)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                                                                        "GetSystemFileCacheSize");
+    pSetSystemFileCacheSize = (FN_SetSystemFileCacheSize)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),
+                                                                        "SetSystemFileCacheSize");
+    ok(pGetSystemFileCacheSize != NULL, "GetSystemFileCacheSize is missing\n");
+    ok(pSetSystemFileCacheSize != NULL, "SetSystemFileCacheSize is missing\n");
+    if (pGetSystemFileCacheSize == NULL || pSetSystemFileCacheSize == NULL)
+        return;
+
     SetLastError(0xdeadbeef);
-    Result = GetSystemFileCacheSize(&Minimum, &Maximum, &Flags);
+    Result = pGetSystemFileCacheSize(&Minimum, &Maximum, &Flags);
     ok_eq_bool(Result, TRUE);
     ok_eq_ulong(GetLastError(), 0xdeadbeef);
     if (!Result)
@@ -72,7 +87,7 @@ START_TEST(SystemFileCacheSize)
         return;
 
     SetLastError(0xdeadbeef);
-    Result = SetSystemFileCacheSize(Minimum, Maximum, 0);
+    Result = pSetSystemFileCacheSize(Minimum, Maximum, 0);
     ok_eq_bool(Result, FALSE);
     ok_eq_ulong(GetLastError(), ERROR_PRIVILEGE_NOT_HELD);
 
@@ -81,11 +96,12 @@ START_TEST(SystemFileCacheSize)
     if (NT_SUCCESS(Status))
     {
         SetLastError(0xdeadbeef);
-        Result = SetSystemFileCacheSize(Minimum, Maximum, 0);
+        Result = pSetSystemFileCacheSize(Minimum, Maximum, 0);
         ok_eq_bool(Result, TRUE);
         ok_eq_ulong(GetLastError(), 0xdeadbeef);
 
-        ok_eq_bool(GetSystemFileCacheSize(&Minimum2, &Maximum2, &Flags2), TRUE);
+        Result = pGetSystemFileCacheSize(&Minimum2, &Maximum2, &Flags2);
+        ok_eq_bool(Result, TRUE);
         ok_eq_size(Minimum2, Minimum);
         ok_eq_size(Maximum2, Maximum);
         ok_eq_ulong(Flags2, Flags);

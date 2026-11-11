@@ -9,6 +9,14 @@
 
 #define MAX_TEST_HEAPS 64
 
+typedef NTSTATUS (NTAPI *FN_RtlEnumProcessHeaps)(PHEAP_ENUMERATION_ROUTINE, PVOID);
+typedef BOOLEAN (NTAPI *FN_RtlValidateProcessHeaps)(VOID);
+typedef NTSTATUS (NTAPI *FN_RtlQueryProcessHeapInformation)(PRTL_DEBUG_INFORMATION);
+
+static FN_RtlEnumProcessHeaps pRtlEnumProcessHeaps;
+static FN_RtlValidateProcessHeaps pRtlValidateProcessHeaps;
+static FN_RtlQueryProcessHeapInformation pRtlQueryProcessHeapInformation;
+
 typedef struct _HEAP_ENUM_CONTEXT
 {
     ULONG Count;
@@ -55,6 +63,7 @@ TestEnumProcessHeaps(VOID)
 {
     HEAP_ENUM_CONTEXT Context;
     HANDLE Heaps[MAX_TEST_HEAPS];
+    NTSTATUS Status;
     ULONG NumberOfHeaps;
     ULONG Index;
     PVOID Heap;
@@ -65,7 +74,8 @@ TestEnumProcessHeaps(VOID)
         return;
 
     RtlZeroMemory(&Context, sizeof(Context));
-    ok_eq_hex(RtlEnumProcessHeaps(EnumHeap, &Context), STATUS_SUCCESS);
+    Status = pRtlEnumProcessHeaps(EnumHeap, &Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_ulong(Context.Count, NumberOfHeaps);
     for (Index = 0; Index < min(Context.Count, NumberOfHeaps); Index++)
         ok(Context.Heaps[Index] == Heaps[Index], "Heap %lu: %p, expected %p\n", Index, Context.Heaps[Index], Heaps[Index]);
@@ -73,7 +83,8 @@ TestEnumProcessHeaps(VOID)
 
     RtlZeroMemory(&Context, sizeof(Context));
     Context.FailAt = 1;
-    ok_eq_hex(RtlEnumProcessHeaps(EnumHeap, &Context), STATUS_UNSUCCESSFUL);
+    Status = pRtlEnumProcessHeaps(EnumHeap, &Context);
+    ok_eq_hex(Status, STATUS_UNSUCCESSFUL);
     ok_eq_ulong(Context.Count, 1);
 
     Heap = RtlCreateHeap(HEAP_GROWABLE, NULL, 0, 0, NULL, NULL);
@@ -82,14 +93,16 @@ TestEnumProcessHeaps(VOID)
         return;
 
     RtlZeroMemory(&Context, sizeof(Context));
-    ok_eq_hex(RtlEnumProcessHeaps(EnumHeap, &Context), STATUS_SUCCESS);
+    Status = pRtlEnumProcessHeaps(EnumHeap, &Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_ulong(Context.Count, NumberOfHeaps + 1);
     ok(ContextHasHeap(&Context, Heap), "New heap %p was not enumerated\n", Heap);
 
     ok_eq_pointer(RtlDestroyHeap(Heap), NULL);
 
     RtlZeroMemory(&Context, sizeof(Context));
-    ok_eq_hex(RtlEnumProcessHeaps(EnumHeap, &Context), STATUS_SUCCESS);
+    Status = pRtlEnumProcessHeaps(EnumHeap, &Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_ulong(Context.Count, NumberOfHeaps);
 }
 
@@ -99,8 +112,10 @@ TestValidateProcessHeaps(VOID)
 {
     PVOID Heap;
     PVOID Block;
+    BOOLEAN Valid;
 
-    ok_eq_int(RtlValidateProcessHeaps(), TRUE);
+    Valid = pRtlValidateProcessHeaps();
+    ok_eq_int(Valid, TRUE);
 
     Heap = RtlCreateHeap(HEAP_GROWABLE, NULL, 0, 0, NULL, NULL);
     ok(Heap != NULL, "RtlCreateHeap failed\n");
@@ -109,7 +124,8 @@ TestValidateProcessHeaps(VOID)
 
     Block = RtlAllocateHeap(Heap, 0, 0x40);
     ok(Block != NULL, "RtlAllocateHeap failed\n");
-    ok_eq_int(RtlValidateProcessHeaps(), TRUE);
+    Valid = pRtlValidateProcessHeaps();
+    ok_eq_int(Valid, TRUE);
     if (Block != NULL)
         ok_eq_int(RtlFreeHeap(Heap, 0, Block), TRUE);
     ok_eq_pointer(RtlDestroyHeap(Heap), NULL);
@@ -129,7 +145,7 @@ TestQueryProcessHeapInformation(VOID)
         return;
 
     NumberOfHeaps = RtlGetProcessHeaps(0, NULL);
-    Status = RtlQueryProcessHeapInformation(Buffer);
+    Status = pRtlQueryProcessHeapInformation(Buffer);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok(Buffer->Heaps != NULL, "No heap information\n");
     if (NT_SUCCESS(Status) && Buffer->Heaps != NULL)
@@ -147,6 +163,18 @@ TestQueryProcessHeapInformation(VOID)
 
 START_TEST(RtlHeapApis)
 {
+    HMODULE Ntdll = GetModuleHandleW(L"ntdll.dll");
+
+    pRtlEnumProcessHeaps = (FN_RtlEnumProcessHeaps)GetProcAddress(Ntdll, "RtlEnumProcessHeaps");
+    pRtlValidateProcessHeaps = (FN_RtlValidateProcessHeaps)GetProcAddress(Ntdll, "RtlValidateProcessHeaps");
+    pRtlQueryProcessHeapInformation = (FN_RtlQueryProcessHeapInformation)
+        GetProcAddress(Ntdll, "RtlQueryProcessHeapInformation");
+    ok(pRtlEnumProcessHeaps != NULL, "RtlEnumProcessHeaps is missing\n");
+    ok(pRtlValidateProcessHeaps != NULL, "RtlValidateProcessHeaps is missing\n");
+    ok(pRtlQueryProcessHeapInformation != NULL, "RtlQueryProcessHeapInformation is missing\n");
+    if (!pRtlEnumProcessHeaps || !pRtlValidateProcessHeaps || !pRtlQueryProcessHeapInformation)
+        return;
+
     TestEnumProcessHeaps();
     TestValidateProcessHeaps();
     TestQueryProcessHeapInformation();

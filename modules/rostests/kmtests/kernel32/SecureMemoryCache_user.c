@@ -11,6 +11,9 @@
 
 #define SECURED_SIZE 0x10000
 
+typedef BOOL (WINAPI *FN_AddSecureMemoryCacheCallback)(PSECURE_MEMORY_CACHE_CALLBACK);
+typedef BOOL (WINAPI *FN_RemoveSecureMemoryCacheCallback)(PSECURE_MEMORY_CACHE_CALLBACK);
+
 static PVOID SecuredBase;
 static HANDLE SecuredHandle;
 static LONG CallbackCalls;
@@ -72,9 +75,21 @@ UnsecureCallback(
 
 START_TEST(SecureMemoryCache)
 {
+    FN_AddSecureMemoryCacheCallback pAddSecureMemoryCacheCallback;
+    FN_RemoveSecureMemoryCacheCallback pRemoveSecureMemoryCacheCallback;
+    HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
     DWORD OldProtect;
     DWORD Error;
     BOOL Result;
+
+    pAddSecureMemoryCacheCallback = (FN_AddSecureMemoryCacheCallback)
+        GetProcAddress(Kernel32, "AddSecureMemoryCacheCallback");
+    pRemoveSecureMemoryCacheCallback = (FN_RemoveSecureMemoryCacheCallback)
+        GetProcAddress(Kernel32, "RemoveSecureMemoryCacheCallback");
+    ok(pAddSecureMemoryCacheCallback != NULL, "AddSecureMemoryCacheCallback is missing\n");
+    ok(pRemoveSecureMemoryCacheCallback != NULL, "RemoveSecureMemoryCacheCallback is missing\n");
+    if (pAddSecureMemoryCacheCallback == NULL || pRemoveSecureMemoryCacheCallback == NULL)
+        return;
 
     Error = KmtLoadAndOpenDriver(L"kernel32", FALSE);
     ok_eq_int(Error, ERROR_SUCCESS);
@@ -93,7 +108,7 @@ START_TEST(SecureMemoryCache)
             Result = VirtualFree(SecuredBase, 0, MEM_RELEASE);
             ok(Result == FALSE, "VirtualFree on secured memory succeeded without a callback\n");
 
-            Result = AddSecureMemoryCacheCallback(UnsecureCallback);
+            Result = pAddSecureMemoryCacheCallback(UnsecureCallback);
             ok_eq_int(Result, TRUE);
 
             Result = VirtualProtect(SecuredBase, SECURED_SIZE, PAGE_NOACCESS, &OldProtect);
@@ -112,7 +127,7 @@ START_TEST(SecureMemoryCache)
             if (Result)
                 SecuredBase = NULL;
 
-            Result = RemoveSecureMemoryCacheCallback(UnsecureCallback);
+            Result = pRemoveSecureMemoryCacheCallback(UnsecureCallback);
             ok_eq_int(Result, TRUE);
             if (SecuredHandle != NULL)
                 UnsecureRange(SecuredHandle);
