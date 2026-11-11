@@ -199,6 +199,265 @@ CmiCreateSecurityKey(
     return STATUS_SUCCESS;
 }
 
+#define MKHIVE_SE_DACL_PRESENT          0x0004
+#define MKHIVE_SE_SACL_PRESENT          0x0010
+#define MKHIVE_SE_DACL_AUTO_INHERITED   0x0400
+#define MKHIVE_SE_SACL_AUTO_INHERITED   0x0800
+#define MKHIVE_SE_DACL_PROTECTED        0x1000
+#define MKHIVE_SE_SACL_PROTECTED        0x2000
+#define MKHIVE_SE_SELF_RELATIVE         0x8000
+#define MKHIVE_OBJECT_INHERIT_ACE       0x01
+#define MKHIVE_CONTAINER_INHERIT_ACE    0x02
+#define MKHIVE_NO_PROPAGATE_INHERIT_ACE 0x04
+#define MKHIVE_INHERIT_ONLY_ACE         0x08
+#define MKHIVE_INHERITED_ACE            0x10
+
+static ULONG
+CmiSidLength(IN const UCHAR* Sid)
+{
+    return 8 + 4 * (ULONG)Sid[1];
+}
+
+static BOOLEAN
+CmiIsCreatorSid(IN const UCHAR* Sid, IN UCHAR Rid)
+{
+    static const UCHAR CreatorAuthority[6] = {0, 0, 0, 0, 0, 3};
+
+    return Sid[0] == 1 && Sid[1] == 1 && !memcmp(&Sid[2], CreatorAuthority, 6) &&
+           Sid[8] == Rid && Sid[9] == 0 && Sid[10] == 0 && Sid[11] == 0;
+}
+
+static ULONG
+CmiPutAce(IN PUCHAR Out, IN UCHAR Type, IN UCHAR Flags, IN ULONG Mask, IN const UCHAR* Sid)
+{
+    ULONG SidLength = CmiSidLength(Sid);
+    USHORT Size = (USHORT)(8 + SidLength);
+
+    if (Out)
+    {
+        Out[0] = Type;
+        Out[1] = Flags;
+        memcpy(&Out[2], &Size, sizeof(Size));
+        memcpy(&Out[4], &Mask, sizeof(Mask));
+        memcpy(&Out[8], Sid, SidLength);
+    }
+    return Size;
+}
+
+static BOOLEAN
+CmiAclGrants(IN const UCHAR* Acl, IN USHORT Before, IN UCHAR Type, IN ULONG Mask, IN const UCHAR* Sid)
+{
+    ULONG Offset = 8;
+    USHORT Index;
+
+    for (Index = 0; Index < Before; Index++)
+    {
+        const UCHAR* Ace = &Acl[Offset];
+        USHORT Size;
+        ULONG AceMask;
+
+        memcpy(&Size, &Ace[2], sizeof(Size));
+        memcpy(&AceMask, &Ace[4], sizeof(AceMask));
+        Offset += Size;
+
+        if (Ace[0] == Type && (Ace[1] & MKHIVE_CONTAINER_INHERIT_ACE) && (AceMask & Mask) == Mask &&
+            CmiSidLength(&Ace[8]) == CmiSidLength(Sid) && !memcmp(&Ace[8], Sid, CmiSidLength(Sid)))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* Builds, or only measures with Out == NULL, the list a subkey inherits from its parent's list */
+static ULONG
+CmiInheritAcl(IN const UCHAR* Acl, IN const UCHAR* Owner, IN const UCHAR* Group, OUT PUCHAR Out)
+{
+    USHORT AceCount, Index, Count = 0;
+    ULONG Offset = 8, Written = 8;
+    USHORT AclSize;
+
+    memcpy(&AceCount, &Acl[4], sizeof(AceCount));
+
+    for (Index = 0; Index < AceCount; Index++)
+    {
+        const UCHAR* Ace = &Acl[Offset];
+        UCHAR Type = Ace[0], Flags = Ace[1];
+        USHORT Size;
+        ULONG Mask;
+        const UCHAR* Sid = &Ace[8];
+
+        memcpy(&Size, &Ace[2], sizeof(Size));
+        memcpy(&Mask, &Ace[4], sizeof(Mask));
+        Offset += Size;
+
+        /* Only entries for containers reach a subkey, and only the plain allow and deny ones are understood here */
+        if (!(Flags & MKHIVE_CONTAINER_INHERIT_ACE) || Type > 1) continue;
+
+        if (CmiIsCreatorSid(Sid, 0) || CmiIsCreatorSid(Sid, 1))
+        {
+            const UCHAR* Creator = CmiIsCreatorSid(Sid, 0) ? Owner : Group;
+
+            /* The creator's own entry is left out when an earlier one already gives it that access */
+            if (!CmiAclGrants(Acl, Index, Type, Mask, Creator))
+            {
+                Written += CmiPutAce(Out ? &Out[Written] : NULL, Type, MKHIVE_INHERITED_ACE, Mask, Creator);
+                Count++;
+            }
+            if (Flags & MKHIVE_NO_PROPAGATE_INHERIT_ACE) continue;
+
+            Written += CmiPutAce(Out ? &Out[Written] : NULL, Type,
+                                 (UCHAR)((Flags & (MKHIVE_OBJECT_INHERIT_ACE | MKHIVE_CONTAINER_INHERIT_ACE)) |
+                                         MKHIVE_INHERIT_ONLY_ACE | MKHIVE_INHERITED_ACE),
+                                 Mask, Sid);
+            Count++;
+            continue;
+        }
+
+        if (Flags & MKHIVE_NO_PROPAGATE_INHERIT_ACE)
+            Flags = MKHIVE_INHERITED_ACE;
+        else
+            Flags = (UCHAR)((Flags & (MKHIVE_OBJECT_INHERIT_ACE | MKHIVE_CONTAINER_INHERIT_ACE)) | MKHIVE_INHERITED_ACE);
+
+        Written += CmiPutAce(Out ? &Out[Written] : NULL, Type, Flags, Mask, Sid);
+        Count++;
+    }
+
+    if (Out)
+    {
+        AclSize = (USHORT)Written;
+        Out[0] = Acl[0];
+        Out[1] = 0;
+        memcpy(&Out[2], &AclSize, sizeof(AclSize));
+        memcpy(&Out[4], &Count, sizeof(Count));
+        Out[6] = Out[7] = 0;
+    }
+    return Written;
+}
+
+/* A subkey gets what its parent passes down as inherited entries, without the parent's protection */
+static HCELL_INDEX
+CmiInheritedSecurityCell(IN PHHIVE Hive, IN HCELL_INDEX ParentCell)
+{
+    PCM_KEY_SECURITY Parent, Security, Candidate;
+    const UCHAR* Base;
+    const UCHAR *Owner, *Group;
+    SECURITY_DESCRIPTOR_RELATIVE Header;
+    PUCHAR Descriptor;
+    ULONG Length, Offset;
+    HCELL_INDEX Cell, Next;
+
+    if (ParentCell == HCELL_NIL) return HCELL_NIL;
+
+    Parent = (PCM_KEY_SECURITY)HvGetCell(Hive, ParentCell);
+    Base = (const UCHAR*)&Parent->Descriptor;
+    Header = Parent->Descriptor;
+
+    if (!(Header.Control & (MKHIVE_SE_DACL_PROTECTED | MKHIVE_SE_SACL_PROTECTED)) ||
+        !Header.Owner || !Header.Group)
+    {
+        Parent->ReferenceCount++;
+        HvReleaseCell(Hive, ParentCell);
+        return ParentCell;
+    }
+
+    Owner = Base + Header.Owner;
+    Group = Base + Header.Group;
+
+    Length = sizeof(SECURITY_DESCRIPTOR_RELATIVE) + CmiSidLength(Owner) + CmiSidLength(Group);
+    if ((Header.Control & MKHIVE_SE_DACL_PRESENT) && Header.Dacl)
+        Length += CmiInheritAcl(Base + Header.Dacl, Owner, Group, NULL);
+    if ((Header.Control & MKHIVE_SE_SACL_PRESENT) && Header.Sacl)
+        Length += CmiInheritAcl(Base + Header.Sacl, Owner, Group, NULL);
+
+    Descriptor = malloc(Length);
+    if (!Descriptor)
+    {
+        Parent->ReferenceCount++;
+        HvReleaseCell(Hive, ParentCell);
+        return ParentCell;
+    }
+
+    memset(Descriptor, 0, Length);
+    ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Revision = Header.Revision;
+    ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Control =
+        (SECURITY_DESCRIPTOR_CONTROL)((Header.Control & (MKHIVE_SE_DACL_PRESENT | MKHIVE_SE_SACL_PRESENT)) |
+                                      MKHIVE_SE_SELF_RELATIVE | MKHIVE_SE_DACL_AUTO_INHERITED |
+                                      MKHIVE_SE_SACL_AUTO_INHERITED);
+
+    Offset = sizeof(SECURITY_DESCRIPTOR_RELATIVE);
+    if ((Header.Control & MKHIVE_SE_SACL_PRESENT) && Header.Sacl)
+    {
+        ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Sacl = Offset;
+        Offset += CmiInheritAcl(Base + Header.Sacl, Owner, Group, Descriptor + Offset);
+    }
+    if ((Header.Control & MKHIVE_SE_DACL_PRESENT) && Header.Dacl)
+    {
+        ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Dacl = Offset;
+        Offset += CmiInheritAcl(Base + Header.Dacl, Owner, Group, Descriptor + Offset);
+    }
+    ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Owner = Offset;
+    memcpy(Descriptor + Offset, Owner, CmiSidLength(Owner));
+    Offset += CmiSidLength(Owner);
+    ((PISECURITY_DESCRIPTOR_RELATIVE)Descriptor)->Group = Offset;
+    memcpy(Descriptor + Offset, Group, CmiSidLength(Group));
+
+    /* The same descriptor is kept once per hive */
+    Cell = Parent->Flink;
+    while (Cell != ParentCell)
+    {
+        Candidate = (PCM_KEY_SECURITY)HvGetCell(Hive, Cell);
+        Next = Candidate->Flink;
+        if (Candidate->DescriptorLength == Length && !memcmp(&Candidate->Descriptor, Descriptor, Length))
+        {
+            Candidate->ReferenceCount++;
+            HvReleaseCell(Hive, Cell);
+            HvReleaseCell(Hive, ParentCell);
+            free(Descriptor);
+            return Cell;
+        }
+        HvReleaseCell(Hive, Cell);
+        Cell = Next;
+    }
+
+    Cell = HvAllocateCell(Hive, FIELD_OFFSET(CM_KEY_SECURITY, Descriptor) + Length, Stable, HCELL_NIL);
+    if (Cell == HCELL_NIL)
+    {
+        Parent->ReferenceCount++;
+        HvReleaseCell(Hive, ParentCell);
+        free(Descriptor);
+        return ParentCell;
+    }
+
+    Parent = (PCM_KEY_SECURITY)HvGetCell(Hive, ParentCell);
+    Security = (PCM_KEY_SECURITY)HvGetCell(Hive, Cell);
+    Security->Signature = CM_KEY_SECURITY_SIGNATURE;
+    Security->ReferenceCount = 1;
+    Security->DescriptorLength = Length;
+    memcpy(&Security->Descriptor, Descriptor, Length);
+
+    /* Link it into the hive's list of security cells, right after its parent's */
+    Next = Parent->Flink;
+    Security->Flink = Next;
+    Security->Blink = ParentCell;
+    Parent->Flink = Cell;
+    if (Next == ParentCell)
+    {
+        Parent->Blink = Cell;
+    }
+    else
+    {
+        Candidate = (PCM_KEY_SECURITY)HvGetCell(Hive, Next);
+        Candidate->Blink = Cell;
+        HvReleaseCell(Hive, Next);
+    }
+
+    HvReleaseCell(Hive, Cell);
+    HvReleaseCell(Hive, ParentCell);
+    free(Descriptor);
+    return Cell;
+}
+
 static NTSTATUS
 CmiCreateSubKey(
     IN PCMHIVE RegistryHive,
@@ -278,15 +537,7 @@ CmiCreateSubKey(
 
         if (ParentKeyCell)
         {
-            /* Inherit the security block of the parent */
-            NewKeyCell->Security = ParentKeyCell->Security;
-            if (NewKeyCell->Security != HCELL_NIL)
-            {
-                PCM_KEY_SECURITY Security;
-                Security = (PCM_KEY_SECURITY)HvGetCell(&RegistryHive->Hive, NewKeyCell->Security);
-                ++Security->ReferenceCount;
-                HvReleaseCell(&RegistryHive->Hive, NewKeyCell->Security);
-            }
+            NewKeyCell->Security = CmiInheritedSecurityCell(&RegistryHive->Hive, ParentKeyCell->Security);
 
             HvReleaseCell(&RegistryHive->Hive, ParentKeyCellOffset);
         }
