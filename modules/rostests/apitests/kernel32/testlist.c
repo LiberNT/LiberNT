@@ -55,6 +55,7 @@ extern void func_GetThreadTimes(void);
 extern void func_GetVolumeInformation(void);
 extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
+extern void func_HeapSummary(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
 extern void func_IoCompletion(void);
@@ -192,6 +193,7 @@ const struct test winetest_testlist[] =
     { "GetVolumeInformation",        func_GetVolumeInformation },
     { "GetWsChangesEx",              func_GetWsChangesEx },
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
+    { "HeapSummary",                 func_HeapSummary },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },
     { "IoCompletion",                func_IoCompletion },

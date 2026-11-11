@@ -156,3 +156,43 @@ RtlGetProcessHeaps(_In_ ULONG HeapCount, _Out_cap_(HeapCount) HANDLE *HeapArray)
     return nHeaps;
 }
 
+NTSTATUS
+NTAPI
+RtlEnumProcessHeaps(
+    _In_ PHEAP_ENUMERATION_ROUTINE HeapEnumerationRoutine,
+    _In_ PVOID Parameter)
+{
+    PPEB Peb = RtlGetCurrentPeb();
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Index;
+
+    RtlEnterCriticalSection(&RtlpProcessHeapsListLock);
+    for (Index = 0; Index < Peb->NumberOfHeaps; Index++)
+    {
+        Status = HeapEnumerationRoutine(Peb->ProcessHeaps[Index], Parameter);
+        if (!NT_SUCCESS(Status))
+            break;
+    }
+    RtlLeaveCriticalSection(&RtlpProcessHeapsListLock);
+
+    return Status;
+}
+
+BOOLEAN
+NTAPI
+RtlValidateProcessHeaps(VOID)
+{
+    PPEB Peb = RtlGetCurrentPeb();
+    BOOLEAN Valid = TRUE;
+    ULONG Index;
+
+    RtlEnterCriticalSection(&RtlpProcessHeapsListLock);
+    for (Index = 0; Index < Peb->NumberOfHeaps; Index++)
+    {
+        if (!RtlValidateHeap(Peb->ProcessHeaps[Index], 0, NULL))
+            Valid = FALSE;
+    }
+    RtlLeaveCriticalSection(&RtlpProcessHeapsListLock);
+
+    return Valid;
+}

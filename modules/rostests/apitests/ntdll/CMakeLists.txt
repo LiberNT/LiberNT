@@ -170,6 +170,7 @@ list(APPEND SOURCE
     RtlGetLongestNtPathLength.c
     RtlGetNtProductType.c
     RtlGetProcessHeaps.c
+    RtlHeapApis.c
     RtlGetProductInfo.c
     RtlGetThreadErrorMode.c
     RtlGetUnloadEventTrace.c

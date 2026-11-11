@@ -1023,6 +1023,19 @@ RtlGetProcessHeaps(
     _Out_cap_(HeapCount) HANDLE *HeapArray
 );
 
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlEnumProcessHeaps(
+    _In_ PHEAP_ENUMERATION_ROUTINE HeapEnumerationRoutine,
+    _In_ PVOID Parameter
+);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlValidateProcessHeaps(VOID);
+
 _Success_(return != 0)
 BOOLEAN
 NTAPI
@@ -3731,6 +3744,13 @@ NTAPI
 RtlQueryProcessDebugInformation(
     _In_ ULONG ProcessId,
     _In_ ULONG DebugInfoClassMask,
+    _Inout_ PRTL_DEBUG_INFORMATION DebugBuffer
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlQueryProcessHeapInformation(
     _Inout_ PRTL_DEBUG_INFORMATION DebugBuffer
 );
 

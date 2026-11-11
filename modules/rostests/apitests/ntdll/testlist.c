@@ -150,6 +150,7 @@ extern void func_RtlGetLengthWithoutTrailingPathSeperators(void);
 extern void func_RtlGetLongestNtPathLength(void);
 extern void func_RtlGetNtProductType(void);
 extern void func_RtlGetProcessHeaps(void);
+extern void func_RtlHeapApis(void);
 extern void func_RtlGetProductInfo(void);
 extern void func_RtlGetThreadErrorMode(void);
 extern void func_RtlGetUnloadEventTrace(void);
@@ -358,6 +359,7 @@ const struct test winetest_testlist[] =
     { "RtlGetLongestNtPathLength",      func_RtlGetLongestNtPathLength },
     { "RtlGetNtProductType",            func_RtlGetNtProductType },
     { "RtlGetProcessHeaps",             func_RtlGetProcessHeaps },
+    { "RtlHeapApis",                    func_RtlHeapApis },
     { "RtlGetProductInfo",              func_RtlGetProductInfo },
     { "RtlGetThreadErrorMode",          func_RtlGetThreadErrorMode },
     { "RtlGetUnloadEventTrace",         func_RtlGetUnloadEventTrace },

@@ -4041,28 +4041,6 @@ BOOLEAN NTAPI RtlValidateHeap(
 /*
  * @unimplemented
  */
-NTSTATUS NTAPI
-RtlEnumProcessHeaps(PHEAP_ENUMERATION_ROUTINE HeapEnumerationRoutine,
-                    PVOID lParam)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-/*
- * @unimplemented
- */
-BOOLEAN NTAPI
-RtlValidateProcessHeaps(VOID)
-{
-    UNIMPLEMENTED;
-    return TRUE;
-}
-
-
-/*
- * @unimplemented
- */
 BOOLEAN NTAPI
 RtlZeroHeap(
     IN PVOID HeapHandle,
@@ -4709,22 +4687,6 @@ RtlMultipleFreeHeap(IN PVOID HeapHandle,
     }
 
     return Index;
-}
-
-/*
- * Info:
- * - https://securityxploded.com/enumheaps.php
- * - https://evilcodecave.wordpress.com/2009/04/14/rtlqueryprocessheapinformation-as-anti-dbg-trick/
- */
-struct _DEBUG_BUFFER;
-
-NTSTATUS
-NTAPI
-RtlQueryProcessHeapInformation(
-    IN struct _DEBUG_BUFFER *DebugBuffer)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
 }
 
 /* EOF */
