@@ -770,6 +770,7 @@ NtQueryInformationFile(
     _In_ FILE_INFORMATION_CLASS FileInformationClass)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PIO_STATUS_BLOCK UserIosb = IoStatusBlock;
     PIO_STACK_LOCATION StackPtr;
     PDEVICE_OBJECT DeviceObject;
     OBJECT_HANDLE_INFORMATION HandleInfo;
@@ -830,6 +831,13 @@ NtQueryInformationFile(
         (PVOID *)&FileObject,
         &HandleInfo);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopCaptureUserIoStatusBlock(FileObject, PreviousMode, &UserIosb);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
 
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL)
@@ -952,7 +960,7 @@ NtQueryInformationFile(
 
     Irp->AssociatedIrp.SystemBuffer = Buffer;
     Irp->UserBuffer = FileInformation;
-    Irp->UserIosb = IoStatusBlock;
+    Irp->UserIosb = UserIosb;
     Irp->RequestorMode = PreviousMode;
     Irp->Flags = IRP_BUFFERED_IO | IRP_DEALLOCATE_BUFFER |
                  IRP_INPUT_OPERATION | IRP_DEFER_IO_COMPLETION;
@@ -1496,6 +1504,7 @@ NtQueryVolumeInformationFile(
     _In_ FS_INFORMATION_CLASS FsInformationClass)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PIO_STATUS_BLOCK UserIosb = IoStatusBlock;
     PIO_STACK_LOCATION StackPtr;
     PDEVICE_OBJECT DeviceObject;
     PFILE_OBJECT FileObject;
@@ -1546,6 +1555,13 @@ NtQueryVolumeInformationFile(
         NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
+    Status = IopCaptureUserIoStatusBlock(FileObject, PreviousMode, &UserIosb);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
+
     if (FsInformationClass == FileFsDeviceInformation)
     {
         Status = IopQueryFsDeviceInformation(FileObject, IoStatusBlock, FsInformation, PreviousMode);
@@ -1594,7 +1610,7 @@ NtQueryVolumeInformationFile(
 
     Irp->AssociatedIrp.SystemBuffer = Buffer;
     Irp->UserBuffer = FsInformation;
-    Irp->UserIosb = IoStatusBlock;
+    Irp->UserIosb = UserIosb;
     Irp->RequestorMode = PreviousMode;
     Irp->Flags = IRP_BUFFERED_IO | IRP_DEALLOCATE_BUFFER |
                  IRP_INPUT_OPERATION | IRP_DEFER_IO_COMPLETION;
@@ -1652,6 +1668,7 @@ NtSetVolumeInformationFile(
     _In_ FS_INFORMATION_CLASS FsInformationClass)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PIO_STATUS_BLOCK UserIosb = IoStatusBlock;
     PIO_STACK_LOCATION StackPtr;
     PDEVICE_OBJECT DeviceObject;
     PFILE_OBJECT FileObject;
@@ -1701,6 +1718,13 @@ NtSetVolumeInformationFile(
         (PVOID *)&FileObject,
         NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopCaptureUserIoStatusBlock(FileObject, PreviousMode, &UserIosb);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
 
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL)
@@ -1761,7 +1785,7 @@ NtSetVolumeInformationFile(
     }
 
     Irp->AssociatedIrp.SystemBuffer = Buffer;
-    Irp->UserIosb = IoStatusBlock;
+    Irp->UserIosb = UserIosb;
     Irp->RequestorMode = PreviousMode;
     Irp->Flags = IRP_BUFFERED_IO | IRP_DEALLOCATE_BUFFER |
                  IRP_DEFER_IO_COMPLETION;

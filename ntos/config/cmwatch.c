@@ -109,7 +109,7 @@ CmpPostApcRoutine(
             if (Completion->Mode != KernelMode)
             {
                 ProbeForWrite(Completion->IoStatusBlock,
-                              sizeof(IO_STATUS_BLOCK),
+                              Completion->IoStatus32 ? sizeof(NTSTATUS) + sizeof(ULONG) : sizeof(IO_STATUS_BLOCK),
                               sizeof(ULONG));
             }
 

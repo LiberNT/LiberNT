@@ -173,6 +173,20 @@ IopWriteIoStatusBlock(PIO_STATUS_BLOCK Destination,
     *Destination = *Source;
 }
 
+/* WoW64 passes a temporary native status block whose Pointer is the caller's 32-bit one; the caller guards the read with SEH */
+FORCEINLINE
+PIO_STATUS_BLOCK
+IopGetWow64IoStatusBlock(PIO_STATUS_BLOCK IoStatusBlock)
+{
+    PIO_STATUS_BLOCK Wow64IoStatusBlock;
+
+    ProbeForRead(IoStatusBlock, sizeof(*IoStatusBlock), sizeof(ULONG));
+    Wow64IoStatusBlock = IoStatusBlock->Pointer;
+    ProbeForWrite(Wow64IoStatusBlock, sizeof(NTSTATUS) + sizeof(ULONG), sizeof(ULONG));
+
+    return Wow64IoStatusBlock;
+}
+
 //
 // Returns the internal Device Object Extension
 //

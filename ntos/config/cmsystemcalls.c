@@ -1798,9 +1798,7 @@ NtNotifyChangeMultipleKeys(
         {
             if (IoStatus32)
             {
-                ProbeForWrite(IoStatusBlock,
-                              sizeof(IO_STATUS_BLOCK32),
-                              sizeof(ULONG));
+                IoStatusBlock = IopGetWow64IoStatusBlock(IoStatusBlock);
             }
             else
             {
@@ -1999,6 +1997,8 @@ NtLoadKeyEx(
         {
             if (RootHandle != NULL) ProbeForWriteHandle(RootHandle);
             if (IoStatus != NULL) ProbeForWriteIoStatusBlock(IoStatus);
+            if (IoStatus != NULL && PsGetCurrentProcessWow64Process() != NULL)
+                IoStatus = IopGetWow64IoStatusBlock(IoStatus);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {

@@ -302,6 +302,7 @@ NTSTATUS IopDeviceFsIoControl(_In_ HANDLE DeviceHandle,
                               _In_ ULONG OutputBufferLength,
                               _In_ BOOLEAN IsDevIoCtl);
 VOID IopWaitForLocalRequest(_In_ PKEVENT Event, _In_ PIRP Irp, _In_ KPROCESSOR_MODE PreviousMode);
+NTSTATUS IopCaptureUserIoStatusBlock(_In_ PFILE_OBJECT FileObject, _In_ KPROCESSOR_MODE PreviousMode, _Inout_ PIO_STATUS_BLOCK *IoStatusBlock);
 
 /* ioerrlog.c */
 

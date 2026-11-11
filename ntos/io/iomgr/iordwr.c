@@ -40,6 +40,28 @@ static const UCHAR IopQueryDirectoryLength[FileMaximumInformation] =
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+/* A WoW64 caller's request on a file opened for asynchronous I/O completes into the caller's own 32-bit block */
+NTSTATUS
+IopCaptureUserIoStatusBlock(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Inout_ PIO_STATUS_BLOCK *IoStatusBlock)
+{
+    if (!IopIs32BitFileIo(FileObject, PreviousMode)) return STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        *IoStatusBlock = IopGetWow64IoStatusBlock(*IoStatusBlock);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 IopBeginRequest(
@@ -80,6 +102,13 @@ IopBeginRequest(
                                        (PVOID *)&FileObject,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopCaptureUserIoStatusBlock(FileObject, PreviousMode, &IoStatusBlock);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
 
     Request->FileObject = FileObject;
 
@@ -345,7 +374,9 @@ IopIssueRequest(
 
         _SEH2_TRY
         {
-            IopWriteIoStatusBlock(CallerIosb, &LocalIosb, FALSE);
+            IopWriteIoStatusBlock(CallerIosb,
+                                  &LocalIosb,
+                                  IopIs32BitFileIo(Request->FileObject, Request->PreviousMode));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
