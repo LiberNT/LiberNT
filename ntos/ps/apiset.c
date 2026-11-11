@@ -253,7 +253,8 @@ PspMapApiSetSchema(
 
     if (PspApiSetSection == NULL) return STATUS_SUCCESS;
 
-    Status = MmMapViewOfSection(PspApiSetSection, Process, &Base, MAXULONG, 0, NULL,
+    Status = MmMapViewOfSection(PspApiSetSection, Process, &Base,
+                                (PsGetProcessPeb32(Process) != NULL) ? MAXULONG : 0, 0, NULL,
                                 &ViewSize, ViewShare, 0, PAGE_READONLY);
     if (!NT_SUCCESS(Status)) return Status;
 
