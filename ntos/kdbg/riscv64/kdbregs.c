@@ -104,4 +104,14 @@ KdbpArchSetHardwareBreakPoint(
     return STATUS_NOT_SUPPORTED;
 }
 
+VOID
+NTAPI
+KdbpArchPrintInterruptTable(
+    _In_ ULONG_PTR Address)
+{
+    UNREFERENCED_PARAMETER(Address);
+
+    KdbPuts("This processor has no interrupt descriptor table\n");
+}
+
 /* EOF */

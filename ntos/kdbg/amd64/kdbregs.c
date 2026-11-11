@@ -166,4 +166,37 @@ KdbpArchSetHardwareBreakPoint(
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+KdbpArchPrintInterruptTable(
+    _In_ ULONG_PTR Address)
+{
+    PKIDTENTRY64 Idt = KeGetPcr()->IdtBase;
+    KIDTENTRY64 Entry;
+    ULONG_PTR Handler;
+    ULONG Vector;
+    ULONG Shown = 0;
+
+    for (Vector = 0; (Vector < 256) && !KdbpIsOutputAborted(); Vector++)
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Entry, &Idt[Vector], sizeof(Entry))) || !Entry.Present)
+            continue;
+
+        Handler = (ULONG_PTR)Entry.OffsetLow |
+                  ((ULONG_PTR)Entry.OffsetMiddle << 16) |
+                  ((ULONG_PTR)Entry.OffsetHigh << 32);
+
+        if ((Address != 0) && (PAGE_ALIGN(Handler) != PAGE_ALIGN(Address)))
+            continue;
+
+        KdbpPrint("%02lx %p ", Vector, (PVOID)Handler);
+        KdbSymPrintAddress((PVOID)Handler, NULL);
+        KdbPuts("\n");
+        Shown++;
+    }
+
+    if (Shown == 0)
+        KdbPuts("No vector of this processor is handled there\n");
+}
+
 /* EOF */

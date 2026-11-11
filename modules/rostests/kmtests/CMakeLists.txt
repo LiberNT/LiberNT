@@ -217,6 +217,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_kd/KdbLocks.c
     ntos_kd/KdbMemoryCommands.c
     ntos_kd/KdbObjectCommands.c
+    ntos_kd/KdbSchedulerCommands.c
     ntos_kd/KdbThreadApc.c
     ntos_kd/KdChangeOption.c
     ntos_kd/KdDebuggerPresent.c

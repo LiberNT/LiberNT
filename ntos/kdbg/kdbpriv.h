@@ -50,6 +50,12 @@ ULONG
 NTAPI
 KdbpArchHardwareBreakPointCount(VOID);
 
+/* Lists the interrupt vectors, or only those handled on the page of Address */
+VOID
+NTAPI
+KdbpArchPrintInterruptTable(
+    _In_ ULONG_PTR Address);
+
 /* kdbanalyze.c */
 
 BOOLEAN
@@ -87,6 +93,16 @@ BOOLEAN
 KdbpCmdPci(
     ULONG Argc,
     PCHAR Argv[]);
+
+/* kdbsched.c */
+
+BOOLEAN KdbpCmdPrcb(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdReady(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDpc(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdTimer(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdInterrupt(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDispatcher(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdInterruptTable(ULONG Argc, PCHAR Argv[]);
 
 /* kdbsymbols.c */
 
