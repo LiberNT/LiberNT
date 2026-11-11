@@ -22,7 +22,7 @@ class CModeButton : public ITfLangBarItemButton, public ITfSource
 public:
     CModeButton() : m_cRefs(1), m_pSink(NULL), m_cAdvise(0), m_cUnadvise(0), m_cInfo(0), m_cStatus(0), m_cIcon(0),
                     m_cTooltip(0), m_cText(0), m_cClick(0), m_dwOtherThread(0), m_hIconLast(NULL),
-                    m_clickLast(TF_LBI_CLK_LEFT), m_ptClickLast(), m_guidItem(GUID_LBI_INPUTMODE), m_fNoButton(FALSE)
+                    m_clickLast(TF_LBI_CLK_LEFT), m_ptClickLast(), m_rcClickLast(), m_guidItem(GUID_LBI_INPUTMODE), m_fNoButton(FALSE)
     {
     }
     virtual ~CModeButton()
@@ -81,6 +81,10 @@ public:
         Count(&m_cClick);
         m_clickLast = click;
         m_ptClickLast = pt;
+        if (prc)
+            m_rcClickLast = *prc;
+        else
+            SetRect(&m_rcClickLast, -1, -1, -1, -1);
         return S_OK;
     }
     STDMETHODIMP InitMenu(ITfMenu *pMenu) override { return E_NOTIMPL; }
@@ -133,6 +137,7 @@ public:
     HICON m_hIconLast;
     TfLBIClick m_clickLast;
     POINT m_ptClickLast;
+    RECT m_rcClickLast;
     GUID m_guidItem;
     BOOL m_fNoButton;
 };
@@ -178,6 +183,14 @@ SendTipState(HWND hwndIndicator, HWND hwndSender, ULONG_PTR dwData, DWORD cbData
 }
 
 static void
+CheckClickRect(CModeButton *pButton, LONG left, LONG top, LONG right, LONG bottom, int line)
+{
+    const RECT *prc = &pButton->m_rcClickLast;
+    ok_(__FILE__, line)(prc->left == left && prc->top == top && prc->right == right && prc->bottom == bottom,
+                        "rect (%ld, %ld)-(%ld, %ld)\n", prc->left, prc->top, prc->right, prc->bottom);
+}
+
+static void
 TestDeferredClick(CModeButton *pButton, HWND hwndTip, HWND hwndFocus)
 {
     LONG cClick = pButton->m_cClick;
@@ -196,11 +209,14 @@ TestDeferredClick(CModeButton *pButton, HWND hwndTip, HWND hwndFocus)
        pButton->m_ptClickLast.x, pButton->m_ptClickLast.y);
 
     SetFocus(NULL);
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICKRECT, MAKEWPARAM(100, 200), MAKELPARAM(132, 248)),
+       "PostMessage failed\n");
     ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_RIGHT, MAKELPARAM(30, 40)),
        "PostMessage failed\n");
     PumpFor(1000);
     ok_long(pButton->m_cClick, cClick + 2);
     ok(pButton->m_clickLast == TF_LBI_CLK_RIGHT, "click %d\n", pButton->m_clickLast);
+    CheckClickRect(pButton, 100, 200, 132, 248, __LINE__);
     SetFocus(hwndFocus);
     PumpFor(100);
     ok_long(pButton->m_cClick, cClick + 2);
@@ -229,6 +245,22 @@ TestPrivateChannel(CModeButton *pButton, HWND hwndFocus)
     ok(pButton->m_clickLast == TF_LBI_CLK_RIGHT, "click %d\n", pButton->m_clickLast);
     ok(pButton->m_ptClickLast.x == -5 && pButton->m_ptClickLast.y == -7, "point (%ld, %ld)\n",
        pButton->m_ptClickLast.x, pButton->m_ptClickLast.y);
+    CheckClickRect(pButton, -5, -7, -4, -6, __LINE__);
+
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICKRECT, MAKEWPARAM(-30, 720), MAKELPARAM(-2, 768)),
+       "PostMessage failed\n");
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_LEFT, MAKELPARAM(-10, 744)),
+       "PostMessage failed\n");
+    PumpFor(500);
+    ok_long(pButton->m_cClick, cClick + 3);
+    ok(pButton->m_ptClickLast.x == -10 && pButton->m_ptClickLast.y == 744, "point (%ld, %ld)\n",
+       pButton->m_ptClickLast.x, pButton->m_ptClickLast.y);
+    CheckClickRect(pButton, -30, 720, -2, 768, __LINE__);
+    ok(PostMessageW(hwndTip, WM_INPUTINDICATOR_CLICK, INPUTINDICATOR_CLICK_LEFT, MAKELPARAM(20, 30)),
+       "PostMessage failed\n");
+    PumpFor(500);
+    ok_long(pButton->m_cClick, cClick + 4);
+    CheckClickRect(pButton, 20, 30, 21, 31, __LINE__);
     TestDeferredClick(pButton, hwndTip, hwndFocus);
 
     HWND hwndIndicator = FindWindowW(INDICATOR_CLASSW, NULL);
