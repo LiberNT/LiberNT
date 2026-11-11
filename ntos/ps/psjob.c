@@ -1674,7 +1674,9 @@ NtSetInformationJobObject(
         {
             ProbeForRead(JobInformation,
                          JobInformationLength,
-                         sizeof(ULONG_PTR));
+                         (JobInformationClass == JobObjectBasicUIRestrictions)
+                             ? TYPE_ALIGNMENT(JOBOBJECT_BASIC_UI_RESTRICTIONS)
+                             : sizeof(ULONG_PTR));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
