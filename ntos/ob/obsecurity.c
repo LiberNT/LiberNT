@@ -107,13 +107,13 @@ ObpCheckDescriptorCompleteness(
     if ((SecurityInformation & OWNER_SECURITY_INFORMATION) &&
         SepGetOwnerFromDescriptor(Descriptor) == NULL)
     {
-        return STATUS_INVALID_OWNER;
+        return STATUS_INVALID_SECURITY_DESCR;
     }
 
     if ((SecurityInformation & GROUP_SECURITY_INFORMATION) &&
         SepGetGroupFromDescriptor(Descriptor) == NULL)
     {
-        return STATUS_INVALID_PRIMARY_GROUP;
+        return STATUS_INVALID_SECURITY_DESCR;
     }
 
     return STATUS_SUCCESS;
