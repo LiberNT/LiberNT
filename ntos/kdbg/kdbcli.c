@@ -1469,6 +1469,115 @@ KdbpCmdApc(
 }
 
 static
+VOID
+KdbpPrintOwner(
+    _In_ const OWNER_ENTRY *Entry)
+{
+    if (Entry->OwnerThread != 0)
+        KdbpPrint("  Owner thread %p, count %lu\n", (PVOID)Entry->OwnerThread, (ULONG)Entry->OwnerCount);
+}
+
+static
+VOID
+KdbpPrintResource(
+    _In_ PERESOURCE Address,
+    _In_ PERESOURCE Resource)
+{
+    OWNER_ENTRY Entry;
+    ULONG TableSize = 0;
+    ULONG Index;
+
+    KdbpPrint("Resource %p %s, active %d, shared waiters %lu, exclusive waiters %lu, contention %lu\n",
+              Address,
+              (Resource->Flag & ResourceOwnedExclusive) ? "exclusive" : "shared",
+              Resource->ActiveCount,
+              Resource->NumberOfSharedWaiters,
+              Resource->NumberOfExclusiveWaiters,
+              Resource->ContentionCount);
+
+    KdbpPrintOwner(&Resource->OwnerEntry);
+
+    if ((Resource->OwnerTable != NULL) &&
+        NT_SUCCESS(KdbpSafeReadMemory(&Entry, Resource->OwnerTable, sizeof(Entry))))
+    {
+        TableSize = min(Entry.TableSize, 64);
+    }
+
+    for (Index = 1; Index < TableSize; Index++)
+    {
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Entry, &Resource->OwnerTable[Index], sizeof(Entry))))
+            break;
+
+        KdbpPrintOwner(&Entry);
+    }
+}
+
+static
+BOOLEAN
+KdbpCmdLocks(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static ERESOURCE Resource;
+    BOOLEAN Verbose = FALSE;
+    PLIST_ENTRY Current;
+    LIST_ENTRY Head;
+    ULONG_PTR Address;
+    ULONG Total = 0;
+    ULONG Held = 0;
+
+    if ((Argc > 1) && (strcmp(Argv[1], "-v") == 0))
+    {
+        Verbose = TRUE;
+    }
+    else if (Argc > 1)
+    {
+        if (!KdbpGetAddressExpression(Argv[1], &Address))
+            return TRUE;
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Resource, (PVOID)Address, sizeof(Resource))))
+            KdbpPrint("Resource %p cannot be read\n", (PVOID)Address);
+        else
+            KdbpPrintResource((PERESOURCE)Address, &Resource);
+
+        return TRUE;
+    }
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Head, &ExpSystemResourcesList, sizeof(Head))))
+        return TRUE;
+
+    for (Current = Head.Flink;
+         (Current != &ExpSystemResourcesList) && (Total < 0x100000) && !KdbpIsOutputAborted();
+         Total++)
+    {
+        PERESOURCE Entry = CONTAINING_RECORD(Current, ERESOURCE, SystemResourcesList);
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Resource, Entry, sizeof(Resource))))
+        {
+            KdbpPrint("Resource %p cannot be read\n", Entry);
+            break;
+        }
+
+        if ((Resource.ActiveCount != 0) ||
+            (Resource.NumberOfSharedWaiters != 0) ||
+            (Resource.NumberOfExclusiveWaiters != 0))
+        {
+            Held++;
+            KdbpPrintResource(Entry, &Resource);
+        }
+        else if (Verbose)
+        {
+            KdbpPrintResource(Entry, &Resource);
+        }
+
+        Current = Resource.SystemResourcesList.Flink;
+    }
+
+    KdbpPrint("%lu resources, %lu held or waited on\n", Total, Held);
+    return TRUE;
+}
+
+static
 BOOLEAN
 KdbpCmdEvaluate(
     ULONG Argc,
@@ -1711,6 +1820,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"thread", "thread [id]", "Lists the threads, or looks at one", KdbpCmdThreads},
     {"!thread", "!thread [address]", "Shows a thread in detail", KdbpCmdThreadDetail},
     {"!apc", "!apc [address]", "Shows the APCs queued to a thread", KdbpCmdApc},
+    {"!locks", "!locks [-v|address]", "Shows the resources that are held or waited on", KdbpCmdLocks},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
