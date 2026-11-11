@@ -526,6 +526,12 @@ NtPrivilegeCheck(
         return STATUS_NO_IMPERSONATION_TOKEN;
     }
 
+    if (Token->ImpersonationLevel < SecurityIdentification)
+    {
+        ObDereferenceObject(Token);
+        return STATUS_BAD_IMPERSONATION_LEVEL;
+    }
+
     if (Count != 0)
     {
         Status = SeCaptureLuidAndAttributesArray(RequiredPrivileges->Privilege,
