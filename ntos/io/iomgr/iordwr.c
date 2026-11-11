@@ -146,28 +146,6 @@ IopBeginRequest(
 
 static
 VOID
-IopSetAsyncParameters(
-    _In_ PIOP_REQUEST Request,
-    _In_opt_ PIO_APC_ROUTINE ApcRoutine,
-    _In_opt_ PVOID ApcContext)
-{
-    PIRP Irp = Request->Irp;
-
-    if (!Request->SynchIo &&
-        Request->FileObject->CompletionContext != NULL &&
-        ApcRoutine != NULL)
-    {
-        Irp->Overlay.AsynchronousParameters.UserApcRoutine = ApcRoutine;
-        Irp->Overlay.AsynchronousParameters.UserApcContext = ApcContext;
-        return;
-    }
-
-    Irp->Overlay.AsynchronousParameters.UserApcRoutine = ApcRoutine;
-    Irp->Overlay.AsynchronousParameters.UserApcContext = ApcContext;
-}
-
-static
-VOID
 IopAbortRequest(
     _In_ PIOP_REQUEST Request)
 {
@@ -184,6 +162,27 @@ IopAbortRequest(
     }
 
     ObDereferenceObject(Request->FileObject);
+}
+
+static
+NTSTATUS
+IopSetAsyncParameters(
+    _In_ PIOP_REQUEST Request,
+    _In_opt_ PIO_APC_ROUTINE ApcRoutine,
+    _In_opt_ PVOID ApcContext)
+{
+    PIRP Irp = Request->Irp;
+
+    if (ApcRoutine != NULL && Request->FileObject->CompletionContext != NULL)
+    {
+        IopAbortRequest(Request);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Irp->Overlay.AsynchronousParameters.UserApcRoutine = ApcRoutine;
+    Irp->Overlay.AsynchronousParameters.UserApcContext = ApcContext;
+
+    return STATUS_SUCCESS;
 }
 
 static
@@ -396,6 +395,9 @@ NtReadFile(
                              TRUE);
     if (!NT_SUCCESS(Status)) return Status;
 
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
+    if (!NT_SUCCESS(Status)) return Status;
+
     Irp = Request.Irp;
 
     if (Request.PreviousMode != KernelMode)
@@ -541,8 +543,6 @@ NtReadFile(
         Irp->UserBuffer = Buffer;
     }
 
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
-
     return IopIssueRequest(&Request, IopReadTransfer);
 }
 
@@ -589,6 +589,9 @@ NtWriteFile(
                                  TRUE);
     }
 
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
 
     Irp = Request.Irp;
@@ -752,8 +755,6 @@ NtWriteFile(
         Irp->UserBuffer = Buffer;
     }
 
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
-
     return IopIssueRequest(&Request, IopWriteTransfer);
 }
 
@@ -793,6 +794,9 @@ IopScatterGather(
                              IoStatusBlock,
                              Write ? IRP_MJ_WRITE : IRP_MJ_READ,
                              TRUE);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
 
     Irp = Request.Irp;
@@ -863,8 +867,6 @@ IopScatterGather(
     Request.StackPtr->Parameters.Read.Length = Length;
     Request.StackPtr->Parameters.Read.Key = CapturedKey;
     Request.StackPtr->Parameters.Read.ByteOffset = CapturedOffset;
-
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
 
     return IopIssueRequest(&Request,
                            Write ? IopWriteTransfer : IopReadTransfer);
@@ -1012,6 +1014,9 @@ NtLockFile(
                                          IRP_MJ_LOCK_CONTROL);
     if (!NT_SUCCESS(Status)) return Status;
 
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
+    if (!NT_SUCCESS(Status)) return Status;
+
     if (Request.PreviousMode != KernelMode)
     {
         _SEH2_TRY
@@ -1049,8 +1054,6 @@ NtLockFile(
     Request.StackPtr->Parameters.LockControl.Key = Key;
 
     Request.FileObject->LockOperation = TRUE;
-
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
 
     return IopIssueRequest(&Request, IopOtherTransfer);
 }
@@ -1149,6 +1152,9 @@ IopDeviceFsIoControl(
                              IsDevIoCtl ? IRP_MJ_DEVICE_CONTROL
                                         : IRP_MJ_FILE_SYSTEM_CONTROL,
                              TRUE);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = IopSetAsyncParameters(&Request, UserApcRoutine, UserApcContext);
     if (!NT_SUCCESS(Status)) return Status;
 
     Irp = Request.Irp;
@@ -1353,8 +1359,6 @@ IopDeviceFsIoControl(
         Irp->UserBuffer = OutputBuffer;
     }
 
-    IopSetAsyncParameters(&Request, UserApcRoutine, UserApcContext);
-
     return IopIssueRequest(&Request, IopOtherTransfer);
 }
 
@@ -1448,6 +1452,9 @@ IopNotifyChangeDirectory(
                              TRUE);
     if (!NT_SUCCESS(Status)) return Status;
 
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
+    if (!NT_SUCCESS(Status)) return Status;
+
     Irp = Request.Irp;
     Irp->Flags = IRP_BUFFERED_IO;
 
@@ -1490,8 +1497,6 @@ IopNotifyChangeDirectory(
             return Status;
         }
     }
-
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
 
     return IopIssueRequest(&Request, IopOtherTransfer);
 }
@@ -1586,6 +1591,9 @@ IopQueryDirectoryFile(
                              TRUE);
     if (!NT_SUCCESS(Status)) return Status;
 
+    Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
+    if (!NT_SUCCESS(Status)) return Status;
+
     Irp = Request.Irp;
 
     if (FileName != NULL)
@@ -1658,8 +1666,6 @@ IopQueryDirectoryFile(
             return Status;
         }
     }
-
-    IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
 
     return IopIssueRequest(&Request, IopOtherTransfer);
 }
