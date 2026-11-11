@@ -540,6 +540,15 @@ IopResolveReparse(
                            FileObject->FileName.Length - TailLength;
         Pieces[1].Length = TailLength;
 
+        /* A substitute name that ends on a separator already supplies the one the rest of the path starts with */
+        if (Pieces[1].Length != 0 &&
+            ((const WCHAR *)Pieces[0].Buffer)[Pieces[0].Length / sizeof(WCHAR) - 1] == OBJ_NAME_PATH_SEPARATOR &&
+            ((const WCHAR *)Pieces[1].Buffer)[0] == OBJ_NAME_PATH_SEPARATOR)
+        {
+            Pieces[1].Buffer = (const UCHAR *)Pieces[1].Buffer + sizeof(WCHAR);
+            Pieces[1].Length -= sizeof(WCHAR);
+        }
+
         Status = IopReplaceCompleteName(CompleteName, Pieces, 2);
     }
 

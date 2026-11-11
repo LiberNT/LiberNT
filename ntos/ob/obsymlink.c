@@ -254,11 +254,21 @@ ObpBuildReparsePath(
     _In_ PUNICODE_STRING Remaining,
     _Inout_ PUNICODE_STRING FullPath)
 {
+    UNICODE_STRING Rest = *Remaining;
     ULONG Length, Maximum;
     PWCHAR Buffer;
 
+    /* A target that ends on a separator already supplies the one the rest of the path starts with */
+    if (Target->Length != 0 && Rest.Length != 0 &&
+        Target->Buffer[Target->Length / sizeof(WCHAR) - 1] == OBJ_NAME_PATH_SEPARATOR &&
+        Rest.Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
+    {
+        Rest.Buffer++;
+        Rest.Length -= sizeof(WCHAR);
+    }
+
     /* What is left of the path still carries its own separator */
-    Length = Target->Length + Remaining->Length;
+    Length = Target->Length + Rest.Length;
 
     if (Length > MAXUSHORT - sizeof(UNICODE_NULL))
         return STATUS_NAME_TOO_LONG;
@@ -273,11 +283,11 @@ ObpBuildReparsePath(
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     RtlCopyMemory(Buffer, Target->Buffer, Target->Length);
-    if (Remaining->Length != 0)
+    if (Rest.Length != 0)
     {
         RtlCopyMemory(&Buffer[Target->Length / sizeof(WCHAR)],
-                      Remaining->Buffer,
-                      Remaining->Length);
+                      Rest.Buffer,
+                      Rest.Length);
     }
 
     Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
