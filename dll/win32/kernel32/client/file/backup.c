@@ -13,6 +13,27 @@
 
 #define BACKUP_STREAM_HEADER_SIZE FIELD_OFFSET(WIN32_STREAM_ID, cStreamName)
 
+#ifndef FSCTL_GET_OBJECT_ID
+#define FSCTL_SET_OBJECT_ID CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 38, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define FSCTL_GET_OBJECT_ID CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 39, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define FSCTL_DELETE_OBJECT_ID CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 40, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+#define FSCTL_SET_OBJECT_ID_EXTENDED CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 47, METHOD_BUFFERED, FILE_SPECIAL_ACCESS)
+typedef struct _FILE_OBJECTID_BUFFER
+{
+    BYTE ObjectId[16];
+    union
+    {
+        struct
+        {
+            BYTE BirthVolumeId[16];
+            BYTE BirthObjectId[16];
+            BYTE DomainId[16];
+        } DUMMYSTRUCTNAME;
+        BYTE ExtendedInfo[48];
+    } DUMMYUNIONNAME;
+} FILE_OBJECTID_BUFFER, *PFILE_OBJECTID_BUFFER;
+#endif
+
 typedef enum _BACKUP_PHASE
 {
     BackupPhaseSecurity,
@@ -21,6 +42,7 @@ typedef enum _BACKUP_PHASE
     BackupPhaseEa,
     BackupPhaseAlternateData,
     BackupPhaseReparse,
+    BackupPhaseObjectId,
     BackupPhaseDone
 } BACKUP_PHASE;
 
@@ -387,6 +409,42 @@ BasepBackupQueryReparse(
 
 static
 NTSTATUS
+BasepBackupQueryObjectId(
+    _In_ HANDLE File,
+    _Out_ PUCHAR *Data,
+    _Out_ PULONG Length)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    PUCHAR Buffer;
+    NTSTATUS Status;
+
+    *Data = NULL;
+    *Length = 0;
+    Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, sizeof(FILE_OBJECTID_BUFFER));
+    if (!Buffer)
+        return STATUS_NO_MEMORY;
+
+    Status = NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_GET_OBJECT_ID,
+                             NULL, 0, Buffer, sizeof(FILE_OBJECTID_BUFFER));
+    if (!NT_SUCCESS(Status) || IoStatusBlock.Information != sizeof(FILE_OBJECTID_BUFFER))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
+        if (Status == STATUS_OBJECTID_NOT_FOUND || Status == STATUS_INVALID_DEVICE_REQUEST ||
+            Status == STATUS_VOLUME_NOT_UPGRADED || Status == STATUS_NOT_IMPLEMENTED ||
+            Status == STATUS_NOT_SUPPORTED || NT_SUCCESS(Status))
+        {
+            return STATUS_SUCCESS;
+        }
+        return Status;
+    }
+
+    *Data = Buffer;
+    *Length = sizeof(FILE_OBJECTID_BUFFER);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 BasepBackupQueryRanges(
     _In_ HANDLE File,
     _In_ LONGLONG EndOfFile,
@@ -680,7 +738,7 @@ BasepBackupNextReadStream(
                 break;
 
             case BackupPhaseReparse:
-                Context->Phase = BackupPhaseDone;
+                Context->Phase = BackupPhaseObjectId;
                 if (!(Context->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
                     break;
                 Status = BasepBackupQueryReparse(File, &Data, &Length);
@@ -688,6 +746,17 @@ BasepBackupNextReadStream(
                     Status = BasepBackupStartMemoryStream(Context, BACKUP_REPARSE_DATA,
                                                           STREAM_NORMAL_ATTRIBUTE, Data, Length);
                 *Found = NT_SUCCESS(Status);
+                break;
+
+            case BackupPhaseObjectId:
+                Context->Phase = BackupPhaseDone;
+                Status = BasepBackupQueryObjectId(File, &Data, &Length);
+                if (NT_SUCCESS(Status) && Data)
+                {
+                    Status = BasepBackupStartMemoryStream(Context, BACKUP_OBJECT_ID,
+                                                          STREAM_NORMAL_ATTRIBUTE, Data, Length);
+                    *Found = NT_SUCCESS(Status);
+                }
                 break;
 
             default:
@@ -848,6 +917,43 @@ BasepBackupRestoreLink(
 }
 
 static
+VOID
+BasepBackupRestoreObjectId(
+    _In_ HANDLE File,
+    _In_reads_bytes_(sizeof(FILE_OBJECTID_BUFFER)) PUCHAR Data)
+{
+    PFILE_OBJECTID_BUFFER Saved = (PFILE_OBJECTID_BUFFER)Data;
+    FILE_OBJECTID_BUFFER Current;
+    IO_STATUS_BLOCK IoStatusBlock;
+    BOOLEAN HadCurrent;
+    NTSTATUS Status;
+
+    /* FIXME: whether an object identifier that cannot be set fails the restore is not documented; it is skipped */
+    Status = NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_GET_OBJECT_ID,
+                             NULL, 0, &Current, sizeof(Current));
+    HadCurrent = NT_SUCCESS(Status) && IoStatusBlock.Information == sizeof(Current);
+    if (HadCurrent && RtlEqualMemory(Current.ObjectId, Saved->ObjectId, sizeof(Saved->ObjectId)))
+    {
+        if (!RtlEqualMemory(Current.ExtendedInfo, Saved->ExtendedInfo, sizeof(Saved->ExtendedInfo)))
+        {
+            NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_SET_OBJECT_ID_EXTENDED,
+                            Saved->ExtendedInfo, sizeof(Saved->ExtendedInfo), NULL, 0);
+        }
+        return;
+    }
+
+    if (HadCurrent)
+        NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_DELETE_OBJECT_ID, NULL, 0, NULL, 0);
+    Status = NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_SET_OBJECT_ID,
+                             Saved, sizeof(*Saved), NULL, 0);
+    if (!NT_SUCCESS(Status) && HadCurrent)
+    {
+        NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_SET_OBJECT_ID,
+                        &Current, sizeof(Current), NULL, 0);
+    }
+}
+
+static
 NTSTATUS
 BasepBackupAllocateMemory(
     _Inout_ PBACKUP_CONTEXT Context)
@@ -934,8 +1040,9 @@ BasepBackupBeginRestoreStream(
             return BasepBackupAllocateMemory(Context);
 
         case BACKUP_OBJECT_ID:
-            /* TODO: object identifier streams are skipped until the file system keeps object identifiers */
-            break;
+            if (Context->DataSize != sizeof(FILE_OBJECTID_BUFFER))
+                return STATUS_INVALID_PARAMETER;
+            return BasepBackupAllocateMemory(Context);
 
         case BACKUP_TXFS_DATA:
             break;
@@ -991,6 +1098,10 @@ BasepBackupEndRestoreStream(
 
         case BACKUP_LINK:
             Status = BasepBackupRestoreLink(File, Context->Memory, (ULONG)Context->DataSize);
+            break;
+
+        case BACKUP_OBJECT_ID:
+            BasepBackupRestoreObjectId(File, Context->Memory);
             break;
 
         case BACKUP_SPARSE_BLOCK:

@@ -9,6 +9,17 @@
 #include <winioctl.h>
 #include <ndk/iofuncs.h>
 #include <ndk/obfuncs.h>
+#include <ndk/setypes.h>
+
+#ifndef FSCTL_GET_OBJECT_ID
+#define FSCTL_GET_OBJECT_ID CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 39, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define FSCTL_CREATE_OR_GET_OBJECT_ID CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 48, METHOD_BUFFERED, FILE_ANY_ACCESS)
+typedef struct _FILE_OBJECTID_BUFFER
+{
+    BYTE ObjectId[16];
+    BYTE ExtendedInfo[48];
+} FILE_OBJECTID_BUFFER, *PFILE_OBJECTID_BUFFER;
+#endif
 
 #define HEADER_SIZE 20
 #define MAX_STREAMS 64
@@ -953,6 +964,115 @@ TestLabel(
 }
 
 static
+NTSTATUS
+QueryObjectId(
+    _In_ PCWSTR Path,
+    _Out_ PFILE_OBJECTID_BUFFER ObjectId)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    HANDLE File;
+    NTSTATUS Status;
+
+    File = CreateFileW(Path, FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                       OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return STATUS_UNSUCCESSFUL;
+    memset(ObjectId, 0, sizeof(*ObjectId));
+    Status = NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_GET_OBJECT_ID, NULL, 0,
+                             ObjectId, sizeof(*ObjectId));
+    CloseHandle(File);
+    return Status;
+}
+
+static
+VOID
+TestObjectIdStream(
+    _In_ PUCHAR Buffer,
+    _In_ PUCHAR Buffer2)
+{
+    FILE_OBJECTID_BUFFER Id;
+    FILE_OBJECTID_BUFFER Queried;
+    PARSED_STREAM Streams[MAX_STREAMS];
+    PPARSED_STREAM Stream;
+    IO_STATUS_BLOCK IoStatusBlock;
+    WCHAR Path[MAX_PATH];
+    WCHAR Copy[MAX_PATH];
+    WCHAR Copy2[MAX_PATH];
+    BOOLEAN Old;
+    HANDLE File;
+    ULONG Length;
+    ULONG Length2;
+    ULONG Count;
+    DWORD Error;
+    NTSTATUS Status;
+
+    MakePath(Path, L"objid.bin");
+    MakePath(Copy, L"objid1.bin");
+    MakePath(Copy2, L"objid2.bin");
+    if (!WriteTestFile(Path, "objid", 5))
+        return;
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Status = NtFsControlFile(File, NULL, NULL, NULL, &IoStatusBlock, FSCTL_CREATE_OR_GET_OBJECT_ID, NULL, 0,
+                             &Id, sizeof(Id));
+    ok(Status == STATUS_SUCCESS, "FSCTL_CREATE_OR_GET_OBJECT_ID failed with 0x%lx\n", Status);
+    if (!NT_SUCCESS(Status) || !Capture(File, FALSE, 0x1000, Buffer, &Length))
+    {
+        CloseHandle(File);
+        DeleteFileW(Path);
+        return;
+    }
+    CloseHandle(File);
+
+    ok(Parse(Buffer, Length, Streams, &Count), "Malformed backup stream of %lu bytes\n", Length);
+    ok(Count == 2, "BackupRead of a file with an object identifier returned %lu streams, expected 2\n", Count);
+    Stream = FindStream(Streams, Count, BACKUP_OBJECT_ID);
+    ok(Stream != NULL, "No BACKUP_OBJECT_ID stream\n");
+    if (Stream)
+    {
+        ok(Stream->Attributes == STREAM_NORMAL_ATTRIBUTE, "BACKUP_OBJECT_ID attributes 0x%lx\n", Stream->Attributes);
+        ok(Stream->NameSize == 0, "BACKUP_OBJECT_ID name size %lu\n", Stream->NameSize);
+        ok(Stream->Size == sizeof(Id), "BACKUP_OBJECT_ID size %I64d\n", Stream->Size);
+        ok(Stream->Size == sizeof(Id) && !memcmp(Stream->Data, &Id, sizeof(Id)), "BACKUP_OBJECT_ID content differs\n");
+    }
+
+    ok(NT_SUCCESS(RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Old)), "Enabling SeRestorePrivilege failed\n");
+    if (Restore(Copy, Buffer, Length, Length, FALSE))
+    {
+        Status = QueryObjectId(Copy, &Queried);
+        ok(Status == STATUS_OBJECTID_NOT_FOUND, "An identifier in use was restored: 0x%lx\n", Status);
+    }
+    ok(DeleteFileW(Path), "DeleteFile(%S) failed with %lu\n", Path, GetLastError());
+    if (Restore(Copy2, Buffer, Length, Length, FALSE))
+    {
+        Status = QueryObjectId(Copy2, &Queried);
+        ok(Status == STATUS_SUCCESS, "The object identifier was not restored: 0x%lx\n", Status);
+        ok(!memcmp(&Queried, &Id, sizeof(Id)), "The restored object identifier differs\n");
+    }
+    DeleteFileW(Copy2);
+
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, FALSE, FALSE, &Old);
+    if (Restore(Copy, Buffer, Length, Length, FALSE))
+    {
+        Status = QueryObjectId(Copy, &Queried);
+        ok(Status == STATUS_OBJECTID_NOT_FOUND, "The identifier was restored without restore access: 0x%lx\n", Status);
+    }
+
+    File = CreateFileW(Copy, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Copy, GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        Length2 = AppendStream(Buffer2, BACKUP_OBJECT_ID, NULL, 0, &Id, 16);
+        ok(!WriteOnce(File, Buffer2, Length2, &Error), "A 16-byte BACKUP_OBJECT_ID stream was accepted\n");
+        CloseHandle(File);
+    }
+    DeleteFileW(Copy);
+}
+
+static
 VOID
 TestWrite(
     _In_ PUCHAR Buffer,
@@ -1230,6 +1350,7 @@ START_TEST(BackupReadWrite)
         TestStreamTypes(Buffer);
         TestSeekRestore(Buffer);
         TestLabel(Buffer);
+        TestObjectIdStream(Buffer, Buffer2);
     }
     if (Buffer)
         HeapFree(GetProcessHeap(), 0, Buffer);
