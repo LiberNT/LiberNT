@@ -834,7 +834,7 @@ NtQueryValueKey(
     {
         Status = CmpCaptureName(ValueName,
                                 PreviousMode,
-                                CMP_VALUE_NAME_MAX,
+                                MAXUSHORT,
                                 &Captured);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1175,7 +1175,7 @@ NtDeleteValueKey(
     {
         Status = CmpCaptureName(ValueName,
                                 PreviousMode,
-                                CMP_VALUE_NAME_MAX,
+                                MAXUSHORT,
                                 &Captured);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
