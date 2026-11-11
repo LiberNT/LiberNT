@@ -43,6 +43,17 @@ HalpArm64DeviceIntIdLimit(VOID)
     return min(max(1020, HalpArm64ExternalIntIdLimit()), HAL_ARM64_CONTROLLER_INTID_MAX);
 }
 
+static
+KAFFINITY
+HalpArm64DeviceInterruptAffinity(VOID)
+{
+    if (HalpArm64InterruptController == NULL)
+        return KeQueryActiveProcessors();
+    if (HalpArm64InterruptController->DeliversToAnyProcessor)
+        return KeQueryActiveProcessors();
+    return HalpDefaultInterruptAffinity ? HalpDefaultInterruptAffinity : 1;
+}
+
 ULONG
 HalpSecondaryArchGsivBase(VOID)
 {
@@ -5701,8 +5712,7 @@ HalGetInterruptVector(
             DeviceIrql = HAL_ARM64_DEVICE_IRQL_MIN +
                          ((Vector - HAL_ARM64_LPI_BASE) % HAL_ARM64_DEVICE_IRQL_COUNT);
             if (Irql) *Irql = DeviceIrql;
-            if (Affinity) *Affinity = HalpDefaultInterruptAffinity ?
-                                       HalpDefaultInterruptAffinity : 1;
+            if (Affinity) *Affinity = HalpArm64DeviceInterruptAffinity();
             DPRINT("[arm64] HalGetInterruptVector: LPI GSI=%lu Vector=%lu IRQL=%u\n",
                    Gsi, Vector, DeviceIrql);
             return Vector;
@@ -5717,8 +5727,7 @@ HalGetInterruptVector(
                 DeviceIrql = HAL_ARM64_DEVICE_IRQL_MIN +
                              (SpiOffset % HAL_ARM64_DEVICE_IRQL_COUNT);
                 if (Irql) *Irql = DeviceIrql;
-                if (Affinity) *Affinity = HalpDefaultInterruptAffinity ?
-                                           HalpDefaultInterruptAffinity : 1;
+                if (Affinity) *Affinity = HalpArm64DeviceInterruptAffinity();
                 DPRINT("[arm64] HalGetInterruptVector: MSI via GICv2m SPI=%lu\n", Vector);
                 return Vector;
             }
@@ -5783,9 +5792,7 @@ HalGetInterruptVector(
         }
         else
         {
-            *Affinity = HalpArm64InterruptController ?
-                        (HalpDefaultInterruptAffinity ? HalpDefaultInterruptAffinity : 1) :
-                        KeQueryActiveProcessors();
+            *Affinity = HalpArm64DeviceInterruptAffinity();
         }
     }
 

@@ -594,6 +594,7 @@ static const HAL_ARM64_INTERRUPT_CONTROLLER AppleAicInterruptOps =
     AppleAicPhase0Initialize,
     AppleAicPhase1MapRuntimeMmio,
     AIC_FIRST_DEVICE_INTID + AIC_MAX_DEVICE_IRQS,
+    TRUE,
 };
 
 static HAL_ARM64_MSI_DOORBELL AppleAicPcieDoorbell;
