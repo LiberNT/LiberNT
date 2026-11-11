@@ -308,6 +308,8 @@ PspTerminateJobObject(
                                PspTerminateJobMember,
                                (PVOID)(ULONG_PTR)ExitStatus);
 
+    KeSetEvent(&Job->Event, IO_NO_INCREMENT, FALSE);
+
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
     Job->Terminating = FALSE;
@@ -461,17 +463,13 @@ PspNotifyJobProcessExit(
                             Process->UniqueProcessId,
                             FALSE);
 
-    /*
-     * A job that just lost its last process is a job that is done, and
-     * whoever is waiting on it is let go.
-     */
+    /* A job is not signalled by running out of processes, only by being terminated */
     if (Job->ActiveProcesses == 0)
     {
         PspSendJobMessageLocked(Job,
                                 JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
                                 NULL,
                                 FALSE);
-        KeSetEvent(&Job->Event, IO_NO_INCREMENT, FALSE);
     }
 
     ExReleaseResourceLite(&Job->JobLock);
