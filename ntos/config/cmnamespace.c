@@ -260,18 +260,17 @@ CmpGetNextName(
         return TRUE;
     }
 
-    if (RemainingName->Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
+    while (RemainingName->Length != 0 &&
+           RemainingName->Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
     {
         RemainingName->Buffer++;
         RemainingName->Length -= sizeof(WCHAR);
+    }
 
-        if (RemainingName->Length == 0)
-        {
-            *LastName = TRUE;
-            return TRUE;
-        }
-
-        if (RemainingName->Buffer[0] == OBJ_NAME_PATH_SEPARATOR) return FALSE;
+    if (RemainingName->Length == 0)
+    {
+        *LastName = TRUE;
+        return TRUE;
     }
 
     Count = RemainingName->Length / sizeof(WCHAR);
