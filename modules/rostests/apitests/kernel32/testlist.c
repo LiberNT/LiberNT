@@ -79,6 +79,7 @@ extern void func_QuantumRoundRobin(void);
 extern void func_RegisterWaitPeriodic(void);
 extern void func_RemoteThreadInit(void);
 extern void func_SandboxLaunch(void);
+extern void func_SecurityBaseApis(void);
 extern void func_SystemImageCatalog(void);
 extern void func_SystemTimeChangeTimers(void);
 extern void func_TzSpecificLocalTimeEx(void);
@@ -234,6 +235,7 @@ const struct test winetest_testlist[] =
     { "RegisterWaitPeriodic",        func_RegisterWaitPeriodic },
     { "RemoteThreadInit",            func_RemoteThreadInit },
     { "SandboxLaunch",               func_SandboxLaunch },
+    { "SecurityBaseApis",            func_SecurityBaseApis },
     { "SharedMemorySecurity",        func_SharedMemorySecurity },
     { "SharedMemoryTransfer",        func_SharedMemoryTransfer },
     { "StarvationBoost",             func_StarvationBoost },

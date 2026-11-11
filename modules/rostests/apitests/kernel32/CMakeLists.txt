@@ -83,6 +83,7 @@ list(APPEND SOURCE
     QuantumRoundRobin.c
     RegisterWaitPeriodic.c
     SandboxLaunch.c
+    SecurityBaseApis.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c
     SharedMemorySecurity.c

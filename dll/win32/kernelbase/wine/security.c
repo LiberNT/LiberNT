@@ -43,6 +43,7 @@ NTSYSAPI NTSTATUS NTAPI NtAccessCheckByTypeResultList(PSECURITY_DESCRIPTOR, PSID
                                                    POBJECT_TYPE_LIST, ULONG, PGENERIC_MAPPING,
                                                    PPRIVILEGE_SET, PULONG, PACCESS_MASK, PNTSTATUS);
 NTSYSAPI NTSTATUS NTAPI NtDeleteObjectAuditAlarm(PUNICODE_STRING, PVOID, BOOLEAN);
+NTSYSAPI NTSTATUS NTAPI RtlSetInformationAcl(PACL, PVOID, ULONG, ACL_INFORMATION_CLASS);
 
 #endif
 NTSYSAPI NTSTATUS WINAPI RtlSetSecurityObject(SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
@@ -1652,8 +1653,9 @@ BOOL WINAPI PrivilegedServiceAuditAlarmW( LPCWSTR subsystem, LPCWSTR service, HA
  */
 BOOL WINAPI SetAclInformation( PACL acl, LPVOID info, DWORD len, ACL_INFORMATION_CLASS class )
 {
-    FIXME( "%p %p 0x%08lx 0x%08x - stub\n", acl, info, len, class );
-    return TRUE;
+    TRACE( "%p %p 0x%08lx 0x%08x\n", acl, info, len, class );
+
+    return set_ntstatus( RtlSetInformationAcl( acl, info, len, class ));
 }
 
 /******************************************************************************

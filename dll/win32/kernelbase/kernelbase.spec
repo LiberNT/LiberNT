@@ -996,7 +996,7 @@
 @ stdcall QueryPerformanceFrequency(ptr) kernel32.QueryPerformanceFrequency
 @ stdcall QueryProcessAffinityUpdateMode(ptr ptr) kernel32.QueryProcessAffinityUpdateMode
 @ stdcall -version=0x600+ QueryProcessCycleTime(ptr ptr) kernel32.QueryProcessCycleTime
-@ stub QuerySecurityAccessMask
+@ stdcall QuerySecurityAccessMask(long ptr)
 @ stdcall -version=0x600+ QueryThreadCycleTime(ptr ptr) kernel32.QueryThreadCycleTime
 @ stdcall QueryThreadpoolStackInformation(ptr ptr)
 @ stdcall QueryVirtualMemoryInformation(long ptr long ptr long ptr)
