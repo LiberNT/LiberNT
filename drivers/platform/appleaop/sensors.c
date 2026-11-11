@@ -151,7 +151,7 @@ AopSensorAttach(
     PAOP_SENSOR Entry = &Device->Sensors[Sensor];
     KIRQL OldIrql;
 
-    ASSERT(Sensor < AOP_SENSORS);
+    ASSERT(Sensor < AOP_FUNCTIONS);
     KeAcquireSpinLock(&Device->SensorLock, &OldIrql);
     Entry->Service = Service;
     Entry->ReportOffset = ReportOffset;
@@ -260,8 +260,8 @@ AopSensorsSetup(
         }
         else if (!strcmp(Name, "aop-audio"))
         {
-            /* TODO: expose the microphones as a PortCls WaveRT capture endpoint over the AOP ADMAC channel */
-            DbgPrint("appleaop: microphone service found, no capture endpoint yet\n");
+            AopSensorAttach(Device, AOP_FUNCTION_AUDIO, (LONG)Index, 0);
+            DbgPrint("appleaop: microphone service ready\n");
         }
     }
 }

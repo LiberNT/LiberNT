@@ -1,0 +1,16 @@
+/*
+ * PROJECT:     LiberNT Apple AOP Microphone Driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <windows.h>
+#include <ntverp.h>
+
+#define VER_FILETYPE                    VFT_DRV
+#define VER_FILESUBTYPE                 VFT2_DRV_SOUND
+#define VER_FILEDESCRIPTION_STR         "Apple AOP Microphone Driver"
+#define VER_INTERNALNAME_STR            "appleaopmic"
+#define VER_ORIGINALFILENAME_STR        "appleaopmic.sys"
+
+#include "common.ver"

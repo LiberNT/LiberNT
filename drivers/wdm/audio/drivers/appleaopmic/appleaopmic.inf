@@ -1,0 +1,88 @@
+; PROJECT:     LiberNT Apple AOP Microphone Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=MEDIA
+ClassGuid={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%LiberNT%
+DriverVer=11/11/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+AppleAopMic.CopyFiles=12
+
+[Manufacturer]
+%LiberNT%=AppleAopMicModels,NTARM64
+
+[AppleAopMicModels.NTARM64]
+%AppleAopMic.DeviceDesc%=AppleAopMic_Install,APPLEAOP\AUDIO
+
+[AppleAopMic_Install]
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+CopyFiles=AppleAopMic.CopyFiles
+AddReg=AppleAopMic.AddReg
+
+[AppleAopMic_Install.Services]
+AddService=appleaopmic,0x00000002,AppleAopMic_Service
+
+[AppleAopMic_Service]
+DisplayName=%AppleAopMic.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\appleaopmic.sys
+
+[AppleAopMic.CopyFiles]
+appleaopmic.sys
+
+[AppleAopMic.AddReg]
+HKR,,AssociatedFilters,,"wdmaud"
+HKR,,Driver,,appleaopmic.sys
+HKR,Drivers,SubClasses,,"wave,mixer"
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\wave\wdmaud.drv,Description,,%AppleAopMic.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Description,,%AppleAopMic.DeviceDesc%
+
+[AppleAopMic_Install.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,Wave,AppleAopMic.WaveInterface
+AddInterface=%KSCATEGORY_REALTIME%,Wave,AppleAopMic.WaveInterface
+AddInterface=%KSCATEGORY_CAPTURE%,Wave,AppleAopMic.WaveInterface
+AddInterface=%KSCATEGORY_AUDIO%,Topology,AppleAopMic.TopologyInterface
+AddInterface=%KSCATEGORY_TOPOLOGY%,Topology,AppleAopMic.TopologyInterface
+
+[AppleAopMic.WaveInterface]
+AddReg=AppleAopMic.WaveInterface.AddReg
+
+[AppleAopMic.WaveInterface.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AppleAopMic.WaveName%
+
+[AppleAopMic.TopologyInterface]
+AddReg=AppleAopMic.TopologyInterface.AddReg
+
+[AppleAopMic.TopologyInterface.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AppleAopMic.TopologyName%
+
+[SourceDisksNames]
+1=%DiskName%
+
+[SourceDisksFiles]
+appleaopmic.sys=1
+
+[Strings]
+LiberNT="LiberNT"
+AppleAopMic.DeviceDesc="Apple Built-in Microphones"
+AppleAopMic.ServiceDesc="LiberNT Apple AOP Microphone Driver"
+AppleAopMic.WaveName="Microphone Array"
+AppleAopMic.TopologyName="Microphone Array Topology"
+DiskName="LiberNT Installation Media"
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME="{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+KSCATEGORY_TOPOLOGY="{DDA54A40-1E4C-11D1-A050-405705C10000}"

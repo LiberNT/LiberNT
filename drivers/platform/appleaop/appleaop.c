@@ -21,10 +21,11 @@ typedef struct _AOP_CHILD_INFO
     APPLE_AOP_FUNCTION Function;
 } AOP_CHILD_INFO;
 
-static const AOP_CHILD_INFO AopChildInfo[AOP_SENSORS] =
+static const AOP_CHILD_INFO AopChildInfo[AOP_FUNCTIONS] =
 {
     { L"APPLEAOP\\ALS", L"Apple ambient light sensor", AppleAopAmbientLight },
     { L"APPLEAOP\\LAS", L"Apple lid angle sensor", AppleAopLidAngle },
+    { L"APPLEAOP\\AUDIO", L"Apple built-in microphones", AppleAopMicrophones },
 };
 
 static const AOP_CONFIG AopConfigs[] =
@@ -253,7 +254,7 @@ AopCreateChildren(
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     ExAcquireFastMutex(&Device->ChildLock);
-    for (Sensor = 0; Sensor < AOP_SENSORS; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS; ++Sensor)
     {
         KeAcquireSpinLock(&Device->SensorLock, &OldIrql);
         Listening = Device->Sensors[Sensor].Listening;
@@ -343,7 +344,7 @@ AopStopHardware(
         Device->Thread = NULL;
     }
     KeAcquireSpinLock(&Device->SensorLock, &OldIrql);
-    for (Sensor = 0; Sensor < AOP_SENSORS; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS; ++Sensor)
     {
         Device->Sensors[Sensor].Listening = FALSE;
         Device->Sensors[Sensor].Callback = NULL;
@@ -494,7 +495,7 @@ AopChildParent(
 {
     PAOP_CHILD Child = Context;
 
-    ASSERT(Child && Child->Type != AOP_TYPE_BUS && Child->Sensor < AOP_SENSORS);
+    ASSERT(Child && Child->Type != AOP_TYPE_BUS && Child->Sensor < AOP_FUNCTIONS);
     return Child->Parent;
 }
 
@@ -676,7 +677,7 @@ AopChildPnp(
     NTSTATUS Status = Irp->IoStatus.Status;
     BOOLEAN Delete;
 
-    ASSERT(Child->Self == DeviceObject && Child->Sensor < AOP_SENSORS);
+    ASSERT(Child->Self == DeviceObject && Child->Sensor < AOP_FUNCTIONS);
     switch (Stack->MinorFunction)
     {
         case IRP_MN_QUERY_ID:
@@ -810,7 +811,7 @@ AopBusRelations(
     ULONG Count = Previous ? Previous->Count : 0, Sensor;
 
     ExAcquireFastMutex(&Device->ChildLock);
-    Relations = ExAllocatePoolWithTag(PagedPool, FIELD_OFFSET(DEVICE_RELATIONS, Objects[Count + AOP_SENSORS + 1]),
+    Relations = ExAllocatePoolWithTag(PagedPool, FIELD_OFFSET(DEVICE_RELATIONS, Objects[Count + AOP_FUNCTIONS + 1]),
                                       AOP_TAG);
     if (!Relations)
     {
@@ -820,7 +821,7 @@ AopBusRelations(
     Relations->Count = Count;
     if (Count)
         RtlCopyMemory(Relations->Objects, Previous->Objects, Count * sizeof(PDEVICE_OBJECT));
-    for (Sensor = 0; Sensor < AOP_SENSORS && Device->ChildrenReported; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS && Device->ChildrenReported; ++Sensor)
     {
         if (!Device->Sensors[Sensor].Child)
             continue;
@@ -839,19 +840,19 @@ VOID
 AopDeleteChildren(
     _Inout_ PAOP_DEVICE Device)
 {
-    PDEVICE_OBJECT Children[AOP_SENSORS];
+    PDEVICE_OBJECT Children[AOP_FUNCTIONS];
     PAOP_CHILD Child;
     ULONG Sensor;
 
     ExAcquireFastMutex(&Device->ChildLock);
     Device->ChildrenReported = FALSE;
-    for (Sensor = 0; Sensor < AOP_SENSORS; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS; ++Sensor)
     {
         Children[Sensor] = Device->Sensors[Sensor].Child;
         Device->Sensors[Sensor].Child = NULL;
     }
     ExReleaseFastMutex(&Device->ChildLock);
-    for (Sensor = 0; Sensor < AOP_SENSORS; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS; ++Sensor)
     {
         if (!Children[Sensor])
             continue;
@@ -1023,7 +1024,7 @@ AopAddDevice(
     ExInitializeFastMutex(&Device->Lock);
     ExInitializeFastMutex(&Device->ChildLock);
     KeInitializeSpinLock(&Device->SensorLock);
-    for (Sensor = 0; Sensor < AOP_SENSORS; ++Sensor)
+    for (Sensor = 0; Sensor < AOP_FUNCTIONS; ++Sensor)
         Device->Sensors[Sensor].Service = -1;
     Device->LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, Pdo);
     if (!Device->LowerDevice)

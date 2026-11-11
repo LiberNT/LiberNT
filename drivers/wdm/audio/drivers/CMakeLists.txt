@@ -1,6 +1,7 @@
 
 add_subdirectory(ac97)
 if(ARCH STREQUAL "arm64")
+    add_subdirectory(appleaopmic)
     add_subdirectory(appleaudio)
 endif()
 add_subdirectory(CMIDriver)

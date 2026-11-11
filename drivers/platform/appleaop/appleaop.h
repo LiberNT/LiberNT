@@ -66,6 +66,8 @@
 #define AOP_SENSOR_ALS                  0
 #define AOP_SENSOR_LAS                  1
 #define AOP_SENSORS                     2
+#define AOP_FUNCTION_AUDIO              2
+#define AOP_FUNCTIONS                   3
 
 #pragma pack(push, 1)
 typedef struct _AFK_QE_HEADER
@@ -222,7 +224,7 @@ typedef struct _AOP_DEVICE
     volatile LONG ServicesPending;
 
     KSPIN_LOCK SensorLock;
-    AOP_SENSOR Sensors[AOP_SENSORS];
+    AOP_SENSOR Sensors[AOP_FUNCTIONS];
     FAST_MUTEX ChildLock;
     BOOLEAN ChildrenReported;
 
