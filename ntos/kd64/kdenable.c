@@ -123,6 +123,9 @@ KdDisableDebuggerWithLock(
     if (KdPitchDebugger || !KdpDebuggerStructuresInitialized)
         return STATUS_DEBUGGER_INACTIVE;
 
+    if (KdBlockEnable)
+        return STATUS_ACCESS_DENIED;
+
     Status = KdpAllowDisable();
     if (!NT_SUCCESS(Status))
         return Status;
