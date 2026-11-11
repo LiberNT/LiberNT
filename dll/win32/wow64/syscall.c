@@ -1313,7 +1313,7 @@ static BOOL init_native_thread( CONTEXT *context )
     XSAVE_FORMAT fxsave;
     IMAGE_NT_HEADERS *nt;
     IMAGE_NT_HEADERS32 *nt32;
-    ULONG_PTR pc = host_context_pc( context ), start, arg, top;
+    ULONG_PTR pc = host_context_pc( context ), start, arg, top, stack_top;
     SIZE_T size, reserve, commit, guard_size = 0x1000;
     void *base = NULL, *commit_base, *guard_base;
 
@@ -1348,7 +1348,12 @@ static BOOL init_native_thread( CONTEXT *context )
     if (NtAllocateVirtualMemory( GetCurrentProcess(), &guard_base, 0, &guard_size, MEM_COMMIT, PAGE_READWRITE | PAGE_GUARD ))
         NtTerminateThread( GetCurrentThread(), STATUS_NO_MEMORY );
 
-    cpu = (WOW64_CPU_INIT *)((top - sizeof(*cpu)) & ~15);
+    /* The CPU area the kernel placed at the top of the native stack stays the thread's own */
+    cpu = NtCurrentTeb()->TlsSlots[WOW64_TLS_CPURESERVED];
+    if (cpu && cpu->Cpu.Machine == IMAGE_FILE_MACHINE_I386)
+        stack_top = top & ~15;
+    else
+        stack_top = (ULONG_PTR)(cpu = (WOW64_CPU_INIT *)((top - sizeof(*cpu)) & ~15));
     cpu->Cpu.Machine = IMAGE_FILE_MACHINE_I386;
     cpu->Context.ContextFlags = WOW64_CONTEXT_ALL;
     cpu->Context.FloatSave.ControlWord = 0x27f;
@@ -1360,7 +1365,7 @@ static BOOL init_native_thread( CONTEXT *context )
     cpu->Context.Eip = pLdrSystemDllInitBlock->pRtlUserThreadStart;
     cpu->Context.Eax = start;
     cpu->Context.Ebx = arg;
-    cpu->Context.Esp = PtrToUlong( cpu ) - 3 * sizeof(ULONG);
+    cpu->Context.Esp = stack_top - 3 * sizeof(ULONG);
     cpu->Context.EFlags = 0x202;
     cpu->Context.SegCs = 0x23;
     cpu->Context.SegDs = 0x2b;
@@ -1369,7 +1374,7 @@ static BOOL init_native_thread( CONTEXT *context )
     cpu->Context.SegGs = 0x2b;
     cpu->Context.SegSs = 0x2b;
 
-    teb32->Tib.StackBase = PtrToUlong( cpu );
+    teb32->Tib.StackBase = stack_top;
     teb32->Tib.StackLimit = PtrToUlong( commit_base );
     teb32->DeallocationStack = PtrToUlong( base );
     NtCurrentTeb()->TlsSlots[WOW64_TLS_CPURESERVED] = cpu;
