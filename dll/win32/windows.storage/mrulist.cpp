@@ -171,7 +171,7 @@ STDMETHODIMP CMruBase::QueryInterface(REFIID riid, void **ppvObj)
         AddRef();
         return S_OK;
     }
-    ERR("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
+    TRACE("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
     return E_NOINTERFACE;
 }
 
@@ -1112,7 +1112,7 @@ STDMETHODIMP CMruPidlList::QueryInterface(REFIID riid, void **ppvObj)
         return S_OK;
     }
 
-    ERR("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
+    TRACE("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
     return E_NOINTERFACE;
 }
 
@@ -1430,7 +1430,7 @@ STDMETHODIMP CMruClassFactory::QueryInterface(REFIID riid, void **ppvObj)
         AddRef();
         return S_OK;
     }
-    ERR("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
+    TRACE("%s: E_NOINTERFACE\n", debugstr_guid(&riid));
     return E_NOINTERFACE;
 }
 
