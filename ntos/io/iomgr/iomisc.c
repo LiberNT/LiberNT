@@ -10,6 +10,33 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _IOP_SYSTEM_THREAD_START
+{
+    PVOID IoObject;
+    PKSTART_ROUTINE StartRoutine;
+    PVOID StartContext;
+} IOP_SYSTEM_THREAD_START, *PIOP_SYSTEM_THREAD_START;
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+static
+VOID
+NTAPI
+IopSystemThreadStart(
+    _In_ PVOID Context)
+{
+    IOP_SYSTEM_THREAD_START Start = *(PIOP_SYSTEM_THREAD_START)Context;
+
+    PAGED_CODE();
+
+    ExFreePoolWithTag(Context, TAG_IO);
+
+    Start.StartRoutine(Start.StartContext);
+
+    ObDereferenceObject(Start.IoObject);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 PEPROCESS
@@ -173,17 +200,41 @@ IoCreateSystemThread(
     _In_ PKSTART_ROUTINE StartRoutine,
     _In_opt_ PVOID StartContext)
 {
+    PIOP_SYSTEM_THREAD_START Start;
+    NTSTATUS Status;
+
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(IoObject);
+    if (IoObject == NULL || StartRoutine == NULL ||
+        (((PDEVICE_OBJECT)IoObject)->Type != IO_TYPE_DEVICE &&
+         ((PDRIVER_OBJECT)IoObject)->Type != IO_TYPE_DRIVER))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
 
-    return PsCreateSystemThread(ThreadHandle,
-                                DesiredAccess,
-                                ObjectAttributes,
-                                ProcessHandle,
-                                ClientId,
-                                StartRoutine,
-                                StartContext);
+    Start = ExAllocatePoolWithTag(PagedPool, sizeof(*Start), TAG_IO);
+    if (Start == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Start->IoObject = IoObject;
+    Start->StartRoutine = StartRoutine;
+    Start->StartContext = StartContext;
+
+    ObReferenceObject(IoObject);
+
+    Status = PsCreateSystemThread(ThreadHandle,
+                                  DesiredAccess,
+                                  ObjectAttributes,
+                                  ProcessHandle,
+                                  ClientId,
+                                  IopSystemThreadStart,
+                                  Start);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(IoObject);
+        ExFreePoolWithTag(Start, TAG_IO);
+    }
+
+    return Status;
 }
 
 NTSTATUS

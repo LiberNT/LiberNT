@@ -183,6 +183,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCreateDeviceSecure.c
     ntos_io/IoCreateFile.c
     ntos_io/IoCreateFileAccessCheck.c
+    ntos_io/IoCreateSystemThread.c
     ntos_io/IoCsqKM.c
     ntos_io/IoDeviceInterface.c
     ntos_io/IoDeviceSecurity.c
