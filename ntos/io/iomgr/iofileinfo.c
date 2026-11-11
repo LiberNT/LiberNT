@@ -1415,7 +1415,7 @@ NtSetInformationFile(
     }
     else if (Status == STATUS_PENDING || !NT_ERROR(Status))
     {
-        KeWaitForSingleObject(&LocalEvent, Executive, KernelMode, FALSE, NULL);
+        IopWaitForLocalRequest(&LocalEvent, Irp, PreviousMode);
         if (Status == STATUS_PENDING) Status = LocalIosb.Status;
 
         if (PreviousMode == KernelMode)

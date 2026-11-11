@@ -260,6 +260,28 @@ IopBeginRequestEitherAccess(
                            TRUE);
 }
 
+VOID
+IopWaitForLocalRequest(
+    _In_ PKEVENT Event,
+    _In_ PIRP Irp,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    BOOLEAN StackSwap;
+    NTSTATUS Status;
+
+    /* The event lives on the caller's stack, which must stay resident during a caller-mode wait */
+    StackSwap = KeSetKernelStackSwapEnable(FALSE);
+
+    Status = KeWaitForSingleObject(Event, Executive, PreviousMode, FALSE, NULL);
+    if (Status == STATUS_ALERTED || Status == STATUS_USER_APC)
+    {
+        IopAbortInterruptedIrp(Event, Irp);
+        KeWaitForSingleObject(Event, Executive, KernelMode, FALSE, NULL);
+    }
+
+    KeSetKernelStackSwapEnable(StackSwap);
+}
+
 static
 NTSTATUS
 IopIssueRequest(
@@ -312,7 +334,7 @@ IopIssueRequest(
         /* An error the driver gave straight back left the status block alone and signalled nothing */
         if (Status != STATUS_PENDING && NT_ERROR(Status)) return Status;
 
-        KeWaitForSingleObject(&LocalEvent, Executive, KernelMode, FALSE, NULL);
+        IopWaitForLocalRequest(&LocalEvent, Request->Irp, Request->PreviousMode);
         if (Status == STATUS_PENDING) Status = LocalIosb.Status;
 
         if (Request->PreviousMode == KernelMode)
