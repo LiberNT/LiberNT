@@ -175,6 +175,7 @@ KiComputeQpcScale(
 static
 VOID
 KiPublishSystemTimeWithBaseline(
+    _In_ LARGE_INTEGER Interrupt,
     _In_ LARGE_INTEGER System)
 {
     PKUSER_SHARED_DATA Shared = MmWriteableSharedUserData;
@@ -193,6 +194,12 @@ KiPublishSystemTimeWithBaseline(
     Shared->QpcSystemTimeIncrement = (Frequency.QuadPart > 0) ? KiQpcSystemTimeIncrement : 0;
     Shared->QpcSystemTimeIncrementShift = KiQpcSystemTimeIncrementShift;
     KiWriteSystemTime(&Shared->SystemTime, System);
+
+    /* The interrupt time goes with the counter read when the clock wrote it, which user mode measures from */
+    Shared->BaselineInterruptTimeQpc = (ULONGLONG)KiTickSnapshotCounter;
+    Shared->QpcInterruptTimeIncrement = (Frequency.QuadPart > 0) ? KiQpcSystemTimeIncrement : 0;
+    Shared->QpcInterruptTimeIncrementShift = KiQpcSystemTimeIncrementShift;
+    KiWriteSystemTime(&Shared->InterruptTime, Interrupt);
 
     InterlockedIncrement64((volatile LONG64 *)&Shared->TimeUpdateLock);
 }
@@ -510,11 +517,13 @@ KiUpdateSharedTime(
 
     Interrupt.QuadPart = (LONGLONG)InterruptTime;
     KiWriteInterruptTime(Interrupt);
-    KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, InterruptTime),
-                        Interrupt);
 
     if (!UpdateSystem)
+    {
+        KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, InterruptTime),
+                            Interrupt);
         return InterruptTime;
+    }
 
     /*
      * System time moves by the adjusted amount, which is how a slew towards an
@@ -525,7 +534,7 @@ KiUpdateSharedTime(
                                  (KiTimeAdjustmentEnabled ? KeTimeAdjustment
                                                           : Increment));
     KiWriteSystemTime(&KiSystemTimeValue, System);
-    KiPublishSystemTimeWithBaseline(System);
+    KiPublishSystemTimeWithBaseline(Interrupt, System);
 
     /* The tick count only advances on a whole default-length period */
     if (KeMaximumIncrement == 0)
@@ -1003,12 +1012,10 @@ KiResumeClockTime(
 
     Interrupt.QuadPart = (LONGLONG)(KiGetInterruptTime() + SleepTime);
     KiWriteInterruptTime(Interrupt);
-    KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, InterruptTime),
-                        Interrupt);
 
     System.QuadPart = (LONGLONG)(KiGetSystemTime() + SleepTime);
     KiWriteSystemTime(&KiSystemTimeValue, System);
-    KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, SystemTime), System);
+    KiPublishSystemTimeWithBaseline(Interrupt, System);
 
     KiInterruptTimeBias += SleepTime;
     KiInterruptTimeFrozen = FALSE;

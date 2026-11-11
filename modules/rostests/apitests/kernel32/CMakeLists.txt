@@ -163,6 +163,7 @@ list(APPEND SOURCE
     ExitedClientId.c
     SleepTickRounding.c
     SwitchToThreadPriority.c
+    QueryInterruptTimePrecise.c
     ThreadPowerThrottling.c
     ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
