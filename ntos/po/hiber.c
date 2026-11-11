@@ -1066,6 +1066,35 @@ PopHiberQueueStart(
     ExQueueWorkItem(&PopHiber.WorkItem, DelayedWorkQueue);
 }
 
+NTSTATUS
+NTAPI
+PopReserveHiberFileFromCaller(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    BOOLEAN Enable;
+
+    PAGED_CODE();
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(BOOLEAN) ||
+        OutputBuffer != NULL || OutputBufferLength != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (PreviousMode != KernelMode &&
+        !SeSinglePrivilegeCheck(SeCreatePagefilePrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    Enable = *(volatile BOOLEAN *)InputBuffer;
+    return PopHiberReserve(Enable != FALSE);
+}
+
 VOID
 NTAPI
 PopHiberInitialize(VOID)

@@ -792,6 +792,10 @@ PoInitSystem(
 
     if (BootPhase == 2)
     {
+        /* The hibernation file goes on the boot volume, which the I/O system has only now brought up */
+        if (KeLoaderBlock != NULL)
+            PopHiberCaptureLoaderBlock(KeLoaderBlock);
+
         PopInitializeButtons();
         return TRUE;
     }
@@ -1181,7 +1185,10 @@ NtPowerInformation(
         if (PreviousMode != KernelMode)
         {
             if (InputBufferLength != 0)
-                ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG));
+                ProbeForRead(InputBuffer,
+                             InputBufferLength,
+                             (PowerInformationLevel == SystemReserveHiberFile) ?
+                                 TYPE_ALIGNMENT(BOOLEAN) : sizeof(ULONG));
             if (OutputBufferLength != 0)
                 ProbeForWrite(OutputBuffer,
                               OutputBufferLength,
@@ -1285,6 +1292,14 @@ NtPowerInformation(
             case SystemPowerLoggingEntry:
                 /* TODO: what a kernel caller writes through this level is not sourced */
                 Status = (PreviousMode != KernelMode) ? STATUS_ACCESS_DENIED : STATUS_NOT_IMPLEMENTED;
+                break;
+
+            case SystemReserveHiberFile:
+                Status = PopReserveHiberFileFromCaller(PreviousMode,
+                                                       InputBuffer,
+                                                       InputBufferLength,
+                                                       OutputBuffer,
+                                                       OutputBufferLength);
                 break;
 
             case LastSleepTime:

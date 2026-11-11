@@ -530,6 +530,16 @@ PopHiberReserve(
 
 NTSTATUS
 NTAPI
+PopReserveHiberFileFromCaller(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
 PopHiberPrepare(
     _Out_ PVOID *SystemContext
 );

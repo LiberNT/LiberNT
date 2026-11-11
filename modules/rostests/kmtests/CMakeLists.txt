@@ -565,6 +565,7 @@ list(APPEND KMTEST_SOURCE
     ndis/NdisSgDma_user.c
     ntos_po/BatteryClassNotify_user.c
     ntos_po/PoDisplayState_user.c
+    ntos_po/PoHibernate_user.c
     ntos_po/PoSleepInformation_user.c
     ntos_po/PoIrp_user.c
     ntos_po/PoExecutionState_user.c
