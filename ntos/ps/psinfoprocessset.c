@@ -668,6 +668,13 @@ NtSetInformationProcess(
                                               sizeof(AccessToken));
             if (!NT_SUCCESS(Status)) break;
 
+            /* The record names the token by handle, and no handle names none */
+            if (AccessToken.Token == NULL)
+            {
+                Status = STATUS_INVALID_HANDLE;
+                break;
+            }
+
             /*
              * A token may be given to a process only while it is still
              * starting, before anything in it has run with the old one.
