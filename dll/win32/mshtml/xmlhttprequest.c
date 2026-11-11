@@ -1775,6 +1775,15 @@ static const tid_t HTMLXMLHttpRequest_iface_tids[] = {
     IHTMLXMLHttpRequest2_tid,
     0
 };
+static const dispex_constant_t xhr_constants[] = {
+    {L"UNSENT",           0},
+    {L"OPENED",           1},
+    {L"HEADERS_RECEIVED", 2},
+    {L"LOADING",          3},
+    {L"DONE",             4},
+    {NULL}
+};
+
 dispex_static_data_t XMLHttpRequest_dispex = {
     .id               = OBJID_XMLHttpRequest,
     .init_constructor = HTMLXMLHttpRequestFactory_init,
@@ -1782,6 +1791,7 @@ dispex_static_data_t XMLHttpRequest_dispex = {
     .disp_tid         = DispHTMLXMLHttpRequest_tid,
     .iface_tids       = HTMLXMLHttpRequest_iface_tids,
     .init_info        = HTMLXMLHttpRequest_init_dispex_info,
+    .constants        = xhr_constants,
 };
 
 

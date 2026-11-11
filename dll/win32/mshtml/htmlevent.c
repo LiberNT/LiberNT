@@ -3615,11 +3615,19 @@ static const tid_t Event_iface_tids[] = {
     0
 };
 
+static const dispex_constant_t event_constants[] = {
+    {L"CAPTURING_PHASE", DEP_CAPTURING_PHASE},
+    {L"AT_TARGET",       DEP_AT_TARGET},
+    {L"BUBBLING_PHASE",  DEP_BUBBLING_PHASE},
+    {NULL}
+};
+
 dispex_static_data_t Event_dispex = {
     .id         = OBJID_Event,
     .vtbl       = &DOMEvent_dispex_vtbl,
     .disp_tid   = DispDOMEvent_tid,
     .iface_tids = Event_iface_tids,
+    .constants  = event_constants,
 };
 
 static const dispex_static_data_vtbl_t DOMUIEvent_dispex_vtbl = {
@@ -3687,6 +3695,16 @@ static const tid_t KeyboardEvent_iface_tids[] = {
     0
 };
 
+static const dispex_constant_t keyboard_event_constants[] = {
+    {L"DOM_KEY_LOCATION_STANDARD", 0},
+    {L"DOM_KEY_LOCATION_LEFT",     1},
+    {L"DOM_KEY_LOCATION_RIGHT",    2},
+    {L"DOM_KEY_LOCATION_NUMPAD",   3},
+    {L"DOM_KEY_LOCATION_MOBILE",   4},
+    {L"DOM_KEY_LOCATION_JOYSTICK", 5},
+    {NULL}
+};
+
 dispex_static_data_t KeyboardEvent_dispex = {
     .id           = OBJID_KeyboardEvent,
     .prototype_id = OBJID_UIEvent,
@@ -3694,6 +3712,7 @@ dispex_static_data_t KeyboardEvent_dispex = {
     .disp_tid     = DispDOMKeyboardEvent_tid,
     .iface_tids   = KeyboardEvent_iface_tids,
     .init_info    = KeyboardEvent_init_dispex_info,
+    .constants    = keyboard_event_constants,
 };
 
 static void DOMPageTransitionEvent_init_dispex_info(dispex_data_t *info, compat_mode_t mode)

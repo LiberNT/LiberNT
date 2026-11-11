@@ -1242,11 +1242,34 @@ static const dispex_static_data_vtbl_t Node_dispex_vtbl = {
     .unlink          = HTMLDOMNode_unlink
 };
 
+static const dispex_constant_t node_constants[] = {
+    {L"ELEMENT_NODE",                              1},
+    {L"ATTRIBUTE_NODE",                            2},
+    {L"TEXT_NODE",                                 3},
+    {L"CDATA_SECTION_NODE",                        4},
+    {L"ENTITY_REFERENCE_NODE",                     5},
+    {L"ENTITY_NODE",                               6},
+    {L"PROCESSING_INSTRUCTION_NODE",               7},
+    {L"COMMENT_NODE",                              8},
+    {L"DOCUMENT_NODE",                             9},
+    {L"DOCUMENT_TYPE_NODE",                        10},
+    {L"DOCUMENT_FRAGMENT_NODE",                    11},
+    {L"NOTATION_NODE",                             12},
+    {L"DOCUMENT_POSITION_DISCONNECTED",            0x01},
+    {L"DOCUMENT_POSITION_PRECEDING",               0x02},
+    {L"DOCUMENT_POSITION_FOLLOWING",               0x04},
+    {L"DOCUMENT_POSITION_CONTAINS",                0x08},
+    {L"DOCUMENT_POSITION_CONTAINED_BY",            0x10},
+    {L"DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC", 0x20},
+    {NULL}
+};
+
 dispex_static_data_t Node_dispex = {
     .id         = OBJID_Node,
     .vtbl       = &Node_dispex_vtbl,
     .disp_tid   = IHTMLDOMNode_tid,
     .init_info  = HTMLDOMNode_init_dispex_info,
+    .constants  = node_constants,
 };
 
 static HRESULT create_node(HTMLDocumentNode *doc, nsIDOMNode *nsnode, HTMLDOMNode **ret)

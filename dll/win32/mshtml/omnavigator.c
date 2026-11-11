@@ -2006,11 +2006,20 @@ static void PerformanceNavigation_init_dispex_info(dispex_data_t *info, compat_m
     dispex_info_add_interface(info, IHTMLPerformanceNavigation_tid, mode < COMPAT_MODE_IE9 ? hooks : ie9_hooks);
 }
 
+static const dispex_constant_t performance_navigation_constants[] = {
+    {L"TYPE_NAVIGATE",     0},
+    {L"TYPE_RELOAD",       1},
+    {L"TYPE_BACK_FORWARD", 2},
+    {L"TYPE_RESERVED",     255},
+    {NULL}
+};
+
 dispex_static_data_t PerformanceNavigation_dispex = {
     .id         = OBJID_PerformanceNavigation,
     .vtbl       = &HTMLPerformanceNavigation_dispex_vtbl,
     .disp_tid   = IHTMLPerformanceNavigation_tid,
     .init_info  = PerformanceNavigation_init_dispex_info,
+    .constants  = performance_navigation_constants,
 };
 
 typedef struct {
