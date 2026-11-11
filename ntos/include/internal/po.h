@@ -456,6 +456,33 @@ PopQuerySleepDisableReasons(
     _In_ ULONG OutputBufferLength
 );
 
+NTSTATUS
+NTAPI
+PopQuerySleepLogging(
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopQuerySleepTime(
+    _In_ POWER_INFORMATION_LEVEL Level,
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopSetPowerStateHandler(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
 extern volatile LONG64 PopLastSleepTime;
 extern volatile LONG64 PopLastWakeTime;
 

@@ -1224,6 +1224,33 @@ NtPowerInformation(
                                                      OutputBufferLength);
                 break;
 
+            case SystemPowerStateHandler:
+                Status = PopSetPowerStateHandler(PreviousMode,
+                                                 InputBuffer,
+                                                 InputBufferLength,
+                                                 OutputBuffer,
+                                                 OutputBufferLength);
+                break;
+
+            case SystemPowerStateLogging:
+                Status = PopQuerySleepLogging(InputBuffer,
+                                              OutputBuffer,
+                                              OutputBufferLength);
+                break;
+
+            case SystemPowerLoggingEntry:
+                /* TODO: what a kernel caller writes through this level is not sourced */
+                Status = (PreviousMode != KernelMode) ? STATUS_ACCESS_DENIED : STATUS_NOT_IMPLEMENTED;
+                break;
+
+            case LastSleepTime:
+            case LastWakeTime:
+                Status = PopQuerySleepTime(PowerInformationLevel,
+                                           InputBuffer,
+                                           OutputBuffer,
+                                           OutputBufferLength);
+                break;
+
             default:
                 /* TODO: the remaining levels are not answered for */
                 Status = STATUS_NOT_IMPLEMENTED;

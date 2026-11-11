@@ -256,6 +256,68 @@ PopQuerySleepDisableReasons(
 
 NTSTATUS
 NTAPI
+PopQuerySleepLogging(
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    PAGED_CODE();
+
+    if (InputBuffer != NULL || OutputBuffer == NULL || OutputBufferLength == 0)
+        return STATUS_INVALID_PARAMETER;
+
+    return PopQuerySleepDisableReasons(OutputBuffer, OutputBufferLength);
+}
+
+NTSTATUS
+NTAPI
+PopQuerySleepTime(
+    _In_ POWER_INFORMATION_LEVEL Level,
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    ULONGLONG Time;
+
+    if (InputBuffer != NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (OutputBuffer == NULL || OutputBufferLength < sizeof(Time))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Time = (ULONGLONG)InterlockedCompareExchange64((Level == LastSleepTime) ? &PopLastSleepTime : &PopLastWakeTime,
+                                                   0,
+                                                   0);
+    RtlCopyMemory(OutputBuffer, &Time, sizeof(Time));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PopSetPowerStateHandler(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    POWER_STATE_HANDLER Handler;
+
+    if (PreviousMode != KernelMode)
+        return STATUS_ACCESS_DENIED;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(Handler) ||
+        OutputBuffer != NULL || OutputBufferLength != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    RtlCopyMemory(&Handler, InputBuffer, sizeof(Handler));
+    return PopRegisterPowerStateHandler(&Handler);
+}
+
+NTSTATUS
+NTAPI
 PopRegisterPowerStateHandler(
     _In_ PPOWER_STATE_HANDLER PowerStateHandler)
 {
