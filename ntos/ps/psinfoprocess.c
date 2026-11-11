@@ -1403,11 +1403,8 @@ NtQueryInformationProcess(
             break;
 
         case ProcessSubsystemInformation:
-            /*
-             * The native subsystem, which is what a process runs under
-             * unless another one claimed it.
-             */
-            Value = 0;
+            Value = Process->PicoCreated ? SubsystemInformationTypeWSL :
+                                           SubsystemInformationTypeWin32;
 
             Status = PspReturnInformation(ProcessInformation,
                                           ProcessInformationLength,

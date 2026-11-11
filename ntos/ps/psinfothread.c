@@ -559,8 +559,8 @@ NtQueryInformationThread(
             break;
 
         case ThreadSubsystemInformation:
-            /* The native subsystem, which is what a thread runs under */
-            Value = 0;
+            Value = THREAD_TO_PROCESS(Thread)->PicoCreated ? SubsystemInformationTypeWSL :
+                                                             SubsystemInformationTypeWin32;
 
             Status = PspReturnThreadInformation(ThreadInformation,
                                                 ThreadInformationLength,

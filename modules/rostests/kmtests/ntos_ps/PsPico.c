@@ -396,6 +396,68 @@ TestPicoProcessShape(
 
 static
 VOID
+TestPicoSubsystem(
+    _In_ HANDLE ProcessHandle,
+    _In_ HANDLE ThreadHandle)
+{
+    ULONG Subsystem;
+    ULONG Large[2];
+    NTSTATUS Status;
+    ULONG Length;
+
+    Subsystem = MaxSubsystemInformationType;
+    Status = ZwQueryInformationProcess(ProcessHandle,
+                                       ProcessSubsystemInformation,
+                                       &Subsystem,
+                                       sizeof(Subsystem),
+                                       &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Subsystem, (ULONG)SubsystemInformationTypeWSL);
+
+    Status = ZwQueryInformationProcess(ProcessHandle,
+                                       ProcessSubsystemInformation,
+                                       Large,
+                                       sizeof(Large),
+                                       &Length);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+
+    Status = ZwQueryInformationThread(ThreadHandle,
+                                      ThreadSubsystemInformation,
+                                      Large,
+                                      sizeof(Large),
+                                      &Length);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+
+    Subsystem = MaxSubsystemInformationType;
+    Status = ZwQueryInformationThread(ThreadHandle,
+                                      ThreadSubsystemInformation,
+                                      &Subsystem,
+                                      sizeof(Subsystem),
+                                      &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Subsystem, (ULONG)SubsystemInformationTypeWSL);
+
+    Subsystem = MaxSubsystemInformationType;
+    Status = ZwQueryInformationProcess(NtCurrentProcess(),
+                                       ProcessSubsystemInformation,
+                                       &Subsystem,
+                                       sizeof(Subsystem),
+                                       &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Subsystem, (ULONG)SubsystemInformationTypeWin32);
+
+    Subsystem = MaxSubsystemInformationType;
+    Status = ZwQueryInformationThread(NtCurrentThread(),
+                                      ThreadSubsystemInformation,
+                                      &Subsystem,
+                                      sizeof(Subsystem),
+                                      &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Subsystem, (ULONG)SubsystemInformationTypeWin32);
+}
+
+static
+VOID
 TestPicoStartRecord(
     _In_ PPICO_TEST_THREAD Record,
     _In_ PEPROCESS Process)
@@ -613,6 +675,8 @@ START_TEST(PsPico)
         ObDereferenceObject(Thread);
     }
     ok_eq_pointer(PsPicoGetProcessContext(Process), NULL);
+
+    TestPicoSubsystem(ProcessHandle, ThreadHandle);
 
 #if defined(_M_AMD64)
     ok_eq_long(SystemCalls, 1L);
