@@ -71,6 +71,25 @@ static BOOL ReadValue(PCWSTR Name, PDWORD Value)
     return Error == ERROR_SUCCESS && Type == REG_DWORD;
 }
 
+static BOOL ChildStarted(DEVINST Bus, DWORD Timeout)
+{
+    ULONG Status = 0, Problem = 0;
+    DWORD Start = GetTickCount();
+    DEVINST Child;
+
+    do
+    {
+        if (CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS && CM_Get_DevNode_Status(&Status, &Problem, Child, 0) == CR_SUCCESS &&
+            (Status & DN_STARTED))
+        {
+            return TRUE;
+        }
+        Sleep(10);
+    } while (GetTickCount() - Start < Timeout);
+
+    return FALSE;
+}
+
 static BOOL InstallChild(PCWSTR InfPath)
 {
     BOOL Reboot = FALSE;
@@ -207,8 +226,8 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
     ok(Status & DN_STARTED, "The child did not come back when its bus reported it again (status 0x%lx)\n", Status);
 }
 
-/* An uninstalled child its bus still reports is set up again when user mode rescans the devices, as Windows 11
- * does; the fixture then installs it again for the next checks */
+/* An uninstalled child its bus still reports is set up and installed again when user mode rescans the devices,
+ * as Windows 11 does; the wait only bounds the installation */
 static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
@@ -243,7 +262,9 @@ static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
        !wcscmp(HardwareIds, L"KMTEST\\FILTERREQCHILD"),
        "The uninstalled child was not set up again on a rescan\n");
 
-    ok(InstallChild(InfPath), "Installing the child again failed\n");
+    ok(ChildStarted(Bus, 1000), "The uninstalled child was not installed again on a rescan\n");
+    if (!ChildStarted(Bus, 0))
+        ok(InstallChild(InfPath), "Installing the child again failed\n");
 }
 
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
