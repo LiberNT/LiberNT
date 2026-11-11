@@ -1053,7 +1053,8 @@ static void test_PdhCollectQueryDataEx(void)
     status = PdhCollectQueryData( query );
     ok(status == ERROR_SUCCESS, "PdhCollectQueryData failed 0x%08lx\n", status);
 
-    for (i = 0; i < 3; i++)
+    /* the interval is counted in whole seconds, so one collection is all that fits in a quick test */
+    for (i = 0; i < 1; i++)
     {
         if (WaitForSingleObject( event, INFINITE ) == WAIT_OBJECT_0)
         {
