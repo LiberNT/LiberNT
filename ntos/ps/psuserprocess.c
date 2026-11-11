@@ -1279,6 +1279,10 @@ NtCreateUserProcess(
     if (Info.Size != sizeof(PS_CREATE_INFO)) return STATUS_INVALID_PARAMETER;
     if (Info.State != PsCreateInitialState) return STATUS_INVALID_PARAMETER;
 
+    /* The first thread of a process cannot be hidden from its debugger */
+    if ((ThreadFlags & THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER) != 0)
+        return STATUS_INVALID_PARAMETER;
+
     if ((ProcessFlags & ~PROCESS_CREATE_FLAGS_LEGAL_MASK) != 0)
         return STATUS_INVALID_PARAMETER;
 
