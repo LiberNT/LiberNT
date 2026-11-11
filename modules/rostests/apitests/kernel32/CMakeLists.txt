@@ -148,6 +148,7 @@ list(APPEND SOURCE
     TransactedFileApis.c
     TunnelCache.c
     UEFIFirmware.c
+    VolumeMountPoints.c
     WaitFileHandle.c
     WaitForMultipleObjects.c
     WerRegisterFile.c

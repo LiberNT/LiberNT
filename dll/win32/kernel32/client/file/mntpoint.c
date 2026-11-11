@@ -858,8 +858,341 @@ DeleteVolumeMountPointW(IN LPCWSTR lpszVolumeMountPoint)
     return TRUE;
 }
 
+typedef struct _BASEP_REPARSE_POINT_INFORMATION
+{
+    LONGLONG FileReference;
+    ULONG Tag;
+} BASEP_REPARSE_POINT_INFORMATION;
+
+typedef struct _BASEP_FIND_MOUNTED_FOLDER
+{
+    HANDLE ReparseIndex;
+    BOOLEAN Restart;
+    BOOLEAN HaveCurrent;
+    UNICODE_STRING Current;
+} BASEP_FIND_MOUNTED_FOLDER, *PBASEP_FIND_MOUNTED_FOLDER;
+
+static
+VOID
+BasepCloseFindMountedFolder(IN PBASEP_FIND_MOUNTED_FOLDER Find)
+{
+    if (Find->ReparseIndex != NULL)
+    {
+        NtClose(Find->ReparseIndex);
+    }
+
+    RtlFreeUnicodeString(&Find->Current);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Find);
+}
+
+static
+NTSTATUS
+BasepQueryMountedFolderName(IN HANDLE FileHandle,
+                            OUT PUNICODE_STRING Name)
+{
+    PFILE_NAME_INFORMATION NameInfo;
+    IO_STATUS_BLOCK IoStatusBlock;
+    ULONG Size, Length;
+    NTSTATUS Status;
+    PWSTR Buffer;
+
+    Size = FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + MAX_PATH * sizeof(WCHAR);
+    for (;;)
+    {
+        NameInfo = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size);
+        if (NameInfo == NULL)
+        {
+            return STATUS_NO_MEMORY;
+        }
+
+        Status = NtQueryInformationFile(FileHandle, &IoStatusBlock, NameInfo, Size, FileNameInformation);
+        if (Status != STATUS_BUFFER_OVERFLOW ||
+            NameInfo->FileNameLength > MAXUSHORT ||
+            Size >= FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + NameInfo->FileNameLength)
+        {
+            break;
+        }
+
+        Size = FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + NameInfo->FileNameLength;
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NameInfo);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NameInfo);
+        return Status;
+    }
+
+    Buffer = NameInfo->FileName;
+    Length = NameInfo->FileNameLength / sizeof(WCHAR);
+    if (Length != 0 && Buffer[0] == L'\\')
+    {
+        Buffer++;
+        Length--;
+    }
+
+    if (Length == 0 || Length + 2 > UNICODE_STRING_MAX_CHARS)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NameInfo);
+        return STATUS_OBJECT_NAME_INVALID;
+    }
+
+    Name->Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, (Length + 2) * sizeof(WCHAR));
+    if (Name->Buffer == NULL)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, NameInfo);
+        return STATUS_NO_MEMORY;
+    }
+
+    RtlCopyMemory(Name->Buffer, Buffer, Length * sizeof(WCHAR));
+    Name->Buffer[Length] = L'\\';
+    Name->Buffer[Length + 1] = UNICODE_NULL;
+    Name->Length = (USHORT)((Length + 1) * sizeof(WCHAR));
+    Name->MaximumLength = (USHORT)((Length + 2) * sizeof(WCHAR));
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, NameInfo);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+BasepGetMountedFolder(IN HANDLE ReparseIndex,
+                      IN LONGLONG FileReference,
+                      OUT PUNICODE_STRING Name)
+{
+    PREPARSE_DATA_BUFFER ReparseBuffer;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UNICODE_STRING Reference, Target;
+    HANDLE FileHandle;
+    NTSTATUS Status;
+
+    Reference.Length = sizeof(FileReference);
+    Reference.MaximumLength = sizeof(FileReference);
+    Reference.Buffer = (PWSTR)&FileReference;
+    InitializeObjectAttributes(&ObjectAttributes, &Reference, 0, ReparseIndex, NULL);
+    Status = NtOpenFile(&FileHandle, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &ObjectAttributes, &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_OPEN_BY_FILE_ID | FILE_OPEN_REPARSE_POINT | FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    ReparseBuffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+    if (ReparseBuffer == NULL)
+    {
+        NtClose(FileHandle);
+        return STATUS_NO_MEMORY;
+    }
+
+    Status = NtFsControlFile(FileHandle, NULL, NULL, NULL, &IoStatusBlock, FSCTL_GET_REPARSE_POINT,
+                             NULL, 0, ReparseBuffer, MAXIMUM_REPARSE_DATA_BUFFER_SIZE);
+    if (NT_SUCCESS(Status))
+    {
+        Status = STATUS_NOT_A_REPARSE_POINT;
+        if (ReparseBuffer->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT &&
+            FIELD_OFFSET(REPARSE_DATA_BUFFER, MountPointReparseBuffer.PathBuffer) +
+            (ULONG)ReparseBuffer->MountPointReparseBuffer.SubstituteNameOffset +
+            ReparseBuffer->MountPointReparseBuffer.SubstituteNameLength <=
+            FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer) + (ULONG)ReparseBuffer->ReparseDataLength)
+        {
+            Target.Length = ReparseBuffer->MountPointReparseBuffer.SubstituteNameLength;
+            Target.MaximumLength = Target.Length;
+            Target.Buffer = (PWSTR)((PUCHAR)ReparseBuffer->MountPointReparseBuffer.PathBuffer +
+                                    ReparseBuffer->MountPointReparseBuffer.SubstituteNameOffset);
+            if (MOUNTMGR_IS_NT_VOLUME_NAME_WB(&Target))
+            {
+                Status = BasepQueryMountedFolderName(FileHandle, Name);
+            }
+        }
+    }
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, ReparseBuffer);
+    NtClose(FileHandle);
+    return Status;
+}
+
+static
+BOOL
+BasepFindNextMountedFolder(IN PBASEP_FIND_MOUNTED_FOLDER Find)
+{
+    BASEP_REPARSE_POINT_INFORMATION Information;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    while (!Find->HaveCurrent)
+    {
+        Status = NtQueryDirectoryFile(Find->ReparseIndex, NULL, NULL, NULL, &IoStatusBlock,
+                                      &Information, sizeof(Information), FileReparsePointInformation,
+                                      TRUE, NULL, Find->Restart);
+        Find->Restart = FALSE;
+        if (Status == STATUS_NO_MORE_FILES || Status == STATUS_NO_SUCH_FILE)
+        {
+            SetLastError(ERROR_NO_MORE_FILES);
+            return FALSE;
+        }
+
+        if (!NT_SUCCESS(Status))
+        {
+            BaseSetLastNTError(Status);
+            return FALSE;
+        }
+
+        if (Information.Tag != IO_REPARSE_TAG_MOUNT_POINT)
+        {
+            continue;
+        }
+
+        Status = BasepGetMountedFolder(Find->ReparseIndex, Information.FileReference, &Find->Current);
+        if (NT_SUCCESS(Status))
+        {
+            Find->HaveCurrent = TRUE;
+        }
+        else if (Status == STATUS_NO_MEMORY)
+        {
+            BaseSetLastNTError(Status);
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+static
+BOOL
+BasepTakeMountedFolderW(IN PBASEP_FIND_MOUNTED_FOLDER Find,
+                        OUT LPWSTR lpszVolumeMountPoint,
+                        IN DWORD cchBufferLength)
+{
+    if (!BasepFindNextMountedFolder(Find))
+    {
+        return FALSE;
+    }
+
+    if (Find->Current.Length / sizeof(WCHAR) >= cchBufferLength)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return FALSE;
+    }
+
+    RtlCopyMemory(lpszVolumeMountPoint, Find->Current.Buffer, Find->Current.Length + sizeof(UNICODE_NULL));
+    RtlFreeUnicodeString(&Find->Current);
+    Find->HaveCurrent = FALSE;
+    return TRUE;
+}
+
+static
+BOOL
+BasepTakeMountedFolderA(IN PBASEP_FIND_MOUNTED_FOLDER Find,
+                        OUT LPSTR lpszVolumeMountPoint,
+                        IN DWORD cchBufferLength)
+{
+    ANSI_STRING AnsiName;
+    NTSTATUS Status;
+
+    if (!BasepFindNextMountedFolder(Find))
+    {
+        return FALSE;
+    }
+
+    if (BasepUnicodeStringTo8BitSize(&Find->Current) > cchBufferLength)
+    {
+        SetLastError(ERROR_FILENAME_EXCED_RANGE);
+        return FALSE;
+    }
+
+    AnsiName.Buffer = lpszVolumeMountPoint;
+    AnsiName.Length = 0;
+    AnsiName.MaximumLength = (USHORT)min(cchBufferLength, MAXUSHORT);
+    Status = BasepUnicodeStringTo8BitString(&AnsiName, &Find->Current, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    RtlFreeUnicodeString(&Find->Current);
+    Find->HaveCurrent = FALSE;
+    return TRUE;
+}
+
+static
+PBASEP_FIND_MOUNTED_FOLDER
+BasepOpenFindMountedFolder(IN LPCWSTR lpszRootPathName)
+{
+    static const WCHAR ReparseIndex[] = L"$Extend\\$Reparse:$R:$INDEX_ALLOCATION";
+    PBASEP_FIND_MOUNTED_FOLDER Find;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UNICODE_STRING RootName, IndexName;
+    NTSTATUS Status;
+    SIZE_T Length;
+
+    if (lpszRootPathName == NULL)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+
+    Length = wcslen(lpszRootPathName);
+    if (Length == 0 || lpszRootPathName[Length - 1] != L'\\')
+    {
+        BaseSetLastNTError(STATUS_OBJECT_NAME_INVALID);
+        return NULL;
+    }
+
+    if (!RtlDosPathNameToNtPathName_U(lpszRootPathName, &RootName, NULL, NULL))
+    {
+        SetLastError(ERROR_PATH_NOT_FOUND);
+        return NULL;
+    }
+
+    IndexName.Length = 0;
+    IndexName.MaximumLength = RootName.Length + sizeof(ReparseIndex);
+    IndexName.Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, IndexName.MaximumLength);
+    if (IndexName.Buffer == NULL)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, RootName.Buffer);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+
+    RtlAppendUnicodeStringToString(&IndexName, &RootName);
+    if (IndexName.Length == 0 || IndexName.Buffer[IndexName.Length / sizeof(WCHAR) - 1] != L'\\')
+    {
+        RtlAppendUnicodeToString(&IndexName, L"\\");
+    }
+    RtlAppendUnicodeToString(&IndexName, ReparseIndex);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, RootName.Buffer);
+
+    Find = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Find));
+    if (Find == NULL)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, IndexName.Buffer);
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return NULL;
+    }
+
+    InitializeObjectAttributes(&ObjectAttributes, &IndexName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&Find->ReparseIndex, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                        &ObjectAttributes, &IoStatusBlock, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, IndexName.Buffer);
+    if (!NT_SUCCESS(Status))
+    {
+        Find->ReparseIndex = NULL;
+        BasepCloseFindMountedFolder(Find);
+        BaseSetLastNTError(Status);
+        return NULL;
+    }
+
+    Find->Restart = TRUE;
+    return Find;
+}
+
 /*
- * @unimplemented
+ * @implemented
  */
 HANDLE
 WINAPI
@@ -867,12 +1200,28 @@ FindFirstVolumeMountPointW(IN LPCWSTR lpszRootPathName,
                            IN LPWSTR lpszVolumeMountPoint,
                            IN DWORD cchBufferLength)
 {
-    STUB;
-    return 0;
+    PBASEP_FIND_MOUNTED_FOLDER Find;
+    DWORD Error;
+
+    Find = BasepOpenFindMountedFolder(lpszRootPathName);
+    if (Find == NULL)
+    {
+        return INVALID_HANDLE_VALUE;
+    }
+
+    if (!BasepTakeMountedFolderW(Find, lpszVolumeMountPoint, cchBufferLength))
+    {
+        Error = GetLastError();
+        BasepCloseFindMountedFolder(Find);
+        SetLastError(Error);
+        return INVALID_HANDLE_VALUE;
+    }
+
+    return (HANDLE)Find;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 HANDLE
 WINAPI
@@ -880,12 +1229,35 @@ FindFirstVolumeMountPointA(IN LPCSTR lpszRootPathName,
                            IN LPSTR lpszVolumeMountPoint,
                            IN DWORD cchBufferLength)
 {
-    STUB;
-    return 0;
+    PBASEP_FIND_MOUNTED_FOLDER Find;
+    PUNICODE_STRING RootPathNameU;
+    DWORD Error;
+
+    RootPathNameU = Basep8BitStringToStaticUnicodeString(lpszRootPathName);
+    if (RootPathNameU == NULL)
+    {
+        return INVALID_HANDLE_VALUE;
+    }
+
+    Find = BasepOpenFindMountedFolder(RootPathNameU->Buffer);
+    if (Find == NULL)
+    {
+        return INVALID_HANDLE_VALUE;
+    }
+
+    if (!BasepTakeMountedFolderA(Find, lpszVolumeMountPoint, cchBufferLength))
+    {
+        Error = GetLastError();
+        BasepCloseFindMountedFolder(Find);
+        SetLastError(Error);
+        return INVALID_HANDLE_VALUE;
+    }
+
+    return (HANDLE)Find;
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
@@ -893,12 +1265,17 @@ FindNextVolumeMountPointA(IN HANDLE hFindVolumeMountPoint,
                           IN LPSTR lpszVolumeMountPoint,
                           DWORD cchBufferLength)
 {
-    STUB;
-    return 0;
+    if (hFindVolumeMountPoint == NULL || hFindVolumeMountPoint == INVALID_HANDLE_VALUE)
+    {
+        SetLastError(ERROR_INVALID_HANDLE);
+        return FALSE;
+    }
+
+    return BasepTakeMountedFolderA(hFindVolumeMountPoint, lpszVolumeMountPoint, cchBufferLength);
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
@@ -906,19 +1283,30 @@ FindNextVolumeMountPointW(IN HANDLE hFindVolumeMountPoint,
                           IN LPWSTR lpszVolumeMountPoint,
                           DWORD cchBufferLength)
 {
-    STUB;
-    return 0;
+    if (hFindVolumeMountPoint == NULL || hFindVolumeMountPoint == INVALID_HANDLE_VALUE)
+    {
+        SetLastError(ERROR_INVALID_HANDLE);
+        return FALSE;
+    }
+
+    return BasepTakeMountedFolderW(hFindVolumeMountPoint, lpszVolumeMountPoint, cchBufferLength);
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
 BOOL
 WINAPI
 FindVolumeMountPointClose(IN HANDLE hFindVolumeMountPoint)
 {
-    STUB;
-    return 0;
+    if (hFindVolumeMountPoint == NULL || hFindVolumeMountPoint == INVALID_HANDLE_VALUE)
+    {
+        SetLastError(ERROR_INVALID_HANDLE);
+        return FALSE;
+    }
+
+    BasepCloseFindMountedFolder(hFindVolumeMountPoint);
+    return TRUE;
 }
 
 /* EOF */
