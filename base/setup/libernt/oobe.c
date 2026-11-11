@@ -1024,7 +1024,10 @@ wWinMain(
     FirstBootRun = EndFirstBootSetup();
     if (!ComponentsOnly)
         DPRINT1("Disk signature check finished with exit code %lu\n", RunExpandStorage(L"/u"));
-    if (!ComponentsOnly && (IsUnattendedFirstBoot() || HasAutomationPayload()))
+    /* An automated session's tests own BITS and the network, so no component is downloaded under them */
+    if (!ComponentsOnly && HasAutomationPayload())
+        return OOBE_SKIPPED;
+    if (!ComponentsOnly && IsUnattendedFirstBoot())
     {
         InstallUnattendedComponents();
         return OOBE_SKIPPED;
