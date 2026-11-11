@@ -35,6 +35,7 @@ KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoMessageRestart;
+KMT_TESTFUNC Test_IoAffinityPolicy;
 KMT_TESTFUNC Test_IoReadWrite;
 KMT_TESTFUNC Test_ExCpuSetInformation;
 KMT_TESTFUNC Test_ExHandleInformation;
@@ -119,6 +120,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
     { "-IoMessageRestart",            Test_IoMessageRestart },
+    { "-IoAffinityPolicy",            Test_IoAffinityPolicy },
     { "IoReadWrite",                  Test_IoReadWrite },
     { "ExCpuSetInformation",          Test_ExCpuSetInformation },
     { "ExHandleInformation",          Test_ExHandleInformation },

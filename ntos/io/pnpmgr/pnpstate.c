@@ -1037,6 +1037,13 @@ PiProcessRemoval(
     IopDisableDeviceInterfaces(DeviceNode);
     PiReleaseDeviceResources(DeviceNode);
 
+    /* The next start asks the stack again, so that its filters and the device's interrupt policy apply anew */
+    if (DeviceNode->ResourceRequirements != NULL)
+    {
+        ExFreePool(DeviceNode->ResourceRequirements);
+        DeviceNode->ResourceRequirements = NULL;
+    }
+
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
 
     IopQueueDeviceInstallEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL

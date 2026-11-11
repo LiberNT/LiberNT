@@ -12,7 +12,202 @@
 #define NDEBUG
 #include <debug.h>
 
+/* PRIVATE DATA ***************************************************************/
+
+static ULONG IopNextOneCloseProcessor;
+
 /* PRIVATE FUNCTIONS **********************************************************/
+
+static
+KAFFINITY
+IopActiveProcessorAffinity(
+    _In_ ULONG Index)
+{
+    KAFFINITY Active = KeQueryActiveProcessors();
+    ULONG Count = 0;
+    ULONG Bit;
+
+    for (Bit = 0; Bit < sizeof(KAFFINITY) * 8; Bit++)
+    {
+        if (Active & ((KAFFINITY)1 << Bit)) Count++;
+    }
+
+    if (Count == 0) return Active;
+
+    Index %= Count;
+    for (Bit = 0; Bit < sizeof(KAFFINITY) * 8; Bit++)
+    {
+        if ((Active & ((KAFFINITY)1 << Bit)) && Index-- == 0) return (KAFFINITY)1 << Bit;
+    }
+
+    return Active;
+}
+
+static
+BOOLEAN
+IopInterruptPolicyAffinity(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _In_ BOOLEAN Message,
+    _In_ KAFFINITY Allowed,
+    _Out_ PKAFFINITY Affinity)
+{
+    KAFFINITY Targeted;
+
+    *Affinity = Allowed;
+    if (!(Requirement->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED)) return TRUE;
+
+    Targeted = Requirement->u.Interrupt.TargetedProcessors;
+    if (Requirement->u.Interrupt.AffinityPolicy > IrqPolicyAllProcessorsInMachineWhenSteered)
+        return !Message && Targeted != 0;
+
+    if (Requirement->u.Interrupt.AffinityPolicy != IrqPolicySpecifiedProcessors || Targeted == 0)
+        return TRUE;
+
+    if (Targeted & ~KeQueryActiveProcessors()) return !Message;
+
+    *Affinity = Targeted;
+    return TRUE;
+}
+
+static
+BOOLEAN
+IopFindInterruptPolicy(
+    _In_ PDEVICE_NODE DeviceNode,
+    _Out_ PULONG Policy,
+    _Out_ PKAFFINITY Override)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = DeviceNode->ResourceRequirements;
+    PIO_RESOURCE_DESCRIPTOR Descriptor;
+    PIO_RESOURCE_LIST List;
+    ULONG ListIndex;
+    ULONG Index;
+
+    *Policy = IrqPolicyMachineDefault;
+    *Override = 0;
+
+    if (Requirements == NULL) return FALSE;
+
+    List = &Requirements->List[0];
+    for (ListIndex = 0; ListIndex < Requirements->AlternativeLists; ListIndex++)
+    {
+        for (Index = 0; Index < List->Count; Index++)
+        {
+            Descriptor = &List->Descriptors[Index];
+            if (Descriptor->Type != CmResourceTypeInterrupt ||
+                !(Descriptor->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED))
+            {
+                continue;
+            }
+
+            *Policy = Descriptor->u.Interrupt.AffinityPolicy;
+            *Override = Descriptor->u.Interrupt.TargetedProcessors;
+            return TRUE;
+        }
+
+        List = (PIO_RESOURCE_LIST)(List->Descriptors + List->Count);
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+IopReadAffinityOverride(
+    _In_ HANDLE PolicyKey,
+    _Out_ PKAFFINITY Affinity)
+{
+    PKEY_VALUE_FULL_INFORMATION Info;
+    ULONG64 Value = 0;
+    BOOLEAN Valid = FALSE;
+    PUCHAR Data;
+
+    *Affinity = 0;
+
+    if (!NT_SUCCESS(IopGetRegistryValue(PolicyKey, L"AssignmentSetOverride", &Info))) return FALSE;
+
+    Data = (PUCHAR)Info + Info->DataOffset;
+    if (Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+    {
+        Value = *(PULONG)Data;
+        Valid = TRUE;
+    }
+    else if (Info->Type == REG_QWORD && Info->DataLength == sizeof(ULONG64))
+    {
+        Value = *(PULONG64)Data;
+        Valid = TRUE;
+    }
+    else if (Info->Type == REG_BINARY && Info->DataLength != 0 && Info->DataLength <= sizeof(KAFFINITY))
+    {
+        RtlCopyMemory(&Value, Data, Info->DataLength);
+        Valid = TRUE;
+    }
+
+    ExFreePool(Info);
+
+    if (Valid) *Affinity = (KAFFINITY)Value;
+    return Valid;
+}
+
+/* Windows 11 marks every interrupt requirement as soon as the Affinity Policy key exists, even empty */
+static
+VOID
+IopApplyInterruptAffinityPolicy(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    UNICODE_STRING PolicyKeyName = RTL_CONSTANT_STRING(L"Interrupt Management\\Affinity Policy");
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = DeviceNode->ResourceRequirements;
+    PKEY_VALUE_FULL_INFORMATION Info;
+    PIO_RESOURCE_DESCRIPTOR Descriptor;
+    HANDLE DeviceKey, PolicyKey;
+    ULONG Policy = IrqPolicyMachineDefault;
+    PIO_RESOURCE_LIST List;
+    KAFFINITY Override;
+    ULONG ListIndex;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Requirements == NULL) return;
+
+    Status = IoOpenDeviceRegistryKey(DeviceNode->PhysicalDeviceObject,
+                                     PLUGPLAY_REGKEY_DEVICE,
+                                     KEY_READ,
+                                     &DeviceKey);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = IopOpenRegistryKeyEx(&PolicyKey, DeviceKey, &PolicyKeyName, KEY_READ);
+    ZwClose(DeviceKey);
+    if (!NT_SUCCESS(Status)) return;
+
+    IopReadAffinityOverride(PolicyKey, &Override);
+
+    Status = IopGetRegistryValue(PolicyKey, L"DevicePolicy", &Info);
+    if (NT_SUCCESS(Status))
+    {
+        if (Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+            Policy = *(PULONG)((PUCHAR)Info + Info->DataOffset);
+        ExFreePool(Info);
+    }
+
+    ZwClose(PolicyKey);
+
+    List = &Requirements->List[0];
+    for (ListIndex = 0; ListIndex < Requirements->AlternativeLists; ListIndex++)
+    {
+        for (Index = 0; Index < List->Count; Index++)
+        {
+            Descriptor = &List->Descriptors[Index];
+            if (Descriptor->Type != CmResourceTypeInterrupt) continue;
+
+            Descriptor->Flags |= CM_RESOURCE_INTERRUPT_POLICY_INCLUDED;
+            Descriptor->u.Interrupt.AffinityPolicy = (IRQ_DEVICE_POLICY)Policy;
+            Descriptor->u.Interrupt.TargetedProcessors = Override;
+        }
+
+        List = (PIO_RESOURCE_LIST)(List->Descriptors + List->Count);
+    }
+}
 
 static
 VOID
@@ -156,8 +351,12 @@ IopAllocateMessageInterrupt(
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     HAL_MESSAGE_ROUTING_INFO RoutingInfo;
+    KAFFINITY PolicyAffinity;
     ULONG MessageCount = 1;
     NTSTATUS Status;
+
+    if (!IopInterruptPolicyAffinity(Requirement, TRUE, 0, &PolicyAffinity))
+        return STATUS_CONFLICTING_ADDRESSES;
 
     if (Requirement->u.Interrupt.MaximumVector == CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN &&
         Requirement->u.Interrupt.MinimumVector <= CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN)
@@ -181,6 +380,7 @@ IopAllocateMessageInterrupt(
     Descriptor->ShareDisposition = Requirement->ShareDisposition;
     Descriptor->Flags = Requirement->Flags;
     Descriptor->u.MessageInterrupt.Raw.MessageCount = (USHORT)MessageCount;
+    /* FIXME: the raw value is the HAL vector, where Windows 11 gives a message token below CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN */
     Descriptor->u.MessageInterrupt.Raw.Vector = RoutingInfo.Vector;
     Descriptor->u.MessageInterrupt.Raw.Affinity = RoutingInfo.TargetProcessors;
 
@@ -194,6 +394,7 @@ IopPickOneDescriptor(
     _In_opt_ PDEVICE_NODE DeviceNode,
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
+    KAFFINITY LineAffinity = 0;
     ULONG Attempts = 0;
 
     if (Requirement->Type == CmResourceTypeInterrupt &&
@@ -203,6 +404,20 @@ IopPickOneDescriptor(
     }
 
     IopDescribeFromRequirement(Requirement, Descriptor);
+
+    if (Requirement->Type == CmResourceTypeInterrupt)
+    {
+        if (!IopInterruptPolicyAffinity(Requirement,
+                                        FALSE,
+                                        (Requirement->Flags & CM_RESOURCE_INTERRUPT_POLICY_INCLUDED) ?
+                                            (KAFFINITY)-1 : Descriptor->u.Interrupt.Affinity,
+                                        &LineAffinity))
+        {
+            return STATUS_CONFLICTING_ADDRESSES;
+        }
+
+        Descriptor->u.Interrupt.Affinity = LineAffinity;
+    }
 
     if (Requirement->Type == CmResourceTypeDevicePrivate ||
         Requirement->Type == CmResourceTypeConfigData ||
@@ -230,6 +445,7 @@ IopPickOneDescriptor(
             DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
 
     IopDescribeFromRequirement(Requirement, Descriptor);
+    if (Requirement->Type == CmResourceTypeInterrupt) Descriptor->u.Interrupt.Affinity = LineAffinity;
     return STATUS_SUCCESS;
 }
 
@@ -355,6 +571,8 @@ IopFilterResourceRequirements(
 
     PAGED_CODE();
 
+    IopApplyInterruptAffinityPolicy(DeviceNode);
+
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
 
     StackLocation.MajorFunction = IRP_MJ_PNP;
@@ -428,28 +646,69 @@ IopUpdateControlKeyWithResources(
     return Status;
 }
 
+/* The translated and raw affinities Windows 11 reports for a message under each policy */
+static
+KAFFINITY
+IopMessageAffinity(
+    _In_ BOOLEAN Included,
+    _In_ ULONG Policy,
+    _In_ KAFFINITY Override,
+    _In_ ULONG MessageIndex,
+    _Out_ PKAFFINITY RawAffinity)
+{
+    KAFFINITY Affinity;
+
+    if (Included && Policy == IrqPolicySpreadMessagesAcrossAllProcessors)
+        Affinity = IopActiveProcessorAffinity(MessageIndex);
+    else if (Included && Policy == IrqPolicySpecifiedProcessors && Override != 0)
+        Affinity = Override;
+    else if (Included && Policy == IrqPolicyOneCloseProcessor)
+        Affinity = IopActiveProcessorAffinity(IopNextOneCloseProcessor++);
+    else
+        Affinity = KeQueryActiveProcessors();
+
+    if (!Included)
+        *RawAffinity = 0;
+    else if (Policy == IrqPolicySpreadMessagesAcrossAllProcessors)
+        *RawAffinity = Affinity;
+    else
+        *RawAffinity = Override;
+
+    return Affinity;
+}
+
 /* Turns the bus-relative list into the one the processor uses, a copy of its own */
 static
 NTSTATUS
 IopTranslateResourceList(
-    _In_ PCM_RESOURCE_LIST Raw,
+    _In_ PDEVICE_NODE DeviceNode,
+    _Inout_ PCM_RESOURCE_LIST Raw,
     _Out_ PCM_RESOURCE_LIST *Translated)
 {
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR RawDescriptor;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    PCM_FULL_RESOURCE_DESCRIPTOR RawFull;
     PCM_FULL_RESOURCE_DESCRIPTOR Full;
     PHYSICAL_ADDRESS Address;
     PCM_RESOURCE_LIST List;
+    KAFFINITY RawAffinity;
+    KAFFINITY Override;
     KAFFINITY Affinity;
+    ULONG MessageIndex = 0;
     ULONG AddressSpace;
     ULONG ListIndex;
+    ULONG Policy;
     ULONG Index;
     ULONG Vector;
     ULONG Size;
+    BOOLEAN Included;
     KIRQL Irql;
 
     PAGED_CODE();
 
     *Translated = NULL;
+
+    Included = IopFindInterruptPolicy(DeviceNode, &Policy, &Override);
 
     Size = PnpDetermineResourceListSize(Raw);
 
@@ -459,9 +718,11 @@ IopTranslateResourceList(
     RtlCopyMemory(List, Raw, Size);
 
     Full = &List->List[0];
+    RawFull = &Raw->List[0];
     for (ListIndex = 0; ListIndex < List->Count; ListIndex++)
     {
         Descriptor = Full->PartialResourceList.PartialDescriptors;
+        RawDescriptor = RawFull->PartialResourceList.PartialDescriptors;
 
         for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
         {
@@ -472,11 +733,13 @@ IopTranslateResourceList(
                     {
                         HAL_MESSAGE_ROUTING_INFO RoutingInfo;
 
+                        Affinity = IopMessageAffinity(Included, Policy, Override, MessageIndex++, &RawAffinity);
+
                         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
                         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
                         RoutingInfo.MessageCount = Descriptor->u.MessageInterrupt.Raw.MessageCount;
                         RoutingInfo.Vector = Descriptor->u.MessageInterrupt.Raw.Vector;
-                        RoutingInfo.TargetProcessors = Descriptor->u.MessageInterrupt.Raw.Affinity;
+                        RoutingInfo.TargetProcessors = Affinity;
 
                         if (!NT_SUCCESS(HalpGetMessageRoutingInfo(&RoutingInfo)))
                         {
@@ -486,7 +749,8 @@ IopTranslateResourceList(
 
                         Descriptor->u.MessageInterrupt.Translated.Level = RoutingInfo.Irql;
                         Descriptor->u.MessageInterrupt.Translated.Vector = RoutingInfo.Vector;
-                        Descriptor->u.MessageInterrupt.Translated.Affinity = RoutingInfo.TargetProcessors;
+                        Descriptor->u.MessageInterrupt.Translated.Affinity = Affinity;
+                        RawDescriptor->u.MessageInterrupt.Raw.Affinity = RawAffinity;
                         break;
                     }
 
@@ -535,9 +799,11 @@ IopTranslateResourceList(
             }
 
             Descriptor = PipGetNextCmPartialDescriptor(Descriptor);
+            RawDescriptor = PipGetNextCmPartialDescriptor(RawDescriptor);
         }
 
         Full = (PCM_FULL_RESOURCE_DESCRIPTOR)Descriptor;
+        RawFull = (PCM_FULL_RESOURCE_DESCRIPTOR)RawDescriptor;
     }
 
     *Translated = List;
@@ -555,7 +821,7 @@ IopSetDeviceResources(
 
     PAGED_CODE();
 
-    Status = IopTranslateResourceList(Raw, &Translated);
+    Status = IopTranslateResourceList(DeviceNode, Raw, &Translated);
     if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(Raw, TAG_IO_RESOURCE);
