@@ -1780,6 +1780,7 @@ NtfsCompleteFailedCreate(
                 (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension,
                 FileCB->StreamCB);
         }
+        NtfsTxfReleaseFileContext((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension, FileCB);
         if (FileCB->RequestedStream)
             ExFreePool(FileCB->RequestedStream);
         if (FileCB->FileName.Buffer &&
@@ -1929,10 +1930,11 @@ Complete:
     return Status;
 }
 
+static
 NTSTATUS
-NTAPI
-NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
-              _Inout_ PIRP Irp)
+NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
+                 _Inout_ PIRP Irp,
+                 _Inout_ PNTFS_TXF_OPEN TxfOpen)
 {
     if (VolumeDeviceObject != NtfsDiskFileSystemDeviceObject)
         NtfsBindVolumeDisk((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension);
@@ -2035,6 +2037,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
 
     Status = NtfsValidateCreateName(&FileObject->FileName, !OpenTargetDirectory);
+    if (NT_SUCCESS(Status))
+        Status = NtfsTxfPrepareCreate(VolumeDeviceObject, Irp, TxfOpen);
     if (!NT_SUCCESS(Status))
         return NtfsCompleteCreate(Irp, Status, 0);
 
@@ -2557,7 +2561,8 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                         VolCB,
                         Mft,
                         &FileObject->FileName);
-                    if (VolCB->CachedLookupParent &&
+                    if (!TxfOpen->Staged &&
+                        VolCB->CachedLookupParent &&
                         VolCB->CachedLookupParentGeneration ==
                             VolCB->DirGeneration &&
                         VolCB->CachedLookupParentPathLength ==
@@ -2611,7 +2616,7 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     Status = NtfsAssignCreateSecurity(
                         Mft,
                         NULL,
-                        &FileObject->FileName,
+                        TxfOpen->Staged ? &TxfOpen->LogicalName : &FileObject->FileName,
                         !!(IrpSp->Parameters.Create.Options &
                            FILE_DIRECTORY_FILE),
                         IrpSp->Parameters.Create.SecurityContext->AccessState,
@@ -3032,6 +3037,16 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                         CachedRecord,
                                         STATUS_DELETE_PENDING);
     }
+    Status = NtfsTxfCheckOpen(VolCB, FileCB, IrpSp, TxfOpen);
+    if (!NT_SUCCESS(Status))
+    {
+        return NtfsCompleteFailedCreate(VolumeDeviceObject,
+                                        Irp,
+                                        FileCB,
+                                        CurrentFile,
+                                        CachedRecord,
+                                        Status);
+    }
 
     if ((NamedDataStream || !(NtfsFileRecordGetHeader(CurrentFile)->Flags & FR_IS_DIRECTORY)) &&
         ((FileCB->DesiredAccess & FILE_WRITE_DATA) ||
@@ -3436,4 +3451,18 @@ NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_DISK_INCREMENT);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+NtfsFsdCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
+              _Inout_ PIRP Irp)
+{
+    NTFS_TXF_OPEN TxfOpen;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&TxfOpen, sizeof(TxfOpen));
+    Status = NtfsCommonCreate(VolumeDeviceObject, Irp, &TxfOpen);
+    NtfsTxfReleaseOpen(&TxfOpen);
+    return Status;
 }

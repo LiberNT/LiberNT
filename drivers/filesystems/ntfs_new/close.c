@@ -99,6 +99,7 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             if (FileCB->RequestedStream)
                 ExFreePool(FileCB->RequestedStream);
 
+            NtfsTxfReleaseFileContext(VolCB, FileCB);
             NtfsPagingFileClose(FileCB);
 
             if (FileCB->StreamCB)

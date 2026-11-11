@@ -860,6 +860,7 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                FileCB);
             KeLeaveCriticalRegion();
         }
+        NtfsTxfCleanup(VolCB, FileCB);
         LastHandle = TRUE;
         if (FileCB->StreamCB)
         {

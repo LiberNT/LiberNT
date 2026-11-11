@@ -7,10 +7,6 @@
 
 #include "precomp.h"
 
-#ifndef SE_CREATE_SYMBOLIC_LINK_PRIVILEGE
-#define SE_CREATE_SYMBOLIC_LINK_PRIVILEGE 35L
-#endif
-
 typedef HANDLE (WINAPI *PFN_CREATE_TRANSACTION)(LPSECURITY_ATTRIBUTES, LPGUID, DWORD, DWORD, DWORD, DWORD, LPWSTR);
 typedef BOOL (WINAPI *PFN_END_TRANSACTION)(HANDLE);
 typedef HANDLE (NTAPI *PFN_RTL_GET_CURRENT_TRANSACTION)(VOID);
@@ -151,6 +147,26 @@ LoadFunctions(VOID)
 }
 
 static
+BOOL
+EnableSymbolicLinkPrivilege(VOID)
+{
+    TOKEN_PRIVILEGES Privileges;
+    HANDLE Token;
+    BOOL Enabled;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &Token))
+        return FALSE;
+
+    Privileges.PrivilegeCount = 1;
+    Privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    Enabled = LookupPrivilegeValue(NULL, SE_CREATE_SYMBOLIC_LINK_NAME, &Privileges.Privileges[0].Luid) &&
+              AdjustTokenPrivileges(Token, FALSE, &Privileges, 0, NULL, NULL) &&
+              GetLastError() == ERROR_SUCCESS;
+    CloseHandle(Token);
+    return Enabled;
+}
+
+static
 HANDLE
 NewTransaction(VOID)
 {
@@ -205,8 +221,9 @@ RemoveTree(
 {
     static const PCWSTR Files[] = { L"exist.txt", L"exist2.txt", L"new.txt", L"newA.txt", L"new2.txt",
                                     L"copy.txt", L"copyA.txt", L"moved.txt", L"movedA.txt", L"link.txt",
-                                    L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt" };
-    static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA" };
+                                    L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt", L"data.txt",
+                                    L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt" };
+    static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree" };
     WCHAR Path[MAX_PATH];
     CHAR PathA[MAX_PATH];
     ULONG Index;
@@ -247,6 +264,15 @@ PrepareTree(
         return FALSE;
     PathOf(Dir, L"attr.txt", Path, PathA);
     if (!WriteTestFile(Path, "attr"))
+        return FALSE;
+    PathOf(Dir, L"data.txt", Path, PathA);
+    if (!WriteTestFile(Path, "old"))
+        return FALSE;
+    PathOf(Dir, L"again.txt", Path, PathA);
+    if (!WriteTestFile(Path, "first"))
+        return FALSE;
+    PathOf(Dir, L"target.txt", Path, PathA);
+    if (!WriteTestFile(Path, "target"))
         return FALSE;
     PathOf(Dir, L"sub", Path, PathA);
     ok(CreateDirectoryW(Path, NULL), "CreateDirectory(%S) failed with %lu\n", Path, GetLastError());
@@ -297,7 +323,6 @@ TestUnsupportedVolume(
     WIN32_FIND_DATAA FindDataA;
     WCHAR Buffer[MAX_PATH];
     CHAR BufferA[MAX_PATH];
-    BOOLEAN WasEnabled;
     HANDLE Transaction;
     HANDLE Handle;
     DWORD Length;
@@ -389,7 +414,7 @@ TestUnsupportedVolume(
     ok_refused(pCreateHardLinkTransactedA(LinkA, ExistA, NULL, Transaction), "CreateHardLinkTransactedA");
     ok(GetFileAttributesA(LinkA) == INVALID_FILE_ATTRIBUTES, "refused hard link %s exists\n", LinkA);
 
-    if (NT_SUCCESS(RtlAdjustPrivilege(SE_CREATE_SYMBOLIC_LINK_PRIVILEGE, TRUE, FALSE, &WasEnabled)))
+    if (EnableSymbolicLinkPrivilege())
     {
         SetLastError(0xdeadbeef);
         ok_refused(pCreateSymbolicLinkTransactedW(Sym, Exist, 0, Transaction), "CreateSymbolicLinkTransactedW");
@@ -397,7 +422,6 @@ TestUnsupportedVolume(
         SetLastError(0xdeadbeef);
         ok_refused(pCreateSymbolicLinkTransactedA(SymA, ExistA, 0, Transaction), "CreateSymbolicLinkTransactedA");
         ok(GetFileAttributesA(SymA) == INVALID_FILE_ATTRIBUTES, "refused symbolic link %s exists\n", SymA);
-        RtlAdjustPrivilege(SE_CREATE_SYMBOLIC_LINK_PRIVILEGE, WasEnabled, FALSE, &WasEnabled);
     }
     else
     {
@@ -615,6 +639,231 @@ TestSupportedVolume(
 }
 
 static
+BOOL
+ListedInTransaction(
+    _In_ PCWSTR Pattern,
+    _In_ PCWSTR Name,
+    _In_ HANDLE Transaction)
+{
+    WIN32_FIND_DATAW Data;
+    BOOL Found = FALSE;
+    HANDLE Find;
+
+    Find = pFindFirstFileTransactedW(Pattern, FindExInfoStandard, &Data, FindExSearchNameMatch, NULL, 0, Transaction);
+    if (Find == INVALID_HANDLE_VALUE)
+        return FALSE;
+    do
+    {
+        if (!_wcsicmp(Data.cFileName, Name))
+            Found = TRUE;
+    } while (FindNextFileW(Find, &Data));
+    FindClose(Find);
+    return Found;
+}
+
+static
+BOOL
+WriteThrough(
+    _In_ HANDLE File,
+    _In_ PCSTR Data)
+{
+    DWORD Written = 0;
+
+    return SetFilePointer(File, 0, NULL, FILE_BEGIN) == 0 &&
+           WriteFile(File, Data, (DWORD)strlen(Data), &Written, NULL) &&
+           Written == strlen(Data) &&
+           SetEndOfFile(File);
+}
+
+static
+VOID
+TestSupportedVolumeData(
+    _In_ PTX_DIR Dir)
+{
+    WCHAR Data[MAX_PATH], Hard[MAX_PATH], Again[MAX_PATH], Target[MAX_PATH], Moved[MAX_PATH];
+    WCHAR Tree[MAX_PATH], Inner[MAX_PATH], Pattern[MAX_PATH], New[MAX_PATH], Exist2[MAX_PATH];
+    WCHAR Buffer[MAX_PATH];
+    CHAR Scratch[MAX_PATH];
+    WIN32_FILE_ATTRIBUTE_DATA Info;
+    HANDLE Transaction;
+    HANDLE Writer, Reader, Outsider;
+    DWORD Length;
+
+    PathOf(Dir, L"data.txt", Data, Scratch);
+    PathOf(Dir, L"hard.txt", Hard, Scratch);
+    PathOf(Dir, L"again.txt", Again, Scratch);
+    PathOf(Dir, L"target.txt", Target, Scratch);
+    PathOf(Dir, L"moved.txt", Moved, Scratch);
+    PathOf(Dir, L"tree", Tree, Scratch);
+    PathOf(Dir, L"tree\\inner.txt", Inner, Scratch);
+    PathOf(Dir, L"*", Pattern, Scratch);
+    PathOf(Dir, L"fresh.txt", New, Scratch);
+    PathOf(Dir, L"attr.txt", Exist2, Scratch);
+
+    /* A transacted writer's data stays private until commit, and a rollback drops it */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    Writer = pCreateFileTransactedW(Data, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL,
+                                    Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "transacted writer open failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        ok(WriteThrough(Writer, "new data"), "transacted write failed with %lu\n", GetLastError());
+        ok(ReadsBack(Data, "old"), "outside reader sees uncommitted data\n");
+        SetLastError(0xdeadbeef);
+        Outsider = CreateFileW(Data, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        ok(Outsider == INVALID_HANDLE_VALUE, "outside writer opened a transactionally locked file\n");
+        ok(GetLastError() == ERROR_SHARING_VIOLATION, "outside writer error %lu\n", GetLastError());
+        if (Outsider != INVALID_HANDLE_VALUE) CloseHandle(Outsider);
+        CloseHandle(Writer);
+    }
+    ok(pGetFileAttributesTransactedW(Data, GetFileExInfoStandard, &Info, Transaction),
+       "transacted query failed with %lu\n", GetLastError());
+    ok(Info.nFileSizeLow == 8, "transacted size %lu, expected 8\n", Info.nFileSizeLow);
+    ok(GetFileAttributesExW(Data, GetFileExInfoStandard, &Info) && Info.nFileSizeLow == 3,
+       "outside size %lu, expected 3\n", Info.nFileSizeLow);
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(Data, "old"), "rolled back data visible\n");
+
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    Writer = pCreateFileTransactedW(Data, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "transacted writer open failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        ok(WriteThrough(Writer, "committed"), "transacted write failed with %lu\n", GetLastError());
+        CloseHandle(Writer);
+    }
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(Data, "committed"), "committed data missing\n");
+
+    /* A non-transacted writer keeps a transaction from opening the file */
+    Outsider = CreateFileW(Data, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(Outsider != INVALID_HANDLE_VALUE, "outside writer open failed with %lu\n", GetLastError());
+    Transaction = NewTransaction();
+    if (Outsider != INVALID_HANDLE_VALUE && Transaction != INVALID_HANDLE_VALUE)
+    {
+        SetLastError(0xdeadbeef);
+        Writer = pCreateFileTransactedW(Data, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0,
+                                        NULL, Transaction, NULL, NULL);
+        ok(Writer == INVALID_HANDLE_VALUE, "transacted writer opened past a non-transacted writer\n");
+        ok(GetLastError() == ERROR_TRANSACTIONAL_CONFLICT, "transacted writer error %lu\n", GetLastError());
+        if (Writer != INVALID_HANDLE_VALUE) CloseHandle(Writer);
+        SetLastError(0xdeadbeef);
+        Reader = pCreateFileTransactedW(Data, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0,
+                                        NULL, Transaction, NULL, NULL);
+        ok(Reader == INVALID_HANDLE_VALUE, "transacted reader opened past a non-transacted writer\n");
+        ok(GetLastError() == ERROR_TRANSACTIONAL_CONFLICT, "transacted reader error %lu\n", GetLastError());
+        if (Reader != INVALID_HANDLE_VALUE) CloseHandle(Reader);
+    }
+    if (Outsider != INVALID_HANDLE_VALUE) CloseHandle(Outsider);
+
+    /* A transacted reader blocks non-transacted writers only while its handle is open */
+    if (Transaction != INVALID_HANDLE_VALUE)
+    {
+        Reader = pCreateFileTransactedW(Data, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0,
+                                        NULL, Transaction, NULL, NULL);
+        ok(Reader != INVALID_HANDLE_VALUE, "transacted reader open failed with %lu\n", GetLastError());
+        SetLastError(0xdeadbeef);
+        Outsider = CreateFileW(Data, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        ok(Outsider == INVALID_HANDLE_VALUE, "outside writer opened past a transacted reader\n");
+        ok(GetLastError() == ERROR_SHARING_VIOLATION, "outside writer error %lu\n", GetLastError());
+        if (Outsider != INVALID_HANDLE_VALUE) CloseHandle(Outsider);
+        if (Reader != INVALID_HANDLE_VALUE) CloseHandle(Reader);
+        Outsider = CreateFileW(Data, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        ok(Outsider != INVALID_HANDLE_VALUE, "outside writer still blocked after the reader closed: %lu\n", GetLastError());
+        if (Outsider != INVALID_HANDLE_VALUE) CloseHandle(Outsider);
+        ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+        CloseHandle(Transaction);
+    }
+
+    /* A hard link appears at commit and is discarded by rollback */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pCreateHardLinkTransactedW(Hard, Data, NULL, Transaction), "CreateHardLinkTransactedW failed with %lu\n", GetLastError());
+    ok(!Exists(Hard), "uncommitted hard link visible outside\n");
+    ok(pGetFileAttributesTransactedW(Hard, GetFileExInfoStandard, &Info, Transaction),
+       "transacted query of the link failed with %lu\n", GetLastError());
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(!Exists(Hard), "rolled back hard link exists\n");
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pCreateHardLinkTransactedW(Hard, Data, NULL, Transaction), "CreateHardLinkTransactedW failed with %lu\n", GetLastError());
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(Hard, "committed"), "committed hard link missing\n");
+
+    /* The transaction sees its own namespace in enumeration, names and long paths */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    Writer = pCreateFileTransactedW(New, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "CreateFileTransactedW failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        Length = GetFinalPathNameByHandleW(Writer, Buffer, RTL_NUMBER_OF(Buffer), FILE_NAME_OPENED | VOLUME_NAME_NONE);
+        ok(Length >= 21 && !_wcsicmp(Buffer + Length - 21, L"\\TxfApiTest\\fresh.txt"),
+           "transacted handle name %S\n", Buffer);
+        CloseHandle(Writer);
+    }
+    ok(pDeleteFileTransactedW(Exist2, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    ok(ListedInTransaction(Pattern, L"fresh.txt", Transaction), "created file not listed in its transaction\n");
+    ok(!ListedInTransaction(Pattern, L"attr.txt", Transaction), "deleted file listed in its transaction\n");
+    ok(ListedOutside(Pattern, L"attr.txt"), "transacted delete hid the file outside\n");
+    ok(!ListedOutside(Pattern, L"fresh.txt"), "uncommitted file listed outside\n");
+    Length = pGetLongPathNameTransactedW(New, Buffer, RTL_NUMBER_OF(Buffer), Transaction);
+    ok(Length > 9 && !_wcsicmp(Buffer + Length - 9, L"fresh.txt"), "GetLongPathNameTransactedW gave %lu %S\n", Length, Buffer);
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(Exists(Exist2) && !Exists(New), "rollback did not restore the namespace\n");
+
+    /* A directory created with its content appears whole at commit */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pCreateDirectoryTransactedW(NULL, Tree, NULL, Transaction), "CreateDirectoryTransactedW failed with %lu\n", GetLastError());
+    Writer = pCreateFileTransactedW(Inner, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "CreateFileTransactedW in a transacted directory failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        ok(WriteThrough(Writer, "inner"), "write failed with %lu\n", GetLastError());
+        CloseHandle(Writer);
+    }
+    ok(!Exists(Tree), "uncommitted directory visible outside\n");
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(Inner, "inner"), "committed directory content missing\n");
+
+    /* Deleting then recreating a name, and replacing a file by a rename, apply at commit */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pDeleteFileTransactedW(Again, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    Writer = pCreateFileTransactedW(Again, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "recreate in the transaction failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        ok(WriteThrough(Writer, "second"), "write failed with %lu\n", GetLastError());
+        CloseHandle(Writer);
+    }
+    ok(ReadsBack(Again, "first"), "outside reader sees the recreated file\n");
+    ok(pMoveFileTransactedW(Data, Target, NULL, NULL, MOVEFILE_REPLACE_EXISTING, Transaction),
+       "MoveFileTransactedW with replace failed with %lu\n", GetLastError());
+    ok(ReadsBack(Target, "target") && ReadsBack(Data, "committed"), "uncommitted replace visible outside\n");
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(Again, "second"), "recreated file not committed\n");
+    ok(!Exists(Data) && ReadsBack(Target, "committed"), "committed replace not applied\n");
+}
+
+static
 VOID
 TestInactiveTransaction(
     _In_ PTX_DIR Dir)
@@ -826,7 +1075,10 @@ TestVolume(
     TestInvalidTransaction(Dir);
     TestInactiveTransaction(Dir);
     if (Supported)
+    {
         TestSupportedVolume(Dir);
+        TestSupportedVolumeData(Dir);
+    }
     else
         TestUnsupportedVolume(Dir);
 
