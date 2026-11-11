@@ -260,7 +260,8 @@ NtQueryInformationThread(
         ThreadInformationClass == ThreadSuspendCount ||
         ThreadInformationClass == ThreadCycleTime ||
         ThreadInformationClass == ThreadSubsystemInformation ||
-        ThreadInformationClass == ThreadIdealProcessorEx)
+        ThreadInformationClass == ThreadIdealProcessorEx ||
+        ThreadInformationClass == ThreadSelectedCpuSets)
     {
         Access = THREAD_QUERY_LIMITED_INFORMATION;
     }

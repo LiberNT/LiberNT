@@ -407,7 +407,8 @@ NtSetInformationProcess(
         Access = PROCESS_SET_QUOTA;
     }
     else if (ProcessInformationClass == ProcessHighGraphicsPriorityInformation ||
-             ProcessInformationClass == ProcessPowerThrottlingState)
+             ProcessInformationClass == ProcessPowerThrottlingState ||
+             ProcessInformationClass == ProcessDefaultCpuSetsInformation)
     {
         Access = PROCESS_SET_LIMITED_INFORMATION;
     }

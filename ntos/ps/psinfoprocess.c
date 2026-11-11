@@ -795,6 +795,8 @@ NtQueryInformationProcess(
         ProcessInformationClass == ProcessPriorityClass ||
         ProcessInformationClass == ProcessIoCounters ||
         ProcessInformationClass == ProcessVmCounters ||
+        ProcessInformationClass == ProcessAffinityUpdateMode ||
+        ProcessInformationClass == ProcessDefaultCpuSetsInformation ||
         ProcessInformationClass == ProcessCycleTime ||
         ProcessInformationClass == ProcessSubsystemProcess ||
         ProcessInformationClass == ProcessSubsystemInformation ||

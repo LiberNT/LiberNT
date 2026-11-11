@@ -331,7 +331,8 @@ NtSetInformationThread(
     if (ThreadInformationClass == ThreadImpersonationToken)
         Access = THREAD_SET_THREAD_TOKEN;
     else if (ThreadInformationClass == ThreadNameInformation ||
-             ThreadInformationClass == ThreadPowerThrottlingState)
+             ThreadInformationClass == ThreadPowerThrottlingState ||
+             ThreadInformationClass == ThreadSelectedCpuSets)
     {
         Access = THREAD_SET_LIMITED_INFORMATION;
     }
