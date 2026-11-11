@@ -15,6 +15,9 @@
 
 #define CHILD_WAIT_MS       15000
 #define CHILD_EXIT_RETURNED 0x600D
+#define PING_INTERVAL_MS    100
+#define PING_WORK_MS        (PING_INTERVAL_MS / 2)
+#define HANG_INTERVAL_MS    PING_INTERVAL_MS
 
 typedef HRESULT (WINAPI *FN_RegisterApplicationRecoveryCallback)(APPLICATION_RECOVERY_CALLBACK, PVOID, DWORD, DWORD);
 typedef HRESULT (WINAPI *FN_UnregisterApplicationRecoveryCallback)(VOID);
@@ -61,6 +64,19 @@ typedef struct _RECOVERY_SHARED
     LONG AfterSleep;
 } RECOVERY_SHARED, *PRECOVERY_SHARED;
 
+typedef enum _RECOVERY_SLOT
+{
+    SlotRemote,
+    SlotCrash,
+    SlotHang,
+    SlotPing,
+    SlotReturn,
+    SlotUnregistered,
+    SlotFinished,
+    SlotCount
+} RECOVERY_SLOT;
+
+static PRECOVERY_SHARED View;
 static PRECOVERY_SHARED Shared;
 static LONG *volatile CrashPointer;
 static BYTE MemoryBlock[64];
@@ -112,11 +128,12 @@ PingCallback(
 
     InterlockedIncrement(&Shared->CallbackCalls);
     Shared->Parameter = (ULONG_PTR)Parameter;
-    Sleep(2500);
+    Sleep(PING_WORK_MS);
     Shared->InProgress = pApplicationRecoveryInProgress(&Cancelled);
     Shared->Cancelled = Cancelled;
-    Sleep(2500);
+    Sleep(PING_WORK_MS);
     Shared->InProgressSecond = pApplicationRecoveryInProgress(&Cancelled);
+    Sleep(PING_WORK_MS);
     InterlockedExchange(&Shared->Done, 1);
     pApplicationRecoveryFinished(FALSE);
     InterlockedExchange(&Shared->AfterFinished, 1);
@@ -175,9 +192,9 @@ RunChildMode(
     if (!strcmp(Mode, "crash"))
         CrashChild(CrashCallback, 3000, FALSE);
     else if (!strcmp(Mode, "hang"))
-        CrashChild(HangCallback, 500, FALSE);
+        CrashChild(HangCallback, HANG_INTERVAL_MS, FALSE);
     else if (!strcmp(Mode, "ping"))
-        CrashChild(PingCallback, 4000, FALSE);
+        CrashChild(PingCallback, PING_INTERVAL_MS, FALSE);
     else if (!strcmp(Mode, "return"))
         CrashChild(ReturnCallback, 3000, FALSE);
     else if (!strcmp(Mode, "unregistered"))
@@ -204,7 +221,9 @@ static
 HANDLE
 StartChild(
     _In_ PCSTR Mode,
-    _In_ HANDLE Mapping)
+    _In_ HANDLE Mapping,
+    _In_ RECOVERY_SLOT Slot,
+    _In_ DWORD PriorityClass)
 {
     CHAR Path[MAX_PATH], CommandLine[MAX_PATH * 2];
     STARTUPINFOA StartupInfo = { sizeof(StartupInfo) };
@@ -213,8 +232,9 @@ StartChild(
     if (!GetModuleFileNameA(NULL, Path, ARRAYSIZE(Path)))
         return NULL;
 
-    StringCbPrintfA(CommandLine, sizeof(CommandLine), "\"%s\" ApplicationRecovery child %s %lu", Path, Mode, HandleToUlong(Mapping));
-    if (!CreateProcessA(NULL, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &StartupInfo, &ProcessInfo))
+    StringCbPrintfA(CommandLine, sizeof(CommandLine), "\"%s\" ApplicationRecovery child %s %lu %u",
+                    Path, Mode, HandleToUlong(Mapping), Slot);
+    if (!CreateProcessA(NULL, CommandLine, NULL, NULL, TRUE, PriorityClass, NULL, NULL, &StartupInfo, &ProcessInfo))
     {
         ok(0, "CreateProcess(%s) failed: %lu\n", Mode, GetLastError());
         return NULL;
@@ -226,17 +246,12 @@ StartChild(
 
 static
 DWORD
-RunChild(
+WaitChild(
     _In_ PCSTR Mode,
-    _In_ HANDLE Mapping)
+    _In_opt_ HANDLE Process)
 {
-    HANDLE Process;
     DWORD Wait, ExitCode = 0xDEADBEEF;
 
-    RtlZeroMemory((PUCHAR)Shared + FIELD_OFFSET(RECOVERY_SHARED, RegisteredCallback),
-                  sizeof(*Shared) - FIELD_OFFSET(RECOVERY_SHARED, RegisteredCallback));
-
-    Process = StartChild(Mode, Mapping);
     if (!Process)
         return ExitCode;
 
@@ -328,7 +343,7 @@ TestRemoteQuery(
 
     RtlZeroMemory((PUCHAR)Shared + FIELD_OFFSET(RECOVERY_SHARED, RegisteredCallback),
                   sizeof(*Shared) - FIELD_OFFSET(RECOVERY_SHARED, RegisteredCallback));
-    Process = StartChild("remote", Mapping);
+    Process = StartChild("remote", Mapping, SlotRemote, 0);
     if (!Process)
         return;
 
@@ -370,7 +385,7 @@ TestRemoteQuery(
     CloseHandle(Process);
     ResetEvent(Shared->DoneEvent);
 
-    Process = StartChild("none", Mapping);
+    Process = StartChild("none", Mapping, SlotRemote, 0);
     if (!Process)
         return;
 
@@ -395,47 +410,69 @@ VOID
 TestRecovery(
     _In_ HANDLE Mapping)
 {
-    DWORD ExitCode;
+    static const struct
+    {
+        PCSTR Mode;
+        RECOVERY_SLOT Slot;
+        DWORD PriorityClass;
+    } Children[] =
+    {
+        { "ping", SlotPing, ABOVE_NORMAL_PRIORITY_CLASS },
+        { "hang", SlotHang, ABOVE_NORMAL_PRIORITY_CLASS },
+        { "crash", SlotCrash, 0 },
+        { "return", SlotReturn, 0 },
+        { "unregistered", SlotUnregistered, 0 },
+        { "finished", SlotFinished, 0 },
+    };
+    HANDLE Processes[RTL_NUMBER_OF(Children)];
+    DWORD ExitCodes[SlotCount];
+    PRECOVERY_SHARED Child;
+    ULONG Index;
 
-    ExitCode = RunChild("crash", Mapping);
-    ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
-    ok_hex(Shared->Register, S_OK);
-    ok_long(Shared->CallbackCalls, 1);
-    ok(Shared->Parameter == Shared->RegisteredParameter, "Parameter %I64x, expected %I64x\n", Shared->Parameter, Shared->RegisteredParameter);
-    ok_hex(Shared->InProgress, S_OK);
-    ok_int(Shared->Cancelled, FALSE);
-    ok_hex(Shared->InProgressNull, E_INVALIDARG);
-    ok_hex(Shared->GetCallback, S_OK);
-    ok(Shared->GetCallbackAddress != 0, "No callback reported during recovery\n");
-    ok_hex(Shared->RegisterFile, WER_E_INVALID_STATE);
-    ok_hex(Shared->RegisterMemoryBlock, WER_E_INVALID_STATE);
-    ok_hex(Shared->RegisterRuntimeModule, WER_E_INVALID_STATE);
-    ok_long(Shared->AfterFinished, 0);
+    for (Index = 0; Index < RTL_NUMBER_OF(Children); Index++)
+    {
+        RtlZeroMemory(&View[Children[Index].Slot], sizeof(View[Children[Index].Slot]));
+        Processes[Index] = StartChild(Children[Index].Mode, Mapping, Children[Index].Slot, Children[Index].PriorityClass);
+    }
+    for (Index = 0; Index < RTL_NUMBER_OF(Children); Index++)
+        ExitCodes[Children[Index].Slot] = WaitChild(Children[Index].Mode, Processes[Index]);
 
-    ExitCode = RunChild("hang", Mapping);
-    ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
-    ok_long(Shared->CallbackCalls, 1);
-    ok_long(Shared->AfterSleep, 0);
+    Child = &View[SlotCrash];
+    ok_hex(ExitCodes[SlotCrash], STATUS_ACCESS_VIOLATION);
+    ok_hex(Child->Register, S_OK);
+    ok_long(Child->CallbackCalls, 1);
+    ok(Child->Parameter == Child->RegisteredParameter, "Parameter %I64x, expected %I64x\n", Child->Parameter, Child->RegisteredParameter);
+    ok_hex(Child->InProgress, S_OK);
+    ok_int(Child->Cancelled, FALSE);
+    ok_hex(Child->InProgressNull, E_INVALIDARG);
+    ok_hex(Child->GetCallback, S_OK);
+    ok(Child->GetCallbackAddress != 0, "No callback reported during recovery\n");
+    ok_hex(Child->RegisterFile, WER_E_INVALID_STATE);
+    ok_hex(Child->RegisterMemoryBlock, WER_E_INVALID_STATE);
+    ok_hex(Child->RegisterRuntimeModule, WER_E_INVALID_STATE);
+    ok_long(Child->AfterFinished, 0);
 
-    ExitCode = RunChild("ping", Mapping);
-    ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
-    ok_long(Shared->CallbackCalls, 1);
-    ok_hex(Shared->InProgress, S_OK);
-    ok_int(Shared->Cancelled, FALSE);
-    ok_hex(Shared->InProgressSecond, S_OK);
-    ok_long(Shared->Done, 1);
-    ok_long(Shared->AfterFinished, 0);
+    Child = &View[SlotHang];
+    ok_hex(ExitCodes[SlotHang], STATUS_ACCESS_VIOLATION);
+    ok_long(Child->CallbackCalls, 1);
+    ok_long(Child->AfterSleep, 0);
 
-    ExitCode = RunChild("return", Mapping);
-    ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
-    ok_long(Shared->CallbackCalls, 1);
+    Child = &View[SlotPing];
+    ok_hex(ExitCodes[SlotPing], STATUS_ACCESS_VIOLATION);
+    ok_long(Child->CallbackCalls, 1);
+    ok_hex(Child->InProgress, S_OK);
+    ok_int(Child->Cancelled, FALSE);
+    ok_hex(Child->InProgressSecond, S_OK);
+    ok_long(Child->Done, 1);
+    ok_long(Child->AfterFinished, 0);
 
-    ExitCode = RunChild("unregistered", Mapping);
-    ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
-    ok_long(Shared->CallbackCalls, 0);
+    ok_hex(ExitCodes[SlotReturn], STATUS_ACCESS_VIOLATION);
+    ok_long(View[SlotReturn].CallbackCalls, 1);
 
-    ExitCode = RunChild("finished", Mapping);
-    ok_hex(ExitCode, CHILD_EXIT_RETURNED);
+    ok_hex(ExitCodes[SlotUnregistered], STATUS_ACCESS_VIOLATION);
+    ok_long(View[SlotUnregistered].CallbackCalls, 0);
+
+    ok_hex(ExitCodes[SlotFinished], CHILD_EXIT_RETURNED);
 }
 
 static
@@ -467,6 +504,7 @@ START_TEST(ApplicationRecovery)
     HANDLE Mapping;
     char **Arguments;
     int ArgumentCount;
+    ULONG Slot;
 
     if (!LoadFunctions())
     {
@@ -475,28 +513,31 @@ START_TEST(ApplicationRecovery)
     }
 
     ArgumentCount = winetest_get_mainargs(&Arguments);
-    if (ArgumentCount >= 5 && !strcmp(Arguments[2], "child"))
+    if (ArgumentCount >= 6 && !strcmp(Arguments[2], "child"))
     {
         Mapping = ULongToHandle(strtoul(Arguments[4], NULL, 10));
-        Shared = MapViewOfFile(Mapping, FILE_MAP_WRITE, 0, 0, sizeof(*Shared));
-        if (!Shared)
+        Slot = strtoul(Arguments[5], NULL, 10);
+        View = MapViewOfFile(Mapping, FILE_MAP_WRITE, 0, 0, SlotCount * sizeof(*View));
+        if (!View || Slot >= SlotCount)
             ExitProcess(0xBAD);
+        Shared = &View[Slot];
         RunChildMode(Arguments[3]);
         return;
     }
 
-    Mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, &Attributes, PAGE_READWRITE, 0, sizeof(*Shared), NULL);
+    Mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, &Attributes, PAGE_READWRITE, 0, SlotCount * sizeof(*View), NULL);
     ok(Mapping != NULL, "CreateFileMapping failed: %lu\n", GetLastError());
     if (!Mapping)
         return;
 
-    Shared = MapViewOfFile(Mapping, FILE_MAP_WRITE, 0, 0, sizeof(*Shared));
-    ok(Shared != NULL, "MapViewOfFile failed: %lu\n", GetLastError());
-    if (!Shared)
+    View = MapViewOfFile(Mapping, FILE_MAP_WRITE, 0, 0, SlotCount * sizeof(*View));
+    ok(View != NULL, "MapViewOfFile failed: %lu\n", GetLastError());
+    if (!View)
     {
         CloseHandle(Mapping);
         return;
     }
+    Shared = &View[SlotRemote];
 
     Shared->ReadyEvent = CreateEventW(&Attributes, FALSE, FALSE, NULL);
     Shared->DoneEvent = CreateEventW(&Attributes, TRUE, FALSE, NULL);
@@ -509,6 +550,6 @@ START_TEST(ApplicationRecovery)
 
     CloseHandle(Shared->ReadyEvent);
     CloseHandle(Shared->DoneEvent);
-    UnmapViewOfFile(Shared);
+    UnmapViewOfFile(View);
     CloseHandle(Mapping);
 }
