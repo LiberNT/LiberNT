@@ -30,6 +30,68 @@ NtNotifyChangeMultipleKeys_WatchThread(LPVOID lpParameter)
     return 0;
 }
 
+static
+BOOLEAN
+IsThreadWaiting(
+    _In_ DWORD ThreadId)
+{
+    PSYSTEM_PROCESS_INFORMATION Process;
+    PSYSTEM_THREAD_INFORMATION Thread;
+    BOOLEAN Blocked = FALSE;
+    ULONG Size = 0x40000;
+    PVOID Buffer = NULL;
+    NTSTATUS Status = STATUS_INFO_LENGTH_MISMATCH;
+    ULONG Index;
+
+    while (Status == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        if (Buffer) HeapFree(GetProcessHeap(), 0, Buffer);
+        Buffer = HeapAlloc(GetProcessHeap(), 0, Size);
+        if (Buffer == NULL) return FALSE;
+        Status = NtQuerySystemInformation(SystemProcessInformation, Buffer, Size, NULL);
+        Size *= 2;
+    }
+
+    Process = Buffer;
+    while (NT_SUCCESS(Status) &&
+           Process->UniqueProcessId != UlongToHandle(GetCurrentProcessId()) &&
+           Process->NextEntryOffset != 0)
+    {
+        Process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Process + Process->NextEntryOffset);
+    }
+
+    if (NT_SUCCESS(Status) && Process->UniqueProcessId == UlongToHandle(GetCurrentProcessId()))
+    {
+        Thread = (PSYSTEM_THREAD_INFORMATION)(Process + 1);
+        for (Index = 0; Index < Process->NumberOfThreads; Index++)
+        {
+            if (Thread[Index].ClientId.UniqueThread == UlongToHandle(ThreadId))
+                Blocked = (Thread[Index].ThreadState == Waiting);
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, Buffer);
+    return Blocked;
+}
+
+/* The watcher has registered once it waits; polling for that replaces a fixed sleep */
+static
+BOOLEAN
+WaitUntilWatcherBlocks(
+    _In_ HANDLE ThreadHandle,
+    _In_ DWORD ThreadId)
+{
+    ULONGLONG Deadline = GetTickCount64() + 5000;
+
+    while (WaitForSingleObject(ThreadHandle, 0) == WAIT_TIMEOUT && GetTickCount64() < Deadline)
+    {
+        if (IsThreadWaiting(ThreadId)) return TRUE;
+        SwitchToThread();
+    }
+
+    return FALSE;
+}
+
 typedef struct _APC_CONTEXT
 {
     BOOLEAN ApcRan;
@@ -50,6 +112,7 @@ START_TEST(NtNotifyChangeMultipleKeys)
 {
     NTSTATUS Status;
     DWORD WaitStatus;
+    DWORD WatchThreadId = 0;
     IO_STATUS_BLOCK IoStatusBlock = { 0 };
     OBJECT_ATTRIBUTES SubordinateObjects[1];
 
@@ -104,11 +167,12 @@ START_TEST(NtNotifyChangeMultipleKeys)
     }
     WatchThread1State->KeyHandle = KeyHandle;
     WatchThread1State->IoStatusBlock = &IoStatusBlock;
-    WatchThread1Handle = CreateThread(NULL, 0, NtNotifyChangeMultipleKeys_WatchThread, WatchThread1State, 0, NULL);
+    WatchThread1Handle = CreateThread(NULL, 0, NtNotifyChangeMultipleKeys_WatchThread, WatchThread1State, 0, &WatchThreadId);
     if (WatchThread1Handle)
     {
         /* Verify the thread is still running */
-        WaitStatus = WaitForSingleObject(WatchThread1Handle, 100);
+        ok(WaitUntilWatcherBlocks(WatchThread1Handle, WatchThreadId), "Watcher did not block\n");
+        WaitStatus = WaitForSingleObject(WatchThread1Handle, 0);
         ok_eq_ulong(WaitStatus, WAIT_TIMEOUT);
         /* Make change to the registry key */
         Status = NtSetValueKey(KeyHandle, &ValueName, 0, REG_DWORD, &Value2, sizeof(Value2));
@@ -138,10 +202,11 @@ START_TEST(NtNotifyChangeMultipleKeys)
     }
     WatchThread2State->KeyHandle = KeyHandle;
     WatchThread2State->IoStatusBlock = &IoStatusBlock;
-    WatchThread2Handle = CreateThread(NULL, 0, NtNotifyChangeMultipleKeys_WatchThread, WatchThread2State, 0, NULL);
+    WatchThread2Handle = CreateThread(NULL, 0, NtNotifyChangeMultipleKeys_WatchThread, WatchThread2State, 0, &WatchThreadId);
     if (WatchThread2Handle)
     {
-        WaitStatus = WaitForSingleObject(WatchThread2Handle, 100);
+        ok(WaitUntilWatcherBlocks(WatchThread2Handle, WatchThreadId), "Watcher did not block\n");
+        WaitStatus = WaitForSingleObject(WatchThread2Handle, 0);
         ok_eq_ulong(WaitStatus, WAIT_TIMEOUT);
         NtClose(KeyHandle);
         KeyHandle = NULL;
