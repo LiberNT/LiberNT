@@ -893,15 +893,7 @@ KbdHid_StartDevice(
     Buffer += Buttons;
     DeviceExtension->BreakUsageList = Buffer;
 
-    //
-    // FIMXE: implement device hacks
-    //
-    // UsageMappings
-    // KeyboardTypeOverride
-    // KeyboardSubTypeOverride
-    // KeyboardNumberTotalKeysOverride
-    // KeyboardNumberFunctionKeysOverride
-    // KeyboardNumberIndicatorsOverride
+    /* TODO: the UsageMappings device parameter */
 
     /* store number of buttons */
     DeviceExtension->UsageListLength = (USHORT)Buttons;
@@ -1103,6 +1095,57 @@ KbdHid_Pnp(
     }
 }
 
+static
+VOID
+KbdHid_QueryOverride(
+    IN HANDLE KeyHandle,
+    IN PCWSTR Name,
+    IN OUT PULONG Value)
+{
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Information = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    UNICODE_STRING ValueName;
+    ULONG Length;
+
+    RtlInitUnicodeString(&ValueName, Name);
+    if (NT_SUCCESS(ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, Information, sizeof(Buffer), &Length)) &&
+        Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+    {
+        *Value = *(PULONG)Information->Data;
+    }
+}
+
+static
+VOID
+KbdHid_QueryDeviceParameters(
+    IN PDEVICE_OBJECT PhysicalDeviceObject,
+    IN PKBDHID_DEVICE_EXTENSION DeviceExtension)
+{
+    PKEYBOARD_ATTRIBUTES Attributes = &DeviceExtension->Attributes;
+    ULONG Type = Attributes->KeyboardIdentifier.Type;
+    ULONG Subtype = Attributes->KeyboardIdentifier.Subtype;
+    ULONG FunctionKeys = Attributes->NumberOfFunctionKeys;
+    ULONG Indicators = Attributes->NumberOfIndicators;
+    ULONG TotalKeys = Attributes->NumberOfKeysTotal;
+    HANDLE KeyHandle;
+
+    if (!NT_SUCCESS(IoOpenDeviceRegistryKey(PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_READ, &KeyHandle)))
+        return;
+
+    KbdHid_QueryOverride(KeyHandle, L"KeyboardTypeOverride", &Type);
+    KbdHid_QueryOverride(KeyHandle, L"KeyboardSubtypeOverride", &Subtype);
+    KbdHid_QueryOverride(KeyHandle, L"KeyboardNumberFunctionKeysOverride", &FunctionKeys);
+    KbdHid_QueryOverride(KeyHandle, L"KeyboardNumberIndicatorsOverride", &Indicators);
+    KbdHid_QueryOverride(KeyHandle, L"KeyboardNumberTotalKeysOverride", &TotalKeys);
+    ZwClose(KeyHandle);
+
+    Attributes->KeyboardIdentifier.Type = (UCHAR)Type;
+    Attributes->KeyboardIdentifier.Subtype = (UCHAR)Subtype;
+    Attributes->NumberOfFunctionKeys = (USHORT)FunctionKeys;
+    Attributes->NumberOfIndicators = (USHORT)Indicators;
+    Attributes->NumberOfKeysTotal = (USHORT)TotalKeys;
+}
+
 NTSTATUS
 NTAPI
 KbdHid_AddDevice(
@@ -1161,6 +1204,7 @@ KbdHid_AddDevice(
     DeviceExtension->Attributes.KeyRepeatMinimum.Delay = KEYBOARD_TYPEMATIC_DELAY_MINIMUM;
     DeviceExtension->Attributes.KeyRepeatMaximum.Rate = KEYBOARD_TYPEMATIC_RATE_DEFAULT;
     DeviceExtension->Attributes.KeyRepeatMaximum.Delay = KEYBOARD_TYPEMATIC_DELAY_MAXIMUM;
+    KbdHid_QueryDeviceParameters(PhysicalDeviceObject, DeviceExtension);
 
     /* allocate irp */
     DeviceExtension->Irp = IoAllocateIrp(NextDeviceObject->StackSize, FALSE);

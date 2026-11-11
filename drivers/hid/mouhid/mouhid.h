@@ -50,6 +50,11 @@ typedef struct
     USHORT WheelUsagePage;
 
     //
+    // wheel direction reversed (FlipFlopWheel in Device Parameters)
+    //
+    BOOLEAN FlipFlopWheel;
+
+    //
     // buffer for the four usage lists below
     //
     PVOID UsageListBuffer;
