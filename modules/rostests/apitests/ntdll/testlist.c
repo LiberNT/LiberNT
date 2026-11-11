@@ -12,6 +12,7 @@ extern void func__strupr(void);
 extern void func__vscwprintf(void);
 extern void func__vsnprintf(void);
 extern void func__vsnwprintf(void);
+extern void func__vswprintf(void);
 extern void func__wcsicmp(void);
 extern void func__wcslwr(void);
 extern void func__wcsnicmp(void);
@@ -228,6 +229,7 @@ const struct test winetest_testlist[] =
     { "_vscwprintf", func__vscwprintf },
     { "_vsnprintf", func__vsnprintf },
     { "_vsnwprintf", func__vsnwprintf },
+    { "_vswprintf", func__vswprintf },
     { "_wcsicmp", func__wcsicmp },
     { "_wcslwr", func__wcslwr },
     { "_wcsnicmp", func__wcsnicmp },

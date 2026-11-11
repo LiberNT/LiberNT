@@ -2016,7 +2016,7 @@
 @ cdecl _vsnprintf_s(ptr long long str ptr)
 @ cdecl _vsnwprintf(ptr long wstr ptr)
 @ cdecl _vsnwprintf_s(ptr long long wstr ptr)
-@ cdecl -stub -version=0x600+ _vswprintf(ptr wstr ptr)
+@ cdecl -version=0x600+ _vswprintf(ptr wstr ptr)
 @ cdecl _wcsicmp(wstr wstr)
 @ cdecl _wcslwr(wstr)
 @ cdecl _wcsnicmp(wstr wstr long)
