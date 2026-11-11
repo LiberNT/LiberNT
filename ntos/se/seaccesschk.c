@@ -545,11 +545,12 @@ SepAccessCheckByType(
     _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
     _In_ ULONG ObjectTypeListLength,
     _In_ PGENERIC_MAPPING GenericMapping,
-    _Out_ PPRIVILEGE_SET PrivilegeSet,
-    _Inout_ PULONG PrivilegeSetLength,
+    _Out_opt_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_opt_ PULONG PrivilegeSetLength,
     _Out_ PACCESS_MASK GrantedAccess,
     _Out_ PNTSTATUS AccessStatus,
-    _In_ BOOLEAN ResultList)
+    _In_ BOOLEAN ResultList,
+    _In_ BOOLEAN ReturnPrivilegeSet)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     POBJECT_TYPE_LIST_INTERNAL Captured = NULL;
@@ -584,11 +585,14 @@ SepAccessCheckByType(
             ProbeForRead(GenericMapping, sizeof(GENERIC_MAPPING), sizeof(ULONG));
             Mapping = *GenericMapping;
 
-            ProbeForWriteUlong(PrivilegeSetLength);
-            SetLength = *PrivilegeSetLength;
+            if (ReturnPrivilegeSet)
+            {
+                ProbeForWriteUlong(PrivilegeSetLength);
+                SetLength = *PrivilegeSetLength;
 
-            if (SetLength != 0)
-                ProbeForWrite(PrivilegeSet, SetLength, sizeof(ULONG));
+                if (SetLength != 0)
+                    ProbeForWrite(PrivilegeSet, SetLength, sizeof(ULONG));
+            }
 
             ProbeForWrite(GrantedAccess,
                           (SIZE_T)Entries * sizeof(ACCESS_MASK),
@@ -608,7 +612,7 @@ SepAccessCheckByType(
     else
     {
         Mapping = *GenericMapping;
-        SetLength = *PrivilegeSetLength;
+        if (ReturnPrivilegeSet) SetLength = *PrivilegeSetLength;
     }
 
     /* A caller has to map its own rights before asking about them */
@@ -761,24 +765,30 @@ SepAccessCheckByType(
 
         _SEH2_TRY
         {
-            *PrivilegeSetLength = Needed;
-
-            if (SetLength < Needed)
+            if (ReturnPrivilegeSet)
             {
-                Status = STATUS_BUFFER_TOO_SMALL;
-            }
-            else
-            {
-                PrivilegeSet->PrivilegeCount = Count;
-                PrivilegeSet->Control = (Used != NULL) ? Used->Control : 0;
+                *PrivilegeSetLength = Needed;
 
-                if (Count != 0)
+                if (SetLength < Needed)
                 {
-                    RtlCopyMemory(PrivilegeSet->Privilege,
-                                  Used->Privilege,
-                                  Count * sizeof(LUID_AND_ATTRIBUTES));
+                    Status = STATUS_BUFFER_TOO_SMALL;
                 }
+                else
+                {
+                    PrivilegeSet->PrivilegeCount = Count;
+                    PrivilegeSet->Control = (Used != NULL) ? Used->Control : 0;
 
+                    if (Count != 0)
+                    {
+                        RtlCopyMemory(PrivilegeSet->Privilege,
+                                      Used->Privilege,
+                                      Count * sizeof(LUID_AND_ATTRIBUTES));
+                    }
+                }
+            }
+
+            if (NT_SUCCESS(Status))
+            {
                 RtlCopyMemory(GrantedAccess,
                               Granted,
                               (SIZE_T)Entries * sizeof(ACCESS_MASK));
@@ -833,7 +843,8 @@ NtAccessCheck(
                                 PrivilegeSetLength,
                                 GrantedAccess,
                                 AccessStatus,
-                                FALSE);
+                                FALSE,
+                                TRUE);
 }
 
 NTSTATUS
@@ -865,7 +876,8 @@ NtAccessCheckByType(
                                 PrivilegeSetLength,
                                 GrantedAccess,
                                 AccessStatus,
-                                FALSE);
+                                FALSE,
+                                TRUE);
 }
 
 NTSTATUS
@@ -897,6 +909,7 @@ NtAccessCheckByTypeResultList(
                                 PrivilegeSetLength,
                                 GrantedAccess,
                                 AccessStatus,
+                                TRUE,
                                 TRUE);
 }
 

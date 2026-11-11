@@ -89,8 +89,6 @@ SepAuditedAccessCheck(
     _In_ BOOLEAN ResultList)
 {
     SECURITY_SUBJECT_CONTEXT SubjectContext;
-    PRIVILEGE_SET PrivilegeSet;
-    ULONG PrivilegeSetLength = sizeof(PrivilegeSet);
     NTSTATUS Status;
     PTOKEN Effective = NULL;
 
@@ -138,11 +136,12 @@ SepAuditedAccessCheck(
                                   ObjectTypeList,
                                   ObjectTypeListLength,
                                   GenericMapping,
-                                  &PrivilegeSet,
-                                  &PrivilegeSetLength,
+                                  NULL,
+                                  NULL,
                                   GrantedAccess,
                                   AccessStatus,
-                                  ResultList);
+                                  ResultList,
+                                  FALSE);
 
     if (ClientToken == NULL) SeReleaseSubjectContext(&SubjectContext);
 

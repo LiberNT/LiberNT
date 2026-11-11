@@ -542,6 +542,7 @@ list(APPEND KMTEST_SOURCE
     kernel32/SecureMemoryCache_user.c
     ntos_se/NtFilterToken.c
     ntos_se/SeLowBoxToken.c
+    ntos_se/SeAuditAlarm.c
     ntos_cc/CcCopyRead_user.c
     ntos_cc/CcCopyWrite_user.c
     ntos_cc/CcMapData_user.c

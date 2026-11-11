@@ -691,11 +691,12 @@ SepAccessCheckByType(
     _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
     _In_ ULONG ObjectTypeListLength,
     _In_ PGENERIC_MAPPING GenericMapping,
-    _Out_ PPRIVILEGE_SET PrivilegeSet,
-    _Inout_ PULONG PrivilegeSetLength,
+    _Out_opt_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_opt_ PULONG PrivilegeSetLength,
     _Out_ PACCESS_MASK GrantedAccess,
     _Out_ PNTSTATUS AccessStatus,
-    _In_ BOOLEAN ResultList);
+    _In_ BOOLEAN ResultList,
+    _In_ BOOLEAN ReturnPrivilegeSet);
 
 VOID
 NTAPI
