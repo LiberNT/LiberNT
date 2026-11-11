@@ -474,6 +474,7 @@ CmpCmdHiveOpen(
     }
 
     Status = CmpInitHiveFromFile(FileAttributes->ObjectName,
+                                 NULL,
                                  0,
                                  NewHive,
                                  Allocate,
@@ -758,6 +759,7 @@ CmpLoadHiveAtName(
     }
 
     Status = CmpInitHiveFromFile(&FilePath,
+                                 TargetKey->ObjectName,
                                  (Flags & REG_NO_LAZY_FLUSH) ? HIVE_NOLAZYFLUSH
                                                              : 0,
                                  &CmHive,
@@ -1578,6 +1580,7 @@ CmpLoadHiveThread(
     RtlInitUnicodeString(&RootName, ListEntry->Name);
 
     Status = CmpInitHiveFromFile(&FileName,
+                                 &RootName,
                                  ListEntry->HHiveFlags,
                                  &CmHive,
                                  &Allocate,

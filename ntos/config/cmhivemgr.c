@@ -268,14 +268,13 @@ BOOLEAN
 NTAPI
 CmpCreateRootNode(
     _In_ PHHIVE Hive,
-    _In_ PCWSTR Name,
+    _In_ PCUNICODE_STRING Name,
     _Out_ PHCELL_INDEX Index)
 {
-    UNICODE_STRING KeyName;
+    UNICODE_STRING KeyName = *Name;
     PCM_KEY_NODE Node;
     USHORT NameSize;
 
-    RtlInitUnicodeString(&KeyName, Name);
     NameSize = CmpNameSize(Hive, &KeyName);
 
     *Index = HvAllocateCell(Hive,
@@ -502,6 +501,7 @@ NTSTATUS
 NTAPI
 CmpInitHiveFromFile(
     _In_ PCUNICODE_STRING HiveName,
+    _In_opt_ PCUNICODE_STRING LinkName,
     _In_ ULONG HiveFlags,
     _Out_ PCMHIVE *Hive,
     _Inout_ PBOOLEAN New,
@@ -510,14 +510,27 @@ CmpInitHiveFromFile(
     ULONG PrimaryDisposition = 0;
     ULONG LogDisposition = 0;
     ULONG ClusterSize = 1;
+    UNICODE_STRING RootName;
     HANDLE Primary = NULL;
     HANDLE Log = NULL;
     HCELL_INDEX RootCell;
     ULONG Operation;
     PCMHIVE CmHive;
     NTSTATUS Status;
+    USHORT Index;
 
     *Hive = NULL;
+
+    RtlInitEmptyUnicodeString(&RootName, NULL, 0);
+    if (LinkName != NULL)
+    {
+        Index = LinkName->Length / sizeof(WCHAR);
+        while (Index > 0 && LinkName->Buffer[Index - 1] != OBJ_NAME_PATH_SEPARATOR) Index--;
+
+        RootName.Buffer = &LinkName->Buffer[Index];
+        RootName.Length = LinkName->Length - Index * sizeof(WCHAR);
+        RootName.MaximumLength = RootName.Length;
+    }
 
     Status = CmpOpenHiveFiles(HiveName,
                               NULL,
@@ -555,7 +568,13 @@ CmpInitHiveFromFile(
         return Status;
     }
 
-    if (*New && !CmpCreateRootNode(&CmHive->Hive, L"", &RootCell))
+    if (*New && RootName.Length == 0)
+    {
+        CmpDestroyHive(CmHive);
+        return STATUS_OBJECT_NAME_INVALID;
+    }
+
+    if (*New && !CmpCreateRootNode(&CmHive->Hive, &RootName, &RootCell))
     {
         CmpDestroyHive(CmHive);
         return STATUS_INSUFFICIENT_RESOURCES;

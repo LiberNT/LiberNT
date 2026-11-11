@@ -945,7 +945,6 @@ CmpInitializeHiveList(VOID)
     UNICODE_STRING HiveName;
     UNICODE_STRING FileName;
     PCMHIVE Hive;
-    HCELL_INDEX RootCell;
     BOOLEAN Allocate;
     NTSTATUS Status;
     ULONG i;
@@ -986,18 +985,13 @@ CmpInitializeHiveList(VOID)
         RtlInitUnicodeString(&FileName, Entry->BaseName);
 
         Status = CmpInitHiveFromFile(&FileName,
+                                     &HiveName,
                                      Entry->HHiveFlags,
                                      &Hive,
                                      &Allocate,
                                      CM_CHECK_REGISTRY_VALIDATE_HIVE |
                                      CM_CHECK_REGISTRY_PURGE_VOLATILES);
         if (!NT_SUCCESS(Status)) continue;
-
-        if (Allocate && !CmpCreateRootNode(&Hive->Hive, L"", &RootCell))
-        {
-            CmpDestroyHive(Hive);
-            continue;
-        }
 
         Hive->Flags |= Entry->CmHiveFlags;
         Entry->CmHive = Hive;
@@ -1123,6 +1117,7 @@ BOOLEAN
 NTAPI
 CmInitSystem1(VOID)
 {
+    UNICODE_STRING RegistryName = RTL_CONSTANT_STRING(L"REGISTRY");
     HCELL_INDEX RootCell;
     PCMHIVE Master;
     HANDLE KeyHandle;
@@ -1174,7 +1169,7 @@ CmInitSystem1(VOID)
                                0);
     if (!NT_SUCCESS(Status)) return FALSE;
 
-    if (!CmpCreateRootNode(&Master->Hive, L"REGISTRY", &RootCell))
+    if (!CmpCreateRootNode(&Master->Hive, &RegistryName, &RootCell))
     {
         return FALSE;
     }
