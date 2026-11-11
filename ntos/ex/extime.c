@@ -426,7 +426,8 @@ NTSTATUS
 ExpSetTimeZoneInformation(
     _In_ PRTL_TIME_ZONE_INFORMATION TimeZoneInformation)
 {
-    LARGE_INTEGER LocalTime, SystemTime, NewTime;
+    LARGE_INTEGER LocalTime, SystemTime;
+    TIME_FIELDS TimeFields;
     LONG Bias;
 
     PAGED_CODE();
@@ -460,9 +461,6 @@ ExpSetTimeZoneInformation(
     ExpAltTimeZoneBias = (ULONG)(TimeZoneInformation->Bias +
                                  TimeZoneInformation->DaylightBias);
 
-    /* The clock keeps universal time; the bias is how far local time is behind. */
-    ExSystemTimeToLocalTime(&SystemTime, &LocalTime);
-
     ExpTimeZoneBias.QuadPart = Int32x32To64(Bias * 60, 10000000);
 
     MmWriteableSharedUserData->TimeZoneBias.High2Time = ExpTimeZoneBias.HighPart;
@@ -470,14 +468,12 @@ ExpSetTimeZoneInformation(
     MmWriteableSharedUserData->TimeZoneBias.High1Time = ExpTimeZoneBias.HighPart;
     MmWriteableSharedUserData->TimeZoneId = ExpTimeZoneId;
 
-    /*
-     * A clock that keeps local time rather than universal time has to be read
-     * through the new bias, so the moment it names does not shift.
-     */
-    if (!ExpRealTimeIsUniversal && ExpRealTimeToSystemTime(&LocalTime, &NewTime))
+    /* The system time stays; a clock that keeps local time is rewritten in the new local time */
+    if (!ExpRealTimeIsUniversal)
     {
-        KeSetSystemTime(&NewTime, &SystemTime, FALSE, NULL);
-        PoNotifySystemTimeSet();
+        ExSystemTimeToLocalTime(&SystemTime, &LocalTime);
+        RtlTimeToTimeFields(&LocalTime, &TimeFields);
+        HalSetRealTimeClock(&TimeFields);
     }
 
     ExpLastTimeZoneBias = (ULONG)Bias;

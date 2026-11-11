@@ -113,6 +113,7 @@ list(APPEND SOURCE
     StarvationBoost.c
     SystemTimeChangeTimers.c
     TzSpecificLocalTimeEx.c
+    TimeZoneKeepsTime.c
     StdHandleInheritance.c
     StreamRename.c
     PosixRename.c

@@ -94,6 +94,7 @@ SeSystemProfilePrivilege = *S-1-5-32-544
 SeSystemTimePrivilege = *S-1-5-19, *S-1-5-32-544, *S-1-5-32-547
 SeTakeOwnershipPrivilege = *S-1-5-32-544
 SeTcbPrivilege =
+SeTimeZonePrivilege = *S-1-5-19, *S-1-5-32-544
 SeUndockPrivilege = *S-1-5-32-544, *S-1-5-32-547
 
 [Group Membership]

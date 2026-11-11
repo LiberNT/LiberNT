@@ -177,6 +177,7 @@ extern void func_SwitchToThreadRoundRobin(void);
 extern void func_YieldStealSwitch(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ThreadPreferredUILanguages(void);
+extern void func_TimeZoneKeepsTime(void);
 extern void func_ProcessPowerThrottling(void);
 extern void func_TransactedFileApis(void);
 extern void func_ProcessorEfficiency(void);
@@ -378,6 +379,7 @@ const struct test winetest_testlist[] =
     { "YieldStealSwitch",            func_YieldStealSwitch },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
+    { "TimeZoneKeepsTime",           func_TimeZoneKeepsTime },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
     { "TransactedFileApis",          func_TransactedFileApis },
     { "ProcessorEfficiency",         func_ProcessorEfficiency },
