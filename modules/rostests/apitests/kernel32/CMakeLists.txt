@@ -90,6 +90,7 @@ list(APPEND SOURCE
     Pipes.c
     PackageNames.c
     PixeloramaCompat.c
+    ProcessAffinityUpdateMode.c
     ProcessPreferredUILanguages.c
     PseudoConsoleCtrlC.c
     PseudoConsoleVtInput.c

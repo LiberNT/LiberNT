@@ -307,6 +307,26 @@ typedef struct _THREAD_POWER_THROTTLING_STATE
 
 #endif // (_WIN32_WINNT >= _WIN32_WINNT_WIN10_RS3) || defined(__REACTOS__)
 
+#if (_WIN32_WINNT >= 0x0600) || defined(__REACTOS__)
+
+#define PROCESS_AFFINITY_ENABLE_AUTO_UPDATE 0x00000001UL
+
+WINBASEAPI
+BOOL
+WINAPI
+SetProcessAffinityUpdateMode(
+    _In_ HANDLE hProcess,
+    _In_ DWORD dwFlags);
+
+WINBASEAPI
+BOOL
+WINAPI
+QueryProcessAffinityUpdateMode(
+    _In_ HANDLE hProcess,
+    _Out_opt_ LPDWORD lpdwFlags);
+
+#endif // (_WIN32_WINNT >= 0x0600) || defined(__REACTOS__)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
