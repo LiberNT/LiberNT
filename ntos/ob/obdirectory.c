@@ -391,14 +391,15 @@ ObpReportDirectoryEntry(
 
     if (NameInfo == NULL) return TRUE;
 
-    Bytes = 2 * sizeof(OBJECT_DIRECTORY_INFORMATION) +
+    Bytes = sizeof(OBJECT_DIRECTORY_INFORMATION) +
             NameInfo->Name.Length + sizeof(UNICODE_NULL) +
             Type->Name.Length + sizeof(UNICODE_NULL);
 
-    if (Bytes > Scan->Left)
+    if (Bytes + sizeof(OBJECT_DIRECTORY_INFORMATION) > Scan->Left)
     {
         Scan->Full = TRUE;
-        if (Scan->Needed == 0) Scan->Needed = Scan->Used + Bytes;
+        if (Scan->Needed == 0)
+            Scan->Needed = Scan->Used + Bytes + sizeof(OBJECT_DIRECTORY_INFORMATION);
         return FALSE;
     }
 
@@ -440,6 +441,7 @@ NtQueryDirectoryObject(
     OBP_LOOKUP_CONTEXT Lookup;
     OBP_DIRECTORY_SCAN Scan;
     ULONG Skip, Index, Bucket;
+    BOOLEAN Done;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -481,7 +483,8 @@ NtQueryDirectoryObject(
     ObpAcquireDirectoryLockShared(Directory, &Lookup);
 
     Index = 0;
-    for (Bucket = 0; Bucket < NUMBER_HASH_BUCKETS && !Scan.Full; Bucket++)
+    Done = FALSE;
+    for (Bucket = 0; Bucket < NUMBER_HASH_BUCKETS && !Done; Bucket++)
     {
         for (Entry = Directory->HashBuckets[Bucket];
              Entry != NULL;
@@ -493,12 +496,13 @@ NtQueryDirectoryObject(
             if (!ObpReportDirectoryEntry(&Scan, Entry->Object))
             {
                 Index--;
+                Done = TRUE;
                 break;
             }
 
-            if (ReturnSingleEntry)
+            if (ReturnSingleEntry && Scan.Used != 0)
             {
-                Scan.Full = TRUE;
+                Done = TRUE;
                 break;
             }
         }
@@ -506,31 +510,27 @@ NtQueryDirectoryObject(
 
     _SEH2_TRY
     {
-        /* An empty descriptor closes the list whenever anything was reported */
-        if (Scan.Used != 0)
-            RtlZeroMemory(Scan.Info, sizeof(OBJECT_DIRECTORY_INFORMATION));
-
-        if (Scan.Used == 0)
+        if (Scan.Full && ReturnSingleEntry)
         {
-            Status = (Scan.Needed != 0) ? STATUS_BUFFER_TOO_SMALL :
-                                          STATUS_NO_MORE_ENTRIES;
-        }
-        else if (ReturnSingleEntry || Index == Skip)
-        {
-            Status = STATUS_SUCCESS;
+            /* The one entry asked for did not fit, and the size it needs is what is reported */
+            Status = STATUS_BUFFER_TOO_SMALL;
+            if (ReturnLength != NULL) *ReturnLength = Scan.Needed;
         }
         else
         {
-            Status = Scan.Full ? STATUS_MORE_ENTRIES : STATUS_SUCCESS;
-        }
+            /* An empty descriptor closes the list whenever the buffer has room for one */
+            if (Scan.Left >= sizeof(OBJECT_DIRECTORY_INFORMATION))
+                RtlZeroMemory(Scan.Info, sizeof(OBJECT_DIRECTORY_INFORMATION));
 
-        if (Scan.Used != 0) *Context = Index;
+            if (Scan.Full)
+                Status = STATUS_MORE_ENTRIES;
+            else
+                Status = (Scan.Used != 0) ? STATUS_SUCCESS : STATUS_NO_MORE_ENTRIES;
 
-        if (ReturnLength != NULL)
-        {
-            *ReturnLength = (Scan.Needed != 0) ?
-                            Scan.Needed :
-                            Scan.Used + sizeof(OBJECT_DIRECTORY_INFORMATION);
+            if (Status != STATUS_NO_MORE_ENTRIES) *Context = Index;
+
+            if (ReturnLength != NULL)
+                *ReturnLength = Scan.Used + sizeof(OBJECT_DIRECTORY_INFORMATION);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
