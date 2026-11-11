@@ -698,6 +698,7 @@ MiSnapThunk(IN PVOID DllBase,
     PIMAGE_IMPORT_BY_NAME ForwardName;
     SIZE_T ForwardLength;
     IMAGE_THUNK_DATA ForwardThunk;
+    PCHAR Dot;
 
     PAGED_CODE();
 
@@ -772,9 +773,10 @@ MiSnapThunk(IN PVOID DllBase,
             Status = STATUS_DRIVER_ENTRYPOINT_NOT_FOUND;
 
             DllName.Buffer = (PCHAR)Address->u1.Function;
-            DllName.Length = (USHORT)(strchr(DllName.Buffer, '.') -
-                                      DllName.Buffer) +
-                                      sizeof(ANSI_NULL);
+            Dot = strchr(DllName.Buffer, '.');
+            if (Dot == NULL) return Status;
+
+            DllName.Length = (USHORT)(Dot - DllName.Buffer) + sizeof(ANSI_NULL);
             DllName.MaximumLength = DllName.Length;
 
             if (!NT_SUCCESS(RtlAnsiStringToUnicodeString(&ForwarderName,
