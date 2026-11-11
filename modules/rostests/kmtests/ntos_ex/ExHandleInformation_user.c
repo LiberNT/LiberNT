@@ -12,11 +12,15 @@
 #define QUERY_ROUNDS 200
 #define TOGGLE_ROUNDS 2000000
 #define CHURN_ROUNDS 24
+#define CHURN_THREADS 2
 
 typedef struct _CHURN_CONTEXT
 {
     PUCHAR Page;
+    PUCHAR Buffer;
     volatile LONG Stop;
+    ULONG Children;
+    ULONG Misses;
 } CHURN_CONTEXT, *PCHURN_CONTEXT;
 
 static
@@ -39,6 +43,32 @@ TogglePage(
 }
 
 static
+BOOLEAN
+IsHandleListed(
+    _In_ PUCHAR Buffer,
+    _In_ DWORD ProcessId,
+    _In_ HANDLE Handle)
+{
+    PSYSTEM_HANDLE_INFORMATION_EX Info = (PSYSTEM_HANDLE_INFORMATION_EX)Buffer;
+    ULONG_PTR Index;
+    ULONG Length;
+
+    if (!NT_SUCCESS(NtQuerySystemInformation(SystemExtendedHandleInformation, Buffer, QUERY_BUFFER_SIZE, &Length)))
+        return FALSE;
+
+    for (Index = 0; Index < Info->NumberOfHandles; Index++)
+    {
+        if ((Info->Handles[Index].UniqueProcessId == ProcessId) &&
+            (Info->Handles[Index].HandleValue == (ULONG_PTR)Handle))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+static
 DWORD
 WINAPI
 ChurnProcesses(
@@ -48,9 +78,15 @@ ChurnProcesses(
     WCHAR Path[MAX_PATH];
     STARTUPINFOW Startup;
     PROCESS_INFORMATION Process;
+    HANDLE Event;
+    HANDLE Remote;
     ULONG Round;
 
     if (GetModuleFileNameW(NULL, Path, RTL_NUMBER_OF(Path)) == 0)
+        return 1;
+
+    Event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (Event == NULL)
         return 1;
 
     for (Round = 0; (Round < CHURN_ROUNDS) && !Context->Stop; Round++)
@@ -59,13 +95,23 @@ ChurnProcesses(
         Startup.cb = sizeof(Startup);
 
         if (!CreateProcessW(Path, NULL, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, NULL, &Startup, &Process))
-            return 1;
+            break;
+
+        Context->Children++;
+
+        if (!DuplicateHandle(GetCurrentProcess(), Event, Process.hProcess, &Remote, 0, FALSE, DUPLICATE_SAME_ACCESS) ||
+            !IsHandleListed(Context->Buffer, Process.dwProcessId, Remote))
+        {
+            Context->Misses++;
+        }
 
         TerminateProcess(Process.hProcess, 0);
         WaitForSingleObject(Process.hProcess, 10000);
         CloseHandle(Process.hThread);
         CloseHandle(Process.hProcess);
     }
+
+    CloseHandle(Event);
 
     return 0;
 }
@@ -74,7 +120,8 @@ static
 ULONG
 QueryWhile(
     _In_ PUCHAR Buffer,
-    _In_ HANDLE Thread)
+    _In_ ULONG ThreadCount,
+    _In_reads_(ThreadCount) PHANDLE Threads)
 {
     ULONG Unexpected = 0;
     ULONG Length;
@@ -92,18 +139,14 @@ QueryWhile(
             Unexpected++;
         }
 
-        if (WaitForSingleObject(Thread, 0) == WAIT_OBJECT_0)
+        if (WaitForMultipleObjects(ThreadCount, Threads, TRUE, 0) == WAIT_OBJECT_0)
             break;
     }
 
     return Unexpected;
 }
 
-static
-VOID
-TestWalkWhile(
-    _In_ PCSTR Name,
-    _In_ LPTHREAD_START_ROUTINE Routine)
+START_TEST(ExHandleInformation)
 {
     CHURN_CONTEXT Context;
     HANDLE Thread;
@@ -111,34 +154,72 @@ TestWalkWhile(
     ULONG Unexpected;
 
     Buffer = VirtualAlloc(NULL, QUERY_BUFFER_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    ok(Buffer != NULL, "%s: VirtualAlloc failed with %lu\n", Name, GetLastError());
+    ok(Buffer != NULL, "VirtualAlloc failed with %lu\n", GetLastError());
     if (Buffer == NULL)
         return;
 
+    RtlZeroMemory(&Context, sizeof(Context));
     Context.Page = Buffer + 8 * PAGE_SIZE;
-    Context.Stop = 0;
 
-    Thread = CreateThread(NULL, 0, Routine, &Context, 0, NULL);
-    ok(Thread != NULL, "%s: CreateThread failed with %lu\n", Name, GetLastError());
-    if (Thread == NULL)
+    Thread = CreateThread(NULL, 0, TogglePage, &Context, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Thread != NULL)
     {
-        VirtualFree(Buffer, 0, MEM_RELEASE);
-        return;
+        Unexpected = QueryWhile(Buffer, 1, &Thread);
+
+        InterlockedExchange(&Context.Stop, 1);
+        ok(WaitForSingleObject(Thread, 30000) == WAIT_OBJECT_0, "the toggling thread did not end\n");
+        CloseHandle(Thread);
+
+        ok(Unexpected == 0, "%lu queries failed unexpectedly\n", Unexpected);
     }
-
-    Unexpected = QueryWhile(Buffer, Thread);
-
-    InterlockedExchange(&Context.Stop, 1);
-    ok(WaitForSingleObject(Thread, 30000) == WAIT_OBJECT_0, "%s: thread did not end\n", Name);
-    CloseHandle(Thread);
-
-    ok(Unexpected == 0, "%s: %lu queries failed unexpectedly\n", Name, Unexpected);
 
     VirtualFree(Buffer, 0, MEM_RELEASE);
 }
 
-START_TEST(ExHandleInformation)
+START_TEST(ExHandleListChurn)
 {
-    TestWalkWhile("buffer protection changing", TogglePage);
-    TestWalkWhile("processes coming and going", ChurnProcesses);
+    CHURN_CONTEXT Context[CHURN_THREADS];
+    HANDLE Threads[CHURN_THREADS];
+    PUCHAR Buffer;
+    ULONG Unexpected;
+    ULONG Started = 0;
+    ULONG Index;
+
+    Buffer = VirtualAlloc(NULL, QUERY_BUFFER_SIZE * (CHURN_THREADS + 1), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ok(Buffer != NULL, "VirtualAlloc failed with %lu\n", GetLastError());
+    if (Buffer == NULL)
+        return;
+
+    for (Index = 0; Index < CHURN_THREADS; Index++)
+    {
+        RtlZeroMemory(&Context[Index], sizeof(Context[Index]));
+        Context[Index].Buffer = Buffer + QUERY_BUFFER_SIZE * (Index + 1);
+
+        Threads[Started] = CreateThread(NULL, 0, ChurnProcesses, &Context[Index], 0, NULL);
+        ok(Threads[Started] != NULL, "CreateThread failed with %lu\n", GetLastError());
+        if (Threads[Started] != NULL)
+            Started++;
+    }
+
+    if (Started != 0)
+    {
+        Unexpected = QueryWhile(Buffer, Started, Threads);
+        ok(Unexpected == 0, "%lu queries failed unexpectedly\n", Unexpected);
+    }
+
+    for (Index = 0; Index < Started; Index++)
+    {
+        ok(WaitForSingleObject(Threads[Index], 60000) == WAIT_OBJECT_0, "churning thread %lu did not end\n", Index);
+        CloseHandle(Threads[Index]);
+    }
+
+    for (Index = 0; Index < CHURN_THREADS; Index++)
+    {
+        ok(Context[Index].Children == CHURN_ROUNDS, "thread %lu made %lu processes\n", Index, Context[Index].Children);
+        ok(Context[Index].Misses == 0, "thread %lu: %lu duplicated handles not listed under the child's id\n",
+           Index, Context[Index].Misses);
+    }
+
+    VirtualFree(Buffer, 0, MEM_RELEASE);
 }
