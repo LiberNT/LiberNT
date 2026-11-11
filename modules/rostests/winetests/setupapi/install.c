@@ -724,7 +724,7 @@ static void test_service_install(const char *executable, const char *argument)
         ok(ret, "QueryServiceStatus failed: %lu\n", GetLastError());
         while (status.dwCurrentState == SERVICE_START_PENDING)
         {
-            Sleep(100);
+            Sleep(1);
             ret = QueryServiceStatus(svc_handle, &status);
             ok(ret, "QueryServiceStatus failed: %lu\n", GetLastError());
         }
@@ -732,7 +732,7 @@ static void test_service_install(const char *executable, const char *argument)
         ret = ControlService(svc_handle, SERVICE_CONTROL_STOP, &status);
         while (status.dwCurrentState == SERVICE_STOP_PENDING)
         {
-            Sleep(100);
+            Sleep(1);
             ret = QueryServiceStatus(svc_handle, &status);
             ok(ret, "QueryServiceStatus failed: %lu\n", GetLastError());
         }
