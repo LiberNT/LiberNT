@@ -122,6 +122,8 @@ EtwpQueryClock(
 
     if (Logger->ClockType == EVENT_TRACE_CLOCK_SYSTEMTIME)
         KeQuerySystemTime(&Time);
+    else if (Logger->ClockType == EVENT_TRACE_CLOCK_CPUCYCLE)
+        Time.QuadPart = (LONGLONG)ReadTimeStampCounter();
     else
         Time = KeQueryPerformanceCounter(NULL);
 
@@ -732,8 +734,12 @@ EtwpStartLogger(
     Logger->FlushTimer = Info->FlushTimer;
     if (!Logger->FlushTimer && (Mode & EVENT_TRACE_REAL_TIME_MODE))
         Logger->FlushTimer = 1;
-    Logger->ClockType = (Info->Wnode.ClientContext == EVENT_TRACE_CLOCK_SYSTEMTIME) ? EVENT_TRACE_CLOCK_SYSTEMTIME :
-                                                                                      EVENT_TRACE_CLOCK_PERFCOUNTER;
+    Logger->ClockType = EVENT_TRACE_CLOCK_PERFCOUNTER;
+    if (Info->Wnode.ClientContext == EVENT_TRACE_CLOCK_SYSTEMTIME ||
+        Info->Wnode.ClientContext == EVENT_TRACE_CLOCK_CPUCYCLE)
+    {
+        Logger->ClockType = Info->Wnode.ClientContext;
+    }
     Logger->InstanceGuid = Info->Wnode.Guid;
     KeQuerySystemTime(&Logger->StartTime);
 

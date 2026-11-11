@@ -143,7 +143,8 @@ WmiGetClock(
             return Value.QuadPart;
 
         case EVENT_TRACE_CLOCK_CPUCYCLE:
-            /* TODO: read the processor's own cycle counter through the HAL */
+            return (LONGLONG)ReadTimeStampCounter();
+
         case EVENT_TRACE_CLOCK_RAW:
         case EVENT_TRACE_CLOCK_PERFCOUNTER:
         default:
