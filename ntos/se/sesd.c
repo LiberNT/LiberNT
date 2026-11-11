@@ -345,10 +345,12 @@ NTSTATUS
 SepBuildLabelSacl(
     _In_opt_ PACL Labels,
     _In_opt_ PACL Others,
+    _In_ BOOLEAN LabelsLast,
     _Out_ PACL *NewSacl)
 {
     UCHAR Revision = ACL_REVISION;
     ULONG Length = sizeof(ACL);
+    BOOLEAN LabelPass;
     BOOLEAN Label;
     PACE_HEADER Ace;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -361,17 +363,18 @@ SepBuildLabelSacl(
 
     for (Pass = 0; Pass < 2; Pass++)
     {
-        Source = (Pass == 0) ? Labels : Others;
+        LabelPass = ((Pass == 0) != LabelsLast);
+        Source = LabelPass ? Labels : Others;
         if (Source == NULL) continue;
 
-        if (Pass == 0 && Source->AclRevision > Revision) Revision = Source->AclRevision;
+        if (LabelPass && Source->AclRevision > Revision) Revision = Source->AclRevision;
 
         for (Index = 0; Index < Source->AceCount; Index++)
         {
             if (!NT_SUCCESS(RtlGetAce(Source, Index, (PVOID *)&Ace))) return STATUS_INVALID_ACL;
 
             Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
-            if (Label != (Pass == 0)) continue;
+            if (Label != LabelPass) continue;
 
             Length += Ace->AceSize;
             if (Source->AclRevision > Revision) Revision = Source->AclRevision;
@@ -387,7 +390,8 @@ SepBuildLabelSacl(
 
     for (Pass = 0; NT_SUCCESS(Status) && Pass < 2; Pass++)
     {
-        Source = (Pass == 0) ? Labels : Others;
+        LabelPass = ((Pass == 0) != LabelsLast);
+        Source = LabelPass ? Labels : Others;
         if (Source == NULL) continue;
 
         for (Index = 0; NT_SUCCESS(Status) && Index < Source->AceCount; Index++)
@@ -396,7 +400,7 @@ SepBuildLabelSacl(
             if (!NT_SUCCESS(Status)) break;
 
             Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
-            if (Label != (Pass == 0)) continue;
+            if (Label != LabelPass) continue;
 
             Status = RtlAddAce(Sacl, Revision, MAXULONG, Ace, Ace->AceSize);
         }
@@ -890,7 +894,7 @@ SeQuerySecurityDescriptorInfo(
         /* Asking for the label shows the label entries of the SACL and nothing else */
         if (Held.Sacl != NULL)
         {
-            Status = SepBuildLabelSacl(Held.Sacl, NULL, &LabelSacl);
+            Status = SepBuildLabelSacl(Held.Sacl, NULL, FALSE, &LabelSacl);
             if (!NT_SUCCESS(Status)) return Status;
         }
 
@@ -1066,7 +1070,7 @@ SeSetSecurityDescriptorInfoEx(
         {
             PACL Merged = NULL;
 
-            Status = SepBuildLabelSacl(Held.Sacl, ReadSacl, &Merged);
+            Status = SepBuildLabelSacl(Held.Sacl, ReadSacl, TRUE, &Merged);
             if (NT_SUCCESS(Status))
             {
                 if (ReadSacl != NULL) ExFreePoolWithTag(ReadSacl, TAG_ACL);
@@ -1081,6 +1085,7 @@ SeSetSecurityDescriptorInfoEx(
         /* A label is set by replacing the label entries of the SACL; whatever else it holds stays */
         Status = SepBuildLabelSacl(Given.SaclPresent ? Given.Sacl : NULL,
                                    Held.SaclPresent ? Held.Sacl : NULL,
+                                   FALSE,
                                    &ReadSacl);
         Next.Sacl = ReadSacl;
         Next.SaclPresent = TRUE;
