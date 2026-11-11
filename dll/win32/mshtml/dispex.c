@@ -916,6 +916,14 @@ static HRESULT typeinfo_invoke(DispatchEx *This, func_info_t *func, WORD flags, 
     hres = ITypeInfo_Invoke(ti, unk, func->id, flags, &params, res, ei, &argerr);
 
     IUnknown_Release(unk);
+
+    if(hres == DISP_E_EXCEPTION && ei && FAILED(ei->scode) && dispex_compat_mode(This) >= COMPAT_MODE_IE9) {
+        hres = ei->scode;
+        SysFreeString(ei->bstrSource);
+        SysFreeString(ei->bstrDescription);
+        SysFreeString(ei->bstrHelpFile);
+        memset(ei, 0, sizeof(*ei));
+    }
     return hres;
 }
 

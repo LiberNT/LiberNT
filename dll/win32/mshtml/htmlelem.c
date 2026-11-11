@@ -5142,8 +5142,7 @@ static HRESULT WINAPI HTMLElement6_setAttributeNS(IHTMLElement6 *iface, VARIANT 
     nsAString_GetData(&ns_str, &ns);
     if((!ns || !ns[0]) && wcschr(strAttributeName, ':')) {
         nsAString_Finish(&ns_str);
-        /* FIXME: Return NamespaceError */
-        return E_FAIL;
+        return MSHTML_E_NAMESPACE;
     }
 
     if(!This->dom_element) {

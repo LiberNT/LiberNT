@@ -82,6 +82,7 @@
 #define MSHTML_E_INDEX_SIZE       0x80700001
 #define MSHTML_E_INVALID_CHARACTER 0x80700005
 #define MSHTML_E_DOM_SYNTAX       0x8070000c
+#define MSHTML_E_NAMESPACE        0x8070000e
 
 typedef struct HTMLWindow HTMLWindow;
 typedef struct HTMLInnerWindow HTMLInnerWindow;
