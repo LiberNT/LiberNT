@@ -40,6 +40,7 @@ list(APPEND SOURCE
     ServiceCrash.c
     ServiceEnv.c
     ServiceNetwork.c
+    ServicePowerSetting.c
     TriggerInfo.c
     TokenBnoIsolation.c
     TraceEvents.c

@@ -420,6 +420,14 @@ NtUserInitialize(
         gbGreInitialized = TRUE;
     }
 
+    /* Every session's CSRSS delivers the power callouts of the windows and services in that session */
+    Status = IntInitWin32PowerManagement(hPowerRequestEvent);
+    if (!NT_SUCCESS(Status))
+    {
+        UserLeave();
+        return Status;
+    }
+
     if (Session->SessionId == 0 || gpDisplaySession)
     {
         Status = UserCreateWinstaDirectory();
@@ -428,14 +436,6 @@ NtUserInitialize(
     }
 
     WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
-
-    /* Initialize Power Request List */
-    Status = IntInitWin32PowerManagement(hPowerRequestEvent);
-    if (!NT_SUCCESS(Status))
-    {
-        UserLeave();
-        return Status;
-    }
 
 // Initialize Media Change (use hMediaRequestEvent).
 
