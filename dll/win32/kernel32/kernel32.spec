@@ -1223,7 +1223,7 @@
 @ stdcall -version=0x600+ SetFileBandwidthReservation(ptr long long long ptr ptr)
 @ stdcall SetFileCompletionNotificationModes(ptr long)
 @ stdcall -version=0x600+ SetFileInformationByHandle(ptr long ptr long)
-@ stub -version=0x600+ SetFileIoOverlappedRange
+@ stdcall -version=0x600+ SetFileIoOverlappedRange(ptr ptr long)
 @ stdcall SetFilePointer(long long ptr long)
 @ stdcall SetFilePointerEx(long double ptr long)
 @ stdcall SetFileShortNameA(long str)

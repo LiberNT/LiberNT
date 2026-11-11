@@ -112,6 +112,7 @@ typedef struct _FILE_OBJECT_EXTENSION
     PVOID FilterContext;
     ULONG FoExtFlags;
     IO_PRIORITY_HINT PriorityHint;
+    PMDL IoStatusBlockRange;
 
 } FILE_OBJECT_EXTENSION, *PFILE_OBJECT_EXTENSION;
 

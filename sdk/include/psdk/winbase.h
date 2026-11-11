@@ -1844,6 +1844,7 @@ HANDLE WINAPI FindFirstStreamW(_In_ LPCWSTR, _In_ STREAM_INFO_LEVELS, _Out_ LPVO
 #if (_WIN32_WINNT >= 0x0600)
 HANDLE WINAPI FindFirstFileNameW(_In_ LPCWSTR lpFileName, _In_ DWORD dwFlags, _Inout_ LPDWORD StringLength, _Out_writes_(*StringLength) PWSTR LinkName);
 BOOL APIENTRY FindNextFileNameW(_In_ HANDLE hFindStream, _Inout_ LPDWORD StringLength, _Out_writes_(*StringLength) PWSTR LinkName);
+BOOL WINAPI SetFileIoOverlappedRange(_In_ HANDLE FileHandle, _In_ PUCHAR OverlappedRangeStart, _In_ ULONG Length);
 #endif
 BOOL WINAPI FindFirstFreeAce(PACL,PVOID*);
 

@@ -1168,6 +1168,7 @@
 @ stdcall SetFileAttributesA(str long) kernel32.SetFileAttributesA
 @ stdcall SetFileAttributesW(wstr long) kernel32.SetFileAttributesW
 @ stdcall -version=0x600+ SetFileInformationByHandle(ptr long ptr long) kernel32.SetFileInformationByHandle
+@ stdcall -version=0x600+ SetFileIoOverlappedRange(ptr ptr long) kernel32.SetFileIoOverlappedRange
 @ stdcall SetFilePointer(long long ptr long) kernel32.SetFilePointer
 @ stdcall SetFilePointerEx(long double ptr long) kernel32.SetFilePointerEx
 @ stdcall SetFileSecurityW(wstr long ptr)

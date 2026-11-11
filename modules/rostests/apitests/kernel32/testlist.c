@@ -30,6 +30,7 @@ extern void func_dosdev(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FindActCtxSectionStringW(void);
 extern void func_FileStorageInfo(void);
+extern void func_FileIoOverlappedRange(void);
 extern void func_FindFileNames(void);
 extern void func_FileInfoByHandleEx(void);
 extern void func_FindFiles(void);
@@ -171,6 +172,7 @@ const struct test winetest_testlist[] =
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
     { "FileStorageInfo",             func_FileStorageInfo },
+    { "FileIoOverlappedRange",       func_FileIoOverlappedRange },
     { "FindFileNames",               func_FindFileNames },
     { "FileInfoByHandleEx",          func_FileInfoByHandleEx },
     { "FindFiles",                   func_FindFiles },

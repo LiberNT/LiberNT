@@ -72,6 +72,8 @@ UCHAR IopSetOperationLength[FileMaximumInformation] =
     [FileShortNameInformation] = sizeof(UNICODE_STRING),
     [FileIoCompletionNotificationInformation] =
         sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION),
+    [FileIoStatusBlockRangeInformation] =
+        sizeof(FILE_IOSTATUSBLOCK_RANGE_INFORMATION),
     [FileIoPriorityHintInformation] =
         sizeof(FILE_IO_PRIORITY_HINT_INFORMATION),
     [FileDispositionInformationEx] = sizeof(FILE_DISPOSITION_INFORMATION_EX),
@@ -120,6 +122,7 @@ ACCESS_MASK IopSetOperationAccess[FileMaximumInformation] =
     [FileTrackingInformation] = FILE_WRITE_DATA,
     [FileValidDataLengthInformation] = FILE_WRITE_DATA,
     [FileShortNameInformation] = DELETE,
+    [FileIoStatusBlockRangeInformation] = FILE_READ_ATTRIBUTES,
     [FileDispositionInformationEx] = DELETE,
     [FileRenameInformationEx] = DELETE,
     [FileCaseSensitiveInformation] = FILE_WRITE_ATTRIBUTES
@@ -162,6 +165,74 @@ ULONG IopSetFsOperationAccess[FileFsMaximumInformation] =
 };
 
 /* PRIVATE FUNCTIONS **********************************************************/
+
+static
+NTSTATUS
+IopSetIoStatusBlockRange(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PFILE_IOSTATUSBLOCK_RANGE_INFORMATION Range,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    PFILE_OBJECT_EXTENSION Extension;
+    PEPROCESS Process;
+    NTSTATUS Status;
+    PMDL Mdl;
+
+    if (!SeSinglePrivilegeCheck(SeLockMemoryPrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (Range->Length == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = IopAllocateFileObjectExtension(FileObject);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Extension = FileObject->FileObjectExtension;
+    if (Extension->IoStatusBlockRange != NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Mdl = IoAllocateMdl(Range->IoStatusBlockRange, Range->Length, FALSE, FALSE, NULL);
+    if (Mdl == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(Mdl, PreviousMode, IoWriteAccess);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(Mdl);
+        return Status;
+    }
+
+    /* The locked pages are charged to the process, which must outlive them */
+    Process = Mdl->Process;
+    if (Process != NULL) ObReferenceObject(Process);
+
+    if (InterlockedCompareExchangePointer((PVOID *)&Extension->IoStatusBlockRange,
+                                          Mdl,
+                                          NULL) != NULL)
+    {
+        MmUnlockPages(Mdl);
+        IoFreeMdl(Mdl);
+        if (Process != NULL) ObDereferenceObject(Process);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* TODO: completion does not yet write status blocks inside the locked range directly */
+    return STATUS_SUCCESS;
+}
 
 static
 NTSTATUS
@@ -1169,6 +1240,29 @@ NtSetInformationFile(
             Status = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
+
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
+
+    if (FileInformationClass == FileIoStatusBlockRangeInformation)
+    {
+        Status = IopSetIoStatusBlockRange(FileObject, Buffer, PreviousMode);
+        ExFreePoolWithTag(Buffer, TAG_IOBUF);
+
+        if (NT_SUCCESS(Status))
+        {
+            _SEH2_TRY
+            {
+                IoStatusBlock->Status = STATUS_SUCCESS;
+                IoStatusBlock->Information = 0;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
 
         ObDereferenceObject(FileObject);
         return Status;

@@ -66,6 +66,36 @@ SetFileCompletionNotificationModes(IN HANDLE FileHandle,
 /*
  * @implemented
  */
+BOOL
+WINAPI
+SetFileIoOverlappedRange(IN HANDLE FileHandle,
+                         IN PUCHAR OverlappedRangeStart,
+                         IN ULONG Length)
+{
+    FILE_IOSTATUSBLOCK_RANGE_INFORMATION FileInformation;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    FileInformation.IoStatusBlockRange = OverlappedRangeStart;
+    FileInformation.Length = Length;
+
+    Status = NtSetInformationFile(FileHandle,
+                                  &IoStatusBlock,
+                                  &FileInformation,
+                                  sizeof(FileInformation),
+                                  FileIoStatusBlockRangeInformation);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+/*
+ * @implemented
+ */
 HANDLE
 WINAPI
 CreateIoCompletionPort(IN HANDLE FileHandle,

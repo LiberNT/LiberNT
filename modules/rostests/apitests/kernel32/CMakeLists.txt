@@ -32,6 +32,7 @@ list(APPEND SOURCE
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
     FileStorageInfo.c
+    FileIoOverlappedRange.c
     FindFileNames.c
     FileInfoByHandleEx.c
     FindFiles.c
@@ -144,6 +145,7 @@ list(APPEND SOURCE
 )
 
 list(APPEND PCH_SKIP_SOURCE
+    ../advapi32/svchlp.c
     testlist.c)
 
 add_executable(kernel32_apitest

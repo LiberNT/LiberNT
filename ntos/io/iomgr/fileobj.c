@@ -140,10 +140,20 @@ IopDeleteFile(
 
     if (FileObject->Flags & FO_FILE_OBJECT_HAS_EXTENSION)
     {
-        PVOID Extension = FileObject->FileObjectExtension;
+        PFILE_OBJECT_EXTENSION Extension = FileObject->FileObjectExtension;
 
         FileObject->FileObjectExtension = NULL;
         FileObject->Flags &= ~FO_FILE_OBJECT_HAS_EXTENSION;
+
+        if (Extension != NULL && Extension->IoStatusBlockRange != NULL)
+        {
+            PMDL Range = Extension->IoStatusBlockRange;
+            PEPROCESS Process = Range->Process;
+
+            MmUnlockPages(Range);
+            IoFreeMdl(Range);
+            if (Process != NULL) ObDereferenceObject(Process);
+        }
 
         if (Extension != NULL) ExFreePoolWithTag(Extension, TAG_IO);
     }
