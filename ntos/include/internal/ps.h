@@ -711,6 +711,13 @@ PspArchCopyLiveWow64Context(
 
 NTSTATUS
 NTAPI
+PspCopyWow64CpuAreaContext(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext);
+
+NTSTATUS
+NTAPI
 PspArchCopyWow64DebugRegisters(
     _In_ PETHREAD Thread,
     _Inout_ PWOW64_CONTEXT Context,

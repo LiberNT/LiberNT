@@ -315,3 +315,108 @@ NtSetContextThread(
     ObDereferenceObject(Thread);
     return Status;
 }
+
+static
+VOID
+PspMergeWow64Context(
+    _Inout_ PWOW64_CONTEXT Target,
+    _In_ PWOW64_CONTEXT Source)
+{
+    ULONG Flags = Source->ContextFlags;
+
+    if ((Flags & WOW64_CONTEXT_CONTROL) == WOW64_CONTEXT_CONTROL)
+    {
+        Target->Ebp = Source->Ebp;
+        Target->Eip = Source->Eip;
+        Target->SegCs = Source->SegCs;
+        Target->EFlags = Source->EFlags;
+        Target->Esp = Source->Esp;
+        Target->SegSs = Source->SegSs;
+    }
+
+    if ((Flags & WOW64_CONTEXT_INTEGER) == WOW64_CONTEXT_INTEGER)
+    {
+        Target->Edi = Source->Edi;
+        Target->Esi = Source->Esi;
+        Target->Ebx = Source->Ebx;
+        Target->Edx = Source->Edx;
+        Target->Ecx = Source->Ecx;
+        Target->Eax = Source->Eax;
+    }
+
+    if ((Flags & WOW64_CONTEXT_SEGMENTS) == WOW64_CONTEXT_SEGMENTS)
+    {
+        Target->SegGs = Source->SegGs;
+        Target->SegFs = Source->SegFs;
+        Target->SegEs = Source->SegEs;
+        Target->SegDs = Source->SegDs;
+    }
+
+    if ((Flags & WOW64_CONTEXT_FLOATING_POINT) == WOW64_CONTEXT_FLOATING_POINT)
+        Target->FloatSave = Source->FloatSave;
+
+    if ((Flags & WOW64_CONTEXT_DEBUG_REGISTERS) == WOW64_CONTEXT_DEBUG_REGISTERS)
+    {
+        Target->Dr0 = Source->Dr0;
+        Target->Dr1 = Source->Dr1;
+        Target->Dr2 = Source->Dr2;
+        Target->Dr3 = Source->Dr3;
+        Target->Dr6 = Source->Dr6;
+        Target->Dr7 = Source->Dr7;
+    }
+
+    if ((Flags & WOW64_CONTEXT_EXTENDED_REGISTERS) == WOW64_CONTEXT_EXTENDED_REGISTERS)
+        RtlCopyMemory(Target->ExtendedRegisters, Source->ExtendedRegisters, sizeof(Target->ExtendedRegisters));
+}
+
+NTSTATUS
+NTAPI
+PspCopyWow64CpuAreaContext(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    PTEB Teb = Thread->Tcb.Teb;
+    PWOW64_CPU_INIT CpuArea;
+    KAPC_STATE ApcState;
+    ULONG Flags = Context->ContextFlags;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (Teb == NULL) return STATUS_INVALID_PARAMETER;
+
+    /* TODO: a thread suspended while running 32-bit code keeps its live state in the trap frame, not in the CPU area */
+    KeStackAttachProcess(&THREAD_TO_PROCESS(Thread)->Pcb, &ApcState);
+
+    _SEH2_TRY
+    {
+        CpuArea = (PWOW64_CPU_INIT)Teb->TlsSlots[WOW64_TLS_CPURESERVED];
+        ProbeForRead(CpuArea, FIELD_OFFSET(WOW64_CPU_INIT, ContextEx), sizeof(USHORT));
+
+        if (CpuArea->Cpu.Machine != IMAGE_FILE_MACHINE_I386)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        else if (SetContext)
+        {
+            ProbeForWrite(CpuArea, FIELD_OFFSET(WOW64_CPU_INIT, ContextEx), sizeof(USHORT));
+            PspMergeWow64Context(&CpuArea->Context, Context);
+            CpuArea->Cpu.Flags |= WOW64_CPURESERVED_FLAG_RESET_STATE;
+        }
+        else
+        {
+            *Context = CpuArea->Context;
+            Context->ContextFlags = Flags;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    KeUnstackDetachProcess(&ApcState);
+
+    return Status;
+}
