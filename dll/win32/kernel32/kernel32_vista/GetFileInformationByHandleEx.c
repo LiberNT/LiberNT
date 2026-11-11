@@ -24,13 +24,16 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileInformationByHandleEx(HANDLE handle, FILE_I
     switch (class)
     {
     case FileRemoteProtocolInfo:
-    case FileDispositionInfoEx:
-    case FileRenameInfoEx:
+        status = NtQueryInformationFile(handle, &io, info, size, FileRemoteProtocolInformation);
+        break;
+
     case FileCaseSensitiveInfo:
+        status = NtQueryInformationFile(handle, &io, info, size, FileCaseSensitiveInformation);
+        break;
+
     case FileNormalizedNameInfo:
-        FIXME("%p, %u, %p, %lu\n", handle, class, info, size);
-        SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
-        return FALSE;
+        status = NtQueryInformationFile(handle, &io, info, size, FileNormalizedNameInformation);
+        break;
 
     case FileStorageInfo:
         status = NtQueryVolumeInformationFile(handle, &io, info, size, FileFsSectorSizeInformation);
@@ -38,6 +41,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileInformationByHandleEx(HANDLE handle, FILE_I
 
     case FileStreamInfo:
         status = NtQueryInformationFile(handle, &io, info, size, FileStreamInformation);
+        if (NT_SUCCESS(status) && io.Information == 0)
+            status = STATUS_END_OF_FILE;
         break;
 
     case FileCompressionInfo:
@@ -94,6 +99,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetFileInformationByHandleEx(HANDLE handle, FILE_I
     case FileAllocationInfo:
     case FileIoPriorityHintInfo:
     case FileEndOfFileInfo:
+    case FileDispositionInfoEx:
+    case FileRenameInfoEx:
     default:
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;

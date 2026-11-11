@@ -1594,6 +1594,37 @@ NtfsReportFileChange(_In_ PVolumeContextBlock VolCB,
 
 static
 NTSTATUS
+NtfsCheckReplacedReadOnly(_In_ PNtfsFileRecord ReplacedFile,
+                          _In_ ULONG RenameFlags,
+                          _In_ KPROCESSOR_MODE AccessMode)
+{
+    SECURITY_SUBJECT_CONTEXT SubjectContext;
+    NtfsFileBasicInformation Basic;
+    PPRIVILEGE_SET Privileges = NULL;
+    ACCESS_MASK GrantedAccess;
+    NTSTATUS Status;
+
+    Status = NtfsFileRecordGetBasicInformation(ReplacedFile, &Basic);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!(Basic.FileAttributes & FILE_ATTRIBUTE_READONLY))
+        return STATUS_SUCCESS;
+    if (!(RenameFlags & FILE_RENAME_IGNORE_READONLY_ATTRIBUTE))
+        return STATUS_ACCESS_DENIED;
+    if (AccessMode == KernelMode)
+        return STATUS_SUCCESS;
+
+    SeCaptureSubjectContext(&SubjectContext);
+    Status = NtfsCheckRecordAccess(ReplacedFile, &SubjectContext, FILE_WRITE_ATTRIBUTES, 0,
+                                   AccessMode, &GrantedAccess, &Privileges);
+    if (Privileges)
+        SeFreePrivileges(Privileges);
+    SeReleaseSubjectContext(&SubjectContext);
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
                          _In_ PFileContextBlock FileCB,
                          _In_ PFILE_OBJECT FileObject,
@@ -1631,6 +1662,7 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
     BOOLEAN IsDirectory;
     BOOLEAN SameParent = FALSE;
     ULONG NameFilter;
+    ULONG RenameFlags;
 
     if (BufferLength < FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) || RenameInfo->FileNameLength == 0 || (RenameInfo->FileNameLength & (sizeof(WCHAR) - 1)) != 0 || BufferLength - FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) < RenameInfo->FileNameLength)
         return STATUS_INVALID_PARAMETER;
@@ -1642,7 +1674,25 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         return STATUS_DELETE_PENDING;
     if (FileCB->IsVolumeOpen || FileCB->FileName.Length <= sizeof(WCHAR) || FileCB->RequestedStream)
         return STATUS_INVALID_PARAMETER;
-    ReplaceIfExists = IrpSp->Parameters.SetFile.ReplaceIfExists || RenameInfo->ReplaceIfExists;
+    if (IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformationEx)
+    {
+        RenameFlags = RenameInfo->Flags;
+        if (RenameFlags & ~(FILE_RENAME_REPLACE_IF_EXISTS | FILE_RENAME_POSIX_SEMANTICS |
+                            FILE_RENAME_SUPPRESS_PIN_STATE_INHERITANCE |
+                            FILE_RENAME_SUPPRESS_STORAGE_RESERVE_INHERITANCE |
+                            FILE_RENAME_PRESERVE_AVAILABLE_SPACE |
+                            FILE_RENAME_IGNORE_READONLY_ATTRIBUTE | FILE_RENAME_FORCE_RESIZE_SR))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+        /* TODO: storage reserve areas, and the manage-volume access their rename flags require, are not implemented */
+    }
+    else
+    {
+        RenameFlags = (IrpSp->Parameters.SetFile.ReplaceIfExists || RenameInfo->ReplaceIfExists)
+                          ? FILE_RENAME_REPLACE_IF_EXISTS : 0;
+    }
+    ReplaceIfExists = BooleanFlagOn(RenameFlags, FILE_RENAME_REPLACE_IF_EXISTS);
 
     TargetFileObject = IrpSp->Parameters.SetFile.FileObject;
     if (TargetFileObject)
@@ -1762,6 +1812,8 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         {
             Status = NtfsCheckNamespaceAccess(VolCB, &ParentName, NULL,
                                               ExistingRecord, FILE_DELETE_CHILD, AccessMode);
+            if (NT_SUCCESS(Status))
+                Status = NtfsCheckReplacedReadOnly(ExistingRecord, RenameFlags, AccessMode);
             if (!NT_SUCCESS(Status))
             {
                 NtfsFileRecordDestroy(ExistingRecord);
@@ -1788,6 +1840,7 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         }
         else if (ExistingIsDirectory || NtfsIsFileRecordOpen(VolCB, ExistingRecordNumber))
         {
+            /* FIXME: FILE_RENAME_POSIX_SEMANTICS does not yet replace a target that still has open handles */
             Status = STATUS_ACCESS_DENIED;
             goto Finish;
         }
@@ -2501,9 +2554,11 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         IrpSp->Parameters.SetFile.FileInformationClass == FileAllocationInformation ||
         IrpSp->Parameters.SetFile.FileInformationClass == FileValidDataLengthInformation ||
         IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformation ||
+        IrpSp->Parameters.SetFile.FileInformationClass == FileRenameInformationEx ||
         IrpSp->Parameters.SetFile.FileInformationClass == FileLinkInformation)
     {
         if (IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformation &&
+            IrpSp->Parameters.SetFile.FileInformationClass != FileRenameInformationEx &&
             IrpSp->Parameters.SetFile.FileInformationClass != FileLinkInformation &&
             FileObject->SectionObjectPointer != NULL &&
             FileObject->SectionObjectPointer->SharedCacheMap != NULL)
@@ -2669,6 +2724,7 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
 
         case FileRenameInformation:
+        case FileRenameInformationEx:
             Status = NtfsSetRenameInformation(VolCB, FileCB, FileObject, IrpSp, (PFILE_RENAME_INFORMATION)SystemBuffer, BufferLength, Irp->RequestorMode);
             goto Complete;
 

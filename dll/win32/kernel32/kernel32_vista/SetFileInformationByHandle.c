@@ -22,21 +22,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
 
     switch (class)
     {
-    case FileNameInfo:
-    case FileStreamInfo:
-    case FileIdBothDirectoryInfo:
-    case FileIdBothDirectoryRestartInfo:
-    case FileFullDirectoryInfo:
-    case FileFullDirectoryRestartInfo:
-    case FileStorageInfo:
-    case FileAlignmentInfo:
-    case FileIdInfo:
-    case FileIdExtdDirectoryInfo:
-    case FileIdExtdDirectoryRestartInfo:
-        FIXME( "%p, %u, %p, %lu\n", file, class, info, size );
-        SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
-        return FALSE;
-
+    case FileCaseSensitiveInfo:
+        status = NtSetInformationFile( file, &io, info, size, FileCaseSensitiveInformation );
+        break;
     case FileAllocationInfo:
         status = NtSetInformationFile( file, &io, info, size, FileAllocationInformation );
         break;
@@ -57,11 +45,18 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
         break;
     case FileRenameInfo:
     case FileRenameInfoEx:
+        if (((FILE_RENAME_INFORMATION *)info)->RootDirectory)
+        {
+            status = NtSetInformationFile( file, &io, info, size,
+                    class == FileRenameInfo ? FileRenameInformation : FileRenameInformationEx );
+            break;
+        }
         {
             FILE_RENAME_INFORMATION *rename_info;
             UNICODE_STRING nt_name;
             ULONG size;
 
+            /* FIXME: a new stream name starting with ':' is converted as a DOS path; NTFS does not rename streams yet */
             if ((status = RtlDosPathNameToNtPathName_U_WithStatus( ((FILE_RENAME_INFORMATION *)info)->FileName,
                                                                    &nt_name, NULL, NULL )))
                 break;
@@ -76,6 +71,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
                         class == FileRenameInfo ? FileRenameInformation : FileRenameInformationEx );
                 HeapFree( GetProcessHeap(), 0, rename_info );
             }
+            else
+                status = STATUS_NO_MEMORY;
             RtlFreeUnicodeString( &nt_name );
             break;
         }
@@ -83,6 +80,18 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
     case FileCompressionInfo:
     case FileAttributeTagInfo:
     case FileRemoteProtocolInfo:
+    case FileNameInfo:
+    case FileStreamInfo:
+    case FileIdBothDirectoryInfo:
+    case FileIdBothDirectoryRestartInfo:
+    case FileFullDirectoryInfo:
+    case FileFullDirectoryRestartInfo:
+    case FileStorageInfo:
+    case FileAlignmentInfo:
+    case FileIdInfo:
+    case FileIdExtdDirectoryInfo:
+    case FileIdExtdDirectoryRestartInfo:
+    case FileNormalizedNameInfo:
     default:
         SetLastError( ERROR_INVALID_PARAMETER );
         return FALSE;
