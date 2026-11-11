@@ -125,7 +125,7 @@ KDDEBUGGER_DATA64 KdDebuggerDataBlock =
     .ThCallbackStack = FIELD_OFFSET(KTHREAD, CallbackStack),
     /* TODO: NextCallback and FramePointer: the LiberNT callout frame has no such members */
     .PaeEnabled = FALSE,
-    .KiCallUserMode = (ULONG_PTR)KiCallUserMode,
+    .KiCallUserMode = (ULONG_PTR)KI_USER_MODE_CALLBACK_ENTRY,
     .KeUserCallbackDispatcher = (ULONG_PTR)&KeUserCallbackDispatcher,
     .PsLoadedModuleList = (ULONG_PTR)&PsLoadedModuleList,
     .PsActiveProcessHead = (ULONG_PTR)&PsActiveProcessHead,
@@ -133,7 +133,7 @@ KDDEBUGGER_DATA64 KdDebuggerDataBlock =
     .ExpSystemResourcesList = (ULONG_PTR)&ExpSystemResourcesList,
     /* TODO: ExpPagedPoolDescriptor and ExpNumberOfPagedPools: the LiberNT pool has no such globals */
     .KeTimeIncrement = (ULONG_PTR)&KeTimeIncrement,
-    /* TODO: KeBugCheckCallbackListHead is not a published LiberNT global */
+    .KeBugCheckCallbackListHead = (ULONG_PTR)&KeBugcheckCallbackListHead,
     .KiBugcheckData = (ULONG_PTR)KiBugCheckData,
     .IopErrorLogListHead = (ULONG_PTR)&IopErrorLogListHead,
     .ObpRootDirectoryObject = (ULONG_PTR)&ObpRootDirectoryObject,

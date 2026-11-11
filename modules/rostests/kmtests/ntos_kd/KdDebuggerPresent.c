@@ -7,6 +7,10 @@
 
 #include <kmt_test.h>
 #include <ndk/kdfuncs.h>
+#include <wdbgexts.h>
+
+static KBUGCHECK_CALLBACK_RECORD CallbackRecord;
+static UCHAR CallbackBuffer[8];
 
 static
 NTSTATUS
@@ -75,6 +79,82 @@ TestCheckLowMemory(VOID)
     ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
+static
+VOID
+NTAPI
+BugCheckCallback(
+    _In_ PVOID Buffer,
+    _In_ ULONG Length)
+{
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(Length);
+}
+
+static
+PKDDEBUGGER_DATA64
+FindDebuggerData(VOID)
+{
+    DBGKD_GET_VERSION64 Version;
+    PLIST_ENTRY Head, Entry;
+    ULONG Length;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Version, sizeof(Version));
+    Status = KdSystemDebugControl(SysDbgQueryVersion, NULL, 0, &Version, sizeof(Version), &Length, KernelMode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status) || (Version.DebuggerDataList == 0))
+        return NULL;
+
+    Head = (PLIST_ENTRY)(ULONG_PTR)Version.DebuggerDataList;
+    for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
+    {
+        PKDDEBUGGER_DATA64 Data = CONTAINING_RECORD(Entry, KDDEBUGGER_DATA64, Header.List);
+
+        if (Data->Header.OwnerTag == KDBG_TAG)
+            return Data;
+    }
+
+    return NULL;
+}
+
+static
+VOID
+TestBugCheckCallbackList(VOID)
+{
+    PKDDEBUGGER_DATA64 Data = FindDebuggerData();
+    PLIST_ENTRY Head, Entry;
+    BOOLEAN Found = FALSE;
+
+    ok(Data != NULL, "No KDBG_TAG block on the debugger data list\n");
+    if (Data == NULL)
+        return;
+
+    KeInitializeCallbackRecord(&CallbackRecord);
+    if (skip(KeRegisterBugCheckCallback(&CallbackRecord,
+                                        BugCheckCallback,
+                                        CallbackBuffer,
+                                        sizeof(CallbackBuffer),
+                                        (PUCHAR)"KdDebuggerPresent"),
+             "The bug check callback was not registered\n"))
+    {
+        return;
+    }
+
+    Head = (PLIST_ENTRY)(ULONG_PTR)Data->KeBugCheckCallbackListHead;
+    ok(Head != NULL, "KeBugCheckCallbackListHead is NULL\n");
+    for (Entry = (Head != NULL) ? Head->Flink : NULL; (Entry != NULL) && (Entry != Head); Entry = Entry->Flink)
+    {
+        if (Entry == &CallbackRecord.Entry)
+        {
+            Found = TRUE;
+            break;
+        }
+    }
+    ok(Found, "The registered record is not on the list KeBugCheckCallbackListHead names\n");
+
+    ok_bool_true(KeDeregisterBugCheckCallback(&CallbackRecord), "KeDeregisterBugCheckCallback returned");
+}
+
 START_TEST(KdDebuggerPresent)
 {
     BOOLEAN NotPresent;
@@ -88,6 +168,7 @@ START_TEST(KdDebuggerPresent)
 
     TestBusData();
     TestCheckLowMemory();
+    TestBugCheckCallbackList();
 
     KD_DEBUGGER_NOT_PRESENT = NotPresent;
 }
