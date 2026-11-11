@@ -7,6 +7,7 @@
 
 #include <kmt_test.h>
 #include <ndk/cmfuncs.h>
+#include <sddl.h>
 #include <winuser.h>
 #include <winreg.h>
 #include <setupapi.h>
@@ -183,7 +184,7 @@ static VOID SetRequest(PCWSTR Name, DWORD Value)
     RegCloseKey(Key);
 }
 
-static HANDLE OpenDevice(DEVINST Device)
+static HANDLE OpenDevice(DEVINST Device, DWORD Access)
 {
     WCHAR Path[MAX_PATH] = L"\\\\?\\GLOBALROOT";
     ULONG Size = sizeof(Path) - sizeof(L"\\\\?\\GLOBALROOT");
@@ -196,7 +197,7 @@ static HANDLE OpenDevice(DEVINST Device)
         return INVALID_HANDLE_VALUE;
     }
 
-    File = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    File = CreateFileW(Path, Access, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     ok(File != INVALID_HANDLE_VALUE, "Opening %ls failed: %lu\n", Path, GetLastError());
     return File;
 }
@@ -219,7 +220,7 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
         return;
     }
 
-    File = OpenDevice(Child);
+    File = OpenDevice(Child, 0);
     if (File == INVALID_HANDLE_VALUE)
         return;
 
@@ -328,7 +329,7 @@ static VOID CheckReplug(DEVINST Bus)
     if (!ReadValue(L"ChildFdoRemoves", &Removes))
         Removes = 0;
 
-    File = OpenDevice(Child);
+    File = OpenDevice(Child, 0);
     if (File == INVALID_HANDLE_VALUE)
         return;
 
@@ -389,6 +390,52 @@ static VOID CheckRemoveTwice(DEVINST Bus)
     ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 }
 
+/* Sets the child's security property from an SDDL string, restarts the child and opens it for reading */
+static DWORD SecureChild(DEVINST Bus, PCWSTR Sddl)
+{
+    WCHAR Path[MAX_PATH] = L"\\\\?\\GLOBALROOT";
+    ULONG Length = sizeof(Path) - sizeof(L"\\\\?\\GLOBALROOT");
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+    HANDLE File;
+    ULONG Size;
+    DWORD Error;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(Sddl, SDDL_REVISION_1, &Descriptor, &Size))
+    {
+        return ERROR_INVALID_DATA;
+    }
+    ok_eq_ulong(CM_Set_DevNode_Registry_PropertyW(Child, CM_DRP_SECURITY, Descriptor, Size, 0), (ULONG)CR_SUCCESS);
+    LocalFree(Descriptor);
+
+    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+                (ULONG)CR_SUCCESS);
+    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The secured child did not start again\n");
+
+    if (CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_PHYSICAL_DEVICE_OBJECT_NAME, NULL, Path + wcslen(Path), &Length, 0) !=
+        CR_SUCCESS)
+    {
+        return ERROR_INVALID_DATA;
+    }
+
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    Error = (File == INVALID_HANDLE_VALUE) ? GetLastError() : ERROR_SUCCESS;
+    if (File != INVALID_HANDLE_VALUE)
+        CloseHandle(File);
+    return Error;
+}
+
+/* The security descriptor a device's registry holds covers its stack once its drivers are added (SPDRP_SECURITY) */
+static VOID CheckDeviceSecurity(DEVINST Bus)
+{
+    ok_eq_ulong(SecureChild(Bus, L"D:(D;;FA;;;SY)(A;;FA;;;WD)"), (ULONG)ERROR_ACCESS_DENIED);
+    ok_eq_ulong(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -431,7 +478,7 @@ static VOID CheckFailed(DEVINST Bus)
     ULONG Status = 0, Problem = 0;
     HANDLE File;
 
-    File = OpenDevice(Bus);
+    File = OpenDevice(Bus, 0);
     if (File == INVALID_HANDLE_VALUE)
         return;
 
@@ -494,6 +541,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReinstall(Device->DevInst, InfPath);
         CheckReplug(Device->DevInst);
         CheckRemoveTwice(Device->DevInst);
+        CheckDeviceSecurity(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }

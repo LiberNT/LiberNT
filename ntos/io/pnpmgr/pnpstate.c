@@ -868,10 +868,104 @@ PiAttachDeviceDrivers(
     return Status;
 }
 
+#define SDDL_REVISION_1 1
+
+/* A security descriptor the device's registry holds covers every device object of its stack once its drivers are
+ * added: its DACL, and its integrity label when it has one (SPDRP_SECURITY) */
+static
+NTSTATUS
+PiApplyDeviceSecurity(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey)
+{
+    UNICODE_STRING ParametersName = RTL_CONSTANT_STRING(L"Device Parameters");
+    SECURITY_INFORMATION SecurityInformation = DACL_SECURITY_INFORMATION;
+    PKEY_VALUE_FULL_INFORMATION Information = NULL;
+    PSECURITY_DESCRIPTOR Converted = NULL;
+    PSECURITY_DESCRIPTOR Descriptor;
+    PDEVICE_OBJECT UpperDevice;
+    HANDLE ParametersKey;
+    BOOLEAN SaclPresent, SaclDefaulted;
+    PACE_HEADER Ace;
+    PWSTR Sddl;
+    PACL Sacl;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (NT_SUCCESS(IopOpenRegistryKeyEx(&ParametersKey, InstanceKey, &ParametersName, KEY_QUERY_VALUE)))
+    {
+        if (!NT_SUCCESS(IopGetRegistryValue(ParametersKey, REGSTR_VAL_DEVICE_SECURITY_DESCRIPTOR, &Information)))
+            Information = NULL;
+        ZwClose(ParametersKey);
+    }
+    if (Information == NULL &&
+        !NT_SUCCESS(IopGetRegistryValue(InstanceKey, REGSTR_VAL_DEVICE_SECURITY_DESCRIPTOR, &Information)))
+    {
+        /* TODO: the class-wide security of Control\Class\{guid}\Properties is applied only by IoCreateDeviceSecure */
+        return STATUS_SUCCESS;
+    }
+
+    Descriptor = (PUCHAR)Information + Information->DataOffset;
+
+    if (Information->Type == REG_BINARY)
+    {
+        Status = RtlValidRelativeSecurityDescriptor(Descriptor, Information->DataLength, DACL_SECURITY_INFORMATION)
+                     ? STATUS_SUCCESS
+                     : STATUS_INVALID_SECURITY_DESCR;
+    }
+    else if (Information->Type == REG_SZ && Information->DataLength >= sizeof(WCHAR) &&
+             (Information->DataLength % sizeof(WCHAR)) == 0)
+    {
+        Sddl = ExAllocatePoolZero(PagedPool, Information->DataLength + sizeof(WCHAR), TAG_IO);
+        Status = (Sddl != NULL) ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
+        if (Sddl != NULL)
+        {
+            RtlCopyMemory(Sddl, Descriptor, Information->DataLength);
+            Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(Sddl, SDDL_REVISION_1, &Converted, NULL);
+            ExFreePoolWithTag(Sddl, TAG_IO);
+        }
+        Descriptor = Converted;
+    }
+    else
+    {
+        Status = STATUS_OBJECT_TYPE_MISMATCH;
+    }
+
+    if (NT_SUCCESS(Status))
+        Status = RtlGetSaclSecurityDescriptor(Descriptor, &SaclPresent, &Sacl, &SaclDefaulted);
+
+    for (Index = 0; NT_SUCCESS(Status) && SaclPresent && Sacl != NULL && Index < Sacl->AceCount; Index++)
+    {
+        Status = RtlGetAce(Sacl, Index, (PVOID *)&Ace);
+        if (NT_SUCCESS(Status) && Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE)
+            SecurityInformation |= LABEL_SECURITY_INFORMATION;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        UpperDevice = IoGetAttachedDeviceReference(DeviceNode->PhysicalDeviceObject);
+        Status = IopSetDeviceSecurityDescriptors(UpperDevice,
+                                                 DeviceNode->PhysicalDeviceObject,
+                                                 &SecurityInformation,
+                                                 Descriptor,
+                                                 PagedPool,
+                                                 &IopFileMapping);
+        ObDereferenceObject(UpperDevice);
+    }
+
+    if (Converted != NULL) ExFreePoolWithTag(Converted, TAG_SD);
+    ExFreePool(Information);
+
+    return Status;
+}
+
 VOID
 PiDevNodeAddDrivers(
     _In_ PDEVICE_NODE DeviceNode)
 {
+    NTSTATUS Security = STATUS_SUCCESS;
     NTSTATUS Status;
     HANDLE InstanceKey = NULL;
 
@@ -892,6 +986,8 @@ PiDevNodeAddDrivers(
     }
 
     Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey);
+    if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
+        Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey);
 
     ZwClose(InstanceKey);
 
@@ -903,6 +999,12 @@ PiDevNodeAddDrivers(
 
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
     {
+        /* Drivers whose device cannot get the security its registry holds stay added, but the device does not start */
+        if (!NT_SUCCESS(Security))
+        {
+            DPRINT1("PnP: %wZ has a security descriptor that cannot be applied (%lx)\n", &DeviceNode->InstancePath, Security);
+            PiSetDevNodeProblem(DeviceNode, CM_PROB_REGISTRY);
+        }
         PiSetDevNodeState(DeviceNode, DeviceNodeDriversAdded);
         return;
     }
