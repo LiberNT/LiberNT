@@ -1103,8 +1103,6 @@ MtpQueryNodeInterrupt(
     return STATUS_SUCCESS;
 }
 
-/* The DockChannel demultiplexes one SoC interrupt into two bits per channel,
- * and the HID child names them, so its own cells give the bit numbers. */
 static
 VOID
 MtpQueryChannelIrqBits(
@@ -1157,8 +1155,6 @@ MtpDpcRoutine(
     KeSetEvent(&Device->DataEvent, IO_NO_INCREMENT, FALSE);
 }
 
-/* The receive flag is a level built from the FIFO threshold, so it is masked
- * here and re-armed once the worker thread has drained the FIFO. */
 static
 BOOLEAN
 NTAPI
