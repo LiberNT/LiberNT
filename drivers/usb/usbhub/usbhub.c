@@ -5180,6 +5180,39 @@ USBH_PdoSetCapabilities(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
     }
 }
 
+#define USBHUB_MASS_STORAGE_SCSI_SUBCLASS 0x06
+#define USBHUB_MASS_STORAGE_UAS_PROTOCOL  0x62
+
+static
+BOOLEAN
+USBH_HasUasStreamsSetting(IN PUSB_CONFIGURATION_DESCRIPTOR ConfigDescriptor,
+                          IN PUSB_INTERFACE_DESCRIPTOR Interface)
+{
+    PUCHAR At = (PUCHAR)ConfigDescriptor;
+    PUCHAR End = At + ConfigDescriptor->wTotalLength;
+    BOOLEAN InSetting = FALSE;
+
+    while (At + 2 <= End && At[0] >= 2 && At + At[0] <= End)
+    {
+        if (At[1] == USB_INTERFACE_DESCRIPTOR_TYPE && At[0] >= sizeof(USB_INTERFACE_DESCRIPTOR))
+        {
+            PUSB_INTERFACE_DESCRIPTOR Setting = (PUSB_INTERFACE_DESCRIPTOR)At;
+
+            InSetting = Setting->bInterfaceNumber == Interface->bInterfaceNumber &&
+                        Setting->bInterfaceClass == USB_DEVICE_CLASS_STORAGE &&
+                        Setting->bInterfaceSubClass == USBHUB_MASS_STORAGE_SCSI_SUBCLASS &&
+                        Setting->bInterfaceProtocol == USBHUB_MASS_STORAGE_UAS_PROTOCOL;
+        }
+        else if (InSetting && At[1] == USB_SUPERSPEED_ENDPOINT_COMPANION_DESCRIPTOR_TYPE && At[0] >= 6 &&
+                 (At[3] & 0x1F))
+        {
+            return TRUE;
+        }
+        At += At[0];
+    }
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
@@ -5290,6 +5323,14 @@ USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
         RtlCopyMemory(&PortExtension->InterfaceDescriptor,
                       Pid,
                       sizeof(PortExtension->InterfaceDescriptor));
+
+        if ((PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED) &&
+            Pid->bInterfaceClass == USB_DEVICE_CLASS_STORAGE &&
+            Pid->bInterfaceSubClass == USBHUB_MASS_STORAGE_SCSI_SUBCLASS &&
+            USBH_HasUasStreamsSetting(ConfigDescriptor, Pid))
+        {
+            PortExtension->InterfaceDescriptor.bInterfaceProtocol = USBHUB_MASS_STORAGE_UAS_PROTOCOL;
+        }
 
         if (Pid->bInterfaceClass == USB_DEVICE_CLASS_HUB)
         {
