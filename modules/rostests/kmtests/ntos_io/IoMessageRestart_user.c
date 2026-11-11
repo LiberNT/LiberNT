@@ -16,6 +16,13 @@
 #define POLICY_KEY L"Device Parameters\\Interrupt Management\\Affinity Policy"
 #define RESULT_KEY L"SOFTWARE\\KmtIoAffinityPolicy"
 
+typedef enum _DESTINATIONS
+{
+    DestinationsRotate,
+    DestinationsSpread,
+    DestinationsFixed
+} DESTINATIONS;
+
 typedef struct _ALLOCATION
 {
     ULONG Messages;
@@ -219,6 +226,40 @@ CheckMessageAffinity(
     }
 }
 
+static
+KAFFINITY
+ActiveProcessors(VOID)
+{
+    SYSTEM_INFO Info;
+
+    GetSystemInfo(&Info);
+    return Info.dwActiveProcessorMask;
+}
+
+static
+ULONG
+NthActiveProcessor(
+    _In_ KAFFINITY Active,
+    _In_ ULONG Index)
+{
+    ULONG Bit, Count = 0;
+
+    for (Bit = 0; Bit < sizeof(KAFFINITY) * 8; Bit++)
+    {
+        if (Active & ((KAFFINITY)1 << Bit)) Count++;
+    }
+
+    if (Count == 0) return MAXULONG;
+
+    Index %= Count;
+    for (Bit = 0; Bit < sizeof(KAFFINITY) * 8; Bit++)
+    {
+        if ((Active & ((KAFFINITY)1 << Bit)) && Index-- == 0) return Bit;
+    }
+
+    return MAXULONG;
+}
+
 /* Runs HalMessageState, which leaves what it reads from the adapter's configuration space under RESULT_KEY */
 static
 HKEY
@@ -272,6 +313,57 @@ CheckLineInterrupt(
     ok(QueryProbe(Key, L"MsiEnabled") == 0, "%s: MSI is still enabled\n", Case);
     ok(QueryProbe(Key, L"IntxDisabled") == 0, "%s: INTx is disabled\n", Case);
     CloseProbe(Key);
+}
+
+static
+VOID
+CheckDestinations(
+    _In_ PCSTR Case,
+    _In_ ULONG Messages,
+    _In_ DESTINATIONS Kind,
+    _In_ ULONG Fixed)
+{
+    ULONG Processors[MAXIMUM_MESSAGES];
+    KAFFINITY Active = ActiveProcessors();
+    ULONG Count = 0, Index;
+    DWORD Type, Size = sizeof(Processors);
+    HKEY Key = ProbeMessages();
+
+    if (Key == NULL)
+    {
+        trace("%s: the message destinations were not read\n", Case);
+        return;
+    }
+
+    ok(QueryProbe(Key, L"MsixEnabled") == 1, "%s: MSI-X is not enabled\n", Case);
+    if (RegQueryValueExW(Key, L"Processors", NULL, &Type, (PBYTE)Processors, &Size) == ERROR_SUCCESS)
+        Count = Size / sizeof(ULONG);
+    CloseProbe(Key);
+
+    ok(Count >= Messages, "%s: %lu table entries for %lu messages\n", Case, Count, Messages);
+
+    for (Index = 0; Index < min(Messages, Count); Index++)
+    {
+        ok(Processors[Index] < sizeof(KAFFINITY) * 8 && (Active & ((KAFFINITY)1 << Processors[Index])),
+           "%s: message %lu goes to no active processor (%lu)\n", Case, Index, Processors[Index]);
+
+        if (Kind == DestinationsSpread)
+        {
+            ok(Processors[Index] == NthActiveProcessor(Active, Index),
+               "%s: message %lu goes to processor %lu, expected %lu\n",
+               Case, Index, Processors[Index], NthActiveProcessor(Active, Index));
+        }
+        else if (Kind == DestinationsFixed)
+        {
+            ok(Processors[Index] == Fixed, "%s: message %lu goes to processor %lu, expected %lu\n",
+               Case, Index, Processors[Index], Fixed);
+        }
+        else if (Index > 0 && NthActiveProcessor(Active, 1) != NthActiveProcessor(Active, 0))
+        {
+            ok(Processors[Index] != Processors[Index - 1], "%s: messages %lu and %lu both go to processor %lu\n",
+               Case, Index - 1, Index, Processors[Index]);
+        }
+    }
 }
 
 /* Disables and enables the xHCI controller of the test VM, so it is never part of a sweep */
@@ -351,12 +443,14 @@ START_TEST(IoAffinityPolicy)
     if (skip(Messages != 0, "The controller has no message interrupts\n"))
         return;
     CheckMessageAffinity("no key", &Allocation, Messages, FALSE, 0);
+    CheckDestinations("no key", Messages, DestinationsRotate, 0);
 
     SetPolicy(InstanceId, TRUE, NULL, NULL);
     Started = RestartController(InstanceId, &Problem);
     ok(Started, "empty key: the controller did not start (problem %lu)\n", Problem);
     ReadAllocation(InstanceId, &Allocation);
     CheckMessageAffinity("empty key", &Allocation, Messages, FALSE, 0);
+    CheckDestinations("empty key", Messages, DestinationsRotate, 0);
 
     Policy = IrqPolicySpreadMessagesAcrossAllProcessors;
     SetPolicy(InstanceId, TRUE, &Policy, NULL);
@@ -364,6 +458,15 @@ START_TEST(IoAffinityPolicy)
     ok(Started, "spread: the controller did not start (problem %lu)\n", Problem);
     ReadAllocation(InstanceId, &Allocation);
     CheckMessageAffinity("spread", &Allocation, Messages, TRUE, 0);
+    CheckDestinations("spread", Messages, DestinationsSpread, 0);
+
+    Policy = IrqPolicyOneCloseProcessor;
+    SetPolicy(InstanceId, TRUE, &Policy, NULL);
+    Started = RestartController(InstanceId, &Problem);
+    ok(Started, "one close processor: the controller did not start (problem %lu)\n", Problem);
+    ReadAllocation(InstanceId, &Allocation);
+    CheckMessageAffinity("one close processor", &Allocation, Messages, FALSE, 0);
+    CheckDestinations("one close processor", Messages, DestinationsRotate, 0);
 
     Policy = IrqPolicySpecifiedProcessors;
     Override = 2;
@@ -372,6 +475,7 @@ START_TEST(IoAffinityPolicy)
     ok(Started, "specified: the controller did not start (problem %lu)\n", Problem);
     ReadAllocation(InstanceId, &Allocation);
     CheckMessageAffinity("specified", &Allocation, Messages, FALSE, 2);
+    CheckDestinations("specified", Messages, DestinationsFixed, 1);
 
     Policy = IrqPolicyMachineDefault;
     SetPolicy(InstanceId, TRUE, &Policy, &Override);
@@ -379,6 +483,7 @@ START_TEST(IoAffinityPolicy)
     ok(Started, "default with an override: the controller did not start (problem %lu)\n", Problem);
     ReadAllocation(InstanceId, &Allocation);
     CheckMessageAffinity("default with an override", &Allocation, Messages, FALSE, 2);
+    CheckDestinations("default with an override", Messages, DestinationsRotate, 0);
 
     Policy = IrqPolicySpecifiedProcessors;
     Override = (KAFFINITY)1 << 2;
@@ -410,4 +515,5 @@ START_TEST(IoAffinityPolicy)
     ok(Started, "restored: the controller did not start (problem %lu)\n", Problem);
     ReadAllocation(InstanceId, &Allocation);
     ok_eq_ulong(Allocation.Messages, Messages);
+    CheckDestinations("restored", Messages, DestinationsRotate, 0);
 }

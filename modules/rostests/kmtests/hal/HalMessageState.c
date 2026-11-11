@@ -10,8 +10,11 @@
 #define E1000E_VENDOR 0x8086
 #define E1000E_DEVICE 0x10D3
 #define MESSAGE_CONTROL 2
+#define MSIX_TABLE 4
 #define MSIX_ENABLE 0x8000
+#define MSIX_TABLE_SIZE 0x7FF
 #define MSI_ENABLE 0x0001
+#define MAXIMUM_ENTRIES 64
 #define RESULT_KEY L"\\Registry\\Machine\\SOFTWARE\\KmtIoAffinityPolicy"
 
 static
@@ -109,10 +112,87 @@ WriteResult(
     ZwClose(Key);
 }
 
+/* The local APIC ID each active processor reports, so a message's destination names a processor */
+static
+VOID
+ReadApicIds(
+    _Out_writes_(MAXIMUM_PROCESSORS) PULONG ApicIds)
+{
+    KAFFINITY Active = KeQueryActiveProcessors();
+    INT Registers[4];
+    ULONG Processor;
+
+    for (Processor = 0; Processor < MAXIMUM_PROCESSORS; Processor++)
+    {
+        ApicIds[Processor] = MAXULONG;
+        if (!(Active & AFFINITY_MASK(Processor))) continue;
+
+        KeSetSystemAffinityThread(AFFINITY_MASK(Processor));
+        __cpuid(Registers, 1);
+        ApicIds[Processor] = ((ULONG)Registers[1] >> 24) & 0xFF;
+    }
+
+    KeRevertToUserAffinityThread();
+}
+
+/* The processor each unmasked MSI-X table entry is delivered to, MAXULONG when masked or not an active processor */
+static
+VOID
+ReadDestinations(
+    _In_ ULONG Slot,
+    _In_ UCHAR Msix,
+    _In_ ULONG Count,
+    _Out_writes_(Count) PULONG Processors)
+{
+    ULONG ApicIds[MAXIMUM_PROCESSORS];
+    ULONG Table = 0, Bar[2] = { 0, 0 };
+    ULONG Index, Processor, Destination;
+    PHYSICAL_ADDRESS Address;
+    PULONG Entries;
+
+    for (Index = 0; Index < Count; Index++) Processors[Index] = MAXULONG;
+
+    HalGetBusDataByOffset(PCIConfiguration, 0, Slot, &Table, Msix + MSIX_TABLE, sizeof(Table));
+    HalGetBusDataByOffset(PCIConfiguration, 0, Slot, &Bar[0],
+                          FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses[Table & 7]), sizeof(ULONG));
+    if ((Bar[0] & 6) == 4)
+    {
+        HalGetBusDataByOffset(PCIConfiguration, 0, Slot, &Bar[1],
+                              FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses[(Table & 7) + 1]), sizeof(ULONG));
+    }
+
+    Address.LowPart = (Bar[0] & ~0xFUL) + (Table & ~7UL);
+    Address.HighPart = (LONG)Bar[1];
+
+    Entries = MmMapIoSpace(Address, Count * 16, MmNonCached);
+    ok(Entries != NULL, "the MSI-X table at 0x%I64x cannot be mapped\n", Address.QuadPart);
+    if (Entries == NULL) return;
+
+    ReadApicIds(ApicIds);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (READ_REGISTER_ULONG(&Entries[Index * 4 + 3]) & 1) continue;
+
+        Destination = (READ_REGISTER_ULONG(&Entries[Index * 4]) >> 12) & 0xFF;
+        for (Processor = 0; Processor < MAXIMUM_PROCESSORS; Processor++)
+        {
+            if (ApicIds[Processor] == Destination)
+            {
+                Processors[Index] = Processor;
+                break;
+            }
+        }
+    }
+
+    MmUnmapIoSpace(Entries, Count * 16);
+}
+
 /* Measures only; IoAffinityPolicy runs it after each restart and checks the results it leaves */
 START_TEST(HalMessageState)
 {
-    ULONG Slot, MsixEnabled, MsiEnabled, IntxDisabled;
+    ULONG Processors[MAXIMUM_ENTRIES];
+    ULONG Slot, MsixEnabled, MsiEnabled, IntxDisabled, Count;
     USHORT Control, Command = 0;
     UCHAR Msix;
 
@@ -131,4 +211,10 @@ START_TEST(HalMessageState)
     WriteResult(L"MsixEnabled", REG_DWORD, &MsixEnabled, sizeof(MsixEnabled));
     WriteResult(L"MsiEnabled", REG_DWORD, &MsiEnabled, sizeof(MsiEnabled));
     WriteResult(L"IntxDisabled", REG_DWORD, &IntxDisabled, sizeof(IntxDisabled));
+
+    if (!MsixEnabled) return;
+
+    Count = min((ULONG)(Control & MSIX_TABLE_SIZE) + 1, MAXIMUM_ENTRIES);
+    ReadDestinations(Slot, Msix, Count, Processors);
+    WriteResult(L"Processors", REG_BINARY, Processors, Count * sizeof(ULONG));
 }

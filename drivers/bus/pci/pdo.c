@@ -46,12 +46,6 @@ DEFINE_GUID(GUID_PCI_VIRTUALIZATION_INTERFACE,
 NTHALAPI
 NTSTATUS
 NTAPI
-HalpGetInterruptTargetInformation(
-    _Inout_ PHAL_INTERRUPT_TARGET_INFORMATION TargetInformation);
-
-NTHALAPI
-NTSTATUS
-NTAPI
 HalpGetMessageRoutingInfo(
     _Inout_ PHAL_MESSAGE_ROUTING_INFO RoutingInfo);
 #endif
@@ -1432,15 +1426,7 @@ PciPdoEnableMsi(
 #if defined(_M_AMD64)
     {
         HAL_MESSAGE_ROUTING_INFO RoutingInfo;
-        HAL_INTERRUPT_TARGET_INFORMATION TargetInfo;
         NTSTATUS Status;
-
-        RtlZeroMemory(&TargetInfo, sizeof(TargetInfo));
-        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-        TargetInfo.TargetProcessors = Affinity;
-        Status = HalpGetInterruptTargetInformation(&TargetInfo);
-        if (NT_SUCCESS(Status) && TargetInfo.TargetProcessors != 0)
-            Affinity = TargetInfo.TargetProcessors;
 
         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
@@ -1476,15 +1462,7 @@ PciPdoEnableMsi(
 #elif (NTDDI_VERSION >= NTDDI_WIN7)
     {
         HAL_MESSAGE_ROUTING_INFO RoutingInfo;
-        HAL_INTERRUPT_TARGET_INFORMATION TargetInfo;
         NTSTATUS Status;
-
-        RtlZeroMemory(&TargetInfo, sizeof(TargetInfo));
-        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-        TargetInfo.TargetProcessors = Affinity;
-        Status = HalGetInterruptTargetInformation(&TargetInfo);
-        if (NT_SUCCESS(Status) && TargetInfo.TargetProcessors != 0)
-            Affinity = TargetInfo.TargetProcessors;
 
         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
@@ -1670,7 +1648,6 @@ PciPdoEnableMsix(
         ULONG MsgVector;
 #if defined(_M_AMD64) || (!defined(_M_ARM64) && (NTDDI_VERSION >= NTDDI_WIN7))
         HAL_MESSAGE_ROUTING_INFO RoutingInfo;
-        HAL_INTERRUPT_TARGET_INFORMATION TargetInfo;
 #endif
         PPCI_MSIX_TABLE_ENTRY Entry;
 
@@ -1680,13 +1657,6 @@ PciPdoEnableMsix(
 
         MsgVector = Messages[i].Vector;
 #if defined(_M_AMD64)
-        RtlZeroMemory(&TargetInfo, sizeof(TargetInfo));
-        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-        TargetInfo.TargetProcessors = MsgAffinity;
-        Status = HalpGetInterruptTargetInformation(&TargetInfo);
-        if (NT_SUCCESS(Status) && TargetInfo.TargetProcessors != 0)
-            MsgAffinity = TargetInfo.TargetProcessors;
-
         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
         RoutingInfo.TargetProcessors = MsgAffinity;
@@ -1725,13 +1695,6 @@ PciPdoEnableMsix(
         if (!NT_SUCCESS(Status))
             goto CleanupMapping;
 #elif (NTDDI_VERSION >= NTDDI_WIN7)
-        RtlZeroMemory(&TargetInfo, sizeof(TargetInfo));
-        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-        TargetInfo.TargetProcessors = MsgAffinity;
-        Status = HalGetInterruptTargetInformation(&TargetInfo);
-        if (NT_SUCCESS(Status) && TargetInfo.TargetProcessors != 0)
-            MsgAffinity = TargetInfo.TargetProcessors;
-
         RtlZeroMemory(&RoutingInfo, sizeof(RoutingInfo));
         RoutingInfo.Version = HAL_MESSAGE_ROUTING_INFO_VERSION;
         RoutingInfo.TargetProcessors = MsgAffinity;
