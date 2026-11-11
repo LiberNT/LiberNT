@@ -57,6 +57,13 @@ KdbpCmdAnalyze(
     ULONG Argc,
     PCHAR Argv[]);
 
+/* kdbpci.c */
+
+BOOLEAN
+KdbpCmdPci(
+    ULONG Argc,
+    PCHAR Argv[]);
+
 /* kdbsymbols.c */
 
 BOOLEAN
