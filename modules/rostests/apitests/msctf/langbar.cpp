@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <olectl.h>
 
 static const GUID GUID_LBI_SYSTEM_HELP = {0xed9d5450, 0xebe6, 0x4255, {0x82, 0x89, 0xf8, 0xa3, 0x1e, 0x68, 0x72, 0x28}};
 static const GUID GUID_HELP_SERVICE = {0x5d997390, 0x8320, 0x400a, {0x88, 0xe5, 0x35, 0xb0, 0xc1, 0x20, 0xf9, 0x0b}};
@@ -227,6 +228,335 @@ static void TestCustomItem(ITfLangBarItemMgr *pMgr)
     pItem->Release();
 }
 
+static const GUID GUID_SYSTEM_ITEM_SERVICE = {0xbebacc94, 0x5cd3, 0x4662, {0xa1, 0xe0, 0xf3, 0x31, 0x99, 0x49, 0x36, 0x69}};
+static const GUID GUID_LBI_LANGUAGE = {0x58c99d96, 0x2f9b, 0x42ce, {0x91, 0xbe, 0x37, 0xef, 0x18, 0x60, 0xf8, 0x82}};
+static const GUID GUID_LBI_CORRECTION = {0x190f67a2, 0x024f, 0x40d9, {0xaa, 0xba, 0x43, 0x9f, 0x5c, 0x80, 0x8f, 0x67}};
+static const GUID GUID_LBI_KEYBOARD = {0x34745c63, 0xb2f0, 0x4784, {0x8b, 0x67, 0x5e, 0x12, 0xc8, 0x70, 0x1a, 0x31}};
+
+class CTestMenu : public ITfMenu
+{
+public:
+    CTestMenu() : m_cItems(0) { }
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
+    {
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfMenu))
+        {
+            *ppv = static_cast<ITfMenu *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+    STDMETHODIMP_(ULONG) Release() override { return 1; }
+    STDMETHODIMP AddMenuItem(UINT uId, DWORD dwFlags, HBITMAP hbmp, HBITMAP hbmpMask, const WCHAR *pch, ULONG cch,
+                             ITfMenu **ppMenu) override
+    {
+        ++m_cItems;
+        if (ppMenu)
+            *ppMenu = NULL;
+        return S_OK;
+    }
+
+    ULONG m_cItems;
+};
+
+class CTestSystemItemSink : public ITfSystemLangBarItemSink
+{
+public:
+    CTestSystemItemSink() : m_cInitMenu(0), m_cMenuSelect(0) { }
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
+    {
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfSystemLangBarItemSink))
+        {
+            *ppv = static_cast<ITfSystemLangBarItemSink *>(this);
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+    STDMETHODIMP_(ULONG) Release() override { return 1; }
+    STDMETHODIMP InitMenu(ITfMenu *pMenu) override
+    {
+        ++m_cInitMenu;
+        return S_OK;
+    }
+    STDMETHODIMP OnMenuSelect(UINT wID) override
+    {
+        ++m_cMenuSelect;
+        return S_OK;
+    }
+
+    ULONG m_cInitMenu, m_cMenuSelect;
+};
+
+static void ok_bstr_(HRESULT hr, BSTR bstr, LPCWSTR pszExpected, int line)
+{
+    ok_(__FILE__, line)(hr == S_OK, "hr %lx\n", hr);
+    ok_(__FILE__, line)(bstr && !lstrcmpW(bstr, pszExpected), "got '%ls', expected '%ls'\n", bstr ? bstr : L"(null)",
+                        pszExpected);
+    SysFreeString(bstr);
+}
+
+static void CheckTexts(ITfLangBarItem *pItem, LPCWSTR pszText, LPCWSTR pszTooltip, int line)
+{
+    ITfLangBarItemButton *pButton = NULL;
+    BSTR bstr = NULL;
+    HRESULT hr;
+
+    hr = pItem->GetTooltipString(&bstr);
+    ok_bstr_(hr, bstr, pszTooltip, line);
+    if (FAILED(pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pButton)))
+        return;
+    bstr = NULL;
+    hr = pButton->GetText(&bstr);
+    ok_bstr_(hr, bstr, pszText, line);
+    pButton->Release();
+}
+
+static void TestSystemItemButton(ITfLangBarItem *pItem, BOOL fSystem)
+{
+    ITfLangBarItemButton *pButton = NULL;
+    CTestMenu menu;
+    HICON hIcon = (HICON)(ULONG_PTR)1;
+    POINT pt = {10, 10};
+    RECT rc = {0, 0, 20, 20};
+    HRESULT hr;
+
+    hr = pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pButton);
+    ok_hr(hr, S_OK);
+    if (!pButton)
+        return;
+    ok_hr(pButton->GetIcon(&hIcon), S_OK);
+    ok(hIcon == NULL, "icon %p\n", hIcon);
+    ok_hr(pButton->GetIcon(NULL), E_INVALIDARG);
+    ok_hr(pButton->GetText(NULL), E_INVALIDARG);
+    ok_hr(pButton->InitMenu(&menu), S_OK);
+    ok_long(menu.m_cItems, 0);
+    ok_hr(pButton->InitMenu(NULL), S_OK);
+    ok_hr(pButton->OnClick(TF_LBI_CLK_RIGHT, pt, &rc), S_OK);
+    ok_hr(pButton->OnMenuSelect(0), fSystem ? E_FAIL : S_OK);
+    ok_hr(pButton->OnMenuSelect(1000), fSystem ? E_FAIL : S_OK);
+    pButton->Release();
+}
+
+static void TestSystemItemSinks(ITfLangBarItem *pItem, BOOL fSystem)
+{
+    ITfSource *pSource = NULL;
+    ITfLangBarItemButton *pButton = NULL;
+    CTestSystemItemSink sysSink;
+    CTestItemSink itemSink;
+    CTestMenu menu;
+    DWORD dwCookie, dwCookie2;
+    HRESULT hr;
+
+    hr = pItem->QueryInterface(IID_ITfSource, (void **)&pSource);
+    ok_hr(hr, S_OK);
+    if (!pSource)
+        return;
+    hr = pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pButton);
+    if (FAILED(hr))
+    {
+        pSource->Release();
+        return;
+    }
+
+    dwCookie = 0;
+    hr = pSource->AdviseSink(IID_ITfLangBarItemSink, &itemSink, &dwCookie);
+    ok_hr(hr, CONNECT_E_CANNOTCONNECT);
+    ok_long(dwCookie, fSystem ? (DWORD)-1 : 0);
+    dwCookie = 0;
+    hr = pSource->AdviseSink(IID_IUnknown, &sysSink, &dwCookie);
+    ok_hr(hr, CONNECT_E_CANNOTCONNECT);
+    ok_hr(pSource->UnadviseSink(0x7777), fSystem ? CONNECT_E_NOCONNECTION : E_FAIL);
+
+    dwCookie = 0;
+    hr = pSource->AdviseSink(IID_ITfSystemLangBarItemSink, &sysSink, &dwCookie);
+    if (!fSystem)
+    {
+        ok_hr(hr, CONNECT_E_CANNOTCONNECT);
+        ok_long(dwCookie, 0);
+        pButton->Release();
+        pSource->Release();
+        return;
+    }
+    ok_hr(hr, S_OK);
+    ok_long(dwCookie, 1);
+    ok_hr(pButton->InitMenu(&menu), S_OK);
+    ok_long(sysSink.m_cInitMenu, 1);
+    ok_long(menu.m_cItems, 0);
+    ok_hr(pButton->OnMenuSelect(5), E_FAIL);
+    ok_long(sysSink.m_cMenuSelect, 0);
+    ok_hr(pSource->UnadviseSink((DWORD)-1), E_INVALIDARG);
+    ok_hr(pSource->UnadviseSink(dwCookie), S_OK);
+    ok_hr(pSource->UnadviseSink(dwCookie), CONNECT_E_NOCONNECTION);
+    ok_hr(pButton->InitMenu(&menu), S_OK);
+    ok_long(sysSink.m_cInitMenu, 1);
+
+    dwCookie2 = 0;
+    hr = pSource->AdviseSink(IID_ITfSystemLangBarItemSink, &sysSink, &dwCookie2);
+    ok_hr(hr, S_OK);
+    ok_long(dwCookie2, 1);
+    ok_hr(pSource->UnadviseSink(dwCookie2), S_OK);
+    pButton->Release();
+    pSource->Release();
+}
+
+static void TestSystemItemSetters(ITfLangBarItem *pItem)
+{
+    ITfSystemLangBarItem *pSys = NULL;
+    ITfSystemDeviceTypeLangBarItem *pDev = NULL;
+    ITfSystemLangBarItemText *pText = NULL;
+    ITfLangBarItemButton *pButton = NULL;
+    HICON hIcon, hSetIcon;
+    BSTR bstr = NULL;
+    DWORD dwMode;
+    HRESULT hr;
+
+    hr = pItem->QueryInterface(IID_ITfSystemLangBarItem, (void **)&pSys);
+    ok_hr(hr, S_OK);
+    hr = pItem->QueryInterface(IID_ITfSystemDeviceTypeLangBarItem, (void **)&pDev);
+    ok_hr(hr, S_OK);
+    hr = pItem->QueryInterface(IID_ITfSystemLangBarItemText, (void **)&pText);
+    ok_hr(hr, S_OK);
+    pItem->QueryInterface(IID_ITfLangBarItemButton, (void **)&pButton);
+    if (pSys && pDev && pText && pButton)
+    {
+        hr = pText->GetItemText(&bstr);
+        ok_bstr_(hr, bstr, L"", __LINE__);
+        ok_hr(pText->GetItemText(NULL), E_INVALIDARG);
+        ok_hr(pText->SetItemText(L"XyZ", 3), S_OK);
+        bstr = NULL;
+        hr = pText->GetItemText(&bstr);
+        ok_bstr_(hr, bstr, L"Xy", __LINE__);
+        ok_hr(pSys->SetTooltipString(const_cast<WCHAR *>(L"TT"), 2), S_OK);
+        CheckTexts(pItem, L"Xy", L"T", __LINE__);
+        ok_hr(pSys->SetTooltipString(const_cast<WCHAR *>(L"ABCD"), 0), S_OK);
+        CheckTexts(pItem, L"Xy", L"", __LINE__);
+        ok_hr(pText->SetItemText(L"", 1), S_OK);
+        CheckTexts(pItem, L"", L"", __LINE__);
+
+        hSetIcon = LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION);
+        ok_hr(pSys->SetIcon(hSetIcon), S_OK);
+        hIcon = NULL;
+        ok_hr(pButton->GetIcon(&hIcon), S_OK);
+        ok(hIcon != NULL && hIcon != hSetIcon, "icon %p, set %p\n", hIcon, hSetIcon);
+        if (hIcon)
+            ok(DestroyIcon(hIcon), "DestroyIcon failed\n");
+        ok_hr(pDev->SetIconMode(TF_DTLBI_USEPROFILEICON), S_OK);
+        hIcon = (HICON)(ULONG_PTR)1;
+        ok_hr(pButton->GetIcon(&hIcon), S_OK);
+        ok(hIcon == NULL, "icon %p\n", hIcon);
+        ok_hr(pDev->SetIconMode(0), S_OK);
+        hIcon = NULL;
+        ok_hr(pButton->GetIcon(&hIcon), S_OK);
+        ok(hIcon != NULL, "no icon\n");
+        if (hIcon)
+            DestroyIcon(hIcon);
+        ok_hr(pSys->SetIcon(NULL), S_OK);
+        hIcon = (HICON)(ULONG_PTR)1;
+        ok_hr(pButton->GetIcon(&hIcon), S_OK);
+        ok(hIcon == NULL, "icon %p\n", hIcon);
+
+        dwMode = 0xdead;
+        ok_hr(pDev->GetIconMode(&dwMode), S_OK);
+        ok_long(dwMode, 0);
+        ok_hr(pDev->GetIconMode(NULL), E_INVALIDARG);
+        ok_hr(pDev->SetIconMode(1), S_OK);
+        dwMode = 0xdead;
+        ok_hr(pDev->GetIconMode(&dwMode), S_OK);
+        ok_long(dwMode, 1);
+        ok_hr(pDev->SetIconMode(0), S_OK);
+    }
+
+    if (pButton)
+        pButton->Release();
+    if (pText)
+        pText->Release();
+    if (pDev)
+        pDev->Release();
+    if (pSys)
+        pSys->Release();
+}
+
+static void TestSystemItems(ITfLangBarItemMgr *pMgr)
+{
+    static const struct
+    {
+        const GUID *pguidItem;
+        const GUID *pguidService;
+        DWORD dwStyle;
+        LONG lSort;
+        BOOL fSystem;
+    } s_Expected[] = {
+        { &GUID_LBI_LANGUAGE, &GUID_SYSTEM_ITEM_SERVICE, TF_LBI_STYLE_BTN_MENU, 0, FALSE },
+        { &GUID_LBI_CORRECTION, &GUID_SYSTEM_ITEM_SERVICE, TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_HIDDENBYDEFAULT, 0,
+          FALSE },
+        { &GUID_LBI_KEYBOARD, &GUID_SYSTEM_ITEM_SERVICE, TF_LBI_STYLE_BTN_MENU, 0, TRUE },
+        { &GUID_LBI_SYSTEM_HELP, &GUID_HELP_SERVICE, TF_LBI_STYLE_BTN_MENU, -30, TRUE },
+    };
+    ITfLangBarItem *items[16];
+    TF_LANGBARITEMINFO infos[16];
+    DWORD statuses[16];
+    ULONG cFetched = 0, i;
+    HRESULT hr;
+
+    hr = pMgr->GetItems(16, items, infos, statuses, &cFetched);
+    ok_hr(hr, S_FALSE);
+    ok_long(cFetched, _countof(s_Expected));
+    for (i = 0; i < cFetched; i++)
+    {
+        IUnknown *pUnk;
+        DWORD dwStatus;
+        BOOL fSystem;
+
+        if (i >= _countof(s_Expected))
+        {
+            items[i]->Release();
+            continue;
+        }
+        fSystem = s_Expected[i].fSystem;
+        winetest_push_context("item %lu", i);
+        ok(IsEqualGUID(infos[i].guidItem, *s_Expected[i].pguidItem), "unexpected guidItem\n");
+        ok(IsEqualGUID(infos[i].clsidService, *s_Expected[i].pguidService), "unexpected clsidService\n");
+        ok_long(infos[i].dwStyle, s_Expected[i].dwStyle);
+        ok_long((LONG)infos[i].ulSort, s_Expected[i].lSort);
+        ok(infos[i].szDescription[0] != UNICODE_NULL, "empty description\n");
+        ok_long(statuses[i], 0);
+
+        hr = items[i]->QueryInterface(IID_ITfSystemLangBarItem, (void **)&pUnk);
+        ok_hr(hr, fSystem ? S_OK : E_NOINTERFACE);
+        if (SUCCEEDED(hr))
+            pUnk->Release();
+        hr = items[i]->QueryInterface(IID_ITfSystemDeviceTypeLangBarItem, (void **)&pUnk);
+        ok_hr(hr, fSystem ? S_OK : E_NOINTERFACE);
+        if (SUCCEEDED(hr))
+            pUnk->Release();
+        hr = items[i]->QueryInterface(IID_ITfSystemLangBarItemText, (void **)&pUnk);
+        ok_hr(hr, fSystem ? S_OK : E_NOINTERFACE);
+        if (SUCCEEDED(hr))
+            pUnk->Release();
+
+        CheckTexts(items[i], L"", L"", __LINE__);
+        TestSystemItemButton(items[i], fSystem);
+        TestSystemItemSinks(items[i], fSystem);
+        if (fSystem)
+            TestSystemItemSetters(items[i]);
+
+        ok_hr(items[i]->Show(FALSE), S_OK);
+        dwStatus = 0xdead;
+        ok_hr(items[i]->GetStatus(&dwStatus), S_OK);
+        ok_long(dwStatus, TF_LBI_STATUS_HIDDEN);
+        ok_hr(items[i]->Show(TRUE), S_OK);
+        dwStatus = 0xdead;
+        ok_hr(items[i]->GetStatus(&dwStatus), S_OK);
+        ok_long(dwStatus, 0);
+        winetest_pop_context();
+        items[i]->Release();
+    }
+}
+
 static ITfLangBarItemMgr *g_pThreadMgr2;
 
 static DWORD WINAPI SecondThread(void *pv)
@@ -260,6 +590,7 @@ START_TEST(langbar)
     }
     ok(pMgr1 == pMgr2, "two managers on one thread: %p %p\n", pMgr1, pMgr2);
     CheckHelpItem(pMgr1);
+    TestSystemItems(pMgr1);
     TestCustomItem(pMgr1);
 
     hThread = CreateThread(NULL, 0, SecondThread, NULL, 0, NULL);
