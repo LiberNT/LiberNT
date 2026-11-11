@@ -21,6 +21,7 @@ PsGetProcessSectionBaseAddress(
 #define PICO_PARENT_EXIT_STATUS ((NTSTATUS)0x0000BEEF)
 #define PICO_CHILD_EXIT_STATUS  ((NTSTATUS)0x0000CAFE)
 #define PICO_WAITER_EXIT_STATUS ((NTSTATUS)0x0000D00D)
+#define PICO_THREADLESS_EXIT_STATUS ((NTSTATUS)0x0000F00D)
 #define PICO_PAGE_BEFORE_CLONE  0x11111111UL
 #define PICO_PAGE_AFTER_CLONE   0x22222222UL
 #define PICO_TEST_SYSTEM_CALL   0x1234ULL
@@ -68,6 +69,7 @@ static PICO_TEST_THREAD ParentThread;
 static PICO_TEST_THREAD ChildThread;
 static PICO_TEST_PROCESS WaiterProcess;
 static PICO_TEST_THREAD WaiterThread;
+static PICO_TEST_PROCESS ThreadlessProcess;
 static KEVENT WaiterStarted;
 static KEVENT WaiterRelease;
 static volatile LONG SystemCalls;
@@ -479,6 +481,42 @@ TestPicoStartRecord(
 
 static
 VOID
+TestPicoThreadlessExit(VOID)
+{
+    HANDLE ProcessHandle;
+    PEPROCESS Process;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&ThreadlessProcess, sizeof(ThreadlessProcess));
+    Status = PsPicoCreateProcess(FALSE, &ThreadlessProcess, &ProcessHandle);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       PROCESS_ALL_ACCESS,
+                                       *PsProcessType,
+                                       KernelMode,
+                                       (PVOID *)&Process,
+                                       NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    ZwTerminateProcess(ProcessHandle, PICO_THREADLESS_EXIT_STATUS);
+    ZwTerminateProcess(ProcessHandle, STATUS_UNSUCCESSFUL);
+
+    ok_eq_long(ThreadlessProcess.ExitCalls, 1L);
+    ok_eq_hex(ThreadlessProcess.ExitStatus, PICO_THREADLESS_EXIT_STATUS);
+    if (NT_SUCCESS(Status))
+    {
+        ok_eq_pointer(ThreadlessProcess.ExitProcess, Process);
+        ObDereferenceObject(Process);
+    }
+
+    ZwClose(ProcessHandle);
+}
+
+static
+VOID
 TestPicoTerminateThread(VOID)
 {
     LARGE_INTEGER Timeout;
@@ -692,4 +730,5 @@ START_TEST(PsPico)
     ZwClose(ProcessHandle);
 
     TestPicoTerminateThread();
+    TestPicoThreadlessExit();
 }

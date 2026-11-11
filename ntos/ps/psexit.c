@@ -497,6 +497,7 @@ PspTerminateProcessThreads(
     PETHREAD Thread;
     PETHREAD Self = PsGetCurrentThread();
     NTSTATUS Status = STATUS_NOTHING_TO_TERMINATE;
+    BOOLEAN WasExiting;
 
     PAGED_CODE();
 
@@ -510,6 +511,7 @@ PspTerminateProcessThreads(
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&Process->ProcessLock);
     if (Process->ExitStatus == STATUS_PENDING) Process->ExitStatus = ExitStatus;
+    WasExiting = (BOOLEAN)Process->ProcessExiting;
     Process->ProcessExiting = TRUE;
     ExReleasePushLockExclusive(&Process->ProcessLock);
     KeLeaveCriticalRegion();
@@ -529,6 +531,10 @@ PspTerminateProcessThreads(
         Status = STATUS_SUCCESS;
         Thread = PsGetNextProcessThread(Process, Thread);
     }
+
+    /* No last thread will tell the provider that a pico process with none has ended */
+    if (Status == STATUS_NOTHING_TO_TERMINATE && !WasExiting && Process->PicoCreated)
+        PspPicoProcessExit(Process);
 
     if (EndCaller && THREAD_TO_PROCESS(Self) == Process)
     {
