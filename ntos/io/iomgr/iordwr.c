@@ -469,6 +469,7 @@ NtReadFile(
 {
     LARGE_INTEGER CapturedOffset;
     IO_STATUS_BLOCK FastIoStatus;
+    PFILE_OBJECT FileObject;
     IOP_REQUEST Request;
     ULONG CapturedKey = 0;
     NTSTATUS Status;
@@ -479,15 +480,26 @@ NtReadFile(
     /* The buffer is probed before the caller's event is reset: a bad buffer leaves the event as it was */
     if (ExGetPreviousMode() != KernelMode)
     {
+        Status = ObReferenceObjectByHandle(FileHandle,
+                                           FILE_READ_DATA,
+                                           IoFileObjectType,
+                                           UserMode,
+                                           (PVOID *)&FileObject,
+                                           NULL);
+        if (!NT_SUCCESS(Status)) return Status;
+
         _SEH2_TRY
         {
             ProbeForWrite(Buffer, Length, sizeof(UCHAR));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+            Status = _SEH2_GetExceptionCode();
         }
         _SEH2_END;
+
+        ObDereferenceObject(FileObject);
+        if (!NT_SUCCESS(Status)) return Status;
     }
 
     Status = IopBeginRequest(&Request,
