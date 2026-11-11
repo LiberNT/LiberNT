@@ -441,29 +441,29 @@ AppleRtkitParseCrashlog(
     ULONG Total, Offset, Length, Payload;
 
     RtlZeroMemory(Crash, sizeof(*Crash));
-    if (!Log || Size < 0x20 || RtlCompareMemory(Bytes, "CLHE", 4) != 4)
+    if (!Log || Size < 0x20 || RtlCompareMemory(Bytes, "EHLC", 4) != 4)
         return FALSE;
     RtlCopyMemory(&Total, Bytes + 8, sizeof(Total));
     if (Total < 0x20 || Total > Size)
         Total = Size;
     for (Offset = 0x20; Offset + 0x10 <= Total; Offset += Length)
     {
-        if (RtlCompareMemory(Bytes + Offset, "CLHE", 4) == 4)
+        if (RtlCompareMemory(Bytes + Offset, "EHLC", 4) == 4)
             break;
         RtlCopyMemory(&Length, Bytes + Offset + 12, sizeof(Length));
         if (Length < 0x10 || Length > Total - Offset)
             break;
         Payload = Length - 0x10;
-        if (RtlCompareMemory(Bytes + Offset, "Cver", 4) == 4 && Payload > 0x10)
+        if (RtlCompareMemory(Bytes + Offset, "revC", 4) == 4 && Payload > 0x10)
         {
             Crash->Version[0] = '\0';
             RtkitCrashString(Crash->Version, sizeof(Crash->Version), Bytes + Offset + 0x20, Payload - 0x10);
         }
-        else if (RtlCompareMemory(Bytes + Offset, "Cstr", 4) == 4 && Payload > 4)
+        else if (RtlCompareMemory(Bytes + Offset, "rtsC", 4) == 4 && Payload > 4)
         {
             RtkitCrashString(Crash->Message, sizeof(Crash->Message), Bytes + Offset + 0x14, Payload - 4);
         }
-        else if (RtlCompareMemory(Bytes + Offset, "Crg8", 4) == 4 && Payload >= 0x348)
+        else if (RtlCompareMemory(Bytes + Offset, "8grC", 4) == 4 && Payload >= 0x348)
         {
             const UCHAR *Regs = Bytes + Offset + 0x10;
 
@@ -475,7 +475,7 @@ AppleRtkitParseCrashlog(
             Crash->Far = RtkitCrashQuad(Regs + 0x330);
             Crash->Esr = RtkitCrashQuad(Regs + 0x340);
         }
-        else if (RtlCompareMemory(Bytes + Offset, "Ccst", 4) == 4 && Payload > 8)
+        else if (RtlCompareMemory(Bytes + Offset, "tscC", 4) == 4 && Payload > 8)
         {
             ULONG At;
 

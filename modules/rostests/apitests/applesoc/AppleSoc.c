@@ -4946,15 +4946,15 @@ TestRtkitCrashlog(VOID)
     ULONG64 Quad;
 
     RtlZeroMemory(RtkitCrashImage, sizeof(RtkitCrashImage));
-    RtlCopyMemory(RtkitCrashImage, "CLHE", 4);
+    RtlCopyMemory(RtkitCrashImage, "EHLC", 4);
     At = 0x20;
-    At = RtkitCrashSection(At, "Cver", 0x10 + 0x10 + 16);
+    At = RtkitCrashSection(At, "revC", 0x10 + 0x10 + 16);
     RtlCopyMemory(RtkitCrashImage + 0x20 + 0x20, "RTKit-2419.40", 14);
     Value = At;
-    At = RtkitCrashSection(At, "Cstr", 0x10 + 4 + 28);
+    At = RtkitCrashSection(At, "rtsC", 0x10 + 4 + 28);
     RtlCopyMemory(RtkitCrashImage + Value + 0x14, "panic: bad init data\nmore", 25);
     Value = At;
-    At = RtkitCrashSection(At, "Crg8", 0x10 + 0x350);
+    At = RtkitCrashSection(At, "8grC", 0x10 + 0x350);
     Quad = 0x1000a4c0ULL;
     RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x108, &Quad, 8);
     Quad = 0x1000a400ULL;
@@ -4966,12 +4966,12 @@ TestRtkitCrashlog(VOID)
     Quad = 0x96000045ULL;
     RtlCopyMemory(RtkitCrashImage + Value + 0x10 + 0x340, &Quad, 8);
     Value = At;
-    At = RtkitCrashSection(At, "Ccst", 0x10 + 8 + 4 * 8);
+    At = RtkitCrashSection(At, "tscC", 0x10 + 8 + 4 * 8);
     Quad = 0x10001000ULL;
     RtlCopyMemory(RtkitCrashImage + Value + 0x18, &Quad, 8);
     Quad = 0x10002000ULL;
     RtlCopyMemory(RtkitCrashImage + Value + 0x20, &Quad, 8);
-    RtlCopyMemory(RtkitCrashImage + At, "CLHE", 4);
+    RtlCopyMemory(RtkitCrashImage + At, "EHLC", 4);
     Total = At + 0x20;
     RtlCopyMemory(RtkitCrashImage + 8, &Total, sizeof(Total));
 
