@@ -57,6 +57,11 @@ static HRESULT WINAPI ClientSite_QueryInterface(IOleClientSite *iface, REFIID ri
     }else if(IsEqualGUID(&IID_IDocHostUIHandler2, riid)) {
         TRACE("(%p)->(IID_IDocHostUIHandler2 %p)\n", This, ppv);
         *ppv = &This->IDocHostUIHandler2_iface;
+#ifdef __REACTOS__
+    }else if(IsEqualGUID(&IID_IDocHostShowUI, riid)) {
+        TRACE("(%p)->(IID_IDocHostShowUI %p)\n", This, ppv);
+        *ppv = &This->IDocHostShowUI_iface;
+#endif
     }else if(IsEqualGUID(&IID_IOleDocumentSite, riid)) {
         TRACE("(%p)->(IID_IOleDocumentSite %p)\n", This, ppv);
         *ppv = &This->IOleDocumentSite_iface;

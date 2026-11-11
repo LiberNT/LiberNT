@@ -132,6 +132,9 @@ struct DocHost {
     IDispatch           IDispatch_iface;
     IPropertyNotifySink IPropertyNotifySink_iface;
     IServiceProvider    IServiceProvider_iface;
+#ifdef __REACTOS__
+    IDocHostShowUI      IDocHostShowUI_iface;
+#endif
 
     /* Interfaces of InPlaceFrame object */
     IOleInPlaceFrame  IOleInPlaceFrame_iface;
@@ -162,6 +165,7 @@ struct DocHost {
 #ifdef __REACTOS__
     LONG progress;
     LONG progress_max;
+    BOOL drop_target_asked;
 #endif
 
     READYSTATE ready_state;

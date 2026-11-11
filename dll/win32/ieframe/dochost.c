@@ -1108,8 +1108,19 @@ static HRESULT WINAPI DocHostUIHandler_GetDropTarget(IDocHostUIHandler2 *iface,
         IDropTarget *pDropTarget, IDropTarget **ppDropTarget)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)->(%p %p)\n", This, pDropTarget, ppDropTarget);
+
+    /* The container is asked once per host, when the host's drop target is first set up */
+    if(!This->hostui || This->drop_target_asked)
+        return E_NOTIMPL;
+
+    This->drop_target_asked = TRUE;
+    return IDocHostUIHandler_GetDropTarget(This->hostui, pDropTarget, ppDropTarget);
+#else
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_GetExternal(IDocHostUIHandler2 *iface,
@@ -1273,9 +1284,88 @@ static const IPropertyNotifySinkVtbl PropertyNotifySinkVtbl = {
     PropertyNotifySink_OnRequestEdit
 };
 
+#ifdef __REACTOS__
+static inline DocHost *impl_from_IDocHostShowUI(IDocHostShowUI *iface)
+{
+    return CONTAINING_RECORD(iface, DocHost, IDocHostShowUI_iface);
+}
+
+static HRESULT WINAPI DocHostShowUI_QueryInterface(IDocHostShowUI *iface, REFIID riid, void **ppv)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_QueryInterface(&This->IOleClientSite_iface, riid, ppv);
+}
+
+static ULONG WINAPI DocHostShowUI_AddRef(IDocHostShowUI *iface)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_AddRef(&This->IOleClientSite_iface);
+}
+
+static ULONG WINAPI DocHostShowUI_Release(IDocHostShowUI *iface)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_Release(&This->IOleClientSite_iface);
+}
+
+static IDocHostShowUI *get_container_show_ui(DocHost *This)
+{
+    IDocHostShowUI *show_ui;
+
+    if(!This->hostui || FAILED(IDocHostUIHandler_QueryInterface(This->hostui, &IID_IDocHostShowUI, (void**)&show_ui)))
+        return NULL;
+    return show_ui;
+}
+
+static HRESULT WINAPI DocHostShowUI_ShowMessage(IDocHostShowUI *iface, HWND hwnd, LPOLESTR lpstrText,
+        LPOLESTR lpstrCaption, DWORD dwType, LPOLESTR lpstrHelpFile, DWORD dwHelpContext, LRESULT *plResult)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    IDocHostShowUI *show_ui;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p %s %s %lx)\n", This, hwnd, debugstr_w(lpstrText), debugstr_w(lpstrCaption), dwType);
+
+    if(!(show_ui = get_container_show_ui(This)))
+        return S_FALSE;
+
+    hres = IDocHostShowUI_ShowMessage(show_ui, hwnd, lpstrText, lpstrCaption, dwType, lpstrHelpFile, dwHelpContext, plResult);
+    IDocHostShowUI_Release(show_ui);
+    return hres;
+}
+
+static HRESULT WINAPI DocHostShowUI_ShowHelp(IDocHostShowUI *iface, HWND hwnd, LPOLESTR pszHelpFile,
+        UINT uCommand, DWORD dwData, POINT ptMouse, IDispatch *pDispatchObjectHit)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    IDocHostShowUI *show_ui;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p %s %u %lx)\n", This, hwnd, debugstr_w(pszHelpFile), uCommand, dwData);
+
+    if(!(show_ui = get_container_show_ui(This)))
+        return S_FALSE;
+
+    hres = IDocHostShowUI_ShowHelp(show_ui, hwnd, pszHelpFile, uCommand, dwData, ptMouse, pDispatchObjectHit);
+    IDocHostShowUI_Release(show_ui);
+    return hres;
+}
+
+static const IDocHostShowUIVtbl DocHostShowUIVtbl = {
+    DocHostShowUI_QueryInterface,
+    DocHostShowUI_AddRef,
+    DocHostShowUI_Release,
+    DocHostShowUI_ShowMessage,
+    DocHostShowUI_ShowHelp
+};
+#endif
+
 void DocHost_Init(DocHost *This, IWebBrowser2 *wb, const IDocHostContainerVtbl* container)
 {
     This->IDocHostUIHandler2_iface.lpVtbl  = &DocHostUIHandler2Vtbl;
+#ifdef __REACTOS__
+    This->IDocHostShowUI_iface.lpVtbl      = &DocHostShowUIVtbl;
+#endif
     This->IOleCommandTarget_iface.lpVtbl   = &OleCommandTargetVtbl;
     This->IPropertyNotifySink_iface.lpVtbl = &PropertyNotifySinkVtbl;
 
