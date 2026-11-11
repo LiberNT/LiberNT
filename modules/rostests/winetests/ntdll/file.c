@@ -4238,7 +4238,7 @@ static void test_file_completion_information(void)
         ok(num_bytes == sizeof(buf), "expected sizeof(buf), got %lu\n", num_bytes);
 
         pov = (void *)0xdeadbeef;
-        ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 500);
+        ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
         ok(!ret, "GetQueuedCompletionStatus succeeded\n");
         ok(pov == NULL, "expected NULL, got %p\n", pov);
     }
@@ -4266,7 +4266,7 @@ static void test_file_completion_information(void)
         ok(num_bytes == sizeof(buf), "expected sizeof(buf), got %lu\n", num_bytes);
 
         pov = (void *)0xdeadbeef;
-        ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 1000);
+        ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 0);
         ok(!ret, "GetQueuedCompletionStatus succeeded\n");
         ok(pov == NULL, "expected NULL, got %p\n", pov);
     }
