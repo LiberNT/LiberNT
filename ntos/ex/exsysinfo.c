@@ -478,7 +478,7 @@ NTSTATUS NTAPI ExpQueryLocksInformation(_Out_opt_ PVOID, _In_ ULONG,
 NTSTATUS NTAPI ExpQueryLookasideInformation(_Out_opt_ PVOID, _In_ ULONG,
     _Out_ PULONG);
 NTSTATUS NTAPI ExpQueryPerformanceInformation(
-    _Out_ PSYSTEM_PERFORMANCE_INFORMATION, _In_ ULONG);
+    _Out_ PSYSTEM_PERFORMANCE_INFORMATION, _In_ ULONG, _Out_ PULONG);
 NTSTATUS NTAPI ExpQueryInterruptInformation(
     _Out_ PSYSTEM_INTERRUPT_INFORMATION, _In_ ULONG, _Out_ PULONG);
 NTSTATUS NTAPI ExpQueryExceptionInformation(
@@ -1151,9 +1151,9 @@ NtQuerySystemInformation(
 
             case SystemPerformanceInformation:
             {
-                ResultLength = sizeof(SYSTEM_PERFORMANCE_INFORMATION);
                 Status = ExpQueryPerformanceInformation(SystemInformation,
-                                                        Length);
+                                                        Length,
+                                                        &ResultLength);
                 break;
             }
 

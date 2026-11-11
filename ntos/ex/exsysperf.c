@@ -116,16 +116,21 @@ ExpCountLookasideHits(
 NTSTATUS
 NTAPI
 ExpQueryPerformanceInformation(
-    _Out_ PSYSTEM_PERFORMANCE_INFORMATION Info,
-    _In_ ULONG Length)
+    _Out_ PSYSTEM_PERFORMANCE_INFORMATION Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
 {
+    SYSTEM_PERFORMANCE_INFORMATION Local;
+    PSYSTEM_PERFORMANCE_INFORMATION Info = &Local;
     ULONG DirtyPages;
     ULONG DirtyPageThreshold;
     ULONG PagedHeapHits;
     ULONG NonPagedHeapHits;
 
-    if (Length < sizeof(SYSTEM_PERFORMANCE_INFORMATION))
+    /* A caller built for the older, shorter record gets the fields it has room for */
+    if (Length < FIELD_OFFSET(SYSTEM_PERFORMANCE_INFORMATION, CcTotalDirtyPages))
     {
+        *ReturnLength = sizeof(SYSTEM_PERFORMANCE_INFORMATION);
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
@@ -161,6 +166,9 @@ ExpQueryPerformanceInformation(
 
     /* TODO: the free system page-table entries and the resident code and
        driver page counts are not kept. */
+
+    *ReturnLength = min(Length, (ULONG)sizeof(Local));
+    RtlCopyMemory(Buffer, &Local, *ReturnLength);
 
     return STATUS_SUCCESS;
 }
