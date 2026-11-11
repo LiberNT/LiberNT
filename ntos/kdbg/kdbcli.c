@@ -1331,6 +1331,142 @@ KdbpCmdThreads(
 }
 
 static
+PETHREAD
+KdbpThreadArgument(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG_PTR Address;
+
+    if (Argc < 2)
+        return KdbCurrentThread;
+
+    if (!KdbpGetAddressExpression(Argv[1], &Address))
+        return NULL;
+
+    return (PETHREAD)Address;
+}
+
+static
+BOOLEAN
+KdbpCmdThreadDetail(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static ETHREAD Snapshot;
+    PETHREAD Thread = KdbpThreadArgument(Argc, Argv);
+
+    if (Thread == NULL)
+        return TRUE;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Snapshot, Thread, sizeof(Snapshot))))
+    {
+        KdbpPrint("Thread %p cannot be read\n", Thread);
+        return TRUE;
+    }
+
+    KdbpPrint("Thread %p  Cid %p.%p  Process %p\n",
+              Thread,
+              Snapshot.Cid.UniqueProcess,
+              Snapshot.Cid.UniqueThread,
+              Snapshot.Tcb.ApcState.Process);
+    KdbpPrint("  State %u, priority %d (base %d), wait reason %u, wait mode %d, wait IRQL %u\n",
+              Snapshot.Tcb.State,
+              Snapshot.Tcb.Priority,
+              Snapshot.Tcb.BasePriority,
+              Snapshot.Tcb.WaitReason,
+              Snapshot.Tcb.WaitMode,
+              Snapshot.Tcb.WaitIrql);
+    KdbpPrint("  Stack: initial %p, base %p, limit %p, current %p\n",
+              Snapshot.Tcb.InitialStack,
+              Snapshot.Tcb.StackBase,
+              (PVOID)Snapshot.Tcb.StackLimit,
+              Snapshot.Tcb.KernelStack);
+    KdbpPrint("  APC disable: kernel %d, special %d, state index %u\n",
+              Snapshot.Tcb.KernelApcDisable,
+              Snapshot.Tcb.SpecialApcDisable,
+              Snapshot.Tcb.ApcStateIndex);
+    KdbpPrint("  APC pending: kernel %u, user %u, kernel APC running %u\n",
+              Snapshot.Tcb.ApcState.KernelApcPending,
+              Snapshot.Tcb.ApcState.UserApcPending,
+              Snapshot.Tcb.ApcState.KernelApcInProgress);
+
+    KdbpPrint("  Start %p ", Snapshot.StartAddress);
+    KdbSymPrintAddress(Snapshot.StartAddress, NULL);
+    KdbpPrint(", Win32 start %p ", Snapshot.Win32StartAddress);
+    KdbSymPrintAddress(Snapshot.Win32StartAddress, NULL);
+    KdbPuts("\n");
+
+    return TRUE;
+}
+
+static
+VOID
+KdbpPrintApcQueue(
+    _In_ PCSTR Name,
+    _In_ PLIST_ENTRY Head)
+{
+    LIST_ENTRY Entry;
+    PLIST_ENTRY Current;
+    ULONG Count = 0;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Entry, Head, sizeof(Entry))))
+        return;
+
+    KdbpPrint("%s APCs:\n", Name);
+
+    for (Current = Entry.Flink;
+         (Current != Head) && (Count < 64) && !KdbpIsOutputAborted();
+         Current = Entry.Flink, Count++)
+    {
+        PKAPC Address = CONTAINING_RECORD(Current, KAPC, ApcListEntry);
+        KAPC Apc;
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Apc, Address, sizeof(Apc))))
+        {
+            KdbpPrint("  %p cannot be read\n", Address);
+            return;
+        }
+
+        KdbpPrint("  %p kernel %p ", Address, (PVOID)Apc.KernelRoutine);
+        KdbSymPrintAddress((PVOID)Apc.KernelRoutine, NULL);
+        KdbpPrint(", normal %p ", (PVOID)Apc.NormalRoutine);
+        KdbSymPrintAddress((PVOID)Apc.NormalRoutine, NULL);
+        KdbPuts("\n");
+
+        Entry = Apc.ApcListEntry;
+    }
+
+    if (Count == 0)
+        KdbPuts("  none\n");
+}
+
+static
+BOOLEAN
+KdbpCmdApc(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    PETHREAD Thread = KdbpThreadArgument(Argc, Argv);
+    UCHAR ApcStateIndex;
+
+    if (Thread == NULL)
+        return TRUE;
+
+    KdbpPrintApcQueue("Kernel", &Thread->Tcb.ApcState.ApcListHead[KernelMode]);
+    KdbpPrintApcQueue("User", &Thread->Tcb.ApcState.ApcListHead[UserMode]);
+
+    if (NT_SUCCESS(KdbpSafeReadMemory(&ApcStateIndex, &Thread->Tcb.ApcStateIndex, sizeof(ApcStateIndex))) &&
+        (ApcStateIndex != 0))
+    {
+        KdbpPrintApcQueue("Saved kernel", &Thread->Tcb.SavedApcState.ApcListHead[KernelMode]);
+        KdbpPrintApcQueue("Saved user", &Thread->Tcb.SavedApcState.ApcListHead[UserMode]);
+    }
+
+    return TRUE;
+}
+
+static
 BOOLEAN
 KdbpCmdEvaluate(
     ULONG Argc,
@@ -1571,6 +1707,8 @@ static const KDB_COMMAND KdbpCommands[] =
     {"sym", "sym [module] <pattern>", "Looks for symbols", KdbpCmdSymbols},
     {"proc", "proc [id]", "Lists the processes, or looks at one", KdbpCmdProcesses},
     {"thread", "thread [id]", "Lists the threads, or looks at one", KdbpCmdThreads},
+    {"!thread", "!thread [address]", "Shows a thread in detail", KdbpCmdThreadDetail},
+    {"!apc", "!apc [address]", "Shows the APCs queued to a thread", KdbpCmdApc},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
@@ -1818,6 +1956,12 @@ KdbpReportStop(
 
     if (KiBugCheckData[0] != 0)
     {
+        KdbpPagerReset();
+        KdbpCmdThreadDetail(1, NULL);
+
+        KdbpPagerReset();
+        KdbpCmdApc(1, NULL);
+
         KdbpReportFrozenProcessors();
 
         KdbpPagerReset();
