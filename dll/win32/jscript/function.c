@@ -512,7 +512,8 @@ static HRESULT Function_apply(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsi
         }else {
             jsval_t res;
 #ifdef __REACTOS__
-            hres = disp_call_value(ctx, get_object(vthis), this_val, DISPATCH_METHOD | DISPATCH_JSCRIPT_NOPROPERTYGET, cnt, args, &res);
+            hres = disp_call_value(ctx, get_object(vthis), this_val, ctx->version < SCRIPTLANGUAGEVERSION_ES5
+                    ? DISPATCH_METHOD | DISPATCH_JSCRIPT_NOPROPERTYGET : DISPATCH_METHOD, cnt, args, &res);
 #else
             hres = disp_call_value(ctx, get_object(vthis), this_val, DISPATCH_METHOD, cnt, args, &res);
 #endif
