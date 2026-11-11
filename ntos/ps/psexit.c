@@ -233,6 +233,7 @@ PspExitThread(
 
     IoCancelThreadIo(Thread);
     ExTimerRundown();
+    CmpFlushNotifyThread(Thread);
     PspDrainUserApcs(Thread);
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
