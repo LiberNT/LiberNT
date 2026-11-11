@@ -790,7 +790,7 @@ static void testCtrlHandler(void)
     if(!(GetVersion() & 0x80000000))
         /* ... and next line leads to an unhandled exception on 9x.  Avoid it on 9x. */
         ok(GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0), "Couldn't send ctrl-c event\n");
-    ok(WaitForSingleObject(mch_event, 3000) == WAIT_TIMEOUT && mch_count == 0, "Event shouldn't have been sent\n");
+    ok(WaitForSingleObject(mch_event, 200) == WAIT_TIMEOUT && mch_count == 0, "Event shouldn't have been sent\n");
     CloseHandle(mch_event);
     ok(SetConsoleCtrlHandler(mch, FALSE), "Couldn't remove handler\n");
     ok(!SetConsoleCtrlHandler(mch, FALSE), "Shouldn't succeed\n");
@@ -5498,7 +5498,7 @@ START_TEST(console)
         ret = SetEvent(event);
         ok(ret, "SetEvent failed\n");
 
-        WaitForSingleObject(mch_child_kill_event, 1000); /* enough for all events to be distributed? */
+        WaitForSingleObject(mch_child_kill_event, 200); /* enough for all events to be distributed? */
         ExitProcess(mch_child_event);
     }
 
