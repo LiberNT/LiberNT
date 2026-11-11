@@ -868,18 +868,21 @@ IopCompleteCreate(
         return Status;
     }
 
+    if (OpenPacket->DeleteOnly)
+    {
+        IopCloseLocalFileObject(OpenPacket->LocalFileObject);
+        OpenPacket->FileObject = NULL;
+        OpenPacket->FinalStatus = Status;
+        OpenPacket->ParseCheck = 1;
+        *Object = NULL;
+        return Status;
+    }
+
     FileObject->Flags |= FO_HANDLE_CREATED;
 
     OpenPacket->FileObject = FileObject;
     OpenPacket->FinalStatus = Status;
     OpenPacket->ParseCheck = 1;
-
-    if (OpenPacket->DeleteOnly)
-    {
-        /* TODO: a delete-only open marks the file for deletion and closes it */
-        *Object = NULL;
-        return Status;
-    }
 
     *Object = FileObject;
 
