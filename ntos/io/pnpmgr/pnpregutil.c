@@ -642,6 +642,48 @@ IopSetDeviceInstanceData(
     return STATUS_SUCCESS;
 }
 
+/* The current hardware profile keeps its own instance key of a device, made at the first open with no Device
+ * Parameters below it, as on Windows 11 */
+static
+NTSTATUS
+PiOpenProfileInstanceKey(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Out_ PHANDLE Key)
+{
+    static CONST WCHAR ProfileEnum[] =
+        L"\\Registry\\Machine\\System\\CurrentControlSet\\Hardware Profiles\\Current\\System\\CurrentControlSet\\Enum\\";
+    UNICODE_STRING Path;
+    PDEVICE_NODE DeviceNode;
+    NTSTATUS Status;
+    HANDLE Created;
+
+    PAGED_CODE();
+
+    *Key = NULL;
+
+    DeviceNode = IopGetDeviceNode(DeviceObject);
+    if (DeviceNode == NULL || DeviceNode->InstancePath.Length == 0) return STATUS_INVALID_DEVICE_REQUEST;
+
+    Path.Length = 0;
+    Path.MaximumLength = (USHORT)(sizeof(ProfileEnum) + DeviceNode->InstancePath.Length);
+    Path.Buffer = ExAllocatePoolWithTag(PagedPool, Path.MaximumLength, TAG_IO);
+    if (Path.Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlAppendUnicodeToString(&Path, ProfileEnum);
+    RtlAppendUnicodeStringToString(&Path, &DeviceNode->InstancePath);
+
+    Status = IopCreateDeviceKeyPath(&Path, REG_OPTION_NON_VOLATILE, &Created);
+    if (NT_SUCCESS(Status))
+    {
+        ZwClose(Created);
+        Status = IopOpenRegistryKeyEx(Key, NULL, &Path, DesiredAccess);
+    }
+
+    ExFreePoolWithTag(Path.Buffer, TAG_IO);
+    return Status;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 NTSTATUS
@@ -689,9 +731,9 @@ IoOpenDeviceRegistryKey(
             return STATUS_SUCCESS;
         }
 
-        *DevInstRegKey = InstanceKey;
+        ZwClose(InstanceKey);
 
-        return STATUS_SUCCESS;
+        return PiOpenProfileInstanceKey(DeviceObject, DesiredAccess, DevInstRegKey);
     }
 
     if (!(DevInstKeyType & PLUGPLAY_REGKEY_DRIVER))

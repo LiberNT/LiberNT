@@ -87,6 +87,40 @@ ReferenceRootDevice(
     return Found;
 }
 
+static
+VOID
+CheckProfileInstanceKey(
+    _In_ HANDLE Key)
+{
+    UNICODE_STRING Profiles = RTL_CONSTANT_STRING(L"\\Hardware Profiles\\");
+    UNICODE_STRING Parameters = RTL_CONSTANT_STRING(L"\\Device Parameters");
+    UCHAR Buffer[sizeof(KEY_NAME_INFORMATION) + 256 * sizeof(WCHAR)];
+    PKEY_NAME_INFORMATION Information = (PKEY_NAME_INFORMATION)Buffer;
+    UNICODE_STRING KeyName, Tail;
+    BOOLEAN InProfile = FALSE;
+    ULONG Length, Index;
+    NTSTATUS Status;
+
+    Status = ZwQueryKey(Key, KeyNameInformation, Information, sizeof(Buffer), &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    KeyName.Buffer = Information->Name;
+    KeyName.Length = KeyName.MaximumLength = (USHORT)Information->NameLength;
+
+    for (Index = 0; !InProfile && Index + Profiles.Length / sizeof(WCHAR) <= KeyName.Length / sizeof(WCHAR); Index++)
+    {
+        Tail.Buffer = KeyName.Buffer + Index;
+        Tail.Length = Tail.MaximumLength = Profiles.Length;
+        InProfile = RtlEqualUnicodeString(&Tail, &Profiles, TRUE);
+    }
+    ok(InProfile, "The key %wZ is not under a hardware profile\n", &KeyName);
+
+    Tail.Buffer = KeyName.Buffer + (KeyName.Length - min(KeyName.Length, Parameters.Length)) / sizeof(WCHAR);
+    Tail.Length = Tail.MaximumLength = min(KeyName.Length, Parameters.Length);
+    ok(!RtlEqualUnicodeString(&Tail, &Parameters, TRUE), "The key %wZ is a Device Parameters key\n", &KeyName);
+}
+
 START_TEST(IoDriverKeyOpen)
 {
     WCHAR Name[128];
@@ -109,6 +143,15 @@ START_TEST(IoDriverKeyOpen)
 
     Status = IoGetDeviceProperty(Pdo, DevicePropertyDriverKeyName, sizeof(DriverKeyName), DriverKeyName, &Length);
     ok_eq_hex(Status, STATUS_SUCCESS);
+
+    /* A new device already has its instance key in the current hardware profile, without Device Parameters */
+    Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DEVICE | PLUGPLAY_REGKEY_CURRENT_HWPROFILE, KEY_READ, &Key);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        CheckProfileInstanceKey(Key);
+        ZwClose(Key);
+    }
 
     ObDereferenceObject(Pdo);
 }
