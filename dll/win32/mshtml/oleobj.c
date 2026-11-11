@@ -769,6 +769,11 @@ static HRESULT WINAPI DocObjOleObject_SetExtent(IOleObject *iface, DWORD dwDrawA
 
     TRACE("(%p)->(%ld %p)\n", This, dwDrawAspect, psizel);
 
+#ifdef __REACTOS__
+    if (psizel->cx < 0 || psizel->cy < 0)
+        return E_FAIL;
+#endif
+
     if (dwDrawAspect != DVASPECT_CONTENT)
         return E_INVALIDARG;
 
