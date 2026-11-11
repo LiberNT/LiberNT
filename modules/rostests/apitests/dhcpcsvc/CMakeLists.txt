@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    ClientIdentifier.c
     DhcpAcquireParameters.c
     testlist.c)
 

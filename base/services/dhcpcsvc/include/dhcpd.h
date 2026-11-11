@@ -230,6 +230,7 @@ struct client_state {
 struct interface_info {
 	struct interface_info	*next;
 	struct hardware		 hw_address;
+	u_int8_t		 client_id[1 + sizeof(((struct hardware *)0)->haddr)];
 	struct in_addr		 primary_address;
 	char			 name[IFNAMSIZ];
 	int			 rfdesc;

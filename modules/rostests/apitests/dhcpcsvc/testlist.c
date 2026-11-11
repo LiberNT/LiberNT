@@ -8,10 +8,12 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_ClientIdentifier(void);
 extern void func_DhcpAcquireParameters(void);
 
 const struct test winetest_testlist[] =
 {
+    { "ClientIdentifier", func_ClientIdentifier },
     { "DhcpAcquireParameters", func_DhcpAcquireParameters },
     { 0, 0 }
 };
