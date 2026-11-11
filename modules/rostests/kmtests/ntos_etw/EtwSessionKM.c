@@ -12,6 +12,11 @@
 NTSTATUS NTAPI WmiStartTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
 NTSTATUS NTAPI WmiStopTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
 LONGLONG FASTCALL WmiGetClock(_In_ ULONG ClockType, _In_opt_ PVOID Context);
+NTSTATUS __cdecl WmiTraceMessage(_In_ TRACEHANDLE LoggerHandle, _In_ ULONG MessageFlags,
+                                 _In_ LPGUID MessageGuid, _In_ USHORT MessageNumber, ...);
+
+static GUID KmtEtwMessageGuid = { 0x5d2f7a10, 0x83c4, 0x4e1b, { 0x9a, 0x61, 0x2b, 0x7e, 0x0c, 0x44, 0xd9, 0x31 } };
+
 typedef struct _KMT_SESSION
 {
     WMI_LOGGER_INFORMATION Info;
@@ -62,6 +67,20 @@ KmtStopSession(
 
     Status = WmiStopTrace(&Session->Info);
     ok_eq_hex(Status, STATUS_SUCCESS);
+}
+
+static
+ULONG
+KmtEventsLogged(
+    _In_ ULONG LoggerId)
+{
+    ULONG Logged = MAXULONG;
+    NTSTATUS Status;
+
+    Status = WmiQueryTraceInformation(LoggerEventsLoggedClass, &Logged, sizeof(Logged), NULL, &LoggerId);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    return Logged;
 }
 
 static
@@ -123,7 +142,132 @@ TestClocks(VOID)
     KmtStopSession(&Session);
 }
 
+static
+VOID
+TestTraceInformation(VOID)
+{
+    KMT_SESSION SessionA, SessionB;
+    ETW_TRACE_SESSION_SETTINGS Settings;
+    TRACEHANDLE Handles[64];
+    TRACEHANDLE HandleA, HandleB, Handle;
+    UNICODE_STRING Name;
+    WNODE_HEADER Wnode;
+    BOOLEAN FoundA, FoundB;
+    ULONG Value, Required, Lost, i;
+    NTSTATUS Status;
+
+    Status = KmtStartSession(&SessionA, L"KmtEtwSessionA", EVENT_TRACE_CLOCK_PERFCOUNTER);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = KmtStartSession(&SessionB, L"KmtEtwSessionB", EVENT_TRACE_CLOCK_PERFCOUNTER);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        KmtStopSession(&SessionA);
+        return;
+    }
+
+    /* A logger identifier gives the session's handle, and the handle gives the identifier back */
+    Required = 0;
+    HandleA = 0;
+    Status = WmiQueryTraceInformation(TraceHandleClass, &HandleA, sizeof(HandleA), &Required, &SessionA.LoggerId);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Required, (ULONG)sizeof(TRACEHANDLE));
+    HandleB = KmtTraceHandle(SessionB.LoggerId);
+    ok(HandleA != HandleB, "two sessions share a handle\n");
+
+    RtlZeroMemory(&Wnode, sizeof(Wnode));
+    Wnode.BufferSize = sizeof(Wnode);
+    Wnode.HistoricalContext = HandleA;
+    Value = MAXULONG;
+    Required = 0;
+    Status = WmiQueryTraceInformation(TraceIdClass, &Value, sizeof(Value), &Required, &Wnode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Value, SessionA.LoggerId);
+    ok_eq_ulong(Required, (ULONG)sizeof(ULONG));
+
+    Required = 0;
+    Status = WmiQueryTraceInformation(TraceIdClass, &Value, sizeof(USHORT), &Required, &Wnode);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok_eq_ulong(Required, (ULONG)sizeof(ULONG));
+
+    Status = WmiQueryTraceInformation(TraceIdClass, &Value, sizeof(Value), NULL, NULL);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER_MIX);
+
+    Status = WmiQueryTraceInformation(TraceHandleClass, &Handle, sizeof(Handle), NULL, NULL);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER_MIX);
+
+    /* What an enable carried is read off the handle in the node */
+    Status = WmiQueryTraceInformation(TraceEnableFlagsClass, &Value, sizeof(Value), NULL, &Wnode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = WmiQueryTraceInformation(TraceEnableLevelClass, &Value, sizeof(Value), NULL, &Wnode);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    /* No global logger was started */
+    Status = WmiQueryTraceInformation(GlobalLoggerHandleClass, &Handle, sizeof(Handle), NULL, NULL);
+    ok_eq_hex(Status, STATUS_NOT_FOUND);
+
+    /* Every running session */
+    RtlZeroMemory(Handles, sizeof(Handles));
+    Required = 0;
+    Status = WmiQueryTraceInformation(AllLoggerHandlesClass, Handles, sizeof(Handles), &Required, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Required >= 2 * sizeof(TRACEHANDLE) && (Required % sizeof(TRACEHANDLE)) == 0, "Required = %lu\n", Required);
+    FoundA = FoundB = FALSE;
+    for (i = 0; i < Required / sizeof(TRACEHANDLE) && i < RTL_NUMBER_OF(Handles); i++)
+    {
+        if (Handles[i] == HandleA) FoundA = TRUE;
+        if (Handles[i] == HandleB) FoundB = TRUE;
+    }
+    ok(FoundA, "session A missing from the handles\n");
+    ok(FoundB, "session B missing from the handles\n");
+
+    Status = WmiQueryTraceInformation(AllLoggerHandlesClass, Handles, sizeof(TRACEHANDLE), &Required, NULL);
+    ok_eq_hex(Status, STATUS_MORE_ENTRIES);
+
+    /* By name */
+    RtlInitUnicodeString(&Name, L"KmtEtwSessionA");
+    Handle = 0;
+    Status = WmiQueryTraceInformation(TraceHandleByNameClass, &Handle, sizeof(Handle), NULL, &Name);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_hex64(Handle, HandleA);
+
+    /* The settings the session runs with */
+    RtlZeroMemory(&Settings, sizeof(Settings));
+    Status = WmiQueryTraceInformation(TraceSessionSettingsClass, &Settings, sizeof(Settings), NULL, &HandleA);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Settings.BufferSize, 4UL);
+    ok(Settings.LoggerMode & EVENT_TRACE_REAL_TIME_MODE, "LoggerMode = 0x%lx\n", Settings.LoggerMode);
+    ok_eq_ulong(Settings.ClockType, (ULONG)EVENT_TRACE_CLOCK_PERFCOUNTER);
+
+    /* Events logged and lost, counted per session */
+    ok_eq_ulong(KmtEventsLogged(SessionA.LoggerId), 0UL);
+    for (i = 0; i < 3; i++)
+    {
+        Status = WmiTraceMessage(HandleA, TRACE_MESSAGE_GUID, &KmtEtwMessageGuid, 1, &i, sizeof(i), NULL, (SIZE_T)0);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+    }
+    ok_eq_ulong(KmtEventsLogged(SessionA.LoggerId), 3UL);
+    ok_eq_ulong(KmtEventsLogged(SessionB.LoggerId), 0UL);
+
+    Lost = MAXULONG;
+    Status = WmiQueryTraceInformation(LoggerEventsLostClass, &Lost, sizeof(Lost), NULL, &SessionA.LoggerId);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Lost, 0UL);
+
+    /* A session that stopped no longer answers to its handle */
+    KmtStopSession(&SessionB);
+    Wnode.HistoricalContext = HandleB;
+    Status = WmiQueryTraceInformation(TraceIdClass, &Value, sizeof(Value), NULL, &Wnode);
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
+
+    KmtStopSession(&SessionA);
+}
+
 START_TEST(EtwSessionKM)
 {
     TestClocks();
+    TestTraceInformation();
 }

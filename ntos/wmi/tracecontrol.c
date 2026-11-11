@@ -251,9 +251,14 @@ WmiQueryTraceInformation(
     _Out_opt_ PULONG RequiredLength,
     _In_opt_ PVOID Buffer)
 {
+    static const UNICODE_STRING GlobalLoggerName = RTL_CONSTANT_STRING(GLOBAL_LOGGER_NAMEW);
+    PETW_TRACE_SESSION_SETTINGS Settings;
     WMI_LOGGER_INFORMATION Info;
+    ULONG LoggerIds[MAXLOGGERS];
+    PUNICODE_STRING Name;
+    PTRACEHANDLE Handles;
+    ULONG Needed, LoggerId, Logged, Count, i;
     NTSTATUS Status;
-    ULONG Needed;
 
     PAGED_CODE();
 
@@ -261,17 +266,7 @@ WmiQueryTraceInformation(
 
     switch (TraceInformationClass)
     {
-        case TraceHandleClass:
-        case GlobalLoggerHandleClass:
-        case EventLoggerHandleClass:
-        case TraceHandleByNameClass:
-            Needed = sizeof(TRACEHANDLE);
-            break;
-
         case TraceIdClass:
-            Needed = sizeof(GUID);
-            break;
-
         case TraceEnableFlagsClass:
         case TraceEnableLevelClass:
         case LoggerEventsLostClass:
@@ -279,71 +274,107 @@ WmiQueryTraceInformation(
             Needed = sizeof(ULONG);
             break;
 
+        case TraceHandleClass:
+        case GlobalLoggerHandleClass:
+        case AllLoggerHandlesClass:
+        case TraceHandleByNameClass:
+            Needed = sizeof(TRACEHANDLE);
+            break;
+
         case TraceSessionSettingsClass:
             Needed = sizeof(ETW_TRACE_SESSION_SETTINGS);
             break;
 
         default:
+            /* TODO: the event logger handle and the notify routines the system keeps for itself */
             return STATUS_INVALID_INFO_CLASS;
     }
 
     if (RequiredLength != NULL) *RequiredLength = Needed;
 
-    if (TraceInformationLength < Needed) return STATUS_BUFFER_TOO_SMALL;
-
-    RtlZeroMemory(&Info, sizeof(Info));
-    Info.Wnode.BufferSize = sizeof(Info);
-
-    if (TraceInformationClass == TraceHandleByNameClass)
-    {
-        if (Buffer == NULL) return STATUS_INVALID_PARAMETER;
-
-        Info.LoggerName = *(PUNICODE_STRING)Buffer;
-    }
-    else
-    {
-        if (Buffer == NULL) return STATUS_INVALID_PARAMETER;
-
-        Info.Wnode.HistoricalContext = *(PTRACEHANDLE)Buffer;
-    }
-
-    Status = WmipLoggerRequest(EtwQueryLoggerCode, &Info);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (TraceInformationLength < Needed) return STATUS_INFO_LENGTH_MISMATCH;
 
     switch (TraceInformationClass)
     {
-        case TraceHandleClass:
-        case GlobalLoggerHandleClass:
-        case EventLoggerHandleClass:
-        case TraceHandleByNameClass:
-            *(PTRACEHANDLE)TraceInformation = Info.Wnode.HistoricalContext;
-            break;
-
         case TraceIdClass:
-            *(LPGUID)TraceInformation = Info.Wnode.Guid;
-            break;
-
         case TraceEnableFlagsClass:
-            *(PULONG)TraceInformation = Info.EnableFlags;
-            break;
-
         case TraceEnableLevelClass:
-            /* TODO: the enable level a provider was turned on with */
-            *(PULONG)TraceInformation = 0;
-            break;
+            if (Buffer == NULL) return STATUS_INVALID_PARAMETER_MIX;
+
+            LoggerId = EtwpLoggerIdFromTraceHandle(((PWNODE_HEADER)Buffer)->HistoricalContext);
+            if (!NT_SUCCESS(EtwpQueryLoggerById(LoggerId, NULL, NULL))) return STATUS_INVALID_HANDLE;
+
+            if (TraceInformationClass == TraceIdClass)
+            {
+                *(PULONG)TraceInformation = LoggerId;
+            }
+            else if (TraceInformationClass == TraceEnableFlagsClass)
+            {
+                /* TODO: the enable flags a provider was turned on with */
+                *(PULONG)TraceInformation = 0;
+            }
+            else
+            {
+                /* TODO: the enable level a provider was turned on with */
+                *(PULONG)TraceInformation = 0;
+            }
+            return STATUS_SUCCESS;
+
+        case TraceHandleClass:
+            if (Buffer == NULL) return STATUS_INVALID_PARAMETER_MIX;
+
+            LoggerId = *(PULONG)Buffer;
+            if (!NT_SUCCESS(EtwpQueryLoggerById(LoggerId, NULL, NULL))) return STATUS_INVALID_HANDLE;
+
+            *(PTRACEHANDLE)TraceInformation = EtwpTraceHandleFromLoggerId(LoggerId);
+            return STATUS_SUCCESS;
+
+        case GlobalLoggerHandleClass:
+            if (!NT_SUCCESS(EtwpFindLoggerByName(&GlobalLoggerName, &LoggerId))) return STATUS_NOT_FOUND;
+
+            *(PTRACEHANDLE)TraceInformation = EtwpTraceHandleFromLoggerId(LoggerId);
+            return STATUS_SUCCESS;
+
+        case AllLoggerHandlesClass:
+            Count = EtwpEnumerateLoggers(LoggerIds, RTL_NUMBER_OF(LoggerIds));
+            if (RequiredLength != NULL) *RequiredLength = Count * sizeof(TRACEHANDLE);
+
+            Handles = TraceInformation;
+            for (i = 0; i < Count && i < TraceInformationLength / sizeof(TRACEHANDLE); i++)
+            {
+                Handles[i] = EtwpTraceHandleFromLoggerId(LoggerIds[i]);
+            }
+
+            return (i < Count) ? STATUS_MORE_ENTRIES : STATUS_SUCCESS;
+
+        case TraceHandleByNameClass:
+            if (Buffer == NULL) return STATUS_INVALID_PARAMETER_MIX;
+
+            Name = Buffer;
+            if (Name->Length == 0 || Name->Buffer == NULL) return STATUS_INVALID_PARAMETER;
+            if (!NT_SUCCESS(EtwpFindLoggerByName(Name, &LoggerId))) return STATUS_INVALID_PARAMETER;
+
+            *(PTRACEHANDLE)TraceInformation = EtwpTraceHandleFromLoggerId(LoggerId);
+            return STATUS_SUCCESS;
 
         case LoggerEventsLostClass:
-            *(PULONG)TraceInformation = Info.EventsLost;
-            break;
-
         case LoggerEventsLoggedClass:
-            *(PULONG)TraceInformation = Info.BuffersWritten;
-            break;
+            if (Buffer == NULL) return STATUS_INVALID_PARAMETER_MIX;
+
+            Status = EtwpQueryLoggerById(*(PULONG)Buffer, &Info, &Logged);
+            if (!NT_SUCCESS(Status)) return STATUS_INVALID_HANDLE;
+
+            *(PULONG)TraceInformation = (TraceInformationClass == LoggerEventsLostClass) ? Info.EventsLost : Logged;
+            return STATUS_SUCCESS;
 
         case TraceSessionSettingsClass:
-        {
-            PETW_TRACE_SESSION_SETTINGS Settings = TraceInformation;
+            if (Buffer == NULL) return STATUS_INVALID_PARAMETER_MIX;
 
+            LoggerId = EtwpLoggerIdFromTraceHandle(*(PTRACEHANDLE)Buffer);
+            Status = EtwpQueryLoggerById(LoggerId, &Info, NULL);
+            if (!NT_SUCCESS(Status)) return STATUS_INVALID_HANDLE;
+
+            Settings = TraceInformation;
             Settings->Version = 1;
             Settings->BufferSize = Info.BufferSize;
             Settings->MinimumBuffers = Info.MinimumBuffers;
@@ -352,14 +383,11 @@ WmiQueryTraceInformation(
             Settings->FlushTimer = Info.FlushTimer;
             Settings->FlushThreshold = (ULONG)Info.FlushThreshold;
             Settings->ClockType = Info.Wnode.ClientContext;
-            break;
-        }
+            return STATUS_SUCCESS;
 
         default:
             return STATUS_INVALID_INFO_CLASS;
     }
-
-    return STATUS_SUCCESS;
 }
 
 ULONG

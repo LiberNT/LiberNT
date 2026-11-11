@@ -51,6 +51,7 @@ typedef struct _ETWP_LOGGER
     ULONG NumberOfBuffers;
     ULONG FreeBuffers;
     ULONG EventsLost;
+    ULONG EventsLogged;
     ULONG BuffersWritten;
     ULONG LogBuffersLost;
     ULONG RealTimeBuffersLost;
@@ -1007,6 +1008,96 @@ EtwpQueryLogger(
     KeReleaseMutex(&Logger->FileLock, FALSE);
 }
 
+/* The handle a session's events are written through names it by its logger identifier */
+TRACEHANDLE
+EtwpTraceHandleFromLoggerId(
+    _In_ ULONG LoggerId)
+{
+    return (TRACEHANDLE)LoggerId;
+}
+
+ULONG
+EtwpLoggerIdFromTraceHandle(
+    _In_ TRACEHANDLE TraceHandle)
+{
+    return (USHORT)TraceHandle;
+}
+
+NTSTATUS
+EtwpQueryLoggerById(
+    _In_ ULONG LoggerId,
+    _Out_opt_ PWMI_LOGGER_INFORMATION Information,
+    _Out_opt_ PULONG EventsLogged)
+{
+    WMI_LOGGER_INFORMATION Snapshot;
+    PETWP_LOGGER Logger;
+
+    PAGED_CODE();
+
+    if (LoggerId >= MAXLOGGERS)
+        return STATUS_WMI_INSTANCE_NOT_FOUND;
+
+    Logger = EtwpReferenceLoggerById((USHORT)LoggerId);
+    if (!Logger)
+        return STATUS_WMI_INSTANCE_NOT_FOUND;
+
+    if (Information)
+    {
+        RtlZeroMemory(&Snapshot, sizeof(Snapshot));
+        EtwpQueryLogger(Logger, &Snapshot);
+        *Information = Snapshot;
+    }
+    if (EventsLogged)
+        *EventsLogged = ReadULongNoFence(&Logger->EventsLogged);
+
+    EtwpDereferenceLogger(Logger);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+EtwpFindLoggerByName(
+    _In_ PCUNICODE_STRING LoggerName,
+    _Out_ PULONG LoggerId)
+{
+    PETWP_LOGGER Logger;
+
+    PAGED_CODE();
+
+    Logger = EtwpReferenceLoggerByName(LoggerName);
+    if (!Logger)
+        return STATUS_WMI_INSTANCE_NOT_FOUND;
+
+    *LoggerId = Logger->LoggerId;
+    EtwpDereferenceLogger(Logger);
+    return STATUS_SUCCESS;
+}
+
+/* Lists the running sessions, as many as fit, and says how many there are */
+ULONG
+EtwpEnumerateLoggers(
+    _Out_writes_to_(Count, return) PULONG LoggerIds,
+    _In_ ULONG Count)
+{
+    ULONG Found = 0, i;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockShared(&EtwpLoggerRegistrationLock);
+    for (i = ETWP_FIRST_LOGGER_ID; i < MAXLOGGERS; i++)
+    {
+        if (!EtwpLoggers[i])
+            continue;
+        if (Found < Count)
+            LoggerIds[Found] = i;
+        Found++;
+    }
+    ExReleasePushLockShared(&EtwpLoggerRegistrationLock);
+    KeLeaveCriticalRegion();
+
+    return Found;
+}
+
 static
 NTSTATUS
 EtwpCaptureString(
@@ -1225,6 +1316,7 @@ EtwpTraceClassicEvent(
             Record->UserTime = Thread->Tcb.UserTime;
             RtlZeroMemory((PUCHAR)Record + Total, Reserved - Total);
             Buffer->CurrentOffset += Reserved;
+            Logger->EventsLogged++;
         }
     }
 

@@ -190,3 +190,29 @@ EtwpTraceClassicEvent(
     _In_ ULONG FieldSize,
     _In_ PVOID Fields,
     _In_ KPROCESSOR_MODE PreviousMode);
+
+TRACEHANDLE
+EtwpTraceHandleFromLoggerId(
+    _In_ ULONG LoggerId);
+
+ULONG
+EtwpLoggerIdFromTraceHandle(
+    _In_ TRACEHANDLE TraceHandle);
+
+struct _WMI_LOGGER_INFORMATION;
+
+NTSTATUS
+EtwpQueryLoggerById(
+    _In_ ULONG LoggerId,
+    _Out_opt_ struct _WMI_LOGGER_INFORMATION *Information,
+    _Out_opt_ PULONG EventsLogged);
+
+NTSTATUS
+EtwpFindLoggerByName(
+    _In_ PCUNICODE_STRING LoggerName,
+    _Out_ PULONG LoggerId);
+
+ULONG
+EtwpEnumerateLoggers(
+    _Out_writes_to_(Count, return) PULONG LoggerIds,
+    _In_ ULONG Count);
