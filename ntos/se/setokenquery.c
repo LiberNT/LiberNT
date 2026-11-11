@@ -93,6 +93,13 @@ SepReferenceTokenToQuery(
                                               &Level);
         if (Found == NULL && TokenHandle == SEP_CURRENT_THREAD_TOKEN)
             return STATUS_NO_TOKEN;
+
+        /* An anonymous impersonation token cannot be opened, through a pseudo handle either */
+        if (Found != NULL && Level == SecurityAnonymous)
+        {
+            ObDereferenceObject(Found);
+            return STATUS_CANT_OPEN_ANONYMOUS;
+        }
     }
 
     if (Found == NULL &&
