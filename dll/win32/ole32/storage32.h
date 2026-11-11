@@ -65,6 +65,9 @@ static const ULONG OFFSET_PS_LEFTCHILD       = 0x00000044;
 static const ULONG OFFSET_PS_RIGHTCHILD      = 0x00000048;
 static const ULONG OFFSET_PS_DIRROOT	     = 0x0000004C;
 static const ULONG OFFSET_PS_GUID            = 0x00000050;
+#ifdef __REACTOS__
+static const ULONG OFFSET_PS_STATEBITS       = 0x00000060;
+#endif
 static const ULONG OFFSET_PS_CTIMELOW        = 0x00000064;
 static const ULONG OFFSET_PS_CTIMEHIGH       = 0x00000068;
 static const ULONG OFFSET_PS_MTIMELOW        = 0x0000006C;
@@ -151,6 +154,9 @@ struct DirEntry
   DirRef         rightChild;
   DirRef         dirRootEntry;
   GUID           clsid;
+#ifdef __REACTOS__
+  DWORD          stateBits;
+#endif
   FILETIME       ctime;
   FILETIME       mtime;
   ULONG          startingBlock;
