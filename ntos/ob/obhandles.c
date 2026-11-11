@@ -1860,7 +1860,17 @@ ObOpenObjectByName(
                                  AccessState,
                                  &TempBuffer->LookupContext,
                                  &Object);
-    if (NT_SUCCESS(Status))
+    /* An object the walk found itself cannot be opened for no access at all */
+    if (NT_SUCCESS(Status) &&
+        AccessMode != KernelMode &&
+        TempBuffer->LookupContext.Object == Object &&
+        AccessState->RemainingDesiredAccess == 0 &&
+        AccessState->PreviouslyGrantedAccess == 0)
+    {
+        ObDereferenceObject(Object);
+        Status = STATUS_ACCESS_DENIED;
+    }
+    else if (NT_SUCCESS(Status))
     {
         Status = ObpCreateHandle(ObOpenHandle,
                                  Object,
