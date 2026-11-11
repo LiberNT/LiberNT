@@ -20,6 +20,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
+#define CRYPT_OID_INFO_HAS_EXTRA_FIELDS
 #include "windef.h"
 #include "winbase.h"
 #include "winternl.h"
@@ -911,7 +912,6 @@ static BOOL WINTRUST_GetTimeFromCounterSigner(
     }
     return foundTimeStamp;
 }
-#endif
 
 static BOOL WINTRUST_GetTimeFromTimeStampToken(const CRYPT_ATTR_BLOB *token,
  FILETIME *time)
@@ -961,6 +961,7 @@ done:
     CryptMsgClose(msg);
     return ret;
 }
+#endif
 
 static LPCSTR filetime_to_str(const FILETIME *time)
 {
@@ -980,7 +981,7 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
  const CMSG_SIGNER_INFO *signerInfo)
 {
     DWORD i;
-    FILETIME time;
+    FILETIME time = data->sftSystemTime;
     BOOL foundTimeStamp = FALSE;
 
     for (i = 0; !foundTimeStamp && i < signerInfo->UnauthAttrs.cAttr; i++)
@@ -1010,9 +1011,7 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
                 }
             }
         }
-        else
-#endif
-        if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
+        else if (!strcmp(signerInfo->UnauthAttrs.rgAttr[i].pszObjId,
          szOID_RFC3161_counterSign))
         {
             const CRYPT_ATTRIBUTE *attr = &signerInfo->UnauthAttrs.rgAttr[i];
@@ -1022,6 +1021,7 @@ static FILETIME WINTRUST_GetTimeFromSigner(const CRYPT_PROVIDER_DATA *data,
                 foundTimeStamp = WINTRUST_GetTimeFromTimeStampToken(
                  &attr->rgValue[j], &time);
         }
+#endif
     }
     if (!foundTimeStamp)
     {
@@ -1300,6 +1300,175 @@ static DWORD SOFTPUB_SaveCounterSigner(CRYPT_PROVIDER_DATA *data, DWORD signerId
     return err;
 }
 
+static void *SOFTPUB_DecodeLocal(LPCSTR type, const BYTE *encoded, DWORD size)
+{
+    void *out = NULL;
+    DWORD outSize;
+
+    if (!CryptDecodeObjectEx(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, type, encoded, size, CRYPT_DECODE_ALLOC_FLAG,
+     NULL, &out, &outSize))
+        return NULL;
+    return out;
+}
+
+static BOOL SOFTPUB_ImprintMatches(const CRYPT_DER_BLOB *imprint, const CRYPT_DATA_BLOB *signature)
+{
+    CRYPT_SEQUENCE_OF_ANY *fields = SOFTPUB_DecodeLocal(X509_SEQUENCE_OF_ANY, imprint->pbData, imprint->cbData);
+    CRYPT_SEQUENCE_OF_ANY *algorithm = NULL;
+    CRYPT_DATA_BLOB *digest = NULL;
+    PCCRYPT_OID_INFO info = NULL;
+    LPSTR *oid = NULL;
+    BYTE hash[64];
+    DWORD size = sizeof(hash);
+    BOOL ret = FALSE;
+
+    if (fields && fields->cValue == 2)
+        algorithm = SOFTPUB_DecodeLocal(X509_SEQUENCE_OF_ANY, fields->rgValue[0].pbData, fields->rgValue[0].cbData);
+    if (algorithm && algorithm->cValue)
+        oid = SOFTPUB_DecodeLocal(X509_OBJECT_IDENTIFIER, algorithm->rgValue[0].pbData, algorithm->rgValue[0].cbData);
+    if (oid)
+        info = CryptFindOIDInfo(CRYPT_OID_INFO_OID_KEY, *oid, CRYPT_HASH_ALG_OID_GROUP_ID);
+    if (info && info->pwszCNGAlgid)
+        digest = SOFTPUB_DecodeLocal(X509_OCTET_STRING, fields->rgValue[1].pbData, fields->rgValue[1].cbData);
+    if (digest && CryptHashCertificate2(info->pwszCNGAlgid, 0, NULL, signature->pbData, signature->cbData, hash, &size))
+        ret = digest->cbData == size && !memcmp(digest->pbData, hash, size);
+    LocalFree(digest);
+    LocalFree(oid);
+    LocalFree(algorithm);
+    LocalFree(fields);
+    return ret;
+}
+
+static DWORD SOFTPUB_CheckTimeStampInfo(HCRYPTMSG msg, const CRYPT_DATA_BLOB *signature, FILETIME *time)
+{
+    CRYPT_SEQUENCE_OF_ANY *info = NULL;
+    CRYPT_DATA_BLOB *octets = NULL;
+    BYTE *content = NULL;
+    DWORD size = 0, err = TRUST_E_TIME_STAMP;
+
+    if (CryptMsgGetParam(msg, CMSG_CONTENT_PARAM, 0, NULL, &size) && (content = malloc(size)) &&
+     CryptMsgGetParam(msg, CMSG_CONTENT_PARAM, 0, content, &size))
+    {
+        if ((octets = SOFTPUB_DecodeLocal(X509_OCTET_STRING, content, size)))
+            info = SOFTPUB_DecodeLocal(X509_SEQUENCE_OF_ANY, octets->pbData, octets->cbData);
+        else
+            info = SOFTPUB_DecodeLocal(X509_SEQUENCE_OF_ANY, content, size);
+    }
+    size = sizeof(*time);
+    /* FIXME: the Windows 11 error for a timestamp whose imprint does not match the signature is unmeasured */
+    if (info && info->cValue > 4 && CryptDecodeObjectEx(X509_ASN_ENCODING, X509_CHOICE_OF_TIME,
+     info->rgValue[4].pbData, info->rgValue[4].cbData, 0, NULL, time, &size))
+        err = SOFTPUB_ImprintMatches(&info->rgValue[2], signature) ? ERROR_SUCCESS : TRUST_E_BAD_DIGEST;
+    LocalFree(info);
+    LocalFree(octets);
+    free(content);
+    return err;
+}
+
+static HCRYPTMSG SOFTPUB_OpenTimeStampToken(CRYPT_PROVIDER_DATA *data, const CRYPT_ATTR_BLOB *token)
+{
+    char contentType[sizeof(szOID_TIMESTAMP_TOKEN)];
+    DWORD size = sizeof(contentType);
+    HCRYPTMSG msg = CryptMsgOpenToDecode(data->dwEncoding, 0, 0, 0, NULL, NULL);
+
+    if (!msg)
+        return NULL;
+    if (CryptMsgUpdate(msg, token->pbData, token->cbData, TRUE) &&
+     CryptMsgGetParam(msg, CMSG_INNER_CONTENT_TYPE_PARAM, 0, contentType, &size) &&
+     !strcmp(contentType, szOID_TIMESTAMP_TOKEN))
+        return msg;
+    CryptMsgClose(msg);
+    SetLastError(TRUST_E_TIME_STAMP);
+    return NULL;
+}
+
+static CMSG_SIGNER_INFO *SOFTPUB_GetTokenSigner(CRYPT_PROVIDER_DATA *data, HCRYPTMSG msg)
+{
+    CMSG_SIGNER_INFO *signer;
+    DWORD size = 0;
+
+    if (!CryptMsgGetParam(msg, CMSG_SIGNER_INFO_PARAM, 0, NULL, &size) || !(signer = data->psPfns->pfnAlloc(size)))
+        return NULL;
+    if (CryptMsgGetParam(msg, CMSG_SIGNER_INFO_PARAM, 0, signer, &size))
+        return signer;
+    data->psPfns->pfnFree(signer);
+    return NULL;
+}
+
+static DWORD SOFTPUB_VerifyTimeStampToken(CRYPT_PROVIDER_DATA *data, DWORD signerIdx, DWORD counterIdx,
+ HCRYPTMSG msg)
+{
+    CRYPT_PROVIDER_SGNR *counter = &data->pasSigners[signerIdx].pasCounterSigners[counterIdx];
+    PCCERT_CONTEXT cert = NULL;
+    CERT_INFO certInfo;
+    FILETIME time;
+    DWORD store, err = ERROR_SUCCESS;
+
+    memset(&certInfo, 0, sizeof(certInfo));
+    certInfo.Issuer = counter->psSigner->Issuer;
+    certInfo.SerialNumber = counter->psSigner->SerialNumber;
+    for (store = 0; !cert && store < data->chStores; store++)
+        cert = CertGetSubjectCertificateFromStore(data->pahStores[store], data->dwEncoding, &certInfo);
+    if (!cert)
+    {
+        counter->dwError = TRUST_E_NO_SIGNER_CERT;
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_COUNTERSIGCERT] = CRYPT_E_NOT_FOUND;
+        return TRUST_E_COUNTER_SIGNER;
+    }
+
+    data->psPfns->pfnAddCert2Chain(data, signerIdx, TRUE, counterIdx, cert);
+    if (!CryptMsgControl(msg, 0, CMSG_CTRL_VERIFY_SIGNATURE, cert->pCertInfo))
+        counter->dwError = GetLastError();
+    else
+        counter->dwError = SOFTPUB_CheckTimeStampInfo(msg, &data->pasSigners[signerIdx].psSigner->EncryptedHash, &time);
+    if (counter->dwError)
+    {
+        data->padwTrustStepErrors[TRUSTERROR_STEP_MSG_COUNTERSIGINFO] = counter->dwError;
+        err = TRUST_E_COUNTER_SIGNER;
+    }
+    else if (SOFTPUB_IsTimeStampCert(cert))
+    {
+        counter->dwSignerType = SGNR_TYPE_TIMESTAMP;
+        counter->sftVerifyAsOf = time;
+        data->pasSigners[signerIdx].sftVerifyAsOf = time;
+    }
+    CertFreeCertificateContext(cert);
+    return err;
+}
+
+static DWORD SOFTPUB_SaveTimeStampToken(CRYPT_PROVIDER_DATA *data, DWORD signerIdx, const CRYPT_ATTR_BLOB *token)
+{
+    CRYPT_PROVIDER_SGNR sgnr = { sizeof(sgnr), { 0 } };
+    HCERTSTORE store;
+    HCRYPTMSG msg;
+    DWORD err;
+
+    if (!(msg = SOFTPUB_OpenTimeStampToken(data, token)))
+        return GetLastError();
+    if (!(sgnr.psSigner = SOFTPUB_GetTokenSigner(data, msg)))
+    {
+        err = GetLastError();
+        CryptMsgClose(msg);
+        return err;
+    }
+    sgnr.sftVerifyAsOf = data->sftSystemTime;
+    if (!data->psPfns->pfnAddSgnr2Chain(data, TRUE, signerIdx, &sgnr))
+    {
+        err = GetLastError();
+        data->psPfns->pfnFree(sgnr.psSigner);
+        CryptMsgClose(msg);
+        return err;
+    }
+    if ((store = CertOpenStore(CERT_STORE_PROV_MSG, data->dwEncoding, 0, 0, msg)))
+    {
+        data->psPfns->pfnAddStore2Chain(data, store);
+        CertCloseStore(store, 0);
+    }
+    err = SOFTPUB_VerifyTimeStampToken(data, signerIdx, data->pasSigners[signerIdx].csCounterSigners - 1, msg);
+    CryptMsgClose(msg);
+    return err;
+}
+
 static DWORD SOFTPUB_SaveCounterSigners(CRYPT_PROVIDER_DATA *data, DWORD signerIdx)
 {
     const CRYPT_ATTRIBUTES *attrs = &data->pasSigners[signerIdx].psSigner->UnauthAttrs;
@@ -1308,6 +1477,12 @@ static DWORD SOFTPUB_SaveCounterSigners(CRYPT_PROVIDER_DATA *data, DWORD signerI
 
     for (i = 0; !err && i < attrs->cAttr; i++)
     {
+        if (!strcmp(attrs->rgAttr[i].pszObjId, szOID_RFC3161_counterSign))
+        {
+            for (j = 0; !err && j < attrs->rgAttr[i].cValue; j++)
+                err = SOFTPUB_SaveTimeStampToken(data, signerIdx, &attrs->rgAttr[i].rgValue[j]);
+            continue;
+        }
         if (strcmp(attrs->rgAttr[i].pszObjId, szOID_RSA_counterSign))
             continue;
         if (!signer)

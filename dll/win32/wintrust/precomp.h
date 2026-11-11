@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #define _INC_WINDOWS
+#define CRYPT_OID_INFO_HAS_EXTRA_FIELDS
 #define COM_NO_WINDOWS_H
 
 #include <windef.h>
