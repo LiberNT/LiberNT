@@ -69,6 +69,7 @@ PspSendTerminationMessages(
 {
     PTERMINATION_PORT Port;
     PTERMINATION_PORT Next;
+    CLIENT_DIED_MSG Message;
 
     PAGED_CODE();
 
@@ -79,7 +80,13 @@ PspSendTerminationMessages(
     {
         Next = Port->Next;
 
-        /* TODO: send LPC_CLIENT_DIED to Port->Port once ALPC carries it */
+        RtlZeroMemory(&Message, sizeof(Message));
+        Message.h.u1.s1.TotalLength = sizeof(Message);
+        Message.h.u1.s1.DataLength = sizeof(Message.CreateTime);
+        Message.h.u2.s2.Type = LPC_CLIENT_DIED;
+        Message.CreateTime = Thread->CreateTime;
+        LpcRequestPort(Port->Port, &Message.h);
+
         ObDereferenceObject(Port->Port);
         ExFreePoolWithTag(Port, TAG_TERMINATE_APC);
 
