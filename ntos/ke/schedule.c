@@ -482,10 +482,12 @@ _Requires_lock_held_(Prcb->PrcbLock)
 static
 PKTHREAD
 KiStealReadyThread(
-    _Inout_ PKPRCB Prcb)
+    _Inout_ PKPRCB Prcb,
+    _In_ KPRIORITY MinimumPriority)
 {
     ULONG Offset, Index;
     KAFFINITY Self = AFFINITY_MASK(Prcb->Number);
+    ULONG Floor = ~(PRIORITY_MASK(MinimumPriority) - 1);
 
     for (Offset = 1; Offset < (ULONG)KeNumberProcessors; Offset++)
     {
@@ -495,13 +497,13 @@ KiStealReadyThread(
 
         Index = (Prcb->Number + Offset) % (ULONG)KeNumberProcessors;
         Remote = KiProcessorBlock[Index];
-        if ((Remote == NULL) || (ReadNoFence((PLONG)&Remote->ReadySummary) == 0))
+        if ((Remote == NULL) || ((ReadNoFence((PLONG)&Remote->ReadySummary) & Floor) == 0))
             continue;
 
         if (InterlockedExchange((PLONG)&Remote->PrcbLock, 1) != 0)
             continue;
 
-        for (Summary = Remote->ReadySummary; Summary != 0; Summary &= ~PRIORITY_MASK(Priority))
+        for (Summary = Remote->ReadySummary & Floor; Summary != 0; Summary &= ~PRIORITY_MASK(Priority))
         {
             PLIST_ENTRY Head, Entry;
 
@@ -558,7 +560,7 @@ KiIdleSchedule(
     Thread = KiSelectReadyThread(0, Prcb);
     if (Thread == NULL)
     {
-        Thread = KiStealReadyThread(Prcb);
+        Thread = KiStealReadyThread(Prcb, 0);
 
         /* It may have been queued while still switching off its last processor */
         if (Thread != NULL)
@@ -569,6 +571,37 @@ KiIdleSchedule(
 
     Thread->NextProcessor = Prcb->Number;
     return Thread;
+}
+
+VOID
+FASTCALL
+KiYieldDelayExecution(VOID)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    PKTHREAD Next;
+    PKPRCB Prcb;
+    KIRQL OldIrql;
+
+    OldIrql = KeRaiseIrqlToSynchLevel();
+    Prcb = KeGetCurrentPrcb();
+    KiAcquirePrcbLock(Prcb);
+
+    if (Prcb->NextThread == NULL)
+    {
+        Next = KiSelectReadyThread(Thread->Priority, Prcb);
+        if (Next == NULL)
+            Next = KiStealReadyThread(Prcb, Thread->Priority);
+
+        if (Next != NULL)
+        {
+            Next->State = Standby;
+            Next->NextProcessor = Prcb->Number;
+            Prcb->NextThread = Next;
+        }
+    }
+
+    KiReleasePrcbLock(Prcb);
+    KiExitDispatcher(OldIrql);
 }
 
 /*

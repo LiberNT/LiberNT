@@ -409,6 +409,10 @@ KiIdleSchedule(
     IN PKPRCB Prcb
 );
 
+VOID
+FASTCALL
+KiYieldDelayExecution(VOID);
+
 typedef enum _KI_BALANCE_REASON
 {
     KiBalanceWakePlacement = 1,

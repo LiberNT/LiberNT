@@ -544,6 +544,7 @@ KeDelayExecutionThread(
             Thread->TimerActive = FALSE;
             Thread->WaitBlockList = NULL;
             KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiYieldDelayExecution();
             return STATUS_SUCCESS;
         }
 
