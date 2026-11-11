@@ -93,6 +93,12 @@ IntAssignDesktopSecurityOnParse(
 
 NTSTATUS
 NTAPI
+IntCheckParsedObjectAccess(
+    _In_ PACCESS_STATE AccessState,
+    _In_ KPROCESSOR_MODE AccessMode);
+
+NTSTATUS
+NTAPI
 IntCreateServiceSecurity(
     _Out_ PSECURITY_DESCRIPTOR *ServiceSd);
 

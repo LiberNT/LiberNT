@@ -69,7 +69,7 @@ IntDesktopObjectParse(IN PVOID ParseObject,
                       IN PSECURITY_QUALITY_OF_SERVICE SecurityQos OPTIONAL,
                       OUT PVOID *Object)
 {
-    NTSTATUS Status;
+    NTSTATUS Status, AccessStatus;
     PDESKTOP Desktop;
     OBJECT_ATTRIBUTES ObjectAttributes;
     PLIST_ENTRY NextEntry, ListHead;
@@ -117,6 +117,10 @@ IntDesktopObjectParse(IN PVOID ParseObject,
                 /* This was a real open, so this is OK */
                 Status = STATUS_SUCCESS;
             }
+
+            AccessStatus = IntCheckParsedObjectAccess(AccessState, AccessMode);
+            if (!NT_SUCCESS(AccessStatus))
+                return AccessStatus;
 
             /* Reference the desktop and return it */
             ObReferenceObject(Desktop);

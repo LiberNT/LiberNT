@@ -273,6 +273,7 @@ IntWinStaObjectParse(
 {
     PWIN32_PARSEMETHOD_PARAMETERS ParseParameters = Parameters;
     PUNICODE_STRING RemainingName = ParseParameters->RemainingName;
+    NTSTATUS Status;
 
     /* Assume we don't find anything */
     *ParseParameters->Object = NULL;
@@ -286,6 +287,11 @@ IntWinStaObjectParse(
             /* Fail */
             return STATUS_OBJECT_TYPE_MISMATCH;
         }
+
+        Status = IntCheckParsedObjectAccess(ParseParameters->AccessState,
+                                            ParseParameters->AccessMode);
+        if (!NT_SUCCESS(Status))
+            return Status;
 
         /* Reference the window station and return */
         ObReferenceObject(ParseParameters->ParseObject);

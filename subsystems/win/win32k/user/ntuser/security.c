@@ -307,6 +307,24 @@ IntAssignDesktopSecurityOnParse(
     return Status;
 }
 
+/* A parse routine that hands back an object answers for the open's access check, which the object manager leaves to it */
+NTSTATUS
+NTAPI
+IntCheckParsedObjectAccess(
+    _In_ PACCESS_STATE AccessState,
+    _In_ KPROCESSOR_MODE AccessMode)
+{
+    /* FIXME: the open is not checked against the object's DACL, since a window station created without a descriptor inherits the WindowStations directory's ACEs instead of its creator's default DACL and would refuse the creator */
+    if (AccessMode != KernelMode &&
+        AccessState->RemainingDesiredAccess == 0 &&
+        AccessState->PreviouslyGrantedAccess == 0)
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+
+    return STATUS_SUCCESS;
+}
+
 /**
  * @brief
  * Creates a security descriptor for the service.
