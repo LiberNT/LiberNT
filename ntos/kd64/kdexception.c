@@ -202,6 +202,16 @@ KdpTrap(
 
         case BREAKPOINT_PROMPT:
 
+            /* A prompt whose buffers cannot be used is not served: the caller gets the breakpoint */
+            if (!KdpPromptBuffersAccessible((PCHAR)ExceptionRecord->ExceptionInformation[1],
+                                            (USHORT)ExceptionRecord->ExceptionInformation[2],
+                                            (PCHAR)KeGetContextServiceArgument3(ContextRecord),
+                                            (USHORT)KeGetContextServiceArgument4(ContextRecord),
+                                            PreviousMode))
+            {
+                return FALSE;
+            }
+
             Length = KdpPrompt((PCHAR)ExceptionRecord->ExceptionInformation[1],
                                (USHORT)ExceptionRecord->ExceptionInformation[2],
                                (PCHAR)KeGetContextServiceArgument3(ContextRecord),
