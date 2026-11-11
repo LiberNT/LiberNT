@@ -793,13 +793,14 @@ IopAbortInterruptedIrp(
 
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
-    if (IsListEmpty(&Irp->ThreadListEntry))
+    /* Completion sets the event before it frees the packet, and cannot run on this thread at APC_LEVEL */
+    /* TODO: a thread-agnostic request is not on the thread's list and is left in flight here */
+    if (KeReadStateEvent(EventObject) || IsListEmpty(&Irp->ThreadListEntry))
     {
         KeLowerIrql(OldIrql);
         return;
     }
 
-    /* At APC_LEVEL the completion APC cannot free the packet on this thread while it is being cancelled */
     Cancelled = IoCancelIrp(Irp);
 
     KeLowerIrql(OldIrql);
@@ -820,7 +821,7 @@ IopAbortInterruptedIrp(
                                  &Timeout) == STATUS_TIMEOUT)
     {
         KeRaiseIrql(APC_LEVEL, &OldIrql);
-        Cancelled = IsListEmpty(&Irp->ThreadListEntry);
+        Cancelled = KeReadStateEvent(EventObject) || IsListEmpty(&Irp->ThreadListEntry);
         KeLowerIrql(OldIrql);
 
         if (Cancelled) return;
