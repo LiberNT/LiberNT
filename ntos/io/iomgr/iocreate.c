@@ -360,16 +360,6 @@ IopOpenLinkOrRenameTarget(
      */
     DesiredAccess = FILE_ADD_FILE;
 
-    Status = IopGetFileInformation(FileObject,
-                                   sizeof(StandardInfo),
-                                   FileStandardInformation,
-                                   &StandardInfo,
-                                   &ReturnedLength);
-    if (NT_SUCCESS(Status) && StandardInfo.Directory)
-    {
-        DesiredAccess = FILE_ADD_SUBDIRECTORY;
-    }
-
     InitializeObjectAttributes(&ObjectAttributes,
                                &TargetName,
                                FileObject->Flags & FO_OPENED_CASE_SENSITIVE
@@ -759,34 +749,50 @@ NTAPI
 NtDeleteFile(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
-    IO_STATUS_BLOCK IoStatusBlock;
+    KPROCESSOR_MODE AccessMode = ExGetPreviousMode();
+    DUMMY_FILE_OBJECT LocalFileObject;
+    OPEN_PACKET OpenPacket;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
     NTSTATUS Status;
     HANDLE Handle;
 
     PAGED_CODE();
 
-    Status = IopCreateFile(&Handle,
-                           DELETE,
-                           ObjectAttributes,
-                           &IoStatusBlock,
-                           NULL,
-                           0,
-                           FILE_SHARE_READ | FILE_SHARE_WRITE |
-                               FILE_SHARE_DELETE,
-                           FILE_OPEN,
-                           FILE_DELETE_ON_CLOSE | FILE_OPEN_REPARSE_POINT,
-                           NULL,
-                           0,
-                           CreateFileTypeNone,
-                           NULL,
-                           0,
-                           0,
-                           NULL);
+    RtlZeroMemory(&OpenPacket, sizeof(OpenPacket));
+
+    OpenPacket.Type = IO_TYPE_OPEN_PACKET;
+    OpenPacket.Size = sizeof(OPEN_PACKET);
+    OpenPacket.CreateOptions = FILE_DELETE_ON_CLOSE | FILE_OPEN_REPARSE_POINT;
+    OpenPacket.ShareAccess = FILE_SHARE_READ | FILE_SHARE_WRITE |
+                             FILE_SHARE_DELETE;
+    OpenPacket.Disposition = FILE_OPEN;
+    OpenPacket.DeleteOnly = TRUE;
+    OpenPacket.LocalFileObject = &LocalFileObject;
+    OpenPacket.AccessMode = AccessMode;
+
+    Status = SeCreateAccessState(&AccessState,
+                                 &AuxData,
+                                 DELETE,
+                                 &IoFileObjectType->TypeInfo.GenericMapping);
     if (!NT_SUCCESS(Status)) return Status;
 
-    NtClose(Handle);
+    Status = ObOpenObjectByName(ObjectAttributes,
+                                NULL,
+                                AccessMode,
+                                &AccessState,
+                                DELETE,
+                                &OpenPacket,
+                                &Handle);
 
-    return STATUS_SUCCESS;
+    SeDeleteAccessState(&AccessState);
+
+    if (OpenPacket.ParseCheck == 0)
+    {
+        return NT_SUCCESS(Status) ? STATUS_OBJECT_TYPE_MISMATCH : Status;
+    }
+
+    return OpenPacket.FinalStatus;
 }
 
 NTSTATUS
