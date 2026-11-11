@@ -24,8 +24,15 @@ static ULONG64 KdpPrintTotalWritten = 0;
 
 static PDEBUG_PRINT_CALLBACK KdpPrintCallbacks[KDP_MAX_PRINT_CALLBACKS];
 
+/* Room in front of a line for the time since boot, and the longest print kept */
+#define KDP_TIMESTAMP_BYTES 32
+#define KDP_PRINT_MAX_BYTES 512
+
+/* The thread whose last print left its line open, tagged; NULL once a line ends */
+static PVOID volatile KdpPrintOpenLine;
+
 /* The line the engine builds for its own output */
-static CHAR KdpDprintfBuffer[KDP_MSG_BUFFER_SIZE];
+static CHAR KdpDprintfBuffer[KDP_TIMESTAMP_BYTES + KDP_MSG_BUFFER_SIZE];
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -120,6 +127,73 @@ KdpAppendToLog(
 
     if (Locked)
         KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
+}
+
+/*
+ * Opens a line with the time since boot. A print that continues the line its
+ * own thread left open gets nothing; one that interrupts another thread's line
+ * ends that line first. Text from user mode always starts a line of its own.
+ */
+static
+USHORT
+KdpBuildTimestampPrefix(
+    _Out_writes_bytes_(KDP_TIMESTAMP_BYTES) PCHAR Prefix,
+    _In_reads_bytes_(Length) PCCH Text,
+    _In_ USHORT Length,
+    _In_ BOOLEAN UserText)
+{
+    ULONG_PTR Line;
+    ULONG_PTR OpenLine;
+    ULONGLONG InterruptTime;
+    USHORT NewLine = 0;
+    int Written;
+
+    Line = (ULONG_PTR)KeGetCurrentThread() | 1 | (UserText ? 2 : 0);
+    OpenLine = (ULONG_PTR)InterlockedExchangePointer(&KdpPrintOpenLine,
+                                                     ((Length != 0) && (Text[Length - 1] == '\n')) ?
+                                                     NULL : (PVOID)Line);
+    if (OpenLine != 0)
+    {
+        if (!UserText && (OpenLine == Line))
+            return 0;
+
+        Prefix[0] = '\n';
+        NewLine = 1;
+    }
+
+    InterruptTime = KeQueryInterruptTime();
+    Written = _snprintf(Prefix + NewLine,
+                        KDP_TIMESTAMP_BYTES - NewLine,
+                        "[%5I64u.%06I64u] ",
+                        InterruptTime / 10000000ULL,
+                        (InterruptTime % 10000000ULL) / 10ULL);
+    if ((Written < 0) || (Written >= (int)(KDP_TIMESTAMP_BYTES - NewLine)))
+        return NewLine;
+
+    return (USHORT)(NewLine + Written);
+}
+
+/*
+ * Puts the time since boot in front of text already placed KDP_TIMESTAMP_BYTES
+ * into Buffer, and describes the whole line in Output.
+ */
+static
+VOID
+KdpStampLine(
+    _Inout_updates_bytes_(KDP_TIMESTAMP_BYTES + Length) PCHAR Buffer,
+    _In_ USHORT Length,
+    _In_ BOOLEAN UserText,
+    _Out_ PSTRING Output)
+{
+    CHAR Prefix[KDP_TIMESTAMP_BYTES];
+    USHORT PrefixLength;
+
+    PrefixLength = KdpBuildTimestampPrefix(Prefix, Buffer + KDP_TIMESTAMP_BYTES, Length, UserText);
+    RtlCopyMemory(Buffer + KDP_TIMESTAMP_BYTES - PrefixLength, Prefix, PrefixLength);
+
+    Output->Buffer = Buffer + KDP_TIMESTAMP_BYTES - PrefixLength;
+    Output->Length = PrefixLength + Length;
+    Output->MaximumLength = Output->Length;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -512,8 +586,8 @@ KdpDprintf(
     int Length;
 
     va_start(Arguments, Format);
-    Length = _vsnprintf(KdpDprintfBuffer,
-                        sizeof(KdpDprintfBuffer) - 1,
+    Length = _vsnprintf(KdpDprintfBuffer + KDP_TIMESTAMP_BYTES,
+                        KDP_MSG_BUFFER_SIZE - 1,
                         Format,
                         Arguments);
     va_end(Arguments);
@@ -521,14 +595,12 @@ KdpDprintf(
     if (Length < 0)
     {
         /* Truncated: say what fitted rather than nothing */
-        Length = sizeof(KdpDprintfBuffer) - 1;
+        Length = KDP_MSG_BUFFER_SIZE - 1;
     }
 
-    KdpDprintfBuffer[Length] = ANSI_NULL;
+    KdpDprintfBuffer[KDP_TIMESTAMP_BYTES + Length] = ANSI_NULL;
 
-    Output.Buffer = KdpDprintfBuffer;
-    Output.Length = (USHORT)Length;
-    Output.MaximumLength = (USHORT)Length;
+    KdpStampLine(KdpDprintfBuffer, (USHORT)Length, FALSE, &Output);
 
     KdpAppendToLog(Output.Buffer, Output.Length);
 
@@ -553,6 +625,7 @@ KdpPrint(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Out_ PBOOLEAN Handled)
 {
+    CHAR Line[KDP_TIMESTAMP_BYTES + KDP_PRINT_MAX_BYTES];
     STRING Output;
     NTSTATUS Status = STATUS_SUCCESS;
     BOOLEAN BreakIn;
@@ -562,12 +635,15 @@ KdpPrint(
 
     *Handled = TRUE;
 
+    Length = min(Length, KDP_PRINT_MAX_BYTES);
+
     if (PreviousMode != KernelMode)
     {
         /* A caller from user mode has to be able to show what it claims to */
         _SEH2_TRY
         {
             ProbeForRead(String, Length, sizeof(CHAR));
+            RtlCopyMemory(Line + KDP_TIMESTAMP_BYTES, String, Length);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -577,13 +653,17 @@ KdpPrint(
 
         if (!NT_SUCCESS(Status))
             return Status;
+
+        String = Line + KDP_TIMESTAMP_BYTES;
+    }
+    else
+    {
+        RtlCopyMemory(Line + KDP_TIMESTAMP_BYTES, String, Length);
     }
 
-    Output.Buffer = String;
-    Output.Length = Length;
-    Output.MaximumLength = Length;
+    KdpStampLine(Line, Length, (BOOLEAN)(PreviousMode != KernelMode), &Output);
 
-    KdpAppendToLog(String, Length);
+    KdpAppendToLog(Output.Buffer, Output.Length);
     KdpPrintToCallbacks(ComponentId, Level, String, Length, PreviousMode);
 
     /* Whether this component at this level is shown at all */

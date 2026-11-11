@@ -56,10 +56,37 @@ GetBootLogName(
 
 static
 BOOLEAN
+IsTimestampBefore(
+    _In_reads_bytes_(Offset) PUCHAR Buffer,
+    _In_ ULONG Offset)
+{
+    ULONG Index;
+
+    if (Offset < sizeof("[    0.000000] ") - 1)
+        return FALSE;
+
+    Index = Offset - (sizeof("[    0.000000] ") - 1);
+    if (Buffer[Index] != '[' || Buffer[Offset - 2] != ']' || Buffer[Offset - 1] != ' ' ||
+        Buffer[Offset - 9] != '.')
+    {
+        return FALSE;
+    }
+
+    for (Index = Offset - 8; Index < Offset - 2; Index++)
+    {
+        if (Buffer[Index] < '0' || Buffer[Index] > '9') return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
 LogContains(
     _In_ PUNICODE_STRING Name,
     _In_ PCSTR Marker,
-    _Out_ PNTSTATUS OpenStatus)
+    _Out_ PNTSTATUS OpenStatus,
+    _Out_ PBOOLEAN Stamped)
 {
     FILE_STANDARD_INFORMATION Standard;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -74,6 +101,7 @@ LogContains(
 
     InitializeObjectAttributes(&ObjectAttributes, Name,
                                OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    *Stamped = FALSE;
     *OpenStatus = ZwOpenFile(&File, FILE_READ_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus,
                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                              FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
@@ -94,6 +122,7 @@ LogContains(
             for (Index = 0; Index + MarkerLength <= Length && !Found; Index++)
             {
                 Found = (RtlCompareMemory(Buffer + Index, Marker, MarkerLength) == MarkerLength);
+                if (Found) *Stamped = IsTimestampBefore(Buffer, Index);
             }
         }
     }
@@ -109,7 +138,7 @@ START_TEST(KdBootLog)
     LARGE_INTEGER Interval;
     CHAR Marker[64];
     NTSTATUS Status, OpenStatus = STATUS_UNSUCCESSFUL;
-    BOOLEAN Found = FALSE;
+    BOOLEAN Found = FALSE, Stamped = FALSE;
     ULONG Try;
 
     Status = GetBootLogName(&Name);
@@ -125,11 +154,12 @@ START_TEST(KdBootLog)
     for (Try = 0; Try < 20 && !Found; Try++)
     {
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
-        Found = LogContains(&Name, Marker, &OpenStatus);
+        Found = LogContains(&Name, Marker, &OpenStatus, &Stamped);
     }
 
     ok_eq_hex(OpenStatus, STATUS_SUCCESS);
     ok(Found, "%s did not reach %wZ\n", Marker, &Name);
+    ok(Stamped, "%s is not preceded by the time since boot\n", Marker);
 
     ExFreePoolWithTag(Name.Buffer, 'LBmK');
 }
