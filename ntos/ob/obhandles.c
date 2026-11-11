@@ -1926,6 +1926,15 @@ ObInsertObject(
     if (ObjectNameInfo != NULL && ObjectNameInfo->Name.Buffer != NULL)
         ObjectName = &ObjectNameInfo->Name;
 
+    if ((Header->Flags & OB_FLAG_PERMANENT) &&
+        !(Header->Flags & OB_FLAG_KERNEL_MODE) &&
+        !SeSinglePrivilegeCheck(SeCreatePermanentPrivilege, UserMode))
+    {
+        ObpDereferenceNameInfo(ObjectNameInfo);
+        ObDereferenceObject(Object);
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
     if (AccessState == NULL)
     {
         AccessState = &LocalAccessState;
@@ -2080,7 +2089,7 @@ ObInsertObject(
                                  FoundObject,
                                  NULL,
                                  AccessState,
-                                 ObjectPointerBias + 1,
+                                 ObjectPointerBias + ((FoundObject == Object) ? 1 : 0),
                                  (ObjectCreateInfo != NULL) ?
                                  ObjectCreateInfo->Attributes : 0,
                                  &Context,
@@ -2091,9 +2100,11 @@ ObInsertObject(
 
         if (!NT_SUCCESS(Status))
         {
+            /* An object that already held the name keeps it; only the lookup's reference on it goes */
+            if (FoundObject != Object) ObDereferenceObject(FoundObject);
             /* The walk left the directory locked for exactly this undo, so
              * taking the name out again must not ask for that lock anew */
-            if (Context.DirectoryLocked) ObpDeleteEntryDirectory(&Context);
+            else if (Context.DirectoryLocked) ObpDeleteEntryDirectory(&Context);
             else if (ObjectName != NULL) ObpDeleteNameCheck(Object);
 
             *Handle = NULL;
