@@ -202,10 +202,14 @@ PsGetNextProcess(
 
         if (ExAcquireRundownProtection(&Candidate->RundownProtect))
         {
-            ObReferenceObject(Candidate);
+            BOOLEAN Referenced = ObReferenceObjectSafe(Candidate);
+
             ExReleaseRundownProtection(&Candidate->RundownProtect);
-            Process = Candidate;
-            break;
+            if (Referenced)
+            {
+                Process = Candidate;
+                break;
+            }
         }
 
         Entry = Entry->Flink;
@@ -248,10 +252,14 @@ PsGetNextProcessThread(
 
         if (ExAcquireRundownProtection(&Candidate->RundownProtect))
         {
-            ObReferenceObject(Candidate);
+            BOOLEAN Referenced = ObReferenceObjectSafe(Candidate);
+
             ExReleaseRundownProtection(&Candidate->RundownProtect);
-            Found = Candidate;
-            break;
+            if (Referenced)
+            {
+                Found = Candidate;
+                break;
+            }
         }
 
         Entry = Entry->Flink;

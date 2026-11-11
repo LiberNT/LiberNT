@@ -272,16 +272,6 @@ PspExitThread(
 
     if (LastThread) PspExitProcess(TRUE, Process);
 
-    KeEnterCriticalRegion();
-    ExAcquirePushLockExclusive(&Process->ProcessLock);
-    if (Thread->ThreadInserted)
-    {
-        RemoveEntryList(&Thread->ThreadListEntry);
-        Thread->ThreadInserted = FALSE;
-    }
-    ExReleasePushLockExclusive(&Process->ProcessLock);
-    KeLeaveCriticalRegion();
-
     PspDeleteThreadSecurity(Thread);
 
     Teb = Thread->Tcb.Teb;
@@ -341,16 +331,6 @@ PspExitProcess(
     PspExitProcessFromJob(Process);
 
     ExReleaseProcessTimerResolution(Process);
-
-    KeEnterCriticalRegion();
-    ExAcquirePushLockExclusive(&PspActiveProcessLock);
-    if (Process->ProcessInserted)
-    {
-        RemoveEntryList(&Process->ActiveProcessLinks);
-        Process->ProcessInserted = FALSE;
-    }
-    ExReleasePushLockExclusive(&PspActiveProcessLock);
-    KeLeaveCriticalRegion();
 
     /* Waiters on the process wake once its handles and address space are gone */
     KeSetProcess(&Process->Pcb, 0, FALSE);
@@ -594,6 +574,17 @@ PspDeleteThread(
 
     if (Process != NULL)
     {
+        /* A thread stays on its process's list until here, so a walker holding it can still step past it */
+        if (Thread->ThreadInserted)
+        {
+            KeEnterCriticalRegion();
+            ExAcquirePushLockExclusive(&Process->ProcessLock);
+            RemoveEntryList(&Thread->ThreadListEntry);
+            Thread->ThreadInserted = FALSE;
+            ExReleasePushLockExclusive(&Process->ProcessLock);
+            KeLeaveCriticalRegion();
+        }
+
         Thread->Tcb.ApcState.Process = NULL;
         ObDereferenceObject(Process);
     }
