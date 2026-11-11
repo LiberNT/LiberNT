@@ -83,6 +83,27 @@ ExpUnlinkThreadTimer(
     KeReleaseSpinLockFromDpcLevel(&Thread->ActiveTimerListLock);
 }
 
+static
+VOID
+ExpQueueTimerApc(
+    _Inout_ PETIMER Timer)
+{
+    ASSERT(Timer->ApcAssociated);
+
+    ObReferenceObject(Timer);
+
+    if (KeInsertQueueApc(&Timer->TimerApc,
+                         Timer->TimerApc.SystemArgument1,
+                         Timer->TimerApc.SystemArgument2,
+                         IO_NO_INCREMENT))
+    {
+        Timer->ApcQueuedSequence = Timer->SetSequence;
+        return;
+    }
+
+    ObDereferenceObject(Timer);
+}
+
 /*
  * Runs when a named timer goes off. The timer only tells the thread that set it,
  * through the routine the thread asked for, and only while that request stands.
@@ -117,13 +138,7 @@ ExpTimerDpcRoutine(
      * The routine runs as an APC in the thread that asked for it. A one-shot
      * timer is done with once the APC has been queued.
      */
-    if (KeInsertQueueApc(&Timer->TimerApc,
-                         Timer->TimerApc.SystemArgument1,
-                         Timer->TimerApc.SystemArgument2,
-                         IO_NO_INCREMENT))
-    {
-        Timer->ApcQueuedSequence = Timer->SetSequence;
-    }
+    ExpQueueTimerApc(Timer);
 
     KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
 }
@@ -155,6 +170,7 @@ ExpTimerApcKernelRoutine(
     {
         *NormalRoutine = NULL;
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        ObDereferenceObject(Timer);
         return;
     }
 
@@ -167,11 +183,21 @@ ExpTimerApcKernelRoutine(
 
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
-        ObDereferenceObject(Timer);
+        ObDereferenceObjectEx(Timer, 2);
         return;
     }
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
+    ObDereferenceObject(Timer);
+}
+
+static
+VOID
+NTAPI
+ExpTimerApcRundown(
+    _In_ PKAPC Apc)
+{
+    ObDereferenceObject(CONTAINING_RECORD(Apc, ETIMER, TimerApc));
 }
 
 VOID
@@ -185,13 +211,7 @@ ExpQueueTimerApcAfterWait(
 
     if (Timer->ApcAssociated)
     {
-        if (KeInsertQueueApc(&Timer->TimerApc,
-                             Timer->TimerApc.SystemArgument1,
-                             Timer->TimerApc.SystemArgument2,
-                             IO_NO_INCREMENT))
-        {
-            Timer->ApcQueuedSequence = Timer->SetSequence;
-        }
+        ExpQueueTimerApc(Timer);
     }
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
@@ -244,20 +264,24 @@ ExpDeleteTimer(
 }
 
 static
-VOID
+LONG
 ExpCancelTimerApc(
     _Inout_ PETIMER Timer)
 {
+    LONG References = 1;
+
     if (!Timer->ApcAssociated)
     {
-        return;
+        return 0;
     }
 
     Timer->ApcAssociated = FALSE;
 
     ExpUnlinkThreadTimer(Timer);
 
-    KeRemoveQueueApc(&Timer->TimerApc);
+    if (KeRemoveQueueApc(&Timer->TimerApc)) References++;
+
+    return References;
 }
 
 static
@@ -325,7 +349,7 @@ ExTimerRundown(VOID)
     PETHREAD Thread = PsGetCurrentThread();
     PETIMER Timer;
     KIRQL OldIrql;
-    BOOLEAN Cancelled;
+    LONG References;
 
     PAGED_CODE();
 
@@ -347,23 +371,22 @@ ExTimerRundown(VOID)
 
         KeAcquireSpinLock(&Timer->Lock, &OldIrql);
 
-        Cancelled = Timer->ApcAssociated && (Timer->TimerApc.Thread == &Thread->Tcb);
-        if (Cancelled)
+        References = 0;
+        if (Timer->ApcAssociated && (Timer->TimerApc.Thread == &Thread->Tcb))
         {
-            ExpCancelTimerApc(Timer);
+            References = ExpCancelTimerApc(Timer);
             KeCancelTimer(&Timer->KeTimer);
             ExpArmHighResolutionTimer(Timer, FALSE);
         }
 
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
-        if (Cancelled)
+        if (References != 0)
         {
             ExpSetWakeTimer(Timer, FALSE);
-            ObDereferenceObject(Timer);
         }
 
-        ObDereferenceObject(Timer);
+        ObDereferenceObjectEx(Timer, References + 1);
     }
 }
 
@@ -560,7 +583,7 @@ NtSetTimer(
     PETIMER Timer;
     LARGE_INTEGER SafeDueTime;
     BOOLEAN State;
-    BOOLEAN Dereference;
+    LONG References;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -604,8 +627,7 @@ NtSetTimer(
     KeAcquireSpinLock(&Timer->Lock, &OldIrql);
 
     /* Whatever the timer was told to do before is forgotten. */
-    Dereference = Timer->ApcAssociated;
-    ExpCancelTimerApc(Timer);
+    References = ExpCancelTimerApc(Timer);
 
     State = KeReadStateTimer(&Timer->KeTimer);
     KeCancelTimer(&Timer->KeTimer);
@@ -620,7 +642,7 @@ NtSetTimer(
                         &Thread->Tcb,
                         CurrentApcEnvironment,
                         ExpTimerApcKernelRoutine,
-                        NULL,
+                        ExpTimerApcRundown,
                         (PKNORMAL_ROUTINE)TimerApcRoutine,
                         PreviousMode,
                         TimerContext);
@@ -644,12 +666,7 @@ NtSetTimer(
                  Period,
                  ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
 
-    if (Dereference)
-    {
-        ObDereferenceObject(Timer);
-    }
-
-    ObDereferenceObject(Timer);
+    ObDereferenceObjectEx(Timer, References + 1);
 
     if (PreviousState == NULL)
     {
@@ -684,7 +701,7 @@ NtCancelTimer(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PETIMER Timer;
     BOOLEAN State;
-    BOOLEAN Dereference = FALSE;
+    LONG References;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -716,11 +733,7 @@ NtCancelTimer(
 
     KeAcquireSpinLock(&Timer->Lock, &OldIrql);
 
-    if (Timer->ApcAssociated)
-    {
-        ExpCancelTimerApc(Timer);
-        Dereference = TRUE;
-    }
+    References = ExpCancelTimerApc(Timer);
 
     KeCancelTimer(&Timer->KeTimer);
     State = KeReadStateTimer(&Timer->KeTimer);
@@ -730,12 +743,7 @@ NtCancelTimer(
 
     ExpSetWakeTimer(Timer, FALSE);
 
-    if (Dereference)
-    {
-        ObDereferenceObject(Timer);
-    }
-
-    ObDereferenceObject(Timer);
+    ObDereferenceObjectEx(Timer, References + 1);
 
     if (CurrentState == NULL)
     {
