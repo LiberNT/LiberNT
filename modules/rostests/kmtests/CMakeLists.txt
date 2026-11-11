@@ -179,6 +179,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCancelKM.c
     ntos_io/IoContainerId.c
     ntos_io/IoCreateFile.c
+    ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCsqKM.c
     ntos_io/IoDeviceInterface.c
     ntos_io/IoEvent.c

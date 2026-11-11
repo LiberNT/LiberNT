@@ -628,7 +628,7 @@ IopSendCreateIrp(
     StackPtr->DeviceObject = DeviceObject;
     StackPtr->Flags = 0;
 
-    if (OpenPacket->Options & IO_NO_PARAMETER_CHECKING)
+    if (OpenPacket->Options & IO_FORCE_ACCESS_CHECK)
     {
         StackPtr->Flags |= SL_FORCE_ACCESS_CHECK;
     }
