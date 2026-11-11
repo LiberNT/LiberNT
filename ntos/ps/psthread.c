@@ -584,9 +584,10 @@ NtCreateThreadEx(
      */
     Commit = StackSize;
     Reserve = MaximumStackSize;
-    if (Reserve == 0) Reserve = Commit;
+    /* TODO: a zero reserve takes the system default instead of the process image's SizeOfStackReserve */
     if (Reserve == 0) Reserve = PSP_DEFAULT_STACK_RESERVE;
     if (Commit == 0) Commit = PAGE_SIZE;
+    if (Commit >= Reserve) Reserve = ROUND_UP(Commit, PSP_DEFAULT_STACK_RESERVE);
 
     Status = PspAllocateUserStack(ProcessHandle,
                                   ZeroBits,
