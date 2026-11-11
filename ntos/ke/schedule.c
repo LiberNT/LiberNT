@@ -1051,6 +1051,9 @@ KiQuantumEnd(VOID)
 
     KiSetThreadQuantum(Thread, Thread->QuantumReset);
 
+    /* A turn that ran out goes to the back of its queue, even behind a preemption already standing by */
+    Thread->Preempted = FALSE;
+
     if ((Thread->BasePriority < LOW_REALTIME_PRIORITY) &&
         !Thread->DisableQuantum)
     {
