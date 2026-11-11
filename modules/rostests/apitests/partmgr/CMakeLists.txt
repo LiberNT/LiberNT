@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     DriveLayout.c
     PhysicalDriveRaw.c
+    StorAdapter.c
     StorDeviceNumber.c
     VirtioDisk.c)
 
