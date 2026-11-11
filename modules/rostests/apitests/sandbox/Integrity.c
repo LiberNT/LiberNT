@@ -404,6 +404,28 @@ RunImpersonationChild(char **Arguments)
     return Failures;
 }
 
+/* Starts a low integrity child that wears the two tokens it inherits */
+static void
+RunWearingChild(HANDLE LowPrimary, HANDLE Higher, HANDLE Same)
+{
+    WCHAR Application[MAX_PATH], CommandLine[MAX_PATH * 2];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Info;
+    DWORD ExitCode;
+
+    ZeroMemory(&Info, sizeof(Info));
+    GetModuleFileNameW(NULL, Application, ARRAYSIZE(Application));
+    StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" Integrity child mic-impersonate %p %p",
+                     Application, Higher, Same);
+    ok(CreateProcessAsUserW(LowPrimary, Application, CommandLine, NULL, NULL, TRUE, CREATE_UNICODE_ENVIRONMENT,
+                            NULL, NULL, &Startup, &Info),
+       "low child creation failed %lu\n", GetLastError());
+    if (!Info.hProcess) return;
+
+    ExitCode = SbxWaitChild(&Info);
+    ok(ExitCode == 0, "low process wearing tokens: child failed with 0x%lx\n", ExitCode);
+}
+
 /* A process may wear a token above its own integrity, but only to tell whom it stands for */
 static void
 TestImpersonationAboveProcess(void)
@@ -411,35 +433,20 @@ TestImpersonationAboveProcess(void)
     SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
     HANDLE LowPrimary = SbxCreateIntegrityToken(SECURITY_MANDATORY_LOW_RID, TokenPrimary);
     HANDLE Base = SbxOpenToken(TOKEN_ALL_ACCESS);
-    HANDLE Higher = NULL, Same = NULL, Event;
-    WCHAR Application[MAX_PATH], CommandLine[MAX_PATH * 2];
-    STARTUPINFOW Startup = { sizeof(Startup) };
-    PROCESS_INFORMATION Info;
-    DWORD ExitCode;
+    HANDLE Event = CreateTestEvent(L"sbx_mic_impersonate", L"D:(A;;GA;;;WD)S:(ML;;NW;;;LW)");
+    HANDLE Higher = NULL, Same = NULL;
 
-    ZeroMemory(&Info, sizeof(Info));
-    Event = CreateTestEvent(L"sbx_mic_impersonate", L"D:(A;;GA;;;WD)S:(ML;;NW;;;LW)");
     ok(Event != NULL, "event creation failed %lu\n", GetLastError());
     ok(LowPrimary && Base, "token setup failed %lu\n", GetLastError());
-    if (!Event || !LowPrimary || !Base) goto Cleanup;
 
-    ok(DuplicateTokenEx(Base, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Higher) &&
-       DuplicateTokenEx(LowPrimary, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Same),
-       "impersonation token creation failed %lu\n", GetLastError());
-    if (!Higher || !Same) goto Cleanup;
+    if (Event && LowPrimary && Base)
+    {
+        ok(DuplicateTokenEx(Base, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Higher) &&
+           DuplicateTokenEx(LowPrimary, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Same),
+           "impersonation token creation failed %lu\n", GetLastError());
+        if (Higher && Same) RunWearingChild(LowPrimary, Higher, Same);
+    }
 
-    GetModuleFileNameW(NULL, Application, ARRAYSIZE(Application));
-    StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" Integrity child mic-impersonate %p %p",
-                     Application, Higher, Same);
-    ok(CreateProcessAsUserW(LowPrimary, Application, CommandLine, NULL, NULL, TRUE, CREATE_UNICODE_ENVIRONMENT,
-                            NULL, NULL, &Startup, &Info),
-       "low child creation failed %lu\n", GetLastError());
-    if (!Info.hProcess) goto Cleanup;
-
-    ExitCode = SbxWaitChild(&Info);
-    ok(ExitCode == 0, "low process wearing tokens: child failed with 0x%lx\n", ExitCode);
-
-Cleanup:
     if (Same) CloseHandle(Same);
     if (Higher) CloseHandle(Higher);
     if (Base) CloseHandle(Base);
