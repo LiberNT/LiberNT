@@ -31,6 +31,12 @@ IopCheckDeviceAccess(
 
     if (AccessMode == KernelMode) return STATUS_SUCCESS;
 
+    if (AccessState->RemainingDesiredAccess == 0 &&
+        AccessState->PreviouslyGrantedAccess == 0)
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+
     if (!DeviceOnlyOpen &&
         !(DeviceObject->Characteristics & FILE_DEVICE_SECURE_OPEN))
     {
