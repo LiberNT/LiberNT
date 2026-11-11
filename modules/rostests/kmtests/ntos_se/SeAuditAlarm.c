@@ -194,7 +194,16 @@ TestAuditedChecks(VOID)
     StopImpersonating();
 }
 
+/* K1: asking in a client's name needs a client, so a thread wearing none is refused */
+static
+VOID
+TestNotImpersonating(VOID)
+{
+    CheckAudited(FILE_READ_DATA, STATUS_NO_IMPERSONATION_TOKEN, 0, 0);
+}
+
 START_TEST(SeAuditAlarm)
 {
     TestAuditedChecks();
+    TestNotImpersonating();
 }

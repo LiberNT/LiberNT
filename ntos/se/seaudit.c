@@ -118,14 +118,23 @@ SepAuditedAccessCheck(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    /*
-     * A caller that named no token of its own is asking in its own name, so
-     * the check is made against the token it is acting with.
-     */
+    /* A caller that named no token asks in the name of the client it impersonates */
     if (ClientToken == NULL)
     {
         SeCaptureSubjectContext(&SubjectContext);
-        Effective = (PTOKEN)SeQuerySubjectContextToken(&SubjectContext);
+
+        if (SubjectContext.ClientToken == NULL)
+            Status = STATUS_NO_IMPERSONATION_TOKEN;
+        else if (SubjectContext.ImpersonationLevel < SecurityIdentification)
+            Status = STATUS_BAD_IMPERSONATION_LEVEL;
+        else
+            Effective = (PTOKEN)SubjectContext.ClientToken;
+
+        if (!NT_SUCCESS(Status))
+        {
+            SeReleaseSubjectContext(&SubjectContext);
+            return Status;
+        }
     }
 
     Status = SepAccessCheckByType(SecurityDescriptor,
