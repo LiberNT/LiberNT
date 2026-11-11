@@ -317,7 +317,9 @@ ExpQueryProcessInformation(
 
                     Ext->StackBase = (PVOID)Thread->Tcb.StackBase;
                     Ext->StackLimit = (PVOID)Thread->Tcb.StackLimit;
-                    Ext->Win32StartAddress = Thread->Win32StartAddress;
+                    Ext->Win32StartAddress = (Thread->Win32StartAddress != NULL) ?
+                                             Thread->Win32StartAddress :
+                                             Thread->StartAddress;
                     Ext->TebBase = Thread->Tcb.Teb;
                     Ext->Reserved2 = 0;
                     Ext->Reserved3 = 0;
@@ -364,37 +366,69 @@ NTAPI
 ExpQueryProcessIdInformation(
     _Inout_ PSYSTEM_PROCESS_ID_INFORMATION Information)
 {
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    PUNICODE_STRING ImageName;
+    NTSTATUS Status = STATUS_SUCCESS;
     PEPROCESS Process;
-    ULONG NameLength;
-    NTSTATUS Status;
+    PWCHAR Buffer;
+    ULONG Needed;
 
     PAGED_CODE();
 
+    if (Information->ImageName.Length != 0) return STATUS_INVALID_PARAMETER;
+
     Status = PsLookupProcessByProcessId(Information->ProcessId, &Process);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status)) return STATUS_INVALID_CID;
+
+    Status = SeLocateProcessImageName(Process, &ImageName);
+    ObDereferenceObject(Process);
+
+    /* A process made from no image file, such as the system process, has an empty name */
+    if (Status == STATUS_UNSUCCESSFUL)
     {
-        return Status;
+        Information->ImageName.Buffer = NULL;
+        Information->ImageName.MaximumLength = 0;
+        return STATUS_SUCCESS;
     }
 
-    NameLength = ExpProcessNameLength(Process);
+    if (!NT_SUCCESS(Status)) return Status;
 
-    if (Information->ImageName.MaximumLength < NameLength)
+    Needed = ImageName->Length + sizeof(UNICODE_NULL);
+    if (Needed > MAXUSHORT)
     {
-        Information->ImageName.MaximumLength = (USHORT)NameLength;
-        ObDereferenceObject(Process);
+        ExFreePool(ImageName);
+        return STATUS_NAME_TOO_LONG;
+    }
+
+    if (Information->ImageName.MaximumLength < Needed)
+    {
+        Information->ImageName.MaximumLength = (USHORT)Needed;
+        ExFreePool(ImageName);
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    ExpWriteProcessName(Process,
-                        &Information->ImageName,
-                        Information->ImageName.Buffer,
-                        NameLength);
+    Buffer = Information->ImageName.Buffer;
+    Information->ImageName.Length = ImageName->Length;
+    Information->ImageName.MaximumLength = (USHORT)Needed;
 
-    Information->ImageName.MaximumLength = (USHORT)NameLength;
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWrite(Buffer, Needed, sizeof(WCHAR));
+        }
 
-    ObDereferenceObject(Process);
+        RtlCopyMemory(Buffer, ImageName->Buffer, ImageName->Length);
+        Buffer[ImageName->Length / sizeof(WCHAR)] = UNICODE_NULL;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
-    return STATUS_SUCCESS;
+    ExFreePool(ImageName);
+    return Status;
 }
 
 /*
