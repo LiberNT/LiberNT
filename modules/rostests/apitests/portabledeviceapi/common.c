@@ -258,6 +258,36 @@ WpdCreateValues(IPortableDeviceValues **Values)
                             &IID_IPortableDeviceValues, (void **)Values);
 }
 
+static
+BOOL
+WpdTestDevicePresent(const WCHAR *Match)
+{
+    HDEVINFO Set = SetupDiGetClassDevsW(NULL, NULL, NULL, DIGCF_PRESENT | DIGCF_ALLCLASSES);
+    SP_DEVINFO_DATA Info = { sizeof(Info) };
+    WCHAR Id[512], *At;
+    DWORD Index;
+    BOOL Present = FALSE;
+
+    if (Set == INVALID_HANDLE_VALUE)
+        return TRUE;
+    for (Index = 0; !Present && SetupDiEnumDeviceInfo(Set, Index, &Info); Index++)
+    {
+        Id[0] = L'#';
+        if (!SetupDiGetDeviceInstanceIdW(Set, &Info, Id + 1, ARRAYSIZE(Id) - 2, NULL))
+            continue;
+        lstrcatW(Id, L"#");
+        for (At = Id; *At; At++)
+        {
+            if (*At == L'\\')
+                *At = L'#';
+        }
+        _wcslwr(Id);
+        Present = wcsstr(Id, Match) != NULL;
+    }
+    SetupDiDestroyDeviceInfoList(Set);
+    return Present;
+}
+
 BOOL
 WpdWaitForDevice(IPortableDeviceManager **Manager, WCHAR *PnPId, DWORD PnPIdChars)
 {
@@ -279,6 +309,13 @@ WpdWaitForDevice(IPortableDeviceManager **Manager, WCHAR *PnPId, DWORD PnPIdChar
 
     WpdTraceIoctlsHookModules();
 
+    if (!WpdTestDevicePresent(Match))
+    {
+        skip("no device matches \"%ls\"\n", Match);
+        IPortableDeviceManager_Release(*Manager);
+        *Manager = NULL;
+        return FALSE;
+    }
     for (Second = 0; Second < WPD_TEST_WAIT_SECONDS; Second++)
     {
         IPortableDeviceManager_RefreshDeviceList(*Manager);
