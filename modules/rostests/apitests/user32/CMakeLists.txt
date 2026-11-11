@@ -1,6 +1,7 @@
 add_subdirectory(makeimg)
 
 list(APPEND SOURCE
+    AltTabHook.c
     AttachThreadInput.c
     ../include/msgtrace.c
     CalculatePopupWindowPosition.c
