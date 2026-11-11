@@ -2816,7 +2816,11 @@ co_WinPosBatchChanged(PWINPOS_ENTRY Entry)
          WinPos.y -= Window->spwndParent->rcClient.top;
       }
       TRACE("WM_WINDOWPOSCHANGED hwnd %p Flags %04x\n",WinPos.hwnd,WinPos.flags);
-      co_IntSendSystemMessageNoWait(WinPos.hwnd, WM_WINDOWPOSCHANGED, 0, (LPARAM) &WinPos);
+      /* SetWindowPos returns after the owner thread handled the change; a dying caller cannot wait */
+      if (Entry->bRequest && !(gptiCurrent->TIF_flags & TIF_INCLEANUP))
+         co_IntSendSystemMessage(WinPos.hwnd, WM_WINDOWPOSCHANGED, 0, (LPARAM) &WinPos);
+      else
+         co_IntSendSystemMessageNoWait(WinPos.hwnd, WM_WINDOWPOSCHANGED, 0, (LPARAM) &WinPos);
    }
 
    if (Entry->bRefreshFrame && Window && IntIsWindow(WinPos.hwnd))

@@ -20,6 +20,7 @@ list(APPEND SOURCE
     CreateIconFromResourceEx.c
     CoveredWindow.c
     CreateWindowEx.c
+    CrossThreadWindowPos.c
     DeferWindowPos.c
     DefFrameProc.c
     DeskWallpaper.c
