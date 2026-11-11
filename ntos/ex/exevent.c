@@ -122,6 +122,7 @@ ExpMeetOnKeyedEvent(
         Other = &KeyedEvent->Releasers[Bucket];
     }
 
+    KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&KeyedEvent->Locks[Bucket]);
 
     Partner = ExpTakeMatchingWait(Other, Key, Process);
@@ -129,6 +130,7 @@ ExpMeetOnKeyedEvent(
     {
         ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
         KeSetEvent(&Partner->Event, EVENT_INCREMENT, FALSE);
+        KeLeaveCriticalRegion();
         return STATUS_SUCCESS;
     }
 
@@ -138,6 +140,7 @@ ExpMeetOnKeyedEvent(
     InsertTailList(Own, &Wait.Link);
 
     ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
+    KeLeaveCriticalRegion();
 
     Status = KeWaitForSingleObject(&Wait.Event,
                                    WrKeyedEvent,
@@ -153,16 +156,19 @@ ExpMeetOnKeyedEvent(
      * The wait ended on its own terms. The counterpart may have arrived in the
      * meantime, so the block is only abandoned if it is still listed.
      */
+    KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&KeyedEvent->Locks[Bucket]);
 
     if (Wait.Link.Flink != NULL)
     {
         RemoveEntryList(&Wait.Link);
         ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
+        KeLeaveCriticalRegion();
         return Status;
     }
 
     ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
+    KeLeaveCriticalRegion();
 
     /* The counterpart took the block and signals the event in this frame after dropping the lock */
     KeWaitForSingleObject(&Wait.Event, WrKeyedEvent, KernelMode, FALSE, NULL);
