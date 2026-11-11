@@ -18,6 +18,7 @@ static LONG RouteCallbacks;
 static LONG DadAdds;
 static LONG DadParameters;
 static ULONG DadAddress;
+static HANDLE DadDone;
 
 static VOID WINAPI UnicastChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_NOTIFICATION_TYPE Type)
 {
@@ -31,7 +32,10 @@ static VOID WINAPI DadChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_
     if (Type == MibAddInstance)
         InterlockedIncrement(&DadAdds);
     else if (Type == MibParameterNotification)
+    {
         InterlockedIncrement(&DadParameters);
+        SetEvent(DadDone);
+    }
 }
 
 static VOID WINAPI RouteChanged(PVOID Context, PMIB_IPFORWARD_ROW2 Row, MIB_NOTIFICATION_TYPE Type)
@@ -67,7 +71,7 @@ static VOID TestCreationTimeStamp(VOID)
     ULONG Index, Compared = 0, Ipv6 = 0;
 
     ok_long(GetUnicastIpAddressTable(AF_UNSPEC, &First), NO_ERROR);
-    Sleep(1100);
+    Sleep(50);
     ok_long(GetUnicastIpAddressTable(AF_UNSPEC, &Second), NO_ERROR);
     if (!First || !Second)
     {
@@ -103,7 +107,7 @@ static VOID TestQuietNotifications(VOID)
 
     ok_long(NotifyUnicastIpAddressChange(AF_UNSPEC, UnicastChanged, NULL, FALSE, &Unicast), NO_ERROR);
     ok_long(NotifyRouteChange2(AF_UNSPEC, RouteChanged, NULL, FALSE, &Route), NO_ERROR);
-    Sleep(2500);
+    Sleep(200);
     if (Unicast)
         ok_long(CancelMibChangeNotify2(Unicast), NO_ERROR);
     if (Route)
@@ -118,8 +122,9 @@ static VOID TestDadCompletionNotification(VOID)
     MIB_UNICASTIPADDRESS_ROW Row, Current;
     const MIB_UNICASTIPADDRESS_ROW *Lease = NULL;
     HANDLE Notify = NULL;
+    ULONGLONG Start, Elapsed;
     ULONG Index, Host;
-    DWORD Status;
+    DWORD Status, Result;
 
     ok_long(GetUnicastIpAddressTable(AF_INET, &Table), NO_ERROR);
     for (Index = 0; Table && Index < Table->NumEntries && !Lease; Index++)
@@ -144,13 +149,19 @@ static VOID TestDadCompletionNotification(VOID)
     Row.OnLinkPrefixLength = Lease->OnLinkPrefixLength;
     FreeMibTable(Table);
 
+    DadDone = CreateEventW(NULL, TRUE, FALSE, NULL);
     ok_long(NotifyUnicastIpAddressChange(AF_INET, DadChanged, NULL, FALSE, &Notify), NO_ERROR);
+    Start = GetTickCount64();
     Status = CreateUnicastIpAddressEntry(&Row);
     ok_long(Status, NO_ERROR);
     if (Status == NO_ERROR)
     {
-        trace("Waiting for duplicate address detection\n");
-        Sleep(5000);
+        Result = WaitForSingleObject(DadDone, 5000);
+        Elapsed = GetTickCount64() - Start;
+        trace("Duplicate address detection completed after %I64u ms\n", Elapsed);
+        ok(Result == WAIT_OBJECT_0, "No notification of the completed duplicate address detection (%lu)\n", Result);
+        /* CreateUnicastIpAddressEntry documents about 3 seconds for IPv4: three probes one second apart */
+        ok(Elapsed <= 3500, "Duplicate address detection took %I64u ms\n", Elapsed);
         Current = Row;
         ok_long(GetUnicastIpAddressEntry(&Current), NO_ERROR);
         ok_long(Current.DadState, IpDadStatePreferred);
@@ -160,6 +171,8 @@ static VOID TestDadCompletionNotification(VOID)
         ok_long(CancelMibChangeNotify2(Notify), NO_ERROR);
     ok_long(DadAdds, 1);
     ok(DadParameters >= 1, "No parameter notification when duplicate address detection completed\n");
+    if (DadDone)
+        CloseHandle(DadDone);
 }
 
 START_TEST(UnicastIpAddressChange)

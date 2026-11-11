@@ -19,7 +19,6 @@
 
 ULONG NextDefaultAdapter = 0;
 
-#define NTE_DAD_FIRST_PROBE 500
 #define NTE_DAD_INTERVAL    1000
 #define NTE_DAD_BATCH       16
 
@@ -693,7 +692,7 @@ NTSTATUS IPAddInterfaceAddress(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Address
     if (Interface != Loopback && Interface->DadTransmits)
     {
         Nte->DadState = IpDadStateTentative;
-        Nte->DadNext = KeQueryInterruptTime() + (ULONGLONG)NTE_DAD_FIRST_PROBE * 10000;
+        Nte->DadNext = KeQueryInterruptTime();
     }
     else
     {
@@ -992,7 +991,7 @@ VOID NteDadTimeout(VOID)
         else
         {
             Nte->DadProbes++;
-            Nte->DadNext = Now + (ULONGLONG)NTE_DAD_INTERVAL * 10000;
+            Nte->DadNext = max(Nte->DadNext + (ULONGLONG)NTE_DAD_INTERVAL * 10000, Now);
         }
         Count++;
     }
@@ -1003,6 +1002,7 @@ VOID NteDadTimeout(VOID)
         ARPTransmitDad(Pending[i].Interface, Pending[i].Address, Pending[i].Announce);
         if (Pending[i].Announce)
         {
+            NBSolicitIncomplete(Pending[i].Interface);
             RdiscStart(Pending[i].Interface);
             TiSignalChange();
         }
