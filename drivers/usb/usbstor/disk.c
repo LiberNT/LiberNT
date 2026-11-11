@@ -491,7 +491,7 @@ USBSTOR_HandleQueryProperty(
         DeviceDescriptor->DeviceType = InquiryData->DeviceType;
         DeviceDescriptor->DeviceTypeModifier = InquiryData->DeviceTypeModifier;
         DeviceDescriptor->RemovableMedia = InquiryData->RemovableMedia;
-        DeviceDescriptor->CommandQueueing = FALSE;
+        DeviceDescriptor->CommandQueueing = FDODeviceExtension->Uas && InquiryData->CommandQueue;
         DeviceDescriptor->BusType = BusTypeUsb;
         DeviceDescriptor->VendorIdOffset = sizeof(STORAGE_DEVICE_DESCRIPTOR) - sizeof(UCHAR);
         DeviceDescriptor->ProductIdOffset = DeviceDescriptor->VendorIdOffset + FieldLengthVendor + 1;
@@ -560,6 +560,12 @@ USBSTOR_HandleQueryProperty(
 
         // get adapter descriptor, information is returned in the same buffer
         AdapterDescriptor = Irp->AssociatedIrp.SystemBuffer;
+        PDODeviceExtension = (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
+        if (PDODeviceExtension->Common.IsFDO)
+            FDODeviceExtension = (PFDO_DEVICE_EXTENSION)PDODeviceExtension;
+        else
+            FDODeviceExtension = (PFDO_DEVICE_EXTENSION)PDODeviceExtension->LowerDeviceObject->DeviceExtension;
+        ASSERT(FDODeviceExtension->Common.IsFDO);
 
         // fill out descriptor
         // NOTE: STORAGE_ADAPTER_DESCRIPTOR_WIN8 may vary in size, so it's important to zero out
@@ -569,6 +575,7 @@ USBSTOR_HandleQueryProperty(
             .Size = sizeof(STORAGE_ADAPTER_DESCRIPTOR_WIN8),
             .MaximumTransferLength = USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH,
             .MaximumPhysicalPages = USBSTOR_DEFAULT_MAX_PHYS_PAGES,
+            .CommandQueueing = FDODeviceExtension->Uas,
             .BusType = BusTypeUsb,
             .BusMajorVersion = 2, //FIXME verify
             .BusMinorVersion = 0 //FIXME

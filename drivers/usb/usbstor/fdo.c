@@ -172,7 +172,7 @@ USBSTOR_FdoHandleStartDevice(
     IN PFDO_DEVICE_EXTENSION DeviceExtension,
     IN OUT PIRP Irp)
 {
-    PUSB_INTERFACE_DESCRIPTOR InterfaceDesc;
+    PUSB_INTERFACE_DESCRIPTOR InterfaceDesc, UasInterface;
     NTSTATUS Status;
     UCHAR Index = 0;
     PIO_WORKITEM WorkItem;
@@ -223,19 +223,19 @@ USBSTOR_FdoHandleStartDevice(
     ASSERT(InterfaceDesc->bLength == sizeof(USB_INTERFACE_DESCRIPTOR));
 
     DPRINT("bInterfaceSubClass %x\n", InterfaceDesc->bInterfaceSubClass);
-    if (InterfaceDesc->bInterfaceProtocol != USB_PROTOCOL_BULK)
+    DeviceExtension->Uas = USBSTOR_UasScanConfiguration(DeviceExtension->ConfigurationDescriptor, &UasInterface,
+                                                        DeviceExtension->UasEndpoint, &DeviceExtension->UasStreams);
+    if (DeviceExtension->Uas && InterfaceDesc->bInterfaceProtocol == USB_PROTOCOL_BULK && !DeviceExtension->UasStreams)
+        DeviceExtension->Uas = FALSE;
+    if (DeviceExtension->Uas)
     {
-        PUSB_INTERFACE_DESCRIPTOR UasInterface;
-
-        if (!USBSTOR_UasScanConfiguration(DeviceExtension->ConfigurationDescriptor, &UasInterface,
-                                          DeviceExtension->UasEndpoint, &DeviceExtension->UasStreams))
-        {
-            DPRINT1("USB Device is neither a bulk only nor a UAS device and is not supported\n");
-            return STATUS_NOT_SUPPORTED;
-        }
-        DeviceExtension->Uas = TRUE;
         DPRINT1("USBSTOR: UAS interface setting %u, streams %u\n", UasInterface->bAlternateSetting,
                 DeviceExtension->UasStreams);
+    }
+    else if (InterfaceDesc->bInterfaceProtocol != USB_PROTOCOL_BULK)
+    {
+        DPRINT1("USB Device is neither a bulk only nor a UAS device and is not supported\n");
+        return STATUS_NOT_SUPPORTED;
     }
 
     if (InterfaceDesc->bInterfaceSubClass == USB_SUBCLASS_UFI)
