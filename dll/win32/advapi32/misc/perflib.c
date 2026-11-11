@@ -1530,7 +1530,8 @@ ULONG WINAPI PerfEnumerateCounterSetInstances( const WCHAR *machine, const GUID 
     struct perf_counterset *counterset = NULL;
     struct perf_buffer buffer = { 0 };
     struct perf_system sys;
-    ULONG i, j, found = 0, ret = ERROR_SUCCESS;
+    ULONG i, j, found = 0, registered = 0, ret = ERROR_SUCCESS;
+    BOOL multi;
 
     TRACE( "machine %s, guid %s, instances %p, size %lu, actual %p.\n", debugstr_w(machine), debugstr_guid(guid),
            instances, size, actual );
@@ -1544,6 +1545,7 @@ ULONG WINAPI PerfEnumerateCounterSetInstances( const WCHAR *machine, const GUID 
         perf_close_system( &sys );
         return ERROR_WMI_GUID_NOT_FOUND;
     }
+    multi = perf_is_multi_instance( counterset );
     for (i = 0; i < sys.count && !ret; ++i)
     {
         if (!perf_provider_counterset( &sys.providers[i], guid )) continue;
@@ -1556,7 +1558,8 @@ ULONG WINAPI PerfEnumerateCounterSetInstances( const WCHAR *machine, const GUID 
         if (!perf_provider_counterset( provider, guid )) continue;
         perf_snapshot_provider( provider );
         perf_read_instances( provider, guid );
-        if (!provider->valid) continue;
+        if (!perf_provider_counterset( provider, guid )) continue;
+        registered++;
         if (provider->status)
         {
             ret = provider->status;
@@ -1573,8 +1576,9 @@ ULONG WINAPI PerfEnumerateCounterSetInstances( const WCHAR *machine, const GUID 
             found++;
         }
     }
+    if (!ret && !registered) ret = ERROR_WMI_GUID_NOT_FOUND;
     if (!ret && !found) ret = ERROR_WMI_INSTANCE_NOT_FOUND;
-    if (!ret && found > 1 && !perf_is_multi_instance( counterset )) ret = ERROR_WMI_INVALID_REGINFO;
+    if (!ret && found > 1 && !multi) ret = ERROR_WMI_INVALID_REGINFO;
     if (!ret) ret = perf_copy_out( &buffer, instances, size, actual );
     perf_free( buffer.data );
     perf_close_system( &sys );

@@ -189,6 +189,9 @@ struct perf_provider
     HANDLE wait;
     CRITICAL_SECTION request_cs;
     LONG handled_request;
+    LONG callback_thread;
+    LONG stopped;
+    HANDLE stop_event;
 };
 
 static LONG perf_provider_ids;
@@ -399,11 +402,14 @@ static void CALLBACK perf_request_callback( void *context, BOOLEAN timeout )
         memcpy( buffer, channel->Request, size );
         if (InterlockedCompareExchange( &channel->RequestSequence, 0, 0 ) == sequence) break;
     }
-    if (sequence != prov->handled_request && (code == PERF_ADD_COUNTER || code == PERF_REMOVE_COUNTER
-        || code == PERF_ENUM_INSTANCES || code == PERF_COLLECT_START || code == PERF_COLLECT_END))
+    if (!prov->stopped && sequence != prov->handled_request && (code == PERF_ADD_COUNTER
+        || code == PERF_REMOVE_COUNTER || code == PERF_ENUM_INSTANCES || code == PERF_COLLECT_START
+        || code == PERF_COLLECT_END))
     {
         prov->handled_request = sequence;
+        InterlockedExchange( &prov->callback_thread, GetCurrentThreadId() );
         status = prov->callback( code, buffer, size );
+        InterlockedExchange( &prov->callback_thread, 0 );
         channel->ResponseStatus = status;
         InterlockedExchange( &channel->ResponseSequence, sequence );
         SetEvent( prov->done_event );
@@ -412,9 +418,8 @@ static void CALLBACK perf_request_callback( void *context, BOOLEAN timeout )
     HeapFree( GetProcessHeap(), 0, buffer );
 }
 
-static void perf_unpublish( struct perf_provider *prov )
+static void perf_unpublish_data( struct perf_provider *prov )
 {
-    if (prov->wait) UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
     if (prov->shared)
     {
         perf_shared_begin( prov->shared );
@@ -423,14 +428,20 @@ static void perf_unpublish( struct perf_provider *prov )
         UnmapViewOfFile( prov->shared );
     }
     if (prov->section) CloseHandle( prov->section );
+    prov->shared = NULL;
+    prov->section = NULL;
+}
+
+static void perf_unpublish( struct perf_provider *prov )
+{
+    if (prov->wait) UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
+    perf_unpublish_data( prov );
     if (prov->channel) UnmapViewOfFile( prov->channel );
     if (prov->channel_section) CloseHandle( prov->channel_section );
     if (prov->request_event) CloseHandle( prov->request_event );
     if (prov->done_event) CloseHandle( prov->done_event );
     if (prov->lock_mutex) CloseHandle( prov->lock_mutex );
     prov->wait = NULL;
-    prov->shared = NULL;
-    prov->section = NULL;
     prov->channel = NULL;
     prov->channel_section = NULL;
     prov->request_event = NULL;
@@ -886,6 +897,29 @@ ULONG WINAPI PerfStartProviderEx( GUID *guid, PERF_PROVIDER_CONTEXT *context, HA
     return STATUS_SUCCESS;
 }
 
+static void perf_free_provider( struct perf_provider *prov )
+{
+    unsigned int i;
+
+    perf_unpublish( prov );
+    for (i = 0; i < prov->counterset_count; ++i)
+        HeapFree( GetProcessHeap(), 0, prov->countersets[i] );
+    HeapFree( GetProcessHeap(), 0, prov->countersets );
+    DeleteCriticalSection( &prov->request_cs );
+    DeleteCriticalSection( &prov->cs );
+    HeapFree( GetProcessHeap(), 0, prov );
+}
+
+static DWORD CALLBACK perf_finish_stop( void *context )
+{
+    struct perf_provider *prov = context;
+
+    WaitForSingleObject( prov->stop_event, INFINITE );
+    CloseHandle( prov->stop_event );
+    perf_free_provider( prov );
+    return 0;
+}
+
 /***********************************************************************
  *           PerfStopProvider   (KERNELBASE.@)
  */
@@ -893,7 +927,8 @@ ULONG WINAPI PerfStopProvider(HANDLE handle)
 {
     struct perf_provider *prov = perf_provider_from_handle( handle );
     struct counterset_instance *inst, *next;
-    unsigned int i;
+    BOOL in_callback;
+    DWORD error;
 
     TRACE( "handle %p.\n", handle );
 
@@ -902,14 +937,15 @@ ULONG WINAPI PerfStopProvider(HANDLE handle)
     if (!list_empty( &prov->instance_list ))
         WARN( "Stopping provider with active counter instances.\n" );
 
-    if (prov->wait)
+    in_callback = prov->wait && prov->callback_thread == (LONG)GetCurrentThreadId();
+    if (prov->wait && !in_callback)
     {
-        /* FIXME: waits for the running control callback, so PerfStopProvider called from that callback deadlocks */
         UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
         prov->wait = NULL;
     }
     EnterCriticalSection( &prov->cs );
-    perf_unpublish( prov );
+    InterlockedExchange( &prov->stopped, TRUE );
+    perf_unpublish_data( prov );
     LIST_FOR_EACH_ENTRY_SAFE(inst, next, &prov->instance_list, struct counterset_instance, entry)
     {
         list_remove( &inst->entry );
@@ -917,12 +953,21 @@ ULONG WINAPI PerfStopProvider(HANDLE handle)
     }
     LeaveCriticalSection( &prov->cs );
 
-    for (i = 0; i < prov->counterset_count; ++i)
-        HeapFree( GetProcessHeap(), 0, prov->countersets[i] );
-    HeapFree( GetProcessHeap(), 0, prov->countersets );
-    DeleteCriticalSection( &prov->request_cs );
-    DeleteCriticalSection( &prov->cs );
-    HeapFree( GetProcessHeap(), 0, prov );
+    if (in_callback)
+    {
+        error = GetLastError();
+        if ((prov->stop_event = CreateEventW( NULL, TRUE, FALSE, NULL ))
+            && (UnregisterWaitEx( prov->wait, prov->stop_event ) || GetLastError() == ERROR_IO_PENDING))
+        {
+            prov->wait = NULL;
+            if (!QueueUserWorkItem( perf_finish_stop, prov, WT_EXECUTEDEFAULT ))
+                ERR( "Provider %p cannot be freed.\n", prov );
+        }
+        else ERR( "Provider %p cannot be freed.\n", prov );
+        SetLastError( error );
+        return STATUS_SUCCESS;
+    }
+    perf_free_provider( prov );
     return STATUS_SUCCESS;
 }
 

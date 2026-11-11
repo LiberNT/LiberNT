@@ -80,6 +80,8 @@ static GUID ChildProviderGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61
 static GUID ChildSetGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61, 0x2c, 0x7f, 0x40, 0x11, 0x12 } };
 static GUID ChildSingleGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61, 0x2c, 0x7f, 0x40, 0x11, 0x13 } };
 static GUID UnknownGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61, 0x2c, 0x7f, 0x40, 0x11, 0xff } };
+static GUID StopProviderGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61, 0x2c, 0x7f, 0x40, 0x11, 0x21 } };
+static GUID StopSetGuid = { 0x8d2b6e40, 0x5c1a, 0x4f7e, { 0xa3, 0x09, 0x61, 0x2c, 0x7f, 0x40, 0x11, 0x22 } };
 
 static ULONG64 LocalRef1 = 0x3333333333ULL;
 static ULONG64 LocalRef2 = 0x44;
@@ -87,6 +89,11 @@ static ULONG64 ChildRef1 = 0x300000003ULL;
 static ULONG64 ChildRef2 = 0x23;
 static CHILD_SHARED *ChildShared;
 static WCHAR ComputerName[MAX_COMPUTERNAME_LENGTH + 1];
+static HANDLE StopProvider;
+static LONG StopCalls;
+static ULONG StopResult = 0xdeadbeef;
+static LONG StopAllocations;
+static LONG StopFrees;
 
 static void
 InitTemplate(COUNTER_TEMPLATE *Template, const GUID *Provider, const GUID *CounterSet, ULONG InstanceType,
@@ -863,6 +870,64 @@ TestLocalProvider(void)
 }
 
 static ULONG WINAPI
+StopCallback(ULONG RequestCode, PVOID Buffer, ULONG BufferSize)
+{
+    if (RequestCode == PERF_ENUM_INSTANCES && InterlockedIncrement(&StopCalls) == 1)
+        StopResult = Perf.StopProvider(StopProvider);
+    return ERROR_SUCCESS;
+}
+
+static PVOID CALLBACK
+StopAlloc(SIZE_T Size, PVOID Context)
+{
+    InterlockedIncrement(&StopAllocations);
+    return HeapAlloc(GetProcessHeap(), 0, Size);
+}
+
+static void CALLBACK
+StopFree(PVOID Block, PVOID Context)
+{
+    InterlockedIncrement(&StopFrees);
+    HeapFree(GetProcessHeap(), 0, Block);
+}
+
+static void
+TestStopInCallback(void)
+{
+    PERF_PROVIDER_CONTEXT Context;
+    COUNTER_TEMPLATE Template;
+    DWORD Actual = 0xdeadbeef, Start, Elapsed;
+    ULONG Ret;
+
+    memset(&Context, 0, sizeof(Context));
+    Context.ContextSize = sizeof(Context);
+    Context.ControlCallback = StopCallback;
+    Context.MemAllocRoutine = StopAlloc;
+    Context.MemFreeRoutine = StopFree;
+    Ret = Perf.StartProviderEx(&StopProviderGuid, &Context, &StopProvider);
+    ok_long(Ret, ERROR_SUCCESS);
+    if (Ret != ERROR_SUCCESS)
+        return;
+    InitTemplate(&Template, &StopProviderGuid, &StopSetGuid, PERF_COUNTERSET_MULTI_INSTANCES, 1, 1);
+    ok_long(Perf.SetCounterSetInfo(StopProvider, &Template.CounterSet, TemplateSize(1)), ERROR_SUCCESS);
+    ok(Perf.CreateInstance(StopProvider, &StopSetGuid, L"Stopped", 1) != NULL, "PerfCreateInstance failed\n");
+    ok(HasCounterSet(&StopSetGuid), "The counter set is not enumerated\n");
+
+    Start = GetTickCount();
+    Ret = Perf.EnumerateCounterSetInstances(NULL, &StopSetGuid, NULL, 0, &Actual);
+    Elapsed = GetTickCount() - Start;
+    ok_long(Ret, ERROR_WMI_GUID_NOT_FOUND);
+    ok_long(StopCalls, 1);
+    ok_long(StopResult, ERROR_SUCCESS);
+    ok(Elapsed < 1000, "The request that stopped the provider took %lu ms\n", Elapsed);
+    ok_long(StopAllocations, 1);
+    ok_long(StopFrees, 1);
+    ok(!HasCounterSet(&StopSetGuid), "The counter set is still enumerated after PerfStopProvider in its callback\n");
+    ok_long(Perf.EnumerateCounterSetInstances(NULL, &StopSetGuid, NULL, 0, &Actual), ERROR_WMI_GUID_NOT_FOUND);
+    ok_long(StopCalls, 1);
+}
+
+static ULONG WINAPI
 ChildCallback(ULONG RequestCode, PVOID Buffer, ULONG BufferSize)
 {
     const WNODE_HEADER *Wnode = Buffer;
@@ -1257,5 +1322,6 @@ START_TEST(PerfConsumer)
         return;
     }
     TestLocalProvider();
+    TestStopInCallback();
     TestChildProvider();
 }
