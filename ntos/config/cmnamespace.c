@@ -1025,6 +1025,14 @@ CmpParseKeyEx(
 
     Create = (ParseContext != NULL) && ParseContext->CreateOperation;
 
+    /* A name given relative to a key handle reaches here whole, and must not start at a root */
+    if (Relative.Length != 0 &&
+        Relative.Buffer[0] == OBJ_NAME_PATH_SEPARATOR &&
+        Relative.Buffer == CompleteName->Buffer)
+    {
+        return STATUS_OBJECT_PATH_SYNTAX_BAD;
+    }
+
     if (Relative.Length != 0 && Relative.Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
     {
         Relative.Buffer++;

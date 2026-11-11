@@ -343,12 +343,6 @@ ObpBeginWalk(
                                            NULL);
         if (Status == STATUS_OBJECT_TYPE_MISMATCH)
         {
-            if (Walk->Remaining.Length != 0 &&
-                Walk->Remaining.Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
-            {
-                return STATUS_OBJECT_PATH_SYNTAX_BAD;
-            }
-
             /* Not a directory, so the object parses the rest of the path */
             Status = ObReferenceObjectByHandle(RootHandle,
                                                0,
@@ -788,12 +782,15 @@ ObpPathLength(
     POBJECT_DIRECTORY Directory;
     ULONG Bytes = 0;
 
-    while (NameInfo != NULL && NameInfo->Directory != NULL)
+    if (&Header->Body == (PVOID)ObpRootDirectoryObject) return 0;
+
+    /* A name held outside any directory, as a desktop's, reads as one level below the root */
+    while (NameInfo != NULL && NameInfo->Name.Length != 0)
     {
         Bytes += sizeof(OBJ_NAME_PATH_SEPARATOR) + NameInfo->Name.Length;
 
         Directory = NameInfo->Directory;
-        if (Directory == ObpRootDirectoryObject) break;
+        if (Directory == NULL || Directory == ObpRootDirectoryObject) break;
 
         NameInfo = OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(Directory));
     }
@@ -812,7 +809,9 @@ ObpWritePath(
     POBJECT_DIRECTORY Directory;
     PUCHAR Cursor = End;
 
-    while (NameInfo != NULL && NameInfo->Directory != NULL)
+    if (&Header->Body == (PVOID)ObpRootDirectoryObject) return;
+
+    while (NameInfo != NULL && NameInfo->Name.Length != 0)
     {
         Cursor -= NameInfo->Name.Length;
         RtlCopyMemory(Cursor, NameInfo->Name.Buffer, NameInfo->Name.Length);
@@ -821,7 +820,7 @@ ObpWritePath(
         *(PWCHAR)Cursor = OBJ_NAME_PATH_SEPARATOR;
 
         Directory = NameInfo->Directory;
-        if (Directory == ObpRootDirectoryObject) break;
+        if (Directory == NULL || Directory == ObpRootDirectoryObject) break;
 
         NameInfo = OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(Directory));
     }
