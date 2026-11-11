@@ -108,6 +108,7 @@ list(APPEND SOURCE
     SetConsoleWindowInfo.c
     SetCurrentDirectory.c
     SetFileAllocationInfo.c
+    SetStdHandleEx.c
     SetThreadStackGuarantee.c
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c

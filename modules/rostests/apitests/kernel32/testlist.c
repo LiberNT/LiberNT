@@ -105,6 +105,7 @@ extern void func_SetComputerNameExW(void);
 extern void func_SetConsoleWindowInfo(void);
 extern void func_SetCurrentDirectory(void);
 extern void func_SetFileAllocationInfo(void);
+extern void func_SetStdHandleEx(void);
 extern void func_SetThreadStackGuarantee(void);
 extern void func_SetUnhandledExceptionFilter(void);
 extern void func_SetWaitableTimerEx(void);
@@ -130,6 +131,7 @@ extern void func_XState(void);
 const struct test winetest_testlist[] =
 {
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
+    { "SetStdHandleEx",              func_SetStdHandleEx },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },

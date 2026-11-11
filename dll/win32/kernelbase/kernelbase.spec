@@ -1195,7 +1195,7 @@
 @ stdcall SetSecurityDescriptorRMControl(ptr ptr) advapi32.SetSecurityDescriptorRMControl
 @ stdcall SetSecurityDescriptorSacl(ptr long ptr long)
 @ stdcall SetStdHandle(long long)
-@ stdcall -version=0x600+ SetStdHandleEx(long long ptr) kernel32.SetStdHandleEx
+@ stdcall -version=0x600+ SetStdHandleEx(long long ptr)
 @ stdcall SetSystemFileCacheSize(long long long) kernel32.SetSystemFileCacheSize
 @ stdcall SetSystemTime(ptr) kernel32.SetSystemTime
 @ stdcall SetSystemTimeAdjustment(long long) kernel32.SetSystemTimeAdjustment

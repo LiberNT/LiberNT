@@ -1257,7 +1257,7 @@
 @ stdcall SetProcessWorkingSetSize(long long long)
 @ stdcall SetProcessWorkingSetSizeEx(long long long long)
 @ stdcall SetStdHandle(long long) kernelbase.SetStdHandle
-@ stub -version=0x600+ SetStdHandleEx
+@ stdcall -version=0x600+ SetStdHandleEx(long long ptr) kernelbase.SetStdHandleEx
 @ stdcall SetSystemFileCacheSize(long long long)
 @ stdcall SetSystemPowerState(long long)
 @ stdcall SetSystemTime(ptr)
