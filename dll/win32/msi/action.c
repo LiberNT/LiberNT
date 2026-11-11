@@ -6204,7 +6204,12 @@ static UINT ITERATE_StartService(MSIRECORD *rec, LPVOID param)
         while (status.dwCurrentState == SERVICE_START_PENDING)
         {
             if (GetTickCount64() - start_time > 30000) break;
+#ifdef __REACTOS__
+            /* A service usually reports running within milliseconds, so it is checked every tick rather than every second */
+            Sleep(10);
+#else
             Sleep(1000);
+#endif
             if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO,
                 (BYTE *)&status, sizeof(SERVICE_STATUS_PROCESS), &dummy))
             {
