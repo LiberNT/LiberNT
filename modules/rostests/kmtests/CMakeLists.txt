@@ -120,6 +120,7 @@ list(APPEND KMTEST_DRV_SOURCE
     example/KernelType.c
     hal/HalBusData.c
     hal/HalDmaAlignment.c
+    hal/HalRealTimeClock.c
     hal/HalSystemInfo.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c

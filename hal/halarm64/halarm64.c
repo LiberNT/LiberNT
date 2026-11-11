@@ -6158,6 +6158,51 @@ HalProcessorIdle(VOID)
 #define HAL_ARM64_RTC_EARLIEST_SECONDS 1767225600UL
 #define HAL_ARM64_PL031_PHYSICAL_ADDRESS 0x09010000ULL
 
+static KSPIN_LOCK HalpArm64SoftClockLock;
+static BOOLEAN HalpArm64SoftClockSet;
+static LONGLONG HalpArm64SoftClockTime;
+static ULONGLONG HalpArm64SoftClockCount;
+
+static
+VOID
+HalpArm64QuerySoftClock(
+    _Out_ PLARGE_INTEGER Time)
+{
+    ULONGLONG Frequency, Ticks;
+    KIRQL OldIrql;
+
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    KeAcquireSpinLockAtDpcLevel(&HalpArm64SoftClockLock);
+    Frequency = HalpReadCntfrq();
+    Ticks = HalpReadCntvct() - HalpArm64SoftClockCount;
+    if (HalpArm64SoftClockSet)
+        Time->QuadPart = HalpArm64SoftClockTime;
+    else
+        RtlSecondsSince1970ToTime(HAL_ARM64_RTC_EARLIEST_SECONDS, Time);
+    KeReleaseSpinLockFromDpcLevel(&HalpArm64SoftClockLock);
+    KeLowerIrql(OldIrql);
+
+    ASSERT(Frequency != 0);
+    if (Frequency)
+        Time->QuadPart += (LONGLONG)((Ticks / Frequency) * 10000000ULL + ((Ticks % Frequency) * 10000000ULL) / Frequency);
+}
+
+static
+VOID
+HalpArm64SetSoftClock(
+    _In_ PLARGE_INTEGER Time)
+{
+    KIRQL OldIrql;
+
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    KeAcquireSpinLockAtDpcLevel(&HalpArm64SoftClockLock);
+    HalpArm64SoftClockTime = Time->QuadPart;
+    HalpArm64SoftClockCount = HalpReadCntvct();
+    HalpArm64SoftClockSet = TRUE;
+    KeReleaseSpinLockFromDpcLevel(&HalpArm64SoftClockLock);
+    KeLowerIrql(OldIrql);
+}
+
 static
 BOOLEAN
 HalpArm64HasQemuPl031(VOID)
@@ -6213,9 +6258,10 @@ HalQueryRealTimeClock(
      * device reports the baseline below rather than 1970.
      */
     if ((Seconds < HAL_ARM64_RTC_EARLIEST_SECONDS) || (Seconds == MAXULONG))
-        Seconds = HAL_ARM64_RTC_EARLIEST_SECONDS;
+        HalpArm64QuerySoftClock(&SystemTime);
+    else
+        RtlSecondsSince1970ToTime(Seconds, &SystemTime);
 
-    RtlSecondsSince1970ToTime(Seconds, &SystemTime);
     RtlTimeToTimeFields(&SystemTime, TimeFields);
     return TRUE;
 }
@@ -6374,11 +6420,22 @@ NTAPI
 HalSetRealTimeClock(
     _In_ PTIME_FIELDS TimeFields)
 {
+    LARGE_INTEGER Time;
+
     if (NT_SUCCESS(HalpEfiSetTime(TimeFields)))
         return TRUE;
 
-    UNIMPLEMENTED_STUB();
-    return FALSE;
+    if (HalpArm64HasQemuPl031())
+    {
+        UNIMPLEMENTED_STUB();
+        return FALSE;
+    }
+
+    if (!RtlTimeFieldsToTime(TimeFields, &Time))
+        return FALSE;
+
+    HalpArm64SetSoftClock(&Time);
+    return TRUE;
 }
 
 ULONG
