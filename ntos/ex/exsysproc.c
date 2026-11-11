@@ -22,15 +22,49 @@ static const WCHAR ExpIdleProcessName[] = L"Idle";
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
+VOID
+ExpGetImageBaseName(
+    _In_ PEPROCESS Process,
+    _Out_ PUNICODE_STRING BaseName)
+{
+    POBJECT_NAME_INFORMATION Audit = Process->SeAuditProcessCreationInfo.ImageFileName;
+    USHORT Index;
+
+    RtlInitEmptyUnicodeString(BaseName, NULL, 0);
+
+    if ((Audit == NULL) || (Audit->Name.Buffer == NULL))
+    {
+        return;
+    }
+
+    Index = Audit->Name.Length / sizeof(WCHAR);
+    while ((Index != 0) && (Audit->Name.Buffer[Index - 1] != OBJ_NAME_PATH_SEPARATOR))
+    {
+        Index--;
+    }
+
+    BaseName->Buffer = &Audit->Name.Buffer[Index];
+    BaseName->Length = Audit->Name.Length - Index * sizeof(WCHAR);
+    BaseName->MaximumLength = BaseName->Length;
+}
+
+static
 ULONG
 ExpProcessNameLength(
     _In_ PEPROCESS Process)
 {
     ULONG Index;
+    UNICODE_STRING BaseName;
 
     if (Process == PsIdleProcess)
     {
         return sizeof(ExpIdleProcessName) - sizeof(WCHAR);
+    }
+
+    ExpGetImageBaseName(Process, &BaseName);
+    if (BaseName.Length != 0)
+    {
+        return BaseName.Length;
     }
 
     for (Index = 0; Index < sizeof(Process->ImageFileName); Index++)
@@ -59,6 +93,7 @@ ExpWriteProcessName(
 {
     ULONG Count = Length / sizeof(WCHAR);
     ULONG Index;
+    UNICODE_STRING BaseName;
 
     Name->Length = (USHORT)Length;
     Name->MaximumLength = (USHORT)Length;
@@ -67,6 +102,13 @@ ExpWriteProcessName(
     if (Process == PsIdleProcess)
     {
         RtlCopyMemory(Buffer, ExpIdleProcessName, Length);
+        return;
+    }
+
+    ExpGetImageBaseName(Process, &BaseName);
+    if (BaseName.Length != 0)
+    {
+        RtlCopyMemory(Buffer, BaseName.Buffer, Length);
         return;
     }
 
