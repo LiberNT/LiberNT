@@ -225,9 +225,7 @@ std::wstring OfferedVersion(const CatalogUpdate &update)
 
 bool Updatable(const DeviceInfo &device)
 {
-    if (CatalogQueries(device).empty())
-        return false;
-    return NeedsDriver(device) || GenericDriver(device) || _wcsnicmp(device.Inf.c_str(), L"oem", 3) == 0;
+    return !CatalogQueries(device).empty();
 }
 
 bool Selectable(ChoiceState state)

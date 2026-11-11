@@ -79,8 +79,41 @@ static void CheckCatalogSource()
     ok(CatalogEntryInUse(first, history) == NULL, "failed install: catalog entry\n");
 }
 
+static void CheckInfClass(const char *klass, const char *guid, bool function)
+{
+    WCHAR directory[MAX_PATH], path[MAX_PATH];
+    char text[512];
+    HANDLE file;
+    DWORD written;
+    int length;
+
+    if (!GetTempPathW(ARRAYSIZE(directory), directory) || !GetTempFileNameW(directory, L"lnt", 0, path))
+    {
+        skip("no temporary INF for class %s\n", klass);
+        return;
+    }
+    length = sprintf(text,
+                     "[Version]\r\nSignature=\"$WINDOWS NT$\"\r\nClass=%s\r\nClassGuid=%s\r\n"
+                     "ExtensionId={7C4BC2E8-56F6-4F2B-A2B9-6C1D9A20A41D}\r\nProvider=LiberNT\r\n"
+                     "DriverVer=01/01/2026,1.0.0.0\r\n",
+                     klass, guid);
+    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "class %s: cannot write the INF (%lu)\n", klass, GetLastError());
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    WriteFile(file, text, (DWORD)length, &written, NULL);
+    CloseHandle(file);
+    ok(FunctionDriverInf(path) == function, "class %s: function driver %d, expected %d\n", klass,
+       FunctionDriverInf(path), function);
+    DeleteFileW(path);
+}
+
 START_TEST(DeviceRules)
 {
+    CheckInfClass("System", "{4d36e97d-e325-11ce-bfc1-08002be10318}", true);
+    CheckInfClass("Extension", "{e2f84ce7-8efa-411c-aa69-97454ca4cb57}", false);
+    CheckInfClass("SoftwareComponent", "{5c4c3332-344d-483c-8739-259e934c9cc8}", false);
+
     CheckQueries(Device(L"ACPI\\VEN_PNP&DEV_0C14\\0", { L"ACPI\\VEN_PNP&DEV_0C14", L"ACPI\\PNP0C14", L"*PNP0C14" }, {}),
                  {}, false);
     CheckQueries(Device(L"ACPI\\ACPI0010\\2&CCB86D17&0", { L"ACPI\\VEN_ACPI&DEV_0010", L"ACPI\\ACPI0010", L"*ACPI0010" },
@@ -102,6 +135,21 @@ START_TEST(DeviceRules)
                    L"PCI\\VEN_8086&CC_0300" },
                  true);
     CheckQueries(Device(L"ROOT\\SYSTEM\\0000", { L"ROOT\\SWENUM" }, {}), {}, false);
+    {
+        DeviceInfo inbox = Device(L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4&REV_00\\3&11583659&0&38",
+                                  { L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4&REV_00", L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4",
+                                    L"PCI\\VEN_1AF4&DEV_1000&CC_020000", L"PCI\\VEN_1AF4&DEV_1000&CC_0200" },
+                                  { L"PCI\\VEN_1AF4&DEV_1000&REV_00", L"PCI\\VEN_1AF4&DEV_1000", L"PCI\\VEN_1AF4&CC_020000",
+                                    L"PCI\\VEN_1AF4&CC_0200", L"PCI\\VEN_1AF4", L"PCI\\CC_020000", L"PCI\\CC_0200" });
+
+        inbox.Inf = L"netkvm.inf";
+        inbox.Service = L"netkvm";
+        inbox.MatchingId = L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4&REV_00";
+        CheckQueries(inbox,
+                     { L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4&REV_00", L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4",
+                       L"PCI\\VEN_1AF4&DEV_1000&CC_020000", L"PCI\\VEN_1AF4&DEV_1000&CC_0200" },
+                     false);
+    }
 
     CheckVersion(L"10.1.13.2", L"10.1.13.3", DriverOrder::Newer);
     CheckVersion(L"10.1.13.2", L"10.1.13.2", DriverOrder::Same);

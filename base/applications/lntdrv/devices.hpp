@@ -95,6 +95,7 @@ DWORD PrepareDownloads();
 void CleanupDownloads(DWORD days);
 void DeleteTree(const std::wstring &path);
 DWORD ExtractPackage(const std::wstring &file, const std::wstring &directory);
+bool FunctionDriverInf(const std::wstring &inf);
 DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring> &infs, PackageDriver &driver);
 std::vector<std::wstring> PackageInfs(const std::wstring &directory);
 DWORD InstallPackageDriver(HWND owner, const PackageDriver &driver, bool force, BOOL &reboot);

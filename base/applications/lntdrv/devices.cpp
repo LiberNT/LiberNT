@@ -10,6 +10,7 @@
 #include "text.hpp"
 
 #include <setupapi.h>
+#include <devguid.h>
 #include <cfgmgr32.h>
 #include <newdev.h>
 #include <shlobj.h>
@@ -589,7 +590,7 @@ std::vector<std::wstring> CatalogQueries(const DeviceInfo &device)
 {
     std::vector<std::wstring> queries;
     const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
-    size_t count = GenericDriver(device) ? 1 : _countof(lists);
+    size_t count = HasDriver(device) ? 1 : _countof(lists);
 
     if (StartsWith(device.InstanceId, L"ROOT\\") || StartsWith(device.InstanceId, L"SWD\\") ||
         StartsWith(device.InstanceId, L"HTREE\\"))
@@ -878,6 +879,16 @@ std::vector<std::wstring> PackageInfs(const std::wstring &directory)
     return infs;
 }
 
+bool FunctionDriverInf(const std::wstring &inf)
+{
+    GUID guid;
+    WCHAR name[MAX_CLASS_NAME_LEN];
+
+    if (!SetupDiGetINFClassW(inf.c_str(), &guid, name, _countof(name), NULL))
+        return true;
+    return !IsEqualGUID(guid, GUID_DEVCLASS_EXTENSION) && !IsEqualGUID(guid, GUID_DEVCLASS_SOFTWARECOMPONENT);
+}
+
 DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring> &infs, PackageDriver &best)
 {
     HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
@@ -898,8 +909,9 @@ DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring
         SP_DEVINSTALL_PARAMS_W params = { sizeof(params) };
         SP_DRVINFO_DATA_W driver = { sizeof(driver) };
 
+        /* TODO: extension and software component INFs of a package are not installed */
         SetupDiDestroyDriverInfoList(set, &data, SPDIT_COMPATDRIVER);
-        if (inf.size() >= MAX_PATH || !SetupDiGetDeviceInstallParamsW(set, &data, &params))
+        if (inf.size() >= MAX_PATH || !FunctionDriverInf(inf) || !SetupDiGetDeviceInstallParamsW(set, &data, &params))
             continue;
         params.Flags |= DI_ENUMSINGLEINF;
         memcpy(params.DriverPath, inf.c_str(), (inf.size() + 1) * sizeof(WCHAR));
