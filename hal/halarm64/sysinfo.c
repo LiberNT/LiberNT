@@ -188,7 +188,13 @@ NTAPI
 HalConvertDeviceIdtToIrql(
     _In_ ULONG Vector)
 {
-    UNREFERENCED_PARAMETER(Vector);
+    if ((HalpArm64MsiRoutingCount != 0) &&
+        ((Vector - HalpArm64MsiRoutingBase) < HalpArm64MsiRoutingCount))
+    {
+        return HALP_ARM64_MSI_DEFAULT_IRQL;
+    }
+
+    /* TODO: a line-based vector's IRQL is only known to HalGetInterruptVector */
     return 0;
 }
 
