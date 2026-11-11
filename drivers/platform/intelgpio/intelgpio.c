@@ -932,6 +932,7 @@ IntelGpioPrepareController(
         PINTELGPIO_COMMUNITY Community = &Context->Communities[CommunityIndex];
         ULONG Revision;
         ULONG PadCount = Soc->CommunityPinCount[CommunityIndex];
+        ULONG LastPadEnd;
 
         if (!Resource || Resource->Type != CmResourceTypeMemory)
             continue;
@@ -946,7 +947,10 @@ IntelGpioPrepareController(
             break;
         Community->PadStride = (Revision >> 16) >= INTELGPIO_REVISION_DEBOUNCE ? 4 * sizeof(ULONG) : 2 * sizeof(ULONG);
         Community->PadOffset = IntelGpioRead(Community, INTELGPIO_PADBAR);
-        if (Community->PadOffset >= Community->RegisterLength || PadCount * Community->PadStride > Community->RegisterLength - Community->PadOffset)
+        LastPadEnd = (PadCount - 1) * Community->PadStride + sizeof(ULONG) +
+                     ((Community->PadStride > 2 * sizeof(ULONG)) ? INTELGPIO_PADCFG2 : INTELGPIO_PADCFG1);
+        if (PadCount == 0 || Community->PadOffset >= Community->RegisterLength ||
+            LastPadEnd > Community->RegisterLength - Community->PadOffset)
             break;
         DPRINT("INTELGPIO: community %lu revision=0x%lx padbar=0x%lx pads=%lu\n", CommunityIndex, Revision >> 16, Community->PadOffset, PadCount);
         CommunityIndex++;
