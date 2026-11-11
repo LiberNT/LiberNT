@@ -1346,9 +1346,11 @@ ObpCloseHandle(
         {
             KeRaiseUserException(STATUS_INVALID_HANDLE);
         }
-        else
+        else if (Handle != NULL && AccessMode == UserMode && !KeIsAttachedProcess() &&
+                 HandleTable != NULL && HandleTable->RaiseUMExceptionOnInvalidHandleClose)
         {
-            ObpCheckInvalidHandleReference(Handle, AccessMode);
+            /* Strict handle checks alone do not raise on a close; this separate table flag does */
+            KeRaiseUserException(STATUS_INVALID_HANDLE);
         }
     }
 
