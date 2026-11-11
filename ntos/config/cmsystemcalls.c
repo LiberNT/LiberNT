@@ -189,16 +189,26 @@ static
 NTSTATUS
 CmpOpenKeyForLoadUnload(
     _In_ PCM_CAPTURED_ATTRIBUTES Captured,
+    _In_opt_ POBJECT_ATTRIBUTES CallerAttributes,
     _In_ ACCESS_MASK DesiredAccess,
     _In_ KPROCESSOR_MODE AccessMode,
     _Out_ PHANDLE KeyHandle,
     _Out_ PCM_KEY_BODY *KeyBody)
 {
+    POBJECT_ATTRIBUTES Attributes = &Captured->Attributes;
     NTSTATUS Status;
 
-    Captured->Attributes.Attributes |= OBJ_KERNEL_HANDLE;
+    /* A caller's own open reads its own attributes: the captured copy lives in kernel memory */
+    if (AccessMode != KernelMode)
+    {
+        Attributes = CallerAttributes;
+    }
+    else
+    {
+        Captured->Attributes.Attributes |= OBJ_KERNEL_HANDLE;
+    }
 
-    Status = ObOpenObjectByName(&Captured->Attributes,
+    Status = ObOpenObjectByName(Attributes,
                                 CmpKeyObjectType,
                                 AccessMode,
                                 NULL,
@@ -210,7 +220,7 @@ CmpOpenKeyForLoadUnload(
     Status = ObReferenceObjectByHandle(*KeyHandle,
                                        DesiredAccess,
                                        CmpKeyObjectType,
-                                       KernelMode,
+                                       AccessMode,
                                        (PVOID*)KeyBody,
                                        NULL);
     if (!NT_SUCCESS(Status))
@@ -1784,6 +1794,7 @@ NtNotifyChangeMultipleKeys(
         }
 
         Status = CmpOpenKeyForLoadUnload(&Captured,
+                                         &SubordinateObjects[0],
                                          KEY_NOTIFY,
                                          PreviousMode,
                                          &SlaveHandle,
@@ -2110,6 +2121,7 @@ CmpUnloadKeyByName(
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = CmpOpenKeyForLoadUnload(&Captured,
+                                     NULL,
                                      KEY_WRITE,
                                      KernelMode,
                                      &KeyHandle,
@@ -2584,6 +2596,7 @@ NtQueryOpenSubKeys(
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = CmpOpenKeyForLoadUnload(&Captured,
+                                     TargetKey,
                                      KEY_READ,
                                      PreviousMode,
                                      &KeyHandle,
