@@ -9,6 +9,7 @@ list(APPEND SOURCE
     bind.c
     broadcast.c
     close.c
+    connect_any.c
     connect_select.c
     dualstack.c
     getaddrinfo.c

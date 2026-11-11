@@ -11,6 +11,7 @@ extern void func_addresslistsort(void);
 extern void func_bind(void);
 extern void func_broadcast(void);
 extern void func_close(void);
+extern void func_connect_any(void);
 extern void func_connect_select(void);
 extern void func_dualstack(void);
 extern void func_getaddrinfo(void);
@@ -43,6 +44,7 @@ const struct test winetest_testlist[] =
     { "bind", func_bind },
     { "broadcast", func_broadcast },
     { "close", func_close },
+    { "connect_any", func_connect_any },
     { "connect_select", func_connect_select },
     { "dualstack", func_dualstack },
     { "getaddrinfo", func_getaddrinfo },
