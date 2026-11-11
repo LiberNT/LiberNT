@@ -109,6 +109,7 @@ Test_LongTests(void)
     CHAR TestDir[] = "XTestDirTunnelCache";
     CHAR OldDir[MAX_PATH];
     FILETIME FileTime, File1Time;
+    ULARGE_INTEGER Past;
 
     /* Create a blank test directory */
     if (GetCurrentDirectory(MAX_PATH, OldDir) == 0)
@@ -148,11 +149,14 @@ Test_LongTests(void)
                        NULL);
     ok(hFile != INVALID_HANDLE_VALUE, "CreateFile() failed\n");
     ok(GetFileTime(hFile, &FileTime, NULL, NULL) != FALSE, "GetFileTime() failed\n");
+    /* An hour back, so the creation time of file2 cannot match it */
+    Past.LowPart = FileTime.dwLowDateTime;
+    Past.HighPart = FileTime.dwHighDateTime;
+    Past.QuadPart -= 36000000000ULL;
+    FileTime.dwLowDateTime = Past.LowPart;
+    FileTime.dwHighDateTime = Past.HighPart;
+    ok(SetFileTime(hFile, &FileTime, NULL, NULL) != FALSE, "SetFileTime() failed\n");
     CloseHandle(hFile);
-
-    /* Wait a least 10ms (resolution of FAT) */
-    /* XXX: Increased to 1s for ReactOS... */
-    Sleep(1000);
 
     hFile = CreateFile("file2",
                        GENERIC_READ | GENERIC_WRITE,
