@@ -1,0 +1,59 @@
+; PROJECT:     LiberNT Apple ISP Camera Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Apple silicon FaceTime camera driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = Camera
+ClassGUID = {ca3e7ab9-b4c3-4ae6-8251-579ef933890f}
+Provider = %LiberNT%
+DriverVer = 11/11/2026,1.0.0.0
+
+[ClassInstall32.NT]
+AddReg = AppleIsp_ClassReg
+
+[AppleIsp_ClassReg]
+HKR, , ,    0, %ClassName%
+HKR, , Icon, 0, "-1"
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%LiberNT% = LiberNT,NTarm64
+
+[LiberNT.NTarm64]
+%AppleIsp.DeviceDesc% = AppleIsp_Inst,FDT\apple_t6030-isp
+
+[AppleIsp_Inst.NT]
+Include = ks.inf
+Needs = KS.Registration
+AddReg = AppleIsp_MediaCategories
+CopyFiles = AppleIsp_CopyFiles
+
+[AppleIsp_MediaCategories]
+HKLM,%MediaCategories%\{FB6C4281-0353-11d1-905F-0000C0CC16BA},Name,,%CapturePinName%
+HKLM,%MediaCategories%\{FB6C4281-0353-11d1-905F-0000C0CC16BA},Display,1,00,00,00,00
+
+[AppleIsp_CopyFiles]
+appleisp.sys
+
+[AppleIsp_Inst.NT.Services]
+AddService = appleisp,0x00000002,AppleIsp_Service
+
+[AppleIsp_Service]
+DisplayName = %AppleIsp.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\appleisp.sys
+LoadOrderGroup = Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+MediaCategories = "SYSTEM\CurrentControlSet\Control\MediaCategories"
+ClassName = "Cameras"
+CapturePinName = "Capture"
+AppleIsp.DeviceDesc = "FaceTime HD Camera"
+AppleIsp.ServiceDesc = "Apple Silicon ISP Camera Driver"
