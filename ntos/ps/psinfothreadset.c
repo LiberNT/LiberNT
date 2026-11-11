@@ -490,15 +490,27 @@ NtSetInformationThread(
             if (!NT_SUCCESS(Status)) break;
 
             if (Processor.Group != 0 ||
+                Processor.Reserved != 0 ||
                 Processor.Number >= (UCHAR)KeNumberProcessors)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb,
-                                      Processor.Number);
+            Processor.Number = KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb,
+                                                         Processor.Number);
             Status = STATUS_SUCCESS;
+
+            /* The caller's record is given back holding the previous choice */
+            _SEH2_TRY
+            {
+                *(PPROCESSOR_NUMBER)ThreadInformation = Processor;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
             break;
 
         case ThreadPriorityBoost:

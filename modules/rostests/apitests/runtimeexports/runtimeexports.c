@@ -68,6 +68,11 @@ static void ProcessorProbes(void)
         else CHECK(node == 0 && error == 0xdeadbeef);
         printf("NUMA g=%u n=%u r=%u ret=%u err=%lu node=%04x\n", groups[g], (unsigned)nums[i], r, result, error, node);
     }
+    input.Group = 0; input.Number = (BYTE)(CpuCount - 1); input.Reserved = 0;
+    CHECK(SetIdeal(GetCurrentThread(), &input, NULL));
+    input.Number = 0; memset(&previous, 0xcc, sizeof(previous));
+    CHECK(SetIdeal(GetCurrentThread(), &input, &previous));
+    CHECK(previous.Group == 0 && previous.Number == CpuCount - 1 && previous.Reserved == 0);
     for (h = 0; h < 4; ++h)
     {
         memset(&output, 0xcc, sizeof(output)); SetLastError(0xdeadbeef);
