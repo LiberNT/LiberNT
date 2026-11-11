@@ -161,6 +161,12 @@ CmpQueryKeyName(
 
     CmpLockRegistry();
 
+    if (KeyBody->KeyControlBlock->Delete)
+    {
+        CmpUnlockRegistry();
+        return STATUS_KEY_DELETED;
+    }
+
     FullName = CmpConstructName(KeyBody->KeyControlBlock);
 
     CmpUnlockRegistry();
