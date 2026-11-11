@@ -286,6 +286,8 @@ KiExitDispatcher(
     Thread->NextProcessor = Prcb->Number;
     KxQueueReadyThread(Thread, Prcb);
 
+    KiWaitForThreadSwapOut(NextThread);
+
     if (KiSwapContext(OldIrql, Thread))
     {
         ASSERT(OldIrql == PASSIVE_LEVEL);

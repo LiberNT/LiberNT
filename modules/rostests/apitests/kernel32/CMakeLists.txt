@@ -169,6 +169,7 @@ list(APPEND SOURCE
     QueryInterruptTimePrecise.c
     ProcessAffinityQueued.c
     SwitchToThreadRoundRobin.c
+    YieldStealSwitch.c
     ThreadPowerThrottling.c
     ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c

@@ -164,6 +164,7 @@ extern void func_SwitchToThreadPriority(void);
 extern void func_QueryInterruptTimePrecise(void);
 extern void func_ProcessAffinityQueued(void);
 extern void func_SwitchToThreadRoundRobin(void);
+extern void func_YieldStealSwitch(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
@@ -353,6 +354,7 @@ const struct test winetest_testlist[] =
     { "QueryInterruptTimePrecise",   func_QueryInterruptTimePrecise },
     { "ProcessAffinityQueued",       func_ProcessAffinityQueued },
     { "SwitchToThreadRoundRobin",    func_SwitchToThreadRoundRobin },
+    { "YieldStealSwitch",            func_YieldStealSwitch },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
