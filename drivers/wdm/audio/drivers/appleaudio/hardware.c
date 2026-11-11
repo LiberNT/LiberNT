@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Apple Silicon Audio Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Headphone jack hardware: MCA, ADMAC, NCO and the CS42L84 codec
+ * PURPOSE:     Headphone jack and speaker hardware: MCA, ADMAC, NCO, CS42L84 and TAS2764
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -15,6 +15,8 @@
 #include <reactos/drivers/appleadmac.h>
 #include <reactos/drivers/applemca.h>
 #include "hardware.h"
+#include "tas2764.h"
+#include "protect.h"
 
 #define TAG_APPLE_AUDIO_HW          'hAPA'
 #define APPLE_AUDIO_LINK_NAME       "Headphone Jack"
@@ -22,6 +24,36 @@
 #define APPLE_AUDIO_SLOTS           2
 #define APPLE_AUDIO_SLOT_WIDTH      32
 #define APPLE_AUDIO_BCLK            (APPLE_AUDIO_SAMPLE_RATE * APPLE_AUDIO_SLOTS * APPLE_AUDIO_SLOT_WIDTH)
+#define APPLE_AUDIO_SPEAKER_LINK_NAME "Speakers"
+#define APPLE_AUDIO_SPEAKER_FRONTEND 1
+#define APPLE_AUDIO_SENSE_FRONTEND  2
+#define APPLE_AUDIO_SPEAKER_SLOTS   8
+#define APPLE_AUDIO_SPEAKER_SLOT_WIDTH 32
+#define APPLE_AUDIO_SPEAKER_BCLK    (APPLE_AUDIO_SAMPLE_RATE * APPLE_AUDIO_SPEAKER_SLOTS * APPLE_AUDIO_SPEAKER_SLOT_WIDTH)
+#define APPLE_AUDIO_SPEAKER_AMP_LEVEL 15
+#define APPLE_AUDIO_SPEAKER_DEFAULT_VOLUME (-40)
+#define APPLE_AUDIO_MAX_AMPS        APPLE_AUDIO_PROTECT_MAX_SPEAKERS
+#define APPLE_AUDIO_MAX_SPEAKER_PORTS 2
+#define APPLE_AUDIO_MAX_SPEAKER_BUSES 4
+#define APPLE_AUDIO_SENSE_SLOTS     16
+#define APPLE_AUDIO_SENSE_SLOT_WIDTH 16
+#define APPLE_AUDIO_SENSE_BITS      16
+#define APPLE_AUDIO_SENSE_FRAME_WORDS 4
+#define APPLE_AUDIO_SENSE_PERIOD_FRAMES 1024
+#define APPLE_AUDIO_SENSE_PERIODS   16
+#define APPLE_AUDIO_SENSE_SKIP_PERIODS 4
+#define APPLE_AUDIO_SENSE_STALL_MS  250
+#define APPLE_AUDIO_FAULT_POLL_MS   1000
+#define APPLE_AUDIO_REPORT_MS       10000
+#define APPLE_AUDIO_AMP_BOOT_US     2000
+#define APPLE_AUDIO_AMP_RAMP_US     7000
+#define APPLE_AUDIO_AMP_SHUTDOWN_US 3000
+#define APPLE_AUDIO_TICKS_PER_MS    10000ULL
+#define APPLE_AUDIO_MCA_CLUSTER_STRIDE 0x4000
+#define APPLE_AUDIO_MCA_SYNC_STATUS 0x100
+#define APPLE_AUDIO_MCA_SYNC_ENABLE 0x00000001
+#define APPLE_AUDIO_MCA_SYNC_MCLK_SELECT 0x104
+#define APPLE_AUDIO_MCA_SYNC_PORT_CLOCK 7
 
 #define CS42L84_CHIP_ID             0x42a84
 #define CS42L84_DEVID               0x0000
@@ -143,6 +175,36 @@ typedef struct _APPLE_AUDIO_CODEC_STEP
     UCHAR Value;
 } APPLE_AUDIO_CODEC_STEP;
 
+typedef struct _APPLE_AUDIO_SPEAKER_HW
+{
+    APPLE_NCO Nco;
+    APPLE_GPIO Shutdown;
+    APPLE_I2C Bus[APPLE_AUDIO_MAX_SPEAKER_BUSES];
+    ULONG BusNode[APPLE_AUDIO_MAX_SPEAKER_BUSES];
+    ULONG BusCount;
+    APPLE_AUDIO_AMP Amp[APPLE_AUDIO_MAX_AMPS];
+    ULONG AmpCount;
+    ULONG Port[APPLE_AUDIO_MAX_SPEAKER_PORTS];
+    ULONG PortCount;
+    APPLE_AUDIO_PROTECTION Protection;
+    PSHORT SenseBuffer;
+    ULONG64 SensePhysical;
+    ULONG SensePeriodBytes;
+    volatile LONG SenseProduced;
+    ULONG SenseConsumed;
+    ULONG64 LastModelTime;
+    ULONG64 LastSenseTime;
+    ULONG64 LastFaultPoll;
+    ULONG64 LastReport;
+    LONG Volume[APPLE_AUDIO_CHANNELS];
+    BOOLEAN Muted;
+    BOOLEAN Present;
+    BOOLEAN Powered;
+    BOOLEAN Unlocked;
+    BOOLEAN Faulted;
+    BOOLEAN StallReported;
+} APPLE_AUDIO_SPEAKER_HW, *PAPPLE_AUDIO_SPEAKER_HW;
+
 typedef struct _APPLE_AUDIO_HW
 {
     FDT_DRIVER_TREE Tree;
@@ -154,17 +216,20 @@ typedef struct _APPLE_AUDIO_HW
     APPLE_NCO Nco;
     APPLE_I2C I2c;
     APPLE_GPIO Reset;
-    APPLE_ADMAC_CHANNEL Channel[APPLE_AUDIO_DIRECTIONS];
+    APPLE_ADMAC_CHANNEL Channel[APPLE_AUDIO_DMA_CHANNELS];
     ULONG Port;
-    ULONG DmaChannel[APPLE_AUDIO_DIRECTIONS];
-    ULONG SampleBits[APPLE_AUDIO_DIRECTIONS];
+    ULONG DmaChannel[APPLE_AUDIO_DMA_CHANNELS];
+    ULONG SampleBits[APPLE_AUDIO_STREAMS];
     UCHAR CodecAddress;
     UCHAR TipState;
-    BOOLEAN Prepared[APPLE_AUDIO_DIRECTIONS];
+    BOOLEAN Prepared[APPLE_AUDIO_STREAMS];
     BOOLEAN Microphone;
     BOOLEAN Muted;
     LONG Volume[APPLE_AUDIO_CHANNELS];
+    APPLE_AUDIO_SPEAKER_HW Speakers;
 } APPLE_AUDIO_HW;
+
+static BOOLEAN AppleAudioSpeakersWarm;
 
 static
 VOID
@@ -437,6 +502,619 @@ CodecInitialize(
     return Status;
 }
 
+static
+VOID
+AppleAudioMcaFollowPortClocks(
+    _In_ PAPPLE_MCA Mca,
+    _In_ ULONG Cluster,
+    _In_ ULONG Port,
+    _In_ BOOLEAN Enable)
+{
+    volatile ULONG *Status, *Select;
+
+    if (!Mca->Clusters || Cluster >= Mca->ClusterCount || Port >= Mca->ClusterCount)
+        return;
+    Status = (volatile ULONG *)(Mca->Clusters + Cluster * APPLE_AUDIO_MCA_CLUSTER_STRIDE + APPLE_AUDIO_MCA_SYNC_STATUS);
+    Select = (volatile ULONG *)(Mca->Clusters + Cluster * APPLE_AUDIO_MCA_CLUSTER_STRIDE + APPLE_AUDIO_MCA_SYNC_MCLK_SELECT);
+    if (Enable)
+    {
+        WRITE_REGISTER_ULONG(Select, Port + APPLE_AUDIO_MCA_SYNC_PORT_CLOCK);
+        WRITE_REGISTER_ULONG(Status, READ_REGISTER_ULONG(Status) | APPLE_AUDIO_MCA_SYNC_ENABLE);
+    }
+    else
+    {
+        WRITE_REGISTER_ULONG(Status, READ_REGISTER_ULONG(Status) & ~APPLE_AUDIO_MCA_SYNC_ENABLE);
+    }
+}
+
+static
+ULONG
+AppleAudioFindLink(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_z_ PCSTR LinkName)
+{
+    const CHAR *Name;
+    ULONG Link, Length;
+
+    for (Link = FdtFirstChild(&Tree->Fdt, Tree->Node); Link != FDT_NO_NODE;
+         Link = FdtNextSibling(&Tree->Fdt, Link))
+    {
+        Name = FdtGetProperty(&Tree->Fdt, Link, "link-name", &Length);
+        if (Name && Length == strlen(LinkName) + 1 && !memcmp(Name, LinkName, Length))
+            return Link;
+    }
+    return FDT_NO_NODE;
+}
+
+static
+NTSTATUS
+AppleAudioFindDma(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG McaNode,
+    _In_z_ PCSTR Wanted,
+    _Out_ PULONG AdmacNode,
+    _Out_ PULONG Channel)
+{
+    const CHAR *Names, *Name;
+    const VOID *Dmas;
+    ULONG NamesLength, Length, Cursor = 0, EntryLength, Index, Cells;
+    ULONG64 Value;
+
+    *AdmacNode = FDT_NO_NODE;
+    *Channel = MAXULONG;
+    Names = FdtGetProperty(&Tree->Fdt, McaNode, "dma-names", &NamesLength);
+    Dmas = FdtGetProperty(&Tree->Fdt, McaNode, "dmas", &Length);
+    for (Index = 0; Names && (Name = FdtNextString(Names, NamesLength, &Cursor, &EntryLength)) != NULL; ++Index)
+    {
+        if (EntryLength != strlen(Wanted) || memcmp(Name, Wanted, EntryLength))
+            continue;
+        if (!Dmas || !FdtReadCells(Dmas, Length, 2 * Index, 1, &Value) ||
+            (*AdmacNode = FdtDriverFindPhandle(Tree, (ULONG)Value)) == FDT_NO_NODE ||
+            !FdtReadU32(&Tree->Fdt, *AdmacNode, "#dma-cells", &Cells) || Cells != 1 ||
+            !FdtReadCells(Dmas, Length, 2 * Index + 1, 1, &Value))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        *Channel = (ULONG)Value;
+        return STATUS_SUCCESS;
+    }
+    return STATUS_NOT_FOUND;
+}
+
+static
+VOID
+AppleAudioIndexedName(
+    _Out_writes_z_(Size) PCHAR Buffer,
+    _In_ ULONG Size,
+    _In_z_ PCSTR Prefix,
+    _In_ ULONG Index)
+{
+    CHAR Digits[10];
+    ULONG Length = 0, Count = 0;
+
+    ASSERT(Size > 0);
+    do
+    {
+        Digits[Count++] = (CHAR)('0' + Index % 10);
+        Index /= 10;
+    } while (Index && Count < sizeof(Digits));
+    while (*Prefix && Length + 1 < Size)
+        Buffer[Length++] = *Prefix++;
+    while (Count && Length + 1 < Size)
+        Buffer[Length++] = Digits[--Count];
+    Buffer[Length] = '\0';
+}
+
+static
+NTSTATUS
+SpeakerParse(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    PFDT_DRIVER_TREE Tree = &Hw->Tree;
+    PAPPLE_AUDIO_AMP Amp;
+    const VOID *Dai, *Compatible, *Shutdown = NULL, *Gpio, *Mode;
+    const CHAR *Prefix;
+    CHAR Property[48];
+    ULONG Link, Child, Length, ShutdownLength = 0, GpioLength, CodecCount, PerPort, Index, Node, Parent, Bus, Value;
+    ULONG64 Cell;
+
+    Link = AppleAudioFindLink(Tree, APPLE_AUDIO_SPEAKER_LINK_NAME);
+    if (Link == FDT_NO_NODE)
+        return STATUS_NOT_FOUND;
+    Compatible = FdtGetProperty(&Tree->Fdt, Tree->Node, "compatible", &Length);
+    Spk->Protection.Board = AppleAudioProtectionFindBoard(Compatible, Length);
+    if (!Spk->Protection.Board)
+    {
+        DbgPrint("appleaudio: no speaker protection profile for this machine, speakers stay off\n");
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    if ((Child = AppleAudioFindLinkChild(Tree, Link, "cpu")) == FDT_NO_NODE ||
+        (Dai = FdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL || !Length ||
+        Length % (2 * sizeof(ULONG)) || Length / (2 * sizeof(ULONG)) > APPLE_AUDIO_MAX_SPEAKER_PORTS)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    Spk->PortCount = Length / (2 * sizeof(ULONG));
+    for (Index = 0; Index < Spk->PortCount; ++Index)
+    {
+        if (!FdtReadCells(Dai, Length, 2 * Index, 1, &Cell) || FdtDriverFindPhandle(Tree, (ULONG)Cell) != Hw->McaNode ||
+            !FdtReadCells(Dai, Length, 2 * Index + 1, 1, &Cell) || Cell >= Hw->Mca.ClusterCount || Cell == Hw->Port)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Spk->Port[Index] = (ULONG)Cell;
+    }
+
+    if ((Child = AppleAudioFindLinkChild(Tree, Link, "codec")) == FDT_NO_NODE ||
+        (Dai = FdtGetProperty(&Tree->Fdt, Child, "sound-dai", &Length)) == NULL || !Length || Length % sizeof(ULONG))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    CodecCount = Length / sizeof(ULONG);
+    if (CodecCount > APPLE_AUDIO_MAX_AMPS || CodecCount % Spk->PortCount)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    PerPort = CodecCount / Spk->PortCount;
+    for (Index = 0; Index < CodecCount; ++Index)
+    {
+        Amp = &Spk->Amp[Index];
+        if (!FdtReadCells(Dai, Length, Index, 1, &Cell) || (Node = FdtDriverFindPhandle(Tree, (ULONG)Cell)) == FDT_NO_NODE)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Value);
+        if (!FdtStringListContains(Compatible, Value, "ti,tas2764"))
+            return STATUS_NOT_SUPPORTED;
+        Amp->Sn012776 = FdtStringListContains(Compatible, Value, "ti,sn012776");
+        Prefix = FdtGetProperty(&Tree->Fdt, Node, "sound-name-prefix", &Value);
+        if (!Prefix || Value < 2 || Value > TAS2764_NAME_LENGTH || Prefix[Value - 1])
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        RtlCopyMemory(Amp->Name, Prefix, Value);
+        Amp->NameLength = Value - 1;
+        Amp->Tweeter = strstr(Amp->Name, "Tweeter") != NULL;
+        if (!FdtReadU32(&Tree->Fdt, Node, "reg", &Value) || Value > 0x7f)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Amp->Address = (UCHAR)Value;
+        if (!FdtReadU32(&Tree->Fdt, Node, "ti,imon-slot-no", &Value) || Value > 0x3f || (Value & 1))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Amp->ImonSlot = (UCHAR)Value;
+        if (!FdtReadU32(&Tree->Fdt, Node, "ti,vmon-slot-no", &Value) || Value > 0x3f || (Value & 1))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Amp->VmonSlot = (UCHAR)Value;
+        Amp->Side = (Spk->PortCount > 1) ? Index / PerPort : (Index & 1);
+        Amp->Node = Node;
+
+        if ((Parent = FdtDriverFindParentNode(Tree, Node)) == FDT_NO_NODE)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        for (Bus = 0; Bus < Spk->BusCount && Spk->BusNode[Bus] != Parent; ++Bus)
+            ;
+        if (Bus == Spk->BusCount)
+        {
+            if (Bus >= APPLE_AUDIO_MAX_SPEAKER_BUSES)
+                return STATUS_DEVICE_CONFIGURATION_ERROR;
+            Spk->BusNode[Spk->BusCount++] = Parent;
+        }
+        Amp->I2c = &Spk->Bus[Bus];
+
+        Gpio = FdtGetProperty(&Tree->Fdt, Node, "shutdown-gpios", &GpioLength);
+        if (!Gpio)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        if (!Shutdown)
+        {
+            Shutdown = Gpio;
+            ShutdownLength = GpioLength;
+        }
+        else if (GpioLength != ShutdownLength || memcmp(Gpio, Shutdown, GpioLength))
+        {
+            return STATUS_NOT_SUPPORTED;
+        }
+
+        AppleAudioIndexedName(Property, sizeof(Property), "dai-tdm-idle-mode-", Index);
+        Mode = FdtGetProperty(&Tree->Fdt, Link, Property, &Value);
+        if (Mode && FdtStringListContains(Mode, Value, "zero"))
+        {
+            AppleAudioIndexedName(Property, sizeof(Property), "dai-tdm-slot-tx-idle-mask-", Index);
+            Amp->IdleZero = FdtReadU32(&Tree->Fdt, Link, Property, &Amp->IdleMask) && Amp->IdleMask;
+        }
+    }
+    Spk->AmpCount = CodecCount;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+SpeakerClose(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    ULONG Index;
+
+    ASSERT(!Hw->Prepared[APPLE_AUDIO_SPEAKERS]);
+    if (Spk->Powered)
+    {
+        for (Index = 0; Index < Spk->AmpCount; ++Index)
+            Tas2764SetMode(&Spk->Amp[Index], Tas2764Shutdown);
+        AppleGpioSet(&Spk->Shutdown, FALSE);
+    }
+    AppleGpioClose(&Spk->Shutdown);
+    for (Index = 0; Index < Spk->BusCount; ++Index)
+        AppleI2cClose(&Spk->Bus[Index]);
+    AppleNcoClose(&Spk->Nco);
+    if (Spk->SenseBuffer)
+        MmFreeContiguousMemorySpecifyCache(Spk->SenseBuffer, Spk->SensePeriodBytes * APPLE_AUDIO_SENSE_PERIODS, MmNonCached);
+    RtlZeroMemory(Spk, sizeof(*Spk));
+    Hw->DmaChannel[APPLE_AUDIO_SPEAKERS] = MAXULONG;
+    Hw->DmaChannel[APPLE_AUDIO_SENSE] = MAXULONG;
+}
+
+static
+NTSTATUS
+SpeakerOpen(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    CHAR Render[8] = { 't', 'x', (CHAR)('0' + APPLE_AUDIO_SPEAKER_FRONTEND), 'a', 0 };
+    CHAR Sense[8] = { 'r', 'x', (CHAR)('0' + APPLE_AUDIO_SENSE_FRONTEND), 'b', 0 };
+    PHYSICAL_ADDRESS Low, High, Boundary;
+    PAPPLE_AUDIO_AMP Amp;
+    ULONG Index, AdmacNode;
+    LONG AmpGain;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    Status = SpeakerParse(Hw);
+    if (Status == STATUS_NOT_FOUND)
+        return Status;
+    if (NT_SUCCESS(Status) && (Hw->Mca.ClusterCount <= APPLE_AUDIO_SENSE_FRONTEND ||
+                               Spk->Protection.Board->Channels > APPLE_AUDIO_SENSE_SLOTS))
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    if (NT_SUCCESS(Status))
+        Status = AppleAudioFindDma(&Hw->Tree, Hw->McaNode, Render, &AdmacNode, &Hw->DmaChannel[APPLE_AUDIO_SPEAKERS]);
+    if (NT_SUCCESS(Status) && (AdmacNode != Hw->AdmacNode || Hw->DmaChannel[APPLE_AUDIO_SPEAKERS] >= Hw->Admac.ChannelCount ||
+                               (Hw->DmaChannel[APPLE_AUDIO_SPEAKERS] & 1)))
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    if (NT_SUCCESS(Status))
+        Status = AppleAudioFindDma(&Hw->Tree, Hw->McaNode, Sense, &AdmacNode, &Hw->DmaChannel[APPLE_AUDIO_SENSE]);
+    if (NT_SUCCESS(Status) && (AdmacNode != Hw->AdmacNode || Hw->DmaChannel[APPLE_AUDIO_SENSE] >= Hw->Admac.ChannelCount ||
+                               !(Hw->DmaChannel[APPLE_AUDIO_SENSE] & 1)))
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    if (NT_SUCCESS(Status))
+        Status = AppleNcoOpen(&Hw->Tree, Hw->McaNode, APPLE_AUDIO_SPEAKER_FRONTEND, &Spk->Nco);
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->BusCount; ++Index)
+        Status = AppleI2cOpen(&Hw->Tree, Spk->BusNode[Index], &Spk->Bus[Index]);
+    if (NT_SUCCESS(Status))
+        Status = AppleGpioOpen(&Hw->Tree, Spk->Amp[0].Node, "shutdown-gpios", &Spk->Shutdown);
+    if (NT_SUCCESS(Status))
+    {
+        Spk->SensePeriodBytes = APPLE_AUDIO_SENSE_PERIOD_FRAMES * Spk->Protection.Board->Channels * sizeof(SHORT);
+        Low.QuadPart = 0;
+        High.QuadPart = -1LL;
+        Boundary.QuadPart = 0;
+        Spk->SenseBuffer = MmAllocateContiguousMemorySpecifyCache(Spk->SensePeriodBytes * APPLE_AUDIO_SENSE_PERIODS, Low,
+                                                                  High, Boundary, MmNonCached);
+        if (!Spk->SenseBuffer)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (!NT_SUCCESS(Status))
+        goto Fail;
+    RtlZeroMemory(Spk->SenseBuffer, Spk->SensePeriodBytes * APPLE_AUDIO_SENSE_PERIODS);
+    Spk->SensePhysical = (ULONG64)MmGetPhysicalAddress(Spk->SenseBuffer).QuadPart;
+
+    AppleGpioSet(&Spk->Shutdown, TRUE);
+    Spk->Powered = TRUE;
+    AppleAudioSleep(APPLE_AUDIO_AMP_BOOT_US);
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->AmpCount; ++Index)
+    {
+        Status = Tas2764Reset(&Spk->Amp[Index]);
+        if (!NT_SUCCESS(Status))
+            DbgPrint("appleaudio: amp %s at %02x does not take a reset (0x%08lx)\n", Spk->Amp[Index].Name,
+                     Spk->Amp[Index].Address, Status);
+    }
+    if (NT_SUCCESS(Status))
+        AppleAudioSleep(APPLE_AUDIO_AMP_BOOT_US);
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->AmpCount; ++Index)
+        Status = Tas2764Initialize(&Spk->Amp[Index], APPLE_AUDIO_SPEAKER_AMP_LEVEL);
+    AmpGain = Tas2764AmpGainMilliDb(APPLE_AUDIO_SPEAKER_AMP_LEVEL);
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->AmpCount; ++Index)
+    {
+        Amp = &Spk->Amp[Index];
+        Status = AppleAudioProtectionAddSpeaker(&Spk->Protection, Amp->Name, Amp->NameLength, Amp->ImonSlot / 2,
+                                                Amp->VmonSlot / 2, AmpGain, !AppleAudioSpeakersWarm, &Amp->Model);
+        if (!NT_SUCCESS(Status))
+            DbgPrint("appleaudio: amp %s (I/V sense slots %u/%u) does not match the protection profile (0x%08lx)\n",
+                     Amp->Name, Amp->ImonSlot, Amp->VmonSlot, Status);
+    }
+    if (!NT_SUCCESS(Status))
+        goto Fail;
+
+    AppleAudioSpeakersWarm = TRUE;
+    Spk->LastModelTime = KeQueryInterruptTime();
+    Spk->Volume[0] = Spk->Volume[1] = APPLE_AUDIO_SPEAKER_DEFAULT_VOLUME;
+    Spk->Present = TRUE;
+    DbgPrint("appleaudio: speakers: %lu amps on %lu I2C buses, MCA ports %lu/%lu fed by cluster %u, sense on cluster %u, "
+             "ADMAC channels %lu and %lu, protection profile %s\n",
+             Spk->AmpCount, Spk->BusCount, Spk->Port[0], Spk->Port[Spk->PortCount - 1], APPLE_AUDIO_SPEAKER_FRONTEND,
+             APPLE_AUDIO_SENSE_FRONTEND, Hw->DmaChannel[APPLE_AUDIO_SPEAKERS], Hw->DmaChannel[APPLE_AUDIO_SENSE],
+             Spk->Protection.Board->Compatible);
+    return STATUS_SUCCESS;
+
+Fail:
+    DbgPrint("appleaudio: speakers stay off (0x%08lx)\n", Status);
+    SpeakerClose(Hw);
+    return Status;
+}
+
+static
+UCHAR
+SpeakerVolume(
+    _In_ PAPPLE_AUDIO_HW Hw,
+    _In_ PAPPLE_AUDIO_AMP Amp)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    LONG Attenuation, Ceiling;
+
+    if (!Spk->Unlocked || Spk->Faulted || Spk->Muted)
+        return TAS2764_DVC_MUTE;
+    ASSERT(Amp->Side < APPLE_AUDIO_CHANNELS && Amp->Model < Spk->Protection.SpeakerCount);
+    ASSERT(Spk->Volume[Amp->Side] <= 0);
+    Attenuation = -Spk->Volume[Amp->Side] * TAS2764_DVC_STEP_MILLI_DB -
+                  AppleAudioProtectionGain(&Spk->Protection, Amp->Model);
+    Ceiling = -AppleAudioProtectionCeiling(&Spk->Protection, Amp->Model);
+    ASSERT(Attenuation >= 0 && Ceiling >= 0);
+    Attenuation = max(Attenuation, Ceiling);
+    Attenuation = (Attenuation + TAS2764_DVC_STEP_MILLI_DB - 1) / TAS2764_DVC_STEP_MILLI_DB;
+    return (UCHAR)min(Attenuation, TAS2764_DVC_MINIMUM);
+}
+
+static
+VOID
+SpeakerApplyVolume(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    PAPPLE_AUDIO_AMP Amp;
+    NTSTATUS Status;
+    UCHAR Previous;
+    ULONG Index;
+
+    for (Index = 0; Index < Spk->AmpCount; ++Index)
+    {
+        Amp = &Spk->Amp[Index];
+        Previous = Amp->Volume;
+        Status = Tas2764SetVolume(Amp, SpeakerVolume(Hw, Amp));
+        if (!NT_SUCCESS(Status) && Previous != TAS2764_VOLUME_UNKNOWN)
+            DbgPrint("appleaudio: amp %s at %02x volume write failed 0x%08lx\n", Amp->Name, Amp->Address, Status);
+    }
+}
+
+static
+VOID
+SpeakerUnprepare(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    ULONG Index;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    if (!Hw->Prepared[APPLE_AUDIO_SPEAKERS])
+        return;
+    AppleAdmacCloseChannel(&Hw->Channel[APPLE_AUDIO_SPEAKERS]);
+    AppleAdmacCloseChannel(&Hw->Channel[APPLE_AUDIO_SENSE]);
+    Spk->Unlocked = FALSE;
+    SpeakerApplyVolume(Hw);
+    for (Index = 0; Index < Spk->AmpCount; ++Index)
+        Tas2764SetMode(&Spk->Amp[Index], Tas2764Muted);
+    AppleAudioSleep(APPLE_AUDIO_AMP_RAMP_US);
+    for (Index = 0; Index < Spk->AmpCount; ++Index)
+        Tas2764SetMode(&Spk->Amp[Index], Tas2764Shutdown);
+    AppleAudioSleep(APPLE_AUDIO_AMP_SHUTDOWN_US);
+    AppleAudioMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], FALSE);
+    AppleMcaEnableClocks(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, FALSE);
+    for (Index = 0; Index < Spk->PortCount; ++Index)
+        AppleMcaRoutePort(&Hw->Mca, Spk->Port[Index], APPLE_AUDIO_SPEAKER_FRONTEND, FALSE);
+    AppleNcoEnable(&Spk->Nco, FALSE);
+    Spk->LastModelTime = KeQueryInterruptTime();
+    Hw->Prepared[APPLE_AUDIO_SPEAKERS] = FALSE;
+    DbgPrint("appleaudio: speakers off\n");
+}
+
+static
+NTSTATUS
+SpeakerPrepare(
+    _Inout_ PAPPLE_AUDIO_HW Hw,
+    _In_ ULONG SampleBits)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    ULONG Index, PortMask = 0;
+    ULONG64 Now, Elapsed, Period;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(!Hw->Prepared[APPLE_AUDIO_SPEAKERS]);
+    if (!Spk->Present)
+        return STATUS_NOT_SUPPORTED;
+    for (Index = 0; Index < Spk->PortCount; ++Index)
+        PortMask |= 1UL << Spk->Port[Index];
+    Status = AppleMcaConfigureTx(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, APPLE_AUDIO_SPEAKER_SLOTS,
+                                 APPLE_AUDIO_SPEAKER_SLOT_WIDTH, APPLE_AUDIO_CHANNELS, SampleBits);
+    if (NT_SUCCESS(Status))
+        Status = AppleMcaConfigureRx(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, APPLE_AUDIO_SENSE_SLOTS,
+                                     APPLE_AUDIO_SENSE_SLOT_WIDTH, Spk->Protection.Board->Channels, APPLE_AUDIO_SENSE_BITS,
+                                     PortMask);
+    if (NT_SUCCESS(Status))
+        Status = AppleNcoSetRate(&Spk->Nco, APPLE_AUDIO_SPEAKER_BCLK);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    AppleNcoEnable(&Spk->Nco, TRUE);
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->PortCount; ++Index)
+        Status = AppleMcaRoutePort(&Hw->Mca, Spk->Port[Index], APPLE_AUDIO_SPEAKER_FRONTEND, TRUE);
+    AppleMcaEnableClocks(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, TRUE);
+    AppleAudioMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], TRUE);
+    Hw->SampleBits[APPLE_AUDIO_SPEAKERS] = SampleBits;
+    Hw->Prepared[APPLE_AUDIO_SPEAKERS] = TRUE;
+    Spk->Unlocked = FALSE;
+    Spk->Faulted = FALSE;
+    Spk->StallReported = FALSE;
+
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->AmpCount; ++Index)
+    {
+        Status = Tas2764SetVolume(&Spk->Amp[Index], TAS2764_DVC_MUTE);
+        if (NT_SUCCESS(Status))
+            Status = Tas2764SetFormat(&Spk->Amp[Index], SampleBits);
+        if (NT_SUCCESS(Status))
+            Status = Tas2764SetMode(&Spk->Amp[Index], Tas2764Muted);
+    }
+    for (Index = 0; NT_SUCCESS(Status) && Index < Spk->AmpCount; ++Index)
+        Status = Tas2764SetMode(&Spk->Amp[Index], Tas2764Active);
+    if (NT_SUCCESS(Status))
+        Status = AppleAdmacOpenChannel(&Hw->Admac, Hw->DmaChannel[APPLE_AUDIO_SPEAKERS], SampleBits / 8,
+                                       APPLE_AUDIO_CHANNELS, &Hw->Channel[APPLE_AUDIO_SPEAKERS]);
+    if (NT_SUCCESS(Status))
+        Status = AppleAdmacOpenChannel(&Hw->Admac, Hw->DmaChannel[APPLE_AUDIO_SENSE], APPLE_AUDIO_SENSE_BITS / 8,
+                                       APPLE_AUDIO_SENSE_FRAME_WORDS, &Hw->Channel[APPLE_AUDIO_SENSE]);
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("appleaudio: speaker preparation failed 0x%08lx\n", Status);
+        SpeakerUnprepare(Hw);
+        return Status;
+    }
+
+    Now = KeQueryInterruptTime();
+    Elapsed = ((Now - Spk->LastModelTime) * APPLE_AUDIO_SAMPLE_RATE) / (1000 * APPLE_AUDIO_TICKS_PER_MS);
+    Period = APPLE_AUDIO_SENSE_PERIOD_FRAMES;
+    if (Elapsed > APPLE_AUDIO_SENSE_SKIP_PERIODS * Period)
+        AppleAudioProtectionSkip(&Spk->Protection, Elapsed - Period);
+    Spk->LastModelTime = Now;
+    Spk->LastSenseTime = Now;
+    Spk->LastFaultPoll = Now;
+    Spk->LastReport = Now;
+    InterlockedExchange(&Spk->SenseProduced, 0);
+    Spk->SenseConsumed = 0;
+    DbgPrint("appleaudio: speakers on, %lu-bit, amps active and muted until V/I sense data arrives\n", SampleBits);
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+SpeakerReport(
+    _Inout_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    PAPPLE_AUDIO_SPEAKER_MODEL Model;
+    PAPPLE_AUDIO_AMP Amp;
+    ULONG Index;
+    LONG Die;
+
+    for (Index = 0; Index < Spk->AmpCount; ++Index)
+    {
+        Amp = &Spk->Amp[Index];
+        Model = &Spk->Protection.Speaker[Amp->Model];
+        if (!Tas2764ReadTemperature(Amp, &Die))
+            Die = 0;
+        DbgPrint("appleaudio: speaker %s: coil %ld mC, magnet %ld mC, power %ld mW, peak V %lu I %lu, gain %ld mdB, "
+                 "volume %02x, die %ld C\n",
+                 Amp->Name, AppleAudioProtectionMilliCelsius(Model->TCoil),
+                 AppleAudioProtectionMilliCelsius(Model->TMagnet), Model->PowerMilliW, Model->PeakVoltage,
+                 Model->PeakCurrent, AppleAudioProtectionGain(&Spk->Protection, Amp->Model), Amp->Volume, Die);
+    }
+}
+
+BOOLEAN
+NTAPI
+AppleAudioHwHasSpeakers(
+    _In_ PAPPLE_AUDIO_HW Hw)
+{
+    return Hw->Speakers.Present;
+}
+
+NTSTATUS
+NTAPI
+AppleAudioHwSetSpeakerVolume(
+    _In_ PAPPLE_AUDIO_HW Hw,
+    _In_ LONG LeftHalfDecibels,
+    _In_ LONG RightHalfDecibels,
+    _In_ BOOLEAN Mute)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    if (!Spk->Present)
+        return STATUS_INVALID_DEVICE_STATE;
+    Spk->Volume[0] = max(min(LeftHalfDecibels, APPLE_AUDIO_VOLUME_MAXIMUM), APPLE_AUDIO_SPEAKER_VOLUME_MINIMUM);
+    Spk->Volume[1] = max(min(RightHalfDecibels, APPLE_AUDIO_VOLUME_MAXIMUM), APPLE_AUDIO_SPEAKER_VOLUME_MINIMUM);
+    Spk->Muted = Mute;
+    if (Hw->Prepared[APPLE_AUDIO_SPEAKERS])
+        SpeakerApplyVolume(Hw);
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+AppleAudioHwProtectSpeakers(
+    _In_ PAPPLE_AUDIO_HW Hw)
+{
+    PAPPLE_AUDIO_SPEAKER_HW Spk = &Hw->Speakers;
+    ULONG Produced, Pending, Processed = 0, Index;
+    ULONG64 Now;
+    NTSTATUS Status = STATUS_SUCCESS, PeriodStatus;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    if (!Spk->Present || !Hw->Prepared[APPLE_AUDIO_SPEAKERS])
+        return;
+    ASSERT(Spk->SenseBuffer && Spk->SensePeriodBytes);
+    Now = KeQueryInterruptTime();
+    Produced = (ULONG)InterlockedCompareExchange(&Spk->SenseProduced, 0, 0);
+    Pending = Produced - Spk->SenseConsumed;
+    if (Pending > APPLE_AUDIO_SENSE_PERIODS / 2)
+    {
+        DbgPrint("appleaudio: speaker sense data overrun, %lu periods behind\n", Pending);
+        Spk->SenseConsumed = Produced;
+        Status = STATUS_DATA_OVERRUN;
+    }
+    KeMemoryBarrier();
+    while (Spk->SenseConsumed != Produced)
+    {
+        PeriodStatus = AppleAudioProtectionRun(&Spk->Protection,
+                                               Spk->SenseBuffer + (Spk->SenseConsumed % APPLE_AUDIO_SENSE_PERIODS) *
+                                               (Spk->SensePeriodBytes / sizeof(SHORT)),
+                                               APPLE_AUDIO_SENSE_PERIOD_FRAMES);
+        if (NT_SUCCESS(Status))
+            Status = PeriodStatus;
+        ++Spk->SenseConsumed;
+        ++Processed;
+    }
+    if (Processed)
+    {
+        Spk->LastSenseTime = Now;
+        Spk->LastModelTime = Now;
+    }
+
+    if (!NT_SUCCESS(Status) && !Spk->Faulted)
+    {
+        Spk->Faulted = TRUE;
+        DbgPrint("appleaudio: speaker protection fault 0x%08lx, amps muted until the stream restarts\n", Status);
+    }
+    else if (!Spk->Faulted && !Processed && Now - Spk->LastSenseTime > APPLE_AUDIO_SENSE_STALL_MS * APPLE_AUDIO_TICKS_PER_MS)
+    {
+        if (Spk->Unlocked || !Spk->StallReported)
+            DbgPrint("appleaudio: no speaker V/I sense data for %I64u ms, amps muted\n",
+                     (Now - Spk->LastSenseTime) / APPLE_AUDIO_TICKS_PER_MS);
+        Spk->Unlocked = FALSE;
+        Spk->StallReported = TRUE;
+    }
+    else if (!Spk->Unlocked && !Spk->Faulted && Processed)
+    {
+        Spk->Unlocked = TRUE;
+        Spk->StallReported = FALSE;
+        DbgPrint("appleaudio: speaker V/I sense data flowing, protection running, amps unmuted\n");
+    }
+    SpeakerApplyVolume(Hw);
+
+    if (Now - Spk->LastFaultPoll >= APPLE_AUDIO_FAULT_POLL_MS * APPLE_AUDIO_TICKS_PER_MS)
+    {
+        Spk->LastFaultPoll = Now;
+        for (Index = 0; Index < Spk->AmpCount; ++Index)
+            Tas2764PollFaults(&Spk->Amp[Index]);
+    }
+    if (Now - Spk->LastReport >= APPLE_AUDIO_REPORT_MS * APPLE_AUDIO_TICKS_PER_MS)
+    {
+        Spk->LastReport = Now;
+        SpeakerReport(Hw);
+    }
+}
+
 NTSTATUS
 NTAPI
 AppleAudioHwOpen(
@@ -455,6 +1133,8 @@ AppleAudioHwOpen(
     if (!Hw)
         return STATUS_INSUFFICIENT_RESOURCES;
     Hw->Volume[0] = Hw->Volume[1] = APPLE_AUDIO_VOLUME_DEFAULT;
+    Hw->DmaChannel[APPLE_AUDIO_SPEAKERS] = MAXULONG;
+    Hw->DmaChannel[APPLE_AUDIO_SENSE] = MAXULONG;
 
     Status = FdtDriverOpen(PhysicalDeviceObject, &Hw->Tree);
     if (!NT_SUCCESS(Status))
@@ -532,6 +1212,7 @@ AppleAudioHwOpen(
     DbgPrint("appleaudio: headphone jack on MCA port %lu from cluster %u, ADMAC channels %lu and %ld, interrupt %lu\n",
              Hw->Port, APPLE_AUDIO_FRONTEND, Hw->DmaChannel[APPLE_AUDIO_RENDER],
              (LONG)Hw->DmaChannel[APPLE_AUDIO_CAPTURE], Hw->Admac.InterruptGsi);
+    SpeakerOpen(Hw);
     *Hardware = Hw;
     return STATUS_SUCCESS;
 
@@ -548,8 +1229,10 @@ AppleAudioHwClose(
 {
     if (!Hw)
         return;
+    AppleAudioHwUnprepare(Hw, APPLE_AUDIO_SPEAKERS);
     AppleAudioHwUnprepare(Hw, APPLE_AUDIO_CAPTURE);
     AppleAudioHwUnprepare(Hw, APPLE_AUDIO_RENDER);
+    SpeakerClose(Hw);
     if (Hw->Reset.Registers)
         AppleGpioSet(&Hw->Reset, FALSE);
     AppleGpioClose(&Hw->Reset);
@@ -712,16 +1395,18 @@ AppleAudioHwPrepare(
     _In_ ULONG Direction,
     _In_ ULONG SampleBits)
 {
-    ULONG Channels = (Direction == APPLE_AUDIO_RENDER) ? APPLE_AUDIO_CHANNELS : APPLE_AUDIO_CAPTURE_CHANNELS;
+    ULONG Channels = APPLE_AUDIO_STREAM_CHANNELS(Direction);
     BOOLEAN Clocks;
     NTSTATUS Status;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
     if (Hw->Prepared[Direction])
         return SampleBits == Hw->SampleBits[Direction] ? STATUS_SUCCESS : STATUS_DEVICE_BUSY;
     if (SampleBits != 16 && SampleBits != 32)
         return STATUS_NOT_SUPPORTED;
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+        return SpeakerPrepare(Hw, SampleBits);
     if (Hw->DmaChannel[Direction] == MAXULONG)
         return STATUS_NOT_SUPPORTED;
     Clocks = !Hw->Prepared[Direction ^ 1];
@@ -769,6 +1454,11 @@ AppleAudioHwUnprepare(
 {
     BOOLEAN Clocks;
 
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+    {
+        SpeakerUnprepare(Hw);
+        return;
+    }
     if (Direction >= APPLE_AUDIO_DIRECTIONS || !Hw->Prepared[Direction])
         return;
     AppleAdmacCloseChannel(&Hw->Channel[Direction]);
@@ -789,8 +1479,17 @@ AppleAudioHwArm(
     _In_ PAPPLE_AUDIO_HW Hw,
     _In_ ULONG Direction)
 {
-    if (Direction >= APPLE_AUDIO_DIRECTIONS || !Hw->Prepared[Direction])
+    NTSTATUS Status;
+
+    if (Direction >= APPLE_AUDIO_STREAMS || !Hw->Prepared[Direction])
         return STATUS_INVALID_DEVICE_STATE;
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+    {
+        Status = AppleMcaResetTx(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND);
+        if (NT_SUCCESS(Status))
+            Status = AppleMcaResetRx(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND);
+        return Status;
+    }
     return (Direction == APPLE_AUDIO_RENDER) ? AppleMcaResetTx(&Hw->Mca, APPLE_AUDIO_FRONTEND) :
            AppleMcaResetRx(&Hw->Mca, APPLE_AUDIO_FRONTEND);
 }
@@ -806,8 +1505,28 @@ AppleAudioHwStartDma(
 {
     NTSTATUS Status;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS || !Hw->Prepared[Direction] || !Hw->Channel[Direction].Admac)
+    if (Direction >= APPLE_AUDIO_STREAMS || !Hw->Prepared[Direction] || !Hw->Channel[Direction].Admac)
         return STATUS_INVALID_DEVICE_STATE;
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+    {
+        if (!Hw->Channel[APPLE_AUDIO_SENSE].Admac)
+            return STATUS_INVALID_DEVICE_STATE;
+        Status = AppleAdmacStartCyclic(&Hw->Channel[APPLE_AUDIO_SENSE], Hw->Speakers.SensePhysical,
+                                       Hw->Speakers.SensePeriodBytes * APPLE_AUDIO_SENSE_PERIODS,
+                                       Hw->Speakers.SensePeriodBytes);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        AppleMcaEnableRx(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, TRUE);
+        Status = AppleAdmacStartCyclic(&Hw->Channel[Direction], Buffer, BufferLength, PeriodLength);
+        if (NT_SUCCESS(Status))
+        {
+            AppleMcaEnableTx(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, TRUE);
+            return Status;
+        }
+        AppleMcaEnableRx(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, FALSE);
+        AppleAdmacStop(&Hw->Channel[APPLE_AUDIO_SENSE]);
+        return Status;
+    }
     Status = AppleAdmacStartCyclic(&Hw->Channel[Direction], Buffer, BufferLength, PeriodLength);
     if (NT_SUCCESS(Status))
     {
@@ -825,9 +1544,16 @@ AppleAudioHwStopDma(
     _In_ PAPPLE_AUDIO_HW Hw,
     _In_ ULONG Direction)
 {
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return;
-    if (Direction == APPLE_AUDIO_RENDER)
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+    {
+        AppleMcaEnableTx(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, FALSE);
+        AppleMcaEnableRx(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, FALSE);
+        if (Hw->Channel[APPLE_AUDIO_SENSE].Admac)
+            AppleAdmacStop(&Hw->Channel[APPLE_AUDIO_SENSE]);
+    }
+    else if (Direction == APPLE_AUDIO_RENDER)
         AppleMcaEnableTx(&Hw->Mca, APPLE_AUDIO_FRONTEND, FALSE);
     else
         AppleMcaEnableRx(&Hw->Mca, APPLE_AUDIO_FRONTEND, FALSE);
@@ -839,12 +1565,12 @@ BOOLEAN
 NTAPI
 AppleAudioHwInterrupt(
     _In_ PAPPLE_AUDIO_HW Hw,
-    _Out_writes_(APPLE_AUDIO_DIRECTIONS) PULONG Periods)
+    _Out_writes_(APPLE_AUDIO_DMA_CHANNELS) PULONG Periods)
 {
     BOOLEAN Global, AnyGlobal = FALSE, Claimed = FALSE, Mine;
     ULONG Direction;
 
-    for (Direction = 0; Direction < APPLE_AUDIO_DIRECTIONS; ++Direction)
+    for (Direction = 0; Direction < APPLE_AUDIO_DMA_CHANNELS; ++Direction)
     {
         Periods[Direction] = 0;
         if (Hw->DmaChannel[Direction] == MAXULONG)
@@ -855,6 +1581,8 @@ AppleAudioHwInterrupt(
             Periods[Direction] = AppleAdmacService(&Hw->Channel[Direction]);
         Claimed |= Mine;
     }
+    if (Periods[APPLE_AUDIO_SENSE])
+        InterlockedExchangeAdd(&Hw->Speakers.SenseProduced, (LONG)Periods[APPLE_AUDIO_SENSE]);
     return Claimed || AnyGlobal;
 }
 
@@ -864,7 +1592,7 @@ AppleAudioHwPosition(
     _In_ PAPPLE_AUDIO_HW Hw,
     _In_ ULONG Direction)
 {
-    if (Direction >= APPLE_AUDIO_DIRECTIONS || !Hw->Channel[Direction].Admac)
+    if (Direction >= APPLE_AUDIO_STREAMS || !Hw->Channel[Direction].Admac)
         return 0;
     return AppleAdmacPosition(&Hw->Channel[Direction]);
 }

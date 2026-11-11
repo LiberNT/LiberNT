@@ -54,6 +54,11 @@ AddInterface=%KSCATEGORY_REALTIME%,Wave,AppleAudio.WaveInterface
 AddInterface=%KSCATEGORY_CAPTURE%,Wave,AppleAudio.WaveInterface
 AddInterface=%KSCATEGORY_AUDIO%,Topology,AppleAudio.TopologyInterface
 AddInterface=%KSCATEGORY_TOPOLOGY%,Topology,AppleAudio.TopologyInterface
+AddInterface=%KSCATEGORY_AUDIO%,WaveSpeaker,AppleAudio.SpeakerWaveInterface
+AddInterface=%KSCATEGORY_RENDER%,WaveSpeaker,AppleAudio.SpeakerWaveInterface
+AddInterface=%KSCATEGORY_REALTIME%,WaveSpeaker,AppleAudio.SpeakerWaveInterface
+AddInterface=%KSCATEGORY_AUDIO%,TopologySpeaker,AppleAudio.SpeakerTopologyInterface
+AddInterface=%KSCATEGORY_TOPOLOGY%,TopologySpeaker,AppleAudio.SpeakerTopologyInterface
 
 [AppleAudio.WaveInterface]
 AddReg=AppleAudio.WaveInterface.AddReg
@@ -69,6 +74,20 @@ AddReg=AppleAudio.TopologyInterface.AddReg
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%AppleAudio.TopologyName%
 
+[AppleAudio.SpeakerWaveInterface]
+AddReg=AppleAudio.SpeakerWaveInterface.AddReg
+
+[AppleAudio.SpeakerWaveInterface.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AppleAudio.SpeakerWaveName%
+
+[AppleAudio.SpeakerTopologyInterface]
+AddReg=AppleAudio.SpeakerTopologyInterface.AddReg
+
+[AppleAudio.SpeakerTopologyInterface.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AppleAudio.SpeakerTopologyName%
+
 [SourceDisksNames]
 1=%DiskName%
 
@@ -81,6 +100,8 @@ AppleAudio.DeviceDesc="Apple Silicon Audio"
 AppleAudio.ServiceDesc="LiberNT Apple Silicon Audio Driver"
 AppleAudio.WaveName="Headphones"
 AppleAudio.TopologyName="Headphones Topology"
+AppleAudio.SpeakerWaveName="Speakers"
+AppleAudio.SpeakerTopologyName="Speakers Topology"
 DiskName="LiberNT Installation Media"
 Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
 KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"

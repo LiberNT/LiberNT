@@ -1,7 +1,7 @@
 /*
  * PROJECT:         LiberNT Apple Silicon Audio Driver
  * LICENSE:         GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:         Adapter: stream control, DMA interrupt, volume and jack detection
+ * PURPOSE:         Adapter: stream control, DMA interrupt, volume, jack detection and speaker protection
  * COPYRIGHT:       Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -25,17 +25,18 @@ CAppleAudioAdapter::CAppleAudioAdapter()
       m_InterruptSync(NULL),
       m_JackWorkItem(NULL),
       m_JackWorkQueued(0),
+      m_ProtectWorkItem(NULL),
+      m_ProtectWorkQueued(0),
       m_Shutdown(0),
       m_JackPortEvents(NULL),
-      m_Mute(FALSE),
       m_Connected(0),
       m_Microphone(0)
 {
-    ULONG Direction;
+    ULONG Direction, Endpoint;
 
     KeInitializeMutex(&m_Mutex, 0);
     KeInitializeSpinLock(&m_EventLock);
-    for (Direction = 0; Direction < APPLE_AUDIO_DIRECTIONS; ++Direction)
+    for (Direction = 0; Direction < APPLE_AUDIO_STREAMS; ++Direction)
     {
         KeInitializeDpc(&m_NotifyDpc[Direction], NotifyDpc, this);
         m_NotificationEvent[Direction] = NULL;
@@ -50,7 +51,13 @@ CAppleAudioAdapter::CAppleAudioAdapter()
     }
     KeInitializeTimer(&m_JackTimer);
     KeInitializeDpc(&m_JackDpc, JackTimerDpc, this);
-    m_Volume[0] = m_Volume[1] = APPLE_AUDIO_VOLUME_DEFAULT * APPLE_AUDIO_KS_VOLUME_STEP;
+    KeInitializeTimer(&m_ProtectTimer);
+    KeInitializeDpc(&m_ProtectDpc, ProtectDpc, this);
+    for (Endpoint = 0; Endpoint < APPLE_AUDIO_ENDPOINTS; ++Endpoint)
+    {
+        m_Volume[Endpoint][0] = m_Volume[Endpoint][1] = APPLE_AUDIO_VOLUME_DEFAULT * APPLE_AUDIO_KS_VOLUME_STEP;
+        m_Mute[Endpoint] = FALSE;
+    }
 }
 
 CAppleAudioAdapter::~CAppleAudioAdapter()
@@ -109,6 +116,12 @@ CAppleAudioAdapter::Initialize(PDEVICE_OBJECT DeviceObject, PDEVICE_OBJECT Physi
     m_JackWorkItem = IoAllocateWorkItem(DeviceObject);
     if (!m_JackWorkItem)
         return STATUS_INSUFFICIENT_RESOURCES;
+    if (AppleAudioHwHasSpeakers(m_Hardware))
+    {
+        m_ProtectWorkItem = IoAllocateWorkItem(DeviceObject);
+        if (!m_ProtectWorkItem)
+            return STATUS_INSUFFICIENT_RESOURCES;
+    }
     DueTime.QuadPart = -10000LL * APPLE_AUDIO_JACK_POLL_MS;
     KeSetTimerEx(&m_JackTimer, DueTime, APPLE_AUDIO_JACK_POLL_MS, &m_JackDpc);
     return STATUS_SUCCESS;
@@ -123,9 +136,10 @@ CAppleAudioAdapter::Shutdown()
     if (InterlockedExchange(&m_Shutdown, 1))
         return;
     KeCancelTimer(&m_JackTimer);
+    KeCancelTimer(&m_ProtectTimer);
     KeFlushQueuedDpcs();
     Interval.QuadPart = -10000LL;
-    while (InterlockedCompareExchange(&m_JackWorkQueued, 0, 0))
+    while (InterlockedCompareExchange(&m_JackWorkQueued, 0, 0) || InterlockedCompareExchange(&m_ProtectWorkQueued, 0, 0))
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
     if (m_JackWorkItem)
     {
@@ -134,6 +148,7 @@ CAppleAudioAdapter::Shutdown()
     }
 
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
+    StopLocked(APPLE_AUDIO_SPEAKERS);
     StopLocked(APPLE_AUDIO_CAPTURE);
     StopLocked(APPLE_AUDIO_RENDER);
     KeReleaseMutex(&m_Mutex, FALSE);
@@ -148,6 +163,13 @@ CAppleAudioAdapter::Shutdown()
         m_InterruptSync = NULL;
     }
     KeFlushQueuedDpcs();
+    while (InterlockedCompareExchange(&m_ProtectWorkQueued, 0, 0))
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    if (m_ProtectWorkItem)
+    {
+        IoFreeWorkItem(m_ProtectWorkItem);
+        m_ProtectWorkItem = NULL;
+    }
     if (m_Hardware)
     {
         AppleAudioHwClose(m_Hardware);
@@ -179,15 +201,21 @@ CAppleAudioAdapter::HasCapture()
 }
 
 BOOLEAN
+CAppleAudioAdapter::HasSpeakers()
+{
+    return m_Hardware && AppleAudioHwHasSpeakers(m_Hardware);
+}
+
+BOOLEAN
 CAppleAudioAdapter::ClaimStream(ULONG Direction)
 {
-    return Direction < APPLE_AUDIO_DIRECTIONS && InterlockedCompareExchange(&m_Open[Direction], 1, 0) == 0;
+    return Direction < APPLE_AUDIO_STREAMS && InterlockedCompareExchange(&m_Open[Direction], 1, 0) == 0;
 }
 
 VOID
 CAppleAudioAdapter::ReleaseStream(ULONG Direction)
 {
-    if (Direction < APPLE_AUDIO_DIRECTIONS)
+    if (Direction < APPLE_AUDIO_STREAMS)
         InterlockedExchange(&m_Open[Direction], 0);
 }
 
@@ -208,9 +236,9 @@ CAppleAudioAdapter::AllocateBuffer(
     PMDL Mdl;
     PVOID Buffer;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
-    FrameBytes = ((Direction == APPLE_AUDIO_RENDER) ? APPLE_AUDIO_CHANNELS : APPLE_AUDIO_CAPTURE_CHANNELS) * SampleBits / 8;
+    FrameBytes = APPLE_AUDIO_STREAM_CHANNELS(Direction) * SampleBits / 8;
     if (!AudioBufferMdl || !ActualSize || !OffsetFromFirstPage || !CacheType || !FrameBytes)
         return STATUS_INVALID_PARAMETER;
     if (m_Mdl[Direction])
@@ -272,7 +300,7 @@ CAppleAudioAdapter::AllocateBuffer(
 VOID
 CAppleAudioAdapter::FreeBuffer(ULONG Direction, PMDL AudioBufferMdl)
 {
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return;
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
     StopLocked(Direction);
@@ -333,8 +361,10 @@ CAppleAudioAdapter::StopLocked(ULONG Direction)
 {
     APPLE_AUDIO_SYNC Sync;
 
-    if (!m_Hardware || Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (!m_Hardware || Direction >= APPLE_AUDIO_STREAMS)
         return;
+    if (Direction == APPLE_AUDIO_SPEAKERS)
+        KeCancelTimer(&m_ProtectTimer);
     if (m_InterruptSync && InterlockedCompareExchange(&m_Running[Direction], 1, 1))
     {
         RtlZeroMemory(&Sync, sizeof(Sync));
@@ -351,9 +381,10 @@ NTSTATUS
 CAppleAudioAdapter::SetStreamState(ULONG Direction, KSSTATE State)
 {
     APPLE_AUDIO_SYNC Sync;
+    LARGE_INTEGER DueTime;
     NTSTATUS Status;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
     if (State != KSSTATE_RUN)
@@ -388,9 +419,16 @@ CAppleAudioAdapter::SetStreamState(ULONG Direction, KSSTATE State)
         m_InterruptSync->CallSynchronizedRoutine(StartSynchronized, &Sync);
         Status = Sync.Status;
     }
+    if (NT_SUCCESS(Status) && Direction == APPLE_AUDIO_SPEAKERS)
+    {
+        DueTime.QuadPart = -10000LL * APPLE_AUDIO_PROTECT_POLL_MS;
+        KeSetTimerEx(&m_ProtectTimer, DueTime, APPLE_AUDIO_PROTECT_POLL_MS, &m_ProtectDpc);
+    }
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("appleaudio: %s start failed 0x%08lx\n", Direction == APPLE_AUDIO_RENDER ? "playback" : "capture",
+        DbgPrint("appleaudio: %s start failed 0x%08lx\n",
+                 Direction == APPLE_AUDIO_CAPTURE ? "capture" :
+                 Direction == APPLE_AUDIO_SPEAKERS ? "speaker playback" : "playback",
                  Status);
         AppleAudioHwUnprepare(m_Hardware, Direction);
     }
@@ -403,7 +441,7 @@ CAppleAudioAdapter::GetPosition(ULONG Direction, PKSAUDIO_POSITION Position)
 {
     APPLE_AUDIO_SYNC Sync;
 
-    if (!Position || Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (!Position || Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
     if (!m_Mdl[Direction] || !m_BufferSize[Direction])
         return STATUS_INVALID_DEVICE_STATE;
@@ -424,7 +462,7 @@ CAppleAudioAdapter::RegisterNotificationEvent(ULONG Direction, PKEVENT Notificat
     KIRQL OldIrql;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
     KeAcquireSpinLock(&m_EventLock, &OldIrql);
     if (m_NotificationEvent[Direction] && m_NotificationEvent[Direction] != NotificationEvent)
@@ -440,7 +478,7 @@ CAppleAudioAdapter::UnregisterNotificationEvent(ULONG Direction, PKEVENT Notific
 {
     KIRQL OldIrql;
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return STATUS_INVALID_PARAMETER;
     KeAcquireSpinLock(&m_EventLock, &OldIrql);
     if (m_NotificationEvent[Direction] == NotificationEvent)
@@ -454,16 +492,18 @@ NTAPI
 CAppleAudioAdapter::InterruptService(PINTERRUPTSYNC InterruptSync, PVOID Context)
 {
     CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
-    ULONG Periods[APPLE_AUDIO_DIRECTIONS], Direction;
+    ULONG Periods[APPLE_AUDIO_DMA_CHANNELS], Direction;
     UNREFERENCED_PARAMETER(InterruptSync);
 
     if (!Adapter->m_Hardware || !AppleAudioHwInterrupt(Adapter->m_Hardware, Periods))
         return STATUS_UNSUCCESSFUL;
-    for (Direction = 0; Direction < APPLE_AUDIO_DIRECTIONS; ++Direction)
+    for (Direction = 0; Direction < APPLE_AUDIO_STREAMS; ++Direction)
     {
         if (Periods[Direction] && InterlockedCompareExchange(&Adapter->m_Running[Direction], 1, 1))
             KeInsertQueueDpc(&Adapter->m_NotifyDpc[Direction], reinterpret_cast<PVOID>(ULONG_PTR(Direction)), NULL);
     }
+    if (Periods[APPLE_AUDIO_SENSE])
+        KeInsertQueueDpc(&Adapter->m_ProtectDpc, NULL, NULL);
     return STATUS_SUCCESS;
 }
 
@@ -476,7 +516,7 @@ CAppleAudioAdapter::NotifyDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgu
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (Direction >= APPLE_AUDIO_DIRECTIONS)
+    if (Direction >= APPLE_AUDIO_STREAMS)
         return;
     KeAcquireSpinLockAtDpcLevel(&Adapter->m_EventLock);
     if (Adapter->m_NotificationEvent[Direction])
@@ -530,58 +570,97 @@ CAppleAudioAdapter::JackWork(PDEVICE_OBJECT DeviceObject, PVOID Context)
     Adapter->Release();
 }
 
-NTSTATUS
-CAppleAudioAdapter::ApplyVolumeLocked()
+VOID
+NTAPI
+CAppleAudioAdapter::ProtectDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2)
 {
-    if (!m_Hardware)
-        return STATUS_INVALID_DEVICE_STATE;
-    return AppleAudioHwSetVolume(m_Hardware, m_Volume[0] / APPLE_AUDIO_KS_VOLUME_STEP,
-                                 m_Volume[1] / APPLE_AUDIO_KS_VOLUME_STEP, m_Mute);
+    CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(DeferredContext);
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0) || !Adapter->m_ProtectWorkItem ||
+        InterlockedExchange(&Adapter->m_ProtectWorkQueued, 1))
+        return;
+    Adapter->AddRef();
+    IoQueueWorkItem(Adapter->m_ProtectWorkItem, ProtectWork, CriticalWorkQueue, Adapter);
+}
+
+VOID
+NTAPI
+CAppleAudioAdapter::ProtectWork(PDEVICE_OBJECT DeviceObject, PVOID Context)
+{
+    CAppleAudioAdapter *Adapter = static_cast<CAppleAudioAdapter *>(Context);
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    KeWaitForSingleObject(&Adapter->m_Mutex, Executive, KernelMode, FALSE, NULL);
+    if (Adapter->m_Hardware && !InterlockedCompareExchange(&Adapter->m_Shutdown, 0, 0))
+        AppleAudioHwProtectSpeakers(Adapter->m_Hardware);
+    KeReleaseMutex(&Adapter->m_Mutex, FALSE);
+    InterlockedExchange(&Adapter->m_ProtectWorkQueued, 0);
+    Adapter->Release();
 }
 
 NTSTATUS
-CAppleAudioAdapter::GetVolume(ULONG Channel, PLONG Level)
+CAppleAudioAdapter::ApplyVolumeLocked(ULONG Endpoint)
 {
-    if (Channel >= APPLE_AUDIO_CHANNELS || !Level)
+    if (!m_Hardware)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS)
+        return AppleAudioHwSetSpeakerVolume(m_Hardware, m_Volume[Endpoint][0] / APPLE_AUDIO_KS_VOLUME_STEP,
+                                            m_Volume[Endpoint][1] / APPLE_AUDIO_KS_VOLUME_STEP, m_Mute[Endpoint]);
+    return AppleAudioHwSetVolume(m_Hardware, m_Volume[Endpoint][0] / APPLE_AUDIO_KS_VOLUME_STEP,
+                                 m_Volume[Endpoint][1] / APPLE_AUDIO_KS_VOLUME_STEP, m_Mute[Endpoint]);
+}
+
+NTSTATUS
+CAppleAudioAdapter::GetVolume(ULONG Endpoint, ULONG Channel, PLONG Level)
+{
+    if (Endpoint >= APPLE_AUDIO_ENDPOINTS || Channel >= APPLE_AUDIO_CHANNELS || !Level)
         return STATUS_INVALID_PARAMETER;
-    *Level = m_Volume[Channel];
+    *Level = m_Volume[Endpoint][Channel];
     return STATUS_SUCCESS;
 }
 
 NTSTATUS
-CAppleAudioAdapter::SetVolume(ULONG Channel, LONG Level)
+CAppleAudioAdapter::SetVolume(ULONG Endpoint, ULONG Channel, LONG Level)
 {
+    LONG Minimum;
     NTSTATUS Status;
 
-    if (Channel >= APPLE_AUDIO_CHANNELS && Channel != ULONG(-1))
+    if (Endpoint >= APPLE_AUDIO_ENDPOINTS || (Channel >= APPLE_AUDIO_CHANNELS && Channel != ULONG(-1)))
         return STATUS_INVALID_PARAMETER;
-    Level = min(max(Level, APPLE_AUDIO_KS_VOLUME_MINIMUM), APPLE_AUDIO_KS_VOLUME_MAXIMUM);
-    Level = APPLE_AUDIO_KS_VOLUME_MINIMUM +
-            ((Level - APPLE_AUDIO_KS_VOLUME_MINIMUM) / APPLE_AUDIO_KS_VOLUME_STEP) * APPLE_AUDIO_KS_VOLUME_STEP;
+    Minimum = (Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS) ? APPLE_AUDIO_KS_SPEAKER_VOLUME_MINIMUM :
+              APPLE_AUDIO_KS_VOLUME_MINIMUM;
+    Level = min(max(Level, Minimum), APPLE_AUDIO_KS_VOLUME_MAXIMUM);
+    Level = Minimum + ((Level - Minimum) / APPLE_AUDIO_KS_VOLUME_STEP) * APPLE_AUDIO_KS_VOLUME_STEP;
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
     if (Channel == ULONG(-1))
-        m_Volume[0] = m_Volume[1] = Level;
+        m_Volume[Endpoint][0] = m_Volume[Endpoint][1] = Level;
     else
-        m_Volume[Channel] = Level;
-    Status = ApplyVolumeLocked();
+        m_Volume[Endpoint][Channel] = Level;
+    Status = ApplyVolumeLocked(Endpoint);
     KeReleaseMutex(&m_Mutex, FALSE);
     return Status;
 }
 
 BOOLEAN
-CAppleAudioAdapter::GetMute()
+CAppleAudioAdapter::GetMute(ULONG Endpoint)
 {
-    return m_Mute;
+    return Endpoint < APPLE_AUDIO_ENDPOINTS && m_Mute[Endpoint];
 }
 
 NTSTATUS
-CAppleAudioAdapter::SetMute(BOOLEAN Mute)
+CAppleAudioAdapter::SetMute(ULONG Endpoint, BOOLEAN Mute)
 {
     NTSTATUS Status;
 
+    if (Endpoint >= APPLE_AUDIO_ENDPOINTS)
+        return STATUS_INVALID_PARAMETER;
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
-    m_Mute = Mute ? TRUE : FALSE;
-    Status = ApplyVolumeLocked();
+    m_Mute[Endpoint] = Mute ? TRUE : FALSE;
+    Status = ApplyVolumeLocked(Endpoint);
     KeReleaseMutex(&m_Mutex, FALSE);
     return Status;
 }

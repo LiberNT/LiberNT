@@ -47,8 +47,7 @@ NTSTATUS
 NTAPI
 CAppleAudioStream::SetFormat(PKSDATAFORMAT DataFormat)
 {
-    ULONG SampleBits = AppleAudioFormatSampleBits(DataFormat, m_Direction == APPLE_AUDIO_RENDER ? APPLE_AUDIO_CHANNELS :
-                                                                                     APPLE_AUDIO_CAPTURE_CHANNELS);
+    ULONG SampleBits = AppleAudioFormatSampleBits(DataFormat, APPLE_AUDIO_STREAM_CHANNELS(m_Direction));
 
     if (!SampleBits)
         return STATUS_NOT_SUPPORTED;

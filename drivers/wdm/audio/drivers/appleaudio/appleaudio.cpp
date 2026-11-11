@@ -81,6 +81,10 @@ AppleAudioStartDevice(PDEVICE_OBJECT DeviceObject, PIRP Irp, PRESOURCELIST Resou
     PUNKNOWN WaveMiniport = NULL;
     PUNKNOWN TopologyPort = NULL;
     PUNKNOWN WavePort = NULL;
+    PUNKNOWN SpeakerTopologyMiniport = NULL;
+    PUNKNOWN SpeakerWaveMiniport = NULL;
+    PUNKNOWN SpeakerTopologyPort = NULL;
+    PUNKNOWN SpeakerWavePort = NULL;
     NTSTATUS Status;
 
     DeviceExtension = static_cast<PAPPLE_AUDIO_DEVICE_EXTENSION>(DeviceObject->DeviceExtension);
@@ -93,7 +97,7 @@ AppleAudioStartDevice(PDEVICE_OBJECT DeviceObject, PIRP Irp, PRESOURCELIST Resou
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    Status = AppleAudioCreateTopology(&TopologyMiniport, Adapter);
+    Status = AppleAudioCreateTopology(&TopologyMiniport, Adapter, APPLE_AUDIO_ENDPOINT_HEADPHONES);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Status = InstallSubdevice(DeviceObject, Irp, L"Topology", CLSID_PortTopology, TopologyMiniport, Adapter,
@@ -101,7 +105,7 @@ AppleAudioStartDevice(PDEVICE_OBJECT DeviceObject, PIRP Irp, PRESOURCELIST Resou
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
-    Status = AppleAudioCreateWave(&WaveMiniport, Adapter);
+    Status = AppleAudioCreateWave(&WaveMiniport, Adapter, APPLE_AUDIO_ENDPOINT_HEADPHONES);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     Status = InstallSubdevice(DeviceObject, Irp, L"Wave", CLSID_PortWaveRT, WaveMiniport, Adapter, ResourceList,
@@ -116,9 +120,35 @@ AppleAudioStartDevice(PDEVICE_OBJECT DeviceObject, PIRP Irp, PRESOURCELIST Resou
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
+    if (Adapter->HasSpeakers())
+    {
+        Status = AppleAudioCreateTopology(&SpeakerTopologyMiniport, Adapter, APPLE_AUDIO_ENDPOINT_SPEAKERS);
+        if (NT_SUCCESS(Status))
+            Status = InstallSubdevice(DeviceObject, Irp, L"TopologySpeaker", CLSID_PortTopology, SpeakerTopologyMiniport,
+                                      Adapter, ResourceList, &SpeakerTopologyPort);
+        if (NT_SUCCESS(Status))
+            Status = AppleAudioCreateWave(&SpeakerWaveMiniport, Adapter, APPLE_AUDIO_ENDPOINT_SPEAKERS);
+        if (NT_SUCCESS(Status))
+            Status = InstallSubdevice(DeviceObject, Irp, L"WaveSpeaker", CLSID_PortWaveRT, SpeakerWaveMiniport, Adapter,
+                                      ResourceList, &SpeakerWavePort);
+        if (NT_SUCCESS(Status))
+            Status = PcRegisterPhysicalConnection(DeviceObject, SpeakerWavePort, 1, SpeakerTopologyPort, 0);
+        if (!NT_SUCCESS(Status))
+            goto Cleanup;
+        DbgPrint("appleaudio: speaker endpoint registered\n");
+    }
+
     DeviceExtension->Adapter = Adapter;
 
 Cleanup:
+    if (SpeakerWavePort)
+        SpeakerWavePort->Release();
+    if (SpeakerTopologyPort)
+        SpeakerTopologyPort->Release();
+    if (SpeakerWaveMiniport)
+        SpeakerWaveMiniport->Release();
+    if (SpeakerTopologyMiniport)
+        SpeakerTopologyMiniport->Release();
     if (WavePort)
         WavePort->Release();
     if (TopologyPort)

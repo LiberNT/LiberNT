@@ -19,6 +19,7 @@
 #define APPLE_AUDIO_KS_VOLUME_STEP 0x8000
 #define APPLE_AUDIO_KS_VOLUME_MINIMUM (APPLE_AUDIO_VOLUME_MINIMUM * APPLE_AUDIO_KS_VOLUME_STEP)
 #define APPLE_AUDIO_KS_VOLUME_MAXIMUM (APPLE_AUDIO_VOLUME_MAXIMUM * APPLE_AUDIO_KS_VOLUME_STEP)
+#define APPLE_AUDIO_KS_SPEAKER_VOLUME_MINIMUM (APPLE_AUDIO_SPEAKER_VOLUME_MINIMUM * APPLE_AUDIO_KS_VOLUME_STEP)
 #define APPLE_AUDIO_TOPOLOGY_HEADPHONE_PIN 1
 #define APPLE_AUDIO_TOPOLOGY_MICROPHONE_PIN 2
 #define APPLE_AUDIO_TOPOLOGY_CAPTURE_PIN 3
@@ -26,6 +27,8 @@
 #define APPLE_AUDIO_WAVE_CAPTURE_PIN 2
 #define APPLE_AUDIO_WAVE_CAPTURE_BRIDGE_PIN 3
 #define APPLE_AUDIO_JACK_POLL_MS 500
+#define APPLE_AUDIO_PROTECT_POLL_MS 50
+#define APPLE_AUDIO_SPEAKER_TOPOLOGY_SPEAKER_PIN 1
 
 PVOID
 __cdecl
@@ -73,6 +76,7 @@ class CAppleAudioAdapter : public CUnknownImpl<IUnknown>
     NTSTATUS RegisterJackEventPort(PPORTEVENTS PortEvents);
 
     BOOLEAN HasCapture();
+    BOOLEAN HasSpeakers();
     BOOLEAN ClaimStream(ULONG Direction);
     VOID ReleaseStream(ULONG Direction);
 
@@ -90,10 +94,10 @@ class CAppleAudioAdapter : public CUnknownImpl<IUnknown>
     NTSTATUS GetPosition(ULONG Direction, PKSAUDIO_POSITION Position);
     NTSTATUS RegisterNotificationEvent(ULONG Direction, PKEVENT NotificationEvent);
     NTSTATUS UnregisterNotificationEvent(ULONG Direction, PKEVENT NotificationEvent);
-    NTSTATUS GetVolume(ULONG Channel, PLONG Level);
-    NTSTATUS SetVolume(ULONG Channel, LONG Level);
-    BOOLEAN GetMute();
-    NTSTATUS SetMute(BOOLEAN Mute);
+    NTSTATUS GetVolume(ULONG Endpoint, ULONG Channel, PLONG Level);
+    NTSTATUS SetVolume(ULONG Endpoint, ULONG Channel, LONG Level);
+    BOOLEAN GetMute(ULONG Endpoint);
+    NTSTATUS SetMute(ULONG Endpoint, BOOLEAN Mute);
     BOOLEAN IsSinkConnected();
     BOOLEAN IsMicrophoneConnected();
 
@@ -105,41 +109,47 @@ class CAppleAudioAdapter : public CUnknownImpl<IUnknown>
     static VOID NTAPI NotifyDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
     static VOID NTAPI JackTimerDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
     static VOID NTAPI JackWork(PDEVICE_OBJECT DeviceObject, PVOID Context);
+    static VOID NTAPI ProtectDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
+    static VOID NTAPI ProtectWork(PDEVICE_OBJECT DeviceObject, PVOID Context);
 
     VOID StopLocked(ULONG Direction);
-    NTSTATUS ApplyVolumeLocked();
+    NTSTATUS ApplyVolumeLocked(ULONG Endpoint);
 
     PDEVICE_OBJECT m_DeviceObject;
     PAPPLE_AUDIO_HW m_Hardware;
     PINTERRUPTSYNC m_InterruptSync;
     KMUTEX m_Mutex;
-    KDPC m_NotifyDpc[APPLE_AUDIO_DIRECTIONS];
+    KDPC m_NotifyDpc[APPLE_AUDIO_STREAMS];
     KTIMER m_JackTimer;
     KDPC m_JackDpc;
     PIO_WORKITEM m_JackWorkItem;
     volatile LONG m_JackWorkQueued;
+    KTIMER m_ProtectTimer;
+    KDPC m_ProtectDpc;
+    PIO_WORKITEM m_ProtectWorkItem;
+    volatile LONG m_ProtectWorkQueued;
     KSPIN_LOCK m_EventLock;
-    PKEVENT m_NotificationEvent[APPLE_AUDIO_DIRECTIONS];
-    volatile LONG m_Open[APPLE_AUDIO_DIRECTIONS];
-    volatile LONG m_Running[APPLE_AUDIO_DIRECTIONS];
+    PKEVENT m_NotificationEvent[APPLE_AUDIO_STREAMS];
+    volatile LONG m_Open[APPLE_AUDIO_STREAMS];
+    volatile LONG m_Running[APPLE_AUDIO_STREAMS];
     volatile LONG m_Shutdown;
     PVOID volatile m_JackPortEvents;
-    LONG m_Volume[APPLE_AUDIO_CHANNELS];
-    BOOLEAN m_Mute;
+    LONG m_Volume[APPLE_AUDIO_ENDPOINTS][APPLE_AUDIO_CHANNELS];
+    BOOLEAN m_Mute[APPLE_AUDIO_ENDPOINTS];
     volatile LONG m_Connected;
     volatile LONG m_Microphone;
-    PMDL m_Mdl[APPLE_AUDIO_DIRECTIONS];
-    PVOID m_Buffer[APPLE_AUDIO_DIRECTIONS];
-    ULONG m_BufferSize[APPLE_AUDIO_DIRECTIONS];
-    ULONG m_PeriodBytes[APPLE_AUDIO_DIRECTIONS];
-    ULONG64 m_BufferPhysical[APPLE_AUDIO_DIRECTIONS];
-    ULONG m_SampleBits[APPLE_AUDIO_DIRECTIONS];
+    PMDL m_Mdl[APPLE_AUDIO_STREAMS];
+    PVOID m_Buffer[APPLE_AUDIO_STREAMS];
+    ULONG m_BufferSize[APPLE_AUDIO_STREAMS];
+    ULONG m_PeriodBytes[APPLE_AUDIO_STREAMS];
+    ULONG64 m_BufferPhysical[APPLE_AUDIO_STREAMS];
+    ULONG m_SampleBits[APPLE_AUDIO_STREAMS];
 };
 
 class CAppleAudioTopology : public CUnknownImpl<IMiniportTopology>
 {
   public:
-    explicit CAppleAudioTopology(CAppleAudioAdapter *Adapter);
+    CAppleAudioTopology(CAppleAudioAdapter *Adapter, ULONG Endpoint);
     virtual ~CAppleAudioTopology();
 
     STDMETHODIMP QueryInterface(REFIID InterfaceId, PVOID *Interface);
@@ -150,17 +160,23 @@ class CAppleAudioTopology : public CUnknownImpl<IMiniportTopology>
         return m_Adapter;
     }
 
+    ULONG GetEndpoint() const
+    {
+        return m_Endpoint;
+    }
+
     VOID AddEventToEventList(PKSEVENT_ENTRY EventEntry);
 
   private:
     CAppleAudioAdapter *m_Adapter;
     PPORTEVENTS m_PortEvents;
+    ULONG m_Endpoint;
 };
 
 class CAppleAudioWave : public CUnknownImpl<IMiniportWaveRT>
 {
   public:
-    explicit CAppleAudioWave(CAppleAudioAdapter *Adapter);
+    CAppleAudioWave(CAppleAudioAdapter *Adapter, ULONG Endpoint);
     virtual ~CAppleAudioWave();
 
     STDMETHODIMP QueryInterface(REFIID InterfaceId, PVOID *Interface);
@@ -168,6 +184,7 @@ class CAppleAudioWave : public CUnknownImpl<IMiniportWaveRT>
 
   private:
     CAppleAudioAdapter *m_Adapter;
+    ULONG m_Endpoint;
 };
 
 class CAppleAudioStream : public CUnknownImpl<IMiniportWaveRTStreamNotification>
@@ -199,7 +216,7 @@ ULONG
 AppleAudioFormatSampleBits(PKSDATAFORMAT DataFormat, ULONG Channels);
 
 NTSTATUS
-AppleAudioCreateTopology(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter);
+AppleAudioCreateTopology(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter, ULONG Endpoint);
 
 NTSTATUS
-AppleAudioCreateWave(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter);
+AppleAudioCreateWave(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter, ULONG Endpoint);

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Apple Silicon Audio Driver
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Headphone jack hardware: MCA, ADMAC, NCO and the CS42L84 codec
+ * PURPOSE:     Headphone jack and speaker hardware: MCA, ADMAC, NCO, CS42L84 and TAS2764
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -20,6 +20,16 @@ extern "C" {
 #define APPLE_AUDIO_CAPTURE             1
 #define APPLE_AUDIO_DIRECTIONS          2
 #define APPLE_AUDIO_CAPTURE_CHANNELS    1
+#define APPLE_AUDIO_SPEAKERS            2
+#define APPLE_AUDIO_STREAMS             3
+#define APPLE_AUDIO_SENSE               3
+#define APPLE_AUDIO_DMA_CHANNELS        4
+#define APPLE_AUDIO_ENDPOINT_HEADPHONES 0
+#define APPLE_AUDIO_ENDPOINT_SPEAKERS   1
+#define APPLE_AUDIO_ENDPOINTS           2
+#define APPLE_AUDIO_SPEAKER_VOLUME_MINIMUM (-200)
+#define APPLE_AUDIO_STREAM_CHANNELS(Stream) \
+    ((Stream) == APPLE_AUDIO_CAPTURE ? APPLE_AUDIO_CAPTURE_CHANNELS : APPLE_AUDIO_CHANNELS)
 
 typedef struct _APPLE_AUDIO_HW *PAPPLE_AUDIO_HW;
 
@@ -84,7 +94,7 @@ BOOLEAN
 NTAPI
 AppleAudioHwInterrupt(
     _In_ PAPPLE_AUDIO_HW Hardware,
-    _Out_writes_(APPLE_AUDIO_DIRECTIONS) PULONG Periods);
+    _Out_writes_(APPLE_AUDIO_DMA_CHANNELS) PULONG Periods);
 
 ULONG
 NTAPI
@@ -106,6 +116,24 @@ AppleAudioHwPollJack(
     _In_ PAPPLE_AUDIO_HW Hardware,
     _Out_ PBOOLEAN Connected,
     _Out_ PBOOLEAN Microphone);
+
+BOOLEAN
+NTAPI
+AppleAudioHwHasSpeakers(
+    _In_ PAPPLE_AUDIO_HW Hardware);
+
+NTSTATUS
+NTAPI
+AppleAudioHwSetSpeakerVolume(
+    _In_ PAPPLE_AUDIO_HW Hardware,
+    _In_ LONG LeftHalfDecibels,
+    _In_ LONG RightHalfDecibels,
+    _In_ BOOLEAN Mute);
+
+VOID
+NTAPI
+AppleAudioHwProtectSpeakers(
+    _In_ PAPPLE_AUDIO_HW Hardware);
 
 #ifdef __cplusplus
 }

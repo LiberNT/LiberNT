@@ -10,7 +10,9 @@ list(APPEND SOURCE
     appleaudio.cpp
     hardware.c
     miniport.cpp
+    protect.c
     stream.cpp
+    tas2764.c
     guid.cpp
     purecall.cpp)
 

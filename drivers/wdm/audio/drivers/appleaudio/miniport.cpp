@@ -1,7 +1,7 @@
 /*
  * PROJECT:         LiberNT Apple Silicon Audio Driver
  * LICENSE:         GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:         WaveRT and topology miniports for the headphone jack
+ * PURPOSE:         WaveRT and topology miniports for the headphone jack and the speakers
  * COPYRIGHT:       Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -119,6 +119,12 @@ AppleAudioTopologyAdapter(PPCPROPERTY_REQUEST PropertyRequest)
     return static_cast<CAppleAudioTopology *>(static_cast<PMINIPORTTOPOLOGY>(PropertyRequest->MajorTarget))->GetAdapter();
 }
 
+static ULONG
+AppleAudioTopologyEndpoint(PPCPROPERTY_REQUEST PropertyRequest)
+{
+    return static_cast<CAppleAudioTopology *>(static_cast<PMINIPORTTOPOLOGY>(PropertyRequest->MajorTarget))->GetEndpoint();
+}
+
 static NTSTATUS NTAPI
 AppleAudioVolumePropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
 {
@@ -148,7 +154,9 @@ AppleAudioVolumePropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
         for (ULONG Index = 0; Index < APPLE_AUDIO_CHANNELS; ++Index)
         {
             Range[Index].SteppingDelta = APPLE_AUDIO_KS_VOLUME_STEP;
-            Range[Index].Bounds.SignedMinimum = APPLE_AUDIO_KS_VOLUME_MINIMUM;
+            Range[Index].Bounds.SignedMinimum =
+                (AppleAudioTopologyEndpoint(PropertyRequest) == APPLE_AUDIO_ENDPOINT_SPEAKERS) ?
+                APPLE_AUDIO_KS_SPEAKER_VOLUME_MINIMUM : APPLE_AUDIO_KS_VOLUME_MINIMUM;
             Range[Index].Bounds.SignedMaximum = APPLE_AUDIO_KS_VOLUME_MAXIMUM;
         }
         PropertyRequest->ValueSize = DescriptionSize;
@@ -163,13 +171,16 @@ AppleAudioVolumePropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
     Channel = *static_cast<PULONG>(PropertyRequest->Instance);
     if (PropertyRequest->Verb & KSPROPERTY_TYPE_GET)
     {
-        NTSTATUS Status = AppleAudioTopologyAdapter(PropertyRequest)->GetVolume(Channel, static_cast<PLONG>(PropertyRequest->Value));
+        NTSTATUS Status = AppleAudioTopologyAdapter(PropertyRequest)->GetVolume(AppleAudioTopologyEndpoint(PropertyRequest),
+                                                                                Channel,
+                                                                                static_cast<PLONG>(PropertyRequest->Value));
         if (NT_SUCCESS(Status))
             PropertyRequest->ValueSize = sizeof(LONG);
         return Status;
     }
     if (PropertyRequest->Verb & KSPROPERTY_TYPE_SET)
-        return AppleAudioTopologyAdapter(PropertyRequest)->SetVolume(Channel, *static_cast<PLONG>(PropertyRequest->Value));
+        return AppleAudioTopologyAdapter(PropertyRequest)->SetVolume(AppleAudioTopologyEndpoint(PropertyRequest), Channel,
+                                                                     *static_cast<PLONG>(PropertyRequest->Value));
     return STATUS_NOT_SUPPORTED;
 }
 
@@ -215,12 +226,14 @@ AppleAudioMutePropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
     }
     if (PropertyRequest->Verb & KSPROPERTY_TYPE_GET)
     {
-        *static_cast<PBOOL>(PropertyRequest->Value) = AppleAudioTopologyAdapter(PropertyRequest)->GetMute();
+        *static_cast<PBOOL>(PropertyRequest->Value) =
+            AppleAudioTopologyAdapter(PropertyRequest)->GetMute(AppleAudioTopologyEndpoint(PropertyRequest));
         PropertyRequest->ValueSize = sizeof(BOOL);
         return STATUS_SUCCESS;
     }
     if (PropertyRequest->Verb & KSPROPERTY_TYPE_SET)
-        return AppleAudioTopologyAdapter(PropertyRequest)->SetMute(*static_cast<PBOOL>(PropertyRequest->Value) != FALSE);
+        return AppleAudioTopologyAdapter(PropertyRequest)->SetMute(AppleAudioTopologyEndpoint(PropertyRequest),
+                                                                   *static_cast<PBOOL>(PropertyRequest->Value) != FALSE);
     return STATUS_NOT_SUPPORTED;
 }
 
@@ -320,6 +333,53 @@ AppleAudioJackDescription2PropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS NTAPI
+AppleAudioSpeakerJackDescriptionPropertyHandler(PPCPROPERTY_REQUEST PropertyRequest)
+{
+    PKSMULTIPLE_ITEM MultipleItem;
+    PKSJACK_DESCRIPTION JackDescription;
+    ULONG PinId, Count, RequiredSize;
+
+    if (!PropertyRequest || !PropertyRequest->MajorTarget || !PropertyRequest->Instance ||
+        PropertyRequest->InstanceSize < sizeof(ULONG))
+        return STATUS_INVALID_PARAMETER;
+    PinId = *static_cast<PULONG>(PropertyRequest->Instance);
+    if (PinId > APPLE_AUDIO_SPEAKER_TOPOLOGY_SPEAKER_PIN)
+        return STATUS_INVALID_PARAMETER;
+    if (PropertyRequest->Verb & KSPROPERTY_TYPE_BASICSUPPORT)
+        return AppleAudioBasicSupport(PropertyRequest, KSPROPERTY_TYPE_BASICSUPPORT | KSPROPERTY_TYPE_GET, VT_ILLEGAL,
+                                      sizeof(KSPROPERTY_DESCRIPTION), 0);
+    if (!(PropertyRequest->Verb & KSPROPERTY_TYPE_GET))
+        return STATUS_NOT_SUPPORTED;
+    Count = (PinId == APPLE_AUDIO_SPEAKER_TOPOLOGY_SPEAKER_PIN) ? 1 : 0;
+    RequiredSize = sizeof(KSMULTIPLE_ITEM) + Count * sizeof(KSJACK_DESCRIPTION);
+    if (!PropertyRequest->ValueSize)
+    {
+        PropertyRequest->ValueSize = RequiredSize;
+        return STATUS_BUFFER_OVERFLOW;
+    }
+    if (PropertyRequest->ValueSize < RequiredSize)
+    {
+        PropertyRequest->ValueSize = RequiredSize;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+    MultipleItem = static_cast<PKSMULTIPLE_ITEM>(PropertyRequest->Value);
+    MultipleItem->Size = RequiredSize;
+    MultipleItem->Count = Count;
+    PropertyRequest->ValueSize = RequiredSize;
+    if (!Count)
+        return STATUS_SUCCESS;
+    JackDescription = reinterpret_cast<PKSJACK_DESCRIPTION>(MultipleItem + 1);
+    RtlZeroMemory(JackDescription, sizeof(*JackDescription));
+    JackDescription->ChannelMapping = KSAUDIO_SPEAKER_STEREO;
+    JackDescription->ConnectionType = eConnTypeUnknown;
+    JackDescription->GeoLocation = eGeoLocFront;
+    JackDescription->GenLocation = eGenLocPrimaryBox;
+    JackDescription->PortConnection = ePortConnIntegratedDevice;
+    JackDescription->IsConnected = TRUE;
+    return STATUS_SUCCESS;
+}
+
 static PCPROPERTY_ITEM AppleAudioVolumeProperties[] =
 {
     {&KSPROPSETID_Audio, KSPROPERTY_AUDIO_VOLUMELEVEL,
@@ -370,6 +430,14 @@ static PCEVENT_ITEM AppleAudioJackEvents[] =
 DEFINE_PCAUTOMATION_TABLE_PROP(AppleAudioVolumeAutomation, AppleAudioVolumeProperties);
 DEFINE_PCAUTOMATION_TABLE_PROP(AppleAudioMuteAutomation, AppleAudioMuteProperties);
 DEFINE_PCAUTOMATION_TABLE_PROP_EVENT(AppleAudioJackAutomation, AppleAudioJackProperties, AppleAudioJackEvents);
+
+static PCPROPERTY_ITEM AppleAudioSpeakerJackProperties[] =
+{
+    {&KSPROPSETID_Jack, KSPROPERTY_JACK_DESCRIPTION, KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_BASICSUPPORT,
+     AppleAudioSpeakerJackDescriptionPropertyHandler}
+};
+
+DEFINE_PCAUTOMATION_TABLE_PROP(AppleAudioSpeakerJackAutomation, AppleAudioSpeakerJackProperties);
 
 static PCPIN_DESCRIPTOR AppleAudioWavePins[] =
 {
@@ -489,6 +557,82 @@ static PCFILTER_DESCRIPTOR AppleAudioTopologyFilterDescriptor =
     0, NULL
 };
 
+static PCPIN_DESCRIPTOR AppleAudioSpeakerWavePins[] =
+{
+    {
+        1, 1, 0, NULL,
+        {
+            0, NULL, 0, NULL,
+            RTL_NUMBER_OF(AppleAudioPcmDataRanges), AppleAudioPcmDataRanges,
+            KSPIN_DATAFLOW_IN, KSPIN_COMMUNICATION_SINK, &KSCATEGORY_AUDIO, NULL, {0}
+        }
+    },
+    {
+        0, 0, 0, NULL,
+        {
+            0, NULL, 0, NULL,
+            RTL_NUMBER_OF(AppleAudioBridgeDataRanges), AppleAudioBridgeDataRanges,
+            KSPIN_DATAFLOW_OUT, KSPIN_COMMUNICATION_NONE, &KSCATEGORY_AUDIO, NULL, {0}
+        }
+    }
+};
+
+static PCNODE_DESCRIPTOR AppleAudioSpeakerWaveNodes[] =
+{
+    {0, NULL, &KSNODETYPE_DAC, NULL}
+};
+
+static PCCONNECTION_DESCRIPTOR AppleAudioSpeakerWaveConnections[] =
+{
+    {PCFILTER_NODE, APPLE_AUDIO_WAVE_RENDER_PIN, 0, 1},
+    {0, 0, PCFILTER_NODE, 1}
+};
+
+static PCFILTER_DESCRIPTOR AppleAudioSpeakerWaveFilterDescriptor =
+{
+    0, NULL,
+    sizeof(PCPIN_DESCRIPTOR), RTL_NUMBER_OF(AppleAudioSpeakerWavePins), AppleAudioSpeakerWavePins,
+    sizeof(PCNODE_DESCRIPTOR), RTL_NUMBER_OF(AppleAudioSpeakerWaveNodes), AppleAudioSpeakerWaveNodes,
+    RTL_NUMBER_OF(AppleAudioSpeakerWaveConnections), AppleAudioSpeakerWaveConnections,
+    0, NULL
+};
+
+static PCPIN_DESCRIPTOR AppleAudioSpeakerTopologyPins[] =
+{
+    {
+        0, 0, 0, NULL,
+        {
+            0, NULL, 0, NULL,
+            RTL_NUMBER_OF(AppleAudioBridgeDataRanges), AppleAudioBridgeDataRanges,
+            KSPIN_DATAFLOW_IN, KSPIN_COMMUNICATION_NONE, &KSCATEGORY_AUDIO, NULL, {0}
+        }
+    },
+    {
+        0, 0, 0, NULL,
+        {
+            0, NULL, 0, NULL,
+            RTL_NUMBER_OF(AppleAudioBridgeDataRanges), AppleAudioBridgeDataRanges,
+            KSPIN_DATAFLOW_OUT, KSPIN_COMMUNICATION_NONE, &KSNODETYPE_SPEAKER, NULL, {0}
+        }
+    }
+};
+
+static PCCONNECTION_DESCRIPTOR AppleAudioSpeakerTopologyConnections[] =
+{
+    {PCFILTER_NODE, 0, 0, 1},
+    {0, 0, 1, 1},
+    {1, 0, PCFILTER_NODE, APPLE_AUDIO_SPEAKER_TOPOLOGY_SPEAKER_PIN}
+};
+
+static PCFILTER_DESCRIPTOR AppleAudioSpeakerTopologyFilterDescriptor =
+{
+    0, &AppleAudioSpeakerJackAutomation,
+    sizeof(PCPIN_DESCRIPTOR), RTL_NUMBER_OF(AppleAudioSpeakerTopologyPins), AppleAudioSpeakerTopologyPins,
+    sizeof(PCNODE_DESCRIPTOR), RTL_NUMBER_OF(AppleAudioTopologyNodes), AppleAudioTopologyNodes,
+    RTL_NUMBER_OF(AppleAudioSpeakerTopologyConnections), AppleAudioSpeakerTopologyConnections,
+    0, NULL
+};
+
 ULONG
 AppleAudioFormatSampleBits(PKSDATAFORMAT DataFormat, ULONG Channels)
 {
@@ -530,7 +674,8 @@ AppleAudioFormatSampleBits(PKSDATAFORMAT DataFormat, ULONG Channels)
     return Bits;
 }
 
-CAppleAudioTopology::CAppleAudioTopology(CAppleAudioAdapter *Adapter) : m_Adapter(Adapter), m_PortEvents(NULL)
+CAppleAudioTopology::CAppleAudioTopology(CAppleAudioAdapter *Adapter, ULONG Endpoint)
+    : m_Adapter(Adapter), m_PortEvents(NULL), m_Endpoint(Endpoint)
 {
     m_Adapter->AddRef();
 }
@@ -565,7 +710,8 @@ CAppleAudioTopology::GetDescription(PPCFILTER_DESCRIPTOR *Description)
 {
     if (!Description)
         return STATUS_INVALID_PARAMETER;
-    *Description = &AppleAudioTopologyFilterDescriptor;
+    *Description = (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS) ? &AppleAudioSpeakerTopologyFilterDescriptor :
+                   &AppleAudioTopologyFilterDescriptor;
     return STATUS_SUCCESS;
 }
 
@@ -598,6 +744,8 @@ CAppleAudioTopology::Init(PUNKNOWN UnknownAdapter, PRESOURCELIST ResourceList, P
     UNREFERENCED_PARAMETER(ResourceList);
     if (!Port)
         return STATUS_INVALID_PARAMETER;
+    if (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS)
+        return STATUS_SUCCESS;
     Status = Port->QueryInterface(IID_IPortEvents, reinterpret_cast<PVOID *>(&m_PortEvents));
     if (!NT_SUCCESS(Status))
         return Status;
@@ -617,7 +765,7 @@ CAppleAudioTopology::AddEventToEventList(PKSEVENT_ENTRY EventEntry)
         m_PortEvents->AddEventToEventList(EventEntry);
 }
 
-CAppleAudioWave::CAppleAudioWave(CAppleAudioAdapter *Adapter) : m_Adapter(Adapter)
+CAppleAudioWave::CAppleAudioWave(CAppleAudioAdapter *Adapter, ULONG Endpoint) : m_Adapter(Adapter), m_Endpoint(Endpoint)
 {
     m_Adapter->AddRef();
 }
@@ -650,7 +798,8 @@ CAppleAudioWave::GetDescription(PPCFILTER_DESCRIPTOR *Description)
 {
     if (!Description)
         return STATUS_INVALID_PARAMETER;
-    *Description = &AppleAudioWaveFilterDescriptor;
+    *Description = (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS) ? &AppleAudioSpeakerWaveFilterDescriptor :
+                   &AppleAudioWaveFilterDescriptor;
     return STATUS_SUCCESS;
 }
 
@@ -669,7 +818,8 @@ CAppleAudioWave::DataRangeIntersection(
     ULONG Channels;
 
     if (!ResultantFormatLength || !DataRange || !MatchingDataRange ||
-        (PinId != APPLE_AUDIO_WAVE_RENDER_PIN && PinId != APPLE_AUDIO_WAVE_CAPTURE_PIN))
+        (PinId != APPLE_AUDIO_WAVE_RENDER_PIN && PinId != APPLE_AUDIO_WAVE_CAPTURE_PIN) ||
+        (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS && PinId != APPLE_AUDIO_WAVE_RENDER_PIN))
         return STATUS_INVALID_PARAMETER;
     Channels = (PinId == APPLE_AUDIO_WAVE_RENDER_PIN) ? APPLE_AUDIO_CHANNELS : APPLE_AUDIO_CAPTURE_CHANNELS;
     if (!IsEqualGUIDAligned(DataRange->MajorFormat, KSDATAFORMAT_TYPE_AUDIO) ||
@@ -741,14 +891,18 @@ CAppleAudioWave::NewStream(
 
     if (!Stream || !PortStream)
         return STATUS_INVALID_PARAMETER;
-    if (Pin == APPLE_AUDIO_WAVE_RENDER_PIN && !Capture)
+    if (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS && Pin == APPLE_AUDIO_WAVE_RENDER_PIN && !Capture &&
+        m_Adapter->HasSpeakers())
+        Direction = APPLE_AUDIO_SPEAKERS;
+    else if (m_Endpoint == APPLE_AUDIO_ENDPOINT_SPEAKERS)
+        return STATUS_NOT_SUPPORTED;
+    else if (Pin == APPLE_AUDIO_WAVE_RENDER_PIN && !Capture)
         Direction = APPLE_AUDIO_RENDER;
     else if (Pin == APPLE_AUDIO_WAVE_CAPTURE_PIN && Capture && m_Adapter->HasCapture())
         Direction = APPLE_AUDIO_CAPTURE;
     else
         return STATUS_NOT_SUPPORTED;
-    SampleBits = AppleAudioFormatSampleBits(DataFormat, Direction == APPLE_AUDIO_RENDER ? APPLE_AUDIO_CHANNELS :
-                                                                                          APPLE_AUDIO_CAPTURE_CHANNELS);
+    SampleBits = AppleAudioFormatSampleBits(DataFormat, APPLE_AUDIO_STREAM_CHANNELS(Direction));
     if (!SampleBits)
         return STATUS_NOT_SUPPORTED;
     if (!m_Adapter->ClaimStream(Direction))
@@ -781,13 +935,13 @@ CAppleAudioWave::GetDeviceDescription(PDEVICE_DESCRIPTION DeviceDescription)
 }
 
 NTSTATUS
-AppleAudioCreateTopology(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter)
+AppleAudioCreateTopology(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter, ULONG Endpoint)
 {
     CAppleAudioTopology *Miniport;
 
-    if (!Unknown || !Adapter)
+    if (!Unknown || !Adapter || Endpoint >= APPLE_AUDIO_ENDPOINTS)
         return STATUS_INVALID_PARAMETER;
-    Miniport = new (NonPagedPool, TAG_APPLE_AUDIO) CAppleAudioTopology(Adapter);
+    Miniport = new (NonPagedPool, TAG_APPLE_AUDIO) CAppleAudioTopology(Adapter, Endpoint);
     if (!Miniport)
         return STATUS_INSUFFICIENT_RESOURCES;
     Miniport->AddRef();
@@ -796,13 +950,13 @@ AppleAudioCreateTopology(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter)
 }
 
 NTSTATUS
-AppleAudioCreateWave(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter)
+AppleAudioCreateWave(PUNKNOWN *Unknown, CAppleAudioAdapter *Adapter, ULONG Endpoint)
 {
     CAppleAudioWave *Miniport;
 
-    if (!Unknown || !Adapter)
+    if (!Unknown || !Adapter || Endpoint >= APPLE_AUDIO_ENDPOINTS)
         return STATUS_INVALID_PARAMETER;
-    Miniport = new (NonPagedPool, TAG_APPLE_AUDIO) CAppleAudioWave(Adapter);
+    Miniport = new (NonPagedPool, TAG_APPLE_AUDIO) CAppleAudioWave(Adapter, Endpoint);
     if (!Miniport)
         return STATUS_INSUFFICIENT_RESOURCES;
     Miniport->AddRef();
