@@ -718,7 +718,7 @@
 @ stdcall SystemFunction040(ptr long long) # RtlEncryptMemory
 @ stdcall SystemFunction041(ptr long long) # RtlDecryptMemory
 @ stdcall -version=0x502 TraceEvent(double ptr) ntdll.EtwTraceEvent
-@ stdcall -version=0x600+ TraceEvent(double ptr) EtwTraceEvent
+@ stdcall -version=0x600+ TraceEvent(int64 ptr) ntdll.EtwLogTraceEvent
 @ stdcall TraceEventInstance(double ptr ptr ptr) ntdll.EtwTraceEventInstance
 @ varargs TraceMessage() ntdll.EtwTraceMessage
 @ stdcall TraceMessageVa() ntdll.EtwTraceMessageVa

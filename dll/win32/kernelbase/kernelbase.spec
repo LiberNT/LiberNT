@@ -1320,7 +1320,7 @@
 @ stdcall TlsFree(long) kernel32.TlsFree
 @ stdcall -norelay TlsGetValue(long) kernel32.TlsGetValue
 @ stdcall -norelay TlsSetValue(long ptr) kernel32.TlsSetValue
-@ stdcall TraceEvent(double ptr) advapi32.TraceEvent
+@ stdcall TraceEvent(int64 ptr) ntdll.EtwLogTraceEvent
 @ varargs TraceMessage(int64 long ptr long) ntdll.EtwTraceMessage
 @ stdcall TraceMessageVa(int64 long ptr long ptr) ntdll.EtwTraceMessageVa
 @ stdcall TransactNamedPipe(long ptr long ptr long ptr ptr) kernel32.TransactNamedPipe

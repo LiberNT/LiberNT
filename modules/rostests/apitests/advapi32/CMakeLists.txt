@@ -40,6 +40,7 @@ list(APPEND SOURCE
     ServiceNetwork.c
     TriggerInfo.c
     TokenBnoIsolation.c
+    TraceEvents.c
     TraceGuids.c
     UserHiveAccess.c
     svchlp.c)

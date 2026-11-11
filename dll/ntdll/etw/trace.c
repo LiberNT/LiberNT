@@ -21,12 +21,14 @@ typedef struct _ETW_CLASSIC_PROVIDER
     GUID ControlGuid;
     WMIDPREQUEST Callback;
     PVOID Context;
+    ULONG GuidCount;
     GUID ClassGuids[ANYSIZE_ARRAY];
 } ETW_CLASSIC_PROVIDER;
 
 static RTL_SRWLOCK EtwpClassicLock = RTL_SRWLOCK_INIT;
 static LIST_ENTRY EtwpClassicProviders = { &EtwpClassicProviders, &EtwpClassicProviders };
 static TRACEHANDLE EtwpNextClassicHandle;
+static LONG EtwpNextInstanceId;
 
 static ULONG
 EtwpRegisterClassicProvider(WMIDPREQUEST Callback, PVOID Context, LPCGUID ControlGuid,
@@ -53,6 +55,7 @@ EtwpRegisterClassicProvider(WMIDPREQUEST Callback, PVOID Context, LPCGUID Contro
     Provider->ControlGuid = *ControlGuid;
     Provider->Callback = Callback;
     Provider->Context = Context;
+    Provider->GuidCount = GuidCount;
     for (i = 0; i < GuidCount; ++i)
         Provider->ClassGuids[i] = *TraceGuidReg[i].Guid;
 
@@ -79,19 +82,124 @@ EtwpRegisterClassicProvider(WMIDPREQUEST Callback, PVOID Context, LPCGUID Contro
     return ERROR_SUCCESS;
 }
 
-/*
- * @unimplemented
- */
+static BOOLEAN
+EtwpFindClassGuid(HANDLE RegHandle, GUID *Guid)
+{
+    ETW_CLASSIC_PROVIDER *Provider;
+    PLIST_ENTRY Entry;
+    BOOLEAN Found = FALSE;
+    ULONG i;
+
+    RtlAcquireSRWLockShared(&EtwpClassicLock);
+    for (Entry = EtwpClassicProviders.Flink; !Found && Entry != &EtwpClassicProviders; Entry = Entry->Flink)
+    {
+        Provider = CONTAINING_RECORD(Entry, ETW_CLASSIC_PROVIDER, Entry);
+        for (i = 0; !Found && i < Provider->GuidCount; ++i)
+        {
+            if (RegHandle == (HANDLE)&Provider->ClassGuids[i])
+            {
+                *Guid = Provider->ClassGuids[i];
+                Found = TRUE;
+            }
+        }
+    }
+    RtlReleaseSRWLockShared(&EtwpClassicLock);
+    return Found;
+}
+
+static ULONG
+EtwpLogClassicEvent(TRACEHANDLE SessionHandle, PEVENT_TRACE_HEADER Header)
+{
+    return RtlNtStatusToDosError(NtTraceEvent((HANDLE)(ULONG_PTR)SessionHandle,
+                                              ETW_NT_FLAGS_TRACE_HEADER,
+                                              Header->Size,
+                                              Header));
+}
+
+ULONG
+NTAPI
+EtwTraceMessageVa(
+    TRACEHANDLE LoggerHandle,
+    ULONG MessageFlags,
+    LPCGUID MessageGuid,
+    USHORT MessageNumber,
+    va_list MessageArgList)
+{
+    ULONG64 StackBuffer[64];
+    PEVENT_TRACE_HEADER Header;
+    va_list Arguments;
+    PUCHAR Data;
+    PVOID Argument;
+    SIZE_T Length, Total = sizeof(EVENT_TRACE_HEADER);
+    ULONG Error = ERROR_SUCCESS;
+
+    if (!LoggerHandle)
+        return ERROR_INVALID_HANDLE;
+    if ((MessageFlags & TRACE_MESSAGE_GUID) && (MessageFlags & TRACE_MESSAGE_COMPONENTID))
+        return ERROR_INVALID_PARAMETER;
+    if (!MessageGuid)
+        return ERROR_INVALID_PARAMETER;
+
+    va_copy(Arguments, MessageArgList);
+    while (!Error && (Argument = va_arg(Arguments, PVOID)) != NULL)
+    {
+        Length = va_arg(Arguments, SIZE_T);
+        if (Length > MAXUSHORT - Total)
+            Error = ERROR_MORE_DATA;
+        else
+            Total += Length;
+    }
+    va_end(Arguments);
+    if (Error)
+        return Error;
+
+    if (Total <= sizeof(StackBuffer))
+        Header = (PEVENT_TRACE_HEADER)StackBuffer;
+    else
+        Header = RtlAllocateHeap(RtlGetProcessHeap(), 0, Total);
+    if (!Header)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    RtlZeroMemory(Header, sizeof(*Header));
+    Header->Size = (USHORT)Total;
+    Header->Flags = WNODE_FLAG_TRACED_GUID;
+    Header->Guid = *MessageGuid;
+    Header->Class.Type = (UCHAR)MessageNumber;
+    Header->Class.Version = MessageNumber;
+
+    Data = (PUCHAR)(Header + 1);
+    va_copy(Arguments, MessageArgList);
+    while ((Argument = va_arg(Arguments, PVOID)) != NULL)
+    {
+        Length = va_arg(Arguments, SIZE_T);
+        RtlCopyMemory(Data, Argument, Length);
+        Data += Length;
+    }
+    va_end(Arguments);
+
+    /* FIXME: logged as a classic event like WmiTraceMessageVa, not in the message record form with the MessageFlags prefix */
+    Error = EtwpLogClassicEvent(LoggerHandle, Header);
+
+    if (Header != (PEVENT_TRACE_HEADER)StackBuffer)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Header);
+    return Error;
+}
+
 ULONG CDECL
 EtwTraceMessage(
-    TRACEHANDLE  SessionHandle,
-    ULONG        MessageFlags,
-    LPCGUID      MessageGuid,
-    USHORT       MessageNumber,
+    TRACEHANDLE LoggerHandle,
+    ULONG MessageFlags,
+    LPCGUID MessageGuid,
+    ULONG MessageNumber,
     ...)
 {
-    FIXME("TraceMessage()\n");
-    return ERROR_SUCCESS;
+    va_list Arguments;
+    ULONG Error;
+
+    va_start(Arguments, MessageNumber);
+    Error = EtwTraceMessageVa(LoggerHandle, MessageFlags, MessageGuid, (USHORT)MessageNumber, Arguments);
+    va_end(Arguments);
+    return Error;
 }
 
 TRACEHANDLE
@@ -100,10 +208,42 @@ EtwGetTraceLoggerHandle(
     PVOID Buffer
 )
 {
-    FIXME("EtwGetTraceLoggerHandle stub()\n");
-    return (TRACEHANDLE)-1;
+    PWNODE_HEADER Wnode = Buffer;
+    USHORT LoggerId;
+
+    if (!Wnode)
+    {
+        RtlSetLastWin32Error(ERROR_INVALID_PARAMETER);
+        return (TRACEHANDLE)(LONG_PTR)INVALID_HANDLE_VALUE;
+    }
+
+    LoggerId = (USHORT)Wnode->HistoricalContext;
+    if (!LoggerId || LoggerId >= MAXLOGGERS)
+    {
+        RtlSetLastWin32Error(ERROR_INVALID_HANDLE);
+        return (TRACEHANDLE)(LONG_PTR)INVALID_HANDLE_VALUE;
+    }
+
+    return Wnode->HistoricalContext;
 }
 
+ULONG
+NTAPI
+EtwLogTraceEvent(
+    TRACEHANDLE SessionHandle,
+    PEVENT_TRACE_HEADER EventTrace
+)
+{
+    if (!SessionHandle || !EventTrace || EventTrace->Size < sizeof(EVENT_TRACE_HEADER))
+        return ERROR_INVALID_PARAMETER;
+    if ((EventTrace->Flags & WNODE_FLAG_USE_MOF_PTR) &&
+        (EventTrace->Size - sizeof(EVENT_TRACE_HEADER)) / sizeof(MOF_FIELD) > MAX_MOF_FIELDS)
+        return ERROR_INVALID_PARAMETER;
+    if (!(EventTrace->Flags & WNODE_FLAG_TRACED_GUID))
+        return ERROR_INVALID_FLAG_NUMBER;
+
+    return EtwpLogClassicEvent(SessionHandle, EventTrace);
+}
 
 ULONG
 NTAPI
@@ -112,13 +252,81 @@ EtwTraceEvent(
     PEVENT_TRACE_HEADER EventTrace
 )
 {
-    if (!EventTrace || EventTrace->Size < sizeof(EVENT_TRACE_HEADER))
+    return EtwLogTraceEvent(SessionHandle, EventTrace);
+}
+
+ULONG
+NTAPI
+EtwTraceEventInstance(
+    TRACEHANDLE SessionHandle,
+    PEVENT_INSTANCE_HEADER EventTrace,
+    PEVENT_INSTANCE_INFO InstInfo,
+    PEVENT_INSTANCE_INFO ParentInstInfo
+)
+{
+    struct
+    {
+        EVENT_TRACE_HEADER Header;
+        MOF_FIELD Fields[MAX_MOF_FIELDS];
+    } Event;
+    ULONG DataLength, Count = 0;
+
+    UNREFERENCED_PARAMETER(ParentInstInfo);
+
+    if (!SessionHandle || !EventTrace || !InstInfo || !InstInfo->RegHandle ||
+        EventTrace->Size < sizeof(EVENT_INSTANCE_HEADER))
+        return ERROR_INVALID_PARAMETER;
+    DataLength = EventTrace->Size - sizeof(EVENT_INSTANCE_HEADER);
+    if ((EventTrace->Flags & WNODE_FLAG_USE_MOF_PTR) && DataLength / sizeof(MOF_FIELD) > MAX_MOF_FIELDS)
+        return ERROR_INVALID_PARAMETER;
+    if (!(EventTrace->Flags & WNODE_FLAG_TRACED_GUID))
+        return ERROR_INVALID_FLAGS;
+
+    RtlZeroMemory(&Event.Header, sizeof(Event.Header));
+    if (!EtwpFindClassGuid(InstInfo->RegHandle, &Event.Header.Guid))
+        return ERROR_INVALID_HANDLE;
+
+    if (EventTrace->Flags & WNODE_FLAG_USE_MOF_PTR)
+    {
+        Count = DataLength / sizeof(MOF_FIELD);
+        RtlCopyMemory(Event.Fields, EventTrace + 1, Count * sizeof(MOF_FIELD));
+    }
+    else if (DataLength)
+    {
+        Event.Fields[0].DataPtr = (ULONG64)(ULONG_PTR)(EventTrace + 1);
+        Event.Fields[0].Length = DataLength;
+        Event.Fields[0].DataType = 0;
+        Count = 1;
+    }
+
+    Event.Header.Size = (USHORT)(sizeof(Event.Header) + Count * sizeof(MOF_FIELD));
+    Event.Header.Version = EventTrace->Version;
+    Event.Header.Flags = WNODE_FLAG_TRACED_GUID | WNODE_FLAG_USE_MOF_PTR;
+
+    /* FIXME: the instance, parent instance and parent class are not recorded: no instance record form exists yet */
+    return EtwpLogClassicEvent(SessionHandle, &Event.Header);
+}
+
+ULONG
+NTAPI
+EtwCreateTraceInstanceId(
+    HANDLE RegHandle,
+    PEVENT_INSTANCE_INFO InstInfo
+)
+{
+    LONG InstanceId;
+
+    if (!RegHandle || !InstInfo)
         return ERROR_INVALID_PARAMETER;
 
-    return RtlNtStatusToDosError(NtTraceEvent((HANDLE)(ULONG_PTR)SessionHandle,
-                                              ETW_NT_FLAGS_TRACE_HEADER,
-                                              EventTrace->Size,
-                                              EventTrace));
+    do
+    {
+        InstanceId = InterlockedIncrement(&EtwpNextInstanceId);
+    } while (!InstanceId);
+
+    InstInfo->RegHandle = RegHandle;
+    InstInfo->InstanceId = (ULONG)InstanceId;
+    return ERROR_SUCCESS;
 }
 
 ULONG
