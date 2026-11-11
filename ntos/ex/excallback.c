@@ -54,6 +54,7 @@ typedef struct _EXP_PROCESSOR_CHANGE_REGISTRATION
 } EXP_PROCESSOR_CHANGE_REGISTRATION, *PEXP_PROCESSOR_CHANGE_REGISTRATION;
 
 static LIST_ENTRY ExpProcessorChangeList;
+static FAST_MUTEX ExpProcessorChangeMutex;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -281,6 +282,7 @@ ExpInitializeCallbacks(VOID)
     KeInitializeEvent(&ExpCallbackEvent, NotificationEvent, FALSE);
     KeInitializeSpinLock(&ExpProcessorAddLock);
     InitializeListHead(&ExpProcessorChangeList);
+    ExInitializeFastMutex(&ExpProcessorChangeMutex);
 
     return TRUE;
 }
@@ -566,6 +568,25 @@ ExNotifyCallback(
 
 /* PROCESSOR CHANGE NOTIFICATIONS *********************************************/
 
+static
+VOID
+ExpNotifyProcessorChange(
+    _In_ PPROCESSOR_CALLBACK_FUNCTION CallbackFunction,
+    _In_opt_ PVOID CallbackContext,
+    _Inout_ PKE_PROCESSOR_CHANGE_NOTIFY_CONTEXT Context,
+    _In_ ULONG Index,
+    _Inout_ PNTSTATUS OperationStatus)
+{
+    NTSTATUS Status;
+
+    Context->NtNumber = Index;
+    Status = KeGetProcessorNumberFromIndex(Index, &Context->ProcNumber);
+    ASSERT(NT_SUCCESS(Status));
+    UNREFERENCED_PARAMETER(Status);
+
+    CallbackFunction(CallbackContext, Context, OperationStatus);
+}
+
 PVOID
 NTAPI
 KeRegisterProcessorChangeCallback(
@@ -575,8 +596,10 @@ KeRegisterProcessorChangeCallback(
 {
     PEXP_PROCESSOR_CHANGE_REGISTRATION Registration;
     KE_PROCESSOR_CHANGE_NOTIFY_CONTEXT Context;
-    NTSTATUS Status = STATUS_SUCCESS;
+    NTSTATUS OperationStatus = STATUS_SUCCESS;
+    BOOLEAN Refused;
     KIRQL OldIrql;
+    ULONG Started;
     ULONG Index;
 
     PAGED_CODE();
@@ -593,28 +616,39 @@ KeRegisterProcessorChangeCallback(
     Registration->Function = CallbackFunction;
     Registration->Context = CallbackContext;
 
-    /*
-     * A caller that asks to be told about the processors already running is
-     * told about each of them before the registration is of any further use.
-     */
+    /* The callbacks of a registration run at APC_LEVEL, one registration at a time */
+    ExAcquireFastMutex(&ExpProcessorChangeMutex);
+
     if (Flags & KE_PROCESSOR_CHANGE_ADD_EXISTING)
     {
-        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        RtlZeroMemory(&Context, sizeof(Context));
+
+        for (Started = 0; Started < (ULONG)KeNumberProcessors; Started++)
         {
-            Context.State = KeProcessorAddCompleteNotify;
-            Context.NtNumber = Index;
-            Context.ProcNumber.Group = 0;
-            Context.ProcNumber.Number = (UCHAR)Index;
-            Context.ProcNumber.Reserved = 0;
+            Context.State = KeProcessorAddStartNotify;
             Context.Status = STATUS_SUCCESS;
-
-            CallbackFunction(CallbackContext, &Context, &Status);
-
-            if (!NT_SUCCESS(Status))
+            OperationStatus = STATUS_SUCCESS;
+            ExpNotifyProcessorChange(CallbackFunction, CallbackContext, &Context, Started, &OperationStatus);
+            if (!NT_SUCCESS(OperationStatus))
             {
-                ExFreePoolWithTag(Registration, EXP_CALLBACK_TAG);
-                return NULL;
+                break;
             }
+        }
+
+        Refused = !NT_SUCCESS(OperationStatus);
+        Context.State = Refused ? KeProcessorAddFailureNotify : KeProcessorAddCompleteNotify;
+        Context.Status = OperationStatus;
+
+        for (Index = 0; Index < Started; Index++)
+        {
+            ExpNotifyProcessorChange(CallbackFunction, CallbackContext, &Context, Index, &OperationStatus);
+        }
+
+        if (Refused)
+        {
+            ExReleaseFastMutex(&ExpProcessorChangeMutex);
+            ExFreePoolWithTag(Registration, EXP_CALLBACK_TAG);
+            return NULL;
         }
     }
 
@@ -622,6 +656,7 @@ KeRegisterProcessorChangeCallback(
     InsertTailList(&ExpProcessorChangeList, &Registration->Link);
     KeReleaseSpinLock(&ExpProcessorAddLock, OldIrql);
 
+    ExReleaseFastMutex(&ExpProcessorChangeMutex);
     return Registration;
 }
 
