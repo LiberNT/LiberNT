@@ -110,6 +110,12 @@ FstubTransfer(
 
     Irp->Flags |= IRP_NOCACHE;
 
+    /* The partition table has to be readable while a removable disk waits for its volume to be verified */
+    if (MajorFunction == IRP_MJ_READ)
+    {
+        IoGetNextIrpStackLocation(Irp)->Flags |= SL_OVERRIDE_VERIFY_VOLUME;
+    }
+
     return FstubSendIrp(Irp, Disk->DeviceObject, &Event, &IoStatus);
 }
 

@@ -183,6 +183,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCloseIrqlKM.c
     ntos_io/IoContainerId.c
     ntos_io/IoCreateDeviceSecure.c
+    ntos_io/IoReadPartitionTable.c
     ntos_io/IoCreateFile.c
     ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCreateSystemThread.c
