@@ -621,6 +621,14 @@ PspAssignProcessToJob(
     _In_ PEJOB Job
 );
 
+NTSTATUS
+NTAPI
+PspInheritParentJob(
+    _In_ PEPROCESS Process,
+    _In_opt_ PEPROCESS Parent,
+    _In_ ULONG Flags
+);
+
 VOID
 NTAPI
 PspExitProcessFromJob(

@@ -769,6 +769,7 @@ PspCreateProcessFromOperands(
     }
 
     Status = PspInsertProcess(Process);
+    if (NT_SUCCESS(Status)) Status = PspInheritParentJob(Process, Operands->Parent, Flags);
     if (!NT_SUCCESS(Status))
     {
         PspUnlinkProcess(Process);

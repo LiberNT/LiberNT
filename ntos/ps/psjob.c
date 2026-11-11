@@ -399,6 +399,40 @@ PspAssignProcessToJob(
 }
 
 /*
+ * A new process starts in the job of the process that made it, unless that
+ * job lets its processes leave: always when breakaway is silent, or when the
+ * creator asked to break away and the job allows it. Asking to break away
+ * from a job that does not allow it fails the creation.
+ */
+NTSTATUS
+NTAPI
+PspInheritParentJob(
+    _In_ PEPROCESS Process,
+    _In_opt_ PEPROCESS Parent,
+    _In_ ULONG Flags)
+{
+    PEJOB Job;
+
+    PAGED_CODE();
+
+    Job = (Parent != NULL) ? Parent->Job : NULL;
+    if (Job == NULL) return STATUS_SUCCESS;
+
+    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK) != 0)
+        return STATUS_SUCCESS;
+
+    if ((Flags & PROCESS_CREATE_FLAGS_BREAKAWAY) != 0)
+    {
+        if ((Job->LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK) != 0)
+            return STATUS_SUCCESS;
+
+        return STATUS_ACCESS_DENIED;
+    }
+
+    return PspAssignProcessToJob(Process, Job);
+}
+
+/*
  * A process in a job is exiting. The job's account is brought up to date
  * while the process can still be read, and whoever watches the job is told.
  */
@@ -495,6 +529,10 @@ PspRemoveProcessFromJob(
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
     RemoveEntryList(&Process->JobLinks);
+
+    /* A process whose creation failed never exited, so it still counts as active */
+    if (!Process->AccountingFolded && Job->ActiveProcesses != 0) Job->ActiveProcesses--;
+
     Process->Job = NULL;
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
