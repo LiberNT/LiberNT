@@ -22,6 +22,7 @@ struct HTMLScriptElement {
     HTMLElement element;
 
     IHTMLScriptElement IHTMLScriptElement_iface;
+    IHTMLScriptElement2 IHTMLScriptElement2_iface;
 
     nsIDOMHTMLScriptElement *nsscript;
     BOOL parsed;

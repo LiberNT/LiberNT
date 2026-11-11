@@ -5560,7 +5560,7 @@ sync_test("prototype props", function() {
         ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",10], "name", "nameProp", "naturalHeight", "naturalWidth",
         "protocol", "src", "start", "useMap", "vrml", "vspace", "width"
     ], [
-        ["crossOrigin",11], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "longDesc", ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11],
+        ["crossOrigin",11], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11],
         ["msPlayToPrimary",10], "naturalHeight", "naturalWidth"
     ]);
     check(HTMLInputElement, [
@@ -5571,14 +5571,14 @@ sync_test("prototype props", function() {
         "size", "src", "start", "status", ["step",10], ["stepDown",10], ["stepUp",10], "type", "useMap", ["validationMessage",10], ["validity",10], "value",
         ["valueAsNumber",10], "vrml", "vspace", "width", ["willValidate",10]
     ], [
-        "accept", ["autocomplete",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["files",10],["list",10], ["max",10], ["min",10], ["multiple",10],
-        ["pattern",10], ["placeholder",10], ["readyState",11], ["required",10], ["step",10], ["stepDown",10], ["stepUp",10], "useMap", ["valueAsNumber",10]
+        ["autocomplete",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["files",10],["list",10], ["max",10], ["min",10], ["multiple",10],
+        ["pattern",10], ["placeholder",10], ["readyState",11], ["required",10], ["step",10], ["stepDown",10], ["stepUp",10], ["valueAsNumber",10]
     ]);
     check(HTMLLabelElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "htmlFor" ], [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form" ]);
     check(HTMLLIElement, [ "type", "value" ]);
     check(HTMLLinkElement, [ "charset", "href", "hreflang", "media", "rel", "rev", "sheet", ["styleSheet",9,10], "target", "type" ],
-                           [ "charset", "hreflang", ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11], "target" ]);
-    check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ], [ "scheme" ]);
+                           [ ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11] ]);
+    check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ]);
     check(HTMLModElement, [ "cite", "dateTime" ]);
     check(HTMLMenuElement, [ "compact", "type" ]);
     check(HTMLOListElement, [ "compact", "start", "type" ]);
@@ -5588,17 +5588,17 @@ sync_test("prototype props", function() {
         ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], "name", "namedRecordset", "object", ["readyState",11], "recordset", ["setCustomValidity",10],
         "standby", "type", "useMap", ["validationMessage",10], ["validity",10], "vspace", "width", ["willValidate",10]
     ], [
-        "alt", "archive", "border", "contentDocument", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "declare", "getSVGDocument", ["msPlayToDisabled",11],
-        ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["onreadystatechange",11], ["readyState",11], "standby", "useMap"
+        "contentDocument", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "getSVGDocument", ["msPlayToDisabled",11],
+        ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["onreadystatechange",11], ["readyState",11]
     ]);
     check(HTMLOptionElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultSelected", "form", "index", "label", "selected", "text", "value" ],
-                             [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "label" ]);
+                             [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10] ]);
     check(HTMLParagraphElement, [ "align", "clear" ]);
     check(HTMLPhraseElement, [ "cite", "dateTime" ]);
     check(HTMLPreElement, [ "cite", "clear", "width" ]);
     check(HTMLQuoteElement, [ "cite", "dateTime" ]);
     check(HTMLUListElement, [ "compact", "type" ]);
-    check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], "charset", ["readyState",11] ], [ "crossOrigin" ]);
+    check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], ["readyState",11] ], [ "crossOrigin" ]);
     check(HTMLSelectElement, [
         "add", ["autofocus",10], ["checkValidity",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "item", "length",
         "multiple", "name", "namedItem", "options", "remove", ["required",10], "selectedIndex", ["setCustomValidity",10], "size", "tags",

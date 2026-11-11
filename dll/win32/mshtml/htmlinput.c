@@ -38,6 +38,7 @@ struct HTMLInputElement {
     HTMLElement element;
 
     IHTMLInputElement IHTMLInputElement_iface;
+    IHTMLInputElement2 IHTMLInputElement2_iface;
     IHTMLInputTextElement IHTMLInputTextElement_iface;
     IHTMLInputTextElement2 IHTMLInputTextElement2_iface;
     IWineHTMLInputPrivate IWineHTMLInputPrivate_iface;
@@ -1405,6 +1406,64 @@ static BOOL HTMLInputElement_is_text_edit(HTMLDOMNode *iface)
     return ret;
 }
 
+static inline HTMLInputElement *impl_from_IHTMLInputElement2(IHTMLInputElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLInputElement, IHTMLInputElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLInputElement2, IHTMLInputElement2,
+                      impl_from_IHTMLInputElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLInputElement2_put_accept(IHTMLInputElement2 *iface, BSTR v)
+{
+    HTMLInputElement *This = impl_from_IHTMLInputElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"accept", v);
+}
+
+static HRESULT WINAPI HTMLInputElement2_get_accept(IHTMLInputElement2 *iface, BSTR *p)
+{
+    HTMLInputElement *This = impl_from_IHTMLInputElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"accept", p);
+}
+
+static HRESULT WINAPI HTMLInputElement2_put_useMap(IHTMLInputElement2 *iface, BSTR v)
+{
+    HTMLInputElement *This = impl_from_IHTMLInputElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"useMap", v);
+}
+
+static HRESULT WINAPI HTMLInputElement2_get_useMap(IHTMLInputElement2 *iface, BSTR *p)
+{
+    HTMLInputElement *This = impl_from_IHTMLInputElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"useMap", p);
+}
+
+static const IHTMLInputElement2Vtbl HTMLInputElement2Vtbl = {
+    HTMLInputElement2_QueryInterface,
+    HTMLInputElement2_AddRef,
+    HTMLInputElement2_Release,
+    HTMLInputElement2_GetTypeInfoCount,
+    HTMLInputElement2_GetTypeInfo,
+    HTMLInputElement2_GetIDsOfNames,
+    HTMLInputElement2_Invoke,
+    HTMLInputElement2_put_accept,
+    HTMLInputElement2_get_accept,
+    HTMLInputElement2_put_useMap,
+    HTMLInputElement2_get_useMap
+};
+
 static inline HTMLInputElement *input_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLInputElement, element.node.event_target.dispex);
@@ -1416,6 +1475,8 @@ static void *HTMLInputElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLInputElement, riid))
         return &This->IHTMLInputElement_iface;
+    if(IsEqualGUID(&IID_IHTMLInputElement2, riid))
+        return &This->IHTMLInputElement2_iface;
     if(IsEqualGUID(&IID_IHTMLInputTextElement, riid))
         return &This->IHTMLInputTextElement_iface;
     if(IsEqualGUID(&IID_IHTMLInputTextElement2, riid))
@@ -1471,6 +1532,7 @@ static void HTMLInputElement_init_dispex_info(dispex_data_t *info, compat_mode_t
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLInputElement_tid, input_hooks);
+    dispex_info_add_interface(info, IHTMLInputElement2_tid, NULL);
     dispex_info_add_interface(info, IHTMLInputTextElement2_tid, inputtext_hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLInputPrivate_tid, NULL);
@@ -1510,6 +1572,7 @@ HRESULT HTMLInputElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HT
         return E_OUTOFMEMORY;
 
     ret->IHTMLInputElement_iface.lpVtbl = &HTMLInputElementVtbl;
+    ret->IHTMLInputElement2_iface.lpVtbl = &HTMLInputElement2Vtbl;
     ret->IHTMLInputTextElement_iface.lpVtbl = &HTMLInputTextElementVtbl;
     ret->IHTMLInputTextElement2_iface.lpVtbl = &HTMLInputTextElement2Vtbl;
     ret->IWineHTMLInputPrivate_iface.lpVtbl = &WineHTMLInputPrivateVtbl;

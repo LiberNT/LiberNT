@@ -37,6 +37,7 @@ struct HTMLOptionElement {
     HTMLElement element;
 
     IHTMLOptionElement IHTMLOptionElement_iface;
+    IHTMLOptionElement3 IHTMLOptionElement3_iface;
 
     nsIDOMHTMLOptionElement *nsoption;
 };
@@ -291,6 +292,44 @@ static const IHTMLOptionElementVtbl HTMLOptionElementVtbl = {
     HTMLOptionElement_get_form
 };
 
+static inline HTMLOptionElement *impl_from_IHTMLOptionElement3(IHTMLOptionElement3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLOptionElement, IHTMLOptionElement3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLOptionElement3, IHTMLOptionElement3,
+                      impl_from_IHTMLOptionElement3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLOptionElement3_put_label(IHTMLOptionElement3 *iface, BSTR v)
+{
+    HTMLOptionElement *This = impl_from_IHTMLOptionElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"label", v);
+}
+
+static HRESULT WINAPI HTMLOptionElement3_get_label(IHTMLOptionElement3 *iface, BSTR *p)
+{
+    HTMLOptionElement *This = impl_from_IHTMLOptionElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"label", p);
+}
+
+static const IHTMLOptionElement3Vtbl HTMLOptionElement3Vtbl = {
+    HTMLOptionElement3_QueryInterface,
+    HTMLOptionElement3_AddRef,
+    HTMLOptionElement3_Release,
+    HTMLOptionElement3_GetTypeInfoCount,
+    HTMLOptionElement3_GetTypeInfo,
+    HTMLOptionElement3_GetIDsOfNames,
+    HTMLOptionElement3_Invoke,
+    HTMLOptionElement3_put_label,
+    HTMLOptionElement3_get_label
+};
+
 static inline HTMLOptionElement *HTMLOptionElement_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLOptionElement, element.node.event_target.dispex);
@@ -302,6 +341,8 @@ static void *HTMLOptionElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLOptionElement, riid))
         return &This->IHTMLOptionElement_iface;
+    if(IsEqualGUID(&IID_IHTMLOptionElement3, riid))
+        return &This->IHTMLOptionElement3_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -356,6 +397,7 @@ static void HTMLOptionElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLOptionElement_tid, option_hooks);
+    dispex_info_add_interface(info, IHTMLOptionElement3_tid, NULL);
     if(mode < COMPAT_MODE_IE11)
         dispex_info_add_interface(info, IHTMLDatabinding_tid, mode >= COMPAT_MODE_IE9 ? databinding_ie9_hooks : NULL);
 
@@ -392,6 +434,7 @@ HRESULT HTMLOptionElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, H
         return E_OUTOFMEMORY;
 
     ret->IHTMLOptionElement_iface.lpVtbl = &HTMLOptionElementVtbl;
+    ret->IHTMLOptionElement3_iface.lpVtbl = &HTMLOptionElement3Vtbl;
     ret->element.node.vtbl = &HTMLOptionElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLOptionElement_dispex);

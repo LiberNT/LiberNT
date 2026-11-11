@@ -14050,6 +14050,24 @@ interface IHTMLImgElement : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLImgElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f826-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLImgElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLIMGELEMENT2_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLIMGELEMENT2_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLImageElementFactory interface
  */
 [
@@ -14225,7 +14243,7 @@ coclass HTMLImg
     WINE_HTMLDATAELEMENT_INTERFACES;
     interface IHTMLControlElement;
     interface IHTMLImgElement;
- /* interface IHTMLImgElement2; */
+    interface IHTMLImgElement2;
  /* interface IHTMLImgElement3; */
  /* interface IHTMLImgElement4; */
  /* interface IHTMLMSImgElement; */
@@ -16252,6 +16270,30 @@ interface IHTMLInputElement : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLInputElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f821-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLInputElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLINPUTELEMENT2_ACCEPT), displaybind, bindable]
+    HRESULT accept([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLINPUTELEMENT2_ACCEPT), displaybind, bindable]
+    HRESULT accept([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLINPUTELEMENT2_USEMAP), displaybind, bindable]
+    HRESULT useMap([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLINPUTELEMENT2_USEMAP), displaybind, bindable]
+    HRESULT useMap([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLInputTextElement interface
  */
 [
@@ -16637,7 +16679,7 @@ coclass HTMLInputElement
     WINE_HTMLDATAELEMENT_INTERFACES;
     interface IHTMLControlElement;
     interface IHTMLInputElement;
- /* interface IHTMLInputElement2; */
+    interface IHTMLInputElement2;
     interface IHTMLInputTextElement;
     interface IHTMLInputTextElement2;
  /* interface IHTMLInputHiddenElement; */
@@ -29405,6 +29447,54 @@ methods:
     [propput, id(DISPID_IHTMLDIVELEMENT_ALIGN), displaybind, bindable]
     void align(BSTR v);
 
+/*****************************************************************************
+ *    IHTMLObjectElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f827-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLObjectElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_ARCHIVE), displaybind, bindable]
+    HRESULT archive([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_ARCHIVE), displaybind, bindable]
+    HRESULT archive([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_ALT), displaybind, bindable]
+    HRESULT alt([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_ALT), displaybind, bindable]
+    HRESULT alt([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_DECLARE), displaybind, bindable]
+    HRESULT declare([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_DECLARE), displaybind, bindable]
+    HRESULT declare([retval, out] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_STANDBY), displaybind, bindable]
+    HRESULT standby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_STANDBY), displaybind, bindable]
+    HRESULT standby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_BORDER)]
+    HRESULT border([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_BORDER)]
+    HRESULT border([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_USEMAP), displaybind, bindable]
+    HRESULT useMap([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_USEMAP), displaybind, bindable]
+    HRESULT useMap([retval, out] BSTR *p);
+}
+
     [propget, id(DISPID_IHTMLDIVELEMENT_ALIGN), displaybind, bindable]
     BSTR align();
 
@@ -29832,7 +29922,7 @@ coclass HTMLObjectElement
     interface IHTMLControlElement;
     interface IHTMLObjectElement;
     interface IHTMLObjectElement2;
- /* interface IHTMLObjectElement3; */
+    interface IHTMLObjectElement3;
  /* interface IHTMLObjectElement4; */
  /* interface IGetSVGDocument; */
  /* interface IHTMLObjectElement5; */

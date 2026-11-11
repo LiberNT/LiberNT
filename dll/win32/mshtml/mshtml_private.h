@@ -298,20 +298,27 @@ struct constructor;
     XIID(IHTMLLabelElement) \
     XIID(IHTMLListElement2) \
     XIID(IHTMLLinkElement) \
+    XIID(IHTMLImgElement2) \
     XIID(IHTMLLocation) \
+    XIID(IHTMLInputElement2) \
     XIID(IHTMLMetaElement) \
     XIID(IHTMLMimeTypesCollection) \
     XIID(IHTMLNamespaceCollection) \
     XIID(IHTMLOListElement) \
     XIID(IHTMLObjectElement) \
+    XIID(IHTMLLinkElement2) \
+    XIID(IHTMLLinkElement3) \
     XIID(IHTMLObjectElement2) \
     XIID(IHTMLOptionElement) \
+    XIID(IHTMLMetaElement2) \
     XIID(IHTMLOptionElementFactory) \
     XIID(IHTMLParaElement) \
     XIID(IHTMLPerformance) \
     XIID(IHTMLPerformanceNavigation) \
     XIID(IHTMLPerformanceTiming) \
+    XIID(IHTMLObjectElement3) \
     XIID(IHTMLPhraseElement2) \
+    XIID(IHTMLOptionElement3) \
     XIID(IHTMLPluginsCollection) \
     XIID(IHTMLRect) \
     XIID(IHTMLRect2) \
@@ -326,6 +333,7 @@ struct constructor;
     XIID(IHTMLStyle) \
     XIID(IHTMLStyle2) \
     XIID(IHTMLStyle3) \
+    XIID(IHTMLScriptElement2) \
     XIID(IHTMLStyle4) \
     XIID(IHTMLStyle5) \
     XIID(IHTMLStyle6) \

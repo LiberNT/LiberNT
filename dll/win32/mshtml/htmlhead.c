@@ -270,6 +270,7 @@ struct HTMLMetaElement {
     HTMLElement element;
 
     IHTMLMetaElement IHTMLMetaElement_iface;
+    IHTMLMetaElement2 IHTMLMetaElement2_iface;
 };
 
 static inline HTMLMetaElement *impl_from_IHTMLMetaElement(IHTMLMetaElement *iface)
@@ -382,6 +383,44 @@ static const IHTMLMetaElementVtbl HTMLMetaElementVtbl = {
     HTMLMetaElement_get_charset
 };
 
+static inline HTMLMetaElement *impl_from_IHTMLMetaElement2(IHTMLMetaElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLMetaElement, IHTMLMetaElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLMetaElement2, IHTMLMetaElement2,
+                      impl_from_IHTMLMetaElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLMetaElement2_put_scheme(IHTMLMetaElement2 *iface, BSTR v)
+{
+    HTMLMetaElement *This = impl_from_IHTMLMetaElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"scheme", v);
+}
+
+static HRESULT WINAPI HTMLMetaElement2_get_scheme(IHTMLMetaElement2 *iface, BSTR *p)
+{
+    HTMLMetaElement *This = impl_from_IHTMLMetaElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"scheme", p);
+}
+
+static const IHTMLMetaElement2Vtbl HTMLMetaElement2Vtbl = {
+    HTMLMetaElement2_QueryInterface,
+    HTMLMetaElement2_AddRef,
+    HTMLMetaElement2_Release,
+    HTMLMetaElement2_GetTypeInfoCount,
+    HTMLMetaElement2_GetTypeInfo,
+    HTMLMetaElement2_GetIDsOfNames,
+    HTMLMetaElement2_Invoke,
+    HTMLMetaElement2_put_scheme,
+    HTMLMetaElement2_get_scheme
+};
+
 static inline HTMLMetaElement *HTMLMetaElement_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLMetaElement, element.node.event_target.dispex);
@@ -393,6 +432,8 @@ static void *HTMLMetaElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLMetaElement, riid))
         return &This->IHTMLMetaElement_iface;
+    if(IsEqualGUID(&IID_IHTMLMetaElement2, riid))
+        return &This->IHTMLMetaElement2_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -411,6 +452,7 @@ static void HTMLMetaElement_init_dispex_info(dispex_data_t *info, compat_mode_t 
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLMetaElement_tid, hooks);
+    dispex_info_add_interface(info, IHTMLMetaElement2_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -444,6 +486,7 @@ HRESULT HTMLMetaElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTM
         return E_OUTOFMEMORY;
 
     ret->IHTMLMetaElement_iface.lpVtbl = &HTMLMetaElementVtbl;
+    ret->IHTMLMetaElement2_iface.lpVtbl = &HTMLMetaElement2Vtbl;
     ret->element.node.vtbl = &HTMLMetaElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLMetaElement_dispex);
