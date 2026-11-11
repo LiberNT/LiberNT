@@ -1112,9 +1112,9 @@ PiSendRemoval(
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
 
-    IopQueueDeviceInstallEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
-                                        : &GUID_DEVICE_SAFE_REMOVAL,
-                               &DeviceNode->InstancePath);
+    IopQueueTargetDeviceEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
+                                       : &GUID_DEVICE_SAFE_REMOVAL,
+                              &DeviceNode->InstancePath);
 }
 
 /* A node out of the tree lives as long as its device object, whose delete routine frees it */

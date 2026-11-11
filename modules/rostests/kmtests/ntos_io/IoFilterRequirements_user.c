@@ -153,6 +153,9 @@ static VOID CheckEject(DEVINST Bus)
     ok(ReadValue(L"EjectAfterRemove", &Value), "The child was not ejected\n");
     ok(Value == 1, "The child was ejected before it was removed\n");
 
+    /* A removal hands user mode nothing to install, so the ejected child stays down */
+    ok_eq_ulong(CMP_WaitNoPendingInstallEvents(1000), (ULONG)WAIT_OBJECT_0);
+
     if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
         return;
     ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Child, 0), (ULONG)CR_SUCCESS);
