@@ -502,6 +502,12 @@ static HRESULT WINAPI HTMLEventObj_get_returnValue(IHTMLEventObj *iface, VARIANT
 
     TRACE("(%p)->(%p)\n", This, p);
 
+    if(V_VT(return_value) == VT_EMPTY && This->event && dispex_compat_mode(&This->dispex) >= COMPAT_MODE_IE9) {
+        V_VT(p) = VT_BOOL;
+        V_BOOL(p) = variant_bool(!This->event->prevent_default);
+        return S_OK;
+    }
+
     V_VT(p) = VT_EMPTY;
     return VariantCopy(p, return_value);
 }

@@ -1371,7 +1371,7 @@ static HRESULT WINAPI submit_onclick_setret(IDispatchEx *iface, DISPID id, LCID 
     ok(hres == S_OK, "get_returnValue failed: %08lx\n", hres);
     if(document_mode < 9) {
         ok(V_VT(&v) == VT_EMPTY, "V_VT(returnValue) = %d\n", V_VT(&v));
-    }else todo_wine {
+    }else {
         ok(V_VT(&v) == VT_BOOL, "V_VT(returnValue) = %d\n", V_VT(&v));
         ok(V_BOOL(&v) == VARIANT_TRUE, "V_BOOL(returnValue) = %x\n", V_BOOL(&v));
     }
