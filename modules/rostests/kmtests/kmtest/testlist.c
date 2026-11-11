@@ -25,6 +25,7 @@ KMT_TESTFUNC Test_SeSecurityDirectory;
 KMT_TESTFUNC Test_FltMgrIo;
 KMT_TESTFUNC Test_FltMgrScan;
 KMT_TESTFUNC Test_FltMgrTx;
+KMT_TESTFUNC Test_NtfsTxfRecovery;
 KMT_TESTFUNC Test_FltMgrLoad;
 KMT_TESTFUNC Test_FltMgrReg;
 KMT_TESTFUNC Test_HidPDescription;
@@ -103,6 +104,7 @@ const KMT_TEST TestList[] =
     { "FltMgrIo",                     Test_FltMgrIo },
     { "FltMgrScan",                   Test_FltMgrScan },
     { "FltMgrTx",                     Test_FltMgrTx },
+    { "NtfsTxfRecovery",              Test_NtfsTxfRecovery },
     { "-FltMgrLoad",                  Test_FltMgrLoad }, // TODO: WIP/untested/crashes.
     { "-FltMgrReg",                   Test_FltMgrReg }, // TODO: WIP/untested/crashes.
     { "HidPDescription",              Test_HidPDescription },

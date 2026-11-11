@@ -94,6 +94,8 @@ typedef struct _VolumeContextBlock
     EX_PUSH_LOCK TxfStagingLock;
     BOOLEAN TxfStagingReady;
     UNICODE_STRING TxfDeviceName;
+    LONG TxfRecoveryPending;
+    PETHREAD TxfRecoveryThread;
 } VolumeContextBlock, *PVolumeContextBlock;
 
 #define NTFS_MAX_MISSING_NAMES 256

@@ -6,6 +6,7 @@
  */
 
 #include "ntfspch.h"
+#include <ndk/rtlfuncs.h>
 
 #define NTFS_TXF_STAGING_ROOT L"\\$Extend\\$TxfStaging"
 #define NTFS_TXF_COPY_CHUNK (64 * 1024)
@@ -14,6 +15,12 @@
                                FILE_WRITE_EA | WRITE_DAC | WRITE_OWNER | MAXIMUM_ALLOWED)
 #define NTFS_TXF_MODIFY_ACCESS (NTFS_TXF_WRITE_ACCESS | DELETE)
 #define TAG_NTFS_TXF 'fxTN'
+#define NTFS_TXF_LOG_SIGNATURE 0x474F4C54
+#define NTFS_TXF_LOG_VERSION 1
+#define NTFS_TXF_LOG_PREPARED 1
+#define NTFS_TXF_LOG_COMMITTED 2
+#define NTFS_TXF_LOG_HEADER_SIZE 512
+#define NTFS_TXF_LOG_MAX_SIZE (64 * 1024 * 1024)
 
 typedef enum _NTFS_TXF_KIND
 {
@@ -39,10 +46,32 @@ typedef struct _NTFS_TXF_CHANGE
     NTFS_TXF_KIND Kind;
     BOOLEAN Directory;
     ULONGLONG FileReference;
+    ULONGLONG Identity;
     UNICODE_STRING Name;
     UNICODE_STRING Source;
     UNICODE_STRING Physical;
 } NTFS_TXF_CHANGE, *PNTFS_TXF_CHANGE;
+
+typedef struct _NTFS_TXF_LOG_HEADER
+{
+    ULONG Signature;
+    ULONG Version;
+    ULONG State;
+    ULONG Count;
+    ULONG RecordBytes;
+    ULONG Checksum;
+} NTFS_TXF_LOG_HEADER, *PNTFS_TXF_LOG_HEADER;
+
+typedef struct _NTFS_TXF_LOG_RECORD
+{
+    ULONG Kind;
+    ULONG Directory;
+    ULONGLONG Identity;
+    USHORT NameLength;
+    USHORT SourceLength;
+    USHORT PhysicalLength;
+    USHORT Reserved;
+} NTFS_TXF_LOG_RECORD, *PNTFS_TXF_LOG_RECORD;
 
 typedef struct _NTFS_TXF_READER
 {
@@ -63,8 +92,20 @@ typedef struct _NTFS_TXF_TRANSACTION
     LIST_ENTRY Changes;
     LIST_ENTRY Readers;
     PETHREAD ActiveThread;
+    PNTFS_TXF_LOG_HEADER Log;
+    ULONG LogSize;
+    HANDLE LogHandle;
+    BOOLEAN Prepared;
     BOOLEAN Ending;
 } NTFS_TXF_TRANSACTION, *PNTFS_TXF_TRANSACTION;
+
+typedef struct _NTFS_TXF_STAGING_WORK
+{
+    WORK_QUEUE_ITEM Item;
+    KEVENT Done;
+    PVolumeContextBlock VolCB;
+    NTSTATUS Status;
+} NTFS_TXF_STAGING_WORK, *PNTFS_TXF_STAGING_WORK;
 
 typedef struct _NTFS_TXF_INFO
 {
@@ -233,6 +274,10 @@ NtfsTxfDereference(_In_ PNTFS_TXF_TRANSACTION Txf)
         NtfsTxfFreeChange(CONTAINING_RECORD(RemoveHeadList(&Txf->Changes), NTFS_TXF_CHANGE, Link));
     while (!IsListEmpty(&Txf->Readers))
         ExFreePoolWithTag(CONTAINING_RECORD(RemoveHeadList(&Txf->Readers), NTFS_TXF_READER, Link), TAG_NTFS_TXF);
+    if (Txf->LogHandle)
+        ZwClose(Txf->LogHandle);
+    if (Txf->Log)
+        ExFreePoolWithTag(Txf->Log, TAG_NTFS_TXF);
     ObDereferenceObject(Txf->Transaction);
     ExFreePoolWithTag(Txf, TAG_NTFS_TXF);
 }
@@ -448,6 +493,7 @@ NtfsTxfRecord(_In_ PNTFS_TXF_TRANSACTION Txf,
               _In_opt_ PCUNICODE_STRING Source,
               _In_opt_ PCUNICODE_STRING Physical,
               _In_ ULONGLONG FileReference,
+              _In_ ULONGLONG Identity,
               _In_ BOOLEAN Directory,
               _Out_opt_ PNTFS_TXF_CHANGE* Result)
 {
@@ -462,6 +508,7 @@ NtfsTxfRecord(_In_ PNTFS_TXF_TRANSACTION Txf,
     Change->Kind = Kind;
     Change->Directory = Directory;
     Change->FileReference = FileReference;
+    Change->Identity = Identity;
     Status = NtfsTxfCopy(&Change->Name, Name);
     if (NT_SUCCESS(Status) && Source)
         Status = NtfsTxfCopy(&Change->Source, Source);
@@ -571,6 +618,56 @@ NtfsTxfOpen(_In_ PVolumeContextBlock VolCB,
                           0);
     NtfsTxfFreeString(&FullName);
     return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfOpenById(_In_ PVolumeContextBlock VolCB,
+                _In_ ULONGLONG FileId,
+                _In_ ACCESS_MASK Access,
+                _In_ ULONG Options,
+                _Out_ PHANDLE Handle)
+{
+    static const UNICODE_STRING Root = RTL_CONSTANT_STRING(L"\\");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    UNICODE_STRING Name;
+    HANDLE RootHandle;
+    NTSTATUS Status;
+
+    *Handle = NULL;
+    Status = NtfsTxfOpen(VolCB, &Root, FILE_READ_ATTRIBUTES, 0, FILE_OPEN, FILE_DIRECTORY_FILE, &RootHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Name.Buffer = (PWCH)&FileId;
+    Name.Length = Name.MaximumLength = sizeof(FileId);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_KERNEL_HANDLE, RootHandle, NULL);
+    Status = ZwCreateFile(Handle,
+                          Access | SYNCHRONIZE,
+                          &ObjectAttributes,
+                          &IoStatus,
+                          NULL,
+                          0,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                          FILE_OPEN,
+                          Options | FILE_OPEN_BY_FILE_ID | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT,
+                          NULL,
+                          0);
+    ZwClose(RootHandle);
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfOpenTarget(_In_ PVolumeContextBlock VolCB,
+                  _In_opt_ PCUNICODE_STRING Target,
+                  _In_ ULONGLONG TargetId,
+                  _In_ ACCESS_MASK Access,
+                  _Out_ PHANDLE Handle)
+{
+    if (TargetId)
+        return NtfsTxfOpenById(VolCB, TargetId, Access, FILE_NON_DIRECTORY_FILE, Handle);
+    return NtfsTxfOpen(VolCB, Target, Access, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, Handle);
 }
 
 static
@@ -760,7 +857,8 @@ static
 NTSTATUS
 NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
                 _In_ PCUNICODE_STRING Source,
-                _In_ PCUNICODE_STRING Target,
+                _In_opt_ PCUNICODE_STRING Target,
+                _In_ ULONGLONG TargetId,
                 _In_ BOOLEAN IntoExisting)
 {
     FILE_END_OF_FILE_INFORMATION EndOfFile;
@@ -787,18 +885,14 @@ NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
     Plain.FileAttributes = FILE_ATTRIBUTE_NORMAL;
     if (IntoExisting)
     {
-        Status = NtfsTxfOpen(VolCB, Target, FILE_WRITE_ATTRIBUTES, 0, FILE_OPEN,
-                             FILE_NON_DIRECTORY_FILE, &TargetHandle);
+        Status = NtfsTxfOpenTarget(VolCB, Target, TargetId, FILE_WRITE_ATTRIBUTES, &TargetHandle);
         if (NT_SUCCESS(Status))
         {
             Status = ZwSetInformationFile(TargetHandle, &IoStatus, &Plain, sizeof(Plain), FileBasicInformation);
             ZwClose(TargetHandle);
         }
         if (NT_SUCCESS(Status))
-        {
-            Status = NtfsTxfOpen(VolCB, Target, FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES, 0, FILE_OPEN,
-                                 FILE_NON_DIRECTORY_FILE, &TargetHandle);
-        }
+            Status = NtfsTxfOpenTarget(VolCB, Target, TargetId, FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES, &TargetHandle);
     }
     else
     {
@@ -844,6 +938,8 @@ NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
     }
     if (NT_SUCCESS(Status))
         Status = ZwSetInformationFile(TargetHandle, &IoStatus, &Basic, sizeof(Basic), FileBasicInformation);
+    if (NT_SUCCESS(Status) && IntoExisting)
+        Status = ZwFlushBuffersFile(TargetHandle, &IoStatus);
     if (Buffer)
         ExFreePoolWithTag(Buffer, TAG_NTFS_TXF);
     ZwClose(TargetHandle);
@@ -853,9 +949,115 @@ NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
 
 static
 NTSTATUS
+NtfsTxfStagingSecurity(_Out_ PSECURITY_DESCRIPTOR* Descriptor)
+{
+    PSECURITY_DESCRIPTOR Absolute;
+    PACL Dacl;
+    ULONG DaclSize;
+    NTSTATUS Status;
+
+    *Descriptor = NULL;
+    DaclSize = sizeof(ACL) + 2 * FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) +
+               RtlLengthSid(SeExports->SeLocalSystemSid) + RtlLengthSid(SeExports->SeAliasAdminsSid);
+    Absolute = ExAllocatePoolWithTag(PagedPool, SECURITY_DESCRIPTOR_MIN_LENGTH + DaclSize, TAG_NTFS_TXF);
+    if (!Absolute)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Dacl = (PACL)((PUCHAR)Absolute + SECURITY_DESCRIPTOR_MIN_LENGTH);
+    Status = RtlCreateSecurityDescriptor(Absolute, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateAcl(Dacl, DaclSize, ACL_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE,
+                                          FILE_ALL_ACCESS, SeExports->SeLocalSystemSid);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE,
+                                          FILE_ALL_ACCESS, SeExports->SeAliasAdminsSid);
+    }
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(Absolute, TRUE, Dacl, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetOwnerSecurityDescriptor(Absolute, SeExports->SeLocalSystemSid, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetControlSecurityDescriptor(Absolute, SE_DACL_PROTECTED, SE_DACL_PROTECTED);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Absolute, TAG_NTFS_TXF);
+        return Status;
+    }
+    *Descriptor = Absolute;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NtfsTxfOpenStaging(_In_ PVolumeContextBlock VolCB,
+                   _In_ BOOLEAN Create,
+                   _Out_ PHANDLE Handle)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    PSECURITY_DESCRIPTOR Descriptor;
+    UNICODE_STRING FullName;
+    NTSTATUS Status;
+
+    *Handle = NULL;
+    Status = NtfsTxfStagingSecurity(&Descriptor);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = NtfsTxfFullName(VolCB, &NtfsTxfStagingRoot, &FullName);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Descriptor, TAG_NTFS_TXF);
+        return Status;
+    }
+    InitializeObjectAttributes(&ObjectAttributes, &FullName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, Descriptor);
+    Status = ZwCreateFile(Handle,
+                          FILE_LIST_DIRECTORY | WRITE_DAC | WRITE_OWNER | SYNCHRONIZE,
+                          &ObjectAttributes,
+                          &IoStatus,
+                          NULL,
+                          FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                          Create ? FILE_OPEN_IF : FILE_OPEN,
+                          FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT,
+                          NULL,
+                          0);
+    if (NT_SUCCESS(Status) && IoStatus.Information != FILE_CREATED)
+    {
+        Status = ZwSetSecurityObject(*Handle, OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, Descriptor);
+        if (!NT_SUCCESS(Status))
+        {
+            ZwClose(*Handle);
+            *Handle = NULL;
+        }
+    }
+    NtfsTxfFreeString(&FullName);
+    ExFreePoolWithTag(Descriptor, TAG_NTFS_TXF);
+    return Status;
+}
+
+static
+VOID
+NTAPI
+NtfsTxfStagingWorker(_In_ PVOID Context)
+{
+    PNTFS_TXF_STAGING_WORK Work = Context;
+    HANDLE Handle;
+
+    Work->Status = NtfsTxfOpenStaging(Work->VolCB, TRUE, &Handle);
+    if (NT_SUCCESS(Work->Status))
+        ZwClose(Handle);
+    KeSetEvent(&Work->Done, IO_NO_INCREMENT, FALSE);
+}
+
+static
+NTSTATUS
 NtfsTxfEnsureStaging(_In_ PVolumeContextBlock VolCB)
 {
-    HANDLE Handle;
+    NTFS_TXF_STAGING_WORK Work;
     NTSTATUS Status = STATUS_SUCCESS;
 
     if (VolCB->TxfStagingReady)
@@ -865,15 +1067,15 @@ NtfsTxfEnsureStaging(_In_ PVolumeContextBlock VolCB)
     ExfAcquirePushLockExclusive(&VolCB->TxfStagingLock);
     if (!VolCB->TxfStagingReady)
     {
-        Status = NtfsTxfOpen(VolCB, &NtfsTxfStagingRoot, FILE_LIST_DIRECTORY,
-                             FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM, FILE_OPEN_IF, FILE_DIRECTORY_FILE, &Handle);
+        Work.VolCB = VolCB;
+        Work.Status = STATUS_UNSUCCESSFUL;
+        KeInitializeEvent(&Work.Done, NotificationEvent, FALSE);
+        ExInitializeWorkItem(&Work.Item, NtfsTxfStagingWorker, &Work);
+        ExQueueWorkItem(&Work.Item, DelayedWorkQueue);
+        KeWaitForSingleObject(&Work.Done, Executive, KernelMode, FALSE, NULL);
+        Status = Work.Status;
         if (NT_SUCCESS(Status))
-        {
-            ZwClose(Handle);
-            /* TODO: replay a commit cut by a crash; the leftovers of uncommitted work are only discarded */
-            NtfsTxfDeleteTree(VolCB, &NtfsTxfStagingRoot, TRUE);
             VolCB->TxfStagingReady = TRUE;
-        }
     }
     ExfReleasePushLockExclusive(&VolCB->TxfStagingLock);
     KeLeaveCriticalRegion();
@@ -897,48 +1099,589 @@ NtfsTxfStagePath(_In_ PNTFS_TXF_TRANSACTION Txf,
                         (USHORT)((RTL_NUMBER_OF(Leaf) - Remaining) * sizeof(WCHAR)));
 }
 
+/* COMMIT LOG *****************************************************************/
+
+static
+NTSTATUS
+NtfsTxfLogPath(_In_ ULONG Id,
+               _Out_ PUNICODE_STRING Path)
+{
+    WCHAR Leaf[24];
+    size_t Remaining;
+    NTSTATUS Status;
+
+    Status = RtlStringCchPrintfExW(Leaf, RTL_NUMBER_OF(Leaf), NULL, &Remaining, 0, L"%lu.log", Id);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return NtfsTxfChild(Path, &NtfsTxfStagingRoot, Leaf,
+                        (USHORT)((RTL_NUMBER_OF(Leaf) - Remaining) * sizeof(WCHAR)));
+}
+
+static
+BOOLEAN
+NtfsTxfIsLogName(_In_reads_bytes_(Length) PCWSTR Name,
+                 _In_ ULONG Length)
+{
+    static const UNICODE_STRING Suffix = RTL_CONSTANT_STRING(L".log");
+    UNICODE_STRING Tail;
+
+    if (Length <= Suffix.Length)
+        return FALSE;
+    Tail.Buffer = (PWCH)((PUCHAR)Name + Length - Suffix.Length);
+    Tail.Length = Tail.MaximumLength = Suffix.Length;
+    return RtlEqualUnicodeString(&Tail, &Suffix, TRUE);
+}
+
+static
+ULONG
+NtfsTxfLogRecordSize(_In_ USHORT NameLength,
+                     _In_ USHORT SourceLength,
+                     _In_ USHORT PhysicalLength)
+{
+    return ALIGN_UP_BY(sizeof(NTFS_TXF_LOG_RECORD) + (ULONG)NameLength + SourceLength + PhysicalLength,
+                       sizeof(ULONGLONG));
+}
+
+static
+BOOLEAN
+NtfsTxfSameFile(_In_ ULONGLONG Actual,
+                _In_ ULONGLONG Identity)
+{
+    return Identity != 0 && (Actual & NTFS_TXF_RECORD_MASK) == (Identity & NTFS_TXF_RECORD_MASK);
+}
+
+static
+NTSTATUS
+NtfsTxfBuildLog(_In_ PNTFS_TXF_TRANSACTION Txf)
+{
+    PNTFS_TXF_LOG_HEADER Header = NULL;
+    PNTFS_TXF_LOG_RECORD Record;
+    PLIST_ENTRY Entry;
+    ULONG Size = NTFS_TXF_LOG_HEADER_SIZE;
+    ULONG Count = 0;
+    PUCHAR Cursor;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ExAcquireFastMutex(&Txf->VolCB->TxfMutex);
+    for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
+    {
+        PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
+
+        if (Change->Kind == NtfsTxfLocked)
+            continue;
+        Size += NtfsTxfLogRecordSize(Change->Name.Length, Change->Source.Length, Change->Physical.Length);
+        Count++;
+        if (Size > NTFS_TXF_LOG_MAX_SIZE)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+    }
+    if (NT_SUCCESS(Status) && Count)
+    {
+        Header = ExAllocatePoolZero(PagedPool, Size, TAG_NTFS_TXF);
+        if (!Header)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (Header)
+    {
+        Cursor = (PUCHAR)Header + NTFS_TXF_LOG_HEADER_SIZE;
+        for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
+        {
+            PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
+            PUCHAR Strings;
+
+            if (Change->Kind == NtfsTxfLocked)
+                continue;
+            Record = (PNTFS_TXF_LOG_RECORD)Cursor;
+            Record->Kind = Change->Kind;
+            Record->Directory = Change->Directory;
+            Record->Identity = Change->Identity;
+            Record->NameLength = Change->Name.Length;
+            Record->SourceLength = Change->Source.Length;
+            Record->PhysicalLength = Change->Physical.Length;
+            Strings = (PUCHAR)(Record + 1);
+            RtlCopyMemory(Strings, Change->Name.Buffer, Change->Name.Length);
+            Strings += Change->Name.Length;
+            if (Change->Source.Length)
+                RtlCopyMemory(Strings, Change->Source.Buffer, Change->Source.Length);
+            Strings += Change->Source.Length;
+            if (Change->Physical.Length)
+                RtlCopyMemory(Strings, Change->Physical.Buffer, Change->Physical.Length);
+            Cursor += NtfsTxfLogRecordSize(Change->Name.Length, Change->Source.Length, Change->Physical.Length);
+        }
+        Header->Signature = NTFS_TXF_LOG_SIGNATURE;
+        Header->Version = NTFS_TXF_LOG_VERSION;
+        Header->State = NTFS_TXF_LOG_PREPARED;
+        Header->Count = Count;
+        Header->RecordBytes = Size - NTFS_TXF_LOG_HEADER_SIZE;
+        Header->Checksum = RtlComputeCrc32(0, (PUCHAR)Header + NTFS_TXF_LOG_HEADER_SIZE, Header->RecordBytes);
+        Txf->Log = Header;
+        Txf->LogSize = Size;
+    }
+    ExReleaseFastMutex(&Txf->VolCB->TxfMutex);
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfReadLogRecord(_In_ PNTFS_TXF_LOG_HEADER Header,
+                     _Inout_ PULONG Offset,
+                     _Out_ PNTFS_TXF_LOG_RECORD* Record,
+                     _Out_ PUNICODE_STRING Name,
+                     _Out_ PUNICODE_STRING Source,
+                     _Out_ PUNICODE_STRING Physical)
+{
+    PNTFS_TXF_LOG_RECORD Current;
+    ULONG End = NTFS_TXF_LOG_HEADER_SIZE + Header->RecordBytes;
+    ULONG Size;
+    PWCHAR Strings;
+
+    if (*Offset > End || End - *Offset < sizeof(NTFS_TXF_LOG_RECORD))
+        return STATUS_FILE_CORRUPT_ERROR;
+    Current = (PNTFS_TXF_LOG_RECORD)((PUCHAR)Header + *Offset);
+    Size = NtfsTxfLogRecordSize(Current->NameLength, Current->SourceLength, Current->PhysicalLength);
+    if (Size > End - *Offset || Current->Kind > NtfsTxfLocked || Current->NameLength == 0 ||
+        (Current->NameLength | Current->SourceLength | Current->PhysicalLength) & (sizeof(WCHAR) - 1))
+    {
+        return STATUS_FILE_CORRUPT_ERROR;
+    }
+    Strings = (PWCHAR)(Current + 1);
+    Name->Buffer = Strings;
+    Name->Length = Name->MaximumLength = Current->NameLength;
+    Source->Buffer = (PWCHAR)((PUCHAR)Strings + Current->NameLength);
+    Source->Length = Source->MaximumLength = Current->SourceLength;
+    Physical->Buffer = (PWCHAR)((PUCHAR)Source->Buffer + Current->SourceLength);
+    Physical->Length = Physical->MaximumLength = Current->PhysicalLength;
+    *Record = Current;
+    *Offset += Size;
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+NtfsTxfValidLog(_In_reads_bytes_(Size) PNTFS_TXF_LOG_HEADER Header,
+                _In_ ULONG Size)
+{
+    return Size >= NTFS_TXF_LOG_HEADER_SIZE &&
+           Header->Signature == NTFS_TXF_LOG_SIGNATURE &&
+           Header->Version == NTFS_TXF_LOG_VERSION &&
+           Header->RecordBytes <= Size - NTFS_TXF_LOG_HEADER_SIZE &&
+           Header->Checksum == RtlComputeCrc32(0, (PUCHAR)Header + NTFS_TXF_LOG_HEADER_SIZE, Header->RecordBytes);
+}
+
+static
+NTSTATUS
+NtfsTxfWriteLog(_In_ PNTFS_TXF_TRANSACTION Txf,
+                _In_ ULONG Length)
+{
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    NTSTATUS Status;
+
+    Offset.QuadPart = 0;
+    Status = ZwWriteFile(Txf->LogHandle, NULL, NULL, NULL, &IoStatus, Txf->Log, Length, &Offset, NULL);
+    if (NT_SUCCESS(Status))
+        Status = ZwFlushBuffersFile(Txf->LogHandle, &IoStatus);
+    return Status;
+}
+
+static
+VOID
+NtfsTxfDeleteLog(_In_ PNTFS_TXF_TRANSACTION Txf)
+{
+    UNICODE_STRING Path;
+
+    if (Txf->LogHandle)
+        ZwClose(Txf->LogHandle);
+    Txf->LogHandle = NULL;
+    if (Txf->Log && NT_SUCCESS(NtfsTxfLogPath(Txf->Id, &Path)))
+    {
+        NtfsTxfDeleteOne(Txf->VolCB, &Path);
+        NtfsTxfFreeString(&Path);
+    }
+}
+
+static
+NTSTATUS
+NtfsTxfApplyStep(_In_ PVolumeContextBlock VolCB,
+                 _In_ NTFS_TXF_KIND Kind,
+                 _In_ ULONGLONG Identity,
+                 _In_ PCUNICODE_STRING Name,
+                 _In_ PCUNICODE_STRING Source,
+                 _In_ PCUNICODE_STRING Physical)
+{
+    NTFS_TXF_INFO Info;
+    NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Done = TRUE;
+
+    switch (Kind)
+    {
+        case NtfsTxfCreated:
+            if (NtfsTxfExists(VolCB, Physical))
+                Status = NtfsTxfSetName(VolCB, Physical, Name, FALSE);
+            else
+                Done = FALSE;
+            break;
+
+        case NtfsTxfShadow:
+            Done = FALSE;
+            if (Identity && NtfsTxfExists(VolCB, Physical))
+            {
+                Done = TRUE;
+                Status = NtfsTxfCopyData(VolCB, Physical, NULL, Identity, TRUE);
+                if (Status == STATUS_INVALID_PARAMETER || Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+                    Status == STATUS_OBJECT_PATH_NOT_FOUND || Status == STATUS_FILE_DELETED)
+                {
+                    Status = STATUS_SUCCESS;
+                }
+            }
+            break;
+
+        case NtfsTxfDeleted:
+            if (NT_SUCCESS(NtfsTxfQuery(VolCB, Name, &Info)) && NtfsTxfSameFile(Info.FileReference, Identity))
+                Status = NtfsTxfDeleteOne(VolCB, Name);
+            else
+                Done = FALSE;
+            break;
+
+        case NtfsTxfRenamed:
+        case NtfsTxfLinked:
+            Done = FALSE;
+            if (Kind == NtfsTxfLinked && NT_SUCCESS(NtfsTxfQuery(VolCB, Name, &Info)) &&
+                NtfsTxfSameFile(Info.FileReference, Identity))
+            {
+                break;
+            }
+            if (NT_SUCCESS(NtfsTxfQuery(VolCB, Source, &Info)) && NtfsTxfSameFile(Info.FileReference, Identity))
+            {
+                Done = TRUE;
+                Status = NtfsTxfSetName(VolCB, Source, Name, Kind == NtfsTxfLinked);
+            }
+            break;
+
+        case NtfsTxfLocked:
+            Done = FALSE;
+            break;
+    }
+    if (NT_SUCCESS(Status) && Done)
+        Status = NtfsFlushVolume(VolCB, FALSE);
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfReplayLog(_In_ PVolumeContextBlock VolCB,
+                 _In_ PNTFS_TXF_LOG_HEADER Header)
+{
+    PNTFS_TXF_LOG_RECORD Record;
+    UNICODE_STRING Name, Source, Physical;
+    ULONG Offset = NTFS_TXF_LOG_HEADER_SIZE;
+    ULONG Index;
+    NTSTATUS Status, Result = STATUS_SUCCESS;
+
+    for (Index = 0; Index < Header->Count; Index++)
+    {
+        Status = NtfsTxfReadLogRecord(Header, &Offset, &Record, &Name, &Source, &Physical);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (Name.Buffer[0] != L'\\' || NtfsTxfIsStaging(&Name) ||
+            (Source.Length && (Source.Buffer[0] != L'\\' || NtfsTxfIsStaging(&Source))) ||
+            ((Record->Kind == NtfsTxfRenamed || Record->Kind == NtfsTxfLinked) && Source.Length == 0) ||
+            ((Record->Kind == NtfsTxfCreated || Record->Kind == NtfsTxfShadow) &&
+             !NtfsTxfUnder(&NtfsTxfStagingRoot, &Physical)))
+        {
+            return STATUS_FILE_CORRUPT_ERROR;
+        }
+        Status = NtfsTxfApplyStep(VolCB, Record->Kind, Record->Identity, &Name, &Source, &Physical);
+        if (!NT_SUCCESS(Status))
+        {
+            /* FIXME: a step that still fails when the committed log is replayed is dropped */
+            DPRINT1("TxF: replay of %wZ failed with 0x%08lx\n", &Name, Status);
+            Result = Status;
+        }
+    }
+    return Result;
+}
+
+static
+VOID
+NtfsTxfDiscardLogged(_In_ PVolumeContextBlock VolCB,
+                     _In_ PNTFS_TXF_LOG_HEADER Header)
+{
+    PNTFS_TXF_LOG_RECORD Record;
+    UNICODE_STRING Name, Source, Physical;
+    ULONG Offset = NTFS_TXF_LOG_HEADER_SIZE;
+    ULONG Index;
+
+    for (Index = 0; Index < Header->Count; Index++)
+    {
+        if (!NT_SUCCESS(NtfsTxfReadLogRecord(Header, &Offset, &Record, &Name, &Source, &Physical)))
+            return;
+        if ((Record->Kind == NtfsTxfCreated || Record->Kind == NtfsTxfShadow) &&
+            NtfsTxfUnder(&NtfsTxfStagingRoot, &Physical) && NtfsTxfExists(VolCB, &Physical))
+        {
+            NtfsTxfDeleteTree(VolCB, &Physical, FALSE);
+        }
+    }
+}
+
+static
+NTSTATUS
+NtfsTxfReadLog(_In_ PVolumeContextBlock VolCB,
+               _In_ PCUNICODE_STRING Path,
+               _Out_ PNTFS_TXF_LOG_HEADER* Log,
+               _Out_ PULONG LogSize)
+{
+    FILE_STANDARD_INFORMATION Standard;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    PVOID Buffer;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    *Log = NULL;
+    *LogSize = 0;
+    Status = NtfsTxfOpen(VolCB, Path, FILE_READ_DATA, 0, FILE_OPEN, FILE_NON_DIRECTORY_FILE, &Handle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = ZwQueryInformationFile(Handle, &IoStatus, &Standard, sizeof(Standard), FileStandardInformation);
+    if (NT_SUCCESS(Status) &&
+        (Standard.EndOfFile.QuadPart < NTFS_TXF_LOG_HEADER_SIZE || Standard.EndOfFile.QuadPart > NTFS_TXF_LOG_MAX_SIZE))
+    {
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(Handle);
+        return Status;
+    }
+    Buffer = ExAllocatePoolZero(PagedPool, (SIZE_T)Standard.EndOfFile.QuadPart, TAG_NTFS_TXF);
+    if (!Buffer)
+    {
+        ZwClose(Handle);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Offset.QuadPart = 0;
+    Status = ZwReadFile(Handle, NULL, NULL, NULL, &IoStatus, Buffer, (ULONG)Standard.EndOfFile.QuadPart, &Offset, NULL);
+    ZwClose(Handle);
+    if (NT_SUCCESS(Status) && IoStatus.Information != (ULONG_PTR)Standard.EndOfFile.QuadPart)
+        Status = STATUS_FILE_CORRUPT_ERROR;
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Buffer, TAG_NTFS_TXF);
+        return Status;
+    }
+    *Log = Buffer;
+    *LogSize = (ULONG)Standard.EndOfFile.QuadPart;
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+NtfsTxfRecoverOneLog(_In_ PVolumeContextBlock VolCB,
+                     _In_ HANDLE Staging,
+                     _Inout_ PUCHAR Buffer)
+{
+    PFILE_DIRECTORY_INFORMATION Entry = (PFILE_DIRECTORY_INFORMATION)Buffer;
+    PNTFS_TXF_LOG_HEADER Log;
+    IO_STATUS_BLOCK IoStatus;
+    UNICODE_STRING Path;
+    ULONG LogSize;
+    NTSTATUS Status;
+    BOOLEAN Restart = TRUE;
+
+    for (;;)
+    {
+        Status = ZwQueryDirectoryFile(Staging, NULL, NULL, NULL, &IoStatus, Buffer, PAGE_SIZE,
+                                      FileDirectoryInformation, TRUE, NULL, Restart);
+        Restart = FALSE;
+        if (!NT_SUCCESS(Status))
+            return FALSE;
+        if (!(Entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            NtfsTxfIsLogName(Entry->FileName, Entry->FileNameLength))
+        {
+            break;
+        }
+    }
+
+    if (!NT_SUCCESS(NtfsTxfChild(&Path, &NtfsTxfStagingRoot, Entry->FileName, (USHORT)Entry->FileNameLength)))
+        return FALSE;
+    Status = NtfsTxfReadLog(VolCB, &Path, &Log, &LogSize);
+    if (NT_SUCCESS(Status) && NtfsTxfValidLog(Log, LogSize))
+    {
+        if (Log->State == NTFS_TXF_LOG_COMMITTED)
+        {
+            Status = NtfsTxfReplayLog(VolCB, Log);
+            DPRINT1("TxF: replayed the committed log %wZ (%lu steps): 0x%08lx\n", &Path, Log->Count, Status);
+        }
+        NtfsTxfDiscardLogged(VolCB, Log);
+    }
+    if (Log)
+        ExFreePoolWithTag(Log, TAG_NTFS_TXF);
+    Status = NtfsTxfDeleteOne(VolCB, &Path);
+    NtfsTxfFreeString(&Path);
+    return NT_SUCCESS(Status);
+}
+
+static
+VOID
+NtfsTxfRecoverStaging(_In_ PVolumeContextBlock VolCB)
+{
+    HANDLE Staging;
+    PUCHAR Buffer;
+    BOOLEAN Sweep;
+
+    if (!NT_SUCCESS(NtfsTxfOpenStaging(VolCB, FALSE, &Staging)))
+        return;
+    Buffer = ExAllocatePoolWithTag(PagedPool, PAGE_SIZE, TAG_NTFS_TXF);
+    if (Buffer)
+    {
+        while (NtfsTxfRecoverOneLog(VolCB, Staging, Buffer))
+            ;
+        ExFreePoolWithTag(Buffer, TAG_NTFS_TXF);
+    }
+    ZwClose(Staging);
+
+    ExAcquireFastMutex(&VolCB->TxfMutex);
+    Sweep = VolCB->TxfActiveCount == 0;
+    ExReleaseFastMutex(&VolCB->TxfMutex);
+    if (Sweep)
+        NtfsTxfDeleteTree(VolCB, &NtfsTxfStagingRoot, TRUE);
+    NtfsFlushVolume(VolCB, FALSE);
+}
+
+static
+BOOLEAN
+NtfsTxfThreadApplies(_In_ PVolumeContextBlock VolCB)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PLIST_ENTRY Entry;
+    BOOLEAN Applies = FALSE;
+
+    ExAcquireFastMutex(&VolCB->TxfMutex);
+    for (Entry = VolCB->TxfTransactions.Flink; Entry != &VolCB->TxfTransactions; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, NTFS_TXF_TRANSACTION, Link)->ActiveThread == Thread)
+        {
+            Applies = TRUE;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->TxfMutex);
+    return Applies;
+}
+
+static
+VOID
+NtfsTxfRecoverIfPending(_In_ PVolumeContextBlock VolCB,
+                        _In_ PDEVICE_OBJECT VolumeDeviceObject)
+{
+    if (!ReadAcquire(&VolCB->TxfRecoveryPending) ||
+        VolCB->TxfRecoveryThread == PsGetCurrentThread() ||
+        NtfsTxfThreadApplies(VolCB))
+    {
+        return;
+    }
+
+    KeEnterCriticalRegion();
+    ExfAcquirePushLockExclusive(&VolCB->TxfStagingLock);
+    if (ReadAcquire(&VolCB->TxfRecoveryPending))
+    {
+        VolCB->TxfRecoveryThread = PsGetCurrentThread();
+        if (NT_SUCCESS(NtfsTxfEnsureDeviceName(VolCB, VolumeDeviceObject)))
+            NtfsTxfRecoverStaging(VolCB);
+        WriteRelease(&VolCB->TxfRecoveryPending, FALSE);
+        VolCB->TxfRecoveryThread = NULL;
+    }
+    ExfReleasePushLockExclusive(&VolCB->TxfStagingLock);
+    KeLeaveCriticalRegion();
+}
+
 /* KTM ************************************************************************/
 
 static
 VOID
+NtfsTxfSetActive(_In_ PNTFS_TXF_TRANSACTION Txf,
+                 _In_ BOOLEAN Active)
+{
+    ExAcquireFastMutex(&Txf->VolCB->TxfMutex);
+    Txf->Ending = TRUE;
+    Txf->ActiveThread = Active ? PsGetCurrentThread() : NULL;
+    ExReleaseFastMutex(&Txf->VolCB->TxfMutex);
+}
+
+static
+NTSTATUS
+NtfsTxfPrepare(_In_ PNTFS_TXF_TRANSACTION Txf)
+{
+    PVolumeContextBlock VolCB = Txf->VolCB;
+    UNICODE_STRING Path;
+    PLIST_ENTRY Entry;
+    NTFS_TXF_INFO Info;
+    NTSTATUS Status;
+
+    NtfsTxfSetActive(Txf, TRUE);
+    Txf->Prepared = TRUE;
+    for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
+    {
+        PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
+
+        if (Change->Kind == NtfsTxfCreated && NT_SUCCESS(NtfsTxfQuery(VolCB, &Change->Physical, &Info)))
+            Change->Identity = Info.FileReference;
+    }
+
+    Status = NtfsTxfBuildLog(Txf);
+    if (NT_SUCCESS(Status) && Txf->Log)
+        Status = NtfsFlushVolume(VolCB, FALSE);
+    if (NT_SUCCESS(Status) && Txf->Log)
+        Status = NtfsTxfLogPath(Txf->Id, &Path);
+    if (NT_SUCCESS(Status) && Txf->Log)
+    {
+        Status = NtfsTxfOpen(VolCB, &Path, FILE_WRITE_DATA, FILE_ATTRIBUTE_NORMAL, FILE_SUPERSEDE,
+                             FILE_NON_DIRECTORY_FILE, &Txf->LogHandle);
+        NtfsTxfFreeString(&Path);
+        if (NT_SUCCESS(Status))
+            Status = NtfsTxfWriteLog(Txf, Txf->LogSize);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("TxF: writing the commit log of transaction %lu failed with 0x%08lx\n", Txf->Id, Status);
+    }
+    NtfsTxfSetActive(Txf, FALSE);
+    return Status;
+}
+
+static
+BOOLEAN
 NtfsTxfApply(_In_ PNTFS_TXF_TRANSACTION Txf)
 {
     PVolumeContextBlock VolCB = Txf->VolCB;
     PLIST_ENTRY Entry;
     NTSTATUS Status;
 
-    /* FIXME: the committed changes are applied one by one without a log, so a crash during commit leaves part of them */
+    if (!Txf->Prepared && !NT_SUCCESS(NtfsTxfPrepare(Txf)))
+        DPRINT1("TxF: transaction %lu commits without a durable log\n", Txf->Id);
+    NtfsTxfSetActive(Txf, TRUE);
+    if (Txf->LogHandle)
+    {
+        Txf->Log->State = NTFS_TXF_LOG_COMMITTED;
+        Status = NtfsTxfWriteLog(Txf, NTFS_TXF_LOG_HEADER_SIZE);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("TxF: marking transaction %lu committed failed with 0x%08lx\n", Txf->Id, Status);
+    }
+
     for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
 
-        Status = STATUS_SUCCESS;
-        switch (Change->Kind)
-        {
-            case NtfsTxfCreated:
-                if (NtfsTxfExists(VolCB, &Change->Physical))
-                    Status = NtfsTxfSetName(VolCB, &Change->Physical, &Change->Name, FALSE);
-                break;
-            case NtfsTxfShadow:
-                if (NtfsTxfExists(VolCB, &Change->Physical) && NtfsTxfExists(VolCB, &Change->Name))
-                    Status = NtfsTxfCopyData(VolCB, &Change->Physical, &Change->Name, TRUE);
-                break;
-            case NtfsTxfDeleted:
-                if (NtfsTxfExists(VolCB, &Change->Name))
-                    Status = NtfsTxfDeleteOne(VolCB, &Change->Name);
-                break;
-            case NtfsTxfRenamed:
-                Status = NtfsTxfSetName(VolCB, &Change->Source, &Change->Name, FALSE);
-                break;
-            case NtfsTxfLinked:
-                Status = NtfsTxfSetName(VolCB, &Change->Source, &Change->Name, TRUE);
-                break;
-            case NtfsTxfLocked:
-                break;
-        }
+        Status = NtfsTxfApplyStep(VolCB, Change->Kind, Change->Identity, &Change->Name, &Change->Source,
+                                  &Change->Physical);
         if (!NT_SUCCESS(Status))
-            DPRINT1("TxF: commit of %wZ failed with 0x%08lx\n", &Change->Name, Status);
+        {
+            DPRINT1("TxF: commit of %wZ failed with 0x%08lx, left to recovery\n", &Change->Name, Status);
+            return FALSE;
+        }
     }
+    return TRUE;
 }
 
 static
@@ -965,21 +1708,29 @@ NtfsTxfEnd(_In_ PNTFS_TXF_TRANSACTION Txf,
            _In_ BOOLEAN Commit)
 {
     PVolumeContextBlock VolCB = Txf->VolCB;
-
-    ExAcquireFastMutex(&VolCB->TxfMutex);
-    Txf->Ending = TRUE;
-    Txf->ActiveThread = PsGetCurrentThread();
-    ExReleaseFastMutex(&VolCB->TxfMutex);
+    BOOLEAN Complete = TRUE;
 
     if (Commit)
-        NtfsTxfApply(Txf);
-    NtfsTxfDiscard(Txf);
+        Complete = NtfsTxfApply(Txf);
+    NtfsTxfSetActive(Txf, TRUE);
+    if (Complete)
+    {
+        NtfsTxfDeleteLog(Txf);
+        NtfsTxfDiscard(Txf);
+    }
+    else if (Txf->LogHandle)
+    {
+        ZwClose(Txf->LogHandle);
+        Txf->LogHandle = NULL;
+    }
 
     ExAcquireFastMutex(&VolCB->TxfMutex);
     RemoveEntryList(&Txf->Link);
     InitializeListHead(&Txf->Link);
     InterlockedDecrement(&VolCB->TxfActiveCount);
     Txf->ActiveThread = NULL;
+    if (!Complete)
+        WriteRelease(&VolCB->TxfRecoveryPending, TRUE);
     ExReleaseFastMutex(&VolCB->TxfMutex);
 }
 
@@ -1008,7 +1759,10 @@ NtfsTxfNotification(_In_ PKENLISTMENT EnlistmentObject,
             break;
 
         case TRANSACTION_NOTIFY_PREPARE:
-            TmPrepareComplete(EnlistmentObject, TmVirtualClock);
+            if (NT_SUCCESS(NtfsTxfPrepare(Txf)))
+                TmPrepareComplete(EnlistmentObject, TmVirtualClock);
+            else
+                TmRollbackEnlistment(EnlistmentObject, TmVirtualClock);
             break;
 
         case TRANSACTION_NOTIFY_COMMIT:
@@ -1204,6 +1958,10 @@ NtfsTxfStreamHasWriters(_In_ PVolumeContextBlock VolCB,
 VOID
 NtfsTxfInitializeVolume(_Inout_ PVolumeContextBlock VolCB)
 {
+    PNtfsFileRecord Record = NULL;
+    ULONG Remaining = 0;
+    NTSTATUS Status;
+
     ExInitializeFastMutex(&VolCB->TxfMutex);
     InitializeListHead(&VolCB->TxfTransactions);
     VolCB->TxfActiveCount = 0;
@@ -1211,6 +1969,21 @@ NtfsTxfInitializeVolume(_Inout_ PVolumeContextBlock VolCB)
     ExInitializePushLock(&VolCB->TxfStagingLock.Value);
     VolCB->TxfStagingReady = FALSE;
     RtlInitEmptyUnicodeString(&VolCB->TxfDeviceName, NULL, 0);
+    VolCB->TxfRecoveryThread = NULL;
+    VolCB->TxfRecoveryPending = FALSE;
+    if (!NtfsTxfVolumeSupported(VolCB))
+        return;
+
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsMasterFileTableGetFileRecordFromQueryEx(NtfsVolumeGetMft(VolCB->DiskVolume), NtfsTxfStagingRoot.Buffer,
+                                                         NtfsTxfStagingRoot.Length / sizeof(WCHAR), TRUE, &Remaining,
+                                                         &Record);
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+    if (Record)
+        NtfsFileRecordDestroy(Record);
+    WriteRelease(&VolCB->TxfRecoveryPending, NT_SUCCESS(Status) && Remaining == 0 && Record);
 }
 
 BOOLEAN
@@ -1302,9 +2075,10 @@ NtfsTxfPrepareExisting(_In_ PVolumeContextBlock VolCB,
         Status = NtfsTxfStagePath(Txf, &Shadow);
         if (!NT_SUCCESS(Status))
             return Status;
-        Status = NtfsTxfCopyData(VolCB, Physical, &Shadow, FALSE);
+        Status = NtfsTxfCopyData(VolCB, Physical, &Shadow, 0, FALSE);
         if (NT_SUCCESS(Status))
-            Status = NtfsTxfRecord(Txf, NtfsTxfShadow, Name, NULL, &Shadow, Info->FileReference, FALSE, NULL);
+            Status = NtfsTxfRecord(Txf, NtfsTxfShadow, Name, NULL, &Shadow, Info->FileReference, Info->FileReference,
+                                   FALSE, NULL);
         if (!NT_SUCCESS(Status))
         {
             NtfsTxfDeleteTree(VolCB, &Shadow, FALSE);
@@ -1328,7 +2102,7 @@ NtfsTxfPrepareExisting(_In_ PVolumeContextBlock VolCB,
         if (Conflict)
             return STATUS_TRANSACTIONAL_CONFLICT;
         if (!Owned)
-            Status = NtfsTxfRecord(Txf, NtfsTxfLocked, Name, NULL, NULL, Info->FileReference, Info->Directory, NULL);
+            Status = NtfsTxfRecord(Txf, NtfsTxfLocked, Name, NULL, NULL, Info->FileReference, 0, Info->Directory, NULL);
         return Status;
     }
 
@@ -1380,7 +2154,7 @@ NtfsTxfPrepareNew(_In_ PVolumeContextBlock VolCB,
     Status = NtfsTxfStagePath(Txf, &Staged);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = NtfsTxfRecord(Txf, NtfsTxfCreated, Name, NULL, &Staged, 0, Directory, NULL);
+    Status = NtfsTxfRecord(Txf, NtfsTxfCreated, Name, NULL, &Staged, 0, 0, Directory, NULL);
     if (!NT_SUCCESS(Status))
     {
         NtfsTxfFreeString(&Staged);
@@ -1411,6 +2185,7 @@ NtfsTxfPrepareCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     NTSTATUS Status;
     BOOLEAN Reserved;
 
+    NtfsTxfRecoverIfPending(VolCB, VolumeDeviceObject);
     NtfsTxfSplitStream(&FileObject->FileName, &Name, &Stream);
     while (Name.Length > sizeof(WCHAR) && Name.Buffer[Name.Length / sizeof(WCHAR) - 1] == L'\\')
         Name.Length -= sizeof(WCHAR);
@@ -1669,6 +2444,17 @@ NtfsTxfCommittedReference(_In_ PFileContextBlock FileCB)
 }
 
 static
+ULONGLONG
+NtfsTxfIdentity(_In_ PFileContextBlock FileCB)
+{
+    ULONGLONG FileReference = NtfsTxfCommittedReference(FileCB);
+
+    if (!FileReference && FileCB->FileRec)
+        FileReference = NtfsFileRecordGetReference(FileCB->FileRec);
+    return FileReference;
+}
+
+static
 BOOLEAN
 NtfsTxfHasChildrenLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
                          _In_ PCUNICODE_STRING Directory)
@@ -1771,8 +2557,8 @@ NtfsTxfRecordDelete(_In_ PVolumeContextBlock VolCB,
         if (!NT_SUCCESS(Status))
             return Status;
     }
-    Status = NtfsTxfRecord(FileCB->Txf, NtfsTxfDeleted, &Name, NULL, NULL,
-                           NtfsTxfCommittedReference(FileCB), Directory, &Change);
+    Status = NtfsTxfRecord(FileCB->Txf, NtfsTxfDeleted, &Name, NULL, NULL, NtfsTxfCommittedReference(FileCB),
+                           NtfsTxfIdentity(FileCB), Directory, &Change);
     if (NT_SUCCESS(Status))
         FileCB->TxfDeleteChange = Change;
     return Status;
@@ -1787,6 +2573,7 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
     NtfsFileBasicInformation Basic;
     PNTFS_TXF_CHANGE Change;
     NTSTATUS Status;
+    BOOLEAN Ending;
 
     *Handled = FALSE;
     if (!FileCB->Txf || NtfsTxfIsPrivate(FileCB))
@@ -1814,14 +2601,17 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
     if (!(Flags & FILE_DISPOSITION_DELETE))
     {
         Change = FileCB->TxfDeleteChange;
-        FileCB->TxfDeleteChange = NULL;
-        if (Change)
-        {
-            ExAcquireFastMutex(&VolCB->TxfMutex);
+        if (!Change)
+            return STATUS_SUCCESS;
+        ExAcquireFastMutex(&VolCB->TxfMutex);
+        Ending = FileCB->Txf->Ending;
+        if (!Ending)
             RemoveEntryList(&Change->Link);
-            ExReleaseFastMutex(&VolCB->TxfMutex);
-            NtfsTxfFreeChange(Change);
-        }
+        ExReleaseFastMutex(&VolCB->TxfMutex);
+        if (Ending)
+            return STATUS_TRANSACTION_NOT_ACTIVE;
+        FileCB->TxfDeleteChange = NULL;
+        NtfsTxfFreeChange(Change);
         return STATUS_SUCCESS;
     }
 
@@ -1858,11 +2648,13 @@ NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
 {
     UNICODE_STRING OldName, Stream, Parent, Leaf, NewName, Source, TargetPhysical, NewLogical;
     PNTFS_TXF_TRANSACTION Txf = FileCB->Txf;
+    PNTFS_TXF_CHANGE Shadow;
     NTFS_TXF_VIEW View;
     NTFS_TXF_INFO Target;
+    ULONGLONG TargetIdentity;
     NTSTATUS Status;
     BOOLEAN Directory = FileCB->FileRec && (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY);
-    BOOLEAN Exists, Reserved, Locked;
+    BOOLEAN Exists, Reserved, Locked, Staged;
 
     if (Txf->Ending)
         return STATUS_TRANSACTION_NOT_ACTIVE;
@@ -1909,15 +2701,16 @@ NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
         else
         {
             ExAcquireFastMutex(&VolCB->TxfMutex);
-            Locked = !NtfsTxfIsStaging(&TargetPhysical) &&
-                     NtfsTxfIsLockedLocked(VolCB, Txf, Target.FileReference, TRUE);
+            Staged = NtfsTxfIsStaging(&TargetPhysical);
+            Locked = !Staged && NtfsTxfIsLockedLocked(VolCB, Txf, Target.FileReference, TRUE);
+            Shadow = Staged ? NtfsTxfFindPhysicalLocked(Txf, NtfsTxfShadow, &TargetPhysical) : NULL;
+            TargetIdentity = Shadow ? Shadow->FileReference : Target.FileReference;
             ExReleaseFastMutex(&VolCB->TxfMutex);
             if (Locked)
                 Status = STATUS_SHARING_VIOLATION;
             else
                 Status = NtfsTxfRecord(Txf, NtfsTxfDeleted, &NewName, NULL, NULL,
-                                       NtfsTxfIsStaging(&TargetPhysical) ? 0 : Target.FileReference,
-                                       FALSE, NULL);
+                                       Staged ? 0 : Target.FileReference, TargetIdentity, FALSE, NULL);
         }
     }
     NtfsTxfFreeString(&TargetPhysical);
@@ -1929,7 +2722,7 @@ NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
 
         NtfsTxfSplitStream(&Source, &SourceName, &SourceStream);
         Status = NtfsTxfRecord(Txf, Link ? NtfsTxfLinked : NtfsTxfRenamed, &NewName, &OldName, &SourceName,
-                               NtfsTxfCommittedReference(FileCB), Directory, NULL);
+                               NtfsTxfCommittedReference(FileCB), NtfsTxfIdentity(FileCB), Directory, NULL);
     }
     if (NT_SUCCESS(Status) && !Link)
     {

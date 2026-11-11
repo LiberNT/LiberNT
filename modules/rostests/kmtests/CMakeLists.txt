@@ -9,6 +9,7 @@ add_subdirectory(fltmgr)
 add_subdirectory(hidparse)
 add_subdirectory(kernel32)
 add_subdirectory(ndis)
+add_subdirectory(ntfs)
 add_subdirectory(ntos_cc)
 add_subdirectory(ntos_io)
 add_subdirectory(ntos_mm)
@@ -549,6 +550,8 @@ list(APPEND KMTEST_SOURCE
     fltmgr/fltmgr_load/fltmgr_user.c
     fltmgr/fltmgr_register/fltmgr_reg_user.c
 
+    ntfs/NtfsTxfRecovery_user.c
+
     hidparse/HidP_user.c
     kernel32/FileAttributes_user.c
     kernel32/FindFile_user.c
@@ -634,6 +637,7 @@ add_dependencies(kmtest_drivers
     fltmgrio_drv
     fltmgr_create
     fltmgrreg_drv
+    ntfstxfrecovery_drv
     hidp_drv
     ioadddeviceunload_drv
     iofilterrequirements_drv

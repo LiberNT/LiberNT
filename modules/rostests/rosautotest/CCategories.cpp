@@ -223,6 +223,7 @@ static const CATEGORY_RULE Rules[] =
     { "kmtest", "Hal*", "kernel:hal" },
     { "kmtest", "FsRtl*", "kernel:fs" },
     { "kmtest", "Npfs*", "kernel:fs" },
+    { "kmtest", "Ntfs*", "kernel:fs" },
     { "kmtest", "FltMgr*", "kernel:fs" },
     { "kmtest", "FileAttributes", "kernel:fs" },
     { "kmtest", "FindFile", "kernel:fs" },
