@@ -277,8 +277,10 @@ static void handle_docobj_load(HTMLDocumentObj *doc)
 
     unlink_ref(&doc->nscontainer->editor_controller);
 
-    if(doc->nscontainer->usermode == EDITMODE)
+    if(doc->nscontainer->usermode == EDITMODE) {
         setup_editor_controller(doc->nscontainer);
+        update_doc(doc, UPDATE_UI);
+    }
 
     if(doc->client) {
         hres = IOleClientSite_QueryInterface(doc->client, &IID_IOleCommandTarget, (void**)&olecmd);
