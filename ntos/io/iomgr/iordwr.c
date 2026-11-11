@@ -222,10 +222,29 @@ IopIssueRequest(
     _In_ PIOP_REQUEST Request,
     _In_ IOP_TRANSFER_TYPE TransferType)
 {
+    PIO_STATUS_BLOCK CallerIosb = NULL;
+    IO_STATUS_BLOCK LocalIosb;
+    KEVENT LocalEvent;
+    BOOLEAN LocalWait;
     BOOLEAN Deferred;
     NTSTATUS Status;
 
-    KeClearEvent(&Request->FileObject->Event);
+    /* A synchronous service returns only once its request is done, even on a file opened for asynchronous I/O */
+    LocalWait = !Request->SynchIo && (Request->Irp->Flags & IRP_SYNCHRONOUS_API);
+    if (LocalWait)
+    {
+        ASSERT(Request->Irp->UserEvent == NULL);
+
+        KeInitializeEvent(&LocalEvent, NotificationEvent, FALSE);
+        CallerIosb = Request->Irp->UserIosb;
+        Request->Irp->UserIosb = &LocalIosb;
+        Request->Irp->UserEvent = &LocalEvent;
+    }
+    else
+    {
+        KeClearEvent(&Request->FileObject->Event);
+    }
+
     IopQueueIrpToThread(Request->Irp);
 
     IopUpdateOperationCount(TransferType);
@@ -237,6 +256,33 @@ IopIssueRequest(
     if (Deferred && Status != STATUS_PENDING)
     {
         IopCompleteDeferredIrp(Request->Irp, Request->FileObject);
+    }
+
+    if (LocalWait)
+    {
+        /* An error the driver gave straight back left the status block alone and signalled nothing */
+        if (Status != STATUS_PENDING && NT_ERROR(Status)) return Status;
+
+        KeWaitForSingleObject(&LocalEvent, Executive, KernelMode, FALSE, NULL);
+        if (Status == STATUS_PENDING) Status = LocalIosb.Status;
+
+        if (Request->PreviousMode == KernelMode)
+        {
+            *CallerIosb = LocalIosb;
+            return Status;
+        }
+
+        _SEH2_TRY
+        {
+            IopWriteIoStatusBlock(CallerIosb, &LocalIosb, FALSE);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+
+        return Status;
     }
 
     if (!Request->SynchIo) return Status;

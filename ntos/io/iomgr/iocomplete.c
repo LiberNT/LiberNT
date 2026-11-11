@@ -225,7 +225,9 @@ IopCompleteRequest(
 
     IopUnQueueIrpFromThread(Irp);
 
-    Is32Bit = IopIs32BitFileIo(FileObject, Irp->RequestorMode);
+    /* A synchronous service's caller is still waiting, so its status block is written in its own form */
+    Is32Bit = !(Irp->Flags & IRP_SYNCHRONOUS_API) &&
+              IopIs32BitFileIo(FileObject, Irp->RequestorMode);
 
     /*
      * An error the driver gave straight back from its dispatch routine reaches
