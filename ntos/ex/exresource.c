@@ -26,7 +26,7 @@ BOOLEAN ExResourceStrict = FALSE;
 #define EXP_RESOURCE_TAG 'aChE'
 
 /* How long one pass of a resource wait lasts before the wait is reported */
-#define EXP_RESOURCE_WAIT_INTERVAL (-10 * 1000 * 1000 * 4)
+#define EXP_RESOURCE_WAIT_INTERVAL (-10 * 1000 * 500)
 
 /* A brief pause taken when a table has to be grown while the lock is dropped */
 #define EXP_RESOURCE_SHORT_INTERVAL (-10 * 1000)
@@ -297,26 +297,47 @@ ExpRecordWaiterPriority(
 static
 VOID
 ExpBoostOwnerThread(
-    _In_ PERESOURCE Resource,
-    _In_ PKTHREAD Owner)
+    _In_ POWNER_ENTRY Entry,
+    _In_ KPRIORITY WaiterPriority)
 {
+    PKTHREAD Owner = (PKTHREAD)Entry->OwnerThread;
+
     if ((Owner == NULL) ||
         ((ULONG_PTR)Owner & EXP_RESOURCE_OWNER_POINTER_BITS))
     {
         return;
     }
 
-    if (Owner->Priority >= LOW_REALTIME_PRIORITY)
+    if ((Owner->Priority >= WaiterPriority) ||
+        (Owner->Priority >= LOW_REALTIME_PRIORITY - 1))
     {
         return;
     }
 
-    if (Owner->Priority >= (SCHAR)(Resource->Flag >> 8))
+    KeBoostPriorityThread(Owner,
+                          (LOW_REALTIME_PRIORITY - 1) - Owner->BasePriority);
+}
+
+static
+VOID
+ExpBoostResourceOwners(
+    _In_ PERESOURCE Resource)
+{
+    KPRIORITY WaiterPriority = KeGetCurrentThread()->Priority;
+    ULONG Size = ExpOwnerTableSize(Resource);
+    ULONG Index;
+
+    if (Resource->Flag & ResourceHasDisabledPriorityBoost)
     {
         return;
     }
 
-    KeBoostPriorityThread(Owner, (KPRIORITY)(Resource->Flag >> 8));
+    ExpBoostOwnerThread(&Resource->OwnerEntry, WaiterPriority);
+
+    for (Index = 1; Index < Size; Index++)
+    {
+        ExpBoostOwnerThread(&Resource->OwnerTable[Index], WaiterPriority);
+    }
 }
 
 static
@@ -353,8 +374,7 @@ ExpWaitForResource(
         }
 
         KeAcquireSpinLock(&Resource->SpinLock, &OldIrql);
-        ExpBoostOwnerThread(Resource,
-                            (PKTHREAD)Resource->OwnerEntry.OwnerThread);
+        ExpBoostResourceOwners(Resource);
         KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
     }
 }
@@ -982,9 +1002,11 @@ NTAPI
 ExDisableResourceBoostLite(
     _In_ PERESOURCE Resource)
 {
-    /* TODO: no published field of ERESOURCE records this, so the request is
-       dropped and waiters keep boosting the owner. */
-    UNREFERENCED_PARAMETER(Resource);
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Resource->SpinLock, &OldIrql);
+    Resource->Flag |= ResourceHasDisabledPriorityBoost;
+    KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
 }
 
 PVOID

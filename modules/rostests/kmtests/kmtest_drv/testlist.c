@@ -136,6 +136,7 @@ KMT_TESTFUNC Test_MmSectionWin11KM;
 KMT_TESTFUNC Test_MmPteWin11KM;
 #endif
 KMT_TESTFUNC Test_ExResource;
+KMT_TESTFUNC Test_ExResourceBoost;
 KMT_TESTFUNC Test_ExRundown;
 KMT_TESTFUNC Test_ExSequencedList;
 KMT_TESTFUNC Test_ExSingleList;
@@ -466,6 +467,7 @@ const KMT_TEST TestList[] =
     { "ExTimeZone",                         Test_ExTimeZone },
     { "ExLicenseDif",                       Test_ExLicenseDif },
     { "ExResource",                         Test_ExResource },
+    { "ExResourceBoost",                    Test_ExResourceBoost },
     { "ExRundown",                          Test_ExRundown },
     { "ExSequencedList",                    Test_ExSequencedList },
     { "ExSingleList",                       Test_ExSingleList },
