@@ -48,6 +48,7 @@ list(APPEND SOURCE
     threadpool.c
     vista.c)
 
+set_source_files_properties(firmware.c PROPERTIES COMPILE_DEFINITIONS NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 add_library(kernel32_vista_static ${SOURCE})
 target_link_libraries(kernel32_vista_static ${PSEH_LIB})
 add_dependencies(kernel32_vista_static psdk)
