@@ -72,9 +72,9 @@ PspGetOrSetContextKernelRoutine(
     }
 
     /*
-     * A thread that has not yet run in user mode has its starting state at
-     * the top of its kernel stack, which is where the frame it will return
-     * through was built.
+     * Only system calls and page faults link their frame to the thread; any
+     * other entry from user mode, and the frame a thread that never ran will
+     * return through, sit at the top of the kernel stack.
      */
     if (Frame == NULL && Thread->Teb != NULL)
         Frame = (PKTRAP_FRAME)((PUCHAR)Thread->InitialStack -
@@ -96,19 +96,34 @@ PspGetOrSetContextKernelRoutine(
         return;
     }
 
+    /*
+     * The nonvolatile registers of a user frame were saved, if at all, by the
+     * kernel functions called since it was entered, so they are reached by
+     * unwinding the stack back to user mode.
+     */
     if (Apc->SystemArgument1 != NULL)
     {
-        KeContextToTrapFrame(&Request->Context,
-                             NULL,
-                             Frame,
-                             Request->Context.ContextFlags,
-                             Request->Mode);
+        if (KiUserTrap(Frame))
+        {
+            KiSetTrapContext(Frame, &Request->Context, Request->Mode);
+        }
+        else
+        {
+            KeContextToTrapFrame(&Request->Context,
+                                 NULL,
+                                 Frame,
+                                 Request->Context.ContextFlags,
+                                 Request->Mode);
+        }
     }
     else
     {
         ULONG Requested = Request->Context.ContextFlags;
 
-        KeTrapFrameToContext(Frame, NULL, &Request->Context);
+        if (KiUserTrap(Frame))
+            KiGetTrapContext(Frame, &Request->Context);
+        else
+            KeTrapFrameToContext(Frame, NULL, &Request->Context);
 
         Request->Context.ContextFlags &= ~(CONTEXT_EXCEPTION_REPORTING |
                                            CONTEXT_SERVICE_ACTIVE |
