@@ -66,6 +66,7 @@ static PKPRCB Current;
 static PKTHREAD KeBugCheckOwner;
 static volatile LONG KiFreezeFailure;
 static ULONG KiFreezeDepth, KiFreezeFlag;
+static PKPRCB KiFreezeHolder __attribute__((unused));
 static KIRQL KiOldIrql;
 static BOOLEAN KdEnteredDebugger, KdDebuggerEnabled = TRUE, KdIgnoreUmExceptions, KdAutoEnableOnEvent;
 static BOOLEAN KdpReportedFirstChance;
@@ -82,7 +83,7 @@ static void KiSetFreezeFailure(void);
 static BOOLEAN KiHasFreezeFailure(void);
 static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb);
 static BOOLEAN KeFreezeExecution(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame) {
-    (void)TrapFrame; (void)ExceptionFrame; Freezes++; KiFreezeDepth = 1;
+    (void)TrapFrame; (void)ExceptionFrame; Freezes++; KiFreezeDepth = 1; KiFreezeHolder = Current;
     if (SimulateFailure) KiSetFreezeFailure();
     return TRUE;
 }

@@ -24,6 +24,9 @@ KIRQL KiOldIrql;
 /* How deep the one freeze owner has nested its own freezes. */
 static ULONG KiFreezeDepth;
 
+/* The processor those freezes belong to; any other one has to wait its turn. */
+static PKPRCB KiFreezeHolder;
+
 /* Set when a processor never answered a freeze or a thaw: the machine is stopping. */
 static volatile LONG KiFreezeFailure;
 
@@ -44,10 +47,11 @@ KiHasFreezeFailure(VOID)
 /*
  * Stops every other processor and leaves this one holding the machine.
  *
- * Interrupt time is stopped first. Were it left running, every timer in the
- * system would be found overdue the instant the machine is let go, and the
- * first thing the debugger's user would see after a breakpoint is a storm of
- * expired timers that the break itself caused.
+ * Interrupt time is stopped as soon as this processor holds the machine. Were
+ * it left running, every timer in the system would be found overdue the
+ * instant the machine is let go, and the first thing the debugger's user would
+ * see after a breakpoint is a storm of expired timers that the break itself
+ * caused.
  *
  * Answers whether interrupts were enabled, which the thaw needs to put back.
  */
@@ -57,49 +61,57 @@ KeFreezeExecution(
     _In_opt_ PKTRAP_FRAME TrapFrame,
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame)
 {
+    PKPRCB Prcb;
     BOOLEAN Enable;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(TrapFrame);
     UNREFERENCED_PARAMETER(ExceptionFrame);
 
     /* Nothing may interrupt this processor from here until the thaw */
     Enable = KeDisableInterrupts();
+    Prcb = KeGetCurrentPrcb();
 
     /*
      * A nested freeze does not stop the machine again: it is already stopped,
      * and the processors that were told to hold must not be told twice.
      */
-    if (KiFreezeDepth != 0)
+    if (KiFreezeHolder == Prcb)
     {
         KiFreezeDepth++;
         return Enable;
     }
 
-    KiFreezeInterruptTime();
-
-    KiOldIrql = KeGetCurrentIrql();
-    if (KiOldIrql < HIGH_LEVEL)
+    OldIrql = KeGetCurrentIrql();
+    if (OldIrql < HIGH_LEVEL)
         KfRaiseIrql(HIGH_LEVEL);
-
-    KiFreezeDepth = 1;
-    KiFreezeFlag = 1;
 
     /* The architecture layer holds the other processors where they are */
     KxFreezeExecution();
+
+    KiFreezeInterruptTime();
+
+    KiOldIrql = OldIrql;
+    KiFreezeDepth = 1;
+    KiFreezeFlag = 1;
+    KiFreezeHolder = Prcb;
 
     return Enable;
 }
 
 /*
- * Lets the machine go again, in the order the freeze took it: the other
- * processors first, then this one's level, then the clock, and interrupts
- * last, so that nothing arrives before the state it would look at is sound.
+ * Lets the machine go again: the clock and the freeze state first, as the next
+ * holder may take the machine the moment it is let go, then the other
+ * processors, then this one's level, and interrupts last, so that nothing
+ * arrives before the state it would look at is sound.
  */
 VOID
 NTAPI
 KeThawExecution(
     _In_ BOOLEAN Enable)
 {
+    KIRQL OldIrql;
+
     /* Nothing is let go after a failed freeze: only the owner of the stop goes on */
     if (KiHasFreezeFailure())
     {
@@ -112,6 +124,7 @@ KeThawExecution(
     }
 
     ASSERT(KiFreezeDepth != 0);
+    ASSERT(KiFreezeHolder == KeGetCurrentPrcb());
 
     if (KiFreezeDepth > 1)
     {
@@ -120,17 +133,18 @@ KeThawExecution(
         return;
     }
 
+    OldIrql = KiOldIrql;
+    KiFreezeDepth = 0;
+    KiFreezeFlag = 0;
+    KiFreezeHolder = NULL;
+    KiThawInterruptTime();
+
     KxThawExecution();
     if (KiHasFreezeFailure())
         return;
 
-    KiFreezeDepth = 0;
-    KiFreezeFlag = 0;
-
-    if (KiOldIrql < HIGH_LEVEL)
-        KeLowerIrql(KiOldIrql);
-
-    KiThawInterruptTime();
+    if (OldIrql < HIGH_LEVEL)
+        KeLowerIrql(OldIrql);
 
     KeRestoreInterrupts(Enable);
 }
