@@ -2694,8 +2694,6 @@ PdoQueryResourceRequirements(
                 MsixMessageCount = 1;
             if (MessageNumberLimit != 0 && MsixMessageCount > MessageNumberLimit)
                 MsixMessageCount = MessageNumberLimit;
-            if (MsixMessageCount > KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS) + 1)
-                MsixMessageCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS) + 1;
         }
         if (HasMsi)
         {

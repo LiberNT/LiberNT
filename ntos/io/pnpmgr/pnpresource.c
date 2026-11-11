@@ -337,6 +337,7 @@ IopFixupResourceListWithRequirements(
             return STATUS_SUCCESS;
         }
 
+        /* TODO: a multi-message request that cannot be granted gets exactly one message instead of the next alternative */
         IopReleaseMessageTokens(Allocated);
         ExFreePoolWithTag(Allocated, TAG_IO_RESOURCE);
     }
