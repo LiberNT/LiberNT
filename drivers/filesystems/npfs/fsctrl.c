@@ -65,18 +65,17 @@ NpQueryClientProcess(IN PDEVICE_OBJECT DeviceObject,
     /* Get the current stack location */
     IoStackLocation = IoGetCurrentIrpStackLocation(Irp);
 
+    Length = IoStackLocation->Parameters.FileSystemControl.OutputBufferLength;
+    if (Length < sizeof(FILE_PIPE_CLIENT_PROCESS_BUFFER))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
     /* Decode the file object and check the node type */
     NodeTypeCode = NpDecodeFileObject(IoStackLocation->FileObject, 0, &Ccb, 0);
     if (NodeTypeCode != NPFS_NTC_CCB)
     {
         return STATUS_PIPE_DISCONNECTED;
-    }
-
-    /* Get the length of the query buffer */
-    Length = IoStackLocation->Parameters.QueryFile.Length;
-    if (Length < 8)
-    {
-        return STATUS_INVALID_PARAMETER;
     }
 
     QueryBuffer = Irp->AssociatedIrp.SystemBuffer;
@@ -163,16 +162,16 @@ NpSetClientProcess(IN PDEVICE_OBJECT DeviceObject,
         return STATUS_PIPE_DISCONNECTED;
     }
 
-    /* Get the length of the query buffer and check if it's valid */
-    Length = IoStackLocation->Parameters.QueryFile.Length;
-    if (Length != sizeof(NP_CLIENT_PROCESS))
+    Length = IoStackLocation->Parameters.FileSystemControl.InputBufferLength;
+    if (Length != sizeof(FILE_PIPE_CLIENT_PROCESS_BUFFER) && Length != sizeof(NP_CLIENT_PROCESS))
     {
         return STATUS_INVALID_PARAMETER;
     }
 
     /* Get the buffer and check if the data Length is valid */
     InputBuffer = Irp->AssociatedIrp.SystemBuffer;
-    if (InputBuffer->DataLength > 30)
+    if (Length == sizeof(NP_CLIENT_PROCESS) &&
+        InputBuffer->DataLength > FILE_PIPE_COMPUTER_NAME_LENGTH * sizeof(WCHAR))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -182,8 +181,8 @@ NpSetClientProcess(IN PDEVICE_OBJECT DeviceObject,
                                                sizeof(NP_CLIENT_PROCESS),
                                                'iFpN');
 
-    /* Copy the full input buffer */
-    RtlCopyMemory(ClientSession, InputBuffer, sizeof(NP_CLIENT_PROCESS));
+    RtlZeroMemory(ClientSession, sizeof(NP_CLIENT_PROCESS));
+    RtlCopyMemory(ClientSession, InputBuffer, Length);
 
     /* Lock the Ccb */
     ExAcquireResourceExclusiveLite(&Ccb->NonPagedCcb->Lock, TRUE);
