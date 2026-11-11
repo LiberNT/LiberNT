@@ -17,6 +17,7 @@
 #include <shlwapi.h>
 #include <strsafe.h>
 #include <shellutils.h>
+#include <tlhelp32.h>
 
 //#define MANUAL_DEBUGGING
 
@@ -126,7 +127,7 @@ public:
     {
         trace("CEnumString::Reset\n");
         m_nIndex = 0;
-        s_bReset = TRUE;
+        InterlockedExchange((LONG *)&s_bReset, TRUE);
         return S_OK;
     }
     STDMETHODIMP Clone(IEnumString** ppenum) override
@@ -138,8 +139,8 @@ public:
     STDMETHODIMP Expand(PCWSTR pszExpand) override
     {
         trace("CEnumString::Expand(%S)\n", pszExpand);
-        s_bExpand = TRUE;
         s_strExpand = pszExpand;
+        InterlockedExchange((LONG *)&s_bExpand, TRUE);
         return S_OK;
     }
     STDMETHODIMP GetOptions(DWORD *pdwFlag) override
@@ -320,7 +321,8 @@ DoTestCaseA(INT x, INT y, INT cx, INT cy, LPCWSTR pszInput,
     DWORD style, exstyle;
     HWND hwndDropDown;
     LONG_PTR id;
-    for (INT i = 0; i < 100; ++i)
+    ULONGLONG ullStart = GetTickCount64();
+    for (;;)
     {
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
         {
@@ -328,9 +330,9 @@ DoTestCaseA(INT x, INT y, INT cx, INT cy, LPCWSTR pszInput,
             DispatchMessageW(&msg);
         }
         hwndDropDown = FindWindowW(L"Auto-Suggest Dropdown", L"");
-        if (IsWindowVisible(hwndDropDown))
+        if (IsWindowVisible(hwndDropDown) || GetTickCount64() - ullStart >= 10000)
             break;
-        Sleep(100);
+        MsgWaitForMultipleObjects(0, NULL, FALSE, 10, QS_ALLINPUT);
     }
     ok(hwndDropDown != NULL, "hwndDropDown was NULL\n");
     ok_int(IsWindowVisible(hwndDropDown), TRUE);
@@ -540,12 +542,11 @@ DoTestCaseA(INT x, INT y, INT cx, INT cy, LPCWSTR pszInput,
     // append WM_QUIT message into message queue
     PostQuitMessage(0);
 
-    // do the messages
+    // do the messages; the worker finished before the drop-down was shown
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
-        Sleep(30); // another thread is working...
     }
 
     // destroy the EDIT control and drop-down window
@@ -591,12 +592,58 @@ DoesMatch(LPWSTR *pList, UINT nCount, LPCWSTR psz)
     return FALSE;
 }
 
+static VOID GetProcessThreads(CSimpleArray<DWORD>& Threads)
+{
+    THREADENTRY32 Entry = { sizeof(Entry) };
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+
+    Threads.RemoveAll();
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+        return;
+    if (Thread32First(hSnapshot, &Entry))
+    {
+        do
+        {
+            if (Entry.th32OwnerProcessID == GetCurrentProcessId())
+                Threads.Add(Entry.th32ThreadID);
+        } while (Thread32Next(hSnapshot, &Entry));
+    }
+    CloseHandle(hSnapshot);
+}
+
+/* A thread the input started may still change the list; one that stays longer than 100 ms is taken as long-lived */
+static VOID WaitForThreadsStartedSince(const CSimpleArray<DWORD>& Before)
+{
+    ULONGLONG ullStart = GetTickCount64();
+    CSimpleArray<DWORD> Now;
+    MSG msg;
+
+    for (;;)
+    {
+        BOOL bNewThread = FALSE;
+
+        GetProcessThreads(Now);
+        for (int i = 0; i < Now.GetSize() && !bNewThread; ++i)
+            bNewThread = (Before.Find(Now[i]) < 0);
+        if (!bNewThread || GetTickCount64() - ullStart >= 100)
+            break;
+
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        MsgWaitForMultipleObjects(0, NULL, FALSE, 1, QS_ALLINPUT);
+    }
+}
+
 // the testcase B
 static VOID
 DoTestCaseB(INT x, INT y, INT cx, INT cy, LPWSTR *pList, UINT nCount,
             const TEST_B_ENTRY *pEntries, UINT cEntries)
 {
     MSG msg;
+    CSimpleArray<DWORD> ThreadsBefore;
     s_bExpand = s_bReset = FALSE;
 
     // create EDIT control
@@ -634,7 +681,6 @@ DoTestCaseB(INT x, INT y, INT cx, INT cy, LPWSTR *pList, UINT nCount,
     HWND hwndDropDown = NULL, hwndScrollBar = NULL, hwndSizeBox = NULL, hwndList = NULL;
     // input
     SetFocus(hwndEdit);
-    Sleep(100);
 
     for (UINT i = 0; i < cEntries; ++i)
     {
@@ -645,42 +691,56 @@ DoTestCaseB(INT x, INT y, INT cx, INT cy, LPWSTR *pList, UINT nCount,
         UINT uMsg = entry.m_uMsg;
         WPARAM wParam = entry.m_wParam;
         LPARAM lParam = entry.m_lParam;
+        GetProcessThreads(ThreadsBefore);
         PostMessageW(hwndEdit, uMsg, wParam, lParam);
 
-        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
-        {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-
-            if (msg.message == WM_CHAR || msg.message == WM_KEYDOWN)
-                Sleep(100); // another thread is working
-        }
-
-        if (!IsWindow(hwndDropDown))
-        {
-            hwndDropDown = FindWindowW(L"Auto-Suggest Dropdown", L"");
-            hwndScrollBar = hwndSizeBox = hwndList = NULL;
-        }
-        if (IsWindowVisible(hwndDropDown))
-        {
-            hwndScrollBar = GetTopWindow(hwndDropDown);
-            hwndSizeBox = GetNextWindow(hwndScrollBar, GW_HWNDNEXT);
-            hwndList = GetNextWindow(hwndSizeBox, GW_HWNDNEXT);
-        }
-
+        /* The suggestions come from another thread: read the state until it shows the expected step, at most a second */
         WCHAR szText[64];
-        GetWindowTextW(hwndEdit, szText, _countof(szText));
-        CStringW strText = szText;
-        INT ich0, ich1;
-        SendMessageW(hwndEdit, EM_GETSEL, (WPARAM)&ich0, (LPARAM)&ich1);
-
-        BOOL bVisible = IsWindowVisible(hwndDropDown);
-        ok(bVisible == entry.m_bVisible, "Line %d: bVisible was %d\n", entry.m_line, bVisible);
-        INT iItem = -1;
-        if (IsWindowVisible(hwndList))
+        CStringW strText;
+        INT ich0, ich1, iItem;
+        BOOL bVisible;
+        ULONGLONG ullStart = GetTickCount64();
+        for (;;)
         {
-            iItem = ListView_GetNextItem(hwndList, -1, LVNI_ALL | LVNI_SELECTED);
+            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+
+            if (!IsWindow(hwndDropDown))
+            {
+                hwndDropDown = FindWindowW(L"Auto-Suggest Dropdown", L"");
+                hwndScrollBar = hwndSizeBox = hwndList = NULL;
+            }
+            if (IsWindowVisible(hwndDropDown))
+            {
+                hwndScrollBar = GetTopWindow(hwndDropDown);
+                hwndSizeBox = GetNextWindow(hwndScrollBar, GW_HWNDNEXT);
+                hwndList = GetNextWindow(hwndSizeBox, GW_HWNDNEXT);
+            }
+
+            GetWindowTextW(hwndEdit, szText, _countof(szText));
+            strText = szText;
+            SendMessageW(hwndEdit, EM_GETSEL, (WPARAM)&ich0, (LPARAM)&ich1);
+            bVisible = IsWindowVisible(hwndDropDown);
+            iItem = -1;
+            if (IsWindowVisible(hwndList))
+                iItem = ListView_GetNextItem(hwndList, -1, LVNI_ALL | LVNI_SELECTED);
+
+            if ((bVisible == entry.m_bVisible &&
+                 strText == (entry.m_text ? entry.m_text : L"") &&
+                 ich0 == entry.m_ich0 && ich1 == entry.m_ich1 && iItem == entry.m_iItem &&
+                 s_bReset == entry.m_bReset && s_bExpand == entry.m_bExpand) ||
+                GetTickCount64() - ullStart >= 1000)
+            {
+                break;
+            }
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 1, QS_ALLINPUT);
         }
+        WaitForThreadsStartedSince(ThreadsBefore);
+
+        ok(bVisible == entry.m_bVisible, "Line %d: bVisible was %d\n", entry.m_line, bVisible);
         BOOL bDidMatch = DoesMatch(pList, nCount, strText);
         ok(bVisible == bDidMatch, "Line %d: bVisible != bDidMatch\n", entry.m_line);
 
