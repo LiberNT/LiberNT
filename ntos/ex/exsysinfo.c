@@ -947,6 +947,12 @@ NtQuerySystemInformation(
         return Status;
     }
 
+    /* The class names its process in an input this form has no room for, so its worker refuses it without a length */
+    if (SystemInformationClass == SystemCpuSetInformation)
+    {
+        return ExpQueryCpuSetInformation(NULL, 0, SystemInformation, Length, UnsafeResultLength, PreviousMode);
+    }
+
     _SEH2_TRY
     {
         switch (SystemInformationClass)
