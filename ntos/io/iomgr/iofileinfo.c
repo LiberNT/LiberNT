@@ -296,6 +296,35 @@ IopAnswerFromFileObject(
             return STATUS_SUCCESS;
         }
 
+        case FileNumaNodeInformation:
+        {
+            PFILE_NUMA_NODE_INFORMATION Info = Buffer;
+            PDEVICE_OBJECT Base;
+            NTSTATUS Status = STATUS_NO_SUCH_DEVICE;
+            USHORT Node = 0;
+
+            /* The node is that of the device the file lives on; a device outside the PnP tree has none */
+            Base = IoGetDeviceAttachmentBaseRef(FileObject->DeviceObject);
+            if (IopGetDeviceNode(Base) != NULL && NT_SUCCESS(IoGetDeviceNumaNode(Base, &Node)))
+                Status = STATUS_SUCCESS;
+            ObDereferenceObject(Base);
+
+            if (!NT_SUCCESS(Status)) return Status;
+
+            _SEH2_TRY
+            {
+                Info->NodeNumber = Node;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                _SEH2_YIELD(return _SEH2_GetExceptionCode());
+            }
+            _SEH2_END;
+
+            *ReturnedLength = sizeof(*Info);
+            return STATUS_SUCCESS;
+        }
+
         case FileIoCompletionNotificationInformation:
         {
             PFILE_IO_COMPLETION_NOTIFICATION_INFORMATION Info = Buffer;
@@ -780,7 +809,11 @@ NtQueryInformationFile(
     {
         _SEH2_TRY
         {
-            ProbeForWrite(FileInformation, Length, sizeof(ULONG));
+            /* A record smaller than a ULONG is aligned no more than its own size */
+            ProbeForWrite(FileInformation,
+                          Length,
+                          (IopQueryOperationLength[FileInformationClass] < sizeof(ULONG)) ?
+                              IopQueryOperationLength[FileInformationClass] : sizeof(ULONG));
             ProbeForWriteIoStatusBlock(IoStatusBlock);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
