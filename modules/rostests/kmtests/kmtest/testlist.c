@@ -57,6 +57,7 @@ KMT_TESTFUNC Test_PoSettingSession;
 KMT_TESTFUNC Test_PoSleepInformation;
 KMT_TESTFUNC Test_PoExecutionState;
 KMT_TESTFUNC Test_PoShutdownPersist;
+KMT_TESTFUNC Test_PoShutdownTime;
 KMT_TESTFUNC Test_BatteryClassNotify;
 KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_PoFxState;
@@ -136,6 +137,7 @@ const KMT_TEST TestList[] =
     { "PoSleepInformation",           Test_PoSleepInformation },
     { "PoExecutionState",             Test_PoExecutionState },
     { "PoShutdownPersist",            Test_PoShutdownPersist },
+    { "-PoShutdownTime",              Test_PoShutdownTime },
     { "ExWddmPoFx",                    Test_ExWddmPoFx },
     { "PoFxState",                     Test_PoFxState },
     { "IoDeviceNumaNode",              Test_IoDeviceNumaNode },

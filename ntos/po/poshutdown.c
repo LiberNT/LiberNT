@@ -66,6 +66,42 @@ PopProcessShutDownLists(VOID)
     }
 }
 
+/* A clean shutdown leaves its time in the registry, which a crash or a power loss does not */
+static
+VOID
+PopRecordShutdownTime(VOID)
+{
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(
+        L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Windows");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"ShutdownTime");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    LARGE_INTEGER SystemTime;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenKey(&KeyHandle, KEY_SET_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Shutdown: the shutdown time is not recorded (0x%08lx)\n", Status);
+        return;
+    }
+
+    KeQuerySystemTime(&SystemTime);
+    Status = ZwSetValueKey(KeyHandle, &ValueName, 0, REG_BINARY, &SystemTime, sizeof(SystemTime));
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Shutdown: the shutdown time is not recorded (0x%08lx)\n", Status);
+
+    ZwClose(KeyHandle);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 CODE_SEG("INIT")
@@ -237,6 +273,7 @@ PopGracefulShutdown(
     DPRINT1("Shutdown: notifying the drivers registered for shutdown\n");
     IoShutdownSystem(0);
     DPRINT1("Shutdown: flushing the registry\n");
+    PopRecordShutdownTime();
     CmShutdownSystem();
     DPRINT1("Shutdown: flushing the cache\n");
     CcShutdownSystem();
