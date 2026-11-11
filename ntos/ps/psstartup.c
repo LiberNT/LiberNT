@@ -427,7 +427,7 @@ PspInitPhase1(VOID)
      * The system library is found later in this phase, once there is a file
      * system to find it on; nothing here may touch a file yet.
      */
-    return PspInitializeApiSetSchema();
+    return PspInitializeApiSetSchema() && PspInitializeApiSetSection();
 }
 
 CODE_SEG("INIT")

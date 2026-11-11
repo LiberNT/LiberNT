@@ -783,6 +783,7 @@ PspCreateProcessFromOperands(
         Status = MmCreatePeb(Process, &InitialPeb, &Peb);
         if (NT_SUCCESS(Status)) Process->Peb = Peb;
         if (NT_SUCCESS(Status)) Status = PspCreateWow64Process(Process, Operands->Section, &InitialPeb);
+        if (NT_SUCCESS(Status)) Status = PspMapApiSetSchema(Process);
     }
 
     /*
