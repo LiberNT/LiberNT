@@ -794,7 +794,12 @@ KeBugCheckWithTf(
     KdpWriteCrashDump();
 
     /* And its second, now that everything has been said */
+#ifdef _WINKD_
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_SECOND);
+#else
+    if (!IopAutoReboot || KdBugCheckDebuggerRequested())
+        KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_SECOND);
+#endif
 
     if (IopAutoReboot)
     {

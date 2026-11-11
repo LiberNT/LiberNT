@@ -86,4 +86,10 @@ CHAR
 KdpUsbKeyboardTryGetChar(
     _Out_ PULONG ScanCode);
 
+BOOLEAN
+KdpKeyboardChordHeld(VOID);
+
+BOOLEAN
+KdpUsbKeyboardChordHeld(VOID);
+
 /* EOF */

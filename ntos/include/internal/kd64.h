@@ -134,6 +134,12 @@ KdEnableBugCheckDebugger(
     VOID
 );
 
+BOOLEAN
+NTAPI
+KdBugCheckDebuggerRequested(
+    VOID
+);
+
 BOOLEAN NTAPI KdpInitializeCrashDump(_In_ HANDLE DumpFileHandle);
 
 BOOLEAN NTAPI KdpInitializeCrashDumpCore(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);

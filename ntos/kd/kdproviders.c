@@ -44,6 +44,9 @@ PKDP_INIT_ROUTINE InitRoutines[KdMax] =
 static CHAR KdpIoBuffer[512];
 static KSPIN_LOCK KdpIoLock;
 
+#define KDP_BUGCHECK_DEBUGGER_SECONDS 3
+#define KDP_BUGCHECK_POLLS_PER_SECOND 100
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -348,6 +351,35 @@ KdEnableBugCheckDebugger(VOID)
 #endif
 
     KdpScreenEnterBugCheck(!KdDebuggerEnabled);
+}
+
+BOOLEAN
+NTAPI
+KdBugCheckDebuggerRequested(VOID)
+{
+    ULONG Tick;
+
+    if (KdPitchDebugger || !KdDebuggerEnabled || KdDebuggerNotPresent)
+        return FALSE;
+
+    DbgPrint("\nPress Ctrl+Alt+B+K within %lu seconds to enter the debugger.\n",
+             (ULONG)KDP_BUGCHECK_DEBUGGER_SECONDS);
+
+    for (Tick = 0; Tick < KDP_BUGCHECK_DEBUGGER_SECONDS * KDP_BUGCHECK_POLLS_PER_SECOND; Tick++)
+    {
+        if (KdpKeyboardChordHeld() || KdpUsbKeyboardChordHeld())
+            return TRUE;
+
+        if (KdTermSerial && (KdbpTryGetCharSerial(1) == 0x03))
+            return TRUE;
+
+        if (KdpDebugMode.Net && KdpNetPollBreakIn())
+            return TRUE;
+
+        KeStallExecutionProcessor(1000000 / KDP_BUGCHECK_POLLS_PER_SECOND);
+    }
+
+    return FALSE;
 }
 
 /*

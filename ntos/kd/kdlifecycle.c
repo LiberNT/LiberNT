@@ -58,6 +58,7 @@ KdDebuggerInitialize1(
     UNREFERENCED_PARAMETER(LoaderBlock);
 
     KdpInitializeProviders(KDP_BOOT_PHASE_BUSES);
+    KdpUsbKeyboardInitialize();
     KdpInitTerminal();
 
     return STATUS_SUCCESS;

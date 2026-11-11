@@ -38,6 +38,20 @@
 #define KDP_SCAN_LEFT_SHIFT     0x2A
 #define KDP_SCAN_RIGHT_SHIFT    0x36
 
+#define KDP_SCAN_EXTENDED       0xE0
+#define KDP_SCAN_CTRL           0x1D
+#define KDP_SCAN_ALT            0x38
+#define KDP_SCAN_B              0x30
+#define KDP_SCAN_K              0x25
+
+#define KDP_CHORD_CTRL          0x01
+#define KDP_CHORD_ALT           0x02
+#define KDP_CHORD_B             0x04
+#define KDP_CHORD_K             0x08
+#define KDP_CHORD_ALL           0x0F
+
+#define KDP_KBD_DRAIN_LIMIT     16
+
 /* Scan code set 1, as a keyboard with the United States layout sends it */
 static const CHAR KdpScanCodeTable[KDP_KBD_SCANCODE_MAX] =
 {
@@ -71,6 +85,8 @@ static const CHAR KdpShiftedScanCodeTable[KDP_KBD_SCANCODE_MAX] =
 
 /* Whether a shift key is being held down right now */
 static BOOLEAN KdpKeyboardShift = FALSE;
+
+static UCHAR KdpKeyboardChord = 0;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
@@ -149,6 +165,44 @@ KdbpTryGetCharKeyboard(
         *ScanCode = Code;
         return KdpScanCodeToChar(Code, KdpKeyboardShift);
     }
+}
+
+BOOLEAN
+KdpKeyboardChordHeld(VOID)
+{
+    ULONG Drained;
+
+    for (Drained = 0; Drained < KDP_KBD_DRAIN_LIMIT; Drained++)
+    {
+        UCHAR Status;
+        UCHAR Code;
+        UCHAR Key;
+
+        Status = READ_PORT_UCHAR((PUCHAR)KDP_KBD_STATUS_PORT);
+        if ((Status & KDP_KBD_STATUS_OUTPUT_FULL) == 0)
+            break;
+
+        Code = READ_PORT_UCHAR((PUCHAR)KDP_KBD_DATA_PORT);
+
+        if (((Status & KDP_KBD_STATUS_FROM_MOUSE) != 0) || (Code == KDP_SCAN_EXTENDED))
+            continue;
+
+        switch (Code & ~KDP_KBD_BREAK_FLAG)
+        {
+            case KDP_SCAN_CTRL: Key = KDP_CHORD_CTRL; break;
+            case KDP_SCAN_ALT: Key = KDP_CHORD_ALT; break;
+            case KDP_SCAN_B: Key = KDP_CHORD_B; break;
+            case KDP_SCAN_K: Key = KDP_CHORD_K; break;
+            default: Key = 0; break;
+        }
+
+        if ((Code & KDP_KBD_BREAK_FLAG) != 0)
+            KdpKeyboardChord &= ~Key;
+        else
+            KdpKeyboardChord |= Key;
+    }
+
+    return (KdpKeyboardChord == KDP_CHORD_ALL);
 }
 
 /*
