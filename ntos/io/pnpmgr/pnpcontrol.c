@@ -869,7 +869,8 @@ PiBuildPowerData(
 
     RtlZeroMemory(PowerData, sizeof(*PowerData));
     PowerData->PD_Size = sizeof(*PowerData);
-    PowerData->PD_MostRecentPowerState = (Dope != NULL) ? Dope->State : PowerDeviceUnspecified;
+    /* A device whose stack never recorded a power state is in D0, the state a power extension starts in */
+    PowerData->PD_MostRecentPowerState = (Dope != NULL) ? Dope->State : PowerDeviceD0;
 
     /* Every device has D0 and D3; the others are what its stack declares */
     PowerData->PD_Capabilities = PDCAP_D0_SUPPORTED | PDCAP_D3_SUPPORTED;
