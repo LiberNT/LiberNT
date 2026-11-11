@@ -526,6 +526,9 @@ static void initialize_plugin_object(PluginHost *host)
     if(SUCCEEDED(hres)) {
         QACONTAINER container = {sizeof(container)};
         QACONTROL control = {sizeof(control)};
+#ifdef __REACTOS__
+        IOleUndoManager *undomgr = NULL;
+#endif
 
         TRACE("Using IQuickActivate\n");
 
@@ -533,9 +536,20 @@ static void initialize_plugin_object(PluginHost *host)
         container.dwAmbientFlags = QACONTAINER_SUPPORTSMNEMONICS|QACONTAINER_MESSAGEREFLECT|QACONTAINER_USERMODE;
         container.pAdviseSink = &host->IAdviseSinkEx_iface;
         container.pPropertyNotifySink = &host->IPropertyNotifySink_iface;
+#ifdef __REACTOS__
+        if(host->doc && host->doc->doc_obj &&
+           SUCCEEDED(IServiceProvider_QueryService(&host->doc->doc_obj->IServiceProvider_iface, &SID_SOleUndoManager,
+                                                   &IID_IOleUndoManager, (void**)&undomgr)))
+            container.pUndoMgr = undomgr;
+        /* TODO: colorBack and pFont carry the container's ambient background color and font */
+#endif
 
         hres = IQuickActivate_QuickActivate(quick_activate, &container, &control);
         IQuickActivate_Release(quick_activate);
+#ifdef __REACTOS__
+        if(undomgr)
+            IOleUndoManager_Release(undomgr);
+#endif
         if(FAILED(hres))
             FIXME("QuickActivate failed: %08lx\n", hres);
     }else {
@@ -2311,6 +2325,13 @@ static HRESULT WINAPI PHServiceProvider_QueryService(IServiceProvider *iface, RE
         *ppv = NULL;
         return E_NOINTERFACE;
     }
+
+#ifdef __REACTOS__
+    if(IsEqualGUID(guidService, &IID_IHTMLWindow2)) {
+        TRACE("IID_IHTMLWindow2 service\n");
+        return IHTMLWindow2_QueryInterface(&This->doc->window->base.IHTMLWindow2_iface, riid, ppv);
+    }
+#endif
 
     return IServiceProvider_QueryService(&This->doc->window->base.outer_window->base.IServiceProvider_iface,
             guidService, riid, ppv);
