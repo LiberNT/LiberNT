@@ -110,9 +110,7 @@ PspQuerySystemThreadInformation(
     Information.BasePriority = KeQueryBasePriorityThread(&Thread->Tcb);
     Information.ContextSwitches = Thread->Tcb.ContextSwitches;
     Information.ThreadState = Thread->Tcb.State;
-
-    /* TODO: the reason a thread is waiting has no published field on this
-     * architecture's thread block, so it is reported as none */
+    Information.WaitReason = Thread->Tcb.WaitReason;
 
     return PspReturnThreadInformation(Buffer,
                                       Length,
