@@ -30,6 +30,9 @@
 #include "mshtml.h"
 #include "mshtmdid.h"
 #include "mshtmhst.h"
+#ifdef __REACTOS__
+#include "httpserver.h"
+#endif
 #include "docobj.h"
 #include "docobjectservice.h"
 #include "hlink.h"
@@ -7840,6 +7843,10 @@ START_TEST(events)
 {
     CoInitialize(NULL);
     main_thread_id = GetCurrentThreadId();
+#ifdef __REACTOS__
+    /* The http checks load their pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
+#endif
 
     if(check_ie()) {
         container_hwnd = create_container_window();
@@ -7896,5 +7903,8 @@ START_TEST(events)
         win_skip("Too old IE\n");
     }
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     CoUninitialize();
 }
