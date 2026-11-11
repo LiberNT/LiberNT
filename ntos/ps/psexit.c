@@ -338,9 +338,9 @@ PspExitProcess(
 }
 
 /*
- * The kernel APC a thread runs to end itself when somebody else
- * asked for it. It runs on the thread, which is the only place the exit can
- * happen.
+ * The kernel APC a thread runs when somebody else asked it to end. It may be
+ * in the middle of kernel-mode work, so it only queues the user APC that ends
+ * the thread on its way back to user mode.
  */
 VOID
 NTAPI
@@ -351,14 +351,30 @@ PsExitSpecialApc(
     _Inout_ PVOID *SystemArgument1,
     _Inout_ PVOID *SystemArgument2)
 {
-    UNREFERENCED_PARAMETER(NormalRoutine);
-    UNREFERENCED_PARAMETER(NormalContext);
+    PVOID ExitStatus = *NormalContext;
+
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     PAGED_CODE();
 
-    ExFreePoolWithTag(Apc, TAG_PS_APC);
+    /* TODO: Windows' stage for ending a system thread from another thread is unknown; it ends in the kernel normal routine */
+    if (PsIsSystemThread(PsGetCurrentThread()))
+        return;
+
+    *NormalRoutine = NULL;
+
+    KeInitializeApc(Apc,
+                    KeGetCurrentThread(),
+                    OriginalApcEnvironment,
+                    KiSchedulerApcTerminate,
+                    PspExitApcRundown,
+                    PspExitNormalApc,
+                    UserMode,
+                    ExitStatus);
+
+    if (!KeInsertQueueApc(Apc, Apc, NULL, 2))
+        ExFreePoolWithTag(Apc, TAG_PS_APC);
 }
 
 VOID
@@ -368,11 +384,11 @@ PspExitNormalApc(
     _In_ PVOID SystemArgument1,
     _In_ PVOID SystemArgument2)
 {
-    UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     PAGED_CODE();
 
+    ExFreePoolWithTag(SystemArgument1, TAG_PS_APC);
     PspExitThread((NTSTATUS)(ULONG_PTR)NormalContext);
 }
 

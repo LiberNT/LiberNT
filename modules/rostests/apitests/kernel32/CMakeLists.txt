@@ -160,6 +160,7 @@ list(APPEND SOURCE
     SystemFileCacheSize.c
     SecureBootFlag.c
     TerminateProcess.c
+    TerminateThread.c
     ExitedClientId.c
     SleepTickRounding.c
     SwitchToThreadPriority.c

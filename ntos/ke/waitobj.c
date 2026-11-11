@@ -596,6 +596,7 @@ KeWaitForAlertByThreadId(
     LARGE_INTEGER DueTime, NewDueTime;
     BOOLEAN Swappable;
     LONG_PTR WaitStatus;
+    NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(Address);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
@@ -615,6 +616,13 @@ KeWaitForAlertByThreadId(
         {
             KiReleaseDispatcherLock(Thread->WaitIrql);
             return STATUS_ALERTED;
+        }
+
+        Status = KiCheckAlertability(Thread, FALSE, WaitMode);
+        if (Status != STATUS_WAIT_0)
+        {
+            KiReleaseDispatcherLock(Thread->WaitIrql);
+            return Status;
         }
 
         if ((Timeout != NULL) && (Timeout->QuadPart == 0))

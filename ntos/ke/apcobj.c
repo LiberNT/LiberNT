@@ -134,6 +134,26 @@ KeInitializeApc(
     Apc->SystemArgument2 = NULL;
 }
 
+/* Ends a thread on its way back to user mode, where none of its kernel-mode work is left below */
+VOID
+NTAPI
+KiSchedulerApcTerminate(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    PKNORMAL_ROUTINE Routine = *NormalRoutine;
+
+    UNREFERENCED_PARAMETER(Apc);
+
+    *NormalRoutine = NULL;
+    KeLowerIrql(PASSIVE_LEVEL);
+    Routine(*NormalContext, *SystemArgument1, *SystemArgument2);
+    KfRaiseIrql(APC_LEVEL);
+}
+
 /*
  * Puts an APC on its thread's list and, where it can be delivered at once,
  * makes the thread notice.
@@ -161,7 +181,13 @@ KiInsertQueueApc(
     ApcState = KiApcTargetState(Thread, Apc->ApcStateIndex);
     ListHead = &ApcState->ApcListHead[(ULONG)ApcMode];
 
-    if (Apc->NormalRoutine != NULL)
+    if ((ApcMode == UserMode) && (Apc->KernelRoutine == KiSchedulerApcTerminate))
+    {
+        /* Ending the thread goes ahead of every user APC and does not wait for an alertable wait */
+        InsertHeadList(ListHead, &Apc->ApcListEntry);
+        ApcState->UserApcPending = TRUE;
+    }
+    else if (Apc->NormalRoutine != NULL)
     {
         InsertTailList(ListHead, &Apc->ApcListEntry);
     }

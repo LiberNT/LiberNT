@@ -140,6 +140,7 @@ list(APPEND SOURCE
     NtSetValueKey.c
     NtSetVolumeInformationFile.c
     NtStartProfile.c
+    NtTerminateThread.c
     NtUnloadDriver.c
     NtWnfState.c
     NtWriteFile.c

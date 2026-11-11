@@ -952,6 +952,16 @@ KeInitializeEventPair(PKEVENT_PAIR EventPair);
 
 VOID
 NTAPI
+KiSchedulerApcTerminate(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2
+);
+
+VOID
+NTAPI
 KiInitializeUserApc(
     IN PKEXCEPTION_FRAME Reserved,
     IN PKTRAP_FRAME TrapFrame,

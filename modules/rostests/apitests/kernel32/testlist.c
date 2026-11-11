@@ -155,6 +155,7 @@ extern void func_SystemFirmware(void);
 extern void func_SystemFileCacheSize(void);
 extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
+extern void func_TerminateThread(void);
 extern void func_ExitedClientId(void);
 extern void func_SleepTickRounding(void);
 extern void func_SwitchToThreadPriority(void);
@@ -338,6 +339,7 @@ const struct test winetest_testlist[] =
     { "SystemFileCacheSize",         func_SystemFileCacheSize },
     { "SecureBootFlag",              func_SecureBootFlag },
     { "TerminateProcess",            func_TerminateProcess },
+    { "TerminateThread",             func_TerminateThread },
     { "ExitedClientId",              func_ExitedClientId },
     { "SleepTickRounding",           func_SleepTickRounding },
     { "SwitchToThreadPriority",      func_SwitchToThreadPriority },

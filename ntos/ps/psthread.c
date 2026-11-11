@@ -158,7 +158,8 @@ PspUserThreadStartup(
 
     KeLeaveCriticalRegion();
 
-    if (Thread->Terminated)
+    /* A thread ended through an APC leaves on its way to user mode, with the status it was given */
+    if (Thread->Terminated && !Thread->Tcb.ApcState.UserApcPending)
     {
         PspTerminateThreadByPointer(Thread, STATUS_SUCCESS, TRUE);
         return;
