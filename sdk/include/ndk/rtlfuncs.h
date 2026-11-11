@@ -5711,6 +5711,14 @@ RtlGetThreadPreferredUILanguages(
     _Inout_ PULONG Size);
 
 NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSetThreadPreferredUILanguages(
+    _In_ DWORD Flags,
+    _In_opt_ PCZZWSTR Buffer,
+    _Out_opt_ PULONG Count);
+
+NTSYSAPI
 BOOLEAN
 NTAPI
 RtlIsValidLocaleName(

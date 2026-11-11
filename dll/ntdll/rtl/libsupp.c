@@ -635,7 +635,7 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
     IMAGE_RESOURCE_DIRECTORY *resdirptr;
     USHORT list[10];  /* list of languages to try */
     int i, pos = 0;
-    LCID user_lcid, system_lcid;
+    LANGID ui_language;
 
     root = RtlImageDirectoryEntryToData( BaseAddress, TRUE, IMAGE_DIRECTORY_ENTRY_RESOURCE, &size );
     if (!root) return STATUS_RESOURCE_DATA_NOT_FOUND;
@@ -668,29 +668,33 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
         /* user defaults, unless SYS_DEFAULT sublanguage specified  */
         if (SUBLANGID(info->Language) != SUBLANG_SYS_DEFAULT)
         {
-            /* 4. current thread locale language */
-            pos = push_language( list, pos, LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale) );
-            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale)), SUBLANG_NEUTRAL ) );
-
-            if (NT_SUCCESS(NtQueryDefaultLocale(TRUE, &user_lcid)))
+            /* 4. thread UI language */
+            ui_language = RtlpGetThreadUILanguage();
+            if (ui_language)
             {
-                /* 5. user locale language */
-                pos = push_language( list, pos, LANGIDFROMLCID(user_lcid) );
+                pos = push_language( list, pos, ui_language );
+                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
+            }
 
-                /* 6. user locale language with neutral sublanguage  */
-                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(user_lcid), SUBLANG_NEUTRAL ) );
+            if (NT_SUCCESS(NtQueryDefaultUILanguage(&ui_language)))
+            {
+                /* 5. user UI language */
+                pos = push_language( list, pos, ui_language );
+
+                /* 6. user UI language with neutral sublanguage  */
+                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
             }
         }
 
         /* now system defaults */
 
-        if (NT_SUCCESS(NtQueryDefaultLocale(FALSE, &system_lcid)))
+        if (NT_SUCCESS(NtQueryInstallUILanguage(&ui_language)))
         {
-            /* 7. system locale language */
-            pos = push_language( list, pos, LANGIDFROMLCID( system_lcid ) );
+            /* 7. system UI language */
+            pos = push_language( list, pos, ui_language );
 
-            /* 8. system locale language with neutral sublanguage */
-            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(system_lcid), SUBLANG_NEUTRAL ) );
+            /* 8. system UI language with neutral sublanguage */
+            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
         }
 
         /* 9. English */
