@@ -64,21 +64,26 @@ START_TEST(KdChangeOption)
         /* A debugger configured to wait, as with CRASHDEBUG, is turned on by one enable */
         ok_eq_hex(KdEnableDebugger(), STATUS_SUCCESS);
         ok_eq_bool(KD_DEBUGGER_ENABLED, TRUE);
+        ok_eq_uint(SharedUserData->KdDebuggerEnabled & 1, 1);
         if (KD_DEBUGGER_ENABLED)
         {
             ok_eq_hex(KdDisableDebugger(), STATUS_SUCCESS);
             ok_eq_bool(KD_DEBUGGER_ENABLED, FALSE);
+            ok_eq_uint(SharedUserData->KdDebuggerEnabled & 1, 0);
         }
         return;
     }
 
+    /* The page user mode reads follows the switch */
     Status = KdDisableDebugger();
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_bool(KD_DEBUGGER_ENABLED, FALSE);
+    ok_eq_uint(SharedUserData->KdDebuggerEnabled & 1, 0);
     if (NT_SUCCESS(Status))
     {
         ok_eq_hex(KdEnableDebugger(), STATUS_SUCCESS);
         ok_eq_bool(KD_DEBUGGER_ENABLED, TRUE);
+        ok_eq_uint(SharedUserData->KdDebuggerEnabled & 1, 1);
     }
 }
 

@@ -31,6 +31,8 @@ typedef enum
 
 extern BOOLEAN KdpScreenMode;
 
+extern NTKERNELAPI PKUSER_SHARED_DATA MmWriteableSharedUserData;
+
 VOID
 NTAPI
 KdpScreenPrint(

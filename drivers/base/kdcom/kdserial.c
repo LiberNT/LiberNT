@@ -139,7 +139,7 @@ KdpReceivePacketLeader(
 
     /* Enable the debugger */
     KD_DEBUGGER_NOT_PRESENT = FALSE;
-    SharedUserData->KdDebuggerEnabled |= 0x00000002;
+    MmWriteableSharedUserData->KdDebuggerEnabled |= 0x00000002;
 
     /* Return the received packet leader */
     *PacketLeader = *(PULONG)Buffer;

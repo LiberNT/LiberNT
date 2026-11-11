@@ -121,7 +121,7 @@ KdEnableDebuggerWithLock(
             KdDebuggerEnabled = TRUE;
             KdPreviouslyEnabled = TRUE;
             KiDebugRoutine = KdpTrap;
-            SharedUserData->KdDebuggerEnabled = TRUE;
+            MmWriteableSharedUserData->KdDebuggerEnabled = TRUE;
         }
     }
 
@@ -160,7 +160,7 @@ KdDisableDebuggerWithLock(
     {
         KdDebuggerEnabled = FALSE;
         KiDebugRoutine = KdpStub;
-        SharedUserData->KdDebuggerEnabled = FALSE;
+        MmWriteableSharedUserData->KdDebuggerEnabled = FALSE;
     }
 
     KdDisableCount++;

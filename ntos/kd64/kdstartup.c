@@ -269,7 +269,7 @@ KdInitSystem(
             KeInitializeTimer(&KdpTimeSlipTimer);
 
             if (KdDebuggerEnabled)
-                SharedUserData->KdDebuggerEnabled = TRUE;
+                MmWriteableSharedUserData->KdDebuggerEnabled = TRUE;
         }
 
         /* The providers decide for themselves what each later phase means */

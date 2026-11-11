@@ -1015,7 +1015,7 @@ ExpInitializeExecutive(
     CmGetSystemControlValues(LoaderBlock->RegistryBase, CmControlVector);
     NtGlobalFlag |= CmNtGlobalFlag;
     ExSuiteMask = ExpReadSuiteMask();
-    SharedUserData->SuiteMask = ExSuiteMask;
+    MmWriteableSharedUserData->SuiteMask = ExSuiteMask;
 
     if (!ObInitSystem())
     {
