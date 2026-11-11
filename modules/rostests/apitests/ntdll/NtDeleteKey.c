@@ -93,7 +93,8 @@ START_TEST(NtDeleteKey)
     /* Stress test key creation */
     Status = CreateRegistryKeyHandle(&ParentKey, KEY_READ | DELETE, L"\\Registry\\Machine\\Software\\RosTests");
 
-    for (i = 0; i <= 9999; i++) {
+    /* More children than two fast index leaves hold (507 each), so the index splits and gets a root */
+    for (i = 0; i <= 1199; i++) {
         _swprintf(Buffer, L"\\Registry\\Machine\\Software\\RosTests\\Child%04d", i);
         Status = CreateRegistryKeyHandle(&ChildKey, KEY_READ, Buffer);
         NtClose(ChildKey);
@@ -105,21 +106,21 @@ START_TEST(NtDeleteKey)
     ok_ntstatus(Status, STATUS_SUCCESS);
 
     /* Test hive rerooting */
-    Status = CreateRegistryKeyHandle(&PetKey, DELETE, L"\\Registry\\Machine\\Software\\RosTests\\Child5000\\Pet");
+    Status = CreateRegistryKeyHandle(&PetKey, DELETE, L"\\Registry\\Machine\\Software\\RosTests\\Child0600\\Pet");
     ok_ntstatus(Status, STATUS_SUCCESS);
     Status = NtDeleteKey(PetKey);
     ok_ntstatus(Status, STATUS_SUCCESS);
 
     NtClose(PetKey);
 
-    Status = CreateRegistryKeyHandle(&ChildKey, DELETE, L"\\Registry\\Machine\\Software\\RosTests\\Child5000");
+    Status = CreateRegistryKeyHandle(&ChildKey, DELETE, L"\\Registry\\Machine\\Software\\RosTests\\Child0600");
     ok_ntstatus(Status, STATUS_SUCCESS);
     Status = NtDeleteKey(ChildKey);
     ok_ntstatus(Status, STATUS_SUCCESS);
 
     /* Test mass key deletion */
-    for (i = 0; i <= 9999; i++) {
-        if (i != 5000) {
+    for (i = 0; i <= 1199; i++) {
+        if (i != 600) {
             _swprintf(Buffer, L"\\Registry\\Machine\\Software\\RosTests\\Child%04d\\Pet", i);
             CreateRegistryKeyHandle(&PetKey, DELETE, Buffer);
             Status = NtDeleteKey(PetKey);
