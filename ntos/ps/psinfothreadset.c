@@ -462,6 +462,14 @@ NtSetInformationThread(
                 break;
             }
 
+            if (Affinity.Reserved[0] != 0 ||
+                Affinity.Reserved[1] != 0 ||
+                Affinity.Reserved[2] != 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
             if (Affinity.Mask == 0 ||
                 (Affinity.Mask &
                  ~THREAD_TO_PROCESS(Thread)->Pcb.Affinity) != 0)
