@@ -3111,10 +3111,23 @@ void WINAPI ClosePseudoConsole( HPCON handle )
 HRESULT WINAPI ResizePseudoConsole( HPCON handle, COORD size )
 {
 #ifdef __REACTOS__
-    if (!handle) return E_INVALIDARG;
-#endif
+    struct pseudo_console *pseudo_console = handle;
+    USHORT packet[3];
+    DWORD written;
+
+    TRACE( "%p (%d,%d)\n", handle, size.X, size.Y );
+
+    if (!pseudo_console || size.X < 0 || size.Y < 0) return E_INVALIDARG;
+    packet[0] = CONDRV_PTY_SIGNAL_RESIZE_WINDOW;
+    packet[1] = size.X;
+    packet[2] = size.Y;
+    if (!WriteFile( pseudo_console->signal, packet, sizeof(packet), &written, NULL ))
+        return HRESULT_FROM_WIN32( GetLastError() );
+    return S_OK;
+#else
     FIXME( "%p (%u,%u) stub, faking success\n", handle, size.X, size.Y );
     return S_OK;
+#endif
 }
 
 static BOOL is_tty_handle( HANDLE handle )

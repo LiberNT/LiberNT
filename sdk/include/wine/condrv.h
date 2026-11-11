@@ -198,6 +198,9 @@ struct condrv_history_params
     unsigned int count;
     WCHAR exe[1];
 };
+
+/* pseudo console signal pipe: USHORT id, then for a resize USHORT width and USHORT height */
+#define CONDRV_PTY_SIGNAL_RESIZE_WINDOW 8
 #endif
 
 /* IOCTL_CONDRV_FILL_OUTPUT params */

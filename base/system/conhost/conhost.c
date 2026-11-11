@@ -4257,6 +4257,69 @@ static BOOL is_key_message( const MSG *msg )
            msg->message == WM_KEYUP   || msg->message == WM_SYSKEYUP;
 }
 
+#ifdef __REACTOS__
+static void resize_pty( struct console *console, unsigned int width, unsigned int height )
+{
+    struct screen_buffer *screen_buffer = console->active;
+    unsigned int scroll;
+    RECT update_rect;
+
+    if (!width || !height || width > SHRT_MAX || height > SHRT_MAX) return;
+    if (screen_buffer->cursor_y >= height)
+    {
+        scroll = screen_buffer->cursor_y - height + 1;
+        memmove( screen_buffer->data, screen_buffer->data + scroll * screen_buffer->width,
+                 (screen_buffer->height - scroll) * screen_buffer->width * sizeof(*screen_buffer->data) );
+        move_cell_colors( screen_buffer, 0, scroll * screen_buffer->width,
+                          (screen_buffer->height - scroll) * screen_buffer->width );
+        move_wrapped_rows( screen_buffer, 0, scroll, screen_buffer->height - scroll );
+        screen_buffer->cursor_y -= scroll;
+    }
+    if (change_screen_buffer_size( screen_buffer, width, height )) return;
+    screen_buffer->win.left   = 0;
+    screen_buffer->win.top    = 0;
+    screen_buffer->win.right  = width - 1;
+    screen_buffer->win.bottom = height - 1;
+    screen_buffer->max_width  = width;
+    screen_buffer->max_height = height;
+    if (screen_buffer->cursor_x >= width) screen_buffer->cursor_x = width - 1;
+    notify_screen_buffer_size( screen_buffer );
+    SetRect( &update_rect, 0, 0, width - 1, height - 1 );
+    update_output( screen_buffer, &update_rect );
+    tty_sync( console );
+}
+
+static int process_pty_signal( struct console *console, HANDLE signal, HANDLE event, IO_STATUS_BLOCK *io,
+                               unsigned short *signal_id )
+{
+    IO_STATUS_BLOCK size_io;
+    unsigned short size[2];
+    NTSTATUS status;
+
+    if (io->Status || io->Information != sizeof(*signal_id))
+    {
+        TRACE( "signaled quit\n" );
+        return 0;
+    }
+    if (*signal_id == CONDRV_PTY_SIGNAL_RESIZE_WINDOW)
+    {
+        status = NtReadFile( signal, event, NULL, NULL, &size_io, size, sizeof(size), NULL, NULL );
+        if (status == STATUS_PENDING)
+        {
+            WaitForSingleObject( event, INFINITE );
+            status = size_io.Status;
+        }
+        if (status || size_io.Information != sizeof(size)) return 0;
+        EnterCriticalSection( &console_section );
+        resize_pty( console, size[0], size[1] );
+        LeaveCriticalSection( &console_section );
+    }
+    else FIXME( "unimplemented signal %x\n", *signal_id );
+    status = NtReadFile( signal, event, NULL, NULL, io, signal_id, sizeof(*signal_id), NULL, NULL );
+    return (status && status != STATUS_PENDING) ? -1 : 1;
+}
+#endif
+
 static int main_loop( struct console *console, HANDLE signal )
 {
     HANDLE signal_event = NULL;
@@ -4307,6 +4370,14 @@ static int main_loop( struct console *console, HANDLE signal )
         switch (res)
         {
         case WAIT_OBJECT_0:
+#ifdef __REACTOS__
+            /* a resize written before a client request must reach that request first */
+            if (signal && !WaitForSingleObject( signal_event, 0 ))
+            {
+                int ret = process_pty_signal( console, signal, signal_event, &signal_io, &signal_id );
+                if (ret <= 0) return ret < 0;
+            }
+#endif
             EnterCriticalSection( &console_section );
             status = process_console_ioctls( console );
             LeaveCriticalSection( &console_section );
@@ -4314,6 +4385,12 @@ static int main_loop( struct console *console, HANDLE signal )
             break;
 
         case WAIT_OBJECT_0 + 1:
+#ifdef __REACTOS__
+            {
+                int ret = process_pty_signal( console, signal, signal_event, &signal_io, &signal_id );
+                if (ret <= 0) return ret < 0;
+            }
+#else
             if (signal_io.Status || signal_io.Information != sizeof(signal_id))
             {
                 TRACE( "signaled quit\n" );
@@ -4323,6 +4400,7 @@ static int main_loop( struct console *console, HANDLE signal )
             status = NtReadFile( signal, signal_event, NULL, NULL, &signal_io, &signal_id,
                                  sizeof(signal_id), NULL, NULL );
             if (status && status != STATUS_PENDING) return 1;
+#endif
             break;
 
         default:
