@@ -698,6 +698,8 @@ VideoPortCallout(
 
         case VideoDxgkMonitorEventCallout:
         {
+            if (CallbackParams->PhysDisp)
+                InterlockedExchange(&((PGRAPHICS_DEVICE)CallbackParams->PhysDisp)->lMonitorEvent, 1);
             UserQueueDisplayConfigurationUpdate();
             CallbackParams->Status = STATUS_SUCCESS;
             break;
