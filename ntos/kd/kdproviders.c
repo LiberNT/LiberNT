@@ -150,12 +150,17 @@ KdpSelectDebugMode(
         }
         else if (_strnicmp(Value, "COM", 3) == 0)
         {
-            KdpDebugMode.Serial = TRUE;
-            SerialPortNumber = KdpReadDecimal(Value + 3);
+            ULONG Number = KdpReadDecimal(Value + 3);
 
             /* COM without a number means the first line */
-            if (SerialPortNumber == 0)
-                SerialPortNumber = 1;
+            if (Number == 0)
+                Number = 1;
+
+            if (KdPortIsComPortNumberValid(Number))
+            {
+                KdpDebugMode.Serial = TRUE;
+                SerialPortNumber = Number;
+            }
         }
 
         /* The option may name more than one way out, separated by commas */
