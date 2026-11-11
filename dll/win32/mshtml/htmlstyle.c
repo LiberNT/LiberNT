@@ -110,6 +110,7 @@ static const WCHAR *overflow_values[] = {
 #define ATTR_NO_NULL        0x0020
 #define ATTR_COMPAT_IE10    0x0040
 #define ATTR_BUILTIN_NAME   0x0080
+#define ATTR_LEGACY_URL     0x0100
 
 typedef struct {
     const WCHAR *name;
@@ -147,7 +148,7 @@ static const style_tbl_entry_t style_tbl[] = {
         L"background",
         DISPID_IHTMLCSSSTYLEDECLARATION_BACKGROUND,
         DISPID_A_BACKGROUND,
-        ATTR_BUILTIN_NAME
+        ATTR_BUILTIN_NAME | ATTR_LEGACY_URL
     },
     {
         L"background-attachment",
@@ -891,6 +892,196 @@ static LPWSTR fix_url_value(LPCWSTR val)
 #endif
 }
 
+static BOOL is_css_space(WCHAR c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
+}
+
+static BOOL is_hex_digit(WCHAR c)
+{
+    return is_digit(c) || ((c | 0x20) >= 'a' && (c | 0x20) <= 'f');
+}
+
+static HRESULT legacy_url_to_gecko(const WCHAR *val, WCHAR **ret)
+{
+    const WCHAR *ptr, *start, *end;
+    WCHAR *out, *o;
+    size_t len;
+
+    *ret = NULL;
+    len = wcslen(val);
+    if(len > ((size_t)~0 / sizeof(WCHAR) - 1) / 5)
+        return E_OUTOFMEMORY;
+    out = malloc((len * 5 + 1) * sizeof(WCHAR));
+    if(!out)
+        return E_OUTOFMEMORY;
+
+    for(ptr = val, o = out; *ptr;) {
+        if(wcsnicmp(ptr, L"url(", 4)) {
+            *o++ = *ptr++;
+            continue;
+        }
+
+        for(start = ptr + 4; is_css_space(*start); start++);
+        if(*start == '"' || *start == '\'' || !(end = wcschr(start, ')'))) {
+            memcpy(o, ptr, 4 * sizeof(WCHAR));
+            o += 4;
+            ptr += 4;
+            continue;
+        }
+
+        ptr = end + 1;
+        while(end > start && is_css_space(end[-1]))
+            end--;
+
+        memcpy(o, L"url(\"", 5 * sizeof(WCHAR));
+        o += 5;
+        for(; start < end; start++) {
+            if(*start == '(') {
+                memcpy(o, L"%28", 3 * sizeof(WCHAR));
+                o += 3;
+            }else if(*start == '"' || *start == '\\') {
+                *o++ = '\\';
+                *o++ = *start;
+            }else if(*start < 0x20 || *start == 0x7f) {
+                o += swprintf(o, 5, L"\\%x ", *start);
+            }else {
+                *o++ = *start;
+            }
+        }
+        *o++ = '"';
+        *o++ = ')';
+    }
+
+    *o = 0;
+    *ret = out;
+    return S_OK;
+}
+
+static HRESULT gecko_url_to_legacy(const WCHAR *val, WCHAR **ret)
+{
+    const WCHAR *ptr;
+    WCHAR *out, *o, quote;
+    unsigned code, i;
+
+    *ret = NULL;
+    out = malloc((wcslen(val) + 1) * sizeof(WCHAR));
+    if(!out)
+        return E_OUTOFMEMORY;
+
+    for(ptr = val, o = out; *ptr;) {
+        if(wcsncmp(ptr, L"url(\"", 5) && wcsncmp(ptr, L"url('", 5)) {
+            *o++ = *ptr++;
+            continue;
+        }
+
+        quote = ptr[4];
+        memcpy(o, L"url(", 4 * sizeof(WCHAR));
+        o += 4;
+        for(ptr += 5; *ptr && *ptr != quote; ptr++) {
+            if(*ptr != '\\') {
+                *o++ = *ptr;
+                continue;
+            }
+            if(!*++ptr)
+                break;
+            if(!is_hex_digit(*ptr)) {
+                if(*ptr != '\n')
+                    *o++ = *ptr;
+                continue;
+            }
+            for(code = 0, i = 0; i < 6 && is_hex_digit(*ptr); i++, ptr++)
+                code = code * 16 + (is_digit(*ptr) ? *ptr - '0' : (*ptr | 0x20) - 'a' + 10);
+            *o++ = code;
+            if(!is_css_space(*ptr))
+                ptr--;
+        }
+        if(*ptr == quote)
+            ptr++;
+        if(*ptr == ')')
+            ptr++;
+        *o++ = ')';
+    }
+
+    *o = 0;
+    *ret = out;
+    return S_OK;
+}
+
+static HRESULT legacy_css_text(const WCHAR *text, BSTR *p)
+{
+    const WCHAR *ptr, *decl, *colon, *end;
+    WCHAR *conv, *out, *o, quote = 0;
+    unsigned depth = 0;
+    HRESULT hres;
+
+    hres = gecko_url_to_legacy(text, &conv);
+    if(FAILED(hres))
+        return hres;
+
+    out = malloc((wcslen(conv) * 2 + 1) * sizeof(WCHAR));
+    if(!out) {
+        free(conv);
+        return E_OUTOFMEMORY;
+    }
+
+    for(ptr = decl = conv, o = out;; ptr++) {
+        if(quote) {
+            if(*ptr == '\\' && ptr[1])
+                ptr++;
+            else if(*ptr == quote)
+                quote = 0;
+            if(*ptr)
+                continue;
+        }
+        if(*ptr == '"' || *ptr == '\'') {
+            quote = *ptr;
+            continue;
+        }
+        if(*ptr == '(')
+            depth++;
+        else if(*ptr == ')' && depth)
+            depth--;
+        if(*ptr && (*ptr != ';' || depth))
+            continue;
+
+        for(end = ptr; end > decl && is_css_space(end[-1]); end--);
+        while(decl < end && is_css_space(*decl))
+            decl++;
+        colon = decl;
+        while(colon < end && *colon != ':')
+            colon++;
+        if(colon < end) {
+            const WCHAR *name_end = colon, *value = colon + 1;
+
+            while(name_end > decl && is_css_space(name_end[-1]))
+                name_end--;
+            while(value < end && is_css_space(*value))
+                value++;
+            if(o != out) {
+                *o++ = ';';
+                *o++ = ' ';
+            }
+            for(; decl < name_end; decl++)
+                *o++ = (*decl >= 'a' && *decl <= 'z') ? *decl - 'a' + 'A' : *decl;
+            *o++ = ':';
+            *o++ = ' ';
+            memcpy(o, value, (end - value) * sizeof(WCHAR));
+            o += end - value;
+        }
+
+        if(!*ptr)
+            break;
+        decl = ptr + 1;
+    }
+
+    *o = 0;
+    free(conv);
+    *p = o == out ? NULL : SysAllocString(out);
+    free(out);
+    return o == out || *p ? S_OK : E_OUTOFMEMORY;
+}
+
 static HRESULT set_nsstyle_property(nsIDOMCSSStyleDeclaration *nsstyle, styleid_t sid, const nsAString *value)
 {
     nsAString str_name, str_empty;
@@ -961,6 +1152,11 @@ static inline HRESULT set_style_property(CSSStyle *style, styleid_t sid, const W
         if(flags & ATTR_FIX_URL)
             val = fix_url_value(value);
 #endif
+        if(flags & ATTR_LEGACY_URL) {
+            hres = legacy_url_to_gecko(value, &val);
+            if(FAILED(hres))
+                return hres;
+        }
     }
 
     nsAString_InitDepend(&value_str, val ? val : value);
@@ -1015,7 +1211,16 @@ static HRESULT nsstyle_to_bstr(const WCHAR *val, DWORD flags, BSTR *p)
         return S_OK;
     }
 
-    ret = SysAllocString(val);
+    if(flags & ATTR_LEGACY_URL) {
+        WCHAR *legacy;
+        HRESULT hres = gecko_url_to_legacy(val, &legacy);
+        if(FAILED(hres))
+            return hres;
+        ret = SysAllocString(legacy);
+        free(legacy);
+    }else {
+        ret = SysAllocString(val);
+    }
     if(!ret)
         return E_OUTOFMEMORY;
 
@@ -5835,11 +6040,21 @@ static HRESULT WINAPI HTMLCSSStyleDeclaration_put_cssText(IHTMLCSSStyleDeclarati
     nsAString text_str;
     nsresult nsres;
 
+    WCHAR *legacy = NULL;
+    HRESULT hres;
+
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
-    nsAString_InitDepend(&text_str, v);
+    if(v && dispex_compat_mode(&This->dispex) < COMPAT_MODE_IE9) {
+        hres = legacy_url_to_gecko(v, &legacy);
+        if(FAILED(hres))
+            return hres;
+    }
+
+    nsAString_InitDepend(&text_str, legacy ? legacy : v);
     nsres = nsIDOMCSSStyleDeclaration_SetCssText(This->nsstyle, &text_str);
     nsAString_Finish(&text_str);
+    free(legacy);
     if(NS_FAILED(nsres)) {
         FIXME("SetCssStyle failed: %08lx\n", nsres);
         return E_FAIL;
@@ -5856,9 +6071,17 @@ static HRESULT WINAPI HTMLCSSStyleDeclaration_get_cssText(IHTMLCSSStyleDeclarati
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    /* NOTE: Quicks mode should use different formatting (uppercase, no ';' at the end of rule). */
     nsAString_Init(&text_str, NULL);
     nsres = nsIDOMCSSStyleDeclaration_GetCssText(This->nsstyle, &text_str);
+    if(NS_SUCCEEDED(nsres) && dispex_compat_mode(&This->dispex) < COMPAT_MODE_IE9) {
+        const PRUnichar *text;
+        HRESULT hres;
+
+        nsAString_GetData(&text_str, &text);
+        hres = legacy_css_text(text, p);
+        nsAString_Finish(&text_str);
+        return hres;
+    }
     return return_nsstr(nsres, &text_str, p);
 }
 
