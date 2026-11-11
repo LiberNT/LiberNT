@@ -38,6 +38,15 @@ typedef struct _BARRIER_WORKER
     LONG ArrivedAfterFirstRound;
 } BARRIER_WORKER, *PBARRIER_WORKER;
 
+typedef struct _BARRIER_DELETER
+{
+    LPSYNCHRONIZATION_BARRIER Barrier;
+    HANDLE Thread;
+    DWORD ThreadId;
+    volatile LONG Calling;
+    volatile LONG Returned;
+} BARRIER_DELETER, *PBARRIER_DELETER;
+
 static
 DWORD
 WINAPI
@@ -73,8 +82,105 @@ WINAPI
 BarrierDeleter(
     _In_ PVOID Parameter)
 {
-    pDeleteSynchronizationBarrier(Parameter);
+    PBARRIER_DELETER Deleter = Parameter;
+
+    InterlockedExchange(&Deleter->Calling, 1);
+    pDeleteSynchronizationBarrier(Deleter->Barrier);
+    InterlockedExchange(&Deleter->Returned, 1);
     return 0;
+}
+
+static
+BOOL
+IsThreadWaiting(
+    _In_ PSYSTEM_PROCESS_INFORMATION Process,
+    _In_ DWORD ThreadId)
+{
+    PSYSTEM_THREAD_INFORMATION Thread;
+    ULONG Index;
+
+    while (Process->UniqueProcessId != UlongToHandle(GetCurrentProcessId()))
+    {
+        if (Process->NextEntryOffset == 0)
+            return FALSE;
+        Process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Process + Process->NextEntryOffset);
+    }
+
+    Thread = (PSYSTEM_THREAD_INFORMATION)(Process + 1);
+    for (Index = 0; Index < Process->NumberOfThreads; Index++)
+    {
+        if (Thread[Index].ClientId.UniqueThread == UlongToHandle(ThreadId))
+            return Thread[Index].ThreadState == Waiting;
+    }
+
+    return FALSE;
+}
+
+static
+BOOL
+WaitForDeleterBlocked(
+    _In_ PBARRIER_DELETER Deleter)
+{
+    ULONGLONG Deadline = GetTickCount64() + BARRIER_JOIN_TIMEOUT;
+    ULONG Size = 0x40000;
+    PVOID Buffer = NULL;
+    BOOL Blocked = FALSE;
+    NTSTATUS Status;
+
+    while (!Blocked && WaitForSingleObject(Deleter->Thread, 0) == WAIT_TIMEOUT && GetTickCount64() < Deadline)
+    {
+        if (!ReadAcquire(&Deleter->Calling))
+        {
+            SwitchToThread();
+            continue;
+        }
+
+        if (Buffer == NULL)
+        {
+            Buffer = HeapAlloc(GetProcessHeap(), 0, Size);
+            if (Buffer == NULL)
+                break;
+        }
+
+        Status = NtQuerySystemInformation(SystemProcessInformation, Buffer, Size, NULL);
+        if (Status == STATUS_INFO_LENGTH_MISMATCH)
+        {
+            HeapFree(GetProcessHeap(), 0, Buffer);
+            Buffer = NULL;
+            Size *= 2;
+            continue;
+        }
+        if (!NT_SUCCESS(Status))
+            break;
+
+        Blocked = IsThreadWaiting(Buffer, Deleter->ThreadId) && !ReadAcquire(&Deleter->Returned);
+        if (!Blocked)
+            SwitchToThread();
+    }
+
+    if (Buffer != NULL)
+        HeapFree(GetProcessHeap(), 0, Buffer);
+
+    return Blocked;
+}
+
+static
+BOOL
+WaitForBarrierEntry(
+    _In_ LPSYNCHRONIZATION_BARRIER Barrier,
+    _In_ const SYNCHRONIZATION_BARRIER *Initial,
+    _In_ HANDLE Thread)
+{
+    ULONGLONG Deadline = GetTickCount64() + BARRIER_JOIN_TIMEOUT;
+
+    while (RtlCompareMemory(Barrier, Initial, sizeof(*Initial)) == sizeof(*Initial))
+    {
+        if (WaitForSingleObject(Thread, 0) != WAIT_TIMEOUT || GetTickCount64() >= Deadline)
+            return FALSE;
+        SwitchToThread();
+    }
+
+    return TRUE;
 }
 
 static
@@ -303,11 +409,13 @@ TestDelete(
     BARRIER_TEST Test = { 0 };
     BARRIER_WORKER Waiter = { 0 };
     BARRIER_WORKER Releaser = { 0 };
+    BARRIER_DELETER Deleter = { 0 };
+    SYNCHRONIZATION_BARRIER Initial;
     HANDLE Ready;
-    HANDLE Deleter;
     DWORD Wait;
 
     ok_eq_bool(pInitializeSynchronizationBarrier(&Test.Barrier, 2, -1), TRUE);
+    Initial = Test.Barrier;
 
     Ready = CreateEventW(NULL, TRUE, FALSE, NULL);
     ok(Ready != NULL, "CreateEventW failed with %lu\n", GetLastError());
@@ -321,28 +429,35 @@ TestDelete(
     }
 
     ok_eq_ulong(WaitForSingleObject(Ready, BARRIER_JOIN_TIMEOUT), WAIT_OBJECT_0);
-    Sleep(100);
+    ok(WaitForBarrierEntry(&Test.Barrier, &Initial, Waiter.Thread),
+       "Flags 0x%lx: the waiter did not enter the barrier\n", WaiterFlags);
 
-    Deleter = CreateThread(NULL, 0, BarrierDeleter, &Test.Barrier, 0, NULL);
-    ok(Deleter != NULL, "CreateThread failed with %lu\n", GetLastError());
+    Deleter.Barrier = &Test.Barrier;
+    Deleter.Thread = CreateThread(NULL, 0, BarrierDeleter, &Deleter, 0, &Deleter.ThreadId);
+    ok(Deleter.Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Deleter.Thread != NULL)
+        SetThreadPriority(Deleter.Thread, THREAD_PRIORITY_ABOVE_NORMAL);
 
     if (WaiterFlags & SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE)
     {
-        Wait = WaitForSingleObject(Deleter, BARRIER_JOIN_TIMEOUT);
+        Wait = WaitForSingleObject(Deleter.Thread, BARRIER_JOIN_TIMEOUT);
         ok(Wait == WAIT_OBJECT_0, "Flags 0x%lx: delete wait returned 0x%lx\n", WaiterFlags, Wait);
         Wait = WaitForSingleObject(Waiter.Thread, 0);
         ok(Wait == WAIT_TIMEOUT, "Flags 0x%lx: waiter wait returned 0x%lx\n", WaiterFlags, Wait);
     }
     else
     {
-        Wait = WaitForSingleObject(Deleter, 200);
-        ok(Wait == WAIT_TIMEOUT, "Flags 0x%lx: delete wait returned 0x%lx\n", WaiterFlags, Wait);
+        ok(WaitForDeleterBlocked(&Deleter), "Flags 0x%lx: delete did not wait for the waiter (returned %ld)\n",
+           WaiterFlags, Deleter.Returned);
     }
 
     if (StartWorker(&Releaser, &Test, SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE, 1, NULL))
+    {
+        SetThreadPriority(Releaser.Thread, THREAD_PRIORITY_ABOVE_NORMAL);
         JoinThread(Releaser.Thread);
+    }
 
-    JoinThread(Deleter);
+    JoinThread(Deleter.Thread);
     JoinThread(Waiter.Thread);
     ok(Waiter.ArrivedAfterFirstRound == 2, "Flags 0x%lx: waiter left after %ld arrivals\n",
        WaiterFlags, Waiter.ArrivedAfterFirstRound);
