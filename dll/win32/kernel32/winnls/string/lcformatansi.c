@@ -334,9 +334,30 @@ int WINAPI GetCalendarInfoA(LCID lcid, CALID Calendar, CALTYPE CalType,
  */
 int WINAPI SetCalendarInfoA(LCID Locale, CALID Calendar, CALTYPE CalType, LPCSTR lpCalData)
 {
-    FIXME("(%08x,%08x,%08x,%s): stub\n",
-          Locale, Calendar, CalType, debugstr_a(lpCalData));
-    return 0;
+    WCHAR Buffer[256];
+    DWORD CodePage = CP_ACP;
+
+    if (!lpCalData)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (!(CalType & CAL_USE_CP_ACP) &&
+        !GetLocaleInfoW(Locale, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
+                        (LPWSTR)&CodePage, sizeof(CodePage) / sizeof(WCHAR)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (!MultiByteToWideChar(CodePage, 0, lpCalData, -1, Buffer, ARRAY_SIZE(Buffer)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    return SetCalendarInfoW(Locale, Calendar, CalType, Buffer);
 }
 
 /* EOF */

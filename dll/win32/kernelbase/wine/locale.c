@@ -1658,6 +1658,31 @@ static BOOL get_japanese_era( struct japanese_era *era )
     RegCloseKey( key );
     return best != 0;
 }
+
+static BOOL get_two_digit_year_max_override( CALID id, unsigned int *value )
+{
+    WCHAR name[11], data[11];
+    DWORD size = sizeof(data) - sizeof(WCHAR), type;
+    unsigned int val = 0;
+    const WCHAR *p;
+    LSTATUS res;
+    HKEY key;
+
+    swprintf( name, ARRAY_SIZE(name), L"%lu", id );
+    if (RegOpenKeyExW( intl_key, L"Calendars\\TwoDigitYearMax", 0, KEY_QUERY_VALUE, &key )) return FALSE;
+    res = RegQueryValueExW( key, name, NULL, &type, (BYTE *)data, &size );
+    RegCloseKey( key );
+    if (res || type != REG_SZ) return FALSE;
+    data[size / sizeof(WCHAR)] = 0;
+    if (!data[0]) return FALSE;
+    for (p = data; *p; p++)
+    {
+        if (*p < '0' || *p > '9' || val > (UINT_MAX - (*p - '0')) / 10) return FALSE;
+        val = val * 10 + (*p - '0');
+    }
+    *value = val;
+    return TRUE;
+}
 #endif
 
 /* get calendar information from the locale.nls file */
@@ -1787,6 +1812,10 @@ static int get_calendar_info( const NLS_LOCALE_DATA *locale, CALID id, CALTYPE t
         return locale_return_strarray( val, 0, type, buffer, len );
 
     case CAL_ITWODIGITYEARMAX:
+#ifdef __REACTOS__
+        if (!(type & CAL_NOUSEROVERRIDE) && get_two_digit_year_max_override( id, &val ))
+            return cal_return_number( val, type, buffer, len, value );
+#endif
         return cal_return_number( cal->itwodigityearmax, type, buffer, len, value );
 
     case CAL_SSHORTESTDAYNAME1:

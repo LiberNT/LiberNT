@@ -98,6 +98,7 @@ list(APPEND SOURCE
     RemoteThreadInit.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c
+    SetCalendarInfo.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
     SetCurrentDirectory.c

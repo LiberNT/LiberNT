@@ -95,6 +95,7 @@ extern void func_RenameDirectoryOldPath(void);
 extern void func_QueueUserAPC(void);
 extern void func_QueryProcessCycleTime(void);
 extern void func_ResizePseudoConsole(void);
+extern void func_SetCalendarInfo(void);
 extern void func_SetComputerNameExW(void);
 extern void func_SetConsoleWindowInfo(void);
 extern void func_SetCurrentDirectory(void);
@@ -217,6 +218,7 @@ const struct test winetest_testlist[] =
     { "QueueUserAPC",                func_QueueUserAPC },
     { "QueryProcessCycleTime",       func_QueryProcessCycleTime },
     { "ResizePseudoConsole",         func_ResizePseudoConsole },
+    { "SetCalendarInfo",             func_SetCalendarInfo },
     { "SetComputerNameExW",          func_SetComputerNameExW },
     { "SetConsoleWindowInfo",        func_SetConsoleWindowInfo },
     { "SetCurrentDirectory",         func_SetCurrentDirectory },

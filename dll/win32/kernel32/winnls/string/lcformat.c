@@ -1836,6 +1836,42 @@ BOOL WINAPI EnumTimeFormatsEx(TIMEFMT_ENUMPROCEX proc, const WCHAR *locale, DWOR
 #endif /* _WIN32_WINNT >= 0x600 */
 
 
+#ifdef __REACTOS__
+static NTSTATUS NLS_CreateTwoDigitYearMaxKey(PHANDLE KeyHandle)
+{
+    static const PCWSTR KeyNames[] = { L"Control Panel", L"International", L"Calendars", L"TwoDigitYearMax" };
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    HANDLE ParentKey, Key;
+    NTSTATUS Status;
+    ULONG i;
+
+    Status = RtlOpenCurrentUser(KEY_CREATE_SUB_KEY, &ParentKey);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (i = 0; i < ARRAY_SIZE(KeyNames); i++)
+    {
+        RtlInitUnicodeString(&KeyName, KeyNames[i]);
+        InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, ParentKey, NULL);
+        Status = NtCreateKey(&Key,
+                             (i + 1 < ARRAY_SIZE(KeyNames)) ? KEY_CREATE_SUB_KEY : KEY_SET_VALUE,
+                             &ObjectAttributes,
+                             0,
+                             NULL,
+                             REG_OPTION_NON_VOLATILE,
+                             NULL);
+        NtClose(ParentKey);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        ParentKey = Key;
+    }
+
+    *KeyHandle = ParentKey;
+    return STATUS_SUCCESS;
+}
+#endif
+
 /*********************************************************************
  *	SetCalendarInfoW				(KERNEL32.@)
  *
@@ -1843,7 +1879,62 @@ BOOL WINAPI EnumTimeFormatsEx(TIMEFMT_ENUMPROCEX proc, const WCHAR *locale, DWOR
  */
 int WINAPI	SetCalendarInfoW(LCID Locale, CALID Calendar, CALTYPE CalType, LPCWSTR lpCalData)
 {
+#ifdef __REACTOS__
+    WCHAR ValueNameBuffer[11];
+    WCHAR DataBuffer[11];
+    UNICODE_STRING ValueName;
+    UNICODE_STRING Data;
+    HANDLE Key;
+    NTSTATUS Status;
+    ULONG Value = 0;
+    SIZE_T i;
+
+    if ((CalType & ~CAL_USE_CP_ACP) != CAL_ITWODIGITYEARMAX)
+    {
+        SetLastError(ERROR_INVALID_FLAGS);
+        return 0;
+    }
+
+    if (!lpCalData || !lpCalData[0] ||
+        !GetCalendarInfoW(Locale, Calendar, CAL_ITWODIGITYEARMAX, NULL, 0, NULL))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    for (i = 0; lpCalData[i]; i++)
+    {
+        if (lpCalData[i] < L'0' || lpCalData[i] > L'9' ||
+            Value > (MAXULONG - (ULONG)(lpCalData[i] - L'0')) / 10)
+        {
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return 0;
+        }
+        Value = Value * 10 + (ULONG)(lpCalData[i] - L'0');
+    }
+
+    RtlInitEmptyUnicodeString(&ValueName, ValueNameBuffer, sizeof(ValueNameBuffer));
+    RtlInitEmptyUnicodeString(&Data, DataBuffer, sizeof(DataBuffer));
+    Status = RtlIntegerToUnicodeString(Calendar, 10, &ValueName);
+    if (NT_SUCCESS(Status))
+        Status = RtlIntegerToUnicodeString(Value, 10, &Data);
+    if (NT_SUCCESS(Status))
+        Status = NLS_CreateTwoDigitYearMaxKey(&Key);
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtSetValueKey(Key, &ValueName, 0, REG_SZ, DataBuffer, Data.Length + sizeof(WCHAR));
+        NtClose(Key);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(ERROR_INTERNAL_ERROR);
+        return 0;
+    }
+
+    return TRUE;
+#else
     FIXME("(%08x,%08x,%08x,%s): stub\n",
 	  Locale, Calendar, CalType, debugstr_w(lpCalData));
     return 0;
+#endif
 }
