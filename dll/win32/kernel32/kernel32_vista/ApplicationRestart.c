@@ -73,7 +73,7 @@ RegisterApplicationRestart(
     if (pwzCommandline != NULL)
     {
         Length = wcslen(pwzCommandline);
-        if (Length > RESTART_MAX_CMD_LINE)
+        if (Length >= RESTART_MAX_CMD_LINE)
             return E_INVALIDARG;
     }
 
@@ -146,7 +146,7 @@ GetApplicationRestartSettings(
     DWORD Needed;
     HRESULT hr;
 
-    if (pcchSize == NULL)
+    if (pcchSize == NULL || (pwzCommandline == NULL && *pcchSize != 0))
         return E_INVALIDARG;
 
     ProcessId = hProcess == NtCurrentProcess() ? GetCurrentProcessId() : GetProcessId(hProcess);
@@ -176,7 +176,14 @@ GetApplicationRestartSettings(
     {
         MemoryBarrier();
         Needed = Data->Length + 1;
-        if (pwzCommandline == NULL || *pcchSize < Needed)
+        if (pwzCommandline == NULL)
+        {
+            *pcchSize = Needed;
+            if (pdwFlags != NULL)
+                *pdwFlags = Data->Flags;
+            hr = S_OK;
+        }
+        else if (*pcchSize < Needed)
         {
             *pcchSize = Needed;
             hr = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);

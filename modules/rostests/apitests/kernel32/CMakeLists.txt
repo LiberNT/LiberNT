@@ -9,6 +9,7 @@ list(APPEND SOURCE
     ConsoleAlias.c
     ApiSetCoreSynch.c
     ApplicationRecovery.c
+    ApplicationRestart.c
     AuditAlarmApis.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c

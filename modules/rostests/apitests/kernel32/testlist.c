@@ -6,6 +6,7 @@ extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_ApplicationRecovery(void);
+extern void func_ApplicationRestart(void);
 extern void func_AuditAlarmApis(void);
 extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
@@ -164,6 +165,7 @@ const struct test winetest_testlist[] =
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "ApplicationRecovery",         func_ApplicationRecovery },
+    { "ApplicationRestart",          func_ApplicationRestart },
     { "AuditAlarmApis",              func_AuditAlarmApis },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
