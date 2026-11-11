@@ -166,6 +166,7 @@ extern void func_ProcessPowerThrottling(void);
 extern void func_TransactedFileApis(void);
 extern void func_TunnelCache(void);
 extern void func_TimerResolutionSleep(void);
+extern void func_ThreadContextInCallback(void);
 extern void func_UEFIFirmware(void);
 extern void func_VolumeMountPoints(void);
 extern void func_WaitFileHandle(void);
@@ -350,6 +351,7 @@ const struct test winetest_testlist[] =
     { "TransactedFileApis",          func_TransactedFileApis },
     { "TunnelCache",                 func_TunnelCache },
     { "TimerResolutionSleep",        func_TimerResolutionSleep },
+    { "ThreadContextInCallback",     func_ThreadContextInCallback },
     { "UEFIFirmware",                func_UEFIFirmware },
     { "VolumeMountPoints",           func_VolumeMountPoints },
     { "WaitFileHandle",              func_WaitFileHandle },
