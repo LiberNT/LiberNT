@@ -26,6 +26,10 @@ typedef struct _SEP_TOKEN_QUESTION
 
 #define SEP_VARIES 0
 
+#define SEP_CURRENT_PROCESS_TOKEN          ((HANDLE)(LONG_PTR)-4)
+#define SEP_CURRENT_THREAD_TOKEN           ((HANDLE)(LONG_PTR)-5)
+#define SEP_CURRENT_THREAD_EFFECTIVE_TOKEN ((HANDLE)(LONG_PTR)-6)
+
 static const SEP_TOKEN_QUESTION SepTokenQuestions[] =
 {
     {TokenUser, SEP_VARIES, TOKEN_QUERY, 0},
@@ -65,6 +69,52 @@ static const SEP_TOKEN_QUESTION SepTokenQuestions[] =
 };
 
 /* PRIVATE FUNCTIONS **********************************************************/
+
+/* A query may name the caller's own tokens by pseudo handle instead of a handle it opened */
+static
+NTSTATUS
+SepReferenceTokenToQuery(
+    _In_ HANDLE TokenHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PTOKEN *Token)
+{
+    SECURITY_IMPERSONATION_LEVEL Level;
+    BOOLEAN CopyOnOpen;
+    BOOLEAN EffectiveOnly;
+    PACCESS_TOKEN Found = NULL;
+
+    if (TokenHandle == SEP_CURRENT_THREAD_TOKEN ||
+        TokenHandle == SEP_CURRENT_THREAD_EFFECTIVE_TOKEN)
+    {
+        Found = PsReferenceImpersonationToken(PsGetCurrentThread(),
+                                              &CopyOnOpen,
+                                              &EffectiveOnly,
+                                              &Level);
+        if (Found == NULL && TokenHandle == SEP_CURRENT_THREAD_TOKEN)
+            return STATUS_NO_TOKEN;
+    }
+
+    if (Found == NULL &&
+        (TokenHandle == SEP_CURRENT_PROCESS_TOKEN ||
+         TokenHandle == SEP_CURRENT_THREAD_EFFECTIVE_TOKEN))
+    {
+        Found = PsReferencePrimaryToken(PsGetCurrentProcess());
+    }
+
+    if (Found != NULL)
+    {
+        *Token = (PTOKEN)Found;
+        return STATUS_SUCCESS;
+    }
+
+    return ObReferenceObjectByHandle(TokenHandle,
+                                     DesiredAccess,
+                                     SeTokenObjectType,
+                                     PreviousMode,
+                                     (PVOID *)Token,
+                                     NULL);
+}
 
 static
 const SEP_TOKEN_QUESTION *
@@ -911,12 +961,10 @@ NtQueryInformationToken(
         _SEH2_END;
     }
 
-    Status = ObReferenceObjectByHandle(TokenHandle,
-                                       Question->ToAsk,
-                                       SeTokenObjectType,
-                                       PreviousMode,
-                                       (PVOID *)&Token,
-                                       NULL);
+    Status = SepReferenceTokenToQuery(TokenHandle,
+                                      Question->ToAsk,
+                                      PreviousMode,
+                                      &Token);
     if (!NT_SUCCESS(Status)) return Status;
 
     /*
