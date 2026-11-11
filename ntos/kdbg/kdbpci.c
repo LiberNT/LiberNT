@@ -11,6 +11,17 @@
 #define NDEBUG
 #include <debug.h>
 
+#define KDB_PCI_MSI_ENABLE 0x0001
+#define KDB_PCI_MSI_CAPABLE_SHIFT 1
+#define KDB_PCI_MSI_ENABLED_SHIFT 4
+#define KDB_PCI_MSI_COUNT_MASK 0x7
+#define KDB_PCI_MSI_64BIT 0x0080
+#define KDB_PCI_MSI_MASKABLE 0x0100
+#define KDB_PCI_MSIX_TABLE_SIZE_MASK 0x07FF
+#define KDB_PCI_MSIX_FUNCTION_MASK 0x4000
+#define KDB_PCI_MSIX_ENABLE 0x8000
+#define KDB_PCI_MSIX_BIR_MASK 0x7UL
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -44,8 +55,14 @@ KdbpPrintPciExpress(
     PCI_EXPRESS_CAPABILITY Express;
 
     if (!KdbpReadPciConfig(Bus, Slot, Offset, &Express, FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, SlotCapabilities)))
+    {
+        KdbPuts("\n");
         return;
+    }
 
+    KdbpPrint(" PCI Express v%u type %u\n",
+              Express.ExpressCapabilities.CapabilityVersion,
+              Express.ExpressCapabilities.DeviceType);
     KdbpPrint("  PCIe devctl 0x%04x devsta 0x%04x lnkcap 0x%08lx lnkctl 0x%04x lnksta 0x%04x (gen%u x%u)\n",
               Express.DeviceControl.AsUSHORT,
               Express.DeviceStatus.AsUSHORT,
@@ -58,26 +75,120 @@ KdbpPrintPciExpress(
 
 static
 VOID
+KdbpPrintPciPowerManagement(
+    _In_ ULONG Bus,
+    _In_ PCI_SLOT_NUMBER Slot,
+    _In_ ULONG Offset)
+{
+    PCI_PM_CAPABILITY Pm;
+
+    if (!KdbpReadPciConfig(Bus, Slot, Offset, &Pm, sizeof(Pm)))
+    {
+        KdbPuts("\n");
+        return;
+    }
+
+    KdbpPrint(" power management v%u, D%u, PME enable %u status %u\n",
+              Pm.PMC.Capabilities.Version,
+              Pm.PMCSR.ControlStatus.PowerState,
+              Pm.PMCSR.ControlStatus.PMEEnable,
+              Pm.PMCSR.ControlStatus.PMEStatus);
+}
+
+static
+VOID
+KdbpPrintPciMsi(
+    _In_ ULONG Bus,
+    _In_ PCI_SLOT_NUMBER Slot,
+    _In_ ULONG Offset)
+{
+    USHORT Control;
+
+    if (!KdbpReadPciConfig(Bus, Slot, Offset + 2, &Control, sizeof(Control)))
+    {
+        KdbPuts("\n");
+        return;
+    }
+
+    KdbpPrint(" MSI %s, %u of %u messages%s%s\n",
+              (Control & KDB_PCI_MSI_ENABLE) ? "enabled" : "disabled",
+              1U << ((Control >> KDB_PCI_MSI_ENABLED_SHIFT) & KDB_PCI_MSI_COUNT_MASK),
+              1U << ((Control >> KDB_PCI_MSI_CAPABLE_SHIFT) & KDB_PCI_MSI_COUNT_MASK),
+              (Control & KDB_PCI_MSI_64BIT) ? ", 64-bit" : "",
+              (Control & KDB_PCI_MSI_MASKABLE) ? ", maskable" : "");
+}
+
+static
+VOID
+KdbpPrintPciMsix(
+    _In_ ULONG Bus,
+    _In_ PCI_SLOT_NUMBER Slot,
+    _In_ ULONG Offset)
+{
+    USHORT Control;
+    ULONG Table;
+    ULONG Pending;
+
+    if (!KdbpReadPciConfig(Bus, Slot, Offset + 2, &Control, sizeof(Control)) ||
+        !KdbpReadPciConfig(Bus, Slot, Offset + 4, &Table, sizeof(Table)) ||
+        !KdbpReadPciConfig(Bus, Slot, Offset + 8, &Pending, sizeof(Pending)))
+    {
+        KdbPuts("\n");
+        return;
+    }
+
+    KdbpPrint(" MSI-X %s%s, %u entries, table bar%lu+0x%lx, pending bits bar%lu+0x%lx\n",
+              (Control & KDB_PCI_MSIX_ENABLE) ? "enabled" : "disabled",
+              (Control & KDB_PCI_MSIX_FUNCTION_MASK) ? " masked" : "",
+              (Control & KDB_PCI_MSIX_TABLE_SIZE_MASK) + 1,
+              Table & KDB_PCI_MSIX_BIR_MASK,
+              Table & ~KDB_PCI_MSIX_BIR_MASK,
+              Pending & KDB_PCI_MSIX_BIR_MASK,
+              Pending & ~KDB_PCI_MSIX_BIR_MASK);
+}
+
+static
+VOID
 KdbpPrintPciCapabilities(
     _In_ ULONG Bus,
     _In_ PCI_SLOT_NUMBER Slot,
     _In_ UCHAR First)
 {
     PCI_CAPABILITIES_HEADER Header;
-    UCHAR Offset = First;
+    ULONG Offset = First & ~3;
     ULONG Count;
 
     for (Count = 0; (Count < 48) && (Offset >= PCI_COMMON_HDR_LENGTH); Count++)
     {
-        if (!KdbpReadPciConfig(Bus, Slot, Offset & ~3, &Header, sizeof(Header)))
+        if (!KdbpReadPciConfig(Bus, Slot, Offset, &Header, sizeof(Header)))
             break;
 
-        KdbpPrint("  cap 0x%02x at 0x%02x\n", Header.CapabilityID, Offset & ~3);
+        KdbpPrint("  cap 0x%02x at 0x%02lx", Header.CapabilityID, Offset);
 
-        if (Header.CapabilityID == PCI_CAPABILITY_ID_PCI_EXPRESS)
-            KdbpPrintPciExpress(Bus, Slot, Offset & ~3);
+        switch (Header.CapabilityID)
+        {
+            case PCI_CAPABILITY_ID_POWER_MANAGEMENT:
+                KdbpPrintPciPowerManagement(Bus, Slot, Offset);
+                break;
 
-        Offset = Header.Next;
+            case PCI_CAPABILITY_ID_MSI:
+                KdbpPrintPciMsi(Bus, Slot, Offset);
+                break;
+
+            case PCI_CAPABILITY_ID_MSIX:
+                KdbpPrintPciMsix(Bus, Slot, Offset);
+                break;
+
+            case PCI_CAPABILITY_ID_PCI_EXPRESS:
+                KdbpPrintPciExpress(Bus, Slot, Offset);
+                break;
+
+            default:
+                KdbPuts("\n");
+                break;
+        }
+
+        Offset = Header.Next & ~3;
     }
 }
 
@@ -119,14 +230,78 @@ KdbpPrintPciExtendedCapabilities(
 
 static
 VOID
+KdbpPrintPciBars(
+    _In_reads_(Count) const ULONG *Bars,
+    _In_ ULONG Count)
+{
+    ULONGLONG Address;
+    ULONG Index;
+    ULONG Bar;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Bars[Index] == 0)
+            continue;
+
+        if (Bars[Index] & PCI_ADDRESS_IO_SPACE)
+        {
+            KdbpPrint("  bar%lu I/O 0x%lx\n", Index, Bars[Index] & PCI_ADDRESS_IO_ADDRESS_MASK);
+            continue;
+        }
+
+        Bar = Index;
+        Address = Bars[Index] & PCI_ADDRESS_MEMORY_ADDRESS_MASK;
+
+        if (((Bars[Bar] & PCI_ADDRESS_MEMORY_TYPE_MASK) == PCI_TYPE_64BIT) && (Index + 1 < Count))
+            Address |= (ULONGLONG)Bars[++Index] << 32;
+
+        KdbpPrint("  bar%lu memory 0x%I64x%s%s\n",
+                  Bar,
+                  Address,
+                  (Index != Bar) ? " 64-bit" : "",
+                  (Bars[Bar] & PCI_ADDRESS_MEMORY_PREFETCHABLE) ? " prefetchable" : "");
+    }
+}
+
+static
+BOOLEAN
+KdbpParsePciAddress(
+    _In_ PCHAR Text,
+    _Out_writes_(3) LONG Wanted[3])
+{
+    PCHAR Device = strchr(Text, ':');
+    PCHAR Function = (Device != NULL) ? strchr(Device, '.') : NULL;
+    ULONG_PTR Value;
+
+    if (Function == NULL)
+        return FALSE;
+
+    *Device++ = ANSI_NULL;
+    *Function++ = ANSI_NULL;
+
+    if (!KdbpGetHexNumber(Text, &Value) || (Value > 0xFF))
+        return FALSE;
+    Wanted[0] = (LONG)Value;
+
+    if (!KdbpGetHexNumber(Device, &Value) || (Value >= PCI_MAX_DEVICES))
+        return FALSE;
+    Wanted[1] = (LONG)Value;
+
+    if (!KdbpGetHexNumber(Function, &Value) || (Value >= PCI_MAX_FUNCTION))
+        return FALSE;
+    Wanted[2] = (LONG)Value;
+
+    return TRUE;
+}
+
+static
+VOID
 KdbpPrintPciFunction(
     _In_ ULONG Bus,
     _In_ PCI_SLOT_NUMBER Slot,
     _In_ PPCI_COMMON_CONFIG Config,
     _In_ BOOLEAN Verbose)
 {
-    ULONG Index;
-
     KdbpPrint("%02lx:%02lx.%lx %04x:%04x class %02x%02x%02x rev %02x hdr %02x\n",
               Bus,
               Slot.u.bits.DeviceNumber,
@@ -146,15 +321,22 @@ KdbpPrintPciFunction(
 
     if (PCI_CONFIGURATION_TYPE(Config) == PCI_DEVICE_TYPE)
     {
-        for (Index = 0; Index < PCI_TYPE0_ADDRESSES; Index++)
-        {
-            if (Config->u.type0.BaseAddresses[Index] != 0)
-                KdbpPrint("  bar%lu 0x%08lx\n", Index, Config->u.type0.BaseAddresses[Index]);
-        }
-
+        KdbpPrintPciBars(Config->u.type0.BaseAddresses, PCI_TYPE0_ADDRESSES);
+        KdbpPrint("  subsystem %04x:%04x\n", Config->u.type0.SubVendorID, Config->u.type0.SubSystemID);
         KdbpPrint("  interrupt line %u pin %u\n",
                   Config->u.type0.InterruptLine,
                   Config->u.type0.InterruptPin);
+    }
+    else if (PCI_CONFIGURATION_TYPE(Config) == PCI_BRIDGE_TYPE)
+    {
+        KdbpPrintPciBars(Config->u.type1.BaseAddresses, PCI_TYPE1_ADDRESSES);
+        KdbpPrint("  buses %u-%u-%u\n",
+                  Config->u.type1.PrimaryBus,
+                  Config->u.type1.SecondaryBus,
+                  Config->u.type1.SubordinateBus);
+        KdbpPrint("  interrupt line %u pin %u\n",
+                  Config->u.type1.InterruptLine,
+                  Config->u.type1.InterruptPin);
     }
 
     if (Config->Status & PCI_STATUS_CAPABILITIES_LIST)
@@ -186,15 +368,26 @@ KdbpCmdPci(
     LONG Wanted[3] = { -1, -1, -1 };
     ULONG Index;
 
-    for (Index = 1; (Index < Argc) && (Index <= 3); Index++)
+    if ((Argc == 2) && (strchr(Argv[1], ':') != NULL))
     {
-        if (!KdbpGetHexNumber(Argv[Index], &Value))
+        if (!KdbpParsePciAddress(Argv[1], Wanted))
         {
-            KdbpPrint("%s is not a number\n", Argv[Index]);
+            KdbPuts("Give the function as bus:device.function, in hexadecimal\n");
             return TRUE;
         }
+    }
+    else
+    {
+        for (Index = 1; (Index < Argc) && (Index <= 3); Index++)
+        {
+            if (!KdbpGetHexNumber(Argv[Index], &Value))
+            {
+                KdbpPrint("%s is not a number\n", Argv[Index]);
+                return TRUE;
+            }
 
-        Wanted[Index - 1] = (LONG)Value;
+            Wanted[Index - 1] = (LONG)Value;
+        }
     }
 
     if (Wanted[0] >= 0)

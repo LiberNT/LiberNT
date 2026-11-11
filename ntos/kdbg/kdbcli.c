@@ -2093,7 +2093,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {".exr", ".exr [address]", "Shows an exception record, or the one of the stop", KdbpCmdExceptionRecord},
     {".frame", ".frame [number]", "Looks at a frame of the stack, or back at its top", KdbpCmdFrame},
     {"!analyze", "!analyze", "Says what stopped the machine and where", KdbpCmdAnalyze},
-    {"!pci", "!pci [bus [device [function]]]", "Lists the PCI functions, or shows one in detail", KdbpCmdPci},
+    {"!pci", "!pci [bus [device [function]]|bus:device.function]", "Lists the PCI functions, or shows one in detail", KdbpCmdPci},
     {"!devtree", "!devtree", "Lists the Plug and Play device tree", KdbpCmdDeviceTree},
     {"!devnode", "!devnode [address]", "Shows a device node and its resources, or the root one", KdbpCmdDeviceNode},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
