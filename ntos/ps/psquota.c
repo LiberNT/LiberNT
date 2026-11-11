@@ -518,7 +518,9 @@ PspSetQuotaLimits(
 {
     PEPROCESS_QUOTA_BLOCK Block;
     QUOTA_LIMITS_EX Limits;
+    KAPC_STATE ApcState;
     BOOLEAN Privileged;
+    NTSTATUS Status;
     KIRQL OldIrql;
 
     PAGED_CODE();
@@ -566,10 +568,14 @@ PspSetQuotaLimits(
             return STATUS_INVALID_PARAMETER;
         }
 
-        return MmAdjustWorkingSetSize(Limits.MinimumWorkingSetSize,
-                                      Limits.MaximumWorkingSetSize,
-                                      0,
-                                      FALSE);
+        KeStackAttachProcess(&Process->Pcb, &ApcState);
+        Status = MmAdjustWorkingSetSize(Limits.MinimumWorkingSetSize,
+                                        Limits.MaximumWorkingSetSize,
+                                        0,
+                                        FALSE);
+        KeUnstackDetachProcess(&ApcState);
+
+        return Status;
     }
 
     Privileged = SeSinglePrivilegeCheck(SeIncreaseQuotaPrivilege, PreviousMode);

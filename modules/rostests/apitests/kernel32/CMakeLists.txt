@@ -135,6 +135,7 @@ list(APPEND SOURCE
     QueryProcessCycleTime.c
     ReadFile.c
     ResourceUILanguage.c
+    ProcessWorkingSetSize.c
     RemoteThreadInit.c
     RenameAsyncHandle.c
     RenameDirectoryOldPath.c

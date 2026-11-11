@@ -92,6 +92,7 @@ extern void func_LoadLibraryExW(void);
 extern void func_LockFileEx(void);
 extern void func_QuantumRoundRobin(void);
 extern void func_RegisterWaitPeriodic(void);
+extern void func_ProcessWorkingSetSize(void);
 extern void func_RemoteThreadInit(void);
 extern void func_SandboxLaunch(void);
 extern void func_SecurityBaseApis(void);
@@ -277,6 +278,7 @@ const struct test winetest_testlist[] =
     { "TebSegmentAfterWait",           func_TebSegmentAfterWait },
     { "QuantumRoundRobin",           func_QuantumRoundRobin },
     { "RegisterWaitPeriodic",        func_RegisterWaitPeriodic },
+    { "ProcessWorkingSetSize",       func_ProcessWorkingSetSize },
     { "RemoteThreadInit",            func_RemoteThreadInit },
     { "SandboxLaunch",               func_SandboxLaunch },
     { "SecurityBaseApis",            func_SecurityBaseApis },
