@@ -1299,7 +1299,10 @@ NtPowerInformation(
                 break;
 
             case PowerRequestAction:
-                Status = PopActOnPowerRequest(InputBuffer, InputBufferLength);
+                if (OutputBuffer != NULL || OutputBufferLength != 0)
+                    Status = STATUS_INVALID_PARAMETER;
+                else
+                    Status = PopActOnPowerRequest(InputBuffer, InputBufferLength);
                 break;
 
             case SystemExecutionState:

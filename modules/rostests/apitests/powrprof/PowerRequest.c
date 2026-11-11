@@ -29,7 +29,7 @@ START_TEST(PowerRequest)
     PPOWER_CHANGE_REQUEST pPowerSetRequest = (PPOWER_CHANGE_REQUEST)GetProcAddress(Kernel32, "PowerSetRequest");
     PPOWER_CHANGE_REQUEST pPowerClearRequest = (PPOWER_CHANGE_REQUEST)GetProcAddress(Kernel32, "PowerClearRequest");
     REASON_CONTEXT Context = {0};
-    HANDLE Request;
+    HANDLE Request, Duplicate;
     BOOL Success;
     ULONG i;
 
@@ -66,6 +66,24 @@ START_TEST(PowerRequest)
         ok(Success, "second PowerClearRequest failed: %lu\n", GetLastError());
         winetest_pop_context();
     }
+
+    SetLastError(0xdeadbeef);
+    Success = pPowerClearRequest(Request, PowerRequestSystemRequired);
+    ok(!Success, "PowerClearRequest of a request type that is not set succeeded\n");
+    ok_long(GetLastError(), ERROR_NOT_SUPPORTED);
+
+    SetLastError(0xdeadbeef);
+    Success = pPowerSetRequest(Request, (POWER_REQUEST_TYPE)0x100);
+    ok(!Success, "PowerSetRequest with an unknown request type succeeded\n");
+    ok_long(GetLastError(), ERROR_NOT_SUPPORTED);
+
+    Duplicate = NULL;
+    SetLastError(0xdeadbeef);
+    Success = DuplicateHandle(GetCurrentProcess(), Request, GetCurrentProcess(), &Duplicate,
+                              0, FALSE, DUPLICATE_SAME_ACCESS);
+    ok(!Success, "DuplicateHandle of a power request succeeded\n");
+    ok_long(GetLastError(), ERROR_ACCESS_DENIED);
+    if (Success) CloseHandle(Duplicate);
 
     SetLastError(0xdeadbeef);
     Success = pPowerSetRequest(GetCurrentProcess(), PowerRequestSystemRequired);
