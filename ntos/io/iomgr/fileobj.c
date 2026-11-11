@@ -483,6 +483,8 @@ IopGetSetSecurityObject(
             Status == STATUS_BUFFER_TOO_SMALL)
         {
             *BufferLength = (ULONG)IoStatusBlock.Information;
+            /* A file system reports a short buffer as an overflow; a security method reports it as too small */
+            Status = STATUS_BUFFER_TOO_SMALL;
         }
         else if (NT_SUCCESS(Status))
         {
