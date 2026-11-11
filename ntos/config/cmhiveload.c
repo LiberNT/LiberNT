@@ -311,6 +311,27 @@ CmpFindLoadedHive(
     return Result;
 }
 
+/* FIXME: the hardware tree lives in the master hive instead of a volatile hive of its own */
+static
+BOOLEAN
+CmpIsHardwareTree(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb)
+{
+    UNICODE_STRING Hardware = RTL_CONSTANT_STRING(L"\\REGISTRY\\MACHINE\\HARDWARE");
+    PUNICODE_STRING Name;
+    BOOLEAN Inside;
+
+    Name = CmpConstructName(Kcb);
+    if (Name == NULL) return FALSE;
+
+    Inside = RtlPrefixUnicodeString(&Hardware, Name, TRUE) &&
+             (Name->Length == Hardware.Length ||
+              Name->Buffer[Hardware.Length / sizeof(WCHAR)] == OBJ_NAME_PATH_SEPARATOR);
+
+    ExFreePool(Name);
+    return Inside;
+}
+
 static
 NTSTATUS
 CmpBuildHiveFilePath(
@@ -892,6 +913,9 @@ CmSaveKey(
     }
 
     if (Kcb->Delete) return STATUS_KEY_DELETED;
+
+    if (Kcb->KeyHive == &CmiVolatileHive->Hive && !CmpIsHardwareTree(Kcb))
+        return STATUS_ACCESS_DENIED;
 
     Status = CmpInitializeHive(&Target,
                                HINIT_CREATE,
