@@ -25,7 +25,8 @@ PspAskThreadForContext(
     _In_ PETHREAD Thread,
     _Inout_ PCONTEXT Context,
     _In_ KPROCESSOR_MODE Mode,
-    _In_ BOOLEAN SetContext)
+    _In_ BOOLEAN SetContext,
+    _In_opt_ PVOID XState)
 {
     PKNORMAL_ROUTINE NormalRoutine = NULL;
     PVOID NormalContext = NULL;
@@ -40,6 +41,7 @@ PspAskThreadForContext(
     Request.Context = *Context;
     Request.Mode = Mode;
     Request.Status = STATUS_SUCCESS;
+    Request.XState = XState;
 
     KeInitializeEvent(&Request.Event, NotificationEvent, FALSE);
 
@@ -123,7 +125,8 @@ PspGetOrSetUserContext(
     return PspAskThreadForContext(Thread,
                                   Context,
                                   ExGetPreviousMode(),
-                                  SetContext);
+                                  SetContext,
+                                  NULL);
 }
 
 NTSTATUS
@@ -135,7 +138,7 @@ PsGetContextThread(
 {
     PAGED_CODE();
 
-    return PspAskThreadForContext(Thread, ThreadContext, PreviousMode, FALSE);
+    return PspAskThreadForContext(Thread, ThreadContext, PreviousMode, FALSE, NULL);
 }
 
 NTSTATUS
@@ -147,7 +150,7 @@ PsSetContextThread(
 {
     PAGED_CODE();
 
-    return PspAskThreadForContext(Thread, ThreadContext, PreviousMode, TRUE);
+    return PspAskThreadForContext(Thread, ThreadContext, PreviousMode, TRUE, NULL);
 }
 
 /* SYSTEM CALLS ***************************************************************/
@@ -165,6 +168,7 @@ NtGetContextThread(
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PVOID XState = NULL;
+    NTSTATUS XStateStatus;
     ULONG ContextFlags;
     CONTEXT Context;
     PETHREAD Thread;
@@ -208,20 +212,22 @@ NtGetContextThread(
     RtlZeroMemory(&Context, sizeof(Context));
     Context.ContextFlags = ContextFlags;
 
-    Status = PspArchCaptureXStateContext(&Context,
+    Status = PspArchCaptureXStateContext(ThreadContext,
                                          ContextFlags,
                                          PreviousMode,
                                          FALSE,
                                          &XState);
     if (NT_SUCCESS(Status))
     {
-        Status = PsGetContextThread(Thread, &Context, PreviousMode);
-        PspArchCompleteXStateContext(XState, NT_SUCCESS(Status));
+        Status = PspAskThreadForContext(Thread, &Context, PreviousMode, FALSE, XState);
+        XStateStatus = PspArchCompleteXStateContext(XState, NT_SUCCESS(Status));
+        if (NT_SUCCESS(Status)) Status = XStateStatus;
     }
 
     ObDereferenceObject(Thread);
 
-    if (!NT_SUCCESS(Status)) return Status;
+    /* An extended state area too small for what is in use still gets the rest of the record */
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) return Status;
 
     if (PreviousMode != KernelMode)
     {
@@ -301,14 +307,14 @@ NtSetContextThread(
         return STATUS_ACCESS_DENIED;
     }
 
-    Status = PspArchCaptureXStateContext(&Context,
+    Status = PspArchCaptureXStateContext(ThreadContext,
                                          Context.ContextFlags,
                                          PreviousMode,
                                          TRUE,
                                          &XState);
     if (NT_SUCCESS(Status))
     {
-        Status = PsSetContextThread(Thread, &Context, PreviousMode);
+        Status = PspAskThreadForContext(Thread, &Context, PreviousMode, TRUE, XState);
         PspArchCompleteXStateContext(XState, FALSE);
     }
 

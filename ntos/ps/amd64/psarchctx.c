@@ -18,6 +18,21 @@
      CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE | \
      CONTEXT_EXCEPTION_ACTIVE)
 
+/* The extended state a get or set carries to the thread and, for a get, back to the caller */
+typedef struct _PSP_XSTATE_REQUEST
+{
+    PUCHAR UserXState;
+    ULONG Length;
+    BOOLEAN SetContext;
+    NTSTATUS Status;
+    UCHAR XState[ANYSIZE_ARRAY];
+} PSP_XSTATE_REQUEST, *PPSP_XSTATE_REQUEST;
+
+static
+VOID
+PspArchTransferXState(
+    _Inout_ PPSP_XSTATE_REQUEST Request);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -115,6 +130,9 @@ PspGetOrSetContextKernelRoutine(
                 Request->Context.ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
         }
     }
+
+    if (Request->XState != NULL)
+        PspArchTransferXState(Request->XState);
 
     KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);
 }
@@ -460,18 +478,111 @@ PspArchCaptureXStateContext(
     _In_ BOOLEAN SetContext,
     _Out_ PVOID *XState)
 {
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(PreviousMode);
-    UNREFERENCED_PARAMETER(SetContext);
+    PPSP_XSTATE_REQUEST Request;
+    PXSAVE_AREA_HEADER Header;
+    PCONTEXT_EX ContextEx;
+    PUCHAR UserXState = NULL;
+    ULONG Length = 0;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
 
     *XState = NULL;
 
-    /* TODO: carry the extended processor state when CONTEXT_XSTATE is asked
-     * for; only the parts a plain context holds are carried today */
-    if ((ContextFlags & CONTEXT_XSTATE) == CONTEXT_XSTATE)
+    if ((ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE)
+        return STATUS_SUCCESS;
+
+    if (!KiGetUserXStateFeatures())
         return STATUS_NOT_SUPPORTED;
 
+    /* The extended state is described by the record that follows the context */
+    ContextEx = (PCONTEXT_EX)(Context + 1);
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForRead(ContextEx, sizeof(*ContextEx), sizeof(ULONG));
+
+        Length = ContextEx->XState.Length;
+        UserXState = (PUCHAR)ContextEx + ContextEx->XState.Offset;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (Length < sizeof(XSAVE_AREA_HEADER) || Length > KiGetUserXStateMaximumLength())
+        return STATUS_INVALID_PARAMETER;
+
+    Request = ExAllocatePoolWithTag(NonPagedPool,
+                                    FIELD_OFFSET(PSP_XSTATE_REQUEST, XState) +
+                                        Length + KiGetUserXStateScratchSize(),
+                                    TAG_KE_XSTATE);
+    if (Request == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Request->UserXState = UserXState;
+    Request->Length = Length;
+    Request->SetContext = SetContext;
+    Request->Status = STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            if (SetContext)
+                ProbeForRead(UserXState, Length, sizeof(ULONG));
+            else
+                ProbeForWrite(UserXState, Length, sizeof(ULONG));
+        }
+
+        /* A get only takes the features asked for from the header */
+        RtlCopyMemory(Request->XState,
+                      UserXState,
+                      SetContext ? Length : sizeof(XSAVE_AREA_HEADER));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (NT_SUCCESS(Status) && SetContext)
+    {
+        Header = (PXSAVE_AREA_HEADER)Request->XState;
+        if (Length < KiGetUserXStateLength(Header->CompactionMask,
+                                           Header->Mask & KiGetUserXStateSetFeatures(Header)))
+        {
+            Status = STATUS_BUFFER_OVERFLOW;
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Request, TAG_KE_XSTATE);
+        return Status;
+    }
+
+    *XState = Request;
     return STATUS_SUCCESS;
+}
+
+/* Runs on the thread: its user extended state is the one live in the processor */
+static
+VOID
+PspArchTransferXState(
+    _Inout_ PPSP_XSTATE_REQUEST Request)
+{
+    if (Request->SetContext)
+    {
+        KiRestoreUserXState(Request->XState, Request->XState + Request->Length);
+        return;
+    }
+
+    Request->Status = KiSaveUserXState(Request->XState,
+                                       Request->Length,
+                                       Request->XState + Request->Length);
 }
 
 NTSTATUS
@@ -480,10 +591,40 @@ PspArchCompleteXStateContext(
     _In_opt_ PVOID XState,
     _In_ BOOLEAN CopyOut)
 {
-    UNREFERENCED_PARAMETER(XState);
-    UNREFERENCED_PARAMETER(CopyOut);
+    PPSP_XSTATE_REQUEST Request = XState;
+    PXSAVE_AREA_HEADER Header;
+    NTSTATUS Status;
+    ULONG Length;
 
-    return STATUS_SUCCESS;
+    PAGED_CODE();
+
+    if (Request == NULL)
+        return STATUS_SUCCESS;
+
+    Status = Request->Status;
+
+    if (CopyOut && !Request->SetContext &&
+        (NT_SUCCESS(Status) || Status == STATUS_BUFFER_OVERFLOW))
+    {
+        /* Only the header and the features found in use are written back */
+        Header = (PXSAVE_AREA_HEADER)Request->XState;
+        Length = sizeof(XSAVE_AREA_HEADER);
+        if (NT_SUCCESS(Status))
+            Length = KiGetUserXStateLength(Header->CompactionMask, Header->Mask);
+
+        _SEH2_TRY
+        {
+            RtlCopyMemory(Request->UserXState, Request->XState, min(Length, Request->Length));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    ExFreePoolWithTag(Request, TAG_KE_XSTATE);
+    return Status;
 }
 
 /*
