@@ -40,6 +40,27 @@
 #include "winternl.h"
 #include "initguid.h"
 
+#ifdef __REACTOS__
+/* The checks only need these waits to time out, so their length does not change the outcome */
+#define COWAIT_TIMEOUT(ms) 5
+
+static void cowait_wait_thread(HANDLE thread)
+{
+    ok(!WaitForSingleObject(thread, 5000), "the helper thread did not finish\n");
+}
+
+static void cowait_wait_sent_message(void)
+{
+    DWORD start = GetTickCount();
+
+    while (!(HIWORD(GetQueueStatus(QS_SENDMESSAGE)) & QS_SENDMESSAGE) && GetTickCount() - start < 5000)
+        Sleep(1);
+    ok(HIWORD(GetQueueStatus(QS_SENDMESSAGE)) & QS_SENDMESSAGE, "the helper thread sent no message\n");
+}
+#else
+#define COWAIT_TIMEOUT(ms) (ms)
+#endif
+
 #define DEFINE_EXPECT(func) \
     static BOOL expect_ ## func = FALSE; static unsigned int called_ ## func = 0
 
@@ -2577,7 +2598,9 @@ static void test_TreatAsClass(void)
     ok(IsEqualGUID(&out, &deadbeef), "expected to get same clsid back\n");
 
     /* bizarrely, native's CoTreatAsClass takes some time to take effect in CoCreateInstance */
+#ifndef __REACTOS__
     Sleep(200);
+#endif
 
     hr = CoCreateInstance(&deadbeef, NULL, CLSCTX_INPROC_SERVER, &IID_IInternetProtocol, (void **)&pIP);
     ok(hr == REGDB_E_CLASSNOTREG, "CoCreateInstance gave wrong error: %08lx\n", hr);
@@ -2896,7 +2919,11 @@ static void CALLBACK apc_test_proc(ULONG_PTR param)
 static DWORD CALLBACK release_semaphore_thread( LPVOID arg )
 {
     HANDLE handle = arg;
+#ifdef __REACTOS__
+    if (WaitForSingleObject(handle, 50) == WAIT_TIMEOUT)
+#else
     if (WaitForSingleObject(handle, 200) == WAIT_TIMEOUT)
+#endif
         ReleaseSemaphore(handle, 1, NULL);
     return 0;
 }
@@ -3031,7 +3058,7 @@ static DWORD CALLBACK test_CoWaitForMultipleHandles_thread(LPVOID arg)
 
     index = 0xdeadbeef;
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index==0 || index==0xdeadbeef/* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3039,7 +3066,7 @@ static DWORD CALLBACK test_CoWaitForMultipleHandles_thread(LPVOID arg)
 
     index = 0xdeadbeef;
     PostMessageA(hWnd, WM_USER, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index==0 || index==0xdeadbeef/* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_USER, WM_USER, PM_REMOVE);
@@ -3050,7 +3077,7 @@ static DWORD CALLBACK test_CoWaitForMultipleHandles_thread(LPVOID arg)
     index = 0xdeadbeef;
     PostMessageA(NULL, uMSG, 0, 0);
 
-    hr = CoWaitForMultipleHandles(COWAIT_ALERTABLE, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(COWAIT_ALERTABLE, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
 
@@ -3084,7 +3111,7 @@ static DWORD CALLBACK test_CoWaitForMultipleHandles_thread(LPVOID arg)
 
     thread = CreateThread(NULL, 0, cowait_unmarshal_thread, stream, 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(0, 50, 1, &event, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 1, &event, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     hr = CoWaitForMultipleHandles(0, 200, 1, &thread, &index);
     ok(hr == S_OK, "expected S_OK, got 0x%08lx\n", hr);
@@ -3174,7 +3201,7 @@ static void test_CoWaitForMultipleHandles(void)
 
     index = 0xdeadbeef;
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3185,7 +3212,10 @@ static void test_CoWaitForMultipleHandles(void)
     index = 0xdeadbeef;
     thread = CreateThread(NULL, 0, post_message_thread, hWnd, 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+#ifdef __REACTOS__
+    cowait_wait_thread(thread);
+#endif
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3197,7 +3227,10 @@ static void test_CoWaitForMultipleHandles(void)
     index = 0xdeadbeef;
     thread = CreateThread(NULL, 0, send_message_thread, hWnd, 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+#ifdef __REACTOS__
+    cowait_wait_sent_message();
+#endif
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3221,7 +3254,7 @@ static void test_CoWaitForMultipleHandles(void)
 
     index = 0xdeadbeef;
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3250,7 +3283,7 @@ static void test_CoWaitForMultipleHandles(void)
 
     index = 0xdeadbeef;
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(COWAIT_ALERTABLE, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(COWAIT_ALERTABLE, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3272,7 +3305,7 @@ static void test_CoWaitForMultipleHandles(void)
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_NOREMOVE);
     ok(success, "PeekMessageA returned FALSE\n");
-    hr = CoWaitForMultipleHandles(0, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3284,7 +3317,7 @@ static void test_CoWaitForMultipleHandles(void)
     ok(success, "PeekMessageA returned FALSE\n");
     thread = CreateThread(NULL, 0, release_semaphore_thread, handles[1], 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(COWAIT_INPUTAVAILABLE, 50, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(COWAIT_INPUTAVAILABLE, COWAIT_TIMEOUT(50), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING || broken(hr == E_INVALIDARG) || broken(hr == S_OK) /* Win 8 */,
        "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     if (hr != S_OK) ReleaseSemaphore(handles[1], 1, NULL);
@@ -3358,7 +3391,10 @@ static void test_CoWaitForMultipleHandles(void)
     PostMessageA(hWnd, WM_QUIT, 41, 0);
     thread = CreateThread(NULL, 0, post_message_thread, hWnd, 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+#ifdef __REACTOS__
+    cowait_wait_thread(thread);
+#endif
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3384,7 +3420,10 @@ static void test_CoWaitForMultipleHandles(void)
     PostMessageA(hWnd, WM_QUIT, 42, 0);
     thread = CreateThread(NULL, 0, send_message_thread, hWnd, 0, &tid);
     ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-    hr = CoWaitForMultipleHandles(0, 500, 2, handles, &index);
+#ifdef __REACTOS__
+    cowait_wait_sent_message();
+#endif
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(500), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
     ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
     success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3416,7 +3455,10 @@ static void test_CoWaitForMultipleHandles(void)
         PostQuitMessage(44);
         thread = CreateThread(NULL, 0, post_message_thread, hWnd, 0, &tid);
         ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-        hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+#ifdef __REACTOS__
+        cowait_wait_thread(thread);
+#endif
+        hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
         ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
         ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
         success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3434,7 +3476,10 @@ static void test_CoWaitForMultipleHandles(void)
         PostQuitMessage(45);
         thread = CreateThread(NULL, 0, send_message_thread, hWnd, 0, &tid);
         ok(thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
-        hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+#ifdef __REACTOS__
+        cowait_wait_sent_message();
+#endif
+        hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
         ok(hr == RPC_S_CALLPENDING, "expected RPC_S_CALLPENDING, got 0x%08lx\n", hr);
         ok(index == 0 || broken(index == 0xdeadbeef) /* Win 8 */, "expected index 0, got %lu\n", index);
         success = PeekMessageA(&msg, hWnd, WM_DDE_FIRST, WM_DDE_FIRST, PM_REMOVE);
@@ -3458,7 +3503,7 @@ static void test_CoWaitForMultipleHandles(void)
 
     /* If COM was not initialized, messages are neither pumped nor peeked at */
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "got %#lx\n", hr);
     success = MsgWaitForMultipleObjectsEx(0, NULL, 2, QS_ALLPOSTMESSAGE, MWMO_ALERTABLE);
     ok(success == 0, "MsgWaitForMultipleObjects returned %x\n", success);
@@ -3469,7 +3514,7 @@ static void test_CoWaitForMultipleHandles(void)
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
     PostMessageA(hWnd, WM_DDE_FIRST, 0, 0);
-    hr = CoWaitForMultipleHandles(0, 100, 2, handles, &index);
+    hr = CoWaitForMultipleHandles(0, COWAIT_TIMEOUT(100), 2, handles, &index);
     ok(hr == RPC_S_CALLPENDING, "got %#lx\n", hr);
     success = MsgWaitForMultipleObjectsEx(0, NULL, 2, QS_ALLPOSTMESSAGE, MWMO_ALERTABLE);
     ok(success == 0, "MsgWaitForMultipleObjects returned %x\n", success);
