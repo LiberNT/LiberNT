@@ -122,6 +122,9 @@ KdbpTryGetCharKeyboard(
 
     *ScanCode = 0;
 
+    if (!KdpArchKeyboardControllerPresent())
+        return (CHAR)-1;
+
     for (;;)
     {
         UCHAR Status;
@@ -129,7 +132,6 @@ KdbpTryGetCharKeyboard(
 
         Status = READ_PORT_UCHAR((PUCHAR)KDP_KBD_STATUS_PORT);
 
-        /* TODO: the PC keyboard controller is probed through port I/O on every architecture */
         if (Status == 0xFF)
             return (CHAR)-1;
 
@@ -182,6 +184,9 @@ KdpKeyboardChordHeld(VOID)
 {
     ULONG Drained;
 
+    if (!KdpArchKeyboardControllerPresent())
+        return FALSE;
+
     for (Drained = 0; Drained < KDP_KBD_DRAIN_LIMIT; Drained++)
     {
         UCHAR Status;
@@ -225,6 +230,9 @@ KbdDisableMouse(VOID)
 {
     ULONG Retry = 10000;
 
+    if (!KdpArchKeyboardControllerPresent())
+        return;
+
     while (((READ_PORT_UCHAR((PUCHAR)KDP_KBD_STATUS_PORT) &
              KDP_KBD_STATUS_INPUT_FULL) != 0) && (Retry != 0))
     {
@@ -239,6 +247,9 @@ VOID
 KbdEnableMouse(VOID)
 {
     ULONG Retry = 10000;
+
+    if (!KdpArchKeyboardControllerPresent())
+        return;
 
     while (((READ_PORT_UCHAR((PUCHAR)KDP_KBD_STATUS_PORT) &
              KDP_KBD_STATUS_INPUT_FULL) != 0) && (Retry != 0))

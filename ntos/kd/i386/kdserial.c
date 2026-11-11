@@ -151,4 +151,10 @@ KdPortPutBufferEx(
     }
 }
 
+BOOLEAN
+KdpArchKeyboardControllerPresent(VOID)
+{
+    return TRUE;
+}
+
 /* EOF */

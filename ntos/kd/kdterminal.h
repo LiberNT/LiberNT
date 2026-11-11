@@ -90,6 +90,9 @@ BOOLEAN
 KdpKeyboardChordHeld(VOID);
 
 BOOLEAN
+KdpArchKeyboardControllerPresent(VOID);
+
+BOOLEAN
 KdpUsbKeyboardChordHeld(VOID);
 
 /* EOF */

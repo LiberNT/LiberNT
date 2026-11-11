@@ -94,3 +94,9 @@ KdPortPutBufferEx(
     UNREFERENCED_PARAMETER(PortInformation);
     KiRiscvConsoleWrite(Buffer, Length);
 }
+
+BOOLEAN
+KdpArchKeyboardControllerPresent(VOID)
+{
+    return FALSE;
+}

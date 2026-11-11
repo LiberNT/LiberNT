@@ -94,3 +94,9 @@ KdPortPutBufferEx(_Inout_ PCPPORT PortInformation,
     UNREFERENCED_PARAMETER(PortInformation);
     EarlyUartWrite(Buffer, Length);
 }
+
+BOOLEAN
+KdpArchKeyboardControllerPresent(VOID)
+{
+    return FALSE;
+}
