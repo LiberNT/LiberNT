@@ -867,7 +867,9 @@ static void test_SetSite(void)
     IObjectWithSite *pow;
     HRESULT hr;
     LONG ref;
+#ifndef __REACTOS__
     UINT i;
+#endif
     struct services expected[] =
     {
         {&SID_STopLevelBrowser,        &IID_ICommDlgBrowser2,          cdbimpl},
@@ -912,11 +914,26 @@ static void test_SetSite(void)
     ebrowser_initialize(peb);
     ebrowser_browse_to_desktop(peb);
 
+#ifdef __REACTOS__
+    /* Wait for the callbacks the checks below expect, within the same second */
+    {
+        DWORD start = GetTickCount();
+        while (!(cdbimpl->OnStateChange && cdbimpl->IncludeObject && cdbimpl->GetViewFlags &&
+                 cdbimpl->OnPreviewCreated && epvimpl->np && epvimpl->cp && epvimpl->cp_o &&
+                 epvimpl->cp_v && epvimpl->dp && epvimpl->pp) &&
+               GetTickCount() - start < 1000)
+        {
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 1, QS_ALLINPUT);
+            process_msgs();
+        }
+    }
+#else
     for(i = 0; i < 10; i++)
     {
         Sleep(100);
         process_msgs();
     }
+#endif
     ShowWindow(hwnd, FALSE);
 
     /* ICommDlgBrowser3 */
@@ -1645,8 +1662,10 @@ static void test_InputObject(void)
         process_msgs();
         hr = IInputObject_TranslateAcceleratorIO(pio, &msg_a);
         todo_wine ok(hr == (found ? S_OK : S_FALSE), "Got 0x%08lx (%04x)\n", hr, i);
+#ifndef __REACTOS__
         if(i == VK_F5)
             Sleep(1000); /* Needed for w2k8 (64bit) */
+#endif
     }
 
     process_msgs();
