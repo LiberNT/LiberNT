@@ -230,6 +230,7 @@ typedef struct _AOP_DEVICE
 
     PKTHREAD Thread;
     KEVENT StopEvent;
+    KEVENT WorkEvent;
     volatile LONG Stop;
     ULONG64 StartedMs;
     BOOLEAN SummaryLogged;

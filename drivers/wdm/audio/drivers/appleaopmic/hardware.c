@@ -9,6 +9,7 @@
 #include <reactos/drivers/fdtdrv.h>
 #include <reactos/drivers/appleadmac.h>
 #include <reactos/drivers/appledart.h>
+#include <reactos/drivers/applertkit.h>
 #include "hardware.h"
 
 #define AOP_MIC_HW_TAG 'hOpA'
@@ -37,14 +38,35 @@ AopMicHwString(
     return (Value && Length && !Value[Length - 1]) ? Value : "?";
 }
 
+static
+NTSTATUS
+AopMicHwFindAdmac(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _Out_ PULONG AdmacNode,
+    _Out_ PULONG DmaChannel)
+{
+    const VOID *Dmas;
+    ULONG Length, Cells;
+    ULONG64 Phandle, Channel;
+
+    *AdmacNode = FDT_NO_NODE;
+    *DmaChannel = 0;
+    Dmas = FdtGetProperty(&Tree->Fdt, Tree->Node, "dmas", &Length);
+    if (!Dmas || !FdtReadCells(Dmas, Length, 0, 1, &Phandle) || !FdtReadCells(Dmas, Length, 1, 1, &Channel) ||
+        (*AdmacNode = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == FDT_NO_NODE ||
+        !FdtReadU32(&Tree->Fdt, *AdmacNode, "#dma-cells", &Cells) || Cells != 1)
+    {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    *DmaChannel = (ULONG)Channel;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 AopMicHwOpen(
     _Out_ PAOP_MIC_HW *Result)
 {
     PAOP_MIC_HW Hardware;
-    const VOID *Dmas;
-    ULONG Length, Cells;
-    ULONG64 Phandle, Channel;
     NTSTATUS Status;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -72,15 +94,12 @@ AopMicHwOpen(
     Hardware->TreeOpen = TRUE;
     *Result = Hardware;
 
-    Dmas = FdtGetProperty(&Hardware->Tree.Fdt, Hardware->Tree.Node, "dmas", &Length);
-    if (!Dmas || !FdtReadCells(Dmas, Length, 0, 1, &Phandle) || !FdtReadCells(Dmas, Length, 1, 1, &Channel) ||
-        (Hardware->AdmacNode = FdtDriverFindPhandle(&Hardware->Tree, (ULONG)Phandle)) == FDT_NO_NODE ||
-        !FdtReadU32(&Hardware->Tree.Fdt, Hardware->AdmacNode, "#dma-cells", &Cells) || Cells != 1)
+    Status = AopMicHwFindAdmac(&Hardware->Tree, &Hardware->AdmacNode, &Hardware->DmaChannel);
+    if (!NT_SUCCESS(Status))
     {
         DbgPrint("appleaopmic: the AOP audio node names no ADMAC channel\n");
-        return STATUS_DEVICE_CONFIGURATION_ERROR;
+        return Status;
     }
-    Hardware->DmaChannel = (ULONG)Channel;
     DbgPrint("appleaopmic: %s %s microphones on ADMAC channel %lu\n", AopMicHwString(Hardware, "apple,machine-kind"),
              AopMicHwString(Hardware, "apple,chassis-name"), Hardware->DmaChannel);
 
@@ -173,4 +192,44 @@ AopMicHwPosition(
     _In_ PAOP_MIC_HW Hardware)
 {
     return Hardware->ChannelOpen ? AppleAdmacPosition(&Hardware->Channel) : 0;
+}
+
+BOOLEAN
+AopMicHwInterrupt(
+    _Inout_ PAOP_MIC_HW Hardware,
+    _Out_ PULONG Reports)
+{
+    BOOLEAN Global, Mine;
+
+    *Reports = 0;
+    if (!Hardware->AdmacOpen)
+        return FALSE;
+    Mine = AppleAdmacInterruptPending(&Hardware->Admac, Hardware->DmaChannel, &Global);
+    if (Mine && Hardware->ChannelOpen)
+        *Reports = AppleAdmacService(&Hardware->Channel);
+    return Mine || Global;
+}
+
+NTSTATUS
+AopMicHwFilterRequirements(
+    _Inout_ PIRP Irp)
+{
+    FDT_DRIVER_TREE Tree;
+    ULONG AdmacNode, DmaChannel, Index, Gsi = 0;
+    BOOLEAN Edge = FALSE;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    Status = FdtDriverOpenByCompatible("apple,t6030-aop-audio", &Tree);
+    if (NT_SUCCESS(Status))
+    {
+        Status = AopMicHwFindAdmac(&Tree, &AdmacNode, &DmaChannel);
+        if (NT_SUCCESS(Status))
+            Status = AppleAdmacQueryInterrupt(&Tree, AdmacNode, &Index, &Gsi, &Edge);
+        FdtDriverClose(&Tree);
+    }
+    if (NT_SUCCESS(Status))
+        Status = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+    DbgPrint("appleaopmic: requesting the ADMAC interrupt %lu: %lx\n", Gsi, Status);
+    return Status;
 }

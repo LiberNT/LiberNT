@@ -294,11 +294,13 @@ AopWorker(
     _In_ PVOID Context)
 {
     PAOP_DEVICE Device = Context;
+    PVOID Objects[2] = { &Device->StopEvent, &Device->WorkEvent };
     LARGE_INTEGER Interval;
+    ULONG64 Elapsed;
+    ULONG WaitMs;
     BOOLEAN Failed;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
-    Interval.QuadPart = -(LONGLONG)AOP_POLL_INTERVAL_MS * 10000;
     while (!Device->Stop)
     {
         AopLock(Device);
@@ -315,12 +317,18 @@ AopWorker(
             AopSensorsSetup(Device);
             AopCreateChildren(Device);
         }
-        if (!Device->SummaryLogged && AopNowMs() - Device->StartedMs >= AOP_SUMMARY_DELAY_MS)
+        Elapsed = AopNowMs() - Device->StartedMs;
+        if (!Device->SummaryLogged && Elapsed >= AOP_SUMMARY_DELAY_MS)
         {
             Device->SummaryLogged = TRUE;
             AopLogSummary(Device);
         }
-        KeWaitForSingleObject(&Device->StopEvent, Executive, KernelMode, FALSE, &Interval);
+        WaitMs = AppleRtkitPollInterval(&Device->Rtkit, AOP_POLL_INTERVAL_MS);
+        if (!Device->SummaryLogged)
+            WaitMs = (ULONG)min((ULONG64)WaitMs, AOP_SUMMARY_DELAY_MS - Elapsed);
+        Interval.QuadPart = -(LONGLONG)WaitMs * 10000;
+        KeWaitForMultipleObjects(RTL_NUMBER_OF(Objects), Objects, WaitAny, Executive, KernelMode, FALSE,
+                                 WaitMs == APPLE_RTKIT_NO_POLL ? NULL : &Interval, NULL);
     }
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -365,6 +373,7 @@ AopStopHardware(
     if (Device->DartAdopted)
         AppleDartAdoptedRelease(&Device->Dart);
     Device->DartAdopted = FALSE;
+    AppleRtkitDisconnectInterrupt(&Device->Rtkit);
     if (Device->Mailbox)
         MmUnmapIoSpace(Device->Mailbox, Device->MailboxSize);
     if (Device->Asc)
@@ -382,15 +391,18 @@ AopStopHardware(
 static
 NTSTATUS
 AopStartHardware(
-    _Inout_ PAOP_DEVICE Device)
+    _Inout_ PAOP_DEVICE Device,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated)
 {
-    ULONG MailboxPhandle, MailboxNode, Control, Index;
+    ULONG MailboxPhandle, MailboxNode, Control, Index, Gsi;
     ULONG64 AscPhysical = 0, MailboxPhysical = 0;
     HANDLE ThreadHandle;
+    BOOLEAN Edge;
     NTSTATUS Status;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
-    ASSERT(!Device->Running && !Device->Thread && !Device->TreeOpen);
+    ASSERT(!Device->Running && !Device->Thread && !Device->TreeOpen && !Device->Rtkit.Interrupt);
     RtlZeroMemory(&Device->Rtkit, sizeof(Device->Rtkit));
     RtlZeroMemory(Device->Endpoints, sizeof(Device->Endpoints));
     for (Index = 0; Index < AFK_ENDPOINT_COUNT; ++Index)
@@ -451,6 +463,12 @@ AopStartHardware(
     Device->Rtkit.Context = Device;
     Device->Rtkit.ShmemSetup = AopShmemSetup;
     Device->Rtkit.Receive = AfkReceive;
+    KeInitializeEvent(&Device->WorkEvent, SynchronizationEvent, FALSE);
+    Status = AppleRtkitQueryInterrupt(&Device->Tree, Device->Tree.Node, &Gsi, &Edge);
+    if (NT_SUCCESS(Status))
+        AppleRtkitConnectInterrupt(&Device->Rtkit, Raw, Translated, Gsi, &Device->WorkEvent);
+    else
+        DbgPrint("appleaop: the AOP mailbox declares no receive interrupt (%lx), polling\n", Status);
     Control = READ_REGISTER_ULONG((volatile ULONG *)(Device->Asc + AOP_ASC_CPU_CONTROL));
     WRITE_REGISTER_ULONG((volatile ULONG *)(Device->Asc + AOP_ASC_CPU_CONTROL), Control | AOP_ASC_CPU_CONTROL_RUN);
     DbgPrint("appleaop: processor control %08lx -> %08lx\n", Control,
@@ -881,6 +899,38 @@ AopPnp(
     Lower = Device->LowerDevice;
     switch (Stack->MinorFunction)
     {
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+            KeInitializeEvent(&Event, NotificationEvent, FALSE);
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, AopCompletion, &Event, TRUE, TRUE, TRUE);
+            Status = IoCallDriver(Lower, Irp);
+            if (Status == STATUS_PENDING)
+            {
+                KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+                Status = Irp->IoStatus.Status;
+            }
+            if (NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED)
+            {
+                FDT_DRIVER_TREE Tree;
+                ULONG Gsi = 0;
+                BOOLEAN Edge = FALSE;
+                NTSTATUS FilterStatus = FdtDriverOpen(Device->Pdo, &Tree);
+
+                if (NT_SUCCESS(FilterStatus))
+                {
+                    FilterStatus = AppleRtkitQueryInterrupt(&Tree, Tree.Node, &Gsi, &Edge);
+                    FdtDriverClose(&Tree);
+                }
+                if (NT_SUCCESS(FilterStatus))
+                    FilterStatus = AppleAddInterruptRequirement(Irp, Gsi, Edge);
+                DbgPrint("appleaop: requesting the mailbox interrupt %lu: %lx\n", Gsi, FilterStatus);
+                if (NT_SUCCESS(FilterStatus))
+                    Status = STATUS_SUCCESS;
+            }
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return Status;
+
         case IRP_MN_START_DEVICE:
             KeInitializeEvent(&Event, NotificationEvent, FALSE);
             IoCopyCurrentIrpStackLocationToNext(Irp);
@@ -893,7 +943,8 @@ AopPnp(
             }
             if (NT_SUCCESS(Status))
             {
-                Status = AopStartHardware(Device);
+                Status = AopStartHardware(Device, Stack->Parameters.StartDevice.AllocatedResources,
+                                          Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
                 if (!NT_SUCCESS(Status))
                     AopStopHardware(Device);
             }

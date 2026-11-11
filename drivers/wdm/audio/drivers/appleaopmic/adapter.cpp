@@ -7,6 +7,19 @@
 
 #include "private.h"
 
+#define AOP_MIC_SYNC_START      0
+#define AOP_MIC_SYNC_STOP       1
+#define AOP_MIC_SYNC_POSITION   2
+#define AOP_MIC_SYNC_SERVICE    3
+
+typedef struct _AOP_MIC_SYNC
+{
+    CAopMicAdapter *Adapter;
+    ULONG Operation;
+    ULONG Value;
+    NTSTATUS Status;
+} AOP_MIC_SYNC, *PAOP_MIC_SYNC;
+
 static ULONG64
 AopMicNowMs()
 {
@@ -82,7 +95,7 @@ CAopMicAdapter::QueryAopInterface(PDEVICE_OBJECT PhysicalDeviceObject)
 }
 
 NTSTATUS
-CAopMicAdapter::Initialize(PDEVICE_OBJECT PhysicalDeviceObject)
+CAopMicAdapter::Initialize(PDEVICE_OBJECT PhysicalDeviceObject, PRESOURCELIST ResourceList)
 {
     NTSTATUS Status;
 
@@ -100,8 +113,96 @@ CAopMicAdapter::Initialize(PDEVICE_OBJECT PhysicalDeviceObject)
     DbgPrint("appleaopmic: AOP audio configured: %lx\n", Status);
     if (!NT_SUCCESS(Status))
         return Status;
+    if (ResourceList && ResourceList->NumberOfInterrupts())
+    {
+        Status = PcNewInterruptSync(&m_InterruptSync, NULL, ResourceList, 0, InterruptSyncModeNormal);
+        if (NT_SUCCESS(Status))
+            Status = m_InterruptSync->RegisterServiceRoutine(InterruptService, this, FALSE);
+        if (NT_SUCCESS(Status))
+            Status = m_InterruptSync->Connect();
+        DbgPrint("appleaopmic: ADMAC interrupt connected: %lx\n", Status);
+        if (!NT_SUCCESS(Status) && m_InterruptSync)
+        {
+            m_InterruptSync->Release();
+            m_InterruptSync = NULL;
+        }
+    }
+    else
+    {
+        DbgPrint("appleaopmic: no ADMAC interrupt was assigned, the capture ring is polled\n");
+    }
     DbgPrint("appleaopmic: built-in microphones ready, %u channels of 32-bit float at %u Hz\n", AOP_MIC_CHANNELS,
              AOP_MIC_SAMPLE_RATE);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+CAopMicAdapter::HardwareSynchronized(PINTERRUPTSYNC InterruptSync, PVOID Context)
+{
+    PAOP_MIC_SYNC Sync = static_cast<PAOP_MIC_SYNC>(Context);
+    CAopMicAdapter *Adapter = Sync->Adapter;
+
+    UNREFERENCED_PARAMETER(InterruptSync);
+    ASSERT(Adapter->m_Hardware);
+    switch (Sync->Operation)
+    {
+        case AOP_MIC_SYNC_START:
+            InterlockedExchange(&Adapter->m_PendingReports, 0);
+            Sync->Status = AopMicHwStart(Adapter->m_Hardware, Adapter->m_BufferPhysical, Adapter->m_BufferSize,
+                                         Adapter->m_PeriodBytes);
+            break;
+        case AOP_MIC_SYNC_STOP:
+            Sync->Value = AopMicHwPosition(Adapter->m_Hardware);
+            AopMicHwStop(Adapter->m_Hardware);
+            break;
+        case AOP_MIC_SYNC_POSITION:
+            Sync->Value = AopMicHwPosition(Adapter->m_Hardware);
+            break;
+        case AOP_MIC_SYNC_SERVICE:
+            Sync->Value = AopMicHwService(Adapter->m_Hardware);
+            break;
+        default:
+            ASSERT(FALSE);
+            Sync->Status = STATUS_INVALID_PARAMETER;
+            break;
+    }
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CAopMicAdapter::CallHardware(ULONG Operation, PULONG Value)
+{
+    AOP_MIC_SYNC Sync;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    Sync.Adapter = this;
+    Sync.Operation = Operation;
+    Sync.Value = 0;
+    Sync.Status = STATUS_SUCCESS;
+    if (m_InterruptSync)
+        m_InterruptSync->CallSynchronizedRoutine(HardwareSynchronized, &Sync);
+    else
+        HardwareSynchronized(NULL, &Sync);
+    if (Value)
+        *Value = Sync.Value;
+    return Sync.Status;
+}
+
+NTSTATUS
+NTAPI
+CAopMicAdapter::InterruptService(PINTERRUPTSYNC InterruptSync, PVOID Context)
+{
+    CAopMicAdapter *Adapter = static_cast<CAopMicAdapter *>(Context);
+    ULONG Reports;
+
+    UNREFERENCED_PARAMETER(InterruptSync);
+    if (!Adapter->m_Hardware || !AopMicHwInterrupt(Adapter->m_Hardware, &Reports))
+        return STATUS_UNSUCCESSFUL;
+    InterlockedIncrement(&Adapter->m_Interrupts);
+    if (Reports)
+        InterlockedExchangeAdd(&Adapter->m_PendingReports, (LONG)Reports);
+    KeInsertQueueDpc(&Adapter->m_Dpc, NULL, NULL);
     return STATUS_SUCCESS;
 }
 
@@ -113,6 +214,14 @@ CAopMicAdapter::Shutdown()
     StopLocked();
     if (m_StreamOpen && m_AopHeld)
         AopAudioSetPower(&m_Aop, AOP_AUDIO_POWER_IDLE, 1, NextCookie());
+    if (m_InterruptSync)
+    {
+        m_InterruptSync->Disconnect();
+        m_InterruptSync->Release();
+        m_InterruptSync = NULL;
+        KeFlushQueuedDpcs();
+        DbgPrint("appleaopmic: ADMAC interrupt disconnected after %ld interrupts\n", m_Interrupts);
+    }
     if (m_ChannelOpen)
         AopMicHwCloseChannel(m_Hardware);
     m_ChannelOpen = FALSE;
@@ -311,9 +420,8 @@ CAopMicAdapter::StopLocked()
         return;
     KeCancelTimer(&m_Timer);
     KeAcquireSpinLock(&m_Lock, &OldIrql);
-    m_Position = AopMicHwPosition(m_Hardware);
     m_Running = FALSE;
-    AopMicHwStop(m_Hardware);
+    CallHardware(AOP_MIC_SYNC_STOP, &m_Position);
     Periods = m_Periods;
     KeReleaseSpinLock(&m_Lock, OldIrql);
     KeFlushQueuedDpcs();
@@ -326,6 +434,7 @@ CAopMicAdapter::SetState(KSSTATE State)
     LARGE_INTEGER Due;
     KIRQL OldIrql;
     NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Poll;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     KeWaitForSingleObject(&m_Mutex, Executive, KernelMode, FALSE, NULL);
@@ -349,7 +458,7 @@ CAopMicAdapter::SetState(KSSTATE State)
     }
     KeAcquireSpinLock(&m_Lock, &OldIrql);
     /* FIXME: resuming from a pause restarts the capture DMA at the start of the buffer */
-    Status = AopMicHwStart(m_Hardware, m_BufferPhysical, m_BufferSize, m_PeriodBytes);
+    Status = CallHardware(AOP_MIC_SYNC_START, NULL);
     if (NT_SUCCESS(Status))
     {
         m_Running = TRUE;
@@ -359,10 +468,10 @@ CAopMicAdapter::SetState(KSSTATE State)
         m_ProgressTime = AopMicNowMs();
     }
     KeReleaseSpinLock(&m_Lock, OldIrql);
-    if (NT_SUCCESS(Status))
+    Poll = !m_InterruptSync || !InterlockedCompareExchange(&m_Interrupts, 0, 0);
+    if (NT_SUCCESS(Status) && Poll)
     {
         Due.QuadPart = -(LONGLONG)AOP_MIC_SERVICE_MS * 10000;
-        /* TODO: connect the ADMAC interrupt instead of servicing the descriptor ring from a timer */
         KeSetTimerEx(&m_Timer, Due, AOP_MIC_SERVICE_MS, &m_Dpc);
     }
     DbgPrint("appleaopmic: capture start of %lu bytes in %lu byte periods: %lx\n", m_BufferSize, m_PeriodBytes,
@@ -380,7 +489,10 @@ CAopMicAdapter::GetPosition(PKSAUDIO_POSITION Position)
     if (!Position)
         return STATUS_INVALID_PARAMETER;
     KeAcquireSpinLock(&m_Lock, &OldIrql);
-    Offset = m_Running ? AopMicHwPosition(m_Hardware) : m_Position;
+    if (m_Running)
+        CallHardware(AOP_MIC_SYNC_POSITION, &Offset);
+    else
+        Offset = m_Position;
     KeReleaseSpinLock(&m_Lock, OldIrql);
     Position->PlayOffset = Offset;
     Position->WriteOffset = Offset;
@@ -427,18 +539,28 @@ CAopMicAdapter::ServiceDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgumen
     PKEVENT Event = NULL;
     ULONG Reports, Position = 0, Periods = 0;
     ULONG64 Now = AopMicNowMs();
-    BOOLEAN First = FALSE, Stalled = FALSE;
+    BOOLEAN First = FALSE, Stalled = FALSE, Fired = FALSE;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     KeAcquireSpinLockAtDpcLevel(&Adapter->m_Lock);
+    if (Adapter->m_InterruptSync && Adapter->m_Interrupts)
+    {
+        KeCancelTimer(&Adapter->m_Timer);
+        Fired = !Adapter->m_InterruptLogged;
+        Adapter->m_InterruptLogged = TRUE;
+    }
     if (!Adapter->m_Running)
     {
         KeReleaseSpinLockFromDpcLevel(&Adapter->m_Lock);
+        if (Fired)
+            DbgPrint("appleaopmic: ADMAC interrupt fired\n");
         return;
     }
-    Reports = AopMicHwService(Adapter->m_Hardware);
+    Adapter->CallHardware(AOP_MIC_SYNC_SERVICE, &Reports);
+    Reports += (ULONG)InterlockedExchange(&Adapter->m_PendingReports, 0);
     if (Reports)
     {
         Adapter->m_Periods += Reports;
@@ -460,6 +582,8 @@ CAopMicAdapter::ServiceDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgumen
     KeReleaseSpinLockFromDpcLevel(&Adapter->m_Lock);
     if (Event)
         KeSetEvent(Event, IO_NO_INCREMENT, FALSE);
+    if (Fired)
+        DbgPrint("appleaopmic: ADMAC interrupt fired\n");
     if (First)
         DbgPrint("appleaopmic: first capture period done, position %lu\n", Position);
     if (Stalled)

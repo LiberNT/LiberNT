@@ -50,6 +50,15 @@ ULONG
 AopMicHwPosition(
     _In_ PAOP_MIC_HW Hardware);
 
+BOOLEAN
+AopMicHwInterrupt(
+    _Inout_ PAOP_MIC_HW Hardware,
+    _Out_ PULONG Reports);
+
+NTSTATUS
+AopMicHwFilterRequirements(
+    _Inout_ PIRP Irp);
+
 #ifdef __cplusplus
 }
 #endif

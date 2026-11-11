@@ -74,7 +74,7 @@ class CAopMicAdapter : public CAopMicUnknown<IUnknown>
 
     STDMETHODIMP QueryInterface(REFIID InterfaceId, PVOID *Interface);
 
-    NTSTATUS Initialize(PDEVICE_OBJECT PhysicalDeviceObject);
+    NTSTATUS Initialize(PDEVICE_OBJECT PhysicalDeviceObject, PRESOURCELIST ResourceList);
     VOID Shutdown();
 
     NTSTATUS OpenStream();
@@ -94,10 +94,13 @@ class CAopMicAdapter : public CAopMicUnknown<IUnknown>
 
   private:
     static VOID NTAPI ServiceDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2);
+    static NTSTATUS NTAPI InterruptService(PINTERRUPTSYNC InterruptSync, PVOID Context);
+    static NTSTATUS NTAPI HardwareSynchronized(PINTERRUPTSYNC InterruptSync, PVOID Context);
 
     NTSTATUS QueryAopInterface(PDEVICE_OBJECT PhysicalDeviceObject);
     VOID StopLocked();
     ULONG NextCookie();
+    NTSTATUS CallHardware(ULONG Operation, PULONG Value);
 
     APPLE_AOP_FUNCTION_INTERFACE m_Aop;
     BOOLEAN m_AopHeld;
@@ -107,6 +110,10 @@ class CAopMicAdapter : public CAopMicUnknown<IUnknown>
     KSPIN_LOCK m_Lock;
     KTIMER m_Timer;
     KDPC m_Dpc;
+    PINTERRUPTSYNC m_InterruptSync;
+    volatile LONG m_Interrupts;
+    volatile LONG m_PendingReports;
+    BOOLEAN m_InterruptLogged;
     BOOLEAN m_StreamOpen;
     BOOLEAN m_Running;
     BOOLEAN m_FirstPeriodLogged;

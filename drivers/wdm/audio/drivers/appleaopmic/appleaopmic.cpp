@@ -80,7 +80,7 @@ AopMicStartDevice(PDEVICE_OBJECT DeviceObject, PIRP Irp, PRESOURCELIST ResourceL
 
     Status = PcGetPhysicalDeviceObject(DeviceObject, &Physical);
     if (NT_SUCCESS(Status))
-        Status = Adapter->Initialize(Physical);
+        Status = Adapter->Initialize(Physical, ResourceList);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 
@@ -135,6 +135,17 @@ AopMicPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PAOP_MIC_DEVICE_EXTENSION DeviceExtension;
     CAopMicAdapter *Adapter;
+    NTSTATUS Status;
+
+    if (Stack->MinorFunction == IRP_MN_FILTER_RESOURCE_REQUIREMENTS)
+    {
+        Status = PcForwardIrpSynchronous(DeviceObject, Irp);
+        if ((NT_SUCCESS(Status) || Status == STATUS_NOT_SUPPORTED) && NT_SUCCESS(AopMicHwFilterRequirements(Irp)))
+            Status = STATUS_SUCCESS;
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
 
     if (Stack->MinorFunction == IRP_MN_STOP_DEVICE || Stack->MinorFunction == IRP_MN_SURPRISE_REMOVAL ||
         Stack->MinorFunction == IRP_MN_REMOVE_DEVICE)
