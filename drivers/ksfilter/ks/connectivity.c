@@ -1028,7 +1028,7 @@ KsHandleSizedListQuery(
     }
 
     Item->Count = DataItemsCount;
-    Item->Size = DataItemSize;
+    Item->Size = Size;
 
     if (IoStack->Parameters.DeviceIoControl.OutputBufferLength == sizeof(KSMULTIPLE_ITEM))
     {
