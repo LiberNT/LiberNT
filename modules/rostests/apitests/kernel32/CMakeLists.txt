@@ -10,6 +10,7 @@ list(APPEND SOURCE
     ApiSetCoreSynch.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c
+    CalendarDateTime.c
     CallbackCallingConventions.c
     Arm64ThreadContext.c
     ConsoleCP.c

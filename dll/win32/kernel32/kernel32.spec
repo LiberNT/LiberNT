@@ -16,7 +16,7 @@
 @ stdcall -stub -version=0x600+ AddSecureMemoryCacheCallback(ptr)
 @ stdcall AddVectoredContinueHandler(long ptr) ntdll.RtlAddVectoredContinueHandler
 @ stdcall AddVectoredExceptionHandler(long ptr) ntdll.RtlAddVectoredExceptionHandler
-@ stdcall -stub -version=0x600+ AdjustCalendarDate(ptr long long)
+@ stdcall -version=0x600+ AdjustCalendarDate(ptr long long)
 @ stdcall AllocConsole() kernelbase.AllocConsole
 @ stdcall AllocateUserPhysicalPages(long ptr ptr)
 @ stdcall -version=0x600+ AllocateUserPhysicalPagesNuma(ptr ptr ptr long)
@@ -107,11 +107,11 @@
 @ stdcall -version=0x502-0x600 -arch=win64 ConsoleIMERoutine(ptr) kernelbase.ConsoleIMERoutine
 @ stdcall ConsoleMenuControl(long long long) kernelbase.ConsoleMenuControl
 @ stdcall ContinueDebugEvent(long long long)
-@ stdcall -stub -version=0x600+ ConvertCalDateTimeToSystemTime(ptr ptr)
+@ stdcall -version=0x600+ ConvertCalDateTimeToSystemTime(ptr ptr)
 @ stdcall ConvertDefaultLocale(long)
 @ stdcall ConvertFiberToThread()
 @ stdcall -stub -version=0x600+ ConvertNLSDayOfWeekToWin32DayOfWeek(long)
-@ stdcall -stub -version=0x600+ ConvertSystemTimeToCalDateTime(ptr long ptr)
+@ stdcall -version=0x600+ ConvertSystemTimeToCalDateTime(ptr long ptr)
 @ stdcall ConvertThreadToFiber(ptr)
 @ stdcall ConvertThreadToFiberEx(ptr long)
 @ stdcall -version=0x601+ CopyContext(ptr long ptr) kernelbase.CopyContext
@@ -399,14 +399,14 @@
 @ stdcall GetCPInfoExA(long long ptr)
 @ stdcall GetCPInfoExW(long long ptr)
 @ stub -version=0x600+ GetCalendarDateFormat
-@ stub -version=0x600+ GetCalendarDateFormatEx
+@ stdcall -version=0x600+ GetCalendarDateFormatEx(wstr long ptr wstr ptr long)
 @ stub -version=0x600+ GetCalendarDaysInMonth
 @ stub -version=0x600+ GetCalendarDifferenceInDays
 @ stdcall GetCalendarInfoA(long long long ptr long ptr)
 @ stdcall -version=0x600+ GetCalendarInfoEx(wstr long wstr long wstr long ptr) kernelbase.GetCalendarInfoEx
 @ stdcall GetCalendarInfoW(long long long ptr long ptr) kernelbase.GetCalendarInfoW
 @ stub -version=0x600+ GetCalendarMonthsInYear
-@ stub -version=0x600+ GetCalendarSupportedDateRange
+@ stdcall -version=0x600+ GetCalendarSupportedDateRange(long ptr ptr)
 @ stub -version=0x600+ GetCalendarWeekNumber
 @ stdcall GetComPlusPackageInstallStatus()
 @ stdcall GetCommConfig(long ptr long)
@@ -829,7 +829,7 @@
 @ stdcall IsBadWritePtr(ptr long)
 @ stub -version=0x600+ IsCalendarLeapDay
 @ stub -version=0x600+ IsCalendarLeapMonth
-@ stub -version=0x600+ IsCalendarLeapYear
+@ stdcall -version=0x600+ IsCalendarLeapYear(long long long)
 @ stdcall IsDBCSLeadByte(long)
 @ stdcall IsDBCSLeadByteEx(long long)
 @ stdcall IsDebuggerPresent()
@@ -1349,7 +1349,7 @@
 @ stdcall UnregisterConsoleIME() kernelbase.UnregisterConsoleIME
 @ stdcall UnregisterWait(long)
 @ stdcall UnregisterWaitEx(long long)
-@ stub -version=0x600+ UpdateCalendarDayOfWeek
+@ stdcall -version=0x600+ UpdateCalendarDayOfWeek(ptr)
 @ stdcall -version=0x600+ UpdateProcThreadAttribute(ptr long ptr ptr ptr ptr ptr)
 @ stdcall UpdateResourceA(long str str long ptr long)
 @ stdcall UpdateResourceW(long wstr wstr long ptr long)

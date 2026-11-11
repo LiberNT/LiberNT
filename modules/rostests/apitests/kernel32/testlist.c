@@ -7,6 +7,7 @@ extern void func_ActCtxDependencyVersions(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
+extern void func_CalendarDateTime(void);
 extern void func_CallbackCallingConventions(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
@@ -132,6 +133,7 @@ const struct test winetest_testlist[] =
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "BaseSetLastNTError",          func_BaseSetLastNTError },
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
+    { "CalendarDateTime",            func_CalendarDateTime },
     { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
