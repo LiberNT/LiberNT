@@ -226,6 +226,9 @@ MockIoOpenDeviceRegistryKey(PDEVICE_OBJECT DeviceObject, ULONG KeyType, ACCESS_M
 #define SIM_ADMAC_INDEX     13
 #define SIM_MCA_INDEX       14
 #define SIM_SWITCH_INDEX    15
+#define SIM_PCIE_ROOT_CFG_BASE  0x580000000ULL
+#define SIM_PCIE_ROOT_CFG_SIZE  0x10000
+#define SIM_PCIE_ROOT_INDEX     17
 
 typedef struct _SIM_REGION
 {
@@ -251,6 +254,7 @@ static ULONG SimAdmacData[SIM_ADMAC_SIZE / sizeof(ULONG)];
 static ULONG SimMcaData[SIM_MCA_SIZE / sizeof(ULONG)];
 static ULONG SimMcaSwitchData[SIM_MCA_SWITCH_SIZE / sizeof(ULONG)];
 static ULONG SimMailboxData[SIM_REGION_SIZE / sizeof(ULONG)];
+static ULONG SimPcieRootConfigData[SIM_PCIE_ROOT_CFG_SIZE / sizeof(ULONG)];
 
 typedef struct _SIM_WRITE
 {
@@ -277,6 +281,7 @@ static SIM_REGION SimRegions[] =
     { SIM_MCA_BASE, sizeof(SimMcaData), SimMcaData },
     { SIM_MCA_SWITCH_BASE, sizeof(SimMcaSwitchData), SimMcaSwitchData },
     { SIM_MAILBOX_BASE, sizeof(SimMailboxData), SimMailboxData },
+    { SIM_PCIE_ROOT_CFG_BASE, sizeof(SimPcieRootConfigData), SimPcieRootConfigData },
 };
 static SIM_WRITE SimWrites[256];
 static BOOLEAN SimAtcStuck;
@@ -1029,6 +1034,7 @@ UatInvalidateAsid(ULONG Asid)
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
+#include "../../../../sdk/lib/drivers/applertkit/pcielink.c"
 #include "../../../../sdk/lib/drivers/applertkit/gpio.c"
 #include "../../../../sdk/lib/drivers/applertkit/i2c.c"
 #include "../../../../sdk/lib/drivers/applertkit/nco.c"
@@ -1280,6 +1286,7 @@ FindNode(PFDT_DRIVER_TREE Tree, const CHAR *Compatible)
 #define PCIEPHY(Offset) SimRegions[8].Data[(Offset) / sizeof(ULONG)]
 #define PINCTRL(Offset) SimRegions[9].Data[(Offset) / sizeof(ULONG)]
 #define PCIECFG(Offset) SimRegions[10].Data[(Offset) / sizeof(ULONG)]
+#define ROOTCFG(Offset) SimRegions[SIM_PCIE_ROOT_INDEX].Data[(Offset) / sizeof(ULONG)]
 
 static
 VOID
@@ -5556,6 +5563,201 @@ TestPcie(VOID)
     ok_int(SimMapCount, 0);
 }
 
+static
+VOID
+AdtPutNode(
+    _In_ ULONG Properties,
+    _In_ ULONG Children,
+    _In_z_ PCSTR Name)
+{
+    AdtPutU32(Properties);
+    AdtPutU32(Children);
+    AdtPutName(Name);
+}
+
+static
+VOID
+AdtBuildPcie(VOID)
+{
+    const ULONG64 Reg[2] = { SIM_PCIE_ROOT_CFG_BASE, 0x10000000 };
+    const ULONG RootL1pm[2] = { 0x4055190f, 0x00000000 }, WlanL1pm[2] = { 0x4055000f, 0x00000000 };
+    const ULONG Aspm = 2, NoAspm = 0, Latency = 0x10081008, Port0 = 0, Port1 = 1;
+
+    AdtUsed = 0;
+    AdtPutNode(1, 1, "device-tree");
+    AdtPutNode(1, 2, "arm-io");
+    AdtPutNode(2, 0, "sgx");
+    AdtPutProperty("device_type", "gpu", 4);
+    AdtPutNode(3, 2, "apcie");
+    AdtPutProperty("device_type", "pci", 4);
+    AdtPutProperty("reg", Reg, sizeof(Reg));
+    AdtPutNode(3, 2, "pci-bridge0");
+    AdtPutProperty("apcie-port", &Port0, sizeof(Port0));
+    AdtPutProperty("pci-l1pm-control", RootL1pm, sizeof(RootL1pm));
+    AdtPutNode(4, 0, "wlan");
+    AdtPutProperty("pci-aspm-default", &Aspm, sizeof(Aspm));
+    AdtPutProperty("pci-l1pm-control", WlanL1pm, sizeof(WlanL1pm));
+    AdtPutProperty("pci-max-latency", &Latency, sizeof(Latency));
+    AdtPutNode(3, 0, "bluetooth-pcie");
+    AdtPutProperty("pci-aspm-default", &Aspm, sizeof(Aspm));
+    AdtPutProperty("pci-max-latency", &Latency, sizeof(Latency));
+    AdtPutNode(2, 1, "pci-bridge1");
+    AdtPutProperty("apcie-port", &Port1, sizeof(Port1));
+    AdtPutNode(2, 0, "pcie-sdreader");
+    AdtPutProperty("pci-aspm-default", &NoAspm, sizeof(NoAspm));
+}
+
+/* Config spaces of the M3 Pro Wi-Fi link as macOS reports them: root port 106b:100c, BCM4388 functions 0 and 1. */
+static
+VOID
+SimPcieLinkConfig(
+    _In_ ULONG RootDevice)
+{
+    ULONG Root = RootDevice << 15;
+
+    memset(SimPcieRootConfigData, 0, sizeof(SimPcieRootConfigData));
+    memset(SimPcieConfigData, 0, sizeof(SimPcieConfigData));
+    ROOTCFG(Root + 0x00) = 0x100c106b;
+    ROOTCFG(Root + 0x04) = 0x00100000;
+    ROOTCFG(Root + 0x34) = 0x00000070;
+    ROOTCFG(Root + 0x70) = 0x00420010;
+    ROOTCFG(Root + 0x7c) = 0x00737814;
+    ROOTCFG(Root + 0x80) = 0x10120040;
+    ROOTCFG(Root + 0x94) = 0x00010c1f;
+    ROOTCFG(Root + 0x100) = 0x2001001e;
+    ROOTCFG(Root + 0x104) = 0x0028281f;
+    ROOTCFG(Root + 0x200) = 0x00010018;
+
+    PCIECFG(0x0000) = 0x443414e4;
+    PCIECFG(0x0004) = 0x00100000;
+    PCIECFG(0x0034) = 0x00000048;
+    PCIECFG(0x0048) = 0x0000ac01;
+    PCIECFG(0x00ac) = 0x00020010;
+    PCIECFG(0x00b0) = 0x10008f82;
+    PCIECFG(0x00b8) = 0x0046f812;
+    PCIECFG(0x00bc) = 0x10120040;
+    PCIECFG(0x00d0) = 0x0008081f;
+    PCIECFG(0x0100) = 0x1b010001;
+    PCIECFG(0x01b0) = 0x24010018;
+    PCIECFG(0x0240) = 0x0001001e;
+    PCIECFG(0x0244) = 0x0000001f;
+
+    PCIECFG(0x1000) = 0x5f7214e4;
+    PCIECFG(0x1004) = 0x00100000;
+    PCIECFG(0x1034) = 0x000000ac;
+    PCIECFG(0x10ac) = 0x00020010;
+    PCIECFG(0x10b0) = 0x10008f82;
+    PCIECFG(0x10b8) = 0x0046d812;
+    PCIECFG(0x10bc) = 0x10120000;
+    PCIECFG(0x10d0) = 0x0008081f;
+}
+
+static
+VOID
+TestPcieLinkPower(VOID)
+{
+    APPLE_PCIE Pcie;
+    PAPPLE_PCIE_PORT Port = &Pcie.Ports[0];
+    APPLE_ADT Adt;
+    ULONG Controller, DeviceOff, RootOff, RootLtr, DeviceLtr, RootTiming, RootL1ss, DeviceL1ss, RootAspm, DeviceAspm;
+
+    AdtBuildPcie();
+    ok(AdtUsed <= sizeof(AdtImage), "The tree needs %lu bytes\n", AdtUsed);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+
+    RtlZeroMemory(&Pcie, sizeof(Pcie));
+    Pcie.ConfigBase = SIM_PCIE_ROOT_CFG_BASE;
+    Pcie.ConfigSize = 0x1000000;
+    Controller = ApplePcieFindAdtController(&Adt, &Pcie);
+    ok(Controller != APPLE_ADT_NO_NODE && !strcmp(AppleAdtNodeName(&Adt, Controller), "apcie"),
+       "The controller node is %lx\n", Controller);
+    ok_int(AppleAdtChildCount(&Adt, Controller), 2);
+    ok_int(AppleAdtChildCount(&Adt, AppleAdtPath(&Adt, "/arm-io/apcie/pci-bridge0")), 2);
+    ok_int(AppleAdtChildCount(&Adt, AppleAdtPath(&Adt, "/arm-io/sgx")), 0);
+    ok_hex(AppleAdtPath(&Adt, "/arm-io/apcie/pci-bridge0/pci-bridge1"), APPLE_ADT_NO_NODE);
+    ok_hex(AppleAdtPath(&Adt, "/arm-io/apcie/pci-bridge0/pcie-sdreader"), APPLE_ADT_NO_NODE);
+    ok(AppleAdtPath(&Adt, "/arm-io/apcie/pci-bridge1/pcie-sdreader") != APPLE_ADT_NO_NODE,
+       "The card reader was not found under its own bridge\n");
+    Pcie.ConfigBase = 0x590000000ULL;
+    ok_hex(ApplePcieFindAdtController(&Adt, &Pcie), APPLE_ADT_NO_NODE);
+    Pcie.ConfigBase = SIM_PCIE_ROOT_CFG_BASE;
+
+    /* The Wi-Fi link: L1, all four L1 substates and LTR, in the order the PCIe specification asks for. */
+    SimPcieLinkConfig(0);
+    Port->Index = 0;
+    Port->Bus = 1;
+    Port->LinkUp = TRUE;
+    SimWriteCount = 0;
+    ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
+    ok(SimWriteCount < RTL_NUMBER_OF(SimWrites), "The write log overflowed\n");
+    ok_hex(ROOTCFG(0x80), 0x00000042);
+    ok_hex(PCIECFG(0x00bc), 0x00000042);
+    ok_hex(PCIECFG(0x10bc), 0x00000002);
+    ok_hex(ROOTCFG(0x98), 0x00000400);
+    ok_hex(PCIECFG(0x00d4), 0x00000400);
+    ok_hex(PCIECFG(0x10d4), 0x00000000);
+    ok_hex(PCIECFG(0x01b4), 0x10081008);
+    ok_hex(ROOTCFG(0x108), 0x4055190f);
+    ok_hex(ROOTCFG(0x10c), 0x00000000);
+    ok_hex(PCIECFG(0x0248), 0x4055000f);
+    ok_hex(PCIECFG(0x024c), 0x00000000);
+    DeviceOff = FindWrite(SIM_PCIE_CFG_BASE + 0xbc, 3, 0, 0);
+    RootOff = FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x80, 3, 0, 0);
+    ok(DeviceOff != MAXULONG && RootOff != MAXULONG && DeviceOff < RootOff,
+       "ASPM was not turned off in the device before the root port (%lu, %lu)\n", DeviceOff, RootOff);
+    RootLtr = FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x98, 0x400, 0x400, 0);
+    DeviceLtr = FindWrite(SIM_PCIE_CFG_BASE + 0xd4, 0x400, 0x400, 0);
+    ok(FindWrite(SIM_PCIE_CFG_BASE + 0x1b4, MAXULONG, 0x10081008, 0) < RootLtr && RootLtr < DeviceLtr,
+       "LTR was not set up latencies first, root port before device (%lu, %lu)\n", RootLtr, DeviceLtr);
+    RootTiming = FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x108, MAXULONG, 0x40551900, 0);
+    RootL1ss = FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x108, 0xf, 0xf, 0);
+    DeviceL1ss = FindWrite(SIM_PCIE_CFG_BASE + 0x248, 0xf, 0xf, 0);
+    ok(DeviceLtr < RootTiming && RootTiming < RootL1ss && RootL1ss < DeviceL1ss,
+       "L1 substates were not timed before being enabled, root port first (%lu, %lu, %lu)\n", RootTiming, RootL1ss,
+       DeviceL1ss);
+    RootAspm = FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x80, 3, 2, 0);
+    DeviceAspm = FindWrite(SIM_PCIE_CFG_BASE + 0xbc, 3, 2, 0);
+    ok(DeviceL1ss < RootAspm && RootAspm < DeviceAspm && DeviceAspm < FindWrite(SIM_PCIE_CFG_BASE + 0x10bc, 3, 2, 0),
+       "L1 was not enabled last, root port first (%lu, %lu)\n", RootAspm, DeviceAspm);
+    ok(FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x80, 0xffff0000, 0, 0) != MAXULONG &&
+       FindWrite(SIM_PCIE_ROOT_CFG_BASE + 0x80, 0xffff0000, 0x10120000, 0) == MAXULONG,
+       "A link status bit was written back\n");
+    ok_int(SimMapCount, 0);
+
+    /* Without LTR on the root port, ASPM L1.2 is the one substate that cannot be used. */
+    SimPcieLinkConfig(0);
+    ROOTCFG(0x94) = 0x0001041f;
+    ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
+    ok_hex(ROOTCFG(0x108), 0x4055190b);
+    ok_hex(PCIECFG(0x0248), 0x4055000b);
+    ok_hex(ROOTCFG(0x98), 0x00000000);
+    ok_hex(PCIECFG(0x01b4), 0x00000000);
+    ok_hex(ROOTCFG(0x80), 0x00000042);
+
+    /* A device that cannot wait for the link to leave L1 keeps L1 off, whatever the platform asks for. */
+    SimPcieLinkConfig(0);
+    PCIECFG(0x10b0) = 0x10008982;
+    ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
+    ok_hex(ROOTCFG(0x80), 0x00000040);
+    ok_hex(PCIECFG(0x00bc), 0x00000040);
+    ok_hex(ROOTCFG(0x108), 0x4055190f);
+
+    /* The SD card reader port: the platform enables nothing, so the link is not touched. */
+    SimPcieLinkConfig(1);
+    Port->Index = 1;
+    SimWriteCount = 0;
+    ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
+    ok_int(SimWriteCount, 0);
+
+    Port->Index = 2;
+    ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
+    ok_int(SimWriteCount, 0);
+    ok_int(SimMapCount, 0);
+
+    memset(SimPcieRootConfigData, 0, sizeof(SimPcieRootConfigData));
+    memset(SimPcieConfigData, 0, sizeof(SimPcieConfigData));
+}
+
 #define PHANDLE_AIC         0x13
 #define PHANDLE_CLKREF      0x14
 #define PHANDLE_I2C_PINS    0x18
@@ -6457,6 +6659,7 @@ START_TEST(AppleSoc)
     TestSpmi();
     TestAtcphy();
     TestPcie();
+    TestPcieLinkPower();
     TestGpio();
     TestI2c();
     TestNco();

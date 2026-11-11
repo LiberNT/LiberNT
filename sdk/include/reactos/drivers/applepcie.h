@@ -8,6 +8,8 @@
 #pragma once
 
 #include <reactos/drivers/fdtdrv.h>
+#include <reactos/drivers/appleadt.h>
+#include <reactos/drivers/applepcielink.h>
 
 #define APPLE_PCIE_MAX_PORTS 4
 #define APPLE_PCIE_MSI_DOORBELL 0xFFFFF000UL
@@ -110,3 +112,17 @@ ApplePcieReadConfig(
     _In_ ULONG Device,
     _In_ ULONG Function,
     _In_ ULONG Offset);
+
+ULONG
+NTAPI
+ApplePcieFindAdtController(
+    _In_ PAPPLE_ADT Adt,
+    _In_ PAPPLE_PCIE Pcie);
+
+VOID
+NTAPI
+ApplePcieConfigureLinkPower(
+    _In_ PAPPLE_ADT Adt,
+    _In_ ULONG Controller,
+    _In_ PAPPLE_PCIE Pcie,
+    _In_ PAPPLE_PCIE_PORT Port);

@@ -17,6 +17,7 @@
 #define APPLE_PCIE_TAG              'icPA'
 #define APPLE_PCIE_FDO              0x4F444650UL
 #define APPLE_PCIE_PDO              0x4F445050UL
+#define APPLE_PCIE_ADT_MAX_LENGTH   0x200000
 
 typedef struct _APPLE_PCIE_EXTENSION
 {
@@ -136,6 +137,47 @@ ApplePcieReportPort(
     }
 }
 
+static
+PVOID
+ApplePcieMapAdt(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _Out_ PAPPLE_ADT Adt,
+    _Out_ PSIZE_T MappedSize)
+{
+    ULONG Reserved, Node, Length;
+    ULONG64 Base, Size;
+    PHYSICAL_ADDRESS Address;
+    const VOID *Label, *Compatible;
+    PVOID Mapped;
+
+    *MappedSize = 0;
+    if (!FdtFindNode(&Tree->Fdt, "/reserved-memory", &Reserved, NULL))
+        return NULL;
+    for (Node = FdtFirstChild(&Tree->Fdt, Reserved); Node != FDT_NO_NODE; Node = FdtNextSibling(&Tree->Fdt, Node))
+    {
+        Compatible = FdtGetProperty(&Tree->Fdt, Node, "compatible", &Length);
+        if (!Compatible || !FdtStringListContains(Compatible, Length, "phram"))
+            continue;
+        Label = FdtGetProperty(&Tree->Fdt, Node, "label", &Length);
+        if (!Label || Length != sizeof("adt") || !RtlEqualMemory(Label, "adt", sizeof("adt")))
+            continue;
+        if (!FdtReadReg(&Tree->Fdt, Node, Reserved, 0, &Base, &Size) || !Size || Size > APPLE_PCIE_ADT_MAX_LENGTH)
+            return NULL;
+        Address.QuadPart = (LONGLONG)Base;
+        Mapped = MmMapIoSpace(Address, (SIZE_T)Size, MmCached);
+        if (!Mapped)
+            return NULL;
+        if (!AppleAdtOpen(Adt, Mapped, (ULONG)Size))
+        {
+            MmUnmapIoSpace(Mapped, (SIZE_T)Size);
+            return NULL;
+        }
+        *MappedSize = (SIZE_T)Size;
+        return Mapped;
+    }
+    return NULL;
+}
+
 static NTSTATUS ApplePcieCreateChild(_Inout_ PAPPLE_PCIE_EXTENSION Extension);
 
 static
@@ -146,9 +188,18 @@ ApplePcieBringUp(
 {
     PAPPLE_PCIE_EXTENSION Extension = Context;
     PAPPLE_PCIE Pcie = &Extension->Pcie;
-    ULONG Index, Mapped = 0, LinksUp = 0;
+    ULONG Index, Mapped = 0, LinksUp = 0, Controller = APPLE_ADT_NO_NODE;
+    APPLE_ADT Adt;
+    PVOID AdtMapping;
+    SIZE_T AdtSize;
     NTSTATUS Status;
 
+    AdtMapping = ApplePcieMapAdt(&Extension->Tree, &Adt, &AdtSize);
+    if (AdtMapping)
+        Controller = ApplePcieFindAdtController(&Adt, Pcie);
+    if (Controller == APPLE_ADT_NO_NODE)
+        DbgPrint("applepcie: the platform tree %s, link power management stays off\n",
+                 AdtMapping ? "has no node for this controller" : "is not available");
     for (Index = 0; Index < Pcie->PortCount; ++Index)
     {
         ApplePcieReportPort(Pcie, &Pcie->Ports[Index], ApplePcieStartPort(&Extension->Tree, Pcie, &Pcie->Ports[Index]));
@@ -156,8 +207,12 @@ ApplePcieBringUp(
         {
             LinksUp++;
             Mapped += ApplePcieMapPortDevices(&Extension->Tree, Pcie, &Pcie->Ports[Index]);
+            if (Controller != APPLE_ADT_NO_NODE && Pcie->Ports[Index].Bus != MAXULONG)
+                ApplePcieConfigureLinkPower(&Adt, Controller, Pcie, &Pcie->Ports[Index]);
         }
     }
+    if (AdtMapping)
+        MmUnmapIoSpace(AdtMapping, AdtSize);
     DbgPrint("applepcie: %lu links up, %lu functions mapped through their DARTs\n", LinksUp, Mapped);
     if (Pcie->WindowCount)
     {
