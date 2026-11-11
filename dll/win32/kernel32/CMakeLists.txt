@@ -81,6 +81,7 @@ list(APPEND SOURCE
     client/file/npipe.c
     client/file/rw.c
     client/file/tape.c
+    client/file/transact.c
     client/file/volume.c
     client/file/volumeansi.c
     wine/actctx.c

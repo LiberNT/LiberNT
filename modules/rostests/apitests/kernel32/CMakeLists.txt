@@ -129,6 +129,7 @@ list(APPEND SOURCE
     TerminateProcess.c
     ThreadPowerThrottling.c
     ProcessPowerThrottling.c
+    TransactedFileApis.c
     TunnelCache.c
     UEFIFirmware.c
     WaitFileHandle.c

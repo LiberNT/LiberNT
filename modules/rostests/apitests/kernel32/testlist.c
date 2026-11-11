@@ -126,6 +126,7 @@ extern void func_SystemFileCacheSize(void);
 extern void func_TerminateProcess(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ProcessPowerThrottling(void);
+extern void func_TransactedFileApis(void);
 extern void func_TunnelCache(void);
 extern void func_UEFIFirmware(void);
 extern void func_WaitFileHandle(void);
@@ -265,6 +266,7 @@ const struct test winetest_testlist[] =
     { "TerminateProcess",            func_TerminateProcess },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
+    { "TransactedFileApis",          func_TransactedFileApis },
     { "TunnelCache",                 func_TunnelCache },
     { "UEFIFirmware",                func_UEFIFirmware },
     { "WaitFileHandle",              func_WaitFileHandle },
