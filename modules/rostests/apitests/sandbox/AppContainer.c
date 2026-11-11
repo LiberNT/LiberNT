@@ -24,7 +24,6 @@
 #define APPCONTAINER_TORTURE_CHILDREN 6
 
 static PFN_NtCreateLowBoxToken pNtCreateLowBoxToken;
-static LONG StageCount;
 
 static PSID
 CapabilitySid(DWORD Rid)
@@ -607,9 +606,8 @@ StageAppContainerImage(PSID Package, PCWSTR UserString, PWSTR Application, SIZE_
         if (!Length || Length >= ARRAYSIZE(ProgramData))
             return FALSE;
     }
-    /* Each launch stages its own copy, so it never waits for the last child's image to be let go */
-    if (FAILED(StringCchPrintfW(Directory, DirectoryCount, L"%s\\sandbox_apitest_%lu_%ld",
-                                ProgramData, GetCurrentProcessId(), InterlockedIncrement(&StageCount))))
+    if (FAILED(StringCchPrintfW(Directory, DirectoryCount, L"%s\\sandbox_apitest_%lu",
+                                ProgramData, GetCurrentProcessId())))
         return FALSE;
     if (!CreateDirectoryW(Directory, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
         return FALSE;

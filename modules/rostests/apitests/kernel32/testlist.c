@@ -158,6 +158,7 @@ extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
 extern void func_TerminateThread(void);
 extern void func_ExitedClientId(void);
+extern void func_ExitedProcessImage(void);
 extern void func_ThreadKernelStack(void);
 extern void func_SleepTickRounding(void);
 extern void func_SwitchToThreadPriority(void);
@@ -348,6 +349,7 @@ const struct test winetest_testlist[] =
     { "TerminateProcess",            func_TerminateProcess },
     { "TerminateThread",             func_TerminateThread },
     { "ExitedClientId",              func_ExitedClientId },
+    { "ExitedProcessImage",          func_ExitedProcessImage },
     { "ThreadKernelStack",           func_ThreadKernelStack },
     { "SleepTickRounding",           func_SleepTickRounding },
     { "SwitchToThreadPriority",      func_SwitchToThreadPriority },

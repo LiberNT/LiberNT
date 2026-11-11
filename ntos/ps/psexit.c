@@ -310,6 +310,8 @@ PspExitProcess(
     _In_ BOOLEAN LastThread,
     _In_ PEPROCESS Process)
 {
+    PVOID Section;
+
     PAGED_CODE();
 
     Process->ProcessExiting = TRUE;
@@ -338,6 +340,10 @@ PspExitProcess(
     if (Process->DebugPort != NULL) DbgkExitProcess(Process->ExitStatus);
 
     MmCleanProcessAddressSpace(Process);
+
+    /* With no view of it left the process lets go of its image, so whoever waited for it may replace the file */
+    Section = InterlockedExchangePointer(&Process->SectionObject, NULL);
+    if (Section != NULL) ObDereferenceObject(Section);
 
     PspExitProcessFromJob(Process);
 

@@ -1227,16 +1227,17 @@ NtQueryInformationProcess(
             break;
 
         case ProcessImageInformation:
-            if (Process->SectionObject == NULL)
-            {
-                Status = STATUS_UNSUCCESSFUL;
-                break;
-            }
-
             /* The image of a process that has exited is no longer answered for */
             if (!ExAcquireRundownProtection(&Process->RundownProtect))
             {
                 Status = STATUS_PROCESS_IS_TERMINATING;
+                break;
+            }
+
+            if (Process->SectionObject == NULL)
+            {
+                ExReleaseRundownProtection(&Process->RundownProtect);
+                Status = STATUS_UNSUCCESSFUL;
                 break;
             }
 
