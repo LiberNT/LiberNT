@@ -50,6 +50,7 @@ list(APPEND SOURCE
     GetFinalPathNameByHandle.c
     GetLocaleInfo.c
     GetModuleFileName.c
+    GetNumberOfConsoleMouseButtons.c
     GetNumaNodeProcessorMaskEx.c
     GetOsSafeBootMode.c
     GetPackageFamilyName.c

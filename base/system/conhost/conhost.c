@@ -4168,6 +4168,15 @@ static NTSTATUS console_input_ioctl( struct console *console, unsigned int code,
     case IOCTL_CONDRV_SET_HISTORY_COMMANDS:
         if (*out_size) return STATUS_INVALID_PARAMETER;
         return set_console_history_commands( console, in_data, in_size );
+
+    case IOCTL_CONDRV_GET_MOUSE_BUTTONS:
+        {
+            DWORD *buttons;
+            if (in_size || *out_size != sizeof(*buttons)) return STATUS_INVALID_PARAMETER;
+            if (!(buttons = alloc_ioctl_buffer( sizeof(*buttons) ))) return STATUS_NO_MEMORY;
+            *buttons = GetSystemMetrics( SM_CMOUSEBUTTONS );
+            return STATUS_SUCCESS;
+        }
 #endif
 
     default:

@@ -1919,9 +1919,19 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetNumberOfConsoleInputEvents( HANDLE handle, DWOR
  */
 BOOL WINAPI GetNumberOfConsoleMouseButtons( DWORD *count )
 {
+#ifdef __REACTOS__
+    DWORD buttons;
+
+    if (!console_ioctl( RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle, IOCTL_CONDRV_GET_MOUSE_BUTTONS,
+                        NULL, 0, &buttons, sizeof(buttons), NULL ))
+        return FALSE;
+    *count = buttons;
+    return TRUE;
+#else
     FIXME( "(%p): stub\n", count );
     *count = 2;
     return TRUE;
+#endif
 }
 
 
