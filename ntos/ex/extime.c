@@ -397,6 +397,26 @@ ExSystemTimeToLocalTime(
     LocalTime->QuadPart = SystemTime->QuadPart - ExpTimeZoneBias.QuadPart;
 }
 
+static
+BOOLEAN
+ExpRealTimeToSystemTime(
+    _In_ PLARGE_INTEGER RealTime,
+    _Out_ PLARGE_INTEGER SystemTime)
+{
+    LONGLONG Bias = ExpRealTimeIsUniversal ? 0 : ExpTimeZoneBias.QuadPart;
+
+    if ((RealTime->QuadPart < 0) ||
+        ((Bias < 0) && (RealTime->QuadPart < -Bias)) ||
+        ((Bias > 0) && (RealTime->QuadPart > MAXLONGLONG - Bias)))
+    {
+        return FALSE;
+    }
+
+    SystemTime->QuadPart = RealTime->QuadPart + Bias;
+    ASSERT(SystemTime->QuadPart >= 0);
+    return TRUE;
+}
+
 /*
  * Takes the time zone the registry describes and makes it the one the system
  * shows times in, moving the clock by whatever the bias has changed by so the
@@ -454,9 +474,8 @@ ExpSetTimeZoneInformation(
      * A clock that keeps local time rather than universal time has to be read
      * through the new bias, so the moment it names does not shift.
      */
-    if (!ExpRealTimeIsUniversal)
+    if (!ExpRealTimeIsUniversal && ExpRealTimeToSystemTime(&LocalTime, &NewTime))
     {
-        ExLocalTimeToSystemTime(&LocalTime, &NewTime);
         KeSetSystemTime(&NewTime, &SystemTime, FALSE, NULL);
         PoNotifySystemTimeSet();
     }
@@ -508,18 +527,10 @@ ExUpdateSystemTimeFromCmos(
         return;
     }
 
-    if (!RtlTimeFieldsToTime(&TimeFields, &HardwareTime))
+    if (!RtlTimeFieldsToTime(&TimeFields, &HardwareTime) ||
+        !ExpRealTimeToSystemTime(&HardwareTime, &NewTime))
     {
         return;
-    }
-
-    if (ExpRealTimeIsUniversal)
-    {
-        NewTime = HardwareTime;
-    }
-    else
-    {
-        ExLocalTimeToSystemTime(&HardwareTime, &NewTime);
     }
 
     if (MaxSepInSeconds == 0)
