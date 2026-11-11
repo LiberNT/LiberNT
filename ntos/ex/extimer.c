@@ -61,6 +61,7 @@ ExpArmHighResolutionTimer(
         return;
 
     Timer->HighResolutionArmed = Arm;
+    /* FIXME: called under the timer lock and from the timer DPC, at DISPATCH_LEVEL, where the WDK allows ExSetTimerResolution only up to APC_LEVEL */
     ExSetTimerResolution(KeMinimumIncrement, Arm);
 }
 
