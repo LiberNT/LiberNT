@@ -162,7 +162,7 @@ KdpSelectDebugMode(
             Value++;
         }
 
-        Value = (*Value == ',') ? (Value + 1) : NULL;
+        Value = (*Value == ',') ? (Value + 1) : KdpOptionValue(Value, "DEBUGPORT");
     }
 
     Value = KdpOptionValue(Options, "BAUDRATE");
