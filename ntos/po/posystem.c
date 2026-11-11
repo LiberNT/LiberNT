@@ -45,6 +45,10 @@ static ULONG PopCachedSettingCount;
 static SYSTEM_POWER_CONDITION PopPowerSource = PoAc;
 static ULONG PopSettingWalks;
 static ULONG PopVideoTimeout = 0;
+static EX_PUSH_LOCK PopIdlenessLock;
+static ULONG64 PopIdlenessTime;
+static ULONG64 PopIdlenessIdleTicks;
+static ULONG PopIdleness;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -733,6 +737,7 @@ PoInitSystem(
         PopInitializeDevicePower();
         PopInitializeVolumes();
         PopInitializeEventSupport();
+        PopInitializeThermalRequests();
         PopInitShutdownList();
 
         return TRUE;
@@ -1012,6 +1017,96 @@ PopSetPowerSettingValueFromCaller(
     return Status;
 }
 
+static
+ULONG
+PopQueryIdleness(VOID)
+{
+    ULONG64 Now;
+    ULONG64 Elapsed;
+    ULONG64 Idle;
+    ULONG64 IdleTicks = 0;
+    ULONG Index;
+    ULONG Idleness;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&PopIdlenessLock);
+
+    Now = KeQueryInterruptTime();
+    /* A sample of a few clock ticks would only measure the tick: a caller that comes back sooner gets the previous figure */
+    if (Now - PopIdlenessTime >= 10ULL * KeMaximumIncrement)
+    {
+        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+            IdleTicks += KiProcessorBlock[Index]->IdleThread->KernelTime;
+
+        Elapsed = (Now - PopIdlenessTime) * (ULONG)KeNumberProcessors;
+        Idle = (IdleTicks - PopIdlenessIdleTicks) * KeMaximumIncrement;
+        PopIdleness = (ULONG)(min(Idle, Elapsed) * 100 / Elapsed);
+        PopIdlenessTime = Now;
+        PopIdlenessIdleTicks = IdleTicks;
+    }
+    Idleness = PopIdleness;
+
+    ExReleasePushLockExclusive(&PopIdlenessLock);
+    KeLeaveCriticalRegion();
+
+    return Idleness;
+}
+
+static
+NTSTATUS
+PopQuerySystemPowerInformation(
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    SYSTEM_POWER_INFORMATION Information;
+
+    if (InputBufferLength != 0) return STATUS_INVALID_PARAMETER;
+    if (OutputBufferLength < sizeof(Information)) return STATUS_BUFFER_TOO_SMALL;
+
+    /* No system idle timer is armed, so there is no threshold and no time left on it */
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.Idleness = PopQueryIdleness();
+    Information.CoolingMode = PopQuerySystemCoolingMode();
+
+    RtlCopyMemory(OutputBuffer, &Information, sizeof(Information));
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PopQueryProcessorInformation(
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    PPROCESSOR_POWER_INFORMATION Output = OutputBuffer;
+    PROCESSOR_POWER_INFORMATION Processor;
+    ULONG Count = (ULONG)KeNumberProcessors;
+    ULONG Index;
+
+    if (InputBufferLength != 0) return STATUS_INVALID_PARAMETER;
+    if (OutputBufferLength / sizeof(Processor) < Count) return STATUS_BUFFER_TOO_SMALL;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Index];
+
+        Processor.Number = Prcb->Number;
+        Processor.MaxMhz = Prcb->MHz;
+        /* FIXME: no performance states are tracked; the frequency measured at boot stands for the current one */
+        Processor.CurrentMhz = Prcb->MHz;
+        Processor.MhzLimit = Prcb->MHz * Prcb->PowerState.CurrentThrottle / 100;
+        /* TODO: no processor idle states are registered, so none is reported */
+        Processor.MaxIdleState = 0;
+        Processor.CurrentIdleState = 0;
+
+        RtlCopyMemory(&Output[Index], &Processor, sizeof(Processor));
+    }
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 NtPowerInformation(
@@ -1027,6 +1122,12 @@ NtPowerInformation(
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
+
+    if ((PowerInformationLevel == SystemPowerInformation) &&
+        ((OutputBuffer == NULL) || (OutputBufferLength == 0)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
 
     _SEH2_TRY
     {
@@ -1068,6 +1169,18 @@ NtPowerInformation(
             case SetPowerSettingValue:
                 Status = PopSetPowerSettingValueFromCaller(InputBuffer,
                                                           InputBufferLength);
+                break;
+
+            case SystemPowerInformation:
+                Status = PopQuerySystemPowerInformation(InputBufferLength,
+                                                        OutputBuffer,
+                                                        OutputBufferLength);
+                break;
+
+            case ProcessorInformation:
+                Status = PopQueryProcessorInformation(InputBufferLength,
+                                                      OutputBuffer,
+                                                      OutputBufferLength);
                 break;
 
             case SystemExecutionState:
