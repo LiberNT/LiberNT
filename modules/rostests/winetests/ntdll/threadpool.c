@@ -36,6 +36,9 @@
 #define TP_CALLBACK_MS 32
 #define TP_SCHEDULER_SETTLE_MS 160
 #define TP_RELEASE_HOLD_MS 64
+#define TP_TIMER_MS 64
+#define TP_TIMER_EARLY_MS 32
+#define TP_PERIOD_MS 100
 #else
 #define RTL_WAIT_SETTLE_MS 50
 #define RTL_WAIT_TIMEOUT_MS 200
@@ -44,6 +47,9 @@
 #define TP_CALLBACK_MS 100
 #define TP_SCHEDULER_SETTLE_MS 500
 #define TP_RELEASE_HOLD_MS 200
+#define TP_TIMER_MS 200
+#define TP_TIMER_EARLY_MS 100
+#define TP_PERIOD_MS 200
 #endif
 
 static NTSTATUS (WINAPI *pTpAllocCleanupGroup)(TP_CLEANUP_GROUP **);
@@ -1438,14 +1444,14 @@ static void test_tp_timer(void)
     ok(!success, "TpIsTimerSet returned TRUE\n");
 
     /* test timer with a relative timeout */
-    when.QuadPart = (ULONGLONG)200 * -10000;
+    when.QuadPart = (ULONGLONG)TP_TIMER_MS * -10000;
     pTpSetTimer(timer, &when, 0, 0);
     success = pTpIsTimerSet(timer);
     ok(success, "TpIsTimerSet returned FALSE\n");
 
     pTpWaitForTimer(timer, FALSE);
 
-    result = WaitForSingleObject(semaphore, 100);
+    result = WaitForSingleObject(semaphore, TP_TIMER_EARLY_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     result = WaitForSingleObject(semaphore, 200);
     ok(result == WAIT_OBJECT_0, "WaitForSingleObject returned %lu\n", result);
@@ -1454,14 +1460,14 @@ static void test_tp_timer(void)
 
     /* test timer with an absolute timeout */
     NtQuerySystemTime( &when );
-    when.QuadPart += (ULONGLONG)200 * 10000;
+    when.QuadPart += (ULONGLONG)TP_TIMER_MS * 10000;
     pTpSetTimer(timer, &when, 0, 0);
     success = pTpIsTimerSet(timer);
     ok(success, "TpIsTimerSet returned FALSE\n");
 
     pTpWaitForTimer(timer, FALSE);
 
-    result = WaitForSingleObject(semaphore, 100);
+    result = WaitForSingleObject(semaphore, TP_TIMER_EARLY_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     result = WaitForSingleObject(semaphore, 200);
     ok(result == WAIT_OBJECT_0, "WaitForSingleObject returned %lu\n", result);
@@ -1503,8 +1509,8 @@ static void test_tp_timer(void)
     ok(timer != NULL, "expected timer != NULL\n");
 
     /* test a relative timeout repeated periodically */
-    when.QuadPart = (ULONGLONG)200 * -10000;
-    pTpSetTimer(timer, &when, 200, 0);
+    when.QuadPart = (ULONGLONG)TP_PERIOD_MS * -10000;
+    pTpSetTimer(timer, &when, TP_PERIOD_MS, 0);
     success = pTpIsTimerSet(timer);
     ok(success, "TpIsTimerSet returned FALSE\n");
 
@@ -1516,8 +1522,8 @@ static void test_tp_timer(void)
         ok(result == WAIT_OBJECT_0, "WaitForSingleObject returned %lu\n", result);
     }
     ticks = GetTickCount() - ticks;
-    ok(ticks >= 500 && (ticks <= 700 || broken(ticks <= 750)) /* Win 7 */,
-       "expected approximately 600 ticks, got %lu\n", ticks);
+    ok(ticks >= 5 * TP_PERIOD_MS / 2 && (ticks <= 7 * TP_PERIOD_MS / 2 || broken(ticks <= 15 * TP_PERIOD_MS / 4)) /* Win 7 */,
+       "expected approximately %u ticks, got %lu\n", 3 * TP_PERIOD_MS, ticks);
 
     /* unset the timer */
     pTpSetTimer(timer, NULL, 0, 0);
