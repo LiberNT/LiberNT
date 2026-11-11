@@ -13,6 +13,19 @@
 
 /* GLOBALS ********************************************************************/
 
+/* What KiSwapContext leaves under KTHREAD::KernelStack (ctxswitch.S) */
+typedef struct _KDB_SWITCH_STACK
+{
+    ULONG ExceptionList;
+    ULONG ApcBypassDisable;
+    ULONG SwapContextReturn;
+    ULONG Ebp;
+    ULONG Edi;
+    ULONG Esi;
+    ULONG Ebx;
+    ULONG Return;
+} KDB_SWITCH_STACK;
+
 #define KDB_REG(n, f) {n, (USHORT)FIELD_OFFSET(CONTEXT, f), (USHORT)RTL_FIELD_SIZE(CONTEXT, f)}
 
 const KDB_REGISTER KdbpRegisters[] =
@@ -248,6 +261,30 @@ KdbpArchPrintInterruptVector(
     }
 
     return FALSE;
+}
+
+BOOLEAN
+NTAPI
+KdbpArchContextFromKernelStack(
+    _In_ PVOID KernelStack,
+    _Out_ PCONTEXT Context)
+{
+    KDB_SWITCH_STACK Stack;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Stack, KernelStack, sizeof(Stack))))
+        return FALSE;
+
+    RtlZeroMemory(Context, sizeof(*Context));
+    Context->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    Context->SegCs = KGDT_R0_CODE;
+    Context->SegSs = KGDT_R0_DATA;
+    Context->Eip = Stack.Return;
+    Context->Esp = (ULONG_PTR)KernelStack + sizeof(Stack);
+    Context->Ebp = Stack.Ebp;
+    Context->Edi = Stack.Edi;
+    Context->Esi = Stack.Esi;
+    Context->Ebx = Stack.Ebx;
+    return TRUE;
 }
 
 /* EOF */

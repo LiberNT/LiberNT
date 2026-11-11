@@ -282,4 +282,25 @@ KdbpArchPrintInterruptVector(
     return FALSE;
 }
 
+BOOLEAN
+NTAPI
+KdbpArchContextFromKernelStack(
+    _In_ PVOID KernelStack,
+    _Out_ PCONTEXT Context)
+{
+    KSWITCH_FRAME Frame;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Frame, KernelStack, sizeof(Frame))))
+        return FALSE;
+
+    RtlZeroMemory(Context, sizeof(*Context));
+    Context->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    Context->SegCs = KGDT64_R0_CODE;
+    Context->SegSs = KGDT64_R0_DATA;
+    Context->Rip = Frame.Return;
+    Context->Rsp = (ULONG_PTR)KernelStack + sizeof(Frame);
+    Context->Rbp = Frame.Rbp;
+    return TRUE;
+}
+
 /* EOF */

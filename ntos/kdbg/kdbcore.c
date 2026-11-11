@@ -711,13 +711,7 @@ KdbpKdbTrapFrameFromKernelStack(
     if ((KernelStack == NULL) || (KdbTrapFrame == NULL))
         return FALSE;
 
-    RtlZeroMemory(KdbTrapFrame, sizeof(*KdbTrapFrame));
-
-    /* TODO: only the stack pointer is recovered; the saved registers of a
-     * switched-out thread need this architecture's own switch frame */
-    KdbpSetRegisterValue(KdbTrapFrame, "sp", (ULONGLONG)(ULONG_PTR)KernelStack);
-
-    return TRUE;
+    return KdbpArchContextFromKernelStack(KernelStack, KdbTrapFrame);
 }
 
 /*
@@ -739,12 +733,6 @@ KdbpAttachToThread(
         KdbCurrentThread = KdbOriginalThread;
         KdbCurrentProcess = KdbOriginalProcess;
         return TRUE;
-    }
-
-    if (Thread->Tcb.State == Running)
-    {
-        /* TODO: a thread running on another processor is not followed */
-        return FALSE;
     }
 
     KdbCurrentThread = Thread;

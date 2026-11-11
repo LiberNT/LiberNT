@@ -204,4 +204,35 @@ KdbpArchPrintInterruptVector(
     return TRUE;
 }
 
+BOOLEAN
+NTAPI
+KdbpArchContextFromKernelStack(
+    _In_ PVOID KernelStack,
+    _Out_ PCONTEXT Context)
+{
+    PUCHAR ExceptionFrame = (PUCHAR)KernelStack + sizeof(KSWITCH_FRAME);
+    KEXCEPTION_FRAME Saved;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Saved, ExceptionFrame, sizeof(Saved))))
+        return FALSE;
+
+    RtlZeroMemory(Context, sizeof(*Context));
+    Context->ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
+    Context->Pc = Saved.Return;
+    Context->Lr = Saved.Return;
+    Context->Fp = Saved.Fp;
+    Context->Sp = (ULONG_PTR)ExceptionFrame + ALIGN_UP_BY(sizeof(KEXCEPTION_FRAME), 16);
+    Context->X19 = Saved.X19;
+    Context->X20 = Saved.X20;
+    Context->X21 = Saved.X21;
+    Context->X22 = Saved.X22;
+    Context->X23 = Saved.X23;
+    Context->X24 = Saved.X24;
+    Context->X25 = Saved.X25;
+    Context->X26 = Saved.X26;
+    Context->X27 = Saved.X27;
+    Context->X28 = Saved.X28;
+    return TRUE;
+}
+
 /* EOF */

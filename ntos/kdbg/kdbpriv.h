@@ -68,6 +68,12 @@ KdbpArchPrintInterruptVector(
     _In_ ULONG Vector,
     _In_ BOOLEAN ShowUnused);
 
+BOOLEAN
+NTAPI
+KdbpArchContextFromKernelStack(
+    _In_ PVOID KernelStack,
+    _Out_ PCONTEXT Context);
+
 /* kdbanalyze.c */
 
 BOOLEAN

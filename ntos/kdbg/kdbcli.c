@@ -45,6 +45,7 @@ volatile PCHAR KdbInitFileBuffer = NULL;
 #define KDB_DUMP_BYTES_PER_LINE 16
 #define KDB_LOG_CHUNK           512
 #define KDB_MAXIMUM_FLOATING_REGISTER 16
+#define KDB_MAXIMUM_THREADS     65536
 
 typedef BOOLEAN (*PKDB_COMMAND_ROUTINE)(ULONG Argc, PCHAR Argv[]);
 
@@ -1038,30 +1039,106 @@ KdbpCmdSetFloatingRegister(
  */
 static
 VOID
+KdbpPrintFrame(
+    _In_ PKDB_KTRAP_FRAME Walk,
+    _In_ PKDB_KTRAP_FRAME Context,
+    _In_ BOOLEAN Verbose)
+{
+    ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Walk);
+
+    if (Verbose)
+    {
+        KdbpPrint("%p sp %p fp %p ",
+                  (PVOID)Pc,
+                  (PVOID)KeGetContextStackRegister(Walk),
+                  (PVOID)KeGetContextFrameRegister(Walk));
+    }
+    else
+    {
+        KdbpPrint("%p ", (PVOID)Pc);
+    }
+
+    KdbSymPrintAddress((PVOID)Pc, Context);
+    KdbPuts("\n");
+}
+
+static
+VOID
 KdbpBackTrace(
     _In_ PKDB_KTRAP_FRAME Context,
-    _In_ ULONG_PTR Limit)
+    _In_ ULONG_PTR Limit,
+    _In_ BOOLEAN Verbose)
 {
     static KDB_KTRAP_FRAME Walk;
-    ULONG_PTR Pc;
     ULONG Depth = 0;
 
     Walk = *Context;
-    Pc = (ULONG_PTR)KeGetContextPc(&Walk);
-
-    KdbpPrint("%p ", (PVOID)Pc);
-    KdbSymPrintAddress((PVOID)Pc, Context);
-    KdbPuts("\n");
+    KdbpPrintFrame(&Walk, Context, Verbose);
 
     while ((Depth < Limit) && !KdbpIsOutputAborted() && KiUnwindFrame(&Walk, (Depth != 0)))
     {
-        Pc = (ULONG_PTR)KeGetContextPc(&Walk);
-
-        KdbpPrint("%p ", (PVOID)Pc);
-        KdbSymPrintAddress((PVOID)Pc, Context);
-        KdbPuts("\n");
-
+        KdbpPrintFrame(&Walk, Context, Verbose);
         Depth++;
+    }
+}
+
+static
+PKDB_KTRAP_FRAME
+KdbpThreadContext(
+    _In_ PETHREAD Thread,
+    _Out_ PKDB_KTRAP_FRAME Buffer)
+{
+    ULONG Processor;
+
+    if (Thread == KdbOriginalThread)
+        return KdbCurrentTrapFrame;
+
+    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Processor];
+
+        if ((Prcb != NULL) && (Prcb->CurrentThread == &Thread->Tcb))
+            return &Prcb->ProcessorState.ContextFrame;
+    }
+
+    return KdbpKdbTrapFrameFromKernelStack(Thread->Tcb.KernelStack, Buffer) ? Buffer : NULL;
+}
+
+static
+VOID
+KdbpBackTraceAll(
+    _In_ ULONG_PTR Limit,
+    _In_ BOOLEAN Verbose)
+{
+    static KDB_KTRAP_FRAME ThreadContext;
+    PLIST_ENTRY ProcessEntry;
+    PLIST_ENTRY ThreadEntry;
+    ULONG Count = 0;
+
+    for (ProcessEntry = PsActiveProcessHead.Flink;
+         (ProcessEntry != &PsActiveProcessHead) && (Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
+         ProcessEntry = ProcessEntry->Flink)
+    {
+        PEPROCESS Process = CONTAINING_RECORD(ProcessEntry, EPROCESS, ActiveProcessLinks);
+
+        for (ThreadEntry = Process->ThreadListHead.Flink;
+             (ThreadEntry != &Process->ThreadListHead) && (Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
+             ThreadEntry = ThreadEntry->Flink, Count++)
+        {
+            PETHREAD Thread = CONTAINING_RECORD(ThreadEntry, ETHREAD, ThreadListEntry);
+            PKDB_KTRAP_FRAME Context = KdbpThreadContext(Thread, &ThreadContext);
+
+            KdbpPrint("Thread %p (%Ix.%Ix) of %.15s\n",
+                      Thread,
+                      (ULONG_PTR)Thread->Cid.UniqueProcess,
+                      (ULONG_PTR)Thread->Cid.UniqueThread,
+                      Process->ImageFileName);
+
+            if (Context == NULL)
+                KdbPuts("  its registers cannot be found\n");
+            else
+                KdbpBackTrace(Context, Limit, Verbose);
+        }
     }
 }
 
@@ -1073,14 +1150,30 @@ KdbpCmdBackTrace(
 {
     PKDB_KTRAP_FRAME Context = KdbpContext();
     ULONG_PTR Limit = 32;
+    BOOLEAN Verbose = FALSE;
+    BOOLEAN All = FALSE;
+    ULONG Index;
+
+    for (Index = 1; Index < Argc; Index++)
+    {
+        if (_stricmp(Argv[Index], "all") == 0)
+            All = TRUE;
+        else if ((_stricmp(Argv[Index], "verbose") == 0) || (_stricmp(Argv[Index], "v") == 0))
+            Verbose = TRUE;
+        else if (!KdbpGetAddressExpression(Argv[Index], &Limit))
+            return TRUE;
+    }
+
+    if (All)
+    {
+        KdbpBackTraceAll(Limit, Verbose);
+        return TRUE;
+    }
 
     if (Context == NULL)
         return TRUE;
 
-    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Limit))
-        return TRUE;
-
-    KdbpBackTrace(Context, Limit);
+    KdbpBackTrace(Context, Limit, Verbose);
     return TRUE;
 }
 
@@ -1415,6 +1508,26 @@ KdbpCmdSymbols(
 }
 
 static
+VOID
+KdbpUseContext(
+    _In_opt_ PKDB_KTRAP_FRAME Context,
+    _In_ PCSTR What);
+
+static
+VOID
+KdbpUseThreadContext(
+    _In_ PETHREAD Thread)
+{
+    static KDB_KTRAP_FRAME ThreadContext;
+    PKDB_KTRAP_FRAME Context = KdbpThreadContext(Thread, &ThreadContext);
+
+    if (Context == NULL)
+        KdbpPrint("The registers of thread %p cannot be found\n", Thread);
+
+    KdbpUseContext((Context == KdbCurrentTrapFrame) ? NULL : Context, "Registers of the thread");
+}
+
+static
 BOOLEAN
 KdbpCmdProcesses(
     ULONG Argc,
@@ -1435,6 +1548,8 @@ KdbpCmdProcesses(
         if (!KdbpAttachToProcess((PVOID)Id))
             KdbpPrint("There is no process %s, or it cannot be looked at\n",
                       Argv[1]);
+        else
+            KdbpUseThreadContext(KdbCurrentThread);
 
         return TRUE;
     }
@@ -1473,15 +1588,14 @@ KdbpCmdThreads(
     {
         ULONG_PTR Id = 0;
 
-        if (!KdbpGetHexNumber(Argv[1], &Id))
-        {
-            KdbpPrint("%s is not a thread identifier\n", Argv[1]);
+        if (!KdbpGetHexNumber(Argv[1], &Id) && !KdbpGetAddressExpression(Argv[1], &Id))
             return TRUE;
-        }
 
         if (!KdbpAttachToThread((PVOID)Id))
             KdbpPrint("There is no thread %s, or it cannot be looked at\n",
                       Argv[1]);
+        else
+            KdbpUseThreadContext(KdbCurrentThread);
 
         return TRUE;
     }
@@ -2214,8 +2328,8 @@ static const KDB_COMMAND KdbpCommands[] =
     {"vregs", "vregs [register]", "Shows the floating-point and vector registers", KdbpCmdFloatingRegisters},
     {"setfpreg", "setfpreg <register> <hex value>", "Changes a floating-point or vector register", KdbpCmdSetFloatingRegister},
     {"setvreg", "setvreg <register> <hex value>", "Changes a floating-point or vector register", KdbpCmdSetFloatingRegister},
-    {"bt", "bt [frames]", "Shows what led here", KdbpCmdBackTrace},
-    {"k", "k [frames]", "Shows what led here", KdbpCmdBackTrace},
+    {"bt", "bt [all] [verbose] [frames]", "Shows what led here, or for every thread", KdbpCmdBackTrace},
+    {"k", "k [all] [verbose] [frames]", "Shows what led here, or for every thread", KdbpCmdBackTrace},
     {"db", "db <address> [count]", "Shows memory as bytes", KdbpCmdDumpBytes},
     {"dw", "dw <address> [count]", "Shows memory as words", KdbpCmdDumpWords},
     {"dd", "dd <address> [count]", "Shows memory as double words", KdbpCmdDumpDwords},
@@ -2459,7 +2573,7 @@ KdbpReportFrozenProcessors(VOID)
 
         KdbpPagerReset();
         KdbpPrint("\nProcessor %lu\n", Processor);
-        KdbpBackTrace(&Prcb->ProcessorState.ContextFrame, KdbpScreenRows() - 5);
+        KdbpBackTrace(&Prcb->ProcessorState.ContextFrame, KdbpScreenRows() - 5, FALSE);
     }
 }
 
@@ -2515,7 +2629,7 @@ KdbpReportStop(
         KdbpCmdRegisters(1, NULL);
 
         KdbpPagerReset();
-        KdbpBackTrace(Context, KdbpScreenRows() - 3);
+        KdbpBackTrace(Context, KdbpScreenRows() - 3, FALSE);
     }
 
     if (KiBugCheckData[0] != 0)
