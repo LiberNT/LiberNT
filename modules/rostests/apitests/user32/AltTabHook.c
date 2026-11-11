@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test Alt+Tab with low-level keyboard hooks that swallow Alt
+ * PURPOSE:     Test Alt+Tab with low-level keyboard hooks and windows that handle WM_SYSCOMMAND
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -10,10 +10,12 @@
 static BOOL SwallowAlt;
 static int SwallowedAltDown;
 static int SwallowedAltUp;
+static BOOL SwallowSysCommand;
 static SHORT TabHookAsyncAlt;
 static DWORD TabHookFlags;
 static UINT TabMessage;
 static SHORT TabKeyStateAlt;
+static int SysCommandCount;
 
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
@@ -108,6 +110,7 @@ static void RunAltTab(const char *Name, BOOL Swallow, BOOL ExpectSwitch, UINT_PT
     SwallowedAltUp = 0;
     TabHookAsyncAlt = TabKeyStateAlt = 0;
     TabHookFlags = TabMessage = 0;
+    SysCommandCount = 0;
 
     hwndActive = GetForegroundWindow();
     hThread = CreateThread(NULL, 0, SendAltTab, NULL, 0, NULL);
@@ -129,6 +132,7 @@ static void RunAltTab(const char *Name, BOOL Swallow, BOOL ExpectSwitch, UINT_PT
     ok(Gone, "%s: switcher still shown 1.5 s after Alt was released\n", Name);
     ok(GetCapture() == NULL, "%s: capture %p left after Alt+Tab\n", Name, GetCapture());
     ok((GetAsyncKeyState(VK_MENU) & 0x8000) == 0, "%s: Alt still down\n", Name);
+    ok(SysCommandCount == 0, "%s: the window got %d SC_NEXTWINDOW/SC_PREVWINDOW\n", Name, SysCommandCount);
     if (Swallow)
     {
         ok(SwallowedAltDown >= 1, "%s: hook saw no Alt down\n", Name);
@@ -163,6 +167,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         TabMessage = uMsg;
         TabKeyStateAlt = GetKeyState(VK_MENU);
     }
+    if (uMsg == WM_SYSCOMMAND &&
+        ((wParam & 0xfff0) == SC_NEXTWINDOW || (wParam & 0xfff0) == SC_PREVWINDOW))
+        SysCommandCount++;
+    if (SwallowSysCommand && uMsg == WM_SYSCOMMAND &&
+        ((wParam & 0xfff0) == SC_NEXTWINDOW || (wParam & 0xfff0) == SC_PREVWINDOW))
+        return 0;
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
@@ -200,6 +210,12 @@ START_TEST(AltTabHook)
     RunAltTab("hook swallows Alt, busy queue", TRUE, FALSE, TimerTicks);
     KillTimer(hwndMain, 1);
     KillTimer(hwndOther, 1);
+
+    SwallowSysCommand = TRUE;
+    SetForegroundWindow(hwndMain);
+    PumpFor(200);
+    RunAltTab("window swallows SC_NEXTWINDOW", FALSE, TRUE, TimerTicks);
+    SwallowSysCommand = FALSE;
 
     UnhookWindowsHookEx(hHook);
     DestroyWindow(hwndOther);

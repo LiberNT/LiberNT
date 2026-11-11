@@ -2089,7 +2089,9 @@ BOOL co_IntProcessKeyboardMessage(MSG* Msg, BOOL* RemoveMessages)
 
                 wParamTmp = UserGetKeyState(VK_SHIFT) & 0x8000 ? SC_PREVWINDOW : SC_NEXTWINDOW;
                 TRACE("Send WM_SYSCOMMAND Alt-Tab/ESC Alt-Shift-Tab/ESC\n");
-                co_IntSendMessage( Msg->hwnd, WM_SYSCOMMAND, wParamTmp, Msg->wParam );
+                /* The switcher belongs to the system: it must not depend on the focus window forwarding WM_SYSCOMMAND. */
+                co_IntCallWindowProc( IntGetClientProc(FNID_DEFWINDOWPROC, FALSE), FALSE, Msg->hwnd,
+                                      WM_SYSCOMMAND, wParamTmp, Msg->wParam, -1 );
 
                 //// Keep looping.
                 Ret = FALSE;
