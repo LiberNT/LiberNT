@@ -964,6 +964,7 @@ Fdo_EvtDeviceD0Entry(
 
     if (fdoCtx->venId == VEN_INTEL) {
         UINT32 val;
+        update_pci_byte(&fdoCtx->BusInterface, HDA_PCIREG_TCSEL, 0x07, 0);
         pci_read_cfg_dword(&fdoCtx->BusInterface, INTEL_HDA_CGCTL, &val);
         val = val & ~INTEL_HDA_CGCTL_MISCBDCGE;
         pci_write_cfg_dword(&fdoCtx->BusInterface, INTEL_HDA_CGCTL, val);
