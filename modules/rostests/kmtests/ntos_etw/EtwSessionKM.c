@@ -24,6 +24,12 @@ typedef struct _KMT_SESSION
     ULONG LoggerId;
 } KMT_SESSION, *PKMT_SESSION;
 
+typedef struct _KMT_TRACED_EVENT
+{
+    EVENT_TRACE_HEADER Header;
+    ULONG Data[2];
+} KMT_TRACED_EVENT, *PKMT_TRACED_EVENT;
+
 static
 NTSTATUS
 KmtStartSession(
@@ -95,6 +101,22 @@ KmtTraceHandle(
     ok_eq_hex(Status, STATUS_SUCCESS);
 
     return Handle;
+}
+
+static
+VOID
+KmtInitTracedEvent(
+    _Out_ PKMT_TRACED_EVENT Event,
+    _In_ TRACEHANDLE Handle)
+{
+    RtlZeroMemory(Event, sizeof(*Event));
+    Event->Header.Size = sizeof(*Event);
+    Event->Header.Flags = WNODE_FLAG_TRACED_GUID;
+    Event->Header.Guid = KmtEtwMessageGuid;
+    Event->Header.Class.Type = EVENT_TRACE_TYPE_INFO;
+    Event->Data[0] = 0x11223344;
+    Event->Data[1] = 0x55667788;
+    ((PWNODE_HEADER)Event)->HistoricalContext = Handle;
 }
 
 static
@@ -266,17 +288,49 @@ TestTraceInformation(VOID)
     KmtStopSession(&SessionA);
 }
 
+static
+VOID
+TestTracedWmiEvents(VOID)
+{
+    KMT_TRACED_EVENT Event;
+    KMT_SESSION Session;
+    TRACEHANDLE Handle;
+    NTSTATUS Status;
+
+    Status = KmtStartSession(&Session, L"KmtEtwTracedEvents", EVENT_TRACE_CLOCK_PERFCOUNTER);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Handle = KmtTraceHandle(Session.LoggerId);
+
+    /* A traced event goes to the logger its handle names, from a buffer WMI does not take over */
+    KmtInitTracedEvent(&Event, Handle);
+    Status = IoWMIWriteEvent(&Event);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(KmtEventsLogged(Session.LoggerId), 1UL);
+
+    KmtInitTracedEvent(&Event, Handle);
+    Status = IoWMIWriteEvent(&Event);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(KmtEventsLogged(Session.LoggerId), 2UL);
+
+    KmtStopSession(&Session);
+}
+
 START_TEST(EtwSessionKM)
 {
     TestClocks();
     TestTraceInformation();
+    TestTracedWmiEvents();
 }
 
 START_TEST(EtwSessionIrqlKM)
 {
+    KMT_TRACED_EVENT Event;
     KMT_SESSION Session;
     TRACEHANDLE Handle;
-    NTSTATUS MessageStatus, HighStatus;
+    NTSTATUS MessageStatus, EventStatus, HighStatus;
     ULONG Value = 0xCAFE;
     KIRQL OldIrql;
     NTSTATUS Status;
@@ -287,19 +341,22 @@ START_TEST(EtwSessionIrqlKM)
         return;
 
     Handle = KmtTraceHandle(Session.LoggerId);
+    KmtInitTracedEvent(&Event, Handle);
 
-    /* Messages are logged at the caller's IRQL, whatever it is */
+    /* Messages and traced events are logged at the caller's IRQL, whatever it is */
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     MessageStatus = WmiTraceMessage(Handle, TRACE_MESSAGE_GUID, &KmtEtwMessageGuid, 2, &Value, sizeof(Value), NULL, (SIZE_T)0);
+    EventStatus = IoWMIWriteEvent(&Event);
     KeLowerIrql(OldIrql);
     ok_eq_hex(MessageStatus, STATUS_SUCCESS);
+    ok_eq_hex(EventStatus, STATUS_SUCCESS);
 
     KeRaiseIrql(HIGH_LEVEL, &OldIrql);
     HighStatus = WmiTraceMessage(Handle, TRACE_MESSAGE_GUID, &KmtEtwMessageGuid, 3, &Value, sizeof(Value), NULL, (SIZE_T)0);
     KeLowerIrql(OldIrql);
     ok_eq_hex(HighStatus, STATUS_SUCCESS);
 
-    ok_eq_ulong(KmtEventsLogged(Session.LoggerId), 2UL);
+    ok_eq_ulong(KmtEventsLogged(Session.LoggerId), 3UL);
 
     KmtStopSession(&Session);
 }

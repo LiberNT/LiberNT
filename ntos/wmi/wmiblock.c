@@ -421,6 +421,16 @@ IoWMIWriteEvent(
 
     if (Wnode == NULL) return STATUS_INVALID_PARAMETER;
 
+    /* A traced event goes to the logger its handle names, at any level, and the buffer stays the caller's */
+    if (Wnode->Flags & WNODE_FLAG_TRACED_GUID)
+    {
+        return EtwpTraceClassicEvent((HANDLE)(ULONG_PTR)Wnode->HistoricalContext,
+                                     ((PEVENT_TRACE_HEADER)Wnode)->Size,
+                                     Wnode,
+                                     KernelMode);
+    }
+
+    /* TODO: a WNODE_FLAG_LOG_WNODE event goes to the logger as well as to the consumers */
     if (Wnode->BufferSize < sizeof(WNODE_HEADER))
     {
         return STATUS_INVALID_PARAMETER;
