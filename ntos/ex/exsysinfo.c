@@ -203,6 +203,23 @@ ExpQueryBasicInformation(
     return STATUS_SUCCESS;
 }
 
+/* A 32-bit process sees 2 GB of user space, or 4 GB when its image is large address aware, less the 64 KB that ends every user space */
+static
+VOID
+ExpLimitToEmulatedAddressSpace(
+    _Inout_ PSYSTEM_BASIC_INFORMATION Basic)
+{
+    SECTION_IMAGE_INFORMATION Image;
+
+    if (PsGetCurrentProcess()->WoW64Process == NULL) return;
+
+    MmGetImageInformation(&Image);
+
+    Basic->MaximumUserModeAddress =
+        (ULONG_PTR)((Image.ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ? MAXULONG : MAXLONG) -
+        MM_ALLOCATION_GRANULARITY;
+}
+
 static
 NTSTATUS
 ExpQueryProcessorInformation(
@@ -965,6 +982,11 @@ NtQuerySystemInformation(
                 }
 
                 Status = ExpQueryBasicInformation(SystemInformation);
+                if (NT_SUCCESS(Status) &&
+                    (SystemInformationClass == SystemEmulationBasicInformation))
+                {
+                    ExpLimitToEmulatedAddressSpace(SystemInformation);
+                }
                 break;
             }
 
