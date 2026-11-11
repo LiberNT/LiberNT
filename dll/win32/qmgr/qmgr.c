@@ -147,6 +147,7 @@ HRESULT BackgroundCopyManagerConstructor(LPVOID *ppObj)
 
 DWORD WINAPI fileTransfer(void *param)
 {
+    /* TODO: time-slice jobs of one priority as BITS does; a job that stays connecting holds every other job queued */
     BackgroundCopyManagerImpl *qmgr = &globalMgr;
     HANDLE events[2];
 #ifdef __REACTOS__
