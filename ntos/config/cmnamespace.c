@@ -231,7 +231,9 @@ CmpCheckOpenAccess(
         SeFreePrivileges(Privileges);
     }
 
-    if (!Allowed) return AccessStatus;
+    /* An existing key refuses the SACL right as access, not as a missing privilege */
+    if (!Allowed)
+        return (AccessStatus == STATUS_PRIVILEGE_NOT_HELD) ? STATUS_ACCESS_DENIED : AccessStatus;
 
     AccessState->PreviouslyGrantedAccess |= Granted;
     AccessState->RemainingDesiredAccess = 0;

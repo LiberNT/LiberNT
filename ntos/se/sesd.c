@@ -260,6 +260,7 @@ SepInheritAcl(
     _In_ BOOLEAN NamedDefaulted,
     _In_opt_ PACL FromAbove,
     _In_opt_ PACL Carried,
+    _In_ BOOLEAN AutoInherit,
     _Out_ PACL *Result,
     _Out_ PBOOLEAN Present,
     _Out_ PBOOLEAN Inherited,
@@ -297,13 +298,14 @@ SepInheritAcl(
     Built = ExAllocatePoolWithTag(PagedPool, Length, TAG_ACL);
     if (Built == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
+    /* Only automatic inheritance marks what came from the container as inherited */
     Status = SepPropagateAcl(Built,
                              &Length,
                              Chosen,
                              Holder,
                              Team,
                              *Inherited,
-                             *Inherited,
+                             (BOOLEAN)(*Inherited && AutoInherit),
                              IsDirectoryObject,
                              ObjectType,
                              Mapping);
@@ -318,6 +320,25 @@ SepInheritAcl(
 }
 
 /* Whoever the caller speaks for may be handed an object */
+static
+BOOLEAN
+SepAclHasLabel(
+    _In_opt_ PACL Acl)
+{
+    PACE_HEADER Ace;
+    ULONG Index;
+
+    if (Acl == NULL) return FALSE;
+
+    for (Index = 0; Index < Acl->AceCount; Index++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Acl, Index, (PVOID *)&Ace))) return FALSE;
+        if (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE) return TRUE;
+    }
+
+    return FALSE;
+}
+
 /* An ACL holding the mandatory label entries of one list and every other entry of another */
 static
 NTSTATUS
@@ -713,6 +734,7 @@ SeAssignSecurityEx(
         Control |= SE_GROUP_DEFAULTED;
     }
 
+    /* TODO: automatic inheritance does not add the container's ACEs to an explicit list, it only replaces a missing one */
     Status = SepInheritAcl(IsDirectoryObject,
                            GenericMapping,
                            ObjectType,
@@ -721,8 +743,9 @@ SeAssignSecurityEx(
                            Asked.Dacl,
                            Asked.DaclPresent,
                            Asked.DaclDefaulted,
-                           Above.DaclPresent ? Above.Dacl : NULL,
+                           (Above.DaclPresent && !(Asked.Control & SE_DACL_PROTECTED)) ? Above.Dacl : NULL,
                            (Token != NULL) ? Token->DefaultDacl : NULL,
+                           (BOOLEAN)((AutoInheritFlags & SEF_DACL_AUTO_INHERIT) != 0),
                            &Settled.Dacl,
                            &Settled.DaclPresent,
                            &DaclInherited,
@@ -738,8 +761,9 @@ SeAssignSecurityEx(
                                Asked.Sacl,
                                Asked.SaclPresent,
                                Asked.SaclDefaulted,
-                               Above.SaclPresent ? Above.Sacl : NULL,
+                               (Above.SaclPresent && !(Asked.Control & SE_SACL_PROTECTED)) ? Above.Sacl : NULL,
                                NULL,
+                               (BOOLEAN)((AutoInheritFlags & SEF_SACL_AUTO_INHERIT) != 0),
                                &Settled.Sacl,
                                &Settled.SaclPresent,
                                &SaclInherited,
@@ -752,10 +776,13 @@ SeAssignSecurityEx(
         if (Settled.SaclPresent) Control |= SE_SACL_PRESENT;
         if (DaclDefaulted) Control |= SE_DACL_DEFAULTED;
         if (SaclDefaulted) Control |= SE_SACL_DEFAULTED;
-        if (DaclInherited && (AutoInheritFlags & SEF_DACL_AUTO_INHERIT))
+
+        /* A list made under automatic inheritance takes part in it, and protection comes from the caller */
+        if (Settled.DaclPresent && (AutoInheritFlags & SEF_DACL_AUTO_INHERIT))
             Control |= SE_DACL_AUTO_INHERITED;
-        if (SaclInherited && (AutoInheritFlags & SEF_SACL_AUTO_INHERIT))
+        if (AutoInheritFlags & SEF_SACL_AUTO_INHERIT)
             Control |= SE_SACL_AUTO_INHERITED;
+        Control |= Asked.Control & (SE_DACL_PROTECTED | SE_SACL_PROTECTED);
 
         /* TODO: an object nobody labelled is given no label of its own */
         Status = SepNewDescriptor((SECURITY_DESCRIPTOR_CONTROL)Control,
@@ -845,7 +872,8 @@ SeQuerySecurityDescriptorInfo(
         Told.DaclPresent = Held.DaclPresent;
 
         if (Held.DaclPresent) Control |= SE_DACL_PRESENT;
-        Control |= Held.Control & (SE_DACL_DEFAULTED | SE_DACL_AUTO_INHERITED);
+        Control |= Held.Control & (SE_DACL_DEFAULTED | SE_DACL_AUTO_INHERITED |
+                                   SE_DACL_AUTO_INHERIT_REQ | SE_DACL_PROTECTED);
     }
 
     if (Wanted & SACL_SECURITY_INFORMATION)
@@ -854,7 +882,8 @@ SeQuerySecurityDescriptorInfo(
         Told.SaclPresent = Held.SaclPresent;
 
         if (Held.SaclPresent) Control |= SE_SACL_PRESENT;
-        Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
+        Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED |
+                                   SE_SACL_AUTO_INHERIT_REQ | SE_SACL_PROTECTED);
     }
     else if ((Wanted & LABEL_SECURITY_INFORMATION) && Held.SaclPresent)
     {
@@ -891,6 +920,38 @@ SeQuerySecurityDescriptorInfo(
     return Status;
 }
 
+/* The inheritance bits a list that is being set takes from the caller and from its request */
+static
+SECURITY_DESCRIPTOR_CONTROL
+SepSetListControl(
+    _In_ SECURITY_INFORMATION Wanted,
+    _In_ SECURITY_DESCRIPTOR_CONTROL Given,
+    _In_ ULONG AutoInheritFlags,
+    _In_ BOOLEAN Sacl)
+{
+    SECURITY_DESCRIPTOR_CONTROL Defaulted = Sacl ? SE_SACL_DEFAULTED : SE_DACL_DEFAULTED;
+    SECURITY_DESCRIPTOR_CONTROL Protected = Sacl ? SE_SACL_PROTECTED : SE_DACL_PROTECTED;
+    SECURITY_DESCRIPTOR_CONTROL Inherited = Sacl ? SE_SACL_AUTO_INHERITED : SE_DACL_AUTO_INHERITED;
+    SECURITY_DESCRIPTOR_CONTROL Request = Sacl ? SE_SACL_AUTO_INHERIT_REQ : SE_DACL_AUTO_INHERIT_REQ;
+    SECURITY_INFORMATION Protect = Sacl ? PROTECTED_SACL_SECURITY_INFORMATION : PROTECTED_DACL_SECURITY_INFORMATION;
+    SECURITY_INFORMATION Unprotect = Sacl ? UNPROTECTED_SACL_SECURITY_INFORMATION : UNPROTECTED_DACL_SECURITY_INFORMATION;
+    ULONG Auto = Sacl ? SEF_SACL_AUTO_INHERIT : SEF_DACL_AUTO_INHERIT;
+    SECURITY_DESCRIPTOR_CONTROL Control;
+
+    Control = Given & (Defaulted | Protected);
+
+    /* A SACL keeps the caller's bits; a DACL stays auto-inherited without automatic inheritance only on request */
+    if (Sacl || (AutoInheritFlags & Auto))
+        Control |= Given & (Inherited | Request);
+    else if ((Given & (Inherited | Request)) == (Inherited | Request))
+        Control |= Inherited;
+
+    if (Wanted & Protect) Control |= Protected;
+    else if (Wanted & Unprotect) Control &= ~Protected;
+
+    return Control;
+}
+
 /*
  * Changes the parts of an object's descriptor the caller named and leaves the
  * rest as they stand. What comes back is a new block; what the object held is
@@ -920,7 +981,6 @@ SeSetSecurityDescriptorInfoEx(
     PAGED_CODE();
 
     UNREFERENCED_PARAMETER(Object);
-    UNREFERENCED_PARAMETER(AutoInheritFlags);
 
     SepReadParts(*ObjectsSecurityDescriptor, &Held);
     SepReadParts(ModificationDescriptor, &Given);
@@ -928,7 +988,9 @@ SeSetSecurityDescriptorInfoEx(
     Next = Held;
     Control = Held.Control &
               (SE_DACL_DEFAULTED | SE_SACL_DEFAULTED |
-               SE_DACL_AUTO_INHERITED | SE_SACL_AUTO_INHERITED);
+               SE_DACL_AUTO_INHERITED | SE_SACL_AUTO_INHERITED |
+               SE_DACL_AUTO_INHERIT_REQ | SE_SACL_AUTO_INHERIT_REQ |
+               SE_DACL_PROTECTED | SE_SACL_PROTECTED);
 
     if (Wanted & OWNER_SECURITY_INFORMATION)
     {
@@ -947,7 +1009,9 @@ SeSetSecurityDescriptorInfoEx(
     {
         Next.Dacl = NULL;
         Next.DaclPresent = Given.DaclPresent;
-        Control &= ~(SE_DACL_DEFAULTED | SE_DACL_AUTO_INHERITED);
+        Control &= ~(SE_DACL_DEFAULTED | SE_DACL_AUTO_INHERITED |
+                     SE_DACL_AUTO_INHERIT_REQ | SE_DACL_PROTECTED);
+        Control |= SepSetListControl(Wanted, Given.Control, AutoInheritFlags, FALSE);
 
         if (Given.DaclPresent && Given.Dacl != NULL)
         {
@@ -976,7 +1040,9 @@ SeSetSecurityDescriptorInfoEx(
     {
         Next.Sacl = NULL;
         Next.SaclPresent = Given.SaclPresent;
-        Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
+        Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED |
+                     SE_SACL_AUTO_INHERIT_REQ | SE_SACL_PROTECTED);
+        Control |= SepSetListControl(Wanted, Given.Control, AutoInheritFlags, TRUE);
 
         if (Given.SaclPresent && Given.Sacl != NULL)
         {
@@ -998,6 +1064,22 @@ SeSetSecurityDescriptorInfoEx(
             }
 
             Next.Sacl = ReadSacl;
+        }
+
+        /* Setting the SACL keeps the object's label unless the label is set as well */
+        if (NT_SUCCESS(Status) && !(Wanted & LABEL_SECURITY_INFORMATION) &&
+            Held.SaclPresent && SepAclHasLabel(Held.Sacl))
+        {
+            PACL Merged = NULL;
+
+            Status = SepBuildLabelSacl(Held.Sacl, ReadSacl, &Merged);
+            if (NT_SUCCESS(Status))
+            {
+                if (ReadSacl != NULL) ExFreePoolWithTag(ReadSacl, TAG_ACL);
+                ReadSacl = Merged;
+                Next.Sacl = Merged;
+                Next.SaclPresent = TRUE;
+            }
         }
     }
     else if (NT_SUCCESS(Status) && (Wanted & LABEL_SECURITY_INFORMATION))

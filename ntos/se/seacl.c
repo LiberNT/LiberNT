@@ -142,6 +142,7 @@ SepPlanAce(
         }
 
         if (MarkInherited) Plan->AceFlags |= INHERITED_ACE;
+        else Plan->AceFlags &= ~INHERITED_ACE;
     }
 
     if (!SepAceIsPlain(Ace->AceType)) return;

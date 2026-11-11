@@ -247,8 +247,11 @@ CmpAssignSecurityDescriptorLocked(
 {
     PSECURITY_DESCRIPTOR Parent = NULL;
     PSECURITY_DESCRIPTOR Assigned = NULL;
+    SECURITY_DESCRIPTOR_CONTROL ParentControl = 0;
+    SECURITY_DESCRIPTOR_CONTROL Control = 0;
     SECURITY_SUBJECT_CONTEXT Subject;
     HCELL_INDEX SecurityCell;
+    ULONG AutoInheritFlags = 0;
     NTSTATUS Status;
     ULONG Length;
 
@@ -264,6 +267,14 @@ CmpAssignSecurityDescriptorLocked(
         if (SecurityDescriptor == NULL) return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    /* A key inherits automatically, marking what it inherits, only from a parent whose list is auto-inherited */
+    if (Parent != NULL) ParentControl = ((PISECURITY_DESCRIPTOR)Parent)->Control;
+    if (SecurityDescriptor != NULL) Control = ((PISECURITY_DESCRIPTOR)SecurityDescriptor)->Control;
+    if (!(Control & SE_DACL_PRESENT) && (ParentControl & SE_DACL_AUTO_INHERITED))
+        AutoInheritFlags |= SEF_DACL_AUTO_INHERIT;
+    if (!(Control & SE_SACL_PRESENT) && (ParentControl & SE_SACL_AUTO_INHERITED))
+        AutoInheritFlags |= SEF_SACL_AUTO_INHERIT;
+
     SeCaptureSubjectContext(&Subject);
 
     Status = SeAssignSecurityEx(Parent,
@@ -271,7 +282,7 @@ CmpAssignSecurityDescriptorLocked(
                                 &Assigned,
                                 NULL,
                                 TRUE,
-                                0,
+                                AutoInheritFlags,
                                 &Subject,
                                 &CmpKeyObjectType->TypeInfo.GenericMapping,
                                 PagedPool);
