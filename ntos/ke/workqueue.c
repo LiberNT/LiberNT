@@ -74,6 +74,7 @@ KiHandQueueEntryToWaiter(
             return FALSE;
 
         Entry = RemoveHeadList(&Queue->EntryListHead);
+        Entry->Flink = NULL;
         Queue->Header.SignalState--;
     }
 
@@ -172,6 +173,7 @@ KiDequeueOrWait(
             KiQueueHasRoom(Queue))
         {
             Entry = RemoveHeadList(&Queue->EntryListHead);
+            Entry->Flink = NULL;
             Queue->Header.SignalState--;
             KiIncrementQueueCurrentCount(Queue);
             KiReleaseDispatcherLock(Thread->WaitIrql);
@@ -463,8 +465,8 @@ KeRemoveQueue(
  * is work the rest are taken while the dispatcher is still held, which is the
  * whole point of the call.
  *
- * Answers how many entries were written, which is zero when the wait ended
- * without work.
+ * Answers how many entries were written. A wait that ended without work
+ * writes its status in the first slot and counts as one.
  */
 ULONG
 NTAPI
@@ -486,7 +488,10 @@ KeRemoveQueueEx(
 
     Entry = KiDequeueOrWait(Queue, WaitMode, Alertable, Timeout, &Status);
     if (Entry == NULL)
-        return 0;
+    {
+        EntryArray[0] = (PLIST_ENTRY)(ULONG_PTR)(ULONG)Status;
+        return 1;
+    }
 
     EntryArray[Removed++] = Entry;
 
@@ -498,7 +503,9 @@ KeRemoveQueueEx(
     while ((Removed < Count) && (Queue->Header.SignalState > 0) &&
            !IsListEmpty(&Queue->EntryListHead))
     {
-        EntryArray[Removed++] = RemoveHeadList(&Queue->EntryListHead);
+        Entry = RemoveHeadList(&Queue->EntryListHead);
+        Entry->Flink = NULL;
+        EntryArray[Removed++] = Entry;
         Queue->Header.SignalState--;
     }
 
