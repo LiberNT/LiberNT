@@ -572,11 +572,8 @@ ObpLookupObjectName(
         ObjectName->Length == sizeof(WCHAR) &&
         ObjectName->Buffer[0] == OBJ_NAME_PATH_SEPARATOR)
     {
-        if (InsertObject != NULL)
+        if (InsertObject != NULL && ObpRootDirectoryObject == NULL)
         {
-            if (ObpRootDirectoryObject != NULL)
-                return STATUS_OBJECT_NAME_COLLISION;
-
             ObpRootDirectoryObject = InsertObject;
             ObReferenceObject(InsertObject);
             *FoundObject = InsertObject;
@@ -599,8 +596,10 @@ ObpLookupObjectName(
         Object = Walk.ParseRoot;
         FoundType = ObpGetObjectTypeFromHeader(OBJECT_TO_OBJECT_HEADER(Object));
 
-        if (FoundType->TypeInfo.ParseProcedure == NULL &&
-            FoundType->TypeInfo.ParseProcedureEx == NULL)
+        /* A symbolic link parses names that reach it, but is no root to look a name up under */
+        if ((FoundType->TypeInfo.ParseProcedure == NULL &&
+             FoundType->TypeInfo.ParseProcedureEx == NULL) ||
+            (FoundType == ObpSymbolicLinkObjectType && Walk.Remaining.Length != 0))
         {
             ObpEndWalk(&Walk);
             return STATUS_OBJECT_TYPE_MISMATCH;

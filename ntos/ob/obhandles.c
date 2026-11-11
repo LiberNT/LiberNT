@@ -1977,13 +1977,13 @@ ObInsertObject(
             }
             else
             {
-                if (FoundType == ObpSymbolicLinkObjectType)
-                    ObDereferenceObject(FoundObject);
-
                 Status = (FoundType != ObjectType) ?
                          STATUS_OBJECT_TYPE_MISMATCH :
                          STATUS_OBJECT_NAME_COLLISION;
             }
+
+            /* The lookup handed over the object already holding the name with a reference of its own */
+            if (!NT_SUCCESS(Status)) ObDereferenceObject(FoundObject);
         }
 
         if (!NT_SUCCESS(Status))

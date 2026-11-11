@@ -267,9 +267,16 @@ ObpCaptureObjectCreateInformation(
         ObjectCreateInfo->SecurityDescriptorCharge = 2048;
     }
 
-    /* Most objects are created with no name at all, which is not an error */
+    /* Most objects are created with no name at all, which is not an error,
+     * but a root directory with no name to look up under it is */
     SuppliedName = Supplied.ObjectName;
-    if (SuppliedName == NULL) return STATUS_SUCCESS;
+    if (SuppliedName == NULL)
+    {
+        if (Supplied.RootDirectory == NULL) return STATUS_SUCCESS;
+
+        ObpReleaseObjectCreateInformation(ObjectCreateInfo);
+        return STATUS_OBJECT_NAME_INVALID;
+    }
 
     Status = ObpCaptureObjectName(ObjectName,
                                   SuppliedName,

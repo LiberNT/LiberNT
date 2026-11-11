@@ -409,6 +409,9 @@ NtCreateSymbolicLinkObject(
         Captured = *LinkTarget;
     }
 
+    /* The target is judged before the name, so a malformed one fails whatever the name */
+    if (Captured.Length > Captured.MaximumLength) return STATUS_INVALID_PARAMETER;
+
     /* An empty target names the namespace root, which is how GLOBALROOT works */
     if (Captured.Length > MAXUSHORT - sizeof(UNICODE_NULL))
         return STATUS_NAME_TOO_LONG;
