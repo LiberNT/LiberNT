@@ -4,6 +4,7 @@
 
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
+extern void func_AlternateComputerNames(void);
 extern void func_ApiSetCoreSynch(void);
 extern void func_ApplicationRecovery(void);
 extern void func_ApplicationRestart(void);
@@ -165,6 +166,7 @@ const struct test winetest_testlist[] =
     { "SecureMemoryCache",           func_SecureMemoryCache },
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
+    { "AlternateComputerNames",      func_AlternateComputerNames },
     { "ApiSetCoreSynch",             func_ApiSetCoreSynch },
     { "ApplicationRecovery",         func_ApplicationRecovery },
     { "ApplicationRestart",          func_ApplicationRestart },

@@ -6,8 +6,8 @@
 @ stdcall AddAtomW(wstr)
 @ stdcall AddConsoleAliasA(str str str) kernelbase.AddConsoleAliasA
 @ stdcall AddConsoleAliasW(wstr wstr wstr) kernelbase.AddConsoleAliasW
-@ stdcall AddLocalAlternateComputerNameA(str ptr)
-@ stdcall AddLocalAlternateComputerNameW(wstr ptr)
+@ stdcall AddLocalAlternateComputerNameA(str long)
+@ stdcall AddLocalAlternateComputerNameW(wstr long)
 @ stdcall -version=0xA00+ AddDependencyToProcessPackageGraph(wstr ptr ptr ptr) kernelbase.AddDependencyToProcessPackageGraph
 @ stdcall AddRefActCtx(ptr)
 @ stdcall -version=0x600+ AddSIDToBoundaryDescriptor(ptr ptr)
