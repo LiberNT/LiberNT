@@ -510,6 +510,9 @@ KeUpdateSystemTime(
     if (!ClockOwner)
         return;
 
+    if (KdDebuggerEnabled && KdPollBreakIn())
+        DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
+
     if (KeMaximumIncrement == 0)
         return;
 
