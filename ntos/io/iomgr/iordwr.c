@@ -273,6 +273,8 @@ IopIssueRequest(
     BOOLEAN Deferred;
     NTSTATUS Status;
 
+    KeClearEvent(&Request->FileObject->Event);
+
     /* A synchronous service returns only once its request is done, even on a file opened for asynchronous I/O */
     LocalWait = !Request->SynchIo && (Request->Irp->Flags & IRP_SYNCHRONOUS_API);
     if (LocalWait)
@@ -283,10 +285,6 @@ IopIssueRequest(
         CallerIosb = Request->Irp->UserIosb;
         Request->Irp->UserIosb = &LocalIosb;
         Request->Irp->UserEvent = &LocalEvent;
-    }
-    else
-    {
-        KeClearEvent(&Request->FileObject->Event);
     }
 
     IopQueueIrpToThread(Request->Irp);
