@@ -1772,6 +1772,7 @@ NtQuerySystemInformationEx(
     switch (SystemInformationClass)
     {
         case SystemSupportedProcessorArchitectures:
+        case SystemSupportedProcessorArchitectures2:
             return ExpQuerySupportedProcessorArchitectures(InputBuffer,
                                                            InputBufferLength,
                                                            SystemInformation,
