@@ -473,6 +473,17 @@ DbgkCreateThread(
 
     if (ApiMsg.LoadDll.FileHandle != NULL)
         ObCloseHandle(ApiMsg.LoadDll.FileHandle, KernelMode);
+
+    RtlZeroMemory(&ApiMsg, sizeof(ApiMsg));
+    if (!NT_SUCCESS(PsGetWow64SystemDll(Process, &ApiMsg.LoadDll.BaseOfDll, NULL))) return;
+
+    ApiMsg.ApiNumber = DbgKmLoadDllApi;
+    ApiMsg.LoadDll.FileHandle = DbgkpSectionToFileHandle(PspWow64SystemDllSection);
+
+    DbgkpSendApiMessage(&ApiMsg, TRUE);
+
+    if (ApiMsg.LoadDll.FileHandle != NULL)
+        ObCloseHandle(ApiMsg.LoadDll.FileHandle, KernelMode);
 }
 
 VOID

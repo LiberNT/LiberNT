@@ -939,11 +939,15 @@ PspBuildProcessParameters32(
 #define PSP_WOW64_X86_TEB_SELECTOR  0x53
 #define PSP_WOW64_X86_MXCSR         0x1F80
 
-static
 NTSTATUS
+NTAPI
 PspCreateWow64CpuArea(
     _In_ HANDLE ProcessHandle,
-    _Inout_ PINITIAL_TEB InitialTeb)
+    _Inout_ PINITIAL_TEB InitialTeb,
+    _In_ ULONG Eip,
+    _In_ ULONG Eax,
+    _In_ ULONG Ebx,
+    _In_ ULONG Esp)
 {
     WOW64_CPU_INIT CpuInit;
     PXSAVE_FORMAT FxSave = (PXSAVE_FORMAT)CpuInit.Context.ExtendedRegisters;
@@ -959,6 +963,10 @@ PspCreateWow64CpuArea(
     CpuInit.Context.FloatSave.TagWord = 0xFFFF;
     FxSave->ControlWord = 0x27F;
     FxSave->MxCsr = PSP_WOW64_X86_MXCSR;
+    CpuInit.Context.Eip = Eip;
+    CpuInit.Context.Eax = Eax;
+    CpuInit.Context.Ebx = Ebx;
+    CpuInit.Context.Esp = Esp;
     CpuInit.Context.EFlags = 0x202;
     CpuInit.Context.SegCs = PSP_WOW64_X86_CODE_SELECTOR;
     CpuInit.Context.SegDs = PSP_WOW64_X86_DATA_SELECTOR;
@@ -1236,6 +1244,8 @@ NtCreateUserProcess(
     PS_CREATE_INFO Info;
     PS_CREATE_STATE FailState;
     INITIAL_TEB InitialTeb;
+    INITIAL_TEB Wow64InitialTeb;
+    PINITIAL_TEB Wow64Teb = NULL;
     CONTEXT Context;
     HANDLE NewProcess = NULL;
     HANDLE NewThread = NULL;
@@ -1405,9 +1415,33 @@ NtCreateUserProcess(
     }
 
 #ifdef _WIN64
-    /* TODO: threads that NtCreateThreadEx makes in a WoW64 process get no CPU area until wow64.dll builds one */
     if (NT_SUCCESS(Status) && Process->WoW64Process != NULL)
-        Status = PspCreateWow64CpuArea(NewProcess, &InitialTeb);
+    {
+        ULONG ThreadStart;
+
+        Status = PspMapWow64SystemDll(Process, &ThreadStart);
+        if (NT_SUCCESS(Status))
+        {
+            Status = PspAllocateUserStack(NewProcess,
+                                          MAXLONG,
+                                          (ImageInformation.MaximumStackSize != 0)
+                                              ? ImageInformation.MaximumStackSize
+                                              : PSP_DEFAULT_STACK_RESERVE,
+                                          ImageInformation.CommittedStackSize,
+                                          0,
+                                          &Wow64InitialTeb);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Status = PspCreateWow64CpuArea(NewProcess,
+                                           &InitialTeb,
+                                           ThreadStart,
+                                           PtrToUlong(ImageInformation.TransferAddress),
+                                           PtrToUlong(Process->WoW64Process->Peb),
+                                           PtrToUlong(Wow64InitialTeb.StackBase) - 3 * sizeof(ULONG));
+        }
+        if (NT_SUCCESS(Status)) Wow64Teb = &Wow64InitialTeb;
+    }
 #endif
 
     if (NT_SUCCESS(Status))
@@ -1428,7 +1462,7 @@ NtCreateUserProcess(
                                  Attributes.ClientId,
                                  &Context,
                                  &InitialTeb,
-                                 NULL,
+                                 Wow64Teb,
                                  ThreadFlags |
                                      THREAD_CREATE_FLAGS_INITIAL_THREAD,
                                  NULL,

@@ -157,6 +157,30 @@ PspGetOrSetContextKernelRoutine(
  * thread entry, which is given the routine to run and its argument, and the
  * stack pointer is left where the calling convention wants it.
  */
+/* WoW64 hands NtCreateThread the thread's 32-bit state in a context whose code selector is the 32-bit one */
+BOOLEAN
+NTAPI
+PsArchGetWow64StartContext(
+    _In_ PCONTEXT Context,
+    _Out_ PULONG Eip,
+    _Out_ PULONG Eax,
+    _Out_ PULONG Ebx,
+    _Out_ PULONG Esp)
+{
+    if (Context->SegCs != (KGDT64_R3_CMCODE | RPL_MASK) ||
+        Context->Rip > MAXULONG ||
+        Context->Rsp > MAXULONG)
+    {
+        return FALSE;
+    }
+
+    *Eip = (ULONG)Context->Rip;
+    *Eax = (ULONG)Context->Rax;
+    *Ebx = (ULONG)Context->Rbx;
+    *Esp = (ULONG)Context->Rsp;
+    return TRUE;
+}
+
 VOID
 NTAPI
 PsArchInitializeUserThreadContext(

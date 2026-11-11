@@ -474,3 +474,21 @@ PspTerminateJobObject(
     _In_ PEJOB Job,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ NTSTATUS ExitStatus);
+
+/* WoW64 */
+
+NTSTATUS
+NTAPI
+PspMapWow64SystemDll(
+    _In_ PEPROCESS Process,
+    _Out_ PULONG RtlUserThreadStart);
+
+NTSTATUS
+NTAPI
+PspCreateWow64CpuArea(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PINITIAL_TEB InitialTeb,
+    _In_ ULONG Eip,
+    _In_ ULONG Eax,
+    _In_ ULONG Ebx,
+    _In_ ULONG Esp);

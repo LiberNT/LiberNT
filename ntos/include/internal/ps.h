@@ -342,6 +342,24 @@ PsArchInitializeUserThreadContext(
     _In_ PVOID StackBase
 );
 
+NTSTATUS
+NTAPI
+PsGetWow64SystemDll(
+    _In_ PEPROCESS Process,
+    _Out_opt_ PVOID *DllBase,
+    _Out_opt_ PULONG RtlUserThreadStart
+);
+
+BOOLEAN
+NTAPI
+PsArchGetWow64StartContext(
+    _In_ PCONTEXT Context,
+    _Out_ PULONG Eip,
+    _Out_ PULONG Eax,
+    _Out_ PULONG Ebx,
+    _Out_ PULONG Esp
+);
+
 //
 // Security Routines
 //
@@ -928,6 +946,7 @@ extern PVOID PspRtlUserThreadStart;
 extern PVOID PspSystemDllInitBlock;
 extern PVOID PspSystemDllBase;
 extern PVOID PspSystemDllSection;
+extern PVOID PspWow64SystemDllSection;
 extern BOOLEAN PspUseJobSchedulingClasses;
 extern CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES];
 extern ULONG PsRawPrioritySeparation;

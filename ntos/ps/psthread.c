@@ -475,6 +475,80 @@ PsCreateSystemThread(
                            NULL);
 }
 
+#ifdef _WIN64
+/* A 32-bit context names a WoW64 thread: it is the thread's 32-bit state, on the stack the caller made, and the native side gets its own */
+static
+NTSTATUS
+PspCreateWow64ThreadFromContext(
+    _Out_ PHANDLE ThreadHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ HANDLE ProcessHandle,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PCLIENT_ID ClientId,
+    _In_ ULONG Eip,
+    _In_ ULONG Eax,
+    _In_ ULONG Ebx,
+    _In_ ULONG Esp,
+    _In_ PINITIAL_TEB Wow64InitialTeb,
+    _In_ ULONG CreateFlags)
+{
+    INITIAL_TEB InitialTeb;
+    PEPROCESS Process;
+    CONTEXT Context;
+    SIZE_T Size = 0;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       PROCESS_CREATE_THREAD,
+                                       PsProcessType,
+                                       PreviousMode,
+                                       (PVOID*)&Process,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Process->WoW64Process == NULL)
+    {
+        ObDereferenceObject(Process);
+        return STATUS_INVALID_PARAMETER;
+    }
+    ObDereferenceObject(Process);
+
+    Status = PspAllocateUserStack(ProcessHandle, 0, PSP_DEFAULT_STACK_RESERVE, PAGE_SIZE, 0, &InitialTeb);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PspCreateWow64CpuArea(ProcessHandle, &InitialTeb, Eip, Eax, Ebx, Esp);
+    if (NT_SUCCESS(Status))
+    {
+        RtlZeroMemory(&Context, sizeof(Context));
+        PsArchInitializeUserThreadContext(&Context,
+                                          PspRtlUserThreadStart,
+                                          (PVOID)(ULONG_PTR)Eax,
+                                          (PVOID)(ULONG_PTR)Ebx,
+                                          InitialTeb.StackBase);
+
+        Status = PspCreateThread(ThreadHandle,
+                                 DesiredAccess,
+                                 ObjectAttributes,
+                                 ProcessHandle,
+                                 NULL,
+                                 ClientId,
+                                 &Context,
+                                 &InitialTeb,
+                                 Wow64InitialTeb,
+                                 CreateFlags,
+                                 NULL,
+                                 NULL,
+                                 NULL);
+    }
+
+    if (!NT_SUCCESS(Status))
+        ZwFreeVirtualMemory(ProcessHandle, &InitialTeb.AllocatedStackBase, &Size, MEM_RELEASE);
+
+    return Status;
+}
+#endif
+
 /* SYSTEM CALLS ***************************************************************/
 
 NTSTATUS
@@ -493,6 +567,9 @@ NtCreateThread(
     INITIAL_TEB SafeInitialTeb;
     CONTEXT SafeContext;
     ULONG CreateFlags = 0;
+#ifdef _WIN64
+    ULONG Eip, Eax, Ebx, Esp;
+#endif
 
     PAGED_CODE();
 
@@ -528,6 +605,22 @@ NtCreateThread(
 
     if (CreateSuspended) CreateFlags |= THREAD_CREATE_FLAGS_CREATE_SUSPENDED;
 
+#ifdef _WIN64
+    if (PsArchGetWow64StartContext(&SafeContext, &Eip, &Eax, &Ebx, &Esp))
+        return PspCreateWow64ThreadFromContext(ThreadHandle,
+                                               DesiredAccess,
+                                               ObjectAttributes,
+                                               ProcessHandle,
+                                               PreviousMode,
+                                               ClientId,
+                                               Eip,
+                                               Eax,
+                                               Ebx,
+                                               Esp,
+                                               &SafeInitialTeb,
+                                               CreateFlags);
+#endif
+
     return PspCreateThread(ThreadHandle,
                            DesiredAccess,
                            ObjectAttributes,
@@ -542,6 +635,68 @@ NtCreateThread(
                            NULL,
                            NULL);
 }
+
+#ifdef _WIN64
+/* A thread a WoW64 process is given at a 32-bit entry starts on its own 32-bit stack at the 32-bit RtlUserThreadStart */
+static
+NTSTATUS
+PspCreateWow64ThreadState(
+    _In_ HANDLE ProcessHandle,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PVOID StartRoutine,
+    _In_opt_ PVOID Argument,
+    _In_ SIZE_T Reserve,
+    _In_ SIZE_T Commit,
+    _Inout_ PINITIAL_TEB InitialTeb,
+    _Out_ PINITIAL_TEB Wow64InitialTeb,
+    _Out_ PBOOLEAN Wow64Thread)
+{
+    PEPROCESS Process;
+    ULONG ThreadStart;
+    NTSTATUS Status;
+
+    *Wow64Thread = FALSE;
+    if ((ULONG_PTR)StartRoutine > MAXULONG) return STATUS_SUCCESS;
+
+    Status = ObReferenceObjectByHandle(ProcessHandle,
+                                       PROCESS_CREATE_THREAD,
+                                       PsProcessType,
+                                       PreviousMode,
+                                       (PVOID*)&Process,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Process->WoW64Process == NULL)
+    {
+        ObDereferenceObject(Process);
+        return STATUS_SUCCESS;
+    }
+
+    Status = PsGetWow64SystemDll(Process, NULL, &ThreadStart);
+    ObDereferenceObject(Process);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PspAllocateUserStack(ProcessHandle, MAXLONG, Reserve, Commit, 0, Wow64InitialTeb);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = PspCreateWow64CpuArea(ProcessHandle,
+                                   InitialTeb,
+                                   ThreadStart,
+                                   PtrToUlong(StartRoutine),
+                                   PtrToUlong(Argument),
+                                   PtrToUlong(Wow64InitialTeb->StackBase) - 3 * sizeof(ULONG));
+    if (!NT_SUCCESS(Status))
+    {
+        SIZE_T Size = 0;
+
+        ZwFreeVirtualMemory(ProcessHandle, &Wow64InitialTeb->AllocatedStackBase, &Size, MEM_RELEASE);
+        return Status;
+    }
+
+    *Wow64Thread = TRUE;
+    return STATUS_SUCCESS;
+}
+#endif
 
 /*
  * The newer form, which builds the state the thread starts in from the entry
@@ -565,6 +720,8 @@ NtCreateThreadEx(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PSP_CREATE_ATTRIBUTES Attributes;
     INITIAL_TEB InitialTeb;
+    INITIAL_TEB Wow64InitialTeb;
+    BOOLEAN Wow64Thread = FALSE;
     HANDLE Handle = NULL;
     PETHREAD Thread;
     CONTEXT Context;
@@ -609,6 +766,25 @@ NtCreateThreadEx(
                                   &InitialTeb);
     if (!NT_SUCCESS(Status)) return Status;
 
+#ifdef _WIN64
+    Status = PspCreateWow64ThreadState(ProcessHandle,
+                                       PreviousMode,
+                                       StartRoutine,
+                                       Argument,
+                                       Reserve,
+                                       Commit,
+                                       &InitialTeb,
+                                       &Wow64InitialTeb,
+                                       &Wow64Thread);
+    if (!NT_SUCCESS(Status))
+    {
+        SIZE_T Size = 0;
+
+        ZwFreeVirtualMemory(ProcessHandle, &InitialTeb.AllocatedStackBase, &Size, MEM_RELEASE);
+        return Status;
+    }
+#endif
+
     RtlZeroMemory(&Context, sizeof(Context));
     PsArchInitializeUserThreadContext(&Context,
                                       PspRtlUserThreadStart,
@@ -624,7 +800,7 @@ NtCreateThreadEx(
                              Attributes.ClientId,
                              &Context,
                              &InitialTeb,
-                             NULL,
+                             Wow64Thread ? &Wow64InitialTeb : NULL,
                              CreateFlags,
                              NULL,
                              NULL,
@@ -637,6 +813,11 @@ NtCreateThreadEx(
                             &InitialTeb.AllocatedStackBase,
                             &Size,
                             MEM_RELEASE);
+        if (Wow64Thread)
+        {
+            Size = 0;
+            ZwFreeVirtualMemory(ProcessHandle, &Wow64InitialTeb.AllocatedStackBase, &Size, MEM_RELEASE);
+        }
         return Status;
     }
 

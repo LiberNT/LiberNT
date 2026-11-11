@@ -8,6 +8,7 @@
 
 #include <ntoskrnl.h>
 #include "pspriv.h"
+#include <reactos/wow64shared.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -27,6 +28,9 @@ PHANDLE_TABLE PspCidTable;
 LARGE_INTEGER ShortPsLockDelay;
 
 ULONG PspTraceLevel;
+
+PVOID PspWow64SystemDllSection;
+ULONG PspWow64RtlUserThreadStartRva;
 
 UNICODE_STRING PsNtDllPathName =
     RTL_CONSTANT_STRING(L"\\SystemRoot\\System32\\ntdll.dll");
@@ -415,6 +419,179 @@ PsInitSystem(
     return FALSE;
 }
 
+/* The 32-bit ntdll is kept as one section too; a system without it runs no 32-bit process */
+CODE_SEG("INIT")
+static
+VOID
+PspLocateWow64SystemDll(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\SystemRoot\\SysWOW64\\ntdll.dll");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    LARGE_INTEGER Offset;
+    SIZE_T ViewSize = 0;
+    PVOID Base = NULL;
+    PVOID Routine = NULL;
+    HANDLE FileHandle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenFile(&FileHandle,
+                        SYNCHRONIZE | FILE_EXECUTE,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_DELETE,
+                        0);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = MmCreateSection(&PspWow64SystemDllSection,
+                             SECTION_ALL_ACCESS,
+                             NULL,
+                             NULL,
+                             PAGE_EXECUTE,
+                             SEC_IMAGE,
+                             FileHandle,
+                             NULL);
+    ZwClose(FileHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        PspWow64SystemDllSection = NULL;
+        return;
+    }
+
+    Offset.QuadPart = 0;
+    Status = MmMapViewOfSection(PspWow64SystemDllSection,
+                                PsGetCurrentProcess(),
+                                &Base,
+                                0,
+                                0,
+                                &Offset,
+                                &ViewSize,
+                                ViewShare,
+                                0,
+                                PAGE_READWRITE);
+    if (Status == STATUS_IMAGE_NOT_AT_BASE) Status = STATUS_SUCCESS;
+    if (NT_SUCCESS(Status))
+    {
+        Routine = RtlFindExportedRoutineByName(Base, "RtlUserThreadStart");
+        MmUnmapViewOfSection(PsGetCurrentProcess(), Base);
+    }
+
+    if (Routine == NULL)
+    {
+        ObDereferenceObject(PspWow64SystemDllSection);
+        PspWow64SystemDllSection = NULL;
+        return;
+    }
+
+    PspWow64RtlUserThreadStartRva = (ULONG)((ULONG_PTR)Routine - (ULONG_PTR)Base);
+}
+
+/* The native loader takes the view the kernel made instead of mapping its own */
+NTSTATUS
+NTAPI
+PspMapWow64SystemDll(
+    _In_ PEPROCESS Process,
+    _Out_ PULONG RtlUserThreadStart)
+{
+    PSYSTEM_DLL_INIT_BLOCK InitBlock = PspSystemDllInitBlock;
+    LARGE_INTEGER Offset;
+    KAPC_STATE ApcState;
+    SIZE_T ViewSize = 0;
+    PVOID Base = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *RtlUserThreadStart = 0;
+    if (PspWow64SystemDllSection == NULL || InitBlock == NULL) return STATUS_INVALID_IMAGE_FORMAT;
+
+    Offset.QuadPart = 0;
+    Status = MmMapViewOfSection(PspWow64SystemDllSection,
+                                Process,
+                                &Base,
+                                0,
+                                0,
+                                &Offset,
+                                &ViewSize,
+                                ViewShare,
+                                0,
+                                PAGE_READWRITE);
+    if (Status == STATUS_IMAGE_NOT_AT_BASE) Status = STATUS_SUCCESS;
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if ((ULONG_PTR)Base + ViewSize > MAXLONG)
+    {
+        MmUnmapViewOfSection(Process, Base);
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        InitBlock->ntdll_handle = (ULONG_PTR)Base;
+        InitBlock->pRtlUserThreadStart = (ULONG_PTR)Base + PspWow64RtlUserThreadStartRva;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+
+    if (!NT_SUCCESS(Status))
+    {
+        MmUnmapViewOfSection(Process, Base);
+        return Status;
+    }
+
+    *RtlUserThreadStart = (ULONG)((ULONG_PTR)Base + PspWow64RtlUserThreadStartRva);
+    return STATUS_SUCCESS;
+}
+
+/* A WoW64 process's 32-bit ntdll and the 32-bit entry its threads start on, as the loader keeps them for the process */
+NTSTATUS
+NTAPI
+PsGetWow64SystemDll(
+    _In_ PEPROCESS Process,
+    _Out_opt_ PVOID *DllBase,
+    _Out_opt_ PULONG RtlUserThreadStart)
+{
+    PSYSTEM_DLL_INIT_BLOCK InitBlock = PspSystemDllInitBlock;
+    KAPC_STATE ApcState;
+    ULONG64 Base = 0;
+    ULONG64 Start = 0;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (DllBase != NULL) *DllBase = NULL;
+    if (RtlUserThreadStart != NULL) *RtlUserThreadStart = 0;
+    if (InitBlock == NULL || Process->WoW64Process == NULL) return STATUS_INVALID_IMAGE_FORMAT;
+
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        Base = InitBlock->ntdll_handle;
+        Start = InitBlock->pRtlUserThreadStart;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+
+    if (!NT_SUCCESS(Status)) return Status;
+    if (Base == 0 || Base > MAXULONG || Start == 0 || Start > MAXULONG) return STATUS_INVALID_IMAGE_FORMAT;
+
+    if (DllBase != NULL) *DllBase = (PVOID)(ULONG_PTR)Base;
+    if (RtlUserThreadStart != NULL) *RtlUserThreadStart = (ULONG)Start;
+    return STATUS_SUCCESS;
+}
+
 /*
  * Finds the native image and keeps a section of it. Every user process is
  * given a view of that one section, so the image is read once for the life
@@ -467,7 +644,12 @@ PsLocateSystemDll(VOID)
     Status = PspMapSystemDll(PsGetCurrentProcess(), NULL, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
-    return PspInitializeSystemDll();
+    Status = PspInitializeSystemDll();
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (sizeof(PVOID) > sizeof(ULONG)) PspLocateWow64SystemDll();
+
+    return STATUS_SUCCESS;
 }
 
 /*
