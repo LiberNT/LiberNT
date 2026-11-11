@@ -1,3 +1,5 @@
+@ stdcall CreateDirect3D11DeviceFromDXGIDevice(ptr ptr)
+@ stdcall CreateDirect3D11SurfaceFromDXGISurface(ptr ptr)
 @ stdcall D3D11CoreCreateDevice(ptr ptr long ptr long ptr)
 @ stub D3D11CoreCreateLayeredDevice
 @ stub D3D11CoreGetLayeredDeviceSize

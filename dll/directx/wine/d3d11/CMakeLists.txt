@@ -12,7 +12,9 @@ list(APPEND SOURCE
     state.c
     texture.c
     utils.c
-    view.c)
+    view.c
+    weakref.c
+    winrt.c)
 
 if(REACTOS_USE_WDDM)
     remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
@@ -39,6 +41,7 @@ if(REACTOS_USE_WDDM)
 endif()
 target_link_libraries(d3d11 vkd3d_shader dx10guid uuid wine)
 add_importlibs(d3d11 dxgi d3dwine gdi32 msvcrt kernel32 ntdll)
+add_delay_importlibs(d3d11 combase)
 add_dependencies(d3d11 d3d_idl_headers wineheaders)
 add_cd_file(TARGET d3d11 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(d3d11)

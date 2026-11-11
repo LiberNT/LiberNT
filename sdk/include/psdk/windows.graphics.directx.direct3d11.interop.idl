@@ -23,7 +23,8 @@ import "inspectable.idl";
 import "windows.graphics.directx.direct3d11.idl";
 
 namespace Windows.Graphics.DirectX.Direct3D11 {
-    HRESULT CreateDirect3D11DeviceFromDXGIDevice([in] IDXGIDevice* dxgiDevice, [out] IInspectable** graphicsDevice);
+    [local] HRESULT __stdcall CreateDirect3D11DeviceFromDXGIDevice([in] IDXGIDevice* dxgiDevice, [out] IInspectable** graphicsDevice);
+    [local] HRESULT __stdcall CreateDirect3D11SurfaceFromDXGISurface([in] IDXGISurface* dgxiSurface, [out] IInspectable** graphicsSurface);
 
     [
         uuid(A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1)
