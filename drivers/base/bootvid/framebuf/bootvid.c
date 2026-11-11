@@ -18,7 +18,6 @@
 /* GLOBALS ********************************************************************/
 
 #define TAG_BOOTVID_BACKBUFFER 'bdiV'
-#define TAG_BOOTVID_SCALE 'sdiV'
 
 #define BOOTVID_FALLBACK_FONT_SCALE 2
 #define BOOTVID_FALLBACK_CELL_WIDTH (BOOTCHAR_WIDTH * BOOTVID_FALLBACK_FONT_SCALE)
@@ -52,9 +51,7 @@ static BOOT_FONT_RENDERER BootVidCompactFont;
 static BOOT_FONT_RENDERER BootVidStatusFont;
 static BOOLEAN VidpCompactFont = FALSE;
 
-static PULONG PhysicalColumns;
-static PULONG PhysicalRows;
-static ULONG ScaleWidth, ScaleHeight;
+static ULONG PixelScale;
 
 static BOOLEAN TextUpdateDeferred;
 static BOOLEAN TextDamaged;
@@ -78,8 +75,8 @@ VidSetVirtualFrameBuffer(
 static __inline ULONG
 LogicalToPhysicalX(_In_ ULONG X)
 {
-    if (ScaleWidth && (X <= ScaleWidth))
-        return PhysicalColumns[X];
+    if (PixelScale)
+        return X * PixelScale;
 
     return (ULONG)(((ULONGLONG)X * ScreenWidth) / VidpDisplayWidth);
 }
@@ -87,39 +84,10 @@ LogicalToPhysicalX(_In_ ULONG X)
 static __inline ULONG
 LogicalToPhysicalY(_In_ ULONG Y)
 {
-    if (ScaleHeight && (Y <= ScaleHeight))
-        return PhysicalRows[Y];
+    if (PixelScale)
+        return Y * PixelScale;
 
     return (ULONG)(((ULONGLONG)Y * ScreenHeight) / VidpDisplayHeight);
-}
-
-static VOID
-BuildScaleTables(VOID)
-{
-    ULONG Index;
-
-    ScaleWidth = 0;
-    ScaleHeight = 0;
-
-    if (PhysicalColumns)
-        ExFreePoolWithTag(PhysicalColumns, TAG_BOOTVID_SCALE);
-
-    PhysicalColumns = ExAllocatePoolWithTag(NonPagedPool,
-                                            ((SIZE_T)VidpDisplayWidth + 1 + VidpDisplayHeight + 1) * sizeof(ULONG),
-                                            TAG_BOOTVID_SCALE);
-    if (!PhysicalColumns)
-        return;
-
-    PhysicalRows = PhysicalColumns + VidpDisplayWidth + 1;
-
-    for (Index = 0; Index <= VidpDisplayWidth; ++Index)
-        PhysicalColumns[Index] = LogicalToPhysicalX(Index);
-
-    for (Index = 0; Index <= VidpDisplayHeight; ++Index)
-        PhysicalRows[Index] = LogicalToPhysicalY(Index);
-
-    ScaleWidth = VidpDisplayWidth;
-    ScaleHeight = VidpDisplayHeight;
 }
 
 static __inline PULONG
@@ -629,7 +597,7 @@ VidInitialize(
     CM_MONITOR_DEVICE_DATA MonitorConfigData;
     INTERFACE_TYPE Interface;
     ULONG BusNumber;
-    ULONG Dpi, ReadableDpi, MaximumDpi;
+    ULONG Dpi, ReadableDpi, MaximumDpi, Scale;
     ULONG LogicalWidth, LogicalHeight, ScrollWidth;
     ULONG CompactPixelHeight, CompactCellHeight;
     SIZE_T BackBufferHeight, CompactBackBufferSize;
@@ -767,10 +735,13 @@ VidInitialize(
     MaximumDpi = min((ULONG)(((ULONGLONG)ScreenWidth * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) / SCREEN_WIDTH), (ULONG)(((ULONGLONG)ScreenHeight * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) / SCREEN_HEIGHT));
     Dpi = min(Dpi, MaximumDpi);
 
-    LogicalWidth = (ULONG)(((ULONGLONG)ScreenWidth * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT + Dpi / 2) / Dpi);
-    LogicalHeight = (ULONG)(((ULONGLONG)ScreenHeight * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT + Dpi / 2) / Dpi);
-    LogicalWidth = max(LogicalWidth, SCREEN_WIDTH);
-    LogicalHeight = max(LogicalHeight, SCREEN_HEIGHT);
+    /* A fractional scale duplicates scattered rows and columns, which distorts glyphs as they scroll */
+    Scale = (Dpi + LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT / 2) / LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
+    Scale = max(min(Scale, min(ScreenWidth / SCREEN_WIDTH, ScreenHeight / SCREEN_HEIGHT)), 1);
+
+    LogicalWidth = max(ScreenWidth / Scale, SCREEN_WIDTH);
+    LogicalHeight = max(ScreenHeight / Scale, SCREEN_HEIGHT);
+    PixelScale = ((LogicalWidth * Scale <= ScreenWidth) && (LogicalHeight * Scale <= ScreenHeight)) ? Scale : 0;
 
     if (BootFontInitialize(&BootVidFont, LogicalWidth, LogicalHeight))
     {
@@ -808,7 +779,7 @@ VidInitialize(
     VidpDisplayHeight = LogicalHeight;
     VidpPhysicalWidth = ScreenWidth;
     VidpPhysicalHeight = ScreenHeight;
-    VidpDisplayDpi = Dpi;
+    VidpDisplayDpi = PixelScale ? (Scale * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) : Dpi;
     VidpScrollRegion.Left = 0;
     VidpScrollRegion.Top = 0;
     VidpScrollRegion.Right = ScrollWidth - 1;
@@ -912,7 +883,6 @@ VidInitialize(
     }
 
     RtlZeroMemory(BackBuffer, BackBufferSize);
-    BuildScaleTables();
 
     /* Reset the video mode if requested */
     if (SetMode)
@@ -1039,8 +1009,7 @@ VidUseCompactFont(VOID)
         return FALSE;
 
     VidpCompactFont = TRUE;
-    ScaleWidth = 0;
-    ScaleHeight = 0;
+    PixelScale = 1;
     VidpDisplayWidth = ScreenWidth;
     VidpDisplayHeight = ScreenHeight;
     VidpDisplayDpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
