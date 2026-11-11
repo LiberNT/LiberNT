@@ -18,6 +18,8 @@
 #define HANG_EXIT_STATUS        0xCFFFFFFF
 #define BLOCK_SIZE              4096
 #define HELPERS_KEY             L"Software\\Microsoft\\Windows\\Windows Error Reporting\\RuntimeExceptionHelperModules"
+#define LOCAL_DUMPS_KEY         L"Software\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps"
+#define LOCAL_DUMP_FLAGS        (MiniDumpWithDataSegs | MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData)
 
 typedef HRESULT (WINAPI *FN_WerReportCreate)(PCWSTR, WER_REPORT_TYPE, PWER_REPORT_INFORMATION, HREPORT *);
 typedef HRESULT (WINAPI *FN_WerReportCloseHandle)(HREPORT);
@@ -1044,24 +1046,133 @@ TestClaimedCrash(
 }
 
 static
+BOOL
+EnableLocalDumps(
+    _In_ PCWSTR Folder,
+    _Out_ PBOOL CreatedRoot)
+{
+    DWORD Disposition, Count = 1, Type = 0, Flags = LOCAL_DUMP_FLAGS;
+    HKEY Root, Key;
+    BOOL Success;
+
+    *CreatedRoot = FALSE;
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, LOCAL_DUMPS_KEY, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &Root,
+                        &Disposition) != ERROR_SUCCESS)
+    {
+        return FALSE;
+    }
+
+    *CreatedRoot = Disposition == REG_CREATED_NEW_KEY;
+    Success = RegCreateKeyExW(Root, L"kernel32_apitest.exe", 0, NULL, 0, KEY_SET_VALUE, NULL, &Key, NULL) == ERROR_SUCCESS;
+    if (Success)
+    {
+        Success = RegSetValueExW(Key, L"DumpFolder", 0, REG_EXPAND_SZ, (const BYTE *)Folder,
+                                 (DWORD)(wcslen(Folder) + 1) * sizeof(WCHAR)) == ERROR_SUCCESS &&
+                  RegSetValueExW(Key, L"DumpCount", 0, REG_DWORD, (const BYTE *)&Count, sizeof(Count)) == ERROR_SUCCESS &&
+                  RegSetValueExW(Key, L"DumpType", 0, REG_DWORD, (const BYTE *)&Type, sizeof(Type)) == ERROR_SUCCESS &&
+                  RegSetValueExW(Key, L"CustomDumpFlags", 0, REG_DWORD, (const BYTE *)&Flags, sizeof(Flags)) == ERROR_SUCCESS;
+        RegCloseKey(Key);
+    }
+
+    RegCloseKey(Root);
+    return Success;
+}
+
+static
+VOID
+DisableLocalDumps(
+    _In_ BOOL CreatedRoot)
+{
+    HKEY Root;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, LOCAL_DUMPS_KEY, 0, KEY_ALL_ACCESS, &Root) != ERROR_SUCCESS)
+        return;
+
+    RegDeleteKeyW(Root, L"kernel32_apitest.exe");
+    RegCloseKey(Root);
+    if (CreatedRoot)
+        RegDeleteKeyW(HKEY_LOCAL_MACHINE, LOCAL_DUMPS_KEY);
+}
+
+static
+VOID
+CheckLocalDump(
+    _In_ PCWSTR Folder,
+    _In_ PCWSTR OldDump,
+    _In_ DWORD ChildId,
+    _In_ PCRASH_SHARED Shared)
+{
+    PMINIDUMP_EXCEPTION_STREAM Exception;
+    PMINIDUMP_DIRECTORY Directory;
+    FOUND_REPORT Location;
+    HANDLE File, Mapping;
+    WCHAR Name[64];
+    PVOID View;
+    ULONG Size;
+
+    ok(GetFileAttributesW(OldDump) == INVALID_FILE_ATTRIBUTES, "oldest local dump was not replaced\n");
+    RtlZeroMemory(&Location, sizeof(Location));
+    StringCchCopyW(Location.Directory, ARRAYSIZE(Location.Directory), Folder);
+    StringCchPrintfW(Name, ARRAYSIZE(Name), L"kernel32_apitest.exe.%lu.dmp", ChildId);
+    View = MapReportFile(&Location, Name, &File, &Mapping);
+    ok(View != NULL, "local dump %S not written\n", Name);
+    if (View)
+    {
+        ok_hex((ULONG)((PMINIDUMP_HEADER)View)->Flags, LOCAL_DUMP_FLAGS);
+        if (pMiniDumpReadDumpStream(View, ExceptionStream, &Directory, (PVOID *)&Exception, &Size))
+        {
+            ok_hex(Exception->ExceptionRecord.ExceptionCode, STATUS_ACCESS_VIOLATION);
+            ok_long(Exception->ThreadId, Shared->CrashThreadId);
+        }
+        else
+        {
+            ok(0, "local dump has no exception stream\n");
+        }
+    }
+    UnmapReportFile(View, File, Mapping);
+}
+
+static
 VOID
 TestDefaultCrash(
     _In_ PCRASH_SHARED Shared,
-    _In_ BOOL HandlerListed)
+    _In_ BOOL HandlerListed,
+    _In_ PCWSTR Temp)
 {
+    WCHAR Folder[MAX_PATH], OldDump[MAX_PATH], DumpPath[MAX_PATH];
     FOUND_REPORT Found;
     HANDLE Process, Ran;
     FILETIME Start;
-    DWORD ExitCode, Elapsed;
+    DWORD ExitCode, Elapsed, ChildId;
+    BOOL LocalDumps, CreatedRoot = FALSE;
+
+    StringCchPrintfW(Folder, ARRAYSIZE(Folder), L"%slntwerdumps_%lu", Temp, GetCurrentProcessId());
+    StringCchPrintfW(OldDump, ARRAYSIZE(OldDump), L"%s\\old.dmp", Folder);
+    CreateDirectoryW(Folder, NULL);
+    ok(WriteTestFile(OldDump, "old dump"), "cannot create %S\n", OldDump);
+    LocalDumps = EnableLocalDumps(Folder, &CreatedRoot);
+    if (!LocalDumps)
+        skip("cannot configure LocalDumps\n");
 
     RtlZeroMemory(Shared, sizeof(*Shared));
     GetSystemTimeAsFileTime(&Start);
     Process = StartCrashChild(WER_HANDLER_MODE_NO_CLAIM, FALSE, &Ran);
     if (!Process)
+    {
+        DisableLocalDumps(CreatedRoot);
         return;
+    }
 
+    ChildId = GetProcessId(Process);
     ExitCode = WaitChild(Process, &Elapsed);
     CloseHandle(Process);
+    DisableLocalDumps(CreatedRoot);
+    if (LocalDumps)
+        CheckLocalDump(Folder, OldDump, ChildId, Shared);
+    StringCchPrintfW(DumpPath, ARRAYSIZE(DumpPath), L"%s\\kernel32_apitest.exe.%lu.dmp", Folder, ChildId);
+    DeleteFileW(DumpPath);
+    DeleteFileW(OldDump);
+    RemoveDirectoryW(Folder);
     trace("unclaimed crash: child exited after %lu ms\n", Elapsed);
     ok_hex(ExitCode, STATUS_ACCESS_VIOLATION);
     if (HandlerListed)
@@ -1167,7 +1278,7 @@ START_TEST(WerCrashReport)
     }
 
     TestClaimedCrash(Shared, Listed, Temp);
-    TestDefaultCrash(Shared, Listed);
+    TestDefaultCrash(Shared, Listed, Temp);
     if (Listed)
         TestDebuggerCrash(Shared);
 

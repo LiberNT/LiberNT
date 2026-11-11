@@ -12,6 +12,7 @@
 #include <winreg.h>
 #include <winuser.h>
 #include <winver.h>
+#include <dbghelp.h>
 #define PSAPI_VERSION 1
 #include <psapi.h>
 #include <rpc.h>
@@ -28,6 +29,8 @@
 #define WER_SETTINGS_KEY    L"Software\\Microsoft\\Windows\\Windows Error Reporting"
 #define WER_EXCLUDED_KEY    WER_SETTINGS_KEY L"\\ExcludedApplications"
 #define WER_HELPERS_KEY     WER_SETTINGS_KEY L"\\RuntimeExceptionHelperModules"
+#define WER_LOCAL_DUMPS_KEY WER_SETTINGS_KEY L"\\LocalDumps"
+#define AEDEBUG_KEY         L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AeDebug"
 #define WER_HANG_EVENT      L"AppHangB1"
 
 typedef struct _WER_TARGET
@@ -54,6 +57,20 @@ typedef struct _WER_CLAIM
     BOOL AutoLaunch;
     WCHAR Debugger[MAX_PATH * 2];
 } WER_CLAIM, *PWER_CLAIM;
+
+typedef struct _WER_LOCAL_DUMPS
+{
+    WCHAR Folder[MAX_PATH];
+    DWORD Count;
+    DWORD Type;
+    DWORD CustomFlags;
+} WER_LOCAL_DUMPS, *PWER_LOCAL_DUMPS;
+
+typedef struct _WER_DUMP_FILE
+{
+    FILETIME Created;
+    WCHAR Name[MAX_PATH];
+} WER_DUMP_FILE, *PWER_DUMP_FILE;
 
 typedef struct _WER_RECOVERY_DIALOG
 {
@@ -260,6 +277,219 @@ WerpIsReportingEnabled(
     return !WerpReadSetting(L"Disabled", 0) &&
            !WerpHasValue(HKEY_LOCAL_MACHINE, WER_EXCLUDED_KEY, Image) &&
            !WerpHasValue(HKEY_CURRENT_USER, WER_EXCLUDED_KEY, Image);
+}
+
+static
+VOID
+WerpApplyLocalDumpValues(
+    _In_ HKEY Key,
+    _Inout_ PWER_LOCAL_DUMPS Settings)
+{
+    static const PCWSTR Names[] = { L"DumpCount", L"DumpType", L"CustomDumpFlags" };
+    PDWORD Values[] = { &Settings->Count, &Settings->Type, &Settings->CustomFlags };
+    WCHAR Folder[MAX_PATH];
+    DWORD Type, Size, Value;
+    ULONG Index;
+
+    Size = sizeof(Folder) - sizeof(WCHAR);
+    if (RegQueryValueExW(Key, L"DumpFolder", NULL, &Type, (PBYTE)Folder, &Size) == ERROR_SUCCESS &&
+        (Type == REG_EXPAND_SZ || Type == REG_SZ))
+    {
+        Folder[Size / sizeof(WCHAR)] = UNICODE_NULL;
+        StringCchCopyW(Settings->Folder, ARRAYSIZE(Settings->Folder), Folder);
+    }
+
+    for (Index = 0; Index < ARRAYSIZE(Names); Index++)
+    {
+        Size = sizeof(Value);
+        if (RegQueryValueExW(Key, Names[Index], NULL, &Type, (PBYTE)&Value, &Size) == ERROR_SUCCESS &&
+            Type == REG_DWORD && Size == sizeof(Value))
+        {
+            *Values[Index] = Value;
+        }
+    }
+}
+
+static
+BOOL
+WerpReadLocalDumpSettings(
+    _In_ PCWSTR Image,
+    _Out_ PWER_LOCAL_DUMPS Settings)
+{
+    WCHAR Folder[MAX_PATH];
+    HKEY Key, ApplicationKey;
+    DWORD Length;
+
+    StringCchCopyW(Settings->Folder, ARRAYSIZE(Settings->Folder), L"%LOCALAPPDATA%\\CrashDumps");
+    Settings->Count = 10;
+    Settings->Type = 1;
+    Settings->CustomFlags = MiniDumpWithDataSegs | MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, WER_LOCAL_DUMPS_KEY, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+        return FALSE;
+
+    WerpApplyLocalDumpValues(Key, Settings);
+    if (Image[0] && RegOpenKeyExW(Key, Image, 0, KEY_QUERY_VALUE, &ApplicationKey) == ERROR_SUCCESS)
+    {
+        WerpApplyLocalDumpValues(ApplicationKey, Settings);
+        RegCloseKey(ApplicationKey);
+    }
+    RegCloseKey(Key);
+
+    Length = ExpandEnvironmentStringsW(Settings->Folder, Folder, ARRAYSIZE(Folder));
+    if (!Length || Length > ARRAYSIZE(Folder))
+        return FALSE;
+
+    StringCchCopyW(Settings->Folder, ARRAYSIZE(Settings->Folder), Folder);
+    return TRUE;
+}
+
+static
+BOOL
+WerpIsAutoDebugging(VOID)
+{
+    WCHAR Auto[8], Debugger[MAX_PATH];
+    DWORD Type, Size;
+    BOOL Enabled = FALSE;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, AEDEBUG_KEY, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+        return FALSE;
+
+    Size = sizeof(Auto) - sizeof(WCHAR);
+    if (RegQueryValueExW(Key, L"Auto", NULL, &Type, (PBYTE)Auto, &Size) == ERROR_SUCCESS && Type == REG_SZ)
+    {
+        Auto[Size / sizeof(WCHAR)] = UNICODE_NULL;
+        Size = sizeof(Debugger) - sizeof(WCHAR);
+        Enabled = Auto[0] == L'1' &&
+                  RegQueryValueExW(Key, L"Debugger", NULL, &Type, (PBYTE)Debugger, &Size) == ERROR_SUCCESS &&
+                  Size >= 2 * sizeof(WCHAR);
+    }
+
+    RegCloseKey(Key);
+    return Enabled;
+}
+
+static
+int
+__cdecl
+WerpCompareDumpFiles(
+    _In_ const void *Left,
+    _In_ const void *Right)
+{
+    return CompareFileTime(&((const WER_DUMP_FILE *)Left)->Created, &((const WER_DUMP_FILE *)Right)->Created);
+}
+
+static
+VOID
+WerpPruneLocalDumps(
+    _In_ PCWSTR Folder,
+    _In_ DWORD Keep)
+{
+    WCHAR Pattern[MAX_PATH], Path[MAX_PATH];
+    PWER_DUMP_FILE Files = NULL, Grown;
+    ULONG Count = 0, Capacity = 0, Index;
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+
+    if (FAILED(StringCchPrintfW(Pattern, ARRAYSIZE(Pattern), L"%s\\*.dmp", Folder)))
+        return;
+
+    Find = FindFirstFileW(Pattern, &Data);
+    if (Find == INVALID_HANDLE_VALUE)
+        return;
+
+    do
+    {
+        if (Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            continue;
+
+        if (Count == Capacity)
+        {
+            Capacity = Capacity ? Capacity * 2 : 16;
+            Grown = Files ? HeapReAlloc(GetProcessHeap(), 0, Files, Capacity * sizeof(*Files)) :
+                            HeapAlloc(GetProcessHeap(), 0, Capacity * sizeof(*Files));
+            if (!Grown)
+                break;
+            Files = Grown;
+        }
+
+        Files[Count].Created = Data.ftCreationTime;
+        StringCchCopyW(Files[Count].Name, ARRAYSIZE(Files[Count].Name), Data.cFileName);
+        Count++;
+    } while (FindNextFileW(Find, &Data));
+    FindClose(Find);
+
+    if (Count)
+        qsort(Files, Count, sizeof(*Files), WerpCompareDumpFiles);
+
+    for (Index = 0; Count > Keep && Index < Count - Keep; Index++)
+    {
+        if (SUCCEEDED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s\\%s", Folder, Files[Index].Name)))
+            DeleteFileW(Path);
+    }
+
+    if (Files)
+        HeapFree(GetProcessHeap(), 0, Files);
+}
+
+static
+VOID
+WerpWriteLocalDump(
+    _In_ PWER_TARGET Target,
+    _In_ ULONG64 PointersAddress,
+    _In_ BOOL HaveException)
+{
+    MINIDUMP_EXCEPTION_INFORMATION Exception;
+    WCHAR Partial[MAX_PATH], Path[MAX_PATH];
+    WER_LOCAL_DUMPS Settings;
+    MINIDUMP_TYPE Type;
+    PWSTR Cursor;
+    HANDLE File;
+    BOOL Success;
+
+    if (!WerpReadLocalDumpSettings(WerpFileName(Target->ImagePath), &Settings) || WerpIsAutoDebugging())
+        return;
+
+    /* FIXME: the flag sets of the mini and full LocalDumps types are undocumented: the WER minidump set and full memory are used */
+    if (Settings.Type == 0)
+        Type = Settings.CustomFlags;
+    else if (Settings.Type == 2)
+        Type = MiniDumpWithFullMemory | MiniDumpWithHandleData | MiniDumpWithUnloadedModules |
+               MiniDumpWithProcessThreadData | MiniDumpWithFullMemoryInfo | MiniDumpWithThreadInfo;
+    else
+        Type = MiniDumpWithDataSegs | MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData |
+               MiniDumpWithTokenInformation;
+
+    StringCchCopyW(Partial, ARRAYSIZE(Partial), Settings.Folder);
+    for (Cursor = wcschr(Partial, L'\\'); Cursor; Cursor = wcschr(Cursor + 1, L'\\'))
+    {
+        if (Cursor - Partial <= 2)
+            continue;
+        *Cursor = UNICODE_NULL;
+        CreateDirectoryW(Partial, NULL);
+        *Cursor = L'\\';
+    }
+    CreateDirectoryW(Partial, NULL);
+
+    WerpPruneLocalDumps(Settings.Folder, max(Settings.Count, 1) - 1);
+    if (FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"%s\\%s.%lu.dmp", Settings.Folder,
+                                WerpFileName(Target->ImagePath), Target->ProcessId)))
+    {
+        return;
+    }
+
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    Exception.ThreadId = Target->ThreadId;
+    Exception.ExceptionPointers = (PEXCEPTION_POINTERS)(ULONG_PTR)PointersAddress;
+    Exception.ClientPointers = TRUE;
+    Success = MiniDumpWriteDump(Target->Process, Target->ProcessId, File, Type, HaveException ? &Exception : NULL,
+                                NULL, NULL);
+    CloseHandle(File);
+    if (!Success)
+        DeleteFileW(Path);
 }
 
 static
@@ -589,6 +819,14 @@ WerpReportCrash(
     if (!WerpOpenTarget(ProcessId, ThreadId, &Target))
         return frrvErrNoDW;
 
+    WerpSuspendTarget(&Target);
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.dwSize = sizeof(Information);
+    Information.hProcess = Target.Process;
+    Information.hThread = Target.Thread;
+    HaveException = WerpReadException(&Target, PointersAddress, &Information.exceptionRecord, &Information.context);
+    WerpWriteLocalDump(&Target, PointersAddress, HaveException);
+
     if (!WerpIsReportingEnabled(&Target))
     {
         WerpCloseTarget(&Target);
@@ -601,13 +839,6 @@ WerpReportCrash(
         WerpCloseTarget(&Target);
         return frrvErr;
     }
-
-    WerpSuspendTarget(&Target);
-    RtlZeroMemory(&Information, sizeof(Information));
-    Information.dwSize = sizeof(Information);
-    Information.hProcess = Target.Process;
-    Information.hThread = Target.Thread;
-    HaveException = WerpReadException(&Target, PointersAddress, &Information.exceptionRecord, &Information.context);
 
     ReportId[0] = UNICODE_NULL;
     if (UuidCreate(&Uuid) == RPC_S_OK && UuidToStringW(&Uuid, &UuidText) == RPC_S_OK)
