@@ -425,7 +425,9 @@ DbgkpCloseObject(
     /* Only the last handle going means the debugger is gone */
     if (SystemHandleCount > 1) return;
 
-    DbgkpDrainDebugObject(DebugObject);
+    ExAcquireFastMutex(&DebugObject->Mutex);
+    DebugObject->DebuggerInactive = TRUE;
+    ExReleaseFastMutex(&DebugObject->Mutex);
 
     /* Every process this debugger held is handed back to itself */
     while ((Debugged = PsGetNextProcess(Debugged)) != NULL)
@@ -438,6 +440,8 @@ DbgkpCloseObject(
             PsTerminateProcess(Debugged, STATUS_DEBUGGER_INACTIVE);
         }
     }
+
+    DbgkpDrainDebugObject(DebugObject);
 }
 
 VOID
