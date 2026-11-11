@@ -340,6 +340,17 @@ NtSetInformationThread(
         Access = THREAD_SET_CONTEXT;
     }
 
+    /* The alignment fixup switch is read before the handle is looked at */
+    if (ThreadInformationClass == ThreadEnableAlignmentFaultFixup)
+    {
+        Status = PspCaptureThreadSetInformation(ThreadInformation,
+                                                ThreadInformationLength,
+                                                PreviousMode,
+                                                &Boolean,
+                                                sizeof(Boolean));
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+
     Status = ObReferenceObjectByHandle(ThreadHandle,
                                        Access,
                                        PsThreadType,
@@ -587,13 +598,6 @@ NtSetInformationThread(
             break;
 
         case ThreadEnableAlignmentFaultFixup:
-            Status = PspCaptureThreadSetInformation(ThreadInformation,
-                                                    ThreadInformationLength,
-                                                    PreviousMode,
-                                                    &Boolean,
-                                                    sizeof(Boolean));
-            if (!NT_SUCCESS(Status)) break;
-
             KeSetAutoAlignmentThread(&Thread->Tcb, Boolean);
             Status = STATUS_SUCCESS;
             break;
