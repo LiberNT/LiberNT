@@ -36,6 +36,9 @@ BOOL WINAPI SetCurrentDirectoryW(LPCWSTR);
 BOOL WINAPI SetEnvironmentVariableA(LPCSTR,LPCSTR);
 BOOL WINAPI SetEnvironmentVariableW(LPCWSTR,LPCWSTR);
 BOOL WINAPI SetStdHandle(_In_ DWORD, _In_ HANDLE);
+#if (_WIN32_WINNT >= 0x0600)
+BOOL WINAPI SetStdHandleEx(_In_ DWORD, _In_ HANDLE, _Out_opt_ PHANDLE);
+#endif
 
 #if _WIN32_WINNT >= 0x0502
 WINBASEAPI BOOL WINAPI NeedCurrentDirectoryForExePathA(LPCSTR ExeName);
