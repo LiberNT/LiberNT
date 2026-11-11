@@ -774,12 +774,177 @@ PspDenormalizeParameterString(
     return TRUE;
 }
 
+static
+VOID
+PspNormalizeParameterString(
+    _Inout_ PUNICODE_STRING String,
+    _In_ ULONG_PTR Block)
+{
+    if (String->Buffer != NULL)
+        String->Buffer = (PWSTR)(Block + (ULONG_PTR)String->Buffer);
+}
+
+#ifdef _WIN64
+typedef struct _CURDIR32
+{
+    UNICODE_STRING32 DosPath;
+    ULONG Handle;
+} CURDIR32;
+
+typedef struct _RTL_DRIVE_LETTER_CURDIR32
+{
+    USHORT Flags;
+    USHORT Length;
+    ULONG TimeStamp;
+    STRING32 DosPath;
+} RTL_DRIVE_LETTER_CURDIR32;
+
+typedef struct _RTL_USER_PROCESS_PARAMETERS32
+{
+    ULONG MaximumLength;
+    ULONG Length;
+    ULONG Flags;
+    ULONG DebugFlags;
+    ULONG ConsoleHandle;
+    ULONG ConsoleFlags;
+    ULONG StandardInput;
+    ULONG StandardOutput;
+    ULONG StandardError;
+    CURDIR32 CurrentDirectory;
+    UNICODE_STRING32 DllPath;
+    UNICODE_STRING32 ImagePathName;
+    UNICODE_STRING32 CommandLine;
+    ULONG Environment;
+    ULONG StartingX;
+    ULONG StartingY;
+    ULONG CountX;
+    ULONG CountY;
+    ULONG CountCharsX;
+    ULONG CountCharsY;
+    ULONG FillAttribute;
+    ULONG WindowFlags;
+    ULONG ShowWindowFlags;
+    UNICODE_STRING32 WindowTitle;
+    UNICODE_STRING32 DesktopInfo;
+    UNICODE_STRING32 ShellInfo;
+    UNICODE_STRING32 RuntimeData;
+    RTL_DRIVE_LETTER_CURDIR32 CurrentDirectories[RTL_MAX_DRIVE_LETTERS];
+    ULONG EnvironmentSize;
+    ULONG EnvironmentVersion;
+    ULONG PackageDependencyData;
+    ULONG ProcessGroupId;
+    ULONG LoaderThreads;
+} RTL_USER_PROCESS_PARAMETERS32;
+
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, CurrentDirectory) == 0x24);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, CommandLine) == 0x40);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, Environment) == 0x48);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, WindowTitle) == 0x70);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, CurrentDirectories) == 0x90);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, EnvironmentSize) == 0x290);
+C_ASSERT(FIELD_OFFSET(RTL_USER_PROCESS_PARAMETERS32, LoaderThreads) == 0x2A0);
+
+static
+BOOLEAN
+PspCopyParameterString32(
+    _Out_ PUNICODE_STRING32 Target,
+    _In_ PUNICODE_STRING Source,
+    _In_ PRTL_USER_PROCESS_PARAMETERS Captured,
+    _In_ SIZE_T Length,
+    _Inout_ PUCHAR Block32,
+    _In_ ULONG Base32,
+    _Inout_ PULONG Offset32)
+{
+    ULONG_PTR Offset = (ULONG_PTR)Source->Buffer;
+
+    RtlZeroMemory(Target, sizeof(*Target));
+    if (Source->Buffer == NULL) return TRUE;
+
+    if (Offset > Length ||
+        Source->MaximumLength > Length - Offset ||
+        Source->Length > Source->MaximumLength)
+    {
+        return FALSE;
+    }
+
+    RtlCopyMemory(Block32 + *Offset32, (PUCHAR)Captured + Offset, Source->MaximumLength);
+    Target->Length = Source->Length;
+    Target->MaximumLength = Source->MaximumLength;
+    Target->Buffer = Base32 + *Offset32;
+    *Offset32 += ALIGN_UP_BY(Source->MaximumLength, sizeof(ULONG));
+    return TRUE;
+}
+
+static
+NTSTATUS
+PspBuildProcessParameters32(
+    _In_ PRTL_USER_PROCESS_PARAMETERS Captured,
+    _In_ SIZE_T Length,
+    _Out_writes_bytes_(Size32) PUCHAR Block32,
+    _In_ ULONG Size32,
+    _In_ ULONG Base32,
+    _In_ ULONG Environment32)
+{
+    RTL_USER_PROCESS_PARAMETERS32 *Parameters32 = (RTL_USER_PROCESS_PARAMETERS32 *)Block32;
+    ULONG Offset32 = sizeof(RTL_USER_PROCESS_PARAMETERS32);
+
+    RtlZeroMemory(Block32, Size32);
+
+    Parameters32->Flags = Captured->Flags | RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
+    Parameters32->DebugFlags = Captured->DebugFlags;
+    Parameters32->ConsoleHandle = HandleToUlong(Captured->ConsoleHandle);
+    Parameters32->ConsoleFlags = Captured->ConsoleFlags;
+    Parameters32->StandardInput = HandleToUlong(Captured->StandardInput);
+    Parameters32->StandardOutput = HandleToUlong(Captured->StandardOutput);
+    Parameters32->StandardError = HandleToUlong(Captured->StandardError);
+    Parameters32->CurrentDirectory.Handle = HandleToUlong(Captured->CurrentDirectory.Handle);
+    Parameters32->Environment = Environment32;
+    Parameters32->StartingX = Captured->StartingX;
+    Parameters32->StartingY = Captured->StartingY;
+    Parameters32->CountX = Captured->CountX;
+    Parameters32->CountY = Captured->CountY;
+    Parameters32->CountCharsX = Captured->CountCharsX;
+    Parameters32->CountCharsY = Captured->CountCharsY;
+    Parameters32->FillAttribute = Captured->FillAttribute;
+    Parameters32->WindowFlags = Captured->WindowFlags;
+    Parameters32->ShowWindowFlags = Captured->ShowWindowFlags;
+    Parameters32->EnvironmentSize = (ULONG)Captured->EnvironmentSize;
+    Parameters32->EnvironmentVersion = (ULONG)Captured->EnvironmentVersion;
+    Parameters32->ProcessGroupId = Captured->ProcessGroupId;
+    Parameters32->LoaderThreads = Captured->LoaderThreads;
+
+    if (!PspCopyParameterString32(&Parameters32->CurrentDirectory.DosPath, &Captured->CurrentDirectory.DosPath,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->DllPath, &Captured->DllPath,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->ImagePathName, &Captured->ImagePathName,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->CommandLine, &Captured->CommandLine,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->WindowTitle, &Captured->WindowTitle,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->DesktopInfo, &Captured->DesktopInfo,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->ShellInfo, &Captured->ShellInfo,
+                                  Captured, Length, Block32, Base32, &Offset32) ||
+        !PspCopyParameterString32(&Parameters32->RuntimeData, &Captured->RuntimeData,
+                                  Captured, Length, Block32, Base32, &Offset32))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Parameters32->MaximumLength = Size32;
+    Parameters32->Length = Offset32;
+    return STATUS_SUCCESS;
+}
+#endif
+
 /*
  * Writes the process parameters into the new process, so that the loader
  * finds its command line and environment where the block says they are. The
  * block is taken from the caller first, because once the new process is
- * attached the caller's memory is out of reach; it is written denormalized,
- * and the loader in the new process normalizes it at its new address.
+ * attached the caller's memory is out of reach; it is written normalized at
+ * its address in the new process.
  */
 static
 NTSTATUS
@@ -787,7 +952,8 @@ PspWriteProcessParameters(
     _In_ PEPROCESS Process,
     _In_ PRTL_USER_PROCESS_PARAMETERS Parameters,
     _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PVOID *Remote)
+    _Out_ PVOID *Remote,
+    _Out_ PULONG Remote32)
 {
     PRTL_USER_PROCESS_PARAMETERS Captured = NULL;
     PWCHAR Environment = NULL;
@@ -796,12 +962,18 @@ PspWriteProcessParameters(
     KAPC_STATE ApcState;
     SIZE_T AllocationSize;
     SIZE_T Length = 0;
+    SIZE_T Allocated = 0;
     PVOID Base = NULL;
+    ULONG_PTR ZeroBits = 0;
+    PUCHAR Block32 = NULL;
+    PVOID Base32 = NULL;
+    SIZE_T Size32 = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
     *Remote = NULL;
+    *Remote32 = 0;
 
     if (Parameters == NULL) return STATUS_SUCCESS;
 
@@ -879,6 +1051,16 @@ PspWriteProcessParameters(
         Captured->Flags &= ~RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
     }
 
+#ifdef _WIN64
+    if (NT_SUCCESS(Status) && Process->WoW64Process != NULL)
+    {
+        ZeroBits = MAXLONG;
+        Size32 = sizeof(RTL_USER_PROCESS_PARAMETERS32) + ALIGN_UP_BY(Length, sizeof(ULONG));
+        Block32 = ExAllocatePoolWithTag(PagedPool, Size32, TAG_PS_PROCESS_PARAMETERS);
+        if (Block32 == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+#endif
+
     if (NT_SUCCESS(Status))
     {
         KeStackAttachProcess(&Process->Pcb, &ApcState);
@@ -888,7 +1070,7 @@ PspWriteProcessParameters(
             AllocationSize = EnvironmentSize;
             Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
                                              &EnvironmentBase,
-                                             0,
+                                             ZeroBits,
                                              &AllocationSize,
                                              MEM_COMMIT | MEM_RESERVE,
                                              PAGE_READWRITE);
@@ -903,13 +1085,52 @@ PspWriteProcessParameters(
                                              &AllocationSize,
                                              MEM_COMMIT | MEM_RESERVE,
                                              PAGE_READWRITE);
+            Allocated = AllocationSize;
+        }
+
+#ifdef _WIN64
+        if (NT_SUCCESS(Status) && Block32 != NULL)
+        {
+            AllocationSize = Size32;
+            Status = ZwAllocateVirtualMemory(NtCurrentProcess(),
+                                             &Base32,
+                                             ZeroBits,
+                                             &AllocationSize,
+                                             MEM_COMMIT | MEM_RESERVE,
+                                             PAGE_READWRITE);
+        }
+#endif
+
+        if (NT_SUCCESS(Status))
+        {
+            Captured->MaximumLength = (ULONG)Allocated;
+            Captured->Environment = EnvironmentBase;
+            Captured->EnvironmentSize = EnvironmentSize;
+
+#ifdef _WIN64
+            if (Block32 != NULL)
+            {
+                Status = PspBuildProcessParameters32(Captured,
+                                                     Length,
+                                                     Block32,
+                                                     (ULONG)Size32,
+                                                     PtrToUlong(Base32),
+                                                     PtrToUlong(EnvironmentBase));
+            }
+#endif
         }
 
         if (NT_SUCCESS(Status))
         {
-            Captured->MaximumLength = (ULONG)AllocationSize;
-            Captured->Environment = EnvironmentBase;
-            Captured->EnvironmentSize = EnvironmentSize;
+            PspNormalizeParameterString(&Captured->CurrentDirectory.DosPath, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->DllPath, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->ImagePathName, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->CommandLine, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->WindowTitle, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->DesktopInfo, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->ShellInfo, (ULONG_PTR)Base);
+            PspNormalizeParameterString(&Captured->RuntimeData, (ULONG_PTR)Base);
+            Captured->Flags |= RTL_USER_PROCESS_PARAMETERS_NORMALIZED;
 
             _SEH2_TRY
             {
@@ -920,6 +1141,14 @@ PspWriteProcessParameters(
 
                 if (Process->Peb != NULL)
                     Process->Peb->ProcessParameters = Base;
+
+#ifdef _WIN64
+                if (Block32 != NULL)
+                {
+                    RtlCopyMemory(Base32, Block32, Size32);
+                    PsGetProcessPeb32(Process)->ProcessParameters = PtrToUlong(Base32);
+                }
+#endif
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
@@ -933,8 +1162,13 @@ PspWriteProcessParameters(
 
     if (Environment != NULL) ExFreePoolWithTag(Environment, TAG_PS_PROCESS_PARAMETERS);
     if (Captured != NULL) ExFreePoolWithTag(Captured, TAG_PS_PROCESS_PARAMETERS);
+    if (Block32 != NULL) ExFreePoolWithTag(Block32, TAG_PS_PROCESS_PARAMETERS);
 
-    if (NT_SUCCESS(Status)) *Remote = Base;
+    if (NT_SUCCESS(Status))
+    {
+        *Remote = Base;
+        *Remote32 = PtrToUlong(Base32);
+    }
 
     return Status;
 }
@@ -974,6 +1208,7 @@ NtCreateUserProcess(
     HANDLE SectionHandle = NULL;
     PVOID Section = NULL;
     PVOID RemoteParameters = NULL;
+    ULONG RemoteParameters32 = 0;
     PEPROCESS Process = NULL;
     SECTION_IMAGE_INFORMATION ImageInformation;
     NTSTATUS Status;
@@ -1108,7 +1343,8 @@ NtCreateUserProcess(
             Status = PspWriteProcessParameters(Process,
                                                ProcessParameters,
                                                PreviousMode,
-                                               &RemoteParameters);
+                                               &RemoteParameters,
+                                               &RemoteParameters32);
         }
     }
 
@@ -1259,7 +1495,7 @@ NtCreateUserProcess(
     Info.SuccessState.SectionHandle = SectionHandle;
     Info.SuccessState.UserProcessParametersNative =
         (ULONGLONG)(ULONG_PTR)RemoteParameters;
-    Info.SuccessState.UserProcessParametersWow64 = 0;
+    Info.SuccessState.UserProcessParametersWow64 = RemoteParameters32;
     Info.SuccessState.CurrentParameterFlags =
         (ProcessParameters != NULL) ? ProcessParameters->Flags : 0;
     Info.SuccessState.PebAddressNative =
