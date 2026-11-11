@@ -849,6 +849,12 @@ SepDeleteToken(
         Token->LowBoxInfo = NULL;
     }
 
+    if (Token->BnoIsolationPrefix.Buffer != NULL)
+    {
+        ExFreePoolWithTag(Token->BnoIsolationPrefix.Buffer, TAG_SE_BNO);
+        RtlInitEmptyUnicodeString(&Token->BnoIsolationPrefix, NULL, 0);
+    }
+
     SepBreakTokenLock(Token);
 }
 

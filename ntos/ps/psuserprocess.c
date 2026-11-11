@@ -51,6 +51,43 @@ PspCaptureAttributeValue(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+PspCaptureBnoIsolation(
+    _In_ PPS_ATTRIBUTE Attribute,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Inout_ PPSP_CREATE_ATTRIBUTES Attributes)
+{
+    PS_BNO_ISOLATION_PARAMETERS Parameters;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Attribute->Size != sizeof(Parameters)) return STATUS_INVALID_PARAMETER;
+
+    Status = PspCaptureAttributeValue(Attribute->ValuePtr,
+                                      sizeof(Parameters),
+                                      PreviousMode,
+                                      &Parameters);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* TODO: the token does not keep the objects behind the parameters' handles alive */
+    if (Parameters.IsolationEnabled &&
+        (Parameters.IsolationPrefix.Buffer == NULL ||
+         Parameters.IsolationPrefix.Length == 0 ||
+         (Parameters.IsolationPrefix.Length % sizeof(WCHAR)) != 0 ||
+         Parameters.IsolationPrefix.Length > Parameters.IsolationPrefix.MaximumLength ||
+         Parameters.IsolationPrefix.Length >= PSP_BNO_PREFIX_CHARS * sizeof(WCHAR)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Attributes->BnoPrefix = Parameters.IsolationPrefix;
+    Attributes->HasBnoIsolation = TRUE;
+    Attributes->BnoIsolationEnabled = Parameters.IsolationEnabled;
+    return STATUS_SUCCESS;
+}
+
 /*
  * Reads the attribute list the caller passed. Every attribute is read once,
  * into the kernel's own memory where the caller cannot change it, and one
@@ -358,16 +395,21 @@ PspCaptureAttributes(
                 Attributes->Chpe = (BOOLEAN)(Safe[Index].Value != 0);
                 break;
 
+            case PsAttributeBnoIsolation:
+                Status = PspCaptureBnoIsolation(&Safe[Index],
+                                                PreviousMode,
+                                                Attributes);
+                if (!NT_SUCCESS(Status)) return Status;
+                break;
+
             case PsAttributeStdHandleInfo:
             case PsAttributeSafeOpenPromptOriginClaim:
-            case PsAttributeBnoIsolation:
                 /*
-                 * These three describe how the new process reaches things
-                 * outside the kernel: its standard handles, where a prompt
-                 * about an untrusted file came from, and which namespace it
-                 * sees. Nothing in the kernel acts on them, and the
-                 * subsystem that does reads them for itself, so they are
-                 * accepted and passed over here.
+                 * These two describe how the new process reaches things
+                 * outside the kernel: its standard handles and where a
+                 * prompt about an untrusted file came from. Nothing in the
+                 * kernel acts on them, and the subsystem that does reads
+                 * them for itself, so they are accepted and passed over here.
                  */
                 break;
 
@@ -437,6 +479,66 @@ PspApplyThreadAttributes(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+PspSetTokenBnoIsolation(
+    _In_ PEPROCESS Process,
+    _In_ PPSP_CREATE_ATTRIBUTES Attributes,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    UNICODE_STRING Prefix;
+    PWCHAR OldBuffer;
+    PTOKEN Token;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if (!Attributes->BnoIsolationEnabled) return STATUS_SUCCESS;
+
+    Prefix.Length = Attributes->BnoPrefix.Length;
+    Prefix.MaximumLength = Prefix.Length + sizeof(UNICODE_NULL);
+    Prefix.Buffer = ExAllocatePoolWithTag(PagedPool, Prefix.MaximumLength, TAG_SE_BNO);
+    if (Prefix.Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForRead(Attributes->BnoPrefix.Buffer, Prefix.Length, sizeof(WCHAR));
+        RtlCopyMemory(Prefix.Buffer, Attributes->BnoPrefix.Buffer, Prefix.Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Prefix.Buffer, TAG_SE_BNO);
+        return Status;
+    }
+
+    Prefix.Buffer[Prefix.Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    Token = PsReferencePrimaryToken(Process);
+    if (Token == NULL)
+    {
+        ExFreePoolWithTag(Prefix.Buffer, TAG_SE_BNO);
+        return STATUS_NO_TOKEN;
+    }
+
+    SepAcquireTokenLockExclusive(Token);
+    OldBuffer = Token->BnoIsolationPrefix.Buffer;
+    Token->BnoIsolationPrefix = Prefix;
+    ExAllocateLocallyUniqueId(&Token->ModifiedId);
+    SepReleaseTokenLock(Token);
+
+    PsDereferencePrimaryToken(Token);
+
+    if (OldBuffer != NULL) ExFreePoolWithTag(OldBuffer, TAG_SE_BNO);
+    return STATUS_SUCCESS;
+}
+
 /*
  * Puts the new process under everything the caller asked for before any of
  * its code runs. Order matters: the mitigations and the protection have to
@@ -467,6 +569,12 @@ PspApplyCreateAttributes(
 
     if (Attributes->MitigationOptions[0] != 0 || Attributes->MitigationOptions[1] != 0)
         PspApplyCreationMitigations(Process, Attributes->MitigationOptions);
+
+    if (Attributes->HasBnoIsolation)
+    {
+        Status = PspSetTokenBnoIsolation(Process, Attributes, PreviousMode);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
 
     if (Attributes->MitigationAuditOptions != 0)
     {

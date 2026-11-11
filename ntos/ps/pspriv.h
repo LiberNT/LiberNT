@@ -28,6 +28,9 @@
 /* How many jobs a creation may name */
 #define PSP_MAX_CREATE_JOBS 16
 
+/* The longest isolation prefix the Win32 BNO isolation attribute can carry */
+#define PSP_BNO_PREFIX_CHARS 0x88
+
 #define PSP_CHILD_PROCESS_RESTRICTED                0x01
 #define PSP_CHILD_PROCESS_OVERRIDE                  0x02
 #define PSP_CHILD_PROCESS_RESTRICTED_UNLESS_SECURE  0x04
@@ -69,6 +72,9 @@ typedef struct _PSP_CREATE_ATTRIBUTES
     BOOLEAN HasIdealProcessor;
     BOOLEAN HasPreferredNode;
     BOOLEAN Chpe;
+    BOOLEAN HasBnoIsolation;
+    BOOLEAN BnoIsolationEnabled;
+    UNICODE_STRING BnoPrefix;
     UNICODE_STRING CapturedImageName;
 } PSP_CREATE_ATTRIBUTES, *PPSP_CREATE_ATTRIBUTES;
 
