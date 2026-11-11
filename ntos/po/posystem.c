@@ -854,23 +854,21 @@ PoInitSystem(
     return TRUE;
 }
 
-/* SYSTEM CALLS ***************************************************************/
+typedef struct _POP_POWER_ACTION_WORK
+{
+    WORK_QUEUE_ITEM WorkItem;
+    POWER_ACTION SystemAction;
+    SYSTEM_POWER_STATE MinSystemState;
+    ULONG Flags;
+} POP_POWER_ACTION_WORK, *PPOP_POWER_ACTION_WORK;
 
-/*
- * Takes the machine to the state the caller named, which it may do only if
- * it is trusted to stop the machine at all.
- */
+static
 NTSTATUS
-NTAPI
-NtSetSystemPowerState(
+PopCheckSystemPowerAction(
     _In_ POWER_ACTION SystemAction,
     _In_ SYSTEM_POWER_STATE MinSystemState,
-    _In_ ULONG Flags)
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-
-    PAGED_CODE();
-
     if (SystemAction < PowerActionReserved ||
         SystemAction > PowerActionDisplayOff)
     {
@@ -885,6 +883,77 @@ NtSetSystemPowerState(
 
     if (!SeSinglePrivilegeCheck(SeShutdownPrivilege, PreviousMode))
         return STATUS_PRIVILEGE_NOT_HELD;
+
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+PopPowerActionWorker(
+    _In_ PVOID Context)
+{
+    PPOP_POWER_ACTION_WORK Work = Context;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = NtSetSystemPowerState(Work->SystemAction, Work->MinSystemState, Work->Flags);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Power action %d failed: 0x%08lx\n", Work->SystemAction, Status);
+
+    ExFreePoolWithTag(Work, 'aPoP');
+}
+
+/* A shutdown that may ask first goes through the console session, so that its applications are asked */
+static
+BOOLEAN
+PopRequestUserShutdown(
+    _In_ POWER_ACTION SystemAction,
+    _In_ ULONG Flags)
+{
+    WIN32_POWEREVENT_PARAMETERS Parameters;
+    KAPC_STATE ApcState;
+    PVOID Session;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (PopEventCallout == NULL || !PopEnterConsoleSession(&Session, &ApcState))
+        return FALSE;
+
+    Parameters.EventNumber = PsW32EventCode;
+    Parameters.Code = PSW32_EVENT_CODE_SHUTDOWN;
+    if (SystemAction == PowerActionShutdownReset)
+        Parameters.Code |= PSW32_EVENT_CODE_SHUTDOWN_RESTART;
+    if (Flags & POWER_ACTION_OVERRIDE_APPS)
+        Parameters.Code |= PSW32_EVENT_CODE_SHUTDOWN_FORCE;
+
+    Status = PopEventCallout(&Parameters);
+    PopLeaveConsoleSession(Session, &ApcState);
+
+    return NT_SUCCESS(Status);
+}
+
+/* SYSTEM CALLS ***************************************************************/
+
+/*
+ * Takes the machine to the state the caller named, which it may do only if
+ * it is trusted to stop the machine at all.
+ */
+NTSTATUS
+NTAPI
+NtSetSystemPowerState(
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE MinSystemState,
+    _In_ ULONG Flags)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = PopCheckSystemPowerAction(SystemAction, MinSystemState, ExGetPreviousMode());
+    if (!NT_SUCCESS(Status)) return Status;
 
     if (SystemAction == PowerActionShutdown ||
         SystemAction == PowerActionShutdownReset ||
@@ -904,12 +973,36 @@ NtInitiatePowerAction(
     _In_ ULONG Flags,
     _In_ BOOLEAN Asynchronous)
 {
+    PPOP_POWER_ACTION_WORK Work;
+    NTSTATUS Status;
+
     PAGED_CODE();
 
-    /* TODO: an action asked for without waiting is still carried out at once */
-    UNREFERENCED_PARAMETER(Asynchronous);
+    Status = PopCheckSystemPowerAction(SystemAction, MinSystemState, ExGetPreviousMode());
+    if (!NT_SUCCESS(Status)) return Status;
 
-    return NtSetSystemPowerState(SystemAction, MinSystemState, Flags);
+    if ((SystemAction == PowerActionShutdown ||
+         SystemAction == PowerActionShutdownReset ||
+         SystemAction == PowerActionShutdownOff) &&
+        (Flags & POWER_ACTION_QUERY_ALLOWED) &&
+        PopRequestUserShutdown(SystemAction, Flags))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    if (!Asynchronous)
+        return NtSetSystemPowerState(SystemAction, MinSystemState, Flags);
+
+    Work = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Work), 'aPoP');
+    if (Work == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Work->SystemAction = SystemAction;
+    Work->MinSystemState = MinSystemState;
+    Work->Flags = Flags;
+    ExInitializeWorkItem(&Work->WorkItem, PopPowerActionWorker, Work);
+    ExQueueWorkItem(&Work->WorkItem, DelayedWorkQueue);
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

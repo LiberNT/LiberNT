@@ -606,6 +606,7 @@ list(APPEND KMTEST_SOURCE
     ntos_po/PoFxState_user.c
     ntos_po/PoShutdownPersist_user.c
     ntos_po/PoShutdownTime_user.c
+    ntos_po/PoInitiatePowerAction_user.c
     tcpip/TcpIp_user.c
     wfp/wfp_listen/wfp_listen_user.c
     wfp/wfp_tcp/wfp_tcp_user.c
