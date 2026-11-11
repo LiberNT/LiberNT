@@ -176,10 +176,24 @@ NTAPI
 CmpDelayDerefKCBWorker(
     _In_ PVOID Parameter)
 {
+    LARGE_INTEGER Due;
+    BOOLEAN Pending;
+
     UNREFERENCED_PARAMETER(Parameter);
 
     CmpDrainDelayDerefList();
     CmpDelayDerefKCBWorkItemActive = FALSE;
+    KeMemoryBarrier();
+
+    /* A hand-off that found the worker still active armed no timer of its own */
+    KeAcquireGuardedMutex(&CmpDelayDerefKCBLock);
+    Pending = !IsListEmpty(&CmpDelayDerefKCBListHead);
+    KeReleaseGuardedMutex(&CmpDelayDerefKCBLock);
+
+    if (!Pending) return;
+
+    Due.QuadPart = Int32x32To64(CmpDelayDerefKCBIntervalInSeconds, -10000000);
+    KeSetTimer(&CmpDelayDerefKCBTimer, Due, &CmpDelayDerefKCBDpc);
 }
 
 VOID
