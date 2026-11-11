@@ -2090,6 +2090,127 @@ NtfsRenameStream(_In_ PVolumeContextBlock VolCB,
 
 static
 NTSTATUS
+NtfsUnlinkReplacedTarget(_In_ PVolumeContextBlock VolCB,
+                         _In_ PUNICODE_STRING Name,
+                         _In_ ULONGLONG RecordNumber,
+                         _In_ PStreamContextBlock Parent,
+                         _In_ PCUNICODE_STRING Leaf)
+{
+    PNtfsMasterFileTable Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
+    PStreamContextBlock ImageStream = NULL;
+    PNtfsFileRecord Target = NULL;
+    PNtfsFileRecord Records[8];
+    PLIST_ENTRY Bucket;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY Next;
+    ULONG RemainingNameLength = 0;
+    ULONG RecordCount = 0;
+    ULONG Index;
+    BOOLEAN RecordDeleted = FALSE;
+    BOOLEAN LastLink;
+    NTSTATUS Status;
+
+    Status = NtfsMasterFileTableGetFileRecordFromQueryEx(Mft, Name->Buffer, Name->Length / sizeof(WCHAR), TRUE,
+                                                         &RemainingNameLength, &Target);
+    if (NT_SUCCESS(Status) && (RemainingNameLength || !Target || NtfsFileRecordGetNumber(Target) != RecordNumber))
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
+    if (!NT_SUCCESS(Status))
+    {
+        if (Target)
+            NtfsFileRecordDestroy(Target);
+        return Status;
+    }
+    LastLink = NtfsFileRecordGetLinkCount(Target) <= 1;
+
+    Bucket = NtfsStreamHashBucket(VolCB, RecordNumber);
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+        PLIST_ENTRY CcbEntry;
+
+        if ((StreamCB->FileReference & 0x0000FFFFFFFFFFFFULL) != RecordNumber)
+            continue;
+        if (!ImageStream && StreamCB->RequestedType == TypeData && !StreamCB->RequestedStream.Length)
+        {
+            ImageStream = StreamCB;
+            ImageStream->ReferenceCount++;
+        }
+        for (CcbEntry = StreamCB->NativeScb.CcbList.Flink;
+             CcbEntry != &StreamCB->NativeScb.CcbList;
+             CcbEntry = CcbEntry->Flink)
+        {
+            PFileContextBlock Other =
+                CONTAINING_RECORD(CONTAINING_RECORD(CcbEntry, NTFS_NATIVE_CCB, StreamEntry), FileContextBlock, NativeCcb);
+
+            for (Index = 0; Index < RecordCount && Records[Index] != Other->FileRec; Index++)
+                NOTHING;
+            if (Index == RecordCount && RecordCount < RTL_NUMBER_OF(Records) && Other->FileRec)
+                Records[RecordCount++] = Other->FileRec;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    /* FIXME: open records of the replaced file beyond the eighth distinct one are not refreshed */
+    if (ImageStream)
+    {
+        if (LastLink && !MmFlushImageSection(&ImageStream->SectionObjectPointers, MmFlushForDelete))
+            Status = STATUS_ACCESS_DENIED;
+        NtfsDereferenceStreamContext(VolCB, ImageStream);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Status = LastLink
+            ? NtfsMasterFileTableUnlinkFile(Mft, Name->Buffer, Name->Length / sizeof(WCHAR), FALSE,
+                                            RecordCount ? Records[0] : NULL)
+            : NtfsMasterFileTableDeleteFileEx(Mft, Name->Buffer, Name->Length / sizeof(WCHAR), FALSE,
+                                              RecordCount ? Records[0] : NULL, FALSE, &RecordDeleted);
+        for (Index = 1; NT_SUCCESS(Status) && Index < RecordCount; Index++)
+            (void)NtfsFileRecordRefresh(Records[Index], Records[0]);
+    }
+    NtfsFileRecordDestroy(Target);
+    NtfsEvictCachedRecord(VolCB, Name->Buffer, (USHORT)(Name->Length / sizeof(WCHAR)), FALSE);
+    InterlockedIncrement(&VolCB->DirGeneration);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (LastLink)
+    {
+        ExAcquireFastMutex(&VolCB->StreamListMutex);
+        for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+        {
+            PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+            if ((StreamCB->FileReference & 0x0000FFFFFFFFFFFFULL) == RecordNumber)
+            {
+                StreamCB->Unlinked = TRUE;
+                StreamCB->DeletePending = TRUE;
+            }
+        }
+        ExReleaseFastMutex(&VolCB->StreamListMutex);
+    }
+
+    Bucket = NtfsLinkHashBucket(VolCB, &Parent->NativeScb, Leaf);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Next)
+    {
+        PNTFS_LCB_ENTRY LinkEntry = CONTAINING_RECORD(Entry, NTFS_LCB_ENTRY, HashEntry);
+
+        Next = Entry->Flink;
+        if (LinkEntry->Lcb.ParentScb == &Parent->NativeScb &&
+            RtlEqualUnicodeString(&LinkEntry->Lcb.FileName, Leaf, TRUE))
+        {
+            RemoveEntryList(&LinkEntry->Lcb.ParentEntry);
+            InitializeListHead(&LinkEntry->Lcb.ParentEntry);
+            RemoveEntryList(&LinkEntry->HashEntry);
+            InitializeListHead(&LinkEntry->HashEntry);
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
                          _In_ PFileContextBlock FileCB,
                          _In_ PFILE_OBJECT FileObject,
@@ -2354,9 +2475,11 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
         }
         else if (ExistingIsDirectory || NtfsIsFileRecordOpen(VolCB, ExistingRecordNumber))
         {
-            /* FIXME: FILE_RENAME_POSIX_SEMANTICS does not yet replace a target that still has open handles */
-            Status = STATUS_ACCESS_DENIED;
-            goto Finish;
+            Status = (!ExistingIsDirectory && (RenameFlags & FILE_RENAME_POSIX_SEMANTICS))
+                ? NtfsUnlinkReplacedTarget(VolCB, &NewName, ExistingRecordNumber, NewParent, &NewLeaf)
+                : STATUS_ACCESS_DENIED;
+            if (!NT_SUCCESS(Status))
+                goto Finish;
         }
         else
         {

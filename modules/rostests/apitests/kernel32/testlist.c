@@ -105,6 +105,7 @@ extern void func_SharedMemoryTransfer(void);
 extern void func_StarvationBoost(void);
 extern void func_StdHandleInheritance(void);
 extern void func_StreamRename(void);
+extern void func_PosixRename(void);
 extern void func_LocaleNameToLCID(void);
 extern void func_lstrcpynW(void);
 extern void func_lstrlen(void);
@@ -287,6 +288,7 @@ const struct test winetest_testlist[] =
     { "StarvationBoost",             func_StarvationBoost },
     { "StdHandleInheritance",        func_StdHandleInheritance },
     { "StreamRename",                func_StreamRename },
+    { "PosixRename",                 func_PosixRename },
     { "LocaleNameToLCID",            func_LocaleNameToLCID },
     { "lstrcpynW",                   func_lstrcpynW },
     { "lstrlen",                     func_lstrlen },

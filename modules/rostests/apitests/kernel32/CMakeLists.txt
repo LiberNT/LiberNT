@@ -110,6 +110,7 @@ list(APPEND SOURCE
     TzSpecificLocalTimeEx.c
     StdHandleInheritance.c
     StreamRename.c
+    PosixRename.c
     LocaleNameToLCID.c
     lstrcpynW.c
     lstrlen.c
