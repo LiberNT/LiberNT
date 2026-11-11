@@ -752,6 +752,8 @@ extern ULONG KiArm64NumWatchpoints;
 extern UCHAR KiArm64UserStepArmed[MAXIMUM_PROCESSORS];
 extern UCHAR KiArm64UserDebugArmed[MAXIMUM_PROCESSORS];
 VOID NTAPI KiArm64LoadUserDebugState(_In_ PKTRAP_FRAME TrapFrame);
+PKINTERRUPT NTAPI KiArm64QueryInterrupt(_In_ ULONG IntId);
+ULONG NTAPI KiArm64QueryInterruptLimit(VOID);
 VOID NTAPI KiArm64SaveUserDebugState(_Inout_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI KiArm64SaveUserDebugRegisters(_Out_ PBOOLEAN Valid, _Out_writes_(ARM64_MAX_BREAKPOINTS) PULONG Bcr,
                                          _Out_writes_(ARM64_MAX_BREAKPOINTS) PULONG64 Bvr,

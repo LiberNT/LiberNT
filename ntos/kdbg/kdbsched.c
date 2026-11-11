@@ -12,6 +12,7 @@
 #include <debug.h>
 
 #define KDB_MAXIMUM_LIST_WALK 4096
+#define KDB_MAXIMUM_INTERRUPT_CHAIN 64
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -96,7 +97,81 @@ KdbpPrintTimer(
     KdbPuts("\n");
 }
 
+static
+BOOLEAN
+KdbpIsInterruptObject(
+    _In_ const KINTERRUPT *Interrupt,
+    _In_ ULONG Vector)
+{
+    return (Interrupt->Type == InterruptObject) &&
+           (Interrupt->Size == sizeof(KINTERRUPT)) &&
+           (Interrupt->Vector == Vector) &&
+           ((ULONG)(UCHAR)Interrupt->Number < (ULONG)(UCHAR)KeNumberProcessors) &&
+           (Interrupt->Irql <= HIGH_LEVEL) &&
+           (Interrupt->SynchronizeIrql >= Interrupt->Irql) &&
+           (Interrupt->SynchronizeIrql <= HIGH_LEVEL);
+}
+
+static
+VOID
+KdbpPrintInterruptObject(
+    _In_ PKINTERRUPT Address,
+    _In_ const KINTERRUPT *Interrupt)
+{
+    KdbpPrint("  %p processor %u IRQL %u/%u %s%s ",
+              Address,
+              (ULONG)(UCHAR)Interrupt->Number,
+              Interrupt->Irql,
+              Interrupt->SynchronizeIrql,
+              (Interrupt->Mode == Latched) ? "latched" : "level",
+              Interrupt->ShareVector ? " shared" : "");
+    KdbSymPrintAddress((PVOID)Interrupt->ServiceRoutine, NULL);
+    KdbpPrint(" context %p\n", Interrupt->ServiceContext);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
+
+BOOLEAN
+KdbpPrintInterruptChain(
+    _In_ ULONG Vector,
+    _In_ PKINTERRUPT Head,
+    _In_ BOOLEAN ShowInvalid)
+{
+    KINTERRUPT Interrupt;
+    PLIST_ENTRY Entry;
+    ULONG Count;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Interrupt, Head, sizeof(Interrupt))) ||
+        !KdbpIsInterruptObject(&Interrupt, Vector))
+    {
+        if (ShowInvalid)
+            KdbpPrint("Vector 0x%lx leads to %p, which is not an interrupt object\n", Vector, Head);
+
+        return FALSE;
+    }
+
+    KdbpPrint("Vector 0x%lx:\n", Vector);
+    KdbpPrintInterruptObject(Head, &Interrupt);
+
+    for (Entry = Interrupt.InterruptListEntry.Flink, Count = 0;
+         (Entry != &Head->InterruptListEntry) && (Count < KDB_MAXIMUM_INTERRUPT_CHAIN) && !KdbpIsOutputAborted();
+         Entry = Interrupt.InterruptListEntry.Flink, Count++)
+    {
+        PKINTERRUPT Next = CONTAINING_RECORD(Entry, KINTERRUPT, InterruptListEntry);
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Interrupt, Next, sizeof(Interrupt))) ||
+            !KdbpIsInterruptObject(&Interrupt, Vector))
+        {
+            KdbpPrint("  %p is not an interrupt object\n", Next);
+            break;
+        }
+
+        KdbpPrintInterruptObject(Next, &Interrupt);
+    }
+
+    return TRUE;
+}
+
 
 BOOLEAN
 KdbpCmdPrcb(
@@ -328,6 +403,45 @@ KdbpCmdDispatcher(
 
     if (Count == 0)
         KdbPuts("  no waiters\n");
+
+    return TRUE;
+}
+
+BOOLEAN
+KdbpCmdInterrupts(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG Limit = KdbpArchInterruptVectorLimit();
+    ULONG_PTR Value;
+    ULONG Vector;
+    ULONG Shown = 0;
+
+    if (Argc > 1)
+    {
+        if (!KdbpGetHexNumber(Argv[1], &Value) && !KdbpGetAddressExpression(Argv[1], &Value))
+            return TRUE;
+
+        if (Value >= Limit)
+        {
+            KdbpPrint("%s is not a vector below 0x%lx\n", Argv[1], Limit);
+            return TRUE;
+        }
+
+        KdbpArchPrintInterruptVector((ULONG)Value, TRUE);
+        return TRUE;
+    }
+
+    KdbpPrint("Interrupts connected on processor %lu\n", KeGetCurrentProcessorNumber());
+
+    for (Vector = 0; (Vector < Limit) && !KdbpIsOutputAborted(); Vector++)
+    {
+        if (KdbpArchPrintInterruptVector(Vector, FALSE))
+            Shown++;
+    }
+
+    if (Shown == 0)
+        KdbPuts("None\n");
 
     return TRUE;
 }

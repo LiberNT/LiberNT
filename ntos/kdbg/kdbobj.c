@@ -57,7 +57,6 @@ KdbpAddressArgument(
     return TRUE;
 }
 
-static
 VOID
 KdbpPrintCountedString(
     _In_ PCUNICODE_STRING String)

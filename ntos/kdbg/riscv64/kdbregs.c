@@ -114,4 +114,28 @@ KdbpArchPrintInterruptTable(
     KdbPuts("This processor has no interrupt descriptor table\n");
 }
 
+ULONG
+NTAPI
+KdbpArchInterruptVectorLimit(VOID)
+{
+    return KiRiscvQueryInterruptLimit();
+}
+
+BOOLEAN
+NTAPI
+KdbpArchPrintInterruptVector(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN ShowUnused)
+{
+    PKINTERRUPT Head = KiRiscvQueryInterrupt(Vector);
+
+    if ((Head != NULL) && KdbpPrintInterruptChain(Vector, Head, ShowUnused))
+        return TRUE;
+
+    if ((Head == NULL) && ShowUnused)
+        KdbpPrint("Interrupt 0x%lx is not connected\n", Vector);
+
+    return FALSE;
+}
+
 /* EOF */

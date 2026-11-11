@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "../kdb.h"
 #include "../kdbpriv.h"
+#include <reactos/smpdbg.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -116,6 +117,51 @@ KdbpArchPrintInterruptTable(
     UNREFERENCED_PARAMETER(Address);
 
     KdbPuts("This processor has no interrupt descriptor table\n");
+}
+
+ULONG
+NTAPI
+KdbpArchInterruptVectorLimit(VOID)
+{
+    return KiArm64QueryInterruptLimit();
+}
+
+BOOLEAN
+NTAPI
+KdbpArchPrintInterruptVector(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN ShowUnused)
+{
+    PKINTERRUPT Head = KiArm64QueryInterrupt(Vector);
+    BOOLEAN Shown = FALSE;
+    ULONG Priority;
+    ULONG Enable;
+    ULONG Pending;
+    ULONG Active;
+
+    if (Head != NULL)
+        Shown = KdbpPrintInterruptChain(Vector, Head, TRUE);
+
+    HalArm64DbgGicState(Vector, &Priority, &Enable, &Pending, &Active);
+
+    if ((Priority == MAXULONG) ||
+        (!Shown && !ShowUnused && (Enable != 1) && (Pending != 1) && (Active != 1)))
+    {
+        if (!Shown && ShowUnused)
+            KdbpPrint("Interrupt 0x%lx is not connected\n", Vector);
+
+        return Shown;
+    }
+
+    if (!Shown)
+        KdbpPrint("Interrupt 0x%lx:\n", Vector);
+
+    KdbpPrint("  GIC priority 0x%02lx%s%s%s\n",
+              Priority,
+              (Enable == 1) ? " enabled" : " disabled",
+              (Pending == 1) ? " pending" : "",
+              (Active == 1) ? " active" : "");
+    return TRUE;
 }
 
 /* EOF */

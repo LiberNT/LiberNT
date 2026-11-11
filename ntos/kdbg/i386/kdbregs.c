@@ -187,4 +187,43 @@ KdbpArchPrintInterruptTable(
         KdbPuts("No vector of this processor is handled there\n");
 }
 
+ULONG
+NTAPI
+KdbpArchInterruptVectorLimit(VOID)
+{
+    return MAXIMUM_IDTVECTOR + 1;
+}
+
+BOOLEAN
+NTAPI
+KdbpArchPrintInterruptVector(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN ShowUnused)
+{
+    PVOID Handler = KeQueryInterruptHandler(Vector);
+
+    if ((Handler >= (PVOID)KiStartUnexpectedRange) && (Handler < (PVOID)KiEndUnexpectedRange))
+    {
+        if (ShowUnused)
+            KdbpPrint("Vector 0x%lx is not connected\n", Vector);
+
+        return FALSE;
+    }
+
+    if (((ULONG_PTR)Handler >= FIELD_OFFSET(KINTERRUPT, DispatchCode)) &&
+        KdbpPrintInterruptChain(Vector, CONTAINING_RECORD(Handler, KINTERRUPT, DispatchCode), FALSE))
+    {
+        return TRUE;
+    }
+
+    if (ShowUnused)
+    {
+        KdbpPrint("Vector 0x%lx is handled by the system at %p ", Vector, Handler);
+        KdbSymPrintAddress(Handler, NULL);
+        KdbPuts("\n");
+    }
+
+    return FALSE;
+}
+
 /* EOF */

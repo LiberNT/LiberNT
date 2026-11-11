@@ -13,6 +13,9 @@
 
 /* GLOBALS ********************************************************************/
 
+extern KI_INTERRUPT_DISPATCH_ENTRY KiUnexpectedRange[256];
+extern KI_INTERRUPT_DISPATCH_ENTRY KiUnexpectedRangeEnd[];
+
 #define KDB_REG(n, f) {n, (USHORT)FIELD_OFFSET(CONTEXT, f), (USHORT)RTL_FIELD_SIZE(CONTEXT, f)}
 
 const KDB_REGISTER KdbpRegisters[] =
@@ -197,6 +200,45 @@ KdbpArchPrintInterruptTable(
 
     if (Shown == 0)
         KdbPuts("No vector of this processor is handled there\n");
+}
+
+ULONG
+NTAPI
+KdbpArchInterruptVectorLimit(VOID)
+{
+    return MAXIMUM_IDTVECTOR + 1;
+}
+
+BOOLEAN
+NTAPI
+KdbpArchPrintInterruptVector(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN ShowUnused)
+{
+    PVOID Handler = KeQueryInterruptHandler(Vector);
+
+    if ((Handler >= (PVOID)KiUnexpectedRange) && (Handler <= (PVOID)KiUnexpectedRangeEnd))
+    {
+        if (ShowUnused)
+            KdbpPrint("Vector 0x%lx is not connected\n", Vector);
+
+        return FALSE;
+    }
+
+    if (((ULONG_PTR)Handler >= FIELD_OFFSET(KINTERRUPT, DispatchCode)) &&
+        KdbpPrintInterruptChain(Vector, CONTAINING_RECORD(Handler, KINTERRUPT, DispatchCode), FALSE))
+    {
+        return TRUE;
+    }
+
+    if (ShowUnused)
+    {
+        KdbpPrint("Vector 0x%lx is handled by the system at %p ", Vector, Handler);
+        KdbSymPrintAddress(Handler, NULL);
+        KdbPuts("\n");
+    }
+
+    return FALSE;
 }
 
 /* EOF */

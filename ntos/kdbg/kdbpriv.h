@@ -56,6 +56,16 @@ NTAPI
 KdbpArchPrintInterruptTable(
     _In_ ULONG_PTR Address);
 
+ULONG
+NTAPI
+KdbpArchInterruptVectorLimit(VOID);
+
+BOOLEAN
+NTAPI
+KdbpArchPrintInterruptVector(
+    _In_ ULONG Vector,
+    _In_ BOOLEAN ShowUnused);
+
 /* kdbanalyze.c */
 
 BOOLEAN
@@ -87,12 +97,21 @@ BOOLEAN KdbpCmdDeviceStack(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdIrp(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdFileObject(ULONG Argc, PCHAR Argv[]);
 
+VOID
+KdbpPrintCountedString(
+    _In_ PCUNICODE_STRING String);
+
 /* kdbpci.c */
 
 BOOLEAN
 KdbpCmdPci(
     ULONG Argc,
     PCHAR Argv[]);
+
+/* kdbpnp.c */
+
+BOOLEAN KdbpCmdDeviceTree(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDeviceNode(ULONG Argc, PCHAR Argv[]);
 
 /* kdbsched.c */
 
@@ -103,6 +122,13 @@ BOOLEAN KdbpCmdTimer(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdInterrupt(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdDispatcher(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdInterruptTable(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdInterrupts(ULONG Argc, PCHAR Argv[]);
+
+BOOLEAN
+KdbpPrintInterruptChain(
+    _In_ ULONG Vector,
+    _In_ PKINTERRUPT Head,
+    _In_ BOOLEAN ShowInvalid);
 
 /* kdbsymbols.c */
 
