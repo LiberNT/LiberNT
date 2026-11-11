@@ -15,6 +15,7 @@ KMT_TESTFUNC Test_CcSetFileSizes;
 KMT_TESTFUNC Test_Example;
 KMT_TESTFUNC Test_FileAttributes;
 KMT_TESTFUNC Test_FindFile;
+KMT_TESTFUNC Test_PipeClientComputerName;
 KMT_TESTFUNC Test_SecureMemoryCache;
 KMT_TESTFUNC Test_NtFilterToken;
 KMT_TESTFUNC Test_NtFilterTokenCapture;
@@ -84,6 +85,7 @@ const KMT_TEST TestList[] =
     { "-Example",                     Test_Example },
     { "FileAttributes",               Test_FileAttributes },
     { "FindFile",                     Test_FindFile },
+    { "PipeClientComputerName",       Test_PipeClientComputerName },
     { "SecureMemoryCache",            Test_SecureMemoryCache },
     { "NtFilterToken",                Test_NtFilterToken },
     { "NtFilterTokenCapture",         Test_NtFilterTokenCapture },

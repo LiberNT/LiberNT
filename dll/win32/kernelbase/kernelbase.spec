@@ -491,7 +491,7 @@
 @ stdcall GetNLSVersionEx(long wstr ptr)
 @ stub GetNamedLocaleHashNode
 @ stub -version=0x600+ GetNamedPipeAttribute() kernel32.GetNamedPipeAttribute
-@ stub -version=0x600+ GetNamedPipeClientComputerNameW() kernel32.GetNamedPipeClientComputerNameW
+@ stdcall -version=0x600+ GetNamedPipeClientComputerNameW(ptr ptr long) kernel32.GetNamedPipeClientComputerNameW
 @ stdcall GetNamedPipeHandleStateW(long ptr ptr ptr ptr wstr long) kernel32.GetNamedPipeHandleStateW
 @ stdcall GetNamedPipeInfo(long ptr ptr ptr ptr) kernel32.GetNamedPipeInfo
 @ stdcall GetNativeSystemInfo(ptr) kernel32.GetNativeSystemInfo

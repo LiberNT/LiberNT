@@ -103,6 +103,7 @@ list(APPEND SOURCE
     Mailslot.c
     MuiResources.c
     MultiByteToWideChar.c
+    NamedPipeClientComputerName.c
     NlsStringApis.c
     NumaApis.c
     PerfProvider.c

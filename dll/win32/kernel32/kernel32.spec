@@ -586,8 +586,8 @@
 @ stdcall GetNLSVersion(long long ptr) kernelbase.GetNLSVersion
 @ stdcall GetNLSVersionEx(long wstr ptr) kernelbase.GetNLSVersionEx
 @ stub -version=0x600+ GetNamedPipeAttribute
-@ stub -version=0x600+ GetNamedPipeClientComputerNameA
-@ stub -version=0x600+ GetNamedPipeClientComputerNameW
+@ stdcall -version=0x600+ GetNamedPipeClientComputerNameA(ptr ptr long)
+@ stdcall -version=0x600+ GetNamedPipeClientComputerNameW(ptr ptr long)
 @ stdcall -version=0x600+ GetNamedPipeClientProcessId(ptr ptr)
 @ stdcall -version=0x600+ GetNamedPipeClientSessionId(ptr ptr)
 @ stdcall GetNamedPipeHandleStateA(long ptr ptr ptr ptr str long)

@@ -99,6 +99,7 @@ extern void func_lstrlen(void);
 extern void func_MailslotRead(void);
 extern void func_MuiResources(void);
 extern void func_MultiByteToWideChar(void);
+extern void func_NamedPipeClientComputerName(void);
 extern void func_NlsStringApis(void);
 extern void func_NumaApis(void);
 extern void func_PerfProvider(void);
@@ -258,6 +259,7 @@ const struct test winetest_testlist[] =
     { "MailslotRead",                func_MailslotRead },
     { "MuiResources",                func_MuiResources },
     { "MultiByteToWideChar",         func_MultiByteToWideChar },
+    { "NamedPipeClientComputerName", func_NamedPipeClientComputerName },
     { "NlsStringApis",               func_NlsStringApis },
     { "NumaApis",                    func_NumaApis },
     { "PerfProvider",              func_PerfProvider },
