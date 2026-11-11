@@ -27,8 +27,9 @@ GENERIC_MAPPING ExpProfileMapping =
 
 #define EXP_PROFILE_TAG 'forP'
 
-/* The smallest and largest number of buckets a profile may ask for */
-#define EXP_PROFILE_MINIMUM_BUCKETS 2
+/* A bucket covers a power-of-two run of addresses, from four bytes to two gigabytes */
+#define EXP_PROFILE_MINIMUM_BUCKET_SHIFT 2
+#define EXP_PROFILE_MAXIMUM_BUCKET_SHIFT 31
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -111,10 +112,22 @@ NtCreateProfile(
     PEPROFILE Profile;
     PEPROCESS Process = NULL;
     HANDLE Handle;
-    ULONG Buckets;
     NTSTATUS Status;
 
     PAGED_CODE();
+
+    if (ProfilingSize == 0)
+    {
+        return STATUS_INVALID_PARAMETER_7;
+    }
+
+    /* TODO: 32-bit x86 also refuses a buffer under four bytes for a range below 64 KB with STATUS_INVALID_PARAMETER_7 */
+
+    if ((Granularity < EXP_PROFILE_MINIMUM_BUCKET_SHIFT) ||
+        (Granularity > EXP_PROFILE_MAXIMUM_BUCKET_SHIFT))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
 
     if (ImageSize == 0)
     {
@@ -122,19 +135,20 @@ NtCreateProfile(
     }
 
     /*
-     * The buffer holds one count for each bucket, and a bucket covers a
-     * power-of-two run of addresses given by the granularity.
+     * The buffer holds one count for each bucket the range touches, the last
+     * one perhaps only in part. The comparison is made in buckets, so a huge
+     * range cannot wrap the byte count around.
      */
-    if (ProfilingSize < EXP_PROFILE_MINIMUM_BUCKETS * sizeof(ULONG))
-    {
-        return STATUS_INVALID_PARAMETER_7;
-    }
-
-    Buckets = ProfilingSize / sizeof(ULONG);
-
-    if ((ULONG_PTR)ImageSize > ((ULONG_PTR)Buckets << Granularity))
+    if ((ProfilingSize / sizeof(ULONG)) <
+        (((ULONG_PTR)ImageSize - 1) >> Granularity) + 1)
     {
         return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    /* The range may reach into kernel space, but may not wrap around */
+    if ((ULONG_PTR)ImageBase + (ULONG_PTR)ImageSize < (ULONG_PTR)ImageBase)
+    {
+        return STATUS_BUFFER_OVERFLOW;
     }
 
     if (PreviousMode != KernelMode)
