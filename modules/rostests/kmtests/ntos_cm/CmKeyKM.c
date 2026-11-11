@@ -367,6 +367,77 @@ TestVolatileSecurityAcrossReload(VOID)
     ZwDeleteFile(&FileAttributes);
 }
 
+static
+VOID
+DeleteNewHiveFiles(
+    _In_ POBJECT_ATTRIBUTES FileAttributes,
+    _In_ POBJECT_ATTRIBUTES LogAttributes)
+{
+    ZwDeleteFile(FileAttributes);
+    ZwDeleteFile(LogAttributes);
+}
+
+/* A hive made by loading a missing file has a root that inherits a descriptor */
+static
+VOID
+TestNewHiveRootSecurity(VOID)
+{
+    static UNICODE_STRING FileName =
+        RTL_CONSTANT_STRING(L"\\SystemRoot\\KmtNewHive.hiv");
+    static UNICODE_STRING LogName =
+        RTL_CONSTANT_STRING(L"\\SystemRoot\\KmtNewHive.hiv.LOG1");
+    static UNICODE_STRING MountName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\KmtNewHive");
+    OBJECT_ATTRIBUTES MountAttributes, FileAttributes, LogAttributes;
+    ULONG Descriptor[64];
+    PSECURITY_DESCRIPTOR Read = (PSECURITY_DESCRIPTOR)Descriptor;
+    BOOLEAN Present = FALSE, Defaulted;
+    ULONG ResultLength;
+    PACL Dacl = NULL;
+    HANDLE Root;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&MountAttributes, &MountName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    InitializeObjectAttributes(&FileAttributes, &FileName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    InitializeObjectAttributes(&LogAttributes, &LogName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    DeleteNewHiveFiles(&FileAttributes, &LogAttributes);
+
+    Status = ZwLoadKey(&MountAttributes, &FileAttributes);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = OpenKey(&Root, NULL, MountName.Buffer);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ZwQuerySecurityObject(Root, DACL_SECURITY_INFORMATION, Read,
+                                       sizeof(Descriptor), &ResultLength);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            Status = RtlGetDaclSecurityDescriptor(Read, &Present, &Dacl,
+                                                  &Defaulted);
+            ok_eq_hex(Status, STATUS_SUCCESS);
+            ok(Present && Dacl != NULL && Dacl->AceCount != 0,
+               "the new hive's root inherited no DACL\n");
+
+            Status = ZwSetSecurityObject(Root, DACL_SECURITY_INFORMATION, Read);
+            ok_eq_hex(Status, STATUS_SUCCESS);
+        }
+        ZwClose(Root);
+    }
+
+    Status = ZwUnloadKey(&MountAttributes);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    DeleteNewHiveFiles(&FileAttributes, &LogAttributes);
+}
+
 START_TEST(CmKeyKM)
 {
     UNICODE_STRING Name, ValueName;
@@ -405,4 +476,5 @@ START_TEST(CmKeyKM)
 
     TestFreedSecurityCell();
     TestVolatileSecurityAcrossReload();
+    TestNewHiveRootSecurity();
 }

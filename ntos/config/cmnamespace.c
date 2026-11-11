@@ -731,10 +731,10 @@ CmpCreateLinkNode(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (Unsecured &&
-        AccessState != NULL && AccessState->SecurityDescriptor != NULL)
+    if (Unsecured)
     {
-        CmpAssignSecurityDescriptor(Kcb, AccessState->SecurityDescriptor);
+        CmpAssignSecurityDescriptor(Kcb,
+                                    (AccessState != NULL) ? AccessState->SecurityDescriptor : NULL);
     }
 
     CmpCleanUpSubKeyInfo(ParentKcb);
