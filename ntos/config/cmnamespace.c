@@ -921,13 +921,14 @@ CmpParseKeyWorker(
             ChildCell = NextCell;
         }
 
-        OpenLink = (Attributes & OBJ_OPENLINK) != 0;
-
-        if (ParseContext != NULL &&
-            (ParseContext->CreateOptions & REG_OPTION_OPEN_LINK))
+        if (Last && Create && (ParseContext->CreateOptions & REG_OPTION_CREATE_LINK))
         {
-            OpenLink = TRUE;
+            HvReleaseCell(Hive, ChildCell);
+            Status = STATUS_OBJECT_NAME_COLLISION;
+            break;
         }
+
+        OpenLink = (Attributes & OBJ_OPENLINK) != 0;
 
         if ((Child->Flags & KEY_SYM_LINK) && (!Last || !OpenLink))
         {

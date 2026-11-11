@@ -676,6 +676,13 @@ CmSetValueKey(
 
     if (Hive->ReadOnly) return STATUS_ACCESS_DENIED;
 
+    if ((Kcb->Flags & KEY_SYM_LINK) &&
+        (Type != REG_LINK ||
+         !RtlEqualUnicodeString(ValueName, &CmSymbolicLinkValueName, TRUE)))
+    {
+        return STATUS_ACCESS_DENIED;
+    }
+
     if (DataSize <= CM_KEY_VALUE_SMALL && DataSize != 0)
     {
         RtlCopyMemory(&SmallData, Data, DataSize);
