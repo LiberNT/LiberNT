@@ -42,6 +42,7 @@
 #define TP_WAIT_MS 64
 #define TP_WAIT_QUIET_MS 32
 #define TP_WAIT_SETTLE_MS 32
+#define TP_STILL_BLOCKED_MS 32
 #else
 #define RTL_WAIT_SETTLE_MS 50
 #define RTL_WAIT_TIMEOUT_MS 200
@@ -56,6 +57,7 @@
 #define TP_WAIT_MS 200
 #define TP_WAIT_QUIET_MS 100
 #define TP_WAIT_SETTLE_MS 50
+#define TP_STILL_BLOCKED_MS 100
 #endif
 
 static NTSTATUS (WINAPI *pTpAllocCleanupGroup)(TP_CLEANUP_GROUP **);
@@ -1007,7 +1009,7 @@ static void CALLBACK work_group_cancel_cb(TP_CALLBACK_INSTANCE *instance, void *
     DWORD result;
 
     ReleaseSemaphore(semaphores[1], 1, NULL);
-    result = WaitForSingleObject(semaphores[0], 200);
+    result = WaitForSingleObject(semaphores[0], 2 * TP_STILL_BLOCKED_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
 }
 
@@ -1287,7 +1289,7 @@ static void CALLBACK disassociate2_cb(TP_CALLBACK_INSTANCE *instance, void *user
     DWORD result;
 
     pTpDisassociateCallback(instance);
-    result = WaitForSingleObject(semaphores[0], 100);
+    result = WaitForSingleObject(semaphores[0], TP_STILL_BLOCKED_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     ReleaseSemaphore(semaphores[1], 1, NULL);
 }
@@ -1298,7 +1300,7 @@ static void CALLBACK disassociate3_cb(TP_CALLBACK_INSTANCE *instance, void *user
     DWORD result;
 
     pTpDisassociateCallback(instance);
-    result = WaitForSingleObject(semaphores[0], 100);
+    result = WaitForSingleObject(semaphores[0], TP_STILL_BLOCKED_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     ReleaseSemaphore(semaphores[1], 1, NULL);
 }
@@ -1341,7 +1343,7 @@ static void test_tp_disassociate(void)
     pTpPostWork(work);
     pTpWaitForWork(work, FALSE);
 
-    result = WaitForSingleObject(semaphores[1], 100);
+    result = WaitForSingleObject(semaphores[1], TP_STILL_BLOCKED_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     ReleaseSemaphore(semaphores[0], 1, NULL);
     result = WaitForSingleObject(semaphores[1], 1000);
@@ -1361,7 +1363,7 @@ static void test_tp_disassociate(void)
     pTpPostWork(work);
     pTpWaitForWork(work, FALSE);
 
-    result = WaitForSingleObject(semaphores[1], 100);
+    result = WaitForSingleObject(semaphores[1], TP_STILL_BLOCKED_MS);
     ok(result == WAIT_TIMEOUT, "WaitForSingleObject returned %lu\n", result);
     ReleaseSemaphore(semaphores[0], 1, NULL);
     result = WaitForSingleObject(semaphores[1], 1000);
