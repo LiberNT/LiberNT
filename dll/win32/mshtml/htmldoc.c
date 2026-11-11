@@ -983,6 +983,17 @@ static HRESULT WINAPI HTMLDocument_get_linkColor(IHTMLDocument2 *iface, VARIANT 
 
     nsAString_Init(&nsstr, NULL);
     nsres = nsIDOMHTMLDocument_GetLinkColor(This->html_document, &nsstr);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *color;
+
+        nsAString_GetData(&nsstr, &color);
+        if(!*color) {
+            nsAString_Finish(&nsstr);
+            V_VT(p) = VT_BSTR;
+            V_BSTR(p) = SysAllocString(L"#0000ff");
+            return V_BSTR(p) ? S_OK : E_OUTOFMEMORY;
+        }
+    }
     return return_nsstr_variant(nsres, &nsstr, NSSTR_COLOR, p);
 }
 

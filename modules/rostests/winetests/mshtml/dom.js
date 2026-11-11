@@ -388,7 +388,6 @@ sync_test("document_owner", function() {
 sync_test("document_style_props", function() {
     document.body.innerHTML = '<a href="#"></a>';
     var r, elem = document.getElementsByTagName("a")[0];
-    todo_wine.
     ok(document.linkColor === "#0000ff", "default linkColor = " + document.linkColor);
 
     document.linkColor = "#deadb8";
