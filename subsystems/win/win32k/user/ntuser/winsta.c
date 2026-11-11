@@ -468,6 +468,12 @@ co_IntInitializeDesktopGraphics(VOID)
     /* Update the SERVERINFO */
     gpsi->aiSysMet[SM_CXSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
     gpsi->aiSysMet[SM_CYSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
+
+    /* A desktop made before the display existed still has the 640x480 InitMetrics gave it */
+    pdesk = IntGetActiveDesktop();
+    if (pdesk != NULL)
+        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN], FALSE);
+
     gpsi->Planes        = NtGdiGetDeviceCaps(ScreenDeviceContext, PLANES);
     gpsi->BitsPixel     = NtGdiGetDeviceCaps(ScreenDeviceContext, BITSPIXEL);
     gpsi->BitCount      = gpsi->Planes * gpsi->BitsPixel;
