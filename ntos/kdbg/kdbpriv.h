@@ -69,6 +69,18 @@ BOOLEAN KdbpCmdCompareMemory(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdFillMemory(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdMoveMemory(ULONG Argc, PCHAR Argv[]);
 
+/* kdbobj.c */
+
+BOOLEAN KdbpCmdProcessDetail(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdTeb(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdPeb(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdObjectHeader(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDriverObject(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDeviceObject(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDeviceStack(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdIrp(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdFileObject(ULONG Argc, PCHAR Argv[]);
+
 /* kdbpci.c */
 
 BOOLEAN

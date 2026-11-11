@@ -623,6 +623,7 @@ endif()
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbhistory.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbio.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbmem.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbobj.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbpci.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbshim.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsymbols.c
