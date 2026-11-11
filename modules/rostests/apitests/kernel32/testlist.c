@@ -9,6 +9,7 @@ extern void func_BaseSetLastNTError(void);
 extern void func_BaseThreadInitThunk(void);
 extern void func_CalendarDateTime(void);
 extern void func_CallbackCallingConventions(void);
+extern void func_CallbackMayRunLong(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCP(void);
@@ -135,6 +136,7 @@ const struct test winetest_testlist[] =
     { "BaseThreadInitThunk",         func_BaseThreadInitThunk },
     { "CalendarDateTime",            func_CalendarDateTime },
     { "CallbackCallingConventions", func_CallbackCallingConventions },
+    { "CallbackMayRunLong",          func_CallbackMayRunLong },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCP",                   func_ConsoleCP },

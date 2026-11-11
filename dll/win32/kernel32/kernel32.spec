@@ -62,7 +62,7 @@
 @ stdcall BuildCommDCBW(wstr ptr)
 @ stdcall CallNamedPipeA(str ptr long ptr long ptr long)
 @ stdcall CallNamedPipeW(wstr ptr long ptr long ptr long)
-@ stdcall -stub -version=0x600+ CallbackMayRunLong(ptr)
+@ stdcall -version=0x600+ CallbackMayRunLong(ptr) kernelbase.CallbackMayRunLong
 @ stdcall CancelDeviceWakeupRequest(long)
 @ stdcall CancelIo(long)
 @ stdcall -version=0x600+ CancelIoEx(ptr ptr)

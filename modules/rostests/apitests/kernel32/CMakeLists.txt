@@ -12,6 +12,7 @@ list(APPEND SOURCE
     BaseThreadInitThunk.c
     CalendarDateTime.c
     CallbackCallingConventions.c
+    CallbackMayRunLong.c
     Arm64ThreadContext.c
     ConsoleCP.c
     ConsoleInputSignal.c
