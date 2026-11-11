@@ -126,6 +126,7 @@ ExpQueryPerformanceInformation(
     ULONG DirtyPageThreshold;
     ULONG PagedHeapHits;
     ULONG NonPagedHeapHits;
+    SIZE_T PeakCommitment;
 
     /* A caller built for the older, shorter record gets the fields it has room for */
     if (Length < FIELD_OFFSET(SYSTEM_PERFORMANCE_INFORMATION, CcTotalDirtyPages))
@@ -139,9 +140,9 @@ ExpQueryPerformanceInformation(
     ExpSumProcessorCounters(Info);
 
     Info->AvailablePages = (ULONG)MmAvailablePages;
-    Info->CommittedPages = (ULONG)MmTotalCommittedPages;
+    Info->CommittedPages = (ULONG)MmQuerySystemCommitCharge(&PeakCommitment);
     Info->CommitLimit = (ULONG)MmTotalCommitLimit;
-    Info->PeakCommitment = (ULONG)MmPeakCommitment;
+    Info->PeakCommitment = (ULONG)PeakCommitment;
     Info->ResidentAvailablePages = (LONGLONG)MmResidentAvailablePages;
     Info->SharedCommittedPages = MmSharedCommit;
 
