@@ -628,7 +628,7 @@ IopSendCreateIrp(
     StackPtr->DeviceObject = DeviceObject;
     StackPtr->Flags = 0;
 
-    if (OpenPacket->Options & IO_NO_PARAMETER_CHECKING)
+    if (OpenPacket->Options & IO_FORCE_ACCESS_CHECK)
     {
         StackPtr->Flags |= SL_FORCE_ACCESS_CHECK;
     }
@@ -879,6 +879,7 @@ IopCompleteCreate(
     }
 
     FileObject->Flags |= FO_HANDLE_CREATED;
+    KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
 
     OpenPacket->FileObject = FileObject;
     OpenPacket->FinalStatus = Status;
