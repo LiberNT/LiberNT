@@ -2341,6 +2341,7 @@ LoadUserProfileW(
         if (bNewProfile)
         {
             if (!ConvertStringSidToSidW(SidString.Buffer, &pProfileSid) ||
+                !CreateUserHive(SidString.Buffer, szProfileListPath) ||
                 !SetUserHiveSecurity(SidString.Buffer, pProfileSid))
             {
                 dwError = GetLastError();
