@@ -496,6 +496,8 @@ typedef struct {
     /* Used by objects that have a collection of items, required by enumerators */
     ULONG (*collection_len)(DispatchEx*);
     HRESULT (*collection_item)(DispatchEx*,ULONG,IDispatch**);
+
+    compat_mode_t (*get_compat_mode)(DispatchEx*);
 } dispex_static_data_vtbl_t;
 
 #define ALL_OBJECTS                     \

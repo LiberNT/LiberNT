@@ -603,11 +603,21 @@ static void HTMLLocation_destructor(DispatchEx *dispex)
     free(This);
 }
 
+static compat_mode_t HTMLLocation_get_compat_mode(DispatchEx *dispex)
+{
+    HTMLLocation *This = impl_from_DispatchEx(dispex);
+
+    if(!This->window || !This->window->base.inner_window)
+        return COMPAT_MODE_QUIRKS;
+    return dispex_compat_mode(&This->window->base.inner_window->event_target.dispex);
+}
+
 static const dispex_static_data_vtbl_t HTMLLocation_dispex_vtbl = {
     .query_interface  = HTMLLocation_query_interface,
     .destructor       = HTMLLocation_destructor,
     .traverse         = HTMLLocation_traverse,
-    .unlink           = HTMLLocation_unlink
+    .unlink           = HTMLLocation_unlink,
+    .get_compat_mode  = HTMLLocation_get_compat_mode
 };
 
 static const tid_t HTMLLocation_iface_tids[] = {

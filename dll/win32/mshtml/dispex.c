@@ -1761,6 +1761,10 @@ static HRESULT invoke_builtin_function(DispatchEx *This, func_info_t *func, WORD
          * Native probably uses some undocumented interface in this case, but it should
          * be fine for us to allow IDispatchEx handle that.
          */
+        if(!caller && (This->info->vtbl->get_compat_mode ? This->info->vtbl->get_compat_mode(This)
+                       : dispex_compat_mode(This)) < COMPAT_MODE_IE9)
+            return E_NOTIMPL;
+
         hres = get_func_obj_entry(This, func, &entry);
         if(FAILED(hres))
             return hres;
