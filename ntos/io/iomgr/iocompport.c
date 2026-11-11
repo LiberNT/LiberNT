@@ -409,7 +409,7 @@ NtSetIoCompletionEx(
     _In_ SIZE_T CompletionInformation)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    PIOP_MINI_COMPLETION_PACKET Reserve;
+    PVOID Reserve;
     NTSTATUS Status;
     PKQUEUE Queue;
 
@@ -425,9 +425,9 @@ NtSetIoCompletionEx(
 
     Status = ObReferenceObjectByHandle(IoCompletionReserveHandle,
                                        0,
-                                       IopWaitCompletionPacketType,
+                                       ExIoCompletionReserveObjectType,
                                        PreviousMode,
-                                       (PVOID *)&Reserve,
+                                       &Reserve,
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
@@ -435,17 +435,18 @@ NtSetIoCompletionEx(
         return Status;
     }
 
-    Reserve->KeyContext = CompletionKey;
-    Reserve->ApcContext = CompletionContext;
-    Reserve->IoStatus = CompletionStatus;
-    Reserve->IoStatusInformation = CompletionInformation;
-
-    KeInsertQueue(Queue, &Reserve->ListEntry);
+    /* FIXME: the packet comes from pool instead of the reserve object, so it can still fail for lack of memory */
+    Status = IoSetIoCompletion(Queue,
+                               CompletionKey,
+                               CompletionContext,
+                               CompletionStatus,
+                               CompletionInformation,
+                               TRUE);
 
     ObDereferenceObject(Reserve);
     ObDereferenceObject(Queue);
 
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 static
