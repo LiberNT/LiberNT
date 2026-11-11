@@ -4551,7 +4551,7 @@ START_TEST(webbrowser)
     }
 
     /* The navigations load their http pages from a loopback server, with their URLs unchanged */
-    ok(start_local_http_server(), "the local http server did not start\n");
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
 #endif
 
     test_SetQueryNetSessionCount();

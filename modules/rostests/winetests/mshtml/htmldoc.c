@@ -9844,7 +9844,7 @@ START_TEST(htmldoc)
     register_protocol();
 #ifdef __REACTOS__
     /* The http checks load their pages from a loopback server, with their URLs unchanged */
-    ok(start_local_http_server(), "the local http server did not start\n");
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
 #endif
 
     asynchronous_binding = TRUE;
