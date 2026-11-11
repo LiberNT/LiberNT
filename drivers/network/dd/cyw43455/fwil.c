@@ -1173,8 +1173,12 @@ CywConnect(
     CywFilIovarSetInt(Adapter, "roam_off", 1);
 
     {
-        ULONG Pm = 0;
-        CywFilCmdSet(Adapter, BRCMF_C_SET_PM, &Pm, sizeof(Pm));
+        ULONG Pm = CYW_PM_FAST;
+        NTSTATUS PmStatus = CywFilCmdSet(Adapter, BRCMF_C_SET_PM, &Pm, sizeof(Pm));
+        NTSTATUS SleepStatus = CywFilIovarSetInt(Adapter, "pm2_sleep_ret", CYW_PM2_SLEEP_RET_MS);
+
+        DPRINT1("CYW: power save mode %lu (fast PS-Poll), back to sleep %lu ms after traffic, for this association: 0x%08lx/0x%08lx\n",
+                Pm, (ULONG)CYW_PM2_SLEEP_RET_MS, PmStatus, SleepStatus);
     }
 
     JoinChanspec = Settings.JoinChanspec;

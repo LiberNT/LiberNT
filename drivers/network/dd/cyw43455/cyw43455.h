@@ -229,6 +229,8 @@ typedef struct _CYW_DLOAD_DATA
 #define BRCMF_C_DISASSOC                52
 #define BRCMF_C_GET_PM                  85
 #define BRCMF_C_SET_PM                  86
+#define CYW_PM_FAST                     2
+#define CYW_PM2_SLEEP_RET_MS            2000
 #define BRCMF_C_GET_RSSI                127
 #define BRCMF_C_SET_WSEC                134
 #define BRCMF_C_SET_BAND                142
