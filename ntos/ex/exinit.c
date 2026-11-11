@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include <ntos/inbv/logo.h>
+#include <reactos/smpdbg.h>
 #define NDEBUG
 #include <debug.h>
 #include <reactos/buildno.h>
@@ -1186,7 +1187,12 @@ Phase1InitializationDiscard(
     HalReportResourceUsage();
     KdDebuggerInitialize1(LoaderBlock);
 
-    /* TODO: the SMP debug watchdog is not started; the load option that enabled it is not known */
+    if (ExpFindLoadOption(LoaderBlock->LoadOptions, "SMPDIAG") != NULL)
+    {
+        SmpDbgEnabled = TRUE;
+        SmpDbgStartWatchdog();
+    }
+
     KseInitialize();
 
     if (!IoInitSystem(LoaderBlock))
