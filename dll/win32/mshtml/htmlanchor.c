@@ -25,6 +25,7 @@
 #include "winbase.h"
 #include "winuser.h"
 #include "ole2.h"
+#include "shlwapi.h"
 #include "mshtmdid.h"
 
 #include "mshtml_private.h"
@@ -433,14 +434,37 @@ static HRESULT WINAPI HTMLAnchorElement_get_pathname(IHTMLAnchorElement *iface, 
 {
     HTMLAnchorElement *This = impl_from_IHTMLAnchorElement(iface);
     nsAString pathname_str;
+    const PRUnichar *pathname;
+    DWORD scheme;
     nsresult nsres;
+    HRESULT hres;
+    IUri *uri;
+    UINT len;
 
     TRACE("(%p)->(%p)\n", This, p);
 
-    /* FIXME: IE prepends a slash for some protocols */
     nsAString_Init(&pathname_str, NULL);
     nsres = nsIDOMHTMLAnchorElement_GetPathname(This->nsanchor, &pathname_str);
-    return return_nsstr(nsres, &pathname_str, p);
+    if(NS_FAILED(nsres))
+        return return_nsstr(nsres, &pathname_str, p);
+
+    nsAString_GetData(&pathname_str, &pathname);
+    if(*pathname == '/' || !(uri = get_anchor_uri(This)))
+        return return_nsstr(nsres, &pathname_str, p);
+
+    hres = IUri_GetScheme(uri, &scheme);
+    IUri_Release(uri);
+    if(FAILED(hres) || (scheme != URL_SCHEME_ABOUT && scheme != URL_SCHEME_FILE))
+        return return_nsstr(nsres, &pathname_str, p);
+
+    len = wcslen(pathname);
+    *p = SysAllocStringLen(NULL, len + 1);
+    if(*p) {
+        (*p)[0] = '/';
+        memcpy(*p + 1, pathname, len * sizeof(WCHAR));
+    }
+    nsAString_Finish(&pathname_str);
+    return *p ? S_OK : E_OUTOFMEMORY;
 }
 
 static HRESULT WINAPI HTMLAnchorElement_put_port(IHTMLAnchorElement *iface, BSTR v)
