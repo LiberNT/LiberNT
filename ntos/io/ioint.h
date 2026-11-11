@@ -486,6 +486,9 @@ NTSTATUS IopOpenInterfaceClassKey(_In_ CONST GUID *ClassGuid,
                                   _In_ BOOLEAN Create,
                                   _Out_ PHANDLE KeyHandle);
 
+VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
+                           _In_ BOOLEAN Linked);
+
 /* devprop.c */
 
 NTSTATUS IopInterfaceLinkToRegistryName(_In_ PUNICODE_STRING SymbolicLinkName,

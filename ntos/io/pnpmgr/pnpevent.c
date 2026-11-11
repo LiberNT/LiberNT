@@ -244,6 +244,8 @@ IopDisableDeviceInterfaces(
 
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
+        IopSetInterfaceLinked(Interface, FALSE);
+
         PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
                                       &Interface->ClassGuid,
                                       &Interface->SymbolicLinkName);

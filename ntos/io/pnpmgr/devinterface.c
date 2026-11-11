@@ -254,6 +254,63 @@ IopFindInterface(
     return NULL;
 }
 
+VOID
+IopSetInterfaceLinked(
+    _In_ PIOP_DEVICE_INTERFACE Interface,
+    _In_ BOOLEAN Linked)
+{
+    UNICODE_STRING LinkedName = RTL_CONSTANT_STRING(L"Linked");
+    UNICODE_STRING RegistryName;
+    UNICODE_STRING ControlName;
+    UNICODE_STRING Reference;
+    PDEVICE_NODE DeviceNode;
+    ULONG Value = Linked;
+    HANDLE InstanceKey;
+    HANDLE ControlKey;
+    HANDLE ClassKey;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    DeviceNode = IopGetDeviceNode(Interface->PhysicalDeviceObject);
+    if (DeviceNode == NULL) return;
+
+    Status = IopBuildInterfaceName(&DeviceNode->InstancePath,
+                                   &Interface->ClassGuid,
+                                   NULL,
+                                   TRUE,
+                                   &RegistryName);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = IopOpenInterfaceClassKey(&Interface->ClassGuid, FALSE, &ClassKey);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopOpenRegistryKeyEx(&InstanceKey, ClassKey, &RegistryName, KEY_READ);
+        ZwClose(ClassKey);
+    }
+    ExFreePoolWithTag(RegistryName.Buffer, TAG_IO_NAME);
+    if (!NT_SUCCESS(Status)) return;
+
+    IopReferenceFromLinkName(&Interface->SymbolicLinkName, &Reference);
+
+    Status = IopBuildReferenceKeyName(&Reference, L"\\Control", &ControlName);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopCreateRegistryKeyEx(&ControlKey,
+                                        InstanceKey,
+                                        &ControlName,
+                                        KEY_SET_VALUE,
+                                        REG_OPTION_VOLATILE,
+                                        NULL);
+        ExFreePoolWithTag(ControlName.Buffer, TAG_IO_NAME);
+    }
+    ZwClose(InstanceKey);
+    if (!NT_SUCCESS(Status)) return;
+
+    ZwSetValueKey(ControlKey, &LinkedName, 0, REG_DWORD, &Value, sizeof(Value));
+    ZwClose(ControlKey);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 NTSTATUS
@@ -468,6 +525,8 @@ IoSetDeviceInterfaceState(
         {
         }
 
+        IopSetInterfaceLinked(Interface, TRUE);
+
         PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_ARRIVAL,
                                       &Interface->ClassGuid,
                                       SymbolicLinkName);
@@ -476,6 +535,8 @@ IoSetDeviceInterfaceState(
     }
 
     IoDeleteSymbolicLink(SymbolicLinkName);
+
+    IopSetInterfaceLinked(Interface, FALSE);
 
     PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
                                   &Interface->ClassGuid,
