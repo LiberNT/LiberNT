@@ -848,13 +848,23 @@ NTAPI
 KiGetGuiServiceFailureStatus(
     _In_ ULONG ServiceNumber)
 {
-    DPRINT1("GUI service %lx refused: no window manager thread\n", ServiceNumber);
+    PKSERVICE_TABLE_DESCRIPTOR Table = &KeServiceDescriptorTableShadow[WIN32K_SERVICE_INDEX];
 
-    if (ServiceNumber >= KeServiceDescriptorTableShadow[WIN32K_SERVICE_INDEX].Limit)
+    if (ServiceNumber >= Table->Limit || Table->Number == NULL)
         return STATUS_INVALID_SYSTEM_SERVICE;
 
-    /* FIXME: Windows fails each service with its own value (0, -1 or STATUS_INVALID_SYSTEM_SERVICE); all get STATUS_NOT_IMPLEMENTED */
-    return STATUS_NOT_IMPLEMENTED;
+    /* The window manager keeps each service's failure code after the argument sizes of all of them */
+    switch (Table->Number[Table->Limit + ServiceNumber])
+    {
+        case SERVICE_FAILURE_ZERO:
+            return 0;
+
+        case SERVICE_FAILURE_MINUS_ONE:
+            return (NTSTATUS)-1;
+
+        default:
+            return STATUS_INVALID_SYSTEM_SERVICE;
+    }
 }
 
 /*
