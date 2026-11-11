@@ -1811,11 +1811,6 @@ NtQuerySystemEnvironmentValue(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    if (Length == 0)
-    {
-        return STATUS_INVALID_PARAMETER_3;
-    }
-
     if (PreviousMode != KernelMode)
     {
         _SEH2_TRY
@@ -1836,7 +1831,7 @@ NtQuerySystemEnvironmentValue(
         return Status;
     }
 
-    Buffer = ExAllocatePoolZero(PagedPool, Length, EXP_SYSINFO_TAG);
+    Buffer = ExAllocatePoolZero(PagedPool, max(Length, 1), EXP_SYSINFO_TAG);
     if (Buffer == NULL)
     {
         ExpFreeCapturedUnicodeString(&Name);
@@ -1851,7 +1846,11 @@ NtQuerySystemEnvironmentValue(
 
     ExpFreeCapturedUnicodeString(&Name);
 
-    if (NT_SUCCESS(Status))
+    if (Status == STATUS_VARIABLE_NOT_FOUND)
+    {
+        Status = STATUS_UNSUCCESSFUL;
+    }
+    else if (NT_SUCCESS(Status))
     {
         _SEH2_TRY
         {
