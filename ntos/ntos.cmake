@@ -276,6 +276,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/po/podevice.c
     ${REACTOS_SOURCE_DIR}/ntos/po/poshutdown.c
     ${REACTOS_SOURCE_DIR}/ntos/po/posystem.c
+    ${REACTOS_SOURCE_DIR}/ntos/po/popowerreq.c
     ${REACTOS_SOURCE_DIR}/ntos/po/povolumes.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/apiset.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/energy.c

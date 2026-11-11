@@ -774,6 +774,7 @@ PoInitSystem(
         PopInitializeVolumes();
         PopInitializeEventSupport();
         PopInitializeThermalRequests();
+        if (!PopInitializePowerRequests()) return FALSE;
         PopInitShutdownList();
 
         return TRUE;
@@ -1230,6 +1231,17 @@ NtPowerInformation(
                 Status = PopQueryProcessorInformation(InputBufferLength,
                                                       OutputBuffer,
                                                       OutputBufferLength);
+                break;
+
+            case PowerRequestCreate:
+                Status = PopCreatePowerRequest(InputBuffer,
+                                               InputBufferLength,
+                                               OutputBuffer,
+                                               OutputBufferLength);
+                break;
+
+            case PowerRequestAction:
+                Status = PopActOnPowerRequest(InputBuffer, InputBufferLength);
                 break;
 
             case SystemExecutionState:

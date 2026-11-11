@@ -619,6 +619,9 @@ PopApplyProcessorPowerSetting(
 
 VOID NTAPI PopInitializeThermalRequests(VOID);
 UCHAR NTAPI PopQuerySystemCoolingMode(VOID);
+BOOLEAN NTAPI PopInitializePowerRequests(VOID);
+NTSTATUS NTAPI PopCreatePowerRequest(_In_reads_bytes_(InputBufferLength) PVOID InputBuffer, _In_ ULONG InputBufferLength, _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer, _In_ ULONG OutputBufferLength);
+NTSTATUS NTAPI PopActOnPowerRequest(_In_reads_bytes_(InputBufferLength) PVOID InputBuffer, _In_ ULONG InputBufferLength);
 
 typedef struct _POP_TTM_PROVIDER
 {
