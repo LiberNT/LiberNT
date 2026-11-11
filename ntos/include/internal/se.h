@@ -414,6 +414,15 @@ SeCopyClientToken(
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PACCESS_TOKEN* NewToken);
 
+NTSTATUS
+NTAPI
+SepCopyImpersonationToken(
+    _In_ PACCESS_TOKEN Token,
+    _In_ BOOLEAN EffectiveOnly,
+    _In_ SECURITY_IMPERSONATION_LEVEL Level,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PACCESS_TOKEN* NewToken);
+
 BOOLEAN
 NTAPI
 SeTokenIsInert(

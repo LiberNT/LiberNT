@@ -332,7 +332,11 @@ SepOpenThreadToken(
     if (CopyOnOpen)
     {
         /* The thread keeps wearing its token; the caller gets a copy it cannot share */
-        Status = SeCopyClientToken(Worn, Level, PreviousMode, (PACCESS_TOKEN *)&Opened);
+        Status = SepCopyImpersonationToken(Worn,
+                                           EffectiveOnly,
+                                           Level,
+                                           PreviousMode,
+                                           (PACCESS_TOKEN *)&Opened);
     }
     else
     {

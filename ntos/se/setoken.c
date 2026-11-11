@@ -1194,6 +1194,24 @@ SeCopyClientToken(
                          (PTOKEN *)NewToken);
 }
 
+NTSTATUS
+NTAPI
+SepCopyImpersonationToken(
+    _In_ PACCESS_TOKEN Token,
+    _In_ BOOLEAN EffectiveOnly,
+    _In_ SECURITY_IMPERSONATION_LEVEL Level,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PACCESS_TOKEN *NewToken)
+{
+    return SepCloneToken(Token,
+                         EffectiveOnly,
+                         TokenImpersonation,
+                         Level,
+                         NULL,
+                         PreviousMode,
+                         (PTOKEN *)NewToken);
+}
+
 /* The token a process started by another one runs with */
 NTSTATUS
 NTAPI
