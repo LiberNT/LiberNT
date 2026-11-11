@@ -1335,6 +1335,99 @@ NtQuerySystemInformation(
     return Status;
 }
 
+static
+NTSTATUS
+ExpQuerySupportedProcessorArchitectures(
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[3];
+    USHORT ProcessMachine = 0;
+    PEPROCESS Process;
+    HANDLE ProcessHandle;
+    ULONG Count = 0;
+    ULONG Needed;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(HANDLE))
+        return STATUS_INVALID_PARAMETER;
+
+    _SEH2_TRY
+    {
+        ProcessHandle = *(PHANDLE)InputBuffer;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (ProcessHandle != NULL)
+    {
+        Status = ObReferenceObjectByHandle(ProcessHandle,
+                                           PROCESS_QUERY_LIMITED_INFORMATION,
+                                           PsProcessType,
+                                           PreviousMode,
+                                           (PVOID*)&Process,
+                                           NULL);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        ProcessMachine = PsWow64GetProcessMachine(Process);
+        ObDereferenceObject(Process);
+    }
+
+    RtlZeroMemory(Machines, sizeof(Machines));
+
+    Machines[Count].Machine = IMAGE_FILE_MACHINE_NATIVE;
+    Machines[Count].KernelMode = 1;
+    Machines[Count].UserMode = 1;
+    Machines[Count].Native = 1;
+    Machines[Count].Process = (ProcessMachine == IMAGE_FILE_MACHINE_NATIVE);
+    Count++;
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+    {
+        Machines[Count].Machine = IMAGE_FILE_MACHINE_I386;
+        Machines[Count].UserMode = 1;
+        Machines[Count].WoW64Container = 1;
+        Machines[Count].Process = (ProcessMachine == IMAGE_FILE_MACHINE_I386);
+        Count++;
+    }
+
+    /* TODO: user-mode machines a host emulates natively (x64 on ARM64) are not listed */
+    Needed = (Count + 1) * sizeof(Machines[0]);
+
+    _SEH2_TRY
+    {
+        if (ResultLength != NULL)
+        {
+            if (PreviousMode != KernelMode) ProbeForWriteUlong(ResultLength);
+            *ResultLength = Needed;
+        }
+
+        if (Length < Needed)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            if (PreviousMode != KernelMode) ProbeForWrite(SystemInformation, Needed, sizeof(ULONG));
+            RtlCopyMemory(SystemInformation, Machines, Needed);
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 /*
  * The same questions, asked about something the caller names rather than about
  * the system as a whole.
@@ -1377,6 +1470,14 @@ NtQuerySystemInformationEx(
      */
     switch (SystemInformationClass)
     {
+        case SystemSupportedProcessorArchitectures:
+            return ExpQuerySupportedProcessorArchitectures(InputBuffer,
+                                                           InputBufferLength,
+                                                           SystemInformation,
+                                                           Length,
+                                                           ResultLength,
+                                                           PreviousMode);
+
         case SystemProcessorPerformanceInformation:
         case SystemProcessorIdleInformation:
         case SystemProcessorCycleTimeInformation:
