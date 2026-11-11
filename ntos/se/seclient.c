@@ -29,7 +29,6 @@ SepCreateClientSecurity(
     _In_ BOOLEAN ServerIsRemote,
     _Out_ PSECURITY_CLIENT_CONTEXT ClientContext)
 {
-    PTOKEN Identity = (PTOKEN)Token;
     PACCESS_TOKEN Snapshot;
     NTSTATUS Status;
 
@@ -53,15 +52,8 @@ SepCreateClientSecurity(
      * A remote server has to be able to tell later whether it is still the
      * same token, so its identity travels with the context.
      */
-    /* TODO: the identity is read without the token's own lock */
     if (ServerIsRemote)
-    {
-        ClientContext->ClientTokenControl.TokenId = Identity->TokenId;
-        ClientContext->ClientTokenControl.AuthenticationId =
-            Identity->AuthenticationId;
-        ClientContext->ClientTokenControl.ModifiedId = Identity->ModifiedId;
-        ClientContext->ClientTokenControl.TokenSource = Identity->TokenSource;
-    }
+        SeGetTokenControlInformation(Token, &ClientContext->ClientTokenControl);
 
     if (ClientSecurityQos->ContextTrackingMode == SECURITY_DYNAMIC_TRACKING)
     {
