@@ -65,6 +65,16 @@ static void get_screen_dpi(int *dpi_x, int *dpi_y)
     ReleaseDC(NULL, hdc);
 }
 
+static void init_persist_state(WebBrowser *This)
+{
+    This->view_mode = FVM_ICON;
+    This->folder_flags = FWF_AUTOARRANGE | FWF_NOCLIENTEDGE;
+    This->doc_host.offline = VARIANT_FALSE;
+    This->doc_host.silent = VARIANT_FALSE;
+    This->register_browser = This->version == 1 ? VARIANT_TRUE : VARIANT_FALSE;
+    This->register_drop_target = VARIANT_FALSE;
+}
+
 void WebBrowser_Ext_InitNew(WebBrowser *This)
 {
     int dpi_x, dpi_y;
@@ -72,12 +82,7 @@ void WebBrowser_Ext_InitNew(WebBrowser *This)
     get_screen_dpi(&dpi_x, &dpi_y);
     This->extent.cx = MulDiv(WB_DEFAULT_WIDTH, 2540, dpi_x);
     This->extent.cy = MulDiv(WB_DEFAULT_HEIGHT, 2540, dpi_y);
-    This->view_mode = FVM_ICON;
-    This->folder_flags = FWF_AUTOARRANGE | FWF_NOCLIENTEDGE;
-    This->doc_host.offline = VARIANT_FALSE;
-    This->doc_host.silent = VARIANT_FALSE;
-    This->register_browser = This->version == 1 ? VARIANT_TRUE : VARIANT_FALSE;
-    This->register_drop_target = VARIANT_FALSE;
+    init_persist_state(This);
 }
 
 static DWORD get_browser_flags(WebBrowser *This)
@@ -723,5 +728,5 @@ void WebBrowser_Ext_Init(WebBrowser *This)
     This->IUrlHistoryNotify_iface.lpVtbl = &UrlHistoryNotifyVtbl;
     This->ITargetNotify_iface.lpVtbl = &TargetNotifyVtbl;
 
-    WebBrowser_Ext_InitNew(This);
+    init_persist_state(This);
 }
