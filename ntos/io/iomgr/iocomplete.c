@@ -323,6 +323,14 @@ IopCompleteRequest(
      */
     Deliver = (BOOLEAN)(!NT_ERROR(Irp->IoStatus.Status) || Irp->PendingReturned);
 
+    /* A synchronous caller waited for the request, so even a pended error reaches it as the return value only */
+    if (NT_ERROR(Irp->IoStatus.Status) &&
+        FileObject != NULL &&
+        (FileObject->Flags & FO_SYNCHRONOUS_IO))
+    {
+        Deliver = FALSE;
+    }
+
     IopReturnRequestBuffers(Irp, TRUE);
 
     Status = Irp->IoStatus.Status;
@@ -374,10 +382,10 @@ IopCompleteRequest(
     }
 
     /* The file is the wait object of synchronous I/O and of I/O issued without an event */
-    if (Deliver &&
-        FileObject != NULL &&
-        ((FileObject->Flags & FO_SYNCHRONOUS_IO) ||
-         ((Irp->UserEvent == NULL) && !(FileObject->Flags & FO_SKIP_SET_EVENT))))
+    if (FileObject != NULL &&
+        ((FileObject->Flags & FO_SYNCHRONOUS_IO) ?
+             (Deliver || Irp->PendingReturned) :
+             (Deliver && (Irp->UserEvent == NULL) && !(FileObject->Flags & FO_SKIP_SET_EVENT))))
     {
         KeSetEvent(&FileObject->Event, 0, FALSE);
     }
