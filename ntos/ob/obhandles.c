@@ -2189,6 +2189,8 @@ ObpReferenceProcessObjectByHandle(
     HandleInformation->GrantedAccess = *TargetAccess;
     HandleInformation->HandleAttributes =
         (ULONG)(HandleEntry->ObAttributes & OBJ_HANDLE_ATTRIBUTES);
+    if (HandleEntry->GrantedAccess & ObpAccessProtectCloseBit)
+        HandleInformation->HandleAttributes |= OBJ_PROTECT_CLOSE;
 
     InterlockedIncrementSizeT(&Header->PointerCount);
 
