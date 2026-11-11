@@ -46,6 +46,9 @@
 #include "tlogstg.h"
 #include "exdispid.h"
 #include "mshtml_test.h"
+#ifdef __REACTOS__
+#include "httpserver.h"
+#endif
 #include "mscoree.h"
 #include "exdisp.h"
 
@@ -9839,6 +9842,10 @@ START_TEST(htmldoc)
 
     container_hwnd = create_container_window();
     register_protocol();
+#ifdef __REACTOS__
+    /* The http checks load their pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(), "the local http server did not start\n");
+#endif
 
     asynchronous_binding = TRUE;
     test_HTMLDocument_hlink(HTTP_STATUS_NOT_FOUND);
@@ -9868,6 +9875,9 @@ START_TEST(htmldoc)
     test_com_aggregation(&CLSID_HTMLDocument);
     test_iframes();
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     DestroyWindow(container_hwnd);
     CoUninitialize();
 }

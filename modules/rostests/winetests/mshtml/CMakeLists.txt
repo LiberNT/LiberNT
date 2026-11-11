@@ -9,6 +9,7 @@ list(APPEND SOURCE
     events.c
     htmldoc.c
     htmllocation.c
+    httpserver.c
     misc.c
     protocol.c
     script.c
@@ -63,7 +64,7 @@ list(APPEND mshtml_winetest_rc_deps
 set_source_files_properties(rsrc.rc PROPERTIES OBJECT_DEPENDS "${mshtml_winetest_rc_deps}")
 target_link_libraries(mshtml_winetest uuid strmiids)
 set_module_type(mshtml_winetest win32cui)
-add_importlibs(mshtml_winetest ole32 oleaut32 shlwapi wininet user32 urlmon gdi32 advapi32 msvcrt kernel32)
+add_importlibs(mshtml_winetest ole32 oleaut32 shlwapi wininet ws2_32 user32 urlmon gdi32 advapi32 msvcrt kernel32)
 add_dependencies(mshtml_winetest test_tlb_header stdole2)
 add_rostests_file(TARGET mshtml_winetest)
 
