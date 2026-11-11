@@ -645,9 +645,9 @@ SepAnswerAboutToken(
             break;
 
         case TokenLinkedToken:
-            /* TODO: no token is linked to another, none being made in pairs */
+            /* TODO: no token is linked to another, none being made in pairs; an unlinked token's logon session has no buddy */
             ((PTOKEN_LINKED_TOKEN)Buffer)->LinkedToken = NULL;
-            return STATUS_NOT_FOUND;
+            return STATUS_NO_SUCH_LOGON_SESSION;
 
         case TokenAuditPolicy:
             /* TODO: what a token has audited is not kept */
