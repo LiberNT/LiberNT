@@ -89,6 +89,7 @@ KMT_TESTFUNC Test_ExLicenseDif;
 KMT_TESTFUNC Test_IoArbiter;
 KMT_TESTFUNC Test_IoLargeMemoryResource;
 KMT_TESTFUNC Test_IoCancelKM;
+KMT_TESTFUNC Test_IoCloseIrqlKM;
 KMT_TESTFUNC Test_PsProcessInfo;
 KMT_TESTFUNC Test_PsEnergy;
 KMT_TESTFUNC Test_PsTls;
@@ -535,6 +536,7 @@ const KMT_TEST TestList[] =
     { "IoArbiter",                          Test_IoArbiter },
     { "IoLargeMemoryResource",              Test_IoLargeMemoryResource },
     { "IoCancelKM",                         Test_IoCancelKM },
+    { "IoCloseIrqlKM",                      Test_IoCloseIrqlKM },
     { "CmCallbacks",                        Test_CmCallbacks },
     { "CmTransactions",                     Test_CmTransactions },
     { "CmKeyKM",                            Test_CmKeyKM },

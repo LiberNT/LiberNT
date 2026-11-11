@@ -37,7 +37,7 @@ ObpDeferObjectDeletion(
 
 /*
  * The delete procedure of a type may be pageable and may block, so an object
- * whose last reference goes away above APC level is handed to the reaper.
+ * whose last reference goes away above passive level is handed to the reaper.
  */
 static
 VOID
@@ -47,7 +47,7 @@ ObpRetireObject(
 {
     POBJECT_HEADER ObjectHeader = OBJECT_TO_OBJECT_HEADER(Object);
 
-    if (Defer || KeGetCurrentIrql() > APC_LEVEL)
+    if (Defer || KeGetCurrentIrql() > PASSIVE_LEVEL)
         ObpDeferObjectDeletion(ObjectHeader);
     else
         ObpDeleteObject(Object, FALSE);
