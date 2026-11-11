@@ -227,9 +227,19 @@ PspAddProcessToJobLimits(
             (UCHAR)PspJobSchedulingClasses[Job->SchedulingClass]);
     }
 
-    /* TODO: apply the working-set and memory limits through the memory
-     * manager, and the per-process time limit through a timer */
+    /* TODO: apply the working-set limits through the memory manager, and the
+     * per-process time limit through a timer */
     return STATUS_SUCCESS;
+}
+
+static
+VOID
+PspRecordJobMemoryPeaks(
+    _Inout_ PEJOB Job,
+    _In_ ULONGLONG ProcessPages)
+{
+    if (ProcessPages > Job->PeakProcessMemoryUsed) Job->PeakProcessMemoryUsed = ProcessPages;
+    if (Job->CurrentJobMemoryUsed > Job->PeakJobMemoryUsed) Job->PeakJobMemoryUsed = Job->CurrentJobMemoryUsed;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -410,6 +420,7 @@ PspAssignProcessToJob(
 {
     PEJOB Current;
     PEJOB Joined;
+    ULONGLONG Committed;
     BOOLEAN Nest = FALSE;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -487,6 +498,10 @@ PspAssignProcessToJob(
         ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
         Process->Job = Job;
         InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
+        /* TODO: charge and return commit along the whole job chain, so a nested job's ancestors keep counting it */
+        Committed = MmQueryProcessCommitCharge(Process);
+        Job->CurrentJobMemoryUsed += Committed;
+        PspRecordJobMemoryPeaks(Job, Committed);
         Status = PspAddProcessToJobLimits(Process, Job);
         ExReleaseResourceLite(&Job->JobLock);
 
@@ -685,29 +700,38 @@ PsChargeJobCommitment(
     _In_ SIZE_T PageCount)
 {
     PEJOB Job = Process->Job;
-    ULONGLONG New;
+    ULONGLONG ProcessPages;
+    ULONG Message = 0;
 
     if (Job == NULL) return STATUS_SUCCESS;
 
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
 
-    New = Job->CurrentJobMemoryUsed + PageCount;
+    ProcessPages = MmQueryProcessCommitCharge(Process) + PageCount;
 
-    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY) != 0 &&
-        New > Job->JobMemoryLimit)
+    /* The limits are kept in bytes, the usage in pages */
+    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_PROCESS_MEMORY) != 0 &&
+        ProcessPages > (Job->ProcessMemoryLimit >> PAGE_SHIFT))
     {
-        PspSendJobMessageLocked(Job,
-                                JOB_OBJECT_MSG_JOB_MEMORY_LIMIT,
-                                NULL,
-                                TRUE);
-        ExReleaseResourceLite(&Job->JobLock);
-        KeLeaveCriticalRegion();
-        return STATUS_QUOTA_EXCEEDED;
+        Message = JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT;
+    }
+    else if ((Job->LimitFlags & JOB_OBJECT_LIMIT_JOB_MEMORY) != 0 &&
+             Job->CurrentJobMemoryUsed + PageCount > (Job->JobMemoryLimit >> PAGE_SHIFT))
+    {
+        Message = JOB_OBJECT_MSG_JOB_MEMORY_LIMIT;
     }
 
-    Job->CurrentJobMemoryUsed = New;
-    if (New > Job->PeakJobMemoryUsed) Job->PeakJobMemoryUsed = New;
+    if (Message != 0)
+    {
+        PspSendJobMessageLocked(Job, Message, Process->UniqueProcessId, TRUE);
+        ExReleaseResourceLite(&Job->JobLock);
+        KeLeaveCriticalRegion();
+        return STATUS_COMMITMENT_LIMIT;
+    }
+
+    Job->CurrentJobMemoryUsed += PageCount;
+    PspRecordJobMemoryPeaks(Job, ProcessPages);
 
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
@@ -1441,8 +1465,8 @@ NtQueryInformationJobObject(
 
             Extended.ProcessMemoryLimit = (SIZE_T)Job->ProcessMemoryLimit;
             Extended.JobMemoryLimit = (SIZE_T)Job->JobMemoryLimit;
-            Extended.PeakProcessMemoryUsed = (SIZE_T)Job->PeakProcessMemoryUsed;
-            Extended.PeakJobMemoryUsed = (SIZE_T)Job->PeakJobMemoryUsed;
+            Extended.PeakProcessMemoryUsed = (SIZE_T)(Job->PeakProcessMemoryUsed << PAGE_SHIFT);
+            Extended.PeakJobMemoryUsed = (SIZE_T)(Job->PeakJobMemoryUsed << PAGE_SHIFT);
 
             Length = (JobInformationClass == JobObjectBasicLimitInformation)
                          ? sizeof(Extended.BasicLimitInformation)
