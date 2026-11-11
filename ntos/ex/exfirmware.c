@@ -225,10 +225,8 @@ ExGetSystemFirmwareTable(
         return STATUS_NOT_IMPLEMENTED;
     }
 
-    if (FirmwareTableID != 0)
-    {
-        return STATUS_NOT_FOUND;
-    }
+    /* The raw provider has the one table, whatever identifier names it */
+    UNREFERENCED_PARAMETER(FirmwareTableID);
 
     Status = ExpGetRawSMBiosTable(FirmwareTableBuffer, &Length, BufferLength);
 
