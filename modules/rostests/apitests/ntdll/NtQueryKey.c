@@ -93,6 +93,13 @@ Test_KeyFullInformation(void)
     ok(FullInformation->MaxValueDataLen != 0x55555555, "MaxValueDataLen = %lu\n", FullInformation->MaxValueDataLen);
     ok(FullInformation->Class[0] == 0x5555, "Class[0] = %u\n", FullInformation->Class[0]);
 
+    RtlFillMemory(FullInformation, FullInformationLength, 0x55);
+    InfoLength = 0x55555555;
+    Status = NtQueryKey(HKLM_Software_Key, KeyNodeInformation, FullInformation, FullInformationLength, &InfoLength);
+    ok(Status == STATUS_SUCCESS, "Status = 0x%lx\n", Status);
+    ok(((PKEY_NODE_INFORMATION)FullInformation)->ClassLength == 0, "ClassLength = %lu\n", ((PKEY_NODE_INFORMATION)FullInformation)->ClassLength);
+    ok(((PKEY_NODE_INFORMATION)FullInformation)->ClassOffset == 0xffffffff, "ClassOffset = %lu\n", ((PKEY_NODE_INFORMATION)FullInformation)->ClassOffset);
+
     InitializeObjectAttributes(&ObjectAttributes,
         &Test_Name,
         OBJ_CASE_INSENSITIVE,

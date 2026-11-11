@@ -153,7 +153,7 @@ CmpQueryKeyData(
 
             Answer->LastWriteTime = Node->LastWriteTime;
             Answer->TitleIndex = 0;
-            Answer->ClassOffset = ClassOffset;
+            Answer->ClassOffset = (Node->ClassLength != 0) ? ClassOffset : MAXULONG;
             Answer->ClassLength = Node->ClassLength;
             Answer->NameLength = NameSize;
 
@@ -187,7 +187,7 @@ CmpQueryKeyData(
 
             Answer->LastWriteTime = Node->LastWriteTime;
             Answer->TitleIndex = 0;
-            Answer->ClassOffset = ClassOffset;
+            Answer->ClassOffset = (Node->ClassLength != 0) ? ClassOffset : MAXULONG;
             Answer->ClassLength = Node->ClassLength;
             Answer->SubKeys = Node->SubKeyCounts[Stable] +
                               Node->SubKeyCounts[Volatile];
