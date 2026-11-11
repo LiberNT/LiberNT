@@ -337,9 +337,11 @@ IopOpenLinkOrRenameTarget(
     _In_ PFILE_OBJECT FileObject)
 {
     PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
+    FILE_STANDARD_INFORMATION StandardInfo;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     PFILE_OBJECT TargetFileObject;
+    ULONG ReturnedLength;
     UNICODE_STRING TargetName;
     ACCESS_MASK DesiredAccess;
     NTSTATUS Status;
@@ -359,6 +361,16 @@ IopOpenLinkOrRenameTarget(
      * handle.
      */
     DesiredAccess = FILE_ADD_FILE;
+
+    Status = IopGetFileInformation(FileObject,
+                                   sizeof(StandardInfo),
+                                   FileStandardInformation,
+                                   &StandardInfo,
+                                   &ReturnedLength);
+    if (NT_SUCCESS(Status) && StandardInfo.Directory)
+    {
+        DesiredAccess = FILE_ADD_SUBDIRECTORY;
+    }
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &TargetName,
