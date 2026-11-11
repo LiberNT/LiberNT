@@ -392,7 +392,7 @@ static int start_listening(IWSDiscoveryPublisherImpl *impl, SOCKADDR_STORAGE *bi
 {
     SOCKADDR_STORAGE multicast_addr, bind_addr, interface_addr;
     listener_thread_params *parameter = NULL;
-    const DWORD receive_timeout = 5000;
+    const DWORD receive_timeout = 100;
     const UINT reuse_addr = 1;
     HANDLE thread_handle;
     int address_length;
@@ -465,7 +465,7 @@ static int start_listening(IWSDiscoveryPublisherImpl *impl, SOCKADDR_STORAGE *bi
         goto cleanup;
     }
 
-    /* Set a 5-second receive timeout */
+    /* Set a 100 ms receive timeout, which bounds how long stopping the publisher waits for this listener */
     if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&receive_timeout, sizeof(receive_timeout)) == SOCKET_ERROR)
     {
         WARN("setsockopt(SO_RCVTIME0) failed (error %d)\n", WSAGetLastError());
