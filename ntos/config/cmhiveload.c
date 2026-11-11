@@ -906,6 +906,21 @@ CmpUnlinkAndReleaseHive(
     CmpDereferenceHive(CmHive);
 }
 
+static
+BOOLEAN
+CmpIsMachineHive(
+    _In_ PCMHIVE CmHive)
+{
+    ULONG i;
+
+    for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++)
+    {
+        if (CmpMachineHiveList[i].CmHive == CmHive) return TRUE;
+    }
+
+    return FALSE;
+}
+
 /*
  * Takes a loaded hive back out. A hive with keys still open cannot go unless
  * the caller asks for it to be forced, in which case those keys are made to
@@ -929,6 +944,8 @@ CmUnloadKey(
 
     CmHive = CmpFindLoadedHive(Kcb->KeyHive);
     if (CmHive == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (CmpIsMachineHive(CmHive)) return STATUS_ACCESS_DENIED;
 
     OpenCount = CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE);
 
