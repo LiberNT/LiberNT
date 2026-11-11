@@ -385,6 +385,434 @@ static void TestGetCalendarDateFormatEx(void)
     ok_error(Ret, ERROR_INVALID_PARAMETER);
 }
 
+static void TestOwnCalendarLeapYears(void)
+{
+    BOOL Ret;
+
+    ok(pIsCalendarLeapYear(CAL_HIJRI, 1445, 1) == TRUE, "Hijri 1445 is a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_HIJRI, 1446, 1) == FALSE, "Hijri 1446 is not a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_HEBREW, 5784, 1) == TRUE, "Hebrew 5784 is a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_HEBREW, 5785, 1) == FALSE, "Hebrew 5785 is not a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_PERSIAN, 1403, 1) == TRUE, "Persian 1403 is a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_PERSIAN, 1402, 1) == FALSE, "Persian 1402 is not a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_PERSIAN, 1404, 1) == FALSE, "Persian 1404 is not a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_UMALQURA, 1447, 1) == TRUE, "UmAlQura 1447 is a leap year\n");
+    ok(pIsCalendarLeapYear(CAL_UMALQURA, 1446, 1) == FALSE, "UmAlQura 1446 is not a leap year\n");
+
+    SetLastError(0xdeadbeef);
+    Ret = pIsCalendarLeapYear(CAL_HIJRI, 1445, 2);
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    SetLastError(0xdeadbeef);
+    Ret = pIsCalendarLeapYear(CAL_HEBREW, 5784, 0);
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    SetLastError(0xdeadbeef);
+    Ret = pIsCalendarLeapYear(CAL_HEBREW, 6000, 1);
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    SetLastError(0xdeadbeef);
+    Ret = pIsCalendarLeapYear(CAL_UMALQURA, 1501, 1);
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    SetLastError(0xdeadbeef);
+    Ret = pIsCalendarLeapYear(CAL_UMALQURA, 1317, 1);
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+}
+
+static void TestOwnCalendarConversions(void)
+{
+    static const struct
+    {
+        WORD Year, Month, Day;
+        CALID CalId;
+        UINT CalYear, CalMonth, CalDay, DayOfWeek;
+    } Tests[] =
+    {
+        { 2001,  1,  1, CAL_HIJRI,    1421, 10,  6, 1 },
+        { 9999, 12, 31, CAL_HIJRI,    9666,  4,  3, 5 },
+        { 2001,  1,  1, CAL_HEBREW,   5761,  4,  6, 1 },
+        { 2024, 10,  3, CAL_HEBREW,   5785,  1,  1, 4 },
+        { 2024,  4, 23, CAL_HEBREW,   5784,  8, 15, 2 },
+        { 2024,  3, 11, CAL_HEBREW,   5784,  7,  1, 1 },
+        { 2025,  3, 14, CAL_HEBREW,   5785,  6, 14, 5 },
+        { 2239,  9, 29, CAL_HEBREW,   5999, 13, 29, 0 },
+        { 2002,  3, 21, CAL_PERSIAN,  1381,  1,  1, 4 },
+        { 2024,  3, 20, CAL_PERSIAN,  1403,  1,  1, 3 },
+        { 2025,  3, 20, CAL_PERSIAN,  1403, 12, 30, 4 },
+        { 2025,  3, 21, CAL_PERSIAN,  1404,  1,  1, 5 },
+        { 9999, 12, 31, CAL_PERSIAN,  9378, 10, 13, 5 },
+        { 1900,  4, 30, CAL_UMALQURA, 1318,  1,  1, 1 },
+        { 2024,  3, 11, CAL_UMALQURA, 1445,  9,  1, 1 },
+        { 2024,  4, 10, CAL_UMALQURA, 1445, 10,  1, 3 },
+        { 2024,  7,  7, CAL_UMALQURA, 1446,  1,  1, 0 },
+        { 2077, 11, 16, CAL_UMALQURA, 1500, 12, 30, 2 },
+    };
+    static const struct
+    {
+        WORD Year, Month, Day;
+        CALID CalId;
+    } OutOfRange[] =
+    {
+        { 2239,  9, 30, CAL_HEBREW },
+        { 1900,  4, 29, CAL_UMALQURA },
+        { 2077, 11, 17, CAL_UMALQURA },
+    };
+    SYSTEMTIME st, Back;
+    CALDATETIME Cal;
+    ULONG i;
+    BOOL Ret;
+
+    for (i = 0; i < ARRAY_SIZE(Tests); i++)
+    {
+        ZeroMemory(&st, sizeof(st));
+        st.wYear = Tests[i].Year;
+        st.wMonth = Tests[i].Month;
+        st.wDay = Tests[i].Day;
+        st.wHour = 6;
+        memset(&Cal, 0xcc, sizeof(Cal));
+        Ret = pConvertSystemTimeToCalDateTime(&st, Tests[i].CalId, &Cal);
+        ok(Ret, "%lu: ConvertSystemTimeToCalDateTime failed, error %lu\n", i, GetLastError());
+        ok_cal(Cal, Tests[i].CalId, 1, Tests[i].CalYear, Tests[i].CalMonth, Tests[i].CalDay, Tests[i].DayOfWeek);
+        ok(Cal.Hour == 6 && Cal.Minute == 0 && Cal.Second == 0 && Cal.Tick == 0, "%lu: Got time %u:%u:%u.%lu\n",
+           i, Cal.Hour, Cal.Minute, Cal.Second, Cal.Tick);
+
+        Cal = MakeCal(Tests[i].CalId, 1, Tests[i].CalYear, Tests[i].CalMonth, Tests[i].CalDay);
+        memset(&Back, 0xcc, sizeof(Back));
+        Ret = pConvertCalDateTimeToSystemTime(&Cal, &Back);
+        ok(Ret, "%lu: ConvertCalDateTimeToSystemTime failed, error %lu\n", i, GetLastError());
+        ok(Back.wYear == Tests[i].Year && Back.wMonth == Tests[i].Month && Back.wDay == Tests[i].Day &&
+           Back.wDayOfWeek == Tests[i].DayOfWeek && Back.wHour == 0,
+           "%lu: Got %u-%u-%u dow %u hour %u\n", i, Back.wYear, Back.wMonth, Back.wDay, Back.wDayOfWeek, Back.wHour);
+
+        Ret = pUpdateCalendarDayOfWeek(&Cal);
+        ok(Ret && Cal.DayOfWeek == Tests[i].DayOfWeek, "%lu: UpdateCalendarDayOfWeek got %d dow %u\n", i, Ret, Cal.DayOfWeek);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(OutOfRange); i++)
+    {
+        ZeroMemory(&st, sizeof(st));
+        st.wYear = OutOfRange[i].Year;
+        st.wMonth = OutOfRange[i].Month;
+        st.wDay = OutOfRange[i].Day;
+        SetLastError(0xdeadbeef);
+        Ret = pConvertSystemTimeToCalDateTime(&st, OutOfRange[i].CalId, &Cal);
+        ok_error(Ret, ERROR_INVALID_PARAMETER);
+    }
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5785, 13, 1);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 13, 29);
+    ok(pConvertCalDateTimeToSystemTime(&Cal, &st) && st.wYear == 2024 && st.wMonth == 10 && st.wDay == 2,
+       "Hebrew 5784-13-29 got %u-%u-%u\n", st.wYear, st.wMonth, st.wDay);
+    Cal = MakeCal(CAL_HIJRI, 1, 1445, 12, 30);
+    ok(pConvertCalDateTimeToSystemTime(&Cal, &st) && st.wYear == 2024 && st.wMonth == 7 && st.wDay == 6,
+       "Hijri 1445-12-30 got %u-%u-%u\n", st.wYear, st.wMonth, st.wDay);
+    Cal = MakeCal(CAL_HIJRI, 1, 1446, 12, 30);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_PERSIAN, 1, 1402, 12, 30);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_PERSIAN, 1, 1403, 7, 31);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_UMALQURA, 1, 1445, 9, 30);
+    ok(pConvertCalDateTimeToSystemTime(&Cal, &st) && st.wYear == 2024 && st.wMonth == 4 && st.wDay == 9,
+       "UmAlQura 1445-09-30 got %u-%u-%u\n", st.wYear, st.wMonth, st.wDay);
+    Cal = MakeCal(CAL_UMALQURA, 1, 1445, 10, 30);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_HIJRI, 2, 1445, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_PERSIAN, 0, 1403, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_error(pConvertCalDateTimeToSystemTime(&Cal, &st), ERROR_INVALID_PARAMETER);
+
+    Cal = MakeCal(CAL_HEBREW, 1, 6000, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pConvertCalDateTimeToSystemTime(&Cal, &st));
+    Cal = MakeCal(CAL_HEBREW, 1, 5361, 4, 26);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pConvertCalDateTimeToSystemTime(&Cal, &st));
+    Cal = MakeCal(CAL_UMALQURA, 1, 1501, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pConvertCalDateTimeToSystemTime(&Cal, &st));
+    Cal = MakeCal(CAL_UMALQURA, 1, 1317, 12, 1);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pConvertCalDateTimeToSystemTime(&Cal, &st));
+}
+
+static void TestOwnCalendarAdjust(void)
+{
+    CALDATETIME Cal, Saved;
+    BOOL Ret;
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 5, 30);
+    Cal.Hour = 9;
+    Ret = pAdjustCalendarDate(&Cal, MonthUnit, 1);
+    ok(Ret, "Hebrew MonthUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HEBREW, 1, 5784, 6, 30, 0);
+    ok(Cal.Hour == 9, "Hour changed to %u\n", Cal.Hour);
+    Ret = pAdjustCalendarDate(&Cal, MonthUnit, 1);
+    ok(Ret, "Hebrew MonthUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HEBREW, 1, 5784, 7, 29, 1);
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 13, 29);
+    Ret = pAdjustCalendarDate(&Cal, YearUnit, 1);
+    ok(Ret, "Hebrew YearUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HEBREW, 1, 5785, 12, 29, 1);
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 12, 1);
+    Ret = pAdjustCalendarDate(&Cal, MonthUnit, 2);
+    ok(Ret, "Hebrew MonthUnit 2 failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HEBREW, 1, 5785, 1, 1, 4);
+
+    Cal = MakeCal(CAL_HIJRI, 1, 1445, 12, 30);
+    Ret = pAdjustCalendarDate(&Cal, YearUnit, 1);
+    ok(Ret, "Hijri YearUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HIJRI, 1, 1446, 12, 29, 3);
+
+    Cal = MakeCal(CAL_HIJRI, 1, 1445, 11, 15);
+    Ret = pAdjustCalendarDate(&Cal, MonthUnit, 2);
+    ok(Ret, "Hijri MonthUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_HIJRI, 1, 1446, 1, 15, 0);
+
+    Cal = MakeCal(CAL_PERSIAN, 1, 1403, 12, 30);
+    Ret = pAdjustCalendarDate(&Cal, YearUnit, 1);
+    ok(Ret, "Persian YearUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_PERSIAN, 1, 1404, 12, 29, 5);
+
+    Cal = MakeCal(CAL_UMALQURA, 1, 1445, 9, 1);
+    Ret = pAdjustCalendarDate(&Cal, DayUnit, 30);
+    ok(Ret, "UmAlQura DayUnit failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_UMALQURA, 1, 1445, 10, 1, 3);
+
+    Cal = MakeCal(CAL_UMALQURA, 1, 1500, 12, 30);
+    Saved = Cal;
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pAdjustCalendarDate(&Cal, DayUnit, 1));
+    ok(memcmp(&Cal, &Saved, sizeof(Cal)) == 0, "Failed call changed the date\n");
+    Cal = MakeCal(CAL_HEBREW, 1, 5999, 13, 29);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pAdjustCalendarDate(&Cal, WeekUnit, 1));
+    Cal = MakeCal(CAL_UMALQURA, 1, 1318, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_out_of_range(pAdjustCalendarDate(&Cal, MonthUnit, -1));
+    Cal = MakeCal(CAL_PERSIAN, 1, 1403, 1, 1);
+    SetLastError(0xdeadbeef);
+    ok_error(pAdjustCalendarDate(&Cal, EraUnit, 1), ERROR_INVALID_PARAMETER);
+}
+
+static void TestOwnCalendarRanges(void)
+{
+    static const struct
+    {
+        CALID CalId;
+        UINT MinYear, MinMonth, MinDay, MinDow;
+        UINT MaxYear, MaxMonth, MaxDay, MaxDow;
+    } Tests[] =
+    {
+        { CAL_HIJRI,    1009,  6, 26, 1, 9666,  4,  3, 5 },
+        { CAL_HEBREW,   5361,  4, 27, 1, 5999, 13, 29, 0 },
+        { CAL_PERSIAN,   979, 10, 11, 1, 9378, 10, 13, 5 },
+        { CAL_UMALQURA, 1318,  1,  1, 1, 1500, 12, 30, 2 },
+    };
+    CALDATETIME Min, Max;
+    ULONG i;
+    BOOL Ret;
+
+    for (i = 0; i < ARRAY_SIZE(Tests); i++)
+    {
+        memset(&Min, 0xcc, sizeof(Min));
+        memset(&Max, 0xcc, sizeof(Max));
+        Ret = pGetCalendarSupportedDateRange(Tests[i].CalId, &Min, &Max);
+        ok(Ret, "%lu: GetCalendarSupportedDateRange failed, error %lu\n", i, GetLastError());
+        ok_cal(Min, Tests[i].CalId, 1, Tests[i].MinYear, Tests[i].MinMonth, Tests[i].MinDay, Tests[i].MinDow);
+        ok_cal(Max, Tests[i].CalId, 1, Tests[i].MaxYear, Tests[i].MaxMonth, Tests[i].MaxDay, Tests[i].MaxDow);
+        ok(Min.Hour == 0 && Min.Minute == 0 && Min.Second == 0 && Min.Tick == 0, "%lu: Min time %u:%u:%u.%lu\n",
+           i, Min.Hour, Min.Minute, Min.Second, Min.Tick);
+        ok(Max.Hour == 23 && Max.Minute == 59 && Max.Second == 59 && Max.Tick == 9999999, "%lu: Max time %u:%u:%u.%lu\n",
+           i, Max.Hour, Max.Minute, Max.Second, Max.Tick);
+    }
+}
+
+static void SetHijriAdjustment(HKEY Key, LPCWSTR Value)
+{
+    LONG Error = RegSetValueExW(Key, L"AddHijriDate", 0, REG_SZ, (const BYTE *)Value, (DWORD)((wcslen(Value) + 1) * sizeof(WCHAR)));
+    ok(Error == ERROR_SUCCESS, "RegSetValueExW(%S) failed, error %ld\n", Value, Error);
+}
+
+static void TestHijriAdjustment(void)
+{
+    static const struct
+    {
+        LPCWSTR Value;
+        UINT Day;
+    } Tests[] =
+    {
+        { L"AddHijriDate+1", 7 },
+        { L"AddHijriDate+2", 8 },
+        { L"AddHijriDate", 5 },
+        { L"AddHijriDate-1", 5 },
+        { L"addhijridate-2", 4 },
+        { L"AddHijriDate+3", 6 },
+        { L"AddHijriDate-3", 6 },
+        { L"AddHijriDatex", 6 },
+        { L"", 6 },
+        { L"+1", 6 },
+    };
+    SYSTEMTIME st = { 2001, 1, 1, 1, 0, 0, 0, 0 };
+    WCHAR Saved[64];
+    DWORD SavedSize = sizeof(Saved), Type = REG_NONE;
+    CALDATETIME Cal;
+    BOOL HadValue;
+    HKEY Key;
+    LONG Error;
+    ULONG i;
+    BOOL Ret;
+
+    Error = RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\International", 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &Key);
+    ok(Error == ERROR_SUCCESS, "RegOpenKeyExW failed, error %ld\n", Error);
+    if (Error != ERROR_SUCCESS)
+        return;
+
+    HadValue = (RegQueryValueExW(Key, L"AddHijriDate", NULL, &Type, (BYTE *)Saved, &SavedSize) == ERROR_SUCCESS);
+
+    for (i = 0; i < ARRAY_SIZE(Tests); i++)
+    {
+        SetHijriAdjustment(Key, Tests[i].Value);
+        Ret = pConvertSystemTimeToCalDateTime(&st, CAL_HIJRI, &Cal);
+        ok(Ret, "%S: ConvertSystemTimeToCalDateTime failed, error %lu\n", Tests[i].Value, GetLastError());
+        ok_cal(Cal, CAL_HIJRI, 1, 1421, 10, Tests[i].Day, 1);
+    }
+
+    SetHijriAdjustment(Key, L"AddHijriDate+1");
+    Cal = MakeCal(CAL_HIJRI, 1, 1421, 10, 7);
+    Ret = pConvertCalDateTimeToSystemTime(&Cal, &st);
+    ok(Ret && st.wYear == 2001 && st.wMonth == 1 && st.wDay == 1, "Adjusted Hijri got %u-%u-%u\n", st.wYear, st.wMonth, st.wDay);
+    st.wYear = 2024; st.wMonth = 3; st.wDay = 11;
+    Ret = pConvertSystemTimeToCalDateTime(&st, CAL_UMALQURA, &Cal);
+    ok(Ret, "CAL_UMALQURA failed, error %lu\n", GetLastError());
+    ok_cal(Cal, CAL_UMALQURA, 1, 1445, 9, 1, 1);
+
+    if (HadValue)
+        RegSetValueExW(Key, L"AddHijriDate", 0, Type, (const BYTE *)Saved, SavedSize);
+    else
+        RegDeleteValueW(Key, L"AddHijriDate");
+    RegCloseKey(Key);
+}
+
+static int (WINAPI *pGetCalendarInfoEx)(LPCWSTR, CALID, LPCWSTR, CALTYPE, LPWSTR, int, LPDWORD);
+
+static void GetCalString(LPCWSTR Locale, CALID CalId, CALTYPE Type, LPWSTR Buffer, int Size)
+{
+    Buffer[0] = UNICODE_NULL;
+    ok(pGetCalendarInfoEx(Locale, CalId, NULL, Type, Buffer, Size, NULL) > 0,
+       "GetCalendarInfoEx(%S, %lu, 0x%lx) failed, error %lu\n", Locale, CalId, Type, GetLastError());
+}
+
+static void ok_format(LPCWSTR Locale, DWORD Flags, CALDATETIME *Cal, LPCWSTR Format, LPCWSTR Expected)
+{
+    WCHAR Buffer[128];
+    int Ret;
+
+    memset(Buffer, 0x55, sizeof(Buffer));
+    Ret = pGetCalendarDateFormatEx(Locale, Flags, Cal, Format, Buffer, ARRAY_SIZE(Buffer));
+    ok(Ret == (int)wcslen(Expected) + 1 && wcscmp(Buffer, Expected) == 0,
+       "%S %lu %S: got %d %S, expected %S\n", Locale, Cal->CalId, Format ? Format : L"(null)", Ret,
+       Ret ? Buffer : L"", Expected);
+}
+
+static void TestOtherCalendarFormat(void)
+{
+    WCHAR Name[80], Name2[80], Expected[160], Picture[80], Buffer[160];
+    CALDATETIME Cal;
+    int Ret;
+
+    if (!pGetCalendarInfoEx)
+    {
+        skip("GetCalendarInfoEx is not exported\n");
+        return;
+    }
+
+    Cal = MakeCal(CAL_HIJRI, 1, 1421, 10, 6);
+    ok_format(L"ar-SA", 0, &Cal, L"yyyy/MM/dd", L"1421/10/06");
+    Cal = MakeCal(CAL_UMALQURA, 1, 1445, 9, 1);
+    ok_format(L"ar-SA", 0, &Cal, L"d/M/yy y", L"1/9/45 45");
+    GetCalString(L"ar-SA", CAL_UMALQURA, CAL_SMONTHNAME9, Name, ARRAY_SIZE(Name));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"%s %s", Name, L"1445");
+    ok_format(L"ar-SA", 0, &Cal, L"MMMM yyyy", Expected);
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 8, 15);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SMONTHNAME8, Name, ARRAY_SIZE(Name));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"15 %s 5784 yyyy'", Name);
+    ok_format(L"he-IL", 0, &Cal, L"d MMMM yyyy 'yyyy'''", Expected);
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 6, 1);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SMONTHNAME6, Name, ARRAY_SIZE(Name));
+    ok_format(L"he-IL", 0, &Cal, L"MMMM", Name);
+    Cal = MakeCal(CAL_HEBREW, 1, 5784, 7, 1);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SMONTHNAME7, Name, ARRAY_SIZE(Name));
+    ok_format(L"he-IL", 0, &Cal, L"MMMM", Name);
+    Cal = MakeCal(CAL_HEBREW, 1, 5785, 6, 14);
+    ok_format(L"he-IL", 0, &Cal, L"MMMM", Name);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SABBREVMONTHNAME7, Name, ARRAY_SIZE(Name));
+    ok_format(L"he-IL", 0, &Cal, L"MMM", Name);
+    Cal = MakeCal(CAL_HEBREW, 1, 5785, 7, 1);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SMONTHNAME8, Name, ARRAY_SIZE(Name));
+    ok_format(L"he-IL", 0, &Cal, L"MMMM", Name);
+
+    Cal = MakeCal(CAL_HEBREW, 1, 5785, 1, 1);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SDAYNAME4, Name, ARRAY_SIZE(Name));
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SABBREVDAYNAME4, Name2, ARRAY_SIZE(Name2));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"%s|%s|01|1", Name, Name2);
+    ok_format(L"he-IL", 0, &Cal, L"dddd|ddd|dd|M", Expected);
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SERASTRING, Name, ARRAY_SIZE(Name));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"%s 85", Name);
+    ok_format(L"he-IL", 0, &Cal, L"gg yy", Expected);
+
+    GetCalString(L"he-IL", CAL_HEBREW, CAL_SLONGDATE, Picture, ARRAY_SIZE(Picture));
+    Ret = pGetCalendarDateFormatEx(L"he-IL", 0, &Cal, Picture, Expected, ARRAY_SIZE(Expected));
+    ok(Ret > 0, "Explicit long date failed, error %lu\n", GetLastError());
+    ok_format(L"he-IL", DATE_LONGDATE, &Cal, NULL, Expected);
+    Ret = pGetCalendarDateFormatEx(L"he-IL", DATE_LONGDATE, &Cal, NULL, NULL, 0);
+    ok(Ret == (int)wcslen(Expected) + 1, "Size query got %d, expected %u\n", Ret, (UINT)wcslen(Expected) + 1);
+    SetLastError(0xdeadbeef);
+    Ret = pGetCalendarDateFormatEx(L"he-IL", DATE_LONGDATE, &Cal, NULL, Buffer, (int)wcslen(Expected));
+    ok_error(Ret, ERROR_INSUFFICIENT_BUFFER);
+
+    Cal = MakeCal(CAL_PERSIAN, 1, 1403, 1, 1);
+    ok_format(L"fa-IR", 0, &Cal, L"yyyy/MM/dd", L"1403/01/01");
+
+    Cal = MakeCal(CAL_THAI, 1, 2551, 3, 14);
+    ok_format(L"th-TH", 0, &Cal, L"d/M/yyyy", L"14/3/2551");
+    Ret = GetLocaleInfoEx(L"th-TH", LOCALE_SSHORTDATE, Picture, ARRAY_SIZE(Picture));
+    ok(Ret > 0, "GetLocaleInfoEx failed, error %lu\n", GetLastError());
+    Ret = pGetCalendarDateFormatEx(L"th-TH", 0, &Cal, Picture, Expected, ARRAY_SIZE(Expected));
+    ok(Ret > 0, "Explicit short date failed, error %lu\n", GetLastError());
+    ok_format(L"th-TH", DATE_SHORTDATE, &Cal, NULL, Expected);
+    Cal = MakeCal(CAL_GREGORIAN, 1, 2008, 3, 14);
+    GetCalString(L"th-TH", CAL_GREGORIAN, CAL_SMONTHNAME3, Name, ARRAY_SIZE(Name));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"%s 2008", Name);
+    ok_format(L"th-TH", 0, &Cal, L"MMMM yyyy", Expected);
+
+    Cal = MakeCal(CAL_JAPAN, 5, 2, 1, 1);
+    GetCalString(L"ja-JP", CAL_JAPAN, CAL_SERASTRING, Name, ARRAY_SIZE(Name));
+    StringCchPrintfW(Expected, ARRAY_SIZE(Expected), L"%s 02 2 02", Name);
+    ok_format(L"ja-JP", 0, &Cal, L"gg yy y yyyy", Expected);
+
+    Cal = MakeCal(CAL_HIJRI, 1, 1421, 10, 6);
+    SetLastError(0xdeadbeef);
+    Ret = pGetCalendarDateFormatEx(L"en-US", 0, &Cal, L"yyyy", Buffer, ARRAY_SIZE(Buffer));
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_TAIWAN, 1, 97, 3, 14);
+    SetLastError(0xdeadbeef);
+    Ret = pGetCalendarDateFormatEx(L"ja-JP", 0, &Cal, L"yyyy", Buffer, ARRAY_SIZE(Buffer));
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+    Cal = MakeCal(CAL_HEBREW, 1, 5785, 13, 1);
+    SetLastError(0xdeadbeef);
+    Ret = pGetCalendarDateFormatEx(L"he-IL", 0, &Cal, L"yyyy", Buffer, ARRAY_SIZE(Buffer));
+    ok_error(Ret, ERROR_INVALID_PARAMETER);
+}
+
 START_TEST(CalendarDateTime)
 {
     HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
@@ -396,6 +824,7 @@ START_TEST(CalendarDateTime)
     pGetCalendarSupportedDateRange = (PVOID)GetProcAddress(Kernel32, "GetCalendarSupportedDateRange");
     pIsCalendarLeapYear = (PVOID)GetProcAddress(Kernel32, "IsCalendarLeapYear");
     pUpdateCalendarDayOfWeek = (PVOID)GetProcAddress(Kernel32, "UpdateCalendarDayOfWeek");
+    pGetCalendarInfoEx = (PVOID)GetProcAddress(Kernel32, "GetCalendarInfoEx");
     if (!pAdjustCalendarDate || !pConvertCalDateTimeToSystemTime || !pConvertSystemTimeToCalDateTime ||
         !pGetCalendarDateFormatEx || !pGetCalendarSupportedDateRange || !pIsCalendarLeapYear ||
         !pUpdateCalendarDayOfWeek)
@@ -411,4 +840,10 @@ START_TEST(CalendarDateTime)
     TestAdjustCalendarDate();
     TestGetCalendarSupportedDateRange();
     TestGetCalendarDateFormatEx();
+    TestOwnCalendarLeapYears();
+    TestOwnCalendarConversions();
+    TestOwnCalendarAdjust();
+    TestOwnCalendarRanges();
+    TestHijriAdjustment();
+    TestOtherCalendarFormat();
 }
