@@ -267,6 +267,149 @@ SepNoteTokenGroupFlags(
     if (Token->RestrictedSidCount != 0) Token->TokenFlags |= TOKEN_IS_RESTRICTED;
 }
 
+/* FIXME: the kept handles are each token's own, not shared per package and logon session */
+static
+NTSTATUS
+SepMakeLowBoxInfo(
+    _In_ PSID Package,
+    _In_ ULONG CapabilityCount,
+    _In_reads_opt_(CapabilityCount) PSID_AND_ATTRIBUTES Capabilities,
+    _In_ ULONG HandleCount,
+    _In_reads_opt_(HandleCount) PHANDLE Handles,
+    _In_ KPROCESSOR_MODE HandleMode,
+    _In_ ULONG Flags,
+    _In_ ULONG LowBoxNumber,
+    _Out_ PSEP_LOWBOX_INFO *NewBox)
+{
+    PSEP_LOWBOX_INFO Box;
+    PVOID Object;
+    SIZE_T Size;
+    PUCHAR Cursor;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Length;
+    ULONG i;
+
+    PAGED_CODE();
+
+    *NewBox = NULL;
+
+    Size = sizeof(SEP_LOWBOX_INFO) +
+           (SIZE_T)CapabilityCount * sizeof(SID_AND_ATTRIBUTES) +
+           (SIZE_T)HandleCount * sizeof(PVOID) +
+           RtlLengthSid(Package);
+
+    for (i = 0; i < CapabilityCount; i++)
+        Size += RtlLengthSid(Capabilities[i].Sid);
+
+    Box = ExAllocatePoolWithTag(PagedPool, Size, TAG_SE);
+    if (Box == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Box, Size);
+    Box->Flags = Flags;
+    Box->LowBoxNumber = LowBoxNumber;
+
+    Cursor = (PUCHAR)(Box + 1);
+
+    Box->CapabilityCount = CapabilityCount;
+    if (CapabilityCount != 0)
+    {
+        Box->Capabilities = (PSID_AND_ATTRIBUTES)Cursor;
+        Cursor += CapabilityCount * sizeof(SID_AND_ATTRIBUTES);
+    }
+
+    if (HandleCount != 0)
+    {
+        Box->Handles = (PVOID *)Cursor;
+        Cursor += HandleCount * sizeof(PVOID);
+    }
+
+    Length = RtlLengthSid(Package);
+    RtlCopyMemory(Cursor, Package, Length);
+    Box->PackageSid = (PSID)Cursor;
+    Cursor += Length;
+
+    for (i = 0; i < CapabilityCount; i++)
+    {
+        Length = RtlLengthSid(Capabilities[i].Sid);
+        RtlCopyMemory(Cursor, Capabilities[i].Sid, Length);
+        Box->Capabilities[i].Sid = (PSID)Cursor;
+        Box->Capabilities[i].Attributes = Capabilities[i].Attributes;
+        Cursor += Length;
+    }
+
+    for (i = 0; i < HandleCount && NT_SUCCESS(Status); i++)
+    {
+        Status = ObReferenceObjectByHandle(Handles[i],
+                                           0,
+                                           NULL,
+                                           HandleMode,
+                                           &Object,
+                                           NULL);
+        if (!NT_SUCCESS(Status)) break;
+
+        Status = ObOpenObjectByPointer(Object,
+                                       OBJ_KERNEL_HANDLE,
+                                       NULL,
+                                       0,
+                                       NULL,
+                                       KernelMode,
+                                       (PHANDLE)&Box->Handles[i]);
+        ObDereferenceObject(Object);
+
+        if (NT_SUCCESS(Status)) Box->HandleCount++;
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        for (i = 0; i < Box->HandleCount; i++)
+            ObCloseHandle(Box->Handles[i], KernelMode);
+
+        ExFreePoolWithTag(Box, TAG_SE);
+        return Status;
+    }
+
+    *NewBox = Box;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+SepFreeLowBoxInfo(
+    _In_ PSEP_LOWBOX_INFO Box)
+{
+    ULONG i;
+
+    PAGED_CODE();
+
+    for (i = 0; i < Box->HandleCount; i++)
+        ObCloseHandle(Box->Handles[i], KernelMode);
+
+    ExFreePoolWithTag(Box, TAG_SE);
+}
+
+static
+NTSTATUS
+SepCopyLowBoxInfo(
+    _In_ PTOKEN Source,
+    _Inout_ PTOKEN Copy)
+{
+    PSEP_LOWBOX_INFO Box = Source->LowBoxInfo;
+
+    PAGED_CODE();
+
+    if (Box == NULL) return STATUS_SUCCESS;
+
+    return SepMakeLowBoxInfo(Box->PackageSid,
+                             Box->CapabilityCount,
+                             Box->Capabilities,
+                             Box->HandleCount,
+                             (PHANDLE)Box->Handles,
+                             KernelMode,
+                             Box->Flags,
+                             Box->LowBoxNumber,
+                             (PSEP_LOWBOX_INFO *)&Copy->LowBoxInfo);
+}
+
 /* A token carries its own lock, since what it says may be changed under it */
 static
 NTSTATUS
@@ -510,6 +653,16 @@ SepCloneToken(
     ExFreePoolWithTag(Groups, TAG_SE);
     if (Privileges != NULL) ExFreePoolWithTag(Privileges, TAG_SE);
 
+    if (NT_SUCCESS(Status))
+    {
+        Status = SepCopyLowBoxInfo(Token, *NewToken);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(*NewToken);
+            *NewToken = NULL;
+        }
+    }
+
     return Status;
 }
 
@@ -562,7 +715,12 @@ SepDeleteToken(
         Token->DefaultDacl = NULL;
     }
 
-    /* TODO: a token made for a package keeps nothing of its own to let go of */
+    if (Token->LowBoxInfo != NULL)
+    {
+        SepFreeLowBoxInfo(Token->LowBoxInfo);
+        Token->LowBoxInfo = NULL;
+    }
+
     SepBreakTokenLock(Token);
 }
 
@@ -1005,6 +1163,16 @@ SeFilterToken(
     if (Groups != NULL) ExFreePoolWithTag(Groups, TAG_SE);
     if (Privileges != NULL) ExFreePoolWithTag(Privileges, TAG_SE);
     if (Restricted != NULL) ExFreePoolWithTag(Restricted, TAG_SE);
+
+    if (NT_SUCCESS(Status))
+    {
+        Status = SepCopyLowBoxInfo(Token, *FilteredToken);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(*FilteredToken);
+            *FilteredToken = NULL;
+        }
+    }
 
     return Status;
 }
@@ -1696,6 +1864,7 @@ NtCreateLowBoxToken(
     PSEP_LOWBOX_INFO Box = NULL;
     PSID Package = NULL;
     PSID_AND_ATTRIBUTES Caps = NULL;
+    PHANDLE Kept = NULL;
     PTOKEN Token = NULL;
     PTOKEN New = NULL;
     HANDLE Handle;
@@ -1735,6 +1904,52 @@ NtCreateLowBoxToken(
                                                 &Length);
     }
 
+    if (NT_SUCCESS(Status) && HandleCount != 0)
+    {
+        if (HandleCount > MAXULONG / sizeof(HANDLE))
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        else
+        {
+            _SEH2_TRY
+            {
+                if (PreviousMode != KernelMode)
+                {
+                    ProbeForRead(Handles,
+                                 HandleCount * sizeof(HANDLE),
+                                 TYPE_ALIGNMENT(HANDLE));
+                }
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+
+        if (NT_SUCCESS(Status))
+        {
+            Kept = ExAllocatePoolWithTag(PagedPool,
+                                         HandleCount * sizeof(HANDLE),
+                                         TAG_SE);
+            if (Kept == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        if (NT_SUCCESS(Status))
+        {
+            _SEH2_TRY
+            {
+                RtlCopyMemory(Kept, Handles, HandleCount * sizeof(HANDLE));
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+    }
+
     if (NT_SUCCESS(Status))
     {
         Status = ObReferenceObjectByHandle(ExistingTokenHandle,
@@ -1759,25 +1974,24 @@ NtCreateLowBoxToken(
 
     if (NT_SUCCESS(Status))
     {
-        Box = ExAllocatePoolWithTag(PagedPool, sizeof(*Box), TAG_SE);
-        if (Box == NULL)
-        {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
-        }
-        else
-        {
-            RtlZeroMemory(Box, sizeof(*Box));
-            Box->PackageSid = Package;
-            Box->CapabilityCount = CapabilityCount;
-            Box->Capabilities = Caps;
+        Status = SepMakeLowBoxInfo(Package,
+                                   CapabilityCount,
+                                   Caps,
+                                   HandleCount,
+                                   Kept,
+                                   PreviousMode,
+                                   0,
+                                   0,
+                                   &Box);
+    }
 
-            /* TODO: the handles a package is given are not kept */
-            New->LowBoxInfo = Box;
-            New->TokenFlags |= TOKEN_LOWBOX;
+    if (NT_SUCCESS(Status))
+    {
+        /* A token made from a package's token stands for the new package */
+        if (New->LowBoxInfo != NULL) SepFreeLowBoxInfo(New->LowBoxInfo);
 
-            Package = NULL;
-            Caps = NULL;
-        }
+        New->LowBoxInfo = Box;
+        New->TokenFlags |= TOKEN_LOWBOX;
     }
 
     if (NT_SUCCESS(Status))
@@ -1803,9 +2017,7 @@ NtCreateLowBoxToken(
         ObDereferenceObject(New);
     }
 
-    UNREFERENCED_PARAMETER(HandleCount);
-    UNREFERENCED_PARAMETER(Handles);
-
+    if (Kept != NULL) ExFreePoolWithTag(Kept, TAG_SE);
     if (Caps != NULL) SeReleaseSidAndAttributesArray(Caps, PreviousMode, TRUE);
     if (Package != NULL) SepReleaseSid(Package, PreviousMode, TRUE);
 

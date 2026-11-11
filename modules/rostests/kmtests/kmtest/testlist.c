@@ -17,6 +17,7 @@ KMT_TESTFUNC Test_FileAttributes;
 KMT_TESTFUNC Test_FindFile;
 KMT_TESTFUNC Test_NtFilterToken;
 KMT_TESTFUNC Test_NtFilterTokenCapture;
+KMT_TESTFUNC Test_SeLowBoxToken;
 KMT_TESTFUNC Test_FltMgrIo;
 KMT_TESTFUNC Test_FltMgrScan;
 KMT_TESTFUNC Test_FltMgrTx;
@@ -79,6 +80,7 @@ const KMT_TEST TestList[] =
     { "FindFile",                     Test_FindFile },
     { "NtFilterToken",                Test_NtFilterToken },
     { "NtFilterTokenCapture",         Test_NtFilterTokenCapture },
+    { "SeLowBoxToken",                Test_SeLowBoxToken },
     { "FltMgrIo",                     Test_FltMgrIo },
     { "FltMgrScan",                   Test_FltMgrScan },
     { "FltMgrTx",                     Test_FltMgrTx },

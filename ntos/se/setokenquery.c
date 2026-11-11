@@ -278,14 +278,23 @@ SepAnswerAboutToken(
         case TokenCapabilities:
         {
             PTOKEN_GROUPS Answer = Buffer;
+            PSEP_LOWBOX_INFO Box = Token->LowBoxInfo;
+            ULONG Count = (Box != NULL) ? Box->CapabilityCount : 0;
+            PSID_AND_ATTRIBUTES Capabilities = (Box != NULL) ? Box->Capabilities : NULL;
 
-            /* TODO: a token holds no capabilities of its own to answer with */
-            Room = FIELD_OFFSET(TOKEN_GROUPS, Groups);
+            Room = SepRoomForHolders(FIELD_OFFSET(TOKEN_GROUPS, Groups),
+                                     Count,
+                                     Capabilities);
             *Needed = Room;
 
             if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;
 
-            Answer->GroupCount = 0;
+            Answer->GroupCount = Count;
+            SepAnswerWithHolders(Answer->Groups,
+                                 Count,
+                                 Capabilities,
+                                 (PUCHAR)Answer->Groups +
+                                     Count * sizeof(SID_AND_ATTRIBUTES), Buffer, Placed);
             break;
         }
 
