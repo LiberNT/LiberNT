@@ -790,11 +790,38 @@ KdpSymbol(
     _In_ PKTRAP_FRAME TrapFrame,
     _In_ PKEXCEPTION_FRAME ExceptionFrame)
 {
+    KD_SYMBOLS_INFO CapturedInfo;
+    STRING CapturedPath;
     STRING Path;
     BOOLEAN Entered;
 
     if (!KdDebuggerEnabled || KdDebuggerNotPresent)
         return;
+
+    /* A caller in user mode hands over pointers that are only trusted once captured */
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(SymbolInfo, sizeof(*SymbolInfo), sizeof(UCHAR));
+            CapturedInfo = *SymbolInfo;
+
+            if (DllPath != NULL)
+            {
+                ProbeForRead(DllPath, sizeof(*DllPath), sizeof(UCHAR));
+                CapturedPath = *DllPath;
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return);
+        }
+        _SEH2_END;
+
+        SymbolInfo = &CapturedInfo;
+        if (DllPath != NULL)
+            DllPath = &CapturedPath;
+    }
 
     Path.Buffer = NULL;
     Path.Length = 0;
@@ -807,32 +834,31 @@ KdpSymbol(
         if (Length > KDP_MSG_BUFFER_SIZE - 1)
             Length = KDP_MSG_BUFFER_SIZE - 1;
 
+        /*
+         * The path is copied out of the caller's memory before the machine
+         * stops, because once it has stopped the caller's address space is
+         * not necessarily the one that is current.
+         */
         if (PreviousMode != KernelMode)
         {
-            BOOLEAN Readable = TRUE;
-
             _SEH2_TRY
             {
                 ProbeForRead(DllPath->Buffer, Length, sizeof(CHAR));
+                RtlCopyMemory(KdpPathBuffer, DllPath->Buffer, Length);
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
-                Readable = FALSE;
+                Length = 0;
             }
             _SEH2_END;
-
-            if (!Readable)
-                Length = 0;
+        }
+        else
+        {
+            KdpMoveMemory(KdpPathBuffer, DllPath->Buffer, Length);
         }
 
         if (Length != 0)
         {
-            /*
-             * The path is copied out of the caller's memory before the machine
-             * stops, because once it has stopped the caller's address space is
-             * not necessarily the one that is current.
-             */
-            KdpMoveMemory(KdpPathBuffer, DllPath->Buffer, Length);
             KdpPathBuffer[Length] = ANSI_NULL;
 
             Path.Buffer = KdpPathBuffer;
