@@ -399,7 +399,8 @@ IopOpenLinkOrRenameTarget(
                             0,
                             CreateFileTypeNone,
                             NULL,
-                            IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY,
+                            IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY |
+                                (Irp->RequestorMode != KernelMode ? IO_FORCE_ACCESS_CHECK : 0),
                             &DriverContext);
     if (!NT_SUCCESS(Status)) return Status;
 
