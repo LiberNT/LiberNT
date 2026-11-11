@@ -407,6 +407,9 @@ KeTerminateThread(
         Thread->Queue = NULL;
     }
 
+    /* A waiter released below may query the thread before the switch that would otherwise charge its last cycles */
+    KiChargeThreadCycleTime(KeGetCurrentPrcb(), Thread);
+
     Thread->Header.SignalState = TRUE;
     if (!IsListEmpty(&Thread->Header.WaitListHead))
         KxUnwaitThread(&Thread->Header, Increment);
