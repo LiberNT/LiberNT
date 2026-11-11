@@ -25,6 +25,12 @@ ULONG ExpRegistryQuotaUsed = 0;
 
 FIRMWARE_TYPE NTAPI ExGetFirmwareType(VOID);
 
+VOID NTAPI ExQueryPoolUsage(_Out_ PULONG PagedPoolPages,
+    _Out_ PULONG NonPagedPoolPages, _Out_ PULONG PagedPoolAllocs,
+    _Out_ PULONG PagedPoolFrees, _Out_ PULONG PagedPoolLookasideHits,
+    _Out_ PULONG NonPagedPoolAllocs, _Out_ PULONG NonPagedPoolFrees,
+    _Out_ PULONG NonPagedPoolLookasideHits);
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -115,6 +121,8 @@ ExpQueryPerformanceInformation(
 {
     ULONG DirtyPages;
     ULONG DirtyPageThreshold;
+    ULONG PagedHeapHits;
+    ULONG NonPagedHeapHits;
 
     if (Length < sizeof(SYSTEM_PERFORMANCE_INFORMATION))
     {
@@ -132,8 +140,14 @@ ExpQueryPerformanceInformation(
     Info->ResidentAvailablePages = (LONGLONG)MmResidentAvailablePages;
     Info->SharedCommittedPages = MmSharedCommit;
 
-    Info->PagedPoolPages = (ULONG)MmPagedPoolCommit;
-    Info->NonPagedPoolPages = 0;
+    ExQueryPoolUsage(&Info->PagedPoolPages,
+                     &Info->NonPagedPoolPages,
+                     &Info->PagedPoolAllocs,
+                     &Info->PagedPoolFrees,
+                     &PagedHeapHits,
+                     &Info->NonPagedPoolAllocs,
+                     &Info->NonPagedPoolFrees,
+                     &NonPagedHeapHits);
 
     Info->NonPagedPoolLookasideHits =
         ExpCountLookasideHits(&ExpNonPagedLookasideListHead);
@@ -145,8 +159,8 @@ ExpQueryPerformanceInformation(
     Info->CcTotalDirtyPages = DirtyPages;
     Info->CcDirtyPageThreshold = DirtyPageThreshold;
 
-    /* TODO: the pool allocation and free counts, the free system page-table
-       entries and the resident code and driver page counts are not kept. */
+    /* TODO: the free system page-table entries and the resident code and
+       driver page counts are not kept. */
 
     return STATUS_SUCCESS;
 }

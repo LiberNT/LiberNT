@@ -13,6 +13,9 @@
 
 #define TAG_TEST 'iSxE'
 
+#define POOL_BLOCKS 32
+#define POOL_BLOCK_SIZE 3072
+
 static
 ULONG
 CountProcessors(
@@ -119,7 +122,48 @@ TestLogicalProcessorInformation(VOID)
     ExFreePoolWithTag(Info, TAG_TEST);
 }
 
+static
+VOID
+TestPoolCounts(VOID)
+{
+    SYSTEM_PERFORMANCE_INFORMATION Before;
+    SYSTEM_PERFORMANCE_INFORMATION After;
+    PVOID Blocks[POOL_BLOCKS];
+    ULONG ReturnLength = 0;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Status = ZwQuerySystemInformation(SystemPerformanceInformation, &Before, sizeof(Before), &ReturnLength);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(ReturnLength, (ULONG)sizeof(Before));
+
+    for (Index = 0; Index < POOL_BLOCKS; Index++)
+        Blocks[Index] = ExAllocatePoolWithTag(PagedPool, POOL_BLOCK_SIZE, TAG_TEST);
+    for (Index = 0; Index < POOL_BLOCKS; Index++)
+        if (Blocks[Index] != NULL) ExFreePoolWithTag(Blocks[Index], TAG_TEST);
+
+    for (Index = 0; Index < POOL_BLOCKS; Index++)
+        Blocks[Index] = ExAllocatePoolWithTag(NonPagedPoolNx, POOL_BLOCK_SIZE, TAG_TEST);
+    for (Index = 0; Index < POOL_BLOCKS; Index++)
+        if (Blocks[Index] != NULL) ExFreePoolWithTag(Blocks[Index], TAG_TEST);
+
+    Status = ZwQuerySystemInformation(SystemPerformanceInformation, &After, sizeof(After), &ReturnLength);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    ok(After.PagedPoolAllocs - Before.PagedPoolAllocs >= POOL_BLOCKS,
+       "paged allocations %lu -> %lu\n", Before.PagedPoolAllocs, After.PagedPoolAllocs);
+    ok(After.PagedPoolFrees - Before.PagedPoolFrees >= POOL_BLOCKS,
+       "paged frees %lu -> %lu\n", Before.PagedPoolFrees, After.PagedPoolFrees);
+    ok(After.NonPagedPoolAllocs - Before.NonPagedPoolAllocs >= POOL_BLOCKS,
+       "nonpaged allocations %lu -> %lu\n", Before.NonPagedPoolAllocs, After.NonPagedPoolAllocs);
+    ok(After.NonPagedPoolFrees - Before.NonPagedPoolFrees >= POOL_BLOCKS,
+       "nonpaged frees %lu -> %lu\n", Before.NonPagedPoolFrees, After.NonPagedPoolFrees);
+    ok(After.PagedPoolPages != 0, "no paged pool pages\n");
+    ok(After.NonPagedPoolPages != 0, "no nonpaged pool pages\n");
+}
+
 START_TEST(ExSystemInformation)
 {
     TestLogicalProcessorInformation();
+    TestPoolCounts();
 }
