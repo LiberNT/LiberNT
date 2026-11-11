@@ -347,7 +347,7 @@ APPLET_LIST *CControlPanelFolder::GetApplets(HWND hwndOwner)
             ILFree(pidlChild);
     }
 
-    pList = (APPLET_LIST *)SHAlloc(FIELD_OFFSET(APPLET_LIST, Items[Items.GetSize()]));
+    pList = (APPLET_LIST *)SHAlloc(FIELD_OFFSET(APPLET_LIST, Items) + Items.GetSize() * sizeof(pList->Items[0]));
     if (!pList)
     {
         for (int i = 0; i < Items.GetSize(); i++)
