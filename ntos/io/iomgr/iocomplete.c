@@ -799,9 +799,11 @@ IopAbortInterruptedIrp(
         return;
     }
 
+    /* At APC_LEVEL the completion APC cannot free the packet on this thread while it is being cancelled */
+    Cancelled = IoCancelIrp(Irp);
+
     KeLowerIrql(OldIrql);
 
-    Cancelled = IoCancelIrp(Irp);
     if (!Cancelled)
     {
         /* A request its driver cannot cancel stays with the synchronous service until it completes */
