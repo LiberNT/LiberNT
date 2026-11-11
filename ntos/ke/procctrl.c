@@ -840,9 +840,8 @@ KeRemoveSystemServiceTable(
 
 /*
  * The status a window manager service call is failed with when the calling
- * thread could not be converted to a GUI thread. The service number is kept
- * for the diagnostic, not used to choose the status: whichever service it was,
- * what failed was the conversion.
+ * thread could not be converted to a GUI thread. A number past the end of the
+ * window manager's table names no service at all.
  */
 NTSTATUS
 NTAPI
@@ -851,6 +850,10 @@ KiGetGuiServiceFailureStatus(
 {
     DPRINT1("GUI service %lx refused: no window manager thread\n", ServiceNumber);
 
+    if (ServiceNumber >= KeServiceDescriptorTableShadow[WIN32K_SERVICE_INDEX].Limit)
+        return STATUS_INVALID_SYSTEM_SERVICE;
+
+    /* FIXME: Windows fails each service with its own value (0, -1 or STATUS_INVALID_SYSTEM_SERVICE); all get STATUS_NOT_IMPLEMENTED */
     return STATUS_NOT_IMPLEMENTED;
 }
 
