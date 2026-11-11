@@ -224,7 +224,7 @@ RemoveTree(
                                     L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt", L"data.txt",
                                     L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt",
                                     L"full\\a.txt", L"full\\b.txt", L"full\\c.txt", L"outside.txt",
-                                    L"Norm.txt", L"norm2.txt", L"Renamed.txt", L"norm3.txt" };
+                                    L"Norm.txt", L"norm2.txt", L"Renamed.txt", L"norm3.txt", L"streams.txt" };
     static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree", L"full" };
     WCHAR Path[MAX_PATH];
     CHAR PathA[MAX_PATH];
@@ -1095,6 +1095,142 @@ TestTransactedNormalizedName(
 }
 
 static
+BOOL
+ReadsBackTransacted(
+    _In_ PCWSTR Path,
+    _In_ PCSTR Expected,
+    _In_ HANDLE Transaction)
+{
+    CHAR Buffer[16] = { 0 };
+    HANDLE File;
+    DWORD Read = 0;
+
+    File = pCreateFileTransactedW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    ReadFile(File, Buffer, sizeof(Buffer) - 1, &Read, NULL);
+    CloseHandle(File);
+    return Read == strlen(Expected) && !memcmp(Buffer, Expected, Read);
+}
+
+static
+BOOL
+WriteTransacted(
+    _In_ PCWSTR Path,
+    _In_ DWORD Disposition,
+    _In_ PCSTR Data,
+    _In_ HANDLE Transaction)
+{
+    HANDLE File;
+    BOOL Result;
+
+    File = pCreateFileTransactedW(Path, GENERIC_WRITE, 0, NULL, Disposition, 0, NULL, Transaction, NULL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Result = WriteThrough(File, Data);
+    CloseHandle(File);
+    return Result;
+}
+
+static
+ULONG
+ListedStreams(
+    _In_ PCWSTR Path,
+    _In_ HANDLE Transaction,
+    _Out_writes_(Size) PWSTR Names,
+    _In_ ULONG Size)
+{
+    WIN32_FIND_STREAM_DATA Data;
+    ULONG Count = 0;
+    HANDLE Find;
+
+    Names[0] = UNICODE_NULL;
+    Find = pFindFirstStreamTransactedW(Path, FindStreamInfoStandard, &Data, 0, Transaction);
+    if (Find == INVALID_HANDLE_VALUE)
+        return 0;
+    do
+    {
+        StringCchCatW(Names, Size, Data.cStreamName);
+        Count++;
+    } while (FindNextStreamW(Find, &Data));
+    FindClose(Find);
+    return Count;
+}
+
+static
+VOID
+TestTransactedNamedStreams(
+    _In_ PTX_DIR Dir)
+{
+    WCHAR File[MAX_PATH], S1[MAX_PATH], S2[MAX_PATH], S3[MAX_PATH], Names[4 * MAX_PATH];
+    UCHAR RenameBuffer[sizeof(FILE_RENAME_INFO) + 16 * sizeof(WCHAR)];
+    PFILE_RENAME_INFO Rename = (PFILE_RENAME_INFO)RenameBuffer;
+    CHAR Scratch[MAX_PATH];
+    HANDLE Transaction;
+    HANDLE Handle;
+
+    PathOf(Dir, L"streams.txt", File, Scratch);
+    PathOf(Dir, L"streams.txt:s1", S1, Scratch);
+    PathOf(Dir, L"streams.txt:s2", S2, Scratch);
+    PathOf(Dir, L"streams.txt:s3", S3, Scratch);
+    if (!WriteTestFile(File, "base") || !WriteTestFile(S1, "one") || !WriteTestFile(S2, "two"))
+        return;
+
+    /* Named streams are transacted: a writer, a new stream and a stream delete stay private until commit */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(WriteTransacted(S1, OPEN_EXISTING, "uno", Transaction), "transacted stream writer failed with %lu\n", GetLastError());
+    ok(ReadsBack(S1, "one"), "outside reader sees the uncommitted stream data\n");
+    SetLastError(0xdeadbeef);
+    Handle = CreateFileW(S2, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(Handle == INVALID_HANDLE_VALUE, "outside writer opened another stream of a transactionally locked file\n");
+    ok(GetLastError() == ERROR_SHARING_VIOLATION, "outside stream writer error %lu\n", GetLastError());
+    if (Handle != INVALID_HANDLE_VALUE) CloseHandle(Handle);
+    ok(ReadsBackTransacted(S1, "uno", Transaction), "transaction does not see its stream data\n");
+    ok(ReadsBackTransacted(S2, "two", Transaction), "transaction lost an untouched stream\n");
+    ok(ReadsBackTransacted(File, "base", Transaction), "transaction lost the unnamed stream\n");
+    ok(WriteTransacted(S3, CREATE_NEW, "three", Transaction), "transacted stream create failed with %lu\n", GetLastError());
+    ok(!ReadsBack(S3, "three"), "uncommitted stream visible outside\n");
+    ok(pDeleteFileTransactedW(S2, Transaction), "transacted stream delete failed with %lu\n", GetLastError());
+    ok(ReadsBack(S2, "two"), "transacted stream delete visible outside\n");
+    ok(!ReadsBackTransacted(S2, "two", Transaction), "deleted stream still readable in the transaction\n");
+    ok(ListedStreams(File, Transaction, Names, RTL_NUMBER_OF(Names)) == 3 && wcsstr(Names, L"::$DATA") &&
+       wcsstr(Names, L":s1:$DATA") && wcsstr(Names, L":s3:$DATA") && !wcsstr(Names, L":s2:"),
+       "transacted stream list %S\n", Names);
+
+    /* A named stream cannot be renamed inside a transaction */
+    Handle = pCreateFileTransactedW(S1, DELETE | SYNCHRONIZE, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(Handle != INVALID_HANDLE_VALUE, "transacted stream open for rename failed with %lu\n", GetLastError());
+    if (Handle != INVALID_HANDLE_VALUE)
+    {
+        ZeroMemory(RenameBuffer, sizeof(RenameBuffer));
+        Rename->FileNameLength = 3 * sizeof(WCHAR);
+        CopyMemory(Rename->FileName, L":s4", 3 * sizeof(WCHAR));
+        ok(!SetFileInformationByHandle(Handle, FileRenameInfo, Rename, sizeof(RenameBuffer)),
+           "a named stream was renamed inside a transaction\n");
+        CloseHandle(Handle);
+    }
+
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(S1, "uno"), "committed stream data missing\n");
+    ok(ReadsBack(S3, "three"), "committed new stream missing\n");
+    ok(!ReadsBack(S2, "two") && GetLastError() == ERROR_FILE_NOT_FOUND, "committed stream delete not applied (%lu)\n", GetLastError());
+    ok(ReadsBack(File, "base"), "commit changed the unnamed stream\n");
+
+    /* Rollback drops stream changes */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(WriteTransacted(S1, OPEN_EXISTING, "xx", Transaction), "transacted stream writer failed with %lu\n", GetLastError());
+    ok(pDeleteFileTransactedW(S3, Transaction), "transacted stream delete failed with %lu\n", GetLastError());
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(S1, "uno") && ReadsBack(S3, "three"), "rollback did not restore the streams\n");
+}
+
+static
 VOID
 TestInactiveTransaction(
     _In_ PTX_DIR Dir)
@@ -1311,6 +1447,7 @@ TestVolume(
         TestSupportedVolumeData(Dir);
         TestTransactedDirectoryRemoval(Dir);
         TestTransactedNormalizedName(Dir);
+        TestTransactedNamedStreams(Dir);
     }
     else
         TestUnsupportedVolume(Dir);

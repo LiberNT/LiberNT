@@ -855,17 +855,220 @@ NtfsTxfCopySecurity(_In_ HANDLE Source,
 
 static
 NTSTATUS
+NtfsTxfCopyBytes(_In_ HANDLE Source,
+                 _In_ HANDLE Target,
+                 _Inout_updates_bytes_(NTFS_TXF_COPY_CHUNK) PVOID Buffer)
+{
+    FILE_END_OF_FILE_INFORMATION EndOfFile;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    NTSTATUS Status;
+
+    EndOfFile.EndOfFile.QuadPart = 0;
+    Status = ZwSetInformationFile(Target, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
+    Offset.QuadPart = 0;
+    while (NT_SUCCESS(Status))
+    {
+        Status = ZwReadFile(Source, NULL, NULL, NULL, &IoStatus, Buffer, NTFS_TXF_COPY_CHUNK, &Offset, NULL);
+        if (Status == STATUS_END_OF_FILE)
+        {
+            Status = STATUS_SUCCESS;
+            break;
+        }
+        if (!NT_SUCCESS(Status) || IoStatus.Information == 0)
+            break;
+        Status = ZwWriteFile(Target, NULL, NULL, NULL, &IoStatus, Buffer, (ULONG)IoStatus.Information, &Offset, NULL);
+        Offset.QuadPart += IoStatus.Information;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        EndOfFile.EndOfFile = Offset;
+        Status = ZwSetInformationFile(Target, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
+    }
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfQueryStreams(_In_ HANDLE File,
+                    _Out_ PFILE_STREAM_INFORMATION* Streams)
+{
+    IO_STATUS_BLOCK IoStatus;
+    PVOID Buffer;
+    ULONG Size;
+    NTSTATUS Status = STATUS_BUFFER_OVERFLOW;
+
+    *Streams = NULL;
+    for (Size = PAGE_SIZE; Size <= 16 * PAGE_SIZE; Size *= 2)
+    {
+        Buffer = ExAllocatePoolZero(PagedPool, Size, TAG_NTFS_TXF);
+        if (!Buffer)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Status = ZwQueryInformationFile(File, &IoStatus, Buffer, Size, FileStreamInformation);
+        if (NT_SUCCESS(Status) && IoStatus.Information == 0)
+            Status = STATUS_END_OF_FILE;
+        if (NT_SUCCESS(Status))
+        {
+            *Streams = Buffer;
+            return STATUS_SUCCESS;
+        }
+        ExFreePoolWithTag(Buffer, TAG_NTFS_TXF);
+        if (Status == STATUS_END_OF_FILE)
+            return STATUS_SUCCESS;
+        if (Status != STATUS_BUFFER_OVERFLOW && Status != STATUS_BUFFER_TOO_SMALL)
+            break;
+    }
+    return Status;
+}
+
+static
+BOOLEAN
+NtfsTxfNamedStream(_In_ PFILE_STREAM_INFORMATION Entry,
+                   _Out_ PUNICODE_STRING Name)
+{
+    static const UNICODE_STRING Data = RTL_CONSTANT_STRING(L":$DATA");
+    UNICODE_STRING Tail;
+
+    Name->Buffer = Entry->StreamName;
+    Name->Length = Name->MaximumLength = (USHORT)min(Entry->StreamNameLength, MAXUSHORT);
+    if (Name->Length <= Data.Length + sizeof(WCHAR) || Name->Buffer[0] != L':')
+        return FALSE;
+    Tail.Buffer = (PWCH)((PUCHAR)Name->Buffer + Name->Length - Data.Length);
+    Tail.Length = Tail.MaximumLength = Data.Length;
+    if (!RtlEqualUnicodeString(&Tail, &Data, TRUE))
+        return FALSE;
+    Name->Length -= Data.Length;
+    return TRUE;
+}
+
+static
+BOOLEAN
+NtfsTxfHasStream(_In_opt_ PFILE_STREAM_INFORMATION Streams,
+                 _In_ PCUNICODE_STRING Name)
+{
+    PFILE_STREAM_INFORMATION Entry = Streams;
+    UNICODE_STRING Other;
+
+    while (Entry)
+    {
+        if (NtfsTxfNamedStream(Entry, &Other) && NtfsTxfEqual(&Other, Name))
+            return TRUE;
+        if (!Entry->NextEntryOffset)
+            break;
+        Entry = (PFILE_STREAM_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset);
+    }
+    return FALSE;
+}
+
+static
+NTSTATUS
+NtfsTxfCopyStreams(_In_ PVolumeContextBlock VolCB,
+                   _In_ HANDLE SourceFile,
+                   _In_ PCUNICODE_STRING Source,
+                   _In_ HANDLE TargetFile,
+                   _In_ PCUNICODE_STRING Target,
+                   _In_ BOOLEAN Sync,
+                   _Inout_updates_bytes_(NTFS_TXF_COPY_CHUNK) PVOID Buffer)
+{
+    PFILE_STREAM_INFORMATION Streams, Existing = NULL, Entry;
+    UNICODE_STRING Name, SourceStream, TargetStream;
+    HANDLE SourceHandle, TargetHandle;
+    NTSTATUS Status;
+
+    Status = NtfsTxfQueryStreams(SourceFile, &Streams);
+    for (Entry = Streams; NT_SUCCESS(Status) && Entry;
+         Entry = Entry->NextEntryOffset ? (PFILE_STREAM_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset) : NULL)
+    {
+        if (!NtfsTxfNamedStream(Entry, &Name))
+            continue;
+        Status = NtfsTxfJoin(&SourceStream, Source, NULL, Name.Buffer, Name.Length);
+        if (!NT_SUCCESS(Status))
+            break;
+        Status = NtfsTxfJoin(&TargetStream, Target, NULL, Name.Buffer, Name.Length);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtfsTxfOpen(VolCB, &SourceStream, FILE_READ_DATA, 0, FILE_OPEN,
+                                 FILE_NON_DIRECTORY_FILE | FILE_SEQUENTIAL_ONLY, &SourceHandle);
+            if (NT_SUCCESS(Status))
+            {
+                Status = NtfsTxfOpen(VolCB, &TargetStream, FILE_WRITE_DATA, 0, FILE_OVERWRITE_IF,
+                                     FILE_NON_DIRECTORY_FILE, &TargetHandle);
+                if (NT_SUCCESS(Status))
+                {
+                    Status = NtfsTxfCopyBytes(SourceHandle, TargetHandle, Buffer);
+                    ZwClose(TargetHandle);
+                }
+                ZwClose(SourceHandle);
+            }
+            NtfsTxfFreeString(&TargetStream);
+        }
+        NtfsTxfFreeString(&SourceStream);
+    }
+
+    if (NT_SUCCESS(Status) && Sync)
+        Status = NtfsTxfQueryStreams(TargetFile, &Existing);
+    for (Entry = Existing; NT_SUCCESS(Status) && Entry;
+         Entry = Entry->NextEntryOffset ? (PFILE_STREAM_INFORMATION)((PUCHAR)Entry + Entry->NextEntryOffset) : NULL)
+    {
+        if (!NtfsTxfNamedStream(Entry, &Name) || NtfsTxfHasStream(Streams, &Name))
+            continue;
+        Status = NtfsTxfJoin(&TargetStream, Target, NULL, Name.Buffer, Name.Length);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtfsTxfDeleteOne(VolCB, &TargetStream);
+            NtfsTxfFreeString(&TargetStream);
+        }
+    }
+
+    if (Existing)
+        ExFreePoolWithTag(Existing, TAG_NTFS_TXF);
+    if (Streams)
+        ExFreePoolWithTag(Streams, TAG_NTFS_TXF);
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfQueryPath(_In_ HANDLE File,
+                 _Out_ PUNICODE_STRING Path)
+{
+    PFILE_NAME_INFORMATION Info;
+    IO_STATUS_BLOCK IoStatus;
+    ULONG Size = FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + MAXUSHORT;
+    NTSTATUS Status;
+
+    Path->Buffer = NULL;
+    Path->Length = Path->MaximumLength = 0;
+    Info = ExAllocatePoolWithTag(PagedPool, Size, TAG_NTFS_TXF);
+    if (!Info)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = ZwQueryInformationFile(File, &IoStatus, Info, Size, FileNameInformation);
+    if (NT_SUCCESS(Status) && (Info->FileNameLength == 0 || Info->FileNameLength > MAXUSHORT - sizeof(WCHAR)))
+        Status = STATUS_OBJECT_NAME_INVALID;
+    if (NT_SUCCESS(Status))
+    {
+        UNICODE_STRING Name;
+
+        Name.Buffer = Info->FileName;
+        Name.Length = Name.MaximumLength = (USHORT)Info->FileNameLength;
+        Status = NtfsTxfCopy(Path, &Name);
+    }
+    ExFreePoolWithTag(Info, TAG_NTFS_TXF);
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
                 _In_ PCUNICODE_STRING Source,
                 _In_opt_ PCUNICODE_STRING Target,
                 _In_ ULONGLONG TargetId,
                 _In_ BOOLEAN IntoExisting)
 {
-    FILE_END_OF_FILE_INFORMATION EndOfFile;
     FILE_BASIC_INFORMATION Basic;
     FILE_BASIC_INFORMATION Plain;
     IO_STATUS_BLOCK IoStatus;
-    LARGE_INTEGER Offset;
+    UNICODE_STRING TargetPath;
     HANDLE SourceHandle, TargetHandle;
     PVOID Buffer;
     NTSTATUS Status;
@@ -911,35 +1114,21 @@ NtfsTxfCopyData(_In_ PVolumeContextBlock VolCB,
         return Status;
     }
 
+    TargetPath.Buffer = NULL;
     Buffer = ExAllocatePoolWithTag(PagedPool, NTFS_TXF_COPY_CHUNK, TAG_NTFS_TXF);
     if (!Buffer)
         Status = STATUS_INSUFFICIENT_RESOURCES;
-    EndOfFile.EndOfFile.QuadPart = 0;
-    if (NT_SUCCESS(Status) && IntoExisting)
-        Status = ZwSetInformationFile(TargetHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
-    Offset.QuadPart = 0;
-    while (NT_SUCCESS(Status))
-    {
-        Status = ZwReadFile(SourceHandle, NULL, NULL, NULL, &IoStatus, Buffer, NTFS_TXF_COPY_CHUNK, &Offset, NULL);
-        if (Status == STATUS_END_OF_FILE)
-        {
-            Status = STATUS_SUCCESS;
-            break;
-        }
-        if (!NT_SUCCESS(Status) || IoStatus.Information == 0)
-            break;
-        Status = ZwWriteFile(TargetHandle, NULL, NULL, NULL, &IoStatus, Buffer, (ULONG)IoStatus.Information, &Offset, NULL);
-        Offset.QuadPart += IoStatus.Information;
-    }
     if (NT_SUCCESS(Status))
-    {
-        EndOfFile.EndOfFile = Offset;
-        Status = ZwSetInformationFile(TargetHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
-    }
+        Status = NtfsTxfCopyBytes(SourceHandle, TargetHandle, Buffer);
+    if (NT_SUCCESS(Status))
+        Status = Target ? NtfsTxfCopy(&TargetPath, Target) : NtfsTxfQueryPath(TargetHandle, &TargetPath);
+    if (NT_SUCCESS(Status))
+        Status = NtfsTxfCopyStreams(VolCB, SourceHandle, Source, TargetHandle, &TargetPath, IntoExisting, Buffer);
     if (NT_SUCCESS(Status))
         Status = ZwSetInformationFile(TargetHandle, &IoStatus, &Basic, sizeof(Basic), FileBasicInformation);
     if (NT_SUCCESS(Status) && IntoExisting)
         Status = ZwFlushBuffersFile(TargetHandle, &IoStatus);
+    NtfsTxfFreeString(&TargetPath);
     if (Buffer)
         ExFreePoolWithTag(Buffer, TAG_NTFS_TXF);
     ZwClose(TargetHandle);
@@ -1994,6 +2183,22 @@ NtfsTxfVolumeSupported(_In_ PVolumeContextBlock VolCB)
 
 static
 BOOLEAN
+NtfsTxfIsDefaultStream(_In_ PCUNICODE_STRING Stream)
+{
+    static const UNICODE_STRING Default = RTL_CONSTANT_STRING(L"::$DATA");
+
+    return Stream->Length == 0 || RtlEqualUnicodeString(Stream, &Default, TRUE);
+}
+
+static
+BOOLEAN
+NtfsTxfNamedStreamHandle(_In_ PFileContextBlock FileCB)
+{
+    return FileCB->RequestedStream && FileCB->RequestedStream[0];
+}
+
+static
+BOOLEAN
 NtfsTxfWriteIntent(_In_ ACCESS_MASK Access,
                    _In_ ULONG Disposition)
 {
@@ -2052,18 +2257,20 @@ NtfsTxfPrepareExisting(_In_ PVolumeContextBlock VolCB,
 {
     UNICODE_STRING Shadow;
     NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Named = !NtfsTxfIsDefaultStream(Stream);
+    BOOLEAN Modify = NtfsTxfWriteIntent(Access, Disposition) || (Named && ((Access & DELETE) || Disposition != FILE_OPEN));
     BOOLEAN Locked, Conflict, Owned;
 
     if (NtfsTxfIsStaging(Physical))
         return STATUS_SUCCESS;
 
-    if (!Info->Directory && NtfsTxfWriteIntent(Access, Disposition))
+    if (Info->Directory && Named && Modify)
     {
-        if (Stream->Length)
-        {
-            /* TODO: shadow named streams; a transacted writer of a named stream is refused */
-            return STATUS_OPERATION_NOT_SUPPORTED_IN_TRANSACTION;
-        }
+        /* TODO: change a named stream of a directory inside a transaction */
+        return STATUS_OPERATION_NOT_SUPPORTED_IN_TRANSACTION;
+    }
+    if (!Info->Directory && Modify)
+    {
         ExAcquireFastMutex(&VolCB->TxfMutex);
         Locked = NtfsTxfIsLockedLocked(VolCB, Txf, Info->FileReference, FALSE);
         ExReleaseFastMutex(&VolCB->TxfMutex);
@@ -2258,7 +2465,7 @@ NtfsTxfPrepareCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
     if (View != NtfsTxfViewHidden && NT_SUCCESS(NtfsTxfQuery(VolCB, &Physical, &Info)))
     {
-        if (Disposition == FILE_CREATE && Stream.Length == 0)
+        if (Disposition == FILE_CREATE && NtfsTxfIsDefaultStream(&Stream))
             Status = STATUS_OBJECT_NAME_COLLISION;
         else
             Status = NtfsTxfPrepareExisting(VolCB, Txf, &Name, &Stream, &Info, Access, Disposition, &Physical, Open);
@@ -2726,22 +2933,23 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
 {
     NtfsFileBasicInformation Basic;
     PNTFS_TXF_CHANGE Change;
+    UNICODE_STRING Name, Stream;
     NTSTATUS Status;
     BOOLEAN Ending;
 
     *Handled = FALSE;
     if (!FileCB->Txf || NtfsTxfIsPrivate(FileCB))
         return STATUS_SUCCESS;
+    NtfsTxfSplitStream(&FileCB->FileName, &Name, &Stream);
+    if (NtfsTxfNamedStreamHandle(FileCB) && NtfsTxfIsStaging(&Name))
+        return STATUS_SUCCESS;
     *Handled = TRUE;
     if (FileCB->Txf->Ending)
         return STATUS_TRANSACTION_NOT_ACTIVE;
     if (!(FileCB->DesiredAccess & DELETE))
         return STATUS_ACCESS_DENIED;
-    if (FileCB->RequestedStream)
-    {
-        /* TODO: delete a named stream inside a transaction */
+    if (NtfsTxfNamedStreamHandle(FileCB))
         return STATUS_OPERATION_NOT_SUPPORTED_IN_TRANSACTION;
-    }
 
     if (Flags & FILE_DISPOSITION_ON_CLOSE)
     {
@@ -2785,7 +2993,7 @@ NtfsTxfCleanup(_In_ PVolumeContextBlock VolCB,
         return;
     NtfsTxfDropReader(VolCB, FileCB);
     if ((FileCB->CreateOptions & FILE_DELETE_ON_CLOSE) && !FileCB->Txf->Ending &&
-        !FileCB->RequestedStream && !NtfsTxfIsPrivate(FileCB))
+        !NtfsTxfNamedStreamHandle(FileCB) && !NtfsTxfIsPrivate(FileCB))
     {
         NtfsTxfRecordDelete(VolCB, FileCB);
         FileCB->CreateOptions &= ~FILE_DELETE_ON_CLOSE;
@@ -2813,11 +3021,8 @@ NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
     if (Txf->Ending)
         return STATUS_TRANSACTION_NOT_ACTIVE;
     NtfsTxfSplitStream(&FileCB->TxfLogicalName, &OldName, &Stream);
-    if (Stream.Length)
-    {
-        /* TODO: rename a named stream inside a transaction */
+    if (!NtfsTxfIsDefaultStream(&Stream))
         return STATUS_OPERATION_NOT_SUPPORTED_IN_TRANSACTION;
-    }
     if (TargetFileCB)
         Parent = *NtfsTxfDisplayName(TargetFileCB);
     else
