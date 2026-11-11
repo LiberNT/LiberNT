@@ -474,6 +474,8 @@ typedef struct _E1000_ADAPTER
     BOOLEAN                 PchHalting;
     ULONG                   PchGeneration;
     ULONG                   PchPhyId;
+    ULONG                   PchPhyRevision;
+    BOOLEAN                 PchNvmK1Enabled;
     volatile LONG           PchPhyBusy;
     volatile LONG           PchLinkWorkState;
     NDIS_HANDLE             PchLinkWorkItem;
@@ -489,6 +491,10 @@ typedef struct _E1000_ADAPTER
     PUCHAR                  IoPort;
     ULONG                   IoPortAddress;
     ULONG                   IoPortLength;
+
+    PUCHAR                  FlashBase;
+    NDIS_PHYSICAL_ADDRESS   FlashAddress;
+    ULONG                   FlashLength;
 
     /* MSI-X BAR mapping */
     PUCHAR                  MsixTableBase;
