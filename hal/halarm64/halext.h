@@ -131,6 +131,14 @@ typedef struct _HAL_ARM64_MSI_DOORBELL
 
 extern const HAL_ARM64_MSI_DOORBELL *HalpArm64MsiDoorbell;
 
+typedef struct _HAL_ARM64_PROCESSOR_IDLE
+{
+    PCSTR Name;
+    VOID (*Idle)(VOID);
+} HAL_ARM64_PROCESSOR_IDLE, *PHAL_ARM64_PROCESSOR_IDLE;
+
+extern const HAL_ARM64_PROCESSOR_IDLE *HalpArm64ProcessorIdle;
+
 /* ------------------------------------------------------------------ */
 /*  Registration (called from platform probes)                        */
 /* ------------------------------------------------------------------ */
@@ -150,6 +158,10 @@ HalpArm64RegisterSystemReset(
 NTSTATUS
 HalpArm64RegisterMsiDoorbell(
     _In_ const HAL_ARM64_MSI_DOORBELL *Doorbell);
+
+NTSTATUS
+HalpArm64RegisterProcessorIdle(
+    _In_ const HAL_ARM64_PROCESSOR_IDLE *Idle);
 
 /* ------------------------------------------------------------------ */
 /*  Generic HAL consumption                                           */

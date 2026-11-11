@@ -21,3 +21,6 @@ AppleWdtProbe(
 
 VOID
 AppleWdtPhase1MapRuntimeMmio(VOID);
+
+VOID
+AppleIdleProbe(VOID);

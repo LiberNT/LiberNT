@@ -6133,7 +6133,14 @@ VOID
 NTAPI
 HalProcessorIdle(VOID)
 {
+    const HAL_ARM64_PROCESSOR_IDLE *Idle = HalpArm64ProcessorIdle;
+
     HalpArm64SetPmrExact(KeGetCurrentIrql());
+    if (Idle)
+    {
+        Idle->Idle();
+        return;
+    }
     ARM64_DSB(SY);
     ARM64_ISB();
     ARM64_WFI();

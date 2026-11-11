@@ -54,6 +54,7 @@ const HAL_ARM64_INTERRUPT_CONTROLLER *HalpArm64InterruptController = NULL;
 const HAL_ARM64_PCI_CONFIG_BACKEND *HalpArm64PciConfigBackend = NULL;
 const HAL_ARM64_SYSTEM_RESET *HalpArm64SystemReset = NULL;
 const HAL_ARM64_MSI_DOORBELL *HalpArm64MsiDoorbell = NULL;
+const HAL_ARM64_PROCESSOR_IDLE *HalpArm64ProcessorIdle = NULL;
 
 /* ================================================================== */
 /*  Registration                                                      */
@@ -131,6 +132,22 @@ HalpArm64RegisterMsiDoorbell(
     return STATUS_SUCCESS;
 }
 
+NTSTATUS
+HalpArm64RegisterProcessorIdle(
+    _In_ const HAL_ARM64_PROCESSOR_IDLE *Idle)
+{
+    if (!Idle || !Idle->Idle)
+        return STATUS_INVALID_PARAMETER;
+
+    if (HalpArm64ProcessorIdle)
+        return STATUS_TOO_LATE;
+
+    HalpArm64ProcessorIdle = Idle;
+
+    DPRINT1("[arm64][HALEXT] Processor idle: %s\n", Idle->Name);
+    return STATUS_SUCCESS;
+}
+
 /* ================================================================== */
 /*  Generic HAL consumption                                           */
 /* ================================================================== */
@@ -160,4 +177,5 @@ VOID
 HalpArm64Phase1PlatformInit(VOID)
 {
     HalpBcm2711VcInit();
+    AppleIdleProbe();
 }
