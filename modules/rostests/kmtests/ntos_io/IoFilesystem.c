@@ -1053,6 +1053,9 @@ TestCachedReadCleanup(VOID)
 typedef struct _DISPATCHED_QUERY_STATE
 {
     KEVENT Event;
+    PETHREAD Thread;
+    BOOLEAN SameThread;
+    BOOLEAN ApcsDisabled;
 } DISPATCHED_QUERY_STATE, *PDISPATCHED_QUERY_STATE;
 
 static
@@ -1068,6 +1071,8 @@ DispatchedQueryCompletion(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Irp);
 
+    State->SameThread = (PsGetCurrentThread() == State->Thread);
+    State->ApcsDisabled = KeAreApcsDisabled();
     KeSetEvent(&State->Event, IO_NO_INCREMENT, FALSE);
 
     return STATUS_MORE_PROCESSING_REQUIRED;
@@ -1088,6 +1093,9 @@ TestDispatchedQuery(VOID)
     HANDLE FileHandle;
     NTSTATUS Status;
     PIRP Irp;
+
+    if (skip(!KeAreApcsDisabled(), "The test thread already runs with APCs disabled\n"))
+        return;
 
     InitializeObjectAttributes(&ObjectAttributes, &FileName,
                                OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
@@ -1115,6 +1123,9 @@ TestDispatchedQuery(VOID)
     if (Irp != NULL)
     {
         KeInitializeEvent(&State.Event, NotificationEvent, FALSE);
+        State.Thread = PsGetCurrentThread();
+        State.SameThread = FALSE;
+        State.ApcsDisabled = FALSE;
 
         Irp->AssociatedIrp.SystemBuffer = &Info;
         Irp->RequestorMode = KernelMode;
@@ -1135,6 +1146,13 @@ TestDispatchedQuery(VOID)
         }
         ok_eq_hex(Status, STATUS_SUCCESS);
         ok_eq_ulongptr(Irp->IoStatus.Information, sizeof(Info));
+
+        if (!skip(State.SameThread, "The request completed on another thread\n"))
+        {
+            ok(State.ApcsDisabled,
+               "The file system completed the request with normal kernel APCs enabled\n");
+        }
+        ok(!KeAreApcsDisabled(), "The file system left normal kernel APCs disabled\n");
 
         IoFreeIrp(Irp);
     }
