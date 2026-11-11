@@ -173,7 +173,7 @@ AppleAudioAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceOb
     if (!DriverObject || !PhysicalDeviceObject)
         return STATUS_INVALID_PARAMETER;
 
-    return PcAddAdapterDevice(DriverObject, PhysicalDeviceObject, AppleAudioStartDevice, 2,
+    return PcAddAdapterDevice(DriverObject, PhysicalDeviceObject, AppleAudioStartDevice, APPLE_AUDIO_MAX_SUBDEVICES,
                               sizeof(APPLE_AUDIO_DEVICE_EXTENSION));
 }
 
