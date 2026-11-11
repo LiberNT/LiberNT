@@ -219,10 +219,58 @@ TestNoAccessControl(VOID)
     ExFreePool(Sd);
 }
 
+/* A string may name its lists in either order */
+static
+VOID
+TestListOrder(VOID)
+{
+    PISECURITY_DESCRIPTOR_RELATIVE Sd = NULL;
+    BOOLEAN Present, Defaulted;
+    NTSTATUS Status;
+    PACL Acl;
+
+    Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(
+                 L"S:(AU;FA;GW;;;WD)D:(A;;GA;;;SY)(D;;WD;;;BG)",
+                 1, (PVOID *)&Sd, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Acl = NULL;
+    Status = RtlGetSaclSecurityDescriptor(Sd, &Present, &Acl, &Defaulted);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Present, "sacl not reported\n");
+    if (Acl != NULL)
+    {
+        ok_eq_uint(Acl->AceCount, 1);
+        CheckAce(Acl, 0, SYSTEM_AUDIT_ACE_TYPE, FAILED_ACCESS_ACE_FLAG,
+                 GENERIC_WRITE, SeExports->SeWorldSid);
+    }
+
+    Acl = NULL;
+    Status = RtlGetDaclSecurityDescriptor(Sd, &Present, &Acl, &Defaulted);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Present, "dacl not reported\n");
+    if (Acl != NULL)
+    {
+        ok_eq_uint(Acl->AceCount, 2);
+        CheckAce(Acl, 0, ACCESS_ALLOWED_ACE_TYPE, 0, GENERIC_ALL,
+                 SeExports->SeLocalSystemSid);
+        CheckAce(Acl, 1, ACCESS_DENIED_ACE_TYPE, 0, WRITE_DAC,
+                 SeExports->SeAliasGuestsSid);
+    }
+
+    ExFreePool(Sd);
+}
+
 START_TEST(SeSddl)
 {
     TestDeviceString();
     TestFullString();
     TestNoAccessControl();
     TestRefusedStrings();
+}
+
+START_TEST(SeSddlListOrder)
+{
+    TestListOrder();
 }

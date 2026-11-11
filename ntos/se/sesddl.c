@@ -559,6 +559,7 @@ SeConvertStringSecurityDescriptorToSecurityDescriptor(
     ULONG Offset;
     ULONG Total;
     ULONG Index;
+    ULONG Parsed;
     BOOLEAN Present;
 
     PAGED_CODE();
@@ -610,17 +611,22 @@ SeConvertStringSecurityDescriptorToSecurityDescriptor(
                 break;
 
             case L'D':
-                Status = SepSddlParseAcl(&Cursor, FALSE, Aces, MaxAces,
-                                         &DaclCount, &AclControl, &Present);
+                Status = SepSddlParseAcl(&Cursor, FALSE,
+                                         &Aces[DaclCount + SaclCount],
+                                         MaxAces - DaclCount - SaclCount,
+                                         &Parsed, &AclControl, &Present);
+                DaclCount += Parsed;
                 if (!NT_SUCCESS(Status)) break;
                 Control |= AclControl;
                 DaclPresent = Present;
                 break;
 
             case L'S':
-                Status = SepSddlParseAcl(&Cursor, TRUE, &Aces[DaclCount],
-                                         MaxAces - DaclCount,
-                                         &SaclCount, &AclControl, &Present);
+                Status = SepSddlParseAcl(&Cursor, TRUE,
+                                         &Aces[DaclCount + SaclCount],
+                                         MaxAces - DaclCount - SaclCount,
+                                         &Parsed, &AclControl, &Present);
+                SaclCount += Parsed;
                 if (!NT_SUCCESS(Status)) break;
                 Control |= AclControl;
                 SaclPresent = Present;
