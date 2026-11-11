@@ -1506,9 +1506,10 @@ FUNC KiZwSystemService
     mov dil, byte ptr [r11 + KTHREAD_PreviousMode]
     mov byte ptr [rbp + KTRAP_FRAME_PreviousMode], dil
 
-    /* Save the old trap frame in TrapFrame.Rdx */
+    /* Link the old trap frame and mark this one as a kernel-mode frame */
     mov rdi, [r11 + KTHREAD_TrapFrame]
-    mov [rbp + KTRAP_FRAME_Rdx], rdi
+    mov [rbp + KTRAP_FRAME_TrapFrame], rdi
+    mov word ptr [rbp + KTRAP_FRAME_SegCs], KGDT64_R0_CODE
 
     /* Set the new trap frame and previous mode */
     mov [r11 + ThTrapFrame], rbp
@@ -1536,7 +1537,7 @@ FUNC KiZwSystemService
 
     /* Restore the old trap frame */
     mov r11, gs:[PcCurrentThread]
-    mov rsi, [rbp + KTRAP_FRAME_Rdx]
+    mov rsi, [rbp + KTRAP_FRAME_TrapFrame]
     mov [r11 + KTHREAD_TrapFrame], rsi
 
     /* Restore PreviousMode from the trap frame */
