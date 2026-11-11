@@ -1168,8 +1168,9 @@ NtPowerInformation(
 
     PAGED_CODE();
 
-    if ((PowerInformationLevel == SystemPowerInformation) &&
-        ((OutputBuffer == NULL) || (OutputBufferLength == 0)))
+    if (((PowerInformationLevel == SystemPowerInformation) &&
+         ((OutputBuffer == NULL) || (OutputBufferLength == 0))) ||
+        ((PowerInformationLevel == ProcessorInformation) && (OutputBuffer == NULL)))
     {
         return STATUS_INVALID_PARAMETER;
     }
