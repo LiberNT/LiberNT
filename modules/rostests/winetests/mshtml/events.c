@@ -460,7 +460,6 @@ static void _test_event_args(unsigned line, const IID *dispiid, DISPID id, WORD 
             IDOMEvent_Release(event);
 
         if(window_event) {
-            todo_wine_if(in_fire_event)
             ok(!iface_cmp((IUnknown*)V_DISPATCH(pdp->rgvarg+1), (IUnknown*)window_event),
                "window_event != event arg\n");
         }
@@ -530,7 +529,6 @@ static void _test_attached_event_args(unsigned line, DISPID id, WORD wFlags, DIS
     ok(V_DISPATCH(pdp->rgvarg) != NULL, "V_DISPATCH(pdp->rgvarg) = %p\n", V_DISPATCH(pdp->rgvarg));
 
     event = _get_event_obj(line);
-    todo_wine
     ok(!iface_cmp((IUnknown*)event, (IUnknown*)V_DISPATCH(pdp->rgvarg)), "event != arg0\n");
     IHTMLEventObj_Release(event);
 }
@@ -1817,7 +1815,6 @@ static void _test_cp_eventarg(unsigned line, REFIID riid, WORD flags, DISPPARAMS
     ok(V_DISPATCH(dp->rgvarg) != NULL, "V_DISPATCH(dp->rgvarg) = %p\n", V_DISPATCH(dp->rgvarg));
 
     event = _get_event_obj(line);
-    todo_wine
     ok(!iface_cmp((IUnknown*)event, (IUnknown*)V_DISPATCH(dp->rgvarg)), "event != arg0\n");
     IHTMLEventObj_Release(event);
 }

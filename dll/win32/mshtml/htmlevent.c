@@ -473,6 +473,11 @@ static HRESULT WINAPI HTMLEventObj_get_shiftKey(IHTMLEventObj *iface, VARIANT_BO
     return S_OK;
 }
 
+static VARIANT *event_obj_return_value(HTMLEventObj *This)
+{
+    return This->event ? &This->event->return_value : &This->return_value;
+}
+
 static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT v)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
@@ -484,7 +489,7 @@ static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT
         return DISP_E_BADVARTYPE;
     }
 
-    This->return_value = v;
+    *event_obj_return_value(This) = v;
     if(!V_BOOL(&v) && This->event)
         IDOMEvent_preventDefault(&This->event->IDOMEvent_iface);
     return S_OK;
@@ -493,11 +498,12 @@ static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT
 static HRESULT WINAPI HTMLEventObj_get_returnValue(IHTMLEventObj *iface, VARIANT *p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    VARIANT *return_value = event_obj_return_value(This);
 
     TRACE("(%p)->(%p)\n", This, p);
 
     V_VT(p) = VT_EMPTY;
-    return VariantCopy(p, &This->return_value);
+    return VariantCopy(p, return_value);
 }
 
 static HRESULT WINAPI HTMLEventObj_put_cancelBubble(IHTMLEventObj *iface, VARIANT_BOOL v)
@@ -516,6 +522,11 @@ static HRESULT WINAPI HTMLEventObj_get_cancelBubble(IHTMLEventObj *iface, VARIAN
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
 
     TRACE("(%p)->(%p)\n", This, p);
+
+    if(!This->event) {
+        *p = VARIANT_FALSE;
+        return S_OK;
+    }
 
     return IDOMEvent_get_cancelBubble(&This->event->IDOMEvent_iface, p);
 }
@@ -1842,6 +1853,20 @@ static HTMLEventObj *alloc_event_obj(DOMEvent *event, HTMLInnerWindow *script_gl
     return event_obj;
 }
 
+static HTMLEventObj *create_event_arg(DOMEvent *event)
+{
+    return event->event_obj ? alloc_event_obj(event, NULL) : NULL;
+}
+
+static void release_event_arg(HTMLEventObj *event_obj)
+{
+    DOMEvent *event = event_obj->event;
+
+    event_obj->event = NULL;
+    IDOMEvent_Release(&event->IDOMEvent_iface);
+    IHTMLEventObj_Release(&event_obj->IHTMLEventObj_iface);
+}
+
 HRESULT create_event_obj(DOMEvent *event, HTMLDocumentNode *doc, IHTMLEventObj **ret)
 {
     HTMLEventObj *event_obj;
@@ -2140,6 +2165,7 @@ static void DOMEvent_unlink(DispatchEx *dispex)
 static void DOMEvent_destructor(DispatchEx *dispex)
 {
     DOMEvent *This = DOMEvent_from_DispatchEx(dispex);
+    VariantClear(&This->return_value);
     free(This->type);
     free(This);
 }
@@ -4279,6 +4305,8 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
     }
 
     for(listener = listeners; listener < listeners + listeners_cnt; listener++) {
+        HTMLEventObj *event_arg = NULL;
+
         if(listener->type != LISTENER_TYPE_ATTACHED) {
             DISPID named_arg = DISPID_THIS;
             VARIANTARG args[2];
@@ -4287,9 +4315,12 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
             V_VT(args) = VT_DISPATCH;
             V_DISPATCH(args) = (IDispatch *)dispex_outer_iface(&event_target->dispex);
 
+            if(dispatch_mode == DISPATCH_LEGACY)
+                event_arg = create_event_arg(event);
+
             V_VT(args+1) = VT_DISPATCH;
-            V_DISPATCH(args+1) = dispatch_mode == DISPATCH_LEGACY
-                ? (IDispatch*)event->event_obj : (IDispatch*)&event->IDOMEvent_iface;
+            V_DISPATCH(args+1) = dispatch_mode != DISPATCH_LEGACY ? (IDispatch*)&event->IDOMEvent_iface
+                : event_arg ? (IDispatch*)&event_arg->IHTMLEventObj_iface : (IDispatch*)event->event_obj;
             V_VT(&v) = VT_EMPTY;
 
             TRACE("%p %s >>>\n", event_target, debugstr_w(event->type));
@@ -4316,8 +4347,10 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
             VARIANTARG arg;
             DISPPARAMS dp = {&arg, NULL, 1, 0};
 
+            event_arg = create_event_arg(event);
+
             V_VT(&arg) = VT_DISPATCH;
-            V_DISPATCH(&arg) = (IDispatch*)event->event_obj;
+            V_DISPATCH(&arg) = event_arg ? (IDispatch*)&event_arg->IHTMLEventObj_iface : (IDispatch*)event->event_obj;
             V_VT(&v) = VT_EMPTY;
 
             TRACE("%p %s attached >>>\n", event_target, debugstr_w(event->type));
@@ -4338,6 +4371,9 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
                 WARN("%p %s attached <<< %08lx\n", event_target, debugstr_w(event->type), hres);
             }
         }
+
+        if(event_arg)
+            release_event_arg(event_arg);
 
         if(event->stop_immediate_propagation)
             break;
@@ -4361,14 +4397,21 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
                     continue;
 
                 for(i=0; i < cp->sinks_size; i++) {
+                    HTMLEventObj *event_arg = NULL;
+
                     if(!cp->sinks[i].disp)
                         continue;
+
+                    if(cp->data->pass_event_arg)
+                        event_arg = create_event_arg(event);
 
                     V_VT(&v) = VT_EMPTY;
 
                     TRACE("%p cp %s [%u] >>>\n", event_target, debugstr_w(event->type), i);
                     hres = call_cp_func(cp->sinks[i].disp, event_info[event->event_id].dispid,
-                            cp->data->pass_event_arg ? event->event_obj : NULL, &v);
+                            !cp->data->pass_event_arg ? NULL : event_arg ? &event_arg->IHTMLEventObj_iface : event->event_obj, &v);
+                    if(event_arg)
+                        release_event_arg(event_arg);
                     if(hres == S_OK) {
                         TRACE("%p cp %s [%u] <<<\n", event_target, debugstr_w(event->type), i);
 
@@ -4587,8 +4630,13 @@ HRESULT fire_event(HTMLDOMNode *node, const WCHAR *event_name, VARIANT *event_va
             return E_OUTOFMEMORY;
     }
 
-    if(!event_obj->event)
+    if(!event_obj->event) {
         hres = create_document_event(node->doc, eid, &event_obj->event);
+        if(SUCCEEDED(hres)) {
+            event_obj->event->return_value = event_obj->return_value;
+            V_VT(&event_obj->return_value) = VT_EMPTY;
+        }
+    }
 
     if(SUCCEEDED(hres)) {
         event_obj->event->event_obj = &event_obj->IHTMLEventObj_iface;

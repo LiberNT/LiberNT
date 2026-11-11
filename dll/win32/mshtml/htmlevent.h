@@ -94,6 +94,7 @@ typedef struct DOMEvent {
     DOM_EVENT_PHASE phase;
 
     IHTMLEventObj *event_obj;
+    VARIANT return_value;
 } DOMEvent;
 
 const WCHAR *get_event_name(eventid_t);
