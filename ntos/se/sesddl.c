@@ -24,6 +24,9 @@ typedef struct _SEP_SDDL_ACE
     UCHAR Type;
     UCHAR Flags;
     ACCESS_MASK Mask;
+    ULONG ObjectFlags;
+    GUID ObjectType;
+    GUID InheritedObjectType;
     PSID Sid;
     BOOLEAN OwnsSid;
     BOOLEAN IsSacl;
@@ -74,10 +77,18 @@ static const SEP_SDDL_SID_NAME SepSddlSidNames[] =
     {{L'S', L'I'}, &SeSystemMandatorySid},
 };
 
-/* TODO: the directory service rights (CC, DC, LC, SW, RP, WP, DT, LO, CR) are
- * not named here, so a string using them is refused */
+/* The directory rights are the values ADS_RIGHTS_ENUM gives them in iads.h */
 static const SEP_SDDL_NAME SepSddlRights[] =
 {
+    {{L'C', L'C'}, 0x00000001},
+    {{L'D', L'C'}, 0x00000002},
+    {{L'L', L'C'}, 0x00000004},
+    {{L'S', L'W'}, 0x00000008},
+    {{L'R', L'P'}, 0x00000010},
+    {{L'W', L'P'}, 0x00000020},
+    {{L'D', L'T'}, 0x00000040},
+    {{L'L', L'O'}, 0x00000080},
+    {{L'C', L'R'}, 0x00000100},
     {{L'G', L'A'}, GENERIC_ALL},
     {{L'G', L'R'}, GENERIC_READ},
     {{L'G', L'W'}, GENERIC_WRITE},
@@ -173,6 +184,48 @@ SepSddlReadUlong(
 
     *Cursor = Current;
     *Value = Result;
+
+    return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+SepSddlIsObjectAce(
+    _In_ UCHAR Type)
+{
+    return (Type == ACCESS_ALLOWED_OBJECT_ACE_TYPE ||
+            Type == ACCESS_DENIED_OBJECT_ACE_TYPE ||
+            Type == SYSTEM_AUDIT_OBJECT_ACE_TYPE ||
+            Type == SYSTEM_ALARM_OBJECT_ACE_TYPE);
+}
+
+static
+NTSTATUS
+SepSddlParseGuid(
+    _Inout_ PCWSTR *Cursor,
+    _Out_ GUID *Guid)
+{
+    WCHAR Braced[38];
+    UNICODE_STRING Text;
+    ULONG Index;
+
+    Braced[0] = L'{';
+
+    for (Index = 0; Index < 36; Index++)
+    {
+        if ((*Cursor)[Index] == UNICODE_NULL) return STATUS_INVALID_PARAMETER;
+        Braced[Index + 1] = (*Cursor)[Index];
+    }
+
+    Braced[37] = L'}';
+
+    Text.Buffer = Braced;
+    Text.Length = sizeof(Braced);
+    Text.MaximumLength = sizeof(Braced);
+
+    if (!NT_SUCCESS(RtlGUIDFromString(&Text, Guid))) return STATUS_INVALID_PARAMETER;
+
+    *Cursor += 36;
 
     return STATUS_SUCCESS;
 }
@@ -333,15 +386,20 @@ SepSddlParseAce(
     Current++;
 
     /* What the entry does */
-    if (SepSddlNamed(Current, L"AU")) { Ace->Type = SYSTEM_AUDIT_ACE_TYPE; Current += 2; }
+    if (SepSddlNamed(Current, L"OA")) { Ace->Type = ACCESS_ALLOWED_OBJECT_ACE_TYPE; Current += 2; }
+    else if (SepSddlNamed(Current, L"OD")) { Ace->Type = ACCESS_DENIED_OBJECT_ACE_TYPE; Current += 2; }
+    else if (SepSddlNamed(Current, L"OU")) { Ace->Type = SYSTEM_AUDIT_OBJECT_ACE_TYPE; Current += 2; }
+    else if (SepSddlNamed(Current, L"OL")) { Ace->Type = SYSTEM_ALARM_OBJECT_ACE_TYPE; Current += 2; }
+    else if (SepSddlNamed(Current, L"AU")) { Ace->Type = SYSTEM_AUDIT_ACE_TYPE; Current += 2; }
     else if (SepSddlNamed(Current, L"AL")) { Ace->Type = SYSTEM_ALARM_ACE_TYPE; Current += 2; }
     else if (SepSddlNamed(Current, L"ML")) { Ace->Type = SYSTEM_MANDATORY_LABEL_ACE_TYPE; Current += 2; }
     else if (SepSddlUpcase(Current[0]) == L'A' && Current[1] == L';') { Ace->Type = ACCESS_ALLOWED_ACE_TYPE; Current++; }
     else if (SepSddlUpcase(Current[0]) == L'D' && Current[1] == L';') { Ace->Type = ACCESS_DENIED_ACE_TYPE; Current++; }
     else
     {
-        /* TODO: the entries that name an object type (OA, OD, OU, OL) are not
-         * built here, so a string using them is refused */
+        /* TODO: the callback, resource attribute, scoped policy, trust label
+         * and access filter entries are not built, so a string using them is
+         * refused */
         return STATUS_NOT_IMPLEMENTED;
     }
 
@@ -375,17 +433,37 @@ SepSddlParseAce(
     if (*Current != L';') return STATUS_INVALID_PARAMETER;
     Current++;
 
-    /* The two object type names, which have to be absent here */
+    /* The two object type names, which only an object entry may carry */
     for (Index = 0; Index < 2; Index++)
     {
-        if (*Current != L';') return STATUS_NOT_IMPLEMENTED;
+        if (*Current != L';')
+        {
+            if (!SepSddlIsObjectAce(Ace->Type)) return STATUS_INVALID_PARAMETER;
+
+            Status = SepSddlParseGuid(&Current,
+                                      (Index == 0) ? &Ace->ObjectType
+                                                   : &Ace->InheritedObjectType);
+            if (!NT_SUCCESS(Status)) return Status;
+
+            Ace->ObjectFlags |= (Index == 0) ? ACE_OBJECT_TYPE_PRESENT
+                                             : ACE_INHERITED_OBJECT_TYPE_PRESENT;
+
+            if (*Current != L';') return STATUS_INVALID_PARAMETER;
+        }
+
         Current++;
     }
 
     Status = SepSddlParseSid(&Current, &Ace->Sid, &Ace->OwnsSid);
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (*Current != L')') return STATUS_INVALID_PARAMETER;
+    if (*Current != L')')
+    {
+        if (Ace->OwnsSid) ExFreePoolWithTag(Ace->Sid, TAG_SID);
+        Ace->Sid = NULL;
+        Ace->OwnsSid = FALSE;
+        return STATUS_INVALID_PARAMETER;
+    }
     Current++;
 
     *Cursor = Current;
@@ -460,6 +538,23 @@ SepSddlParseAcl(
     return STATUS_SUCCESS;
 }
 
+static
+ULONG
+SepSddlAceLength(
+    _In_ PSEP_SDDL_ACE Ace)
+{
+    ULONG Length;
+
+    if (!SepSddlIsObjectAce(Ace->Type))
+        return (ULONG)(FIELD_OFFSET(KNOWN_ACE, SidStart) + RtlLengthSid(Ace->Sid));
+
+    Length = FIELD_OFFSET(KNOWN_OBJECT_ACE, SidStart);
+    if (Ace->ObjectFlags & ACE_OBJECT_TYPE_PRESENT) Length += sizeof(GUID);
+    if (Ace->ObjectFlags & ACE_INHERITED_OBJECT_TYPE_PRESENT) Length += sizeof(GUID);
+
+    return Length + (ULONG)RtlLengthSid(Ace->Sid);
+}
+
 /* What one list takes once it is laid out */
 static
 ULONG
@@ -475,8 +570,7 @@ SepSddlAclLength(
     {
         if (Aces[Index].IsSacl != IsSacl) continue;
 
-        Length += (ULONG)(FIELD_OFFSET(KNOWN_ACE, SidStart) +
-                          RtlLengthSid(Aces[Index].Sid));
+        Length += SepSddlAceLength(&Aces[Index]);
     }
 
     return Length;
@@ -504,19 +598,36 @@ SepSddlWriteAcl(
     for (Index = 0; Index < Count; Index++)
     {
         PKNOWN_ACE Ace = (PKNOWN_ACE)Cursor;
-        ULONG SidLength;
+        PKNOWN_OBJECT_ACE ObjectAce = (PKNOWN_OBJECT_ACE)Cursor;
+        PUCHAR Where = (PUCHAR)&Ace->SidStart;
 
         if (Aces[Index].IsSacl != IsSacl) continue;
 
-        SidLength = (ULONG)RtlLengthSid(Aces[Index].Sid);
-
         Ace->Header.AceType = Aces[Index].Type;
         Ace->Header.AceFlags = Aces[Index].Flags;
-        Ace->Header.AceSize =
-            (USHORT)(FIELD_OFFSET(KNOWN_ACE, SidStart) + SidLength);
+        Ace->Header.AceSize = (USHORT)SepSddlAceLength(&Aces[Index]);
         Ace->Mask = Aces[Index].Mask;
 
-        RtlCopyMemory(&Ace->SidStart, Aces[Index].Sid, SidLength);
+        /* The types an object entry names follow its flags, in that order */
+        if (SepSddlIsObjectAce(Aces[Index].Type))
+        {
+            ObjectAce->Flags = Aces[Index].ObjectFlags;
+            Where = (PUCHAR)&ObjectAce->SidStart;
+
+            if (Aces[Index].ObjectFlags & ACE_OBJECT_TYPE_PRESENT)
+            {
+                RtlCopyMemory(Where, &Aces[Index].ObjectType, sizeof(GUID));
+                Where += sizeof(GUID);
+            }
+
+            if (Aces[Index].ObjectFlags & ACE_INHERITED_OBJECT_TYPE_PRESENT)
+            {
+                RtlCopyMemory(Where, &Aces[Index].InheritedObjectType, sizeof(GUID));
+                Where += sizeof(GUID);
+            }
+        }
+
+        RtlCopyMemory(Where, Aces[Index].Sid, RtlLengthSid(Aces[Index].Sid));
 
         Cursor += Ace->Header.AceSize;
         Acl->AceCount++;

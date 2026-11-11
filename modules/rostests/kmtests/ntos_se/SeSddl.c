@@ -219,6 +219,123 @@ TestNoAccessControl(VOID)
     ExFreePool(Sd);
 }
 
+/* The rights a directory object answers for, and the entries naming its parts */
+static
+VOID
+TestObjectEntries(VOID)
+{
+    static const GUID Property =
+        {0xbf967aba, 0x0de6, 0x11d0, {0xa2, 0x85, 0x00, 0xaa, 0x00, 0x30, 0x49, 0xe2}};
+    static const GUID Class =
+        {0xbf967a86, 0x0de6, 0x11d0, {0xa2, 0x85, 0x00, 0xaa, 0x00, 0x30, 0x49, 0xe2}};
+    PISECURITY_DESCRIPTOR_RELATIVE Sd = NULL;
+    PACCESS_ALLOWED_OBJECT_ACE Ace;
+    BOOLEAN Present, Defaulted;
+    NTSTATUS Status;
+    PACL Acl;
+
+    Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(
+                 L"D:(A;;CCDCLCSWRPWPDTLOCR;;;SY)"
+                 L"(OA;CI;RP;bf967aba-0de6-11d0-a285-00aa003049e2;"
+                 L"bf967a86-0de6-11d0-a285-00aa003049e2;BA)"
+                 L"(OD;;WP;;bf967a86-0de6-11d0-a285-00aa003049e2;WD)"
+                 L"S:(OU;SA;CR;bf967aba-0de6-11d0-a285-00aa003049e2;;WD)",
+                 1, (PVOID *)&Sd, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Acl = NULL;
+    Status = RtlGetDaclSecurityDescriptor(Sd, &Present, &Acl, &Defaulted);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Acl != NULL)
+    {
+        ok_eq_uint(Acl->AceCount, 3);
+
+        /* The nine directory rights, CC through CR, are the low nine bits */
+        CheckAce(Acl, 0, ACCESS_ALLOWED_ACE_TYPE, 0, 0x1ff,
+                 SeExports->SeLocalSystemSid);
+
+        Ace = NULL;
+        Status = RtlGetAce(Acl, 1, (PVOID *)&Ace);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (Ace != NULL)
+        {
+            ok_eq_uint(Ace->Header.AceType, ACCESS_ALLOWED_OBJECT_ACE_TYPE);
+            ok_eq_uint(Ace->Header.AceFlags, CONTAINER_INHERIT_ACE);
+            ok_eq_hex(Ace->Mask, 0x10UL);
+            ok_eq_hex(Ace->Flags, (ULONG)(ACE_OBJECT_TYPE_PRESENT |
+                                          ACE_INHERITED_OBJECT_TYPE_PRESENT));
+            ok(RtlEqualMemory(&Ace->ObjectType, &Property, sizeof(GUID)),
+               "the object type is another one\n");
+            ok(RtlEqualMemory(&Ace->InheritedObjectType, &Class, sizeof(GUID)),
+               "the inherited object type is another one\n");
+            ok(RtlEqualSid((PSID)&Ace->SidStart, SeExports->SeAliasAdminsSid),
+               "the entry names another identifier\n");
+            ok_eq_uint(Ace->Header.AceSize,
+                       FIELD_OFFSET(ACCESS_ALLOWED_OBJECT_ACE, SidStart) +
+                       RtlLengthSid(SeExports->SeAliasAdminsSid));
+        }
+
+        /* A type that is left out leaves no room behind it */
+        Ace = NULL;
+        Status = RtlGetAce(Acl, 2, (PVOID *)&Ace);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (Ace != NULL)
+        {
+            ok_eq_uint(Ace->Header.AceType, ACCESS_DENIED_OBJECT_ACE_TYPE);
+            ok_eq_uint(Ace->Header.AceFlags, 0);
+            ok_eq_hex(Ace->Mask, 0x20UL);
+            ok_eq_hex(Ace->Flags, (ULONG)ACE_INHERITED_OBJECT_TYPE_PRESENT);
+            ok(RtlEqualMemory(&Ace->ObjectType, &Class, sizeof(GUID)),
+               "the inherited object type is not where the first type goes\n");
+            ok(RtlEqualSid((PSID)&Ace->InheritedObjectType, SeExports->SeWorldSid),
+               "the identifier does not follow the one type given\n");
+            ok_eq_uint(Ace->Header.AceSize,
+                       FIELD_OFFSET(ACCESS_ALLOWED_OBJECT_ACE, InheritedObjectType) +
+                       RtlLengthSid(SeExports->SeWorldSid));
+        }
+    }
+
+    Acl = NULL;
+    Status = RtlGetSaclSecurityDescriptor(Sd, &Present, &Acl, &Defaulted);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Acl != NULL)
+    {
+        ok_eq_uint(Acl->AceCount, 1);
+
+        Ace = NULL;
+        Status = RtlGetAce(Acl, 0, (PVOID *)&Ace);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (Ace != NULL)
+        {
+            ok_eq_uint(Ace->Header.AceType, SYSTEM_AUDIT_OBJECT_ACE_TYPE);
+            ok_eq_uint(Ace->Header.AceFlags, SUCCESSFUL_ACCESS_ACE_FLAG);
+            ok_eq_hex(Ace->Mask, 0x100UL);
+            ok_eq_hex(Ace->Flags, (ULONG)ACE_OBJECT_TYPE_PRESENT);
+            ok(RtlEqualMemory(&Ace->ObjectType, &Property, sizeof(GUID)),
+               "the object type is another one\n");
+            ok(RtlEqualSid((PSID)&Ace->InheritedObjectType, SeExports->SeWorldSid),
+               "the identifier does not follow the one type given\n");
+        }
+    }
+
+    ExFreePool(Sd);
+
+    /* Only an entry that names an object type may carry one, and only whole */
+    Sd = NULL;
+    Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(
+                 L"D:(A;;GA;bf967aba-0de6-11d0-a285-00aa003049e2;;SY)",
+                 1, (PVOID *)&Sd, NULL);
+    ok(!NT_SUCCESS(Status), "a plain entry took an object type (0x%08lx)\n", Status);
+    if (NT_SUCCESS(Status) && Sd != NULL) ExFreePool(Sd);
+
+    Sd = NULL;
+    Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(
+                 L"D:(OA;;RP;bf967aba-0de6-11d0-a285;;SY)", 1, (PVOID *)&Sd, NULL);
+    ok(!NT_SUCCESS(Status), "a broken object type was taken (0x%08lx)\n", Status);
+    if (NT_SUCCESS(Status) && Sd != NULL) ExFreePool(Sd);
+}
+
 /* A string may name its lists in either order */
 static
 VOID
@@ -268,6 +385,7 @@ START_TEST(SeSddl)
     TestFullString();
     TestNoAccessControl();
     TestRefusedStrings();
+    TestObjectEntries();
 }
 
 START_TEST(SeSddlListOrder)
