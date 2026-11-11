@@ -313,6 +313,91 @@ CmpFindLoadedHive(
 
 static
 NTSTATUS
+CmpBuildHiveFilePath(
+    _In_ POBJECT_ATTRIBUTES SourceFile,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PUNICODE_STRING FilePath)
+{
+    POBJECT_NAME_INFORMATION RootName;
+    ULONG Length = 0;
+    ULONG Total;
+    NTSTATUS Status;
+    PVOID Root;
+    PWCHAR Buffer;
+    USHORT Used;
+
+    *FilePath = *SourceFile->ObjectName;
+    if (SourceFile->RootDirectory == NULL) return STATUS_SUCCESS;
+
+    Status = ObReferenceObjectByHandle(SourceFile->RootDirectory,
+                                       0,
+                                       NULL,
+                                       AccessMode,
+                                       &Root,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObQueryNameString(Root, NULL, 0, &Length);
+    if (Length < sizeof(OBJECT_NAME_INFORMATION))
+    {
+        ObDereferenceObject(Root);
+        return NT_SUCCESS(Status) ? STATUS_OBJECT_PATH_INVALID : Status;
+    }
+
+    RootName = ExAllocatePoolWithTag(PagedPool, Length, TAG_CM);
+    if (RootName == NULL)
+    {
+        ObDereferenceObject(Root);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = ObQueryNameString(Root, RootName, Length, &Length);
+    ObDereferenceObject(Root);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return Status;
+    }
+
+    Total = (ULONG)RootName->Name.Length + sizeof(WCHAR) +
+            SourceFile->ObjectName->Length;
+    if (Total > MAXUSHORT - sizeof(WCHAR))
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return STATUS_OBJECT_NAME_INVALID;
+    }
+
+    Buffer = ExAllocatePoolZero(PagedPool, Total + sizeof(WCHAR), TAG_CM);
+    if (Buffer == NULL)
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlCopyMemory(Buffer, RootName->Name.Buffer, RootName->Name.Length);
+    Used = RootName->Name.Length;
+    ExFreePoolWithTag(RootName, TAG_CM);
+
+    if (Used == 0 || Buffer[Used / sizeof(WCHAR) - 1] != OBJ_NAME_PATH_SEPARATOR)
+    {
+        Buffer[Used / sizeof(WCHAR)] = OBJ_NAME_PATH_SEPARATOR;
+        Used += sizeof(WCHAR);
+    }
+
+    RtlCopyMemory((PUCHAR)Buffer + Used,
+                  SourceFile->ObjectName->Buffer,
+                  SourceFile->ObjectName->Length);
+    Used += SourceFile->ObjectName->Length;
+
+    FilePath->Buffer = Buffer;
+    FilePath->Length = Used;
+    FilePath->MaximumLength = Used + sizeof(WCHAR);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 CmpRememberHiveFileNames(
     _Inout_ PCMHIVE Hive,
     _In_ PCUNICODE_STRING FilePath,
@@ -478,6 +563,7 @@ CmpLoadHiveAtName(
     _Out_opt_ PCM_KEY_BODY *RootBody)
 {
     OBJECT_ATTRIBUTES RootAttributes;
+    UNICODE_STRING FilePath;
     BOOLEAN Allocate = TRUE;
     PCMHIVE CmHive = NULL;
     PCM_KEY_BODY KeyBody;
@@ -500,9 +586,12 @@ CmpLoadHiveAtName(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
+    Status = CmpBuildHiveFilePath(SourceFile, AccessMode, &FilePath);
+    if (!NT_SUCCESS(Status)) return Status;
+
     ExAcquirePushLockExclusive(&CmpLoadHiveLock);
 
-    Status = CmpInitHiveFromFile(SourceFile->ObjectName,
+    Status = CmpInitHiveFromFile(&FilePath,
                                  (Flags & REG_NO_LAZY_FLUSH) ? HIVE_NOLAZYFLUSH
                                                              : 0,
                                  &CmHive,
@@ -512,6 +601,8 @@ CmpLoadHiveAtName(
     if (!NT_SUCCESS(Status))
     {
         ExReleasePushLockExclusive(&CmpLoadHiveLock);
+        if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+            ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
         return Status;
     }
 
@@ -532,6 +623,8 @@ CmpLoadHiveAtName(
         {
             CmpDestroyHive(CmHive);
             ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+                ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
             return Status;
         }
     }
@@ -542,8 +635,11 @@ CmpLoadHiveAtName(
     }
 
     CmpRememberHiveFileNames(CmHive,
-                             SourceFile->ObjectName,
+                             &FilePath,
                              TargetKey->ObjectName);
+
+    if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+        ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
 
     CmpLockRegistryExclusive();
 
