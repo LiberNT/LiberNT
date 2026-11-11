@@ -673,7 +673,6 @@ PspAllocateUserStack(
         return Status;
     }
 
-    InitialTeb->StackLimit = GuardBase;
     return STATUS_SUCCESS;
 }
 
