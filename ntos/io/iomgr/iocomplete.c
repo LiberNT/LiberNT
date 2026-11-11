@@ -294,10 +294,13 @@ IopCompleteRequest(
         }
     }
 
+    /* A request without an APC context, or one a skip-on-success file finished without pending it, leaves no packet */
     if (Deliver &&
         FileObject != NULL &&
         FileObject->CompletionContext != NULL &&
         Irp->Overlay.AsynchronousParameters.UserApcRoutine == NULL &&
+        Irp->Overlay.AsynchronousParameters.UserApcContext != NULL &&
+        (Irp->PendingReturned || !(FileObject->Flags & FO_SKIP_COMPLETION_PORT)) &&
         !(Irp->Flags & IRP_CREATE_OPERATION))
     {
         Port = FileObject->CompletionContext->Port;
