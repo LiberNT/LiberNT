@@ -61,7 +61,7 @@ START_TEST(SystemFileCacheSize)
 
     ok(Minimum != (SIZE_T)-2, "Minimum was not written\n");
     ok(Maximum != (SIZE_T)-2, "Maximum was not written\n");
-    ok(Minimum <= Maximum, "Minimum 0x%Ix > maximum 0x%Ix\n", Minimum, Maximum);
+    ok(Minimum <= Maximum, "Minimum 0x%I64x > maximum 0x%I64x\n", (ULONGLONG)Minimum, (ULONGLONG)Maximum);
     ok((Flags & ~(FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MIN_HARD_ENABLE)) == 0, "Flags 0x%lx\n", Flags);
 
     TestInvalidFlags(Minimum, Maximum);

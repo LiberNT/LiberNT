@@ -138,8 +138,8 @@ TestQueryProcessHeapInformation(VOID)
         ok_eq_pointer(Buffer->Heaps->Heaps[0].BaseAddress, RtlGetProcessHeap());
         ok(Buffer->Heaps->Heaps[0].BytesCommitted != 0, "Process heap reports no committed bytes\n");
         ok(Buffer->Heaps->Heaps[0].BytesCommitted >= Buffer->Heaps->Heaps[0].BytesAllocated,
-           "Committed 0x%Ix < allocated 0x%Ix\n", Buffer->Heaps->Heaps[0].BytesCommitted,
-           Buffer->Heaps->Heaps[0].BytesAllocated);
+           "Committed 0x%I64x < allocated 0x%I64x\n", (ULONGLONG)Buffer->Heaps->Heaps[0].BytesCommitted,
+           (ULONGLONG)Buffer->Heaps->Heaps[0].BytesAllocated);
     }
 
     ok_eq_hex(RtlDestroyQueryDebugBuffer(Buffer), STATUS_SUCCESS);

@@ -44,11 +44,11 @@ START_TEST(HeapSummary)
     ok_eq_bool(Result, TRUE);
     ok_eq_ulong(GetLastError(), 0xdeadbeef);
     ok_eq_ulong(Summary.cb, sizeof(Summary));
-    ok(Summary.cbAllocated == 0x100 + 0x200 + 0x60000, "cbAllocated 0x%Ix\n", Summary.cbAllocated);
-    ok(Summary.cbCommitted >= Summary.cbAllocated, "cbCommitted 0x%Ix < cbAllocated 0x%Ix\n",
-       Summary.cbCommitted, Summary.cbAllocated);
-    ok(Summary.cbReserved >= Summary.cbCommitted, "cbReserved 0x%Ix < cbCommitted 0x%Ix\n",
-       Summary.cbReserved, Summary.cbCommitted);
+    ok(Summary.cbAllocated == 0x100 + 0x200 + 0x60000, "cbAllocated 0x%I64x\n", (ULONGLONG)Summary.cbAllocated);
+    ok(Summary.cbCommitted >= Summary.cbAllocated, "cbCommitted 0x%I64x < cbAllocated 0x%I64x\n",
+       (ULONGLONG)Summary.cbCommitted, (ULONGLONG)Summary.cbAllocated);
+    ok(Summary.cbReserved >= Summary.cbCommitted, "cbReserved 0x%I64x < cbCommitted 0x%I64x\n",
+       (ULONGLONG)Summary.cbReserved, (ULONGLONG)Summary.cbCommitted);
 
     ok_eq_bool(HeapDestroy(Heap), TRUE);
 
@@ -56,8 +56,8 @@ START_TEST(HeapSummary)
     Summary.cb = sizeof(Summary);
     ok_eq_bool(HeapSummary(GetProcessHeap(), 0, &Summary), TRUE);
     ok(Summary.cbAllocated != 0, "Process heap reports no allocated bytes\n");
-    ok(Summary.cbCommitted >= Summary.cbAllocated, "cbCommitted 0x%Ix < cbAllocated 0x%Ix\n",
-       Summary.cbCommitted, Summary.cbAllocated);
-    ok(Summary.cbReserved >= Summary.cbCommitted, "cbReserved 0x%Ix < cbCommitted 0x%Ix\n",
-       Summary.cbReserved, Summary.cbCommitted);
+    ok(Summary.cbCommitted >= Summary.cbAllocated, "cbCommitted 0x%I64x < cbAllocated 0x%I64x\n",
+       (ULONGLONG)Summary.cbCommitted, (ULONGLONG)Summary.cbAllocated);
+    ok(Summary.cbReserved >= Summary.cbCommitted, "cbReserved 0x%I64x < cbCommitted 0x%I64x\n",
+       (ULONGLONG)Summary.cbReserved, (ULONGLONG)Summary.cbCommitted);
 }
