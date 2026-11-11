@@ -168,6 +168,7 @@ KMT_TESTFUNC Test_IoCreateDeviceSecure;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoCreateFileAccessCheck;
 KMT_TESTFUNC Test_IoCreateSystemThread;
+KMT_TESTFUNC Test_IoCustomTargetEventReport;
 KMT_TESTFUNC Test_IoDeviceInterface;
 KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
@@ -549,6 +550,7 @@ const KMT_TEST TestList[] =
     { "IoCreateFileAccessCheck",            Test_IoCreateFileAccessCheck },
     { "IoCreateSystemThread",               Test_IoCreateSystemThread },
     { "IoWmiAcpi",                          Test_IoWmiAcpi },
+    { "-IoCustomTargetEventReport",         Test_IoCustomTargetEventReport },
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },
     { "IoEvent",                            Test_IoEvent },

@@ -129,23 +129,36 @@ IopQueueCustomTargetEvent(
     _In_ PUNICODE_STRING DeviceIds,
     _In_ PTARGET_DEVICE_CUSTOM_NOTIFICATION Notification)
 {
+    PTARGET_DEVICE_CUSTOM_NOTIFICATION Copy;
     PIOP_PLUGPLAY_EVENT_BLOCK Entry;
-    ULONG Extra;
+    ULONG Offset;
 
     PAGED_CODE();
 
-    Extra = DeviceIds->Length + 2 * sizeof(WCHAR);
+    if (Notification->Size < FIELD_OFFSET(TARGET_DEVICE_CUSTOM_NOTIFICATION, CustomDataBuffer))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* The notification follows the device IDs; user mode reads it there with its data */
+    Offset = ALIGN_UP_BY(FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, CustomNotification.DeviceIds) +
+                             DeviceIds->Length + 2 * sizeof(WCHAR),
+                         sizeof(ULONGLONG));
 
     Entry = IopAllocatePnpEvent(&Notification->Event,
                                 CustomDeviceEvent,
-                                Extra);
+                                Offset + Notification->Size);
     if (Entry == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    Entry->Event.CustomNotification.NotificationStructure = NULL;
+    Entry->Event.CustomNotification.NotificationStructure = (PVOID)(ULONG_PTR)Offset;
 
     RtlCopyMemory(Entry->Event.CustomNotification.DeviceIds,
                   DeviceIds->Buffer,
                   DeviceIds->Length);
+
+    Copy = (PTARGET_DEVICE_CUSTOM_NOTIFICATION)((PUCHAR)&Entry->Event + Offset);
+    RtlCopyMemory(Copy, Notification, Notification->Size);
+    Copy->FileObject = NULL;
 
     IopPostPnpEvent(Entry);
 
@@ -260,6 +273,22 @@ IopDisableDeviceInterfaces(
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
+static
+VOID
+IopCopyPnpEvent(
+    _Out_ PPLUGPLAY_EVENT_BLOCK Buffer,
+    _In_ PIOP_PLUGPLAY_EVENT_BLOCK Entry)
+{
+    RtlCopyMemory(Buffer, &Entry->Event, Entry->Event.TotalSize);
+
+    if (Entry->Event.EventCategory == CustomDeviceEvent &&
+        Entry->Event.CustomNotification.NotificationStructure != NULL)
+    {
+        Buffer->CustomNotification.NotificationStructure =
+            (PUCHAR)Buffer + (ULONG_PTR)Entry->Event.CustomNotification.NotificationStructure;
+    }
+}
+
 NTSTATUS
 NTAPI
 NtGetPlugPlayEvent(
@@ -343,7 +372,7 @@ NtGetPlugPlayEvent(
     {
         _SEH2_TRY
         {
-            RtlCopyMemory(Buffer, &Entry->Event, Entry->Event.TotalSize);
+            IopCopyPnpEvent(Buffer, Entry);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -353,7 +382,7 @@ NtGetPlugPlayEvent(
     }
     else
     {
-        RtlCopyMemory(Buffer, &Entry->Event, Entry->Event.TotalSize);
+        IopCopyPnpEvent(Buffer, Entry);
     }
 
     ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);

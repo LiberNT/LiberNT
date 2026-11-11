@@ -186,6 +186,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCreateSystemThread.c
     ntos_io/IoCsqKM.c
+    ntos_io/IoCustomTargetEvent.c
     ntos_io/IoDeviceInterface.c
     ntos_io/IoDeviceSecurity.c
     ntos_io/IoDriverKey.c
@@ -601,6 +602,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
+    ntos_io/IoCustomTargetEvent_user.c
     ntos_io/IoDeviceTree_user.c
     ntos_io/IoDriverKey_user.c
     ntos_io/IoInterfaceOrder_user.c
