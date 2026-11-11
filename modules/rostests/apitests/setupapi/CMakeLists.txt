@@ -5,6 +5,7 @@ list(APPEND SOURCE
     DevicePdoName.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
+    InboxClasses.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
     NewDeviceInstall.c
