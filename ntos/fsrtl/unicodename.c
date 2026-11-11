@@ -15,6 +15,9 @@
 
 #define FSRTL_STACK_STATES 64
 
+#define FSRTL_STATE_ACTIVE 1
+#define FSRTL_STATE_BOUNDED 2
+
 /*
  * One run of the matcher: the expression, the name and the two state sets the
  * sweep needs.
@@ -76,14 +79,14 @@ FsRtlpCloseStates(
 
         if (Character == L'*')
         {
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
             continue;
         }
 
         /* DOS_STAR may always stop here, matching nothing more */
         if (Character == DOS_STAR)
         {
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
             continue;
         }
 
@@ -96,7 +99,7 @@ FsRtlpCloseStates(
 
                 while ((j < Length) && (Run->Expression[j] == DOS_QM)) j++;
 
-                Run->Current[j] = TRUE;
+                Run->Current[j] |= FSRTL_STATE_ACTIVE;
             }
 
             continue;
@@ -104,7 +107,7 @@ FsRtlpCloseStates(
 
         if ((Character == DOS_DOT) && (NamePosition == Run->NameLength))
         {
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
         }
     }
 }
@@ -118,7 +121,7 @@ FsRtlpSweepExpression(
     ULONG Position;
 
     RtlZeroMemory(Run->Current, States);
-    Run->Current[0] = TRUE;
+    Run->Current[0] = FSRTL_STATE_ACTIVE;
 
     for (Position = 0; ; Position++)
     {
@@ -143,29 +146,42 @@ FsRtlpSweepExpression(
 
             if (Character == L'*')
             {
-                Run->Next[i] = TRUE;
+                Run->Next[i] |= FSRTL_STATE_ACTIVE;
             }
             else if (Character == L'?')
             {
-                Run->Next[i + 1] = TRUE;
+                Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
             }
             else if (Character == DOS_QM)
             {
-                if (Run->Name[Position] != L'.') Run->Next[i + 1] = TRUE;
+                if (Run->Name[Position] != L'.')
+                {
+                    Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
+                }
+                else
+                {
+                    ULONG j = i;
+
+                    /* A run of DOS_QM that ends the expression takes the period with it */
+                    while ((j < Run->ExpressionLength) && (Run->Expression[j] == DOS_QM)) j++;
+                    if (j == Run->ExpressionLength) Run->Next[j] |= FSRTL_STATE_ACTIVE;
+                }
             }
             else if (Character == DOS_DOT)
             {
-                if (Run->Name[Position] == L'.') Run->Next[i + 1] = TRUE;
+                if (Run->Name[Position] == L'.') Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
             }
             else if (Character == DOS_STAR)
             {
-                /* It takes characters up to and including the name's final period, never past it */
-                if ((Run->LastDot < 0) || (Position <= (ULONG)Run->LastDot))
-                    Run->Next[i] = TRUE;
+                /* It takes characters up to and including the name's final period, and past it only when it started there */
+                if (Run->Current[i] & FSRTL_STATE_ACTIVE)
+                {
+                    Run->Next[i] |= ((LONG)Position == Run->LastDot) ? FSRTL_STATE_BOUNDED : FSRTL_STATE_ACTIVE;
+                }
             }
             else if (FsRtlpUpcaseChar(Run, Character) == Wanted)
             {
-                Run->Next[i + 1] = TRUE;
+                Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
             }
         }
 
@@ -241,12 +257,6 @@ FsRtlpMatchName(
     if (Run.ExpressionLength == 0) return FALSE;
 
     if ((Run.ExpressionLength == 1) && (Run.Expression[0] == L'*'))
-    {
-        return TRUE;
-    }
-
-    if ((Run.ExpressionLength == 3) && (Run.Expression[0] == L'*') &&
-        (Run.Expression[1] == L'.') && (Run.Expression[2] == L'*'))
     {
         return TRUE;
     }
