@@ -1460,6 +1460,30 @@ CdConnectionIoctl(
             return Status;
         }
 
+        case IOCTL_CONDRV_CLIENT_REQUEST:
+        {
+            PCONDRV_CLIENT_REQUEST Header = Irp->AssociatedIrp.SystemBuffer;
+            PFILE_OBJECT Target;
+
+            if (InLength < sizeof(*Header))
+                return STATUS_INVALID_PARAMETER;
+            Status = ObReferenceObjectByHandle(UlongToHandle(Header->Handle),
+                                               (ACCESS_MASK)((Header->Code >> 14) & 3),
+                                               *IoFileObjectType,
+                                               Irp->RequestorMode,
+                                               (PVOID*)&Target,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            /* Only the fast I/O routine serves the request; a console file falls back to its own IOCTL */
+            if (IoGetRelatedDeviceObject(Target) != Stack->DeviceObject || !Target->FsContext)
+                Status = STATUS_INVALID_HANDLE;
+            else
+                Status = STATUS_NOT_SUPPORTED;
+            ObDereferenceObject(Target);
+            return Status;
+        }
+
         default:
             return STATUS_NOT_SUPPORTED;
     }
