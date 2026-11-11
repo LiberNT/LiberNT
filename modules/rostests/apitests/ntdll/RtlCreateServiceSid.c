@@ -7,13 +7,9 @@
 
 #include "precomp.h"
 
-NTSYSAPI
-NTSTATUS
-NTAPI
-RtlCreateServiceSid(
-    _In_ PUNICODE_STRING ServiceName,
-    _Out_writes_bytes_opt_(*ServiceSidLength) PSID ServiceSid,
-    _Inout_ PULONG ServiceSidLength);
+typedef NTSTATUS (NTAPI *FN_RtlCreateServiceSid)(PUNICODE_STRING, PSID, PULONG);
+
+static FN_RtlCreateServiceSid pRtlCreateServiceSid;
 
 static
 VOID
@@ -29,7 +25,7 @@ CheckServiceSid(
     RtlInitUnicodeString(&ServiceName, Name);
     Length = RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT);
     RtlFillMemory(Buffer, sizeof(Buffer), 0xcc);
-    Status = RtlCreateServiceSid(&ServiceName, Buffer, &Length);
+    Status = pRtlCreateServiceSid(&ServiceName, Buffer, &Length);
     ok(Status == STATUS_SUCCESS, "%S: status 0x%lx\n", Name, Status);
     ok(Length == RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT), "%S: length %lu\n", Name, Length);
     if (!NT_SUCCESS(Status))
@@ -54,31 +50,38 @@ START_TEST(RtlCreateServiceSid)
     ULONG Length;
     NTSTATUS Status;
 
+    pRtlCreateServiceSid = (FN_RtlCreateServiceSid)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlCreateServiceSid");
+    if (!pRtlCreateServiceSid)
+    {
+        skip("RtlCreateServiceSid not exported by ntdll\n");
+        return;
+    }
+
     RtlInitUnicodeString(&ServiceName, L"TestService");
 
     Length = 0;
-    Status = RtlCreateServiceSid(NULL, NULL, &Length);
+    Status = pRtlCreateServiceSid(NULL, NULL, &Length);
     ok(Status == STATUS_INVALID_PARAMETER, "Status 0x%lx\n", Status);
 
-    Status = RtlCreateServiceSid(&ServiceName, NULL, NULL);
+    Status = pRtlCreateServiceSid(&ServiceName, NULL, NULL);
     ok(Status == STATUS_INVALID_PARAMETER, "Status 0x%lx\n", Status);
 
     /* A buffer that is too small gets the length it needs */
     Length = 0;
-    Status = RtlCreateServiceSid(&ServiceName, NULL, &Length);
+    Status = pRtlCreateServiceSid(&ServiceName, NULL, &Length);
     ok(Status == STATUS_BUFFER_TOO_SMALL, "Status 0x%lx\n", Status);
     ok(Length == RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT), "Length %lu\n", Length);
 
     Length = RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT) - 1;
     RtlFillMemory(Buffer, sizeof(Buffer), 0xcc);
-    Status = RtlCreateServiceSid(&ServiceName, Buffer, &Length);
+    Status = pRtlCreateServiceSid(&ServiceName, Buffer, &Length);
     ok(Status == STATUS_BUFFER_TOO_SMALL, "Status 0x%lx\n", Status);
     ok(Length == RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT), "Length %lu\n", Length);
     ok(Buffer[0] == 0xcccccccc, "Buffer was written: 0x%lx\n", Buffer[0]);
 
     /* A NULL buffer only asks for the length, whatever length is passed */
     Length = sizeof(Buffer);
-    Status = RtlCreateServiceSid(&ServiceName, NULL, &Length);
+    Status = pRtlCreateServiceSid(&ServiceName, NULL, &Length);
     ok(Status == STATUS_BUFFER_TOO_SMALL, "Status 0x%lx\n", Status);
     ok(Length == RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT), "Length %lu\n", Length);
 
@@ -89,7 +92,7 @@ START_TEST(RtlCreateServiceSid)
 
     /* A larger buffer is filled the same way and the length is the SID's */
     Length = sizeof(Buffer);
-    Status = RtlCreateServiceSid(&ServiceName, Buffer, &Length);
+    Status = pRtlCreateServiceSid(&ServiceName, Buffer, &Length);
     ok(Status == STATUS_SUCCESS, "Status 0x%lx\n", Status);
     ok(Length == RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT), "Length %lu\n", Length);
 }
