@@ -2748,6 +2748,15 @@ KdbpReportStop(
     KdbpPagerReset();
 }
 
+static
+VOID
+KdbpPersistSessionLog(VOID)
+{
+    /* Writing through the crash storage path resets the boot disk, so only a bug check session may do it */
+    if (KiBugCheckData[0] != 0)
+        (VOID)KdpWriteBootLogAtCrash(NULL, NULL);
+}
+
 /*
  * Where a person sits while the machine is stopped. Returns once a command
  * has asked for the machine to run again.
@@ -2763,10 +2772,12 @@ KdbpCliMainLoop(
     KdbpFrameSelected = FALSE;
     KdbpPagerReset();
     KdbpReportStop(EnteredOnSingleStep);
+    KdbpPersistSessionLog();
 
     /* Whatever the machine was told to do at the first stop is done here */
     KdbpLeaveLoop = FALSE;
     KdbpCliInterpretInitFile();
+    KdbpPersistSessionLog();
     if (KdbpLeaveLoop)
         return;
 
@@ -2796,6 +2807,8 @@ KdbpCliMainLoop(
 
         if (KdbpCliInterpretCommand(Command))
             return;
+
+        KdbpPersistSessionLog();
     }
 }
 
