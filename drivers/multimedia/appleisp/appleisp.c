@@ -142,14 +142,17 @@ IspReadRegions(
     for (Index = 0; Regions && FdtReadCells(Regions, RegionsLength, Index, 1, &Value); ++Index)
     {
         Name = FdtNextString(Names, NamesLength, &Cursor, &NameLength);
-        if (Isp->RegionCount == ISP_MAX_REGIONS || !Name || !NameLength || NameLength >= sizeof(Region->Name))
+        if (Isp->RegionCount == ISP_MAX_REGIONS || (Name && NameLength >= sizeof(Region->Name)))
         {
-            DbgPrint("appleisp: firmware region %lu is unnamed or one too many\n", Index);
+            DbgPrint("appleisp: firmware region %lu has too long a name or is one too many\n", Index);
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         }
         Region = &Isp->Regions[Isp->RegionCount];
         RtlZeroMemory(Region, sizeof(*Region));
-        RtlCopyMemory(Region->Name, Name, NameLength);
+        if (Name && NameLength)
+            RtlCopyMemory(Region->Name, Name, NameLength);
+        else
+            RtlStringCbPrintfA(Region->Name, sizeof(Region->Name), "region%lu", Index);
         Memory = FdtDriverFindPhandle(&Isp->Tree, (ULONG)Value);
         if (Memory == FDT_NO_NODE || !FdtDriverReadReg(&Isp->Tree, Memory, 0, &Physical, &Size) || !Physical || !Size)
         {
