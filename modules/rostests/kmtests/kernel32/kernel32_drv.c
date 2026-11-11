@@ -109,6 +109,30 @@ TestMessageHandler(
             DPRINT("IOCTL_EXPECT_SET_ATTRIBUTES: %lu\n", ExpectedSetAttributes);
             break;
         }
+        case IOCTL_SECURE_MEMORY:
+        {
+            PKMT_SECURE_MEMORY Request = Buffer;
+
+            if (InLength != sizeof(*Request) || *OutLength < sizeof(*Request))
+                return STATUS_INVALID_PARAMETER;
+
+            Request->SecureHandle = MmSecureVirtualMemory(Request->Address, Request->Size, Request->ProbeMode);
+            *OutLength = sizeof(*Request);
+            if (Request->SecureHandle == NULL)
+                return STATUS_UNSUCCESSFUL;
+            break;
+        }
+        case IOCTL_UNSECURE_MEMORY:
+        {
+            PKMT_SECURE_MEMORY Request = Buffer;
+
+            if (InLength != sizeof(*Request))
+                return STATUS_INVALID_PARAMETER;
+
+            MmUnsecureVirtualMemory(Request->SecureHandle);
+            *OutLength = 0;
+            break;
+        }
         default:
             return STATUS_NOT_SUPPORTED;
     }
