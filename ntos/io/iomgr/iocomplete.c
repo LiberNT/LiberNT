@@ -106,6 +106,16 @@ IopAbandonThreadAgnosticIrp(
     KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
 }
 
+static
+VOID
+IopFreeCompletedIrp(
+    _Inout_ PIRP Irp)
+{
+    /* The completion APC overlaid the extension pointer, freed before the APC was set up */
+    Irp->Tail.Overlay.IrpExtension = NULL;
+    IoFreeIrp(Irp);
+}
+
 VOID
 NTAPI
 IopFreeIrpKernelApc(
@@ -114,7 +124,7 @@ IopFreeIrpKernelApc(
     PIRP Irp = CONTAINING_RECORD(Apc, IRP, Tail.Apc);
 
     IopUnQueueIrpFromThread(Irp);
-    IoFreeIrp(Irp);
+    IopFreeCompletedIrp(Irp);
 }
 
 VOID
@@ -177,7 +187,7 @@ IopUserCompletion(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
+    IopFreeCompletedIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
 }
 
 static
@@ -186,7 +196,7 @@ NTAPI
 IopUserRundown(
     _In_ PKAPC Apc)
 {
-    IoFreeIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
+    IopFreeCompletedIrp(CONTAINING_RECORD(Apc, IRP, Tail.Apc));
 }
 
 VOID
@@ -351,7 +361,7 @@ IopCompleteRequest(
         if (KeInsertQueueApc(&Irp->Tail.Apc, Irp->UserIosb, NULL, IO_NO_INCREMENT)) return;
     }
 
-    IoFreeIrp(Irp);
+    IopFreeCompletedIrp(Irp);
 }
 
 /* Finishes in the requestor's context a packet whose driver did not pend it */
@@ -503,12 +513,14 @@ IofCompleteRequest(
 
     FileObject = Irp->Tail.Overlay.OriginalFileObject;
 
-    /* The completion APC overlays the auxiliary buffer pointer */
+    /* The completion APC overlays the auxiliary buffer and extension pointers */
     if (Irp->Tail.Overlay.AuxiliaryBuffer != NULL)
     {
         ExFreePool(Irp->Tail.Overlay.AuxiliaryBuffer);
         Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
     }
+
+    if (Irp->Tail.Overlay.IrpExtension != NULL) IopFreeIrpExtension(Irp);
 
     if (Irp->Flags & IRP_DEFER_IO_COMPLETION && !Irp->PendingReturned) return;
 
