@@ -1337,7 +1337,7 @@
 @ stdcall RtlTraceDatabaseLock(ptr)
 @ stdcall RtlTraceDatabaseUnlock(ptr)
 @ stdcall RtlTraceDatabaseValidate(ptr)
-@ stdcall -stub -version=0x600+ RtlTryAcquirePebLock()
+@ stdcall RtlTryAcquirePebLock()
 @ stdcall RtlTryAcquireSRWLockExclusive(ptr)
 @ stdcall RtlTryAcquireSRWLockShared(ptr)
 @ stdcall RtlTryEnterCriticalSection(ptr)

@@ -174,6 +174,7 @@ list(APPEND SOURCE
     RtlGetProductInfo.c
     RtlGetThreadErrorMode.c
     RtlGetUnloadEventTrace.c
+    RtlTryAcquirePebLock.c
     RtlHandle.c
     RtlHeapDecommit.c
     RtlHeapFreeCoalesce.c

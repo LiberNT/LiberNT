@@ -120,6 +120,16 @@ RtlReleasePebLock(VOID)
 }
 
 /*
+ * @implemented
+ */
+LOGICAL
+NTAPI
+RtlTryAcquirePebLock(VOID)
+{
+    return RtlTryEnterCriticalSection(NtCurrentPeb()->FastPebLock);
+}
+
+/*
 * @implemented
 */
 ULONG

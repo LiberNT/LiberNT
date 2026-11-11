@@ -154,6 +154,7 @@ extern void func_RtlHeapApis(void);
 extern void func_RtlGetProductInfo(void);
 extern void func_RtlGetThreadErrorMode(void);
 extern void func_RtlGetUnloadEventTrace(void);
+extern void func_RtlTryAcquirePebLock(void);
 extern void func_RtlHandle(void);
 extern void func_RtlHeapDecommit(void);
 extern void func_RtlHeapFreeCoalesce(void);
@@ -363,6 +364,7 @@ const struct test winetest_testlist[] =
     { "RtlGetProductInfo",              func_RtlGetProductInfo },
     { "RtlGetThreadErrorMode",          func_RtlGetThreadErrorMode },
     { "RtlGetUnloadEventTrace",         func_RtlGetUnloadEventTrace },
+    { "RtlTryAcquirePebLock",           func_RtlTryAcquirePebLock },
     { "RtlHandle",                      func_RtlHandle },
     { "RtlHeapDecommit",                func_RtlHeapDecommit },
     { "RtlHeapFreeCoalesce",            func_RtlHeapFreeCoalesce },
