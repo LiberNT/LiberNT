@@ -198,6 +198,10 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
         return Status;
     }
 
+    /* The devices other kernel tests create on the kmtest driver keep its own dispatch */
+    if (DeviceObject != TestDevice)
+        return PreviousDispatch[Stack->MajorFunction](DeviceObject, Irp);
+
     Extension = DeviceObject->DeviceExtension;
     Status = IoAcquireRemoveLock(&Extension->RemoveLock, Irp);
     if (!NT_SUCCESS(Status))
