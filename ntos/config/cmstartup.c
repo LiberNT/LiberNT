@@ -603,6 +603,158 @@ CmpCreateCurrentProfileLink(VOID)
                              Target);
 }
 
+static
+VOID
+CmpLinkWow64SharedKey(
+    _In_ PCWSTR Name)
+{
+    WCHAR Link[256];
+    WCHAR Target[256];
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    HANDLE KeyHandle;
+    PWCHAR Separator;
+    SIZE_T PrefixLength;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(RtlStringCchPrintfW(Target, RTL_NUMBER_OF(Target),
+                                        L"\\REGISTRY\\MACHINE\\SOFTWARE\\%ls", Name)) ||
+        !NT_SUCCESS(RtlStringCchPrintfW(Link, RTL_NUMBER_OF(Link),
+                                        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\%ls", Name)))
+    {
+        return;
+    }
+
+    RtlInitUnicodeString(&KeyName, Target);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes))) return;
+    ZwClose(KeyHandle);
+
+    PrefixLength = wcslen(L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\");
+    for (Separator = wcschr(&Link[PrefixLength], OBJ_NAME_PATH_SEPARATOR);
+         Separator != NULL;
+         Separator = wcschr(Separator + 1, OBJ_NAME_PATH_SEPARATOR))
+    {
+        *Separator = UNICODE_NULL;
+        RtlInitUnicodeString(&KeyName, Link);
+        Status = ZwCreateKey(&KeyHandle,
+                             KEY_CREATE_SUB_KEY,
+                             &ObjectAttributes,
+                             0,
+                             NULL,
+                             REG_OPTION_NON_VOLATILE,
+                             NULL);
+        *Separator = OBJ_NAME_PATH_SEPARATOR;
+        if (!NT_SUCCESS(Status)) return;
+        ZwClose(KeyHandle);
+    }
+
+    CmpCreateBootLink(Link, Target);
+}
+
+/* The shared keys are those of the Microsoft documentation "Registry Keys Affected by WOW64" */
+static
+VOID
+CmpCreateWow64Links(VOID)
+{
+    static const PCWSTR Parents[] =
+    {
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node",
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node",
+    };
+    static const PCWSTR SharedClasses[] =
+    {
+        L"AppID",
+        L"Protocols",
+        L"TypeLib",
+    };
+    static const PCWSTR SharedKeys[] =
+    {
+        L"Clients",
+        L"Microsoft\\COM3",
+        L"Microsoft\\Cryptography\\Calais\\Current",
+        L"Microsoft\\Cryptography\\Calais\\Readers",
+        L"Microsoft\\Cryptography\\Services",
+        L"Microsoft\\CTF\\SystemShared",
+        L"Microsoft\\CTF\\TIP",
+        L"Microsoft\\DFS",
+        L"Microsoft\\Driver Signing",
+        L"Microsoft\\EnterpriseCertificates",
+        L"Microsoft\\EventSystem",
+        L"Microsoft\\MSMQ",
+        L"Microsoft\\Non-Driver Signing",
+        L"Microsoft\\Notepad\\DefaultFonts",
+        L"Microsoft\\OLE",
+        L"Microsoft\\RAS",
+        L"Microsoft\\RPC",
+        L"Microsoft\\SystemCertificates",
+        L"Microsoft\\TermServLicensing",
+        L"Microsoft\\Transaction Server",
+        L"Microsoft\\Windows\\CurrentVersion\\App Paths",
+        L"Microsoft\\Windows\\CurrentVersion\\Control Panel\\Cursors\\Schemes",
+        L"Microsoft\\Windows\\CurrentVersion\\Explorer\\AutoplayHandlers",
+        L"Microsoft\\Windows\\CurrentVersion\\Explorer\\DriveIcons",
+        L"Microsoft\\Windows\\CurrentVersion\\Explorer\\KindMap",
+        L"Microsoft\\Windows\\CurrentVersion\\Group Policy",
+        L"Microsoft\\Windows\\CurrentVersion\\Policies",
+        L"Microsoft\\Windows\\CurrentVersion\\PreviewHandlers",
+        L"Microsoft\\Windows\\CurrentVersion\\Setup",
+        L"Microsoft\\Windows\\CurrentVersion\\Telephony\\Locations",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Console",
+        L"Microsoft\\Windows NT\\CurrentVersion\\FontDpi",
+        L"Microsoft\\Windows NT\\CurrentVersion\\FontLink",
+        L"Microsoft\\Windows NT\\CurrentVersion\\FontMapper",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+        L"Microsoft\\Windows NT\\CurrentVersion\\FontSubstitutes",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Gre_Initialize",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options",
+        L"Microsoft\\Windows NT\\CurrentVersion\\LanguagePack",
+        L"Microsoft\\Windows NT\\CurrentVersion\\NetworkCards",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Perflib",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Ports",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Print",
+        L"Microsoft\\Windows NT\\CurrentVersion\\ProfileList",
+        L"Microsoft\\Windows NT\\CurrentVersion\\Time Zones",
+        L"Policies",
+        L"RegisteredApplications",
+    };
+    WCHAR Link[128];
+    WCHAR Target[128];
+    UNICODE_STRING Name;
+    HANDLE KeyHandle;
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Parents); i++)
+    {
+        RtlInitUnicodeString(&Name, Parents[i]);
+        if (!NT_SUCCESS(CmpCreateStartupKey(&Name, REG_OPTION_NON_VOLATILE, &KeyHandle))) return;
+        ZwClose(KeyHandle);
+    }
+
+    CmpCreateBootLink(L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Classes",
+                      L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node");
+
+    for (i = 0; i < RTL_NUMBER_OF(SharedClasses); i++)
+    {
+        if (NT_SUCCESS(RtlStringCchPrintfW(Link, RTL_NUMBER_OF(Link),
+                                           L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node\\%ls",
+                                           SharedClasses[i])) &&
+            NT_SUCCESS(RtlStringCchPrintfW(Target, RTL_NUMBER_OF(Target),
+                                           L"\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\%ls",
+                                           SharedClasses[i])))
+        {
+            CmpCreateBootLink(Link, Target);
+        }
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(SharedKeys); i++)
+        CmpLinkWow64SharedKey(SharedKeys[i]);
+}
+
 /*
  * Writes down how the system was started, which is the only record of the
  * boot options once the loader is gone.
@@ -795,6 +947,8 @@ CmpInitializeHiveList(VOID)
     }
 
     ExReleasePushLockExclusive(&CmpLoadHiveLock);
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG)) CmpCreateWow64Links();
 
     CmpSetVersionData();
 }
