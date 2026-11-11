@@ -503,9 +503,9 @@ BaseInitAppcompatCacheSupport(VOID)
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
-PVOID
+ULONG
 WINAPI
 GetComPlusPackageInstallStatus(VOID)
 {
