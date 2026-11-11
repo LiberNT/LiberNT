@@ -1416,16 +1416,29 @@ LdrpApplyFileNameRedirection(
 
     if (*RedirectedDll)
     {
-        UNICODE_STRING NtSystemRoot;
+        UNICODE_STRING SystemDirectory;
         static const UNICODE_STRING System32 = RTL_CONSTANT_STRING(L"\\System32\\");
+        static const UNICODE_STRING Backslash = RTL_CONSTANT_STRING(L"\\");
+        PCUNICODE_STRING Separator;
         PUNICODE_STRING ResultPath = NULL;
 
         /* This is an apiset we can use */
         if (ApiSetRedirected)
             *ApiSetRedirected = TRUE;
-        RtlInitUnicodeString(&NtSystemRoot, SharedUserData->NtSystemRoot);
 
-        SIZE_T Needed = System32.Length + ApisetName.Length + NtSystemRoot.Length + sizeof(UNICODE_NULL);
+        /* The host is the module of that name in the process's own system directory, where its known DLLs live */
+        if (LdrpKnownDllPath.Length != 0)
+        {
+            SystemDirectory = LdrpKnownDllPath;
+            Separator = &Backslash;
+        }
+        else
+        {
+            RtlInitUnicodeString(&SystemDirectory, SharedUserData->NtSystemRoot);
+            Separator = &System32;
+        }
+
+        SIZE_T Needed = SystemDirectory.Length + Separator->Length + ApisetName.Length + sizeof(UNICODE_NULL);
 
         if (StaticString && StaticString->MaximumLength >= (USHORT)Needed)
         {
@@ -1451,8 +1464,8 @@ LdrpApplyFileNameRedirection(
             return STATUS_INVALID_PARAMETER;
         }
 
-        RtlAppendUnicodeStringToString(ResultPath, &NtSystemRoot);
-        RtlAppendUnicodeStringToString(ResultPath, &System32);
+        RtlAppendUnicodeStringToString(ResultPath, &SystemDirectory);
+        RtlAppendUnicodeStringToString(ResultPath, Separator);
         RtlAppendUnicodeStringToString(ResultPath, &ApisetName);
 
         /* Log each apiset->host mapping once per process — the resolves
