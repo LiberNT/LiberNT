@@ -16,6 +16,7 @@ list(APPEND SOURCE
     CallbackMayRunLong.c
     Arm64ThreadContext.c
     ConsoleCP.c
+    ConsoleFontInfo.c
     ConsoleInputSignal.c
     ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
