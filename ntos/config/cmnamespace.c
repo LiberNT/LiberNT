@@ -566,16 +566,27 @@ CmpDoCreate(
         }
     }
 
-    Status = CmpCreateKeyBody(Kcb, AccessMode, Context, Object);
+    /* The key is made either way; the creator only gets the SACL right with the privilege that governs it */
+    if (AccessMode != KernelMode &&
+        (AccessState->RemainingDesiredAccess & ACCESS_SYSTEM_SECURITY) &&
+        !SeSinglePrivilegeCheck(SeSecurityPrivilege, AccessMode))
+    {
+        Status = STATUS_PRIVILEGE_NOT_HELD;
+    }
+    else
+    {
+        Status = CmpCreateKeyBody(Kcb, AccessMode, Context, Object);
+    }
+
     CmpDereferenceKeyControlBlock(Kcb);
 
-    if (!NT_SUCCESS(Status)) return Status;
+    if (!NT_SUCCESS(Status) && Status != STATUS_PRIVILEGE_NOT_HELD) return Status;
 
     CmpCleanUpSubKeyInfo(ParentKcb);
     Context->Disposition = REG_CREATED_NEW_KEY;
 
     CmpReportNotify(ParentKcb, Hive, Cell, REG_NOTIFY_CHANGE_NAME);
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 /*
