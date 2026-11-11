@@ -1158,7 +1158,7 @@
 @ stdcall SetCalendarInfoA(long long long str)
 @ stdcall SetCalendarInfoW(long long long wstr)
 @ stdcall SetClientTimeZoneInformation(ptr)
-@ stdcall SetComPlusPackageInstallStatus(ptr)
+@ stdcall SetComPlusPackageInstallStatus(long)
 @ stdcall SetCommBreak(long)
 @ stdcall SetCommConfig(long ptr long)
 @ stdcall SetCommMask(long ptr)

@@ -509,8 +509,7 @@ PVOID
 WINAPI
 GetComPlusPackageInstallStatus(VOID)
 {
-    STUB;
-    return NULL;
+    return SharedUserData->ComPlusPackage;
 }
 
 /*
