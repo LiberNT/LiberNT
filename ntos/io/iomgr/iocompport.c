@@ -129,9 +129,11 @@ IopCloseIoCompletion(
     IN ULONG_PTR SystemHandleCount)
 {
     UNREFERENCED_PARAMETER(Process);
-    UNREFERENCED_PARAMETER(Object);
     UNREFERENCED_PARAMETER(ProcessHandleCount);
-    UNREFERENCED_PARAMETER(SystemHandleCount);
+
+    if (SystemHandleCount != 1) return;
+
+    IopDeleteIoCompletion(Object);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
