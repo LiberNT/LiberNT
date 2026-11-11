@@ -704,7 +704,9 @@ NtOpenThread(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     CLIENT_ID SafeCid = { NULL, NULL };
     BOOLEAN HasCid = FALSE;
-    BOOLEAN HasName;
+    BOOLEAN HasName = FALSE;
+    PUNICODE_STRING ObjectName;
+    ULONG Attributes = 0;
     ACCESS_STATE AccessState;
     AUX_ACCESS_DATA AuxData;
     PETHREAD Thread;
@@ -724,6 +726,16 @@ NtOpenThread(
                 SafeCid = *ClientId;
                 HasCid = TRUE;
             }
+
+            /* The attributes are not optional: a NULL pointer faults like any other bad one */
+            ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
+            ObjectName = ObjectAttributes->ObjectName;
+            Attributes = ObjectAttributes->Attributes;
+            if (ObjectName != NULL)
+            {
+                ProbeForRead(ObjectName, sizeof(UNICODE_STRING), sizeof(ULONG));
+                HasName = (ObjectName->Length != 0);
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -731,15 +743,19 @@ NtOpenThread(
         }
         _SEH2_END;
     }
-    else if (ClientId != NULL)
+    else
     {
-        SafeCid = *ClientId;
-        HasCid = TRUE;
-    }
+        if (ClientId != NULL)
+        {
+            SafeCid = *ClientId;
+            HasCid = TRUE;
+        }
 
-    HasName = (ObjectAttributes != NULL &&
-               ObjectAttributes->ObjectName != NULL &&
-               ObjectAttributes->ObjectName->Length != 0);
+        HasName = (ObjectAttributes != NULL &&
+                   ObjectAttributes->ObjectName != NULL &&
+                   ObjectAttributes->ObjectName->Length != 0);
+        if (ObjectAttributes != NULL) Attributes = ObjectAttributes->Attributes;
+    }
 
     if (HasCid == HasName) return STATUS_INVALID_PARAMETER_MIX;
 
@@ -769,8 +785,7 @@ NtOpenThread(
         }
 
         Status = ObOpenObjectByPointer(Thread,
-                                       (ObjectAttributes != NULL) ?
-                                           ObjectAttributes->Attributes : 0,
+                                       Attributes,
                                        &AccessState,
                                        0,
                                        PsThreadType,
