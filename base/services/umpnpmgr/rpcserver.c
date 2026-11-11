@@ -2753,14 +2753,14 @@ PNP_GetInterfaceDeviceList(
     PlugPlayData.Flags = ulFlags;
     PlugPlayData.FilterGuid = InterfaceGuid;
     PlugPlayData.Buffer = Buffer;
-    PlugPlayData.BufferSize = *pulLength;
+    PlugPlayData.BufferSize = *pulLength / sizeof(WCHAR);
 
     Status = NtPlugPlayControl(PlugPlayControlGetInterfaceDeviceList,
                                (PVOID)&PlugPlayData,
                                sizeof(PLUGPLAY_CONTROL_INTERFACE_DEVICE_LIST_DATA));
-    if (NT_SUCCESS(Status) && PlugPlayData.BufferSize <= *pulLength)
+    if (NT_SUCCESS(Status) && PlugPlayData.BufferSize <= *pulLength / sizeof(WCHAR))
     {
-        *pulLength = PlugPlayData.BufferSize;
+        *pulLength = PlugPlayData.BufferSize * sizeof(WCHAR);
     }
     else
     {
@@ -2809,7 +2809,7 @@ PNP_GetInterfaceDeviceListSize(
                                sizeof(PLUGPLAY_CONTROL_INTERFACE_DEVICE_LIST_DATA));
     if (NT_SUCCESS(Status))
     {
-        *pulLen = PlugPlayData.BufferSize;
+        *pulLen = PlugPlayData.BufferSize * sizeof(WCHAR);
     }
     else
     {
