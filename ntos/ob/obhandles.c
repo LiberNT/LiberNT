@@ -92,21 +92,27 @@ ObpSaclHasAuditAces(
     _In_ PISECURITY_DESCRIPTOR SecurityDescriptor);
 
 /*
- * A handle may only carry rights its type defines, and a request for whatever
- * the object allows is answered with everything the mapping covers.
+ * A handle may only carry rights its type defines. A request for whatever the
+ * object allows is left to the access check when there is one, which grants
+ * what the descriptor allows; without a check it is everything the mapping
+ * covers.
  */
 static
 NTSTATUS
 ObpValidateAccessMask(
     _In_ POBJECT_TYPE ObjectType,
     _Inout_ PACCESS_STATE AccessState,
-    _In_ BOOLEAN DropExcess)
+    _In_ BOOLEAN DropExcess,
+    _In_ BOOLEAN Checked)
 {
     PISECURITY_DESCRIPTOR Descriptor;
+    BOOLEAN MaximumAllowed;
 
-    if (AccessState->RemainingDesiredAccess & MAXIMUM_ALLOWED)
+    MaximumAllowed = (AccessState->RemainingDesiredAccess & MAXIMUM_ALLOWED) != 0;
+    AccessState->RemainingDesiredAccess &= ~MAXIMUM_ALLOWED;
+
+    if (MaximumAllowed && !Checked)
     {
-        AccessState->RemainingDesiredAccess &= ~MAXIMUM_ALLOWED;
         AccessState->RemainingDesiredAccess |=
             ObjectType->TypeInfo.GenericMapping.GenericAll;
     }
@@ -122,6 +128,9 @@ ObpValidateAccessMask(
     {
         return STATUS_ACCESS_DENIED;
     }
+
+    if (MaximumAllowed && Checked)
+        AccessState->RemainingDesiredAccess |= MAXIMUM_ALLOWED;
 
     /* A descriptor whose system ACL audits anything can only be acted on by a
      * caller allowed to see that ACL */
@@ -697,7 +706,10 @@ ObpIncrementHandleCount(
     {
         Status = ObpValidateAccessMask(ObjectType,
                                        AccessState,
-                                       (BOOLEAN)(OpenReason == ObCreateHandle));
+                                       (BOOLEAN)(OpenReason == ObCreateHandle),
+                                       (BOOLEAN)(OpenReason != ObCreateHandle &&
+                                                 AccessMode != KernelMode &&
+                                                 CheckObjectAccess));
         if (!NT_SUCCESS(Status)) return Status;
 
         if (OpenReason == ObCreateHandle)
@@ -715,7 +727,8 @@ ObpIncrementHandleCount(
             AccessState->RemainingDesiredAccess = 0;
         }
         else if (AccessMode != KernelMode && CheckObjectAccess &&
-                 AccessState->RemainingDesiredAccess != 0)
+                 (AccessState->RemainingDesiredAccess != 0 ||
+                  AccessState->PreviouslyGrantedAccess == 0))
         {
             /*
              * Only what is still outstanding is checked, and only for an
@@ -1902,6 +1915,7 @@ ObInsertObject(
     AUX_ACCESS_DATA AuxData;
     BOOLEAN SdAllocated = FALSE;
     BOOLEAN IsNewObject;
+    BOOLEAN PublishDriveLetter = FALSE;
     NTSTATUS Status, RealStatus, ChargeStatus;
     PVOID FoundObject = Object;
 
@@ -1987,7 +2001,10 @@ ObInsertObject(
 
         /* A symbolic link publishes its drive letter once it is named */
         if (ObjectType == ObpSymbolicLinkObjectType && FoundObject == Object)
-            ObpCreateSymbolicLinkName(Object);
+        {
+            PublishDriveLetter = TRUE;
+            ObReferenceObject(Object);
+        }
     }
     else
     {
@@ -2102,6 +2119,13 @@ ObInsertObject(
         ObpFreeObjectCreateInformation(ObjectCreateInfo);
 
     ObpReleaseLookupContext(&Context);
+
+    /* Resolving the link's target walks the namespace, which the directory lock held until here would block */
+    if (PublishDriveLetter)
+    {
+        if (NT_SUCCESS(RealStatus)) ObpCreateSymbolicLinkName(Object);
+        ObDereferenceObject(Object);
+    }
 
     if (AccessState == &LocalAccessState) SeDeleteAccessState(AccessState);
 
@@ -2342,14 +2366,13 @@ ObDuplicateObject(
         }
     }
 
-    /* The source is closed first and whatever becomes of the duplicate, so its place in the table is free for the new handle */
-    if (Options & DUPLICATE_CLOSE_SOURCE)
-        ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
     if (!KernelHandle)
     {
         TargetTable = ObReferenceProcessHandleTable(TargetProcess);
         if (TargetTable == NULL)
         {
+            if (Options & DUPLICATE_CLOSE_SOURCE)
+                ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
             ObDereferenceObject(Object);
             return STATUS_PROCESS_IS_TERMINATING;
         }
@@ -2362,6 +2385,8 @@ ObDuplicateObject(
     if (!NT_SUCCESS(Status))
     {
         if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
+        if (Options & DUPLICATE_CLOSE_SOURCE)
+            ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
         ObDereferenceObject(Object);
         return Status;
     }
@@ -2384,6 +2409,8 @@ ObDuplicateObject(
     {
         SeDeleteAccessState(&AccessState);
         if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
+        if (Options & DUPLICATE_CLOSE_SOURCE)
+            ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
         ObDereferenceObject(Object);
         return Status;
     }
@@ -2460,6 +2487,10 @@ ObDuplicateObject(
 
     SeDeleteAccessState(&AccessState);
     if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
+
+    /* The source goes once the duplicate holds the object, so closing it is never the object's last close */
+    if (Options & DUPLICATE_CLOSE_SOURCE)
+        ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
 
     /* The reference the source handle lent us belongs to the new handle */
     if (!NT_SUCCESS(Status)) ObDereferenceObject(Object);
