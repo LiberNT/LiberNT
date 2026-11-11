@@ -337,6 +337,7 @@ IopOpenLinkOrRenameTarget(
     _In_ PFILE_OBJECT FileObject)
 {
     PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
+    IO_DRIVER_CREATE_CONTEXT DriverContext;
     FILE_STANDARD_INFORMATION StandardInfo;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
@@ -380,21 +381,25 @@ IopOpenLinkOrRenameTarget(
                                RenameInfo->RootDirectory,
                                NULL);
 
-    Status = IoCreateFile(Handle,
-                          DesiredAccess,
-                          &ObjectAttributes,
-                          &IoStatusBlock,
-                          NULL,
-                          0,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE |
-                              FILE_SHARE_DELETE,
-                          FILE_OPEN,
-                          FILE_OPEN_REPARSE_POINT,
-                          NULL,
-                          0,
-                          CreateFileTypeNone,
-                          NULL,
-                          IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY);
+    IoInitializeDriverCreateContext(&DriverContext);
+    DriverContext.TxnParameters = IoGetTransactionParameterBlock(FileObject);
+
+    Status = IoCreateFileEx(Handle,
+                            DesiredAccess,
+                            &ObjectAttributes,
+                            &IoStatusBlock,
+                            NULL,
+                            0,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE |
+                                FILE_SHARE_DELETE,
+                            FILE_OPEN,
+                            FILE_OPEN_REPARSE_POINT,
+                            NULL,
+                            0,
+                            CreateFileTypeNone,
+                            NULL,
+                            IO_NO_PARAMETER_CHECKING | IO_OPEN_TARGET_DIRECTORY,
+                            &DriverContext);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = ObReferenceObjectByHandle(*Handle,
