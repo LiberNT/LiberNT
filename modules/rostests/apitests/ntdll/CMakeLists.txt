@@ -111,6 +111,7 @@ list(APPEND SOURCE
     NtOpenProcessToken.c
     NtOpenThreadToken.c
     NtProtectVirtualMemory.c
+    NtOpenMaximumAllowed.c
     NtQueryInformationFile.c
     NtQueryDirectoryFile.c
     NtQueryInformationProcess.c

@@ -92,21 +92,27 @@ ObpSaclHasAuditAces(
     _In_ PISECURITY_DESCRIPTOR SecurityDescriptor);
 
 /*
- * A handle may only carry rights its type defines, and a request for whatever
- * the object allows is answered with everything the mapping covers.
+ * A handle may only carry rights its type defines. A request for whatever the
+ * object allows is left to the access check when there is one, which grants
+ * what the descriptor allows; without a check it is everything the mapping
+ * covers.
  */
 static
 NTSTATUS
 ObpValidateAccessMask(
     _In_ POBJECT_TYPE ObjectType,
     _Inout_ PACCESS_STATE AccessState,
-    _In_ BOOLEAN DropExcess)
+    _In_ BOOLEAN DropExcess,
+    _In_ BOOLEAN Checked)
 {
     PISECURITY_DESCRIPTOR Descriptor;
+    BOOLEAN MaximumAllowed;
 
-    if (AccessState->RemainingDesiredAccess & MAXIMUM_ALLOWED)
+    MaximumAllowed = (AccessState->RemainingDesiredAccess & MAXIMUM_ALLOWED) != 0;
+    AccessState->RemainingDesiredAccess &= ~MAXIMUM_ALLOWED;
+
+    if (MaximumAllowed && !Checked)
     {
-        AccessState->RemainingDesiredAccess &= ~MAXIMUM_ALLOWED;
         AccessState->RemainingDesiredAccess |=
             ObjectType->TypeInfo.GenericMapping.GenericAll;
     }
@@ -122,6 +128,9 @@ ObpValidateAccessMask(
     {
         return STATUS_ACCESS_DENIED;
     }
+
+    if (MaximumAllowed && Checked)
+        AccessState->RemainingDesiredAccess |= MAXIMUM_ALLOWED;
 
     /* A descriptor whose system ACL audits anything can only be acted on by a
      * caller allowed to see that ACL */
@@ -697,7 +706,10 @@ ObpIncrementHandleCount(
     {
         Status = ObpValidateAccessMask(ObjectType,
                                        AccessState,
-                                       (BOOLEAN)(OpenReason == ObCreateHandle));
+                                       (BOOLEAN)(OpenReason == ObCreateHandle),
+                                       (BOOLEAN)(OpenReason != ObCreateHandle &&
+                                                 AccessMode != KernelMode &&
+                                                 CheckObjectAccess));
         if (!NT_SUCCESS(Status)) return Status;
 
         if (OpenReason == ObCreateHandle)
