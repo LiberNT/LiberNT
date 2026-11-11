@@ -64,6 +64,17 @@ KdpScreenFlushStop(VOID);
 
 static
 VOID
+KdpScreenAddStop(
+    _In_reads_bytes_(Length) PCCH String,
+    _In_ ULONG Length);
+
+#define KDP_SCREEN_REPLAY_SIZE  4096
+#define KDP_SCREEN_REPLAY_LINES 24
+
+static CHAR KdpScreenReplay[KDP_SCREEN_REPLAY_SIZE];
+
+static
+VOID
 KdpScreenSetConsole(
     _In_ BOOLEAN Clear)
 {
@@ -148,6 +159,26 @@ KdpScreenAcquire(VOID)
  * display is taken whether or not the screen was one of the places the output
  * was going, because a stopped machine has nowhere else to say it.
  */
+static
+VOID
+KdpScreenReplayTail(VOID)
+{
+    ULONG Length, Start, Lines = 0;
+
+    Length = KdpCopyPrintBufferTail(KdpScreenReplay, sizeof(KdpScreenReplay));
+    for (Start = Length; Start > 0; Start--)
+    {
+        if ((KdpScreenReplay[Start - 1] == '\n') && (Start != Length) && (++Lines >= KDP_SCREEN_REPLAY_LINES))
+            break;
+    }
+
+    while ((Start < Length) && (KdpScreenReplay[Start] == ANSI_NULL))
+        Start++;
+
+    if (Start < Length)
+        KdpScreenAddStop(KdpScreenReplay + Start, Length - Start);
+}
+
 BOOLEAN
 KdpScreenEnterStop(
     _In_ BOOLEAN Requested)
@@ -165,6 +196,9 @@ KdpScreenEnterStop(
         KdpScreenJoin();
         KdpScreenJoinedForStop = TRUE;
     }
+
+    if (Acquired)
+        KdpScreenReplayTail();
 
     return Acquired;
 }
