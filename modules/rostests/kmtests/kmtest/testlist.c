@@ -145,7 +145,7 @@ const KMT_TEST TestList[] =
     { "PoSettingSession",             Test_PoSettingSession },
     { "PoSleepInformation",           Test_PoSleepInformation },
     { "PoExecutionState",             Test_PoExecutionState },
-    { "PoShutdownPersist",            Test_PoShutdownPersist },
+    { "-PoShutdownPersist",           Test_PoShutdownPersist },
     { "-PoShutdownTime",              Test_PoShutdownTime },
     { "-PoInitiatePowerAction",       Test_PoInitiatePowerAction },
     { "ExWddmPoFx",                    Test_ExWddmPoFx },
