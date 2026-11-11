@@ -65,17 +65,17 @@ TestDefWindowProc(
     }
 
     Result = pNtdllDefWindowProc_W(Window, WM_SETTEXT, 0, (LPARAM)L"ntdll wide");
-    ok(Result == TRUE, "NtdllDefWindowProc_W(WM_SETTEXT) returned %Id\n", Result);
+    ok(Result == TRUE, "NtdllDefWindowProc_W(WM_SETTEXT) returned %I64d\n", (LONGLONG)Result);
     RtlZeroMemory(TextW, sizeof(TextW));
     Length = pGetWindowTextW(Window, TextW, ARRAYSIZE(TextW));
     ok(Length == 10, "GetWindowTextW returned %d\n", Length);
     ok(wcscmp(TextW, L"ntdll wide") == 0, "Window text is '%ls'\n", TextW);
 
     Result = pNtdllDefWindowProc_W(Window, WM_GETTEXTLENGTH, 0, 0);
-    ok(Result == 10, "NtdllDefWindowProc_W(WM_GETTEXTLENGTH) returned %Id\n", Result);
+    ok(Result == 10, "NtdllDefWindowProc_W(WM_GETTEXTLENGTH) returned %I64d\n", (LONGLONG)Result);
 
     Result = pNtdllDefWindowProc_A(Window, WM_SETTEXT, 0, (LPARAM)"ntdll ansi");
-    ok(Result == TRUE, "NtdllDefWindowProc_A(WM_SETTEXT) returned %Id\n", Result);
+    ok(Result == TRUE, "NtdllDefWindowProc_A(WM_SETTEXT) returned %I64d\n", (LONGLONG)Result);
     RtlZeroMemory(TextW, sizeof(TextW));
     Length = pGetWindowTextW(Window, TextW, ARRAYSIZE(TextW));
     ok(Length == 10, "GetWindowTextW returned %d\n", Length);
@@ -83,17 +83,17 @@ TestDefWindowProc(
 
     RtlFillMemory(TextA, sizeof(TextA), 'x');
     Result = pNtdllDefWindowProc_A(Window, WM_GETTEXT, ARRAYSIZE(TextA), (LPARAM)TextA);
-    ok(Result == 10, "NtdllDefWindowProc_A(WM_GETTEXT) returned %Id\n", Result);
+    ok(Result == 10, "NtdllDefWindowProc_A(WM_GETTEXT) returned %I64d\n", (LONGLONG)Result);
     ok(strcmp(TextA, "ntdll ansi") == 0, "WM_GETTEXT returned '%.31s'\n", TextA);
 
     RtlFillMemory(TextW, sizeof(TextW), 0xff);
     Result = pNtdllDefWindowProc_W(Window, WM_GETTEXT, ARRAYSIZE(TextW), (LPARAM)TextW);
-    ok(Result == 10, "NtdllDefWindowProc_W(WM_GETTEXT) returned %Id\n", Result);
+    ok(Result == 10, "NtdllDefWindowProc_W(WM_GETTEXT) returned %I64d\n", (LONGLONG)Result);
     ok(wcscmp(TextW, L"ntdll ansi") == 0, "WM_GETTEXT returned '%.31ls'\n", TextW);
 
     Result = pNtdllDefWindowProc_A(Window, WM_GETTEXTLENGTH, 0, 0);
     ok(Result == pDefWindowProcW(Window, WM_GETTEXTLENGTH, 0, 0),
-       "NtdllDefWindowProc_A(WM_GETTEXTLENGTH) returned %Id\n", Result);
+       "NtdllDefWindowProc_A(WM_GETTEXTLENGTH) returned %I64d\n", (LONGLONG)Result);
 
     ok(pDestroyWindow(Window), "DestroyWindow failed with %lu\n", GetLastError());
     ok(pUnregisterClassW(TestClassName, Instance), "UnregisterClassW failed with %lu\n", GetLastError());
@@ -125,23 +125,23 @@ TestDialogWndProc(
 
     pNtdllDialogWndProc_W(hDlg, DM_SETDEFID, 7, 0);
     Result = pDefDlgProcW(hDlg, DM_GETDEFID, 0, 0);
-    ok(LOWORD(Result) == 7, "DM_GETDEFID after NtdllDialogWndProc_W(DM_SETDEFID) returned 0x%Ix\n", Result);
-    ok(HIWORD(Result) == DC_HASDEFID, "DM_GETDEFID returned 0x%Ix\n", Result);
+    ok(LOWORD(Result) == 7, "DM_GETDEFID after NtdllDialogWndProc_W(DM_SETDEFID) returned 0x%I64x\n", (ULONGLONG)Result);
+    ok(HIWORD(Result) == DC_HASDEFID, "DM_GETDEFID returned 0x%I64x\n", (ULONGLONG)Result);
 
     Result = pNtdllDialogWndProc_W(hDlg, DM_GETDEFID, 0, 0);
-    ok(Result == MAKELONG(7, DC_HASDEFID), "NtdllDialogWndProc_W(DM_GETDEFID) returned 0x%Ix\n", Result);
+    ok(Result == MAKELONG(7, DC_HASDEFID), "NtdllDialogWndProc_W(DM_GETDEFID) returned 0x%I64x\n", (ULONGLONG)Result);
 
     pNtdllDialogWndProc_A(hDlg, DM_SETDEFID, 9, 0);
     Result = pDefDlgProcA(hDlg, DM_GETDEFID, 0, 0);
-    ok(LOWORD(Result) == 9, "DM_GETDEFID after NtdllDialogWndProc_A(DM_SETDEFID) returned 0x%Ix\n", Result);
+    ok(LOWORD(Result) == 9, "DM_GETDEFID after NtdllDialogWndProc_A(DM_SETDEFID) returned 0x%I64x\n", (ULONGLONG)Result);
 
     Result = pNtdllDialogWndProc_A(hDlg, DM_GETDEFID, 0, 0);
-    ok(Result == MAKELONG(9, DC_HASDEFID), "NtdllDialogWndProc_A(DM_GETDEFID) returned 0x%Ix\n", Result);
+    ok(Result == MAKELONG(9, DC_HASDEFID), "NtdllDialogWndProc_A(DM_GETDEFID) returned 0x%I64x\n", (ULONGLONG)Result);
 
     Result = pNtdllDialogWndProc_W(hDlg, WM_SETTEXT, 0, (LPARAM)L"dialog");
-    ok(Result == TRUE, "NtdllDialogWndProc_W(WM_SETTEXT) returned %Id\n", Result);
+    ok(Result == TRUE, "NtdllDialogWndProc_W(WM_SETTEXT) returned %I64d\n", (LONGLONG)Result);
     Result = pNtdllDialogWndProc_A(hDlg, WM_GETTEXTLENGTH, 0, 0);
-    ok(Result == 6, "NtdllDialogWndProc_A(WM_GETTEXTLENGTH) returned %Id\n", Result);
+    ok(Result == 6, "NtdllDialogWndProc_A(WM_GETTEXTLENGTH) returned %I64d\n", (LONGLONG)Result);
 
     ok(pDestroyWindow(hDlg), "DestroyWindow failed with %lu\n", GetLastError());
 }
