@@ -528,7 +528,14 @@ NtSetInformationProcess(
                 break;
             }
 
+            if (!ExAcquireRundownProtection(&Process->RundownProtect))
+            {
+                Status = STATUS_PROCESS_IS_TERMINATING;
+                break;
+            }
+
             KeSetAffinityProcess(&Process->Pcb, (KAFFINITY)Pointer);
+            ExReleaseRundownProtection(&Process->RundownProtect);
             Status = STATUS_SUCCESS;
             break;
 
