@@ -252,6 +252,7 @@ KMT_TESTFUNC Test_CmTransactions;
 KMT_TESTFUNC Test_CmKeyKM;
 KMT_TESTFUNC Test_EtwRegisterKM;
 KMT_TESTFUNC Test_EtwSessionKM;
+KMT_TESTFUNC Test_EtwSessionIrqlKM;
 KMT_TESTFUNC Test_IoBuildIoctlKM;
 KMT_TESTFUNC Test_IoCsqKM;
 KMT_TESTFUNC Test_IoNullDeviceKM;
@@ -523,6 +524,7 @@ const KMT_TEST TestList[] =
     { "CmKeyKM",                            Test_CmKeyKM },
     { "EtwRegisterKM",                      Test_EtwRegisterKM },
     { "EtwSessionKM",                       Test_EtwSessionKM },
+    { "EtwSessionIrqlKM",                   Test_EtwSessionIrqlKM },
     { "IoBuildIoctlKM",                     Test_IoBuildIoctlKM },
     { "IoCsqKM",                            Test_IoCsqKM },
     { "IoNullDeviceKM",                     Test_IoNullDeviceKM },

@@ -271,3 +271,35 @@ START_TEST(EtwSessionKM)
     TestClocks();
     TestTraceInformation();
 }
+
+START_TEST(EtwSessionIrqlKM)
+{
+    KMT_SESSION Session;
+    TRACEHANDLE Handle;
+    NTSTATUS MessageStatus, HighStatus;
+    ULONG Value = 0xCAFE;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    Status = KmtStartSession(&Session, L"KmtEtwRaisedIrql", EVENT_TRACE_CLOCK_PERFCOUNTER);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Handle = KmtTraceHandle(Session.LoggerId);
+
+    /* Messages are logged at the caller's IRQL, whatever it is */
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    MessageStatus = WmiTraceMessage(Handle, TRACE_MESSAGE_GUID, &KmtEtwMessageGuid, 2, &Value, sizeof(Value), NULL, (SIZE_T)0);
+    KeLowerIrql(OldIrql);
+    ok_eq_hex(MessageStatus, STATUS_SUCCESS);
+
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    HighStatus = WmiTraceMessage(Handle, TRACE_MESSAGE_GUID, &KmtEtwMessageGuid, 3, &Value, sizeof(Value), NULL, (SIZE_T)0);
+    KeLowerIrql(OldIrql);
+    ok_eq_hex(HighStatus, STATUS_SUCCESS);
+
+    ok_eq_ulong(KmtEventsLogged(Session.LoggerId), 2UL);
+
+    KmtStopSession(&Session);
+}

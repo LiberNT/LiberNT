@@ -561,12 +561,6 @@ EtwpLogEvent(
     ULONG LoggerId;
     ULONG Size;
 
-    if (KeGetCurrentIrql() > APC_LEVEL)
-    {
-        /* FIXME: Windows writes from any level; this drops the event instead */
-        return STATUS_SUCCESS;
-    }
-
     Status = EtwpCollectEventFields(Event.Fields,
                                     &FieldCount,
                                     UserDataCount,
