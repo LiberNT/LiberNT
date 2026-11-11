@@ -1885,6 +1885,27 @@ NtSetSystemInformation(
                 break;
             }
 
+            case SystemCurrentTimeZoneInformation:
+            {
+                RTL_TIME_ZONE_INFORMATION TimeZone;
+
+                if (Length != sizeof(RTL_TIME_ZONE_INFORMATION))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeTimeZonePrivilege, PreviousMode))
+                {
+                    Status = STATUS_PRIVILEGE_NOT_HELD;
+                    break;
+                }
+
+                TimeZone = *(PRTL_TIME_ZONE_INFORMATION)SystemInformation;
+                Status = ExpSetTimeZoneInformation(&TimeZone);
+                break;
+            }
+
             case SystemDpcBehaviorInformation:
             {
                 Status = ExpSetDpcBehaviour(SystemInformation, Length);
