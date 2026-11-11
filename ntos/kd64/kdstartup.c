@@ -106,6 +106,7 @@ KdpReadBootOptions(
          */
         KdPitchDebugger = FALSE;
         KdDebuggerEnabled = FALSE;
+        KdDisableCount = 1;
         KdPreviouslyEnabled = TRUE;
         KdAutoEnableOnEvent = TRUE;
     }

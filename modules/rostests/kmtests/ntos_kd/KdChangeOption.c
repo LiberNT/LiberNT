@@ -59,8 +59,18 @@ START_TEST(KdChangeOption)
     if (DisabledWhileBlocked)
         KdEnableDebugger();
 
-    if (skip(KD_DEBUGGER_ENABLED, "The debugger is not enabled\n"))
+    if (!KD_DEBUGGER_ENABLED)
+    {
+        /* A debugger configured to wait, as with CRASHDEBUG, is turned on by one enable */
+        ok_eq_hex(KdEnableDebugger(), STATUS_SUCCESS);
+        ok_eq_bool(KD_DEBUGGER_ENABLED, TRUE);
+        if (KD_DEBUGGER_ENABLED)
+        {
+            ok_eq_hex(KdDisableDebugger(), STATUS_SUCCESS);
+            ok_eq_bool(KD_DEBUGGER_ENABLED, FALSE);
+        }
         return;
+    }
 
     Status = KdDisableDebugger();
     ok_eq_hex(Status, STATUS_SUCCESS);
