@@ -561,6 +561,7 @@ PspAssignProcessToJob(
         Status = PspAddProcessToJobLimits(Process, Job);
         ExReleaseResourceLite(&Job->JobLock);
 
+        /* FIXME: a commit another thread charges while a running process joins can be missed or counted twice */
         Committed = MmQueryProcessCommitCharge(Process);
 
         for (Joined = Job; Joined != Current; Joined = Joined->ParentJob)
@@ -739,6 +740,9 @@ PspRemoveProcessFromJob(
     if (Job == NULL) return;
 
     PspExitProcessFromJob(Process);
+
+    /* The address space goes after the job link, so what is still committed is given back now */
+    PsReturnJobCommitment(Process, MmQueryProcessCommitCharge(Process));
 
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
@@ -1586,8 +1590,10 @@ NtQueryInformationJobObject(
 
             Extended.ProcessMemoryLimit = (SIZE_T)Job->ProcessMemoryLimit;
             Extended.JobMemoryLimit = (SIZE_T)Job->JobMemoryLimit;
+            ExAcquirePushLockShared(&Job->MemoryLimitsLock);
             Extended.PeakProcessMemoryUsed = (SIZE_T)(Job->PeakProcessMemoryUsed << PAGE_SHIFT);
             Extended.PeakJobMemoryUsed = (SIZE_T)(Job->PeakJobMemoryUsed << PAGE_SHIFT);
+            ExReleasePushLockShared(&Job->MemoryLimitsLock);
 
             Length = (JobInformationClass == JobObjectBasicLimitInformation)
                          ? sizeof(Extended.BasicLimitInformation)
