@@ -3945,6 +3945,18 @@ DxgkIsDisplayAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 BOOLEAN
+DxgkDisplayMapsDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkDisplayDetachDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkDisplayAbortDetach(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
 DxgkIsDisplayBridgeDevice(
     _In_opt_ PDEVICE_OBJECT DeviceObject);
 
