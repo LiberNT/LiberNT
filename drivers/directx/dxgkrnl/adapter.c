@@ -12337,7 +12337,9 @@ DxgkpIsPostDisplayDevice(
                                                     sizeof(BusType),
                                                     &BusType,
                                                     &ResultLength)) &&
-                     IsEqualGUID(&BusType, &GUID_BUS_TYPE_ACPI);
+                     (IsEqualGUID(&BusType, &GUID_BUS_TYPE_ACPI) ||
+                      /* Device-tree platform devices are enumerated by the HAL the way ACPI ones are on Windows. */
+                      IsEqualGUID(&BusType, &GUID_BUS_TYPE_INTERNAL));
     if (AcpiEnumerated)
     {
         RTL_QUERY_REGISTRY_TABLE QueryTable[2];
