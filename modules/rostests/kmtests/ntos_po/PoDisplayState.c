@@ -218,8 +218,8 @@ START_TEST(PoDisplayStateOff)
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
-        ok(WaitForValue(&DisplayWatch, PowerMonitorOff, 5000), "the display did not idle out, state %ld\n", DisplayWatch.Value);
-        ok(WaitForValue(&MonitorWatch, 0, 500), "the monitor was not reported off, value %ld\n", MonitorWatch.Value);
+        ok(WaitForValue(&DisplayWatch, PowerMonitorOff, 250), "the display did not idle out, state %ld\n", DisplayWatch.Value);
+        ok(WaitForValue(&MonitorWatch, 0, 250), "the monitor was not reported off, value %ld\n", MonitorWatch.Value);
         ok_eq_hex(SetVideoTimeout(Condition, Original), STATUS_SUCCESS);
     }
 

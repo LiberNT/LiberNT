@@ -31,6 +31,7 @@ static LIST_ENTRY PopStandbyPausedList;
 static KTIMER PopDisplayIdleTimer;
 static KDPC PopDisplayIdleDpc;
 static WORK_QUEUE_ITEM PopDisplayIdleWorkItem;
+static PVOID PopVideoTimeoutWatch;
 static volatile LONG PopDisplayIdleQueued;
 static volatile LONG PopDisplayActivityTick;
 
@@ -301,17 +302,11 @@ PopNoteDisplayActivity(VOID)
 
 static
 VOID
-NTAPI
-PopDisplayIdleWorker(
-    _In_ PVOID Context)
+PopCheckDisplayIdle(VOID)
 {
     ULONG Timeout;
     ULONG Now;
     ULONG Idle;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    InterlockedExchange(&PopDisplayIdleQueued, 0);
 
     Timeout = PopGetVideoTimeout();
     if (Timeout == 0 || PopGetDisplayState() != PowerMonitorOn || PopIsDisplayRequired())
@@ -325,6 +320,37 @@ PopDisplayIdleWorker(
 
     DPRINT1("The display idled out after %lu seconds\n", Timeout);
     PopRequestDisplayState(PowerMonitorOff);
+}
+
+static
+VOID
+NTAPI
+PopDisplayIdleWorker(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    InterlockedExchange(&PopDisplayIdleQueued, 0);
+    PopCheckDisplayIdle();
+}
+
+/* A new timeout applies to the time already spent idle, not only from the next periodic check */
+static
+NTSTATUS
+NTAPI
+PopVideoTimeoutChanged(
+    _In_ LPCGUID SettingGuid,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _Inout_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(SettingGuid);
+    UNREFERENCED_PARAMETER(Value);
+    UNREFERENCED_PARAMETER(ValueLength);
+    UNREFERENCED_PARAMETER(Context);
+
+    PopCheckDisplayIdle();
+    return STATUS_SUCCESS;
 }
 
 static
@@ -362,4 +388,13 @@ PopInitializeStandby(VOID)
     KeInitializeTimerEx(&PopDisplayIdleTimer, SynchronizationTimer);
     DueTime.QuadPart = -10000000LL;
     KeSetTimerEx(&PopDisplayIdleTimer, DueTime, 1000, &PopDisplayIdleDpc);
+
+    if (!NT_SUCCESS(PoRegisterPowerSettingCallback(NULL,
+                                                   &GUID_VIDEO_POWERDOWN_TIMEOUT,
+                                                   PopVideoTimeoutChanged,
+                                                   NULL,
+                                                   &PopVideoTimeoutWatch)))
+    {
+        DPRINT1("Display timeout changes are seen only by the periodic check\n");
+    }
 }
