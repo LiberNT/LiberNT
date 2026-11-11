@@ -2240,10 +2240,23 @@ static HRESULT WINAPI DOMUIEvent_get_detail(IDOMUIEvent *iface, LONG *p)
     return S_OK;
 }
 
+static mozIDOMWindow *get_view_window(IHTMLWindow2 *view)
+{
+    HTMLOuterWindow *window = unsafe_outer_window_from_IHTMLWindow2(view);
+    mozIDOMWindow *ret = NULL;
+
+    if(window && window->nswindow)
+        nsIDOMWindow_GetInnerWindow(window->nswindow, &ret);
+    else if(view)
+        FIXME("unsupported view %p\n", view);
+    return ret;
+}
+
 static HRESULT WINAPI DOMUIEvent_initUIEvent(IDOMUIEvent *iface, BSTR type, VARIANT_BOOL can_bubble,
         VARIANT_BOOL cancelable, IHTMLWindow2 *view, LONG detail)
 {
     DOMUIEvent *This = impl_from_IDOMUIEvent(iface);
+    mozIDOMWindow *view_window;
     nsAString type_str;
     nsresult nsres;
     HRESULT hres;
@@ -2255,17 +2268,17 @@ static HRESULT WINAPI DOMUIEvent_initUIEvent(IDOMUIEvent *iface, BSTR type, VARI
         return S_OK;
     }
 
-    if(view)
-        FIXME("view argument is not supported\n");
-
     hres = IDOMEvent_initEvent(&This->event.IDOMEvent_iface, type, can_bubble, cancelable);
     if(FAILED(hres))
         return hres;
 
+    view_window = get_view_window(view);
     nsAString_InitDepend(&type_str, type);
     nsres = nsIDOMUIEvent_InitUIEvent(This->nsevent, &type_str, !!can_bubble, !!cancelable,
-                                      NULL /* FIXME */, detail);
+                                      view_window, detail);
     nsAString_Finish(&type_str);
+    if(view_window)
+        mozIDOMWindow_Release(view_window);
     if(NS_FAILED(nsres)) {
         FIXME("InitUIEvent failed: %08lx\n", nsres);
         return E_FAIL;
@@ -2525,9 +2538,6 @@ static HRESULT WINAPI DOMMouseEvent_initMouseEvent(IDOMMouseEvent *iface, BSTR t
         return S_OK;
     }
 
-    if(view)
-        FIXME("view argument is not supported\n");
-
     if(related_target) {
         hres = get_gecko_target(related_target, &nstarget);
         if(FAILED(hres))
@@ -2536,12 +2546,16 @@ static HRESULT WINAPI DOMMouseEvent_initMouseEvent(IDOMMouseEvent *iface, BSTR t
 
     hres = IDOMEvent_initEvent(&This->ui_event.event.IDOMEvent_iface, type, can_bubble, cancelable);
     if(SUCCEEDED(hres)) {
+        mozIDOMWindow *view_window = get_view_window(view);
+
         nsAString_InitDepend(&type_str, type);
         nsres = nsIDOMMouseEvent_InitMouseEvent(This->nsevent, &type_str, can_bubble, cancelable,
-                                                NULL /* FIXME */, detail, screen_x, screen_y,
+                                                view_window, detail, screen_x, screen_y,
                                                 client_x, client_y, !!ctrl_key, !!alt_key, !!shift_key,
                                                 !!meta_key, button, nstarget);
         nsAString_Finish(&type_str);
+        if(view_window)
+            mozIDOMWindow_Release(view_window);
         if(NS_FAILED(nsres)) {
             FIXME("InitMouseEvent failed: %08lx\n", nsres);
             return E_FAIL;

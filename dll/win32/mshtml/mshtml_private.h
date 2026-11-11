@@ -1349,6 +1349,7 @@ HRESULT create_enum_variant(DispatchEx*,IUnknown**);
 HRESULT create_outer_window(GeckoBrowser*,mozIDOMWindowProxy*,HTMLOuterWindow*,HTMLOuterWindow**);
 HRESULT update_window_doc(HTMLInnerWindow*);
 HTMLOuterWindow *mozwindow_to_window(const mozIDOMWindowProxy*);
+HTMLOuterWindow *unsafe_outer_window_from_IHTMLWindow2(IHTMLWindow2*);
 void get_top_window(HTMLOuterWindow*,HTMLOuterWindow**);
 HRESULT create_location(HTMLOuterWindow*,HTMLLocation**);
 HRESULT create_navigator(HTMLInnerWindow*,IOmNavigator**);

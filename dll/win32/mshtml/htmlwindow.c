@@ -155,6 +155,16 @@ static inline HTMLOuterWindow *HTMLOuterWindow_from_IHTMLWindow2(IHTMLWindow2 *i
     return CONTAINING_RECORD(iface, HTMLOuterWindow, base.IHTMLWindow2_iface);
 }
 
+static const IHTMLWindow2Vtbl HTMLWindow2Vtbl;
+static const IHTMLWindow2Vtbl outer_window_HTMLWindow2Vtbl;
+
+HTMLOuterWindow *unsafe_outer_window_from_IHTMLWindow2(IHTMLWindow2 *iface)
+{
+    if(!iface || (iface->lpVtbl != &HTMLWindow2Vtbl && iface->lpVtbl != &outer_window_HTMLWindow2Vtbl))
+        return NULL;
+    return impl_from_IHTMLWindow2(iface)->outer_window;
+}
+
 static void *base_query_interface(HTMLWindow *This, REFIID riid)
 {
     if(IsEqualGUID(&IID_IUnknown, riid))
