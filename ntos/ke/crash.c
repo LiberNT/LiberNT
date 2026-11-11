@@ -652,7 +652,9 @@ KiStopExceptionContext(
 static
 VOID
 KiReportBugCheckBackTrace(
-    _In_ PCONTEXT Context)
+    _In_z_ PCSTR Title,
+    _In_ PCONTEXT Context,
+    _In_ BOOLEAN Display)
 {
     static CONTEXT Walk;
     PLDR_DATA_TABLE_ENTRY LdrEntry;
@@ -664,7 +666,10 @@ KiReportBugCheckBackTrace(
     ULONG Index;
 
     Walk = *Context;
-    KiDisplayAndLogBugCheckString("\r\nBacktrace:\r\n");
+    if (Display)
+        KiDisplayAndLogBugCheckString(Title);
+    else
+        DbgPrint("%s", Title);
 
     for (Index = 0; Index < KI_BUGCHECK_FRAMES; Index++)
     {
@@ -683,7 +688,30 @@ KiReportBugCheckBackTrace(
             _snprintf(Line, sizeof(Line), "#%02lu %p\r\n", Index, (PVOID)Pc);
         }
 
-        KiDisplayAndLogBugCheckString(Line);
+        if (Display)
+            KiDisplayAndLogBugCheckString(Line);
+        else
+            DbgPrint("%s", Line);
+    }
+}
+
+static
+VOID
+KiReportFrozenProcessors(VOID)
+{
+    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG Processor;
+    CHAR Title[48];
+
+    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Processor];
+
+        if ((Prcb == NULL) || (Processor == Current))
+            continue;
+
+        _snprintf(Title, sizeof(Title), "\r\nBacktrace of processor %lu:\r\n", Processor);
+        KiReportBugCheckBackTrace(Title, &Prcb->ProcessorState.ContextFrame, FALSE);
     }
 }
 
@@ -750,7 +778,7 @@ KiReportBugCheck(
     }
 
     if (Context != NULL)
-        KiReportBugCheckBackTrace(Context);
+        KiReportBugCheckBackTrace("\r\nBacktrace:\r\n", Context, TRUE);
 
     KiDumpParameterImages("\r\nParameters point into: ",
                           &KiBugCheckData[1],
@@ -773,6 +801,9 @@ KiReportBugCheck(
 #else
     UNREFERENCED_PARAMETER(TrapFrame);
 #endif
+
+    /* The frozen processors go to the log only: the screen keeps the processor that stopped */
+    KiReportFrozenProcessors();
 }
 
 /*
