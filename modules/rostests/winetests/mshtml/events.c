@@ -1198,8 +1198,7 @@ static HRESULT WINAPI unattached_img_onload(IDispatchEx *iface, DISPID id, LCID 
 
     test_event_args(document_mode < 9 ? &DIID_DispHTMLImg : NULL, id, wFlags, pdp, pvarRes, pei, pspCaller);
     event_src = get_event_src();
-    todo_wine
-        ok(!event_src, "event_src != NULL\n");
+    ok(!event_src, "event_src != NULL\n");
     if(event_src)
         IHTMLElement_Release(event_src);
     return S_OK;

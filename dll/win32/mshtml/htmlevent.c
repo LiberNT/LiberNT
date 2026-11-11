@@ -387,6 +387,10 @@ DISPEX_IDISPATCH_IMPL(HTMLEventObj, IHTMLEventObj, impl_from_IHTMLEventObj(iface
 static HRESULT WINAPI HTMLEventObj_get_srcElement(IHTMLEventObj *iface, IHTMLElement **p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    HTMLElement *elem;
+    cpp_bool connected;
+    nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
@@ -395,7 +399,20 @@ static HRESULT WINAPI HTMLEventObj_get_srcElement(IHTMLEventObj *iface, IHTMLEle
         return S_OK;
     }
 
-    return IDOMEvent_get_srcElement(&This->event->IDOMEvent_iface, p);
+    hres = IDOMEvent_get_srcElement(&This->event->IDOMEvent_iface, p);
+    if(FAILED(hres) || !*p)
+        return hres;
+
+    elem = unsafe_impl_from_IHTMLElement(*p);
+    if(!elem || !elem->node.doc)
+        return S_OK;
+
+    nsres = nsIDOMNode_Contains(elem->node.doc->node.nsnode, elem->node.nsnode, &connected);
+    if(NS_SUCCEEDED(nsres) && !connected) {
+        IHTMLElement_Release(*p);
+        *p = NULL;
+    }
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLEventObj_get_altKey(IHTMLEventObj *iface, VARIANT_BOOL *p)
