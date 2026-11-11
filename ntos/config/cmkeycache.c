@@ -560,6 +560,30 @@ CmpCleanUpSubKeyInfo(
     Kcb->ExtFlags |= CM_KCB_INVALID_CACHED_INFO;
 }
 
+/* A parent may only reach zero under its own bucket, which a reviving lookup holds; buckets have no order, so it is tried */
+static
+VOID
+CmpDereferenceParentKcb(
+    _In_ PCM_KEY_CONTROL_BLOCK Parent)
+{
+    ULONG ConvKey = Parent->ConvKey;
+
+    if (CmpTestRegistryLockExclusive() || CmpIsKcbLockedExclusive(Parent))
+    {
+        CmpDereferenceKeyControlBlockWithLock(Parent, TRUE);
+        return;
+    }
+
+    if (CmpTryToAcquireKcbLockExclusiveByKey(ConvKey))
+    {
+        CmpDereferenceKeyControlBlockWithLock(Parent, TRUE);
+        CmpReleaseKcbLockByKey(ConvKey);
+        return;
+    }
+
+    CmpDelayDerefKeyControlBlock(Parent);
+}
+
 VOID
 NTAPI
 CmpCleanUpKcbCacheWithLock(
@@ -590,10 +614,7 @@ CmpCleanUpKcbCacheWithLock(
 
     CmpFreeKeyControlBlock(Kcb);
 
-    if (Parent != NULL)
-    {
-        CmpDereferenceKeyControlBlockWithLock(Parent, LockHeldExclusively);
-    }
+    if (Parent != NULL) CmpDereferenceParentKcb(Parent);
 }
 
 VOID

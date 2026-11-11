@@ -145,15 +145,12 @@ CmpDelayCloseDpcRoutine(
     ExQueueWorkItem(&CmpDelayCloseWorkItem, DelayedWorkQueue);
 }
 
+static
 VOID
-NTAPI
-CmpDelayDerefKCBWorker(
-    _In_ PVOID Parameter)
+CmpDrainDelayDerefList(VOID)
 {
     PCM_DELAY_DEREF_KCB_ITEM Item;
     PLIST_ENTRY Entry;
-
-    UNREFERENCED_PARAMETER(Parameter);
 
     for (;;)
     {
@@ -172,7 +169,16 @@ CmpDelayDerefKCBWorker(
         CmpDereferenceKeyControlBlock(Item->Kcb);
         CmpFreeDelayItem(Item);
     }
+}
 
+VOID
+NTAPI
+CmpDelayDerefKCBWorker(
+    _In_ PVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+
+    CmpDrainDelayDerefList();
     CmpDelayDerefKCBWorkItemActive = FALSE;
 }
 
@@ -325,25 +331,26 @@ CmpDelayDerefKeyControlBlock(
 {
     PCM_DELAY_DEREF_KCB_ITEM Item;
     LARGE_INTEGER Due;
+    BOOLEAN WasEmpty;
 
-    if (!CmpDelayDerefEngineRunning)
-    {
-        CmpDereferenceKeyControlBlock(Kcb);
-        return;
-    }
+    ASSERT(CmpDelayDerefEngineRunning);
 
-    Item = CmpAllocateDelayItem();
+    Item = CmpDelayDerefEngineRunning ? CmpAllocateDelayItem() : NULL;
     if (Item == NULL)
     {
-        CmpDereferenceKeyControlBlock(Kcb);
+        /* FIXME: without a work item the reference is kept; dropping it here could wait on a lock the caller holds */
         return;
     }
 
     Item->Kcb = Kcb;
 
     KeAcquireGuardedMutex(&CmpDelayDerefKCBLock);
+    WasEmpty = IsListEmpty(&CmpDelayDerefKCBListHead);
     InsertTailList(&CmpDelayDerefKCBListHead, &Item->ListEntry);
     KeReleaseGuardedMutex(&CmpDelayDerefKCBLock);
+
+    /* Only the first item arms the timer, so later hand-offs cannot keep pushing the drop out */
+    if (!WasEmpty) return;
 
     Due.QuadPart = Int32x32To64(CmpDelayDerefKCBIntervalInSeconds, -10000000);
     KeSetTimer(&CmpDelayDerefKCBTimer, Due, &CmpDelayDerefKCBDpc);
@@ -353,15 +360,13 @@ VOID
 NTAPI
 CmpRunDownDelayDerefKCBEngine(VOID)
 {
-    if (!CmpDelayDerefEngineRunning) return;
+    /* The engines stay on after shutdown: keys are still read, and a parent's drop may still have to be handed to the worker */
+    if (CmpDelayDerefEngineRunning) CmpDrainDelayDerefList();
 
-    KeCancelTimer(&CmpDelayDerefKCBTimer);
-    CmpDelayDerefEngineRunning = FALSE;
-    CmpDelayDerefKCBWorker(NULL);
-
-    KeCancelTimer(&CmpDelayCloseTimer);
-    CmpDelayCloseEngineRunning = FALSE;
-    CmpLockRegistry();
-    CmpDrainDelayedClose(0);
-    CmpUnlockRegistry();
+    if (CmpDelayCloseEngineRunning)
+    {
+        CmpLockRegistry();
+        CmpDrainDelayedClose(0);
+        CmpUnlockRegistry();
+    }
 }
