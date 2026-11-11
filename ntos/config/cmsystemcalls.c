@@ -2128,6 +2128,8 @@ CmpUnloadKeyByName(
                                      &KeyBody);
     CmpReleaseAttributes(&Captured);
 
+    /* A name with no hive mounted under it is a wrong argument, not a missing object */
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND) return STATUS_INVALID_PARAMETER;
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Event != NULL)
