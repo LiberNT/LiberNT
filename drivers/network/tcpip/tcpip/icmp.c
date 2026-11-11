@@ -293,7 +293,6 @@ ReceiveDatagram(
     DataBuffer = (PUCHAR)IcmpHeader + sizeof(ICMP_HEADER);
     DataSize = PacketBytes - IpHeaderSize - sizeof(ICMP_HEADER);
 
-    KeWaitForSingleObject(&Context->InitializationFinishedEvent, Executive, KernelMode, FALSE, NULL);
     if (Context->SendFailed)
         return STATUS_SUCCESS;
 
@@ -411,6 +410,8 @@ DispEchoRequest(
     PICMP_PACKET_CONTEXT SendContext;
     LARGE_INTEGER RequestTimeout;
     UINT8 SavedTtl;
+    BOOLEAN Replied;
+    KIRQL OldIrql;
 
     TI_DbgPrint(DEBUG_ICMP, ("About to send datagram, OutputBufferLength: %u, SystemBuffer: %p\n", OutputBufferLength, Irp->AssociatedIrp.SystemBuffer));
 
@@ -531,12 +532,11 @@ DispEchoRequest(
 
     UnlockObject(AddrFile);
 
+    SendContext->StartTicks = KeQueryPerformanceCounter(NULL).QuadPart;
+
     Status = AddrFile->Send(AddrFile, &ConnectionInfo, (PCHAR)Buffer, RequestSize, &DataUsed);
 
     // From this point we may receive a reply packet.
-    // But we are not ready for it thus InitializationFinishedEvent is needed (see below)
-
-    SendContext->StartTicks = KeQueryPerformanceCounter(NULL).QuadPart;
 
     ExFreePoolWithTag(Buffer, OUT_DATA_TAG);
 
@@ -562,8 +562,16 @@ DispEchoRequest(
     }
 
     IoMarkIrpPending(Irp);
-    KeSetTimer(&SendContext->TimeoutTimer, RequestTimeout, &SendContext->TimeoutDpc);
+
+    KeAcquireSpinLock(&SendContext->ReplyLock, &OldIrql);
+    Replied = (SendContext->nReplies != 0);
+    if (!Replied)
+        KeSetTimer(&SendContext->TimeoutTimer, RequestTimeout, &SendContext->TimeoutDpc);
+    KeReleaseSpinLock(&SendContext->ReplyLock, OldIrql);
+
     KeSetEvent(&SendContext->InitializationFinishedEvent, IO_NO_INCREMENT, FALSE);
+    if (Replied)
+        IoQueueWorkItem(SendContext->FinishWorker, &EndRequestHandler, DelayedWorkQueue, SendContext);
 
     return STATUS_PENDING;
 }
