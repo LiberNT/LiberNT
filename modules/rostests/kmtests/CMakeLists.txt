@@ -242,6 +242,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeProcessStackCount.c
     ntos_ke/KeQueryBasePriority.c
     ntos_ke/KeProcessor.c
+    ntos_ke/KeQuantumEnd.c
     ntos_ke/KeSemaphore.c
     ntos_ke/KeSpinLock.c
     ntos_ke/KeThreadedDpc.c

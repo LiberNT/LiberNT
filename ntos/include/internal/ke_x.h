@@ -2132,6 +2132,9 @@ KiSelectReadyThread(IN KPRIORITY Priority,
     PLIST_ENTRY ListEntry;
     PKTHREAD Thread;
 
+    if (Priority > HIGH_PRIORITY)
+        return NULL;
+
     for (;;)
     {
         /* Save the current mask and get the priority set for the CPU */
