@@ -121,6 +121,10 @@ KdbpCmdPci(
 BOOLEAN KdbpCmdDeviceTree(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdDeviceNode(ULONG Argc, PCHAR Argv[]);
 
+/* kdbtypes.c */
+
+BOOLEAN KdbpCmdDisplayType(ULONG Argc, PCHAR Argv[]);
+
 /* kdbsched.c */
 
 BOOLEAN KdbpCmdPrcb(ULONG Argc, PCHAR Argv[]);

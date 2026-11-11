@@ -629,6 +629,7 @@ endif()
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsched.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbshim.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsymbols.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbtypes.c
             ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdb_symz.c)
     endif()
 

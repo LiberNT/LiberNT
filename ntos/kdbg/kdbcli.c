@@ -2384,6 +2384,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!devtree", "!devtree", "Lists the Plug and Play device tree", KdbpCmdDeviceTree},
     {"!devnode", "!devnode [address]", "Shows a device node and its resources, or the root one", KdbpCmdDeviceNode},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
+    {"dt", "dt [[module!]type [address]]", "Shows the layout of a kernel type, or one at an address", KdbpCmdDisplayType},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
     {"bugcheck", "bugcheck", "Crashes the machine on purpose", KdbpCmdBugCheck},
