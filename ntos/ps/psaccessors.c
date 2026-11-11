@@ -1030,11 +1030,28 @@ PsReferenceProcessFilePointer(
 
 /* WORKING-SET WATCHING *******************************************************/
 
-/*
- * Records a fault for a process that asked to be told where its faults come
- * from. The ring is written under a lock at the fault's own level, because
- * this runs inside the fault.
- */
+typedef struct _PSP_WS_WATCH_RECORD
+{
+    PVOID FaultingPc;
+    PVOID FaultingVa;
+    HANDLE FaultingThreadId;
+} PSP_WS_WATCH_RECORD, *PPSP_WS_WATCH_RECORD;
+
+typedef struct _PSP_WS_WATCH
+{
+    KSPIN_LOCK SpinLock;
+    ULONG Count;
+    ULONG Lost;
+    PSP_WS_WATCH_RECORD Records[PSP_WS_WATCH_RECORDS];
+} PSP_WS_WATCH, *PPSP_WS_WATCH;
+
+typedef struct _PSP_WS_WATCH_INFORMATION_EX
+{
+    PROCESS_WS_WATCH_INFORMATION BasicInfo;
+    ULONG_PTR FaultingThreadId;
+    ULONG_PTR Flags;
+} PSP_WS_WATCH_INFORMATION_EX, *PPSP_WS_WATCH_INFORMATION_EX;
+
 VOID
 NTAPI
 PsWatchWorkingSet(
@@ -1042,28 +1059,74 @@ PsWatchWorkingSet(
     _In_ PVOID FaultingPc,
     _In_ PVOID FaultingVa)
 {
-    PPAGEFAULT_HISTORY History = Process->WorkingSetWatch;
+    PPSP_WS_WATCH Watch = (PPSP_WS_WATCH)Process->WorkingSetWatch;
     KIRQL OldIrql;
 
-    if (History == NULL) return;
+    if (Watch == NULL) return;
 
-    KeAcquireSpinLock(&History->SpinLock, &OldIrql);
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
 
-    if (History->CurrentIndex < PSP_WS_WATCH_RECORDS)
+    if (Watch->Count < PSP_WS_WATCH_RECORDS)
     {
-        History->WatchInfo[History->CurrentIndex].FaultingPc = FaultingPc;
-        History->WatchInfo[History->CurrentIndex].FaultingVa = FaultingVa;
-        History->CurrentIndex++;
+        Watch->Records[Watch->Count].FaultingPc = FaultingPc;
+        Watch->Records[Watch->Count].FaultingVa = FaultingVa;
+        Watch->Records[Watch->Count].FaultingThreadId = PsGetCurrentThreadId();
+        Watch->Count++;
+    }
+    else
+    {
+        Watch->Lost++;
     }
 
-    KeReleaseSpinLock(&History->SpinLock, OldIrql);
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
 }
 
-/*
- * Hands back what has been recorded. A caller that asks with no room is told
- * how much it needs; the records are left where they are either way, so two
- * callers see the same thing.
- */
+static
+NTSTATUS
+PspCopyWorkingSetWatch(
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_reads_(Count) const PSP_WS_WATCH_RECORD *Records,
+    _In_ ULONG Count,
+    _In_ ULONG Lost,
+    _In_ BOOLEAN Extended)
+{
+    PSP_WS_WATCH_INFORMATION_EX Record;
+    ULONG RecordSize;
+    ULONG Index;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RecordSize = Extended ? sizeof(PSP_WS_WATCH_INFORMATION_EX) : sizeof(PROCESS_WS_WATCH_INFORMATION);
+    ASSERT(Length >= (Count + 1) * RecordSize);
+
+    _SEH2_TRY
+    {
+        for (Index = 0; Index <= Count; Index++)
+        {
+            RtlZeroMemory(&Record, sizeof(Record));
+            if (Index < Count)
+            {
+                Record.BasicInfo.FaultingPc = Records[Index].FaultingPc;
+                Record.BasicInfo.FaultingVa = Records[Index].FaultingVa;
+                Record.FaultingThreadId = (ULONG_PTR)Records[Index].FaultingThreadId;
+            }
+            else
+            {
+                Record.BasicInfo.FaultingVa = (PVOID)(ULONG_PTR)Lost;
+            }
+
+            RtlCopyMemory((PUCHAR)Buffer + Index * RecordSize, &Record, RecordSize);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 PspQueryWorkingSetWatch(
@@ -1073,35 +1136,50 @@ PspQueryWorkingSetWatch(
     _Out_ PULONG ReturnLength,
     _In_ BOOLEAN Extended)
 {
-    PPAGEFAULT_HISTORY History = Process->WorkingSetWatch;
-    ULONG Needed;
+    PPSP_WS_WATCH Watch = (PPSP_WS_WATCH)Process->WorkingSetWatch;
+    PPSP_WS_WATCH_RECORD Records;
+    ULONG RecordSize;
+    ULONG Count;
+    ULONG Lost;
     KIRQL OldIrql;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(Extended);
-
     *ReturnLength = 0;
 
-    if (History == NULL) return STATUS_UNSUCCESSFUL;
+    if (Watch == NULL) return STATUS_UNSUCCESSFUL;
 
-    KeAcquireSpinLock(&History->SpinLock, &OldIrql);
+    RecordSize = Extended ? sizeof(PSP_WS_WATCH_INFORMATION_EX) : sizeof(PROCESS_WS_WATCH_INFORMATION);
 
-    Needed = (ULONG)FIELD_OFFSET(PAGEFAULT_HISTORY,
-                                 WatchInfo[History->CurrentIndex]);
+    Records = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(Watch->Records), TAG_PS_WS_WATCH);
+    if (Records == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    if (Length < Needed)
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    Count = Watch->Count;
+    Lost = Watch->Lost;
+    RtlCopyMemory(Records, Watch->Records, Count * sizeof(PSP_WS_WATCH_RECORD));
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+
+    *ReturnLength = (Count + 1) * RecordSize;
+    if (Length < *ReturnLength)
     {
-        KeReleaseSpinLock(&History->SpinLock, OldIrql);
-        *ReturnLength = Needed;
+        ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
         return STATUS_BUFFER_TOO_SMALL;
     }
 
-    RtlCopyMemory(Buffer, History, Needed);
+    Status = PspCopyWorkingSetWatch(Buffer, Length, Records, Count, Lost, Extended);
+    ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
+    if (!NT_SUCCESS(Status)) return Status;
 
-    KeReleaseSpinLock(&History->SpinLock, OldIrql);
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    RtlMoveMemory(Watch->Records,
+                  &Watch->Records[Count],
+                  (Watch->Count - Count) * sizeof(PSP_WS_WATCH_RECORD));
+    Watch->Count -= Count;
+    Watch->Lost -= Lost;
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
 
-    *ReturnLength = Needed;
     return STATUS_SUCCESS;
 }
 
@@ -1115,37 +1193,33 @@ PspSetWorkingSetWatch(
     _In_ PEPROCESS Process,
     _In_ BOOLEAN Enable)
 {
-    PPAGEFAULT_HISTORY History;
+    PPSP_WS_WATCH Watch;
 
     PAGED_CODE();
 
     if (!Enable)
     {
-        History = InterlockedExchangePointer((PVOID*)&Process->WorkingSetWatch,
-                                             NULL);
-        if (History == NULL) return STATUS_UNSUCCESSFUL;
+        Watch = InterlockedExchangePointer((PVOID*)&Process->WorkingSetWatch,
+                                           NULL);
+        if (Watch == NULL) return STATUS_UNSUCCESSFUL;
 
         Process->WriteWatch = FALSE;
-        ExFreePoolWithTag(History, TAG_PS_WS_WATCH);
+        ExFreePoolWithTag(Watch, TAG_PS_WS_WATCH);
         return STATUS_SUCCESS;
     }
 
     if (Process->WorkingSetWatch != NULL) return STATUS_PORT_ALREADY_SET;
 
-    History = ExAllocatePoolZero(NonPagedPool,
-                                 PSP_WS_WATCH_SIZE,
-                                 TAG_PS_WS_WATCH);
-    if (History == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+    Watch = ExAllocatePoolZero(NonPagedPoolNx, sizeof(PSP_WS_WATCH), TAG_PS_WS_WATCH);
+    if (Watch == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    KeInitializeSpinLock(&History->SpinLock);
-    History->CurrentIndex = 0;
-    History->MapIndex = PSP_WS_WATCH_RECORDS;
+    KeInitializeSpinLock(&Watch->SpinLock);
 
     if (InterlockedCompareExchangePointer((PVOID*)&Process->WorkingSetWatch,
-                                          History,
+                                          Watch,
                                           NULL) != NULL)
     {
-        ExFreePoolWithTag(History, TAG_PS_WS_WATCH);
+        ExFreePoolWithTag(Watch, TAG_PS_WS_WATCH);
         return STATUS_PORT_ALREADY_SET;
     }
 
