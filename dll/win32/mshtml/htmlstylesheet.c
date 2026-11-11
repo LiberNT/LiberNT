@@ -804,10 +804,58 @@ static HRESULT WINAPI HTMLStyleSheet_get_media(IHTMLStyleSheet *iface, BSTR *p)
     return E_NOTIMPL;
 }
 
+static const WCHAR *css_rule_end(const WCHAR *p)
+{
+    unsigned depth = 0;
+    WCHAR quote;
+
+    for(; *p; p++) {
+        switch(*p) {
+        case '"':
+        case '\'':
+            quote = *p;
+            while(p[1] && p[1] != quote) {
+                if(p[1] == '\\' && p[2])
+                    p++;
+                p++;
+            }
+            if(!p[1])
+                return p + 1;
+            p++;
+            break;
+        case '/':
+            if(p[1] != '*')
+                break;
+            for(p += 2; *p && (p[0] != '*' || p[1] != '/'); p++);
+            if(!*p)
+                return p;
+            p++;
+            break;
+        case '{':
+            depth++;
+            break;
+        case '}':
+            if(depth && !--depth)
+                return p + 1;
+            break;
+        case ';':
+            if(!depth)
+                return p + 1;
+            break;
+        }
+    }
+
+    return p;
+}
+
 static HRESULT WINAPI HTMLStyleSheet_put_cssText(IHTMLStyleSheet *iface, BSTR v)
 {
     HTMLStyleSheet *This = impl_from_IHTMLStyleSheet(iface);
+    const WCHAR *ptr, *end;
+    nsAString nsstr;
+    UINT32 cnt = 0, idx;
     nsresult nsres;
+    WCHAR *rule;
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
@@ -815,18 +863,26 @@ static HRESULT WINAPI HTMLStyleSheet_put_cssText(IHTMLStyleSheet *iface, BSTR v)
         nsres = nsIDOMCSSStyleSheet_DeleteRule(This->nsstylesheet, 0);
     }while(NS_SUCCEEDED(nsres));
 
-    if(v && *v) {
-        nsAString nsstr;
-        UINT32 idx;
+    for(ptr = v; ptr && *ptr; ptr = end) {
+        while(iswspace(*ptr))
+            ptr++;
+        if(!*ptr)
+            break;
+        end = css_rule_end(ptr);
 
-        /* FIXME: This won't work for multiple rules in the string. */
-        nsAString_InitDepend(&nsstr, v);
-        nsres = nsIDOMCSSStyleSheet_InsertRule(This->nsstylesheet, &nsstr, 0, &idx);
+        if(!(rule = malloc((end - ptr + 1) * sizeof(WCHAR))))
+            return E_OUTOFMEMORY;
+        memcpy(rule, ptr, (end - ptr) * sizeof(WCHAR));
+        rule[end - ptr] = 0;
+
+        nsAString_InitDepend(&nsstr, rule);
+        nsres = nsIDOMCSSStyleSheet_InsertRule(This->nsstylesheet, &nsstr, cnt, &idx);
         nsAString_Finish(&nsstr);
-        if(NS_FAILED(nsres)) {
-            FIXME("InsertRule failed for string %s. Probably multiple rules passed.\n", debugstr_w(v));
-            return E_FAIL;
-        }
+        if(NS_SUCCEEDED(nsres))
+            cnt++;
+        else
+            WARN("InsertRule failed for %s: %08lx\n", debugstr_w(rule), nsres);
+        free(rule);
     }
 
     return S_OK;
