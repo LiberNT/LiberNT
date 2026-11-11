@@ -10,6 +10,25 @@
 #define USBNET_PCI_PROGIF_XHCI  0x30
 
 PKDNET_EXTENSIBILITY_IMPORTS KdNetExtensibilityImports;
+BOOLEAN UsbNetLocalBroadcast;
+
+static
+BOOLEAN
+UsbNetOptionIsOne(
+    _In_opt_z_ PCSTR Options,
+    _In_z_ PCSTR Name)
+{
+    SIZE_T Length = strlen(Name);
+    PCSTR Text;
+
+    for (Text = Options; Text && (Text = strstr(Text, Name)) != NULL; Text += Length)
+    {
+        if ((Text == Options || Text[-1] == ' ' || Text[-1] == '/') && Text[Length] == '1')
+            return TRUE;
+    }
+
+    return FALSE;
+}
 
 static
 VOID
@@ -27,8 +46,6 @@ KdInitializeLibrary(
 {
     PKDNET_EXTENSIBILITY_EXPORTS Exports;
 
-    UNREFERENCED_PARAMETER(LoaderOptions);
-
     if (!ImportTable || ImportTable->FunctionCount != KDNET_EXT_IMPORTS)
         return STATUS_INVALID_PARAMETER;
 
@@ -43,6 +60,7 @@ KdInitializeLibrary(
     }
 
     KdNetExtensibilityImports = ImportTable;
+    UsbNetLocalBroadcast = UsbNetOptionIsOne(LoaderOptions, "LOCAL_BROADCAST=");
     Exports->KdInitializeController = UsbNetInitializeController;
     Exports->KdShutdownController = UsbNetShutdownController;
     Exports->KdSetHibernateRange = UsbNetSetHibernateRange;

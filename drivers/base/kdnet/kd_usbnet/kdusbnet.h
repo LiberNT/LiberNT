@@ -388,6 +388,7 @@ typedef struct _USBNET_ADAPTER
 } USBNET_ADAPTER, *PUSBNET_ADAPTER;
 
 extern PKDNET_EXTENSIBILITY_IMPORTS KdNetExtensibilityImports;
+extern BOOLEAN UsbNetLocalBroadcast;
 
 FORCEINLINE
 ULONG
