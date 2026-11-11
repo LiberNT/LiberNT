@@ -224,6 +224,29 @@ IopAnswerFromFileObject(
             return STATUS_SUCCESS;
         }
 
+        case FileIoCompletionNotificationInformation:
+        {
+            PFILE_IO_COMPLETION_NOTIFICATION_INFORMATION Info = Buffer;
+            ULONG Flags = 0;
+
+            if (FileObject->Flags & FO_SKIP_COMPLETION_PORT)
+            {
+                Flags |= FILE_SKIP_COMPLETION_PORT_ON_SUCCESS;
+            }
+            if (FileObject->Flags & FO_SKIP_SET_EVENT)
+            {
+                Flags |= FILE_SKIP_SET_EVENT_ON_HANDLE;
+            }
+            if (FileObject->Flags & FO_SKIP_SET_FAST_IO)
+            {
+                Flags |= FILE_SKIP_SET_USER_EVENT_ON_FAST_IO;
+            }
+
+            Info->Flags = Flags;
+            *ReturnedLength = sizeof(*Info);
+            return STATUS_SUCCESS;
+        }
+
         default:
             break;
     }
@@ -1036,6 +1059,49 @@ NtSetInformationFile(
         }
 
         ExFreePoolWithTag(Buffer, TAG_IOBUF);
+
+        _SEH2_TRY
+        {
+            IoStatusBlock->Status = STATUS_SUCCESS;
+            IoStatusBlock->Information = 0;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
+
+    if (FileInformationClass == FileIoCompletionNotificationInformation)
+    {
+        PFILE_IO_COMPLETION_NOTIFICATION_INFORMATION Notification = Buffer;
+        LONG Flags = 0;
+
+        if (Notification->Flags & FILE_SKIP_COMPLETION_PORT_ON_SUCCESS)
+        {
+            Flags |= FO_SKIP_COMPLETION_PORT;
+        }
+        if (Notification->Flags & FILE_SKIP_SET_EVENT_ON_HANDLE)
+        {
+            Flags |= FO_SKIP_SET_EVENT;
+        }
+        if (Notification->Flags & FILE_SKIP_SET_USER_EVENT_ON_FAST_IO)
+        {
+            Flags |= FO_SKIP_SET_FAST_IO;
+        }
+
+        ExFreePoolWithTag(Buffer, TAG_IOBUF);
+
+        if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+        {
+            ObDereferenceObject(FileObject);
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        InterlockedOr((PLONG)&FileObject->Flags, Flags);
 
         _SEH2_TRY
         {
