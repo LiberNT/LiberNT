@@ -21,6 +21,46 @@ static DWORD WINAPI worker(void *arg)
     return 123;
 }
 
+static HANDLE waiter_started, never_set;
+
+static DWORD WINAPI waiter(void *arg)
+{
+    SetEvent(waiter_started);
+    return WaitForSingleObject(never_set, 1000);
+}
+
+/* A suspension delivered into a wait must not end that wait */
+static void test_suspend_waiting_thread(void)
+{
+    HANDLE thread;
+    DWORD result, previous, exit_code = 0;
+
+    waiter_started = CreateEventW(NULL, TRUE, FALSE, NULL);
+    never_set = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(waiter_started != NULL && never_set != NULL, "CreateEvent failed %lu\n", GetLastError());
+    if (!waiter_started || !never_set) return;
+    thread = CreateThread(NULL, 0, waiter, NULL, 0, NULL);
+    ok(thread != NULL, "CreateThread failed %lu\n", GetLastError());
+    if (!thread) return;
+    result = WaitForSingleObject(waiter_started, 5000);
+    ok(result == WAIT_OBJECT_0, "Waiter startup returned %#lx\n", result);
+    Sleep(50);
+
+    previous = SuspendThread(thread);
+    ok(previous == 0, "Suspend of the waiter returned %lu\n", previous);
+    Sleep(50);
+    previous = ResumeThread(thread);
+    ok(previous == 1, "Resume of the waiter returned %lu\n", previous);
+
+    result = WaitForSingleObject(thread, 5000);
+    ok(result == WAIT_OBJECT_0, "Waiter did not finish: %#lx\n", result);
+    GetExitCodeThread(thread, &exit_code);
+    ok(exit_code == WAIT_TIMEOUT, "The interrupted wait returned %#lx\n", exit_code);
+    CloseHandle(thread);
+    CloseHandle(never_set);
+    CloseHandle(waiter_started);
+}
+
 START_TEST(SuspendThread)
 {
     HANDLE thread;
@@ -93,4 +133,6 @@ START_TEST(SuspendThread)
     if (old_affinity) SetThreadAffinityMask(GetCurrentThread(), old_affinity);
     CloseHandle(thread);
     CloseHandle(ready);
+
+    test_suspend_waiting_thread();
 }
