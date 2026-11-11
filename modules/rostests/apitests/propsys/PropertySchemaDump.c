@@ -13,22 +13,25 @@
 #include <propvarutil.h>
 #include <stdio.h>
 
+/* The schema text is written only when asked for (WINETEST_DEBUG=2); every description is still walked */
+#define DumpPrintf(...) do { if (winetest_debug > 1) printf(__VA_ARGS__); } while (0)
+
 static void
 PrintText(LPCWSTR Text)
 {
     if (!Text)
     {
-        printf("-");
+        DumpPrintf("-");
         return;
     }
     for (; *Text; Text++)
     {
         if (*Text == L'\t' || *Text == L'\n' || *Text == L'\r')
-            printf(" ");
+            DumpPrintf(" ");
         else if (*Text < 0x80)
-            printf("%c", (char)*Text);
+            DumpPrintf("%c", (char)*Text);
         else
-            printf("\\u%04x", *Text);
+            DumpPrintf("\\u%04x", *Text);
     }
 }
 
@@ -37,7 +40,7 @@ PrintValue(const PROPVARIANT *Value)
 {
     LPWSTR Text = NULL;
 
-    printf("%u:", Value->vt);
+    DumpPrintf("%u:", Value->vt);
     if (Value->vt != VT_EMPTY && SUCCEEDED(PropVariantToStringAlloc(Value, &Text)))
     {
         PrintText(Text);
@@ -86,22 +89,22 @@ DumpDefaultText(IPropertyDescription *Desc, IPropertyEnumTypeList *List, LPCWSTR
             continue;
         }
         hr = IPropertyDescription_FormatForDisplay(Desc, &Value, PDFF_DEFAULT, &Text);
-        printf("DEFAULT\t");
+        DumpPrintf("DEFAULT\t");
         PrintText(Canonical);
-        printf("\t");
+        DumpPrintf("\t");
         PrintValue(&Value);
-        printf("\t%#lx\t", hr);
+        DumpPrintf("\t%#lx\t", hr);
         PrintText(SUCCEEDED(hr) ? Text : NULL);
-        printf("\n");
+        DumpPrintf("\n");
         CoTaskMemFree(Text);
         Text = NULL;
         if ((Type & ~VT_VECTOR) != VT_LPWSTR)
             PropVariantClear(&Value);
         return;
     }
-    printf("DEFAULT\t");
+    DumpPrintf("DEFAULT\t");
     PrintText(Canonical);
-    printf("\t-\t-\t-\n");
+    DumpPrintf("\t-\t-\t-\n");
 }
 
 static void
@@ -140,19 +143,19 @@ DumpEnumTypes(IPropertyDescription *Desc, LPCWSTR Canonical)
                 Image = NULL;
             IPropertyEnumType2_Release(Type2);
         }
-        printf("ENUM\t");
+        DumpPrintf("ENUM\t");
         PrintText(Canonical);
-        printf("\t%u\t%u\t", i, Kind);
+        DumpPrintf("\t%u\t%u\t", i, Kind);
         PrintValue(&Value);
-        printf("\t");
+        DumpPrintf("\t");
         PrintValue(&Min);
-        printf("\t");
+        DumpPrintf("\t");
         PrintValue(&Set);
-        printf("\t");
+        DumpPrintf("\t");
         PrintText(Display);
-        printf("\t");
+        DumpPrintf("\t");
         PrintText(Image);
-        printf("\n");
+        DumpPrintf("\n");
         PropVariantClear(&Value);
         PropVariantClear(&Min);
         PropVariantClear(&Set);
@@ -201,17 +204,17 @@ DumpDescription(IPropertyDescription *Desc)
     IPropertyDescription_GetConditionType(Desc, &Condition, &Operation);
     StringFromGUID2(&Key.fmtid, Guid, _countof(Guid));
 
-    printf("PROP\t");
+    DumpPrintf("PROP\t");
     PrintText(Canonical);
-    printf("\t");
+    DumpPrintf("\t");
     PrintText(Guid);
-    printf("\t%lu\t%u\t%#lx\t%#lx\t%u\t%u\t%#lx\t%u\t%u\t%u\t%u\t%u\t%u\t",
+    DumpPrintf("\t%lu\t%u\t%#lx\t%#lx\t%u\t%u\t%#lx\t%u\t%u\t%u\t%u\t%u\t%u\t",
            Key.pid, Type, (ULONG)TypeFlags, (ULONG)ViewFlags, Width, DisplayType, (ULONG)ColumnState,
            Grouping, Relative, Sort, Aggregation, Condition, Operation);
     PrintText(Display);
-    printf("\t");
+    DumpPrintf("\t");
     PrintText(Invitation);
-    printf("\n");
+    DumpPrintf("\n");
     DumpEnumTypes(Desc, Canonical);
     CoTaskMemFree(Canonical);
     CoTaskMemFree(Display);
