@@ -129,12 +129,28 @@ ExpWriteHandleEntry(
     return FALSE;
 }
 
+VOID NTAPI ExpEnumHandleTableList(
+    _In_ VOID (NTAPI *)(_In_ PHANDLE_TABLE, _In_opt_ PVOID), _In_opt_ PVOID);
+
+static
+VOID
+NTAPI
+ExpWalkTableHandles(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_opt_ PVOID Context)
+{
+    PEXP_HANDLE_WALK Walk = Context;
+
+    Walk->UniqueProcessId = HandleTable->UniqueProcessId;
+    ExEnumHandleTable(HandleTable, ExpWriteHandleEntry, Walk, NULL);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
- * Walks every handle table in the system. The tables are chained in buckets, so
- * a bucket is held only for as long as it takes to reach the next table, and
- * the table's own lock keeps it alive while its handles are read.
+ * Walks every handle table in the system. The tables are chained in buckets,
+ * and a bucket is held while the handles of its tables are read, so no table
+ * leaves the list under the walk.
  */
 NTSTATUS
 NTAPI
@@ -145,10 +161,10 @@ ExpQueryHandleInformation(
     _In_ BOOLEAN Extended)
 {
     EXP_HANDLE_WALK Walk;
-    PLIST_ENTRY Entry;
-    PHANDLE_TABLE HandleTable;
-    ULONG Bucket;
+    PVOID Output = Buffer;
+    PMDL Mdl = NULL;
     ULONG Header;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
@@ -156,47 +172,53 @@ ExpQueryHandleInformation(
         (ULONG)FIELD_OFFSET(SYSTEM_HANDLE_INFORMATION_EX, Handles) :
         (ULONG)FIELD_OFFSET(SYSTEM_HANDLE_INFORMATION, Handles);
 
+    /* The entries are written with the tables locked, where the caller's pages must not fault */
+    if ((Buffer != NULL) && (Length != 0) && (ExGetPreviousMode() != KernelMode))
+    {
+        Status = ExLockUserBuffer(Buffer,
+                                  Length,
+                                  ExGetPreviousMode(),
+                                  IoWriteAccess,
+                                  &Output,
+                                  &Mdl);
+        if (!NT_SUCCESS(Status))
+        {
+            return Status;
+        }
+    }
+
     RtlZeroMemory(&Walk, sizeof(Walk));
 
     Walk.Extended = Extended;
     Walk.Length = (Length > Header) ? (Length - Header) : 0;
-    Walk.Buffer = ((Buffer != NULL) && (Length >= Header)) ?
-        ((PUCHAR)Buffer + Header) : NULL;
+    Walk.Buffer = ((Output != NULL) && (Length >= Header)) ?
+        ((PUCHAR)Output + Header) : NULL;
 
-    for (Entry = ExpFirstHandleTableEntry(&Bucket);
-         Entry != NULL;
-         Entry = ExpNextHandleTableEntry(&Bucket, Entry))
-    {
-        HandleTable = CONTAINING_RECORD(Entry, HANDLE_TABLE, HandleTableList);
-
-        Walk.UniqueProcessId = HandleTable->UniqueProcessId;
-
-        /* FIXME: nothing keeps a table on this list while it is being read */
-        KeEnterCriticalRegion();
-        ExEnumHandleTable(HandleTable, ExpWriteHandleEntry, &Walk, NULL);
-        KeLeaveCriticalRegion();
-    }
+    ExpEnumHandleTableList(ExpWalkTableHandles, &Walk);
 
     *ReturnLength = Header + Walk.Used;
 
-    if ((Buffer == NULL) || (Length < Header) || Walk.Overflow)
+    if ((Output == NULL) || (Length < Header) || Walk.Overflow)
     {
-        return STATUS_INFO_LENGTH_MISMATCH;
+        Status = STATUS_INFO_LENGTH_MISMATCH;
     }
-
-    if (Extended)
+    else if (Extended)
     {
-        PSYSTEM_HANDLE_INFORMATION_EX Info = Buffer;
+        PSYSTEM_HANDLE_INFORMATION_EX Info = Output;
 
         Info->NumberOfHandles = Walk.Count;
         Info->Reserved = 0;
+        Status = STATUS_SUCCESS;
     }
     else
     {
-        ((PSYSTEM_HANDLE_INFORMATION)Buffer)->NumberOfHandles = Walk.Count;
+        ((PSYSTEM_HANDLE_INFORMATION)Output)->NumberOfHandles = Walk.Count;
+        Status = STATUS_SUCCESS;
     }
 
-    return STATUS_SUCCESS;
+    ExUnlockUserBuffer(Mdl);
+
+    return Status;
 }
 
 /*

@@ -548,6 +548,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
     ntos_io/IoReadWrite_user.c
+    ntos_ex/ExHandleInformation_user.c
     ntos_kd/KdLiveDump_user.c
     ntos_kd/NtSystemDebugControl.c
     ntos_mm/MmMapLockedPagesSpecifyCache_user.c

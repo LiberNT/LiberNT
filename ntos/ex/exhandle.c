@@ -682,12 +682,21 @@ ExpBlockOnLockedHandleEntry(
     KeDelayExecutionThread(KernelMode, FALSE, &Interval);
 }
 
+/* The process identifier is stored in the table after it is linked, so it cannot pick the bucket */
+static
+ULONG
+ExpHandleTableBucket(
+    _In_ PHANDLE_TABLE HandleTable)
+{
+    return (ULONG)(((ULONG_PTR)HandleTable >> 4) % HANDLE_TABLE_LIST_BUCKETS);
+}
+
 static
 VOID
 ExpLinkHandleTable(
     _Inout_ PHANDLE_TABLE HandleTable)
 {
-    ULONG Bucket = HandleTable->UniqueProcessId % HANDLE_TABLE_LIST_BUCKETS;
+    ULONG Bucket = ExpHandleTableBucket(HandleTable);
 
     ExAcquirePushLockExclusive(&ExpHandleTableBuckets[Bucket].Lock);
     InsertTailList(&ExpHandleTableBuckets[Bucket].ListHead,
@@ -700,7 +709,7 @@ VOID
 ExpUnlinkHandleTable(
     _Inout_ PHANDLE_TABLE HandleTable)
 {
-    ULONG Bucket = HandleTable->UniqueProcessId % HANDLE_TABLE_LIST_BUCKETS;
+    ULONG Bucket = ExpHandleTableBucket(HandleTable);
 
     if (HandleTable->HandleTableList.Flink == NULL)
     {
@@ -974,6 +983,34 @@ ExpNextHandleTableEntry(
 
     *Bucket = HANDLE_TABLE_LIST_BUCKETS;
     return NULL;
+}
+
+VOID
+NTAPI
+ExpEnumHandleTableList(
+    _In_ VOID (NTAPI *Routine)(_In_ PHANDLE_TABLE HandleTable, _In_opt_ PVOID Context),
+    _In_opt_ PVOID Context)
+{
+    PLIST_ENTRY Entry;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    for (Index = 0; Index < HANDLE_TABLE_LIST_BUCKETS; Index++)
+    {
+        KeEnterCriticalRegion();
+        ExAcquirePushLockShared(&ExpHandleTableBuckets[Index].Lock);
+
+        for (Entry = ExpHandleTableBuckets[Index].ListHead.Flink;
+             Entry != &ExpHandleTableBuckets[Index].ListHead;
+             Entry = Entry->Flink)
+        {
+            Routine(CONTAINING_RECORD(Entry, HANDLE_TABLE, HandleTableList), Context);
+        }
+
+        ExReleasePushLockShared(&ExpHandleTableBuckets[Index].Lock);
+        KeLeaveCriticalRegion();
+    }
 }
 
 PHANDLE_TABLE
