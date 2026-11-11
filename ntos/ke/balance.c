@@ -67,9 +67,10 @@ KiRelieveStarvedThread(
     KiSetThreadQuantum(Thread, Thread->QuantumReset * 2);
     Thread->Preempted = FALSE;
 
+    /* Off the queue, so no longer ready, before anyone else can look at it */
+    Thread->State = DeferredReady;
     KiReleasePrcbLock(Prcb);
 
-    Thread->State = DeferredReady;
     Thread->AdjustReason = AdjustNone;
     KiDeferredReadyThread(Thread);
 }

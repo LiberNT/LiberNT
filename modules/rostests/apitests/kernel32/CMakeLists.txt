@@ -166,6 +166,7 @@ list(APPEND SOURCE
     SleepTickRounding.c
     SwitchToThreadPriority.c
     QueryInterruptTimePrecise.c
+    ProcessAffinityQueued.c
     SwitchToThreadRoundRobin.c
     ThreadPowerThrottling.c
     ThreadPreferredUILanguages.c

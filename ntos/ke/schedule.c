@@ -698,6 +698,34 @@ KiSwapThread(
     return WaitStatus;
 }
 
+/* The queue may change between reading NextProcessor and locking it, so both are checked again under the lock */
+static
+PKPRCB
+KiAcquireReadyThreadPrcb(
+    _In_ PKTHREAD Thread)
+{
+    PKPRCB Prcb;
+    ULONG Processor;
+
+    for (;;)
+    {
+        Processor = Thread->NextProcessor;
+        Prcb = KiProcessorBlock[Processor];
+        KiAcquirePrcbLock(Prcb);
+
+        if (Thread->State != Ready)
+        {
+            KiReleasePrcbLock(Prcb);
+            return NULL;
+        }
+
+        if (Thread->NextProcessor == Processor)
+            return Prcb;
+
+        KiReleasePrcbLock(Prcb);
+    }
+}
+
 /*
  * Moves a thread to a new priority, honouring whichever floors are in force.
  * The caller holds the thread lock, and the PRCB lock of the processor the
@@ -730,13 +758,9 @@ KiSetPriorityThread(
              * A queued thread has to change queue, and the summary bit of the
              * queue it leaves goes with it when that queue empties.
              */
-            Processor = Thread->NextProcessor;
-            Prcb = KiProcessorBlock[Processor];
-            KiAcquirePrcbLock(Prcb);
-
-            if (Thread->State != Ready)
+            Prcb = KiAcquireReadyThreadPrcb(Thread);
+            if (Prcb == NULL)
             {
-                KiReleasePrcbLock(Prcb);
                 Thread->Priority = (SCHAR)Priority;
                 break;
             }
@@ -747,6 +771,7 @@ KiSetPriorityThread(
 
             Thread->Priority = (SCHAR)Priority;
             Thread->Preempted = FALSE;
+            Thread->State = DeferredReady;
             KiReleasePrcbLock(Prcb);
 
             /* Placed again on the way out of the dispatcher, where it can displace the running thread */
@@ -838,14 +863,14 @@ KiSetAffinityThread(
     {
         case Ready:
         {
-            Processor = Thread->NextProcessor;
-            if (Affinity & AFFINITY_MASK(Processor))
+            if (Affinity & AFFINITY_MASK(Thread->NextProcessor))
                 break;
 
-            Prcb = KiProcessorBlock[Processor];
-            KiAcquirePrcbLock(Prcb);
+            Prcb = KiAcquireReadyThreadPrcb(Thread);
+            if (Prcb == NULL)
+                break;
 
-            if (Thread->State != Ready)
+            if (Affinity & Prcb->SetMember)
             {
                 KiReleasePrcbLock(Prcb);
                 break;
@@ -855,9 +880,9 @@ KiSetAffinityThread(
             if (RemoveEntryList(&Thread->WaitListEntry))
                 Prcb->ReadySummary ^= PRIORITY_MASK(Thread->Priority);
 
+            Thread->State = DeferredReady;
             KiReleasePrcbLock(Prcb);
 
-            Thread->State = DeferredReady;
             KiDeferredReadyThread(Thread);
             break;
         }
@@ -898,7 +923,11 @@ KiSetAffinityThread(
             Prcb = KiProcessorBlock[Processor];
             KiAcquirePrcbLock(Prcb);
             if (Prcb->NextThread == NULL)
+            {
+                /* What it picks is off the ready queue from here on, so it must not still look ready */
                 Prcb->NextThread = KiSelectNextThread(Prcb);
+                Prcb->NextThread->State = Standby;
+            }
             KiReleasePrcbLock(Prcb);
             KiRescheduleThread(TRUE, Processor);
             break;
@@ -1285,9 +1314,9 @@ KiBalanceReadyQueues(
         if (RemoveEntryList(&Thread->WaitListEntry))
             Source->ReadySummary ^= PRIORITY_MASK(Priority);
 
+        Thread->State = DeferredReady;
         KiReleasePrcbLock(Source);
 
-        Thread->State = DeferredReady;
         Thread->NextProcessor = Target->Number;
         Thread->AdjustReason = AdjustNone;
         KiDeferredReadyThread(Thread);
