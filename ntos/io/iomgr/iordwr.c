@@ -24,6 +24,20 @@ typedef struct _IOP_REQUEST
     BOOLEAN Locked;
 } IOP_REQUEST, *PIOP_REQUEST;
 
+/* TODO: FileIdGlobalTxDirectoryInformation and the FileIdExtd classes are refused until a file system answers them */
+static const UCHAR IopQueryDirectoryLength[FileMaximumInformation] =
+{
+    [FileDirectoryInformation] = sizeof(FILE_DIRECTORY_INFORMATION),
+    [FileFullDirectoryInformation] = sizeof(FILE_FULL_DIR_INFORMATION),
+    [FileBothDirectoryInformation] = sizeof(FILE_BOTH_DIR_INFORMATION),
+    [FileNamesInformation] = sizeof(FILE_NAMES_INFORMATION),
+    [FileObjectIdInformation] = sizeof(FILE_OBJECTID_INFORMATION),
+    [FileQuotaInformation] = sizeof(FILE_QUOTA_INFORMATION),
+    [FileReparsePointInformation] = sizeof(FILE_REPARSE_POINT_INFORMATION),
+    [FileIdBothDirectoryInformation] = sizeof(FILE_ID_BOTH_DIR_INFORMATION),
+    [FileIdFullDirectoryInformation] = sizeof(FILE_ID_FULL_DIR_INFORMATION)
+};
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -1637,6 +1651,17 @@ IopQueryDirectoryFile(
     PMDL Mdl;
 
     PAGED_CODE();
+
+    if ((ULONG)FileInformationClass >= FileMaximumInformation ||
+        IopQueryDirectoryLength[FileInformationClass] == 0)
+    {
+        return STATUS_INVALID_INFO_CLASS;
+    }
+
+    if (Length < IopQueryDirectoryLength[FileInformationClass])
+    {
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
 
     RtlInitEmptyUnicodeString(&CapturedName, NULL, 0);
 
