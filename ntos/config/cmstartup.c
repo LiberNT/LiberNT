@@ -11,6 +11,18 @@
 
 #include "cmpriv.h"
 
+#if DBG
+#define CMP_KERNEL_FLAVOR L" Checked"
+#else
+#define CMP_KERNEL_FLAVOR L" Free"
+#endif
+
+#ifdef CONFIG_SMP
+#define CMP_KERNEL_TYPE L"Multiprocessor" CMP_KERNEL_FLAVOR
+#else
+#define CMP_KERNEL_TYPE L"Uniprocessor" CMP_KERNEL_FLAVOR
+#endif
+
 /* GLOBALS ********************************************************************/
 
 /*
@@ -96,6 +108,8 @@ static UNICODE_STRING CmpMachineName =
     RTL_CONSTANT_STRING(L"\\REGISTRY\\MACHINE");
 static UNICODE_STRING CmpUserName =
     RTL_CONSTANT_STRING(L"\\REGISTRY\\USER");
+static UNICODE_STRING CmpAppHiveRootName =
+    RTL_CONSTANT_STRING(L"\\REGISTRY\\A");
 static UNICODE_STRING CmpRegistryRootName =
     RTL_CONSTANT_STRING(L"\\REGISTRY");
 static UNICODE_STRING CmpRegistryRootKeyName =
@@ -805,6 +819,7 @@ CmpSetVersionData(VOID)
 {
     UNICODE_STRING VersionPath = RTL_CONSTANT_STRING(
         L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+    UNICODE_STRING KernelType = RTL_CONSTANT_STRING(CMP_KERNEL_TYPE);
     UNICODE_STRING BuildLab;
     UNICODE_STRING Minor;
     UNICODE_STRING Text;
@@ -837,6 +852,7 @@ CmpSetVersionData(VOID)
 
     CmpWriteNumberAsString(KeyHandle, L"CurrentBuildNumber", NtBuildNumber);
     CmpWriteNumberAsString(KeyHandle, L"CurrentBuild", NtBuildNumber);
+    CmpWriteStringValue(KeyHandle, L"CurrentType", &KernelType);
 
     RtlInitAnsiString(&Narrow, NtBuildLab);
 
@@ -854,6 +870,66 @@ CmpSetVersionData(VOID)
     CmpWriteStringValue(KeyHandle, L"SystemRoot", &NtSystemRoot);
 
     ZwClose(KeyHandle);
+}
+
+static
+VOID
+CmpMarkPerformanceKeys(VOID)
+{
+    static const PCWSTR Names[] =
+    {
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\009",
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Perflib\\CurrentLanguage"
+    };
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PCM_KEY_CONTROL_BLOCK Kcb;
+    UNICODE_STRING Name;
+    PCM_KEY_BODY KeyBody;
+    PCM_KEY_NODE Node;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(Names); i++)
+    {
+        RtlInitUnicodeString(&Name, Names[i]);
+        InitializeObjectAttributes(&ObjectAttributes,
+                                   &Name,
+                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                                   NULL,
+                                   NULL);
+
+        Status = ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
+        if (!NT_SUCCESS(Status)) continue;
+
+        Status = ObReferenceObjectByHandle(KeyHandle,
+                                           0,
+                                           CmpKeyObjectType,
+                                           KernelMode,
+                                           (PVOID*)&KeyBody,
+                                           NULL);
+        ZwClose(KeyHandle);
+        if (!NT_SUCCESS(Status)) continue;
+
+        CmpLockRegistryExclusive();
+
+        Kcb = KeyBody->KeyControlBlock;
+        Node = (Kcb != NULL) ? (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell) : NULL;
+        if (Node != NULL)
+        {
+            if ((Node->Flags & KEY_PREDEF_HANDLE) == 0 &&
+                HvMarkCellDirty(Kcb->KeyHive, Kcb->KeyCell, FALSE))
+            {
+                Node->Flags |= KEY_PREDEF_HANDLE;
+            }
+
+            Kcb->Flags = Node->Flags;
+            HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+        }
+
+        CmpUnlockRegistry();
+        ObDereferenceObject(KeyBody);
+    }
 }
 
 /*
@@ -951,6 +1027,7 @@ CmpInitializeHiveList(VOID)
     if (sizeof(PVOID) == sizeof(ULONGLONG)) CmpCreateWow64Links();
 
     CmpSetVersionData();
+    CmpMarkPerformanceKeys();
 }
 
 /*
@@ -1112,6 +1189,10 @@ CmInitSystem1(VOID)
     ZwClose(KeyHandle);
 
     Status = CmpCreateVolatileKey(&CmpUserName, &KeyHandle);
+    if (!NT_SUCCESS(Status)) return FALSE;
+    ZwClose(KeyHandle);
+
+    Status = CmpCreateVolatileKey(&CmpAppHiveRootName, &KeyHandle);
     if (!NT_SUCCESS(Status)) return FALSE;
     ZwClose(KeyHandle);
 
