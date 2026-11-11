@@ -94,7 +94,7 @@ IopDisassociateThreadIrp(VOID)
     PIRP Irp;
     KIRQL OldIrql;
 
-    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
 
     while (!IsListEmpty(&Thread->IrpList))
     {
@@ -105,7 +105,7 @@ IopDisassociateThreadIrp(VOID)
         Irp->Tail.Overlay.Thread = NULL;
     }
 
-    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+    KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
 }
 
 /* A port-bound request with no event and no APC belongs to its file, not to the thread that issued it */
@@ -780,6 +780,23 @@ IopFinalizeAsynchronousIo(
     return Status;
 }
 
+/* The request belongs to the calling thread, the only one that takes it off its list */
+static
+BOOLEAN
+IopIrpOnThreadList(
+    _In_ PIRP Irp)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    BOOLEAN Queued;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
+    Queued = !IsListEmpty(&Irp->ThreadListEntry);
+    KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
+
+    return Queued;
+}
+
 VOID
 NTAPI
 IopAbortInterruptedIrp(
@@ -794,7 +811,7 @@ IopAbortInterruptedIrp(
 
     /* Completion sets the event before it frees the packet, and cannot run on this thread at APC_LEVEL */
     /* TODO: a thread-agnostic request is not on the thread's list and is left in flight here */
-    if (KeReadStateEvent(EventObject) || IsListEmpty(&Irp->ThreadListEntry))
+    if (KeReadStateEvent(EventObject) || !IopIrpOnThreadList(Irp))
     {
         KeLowerIrql(OldIrql);
         return;
@@ -820,7 +837,7 @@ IopAbortInterruptedIrp(
                                  &Timeout) == STATUS_TIMEOUT)
     {
         KeRaiseIrql(APC_LEVEL, &OldIrql);
-        Cancelled = KeReadStateEvent(EventObject) || IsListEmpty(&Irp->ThreadListEntry);
+        Cancelled = KeReadStateEvent(EventObject) || !IopIrpOnThreadList(Irp);
         KeLowerIrql(OldIrql);
 
         if (Cancelled) return;

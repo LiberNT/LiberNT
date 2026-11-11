@@ -49,13 +49,16 @@ VOID
 IopQueueIrpToThread(IN PIRP Irp)
 {
     PETHREAD Thread = Irp->Tail.Overlay.Thread;
+    KIRQL OldIrql;
 
     /* Disable special kernel APCs so we can't race with IopCompleteRequest.
      * IRP's thread must be the current thread */
     KeEnterGuardedRegionThread(&Thread->Tcb);
 
     /* Insert it into the list */
+    KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
     InsertHeadList(&Thread->IrpList, &Irp->ThreadListEntry);
+    KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
 
     /* Leave the guarded region */
     KeLeaveGuardedRegionThread(&Thread->Tcb);
@@ -65,6 +68,10 @@ FORCEINLINE
 VOID
 IopUnQueueIrpFromThread(IN PIRP Irp)
 {
+    /* The list changes only in its thread's context; the completion APC overlays Tail.Overlay.Thread */
+    PETHREAD Thread = PsGetCurrentThread();
+    KIRQL OldIrql;
+
     /* Special kernel APCs must be disabled so we can't race with
      * IopCompleteRequest (or because we are called from there) */
     ASSERT(KeAreAllApcsDisabled());
@@ -72,8 +79,10 @@ IopUnQueueIrpFromThread(IN PIRP Irp)
     /* Remove it from the list and reset it */
     if (IsListEmpty(&Irp->ThreadListEntry))
         return;
+    KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
     RemoveEntryList(&Irp->ThreadListEntry);
     InitializeListHead(&Irp->ThreadListEntry);
+    KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
 }
 
 static

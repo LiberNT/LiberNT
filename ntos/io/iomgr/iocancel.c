@@ -14,14 +14,15 @@
 
 static KSPIN_LOCK IopCancelSpinLock;
 
-typedef struct _IOP_CANCEL_SWEEP
+typedef struct _IOP_CANCEL_FILTER
 {
     PFILE_OBJECT FileObject;
     PIO_STATUS_BLOCK Match;
-    KEVENT Done;
-    LONG Pending;
-    LONG Found;
-} IOP_CANCEL_SWEEP, *PIOP_CANCEL_SWEEP;
+    PETHREAD Thread;
+    PEPROCESS Process;
+    BOOLEAN SynchronousOnly;
+    BOOLEAN Retry;
+} IOP_CANCEL_FILTER, *PIOP_CANCEL_FILTER;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -32,13 +33,27 @@ IoInitCancelHandling(VOID)
     KeInitializeSpinLock(&IopCancelSpinLock);
 }
 
-/* A cancel routine claimed under the file's list lock cannot see its request complete; it runs once the lock is dropped */
+static
 BOOLEAN
-IopCancelFileIrps(
-    _In_ PFILE_OBJECT FileObject,
-    _In_opt_ PIO_STATUS_BLOCK Match,
-    _In_opt_ PETHREAD Thread,
-    _In_opt_ PEPROCESS Process)
+IopIrpMatchesFilter(
+    _In_ PIRP Irp,
+    _In_ PIOP_CANCEL_FILTER Filter)
+{
+    if (Filter->FileObject != NULL && Irp->Tail.Overlay.OriginalFileObject != Filter->FileObject) return FALSE;
+    if (Filter->Match != NULL && Irp->UserIosb != Filter->Match) return FALSE;
+    if (Filter->Thread != NULL && Irp->Tail.Overlay.Thread != Filter->Thread) return FALSE;
+    if (Filter->Process != NULL && PsGetThreadProcess(Irp->Tail.Overlay.Thread) != Filter->Process) return FALSE;
+    if (Filter->SynchronousOnly && !IsIrpSynchronous(Irp, Irp->Tail.Overlay.OriginalFileObject)) return FALSE;
+    return TRUE;
+}
+
+/* A cancel routine claimed under the list lock cannot see its request complete; it runs once the lock is dropped */
+static
+BOOLEAN
+IopCancelListIrps(
+    _In_ PLIST_ENTRY List,
+    _In_ PKSPIN_LOCK ListLock,
+    _In_ PIOP_CANCEL_FILTER Filter)
 {
     PDRIVER_CANCEL CancelRoutine;
     BOOLEAN Found = FALSE;
@@ -49,36 +64,28 @@ IopCancelFileIrps(
 
     for (;;)
     {
-        KeAcquireSpinLock(&FileObject->IrpListLock, &OldIrql);
+        KeAcquireSpinLock(ListLock, &OldIrql);
 
-        for (Entry = FileObject->IrpList.Flink;
-             Entry != &FileObject->IrpList;
-             Entry = Entry->Flink)
+        for (Entry = List->Flink; Entry != List; Entry = Entry->Flink)
         {
             Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
 
-            if (Match != NULL && Irp->UserIosb != Match) continue;
-            if (Thread != NULL && Irp->Tail.Overlay.Thread != Thread) continue;
-            if (Process != NULL &&
-                PsGetThreadProcess(Irp->Tail.Overlay.Thread) != Process)
-            {
-                continue;
-            }
+            if (!IopIrpMatchesFilter(Irp, Filter)) continue;
 
             Found = TRUE;
-            if (!Irp->Cancel) break;
+            if (Filter->Retry ? (Irp->CancelRoutine != NULL) : !Irp->Cancel) break;
         }
 
-        if (Entry == &FileObject->IrpList)
+        if (Entry == List)
         {
-            KeReleaseSpinLock(&FileObject->IrpListLock, OldIrql);
+            KeReleaseSpinLock(ListLock, OldIrql);
             return Found;
         }
 
         IoAcquireCancelSpinLock(&CancelIrql);
         Irp->Cancel = TRUE;
         CancelRoutine = IoSetCancelRoutine(Irp, NULL);
-        KeReleaseSpinLockFromDpcLevel(&FileObject->IrpListLock);
+        KeReleaseSpinLockFromDpcLevel(ListLock);
 
         if (CancelRoutine == NULL || Irp->CurrentLocation > Irp->StackCount + 1)
         {
@@ -91,11 +98,18 @@ IopCancelFileIrps(
     }
 }
 
-/*
- * The list belongs to the calling thread and changes only in its context, so
- * holding off its completion APCs keeps every entry in place, and the cancel
- * routines run at APC_LEVEL, below which a file system may take its locks.
- */
+BOOLEAN
+IopCancelFileIrps(
+    _In_ PFILE_OBJECT FileObject,
+    _In_opt_ PIO_STATUS_BLOCK Match,
+    _In_opt_ PETHREAD Thread,
+    _In_opt_ PEPROCESS Process)
+{
+    IOP_CANCEL_FILTER Filter = { NULL, Match, Thread, Process, FALSE, FALSE };
+
+    return IopCancelListIrps(&FileObject->IrpList, &FileObject->IrpListLock, &Filter);
+}
+
 static
 BOOLEAN
 IopCancelThreadIrpsForFile(
@@ -103,132 +117,47 @@ IopCancelThreadIrpsForFile(
     _In_opt_ PIO_STATUS_BLOCK Match)
 {
     PETHREAD Thread = PsGetCurrentThread();
-    BOOLEAN Found = FALSE;
-    PLIST_ENTRY Entry;
-    KIRQL OldIrql;
-    PIRP Irp;
+    IOP_CANCEL_FILTER Filter = { FileObject, Match, NULL, NULL, FALSE, FALSE };
 
-    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
-
-    KeRaiseIrql(APC_LEVEL, &OldIrql);
-
-    Entry = Thread->IrpList.Flink;
-    while (Entry != &Thread->IrpList)
-    {
-        Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
-        Entry = Entry->Flink;
-
-        ASSERT(Irp->Tail.Overlay.Thread == Thread);
-        if (Irp->Tail.Overlay.OriginalFileObject != FileObject) continue;
-        if (Match != NULL && Irp->UserIosb != Match) continue;
-
-        Found = TRUE;
-        IoCancelIrp(Irp);
-    }
-
-    KeLowerIrql(OldIrql);
-
-    return Found;
+    return IopCancelListIrps(&Thread->IrpList, &Thread->IrpListLock, &Filter);
 }
 
-static
-VOID
-IopEndCancelSweep(
-    _In_ PKAPC Apc)
-{
-    PIOP_CANCEL_SWEEP Sweep = Apc->SystemArgument1;
-
-    ExFreePoolWithTag(Apc, TAG_IO);
-    if (InterlockedDecrement(&Sweep->Pending) == 0)
-        KeSetEvent(&Sweep->Done, IO_NO_INCREMENT, FALSE);
-}
-
-static
-VOID
-NTAPI
-IopCancelSweepApc(
-    _In_ PKAPC Apc,
-    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
-    _Inout_ PVOID *NormalContext,
-    _Inout_ PVOID *SystemArgument1,
-    _Inout_ PVOID *SystemArgument2)
-{
-    PIOP_CANCEL_SWEEP Sweep = *SystemArgument1;
-
-    UNREFERENCED_PARAMETER(NormalRoutine);
-    UNREFERENCED_PARAMETER(NormalContext);
-    UNREFERENCED_PARAMETER(SystemArgument2);
-
-    if (IopCancelThreadIrpsForFile(Sweep->FileObject, Sweep->Match))
-        InterlockedExchange(&Sweep->Found, TRUE);
-    Apc->SystemArgument1 = Sweep;
-    IopEndCancelSweep(Apc);
-}
-
-static
-VOID
-NTAPI
-IopCancelSweepRundown(
-    _In_ PKAPC Apc)
-{
-    IopEndCancelSweep(Apc);
-}
-
-/*
- * Another thread's request list changes only in that thread's context, so each
- * thread of the process that has requests walks its own list in a special
- * kernel APC and the caller waits for all of them to have looked.
- */
 static
 BOOLEAN
-IopCancelOtherThreadsIrps(
-    _In_ PFILE_OBJECT FileObject,
-    _In_opt_ PIO_STATUS_BLOCK Match)
+IopThreadHasIrps(
+    _In_ PETHREAD Thread)
 {
-    PETHREAD Current = PsGetCurrentThread();
-    PEPROCESS Process = PsGetCurrentProcess();
-    IOP_CANCEL_SWEEP Sweep;
+    BOOLEAN HasIrps;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
+    HasIrps = !IsListEmpty(&Thread->IrpList);
+    KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
+
+    return HasIrps;
+}
+
+/* Another thread's request list is held still by its IrpListLock */
+static
+BOOLEAN
+IopCancelProcessThreadIrps(
+    _In_ PEPROCESS Process,
+    _In_ PIOP_CANCEL_FILTER Filter)
+{
+    BOOLEAN Found = FALSE;
     PETHREAD Thread;
-    PKAPC Apc;
 
     PAGED_CODE();
-
-    Sweep.FileObject = FileObject;
-    Sweep.Match = Match;
-    Sweep.Pending = 1;
-    Sweep.Found = FALSE;
-    KeInitializeEvent(&Sweep.Done, NotificationEvent, FALSE);
 
     for (Thread = PsGetNextProcessThread(Process, NULL);
          Thread != NULL;
          Thread = PsGetNextProcessThread(Process, Thread))
     {
-        if (Thread == Current || IsListEmpty(&Thread->IrpList)) continue;
-
-        Apc = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Apc), TAG_IO);
-        if (Apc == NULL) continue;
-
-        KeInitializeApc(Apc,
-                        &Thread->Tcb,
-                        OriginalApcEnvironment,
-                        IopCancelSweepApc,
-                        IopCancelSweepRundown,
-                        NULL,
-                        KernelMode,
-                        NULL);
-
-        InterlockedIncrement(&Sweep.Pending);
-        if (!KeInsertQueueApc(Apc, &Sweep, NULL, IO_NO_INCREMENT))
-        {
-            InterlockedDecrement(&Sweep.Pending);
-            ExFreePoolWithTag(Apc, TAG_IO);
-        }
+        if (IopCancelListIrps(&Thread->IrpList, &Thread->IrpListLock, Filter))
+            Found = TRUE;
     }
 
-    if (InterlockedDecrement(&Sweep.Pending) != 0)
-        KeWaitForSingleObject(&Sweep.Done, Executive, KernelMode, FALSE, NULL);
-
-    return (BOOLEAN)Sweep.Found;
+    return Found;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -286,49 +215,32 @@ NTAPI
 IoCancelThreadIo(
     _In_ PETHREAD Thread)
 {
+    IOP_CANCEL_FILTER Filter = { NULL, NULL, NULL, NULL, FALSE, FALSE };
     LARGE_INTEGER Interval;
     PLIST_ENTRY Entry;
     ULONG Attempts = 0;
     KIRQL OldIrql;
-    PIRP Irp;
 
     PAGED_CODE();
 
-    KeRaiseIrql(APC_LEVEL, &OldIrql);
-
-    Entry = Thread->IrpList.Flink;
-    while (Entry != &Thread->IrpList)
-    {
-        Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
-        Entry = Entry->Flink;
-
-        IoCancelIrp(Irp);
-    }
-
-    KeLowerIrql(OldIrql);
+    IopCancelListIrps(&Thread->IrpList, &Thread->IrpListLock, &Filter);
 
     Interval.QuadPart = -100 * 1000 * 10;
 
-    while (!IsListEmpty(&Thread->IrpList))
+    while (IopThreadHasIrps(Thread))
     {
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
 
         Attempts++;
         if (Attempts < 10) continue;
 
-        KeRaiseIrql(APC_LEVEL, &OldIrql);
+        KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
+        for (Entry = Thread->IrpList.Flink; Entry != &Thread->IrpList; Entry = Entry->Flink)
+            DPRINT1("I/O: request %p would not cancel on thread exit\n", CONTAINING_RECORD(Entry, IRP, ThreadListEntry));
+        KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
 
-        Entry = Thread->IrpList.Flink;
-        while (Entry != &Thread->IrpList)
-        {
-            Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
-            Entry = Entry->Flink;
-
-            DPRINT1("I/O: request %p would not cancel on thread exit\n", Irp);
-            IoCancelIrp(Irp);
-        }
-
-        KeLowerIrql(OldIrql);
+        Filter.Retry = TRUE;
+        IopCancelListIrps(&Thread->IrpList, &Thread->IrpListLock, &Filter);
 
         Attempts = 0;
     }
@@ -474,6 +386,7 @@ NtCancelIoFileEx(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     IO_STATUS_BLOCK KernelIosb;
     PFILE_OBJECT FileObject;
+    IOP_CANCEL_FILTER Filter = { NULL, NULL, NULL, NULL, FALSE, FALSE };
     BOOLEAN Found = FALSE;
     NTSTATUS Status;
 
@@ -500,11 +413,9 @@ NtCancelIoFileEx(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Found = IopCancelThreadIrpsForFile(FileObject, IoRequestToCancel);
-    if (IopCancelOtherThreadsIrps(FileObject, IoRequestToCancel))
-    {
-        Found = TRUE;
-    }
+    Filter.FileObject = FileObject;
+    Filter.Match = IoRequestToCancel;
+    Found = IopCancelProcessThreadIrps(PsGetCurrentProcess(), &Filter);
     if (IopCancelFileIrps(FileObject, IoRequestToCancel, NULL, PsGetCurrentProcess()))
     {
         Found = TRUE;
@@ -552,13 +463,11 @@ NtCancelSynchronousIoFile(
     _Out_ PIO_STATUS_BLOCK IoStatusBlock)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    IOP_CANCEL_FILTER Filter = { NULL, NULL, NULL, NULL, FALSE, FALSE };
     IO_STATUS_BLOCK KernelIosb;
     BOOLEAN Found = FALSE;
-    PLIST_ENTRY Entry;
     PETHREAD Thread;
     NTSTATUS Status;
-    KIRQL OldIrql;
-    PIRP Irp;
 
     PAGED_CODE();
 
@@ -589,28 +498,9 @@ NtCancelSynchronousIoFile(
         return STATUS_ACCESS_DENIED;
     }
 
-    /* FIXME: another thread's list is walked without anything that stops that thread from changing it */
-    KeRaiseIrql(APC_LEVEL, &OldIrql);
-
-    Entry = Thread->IrpList.Flink;
-    while (Entry != &Thread->IrpList)
-    {
-        Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
-        Entry = Entry->Flink;
-
-        if (!IsIrpSynchronous(Irp, Irp->Tail.Overlay.OriginalFileObject)) continue;
-        if (IoRequestToCancel != NULL && Irp->UserIosb != IoRequestToCancel)
-        {
-            continue;
-        }
-
-        Found = TRUE;
-        IoCancelIrp(Irp);
-
-        if (IoRequestToCancel != NULL) break;
-    }
-
-    KeLowerIrql(OldIrql);
+    Filter.Match = IoRequestToCancel;
+    Filter.SynchronousOnly = TRUE;
+    Found = IopCancelListIrps(&Thread->IrpList, &Thread->IrpListLock, &Filter);
 
     ObDereferenceObject(Thread);
 

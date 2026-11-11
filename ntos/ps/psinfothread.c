@@ -224,6 +224,7 @@ NtQueryInformationThread(
     NTSTATUS Status;
     PVOID Pointer;
     ULONG Value;
+    KIRQL OldIrql;
     GUID Container;
 
     PAGED_CODE();
@@ -357,7 +358,9 @@ NtQueryInformationThread(
             break;
 
         case ThreadIsIoPending:
+            KeAcquireSpinLock(&Thread->IrpListLock, &OldIrql);
             Value = IsListEmpty(&Thread->IrpList) ? 0 : 1;
+            KeReleaseSpinLock(&Thread->IrpListLock, OldIrql);
 
             Status = PspReturnThreadInformation(ThreadInformation,
                                                 ThreadInformationLength,
