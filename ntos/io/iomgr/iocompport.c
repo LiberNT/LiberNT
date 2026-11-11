@@ -602,8 +602,6 @@ NtRemoveIoCompletionEx(
 
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(Alertable);
-
     if (Count == 0) return STATUS_INVALID_PARAMETER;
 
     if (PreviousMode != KernelMode)
@@ -647,8 +645,9 @@ NtRemoveIoCompletionEx(
 
         NoWait.QuadPart = 0;
 
-        Entry = KeRemoveQueue(Queue,
+        Entry = KiRemoveQueue(Queue,
                               PreviousMode,
+                              (Removed == 0) ? Alertable : FALSE,
                               (Removed == 0)
                                   ? ((Timeout != NULL) ? &CapturedTimeout
                                                        : NULL)

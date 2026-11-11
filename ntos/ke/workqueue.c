@@ -93,7 +93,8 @@ KiHandQueueEntryToWaiter(
  *
  * Answers the entry, or NULL with the reason in Status. The caller is on the
  * queue's thread list when this returns either way, and is counted among the
- * threads the queue considers active.
+ * threads the queue considers active, unless an APC or alert ended the call
+ * before it joined the queue.
  */
 static
 PLIST_ENTRY
@@ -137,6 +138,15 @@ KiDequeueOrWait(
         PreviousQueue = Thread->Queue;
         if (PreviousQueue != Queue)
         {
+            /* A thread not yet serving this queue takes a pending APC before work and stays where it was */
+            WaitCheck = KiCheckAlertability(Thread, Alertable, WaitMode);
+            if (WaitCheck != STATUS_WAIT_0)
+            {
+                KiReleaseDispatcherLock(Thread->WaitIrql);
+                *Status = WaitCheck;
+                return NULL;
+            }
+
             /*
              * Changing queues. The one being left has to be told, because a
              * thread it was counting is gone and one of its waiters may now
