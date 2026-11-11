@@ -41,6 +41,7 @@
 #define TAG_PNP_ID          'IPtS'
 #define TAG_DUMP_CONTEXT    'CptS'
 #define TAG_DMA_BUFFER      'DBtS'
+#define TAG_RESET_REQUEST   'RRtS'
 
 typedef enum
 {
@@ -215,7 +216,42 @@ typedef struct _FDO_DEVICE_EXTENSION
     DEVICE_POWER_STATE DevicePowerState;
     SYSTEM_POWER_STATE SystemPowerState;
     PORT_USAGE_COUNTS Usage;
+
+    KSPIN_LOCK ActiveLock;
+    LIST_ENTRY ActiveRequests;
+    KTIMER TimeoutTimer;
+    KDPC TimeoutDpc;
+    BOOLEAN TimeoutArmed;
+    volatile BOOLEAN ResetActive;
+    BOOLEAN BusResetActive;
+    LONG BusyCompletions;
+    PIO_WORKITEM ResetWorkItem;
+    KEVENT ResetIdle;
+    UCHAR ResetPathId;
+    UCHAR ResetTargetId;
+    UCHAR ResetLun;
+    ULONG ResetTimeOutValue;
+    BOOLEAN TimeoutsStopped;
+    KEVENT TimeoutsStopEvent;
+    volatile LONG RecoveringRequests;
+    KEVENT Recovered;
+    EX_SPIN_LOCK ChannelLock;
+    KDPC CompleteRequestsDpc;
+    volatile LONG64 StartSequence;
+    KTIMER BusyRetryTimer;
+    KDPC BusyRetryDpc;
+    SLIST_HEADER CompleteRequestsFree;
+    SLIST_HEADER CompleteRequestsPending;
+    PVOID CompleteRequestsPool;
 } FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
+
+FORCEINLINE
+BOOLEAN
+PortStartIoSerialized(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension)
+{
+    return !DeviceExtension->Miniport.PortConfig.VirtualDevice && (DeviceExtension->PerfConcurrentChannels <= 1);
+}
 
 NTSTATUS PortInitializeDma(_In_ PFDO_DEVICE_EXTENSION FdoExtension,
                           _In_ PPORT_CONFIGURATION_INFORMATION Config);
@@ -252,6 +288,10 @@ typedef struct _PDO_DEVICE_EXTENSION
     CHAR FirmwareRevision[STOR_FIRMWARE_REVISION_LENGTH + 1];
     struct _PORT_DUMP_CONTEXT *DumpContext;
     PORT_USAGE_COUNTS Usage;
+    LONG OutstandingRequests;
+    LONG UntaggedRequests;
+    LONG BusyCompletions;
+    ULONGLONG BusyUntil;
 
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
@@ -278,10 +318,23 @@ typedef struct _STOR_SRB_CONTEXT
     PVOID OriginalDataBuffer;
     PVOID OriginalSystemVa;
     ULONG BounceLength;
+    LIST_ENTRY ActiveEntry;
+    ULONGLONG Deadline;
+    LONG64 StartSequence;
+    BOOLEAN WasRecovering;
+    volatile LONG State;
 } STOR_SRB_CONTEXT, *PSTOR_SRB_CONTEXT;
+
+#define PORT_SRB_PREPARED   0
+#define PORT_SRB_BUILDING   1
+#define PORT_SRB_ACTIVE     2
+#define PORT_SRB_RECOVERING 3
+#define PORT_SRB_COMPLETED  4
 
 #define PortGetSrbContext(Irp)  ((PSTOR_SRB_CONTEXT)((Irp)->Tail.Overlay.DriverContext[0]))
 #define PORT_DUMP_IRP_MARKER     ((PVOID)(ULONG_PTR)'pruD')
+#define PORT_UNTAGGED_MARKER     ((PVOID)(ULONG_PTR)'gtnU')
+#define PortRequestCountedUntagged(Irp)  ((Irp)->Tail.Overlay.DriverContext[2] == PORT_UNTAGGED_MARKER)
 
 FORCEINLINE BOOLEAN PortIsExtendedSrb(_In_opt_ PVOID Srb)
 {
@@ -381,7 +434,80 @@ PortFdoStartRequest(
 
 VOID
 PortFdoEndRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp);
+
+BOOLEAN
+PortFdoSetBusy(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ BOOLEAN Unit,
+    _In_ UCHAR PathId,
+    _In_ UCHAR TargetId,
+    _In_ UCHAR Lun,
+    _In_ ULONG RequestsToComplete);
+
+VOID
+PortFdoTrackRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext);
+
+VOID
+PortFdoUntrackRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext);
+
+VOID
+PortFdoStopTimeouts(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID
+PortFdoStartTimeouts(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+BOOLEAN
+PortFdoClaimRequest(
+    _Inout_ PSTOR_SRB_CONTEXT SrbContext,
+    _In_ BOOLEAN Started);
+
+VOID
+PortFdoStartRequestIo(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PVOID Srb);
+
+VOID
+PortFdoRequestRecovered(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension);
+
+VOID
+PortFdoCompleteRequests(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ UCHAR PathId,
+    _In_ UCHAR TargetId,
+    _In_ UCHAR Lun,
+    _In_ UCHAR SrbStatus,
+    _In_ LONG64 LastStarted);
+
+VOID
+PortFdoRetryBusyRequest(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp);
+
+KDEFERRED_ROUTINE PortFdoCompleteRequestsDpc;
+KDEFERRED_ROUTINE PortFdoBusyRetryDpc;
+
+#define PORT_COMPLETE_REQUESTS_DEFERRED 8
+
+typedef struct _PORT_COMPLETE_REQUESTS
+{
+    SLIST_ENTRY Entry;
+    LONG64 LastStarted;
+    UCHAR PathId;
+    UCHAR TargetId;
+    UCHAR Lun;
+    UCHAR SrbStatus;
+} PORT_COMPLETE_REQUESTS, *PPORT_COMPLETE_REQUESTS;
+
+KDEFERRED_ROUTINE PortFdoTimeoutDpc;
 
 
 /* miniport.c */
@@ -572,6 +698,10 @@ PHW_INITIALIZATION_DATA
 PortGetDriverInitData(
     PDRIVER_OBJECT_EXTENSION DriverExtension,
     INTERFACE_TYPE InterfaceType);
+
+PHW_INITIALIZATION_DATA
+PortGetVirtualDriverInitData(
+    PDRIVER_OBJECT_EXTENSION DriverExtension);
 
 NTSTATUS
 NTAPI
