@@ -849,6 +849,7 @@ static DWORD CALLBACK alarmThreadMain(LPVOID arg)
 }
 
 static HANDLE hnp = INVALID_HANDLE_VALUE;
+static HANDLE server_ready;
 
 /** Trivial byte echo server - disconnects after each session */
 static DWORD CALLBACK serverThreadMain1(LPVOID arg)
@@ -864,6 +865,7 @@ static DWORD CALLBACK serverThreadMain1(LPVOID arg)
         /* nInBufSize */ 1024,
         /* nDefaultWait */ NMPWAIT_USE_DEFAULT_WAIT,
         /* lpSecurityAttrib */ NULL);
+    SetEvent(server_ready);
 
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
     for (i = 0; i < NB_SERVER_LOOPS; i++) {
@@ -916,6 +918,7 @@ static DWORD CALLBACK serverThreadMain2(LPVOID arg)
         /* nInBufSize */ 1024,
         /* nDefaultWait */ NMPWAIT_USE_DEFAULT_WAIT,
         /* lpSecurityAttrib */ NULL);
+    SetEvent(server_ready);
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
 
     for (i = 0; i < NB_SERVER_LOOPS; i++) {
@@ -995,6 +998,7 @@ static DWORD CALLBACK serverThreadMain3(LPVOID arg)
         /* nInBufSize */ 1024,
         /* nDefaultWait */ NMPWAIT_USE_DEFAULT_WAIT,
         /* lpSecurityAttrib */ NULL);
+    SetEvent(server_ready);
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
 
     hEvent = CreateEventW(NULL,  /* security attribute */
@@ -1124,6 +1128,7 @@ static DWORD CALLBACK serverThreadMain4(LPVOID arg)
         /* nInBufSize */ 1024,
         /* nDefaultWait */ NMPWAIT_USE_DEFAULT_WAIT,
         /* lpSecurityAttrib */ NULL);
+    SetEvent(server_ready);
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
 
     hcompletion = CreateIoCompletionPort(hnp, NULL, 12345, 1);
@@ -1286,6 +1291,7 @@ static DWORD CALLBACK serverThreadMain5(LPVOID arg)
         /* nInBufSize */ 1024,
         /* nDefaultWait */ NMPWAIT_USE_DEFAULT_WAIT,
         /* lpSecurityAttrib */ NULL);
+    SetEvent(server_ready);
     ok(hnp != INVALID_HANDLE_VALUE, "CreateNamedPipe failed\n");
 
     hEvent = CreateEventW(NULL,  /* security attribute */
@@ -1369,6 +1375,7 @@ static void exerciseServer(const char *pipename, HANDLE serverThread)
     int i;
 
     if (winetest_debug > 1) trace("exerciseServer starting\n");
+    WaitForSingleObject(server_ready, 5000);
     for (i = 0; i < NB_SERVER_LOOPS; i++) {
         HANDLE hFile=INVALID_HANDLE_VALUE;
         static const char obuf[] = "Bit Bucket";
@@ -1391,7 +1398,7 @@ static void exerciseServer(const char *pipename, HANDLE serverThread)
 	    else
 	        ok(err == ERROR_PIPE_BUSY, "connecting to pipe\n");
             if (winetest_debug > 1) trace("connect failed, retrying\n");
-            Sleep(200);
+            WaitNamedPipeA(pipename, 200);
         }
         ok(hFile != INVALID_HANDLE_VALUE, "client opening named pipe\n");
 
@@ -1424,6 +1431,7 @@ static void test_NamedPipe_2(void)
     trace("test_NamedPipe_2 starting\n");
     /* Set up a twenty second timeout */
     alarm_event = CreateEventW( NULL, TRUE, FALSE, NULL );
+    server_ready = CreateEventW( NULL, FALSE, FALSE, NULL );
     SetLastError(0xdeadbeef);
     alarmThread = CreateThread(NULL, 0, alarmThreadMain, (void *) 20000, 0, &alarmThreadId);
     ok(alarmThread != NULL, "CreateThread failed: %ld\n", GetLastError());
@@ -1465,6 +1473,7 @@ static void test_NamedPipe_2(void)
 
     ok(SetEvent( alarm_event ), "SetEvent\n");
     CloseHandle( alarm_event );
+    CloseHandle( server_ready );
     if (winetest_debug > 1) trace("test_NamedPipe_2 returning\n");
 }
 
@@ -2710,7 +2719,7 @@ static void test_readfileex_pending(void)
     ok((NTSTATUS)overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %#Ix\n", overlapped.Internal);
     ok(overlapped.InternalHigh == -1, "expected -1, got %Iu\n", overlapped.InternalHigh);
 
-    wait = WaitForSingleObject(event, 100);
+    wait = WaitForSingleObject(event, 0);
     ok(wait == WAIT_TIMEOUT, "WaitForSingleObject returned %lx\n", wait);
 
     num_bytes = 0xdeadbeef;
@@ -2882,6 +2891,16 @@ static DWORD CALLBACK flush_proc(HANDLE pipe)
     return 0;
 }
 
+static void wait_io_pending(HANDLE thread)
+{
+    BOOL pending = FALSE;
+    unsigned int i;
+
+    for (i = 0; i < 100000 && WaitForSingleObject(thread, 0) == WAIT_TIMEOUT &&
+                GetThreadIOPendingFlag(thread, &pending) && !pending; i++)
+        SwitchToThread();
+}
+
 #define test_flush_async(a,b) _test_flush_async(__LINE__,a,b)
 static HANDLE _test_flush_async(unsigned line, HANDLE pipe, DWORD error)
 {
@@ -2892,7 +2911,7 @@ static HANDLE _test_flush_async(unsigned line, HANDLE pipe, DWORD error)
     thread = CreateThread(NULL, 0, flush_proc, pipe, 0, &tid);
     ok_(__FILE__,line)(thread != NULL, "CreateThread failed: %lu\n", GetLastError());
 
-    Sleep(50);
+    wait_io_pending(thread);
     _test_not_signaled(line, thread);
     return thread;
 }
