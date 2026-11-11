@@ -579,19 +579,23 @@ NtSetInformationDebugObject(
     if (InformationClass != DebugObjectKillProcessOnExitInformation)
         return STATUS_INVALID_PARAMETER;
 
-    if (InformationLength != sizeof(Told)) return STATUS_INFO_LENGTH_MISMATCH;
-
     _SEH2_TRY
     {
-        if (PreviousMode != KernelMode)
-        {
-            ProbeForRead(Information, sizeof(Told), sizeof(ULONG));
-            if (ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
-        }
+        if (PreviousMode != KernelMode && ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
 
-        Told = *(PDEBUG_OBJECT_KILL_PROCESS_ON_EXIT_INFORMATION)Information;
-        if (ReturnLength != NULL) *ReturnLength = 0;
-        Status = STATUS_SUCCESS;
+        if (InformationLength != sizeof(Told))
+        {
+            if (ReturnLength != NULL) *ReturnLength = sizeof(Told);
+            Status = STATUS_INFO_LENGTH_MISMATCH;
+        }
+        else
+        {
+            if (PreviousMode != KernelMode) ProbeForRead(Information, sizeof(Told), sizeof(ULONG));
+
+            Told = *(PDEBUG_OBJECT_KILL_PROCESS_ON_EXIT_INFORMATION)Information;
+            if (ReturnLength != NULL) *ReturnLength = 0;
+            Status = STATUS_SUCCESS;
+        }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -600,6 +604,8 @@ NtSetInformationDebugObject(
     _SEH2_END;
 
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (Told.KillProcessOnExit & ~DBGK_KILL_PROCESS_ON_EXIT) return STATUS_INVALID_PARAMETER;
 
     Status = ObReferenceObjectByHandle(DebugHandle,
                                        DEBUG_OBJECT_SET_INFORMATION,
