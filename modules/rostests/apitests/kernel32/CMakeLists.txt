@@ -8,6 +8,7 @@ list(APPEND SOURCE
     ActCtxDependencyVersions.c
     ConsoleAlias.c
     ApiSetCoreSynch.c
+    AuditAlarmApis.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c
     BackupReadWrite.c
