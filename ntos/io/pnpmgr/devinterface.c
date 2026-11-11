@@ -558,7 +558,7 @@ IoSetDeviceInterfaceState(
     if (Interface->Enabled == Enable)
     {
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
-        return STATUS_OBJECT_NAME_EXISTS;
+        return Enable ? STATUS_OBJECT_NAME_EXISTS : STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
     Interface->Enabled = Enable;

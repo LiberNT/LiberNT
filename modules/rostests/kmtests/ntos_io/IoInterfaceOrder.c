@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled
+ * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, and an unchanged state is reported
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -117,6 +117,7 @@ START_TEST(IoInterfaceOrderCheck)
     {
         ok_eq_hex(IoSetDeviceInterfaceState(&Second, TRUE), STATUS_SUCCESS);
         ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_SUCCESS);
+        ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_OBJECT_NAME_EXISTS);
 
         Status = IoGetDeviceInterfaces(&TestInterface, NULL, 0, &List);
         ok_eq_hex(Status, STATUS_SUCCESS);
@@ -133,6 +134,7 @@ START_TEST(IoInterfaceOrderCheck)
         }
 
         ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
+        ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_OBJECT_NAME_NOT_FOUND);
         ok_eq_hex(IoSetDeviceInterfaceState(&Second, FALSE), STATUS_SUCCESS);
     }
 
