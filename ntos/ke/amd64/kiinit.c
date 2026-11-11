@@ -537,32 +537,24 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
     //FrLdrDbgPrint("Hello from KiSystemStartup!!!\n");
 
-    if (KeNumberProcessors == 0)
-    {
-        /* Boot processor: it prepares the loader block for itself */
-        Cpu = 0;
+    /* Get the current CPU number */
+    Cpu = KeNumberProcessors++; // FIXME
 
+    /* LoaderBlock initialization for Cpu 0 */
+    if (Cpu == 0)
+    {
         /* Save the loader block */
         KeLoaderBlock = LoaderBlock;
 
         /* Prepare LoaderBlock, PCR, TSS with the P0 boot data */
         KiInitializeP0BootStructures(LoaderBlock);
     }
-    else
-    {
-        /* The number comes from the PRCB: KeNumberProcessors++ is not atomic */
-        Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
-        Cpu = Pcr->Prcb.Number;
-    }
 
     /* Get Pcr from loader block */
     Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
 
-    /* Publish the PRCB before counting: [0, KeNumberProcessors) must be valid */
+    /* Set the PRCB for this Processor */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
-    KeMemoryBarrier();
-    if ((CCHAR)(Cpu + 1) > KeNumberProcessors)
-        KeNumberProcessors = (CCHAR)(Cpu + 1);
 
     /* Save the initial thread */
     InitialThread = (PKTHREAD)LoaderBlock->Thread;

@@ -151,10 +151,6 @@ extern USHORT KeProcessorRevision;
 extern ULONG64 KeFeatureBits;
 extern KAFFINITY KeActiveProcessors;
 extern ULONG KeBugCheckActive;
-BOOLEAN KiClaimBugCheckEntry(PKPRCB Prcb);
-BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb);
-VOID KiSetFreezeFailure(VOID);
-BOOLEAN KiHasFreezeFailure(VOID);
 extern PKPRCB KiProcessorBlock[];
 #ifdef KI_CORE_PARKING
 extern KSCHEDULER_SUBNODE KiNode0SubNode;
@@ -236,7 +232,6 @@ extern ULONG KiServiceLimit;
 extern LIST_ENTRY KeBugcheckCallbackListHead, KeBugcheckReasonCallbackListHead;
 extern KSPIN_LOCK BugCheckCallbackLock;
 extern KDPC KiTimerExpireDpc;
-extern KSPIN_LOCK KiTimerAdjustmentLock;
 extern KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
 extern FAST_MUTEX KiGenericCallDpcMutex;
 extern LIST_ENTRY KiProfileListHead, KiProfileSourceListHead;
@@ -455,10 +450,6 @@ FASTCALL
 KiSelectNextThread(
     IN PKPRCB Prcb
 );
-
-BOOLEAN
-FASTCALL
-KiSignalTimer(IN PKTIMER Timer);
 
 BOOLEAN
 FASTCALL
