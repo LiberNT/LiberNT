@@ -104,7 +104,17 @@ TestDocumentLists(void)
     CComPtr<IObjectArray> Recent;
     CComPtr<IShellItem> Item;
     SHARDAPPIDINFO Info;
+    WCHAR LinkPath[MAX_PATH];
+    LPWSTR RecentDir = NULL;
     HRESULT hr;
+
+    hr = SHGetKnownFolderPath(FOLDERID_Recent, 0, NULL, &RecentDir);
+    ok_hr(hr, S_OK);
+    if (FAILED(hr))
+        return;
+    wsprintfW(LinkPath, L"%s\\%s.lnk", RecentDir, g_Name);
+    CoTaskMemFree(RecentDir);
+    DeleteFileW(LinkPath);
 
     hr = CoCreateInstance(CLSID_ApplicationDocumentLists, NULL, CLSCTX_INPROC_SERVER,
                           IID_PPV_ARG(IApplicationDocumentLists, &Lists));
@@ -121,7 +131,10 @@ TestDocumentLists(void)
     Info.pszAppID = g_AppId;
     SHAddToRecentDocs(SHARD_APPIDINFO, &Info);
 
-    Sleep(1000);
+    /* The recent link of a later call shows that this one was handled */
+    SHAddToRecentDocs(SHARD_PATHW, g_File);
+    ok(WaitForFile(LinkPath, 5000), "no recent link %ls\n", LinkPath);
+    DeleteFileW(LinkPath);
     hr = Lists->GetList(ADLT_RECENT, 0, IID_PPV_ARG(IObjectArray, &Recent));
     ok_hr(hr, S_OK);
     if (SUCCEEDED(hr))
