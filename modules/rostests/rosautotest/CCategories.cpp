@@ -162,6 +162,7 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "SleepTickRounding", "core:threads" },
     { "kernel32_apitest", "SwitchToThreadPriority", "core:threads" },
     { "kernel32_apitest", "QueryInterruptTimePrecise", "core:threads" },
+    { "kernel32_apitest", "ProcessAffinityQueued", "core:threads" },
     { "kernel32_apitest", "SwitchToThreadRoundRobin", "core:threads" },
     { "kernel32_apitest", "TimerResolutionSleep", "core:threads" },
     { "kernel32_apitest", "HighResolutionTimerClock", "core:threads" },
