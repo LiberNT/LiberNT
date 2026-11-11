@@ -345,6 +345,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ps/PsWddm.c
     ntos_ps/PsProcessInfo.c
     ntos_ps/PsQuota.c
+    ntos_ps/PsGetVersion.c
     ntos_ps/PsSystemThread.c
     ntos_ps/PsPico.c
     ntos_ps/PsJobCommit.c

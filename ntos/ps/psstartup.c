@@ -775,7 +775,7 @@ PsGetVersion(
 {
     if (MajorVersion != NULL) *MajorVersion = NtMajorVersion;
     if (MinorVersion != NULL) *MinorVersion = NtMinorVersion;
-    if (BuildNumber != NULL) *BuildNumber = NtBuildNumber & 0x3FFF;
+    if (BuildNumber != NULL) *BuildNumber = NtBuildNumber & 0xFFFF;
 
     if (CSDVersion != NULL)
     {

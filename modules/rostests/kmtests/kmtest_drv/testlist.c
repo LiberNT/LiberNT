@@ -372,6 +372,7 @@ KMT_TESTFUNC Test_PoProcessorStateHandler;
 KMT_TESTFUNC Test_PoKernelPowerRequest;
 KMT_TESTFUNC Test_PsNotify;
 KMT_TESTFUNC Test_PsQuota;
+KMT_TESTFUNC Test_PsGetVersion;
 KMT_TESTFUNC Test_PsSystemThread;
 KMT_TESTFUNC Test_PsPico;
 KMT_TESTFUNC Test_PsJobCommit;
@@ -818,6 +819,7 @@ const KMT_TEST TestList[] =
     { "RtlIsValidOemCharacter",             Test_RtlIsValidOemCharacter },
     { "PsProcessInfo",                      Test_PsProcessInfo },
     { "PsNotifyKM",                         Test_PsNotifyKM },
+    { "PsGetVersion",                       Test_PsGetVersion },
     { "PsSystemThread",                     Test_PsSystemThread },
     { "PsPico",                             Test_PsPico },
     { "PsJobCommit",                        Test_PsJobCommit },
