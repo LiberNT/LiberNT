@@ -450,6 +450,7 @@ NtCancelSynchronousIoFile(
         return STATUS_ACCESS_DENIED;
     }
 
+    /* FIXME: another thread's list is walked without anything that stops that thread from changing it */
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
     Entry = Thread->IrpList.Flink;
@@ -458,7 +459,7 @@ NtCancelSynchronousIoFile(
         Irp = CONTAINING_RECORD(Entry, IRP, ThreadListEntry);
         Entry = Entry->Flink;
 
-        if (!(Irp->Flags & IRP_SYNCHRONOUS_API)) continue;
+        if (!IsIrpSynchronous(Irp, Irp->Tail.Overlay.OriginalFileObject)) continue;
         if (IoRequestToCancel != NULL && Irp->UserIosb != IoRequestToCancel)
         {
             continue;
