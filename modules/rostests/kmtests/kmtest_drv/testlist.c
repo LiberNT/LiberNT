@@ -220,6 +220,7 @@ KMT_TESTFUNC Test_KdbContextCommands;
 KMT_TESTFUNC Test_KdbLocks;
 KMT_TESTFUNC Test_KdbThreadApc;
 KMT_TESTFUNC Test_KdChangeOption;
+KMT_TESTFUNC Test_KdbSystemBreak;
 KMT_TESTFUNC Test_KdDebuggerPresent;
 KMT_TESTFUNC Test_KdPrintComponent;
 KMT_TESTFUNC Test_KdPrintStatus;
@@ -621,6 +622,7 @@ const KMT_TEST TestList[] =
     { "KdBootLog",                          Test_KdBootLog },
     { "-KdBreakContinue",                   Test_KdBreakContinue },
     { "-KdbSchedulerCommands",              Test_KdbSchedulerCommands },
+    { "-KdbSystemBreak",                    Test_KdbSystemBreak },
     { "-KdbDeviceCommands",                 Test_KdbDeviceCommands },
     { "-KdbCliCommands",                    Test_KdbCliCommands },
     { "-KdbObjectCommands",                 Test_KdbObjectCommands },

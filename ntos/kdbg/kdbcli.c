@@ -2573,6 +2573,9 @@ KdbpRunCommand(
 
         Routine = (PKDBG_CLI_ROUTINE)KdbpCliCallbacks[Index];
 
+        if (!MmIsAddressValid((PVOID)Routine))
+            continue;
+
         if (Routine(Command, Argc, Argv))
             return KdbpLeaveLoop;
     }
