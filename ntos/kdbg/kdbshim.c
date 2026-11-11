@@ -174,6 +174,12 @@ KdbgReceivePacket(
             KdbgPromptActive = FALSE;
             KdpScreenRelease(KdbgPromptDisplayAcquired);
             KbdEnableMouse();
+
+            if ((MessageData != NULL) && (MessageData->Buffer != NULL) && (MessageData->Length != 0) &&
+                (((MessageData->Buffer[0] | 0x20) == 'b') || ((MessageData->Buffer[0] | 0x20) == 'o')))
+            {
+                KdbBreakRequestThread = KeGetCurrentThread();
+            }
         }
 
         return Status;

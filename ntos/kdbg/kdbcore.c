@@ -29,6 +29,7 @@ BOOLEAN KdbActive = FALSE;
 
 /* The breakpoint the machine last stopped at, or -1 */
 LONG KdbLastBreakPointNr = -1;
+PKTHREAD KdbBreakRequestThread = NULL;
 
 /* How many instructions are still to be stepped, and whether calls are entered */
 ULONG KdbNumSingleSteps = 0;
@@ -960,6 +961,14 @@ KdbEnterDebuggerException(
     if ((ExceptionNr >= 0) && (BreakPointNr < 0) && !EnteredOnSingleStep)
     {
         KdbpGetEnterCondition(ExceptionNr, FirstChance, &EnterCondition);
+
+        if (KdbBreakRequestThread == KeGetCurrentThread())
+        {
+            if (ExceptionNr == KdbpExceptionNumber(STATUS_BREAKPOINT))
+                EnterCondition = KdbEnterAlways;
+
+            KdbBreakRequestThread = NULL;
+        }
 
         if ((EnterCondition == KdbDoNotEnter) ||
             ((EnterCondition == KdbEnterFromKmode) && (PreviousMode != KernelMode)) ||

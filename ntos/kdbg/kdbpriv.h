@@ -20,6 +20,7 @@ typedef struct _KDB_REGISTER
 } KDB_REGISTER, *PKDB_REGISTER;
 
 extern const KDB_REGISTER KdbpRegisters[];
+extern PKTHREAD KdbBreakRequestThread;
 extern const ULONG KdbpRegisterCount;
 extern const KDB_REGISTER KdbpFloatingRegisters[];
 extern const ULONG KdbpFloatingRegisterCount;
