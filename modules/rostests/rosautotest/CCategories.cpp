@@ -154,7 +154,6 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "CreateProcess", "core:process" },
     { "kernel32_apitest", "JobObject*", "core:process" },
     { "kernel32_apitest", "TerminateProcess", "core:process" },
-    { "kernel32_apitest", "TerminateThread", "core:threads" },
     { "kernel32_apitest", "ExitedClientId", "core:process" },
     { "kernel32_apitest", "SleepTickRounding", "core:threads" },
     { "kernel32_apitest", "TimerResolutionSleep", "core:threads" },
