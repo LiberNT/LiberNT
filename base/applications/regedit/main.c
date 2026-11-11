@@ -189,8 +189,6 @@ int WINAPI wWinMain(HINSTANCE hInstance,
 
     UNREFERENCED_PARAMETER(hPrevInstance);
 
-    OleInitialize(NULL);
-
     /* Initialize global strings */
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, ARRAY_SIZE(szTitle));
     LoadStringW(hInstance, IDC_REGEDIT_FRAME, szFrameClass, ARRAY_SIZE(szFrameClass));
@@ -198,6 +196,8 @@ int WINAPI wWinMain(HINSTANCE hInstance,
 
     if (ProcessCmdLine(GetCommandLineW()))
         return 0;
+
+    OleInitialize(NULL);
 
     switch (GetUserDefaultUILanguage())
     {
