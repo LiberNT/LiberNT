@@ -24,7 +24,8 @@ static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
-                                 L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus" };
+                                 L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus",
+                                 L"HideChild", L"ChildSurprised", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -128,6 +129,84 @@ static VOID CheckReenumerate(DEVINST Bus)
     ok(ReadValue(L"BusRelationsQueried", &Value) && Value > Queried, "Reenumerating the bus did not ask it for its children\n");
 }
 
+static VOID SetRequest(PCWSTR Name, DWORD Value)
+{
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ServiceKey, 0, KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
+        return;
+    RegSetValueExW(Key, Name, 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
+    RegCloseKey(Key);
+}
+
+static HANDLE OpenDevice(DEVINST Device)
+{
+    WCHAR Path[MAX_PATH] = L"\\\\?\\GLOBALROOT";
+    ULONG Size = sizeof(Path) - sizeof(L"\\\\?\\GLOBALROOT");
+    HANDLE File;
+
+    if (CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_PHYSICAL_DEVICE_OBJECT_NAME, NULL, Path + wcslen(Path), &Size, 0) !=
+        CR_SUCCESS)
+    {
+        ok(FALSE, "The device has no PDO name\n");
+        return INVALID_HANDLE_VALUE;
+    }
+
+    File = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "Opening %ls failed: %lu\n", Path, GetLastError());
+    return File;
+}
+
+/* A child its bus stops reporting is surprise-removed, gets its remove request after its last handle closes
+ * and leaves the tree; the waits only bound a lost request */
+static VOID CheckSurpriseRemoval(DEVINST Bus)
+{
+    ULONG Status = 0, Problem = 0;
+    DWORD Start, Value = 0;
+    DEVINST Child;
+    HANDLE File;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to remove\n");
+        return;
+    }
+
+    File = OpenDevice(Child);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    SetRequest(L"HideChild", 1);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok(ReadValue(L"ChildSurprised", &Value) && Value == 1, "The missing child was not surprise-removed\n");
+    ok(!ReadValue(L"ChildFdoRemoves", &Value), "The missing child was removed while a handle was open\n");
+
+    CloseHandle(File);
+
+    Start = GetTickCount();
+    while (!ReadValue(L"ChildFdoRemoves", &Value) && GetTickCount() - Start < 1000)
+        Sleep(10);
+    ok(ReadValue(L"ChildFdoRemoves", &Value) && Value == 1, "The missing child was not removed after its last close\n");
+
+    Start = GetTickCount();
+    while (CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS && GetTickCount() - Start < 1000)
+        Sleep(10);
+    ok(CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS, "The missing child is still in the device tree\n");
+
+    SetRequest(L"HideChild", 0);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    Start = GetTickCount();
+    while ((CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+            CM_Get_DevNode_Status(&Status, &Problem, Child, 0) != CR_SUCCESS || !(Status & DN_STARTED)) &&
+           GetTickCount() - Start < 1000)
+    {
+        Sleep(10);
+    }
+    ok(Status & DN_STARTED, "The child did not come back when its bus reported it again (status 0x%lx)\n", Status);
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -162,21 +241,19 @@ static VOID CheckEject(DEVINST Bus)
     ok(Problem == CM_PROB_HELD_FOR_EJECT, "The ejected child has problem %lu (status 0x%lx)\n", Problem, Status);
 }
 
-/* The bus reports itself failed at the next enumeration; the wait only bounds a lost report */
+/* The bus reports itself failed at the next enumeration: it is surprise-removed and gets its remove request
+ * after its last handle closes; the waits only bound a lost report */
 static VOID CheckFailed(DEVINST Bus)
 {
-    DWORD Start, Value = 1;
+    DWORD Start, Value = 0;
     ULONG Status = 0, Problem = 0;
-    HKEY Key;
+    HANDLE File;
 
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ServiceKey, 0, KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
-    {
-        ok(FALSE, "The fixture's service key is missing\n");
+    File = OpenDevice(Bus);
+    if (File == INVALID_HANDLE_VALUE)
         return;
-    }
-    RegSetValueExW(Key, L"FailBus", 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
-    RegCloseKey(Key);
 
+    SetRequest(L"FailBus", 1);
     ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
@@ -187,6 +264,15 @@ static VOID CheckFailed(DEVINST Bus)
     }
 
     ok(Problem == CM_PROB_FAILED_POST_START, "The failed bus has problem %lu (status 0x%lx)\n", Problem, Status);
+    ok(ReadValue(L"BusSurprised", &Value) && Value == 1, "The failed bus was not surprise-removed\n");
+    ok(!ReadValue(L"BusFdoRemoves", &Value), "The failed bus was removed while a handle was open\n");
+
+    CloseHandle(File);
+
+    Start = GetTickCount();
+    while (!ReadValue(L"BusFdoRemoves", &Value) && GetTickCount() - Start < 1000)
+        Sleep(10);
+    ok(ReadValue(L"BusFdoRemoves", &Value) && Value == 1, "The failed bus was not removed after its last close\n");
 }
 
 static VOID RemoveChild(VOID)
@@ -222,6 +308,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckRecorded();
         CheckRestart();
         CheckReenumerate(Device->DevInst);
+        CheckSurpriseRemoval(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Bus and function driver that records how the PnP manager filters, restarts, ejects and fails a device
+ * PURPOSE:     Bus and function driver that records how the PnP manager filters, restarts, removes, ejects and fails a device
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -26,6 +26,7 @@ typedef struct _TEST_EXTENSION
     PDEVICE_OBJECT Lower;
     PDEVICE_OBJECT Child;
     PDEVICE_OBJECT Pdo;
+    PVOID Bus;
     LONG Starts;
     BOOLEAN ReportChange;
 } TEST_EXTENSION, *PTEST_EXTENSION;
@@ -36,6 +37,9 @@ static BOOLEAN EjectRequested;
 static ULONG RelationsQueried;
 static ULONG BusStateQueried;
 static BOOLEAN FailRequested;
+static BOOLEAN ChildHidden;
+static ULONG ChildFdoRemoves;
+static ULONG BusFdoRemoves;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstanceId[] = L"0";
@@ -221,16 +225,21 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             return Pass(Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
+            Record(L"ChildFdoRemoves", ++ChildFdoRemoves);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             Status = Pass(Extension, Irp);
             IoDetachDevice(Extension->Lower);
             IoDeleteDevice(DeviceObject);
             return Status;
 
+        case IRP_MN_SURPRISE_REMOVAL:
+            Record(L"ChildSurprised", 1);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return Pass(Extension, Irp);
+
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL:
             Irp->IoStatus.Status = STATUS_SUCCESS;
             return Pass(Extension, Irp);
 
@@ -247,6 +256,13 @@ static NTSTATUS ReportChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
     ULONG Count = Existing ? Existing->Count : 0;
     NTSTATUS Status;
 
+    ChildHidden = Requested(L"HideChild");
+    if (ChildHidden)
+    {
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        return Pass(Extension, Irp);
+    }
+
     if (Extension->Child == NULL)
     {
         Status = IoCreateDevice(DeviceObject->DriverObject, sizeof(TEST_EXTENSION), NULL, FILE_DEVICE_UNKNOWN,
@@ -256,6 +272,8 @@ static NTSTATUS ReportChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
         ChildExtension = Extension->Child->DeviceExtension;
         RtlZeroMemory(ChildExtension, sizeof(*ChildExtension));
         ChildExtension->Kind = TestChildPdo;
+        ChildExtension->Bus = Extension;
+        ChildRemoved = FALSE;
         Extension->Child->Flags |= DO_POWER_PAGABLE;
         Extension->Child->Flags &= ~DO_DEVICE_INITIALIZING;
     }
@@ -311,6 +329,7 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
             return ReportChild(DeviceObject, Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
+            Record(L"BusFdoRemoves", ++BusFdoRemoves);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             Status = Pass(Extension, Irp);
             IoDetachDevice(Extension->Lower);
@@ -319,12 +338,16 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
             IoDeleteDevice(DeviceObject);
             return Status;
 
+        case IRP_MN_SURPRISE_REMOVAL:
+            Record(L"BusSurprised", 1);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return Pass(Extension, Irp);
+
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
         case IRP_MN_STOP_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL:
             Irp->IoStatus.Status = STATUS_SUCCESS;
             return Pass(Extension, Irp);
 
@@ -394,8 +417,14 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 
         case IRP_MN_REMOVE_DEVICE:
             ChildRemoved = TRUE;
-            Status = STATUS_SUCCESS;
-            break;
+            Complete(Irp, STATUS_SUCCESS);
+            /* A child the bus no longer reports goes away with its remove request */
+            if (ChildHidden)
+            {
+                ((PTEST_EXTENSION)((PTEST_EXTENSION)DeviceObject->DeviceExtension)->Bus)->Child = NULL;
+                IoDeleteDevice(DeviceObject);
+            }
+            return STATUS_SUCCESS;
 
         case IRP_MN_QUERY_DEVICE_RELATIONS:
             if (Stack->Parameters.QueryDeviceRelations.Type != TargetDeviceRelation)
@@ -442,6 +471,12 @@ static NTSTATUS NTAPI TestPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     if (Extension->Kind == TestChildFdo)
         return ChildFdoPnp(DeviceObject, Extension, Irp);
     return BusFdoPnp(DeviceObject, Extension, Irp);
+}
+
+static NTSTATUS NTAPI TestCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    return Complete(Irp, STATUS_SUCCESS);
 }
 
 static NTSTATUS NTAPI TestPower(PDEVICE_OBJECT DeviceObject, PIRP Irp)
@@ -499,6 +534,9 @@ NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Registry
 
     DriverObject->DriverUnload = TestUnload;
     DriverObject->DriverExtension->AddDevice = TestAddDevice;
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = TestCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP] = TestCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = TestCreateClose;
     DriverObject->MajorFunction[IRP_MJ_PNP] = TestPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = TestPower;
     return STATUS_SUCCESS;

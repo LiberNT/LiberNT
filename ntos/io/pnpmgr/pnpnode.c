@@ -472,27 +472,39 @@ PiSetDevNodeText(
     }
 }
 
+/* Whatever device of a stack was closed, the device node hangs off the bottom of the stack */
 VOID
 NTAPI
 PiDeviceObjectClosed(
     _In_ PDEVICE_OBJECT DeviceObject)
 {
-    PEXTENDED_DEVOBJ_EXTENSION Extension;
+    PDEVICE_OBJECT PhysicalDeviceObject = DeviceObject;
     PDEVICE_NODE DeviceNode;
+    KIRQL OldIrql;
 
-    Extension = IoGetDevObjExtension(DeviceObject);
-    DeviceNode = Extension->DeviceNode;
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
 
-    if (DeviceNode == NULL) return;
-
-    if (DeviceNode->State == DeviceNodeRemovePendingCloses ||
-        DeviceNode->State == DeviceNodeDeletePendingCloses)
+    while (IoGetDevObjExtension(PhysicalDeviceObject)->AttachedTo != NULL)
     {
-        PiQueueDeviceAction(DeviceNode->PhysicalDeviceObject,
+        PhysicalDeviceObject = IoGetDevObjExtension(PhysicalDeviceObject)->AttachedTo;
+    }
+    ObReferenceObject(PhysicalDeviceObject);
+
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    DeviceNode = IoGetDevObjExtension(PhysicalDeviceObject)->DeviceNode;
+
+    if (DeviceNode != NULL &&
+        (DeviceNode->State == DeviceNodeRemovePendingCloses ||
+         DeviceNode->State == DeviceNodeDeletePendingCloses))
+    {
+        PiQueueDeviceAction(PhysicalDeviceObject,
                             PiActionCloseRemovedDevice,
                             NULL,
                             NULL);
     }
+
+    ObDereferenceObject(PhysicalDeviceObject);
 }
 
 static

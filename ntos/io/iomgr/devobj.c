@@ -151,6 +151,7 @@ IopDecrementDeviceObjectRef(
     PDRIVER_OBJECT DriverObject;
     BOOLEAN Delete = FALSE;
     BOOLEAN Unload = FALSE;
+    BOOLEAN Closed = FALSE;
     KIRQL OldIrql;
 
     KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
@@ -164,6 +165,11 @@ IopDecrementDeviceObjectRef(
     if (DeviceObject->ReferenceCount == 0)
     {
         if (Extension->ExtensionFlags & DOE_DELETE_PENDING) Delete = TRUE;
+        if (Extension->ExtensionFlags & DOE_REMOVE_PENDING)
+        {
+            Closed = TRUE;
+            ObReferenceObject(DeviceObject);
+        }
 
         if ((UnloadIfUnused ||
              (Extension->ExtensionFlags & DOE_UNLOAD_PENDING)) &&
@@ -176,8 +182,13 @@ IopDecrementDeviceObjectRef(
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
+    /* The last close of a surprise-removed stack lets its remove request go */
+    if (Closed) PiDeviceObjectClosed(DeviceObject);
+
     if (Delete) IopUnloadDevice(DeviceObject);
     if (Unload) IopUnloadDevice(DeviceObject);
+
+    if (Closed) ObDereferenceObject(DeviceObject);
 }
 
 VOID

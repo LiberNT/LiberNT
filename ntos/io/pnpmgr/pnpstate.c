@@ -970,7 +970,8 @@ PiEjectDevice(
 
         PiSetDevNodeProblem(DeviceNode, CM_PROB_HELD_FOR_EJECT);
 
-        if (Supported)
+        /* TODO: an eject whose removal waits for a child's last close is not sent once that child is gone */
+        if (Supported && DeviceNode->State == DeviceNodeRemoved)
         {
             RtlZeroMemory(&StackLocation, sizeof(StackLocation));
             StackLocation.MajorFunction = IRP_MJ_PNP;
@@ -1015,6 +1016,43 @@ PiRestartInPlace(
 
 static
 VOID
+PiProcessRemoval(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ BOOLEAN Surprise,
+    _In_ BOOLEAN ParentRemoved);
+
+/* A child its bus no longer reports is gone: it is surprise-removed and leaves the tree after its last close */
+static
+VOID
+PiRemoveMissingChildren(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PDEVICE_RELATIONS Relations)
+{
+    PDEVICE_NODE ChildNode;
+    PDEVICE_NODE Next;
+    BOOLEAN Reported;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    for (ChildNode = DeviceNode->Child; ChildNode != NULL; ChildNode = Next)
+    {
+        Next = ChildNode->Sibling;
+
+        Reported = FALSE;
+        for (Index = 0; Relations != NULL && Index < Relations->Count && !Reported; Index++)
+        {
+            Reported = (Relations->Objects[Index] == ChildNode->PhysicalDeviceObject);
+        }
+        if (Reported) continue;
+
+        PiSetDevNodeFlag(ChildNode, DNF_DEVICE_GONE);
+        PiProcessRemoval(ChildNode, TRUE, FALSE);
+    }
+}
+
+static
+VOID
 PiProcessNewChildren(
     _In_ PDEVICE_NODE DeviceNode)
 {
@@ -1026,9 +1064,10 @@ PiProcessNewChildren(
     PAGED_CODE();
 
     Relations = DeviceNode->OverUsed1.PendingDeviceRelations;
-    if (Relations == NULL) return;
-
     DeviceNode->OverUsed1.PendingDeviceRelations = NULL;
+
+    PiRemoveMissingChildren(DeviceNode, Relations);
+    if (Relations == NULL) return;
 
     for (Index = 0; Index < Relations->Count; Index++)
     {
@@ -1080,6 +1119,50 @@ PiProcessEnumeration(
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
 }
 
+/* A surprise-removed stack takes no new opens until its remove request (IRP_MN_SURPRISE_REMOVAL documentation) */
+static
+VOID
+PiSetStackRemovePending(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ BOOLEAN Pending)
+{
+    PDEVICE_OBJECT Device;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+
+    for (Device = PhysicalDeviceObject; Device != NULL; Device = Device->AttachedDevice)
+    {
+        if (Pending)
+            IoGetDevObjExtension(Device)->ExtensionFlags |= DOE_REMOVE_PENDING;
+        else
+            IoGetDevObjExtension(Device)->ExtensionFlags &= ~DOE_REMOVE_PENDING;
+    }
+
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+}
+
+static
+BOOLEAN
+PiStackIsOpen(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    PDEVICE_OBJECT Device;
+    BOOLEAN Open = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+
+    for (Device = PhysicalDeviceObject; Device != NULL && !Open; Device = Device->AttachedDevice)
+    {
+        Open = (Device->ReferenceCount != 0);
+    }
+
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    return Open;
+}
+
 static
 VOID
 PiSendRemoval(
@@ -1110,7 +1193,20 @@ PiSendRemoval(
         DeviceNode->ResourceRequirements = NULL;
     }
 
-    PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
+    /* A surprise-removed device keeps its stack until nothing holds it open (IRP_MN_REMOVE_DEVICE documentation) */
+    if (Surprise)
+    {
+        PiSetStackRemovePending(DeviceNode->PhysicalDeviceObject, TRUE);
+        PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE,
+                                   DeviceNode->PhysicalDeviceObject,
+                                   NULL);
+        PiSetDevNodeState(DeviceNode, DeviceNodeRemovePendingCloses);
+    }
+    else
+    {
+        PiSetStackRemovePending(DeviceNode->PhysicalDeviceObject, FALSE);
+        PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
+    }
 
     IopQueueTargetDeviceEvent(Surprise ? &GUID_DEVICE_SURPRISE_REMOVAL
                                        : &GUID_DEVICE_SAFE_REMOVAL,
@@ -1138,6 +1234,41 @@ PiDeleteDevNode(
 }
 
 static
+BOOLEAN
+PiIsPendingCloses(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    return DeviceNode->State == DeviceNodeRemovePendingCloses ||
+           DeviceNode->State == DeviceNodeDeletePendingCloses;
+}
+
+/* A surprise-removed device gets its remove request once its children are gone and nothing holds its stack open;
+ * one that is gone then leaves the tree, and its parent may be next */
+static
+VOID
+PiCloseRemovedDevice(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PDEVICE_NODE Parent;
+    BOOLEAN Delete;
+
+    PAGED_CODE();
+
+    while (DeviceNode != NULL && PiIsPendingCloses(DeviceNode))
+    {
+        if (DeviceNode->Child != NULL || PiStackIsOpen(DeviceNode->PhysicalDeviceObject)) return;
+
+        Delete = (DeviceNode->State == DeviceNodeDeletePendingCloses);
+        Parent = DeviceNode->Parent;
+
+        PiSendRemoval(DeviceNode, FALSE);
+        if (Delete) PiDeleteDevNode(DeviceNode);
+
+        DeviceNode = Parent;
+    }
+}
+
+static
 VOID
 PiProcessRemoval(
     _In_ PDEVICE_NODE DeviceNode,
@@ -1146,6 +1277,7 @@ PiProcessRemoval(
 {
     PDEVICE_NODE Child;
     PDEVICE_NODE Next;
+    BOOLEAN Gone;
 
     PAGED_CODE();
 
@@ -1157,13 +1289,30 @@ PiProcessRemoval(
         Child = Next;
     }
 
-    if (DeviceNode->State != DeviceNodeRemoved)
+    Gone = ParentRemoved || (DeviceNode->Flags & DNF_DEVICE_GONE);
+
+    if (!PiIsPendingCloses(DeviceNode) && DeviceNode->State != DeviceNodeRemoved)
     {
-        PiSendRemoval(DeviceNode, Surprise);
+        if (Surprise || DeviceNode->Child == NULL)
+        {
+            PiSendRemoval(DeviceNode, Surprise);
+        }
+        else
+        {
+            /* A child still waiting for its last close is removed before its parent */
+            PiSetStackRemovePending(DeviceNode->PhysicalDeviceObject, TRUE);
+            PiSetDevNodeState(DeviceNode, DeviceNodeRemovePendingCloses);
+        }
     }
 
-    /* TODO: a surprise-removed child leaves the tree once its remove request follows the last close */
-    if (ParentRemoved && !Surprise)
+    if (PiIsPendingCloses(DeviceNode))
+    {
+        if (Gone) PiSetDevNodeState(DeviceNode, DeviceNodeDeletePendingCloses);
+        PiCloseRemovedDevice(DeviceNode);
+        return;
+    }
+
+    if (Gone)
     {
         PiDeleteDevNode(DeviceNode);
     }
@@ -1336,8 +1485,9 @@ PiRunDeviceAction(
                         PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_POST_START);
                     }
 
+                    /* Both are surprise removals (IRP_MN_SURPRISE_REMOVAL documentation) */
                     PiSetDevNodeState(DeviceNode,
-                                      DeviceNodeAwaitingQueuedRemoval);
+                                      DeviceNodeAwaitingQueuedDeletion);
                     PiDevNodeStateMachine(DeviceNode);
                 }
                 else if ((DeviceState & PNP_DEVICE_RESOURCE_REQUIREMENTS_CHANGED) &&
@@ -1363,11 +1513,7 @@ PiRunDeviceAction(
                 break;
 
             case PiActionCloseRemovedDevice:
-                if (DeviceNode->State == DeviceNodeRemovePendingCloses ||
-                    DeviceNode->State == DeviceNodeDeletePendingCloses)
-                {
-                    PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
-                }
+                PiCloseRemovedDevice(DeviceNode);
                 break;
 
             case PiActionEjectDevice:
