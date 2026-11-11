@@ -195,6 +195,7 @@ KMT_TESTFUNC Test_IoTimerKM;
 #endif
 KMT_TESTFUNC Test_IoVolume;
 KMT_TESTFUNC Test_KdBootLog;
+KMT_TESTFUNC Test_KdChangeOption;
 KMT_TESTFUNC Test_KdPrintComponent;
 KMT_TESTFUNC Test_KdSystemDebugControl;
 KMT_TESTFUNC Test_KdUsbNetRules;
@@ -539,6 +540,7 @@ const KMT_TEST TestList[] =
     { "IoReportRootDevice",                 Test_IoReportRootDevice },
     { "IoVolume",                           Test_IoVolume },
     { "KdBootLog",                          Test_KdBootLog },
+    { "KdChangeOption",                     Test_KdChangeOption },
     { "KdPrintComponent",                   Test_KdPrintComponent },
     { "KdSystemDebugControl",               Test_KdSystemDebugControl },
     { "KdUsbNetRules",                      Test_KdUsbNetRules },

@@ -187,9 +187,8 @@ KdRefreshDebuggerNotPresent(VOID)
 }
 
 /*
- * The only option the published interface has. Blocking is one way: a system
- * that has forbidden the debugger from being enabled cannot take it back,
- * since whatever it was protecting is still worth protecting.
+ * The only option the published interface has. The block is whatever the
+ * caller last set, unless its high bit is set: that one is never taken back.
  */
 NTSTATUS
 NTAPI
@@ -201,36 +200,28 @@ KdChangeOption(
     _Out_ PVOID OutBuffer,
     _Out_opt_ PULONG OutBufferNeeded)
 {
-    UNREFERENCED_PARAMETER(OutBuffer);
-
     if (KdPitchDebugger)
         return STATUS_DEBUGGER_INACTIVE;
 
-    switch (Option)
+    if (Option != KD_OPTION_SET_BLOCK_ENABLE)
+        return STATUS_INVALID_INFO_CLASS;
+
+    if ((InBufferBytes != sizeof(BOOLEAN)) ||
+        (InBuffer == NULL) ||
+        (OutBufferBytes != 0) ||
+        (OutBuffer != NULL))
     {
-        case KD_OPTION_SET_BLOCK_ENABLE:
-
-            if (InBufferBytes != sizeof(BOOLEAN))
-                return STATUS_INVALID_PARAMETER_2;
-
-            if (InBuffer == NULL)
-                return STATUS_INVALID_PARAMETER_3;
-
-            if (OutBufferBytes != 0)
-                return STATUS_INVALID_PARAMETER_4;
-
-            if (OutBufferNeeded != NULL)
-                *OutBufferNeeded = 0;
-
-            if (KdBlockEnable && !(*(PBOOLEAN)InBuffer))
-                return STATUS_ACCESS_DENIED;
-
-            KdBlockEnable = *(PBOOLEAN)InBuffer;
-            return STATUS_SUCCESS;
-
-        default:
-            return STATUS_INVALID_PARAMETER_1;
+        return STATUS_INVALID_PARAMETER;
     }
+
+    if (OutBufferNeeded != NULL)
+        *OutBufferNeeded = 0;
+
+    if ((KdBlockEnable & KDP_BLOCK_ENABLE_PERMANENT) != 0)
+        return STATUS_ACCESS_DENIED;
+
+    KdBlockEnable = *(PBOOLEAN)InBuffer;
+    return STATUS_SUCCESS;
 }
 
 /*

@@ -21,6 +21,9 @@
 /* How long the time slip timer waits before it asks the host for the time */
 #define KDP_TIME_SLIP_INTERVAL_MS   (-100 * 1000 * 10)
 
+/* The bit of KdBlockEnable that keeps the debugger blocked for good */
+#define KDP_BLOCK_ENABLE_PERMANENT  0x80
+
 typedef struct _KDP_WAIT_RESULT
 {
     KCONTINUE_STATUS Status;
