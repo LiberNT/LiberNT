@@ -178,6 +178,7 @@ PspAllocateProcess(
         (ULONGLONG)InterlockedIncrement64(&PspProcessSequenceNumber);
     Process->ExitStatus = STATUS_PENDING;
     Process->Machine = IMAGE_FILE_MACHINE_NATIVE;
+    Process->DefaultPagePriority = PSP_PAGE_PRIORITY_NORMAL;
 
     if (Parent != NULL)
     {

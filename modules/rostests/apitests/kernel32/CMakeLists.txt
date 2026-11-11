@@ -160,6 +160,7 @@ list(APPEND SOURCE
     SystemFirmware.c
     SystemFirmwareAcpi.c
     ProcessTokenSession.c
+    LimitedProcessQueries.c
     SystemFileCacheSize.c
     SecureBootFlag.c
     TerminateProcess.c

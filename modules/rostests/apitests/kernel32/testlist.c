@@ -155,6 +155,7 @@ extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
 extern void func_SystemFirmwareAcpi(void);
 extern void func_ProcessTokenSession(void);
+extern void func_LimitedProcessQueries(void);
 extern void func_SystemFileCacheSize(void);
 extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
@@ -348,6 +349,7 @@ const struct test winetest_testlist[] =
     { "SystemFirmware",              func_SystemFirmware },
     { "SystemFirmwareAcpi",          func_SystemFirmwareAcpi },
     { "ProcessTokenSession",         func_ProcessTokenSession },
+    { "LimitedProcessQueries",       func_LimitedProcessQueries },
     { "SystemFileCacheSize",         func_SystemFileCacheSize },
     { "SecureBootFlag",              func_SecureBootFlag },
     { "TerminateProcess",            func_TerminateProcess },

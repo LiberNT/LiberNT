@@ -798,6 +798,8 @@ NtQueryInformationProcess(
         ProcessInformationClass == ProcessAffinityUpdateMode ||
         ProcessInformationClass == ProcessDefaultCpuSetsInformation ||
         ProcessInformationClass == ProcessCycleTime ||
+        ProcessInformationClass == ProcessGroupInformation ||
+        ProcessInformationClass == ProcessPagePriority ||
         ProcessInformationClass == ProcessSubsystemProcess ||
         ProcessInformationClass == ProcessSubsystemInformation ||
         ProcessInformationClass == ProcessProtectionInformation ||
