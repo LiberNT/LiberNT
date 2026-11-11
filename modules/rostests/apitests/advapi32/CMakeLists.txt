@@ -40,6 +40,7 @@ list(APPEND SOURCE
     TriggerInfo.c
     TokenBnoIsolation.c
     TraceGuids.c
+    UserHiveAccess.c
     svchlp.c)
 
 list(APPEND PCH_SKIP_SOURCE

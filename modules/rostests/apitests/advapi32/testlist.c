@@ -44,6 +44,7 @@ extern void func_TriggerInfo(void);
 extern void func_ServiceNetwork(void);
 extern void func_TokenBnoIsolation(void);
 extern void func_TraceGuids(void);
+extern void func_UserHiveAccess(void);
 
 const struct test winetest_testlist[] =
 {
@@ -89,5 +90,6 @@ const struct test winetest_testlist[] =
     { "ServiceNetwork", func_ServiceNetwork },
     { "TokenBnoIsolation", func_TokenBnoIsolation },
     { "TraceGuids", func_TraceGuids },
+    { "UserHiveAccess", func_UserHiveAccess },
     { 0, 0 }
 };

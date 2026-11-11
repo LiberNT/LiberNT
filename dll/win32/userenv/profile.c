@@ -163,7 +163,6 @@ SetUserHiveSecurity(
                                   0,
                                   0};
     PSID Sids[sizeof(SidStrings) / sizeof(SidStrings[0])] = {NULL};
-    SECURITY_DESCRIPTOR SecurityDescriptor;
     PACL pDacl = NULL;
     DWORD dwDaclSize;
     DWORD dwError = ERROR_SUCCESS;
@@ -204,17 +203,11 @@ SetUserHiveSecurity(
         }
     }
 
-    if (!InitializeSecurityDescriptor(&SecurityDescriptor, SECURITY_DESCRIPTOR_REVISION) ||
-        !SetSecurityDescriptorDacl(&SecurityDescriptor, TRUE, pDacl, FALSE))
-    {
-        dwError = GetLastError();
-        goto done;
-    }
-
-    dwError = RegOpenKeyExW(HKEY_USERS, pszSidString, 0, WRITE_DAC, &hKey);
+    dwError = RegOpenKeyExW(HKEY_USERS, pszSidString, 0, READ_CONTROL | WRITE_DAC, &hKey);
     if (dwError == ERROR_SUCCESS)
     {
-        dwError = RegSetKeySecurity(hKey, DACL_SECURITY_INFORMATION, &SecurityDescriptor);
+        dwError = SetSecurityInfo(hKey, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION,
+                                  NULL, NULL, pDacl, NULL);
         RegCloseKey(hKey);
     }
 
