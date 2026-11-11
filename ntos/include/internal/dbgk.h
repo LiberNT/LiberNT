@@ -74,6 +74,12 @@ DbgkExitThread(
 
 VOID
 NTAPI
+DbgkCloseThreadDebugObject(
+    IN PETHREAD Thread
+);
+
+VOID
+NTAPI
 DbgkMapViewOfSection(
     IN PVOID Section,
     IN PVOID BaseAddress,

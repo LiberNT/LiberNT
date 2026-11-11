@@ -485,6 +485,38 @@ DbgkInitialize(VOID)
     ObCreateObjectType(&Name, &Initializer, NULL, &DbgkDebugObjectType);
 }
 
+/*
+ * A thread that made itself a debugger keeps its debug object's handle in its
+ * TEB, and the handle goes when the thread does, so a debugger that ends ends
+ * its kill-on-close debuggees with it.
+ */
+VOID
+NTAPI
+DbgkCloseThreadDebugObject(
+    _In_ PETHREAD Thread)
+{
+    PTEB Teb = Thread->Tcb.Teb;
+    HANDLE DebugObject = NULL;
+
+    PAGED_CODE();
+
+    ASSERT(Thread == PsGetCurrentThread());
+
+    if (Teb == NULL) return;
+
+    _SEH2_TRY
+    {
+        DebugObject = Teb->DbgSsReserved[1];
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        DebugObject = NULL;
+    }
+    _SEH2_END;
+
+    if (DebugObject != NULL) ObCloseHandle(DebugObject, UserMode);
+}
+
 /* SYSTEM CALLS ***************************************************************/
 
 NTSTATUS

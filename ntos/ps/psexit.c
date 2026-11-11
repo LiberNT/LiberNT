@@ -225,6 +225,7 @@ PspExitThread(
     PspDrainUserApcs(Thread);
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
+    DbgkCloseThreadDebugObject(Thread);
 
     PspRunCreateThreadNotifyRoutines(Thread, FALSE);
 
