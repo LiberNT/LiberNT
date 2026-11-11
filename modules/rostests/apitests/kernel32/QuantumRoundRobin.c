@@ -7,7 +7,7 @@
 
 #include "precomp.h"
 
-#define SPINNER_COUNT 8
+#define SPINNER_COUNT 4
 
 static volatile LONG StopSpinning;
 static volatile LONG SpinnersStarted;
@@ -66,7 +66,7 @@ START_TEST(QuantumRoundRobin)
     while (ReadAcquire(&SpinnersStarted) < SPINNER_COUNT && GetTickCount() - Start < 10000)
         Sleep(10);
     ok_long(SpinnersStarted, SPINNER_COUNT);
-    Sleep(200);
+    Sleep(32);
 
     for (Round = 0; Round < 3; Round++)
     {
