@@ -11,6 +11,9 @@
 #define NDEBUG
 #include <debug.h>
 
+/* Spin loops count yields, and drivers size them on Windows 11, where a yield with nothing to run takes about 1 us */
+#define KI_EMPTY_YIELD_STALL_US 1
+
 /* GLOBALS ********************************************************************/
 
 /* Processors with nothing to run. A bit here is a promise to whoever is
@@ -581,6 +584,7 @@ KiYieldDelayExecution(VOID)
     PKTHREAD Next;
     PKPRCB Prcb;
     KIRQL OldIrql;
+    BOOLEAN Yielded;
 
     OldIrql = KeRaiseIrqlToSynchLevel();
     Prcb = KeGetCurrentPrcb();
@@ -601,8 +605,13 @@ KiYieldDelayExecution(VOID)
         }
     }
 
+    Yielded = (Prcb->NextThread != NULL);
+
     KiReleasePrcbLock(Prcb);
     KiExitDispatcher(OldIrql);
+
+    if (!Yielded)
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
 }
 
 /*
@@ -1351,6 +1360,7 @@ NtYieldExecution(VOID)
     if (Prcb->ReadySummary == 0)
     {
         KeLowerIrql(OldIrql);
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
         return Status;
     }
 
@@ -1385,6 +1395,10 @@ NtYieldExecution(VOID)
     KiReleasePrcbLock(Prcb);
 
     KiExitDispatcher(OldIrql);
+
+    if (Status == STATUS_NO_YIELD_PERFORMED)
+        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
+
     return Status;
 }
 
