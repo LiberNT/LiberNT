@@ -313,10 +313,7 @@ START_TEST(WinSaferRestrictions)
 
     Ret = RunChild(BasicPath, 0, &ExitCode, &Error);
     ok(Ret, "a Basic User image did not start: %lu\n", Error);
-    if (Ret && ExitCode == (DWORD)STATUS_ACCESS_DENIED)
-        skip("the Basic User child could not connect to the Windows subsystem (0x%lx)\n", ExitCode);
-    else if (Ret)
-        ok(ExitCode == State, "running Basic User child state 0x%lx, expected 0x%lx\n", ExitCode, State);
+    ok(!Ret || ExitCode == State, "running Basic User child state 0x%lx, expected 0x%lx\n", ExitCode, State);
 
     Ret = SuspendedChildState(FreePath, &State, &Error);
     ok(Ret, "an unrestricted image did not start: %lu\n", Error);
