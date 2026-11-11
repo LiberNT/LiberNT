@@ -1140,13 +1140,15 @@ ObpQueryNameInfoSize(
     ULONG Bytes = 0;
 
     if (NameInfo == NULL || NameInfo->Name.Length == 0) return 0;
+    if (ObpRootDirectoryObject != NULL &&
+        NameInfo == ObQueryNameInfo(ObpRootDirectoryObject)) return 0;
 
-    while (NameInfo != NULL && NameInfo->Directory != NULL)
+    while (NameInfo != NULL && NameInfo->Name.Length != 0)
     {
         Bytes += sizeof(OBJ_NAME_PATH_SEPARATOR) + NameInfo->Name.Length;
 
         Directory = NameInfo->Directory;
-        if (Directory == ObpRootDirectoryObject) break;
+        if (Directory == NULL || Directory == ObpRootDirectoryObject) break;
 
         NameInfo = OBJECT_HEADER_TO_NAME_INFO(
             OBJECT_TO_OBJECT_HEADER(Directory));
