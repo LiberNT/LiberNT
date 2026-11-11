@@ -20,7 +20,7 @@ static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
-                                 L"StartCount", L"StopSeen", L"RestartPrivateMask",
+                                 L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
@@ -122,6 +122,37 @@ static VOID CheckReenumerate(DEVINST Bus)
     ok(ReadValue(L"BusRelationsQueried", &Value) && Value > Queried, "Reenumerating the bus did not ask it for its children\n");
 }
 
+/* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
+static VOID CheckEject(DEVINST Bus)
+{
+    DWORD Start, Value = 1;
+    ULONG Status = 0, Problem = 0;
+    DEVINST Child;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, ServiceKey, 0, KEY_SET_VALUE, &Key) != ERROR_SUCCESS)
+    {
+        ok(FALSE, "The fixture's service key is missing\n");
+        return;
+    }
+    RegSetValueExW(Key, L"EjectChild", 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
+    RegCloseKey(Key);
+
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    Start = GetTickCount();
+    while (!ReadValue(L"EjectAfterRemove", &Value) && GetTickCount() - Start < 1000)
+        Sleep(10);
+
+    ok(ReadValue(L"EjectAfterRemove", &Value), "The child was not ejected\n");
+    ok(Value == 1, "The child was ejected before it was removed\n");
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+        return;
+    ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Child, 0), (ULONG)CR_SUCCESS);
+    ok(Problem == CM_PROB_HELD_FOR_EJECT, "The ejected child has problem %lu (status 0x%lx)\n", Problem, Status);
+}
+
 static VOID RemoveChild(VOID)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
@@ -155,6 +186,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckRecorded();
         CheckRestart();
         CheckReenumerate(Device->DevInst);
+        CheckEject(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);

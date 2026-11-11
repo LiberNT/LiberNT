@@ -940,6 +940,48 @@ PiProcessStartDevice(
                                &DeviceNode->InstancePath);
 }
 
+/* An eject removes the device first and leaves the eject itself to its bus driver (IoRequestDeviceEject) */
+static
+NTSTATUS
+PiEjectDevice(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    DEVICE_CAPABILITIES Capabilities;
+    IO_STACK_LOCATION StackLocation;
+    PI_QUERY_REMOVE_DATA RemoveData;
+    BOOLEAN Supported = FALSE;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    IopQueueTargetDeviceEvent(&GUID_DEVICE_KERNEL_INITIATED_EJECT, &DeviceNode->InstancePath);
+
+    if (NT_SUCCESS(IopQueryDeviceCapabilities(DeviceNode, &Capabilities))) Supported = Capabilities.EjectSupported;
+
+    /* TODO: the removal and ejection relations of the device are not queried and removed with it */
+    Status = PiQueryRemoveDevice(DeviceNode->PhysicalDeviceObject, &RemoveData);
+    if (NT_SUCCESS(Status))
+    {
+        PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
+        PiDevNodeStateMachine(DeviceNode);
+
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_HELD_FOR_EJECT);
+
+        if (Supported)
+        {
+            RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+            StackLocation.MajorFunction = IRP_MJ_PNP;
+            StackLocation.MinorFunction = IRP_MN_EJECT;
+            Status = IopSynchronousCall(DeviceNode->PhysicalDeviceObject, &StackLocation, NULL);
+        }
+    }
+
+    IopQueueTargetDeviceEvent(NT_SUCCESS(Status) ? &GUID_DEVICE_EJECT : &GUID_DEVICE_EJECT_VETOED,
+                              &DeviceNode->InstancePath);
+
+    return Status;
+}
+
 /* New requirements restart a started device in place with the resources it holds, as Windows 11 does */
 static
 VOID
@@ -1320,13 +1362,7 @@ PiRunDeviceAction(
                 break;
 
             case PiActionEjectDevice:
-                Status = PiQueryRemoveDevice(Request->DeviceObject,
-                                             &RemoveData);
-                if (!NT_SUCCESS(Status)) break;
-
-                PiSetDevNodeState(DeviceNode,
-                                  DeviceNodeAwaitingQueuedRemoval);
-                PiDevNodeStateMachine(DeviceNode);
+                Status = PiEjectDevice(DeviceNode);
                 break;
 
             default:

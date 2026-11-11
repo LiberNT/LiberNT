@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Bus and function driver that records how the PnP manager filters and restarts a device's requirements
+ * PURPOSE:     Bus and function driver that records how the PnP manager filters, restarts and ejects a device
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -29,6 +29,8 @@ typedef struct _TEST_EXTENSION
 } TEST_EXTENSION, *PTEST_EXTENSION;
 
 static WCHAR ServicePath[260];
+static BOOLEAN ChildRemoved;
+static BOOLEAN EjectRequested;
 static ULONG RelationsQueried;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
@@ -38,6 +40,19 @@ static const WCHAR ChildDescription[] = L"Kmtest filter requirements child";
 static VOID Record(PCWSTR Name, ULONG Value)
 {
     RtlWriteRegistryValue(RTL_REGISTRY_ABSOLUTE, ServicePath, Name, REG_DWORD, &Value, sizeof(Value));
+}
+
+static BOOLEAN Requested(PCWSTR Name)
+{
+    ULONG Value = 0;
+    RTL_QUERY_REGISTRY_TABLE Table[2];
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_TYPECHECK;
+    Table[0].Name = (PWSTR)Name;
+    Table[0].EntryContext = &Value;
+    Table[0].DefaultType = (REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT) | REG_NONE;
+    return NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE, ServicePath, Table, NULL, NULL)) && Value != 0;
 }
 
 static NTSTATUS Complete(PIRP Irp, NTSTATUS Status)
@@ -243,6 +258,11 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
             if (Stack->Parameters.QueryDeviceRelations.Type != BusRelations)
                 return Pass(Extension, Irp);
             Record(L"BusRelationsQueried", ++RelationsQueried);
+            if (!EjectRequested && Extension->Child != NULL && Requested(L"EjectChild"))
+            {
+                EjectRequested = TRUE;
+                IoRequestDeviceEject(Extension->Child);
+            }
             return ReportChild(DeviceObject, Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
@@ -318,6 +338,17 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
         case IRP_MN_QUERY_CAPABILITIES:
             Stack->Parameters.DeviceCapabilities.Capabilities->UniqueID = FALSE;
             Stack->Parameters.DeviceCapabilities.Capabilities->SilentInstall = TRUE;
+            Stack->Parameters.DeviceCapabilities.Capabilities->EjectSupported = TRUE;
+            Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_EJECT:
+            Record(L"EjectAfterRemove", ChildRemoved);
+            Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_REMOVE_DEVICE:
+            ChildRemoved = TRUE;
             Status = STATUS_SUCCESS;
             break;
 
@@ -348,7 +379,6 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
         case IRP_MN_CANCEL_STOP_DEVICE:
         case IRP_MN_STOP_DEVICE:
         case IRP_MN_SURPRISE_REMOVAL:
-        case IRP_MN_REMOVE_DEVICE:
             Status = STATUS_SUCCESS;
             break;
 
