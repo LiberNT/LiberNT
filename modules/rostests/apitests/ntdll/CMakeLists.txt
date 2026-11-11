@@ -155,6 +155,7 @@ list(APPEND SOURCE
     RtlDetermineDosPathNameType.c
     ProcessPoolQuota.c
     RtlWnfAndSqm.c
+    WinSqmSession.c
     RtlCheckPortableOperatingSystem.c
     RtlDoesFileExists.c
     RtlDosApplyFileIsolationRedirection_Ustr.c

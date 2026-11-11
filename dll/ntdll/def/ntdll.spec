@@ -1523,7 +1523,7 @@
 @ stdcall -stub -version=0x600+ WerReportWatsonEvent(long long long long) ; doesn't exist in win11
 @ stdcall -stub -version=0x600+ WinSqmAddToStream(ptr long long long) ; stub on Win11?
 @ stdcall -stub -version=0x600+ WinSqmAddToStreamEx(ptr long long ptr long)
-@ stdcall -stub -version=0x600+ WinSqmEndSession(ptr) ; stub on Win11?
+@ stdcall -version=0x600+ WinSqmEndSession(ptr)
 @ stdcall -version=0x600+ WinSqmEventEnabled(long ptr) ; stub on Win11?
 @ stdcall -stub -version=0x600+ WinSqmEventWrite(long long long) ; stub on Win11?
 @ stdcall -version=0x600+ WinSqmIncrementDWORD(long long long)
@@ -1531,7 +1531,7 @@
 @ stdcall -version=0x600+ WinSqmSetDWORD(ptr long long)
 @ stdcall -version=0x600+ WinSqmSetDWORD64(ptr long int64)
 @ stdcall -stub -version=0x600+ WinSqmSetString(ptr long ptr) ; stub on Win11?
-@ stdcall -stub -version=0x600+ WinSqmStartSession(ptr) ; stub on Win11?
+@ stdcall -version=0x600+ WinSqmStartSession(ptr long long)
 @ stdcall ZwAcceptConnectPort(ptr long ptr long long ptr)
 @ stdcall ZwAccessCheck(ptr long long ptr ptr ptr ptr ptr)
 @ stdcall ZwAccessCheckAndAuditAlarm(ptr long ptr ptr ptr long ptr long ptr ptr ptr)
