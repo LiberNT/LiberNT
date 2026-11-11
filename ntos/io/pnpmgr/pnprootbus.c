@@ -541,6 +541,19 @@ PnpRootScanRegistry(VOID)
     ZwClose(RootKey);
 }
 
+BOOLEAN
+PnpRootForgetDevice(
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    PAGED_CODE();
+
+    if (DeviceObject->DriverObject != PnpRootDriverObject) return FALSE;
+
+    PnpRootRetireDevice(DeviceObject);
+    IoDeleteDevice(DeviceObject);
+    return TRUE;
+}
+
 /*
  * An instance registered while the system runs becomes a device at once, a
  * phantom included: registering it is what makes it real. The path is the
@@ -1013,7 +1026,7 @@ PnpRootPnp(
 
         case IRP_MN_REMOVE_DEVICE:
 
-            /* TODO: a registry instance whose key was deleted stays a device of the bus until restart */
+            /* A registry instance stays a device of the bus until it is uninstalled */
             if (PdoExtension != NULL &&
                 PdoExtension->Device != NULL &&
                 PdoExtension->Device->FromRegistry)

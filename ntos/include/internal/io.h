@@ -1404,6 +1404,10 @@ VOID
 PnpRootRetireDevice(
     _In_ PDEVICE_OBJECT DeviceObject);
 
+BOOLEAN
+PnpRootForgetDevice(
+    _In_ PDEVICE_OBJECT DeviceObject);
+
 NTSTATUS
 PnpRootCreateInstance(
     _In_ PCUNICODE_STRING InstancePath);

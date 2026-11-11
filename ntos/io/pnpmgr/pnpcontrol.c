@@ -408,6 +408,7 @@ PiControlDeregisterDevice(
 {
     PDEVICE_OBJECT DeviceObject;
     PDEVICE_NODE DeviceNode;
+    BOOLEAN Forget = FALSE;
     NTSTATUS Status;
     KIRQL OldIrql;
 
@@ -426,8 +427,12 @@ PiControlDeregisterDevice(
     else
     {
         DeviceNode->Flags |= DNF_UNINSTALLED;
+        Forget = (DeviceNode->State == DeviceNodeRemoved) && (DeviceNode->Child == NULL);
     }
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    /* A removed root device that is uninstalled is no device any more: its node leaves the tree */
+    if (Forget && PnpRootForgetDevice(DeviceObject)) IopFreeDeviceNode(DeviceNode);
 
     ObDereferenceObject(DeviceObject);
     return Status;
