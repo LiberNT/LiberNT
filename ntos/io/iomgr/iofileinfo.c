@@ -1019,6 +1019,13 @@ NtSetInformationFile(
         PIO_COMPLETION_CONTEXT Context;
         PVOID Port;
 
+        if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+        {
+            ExFreePoolWithTag(Buffer, TAG_IOBUF);
+            ObDereferenceObject(FileObject);
+            return STATUS_INVALID_PARAMETER;
+        }
+
         Status = ObReferenceObjectByHandle(Completion->Port,
                                            IO_COMPLETION_MODIFY_STATE,
                                            IoCompletionType,
@@ -1059,6 +1066,11 @@ NtSetInformationFile(
         }
 
         ExFreePoolWithTag(Buffer, TAG_IOBUF);
+
+        if (!(FileObject->Flags & FO_SKIP_SET_EVENT))
+        {
+            KeSetEvent(&FileObject->Event, 0, FALSE);
+        }
 
         _SEH2_TRY
         {
