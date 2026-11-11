@@ -879,6 +879,8 @@ CmDeleteKey(
     HCELL_INDEX Cell;
     NTSTATUS Status;
 
+    if (Kcb->Delete) return STATUS_SUCCESS;
+
     Status = CmpKeyIsUsable(Kcb);
     if (!NT_SUCCESS(Status)) return Status;
 
