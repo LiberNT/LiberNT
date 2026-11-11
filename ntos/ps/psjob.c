@@ -1483,8 +1483,21 @@ NtSetInformationJobObject(
                 break;
             }
 
-            if (Extended.BasicLimitInformation.SchedulingClass >=
+            /* A field is only looked at when its limit is asked for */
+            if ((Extended.BasicLimitInformation.LimitFlags &
+                 JOB_OBJECT_LIMIT_SCHEDULING_CLASS) != 0 &&
+                Extended.BasicLimitInformation.SchedulingClass >=
                 PSP_JOB_SCHEDULING_CLASSES)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
+            if ((Extended.BasicLimitInformation.LimitFlags &
+                 JOB_OBJECT_LIMIT_AFFINITY) != 0 &&
+                (Extended.BasicLimitInformation.Affinity == 0 ||
+                 (Extended.BasicLimitInformation.Affinity &
+                  ~(ULONG_PTR)KeActiveProcessors) != 0))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
