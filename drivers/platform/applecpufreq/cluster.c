@@ -17,7 +17,7 @@ CpufreqFindCpus(
     _Out_ PCPUFREQ_CPUS Cpus)
 {
     const VOID *Property;
-    ULONG Phandle, Cells, Parent, Cpu, Length, Table;
+    ULONG Phandle, Cells, Parent, Cpu, Length, Table, Capacity;
     ULONG64 Domain, Mpidr, Size;
 
     RtlZeroMemory(Cpus, sizeof(*Cpus));
@@ -36,19 +36,73 @@ CpufreqFindCpus(
         if (!Property || !FdtReadCells(Property, Length, 0, 1, &Domain) || Domain != Phandle)
             continue;
         if (!FdtReadU32(Fdt, Cpu, "operating-points-v2", &Table) || !Table ||
-            (Cpus->Count && Table != Cpus->TablePhandle) || !FdtReadReg(Fdt, Cpu, Parent, 0, &Mpidr, &Size))
+            (Cpus->Count && Table != Cpus->TablePhandle) || !FdtReadReg(Fdt, Cpu, Parent, 0, &Mpidr, &Size) ||
+            Cpus->Count == CPUFREQ_MAX_CPUS)
         {
             return STATUS_DEVICE_CONFIGURATION_ERROR;
         }
+        if (!FdtReadU32(Fdt, Cpu, "capacity-dmips-mhz", &Capacity))
+            Capacity = 0;
         if (!Cpus->Count)
         {
             Cpus->TablePhandle = Table;
             Cpus->First = Mpidr;
+            Cpus->Capacity = Capacity;
+        }
+        else if (Capacity != Cpus->Capacity)
+        {
+            Cpus->Capacity = 0;
         }
         Cpus->Last = Mpidr;
-        Cpus->Count++;
+        Cpus->Mpidr[Cpus->Count++] = Mpidr;
     }
     return Cpus->Count ? STATUS_SUCCESS : STATUS_DEVICE_CONFIGURATION_ERROR;
+}
+
+NTSTATUS
+CpufreqFindEfficientCpus(
+    _In_ const FDT *Fdt,
+    _Out_ PCPUFREQ_CPUS Cpus)
+{
+    const VOID *Property;
+    ULONG Parent, Cpu, Length, Capacity;
+    ULONG64 Mpidr, Size;
+
+    RtlZeroMemory(Cpus, sizeof(*Cpus));
+    Cpus->Capacity = MAXULONG;
+    if (!FdtResolvePath(Fdt, "/cpus", &Parent, NULL, NULL))
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    for (Cpu = FdtFirstChild(Fdt, Parent); Cpu != FDT_NO_NODE; Cpu = FdtNextSibling(Fdt, Cpu))
+    {
+        Property = FdtGetProperty(Fdt, Cpu, "device_type", &Length);
+        if (!FdtStringListContains(Property, Length, "cpu"))
+            continue;
+        if (!FdtReadU32(Fdt, Cpu, "capacity-dmips-mhz", &Capacity) || !Capacity ||
+            !FdtReadReg(Fdt, Cpu, Parent, 0, &Mpidr, &Size))
+        {
+            continue;
+        }
+        if (Capacity > Cpus->Capacity)
+            continue;
+        if (Capacity < Cpus->Capacity)
+        {
+            Cpus->Capacity = Capacity;
+            Cpus->Count = 0;
+        }
+        if (Cpus->Count == CPUFREQ_MAX_CPUS)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        if (!Cpus->Count)
+            Cpus->First = Mpidr;
+        Cpus->Last = Mpidr;
+        Cpus->Mpidr[Cpus->Count++] = Mpidr;
+    }
+    if (!Cpus->Count)
+    {
+        Cpus->Capacity = 0;
+        return STATUS_NOT_FOUND;
+    }
+    ASSERT(Cpus->Capacity && Cpus->Capacity != MAXULONG);
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS

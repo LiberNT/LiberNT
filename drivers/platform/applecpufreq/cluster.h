@@ -21,6 +21,7 @@
 #define CPUFREQ_MAX_STATES          32
 #define CPUFREQ_POLL_US             2
 #define CPUFREQ_POLL_COUNT          200
+#define CPUFREQ_MAX_CPUS            64
 
 typedef struct _CPUFREQ_STATE
 {
@@ -49,12 +50,19 @@ typedef struct _CPUFREQ_CPUS
     ULONG64 First;
     ULONG64 Last;
     ULONG TablePhandle;
+    ULONG Capacity;
+    ULONG64 Mpidr[CPUFREQ_MAX_CPUS];
 } CPUFREQ_CPUS, *PCPUFREQ_CPUS;
 
 NTSTATUS
 CpufreqFindCpus(
     _In_ const FDT *Fdt,
     _In_ ULONG Cluster,
+    _Out_ PCPUFREQ_CPUS Cpus);
+
+NTSTATUS
+CpufreqFindEfficientCpus(
+    _In_ const FDT *Fdt,
     _Out_ PCPUFREQ_CPUS Cpus);
 
 NTSTATUS

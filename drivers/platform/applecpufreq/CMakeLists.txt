@@ -5,7 +5,7 @@
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 #
 
-add_library(applecpufreq MODULE applecpufreq.c cluster.c applecpufreq.rc)
+add_library(applecpufreq MODULE applecpufreq.c cluster.c governor.c applecpufreq.rc)
 set_module_type(applecpufreq kernelmodedriver)
 target_link_libraries(applecpufreq fdtdrv)
 add_importlibs(applecpufreq ntoskrnl hal)
