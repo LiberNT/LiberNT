@@ -223,6 +223,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoNullDeviceKM.c
     ntos_io/IoVolume.c
     ntos_io/IoWmiAcpi.c
+    ntos_io/ZwWriteFileAppend.c
     ntos_kd/KdBootLog.c
     ntos_kd/KdBreakContinue.c
     ntos_kd/KdbCliCommands.c

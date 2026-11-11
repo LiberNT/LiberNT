@@ -27,6 +27,7 @@ extern void func_wcstoul(void);
 extern void func_wcstombs(void);
 
 extern void func_ApiSetMap(void);
+extern void func_AppendOnlyWrite(void);
 extern void func_BootLog(void);
 extern void func_DbgCommandString(void);
 extern void func_DebugRegisters(void);
@@ -258,6 +259,7 @@ const struct test winetest_testlist[] =
     { "wcstoul", func_wcstoul },
     { "wcstombs", func_wcstombs },
 
+    { "AppendOnlyWrite",                func_AppendOnlyWrite },
     { "BootLog",                        func_BootLog },
     { "DbgCommandString",               func_DbgCommandString },
     { "DebugRegisters",                 func_DebugRegisters },

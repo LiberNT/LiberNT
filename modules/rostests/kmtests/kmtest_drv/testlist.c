@@ -179,6 +179,7 @@ KMT_TESTFUNC Test_IoEvent;
 KMT_TESTFUNC Test_IoInterfaceOrderCheck;
 KMT_TESTFUNC Test_IoStorageDumpPath;
 KMT_TESTFUNC Test_IoWmiAcpi;
+KMT_TESTFUNC Test_ZwWriteFileAppend;
 KMT_TESTFUNC Test_IoFilesystem;
 KMT_TESTFUNC Test_IoInterrupt;
 KMT_TESTFUNC Test_IoIommu;
@@ -562,6 +563,7 @@ const KMT_TEST TestList[] =
     { "IoCreateFileAccessCheck",            Test_IoCreateFileAccessCheck },
     { "IoCreateSystemThread",               Test_IoCreateSystemThread },
     { "IoWmiAcpi",                          Test_IoWmiAcpi },
+    { "ZwWriteFileAppend",                  Test_ZwWriteFileAppend },
     { "-IoCustomTargetEventReport",         Test_IoCustomTargetEventReport },
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },

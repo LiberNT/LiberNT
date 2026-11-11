@@ -19,6 +19,7 @@ typedef struct _IOP_REQUEST
     PKEVENT EventObject;
     PIRP Irp;
     PIO_STACK_LOCATION StackPtr;
+    ACCESS_MASK GrantedAccess;
     KPROCESSOR_MODE PreviousMode;
     BOOLEAN SynchIo;
     BOOLEAN Locked;
@@ -74,6 +75,7 @@ IopBeginRequest(
     _In_ BOOLEAN RequireLock)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    OBJECT_HANDLE_INFORMATION HandleInformation;
     PFILE_OBJECT FileObject;
     NTSTATUS Status;
 
@@ -100,8 +102,10 @@ IopBeginRequest(
                                        IoFileObjectType,
                                        PreviousMode,
                                        (PVOID *)&FileObject,
-                                       NULL);
+                                       &HandleInformation);
     if (!NT_SUCCESS(Status)) return Status;
+
+    Request->GrantedAccess = HandleInformation.GrantedAccess;
 
     Status = IopCaptureUserIoStatusBlock(FileObject, PreviousMode, &IoStatusBlock);
     if (!NT_SUCCESS(Status))
@@ -830,6 +834,13 @@ NtWriteFile(
         }
 
         CapturedOffset = Request.FileObject->CurrentByteOffset;
+    }
+
+    if (((Request.GrantedAccess & (FILE_WRITE_DATA | FILE_APPEND_DATA)) == FILE_APPEND_DATA) &&
+        !(Request.FileObject->Flags & (FO_NAMED_PIPE | FO_MAILSLOT)))
+    {
+        CapturedOffset.HighPart = -1;
+        CapturedOffset.LowPart = FILE_WRITE_TO_END_OF_FILE;
     }
 
     if (!IopIsTransferValid(&Request, TRUE, Buffer, Length, &CapturedOffset))
