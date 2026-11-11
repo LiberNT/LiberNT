@@ -10,7 +10,7 @@
 #include <strsafe.h>
 
 static const WCHAR TestRegistryName[] =
-    L"Local\\ReactOS.CoreAudio.SessionRegistry.v1";
+    L"Local\\ReactOS.CoreAudio.SessionRegistry.v2";
 
 typedef struct _TEST_ENDPOINT
 {

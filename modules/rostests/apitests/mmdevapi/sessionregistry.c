@@ -61,8 +61,8 @@ static void TestSharedLayout(void)
     ULONG Occupied = 0;
     ULONG i;
 
-    C_ASSERT(sizeof(TEST_SHARED_SESSION) == 2028);
-    C_ASSERT(sizeof(TEST_SHARED_REGISTRY) == 16 + 128 * 2028);
+    C_ASSERT(sizeof(TEST_SHARED_SESSION) == 2036);
+    C_ASSERT(sizeof(TEST_SHARED_REGISTRY) == 16 + 128 * 2036);
     C_ASSERT(FIELD_OFFSET(TEST_SHARED_SESSION, Generation) == 4);
     C_ASSERT(FIELD_OFFSET(TEST_SHARED_SESSION, ChannelVolumes) == 84);
     C_ASSERT(FIELD_OFFSET(TEST_SHARED_REGISTRY, Sessions) == 16);
