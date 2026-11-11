@@ -86,6 +86,10 @@ static BOOLEAN KiInterruptTimeFrozen;
 /* The bucket of the timer table the clock has checked up to. */
 static ULONG KiTimerScanHand;
 
+static LONGLONG KiQpcScaleFrequency;
+static ULONGLONG KiQpcSystemTimeIncrement;
+static UCHAR KiQpcSystemTimeIncrementShift;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 FORCEINLINE
@@ -120,6 +124,68 @@ KiPublishSharedTime(
 
     KiWriteSystemTime((volatile KSYSTEM_TIME *)((PUCHAR)Shared + Offset),
                       Value);
+}
+
+/* Counter ticks become hundreds of nanoseconds as (ticks * Increment) >> (64 - Shift) */
+static
+VOID
+KiComputeQpcScale(
+    _In_ LONGLONG Frequency)
+{
+    ULONGLONG Remainder;
+    ULONGLONG Quotient = 0;
+    ULONGLONG Low;
+    UCHAR Shift = 0;
+    ULONG Bit;
+
+    while (Shift < 63 && ((ULONGLONG)Frequency << Shift) <= 10000000ULL)
+        Shift++;
+
+    Remainder = 10000000ULL >> Shift;
+    Low = (Shift != 0) ? (10000000ULL << (64 - Shift)) : 0;
+
+    for (Bit = 0; Bit < 64; Bit++)
+    {
+        Remainder = (Remainder << 1) | (Low >> 63);
+        Low <<= 1;
+        Quotient <<= 1;
+
+        if (Remainder >= (ULONGLONG)Frequency)
+        {
+            Remainder -= (ULONGLONG)Frequency;
+            Quotient |= 1;
+        }
+    }
+
+    KiQpcSystemTimeIncrement = Quotient;
+    KiQpcSystemTimeIncrementShift = Shift;
+    KiQpcScaleFrequency = Frequency;
+}
+
+/* Only the clock owner calls this, so it is the one writer of the update lock */
+static
+VOID
+KiPublishSystemTimeWithBaseline(
+    _In_ LARGE_INTEGER System)
+{
+    PKUSER_SHARED_DATA Shared = MmWriteableSharedUserData;
+    LARGE_INTEGER Counter, Frequency;
+
+    if (Shared == NULL)
+        return;
+
+    Counter = KeQueryPerformanceCounter(&Frequency);
+    if (Frequency.QuadPart > 0 && Frequency.QuadPart != KiQpcScaleFrequency)
+        KiComputeQpcScale(Frequency.QuadPart);
+
+    InterlockedIncrement64((volatile LONG64 *)&Shared->TimeUpdateLock);
+
+    Shared->BaselineSystemTimeQpc = (ULONGLONG)Counter.QuadPart;
+    Shared->QpcSystemTimeIncrement = (Frequency.QuadPart > 0) ? KiQpcSystemTimeIncrement : 0;
+    Shared->QpcSystemTimeIncrementShift = KiQpcSystemTimeIncrementShift;
+    KiWriteSystemTime(&Shared->SystemTime, System);
+
+    InterlockedIncrement64((volatile LONG64 *)&Shared->TimeUpdateLock);
 }
 
 /*
@@ -387,7 +453,7 @@ KiUpdateSharedTime(
                                  (KiTimeAdjustmentEnabled ? KeTimeAdjustment
                                                           : Increment));
     KiWriteSystemTime(&KiSystemTimeValue, System);
-    KiPublishSharedTime(FIELD_OFFSET(KUSER_SHARED_DATA, SystemTime), System);
+    KiPublishSystemTimeWithBaseline(System);
 
     /* The tick count only advances on a whole default-length period */
     if (KeMaximumIncrement == 0)
