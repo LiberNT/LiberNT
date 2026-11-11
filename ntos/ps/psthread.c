@@ -853,17 +853,23 @@ NtGetNextThread(
 
     if (Flags != 0) return STATUS_INVALID_PARAMETER;
 
+    /* Every failure from here on leaves the caller's handle cleared */
     if (PreviousMode != KernelMode)
     {
         _SEH2_TRY
         {
             ProbeForWriteHandle(NewThreadHandle);
+            *NewThreadHandle = NULL;
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
             _SEH2_YIELD(return _SEH2_GetExceptionCode());
         }
         _SEH2_END;
+    }
+    else
+    {
+        *NewThreadHandle = NULL;
     }
 
     Status = ObReferenceObjectByHandle(ProcessHandle,
@@ -896,19 +902,23 @@ NtGetNextThread(
         }
     }
 
-    /* The walk consumes the reference it is given and gives one back */
-    Thread = PsGetNextProcessThread(Process, Previous);
+    /* The walk consumes the reference it is given and gives one back, passing over threads the caller may not open */
+    for (Thread = PsGetNextProcessThread(Process, Previous);
+         Thread != NULL;
+         Thread = PsGetNextProcessThread(Process, Thread))
+    {
+        Status = ObOpenObjectByPointer(Thread,
+                                       HandleAttributes,
+                                       NULL,
+                                       DesiredAccess,
+                                       PsThreadType,
+                                       PreviousMode,
+                                       &Handle);
+        if (Status != STATUS_ACCESS_DENIED) break;
+    }
     ObDereferenceObject(Process);
 
     if (Thread == NULL) return STATUS_NO_MORE_ENTRIES;
-
-    Status = ObOpenObjectByPointer(Thread,
-                                   HandleAttributes,
-                                   NULL,
-                                   DesiredAccess,
-                                   PsThreadType,
-                                   PreviousMode,
-                                   &Handle);
     ObDereferenceObject(Thread);
 
     if (!NT_SUCCESS(Status)) return Status;
