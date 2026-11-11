@@ -310,9 +310,8 @@ NTAPI
 KeUninitThread(
     _Inout_ PKTHREAD Thread)
 {
+    /* The bounds stay as the record of where the stack was, which a snapshot of an ended thread still reports */
     Thread->InitialStack = NULL;
-    Thread->StackBase = NULL;
-    Thread->StackLimit = 0;
     Thread->KernelStack = NULL;
 }
 
