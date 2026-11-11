@@ -410,7 +410,7 @@ KeSetAffinityProcess(
         KiAcquireThreadLock(Thread);
         KiThreadUserAffinityMask(Thread) = Affinity;
         if (!Thread->SystemAffinityActive)
-            KiSetAffinityThread(Thread, Affinity);
+            KiSetAffinityThread(Thread, KiThreadCpuSetAffinity(Thread, Affinity));
         KiReleaseThreadLock(Thread);
     }
 

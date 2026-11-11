@@ -1221,6 +1221,27 @@ KeQueryRuntimeThread(
     return Thread->KernelTime;
 }
 
+/* Affinity wins over CPU sets that share none of its processors */
+KAFFINITY
+FASTCALL
+KiThreadCpuSetAffinity(
+    _In_ PKTHREAD Thread,
+    _In_ KAFFINITY Affinity)
+{
+    PETHREAD Ethread = CONTAINING_RECORD(Thread, ETHREAD, Tcb);
+    KAFFINITY Selected;
+
+    if (Ethread->IndirectCpuSets)
+    {
+        return Affinity;
+    }
+
+    /* TODO: a thread that selected no CPU sets is not yet held to its process's default ones */
+    Selected = (KAFFINITY)Ethread->SelectedCpuSets;
+
+    return ((Affinity & Selected) != 0) ? (Affinity & Selected) : Affinity;
+}
+
 /*
  * Confines a thread to a set of processors on the caller's behalf. The set
  * becomes the thread's user affinity, which is what a system affinity region
@@ -1241,6 +1262,7 @@ KeSetAffinityThread(
     OldIrql = KiAcquireDispatcherLock();
     KiAcquireThreadLock(Thread);
 
+    OldAffinity = KiThreadUserAffinityMask(Thread);
     KiThreadUserAffinityMask(Thread) = Affinity;
 
     if (Thread->SystemAffinityActive)
@@ -1250,7 +1272,7 @@ KeSetAffinityThread(
     }
     else
     {
-        OldAffinity = KiSetAffinityThread(Thread, Affinity);
+        KiSetAffinityThread(Thread, KiThreadCpuSetAffinity(Thread, Affinity));
     }
 
     KiReleaseThreadLock(Thread);
@@ -1324,7 +1346,9 @@ KeRevertToUserAffinityThreadEx(
     else
     {
         Thread->SystemAffinityActive = FALSE;
-        KiSetAffinityThread(Thread, KiThreadUserAffinityMask(Thread));
+        KiSetAffinityThread(Thread,
+                            KiThreadCpuSetAffinity(Thread,
+                                                   KiThreadUserAffinityMask(Thread)));
     }
 
     KiReleaseThreadLock(Thread);

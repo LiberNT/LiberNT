@@ -265,11 +265,11 @@ PspSetThreadCpuSets(
 {
     PEPROCESS Process = THREAD_TO_PROCESS(Thread);
     ULONG Ids[PSP_MAX_CPU_SET_IDS];
-    ULONG64 Masks[PSP_MAX_CPU_SET_IDS];
+    ULONG64 Previous;
+    ULONG64 Mask;
     KAFFINITY Allowed;
     KAFFINITY Affinity = 0;
     ULONG Count;
-    ULONG Index;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -299,14 +299,13 @@ PspSetThreadCpuSets(
 
     if ((Affinity & ~Allowed) != 0) return STATUS_INVALID_PARAMETER;
 
-    for (Index = 0; Index < Count; Index++)
-    {
-        Masks[Index] =
-            (ULONG64)PSP_CPU_SET_MASK(Ids[Index] - PSP_CPU_SET_ID_BASE);
-    }
+    /* The kernel takes one mask per processor group, and reads the field back whenever the affinity changes */
+    Previous = Thread->SelectedCpuSets;
+    Thread->SelectedCpuSets = (ULONG64)Affinity;
 
-    Status = KeSetSelectedCpuSetsThread(&Thread->Tcb, Count, Masks);
-    if (NT_SUCCESS(Status)) Thread->SelectedCpuSets = (ULONG64)Affinity;
+    Mask = (ULONG64)Affinity;
+    Status = KeSetSelectedCpuSetsThread(&Thread->Tcb, 1, &Mask);
+    if (!NT_SUCCESS(Status)) Thread->SelectedCpuSets = Previous;
 
     return Status;
 }

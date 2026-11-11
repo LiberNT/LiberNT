@@ -35,6 +35,7 @@ KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoReadWrite;
 KMT_TESTFUNC Test_ExHandleInformation;
 KMT_TESTFUNC Test_ExHandleListChurn;
+KMT_TESTFUNC Test_PsThreadCpuSets;
 KMT_TESTFUNC Test_KdLiveDump;
 KMT_TESTFUNC Test_KeContextSegments;
 KMT_TESTFUNC Test_KeNonCanonicalReturn;
@@ -108,6 +109,7 @@ const KMT_TEST TestList[] =
     { "IoReadWrite",                  Test_IoReadWrite },
     { "ExHandleInformation",          Test_ExHandleInformation },
     { "ExHandleListChurn",            Test_ExHandleListChurn },
+    { "PsThreadCpuSets",              Test_PsThreadCpuSets },
     { "KdLiveDump",                   Test_KdLiveDump },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },

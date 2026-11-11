@@ -435,6 +435,13 @@ KiSetAffinityThread(
     IN KAFFINITY Affinity
 );
 
+KAFFINITY
+FASTCALL
+KiThreadCpuSetAffinity(
+    IN PKTHREAD Thread,
+    IN KAFFINITY Affinity
+);
+
 PKTHREAD
 FASTCALL
 KiSelectNextThread(

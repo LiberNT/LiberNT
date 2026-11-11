@@ -1614,17 +1614,15 @@ KeSetSelectedCpuSetsThread(
     _In_ ULONG CpuSetCount,
     _In_reads_(CpuSetCount) PULONG64 CpuSetMasks)
 {
-    KAFFINITY Active = KeActiveProcessors;
+    KAFFINITY Selected;
+    KAFFINITY Affinity;
+    KIRQL OldIrql;
     ULONG i;
 
     if (Thread == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    /* An empty selection clears any restriction, which is the honest default. */
-    if (CpuSetCount == 0)
-        return STATUS_SUCCESS;
-
-    if (CpuSetMasks == NULL)
+    if ((CpuSetCount != 0) && (CpuSetMasks == NULL))
         return STATUS_INVALID_PARAMETER;
 
     /* Only group 0 exists, so no other group may carry a selection. */
@@ -1634,16 +1632,24 @@ KeSetSelectedCpuSetsThread(
             return STATUS_NOT_SUPPORTED;
     }
 
-    if (CpuSetMasks[0] == 0)
-        return STATUS_SUCCESS;
+    Selected = (CpuSetCount != 0) ? (KAFFINITY)CpuSetMasks[0] : 0;
+    if ((Selected & ~KeActiveProcessors) != 0)
+        return STATUS_INVALID_PARAMETER;
 
-    /* A selection covering every active processor imposes no real restriction.
-     * A proper subset would require per-thread CPU-set state that cannot be
-     * stored without changing the KTHREAD layout, so it is honestly rejected. */
-    if ((CpuSetMasks[0] & Active) == Active)
-        return STATUS_SUCCESS;
+    OldIrql = KiAcquireDispatcherLock();
+    KiAcquireThreadLock(Thread);
 
-    return STATUS_NOT_SUPPORTED;
+    Affinity = KiThreadUserAffinityMask(Thread);
+    if ((Affinity & Selected) != 0)
+        Affinity &= Selected;
+
+    if (!Thread->SystemAffinityActive)
+        KiSetAffinityThread(Thread, Affinity);
+
+    KiReleaseThreadLock(Thread);
+    KiReleaseDispatcherLock(OldIrql);
+
+    return STATUS_SUCCESS;
 }
 
 /*
