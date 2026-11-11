@@ -464,10 +464,10 @@
 @ stdcall GetLastError() ntdll.RtlGetLastWin32Error
 @ stdcall GetLengthSid(ptr)
 @ stdcall GetLocalTime(ptr) kernel32.GetLocalTime
-@ stdcall GetLocaleInfoA(long long ptr long) kernel32.GetLocaleInfoA
-@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long) kernel32.GetLocaleInfoEx
+@ stdcall GetLocaleInfoA(long long ptr long)
+@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long)
 @ stub GetLocaleInfoHelper
-@ stdcall GetLocaleInfoW(long long ptr long) kernel32.GetLocaleInfoW
+@ stdcall GetLocaleInfoW(long long ptr long)
 @ stdcall GetLogicalDriveStringsW(long ptr) kernel32.GetLogicalDriveStringsW
 @ stdcall GetLogicalDrives() kernel32.GetLogicalDrives
 @ stdcall GetLogicalProcessorInformation(ptr ptr) kernel32.GetLogicalProcessorInformation
@@ -562,7 +562,7 @@
 @ stdcall GetSystemCpuSetInformation(ptr long ptr ptr long)
 @ stdcall GetSystemDefaultLCID() kernel32.GetSystemDefaultLCID
 @ stdcall GetSystemDefaultLangID() kernel32.GetSystemDefaultLangID
-@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long) kernel32.GetSystemDefaultLocaleName
+@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long)
 @ stdcall GetSystemDefaultUILanguage() kernel32.GetSystemDefaultUILanguage
 @ stdcall GetSystemDirectoryA(ptr long) kernel32.GetSystemDirectoryA
 @ stdcall GetSystemDirectoryW(ptr long) kernel32.GetSystemDirectoryW
@@ -618,7 +618,7 @@
 @ stdcall GetUserDefaultGeoName(ptr long)
 @ stdcall GetUserDefaultLCID() kernel32.GetUserDefaultLCID
 @ stdcall GetUserDefaultLangID() kernel32.GetUserDefaultLangID
-@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long) kernel32.GetUserDefaultLocaleName
+@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long)
 @ stdcall GetUserDefaultUILanguage() kernel32.GetUserDefaultUILanguage
 @ stdcall GetUserGeoID(long)
 @ stub GetUserInfo
@@ -1185,7 +1185,7 @@
 @ stdcall SetKernelObjectSecurity(long long ptr)
 @ stdcall SetLastError(long) ntdll.RtlSetLastWin32Error
 @ stdcall SetLocalTime(ptr) kernel32.SetLocalTime
-@ stdcall SetLocaleInfoW(long long wstr) kernel32.SetLocaleInfoW
+@ stdcall SetLocaleInfoW(long long wstr)
 @ stdcall SetNamedPipeHandleState(long ptr ptr ptr) kernel32.SetNamedPipeHandleState
 @ stdcall SetPriorityClass(long long) kernel32.SetPriorityClass
 @ stdcall SetPrivateObjectSecurity(long ptr ptr ptr long)

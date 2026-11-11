@@ -6378,8 +6378,6 @@ INT WINAPI GetDurationFormatEx( const WCHAR *name, DWORD flags, const SYSTEMTIME
 }
 #endif
 
-#ifndef __REACTOS__
-
 
 /******************************************************************************
  *	GetLocaleInfoA   (kernelbase.@)
@@ -6470,8 +6468,6 @@ INT WINAPI DECLSPEC_HOTPATCH GetLocaleInfoEx( const WCHAR *name, LCTYPE info, WC
     return get_locale_info( locale, lcid, info, buffer, len );
 }
 
-
-#endif
 
 /******************************************************************************
  *	GetNLSVersion   (kernelbase.@)
@@ -6629,6 +6625,7 @@ LANGID WINAPI DECLSPEC_HOTPATCH GetSystemDefaultLangID(void)
     return LANGIDFROMLCID( GetSystemDefaultLCID() );
 }
 
+#endif
 
 /***********************************************************************
  *	GetSystemDefaultLocaleName   (kernelbase.@)
@@ -6638,6 +6635,7 @@ INT WINAPI DECLSPEC_HOTPATCH GetSystemDefaultLocaleName( LPWSTR name, INT count 
     return get_locale_info( system_locale, system_lcid, LOCALE_SNAME, name, count );
 }
 
+#ifndef __REACTOS__
 
 /***********************************************************************
  *	GetSystemDefaultUILanguage   (kernelbase.@)
@@ -6779,6 +6777,7 @@ LANGID WINAPI DECLSPEC_HOTPATCH GetUserDefaultLangID(void)
     return LANGIDFROMLCID( GetUserDefaultLCID() );
 }
 
+#endif
 
 /***********************************************************************
  *	GetUserDefaultLocaleName   (kernelbase.@)
@@ -6788,6 +6787,7 @@ INT WINAPI DECLSPEC_HOTPATCH GetUserDefaultLocaleName( LPWSTR name, INT len )
     return get_locale_info( user_locale, user_lcid, LOCALE_SNAME, name, len );
 }
 
+#ifndef __REACTOS__
 
 /***********************************************************************
  *	GetUserDefaultUILanguage   (kernelbase.@)
@@ -7521,8 +7521,6 @@ INT WINAPI DECLSPEC_HOTPATCH ResolveLocaleName( LPCWSTR name, LPWSTR buffer, INT
     return datalen;
 }
 
-#ifndef __REACTOS__
-
 
 /******************************************************************************
  *	SetLocaleInfoW   (kernelbase.@)
@@ -7610,6 +7608,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetLocaleInfoW( LCID lcid, LCTYPE lctype, const WC
     return FALSE;
 }
 
+#ifndef __REACTOS__
 
 /***********************************************************************
  *	SetCalendarInfoW   (kernelbase.@)

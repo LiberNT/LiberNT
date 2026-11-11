@@ -15,31 +15,23 @@ list(APPEND SOURCE
     DiscardVirtualMemory.c
     DllDirectory.c
     DynamicTimeZone.c
-    EnumSystemLocalesEx.c
     FirefoxCompat.c
     firmware.c
     GetActiveProcessorCount.c
     GetEnabledXStateFeatures.c
     GetOverlappedResultEx.c
-    GetLocaleInfoEx.c
     GetFileInformationByHandleEx.c
     GetFinalPathNameByHandle.c
     GetLogicalProcessorInformationEx.c
     GetNamedPipeClientProcessId.c
     GetProcessGroupAffinity.c
-    GetSystemDefaultLocaleName.c
     GetTickCount64.c
-    GetUserDefaultLocaleName.c
     InitOnce.c
-    IsValidLocaleName.c
-    LCIDToLocaleName.c
-    LocaleNameToLCID.c
     Packages.c
     ProcThreadAttributeList.c
     PrefetchVirtualMemory.c
     ProcessInformation.c
     ProcessMitigationPolicy.c
-    ResolveLocaleName.c
     SetDefaultDllDirectories.c
     SetFileInformationByHandle.c
     SetProcessValidCallTargets.c

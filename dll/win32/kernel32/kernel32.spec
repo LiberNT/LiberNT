@@ -555,9 +555,9 @@
 @ stdcall GetLastError() ntdll.RtlGetLastWin32Error
 @ stdcall -version=0x500-0x502 GetLinguistLangSize(ptr)
 @ stdcall GetLocalTime(ptr)
-@ stdcall GetLocaleInfoA(long long ptr long)
-@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long)
-@ stdcall GetLocaleInfoW(long long ptr long)
+@ stdcall GetLocaleInfoA(long long ptr long) kernelbase.GetLocaleInfoA
+@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long) kernelbase.GetLocaleInfoEx
+@ stdcall GetLocaleInfoW(long long ptr long) kernelbase.GetLocaleInfoW
 @ stdcall -arch=win64 GetNextUmsListItem(ptr)
 @ stdcall -version=0x602+ GetOsSafeBootMode(ptr)
 @ stdcall -version=0x602+ GetPackageFullName(long ptr ptr) kernelbase.GetPackageFullName
@@ -680,7 +680,7 @@
 @ stdcall -version=0x600+ GetSystemDEPPolicy()
 @ stdcall GetSystemDefaultLCID()
 @ stdcall GetSystemDefaultLangID()
-@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long)
+@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long) kernelbase.GetSystemDefaultLocaleName
 @ stdcall GetSystemDefaultUILanguage()
 @ stdcall GetSystemDirectoryA(ptr long)
 @ stdcall GetSystemDirectoryW(ptr long)
@@ -733,7 +733,7 @@
 @ stdcall GetUserDefaultGeoName(ptr long) kernelbase.GetUserDefaultGeoName
 @ stdcall GetUserDefaultLCID()
 @ stdcall GetUserDefaultLangID()
-@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long)
+@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long) kernelbase.GetUserDefaultLocaleName
 @ stdcall GetUserDefaultUILanguage()
 @ stdcall GetUserGeoID(long) kernelbase.GetUserGeoID
 @ stdcall -version=0x600+ GetUserPreferredUILanguages(long ptr wstr ptr) kernelbase.GetUserPreferredUILanguages
@@ -1249,7 +1249,7 @@
 @ stdcall SetLocalPrimaryComputerNameW(long long) ; missing in XP SP3
 @ stdcall SetLocalTime(ptr)
 @ stdcall SetLocaleInfoA(long long str)
-@ stdcall SetLocaleInfoW(long long wstr)
+@ stdcall SetLocaleInfoW(long long wstr) kernelbase.SetLocaleInfoW
 @ stdcall SetMailslotInfo(long long)
 @ stdcall SetMessageWaitingIndicator(ptr long)
 @ stub -version=0x600+ SetNamedPipeAttribute
