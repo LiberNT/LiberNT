@@ -314,6 +314,15 @@ static nsresult run_end_load(HTMLDocumentNode *This, nsISupports *arg1, nsISuppo
         parse_complete(doc_obj);
         IUnknown_Release(doc_obj->outer_unk);
     }
+#ifdef __REACTOS__
+    else if(window->base.outer_window && window->base.outer_window->parent && doc_obj->doc_object_service &&
+            !(window->base.outer_window->load_flags & BINDING_REFRESH)) {
+        IUnknown_AddRef(doc_obj->outer_unk);
+        IDocObjectService_FireNavigateComplete2(doc_obj->doc_object_service,
+                &window->base.outer_window->base.IHTMLWindow2_iface, navNoHistory | navNoReadFromCache);
+        IUnknown_Release(doc_obj->outer_unk);
+    }
+#endif
 
     bind_event_scripts(This);
 
