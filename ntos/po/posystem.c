@@ -783,6 +783,13 @@ NtSetSystemPowerState(
     if (!SeSinglePrivilegeCheck(SeShutdownPrivilege, PreviousMode))
         return STATUS_PRIVILEGE_NOT_HELD;
 
+    if (SystemAction == PowerActionShutdown ||
+        SystemAction == PowerActionShutdownReset ||
+        SystemAction == PowerActionShutdownOff)
+    {
+        return PopShutdownSystem(SystemAction);
+    }
+
     return PopSleepSystem(SystemAction, MinSystemState, Flags);
 }
 

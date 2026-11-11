@@ -593,6 +593,18 @@ PopGracefulShutdown(
     IN PVOID Context
 );
 
+NTSTATUS
+NTAPI
+PopShutdownSystem(
+    IN POWER_ACTION SystemAction
+);
+
+NTSTATUS
+NTAPI
+PopShutdownSendDevices(
+    IN POWER_ACTION SystemAction
+);
+
 VOID
 NTAPI
 PopFlushVolumes(

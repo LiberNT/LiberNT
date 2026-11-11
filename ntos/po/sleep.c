@@ -653,6 +653,31 @@ PopSleepIpiWorker(
 
 NTSTATUS
 NTAPI
+PopShutdownSendDevices(
+    _In_ POWER_ACTION SystemAction)
+{
+    PDEVICE_OBJECT PowerPdo;
+    PDEVICE_OBJECT PowerDevice = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (SystemAction != PowerActionShutdownReset &&
+        NT_SUCCESS(IopGetSystemPowerDeviceObject(&PowerPdo)))
+    {
+        PowerDevice = IoGetAttachedDeviceReference(PowerPdo);
+    }
+
+    Status = PopSleepSendDevices(PowerDevice, IRP_MN_SET_POWER, PowerSystemShutdown, SystemAction);
+
+    if (PowerDevice != NULL)
+        ObDereferenceObject(PowerDevice);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 PopSleepSystem(
     _In_ POWER_ACTION SystemAction,
     _In_ SYSTEM_POWER_STATE LightestSystemState,

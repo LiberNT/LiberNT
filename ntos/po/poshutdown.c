@@ -18,6 +18,9 @@ PPOP_SHUTDOWN_WAIT_ENTRY PopShutdownThreadList = NULL;
 ULONG PopShutdownPowerOffPolicy = 0;
 KEVENT PopShutdownEvent;
 
+static volatile LONG PopShutdownStarted = FALSE;
+static POWER_ACTION PopShutdownAction = PowerActionShutdown;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -216,6 +219,8 @@ NTAPI
 PopGracefulShutdown(
     _In_ PVOID Context)
 {
+    POWER_ACTION Action;
+
     UNREFERENCED_PARAMETER(Context);
 
     PAGED_CODE();
@@ -224,14 +229,45 @@ PopGracefulShutdown(
 
     /* TODO: the processes still running are not asked to stop first */
 
+    KdShutdownBootLog();
+
+    IoShutdownSystem(0);
+    CmShutdownSystem();
+    CcShutdownSystem();
+    MmShutdownSystem(0);
+
     PopFlushVolumes(TRUE);
 
-    PopSetSystemPowerState(PowerSystemShutdown, PopShutdownPowerOffPolicy
-                                                    ? PowerActionShutdownOff
-                                                    : PowerActionShutdown);
+    IoShutdownSystem(1);
+    IoShutdownSystem(2);
 
-    HalReturnToFirmware(PopShutdownPowerOffPolicy ? HalPowerDownRoutine
-                                                  : HalHaltRoutine);
+    Action = PopShutdownAction;
+    if (Action == PowerActionShutdown && PopShutdownPowerOffPolicy)
+        Action = PowerActionShutdownOff;
+
+    PopShutdownSendDevices(Action);
+
+    if (Action == PowerActionShutdownReset)
+        HalReturnToFirmware(HalRebootRoutine);
+    else if (Action == PowerActionShutdownOff)
+        HalReturnToFirmware(HalPowerDownRoutine);
+    else
+        HalReturnToFirmware(HalHaltRoutine);
+}
+
+NTSTATUS
+NTAPI
+PopShutdownSystem(
+    _In_ POWER_ACTION SystemAction)
+{
+    PAGED_CODE();
+
+    if (InterlockedExchange(&PopShutdownStarted, TRUE) != FALSE)
+        return STATUS_SUCCESS;
+
+    PopShutdownAction = SystemAction;
+    PopGracefulShutdown(NULL);
+    return STATUS_SUCCESS;
 }
 
 /*
