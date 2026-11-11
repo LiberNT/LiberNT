@@ -443,7 +443,8 @@ NtCancelIoFile(
     {
         _SEH2_TRY
         {
-            IopWriteIoStatusBlock(IoStatusBlock,
+            IopWriteIoStatusBlock(IopIs32BitFileIo(FileObject, PreviousMode) ?
+                                      IopGetWow64IoStatusBlock(IoStatusBlock) : IoStatusBlock,
                                   &KernelIosb,
                                   IopIs32BitFileIo(FileObject, PreviousMode));
         }
@@ -522,7 +523,8 @@ NtCancelIoFileEx(
     {
         _SEH2_TRY
         {
-            IopWriteIoStatusBlock(IoStatusBlock,
+            IopWriteIoStatusBlock(IopIs32BitFileIo(FileObject, PreviousMode) ?
+                                      IopGetWow64IoStatusBlock(IoStatusBlock) : IoStatusBlock,
                                   &KernelIosb,
                                   IopIs32BitFileIo(FileObject, PreviousMode));
         }
