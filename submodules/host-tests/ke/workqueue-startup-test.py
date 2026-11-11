@@ -1,5 +1,6 @@
 # PROJECT:     LiberNT host-native tests
-# LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)+# PURPOSE:     Early executive work queue regression
+# LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+# PURPOSE:     Early executive work queue regression
 # COPYRIGHT:   Copyright 2026 LiberNT contributors
 import argparse
 import pathlib
@@ -11,10 +12,10 @@ parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 root = pathlib.Path(args.root)
+source = (root / 'ntos/ex/exworker.c').read_text()
 
 
-def body(path, name):
-    source = (root / path).read_text()
+def body(name):
     start = source.index('\n' + name + '(')
     start = source.index('{', start)
     depth = 1
@@ -31,17 +32,22 @@ fixture = r'''
 #include <stdint.h>
 #include <string.h>
 typedef unsigned int ULONG;
-typedef int32_t LONG, *PLONG;
-typedef uintptr_t ULONG_PTR;
-typedef int BOOLEAN, NTSTATUS, WORK_QUEUE_TYPE;
-typedef void *PVOID, *HANDLE, *PETHREAD;
-typedef struct LIST_ENTRY { struct LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *PLIST_ENTRY;
-typedef struct { int Type; } HEADER;
-typedef struct { HEADER Header; LIST_ENTRY EntryListHead; ULONG CurrentCount, MaximumCount; } KQUEUE;
-typedef struct { int MakeThreadsAsNecessary, QueueDisabled; } INFO;
-typedef struct { KQUEUE WorkerQueue; INFO Info; ULONG DynamicThreadCount; } EX_WORK_QUEUE, *PEX_WORK_QUEUE;
-typedef struct { LIST_ENTRY List; void (*WorkerRoutine)(void *); } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
-typedef struct { int Initialized, Signaled; } EVENT;
+typedef int32_t LONG;
+typedef uintptr_t ULONG_PTR, KSPIN_LOCK;
+typedef unsigned char BOOLEAN, KIRQL;
+typedef int NTSTATUS, WORK_QUEUE_TYPE;
+typedef void *PVOID, *HANDLE;
+typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *PLIST_ENTRY;
+typedef struct { int Type; } DISPATCHER_HEADER;
+typedef struct { DISPATCHER_HEADER Header; LIST_ENTRY EntryListHead; ULONG CurrentCount, MaximumCount; } KQUEUE;
+typedef struct { BOOLEAN MakeThreadsAsNecessary; } EX_QUEUE_INFO;
+typedef struct {
+    KQUEUE WorkerQueue;
+    ULONG DynamicThreadCount, WorkItemsProcessed, WorkItemsProcessedLastPass, QueueDepthLastPass;
+    EX_QUEUE_INFO Info;
+} EX_WORK_QUEUE;
+typedef struct { LIST_ENTRY List; void (*WorkerRoutine)(PVOID); PVOID Parameter; } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
+typedef struct { int Initialized; } KEVENT, FAST_MUTEX;
 #define CriticalWorkQueue 0
 #define DelayedWorkQueue 1
 #define HyperCriticalWorkQueue 2
@@ -49,107 +55,100 @@ typedef struct { int Initialized, Signaled; } EVENT;
 #define QueueObject 7
 #define FALSE 0
 #define TRUE 1
-#define FirmwareTypeUefi 1
-#define FirmwareTypeBios 0
-#define EX_DELAYED_WORK_RESERVE 6
-#define EX_MAX_DELAYED_WORK_THREADS 16
-#define EX_CRITICAL_WORK_THREADS 5
-#define EX_HYPERCRITICAL_WORK_THREADS 1
+#define NotificationEvent 0
 #define SynchronizationEvent 1
-#define NotificationEvent 2
 #define THREAD_ALL_ACCESS 0
 #define KernelMode 0
-#define PHASE1_INITIALIZATION_FAILED 1
-#define WORKER_INVALID 2
+#define EXP_CRITICAL_WORKERS_BASE 5
+#define EXP_DELAYED_WORKERS_BASE 3
+#define EXP_HYPERCRITICAL_WORKERS 1
 #define ASSERT(x) assert(x)
-#define DPRINT(...) ((void)0)
-#define DPRINT1(...) ((void)0)
-#define NT_SUCCESS(s) ((s) == 0)
-#define min(a,b) ((a)<(b)?(a):(b))
-#define RtlZeroMemory(p,n) memset(p,0,n)
+#define NT_SUCCESS(s) ((s) >= 0)
 static EX_WORK_QUEUE ExWorkerQueue[MaximumWorkQueue];
-static ULONG ExpStaticWorkerCounts[MaximumWorkQueue], KeNumberProcessors = 1;
-static ULONG ExpAdditionalDelayedWorkerThreads, ExpAdditionalCriticalWorkerThreads;
-static ULONG ExCriticalWorkerThreads, ExDelayedWorkerThreads;
-static int ExpWorkersCanSwap, ExpWorkerSwapinMutex, ExpEnvironmentLock;
-static LIST_ENTRY ExpWorkerListHead, ExpFirmwareTableProviderListHead;
-static int ExpFirmwareTableResource, ExpTimeRefreshLock, ExpFirmwareType, ExSuiteMask;
-static EVENT ExpThreadSetManagerEvent, ExpThreadSetManagerShutdownEvent;
-static PETHREAD ExpWorkerThreadBalanceManagerPtr;
-static ULONG_PTR MmUserProbeAddress;
-static struct { struct { int FirmwareTypeEfi; } FirmwareInformation; } Loader, *KeLoaderBlock = &Loader;
-static void InitializeListHead(LIST_ENTRY *h) { h->Flink = h->Blink = h; }
-static int IsListEmpty(LIST_ENTRY *h) { return h->Flink == h; }
+static ULONG KeNumberProcessors = 1, ExCriticalWorkerThreads, ExDelayedWorkerThreads, WorkersCreated;
+static LIST_ENTRY ExpWorkerListHead;
+static KSPIN_LOCK ExpWorkerListLock, ExpEarlyWorkLock;
+static FAST_MUTEX ExpWorkerSwapinMutex;
+static KEVENT ExpThreadSetManagerEvent, ExpThreadSetManagerShutdownEvent;
+static PVOID ExpWorkerThreadBalanceManagerPtr, PsThreadType;
+static PLIST_ENTRY ExpEarlyWork[MaximumWorkQueue];
+static BOOLEAN ExpWorkerQueuesReady;
+static int LockHeld;
+static void InitializeListHead(PLIST_ENTRY h) { h->Flink = h->Blink = h; }
+static void KeInitializeSpinLock(KSPIN_LOCK *l) { *l = 0; }
+static void KeAcquireSpinLock(KSPIN_LOCK *l, KIRQL *irql) { (void)l; assert(!LockHeld); LockHeld = 1; *irql = 0; }
+static void KeReleaseSpinLock(KSPIN_LOCK *l, KIRQL irql) { (void)l; (void)irql; assert(LockHeld); LockHeld = 0; }
+static BOOLEAN ReadBooleanAcquire(const BOOLEAN *p) { return *p; }
+static void WriteBooleanRelease(BOOLEAN *p, BOOLEAN v) { assert(LockHeld); *p = v; }
+static void ExInitializeFastMutex(FAST_MUTEX *m) { m->Initialized = 1; }
+static void KeInitializeEvent(KEVENT *e, int type, int state) { (void)type; (void)state; e->Initialized = 1; }
 static void KeInitializeQueue(KQUEUE *q, ULONG count) {
-    q->Header.Type = QueueObject; InitializeListHead(&q->EntryListHead);
-    q->CurrentCount = 0; q->MaximumCount = count ? count : KeNumberProcessors;
+    q->Header.Type = QueueObject;
+    InitializeListHead(&q->EntryListHead);
+    q->CurrentCount = 0;
+    q->MaximumCount = count ? count : KeNumberProcessors;
 }
-static void KeInsertQueue(KQUEUE *q, LIST_ENTRY *e) {
-    LIST_ENTRY *h = &q->EntryListHead;
+static void KeInsertQueue(KQUEUE *q, PLIST_ENTRY e) {
+    PLIST_ENTRY h = &q->EntryListHead;
     assert(q->Header.Type == QueueObject);
     e->Blink = h->Blink; e->Flink = h; h->Blink->Flink = e; h->Blink = e;
 }
-static void KeInitializeEvent(EVENT *e, int type, int state) { (void)type; (void)state; e->Initialized = 1; }
-static void KeSetEvent(EVENT *e, int a, int b) { (void)a; (void)b; assert(e->Initialized); e->Signaled = 1; }
-static LONG InterlockedExchange(LONG *p, LONG value) { LONG old = *p; *p = value; return old; }
-static void ExInitializeFastMutex(int *p) { (void)p; }
-static void ExInitializeResourceLite(int *p) { (void)p; }
-static void ExpResourceInitialization(void) {}
-static void ExpInitLookasideLists(void) {}
-static int ExpGetSuiteMask(void) { return 0; }
-static void ExpCreateWorkerThread(int q, int dynamic) { (void)q; (void)dynamic; }
-static void ExpWorkerThreadBalanceManager(void) {}
-static NTSTATUS PsCreateSystemThread(HANDLE *h, int a, void *b, int c, void *d, void (*e)(void), void *f) {
-    (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; *h = (void *)1; return 0;
+static void ExpCreateWorkerThread(WORK_QUEUE_TYPE q, BOOLEAN dynamic) {
+    (void)q; (void)dynamic;
+    assert(ExpWorkerQueuesReady);
+    WorkersCreated++;
 }
-static void ObReferenceObjectByHandle(HANDLE h, int a, void *b, int c, void **p, void *d) {
-    (void)h; (void)a; (void)b; (void)c; (void)d; *p = (void *)1;
+static void ExpWorkerThreadBalanceManager(PVOID p) { (void)p; }
+static NTSTATUS PsCreateSystemThread(HANDLE *h, int a, PVOID b, PVOID c, PVOID d, void (*e)(PVOID), PVOID f) {
+    (void)a; (void)b; (void)c; (void)d; (void)e; (void)f; *h = (HANDLE)1; return 0;
+}
+static NTSTATUS ObReferenceObjectByHandle(HANDLE h, int a, PVOID b, int c, PVOID *p, PVOID d) {
+    (void)h; (void)a; (void)b; (void)c; (void)d; *p = (PVOID)1; return 0;
 }
 static void ObCloseHandle(HANDLE h, int mode) { (void)h; (void)mode; }
-static void KeBugCheckEx(int code, ...) { (void)code; assert(0); }
-static BOOLEAN ExpNewThreadNecessary(WORK_QUEUE_TYPE WorkQueueType) { @NECESSARY@ }
-static void ExpInitializeWorkerQueues(void) { @QUEUES@ }
-static BOOLEAN ExpInitSystemPhase0(void) { @PHASE0@ }
+static BOOLEAN ExpHoldEarlyWorkItem(PWORK_QUEUE_ITEM WorkItem, WORK_QUEUE_TYPE QueueType) { @HOLD@ }
+static void ExpReleaseEarlyWork(void) { @RELEASE@ }
 static void ExpInitializeWorkerThreads(void) { @THREADS@ }
 static void ExQueueWorkItem(PWORK_QUEUE_ITEM WorkItem, WORK_QUEUE_TYPE QueueType) { @ENQUEUE@ }
-static void Worker(void *p) { (void)p; }
+static void Worker(PVOID p) { (void)p; }
 int main(void) {
-    WORK_QUEUE_ITEM Items[MaximumWorkQueue] = {0}, Later = {0};
+    WORK_QUEUE_ITEM Early[MaximumWorkQueue], Second, Later;
     ULONG i;
-    assert(ExpInitSystemPhase0());
+    memset(Early, 0, sizeof(Early));
+    memset(&Second, 0, sizeof(Second));
+    memset(&Later, 0, sizeof(Later));
     for (i = 0; i < MaximumWorkQueue; i++) {
-        Items[i].WorkerRoutine = Worker;
-        ExQueueWorkItem(&Items[i], i);
-        assert(ExWorkerQueue[i].WorkerQueue.EntryListHead.Flink == &Items[i].List);
+        Early[i].WorkerRoutine = Worker;
+        ExQueueWorkItem(&Early[i], i);
+        assert(ExWorkerQueue[i].WorkerQueue.Header.Type != QueueObject);
     }
+    Second.WorkerRoutine = Worker;
+    ExQueueWorkItem(&Second, CriticalWorkQueue);
+    assert(!LockHeld && !ExpWorkerQueuesReady);
     KeNumberProcessors = 4;
     ExpInitializeWorkerThreads();
+    assert(ExpWorkerQueuesReady && !LockHeld && WorkersCreated != 0);
     for (i = 0; i < MaximumWorkQueue; i++) {
-        assert(ExWorkerQueue[i].WorkerQueue.EntryListHead.Flink == &Items[i].List);
+        assert(ExpEarlyWork[i] == NULL);
         assert(ExWorkerQueue[i].WorkerQueue.MaximumCount == 4);
+        assert(ExWorkerQueue[i].WorkerQueue.EntryListHead.Flink == &Early[i].List);
     }
+    assert(Early[CriticalWorkQueue].List.Flink == &Second.List);
+    assert(Second.List.Flink == &ExWorkerQueue[CriticalWorkQueue].WorkerQueue.EntryListHead);
     Later.WorkerRoutine = Worker;
     ExQueueWorkItem(&Later, CriticalWorkQueue);
-    assert(Items[CriticalWorkQueue].List.Flink == &Later.List);
-    assert(ExpThreadSetManagerEvent.Signaled);
-    assert(ExCriticalWorkerThreads == 5 && ExDelayedWorkerThreads == 10);
-    assert(ExpWorkersCanSwap && ExpFirmwareType == FirmwareTypeBios && ExSuiteMask == 0);
-    assert(ExpWorkerThreadBalanceManagerPtr == (void *)1);
+    assert(Second.List.Flink == &Later.List);
+    assert(ExpWorkerThreadBalanceManagerPtr == (PVOID)1);
     return 0;
 }
 '''
-for marker, path, name in [
-    ('NECESSARY', 'ntos/ex/work.c', 'ExpNewThreadNecessary'),
-    ('PHASE0', 'ntos/ex/init.c', 'ExpInitSystemPhase0'),
-    ('THREADS', 'ntos/ex/work.c', 'ExpInitializeWorkerThreads'),
-    ('ENQUEUE', 'ntos/ex/work.c', 'ExQueueWorkItem'),
+for marker, name in [
+    ('HOLD', 'ExpHoldEarlyWorkItem'),
+    ('RELEASE', 'ExpReleaseEarlyWork'),
+    ('THREADS', 'ExpInitializeWorkerThreads'),
+    ('ENQUEUE', 'ExQueueWorkItem'),
 ]:
-    fixture = fixture.replace('@' + marker + '@', body(path, name))
-try:
-    queues = body('ntos/ex/work.c', 'ExpInitializeWorkerQueues')
-except ValueError:
-    queues = ''
-fixture = fixture.replace('@QUEUES@', queues)
+    fixture = fixture.replace('@' + marker + '@', body(name))
 
 with tempfile.TemporaryDirectory(prefix='ex-workqueue-') as tmp:
     path = pathlib.Path(tmp)
