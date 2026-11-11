@@ -91,7 +91,11 @@ KiUnwindFrame(
 
     /* A return address after a call that ends its function already lies in the next one */
     if (!KiLookupFunctionEntryUnlocked(CallerFrame ? ControlPc - 1 : ControlPc, &ImageBase, &FunctionEntry))
-        return FALSE;
+    {
+        /* A kernel fault outside every image is a call through a bad pointer: its caller's return address is on top */
+        if (CallerFrame || ((Context->SegCs & MODE_MASK) != KernelMode))
+            return FALSE;
+    }
 
     if (FunctionEntry == NULL)
     {
