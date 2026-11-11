@@ -2,6 +2,7 @@
 #include <apitest.h>
 
 extern void func_AppInstallManager(void);
+extern void func_DispatcherQueue(void);
 extern void func_NotificationData(void);
 extern void func_PenDevice(void);
 extern void func_ToastCallback(void);
@@ -13,6 +14,7 @@ extern void func_ValueSet(void);
 const struct test winetest_testlist[] =
 {
     { "AppInstallManager", func_AppInstallManager },
+    { "DispatcherQueue", func_DispatcherQueue },
     { "NotificationData", func_NotificationData },
     { "PenDevice", func_PenDevice },
     { "ToastCallback", func_ToastCallback },
