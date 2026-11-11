@@ -283,6 +283,7 @@ KdpStub(
     ULONG ComponentId;
     ULONG Level;
     STRING Output;
+    NTSTATUS PrintStatus = STATUS_DEVICE_NOT_CONNECTED;
 
     UNREFERENCED_PARAMETER(TrapFrame);
     UNREFERENCED_PARAMETER(ExceptionFrame);
@@ -311,10 +312,10 @@ KdpStub(
                                     Output.Buffer,
                                     Output.Length,
                                     PreviousMode);
+                PrintStatus = STATUS_SUCCESS;
             }
 
-            KeSetContextReturnRegister(ContextRecord,
-                                       (ULONG_PTR)STATUS_DEVICE_NOT_CONNECTED);
+            KeSetContextReturnRegister(ContextRecord, (ULONG_PTR)PrintStatus);
             KdpStepPastServiceBreakpoint(ContextRecord);
             return TRUE;
 

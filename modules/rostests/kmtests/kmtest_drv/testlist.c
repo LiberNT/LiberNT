@@ -202,6 +202,7 @@ KMT_TESTFUNC Test_KdBreakContinue;
 KMT_TESTFUNC Test_KdChangeOption;
 KMT_TESTFUNC Test_KdDebuggerPresent;
 KMT_TESTFUNC Test_KdPrintComponent;
+KMT_TESTFUNC Test_KdPrintStatus;
 KMT_TESTFUNC Test_KdSystemDebugControl;
 KMT_TESTFUNC Test_KdUsbNetRules;
 KMT_TESTFUNC Test_KsecBcrypt;
@@ -568,6 +569,7 @@ const KMT_TEST TestList[] =
     { "KdChangeOption",                     Test_KdChangeOption },
     { "KdDebuggerPresent",                  Test_KdDebuggerPresent },
     { "KdPrintComponent",                   Test_KdPrintComponent },
+    { "KdPrintStatus",                      Test_KdPrintStatus },
     { "KdSystemDebugControl",               Test_KdSystemDebugControl },
     { "KdUsbNetRules",                      Test_KdUsbNetRules },
     { "KsecBcrypt",                         Test_KsecBcrypt },
