@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <winreg.h>
 
 static
 VOID
@@ -184,6 +185,56 @@ TestKeyDacl(VOID)
     RtlFreeSid(World);
 }
 
+static
+VOID
+TestLongLinkTarget(VOID)
+{
+    UNICODE_STRING LinkName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Software\\RosTestsLongLink");
+    UNICODE_STRING Through = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Software\\RosTestsLongLink\\Beyond\\TheEnd");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SymbolicLinkValue");
+    static const WCHAR Prefix[] = L"\\Registry\\Machine\\Software\\";
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    const ULONG TargetLength = 0xFFF0;
+    HANDLE Link, KeyHandle;
+    PWCHAR Target;
+    NTSTATUS Status;
+    ULONG i;
+
+    Target = RtlAllocateHeap(RtlGetProcessHeap(), 0, TargetLength);
+    if (Target == NULL)
+    {
+        skip("Out of memory\n");
+        return;
+    }
+    RtlCopyMemory(Target, Prefix, sizeof(Prefix) - sizeof(WCHAR));
+    for (i = (sizeof(Prefix) - sizeof(WCHAR)) / sizeof(WCHAR); i < TargetLength / sizeof(WCHAR); i++)
+        Target[i] = L'a';
+
+    InitializeObjectAttributes(&ObjectAttributes, &LinkName, OBJ_CASE_INSENSITIVE | OBJ_OPENLINK, NULL, NULL);
+    Status = NtCreateKey(&Link, KEY_ALL_ACCESS, &ObjectAttributes, 0, NULL,
+                         REG_OPTION_VOLATILE | REG_OPTION_CREATE_LINK, NULL);
+    ok(Status == STATUS_SUCCESS, "NtCreateKey(link) returned 0x%lx\n", Status);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Target);
+        return;
+    }
+
+    Status = NtSetValueKey(Link, &ValueName, 0, REG_LINK, Target, TargetLength);
+    ok(Status == STATUS_SUCCESS, "NtSetValueKey returned 0x%lx\n", Status);
+
+    InitializeObjectAttributes(&ObjectAttributes, &Through, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes);
+    ok(Status == STATUS_INVALID_PARAMETER || Status == STATUS_NAME_TOO_LONG,
+       "NtOpenKey through the link returned 0x%lx\n", Status);
+    if (NT_SUCCESS(Status)) NtClose(KeyHandle);
+
+    Status = NtDeleteKey(Link);
+    ok(Status == STATUS_SUCCESS, "NtDeleteKey returned 0x%lx\n", Status);
+    NtClose(Link);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Target);
+}
+
 START_TEST(NtCreateKey)
 {
     TestCreateOpen(0, 0, STATUS_ACCESS_DENIED);
@@ -196,4 +247,5 @@ START_TEST(NtCreateKey)
     TestCreateOpen(READ_CONTROL | KEY_WOW64_32KEY | KEY_WOW64_64KEY, READ_CONTROL, STATUS_SUCCESS); // STATUS_INVALID_PARAMETER on Win7
     TestBackupOpen();
     TestKeyDacl();
+    TestLongLinkTarget();
 }

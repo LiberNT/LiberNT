@@ -57,7 +57,7 @@ CmpReparseThroughLink(
     UNICODE_STRING Target;
     PWCHAR Buffer;
     ULONG Length;
-    USHORT Size;
+    ULONG Size;
 
     Cell = CmpFindValueByName(Hive, Node, &CmSymbolicLinkValueName);
     if (Cell == HCELL_NIL) return STATUS_OBJECT_NAME_NOT_FOUND;
@@ -82,11 +82,17 @@ CmpReparseThroughLink(
     Target.Length = (USHORT)Length;
     Target.MaximumLength = (USHORT)Length;
 
-    Size = Target.Length + Remaining->Length;
+    Size = (ULONG)Target.Length + Remaining->Length;
     if (Remaining->Length != 0 &&
         Remaining->Buffer[0] != OBJ_NAME_PATH_SEPARATOR)
     {
         Size += sizeof(WCHAR);
+    }
+
+    if (Size + sizeof(WCHAR) > MAXUSHORT)
+    {
+        HvReleaseCell(Hive, Cell);
+        return STATUS_INVALID_PARAMETER;
     }
 
     Buffer = ExAllocatePoolZero(PagedPool, Size + sizeof(WCHAR), TAG_CM);
@@ -118,8 +124,8 @@ CmpReparseThroughLink(
     if (CompleteName->Buffer != NULL) ExFreePool(CompleteName->Buffer);
 
     CompleteName->Buffer = Buffer;
-    CompleteName->Length = Size;
-    CompleteName->MaximumLength = Size + sizeof(WCHAR);
+    CompleteName->Length = (USHORT)Size;
+    CompleteName->MaximumLength = (USHORT)(Size + sizeof(WCHAR));
     return STATUS_REPARSE;
 }
 
