@@ -1138,8 +1138,7 @@ NtSetInformationFile(
         PFILE_IO_PRIORITY_HINT_INFORMATION Hint = Buffer;
         PFILE_OBJECT_EXTENSION Extension;
 
-        if (Hint->PriorityHint >= MaxIoPriorityTypes ||
-            (PreviousMode != KernelMode && Hint->PriorityHint > IoPriorityNormal))
+        if (Hint->PriorityHint >= MaxIoPriorityTypes)
         {
             ExFreePoolWithTag(Buffer, TAG_IOBUF);
             ObDereferenceObject(FileObject);
