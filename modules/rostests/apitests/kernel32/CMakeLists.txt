@@ -79,6 +79,7 @@ list(APPEND SOURCE
     GetVolumeInformation.c
     GetWsChangesEx.c
     HeapLowFragmentation.c
+    HighResolutionTimerClock.c
     HeapSummary.c
     InitOnce.c
     interlck.c

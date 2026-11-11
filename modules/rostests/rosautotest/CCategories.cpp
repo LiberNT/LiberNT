@@ -158,6 +158,7 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "ExitedClientId", "core:process" },
     { "kernel32_apitest", "SleepTickRounding", "core:threads" },
     { "kernel32_apitest", "TimerResolutionSleep", "core:threads" },
+    { "kernel32_apitest", "HighResolutionTimerClock", "core:threads" },
     { "kernel32_apitest", "QueryProcessCycleTime", "core:process" },
     { "kernel32_apitest", "ProcessPowerThrottling", "core:process" },
     { "kernel32_apitest", "StdHandleInheritance", "core:process" },
