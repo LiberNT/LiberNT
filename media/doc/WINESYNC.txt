@@ -24,6 +24,10 @@ sdk/tools/wpp                   # Synced to Wine-11.14 (Module was moved into wr
 The following headers are shared with Wine.
 sdk/include/psdk/msasn1.h       # Synced to Wine-11.13-83-ge8781e7c8d0
 sdk/include/psdk/rpcproxy.h     # Synced to Wine-11.14
+sdk/include/psdk/sapi.idl       # Synced to Wine-11.14
+sdk/include/psdk/sapiaut.idl    # Synced to Wine-11.14
+sdk/include/psdk/sapiddk.idl    # Synced to Wine-11.14
+sdk/include/psdk/sperror.h      # Synced to Wine-11.14
 sdk/include/psdk/netioapi.h     # Synced to Wine-11.14 (mirrors sdk/include/wine/netioapi.h)
 sdk/include/psdk/winevt.h       # Synced to Wine-11.14
 sdk/include/psdk/wldp.h         # Synced to Wine-11.13-83-ge8781e7c8d0 (LiberNT adds the documented declarations)
@@ -225,6 +229,7 @@ dll/win32/rpcrt4              # Synced to Wine-11.14
 dll/win32/rsabase             # Synced to Wine-11.14
 dll/win32/rsaenh              # Synced to Wine-11.14
 dll/win32/rtworkq             # Synced to Wine-11.14
+dll/win32/sapi                # Synced to Wine-11.14 (LiberNT drops the empty Wine default voice token)
 dll/win32/sccbase             # Synced to Wine-11.14
 dll/win32/schannel            # Synced to Wine-11.14
 dll/win32/scrrun              # Synced to Wine-11.14

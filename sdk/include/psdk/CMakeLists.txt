@@ -155,6 +155,8 @@ list(APPEND SOURCE
 #   rstbas.idl
 #   rstinf.idl
 #   rstloc.idl
+    sapi.idl
+    sapiddk.idl
     sensevts.idl
     sensorsapi.idl
     servprov.idl
