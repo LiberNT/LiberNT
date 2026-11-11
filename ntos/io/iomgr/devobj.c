@@ -752,6 +752,9 @@ IoDeleteDevice(
             IoGetDevObjExtension(DeviceObject)->DeviceNode);
     }
 
+    /* The name goes at once; only the object waits for the files still open on it */
+    if (DeviceObject->Flags & DO_DEVICE_HAS_NAME) ObMakeTemporaryObject(DeviceObject);
+
     KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
 
     Extension = IoGetDevObjExtension(DeviceObject);

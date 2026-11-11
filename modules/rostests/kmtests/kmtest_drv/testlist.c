@@ -166,6 +166,7 @@ KMT_TESTFUNC Test_IoDriverKeyOpen;
 KMT_TESTFUNC Test_IoDriverSection;
 KMT_TESTFUNC Test_IoGetRequestorProcess;
 KMT_TESTFUNC Test_IoCreateDeviceSecure;
+KMT_TESTFUNC Test_IoDeleteDeviceName;
 KMT_TESTFUNC Test_IoReadPartitionTable;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoCreateFileAccessCheck;
@@ -551,6 +552,7 @@ const KMT_TEST TestList[] =
     { "IoDriverSection",                    Test_IoDriverSection },
     { "IoGetRequestorProcess",              Test_IoGetRequestorProcess },
     { "IoCreateDeviceSecure",               Test_IoCreateDeviceSecure },
+    { "IoDeleteDeviceName",                 Test_IoDeleteDeviceName },
     { "IoReadPartitionTable",               Test_IoReadPartitionTable },
     { "IoCreateFile",                       Test_IoCreateFile },
     { "IoCreateFileAccessCheck",            Test_IoCreateFileAccessCheck },
