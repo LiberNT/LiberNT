@@ -358,7 +358,7 @@ static const DXGK_DRIVERCAPS SOFTGPU_DRIVER_CAPS =
     /* PresentationCaps.Value = 0 */
     .MaxOverlays                = SOFTGPU_MAX_OVERLAYS,
     .GammaRampCaps.Value        = 0,
-    .SchedulingCaps.Value       = 0,
+    .SchedulingCaps.VSyncPowerSaveAware = 1,
     .MemoryManagementCaps.Value = 0,
     .GpuEngineTopology.NbAsymetricProcessingNodes = SOFTGPU_ENGINE_COUNT,
     .WDDMVersion                = SOFTGPU_DECLARED_WDDM_VERSION,
@@ -1456,6 +1456,8 @@ SoftGpuStartDevice(
     }
     Device->VsyncTimer = ExAllocateTimer(SoftGpuVsyncTimerCallback, Device, EX_TIMER_HIGH_RESOLUTION);
     Device->VsyncTimerInitialized = Device->VsyncTimer != NULL;
+    Device->VsyncTimerRunning = FALSE;
+    Device->VsyncPhaseOrigin = 0;
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     InterlockedExchange(&Device->VsyncEnabled, 0);
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
@@ -1559,7 +1561,10 @@ SoftGpuDdiStopDevice(
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     if (Device->VsyncTimerInitialized)
     {
+        KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
         Device->VsyncTimerInitialized = FALSE;
+        Device->VsyncTimerRunning = FALSE;
+        KeReleaseSpinLock(&Device->FenceLock, OldIrql);
         ExDeleteTimer(Device->VsyncTimer, TRUE, TRUE, NULL);
         Device->VsyncTimer = NULL;
     }
@@ -3252,8 +3257,8 @@ SoftGpuSetVsyncState(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ DXGK_CRTC_VSYNC_STATE VsyncState)
 {
-    LARGE_INTEGER Due;
     SOFTGPU_VSYNC_POLICY Policy;
+    KIRQL OldIrql;
 
     if (!Device->VsyncTimerInitialized ||
         !SoftGpuVsyncEvaluatePolicy((ULONG)VsyncState, &Policy))
@@ -3263,24 +3268,15 @@ SoftGpuSetVsyncState(
                    : STATUS_INVALID_PARAMETER;
     }
 
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
     InterlockedExchange(
         &Device->VsyncEnabled,
         Policy.NotificationEnabled ? 1 : 0);
-
-    if (Policy.PhaseEnabled)
-    {
-        if (InterlockedExchange(&Device->VsyncPhaseEnabled, 1) == 0)
-        {
-            Due.QuadPart = -166667;
-            ExSetTimer(Device->VsyncTimer, Due.QuadPart, -Due.QuadPart, NULL);
-        }
-    }
-    else
-    {
-        InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
-        if (Policy.CancelTimer)
-            ExCancelTimer(Device->VsyncTimer, NULL);
-    }
+    InterlockedExchange(&Device->VsyncPhaseEnabled, Policy.PhaseEnabled ? 1 : 0);
+    if (Policy.CancelTimer)
+        Device->VsyncPhaseOrigin = 0;
+    SoftGpuVsyncTimerUpdateLocked(Device);
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
 
     return STATUS_SUCCESS;
 }

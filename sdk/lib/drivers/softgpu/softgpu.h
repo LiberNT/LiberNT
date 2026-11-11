@@ -389,6 +389,8 @@ typedef struct _SOFTGPU_DEVICE
     volatile LONG       VsyncPhaseEnabled;
     volatile LONG       VsyncEnabled;
     BOOLEAN             VsyncTimerInitialized;
+    BOOLEAN             VsyncTimerRunning;
+    ULONGLONG           VsyncPhaseOrigin;
 
     /*
      * dxgkrnl callback vtable.  Copied from the PDXGK_INTERFACE argument
@@ -1001,6 +1003,10 @@ NTAPI
 SoftGpuVsyncTimerCallback(
     _In_     PEX_TIMER Timer,
     _In_opt_ PVOID     Context);
+
+VOID
+SoftGpuVsyncTimerUpdateLocked(
+    _Inout_ PSOFTGPU_DEVICE Device);
 
 NTSTATUS
 APIENTRY

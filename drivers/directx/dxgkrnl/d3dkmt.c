@@ -11963,6 +11963,19 @@ DxgkpKmtEnterInFlight(
     return NULL;
 }
 
+BOOLEAN
+DxgkKmtIoctlsInFlight(VOID)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < DXGKP_KMT_INFLIGHT_SLOTS; Index++)
+    {
+        if (DxgkpKmtInFlight[Index].Thread != NULL)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 /* DISPATCH_LEVEL, from the TDR tick. */
 VOID
 DxgkKmtReportStuckIoctls(

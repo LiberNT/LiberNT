@@ -1103,6 +1103,7 @@ SoftGpuDpcRoutine(
                     Engine->SubmitRing[HeadIndex % SOFTGPU_SUBMIT_RING_SIZE].StartOffset =
                         ExecuteResult.ResumeOffset;
                     Engine->EngineActive = 0;
+                    SoftGpuVsyncTimerUpdateLocked(Device);
                     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
                     break;
                 }
@@ -1131,6 +1132,7 @@ SoftGpuDpcRoutine(
                     FaultedSubmit = Submit;
                     FaultResult = ExecuteResult;
                     HaveFault = TRUE;
+                    SoftGpuVsyncTimerUpdateLocked(Device);
                     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
                     break;
 #else
@@ -1266,6 +1268,45 @@ SoftGpuDpcRoutine(
 }
 
 
+#define SOFTGPU_VSYNC_PERIOD_100NS 166667ULL
+
+VOID
+SoftGpuVsyncTimerUpdateLocked(
+    _Inout_ PSOFTGPU_DEVICE Device)
+{
+    ULONGLONG Now, Due;
+    ULONG NodeOrdinal;
+    BOOLEAN Needed;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(Device->VsyncTimerInitialized || !Device->VsyncTimerRunning);
+    if (!Device->VsyncTimerInitialized)
+        return;
+
+    Needed = !Device->Stopped && InterlockedCompareExchange(&Device->VsyncEnabled, 0, 0) != 0;
+    for (NodeOrdinal = 0; !Needed && NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        Needed = !Device->Stopped &&
+                 Device->Engines[NodeOrdinal].SubmitRingHead != Device->Engines[NodeOrdinal].SubmitRingTail;
+    }
+    if (Needed == Device->VsyncTimerRunning)
+        return;
+    if (!Needed)
+    {
+        ExCancelTimer(Device->VsyncTimer, NULL);
+        Device->VsyncTimerRunning = FALSE;
+        return;
+    }
+
+    Now = KeQueryInterruptTime();
+    if (Device->VsyncPhaseOrigin == 0 || Device->VsyncPhaseOrigin > Now + SOFTGPU_VSYNC_PERIOD_100NS)
+        Device->VsyncPhaseOrigin = Now;
+    Due = SOFTGPU_VSYNC_PERIOD_100NS - ((Now - Device->VsyncPhaseOrigin) % SOFTGPU_VSYNC_PERIOD_100NS);
+    ASSERT(Due != 0 && Due <= SOFTGPU_VSYNC_PERIOD_100NS);
+    ExSetTimer(Device->VsyncTimer, -(LONGLONG)Due, SOFTGPU_VSYNC_PERIOD_100NS, NULL);
+    Device->VsyncTimerRunning = TRUE;
+}
+
 VOID
 NTAPI
 SoftGpuVsyncTimerCallback(
@@ -1277,6 +1318,8 @@ SoftGpuVsyncTimerCallback(
     KIRQL OldIrql;
     BOOLEAN PhaseActive;
     BOOLEAN Deliver;
+    BOOLEAN Kick[SOFTGPU_ENGINE_COUNT];
+    ULONG NodeOrdinal;
 
     UNREFERENCED_PARAMETER(Timer);
 
@@ -1288,17 +1331,20 @@ SoftGpuVsyncTimerCallback(
                   InterlockedCompareExchange(
                       &Device->VsyncPhaseEnabled, 0, 0) != 0;
     Deliver = SoftGpuVsyncCanDeliverNotification(PhaseActive, InterlockedCompareExchange(&Device->VsyncEnabled, 0, 0) != 0, Device->DxgkInterface.DxgkCbNotifyInterrupt != NULL, Device->DxgkInterface.DxgkCbQueueDpc != NULL);
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        Kick[NodeOrdinal] = !Device->Stopped &&
+                            Device->Engines[NodeOrdinal].SubmitRingHead != Device->Engines[NodeOrdinal].SubmitRingTail;
+    }
+    SoftGpuVsyncTimerUpdateLocked(Device);
     KeReleaseSpinLock(&Device->FenceLock, OldIrql);
-    if (!PhaseActive)
-        return;
 
     /* Re-kick every node: a buffer parked on an unsatisfied GPU wait retries
      * on this cadence, so a fence signaled by another engine or by the CPU
      * always unblocks it -- and the signaller may be a different node. */
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
     {
-        ULONG NodeOrdinal;
-
-        for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+        if (Kick[NodeOrdinal])
             KeInsertQueueDpc(&Device->Engines[NodeOrdinal].DpcObject, NULL, NULL);
     }
 

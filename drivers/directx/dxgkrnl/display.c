@@ -3802,6 +3802,8 @@ DxgkpStartPresentTimer(
         KeInitializeTimer(&Adapter->PresentTimer);
         KeInitializeDpc(&Adapter->PresentDpc, DxgkpPresentTimerDpc, Adapter);
         DueTime.QuadPart = -(LONGLONG)PeriodMs * 10000LL;
+        Adapter->PresentTimerOrigin = KeQueryInterruptTime() + (ULONGLONG)PeriodMs * 10000ULL;
+        Adapter->PresentTimerParked = FALSE;
         KeSetTimerEx(&Adapter->PresentTimer,
                      DueTime,
                      PeriodMs,
@@ -3834,6 +3836,9 @@ DxgkpStopPresentTimer(
     {
         /* Clear the active flag before draining an in-flight timer DPC. */
         Adapter->PresentTimerActive = FALSE;
+        if (Adapter->PresentTimerParked)
+            DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, FALSE);
+        Adapter->PresentTimerParked = FALSE;
         KeCancelTimer(&Adapter->PresentTimer);
 
         KeFlushQueuedDpcs();
@@ -3841,6 +3846,47 @@ DxgkpStopPresentTimer(
 
     DXGKRNL_TRACE("DxgkpStopPresentTimer: stopped\n");
     KeReleaseMutex(&Adapter->PresentLifecycleMutex, FALSE);
+}
+
+BOOLEAN
+DxgkpParkPresentTimer(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Parked = FALSE;
+
+    PAGED_CODE();
+    (VOID)KeWaitForSingleObject(&Adapter->PresentLifecycleMutex, Executive, KernelMode, FALSE, NULL);
+    if (Adapter->PresentTimerActive && !Adapter->PresentTimerParked)
+    {
+        KeCancelTimer(&Adapter->PresentTimer);
+        Adapter->PresentTimerParked = TRUE;
+        Parked = TRUE;
+    }
+    KeReleaseMutex(&Adapter->PresentLifecycleMutex, FALSE);
+    return Parked;
+}
+
+BOOLEAN
+DxgkpResumePresentTimer(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    const ULONGLONG Period100ns = 16ULL * 10000ULL;
+    LARGE_INTEGER DueTime;
+    BOOLEAN WasParked;
+
+    PAGED_CODE();
+    (VOID)KeWaitForSingleObject(&Adapter->PresentLifecycleMutex, Executive, KernelMode, FALSE, NULL);
+    WasParked = Adapter->PresentTimerParked;
+    if (WasParked && Adapter->PresentTimerActive)
+    {
+        DueTime.QuadPart = -(LONGLONG)DxgkVsyncPowerCoreResumeDue(KeQueryInterruptTime(),
+                                                                  Adapter->PresentTimerOrigin,
+                                                                  Period100ns);
+        KeSetTimerEx(&Adapter->PresentTimer, DueTime, 16, &Adapter->PresentDpc);
+    }
+    Adapter->PresentTimerParked = FALSE;
+    KeReleaseMutex(&Adapter->PresentLifecycleMutex, FALSE);
+    return WasParked;
 }
 
 /* ========================================================================

@@ -848,6 +848,7 @@ DxgkpRegisterBugCheckCallback(VOID)
  * ====================================================================== */
 
 #define DXGKP_TDR_TICK_MS 100
+#define DXGKP_TDR_IDLE_TICKS 10
 
 static DECLSPEC_NORETURN VOID
 DxgkpBugCheckTdrFailure(
@@ -1388,6 +1389,61 @@ DxgkpRequestAdapterTimeoutRecovery(
     ExQueueWorkItem(&Adapter->TdrWorkItem, DelayedWorkQueue);
 }
 
+static BOOLEAN
+DxgkpTdrWorkOutstanding(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ULONG Fence, Node, Engine;
+    BOOLEAN Outstanding;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Adapter->SubmitDmaLock, &OldIrql);
+    Outstanding = !IsListEmpty(&Adapter->SubmitDmaListHead);
+    KeReleaseSpinLock(&Adapter->SubmitDmaLock, OldIrql);
+    return Outstanding || VidSchGetOldestKickedPacket(Adapter, &Fence, &Node, &Engine);
+}
+
+static VOID
+DxgkpWatchSubmittedWork(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Due;
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    if (InterlockedCompareExchange(&Adapter->TdrTimerParked, 0, 0) == 0)
+        return;
+    KeAcquireSpinLock(&Adapter->TdrTimerLock, &OldIrql);
+    if (Adapter->TdrTimerParked != 0 &&
+        InterlockedCompareExchange(&Adapter->TdrTimerActive, 0, 0) != 0)
+    {
+        Adapter->TdrIdleTicks = 0;
+        Due.QuadPart = -10000LL * DXGKP_TDR_TICK_MS;
+        KeSetTimerEx(&Adapter->TdrTimer, Due, DXGKP_TDR_TICK_MS, &Adapter->TdrDpc);
+        InterlockedExchange(&Adapter->TdrTimerParked, 0);
+    }
+    KeReleaseSpinLock(&Adapter->TdrTimerLock, OldIrql);
+}
+
+static VOID
+DxgkpParkTdrTimer(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    KeAcquireSpinLockAtDpcLevel(&Adapter->TdrTimerLock);
+    if (Adapter->TdrTimerParked != 0 ||
+        InterlockedCompareExchange(&Adapter->TdrTimerActive, 0, 0) == 0)
+    {
+        KeReleaseSpinLockFromDpcLevel(&Adapter->TdrTimerLock);
+        return;
+    }
+    KeCancelTimer(&Adapter->TdrTimer);
+    InterlockedExchange(&Adapter->TdrTimerParked, 1);
+    KeReleaseSpinLockFromDpcLevel(&Adapter->TdrTimerLock);
+    if (DxgkpTdrWorkOutstanding(Adapter) || DxgkKmtIoctlsInFlight())
+        DxgkpWatchSubmittedWork(Adapter);
+}
+
 static VOID
 NTAPI
 DxgkpTdrDpcRoutine(
@@ -1453,8 +1509,13 @@ DxgkpTdrDpcRoutine(
         Adapter->TdrLastObservedEngine = HeadEngine;
         Adapter->TdrLastObservedCompletedFence = CompletedFence;
         Adapter->TdrLastProgressTime100ns = Now100ns;
+        if (Outstanding || DxgkKmtIoctlsInFlight())
+            Adapter->TdrIdleTicks = 0;
+        else if (++Adapter->TdrIdleTicks >= DXGKP_TDR_IDLE_TICKS)
+            DxgkpParkTdrTimer(Adapter);
         return;
     }
+    Adapter->TdrIdleTicks = 0;
 
     if (HeadFence != Adapter->TdrLastObservedFence || HeadNode != Adapter->TdrLastObservedNode || HeadEngine != Adapter->TdrLastObservedEngine || CompletedFence != Adapter->TdrLastObservedCompletedFence)
     {
@@ -1525,10 +1586,12 @@ DxgkpStartTdrWatchdog(
     Adapter->TdrLastObservedEngine = 0;
     Adapter->TdrLastObservedCompletedFence = 0;
     Adapter->TdrStuckTicks = 0;
+    Adapter->TdrIdleTicks = 0;
     Adapter->TdrLastProgressTime100ns = KeQueryInterruptTime();
     Adapter->TdrDdiTimerArmed = 0;
     DxgkResetSubmittedFenceIdentities(Adapter);
     InterlockedExchange(&Adapter->TdrCompletionNotificationsEnabled, 1);
+    InterlockedExchange(&Adapter->TdrTimerParked, 0);
     if (Adapter->TdrConfig.TdrLevel == DXGKP_TDR_LEVEL_OFF)
     {
         InterlockedExchange(&Adapter->TdrTimerActive, 0);
@@ -1544,9 +1607,17 @@ static VOID
 DxgkpStopTdrWatchdog(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
-    if (InterlockedExchange(&Adapter->TdrTimerActive, 0) != 0)
-    {
+    KIRQL OldIrql;
+    LONG WasActive;
+
+    KeAcquireSpinLock(&Adapter->TdrTimerLock, &OldIrql);
+    WasActive = InterlockedExchange(&Adapter->TdrTimerActive, 0);
+    if (WasActive != 0)
         KeCancelTimer(&Adapter->TdrTimer);
+    InterlockedExchange(&Adapter->TdrTimerParked, 0);
+    KeReleaseSpinLock(&Adapter->TdrTimerLock, OldIrql);
+    if (WasActive != 0)
+    {
         KeRemoveQueueDpc(&Adapter->TdrDpc);
         KeFlushQueuedDpcs();
     }
@@ -2151,12 +2222,14 @@ VOID NTAPI DxgkPublishSubmittedFence(_In_ PDXGKRNL_ADAPTER Adapter, _In_ ULONG N
             DxgkpShadowPublishSubmittedFence(Adapter, NodeOrdinal, SubmissionFenceId);
         else
             DxgkpBugCheckMms2Timeline(Adapter, NodeOrdinal, SubmissionFenceId);
+        DxgkpWatchSubmittedWork(Adapter);
         return;
     }
     if (!Timeline.PublishFence(Timeline.TimelineHandle, Timeline.Generation, NodeOrdinal, SubmissionFenceId))
         DxgkpBugCheckMms2Timeline(Adapter, NodeOrdinal, SubmissionFenceId);
     DxgkpUpdateCompletedFence(&Adapter->NodeLastSubmittedFenceId[NodeOrdinal], SubmissionFenceId);
     DxgkpReleaseMms2TimelineCall(Adapter);
+    DxgkpWatchSubmittedWork(Adapter);
 }
 
 BOOLEAN NTAPI DxgkIsSubmittedFenceIdentity(_In_ PDXGKRNL_ADAPTER Adapter, _In_ ULONG NodeOrdinal, _In_ ULONG SubmissionFenceId)
@@ -3551,6 +3624,8 @@ DxgkCommitTrackedDmaBuffer(
         DxgkpReleaseSubmitDmaReservationLocked(Adapter);
     KeReleaseSpinLock(&Adapter->SubmitDmaLock, OldIrql);
     DxgkRetireCompletedDmaBuffers(Adapter);
+    if (!RetiredNow)
+        DxgkpWatchSubmittedWork(Adapter);
 }
 
 VOID
@@ -13644,7 +13719,7 @@ DxgkCollectAdapterDiagnosticInfo(
 }
 
 static NTSTATUS
-DxgkpSetVsyncInterruptState(
+DxgkpCallVsyncControl(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ DXGK_CRTC_VSYNC_STATE VsyncState)
 {
@@ -13727,15 +13802,90 @@ DxgkpSetVsyncInterruptState(
     _SEH2_END;
 
     DxgkReleaseMiniportCallback(Adapter);
-    Status = DxgkAdapterStartVsyncControlStatus(Status);
-    /* This is the only place the vsync interrupt is turned on or off, so it
-     * is the only place that can answer whether it is on. */
+    return DxgkAdapterStartVsyncControlStatus(Status);
+}
+
+static NTSTATUS
+DxgkpSetVsyncInterruptState(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ DXGK_CRTC_VSYNC_STATE VsyncState)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Adapter == NULL || Adapter->MiniportContext == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    KeWaitForSingleObject(&Adapter->VsyncControlMutex, Executive, KernelMode, FALSE, NULL);
+    Status = DxgkpCallVsyncControl(Adapter, VsyncState);
+    /* This is the only place the vsync interrupt is turned on or off for
+     * the OS, so it is the only place that can answer whether it is on. */
     if (NT_SUCCESS(Status))
     {
         InterlockedExchange(&Adapter->VsyncInterruptEnabled,
                             (VsyncState == DXGK_VSYNC_ENABLE) ? 1 : 0);
+        DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, FALSE);
     }
+    KeReleaseMutex(&Adapter->VsyncControlMutex, FALSE);
     return Status;
+}
+
+VOID
+DxgkVsyncPowerDemand(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+
+    if (!DxgkVsyncPowerCoreDemand(&Adapter->VsyncPower))
+        return;
+    KeWaitForSingleObject(&Adapter->VsyncControlMutex, Executive, KernelMode, FALSE, NULL);
+    if (InterlockedCompareExchange(&Adapter->VsyncPower.Saved, 0, 0) != 0 &&
+        DxgkpResumePresentTimer(Adapter))
+    {
+        DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, FALSE);
+    }
+    else if (InterlockedCompareExchange(&Adapter->VsyncPower.Saved, 0, 0) != 0)
+    {
+        ASSERT(InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) != 0);
+        Status = DxgkpCallVsyncControl(Adapter, DXGK_VSYNC_ENABLE);
+        if (NT_SUCCESS(Status))
+            DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, FALSE);
+        else
+            DXGKRNL_ERR("The vsync interrupt could not be turned back on: 0x%08lX\n", Status);
+    }
+    KeReleaseMutex(&Adapter->VsyncControlMutex, FALSE);
+}
+
+VOID
+DxgkVsyncPowerIdle(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+
+    KeWaitForSingleObject(&Adapter->VsyncControlMutex, Executive, KernelMode, FALSE, NULL);
+    if (DxgkVsyncPowerCoreMayDisable(&Adapter->VsyncPower))
+    {
+        if (DxgkpParkPresentTimer(Adapter))
+        {
+            DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, TRUE);
+        }
+        else if (Adapter->SchedulingCaps.VSyncPowerSaveAware &&
+                 InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) != 0)
+        {
+            Status = DxgkpCallVsyncControl(Adapter, DXGK_VSYNC_DISABLE_KEEP_PHASE);
+            if (NT_SUCCESS(Status))
+                DxgkVsyncPowerCoreSetSaved(&Adapter->VsyncPower, TRUE);
+        }
+    }
+    DxgkVsyncPowerCoreWorkDone(&Adapter->VsyncPower);
+    KeReleaseMutex(&Adapter->VsyncControlMutex, FALSE);
 }
 
 /*
@@ -17373,6 +17523,8 @@ DxgkpAddDeviceRegistered(
     KeInitializeMutex(&Adapter->StablePowerMutex, 0);
     KeInitializeMutex(&Adapter->VidPnMutex, 0);
     KeInitializeMutex(&Adapter->OverlayMutex, 0);
+    KeInitializeMutex(&Adapter->VsyncControlMutex, 0);
+    KeInitializeSpinLock(&Adapter->TdrTimerLock);
     KeInitializeEvent(&Adapter->AdapterStartCompletedEvent, NotificationEvent, TRUE);
     Adapter->AdapterStartGeneration = 0;
     Adapter->AdapterStartCompletedGeneration = 0;

@@ -724,6 +724,7 @@ DxgkpWaitForVerticalBlank(
     InsertTailList(&Queue->VBlankWaiterList, &Waiter.Entry);
     WaiterLinked = TRUE;
     KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
+    DxgkVsyncPowerDemand(Adapter);
     LinkGeneration = InterlockedCompareExchange(&Adapter->LinkConfigGeneration, 0, 0);
     Began = KeQueryInterruptTime();
     Deadline = Began + DXGK_VBLANK_WAIT_TIMEOUT_100NS;
@@ -901,6 +902,8 @@ DxgkPresentSetSyncRefreshCountWaitTarget(
         Status = STATUS_SUCCESS;
     }
     KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
+    if (NT_SUCCESS(Status))
+        DxgkVsyncPowerDemand(Adapter);
 
 Cleanup:
     DxgkpReleasePresentQueues(Adapter);
@@ -4875,6 +4878,7 @@ DxgkpWaitForMmioScanout(
     BOOLEAN PresentIdReported;
     NTSTATUS Status;
 
+    DxgkVsyncPowerDemand(Adapter);
     /* A periodic bounded wait also observes device/reset teardown when the
      * hardware stops generating interrupts. Timeout never retires storage. */
     Timeout.QuadPart = -(100 * 10000LL);
@@ -5294,6 +5298,7 @@ DxgkpWaitForNextMmioVsync(
     ULONGLONG Began = KeQueryInterruptTime();
     LARGE_INTEGER Timeout;
 
+    DxgkVsyncPowerDemand(Adapter);
     Timeout.QuadPart = -(10 * 10000LL);
     while (InterlockedCompareExchange64(&Adapter->VsyncScanoutSequence[SourceId], 0, 0) == Start)
     {
@@ -6496,6 +6501,7 @@ DxgkpQueuePresent(
         KeClearEvent(&Queue->SpaceAvailableEvent);
 
     KeReleaseSpinLock(&Queue->QueueLock, OldIrql);
+    DxgkVsyncPowerDemand(Adapter);
 
     /*
      * For immediate flip interval (non-DOD), execute right away rather
@@ -6691,6 +6697,86 @@ DxgkpProcessPresentQueue(
     return Status;
 }
 
+static BOOLEAN
+DxgkpVsyncQueueIdle(
+    _In_ PDXGKRNL_PRESENT_QUEUE Queue)
+{
+    BOOLEAN Idle;
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    KeAcquireSpinLock(&Queue->QueueLock, &OldIrql);
+    Idle = Queue->Count == 0;
+    KeReleaseSpinLock(&Queue->QueueLock, OldIrql);
+    if (!Idle)
+        return FALSE;
+    if (Queue->VidPnSourceId < 32 &&
+        InterlockedCompareExchange(&Queue->Adapter->MpoPostPresentLayers[Queue->VidPnSourceId], 0, 0) != 0)
+    {
+        return FALSE;
+    }
+    KeAcquireSpinLock(&Queue->VBlankWaitLock, &OldIrql);
+    Idle = IsListEmpty(&Queue->VBlankWaiterList);
+#if (REACTOS_WDDM_TARGET_LEVEL >= 1200)
+    Idle = Idle && !Queue->DwmVBlankTargetArmed;
+#endif
+    KeReleaseSpinLock(&Queue->VBlankWaitLock, OldIrql);
+    KeAcquireSpinLock(&Queue->MmioFlipLock, &OldIrql);
+    Idle = Idle && IsListEmpty(&Queue->MmioFlipList);
+    KeReleaseSpinLock(&Queue->MmioFlipLock, OldIrql);
+    return Idle && *(PDXGKVMM_ALLOCATION volatile *)&Queue->MmioPendingAllocation == NULL;
+}
+
+static BOOLEAN
+DxgkpVsyncAdapterIdle(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKRNL_PRESENT_QUEUE Queues = (PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues;
+    ULONG Index;
+
+    if (DxgkSyncHasPeriodicFences())
+        return FALSE;
+    for (Index = 0; Index < Adapter->PresentQueueCount; Index++)
+    {
+        if (!DxgkpVsyncQueueIdle(&Queues[Index]))
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static VOID
+NTAPI
+DxgkpVsyncPowerWorker(
+    _In_ PVOID Context)
+{
+    PDXGKRNL_ADAPTER Adapter = Context;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    DxgkVsyncPowerIdle(Adapter);
+    DxgkpReleasePresentQueues(Adapter);
+}
+
+static VOID
+DxgkpVsyncPowerPulse(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Idle)
+{
+    if (!DxgkVsyncPowerCorePulse(&Adapter->VsyncPower,
+                                 Adapter->SchedulingCaps.VSyncPowerSaveAware != 0 ||
+                                 *(volatile BOOLEAN *)&Adapter->PresentTimerActive,
+                                 Idle))
+    {
+        return;
+    }
+    if (!DxgkpAcquirePresentQueues(Adapter))
+    {
+        DxgkVsyncPowerCoreWorkDone(&Adapter->VsyncPower);
+        return;
+    }
+    ExInitializeWorkItem(&Adapter->VsyncPowerWorkItem, DxgkpVsyncPowerWorker, Adapter);
+    ExQueueWorkItem(&Adapter->VsyncPowerWorkItem, DelayedWorkQueue);
+}
+
 /* ========================================================================
  * DxgkpNotifyVSync
  *
@@ -6738,6 +6824,7 @@ DxgkpNotifyVSync(
     KeAcquireSpinLock(&Queue->QueueLock, &OldIrql);
     HasEntries = Queue->Count != 0;
     KeReleaseSpinLock(&Queue->QueueLock, OldIrql);
+    DxgkpVsyncPowerPulse(Adapter, !HasEntries && DxgkpVsyncAdapterIdle(Adapter));
     /* A periodic monitored fence owes an advance on every pulse even when no
      * present is queued, and that advance runs at PASSIVE_LEVEL; so does an
      * overlay post-present notification. */

@@ -83,6 +83,7 @@
 #include "caps_core.h"
 #include "node_stats_core.h"
 #include "postdisplay_core.h"
+#include "vsync_power_core.h"
 
 /* ---- WDDM DDI interface version selection ------------------------------ */
 /*
@@ -914,6 +915,9 @@ struct _DXGKRNL_ADAPTER
     /* Adapter-wide counters answered by D3DKMTQueryStatistics(ADAPTER). */
     volatile LONG               TdrDetectedCount;
     volatile LONG               VsyncInterruptEnabled;
+    DXGK_VSYNC_POWER_CORE       VsyncPower;
+    KMUTEX                      VsyncControlMutex;
+    WORK_QUEUE_ITEM             VsyncPowerWorkItem;
 
     /* Stable head fields cached from DXGKQAITYPE_DRIVERCAPS. */
     PHYSICAL_ADDRESS            HighestAcceptableAddress;
@@ -1266,6 +1270,8 @@ struct _DXGKRNL_ADAPTER
     KTIMER                      PresentTimer;
     KDPC                        PresentDpc;
     BOOLEAN                     PresentTimerActive;
+    BOOLEAN                     PresentTimerParked;
+    ULONGLONG                   PresentTimerOrigin;
     KMUTEX                      PresentLifecycleMutex;
 
     /*
@@ -1315,6 +1321,9 @@ struct _DXGKRNL_ADAPTER
     ULONG                       TdrStuckTicks;
     ULONGLONG                   TdrLastProgressTime100ns;
     volatile LONG               TdrTimerActive;
+    volatile LONG               TdrTimerParked;
+    ULONG                       TdrIdleTicks;
+    KSPIN_LOCK                  TdrTimerLock;
     volatile LONG               TdrOwnershipUncertain;
     volatile LONG               TdrCompletionNotificationsEnabled;
     TDR_CONFIG                  TdrConfig;
@@ -2584,6 +2593,14 @@ DxgkAdapterStop(
 
 NTSTATUS
 DxgkRearmVsyncInterrupt(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkVsyncPowerDemand(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkVsyncPowerIdle(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 BOOLEAN
@@ -4124,6 +4141,14 @@ VOID
 DxgkpStopPresentTimer(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+BOOLEAN
+DxgkpParkPresentTimer(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+BOOLEAN
+DxgkpResumePresentTimer(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 /* ========================================================================
  * Function prototypes — present.c  (swap chain / present infrastructure)
  * ====================================================================== */
@@ -4883,6 +4908,7 @@ DxgkDebugInit(VOID);
 
 VOID DxgkDumpRecentKmtIoctls(VOID);
 VOID DxgkKmtReportStuckIoctls(_In_ ULONGLONG Now100ns);
+BOOLEAN DxgkKmtIoctlsInFlight(VOID);
 VOID DxgkVidMmNoteApertureOp(_In_ PDXGKRNL_ADAPTER Adapter, _In_ BOOLEAN Map, _In_ ULONG SegmentId, _In_ ULONGLONG OffsetInPages, _In_ ULONGLONG Pages, _In_opt_ HANDLE hAllocation, _In_opt_ PVOID Allocation);
 VOID DxgkVidMmDumpApertureOps(VOID);
 VOID DxgkPagingDumpRecentOps(VOID);
