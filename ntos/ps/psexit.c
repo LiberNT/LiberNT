@@ -189,22 +189,6 @@ PspExitThread(
      */
     ExWaitForRundownProtectionRelease(&Thread->RundownProtect);
 
-    KeEnterCriticalRegion();
-    ExAcquirePushLockExclusive(&Process->ProcessLock);
-
-    LastThread = (InterlockedDecrement((PLONG)&Process->ActiveThreads) == 0);
-    Process->LastThreadExitStatus = ExitStatus;
-
-    if (LastThread)
-    {
-        Process->ProcessExiting = TRUE;
-        if (Process->ExitStatus == STATUS_PENDING)
-            Process->ExitStatus = ExitStatus;
-    }
-
-    ExReleasePushLockExclusive(&Process->ProcessLock);
-    KeLeaveCriticalRegion();
-
     PspDrainUserApcs(Thread);
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
@@ -223,6 +207,22 @@ PspExitThread(
     PspRundownPropertySet(&Thread->PropertySet);
     PopReleaseThreadPowerObject(Thread->LegacyPowerObject);
     Thread->LegacyPowerObject = NULL;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&Process->ProcessLock);
+
+    LastThread = (InterlockedDecrement((PLONG)&Process->ActiveThreads) == 0);
+    Process->LastThreadExitStatus = ExitStatus;
+
+    if (LastThread)
+    {
+        Process->ProcessExiting = TRUE;
+        if (Process->ExitStatus == STATUS_PENDING)
+            Process->ExitStatus = ExitStatus;
+    }
+
+    ExReleasePushLockExclusive(&Process->ProcessLock);
+    KeLeaveCriticalRegion();
 
     /*
      * The process is finished with before the thread leaves its own list,
