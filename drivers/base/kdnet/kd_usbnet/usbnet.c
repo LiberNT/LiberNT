@@ -30,6 +30,8 @@ UsbNetGetHardwareContextSize(
     return UsbNetAlignedAdapterSize() + (USBNET_FIXED_PAGES + USBNET_MAX_TIERS - 1 + USBNET_MAX_SCRATCHPAD) * PAGE_SIZE;
 }
 
+C_ASSERT((USBNET_MAX_SLOTS + 1) * sizeof(ULONG64) <= 1024);
+
 static
 VOID
 UsbNetLayout(
