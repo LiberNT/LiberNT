@@ -50,6 +50,13 @@ ULONG
 NTAPI
 KdbpArchHardwareBreakPointCount(VOID);
 
+/* kdbanalyze.c */
+
+BOOLEAN
+KdbpCmdAnalyze(
+    ULONG Argc,
+    PCHAR Argv[]);
+
 /* kdbsymbols.c */
 
 BOOLEAN

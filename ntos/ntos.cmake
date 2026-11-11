@@ -616,6 +616,7 @@ endif()
     if(KDBG)
         list(APPEND SOURCE
             ${REACTOS_SOURCE_DIR}/ntos/mm/pool/debug/poolkdbg.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbanalyze.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbcli.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbcore.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbexpr.c

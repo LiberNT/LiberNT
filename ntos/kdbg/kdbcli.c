@@ -1889,6 +1889,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!apc", "!apc [address]", "Shows the APCs queued to a thread", KdbpCmdApc},
     {"!locks", "!locks [-v|address]", "Shows the resources that are held or waited on", KdbpCmdLocks},
     {"cpu", "cpu [number|current]", "Lists the processors, or looks at a frozen one", KdbpCmdProcessor},
+    {"!analyze", "!analyze", "Says what stopped the machine and where", KdbpCmdAnalyze},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
@@ -2141,6 +2142,9 @@ KdbpReportStop(
 
         KdbpPagerReset();
         KdbpCmdApc(1, NULL);
+
+        KdbpPagerReset();
+        KdbpCmdAnalyze(1, NULL);
 
         KdbpReportFrozenProcessors();
 
