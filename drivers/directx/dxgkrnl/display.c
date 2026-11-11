@@ -82,9 +82,17 @@ typedef struct _DXGKP_DISPLAY_BRIDGE
     BOOLEAN                     InitialModePending;
     PVOID                       Win32kPhysDisp;
     PVIDEO_WIN32K_CALLOUT       Win32kCallout;
+    KSPIN_LOCK                  DetachLock;
+    PVOID                       DetachedFb;
+    ULONG                       DetachedFbSize;
+    LONG                        DetachedFbMapCount;
+    BOOLEAN                     DetachPending;
+    PDXGKRNL_ADAPTER            DetachOwner;
 } DXGKP_DISPLAY_BRIDGE, *PDXGKP_DISPLAY_BRIDGE;
 
 static KSPIN_LOCK g_DisplayBridgeLock;
+static PDXGKP_DISPLAY_BRIDGE g_DisplayDetachBridge;
+static PDXGKP_DISPLAY_BRIDGE g_DisplayParkedBridge;
 
 static
 PDXGKP_DISPLAY_BRIDGE
@@ -359,15 +367,37 @@ DxgkDisplayDetachWin32kSession(
     ObDereferenceObject(AttachedProcess);
 }
 
+static VOID
+DxgkpDisplayRefreshWin32k(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+{
+    VIDEO_WIN32K_CALLBACKS_PARAMS Params;
+    PVIDEO_WIN32K_CALLOUT Callout;
+    KAPC_STATE ApcState;
+    PEPROCESS Process;
+
+    PAGED_CODE();
+
+    Callout = (PVIDEO_WIN32K_CALLOUT)InterlockedCompareExchangePointer((PVOID *)&Bridge->Win32kCallout, NULL, NULL);
+    if (Callout == NULL)
+        return;
+    RtlZeroMemory(&Params, sizeof(Params));
+    Params.CalloutType = VideoDxgkMonitorEventCallout;
+    Params.PhysDisp = Bridge->Win32kPhysDisp;
+    if (!DxgkDisplayAttachWin32kSession(&ApcState, &Process))
+    {
+        ASSERT(FALSE);
+        return;
+    }
+    Callout(&Params);
+    DxgkDisplayDetachWin32kSession(&ApcState, Process);
+}
+
 VOID
 DxgkDisplayNotifyMonitorEvent(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
-    VIDEO_WIN32K_CALLBACKS_PARAMS Params;
-    PVIDEO_WIN32K_CALLOUT Callout;
     PDXGKP_DISPLAY_BRIDGE Bridge;
-    KAPC_STATE ApcState;
-    PEPROCESS Process;
 
     PAGED_CODE();
 
@@ -376,22 +406,7 @@ DxgkDisplayNotifyMonitorEvent(
     Bridge = DxgkpAcquireDisplayBridge(Adapter);
     if (Bridge == NULL)
         return;
-    Callout = (PVIDEO_WIN32K_CALLOUT)InterlockedCompareExchangePointer((PVOID *)&Bridge->Win32kCallout, NULL, NULL);
-    if (Callout != NULL)
-    {
-        RtlZeroMemory(&Params, sizeof(Params));
-        Params.CalloutType = VideoDxgkMonitorEventCallout;
-        Params.PhysDisp = Bridge->Win32kPhysDisp;
-        if (DxgkDisplayAttachWin32kSession(&ApcState, &Process))
-        {
-            Callout(&Params);
-            DxgkDisplayDetachWin32kSession(&ApcState, Process);
-        }
-        else
-        {
-            ASSERT(FALSE);
-        }
-    }
+    DxgkpDisplayRefreshWin32k(Bridge);
     ExReleaseRundownProtection(&Bridge->Rundown);
 }
 
@@ -400,6 +415,230 @@ DxgkIsDisplayAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     return Adapter != NULL && Adapter->DisplayBridge != NULL;
+}
+
+BOOLEAN
+DxgkDisplayMapsDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Mapped;
+
+    PAGED_CODE();
+
+    if (!DxgkIsDisplayAdapter(Adapter))
+        return FALSE;
+    (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    Mapped = InterlockedCompareExchange(&Adapter->ShadowFbMapCount, 0, 0) > 0 ||
+             Adapter->RetiredShadowFb != NULL ||
+             Adapter->RetiredShadowAllocationFb != NULL;
+    KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+    return Mapped;
+}
+
+static VOID
+DxgkpDisplayReleaseDetachBridge(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
+    ASSERT(g_DisplayDetachBridge == Bridge);
+    ASSERT(g_DisplayParkedBridge != Bridge);
+    if (g_DisplayDetachBridge == Bridge)
+        g_DisplayDetachBridge = NULL;
+    KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
+}
+
+static BOOLEAN
+DxgkpDisplayMapDetachedFb(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge,
+    _Out_ PVOID *Fb,
+    _Out_ PULONG Size)
+{
+    BOOLEAN Mapped = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    if (Bridge->DetachPending && Bridge->DetachedFb != NULL)
+    {
+        ASSERT(Bridge->DetachedFbMapCount >= 0);
+        Bridge->DetachedFbMapCount++;
+        *Fb = Bridge->DetachedFb;
+        *Size = Bridge->DetachedFbSize;
+        Mapped = TRUE;
+    }
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    return Mapped;
+}
+
+static BOOLEAN
+DxgkpDisplayUnmapDetachedFb(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge,
+    _In_opt_ PVOID Fb)
+{
+    PVOID FreeFb = NULL;
+    BOOLEAN Unmapped = FALSE;
+    KIRQL OldIrql;
+
+    if (Fb == NULL)
+        return FALSE;
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    if (Fb == Bridge->DetachedFb && Bridge->DetachedFbMapCount > 0)
+    {
+        Unmapped = TRUE;
+        if (--Bridge->DetachedFbMapCount == 0 && !Bridge->DetachPending)
+        {
+            FreeFb = Bridge->DetachedFb;
+            Bridge->DetachedFb = NULL;
+            Bridge->DetachedFbSize = 0;
+        }
+    }
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    if (FreeFb != NULL)
+    {
+        ExFreePoolWithTag(FreeFb, TAG_DXGK_DISPLAY);
+        DxgkpDisplayReleaseDetachBridge(Bridge);
+        DXGKRNL_INFO("DISPLAY_BRIDGE: win32k left the detached desktop copy\n");
+    }
+    return Unmapped;
+}
+
+static VOID
+DxgkpDisplayEndDetach(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+{
+    PVOID FreeFb = NULL;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    ASSERT(Bridge->DetachPending);
+    ASSERT(Bridge->DetachedFb != NULL);
+    Bridge->DetachPending = FALSE;
+    Bridge->DetachOwner = NULL;
+    if (Bridge->DetachedFbMapCount == 0)
+    {
+        FreeFb = Bridge->DetachedFb;
+        Bridge->DetachedFb = NULL;
+        Bridge->DetachedFbSize = 0;
+    }
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    if (FreeFb != NULL)
+    {
+        ExFreePoolWithTag(FreeFb, TAG_DXGK_DISPLAY);
+        DxgkpDisplayReleaseDetachBridge(Bridge);
+    }
+}
+
+NTSTATUS
+DxgkDisplayDetachDesktop(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Interval;
+    PDXGKP_DISPLAY_BRIDGE Bridge;
+    PVOID Fb = NULL;
+    ULONG Size;
+    ULONG Attempt;
+    BOOLEAN Busy;
+    KIRQL OldIrql;
+    NTSTATUS Status = STATUS_IO_TIMEOUT;
+
+    PAGED_CODE();
+
+    Bridge = DxgkpAcquireDisplayBridge(Adapter);
+    if (Bridge == NULL)
+        return STATUS_DEVICE_BUSY;
+    if (InterlockedCompareExchangePointer((PVOID *)&Bridge->Win32kCallout, NULL, NULL) == NULL)
+    {
+        ExReleaseRundownProtection(&Bridge->Rundown);
+        return STATUS_DEVICE_BUSY;
+    }
+
+    (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    Size = Adapter->ShadowFbSize;
+    if (Size != 0 && Adapter->ShadowFb != NULL)
+    {
+        Fb = ExAllocatePoolZero(NonPagedPoolNx, Size, TAG_DXGK_DISPLAY);
+        if (Fb != NULL)
+            RtlCopyMemory(Fb, Adapter->ShadowFb, Size);
+    }
+    KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+    if (Fb == NULL)
+    {
+        ExReleaseRundownProtection(&Bridge->Rundown);
+        return Size != 0 ? STATUS_INSUFFICIENT_RESOURCES : STATUS_DEVICE_BUSY;
+    }
+
+    KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
+    Busy = g_DisplayDetachBridge != NULL;
+    if (!Busy)
+        g_DisplayDetachBridge = Bridge;
+    KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
+    if (Busy)
+    {
+        ExFreePoolWithTag(Fb, TAG_DXGK_DISPLAY);
+        ExReleaseRundownProtection(&Bridge->Rundown);
+        return STATUS_DEVICE_BUSY;
+    }
+
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    ASSERT(Bridge->DetachedFb == NULL);
+    ASSERT(Bridge->DetachedFbMapCount == 0);
+    ASSERT(!Bridge->DetachPending);
+    Bridge->DetachedFb = Fb;
+    Bridge->DetachedFbSize = Size;
+    Bridge->DetachedFbMapCount = 0;
+    Bridge->DetachPending = TRUE;
+    Bridge->DetachOwner = Adapter;
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+
+    DxgkpDisplayRefreshWin32k(Bridge);
+    Interval.QuadPart = -(100LL * 10000LL);
+    for (Attempt = 0; Attempt < 100 && Status == STATUS_IO_TIMEOUT; Attempt++)
+    {
+        if (!DxgkDisplayMapsDesktop(Adapter))
+        {
+            DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p desktop detached to a %lu-byte copy after %lu ms\n",
+                         Adapter, Size, Attempt * 100);
+            Status = STATUS_SUCCESS;
+        }
+        else
+        {
+            KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_WARN("DISPLAY_BRIDGE: win32k did not leave the desktop of adapter %p\n", Adapter);
+        DxgkpDisplayEndDetach(Bridge);
+        DxgkpDisplayRefreshWin32k(Bridge);
+    }
+    ExReleaseRundownProtection(&Bridge->Rundown);
+    return Status;
+}
+
+VOID
+DxgkDisplayAbortDetach(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKP_DISPLAY_BRIDGE Bridge;
+    BOOLEAN Pending;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    Bridge = DxgkpAcquireDisplayBridge(Adapter);
+    if (Bridge == NULL)
+        return;
+    KeAcquireSpinLock(&Bridge->DetachLock, &OldIrql);
+    Pending = Bridge->DetachPending;
+    KeReleaseSpinLock(&Bridge->DetachLock, OldIrql);
+    if (Pending)
+    {
+        DxgkpDisplayEndDetach(Bridge);
+        DxgkpDisplayRefreshWin32k(Bridge);
+    }
+    ExReleaseRundownProtection(&Bridge->Rundown);
 }
 
 /* ========================================================================
@@ -4639,6 +4878,17 @@ DxgkpDisplayDispatch(
                 BOOLEAN StartTimer;
                 BOOLEAN SnapshotHeld = TRUE;
 
+                if (DxgkpDisplayMapDetachedFb(Bridge, &FbVa, &FbSize))
+                {
+                    MemoryInfo->VideoRamBase = FbVa;
+                    MemoryInfo->VideoRamLength = FbSize;
+                    MemoryInfo->FrameBufferBase = FbVa;
+                    MemoryInfo->FrameBufferLength = FbSize;
+                    BytesReturned = sizeof(VIDEO_MEMORY_INFORMATION);
+                    Status = STATUS_SUCCESS;
+                    break;
+                }
+
                 if (Adapter == NULL)
                 {
                     Status = STATUS_DEVICE_NOT_READY;
@@ -4765,6 +5015,11 @@ DxgkpDisplayDispatch(
                 Stack->Parameters.DeviceIoControl.InputBufferLength >= sizeof(VIDEO_MEMORY))
             {
                 RequestedVa = VideoMemory->RequestedVirtualAddress;
+            }
+            if (DxgkpDisplayUnmapDetachedFb(Bridge, RequestedVa))
+            {
+                Status = STATUS_SUCCESS;
+                break;
             }
             if (Adapter != NULL)
             {
@@ -6166,60 +6421,49 @@ DxgkDisplayRegisterSourceDisplays(
     DxgkpSourceDisplayRegisterAll(Adapter);
 }
 
-/* ========================================================================
- * DxgkDisplayRegister
- *
- * Called after DxgkAdapterStart succeeds.  Creates a \Device\VideoN
- * device object (trying Video0 first, then Video1, Video2, etc. if
- * the name is already taken by videoprt / VGA) and populates the
- * registry entries so that win32ss can discover the WDDM adapter.
- *
- * When another driver (typically videoprt for the VGA/BIOS framebuffer)
- * already owns \Device\Video0, we:
- *   1. Accept the next available device number.
- *   2. Write DEVICEMAP\VIDEO\Device\VideoN pointing to our driver key.
- *   3. Update MaxObjectNumber to cover all registered devices.
- *
- * This avoids bugcheck 0xB4 (VIDEO_DRIVER_INIT_FAILURE) that previously
- * occurred when UEFIFB/VGA stole Video0 before dxgkrnl.
- *
- * IRQL: PASSIVE_LEVEL
- * ====================================================================== */
-NTSTATUS
-DxgkDisplayRegister(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+static
+BOOLEAN
+DxgkpDisplayBridgeDetached(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+{
+    BOOLEAN Detached;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
+    Detached = g_DisplayDetachBridge == Bridge;
+    KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
+    return Detached;
+}
+
+static
+VOID
+DxgkpDisplayParkBridge(
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+{
+    KIRQL OldIrql;
+
+    ASSERT(Bridge->Adapter == NULL);
+    InterlockedExchange(&Bridge->RemovePending, 0);
+    ExReInitializeRundownProtection(&Bridge->Rundown);
+    KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
+    ASSERT(g_DisplayDetachBridge == Bridge);
+    ASSERT(g_DisplayParkedBridge == NULL);
+    g_DisplayParkedBridge = Bridge;
+    KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
+    DXGKRNL_INFO("DISPLAY_BRIDGE: \\Device\\Video%lu stays open for the detached desktop\n",
+                 Bridge->DeviceNumber);
+}
+
+static NTSTATUS
+DxgkpDisplayCreateVideoDevice(
+    _Out_ PDEVICE_OBJECT *DeviceObject,
+    _Out_ PULONG Number,
+    _Out_writes_(DeviceBufferCount) PWCHAR DeviceBuffer,
+    _In_ SIZE_T DeviceBufferCount)
 {
     NTSTATUS        Status;
     UNICODE_STRING  DeviceName;
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    UNICODE_STRING  KeyName;
-    HANDLE          hVideoMap = NULL;
-    HANDLE          hDriverKey = NULL;
     ULONG           DeviceNumber;
-    ULONG           ExistingMax;
-    BOOLEAN         DeviceMapEntryWritten = FALSE;
-    WCHAR           DeviceBuffer[24];     /* L"\\Device\\Video%lu" */
-    WCHAR           DeviceValueName[24];  /* L"\\Device\\Video%lu" */
-    WCHAR           DriverKeyBuf[128];    /* dxgkrnl\DeviceN key path */
-    PDEVICE_OBJECT  DeviceObject = NULL;
-    PDXGKP_DISPLAY_BRIDGE Bridge = NULL;
-    KIRQL           OldIrql;
-
-    PAGED_CODE();
-
-    DXGKRNL_TRACE("DxgkDisplayRegister: Adapter=%p\n", Adapter);
-
-    /*
-     * POST geometry is owned by the public ownership callback. In-tree
-     * display miniports call DxgkCbAcquirePostDisplayOwnership during start;
-     * a miniport that deliberately runs headless leaves these fields zero.
-     */
-
-    if (Adapter->DisplayBridge != NULL)
-    {
-        DXGKRNL_TRACE("DxgkDisplayRegister: already registered for this adapter\n");
-        return STATUS_SUCCESS;
-    }
 
     /* ---- Step 1: Find a free \Device\VideoN name ---- */
 
@@ -6229,7 +6473,6 @@ DxgkDisplayRegister(
      * that are still live.  A stopped basic-display adapter may have been
      * Video0 even though its former MaxObjectNumber was observed earlier.
      */
-    ExistingMax = DxgkpReadMaxObjectNumber();
     DeviceNumber = 0;
 
     /*
@@ -6242,7 +6485,7 @@ DxgkDisplayRegister(
          DeviceNumber++)
     {
         RtlStringCchPrintfW(DeviceBuffer,
-                            RTL_NUMBER_OF(DeviceBuffer),
+                            DeviceBufferCount,
                             L"\\Device\\Video%lu", DeviceNumber);
         RtlInitUnicodeString(&DeviceName, DeviceBuffer);
 
@@ -6253,13 +6496,13 @@ DxgkDisplayRegister(
                      FILE_DEVICE_VIDEO,  /* Match videoprt device type */
                      FILE_DEVICE_SECURE_OPEN,
                      FALSE,
-                     &DeviceObject);
+                     DeviceObject);
 
         if (NT_SUCCESS(Status))
         {
             /* Success -- we own this device number. */
             DXGKRNL_TRACE("DxgkDisplayRegister: created \\Device\\Video%lu at %p\n",
-                          DeviceNumber, DeviceObject);
+                          DeviceNumber, *DeviceObject);
             break;
         }
 
@@ -6284,13 +6527,108 @@ DxgkDisplayRegister(
         return Status;
     }
 
-    Bridge = (PDXGKP_DISPLAY_BRIDGE)DeviceObject->DeviceExtension;
-    RtlZeroMemory(Bridge, sizeof(*Bridge));
-    Bridge->Signature = DXGKP_DISPLAY_BRIDGE_SIGNATURE;
-    Bridge->DeviceObject = DeviceObject;
-    Bridge->Adapter = Adapter;
-    ExInitializeRundownProtection(&Bridge->Rundown);
-    Bridge->DeviceNumber = DeviceNumber;
+    *Number = DeviceNumber;
+    return STATUS_SUCCESS;
+}
+
+/* ========================================================================
+ * DxgkDisplayRegister
+ *
+ * Called after DxgkAdapterStart succeeds.  Creates a \Device\VideoN
+ * device object (trying Video0 first, then Video1, Video2, etc. if
+ * the name is already taken by videoprt / VGA) and populates the
+ * registry entries so that win32ss can discover the WDDM adapter.
+ *
+ * When another driver (typically videoprt for the VGA/BIOS framebuffer)
+ * already owns \Device\Video0, we:
+ *   1. Accept the next available device number.
+ *   2. Write DEVICEMAP\VIDEO\Device\VideoN pointing to our driver key.
+ *   3. Update MaxObjectNumber to cover all registered devices.
+ *
+ * This avoids bugcheck 0xB4 (VIDEO_DRIVER_INIT_FAILURE) that previously
+ * occurred when UEFIFB/VGA stole Video0 before dxgkrnl.
+ *
+ * IRQL: PASSIVE_LEVEL
+ * ====================================================================== */
+NTSTATUS
+DxgkDisplayRegister(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    NTSTATUS        Status;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING  KeyName;
+    HANDLE          hVideoMap = NULL;
+    HANDLE          hDriverKey = NULL;
+    ULONG           DeviceNumber;
+    ULONG           ExistingMax;
+    BOOLEAN         Adopted = FALSE;
+    BOOLEAN         DeviceMapEntryWritten = FALSE;
+    WCHAR           DeviceBuffer[24];     /* L"\\Device\\Video%lu" */
+    WCHAR           DeviceValueName[24];  /* L"\\Device\\Video%lu" */
+    WCHAR           DriverKeyBuf[128];    /* dxgkrnl\DeviceN key path */
+    PDEVICE_OBJECT  DeviceObject = NULL;
+    PDXGKP_DISPLAY_BRIDGE Bridge = NULL;
+    KIRQL           OldIrql;
+
+    PAGED_CODE();
+
+    DXGKRNL_TRACE("DxgkDisplayRegister: Adapter=%p\n", Adapter);
+
+    /*
+     * POST geometry is owned by the public ownership callback. In-tree
+     * display miniports call DxgkCbAcquirePostDisplayOwnership during start;
+     * a miniport that deliberately runs headless leaves these fields zero.
+     */
+
+    if (Adapter->DisplayBridge != NULL)
+    {
+        DXGKRNL_TRACE("DxgkDisplayRegister: already registered for this adapter\n");
+        return STATUS_SUCCESS;
+    }
+
+    ExistingMax = DxgkpReadMaxObjectNumber();
+
+    KeAcquireSpinLock(&g_DisplayBridgeLock, &OldIrql);
+    Bridge = g_DisplayParkedBridge;
+    if (Bridge != NULL && Bridge->DetachOwner != NULL &&
+        (Bridge->DetachOwner == Adapter || Adapter->PostDisplayFallbackAdapter == Bridge->DetachOwner))
+    {
+        g_DisplayParkedBridge = NULL;
+    }
+    else
+    {
+        Bridge = NULL;
+    }
+    KeReleaseSpinLock(&g_DisplayBridgeLock, OldIrql);
+
+    if (Bridge != NULL)
+    {
+        Adopted = TRUE;
+        ASSERT(Bridge->Adapter == NULL);
+        ASSERT(DxgkpDisplayBridgeDetached(Bridge));
+        DeviceObject = Bridge->DeviceObject;
+        DeviceNumber = Bridge->DeviceNumber;
+        RtlStringCchPrintfW(DeviceBuffer,
+                            RTL_NUMBER_OF(DeviceBuffer),
+                            L"\\Device\\Video%lu", DeviceNumber);
+        DXGKRNL_INFO("DISPLAY_BRIDGE: adapter %p takes over the detached desktop on %ls\n",
+                     Adapter, DeviceBuffer);
+    }
+    else
+    {
+        Status = DxgkpDisplayCreateVideoDevice(&DeviceObject, &DeviceNumber, DeviceBuffer, RTL_NUMBER_OF(DeviceBuffer));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Bridge = (PDXGKP_DISPLAY_BRIDGE)DeviceObject->DeviceExtension;
+        RtlZeroMemory(Bridge, sizeof(*Bridge));
+        Bridge->Signature = DXGKP_DISPLAY_BRIDGE_SIGNATURE;
+        Bridge->DeviceObject = DeviceObject;
+        ExInitializeRundownProtection(&Bridge->Rundown);
+        KeInitializeSpinLock(&Bridge->DetachLock);
+        Bridge->DeviceNumber = DeviceNumber;
+    }
+
+    InterlockedExchangePointer((PVOID *)&Bridge->Adapter, Adapter);
     Bridge->InitialModePending = TRUE;
     (VOID)RtlStringCchCopyW(Adapter->DisplayDeviceName, RTL_NUMBER_OF(Adapter->DisplayDeviceName), DeviceBuffer);
 
@@ -6506,7 +6844,22 @@ Cleanup:
     if (hVideoMap)
         ZwClose(hVideoMap);
 
-    if (!NT_SUCCESS(Status) && Bridge != NULL)
+    if (NT_SUCCESS(Status) && Adopted)
+    {
+        DxgkpDisplayEndDetach(Bridge);
+        if (ExAcquireRundownProtection(&Bridge->Rundown))
+        {
+            DxgkpDisplayRefreshWin32k(Bridge);
+            ExReleaseRundownProtection(&Bridge->Rundown);
+        }
+    }
+    else if (!NT_SUCCESS(Status) && Adopted)
+    {
+        DxgkpCloseDisplayBridge(Adapter, Bridge);
+        DxgkpDisplayParkBridge(Bridge);
+        Adapter->DisplayDeviceName[0] = L'\0';
+    }
+    else if (!NT_SUCCESS(Status))
     {
         DxgkpCloseDisplayBridge(Adapter, Bridge);
         if (DeviceMapEntryWritten)
@@ -6565,10 +6918,16 @@ DxgkDisplayUnregister(
             ExFreePoolWithTag(OldFb, TAG_DXGK_DISPLAY);
     }
 
+    Adapter->DisplayDeviceName[0] = L'\0';
+    if (DxgkpDisplayBridgeDetached(Bridge))
+    {
+        DxgkpDisplayParkBridge(Bridge);
+        return;
+    }
+
     DXGKRNL_TRACE("DxgkDisplayUnregister: deleting \\Device\\Video%lu\n", Bridge->DeviceNumber);
     DxgkpRemoveDeviceMapEntry(Bridge->DeviceNumber);
     IoDeleteDevice(Bridge->DeviceObject);
-    Adapter->DisplayDeviceName[0] = L'\0';
 }
 
 /* ========================================================================
@@ -6600,7 +6959,7 @@ DxgkpDisplayPnpDispatch(
                 if (ExAcquireRundownProtection(&Bridge->Rundown))
                 {
                     Adapter = Bridge->Adapter;
-                    if (Adapter->PhysicalDeviceObject != NULL)
+                    if (Adapter != NULL && Adapter->PhysicalDeviceObject != NULL)
                     {
                         PDEVICE_RELATIONS Rel;
                         Rel = (PDEVICE_RELATIONS)ExAllocatePoolWithTag(
