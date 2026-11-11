@@ -482,6 +482,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     // Do not force buffered or direct I/O at FS level; leave to I/O manager/CC
     if (TargetDeviceObject->AlignmentRequirement > FSDeviceObject->AlignmentRequirement)
         FSDeviceObject->AlignmentRequirement = TargetDeviceObject->AlignmentRequirement;
+    FSDeviceObject->SectorSize = (USHORT)DiskGeometry.BytesPerSector;
 
     // Set up FastIo dispatch table for this volume
     FSDeviceObject->DriverObject->FastIoDispatch = &FastIoDispatch;

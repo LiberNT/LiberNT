@@ -179,6 +179,36 @@ IopAbortRequest(
 }
 
 static
+BOOLEAN
+IopIsTransferValid(
+    _In_ PIOP_REQUEST Request,
+    _In_ BOOLEAN Write,
+    _In_ PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ PLARGE_INTEGER Offset)
+{
+    PDEVICE_OBJECT DeviceObject = Request->DeviceObject;
+    ULONG SectorSize = DeviceObject->SectorSize;
+
+    if (Offset->QuadPart < 0 &&
+        !(Write && Offset->QuadPart == -1) &&
+        !(Request->FileObject->Flags & (FO_NAMED_PIPE | FO_MAILSLOT)))
+    {
+        return FALSE;
+    }
+
+    if (!(Request->FileObject->Flags & FO_NO_INTERMEDIATE_BUFFERING)) return TRUE;
+
+    if ((ULONG_PTR)Buffer & DeviceObject->AlignmentRequirement) return FALSE;
+
+    if (SectorSize == 0) return TRUE;
+
+    if (Length % SectorSize != 0) return FALSE;
+
+    return Offset->QuadPart < 0 || (Offset->QuadPart % SectorSize) == 0;
+}
+
+static
 NTSTATUS
 IopSetAsyncParameters(
     _In_ PIOP_REQUEST Request,
@@ -530,6 +560,12 @@ NtReadFile(
         CapturedOffset = Request.FileObject->CurrentByteOffset;
     }
 
+    if (!IopIsTransferValid(&Request, FALSE, Buffer, Length, &CapturedOffset))
+    {
+        IopAbortRequest(&Request);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     if (IopTryFastIo(&Request,
                      FALSE,
                      &CapturedOffset,
@@ -724,6 +760,12 @@ NtWriteFile(
         }
 
         CapturedOffset = Request.FileObject->CurrentByteOffset;
+    }
+
+    if (!IopIsTransferValid(&Request, TRUE, Buffer, Length, &CapturedOffset))
+    {
+        IopAbortRequest(&Request);
+        return STATUS_INVALID_PARAMETER;
     }
 
     if (IopTryFastIo(&Request,
