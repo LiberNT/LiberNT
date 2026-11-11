@@ -18,6 +18,9 @@
  */
 
 #include "private.h"
+#ifdef __REACTOS__
+#include "robuffer.h"
+#endif
 
 #include "wine/debug.h"
 
@@ -464,9 +467,17 @@ struct synthesis_stream
     ISpeechSynthesisStream ISpeechSynthesisStream_iface;
     IRandomAccessStream IRandomAccessStream_iface;
     IInputStream IInputStream_iface;
+#ifdef __REACTOS__
+    IContentTypeProvider IContentTypeProvider_iface;
+#endif
     LONG ref;
 
     IVector_IMediaMarker *markers;
+#ifdef __REACTOS__
+    BYTE *data;
+    UINT64 size;
+    UINT64 position;
+#endif
 };
 
 static inline struct synthesis_stream *impl_from_ISpeechSynthesisStream( ISpeechSynthesisStream *iface )
@@ -502,6 +513,14 @@ HRESULT WINAPI synthesis_stream_QueryInterface( ISpeechSynthesisStream *iface, R
         *out = &impl->IInputStream_iface;
         return S_OK;
     }
+#ifdef __REACTOS__
+    if (IsEqualGUID(iid, &IID_IContentTypeProvider))
+    {
+        IContentTypeProvider_AddRef(&impl->IContentTypeProvider_iface);
+        *out = &impl->IContentTypeProvider_iface;
+        return S_OK;
+    }
+#endif
 
     FIXME("%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid(iid));
     *out = NULL;
@@ -524,7 +543,13 @@ ULONG WINAPI synthesis_stream_Release( ISpeechSynthesisStream *iface )
     TRACE("iface %p, ref %lu.\n", iface, ref);
 
     if (!ref)
+    {
+#ifdef __REACTOS__
+        if (impl->markers) IVector_IMediaMarker_Release(impl->markers);
+        free(impl->data);
+#endif
         free(impl);
+    }
 
     return ref;
 }
@@ -619,9 +644,17 @@ static HRESULT WINAPI synthesis_stream_random_access_GetTrustLevel( IRandomAcces
 
 static HRESULT WINAPI synthesis_stream_random_access_get_Size( IRandomAccessStream *iface, UINT64 *value )
 {
+#ifdef __REACTOS__
+    struct synthesis_stream *impl = impl_from_IRandomAccessStream(iface);
+
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    *value = impl->size;
+#else
     FIXME( "iface %p, value %p stub.\n", iface, value );
 
     *value = 0;
+#endif
     return S_OK;
 }
 
@@ -652,17 +685,35 @@ static HRESULT WINAPI synthesis_stream_random_access_GetOutputStreamAt( IRandomA
 
 static HRESULT WINAPI synthesis_stream_random_access_get_Position( IRandomAccessStream *iface, UINT64 *value )
 {
+#ifdef __REACTOS__
+    struct synthesis_stream *impl = impl_from_IRandomAccessStream(iface);
+
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    *value = impl->position;
+    return S_OK;
+#else
     FIXME( "iface %p, value %p stub.\n", iface, value );
 
     *value = 0;
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI synthesis_stream_random_access_Seek( IRandomAccessStream *iface, UINT64 position )
 {
+#ifdef __REACTOS__
+    struct synthesis_stream *impl = impl_from_IRandomAccessStream(iface);
+
+    TRACE( "iface %p, position %I64u.\n", iface, position );
+
+    impl->position = position;
+    return S_OK;
+#else
     FIXME( "iface %p, position %I64u stub.\n", iface, position );
 
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI synthesis_stream_random_access_CloneStream( IRandomAccessStream *iface, IRandomAccessStream **stream )
@@ -675,18 +726,32 @@ static HRESULT WINAPI synthesis_stream_random_access_CloneStream( IRandomAccessS
 
 static HRESULT WINAPI synthesis_stream_random_access_get_CanRead( IRandomAccessStream *iface, BOOLEAN *value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    *value = TRUE;
+    return S_OK;
+#else
     FIXME( "iface %p, value %p stub.\n", iface, value );
 
     *value = FALSE;
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI synthesis_stream_random_access_get_CanWrite( IRandomAccessStream *iface, BOOLEAN *value )
 {
+#ifdef __REACTOS__
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    *value = FALSE;
+    return S_OK;
+#else
     FIXME( "iface %p, value %p stub.\n", iface, value );
 
     *value = FALSE;
     return E_NOTIMPL;
+#endif
 }
 
 static const struct IRandomAccessStreamVtbl synthesis_stream_random_access_vtbl =
@@ -996,7 +1061,32 @@ static HRESULT WINAPI synthesis_stream_input_GetTrustLevel( IInputStream *iface,
 static HRESULT WINAPI synthesis_stream_input_ReadAsync( IInputStream *iface, IBuffer *buffer, UINT32 count,
         InputStreamOptions options, IAsyncOperationWithProgress_IBuffer_UINT32 **operation)
 {
+#ifdef __REACTOS__
+    struct synthesis_stream *impl = impl_from_IInputStream(iface);
+    IBufferByteAccess *byte_access;
+    UINT32 capacity, length = 0;
+    BYTE *bytes;
+    HRESULT hr;
+
+    TRACE( "iface %p, buffer %p, count %u, options %d, operation %p.\n", iface, buffer, count, options, operation );
+
+    if (!buffer || !operation) return E_POINTER;
+    if (FAILED(hr = IBuffer_get_Capacity( buffer, &capacity ))) return hr;
+    if (impl->position < impl->size)
+        length = (UINT32)min( (UINT64)min( count, capacity ), impl->size - impl->position );
+    if (length)
+    {
+        if (FAILED(hr = IBuffer_QueryInterface( buffer, &IID_IBufferByteAccess, (void **)&byte_access ))) return hr;
+        hr = IBufferByteAccess_Buffer( byte_access, &bytes );
+        if (SUCCEEDED(hr)) memcpy( bytes, impl->data + impl->position, length );
+        IBufferByteAccess_Release( byte_access );
+        if (FAILED(hr)) return hr;
+        impl->position += length;
+    }
+    if (FAILED(hr = IBuffer_put_Length( buffer, length ))) return hr;
+#else
     FIXME( "iface %p, buffer %p, count %u, options %d, operation %p stub.\n", iface, buffer, count, options, operation );
+#endif
     return async_operation_with_progress_buffer_uint32_create( iface, buffer, operation );
 }
 
@@ -1015,7 +1105,33 @@ static const struct IInputStreamVtbl synthesis_stream_input_vtbl =
 };
 
 
+#ifdef __REACTOS__
+DEFINE_IINSPECTABLE(synthesis_stream_content_type, IContentTypeProvider, struct synthesis_stream, ISpeechSynthesisStream_iface)
+
+static HRESULT WINAPI synthesis_stream_content_type_get_ContentType( IContentTypeProvider *iface, HSTRING *value )
+{
+    static const WCHAR wave[] = L"audio/wav";
+
+    TRACE( "iface %p, value %p.\n", iface, value );
+
+    return WindowsCreateString( wave, ARRAY_SIZE(wave) - 1, value );
+}
+
+static const struct IContentTypeProviderVtbl synthesis_stream_content_type_vtbl =
+{
+    synthesis_stream_content_type_QueryInterface,
+    synthesis_stream_content_type_AddRef,
+    synthesis_stream_content_type_Release,
+    synthesis_stream_content_type_GetIids,
+    synthesis_stream_content_type_GetRuntimeClassName,
+    synthesis_stream_content_type_GetTrustLevel,
+    synthesis_stream_content_type_get_ContentType,
+};
+
+static HRESULT synthesis_stream_create( BYTE *data, UINT32 size, ISpeechSynthesisStream **out )
+#else
 static HRESULT synthesis_stream_create( ISpeechSynthesisStream **out )
+#endif
 {
     struct synthesis_stream *impl;
     struct vector_iids markers_iids =
@@ -1038,9 +1154,16 @@ static HRESULT synthesis_stream_create( ISpeechSynthesisStream **out )
     impl->ISpeechSynthesisStream_iface.lpVtbl = &synthesis_stream_vtbl;
     impl->IRandomAccessStream_iface.lpVtbl = &synthesis_stream_random_access_vtbl;
     impl->IInputStream_iface.lpVtbl = &synthesis_stream_input_vtbl;
+#ifdef __REACTOS__
+    impl->IContentTypeProvider_iface.lpVtbl = &synthesis_stream_content_type_vtbl;
+#endif
     impl->ref = 1;
     if (FAILED(hr = vector_inspectable_create(&markers_iids, (IVector_IInspectable**)&impl->markers)))
         goto error;
+#ifdef __REACTOS__
+    impl->data = data;
+    impl->size = size;
+#endif
 
     TRACE("created ISpeechSynthesisStream %p.\n", impl);
     *out = &impl->ISpeechSynthesisStream_iface;
@@ -1462,6 +1585,49 @@ static HRESULT WINAPI synthesizer_GetTrustLevel( ISpeechSynthesizer *iface, Trus
     return E_NOTIMPL;
 }
 
+#ifdef __REACTOS__
+static HRESULT synthesizer_synthesize_to_stream( IUnknown *invoker, IUnknown *param, PROPVARIANT *result, BOOL called_async )
+{
+    ISpeechSynthesisStream *stream;
+    UINT32 size;
+    BYTE *data;
+    HRESULT hr;
+
+    if (!called_async) return STATUS_PENDING;
+
+    if (FAILED(hr = synthesis_request_run(param, &data, &size))) return hr;
+    if (FAILED(hr = synthesis_stream_create(data, size, &stream)))
+    {
+        free(data);
+        return hr;
+    }
+    result->vt = VT_UNKNOWN;
+    result->punkVal = (IUnknown *)stream;
+    return S_OK;
+}
+
+static HRESULT synthesizer_start( struct synthesizer *impl, HSTRING text, BOOL ssml,
+                                  IAsyncOperation_SpeechSynthesisStream **operation )
+{
+    IUnknown *request;
+    HSTRING voice_id;
+    HRESULT hr;
+
+    if (FAILED(hr = IVoiceInformation_get_Id(impl->current_voice, &voice_id)))
+        return hr;
+    /* TODO: Apply the audio pitch, appended silence and boundary metadata options. */
+    hr = synthesis_request_create(text, ssml, voice_id, impl->options->audio_volume, impl->options->speaking_rate,
+                                  &request);
+    WindowsDeleteString(voice_id);
+    if (FAILED(hr))
+        return hr;
+    hr = async_operation_inspectable_create(&IID_IAsyncOperation_SpeechSynthesisStream, NULL, request,
+                                            synthesizer_synthesize_to_stream, InterlockedIncrement(&impl->async_id),
+                                            S_OK, (IAsyncOperation_IInspectable **)operation);
+    IUnknown_Release(request);
+    return hr;
+}
+#else
 static HRESULT synthesizer_synthesize_text_to_stream_async( IUnknown *invoker, IUnknown *param, PROPVARIANT *result, BOOL called_async )
 {
     ISpeechSynthesisStream *stream;
@@ -1476,6 +1642,7 @@ static HRESULT synthesizer_synthesize_text_to_stream_async( IUnknown *invoker, I
     }
     return hr;
 }
+#endif
 
 static HRESULT WINAPI synthesizer_SynthesizeTextToStreamAsync( ISpeechSynthesizer *iface, HSTRING text,
                                                                IAsyncOperation_SpeechSynthesisStream **operation )
@@ -1484,9 +1651,7 @@ static HRESULT WINAPI synthesizer_SynthesizeTextToStreamAsync( ISpeechSynthesize
     struct synthesizer *impl = impl_from_ISpeechSynthesizer(iface);
 
     TRACE("iface %p, text %p, operation %p.\n", iface, text, operation);
-    return async_operation_inspectable_create(&IID_IAsyncOperation_SpeechSynthesisStream, NULL, NULL,
-                                              synthesizer_synthesize_text_to_stream_async, InterlockedIncrement(&impl->async_id),
-                                              S_OK, (IAsyncOperation_IInspectable **)operation);
+    return synthesizer_start(impl, text, FALSE, operation);
 #else
     TRACE("iface %p, text %p, operation %p.\n", iface, text, operation);
     return async_operation_inspectable_create(&IID_IAsyncOperation_SpeechSynthesisStream, NULL, NULL,
@@ -1494,6 +1659,7 @@ static HRESULT WINAPI synthesizer_SynthesizeTextToStreamAsync( ISpeechSynthesize
 #endif
 }
 
+#ifndef __REACTOS__
 static HRESULT synthesizer_synthesize_ssml_to_stream_async( IUnknown *invoker, IUnknown *param, PROPVARIANT *result, BOOL called_async )
 {
     ISpeechSynthesisStream *stream;
@@ -1508,6 +1674,7 @@ static HRESULT synthesizer_synthesize_ssml_to_stream_async( IUnknown *invoker, I
     }
     return hr;
 }
+#endif
 
 static HRESULT WINAPI synthesizer_SynthesizeSsmlToStreamAsync( ISpeechSynthesizer *iface, HSTRING ssml,
                                                                IAsyncOperation_SpeechSynthesisStream **operation )
@@ -1516,9 +1683,7 @@ static HRESULT WINAPI synthesizer_SynthesizeSsmlToStreamAsync( ISpeechSynthesize
     struct synthesizer *impl = impl_from_ISpeechSynthesizer(iface);
 
     TRACE("iface %p, ssml %p, operation %p.\n", iface, ssml, operation);
-    return async_operation_inspectable_create(&IID_IAsyncOperation_SpeechSynthesisStream, NULL, NULL,
-                                              synthesizer_synthesize_ssml_to_stream_async, InterlockedIncrement(&impl->async_id),
-                                              S_OK, (IAsyncOperation_IInspectable **)operation);
+    return synthesizer_start(impl, ssml, TRUE, operation);
 #else
     TRACE("iface %p, ssml %p, operation %p.\n", iface, ssml, operation);
     return async_operation_inspectable_create(&IID_IAsyncOperation_SpeechSynthesisStream, NULL, NULL,
@@ -1807,9 +1972,37 @@ static HRESULT static_installed_voices_init(void)
 {
     WCHAR locale[LOCALE_NAME_MAX_LENGTH];
     HRESULT hr;
+#ifdef __REACTOS__
+    struct voice_token *tokens;
+    UINT32 count, i;
+#endif
 
     if (all_voices.provider.num_voices)
         return S_OK;
+
+#ifdef __REACTOS__
+    if (FAILED(hr = voice_tokens_enumerate(&tokens, &count)))
+        return hr;
+    if (count && !(all_voices.provider.voices = calloc(count, sizeof(all_voices.provider.voices[0]))))
+    {
+        free(tokens);
+        return E_OUTOFMEMORY;
+    }
+    for (i = 0; i < count; i++)
+    {
+        if (FAILED(hr = voice_information_create(tokens[i].name, tokens[i].id, tokens[i].locale,
+                                                 tokens[i].female ? VoiceGender_Female : VoiceGender_Male,
+                                                 &all_voices.provider.voices[all_voices.provider.num_voices])))
+            break;
+        all_voices.provider.num_voices++;
+    }
+    free(tokens);
+    if (all_voices.provider.num_voices)
+        return S_OK;
+    free(all_voices.provider.voices);
+    all_voices.provider.voices = NULL;
+    /* FIXME: Without an installed voice token the placeholder voice is reported and synthesis fails. */
+#endif
 
     if (GetUserDefaultLocaleName(locale, ARRAY_SIZE(locale)) > ARRAY_SIZE(locale))
         return E_OUTOFMEMORY;

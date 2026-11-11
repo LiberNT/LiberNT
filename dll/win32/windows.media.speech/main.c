@@ -19,6 +19,9 @@
 
 #include "initguid.h"
 #include "private.h"
+#ifdef __REACTOS__
+#include "robuffer.h"
+#endif
 
 #include "wine/debug.h"
 

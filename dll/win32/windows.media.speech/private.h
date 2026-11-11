@@ -63,6 +63,10 @@ extern IActivationFactory *recognizer_factory;
 
 extern IActivationFactory *synthesizer_factory;
 
+#ifdef __REACTOS__
+#include "sapi_synthesis.h"
+#endif
+
 
 
 struct vector_iids
