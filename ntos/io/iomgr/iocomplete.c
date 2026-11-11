@@ -294,6 +294,7 @@ IopCompleteRequest(
     PVOID Port = NULL;
     PVOID Key = NULL;
     BOOLEAN Deliver;
+    BOOLEAN DeliverApc;
 
     UNREFERENCED_PARAMETER(NormalRoutine);
     UNREFERENCED_PARAMETER(NormalContext);
@@ -315,13 +316,11 @@ IopCompleteRequest(
      */
     Deliver = (BOOLEAN)(!NT_ERROR(Irp->IoStatus.Status) || Irp->PendingReturned);
 
-    /* A synchronous caller waited for the request, so even a pended error reaches it as the return value only */
-    if (NT_ERROR(Irp->IoStatus.Status) &&
-        FileObject != NULL &&
-        (FileObject->Flags & FO_SYNCHRONOUS_IO))
-    {
-        Deliver = FALSE;
-    }
+    /* A synchronous caller waited for the request, so a pended error queues no completion APC */
+    DeliverApc = (BOOLEAN)(Deliver &&
+                           !(NT_ERROR(Irp->IoStatus.Status) &&
+                             FileObject != NULL &&
+                             (FileObject->Flags & FO_SYNCHRONOUS_IO)));
 
     IopReturnRequestBuffers(Irp, TRUE);
 
@@ -407,7 +406,7 @@ IopCompleteRequest(
     if (FileObject != NULL) ObDereferenceObject(FileObject);
 
     /* The caller's routine runs in user mode; the packet lives until it is delivered */
-    if (Deliver && Irp->Overlay.AsynchronousParameters.UserApcRoutine != NULL)
+    if (DeliverApc && Irp->Overlay.AsynchronousParameters.UserApcRoutine != NULL)
     {
         KeInitializeApc(&Irp->Tail.Apc,
                         KeGetCurrentThread(),
