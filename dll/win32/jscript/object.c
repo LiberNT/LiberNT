@@ -619,7 +619,7 @@ static HRESULT to_property_descriptor(script_ctx_t *ctx, jsdisp_t *attr_obj, pro
 
     if(desc->explicit_getter || desc->explicit_setter) {
         if(desc->explicit_value)
-            hres = JS_E_PROP_DESC_MISMATCH;
+            hres = JS_E_INVALID_ACTION;
         else if(desc->mask & PROPF_WRITABLE)
             hres = JS_E_INVALID_WRITABLE_PROP_DESC;
     }

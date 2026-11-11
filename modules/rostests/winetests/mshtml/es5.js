@@ -635,7 +635,6 @@ sync_test("defineProperty", function() {
             func();
         }catch(e) {
             var n = e.number + 0x100000000; /* make it unsigned like HRESULT */
-            todo_wine_if(expected_number == JS_E_PROP_DESC_MISMATCH).
             ok(n === expected_number, "got exception " + n.toString(16)
                + " expected " + expected_number.toString(16));
             ok(e.name === "TypeError", "e.name = " + e.name);
