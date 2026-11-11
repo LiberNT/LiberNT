@@ -712,9 +712,11 @@ KiSetPriorityThread(
                 Prcb->ReadySummary ^= PRIORITY_MASK(OldPriority);
 
             Thread->Priority = (SCHAR)Priority;
-            Thread->State = Running;
             Thread->Preempted = FALSE;
-            KiQueueReadyThread(Thread, Prcb);
+            KiReleasePrcbLock(Prcb);
+
+            /* Placed again on the way out of the dispatcher, where it can displace the running thread */
+            KiInsertDeferredReadyList(Thread);
             break;
         }
 
