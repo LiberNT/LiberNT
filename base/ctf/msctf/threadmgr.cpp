@@ -613,7 +613,8 @@ STDMETHODIMP_(ULONG) CThreadMgr::Release()
 STDMETHODIMP CThreadMgr::Activate(_Out_ TfClientId *ptid)
 {
     TRACE("(%p) %p\n", this, ptid);
-    return ActivateEx(ptid, 0);
+    HRESULT hr = ActivateEx(ptid, 0);
+    return (hr == S_FALSE) ? S_OK : hr;
 }
 
 STDMETHODIMP CThreadMgr::Deactivate()

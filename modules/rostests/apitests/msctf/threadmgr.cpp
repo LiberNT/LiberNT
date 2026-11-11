@@ -681,6 +681,24 @@ static void TestLangBarItemMgr(TSF_FIXTURE *pFixture)
     pMgr->Release();
 }
 
+static void TestNestedActivate(TSF_FIXTURE *pFixture)
+{
+    ITfThreadMgrEx *pEx = NULL;
+    TfClientId tid = 0;
+
+    ok_hr(pFixture->pThreadMgr->Activate(&tid), S_OK);
+    ok_long(tid, pFixture->tid);
+    ok_hr(pFixture->pThreadMgr->Deactivate(), S_OK);
+    ok_hr(pFixture->pThreadMgr->QueryInterface(IID_ITfThreadMgrEx, (void **)&pEx), S_OK);
+    if (!pEx)
+        return;
+    tid = 0;
+    ok_hr(pEx->ActivateEx(&tid, 0), S_FALSE);
+    ok_long(tid, pFixture->tid);
+    ok_hr(pEx->Deactivate(), S_OK);
+    pEx->Release();
+}
+
 START_TEST(threadmgr)
 {
     TSF_FIXTURE fixture;
@@ -700,6 +718,7 @@ START_TEST(threadmgr)
             fixture.pThreadMgr->SetFocus(fixture.pDocMgr);
             TestTip_Activate();
         }
+        TestNestedActivate(&fixture);
         TestClientIdChecks(&fixture);
         TestUIElements(&fixture);
         if (fRegistered && g_pTip->tid)
