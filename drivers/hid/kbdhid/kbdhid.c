@@ -898,6 +898,9 @@ KbdHid_StartDevice(
     /* store number of buttons */
     DeviceExtension->UsageListLength = (USHORT)Buttons;
 
+    DeviceExtension->Attributes.KeyboardMode = 1;
+    DeviceExtension->Attributes.NumberOfKeysTotal = Capabilities.NumberInputDataIndices;
+
     /* store preparsed data */
     DeviceExtension->PreparsedData = PreparsedData;
 

@@ -168,7 +168,7 @@ HidClassPDO_HandleQueryHardwareId(
 {
     NTSTATUS Status;
     PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension;
-    WCHAR Buffer[200];
+    WCHAR Buffer[256];
     WCHAR Function[8] = L"";
     ULONG Offset = 0;
     LPWSTR Ptr;
@@ -226,6 +226,8 @@ HidClassPDO_HandleQueryHardwareId(
     //
     CollectionDescription = HidClassPDO_GetCollectionDescription(&PDODeviceExtension->Common.DeviceDescription, PDODeviceExtension->CollectionNumber);
     ASSERT(CollectionDescription);
+
+    Offset += _swprintf(&Buffer[Offset], L"HID\\VID_%04X&UP:%04X_U:%04X", PDODeviceExtension->Common.Attributes.VendorID, CollectionDescription->UsagePage, CollectionDescription->Usage) + 1;
 
     if (CollectionDescription->UsagePage == HID_USAGE_PAGE_GENERIC)
     {

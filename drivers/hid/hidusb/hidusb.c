@@ -1787,7 +1787,7 @@ HidUsb_CopyStringDescriptor(
 
     if (OutputBufferLength < RequiredLength)
     {
-        Status = STATUS_BUFFER_TOO_SMALL;
+        Status = STATUS_INVALID_USER_BUFFER;
         goto Cleanup;
     }
 

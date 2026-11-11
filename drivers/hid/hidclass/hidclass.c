@@ -134,6 +134,27 @@ HidClassDriverUnload(
         DriverExtension->DriverUnload(DriverObject);
 }
 
+static
+BOOLEAN
+HidClass_IsSystemExclusive(
+    IN PHIDCLASS_PDO_DEVICE_EXTENSION PDODeviceExtension)
+{
+    PHIDP_COLLECTION_DESC CollectionDescription;
+
+    ASSERT(PDODeviceExtension->Common.IsFDO == FALSE);
+
+    CollectionDescription = HidClassPDO_GetCollectionDescription(&PDODeviceExtension->Common.DeviceDescription,
+                                                                 PDODeviceExtension->CollectionNumber);
+    ASSERT(CollectionDescription);
+    if (!CollectionDescription || CollectionDescription->UsagePage != HID_USAGE_PAGE_GENERIC)
+        return FALSE;
+
+    return CollectionDescription->Usage == HID_USAGE_GENERIC_POINTER ||
+           CollectionDescription->Usage == HID_USAGE_GENERIC_MOUSE ||
+           CollectionDescription->Usage == HID_USAGE_GENERIC_KEYBOARD ||
+           CollectionDescription->Usage == HID_USAGE_GENERIC_KEYPAD;
+}
+
 NTSTATUS
 NTAPI
 HidClass_Create(
@@ -179,6 +200,18 @@ HidClass_Create(
     DPRINT("ShareAccess %x\n", IoStack->Parameters.Create.ShareAccess);
     DPRINT("Options %x\n", IoStack->Parameters.Create.Options);
     DPRINT("DesiredAccess %x\n", IoStack->Parameters.Create.SecurityContext->DesiredAccess);
+
+    ASSERT(IoStack->Parameters.Create.SecurityContext);
+    ASSERT(IoStack->Parameters.Create.SecurityContext->AccessState);
+    if (Irp->RequestorMode != KernelMode &&
+        ((IoStack->Parameters.Create.SecurityContext->AccessState->PreviouslyGrantedAccess |
+          IoStack->Parameters.Create.SecurityContext->AccessState->RemainingDesiredAccess) & FILE_READ_DATA) &&
+        HidClass_IsSystemExclusive(PDODeviceExtension))
+    {
+        Irp->IoStatus.Status = STATUS_ACCESS_DENIED;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_ACCESS_DENIED;
+    }
 
     //
     // allocate context
@@ -1405,6 +1438,18 @@ HidClass_DeviceControl(
     // get stack location
     //
     IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    if (Irp->RequestorMode != KernelMode &&
+        (IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_HID_GET_FEATURE ||
+         IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_HID_SET_FEATURE ||
+         IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_HID_GET_INPUT_REPORT ||
+         IoStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_HID_SET_OUTPUT_REPORT) &&
+        HidClass_IsSystemExclusive(PDODeviceExtension))
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_INVALID_DEVICE_REQUEST;
+    }
 
     switch (IoStack->Parameters.DeviceIoControl.IoControlCode)
     {
