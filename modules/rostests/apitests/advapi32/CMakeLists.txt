@@ -28,6 +28,7 @@ list(APPEND SOURCE
     RegEnumKey.c
     RegEnumValueW.c
     RegFlushKey.c
+    RegNotifyThreadAgnostic.c
     RegNotifyThreadExit.c
     RegLoadAppKey.c
     RegOpenKeyExW.c

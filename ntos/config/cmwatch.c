@@ -258,6 +258,18 @@ CmpDeliverCompletion(
 
     if (Completion->SlaveBody != NULL) CmpCancelSiblingPosts(Completion);
 
+    /* TODO: a thread-agnostic answer only signals its event; its status block is left unwritten */
+    if (Completion->Thread == NULL)
+    {
+        ASSERT(Completion->Event != NULL);
+        ASSERT(Completion->ApcRoutine == NULL);
+        ASSERT(!Completion->Synchronous);
+
+        KeSetEvent(Completion->Event, EVENT_INCREMENT, FALSE);
+        CmpReleaseCompletion(Completion);
+        return;
+    }
+
     KeInitializeApc(&Completion->Apc,
                     &Completion->Thread->Tcb,
                     OriginalApcEnvironment,
@@ -460,7 +472,7 @@ CmpNotifyChangeKey(
     PCM_NOTIFY_BLOCK Slave = NULL;
     NTSTATUS Status;
 
-    if ((Filter & ~REG_LEGAL_CHANGE_FILTER) != 0)
+    if ((Filter & ~(REG_LEGAL_CHANGE_FILTER | REG_NOTIFY_THREAD_AGNOSTIC)) != 0)
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -495,7 +507,6 @@ CmpNotifyChangeKey(
     if (Completion == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     Completion->RefCount = 1;
-    Completion->Thread = PsGetCurrentThread();
     Completion->Event = Event;
     Completion->ApcRoutine = ApcRoutine;
     Completion->ApcContext = ApcContext;
@@ -504,7 +515,13 @@ CmpNotifyChangeKey(
     Completion->Synchronous = !Asynchronous;
     Completion->Mode = PreviousMode;
     KeInitializeEvent(&Completion->Finished, NotificationEvent, FALSE);
-    ObReferenceObject(Completion->Thread);
+
+    /* TODO: REG_NOTIFY_THREAD_AGNOSTIC frees only asynchronous event notifications from the thread; the other forms stay tied to it */
+    if (!(Filter & REG_NOTIFY_THREAD_AGNOSTIC) || !Asynchronous || (Event == NULL) || (ApcRoutine != NULL))
+    {
+        Completion->Thread = PsGetCurrentThread();
+        ObReferenceObject(Completion->Thread);
+    }
 
     if (SlaveKeyBody != NULL)
     {
