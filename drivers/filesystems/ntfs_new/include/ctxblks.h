@@ -668,7 +668,6 @@ NTSTATUS
 NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
                       _Inout_ PFileContextBlock FileCB,
                       _In_ ULONG Flags,
-                      _In_ NTSTATUS DirectoryEmpty,
                       _Out_ PBOOLEAN Handled);
 
 NTSTATUS

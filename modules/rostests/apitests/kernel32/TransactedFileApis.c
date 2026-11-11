@@ -222,8 +222,9 @@ RemoveTree(
     static const PCWSTR Files[] = { L"exist.txt", L"exist2.txt", L"new.txt", L"newA.txt", L"new2.txt",
                                     L"copy.txt", L"copyA.txt", L"moved.txt", L"movedA.txt", L"link.txt",
                                     L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt", L"data.txt",
-                                    L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt" };
-    static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree" };
+                                    L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt",
+                                    L"full\\a.txt", L"full\\b.txt", L"full\\c.txt", L"outside.txt" };
+    static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree", L"full" };
     WCHAR Path[MAX_PATH];
     CHAR PathA[MAX_PATH];
     ULONG Index;
@@ -864,6 +865,133 @@ TestSupportedVolumeData(
 }
 
 static
+ULONG
+CountListedInTransaction(
+    _In_ PCWSTR Pattern,
+    _In_ HANDLE Transaction)
+{
+    WIN32_FIND_DATAW Data;
+    ULONG Count = 0;
+    HANDLE Find;
+
+    Find = pFindFirstFileTransactedW(Pattern, FindExInfoStandard, &Data, FindExSearchNameMatch, NULL, 0, Transaction);
+    if (Find == INVALID_HANDLE_VALUE)
+        return 0;
+    do
+    {
+        if (wcscmp(Data.cFileName, L".") && wcscmp(Data.cFileName, L".."))
+            Count++;
+    } while (FindNextFileW(Find, &Data));
+    FindClose(Find);
+    return Count;
+}
+
+static
+BOOL
+PrepareFullDirectory(
+    _In_ PCWSTR Full,
+    _In_ PCWSTR ChildA,
+    _In_ PCWSTR ChildB)
+{
+    if (!Exists(Full) && !CreateDirectoryW(Full, NULL))
+    {
+        ok(0, "CreateDirectory(%S) failed with %lu\n", Full, GetLastError());
+        return FALSE;
+    }
+    return WriteTestFile(ChildA, "a") && WriteTestFile(ChildB, "b");
+}
+
+static
+VOID
+TestTransactedDirectoryRemoval(
+    _In_ PTX_DIR Dir)
+{
+    WCHAR Full[MAX_PATH], ChildA[MAX_PATH], ChildB[MAX_PATH], ChildC[MAX_PATH], Pattern[MAX_PATH], Outside[MAX_PATH];
+    CHAR Scratch[MAX_PATH];
+    WIN32_FILE_ATTRIBUTE_DATA Info;
+    HANDLE Transaction;
+    HANDLE Writer;
+
+    PathOf(Dir, L"full", Full, Scratch);
+    PathOf(Dir, L"full\\a.txt", ChildA, Scratch);
+    PathOf(Dir, L"full\\b.txt", ChildB, Scratch);
+    PathOf(Dir, L"full\\c.txt", ChildC, Scratch);
+    PathOf(Dir, L"full\\*", Pattern, Scratch);
+    PathOf(Dir, L"outside.txt", Outside, Scratch);
+    if (!PrepareFullDirectory(Full, ChildA, ChildB))
+        return;
+
+    /* A directory whose committed children were all deleted in the transaction is empty inside it */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pDeleteFileTransactedW(ChildA, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    ok(pDeleteFileTransactedW(ChildB, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    ok(CountListedInTransaction(Pattern, Transaction) == 0, "deleted children still listed in the transaction\n");
+    ok(pRemoveDirectoryTransactedW(Full, Transaction),
+       "RemoveDirectoryTransactedW of a transactionally empty directory failed with %lu\n", GetLastError());
+    ok(Exists(Full) && ReadsBack(ChildA, "a") && ReadsBack(ChildB, "b"),
+       "transacted directory removal visible outside before commit\n");
+    ok(!pGetFileAttributesTransactedW(Full, GetFileExInfoStandard, &Info, Transaction),
+       "removed directory still found in the transaction\n");
+    ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(!Exists(ChildA) && !Exists(ChildB) && !Exists(Full), "committed directory removal not applied\n");
+
+    /* One remaining committed child keeps the directory from being removed */
+    if (!PrepareFullDirectory(Full, ChildA, ChildB))
+        return;
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pDeleteFileTransactedW(ChildA, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    SetLastError(0xdeadbeef);
+    ok(!pRemoveDirectoryTransactedW(Full, Transaction), "RemoveDirectoryTransactedW removed a non-empty directory\n");
+    ok(GetLastError() == ERROR_DIR_NOT_EMPTY, "non-empty directory removal error %lu\n", GetLastError());
+
+    /* A child moved out of the directory no longer counts */
+    ok(pMoveFileTransactedW(ChildB, Outside, NULL, NULL, 0, Transaction), "MoveFileTransactedW failed with %lu\n", GetLastError());
+    ok(pRemoveDirectoryTransactedW(Full, Transaction),
+       "RemoveDirectoryTransactedW after moving the last child out failed with %lu\n", GetLastError());
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(ChildA, "a") && ReadsBack(ChildB, "b") && !Exists(Outside), "rollback did not restore the directory\n");
+
+    /* A child created in the transaction, or a committed child it writes to, keeps the directory */
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    ok(pDeleteFileTransactedW(ChildA, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    ok(pDeleteFileTransactedW(ChildB, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    Writer = pCreateFileTransactedW(ChildC, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "CreateFileTransactedW failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE) CloseHandle(Writer);
+    SetLastError(0xdeadbeef);
+    ok(!pRemoveDirectoryTransactedW(Full, Transaction), "RemoveDirectoryTransactedW removed a directory with a new child\n");
+    ok(GetLastError() == ERROR_DIR_NOT_EMPTY, "new child: error %lu\n", GetLastError());
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+    Writer = pCreateFileTransactedW(ChildA, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(Writer != INVALID_HANDLE_VALUE, "transacted writer open failed with %lu\n", GetLastError());
+    if (Writer != INVALID_HANDLE_VALUE)
+    {
+        ok(WriteThrough(Writer, "aa"), "transacted write failed with %lu\n", GetLastError());
+        CloseHandle(Writer);
+    }
+    ok(pDeleteFileTransactedW(ChildB, Transaction), "DeleteFileTransactedW failed with %lu\n", GetLastError());
+    SetLastError(0xdeadbeef);
+    ok(!pRemoveDirectoryTransactedW(Full, Transaction), "RemoveDirectoryTransactedW removed a directory with a written child\n");
+    ok(GetLastError() == ERROR_DIR_NOT_EMPTY, "written child: error %lu\n", GetLastError());
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+    ok(ReadsBack(ChildA, "a") && ReadsBack(ChildB, "b") && !Exists(ChildC), "rollback did not restore the children\n");
+}
+
+static
 VOID
 TestInactiveTransaction(
     _In_ PTX_DIR Dir)
@@ -1078,6 +1206,7 @@ TestVolume(
     {
         TestSupportedVolume(Dir);
         TestSupportedVolumeData(Dir);
+        TestTransactedDirectoryRemoval(Dir);
     }
     else
         TestUnsupportedVolume(Dir);

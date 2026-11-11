@@ -2694,10 +2694,7 @@ NtfsSetDispositionInformation(_In_ PVolumeContextBlock VolCB,
     ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
     ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
     NtfsAcquireMetadata(VolCB);
-    Status = NtfsTxfSetDisposition(VolCB, FileCB, Flags,
-                                   (FileCB->Txf && FileCB->FileDir && (Flags & FILE_DISPOSITION_DELETE))
-                                       ? NtfsCheckDirectoryEmpty(VolCB, FileCB) : STATUS_SUCCESS,
-                                   &Handled);
+    Status = NtfsTxfSetDisposition(VolCB, FileCB, Flags, &Handled);
     if (!Handled)
         Status = NtfsSetDisposition(VolCB, FileCB, FileObject, Flags);
     NtfsReleaseMetadata(VolCB);

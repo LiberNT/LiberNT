@@ -1681,8 +1681,11 @@ NtfsTxfHasChildrenLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
         PNTFS_TXF_CHANGE Match;
         UNICODE_STRING Parent, Leaf;
 
-        if (Change->Kind != NtfsTxfCreated && Change->Kind != NtfsTxfRenamed && Change->Kind != NtfsTxfLinked)
+        if (Change->Kind != NtfsTxfCreated && Change->Kind != NtfsTxfShadow &&
+            Change->Kind != NtfsTxfRenamed && Change->Kind != NtfsTxfLinked)
+        {
             continue;
+        }
         NtfsTxfSplit(&Change->Name, &Parent, &Leaf);
         if (NtfsTxfEqual(&Parent, Directory) &&
             NtfsTxfResolveLocked(Txf, &Change->Name, &Match) == NtfsTxfViewMapped && Match == Change)
@@ -1695,6 +1698,62 @@ NtfsTxfHasChildrenLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
 
 static
 NTSTATUS
+NtfsTxfCheckDirectoryEmpty(_In_ PVolumeContextBlock VolCB,
+                           _In_ PFileContextBlock FileCB,
+                           _In_ PCUNICODE_STRING Logical)
+{
+    PNtfsDirectoryEntry Entry;
+    PNtfsDirectory Directory;
+    PNtfsFileRecord Record = NULL;
+    UNICODE_STRING Physical, Stream;
+    ULONG Remaining = 0;
+    NTSTATUS Status;
+    BOOLEAN Children, Restart = TRUE;
+
+    ExAcquireFastMutex(&VolCB->TxfMutex);
+    Children = NtfsTxfHasChildrenLocked(FileCB->Txf, Logical);
+    ExReleaseFastMutex(&VolCB->TxfMutex);
+    if (Children)
+        return STATUS_DIRECTORY_NOT_EMPTY;
+
+    Entry = ExAllocatePoolWithTag(PagedPool, sizeof(*Entry), TAG_NTFS_TXF);
+    if (!Entry)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Directory = NtfsDirectoryCreate(VolCB->DiskVolume);
+    if (!Directory)
+    {
+        ExFreePoolWithTag(Entry, TAG_NTFS_TXF);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    NtfsTxfSplitStream(&FileCB->FileName, &Physical, &Stream);
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsMasterFileTableGetFileRecordFromQueryEx(NtfsVolumeGetMft(VolCB->DiskVolume), Physical.Buffer,
+                                                         Physical.Length / sizeof(WCHAR), TRUE, &Remaining, &Record);
+    if (NT_SUCCESS(Status) && (Remaining != 0 || !Record))
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
+    if (NT_SUCCESS(Status))
+        Status = NtfsDirectoryLoadDirectory(Directory, Record);
+    while (NT_SUCCESS(Status))
+    {
+        Status = NtfsDirectoryReadNext(Directory, Restart, Entry);
+        Restart = FALSE;
+        if (NT_SUCCESS(Status) && NtfsTxfKeepDirectoryEntry(VolCB, FileCB, Entry->Name, Entry->NameLength))
+            Status = STATUS_DIRECTORY_NOT_EMPTY;
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+
+    NtfsDirectoryDestroy(Directory);
+    if (Record)
+        NtfsFileRecordDestroy(Record);
+    ExFreePoolWithTag(Entry, TAG_NTFS_TXF);
+    return Status == STATUS_NO_MORE_FILES ? STATUS_SUCCESS : Status;
+}
+
+static
+NTSTATUS
 NtfsTxfRecordDelete(_In_ PVolumeContextBlock VolCB,
                     _Inout_ PFileContextBlock FileCB)
 {
@@ -1702,18 +1761,15 @@ NtfsTxfRecordDelete(_In_ PVolumeContextBlock VolCB,
     UNICODE_STRING Name, Stream;
     NTSTATUS Status;
     BOOLEAN Directory = FileCB->FileRec && (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY);
-    BOOLEAN Children;
 
     if (FileCB->TxfDeleteChange)
         return STATUS_SUCCESS;
     NtfsTxfSplitStream(&FileCB->TxfLogicalName, &Name, &Stream);
     if (Directory)
     {
-        ExAcquireFastMutex(&VolCB->TxfMutex);
-        Children = NtfsTxfHasChildrenLocked(FileCB->Txf, &Name);
-        ExReleaseFastMutex(&VolCB->TxfMutex);
-        if (Children)
-            return STATUS_DIRECTORY_NOT_EMPTY;
+        Status = NtfsTxfCheckDirectoryEmpty(VolCB, FileCB, &Name);
+        if (!NT_SUCCESS(Status))
+            return Status;
     }
     Status = NtfsTxfRecord(FileCB->Txf, NtfsTxfDeleted, &Name, NULL, NULL,
                            NtfsTxfCommittedReference(FileCB), Directory, &Change);
@@ -1726,7 +1782,6 @@ NTSTATUS
 NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
                       _Inout_ PFileContextBlock FileCB,
                       _In_ ULONG Flags,
-                      _In_ NTSTATUS DirectoryEmpty,
                       _Out_ PBOOLEAN Handled)
 {
     NtfsFileBasicInformation Basic;
@@ -1775,9 +1830,6 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
         return Status;
     if ((Basic.FileAttributes & FILE_ATTRIBUTE_READONLY) && !(Flags & FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE))
         return STATUS_CANNOT_DELETE;
-    /* FIXME: a directory whose last committed children were deleted in the same transaction still reads as not empty */
-    if (!NT_SUCCESS(DirectoryEmpty))
-        return DirectoryEmpty;
     return NtfsTxfRecordDelete(VolCB, FileCB);
 }
 
