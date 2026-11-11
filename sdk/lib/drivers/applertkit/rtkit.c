@@ -9,6 +9,7 @@
 #include <ntddk.h>
 #endif
 #include <reactos/drivers/applertkit.h>
+#include <reactos/drivers/appleadmac.h>
 
 #define MBOX_CONTROL_FULL       0x00010000
 #define MBOX_CONTROL_EMPTY      0x00020000
@@ -30,6 +31,8 @@
 
 #define RTKIT_MIN_VERSION       11
 #define RTKIT_MAX_VERSION       12
+
+#define RTKIT_MAX_INTERRUPT_CELLS   4
 
 #define BUFFER_REQUEST          1
 #define SYSLOG_LOG              5
@@ -93,7 +96,7 @@ AppleRtkitSend(
 
 static
 BOOLEAN
-RtkitReceive(
+RtkitReceiveHardware(
     _In_ PAPPLE_RTKIT Rtkit,
     _Out_ PUCHAR Endpoint,
     _Out_ PULONG64 Message)
@@ -104,6 +107,94 @@ RtkitReceive(
     *Endpoint = (UCHAR)*(volatile ULONG64 *)(Rtkit->Mailbox + MBOX_I2A_RECV1);
     KeMemoryBarrier();
     return TRUE;
+}
+
+static
+BOOLEAN
+RtkitQueueTake(
+    _Inout_ PAPPLE_RTKIT Rtkit,
+    _Out_ PUCHAR Endpoint,
+    _Out_ PULONG64 Message)
+{
+    ULONG Slot;
+
+    ASSERT(Rtkit->QueueTail - Rtkit->QueueHead <= APPLE_RTKIT_QUEUE_SLOTS);
+    if (Rtkit->QueueHead == Rtkit->QueueTail)
+        return FALSE;
+    Slot = Rtkit->QueueHead % APPLE_RTKIT_QUEUE_SLOTS;
+    *Endpoint = Rtkit->QueueEndpoint[Slot];
+    *Message = Rtkit->QueueMessage[Slot];
+    Rtkit->QueueHead++;
+    return TRUE;
+}
+
+ULONG
+NTAPI
+AppleRtkitDrainMailbox(
+    _Inout_ PAPPLE_RTKIT Rtkit)
+{
+    UCHAR Endpoint;
+    ULONG64 Message;
+    ULONG Count = 0, Slot;
+
+    ASSERT(Rtkit->Mailbox);
+    while (Count < APPLE_RTKIT_QUEUE_SLOTS && RtkitReceiveHardware(Rtkit, &Endpoint, &Message))
+    {
+        ++Count;
+        ASSERT(Rtkit->QueueTail - Rtkit->QueueHead <= APPLE_RTKIT_QUEUE_SLOTS);
+        if (Rtkit->QueueTail - Rtkit->QueueHead == APPLE_RTKIT_QUEUE_SLOTS)
+        {
+            Rtkit->QueueLost++;
+            continue;
+        }
+        Slot = Rtkit->QueueTail % APPLE_RTKIT_QUEUE_SLOTS;
+        Rtkit->QueueEndpoint[Slot] = Endpoint;
+        Rtkit->QueueMessage[Slot] = Message;
+        Rtkit->QueueTail++;
+    }
+    return Count;
+}
+
+typedef struct _RTKIT_TAKE
+{
+    PAPPLE_RTKIT Rtkit;
+    PUCHAR Endpoint;
+    PULONG64 Message;
+} RTKIT_TAKE, *PRTKIT_TAKE;
+
+static
+BOOLEAN
+NTAPI
+RtkitTakeSynchronized(
+    _In_opt_ PVOID Context)
+{
+    PRTKIT_TAKE Take = Context;
+
+    ASSERT(Take && Take->Rtkit->Interrupt);
+    if (RtkitQueueTake(Take->Rtkit, Take->Endpoint, Take->Message))
+        return TRUE;
+    return RtkitReceiveHardware(Take->Rtkit, Take->Endpoint, Take->Message);
+}
+
+static
+BOOLEAN
+RtkitReceive(
+    _Inout_ PAPPLE_RTKIT Rtkit,
+    _Out_ PUCHAR Endpoint,
+    _Out_ PULONG64 Message)
+{
+    RTKIT_TAKE Take;
+
+    if (Rtkit->Interrupt)
+    {
+        Take.Rtkit = Rtkit;
+        Take.Endpoint = Endpoint;
+        Take.Message = Message;
+        return KeSynchronizeExecution(Rtkit->Interrupt, RtkitTakeSynchronized, &Take);
+    }
+    if (RtkitQueueTake(Rtkit, Endpoint, Message))
+        return TRUE;
+    return RtkitReceiveHardware(Rtkit, Endpoint, Message);
 }
 
 static
@@ -450,9 +541,16 @@ AppleRtkitPoll(
 {
     UCHAR Endpoint;
     ULONG64 Message;
-    ULONG Type;
+    ULONG Type, Lost;
     BOOLEAN Any = FALSE;
 
+    Lost = Rtkit->QueueLost;
+    if (Lost != Rtkit->QueueLostReported)
+    {
+        DbgPrint("%s: %lu coprocessor messages were lost, the receive queue was full\n", Rtkit->Name,
+                 Lost - Rtkit->QueueLostReported);
+        Rtkit->QueueLostReported = Lost;
+    }
     while (RtkitReceive(Rtkit, &Endpoint, &Message))
     {
         Any = TRUE;
@@ -502,6 +600,77 @@ AppleRtkitPoll(
         }
     }
     return Any;
+}
+
+ULONG
+NTAPI
+AppleRtkitPollInterval(
+    _In_ PAPPLE_RTKIT Rtkit,
+    _In_ ULONG PollMs)
+{
+    if (!Rtkit->Interrupt)
+        return PollMs;
+    if (!Rtkit->Interrupts)
+        return max(PollMs, APPLE_RTKIT_FALLBACK_POLL_MS);
+    return APPLE_RTKIT_NO_POLL;
+}
+
+NTSTATUS
+NTAPI
+AppleRtkitQueryInterrupt(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    const VOID *Names, *Interrupts;
+    const CHAR *Name, *Compatible;
+    ULONG Phandle, Mailbox, Controller, Parent, CellCount, Cursor = 0, Index, Cell;
+    ULONG NamesLength, NameLength, Length, CompatibleLength;
+    ULONG Cells[RTKIT_MAX_INTERRUPT_CELLS];
+    ULONG64 Value;
+
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+    if (!FdtReadU32(&Tree->Fdt, Node, "mboxes", &Phandle) ||
+        (Mailbox = FdtDriverFindPhandle(Tree, Phandle)) == FDT_NO_NODE)
+    {
+        return STATUS_NOT_FOUND;
+    }
+    Names = FdtGetProperty(&Tree->Fdt, Mailbox, "interrupt-names", &NamesLength);
+    for (Index = 0; (Name = FdtNextString(Names, NamesLength, &Cursor, &NameLength)) != NULL; ++Index)
+    {
+        if (NameLength == sizeof("recv-not-empty") - 1 && !memcmp(Name, "recv-not-empty", NameLength))
+            break;
+    }
+    if (!Name)
+        return STATUS_NOT_FOUND;
+    for (Parent = Mailbox; !FdtReadU32(&Tree->Fdt, Parent, "interrupt-parent", &Phandle);)
+    {
+        Parent = FdtDriverFindParentNode(Tree, Parent);
+        if (Parent == FDT_NO_NODE)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    Controller = FdtDriverFindPhandle(Tree, Phandle);
+    if (Controller == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Controller, "#interrupt-cells", &CellCount) ||
+        !CellCount || CellCount > RTKIT_MAX_INTERRUPT_CELLS)
+    {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    Interrupts = FdtGetProperty(&Tree->Fdt, Mailbox, "interrupts", &Length);
+    for (Cell = 0; Cell < CellCount; ++Cell)
+    {
+        if (!Interrupts || !FdtReadCells(Interrupts, Length, Index * CellCount + Cell, 1, &Value))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Cells[Cell] = (ULONG)Value;
+    }
+    Compatible = FdtGetProperty(&Tree->Fdt, Controller, "compatible", &CompatibleLength);
+    if (!Compatible ||
+        !HalArm64TranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, CellCount, Gsi, EdgeTriggered))
+    {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+    return STATUS_SUCCESS;
 }
 
 static

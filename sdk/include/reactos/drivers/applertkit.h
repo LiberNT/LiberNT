@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <reactos/drivers/fdtdrv.h>
+
 #define RTKIT_EP_MGMT           0x00
 #define RTKIT_EP_CRASHLOG       0x01
 #define RTKIT_EP_SYSLOG         0x02
@@ -21,7 +23,12 @@
 #define RTKIT_PWR_STATE_ON        0x20
 #define RTKIT_PWR_STATE_INIT      0x220
 
+#define APPLE_RTKIT_QUEUE_SLOTS         256
+#define APPLE_RTKIT_FALLBACK_POLL_MS    1000
+#define APPLE_RTKIT_NO_POLL             MAXULONG
+
 typedef struct _APPLE_RTKIT APPLE_RTKIT, *PAPPLE_RTKIT;
+typedef struct _APPLE_RTKIT_INTERRUPT APPLE_RTKIT_INTERRUPT, *PAPPLE_RTKIT_INTERRUPT;
 
 /* Provide a buffer the coprocessor asked for. Iova is zero when the host chooses the address. */
 typedef BOOLEAN (NTAPI *PAPPLE_RTKIT_SHMEM_SETUP)(
@@ -63,6 +70,16 @@ struct _APPLE_RTKIT
 
     PVOID CrashlogBuffer;
     ULONG CrashlogBufferSize;
+
+    struct _KINTERRUPT *Interrupt;
+    PAPPLE_RTKIT_INTERRUPT InterruptState;
+    volatile LONG Interrupts;
+    ULONG QueueHead;
+    ULONG QueueTail;
+    ULONG QueueLost;
+    ULONG QueueLostReported;
+    UCHAR QueueEndpoint[APPLE_RTKIT_QUEUE_SLOTS];
+    ULONG64 QueueMessage[APPLE_RTKIT_QUEUE_SLOTS];
 };
 
 #define APPLE_RTKIT_CRASH_STACK     8
@@ -132,3 +149,45 @@ AppleRtkitSetPowerState(
     _In_ ULONG ApState,
     _In_ ULONG IopState,
     _In_ ULONG TimeoutMs);
+
+NTSTATUS
+NTAPI
+AppleRtkitQueryInterrupt(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered);
+
+ULONG
+NTAPI
+AppleRtkitDrainMailbox(
+    _Inout_ PAPPLE_RTKIT Rtkit);
+
+ULONG
+NTAPI
+AppleRtkitPollInterval(
+    _In_ PAPPLE_RTKIT Rtkit,
+    _In_ ULONG PollMs);
+
+#ifndef UNIT_TEST
+NTSTATUS
+NTAPI
+AppleRtkitConnectInterrupt(
+    _Inout_ PAPPLE_RTKIT Rtkit,
+    _In_opt_ PCM_RESOURCE_LIST Raw,
+    _In_opt_ PCM_RESOURCE_LIST Translated,
+    _In_ ULONG Gsi,
+    _In_opt_ PKEVENT Notify);
+
+VOID
+NTAPI
+AppleRtkitDisconnectInterrupt(
+    _Inout_ PAPPLE_RTKIT Rtkit);
+
+NTSTATUS
+NTAPI
+AppleAddInterruptRequirement(
+    _Inout_ PIRP Irp,
+    _In_ ULONG Gsi,
+    _In_ BOOLEAN EdgeTriggered);
+#endif

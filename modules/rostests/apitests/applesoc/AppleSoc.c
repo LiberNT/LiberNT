@@ -997,6 +997,7 @@ static ULONG SimStalledMicroseconds;
 #define KeDelayExecutionThread(Mode, Alertable, Interval) \
     (SimSleptMs += (ULONG)(-(Interval)->QuadPart / 10000), STATUS_SUCCESS)
 #define KeQueryInterruptTime() ((ULONG64)(SimSleptMs * 10000ULL + SimStalledMicroseconds * 10ULL))
+#define KeSynchronizeExecution(Interrupt, Routine, Context) ((Routine)(Context))
 
 static
 VOID
@@ -2487,6 +2488,139 @@ TestRtkitBoot(VOID)
     ok_hex(AppleRtkitBoot(&Rtkit, 100), STATUS_IO_TIMEOUT);
     ok_int(Rtkit.Version, 12);
     ok(!Rtkit.EpmapDone, "A coprocessor that stopped announced its endpoints\n");
+}
+
+#define PHANDLE_MBOX_AIC    0x40
+#define PHANDLE_MBOX        0x41
+
+static UCHAR RtkitReceivedEndpoint[8];
+static ULONG64 RtkitReceivedMessage[8];
+static ULONG RtkitReceivedCount;
+
+static
+VOID
+NTAPI
+RtkitTestReceive(
+    _In_ PVOID Context,
+    _In_ UCHAR Endpoint,
+    _In_ ULONG64 Message)
+{
+    UNREFERENCED_PARAMETER(Context);
+    if (RtkitReceivedCount < RTL_NUMBER_OF(RtkitReceivedMessage))
+    {
+        RtkitReceivedEndpoint[RtkitReceivedCount] = Endpoint;
+        RtkitReceivedMessage[RtkitReceivedCount] = Message;
+    }
+    ++RtkitReceivedCount;
+}
+
+static
+VOID
+OpenMailboxTree(
+    _Out_ PFDT_DRIVER_TREE Tree,
+    _In_ BOOLEAN Named)
+{
+    memset(&Builder, 0, sizeof(Builder));
+    FdtBeginNode("");
+    FdtCells("#address-cells", 1, 2);
+    FdtCells("#size-cells", 1, 2);
+    FdtBeginNode("soc");
+    FdtStrings("compatible", LIST("simple-bus"));
+    FdtCells("#address-cells", 1, 2);
+    FdtCells("#size-cells", 1, 2);
+    FdtCells("interrupt-parent", 1, PHANDLE_MBOX_AIC);
+    FdtBeginNode("interrupt-controller@351000000");
+    FdtStrings("compatible", LIST("apple,t6030-aic3\0apple,t8122-aic3"));
+    FdtCells("#interrupt-cells", 1, 3);
+    FdtProperty("interrupt-controller", NULL, 0);
+    FdtCells("phandle", 1, PHANDLE_MBOX_AIC);
+    FdtEndNode();
+    FdtBeginNode("mbox@36c408000");
+    FdtStrings("compatible", LIST("apple,t6030-asc-mailbox\0apple,asc-mailbox-v4"));
+    FdtCells("reg", 4, 3, 0x6c408000, 0, 0x4000);
+    FdtCells("interrupts", 12, 0, 0x22a, 4, 0, 0x22b, 4, 0, 0x22c, 4, 0, 0x22d, 4);
+    if (Named)
+        FdtStrings("interrupt-names", LIST("send-empty\0send-not-empty\0recv-empty\0recv-not-empty"));
+    FdtCells("phandle", 1, PHANDLE_MBOX);
+    FdtEndNode();
+    FdtBeginNode("smc@36c400000");
+    FdtStrings("compatible", LIST("apple,t6030-smc\0apple,t8103-smc"));
+    FdtCells("reg", 8, 3, 0x6c400000, 0, 0x4000, 3, 0x6de00000, 0, 0x100000);
+    FdtCells("mboxes", 1, PHANDLE_MBOX);
+    FdtEndNode();
+    FdtEndNode();
+    FdtEndNode();
+    FdtFinish();
+    memset(Tree, 0, sizeof(*Tree));
+    Tree->Blob = Builder.Blob;
+    ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The mailbox tree did not open\n");
+}
+
+static
+VOID
+TestRtkitInterrupt(VOID)
+{
+    FDT_DRIVER_TREE Tree;
+    APPLE_RTKIT Rtkit;
+    ULONG Gsi, Index;
+    BOOLEAN Edge;
+
+    OpenMailboxTree(&Tree, TRUE);
+    ok_hex(AppleRtkitQueryInterrupt(&Tree, FindNode(&Tree, "apple,t8103-smc"), &Gsi, &Edge), STATUS_SUCCESS);
+    ok_int(Gsi, 32 + 0x22d);
+    ok(!Edge, "The mailbox receive interrupt is level triggered\n");
+    ok_hex(AppleRtkitQueryInterrupt(&Tree, FindNode(&Tree, "apple,asc-mailbox-v4"), &Gsi, &Edge), STATUS_NOT_FOUND);
+    OpenMailboxTree(&Tree, FALSE);
+    ok_hex(AppleRtkitQueryInterrupt(&Tree, FindNode(&Tree, "apple,t8103-smc"), &Gsi, &Edge), STATUS_NOT_FOUND);
+    ok_int(Gsi, 0);
+
+    SimMboxReset(0, 0);
+    SimMboxControlReads = 1;
+    RtlZeroMemory(&Rtkit, sizeof(Rtkit));
+    Rtkit.Name = "test";
+    Rtkit.Mailbox = (PUCHAR)SimMailboxData;
+    Rtkit.Receive = RtkitTestReceive;
+    SimMboxPush(0x20, 1);
+    SimMboxPush(0x21, 2);
+    SimMboxPush(0x20, 3);
+    ok_int(AppleRtkitDrainMailbox(&Rtkit), 3);
+    ok(SimMboxOutHead == SimMboxOutTail, "The interrupt left the mailbox full\n");
+    ok_int(AppleRtkitDrainMailbox(&Rtkit), 0);
+
+    Rtkit.Interrupt = (struct _KINTERRUPT *)&Rtkit;
+    SimMboxPush(0x22, 4);
+    RtkitReceivedCount = 0;
+    ok(AppleRtkitPoll(&Rtkit), "The queued messages were not received\n");
+    ok_int(RtkitReceivedCount, 4);
+    for (Index = 0; Index < 4; ++Index)
+    {
+        ok(RtkitReceivedMessage[Index] == Index + 1, "Message %lu is %I64x\n", Index, RtkitReceivedMessage[Index]);
+        ok_int(RtkitReceivedEndpoint[Index], (Index == 1) ? 0x21 : (Index == 3) ? 0x22 : 0x20);
+    }
+    ok(!AppleRtkitPoll(&Rtkit), "A message was received twice\n");
+
+    ok_int(AppleRtkitPollInterval(&Rtkit, 20), APPLE_RTKIT_FALLBACK_POLL_MS);
+    Rtkit.Interrupts = 1;
+    ok(AppleRtkitPollInterval(&Rtkit, 20) == APPLE_RTKIT_NO_POLL, "The interrupt did not stop the polling\n");
+    Rtkit.Interrupt = NULL;
+    ok_int(AppleRtkitPollInterval(&Rtkit, 20), 20);
+
+    Rtkit.Interrupt = (struct _KINTERRUPT *)&Rtkit;
+    for (Index = 0; Index < APPLE_RTKIT_QUEUE_SLOTS + 8; ++Index)
+    {
+        SimMboxPush(0x20, 0x100 + Index);
+        if (SimMboxOutTail - SimMboxOutHead == SIM_MBOX_QUEUE)
+            AppleRtkitDrainMailbox(&Rtkit);
+    }
+    AppleRtkitDrainMailbox(&Rtkit);
+    ok(SimMboxOutHead == SimMboxOutTail, "A full queue left the mailbox full\n");
+    ok_int(Rtkit.QueueLost, 8);
+    RtkitReceivedCount = 0;
+    ok(AppleRtkitPoll(&Rtkit), "The queued messages were not received\n");
+    ok_int(RtkitReceivedCount, APPLE_RTKIT_QUEUE_SLOTS);
+    ok(RtkitReceivedMessage[0] == 0x100, "The oldest message is %I64x\n", RtkitReceivedMessage[0]);
+    ok_int(Rtkit.QueueLostReported, 8);
+    ok_int(Rtkit.QueueHead, Rtkit.QueueTail);
 }
 
 static PVOID AgxInitBuffers[APPLE_AGX_OBJECTS];
@@ -6645,6 +6779,7 @@ START_TEST(AppleSoc)
     TestAdt();
     TestAgxDescribe();
     TestRtkitBoot();
+    TestRtkitInterrupt();
     TestAgxInitLayout();
     TestAgxInitWrite();
     TestAgxRing();
