@@ -294,15 +294,34 @@ NtRaiseException(
     _In_ BOOLEAN SearchFrames)
 {
     PKTHREAD Thread = KeGetCurrentThread();
+    PKTRAP_FRAME TrapFrame = Thread->TrapFrame;
+    KI_SERVICE_EXCEPTION_STATE ServiceState;
+    PKEXCEPTION_FRAME ExceptionFrame;
+    NTSTATUS Status;
 
-    if (Thread->TrapFrame == NULL)
+    if (TrapFrame == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    return KiRaiseException(ExceptionRecord,
-                            Context,
-                            NULL,
-                            Thread->TrapFrame,
-                            SearchFrames);
+    ExceptionFrame = KiEnterServiceException(Thread,
+                                             TrapFrame,
+                                             Context,
+                                             Thread->PreviousMode,
+                                             NULL,
+                                             &ServiceState);
+
+    Status = KiRaiseException(ExceptionRecord,
+                              Context,
+                              ExceptionFrame,
+                              TrapFrame,
+                              SearchFrames);
+    if (!NT_SUCCESS(Status))
+    {
+        KiAbortServiceException(TrapFrame, ExceptionFrame, &ServiceState);
+        return Status;
+    }
+
+    KiLeaveServiceException(Thread, TrapFrame);
+    KiExceptionExit(TrapFrame, ExceptionFrame);
 }
 
 /* EOF */

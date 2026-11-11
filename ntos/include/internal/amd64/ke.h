@@ -235,8 +235,9 @@ KiEnterServiceException(
     _Out_ PKI_SERVICE_EXCEPTION_STATE State)
 {
     UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     UNREFERENCED_PARAMETER(PreviousMode);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 
     /* A system service has no frame of nonvolatiles; the state carries one */
     if (ExceptionFrame == NULL)
@@ -267,8 +268,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 FORCEINLINE

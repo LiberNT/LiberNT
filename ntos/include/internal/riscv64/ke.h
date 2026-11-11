@@ -401,7 +401,7 @@ KiGetLinkedTrapFrame(
 }
 
 /* System services that raise or continue unlink the service trap frame on
- * entry; the trap frame holds every register, so nothing else is saved. */
+ * the way out; the trap frame holds every register, so nothing else is saved. */
 typedef struct _KI_SERVICE_EXCEPTION_STATE
 {
     UCHAR Reserved;
@@ -420,7 +420,8 @@ KiEnterServiceException(
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
     UNREFERENCED_PARAMETER(State);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     return ExceptionFrame;
 }
 
@@ -442,8 +443,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 FORCEINLINE
