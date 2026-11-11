@@ -4,6 +4,7 @@
 
 struct _KD_DISPATCH_TABLE;
 
+#define KDP_BOOT_PHASE_BUSES 2
 #define KDP_BOOT_PHASE_SYSTEM_ROOT 6
 
 typedef

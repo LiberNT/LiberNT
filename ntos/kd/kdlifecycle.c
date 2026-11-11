@@ -57,6 +57,7 @@ KdDebuggerInitialize1(
 {
     UNREFERENCED_PARAMETER(LoaderBlock);
 
+    KdpInitializeProviders(KDP_BOOT_PHASE_BUSES);
     KdpInitTerminal();
 
     return STATUS_SUCCESS;
