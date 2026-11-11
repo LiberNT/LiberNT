@@ -4932,9 +4932,15 @@ HRESULT STDMETHODCALLTYPE CDefView::GetCurrentViewMode(UINT *pViewMode)
     return S_OK;
 }
 
+/* The view drives its list view directly, so the control's subclasses do not see view changes, as on Windows */
+static LRESULT CallListViewProc(HWND hwndList, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    return CallWindowProcW((WNDPROC)GetClassLongPtrW(hwndList, GCLP_WNDPROC), hwndList, uMsg, wParam, lParam);
+}
+
 HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
 {
-    DWORD dwStyle;
+    DWORD dwView;
     TRACE("(%p)->(%u), stub\n", this, ViewMode);
 
     /* It's not redundant to check FVM_AUTO because it's a (UINT)-1 */
@@ -4943,19 +4949,15 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
     if ((INT)ViewMode < FVM_FIRST || (INT)ViewMode > FVM_LAST)
         return S_OK;
 
-    /* Windows before Vista uses LVM_SETVIEW and possibly
-       LVM_SETEXTENDEDLISTVIEWSTYLE to set the style of the listview,
-       while later versions seem to accomplish this through other
-       means. */
     switch (ViewMode)
     {
-        case FVM_ICON:      dwStyle = LVS_ICON;      break;
-        case FVM_SMALLICON: dwStyle = LVS_SMALLICON; break;
-        case FVM_LIST:      dwStyle = LVS_LIST;      break;
-        case FVM_DETAILS:   dwStyle = LVS_REPORT;    break;
+        case FVM_ICON:      dwView = LV_VIEW_ICON;      break;
+        case FVM_SMALLICON: dwView = LV_VIEW_SMALLICON; break;
+        case FVM_LIST:      dwView = LV_VIEW_LIST;      break;
+        case FVM_DETAILS:   dwView = LV_VIEW_DETAILS;   break;
         default:
             FIXME("ViewMode %d not implemented\n", ViewMode);
-            dwStyle = LVS_LIST;
+            dwView = LV_VIEW_LIST;
             break;
     }
 
@@ -4964,7 +4966,8 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
     /* This will not necessarily be the actual mode set above.
        This mimics the behavior of Windows XP. */
     m_FolderSettings.ViewMode = ViewMode;
-    m_ListView.ModifyStyle(LVS_TYPEMASK, dwStyle);
+    m_ListView.SendMessage(WM_SETREDRAW, FALSE, 0);
+    CallListViewProc(m_ListView, LVM_SETVIEW, dwView, 0);
     if (IsComputerTileView())
     {
         m_ComputerNeedsFinalArrange = true;
@@ -4975,11 +4978,12 @@ HRESULT STDMETHODCALLTYPE CDefView::SetCurrentViewMode(UINT ViewMode)
     {
         if (wasComputerTileView && (m_FolderSettings.fFlags & FWF_AUTOARRANGE))
             m_ListView.ModifyStyle(0, LVS_AUTOARRANGE);
-        ListView_SetIconSpacing(m_ListView, -1, -1);
+        CallListViewProc(m_ListView, LVM_SETICONSPACING, 0, MAKELPARAM(-1, -1));
         if (GetAutoArrange() == S_OK)
-            m_ListView.Arrange(LVA_DEFAULT);
+            CallListViewProc(m_ListView, LVM_ARRANGE, LVA_DEFAULT, 0);
         m_ListView.InvalidateRect(NULL, TRUE);
     }
+    m_ListView.SendMessage(WM_SETREDRAW, TRUE, 0);
     CheckToolbar();
     return S_OK;
 }
@@ -6185,7 +6189,7 @@ INT CDefView::_FindInsertableIndexFromPoint(POINT pt)
     INT i, nCount = m_ListView.GetItemCount();
     DWORD dwSpacing;
     INT dx, dy;
-    BOOL bSmall = ((m_ListView.GetStyle() & LVS_TYPEMASK) != LVS_ICON);
+    BOOL bSmall = (ListView_GetView(m_ListView) != LV_VIEW_ICON);
 
     // FIXME: LVM_GETORIGIN is broken. See CORE-17266
     pt.x += m_ListView.GetScrollPos(SB_HORZ);
