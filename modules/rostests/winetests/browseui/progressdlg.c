@@ -87,6 +87,7 @@ static void test_IProgressDialog_lifecycle(DWORD flags)
     HWND hwnd = (HWND)0xdeadbeef;
     HRESULT hr;
     BOOL cancelled;
+    DWORD start;
 
     hr = CoCreateInstance(&CLSID_ProgressDialog, NULL, CLSCTX_INPROC_SERVER,
                           &IID_IProgressDialog, (void **)&dlg);
@@ -108,7 +109,13 @@ static void test_IProgressDialog_lifecycle(DWORD flags)
     IProgressDialog_SetLine(dlg, 3, L"third line", FALSE, NULL);
     IProgressDialog_SetProgress64(dlg, 0x100000001ULL, 0x200000002ULL);
     IProgressDialog_StartProgressDialog(dlg, NULL, NULL, flags, NULL);
-    pump_messages(500);
+    start = GetTickCount();
+    do
+    {
+        pump_messages(1);
+        hwnd = NULL;
+        IOleWindow_GetWindow(olewindow, &hwnd);
+    } while (!(hwnd && IsWindow(hwnd)) && GetTickCount() - start < 500);
 
     hr = IOleWindow_GetWindow(olewindow, &hwnd);
     ok(hr == S_OK, "GetWindow failed, hr %#lx.\n", hr);
@@ -119,8 +126,9 @@ static void test_IProgressDialog_lifecycle(DWORD flags)
         if (!(flags & PROGDLG_NOCANCEL))
         {
             SendMessageW(hwnd, WM_CLOSE, 0, 0);
-            pump_messages(50);
-            cancelled = IProgressDialog_HasUserCancelled(dlg);
+            start = GetTickCount();
+            while (!(cancelled = IProgressDialog_HasUserCancelled(dlg)) && GetTickCount() - start < 50)
+                pump_messages(1);
             ok(cancelled, "cancel command was not observed.\n");
         }
     }
