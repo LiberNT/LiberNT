@@ -84,7 +84,8 @@ TestSizingApis(
     ok(Result, "AdjustWindowRectExForDpi failed for %u DPI, error %lu\n", SystemDpi, GetLastError());
     Result = AdjustWindowRectExForDpiFn(&TargetRect, WS_CAPTION, FALSE, 0, TargetDpi);
     ok(Result, "AdjustWindowRectExForDpi failed for %u DPI, error %lu\n", TargetDpi, GetLastError());
-    ok(TargetRect.top == SourceRect.top - (TargetCaption - SourceCaption), "The target top margin %ld did not scale from %ld\n", TargetRect.top, SourceRect.top);
+    ok(TargetRect.top - TargetRect.left == SourceRect.top - SourceRect.left - (TargetCaption - SourceCaption),
+       "The target caption margin %ld did not scale from %ld\n", TargetRect.top - TargetRect.left, SourceRect.top - SourceRect.left);
 
     SetRect(&SourceRect, 0, 0, 100, 100);
     TargetRect = SourceRect;

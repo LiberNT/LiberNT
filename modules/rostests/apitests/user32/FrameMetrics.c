@@ -7,6 +7,10 @@
 
 #include "precomp.h"
 
+typedef BOOL (WINAPI *PADJUSTWINDOWRECTEXFORDPI)(LPRECT, DWORD, BOOL, DWORD, UINT);
+
+static PADJUSTWINDOWRECTEXFORDPI pAdjustWindowRectExForDpi;
+
 static BOOL IsLegacyImage(void)
 {
     PIMAGE_DOS_HEADER Dos = (PIMAGE_DOS_HEADER)GetModuleHandleW(NULL);
@@ -23,6 +27,13 @@ static void CheckAdjust(DWORD Style, DWORD ExStyle, LONG Frame, BOOL Caption)
     ok(AdjustWindowRectEx(&Rect, Style, FALSE, ExStyle), "AdjustWindowRectEx %#lx %#lx failed\n", Style, ExStyle);
     ok(Rect.left == -Frame && Rect.top == -Top && Rect.right == Frame && Rect.bottom == Frame,
        "AdjustWindowRectEx %#lx %#lx: (%ld,%ld)-(%ld,%ld), expected (%ld,%ld)-(%ld,%ld)\n", Style, ExStyle,
+       Rect.left, Rect.top, Rect.right, Rect.bottom, -Frame, -Top, Frame, Frame);
+
+    SetRectEmpty(&Rect);
+    ok(pAdjustWindowRectExForDpi(&Rect, Style, FALSE, ExStyle, USER_DEFAULT_SCREEN_DPI),
+       "AdjustWindowRectExForDpi %#lx %#lx failed\n", Style, ExStyle);
+    ok(Rect.left == -Frame && Rect.top == -Top && Rect.right == Frame && Rect.bottom == Frame,
+       "AdjustWindowRectExForDpi %#lx %#lx: (%ld,%ld)-(%ld,%ld), expected (%ld,%ld)-(%ld,%ld)\n", Style, ExStyle,
        Rect.left, Rect.top, Rect.right, Rect.bottom, -Frame, -Top, Frame, Frame);
 }
 
@@ -146,6 +157,11 @@ START_TEST(FrameMetrics)
         skip("Display is at %d DPI\n", Dpi);
         return;
     }
+    pAdjustWindowRectExForDpi = (PADJUSTWINDOWRECTEXFORDPI)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                                          "AdjustWindowRectExForDpi");
+    ok(pAdjustWindowRectExForDpi != NULL, "AdjustWindowRectExForDpi is not exported\n");
+    if (!pAdjustWindowRectExForDpi)
+        return;
 
     CheckFrames(Legacy);
     if (Argc <= 2)
