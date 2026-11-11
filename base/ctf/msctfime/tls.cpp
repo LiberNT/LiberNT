@@ -73,6 +73,8 @@ BOOL TLS::InternalDestroyTLS()
     if (!pTLS)
         return FALSE;
 
+    if (pTLS->m_hKeyboardHook)
+        ::UnhookWindowsHookEx(pTLS->m_hKeyboardHook);
     if (pTLS->m_pBridge)
         pTLS->m_pBridge->Release();
     if (pTLS->m_pProfile)

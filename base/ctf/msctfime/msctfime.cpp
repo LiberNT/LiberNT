@@ -823,6 +823,42 @@ CtfImeIsGuidMapEnable(
     return ret;
 }
 
+static BOOL
+ProcessAppDocumentKey(ITfThreadMgrEx *pThreadMgr, WPARAM wParam, LPARAM lParam)
+{
+    ITfDocumentMgr *pDocMgr = NULL;
+    if (FAILED(pThreadMgr->GetFocus(&pDocMgr)) || !pDocMgr)
+        return FALSE;
+    BOOL fOwn = CicBridge::IsOwnDim(pDocMgr);
+    pDocMgr->Release();
+    if (fOwn)
+        return FALSE;
+
+    ITfKeystrokeMgr *pKeystrokeMgr = NULL;
+    if (FAILED(pThreadMgr->QueryInterface(IID_ITfKeystrokeMgr, (void **)&pKeystrokeMgr)))
+        return FALSE;
+    BOOL fEaten = FALSE;
+    HRESULT hr;
+    if (lParam & 0x80000000)
+        hr = pKeystrokeMgr->KeyUp(wParam, lParam, &fEaten);
+    else
+        hr = pKeystrokeMgr->KeyDown(wParam, lParam, &fEaten);
+    pKeystrokeMgr->Release();
+    return SUCCEEDED(hr) && fEaten;
+}
+
+static LRESULT CALLBACK
+KeyboardHookProc(INT nCode, WPARAM wParam, LPARAM lParam)
+{
+    TLS *pTLS = TLS::PeekTLS();
+    if (nCode == HC_ACTION && pTLS && pTLS->m_pBridge && pTLS->m_pThreadMgr &&
+        ProcessAppDocumentKey(pTLS->m_pThreadMgr, wParam, lParam))
+    {
+        return 1;
+    }
+    return ::CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
 /***********************************************************************
  *      CtfImeCreateThreadMgr (MSCTFIME.@)
  *
@@ -856,6 +892,8 @@ CtfImeCreateThreadMgr(VOID)
         hr = pTLS->m_pBridge->ActivateIMMX(pTLS, pTLS->m_pThreadMgr);
         if (FAILED(hr))
             pTLS->m_pBridge->UnInitIMMX(pTLS);
+        else if (!pTLS->m_hKeyboardHook)
+            pTLS->m_hKeyboardHook = ::SetWindowsHookExW(WH_KEYBOARD, KeyboardHookProc, NULL, ::GetCurrentThreadId());
     }
 
     return hr;
@@ -883,7 +921,14 @@ CtfImeDestroyThreadMgr(VOID)
 
     HRESULT hr = pTLS->m_pBridge->DeactivateIMMX(pTLS, pTLS->m_pThreadMgr);
     if (hr == S_OK)
+    {
+        if (pTLS->m_hKeyboardHook)
+        {
+            ::UnhookWindowsHookEx(pTLS->m_hKeyboardHook);
+            pTLS->m_hKeyboardHook = NULL;
+        }
         pTLS->m_pBridge->UnInitIMMX(pTLS);
+    }
 
     return hr;
 }

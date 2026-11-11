@@ -26,6 +26,7 @@ public:
     BOOL m_bNowOpening;
     DWORD m_NonEAComposition;
     DWORD m_cWnds;
+    HHOOK m_hKeyboardHook;
 
     static BOOL Initialize();
     static VOID Uninitialize();
