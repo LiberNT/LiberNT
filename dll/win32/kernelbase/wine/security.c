@@ -1685,9 +1685,9 @@ BOOL WINAPI DeriveCapabilitySidsFromName( const WCHAR *cap_name, PSID **cap_grou
     *cap_group_sids = NULL;
     *cap_sids = NULL;
 
-    if (!(*cap_group_sids = RtlAllocateHeap( GetProcessHeap(), 0, *cap_group_sid_count * sizeof(**cap_group_sids) )))
+    if (!(*cap_group_sids = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, *cap_group_sid_count * sizeof(**cap_group_sids) )))
         goto done;
-    if (!(*cap_sids = RtlAllocateHeap( GetProcessHeap(), 0, *cap_sid_count * sizeof(**cap_sids) )))
+    if (!(*cap_sids = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, *cap_sid_count * sizeof(**cap_sids) )))
         goto done;
 
     /* There is no obvious way to query returned subauthority count for RtlDeriveCapabilitySidsFromName,
