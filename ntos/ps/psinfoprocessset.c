@@ -224,7 +224,8 @@ PspSetThreadStackAllocation(
 {
     PROCESS_STACK_ALLOCATION_INFORMATION_EX Extended;
     PROCESS_STACK_ALLOCATION_INFORMATION *Target;
-    INITIAL_TEB InitialTeb;
+    SIZE_T ReserveSize;
+    PVOID StackBase;
     HANDLE Handle;
     NTSTATUS Status;
     BOOLEAN IsExtended;
@@ -260,17 +261,20 @@ PspSetThreadStackAllocation(
                                    &Handle);
     if (!NT_SUCCESS(Status)) return Status;
 
-    Status = PspAllocateUserStack(Handle,
-                                  Extended.AllocInfo.ZeroBits,
-                                  Extended.AllocInfo.ReserveSize,
-                                  PAGE_SIZE,
-                                  0,
-                                  &InitialTeb);
+    /* The stack is only reserved: whoever builds the thread on it commits what it needs */
+    StackBase = NULL;
+    ReserveSize = Extended.AllocInfo.ReserveSize;
+    Status = ZwAllocateVirtualMemory(Handle,
+                                     &StackBase,
+                                     Extended.AllocInfo.ZeroBits,
+                                     &ReserveSize,
+                                     MEM_RESERVE,
+                                     PAGE_READWRITE);
     ZwClose(Handle);
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    Extended.AllocInfo.StackBase = InitialTeb.AllocatedStackBase;
+    Extended.AllocInfo.StackBase = StackBase;
 
     Target = IsExtended
                  ? &((PPROCESS_STACK_ALLOCATION_INFORMATION_EX)Information)
