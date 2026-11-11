@@ -53,7 +53,11 @@ NvmeConfigureApst(_In_ PNVME_DEVICE_EXTENSION Device)
 
     Device->ApstEnabled = FALSE;
     if ((Device->Apsta & 1) == 0 || Device->DeepestNonOpState == 0)
+    {
+        DPRINT1("stornvme: no autonomous power state transitions (%u power states, APSTA %u, deepest usable non-operational state %u)\n",
+                Device->Npss + 1, Device->Apsta, Device->DeepestNonOpState);
         return;
+    }
 
     Psd = &Device->Psd[Device->DeepestNonOpState];
     IdleMilliseconds = (((ULONGLONG)Psd->ENLAT + Psd->EXLAT) / 1000) * 50;
@@ -124,10 +128,10 @@ NvmeConfigurePowerAndEvents(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
 
+    NvmeConfigureApst(Device);
     if (Device->Transport && !Device->Transport->AsyncEvents)
         return;
 
-    NvmeConfigureApst(Device);
     NvmeConfigureThermal(Device);
 
     /* All SMART warnings; namespace notices too when the controller has them. */
