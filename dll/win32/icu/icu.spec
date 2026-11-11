@@ -7,6 +7,7 @@
 @ cdecl u_errorName(long)
 @ cdecl u_charsToUChars(ptr ptr long)
 @ cdecl u_UCharsToChars(ptr ptr long)
+@ cdecl u_strlen(wstr)
 @ cdecl ucnv_cbFromUWriteUChars(ptr ptr ptr long ptr)
 @ cdecl ucnv_cbToUWriteUChars(ptr ptr long long ptr)
 @ cdecl ucnv_close(ptr)
