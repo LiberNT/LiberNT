@@ -533,7 +533,7 @@ SepAnswerAboutToken(
             break;
 
         case TokenHasRestrictions:
-            *(PULONG)Buffer = (Token->RestrictedSidCount != 0) ? 1 : 0;
+            *(PULONG)Buffer = (Token->TokenFlags & TOKEN_IS_FILTERED) ? 1 : 0;
             break;
 
         case TokenIsRestricted:

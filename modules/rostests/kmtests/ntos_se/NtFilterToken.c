@@ -53,6 +53,22 @@ CheckDenyOnly(
     HeapFree(GetProcessHeap(), 0, Groups);
 }
 
+/* A token says whether it was ever filtered, whatever the filtering removed */
+static
+VOID
+CheckHasRestrictions(
+    _In_ HANDLE Token,
+    _In_ ULONG Expected)
+{
+    ULONG Value = 0xdeadbeef;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationToken(Token, TokenHasRestrictions, &Value, sizeof(Value), &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(!!Value == !!Expected, "TokenHasRestrictions %lu, expected %lu\n", Value, Expected);
+}
+
 /* Whether the current thread can wear the token at the level it is acted on */
 static
 VOID
@@ -130,6 +146,8 @@ START_TEST(NtFilterToken)
 
     if (!OpenOwnToken(&Process, &World)) return;
 
+    CheckHasRestrictions(Process, 0);
+
     Groups.GroupCount = 1;
     Groups.Groups[0].Sid = World;
     Groups.Groups[0].Attributes = 0;
@@ -139,6 +157,7 @@ START_TEST(NtFilterToken)
     if (NT_SUCCESS(Status))
     {
         CheckDenyOnly(Filtered, World);
+        CheckHasRestrictions(Filtered, 1);
         NtClose(Filtered);
     }
 
@@ -147,6 +166,7 @@ START_TEST(NtFilterToken)
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
+        CheckHasRestrictions(Filtered, 1);
         CheckImpersonation(Filtered);
         NtClose(Filtered);
     }
