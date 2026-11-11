@@ -1428,6 +1428,7 @@ typedef struct _WINPOS_ENTRY
    BOOL bDeferActivate;
    BOOL bNoActivate;
    BOOL bCompositedPureMove;
+   BOOL bExposedParent;
    BOOL bRefreshFrame;
    UINT Flags;
    HWND hwndBand;
@@ -2072,7 +2073,9 @@ co_WinPosBatchSyncPaint(PWINPOS_ENTRY Entry)
        {
            PWND Parent = Window->spwndParent;
            if (!Parent || UserIsDesktopWindow(Parent)) Parent = Window;
-           UserSyncAndPaintWindows( Parent, RDW_ERASENOW | RDW_CLIPCHILDREN);
+           /* A parent that clips its children has nothing under the child to erase unless the change uncovered some of it */
+           if (Parent == Window || Entry->bExposedParent || !(Parent->style & WS_CLIPCHILDREN))
+               UserSyncAndPaintWindows( Parent, RDW_ERASENOW | RDW_CLIPCHILDREN);
        }
 
        /* Give newly shown windows a chance to redraw */
@@ -2106,6 +2109,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
    BOOL PosChanged = FALSE;
    BOOL bComposited = FALSE;
    BOOL bCompositedPureMove = FALSE;
+   BOOL bExposedParent = FALSE;
    BOOL bExComposited = FALSE;
    PWND pwndAncestor;
    UINT ZOrderFlags;
@@ -2664,6 +2668,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
              if (RgnType != ERROR && RgnType != NULLREGION)
              {
                 co_VIS_WindowLayoutChanged(Window, ExposedRgn);
+                bExposedParent = TRUE;
              }
              REGION_Delete(ExposedRgn);
          }
@@ -2754,6 +2759,7 @@ co_WinPosBatchApply(PWINPOS_ENTRY Entry)
    Entry->WinPos = WinPos;
    Entry->NewWindowRect = NewWindowRect;
    Entry->bCompositedPureMove = bCompositedPureMove;
+   Entry->bExposedParent = bExposedParent;
    if (!Entry->bDeferActivate)
       co_WinPosBatchSyncPaint(Entry);
    return TRUE;

@@ -87,6 +87,15 @@ START_TEST(HiddenChildWindowPos)
     ok(!GetUpdateRect(g_Parent, &Rect, FALSE), "The parent was invalidated (%ld,%ld)-(%ld,%ld)\n",
        Rect.left, Rect.top, Rect.right, Rect.bottom);
 
+    /* Growing a visible child of a parent that clips its children uncovers nothing of the parent */
+    InvalidateRect(g_Parent, NULL, TRUE);
+    g_EraseCount = g_NcPaintCount = 0;
+    ok(SetWindowPos(Visible, NULL, 0, 0, 150, 80, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE),
+       "SetWindowPos failed, error %lu\n", GetLastError());
+    ok_long(g_EraseCount, 0);
+    ok_long(g_NcPaintCount, 0);
+    FlushMessages();
+
     /* Hiding a visible child uncovers part of the parent */
     ValidateRect(g_Parent, NULL);
     ok(SetWindowPos(Visible, NULL, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE),
