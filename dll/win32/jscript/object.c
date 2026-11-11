@@ -87,6 +87,8 @@ HRESULT Object_toString(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned a
         str = L"[object Object]";
     }else if(jsdisp->builtin_info->to_string) {
         hres = jsdisp->builtin_info->to_string(jsdisp, &ret);
+    }else if(jsdisp->builtin_info->class == JSCLASS_ARGUMENTS && ctx->version >= SCRIPTLANGUAGEVERSION_ES5) {
+        str = L"[object Arguments]";
     }else if(names[jsdisp->builtin_info->class]) {
         str = names[jsdisp->builtin_info->class];
     }else {

@@ -1180,7 +1180,6 @@ sync_test("toString", function() {
     var tmp, obj;
 
     (function () { tmp = Object.prototype.toString.call(arguments); })();
-    todo_wine.
     ok(tmp === "[object Arguments]", "toString.call(arguments) = " + tmp);
     tmp = Object.prototype.toString.call(this);
     ok(tmp === "[object Window]", "toString.call(null) = " + tmp);
