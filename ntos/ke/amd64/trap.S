@@ -594,6 +594,15 @@ FUNC KiPageFault
     jnz SkipStackCheck
     test rcx, rcx
     jz SkipStackCheck
+    /* A previous frame on another stack, such as the one a stack callout left, says nothing about this one */
+    mov r10, [rax + ThStackLimit]
+    mov r11, [rax + ThStackBase]
+    cmp rcx, r10
+    jb SkipStackCheck
+    cmp rcx, r11
+    jae SkipStackCheck
+    cmp rbp, r11
+    jae SkipStackCheck
     cmp rcx, rbp
     jbe KernelStackOverflow
     sub rcx, rbp

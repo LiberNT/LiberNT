@@ -276,6 +276,7 @@ KMT_TESTFUNC Test_KeDpcFlush;
 KMT_TESTFUNC Test_KeDpcReadyThread;
 KMT_TESTFUNC Test_KeDpcRemove;
 KMT_TESTFUNC Test_KeEvent;
+KMT_TESTFUNC Test_KeExpandKernelStack;
 KMT_TESTFUNC Test_KeFloatPointState;
 KMT_TESTFUNC Test_KeGuardedMutex;
 KMT_TESTFUNC Test_CmCallbacks;
@@ -700,6 +701,7 @@ const KMT_TEST TestList[] =
     { "KeDpcReadyThread",                   Test_KeDpcReadyThread },
     { "KeDpcRemove",                        Test_KeDpcRemove },
     { "KeEvent",                            Test_KeEvent },
+    { "KeExpandKernelStack",                Test_KeExpandKernelStack },
     { "KeFloatPointState",                  Test_KeFloatPointState },
     { "KeGuardedMutex",                     Test_KeGuardedMutex },
     { "KeIrql",                             Test_KeIrql },
