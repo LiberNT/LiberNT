@@ -27,6 +27,8 @@ typedef struct _POP_SETTING_WATCHER
     PPOWER_SETTING_CALLBACK Callback;
     PVOID Context;
     PDEVICE_OBJECT DeviceObject;
+    PVOID Session;
+    ULONG SessionId;
     BOOLEAN Unregistered;
 } POP_SETTING_WATCHER, *PPOP_SETTING_WATCHER;
 
@@ -269,6 +271,42 @@ PopFindCachedSetting(
     return NULL;
 }
 
+static
+VOID
+PopFreeSettingWatcher(
+    _In_ PPOP_SETTING_WATCHER Watcher)
+{
+    if (Watcher->Session != NULL)
+        MmQuitNextSession(Watcher->Session);
+
+    ExFreePoolWithTag(Watcher, 'cPoP');
+}
+
+/* A callback in session space runs attached to the session it was registered from, whoever changed the setting */
+static
+VOID
+PopCallSettingWatcher(
+    _In_ PPOP_SETTING_WATCHER Watcher,
+    _In_ LPCGUID Setting,
+    _In_reads_bytes_(Length) PVOID Value,
+    _In_ ULONG Length)
+{
+    KAPC_STATE ApcState;
+
+    if (Watcher->Session == NULL ||
+        PsGetProcessSessionIdEx(PsGetCurrentProcess()) == Watcher->SessionId)
+    {
+        Watcher->Callback(Setting, Value, Length, Watcher->Context);
+        return;
+    }
+
+    if (!NT_SUCCESS(MmAttachSession(Watcher->Session, &ApcState)))
+        return;
+
+    Watcher->Callback(Setting, Value, Length, Watcher->Context);
+    MmDetachSession(Watcher->Session, &ApcState);
+}
+
 /*
  * A walk lets go of the lock around every callback, and a callback may take
  * its own registration away. Nothing is unlinked while a walk is under way:
@@ -294,7 +332,7 @@ PopEndSettingWalk(VOID)
         if (!Watcher->Unregistered) continue;
 
         RemoveEntryList(&Watcher->Entry);
-        ExFreePoolWithTag(Watcher, 'cPoP');
+        PopFreeSettingWatcher(Watcher);
     }
 }
 
@@ -322,7 +360,7 @@ PopNotifySettingWatchers(
         if (!IsEqualGUIDAligned(&Watcher->Setting, Setting)) continue;
 
         KeReleaseGuardedMutex(&PopSettingLock);
-        Watcher->Callback(Setting, Value, Length, Watcher->Context);
+        PopCallSettingWatcher(Watcher, Setting, Value, Length);
         KeAcquireGuardedMutex(&PopSettingLock);
     }
 
@@ -543,7 +581,20 @@ PoRegisterPowerSettingCallback(
     Watcher->Callback = Callback;
     Watcher->Context = Context;
     Watcher->DeviceObject = DeviceObject;
+    Watcher->Session = NULL;
+    Watcher->SessionId = 0;
     Watcher->Unregistered = FALSE;
+
+    if (MmIsSessionAddress((PVOID)Callback))
+    {
+        Watcher->SessionId = PsGetProcessSessionIdEx(PsGetCurrentProcess());
+        Watcher->Session = MmGetSessionById(Watcher->SessionId);
+        if (Watcher->Session == NULL)
+        {
+            ExFreePoolWithTag(Watcher, 'cPoP');
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
 
     if (Handle != NULL) *Handle = Watcher;
 
@@ -562,7 +613,7 @@ PoRegisterPowerSettingCallback(
     PopSettingWalks++;
     KeReleaseGuardedMutex(&PopSettingLock);
 
-    Callback(SettingGuid, Value, Length, Context);
+    PopCallSettingWatcher(Watcher, SettingGuid, Value, Length);
 
     KeAcquireGuardedMutex(&PopSettingLock);
     PopEndSettingWalk();
@@ -615,7 +666,7 @@ PoUnregisterPowerSettingCallback(
     RemoveEntryList(&Watcher->Entry);
     KeReleaseGuardedMutex(&PopSettingLock);
 
-    ExFreePoolWithTag(Watcher, 'cPoP');
+    PopFreeSettingWatcher(Watcher);
     return STATUS_SUCCESS;
 }
 

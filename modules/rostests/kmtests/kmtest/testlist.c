@@ -50,6 +50,7 @@ KMT_TESTFUNC Test_NtUserPhysicalPages;
 KMT_TESTFUNC Test_NtProcessClone;
 KMT_TESTFUNC Test_PoDisplayState;
 KMT_TESTFUNC Test_PoHibernate;
+KMT_TESTFUNC Test_PoSettingSession;
 KMT_TESTFUNC Test_PoSleepInformation;
 KMT_TESTFUNC Test_PoExecutionState;
 KMT_TESTFUNC Test_PoShutdownPersist;
@@ -125,6 +126,7 @@ const KMT_TEST TestList[] =
     { "NtProcessClone",               Test_NtProcessClone },
     { "PoDisplayState",               Test_PoDisplayState },
     { "PoHibernate",                  Test_PoHibernate },
+    { "PoSettingSession",             Test_PoSettingSession },
     { "PoSleepInformation",           Test_PoSleepInformation },
     { "PoExecutionState",             Test_PoExecutionState },
     { "PoShutdownPersist",            Test_PoShutdownPersist },
