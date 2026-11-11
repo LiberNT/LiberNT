@@ -164,6 +164,13 @@ PspUserThreadStartup(
         return;
     }
 
+    if (Thread->Tcb.Header.Minimal)
+    {
+        PspPicoThreadStartup(KeGetTrapFrame(&Thread->Tcb),
+                             KeGetExceptionFrame(&Thread->Tcb));
+        return;
+    }
+
     /* A new thread's first return to user mode goes through the frames made for it below its stack */
     PspArchInitializeUserThreadStartup(KeGetExceptionFrame(&Thread->Tcb),
                                        KeGetTrapFrame(&Thread->Tcb));
@@ -269,6 +276,7 @@ PspCreateThread(
     if (StartRoutine != NULL) Thread->SystemThread = TRUE;
     if ((CreateFlags & THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER) != 0)
         Thread->HideFromDebugger = TRUE;
+    if ((ThreadContext != NULL) && Process->PicoCreated) Thread->PicoNotifyExit = TRUE;
 
     KernelStack = MmCreateKernelStack(FALSE, 0);
     if (KernelStack == NULL)
@@ -284,11 +292,12 @@ PspCreateThread(
      */
     if (ThreadContext != NULL)
     {
-        Status = MmCreateTeb(Process,
-                             &Thread->Cid,
-                             InitialTeb,
-                             Wow64InitialTeb,
-                             &Teb);
+        Status = Process->PicoCreated ? STATUS_SUCCESS :
+                                        MmCreateTeb(Process,
+                                                    &Thread->Cid,
+                                                    InitialTeb,
+                                                    Wow64InitialTeb,
+                                                    &Teb);
         if (!NT_SUCCESS(Status))
         {
             MmDeleteKernelStack(KernelStack, FALSE);
@@ -321,6 +330,8 @@ PspCreateThread(
         ObDereferenceObject(Process);
         return Status;
     }
+
+    if (Thread->PicoNotifyExit) Thread->Tcb.Header.Minimal = TRUE;
 
     /*
      * From here the thread names its process, so it keeps a reference of its

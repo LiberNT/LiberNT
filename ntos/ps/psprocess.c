@@ -245,8 +245,16 @@ PspAllocateProcess(
      * the system process is the one exception, because that process has no
      * user address space to copy and the child is only there to hold threads.
      */
-    if (Section == NULL && Parent != NULL && Parent != PsInitialSystemProcess)
+    if ((Flags & PSP_PROCESS_CREATE_PICO_MASK) != 0)
+    {
+        Process->PicoCreated = TRUE;
+        Process->Minimal = TRUE;
+        if ((Flags & PSP_PROCESS_CREATE_PICO_CLONE) != 0) Clone = Parent;
+    }
+    else if (Section == NULL && Parent != NULL && Parent != PsInitialSystemProcess)
+    {
         Clone = Parent;
+    }
 
     Status = MmInitializeProcessAddressSpace(Process,
                                              Clone,
@@ -843,8 +851,19 @@ PspCreateProcess(
 
     UNREFERENCED_PARAMETER(InJob);
 
-    if ((Flags & ~PROCESS_CREATE_FLAGS_LEGAL_MASK) != 0)
+    if ((Flags & ~(PROCESS_CREATE_FLAGS_LEGAL_MASK |
+                   ((PreviousMode == KernelMode) ? PSP_PROCESS_CREATE_PICO_MASK : 0))) != 0)
+    {
         return STATUS_INVALID_PARAMETER;
+    }
+
+    if ((Flags & PSP_PROCESS_CREATE_PICO_MASK) != 0 &&
+        ((SectionHandle != NULL) ||
+         ((Flags & PSP_PROCESS_CREATE_PICO_MASK) == PSP_PROCESS_CREATE_PICO_MASK) ||
+         ((Flags & PSP_PROCESS_CREATE_PICO_CLONE) != 0 && ParentProcess == NULL)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
 
     /*
      * A process with no parent gets no address space of its own and exists
