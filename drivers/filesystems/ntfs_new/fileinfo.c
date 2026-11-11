@@ -506,6 +506,69 @@ GetFileNetworkOpenInformation(_In_ PFileContextBlock FileCB,
 
 static
 NTSTATUS
+GetFileHardLinkInformation(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PFileContextBlock FileCB,
+    _Out_ PFILE_LINKS_INFORMATION Buffer,
+    _Inout_ PULONG Length)
+{
+    PFILE_LINK_ENTRY_INFORMATION Previous = NULL;
+    PFILE_LINK_ENTRY_INFORMATION Entry;
+    UNICODE_STRING LinkName;
+    ULONGLONG ParentReference;
+    ULONG Context = 0;
+    ULONG BytesNeeded = FIELD_OFFSET(FILE_LINKS_INFORMATION, Entry);
+    ULONG BytesWritten = FIELD_OFFSET(FILE_LINKS_INFORMATION, Entry);
+    ULONG EntriesReturned = 0;
+    ULONG EntryLength;
+    ULONG EntryOffset;
+    BOOLEAN Overflow = FALSE;
+    NTSTATUS Status;
+
+    if (*Length < sizeof(FILE_LINKS_INFORMATION))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    for (;;)
+    {
+        Status = NtfsMasterFileTableEnumerateLinks(NtfsVolumeGetMft(VolCB->DiskVolume),
+                                                   FileCB->FileRec,
+                                                   &Context,
+                                                   &ParentReference,
+                                                   &LinkName);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+            break;
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        EntryLength = FIELD_OFFSET(FILE_LINK_ENTRY_INFORMATION, FileName) + LinkName.Length;
+        BytesNeeded = ALIGN_UP_BY(BytesNeeded, sizeof(LONGLONG)) + EntryLength;
+        EntryOffset = ALIGN_UP_BY(BytesWritten, sizeof(LONGLONG));
+        if (Overflow || EntryOffset > *Length || EntryLength > *Length - EntryOffset)
+        {
+            Overflow = TRUE;
+            continue;
+        }
+
+        Entry = (PFILE_LINK_ENTRY_INFORMATION)((PUCHAR)Buffer + EntryOffset);
+        Entry->NextEntryOffset = 0;
+        Entry->ParentFileId = (LONGLONG)ParentReference;
+        Entry->FileNameLength = LinkName.Length / sizeof(WCHAR);
+        RtlCopyMemory(Entry->FileName, LinkName.Buffer, LinkName.Length);
+        if (Previous)
+            Previous->NextEntryOffset = (ULONG)((PUCHAR)Entry - (PUCHAR)Previous);
+        Previous = Entry;
+        BytesWritten = EntryOffset + EntryLength;
+        EntriesReturned++;
+    }
+
+    Buffer->BytesNeeded = BytesNeeded;
+    Buffer->EntriesReturned = EntriesReturned;
+    *Length -= BytesWritten;
+    return Overflow ? STATUS_BUFFER_OVERFLOW : STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 GetFileStreamInformation(
     _In_ PFileContextBlock FileCB,
     _Out_ PFILE_STREAM_INFORMATION Buffer,
@@ -2050,6 +2113,7 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
         case FileCaseSensitiveInformation:
         case FileStatInformation:
         case FileStatLxInformation:
+        case FileHardLinkInformation:
             if (!FileCB->FileRec || !VolCB || !VolCB->DiskVolume)
             {
                 Status = STATUS_INVALID_PARAMETER;
@@ -2119,6 +2183,11 @@ NtfsFsdQueryInformation(_In_    PDEVICE_OBJECT VolumeDeviceObject,
                 FileCB,
                 (PFILE_STREAM_INFORMATION)SystemBuffer,
                 &BufferLength);
+            break;
+        case FileHardLinkInformation:
+            Status = GetFileHardLinkInformation(VolCB, FileCB,
+                                                (PFILE_LINKS_INFORMATION)SystemBuffer,
+                                                &BufferLength);
             break;
         case FilePositionInformation:
         {

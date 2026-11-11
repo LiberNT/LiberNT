@@ -731,6 +731,14 @@ NtfsMasterFileTableGetLinkShortName(
     _Out_ PUNICODE_STRING ShortName);
 
 NTSTATUS
+NtfsMasterFileTableEnumerateLinks(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord File,
+    _Inout_ PULONG Context,
+    _Out_ PULONGLONG ParentReference,
+    _Out_ PUNICODE_STRING LinkName);
+
+NTSTATUS
 NtfsMasterFileTableIsDescendantDirectory(
     _In_ PNtfsMasterFileTable Mft,
     _In_ ULONGLONG FileReference,

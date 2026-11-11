@@ -1833,6 +1833,13 @@ public:
         _Out_ PUNICODE_STRING ShortName);
 
     NTSTATUS
+    EnumerateLinks(
+        _In_ PFileRecord File,
+        _Inout_ PULONG Context,
+        _Out_ PULONGLONG ParentReference,
+        _Out_ PUNICODE_STRING LinkName);
+
+    NTSTATUS
     IsDescendantDirectory(
         _In_ ULONGLONG FileReference,
         _In_ ULONGLONG AncestorReference,

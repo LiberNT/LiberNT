@@ -32,6 +32,7 @@ list(APPEND SOURCE
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
     FileStorageInfo.c
+    FindFileNames.c
     FileInfoByHandleEx.c
     FindFiles.c
     FindPackagesByPackageFamily.c

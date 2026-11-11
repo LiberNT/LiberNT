@@ -295,6 +295,7 @@
 @ stdcall FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long)
 @ stdcall FindNextChangeNotification(long) kernel32.FindNextChangeNotification
 @ stdcall FindNextFileA(long ptr) kernel32.FindNextFileA
+@ stdcall -version=0x600+ FindNextFileNameW(ptr ptr ptr) kernel32.FindNextFileNameW
 @ stdcall FindNextFileW(long ptr) kernel32.FindNextFileW
 @ stdcall FindNextStreamW(ptr ptr) kernel32.FindNextStreamW
 @ stdcall FindNextVolumeW(long ptr long) kernel32.FindNextVolumeW

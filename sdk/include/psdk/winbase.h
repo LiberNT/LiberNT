@@ -1841,6 +1841,10 @@ HANDLE WINAPI FindFirstFileExW(LPCWSTR,FINDEX_INFO_LEVELS,PVOID,FINDEX_SEARCH_OP
 #if (_WIN32_WINNT >= 0x0501)
 HANDLE WINAPI FindFirstStreamW(_In_ LPCWSTR, _In_ STREAM_INFO_LEVELS, _Out_ LPVOID, _Reserved_ DWORD);
 #endif
+#if (_WIN32_WINNT >= 0x0600)
+HANDLE WINAPI FindFirstFileNameW(_In_ LPCWSTR lpFileName, _In_ DWORD dwFlags, _Inout_ LPDWORD StringLength, _Out_writes_(*StringLength) PWSTR LinkName);
+BOOL APIENTRY FindNextFileNameW(_In_ HANDLE hFindStream, _Inout_ LPDWORD StringLength, _Out_writes_(*StringLength) PWSTR LinkName);
+#endif
 BOOL WINAPI FindFirstFreeAce(PACL,PVOID*);
 
 #if (_WIN32_WINNT >= 0x0500)

@@ -2305,6 +2305,34 @@ MasterFileTable::GetLinkShortName(
 }
 
 NTSTATUS
+MasterFileTable::EnumerateLinks(
+    _In_ PFileRecord File,
+    _Inout_ PULONG Context,
+    _Out_ PULONGLONG ParentReference,
+    _Out_ PUNICODE_STRING LinkName)
+{
+    PAttribute Attribute;
+    PFileNameEx FileName;
+    NTSTATUS Status;
+
+    RtlZeroMemory(LinkName, sizeof(*LinkName));
+    *ParentReference = 0;
+    do
+    {
+        Status = EnumerateFileNames(File, Context, &Attribute, &FileName);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!FileName)
+            return STATUS_NO_MORE_ENTRIES;
+    } while (FileName->NameType == NAME_TYPE_DOS);
+
+    *ParentReference = FileName->ParentFileReference;
+    *LinkName = NtfsMakeCountedUnicodeString(FileName->Name,
+                                            FileName->NameLength * sizeof(WCHAR));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 MasterFileTable::IsDescendantDirectory(
     _In_ ULONGLONG FileReference,
     _In_ ULONGLONG AncestorReference,
