@@ -21,6 +21,8 @@ typedef struct _KDB_REGISTER
 
 extern const KDB_REGISTER KdbpRegisters[];
 extern const ULONG KdbpRegisterCount;
+extern const KDB_REGISTER KdbpFloatingRegisters[];
+extern const ULONG KdbpFloatingRegisterCount;
 
 /*
  * Stepping one instruction at a time, and stopping on an address being used

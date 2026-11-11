@@ -49,6 +49,30 @@ const KDB_REGISTER KdbpRegisters[] =
 
 const ULONG KdbpRegisterCount = RTL_NUMBER_OF(KdbpRegisters);
 
+#define KDB_X87_REGISTER_SIZE 10
+
+/* TODO: xmm0-xmm7 and mxcsr from ExtendedRegisters when the context has CONTEXT_EXTENDED_REGISTERS */
+const KDB_REGISTER KdbpFloatingRegisters[] =
+{
+    {"st0", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[0 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st1", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[1 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st2", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[2 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st3", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[3 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st4", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[4 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st5", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[5 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st6", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[6 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    {"st7", (USHORT)FIELD_OFFSET(CONTEXT, FloatSave.RegisterArea[7 * KDB_X87_REGISTER_SIZE]), KDB_X87_REGISTER_SIZE},
+    KDB_REG("fctrl", FloatSave.ControlWord),
+    KDB_REG("fstat", FloatSave.StatusWord),
+    KDB_REG("ftag", FloatSave.TagWord),
+    KDB_REG("fioff", FloatSave.ErrorOffset),
+    KDB_REG("fiseg", FloatSave.ErrorSelector),
+    KDB_REG("fooff", FloatSave.DataOffset),
+    KDB_REG("foseg", FloatSave.DataSelector)
+};
+
+const ULONG KdbpFloatingRegisterCount = RTL_NUMBER_OF(KdbpFloatingRegisters);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*

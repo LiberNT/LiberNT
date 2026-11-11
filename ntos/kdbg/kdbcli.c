@@ -44,6 +44,7 @@ volatile PCHAR KdbInitFileBuffer = NULL;
 #define KDB_DEFAULT_SCREEN_ROWS 24
 #define KDB_DUMP_BYTES_PER_LINE 16
 #define KDB_LOG_CHUNK           512
+#define KDB_MAXIMUM_FLOATING_REGISTER 16
 
 typedef BOOLEAN (*PKDB_COMMAND_ROUTINE)(ULONG Argc, PCHAR Argv[]);
 
@@ -859,6 +860,174 @@ KdbpCmdRegister(
     }
 
     KdbpPrint("%s = %016I64x\n", Argv[1], Value);
+    return TRUE;
+}
+
+static
+const KDB_REGISTER *
+KdbpFindFloatingRegister(
+    _In_ PCSTR Name)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < KdbpFloatingRegisterCount; Index++)
+    {
+        if (_stricmp(KdbpFloatingRegisters[Index].Name, Name) == 0)
+            return &KdbpFloatingRegisters[Index];
+    }
+
+    return NULL;
+}
+
+static
+VOID
+KdbpPrintFloatingRegister(
+    _In_ PKDB_KTRAP_FRAME Context,
+    _In_ const KDB_REGISTER *Register)
+{
+    static const CHAR Digits[] = "0123456789abcdef";
+    const UCHAR *Bytes = (const UCHAR *)Context + Register->Offset;
+    CHAR Text[2 * KDB_MAXIMUM_FLOATING_REGISTER + 1];
+    ULONG Index;
+
+    for (Index = 0; (Index < Register->Size) && (Index < KDB_MAXIMUM_FLOATING_REGISTER); Index++)
+    {
+        UCHAR Byte = Bytes[Register->Size - 1 - Index];
+
+        Text[2 * Index] = Digits[Byte >> 4];
+        Text[2 * Index + 1] = Digits[Byte & 0xF];
+    }
+
+    Text[2 * Index] = ANSI_NULL;
+    KdbpPrint("%-6s 0x%s\n", Register->Name, Text);
+}
+
+static
+BOOLEAN
+KdbpParseHexBytes(
+    _In_ PCSTR Text,
+    _Out_writes_bytes_(Size) PUCHAR Value,
+    _In_ ULONG Size)
+{
+    SIZE_T Length;
+    ULONG Digits = 0;
+    ULONG Nibble = 0;
+
+    if ((Text[0] == '0') && ((Text[1] == 'x') || (Text[1] == 'X')))
+        Text += 2;
+
+    for (Length = 0; Text[Length] != ANSI_NULL; Length++)
+    {
+        if ((Text[Length] == '`') || (Text[Length] == '_'))
+            continue;
+
+        if (!isxdigit((UCHAR)Text[Length]) || (++Digits > 2 * Size))
+            return FALSE;
+    }
+
+    if (Digits == 0)
+        return FALSE;
+
+    RtlZeroMemory(Value, Size);
+
+    while (Length != 0)
+    {
+        CHAR Char = Text[--Length];
+        UCHAR Digit;
+
+        if ((Char == '`') || (Char == '_'))
+            continue;
+
+        if ((Char >= '0') && (Char <= '9'))
+            Digit = (UCHAR)(Char - '0');
+        else
+            Digit = (UCHAR)((Char | 0x20) - 'a' + 10);
+
+        Value[Nibble / 2] |= (UCHAR)(Digit << ((Nibble & 1) * 4));
+        Nibble++;
+    }
+
+    return TRUE;
+}
+
+static
+PKDB_KTRAP_FRAME
+KdbpFloatingContext(VOID)
+{
+    PKDB_KTRAP_FRAME Context = KdbpContext();
+
+    if ((Context != NULL) && ((Context->ContextFlags & CONTEXT_FLOATING_POINT) == CONTEXT_FLOATING_POINT))
+        return Context;
+
+    KdbPuts("This context holds no floating-point state\n");
+    return NULL;
+}
+
+static
+BOOLEAN
+KdbpCmdFloatingRegisters(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    PKDB_KTRAP_FRAME Context = KdbpFloatingContext();
+    const KDB_REGISTER *Register;
+    ULONG Index;
+
+    if (Context == NULL)
+        return TRUE;
+
+    if (Argc > 1)
+    {
+        Register = KdbpFindFloatingRegister(Argv[1]);
+        if (Register == NULL)
+            KdbpPrint("There is no floating-point or vector register called %s\n", Argv[1]);
+        else
+            KdbpPrintFloatingRegister(Context, Register);
+
+        return TRUE;
+    }
+
+    for (Index = 0; (Index < KdbpFloatingRegisterCount) && !KdbpIsOutputAborted(); Index++)
+        KdbpPrintFloatingRegister(Context, &KdbpFloatingRegisters[Index]);
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpCmdSetFloatingRegister(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    UCHAR Value[KDB_MAXIMUM_FLOATING_REGISTER];
+    const KDB_REGISTER *Register;
+    PKDB_KTRAP_FRAME Context;
+
+    if (Argc < 3)
+    {
+        KdbPuts("A register and a hexadecimal value are needed\n");
+        return TRUE;
+    }
+
+    Context = KdbpFloatingContext();
+    if (Context == NULL)
+        return TRUE;
+
+    Register = KdbpFindFloatingRegister(Argv[1]);
+    if (Register == NULL)
+    {
+        KdbpPrint("There is no floating-point or vector register called %s\n", Argv[1]);
+        return TRUE;
+    }
+
+    if ((Register->Size > sizeof(Value)) || !KdbpParseHexBytes(Argv[2], Value, Register->Size))
+    {
+        KdbpPrint("%s is not a hexadecimal value of at most %u bytes\n", Argv[2], Register->Size);
+        return TRUE;
+    }
+
+    RtlCopyMemory((PUCHAR)Context + Register->Offset, Value, Register->Size);
+    KdbpPrintFloatingRegister(Context, Register);
     return TRUE;
 }
 
@@ -2041,6 +2210,10 @@ static const KDB_COMMAND KdbpCommands[] =
     {"be", "be <number|*>", "Turns a breakpoint back on", KdbpCmdBreakPointEnable},
     {"regs", "regs", "Shows every register", KdbpCmdRegisters},
     {"r", "r <name> [value]", "Shows or changes one register", KdbpCmdRegister},
+    {"fpregs", "fpregs [register]", "Shows the floating-point and vector registers", KdbpCmdFloatingRegisters},
+    {"vregs", "vregs [register]", "Shows the floating-point and vector registers", KdbpCmdFloatingRegisters},
+    {"setfpreg", "setfpreg <register> <hex value>", "Changes a floating-point or vector register", KdbpCmdSetFloatingRegister},
+    {"setvreg", "setvreg <register> <hex value>", "Changes a floating-point or vector register", KdbpCmdSetFloatingRegister},
     {"bt", "bt [frames]", "Shows what led here", KdbpCmdBackTrace},
     {"k", "k [frames]", "Shows what led here", KdbpCmdBackTrace},
     {"db", "db <address> [count]", "Shows memory as bytes", KdbpCmdDumpBytes},

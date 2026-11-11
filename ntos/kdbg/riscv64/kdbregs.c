@@ -58,6 +58,45 @@ const KDB_REGISTER KdbpRegisters[] =
 
 const ULONG KdbpRegisterCount = RTL_NUMBER_OF(KdbpRegisters);
 
+const KDB_REGISTER KdbpFloatingRegisters[] =
+{
+    KDB_REG("f0", F[0]),
+    KDB_REG("f1", F[1]),
+    KDB_REG("f2", F[2]),
+    KDB_REG("f3", F[3]),
+    KDB_REG("f4", F[4]),
+    KDB_REG("f5", F[5]),
+    KDB_REG("f6", F[6]),
+    KDB_REG("f7", F[7]),
+    KDB_REG("f8", F[8]),
+    KDB_REG("f9", F[9]),
+    KDB_REG("f10", F[10]),
+    KDB_REG("f11", F[11]),
+    KDB_REG("f12", F[12]),
+    KDB_REG("f13", F[13]),
+    KDB_REG("f14", F[14]),
+    KDB_REG("f15", F[15]),
+    KDB_REG("f16", F[16]),
+    KDB_REG("f17", F[17]),
+    KDB_REG("f18", F[18]),
+    KDB_REG("f19", F[19]),
+    KDB_REG("f20", F[20]),
+    KDB_REG("f21", F[21]),
+    KDB_REG("f22", F[22]),
+    KDB_REG("f23", F[23]),
+    KDB_REG("f24", F[24]),
+    KDB_REG("f25", F[25]),
+    KDB_REG("f26", F[26]),
+    KDB_REG("f27", F[27]),
+    KDB_REG("f28", F[28]),
+    KDB_REG("f29", F[29]),
+    KDB_REG("f30", F[30]),
+    KDB_REG("f31", F[31]),
+    KDB_REG("fcsr", Fcsr)
+};
+
+const ULONG KdbpFloatingRegisterCount = RTL_NUMBER_OF(KdbpFloatingRegisters);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*

@@ -61,6 +61,47 @@ const KDB_REGISTER KdbpRegisters[] =
 
 const ULONG KdbpRegisterCount = RTL_NUMBER_OF(KdbpRegisters);
 
+#define KDB_X87_REGISTER_SIZE 10
+
+const KDB_REGISTER KdbpFloatingRegisters[] =
+{
+    {"st0", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[0]), KDB_X87_REGISTER_SIZE},
+    {"st1", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[1]), KDB_X87_REGISTER_SIZE},
+    {"st2", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[2]), KDB_X87_REGISTER_SIZE},
+    {"st3", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[3]), KDB_X87_REGISTER_SIZE},
+    {"st4", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[4]), KDB_X87_REGISTER_SIZE},
+    {"st5", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[5]), KDB_X87_REGISTER_SIZE},
+    {"st6", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[6]), KDB_X87_REGISTER_SIZE},
+    {"st7", (USHORT)FIELD_OFFSET(CONTEXT, FltSave.FloatRegisters[7]), KDB_X87_REGISTER_SIZE},
+    KDB_REG("xmm0", Xmm0),
+    KDB_REG("xmm1", Xmm1),
+    KDB_REG("xmm2", Xmm2),
+    KDB_REG("xmm3", Xmm3),
+    KDB_REG("xmm4", Xmm4),
+    KDB_REG("xmm5", Xmm5),
+    KDB_REG("xmm6", Xmm6),
+    KDB_REG("xmm7", Xmm7),
+    KDB_REG("xmm8", Xmm8),
+    KDB_REG("xmm9", Xmm9),
+    KDB_REG("xmm10", Xmm10),
+    KDB_REG("xmm11", Xmm11),
+    KDB_REG("xmm12", Xmm12),
+    KDB_REG("xmm13", Xmm13),
+    KDB_REG("xmm14", Xmm14),
+    KDB_REG("xmm15", Xmm15),
+    KDB_REG("fctrl", FltSave.ControlWord),
+    KDB_REG("fstat", FltSave.StatusWord),
+    KDB_REG("ftag", FltSave.TagWord),
+    KDB_REG("fop", FltSave.ErrorOpcode),
+    KDB_REG("fioff", FltSave.ErrorOffset),
+    KDB_REG("fiseg", FltSave.ErrorSelector),
+    KDB_REG("fooff", FltSave.DataOffset),
+    KDB_REG("foseg", FltSave.DataSelector),
+    KDB_REG("mxcsr", MxCsr)
+};
+
+const ULONG KdbpFloatingRegisterCount = RTL_NUMBER_OF(KdbpFloatingRegisters);
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
