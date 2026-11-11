@@ -289,6 +289,7 @@ static const CATEGORY_RULE Rules[] =
     { "runtimeexports_apitest", "*", "core:loader" },
     { "sdk_apitest", "*", "core:loader" },
     { "sxs_winetest", "*", "core:loader" },
+    { "icu_apitest", "*", "core:locale" },
     { "localeparent_apitest", "*", "core:locale" },
     { "mlang_winetest", "*", "core:locale" },
     { "nlsfind_apitest", "*", "core:locale" },
