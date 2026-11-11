@@ -272,7 +272,6 @@ CmpDeliverCompletion(
         if (Completion->Synchronous)
         {
             KeSetEvent(&Completion->Finished, EVENT_INCREMENT, FALSE);
-            return;
         }
 
         CmpReleaseCompletion(Completion);
