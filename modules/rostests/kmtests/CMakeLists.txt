@@ -586,6 +586,7 @@ list(APPEND KMTEST_SOURCE
     ntos_ps/PsThreadCpuSets_user.c
     ntos_ex/ExCpuSetInformation_user.c
     ntos_ex/ExHandleInformation_user.c
+    ntos_kd/KdBreakRequest_user.c
     ntos_kd/KdDebugService_user.c
     ntos_kd/KdLiveDump_user.c
     ntos_kd/KdPullRemoteFile_user.c

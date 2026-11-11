@@ -2313,10 +2313,18 @@ KdbInitialize(
     _In_ PKD_DISPATCH_TABLE DispatchTable,
     _In_ ULONG BootPhase)
 {
+    NTSTATUS Status;
+
     UNREFERENCED_PARAMETER(DispatchTable);
 
     if (BootPhase == 0)
-        return KdbpCliInit();
+    {
+        Status = KdbpCliInit();
+        if (NT_SUCCESS(Status) && KdDebuggerEnabled)
+            KdDebuggerNotPresent = FALSE;
+
+        return Status;
+    }
 
     if (BootPhase == KDP_BOOT_PHASE_SYSTEM_ROOT)
         KdbpReadInitFile();

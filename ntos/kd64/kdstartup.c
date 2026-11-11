@@ -254,6 +254,9 @@ KdInitSystem(
              */
             KeInitializeDpc(&KdpTimeSlipDpc, KdpTimeSlipDpcRoutine, NULL);
             KeInitializeTimer(&KdpTimeSlipTimer);
+
+            if (KdDebuggerEnabled)
+                SharedUserData->KdDebuggerEnabled = TRUE;
         }
 
         /* The providers decide for themselves what each later phase means */

@@ -39,6 +39,7 @@ KMT_TESTFUNC Test_ExCpuSetInformation;
 KMT_TESTFUNC Test_ExHandleInformation;
 KMT_TESTFUNC Test_ExHandleListChurn;
 KMT_TESTFUNC Test_PsThreadCpuSets;
+KMT_TESTFUNC Test_KdBreakRequest;
 KMT_TESTFUNC Test_KdDebugService;
 KMT_TESTFUNC Test_KdLiveDump;
 KMT_TESTFUNC Test_KdPullRemoteFile;
@@ -119,6 +120,7 @@ const KMT_TEST TestList[] =
     { "ExHandleInformation",          Test_ExHandleInformation },
     { "ExHandleListChurn",            Test_ExHandleListChurn },
     { "PsThreadCpuSets",              Test_PsThreadCpuSets },
+    { "-KdBreakRequest",              Test_KdBreakRequest },
     { "KdDebugService",               Test_KdDebugService },
     { "KdLiveDump",                   Test_KdLiveDump },
     { "KdPullRemoteFile",             Test_KdPullRemoteFile },
