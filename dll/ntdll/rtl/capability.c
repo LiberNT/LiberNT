@@ -1,6 +1,6 @@
 /*
  * PROJECT:     LiberNT NT User-Mode DLL
- * PURPOSE:     Capability SID support
+ * PURPOSE:     Capability and service SID support
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  */
 
@@ -77,5 +77,46 @@ RtlDeriveCapabilitySidsFromName(
     *RtlSubAuthoritySid(Sid, 0) = SECURITY_BUILTIN_DOMAIN_RID;
     RtlCopyMemory(Sid->SubAuthority + 1, Hash, sizeof(Hash));
 
+    return STATUS_SUCCESS;
+}
+
+C_ASSERT(SYMCRYPT_SHA1_RESULT_SIZE == (SECURITY_SERVICE_ID_RID_COUNT - 1) * sizeof(ULONG));
+
+NTSTATUS
+NTAPI
+RtlCreateServiceSid(
+    _In_ PUNICODE_STRING ServiceName,
+    _Out_writes_bytes_opt_(*ServiceSidLength) PSID ServiceSid,
+    _Inout_ PULONG ServiceSidLength)
+{
+    static const SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+    UNICODE_STRING UppercaseName;
+    NTSTATUS Status;
+    ULONG Length;
+    PISID Sid;
+
+    if (!ServiceName || !ServiceSidLength)
+        return STATUS_INVALID_PARAMETER;
+
+    Length = RtlLengthRequiredSid(SECURITY_SERVICE_ID_RID_COUNT);
+    if (!ServiceSid || *ServiceSidLength < Length)
+    {
+        *ServiceSidLength = Length;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    Status = RtlUpcaseUnicodeString(&UppercaseName, ServiceName, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Sid = ServiceSid;
+    Sid->Revision = SID_REVISION;
+    Sid->IdentifierAuthority = NtAuthority;
+    Sid->SubAuthorityCount = SECURITY_SERVICE_ID_RID_COUNT;
+    *RtlSubAuthoritySid(Sid, 0) = SECURITY_SERVICE_ID_BASE_RID;
+    SymCryptSha1((PBYTE)UppercaseName.Buffer, UppercaseName.Length, (PBYTE)(Sid->SubAuthority + 1));
+    RtlFreeUnicodeString(&UppercaseName);
+
+    *ServiceSidLength = Length;
     return STATUS_SUCCESS;
 }

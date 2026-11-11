@@ -146,6 +146,7 @@ list(APPEND SOURCE
     RtlComputePrivatizedDllName_U.c
     RtlConditionVariable.c
     RtlCopyMappedMemory.c
+    RtlCreateServiceSid.c
     RtlCriticalSection.c
     RtlCurrentTransaction.c
     RtlDebugInformation.c
