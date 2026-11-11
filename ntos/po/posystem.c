@@ -1004,8 +1004,9 @@ NtSetThreadExecutionState(
 
     PAGED_CODE();
 
-    if (NewFlags & ~(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED |
-                     ES_USER_PRESENT | ES_CONTINUOUS))
+    if ((NewFlags & ~(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED |
+                      ES_AWAYMODE_REQUIRED | ES_CONTINUOUS)) ||
+        ((NewFlags & ES_AWAYMODE_REQUIRED) && !(NewFlags & ES_CONTINUOUS)))
     {
         return STATUS_INVALID_PARAMETER;
     }

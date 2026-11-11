@@ -76,6 +76,32 @@ WindowThread(
 }
 
 static
+DWORD
+WINAPI
+AwayModeThread(
+    _In_ PVOID Parameter)
+{
+    EXECUTION_STATE Previous = 0xdeadbeef;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(Parameter);
+
+    Status = NtSetThreadExecutionState(ES_AWAYMODE_REQUIRED, &Previous);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+
+    Status = NtSetThreadExecutionState(ES_CONTINUOUS | ES_USER_PRESENT, &Previous);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+    ok_eq_hex(Previous, 0xdeadbeef);
+
+    Previous = SetState(ES_CONTINUOUS | ES_AWAYMODE_REQUIRED);
+    ok_eq_hex(Previous, ES_CONTINUOUS);
+
+    Previous = SetState(ES_CONTINUOUS);
+    ok_eq_hex(Previous, ES_CONTINUOUS | ES_AWAYMODE_REQUIRED);
+    return 0;
+}
+
+static
 VOID
 RunThread(
     _In_ LPTHREAD_START_ROUTINE Routine)
@@ -96,4 +122,5 @@ START_TEST(PoExecutionState)
 {
     RunThread(ContinuousThread);
     RunThread(WindowThread);
+    RunThread(AwayModeThread);
 }
