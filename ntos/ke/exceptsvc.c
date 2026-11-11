@@ -28,6 +28,7 @@ NTSTATUS
 NTAPI
 KiContinue(
     _In_ PCONTEXT Context,
+    _In_ PCONTEXT SourceContext,
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame)
 {
@@ -38,7 +39,7 @@ KiContinue(
     if (OldIrql < APC_LEVEL)
         KfRaiseIrql(APC_LEVEL);
 
-    Status = KiContinueExtendedState(Context, Context->ContextFlags);
+    Status = KiContinueExtendedState(SourceContext, Context->ContextFlags, Thread->PreviousMode);
     if (NT_SUCCESS(Status))
     {
         KeContextToTrapFrame(Context,
@@ -80,7 +81,7 @@ KiContinuePreviousModeUser(
     }
     _SEH2_END;
 
-    return KiContinue(&LocalContext, ExceptionFrame, TrapFrame);
+    return KiContinue(&LocalContext, Context, ExceptionFrame, TrapFrame);
 }
 
 /*
@@ -116,7 +117,7 @@ KiContinueService(
     if (PreviousMode != KernelMode)
         Status = KiContinuePreviousModeUser(Context, ExceptionFrame, TrapFrame);
     else
-        Status = KiContinue(Context, ExceptionFrame, TrapFrame);
+        Status = KiContinue(Context, Context, ExceptionFrame, TrapFrame);
 
     if (!NT_SUCCESS(Status))
     {

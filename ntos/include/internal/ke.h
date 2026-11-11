@@ -1187,6 +1187,7 @@ NTSTATUS
 NTAPI
 KiContinue(
     IN PCONTEXT Context,
+    IN PCONTEXT SourceContext,
     IN PKEXCEPTION_FRAME ExceptionFrame,
     IN PKTRAP_FRAME TrapFrame
 );
@@ -1194,8 +1195,9 @@ KiContinue(
 NTSTATUS
 NTAPI
 KiContinueExtendedState(
-    _In_ PCONTEXT Context,
-    _In_ ULONG ContextFlags);
+    _In_ PCONTEXT SourceContext,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode);
 
 #ifndef _M_AMD64
 VOID

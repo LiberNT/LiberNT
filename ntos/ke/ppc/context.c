@@ -85,11 +85,13 @@ KeTrapFrameToContext(
 NTSTATUS
 NTAPI
 KiContinueExtendedState(
-    _In_ PCONTEXT Context,
-    _In_ ULONG ContextFlags)
+    _In_ PCONTEXT SourceContext,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
-    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SourceContext);
     UNREFERENCED_PARAMETER(ContextFlags);
+    UNREFERENCED_PARAMETER(PreviousMode);
 
     return STATUS_SUCCESS;
 }

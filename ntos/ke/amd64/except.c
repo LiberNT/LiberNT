@@ -1001,25 +1001,43 @@ KiXmmExceptionHandler(
 NTSTATUS
 NTAPI
 KiContinueExtendedState(
-    _In_ PCONTEXT Context,
-    _In_ ULONG ContextFlags)
+    _In_ PCONTEXT SourceContext,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
     PCONTEXT_EX ContextEx;
     PXSAVE_AREA_HEADER Header;
-    PUCHAR UserXState, XState;
-    ULONG Length;
+    PUCHAR UserXState = NULL, XState;
+    ULONG Length = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     if ((ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE || !KiGetUserXStateFeatures())
         return STATUS_SUCCESS;
 
-    ContextEx = (PCONTEXT_EX)(Context + 1);
-    ProbeForRead(ContextEx, sizeof(*ContextEx), sizeof(ULONG));
-    Length = ContextEx->XState.Length;
-    UserXState = (PUCHAR)ContextEx + ContextEx->XState.Offset;
+    ContextEx = (PCONTEXT_EX)(SourceContext + 1);
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForRead(ContextEx, sizeof(*ContextEx), sizeof(ULONG));
+
+        Length = ContextEx->XState.Length;
+        UserXState = (PUCHAR)ContextEx + ContextEx->XState.Offset;
+
+        if ((PreviousMode != KernelMode) && (Length >= sizeof(XSAVE_AREA_HEADER)) &&
+            (Length <= KiGetUserXStateMaximumLength()))
+        {
+            ProbeForRead(UserXState, Length, sizeof(ULONG));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
     if (Length < sizeof(XSAVE_AREA_HEADER) || Length > KiGetUserXStateMaximumLength())
         return STATUS_INVALID_PARAMETER;
-    ProbeForRead(UserXState, Length, sizeof(ULONG));
 
     XState = ExAllocatePoolWithTag(NonPagedPool, Length + KiGetUserXStateScratchSize(), TAG_KE_XSTATE);
     if (!XState)
