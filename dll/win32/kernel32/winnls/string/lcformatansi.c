@@ -231,15 +231,8 @@ INT WINAPI GetCurrencyFormatA(LCID lcid, DWORD dwFlags,
  */
 BOOL WINAPI EnumDateFormatsA(DATEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
 {
-    struct enumdateformats_context ctxt;
-
-    ctxt.type = CALLBACK_ENUMPROC;
-    ctxt.u.callback = (DATEFMT_ENUMPROCW)proc;
-    ctxt.lcid = lcid;
-    ctxt.flags = flags;
-    ctxt.unicode = FALSE;
-
-    return NLS_EnumDateFormats(&ctxt);
+    return Internal_EnumDateFormats((DATEFMT_ENUMPROCW)proc, NlsValidateLocale(&lcid, 0),
+                                    flags, FALSE, FALSE, FALSE, 0);
 }
 
 /**************************************************************************
@@ -250,8 +243,6 @@ BOOL WINAPI EnumDateFormatsA(DATEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
  */
 BOOL WINAPI EnumTimeFormatsA(TIMEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
 {
-    struct enumtimeformats_context ctxt;
-
     /* EnumTimeFormatsA doesn't support flags, EnumTimeFormatsW does. */
     if (flags & ~LOCALE_USE_CP_ACP)
     {
@@ -259,13 +250,8 @@ BOOL WINAPI EnumTimeFormatsA(TIMEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
         return FALSE;
     }
 
-    ctxt.type = CALLBACK_ENUMPROC;
-    ctxt.u.callback = (TIMEFMT_ENUMPROCW)proc;
-    ctxt.lcid = lcid;
-    ctxt.flags = flags;
-    ctxt.unicode = FALSE;
-
-    return NLS_EnumTimeFormats(&ctxt);
+    return Internal_EnumTimeFormats((TIMEFMT_ENUMPROCW)proc, NlsValidateLocale(&lcid, 0),
+                                    flags, FALSE, FALSE, 0);
 }
 
 /******************************************************************************

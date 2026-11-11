@@ -43,6 +43,7 @@ list(APPEND SOURCE
     DeleteFileCase.c
     DeviceIoControl.c
     dosdev.c
+    EnumDateTimeFormats.c
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
     FileStorageInfo.c

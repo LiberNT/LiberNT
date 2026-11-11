@@ -259,9 +259,9 @@
 @ stdcall EnumCalendarInfoW(ptr long long long) kernelbase.EnumCalendarInfoW
 @ stdcall EnumDateFormatsA(ptr long long)
 @ stdcall EnumDateFormatsExA(ptr long long)
-@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long)
-@ stdcall EnumDateFormatsExW(ptr long long)
-@ stdcall EnumDateFormatsW(ptr long long)
+@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long) kernelbase.EnumDateFormatsExEx
+@ stdcall EnumDateFormatsExW(ptr long long) kernelbase.EnumDateFormatsExW
+@ stdcall EnumDateFormatsW(ptr long long) kernelbase.EnumDateFormatsW
 @ stdcall EnumLanguageGroupLocalesA(ptr long long ptr)
 @ stdcall EnumLanguageGroupLocalesW(ptr long long ptr)
 @ stdcall EnumResourceLanguagesA(long str str ptr long)
@@ -286,8 +286,8 @@
 @ stdcall -version=0x600+ EnumSystemLocalesEx(ptr long long ptr) kernelbase.EnumSystemLocalesEx
 @ stdcall EnumSystemLocalesW(ptr long) kernelbase.EnumSystemLocalesW
 @ stdcall EnumTimeFormatsA(ptr long long)
-@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long)
-@ stdcall EnumTimeFormatsW(ptr long long)
+@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long) kernelbase.EnumTimeFormatsEx
+@ stdcall EnumTimeFormatsW(ptr long long) kernelbase.EnumTimeFormatsW
 @ stdcall EnumUILanguagesA(ptr long long)
 @ stdcall EnumUILanguagesW(ptr long long)
 @ stdcall EnumerateLocalComputerNamesA(ptr long str ptr)

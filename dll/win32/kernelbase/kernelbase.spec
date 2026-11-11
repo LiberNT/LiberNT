@@ -222,9 +222,9 @@
 @ stdcall EnumCalendarInfoExEx(ptr wstr long wstr long long)
 @ stdcall EnumCalendarInfoExW(ptr long long long)
 @ stdcall EnumCalendarInfoW(ptr long long long)
-@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long) kernel32.EnumDateFormatsExEx
-@ stdcall EnumDateFormatsExW(ptr long long) kernel32.EnumDateFormatsExW
-@ stdcall EnumDateFormatsW(ptr long long) kernel32.EnumDateFormatsW
+@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long)
+@ stdcall EnumDateFormatsExW(ptr long long)
+@ stdcall EnumDateFormatsW(ptr long long)
 @ stdcall -version=0x601+ EnumDeviceDrivers(ptr long ptr) kernel32.K32EnumDeviceDrivers
 @ stdcall EnumDynamicTimeZoneInformation(long ptr)
 @ stdcall EnumLanguageGroupLocalesW(ptr long long ptr) kernel32.EnumLanguageGroupLocalesW
@@ -247,8 +247,8 @@
 @ stdcall EnumSystemLocalesA(ptr long)
 @ stdcall EnumSystemLocalesEx(ptr long long ptr)
 @ stdcall EnumSystemLocalesW(ptr long)
-@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long) kernel32.EnumTimeFormatsEx
-@ stdcall EnumTimeFormatsW(ptr long long) kernel32.EnumTimeFormatsW
+@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long)
+@ stdcall EnumTimeFormatsW(ptr long long)
 @ stdcall EnumUILanguagesW(ptr long long) kernel32.EnumUILanguagesW
 @ stdcall EqualDomainSid(ptr ptr ptr)
 @ stdcall EqualPrefixSid(ptr ptr)
