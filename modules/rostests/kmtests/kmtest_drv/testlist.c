@@ -162,6 +162,7 @@ KMT_TESTFUNC Test_HalPortIo;
 KMT_TESTFUNC Test_HalSystemInfo;
 KMT_TESTFUNC Test_IoContainerId;
 KMT_TESTFUNC Test_IoDriverSection;
+KMT_TESTFUNC Test_IoGetRequestorProcess;
 KMT_TESTFUNC Test_IoCreateDeviceSecure;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoCreateFileAccessCheck;
@@ -538,6 +539,7 @@ const KMT_TEST TestList[] =
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },
     { "IoDriverSection",                    Test_IoDriverSection },
+    { "IoGetRequestorProcess",              Test_IoGetRequestorProcess },
     { "IoCreateDeviceSecure",               Test_IoCreateDeviceSecure },
     { "IoCreateFile",                       Test_IoCreateFile },
     { "IoCreateFileAccessCheck",            Test_IoCreateFileAccessCheck },

@@ -59,9 +59,13 @@ NTAPI
 IoGetRequestorProcess(
     _In_ PIRP Irp)
 {
-    if (Irp->Tail.Overlay.Thread == NULL) return NULL;
+    PETHREAD Thread = Irp->Tail.Overlay.Thread;
 
-    return PsGetThreadProcess(Irp->Tail.Overlay.Thread);
+    if (Thread == NULL) return NULL;
+
+    if (Irp->ApcEnvironment == OriginalApcEnvironment) return PsGetThreadProcess(Thread);
+
+    return (PEPROCESS)Thread->Tcb.ApcState.Process;
 }
 
 ULONG

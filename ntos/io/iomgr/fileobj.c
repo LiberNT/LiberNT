@@ -192,9 +192,6 @@ IopUnlockAllForProcess(
         return;
     }
 
-    /* FIXME: IoGetRequestorProcess names the thread's own process, so a close made attached to another process leaves its locks to the cleanup */
-    if (Process != IoThreadToProcess(PsGetCurrentThread())) return;
-
     IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_LOCK_CONTROL, IRP_MN_UNLOCK_ALL);
 }
 
