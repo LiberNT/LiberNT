@@ -64,17 +64,18 @@ PsSuspendThread(
     _In_ PETHREAD Thread,
     _Out_opt_ PULONG PreviousCount)
 {
+    BOOLEAN Self = (Thread == PsGetCurrentThread());
     ULONG Count = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (!ExAcquireRundownProtection(&Thread->RundownProtect))
+    if (!Self && !ExAcquireRundownProtection(&Thread->RundownProtect))
         return STATUS_THREAD_IS_TERMINATING;
 
     if (Thread->Terminated)
     {
-        ExReleaseRundownProtection(&Thread->RundownProtect);
+        if (!Self) ExReleaseRundownProtection(&Thread->RundownProtect);
         return STATUS_THREAD_IS_TERMINATING;
     }
 
@@ -88,7 +89,7 @@ PsSuspendThread(
     }
     _SEH2_END;
 
-    ExReleaseRundownProtection(&Thread->RundownProtect);
+    if (!Self) ExReleaseRundownProtection(&Thread->RundownProtect);
 
     if (NT_SUCCESS(Status) && PreviousCount != NULL) *PreviousCount = Count;
     return Status;
