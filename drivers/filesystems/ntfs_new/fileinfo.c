@@ -2518,12 +2518,6 @@ Done:
         Irp->IoStatus.Information =
             IoStack->Parameters.QueryFile.Length -
             BufferLength;
-
-#ifdef __REACTOS__
-        // HACK!!! Driver should not have to edit UserIosb.
-        Irp->UserIosb->Status = Irp->IoStatus.Status;
-        Irp->UserIosb->Information = Irp->IoStatus.Information;
-#endif
     }
     else
     {

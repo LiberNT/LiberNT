@@ -1050,6 +1050,99 @@ TestCachedReadCleanup(VOID)
     ObDereferenceObject(FileObject);
 }
 
+typedef struct _DISPATCHED_QUERY_STATE
+{
+    KEVENT Event;
+} DISPATCHED_QUERY_STATE, *PDISPATCHED_QUERY_STATE;
+
+static
+NTSTATUS
+NTAPI
+DispatchedQueryCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_opt_ PVOID Context)
+{
+    PDISPATCHED_QUERY_STATE State = Context;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+
+    KeSetEvent(&State->Event, IO_NO_INCREMENT, FALSE);
+
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+VOID
+TestDispatchedQuery(VOID)
+{
+    UNICODE_STRING FileName = RTL_CONSTANT_STRING(L"\\SystemRoot\\system32\\ntoskrnl.exe");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    FILE_STANDARD_INFORMATION Info;
+    DISPATCHED_QUERY_STATE State;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION Stack;
+    PDEVICE_OBJECT DeviceObject;
+    PFILE_OBJECT FileObject;
+    HANDLE FileHandle;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    InitializeObjectAttributes(&ObjectAttributes, &FileName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    Status = ZwOpenFile(&FileHandle, FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                        &ObjectAttributes, &IoStatus,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_NON_DIRECTORY_FILE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Status = ObReferenceObjectByHandle(FileHandle, 0, *IoFileObjectType,
+                                       KernelMode, (PVOID *)&FileObject, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(FileHandle);
+        return;
+    }
+
+    DeviceObject = IoGetRelatedDeviceObject(FileObject);
+    Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
+    ok(Irp != NULL, "IoAllocateIrp failed\n");
+    if (Irp != NULL)
+    {
+        KeInitializeEvent(&State.Event, NotificationEvent, FALSE);
+
+        Irp->AssociatedIrp.SystemBuffer = &Info;
+        Irp->RequestorMode = KernelMode;
+        Irp->Tail.Overlay.Thread = PsGetCurrentThread();
+
+        Stack = IoGetNextIrpStackLocation(Irp);
+        Stack->MajorFunction = IRP_MJ_QUERY_INFORMATION;
+        Stack->FileObject = FileObject;
+        Stack->Parameters.QueryFile.Length = sizeof(Info);
+        Stack->Parameters.QueryFile.FileInformationClass = FileStandardInformation;
+        IoSetCompletionRoutine(Irp, DispatchedQueryCompletion, &State, TRUE, TRUE, TRUE);
+
+        Status = IoCallDriver(DeviceObject, Irp);
+        if (Status == STATUS_PENDING)
+        {
+            KeWaitForSingleObject(&State.Event, Executive, KernelMode, FALSE, NULL);
+            Status = Irp->IoStatus.Status;
+        }
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ok_eq_ulongptr(Irp->IoStatus.Information, sizeof(Info));
+
+        IoFreeIrp(Irp);
+    }
+
+    ObDereferenceObject(FileObject);
+    ZwClose(FileHandle);
+}
+
 START_TEST(IoFilesystem)
 {
     if (skip(!IsWinPE(), "IoFilesystem path matrix requires an installed OS, not WinPE\n"))
@@ -1065,4 +1158,5 @@ START_TEST(IoFilesystem)
     TestSharedCacheMap();
     TestReadAfterSmallWrites();
     TestCachedReadCleanup();
+    TestDispatchedQuery();
 }
