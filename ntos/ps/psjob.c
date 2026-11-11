@@ -1062,6 +1062,28 @@ NtCreateJobSet(
     return Status;
 }
 
+static
+NTSTATUS
+PspCopyJobInformation(
+    _Out_writes_bytes_(Length) PVOID Destination,
+    _In_reads_bytes_(Length) PVOID JobInformation,
+    _In_ ULONG Length)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Destination, JobInformation, Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtQueryInformationJobObject(
@@ -1076,7 +1098,11 @@ NtQueryInformationJobObject(
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION Extended;
     JOBOBJECT_BASIC_UI_RESTRICTIONS Restrictions;
     JOBOBJECT_END_OF_JOB_TIME_INFORMATION EndOfJob;
+    JOBOBJECT_JOBSET_INFORMATION Set;
+    PJOBOBJECT_BASIC_PROCESS_ID_LIST List = NULL;
+    PVOID Source = NULL;
     ULONG Length = 0;
+    NTSTATUS CopyStatus;
     NTSTATUS Status;
     PEJOB Job;
 
@@ -1166,7 +1192,7 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            RtlCopyMemory(JobInformation, &BasicAndIo, Length);
+            Source = &BasicAndIo;
             Status = STATUS_SUCCESS;
             break;
 
@@ -1203,7 +1229,7 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            RtlCopyMemory(JobInformation, &Extended, Length);
+            Source = &Extended;
             Status = STATUS_SUCCESS;
             break;
 
@@ -1217,7 +1243,7 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            RtlCopyMemory(JobInformation, &Restrictions, Length);
+            Source = &Restrictions;
             Status = STATUS_SUCCESS;
             break;
 
@@ -1231,15 +1257,15 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            RtlCopyMemory(JobInformation, &EndOfJob, Length);
+            Source = &EndOfJob;
             Status = STATUS_SUCCESS;
             break;
 
         case JobObjectBasicProcessIdList:
         {
-            PJOBOBJECT_BASIC_PROCESS_ID_LIST List = JobInformation;
             PLIST_ENTRY Entry;
             ULONG Room;
+            ULONG Members = 0;
             ULONG Count = 0;
 
             if (JobInformationLength <
@@ -1253,6 +1279,26 @@ NtQueryInformationJobObject(
             Room = (JobInformationLength -
                     (ULONG)FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
                                         ProcessIdList)) / sizeof(ULONG_PTR);
+
+            for (Entry = Job->ProcessListHead.Flink;
+                 Entry != &Job->ProcessListHead;
+                 Entry = Entry->Flink)
+            {
+                Members++;
+            }
+
+            if (Room > Members) Room = Members;
+
+            List = ExAllocatePoolWithTag(PagedPool,
+                                         FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
+                                                      ProcessIdList) +
+                                             Room * sizeof(ULONG_PTR),
+                                         TAG_EJOB);
+            if (List == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
 
             for (Entry = Job->ProcessListHead.Flink;
                  Entry != &Job->ProcessListHead && Count < Room;
@@ -1273,6 +1319,7 @@ NtQueryInformationJobObject(
             Length = (ULONG)FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
                                          ProcessIdList) +
                      Count * (ULONG)sizeof(ULONG_PTR);
+            Source = List;
 
             /*
              * A caller with room for some of the processes is given those and
@@ -1286,8 +1333,6 @@ NtQueryInformationJobObject(
 
         case JobObjectJobSetInformation:
         {
-            JOBOBJECT_JOBSET_INFORMATION Set;
-
             Set.MemberLevel = Job->NestingDepth;
             Length = sizeof(Set);
 
@@ -1297,7 +1342,7 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            RtlCopyMemory(JobInformation, &Set, Length);
+            Source = &Set;
             Status = STATUS_SUCCESS;
             break;
         }
@@ -1330,6 +1375,15 @@ NtQueryInformationJobObject(
 
     ObDereferenceObject(Job);
 
+    /* The caller's buffer is written only after the job is let go, because writing it may fault */
+    if (!NT_ERROR(Status) && Source != NULL)
+    {
+        CopyStatus = PspCopyJobInformation(JobInformation, Source, Length);
+        if (!NT_SUCCESS(CopyStatus)) Status = CopyStatus;
+    }
+
+    if (List != NULL) ExFreePoolWithTag(List, TAG_EJOB);
+
     if (ReturnLength == NULL) return Status;
 
     if (PreviousMode != KernelMode)
@@ -1348,28 +1402,6 @@ NtQueryInformationJobObject(
     {
         *ReturnLength = Length;
     }
-
-    return Status;
-}
-
-static
-NTSTATUS
-PspCopyJobInformation(
-    _Out_writes_bytes_(Length) PVOID Destination,
-    _In_reads_bytes_(Length) PVOID JobInformation,
-    _In_ ULONG Length)
-{
-    NTSTATUS Status = STATUS_SUCCESS;
-
-    _SEH2_TRY
-    {
-        RtlCopyMemory(Destination, JobInformation, Length);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
 
     return Status;
 }
