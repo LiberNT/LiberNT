@@ -167,7 +167,8 @@ AfdSetInfo( PDEVICE_OBJECT DeviceObject, PIRP Irp,
                         UINT PreviousReportedSize = FCB->ReportedReceiveWindowSize;
 
                         FCB->Recv.Size = InfoReq->Information.Ulong;
-                        FCB->ReportedReceiveWindowSize = InfoReq->Information.Ulong;
+                        if (InfoReq->Information.Ulong > 0 && InfoReq->Information.Ulong < 0xFFFF)
+                            FCB->ReportedReceiveWindowSize = InfoReq->Information.Ulong;
                         Status = AfdRearmDatagram(FCB);
                         if (!NT_SUCCESS(Status))
                         {
