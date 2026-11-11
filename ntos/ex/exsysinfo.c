@@ -508,6 +508,8 @@ NTSTATUS NTAPI ExpQueryBootEnvironmentInformation(
     _Out_ PSYSTEM_BOOT_ENVIRONMENT_INFORMATION, _In_ ULONG);
 NTSTATUS NTAPI ExpQueryRegistryQuota(
     _Out_ PSYSTEM_REGISTRY_QUOTA_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryCpuSetInformation(_In_opt_ PVOID, _In_ ULONG,
+    _Out_opt_ PVOID, _In_ ULONG, _Out_opt_ PULONG, _In_ KPROCESSOR_MODE);
 
 NTSTATUS NTAPI ExpSetTimeAdjustment(
     _In_ PSYSTEM_SET_TIME_ADJUST_INFORMATION, _In_ ULONG);
@@ -1844,6 +1846,14 @@ NtQuerySystemInformationEx(
                                                            Length,
                                                            ResultLength,
                                                            PreviousMode);
+
+        case SystemCpuSetInformation:
+            return ExpQueryCpuSetInformation(InputBuffer,
+                                             InputBufferLength,
+                                             SystemInformation,
+                                             Length,
+                                             ResultLength,
+                                             PreviousMode);
 
         case SystemLogicalProcessorAndGroupInformation:
             return ExpQueryLogicalProcessorRelationship(InputBuffer,

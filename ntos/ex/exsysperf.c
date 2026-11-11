@@ -713,4 +713,179 @@ ExpQueryRegistryQuota(
     return STATUS_SUCCESS;
 }
 
+static
+UCHAR
+ExpProcessorNode(
+    _In_ ULONG Index)
+{
+    GROUP_AFFINITY Affinity;
+    USHORT HighestNode = KeQueryHighestNodeNumber();
+    USHORT Node;
+
+    for (Node = 0; Node <= HighestNode; Node++)
+    {
+        KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+        if (Affinity.Mask & AFFINITY_MASK(Index)) return (UCHAR)Node;
+    }
+
+    return 0;
+}
+
+static
+UCHAR
+ExpLastLevelCacheIndex(
+    _In_ ULONG Index,
+    _In_reads_(CacheCount) PKI_CACHE_RECORD Caches,
+    _In_ ULONG CacheCount)
+{
+    KAFFINITY Shared = AFFINITY_MASK(Index);
+    UCHAR Level = 0;
+    ULONG Record;
+    ULONG Lowest;
+
+    for (Record = 0; Record < CacheCount; Record++)
+    {
+        if ((Caches[Record].ProcessorSet & AFFINITY_MASK(Index)) &&
+            (Caches[Record].Descriptor.Level >= Level))
+        {
+            Level = Caches[Record].Descriptor.Level;
+            Shared = Caches[Record].ProcessorSet;
+        }
+    }
+
+    for (Lowest = 0; !(Shared & AFFINITY_MASK(Lowest)); Lowest++);
+
+    return (UCHAR)Lowest;
+}
+
+/* One set per logical processor, named 0x100 plus its index (Windows Internals 7th ed., Part 1, ch. 4) */
+NTSTATUS
+NTAPI
+ExpQueryCpuSetInformation(
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    PSYSTEM_CPU_SET_INFORMATION Records = SystemInformation;
+    PKI_CACHE_RECORD Caches;
+    PEPROCESS Process;
+    HANDLE ProcessHandle;
+    ULONG CacheCount = 0;
+    ULONG SetCount;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index;
+    ULONG Written = 0;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if ((InputBuffer == NULL) || (InputBufferLength != sizeof(HANDLE)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    _SEH2_TRY
+    {
+        ProcessHandle = *(PHANDLE)InputBuffer;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (ProcessHandle != NULL)
+    {
+        Status = ObReferenceObjectByHandle(ProcessHandle,
+                                           PROCESS_QUERY_LIMITED_INFORMATION,
+                                           PsProcessType,
+                                           PreviousMode,
+                                           (PVOID *)&Process,
+                                           NULL);
+        if (!NT_SUCCESS(Status))
+        {
+            return Status;
+        }
+
+        ObDereferenceObject(Process);
+    }
+
+    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    {
+        if (KeActiveProcessors & AFFINITY_MASK(Index)) Count++;
+    }
+
+    Needed = Count * (ULONG)sizeof(SYSTEM_CPU_SET_INFORMATION);
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            if (Length != 0) ProbeForWrite(SystemInformation, Length, sizeof(ULONG));
+            if (ResultLength != NULL) ProbeForWriteUlong(ResultLength);
+        }
+
+        if (Length < Needed)
+        {
+            if (ResultLength != NULL) *ResultLength = Needed;
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Caches = ExAllocatePoolWithTag(PagedPool, KI_MAX_CACHE_RECORDS * sizeof(KI_CACHE_RECORD), EXP_SYSPERF_TAG);
+    if (Caches != NULL)
+    {
+        KiQueryProcessorTopology(Caches, KI_MAX_CACHE_RECORDS, &CacheCount, NULL, 0, &SetCount);
+    }
+
+    _SEH2_TRY
+    {
+        for (Index = 0; (Index < (ULONG)KeNumberProcessors) && (Written < Count); Index++)
+        {
+            PSYSTEM_CPU_SET_INFORMATION Record = &Records[Written];
+            PKPRCB Prcb = KiProcessorBlock[Index];
+
+            if (!(KeActiveProcessors & AFFINITY_MASK(Index))) continue;
+
+            RtlZeroMemory(Record, sizeof(*Record));
+            Record->Size = sizeof(*Record);
+            Record->Type = CpuSetInformation;
+            Record->CpuSet.Id = 0x100 + Index;
+            Record->CpuSet.Group = 0;
+            Record->CpuSet.LogicalProcessorIndex = (UCHAR)Index;
+            Record->CpuSet.CoreIndex = (UCHAR)((Prcb->MultiThreadSetMaster != NULL) ?
+                                                Prcb->MultiThreadSetMaster->Number : Index);
+            Record->CpuSet.LastLevelCacheIndex =
+                ExpLastLevelCacheIndex(Index, Caches, (Caches != NULL) ? CacheCount : 0);
+            Record->CpuSet.NumaNodeIndex = ExpProcessorNode(Index);
+            Written++;
+        }
+
+        if (ResultLength != NULL) *ResultLength = Needed;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Caches != NULL) ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
+
+    return Status;
+}
+
 /* EOF */

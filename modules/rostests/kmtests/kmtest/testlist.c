@@ -33,6 +33,7 @@ KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoReadWrite;
+KMT_TESTFUNC Test_ExCpuSetInformation;
 KMT_TESTFUNC Test_ExHandleInformation;
 KMT_TESTFUNC Test_ExHandleListChurn;
 KMT_TESTFUNC Test_PsThreadCpuSets;
@@ -108,6 +109,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
     { "IoReadWrite",                  Test_IoReadWrite },
+    { "ExCpuSetInformation",          Test_ExCpuSetInformation },
     { "ExHandleInformation",          Test_ExHandleInformation },
     { "ExHandleListChurn",            Test_ExHandleListChurn },
     { "PsThreadCpuSets",              Test_PsThreadCpuSets },
