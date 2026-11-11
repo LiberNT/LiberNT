@@ -64,6 +64,7 @@ static BOOLEAN KdbpLeaveLoop = FALSE;
 
 /* Set once the init file has been run, so it only runs once */
 static BOOLEAN KdbpInitFileInterpreted = FALSE;
+static BOOLEAN KdbpInitFileRunning = FALSE;
 
 /* Whether a bug check was asked for at the prompt */
 
@@ -150,7 +151,7 @@ KdbpPager(
         KdbpLinesPrinted++;
 
         /* Only worth pausing while somebody is there to press a key */
-        if (!KdbActive || (KdbpLinesPrinted + 1 < Rows))
+        if (!KdbActive || KdbpInitFileRunning || (KdbpLinesPrinted + 1 < Rows))
             continue;
 
         KdpScreenHoldOutput(FALSE);
@@ -2241,6 +2242,7 @@ KdbpCliInterpretInitFile(VOID)
         return;
 
     KdbpInitFileInterpreted = TRUE;
+    KdbpInitFileRunning = TRUE;
 
     while (*Current != ANSI_NULL)
     {
@@ -2259,8 +2261,10 @@ KdbpCliInterpretInitFile(VOID)
         KdbpPagerReset();
         KdbpPrint("kdb:> %s\n", Line);
         if (KdbpCliInterpretCommand(Line))
-            return;
+            break;
     }
+
+    KdbpInitFileRunning = FALSE;
 }
 
 static
