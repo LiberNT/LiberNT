@@ -1,3 +1,4 @@
+add_subdirectory(lntuas)
 add_subdirectory(lntuvc)
 add_subdirectory(usbccgp)
 add_subdirectory(usbd)
