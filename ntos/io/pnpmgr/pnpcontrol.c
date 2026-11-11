@@ -432,7 +432,11 @@ PiControlDeregisterDevice(
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
     /* A removed root device that is uninstalled is no device any more: its node leaves the tree */
-    if (Forget && PnpRootForgetDevice(DeviceObject)) IopFreeDeviceNode(DeviceNode);
+    if (Forget && PnpRootForgetDevice(DeviceObject))
+    {
+        PiSetDevNodeFlag(DeviceNode, DNF_DEVICE_GONE);
+        PiPerformSyncDeviceAction(DeviceObject, PiActionRemoveDevice);
+    }
 
     ObDereferenceObject(DeviceObject);
     return Status;

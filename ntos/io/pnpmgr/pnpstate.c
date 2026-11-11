@@ -1561,13 +1561,33 @@ PiRunDeviceAction(
             }
 
             case PiActionQueryRemoveDevice:
-                Status = PiQueryRemoveDevice(Request->DeviceObject,
-                                             &RemoveData);
+                /* A stack that is removed already is asked nothing more */
+                if (DeviceNode->State == DeviceNodeRemoved || PiIsPendingCloses(DeviceNode))
+                {
+                    RtlZeroMemory(&RemoveData, sizeof(RemoveData));
+                    Status = STATUS_SUCCESS;
+                }
+                else
+                {
+                    Status = PiQueryRemoveDevice(Request->DeviceObject,
+                                                 &RemoveData);
+                }
                 if (Request->RemoveData != NULL)
                     *Request->RemoveData = RemoveData;
                 break;
 
             case PiActionRemoveDevice:
+                /* A removed stack gets no second remove request; a removed node that is gone leaves the tree */
+                if (DeviceNode->State == DeviceNodeRemoved || PiIsPendingCloses(DeviceNode))
+                {
+                    if (DeviceNode->State == DeviceNodeRemoved && (DeviceNode->Flags & DNF_DEVICE_GONE) &&
+                        DeviceNode->Child == NULL)
+                    {
+                        PiDeleteDevNode(DeviceNode);
+                    }
+                    break;
+                }
+
                 PiSetDevNodeState(DeviceNode,
                                   DeviceNodeAwaitingQueuedRemoval);
                 PiDevNodeStateMachine(DeviceNode);

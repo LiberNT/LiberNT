@@ -38,6 +38,8 @@ static ULONG RelationsQueried;
 static ULONG BusStateQueried;
 static BOOLEAN FailRequested;
 static ULONG ChildFdoRemoves;
+static ULONG ChildPdoRemoves;
+static ULONG ChildPdoQueryRemoves;
 static ULONG BusFdoRemoves;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
@@ -419,6 +421,7 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_REMOVE_DEVICE:
+            Record(L"ChildPdoRemoves", ++ChildPdoRemoves);
             Extension->Removed = TRUE;
             Complete(Irp, STATUS_SUCCESS);
             if (Extension->Missing)
@@ -451,6 +454,10 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_QUERY_REMOVE_DEVICE:
+            Record(L"ChildPdoQueryRemoves", ++ChildPdoQueryRemoves);
+            Status = STATUS_SUCCESS;
+            break;
+
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:

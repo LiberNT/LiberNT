@@ -25,7 +25,8 @@ static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestF
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus",
-                                 L"HideChild", L"ChildSurprised", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves" };
+                                 L"HideChild", L"ChildSurprised", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
+                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -309,6 +310,34 @@ static VOID CheckReplug(DEVINST Bus)
     ok(ChildStarted(Bus, 0), "The child plugged in again stopped when the old stack went\n");
 }
 
+/* Removing a child that is removed already asks its stack nothing and sends it no second remove request; set up
+ * again, it starts */
+static VOID CheckRemoveTwice(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DWORD Removes = 0, Queries = 0, Value = 0;
+    DEVINST Child;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to remove\n");
+        return;
+    }
+
+    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+                (ULONG)CR_SUCCESS);
+    ok(ReadValue(L"ChildPdoRemoves", &Removes), "The child got no remove request\n");
+    ok(ReadValue(L"ChildPdoQueryRemoves", &Queries), "The child was not asked whether it can be removed\n");
+
+    CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK);
+    ok(ReadValue(L"ChildPdoRemoves", &Value) && Value == Removes, "The removed child got a second remove request\n");
+    ok(ReadValue(L"ChildPdoQueryRemoves", &Value) && Value == Queries, "The removed child was asked again\n");
+
+    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The removed child did not start again\n");
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -413,6 +442,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckSurpriseRemoval(Device->DevInst);
         CheckReinstall(Device->DevInst, InfPath);
         CheckReplug(Device->DevInst);
+        CheckRemoveTwice(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }
