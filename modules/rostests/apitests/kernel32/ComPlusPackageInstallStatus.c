@@ -18,7 +18,8 @@ START_TEST(ComPlusPackageInstallStatus)
     HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
     PFN_GET_COMPLUS_STATUS pGetComPlusPackageInstallStatus;
     PFN_SET_COMPLUS_STATUS pSetComPlusPackageInstallStatus;
-    ULONG Status, Shared;
+    ULONG Status, Shared, Queried, ReturnLength;
+    NTSTATUS NtStatus;
     BOOL Ret;
 
     pGetComPlusPackageInstallStatus = (PFN_GET_COMPLUS_STATUS)GetProcAddress(Kernel32, "GetComPlusPackageInstallStatus");
@@ -49,8 +50,23 @@ START_TEST(ComPlusPackageInstallStatus)
 
     SetLastError(0xdeadbeef);
     Ret = pSetComPlusPackageInstallStatus(Status);
-    trace("SetComPlusPackageInstallStatus(%lu) returned %d, error %lu\n", Status, Ret, GetLastError());
-    if (Ret)
-        ok_long(pGetComPlusPackageInstallStatus(), Status);
+    ok_int(Ret, TRUE);
+    ok_long(GetLastError(), 0xdeadbeef);
+    ok_long(pGetComPlusPackageInstallStatus(), Status);
+
+    Ret = pSetComPlusPackageInstallStatus(!Status);
+    ok_int(Ret, TRUE);
+    ok_long(pGetComPlusPackageInstallStatus(), !Status);
+    ok_long(*(volatile ULONG *)(ULONG_PTR)(USER_SHARED_DATA_ADDRESS + USER_SHARED_DATA_COMPLUS_PACKAGE), !Status);
+
+    Queried = 0xdeadbeef;
+    ReturnLength = 0;
+    NtStatus = NtQuerySystemInformation(SystemComPlusPackage, &Queried, sizeof(Queried), &ReturnLength);
+    ok_hex(NtStatus, STATUS_SUCCESS);
+    ok_long(Queried, !Status);
+    ok_long(ReturnLength, sizeof(Queried));
+
+    Ret = pSetComPlusPackageInstallStatus(Status);
+    ok_int(Ret, TRUE);
     ok_long(pGetComPlusPackageInstallStatus(), Shared);
 }

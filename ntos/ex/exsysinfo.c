@@ -1047,6 +1047,19 @@ NtQuerySystemInformation(
                 break;
             }
 
+            case SystemComPlusPackage:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation = ReadNoFence((const volatile LONG *)&SharedUserData->ComPlusPackage);
+                break;
+            }
+
             case SystemRangeStartInformation:
             {
                 ResultLength = sizeof(ULONG_PTR);
@@ -2151,6 +2164,24 @@ NtSetSystemInformation(
             }
 
             case SystemComPlusPackage:
+            {
+                if (Length != sizeof(ULONG))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                InterlockedExchange((PLONG)&MmWriteableSharedUserData->ComPlusPackage,
+                                    *(volatile LONG *)SystemInformation);
+                break;
+            }
+
             case SystemAitSamplingValue:
             case SystemRegistryAppendString:
             case SystemWatchdogTimerHandler:
