@@ -27,6 +27,7 @@ extern void func_wcstoul(void);
 extern void func_wcstombs(void);
 
 extern void func_ApiSetMap(void);
+extern void func_DbgCommandString(void);
 extern void func_DebugRegisters(void);
 extern void func_DllLoadNotification(void);
 extern void func_FileStatInformation(void);
@@ -254,6 +255,7 @@ const struct test winetest_testlist[] =
     { "wcstoul", func_wcstoul },
     { "wcstombs", func_wcstombs },
 
+    { "DbgCommandString",               func_DbgCommandString },
     { "DebugRegisters",                 func_DebugRegisters },
     { "DllLoadNotification",            func_DllLoadNotification },
     { "FileStatInformation",            func_FileStatInformation },

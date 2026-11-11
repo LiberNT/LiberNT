@@ -56,6 +56,7 @@ set(ALPC_SOURCE
 list(APPEND SOURCE
     ApiSetMap.c
     DllLoadNotification.c
+    DbgCommandString.c
     DebugRegisters.c
     FileStatInformation.c
     arm64_chpe.c

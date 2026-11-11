@@ -885,19 +885,41 @@ KdpCommandString(
     _In_ PKTRAP_FRAME TrapFrame,
     _In_ PKEXCEPTION_FRAME ExceptionFrame)
 {
+    STRING CapturedName = { 0, 0, NULL };
+    STRING CapturedCommand = { 0, 0, NULL };
+    BOOLEAN Readable = TRUE;
     BOOLEAN Entered;
 
     if (!KdDebuggerEnabled || KdDebuggerNotPresent)
         return;
 
+    /* A caller in user mode hands over pointers that are only trusted once captured, bytes included */
     if (PreviousMode != KernelMode)
     {
-        BOOLEAN Readable = TRUE;
-
         _SEH2_TRY
         {
-            ProbeForRead(NameString->Buffer, NameString->Length, sizeof(CHAR));
-            ProbeForRead(CommandString->Buffer, CommandString->Length, sizeof(CHAR));
+            if (NameString != NULL)
+            {
+                ProbeForRead(NameString, sizeof(*NameString), sizeof(UCHAR));
+                CapturedName = *NameString;
+            }
+            if (CommandString != NULL)
+            {
+                ProbeForRead(CommandString, sizeof(*CommandString), sizeof(UCHAR));
+                CapturedCommand = *CommandString;
+            }
+
+            if ((ULONG)CapturedName.Length + CapturedCommand.Length > sizeof(KdpPathBuffer))
+            {
+                Readable = FALSE;
+            }
+            else
+            {
+                ProbeForRead(CapturedName.Buffer, CapturedName.Length, sizeof(CHAR));
+                ProbeForRead(CapturedCommand.Buffer, CapturedCommand.Length, sizeof(CHAR));
+                RtlCopyMemory(KdpPathBuffer, CapturedName.Buffer, CapturedName.Length);
+                RtlCopyMemory(KdpPathBuffer + CapturedName.Length, CapturedCommand.Buffer, CapturedCommand.Length);
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -907,6 +929,13 @@ KdpCommandString(
 
         if (!Readable)
             return;
+
+        CapturedName.Buffer = KdpPathBuffer;
+        CapturedName.MaximumLength = CapturedName.Length;
+        CapturedCommand.Buffer = KdpPathBuffer + CapturedName.Length;
+        CapturedCommand.MaximumLength = CapturedCommand.Length;
+        NameString = (NameString != NULL) ? &CapturedName : NULL;
+        CommandString = (CommandString != NULL) ? &CapturedCommand : NULL;
     }
 
     Entered = KdEnterDebugger(TrapFrame, ExceptionFrame);

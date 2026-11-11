@@ -44,6 +44,7 @@ static const CATEGORY_RULE Rules[] =
     { "ntdll_apitest", "StackOverflow", "core:exceptions" },
     { "ntdll_apitest", "NtContinue", "core:exceptions" },
     { "ntdll_apitest", "setjmp", "core:exceptions" },
+    { "ntdll_apitest", "DbgCommandString", "core:exceptions" },
     { "ntdll_apitest", "DebugRegisters", "core:exceptions" },
     { "ntdll_apitest", "wow64_startup", "core:wow64" },
     { "ntdll_apitest", "wow64_native_process", "core:wow64" },
