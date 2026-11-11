@@ -31,6 +31,9 @@
 
 #include "wine/debug.h"
 
+#define DOM_E_TYPE_MISMATCH  0x80700011
+#define DOM_E_QUOTA_EXCEEDED 0x80700016
+
 WINE_DEFAULT_DEBUG_CHANNEL(jscript);
 
 typedef struct {
@@ -1422,17 +1425,13 @@ HRESULT typed_array_get_random_values(jsdisp_t *obj)
     if(!obj || obj->builtin_info->class < FIRST_TYPEDARRAY_JSCLASS || obj->builtin_info->class > LAST_TYPEDARRAY_JSCLASS)
         return E_INVALIDARG;
 
-    if(obj->builtin_info->class == JSCLASS_FLOAT32ARRAY || obj->builtin_info->class == JSCLASS_FLOAT64ARRAY) {
-        /* FIXME: Return TypeMismatchError */
-        return E_FAIL;
-    }
+    if(obj->builtin_info->class == JSCLASS_FLOAT32ARRAY || obj->builtin_info->class == JSCLASS_FLOAT64ARRAY)
+        return DOM_E_TYPE_MISMATCH;
 
     typedarr = typedarr_from_jsdisp(obj);
     size = typedarr->length * typed_array_descs[obj->builtin_info->class - FIRST_TYPEDARRAY_JSCLASS].size;
-    if(size > 65536) {
-        /* FIXME: Return QuotaExceededError */
-        return E_FAIL;
-    }
+    if(size > 65536)
+        return DOM_E_QUOTA_EXCEEDED;
 
     if(!RtlGenRandom(&typedarr->buffer->buf[typedarr->offset], size))
         return HRESULT_FROM_WIN32(GetLastError());
