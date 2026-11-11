@@ -477,7 +477,7 @@ GetComputerNameW(LPWSTR lpBuffer, LPDWORD lpnSize)
 
 static
 BOOL
-BaseVerifyDnsName(LPCWSTR lpDnsName)
+BaseVerifyDnsName(LPCWSTR lpDnsName, DNS_NAME_FORMAT Format)
 {
     HINSTANCE hDNSAPI;
     FN_DnsValidateName_W fnValidate;
@@ -491,7 +491,7 @@ BaseVerifyDnsName(LPCWSTR lpDnsName)
     fnValidate = (FN_DnsValidateName_W)GetProcAddress(hDNSAPI, "DnsValidateName_W");
     if (fnValidate)
     {
-        Status = (*fnValidate)(lpDnsName, DnsNameHostnameLabel);
+        Status = (*fnValidate)(lpDnsName, Format);
         if (Status == STATUS_SUCCESS || Status == DNS_ERROR_NON_RFC_NAME)
             ret = TRUE;
     }
@@ -549,11 +549,11 @@ IsValidComputerName(COMPUTER_NAME_FORMAT NameType,
         case ComputerNamePhysicalDnsDomain:
             /* An empty DNS name is valid */
             if (Length != 0)
-                return BaseVerifyDnsName(lpComputerName);
+                return BaseVerifyDnsName(lpComputerName, DnsNameDomain);
             return TRUE;
 
         case ComputerNamePhysicalDnsHostname:
-            return BaseVerifyDnsName(lpComputerName);
+            return BaseVerifyDnsName(lpComputerName, DnsNameHostnameLabel);
 
         default:
             return FALSE;
