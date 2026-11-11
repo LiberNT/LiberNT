@@ -9,6 +9,59 @@
 
 #define ntv6(x) (LOBYTE(LOWORD(GetVersion())) >= 6 ? (x) : 0)
 
+typedef struct _TEST_FILE_ALL_INFORMATION
+{
+    FILE_BASIC_INFORMATION BasicInformation;
+    FILE_STANDARD_INFORMATION StandardInformation;
+    FILE_INTERNAL_INFORMATION InternalInformation;
+    FILE_EA_INFORMATION EaInformation;
+    FILE_ACCESS_INFORMATION AccessInformation;
+    FILE_POSITION_INFORMATION PositionInformation;
+    FILE_MODE_INFORMATION ModeInformation;
+    ULONG AlignmentRequirement;
+    FILE_NAME_INFORMATION NameInformation;
+} TEST_FILE_ALL_INFORMATION;
+
+static void TestAllInformationLength(HANDLE hFile)
+{
+    NTSTATUS Status;
+    IO_STATUS_BLOCK IoStatusBlock;
+    ULONG64 Storage[(sizeof(TEST_FILE_ALL_INFORMATION) + MAX_PATH * sizeof(WCHAR)) / sizeof(ULONG64)];
+
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    Storage,
+                                    sizeof(TEST_FILE_ALL_INFORMATION) - 1,
+                                    FileAllInformation);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    Status = NtQueryInformationFile(hFile,
+                                    &IoStatusBlock,
+                                    Storage,
+                                    sizeof(Storage),
+                                    FileAllInformation);
+    ok_hex(Status, STATUS_SUCCESS);
+}
+
+static HANDLE OpenFatVolumeRoot(void)
+{
+    WCHAR Drives[256], FileSystem[MAX_PATH];
+    LPWSTR Drive;
+
+    if (!GetLogicalDriveStringsW(ARRAYSIZE(Drives), Drives))
+        return INVALID_HANDLE_VALUE;
+    for (Drive = Drives; *Drive; Drive += wcslen(Drive) + 1)
+    {
+        if (GetDriveTypeW(Drive) != DRIVE_FIXED && GetDriveTypeW(Drive) != DRIVE_REMOVABLE)
+            continue;
+        if (!GetVolumeInformationW(Drive, NULL, 0, NULL, NULL, NULL, FileSystem, ARRAYSIZE(FileSystem)))
+            continue;
+        if (!wcsncmp(FileSystem, L"FAT", 3))
+            return CreateFileW(Drive, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                               OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    }
+    return INVALID_HANDLE_VALUE;
+}
+
 START_TEST(NtQueryInformationFile)
 {
     NTSTATUS Status;
@@ -73,5 +126,15 @@ START_TEST(NtQueryInformationFile)
                                     FileBasicInformation);
     ok_hex(Status, STATUS_SUCCESS);
 
+    TestAllInformationLength(hFile);
+    CloseHandle(hFile);
+
+    hFile = OpenFatVolumeRoot();
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        skip("No FAT volume\n");
+        return;
+    }
+    TestAllInformationLength(hFile);
     CloseHandle(hFile);
 }
