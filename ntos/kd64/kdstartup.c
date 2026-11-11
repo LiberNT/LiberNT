@@ -146,11 +146,6 @@ KdpInitializeStructures(VOID)
     KdpOweBreakpoint = FALSE;
     BreakpointsSuspended = FALSE;
 
-    KdPrintCircularBuffer = KdPrintDefaultCircularBuffer;
-    KdPrintWritePointer = KdPrintDefaultCircularBuffer;
-    KdPrintBufferSize = sizeof(KdPrintDefaultCircularBuffer);
-    KdPrintRolloverCount = 0;
-
     /* The host walks this list to find every data block the system publishes */
     InitializeListHead(&KdpDebuggerDataListHead);
     KdRegisterDebuggerDataBlock('GBDK',

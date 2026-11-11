@@ -8,6 +8,7 @@
 #include <kmt_test.h>
 
 #define LOG_TAIL_BYTES (256 * 1024)
+#define LOG_HEAD_BYTES 4096
 
 static
 NTSTATUS
@@ -86,7 +87,8 @@ LogContains(
     _In_ PUNICODE_STRING Name,
     _In_ PCSTR Marker,
     _Out_ PNTSTATUS OpenStatus,
-    _Out_ PBOOLEAN Stamped)
+    _Out_ PBOOLEAN Stamped,
+    _Out_ PULONG Count)
 {
     FILE_STANDARD_INFORMATION Standard;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -102,6 +104,7 @@ LogContains(
     InitializeObjectAttributes(&ObjectAttributes, Name,
                                OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
     *Stamped = FALSE;
+    *Count = 0;
     *OpenStatus = ZwOpenFile(&File, FILE_READ_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus,
                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                              FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
@@ -119,10 +122,13 @@ LogContains(
         if (NT_SUCCESS(Status))
         {
             Length = (ULONG)IoStatus.Information;
-            for (Index = 0; Index + MarkerLength <= Length && !Found; Index++)
+            for (Index = 0; Index + MarkerLength <= Length; Index++)
             {
-                Found = (RtlCompareMemory(Buffer + Index, Marker, MarkerLength) == MarkerLength);
-                if (Found) *Stamped = IsTimestampBefore(Buffer, Index);
+                if (RtlCompareMemory(Buffer + Index, Marker, MarkerLength) != MarkerLength)
+                    continue;
+                if (!Found) *Stamped = IsTimestampBefore(Buffer, Index);
+                Found = TRUE;
+                (*Count)++;
             }
         }
     }
@@ -132,6 +138,36 @@ LogContains(
     return Found;
 }
 
+static
+ULONG
+LogHeadNuls(
+    _In_ PUNICODE_STRING Name)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    UCHAR Buffer[LOG_HEAD_BYTES];
+    ULONG Nuls = MAXULONG, Index;
+    HANDLE File;
+
+    InitializeObjectAttributes(&ObjectAttributes, Name,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenFile(&File, FILE_READ_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+        return Nuls;
+
+    Offset.QuadPart = 0;
+    if (NT_SUCCESS(ZwReadFile(File, NULL, NULL, NULL, &IoStatus, Buffer, sizeof(Buffer), &Offset, NULL)))
+    {
+        for (Nuls = 0, Index = 0; Index < (ULONG)IoStatus.Information; Index++)
+            Nuls += (Buffer[Index] == 0);
+    }
+
+    ZwClose(File);
+    return Nuls;
+}
+
 START_TEST(KdBootLog)
 {
     UNICODE_STRING Name;
@@ -139,7 +175,7 @@ START_TEST(KdBootLog)
     CHAR Marker[64];
     NTSTATUS Status, OpenStatus = STATUS_UNSUCCESSFUL;
     BOOLEAN Found = FALSE, Stamped = FALSE;
-    ULONG Try;
+    ULONG Try, Count = 0;
 
     Status = GetBootLogName(&Name);
     ok_eq_hex(Status, STATUS_SUCCESS);
@@ -154,12 +190,14 @@ START_TEST(KdBootLog)
     for (Try = 0; Try < 20 && !Found; Try++)
     {
         KeDelayExecutionThread(KernelMode, FALSE, &Interval);
-        Found = LogContains(&Name, Marker, &OpenStatus, &Stamped);
+        Found = LogContains(&Name, Marker, &OpenStatus, &Stamped, &Count);
     }
 
     ok_eq_hex(OpenStatus, STATUS_SUCCESS);
     ok(Found, "%s did not reach %wZ\n", Marker, &Name);
     ok(Stamped, "%s is not preceded by the time since boot\n", Marker);
+    ok(Count == 1, "%s is in %wZ %lu times\n", Marker, &Name, Count);
+    ok_eq_ulong(LogHeadNuls(&Name), 0UL);
 
     ExFreePoolWithTag(Name.Buffer, 'LBmK');
 }

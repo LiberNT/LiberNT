@@ -113,8 +113,14 @@ KdbgSendPacket(
                 return;
             }
 
+            /* The engine has already logged a print, but not a prompt */
             if ((MessageData != NULL) && (MessageData->Buffer != NULL))
-                KdbPutsN(MessageData->Buffer, MessageData->Length);
+            {
+                if (DebugIo->ApiNumber == DbgKdPrintStringApi)
+                    KdbpCaptureOutput(MessageData->Buffer, MessageData->Length);
+                else
+                    KdbPutsN(MessageData->Buffer, MessageData->Length);
+            }
 
             return;
         }
