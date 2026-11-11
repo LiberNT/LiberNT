@@ -45,6 +45,7 @@ list(APPEND SOURCE
     devicetopology.idl
     dimm.idl
     directmanipulation.idl
+    dispatcherqueue.idl
     dispex.idl
     docobj.idl
     docobjectservice.idl

@@ -1,0 +1,16 @@
+/*
+ * PROJECT:     LiberNT Windows Runtime
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Runtime classes registered by coremessaging.dll
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#pragma makedep register
+#pragma winrt ns_prefix
+
+import "windows.system.idl";
+
+namespace Windows.System {
+    runtimeclass DispatcherQueue;
+    runtimeclass DispatcherQueueController;
+}
