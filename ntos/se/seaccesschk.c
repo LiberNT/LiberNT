@@ -25,6 +25,16 @@ typedef struct _SEP_CHECK_CONTEXT
     BOOLEAN CallerIsOwner;
 } SEP_CHECK_CONTEXT, *PSEP_CHECK_CONTEXT;
 
+/* What the condition of an entry comes to for the token being checked */
+typedef enum _SEP_CONDITION
+{
+    SepConditionFalse,
+    SepConditionTrue,
+    SepConditionUnknown
+} SEP_CONDITION;
+
+static const WCHAR SepProcUniqueName[] = L"TSA://ProcUnique";
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -132,6 +142,118 @@ SepDaclNamesOwnerRights(
     return FALSE;
 }
 
+/* Reads a count out of an expression without reading past its end */
+static
+BOOLEAN
+SepReadExpressionCount(
+    _Inout_ PUCHAR *Cursor,
+    _In_ PUCHAR End,
+    _Out_ PULONG Value)
+{
+    if ((SIZE_T)(End - *Cursor) < sizeof(ULONG)) return FALSE;
+
+    RtlCopyMemory(Value, *Cursor, sizeof(ULONG));
+    *Cursor += sizeof(ULONG);
+    return TRUE;
+}
+
+/*
+ * Settles the condition a process writes to keep its own objects to itself:
+ * that the token's TSA://ProcUnique attribute equals the two numbers given.
+ */
+/* TODO: conditional expressions other than TSA://ProcUnique equality come out unknown */
+static
+SEP_CONDITION
+SepEvaluateCondition(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PACE Ace)
+{
+    static const UCHAR Signature[] = {'a', 'r', 't', 'x'};
+    PISID Sid = (PISID)&((PKNOWN_ACE)Ace)->SidStart;
+    PUCHAR End = (PUCHAR)Ace + Ace->Header.AceSize;
+    PUCHAR Cursor = (PUCHAR)Sid;
+    PUCHAR Nested;
+    ULONG64 Values[2];
+    ULONG64 High;
+    ULONG64 Low;
+    ULONG Length;
+    ULONG Index;
+    WCHAR Character;
+
+    if (Context->Token == NULL) return SepConditionUnknown;
+
+    if ((SIZE_T)(End - Cursor) < RtlLengthRequiredSid(0)) return SepConditionUnknown;
+    Length = RtlLengthRequiredSid(Sid->SubAuthorityCount);
+    if ((SIZE_T)(End - Cursor) < Length) return SepConditionUnknown;
+    Cursor += Length;
+
+    if ((SIZE_T)(End - Cursor) < sizeof(Signature) ||
+        RtlCompareMemory(Cursor, Signature, sizeof(Signature)) != sizeof(Signature))
+    {
+        return SepConditionUnknown;
+    }
+    Cursor += sizeof(Signature);
+
+    /* A local attribute, named by its length in bytes */
+    if (Cursor >= End || *Cursor++ != 0xF8 ||
+        !SepReadExpressionCount(&Cursor, End, &Length) ||
+        Length != sizeof(SepProcUniqueName) - sizeof(WCHAR) ||
+        (SIZE_T)(End - Cursor) < Length)
+    {
+        return SepConditionUnknown;
+    }
+
+    for (Index = 0; Index < Length / sizeof(WCHAR); Index++)
+    {
+        RtlCopyMemory(&Character, Cursor + Index * sizeof(WCHAR), sizeof(WCHAR));
+        if (RtlUpcaseUnicodeChar(Character) != RtlUpcaseUnicodeChar(SepProcUniqueName[Index]))
+            return SepConditionUnknown;
+    }
+    Cursor += Length;
+
+    /* A composite of two signless decimal 64-bit numbers */
+    if (Cursor >= End || *Cursor++ != 0x50 ||
+        !SepReadExpressionCount(&Cursor, End, &Length) ||
+        (SIZE_T)(End - Cursor) < Length)
+    {
+        return SepConditionUnknown;
+    }
+    Nested = Cursor + Length;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Values); Index++)
+    {
+        if ((SIZE_T)(Nested - Cursor) < 3 + sizeof(ULONG64) ||
+            Cursor[0] != 0x04 ||
+            Cursor[1 + sizeof(ULONG64)] != 0x03 ||
+            Cursor[2 + sizeof(ULONG64)] != 0x02)
+        {
+            return SepConditionUnknown;
+        }
+
+        RtlCopyMemory(&Values[Index], Cursor + 1, sizeof(ULONG64));
+        Cursor += 3 + sizeof(ULONG64);
+    }
+
+    /* The equality operator, then only padding */
+    if (Cursor != Nested || Cursor >= End || *Cursor++ != 0x80) return SepConditionUnknown;
+
+    while (Cursor < End)
+    {
+        if (*Cursor++ != 0) return SepConditionUnknown;
+    }
+
+    if (Context->Token->ProcUnique.LowPart == 0 && Context->Token->ProcUnique.HighPart == 0)
+        return SepConditionFalse;
+
+    High = (ULONG)Context->Token->ProcUnique.HighPart;
+    Low = Context->Token->ProcUnique.LowPart;
+
+    if ((Values[0] == High && Values[1] == Low) || (Values[0] == Low && Values[1] == High))
+        return SepConditionTrue;
+
+    return SepConditionFalse;
+}
+
 /*
  * Walks a list once for one entry of the object type list. Entries are read in
  * order and the walk stops as soon as the answer can no longer change: a
@@ -171,7 +293,15 @@ SepWalkDacl(
         {
             case ACCESS_DENIED_ACE_TYPE:
             case ACCESS_DENIED_OBJECT_ACE_TYPE:
+            case ACCESS_DENIED_CALLBACK_ACE_TYPE:
                 if (!SepAceSidApplies(Context, Sid, TRUE)) break;
+
+                /* A refusal whose condition cannot be settled still refuses */
+                if (Ace->Header.AceType == ACCESS_DENIED_CALLBACK_ACE_TYPE &&
+                    SepEvaluateCondition(Context, Ace) == SepConditionFalse)
+                {
+                    break;
+                }
 
                 if (Context->MaximumAllowed)
                 {
@@ -198,7 +328,14 @@ SepWalkDacl(
 
             case ACCESS_ALLOWED_ACE_TYPE:
             case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+            case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
                 if (!SepAceSidApplies(Context, Sid, FALSE)) break;
+
+                if (Ace->Header.AceType == ACCESS_ALLOWED_CALLBACK_ACE_TYPE &&
+                    SepEvaluateCondition(Context, Ace) != SepConditionTrue)
+                {
+                    break;
+                }
 
                 if (Context->MaximumAllowed)
                 {

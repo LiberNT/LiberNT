@@ -648,6 +648,9 @@ SepCloneToken(
                               0,
                               NewToken);
 
+    /* A copy stands for the same process as the token it was made from */
+    if (NT_SUCCESS(Status)) (*NewToken)->ProcUnique = Token->ProcUnique;
+
     SepReleaseTokenLock(Token);
 
     ExFreePoolWithTag(Groups, TAG_SE);
@@ -1158,6 +1161,8 @@ SeFilterToken(
                               0,
                               (PTOKEN *)FilteredToken);
 
+    if (NT_SUCCESS(Status)) ((PTOKEN)*FilteredToken)->ProcUnique = Token->ProcUnique;
+
     SepReleaseTokenLock(Token);
 
     if (Groups != NULL) ExFreePoolWithTag(Groups, TAG_SE);
@@ -1340,6 +1345,9 @@ SepCopyPrimaryToken(
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* Every process is told apart from the one whose token it was given */
+    ExAllocateLocallyUniqueId(&New->ProcUnique);
+
     Status = SepSecureTokenWithItself(New);
     if (!NT_SUCCESS(Status))
     {
@@ -1392,6 +1400,7 @@ SeSubProcessToken(
 
     New->SessionId = SessionId;
     New->TokenInUse = InUse;
+    ExAllocateLocallyUniqueId(&New->ProcUnique);
 
     Status = SepSecureTokenWithItself(New);
     if (!NT_SUCCESS(Status))

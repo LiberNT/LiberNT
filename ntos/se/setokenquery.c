@@ -26,6 +26,30 @@ typedef struct _SEP_TOKEN_QUESTION
 
 #define SEP_VARIES 0
 
+/* The attribute form TokenSecurityAttributes answers with, names as counted strings */
+typedef struct _SEP_TOKEN_ATTRIBUTE
+{
+    UNICODE_STRING Name;
+    USHORT ValueType;
+    USHORT Reserved;
+    ULONG Flags;
+    ULONG ValueCount;
+    PULONG64 Values;
+} SEP_TOKEN_ATTRIBUTE, *PSEP_TOKEN_ATTRIBUTE;
+
+typedef struct _SEP_TOKEN_ATTRIBUTES
+{
+    USHORT Version;
+    USHORT Reserved;
+    ULONG AttributeCount;
+    PSEP_TOKEN_ATTRIBUTE Attributes;
+} SEP_TOKEN_ATTRIBUTES, *PSEP_TOKEN_ATTRIBUTES;
+
+#define SEP_TOKEN_ATTRIBUTES_VERSION 1
+#define SEP_ATTRIBUTE_COMPARE_IGNORE 0x0040
+
+static const WCHAR SepProcUniqueAttribute[] = L"TSA://ProcUnique";
+
 #define SEP_CURRENT_PROCESS_TOKEN          ((HANDLE)(LONG_PTR)-4)
 #define SEP_CURRENT_THREAD_TOKEN           ((HANDLE)(LONG_PTR)-5)
 #define SEP_CURRENT_THREAD_EFFECTIVE_TOKEN ((HANDLE)(LONG_PTR)-6)
@@ -65,6 +89,7 @@ static const SEP_TOKEN_QUESTION SepTokenQuestions[] =
     {TokenAppContainerSid, SEP_VARIES, TOKEN_QUERY, 0},
     {TokenAppContainerNumber, sizeof(ULONG), TOKEN_QUERY, 0},
     {TokenIsRestricted, sizeof(ULONG), TOKEN_QUERY, 0},
+    {TokenSecurityAttributes, SEP_VARIES, TOKEN_QUERY, 0},
     {TokenBnoIsolation, SEP_VARIES, TOKEN_QUERY, 0},
 };
 
@@ -629,6 +654,51 @@ SepAnswerAboutToken(
             PSEP_LOWBOX_INFO Box = Token->LowBoxInfo;
 
             *(PULONG)Buffer = (Box != NULL) ? Box->LowBoxNumber : 0;
+            break;
+        }
+
+        case TokenSecurityAttributes:
+        {
+            PSEP_TOKEN_ATTRIBUTES Answer = Buffer;
+            PSEP_TOKEN_ATTRIBUTE Attribute;
+            PUCHAR Name;
+            PULONG64 Values;
+            BOOLEAN Present = (Token->ProcUnique.LowPart != 0 || Token->ProcUnique.HighPart != 0);
+
+            /* TODO: a token carries no attributes beyond its TSA://ProcUnique */
+            Room = (ULONG)sizeof(*Answer);
+            if (Present)
+            {
+                Room = ALIGN_UP_BY(Room, sizeof(PVOID)) + (ULONG)sizeof(*Attribute) +
+                       (ULONG)sizeof(SepProcUniqueAttribute);
+                Room = ALIGN_UP_BY(Room, sizeof(ULONG64)) + 2 * (ULONG)sizeof(ULONG64);
+            }
+            *Needed = Room;
+
+            if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;
+
+            RtlZeroMemory(Buffer, Room);
+            Answer->Version = SEP_TOKEN_ATTRIBUTES_VERSION;
+            if (!Present) break;
+
+            Attribute = (PSEP_TOKEN_ATTRIBUTE)ALIGN_UP_POINTER_BY((PUCHAR)Buffer + sizeof(*Answer), sizeof(PVOID));
+            Name = (PUCHAR)(Attribute + 1);
+            Values = (PULONG64)ALIGN_UP_POINTER_BY(Name + sizeof(SepProcUniqueAttribute), sizeof(ULONG64));
+
+            RtlCopyMemory(Name, SepProcUniqueAttribute, sizeof(SepProcUniqueAttribute));
+            Values[0] = (ULONG)Token->ProcUnique.HighPart;
+            Values[1] = Token->ProcUnique.LowPart;
+
+            Attribute->Name.Length = (USHORT)(sizeof(SepProcUniqueAttribute) - sizeof(WCHAR));
+            Attribute->Name.MaximumLength = (USHORT)sizeof(SepProcUniqueAttribute);
+            Attribute->Name.Buffer = SepPlaced(Buffer, Placed, Name);
+            Attribute->ValueType = CLAIM_SECURITY_ATTRIBUTE_TYPE_UINT64;
+            Attribute->Flags = CLAIM_SECURITY_ATTRIBUTE_NON_INHERITABLE | SEP_ATTRIBUTE_COMPARE_IGNORE;
+            Attribute->ValueCount = 2;
+            Attribute->Values = SepPlaced(Buffer, Placed, Values);
+
+            Answer->AttributeCount = 1;
+            Answer->Attributes = SepPlaced(Buffer, Placed, Attribute);
             break;
         }
 
