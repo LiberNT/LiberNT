@@ -407,6 +407,72 @@ TestJobTimes(void)
     CloseHandle(Job);
 }
 
+static HANDLE
+ImpersonationWithPrivilege(PCWSTR Privilege, BOOL Enable)
+{
+    TOKEN_PRIVILEGES Privileges;
+    HANDLE Process = NULL, Token = NULL;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &Process)) return NULL;
+    if (!DuplicateTokenEx(Process, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation,
+                          TokenImpersonation, &Token))
+    {
+        CloseHandle(Process);
+        return NULL;
+    }
+    CloseHandle(Process);
+
+    Privileges.PrivilegeCount = 1;
+    Privileges.Privileges[0].Attributes = Enable ? SE_PRIVILEGE_ENABLED : 0;
+    if (!LookupPrivilegeValueW(NULL, Privilege, &Privileges.Privileges[0].Luid) ||
+        !AdjustTokenPrivileges(Token, FALSE, &Privileges, 0, NULL, NULL) ||
+        GetLastError() != ERROR_SUCCESS)
+    {
+        CloseHandle(Token);
+        return NULL;
+    }
+    return Token;
+}
+
+static DWORD
+SetSchedulingClass(HANDLE Job, HANDLE Token, DWORD SchedulingClass)
+{
+    JOBOBJECT_BASIC_LIMIT_INFORMATION Limits;
+    DWORD Error = ERROR_SUCCESS;
+
+    ZeroMemory(&Limits, sizeof(Limits));
+    Limits.LimitFlags = JOB_OBJECT_LIMIT_SCHEDULING_CLASS;
+    Limits.SchedulingClass = SchedulingClass;
+
+    if (!SetThreadToken(NULL, Token)) return GetLastError();
+    if (!SetInformationJobObject(Job, JobObjectBasicLimitInformation, &Limits, sizeof(Limits)))
+        Error = GetLastError();
+    RevertToSelf();
+    return Error;
+}
+
+static void
+TestSchedulingClassPrivilege(void)
+{
+    HANDLE Job, Without, With;
+
+    Job = CreateJobObjectW(NULL, NULL);
+    Without = ImpersonationWithPrivilege(L"SeIncreaseBasePriorityPrivilege", FALSE);
+    With = ImpersonationWithPrivilege(L"SeIncreaseBasePriorityPrivilege", TRUE);
+    ok(Job && Without && With, "setup failed %lu\n", GetLastError());
+
+    if (Job && Without && With)
+    {
+        ok_long(SetSchedulingClass(Job, Without, 5), ERROR_SUCCESS);
+        ok_long(SetSchedulingClass(Job, Without, 6), ERROR_PRIVILEGE_NOT_HELD);
+        ok_long(SetSchedulingClass(Job, With, 9), ERROR_SUCCESS);
+    }
+
+    if (With) CloseHandle(With);
+    if (Without) CloseHandle(Without);
+    if (Job) CloseHandle(Job);
+}
+
 static void
 TestUiRestrictionChain(void)
 {
@@ -447,4 +513,5 @@ START_TEST(JobLifecycle)
     TestEndOfJobTime();
     TestUiRestrictionChain();
     TestJobTimes();
+    TestSchedulingClassPrivilege();
 }

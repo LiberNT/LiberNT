@@ -1945,6 +1945,17 @@ NtSetInformationJobObject(
                 break;
             }
 
+            if ((Extended.BasicLimitInformation.LimitFlags &
+                 JOB_OBJECT_LIMIT_SCHEDULING_CLASS) != 0 &&
+                Extended.BasicLimitInformation.SchedulingClass >
+                    PSP_JOB_SCHEDULING_CLASS_DEFAULT &&
+                !SeSinglePrivilegeCheck(SeIncreaseBasePriorityPrivilege,
+                                        PreviousMode))
+            {
+                Status = STATUS_PRIVILEGE_NOT_HELD;
+                break;
+            }
+
             KeEnterCriticalRegion();
             ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
             ExAcquirePushLockExclusive(&Job->MemoryLimitsLock);
