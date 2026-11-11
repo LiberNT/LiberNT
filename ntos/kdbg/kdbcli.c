@@ -46,6 +46,7 @@ volatile PCHAR KdbInitFileBuffer = NULL;
 #define KDB_LOG_CHUNK           512
 #define KDB_MAXIMUM_FLOATING_REGISTER 16
 #define KDB_MAXIMUM_THREADS     65536
+#define KDB_MAXIMUM_COMMAND_DEPTH 16
 
 typedef BOOLEAN (*PKDB_COMMAND_ROUTINE)(ULONG Argc, PCHAR Argv[]);
 
@@ -76,7 +77,9 @@ static PVOID KdbpCliCallbacks[KDB_CALLBACK_MAX];
 static ULONG_PTR KdbpLastDumpAddress = 0;
 static ULONG_PTR KdbpLastDisassembleAddress = 0;
 
-static CHAR KdbpCommandBuffer[KDB_COMMAND_MAX];
+static CHAR KdbpCommandBuffers[KDB_MAXIMUM_COMMAND_DEPTH][KDB_COMMAND_MAX];
+static CHAR KdbpAliasBuffers[KDB_MAXIMUM_COMMAND_DEPTH][KDB_COMMAND_MAX];
+static ULONG KdbpCommandDepth;
 static CHAR KdbpPrintBuffer[1024];
 
 static PKDB_KTRAP_FRAME KdbpViewContext;
@@ -192,6 +195,7 @@ KdbpCaptureOutput(
     if (KdbpOutputAborted)
         return;
 
+    KdbpTranscriptAppend(String, Length);
     KdbpPager((PCHAR)String, Length);
 }
 
@@ -2388,6 +2392,14 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!devnode", "!devnode [address]", "Shows a device node and its resources, or the root one", KdbpCmdDeviceNode},
     {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
     {"dt", "dt [[module!]type [address]]", "Shows the layout of a kernel type, or one at an address", KdbpCmdDisplayType},
+    {"version", "version", "Shows the versions of the system and of the debugger", KdbpCmdVersion},
+    {"echo", "echo [text]", "Prints a line of text", KdbpCmdEcho},
+    {"alias", "alias [name [command]]", "Lists the aliases, shows one, or makes a name stand for a command", KdbpCmdAlias},
+    {"unalias", "unalias <name>", "Forgets an alias", KdbpCmdUnalias},
+    {"log", "log [on|off|clear|show]", "Keeps or shows a transcript of the debugger's output", KdbpCmdTranscript},
+    {"script", "script <address> <length>", "Runs the commands written in memory, one per line", KdbpCmdScript},
+    {"repeat", "repeat <count> <command>", "Runs a command several times", KdbpCmdRepeat},
+    {"selftest", "selftest", "Checks the debugger's parsers, guarded reads and tables", KdbpCmdSelfTest},
     {"filter", "filter <comp> <level> <on|off>", "Decides what is printed", KdbpCmdFilter},
     {"cond", "cond <nr|*> <first|last> <what>", "Decides what to stop for", KdbpCmdCondition},
     {"bugcheck", "bugcheck", "Crashes the machine on purpose", KdbpCmdBugCheck},
@@ -2473,12 +2485,57 @@ KdbpSplitCommand(
     return Argc;
 }
 
-/*
- * Runs one command line. Returns TRUE when the machine is to run again.
- */
 BOOLEAN
-KdbpCliInterpretCommand(
-    _In_ PCHAR Command)
+KdbpIsCommandName(
+    _In_ PCSTR Name)
+{
+    ULONG Index;
+
+    for (Index = 0; KdbpCommands[Index].Name != NULL; Index++)
+    {
+        if (_stricmp(KdbpCommands[Index].Name, Name) == 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+ULONG
+KdbpCheckCommandTable(VOID)
+{
+    ULONG Failures = 0;
+    ULONG Index;
+    ULONG Other;
+
+    for (Index = 0; KdbpCommands[Index].Name != NULL; Index++)
+    {
+        if ((KdbpCommands[Index].Syntax == NULL) ||
+            (KdbpCommands[Index].Help == NULL) ||
+            (KdbpCommands[Index].Routine == NULL))
+        {
+            KdbpPrint("selftest: the command %s is incomplete\n", KdbpCommands[Index].Name);
+            Failures++;
+        }
+
+        for (Other = Index + 1; KdbpCommands[Other].Name != NULL; Other++)
+        {
+            if (_stricmp(KdbpCommands[Index].Name, KdbpCommands[Other].Name) == 0)
+            {
+                KdbpPrint("selftest: the command %s is listed twice\n", KdbpCommands[Index].Name);
+                Failures++;
+            }
+        }
+    }
+
+    return Failures;
+}
+
+static
+BOOLEAN
+KdbpRunCommand(
+    _In_ PCHAR Command,
+    _Inout_updates_(KDB_COMMAND_MAX) PCHAR Buffer,
+    _Inout_updates_(KDB_COMMAND_MAX) PCHAR Expanded)
 {
     PCHAR Argv[KDB_ARGUMENT_MAX];
     ULONG Argc;
@@ -2487,12 +2544,15 @@ KdbpCliInterpretCommand(
     KdbpLeaveLoop = FALSE;
 
     /* The line is taken apart in a copy, since the words point into it */
-    strncpy(KdbpCommandBuffer, Command, sizeof(KdbpCommandBuffer) - 1);
-    KdbpCommandBuffer[sizeof(KdbpCommandBuffer) - 1] = ANSI_NULL;
+    strncpy(Buffer, Command, KDB_COMMAND_MAX - 1);
+    Buffer[KDB_COMMAND_MAX - 1] = ANSI_NULL;
 
-    Argc = KdbpSplitCommand(KdbpCommandBuffer, Argv);
+    Argc = KdbpSplitCommand(Buffer, Argv);
     if (Argc == 0)
         return FALSE;
+
+    if (KdbpExpandAlias(Argc, Argv, Expanded, KDB_COMMAND_MAX))
+        return (Expanded[0] != ANSI_NULL) && KdbpCliInterpretCommand(Expanded);
 
     for (Index = 0; KdbpCommands[Index].Name != NULL; Index++)
     {
@@ -2521,6 +2581,33 @@ KdbpCliInterpretCommand(
               "Type help for what can.\n", Argv[0]);
 
     return FALSE;
+}
+
+/*
+ * Runs one command line. Returns TRUE when the machine is to run again.
+ */
+BOOLEAN
+KdbpCliInterpretCommand(
+    _In_ PCHAR Command)
+{
+    BOOLEAN Leave;
+
+    if (KdbpCommandDepth >= KDB_MAXIMUM_COMMAND_DEPTH)
+    {
+        KdbpPrint("Commands that run commands go no deeper than %u\n", KDB_MAXIMUM_COMMAND_DEPTH);
+        return FALSE;
+    }
+
+    if (!KdbpInitFileRunning || (KdbpCommandDepth != 0))
+        KdbpTranscriptCommand(Command);
+
+    KdbpCommandDepth++;
+    Leave = KdbpRunCommand(Command,
+                           KdbpCommandBuffers[KdbpCommandDepth - 1],
+                           KdbpAliasBuffers[KdbpCommandDepth - 1]);
+    KdbpCommandDepth--;
+
+    return Leave;
 }
 
 /*

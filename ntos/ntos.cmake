@@ -627,6 +627,7 @@ endif()
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbpci.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbpnp.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsched.c
+    ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbscript.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbshim.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbsymbols.c
     ${REACTOS_SOURCE_DIR}/ntos/kdbg/kdbtypes.c

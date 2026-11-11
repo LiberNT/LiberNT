@@ -121,6 +121,20 @@ KdbpCmdPci(
 BOOLEAN KdbpCmdDeviceTree(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdDeviceNode(ULONG Argc, PCHAR Argv[]);
 
+/* kdbscript.c */
+
+VOID KdbpTranscriptAppend(_In_reads_(Length) PCCH String, _In_ ULONG Length);
+VOID KdbpTranscriptCommand(_In_ PCSTR Command);
+BOOLEAN KdbpExpandAlias(_In_ ULONG Argc, _In_ PCHAR Argv[], _Out_writes_(Length) PCHAR Buffer, _In_ ULONG Length);
+BOOLEAN KdbpCmdVersion(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdEcho(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdAlias(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdUnalias(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdTranscript(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdScript(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdRepeat(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdSelfTest(ULONG Argc, PCHAR Argv[]);
+
 /* kdbtypes.c */
 
 BOOLEAN KdbpCmdDisplayType(ULONG Argc, PCHAR Argv[]);
@@ -157,6 +171,13 @@ KdbpPagerReset(VOID);
 BOOLEAN
 KdbpCliInterpretCommand(
     _In_ PCHAR Command);
+
+BOOLEAN
+KdbpIsCommandName(
+    _In_ PCSTR Name);
+
+ULONG
+KdbpCheckCommandTable(VOID);
 
 /* kdbcore.c */
 

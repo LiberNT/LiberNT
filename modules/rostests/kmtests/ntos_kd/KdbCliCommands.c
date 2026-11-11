@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Stops in the debugger with a waiting thread to look at
+ * PURPOSE:     Stops in the debugger with a waiting thread and a script in memory to look at
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -9,6 +9,8 @@
 
 ULONG_PTR KdbTestWaiterId;
 PVOID KdbTestWaiterThread;
+CHAR KdbTestScript[] = "echo first line of the script\r\n# a remark\r\n\r\necho last line of the script";
+ULONG_PTR KdbTestScriptLength = sizeof(KdbTestScript) - 1;
 
 static KEVENT KdbTestWakeEvent;
 
@@ -43,7 +45,7 @@ START_TEST(KdbCliCommands)
     KdbTestWaiterId = (ULONG_PTR)PsGetThreadId((PETHREAD)Waiter);
     trace("Waiting thread %p, id %Ix\n", KdbTestWaiterThread, KdbTestWaiterId);
 
-    /* The debugger's start-up file looks at the waiting thread here */
+    /* The debugger's start-up file looks at the waiting thread and runs the script here */
     DbgBreakPoint();
 
     KeSetEvent(&KdbTestWakeEvent, IO_NO_INCREMENT, FALSE);
