@@ -1138,6 +1138,8 @@ Phase1InitializationDiscard(
 
     KiExpandInitialProcessAffinities();
 
+    KiInitializeProcessorEfficiency();
+
     /*
      * The namespace comes before anything that names what it makes, which is
      * everything below: a name is looked up from the root, and until this

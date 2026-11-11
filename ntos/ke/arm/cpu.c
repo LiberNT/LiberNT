@@ -236,3 +236,12 @@ KiQueryProcessorDomains(
 {
     RtlZeroMemory(Domains, sizeof(*Domains));
 }
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+}

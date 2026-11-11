@@ -158,6 +158,8 @@ extern PKPRCB KiProcessorBlock[];
 #ifdef KI_CORE_PARKING
 extern KSCHEDULER_SUBNODE KiNode0SubNode;
 #endif
+extern KAFFINITY KiHeteroEfficientSet;
+extern KAFFINITY KiHeteroPerformanceSet;
 #ifndef KI_MAX_NUMA_NODES
 #define KI_MAX_NUMA_NODES 1
 #endif
@@ -183,6 +185,37 @@ BOOLEAN
 FASTCALL
 KiIsProcessorParked(
     _In_ PKPRCB Prcb);
+
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses);
+
+VOID
+NTAPI
+KiInitializeProcessorEfficiency(VOID);
+
+BOOLEAN
+FASTCALL
+KiThreadPrefersEfficiency(
+    _In_ PKTHREAD Thread);
+
+KAFFINITY
+FASTCALL
+KiHeteroPreferredProcessorSet(
+    _In_ PKTHREAD Thread,
+    _In_ KAFFINITY ProcessorSet);
+
+BOOLEAN
+FASTCALL
+KiShouldVacateProcessor(
+    _In_ PKTHREAD Thread,
+    _In_ PKPRCB Prcb);
+
+VOID
+FASTCALL
+KiCheckProcessorUnpark(
+    _In_ PKTHREAD Thread);
 
 //
 // Processor cache/package topology records reported by per-architecture

@@ -8,6 +8,7 @@
 
 #include <ntoskrnl.h>
 #include <reactos/arm64/acpi.h>
+#include <libernt/fdtlib.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -59,6 +60,8 @@ typedef struct _KI_ARM64_CPU_NUMA_TOPOLOGY
     BOOLEAN Present;
     BOOLEAN HasSratNode;
     BOOLEAN HasMpidr;
+    BOOLEAN HasEfficiencyClass;
+    UCHAR EfficiencyClass;
     ULONG AcpiProcessorUid;
     ULONG ProximityDomain;
     UCHAR NodeNumber;
@@ -82,6 +85,9 @@ static BOOLEAN KiArm64NumaDefaultInitialized;
 static BOOLEAN KiArm64AcpiIdentityMapped;
 static BOOLEAN KiArm64NodeStorageInitialized;
 static KI_ARM64_CPU_NUMA_TOPOLOGY KiArm64CpuNumaTopology[MAXIMUM_PROCESSORS];
+static ULONG64 KiArm64ProcessorMpidr[MAXIMUM_PROCESSORS];
+
+C_ASSERT(FIELD_OFFSET(ARM64_ACPI_MADT_GENERIC_INTERRUPT, EfficiencyClass) == 76);
 static KI_ARM64_NODE_DOMAIN KiArm64NodeDomains[KI_MAX_NUMA_NODES];
 
 static
@@ -510,6 +516,12 @@ KiArm64ParseMadtCpuUids(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
                 {
                     KiArm64CpuNumaTopology[LogicalCpu].Mpidr = KiArm64ReadUnaligned64(&Gicc->Mpidr);
                     KiArm64CpuNumaTopology[LogicalCpu].HasMpidr = TRUE;
+                }
+
+                if (Entry->Length > FIELD_OFFSET(ARM64_ACPI_MADT_GENERIC_INTERRUPT, EfficiencyClass))
+                {
+                    KiArm64CpuNumaTopology[LogicalCpu].EfficiencyClass = Gicc->EfficiencyClass;
+                    KiArm64CpuNumaTopology[LogicalCpu].HasEfficiencyClass = TRUE;
                 }
 
                 LogicalCpu++;
@@ -1381,4 +1393,163 @@ KiQueryProcessorDomains(
 {
     /* TODO: modules and dies from the ACPI PPTT; cores and packages fall back to the SMT and package sets */
     RtlZeroMemory(Domains, sizeof(*Domains));
+}
+
+static
+ULONG_PTR
+NTAPI
+KiArm64CaptureProcessorMpidr(
+    _In_ ULONG_PTR Context)
+{
+    ULONG Number = KeGetCurrentProcessorNumber();
+
+    UNREFERENCED_PARAMETER(Context);
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    KiArm64ProcessorMpidr[Number] = ARM64_READ_SYSREG(MPIDR_EL1) & KI_ARM64_MPIDR_AFF_ALL;
+    return 0;
+}
+
+static
+BOOLEAN
+KiArm64ReadDeviceTreeCapacities(
+    _Out_writes_to_(MAXIMUM_PROCESSORS, *Count) PULONG64 Mpidrs,
+    _Out_writes_to_(MAXIMUM_PROCESSORS, *Count) PULONG Capacities,
+    _Out_ PULONG Count)
+{
+    const VOID *Property;
+    ULONG Cpus, Node, AddressCells, SizeCells, Length, Capacity;
+    ULONG64 Mpidr;
+    FDT Fdt;
+
+    *Count = 0;
+    if ((KeLoaderBlock == NULL) ||
+        (KeLoaderBlock->u.Arm64.DeviceTree == 0) ||
+        !FdtOpen((const VOID *)(ULONG_PTR)KeLoaderBlock->u.Arm64.DeviceTree,
+                 (SIZE_T)KeLoaderBlock->u.Arm64.DeviceTreeSize,
+                 &Fdt) ||
+        !FdtFindNode(&Fdt, "/cpus", &Cpus, NULL))
+    {
+        return FALSE;
+    }
+
+    FdtGetCellCounts(&Fdt, Cpus, &AddressCells, &SizeCells);
+    if ((AddressCells == 0) || (AddressCells > 2))
+        return FALSE;
+
+    for (Node = FdtFirstChild(&Fdt, Cpus); Node != FDT_NO_NODE; Node = FdtNextSibling(&Fdt, Node))
+    {
+        Property = FdtGetProperty(&Fdt, Node, "device_type", &Length);
+        if (!FdtStringListContains(Property, Length, "cpu"))
+            continue;
+        Property = FdtGetProperty(&Fdt, Node, "status", &Length);
+        if ((Property != NULL) &&
+            !FdtStringListContains(Property, Length, "okay") &&
+            !FdtStringListContains(Property, Length, "ok"))
+        {
+            continue;
+        }
+        Property = FdtGetProperty(&Fdt, Node, "reg", &Length);
+        if (!FdtReadCells(Property, Length, 0, AddressCells, &Mpidr) ||
+            !FdtReadU32(&Fdt, Node, "capacity-dmips-mhz", &Capacity) ||
+            (Capacity == 0) ||
+            (*Count >= MAXIMUM_PROCESSORS))
+        {
+            *Count = 0;
+            return FALSE;
+        }
+
+        Mpidrs[*Count] = Mpidr & KI_ARM64_MPIDR_AFF_ALL;
+        Capacities[*Count] = Capacity;
+        (*Count)++;
+    }
+
+    return *Count != 0;
+}
+
+static
+UCHAR
+KiArm64RankDeviceTreeCapacity(
+    _In_reads_(Count) const ULONG *Capacities,
+    _In_ ULONG Count,
+    _In_ ULONG Capacity)
+{
+    ULONG Index, Earlier;
+    UCHAR Rank = 0;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Capacities[Index] >= Capacity)
+            continue;
+        for (Earlier = 0; Earlier < Index; Earlier++)
+        {
+            if (Capacities[Earlier] == Capacities[Index])
+                break;
+        }
+        if (Earlier == Index)
+            Rank++;
+    }
+
+    ASSERT(Rank < Count);
+    return Rank;
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    ULONG64 DeviceTreeMpidrs[MAXIMUM_PROCESSORS];
+    ULONG DeviceTreeCapacities[MAXIMUM_PROCESSORS];
+    KAFFINITY Remaining = KeActiveProcessors;
+    ULONG DeviceTreeCount, Processor, Index;
+    BOOLEAN HaveDeviceTree;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+    RtlZeroMemory(KiArm64ProcessorMpidr, sizeof(KiArm64ProcessorMpidr));
+    KeIpiGenericCall(KiArm64CaptureProcessorMpidr, 0);
+    HaveDeviceTree = KiArm64ReadDeviceTreeCapacities(DeviceTreeMpidrs, DeviceTreeCapacities, &DeviceTreeCount);
+
+    while (BitScanForwardAffinity(&Processor, Remaining))
+    {
+        Remaining &= ~AFFINITY_MASK(Processor);
+        for (Index = 0; Index < MAXIMUM_PROCESSORS; Index++)
+        {
+            if (KiArm64CpuNumaTopology[Index].Present &&
+                KiArm64CpuNumaTopology[Index].HasMpidr &&
+                KiArm64CpuNumaTopology[Index].HasEfficiencyClass &&
+                ((KiArm64CpuNumaTopology[Index].Mpidr & KI_ARM64_MPIDR_AFF_ALL) == KiArm64ProcessorMpidr[Processor]))
+            {
+                break;
+            }
+        }
+        if (Index < MAXIMUM_PROCESSORS)
+        {
+            EfficiencyClasses[Processor] = KiArm64CpuNumaTopology[Index].EfficiencyClass;
+            continue;
+        }
+
+        if (!HaveDeviceTree)
+            continue;
+
+        for (Index = 0; Index < DeviceTreeCount; Index++)
+        {
+            if (DeviceTreeMpidrs[Index] == KiArm64ProcessorMpidr[Processor])
+                break;
+        }
+        if (Index == DeviceTreeCount)
+        {
+            DPRINT1("Processor %lu (MPIDR 0x%llx) has no device tree cpu node\n",
+                    Processor, KiArm64ProcessorMpidr[Processor]);
+            continue;
+        }
+
+        EfficiencyClasses[Processor] = KiArm64RankDeviceTreeCapacity(DeviceTreeCapacities,
+                                                                     DeviceTreeCount,
+                                                                     DeviceTreeCapacities[Index]);
+        DPRINT1("Processor %lu (MPIDR 0x%llx, capacity-dmips-mhz %lu) has efficiency class %u\n",
+                Processor, KiArm64ProcessorMpidr[Processor], DeviceTreeCapacities[Index],
+                EfficiencyClasses[Processor]);
+    }
 }

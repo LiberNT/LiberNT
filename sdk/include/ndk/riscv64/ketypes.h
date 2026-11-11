@@ -8,6 +8,10 @@
 #ifndef _RISCV64_KETYPES_H
 #define _RISCV64_KETYPES_H
 
+#define PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE 0x1A8
+/* TODO: no Windows layout evidence for PROCESSOR_POWER_STATE on riscv64 */
+#include <potypes.h>
+
 /* Software synchronization priority, below the clock and IPI levels. */
 #define SYNCH_LEVEL 12
 

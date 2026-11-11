@@ -187,6 +187,7 @@ list(APPEND SOURCE
     TimerResolutionSleep.c
     ThreadContextInCallback.c
     TransactedFileApis.c
+    ProcessorEfficiency.c
     TunnelCache.c
     UEFIFirmware.c
     VolumeMountPoints.c

@@ -179,6 +179,7 @@ extern void func_ThreadPowerThrottling(void);
 extern void func_ThreadPreferredUILanguages(void);
 extern void func_ProcessPowerThrottling(void);
 extern void func_TransactedFileApis(void);
+extern void func_ProcessorEfficiency(void);
 extern void func_TunnelCache(void);
 extern void func_TimerResolutionSleep(void);
 extern void func_ThreadContextInCallback(void);
@@ -379,6 +380,7 @@ const struct test winetest_testlist[] =
     { "ThreadPreferredUILanguages",  func_ThreadPreferredUILanguages },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },
     { "TransactedFileApis",          func_TransactedFileApis },
+    { "ProcessorEfficiency",         func_ProcessorEfficiency },
     { "TunnelCache",                 func_TunnelCache },
     { "TimerResolutionSleep",        func_TimerResolutionSleep },
     { "ThreadContextInCallback",     func_ThreadContextInCallback },

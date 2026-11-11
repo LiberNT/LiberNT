@@ -1537,7 +1537,8 @@ KiAppendDomainRecords(
             Record->Relationship = Relationship;
             Record->Size = Size;
             Record->Processor.Flags = ((Level == KiTopologyCore) && ((Set & (Set - 1)) != 0)) ? LTP_PC_SMT : 0;
-            Record->Processor.EfficiencyClass = 0;
+            Record->Processor.EfficiencyClass =
+                (Level == KiTopologyCore) ? KiProcessorBlock[RtlFindLeastSignificantBit((ULONGLONG)Set)]->PowerState.ArchitecturalEfficiencyClass : 0;
             Record->Processor.GroupCount = 1;
             Record->Processor.GroupMask[0].Mask = Set;
             Record->Processor.GroupMask[0].Group = 0;

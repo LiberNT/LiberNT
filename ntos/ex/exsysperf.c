@@ -895,6 +895,8 @@ ExpQueryCpuSetInformation(
             Record->CpuSet.LastLevelCacheIndex =
                 ExpLastLevelCacheIndex(Index, Caches, (Caches != NULL) ? CacheCount : 0);
             Record->CpuSet.NumaNodeIndex = ExpProcessorNode(Index);
+            Record->CpuSet.EfficiencyClass = Prcb->PowerState.ArchitecturalEfficiencyClass;
+            Record->CpuSet.AllFlags = Prcb->PowerState.Parked ? SYSTEM_CPU_SET_INFORMATION_PARKED : 0;
             Written++;
         }
 

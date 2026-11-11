@@ -90,54 +90,6 @@ VOID
 (FASTCALL *PPROCESSOR_IDLE_FUNCTION)(
     struct _PROCESSOR_POWER_STATE *PState);
 
-typedef struct _PROCESSOR_POWER_STATE
-{
-    PPROCESSOR_IDLE_FUNCTION IdleFunction;
-    ULONG Idle0KernelTimeLimit;
-    ULONG Idle0LastTime;
-    PVOID IdleHandlers;
-    PVOID IdleState;
-    ULONG IdleHandlersCount;
-    ULONGLONG LastCheck;
-    PROCESSOR_IDLE_TIMES IdleTimes;
-    ULONG IdleTime1;
-    ULONG PromotionCheck;
-    ULONG IdleTime2;
-    UCHAR CurrentThrottle;
-    UCHAR ThermalThrottleLimit;
-    UCHAR CurrentThrottleIndex;
-    UCHAR ThermalThrottleIndex;
-    ULONG LastKernelUserTime;
-    ULONG PerfIdleTime;
-    ULONGLONG DebugDelta;
-    ULONG DebugCount;
-    ULONG LastSysTime;
-    ULONGLONG TotalIdleStateTime[3];
-    ULONG TotalIdleTransitions[3];
-    ULONGLONG PreviousC3StateTime;
-    UCHAR KneeThrottleIndex;
-    UCHAR ThrottleLimitIndex;
-    UCHAR PerfStatesCount;
-    UCHAR ProcessorMinThrottle;
-    UCHAR ProcessorMaxThrottle;
-    UCHAR LastBusyPercentage;
-    UCHAR LastC3Percentage;
-    UCHAR LastAdjustedBusyPercentage;
-    ULONG PromotionCount;
-    ULONG DemotionCount;
-    ULONG ErrorCount;
-    ULONG RetryCount;
-    ULONG Flags;
-    LARGE_INTEGER PerfCounterFrequency;
-    ULONG PerfTickCount;
-    KTIMER PerfTimer;
-    KDPC PerfDpc;
-    PROCESSOR_PERF_STATE *PerfStates;
-    PVOID PerfSetThrottle;
-    ULONG LastC3KernelUserTime;
-    ULONG Spare1[1];
-} PROCESSOR_POWER_STATE, *PPROCESSOR_POWER_STATE;
-
 //
 // Device Notification Structure
 //
@@ -176,3 +128,68 @@ typedef struct _PO_IRP_MANAGER
 #endif // !NTOS_MODE_USER
 
 #endif // _POTYPES_H
+
+#if !defined(NTOS_MODE_USER) && defined(PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE) && !defined(_PROCESSOR_POWER_STATE_DEFINED)
+#define _PROCESSOR_POWER_STATE_DEFINED
+typedef struct _PROCESSOR_POWER_STATE
+{
+    union
+    {
+        struct
+        {
+            PPROCESSOR_IDLE_FUNCTION IdleFunction;
+            ULONG Idle0KernelTimeLimit;
+            ULONG Idle0LastTime;
+            PVOID IdleHandlers;
+            PVOID IdleState;
+            ULONG IdleHandlersCount;
+            ULONGLONG LastCheck;
+            PROCESSOR_IDLE_TIMES IdleTimes;
+            ULONG IdleTime1;
+            ULONG PromotionCheck;
+            ULONG IdleTime2;
+            UCHAR CurrentThrottle;
+            UCHAR ThermalThrottleLimit;
+            UCHAR CurrentThrottleIndex;
+            UCHAR ThermalThrottleIndex;
+            ULONG LastKernelUserTime;
+            ULONG PerfIdleTime;
+            ULONGLONG DebugDelta;
+            ULONG DebugCount;
+            ULONG LastSysTime;
+            ULONGLONG TotalIdleStateTime[3];
+            ULONG TotalIdleTransitions[3];
+            ULONGLONG PreviousC3StateTime;
+            UCHAR KneeThrottleIndex;
+            UCHAR ThrottleLimitIndex;
+            UCHAR PerfStatesCount;
+            UCHAR ProcessorMinThrottle;
+            UCHAR ProcessorMaxThrottle;
+            UCHAR LastBusyPercentage;
+            UCHAR LastC3Percentage;
+            UCHAR LastAdjustedBusyPercentage;
+            ULONG PromotionCount;
+            ULONG DemotionCount;
+            ULONG ErrorCount;
+            ULONG RetryCount;
+            ULONG Flags;
+            LARGE_INTEGER PerfCounterFrequency;
+            ULONG PerfTickCount;
+            KTIMER PerfTimer;
+            KDPC PerfDpc;
+            PROCESSOR_PERF_STATE *PerfStates;
+            PVOID PerfSetThrottle;
+            ULONG LastC3KernelUserTime;
+            ULONG Spare1[1];
+        };
+        UCHAR LegacyStateArea[PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE];
+    };
+    UCHAR ArchitecturalEfficiencyClass;
+    volatile UCHAR PerformanceSchedulingClass;
+    volatile UCHAR EfficiencySchedulingClass;
+    UCHAR Reserved;
+    UCHAR Parked;
+    UCHAR SoftParked;
+    UCHAR LongPriorQosPeriod;
+} PROCESSOR_POWER_STATE, *PPROCESSOR_POWER_STATE;
+#endif

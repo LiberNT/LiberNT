@@ -231,6 +231,9 @@ KiSelectTargetProcessor(
         return Thread->NextProcessor;
     }
 
+    Affinity = KiHeteroPreferredProcessorSet(Thread, Affinity);
+    ASSERT(Affinity != 0);
+
     IdealMask = AFFINITY_MASK(Thread->IdealProcessor);
 
     IdleSet = Affinity & KiIdleSummary;
@@ -241,6 +244,9 @@ KiSelectTargetProcessor(
         if (QuietSet != 0)
             IdleSet = QuietSet;
 
+        if (IdleSet & KiHeteroPerformanceSet)
+            IdleSet &= KiHeteroPerformanceSet;
+
         if (IdleSet & IdealMask)
             return Thread->IdealProcessor;
 
@@ -250,10 +256,30 @@ KiSelectTargetProcessor(
         return KiFirstSetProcessor(IdleSet);
     }
 
+    KiCheckProcessorUnpark(Thread);
+
     if (Affinity & IdealMask)
         return Thread->IdealProcessor;
 
     return KiFindIdealProcessor(Affinity, (UCHAR)Thread->IdealProcessor);
+}
+
+static
+BOOLEAN
+KiCanStealToProcessor(
+    _In_ PKTHREAD Thread,
+    _In_ ULONG TargetCpu)
+{
+    KAFFINITY Affinity = KiThreadAffinityMask(Thread) & KeActiveProcessors;
+    KAFFINITY NonParkedSet = KiGetNonParkedProcessorSet();
+
+    if (!(Affinity & AFFINITY_MASK(TargetCpu)) ||
+        !(KiHeteroPreferredProcessorSet(Thread, Affinity) & AFFINITY_MASK(TargetCpu)))
+    {
+        return FALSE;
+    }
+
+    return (NonParkedSet & AFFINITY_MASK(TargetCpu)) || !(Affinity & NonParkedSet);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -521,6 +547,8 @@ KiStealReadyThread(
                 ASSERT(Thread->State == Ready);
                 ASSERT(Thread != Remote->IdleThread);
                 if ((KiThreadAffinityMask(Thread) & Self) == 0)
+                    continue;
+                if (!KiCanStealToProcessor(Thread, Prcb->Number))
                     continue;
 
                 if (RemoveEntryList(&Thread->WaitListEntry))
@@ -1075,6 +1103,9 @@ KiQuantumEnd(VOID)
         return;
     }
 
+    if (Thread != Prcb->IdleThread)
+        KiCheckProcessorUnpark(Thread);
+
     /*
      * A preemption that was deferred is honoured here. This is the point the
      * thread agreed to: it asked not to be interrupted mid-operation, not to
@@ -1152,6 +1183,12 @@ KiQuantumEnd(VOID)
             Prcb->NextThread = Next;
             Thread->Preempted = FALSE;
         }
+    }
+
+    if ((Prcb->NextThread == NULL) && KiShouldVacateProcessor(Thread, Prcb))
+    {
+        Prcb->IdleThread->State = Standby;
+        Prcb->NextThread = Prcb->IdleThread;
     }
 
     KiReleasePrcbLock(Prcb);
@@ -1282,9 +1319,6 @@ KiBalanceReadyQueues(
     if (Target->ReadySummary != 0)
         return FALSE;
 
-    if (KiIsProcessorParked(Target))
-        return FALSE;
-
     Candidates = KeActiveProcessors & ~AFFINITY_MASK(Target->Number);
     while (Candidates != 0)
     {
@@ -1314,7 +1348,8 @@ KiBalanceReadyQueues(
         Thread = CONTAINING_RECORD(Entry, KTHREAD, WaitListEntry);
 
         if ((Thread->State != Ready) ||
-            ((KiThreadAffinityMask(Thread) & Target->SetMember) == 0))
+            ((KiThreadAffinityMask(Thread) & Target->SetMember) == 0) ||
+            !KiCanStealToProcessor(Thread, Target->Number))
         {
             KiReleasePrcbLock(Source);
             continue;

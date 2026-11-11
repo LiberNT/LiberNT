@@ -7,6 +7,10 @@
 #ifndef _PPC_KETYPES_H
 #define _PPC_KETYPES_H
 
+#define PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE 0x160
+/* TODO: no Windows layout evidence for PROCESSOR_POWER_STATE on ppc */
+#include <potypes.h>
+
 #ifdef CONFIG_SMP
 #define SYNCH_LEVEL (IPI_LEVEL - 2)
 #else

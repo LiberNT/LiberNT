@@ -272,3 +272,13 @@ KiQueryProcessorDomains(
     /* TODO: cores, modules, dies and packages from the device tree cpu-map; each hart falls back to its own core in one package */
     RtlZeroMemory(Domains, sizeof(*Domains));
 }
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    /* TODO: rank the harts by their device tree capacity-dmips-mhz as arm64 does */
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+}
