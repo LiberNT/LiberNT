@@ -361,5 +361,7 @@ CmpRunDownDelayDerefKCBEngine(VOID)
 
     KeCancelTimer(&CmpDelayCloseTimer);
     CmpDelayCloseEngineRunning = FALSE;
+    CmpLockRegistry();
     CmpDrainDelayedClose(0);
+    CmpUnlockRegistry();
 }
