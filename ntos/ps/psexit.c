@@ -152,6 +152,15 @@ PspDrainUserApcs(
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
+static
+VOID
+PspDeleteKernelStack(
+    _Inout_ PETHREAD Thread)
+{
+    MmDeleteKernelStack(Thread->Tcb.StackBase, (BOOLEAN)Thread->Tcb.LargeStack);
+    KeUninitThread(&Thread->Tcb);
+}
+
 /*
  * The work item that finishes with a thread the scheduler left behind. A
  * thread cannot free the stack it is standing on, so the last of it is done
@@ -180,7 +189,7 @@ PspReapRoutine(
     {
         PETHREAD Next = Thread->ReaperLink;
 
-        KeUninitThread(&Thread->Tcb);
+        PspDeleteKernelStack(Thread);
         ObDereferenceObject(Thread);
 
         Thread = Next;
@@ -587,7 +596,7 @@ PspDeleteThread(
     }
 
     /* A thread that ran had its stack freed by the reaper */
-    if (Thread->Tcb.InitialStack != NULL) KeUninitThread(&Thread->Tcb);
+    if (Thread->Tcb.InitialStack != NULL) PspDeleteKernelStack(Thread);
 
     if (Process != NULL)
     {

@@ -163,6 +163,7 @@ list(APPEND SOURCE
     TerminateProcess.c
     TerminateThread.c
     ExitedClientId.c
+    ThreadKernelStack.c
     SleepTickRounding.c
     SwitchToThreadPriority.c
     QueryInterruptTimePrecise.c
