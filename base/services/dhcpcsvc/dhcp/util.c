@@ -142,10 +142,12 @@ int read_client_conf(struct interface_info *ifi) {
            error("Failed to allocate heap for hostname");
        }
        /* Both Linux and Windows send this */
+       ifi->client_id[0] = ifi->hw_address.htype;
+       memcpy(&ifi->client_id[1], ifi->hw_address.haddr, ifi->hw_address.hlen);
        config->send_options[DHO_DHCP_CLIENT_IDENTIFIER].data =
-             ifi->hw_address.haddr;
+             ifi->client_id;
        config->send_options[DHO_DHCP_CLIENT_IDENTIFIER].len =
-             ifi->hw_address.hlen;
+             ifi->hw_address.hlen + 1;
 
         /* Set the Vendor Class ID */
        config->send_options[DHO_DHCP_CLASS_IDENTIFIER].data = (u_int8_t*)lpClassIdentifier;
