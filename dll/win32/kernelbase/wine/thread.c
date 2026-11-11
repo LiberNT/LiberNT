@@ -635,7 +635,21 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetThreadInformation( HANDLE thread, THREAD_INFORM
         case ThreadDynamicCodePolicy:
             return set_ntstatus( NtSetInformationThread( thread, ThreadDynamicCodePolicyInfo, info, size ));
         case ThreadPowerThrottling:
+#ifdef __REACTOS__
+        {
+            THREAD_POWER_THROTTLING_STATE state;
+
+            if (size < sizeof(state))
+            {
+                SetLastError( ERROR_INVALID_PARAMETER );
+                return FALSE;
+            }
+            state = *(const THREAD_POWER_THROTTLING_STATE *)info;
+            return set_ntstatus( NtSetInformationThread( thread, ThreadPowerThrottlingState, &state, sizeof(state) ));
+        }
+#else
             return set_ntstatus( NtSetInformationThread( thread, ThreadPowerThrottlingState, info, size ));
+#endif
         default:
             FIXME("Unsupported class %u.\n", info_class);
 #ifdef __REACTOS__
