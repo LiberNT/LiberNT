@@ -108,6 +108,7 @@
 
 typedef struct _FILE_OBJECT_EXTENSION
 {
+    TXN_PARAMETER_BLOCK TxnParameters;
     PDEVICE_OBJECT TopDeviceObjectHint;
     PVOID FilterContext;
     ULONG FoExtFlags;

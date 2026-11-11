@@ -904,6 +904,131 @@ IopReferenceRelatedVpb(
     return Vpb;
 }
 
+static
+NTSTATUS
+IopReferenceCreateTransaction(
+    _In_ POPEN_PACKET OpenPacket,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PTXN_PARAMETER_BLOCK TxnParameters)
+{
+    PTXN_PARAMETER_BLOCK Supplied = OpenPacket->DriverCreateContext.TxnParameters;
+    PKTRANSACTION Transaction;
+    HANDLE Handle = NULL;
+    NTSTATUS Status;
+    PTEB Teb;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(TxnParameters, sizeof(*TxnParameters));
+
+    if (Supplied != NULL)
+    {
+        if (Supplied->TransactionObject == NULL) return STATUS_SUCCESS;
+
+        ObReferenceObject(Supplied->TransactionObject);
+        *TxnParameters = *Supplied;
+        return STATUS_SUCCESS;
+    }
+
+    if (AccessMode == KernelMode) return STATUS_SUCCESS;
+
+    /* FIXME: a WoW64 thread keeps its current transaction in its 32-bit TEB, which is not read, so its opens run untransacted */
+    Teb = PsGetCurrentThreadTeb();
+    if (Teb == NULL) return STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        ProbeForRead(&Teb->CurrentTransactionHandle, sizeof(HANDLE), sizeof(ULONG));
+        Handle = Teb->CurrentTransactionHandle;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (Handle == NULL) return STATUS_SUCCESS;
+
+    Status = ObReferenceObjectByHandle(Handle,
+                                       0,
+                                       TmTransactionObjectType,
+                                       AccessMode,
+                                       (PVOID *)&Transaction,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return STATUS_CURRENT_TRANSACTION_NOT_VALID;
+
+    TxnParameters->Length = sizeof(TXN_PARAMETER_BLOCK);
+    TxnParameters->TxFsContext = TXF_MINIVERSION_DEFAULT_VIEW;
+    TxnParameters->TransactionObject = Transaction;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+IopCheckTransactedOpen(
+    _In_ PTXN_PARAMETER_BLOCK TxnParameters,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PDEVICE_OBJECT TargetDevice)
+{
+    PAGED_CODE();
+
+    if (!TmIsTransactionActive(TxnParameters->TransactionObject))
+    {
+        return STATUS_TRANSACTION_NOT_ACTIVE;
+    }
+
+    if (TargetDevice->Flags & DO_SUPPORTS_TRANSACTIONS) return STATUS_SUCCESS;
+
+    if (((DeviceObject->Characteristics | TargetDevice->Characteristics) & FILE_REMOTE_DEVICE) ||
+        DeviceObject->DeviceType == FILE_DEVICE_MULTI_UNC_PROVIDER)
+    {
+        return STATUS_TRANSACTIONS_UNSUPPORTED_REMOTE;
+    }
+
+    return STATUS_TRANSACTIONAL_OPEN_NOT_ALLOWED;
+}
+
+static
+NTSTATUS
+IopAttachCreateTransaction(
+    _In_ PFILE_OBJECT FileObject,
+    _In_ PTXN_PARAMETER_BLOCK TxnParameters)
+{
+    PFILE_OBJECT_EXTENSION Extension;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IopAllocateFileObjectExtension(FileObject);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Extension = FileObject->FileObjectExtension;
+    Extension->TxnParameters = *TxnParameters;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+IopDetachLocalFileObjectExtension(
+    _In_ POPEN_PACKET OpenPacket,
+    _In_ PFILE_OBJECT FileObject)
+{
+    PTXN_PARAMETER_BLOCK TxnParameters;
+
+    PAGED_CODE();
+
+    /* A local file object the driver never opened is never closed, so what it holds goes back here */
+    if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly) return;
+    if (!(FileObject->Flags & FO_FILE_OBJECT_HAS_EXTENSION)) return;
+
+    TxnParameters = IoGetTransactionParameterBlock(FileObject);
+    if (TxnParameters != NULL) ObDereferenceObject(TxnParameters->TransactionObject);
+
+    ExFreePoolWithTag(FileObject->FileObjectExtension, TAG_IO);
+    FileObject->FileObjectExtension = NULL;
+    FileObject->Flags &= ~FO_FILE_OBJECT_HAS_EXTENSION;
+}
+
 /* PARSE METHODS **************************************************************/
 
 #define IOP_DIRECT_DEVICE_OPEN_ACCESS (SYNCHRONIZE | FILE_READ_ATTRIBUTES)
@@ -927,6 +1052,7 @@ IopParseDeviceEx(
     PDEVICE_OBJECT DeviceObject = ParseObject;
     PDEVICE_OBJECT TargetDevice;
     POPEN_PACKET OpenPacket = Context;
+    TXN_PARAMETER_BLOCK TxnParameters;
     PFILE_OBJECT FileObject;
     BOOLEAN DeviceOnlyOpen;
     BOOLEAN DirectOpen = FALSE;
@@ -1028,10 +1154,23 @@ IopParseDeviceEx(
         }
     }
 
+    Status = IopReferenceCreateTransaction(OpenPacket, AccessMode, &TxnParameters);
+    if (NT_SUCCESS(Status) && TxnParameters.TransactionObject != NULL)
+    {
+        Status = IopCheckTransactedOpen(&TxnParameters, DeviceObject, TargetDevice);
+        if (!NT_SUCCESS(Status)) ObDereferenceObject(TxnParameters.TransactionObject);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
+        return Status;
+    }
+
     /* The file object names the device that was opened; requests go to the top of what serves it */
     Status = IopReferenceDeviceObject(DeviceObject);
     if (!NT_SUCCESS(Status))
     {
+        if (TxnParameters.TransactionObject != NULL) ObDereferenceObject(TxnParameters.TransactionObject);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
         return Status;
     }
@@ -1042,8 +1181,22 @@ IopParseDeviceEx(
                                        Attributes,
                                        AccessMode,
                                        &Status);
+    if (FileObject != NULL && TxnParameters.TransactionObject != NULL)
+    {
+        Status = IopAttachCreateTransaction(FileObject, &TxnParameters);
+        if (!NT_SUCCESS(Status))
+        {
+            if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
+            {
+                FileObject->DeviceObject = NULL;
+                ObDereferenceObject(FileObject);
+            }
+            FileObject = NULL;
+        }
+    }
     if (FileObject == NULL)
     {
+        if (TxnParameters.TransactionObject != NULL) ObDereferenceObject(TxnParameters.TransactionObject);
         IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
         return Status;
@@ -1085,6 +1238,7 @@ IopParseDeviceEx(
             ObDereferenceObject(FileObject);
         }
 
+        IopDetachLocalFileObjectExtension(OpenPacket, FileObject);
         IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
 
@@ -1101,6 +1255,7 @@ IopParseDeviceEx(
     /* A create the driver did not complete leaves the device and volume to this routine */
     if (!NT_SUCCESS(Status) || Status == STATUS_REPARSE)
     {
+        IopDetachLocalFileObjectExtension(OpenPacket, FileObject);
         IopDecrementDeviceObjectRef(DeviceObject, FALSE);
         if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
     }

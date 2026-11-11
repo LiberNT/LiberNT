@@ -100,6 +100,7 @@ IopDeleteFile(
     IN PVOID ObjectBody)
 {
     PFILE_OBJECT FileObject = ObjectBody;
+    PTXN_PARAMETER_BLOCK TxnParameters;
     PDEVICE_OBJECT DeviceObject;
     PVPB Vpb;
 
@@ -129,6 +130,13 @@ IopDeleteFile(
         FileObject->FileName.Buffer = NULL;
         FileObject->FileName.Length = 0;
         FileObject->FileName.MaximumLength = 0;
+    }
+
+    TxnParameters = IoGetTransactionParameterBlock(FileObject);
+    if (TxnParameters != NULL)
+    {
+        ObDereferenceObject(TxnParameters->TransactionObject);
+        TxnParameters->TransactionObject = NULL;
     }
 
     if (FileObject->CompletionContext != NULL)

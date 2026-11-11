@@ -151,10 +151,14 @@ NTAPI
 IoGetTransactionParameterBlock(
     _In_ PFILE_OBJECT FileObject)
 {
-    /* TODO: no transaction manager plumbing on the create path */
-    UNREFERENCED_PARAMETER(FileObject);
+    PFILE_OBJECT_EXTENSION Extension;
 
-    return NULL;
+    if (!(FileObject->Flags & FO_FILE_OBJECT_HAS_EXTENSION)) return NULL;
+
+    Extension = FileObject->FileObjectExtension;
+    if (Extension == NULL || Extension->TxnParameters.TransactionObject == NULL) return NULL;
+
+    return &Extension->TxnParameters;
 }
 
 NTSTATUS
