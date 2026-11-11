@@ -125,6 +125,9 @@ AlpcpCaptureAttributes(
         RtlCopyMemory(Buffer, UserAttributes, Size);
     }
 
+    Buffer->AllocatedAttributes = Header.AllocatedAttributes;
+    Buffer->ValidAttributes = Header.ValidAttributes;
+
     *Captured = Buffer;
     return STATUS_SUCCESS;
 }
@@ -565,6 +568,7 @@ AlpcpCaptureSendAttributes(
 
     if (!Attributes) return STATUS_SUCCESS;
     Valid = Attributes->ValidAttributes;
+    ASSERT((Valid & ~Attributes->AllocatedAttributes) == 0);
 
     if (Valid & ALPC_MESSAGE_CONTEXT_ATTRIBUTE)
     {
