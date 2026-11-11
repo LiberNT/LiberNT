@@ -587,6 +587,7 @@ KiSwapThread(
 {
     KIRQL WaitIrql = Thread->WaitIrql;
     PKTHREAD NextThread;
+    LONG_PTR WaitStatus;
     BOOLEAN ApcPending;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
@@ -650,6 +651,8 @@ KiSwapThread(
      * Back on this thread's own stack. A kernel APC that came in while it was
      * blocked is delivered now, before the caller sees the wait status.
      */
+    WaitStatus = Thread->WaitStatus;
+
     if (ApcPending)
     {
         ASSERT(WaitIrql == PASSIVE_LEVEL);
@@ -658,7 +661,7 @@ KiSwapThread(
     }
 
     KeLowerIrql(WaitIrql);
-    return Thread->WaitStatus;
+    return WaitStatus;
 }
 
 /*
