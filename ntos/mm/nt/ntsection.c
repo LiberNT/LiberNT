@@ -2556,8 +2556,9 @@ NtCreateSection(
         return STATUS_DYNAMIC_CODE_BLOCKED;
     }
 
-    Status = MmCreateSection(&SectionObject, DesiredAccess, ObjectAttributes, &SafeMaximumSize,
-                             SectionPageProtection, AllocationAttributes, FileHandle, NULL);
+    Status = MiCreateSectionWithMode(&SectionObject, PreviousMode, FALSE, DesiredAccess, ObjectAttributes,
+                                     &SafeMaximumSize, SectionPageProtection, AllocationAttributes, FileHandle,
+                                     NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
