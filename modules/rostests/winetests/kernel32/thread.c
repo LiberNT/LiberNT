@@ -328,6 +328,13 @@ static void create_function_addr_events(HANDLE events[2])
 }
 
 /* check CreateRemoteThread */
+#ifdef __REACTOS__
+/* A thread that wrongly ran would signal within milliseconds; six clock ticks still show it did not */
+#define NOT_RUN_WAIT_MS 100
+#else
+#define NOT_RUN_WAIT_MS 1000
+#endif
+
 static VOID test_CreateRemoteThread(void)
 {
     HANDLE hProcess, hThread, hEvent, hRemoteEvent;
@@ -371,7 +378,7 @@ static VOID test_CreateRemoteThread(void)
     ok(ret == 2, "ret=%lu, err=%lu\n", ret, GetLastError());
 
     /* thread still suspended, so wait times out */
-    ret = WaitForSingleObject(hEvent, 1000);
+    ret = WaitForSingleObject(hEvent, NOT_RUN_WAIT_MS);
     ok(ret == WAIT_TIMEOUT, "wait did not time out, ret=%lu\n", ret);
 
     ret = ResumeThread(hThread);
@@ -402,7 +409,7 @@ static VOID test_CreateRemoteThread(void)
     ok(hThread != NULL, "CreateRemoteThread failed, err=%lu\n", GetLastError());
 
     /* closed handle, so wait times out */
-    ret = WaitForSingleObject(hEvent, 1000);
+    ret = WaitForSingleObject(hEvent, NOT_RUN_WAIT_MS);
     ok(ret == WAIT_TIMEOUT, "wait did not time out, ret=%lu\n", ret);
 
     /* check that remote SetEvent() failed */
@@ -532,7 +539,7 @@ static VOID test_CreateThread_suspended(void)
    of a better way of checking this than just waiting.  I am not sure if this
    will work on slow computers.
 */
-  ok(WaitForSingleObject(thread,1000)==WAIT_TIMEOUT,
+  ok(WaitForSingleObject(thread,NOT_RUN_WAIT_MS)==WAIT_TIMEOUT,
      "ResumeThread should not have actually started the thread\n");
 /* Now actually resume the thread and make sure that it actually completes*/
   ok(ResumeThread(thread)==1,"Resume thread returned an invalid value\n");
