@@ -904,6 +904,7 @@ ULONG WINAPI PerfStopProvider(HANDLE handle)
 
     if (prov->wait)
     {
+        /* FIXME: waits for the running control callback, so PerfStopProvider called from that callback deadlocks */
         UnregisterWaitEx( prov->wait, INVALID_HANDLE_VALUE );
         prov->wait = NULL;
     }
