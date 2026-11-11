@@ -122,6 +122,7 @@ extern void func_NtSystemInformation(void);
 extern void func_NtUnloadDriver(void);
 extern void func_NtWnfState(void);
 extern void func_NtWriteFile(void);
+extern void func_NtdllDefWindowProc(void);
 extern void func_RtlAllocateHeap(void);
 extern void func_RtlCreateTagHeap(void);
 extern void func_RtlBitmapApi(void);
@@ -335,6 +336,7 @@ const struct test winetest_testlist[] =
     { "NtUnloadDriver",                 func_NtUnloadDriver },
     { "NtWnfState",                     func_NtWnfState },
     { "NtWriteFile",                    func_NtWriteFile },
+    { "NtdllDefWindowProc",             func_NtdllDefWindowProc },
     { "RtlAllocateHeap",                func_RtlAllocateHeap },
     { "RtlCreateTagHeap", func_RtlCreateTagHeap },
     { "RtlBitmapApi",                   func_RtlBitmapApi },

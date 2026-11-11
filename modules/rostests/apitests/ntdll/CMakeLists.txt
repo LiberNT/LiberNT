@@ -139,6 +139,7 @@ list(APPEND SOURCE
     NtUnloadDriver.c
     NtWnfState.c
     NtWriteFile.c
+    NtdllDefWindowProc.c
     probelib.c
     RtlAllocateHeap.c
     RtlCreateTagHeap.c
