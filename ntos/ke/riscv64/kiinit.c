@@ -349,6 +349,7 @@ KiRiscvSystemStartup(
     KiRiscvEnableUserCacheBlockOperations();
     KiRiscvEnableUserTimeCounter();
 
+    LoaderBlock->Process = (ULONG_PTR)&KiInitialProcess.Pcb;
     InitialProcess = (PKPROCESS)(ULONG_PTR)LoaderBlock->Process;
     InitialThread = (PKTHREAD)(ULONG_PTR)LoaderBlock->Thread;
     InitialThread->ApcState.Process = InitialProcess;
