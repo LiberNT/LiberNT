@@ -213,6 +213,7 @@ struct constructor;
     XIID(IElementSelector) \
     XIID(IElementTraversal) \
     XIID(IEventTarget) \
+    XIID(IGetSVGDocument) \
     XIID(IHTMLAnchorElement) \
     XIID(IHTMLAreaElement) \
     XIID(IHTMLAttributeCollection) \
@@ -274,6 +275,9 @@ struct constructor;
     XIID(IHTMLFormElement2) \
     XIID(IHTMLFrameBase) \
     XIID(IHTMLFrameBase2) \
+    XIID(IHTMLFrameBase3) \
+    XIID(IHTMLFrameElement) \
+    XIID(IHTMLFrameElement2) \
     XIID(IHTMLFrameElement3) \
     XIID(IHTMLFrameSetElement) \
     XIID(IHTMLFrameSetElement2) \
@@ -1226,6 +1230,8 @@ struct HTMLFrameBase {
 
     IHTMLFrameBase  IHTMLFrameBase_iface;
     IHTMLFrameBase2 IHTMLFrameBase2_iface;
+    IHTMLFrameBase3 IHTMLFrameBase3_iface;
+    IGetSVGDocument IGetSVGDocument_iface;
 
     HTMLOuterWindow *content_window;
 

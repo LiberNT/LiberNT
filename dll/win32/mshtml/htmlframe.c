@@ -648,12 +648,101 @@ static const IHTMLFrameBase2Vtbl HTMLFrameBase2Vtbl = {
     HTMLFrameBase2_get_allowTransparency
 };
 
+static inline HTMLFrameBase *impl_from_IHTMLFrameBase3(IHTMLFrameBase3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFrameBase, IHTMLFrameBase3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLFrameBase3, IHTMLFrameBase3,
+                      impl_from_IHTMLFrameBase3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLFrameBase3_put_longDesc(IHTMLFrameBase3 *iface, BSTR v)
+{
+    HTMLFrameBase *This = impl_from_IHTMLFrameBase3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_string_attr_setter(&This->element, L"longDesc", v ? v : L"");
+}
+
+static HRESULT WINAPI HTMLFrameBase3_get_longDesc(IHTMLFrameBase3 *iface, BSTR *p)
+{
+    HTMLFrameBase *This = impl_from_IHTMLFrameBase3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_string_attr_getter(&This->element, L"longDesc", FALSE, p);
+}
+
+static const IHTMLFrameBase3Vtbl HTMLFrameBase3Vtbl = {
+    HTMLFrameBase3_QueryInterface,
+    HTMLFrameBase3_AddRef,
+    HTMLFrameBase3_Release,
+    HTMLFrameBase3_GetTypeInfoCount,
+    HTMLFrameBase3_GetTypeInfo,
+    HTMLFrameBase3_GetIDsOfNames,
+    HTMLFrameBase3_Invoke,
+    HTMLFrameBase3_put_longDesc,
+    HTMLFrameBase3_get_longDesc
+};
+
+static inline HTMLFrameBase *impl_from_IGetSVGDocument(IGetSVGDocument *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFrameBase, IGetSVGDocument_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(GetSVGDocument, IGetSVGDocument,
+                      impl_from_IGetSVGDocument(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI GetSVGDocument_getSVGDocument(IGetSVGDocument *iface, IDispatch **ppSVGDocument)
+{
+    HTMLFrameBase *This = impl_from_IGetSVGDocument(iface);
+    HTMLDocumentNode *doc;
+    const PRUnichar *type;
+    nsAString type_str;
+    nsresult nsres;
+
+    TRACE("(%p)->(%p)\n", This, ppSVGDocument);
+
+    *ppSVGDocument = NULL;
+    if(!This->content_window || !This->content_window->base.inner_window ||
+       !(doc = This->content_window->base.inner_window->doc))
+        return S_OK;
+
+    nsAString_Init(&type_str, NULL);
+    nsres = nsIDOMDocument_GetContentType(doc->dom_document, &type_str);
+    if(NS_SUCCEEDED(nsres)) {
+        nsAString_GetData(&type_str, &type);
+        if(!wcscmp(type, L"image/svg+xml")) {
+            *ppSVGDocument = (IDispatch*)&doc->IHTMLDocument2_iface;
+            IDispatch_AddRef(*ppSVGDocument);
+        }
+    }
+    nsAString_Finish(&type_str);
+    return S_OK;
+}
+
+static const IGetSVGDocumentVtbl GetSVGDocumentVtbl = {
+    GetSVGDocument_QueryInterface,
+    GetSVGDocument_AddRef,
+    GetSVGDocument_Release,
+    GetSVGDocument_GetTypeInfoCount,
+    GetSVGDocument_GetTypeInfo,
+    GetSVGDocument_GetIDsOfNames,
+    GetSVGDocument_Invoke,
+    GetSVGDocument_getSVGDocument
+};
+
 static void *HTMLFrameBase_QI(HTMLFrameBase *This, REFIID riid)
 {
     if(IsEqualGUID(&IID_IHTMLFrameBase, riid))
         return &This->IHTMLFrameBase_iface;
     if(IsEqualGUID(&IID_IHTMLFrameBase2, riid))
         return &This->IHTMLFrameBase2_iface;
+    if(IsEqualGUID(&IID_IHTMLFrameBase3, riid))
+        return &This->IHTMLFrameBase3_iface;
+    if(IsEqualGUID(&IID_IGetSVGDocument, riid))
+        return &This->IGetSVGDocument_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -673,6 +762,8 @@ static void HTMLFrameBase_Init(HTMLFrameBase *This, HTMLDocumentNode *doc, nsIDO
 
     This->IHTMLFrameBase_iface.lpVtbl = &HTMLFrameBaseVtbl;
     This->IHTMLFrameBase2_iface.lpVtbl = &HTMLFrameBase2Vtbl;
+    This->IHTMLFrameBase3_iface.lpVtbl = &HTMLFrameBase3Vtbl;
+    This->IGetSVGDocument_iface.lpVtbl = &GetSVGDocumentVtbl;
 
     HTMLElement_Init(&This->element, doc, nselem, dispex_data);
 
@@ -688,7 +779,127 @@ static void HTMLFrameBase_Init(HTMLFrameBase *This, HTMLDocumentNode *doc, nsIDO
 
 struct HTMLFrameElement {
     HTMLFrameBase framebase;
+    IHTMLFrameElement IHTMLFrameElement_iface;
+    IHTMLFrameElement2 IHTMLFrameElement2_iface;
     IHTMLFrameElement3 IHTMLFrameElement3_iface;
+};
+
+static inline HTMLFrameElement *impl_from_IHTMLFrameElement(IHTMLFrameElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFrameElement, IHTMLFrameElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLFrameElement, IHTMLFrameElement,
+                      impl_from_IHTMLFrameElement(iface)->framebase.element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLFrameElement_put_borderColor(IHTMLFrameElement *iface, VARIANT v)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return elem_put_color_attr(&This->framebase.element, L"borderColor", &v);
+}
+
+static HRESULT WINAPI HTMLFrameElement_get_borderColor(IHTMLFrameElement *iface, VARIANT *p)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_color_attr(&This->framebase.element, L"borderColor", p);
+}
+
+static const IHTMLFrameElementVtbl HTMLFrameElementVtbl = {
+    HTMLFrameElement_QueryInterface,
+    HTMLFrameElement_AddRef,
+    HTMLFrameElement_Release,
+    HTMLFrameElement_GetTypeInfoCount,
+    HTMLFrameElement_GetTypeInfo,
+    HTMLFrameElement_GetIDsOfNames,
+    HTMLFrameElement_Invoke,
+    HTMLFrameElement_put_borderColor,
+    HTMLFrameElement_get_borderColor
+};
+
+static inline HTMLFrameElement *impl_from_IHTMLFrameElement2(IHTMLFrameElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFrameElement, IHTMLFrameElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLFrameElement2, IHTMLFrameElement2,
+                      impl_from_IHTMLFrameElement2(iface)->framebase.element.node.event_target.dispex)
+
+static HRESULT frame_put_size_attr(HTMLFrameElement *This, const WCHAR *name, VARIANT *v)
+{
+    nsAString nsstr;
+    const PRUnichar *str;
+    HRESULT hres;
+
+    hres = variant_to_nsstr(v, FALSE, &nsstr);
+    if(FAILED(hres))
+        return hres;
+
+    nsAString_GetData(&nsstr, &str);
+    hres = elem_string_attr_setter(&This->framebase.element, name, str ? str : L"");
+    nsAString_Finish(&nsstr);
+    return hres;
+}
+
+static HRESULT frame_get_size_attr(HTMLFrameElement *This, const WCHAR *name, VARIANT *p)
+{
+    V_VT(p) = VT_BSTR;
+    return elem_string_attr_getter(&This->framebase.element, name, FALSE, &V_BSTR(p));
+}
+
+static HRESULT WINAPI HTMLFrameElement2_put_height(IHTMLFrameElement2 *iface, VARIANT v)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return frame_put_size_attr(This, L"height", &v);
+}
+
+static HRESULT WINAPI HTMLFrameElement2_get_height(IHTMLFrameElement2 *iface, VARIANT *p)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return frame_get_size_attr(This, L"height", p);
+}
+
+static HRESULT WINAPI HTMLFrameElement2_put_width(IHTMLFrameElement2 *iface, VARIANT v)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    return frame_put_size_attr(This, L"width", &v);
+}
+
+static HRESULT WINAPI HTMLFrameElement2_get_width(IHTMLFrameElement2 *iface, VARIANT *p)
+{
+    HTMLFrameElement *This = impl_from_IHTMLFrameElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return frame_get_size_attr(This, L"width", p);
+}
+
+static const IHTMLFrameElement2Vtbl HTMLFrameElement2Vtbl = {
+    HTMLFrameElement2_QueryInterface,
+    HTMLFrameElement2_AddRef,
+    HTMLFrameElement2_Release,
+    HTMLFrameElement2_GetTypeInfoCount,
+    HTMLFrameElement2_GetTypeInfo,
+    HTMLFrameElement2_GetIDsOfNames,
+    HTMLFrameElement2_Invoke,
+    HTMLFrameElement2_put_height,
+    HTMLFrameElement2_get_height,
+    HTMLFrameElement2_put_width,
+    HTMLFrameElement2_get_width
 };
 
 static inline HTMLFrameElement *impl_from_IHTMLFrameElement3(IHTMLFrameElement3 *iface)
@@ -832,6 +1043,10 @@ static void *HTMLFrameElement_query_interface(DispatchEx *dispex, REFIID riid)
 {
     HTMLFrameElement *This = frame_from_DispatchEx(dispex);
 
+    if(IsEqualGUID(&IID_IHTMLFrameElement, riid))
+        return &This->IHTMLFrameElement_iface;
+    if(IsEqualGUID(&IID_IHTMLFrameElement2, riid))
+        return &This->IHTMLFrameElement2_iface;
     if(IsEqualGUID(&IID_IHTMLFrameElement3, riid))
         return &This->IHTMLFrameElement3_iface;
     if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
@@ -908,21 +1123,43 @@ static const NodeImplVtbl HTMLFrameElementImplVtbl = {
     .bind_to_tree          = HTMLFrameElement_bind_to_tree,
 };
 
-static void HTMLFrameElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+/* TODO: expose security (IE9+) on frames and iframes and sandbox (IE10+) on iframes */
+static const dispex_hook_t *frame_base2_hooks(compat_mode_t mode)
 {
-    static const dispex_hook_t base2_hooks[] = {
+    static const dispex_hook_t base2_ie11_hooks[] = {
+        {DISPID_IHTMLFRAMEBASE2_ONREADYSTATECHANGE},
+        {DISPID_IHTMLFRAMEBASE2_READYSTATE},
+        {DISPID_IHTMLFRAMEBASE2_ALLOWTRANSPARENCY},
         {DISPID_IHTMLFRAMEBASE2_CONTENTWINDOW,      .noattr = TRUE},
         {DISPID_IHTMLFRAMEBASE2_READYSTATE,         .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
-    static const dispex_hook_t hooks[] = {
+
+    if(mode >= COMPAT_MODE_IE11)
+        return base2_ie11_hooks;
+    return mode >= COMPAT_MODE_IE9 ? base2_ie11_hooks + 2 : base2_ie11_hooks + 3;
+}
+
+static void HTMLFrameElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    static const dispex_hook_t ie7_hooks[] = {
+        {DISPID_IHTMLFRAMEELEMENT3_CONTENTDOCUMENT},
         {DISPID_IHTMLFRAMEELEMENT3_CONTENTDOCUMENT, .noattr = TRUE},
         {DISPID_IHTMLFRAMEELEMENT3_IE8_LONGDESC,    .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
+    static const dispex_hook_t elem2_hooks[] = {
+        {DISPID_IHTMLFRAMEELEMENT2_HEIGHT,          .noattr = TRUE},
+        {DISPID_IHTMLFRAMEELEMENT2_WIDTH,           .noattr = TRUE},
+        {DISPID_UNKNOWN}
+    };
     dispex_info_add_interface(info, IHTMLFrameBase_tid, NULL);
-    dispex_info_add_interface(info, IHTMLFrameBase2_tid, base2_hooks);
-    dispex_info_add_interface(info, IHTMLFrameElement3_tid, hooks);
+    dispex_info_add_interface(info, IHTMLFrameBase2_tid, frame_base2_hooks(mode));
+    dispex_info_add_interface(info, IHTMLFrameBase3_tid, NULL);
+    dispex_info_add_interface(info, IHTMLFrameElement_tid, NULL);
+    dispex_info_add_interface(info, IHTMLFrameElement2_tid, elem2_hooks);
+    dispex_info_add_interface(info, IHTMLFrameElement3_tid, mode < COMPAT_MODE_IE8 ? ie7_hooks : ie7_hooks + 1);
+    dispex_info_add_interface(info, IGetSVGDocument_tid, NULL);
     if(mode < COMPAT_MODE_IE11)
         dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
@@ -962,6 +1199,8 @@ HRESULT HTMLFrameElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HT
         return E_OUTOFMEMORY;
 
     ret->framebase.element.node.vtbl = &HTMLFrameElementImplVtbl;
+    ret->IHTMLFrameElement_iface.lpVtbl = &HTMLFrameElementVtbl;
+    ret->IHTMLFrameElement2_iface.lpVtbl = &HTMLFrameElement2Vtbl;
     ret->IHTMLFrameElement3_iface.lpVtbl = &HTMLFrameElement3Vtbl;
 
     HTMLFrameBase_Init(&ret->framebase, doc, nselem, &HTMLFrameElement_dispex);
@@ -1361,19 +1600,17 @@ static const NodeImplVtbl HTMLIFrameImplVtbl = {
 
 static void HTMLIFrameElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
 {
-    static const dispex_hook_t base2_hooks[] = {
-        {DISPID_IHTMLFRAMEBASE2_CONTENTWINDOW,       .noattr = TRUE},
-        {DISPID_IHTMLFRAMEBASE2_READYSTATE,          .noattr = TRUE},
-        {DISPID_UNKNOWN}
-    };
-    static const dispex_hook_t hooks[] = {
+    static const dispex_hook_t ie7_hooks[] = {
+        {DISPID_IHTMLIFRAMEELEMENT3_CONTENTDOCUMENT},
         {DISPID_IHTMLIFRAMEELEMENT3_CONTENTDOCUMENT, .noattr = TRUE},
         {DISPID_IHTMLIFRAMEELEMENT3_IE8_LONGDESC,    .noattr = TRUE},
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLFrameBase_tid, NULL);
-    dispex_info_add_interface(info, IHTMLFrameBase2_tid, base2_hooks);
-    dispex_info_add_interface(info, IHTMLIFrameElement3_tid, hooks);
+    dispex_info_add_interface(info, IHTMLFrameBase2_tid, frame_base2_hooks(mode));
+    dispex_info_add_interface(info, IHTMLFrameBase3_tid, NULL);
+    dispex_info_add_interface(info, IHTMLIFrameElement3_tid, mode < COMPAT_MODE_IE8 ? ie7_hooks : ie7_hooks + 1);
+    dispex_info_add_interface(info, IGetSVGDocument_tid, NULL);
     if(mode < COMPAT_MODE_IE11)
         dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 

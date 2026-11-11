@@ -30039,6 +30039,24 @@ interface IHTMLFrameBase2 : IDispatch
     HRESULT allowTransparency([retval, out] VARIANT_BOOL *p);
 }
 
+/*****************************************************************************
+ *    IHTMLFrameBase3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82e-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameBase3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEBASE3_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMEBASE3_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([retval, out] BSTR *p);
+}
+
 #define WINE_IHTMLFRAMEBASE2_DISPINTERFACE_DECL                         \
     [propget, id(DISPID_IHTMLFRAMEBASE2_CONTENTWINDOW)]                 \
     IHTMLWindow2 *contentWindow();                                      \
@@ -30062,6 +30080,63 @@ interface IHTMLFrameBase2 : IDispatch
     WINE_IHTMLFRAMEBASE_DISPINTERFACE_DECL;   \
     WINE_IHTMLFRAMEBASE2_DISPINTERFACE_DECL;  \
     WINE_IHTMLFRAMEBASE3_DISPINTERFACE_DECL
+
+/*****************************************************************************
+ *    IGetSVGDocument interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305105ab-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IGetSVGDocument : IDispatch
+{
+    [id(DISPID_IGETSVGDOCUMENT_GETSVGDOCUMENT)]
+    HRESULT getSVGDocument([retval, out] IDispatch **ppSVGDocument);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f313-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([retval, out] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f7f5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEELEMENT2_HEIGHT)]
+    HRESULT height([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT2_HEIGHT)]
+    HRESULT height([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMEELEMENT2_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT2_WIDTH)]
+    HRESULT width([retval, out] VARIANT *p);
+}
 
 /*****************************************************************************
  *    IHTMLFrameElement3 interface
@@ -30165,11 +30240,11 @@ coclass HTMLFrameElement
     interface IHTMLControlElement;
     interface IHTMLFrameBase;
     interface IHTMLFrameBase2;
- /* interface IHTMLFrameBase3; */
- /* interface IHTMLFrameElement; */
- /* interface IHTMLFrameElement2; */
+    interface IHTMLFrameBase3;
+    interface IHTMLFrameElement;
+    interface IHTMLFrameElement2;
     interface IHTMLFrameElement3;
- /* interface IGetSVGDocument; */
+    interface IGetSVGDocument;
 }
 
 /*****************************************************************************
@@ -30340,11 +30415,11 @@ coclass HTMLIFrame
     interface IHTMLControlElement;
     interface IHTMLFrameBase;
     interface IHTMLFrameBase2;
- /* interface IHTMLFrameBase3; */
+    interface IHTMLFrameBase3;
     interface IHTMLIFrameElement;
     interface IHTMLIFrameElement2;
     interface IHTMLIFrameElement3;
- /* interface IGetSVGDocument; */
+    interface IGetSVGDocument;
 }
 
 /*****************************************************************************
