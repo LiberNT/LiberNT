@@ -119,6 +119,7 @@ extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
 extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
+extern void func_SystemFileCacheSize(void);
 extern void func_TerminateProcess(void);
 extern void func_ThreadPowerThrottling(void);
 extern void func_ProcessPowerThrottling(void);
@@ -254,6 +255,7 @@ const struct test winetest_testlist[] =
     { "SuspendThread",               func_SuspendThread },
     { "SynchronizationBarrier",      func_SynchronizationBarrier },
     { "SystemFirmware",              func_SystemFirmware },
+    { "SystemFileCacheSize",         func_SystemFileCacheSize },
     { "TerminateProcess",            func_TerminateProcess },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },
     { "ProcessPowerThrottling",      func_ProcessPowerThrottling },

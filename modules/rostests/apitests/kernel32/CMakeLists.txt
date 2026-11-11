@@ -122,6 +122,7 @@ list(APPEND SOURCE
     SuspendThread.c
     SynchronizationBarrier.c
     SystemFirmware.c
+    SystemFileCacheSize.c
     TerminateProcess.c
     ThreadPowerThrottling.c
     ProcessPowerThrottling.c
