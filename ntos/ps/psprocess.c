@@ -672,6 +672,45 @@ PspAllocateUserStack(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+PspCreateWow64Process(
+    _In_ PEPROCESS Process,
+    _In_ PVOID Section,
+    _In_ PINITIAL_PEB InitialPeb)
+{
+#ifdef _WIN64
+    SECTION_IMAGE_INFORMATION ImageInformation;
+    PEWOW64PROCESS Wow64Process;
+    struct _PEB32 *Peb32;
+    NTSTATUS Status;
+
+    Status = MmGetSectionImageInformation(Section, &ImageInformation);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (ImageInformation.Machine != IMAGE_FILE_MACHINE_I386) return STATUS_SUCCESS;
+
+    Wow64Process = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Wow64Process), TAG_WOW64_PROCESS);
+    if (Wow64Process == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = MmCreatePeb32(Process, InitialPeb, &ImageInformation, &Peb32);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Wow64Process, TAG_WOW64_PROCESS);
+        return Status;
+    }
+
+    Wow64Process->Peb = Peb32;
+    Wow64Process->NtdllType = PsWowX86SystemDll;
+    Process->WoW64Process = Wow64Process;
+#else
+    UNREFERENCED_PARAMETER(Process);
+    UNREFERENCED_PARAMETER(Section);
+    UNREFERENCED_PARAMETER(InitialPeb);
+#endif
+    return STATUS_SUCCESS;
+}
+
 /*
  * The whole of making a process from what is already held. Up to the point
  * the process is inserted a failure drops it; after that a caller can already
@@ -743,6 +782,7 @@ PspCreateProcessFromOperands(
 
         Status = MmCreatePeb(Process, &InitialPeb, &Peb);
         if (NT_SUCCESS(Status)) Process->Peb = Peb;
+        if (NT_SUCCESS(Status)) Status = PspCreateWow64Process(Process, Operands->Section, &InitialPeb);
     }
 
     /*

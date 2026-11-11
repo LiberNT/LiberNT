@@ -119,6 +119,7 @@ list(APPEND SOURCE
     WerRegisterFile.c
     WideCharToMultiByte.c
     Wow64GetThreadContext.c
+    Wow64ChildProcess.c
     WriteFile.c
     WriteFileBadBuffer.c
     WriteFileSeekBack.c

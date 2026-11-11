@@ -124,6 +124,7 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "GetCurrentThreadStackLimits", "core:exceptions" },
     { "kernel32_apitest", "WerRegisterFile", "core:exceptions" },
     { "kernel32_apitest", "Wow64GetThreadContext", "core:wow64" },
+    { "kernel32_apitest", "Wow64ChildProcess", "core:wow64" },
     { "kernel32_apitest", "GetSystemWow64Directory", "core:wow64" },
     { "kernel32_apitest", "Arm64ThreadContext", "core:wow64" },
     { "kernel32_apitest", "XState", "core:wow64" },

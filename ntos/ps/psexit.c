@@ -639,6 +639,12 @@ PspDeleteProcess(
         Process->EnergyContext = NULL;
     }
 
+    if (Process->WoW64Process != NULL)
+    {
+        ExFreePoolWithTag(Process->WoW64Process, TAG_WOW64_PROCESS);
+        Process->WoW64Process = NULL;
+    }
+
     /* TODO: on x86 the process's LDT and its DOS-machine objects are no
      * longer torn down here; that belongs in an architecture hook */
     if (Process->HasAddressSpace)
