@@ -10,6 +10,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#define SDDL_REVISION_1 1
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -564,6 +566,84 @@ IoCreateDevice(
     return Status;
 }
 
+static
+VOID
+IopReadClassOverride(
+    _In_ HANDLE PropertiesKey,
+    _In_ PWSTR ValueName,
+    _Inout_ PULONG Value)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+
+    if (!NT_SUCCESS(IopGetRegistryValue(PropertiesKey, ValueName, &Information))) return;
+
+    if (Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+        *Value = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+
+    ExFreePoolWithTag(Information, TAG_IO);
+}
+
+static
+VOID
+IopQueryDeviceClassOverrides(
+    _In_ LPCGUID DeviceClassGuid,
+    _Inout_ DEVICE_TYPE *DeviceType,
+    _Inout_ PULONG DeviceCharacteristics,
+    _Inout_ PBOOLEAN Exclusive,
+    _Outptr_result_maybenull_ PKEY_VALUE_FULL_INFORMATION *Security)
+{
+    UNICODE_STRING ClassRootName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+    UNICODE_STRING PropertiesName = RTL_CONSTANT_STRING(REGSTR_KEY_DEVICE_PROPERTIES);
+    PKEY_VALUE_FULL_INFORMATION Information;
+    HANDLE ClassRoot, ClassKey, PropertiesKey;
+    UNICODE_STRING GuidString;
+    ULONG Value;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *Security = NULL;
+
+    if (!NT_SUCCESS(RtlStringFromGUID(DeviceClassGuid, &GuidString))) return;
+
+    Status = IopOpenRegistryKeyEx(&ClassRoot, NULL, &ClassRootName, KEY_READ);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopOpenRegistryKeyEx(&ClassKey, ClassRoot, &GuidString, KEY_READ);
+        ZwClose(ClassRoot);
+    }
+    RtlFreeUnicodeString(&GuidString);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = IopOpenRegistryKeyEx(&PropertiesKey, ClassKey, &PropertiesName, KEY_READ);
+    ZwClose(ClassKey);
+    if (!NT_SUCCESS(Status)) return;
+
+    IopReadClassOverride(PropertiesKey, REGSTR_VAL_DEVICE_TYPE, DeviceType);
+    IopReadClassOverride(PropertiesKey, REGSTR_VAL_DEVICE_CHARACTERISTICS, DeviceCharacteristics);
+
+    Value = *Exclusive;
+    IopReadClassOverride(PropertiesKey, REGSTR_VAL_DEVICE_EXCLUSIVE, &Value);
+    *Exclusive = (Value != 0);
+
+    if (NT_SUCCESS(IopGetRegistryValue(PropertiesKey, REGSTR_VAL_DEVICE_SECURITY_DESCRIPTOR, &Information)))
+    {
+        if (Information->Type == REG_BINARY &&
+            RtlValidRelativeSecurityDescriptor((PUCHAR)Information + Information->DataOffset,
+                                               Information->DataLength,
+                                               DACL_SECURITY_INFORMATION))
+        {
+            *Security = Information;
+        }
+        else
+        {
+            ExFreePoolWithTag(Information, TAG_IO);
+        }
+    }
+
+    ZwClose(PropertiesKey);
+}
+
 NTSTATUS
 NTAPI
 IoCreateDeviceSecure(
@@ -577,14 +657,46 @@ IoCreateDeviceSecure(
     _In_opt_ LPCGUID DeviceClassGuid,
     _Outptr_ PDEVICE_OBJECT *DeviceObject)
 {
+    PKEY_VALUE_FULL_INFORMATION ClassSecurity = NULL;
+    PSECURITY_DESCRIPTOR Converted = NULL;
+    PSECURITY_DESCRIPTOR Descriptor;
+    PWSTR Sddl;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    UNREFERENCED_PARAMETER(DefaultSDDLString);
-    UNREFERENCED_PARAMETER(DeviceClassGuid);
+    *DeviceObject = NULL;
 
-    /* TODO: no SDDL parser in the kernel; the default descriptor is applied */
+    if (DeviceClassGuid != NULL)
+    {
+        IopQueryDeviceClassOverrides(DeviceClassGuid,
+                                     &DeviceType,
+                                     &DeviceCharacteristics,
+                                     &Exclusive,
+                                     &ClassSecurity);
+    }
+
+    if (ClassSecurity != NULL)
+    {
+        Descriptor = (PUCHAR)ClassSecurity + ClassSecurity->DataOffset;
+    }
+    else
+    {
+        if (DefaultSDDLString == NULL || DefaultSDDLString->Buffer == NULL) return STATUS_INVALID_PARAMETER;
+
+        Sddl = ExAllocatePoolWithTag(PagedPool, DefaultSDDLString->Length + sizeof(UNICODE_NULL), TAG_IO);
+        if (Sddl == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        RtlCopyMemory(Sddl, DefaultSDDLString->Buffer, DefaultSDDLString->Length);
+        Sddl[DefaultSDDLString->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+        Status = SeConvertStringSecurityDescriptorToSecurityDescriptor(Sddl, SDDL_REVISION_1, &Converted, NULL);
+        ExFreePoolWithTag(Sddl, TAG_IO);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        Descriptor = Converted;
+    }
+
     Status = IoCreateDevice(DriverObject,
                             DeviceExtensionSize,
                             DeviceName,
@@ -592,6 +704,18 @@ IoCreateDeviceSecure(
                             DeviceCharacteristics,
                             Exclusive,
                             DeviceObject);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ObSetSecurityObjectByPointer(*DeviceObject, DACL_SECURITY_INFORMATION, Descriptor);
+        if (!NT_SUCCESS(Status))
+        {
+            IoDeleteDevice(*DeviceObject);
+            *DeviceObject = NULL;
+        }
+    }
+
+    if (Converted != NULL) ExFreePoolWithTag(Converted, TAG_SD);
+    if (ClassSecurity != NULL) ExFreePoolWithTag(ClassSecurity, TAG_IO);
 
     return Status;
 }

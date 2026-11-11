@@ -180,6 +180,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCancelKM.c
     ntos_io/IoCloseIrqlKM.c
     ntos_io/IoContainerId.c
+    ntos_io/IoCreateDeviceSecure.c
     ntos_io/IoCreateFile.c
     ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCsqKM.c
@@ -507,7 +508,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
 else()
     target_link_options(kmtest_drv PRIVATE -Wl,--forceinteg)
 endif()
-target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib ${PSEH_LIB})
+target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib wdmsec ${PSEH_LIB})
 add_importlibs(kmtest_drv ksecdd ndis smclib ntoskrnl hal)
 if(REACTOS_USE_WDDM)
     add_importlibs(kmtest_drv dxgkrnl dxgmms2)
