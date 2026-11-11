@@ -156,6 +156,7 @@ list(APPEND SOURCE
     SetWaitableTimerEx.c
     WaitableTimerHighResolution.c
     WaitableTimerApcReset.c
+    WaitableTimerCloseAtExpiry.c
     WaitableTimerThreadExit.c
     SwitchToThreadCost.c
     SuspendThread.c

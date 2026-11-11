@@ -151,6 +151,7 @@ extern void func_SetUnhandledExceptionFilter(void);
 extern void func_SetWaitableTimerEx(void);
 extern void func_WaitableTimerHighResolution(void);
 extern void func_WaitableTimerApcReset(void);
+extern void func_WaitableTimerCloseAtExpiry(void);
 extern void func_WaitableTimerThreadExit(void);
 extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
@@ -348,6 +349,7 @@ const struct test winetest_testlist[] =
     { "SetWaitableTimerEx",          func_SetWaitableTimerEx },
     { "WaitableTimerHighResolution", func_WaitableTimerHighResolution },
     { "WaitableTimerApcReset",       func_WaitableTimerApcReset },
+    { "WaitableTimerCloseAtExpiry",  func_WaitableTimerCloseAtExpiry },
     { "WaitableTimerThreadExit",     func_WaitableTimerThreadExit },
     { "SwitchToThreadCost", func_SwitchToThreadCost },
     { "SuspendThread",               func_SuspendThread },

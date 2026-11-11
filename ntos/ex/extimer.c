@@ -197,6 +197,14 @@ ExpQueueTimerApcAfterWait(
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
 }
 
+static
+BOOLEAN
+ExpTimerMayHaveRunDpc(
+    _In_ PETIMER Timer)
+{
+    return Timer->HighResolution || (Timer->TimerApc.KernelRoutine != NULL);
+}
+
 /*
  * Takes a timer off whatever it is still listed on when the last handle to it
  * goes away, so nothing is left pointing at it.
@@ -209,7 +217,16 @@ ExpDeleteTimer(
     PETIMER Timer = ObjectBody;
     KIRQL OldIrql;
 
+    PAGED_CODE();
+
+    ASSERT(!Timer->ApcAssociated);
+
     KeCancelTimer(&Timer->KeTimer);
+
+    if (ExpTimerMayHaveRunDpc(Timer))
+    {
+        KeFlushQueuedDpcs();
+    }
 
     KeAcquireSpinLock(&Timer->Lock, &OldIrql);
     ExpArmHighResolutionTimer(Timer, FALSE);
