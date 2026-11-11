@@ -1856,6 +1856,7 @@ typedef struct _ETHREAD
     volatile LONG ExecutableWriteAllowed;
 #if defined(__REACTOS__)
     CHAR Win32kPriorityFloor;
+    /* TODO: unused since the opt-out moved to CrossThreadFlags.DisableDynamicCodeOptOut; remove with the next pstypes.h change */
     volatile LONG DynamicCodeOptOut;
 #endif
 } ETHREAD;
