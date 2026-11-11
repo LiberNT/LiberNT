@@ -182,10 +182,10 @@ static HWND WaitWindow(WINDOW_SEARCH *Search, HANDLE Process, DWORD BudgetMs)
             return Search->Found;
         if (GetTickCount() - Start >= BudgetMs)
             return NULL;
-        if (Process && WaitForSingleObject(Process, 100) == WAIT_OBJECT_0)
+        if (Process && WaitForSingleObject(Process, 1) == WAIT_OBJECT_0)
             return NULL;
         if (!Process)
-            Sleep(100);
+            Sleep(1);
     }
 }
 
