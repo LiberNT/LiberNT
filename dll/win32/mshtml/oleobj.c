@@ -3474,6 +3474,9 @@ static ULONG WINAPI HTMLDocumentObj_Release(IUnknown *iface)
     TRACE("(%p) ref = %lu\n", This, ref);
 
     if(!ref) {
+        /* The teardown runs Gecko code that can AddRef and Release this object again */
+        This->ref = 1;
+
         if(This->doc_node) {
             HTMLDocumentNode *doc_node = This->doc_node;
 

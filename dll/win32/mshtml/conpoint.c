@@ -452,4 +452,5 @@ void ConnectionPointContainer_Destroy(ConnectionPointContainer *This)
     for(i=0; This->cp_entries[i].riid; i++)
         ConnectionPoint_Destroy(This->cps+i);
     free(This->cps);
+    This->cps = NULL;
 }

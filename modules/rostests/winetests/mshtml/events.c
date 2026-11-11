@@ -6528,9 +6528,12 @@ typedef struct {
 
     HANDLE delay_event;
     ULONG delay;
+    BOOL held;
 } ProtocolHandler;
 
 static ProtocolHandler *delay_with_signal_handler;
+static BOOL hold_requests;
+static LONG held_requests;
 
 static DWORD WINAPI delay_proc(void *arg)
 {
@@ -6646,6 +6649,14 @@ static HRESULT WINAPI Protocol_Continue(IInternetProtocolEx *iface, PROTOCOLDATA
         }
     }
 
+    if(This->held) {
+        hres = IInternetProtocolSink_ReportData(This->sink, BSCF_FIRSTDATANOTIFICATION, This->size, This->size * 2);
+        ok(hres == S_OK, "ReportData failed: %08lx\n", hres);
+        held_requests++;
+        IInternetProtocolEx_Release(&This->IInternetProtocolEx_iface);
+        return S_OK;
+    }
+
     hres = IInternetProtocolSink_ReportData(This->sink, BSCF_FIRSTDATANOTIFICATION | BSCF_LASTDATANOTIFICATION,
                                             This->size, This->size);
     ok(hres == S_OK, "ReportData failed: %08lx\n", hres);
@@ -6695,6 +6706,8 @@ static HRESULT WINAPI Protocol_Read(IInternetProtocolEx *iface, void *pv, ULONG 
     }
 
     *pcbRead = read;
+    if(This->held && !read)
+        return E_PENDING;
     return (This->ptr != This->data + This->size) ? S_OK : S_FALSE;
 }
 
@@ -6723,6 +6736,8 @@ static HRESULT WINAPI ProtocolEx_StartEx(IInternetProtocolEx *iface, IUri *uri, 
     ProtocolHandler *This = impl_from_IInternetProtocolEx(iface);
     HRESULT hres;
     BSTR query;
+
+    This->held = hold_requests;
 
     This->data = protocol_doc_str;
     This->size = strlen(This->data);
@@ -7045,19 +7060,10 @@ static IHTMLDocument2 *create_document(void)
     return SUCCEEDED(hres) ? doc : NULL;
 }
 
-static IHTMLDocument2 *create_document_with_origin(const char *str)
+static void set_protocol_doc_str(const char *str)
 {
     IInternetSession *internet_session;
-    IPersistMoniker *persist;
-    IHTMLDocument2 *doc;
-    IMoniker *mon;
     HRESULT hres;
-    BSTR url;
-    MSG msg;
-
-    doc = create_document();
-    if(!doc)
-        return NULL;
 
     if(!protocol_doc_str) {
         hres = CoInternetGetSession(0, &internet_session, 0);
@@ -7069,6 +7075,22 @@ static IHTMLDocument2 *create_document_with_origin(const char *str)
         IInternetSession_Release(internet_session);
     }
     protocol_doc_str = str;
+}
+
+static IHTMLDocument2 *create_document_with_origin(const char *str)
+{
+    IPersistMoniker *persist;
+    IHTMLDocument2 *doc;
+    IMoniker *mon;
+    HRESULT hres;
+    BSTR url;
+    MSG msg;
+
+    doc = create_document();
+    if(!doc)
+        return NULL;
+
+    set_protocol_doc_str(str);
 
     notif_doc = doc;
     doc_complete = FALSE;
@@ -7748,6 +7770,45 @@ static void test_navigation_during_notif(void)
     }
 }
 
+static void test_release_during_load(void)
+{
+    IHTMLDocument2 *doc;
+    DWORD start;
+    ULONG ref;
+    MSG msg;
+
+    if(!(doc = create_document()))
+        return;
+
+    set_protocol_doc_str(empty_doc_str);
+    hold_requests = TRUE;
+    held_requests = 0;
+    set_client_site(doc, TRUE);
+    doc_load_res(doc, L"event_iframe.html");
+    do_advise((IUnknown*)doc, &IID_IPropertyNotifySink, (IUnknown*)&PropertyNotifySink);
+
+    start = GetTickCount();
+    while(held_requests < 2 && GetTickCount() - start < 5000) {
+        if(PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }else {
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 100, QS_ALLINPUT);
+        }
+    }
+    ok(held_requests == 2, "held_requests = %ld\n", held_requests);
+    ok(!doc_complete, "the document completed with pending iframes\n");
+
+    if(view) {
+        IOleDocumentView_Release(view);
+        view = NULL;
+    }
+    set_client_site(doc, FALSE);
+    ref = IHTMLDocument2_Release(doc);
+    ok(!ref, "ref = %lu\n", ref);
+    hold_requests = FALSE;
+}
+
 static BOOL check_ie(void)
 {
     IHTMLDocument2 *doc;
@@ -7822,6 +7883,7 @@ START_TEST(events)
             test_sync_xhr_events(empty_doc_ie9_str);
         }
         test_navigation_during_notif();
+        test_release_during_load();
 
         /* Test this last since it doesn't close the view properly. */
         test_document_close();
