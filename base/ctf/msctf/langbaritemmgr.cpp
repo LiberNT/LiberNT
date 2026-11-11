@@ -538,7 +538,7 @@ public:
 
 private:
     CTipInputModeIndicator() : m_refs(1), m_hwnd(NULL), m_dwThreadId(0), m_hIconSent(NULL), m_pButton(NULL)
-        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_cClickWaits(0) { }
+        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_dwClickTime(0) { }
     ~CTipInputModeIndicator()
     {
         Close();
@@ -591,7 +591,7 @@ private:
     {
         m_click = click;
         m_ptClick = pt;
-        m_cClickWaits = 0;
+        m_dwClickTime = GetTickCount();
         if (GetFocus())
         {
             Click(click, pt);
@@ -602,7 +602,7 @@ private:
 
     void OnClickTimer()
     {
-        if (!GetFocus() && ++m_cClickWaits < CLICK_TIMER_MAX)
+        if (!GetFocus() && GetTickCount() - m_dwClickTime < CLICK_WAIT_MS)
             return;
         KillTimer(m_hwnd, CLICK_TIMER_ID);
         Click(m_click, m_ptClick);
@@ -663,7 +663,7 @@ private:
         return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
 
-    enum { CLICK_TIMER_ID = 1, CLICK_TIMER_MS = 20, CLICK_TIMER_MAX = 25 };
+    enum { CLICK_TIMER_ID = 1, CLICK_TIMER_MS = 20, CLICK_WAIT_MS = 500 };
 
     static BOOL s_fRegistered;
 
@@ -676,7 +676,7 @@ private:
     DWORD m_dwCookie;
     TfLBIClick m_click;
     POINT m_ptClick;
-    UINT m_cClickWaits;
+    DWORD m_dwClickTime;
 };
 
 BOOL CTipInputModeIndicator::s_fRegistered = FALSE;
