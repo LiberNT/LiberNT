@@ -129,6 +129,10 @@ KdbpTryGetCharKeyboard(
 
         Status = READ_PORT_UCHAR((PUCHAR)KDP_KBD_STATUS_PORT);
 
+        /* TODO: the PC keyboard controller is probed through port I/O on every architecture */
+        if (Status == 0xFF)
+            return (CHAR)-1;
+
         if ((Status & KDP_KBD_STATUS_OUTPUT_FULL) == 0)
         {
             if (Remaining == 0)
@@ -143,7 +147,13 @@ KdbpTryGetCharKeyboard(
 
         /* The mouse shares the controller and has nothing to say here */
         if ((Status & KDP_KBD_STATUS_FROM_MOUSE) != 0)
+        {
+            if (Remaining == 0)
+                return (CHAR)-1;
+
+            Remaining--;
             continue;
+        }
 
         /* Letting go of a key only matters for the shift keys */
         if ((Code & KDP_KBD_BREAK_FLAG) != 0)
