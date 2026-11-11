@@ -349,7 +349,9 @@ PiQueryAndSaveIds(
         UniqueId = (BOOLEAN)Capabilities.UniqueID;
     }
 
-    Status = PiBuildInstancePath(DeviceNode, DeviceId, InstanceId, UniqueId);
+    /* A removed node that is set up again keeps the instance path it was enumerated with */
+    Status = (DeviceNode->InstancePath.Length != 0) ? STATUS_SUCCESS :
+             PiBuildInstancePath(DeviceNode, DeviceId, InstanceId, UniqueId);
 
     if (InstanceId != NULL) ExFreePool(InstanceId);
     ExFreePool(DeviceId);
@@ -1076,6 +1078,13 @@ PiProcessNewChildren(
         ChildNode = IopGetDeviceNode(Child);
         if (ChildNode != NULL)
         {
+            /* A removed device its bus still reports is set up again, its instance key and IDs included */
+            if (ChildNode->State == DeviceNodeRemoved && !(ChildNode->Flags & (DNF_HAS_PROBLEM | DNF_DEVICE_GONE)))
+            {
+                PiClearDevNodeFlag(ChildNode, DNF_IDS_QUERIED | DNF_UNINSTALLED);
+                PiSetDevNodeState(ChildNode, DeviceNodeUninitialized);
+            }
+
             ObDereferenceObject(Child);
             continue;
         }

@@ -390,6 +390,45 @@ NtGetPlugPlayEvent(
     return Status;
 }
 
+/* A rescan from user mode also asks the bus of every removed device that is still present for its children */
+static
+VOID
+PiFlagParentsOfRemovedDevices(
+    _In_ PDEVICE_NODE Root)
+{
+    PDEVICE_NODE Node = Root;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&IopDeviceTreeResource, TRUE);
+
+    while (Node != NULL)
+    {
+        if (Node != Root && Node->State == DeviceNodeRemoved &&
+            !(Node->Flags & (DNF_HAS_PROBLEM | DNF_DEVICE_GONE)))
+        {
+            PiSetDevNodeFlag(Node->Parent, DNF_REENUMERATE);
+        }
+
+        if (Node->Child != NULL)
+        {
+            Node = Node->Child;
+            continue;
+        }
+
+        while (Node != Root && Node->Sibling == NULL)
+        {
+            Node = Node->Parent;
+        }
+
+        Node = (Node == Root) ? NULL : Node->Sibling;
+    }
+
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
+}
+
 static
 NTSTATUS
 IopControlEnumerateDevice(
@@ -405,6 +444,7 @@ IopControlEnumerateDevice(
 
     /* The device is asked for its children again, as CM_Reenumerate_DevNode documents */
     PiSetDevNodeFlag(IopGetDeviceNode(DeviceObject), DNF_REENUMERATE);
+    PiFlagParentsOfRemovedDevices(IopGetDeviceNode(DeviceObject));
 
     Status = PiPerformSyncDeviceAction(DeviceObject, PiActionEnumDeviceTree);
 

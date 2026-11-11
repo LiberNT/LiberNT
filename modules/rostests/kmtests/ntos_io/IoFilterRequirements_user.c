@@ -207,6 +207,45 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
     ok(Status & DN_STARTED, "The child did not come back when its bus reported it again (status 0x%lx)\n", Status);
 }
 
+/* An uninstalled child its bus still reports is set up again when user mode rescans the devices, as Windows 11
+ * does; the fixture then installs it again for the next checks */
+static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
+{
+    SP_DEVINFO_DATA Device = { sizeof(Device) };
+    WCHAR Instance[MAX_DEVICE_ID_LEN];
+    WCHAR HardwareIds[64];
+    ULONG Size = sizeof(HardwareIds);
+    HDEVINFO Devices;
+    DEVINST Child, Root;
+    BOOL Removed = FALSE;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        CM_Get_Device_IDW(Child, Instance, RTL_NUMBER_OF(Instance), 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to uninstall\n");
+        return;
+    }
+
+    Devices = SetupDiCreateDeviceInfoList(NULL, NULL);
+    if (Devices != INVALID_HANDLE_VALUE && SetupDiOpenDeviceInfoW(Devices, Instance, NULL, 0, &Device))
+        Removed = SetupDiCallClassInstaller(DIF_REMOVE, Devices, &Device);
+    if (Devices != INVALID_HANDLE_VALUE)
+        SetupDiDestroyDeviceInfoList(Devices);
+    ok(Removed, "Uninstalling %ls failed: %lu\n", Instance, GetLastError());
+    if (!Removed)
+        return;
+
+    ok_eq_ulong(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok(CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS &&
+       CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_HARDWAREID, NULL, HardwareIds, &Size, 0) == CR_SUCCESS &&
+       !wcscmp(HardwareIds, L"KMTEST\\FILTERREQCHILD"),
+       "The uninstalled child was not set up again on a rescan\n");
+
+    ok(InstallChild(InfPath), "Installing the child again failed\n");
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -309,6 +348,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckRestart();
         CheckReenumerate(Device->DevInst);
         CheckSurpriseRemoval(Device->DevInst);
+        CheckReinstall(Device->DevInst, InfPath);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }
