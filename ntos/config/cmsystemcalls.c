@@ -1957,6 +1957,8 @@ NtLoadKeyEx(
 
     UNREFERENCED_PARAMETER(DesiredAccess);
 
+    if (RootHandle != NULL && (Flags & REG_APP_HIVE) == 0) return STATUS_INVALID_PARAMETER_7;
+
     if (PreviousMode != KernelMode)
     {
         _SEH2_TRY
