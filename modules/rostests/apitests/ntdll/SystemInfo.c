@@ -425,25 +425,25 @@ CollectProcessorSets(
         Mask = Record->Processor.GroupMask[0].Mask;
         ok(Record->Processor.GroupCount == 1, "Relationship %d: group count %u\n", Relationship, Record->Processor.GroupCount);
         ok(Record->Processor.GroupMask[0].Group == 0, "Relationship %d: group %u\n", Relationship, Record->Processor.GroupMask[0].Group);
-        ok(Mask != 0 && (Mask & ~Active) == 0, "Relationship %d: mask 0x%Ix of 0x%Ix\n", Relationship, Mask, Active);
-        ok((Seen & Mask) == 0, "Relationship %d: mask 0x%Ix overlaps 0x%Ix\n", Relationship, Mask, Seen);
+        ok(Mask != 0 && (Mask & ~Active) == 0, "Relationship %d: mask 0x%I64x of 0x%I64x\n", Relationship, (ULONGLONG)Mask, (ULONGLONG)Active);
+        ok((Seen & Mask) == 0, "Relationship %d: mask 0x%I64x overlaps 0x%I64x\n", Relationship, (ULONGLONG)Mask, (ULONGLONG)Seen);
         Seen |= Mask;
 
         if (Relationship == RelationProcessorCore)
         {
             ok(Record->Processor.Flags == ((CountProcessors(Mask) > 1) ? LTP_PC_SMT : 0),
-               "Core 0x%Ix: flags 0x%x\n", Mask, Record->Processor.Flags);
+               "Core 0x%I64x: flags 0x%x\n", (ULONGLONG)Mask, Record->Processor.Flags);
         }
         else if (Relationship == RelationProcessorPackage)
         {
-            ok(Record->Processor.Flags == 0, "Package 0x%Ix: flags 0x%x\n", Mask, Record->Processor.Flags);
+            ok(Record->Processor.Flags == 0, "Package 0x%I64x: flags 0x%x\n", (ULONGLONG)Mask, Record->Processor.Flags);
         }
 
         if (Sets->Count < RTL_NUMBER_OF(Sets->Sets))
             Sets->Sets[Sets->Count++] = Mask;
     }
     ok(Info == NULL || Offset == Length, "Relationship %d: records end at %lu of %lu\n", Relationship, Offset, Length);
-    ok(Seen == Active, "Relationship %d: sets cover 0x%Ix of 0x%Ix\n", Relationship, Seen, Active);
+    ok(Seen == Active, "Relationship %d: sets cover 0x%I64x of 0x%I64x\n", Relationship, (ULONGLONG)Seen, (ULONGLONG)Active);
 
     if (Info != NULL)
         RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
@@ -466,7 +466,7 @@ CheckNested(
             if ((Inner->Sets[i] & ~Outer->Sets[j]) == 0)
                 Containing++;
         }
-        ok(Containing == 1, "%s 0x%Ix: in %lu outer sets\n", Name, Inner->Sets[i], Containing);
+        ok(Containing == 1, "%s 0x%I64x: in %lu outer sets\n", Name, (ULONGLONG)Inner->Sets[i], Containing);
     }
 }
 
@@ -484,7 +484,7 @@ CheckSetSizes(
     for (i = 0; i < Sets->Count; i++)
     {
         ok(CountProcessors(Sets->Sets[i]) == Processors,
-           "%s 0x%Ix: %lu processors, expected %lu\n", Name, Sets->Sets[i], CountProcessors(Sets->Sets[i]), Processors);
+           "%s 0x%I64x: %lu processors, expected %lu\n", Name, (ULONGLONG)Sets->Sets[i], CountProcessors(Sets->Sets[i]), Processors);
     }
 }
 

@@ -616,8 +616,13 @@ typedef struct
 typedef struct
 {
     DWORD NodeNumber;
-    BYTE Reserved[20];
-    GROUP_AFFINITY32 GroupMask;
+    BYTE Reserved[18];
+    WORD GroupCount;
+    union
+    {
+        GROUP_AFFINITY32 GroupMask;
+        GROUP_AFFINITY32 GroupMasks[ANYSIZE_ARRAY];
+    };
 } NUMA_NODE_RELATIONSHIP32;
 
 typedef struct
@@ -627,8 +632,13 @@ typedef struct
     WORD LineSize;
     DWORD CacheSize;
     PROCESSOR_CACHE_TYPE Type;
-    BYTE Reserved[20];
-    GROUP_AFFINITY32 GroupMask;
+    BYTE Reserved[18];
+    WORD GroupCount;
+    union
+    {
+        GROUP_AFFINITY32 GroupMask;
+        GROUP_AFFINITY32 GroupMasks[ANYSIZE_ARRAY];
+    };
 } CACHE_RELATIONSHIP32;
 
 typedef struct
