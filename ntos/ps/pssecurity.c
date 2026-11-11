@@ -116,10 +116,11 @@ PspInitializeProcessSecurity(
     Parented = PsReferencePrimaryToken(Parent);
     if (Parented == NULL) return STATUS_NO_TOKEN;
 
+    /* The address space, and with it the session the creator is in, is joined only after this */
     Status = SeSubProcessToken(Parented,
                                &Token,
                                TRUE,
-                               MmGetSessionId(Process));
+                               MmGetSessionId(PsGetCurrentProcess()));
     PsDereferencePrimaryToken(Parented);
 
     if (!NT_SUCCESS(Status)) return Status;
