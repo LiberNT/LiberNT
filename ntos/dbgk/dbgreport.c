@@ -792,9 +792,18 @@ NtDebugActiveProcess(
         return Status;
     }
 
+    if (!ExAcquireRundownProtection(&Process->RundownProtect))
+    {
+        ObDereferenceObject(DebugObject);
+        ObDereferenceObject(Process);
+        return STATUS_PROCESS_IS_TERMINATING;
+    }
+
     Status = DbgkpPostFakeProcessCreateMessages(Process, DebugObject, &Last);
 
     Status = DbgkpSetProcessDebugObject(Process, DebugObject, Status, Last);
+
+    ExReleaseRundownProtection(&Process->RundownProtect);
 
     ObDereferenceObject(DebugObject);
     ObDereferenceObject(Process);
