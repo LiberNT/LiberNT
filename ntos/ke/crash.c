@@ -716,11 +716,10 @@ KiBugCheckDebugBreak(
  * The order matters and is the whole design of this routine. The parameters are
  * recorded before anything that could fault, because they are the only thing a
  * dump reader is certain to get. Then every other processor is stopped, so that
- * nothing changes underneath what follows. Then the callbacks run, then the
- * debugger is offered the stop, then the screen. The debugger comes before the
- * screen because a debugger that is attached is more use than a screen nobody
- * is looking at, and after the callbacks because their buffers are part of what
- * it will be shown.
+ * nothing changes underneath what follows. Then the callbacks run, an external
+ * debugger gets its first look, the screen is put up and the dump is written.
+ * An integrated debugger only gets the machine after that: it always counts as
+ * attached and would otherwise keep the dump from ever being written.
  */
 DECLSPEC_NORETURN
 VOID
@@ -809,10 +808,14 @@ KeBugCheckWithTf(
     KiDoBugCheckCallbacks();
     KiDoBugCheckReasonCallbacks(KbCallbackDumpIo);
 
+#ifdef _WINKD_
     /* The debugger's first look, before the screen is taken over */
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_FIRST);
+#endif
 
     KiDisplayBlueScreen(BugCheckCode, TrapFrame, ContextPointer);
+
+    KdpWriteCrashDump();
 
     /* And its second, now that everything has been said */
     KiBugCheckDebugBreak(DBG_STATUS_BUGCHECK_SECOND);

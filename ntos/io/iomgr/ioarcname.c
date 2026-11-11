@@ -588,6 +588,9 @@ IopMarkBootPartition(
 
     FileObject->DeviceObject->Flags |= DO_SYSTEM_BOOT_PARTITION;
 
+    if (!IoInitializeDedicatedCrashDump(FileObject))
+        IoInitializeBootPageFileCrashDump(&DeviceName);
+
     ObDereferenceObject(FileObject);
     ZwClose(Handle);
     RtlFreeUnicodeString(&DeviceName);

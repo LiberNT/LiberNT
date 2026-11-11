@@ -711,6 +711,11 @@ IoInitSystem(
         return FALSE;
     }
 
+    if (!IoInitializeCrashDumpCore(LoaderBlock))
+    {
+        DPRINT("I/O: no crash dump on this boot\n");
+    }
+
     IopInitializeBootDrivers();
 
     Status = IopCreateArcNames(LoaderBlock);
@@ -738,10 +743,7 @@ IoInitSystem(
 
     IopInitializeSystemDrivers();
 
-    if (!IoInitializeCrashDumpCore(LoaderBlock))
-    {
-        DPRINT("I/O: no crash dump on this boot\n");
-    }
+    IoPublishCrashDumpArtifacts();
 
     return TRUE;
 }
