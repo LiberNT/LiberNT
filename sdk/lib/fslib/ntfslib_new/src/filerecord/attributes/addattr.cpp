@@ -1604,10 +1604,11 @@ FileRecord::RemoveListedAttribute(
 }
 
 NTSTATUS
-FileRecord::CreateInitialAttributeList()
+FileRecord::CreateInitialAttributeList(_In_opt_ PAttribute GrowingData)
 {
     PAttribute Candidate = NULL;
     PAttribute Candidates[2] = {};
+    PAttribute DataCandidate = NULL;
     PAttribute EaCandidate = NULL;
     PAttribute EaInformationCandidate = NULL;
     PAttribute FallbackCandidate = NULL;
@@ -1632,6 +1633,7 @@ FileRecord::CreateInitialAttributeList()
     ULONG MovedCount = 0;
     ULONG Offset;
     ULONG WrittenLength;
+    BOOLEAN BaseFull;
     BOOLEAN BaseWriteAttempted = FALSE;
     BOOLEAN BaseRestored = TRUE;
     BOOLEAN EndMarkerFound = FALSE;
@@ -1720,6 +1722,18 @@ FileRecord::CreateInitialAttributeList()
         {
             FallbackCandidate = Attribute;
         }
+        else if (Attribute->IsNonResident &&
+                 Attribute->AttributeType == TypeData &&
+                 Attribute->Flags == 0 &&
+                 Attribute->NonResident.FirstVCN == 0 &&
+                 (GrowingData
+                      ? Attribute == GrowingData
+                      : !DataCandidate ||
+                        Attribute->Length >
+                            DataCandidate->Length))
+        {
+            DataCandidate = Attribute;
+        }
         else if (!Attribute->IsNonResident &&
                  Attribute->AttributeType ==
                     TypeEAInformation &&
@@ -1753,7 +1767,12 @@ FileRecord::CreateInitialAttributeList()
         Status = STATUS_FILE_CORRUPT_ERROR;
         goto Done;
     }
-    if (Candidate)
+    ASSERT(!GrowingData || DataCandidate == GrowingData);
+    if (GrowingData && DataCandidate)
+    {
+        Candidates[CandidateCount++] = DataCandidate;
+    }
+    else if (Candidate)
     {
         Candidates[CandidateCount++] = Candidate;
     }
@@ -1774,11 +1793,20 @@ FileRecord::CreateInitialAttributeList()
         Candidates[CandidateCount++] =
             FallbackCandidate;
     }
+    BaseFull =
+        Header->ActualSize >
+            Header->AllocatedSize ||
+        Header->AllocatedSize -
+            Header->ActualSize < 0x50;
     if (CandidateCount == 0 &&
-        (Header->ActualSize >
-             Header->AllocatedSize ||
-         Header->AllocatedSize -
-             Header->ActualSize < 0x50))
+        BaseFull &&
+        DataCandidate)
+    {
+        Candidates[CandidateCount++] =
+            DataCandidate;
+    }
+    if (CandidateCount == 0 &&
+        BaseFull)
     {
         Status = STATUS_BUFFER_TOO_SMALL;
         goto Done;
