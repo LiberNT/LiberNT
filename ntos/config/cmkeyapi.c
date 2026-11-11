@@ -1016,7 +1016,7 @@ CmRenameKey(
     {
         HvReleaseCell(Hive, Parent->KeyCell);
         HvReleaseCell(Hive, Kcb->KeyCell);
-        return STATUS_OBJECT_NAME_COLLISION;
+        return STATUS_CANNOT_DELETE;
     }
 
     StorageType = HvGetCellType(Kcb->KeyCell);

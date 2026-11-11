@@ -1294,6 +1294,11 @@ NtRenameKey(
 
     PAGED_CODE();
 
+    if (NewName == NULL)
+    {
+        return (PreviousMode != KernelMode) ? STATUS_ACCESS_VIOLATION : STATUS_INVALID_PARAMETER;
+    }
+
     _SEH2_TRY
     {
         Status = CmpCaptureName(NewName,
