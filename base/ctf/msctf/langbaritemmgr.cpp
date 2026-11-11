@@ -538,7 +538,8 @@ public:
 
 private:
     CTipInputModeIndicator() : m_refs(1), m_hwnd(NULL), m_dwThreadId(0), m_hIconSent(NULL), m_pButton(NULL)
-        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_dwClickTime(0) { }
+        , m_pSource(NULL), m_dwCookie(0), m_click(TF_LBI_CLK_LEFT), m_ptClick(), m_rcClick(), m_rcNextClick()
+        , m_fNextClickRect(FALSE), m_dwClickTime(0) { }
     ~CTipInputModeIndicator()
     {
         Close();
@@ -591,10 +592,15 @@ private:
     {
         m_click = click;
         m_ptClick = pt;
+        if (m_fNextClickRect)
+            m_rcClick = m_rcNextClick;
+        else
+            SetRect(&m_rcClick, pt.x, pt.y, pt.x + 1, pt.y + 1);
+        m_fNextClickRect = FALSE;
         m_dwClickTime = GetTickCount();
         if (GetFocus())
         {
-            Click(click, pt);
+            Click();
             return;
         }
         SetTimer(m_hwnd, CLICK_TIMER_ID, CLICK_TIMER_MS, NULL);
@@ -605,18 +611,18 @@ private:
         if (!GetFocus() && GetTickCount() - m_dwClickTime < CLICK_WAIT_MS)
             return;
         KillTimer(m_hwnd, CLICK_TIMER_ID);
-        Click(m_click, m_ptClick);
+        Click();
     }
 
-    void Click(TfLBIClick click, POINT pt)
+    void Click()
     {
         if (!m_pButton)
             return;
-        RECT rc = { pt.x, pt.y, pt.x + 1, pt.y + 1 };
+        RECT rc = m_rcClick;
         ITfLangBarItemButton *pButton = m_pButton;
         AddRef();
         pButton->AddRef();
-        pButton->OnClick(click, pt, &rc);
+        pButton->OnClick(m_click, m_ptClick, &rc);
         pButton->Release();
         Release();
     }
@@ -637,6 +643,14 @@ private:
                     pThis->AddRef();
                     pThis->Publish();
                     pThis->Release();
+                }
+                return 0;
+            case WM_INPUTINDICATOR_CLICKRECT:
+                if (pThis)
+                {
+                    SetRect(&pThis->m_rcNextClick, GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam), GET_X_LPARAM(lParam),
+                            GET_Y_LPARAM(lParam));
+                    pThis->m_fNextClickRect = TRUE;
                 }
                 return 0;
             case WM_INPUTINDICATOR_CLICK:
@@ -676,6 +690,9 @@ private:
     DWORD m_dwCookie;
     TfLBIClick m_click;
     POINT m_ptClick;
+    RECT m_rcClick;
+    RECT m_rcNextClick;
+    BOOL m_fNextClickRect;
     DWORD m_dwClickTime;
 };
 

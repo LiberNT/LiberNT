@@ -1201,7 +1201,14 @@ KbSwitch_OnPenIconMsg(HWND hwnd, UINT uMouseMsg)
     if (HasTipInputMode())
     {
         WPARAM wClick = (uMouseMsg == WM_RBUTTONUP) ? INPUTINDICATOR_CLICK_RIGHT : INPUTINDICATOR_CLICK_LEFT;
+        NOTIFYICONIDENTIFIER nii = { sizeof(nii), hwnd, NOTIFY_ICON_ID_SYSTEM_PEN };
+        RECT rcIcon;
         SetForegroundWindow(GetTargetWindow(g_hwndLastActive));
+        if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &rcIcon)))
+        {
+            PostMessageW(g_TipInputMode.hwndTip, WM_INPUTINDICATOR_CLICKRECT, MAKEWPARAM(rcIcon.left, rcIcon.top),
+                         MAKELPARAM(rcIcon.right, rcIcon.bottom));
+        }
         PostMessageW(g_TipInputMode.hwndTip, WM_INPUTINDICATOR_CLICK, wClick, MAKELPARAM(pt.x, pt.y));
         return;
     }
