@@ -863,6 +863,8 @@ PiProcessStartDevice(
 
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
 
+    PopFxNotifyDeviceStarted(DeviceNode->PhysicalDeviceObject);
+
     InbvIndicateProgress();
 
     /* A device that just started is asked for its children */
