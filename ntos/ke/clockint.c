@@ -297,7 +297,7 @@ KeSetTimeIncrement(
     ASSERT(MaxIncrement >= MinIncrement);
 
     KeMaximumIncrement = MaxIncrement;
-    KeMinimumIncrement = max(MinIncrement, 10000);
+    KeMinimumIncrement = MinIncrement;
     KeTimeIncrement = MaxIncrement;
     KeTimeAdjustment = MaxIncrement;
     KiTickOffset = (LONG)MaxIncrement;
@@ -377,14 +377,14 @@ KiCounterOffsetInPeriod(
     if (Sequence == 0) return 0;
 
     /* The caller's tick has been overtaken since it read the counter, so the whole period has passed */
-    if (SnapshotTime != Interrupt) return KeMaximumIncrement;
+    if (SnapshotTime != Interrupt) return KeTimeIncrement;
 
     if (Counter.QuadPart <= SnapshotCounter) return 0;
 
     Elapsed = (ULONGLONG)(Counter.QuadPart - SnapshotCounter) * 10000000ULL /
               (ULONGLONG)Frequency.QuadPart;
 
-    return min(Elapsed, (ULONGLONG)KeMaximumIncrement);
+    return min(Elapsed, (ULONGLONG)KeTimeIncrement);
 }
 
 static

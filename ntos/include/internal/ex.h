@@ -1689,7 +1689,7 @@ ExReleaseTimeRefreshLock(
 VOID
 NTAPI
 ExpSetHighResolutionClock(
-    IN BOOLEAN Active
+    IN ULONG Resolution
 );
 
 VOID

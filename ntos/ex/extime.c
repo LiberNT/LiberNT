@@ -241,9 +241,10 @@ ExpApplyTimerResolution(VOID)
         Shortest = ExpKernelRequestedResolution;
     }
 
-    KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
+    /* Applied under the lock, so two callers cannot leave the clock at the step of the older answer */
+    ExpSetHighResolutionClock(Shortest);
 
-    ExpSetHighResolutionClock(Shortest != 0);
+    KeReleaseSpinLock(&ExpResolutionLock, OldIrql);
 }
 
 static
@@ -539,16 +540,16 @@ ExUpdateSystemTimeFromCmos(
 }
 
 /*
- * Asks the kernel for the shortest clock step it can manage, or lets it go back
- * to its usual one. A short step costs power, so it is only held while asked for.
+ * Runs the clock at the shortest step anyone asked for, or lets it go back to
+ * its usual one. The step reported is the one the platform grants. A short step
+ * costs power, so it is only held while asked for.
  */
 VOID
 NTAPI
 ExpSetHighResolutionClock(
-    _In_ BOOLEAN Active)
+    _In_ ULONG Resolution)
 {
-    /* FIXME: the clock's rate never changes (no HalSetTimeIncrement, whose faster ticks KiUpdateRunTime would charge as whole periods), so the current resolution stays the default */
-    UNREFERENCED_PARAMETER(Active);
+    KeTimeIncrement = HalSetTimeIncrement((Resolution != 0) ? Resolution : KeMaximumIncrement);
 }
 
 VOID
