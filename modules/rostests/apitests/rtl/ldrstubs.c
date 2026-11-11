@@ -43,3 +43,10 @@ LdrpGetResourceModuleForEntry(PVOID BaseAddress, PVOID Entry)
 {
     return BaseAddress;
 }
+
+LANGID
+NTAPI
+RtlpGetThreadUILanguage(VOID)
+{
+    return 0;
+}
