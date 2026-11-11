@@ -138,6 +138,12 @@ KdbpParseNumber(
         if (Digit >= Radix)
             break;
 
+        if (Value > (MAXULONGLONG - Digit) / Radix)
+        {
+            KdbpFail(Parser, "the number does not fit in 64 bits");
+            return 0;
+        }
+
         Value = (Value * Radix) + Digit;
         Any = TRUE;
         Parser->Current++;

@@ -285,6 +285,9 @@ KdbpGetHexNumber(
         else
             break;
 
+        if (Value > (MAXULONG_PTR >> 4))
+            return FALSE;
+
         Value = (Value * 16) + Digit;
         Any = TRUE;
         Current++;
