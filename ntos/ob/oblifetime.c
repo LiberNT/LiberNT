@@ -123,7 +123,8 @@ ObpCaptureObjectName(
 
     /* A name made of whole characters is the only shape there is */
     if (Supplied.Length == 0) return STATUS_SUCCESS;
-    if ((Supplied.Length % sizeof(WCHAR)) != 0 || Supplied.Buffer == NULL)
+    if ((Supplied.Length % sizeof(WCHAR)) != 0 || Supplied.Buffer == NULL ||
+        Supplied.Length > MAXUSHORT - sizeof(UNICODE_NULL))
         return STATUS_OBJECT_NAME_INVALID;
 
     Buffer = ObpAllocateObjectNameBuffer(Supplied.Length,
