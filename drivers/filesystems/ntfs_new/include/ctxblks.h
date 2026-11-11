@@ -687,6 +687,13 @@ NtfsTxfCheckNewName(_In_ PVolumeContextBlock VolCB,
 PCUNICODE_STRING
 NtfsTxfDisplayName(_In_ PFileContextBlock FileCB);
 
+NTSTATUS
+NtfsTxfNormalizedName(_In_ PVolumeContextBlock VolCB,
+                      _In_ PFileContextBlock FileCB,
+                      _Out_writes_(Capacity) PWCHAR Path,
+                      _In_ ULONG Capacity,
+                      _Out_ PULONG PathLength);
+
 BOOLEAN
 NtfsTxfKeepDirectoryEntry(_In_ PVolumeContextBlock VolCB,
                           _In_ PFileContextBlock FileCB,

@@ -223,7 +223,8 @@ RemoveTree(
                                     L"copy.txt", L"copyA.txt", L"moved.txt", L"movedA.txt", L"link.txt",
                                     L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt", L"data.txt",
                                     L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt",
-                                    L"full\\a.txt", L"full\\b.txt", L"full\\c.txt", L"outside.txt" };
+                                    L"full\\a.txt", L"full\\b.txt", L"full\\c.txt", L"outside.txt",
+                                    L"Norm.txt", L"norm2.txt", L"Renamed.txt", L"norm3.txt" };
     static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree", L"full" };
     WCHAR Path[MAX_PATH];
     CHAR PathA[MAX_PATH];
@@ -993,6 +994,108 @@ TestTransactedDirectoryRemoval(
 
 static
 VOID
+CheckNormalizedName(
+    _In_ HANDLE File,
+    _In_ PCWSTR Directory,
+    _In_ PCWSTR Leaf,
+    _In_ PCSTR What)
+{
+    WCHAR Expected[MAX_PATH], Buffer[MAX_PATH];
+    UCHAR Info[sizeof(FILE_NAME_INFO) + MAX_PATH * sizeof(WCHAR)];
+    PFILE_NAME_INFO NameInfo = (PFILE_NAME_INFO)Info;
+    DWORD Length;
+
+    StringCchPrintfW(Expected, RTL_NUMBER_OF(Expected), L"%s\\%s", Directory, Leaf);
+    Length = GetFinalPathNameByHandleW(File, Buffer, RTL_NUMBER_OF(Buffer), FILE_NAME_NORMALIZED | VOLUME_NAME_NONE);
+    ok(Length == wcslen(Expected) && !wcscmp(Buffer, Expected), "%s: normalized name %lu %S, expected %S\n",
+       What, Length, Length < RTL_NUMBER_OF(Buffer) ? Buffer : L"", Expected);
+    ZeroMemory(Info, sizeof(Info));
+    ok(GetFileInformationByHandleEx(File, FileNormalizedNameInfo, Info, sizeof(Info)),
+       "%s: FileNormalizedNameInfo failed with %lu\n", What, GetLastError());
+    StringCchCopyNW(Buffer, RTL_NUMBER_OF(Buffer), NameInfo->FileName,
+                    min(NameInfo->FileNameLength / sizeof(WCHAR), RTL_NUMBER_OF(Buffer) - 1));
+    ok(NameInfo->FileNameLength == wcslen(Expected) * sizeof(WCHAR) && !wcscmp(Buffer, Expected),
+       "%s: FileNormalizedNameInfo gave %S\n", What, Buffer);
+}
+
+static
+VOID
+TestTransactedNormalizedName(
+    _In_ PTX_DIR Dir)
+{
+    WCHAR Directory[MAX_PATH], Path[MAX_PATH], Moved[MAX_PATH], Buffer[MAX_PATH];
+    CHAR Scratch[MAX_PATH];
+    HANDLE Transaction;
+    HANDLE File;
+    DWORD Length;
+
+    File = CreateFileW(Dir->Dir, 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+                       FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "directory open failed with %lu\n", GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Length = GetFinalPathNameByHandleW(File, Directory, RTL_NUMBER_OF(Directory), FILE_NAME_NORMALIZED | VOLUME_NAME_NONE);
+    CloseHandle(File);
+    ok(Length != 0 && Length < RTL_NUMBER_OF(Directory), "directory normalized name failed with %lu\n", GetLastError());
+    PathOf(Dir, L"norm2.txt", Path, Scratch);
+    if (Length == 0 || Length >= RTL_NUMBER_OF(Directory) || !WriteTestFile(Path, "n2"))
+        return;
+    PathOf(Dir, L"norm3.txt", Path, Scratch);
+    if (!WriteTestFile(Path, "n3"))
+        return;
+
+    Transaction = NewTransaction();
+    if (Transaction == INVALID_HANDLE_VALUE)
+        return;
+
+    /* A file created in the transaction has its normalized name in the transaction's view */
+    PathOf(Dir, L"Norm.txt", Path, Scratch);
+    File = pCreateFileTransactedW(Path, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFileTransactedW failed with %lu\n", GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        CheckNormalizedName(File, Directory, L"Norm.txt", "created file");
+        CloseHandle(File);
+    }
+
+    /* A committed file renamed in the transaction takes its new name */
+    PathOf(Dir, L"norm2.txt", Path, Scratch);
+    PathOf(Dir, L"Renamed.txt", Moved, Scratch);
+    ok(pMoveFileTransactedW(Path, Moved, NULL, NULL, 0, Transaction), "MoveFileTransactedW failed with %lu\n", GetLastError());
+    PathOf(Dir, L"RENAMED.TXT", Path, Scratch);
+    File = pCreateFileTransactedW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "transacted open of the renamed file failed with %lu\n", GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        CheckNormalizedName(File, Directory, L"Renamed.txt", "renamed file");
+        Length = GetFinalPathNameByHandleW(File, Buffer, RTL_NUMBER_OF(Buffer), FILE_NAME_OPENED | VOLUME_NAME_NONE);
+        ok(Length >= 12 && !wcscmp(Buffer + Length - 12, L"\\RENAMED.TXT"), "opened name %S\n", Buffer);
+        CloseHandle(File);
+    }
+
+    /* A committed file opened by another case, by a reader and by a writer of the transaction */
+    PathOf(Dir, L"NORM3.TXT", Path, Scratch);
+    File = pCreateFileTransactedW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "transacted reader open failed with %lu\n", GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        CheckNormalizedName(File, Directory, L"norm3.txt", "transacted reader");
+        CloseHandle(File);
+    }
+    File = pCreateFileTransactedW(Path, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL, Transaction, NULL, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "transacted writer open failed with %lu\n", GetLastError());
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        CheckNormalizedName(File, Directory, L"norm3.txt", "transacted writer");
+        CloseHandle(File);
+    }
+
+    ok(pRollbackTransaction(Transaction), "RollbackTransaction failed with %lu\n", GetLastError());
+    CloseHandle(Transaction);
+}
+
+static
+VOID
 TestInactiveTransaction(
     _In_ PTX_DIR Dir)
 {
@@ -1207,6 +1310,7 @@ TestVolume(
         TestSupportedVolume(Dir);
         TestSupportedVolumeData(Dir);
         TestTransactedDirectoryRemoval(Dir);
+        TestTransactedNormalizedName(Dir);
     }
     else
         TestUnsupportedVolume(Dir);

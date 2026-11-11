@@ -221,8 +221,7 @@ GetFileNormalizedNameInformation(_In_ PVolumeContextBlock VolCB,
     PWCHAR Path;
     NTSTATUS Status;
 
-    /* FIXME: a transacted handle reports the name it was opened by instead of the normalized name */
-    if (FileCB->IsVolumeOpen || FileCB->RequestedStream || FileCB->Txf ||
+    if (FileCB->IsVolumeOpen || FileCB->RequestedStream ||
         (FileCB->CreateOptions & FILE_OPEN_BY_FILE_ID) ||
         FileCB->FileName.Length <= sizeof(WCHAR))
     {
@@ -237,8 +236,11 @@ GetFileNormalizedNameInformation(_In_ PVolumeContextBlock VolCB,
     if (!Path)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    Status = NtfsReferenceNameParent(VolCB, &FileCB->FileName, &ParentStream, &LeafName);
-    if (NT_SUCCESS(Status))
+    if (FileCB->Txf)
+        Status = NtfsTxfNormalizedName(VolCB, FileCB, Path, Capacity, &PathLength);
+    else
+        Status = NtfsReferenceNameParent(VolCB, &FileCB->FileName, &ParentStream, &LeafName);
+    if (NT_SUCCESS(Status) && !FileCB->Txf)
     {
         Status = NtfsMasterFileTableGetPathFromFileReference(Mft, ParentStream->FileReference,
                                                             Path, Capacity, &PathLength);

@@ -2407,6 +2407,160 @@ NtfsTxfDisplayName(_In_ PFileContextBlock FileCB)
     return &FileCB->FileName;
 }
 
+static
+NTSTATUS
+NtfsTxfPhysicalLeaf(_In_ PVolumeContextBlock VolCB,
+                    _In_ PCUNICODE_STRING Physical,
+                    _Out_writes_(Capacity) PWCHAR Leaf,
+                    _In_ ULONG Capacity,
+                    _Out_ PULONG LeafLength)
+{
+    PNtfsMasterFileTable Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
+    PNtfsFileRecord File = NULL, Parent = NULL;
+    UNICODE_STRING ParentName, Given, LinkName;
+    ULONG Remaining = 0;
+    NTSTATUS Status;
+
+    *LeafLength = 0;
+    RtlInitEmptyUnicodeString(&LinkName, NULL, 0);
+    NtfsTxfSplit(Physical, &ParentName, &Given);
+    KeEnterCriticalRegion();
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsMasterFileTableGetFileRecordFromQueryEx(Mft, Physical->Buffer, Physical->Length / sizeof(WCHAR), TRUE,
+                                                         &Remaining, &File);
+    if (NT_SUCCESS(Status) && (Remaining != 0 || !File))
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtfsMasterFileTableGetFileRecordFromQueryEx(Mft, ParentName.Buffer, ParentName.Length / sizeof(WCHAR),
+                                                             TRUE, &Remaining, &Parent);
+        if (NT_SUCCESS(Status) && (Remaining != 0 || !Parent))
+            Status = STATUS_OBJECT_PATH_NOT_FOUND;
+    }
+    if (NT_SUCCESS(Status))
+        Status = NtfsMasterFileTableGetLinkName(Mft, File, NtfsFileRecordGetReference(Parent), &Given, &LinkName);
+    if (NT_SUCCESS(Status) && LinkName.Length / sizeof(WCHAR) > Capacity)
+        Status = STATUS_NAME_TOO_LONG;
+    if (NT_SUCCESS(Status))
+    {
+        RtlCopyMemory(Leaf, LinkName.Buffer, LinkName.Length);
+        *LeafLength = LinkName.Length / sizeof(WCHAR);
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+    if (Parent)
+        NtfsFileRecordDestroy(Parent);
+    if (File)
+        NtfsFileRecordDestroy(File);
+    return Status;
+}
+
+static
+NTSTATUS
+NtfsTxfComponentLeaf(_In_ PVolumeContextBlock VolCB,
+                     _In_ PNTFS_TXF_TRANSACTION Txf,
+                     _In_ PCUNICODE_STRING Prefix,
+                     _In_ PCUNICODE_STRING Component,
+                     _Out_writes_(Capacity) PWCHAR Leaf,
+                     _In_ ULONG Capacity,
+                     _Out_ PULONG LeafLength)
+{
+    PNTFS_TXF_CHANGE Match;
+    UNICODE_STRING Physical, Parent, Given;
+    NTFS_TXF_VIEW View;
+    NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Named = FALSE;
+
+    Physical.Buffer = NULL;
+    ExAcquireFastMutex(&VolCB->TxfMutex);
+    View = NtfsTxfResolveLocked(Txf, Prefix, &Match);
+    if (View == NtfsTxfViewMapped && Match->Kind != NtfsTxfShadow && NtfsTxfEqual(&Match->Name, Prefix))
+    {
+        NtfsTxfSplit(&Match->Name, &Parent, &Given);
+        if (Given.Length / sizeof(WCHAR) > Capacity)
+        {
+            Status = STATUS_NAME_TOO_LONG;
+        }
+        else
+        {
+            RtlCopyMemory(Leaf, Given.Buffer, Given.Length);
+            *LeafLength = Given.Length / sizeof(WCHAR);
+        }
+        Named = TRUE;
+    }
+    else if (View == NtfsTxfViewMapped && Match->Kind != NtfsTxfShadow)
+    {
+        Status = NtfsTxfMapped(Match, Prefix, &Physical);
+    }
+    else if (View != NtfsTxfViewHidden && View != NtfsTxfViewHiddenParent)
+    {
+        Status = NtfsTxfCopy(&Physical, Prefix);
+    }
+    ExReleaseFastMutex(&VolCB->TxfMutex);
+    if (Named || !NT_SUCCESS(Status))
+        return Status;
+
+    if (!Physical.Buffer || !NT_SUCCESS(NtfsTxfPhysicalLeaf(VolCB, &Physical, Leaf, Capacity, LeafLength)))
+    {
+        if (Component->Length / sizeof(WCHAR) > Capacity)
+        {
+            Status = STATUS_NAME_TOO_LONG;
+        }
+        else
+        {
+            RtlCopyMemory(Leaf, Component->Buffer, Component->Length);
+            *LeafLength = Component->Length / sizeof(WCHAR);
+        }
+    }
+    NtfsTxfFreeString(&Physical);
+    return Status;
+}
+
+NTSTATUS
+NtfsTxfNormalizedName(_In_ PVolumeContextBlock VolCB,
+                      _In_ PFileContextBlock FileCB,
+                      _Out_writes_(Capacity) PWCHAR Path,
+                      _In_ ULONG Capacity,
+                      _Out_ PULONG PathLength)
+{
+    UNICODE_STRING Logical, Stream, Prefix, Component;
+    ULONG Length = 1, LeafLength;
+    USHORT Index = 1, Count, Start;
+    NTSTATUS Status;
+
+    *PathLength = 0;
+    NtfsTxfSplitStream(NtfsTxfDisplayName(FileCB), &Logical, &Stream);
+    Count = Logical.Length / sizeof(WCHAR);
+    if (Count == 0 || Logical.Buffer[0] != L'\\' || Capacity < 2)
+        return STATUS_OBJECT_PATH_INVALID;
+    Path[0] = L'\\';
+    while (Index < Count)
+    {
+        Start = Index;
+        while (Index < Count && Logical.Buffer[Index] != L'\\')
+            Index++;
+        Component.Buffer = Logical.Buffer + Start;
+        Component.Length = Component.MaximumLength = (Index - Start) * sizeof(WCHAR);
+        Prefix.Buffer = Logical.Buffer;
+        Prefix.Length = Prefix.MaximumLength = Index * sizeof(WCHAR);
+        if (Component.Length)
+        {
+            if (Length > 1)
+                Path[Length++] = L'\\';
+            if (Length >= Capacity)
+                return STATUS_NAME_TOO_LONG;
+            Status = NtfsTxfComponentLeaf(VolCB, FileCB->Txf, &Prefix, &Component, Path + Length,
+                                          Capacity - Length, &LeafLength);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            Length += LeafLength;
+        }
+        Index++;
+    }
+    *PathLength = Length;
+    return STATUS_SUCCESS;
+}
+
 /* NAMESPACE CHANGES **********************************************************/
 
 static
