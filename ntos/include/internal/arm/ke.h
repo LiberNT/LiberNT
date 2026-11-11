@@ -46,6 +46,10 @@
 #define KeSetContextReturnRegister(Context, ReturnValue) \
     ((Context)->R0 = (ReturnValue))
 
+/* TODO: this port's debug service passes no third or fourth argument yet */
+#define KeGetContextServiceArgument3(Context) ((ULONG_PTR)0)
+#define KeGetContextServiceArgument4(Context) ((ULONG_PTR)0)
+
 //
 // Macro to get trap and exception frame from a thread stack
 //

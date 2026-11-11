@@ -176,6 +176,23 @@ KeSetContextReturnRegister(_Inout_ PCONTEXT Context, _In_ ULONG_PTR ReturnValue)
     Context->Gpr3 = ReturnValue;
 }
 
+/* TODO: this port's debug service passes no third or fourth argument yet */
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument3(_In_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return 0;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(_In_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return 0;
+}
+
 FORCEINLINE
 ULONG_PTR
 KeGetContextStackRegister(_In_ PCONTEXT Context)

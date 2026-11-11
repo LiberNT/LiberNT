@@ -93,6 +93,20 @@ KeSetContextReturnRegister(PCONTEXT Context, ULONG_PTR ReturnValue)
 
 FORCEINLINE
 ULONG_PTR
+KeGetContextServiceArgument3(PCONTEXT Context)
+{
+    return Context->Ebx;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(PCONTEXT Context)
+{
+    return Context->Edi;
+}
+
+FORCEINLINE
+ULONG_PTR
 KeGetContextStackRegister(PCONTEXT Context)
 {
     return Context->Esp;

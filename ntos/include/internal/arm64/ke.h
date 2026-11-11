@@ -526,6 +526,20 @@ KeSetContextReturnRegister(
 
 FORCEINLINE
 ULONG_PTR
+KeGetContextServiceArgument3(_In_ PCONTEXT Context)
+{
+    return Context->X3;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(_In_ PCONTEXT Context)
+{
+    return Context->X4;
+}
+
+FORCEINLINE
+ULONG_PTR
 KeGetContextStackRegister(
     _In_ PCONTEXT Context)
 {

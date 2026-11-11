@@ -55,6 +55,7 @@ static
 VOID
 KdpPrintServiceComponent(
     _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PCONTEXT ContextRecord,
     _Out_ PULONG ComponentId,
     _Out_ PULONG Level)
 {
@@ -65,8 +66,8 @@ KdpPrintServiceComponent(
         return;
     }
 
-    *ComponentId = DPFLTR_DEFAULT_ID;
-    *Level = DPFLTR_ERROR_LEVEL;
+    *ComponentId = (ULONG)KeGetContextServiceArgument3(ContextRecord);
+    *Level = (ULONG)KeGetContextServiceArgument4(ContextRecord);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -183,7 +184,7 @@ KdpTrap(
     {
         case BREAKPOINT_PRINT:
 
-            KdpPrintServiceComponent(ExceptionRecord, &ComponentId, &Level);
+            KdpPrintServiceComponent(ExceptionRecord, ContextRecord, &ComponentId, &Level);
 
             Status = KdpPrint(ComponentId,
                               Level,
@@ -203,8 +204,8 @@ KdpTrap(
 
             Length = KdpPrompt((PCHAR)ExceptionRecord->ExceptionInformation[1],
                                (USHORT)ExceptionRecord->ExceptionInformation[2],
-                               (PCHAR)ExceptionRecord->ExceptionInformation[3],
-                               (USHORT)ExceptionRecord->ExceptionInformation[4],
+                               (PCHAR)KeGetContextServiceArgument3(ContextRecord),
+                               (USHORT)KeGetContextServiceArgument4(ContextRecord),
                                PreviousMode,
                                TrapFrame,
                                ExceptionFrame);
@@ -298,7 +299,7 @@ KdpStub(
              */
             if (PreviousMode == KernelMode)
             {
-                KdpPrintServiceComponent(ExceptionRecord, &ComponentId, &Level);
+                KdpPrintServiceComponent(ExceptionRecord, ContextRecord, &ComponentId, &Level);
 
                 Output.Buffer = (PCHAR)ExceptionRecord->ExceptionInformation[1];
                 Output.Length = (USHORT)ExceptionRecord->ExceptionInformation[2];
