@@ -142,6 +142,8 @@ struct constructor;
     XDIID(DispHTMLEmbed) \
     XDIID(DispHTMLFontElement) \
     XDIID(DispHTMLFormElement) \
+    XDIID(DispHTMLFieldSetElement) \
+    XDIID(DispHTMLLegendElement) \
     XDIID(DispHTMLGenericElement) \
     XDIID(DispHTMLFrameElement) \
     XDIID(DispHTMLFrameSetSite) \
@@ -162,6 +164,7 @@ struct constructor;
     XDIID(DispHTMLNavigator) \
     XDIID(DispHTMLOListElement) \
     XDIID(DispHTMLObjectElement) \
+    XDIID(DispHTMLParamElement) \
     XDIID(DispHTMLOptionElement) \
     XDIID(DispHTMLParaElement) \
     XDIID(DispHTMLPhraseElement) \
@@ -176,6 +179,7 @@ struct constructor;
     XDIID(DispHTMLStyleSheetRulesCollection) \
     XDIID(DispHTMLStyleSheetsCollection) \
     XDIID(DispHTMLTable) \
+    XDIID(DispHTMLTableCaption) \
     XDIID(DispHTMLTableCell) \
     XDIID(DispHTMLTableCol) \
     XDIID(DispHTMLTableRow) \
@@ -272,6 +276,8 @@ struct constructor;
     XIID(IHTMLFiltersCollection) \
     XIID(IHTMLFontElement) \
     XIID(IHTMLFormElement) \
+    XIID(IHTMLFieldSetElement) \
+    XIID(IHTMLLegendElement) \
     XIID(IHTMLFormElement2) \
     XIID(IHTMLFrameBase) \
     XIID(IHTMLFrameBase2) \
@@ -314,6 +320,8 @@ struct constructor;
     XIID(IHTMLOptionElement) \
     XIID(IHTMLOptionElement3) \
     XIID(IHTMLOptionElementFactory) \
+    XIID(IHTMLParamElement) \
+    XIID(IHTMLParamElement2) \
     XIID(IHTMLParaElement) \
     XIID(IHTMLPerformance) \
     XIID(IHTMLPerformanceNavigation) \
@@ -345,6 +353,7 @@ struct constructor;
     XIID(IHTMLStyleSheetRulesCollection) \
     XIID(IHTMLStyleSheetsCollection) \
     XIID(IHTMLTable) \
+    XIID(IHTMLTableCaption) \
     XIID(IHTMLTable2) \
     XIID(IHTMLTable3) \
     XIID(IHTMLTableCell) \
@@ -556,6 +565,7 @@ typedef struct {
     X(HTMLDocument)                        \
     X(HTMLElement)                         \
     X(HTMLEmbedElement)                    \
+    X(HTMLFieldSetElement)                 \
     X(HTMLFontElement)                     \
     X(HTMLFormElement)                     \
     X(HTMLFrameElement)                    \
@@ -569,6 +579,7 @@ typedef struct {
     X(HTMLInputElement)                    \
     X(HTMLLIElement)                       \
     X(HTMLLabelElement)                    \
+    X(HTMLLegendElement)                   \
     X(HTMLLinkElement)                     \
     X(HTMLMenuElement)                     \
     X(HTMLMetaElement)                     \
@@ -577,6 +588,7 @@ typedef struct {
     X(HTMLObjectElement)                   \
     X(HTMLOptionElement)                   \
     X(HTMLParagraphElement)                \
+    X(HTMLParamElement)                    \
     X(HTMLPhraseElement)                   \
     X(HTMLPreElement)                      \
     X(HTMLQuoteElement)                    \
@@ -584,6 +596,7 @@ typedef struct {
     X(HTMLSelectElement)                   \
     X(HTMLSpanElement)                     \
     X(HTMLStyleElement)                    \
+    X(HTMLTableCaptionElement)             \
     X(HTMLTableCellElement)                \
     X(HTMLTableColElement)                 \
     X(HTMLTableDataCellElement)            \
@@ -1534,6 +1547,8 @@ HRESULT HTMLBodyElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLButtonElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLEmbedElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLFormElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLFieldSetElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLLegendElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLFrameElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLHeadElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLBRElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
@@ -1574,10 +1589,12 @@ BOOL list_attr_is_invalid(HTMLElement*,const WCHAR*);
 HRESULT HTMLLinkElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLMetaElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLObjectElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLParamElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLOptionElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLScriptElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLSelectElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTable_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLTableCaptionElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCell_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCol_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableRow_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);

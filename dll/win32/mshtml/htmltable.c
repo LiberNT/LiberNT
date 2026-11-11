@@ -2931,3 +2931,134 @@ HRESULT HTMLTableSection_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HT
     *elem = &ret->element;
     return S_OK;
 }
+
+struct HTMLTableCaptionElement {
+    HTMLElement element;
+
+    IHTMLTableCaption IHTMLTableCaption_iface;
+};
+
+typedef struct HTMLTableCaptionElement HTMLTableCaptionElement;
+
+static inline HTMLTableCaptionElement *impl_from_IHTMLTableCaption(IHTMLTableCaption *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableCaptionElement, IHTMLTableCaption_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLTableCaption, IHTMLTableCaption,
+                      impl_from_IHTMLTableCaption(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLTableCaption_put_align(IHTMLTableCaption *iface, BSTR v)
+{
+    HTMLTableCaptionElement *This = impl_from_IHTMLTableCaption(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"align", v);
+}
+
+static HRESULT WINAPI HTMLTableCaption_get_align(IHTMLTableCaption *iface, BSTR *p)
+{
+    HTMLTableCaptionElement *This = impl_from_IHTMLTableCaption(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"align", p);
+}
+
+static HRESULT WINAPI HTMLTableCaption_put_vAlign(IHTMLTableCaption *iface, BSTR v)
+{
+    HTMLTableCaptionElement *This = impl_from_IHTMLTableCaption(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"vAlign", v);
+}
+
+static HRESULT WINAPI HTMLTableCaption_get_vAlign(IHTMLTableCaption *iface, BSTR *p)
+{
+    HTMLTableCaptionElement *This = impl_from_IHTMLTableCaption(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"vAlign", p);
+}
+
+static const IHTMLTableCaptionVtbl HTMLTableCaptionVtbl = {
+    HTMLTableCaption_QueryInterface,
+    HTMLTableCaption_AddRef,
+    HTMLTableCaption_Release,
+    HTMLTableCaption_GetTypeInfoCount,
+    HTMLTableCaption_GetTypeInfo,
+    HTMLTableCaption_GetIDsOfNames,
+    HTMLTableCaption_Invoke,
+    HTMLTableCaption_put_align,
+    HTMLTableCaption_get_align,
+    HTMLTableCaption_put_vAlign,
+    HTMLTableCaption_get_vAlign
+};
+
+static inline HTMLTableCaptionElement *HTMLTableCaptionElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLTableCaptionElement, element.node.event_target.dispex);
+}
+
+static void *HTMLTableCaptionElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLTableCaptionElement *This = HTMLTableCaptionElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLTableCaption, riid))
+        return &This->IHTMLTableCaption_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLTableCaptionElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLTableCaption,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLTableCaptionElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLTableCaptionElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLTableCaptionElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLTableCaption_tid, NULL);
+}
+
+dispex_static_data_t HTMLTableCaptionElement_dispex = {
+    .id           = OBJID_HTMLTableCaptionElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLTableCaptionElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLTableCaption_tid,
+    .init_info    = HTMLTableCaptionElement_init_dispex_info,
+};
+
+HRESULT HTMLTableCaptionElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLTableCaptionElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLTableCaption_iface.lpVtbl = &HTMLTableCaptionVtbl;
+    ret->element.node.vtbl = &HTMLTableCaptionElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableCaptionElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}

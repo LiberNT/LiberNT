@@ -27773,6 +27773,46 @@ interface IHTMLTableCaption : IDispatch
 }
 
 /*****************************************************************************
+ *    DispHTMLTableCaption dispinterface
+ */
+[
+    hidden,
+    uuid(3050f508-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableCaption
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLECAPTION_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECAPTION_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLECAPTION_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECAPTION_VALIGN)]
+    BSTR vAlign();
+}
+
+/*****************************************************************************
+ *    HTMLTableCaption coclass
+ */
+[
+    noncreatable,
+    uuid(3050f2ec-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableCaption
+{
+    [default]         dispinterface DispHTMLTableCaption;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableCaption;
+}
+
+/*****************************************************************************
  *    IHTMLTable interface
  */
 [
@@ -29970,6 +30010,125 @@ methods:
 
     [propget, id(DISPID_IHTMLPARAMELEMENT2_IE8_VALUETYPE)]
     BSTR ie8_valueType();
+}
+
+/*****************************************************************************
+ *    HTMLParamElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f83e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLParamElement
+{
+    [default]         dispinterface DispHTMLParamElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLParamElement;
+    interface IHTMLParamElement2;
+}
+
+/*****************************************************************************
+ *    IHTMLFieldSetElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3e7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFieldSetElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLFieldSetElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f545-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFieldSetElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLFieldSetElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3e8-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFieldSetElement
+{
+    [default]         dispinterface DispHTMLFieldSetElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLFieldSetElement;
+}
+
+/*****************************************************************************
+ *    IHTMLLegendElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3ea-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLLegendElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLLegendElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f546-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLLegendElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLLegendElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3e9-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLLegendElement
+{
+    [default]         dispinterface DispHTMLLegendElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLLegendElement;
 }
 
 /*****************************************************************************
