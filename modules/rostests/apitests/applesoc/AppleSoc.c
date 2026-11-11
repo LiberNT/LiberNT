@@ -5835,7 +5835,6 @@ TestPcieLinkPower(VOID)
     ok_hex(ApplePcieFindAdtController(&Adt, &Pcie), APPLE_ADT_NO_NODE);
     Pcie.ConfigBase = SIM_PCIE_ROOT_CFG_BASE;
 
-    /* The Wi-Fi link: L1, all four L1 substates and LTR, in the order the PCIe specification asks for. */
     SimPcieLinkConfig(0);
     Port->Index = 0;
     Port->Bus = 1;
@@ -5877,7 +5876,6 @@ TestPcieLinkPower(VOID)
        "A link status bit was written back\n");
     ok_int(SimMapCount, 0);
 
-    /* Without LTR on the root port, ASPM L1.2 is the one substate that cannot be used. */
     SimPcieLinkConfig(0);
     ROOTCFG(0x94) = 0x0001041f;
     ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
@@ -5887,7 +5885,6 @@ TestPcieLinkPower(VOID)
     ok_hex(PCIECFG(0x01b4), 0x00000000);
     ok_hex(ROOTCFG(0x80), 0x00000042);
 
-    /* A device that cannot wait for the link to leave L1 keeps L1 off, whatever the platform asks for. */
     SimPcieLinkConfig(0);
     PCIECFG(0x10b0) = 0x10008982;
     ApplePcieConfigureLinkPower(&Adt, Controller, &Pcie, Port);
@@ -5895,7 +5892,6 @@ TestPcieLinkPower(VOID)
     ok_hex(PCIECFG(0x00bc), 0x00000040);
     ok_hex(ROOTCFG(0x108), 0x4055190f);
 
-    /* The SD card reader port: the platform enables nothing, so the link is not touched. */
     SimPcieLinkConfig(1);
     Port->Index = 1;
     SimWriteCount = 0;
