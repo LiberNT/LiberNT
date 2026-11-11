@@ -108,7 +108,7 @@ START_TEST(LocaleNameToLCID)
            "Wrong neutral lcid for '%S': expected 0x%lx, got 0x%lx\n",
            SpecialCases[i].Name, SpecialCases[i].Neutral, lcid);
         lcid = pLocaleNameToLCID(SpecialCases[i].Name, 0);
-        todo_if(is_reactos() && (!wcscmp(SpecialCases[i].Name, L"tzm-Tfng") || !wcscmp(SpecialCases[i].Name, L"ku-Arab")))
+        todo_if(is_reactos() && !wcscmp(SpecialCases[i].Name, L"tzm-Tfng"))
         ok(lcid == SpecialCases[i].Default,
            "Wrong default lcid for '%S': expected 0x%lx, got 0x%lx\n",
            SpecialCases[i].Name, SpecialCases[i].Default, lcid);
