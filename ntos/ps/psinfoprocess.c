@@ -1230,16 +1230,25 @@ NtQueryInformationProcess(
                 break;
             }
 
+            /* The image of a process that has exited is no longer answered for */
+            if (!ExAcquireRundownProtection(&Process->RundownProtect))
+            {
+                Status = STATUS_PROCESS_IS_TERMINATING;
+                break;
+            }
+
             LocalLength = sizeof(SECTION_IMAGE_INFORMATION);
             Local = ExAllocatePoolZero(PagedPool, LocalLength, TAG_SEPA);
             if (Local == NULL)
             {
+                ExReleaseRundownProtection(&Process->RundownProtect);
                 Status = STATUS_INSUFFICIENT_RESOURCES;
                 break;
             }
 
             Status = MmGetSectionImageInformation(Process->SectionObject,
                                                   Local);
+            ExReleaseRundownProtection(&Process->RundownProtect);
             if (NT_SUCCESS(Status))
             {
                 Status = PspReturnInformation(ProcessInformation,
