@@ -7,6 +7,8 @@
 
 #define WIN32_NO_STATUS
 #include <apitest.h>
+#define COBJMACROS
+#include <objbase.h>
 #include <wincrypt.h>
 #include <wintrust.h>
 #include <softpub.h>
@@ -24,11 +26,14 @@ typedef HRESULT (WINAPI *PFN_FIND_CERTS)(PCERT_CHAIN, DWORD *, DWORD *, BYTE *, 
 #define TEST_OS_ATTR L"2:10.0,2:6.3,2:6.1"
 
 static const GUID PeSubject = { 0xC689AAB8, 0x8E78, 0x11D0, { 0x8C,0x47,0x00,0xC0,0x4F,0xC2,0x95,0xEE } };
+static const GUID MsiSubject = { 0x000C10F1, 0x0000, 0x0000, { 0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46 } };
+static const CLSID MsiDatabase = { 0x000C1084, 0x0000, 0x0000, { 0xC0,0x00,0x00,0x00,0x00,0x00,0x00,0x46 } };
 
 static HCRYPTPROV Provider;
 static PCCERT_CONTEXT Root, Leaf, Tsa, CodeSigner, RogueTsa, SigningCert;
 static HCERTSTORE MachineRoot;
-static WCHAR TempDir[MAX_PATH], CatalogPath[MAX_PATH], MemberPath[MAX_PATH], OtherPath[MAX_PATH], ImagePath[MAX_PATH];
+static WCHAR TempDir[MAX_PATH], CatalogPath[MAX_PATH], MemberPath[MAX_PATH], OtherPath[MAX_PATH], ImagePath[MAX_PATH],
+             MsiPath[MAX_PATH];
 
 static
 BOOL
@@ -701,6 +706,108 @@ TestSha1Image(VOID)
 }
 
 static
+BOOL
+WriteMsiStream(const WCHAR *Name, const void *Data, ULONG Size, BOOL Create)
+{
+    IStorage *Storage;
+    IStream *Stream;
+    ULONG Written = 0;
+    HRESULT hr;
+
+    if (Create)
+        hr = StgCreateDocfile(MsiPath, STGM_CREATE | STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, 0, &Storage);
+    else
+        hr = StgOpenStorage(MsiPath, NULL, STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, NULL, 0, &Storage);
+    if (FAILED(hr))
+        return FALSE;
+    if (Create)
+        hr = IStorage_SetClass(Storage, &MsiDatabase);
+    if (SUCCEEDED(hr))
+        hr = IStorage_CreateStream(Storage, Name, STGM_CREATE | STGM_WRITE | STGM_SHARE_EXCLUSIVE, 0, 0, &Stream);
+    if (SUCCEEDED(hr))
+    {
+        hr = IStream_Write(Stream, Data, Size, &Written);
+        IStream_Release(Stream);
+    }
+    IStorage_Release(Storage);
+    return SUCCEEDED(hr) && Written == Size;
+}
+
+static
+BOOL
+CreateSignedMsi(VOID)
+{
+    SIP_DISPATCH_INFO Sip;
+    SIP_SUBJECTINFO Info;
+    GUID Subject = MsiSubject;
+    SIP_INDIRECT_DATA *Indirect = NULL;
+    BYTE *Encoded = NULL, *Signed = NULL;
+    DWORD Size = 0, EncodedSize = 0, SignedSize = 0;
+    BOOL Ret = FALSE;
+
+    ZeroMemory(&Sip, sizeof(Sip));
+    Sip.cbSize = sizeof(Sip);
+    if (!WriteMsiStream(L"Data", "LiberNT signed MSI", 18, TRUE) || !CryptSIPLoad(&MsiSubject, 0, &Sip))
+        return FALSE;
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    Info.pgSubjectType = &Subject;
+    Info.pwsFileName = MsiPath;
+    Info.hProv = Provider;
+    Info.DigestAlgorithm.pszObjId = (LPSTR)szOID_NIST_sha256;
+    Info.dwEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
+    if (Sip.pfCreate(&Info, &Size, NULL) &&
+        (Indirect = HeapAlloc(GetProcessHeap(), 0, Size)) &&
+        Sip.pfCreate(&Info, &Size, Indirect) &&
+        CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, NULL, &EncodedSize) &&
+        (Encoded = HeapAlloc(GetProcessHeap(), 0, EncodedSize)) &&
+        CryptEncodeObject(X509_ASN_ENCODING, SPC_INDIRECT_DATA_CONTENT_STRUCT, Indirect, Encoded, &EncodedSize) &&
+        SignContent(SPC_INDIRECT_DATA_OBJID, Encoded, EncodedSize, NULL, &Signed, &SignedSize))
+    {
+        Ret = WriteMsiStream(L"\x0005" L"DigitalSignature", Signed, SignedSize, FALSE);
+    }
+    HeapFree(GetProcessHeap(), 0, Signed);
+    HeapFree(GetProcessHeap(), 0, Encoded);
+    HeapFree(GetProcessHeap(), 0, Indirect);
+    return Ret;
+}
+
+static
+LONG
+VerifyMsi(VOID)
+{
+    GUID Generic = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File = { sizeof(File) };
+    WINTRUST_DATA Data = { sizeof(Data) };
+
+    File.pcwszFilePath = MsiPath;
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    Data.dwStateAction = WTD_STATEACTION_IGNORE;
+    return WinVerifyTrust(INVALID_HANDLE_VALUE, &Generic, &Data);
+}
+
+static
+VOID
+TestMsi(VOID)
+{
+    if (!CreateSignedMsi())
+    {
+        ok(FALSE, "Cannot sign the MSI (%lu)\n", GetLastError());
+        return;
+    }
+    ok_hex(VerifyMsi(), ERROR_SUCCESS);
+    ok(WriteMsiStream(L"Data", "LiberNT signed MSi", 18, FALSE), "Cannot change the MSI\n");
+    ok_hex(VerifyMsi(), TRUST_E_BAD_DIGEST);
+    ok(WriteMsiStream(L"Data", "LiberNT signed MSI", 18, FALSE), "Cannot restore the MSI\n");
+    ok_hex(VerifyMsi(), ERROR_SUCCESS);
+    ok(WriteMsiStream(L"Other", "", 0, FALSE), "Cannot add an empty stream\n");
+    ok_hex(VerifyMsi(), TRUST_E_BAD_DIGEST);
+}
+
+static
 VOID
 TestFindCerts(VOID)
 {
@@ -763,6 +870,7 @@ SetupFixture(VOID)
     swprintf(MemberPath, RTL_NUMBER_OF(MemberPath), L"%lslntwtsig-member.txt", TempDir);
     swprintf(OtherPath, RTL_NUMBER_OF(OtherPath), L"%lslntwtsig-other.txt", TempDir);
     swprintf(ImagePath, RTL_NUMBER_OF(ImagePath), L"%lslntwtsig-image.exe", TempDir);
+    swprintf(MsiPath, RTL_NUMBER_OF(MsiPath), L"%lslntwtsig-package.msi", TempDir);
     if (!WriteBytes(MemberPath, MemberText, sizeof(MemberText) - 1) || !WriteBytes(OtherPath, OtherText, sizeof(OtherText) - 1))
         return FALSE;
 
@@ -1144,6 +1252,7 @@ CleanupFixture(VOID)
     DeleteFileW(MemberPath);
     DeleteFileW(OtherPath);
     DeleteFileW(ImagePath);
+    DeleteFileW(MsiPath);
 }
 
 START_TEST(SignedCatalog)
@@ -1164,6 +1273,7 @@ START_TEST(SignedCatalog)
     ok(CreateSignedImage(szOID_NIST_sha256, 0, NULL, Digest, &DigestSize), "Cannot sign the image (%lu)\n", GetLastError());
     TestImage(Digest, DigestSize);
     TestSha1Image();
+    TestMsi();
     TestUnalignedImage();
     TestDigestAlgorithm();
     TestTimestamp();
