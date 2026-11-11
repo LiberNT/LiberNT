@@ -21,7 +21,7 @@ ULONG ExpRegistryQuotaUsed = 0;
 
 /* PRIVATE DATA ***************************************************************/
 
-#define EXP_SYSPERF_TAG 'frePP'
+#define EXP_SYSPERF_TAG 'freP'
 
 FIRMWARE_TYPE NTAPI ExGetFirmwareType(VOID);
 
@@ -472,10 +472,46 @@ ExpQueryFileCacheInformation(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+ExpIsCoreMaster(
+    _In_ ULONG Index)
+{
+    PKPRCB Prcb = KiProcessorBlock[Index];
+
+    return (Prcb != NULL) &&
+           ((KeActiveProcessors & Prcb->SetMember) != 0) &&
+           (Prcb->MultiThreadSetMaster == Prcb);
+}
+
+static
+PSYSTEM_LOGICAL_PROCESSOR_INFORMATION
+ExpNextLogicalProcessorRecord(
+    _In_ PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Records,
+    _Inout_ PULONG Written,
+    _In_ ULONG Count,
+    _In_ LOGICAL_PROCESSOR_RELATIONSHIP Relationship,
+    _In_ KAFFINITY Mask)
+{
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Record;
+
+    if (*Written >= Count)
+    {
+        return NULL;
+    }
+
+    Record = &Records[(*Written)++];
+    RtlZeroMemory(Record, sizeof(*Record));
+    Record->ProcessorMask = (ULONG_PTR)Mask;
+    Record->Relationship = Relationship;
+
+    return Record;
+}
+
 /*
  * How the processors of the machine relate to each other: which of them share
- * a core, and which node each belongs to. Without a way to tell cores and
- * caches apart, each processor is reported as a package of its own on node zero.
+ * a core, a cache or a package, and which node each belongs to. The caches and
+ * the packages are the ones the architecture's own code found on the processors.
  */
 NTSTATUS
 NTAPI
@@ -484,42 +520,129 @@ ExpQueryLogicalProcessorInformation(
     _In_ ULONG Length,
     _Out_ PULONG ReturnLength)
 {
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Info = Buffer;
-    ULONG Count = (ULONG)KeNumberProcessors * 2 + 1;
-    ULONG Needed;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Record;
+    PKI_CACHE_RECORD Caches;
+    PKAFFINITY Packages;
+    GROUP_AFFINITY Affinity;
+    USHORT HighestNode = KeQueryHighestNodeNumber();
+    ULONG CacheCount;
+    ULONG PackageCount;
+    ULONG Count = 0;
     ULONG Written = 0;
+    ULONG Needed;
     ULONG Index;
+    USHORT Node;
 
+    PAGED_CODE();
+
+    Caches = ExAllocatePoolWithTag(PagedPool,
+                                   KI_MAX_CACHE_RECORDS * sizeof(KI_CACHE_RECORD) +
+                                   MAXIMUM_PROCESSORS * sizeof(KAFFINITY),
+                                   EXP_SYSPERF_TAG);
+    if (Caches == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Packages = (PKAFFINITY)(Caches + KI_MAX_CACHE_RECORDS);
+
+    KiQueryProcessorTopology(Caches,
+                             KI_MAX_CACHE_RECORDS,
+                             &CacheCount,
+                             Packages,
+                             MAXIMUM_PROCESSORS,
+                             &PackageCount);
+
+    if (PackageCount == 0)
+    {
+        Packages[0] = KeActiveProcessors;
+        PackageCount = 1;
+    }
+
+    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    {
+        if (ExpIsCoreMaster(Index)) Count++;
+    }
+
+    for (Node = 0; Node <= HighestNode; Node++)
+    {
+        KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+        if (Affinity.Mask != 0) Count++;
+    }
+
+    Count += CacheCount + PackageCount;
     Needed = Count * (ULONG)sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
 
     *ReturnLength = Needed;
 
     if ((Buffer == NULL) || (Length < Needed))
     {
+        ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    _SEH2_TRY
     {
-        RtlZeroMemory(&Info[Written], sizeof(Info[Written]));
-        Info[Written].ProcessorMask = (ULONG_PTR)1 << Index;
-        Info[Written].Relationship = RelationProcessorCore;
-        Info[Written].ProcessorCore.Flags = 0;
-        Written++;
+        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        {
+            PKPRCB Prcb = KiProcessorBlock[Index];
 
-        RtlZeroMemory(&Info[Written], sizeof(Info[Written]));
-        Info[Written].ProcessorMask = (ULONG_PTR)1 << Index;
-        Info[Written].Relationship = RelationProcessorPackage;
-        Written++;
+            if (!ExpIsCoreMaster(Index)) continue;
+
+            Record = ExpNextLogicalProcessorRecord(Buffer,
+                                                   &Written,
+                                                   Count,
+                                                   RelationProcessorCore,
+                                                   (KAFFINITY)Prcb->MultiThreadProcessorSet);
+            if (Record == NULL) break;
+
+            Record->ProcessorCore.Flags =
+                (Prcb->MultiThreadProcessorSet != Prcb->SetMember) ? LTP_PC_SMT : 0;
+        }
+
+        for (Index = 0; Index < CacheCount; Index++)
+        {
+            Record = ExpNextLogicalProcessorRecord(Buffer,
+                                                   &Written,
+                                                   Count,
+                                                   RelationCache,
+                                                   Caches[Index].ProcessorSet);
+            if (Record == NULL) break;
+
+            Record->Cache = Caches[Index].Descriptor;
+        }
+
+        for (Index = 0; Index < PackageCount; Index++)
+        {
+            if (ExpNextLogicalProcessorRecord(Buffer,
+                                              &Written,
+                                              Count,
+                                              RelationProcessorPackage,
+                                              Packages[Index]) == NULL) break;
+        }
+
+        for (Node = 0; Node <= HighestNode; Node++)
+        {
+            KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+            if (Affinity.Mask == 0) continue;
+
+            Record = ExpNextLogicalProcessorRecord(Buffer,
+                                                   &Written,
+                                                   Count,
+                                                   RelationNumaNode,
+                                                   Affinity.Mask);
+            if (Record == NULL) break;
+
+            Record->NumaNode.NodeNumber = Node;
+        }
     }
+    _SEH2_FINALLY
+    {
+        ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
+    }
+    _SEH2_END;
 
-    RtlZeroMemory(&Info[Written], sizeof(Info[Written]));
-    Info[Written].ProcessorMask = (ULONG_PTR)KeActiveProcessors;
-    Info[Written].Relationship = RelationNumaNode;
-    Info[Written].NumaNode.NodeNumber = 0;
-    Written++;
-
-    /* TODO: the caches of a processor are not described. */
+    *ReturnLength = Written * (ULONG)sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
 
     return STATUS_SUCCESS;
 }

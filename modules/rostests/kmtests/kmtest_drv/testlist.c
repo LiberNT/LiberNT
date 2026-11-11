@@ -139,6 +139,7 @@ KMT_TESTFUNC Test_ExResource;
 KMT_TESTFUNC Test_ExRundown;
 KMT_TESTFUNC Test_ExSequencedList;
 KMT_TESTFUNC Test_ExSingleList;
+KMT_TESTFUNC Test_ExSystemInformation;
 KMT_TESTFUNC Test_ExTimer;
 KMT_TESTFUNC Test_ExUuid;
 KMT_TESTFUNC Test_CcLazyWriter;
@@ -459,6 +460,7 @@ const KMT_TEST TestList[] =
     { "ExRundown",                          Test_ExRundown },
     { "ExSequencedList",                    Test_ExSequencedList },
     { "ExSingleList",                       Test_ExSingleList },
+    { "ExSystemInformation",                Test_ExSystemInformation },
     { "ExTimer",                            Test_ExTimer },
     { "ExUuid",                             Test_ExUuid },
     { "CcLazyWriter",                       Test_CcLazyWriter },
