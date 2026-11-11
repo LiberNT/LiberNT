@@ -574,9 +574,7 @@ NtQueryInformationThread(
             break;
 
         case ThreadDynamicCodePolicyInfo:
-            Value = THREAD_TO_PROCESS(Thread)->
-                        MitigationFlagsValues.DisableDynamicCode ? 1 : 0;
-            if (Thread->DisableDynamicCodeOptOut) Value |= 2;
+            Value = Thread->DisableDynamicCodeOptOut ? 1 : 0;
 
             Status = PspReturnThreadInformation(ThreadInformation,
                                                 ThreadInformationLength,

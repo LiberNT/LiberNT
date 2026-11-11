@@ -14,8 +14,7 @@
 #define PSP_MAX_THREAD_NAME 512
 
 /* What ThreadDynamicCodePolicyInfo carries */
-#define PSP_DYNAMIC_CODE_DISABLE 0x1
-#define PSP_DYNAMIC_CODE_OPT_OUT 0x2
+#define PSP_THREAD_DYNAMIC_CODE_ALLOW 0x1
 
 /*
  * The lengths each class may be set with, checked before the thread is
@@ -727,8 +726,7 @@ NtSetInformationThread(
                                                     sizeof(Value));
             if (!NT_SUCCESS(Status)) break;
 
-            if ((Value & ~(PSP_DYNAMIC_CODE_DISABLE |
-                           PSP_DYNAMIC_CODE_OPT_OUT)) != 0)
+            if ((Value & ~PSP_THREAD_DYNAMIC_CODE_ALLOW) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
@@ -738,7 +736,7 @@ NtSetInformationThread(
              * A thread may step out of its process's ban on making code at
              * run time only if the process allowed that when it set the ban.
              */
-            if ((Value & PSP_DYNAMIC_CODE_OPT_OUT) != 0 &&
+            if ((Value & PSP_THREAD_DYNAMIC_CODE_ALLOW) != 0 &&
                 !THREAD_TO_PROCESS(Thread)->
                      MitigationFlagsValues.DisableDynamicCodeAllowOptOut)
             {
@@ -746,9 +744,10 @@ NtSetInformationThread(
                 break;
             }
 
-            InterlockedExchange(&Thread->DynamicCodeOptOut,
-                                ((Value & PSP_DYNAMIC_CODE_OPT_OUT) != 0)
-                                    ? 1 : 0);
+            if ((Value & PSP_THREAD_DYNAMIC_CODE_ALLOW) != 0)
+                PspSetCrossThreadFlag(Thread, CT_DISABLE_DYNAMIC_CODE_OPT_OUT_BIT);
+            else
+                PspClearCrossThreadFlag(Thread, CT_DISABLE_DYNAMIC_CODE_OPT_OUT_BIT);
             Status = STATUS_SUCCESS;
             break;
 

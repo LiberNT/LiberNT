@@ -232,7 +232,7 @@ MiDynamicCodeBlocked(
     Thread = PsGetCurrentThread();
     return !(THREAD_TO_PROCESS(Thread) == Process &&
              Process->MitigationFlagsValues.DisableDynamicCodeAllowOptOut &&
-             ReadAcquire(&Thread->DynamicCodeOptOut));
+             (ReadAcquire((volatile LONG *)&Thread->CrossThreadFlags) & CT_DISABLE_DYNAMIC_CODE_OPT_OUT_BIT));
 }
 
 static
