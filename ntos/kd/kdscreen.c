@@ -42,6 +42,8 @@ KdpScreenSetConsole(
     ULONG Height = SCREEN_HEIGHT;
     ULONG Right = SCREEN_WIDTH - 1;
 
+    InbvUseCompactFont();
+
     if (InbvQueryDisplayInfo(&DisplayInfo) &&
         (DisplayInfo.Width >= SCREEN_WIDTH) &&
         (DisplayInfo.Height >= SCREEN_HEIGHT) &&
