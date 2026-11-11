@@ -30,7 +30,7 @@ static const char hello_html[] =
 static const char snapshot_html[] =
     "<!DOCTYPE html>\n"
     "<html><head>\n"
-    "<title>Local test page</title>\n"
+    "<title>WineHQ - Run Windows applications on Linux, BSD, Solaris and Mac OS X</title>\n"
     "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n"
     "<link rel=\"stylesheet\" href=\"index_files/styles.css\" type=\"text/css\" media=\"screen, print\">\n"
     "<script src=\"index_files/jquery.js\" type=\"text/javascript\"></script>\n"
