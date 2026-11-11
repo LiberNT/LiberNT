@@ -3274,7 +3274,6 @@ BOOL WINAPI SaferIdentifyLevel(DWORD count, SAFER_CODE_PROPERTIES *properties, S
     *handle = (SAFER_LEVEL_HANDLE)0xdeadbeef;
     return TRUE;
 }
-#endif
 
 /******************************************************************************
  * SaferSetLevelInformation   [ADVAPI32.@]
@@ -3294,6 +3293,7 @@ BOOL WINAPI SaferiIsExecutableFileType(const WCHAR *path, BOOLEAN shell_execute)
     FIXME("(%s, %u) stub\n", debugstr_w(path), shell_execute);
     return FALSE;
 }
+#endif
 
 /******************************************************************************
  * LookupSecurityDescriptorPartsA   [ADVAPI32.@]

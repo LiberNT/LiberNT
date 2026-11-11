@@ -34,6 +34,8 @@ list(APPEND SOURCE
     RegQueryValueExW.c
     RtlEncryptMemory.c
     SaferIdentifyLevel.c
+    SaferLevels.c
+    SaferRules.c
     ServiceArgs.c
     ServiceCrash.c
     ServiceEnv.c

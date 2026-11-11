@@ -619,19 +619,19 @@
 @ stdcall SaferCloseLevel(ptr)
 @ stdcall SaferComputeTokenFromLevel(ptr ptr ptr long ptr)
 @ stdcall SaferCreateLevel(long long long ptr ptr)
-@ stub SaferGetLevelInformation
+@ stdcall SaferGetLevelInformation(ptr long ptr long ptr)
 @ stdcall SaferGetPolicyInformation(long long long ptr ptr ptr)
 @ stdcall SaferIdentifyLevel(long ptr ptr ptr)
 @ stdcall SaferRecordEventLogEntry(ptr wstr ptr)
 @ stdcall SaferSetLevelInformation(ptr long ptr long)
-@ stub SaferSetPolicyInformation
+@ stdcall SaferSetPolicyInformation(long long long ptr ptr)
 @ stub SaferiChangeRegistryScope
 @ stub SaferiCompareTokenLevels
 @ stdcall SaferiIsExecutableFileType(wstr long)
 @ stub SaferiPopulateDefaultsInRegistry
 @ stub SaferiRecordEventLogEntry
 @ stub SaferiReplaceProcessThreadTokens
-@ stub SaferiSearchMatchingHashRules
+@ stdcall SaferiSearchMatchingHashRules(long ptr long long ptr ptr)
 @ stdcall SetAclInformation(ptr ptr long long) kernelbase.SetAclInformation
 @ stub SetEntriesInAccessListA
 @ stub SetEntriesInAccessListW
