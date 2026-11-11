@@ -23,6 +23,7 @@
 #include <ks.h>
 #include <drivers/usbport/usbmport.h>
 #include <reactos/drivers/dumpstor.h>
+#include <reactos/drivers/usbmsos20.h>
 
 #define USB_HUB_TAG 'BUHU'
 
@@ -319,6 +320,9 @@ typedef struct _USBHUB_PORT_PDO_EXTENSION {
   UCHAR MsOsVendorCode;
   CHAR MsCompatibleId[9];
   CHAR MsSubCompatibleId[9];
+  BOOLEAN MsOs20Ccgp;
+  USHORT MsOs20DescriptorSetLength;
+  PUCHAR MsOs20DescriptorSet;
 } USBHUB_PORT_PDO_EXTENSION, *PUSBHUB_PORT_PDO_EXTENSION;
 
 typedef struct _USBHUB_URB_TIMEOUT_CONTEXT {
@@ -561,6 +565,11 @@ USBH_GetDeviceType(
   IN PUSBHUB_FDO_EXTENSION HubExtension,
   IN PUSB_DEVICE_HANDLE DeviceHandle,
   OUT USB_DEVICE_TYPE * OutDeviceType);
+
+VOID
+NTAPI
+USBH_ApplyMsOs20Properties(
+  IN PUSBHUB_PORT_PDO_EXTENSION PortExtension);
 
 VOID
 NTAPI

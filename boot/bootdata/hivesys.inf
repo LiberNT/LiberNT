@@ -366,6 +366,11 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-4445535400
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-444553540000}","IconPath",0x00010000,"%SystemRoot%\System32\setupapi.dll,-20"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-444553540000}","NoInstallClass",0x00000000,"1"
 
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}",,0x00000000,"Universal Serial Bus devices"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","Class",0x00000000,"USBDevice"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","IconPath",0x00010000,"%SystemRoot%\System32\setupapi.dll,-20"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","NoInstallClass",0x00000000,"1"
+
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}",,0x00000000,"USB Function Controller"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}","Class",0x00000000,"USBFunctionController"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}","Icon",0x00000000,"-20"

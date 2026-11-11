@@ -525,6 +525,7 @@ PDO_HandlePnp(
             //
             DPRINT("[USBCCGP] PDO IRP_MN_START\n");
             PDODeviceExtension->Removed = FALSE;
+            USBCCGP_ApplyMsOs20Properties(DeviceObject, PDODeviceExtension);
             Status = STATUS_SUCCESS;
             break;
         }

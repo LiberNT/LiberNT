@@ -3062,6 +3062,8 @@ USBH_PdoStartDevice(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         Guid = &GUID_DEVINTERFACE_USB_DEVICE;
     }
 
+    USBH_ApplyMsOs20Properties(PortExtension);
+
     Status = USBH_SymbolicLink(PortExtension, Guid, TRUE);
 
     if (NT_SUCCESS(Status))

@@ -24,6 +24,7 @@
 
 #include "wine/debug.h"
 
+#ifndef __REACTOS__
 WINE_DEFAULT_DEBUG_CHANNEL(winusb);
 
 /***********************************************************************
@@ -34,3 +35,4 @@ BOOL WINAPI WinUsb_Free(WINUSB_INTERFACE_HANDLE handle)
     FIXME( "(%p) - stub\n", handle );
     return TRUE;
 }
+#endif
