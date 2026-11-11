@@ -48,6 +48,23 @@ typedef struct _EX_TIMER
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
+ * A high-resolution timer keeps the clock at its finest step while it is set,
+ * through the counted request drivers share. Called with the timer's lock held.
+ */
+static
+VOID
+ExpArmHighResolutionTimer(
+    _Inout_ PETIMER Timer,
+    _In_ BOOLEAN Arm)
+{
+    if (!Timer->HighResolution || (Timer->HighResolutionArmed == Arm))
+        return;
+
+    Timer->HighResolutionArmed = Arm;
+    ExSetTimerResolution(KeMinimumIncrement, Arm);
+}
+
+/*
  * Runs when a named timer goes off. The timer only tells the thread that set it,
  * through the routine the thread asked for, and only while that request stands.
  */
@@ -66,6 +83,10 @@ ExpTimerDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+
+    /* A one-shot timer that went off and was not set again needs the fine clock no more */
+    if ((Timer->Period == 0) && !Timer->KeTimer.Header.Inserted)
+        ExpArmHighResolutionTimer(Timer, FALSE);
 
     if (!Timer->ApcAssociated)
     {
@@ -171,6 +192,10 @@ ExpDeleteTimer(
     KIRQL OldIrql;
 
     KeCancelTimer(&Timer->KeTimer);
+
+    KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+    ExpArmHighResolutionTimer(Timer, FALSE);
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
     KeAcquireSpinLock(&ExpWakeListLock, &OldIrql);
 
@@ -304,13 +329,14 @@ ExTimerRundown(VOID)
     }
 }
 
+static
 NTSTATUS
-NTAPI
-NtCreateTimer(
+ExpCreateTimer(
     _Out_ PHANDLE TimerHandle,
     _In_ ACCESS_MASK DesiredAccess,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
-    _In_ TIMER_TYPE TimerType)
+    _In_ TIMER_TYPE TimerType,
+    _In_ BOOLEAN HighResolution)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PETIMER Timer;
@@ -357,6 +383,7 @@ NtCreateTimer(
     KeInitializeTimerEx(&Timer->KeTimer, TimerType);
     KeInitializeDpc(&Timer->TimerDpc, ExpTimerDpcRoutine, Timer);
     KeInitializeSpinLock(&Timer->Lock);
+    Timer->HighResolution = HighResolution;
 
     Status = ObInsertObject(Timer, NULL, DesiredAccess, 0, NULL, &Handle);
     if (!NT_SUCCESS(Status))
@@ -385,6 +412,17 @@ NtCreateTimer(
 
 NTSTATUS
 NTAPI
+NtCreateTimer(
+    _Out_ PHANDLE TimerHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ TIMER_TYPE TimerType)
+{
+    return ExpCreateTimer(TimerHandle, DesiredAccess, ObjectAttributes, TimerType, FALSE);
+}
+
+NTSTATUS
+NTAPI
 NtCreateTimer2(
     _Out_ PHANDLE TimerHandle,
     _In_opt_ PVOID Reserved1,
@@ -395,19 +433,20 @@ NtCreateTimer2(
     UNREFERENCED_PARAMETER(Reserved1);
 
     /*
-     * The attributes are the ones a driver's own timer takes, of which only the
-     * kind of timer to make means anything to a timer a caller can name.
+     * The attributes are the ones a driver's own timer takes: the kind of timer
+     * to make, and whether it keeps the clock at its finest step while set.
      */
     if (Attributes & ~(ULONG)(EX_TIMER_NOTIFICATION | EX_TIMER_HIGH_RESOLUTION))
     {
         return STATUS_INVALID_PARAMETER_4;
     }
 
-    return NtCreateTimer(TimerHandle,
-                         DesiredAccess,
-                         ObjectAttributes,
-                         (Attributes & EX_TIMER_NOTIFICATION) ?
-                         NotificationTimer : SynchronizationTimer);
+    return ExpCreateTimer(TimerHandle,
+                          DesiredAccess,
+                          ObjectAttributes,
+                          (Attributes & EX_TIMER_NOTIFICATION) ?
+                          NotificationTimer : SynchronizationTimer,
+                          (Attributes & EX_TIMER_HIGH_RESOLUTION) != 0);
 }
 
 NTSTATUS
@@ -533,6 +572,7 @@ NtSetTimer(
 
     Timer->SetSequence++;
     Timer->Period = Period;
+    ExpArmHighResolutionTimer(Timer, TRUE);
 
     if (TimerApcRoutine != NULL)
     {
@@ -562,7 +602,7 @@ NtSetTimer(
     KeSetTimerEx(&Timer->KeTimer,
                  SafeDueTime,
                  Period,
-                 (TimerApcRoutine != NULL) ? &Timer->TimerDpc : NULL);
+                 ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
 
     ObDereferenceObject(Timer);
 
@@ -639,6 +679,7 @@ NtCancelTimer(
 
     KeCancelTimer(&Timer->KeTimer);
     State = KeReadStateTimer(&Timer->KeTimer);
+    ExpArmHighResolutionTimer(Timer, FALSE);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
