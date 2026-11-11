@@ -20,6 +20,7 @@ list(APPEND SOURCE
     ConsoleCP.c
     ConsoleFontInfo.c
     ConsoleInputSignal.c
+    ConsoleRequestStress.c
     ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c

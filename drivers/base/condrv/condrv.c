@@ -724,11 +724,13 @@ CdFinishIrp(
         PCD_FILE File = FileObject->FsContext;
         KIRQL OldIrql;
 
-        KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
-        OldIrql = ExAcquireSpinLockShared(&CdLock);
+        OldIrql = ExAcquireSpinLockExclusive(&CdLock);
+        /* A request queued on the file after this one owns the event: signalling it would end that wait early */
+        if (File->NoEventIrps == 1)
+            KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
         if (InterlockedDecrement(&File->NoEventIrps) == 0 && (FileObject->Flags & FO_SYNCHRONOUS_IO))
             CdUpdateFileEventShared(File, TRUE);
-        ExReleaseSpinLockShared(&CdLock, OldIrql);
+        ExReleaseSpinLockExclusive(&CdLock, OldIrql);
         ObDereferenceObject(FileObject);
     }
 }

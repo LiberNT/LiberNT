@@ -18,6 +18,7 @@ extern void func_ConsoleCommandHistory(void);
 extern void func_ConsoleCP(void);
 extern void func_ConsoleFontInfo(void);
 extern void func_ConsoleInputSignal(void);
+extern void func_ConsoleRequestStress(void);
 extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
 extern void func_ConsoleVirtualTerminal(void);
@@ -170,6 +171,7 @@ const struct test winetest_testlist[] =
     { "ConsoleCP",                   func_ConsoleCP },
     { "ConsoleFontInfo",           func_ConsoleFontInfo },
     { "ConsoleInputSignal",          func_ConsoleInputSignal },
+    { "ConsoleRequestStress",        func_ConsoleRequestStress },
     { "ConsoleDbcsCells",            func_ConsoleDbcsCells },
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
