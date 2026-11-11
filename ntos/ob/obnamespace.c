@@ -111,6 +111,9 @@ ObpRedirectDosDevices(
             return STATUS_OBJECT_PATH_NOT_FOUND;
         }
 
+        if (Remaining->Length == ObpDosDevicesShortName.Length)
+            return STATUS_OBJECT_NAME_INVALID;
+
         Prefixed = TRUE;
     }
 
@@ -376,6 +379,8 @@ ObpBeginWalk(
         Walk->Held = Walk->Directory;
         return STATUS_SUCCESS;
     }
+
+    if (Status == STATUS_OBJECT_NAME_INVALID) return Status;
 
     Walk->Directory = ObpRootDirectoryObject;
     return STATUS_SUCCESS;
