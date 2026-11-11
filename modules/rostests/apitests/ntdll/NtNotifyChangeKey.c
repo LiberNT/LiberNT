@@ -94,7 +94,7 @@ START_TEST(NtNotifyChangeKey)
         }
         else
             CHECK(TerminateThread(thread, 77));
-        DWORD wait = WaitForSingleObject(thread, 5000);
+        DWORD wait = WaitForSingleObject(thread, (which == 7) ? 1000 : 5000);
         CHECK(wait == WAIT_OBJECT_0);
         if (wait == WAIT_OBJECT_0 && which >= 8)
             CHECK(r.status == ERROR_SUCCESS);

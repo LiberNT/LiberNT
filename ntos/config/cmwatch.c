@@ -278,6 +278,17 @@ CmpDeliverCompletion(
     }
 }
 
+/* A waiter that leaves early takes its posts back, unless the answer is already on its way */
+static
+VOID
+CmpAbandonCompletion(
+    _In_ PCM_POST_COMPLETION Completion)
+{
+    if (InterlockedCompareExchange(&Completion->Completed, 1, 0) != 0) return;
+
+    CmpCancelSiblingPosts(Completion);
+}
+
 static
 VOID
 CmpUnlinkPostBlock(
@@ -511,13 +522,13 @@ CmpNotifyChangeKey(
 
         if (!Asynchronous)
         {
-            KeWaitForSingleObject(&Completion->Finished,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
+            Status = KeWaitForSingleObject(&Completion->Finished,
+                                           Executive,
+                                           PreviousMode,
+                                           FALSE,
+                                           NULL);
             CmpReleaseCompletion(Completion);
-            return STATUS_SUCCESS;
+            return Status;
         }
 
         CmpReleaseCompletion(Completion);
@@ -546,13 +557,20 @@ CmpNotifyChangeKey(
 
     CmpUnlockRegistry();
 
-    KeWaitForSingleObject(&Completion->Finished,
-                          Executive,
-                          KernelMode,
-                          FALSE,
-                          NULL);
+    Status = KeWaitForSingleObject(&Completion->Finished,
+                                   Executive,
+                                   PreviousMode,
+                                   FALSE,
+                                   NULL);
 
     CmpLockRegistry();
+
+    if (Status != STATUS_SUCCESS)
+    {
+        CmpAbandonCompletion(Completion);
+        CmpReleaseCompletion(Completion);
+        return Status;
+    }
 
     Status = Completion->Status;
     CmpReleaseCompletion(Completion);
