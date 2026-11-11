@@ -2768,6 +2768,7 @@ NtMapViewOfSection(
         if (NT_SUCCESS(Status) && Section->Control->Image &&
             Section->Control->ImageInformation.ImageContainsCode &&
             Section->Control->ImageInformation.Machine != PsGetProcessMachine(Process) &&
+            Section->Control->ImageInformation.Machine != PsWow64GetProcessMachine(Process) &&
             Section->Control->ImageInformation.Machine != IMAGE_FILE_MACHINE_NATIVE &&
             !(Section->Control->ImageInformation.Machine == IMAGE_FILE_MACHINE_ARM64EC &&
               PsGetProcessMachine(Process) == IMAGE_FILE_MACHINE_ARM64))
