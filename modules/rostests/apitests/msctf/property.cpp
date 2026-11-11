@@ -200,6 +200,91 @@ static void AppPropertySession(TfEditCookie ec, void *pv)
     pProperty->Release();
 }
 
+static void SetAttr(TfEditCookie ec, TSF_FIXTURE *pFixture, ITfProperty *pProperty, LONG lStart, LONG lEnd, LONG lValue)
+{
+    ITfRange *pRange;
+
+    ok_hr(pProperty->Clear(ec, NULL), S_OK);
+    pRange = Range_New(pFixture, ec, lStart, lEnd);
+    ok_hr(SetI4(ec, pProperty, pRange, lValue), S_OK);
+    pRange->Release();
+}
+
+static void CorrectionSession(TfEditCookie ec, void *pv)
+{
+    TSF_FIXTURE *pFixture = (TSF_FIXTURE *)pv;
+    ITfProperty *pProperty = NULL;
+    ITfRange *pRange;
+
+    ok_hr(pFixture->pContext->GetProperty(GUID_PROP_ATTRIBUTE, &pProperty), S_OK);
+    if (!pProperty)
+        return;
+
+    SetAttr(ec, pFixture, pProperty, 2, 5, 7);
+    pRange = Range_New(pFixture, ec, 2, 5);
+    ok_hr(pRange->SetText(ec, TF_ST_CORRECTION, L"xyz", 3), S_OK);
+    pRange->Release();
+    check_spans(ec, pProperty, 0, "");
+
+    SetAttr(ec, pFixture, pProperty, 2, 5, 7);
+    pRange = Range_New(pFixture, ec, 2, 5);
+    ok_hr(pRange->SetText(ec, 0, L"xyz", 3), S_OK);
+    pRange->Release();
+    check_spans(ec, pProperty, 0, "");
+
+    SetAttr(ec, pFixture, pProperty, 2, 5, 7);
+    pRange = Range_New(pFixture, ec, 3, 4);
+    ok_hr(pRange->SetText(ec, TF_ST_CORRECTION, L"pq", 2), S_OK);
+    pRange->Release();
+    check_spans(ec, pProperty, 3, "[2,3]=7 [3,5]=-1 [5,6]=7");
+
+    SetAttr(ec, pFixture, pProperty, 2, 5, 7);
+    pProperty->Release();
+}
+
+static const char *g_pszExpectedSpans;
+
+static void CheckSpansSession(TfEditCookie ec, void *pv)
+{
+    TSF_FIXTURE *pFixture = (TSF_FIXTURE *)pv;
+    ITfProperty *pProperty = NULL;
+
+    ok_hr(pFixture->pContext->GetProperty(GUID_PROP_ATTRIBUTE, &pProperty), S_OK);
+    if (!pProperty)
+        return;
+    check_spans(ec, pProperty, strchr(g_pszExpectedSpans, '[') ? 1 : 0, g_pszExpectedSpans);
+    pProperty->Release();
+}
+
+static void SetAttrSession(TfEditCookie ec, void *pv)
+{
+    TSF_FIXTURE *pFixture = (TSF_FIXTURE *)pv;
+    ITfProperty *pProperty = NULL;
+
+    ok_hr(pFixture->pContext->GetProperty(GUID_PROP_ATTRIBUTE, &pProperty), S_OK);
+    if (!pProperty)
+        return;
+    SetAttr(ec, pFixture, pProperty, 2, 5, 7);
+    pProperty->Release();
+}
+
+static void TestAppTextChange(TSF_FIXTURE *pFixture, DWORD dwFlags, const char *pszExpected)
+{
+    TS_TEXTCHANGE change = { 2, 5, 5 };
+    HRESULT hr;
+
+    hr = Fixture_RunSync(pFixture, SetAttrSession, pFixture, TF_ES_SYNC | TF_ES_READWRITE);
+    ok_hr(hr, S_OK);
+    ok(pFixture->pStore->m_pSink != NULL, "no text store sink\n");
+    if (!pFixture->pStore->m_pSink)
+        return;
+    hr = pFixture->pStore->m_pSink->OnTextChange(dwFlags, &change);
+    ok_hr(hr, S_OK);
+    g_pszExpectedSpans = pszExpected;
+    hr = Fixture_RunSync(pFixture, CheckSpansSession, pFixture, TF_ES_SYNC | TF_ES_READ);
+    ok_hr(hr, S_OK);
+}
+
 START_TEST(property)
 {
     TSF_FIXTURE fixture;
@@ -221,6 +306,14 @@ START_TEST(property)
         fixture.pStore->m_attrValue = 7;
         hr = Fixture_RunSync(&fixture, AppPropertySession, &fixture, TF_ES_SYNC | TF_ES_READ);
         ok_hr(hr, S_OK);
+    }
+    Fixture_Done(&fixture);
+    if (Fixture_Init(&fixture, L"0123456789"))
+    {
+        hr = Fixture_RunSync(&fixture, CorrectionSession, &fixture, TF_ES_SYNC | TF_ES_READWRITE);
+        ok_hr(hr, S_OK);
+        TestAppTextChange(&fixture, TS_ST_CORRECTION, "");
+        TestAppTextChange(&fixture, 0, "");
     }
     Fixture_Done(&fixture);
     CoUninitialize();
