@@ -857,6 +857,32 @@ PiDevNodeAddDrivers(
     PiSetDevNodeState(DeviceNode, DeviceNodeInitialized);
 }
 
+/* A device that no longer runs gives back what it was started with, its message interrupts included */
+static
+VOID
+PiReleaseDeviceResources(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PAGED_CODE();
+
+    IopResDbRelease(DeviceNode);
+    IopReleaseMessageTokens(DeviceNode->ResourceList);
+
+    if (DeviceNode->ResourceList != NULL)
+    {
+        ExFreePool(DeviceNode->ResourceList);
+        DeviceNode->ResourceList = NULL;
+    }
+
+    if (DeviceNode->ResourceListTranslated != NULL)
+    {
+        ExFreePool(DeviceNode->ResourceListTranslated);
+        DeviceNode->ResourceListTranslated = NULL;
+    }
+
+    IopUpdateResourceMapForPnPDevice(DeviceNode);
+}
+
 static
 VOID
 PiProcessStartDevice(
@@ -887,7 +913,7 @@ PiProcessStartDevice(
                 &DeviceNode->InstancePath,
                 Status);
 
-        IopResDbRelease(DeviceNode);
+        PiReleaseDeviceResources(DeviceNode);
         PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_START);
         PiSetDevNodeState(DeviceNode, DeviceNodeDriversAdded);
 
@@ -1009,7 +1035,7 @@ PiProcessRemoval(
                        NULL);
 
     IopDisableDeviceInterfaces(DeviceNode);
-    IopResDbRelease(DeviceNode);
+    PiReleaseDeviceResources(DeviceNode);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
 
