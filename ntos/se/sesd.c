@@ -318,6 +318,79 @@ SepInheritAcl(
 }
 
 /* Whoever the caller speaks for may be handed an object */
+/* An ACL holding the mandatory label entries of one list and every other entry of another */
+static
+NTSTATUS
+SepBuildLabelSacl(
+    _In_opt_ PACL Labels,
+    _In_opt_ PACL Others,
+    _Out_ PACL *NewSacl)
+{
+    UCHAR Revision = ACL_REVISION;
+    ULONG Length = sizeof(ACL);
+    BOOLEAN Label;
+    PACE_HEADER Ace;
+    NTSTATUS Status = STATUS_SUCCESS;
+    PACL Source;
+    PACL Sacl;
+    ULONG Pass;
+    ULONG Index;
+
+    *NewSacl = NULL;
+
+    for (Pass = 0; Pass < 2; Pass++)
+    {
+        Source = (Pass == 0) ? Labels : Others;
+        if (Source == NULL) continue;
+
+        if (Pass == 0 && Source->AclRevision > Revision) Revision = Source->AclRevision;
+
+        for (Index = 0; Index < Source->AceCount; Index++)
+        {
+            if (!NT_SUCCESS(RtlGetAce(Source, Index, (PVOID *)&Ace))) return STATUS_INVALID_ACL;
+
+            Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
+            if (Label != (Pass == 0)) continue;
+
+            Length += Ace->AceSize;
+            if (Source->AclRevision > Revision) Revision = Source->AclRevision;
+        }
+    }
+
+    if (Length > MAXUSHORT) return STATUS_ALLOTTED_SPACE_EXCEEDED;
+
+    Sacl = ExAllocatePoolWithTag(PagedPool, Length, TAG_ACL);
+    if (Sacl == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlCreateAcl(Sacl, Length, Revision);
+
+    for (Pass = 0; NT_SUCCESS(Status) && Pass < 2; Pass++)
+    {
+        Source = (Pass == 0) ? Labels : Others;
+        if (Source == NULL) continue;
+
+        for (Index = 0; NT_SUCCESS(Status) && Index < Source->AceCount; Index++)
+        {
+            Status = RtlGetAce(Source, Index, (PVOID *)&Ace);
+            if (!NT_SUCCESS(Status)) break;
+
+            Label = (Ace->AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE);
+            if (Label != (Pass == 0)) continue;
+
+            Status = RtlAddAce(Sacl, Revision, MAXULONG, Ace, Ace->AceSize);
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Sacl, TAG_ACL);
+        return Status;
+    }
+
+    *NewSacl = Sacl;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 SepCheckNewOwner(
@@ -753,8 +826,10 @@ SeQuerySecurityDescriptorInfo(
     SECURITY_INFORMATION Wanted = *SecurityInformation;
     SEP_SD_PARTS Held;
     SEP_SD_PARTS Told;
+    PACL LabelSacl = NULL;
     ULONG Control = 0;
     ULONG Needed = 0;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
@@ -781,6 +856,20 @@ SeQuerySecurityDescriptorInfo(
         if (Held.SaclPresent) Control |= SE_SACL_PRESENT;
         Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
     }
+    else if ((Wanted & LABEL_SECURITY_INFORMATION) && Held.SaclPresent)
+    {
+        /* Asking for the label shows the label entries of the SACL and nothing else */
+        if (Held.Sacl != NULL)
+        {
+            Status = SepBuildLabelSacl(Held.Sacl, NULL, &LabelSacl);
+            if (!NT_SUCCESS(Status)) return Status;
+        }
+
+        Told.Sacl = LabelSacl;
+        Told.SaclPresent = TRUE;
+        Control |= SE_SACL_PRESENT;
+        Control |= Held.Control & (SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
+    }
 
     /* Asking with no room to write in is asking how much room it takes */
     SepWriteParts(NULL, &Needed, (SECURITY_DESCRIPTOR_CONTROL)Control, &Told);
@@ -788,13 +877,18 @@ SeQuerySecurityDescriptorInfo(
     if (SecurityDescriptor == NULL || *Length < Needed)
     {
         *Length = Needed;
-        return STATUS_BUFFER_TOO_SMALL;
+        Status = STATUS_BUFFER_TOO_SMALL;
+    }
+    else
+    {
+        Status = SepWriteParts(SecurityDescriptor,
+                               Length,
+                               (SECURITY_DESCRIPTOR_CONTROL)Control,
+                               &Told);
     }
 
-    return SepWriteParts(SecurityDescriptor,
-                         Length,
-                         (SECURITY_DESCRIPTOR_CONTROL)Control,
-                         &Told);
+    if (LabelSacl != NULL) ExFreePoolWithTag(LabelSacl, TAG_ACL);
+    return Status;
 }
 
 /*
@@ -905,6 +999,16 @@ SeSetSecurityDescriptorInfoEx(
 
             Next.Sacl = ReadSacl;
         }
+    }
+    else if (NT_SUCCESS(Status) && (Wanted & LABEL_SECURITY_INFORMATION))
+    {
+        /* A label is set by replacing the label entries of the SACL; whatever else it holds stays */
+        Status = SepBuildLabelSacl(Given.SaclPresent ? Given.Sacl : NULL,
+                                   Held.SaclPresent ? Held.Sacl : NULL,
+                                   &ReadSacl);
+        Next.Sacl = ReadSacl;
+        Next.SaclPresent = TRUE;
+        Control &= ~SE_SACL_DEFAULTED;
     }
 
     if (NT_SUCCESS(Status))
