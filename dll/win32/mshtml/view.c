@@ -1067,7 +1067,12 @@ static HRESULT WINAPI WindowForBindingUI_GetWindow(IWindowForBindingUI *iface, R
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_guid(rguidReason), phwnd);
 
+#ifdef __REACTOS__
+    /* A document not activated yet has no window of its own; binding UI is owned by the thread's hidden window */
+    *phwnd = This->hwnd ? This->hwnd : get_thread_hwnd();
+#else
     *phwnd = This->hwnd;
+#endif
     return S_OK;
 }
 
