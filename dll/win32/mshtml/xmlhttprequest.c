@@ -510,6 +510,12 @@ static nsresult NSAPI XMLHttpReqEventListener_HandleEvent(nsIDOMEventListener *i
         }
     }
 
+    if(event->event_id == EVENTID_READYSTATECHANGE && ready_state == READYSTATE_INTERACTIVE
+       && This->xhr->ready_state == READYSTATE_INTERACTIVE) {
+        IDOMEvent_Release(&event->IDOMEvent_iface);
+        return NS_OK;
+    }
+
     This->xhr->ready_state = ready_state;
     dispatch_event(&This->xhr->event_target, event);
     IDOMEvent_Release(&event->IDOMEvent_iface);
