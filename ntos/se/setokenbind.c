@@ -76,7 +76,17 @@ SeTokenCanImpersonate(
             Allowed = FALSE;
     }
 
-    /* TODO: a token of higher integrity than the process's is not refused */
+    /* A thread may not act as a token trusted more than its own process */
+    if (SepGetTokenIntegrityRid(TokenToImpersonate) > SepGetTokenIntegrityRid(ProcessToken))
+        Allowed = FALSE;
+
+    /* A restricted process may only act as a token that is restricted too */
+    if ((ProcessToken->TokenFlags & TOKEN_IS_RESTRICTED) &&
+        !(TokenToImpersonate->TokenFlags & TOKEN_IS_RESTRICTED))
+    {
+        Allowed = FALSE;
+    }
+
     SepReleaseTokenLock(TokenToImpersonate);
     SepReleaseTokenLock(ProcessToken);
 

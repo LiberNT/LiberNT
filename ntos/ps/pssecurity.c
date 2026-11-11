@@ -423,9 +423,9 @@ PsReferenceEffectiveToken(
 }
 
 /*
- * Makes a thread wear a token. A token the thread is not allowed to wear at
- * the level asked for is refused, and passing no token takes off whatever
- * the thread is wearing.
+ * Makes a thread wear a token. A token the thread is not allowed to act as is
+ * worn at identification level, and passing no token takes off whatever the
+ * thread is wearing.
  */
 NTSTATUS
 NTAPI
@@ -437,6 +437,7 @@ PsImpersonateClient(
     _In_ SECURITY_IMPERSONATION_LEVEL ImpersonationLevel)
 {
     PEPROCESS Process = THREAD_TO_PROCESS(Thread);
+    PACCESS_TOKEN Identification = NULL;
     PACCESS_TOKEN OldToken = NULL;
     PACCESS_TOKEN Primary;
     NTSTATUS Status;
@@ -451,7 +452,8 @@ PsImpersonateClient(
 
     /*
      * Wearing a token at the level where it can be acted on is only allowed
-     * to a process that could have obtained the token itself.
+     * to a process that could have obtained the token itself; any other
+     * process wears a copy that only tells whom it stands for.
      */
     if (ImpersonationLevel >= SecurityImpersonation)
     {
@@ -460,8 +462,15 @@ PsImpersonateClient(
 
         if (!SeTokenCanImpersonate(Primary, Token, ImpersonationLevel))
         {
-            PsDereferencePrimaryToken(Primary);
-            return STATUS_ACCESS_DENIED;
+            Status = SeCopyClientToken(Token, SecurityIdentification, KernelMode, &Identification);
+            if (!NT_SUCCESS(Status))
+            {
+                PsDereferencePrimaryToken(Primary);
+                return Status;
+            }
+
+            Token = Identification;
+            ImpersonationLevel = SecurityIdentification;
         }
 
         PsDereferencePrimaryToken(Primary);
@@ -473,6 +482,7 @@ PsImpersonateClient(
     if (!NT_SUCCESS(Status))
     {
         PspUnlockThreadSecurityExclusive(Thread);
+        if (Identification != NULL) ObDereferenceObject(Identification);
         return Status;
     }
 
@@ -489,6 +499,7 @@ PsImpersonateClient(
     PspUnlockThreadSecurityExclusive(Thread);
 
     if (OldToken != NULL) ObDereferenceObject(OldToken);
+    if (Identification != NULL) ObDereferenceObject(Identification);
 
     PspWriteTebImpersonationInfo(Thread, Process);
 
