@@ -604,6 +604,9 @@ PspDeleteProcess(
 
     Process->ProcessDelete = TRUE;
 
+    /* A process deleted without having exited leaves its jobs while it still has its identifier */
+    PspRemoveProcessFromJob(Process);
+
     if (Process->UniqueProcessId != NULL)
     {
         PspRemoveCid(Process->UniqueProcessId);
@@ -620,7 +623,6 @@ PspDeleteProcess(
         Process->ProcessInserted = FALSE;
     }
 
-    PspRemoveProcessFromJob(Process);
     PspDeleteProcessSecurity(Process);
     ObDereferenceDeviceMap(Process);
 

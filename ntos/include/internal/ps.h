@@ -635,11 +635,6 @@ PspExitProcessFromJob(
     _In_ PEPROCESS Process
 );
 
-VOID
-NTAPI
-PspNotifyJobProcessExit(
-    _In_ PEPROCESS Process
-);
 
 VOID
 NTAPI

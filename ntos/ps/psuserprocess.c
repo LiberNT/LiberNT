@@ -567,10 +567,7 @@ PspApplyCreateAttributes(
         _SEH2_END;
     }
 
-    /*
-     * A process belongs to one job, so the innermost of the jobs named is
-     * the one it joins: joining that one puts it under every job above it.
-     */
+    /* The jobs are joined in order, each one nested inside the one before */
     for (Index = 0; Index < Attributes->JobCount; Index++)
     {
         PEJOB Job;
@@ -587,9 +584,6 @@ PspApplyCreateAttributes(
         ObDereferenceObject(Job);
 
         if (!NT_SUCCESS(Status)) return Status;
-
-        /* The first one that takes the process is the one it is in */
-        break;
     }
 
     return STATUS_SUCCESS;

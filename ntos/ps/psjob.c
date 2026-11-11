@@ -94,9 +94,62 @@ PspInvokeW32JobCallout(
 }
 
 /*
- * Calls back for every process in the job, with the job held so that the
- * list cannot change underneath. A callback that fails stops the walk,
- * because a caller that cannot handle one process cannot handle the rest.
+ * Whether Ancestor is the job itself or one of the jobs it is nested in.
+ * Entered with the job hierarchy lock held.
+ */
+static
+BOOLEAN
+PspIsJobWithin(
+    _In_opt_ PEJOB Job,
+    _In_ PEJOB Ancestor)
+{
+    for (; Job != NULL; Job = Job->ParentJob)
+    {
+        if (Job == Ancestor) return TRUE;
+    }
+
+    return FALSE;
+}
+
+/* Entered with the job hierarchy lock held */
+static
+NTSTATUS
+PspEnumerateJobTree(
+    _In_ PEJOB Job,
+    _In_ PJOB_ENUMERATOR_CALLBACK Callback,
+    _In_opt_ PVOID Context)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+    PLIST_ENTRY Entry;
+
+    ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
+
+    for (Entry = Job->ProcessListHead.Flink;
+         Entry != &Job->ProcessListHead;
+         Entry = Entry->Flink)
+    {
+        Status = Callback(CONTAINING_RECORD(Entry, EPROCESS, JobLinks), Context);
+        if (!NT_SUCCESS(Status)) break;
+    }
+
+    ExReleaseResourceLite(&Job->JobLock);
+
+    for (Entry = Job->ChildJobListHead.Flink;
+         NT_SUCCESS(Status) && Entry != &Job->ChildJobListHead;
+         Entry = Entry->Flink)
+    {
+        Status = PspEnumerateJobTree(CONTAINING_RECORD(Entry, EJOB, SiblingJobLinks),
+                                     Callback,
+                                     Context);
+    }
+
+    return Status;
+}
+
+/*
+ * Calls back for every process in the job and in the jobs nested in it, with
+ * the hierarchy held so that neither the lists nor the nesting can change
+ * underneath. A callback that fails stops the walk.
  */
 NTSTATUS
 NTAPI
@@ -105,29 +158,24 @@ PspEnumerateProcessesInJob(
     _In_ PJOB_ENUMERATOR_CALLBACK Callback,
     _In_opt_ PVOID Context)
 {
-    NTSTATUS Status = STATUS_SUCCESS;
-    PLIST_ENTRY Entry;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
     KeEnterCriticalRegion();
-    ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
-
-    for (Entry = Job->ProcessListHead.Flink;
-         Entry != &Job->ProcessListHead;
-         Entry = Entry->Flink)
-    {
-        PEPROCESS Process = CONTAINING_RECORD(Entry, EPROCESS, JobLinks);
-
-        Status = Callback(Process, Context);
-        if (!NT_SUCCESS(Status)) break;
-    }
-
-    ExReleaseResourceLite(&Job->JobLock);
+    ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
+    Status = PspEnumerateJobTree(Job, Callback, Context);
+    ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 
     return Status;
 }
+
+typedef struct _PSP_JOB_TERMINATE_CONTEXT
+{
+    NTSTATUS ExitStatus;
+    BOOLEAN EndCaller;
+} PSP_JOB_TERMINATE_CONTEXT, *PPSP_JOB_TERMINATE_CONTEXT;
 
 static
 NTSTATUS
@@ -136,12 +184,19 @@ PspTerminateJobMember(
     _In_ PEPROCESS Process,
     _In_opt_ PVOID Context)
 {
-    NTSTATUS ExitStatus = (NTSTATUS)(ULONG_PTR)Context;
+    PPSP_JOB_TERMINATE_CONTEXT Terminate = Context;
 
     /* A process already on its way out is left to finish: its last thread may be the one closing the job */
     if (Process->ProcessExiting) return STATUS_SUCCESS;
 
-    PspTerminateProcess(Process, ExitStatus);
+    /* The caller does not come back from ending itself, so it goes once the walk is over */
+    if (Process == PsGetCurrentProcess())
+    {
+        Terminate->EndCaller = TRUE;
+        return STATUS_SUCCESS;
+    }
+
+    PspTerminateProcess(Process, Terminate->ExitStatus);
     return STATUS_SUCCESS;
 }
 
@@ -264,14 +319,26 @@ PspDeleteJob(
     _In_ PVOID ObjectBody)
 {
     PEJOB Job = ObjectBody;
+    PEJOB Parent;
 
     PAGED_CODE();
 
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&PspJobListLock, TRUE);
     if (Job->JobLinks.Flink != NULL) RemoveEntryList(&Job->JobLinks);
+
+    /* A nested job holds its parent until it goes */
+    Parent = Job->ParentJob;
+    if (Parent != NULL)
+    {
+        RemoveEntryList(&Job->SiblingJobLinks);
+        Job->ParentJob = NULL;
+    }
+
     ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
+
+    if (Parent != NULL) ObDereferenceObject(Parent);
 
     if (Job->CompletionPort != NULL)
     {
@@ -294,6 +361,8 @@ PspTerminateJobObject(
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ NTSTATUS ExitStatus)
 {
+    PSP_JOB_TERMINATE_CONTEXT Terminate;
+
     PAGED_CODE();
 
     UNREFERENCED_PARAMETER(AccessMode);
@@ -304,9 +373,9 @@ PspTerminateJobObject(
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 
-    PspEnumerateProcessesInJob(Job,
-                               PspTerminateJobMember,
-                               (PVOID)(ULONG_PTR)ExitStatus);
+    Terminate.ExitStatus = ExitStatus;
+    Terminate.EndCaller = FALSE;
+    PspEnumerateProcessesInJob(Job, PspTerminateJobMember, &Terminate);
 
     KeSetEvent(&Job->Event, IO_NO_INCREMENT, FALSE);
 
@@ -316,12 +385,22 @@ PspTerminateJobObject(
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
 
+    /* The caller's process goes too: its other threads now, the caller once it is back out of the call */
+    if (Terminate.EndCaller)
+    {
+        ZwTerminateProcess(NULL, ExitStatus);
+        PspTerminateThreadByPointer(PsGetCurrentThread(), ExitStatus, FALSE);
+    }
+
     return STATUS_SUCCESS;
 }
 
 /*
- * Puts a process into a job. A process belongs to one job for the rest of
- * its life: it may be put into a job once, and never taken out.
+ * Puts a process into a job. A process already in a job may also be put into
+ * a job nested inside it, or into a job that is in no hierarchy and holds
+ * nothing, which is then nested inside the process's job; a job the process
+ * is already in, directly or through a nested one, is already its job. Every
+ * job the process enters counts it and is told of it, innermost first.
  */
 NTSTATUS
 NTAPI
@@ -329,7 +408,10 @@ PspAssignProcessToJob(
     _In_ PEPROCESS Process,
     _In_ PEJOB Job)
 {
-    NTSTATUS Status;
+    PEJOB Current;
+    PEJOB Joined;
+    BOOLEAN Nest = FALSE;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
@@ -337,58 +419,99 @@ PspAssignProcessToJob(
         return STATUS_PROCESS_IS_TERMINATING;
 
     KeEnterCriticalRegion();
-    ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+    ExAcquireResourceExclusiveLite(&PspJobListLock, TRUE);
 
-    if (Process->Job != NULL)
+    Current = Process->Job;
+
+    if (Current != NULL && PspIsJobWithin(Current, Job))
     {
-        ExReleaseResourceLite(&Job->JobLock);
+        ExReleaseResourceLite(&PspJobListLock);
         KeLeaveCriticalRegion();
         ExReleaseRundownProtection(&Process->RundownProtect);
-
-        /* A process belongs to one job for the rest of its life */
-        return STATUS_ACCESS_DENIED;
+        return STATUS_SUCCESS;
     }
 
-    if (Job->CloseDone || Job->DisallowNewProcesses)
+    if (Current != NULL && !PspIsJobWithin(Job, Current))
     {
-        ExReleaseResourceLite(&Job->JobLock);
-        KeLeaveCriticalRegion();
-        ExReleaseRundownProtection(&Process->RundownProtect);
-        return STATUS_INVALID_PARAMETER;
+        if (Job->ParentJob != NULL ||
+            Job->TotalProcesses != 0 ||
+            !IsListEmpty(&Job->ChildJobListHead))
+        {
+            Status = STATUS_ACCESS_DENIED;
+        }
+        else
+        {
+            Nest = TRUE;
+        }
     }
 
-    /*
-     * A job may be told how many processes it will hold at once, and a
-     * process that would be one too many is refused.
-     */
-    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS) != 0 &&
-        Job->ActiveProcesses >= Job->ActiveProcessLimit)
+    if (NT_SUCCESS(Status))
     {
+        ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
+
+        if (Job->CloseDone || Job->DisallowNewProcesses)
+        {
+            Status = STATUS_INVALID_PARAMETER;
+        }
+        /* A job may be told how many processes it holds at once; one too many is refused */
+        else if ((Job->LimitFlags & JOB_OBJECT_LIMIT_ACTIVE_PROCESS) != 0 &&
+                 Job->ActiveProcesses >= Job->ActiveProcessLimit)
+        {
+            Status = STATUS_QUOTA_EXCEEDED;
+        }
+
         ExReleaseResourceLite(&Job->JobLock);
-        KeLeaveCriticalRegion();
-        ExReleaseRundownProtection(&Process->RundownProtect);
-        return STATUS_QUOTA_EXCEEDED;
     }
 
-    ObReferenceObject(Job);
-    Process->Job = Job;
-    InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
-    Job->TotalProcesses++;
-    Job->ActiveProcesses++;
+    if (NT_SUCCESS(Status) && Nest)
+    {
+        ObReferenceObject(Current);
+        Job->ParentJob = Current;
+        Job->RootJob = (Current->RootJob != NULL) ? Current->RootJob : Current;
+        Job->NestingDepth = Current->NestingDepth + 1;
+        Job->AncestorCount = Current->AncestorCount + 1;
+        InsertTailList(&Current->ChildJobListHead, &Job->SiblingJobLinks);
+    }
 
-    PspSendJobMessageLocked(Job,
-                            JOB_OBJECT_MSG_NEW_PROCESS,
-                            Process->UniqueProcessId,
-                            FALSE);
+    if (NT_SUCCESS(Status))
+    {
+        if (Current != NULL)
+        {
+            ExAcquireResourceExclusiveLite(&Current->JobLock, TRUE);
+            RemoveEntryList(&Process->JobLinks);
+            ExReleaseResourceLite(&Current->JobLock);
+        }
 
-    Status = PspAddProcessToJobLimits(Process, Job);
+        ObReferenceObject(Job);
 
-    ExReleaseResourceLite(&Job->JobLock);
+        ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+        Process->Job = Job;
+        InsertTailList(&Job->ProcessListHead, &Process->JobLinks);
+        Status = PspAddProcessToJobLimits(Process, Job);
+        ExReleaseResourceLite(&Job->JobLock);
+
+        for (Joined = Job; Joined != Current; Joined = Joined->ParentJob)
+        {
+            ExAcquireResourceExclusiveLite(&Joined->JobLock, TRUE);
+            Joined->TotalProcesses++;
+            Joined->ActiveProcesses++;
+            PspSendJobMessageLocked(Joined,
+                                    JOB_OBJECT_MSG_NEW_PROCESS,
+                                    Process->UniqueProcessId,
+                                    FALSE);
+            ExReleaseResourceLite(&Joined->JobLock);
+        }
+
+        /* The process's reference moved to the nested job, which keeps the one above it */
+        if (Current != NULL) ObDereferenceObject(Current);
+    }
+
+    ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 
     ExReleaseRundownProtection(&Process->RundownProtect);
 
-    if (PsGetProcessWin32Process(Process) != NULL)
+    if (NT_SUCCESS(Status) && PsGetProcessWin32Process(Process) != NULL)
     {
         PspInvokeW32JobCallout(Job,
                                PsW32JobCalloutAddProcess,
@@ -399,10 +522,11 @@ PspAssignProcessToJob(
 }
 
 /*
- * A new process starts in the job of the process that made it, unless that
- * job lets its processes leave: always when breakaway is silent, or when the
- * creator asked to break away and the job allows it. Asking to break away
- * from a job that does not allow it fails the creation.
+ * A new process starts in the job of the process that made it. It leaves
+ * every job that lets it go, from the innermost outwards: a job with silent
+ * breakaway always does, and one that allows breakaway does when the creator
+ * asked to break away. Asking to break away when the creator's own job does
+ * not allow it fails the creation.
  */
 NTSTATUS
 NTAPI
@@ -411,47 +535,77 @@ PspInheritParentJob(
     _In_opt_ PEPROCESS Parent,
     _In_ ULONG Flags)
 {
+    BOOLEAN Breakaway = ((Flags & PROCESS_CREATE_FLAGS_BREAKAWAY) != 0);
+    NTSTATUS Status;
     PEJOB Job;
 
     PAGED_CODE();
 
-    Job = (Parent != NULL) ? Parent->Job : NULL;
-    if (Job == NULL) return STATUS_SUCCESS;
+    if (Parent == NULL || Parent->Job == NULL) return STATUS_SUCCESS;
 
-    if ((Job->LimitFlags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK) != 0)
-        return STATUS_SUCCESS;
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
 
-    if ((Flags & PROCESS_CREATE_FLAGS_BREAKAWAY) != 0)
+    Job = Parent->Job;
+
+    if (Breakaway &&
+        (Job->LimitFlags & (JOB_OBJECT_LIMIT_BREAKAWAY_OK |
+                            JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK)) == 0)
     {
-        if ((Job->LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK) != 0)
-            return STATUS_SUCCESS;
-
+        ExReleaseResourceLite(&PspJobListLock);
+        KeLeaveCriticalRegion();
         return STATUS_ACCESS_DENIED;
     }
 
-    return PspAssignProcessToJob(Process, Job);
+    while (Job != NULL &&
+           ((Job->LimitFlags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK) != 0 ||
+            (Breakaway && (Job->LimitFlags & JOB_OBJECT_LIMIT_BREAKAWAY_OK) != 0)))
+    {
+        Job = Job->ParentJob;
+    }
+
+    if (Job != NULL) ObReferenceObject(Job);
+
+    ExReleaseResourceLite(&PspJobListLock);
+    KeLeaveCriticalRegion();
+
+    if (Job == NULL) return STATUS_SUCCESS;
+
+    Status = PspAssignProcessToJob(Process, Job);
+    ObDereferenceObject(Job);
+    return Status;
 }
 
 /*
- * A process in a job is exiting. The job's account is brought up to date
- * while the process can still be read, and whoever watches the job is told.
+ * A process in a job is leaving it. Each job it is in, innermost first, takes
+ * its account while it can still be read, stops counting it as active and
+ * tells whoever watches the job. Only the first of exit and deletion does
+ * this, because a process whose creation failed is deleted without exiting.
  */
 VOID
 NTAPI
 PspExitProcessFromJob(
     _In_ PEPROCESS Process)
 {
-    PEJOB Job = Process->Job;
+    PEJOB Job;
 
     PAGED_CODE();
 
-    if (Job == NULL) return;
+    if (Process->Job == NULL) return;
+
+    if ((InterlockedOr((PLONG)&Process->Flags2, PSP_JOB_ACCOUNTING_FOLDED) &
+         PSP_JOB_ACCOUNTING_FOLDED) != 0)
+    {
+        return;
+    }
 
     KeEnterCriticalRegion();
-    ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+    ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
 
-    if (!Process->AccountingFolded)
+    for (Job = Process->Job; Job != NULL; Job = Job->ParentJob)
     {
+        ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
+
         Job->TotalKernelTime.QuadPart += Process->Pcb.KernelTime;
         Job->TotalUserTime.QuadPart += Process->Pcb.UserTime;
         Job->TotalPageFaultCount += Process->Vm.Instance.PageFaultCount;
@@ -467,46 +621,27 @@ PspExitProcessFromJob(
             (ULONGLONG)Process->WriteTransferCount.QuadPart;
         Job->OtherTransferCount +=
             (ULONGLONG)Process->OtherTransferCount.QuadPart;
-        Process->AccountingFolded = TRUE;
-    }
 
-    if (Job->ActiveProcesses != 0) Job->ActiveProcesses--;
+        if (Job->ActiveProcesses != 0) Job->ActiveProcesses--;
 
-    ExReleaseResourceLite(&Job->JobLock);
-    KeLeaveCriticalRegion();
-
-    PspNotifyJobProcessExit(Process);
-}
-
-VOID
-NTAPI
-PspNotifyJobProcessExit(
-    _In_ PEPROCESS Process)
-{
-    PEJOB Job = Process->Job;
-
-    PAGED_CODE();
-
-    if (Job == NULL) return;
-
-    KeEnterCriticalRegion();
-    ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
-
-    PspSendJobMessageLocked(Job,
-                            JOB_OBJECT_MSG_EXIT_PROCESS,
-                            Process->UniqueProcessId,
-                            FALSE);
-
-    /* A job is not signalled by running out of processes, only by being terminated */
-    if (Job->ActiveProcesses == 0)
-    {
         PspSendJobMessageLocked(Job,
-                                JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
-                                NULL,
+                                JOB_OBJECT_MSG_EXIT_PROCESS,
+                                Process->UniqueProcessId,
                                 FALSE);
+
+        /* A job is not signalled by running out of processes, only by being terminated */
+        if (Job->ActiveProcesses == 0)
+        {
+            PspSendJobMessageLocked(Job,
+                                    JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO,
+                                    NULL,
+                                    FALSE);
+        }
+
+        ExReleaseResourceLite(&Job->JobLock);
     }
 
-    ExReleaseResourceLite(&Job->JobLock);
+    ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 }
 
@@ -526,13 +661,11 @@ PspRemoveProcessFromJob(
 
     if (Job == NULL) return;
 
+    PspExitProcessFromJob(Process);
+
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
     RemoveEntryList(&Process->JobLinks);
-
-    /* A process whose creation failed never exited, so it still counts as active */
-    if (!Process->AccountingFolded && Job->ActiveProcesses != 0) Job->ActiveProcesses--;
-
     Process->Job = NULL;
     ExReleaseResourceLite(&Job->JobLock);
     KeLeaveCriticalRegion();
@@ -903,7 +1036,12 @@ NtIsProcessInJob(
             return Status;
         }
 
-        InJob = (BOOLEAN)(Process->Job == Job);
+        KeEnterCriticalRegion();
+        ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
+        InJob = PspIsJobWithin(Process->Job, Job);
+        ExReleaseResourceLite(&PspJobListLock);
+        KeLeaveCriticalRegion();
+
         ObDereferenceObject(Job);
     }
     else
@@ -936,8 +1074,11 @@ NtTerminateJobObject(
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* A caller ending its own job keeps the exit it queued for itself until it has let go of the job */
+    KeEnterCriticalRegion();
     Status = PspTerminateJobObject(Job, PreviousMode, ExitStatus);
     ObDereferenceObject(Job);
+    KeLeaveCriticalRegion();
 
     return Status;
 }
@@ -1097,6 +1238,53 @@ NtCreateJobSet(
     return Status;
 }
 
+/* Reports a running process of a job tree to the job whose port was just set */
+static
+NTSTATUS
+NTAPI
+PspReportJobMember(
+    _In_ PEPROCESS Process,
+    _In_opt_ PVOID Context)
+{
+    if (Process->AccountingFolded) return STATUS_SUCCESS;
+
+    PspSendJobMessageLocked((PEJOB)Context,
+                            JOB_OBJECT_MSG_NEW_PROCESS,
+                            Process->UniqueProcessId,
+                            FALSE);
+    return STATUS_SUCCESS;
+}
+
+typedef struct _PSP_JOB_ID_LIST_CONTEXT
+{
+    PJOBOBJECT_BASIC_PROCESS_ID_LIST List;
+    ULONG Room;
+    ULONG Count;
+} PSP_JOB_ID_LIST_CONTEXT, *PPSP_JOB_ID_LIST_CONTEXT;
+
+/* Counts, or lists while there is room, the processes still running in a job tree */
+static
+NTSTATUS
+NTAPI
+PspListJobMember(
+    _In_ PEPROCESS Process,
+    _In_opt_ PVOID Context)
+{
+    PPSP_JOB_ID_LIST_CONTEXT IdList = Context;
+
+    /* A process that has exited stays associated with the job but is no longer in it */
+    if (Process->AccountingFolded) return STATUS_SUCCESS;
+
+    if (IdList->List != NULL)
+    {
+        if (IdList->Count >= IdList->Room) return STATUS_SUCCESS;
+        IdList->List->ProcessIdList[IdList->Count] = (ULONG_PTR)Process->UniqueProcessId;
+    }
+
+    IdList->Count++;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 PspCopyJobInformation(
@@ -1187,7 +1375,9 @@ NtQueryInformationJobObject(
         ObReferenceObject(Job);
     }
 
+    /* The hierarchy is taken first, as everywhere, because a job's answer includes the jobs nested in it */
     KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
     ExAcquireResourceSharedLite(&Job->JobLock, TRUE);
 
     RtlZeroMemory(&BasicAndIo, sizeof(BasicAndIo));
@@ -1298,10 +1488,8 @@ NtQueryInformationJobObject(
 
         case JobObjectBasicProcessIdList:
         {
-            PLIST_ENTRY Entry;
+            PSP_JOB_ID_LIST_CONTEXT IdList;
             ULONG Room;
-            ULONG Members = 0;
-            ULONG Count = 0;
 
             /* The record has to hold at least one identifier */
             if (JobInformationLength < sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST))
@@ -1315,14 +1503,10 @@ NtQueryInformationJobObject(
                     (ULONG)FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
                                         ProcessIdList)) / sizeof(ULONG_PTR);
 
-            for (Entry = Job->ProcessListHead.Flink;
-                 Entry != &Job->ProcessListHead;
-                 Entry = Entry->Flink)
-            {
-                if (!CONTAINING_RECORD(Entry, EPROCESS, JobLinks)->AccountingFolded) Members++;
-            }
-
-            if (Room > Members) Room = Members;
+            /* The processes of the jobs nested in this one are in it too */
+            RtlZeroMemory(&IdList, sizeof(IdList));
+            PspEnumerateJobTree(Job, PspListJobMember, &IdList);
+            if (Room > IdList.Count) Room = IdList.Count;
 
             List = ExAllocatePoolWithTag(PagedPool,
                                          FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
@@ -1335,28 +1519,17 @@ NtQueryInformationJobObject(
                 break;
             }
 
-            for (Entry = Job->ProcessListHead.Flink;
-                 Entry != &Job->ProcessListHead && Count < Room;
-                 Entry = Entry->Flink)
-            {
-                PEPROCESS Member = CONTAINING_RECORD(Entry,
-                                                     EPROCESS,
-                                                     JobLinks);
-
-                /* A process that has exited stays associated with the job but is no longer in it */
-                if (Member->AccountingFolded) continue;
-
-                List->ProcessIdList[Count] =
-                    (ULONG_PTR)Member->UniqueProcessId;
-                Count++;
-            }
+            IdList.List = List;
+            IdList.Room = Room;
+            IdList.Count = 0;
+            PspEnumerateJobTree(Job, PspListJobMember, &IdList);
 
             List->NumberOfAssignedProcesses = Job->ActiveProcesses;
-            List->NumberOfProcessIdsInList = Count;
+            List->NumberOfProcessIdsInList = IdList.Count;
 
             Length = (ULONG)FIELD_OFFSET(JOBOBJECT_BASIC_PROCESS_ID_LIST,
                                          ProcessIdList) +
-                     Count * (ULONG)sizeof(ULONG_PTR);
+                     IdList.Count * (ULONG)sizeof(ULONG_PTR);
             Source = List;
 
             /*
@@ -1364,8 +1537,8 @@ NtQueryInformationJobObject(
              * told there were more, which is how it learns to ask again with
              * room for all of them.
              */
-            Status = (Count < Job->ActiveProcesses) ? STATUS_BUFFER_OVERFLOW
-                                                    : STATUS_SUCCESS;
+            Status = (IdList.Count < Job->ActiveProcesses) ? STATUS_BUFFER_OVERFLOW
+                                                           : STATUS_SUCCESS;
             break;
         }
 
@@ -1409,6 +1582,7 @@ NtQueryInformationJobObject(
     }
 
     ExReleaseResourceLite(&Job->JobLock);
+    ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 
     ObDereferenceObject(Job);
@@ -1681,30 +1855,17 @@ NtSetInformationJobObject(
                 if (!NT_SUCCESS(Status)) break;
 
                 KeEnterCriticalRegion();
+                ExAcquireResourceSharedLite(&PspJobListLock, TRUE);
                 ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
 
                 if (Job->CompletionPort == NULL)
                 {
-                    PLIST_ENTRY Entry;
-
                     Job->CompletionPort = Completion;
                     Job->CompletionKey = Port.CompletionKey;
                     Completion = NULL;
 
-                    /* The processes already in the job are reported as if they had just joined */
-                    for (Entry = Job->ProcessListHead.Flink;
-                         Entry != &Job->ProcessListHead;
-                         Entry = Entry->Flink)
-                    {
-                        PEPROCESS Member = CONTAINING_RECORD(Entry, EPROCESS, JobLinks);
-
-                        if (Member->AccountingFolded) continue;
-
-                        PspSendJobMessageLocked(Job,
-                                                JOB_OBJECT_MSG_NEW_PROCESS,
-                                                Member->UniqueProcessId,
-                                                FALSE);
-                    }
+                    /* The processes already in the job, and in the jobs nested in it, are reported as if they had just joined */
+                    PspEnumerateJobTree(Job, PspReportJobMember, Job);
                 }
                 else
                 {
@@ -1712,6 +1873,7 @@ NtSetInformationJobObject(
                 }
 
                 ExReleaseResourceLite(&Job->JobLock);
+                ExReleaseResourceLite(&PspJobListLock);
                 KeLeaveCriticalRegion();
 
                 if (Completion != NULL) ObDereferenceObject(Completion);
