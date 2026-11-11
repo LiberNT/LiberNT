@@ -27,10 +27,10 @@
 #include "winbase.h"
 #include "winnls.h"
 
-#define TIMEOUT 1000   /* one second for Timeouts*/
+#define TIMEOUT 200    /* 200 ms for Timeouts*/
 #define SLOWBAUD 150
 #define FASTBAUD 115200
-#define TIMEDELTA 150  /* 150 ms uncertainty allowed */
+#define TIMEDELTA 60   /* 60 ms uncertainty allowed */
 
 /* Define the appropriate LOOPBACK(s) TRUE if you have a Loopback cable with
  * the mentioned shorts connected to your Serial port
@@ -2116,7 +2116,7 @@ static void test_read_write(void)
     ovl_wait.OffsetHigh = 0;
     ovl_wait.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
 
-    trace("waiting 3 secs for modem response...\n");
+    trace("waiting 300 ms for modem response...\n");
     last_event_time = 0;
     before = GetTickCount();
     do
@@ -2185,10 +2185,10 @@ static void test_read_write(void)
             }
             else
             {
-                if (last_event_time || after - before >= 3000) goto done;
+                if (last_event_time || after - before >= 300) goto done;
             }
         }
-    } while (after - before < 3000);
+    } while (after - before < 300);
 
 done:
     CloseHandle(ovl_wait.hEvent);
