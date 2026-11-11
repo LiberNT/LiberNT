@@ -138,6 +138,8 @@ typedef struct _XHCI_DEVICE_SLOT {
     volatile LONG Ep0NeedsStallReset;    /* Set on stall, cleared by next submit at PASSIVE */
     volatile LONG Ep0StallResetQueued;   /* Prevent duplicate stall-reset workers */
     KEVENT Ep0StallResetEvent;
+    BOOLEAN DebugAdopted;
+    XHCI_CONTEXT_ALLOCATION OwnDeviceContext;
 } XHCI_DEVICE_SLOT, *PXHCI_DEVICE_SLOT;
 
 typedef struct _XHCI_PROTOCOL_SEGMENT {
@@ -279,6 +281,13 @@ typedef struct _XHCI_EXTENSION {
   BOOLEAN TimerResolutionRaised;
   BOOLEAN DebugShare;
   KD_USB_SHARE DebugShareInfo;
+  BOOLEAN DebugHubShare;
+  UCHAR DebugHubCount;
+  UCHAR DebugHubSlot[KD_USB_SHARE_MAX_SLOTS];
+  UCHAR DebugHubPort[KD_USB_SHARE_MAX_SLOTS];
+  UCHAR DebugNextSpeed[KD_USB_SHARE_MAX_SLOTS];
+  ULONG DebugHubRoute[KD_USB_SHARE_MAX_SLOTS];
+  volatile LONG DebugPortChange[KD_USB_SHARE_MAX_SLOTS];
   XHCI_COMMAND_CONTEXT FrozenCommand;
 } XHCI_EXTENSION, *PXHCI_EXTENSION;
 
