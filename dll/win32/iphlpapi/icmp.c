@@ -438,6 +438,12 @@ IcmpSendEcho2(
     DWORD nReplies;
     NTSTATUS Status;
 
+    if (ReplyBuffer == NULL || ReplySize == 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
     if (ReplySize < sizeof(ICMP_ECHO_REPLY) + sizeof(IO_STATUS_BLOCK))
     {
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
@@ -596,7 +602,7 @@ IcmpSendEcho(
     DWORD nReplies;
     NTSTATUS Status;
 
-    if (Timeout == 0 || Timeout == (DWORD)-1)
+    if (Timeout == 0 || Timeout == (DWORD)-1 || ReplyBuffer == NULL || ReplySize == 0)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return 0;
