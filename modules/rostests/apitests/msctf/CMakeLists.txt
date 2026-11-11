@@ -6,6 +6,7 @@ list(APPEND SOURCE
     composition.cpp
     editsession.cpp
     inputmode.cpp
+    keyroute.cpp
     langbar.cpp
     langbarmgr.cpp
     layouttip.cpp
