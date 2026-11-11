@@ -33,6 +33,8 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_freeze_targets COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-freeze-targets-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.amd64_processor_number COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-processor-number-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_freeze_publication COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-freeze-publication-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ex.workqueue_startup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/workqueue-startup-test.py
