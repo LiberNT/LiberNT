@@ -66,6 +66,14 @@ AppleMcaEnableClocks(
     _In_ ULONG Cluster,
     _In_ BOOLEAN Enable);
 
+VOID
+NTAPI
+AppleMcaFollowPortClocks(
+    _In_ PAPPLE_MCA Mca,
+    _In_ ULONG Cluster,
+    _In_ ULONG Port,
+    _In_ BOOLEAN Enable);
+
 NTSTATUS
 NTAPI
 AppleMcaResetTx(

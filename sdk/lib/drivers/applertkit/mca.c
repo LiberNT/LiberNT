@@ -21,6 +21,7 @@
 #define MCA_SYNC_STATUS             0x100
 #define MCA_SYNC_ENABLE             0x00000001
 #define MCA_SYNC_MCLK_SELECT        0x104
+#define MCA_SYNC_PORT_CLOCK_BASE    7
 #define MCA_SYNC_HIGH_PERIOD        0x108
 #define MCA_SYNC_LOW_PERIOD         0x10c
 #define MCA_PORT_ENABLES            0x600
@@ -320,6 +321,29 @@ AppleMcaEnableClocks(
     {
         McaModify(Mca, Cluster, MCA_SYNC_STATUS, MCA_SYNC_ENABLE, 0);
         McaModify(Mca, Cluster, MCA_STATUS, MCA_STATUS_MCLK_ENABLE, 0);
+    }
+}
+
+VOID
+NTAPI
+AppleMcaFollowPortClocks(
+    _In_ PAPPLE_MCA Mca,
+    _In_ ULONG Cluster,
+    _In_ ULONG Port,
+    _In_ BOOLEAN Enable)
+{
+    ASSERT(Cluster < Mca->ClusterCount);
+    ASSERT(Port < Mca->ClusterCount);
+    if (!Mca->Clusters || Cluster >= Mca->ClusterCount || Port >= Mca->ClusterCount)
+        return;
+    if (Enable)
+    {
+        WRITE_REGISTER_ULONG(McaRegister(Mca, Cluster, MCA_SYNC_MCLK_SELECT), Port + MCA_SYNC_PORT_CLOCK_BASE);
+        McaModify(Mca, Cluster, MCA_SYNC_STATUS, MCA_SYNC_ENABLE, MCA_SYNC_ENABLE);
+    }
+    else
+    {
+        McaModify(Mca, Cluster, MCA_SYNC_STATUS, MCA_SYNC_ENABLE, 0);
     }
 }
 

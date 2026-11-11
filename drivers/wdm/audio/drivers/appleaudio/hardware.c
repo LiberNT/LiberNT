@@ -49,11 +49,6 @@
 #define APPLE_AUDIO_AMP_RAMP_US     7000
 #define APPLE_AUDIO_AMP_SHUTDOWN_US 3000
 #define APPLE_AUDIO_TICKS_PER_MS    10000ULL
-#define APPLE_AUDIO_MCA_CLUSTER_STRIDE 0x4000
-#define APPLE_AUDIO_MCA_SYNC_STATUS 0x100
-#define APPLE_AUDIO_MCA_SYNC_ENABLE 0x00000001
-#define APPLE_AUDIO_MCA_SYNC_MCLK_SELECT 0x104
-#define APPLE_AUDIO_MCA_SYNC_PORT_CLOCK 7
 
 #define CS42L84_CHIP_ID             0x42a84
 #define CS42L84_DEVID               0x0000
@@ -503,31 +498,6 @@ CodecInitialize(
 }
 
 static
-VOID
-AppleAudioMcaFollowPortClocks(
-    _In_ PAPPLE_MCA Mca,
-    _In_ ULONG Cluster,
-    _In_ ULONG Port,
-    _In_ BOOLEAN Enable)
-{
-    volatile ULONG *Status, *Select;
-
-    if (!Mca->Clusters || Cluster >= Mca->ClusterCount || Port >= Mca->ClusterCount)
-        return;
-    Status = (volatile ULONG *)(Mca->Clusters + Cluster * APPLE_AUDIO_MCA_CLUSTER_STRIDE + APPLE_AUDIO_MCA_SYNC_STATUS);
-    Select = (volatile ULONG *)(Mca->Clusters + Cluster * APPLE_AUDIO_MCA_CLUSTER_STRIDE + APPLE_AUDIO_MCA_SYNC_MCLK_SELECT);
-    if (Enable)
-    {
-        WRITE_REGISTER_ULONG(Select, Port + APPLE_AUDIO_MCA_SYNC_PORT_CLOCK);
-        WRITE_REGISTER_ULONG(Status, READ_REGISTER_ULONG(Status) | APPLE_AUDIO_MCA_SYNC_ENABLE);
-    }
-    else
-    {
-        WRITE_REGISTER_ULONG(Status, READ_REGISTER_ULONG(Status) & ~APPLE_AUDIO_MCA_SYNC_ENABLE);
-    }
-}
-
-static
 ULONG
 AppleAudioFindLink(
     _In_ PFDT_DRIVER_TREE Tree,
@@ -899,7 +869,7 @@ SpeakerUnprepare(
     for (Index = 0; Index < Spk->AmpCount; ++Index)
         Tas2764SetMode(&Spk->Amp[Index], Tas2764Shutdown);
     AppleAudioSleep(APPLE_AUDIO_AMP_SHUTDOWN_US);
-    AppleAudioMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], FALSE);
+    AppleMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], FALSE);
     AppleMcaEnableClocks(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, FALSE);
     for (Index = 0; Index < Spk->PortCount; ++Index)
         AppleMcaRoutePort(&Hw->Mca, Spk->Port[Index], APPLE_AUDIO_SPEAKER_FRONTEND, FALSE);
@@ -941,7 +911,7 @@ SpeakerPrepare(
     for (Index = 0; NT_SUCCESS(Status) && Index < Spk->PortCount; ++Index)
         Status = AppleMcaRoutePort(&Hw->Mca, Spk->Port[Index], APPLE_AUDIO_SPEAKER_FRONTEND, TRUE);
     AppleMcaEnableClocks(&Hw->Mca, APPLE_AUDIO_SPEAKER_FRONTEND, TRUE);
-    AppleAudioMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], TRUE);
+    AppleMcaFollowPortClocks(&Hw->Mca, APPLE_AUDIO_SENSE_FRONTEND, Spk->Port[0], TRUE);
     Hw->SampleBits[APPLE_AUDIO_SPEAKERS] = SampleBits;
     Hw->Prepared[APPLE_AUDIO_SPEAKERS] = TRUE;
     Spk->Unlocked = FALSE;
