@@ -601,6 +601,14 @@ NtQueueApcThreadEx2(
         return STATUS_THREAD_IS_TERMINATING;
     }
 
+    /* A thread that has ended will never return to user mode to run it */
+    if (Thread->Terminated)
+    {
+        ObDereferenceObject(Thread);
+        if (Reserve != NULL) ObDereferenceObject(Reserve);
+        return STATUS_UNSUCCESSFUL;
+    }
+
     /* TODO: take the control block out of the reserve object when one is given */
     Apc = ExAllocatePoolWithTag(NonPagedPool, sizeof(KAPC), TAG_PS_APC);
     if (Apc == NULL)
