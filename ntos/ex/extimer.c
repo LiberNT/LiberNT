@@ -543,6 +543,7 @@ NtSetTimer(
     PETIMER Timer;
     LARGE_INTEGER SafeDueTime;
     BOOLEAN State;
+    BOOLEAN Dereference;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -586,6 +587,7 @@ NtSetTimer(
     KeAcquireSpinLock(&Timer->Lock, &OldIrql);
 
     /* Whatever the timer was told to do before is forgotten. */
+    Dereference = Timer->ApcAssociated;
     ExpCancelTimerApc(Timer);
 
     State = KeReadStateTimer(&Timer->KeTimer);
@@ -624,6 +626,11 @@ NtSetTimer(
                  SafeDueTime,
                  Period,
                  ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
+
+    if (Dereference)
+    {
+        ObDereferenceObject(Timer);
+    }
 
     ObDereferenceObject(Timer);
 
