@@ -1794,11 +1794,26 @@ PiInitializeDevNode(
         }
         else
         {
-            DPRINT1("Duplicate device instance '%wZ'\n", &InstancePathU);
-            DPRINT1("Current instance parent: '%wZ'\n", &DeviceNode->Parent->InstancePath);
-            DPRINT1("Old instance parent: '%wZ'\n", &OldDeviceNode->Parent->InstancePath);
+            PDEVICE_NODE OldParent = OldDeviceNode->Parent;
 
-            KeBugCheckEx(PNP_DETECTED_FATAL_ERROR, 0x01, (ULONG_PTR)DeviceNode->PhysicalDeviceObject, (ULONG_PTR)OldDeviceObject, 0);
+            DPRINT1("Device instance '%wZ' already registered, deferring until removal\n", &InstancePathU);
+            InterlockedExchange(&PiDuplicateInstancePending, 1);
+            KeMemoryBarrier();
+            if (OldParent != NULL)
+            {
+                PiQueueDeviceAction(OldParent->PhysicalDeviceObject,
+                                    PiActionEnumDeviceTree, NULL, NULL);
+            }
+            else
+            {
+                DPRINT1("Duplicate device instance '%wZ'\n", &InstancePathU);
+                KeBugCheckEx(PNP_DETECTED_FATAL_ERROR, 0x01, (ULONG_PTR)DeviceNode->PhysicalDeviceObject, (ULONG_PTR)OldDeviceObject, 0);
+            }
+            ObDereferenceObject(OldDeviceObject);
+            ExReleaseResourceLite(&IopDeviceTreeResource);
+            KeLeaveCriticalRegion();
+            RtlFreeUnicodeString(&InstancePathU);
+            return STATUS_DEVICE_BUSY;
         }
     }
 
