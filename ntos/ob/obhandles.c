@@ -2399,10 +2399,13 @@ ObDuplicateObject(
         }
     }
 
-    Status = SeCreateAccessState(&AccessState,
-                                 &AuxData,
-                                 Granted,
-                                 &ObjectType->TypeInfo.GenericMapping);
+    /* Rights a duplicate adds are checked for the caller's impersonation, else for the process that gets the handle */
+    Status = SeCreateAccessStateEx(PsGetCurrentThread(),
+                                   TargetProcess,
+                                   &AccessState,
+                                   &AuxData,
+                                   Granted,
+                                   &ObjectType->TypeInfo.GenericMapping);
     if (!NT_SUCCESS(Status))
     {
         if (!KernelHandle) ObDereferenceProcessHandleTable(TargetProcess);
