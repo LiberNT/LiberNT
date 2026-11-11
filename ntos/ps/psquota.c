@@ -16,7 +16,7 @@
 EPROCESS_QUOTA_BLOCK PspDefaultQuotaBlock;
 
 static LIST_ENTRY PspQuotaBlockList;
-static KGUARDED_MUTEX PspQuotaLock;
+static KSPIN_LOCK PspQuotaLock;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -34,8 +34,9 @@ PspChargeQuotaBlock(
 {
     PEPROCESS_QUOTA_ENTRY Entry = &Block->QuotaEntry[QuotaType];
     SIZE_T New;
+    KIRQL OldIrql;
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
 
     New = Entry->Usage + Amount;
 
@@ -43,14 +44,14 @@ PspChargeQuotaBlock(
     if (New < Entry->Usage ||
         (Entry->Limit != 0 && New > Entry->Limit))
     {
-        KeReleaseGuardedMutex(&PspQuotaLock);
+        KeReleaseSpinLock(&PspQuotaLock, OldIrql);
         return STATUS_QUOTA_EXCEEDED;
     }
 
     Entry->Usage = New;
     if (New > Entry->Peak) Entry->Peak = New;
 
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
     return STATUS_SUCCESS;
 }
 
@@ -62,8 +63,9 @@ PspReturnQuotaBlock(
     _In_ SIZE_T Amount)
 {
     PEPROCESS_QUOTA_ENTRY Entry = &Block->QuotaEntry[QuotaType];
+    KIRQL OldIrql;
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
 
     /*
      * Returning more than was charged would turn the account negative and
@@ -72,7 +74,7 @@ PspReturnQuotaBlock(
     if (Amount > Entry->Usage) Entry->Usage = 0;
     else Entry->Usage -= Amount;
 
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 }
 
 static
@@ -94,7 +96,7 @@ PsInitializeQuotaSystem(VOID)
 {
     PAGED_CODE();
 
-    KeInitializeGuardedMutex(&PspQuotaLock);
+    KeInitializeSpinLock(&PspQuotaLock);
     InitializeListHead(&PspQuotaBlockList);
 
     RtlZeroMemory(&PspDefaultQuotaBlock, sizeof(PspDefaultQuotaBlock));
@@ -113,11 +115,13 @@ NTAPI
 PspInsertQuotaBlock(
     _In_ PEPROCESS_QUOTA_BLOCK QuotaBlock)
 {
+    KIRQL OldIrql;
+
     PAGED_CODE();
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
     InsertTailList(&PspQuotaBlockList, &QuotaBlock->QuotaList);
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 }
 
 /*
@@ -131,16 +135,17 @@ PspInheritQuota(
     _In_opt_ PEPROCESS ParentProcess)
 {
     PEPROCESS_QUOTA_BLOCK Block = &PspDefaultQuotaBlock;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
     if (ParentProcess != NULL && ParentProcess->QuotaBlock != NULL)
         Block = ParentProcess->QuotaBlock;
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
     Block->ReferenceCount++;
     Block->ProcessCount++;
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 
     Process->QuotaBlock = Block;
 }
@@ -156,13 +161,14 @@ PspDereferenceQuotaBlock(
     _In_ PEPROCESS_QUOTA_BLOCK QuotaBlock)
 {
     BOOLEAN Free = FALSE;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
     if (QuotaBlock == NULL) return;
     if (Process != NULL) Process->QuotaBlock = NULL;
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
 
     if (Process != NULL && QuotaBlock->ProcessCount != 0)
         QuotaBlock->ProcessCount--;
@@ -176,7 +182,7 @@ PspDereferenceQuotaBlock(
         Free = TRUE;
     }
 
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 
     if (Free) ExFreePoolWithTag(QuotaBlock, TAG_QUOTA_BLOCK);
 }
@@ -388,6 +394,7 @@ PsChargeSharedPoolQuota(
     _In_ SIZE_T AmountToChargeNonPaged)
 {
     PEPROCESS_QUOTA_BLOCK Block = Process->QuotaBlock;
+    KIRQL OldIrql;
 
     if (Block == NULL) return NULL;
 
@@ -410,9 +417,9 @@ PsChargeSharedPoolQuota(
         return NULL;
     }
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
     Block->ReferenceCount++;
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 
     return Block;
 }
@@ -512,6 +519,7 @@ PspSetQuotaLimits(
     PEPROCESS_QUOTA_BLOCK Block;
     QUOTA_LIMITS_EX Limits;
     BOOLEAN Privileged;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
@@ -529,7 +537,7 @@ PspSetQuotaLimits(
     {
         _SEH2_TRY
         {
-            ProbeForRead(QuotaLimits, QuotaLimitsLength, sizeof(ULONG_PTR));
+            ProbeForRead(QuotaLimits, QuotaLimitsLength, sizeof(ULONG));
             RtlCopyMemory(&Limits, QuotaLimits, QuotaLimitsLength);
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -569,7 +577,7 @@ PspSetQuotaLimits(
     Block = Process->QuotaBlock;
     if (Block == NULL) return STATUS_SUCCESS;
 
-    KeAcquireGuardedMutex(&PspQuotaLock);
+    KeAcquireSpinLock(&PspQuotaLock, &OldIrql);
 
     /*
      * A block that is still the one every process shares cannot be given
@@ -577,7 +585,7 @@ PspSetQuotaLimits(
      */
     if (Block == &PspDefaultQuotaBlock)
     {
-        KeReleaseGuardedMutex(&PspQuotaLock);
+        KeReleaseSpinLock(&PspQuotaLock, OldIrql);
         return STATUS_ACCESS_DENIED;
     }
 
@@ -590,7 +598,7 @@ PspSetQuotaLimits(
             (Limits.PagefileLimit != 0 &&
              Limits.PagefileLimit > Block->QuotaEntry[PsPageFile].Limit))
         {
-            KeReleaseGuardedMutex(&PspQuotaLock);
+            KeReleaseSpinLock(&PspQuotaLock, OldIrql);
             return STATUS_PRIVILEGE_NOT_HELD;
         }
     }
@@ -604,7 +612,7 @@ PspSetQuotaLimits(
     if (Limits.PagefileLimit != 0)
         Block->QuotaEntry[PsPageFile].Limit = Limits.PagefileLimit;
 
-    KeReleaseGuardedMutex(&PspQuotaLock);
+    KeReleaseSpinLock(&PspQuotaLock, OldIrql);
 
     return STATUS_SUCCESS;
 }
