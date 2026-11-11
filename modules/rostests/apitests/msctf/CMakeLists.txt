@@ -11,6 +11,7 @@ list(APPEND SOURCE
     langbarmgr.cpp
     layouttip.cpp
     owner.cpp
+    profilemgr.cpp
     profiles.cpp
     property.cpp
     range.cpp
