@@ -678,7 +678,7 @@ add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_pofx.inf")
 configure_file(ntos_io/kmtest_addfail.inf kmtest_addfail.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_addfail.inf")
 configure_file(ntos_io/kmtest_filterreq.inf kmtest_filterreq.inf COPYONLY)
-add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_filterreq.inf"
+add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_filterreq.inf")
 configure_file(ntos_io/kmtest_remchild.inf kmtest_remchild.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_remchild.inf")
 
