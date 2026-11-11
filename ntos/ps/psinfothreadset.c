@@ -151,7 +151,9 @@ PspSetThreadName(
 
     if (Safe.ThreadName.Length != 0)
     {
-        if (Safe.ThreadName.Buffer == NULL) return STATUS_INVALID_PARAMETER;
+        /* A user caller's missing characters fault when read, as on Windows */
+        if ((Safe.ThreadName.Buffer == NULL) && (PreviousMode == KernelMode))
+            return STATUS_INVALID_PARAMETER;
 
         New = ExAllocatePoolWithTag(PagedPool,
                                     sizeof(UNICODE_STRING) +
