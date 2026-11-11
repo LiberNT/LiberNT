@@ -55,6 +55,7 @@ set(ALPC_SOURCE
 
 list(APPEND SOURCE
     ApiSetMap.c
+    BootLog.c
     DllLoadNotification.c
     DbgCommandString.c
     DpcBehaviorRegistry.c

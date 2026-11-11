@@ -576,6 +576,35 @@ IopPublishSystemRoot(
     MmWriteableSharedUserData->NtSystemRoot[NtSystemRoot.Length / sizeof(WCHAR)] = UNICODE_NULL;
 }
 
+CODE_SEG("INIT")
+static
+BOOLEAN
+IopIsBootLogRequested(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PCSTR Options;
+    SIZE_T Length = strlen("BOOTLOG");
+    PCSTR Current;
+
+    ASSERT(LoaderBlock != NULL);
+
+    Options = LoaderBlock->LoadOptions;
+    if (Options == NULL) return FALSE;
+
+    for (Current = Options; *Current != ANSI_NULL; Current++)
+    {
+        if ((Current != Options) && (Current[-1] != ' ') && (Current[-1] != '/')) continue;
+        if (_strnicmp(Current, "BOOTLOG", Length) != 0) continue;
+
+        if ((Current[Length] == ANSI_NULL) || (Current[Length] == ' ') || (Current[Length] == '/'))
+        {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
 /* User mode learns the safe-boot mode from this volatile key, which only a safe boot creates */
 CODE_SEG("INIT")
 static
@@ -709,7 +738,7 @@ IoInitSystem(
     }
 
     IoInitCancelHandling();
-    IopInitBootLog(FALSE);
+    IopInitBootLog(IopIsBootLogRequested(LoaderBlock));
     IopInitTimerImplementation();
     IopInitErrorLog();
     IoInitShutdownNotification();
@@ -788,6 +817,9 @@ IoInitSystem(
     KdInitializeFileService();
 
     IopInitializeSystemDrivers();
+
+    /* TODO: drivers that load after this save, and PnP device driver loads, are not written to the boot log */
+    IopSaveBootLogToFile();
 
     IoPublishCrashDumpArtifacts();
 
