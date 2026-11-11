@@ -3540,7 +3540,6 @@ static void child_process(const char *dll_name, DWORD target_offset)
     CloseHandle(thread);
 
     ResetEvent(event);
-    Sleep(100);
 
     ok(attached_thread_count == 2, "attached thread count should be 2\n");
     for (i = 0; i < attached_thread_count; i++)
@@ -3574,8 +3573,6 @@ static void child_process(const char *dll_name, DWORD target_offset)
     ret = TerminateProcess(0, 195);
     ok(!ret, "TerminateProcess(0) should fail\n");
     ok(GetLastError() == ERROR_INVALID_HANDLE, "expected ERROR_INVALID_HANDLE, got %ld\n", GetLastError());
-
-    Sleep(100);
 
     affinity = 1;
     ret = pNtSetInformationProcess(process, ProcessAffinityMask, &affinity, sizeof(affinity));
