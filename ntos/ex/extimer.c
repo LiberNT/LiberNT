@@ -64,6 +64,25 @@ ExpArmHighResolutionTimer(
     ExSetTimerResolution(KeMinimumIncrement, Arm);
 }
 
+/* Called with the timer's lock held; the thread's own lock guards the list of timers it set */
+static
+VOID
+ExpUnlinkThreadTimer(
+    _Inout_ PETIMER Timer)
+{
+    PETHREAD Thread = CONTAINING_RECORD(Timer->TimerApc.Thread, ETHREAD, Tcb);
+
+    KeAcquireSpinLockAtDpcLevel(&Thread->ActiveTimerListLock);
+
+    if (Timer->ActiveTimerListEntry.Flink != NULL)
+    {
+        RemoveEntryList(&Timer->ActiveTimerListEntry);
+        Timer->ActiveTimerListEntry.Flink = NULL;
+    }
+
+    KeReleaseSpinLockFromDpcLevel(&Thread->ActiveTimerListLock);
+}
+
 /*
  * Runs when a named timer goes off. The timer only tells the thread that set it,
  * through the routine the thread asked for, and only while that request stands.
@@ -144,8 +163,7 @@ ExpTimerApcKernelRoutine(
     {
         Timer->ApcAssociated = FALSE;
 
-        RemoveEntryList(&Timer->ActiveTimerListEntry);
-        Timer->ActiveTimerListEntry.Flink = NULL;
+        ExpUnlinkThreadTimer(Timer);
 
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
@@ -220,11 +238,7 @@ ExpCancelTimerApc(
 
     Timer->ApcAssociated = FALSE;
 
-    if (Timer->ActiveTimerListEntry.Flink != NULL)
-    {
-        RemoveEntryList(&Timer->ActiveTimerListEntry);
-        Timer->ActiveTimerListEntry.Flink = NULL;
-    }
+    ExpUnlinkThreadTimer(Timer);
 
     KeRemoveQueueApc(&Timer->TimerApc);
 }
@@ -293,37 +307,44 @@ ExTimerRundown(VOID)
 {
     PETHREAD Thread = PsGetCurrentThread();
     PETIMER Timer;
-    PLIST_ENTRY Entry;
     KIRQL OldIrql;
+    BOOLEAN Cancelled;
+
+    PAGED_CODE();
 
     for (;;)
     {
-        KeAcquireSpinLock(&ExpWakeListLock, &OldIrql);
+        KeAcquireSpinLock(&Thread->ActiveTimerListLock, &OldIrql);
 
         if (IsListEmpty(&Thread->ActiveTimerListHead))
         {
-            KeReleaseSpinLock(&ExpWakeListLock, OldIrql);
+            KeReleaseSpinLock(&Thread->ActiveTimerListLock, OldIrql);
             return;
         }
 
-        Entry = Thread->ActiveTimerListHead.Flink;
-        Timer = CONTAINING_RECORD(Entry, ETIMER, ActiveTimerListEntry);
+        /* The listing holds a reference, so the timer is alive until the timer lock settles who drops it */
+        Timer = CONTAINING_RECORD(Thread->ActiveTimerListHead.Flink, ETIMER, ActiveTimerListEntry);
+        ObReferenceObject(Timer);
 
-        RemoveEntryList(&Timer->ActiveTimerListEntry);
-        Timer->ActiveTimerListEntry.Flink = NULL;
-
-        KeReleaseSpinLock(&ExpWakeListLock, OldIrql);
+        KeReleaseSpinLock(&Thread->ActiveTimerListLock, OldIrql);
 
         KeAcquireSpinLock(&Timer->Lock, &OldIrql);
 
-        if (Timer->ApcAssociated)
+        Cancelled = Timer->ApcAssociated && (Timer->TimerApc.Thread == &Thread->Tcb);
+        if (Cancelled)
         {
-            Timer->ApcAssociated = FALSE;
+            ExpCancelTimerApc(Timer);
             KeCancelTimer(&Timer->KeTimer);
-            KeRemoveQueueApc(&Timer->TimerApc);
+            ExpArmHighResolutionTimer(Timer, FALSE);
         }
 
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
+
+        if (Cancelled)
+        {
+            ExpSetWakeTimer(Timer, FALSE);
+            ObDereferenceObject(Timer);
+        }
 
         ObDereferenceObject(Timer);
     }
@@ -589,10 +610,10 @@ NtSetTimer(
 
         ObReferenceObject(Timer);
 
-        KeAcquireSpinLockAtDpcLevel(&ExpWakeListLock);
+        KeAcquireSpinLockAtDpcLevel(&Thread->ActiveTimerListLock);
         InsertTailList(&Thread->ActiveTimerListHead,
                        &Timer->ActiveTimerListEntry);
-        KeReleaseSpinLockFromDpcLevel(&ExpWakeListLock);
+        KeReleaseSpinLockFromDpcLevel(&Thread->ActiveTimerListLock);
     }
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);

@@ -155,6 +155,7 @@ list(APPEND SOURCE
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c
     WaitableTimerHighResolution.c
+    WaitableTimerThreadExit.c
     SwitchToThreadCost.c
     SuspendThread.c
     SynchronizationBarrier.c
