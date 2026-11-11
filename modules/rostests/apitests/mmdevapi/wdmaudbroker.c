@@ -90,6 +90,68 @@ static BOOL OpenAndCloseRenderPin(HANDLE Wdmaud, const WAVEFORMATEXTENSIBLE *For
     return Opened;
 }
 
+static BOOL SetPinState(HANDLE Wdmaud, HANDLE Pin, KSSTATE State)
+{
+    WDMAUD_DEVICE_INFO Info;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.DeviceType = WAVE_OUT_DEVICE_TYPE;
+    Info.DeviceIndex = 0;
+    Info.hDevice = Pin;
+    Info.u.State = State;
+    return Ioctl(Wdmaud, IOCTL_SETDEVICE_STATE, &Info);
+}
+
+static BOOL ClosePinHandle(HANDLE Wdmaud, HANDLE Pin)
+{
+    WDMAUD_DEVICE_INFO Info;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.DeviceType = WAVE_OUT_DEVICE_TYPE;
+    Info.DeviceIndex = 0;
+    Info.hDevice = Pin;
+    return Ioctl(Wdmaud, IOCTL_CLOSE_WDMAUD, &Info);
+}
+
+static void TestSecondOpenKeepsFirst(HANDLE Wdmaud, const WAVEFORMATEXTENSIBLE *Format)
+{
+    WDMAUD_DEVICE_INFO Info;
+    HANDLE First, Second = NULL;
+    BOOL Opened;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.DeviceType = WAVE_OUT_DEVICE_TYPE;
+    Info.DeviceIndex = 0;
+    Info.u.WaveFormatExtensible = *Format;
+    if (!Ioctl(Wdmaud, IOCTL_OPEN_WDMAUD, &Info))
+    {
+        ok(0, "first IOCTL_OPEN_WDMAUD failed with %lu\n", GetLastError());
+        return;
+    }
+    First = Info.hDevice;
+    ok(SetPinState(Wdmaud, First, KSSTATE_ACQUIRE), "first pin ACQUIRE failed with %lu\n", GetLastError());
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.DeviceType = WAVE_OUT_DEVICE_TYPE;
+    Info.DeviceIndex = 0;
+    Info.u.WaveFormatExtensible = *Format;
+    Opened = Ioctl(Wdmaud, IOCTL_OPEN_WDMAUD, &Info);
+    trace("second IOCTL_OPEN_WDMAUD on the same pin: %d, error %lu\n", Opened, Opened ? 0 : GetLastError());
+    if (Opened)
+    {
+        Second = Info.hDevice;
+        ok(Second != First, "the second pin reuses the first pin's handle %p\n", First);
+    }
+
+    ok(SetPinState(Wdmaud, First, KSSTATE_PAUSE), "first pin PAUSE after the second open failed with %lu\n", GetLastError());
+    ok(SetPinState(Wdmaud, First, KSSTATE_STOP), "first pin STOP after the second open failed with %lu\n", GetLastError());
+    ok(ClosePinHandle(Wdmaud, First), "closing the first pin failed with %lu\n", GetLastError());
+    if (Second && Second != First)
+        ok(ClosePinHandle(Wdmaud, Second), "closing the second pin failed with %lu\n", GetLastError());
+
+    ok(OpenAndCloseRenderPin(Wdmaud, Format), "reopening the pin failed with %lu\n", GetLastError());
+}
+
 static BOOL CreateWellKnown(WELL_KNOWN_SID_TYPE Type, BYTE Buffer[SECURITY_MAX_SID_SIZE])
 {
     DWORD Length = SECURITY_MAX_SID_SIZE;
@@ -204,6 +266,8 @@ START_TEST(wdmaudbroker)
         CloseHandle(Wdmaud);
         return;
     }
+
+    TestSecondOpenKeepsFirst(Wdmaud, &Format);
 
     Token = CreateAudioServiceToken();
     ok(Token != NULL, "Creating the restricted token failed with %lu\n", GetLastError());

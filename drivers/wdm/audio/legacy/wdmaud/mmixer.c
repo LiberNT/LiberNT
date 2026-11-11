@@ -973,7 +973,6 @@ CreatePinCallback(
     ULONG BytesReturned;
     SYSAUDIO_INSTANCE_INFO InstanceInfo;
     NTSTATUS Status;
-    ULONG FreeIndex;
     PPIN_CREATE_CONTEXT Context = (PPIN_CREATE_CONTEXT)Ctx;
 
     /* setup property request */
@@ -989,9 +988,6 @@ CreatePinCallback(
     if (!NT_SUCCESS(Status))
         return MM_STATUS_UNSUCCESSFUL;
 
-    /* close existing pin */
-    FreeIndex = ClosePin(Context->ClientInfo, VirtualDeviceId, PinId, Context->DeviceType);
-
     /* now create the pin */
     Status = KsCreatePin(Context->DeviceExtension->hSysAudio, PinConnect, DesiredAccess, PinHandle);
 
@@ -1000,7 +996,7 @@ CreatePinCallback(
         return MM_STATUS_UNSUCCESSFUL;
 
     /* store the handle */
-    Status = InsertPinHandle(Context->ClientInfo, VirtualDeviceId, PinId, Context->DeviceType, *PinHandle, FreeIndex);
+    Status = InsertPinHandle(Context->ClientInfo, VirtualDeviceId, PinId, Context->DeviceType, *PinHandle);
     if (!NT_SUCCESS(Status))
     {
         /* failed to insert handle */
