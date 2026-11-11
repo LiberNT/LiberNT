@@ -41,6 +41,7 @@ UCHAR IopQueryOperationLength[FileMaximumInformation] =
         sizeof(FILE_IO_COMPLETION_NOTIFICATION_INFORMATION),
     [FileIoPriorityHintInformation] =
         sizeof(FILE_IO_PRIORITY_HINT_INFORMATION),
+    [FileHardLinkInformation] = sizeof(FILE_LINKS_INFORMATION),
     [FileNormalizedNameInformation] = sizeof(FILE_NAME_INFORMATION),
     [FileNumaNodeInformation] = sizeof(FILE_NUMA_NODE_INFORMATION),
     [FileIdInformation] = sizeof(FILE_ID_INFORMATION),
