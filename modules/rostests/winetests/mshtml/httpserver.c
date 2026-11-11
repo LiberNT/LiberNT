@@ -62,6 +62,7 @@ static const char snapshot_html[] =
 static const char styles_css[] = "body { margin: 0; }\n";
 static const char script_js[] = "var local_test_page = 1;\n";
 static const char winetest_file[] = "A file of a type with no registered handler.\n";
+static const char cors_html[] = "<html><body>test</body></html>\n";
 static const char xmltest_xml[] = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<a>TEST</a>\n";
 static const char moved_html[] =
     "<html><head><title>301 Moved Permanently</title></head><body>\n"
@@ -81,6 +82,11 @@ static const unsigned char logo_png[] =
 static const char static_headers[] =
     "Last-Modified: Tue, 14 Jun 2022 15:45:18 GMT\r\n"
     "Accept-Ranges: bytes\r\n";
+
+static const char cors_headers[] =
+    "Last-Modified: Tue, 14 Jun 2022 15:45:18 GMT\r\n"
+    "Accept-Ranges: bytes\r\n"
+    "Access-Control-Allow-Origin: *\r\n";
 
 static const char script_headers[] =
     "Cache-Control: max-age=0, no-cache, no-store, must-revalidate\r\n"
@@ -200,7 +206,9 @@ static const struct served_page served_pages[] =
     { "/tests/winehq_snapshot/index_files/utils.js", "200 OK", static_headers, "application/javascript", script_js, sizeof(script_js) - 1 },
     { "/tests/winehq_snapshot/index_files/brand", "200 OK", static_headers, "application/javascript", script_js, sizeof(script_js) - 1 },
     { "/tests/winehq_snapshot/index_files/winehq_logo_glass.png", "200 OK", static_headers, "image/png", (const char *)logo_png, sizeof(logo_png) },
+    { "/tests/winehq_snapshot/index_files/winehq_logo_text.png", "200 OK", static_headers, "image/png", (const char *)logo_png, sizeof(logo_png) },
     { "/tests/file.winetest", "200 OK", static_headers, "application/winetest", winetest_file, sizeof(winetest_file) - 1 },
+    { "/tests/cors.html", "200 OK", cors_headers, "text/plain", cors_html, sizeof(cors_html) - 1 },
     { "/tests/xmltest.xml", "200 OK", static_headers, "application/xml", xmltest_xml, sizeof(xmltest_xml) - 1 },
     { "/tests/empty.js", "200 OK", static_headers, "text/javascript", "", 0 },
     { "/tests/redirect", "301 Moved Permanently", "Location: http://test.winehq.org/tests/hello.html\r\n",
