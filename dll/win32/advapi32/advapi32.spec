@@ -475,7 +475,12 @@
 @ stdcall -ret64 OpenTraceA(ptr)
 @ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall -version=0x600+ PerfCreateInstance(long ptr wstr long) kernelbase.PerfCreateInstance
+@ stdcall -version=0x600+ PerfDecrementULongCounterValue(long ptr long long) kernelbase.PerfDecrementULongCounterValue
+@ stdcall -version=0x600+ PerfDecrementULongLongCounterValue(long ptr long int64) kernelbase.PerfDecrementULongLongCounterValue
 @ stdcall -version=0x600+ PerfDeleteInstance(long ptr) kernelbase.PerfDeleteInstance
+@ stdcall -version=0x600+ PerfIncrementULongCounterValue(long ptr long long) kernelbase.PerfIncrementULongCounterValue
+@ stdcall -version=0x600+ PerfIncrementULongLongCounterValue(long ptr long int64) kernelbase.PerfIncrementULongLongCounterValue
+@ stdcall -version=0x600+ PerfQueryInstance(long ptr wstr long) kernelbase.PerfQueryInstance
 @ stdcall -version=0x600+ PerfSetCounterRefValue(long ptr long ptr) kernelbase.PerfSetCounterRefValue
 @ stdcall -version=0x600+ PerfSetCounterSetInfo(long ptr long) kernelbase.PerfSetCounterSetInfo
 @ stdcall -version=0x600+ PerfSetULongCounterValue(long ptr long long) kernelbase.PerfSetULongCounterValue

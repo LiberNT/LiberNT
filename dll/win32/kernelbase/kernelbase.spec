@@ -958,7 +958,12 @@
 @ stdcall PeekConsoleInputW(ptr ptr long ptr)
 @ stdcall PeekNamedPipe(long ptr long ptr ptr ptr) kernel32.PeekNamedPipe
 @ stdcall PerfCreateInstance(long ptr wstr long)
+@ stdcall PerfDecrementULongCounterValue(long ptr long long)
+@ stdcall PerfDecrementULongLongCounterValue(long ptr long int64)
 @ stdcall PerfDeleteInstance(long ptr)
+@ stdcall PerfIncrementULongCounterValue(long ptr long long)
+@ stdcall PerfIncrementULongLongCounterValue(long ptr long int64)
+@ stdcall PerfQueryInstance(long ptr wstr long)
 @ stdcall PerfSetCounterRefValue(long ptr long ptr)
 @ stdcall PerfSetCounterSetInfo(long ptr long)
 @ stdcall PerfSetULongCounterValue(long ptr long long)

@@ -94,6 +94,7 @@ list(APPEND SOURCE
     MultiByteToWideChar.c
     NlsStringApis.c
     NumaApis.c
+    PerfProvider.c
     Pipes.c
     PackageNames.c
     PixeloramaCompat.c
