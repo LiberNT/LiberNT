@@ -262,6 +262,33 @@ Cleanup:
     if (Job) CloseHandle(Job);
 }
 
+static void
+TestEndOfJobTime(void)
+{
+    ULONG Storage[3];
+    PJOBOBJECT_END_OF_JOB_TIME_INFORMATION EndOfJob;
+    DWORD Length = 0;
+    HANDLE Job;
+
+    Job = CreateJobObjectW(NULL, NULL);
+    ok(Job != NULL, "CreateJobObject failed %lu\n", GetLastError());
+    if (!Job) return;
+
+    /* On a 4-byte boundary that is not an 8-byte one */
+    EndOfJob = (PJOBOBJECT_END_OF_JOB_TIME_INFORMATION)(((ULONG_PTR)Storage % 8) ? &Storage[0] : &Storage[1]);
+    EndOfJob->EndOfJobTimeAction = JOB_OBJECT_POST_AT_END_OF_JOB;
+    ok(SetInformationJobObject(Job, JobObjectEndOfJobTimeInformation, EndOfJob, sizeof(*EndOfJob)),
+       "end-of-job time on a 4-byte boundary failed %lu\n", GetLastError());
+
+    EndOfJob->EndOfJobTimeAction = 0xdead;
+    ok(QueryInformationJobObject(Job, JobObjectEndOfJobTimeInformation, EndOfJob, sizeof(*EndOfJob), &Length) &&
+       Length == sizeof(*EndOfJob) && EndOfJob->EndOfJobTimeAction == JOB_OBJECT_POST_AT_END_OF_JOB,
+       "end-of-job time not stored: error %lu, length %lu, action %lu\n",
+       GetLastError(), Length, EndOfJob->EndOfJobTimeAction);
+
+    CloseHandle(Job);
+}
+
 START_TEST(JobLifecycle)
 {
     char **Arguments;
@@ -278,4 +305,5 @@ START_TEST(JobLifecycle)
     TestTerminateJob();
     TestKillOnJobClose();
     TestCompletionPortLifecycle();
+    TestEndOfJobTime();
 }

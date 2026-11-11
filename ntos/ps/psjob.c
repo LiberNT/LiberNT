@@ -1642,6 +1642,24 @@ NtQueryInformationJobObject(
     return Status;
 }
 
+static
+ULONG
+PspJobInformationAlignment(
+    _In_ JOBOBJECTINFOCLASS JobInformationClass)
+{
+    switch (JobInformationClass)
+    {
+        case JobObjectBasicUIRestrictions:
+            return TYPE_ALIGNMENT(JOBOBJECT_BASIC_UI_RESTRICTIONS);
+
+        case JobObjectEndOfJobTimeInformation:
+            return TYPE_ALIGNMENT(JOBOBJECT_END_OF_JOB_TIME_INFORMATION);
+
+        default:
+            return sizeof(ULONG_PTR);
+    }
+}
+
 NTSTATUS
 NTAPI
 NtSetInformationJobObject(
@@ -1674,9 +1692,7 @@ NtSetInformationJobObject(
         {
             ProbeForRead(JobInformation,
                          JobInformationLength,
-                         (JobInformationClass == JobObjectBasicUIRestrictions)
-                             ? TYPE_ALIGNMENT(JOBOBJECT_BASIC_UI_RESTRICTIONS)
-                             : sizeof(ULONG_PTR));
+                         PspJobInformationAlignment(JobInformationClass));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
