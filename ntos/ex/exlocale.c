@@ -142,7 +142,8 @@ NTSTATUS
 ExpWriteLocaleValue(
     _In_ PCWSTR Path,
     _In_ PCWSTR ValueName,
-    _In_ ULONG Value)
+    _In_ ULONG Value,
+    _In_ ULONG Digits)
 {
     WCHAR Text[EXP_LOCALE_DIGITS];
     UNICODE_STRING Name;
@@ -153,7 +154,7 @@ ExpWriteLocaleValue(
 
     PAGED_CODE();
 
-    for (Digit = 8; Digit > 0; Digit--)
+    for (Digit = Digits; Digit > 0; Digit--)
     {
         ULONG Nibble = (Value >> ((Digit - 1) * 4)) & 0xF;
 
@@ -229,7 +230,8 @@ ExpSetCurrentUserUILanguage(
 
     return ExpWriteLocaleValue(EXP_LOCALE_USER_KEY,
                                EXP_LOCALE_USER_UI_VALUE,
-                               LanguageId);
+                               LanguageId,
+                               8);
 }
 
 NTSTATUS
@@ -302,14 +304,16 @@ NtSetDefaultLocale(
 
         return ExpWriteLocaleValue(EXP_LOCALE_USER_KEY,
                                    EXP_LOCALE_USER_VALUE,
-                                   DefaultLocaleId);
+                                   DefaultLocaleId,
+                                   8);
     }
 
     PsDefaultSystemLocaleId = DefaultLocaleId;
 
     return ExpWriteLocaleValue(EXP_LOCALE_SYSTEM_KEY,
                                EXP_LOCALE_SYSTEM_VALUE,
-                               DefaultLocaleId);
+                               LANGIDFROMLCID(DefaultLocaleId),
+                               4);
 }
 
 NTSTATUS
