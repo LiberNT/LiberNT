@@ -208,6 +208,50 @@ IopCloseFile(
     IopDecrementDeviceObjectHandleCount(DeviceObject);
 }
 
+static
+NTSTATUS
+IopQueryFileSystemName(
+    _In_ PFILE_OBJECT FileObject,
+    _Outptr_ PFILE_NAME_INFORMATION *NameInformation)
+{
+    PFILE_NAME_INFORMATION Buffer;
+    ULONG Length = PAGE_SIZE;
+    ULONG NameLength, Needed;
+    NTSTATUS Status;
+
+    for (;;)
+    {
+        Buffer = ExAllocatePoolZero(PagedPool, Length, TAG_IO_NAME);
+        if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Status = IopQueryDeviceInformation(FileObject,
+                                           FileNameInformation,
+                                           Length,
+                                           Buffer,
+                                           NULL,
+                                           TRUE);
+        if (Status != STATUS_BUFFER_OVERFLOW) break;
+
+        NameLength = Buffer->FileNameLength;
+        ExFreePoolWithTag(Buffer, TAG_IO_NAME);
+
+        if (NameLength > MAXUSHORT) return STATUS_NAME_TOO_LONG;
+        Needed = FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + NameLength;
+        if (Needed <= Length) return STATUS_UNSUCCESSFUL;
+        Length = Needed;
+    }
+
+    if (!NT_SUCCESS(Status) ||
+        Buffer->FileNameLength > Length - FIELD_OFFSET(FILE_NAME_INFORMATION, FileName))
+    {
+        ExFreePoolWithTag(Buffer, TAG_IO_NAME);
+        return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
+    }
+
+    *NameInformation = Buffer;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 IopQueryNameInternal(
@@ -220,13 +264,16 @@ IopQueryNameInternal(
     IN KPROCESSOR_MODE PreviousMode)
 {
     POBJECT_NAME_INFORMATION DeviceName = NULL;
+    PFILE_NAME_INFORMATION FileSystemName = NULL;
     PFILE_OBJECT FileObject = ObjectBody;
+    UNICODE_STRING FileName = FileObject->FileName;
     UNICODE_STRING DosName;
     ULONG DeviceLength = 0;
     ULONG TotalLength;
     NTSTATUS Status;
     PWCHAR Cursor;
     BOOLEAN DosNameUsed = FALSE;
+    BOOLEAN LockFailed;
 
     UNREFERENCED_PARAMETER(HasName);
     UNREFERENCED_PARAMETER(PreviousMode);
@@ -274,8 +321,37 @@ IopQueryNameInternal(
         DeviceLength = DeviceName->Name.Length;
     }
 
+    /* FIXME: a file opened by a full path reports that path, not the name the file system holds now */
+    if (FileObject->RelatedFileObject != NULL)
+    {
+        if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+            (VOID)IopAcquireFileObjectLock(FileObject, KernelMode, FALSE, &LockFailed);
+
+        Status = IopQueryFileSystemName(FileObject, &FileSystemName);
+
+        if (FileObject->Flags & FO_SYNCHRONOUS_IO) IopUnlockFileObject(FileObject);
+
+        if (NT_SUCCESS(Status) &&
+            DeviceLength + FileSystemName->FileNameLength + sizeof(WCHAR) > MAXUSHORT)
+        {
+            ExFreePoolWithTag(FileSystemName, TAG_IO_NAME);
+            Status = STATUS_NAME_TOO_LONG;
+        }
+
+        if (!NT_SUCCESS(Status))
+        {
+            if (DeviceName != NULL) ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
+            if (DosNameUsed) ExFreePool(DosName.Buffer);
+            return Status;
+        }
+
+        FileName.Buffer = FileSystemName->FileName;
+        FileName.Length = (USHORT)FileSystemName->FileNameLength;
+        FileName.MaximumLength = FileName.Length;
+    }
+
     TotalLength = (ULONG)sizeof(OBJECT_NAME_INFORMATION) + DeviceLength +
-                  FileObject->FileName.Length + sizeof(WCHAR);
+                  FileName.Length + sizeof(WCHAR);
 
     *ReturnLength = TotalLength;
 
@@ -283,6 +359,7 @@ IopQueryNameInternal(
     {
         if (DeviceName != NULL) ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
         if (DosNameUsed) ExFreePool(DosName.Buffer);
+        if (FileSystemName != NULL) ExFreePoolWithTag(FileSystemName, TAG_IO_NAME);
 
         /* Room for the header but not the name is an overflow, not a wrong length */
         return (Length < sizeof(OBJECT_NAME_INFORMATION)) ? STATUS_INFO_LENGTH_MISMATCH
@@ -293,9 +370,9 @@ IopQueryNameInternal(
 
     ObjectNameInfo->Name.Buffer = Cursor;
     ObjectNameInfo->Name.MaximumLength =
-        (USHORT)(DeviceLength + FileObject->FileName.Length + sizeof(WCHAR));
+        (USHORT)(DeviceLength + FileName.Length + sizeof(WCHAR));
     ObjectNameInfo->Name.Length =
-        (USHORT)(DeviceLength + FileObject->FileName.Length);
+        (USHORT)(DeviceLength + FileName.Length);
 
     if (DosNameUsed)
     {
@@ -308,18 +385,19 @@ IopQueryNameInternal(
 
     Cursor += DeviceLength / sizeof(WCHAR);
 
-    if (FileObject->FileName.Length != 0)
+    if (FileName.Length != 0)
     {
         RtlCopyMemory(Cursor,
-                      FileObject->FileName.Buffer,
-                      FileObject->FileName.Length);
-        Cursor += FileObject->FileName.Length / sizeof(WCHAR);
+                      FileName.Buffer,
+                      FileName.Length);
+        Cursor += FileName.Length / sizeof(WCHAR);
     }
 
     *Cursor = UNICODE_NULL;
 
     if (DeviceName != NULL) ExFreePoolWithTag(DeviceName, TAG_IO_NAME);
     if (DosNameUsed) ExFreePool(DosName.Buffer);
+    if (FileSystemName != NULL) ExFreePoolWithTag(FileSystemName, TAG_IO_NAME);
 
     return STATUS_SUCCESS;
 }
