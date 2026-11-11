@@ -62,6 +62,7 @@ extern void func_GetUserObjectInformation(void);
 extern void func_GetWindowPlacement(void);
 extern void func_GhostWindow(void);
 extern void func_GW_ENABLEDPOPUP(void);
+extern void func_HiddenChildWindowPos(void);
 extern void func_ImeWindow(void);
 extern void func_InitializeLpkHooks(void);
 extern void func_InputMessageSource(void);
@@ -196,6 +197,7 @@ const struct test winetest_testlist[] =
     { "GetWindowPlacement", func_GetWindowPlacement },
     { "GhostWindow", func_GhostWindow },
     { "GW_ENABLEDPOPUP", func_GW_ENABLEDPOPUP },
+    { "HiddenChildWindowPos", func_HiddenChildWindowPos },
     { "ImeWindow", func_ImeWindow },
     { "InitializeLpkHooks", func_InitializeLpkHooks },
     { "InputMessageSource", func_InputMessageSource },

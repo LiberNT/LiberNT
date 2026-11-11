@@ -2059,7 +2059,9 @@ co_WinPosBatchSyncPaint(PWINPOS_ENTRY Entry)
    UINT flags = Entry->Flags;
    PWINDOWPOS WinPos = &Entry->WinPos;
 
+   /* SWP_NOREDRAW, also set for a window that is not visible, leaves every painting of the change to the caller */
    if(!(flags & SWP_DEFERERASE) &&
+      !(WinPos->flags & SWP_NOREDRAW) &&
       !((Window->state & WNDS_BEINGACTIVATED) && (WinPos->flags & SWP_AGG_STATUSFLAGS) == SWP_AGG_NOPOSCHANGE))
    {
        /* erase parent when hiding or resizing child */
