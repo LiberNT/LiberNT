@@ -109,6 +109,7 @@ ExpMeetOnKeyedEvent(
     PLIST_ENTRY Own, Other;
     PEXP_KEYED_WAIT Partner;
     EXP_KEYED_WAIT Wait;
+    BOOLEAN StackSwap;
     NTSTATUS Status;
 
     if (Releasing)
@@ -142,11 +143,14 @@ ExpMeetOnKeyedEvent(
     ExReleasePushLockExclusive(&KeyedEvent->Locks[Bucket]);
     KeLeaveCriticalRegion();
 
+    /* Other threads reach the wait block on this stack during a caller-mode wait, so the stack stays resident */
+    StackSwap = KeSetKernelStackSwapEnable(FALSE);
     Status = KeWaitForSingleObject(&Wait.Event,
                                    WrKeyedEvent,
-                                   KernelMode,
+                                   KeGetPreviousMode(),
                                    Alertable,
                                    Timeout);
+    KeSetKernelStackSwapEnable(StackSwap);
     if (Status == STATUS_SUCCESS)
     {
         return STATUS_SUCCESS;

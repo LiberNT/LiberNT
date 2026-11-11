@@ -28,6 +28,36 @@ KeyedWaiterThread(PVOID Context)
     return 0;
 }
 
+static DWORD WINAPI
+UntimedKeyedWaiterThread(PVOID Context)
+{
+    PKEYED_WAITER Waiter = Context;
+
+    SetEvent(Waiter->Started);
+    Waiter->Status = NtWaitForKeyedEvent(Waiter->KeyedEvent, TEST_KEY, FALSE, NULL);
+    return 0;
+}
+
+static LONG ApcRan;
+
+static VOID NTAPI
+KeyedWaitApc(ULONG_PTR Parameter)
+{
+    InterlockedIncrement(&ApcRan);
+}
+
+static DWORD WINAPI
+AlertableKeyedWaiterThread(PVOID Context)
+{
+    PKEYED_WAITER Waiter = Context;
+    LARGE_INTEGER Timeout;
+
+    Timeout.QuadPart = -30000000LL;
+    SetEvent(Waiter->Started);
+    Waiter->Status = NtWaitForKeyedEvent(Waiter->KeyedEvent, TEST_KEY, TRUE, &Timeout);
+    return 0;
+}
+
 static ULONG_PTR ProcessInformation[0x20000];
 
 /* The thread's state, wait reason and context switch count; FALSE if it was not found */
@@ -163,8 +193,112 @@ Test_TimedOutReleaseIsForgotten(VOID)
     NtClose(KeyedEvent);
 }
 
+/* Starts a waiter thread and returns once it blocks on the keyed event; NULL on failure */
+static HANDLE
+StartKeyedWaiter(PKEYED_WAITER Waiter, LPTHREAD_START_ROUTINE Routine)
+{
+    HANDLE Thread;
+    DWORD ThreadId;
+    ULONG i;
+
+    Waiter->Status = STATUS_PENDING;
+    Waiter->Started = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Waiter->Started != NULL, "CreateEventW failed %lu\n", GetLastError());
+    if (!Waiter->Started)
+        return NULL;
+
+    Thread = CreateThread(NULL, 0, Routine, Waiter, 0, &ThreadId);
+    ok(Thread != NULL, "CreateThread failed %lu\n", GetLastError());
+    if (!Thread)
+    {
+        CloseHandle(Waiter->Started);
+        return NULL;
+    }
+
+    ok(WaitForSingleObject(Waiter->Started, 5000) == WAIT_OBJECT_0, "The waiter did not start\n");
+    for (i = 0; i < 200 && !IsWaitingOnKeyedEvent(ThreadId); i++)
+        Sleep(10);
+    ok(IsWaitingOnKeyedEvent(ThreadId), "The waiter is not waiting on the keyed event\n");
+
+    return Thread;
+}
+
+static VOID
+Test_TerminatedWaiterIsForgotten(VOID)
+{
+    KEYED_WAITER Waiter = { NULL, NULL, STATUS_PENDING };
+    LARGE_INTEGER Timeout;
+    HANDLE Thread;
+    NTSTATUS Status;
+    DWORD Result;
+
+    Status = NtCreateKeyedEvent(&Waiter.KeyedEvent, KEYEDEVENT_ALL_ACCESS, NULL, 0);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Thread = StartKeyedWaiter(&Waiter, UntimedKeyedWaiterThread);
+    if (!Thread)
+    {
+        NtClose(Waiter.KeyedEvent);
+        return;
+    }
+
+    ok(TerminateThread(Thread, 0xdead), "TerminateThread failed %lu\n", GetLastError());
+    Result = WaitForSingleObject(Thread, 5000);
+    ok(Result == WAIT_OBJECT_0, "The terminated waiter did not exit: %lu\n", Result);
+
+    /* The terminated waiter's wait is gone, so nobody is left to release */
+    Timeout.QuadPart = -100000LL;
+    Status = NtReleaseKeyedEvent(Waiter.KeyedEvent, TEST_KEY, FALSE, &Timeout);
+    ok_ntstatus(Status, STATUS_TIMEOUT);
+
+    CloseHandle(Thread);
+    CloseHandle(Waiter.Started);
+    NtClose(Waiter.KeyedEvent);
+}
+
+static VOID
+Test_AlertableWaitTakesUserApc(VOID)
+{
+    KEYED_WAITER Waiter = { NULL, NULL, STATUS_PENDING };
+    LARGE_INTEGER Timeout;
+    HANDLE Thread;
+    NTSTATUS Status;
+    DWORD Result;
+
+    Status = NtCreateKeyedEvent(&Waiter.KeyedEvent, KEYEDEVENT_ALL_ACCESS, NULL, 0);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ApcRan = 0;
+    Thread = StartKeyedWaiter(&Waiter, AlertableKeyedWaiterThread);
+    if (!Thread)
+    {
+        NtClose(Waiter.KeyedEvent);
+        return;
+    }
+
+    ok(QueueUserAPC(KeyedWaitApc, Thread, 0), "QueueUserAPC failed %lu\n", GetLastError());
+    Result = WaitForSingleObject(Thread, 5000);
+    ok(Result == WAIT_OBJECT_0, "The alertable waiter did not return: %lu\n", Result);
+    ok_ntstatus(Waiter.Status, STATUS_USER_APC);
+    ok(ApcRan == 1, "The APC ran %ld times\n", ApcRan);
+
+    Timeout.QuadPart = -100000LL;
+    Status = NtReleaseKeyedEvent(Waiter.KeyedEvent, TEST_KEY, FALSE, &Timeout);
+    ok_ntstatus(Status, STATUS_TIMEOUT);
+
+    CloseHandle(Thread);
+    CloseHandle(Waiter.Started);
+    NtClose(Waiter.KeyedEvent);
+}
+
 START_TEST(NtKeyedEvent)
 {
     Test_TimedOutReleaseIsForgotten();
     Test_TimedOutWaitLeavesOtherWaiter();
+    Test_AlertableWaitTakesUserApc();
+    Test_TerminatedWaiterIsForgotten();
 }
