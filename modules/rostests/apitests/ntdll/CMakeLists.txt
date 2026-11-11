@@ -141,6 +141,7 @@ list(APPEND SOURCE
     RtlAllocateHeap.c
     RtlCreateTagHeap.c
     RtlBitmap.c
+    RtlBarrier.c
     RtlSList.c
     RtlComputePrivatizedDllName_U.c
     RtlConditionVariable.c

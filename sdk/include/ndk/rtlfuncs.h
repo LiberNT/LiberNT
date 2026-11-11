@@ -5305,6 +5305,53 @@ NTAPI
 RtlReleaseSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock);
 
 //
+// Synchronization Barrier Functions
+//
+#ifdef NTOS_MODE_USER
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlInitBarrier(
+    _Out_ PRTL_BARRIER Barrier,
+    _In_ LONG TotalThreads,
+    _In_ LONG SpinCount);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlBarrier(
+    _Inout_ PRTL_BARRIER Barrier,
+    _In_ ULONG Flags);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlDeleteBarrier(
+    _In_ PRTL_BARRIER Barrier);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlWaitOnAddress(
+    _In_ const VOID *Address,
+    _In_ const VOID *CompareAddress,
+    _In_ SIZE_T AddressSize,
+    _In_opt_ const LARGE_INTEGER *Timeout);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlWakeAddressAll(
+    _In_ const VOID *Address);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlWakeAddressSingle(
+    _In_ const VOID *Address);
+#endif
+
+//
 // Secure Memory Functions
 //
 #ifdef NTOS_MODE_USER

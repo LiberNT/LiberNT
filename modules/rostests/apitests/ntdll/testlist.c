@@ -123,6 +123,7 @@ extern void func_NtWriteFile(void);
 extern void func_RtlAllocateHeap(void);
 extern void func_RtlCreateTagHeap(void);
 extern void func_RtlBitmapApi(void);
+extern void func_RtlBarrier(void);
 extern void func_RtlSList(void);
 extern void func_RtlCaptureContext(void);
 extern void func_RtlComputePrivatizedDllName_U(void);
@@ -329,6 +330,7 @@ const struct test winetest_testlist[] =
     { "RtlAllocateHeap",                func_RtlAllocateHeap },
     { "RtlCreateTagHeap", func_RtlCreateTagHeap },
     { "RtlBitmapApi",                   func_RtlBitmapApi },
+    { "RtlBarrier",                     func_RtlBarrier },
     { "RtlSList",                       func_RtlSList },
     { "RtlComputePrivatizedDllName_U",  func_RtlComputePrivatizedDllName_U },
     { "RtlConditionVariable",           func_RtlConditionVariable },

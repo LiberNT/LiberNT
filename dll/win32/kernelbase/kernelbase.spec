@@ -202,6 +202,7 @@
 @ stdcall DeleteAce(ptr long)
 @ stdcall DeleteBoundaryDescriptor(ptr) kernel32.DeleteBoundaryDescriptor
 @ stdcall -version=0x600+ DeleteProcThreadAttributeList(ptr) kernel32.DeleteProcThreadAttributeList
+@ stdcall DeleteSynchronizationBarrier(ptr) kernel32.DeleteSynchronizationBarrier
 @ stdcall DestroyPrivateObjectSecurity(ptr)
 @ stdcall DeviceIoControl(long long ptr long ptr long ptr ptr) kernel32.DeviceIoControl
 @ stdcall DisablePredefinedHandleTableInternal(long)
@@ -217,6 +218,7 @@
 @ stdcall EncodePointer(ptr) ntdll.RtlEncodePointer
 @ stdcall EncodeSystemPointer(ptr) ntdll.RtlEncodeSystemPointer
 @ stdcall EnterCriticalSection(ptr) ntdll.RtlEnterCriticalSection
+@ stdcall EnterSynchronizationBarrier(ptr long) kernel32.EnterSynchronizationBarrier
 @ stdcall EnumCalendarInfoExEx(ptr wstr long wstr long long)
 @ stdcall EnumCalendarInfoExW(ptr long long long)
 @ stdcall EnumCalendarInfoW(ptr long long long)
@@ -676,6 +678,7 @@
 @ stdcall -version=0x601+ InitializeProcessForWsWatch(long) kernel32.K32InitializeProcessForWsWatch
 @ stdcall InitializeSListHead(ptr) ntdll.RtlInitializeSListHead
 @ stdcall -version=0x600+ InitializeSRWLock(ptr) ntdll.RtlInitializeSRWLock
+@ stdcall InitializeSynchronizationBarrier(ptr long long) kernel32.InitializeSynchronizationBarrier
 @ stdcall InitializeSecurityDescriptor(ptr long)
 @ stdcall InitializeSid(ptr ptr long)
 @ stdcall -arch=i386,ppc InterlockedCompareExchange(ptr long long) kernel32.InterlockedCompareExchange

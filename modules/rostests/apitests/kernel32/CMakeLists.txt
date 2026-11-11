@@ -118,6 +118,7 @@ list(APPEND SOURCE
     WaitableTimerHighResolution.c
     SwitchToThreadCost.c
     SuspendThread.c
+    SynchronizationBarrier.c
     SystemFirmware.c
     TerminateProcess.c
     ThreadPowerThrottling.c

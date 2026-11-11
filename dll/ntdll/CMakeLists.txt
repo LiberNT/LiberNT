@@ -47,6 +47,7 @@ list(APPEND SOURCE
     ldr/ldrpe.c
     ldr/ldrutils.c
     ldr/verifier.c
+    rtl/barrier.c
     rtl/exit.c
     rtl/mui.c
     rtl/nls.c

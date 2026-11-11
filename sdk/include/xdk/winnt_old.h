@@ -3266,6 +3266,14 @@ typedef struct _RTL_SRWLOCK {
   PVOID Ptr;
 } RTL_SRWLOCK, *PRTL_SRWLOCK;
 
+typedef struct _RTL_BARRIER {
+  DWORD Reserved1;
+  DWORD Reserved2;
+  ULONG_PTR Reserved3[2];
+  DWORD Reserved4;
+  DWORD Reserved5;
+} RTL_BARRIER, *PRTL_BARRIER;
+
 typedef LONG
 (NTAPI *PVECTORED_EXCEPTION_HANDLER)(
     struct _EXCEPTION_POINTERS *ExceptionInfo

@@ -115,6 +115,7 @@ extern void func_SetWaitableTimerEx(void);
 extern void func_WaitableTimerHighResolution(void);
 extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
+extern void func_SynchronizationBarrier(void);
 extern void func_SystemFirmware(void);
 extern void func_TerminateProcess(void);
 extern void func_ThreadPowerThrottling(void);
@@ -247,6 +248,7 @@ const struct test winetest_testlist[] =
     { "WaitableTimerHighResolution", func_WaitableTimerHighResolution },
     { "SwitchToThreadCost", func_SwitchToThreadCost },
     { "SuspendThread",               func_SuspendThread },
+    { "SynchronizationBarrier",      func_SynchronizationBarrier },
     { "SystemFirmware",              func_SystemFirmware },
     { "TerminateProcess",            func_TerminateProcess },
     { "ThreadPowerThrottling",       func_ThreadPowerThrottling },

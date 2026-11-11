@@ -698,6 +698,15 @@ typedef NTSTATUS
 #endif
 
 //
+// RtlBarrier Flags
+//
+#ifdef NTOS_MODE_USER
+#define RTL_BARRIER_FLAGS_SPIN_ONLY                         0x00000001
+#define RTL_BARRIER_FLAGS_BLOCK_ONLY                        0x00000002
+#define RTL_BARRIER_FLAGS_DELETE_SAFE                       0x00010000
+#endif
+
+//
 // RTL Range List callbacks
 //
 typedef BOOLEAN
