@@ -91,6 +91,8 @@ static const SEP_TOKEN_QUESTION SepTokenQuestions[] =
     {TokenIsRestricted, sizeof(ULONG), TOKEN_QUERY, 0},
     {TokenSecurityAttributes, SEP_VARIES, TOKEN_QUERY, 0},
     {TokenBnoIsolation, SEP_VARIES, TOKEN_QUERY, 0},
+    {TokenIsLessPrivilegedAppContainer, sizeof(ULONG), TOKEN_QUERY, 0},
+    {TokenIsSandboxed, sizeof(ULONG), TOKEN_QUERY, 0},
 };
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -656,6 +658,21 @@ SepAnswerAboutToken(
             *(PULONG)Buffer = (Box != NULL) ? Box->LowBoxNumber : 0;
             break;
         }
+
+        case TokenIsLessPrivilegedAppContainer:
+        {
+            PSEP_LOWBOX_INFO Box = Token->LowBoxInfo;
+
+            if (Box == NULL) return STATUS_INVALID_PARAMETER;
+
+            *(PULONG)Buffer = (Box->Flags & SEP_LOWBOX_LPAC) ? 1 : 0;
+            break;
+        }
+
+        case TokenIsSandboxed:
+            /* TODO: what else makes Windows 11 call a token sandboxed is not known; an inert one answers yes */
+            *(PULONG)Buffer = (Token->TokenFlags & TOKEN_SANDBOX_INERT) ? 1 : 0;
+            break;
 
         case TokenSecurityAttributes:
         {
