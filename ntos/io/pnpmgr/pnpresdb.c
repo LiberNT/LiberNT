@@ -80,6 +80,7 @@ IopResClassFromType(_In_ UCHAR Type, _Out_ PI_RES_CLASS *Class)
     switch (Type)
     {
         case CmResourceTypeMemory:      *Class = PiResClassMemory; return TRUE;
+        case CmResourceTypeMemoryLarge: *Class = PiResClassMemory; return TRUE;
         case CmResourceTypePort:        *Class = PiResClassPort; return TRUE;
         case CmResourceTypeInterrupt:   *Class = PiResClassInterrupt; return TRUE;
         case CmResourceTypeDma:         *Class = PiResClassDma; return TRUE;
@@ -106,17 +107,24 @@ static
 BOOLEAN
 IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE aOwner, _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR b, _In_opt_ PDEVICE_NODE bOwner)
 {
-    if (a->Type != b->Type)
+    PI_RES_CLASS aClass, bClass;
+
+    if (!IopResClassFromType(a->Type, &aClass) || !IopResClassFromType(b->Type, &bClass) || aClass != bClass)
         return FALSE;
     if (a->ShareDisposition == CmResourceShareShared && b->ShareDisposition == CmResourceShareShared)
         return FALSE;
 
     switch (a->Type)
     {
+        /* A large window is memory too, with its scaled length */
         case CmResourceTypeMemory:
+        case CmResourceTypeMemoryLarge:
         {
-            UINT64 aStart = (UINT64)a->u.Memory.Start.QuadPart, aEnd = aStart + a->u.Memory.Length;
-            UINT64 bStart = (UINT64)b->u.Memory.Start.QuadPart, bEnd = bStart + b->u.Memory.Length;
+            UINT64 aStart, bStart;
+            UINT64 aEnd = RtlCmDecodeMemIoResource(a, &aStart);
+            UINT64 bEnd = RtlCmDecodeMemIoResource(b, &bStart);
+            aEnd += aStart;
+            bEnd += bStart;
             if (!(aStart < bEnd && bStart < aEnd))
                 return FALSE;
             if ((a->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && aStart <= bStart && aEnd >= bEnd)

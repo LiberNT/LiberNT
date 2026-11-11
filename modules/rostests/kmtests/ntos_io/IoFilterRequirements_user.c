@@ -30,7 +30,8 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
-                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled" };
+                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
+                                 L"LargeMemory", L"StartLargeMemory" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -436,6 +437,38 @@ static VOID CheckDeviceSecurity(DEVINST Bus)
     ok_eq_ulong(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
 }
 
+static VOID RestartChild(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to restart\n");
+        return;
+    }
+    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+                (ULONG)CR_SUCCESS);
+    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+}
+
+/* A memory window of 4 GB or more is assigned whole, with its scaled length (CM_RESOURCE_MEMORY_LARGE): here
+ * 8 GB at its 64 GB minimum */
+static VOID CheckLargeMemory(DEVINST Bus)
+{
+    DWORD Value = 0;
+
+    SetRequest(L"LargeMemory", 1);
+    RestartChild(Bus);
+    ok(ReadValue(L"StartLargeMemory", &Value) && Value == (8 | (64 << 16)),
+       "The child got no 8 GB window at 64 GB (0x%lx)\n", Value);
+
+    SetRequest(L"LargeMemory", 0);
+    RestartChild(Bus);
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -542,6 +575,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReplug(Device->DevInst);
         CheckRemoveTwice(Device->DevInst);
         CheckDeviceSecurity(Device->DevInst);
+        CheckLargeMemory(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }

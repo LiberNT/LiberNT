@@ -215,6 +215,9 @@ IopDescribeFromRequirement(
     _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
+    ULONGLONG Minimum = 0;
+    ULONGLONG Length;
+
     RtlZeroMemory(Descriptor, sizeof(*Descriptor));
 
     Descriptor->Type = Requirement->Type;
@@ -231,6 +234,13 @@ IopDescribeFromRequirement(
         case CmResourceTypeMemory:
             Descriptor->u.Memory.Start = Requirement->u.Memory.MinimumAddress;
             Descriptor->u.Memory.Length = Requirement->u.Memory.Length;
+            break;
+
+        /* A window of 4 GB or more keeps its scaled length (CM_RESOURCE_MEMORY_LARGE) */
+        case CmResourceTypeMemoryLarge:
+            Length = RtlIoDecodeMemIoResource(Requirement, NULL, &Minimum, NULL);
+            if (!NT_SUCCESS(RtlCmEncodeMemIoResource(Descriptor, CmResourceTypeMemoryLarge, Length, Minimum)))
+                Descriptor->u.Memory.Length = 0;
             break;
 
         case CmResourceTypeInterrupt:
@@ -286,10 +296,23 @@ IopAdvanceCandidate(
     _Inout_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     ULONGLONG Alignment;
+    ULONGLONG Maximum;
+    ULONGLONG Length;
     ULONGLONG Next;
 
     switch (Requirement->Type)
     {
+        case CmResourceTypeMemoryLarge:
+            Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, NULL, &Maximum);
+            if (Alignment == 0) Alignment = 1;
+
+            Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Alignment;
+
+            if (Length == 0 || Next + Length - 1 > Maximum) return FALSE;
+
+            Descriptor->u.Memory.Start.QuadPart = (LONGLONG)Next;
+            return TRUE;
+
         case CmResourceTypePort:
             Alignment = Requirement->u.Port.Alignment;
             if (Alignment == 0) Alignment = 1;
@@ -789,6 +812,7 @@ IopTranslateResourceList(
 
                 case CmResourceTypePort:
                 case CmResourceTypeMemory:
+                case CmResourceTypeMemoryLarge:
                     AddressSpace = (Descriptor->Type == CmResourceTypePort) ? 1 : 0;
 
                     if (!HalTranslateBusAddress(Full->InterfaceType,

@@ -12,6 +12,8 @@
 #define TEST_ADDED_MAGIC 0x4B464144
 #define TEST_DMA_CHANNEL 3
 #define TEST_DMA_REQUEST_LINE 21
+#define TEST_LARGE_LENGTH 0x200000000ULL
+#define TEST_LARGE_MINIMUM 0x1000000000ULL
 #define TEST_CONNECTION_ID_LOW 0x5A7E
 #define TEST_CONNECTION_ID_HIGH 0x2
 
@@ -93,12 +95,14 @@ static PWSTR CopyString(const WCHAR *Source, SIZE_T Size)
     return Buffer;
 }
 
-static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma)
+static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma, BOOLEAN WithLargeMemory)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Dma;
     PIO_RESOURCE_DESCRIPTOR Connection;
-    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + (Count + (WithDma ? 2 : 0) - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    PIO_RESOURCE_DESCRIPTOR Large;
+    ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) +
+                 (Count + (WithDma ? 2 : 0) + (WithLargeMemory ? 1 : 0) - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
     ULONG Index;
 
     List = ExAllocatePoolZero(PagedPool, Size, TEST_TAG);
@@ -136,7 +140,39 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN Wit
         Connection->u.Connection.IdHighPart = TEST_CONNECTION_ID_HIGH;
         List->List[0].Count++;
     }
+    if (WithLargeMemory)
+    {
+        Large = &List->List[0].Descriptors[List->List[0].Count];
+        Large->Type = CmResourceTypeMemoryLarge;
+        Large->ShareDisposition = CmResourceShareDeviceExclusive;
+        Large->Flags = CM_RESOURCE_MEMORY_READ_WRITE | CM_RESOURCE_MEMORY_LARGE_40;
+        Large->u.Memory40.Length40 = (ULONG)(TEST_LARGE_LENGTH >> 8);
+        Large->u.Memory40.Alignment40 = (ULONG)(TEST_LARGE_LENGTH >> 8);
+        Large->u.Memory40.MinimumAddress.QuadPart = TEST_LARGE_MINIMUM;
+        Large->u.Memory40.MaximumAddress.QuadPart = TEST_LARGE_MINIMUM * 4 - 1;
+        List->List[0].Count++;
+    }
     return List;
+}
+
+/* The large window the child was started with: its length and start in GB */
+static ULONG StartedLargeMemory(PCM_RESOURCE_LIST Resources)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONGLONG Start = 0, Length;
+    ULONG Index;
+
+    if (Resources == NULL || Resources->Count == 0)
+        return 0;
+    for (Index = 0; Index < Resources->List[0].PartialResourceList.Count; Index++)
+    {
+        Descriptor = &Resources->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (Descriptor->Type != CmResourceTypeMemoryLarge)
+            continue;
+        Length = RtlCmDecodeMemIoResource(Descriptor, &Start);
+        return (ULONG)(Length >> 30) | ((ULONG)(Start >> 30) << 16);
+    }
+    return 0;
 }
 
 static ULONG StartedConnection(PCM_RESOURCE_LIST Resources)
@@ -210,7 +246,7 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
     if (Current == NULL || Current != Supplied)
         return Complete(Irp, Status);
 
-    Filtered = BuildRequirements(2, TRUE);
+    Filtered = BuildRequirements(2, TRUE, Requested(L"LargeMemory"));
     if (Filtered == NULL)
         return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
     ExFreePool(Current);
@@ -237,6 +273,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Record(L"StartCount", (ULONG)Starts);
             Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartConnection", StartedConnection(Stack->Parameters.StartDevice.AllocatedResources));
+            Record(L"StartLargeMemory", StartedLargeMemory(Stack->Parameters.StartDevice.AllocatedResources));
             /* The child leaves disabling its interface to the PnP manager when it goes */
             if (NT_SUCCESS(Status) && Extension->Interface.Buffer == NULL &&
                 NT_SUCCESS(IoRegisterDeviceInterface(Extension->Pdo, &ChildInterfaceGuid, NULL, &Extension->Interface)))
@@ -492,7 +529,7 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
-            Requirements = BuildRequirements(1, FALSE);
+            Requirements = BuildRequirements(1, FALSE, FALSE);
             Status = Requirements ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
             if (Requirements != NULL)
                 Irp->IoStatus.Information = (ULONG_PTR)Requirements;
