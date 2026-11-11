@@ -10,6 +10,7 @@ list(APPEND SOURCE
     ApiSetCoreSynch.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c
+    BackupReadWrite.c
     CalendarDateTime.c
     CallbackCallingConventions.c
     CallbackMayRunLong.c

@@ -1066,7 +1066,7 @@ FindFirstStreamW(IN LPCWSTR lpFileName,
                                         BufferSize,
                                         FileStreamInformation);
 
-    } while (Status == STATUS_BUFFER_TOO_SMALL);
+    } while (Status == STATUS_BUFFER_TOO_SMALL || Status == STATUS_BUFFER_OVERFLOW);
 
     if (NT_SUCCESS(Status) && IoStatusBlock.Information == 0)
         Status = STATUS_END_OF_FILE;

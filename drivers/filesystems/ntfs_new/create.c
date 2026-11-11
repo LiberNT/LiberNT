@@ -138,6 +138,7 @@ NtfsNormalizeRelatedName(
     USHORT ChildLength;
     USHORT SeparatorLength;
     ULONG NewLength;
+    BOOLEAN StreamOfParent;
 
     RelatedFileObject = FileObject->RelatedFileObject;
     if (!RelatedFileObject)
@@ -154,7 +155,10 @@ NtfsNormalizeRelatedName(
     if (ChildLength != 0 && FileObject->FileName.Buffer[0] == L'\\')
         return STATUS_INVALID_PARAMETER;
 
-    if (ChildLength != 0 &&
+    StreamOfParent = ChildLength != 0 && FileObject->FileName.Buffer[0] == L':' &&
+                     ParentFileCB->FileRec &&
+                     !(ParentFileCB->RequestedStream && ParentFileCB->RequestedStream[0]);
+    if (ChildLength != 0 && !StreamOfParent &&
         (!ParentFileCB->FileRec ||
          !(NtfsFileRecordGetHeader(ParentFileCB->FileRec)->Flags & FR_IS_DIRECTORY)))
     {
@@ -162,7 +166,21 @@ NtfsNormalizeRelatedName(
     }
 
     ParentLength = ParentFileCB->FileName.Length;
-    SeparatorLength = ParentLength != 0 &&
+    if (StreamOfParent)
+    {
+        USHORT Index;
+
+        for (Index = 0; Index < ParentLength / sizeof(WCHAR); Index++)
+        {
+            if (ParentFileCB->FileName.Buffer[Index] == L':')
+            {
+                ParentLength = Index * sizeof(WCHAR);
+                break;
+            }
+        }
+    }
+    SeparatorLength = !StreamOfParent &&
+                      ParentLength != 0 &&
                       ChildLength != 0 &&
                       ParentFileCB->FileName.Buffer[ParentLength / sizeof(WCHAR) - 1] != L'\\'
                           ? sizeof(WCHAR)
