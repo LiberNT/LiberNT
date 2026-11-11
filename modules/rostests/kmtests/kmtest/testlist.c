@@ -38,6 +38,7 @@ KMT_TESTFUNC Test_ExHandleListChurn;
 KMT_TESTFUNC Test_KdLiveDump;
 KMT_TESTFUNC Test_KeContextSegments;
 KMT_TESTFUNC Test_KeNonCanonicalReturn;
+KMT_TESTFUNC Test_KeSystemCallInt2E;
 KMT_TESTFUNC Test_MmMapLockedPagesSpecifyCache;
 KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
@@ -145,6 +146,7 @@ const KMT_TEST TestList[] =
 #ifdef _M_AMD64
     { "KeContextSegments",            Test_KeContextSegments },
     { "KeNonCanonicalReturn",         Test_KeNonCanonicalReturn },
+    { "KeSystemCallInt2E",            Test_KeSystemCallInt2E },
     { "RtlCaptureContextUM",          Test_RtlCaptureContext },
 #endif
     { NULL,                           NULL },

@@ -399,14 +399,3 @@ KiSystemCallHandler(
 
     return (PVOID)DescriptorTable->Base[ServiceNumber];
 }
-
-
-// FIXME: we need to
-VOID
-KiSystemService(IN PKTHREAD Thread,
-                IN PKTRAP_FRAME TrapFrame,
-                IN ULONG Instruction)
-{
-    UNIMPLEMENTED;
-    __debugbreak();
-}
