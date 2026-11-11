@@ -276,14 +276,6 @@ ObpCaptureObjectCreateInformation(
                                   AccessMode,
                                   AllocateFromLookaside);
 
-    /* A name that is there but empty names nothing, unless a root directory
-     * is what the caller meant */
-    if (NT_SUCCESS(Status) && ObjectName->Length == 0 &&
-        Supplied.RootDirectory == NULL)
-    {
-        Status = STATUS_OBJECT_NAME_INVALID;
-    }
-
     if (!NT_SUCCESS(Status)) ObpReleaseObjectCreateInformation(ObjectCreateInfo);
 
     return Status;

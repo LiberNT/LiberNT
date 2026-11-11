@@ -369,7 +369,7 @@ ObpBeginWalk(
         return STATUS_SUCCESS;
     }
 
-    if (Walk->Remaining.Length == 0) return STATUS_OBJECT_NAME_INVALID;
+    if (Walk->Remaining.Length == 0) return STATUS_OBJECT_PATH_SYNTAX_BAD;
     if (Walk->Remaining.Buffer[0] != OBJ_NAME_PATH_SEPARATOR)
         return STATUS_OBJECT_PATH_SYNTAX_BAD;
 
