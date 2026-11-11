@@ -53,6 +53,7 @@ extern void func_GetTempFileName(void);
 extern void func_GetTempPath2(void);
 extern void func_GetThreadTimes(void);
 extern void func_GetVolumeInformation(void);
+extern void func_GetWsChangesEx(void);
 extern void func_HeapLowFragmentation(void);
 extern void func_InitOnce(void);
 extern void func_interlck(void);
@@ -186,6 +187,7 @@ const struct test winetest_testlist[] =
     { "GetTempPath2",                func_GetTempPath2 },
     { "GetThreadTimes",              func_GetThreadTimes },
     { "GetVolumeInformation",        func_GetVolumeInformation },
+    { "GetWsChangesEx",              func_GetWsChangesEx },
     { "HeapLowFragmentation",        func_HeapLowFragmentation },
     { "InitOnce",                    func_InitOnce },
     { "interlck",                    func_interlck },

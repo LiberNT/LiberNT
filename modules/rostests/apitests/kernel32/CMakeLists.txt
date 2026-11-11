@@ -55,6 +55,7 @@ list(APPEND SOURCE
     GetTempPath2.c
     GetThreadTimes.c
     GetVolumeInformation.c
+    GetWsChangesEx.c
     HeapLowFragmentation.c
     InitOnce.c
     interlck.c

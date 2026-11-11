@@ -1141,6 +1141,32 @@ GetWsChanges(HANDLE hProcess,
     return TRUE;
 }
 
+BOOL
+WINAPI
+GetWsChangesEx(HANDLE hProcess,
+               PPSAPI_WS_WATCH_INFORMATION_EX lpWatchInfoEx,
+               PDWORD cb)
+{
+    ULONG ReturnLength = 0;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationProcess(hProcess,
+                                       ProcessWorkingSetWatchEx,
+                                       lpWatchInfoEx,
+                                       *cb,
+                                       &ReturnLength);
+    if (NT_SUCCESS(Status) || Status == STATUS_BUFFER_TOO_SMALL)
+        *cb = ReturnLength;
+
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 
 /*
  * @implemented
