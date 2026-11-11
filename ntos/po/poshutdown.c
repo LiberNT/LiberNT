@@ -164,7 +164,6 @@ PoRequestShutdownEvent(
 
     if (Event != NULL)
     {
-        ObReferenceObject(&PopShutdownEvent);
         *Event = &PopShutdownEvent;
     }
 
