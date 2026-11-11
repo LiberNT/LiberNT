@@ -510,6 +510,99 @@ CmpCreateControlSet(
     return Status;
 }
 
+static
+NTSTATUS
+CmpCreateBootLink(
+    _In_ PCWSTR Link,
+    _In_ PCWSTR Target)
+{
+    UNICODE_STRING ValueName = CmSymbolicLinkValueName;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Name;
+    HANDLE KeyHandle;
+    ULONG Disposition;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&Name, Link);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Name,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_OPENLINK,
+                               NULL,
+                               NULL);
+
+    Status = ZwCreateKey(&KeyHandle,
+                         KEY_ALL_ACCESS,
+                         &ObjectAttributes,
+                         0,
+                         NULL,
+                         REG_OPTION_VOLATILE | REG_OPTION_CREATE_LINK,
+                         &Disposition);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Disposition != REG_CREATED_NEW_KEY)
+    {
+        ZwClose(KeyHandle);
+        return STATUS_OBJECT_NAME_COLLISION;
+    }
+
+    Status = ZwSetValueKey(KeyHandle,
+                           &ValueName,
+                           0,
+                           REG_LINK,
+                           (PVOID)Target,
+                           (ULONG)(wcslen(Target) * sizeof(WCHAR)));
+
+    ZwClose(KeyHandle);
+    return Status;
+}
+
+CODE_SEG("INIT")
+static
+NTSTATUS
+CmpCreateCurrentProfileLink(VOID)
+{
+    UNICODE_STRING ConfigName = RTL_CONSTANT_STRING(
+        L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Control\\IDConfigDB");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"CurrentConfig");
+    UCHAR ValueBuffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)ValueBuffer;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    WCHAR Target[96];
+    HANDLE KeyHandle;
+    ULONG Length;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &ConfigName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ZwQueryValueKey(KeyHandle,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             Value,
+                             sizeof(ValueBuffer),
+                             &Length);
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Value->Type != REG_DWORD || Value->DataLength != sizeof(ULONG))
+        return STATUS_OBJECT_TYPE_MISMATCH;
+
+    Status = RtlStringCchPrintfW(Target,
+                                 RTL_NUMBER_OF(Target),
+                                 L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Hardware Profiles\\%04lu",
+                                 *(PULONG)Value->Data);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    return CmpCreateBootLink(L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Hardware Profiles\\Current",
+                             Target);
+}
+
 /*
  * Writes down how the system was started, which is the only record of the
  * boot options once the loader is gone.
@@ -884,6 +977,9 @@ CmInitSystem1(VOID)
     Status = CmpCreateControlSet(
         &CmpMachineHiveList[CMP_SYSTEM_HIVE].CmHive->Hive);
     if (!NT_SUCCESS(Status)) return FALSE;
+
+    Status = CmpCreateCurrentProfileLink();
+    if (!NT_SUCCESS(Status)) DPRINT1("CM: no current hardware profile link (0x%08lx)\n", Status);
 
     Status = CmpInitializeHardwareConfiguration(KeLoaderBlock);
     if (!NT_SUCCESS(Status)) return FALSE;
