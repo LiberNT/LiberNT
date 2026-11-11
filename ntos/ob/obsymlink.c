@@ -402,6 +402,9 @@ NtCreateSymbolicLinkObject(
 
     if (PreviousMode != KernelMode)
     {
+        /* Unlike other objects, a link cannot be created without attributes from user mode */
+        if (ObjectAttributes == NULL) return STATUS_ACCESS_VIOLATION;
+
         _SEH2_TRY
         {
             ProbeForWriteHandle(LinkHandle);
@@ -423,7 +426,8 @@ NtCreateSymbolicLinkObject(
     }
 
     /* The target is judged before the name, so a malformed one fails whatever the name */
-    if (Captured.Length > Captured.MaximumLength) return STATUS_INVALID_PARAMETER;
+    if (Captured.Length > Captured.MaximumLength || Captured.MaximumLength == 0)
+        return STATUS_INVALID_PARAMETER;
 
     /* An empty target names the namespace root, which is how GLOBALROOT works */
     if (Captured.Length > MAXUSHORT - sizeof(UNICODE_NULL))

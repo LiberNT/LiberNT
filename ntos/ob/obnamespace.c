@@ -706,9 +706,12 @@ ObpLookupObjectName(
         Header = OBJECT_TO_OBJECT_HEADER(Object);
         FoundType = ObpGetObjectTypeFromHeader(Header);
 
+        /* A link asked for as itself is found like any other object, so the open is access checked */
         if ((FoundType->TypeInfo.ParseProcedure != NULL ||
              FoundType->TypeInfo.ParseProcedureEx != NULL) &&
-            (InsertObject == NULL || FoundType == ObpSymbolicLinkObjectType))
+            (InsertObject == NULL || FoundType == ObpSymbolicLinkObjectType) &&
+            !(FoundType == ObpSymbolicLinkObjectType && Walk.Remaining.Length == 0 &&
+              (ObjectType == ObpSymbolicLinkObjectType || (Attributes & OBJ_OPENLINK))))
         {
             Status = ObpParseAt(&Walk, Object, FoundType, ObjectType,
                                 AccessState, CheckMode, Attributes, ObjectName,
