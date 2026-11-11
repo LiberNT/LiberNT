@@ -685,21 +685,16 @@ ExReleasePushLockEx(
     ExfReleasePushLock(PushLock);
 }
 
-/*
- * Queues a block on the lock without asking for the lock. The caller owns the
- * lock exclusively and keeps owning it; the block is woken by
- * ExfUnblockPushLock, not by a release.
- */
+static
 VOID
-FASTCALL
-ExBlockPushLock(
+ExpQueueWaitBlock(
     _Inout_ PEX_PUSH_LOCK PushLock,
-    _Inout_ PVOID WaitBlock)
+    _Out_ PEX_PUSH_LOCK_WAIT_BLOCK Block,
+    _In_ LONG Flags)
 {
-    PEX_PUSH_LOCK_WAIT_BLOCK Block = WaitBlock;
     EX_PUSH_LOCK OldValue;
 
-    ExpPrepareWaitBlock(Block, 0);
+    ExpPrepareWaitBlock(Block, Flags);
 
     for (;;)
     {
@@ -718,6 +713,83 @@ ExBlockPushLock(
             return;
         }
     }
+}
+
+/*
+ * Takes every block off a push lock used as a queue and wakes them all except
+ * the caller's own, which only leaves the queue. Returns whether the caller's
+ * block was among them; when it was not, another unblock holds it.
+ */
+static
+BOOLEAN
+ExpUnblockWaitChain(
+    _Inout_ PEX_PUSH_LOCK PushLock,
+    _In_opt_ PEX_PUSH_LOCK_WAIT_BLOCK CurrentWaitBlock)
+{
+    EX_PUSH_LOCK OldValue;
+    PEX_PUSH_LOCK_WAIT_BLOCK Block, Next;
+    BOOLEAN FoundCurrent = FALSE;
+
+    OldValue.Ptr = InterlockedExchangePointer(&PushLock->Ptr, NULL);
+    ASSERT(!OldValue.Locked);
+
+    if (!OldValue.Waiting)
+    {
+        return FALSE;
+    }
+
+    for (Block = ExpPushLockChain(OldValue); Block != NULL; Block = Next)
+    {
+        Next = Block->Next;
+        if (Block == CurrentWaitBlock)
+        {
+            FoundCurrent = TRUE;
+        }
+        else
+        {
+            ExpWakeWaitBlock(Block);
+        }
+    }
+
+    return FoundCurrent;
+}
+
+static
+NTSTATUS
+ExpTimedWaitForUnblock(
+    _Inout_ PEX_PUSH_LOCK PushLock,
+    _Inout_ PEX_PUSH_LOCK_WAIT_BLOCK Block,
+    _In_opt_ PLARGE_INTEGER Timeout)
+{
+    NTSTATUS Status;
+
+    Status = ExpSleepOnWaitBlock(Block, Timeout);
+    if (Status != STATUS_TIMEOUT)
+    {
+        return Status;
+    }
+
+    if (ExpUnblockWaitChain(PushLock, Block))
+    {
+        return STATUS_TIMEOUT;
+    }
+
+    /* An unblock already holds the block and its signal is on the way */
+    KeWaitForSingleObject(&Block->WakeEvent, WrPushLock, KernelMode, FALSE, NULL);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Queues a block on a push lock used as a queue of waiters; ExfUnblockPushLock
+ * wakes it.
+ */
+VOID
+FASTCALL
+ExBlockPushLock(
+    _Inout_ PEX_PUSH_LOCK PushLock,
+    _Inout_ PVOID WaitBlock)
+{
+    ExpQueueWaitBlock(PushLock, WaitBlock, 0);
 }
 
 VOID
@@ -740,8 +812,6 @@ ExTimedWaitForUnblockPushLock(
 {
     PEX_PUSH_LOCK_WAIT_BLOCK Block = WaitBlock;
 
-    UNREFERENCED_PARAMETER(PushLock);
-
     if (Timeout == NULL)
     {
         ExpSleepOnWaitBlock(Block, NULL);
@@ -756,7 +826,7 @@ ExTimedWaitForUnblockPushLock(
         return STATUS_SUCCESS;
     }
 
-    return ExpSleepOnWaitBlock(Block, Timeout);
+    return ExpTimedWaitForUnblock(PushLock, Block, Timeout);
 }
 
 VOID
@@ -765,62 +835,19 @@ ExfUnblockPushLock(
     _Inout_ PEX_PUSH_LOCK PushLock,
     _Inout_ PVOID CurrentWaitBlock)
 {
-    PEX_PUSH_LOCK_WAIT_BLOCK Block = CurrentWaitBlock;
-    EX_PUSH_LOCK OldValue, NewValue;
-    PEX_PUSH_LOCK_WAIT_BLOCK Head;
+    PEX_PUSH_LOCK_WAIT_BLOCK Current = CurrentWaitBlock;
 
-    for (;;)
+    if (!ExpUnblockWaitChain(PushLock, Current) && (Current != NULL))
     {
-        OldValue.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
-
-        if (!OldValue.Waiting)
-        {
-            break;
-        }
-
-        Head = ExpPushLockChain(OldValue);
-        if (Head != Block)
-        {
-            ExpFindWaitBlockChainTail(Head);
-            break;
-        }
-
-        if (Block->Next == NULL)
-        {
-            NewValue.Value = OldValue.Value &
-                             (EX_PUSH_LOCK_LOCK | EX_PUSH_LOCK_WAKING);
-            if (Block->ShareCount > 0)
-            {
-                NewValue.Value |= (ULONG_PTR)Block->ShareCount *
-                                  EX_PUSH_LOCK_SHARE_INC;
-                if (Block->ShareCount > 1)
-                {
-                    NewValue.Value |= EX_PUSH_LOCK_MULTIPLE_SHARED;
-                }
-            }
-        }
-        else
-        {
-            NewValue.Value = (ULONG_PTR)Block->Next | EX_PUSH_LOCK_WAITING |
-                             (OldValue.Value & (EX_PUSH_LOCK_LOCK |
-                                                EX_PUSH_LOCK_WAKING |
-                                                EX_PUSH_LOCK_MULTIPLE_SHARED));
-        }
-
-        if (ExpChangePushlock(PushLock, NewValue.Ptr, OldValue.Ptr) ==
-            OldValue.Ptr)
-        {
-            break;
-        }
+        /* Another unblock took the caller's block with the queue: it is not done with it yet */
+        ExpSleepOnWaitBlock(Current, NULL);
     }
-
-    ExpWakeWaitBlock(Block);
 }
 
 /*
- * Lets go of the lock and waits until the watched bytes stop matching what the
- * caller last saw, then takes the lock again. The caller holds the lock
- * exclusively on the way in and on the way out.
+ * Waits on the push lock's queue while the watched value still equals the
+ * caller's copy; an unblock of the push lock ends the wait. Only 1, 2, 4 and
+ * 8 byte values are watched.
  */
 NTSTATUS
 FASTCALL
@@ -832,37 +859,43 @@ ExBlockOnAddressPushLock(
     _In_opt_ PLARGE_INTEGER Timeout)
 {
     EX_PUSH_LOCK_WAIT_BLOCK WaitBlock;
-    EX_PUSH_LOCK OldValue;
-    NTSTATUS Status;
+    BOOLEAN Equal;
 
     ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
-    if (RtlCompareMemory((PVOID)Address, CompareAddress, AddressSize) ==
-        AddressSize)
+    /* Queued before the compare, so a store followed by an unblock cannot be missed */
+    ExpQueueWaitBlock(PushLock, &WaitBlock, EXP_PUSH_LOCK_FLAGS_EVENT);
+
+    switch (AddressSize)
     {
-        ExpPrepareWaitBlock(&WaitBlock, EXP_PUSH_LOCK_FLAGS_EVENT);
+        case sizeof(UCHAR):
+            Equal = (*(volatile UCHAR *)Address == *(PUCHAR)CompareAddress);
+            break;
 
-        for (;;)
-        {
-            OldValue.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
-            if (ExpLinkWaitBlock(PushLock, &WaitBlock, OldValue, FALSE))
-            {
-                break;
-            }
-        }
+        case sizeof(USHORT):
+            Equal = (*(volatile USHORT *)Address == *(PUSHORT)CompareAddress);
+            break;
 
-        if (OldValue.Waiting && !OldValue.Waking)
-        {
-            ExfTryToWakePushLock(PushLock);
-        }
+        case sizeof(ULONG):
+            Equal = (*(volatile ULONG *)Address == *(PULONG)CompareAddress);
+            break;
 
-        Status = ExpSleepOnWaitBlock(&WaitBlock, Timeout);
+        case sizeof(ULONG64):
+            Equal = (*(volatile ULONG64 *)Address == *(PULONG64)CompareAddress);
+            break;
 
-        ExAcquirePushLockExclusive(PushLock);
-        return Status;
+        default:
+            Equal = FALSE;
+            break;
     }
 
-    return STATUS_SUCCESS;
+    if (!Equal)
+    {
+        ExfUnblockPushLock(PushLock, &WaitBlock);
+        return STATUS_SUCCESS;
+    }
+
+    return ExpTimedWaitForUnblock(PushLock, &WaitBlock, Timeout);
 }
 
 /* EOF */
