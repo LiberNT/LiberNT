@@ -473,6 +473,107 @@ TestResources(VOID)
     pSetThreadPreferredUILanguages(0, NULL, NULL);
 }
 
+static VOID
+SetFilter(PCSTR Tag, DWORD Filter)
+{
+    BOOL Ret;
+
+    SetLastError(0xdeadbeef);
+    Ret = pSetThreadPreferredUILanguages(Filter, NULL, NULL);
+    ok(Ret, "%s: filter 0x%lx failed, error %lu\n", Tag, Filter, GetLastError());
+    ok(GetLastError() == 0xdeadbeef, "%s: filter error %lu\n", Tag, GetLastError());
+}
+
+static VOID
+TestFilters(VOID)
+{
+    static const WCHAR Complex[] = L"ar-SA\0fr-FR\0hi-IN\0";
+    static const WCHAR ComplexFiltered[] = L"fr-FR\0en\0";
+    static const WCHAR ComplexFilteredIds[] = L"040C\0" L"0009\0";
+    static const WCHAR Mixed[] = L"ru-RU\0fr-FR\0he-IL\0";
+    static const WCHAR MixedComplexFiltered[] = L"ru-RU\0fr-FR\0en\0";
+    static const WCHAR MixedConsoleFiltered[] = L"fr-FR\0en\0";
+    static const WCHAR English[] = L"en-GB\0ja-JP\0";
+    static const WCHAR EnglishConsoleFiltered[] = L"en-GB\0";
+    static const WCHAR Maghreb[] = L"ar-MA\0th-TH\0";
+    static const WCHAR MaghrebFiltered[] = L"fr\0en\0";
+    static const WCHAR Arabic[] = L"ar-SA\0";
+    static const WCHAR NewList[] = L"th-TH\0de-DE\0";
+    static const WCHAR NewListFiltered[] = L"de-DE\0en\0";
+    WCHAR User[256], Expected[512], Language[LOCALE_NAME_MAX_LENGTH];
+    ULONG Count, Size;
+    LANGID LanguageId;
+    BOOL Ret;
+
+    if (!SetThreadLanguages("complex", MUI_LANGUAGE_NAME, Complex, 3))
+        return;
+    SetFilter("complex", MUI_COMPLEX_SCRIPT_FILTER);
+    CheckLanguages("complex filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, ComplexFiltered);
+    CheckLanguages("complex filter id", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_ID, ComplexFilteredIds);
+    SetFilter("complex reset", MUI_RESET_FILTERS);
+    CheckLanguages("complex reset", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, Complex);
+
+    SetThreadLanguages("maghreb", MUI_LANGUAGE_NAME, Maghreb, 2);
+    SetFilter("maghreb", MUI_COMPLEX_SCRIPT_FILTER);
+    CheckLanguages("maghreb filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, MaghrebFiltered);
+
+    SetThreadLanguages("new list", MUI_LANGUAGE_NAME, NewList, 2);
+    CheckLanguages("new list keeps filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, NewListFiltered);
+
+    SetThreadLanguages("mixed", MUI_LANGUAGE_NAME, Mixed, 3);
+    CheckLanguages("mixed complex filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, MixedComplexFiltered);
+    SetFilter("mixed console", MUI_CONSOLE_FILTER);
+    if (GetACP() == 1252)
+    {
+        CheckLanguages("mixed console filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, MixedConsoleFiltered);
+        SetThreadLanguages("english", MUI_LANGUAGE_NAME, English, 2);
+        CheckLanguages("english console filter", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, EnglishConsoleFiltered);
+    }
+    else
+    {
+        skip("console code page checks need code page 1252, have %u\n", GetACP());
+    }
+    SetFilter("mixed reset", MUI_RESET_FILTERS);
+    CheckLanguages("mixed reset", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, (GetACP() == 1252) ? English : Mixed);
+
+    Size = _countof(User);
+    Ret = pGetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &Count, User, &Size);
+    ok(Ret, "user languages failed, error %lu\n", GetLastError());
+    memset(Language, 0, sizeof(Language));
+    LCIDToLocaleName(MAKELCID(GetSystemDefaultUILanguage(), SORT_DEFAULT), Language, LOCALE_NAME_MAX_LENGTH, 0);
+    if (Ret && GetACP() == 1252 && !wcscmp(User, L"en-US") && !User[6] && !wcscmp(Language, L"en-US"))
+    {
+        SetThreadLanguages("arabic", MUI_LANGUAGE_NAME, Arabic, 1);
+        SetFilter("arabic console", MUI_CONSOLE_FILTER);
+        CheckLanguages("arabic console merge", MUI_MERGE_USER_FALLBACK | MUI_LANGUAGE_NAME, L"en-US\0en\0");
+        CheckLanguages("arabic console ui fallback", MUI_MERGE_SYSTEM_FALLBACK | MUI_MERGE_USER_FALLBACK | MUI_LANGUAGE_NAME,
+                       L"en-US\0en\0");
+        LanguageId = pGetThreadUILanguage();
+        ok(LanguageId == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), "filtered thread UI language %04x\n", LanguageId);
+        SetFilter("arabic reset", MUI_RESET_FILTERS);
+
+        memset(Expected, 0, sizeof(Expected));
+        AppendList(Expected, _countof(Expected), Arabic, FALSE);
+        AppendList(Expected, _countof(Expected), User, FALSE);
+        CheckLanguages("arabic unfiltered merge", MUI_MERGE_USER_FALLBACK | MUI_LANGUAGE_NAME, Expected);
+        LanguageId = pGetThreadUILanguage();
+        ok(LanguageId == MAKELANGID(LANG_ARABIC, SUBLANG_ARABIC_SAUDI_ARABIA), "unfiltered thread UI language %04x\n", LanguageId);
+
+        LanguageId = pSetThreadUILanguage(0);
+        ok(LanguageId == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), "console language %04x\n", LanguageId);
+        CheckFirstThreadLanguage("console language filters the list", L"en");
+        SetFilter("console language reset", MUI_RESET_FILTERS);
+        CheckFirstThreadLanguage("console language keeps the list", L"ar-SA");
+    }
+    else
+    {
+        skip("merged filter checks need an en-US user and system language with code page 1252\n");
+    }
+
+    pSetThreadPreferredUILanguages(0, NULL, NULL);
+    CheckLanguages("cleared", MUI_THREAD_LANGUAGES | MUI_LANGUAGE_NAME, EmptyList);
+}
+
 typedef VOID (*PTHREAD_TEST)(VOID);
 
 static const PTHREAD_TEST ThreadTests[] =
@@ -483,6 +584,7 @@ static const PTHREAD_TEST ThreadTests[] =
     TestIsolationChild,
     TestThreadUILanguage,
     TestResources,
+    TestFilters,
 };
 
 static DWORD WINAPI
@@ -531,4 +633,5 @@ START_TEST(ThreadPreferredUILanguages)
     RunInThread(2);
     RunInThread(4);
     RunInThread(5);
+    RunInThread(6);
 }
