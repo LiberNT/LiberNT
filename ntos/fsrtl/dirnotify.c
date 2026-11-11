@@ -310,16 +310,6 @@ FsRtlpCopyName(
 }
 
 static
-ULONG
-FsRtlpEntrySize(
-    _In_ ULONG NameBytes)
-{
-    ULONG Size = FIELD_OFFSET(FILE_NOTIFY_INFORMATION, FileName) + NameBytes;
-
-    return ALIGN_UP_BY(Size, sizeof(ULONG));
-}
-
-static
 BOOLEAN
 FsRtlNotifyUpdateBuffer(
     _In_ PVOID Buffer,
@@ -335,20 +325,21 @@ FsRtlNotifyUpdateBuffer(
     PFILE_NOTIFY_INFORMATION Information;
     ULONG Separator = (StreamBytes != 0) ? sizeof(WCHAR) : 0;
     ULONG TotalName = NameBytes + Separator + StreamBytes;
-    ULONG Size = FsRtlpEntrySize(TotalName);
+    ULONG Size = FIELD_OFFSET(FILE_NOTIFY_INFORMATION, FileName) + TotalName;
+    ULONG Offset = (*DataLength != 0) ? ALIGN_UP_BY(*DataLength, sizeof(ULONG)) : 0;
     PUCHAR Target;
 
-    if (*DataLength + Size > BufferLength) return FALSE;
+    if (Offset + Size > BufferLength) return FALSE;
 
     if (*DataLength != 0)
     {
         Information = (PFILE_NOTIFY_INFORMATION)((PUCHAR)Buffer + *LastEntry);
-        Information->NextEntryOffset = *DataLength - *LastEntry;
+        Information->NextEntryOffset = Offset - *LastEntry;
     }
 
-    *LastEntry = *DataLength;
+    *LastEntry = Offset;
 
-    Information = (PFILE_NOTIFY_INFORMATION)((PUCHAR)Buffer + *DataLength);
+    Information = (PFILE_NOTIFY_INFORMATION)((PUCHAR)Buffer + Offset);
     Information->NextEntryOffset = 0;
     Information->Action = Action;
     Information->FileNameLength = TotalName;
@@ -364,7 +355,7 @@ FsRtlNotifyUpdateBuffer(
         RtlCopyMemory(Target, StreamName, StreamBytes);
     }
 
-    *DataLength += Size;
+    *DataLength = Offset + Size;
 
     return TRUE;
 }
@@ -479,6 +470,38 @@ FsRtlpNameIsUnder(
 
 static
 VOID
+FsRtlpCompleteWithBuffered(
+    _Inout_ PNOTIFY_CHANGE Notify,
+    _Inout_ PLIST_ENTRY Completed)
+{
+    PIRP Irp = CONTAINING_RECORD(RemoveHeadList(&Notify->NotifyIrps),
+                                 IRP,
+                                 Tail.Overlay.ListEntry);
+    ULONG Length = 0;
+    PVOID Buffer;
+
+    IoSetCancelRoutine(Irp, NULL);
+
+    Buffer = FsRtlpIrpBuffer(Irp, &Length);
+
+    if (!FlagOn(Notify->Flags, NOTIFY_IMMEDIATELY) &&
+        (Buffer != NULL) &&
+        (Length >= Notify->DataLength))
+    {
+        RtlCopyMemory(Buffer, Notify->Buffer, Notify->DataLength);
+        FsRtlpQueueCompletion(Completed, Irp, STATUS_SUCCESS, Notify->DataLength);
+    }
+    else
+    {
+        FsRtlpQueueCompletion(Completed, Irp, STATUS_NOTIFY_ENUM_DIR, 0);
+    }
+
+    ClearFlag(Notify->Flags, NOTIFY_IMMEDIATELY);
+    FsRtlpFreeNotifyBuffer(Notify);
+}
+
+static
+VOID
 FsRtlpReportToNotify(
     _Inout_ PNOTIFY_CHANGE Notify,
     _In_ PSTRING FullTargetName,
@@ -491,6 +514,7 @@ FsRtlpReportToNotify(
     ULONG NameBytes = FullTargetName->Length - RelativeOffset;
     PVOID Stream = NULL;
     ULONG StreamBytes = 0;
+    BOOLEAN Held;
 
     if (StreamName != NULL)
     {
@@ -498,7 +522,13 @@ FsRtlpReportToNotify(
         StreamBytes = StreamName->Length;
     }
 
-    if (!IsListEmpty(&Notify->NotifyIrps))
+    /* The old name of a rename waits for its new name, so a watcher is told about both at once */
+    Held = (Action == FILE_ACTION_RENAMED_OLD_NAME);
+
+    if (!IsListEmpty(&Notify->NotifyIrps) &&
+        !Held &&
+        (Notify->DataLength == 0) &&
+        !FlagOn(Notify->Flags, NOTIFY_IMMEDIATELY))
     {
         PIRP Irp = CONTAINING_RECORD(RemoveHeadList(&Notify->NotifyIrps),
                                      IRP,
@@ -513,6 +543,7 @@ FsRtlpReportToNotify(
         Buffer = FsRtlpIrpBuffer(Irp, &Length);
 
         if ((Buffer != NULL) &&
+            (Notify->BufferLength != 0) &&
             FsRtlNotifyUpdateBuffer(Buffer,
                                     Length,
                                     &DataLength,
@@ -536,44 +567,42 @@ FsRtlpReportToNotify(
         return;
     }
 
-    if (FlagOn(Notify->Flags, NOTIFY_IMMEDIATELY)) return;
-
-    if (Notify->Buffer == NULL)
+    if (!FlagOn(Notify->Flags, NOTIFY_IMMEDIATELY))
     {
-        if (Notify->BufferLength == 0)
+        if ((Notify->Buffer == NULL) && (Notify->BufferLength != 0))
         {
-            SetFlag(Notify->Flags, NOTIFY_IMMEDIATELY);
-            return;
+            Notify->AllocatedBuffer = ExAllocatePoolWithTag(PagedPool,
+                                                            Notify->BufferLength,
+                                                            FSRTL_NOTIFY_TAG);
+
+            if (Notify->AllocatedBuffer != NULL)
+            {
+                Notify->Buffer = Notify->AllocatedBuffer;
+                Notify->ThisBufferLength = Notify->BufferLength;
+                Notify->DataLength = 0;
+                Notify->LastEntry = 0;
+            }
         }
 
-        Notify->AllocatedBuffer = ExAllocatePoolWithTag(PagedPool,
-                                                        Notify->BufferLength,
-                                                        FSRTL_NOTIFY_TAG);
-
-        if (Notify->AllocatedBuffer == NULL)
+        if ((Notify->Buffer == NULL) ||
+            !FsRtlNotifyUpdateBuffer(Notify->Buffer,
+                                     Notify->ThisBufferLength,
+                                     &Notify->DataLength,
+                                     &Notify->LastEntry,
+                                     Action,
+                                     Name,
+                                     NameBytes,
+                                     Stream,
+                                     StreamBytes))
         {
+            FsRtlpFreeNotifyBuffer(Notify);
             SetFlag(Notify->Flags, NOTIFY_IMMEDIATELY);
-            return;
         }
-
-        Notify->Buffer = Notify->AllocatedBuffer;
-        Notify->ThisBufferLength = Notify->BufferLength;
-        Notify->DataLength = 0;
-        Notify->LastEntry = 0;
     }
 
-    if (!FsRtlNotifyUpdateBuffer(Notify->Buffer,
-                                 Notify->ThisBufferLength,
-                                 &Notify->DataLength,
-                                 &Notify->LastEntry,
-                                 Action,
-                                 Name,
-                                 NameBytes,
-                                 Stream,
-                                 StreamBytes))
+    if (!Held && !IsListEmpty(&Notify->NotifyIrps))
     {
-        FsRtlpFreeNotifyBuffer(Notify);
-        SetFlag(Notify->Flags, NOTIFY_IMMEDIATELY);
+        FsRtlpCompleteWithBuffered(Notify, Completed);
     }
 }
 
@@ -698,11 +727,17 @@ FsRtlNotifyFilterChangeDirectory(
 
     if (NotifyIrp == NULL)
     {
-        Notify = FsRtlpFindNotify(NotifyList, FsContext);
+        PLIST_ENTRY Entry;
 
-        if (Notify != NULL)
+        /* Without a request the stream itself is going away, so every watch on it ends */
+        for (Entry = NotifyList->Flink; Entry != NotifyList; Entry = Entry->Flink)
         {
-            FsRtlNotifyCleanupOneEntry(Notify, &Collected);
+            Notify = CONTAINING_RECORD(Entry, NOTIFY_CHANGE, NotifyList);
+
+            if (Notify->StreamID == FsContext)
+            {
+                FsRtlNotifyCleanupOneEntry(Notify, &Collected);
+            }
         }
 
         FsRtlNotifyReleaseFastMutex(Sync);
@@ -800,6 +835,11 @@ FsRtlNotifyFilterChangeDirectory(
         if (WatchTree) SetFlag(Notify->Flags, WATCH_TREE);
         if (FullDirectoryName->Length == 0) SetFlag(Notify->Flags, WATCH_ROOT);
 
+        if (!IgnoreBuffer)
+        {
+            Notify->BufferLength = Stack->Parameters.NotifyDirectory.Length;
+        }
+
         InitializeListHead(&Notify->NotifyIrps);
         InsertTailList(NotifyList, &Notify->NotifyList);
     }
@@ -810,11 +850,6 @@ FsRtlNotifyFilterChangeDirectory(
             SeReleaseSubjectContext(SubjectContext);
             ExFreePool(SubjectContext);
         }
-    }
-
-    if (!IgnoreBuffer && (Notify->BufferLength == 0))
-    {
-        Notify->BufferLength = Stack->Parameters.NotifyDirectory.Length;
     }
 
     if (FlagOn(Notify->Flags, NOTIFY_IMMEDIATELY))
