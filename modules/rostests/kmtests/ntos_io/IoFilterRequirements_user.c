@@ -18,7 +18,8 @@ static const WCHAR BusHardwareIds[] = L"ROOT\\KMTESTFILTERREQ\0";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
-static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask" };
+static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
+                                 L"StartCount", L"StopSeen", L"RestartPrivateMask" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -95,6 +96,20 @@ static VOID CheckRecorded(VOID)
     ok(Value == 3, "The start resources were not the filtered requirements (mask %lu)\n", Value);
 }
 
+/* The function driver reports new requirements after its first start; the wait only bounds a lost restart */
+static VOID CheckRestart(VOID)
+{
+    DWORD Start = GetTickCount();
+    DWORD Value = 0;
+
+    while ((!ReadValue(L"StartCount", &Value) || Value < 2) && GetTickCount() - Start < 1000)
+        Sleep(10);
+
+    ok(Value == 2, "The device was not started again after its requirements changed (%lu starts)\n", Value);
+    ok(!ReadValue(L"StopSeen", &Value), "The device was stopped for a change of its requirements\n");
+    ok(ReadValue(L"RestartPrivateMask", &Value) && Value == 3, "The restart did not carry the device's resources (mask %lu)\n", Value);
+}
+
 static VOID RemoveChild(VOID)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
@@ -126,6 +141,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
     {
         ok(InstallChild(InfPath), "Installing the child fixture failed\n");
         CheckRecorded();
+        CheckRestart();
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);

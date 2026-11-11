@@ -192,7 +192,8 @@ PiIrpStartDevice(
 
     PAGED_CODE();
 
-    ASSERT(DeviceNode->State == DeviceNodeStartPending);
+    ASSERT(DeviceNode->State == DeviceNodeStartPending ||
+           DeviceNode->State == DeviceNodeStarted);
 
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
 

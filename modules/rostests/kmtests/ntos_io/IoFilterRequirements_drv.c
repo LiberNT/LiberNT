@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Bus and function driver that records how the PnP manager sends IRP_MN_FILTER_RESOURCE_REQUIREMENTS
+ * PURPOSE:     Bus and function driver that records how the PnP manager filters and restarts a device's requirements
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -23,6 +23,9 @@ typedef struct _TEST_EXTENSION
     TEST_KIND Kind;
     PDEVICE_OBJECT Lower;
     PDEVICE_OBJECT Child;
+    PDEVICE_OBJECT Pdo;
+    LONG Starts;
+    BOOLEAN ReportChange;
 } TEST_EXTENSION, *PTEST_EXTENSION;
 
 static WCHAR ServicePath[260];
@@ -133,6 +136,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     NTSTATUS Status;
+    LONG Starts;
 
     switch (Stack->MinorFunction)
     {
@@ -141,8 +145,31 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
 
         case IRP_MN_START_DEVICE:
             Status = IoForwardIrpSynchronously(Extension->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
-            Record(L"StartPrivateMask", StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
+            Starts = InterlockedIncrement(&Extension->Starts);
+            Record(Starts == 1 ? L"StartPrivateMask" : L"RestartPrivateMask",
+                   StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
+            Record(L"StartCount", (ULONG)Starts);
+            if (Starts == 1)
+            {
+                Extension->ReportChange = TRUE;
+                IoInvalidateDeviceState(Extension->Pdo);
+            }
             return Complete(Irp, Status);
+
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+            IoForwardIrpSynchronously(Extension->Lower, Irp);
+            if (Extension->ReportChange)
+            {
+                Extension->ReportChange = FALSE;
+                Irp->IoStatus.Information |= PNP_DEVICE_RESOURCE_REQUIREMENTS_CHANGED;
+            }
+            return Complete(Irp, STATUS_SUCCESS);
+
+        case IRP_MN_QUERY_STOP_DEVICE:
+        case IRP_MN_STOP_DEVICE:
+            Record(L"StopSeen", 1);
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            return Pass(Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
             Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -153,9 +180,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
 
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
-        case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
-        case IRP_MN_STOP_DEVICE:
         case IRP_MN_SURPRISE_REMOVAL:
             Irp->IoStatus.Status = STATUS_SUCCESS;
             return Pass(Extension, Irp);
@@ -371,6 +396,7 @@ static NTSTATUS NTAPI TestAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT 
     Extension = Fdo->DeviceExtension;
     RtlZeroMemory(Extension, sizeof(*Extension));
     Extension->Kind = (Pdo->DriverObject == DriverObject) ? TestChildFdo : TestBusFdo;
+    Extension->Pdo = Pdo;
     Extension->Lower = IoAttachDeviceToDeviceStack(Fdo, Pdo);
     if (Extension->Lower == NULL)
     {

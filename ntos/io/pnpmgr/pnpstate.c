@@ -940,6 +940,34 @@ PiProcessStartDevice(
                                &DeviceNode->InstancePath);
 }
 
+/* New requirements restart a started device in place with the resources it holds, as Windows 11 does */
+static
+VOID
+PiRestartInPlace(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PIO_RESOURCE_REQUIREMENTS_LIST Requirements = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(PiIrpQueryResourceRequirements(DeviceNode, &Requirements))) Requirements = NULL;
+
+    if (DeviceNode->ResourceRequirements != NULL) ExFreePool(DeviceNode->ResourceRequirements);
+    DeviceNode->ResourceRequirements = Requirements;
+
+    if (Requirements != NULL) IopFilterResourceRequirements(DeviceNode);
+
+    Status = PiIrpStartDevice(DeviceNode);
+    if (NT_SUCCESS(Status)) return;
+
+    DPRINT1("PnP: %wZ did not restart (%lx)\n", &DeviceNode->InstancePath, Status);
+
+    PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_START);
+    PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
+    PiDevNodeStateMachine(DeviceNode);
+}
+
 static
 VOID
 PiProcessNewChildren(
@@ -1260,6 +1288,11 @@ PiRunDeviceAction(
                     PiSetDevNodeState(DeviceNode,
                                       DeviceNodeAwaitingQueuedRemoval);
                     PiDevNodeStateMachine(DeviceNode);
+                }
+                else if ((DeviceState & PNP_DEVICE_RESOURCE_REQUIREMENTS_CHANGED) &&
+                         DeviceNode->State == DeviceNodeStarted)
+                {
+                    PiRestartInPlace(DeviceNode);
                 }
 
                 break;
