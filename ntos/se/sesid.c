@@ -415,7 +415,11 @@ SepCaptureSid(
     _SEH2_END;
 
     /* Only now can it no longer change underneath the check */
-    if (NT_SUCCESS(Status) && !RtlValidSid(Copy)) Status = STATUS_INVALID_SID;
+    if (NT_SUCCESS(Status) &&
+        (((PISID)Copy)->SubAuthorityCount != Count || !RtlValidSid(Copy)))
+    {
+        Status = STATUS_INVALID_SID;
+    }
 
     if (!NT_SUCCESS(Status))
     {
@@ -564,13 +568,33 @@ SeCaptureSidAndAttributesArray(
         for (Index = 0; Index < AttributeCount; Index++)
         {
             PISID Sid = SrcSidAndAttributes[Index].Sid;
-            ULONG Length = RtlLengthRequiredSid(Sid->SubAuthorityCount);
+            UCHAR Count;
+            ULONG Length;
+
+            if (PreviousMode != KernelMode)
+            {
+                ProbeForRead(Sid,
+                             FIELD_OFFSET(SID, SubAuthority),
+                             sizeof(ULONG));
+            }
+
+            Count = Sid->SubAuthorityCount;
+            Length = RtlLengthRequiredSid(Count);
+
+            /* The caller's memory may have changed since it was measured */
+            if (Count > SID_MAX_SUB_AUTHORITIES ||
+                ALIGN_UP(Length, ULONG) > (SIZE_T)((PUCHAR)Entries + Total - Cursor))
+            {
+                Status = STATUS_INVALID_SID;
+                break;
+            }
 
             if (PreviousMode != KernelMode) ProbeForRead(Sid, Length, sizeof(ULONG));
 
             RtlCopyMemory(Cursor, Sid, Length);
 
-            if (!RtlValidSid((PSID)Cursor))
+            if (((PISID)Cursor)->SubAuthorityCount != Count ||
+                !RtlValidSid((PSID)Cursor))
             {
                 Status = STATUS_INVALID_SID;
                 break;
