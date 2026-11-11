@@ -18,9 +18,9 @@ IopWorkItemCallback(
     _In_ PVOID Parameter)
 {
     PIO_WORKITEM WorkItem = Parameter;
-    PDEVICE_OBJECT DeviceObject = WorkItem->DeviceObject;
+    PDEVICE_OBJECT DeviceObject = WorkItem->IoObject;
 
-    WorkItem->WorkerRoutine(DeviceObject, WorkItem->Context);
+    WorkItem->Routine(DeviceObject, WorkItem->Context);
 
     if (DeviceObject != NULL) ObDereferenceObject(DeviceObject);
 }
@@ -44,7 +44,7 @@ IoAllocateWorkItem(
     WorkItem = ExAllocatePoolZero(NonPagedPool, sizeof(IO_WORKITEM), TAG_IOWI);
     if (WorkItem == NULL) return NULL;
 
-    WorkItem->DeviceObject = DeviceObject;
+    WorkItem->IoObject = DeviceObject;
 
     return WorkItem;
 }
@@ -56,7 +56,7 @@ IoInitializeWorkItem(
     _In_ PIO_WORKITEM IoWorkItem)
 {
     RtlZeroMemory(IoWorkItem, sizeof(IO_WORKITEM));
-    IoWorkItem->DeviceObject = IoObject;
+    IoWorkItem->IoObject = IoObject;
 }
 
 VOID
@@ -82,10 +82,10 @@ IopWorkItemCallbackEx(
     _In_ PVOID Parameter)
 {
     PIO_WORKITEM WorkItem = Parameter;
-    PDEVICE_OBJECT DeviceObject = WorkItem->DeviceObject;
+    PDEVICE_OBJECT DeviceObject = WorkItem->IoObject;
     PIO_WORKITEM_ROUTINE_EX Routine;
 
-    Routine = (PIO_WORKITEM_ROUTINE_EX)WorkItem->WorkerRoutine;
+    Routine = (PIO_WORKITEM_ROUTINE_EX)WorkItem->Routine;
 
     Routine(DeviceObject, WorkItem->Context, WorkItem);
 
@@ -100,16 +100,16 @@ IoQueueWorkItem(
     _In_ WORK_QUEUE_TYPE QueueType,
     _In_opt_ PVOID Context)
 {
-    ASSERT(IoWorkItem->DeviceObject != NULL);
+    ASSERT(IoWorkItem->IoObject != NULL);
 
-    IoWorkItem->WorkerRoutine = WorkerRoutine;
+    IoWorkItem->Routine = WorkerRoutine;
     IoWorkItem->Context = Context;
 
-    ObReferenceObject(IoWorkItem->DeviceObject);
+    ObReferenceObject(IoWorkItem->IoObject);
 
-    ExInitializeWorkItem(&IoWorkItem->Item, IopWorkItemCallback, IoWorkItem);
+    ExInitializeWorkItem(&IoWorkItem->WorkItem, IopWorkItemCallback, IoWorkItem);
 
-    ExQueueWorkItem(&IoWorkItem->Item, QueueType);
+    ExQueueWorkItem(&IoWorkItem->WorkItem, QueueType);
 }
 
 VOID
@@ -120,14 +120,14 @@ IoQueueWorkItemEx(
     _In_ WORK_QUEUE_TYPE QueueType,
     _In_opt_ PVOID Context)
 {
-    ASSERT(IoWorkItem->DeviceObject != NULL);
+    ASSERT(IoWorkItem->IoObject != NULL);
 
-    IoWorkItem->WorkerRoutine = (PIO_WORKITEM_ROUTINE)WorkerRoutine;
+    IoWorkItem->Routine = (PIO_WORKITEM_ROUTINE)WorkerRoutine;
     IoWorkItem->Context = Context;
 
-    ObReferenceObject(IoWorkItem->DeviceObject);
+    ObReferenceObject(IoWorkItem->IoObject);
 
-    ExInitializeWorkItem(&IoWorkItem->Item, IopWorkItemCallbackEx, IoWorkItem);
+    ExInitializeWorkItem(&IoWorkItem->WorkItem, IopWorkItemCallbackEx, IoWorkItem);
 
-    ExQueueWorkItem(&IoWorkItem->Item, QueueType);
+    ExQueueWorkItem(&IoWorkItem->WorkItem, QueueType);
 }

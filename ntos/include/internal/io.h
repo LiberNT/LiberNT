@@ -423,11 +423,23 @@ typedef struct _IO_UNLOAD_SAFE_COMPLETION_CONTEXT
 //
 typedef struct _IO_WORKITEM
 {
-    WORK_QUEUE_ITEM Item;
-    PDEVICE_OBJECT DeviceObject;
-    PIO_WORKITEM_ROUTINE WorkerRoutine;
+    WORK_QUEUE_ITEM WorkItem;
+    PIO_WORKITEM_ROUTINE Routine;
+    PVOID IoObject;
     PVOID Context;
+    /* TODO: WorkOnBehalfThread, Type and ActivityId are kept zero */
+    struct _ETHREAD *WorkOnBehalfThread;
+    ULONG Type;
+    GUID ActivityId;
 } IO_WORKITEM;
+
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, Routine) == 0x20));
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, IoObject) == 0x28));
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, Context) == 0x30));
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, WorkOnBehalfThread) == 0x38));
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, Type) == 0x40));
+C_ASSERT((sizeof(PVOID) != 8) || (FIELD_OFFSET(IO_WORKITEM, ActivityId) == 0x44));
+C_ASSERT((sizeof(PVOID) != 8) || (sizeof(IO_WORKITEM) == 0x58));
 
 //
 // I/O Wrapper around the Kernel Interrupt
