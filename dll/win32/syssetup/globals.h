@@ -83,6 +83,9 @@ DWORD
 SaveDefaultUserHive(VOID);
 
 VOID
+CreateMachineGuid(VOID);
+
+VOID
 StartWow64Registration(VOID);
 
 VOID

@@ -1224,6 +1224,7 @@ ConfigureTargetSystem(
         if (!NT_SUCCESS(Status))
             return RtlNtStatusToDosError(Status);
     }
+    CreateMachineGuid();
 
     ReportTargetPhase(5);
     RegisterTargetComponents();

@@ -19,6 +19,7 @@ list(APPEND SOURCE
     LockServiceDatabase.c
     LookupAccountName.c
     LookupAccountSid.c
+    MachineGuid.c
     OpenTrace.c
     QueryServiceConfig2.c
     RegCreateKeyEx.c

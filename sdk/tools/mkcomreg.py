@@ -575,7 +575,10 @@ def read_code_data(lines):
             continue
         if current is None:
             raise ValueError("registry line outside a section: %r" % text)
-        current.append(code_line_op(text))
+        op = code_line_op(text)
+        if op[0] == "set" and op[2].lower() == "software\\microsoft\\cryptography" and op[3].lower() == "machineguid":
+            raise ValueError("MachineGuid identifies one installation and is created by setup: %r" % text)
+        current.append(op)
     return sections
 
 

@@ -1153,6 +1153,48 @@ GetPreinstallUserName(
     return UserName[0] != UNICODE_NULL;
 }
 
+VOID
+CreateMachineGuid(VOID)
+{
+    RPC_WSTR UuidString;
+    UUID Uuid;
+    HKEY hKey;
+    LONG Error;
+
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Microsoft\\Cryptography",
+                            0,
+                            NULL,
+                            0,
+                            KEY_QUERY_VALUE | KEY_SET_VALUE | KEY_WOW64_64KEY,
+                            NULL,
+                            &hKey,
+                            NULL);
+    if (Error != ERROR_SUCCESS)
+    {
+        DPRINT1("Cannot open the Cryptography key (error %ld)\n", Error);
+        return;
+    }
+
+    Error = RegQueryValueExW(hKey, L"MachineGuid", NULL, NULL, NULL, NULL);
+    if (Error == ERROR_FILE_NOT_FOUND &&
+        UuidCreate(&Uuid) == RPC_S_OK &&
+        UuidToStringW(&Uuid, &UuidString) == RPC_S_OK)
+    {
+        Error = RegSetValueExW(hKey,
+                               L"MachineGuid",
+                               0,
+                               REG_SZ,
+                               (PBYTE)UuidString,
+                               (DWORD)((wcslen((PCWSTR)UuidString) + 1) * sizeof(WCHAR)));
+        RpcStringFreeW(&UuidString);
+    }
+    if (Error != ERROR_SUCCESS)
+        DPRINT1("Cannot create the machine GUID (error %ld)\n", Error);
+
+    RegCloseKey(hKey);
+}
+
 static
 VOID
 ScheduleFirstBootSetup(VOID)
@@ -1257,6 +1299,7 @@ InstallLiveCD(VOID)
     InitializeProgramFilesDir();
     if (!CommonInstall())
         goto error;
+    CreateMachineGuid();
 
     bPreinstall = GetPreinstallUserName(UserName, ARRAYSIZE(UserName));
     if (bPreinstall)
