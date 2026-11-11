@@ -136,33 +136,6 @@ PspThreadOpen(
     return STATUS_SUCCESS;
 }
 
-/*
- * Neither a process nor a thread is ever given a name in the namespace, so
- * the object manager has nothing to report for one.
- */
-static
-NTSTATUS
-NTAPI
-PspQueryObjectName(
-    _In_ PVOID Object,
-    _In_ BOOLEAN HasObjectName,
-    _Out_ POBJECT_NAME_INFORMATION ObjectNameInfo,
-    _In_ ULONG Length,
-    _Out_ PULONG ReturnLength,
-    _In_ KPROCESSOR_MODE AccessMode)
-{
-    UNREFERENCED_PARAMETER(Object);
-    UNREFERENCED_PARAMETER(HasObjectName);
-    UNREFERENCED_PARAMETER(ObjectNameInfo);
-    UNREFERENCED_PARAMETER(Length);
-    UNREFERENCED_PARAMETER(AccessMode);
-
-    PAGED_CODE();
-
-    *ReturnLength = 0;
-    return STATUS_OBJECT_NAME_NOT_FOUND;
-}
-
 CODE_SEG("INIT")
 static
 BOOLEAN
@@ -194,7 +167,6 @@ PspCreateObjectTypes(VOID)
     Initializer->OpenProcedure = PspProcessOpen;
     Initializer->CloseProcedure = PspProcessClose;
     Initializer->DeleteProcedure = PspDeleteProcess;
-    Initializer->QueryNameProcedure = PspQueryObjectName;
     Initializer->SecurityProcedure = SeDefaultObjectMethod;
 
     RtlInitUnicodeString(&Name, L"Process");
@@ -219,7 +191,6 @@ PspCreateObjectTypes(VOID)
     Initializer->SupportsObjectCallbacks = TRUE;
     Initializer->OpenProcedure = PspThreadOpen;
     Initializer->DeleteProcedure = PspDeleteThread;
-    Initializer->QueryNameProcedure = PspQueryObjectName;
     Initializer->SecurityProcedure = SeDefaultObjectMethod;
 
     RtlInitUnicodeString(&Name, L"Thread");
