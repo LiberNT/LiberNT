@@ -119,6 +119,8 @@ IopDeleteFile(
 
         IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE, 0);
 
+        FsRtlPTeardownPerFileObjectContexts(FileObject);
+
         Vpb = FileObject->Vpb;
         if (Vpb != NULL && !(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
         {

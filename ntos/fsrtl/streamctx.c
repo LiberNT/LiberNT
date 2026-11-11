@@ -580,7 +580,6 @@ FsRtlPTeardownPerFileObjectContexts(
 
     if (Bucket == NULL) return;
 
-    /* TODO: the I/O manager does not call this when a file object is deleted, so a filter that forgets its contexts keeps the bucket alive */
     while (!IsListEmpty(&Bucket->Contexts))
     {
         RemoveHeadList(&Bucket->Contexts);
