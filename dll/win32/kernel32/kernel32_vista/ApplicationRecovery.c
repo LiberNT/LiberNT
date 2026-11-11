@@ -22,6 +22,41 @@ typedef struct _BASE_RECOVERY_RUN
     PVOID Parameter;
 } BASE_RECOVERY_RUN, *PBASE_RECOVERY_RUN;
 
+static
+DWORD
+WINAPI
+BasepRemoteRecoveryThread(
+    _In_ PVOID Parameter)
+{
+    PBASE_WER_REGISTRATION Registration = BaseWerGetRegistration(FALSE);
+    NTSTATUS ExitStatus = (NTSTATUS)BASE_WER_HANG_EXIT_STATUS;
+    APPLICATION_RECOVERY_CALLBACK Callback;
+    PVOID CallbackParameter;
+
+    if (!Registration)
+        NtTerminateProcess(NtCurrentProcess(), ExitStatus);
+
+    RtlAcquireSRWLockExclusive(&Registration->Lock);
+    if ((Registration->State & BASE_WER_RECOVERY_IN_PROGRESS) ||
+        !(Registration->State & BASE_WER_RECOVERY_REGISTERED))
+    {
+        RtlReleaseSRWLockExclusive(&Registration->Lock);
+        NtTerminateProcess(NtCurrentProcess(), ExitStatus);
+        return 0;
+    }
+
+    Callback = (APPLICATION_RECOVERY_CALLBACK)(ULONG_PTR)Registration->RecoveryCallback;
+    CallbackParameter = (PVOID)(ULONG_PTR)Registration->RecoveryParameter;
+    Registration->RecoveryPingEvent = Parameter;
+    Registration->RecoveryExitStatus = ExitStatus;
+    InterlockedOr(&Registration->State, BASE_WER_RECOVERY_IN_PROGRESS);
+    RtlReleaseSRWLockExclusive(&Registration->Lock);
+
+    Callback(CallbackParameter);
+    NtTerminateProcess(NtCurrentProcess(), ExitStatus);
+    return 0;
+}
+
 HRESULT
 WINAPI
 RegisterApplicationRecoveryCallback(
@@ -45,6 +80,7 @@ RegisterApplicationRecoveryCallback(
     Registration->RecoveryParameter = (ULONG_PTR)pvParameter;
     Registration->RecoveryPingInterval = dwPingInterval ? dwPingInterval : RECOVERY_DEFAULT_PING_INTERVAL;
     Registration->RecoveryFlags = dwFlags;
+    Registration->RemoteRecoveryRoutine = (ULONG_PTR)BasepRemoteRecoveryThread;
     InterlockedOr(&Registration->State, BASE_WER_RECOVERY_REGISTERED);
     RtlReleaseSRWLockExclusive(&Registration->Lock);
 
@@ -120,7 +156,8 @@ ApplicationRecoveryInProgress(
     if (!Registration || !(ReadAcquire(&Registration->State) & BASE_WER_RECOVERY_IN_PROGRESS))
         return E_FAIL;
 
-    NtSetEvent(Registration->RecoveryPingEvent, NULL);
+    if (Registration->RecoveryPingEvent)
+        NtSetEvent(Registration->RecoveryPingEvent, NULL);
     *pbCancelled = ReadAcquire(&Registration->RecoveryCancelled) != 0;
     return S_OK;
 }
@@ -151,7 +188,6 @@ BasepRecoveryThread(
     return Run->Callback(Run->Parameter);
 }
 
-/* TODO: recovery of a hung application: no hung-window report reaches this path */
 VOID
 WINAPI
 BasepRunApplicationRecovery(
@@ -190,7 +226,7 @@ BasepRunApplicationRecovery(
     InterlockedOr(&Registration->State, BASE_WER_RECOVERY_IN_PROGRESS);
     RtlReleaseSRWLockExclusive(&Registration->Lock);
 
-    /* TODO: no recovery progress UI, so the user can never cancel and pbCancelled always reports FALSE */
+    /* TODO: no recovery progress UI on the crash path, so pbCancelled reports FALSE there */
     Handles[1] = CreateThread(NULL, 0, BasepRecoveryThread, &Run, 0, NULL);
     if (Handles[1])
     {

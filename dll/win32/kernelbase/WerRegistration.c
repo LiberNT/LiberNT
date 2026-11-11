@@ -12,18 +12,11 @@
 
 typedef struct _WER_REGISTERED_ENTRY
 {
-    LIST_ENTRY Entry;
-    PVOID Address;
-    DWORD Size;
-    WER_REGISTER_FILE_TYPE FileType;
-    DWORD Flags;
-    UNICODE_STRING FileName;
+    BASE_WER_ENTRY Shared;
+    WCHAR Name[ANYSIZE_ARRAY];
 } WER_REGISTERED_ENTRY, *PWER_REGISTERED_ENTRY;
 
-/* TODO: no crash report or dump consumes the registered files and memory blocks (Windows adds them only when the server asks) */
 static SRWLOCK WerRegistrationLock = SRWLOCK_INIT;
-static LIST_ENTRY WerRegisteredFiles = {&WerRegisteredFiles, &WerRegisteredFiles};
-static LIST_ENTRY WerRegisteredMemoryBlocks = {&WerRegisteredMemoryBlocks, &WerRegisteredMemoryBlocks};
 static ULONG WerRegisteredEntryCount;
 
 static
@@ -34,11 +27,30 @@ WerIsRecoveryInProgress(VOID)
 }
 
 static
+PULONG64
+WerGetChain(
+    _In_ PBASE_WER_REGISTRATION Registration,
+    _In_ BOOL Files)
+{
+    return Files ? &Registration->Files : &Registration->MemoryBlocks;
+}
+
+static
 HRESULT
 WerInsertEntry(
-    _In_ PLIST_ENTRY List,
+    _In_ BOOL Files,
     _In_ PWER_REGISTERED_ENTRY Entry)
 {
+    PBASE_WER_REGISTRATION Registration = BaseWerGetRegistration(TRUE);
+    PULONG64 Link;
+
+    if (!Registration)
+    {
+        RtlFreeHeap(GetProcessHeap(), 0, Entry);
+        return E_OUTOFMEMORY;
+    }
+
+    Entry->Shared.Next = 0;
     AcquireSRWLockExclusive(&WerRegistrationLock);
     if (WerRegisteredEntryCount >= WER_MAX_REGISTERED_ENTRIES)
     {
@@ -47,7 +59,8 @@ WerInsertEntry(
         return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
     }
 
-    InsertTailList(List, &Entry->Entry);
+    for (Link = WerGetChain(Registration, Files); *Link; Link = &((PBASE_WER_ENTRY)(ULONG_PTR)*Link)->Next);
+    InterlockedExchange64((PLONG64)Link, (LONG64)(ULONG_PTR)Entry);
     WerRegisteredEntryCount++;
     ReleaseSRWLockExclusive(&WerRegistrationLock);
     return S_OK;
@@ -56,20 +69,28 @@ WerInsertEntry(
 static
 HRESULT
 WerRemoveEntry(
-    _In_ PLIST_ENTRY List,
+    _In_ BOOL Files,
     _In_opt_ PVOID Address,
     _In_opt_ PCUNICODE_STRING FileName)
 {
+    PBASE_WER_REGISTRATION Registration = BaseWerGetRegistration(FALSE);
     PWER_REGISTERED_ENTRY Entry;
-    PLIST_ENTRY Link;
+    UNICODE_STRING EntryName;
+    PULONG64 Link;
+
+    if (!Registration)
+        return WER_E_NOT_FOUND;
 
     AcquireSRWLockExclusive(&WerRegistrationLock);
-    for (Link = List->Flink; Link != List; Link = Link->Flink)
+    for (Link = WerGetChain(Registration, Files); *Link; Link = &Entry->Shared.Next)
     {
-        Entry = CONTAINING_RECORD(Link, WER_REGISTERED_ENTRY, Entry);
-        if (FileName ? RtlEqualUnicodeString(&Entry->FileName, FileName, TRUE) : Entry->Address == Address)
+        Entry = (PWER_REGISTERED_ENTRY)(ULONG_PTR)*Link;
+        EntryName.Buffer = Entry->Name;
+        EntryName.Length = EntryName.MaximumLength = (USHORT)Entry->Shared.NameLength;
+        if (FileName ? RtlEqualUnicodeString(&EntryName, FileName, TRUE) :
+                       Entry->Shared.Address == (ULONG_PTR)Address)
         {
-            RemoveEntryList(&Entry->Entry);
+            InterlockedExchange64((PLONG64)Link, (LONG64)Entry->Shared.Next);
             WerRegisteredEntryCount--;
             ReleaseSRWLockExclusive(&WerRegistrationLock);
             RtlFreeHeap(GetProcessHeap(), 0, Entry);
@@ -145,20 +166,18 @@ WerRegisterFile(
     if (WerIsRecoveryInProgress())
         return WER_E_INVALID_STATE;
 
-    Entry = RtlAllocateHeap(GetProcessHeap(), 0, sizeof(*Entry) + (Length + 1) * sizeof(WCHAR));
+    Entry = RtlAllocateHeap(GetProcessHeap(), HEAP_ZERO_MEMORY,
+                            FIELD_OFFSET(WER_REGISTERED_ENTRY, Name[Length + 1]));
     if (!Entry)
         return E_OUTOFMEMORY;
 
-    Entry->Address = NULL;
-    Entry->Size = 0;
-    Entry->FileType = regFileType;
-    Entry->Flags = dwFlags;
-    Entry->FileName.Buffer = (PWSTR)(Entry + 1);
-    Entry->FileName.Length = (USHORT)(Length * sizeof(WCHAR));
-    Entry->FileName.MaximumLength = (USHORT)((Length + 1) * sizeof(WCHAR));
-    RtlCopyMemory(Entry->FileName.Buffer, pwzFile, (Length + 1) * sizeof(WCHAR));
+    Entry->Shared.Type = regFileType;
+    Entry->Shared.Flags = dwFlags;
+    Entry->Shared.NameLength = (ULONG)(Length * sizeof(WCHAR));
+    Entry->Shared.Name = (ULONG_PTR)Entry->Name;
+    RtlCopyMemory(Entry->Name, pwzFile, (Length + 1) * sizeof(WCHAR));
 
-    return WerInsertEntry(&WerRegisteredFiles, Entry);
+    return WerInsertEntry(TRUE, Entry);
 }
 
 HRESULT
@@ -175,7 +194,7 @@ WerUnregisterFile(
         return WER_E_INVALID_STATE;
 
     RtlInitUnicodeString(&FileName, pwzFilePath);
-    return WerRemoveEntry(&WerRegisteredFiles, NULL, &FileName);
+    return WerRemoveEntry(TRUE, NULL, &FileName);
 }
 
 HRESULT
@@ -196,9 +215,9 @@ WerRegisterMemoryBlock(
     if (!Entry)
         return E_OUTOFMEMORY;
 
-    Entry->Address = pvAddress;
-    Entry->Size = dwSize;
-    return WerInsertEntry(&WerRegisteredMemoryBlocks, Entry);
+    Entry->Shared.Address = (ULONG_PTR)pvAddress;
+    Entry->Shared.Size = dwSize;
+    return WerInsertEntry(FALSE, Entry);
 }
 
 HRESULT
@@ -212,5 +231,5 @@ WerUnregisterMemoryBlock(
     if (WerIsRecoveryInProgress())
         return WER_E_INVALID_STATE;
 
-    return WerRemoveEntry(&WerRegisteredMemoryBlocks, pvAddress, NULL);
+    return WerRemoveEntry(FALSE, pvAddress, NULL);
 }

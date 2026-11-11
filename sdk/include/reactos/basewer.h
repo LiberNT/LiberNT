@@ -17,6 +17,19 @@
 #define BASE_WER_RECOVERY_IN_PROGRESS   0x00000004
 #define BASE_WER_RESTART_REGISTERED     0x00000008
 
+#define BASE_WER_HANG_EXIT_STATUS       0xCFFFFFFF
+
+typedef struct _BASE_WER_ENTRY
+{
+    ULONG64 Next;
+    ULONG64 Address;
+    ULONG Size;
+    ULONG Type;
+    ULONG Flags;
+    ULONG NameLength;
+    ULONG64 Name;
+} BASE_WER_ENTRY, *PBASE_WER_ENTRY;
+
 typedef struct _BASE_WER_REGISTRATION
 {
     ULONG Signature;
@@ -30,10 +43,15 @@ typedef struct _BASE_WER_REGISTRATION
     ULONG64 RestartCommandLine;
     ULONG RestartLength;
     ULONG Reserved;
+    ULONG64 Files;
+    ULONG64 MemoryBlocks;
+    ULONG64 RuntimeModules;
+    ULONG64 RemoteRecoveryRoutine;
+    LONG RecoveryCancelled;
+    ULONG Reserved2;
     RTL_SRWLOCK Lock;
     HANDLE RecoveryPingEvent;
     LONG RecoveryExitStatus;
-    LONG RecoveryCancelled;
 } BASE_WER_REGISTRATION, *PBASE_WER_REGISTRATION;
 
 #define BASE_WER_SHARED_SIZE FIELD_OFFSET(BASE_WER_REGISTRATION, Lock)
