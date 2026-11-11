@@ -693,6 +693,7 @@ PspCreateWow64Process(
     if (!NT_SUCCESS(Status)) return Status;
 
     if (ImageInformation.Machine != IMAGE_FILE_MACHINE_I386) return STATUS_SUCCESS;
+    if (ImageInformation.ComPlusNativeReady) return STATUS_SUCCESS;
 
     Wow64Process = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Wow64Process), TAG_WOW64_PROCESS);
     if (Wow64Process == NULL) return STATUS_INSUFFICIENT_RESOURCES;
