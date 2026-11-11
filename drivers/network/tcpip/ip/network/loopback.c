@@ -12,6 +12,8 @@
 
 PIP_INTERFACE Loopback = NULL;
 
+#define LOOP_INLINE_STACK (KERNEL_STACK_SIZE / 2)
+
 VOID LoopPassiveWorker(
   PVOID Context)
 {
@@ -78,6 +80,14 @@ VOID LoopTransmit(
                        &IPPacket->TotalSize);
 
             IPPacket->MappedHeader = TRUE;
+
+            /* A sender at passive level with stack to spare sees its datagram delivered before the send returns */
+            if (KeGetCurrentIrql() == PASSIVE_LEVEL && IoGetRemainingStackSize() >= LOOP_INLINE_STACK)
+            {
+                (PC(NdisPacket)->DLComplete)(PC(NdisPacket)->Context, NdisPacket, NdisStatus);
+                LoopPassiveWorker(IPPacket);
+                return;
+            }
 
             if (!ChewCreate(LoopPassiveWorker, IPPacket))
             {

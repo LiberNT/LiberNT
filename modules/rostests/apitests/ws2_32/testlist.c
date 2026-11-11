@@ -24,6 +24,7 @@ extern void func_nonblocking(void);
 extern void func_nostartup(void);
 extern void func_open_osfhandle(void);
 extern void func_pollable_event(void);
+extern void func_loopback_pingpong(void);
 extern void func_recv(void);
 extern void func_send(void);
 extern void func_sendto_neighbor(void);
@@ -59,6 +60,7 @@ const struct test winetest_testlist[] =
     { "nostartup", func_nostartup },
     { "open_osfhandle", func_open_osfhandle },
     { "pollable_event", func_pollable_event },
+    { "loopback_pingpong", func_loopback_pingpong },
     { "recv", func_recv },
     { "send", func_send },
     { "sendto_neighbor", func_sendto_neighbor },

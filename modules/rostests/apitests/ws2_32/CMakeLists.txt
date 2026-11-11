@@ -18,6 +18,7 @@ list(APPEND SOURCE
     getservbyname.c
     getservbyport.c
     helpers.c
+    loopback_pingpong.c
     ioctlsocket.c
     nonblocking.c
     nostartup.c

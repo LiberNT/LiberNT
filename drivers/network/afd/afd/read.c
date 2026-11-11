@@ -952,13 +952,11 @@ AfdIsFromConnectedPeer(
     return PeerIp->in_addr == FromIp->in_addr && PeerIp->sin_port == FromIp->sin_port;
 }
 
-NTSTATUS NTAPI
-PacketSocketRecvComplete(
-        PDEVICE_OBJECT DeviceObject,
-        PIRP Irp,
-        PVOID Context ) {
+static NTSTATUS
+PacketSocketRecvProcess(
+        PAFD_FCB FCB,
+        PIRP Irp ) {
     NTSTATUS Status = STATUS_SUCCESS;
-    PAFD_FCB FCB = Context;
     PIRP NextIrp;
     PIO_STACK_LOCATION NextIrpSp;
     PLIST_ENTRY ListEntry;
@@ -967,11 +965,6 @@ PacketSocketRecvComplete(
     UINT ControlLen = 0;
     UINT DGSize;
     PLIST_ENTRY NextIrpEntry, DatagramRecvEntry;
-
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if( !SocketAcquireStateLock( FCB ) )
-        return STATUS_FILE_CLOSED;
 
     ASSERT(FCB->ReceiveIrp.InFlightRequest == Irp);
     FCB->ReceiveIrp.InFlightRequest = NULL;
@@ -1128,6 +1121,52 @@ SatisfyRequests:
     SocketStateUnlock( FCB );
 
     return STATUS_SUCCESS;
+}
+
+static IO_WORKITEM_ROUTINE PacketSocketDeferredRecv;
+
+static
+VOID
+NTAPI
+PacketSocketDeferredRecv(
+        PDEVICE_OBJECT DeviceObject,
+        PVOID Context ) {
+    PAFD_FCB FCB = Context;
+    PIRP Irp;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if( !SocketAcquireStateLock( FCB ) )
+        return;
+
+    Irp = FCB->ReceiveIrp.InFlightRequest;
+    PacketSocketRecvProcess( FCB, Irp );
+    IoFreeIrp(Irp);
+}
+
+NTSTATUS NTAPI
+PacketSocketRecvComplete(
+        PDEVICE_OBJECT DeviceObject,
+        PIRP Irp,
+        PVOID Context ) {
+    PAFD_FCB FCB = Context;
+    LARGE_INTEGER NoWait;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    if( !FCB )
+        return STATUS_FILE_CLOSED;
+
+    /* A looped-back datagram completes inside its sender's send, so waiting here could close a lock cycle */
+    NoWait.QuadPart = 0;
+    if (KeGetCurrentIrql() == PASSIVE_LEVEL &&
+        KeWaitForSingleObject(&FCB->Mutex, Executive, KernelMode, FALSE, &NoWait) == STATUS_SUCCESS)
+    {
+        return PacketSocketRecvProcess( FCB, Irp );
+    }
+
+    IoQueueWorkItem(FCB->ReceiveWorkItem, PacketSocketDeferredRecv, DelayedWorkQueue, FCB);
+    return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
 NTSTATUS NTAPI
