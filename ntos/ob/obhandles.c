@@ -1298,9 +1298,8 @@ ObpCloseHandle(
 
     PAGED_CODE();
 
-    /* Closing the current-process pseudo handle does nothing and succeeds */
-    /* TODO: the current-thread pseudo handle is still refused, unverified */
-    if (Handle == NtCurrentProcess()) return STATUS_SUCCESS;
+    /* Closing a pseudo handle (process, thread, session and the three token ones) does nothing and succeeds */
+    if ((LONG_PTR)Handle >= -6 && (LONG_PTR)Handle < 0) return STATUS_SUCCESS;
 
     if (ObpIsKernelHandle(Handle, AccessMode))
     {
@@ -1340,7 +1339,18 @@ ObpCloseHandle(
     if (AttachedToProcess) KeUnstackDetachProcess(&ApcState);
 
     if (Status == STATUS_INVALID_HANDLE)
-        ObpCheckInvalidHandleReference(Handle, AccessMode);
+    {
+        /* A process being debugged is told it closed a bad handle, as CloseHandle documents */
+        if (Handle != NULL && AccessMode == UserMode && !KeIsAttachedProcess() &&
+            PsGetCurrentProcess()->DebugPort != NULL)
+        {
+            KeRaiseUserException(STATUS_INVALID_HANDLE);
+        }
+        else
+        {
+            ObpCheckInvalidHandleReference(Handle, AccessMode);
+        }
+    }
 
     return Status;
 }
