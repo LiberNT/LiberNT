@@ -407,12 +407,15 @@ IoRegisterDeviceInterface(
     {
         RtlInitUnicodeString(&ValueName, L"SymbolicLink");
 
+        /* The registry keeps the link in its user-mode form, \\?\ */
+        LinkName.Buffer[1] = OBJ_NAME_PATH_SEPARATOR;
         ZwSetValueKey(ControlKey,
                       &ValueName,
                       0,
                       REG_SZ,
                       LinkName.Buffer,
                       LinkName.Length + sizeof(WCHAR));
+        LinkName.Buffer[1] = L'?';
 
         ZwClose(ControlKey);
     }
