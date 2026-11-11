@@ -471,6 +471,15 @@ SeAccessCheck(
         return FALSE;
     }
 
+    /* A thread impersonating below SecurityImpersonation may identify its client but not act for it */
+    if (SubjectSecurityContext->ClientToken != NULL &&
+        SubjectSecurityContext->ImpersonationLevel < SecurityImpersonation)
+    {
+        *GrantedAccess = 0;
+        *AccessStatus = STATUS_BAD_IMPERSONATION_LEVEL;
+        return FALSE;
+    }
+
     if (!SubjectContextLocked) SeLockSubjectContext(SubjectSecurityContext);
 
     RtlZeroMemory(&Context, sizeof(Context));
