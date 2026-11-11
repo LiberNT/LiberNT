@@ -511,7 +511,7 @@ BOOLEAN
 NTAPI
 HalpBiosDisplayReset(VOID)
 {
-    X86_BIOS_REGISTERS Registers;
+    X86_BIOS_REGISTERS Registers = {0};
     ULONG OldEflags;
     BOOLEAN Success;
 
