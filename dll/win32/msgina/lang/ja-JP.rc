@@ -55,4 +55,5 @@ BEGIN
     IDS_LOGONUI_EMERGENCY_TITLE "緊急再起動"
     IDS_LOGONUI_EMERGENCY_TEXT "[OK] を選ぶとすぐに再起動します。保存していない内容はすべて失われます。最後の手段としてのみ使ってください。"
     IDS_LOGONUI_SIGN_IN "サインイン"
+    IDS_LOGONUI_DATE_FORMAT "M月d日 dddd"
 END
