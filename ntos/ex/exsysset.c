@@ -220,12 +220,9 @@ ExpSetTimeAdjustment(
         return STATUS_SUCCESS;
     }
 
-    if ((Information->TimeAdjustment == 0) ||
-        (Information->TimeAdjustment > KeMaximumIncrement * 2))
-    {
-        return STATUS_INVALID_PARAMETER_2;
-    }
+    if (Information->TimeAdjustment == 0) return STATUS_INTEGER_DIVIDE_BY_ZERO;
 
+    /* FIXME: the clock never applies the adjustment (KiTimeAdjustmentEnabled stays FALSE) */
     KeTimeAdjustment = Information->TimeAdjustment;
 
     return STATUS_SUCCESS;
