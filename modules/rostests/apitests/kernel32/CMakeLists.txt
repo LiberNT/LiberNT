@@ -164,6 +164,7 @@ list(APPEND SOURCE
     WerRegisterFile.c
     WerRegistration.c
     WideCharToMultiByte.c
+    WinSaferRestrictions.c
     Wow64GetThreadContext.c
     Wow64ChildProcess.c
     Wow64SuspendThread.c

@@ -3114,7 +3114,7 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         AttributeList->Attributes[AttributeCount].Value = (ULONG_PTR)DebugHandle;
         AttributeCount++;
     }
-    EffectiveToken = UserToken ? UserToken : SaferToken;
+    EffectiveToken = SaferToken ? SaferToken : UserToken;
     if (Extended->SecurityCapabilities)
     {
         HANDLE BaseToken = EffectiveToken;
@@ -3266,11 +3266,6 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     {
         HardErrorMode = SEM_FAILCRITICALERRORS;
         Status = NtSetInformationProcess(ProcessHandle, ProcessDefaultHardErrorMode, &HardErrorMode, sizeof(HardErrorMode));
-        if (!NT_SUCCESS(Status)) goto Failure;
-    }
-    if (SaferToken && !UserToken)
-    {
-        Status = BasepReplaceProcessThreadTokens(SaferToken, ProcessHandle, ThreadHandle);
         if (!NT_SUCCESS(Status)) goto Failure;
     }
     if (JobHandle)
@@ -4222,7 +4217,7 @@ StartScan:
 
     /* Have we already done, and do we need to do, SRP (WinSafer) checks? */
     if (!(SkipSaferAndAppCompat) &&
-        ~(dwCreationFlags & CREATE_PRESERVE_CODE_AUTHZ_LEVEL))
+        !(dwCreationFlags & CREATE_PRESERVE_CODE_AUTHZ_LEVEL))
     {
         /* Assume yes */
         SaferNeeded = TRUE;
@@ -4960,6 +4955,7 @@ StartScan:
         || ExtendedAttributes.ComponentFilterPresent
         || ExtendedAttributes.PseudoConsole
         || hUserToken
+        || TokenHandle
        )
     {
         Result = BasepCreateUserProcess(hUserToken, TokenHandle, JobHandle, &PathName, lpApplicationName, lpCommandLine, lpEnvironment, lpCurrentDirectory, &StartupInfo, dwCreationFlags | NoWindow, bInheritHandles, lpProcessAttributes, lpThreadAttributes, ParameterFlags, Flags, ParentProcess, InheritHandleList, InheritHandleCount, &PriorityClass, &ExtendedAttributes, lpProcessInformation);
@@ -5749,7 +5745,7 @@ Quickie:
     if (TokenHandle)
     {
         /* And if the user asked for one */
-        if (hUserToken)
+        if ((hUserToken) && (hNewToken))
         {
             /* Then return it */
             *hNewToken = TokenHandle;
