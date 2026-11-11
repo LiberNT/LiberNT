@@ -35,6 +35,7 @@ KMT_TESTFUNC Test_IoFilterRequirements;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
+KMT_TESTFUNC Test_IoDeviceTree;
 KMT_TESTFUNC Test_IoMessageRestart;
 KMT_TESTFUNC Test_IoAffinityPolicy;
 KMT_TESTFUNC Test_IoRemoveChildren;
@@ -122,6 +123,7 @@ const KMT_TEST TestList[] =
     { "IoCreateFile",                 Test_IoCreateFile },
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
+    { "-IoDeviceTree",                Test_IoDeviceTree },
     { "-IoMessageRestart",            Test_IoMessageRestart },
     { "-IoAffinityPolicy",            Test_IoAffinityPolicy },
     { "-IoRemoveChildren",            Test_IoRemoveChildren },

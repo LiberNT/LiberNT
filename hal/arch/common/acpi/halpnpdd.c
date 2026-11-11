@@ -1200,6 +1200,7 @@ HaliInitPnpDriver(VOID)
     PAGED_CODE();
 
     /* Create the driver */
+    /* TODO: Windows 11 ARM64 reports this HAL as ROOT\ARM64_HAL\0000, so its driver is not ACPI_HAL there */
     RtlInitUnicodeString(&DriverString, L"\\Driver\\ACPI_HAL");
     Status = IoCreateDriver(&DriverString, HalpDriverEntry);
 

@@ -595,6 +595,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
+    ntos_io/IoDeviceTree_user.c
     ntos_io/IoMessageRestart_user.c
     ntos_io/IoRemoveChildren_user.c
     ntos_io/IoReadWrite_user.c

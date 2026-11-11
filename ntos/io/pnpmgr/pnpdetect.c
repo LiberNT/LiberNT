@@ -13,43 +13,128 @@
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+/* The names of the INTERFACE_TYPE values, in their order */
+static const PCWSTR IopInterfaceTypeNames[MaximumInterfaceType] =
+{
+    L"Internal", L"Isa", L"Eisa", L"MicroChannel", L"TurboChannel", L"PCIBus",
+    L"VMEBus", L"NuBus", L"PCMCIABus", L"CBus", L"MPIBus", L"MPSABus",
+    L"ProcessorInternal", L"InternalPowerBus", L"PNPISABus", L"PNPBus", L"Vmcs",
+    L"ACPIBus"
+};
+
+/* A driver without a service key, as IoCreateDriver makes them, goes by the last part of its object name */
+static
+BOOLEAN
+IopGetDetectedServiceName(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _Out_ PUNICODE_STRING ServiceName)
+{
+    PEXTENDED_DRIVER_EXTENSION Extension = IoGetDrvObjExtension(DriverObject);
+    USHORT Count;
+
+    *ServiceName = Extension->ServiceKeyName.Length != 0 ?
+                   Extension->ServiceKeyName : DriverObject->DriverName;
+
+    for (Count = ServiceName->Length / sizeof(WCHAR); Count > 0; Count--)
+    {
+        if (ServiceName->Buffer[Count - 1] == OBJ_NAME_PATH_SEPARATOR) break;
+    }
+
+    ServiceName->Buffer += Count;
+    ServiceName->Length -= Count * sizeof(WCHAR);
+    ServiceName->MaximumLength = ServiceName->Length;
+
+    return ServiceName->Length != 0;
+}
+
+/* DETECTED<interface of the first listed bus, Internal without one>\<service> and DETECTED\<service> */
+static
+NTSTATUS
+IopBuildDetectedIds(
+    _In_ PCUNICODE_STRING ServiceName,
+    _In_opt_ PCM_RESOURCE_LIST ResourceList,
+    _Out_ PWSTR *CompatibleIds,
+    _Out_ PULONG Size)
+{
+    INTERFACE_TYPE Interface = Internal;
+    PWSTR Buffer;
+    size_t Remaining;
+    PWSTR Second;
+    NTSTATUS Status;
+
+    *CompatibleIds = NULL;
+    *Size = 0;
+
+    if (ResourceList != NULL && ResourceList->Count != 0 &&
+        ResourceList->List[0].InterfaceType > InterfaceTypeUndefined &&
+        ResourceList->List[0].InterfaceType < MaximumInterfaceType)
+    {
+        Interface = ResourceList->List[0].InterfaceType;
+    }
+
+    Remaining = (2 * (sizeof(L"DETECTED\\") + ServiceName->Length) +
+                 wcslen(IopInterfaceTypeNames[Interface]) * sizeof(WCHAR) +
+                 sizeof(WCHAR));
+
+    Buffer = ExAllocatePoolZero(PagedPool, Remaining, TAG_IO);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlStringCbPrintfW(Buffer, Remaining, L"DETECTED%ws\\%wZ",
+                                IopInterfaceTypeNames[Interface], ServiceName);
+    if (NT_SUCCESS(Status))
+    {
+        Second = Buffer + wcslen(Buffer) + 1;
+        Status = RtlStringCbPrintfW(Second,
+                                    Remaining - (Second - Buffer) * sizeof(WCHAR),
+                                    L"DETECTED\\%wZ",
+                                    ServiceName);
+        *Size = (ULONG)((Second - Buffer) + wcslen(Second) + 2) * sizeof(WCHAR);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Buffer, TAG_IO);
+        *Size = 0;
+        return Status;
+    }
+
+    *CompatibleIds = Buffer;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 IopCreateDetectedDeviceNode(
     _In_ PDRIVER_OBJECT DriverObject,
+    _In_opt_ PCM_RESOURCE_LIST ResourceList,
     _Out_ PDEVICE_OBJECT *PhysicalDeviceObject,
     _Out_ PDEVICE_NODE *DeviceNode)
 {
-    PEXTENDED_DRIVER_EXTENSION Extension;
     UNICODE_STRING InstancePath;
     UNICODE_STRING ServiceName;
     PDEVICE_OBJECT Pdo = NULL;
+    PWSTR CompatibleIds;
     PDEVICE_NODE Node;
     NTSTATUS Status;
+    ULONG Size;
 
     PAGED_CODE();
 
     *PhysicalDeviceObject = NULL;
     *DeviceNode = NULL;
 
-    Extension = IoGetDrvObjExtension(DriverObject);
-
-    if (Extension->ServiceKeyName.Length != 0)
-    {
-        ServiceName = Extension->ServiceKeyName;
-    }
-    else if (DriverObject->DriverName.Length != 0)
-    {
-        ServiceName = DriverObject->DriverName;
-    }
-    else
+    if (!IopGetDetectedServiceName(DriverObject, &ServiceName))
     {
         return STATUS_INVALID_PARAMETER;
     }
 
+    Status = IopBuildDetectedIds(&ServiceName, ResourceList, &CompatibleIds, &Size);
+    if (!NT_SUCCESS(Status)) return Status;
+
     RtlInitEmptyUnicodeString(&InstancePath, NULL, 0);
 
-    Status = PnpRootCreateDevice(&ServiceName, &Pdo, &InstancePath);
+    Status = PnpRootCreateDevice(&ServiceName, CompatibleIds, Size, &Pdo, &InstancePath);
+    ExFreePoolWithTag(CompatibleIds, TAG_IO);
     if (!NT_SUCCESS(Status)) return Status;
 
     Node = PipAllocateDeviceNode(Pdo);
@@ -73,6 +158,26 @@ IopCreateDetectedDeviceNode(
     *DeviceNode = Node;
 
     return STATUS_SUCCESS;
+}
+
+/* A reported device's identifiers are not queried, so its instance key gets them here */
+static
+VOID
+IopSaveDetectedIds(
+    _In_ HANDLE InstanceKey,
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_opt_ PCM_RESOURCE_LIST ResourceList)
+{
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"CompatibleIDs");
+    UNICODE_STRING ServiceName;
+    PWSTR CompatibleIds;
+    ULONG Size;
+
+    if (!IopGetDetectedServiceName(DriverObject, &ServiceName)) return;
+    if (!NT_SUCCESS(IopBuildDetectedIds(&ServiceName, ResourceList, &CompatibleIds, &Size))) return;
+
+    ZwSetValueKey(InstanceKey, &ValueName, 0, REG_MULTI_SZ, CompatibleIds, Size);
+    ExFreePoolWithTag(CompatibleIds, TAG_IO);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -106,7 +211,7 @@ IoReportDetectedDevice(
     }
     else
     {
-        Status = IopCreateDetectedDeviceNode(DriverObject, &Pdo, &Node);
+        Status = IopCreateDetectedDeviceNode(DriverObject, ResourceList, &Pdo, &Node);
         if (!NT_SUCCESS(Status)) return Status;
 
         Created = TRUE;
@@ -218,6 +323,8 @@ IoReportDetectedDevice(
 
         IopSetDeviceInstanceData(InstanceKey, Node);
 
+        if (Created) IopSaveDetectedIds(InstanceKey, DriverObject, ResourceList);
+
         ZwClose(InstanceKey);
     }
 
@@ -245,7 +352,7 @@ IoReportRootDevice(
 
     PAGED_CODE();
 
-    Status = IopCreateDetectedDeviceNode(DriverObject, &Pdo, &Node);
+    Status = IopCreateDetectedDeviceNode(DriverObject, NULL, &Pdo, &Node);
     if (!NT_SUCCESS(Status)) return Status;
 
     PiSetDevNodeFlag(Node, DNF_NO_RESOURCE_REQUIRED | DNF_REENUMERATE);

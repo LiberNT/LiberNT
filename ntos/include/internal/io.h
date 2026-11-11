@@ -1417,10 +1417,11 @@ PnpRootCreateDeviceObject(
 
 NTSTATUS
 PnpRootCreateDevice(
-    IN PUNICODE_STRING ServiceName,
-    OUT PDEVICE_OBJECT *PhysicalDeviceObject,
-    OUT PUNICODE_STRING FullInstancePath
-);
+    _In_ PCUNICODE_STRING ServiceName,
+    _In_reads_bytes_opt_(CompatibleIdsSize) PCWSTR CompatibleIds,
+    _In_ ULONG CompatibleIdsSize,
+    _Out_ PDEVICE_OBJECT *PhysicalDeviceObject,
+    _Out_opt_ PUNICODE_STRING FullInstancePath);
 
 NTSTATUS
 PnpRootRegisterDevice(
