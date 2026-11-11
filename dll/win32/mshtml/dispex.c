@@ -947,9 +947,15 @@ static HRESULT format_func_disp_string(const WCHAR *name, IServiceProvider *call
     static const WCHAR func_suffixW[] =
         {'(',')',' ','{','\n',' ',' ',' ',' ','[','n','a','t','i','v','e',' ','c','o','d','e',']','\n','}','\n'};
 
-    /* FIXME: This probably should be more generic. Also we should try to get IID_IActiveScriptSite and SID_GetCaller. */
+    IDispatch *security_window;
+
+    /* FIXME: This probably should be more generic. */
     if(!caller)
         return E_ACCESSDENIED;
+
+    /* FIXME: the caller's security window is looked up as Windows does but not checked against this function */
+    if((security_window = get_caller_security_window(caller)))
+        IDispatch_Release(security_window);
 
     name_len = wcslen(name);
     ptr = str = SysAllocStringLen(NULL, name_len + ARRAY_SIZE(func_prefixW) + ARRAY_SIZE(func_suffixW));

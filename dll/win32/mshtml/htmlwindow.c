@@ -2171,16 +2171,12 @@ done:
     return hres;
 }
 
-static IHTMLWindow2 *get_source_window(IServiceProvider *caller, compat_mode_t compat_mode)
+IDispatch *get_caller_security_window(IServiceProvider *caller)
 {
     IOleCommandTarget *cmdtarget, *parent_cmdtarget;
     IServiceProvider *parent;
-    IHTMLWindow2 *source;
     HRESULT hres;
     VARIANT var;
-
-    if(!caller)
-        return NULL;
 
     hres = IServiceProvider_QueryService(caller, &IID_IActiveScriptSite, &IID_IOleCommandTarget, (void**)&cmdtarget);
     if(hres != S_OK)
@@ -2207,8 +2203,20 @@ static IHTMLWindow2 *get_source_window(IServiceProvider *caller, compat_mode_t c
         return NULL;
 
     /* Native assumes it's VT_DISPATCH and doesn't check it */
-    hres = IDispatch_QueryInterface(V_DISPATCH(&var), &IID_IHTMLWindow2, (void**)&source);
-    IDispatch_Release(V_DISPATCH(&var));
+    return V_DISPATCH(&var);
+}
+
+static IHTMLWindow2 *get_source_window(IServiceProvider *caller, compat_mode_t compat_mode)
+{
+    IHTMLWindow2 *source;
+    IDispatch *disp;
+    HRESULT hres;
+
+    if(!caller || !(disp = get_caller_security_window(caller)))
+        return NULL;
+
+    hres = IDispatch_QueryInterface(disp, &IID_IHTMLWindow2, (void**)&source);
+    IDispatch_Release(disp);
     if(hres != S_OK)
         return NULL;
 

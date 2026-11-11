@@ -750,6 +750,7 @@ void init_dispatch_with_owner(DispatchEx*,dispex_static_data_t*,DispatchEx*);
 HTMLInnerWindow *get_script_global(DispatchEx*);
 void dispex_props_unlink(DispatchEx*);
 HRESULT change_type(VARIANT*,VARIANT*,VARTYPE,IServiceProvider*);
+IDispatch *get_caller_security_window(IServiceProvider*);
 HRESULT dispex_get_dprop_ref(DispatchEx*,const WCHAR*,BOOL,VARIANT**);
 HRESULT get_dispids(tid_t,DWORD*,DISPID**);
 HRESULT remove_attribute(DispatchEx*,DISPID,VARIANT_BOOL*);
