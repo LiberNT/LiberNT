@@ -718,8 +718,19 @@ BOOLEAN
 NTAPI
 PopLockConsoleOnWake(VOID)
 {
-    /* TODO: nothing is locked when the machine comes back */
-    return FALSE;
+    PPOP_CACHED_SETTING Cached;
+    BOOLEAN Lock = TRUE;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopSettingLock);
+
+    Cached = PopFindCachedSetting(&GUID_LOCK_CONSOLE_ON_WAKE);
+    if (Cached != NULL && Cached->Length[PopPowerSource] == sizeof(ULONG))
+        Lock = (*(PULONG)Cached->Value[PopPowerSource] != 0);
+
+    KeReleaseGuardedMutex(&PopSettingLock);
+    return Lock;
 }
 
 VOID
@@ -728,6 +739,7 @@ PopInitializeEventSupport(VOID)
 {
     ULONG Preference = 50;
     ULONG Source = PoAc;
+    ULONG LockConsole = 1;
     ULONG Condition;
 
     PAGED_CODE();
@@ -746,6 +758,10 @@ PopInitializeEventSupport(VOID)
                              (SYSTEM_POWER_CONDITION)Condition,
                              &Source,
                              sizeof(Source));
+        PopStoreSettingValue(&GUID_LOCK_CONSOLE_ON_WAKE,
+                             (SYSTEM_POWER_CONDITION)Condition,
+                             &LockConsole,
+                             sizeof(LockConsole));
     }
 }
 

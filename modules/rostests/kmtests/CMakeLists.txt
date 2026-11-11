@@ -321,6 +321,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_po/PoPowerLimit.c
     ntos_po/PoPowerSettings.c
     ntos_po/PoKernelPowerRequest.c
+    ntos_po/PoLockConsoleOnWake.c
     ntos_ps/PsNotify.c
     ntos_ps/PsNotifyKM.c
     ntos_ps/PsEnergy.c
