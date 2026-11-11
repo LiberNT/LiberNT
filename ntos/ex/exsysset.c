@@ -21,6 +21,18 @@ PKEVENT ExpTimeSlipEvent = NULL;
 extern ULONG ExpRegistryQuotaAllowed;
 extern ULONG ExpRegistryQuotaUsed;
 
+extern EX_PUSH_LOCK ExpFileCacheLock;
+extern BOOLEAN ExpFileCacheLimitsSet;
+extern SIZE_T ExpFileCacheMinimum;
+extern SIZE_T ExpFileCacheMaximum;
+extern ULONG ExpFileCacheFlags;
+
+/* The SetSystemFileCacheSize flags of the Windows SDK memoryapi.h, which no kernel header declares */
+#define FILE_CACHE_MAX_HARD_ENABLE  0x00000001
+#define FILE_CACHE_MAX_HARD_DISABLE 0x00000002
+#define FILE_CACHE_MIN_HARD_ENABLE  0x00000004
+#define FILE_CACHE_MIN_HARD_DISABLE 0x00000008
+
 /*
  * How the kernel treats a graphics driver it is asked to load: it goes into the
  * part of the address space the window manager's own session owns, and it is
@@ -502,9 +514,25 @@ ExpSetFileCacheInformation(
     _In_ PSYSTEM_FILECACHE_INFORMATION Information,
     _In_ ULONG Length)
 {
+    SIZE_T Minimum;
+    SIZE_T Maximum;
+    ULONG Flags;
+
     if (Length < sizeof(SYSTEM_FILECACHE_INFORMATION))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    Minimum = Information->MinimumWorkingSet;
+    Maximum = Information->MaximumWorkingSet;
+    Flags = Information->Flags;
+
+    if ((Flags & ~(FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MAX_HARD_DISABLE |
+                   FILE_CACHE_MIN_HARD_ENABLE | FILE_CACHE_MIN_HARD_DISABLE)) ||
+        ((Flags & FILE_CACHE_MAX_HARD_ENABLE) && (Flags & FILE_CACHE_MAX_HARD_DISABLE)) ||
+        ((Flags & FILE_CACHE_MIN_HARD_ENABLE) && (Flags & FILE_CACHE_MIN_HARD_DISABLE)))
+    {
+        return STATUS_INVALID_PARAMETER;
     }
 
     if (!SeSinglePrivilegeCheck(SeIncreaseQuotaPrivilege, ExGetPreviousMode()))
@@ -512,11 +540,31 @@ ExpSetFileCacheInformation(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    if (Information->MaximumWorkingSet != 0)
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&ExpFileCacheLock);
+
+    /* Both sizes at (SIZE_T)-1 ask for the cache to be flushed, not for new limits */
+    if (Minimum != (SIZE_T)-1 || Maximum != (SIZE_T)-1)
     {
-        CcNtSetDirtyPageThreshold(
-            (ULONG)(Information->MaximumWorkingSet >> PAGE_SHIFT));
+        ExpFileCacheMinimum = Minimum;
+        ExpFileCacheMaximum = Maximum;
+        ExpFileCacheLimitsSet = TRUE;
     }
+
+    if (Flags & FILE_CACHE_MAX_HARD_ENABLE)
+        ExpFileCacheFlags |= FILE_CACHE_MAX_HARD_ENABLE;
+    if (Flags & FILE_CACHE_MAX_HARD_DISABLE)
+        ExpFileCacheFlags &= ~FILE_CACHE_MAX_HARD_ENABLE;
+    if (Flags & FILE_CACHE_MIN_HARD_ENABLE)
+        ExpFileCacheFlags |= FILE_CACHE_MIN_HARD_ENABLE;
+    if (Flags & FILE_CACHE_MIN_HARD_DISABLE)
+        ExpFileCacheFlags &= ~FILE_CACHE_MIN_HARD_ENABLE;
+
+    ExReleasePushLockExclusive(&ExpFileCacheLock);
+    KeLeaveCriticalRegion();
+
+    if (Minimum == (SIZE_T)-1 && Maximum == (SIZE_T)-1)
+        CcUnmapIdleViews((SIZE_T)-1);
 
     return STATUS_SUCCESS;
 }

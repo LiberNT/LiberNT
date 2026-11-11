@@ -19,6 +19,13 @@
 ULONG ExpRegistryQuotaAllowed = 0;
 ULONG ExpRegistryQuotaUsed = 0;
 
+/* TODO: the memory manager does not hold the system cache working set to these limits */
+EX_PUSH_LOCK ExpFileCacheLock;
+BOOLEAN ExpFileCacheLimitsSet = FALSE;
+SIZE_T ExpFileCacheMinimum = 0;
+SIZE_T ExpFileCacheMaximum = 0;
+ULONG ExpFileCacheFlags = 0;
+
 /* PRIVATE DATA ***************************************************************/
 
 #define EXP_SYSPERF_TAG 'freP'
@@ -478,17 +485,33 @@ ExpQueryFileCacheInformation(
 
     ULONG DirtyPages;
     ULONG Threshold;
+    SIZE_T Minimum = 0;
+    SIZE_T Maximum;
+    ULONG Flags;
+
+    CcNtQueryDirtyPages(&DirtyPages, &Threshold);
+    Maximum = (SIZE_T)Threshold << PAGE_SHIFT;
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockShared(&ExpFileCacheLock);
+    if (ExpFileCacheLimitsSet)
+    {
+        Minimum = ExpFileCacheMinimum;
+        Maximum = ExpFileCacheMaximum;
+    }
+    Flags = ExpFileCacheFlags;
+    ExReleasePushLockShared(&ExpFileCacheLock);
+    KeLeaveCriticalRegion();
 
     RtlZeroMemory(Info, sizeof(*Info));
 
-    CcNtQueryDirtyPages(&DirtyPages, &Threshold);
-
     Info->CurrentSize = (SIZE_T)DirtyPages << PAGE_SHIFT;
     Info->PeakSize = Info->CurrentSize;
-    Info->MinimumWorkingSet = 0;
-    Info->MaximumWorkingSet = (SIZE_T)Threshold << PAGE_SHIFT;
+    Info->MinimumWorkingSet = Minimum;
+    Info->MaximumWorkingSet = Maximum;
     Info->CurrentSizeIncludingTransitionInPages = Info->CurrentSize;
     Info->PeakSizeIncludingTransitionInPages = Info->CurrentSize;
+    Info->Flags = Flags;
 
     /* TODO: the cache manager does not keep a fault count of its own. */
 

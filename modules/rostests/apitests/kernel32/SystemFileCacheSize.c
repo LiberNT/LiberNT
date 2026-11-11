@@ -45,6 +45,29 @@ TestInvalidFlags(
     }
 }
 
+static
+VOID
+TestFlags(
+    _In_ SIZE_T Minimum,
+    _In_ SIZE_T Maximum,
+    _In_ DWORD Flags,
+    _In_ DWORD Expected)
+{
+    SIZE_T Minimum2;
+    SIZE_T Maximum2;
+    DWORD Flags2 = 0xdeadbeef;
+    BOOL Result;
+
+    SetLastError(0xdeadbeef);
+    Result = pSetSystemFileCacheSize(Minimum, Maximum, Flags);
+    ok(Result == TRUE, "Flags 0x%lx: returned %d, last error %lu\n", Flags, Result, GetLastError());
+
+    Result = pGetSystemFileCacheSize(&Minimum2, &Maximum2, &Flags2);
+    ok(Result == TRUE, "Flags 0x%lx: query returned %d\n", Flags, Result);
+    ok(Flags2 == Expected, "Flags 0x%lx: the limits in effect are 0x%lx, expected 0x%lx\n", Flags, Flags2, Expected);
+    ok(Minimum2 == Minimum && Maximum2 == Maximum, "Flags 0x%lx: the sizes changed\n", Flags);
+}
+
 START_TEST(SystemFileCacheSize)
 {
     SIZE_T Minimum = (SIZE_T)-2;
@@ -105,6 +128,31 @@ START_TEST(SystemFileCacheSize)
         ok_eq_size(Minimum2, Minimum);
         ok_eq_size(Maximum2, Maximum);
         ok_eq_ulong(Flags2, Flags);
+
+        TestFlags(Minimum, Maximum, FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MIN_HARD_ENABLE,
+                  FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MIN_HARD_ENABLE);
+        TestFlags(Minimum, Maximum, 0, FILE_CACHE_MAX_HARD_ENABLE | FILE_CACHE_MIN_HARD_ENABLE);
+        TestFlags(Minimum, Maximum, FILE_CACHE_MAX_HARD_DISABLE, FILE_CACHE_MIN_HARD_ENABLE);
+        TestFlags(Minimum, Maximum, FILE_CACHE_MIN_HARD_DISABLE, 0);
+
+        Result = pSetSystemFileCacheSize(Minimum + 0x100000, Maximum + 0x100000, 0);
+        ok_eq_bool(Result, TRUE);
+        Result = pGetSystemFileCacheSize(&Minimum2, &Maximum2, &Flags2);
+        ok_eq_bool(Result, TRUE);
+        ok_eq_size(Minimum2, Minimum + 0x100000);
+        ok_eq_size(Maximum2, Maximum + 0x100000);
+
+        Result = pSetSystemFileCacheSize((SIZE_T)-1, (SIZE_T)-1, 0);
+        ok_eq_bool(Result, TRUE);
+        Result = pGetSystemFileCacheSize(&Minimum2, &Maximum2, &Flags2);
+        ok_eq_bool(Result, TRUE);
+        ok_eq_size(Minimum2, Minimum + 0x100000);
+        ok_eq_size(Maximum2, Maximum + 0x100000);
+
+        Result = pSetSystemFileCacheSize(Minimum, Maximum,
+                                         ((Flags & FILE_CACHE_MAX_HARD_ENABLE) ? FILE_CACHE_MAX_HARD_ENABLE : FILE_CACHE_MAX_HARD_DISABLE) |
+                                         ((Flags & FILE_CACHE_MIN_HARD_ENABLE) ? FILE_CACHE_MIN_HARD_ENABLE : FILE_CACHE_MIN_HARD_DISABLE));
+        ok_eq_bool(Result, TRUE);
     }
 
     RtlAdjustPrivilege(SE_INCREASE_QUOTA_PRIVILEGE, WasEnabled, FALSE, &Dummy);
