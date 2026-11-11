@@ -174,6 +174,10 @@ DbgkpPostFakeThreadMessages(
 
     while ((Thread = PsGetNextProcessThread(Process, Thread)) != NULL)
     {
+        /* A thread that has already ended is not announced */
+        if (!ExAcquireRundownProtection(&Thread->RundownProtect)) continue;
+        ExReleaseRundownProtection(&Thread->RundownProtect);
+
         if (Last != NULL) ObDereferenceObject(Last);
 
         Last = Thread;

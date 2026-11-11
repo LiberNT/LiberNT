@@ -250,16 +250,11 @@ PsGetNextProcessThread(
                                                ETHREAD,
                                                ThreadListEntry);
 
-        if (ExAcquireRundownProtection(&Candidate->RundownProtect))
+        /* A thread that has ended is still handed out while something holds it */
+        if (ObReferenceObjectSafe(Candidate))
         {
-            BOOLEAN Referenced = ObReferenceObjectSafe(Candidate);
-
-            ExReleaseRundownProtection(&Candidate->RundownProtect);
-            if (Referenced)
-            {
-                Found = Candidate;
-                break;
-            }
+            Found = Candidate;
+            break;
         }
 
         Entry = Entry->Flink;
