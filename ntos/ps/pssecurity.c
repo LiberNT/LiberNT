@@ -203,21 +203,6 @@ PspSetPrimaryToken(
 
     if (NewToken == NULL) return STATUS_INVALID_PARAMETER;
 
-    if (Duplicate)
-    {
-        PACCESS_TOKEN Copy;
-
-        Status = SeCopyClientToken(NewToken,
-                                   SecurityImpersonation,
-                                   KernelMode,
-                                   &Copy);
-        if (Referenced) ObDereferenceObject(NewToken);
-        if (!NT_SUCCESS(Status)) return Status;
-
-        NewToken = Copy;
-        Referenced = TRUE;
-    }
-
     /*
      * A token may be given to a process only when it stands for the same
      * logon the process already belongs to, which is what being a child or a
@@ -233,6 +218,20 @@ PspSetPrimaryToken(
                                     PreviousMode))
         {
             Status = STATUS_PRIVILEGE_NOT_HELD;
+        }
+    }
+
+    /* A new process runs with a copy of the token it was given, secured by that copy's own default DACL */
+    if (NT_SUCCESS(Status) && Duplicate)
+    {
+        PACCESS_TOKEN Copy = NULL;
+
+        Status = SepCopyPrimaryToken(NewToken, &Copy);
+        if (NT_SUCCESS(Status))
+        {
+            if (Referenced) ObDereferenceObject(NewToken);
+            NewToken = Copy;
+            Referenced = TRUE;
         }
     }
 

@@ -423,6 +423,12 @@ SepCopyImpersonationToken(
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PACCESS_TOKEN* NewToken);
 
+NTSTATUS
+NTAPI
+SepCopyPrimaryToken(
+    _In_ PACCESS_TOKEN Token,
+    _Out_ PACCESS_TOKEN* NewToken);
+
 BOOLEAN
 NTAPI
 SeTokenIsInert(

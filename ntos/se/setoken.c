@@ -1212,6 +1212,119 @@ SepCopyImpersonationToken(
                          (PTOKEN *)NewToken);
 }
 
+/* A token a process runs with is secured by what it says itself: its default owner, its primary group, its default DACL and its own integrity level */
+static
+NTSTATUS
+SepSecureTokenWithItself(
+    _In_ PTOKEN Token)
+{
+    SECURITY_DESCRIPTOR Absolute;
+    PSECURITY_DESCRIPTOR Relative;
+    PSID LabelSid = SeMediumMandatorySid;
+    ULONG SaclLength;
+    ULONG Length = 0;
+    NTSTATUS Status;
+    PACL Sacl;
+
+    if (Token->IntegrityLevelIndex != 0 &&
+        Token->IntegrityLevelIndex < Token->UserAndGroupCount)
+    {
+        LabelSid = Token->UserAndGroups[Token->IntegrityLevelIndex].Sid;
+    }
+
+    SaclLength = sizeof(ACL) +
+                 FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) +
+                 RtlLengthSid(LabelSid);
+    Sacl = ExAllocatePoolWithTag(PagedPool, SaclLength, TAG_ACL);
+    if (Sacl == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlCreateAcl(Sacl, SaclLength, ACL_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAddMandatoryAce(Sacl,
+                                    ACL_REVISION,
+                                    0,
+                                    SYSTEM_MANDATORY_LABEL_NO_WRITE_UP,
+                                    SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+                                    LabelSid);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        RtlCreateSecurityDescriptor(&Absolute, SECURITY_DESCRIPTOR_REVISION);
+        RtlSetOwnerSecurityDescriptor(&Absolute,
+                                      Token->UserAndGroups[Token->DefaultOwnerIndex].Sid,
+                                      FALSE);
+        RtlSetGroupSecurityDescriptor(&Absolute, Token->PrimaryGroup, FALSE);
+        if (Token->DefaultDacl != NULL)
+            RtlSetDaclSecurityDescriptor(&Absolute, TRUE, Token->DefaultDacl, FALSE);
+        RtlSetSaclSecurityDescriptor(&Absolute, TRUE, Sacl, FALSE);
+
+        Status = RtlAbsoluteToSelfRelativeSD(&Absolute, NULL, &Length);
+        if (Status == STATUS_BUFFER_TOO_SMALL) Status = STATUS_SUCCESS;
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Sacl, TAG_ACL);
+        return Status;
+    }
+
+    Relative = ExAllocatePoolWithTag(PagedPool, Length, TAG_SD);
+    if (Relative == NULL)
+    {
+        ExFreePoolWithTag(Sacl, TAG_ACL);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = RtlAbsoluteToSelfRelativeSD(&Absolute, Relative, &Length);
+    ExFreePoolWithTag(Sacl, TAG_ACL);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Relative, TAG_SD);
+        return Status;
+    }
+
+    Status = ObAssignObjectSecurityDescriptor(Token, Relative, PagedPool);
+    if (!NT_SUCCESS(Status)) ExFreePoolWithTag(Relative, TAG_SD);
+
+    return Status;
+}
+
+/* The copy of a token a new process is started with when it is given one */
+NTSTATUS
+NTAPI
+SepCopyPrimaryToken(
+    _In_ PACCESS_TOKEN Token,
+    _Out_ PACCESS_TOKEN *NewToken)
+{
+    PTOKEN New = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *NewToken = NULL;
+
+    Status = SepCloneToken(Token,
+                           FALSE,
+                           TokenPrimary,
+                           SecurityAnonymous,
+                           NULL,
+                           KernelMode,
+                           &New);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = SepSecureTokenWithItself(New);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(New);
+        return Status;
+    }
+
+    *NewToken = New;
+    return STATUS_SUCCESS;
+}
+
 /* The token a process started by another one runs with */
 NTSTATUS
 NTAPI
@@ -1253,6 +1366,13 @@ SeSubProcessToken(
 
     New->SessionId = SessionId;
     New->TokenInUse = InUse;
+
+    Status = SepSecureTokenWithItself(New);
+    if (!NT_SUCCESS(Status))
+    {
+        ObDereferenceObject(New);
+        return Status;
+    }
 
     *Token = New;
     return STATUS_SUCCESS;

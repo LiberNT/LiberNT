@@ -1358,7 +1358,7 @@ NtCreateUserProcess(
             Status = PspSetPrimaryToken(Process,
                                         Attributes.Token,
                                         NULL,
-                                        FALSE);
+                                        TRUE);
         }
 
         if (NT_SUCCESS(Status) && Attributes.PriorityClass != 0)
