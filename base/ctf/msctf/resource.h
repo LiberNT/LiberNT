@@ -7,4 +7,7 @@
 
 #pragma once
 
-#define IDS_LANGBAR_HELP    100
+#define IDS_LANGBAR_HELP        100
+#define IDS_LANGBAR_LANGUAGE    101
+#define IDS_LANGBAR_CORRECTION  102
+#define IDS_LANGBAR_KEYBOARD    103
