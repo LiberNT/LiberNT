@@ -11,6 +11,32 @@
 #define CPU_SET_ID(Index) (0x100 + (Index))
 #define SAMPLES 20
 
+typedef struct _WAKER
+{
+    HANDLE Ask;
+    HANDLE Wake;
+} WAKER, *PWAKER;
+
+static
+DWORD
+WINAPI
+WakerThread(
+    _In_ LPVOID Parameter)
+{
+    PWAKER Waker = Parameter;
+    ULONG Round;
+
+    for (Round = 0; Round < SAMPLES; Round++)
+    {
+        if (WaitForSingleObject(Waker->Ask, 1000) != WAIT_OBJECT_0)
+            break;
+
+        SetEvent(Waker->Wake);
+    }
+
+    return 0;
+}
+
 static
 VOID
 CheckSelection(
@@ -39,6 +65,9 @@ START_TEST(PsThreadCpuSets)
     ULONG Last;
     ULONG Elsewhere = 0;
     ULONG Round;
+    WAKER Waker;
+    HANDLE Thread;
+    DWORD Wait;
     NTSTATUS Status;
 
     GetSystemInfo(&Info);
@@ -54,13 +83,28 @@ START_TEST(PsThreadCpuSets)
 
     if (NT_SUCCESS(Status))
     {
-        for (Round = 0; Round < SAMPLES; Round++)
+        Waker.Ask = CreateEventW(NULL, FALSE, FALSE, NULL);
+        Waker.Wake = CreateEventW(NULL, FALSE, FALSE, NULL);
+        Thread = CreateThread(NULL, 0, WakerThread, &Waker, 0, NULL);
+        ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+
+        for (Round = 0; (Thread != NULL) && (Round < SAMPLES); Round++)
         {
-            Sleep(1);
+            Wait = SignalObjectAndWait(Waker.Ask, Waker.Wake, 1000, FALSE);
+            ok_eq_ulong(Wait, WAIT_OBJECT_0);
             if (GetCurrentProcessorNumber() != Last) Elsewhere++;
         }
 
         ok(Elsewhere == 0, "ran %lu of %u times off processor %lu\n", Elsewhere, SAMPLES, Last);
+
+        if (Thread != NULL)
+        {
+            Wait = WaitForSingleObject(Thread, 1000);
+            ok_eq_ulong(Wait, WAIT_OBJECT_0);
+            CloseHandle(Thread);
+        }
+        CloseHandle(Waker.Wake);
+        CloseHandle(Waker.Ask);
     }
 
     Pair[0] = CPU_SET_ID(0);

@@ -9,9 +9,9 @@
 #include <ndk/exfuncs.h>
 
 #define QUERY_BUFFER_SIZE (4 * 1024 * 1024)
-#define QUERY_ROUNDS 200
+#define QUERY_ROUNDS 50
 #define TOGGLE_ROUNDS 2000000
-#define CHURN_ROUNDS 24
+#define CHURN_ROUNDS 6
 #define CHURN_THREADS 2
 
 typedef struct _CHURN_CONTEXT

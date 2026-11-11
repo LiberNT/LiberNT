@@ -130,40 +130,47 @@ JoinSystemThread(
     ZwClose(Handle);
 }
 
-static
-VOID
-TestBoost(
-    _In_ PCSTR Name,
-    _In_ OWNER_KIND Kind,
-    _In_ ULONG OwnerCount,
-    _In_ BOOLEAN DisableBoost,
-    _In_ KPRIORITY Expected)
+typedef struct _BOOST_CASE
 {
+    PCSTR Name;
+    OWNER_KIND Kind;
+    ULONG OwnerCount;
+    BOOLEAN DisableBoost;
+    KPRIORITY Expected;
+    PERESOURCE Resource;
     BOOST_OWNER Owners[MAX_OWNERS];
     BOOST_WAITER Waiter;
+    KPRIORITY Seen[MAX_OWNERS];
+    ULONG Started;
+    BOOLEAN WaiterStarted;
+} BOOST_CASE, *PBOOST_CASE;
+
+static
+VOID
+StartCase(
+    _Inout_ PBOOST_CASE Case)
+{
     LARGE_INTEGER Interval;
     LARGE_INTEGER Timeout;
-    KPRIORITY Seen[MAX_OWNERS];
-    PERESOURCE Resource;
     NTSTATUS Status;
-    ULONG Started = 0;
     ULONG Index;
+    ULONG Spins;
 
-    Resource = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Resource), 'tsoB');
-    if (skip(Resource != NULL, "%s: no pool\n", Name))
+    Case->Resource = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Case->Resource), 'tsoB');
+    if (skip(Case->Resource != NULL, "%s: no pool\n", Case->Name))
         return;
 
-    ExInitializeResourceLite(Resource);
-    if (DisableBoost)
-        ExDisableResourceBoostLite(Resource);
+    ExInitializeResourceLite(Case->Resource);
+    if (Case->DisableBoost)
+        ExDisableResourceBoostLite(Case->Resource);
 
-    for (Index = 0; Index < OwnerCount; Index++)
+    for (Index = 0; Index < Case->OwnerCount; Index++)
     {
-        PBOOST_OWNER Owner = &Owners[Index];
+        PBOOST_OWNER Owner = &Case->Owners[Index];
 
         RtlZeroMemory(Owner, sizeof(*Owner));
-        Owner->Resource = Resource;
-        Owner->Kind = Kind;
+        Owner->Resource = Case->Resource;
+        Owner->Kind = Case->Kind;
         Owner->Priority = OWNER_PRIORITY + (KPRIORITY)Index;
         KeInitializeEvent(&Owner->Acquired, NotificationEvent, FALSE);
         KeInitializeEvent(&Owner->Release, NotificationEvent, FALSE);
@@ -180,53 +187,130 @@ TestBoost(
         Status = KeWaitForSingleObject(&Owner->Acquired, Executive, KernelMode, FALSE, &Timeout);
         ok_eq_hex(Status, STATUS_SUCCESS);
 
-        Started++;
+        Case->Started++;
     }
 
-    RtlZeroMemory(&Waiter, sizeof(Waiter));
-    Waiter.Resource = Resource;
-    Status = StartSystemThread(WaiterThread, &Waiter, &Waiter.Handle);
+    RtlZeroMemory(&Case->Waiter, sizeof(Case->Waiter));
+    Case->Waiter.Resource = Case->Resource;
+    Status = StartSystemThread(WaiterThread, &Case->Waiter, &Case->Waiter.Handle);
     ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
 
-    Interval.QuadPart = -10 * 1000 * 1500;
-    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    Case->WaiterStarted = TRUE;
 
-    for (Index = 0; Index < Started; Index++)
-        Seen[Index] = (Owners[Index].Thread != NULL) ? KeQueryPriorityThread(Owners[Index].Thread) : -1;
+    Interval.QuadPart = -10 * 1000;
+    for (Spins = 0; (Spins < 1000) && (ExGetExclusiveWaiterCount(Case->Resource) == 0); Spins++)
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    ok_eq_ulong(ExGetExclusiveWaiterCount(Case->Resource), 1UL);
+}
 
-    for (Index = 0; Index < Started; Index++)
-        KeSetEvent(&Owners[Index].Release, IO_NO_INCREMENT, FALSE);
+static
+BOOLEAN
+CaseBoosted(
+    _In_ PBOOST_CASE Case)
+{
+    ULONG Index;
 
-    for (Index = 0; Index < Started; Index++)
+    if (Case->Expected < 0)
+        return TRUE;
+
+    for (Index = 0; Index < Case->Started; Index++)
     {
-        JoinSystemThread(Owners[Index].Handle);
-        if (Owners[Index].Thread != NULL)
-            ObDereferenceObject(Owners[Index].Thread);
+        if ((Case->Owners[Index].Thread == NULL) || (KeQueryPriorityThread(Case->Owners[Index].Thread) != Case->Expected))
+            return FALSE;
     }
 
-    if (NT_SUCCESS(Status))
-        JoinSystemThread(Waiter.Handle);
+    return TRUE;
+}
 
-    for (Index = 0; Index < Started; Index++)
+static
+VOID
+FinishCase(
+    _Inout_ PBOOST_CASE Case)
+{
+    ULONG Index;
+
+    if (Case->Resource == NULL)
+        return;
+
+    for (Index = 0; Index < Case->Started; Index++)
+        Case->Seen[Index] = (Case->Owners[Index].Thread != NULL) ? KeQueryPriorityThread(Case->Owners[Index].Thread) : -1;
+
+    for (Index = 0; Index < Case->Started; Index++)
+        KeSetEvent(&Case->Owners[Index].Release, IO_NO_INCREMENT, FALSE);
+
+    for (Index = 0; Index < Case->Started; Index++)
     {
-        ok(Seen[Index] == ((Expected < 0) ? Owners[Index].Priority : Expected),
-           "%s: owner %lu at priority %ld, expected %ld\n", Name, Index, Seen[Index],
-           (Expected < 0) ? Owners[Index].Priority : Expected);
+        JoinSystemThread(Case->Owners[Index].Handle);
+        if (Case->Owners[Index].Thread != NULL)
+            ObDereferenceObject(Case->Owners[Index].Thread);
     }
 
-    ExDeleteResourceLite(Resource);
-    ExFreePoolWithTag(Resource, 'tsoB');
+    if (Case->WaiterStarted)
+        JoinSystemThread(Case->Waiter.Handle);
+
+    for (Index = 0; Index < Case->Started; Index++)
+    {
+        ok(Case->Seen[Index] == ((Case->Expected < 0) ? Case->Owners[Index].Priority : Case->Expected),
+           "%s: owner %lu at priority %ld, expected %ld\n", Case->Name, Index, Case->Seen[Index],
+           (Case->Expected < 0) ? Case->Owners[Index].Priority : Case->Expected);
+    }
+
+    ExDeleteResourceLite(Case->Resource);
+    ExFreePoolWithTag(Case->Resource, 'tsoB');
+}
+
+/* The last case boosts: once it has, every earlier waiter has also ended its first 500 ms pass */
+static
+VOID
+RunCases(
+    _Inout_updates_(Count) PBOOST_CASE Cases,
+    _In_ ULONG Count)
+{
+    LARGE_INTEGER Interval;
+    ULONGLONG Deadline;
+    BOOLEAN Boosted;
+    ULONG Index;
+
+    ASSERT(Cases[Count - 1].Expected >= 0);
+
+    for (Index = 0; Index < Count; Index++)
+        StartCase(&Cases[Index]);
+
+    Interval.QuadPart = -10 * 1000;
+    Deadline = KeQueryInterruptTime() + 2ULL * 10 * 1000 * 1000;
+    do
+    {
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+        Boosted = TRUE;
+        for (Index = 0; Index < Count; Index++)
+            Boosted = Boosted && CaseBoosted(&Cases[Index]);
+    } while (!Boosted && (KeQueryInterruptTime() < Deadline));
+
+    for (Index = 0; Index < Count; Index++)
+        FinishCase(&Cases[Index]);
 }
 
 START_TEST(ExResourceBoost)
 {
-    TestBoost("exclusive owner", OwnerExclusive, 1, FALSE, BOOSTED_PRIORITY);
-    TestBoost("boost disabled", OwnerExclusive, 1, TRUE, -1);
-    TestBoost("shared owners", OwnerShared, 2, FALSE, BOOSTED_PRIORITY);
+    BOOST_CASE Cases[] =
+    {
+        { "boost disabled", OwnerExclusive, 1, TRUE, -1 },
+        { "shared owners", OwnerShared, 2, FALSE, BOOSTED_PRIORITY },
+        { "exclusive owner", OwnerExclusive, 1, FALSE, BOOSTED_PRIORITY },
+    };
+
+    RunCases(Cases, RTL_NUMBER_OF(Cases));
 }
 
 START_TEST(ExResourceBoostOwnerPointer)
 {
-    TestBoost("owner pointer naming a thread", OwnerPointerThread, 1, FALSE, BOOSTED_PRIORITY);
-    TestBoost("owner pointer naming storage", OwnerPointerStorage, 1, FALSE, -1);
+    BOOST_CASE Cases[] =
+    {
+        { "owner pointer naming storage", OwnerPointerStorage, 1, FALSE, -1 },
+        { "owner pointer naming a thread", OwnerPointerThread, 1, FALSE, BOOSTED_PRIORITY },
+    };
+
+    RunCases(Cases, RTL_NUMBER_OF(Cases));
 }
