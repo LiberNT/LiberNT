@@ -242,7 +242,9 @@ TestPicoThreadStart(
     {
         Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
         KeSetEvent(&WaiterStarted, IO_NO_INCREMENT, FALSE);
-        KeWaitForSingleObject(&WaiterRelease, Executive, KernelMode, FALSE, &Timeout);
+        /* A thread ends on its way back to user mode, so only an alertable user wait is cut short */
+        if (KeWaitForSingleObject(&WaiterRelease, Executive, UserMode, TRUE, &Timeout) == STATUS_USER_APC)
+            return;
         PsPicoTerminateCurrentThread(STATUS_TIMEOUT);
     }
 

@@ -82,7 +82,7 @@ WaitReasonThreadRoutine(
     UNREFERENCED_PARAMETER(Context);
 
     Timeout.QuadPart = -10LL * 1000 * 1000 * 10;
-    KeSetEvent(&WaitReasonReady, IO_NO_INCREMENT, FALSE);
+    KeSetEvent(&WaitReasonReady, IO_NO_INCREMENT, TRUE);
     KeWaitForSingleObject(&WaitReasonRelease, UserRequest, KernelMode, FALSE, &Timeout);
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
@@ -120,7 +120,8 @@ TestWaitReason(VOID)
     Status = KeWaitForSingleObject(&WaitReasonReady, Executive, KernelMode, FALSE, &Timeout);
     ok_eq_hex(Status, STATUS_SUCCESS);
 
-    Timeout.QuadPart = -50LL * 1000 * 10;
+    /* The thread holds the dispatcher lock from KeSetEvent(Wait = TRUE) into its wait, so a zero wait comes after it */
+    Timeout.QuadPart = 0;
     Status = KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, &Timeout);
     ok_eq_hex(Status, STATUS_TIMEOUT);
 
