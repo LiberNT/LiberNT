@@ -562,6 +562,7 @@ typedef struct _TDR_CONFIG
 
 extern TDR_CONFIG g_TdrConfig;
 BOOLEAN DxgkpBootLogHoldsDisplay(VOID);
+BOOLEAN DxgkpScreenLogRequested(VOID);
 
 /* Direct counters include every committed tracked submission.  The public
  * virtgpu escape path also precharges queued PREPARED work against these

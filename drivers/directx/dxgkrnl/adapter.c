@@ -14169,7 +14169,7 @@ DxgkAdapterStart(
         }
     }
 
-    if (!Adapter->IsBasicDisplayFallback && DxgkpIsPostDisplayDevice(Adapter))
+    if (!Adapter->IsBasicDisplayFallback && DxgkpIsPostDisplayDevice(Adapter) && !DxgkpScreenLogRequested())
     {
         /* TODO: keep boot output in a virtual frame buffer for the boot image relay instead of dropping it */
         DXGKRNL_TRACE("DxgkAdapterStart: POST display adapter %p takes the display from the boot screen\n", Adapter);

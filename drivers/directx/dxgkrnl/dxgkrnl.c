@@ -492,6 +492,46 @@ DxgkpBootLogHoldsDisplay(VOID)
     return InbvCheckDisplayOwnership();
 }
 
+BOOLEAN
+DxgkpScreenLogRequested(VOID)
+{
+    static LONG Requested = -1;
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
+    struct
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Header;
+        WCHAR Text[1024];
+    } Value;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG Length;
+    LONG Result = 0;
+
+    PAGED_CODE();
+
+    if (ReadAcquire(&Requested) >= 0)
+        return ReadAcquire(&Requested) != 0;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (KD_DEBUGGER_ENABLED && NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+    {
+        RtlZeroMemory(&Value, sizeof(Value));
+        if (NT_SUCCESS(ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, &Value,
+                                       sizeof(Value) - sizeof(WCHAR), &Length)) &&
+            Value.Header.Type == REG_SZ &&
+            wcsstr(_wcsupr((PWSTR)Value.Header.Data), L"DEBUGPORT=SCREEN") != NULL)
+        {
+            Result = 1;
+        }
+
+        ZwClose(KeyHandle);
+    }
+
+    InterlockedExchange(&Requested, Result);
+    return Result != 0;
+}
+
 /*
  * Exported build and bugcheck state consumed as data by dxgmms2. The Windows
  * 11 public symbols and consumer accesses define the widths; retail ReactOS
