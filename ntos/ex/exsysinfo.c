@@ -208,13 +208,13 @@ NTSTATUS
 ExpQueryProcessorInformation(
     _Out_ PSYSTEM_PROCESSOR_INFORMATION Processor)
 {
-    RtlZeroMemory(Processor, sizeof(*Processor));
+    ULONG FeatureBits = (ULONG)KeFeatureBits;
 
-    Processor->MaximumProcessors = 0;
     Processor->ProcessorArchitecture = (USHORT)KeProcessorArchitecture;
     Processor->ProcessorLevel = (USHORT)KeProcessorLevel;
     Processor->ProcessorRevision = (USHORT)KeProcessorRevision;
-    Processor->ProcessorFeatureBits = KeFeatureBits;
+    Processor->MaximumProcessors = (USHORT)KeNumberProcessors;
+    RtlCopyMemory(&Processor->ProcessorFeatureBits, &FeatureBits, sizeof(FeatureBits));
 
     return STATUS_SUCCESS;
 }
@@ -963,8 +963,8 @@ NtQuerySystemInformation(
             case SystemProcessorInformation:
             case SystemEmulationProcessorInformation:
             {
-                ResultLength = sizeof(SYSTEM_PROCESSOR_INFORMATION);
-                if (Length != ResultLength)
+                ResultLength = FIELD_OFFSET(SYSTEM_PROCESSOR_INFORMATION, ProcessorFeatureBits) + sizeof(ULONG);
+                if (Length < ResultLength)
                 {
                     Status = STATUS_INFO_LENGTH_MISMATCH;
                     break;
