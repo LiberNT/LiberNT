@@ -202,6 +202,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoWmiAcpi.c
     ntos_kd/KdBootLog.c
     ntos_kd/KdChangeOption.c
+    ntos_kd/KdDebuggerPresent.c
     ntos_kd/KdPrintComponent.c
     ntos_kd/KdSystemDebugControl.c
     ntos_kd/KdUsbNetRules.c
