@@ -57,6 +57,18 @@ KdbpCmdAnalyze(
     ULONG Argc,
     PCHAR Argv[]);
 
+/* kdbmem.c */
+
+BOOLEAN KdbpCmdNearestSymbol(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDumpUnicode(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDumpDwordSymbols(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDumpQwordSymbols(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdDumpPointerSymbols(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdSearchMemory(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdCompareMemory(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdFillMemory(ULONG Argc, PCHAR Argv[]);
+BOOLEAN KdbpCmdMoveMemory(ULONG Argc, PCHAR Argv[]);
+
 /* kdbpci.c */
 
 BOOLEAN
