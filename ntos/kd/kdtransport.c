@@ -25,13 +25,28 @@
 /* PRIVATE DATA ***************************************************************/
 
 #define KDP_FILE_IO_POLL_US         10
-#define KDP_FILE_IO_SERIAL_POLLS    100000
-#define KDP_FILE_IO_NET_POLLS       400000
+#define KDP_FILE_IO_SERIAL_SECONDS  1
+#define KDP_FILE_IO_NET_SECONDS     4
 #define KDP_FILE_IO_MAXIMUM_SKIPPED (4 * PACKET_MAX_SIZE)
 
 static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
+static ULONG KdpFileIoApiNumber;
+static BOOLEAN KdpFileIoHostAbsent;
 
 /* PRIVATE FUNCTIONS **********************************************************/
+
+static
+BOOLEAN
+KdpFileIoTransportReady(VOID)
+{
+    if (KdpFileIoHostAbsent)
+        return FALSE;
+
+    if (KdpDebugMode.Serial)
+        return TRUE;
+
+    return KdpDebugMode.Net && KdpNetQueryAttached(NULL, NULL);
+}
 
 static
 VOID
@@ -51,16 +66,22 @@ BOOLEAN
 KdpFileIoGetByte(
     _Out_ PUCHAR Byte)
 {
-    ULONG Polls = KdpDebugMode.Net ? KDP_FILE_IO_NET_POLLS : KDP_FILE_IO_SERIAL_POLLS;
-    ULONG Poll;
+    LARGE_INTEGER Frequency;
+    LONGLONG Deadline;
 
-    for (Poll = 0; Poll < Polls; Poll++)
+    Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
+    Deadline += Frequency.QuadPart * (KdpDebugMode.Net ? KDP_FILE_IO_NET_SECONDS : KDP_FILE_IO_SERIAL_SECONDS);
+
+    for (;;)
     {
         if (KdpDebugMode.Serial && KdPortGetByteEx(&SerialPortInfo, Byte))
             return TRUE;
 
         if (KdpDebugMode.Net && KdpNetGetByte(Byte))
             return TRUE;
+
+        if (KeQueryPerformanceCounter(NULL).QuadPart >= Deadline)
+            break;
 
         KeStallExecutionProcessor(KDP_FILE_IO_POLL_US);
     }
@@ -96,7 +117,7 @@ KdpSendFileIoPacket(
     if ((MessageHeader == NULL) ||
         (MessageHeader->Buffer == NULL) ||
         (MessageHeader->Length != sizeof(DBGKD_FILE_IO)) ||
-        (!KdpDebugMode.Serial && !KdpDebugMode.Net))
+        !KdpFileIoTransportReady())
     {
         return;
     }
@@ -107,6 +128,7 @@ KdpSendFileIoPacket(
     if (MessageHeader->Length + DataLength > PACKET_MAX_SIZE)
         return;
 
+    KdpFileIoApiNumber = ((PDBGKD_FILE_IO)MessageHeader->Buffer)->ApiNumber;
     KdpFileIoPacketId++;
 
     Packet.PacketLeader = PACKET_LEADER;
@@ -178,7 +200,7 @@ KdpReceiveFileIoPacket(
         (MessageHeader->MaximumLength < sizeof(DBGKD_FILE_IO)) ||
         (MessageData == NULL) ||
         (MessageData->Buffer == NULL) ||
-        (!KdpDebugMode.Serial && !KdpDebugMode.Net))
+        !KdpFileIoTransportReady())
     {
         return KdPacketTimedOut;
     }
@@ -234,7 +256,17 @@ KdpReceiveFileIoPacket(
         return KdPacketReceived;
     }
 
+    if (KdpFileIoApiNumber == DbgKdCreateFileApi)
+        KdpFileIoHostAbsent = TRUE;
+
     return KdPacketTimedOut;
+}
+
+VOID
+KdpResetFileIoHost(VOID)
+{
+    KdpFileIoHostAbsent = FALSE;
+    KdpContext.KdpControlCPending = FALSE;
 }
 
 /*

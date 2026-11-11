@@ -588,6 +588,7 @@ list(APPEND KMTEST_SOURCE
     ntos_ex/ExHandleInformation_user.c
     ntos_kd/KdDebugService_user.c
     ntos_kd/KdLiveDump_user.c
+    ntos_kd/KdPullRemoteFile_user.c
     ntos_kd/NtSystemDebugControl.c
     ntos_mm/MmMapLockedPagesSpecifyCache_user.c
     ntos_mm/NtCreateSection_user.c

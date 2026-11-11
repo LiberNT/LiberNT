@@ -41,6 +41,7 @@ KMT_TESTFUNC Test_ExHandleListChurn;
 KMT_TESTFUNC Test_PsThreadCpuSets;
 KMT_TESTFUNC Test_KdDebugService;
 KMT_TESTFUNC Test_KdLiveDump;
+KMT_TESTFUNC Test_KdPullRemoteFile;
 KMT_TESTFUNC Test_KeContextSegments;
 KMT_TESTFUNC Test_KeNonCanonicalReturn;
 KMT_TESTFUNC Test_KeSystemCallInt2E;
@@ -120,6 +121,7 @@ const KMT_TEST TestList[] =
     { "PsThreadCpuSets",              Test_PsThreadCpuSets },
     { "KdDebugService",               Test_KdDebugService },
     { "KdLiveDump",                   Test_KdLiveDump },
+    { "KdPullRemoteFile",             Test_KdPullRemoteFile },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
     { "NdisSgDma",                    Test_NdisSgDma },

@@ -398,14 +398,4 @@ KdShowShutdownLog(VOID)
     return (KdpDebugMode.Screen && KdDebuggerEnabled);
 }
 
-/*
- * The host that was serving files has gone. Called by the file service when
- * it has to start over.
- */
-VOID
-KdpResetFileIoHost(VOID)
-{
-    KdpContext.KdpControlCPending = FALSE;
-}
-
 /* EOF */
