@@ -363,17 +363,22 @@ ExpDestroyAtomTable(
  */
 PVOID
 NTAPI
-ExpGetGlobalAtomTable(VOID)
+ExpGetGlobalAtomTable(
+    _Out_ PBOOLEAN WindowManagerTable)
 {
     PVOID Table;
 
     PAGED_CODE();
+
+    *WindowManagerTable = FALSE;
 
     if (ExpGlobalAtomTableCallout != NULL)
     {
         Table = ExpGlobalAtomTableCallout();
         if (Table != NULL)
         {
+            /* The window manager makes its tables with RtlCreateAtomTable */
+            *WindowManagerTable = TRUE;
             return Table;
         }
     }
@@ -609,11 +614,12 @@ NtAddAtom(
     PVOID Table;
     RTL_ATOM Result = 0;
     USHORT Length;
+    BOOLEAN WindowManagerTable;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    Table = ExpGetGlobalAtomTable();
+    Table = ExpGetGlobalAtomTable(&WindowManagerTable);
     if (Table == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -638,7 +644,10 @@ NtAddAtom(
         return Status;
     }
 
-    Status = ExpAddAtom(Table, Name, Length, &Result);
+    if (WindowManagerTable)
+        Status = RtlAddAtomToAtomTable(Table, Name, &Result);
+    else
+        Status = ExpAddAtom(Table, Name, Length, &Result);
     if (!NT_SUCCESS(Status) || (Atom == NULL))
     {
         return Status;
@@ -668,11 +677,12 @@ NtFindAtom(
     PVOID Table;
     RTL_ATOM Result = 0;
     USHORT Length;
+    BOOLEAN WindowManagerTable;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    Table = ExpGetGlobalAtomTable();
+    Table = ExpGetGlobalAtomTable(&WindowManagerTable);
     if (Table == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -697,7 +707,10 @@ NtFindAtom(
         return Status;
     }
 
-    Status = ExpLookupAtom(Table, Name, Length, &Result);
+    if (WindowManagerTable)
+        Status = RtlLookupAtomInAtomTable(Table, Name, &Result);
+    else
+        Status = ExpLookupAtom(Table, Name, Length, &Result);
     if (!NT_SUCCESS(Status) || (Atom == NULL))
     {
         return Status;
@@ -722,14 +735,17 @@ NtDeleteAtom(
     _In_ RTL_ATOM Atom)
 {
     PVOID Table;
+    BOOLEAN WindowManagerTable;
 
     PAGED_CODE();
 
-    Table = ExpGetGlobalAtomTable();
+    Table = ExpGetGlobalAtomTable(&WindowManagerTable);
     if (Table == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
     }
+
+    if (WindowManagerTable) return RtlDeleteAtomFromAtomTable(Table, Atom);
 
     return ExpDeleteAtom(Table, Atom);
 }
@@ -783,6 +799,105 @@ ExpCopyAtomBasicInformation(
     return Status;
 }
 
+static
+NTSTATUS
+ExpWriteAtomReturnLength(
+    _Out_opt_ PULONG ReturnLength,
+    _In_ ULONG Required,
+    _In_ NTSTATUS Status)
+{
+    if (ReturnLength == NULL) return Status;
+
+    _SEH2_TRY
+    {
+        *ReturnLength = Required;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+static
+NTSTATUS
+ExpListRtlAtoms(
+    _In_ PRTL_ATOM_TABLE Table,
+    _Out_ PATOM_TABLE_INFORMATION Info,
+    _In_ ULONG Capacity,
+    _Out_opt_ PULONG ReturnLength)
+{
+    PRTL_ATOM Atoms;
+    ULONG Room = min(Capacity, (ULONG)(EXP_ATOM_LAST - EXP_ATOM_FIRST + 1));
+    ULONG Count = 0;
+    NTSTATUS Status;
+
+    /* The table is read under its lock, so into the kernel's memory, and copied out after */
+    Atoms = ExAllocatePoolWithTag(PagedPool, (Room + 1) * sizeof(RTL_ATOM), EXP_ATOM_TAG);
+    if (Atoms == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlQueryAtomListInAtomTable(Table, Room, &Count, Atoms);
+    if (NT_SUCCESS(Status) || Status == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        Status = STATUS_SUCCESS;
+
+        _SEH2_TRY
+        {
+            RtlCopyMemory(Info->Atoms, Atoms, min(Count, Room) * sizeof(RTL_ATOM));
+            Info->NumberOfAtoms = Count;
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    ExFreePoolWithTag(Atoms, EXP_ATOM_TAG);
+
+    Status = ExpWriteAtomReturnLength(ReturnLength,
+                                      (ULONG)FIELD_OFFSET(ATOM_TABLE_INFORMATION, Atoms) +
+                                          Count * (ULONG)sizeof(RTL_ATOM),
+                                      Status);
+
+    if (NT_SUCCESS(Status) && (Count > Capacity)) return STATUS_INFO_LENGTH_MISMATCH;
+
+    return Status;
+}
+
+static
+NTSTATUS
+ExpQueryRtlAtom(
+    _In_ PRTL_ATOM_TABLE Table,
+    _In_ RTL_ATOM Atom,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ReturnLength)
+{
+    WCHAR Name[EXP_ATOM_MAXIMUM_NAME + 1];
+    ULONG NameLength = sizeof(Name);
+    ULONG References = 0;
+    ULONG Pins = 0;
+    NTSTATUS Status;
+
+    Status = RtlQueryAtomInAtomTable(Table, Atom, &References, &Pins, Name, &NameLength);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ExpCopyAtomBasicInformation(Buffer,
+                                         Length,
+                                         Name,
+                                         NameLength / sizeof(WCHAR),
+                                         (USHORT)References,
+                                         (BOOLEAN)(Pins != 0));
+
+    return ExpWriteAtomReturnLength(ReturnLength,
+                                    (ULONG)FIELD_OFFSET(ATOM_BASIC_INFORMATION, Name) +
+                                        NameLength + (ULONG)sizeof(WCHAR),
+                                    Status);
+}
+
 NTSTATUS
 NTAPI
 NtQueryInformationAtom(
@@ -796,11 +911,12 @@ NtQueryInformationAtom(
     PEXP_ATOM_TABLE Table;
     PEXP_ATOM_ENTRY Entry;
     ULONG Required;
+    BOOLEAN WindowManagerTable;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    Table = ExpGetGlobalAtomTable();
+    Table = ExpGetGlobalAtomTable(&WindowManagerTable);
     if (Table == NULL)
     {
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -844,6 +960,9 @@ NtQueryInformationAtom(
         Capacity = (AtomInformationLength -
                     (ULONG)FIELD_OFFSET(ATOM_TABLE_INFORMATION, Atoms)) /
                    (ULONG)sizeof(RTL_ATOM);
+
+        if (WindowManagerTable)
+            return ExpListRtlAtoms((PRTL_ATOM_TABLE)Table, Info, Capacity, ReturnLength);
 
         ExpLockAtomTable(Table, FALSE);
 
@@ -929,6 +1048,14 @@ NtQueryInformationAtom(
                                              Number.Length / sizeof(WCHAR) + 1,
                                              1,
                                              TRUE);
+    }
+    else if (WindowManagerTable)
+    {
+        return ExpQueryRtlAtom((PRTL_ATOM_TABLE)Table,
+                               Atom,
+                               AtomInformation,
+                               AtomInformationLength,
+                               ReturnLength);
     }
     else
     {
