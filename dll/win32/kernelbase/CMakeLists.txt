@@ -15,6 +15,7 @@ spec2def(kernelbase.dll kernelbase.spec ADD_IMPORTLIB)
 add_library(kernelbase MODULE
     ApiSetQuery.c
     AppContainer.c
+    AppInitDlls.c
     CancelSynchronousIo.c
     ConsoleLegacy.c
     CpuSets.c

@@ -5,6 +5,7 @@
 extern void func_ActCtxWithXmlNamespaces(void);
 extern void func_ActCtxDependencyVersions(void);
 extern void func_AlternateComputerNames(void);
+extern void func_LoadAppInitDlls(void);
 extern void func_ComPlusPackageInstallStatus(void);
 extern void func_IntegratedDisplaySize(void);
 extern void func_MessageWaitingIndicator(void);
@@ -172,6 +173,7 @@ const struct test winetest_testlist[] =
     { "ActCtxWithXmlNamespaces",     func_ActCtxWithXmlNamespaces },
     { "ActCtxDependencyVersions",    func_ActCtxDependencyVersions },
     { "AlternateComputerNames",      func_AlternateComputerNames },
+    { "LoadAppInitDlls",              func_LoadAppInitDlls },
     { "ComPlusPackageInstallStatus",  func_ComPlusPackageInstallStatus },
     { "IntegratedDisplaySize",        func_IntegratedDisplaySize },
     { "MessageWaitingIndicator",      func_MessageWaitingIndicator },

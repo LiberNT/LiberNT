@@ -7,6 +7,7 @@ add_message_headers(ANSI FormatMessage.mc)
 list(APPEND SOURCE
     ActCtxDependencyVersions.c
     AlternateComputerNames.c
+    LoadAppInitDlls.c
     ComPlusPackageInstallStatus.c
     IntegratedDisplaySize.c
     MessageWaitingIndicator.c

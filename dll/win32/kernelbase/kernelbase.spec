@@ -776,7 +776,7 @@
 @ stdcall LCMapStringW(long long wstr long ptr long)
 @ stdcall LeaveCriticalSection(ptr) ntdll.RtlLeaveCriticalSection
 @ stdcall -version=0x600+ LeaveCriticalSectionWhenCallbackReturns(ptr ptr) ntdll.TpCallbackLeaveCriticalSectionOnCompletion
-@ stub LoadAppInitDlls
+@ stdcall LoadAppInitDlls()
 @ stdcall LoadLibraryA(str) kernel32.LoadLibraryA
 @ stdcall LoadLibraryExA(str long long) kernel32.LoadLibraryExA
 @ stdcall LoadLibraryExW(wstr long long) kernel32.LoadLibraryExW
