@@ -769,6 +769,10 @@ KiClearDpcThreadState(
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimit)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriod)
+#define KiPrcbContext(Prcb) ((Prcb)->Context)
+#define KI_PRCB_CPU_TYPE_OFFSET FIELD_OFFSET(KPRCB, CpuType)
+#define KI_PRCB_VENDOR_STRING_OFFSET FIELD_OFFSET(KPRCB, VendorString)
+#define KI_PRCB_CONTEXT_OFFSET FIELD_OFFSET(KPRCB, Context)
 #define KiClockTickSuspended(Prcb) FALSE
 
 #define _KeIsExecutingDpc() ((BOOLEAN)__readgsbyte(FIELD_OFFSET(KIPCR, Prcb.DpcRoutineActive)))

@@ -34,6 +34,7 @@ KSERVICE_TABLE_DESCRIPTOR KeServiceDescriptorTableShadow[SSDT_MAX_ENTRIES];
 PVOID KeUserApcDispatcher;
 PVOID KeUserCallbackDispatcher;
 PVOID KeUserExceptionDispatcher;
+PVOID KeUserExceptionDispatcherWorker;
 PVOID KeRaiseUserExceptionDispatcher;
 PVOID KeUserEmulationDispatcher;
 

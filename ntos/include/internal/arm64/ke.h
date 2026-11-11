@@ -1143,6 +1143,11 @@ KiClearDpcThreadState(
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+#define KiPrcbContext(Prcb) ((Prcb)->Context)
+/* TODO: the debugger data offsets of the processor type and vendor string on ARM64 are not known */
+#define KI_PRCB_CPU_TYPE_OFFSET 0
+#define KI_PRCB_VENDOR_STRING_OFFSET 0
+#define KI_PRCB_CONTEXT_OFFSET FIELD_OFFSET(KPRCB, Context)
 #define KiClockTickSuspended(Prcb) FALSE
 
 #define KiIsUserModeTrap(TrapFrame) ((TrapFrame)->PreviousMode == UserMode)

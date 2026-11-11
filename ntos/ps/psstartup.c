@@ -573,6 +573,12 @@ PspInitializeSystemDll(VOID)
     KeRaiseUserExceptionDispatcher =
         RtlFindExportedRoutineByName(PspSystemDllBase,
                                      "KiRaiseUserExceptionDispatcher");
+    KeUserExceptionDispatcherWorker =
+        RtlFindExportedRoutineByName(PspSystemDllBase,
+                                     "KiUserExceptionDispatcherWorker");
+    KeUserEmulationDispatcher =
+        RtlFindExportedRoutineByName(PspSystemDllBase,
+                                     "KiUserEmulationDispatcher");
     PspRtlUserThreadStart =
         RtlFindExportedRoutineByName(PspSystemDllBase, "RtlUserThreadStart");
     PspSystemDllInitBlock =

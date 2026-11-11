@@ -337,6 +337,7 @@ KiArm64PrepareBootPcr(_Inout_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     KeArm64CurrentPcr = Pcr;
     Pcr->Self = (struct _KPCR *)Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
+    Pcr->Prcb.Context = &Pcr->Prcb.ProcessorState.ContextFrame;
     Pcr->LockArray = Pcr->Prcb.LockQueue;
     Pcr->CurrentIrql = PASSIVE_LEVEL;
 
@@ -915,6 +916,7 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
 
     Pcr->Self = (struct _KPCR *)Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
+    Pcr->Prcb.Context = &Pcr->Prcb.ProcessorState.ContextFrame;
     Pcr->LockArray = Pcr->Prcb.LockQueue;
     Pcr->CurrentIrql = PASSIVE_LEVEL;
     Pcr->Prcb.CurrentThread = IdleThread;
@@ -974,6 +976,7 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
 
     Pcr->Self = (struct _KPCR *)Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
+    Pcr->Prcb.Context = &Pcr->Prcb.ProcessorState.ContextFrame;
     Pcr->LockArray = Pcr->Prcb.LockQueue;
     Pcr->CurrentIrql = PASSIVE_LEVEL;
 

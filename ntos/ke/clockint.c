@@ -11,6 +11,8 @@
 #include <debug.h>
 
 #undef KeQueryTickCount
+#undef KeQueryInterruptTime
+#undef KeQuerySystemTime
 
 /* GLOBALS ********************************************************************/
 
@@ -221,29 +223,29 @@ KiChargeDpcWatchdog(
     _Inout_ PKPRCB Prcb,
     _In_ ULONG Ticks)
 {
-    Prcb->DpcTimeCount += Ticks;
-    Prcb->DpcWatchdogCount += (LONG)Ticks;
+    KiPrcbDpcTimeCount(Prcb) += Ticks;
+    KiPrcbDpcWatchdogCount(Prcb) += (LONG)Ticks;
 
     if (KdDebuggerEnabled && !KdDebuggerNotPresent)
         return;
 
-    if ((Prcb->DpcTimeLimit != 0) &&
-        (Prcb->DpcTimeCount > Prcb->DpcTimeLimit))
+    if ((KiPrcbDpcTimeLimit(Prcb) != 0) &&
+        (KiPrcbDpcTimeCount(Prcb) > KiPrcbDpcTimeLimit(Prcb)))
     {
         KeBugCheckEx(DPC_WATCHDOG_VIOLATION,
                      0,
-                     Prcb->DpcTimeCount,
-                     Prcb->DpcTimeLimit,
+                     KiPrcbDpcTimeCount(Prcb),
+                     KiPrcbDpcTimeLimit(Prcb),
                      (ULONG_PTR)Prcb->DpcData[DPC_NORMAL].ActiveDpc);
     }
 
-    if ((Prcb->DpcWatchdogPeriod != 0) &&
-        (Prcb->DpcWatchdogCount > Prcb->DpcWatchdogPeriod))
+    if ((KiPrcbDpcWatchdogPeriod(Prcb) != 0) &&
+        (KiPrcbDpcWatchdogCount(Prcb) > KiPrcbDpcWatchdogPeriod(Prcb)))
     {
         KeBugCheckEx(DPC_WATCHDOG_VIOLATION,
                      1,
-                     (ULONG_PTR)Prcb->DpcWatchdogCount,
-                     (ULONG_PTR)Prcb->DpcWatchdogPeriod,
+                     (ULONG_PTR)KiPrcbDpcWatchdogCount(Prcb),
+                     (ULONG_PTR)KiPrcbDpcWatchdogPeriod(Prcb),
                      (ULONG_PTR)Prcb->DpcData[DPC_NORMAL].ActiveDpc);
     }
 }
@@ -295,6 +297,21 @@ KeQueryTickCount(
     _Out_ PLARGE_INTEGER CurrentCount)
 {
     *CurrentCount = KiReadSystemTime(&KeTickCount);
+}
+
+ULONGLONG
+NTAPI
+KeQueryInterruptTime(VOID)
+{
+    return KiGetInterruptTime();
+}
+
+VOID
+NTAPI
+KeQuerySystemTime(
+    _Out_ PLARGE_INTEGER CurrentTime)
+{
+    CurrentTime->QuadPart = (LONGLONG)KiGetSystemTime();
 }
 
 /*
@@ -679,10 +696,10 @@ KiUpdateRunTime(
     /* DPCs queued here without an interrupt of their own are drained on the tick */
     if ((Prcb->DpcData[DPC_NORMAL].DpcQueueDepth != 0) &&
         !Prcb->DpcRoutineActive &&
-        !Prcb->DpcInterruptRequested)
+        !KiIsDpcInterruptRequested(Prcb))
     {
         /* TODO: adapt MaximumDpcQueueDepth to IdealDpcRate and AdjustDpcThreshold */
-        Prcb->DpcInterruptRequested = TRUE;
+        KiSetDpcInterruptRequested(Prcb);
         HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
     }
 

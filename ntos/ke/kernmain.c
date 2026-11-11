@@ -314,10 +314,10 @@ KiInitSpinLocks(
      * Which lock covers which buckets is decided by the table index, in
      * KiAcquireTimerLock.
      */
-    Prcb->LockQueue[LockQueueTimerTableLock].Lock = &KiTimerTableLock;
+    KiPrcbTimerTableLockQueue(Prcb, 0)->Lock = &KiTimerTableLock;
     for (Index = 1; Index < LOCK_QUEUE_TIMER_TABLE_LOCKS; Index++)
     {
-        Prcb->LockQueue[LockQueueTimerTableLock + Index].Lock =
+        KiPrcbTimerTableLockQueue(Prcb, Index)->Lock =
             &KiTimerTableLocks[Index - 1];
     }
 
@@ -358,16 +358,15 @@ KiInitSpinLocks(
      * whole pass the longer one: a pass made of many short routines is not
      * stuck, but one that never ends is.
      */
-    Prcb->DpcTimeLimit = KiWatchdogTicks(KiDPCTimeoutSeconds);
-    Prcb->DpcWatchdogPeriod = (LONG)KiWatchdogTicks(KiDPCWatchdogSeconds);
-    Prcb->DpcTimeCount = 0;
-    Prcb->DpcWatchdogCount = 0;
+    KiPrcbDpcTimeLimit(Prcb) = KiWatchdogTicks(KiDPCTimeoutSeconds);
+    KiPrcbDpcWatchdogPeriod(Prcb) = (LONG)KiWatchdogTicks(KiDPCWatchdogSeconds);
+    KiPrcbDpcTimeCount(Prcb) = 0;
+    KiPrcbDpcWatchdogCount(Prcb) = 0;
     Prcb->DpcRequestRate = 0;
     Prcb->DpcLastCount = 0;
-    Prcb->DpcInterruptRequested = FALSE;
-    Prcb->DpcThreadRequested = FALSE;
+    KiClearDpcInterruptRequested(Prcb);
+    KiClearDpcThreadState(Prcb);
     Prcb->DpcRoutineActive = FALSE;
-    Prcb->DpcThreadActive = FALSE;
     Prcb->ThreadDpcEnable = FALSE;
     Prcb->DpcSetEventRequest = 0;
 

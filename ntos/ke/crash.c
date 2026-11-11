@@ -777,7 +777,7 @@ KeBugCheckWithTf(
 
     /* A dump writer finds the state through the processor block */
     Prcb = KeGetCurrentPrcb();
-    Prcb->CrashDumpContext = ContextPointer;
+    KiPrcbContext(Prcb) = ContextPointer;
 
     KiDoBugCheckCallbacks();
     KiDoBugCheckReasonCallbacks(KbCallbackDumpIo);
@@ -1312,7 +1312,7 @@ KeInitializeCrashDumpHeader(
      * writer to copy, and inventing one would describe memory wrongly.
      */
 
-    Context = KeGetCurrentPrcb()->CrashDumpContext;
+    Context = KiPrcbContext(KeGetCurrentPrcb());
     if (Context != NULL)
     {
         RtlCopyMemory(Header->ContextRecord,

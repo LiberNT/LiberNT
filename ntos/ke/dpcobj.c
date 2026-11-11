@@ -217,7 +217,7 @@ KiDpcThreadRoutine(
 
         do
         {
-            Prcb->DpcThreadActive = TRUE;
+            KiSetDpcThreadActive(Prcb);
 
             for (;;)
             {
@@ -244,8 +244,7 @@ KiDpcThreadRoutine(
              */
             OldIrql = KfRaiseIrql(HIGH_LEVEL);
             KeAcquireSpinLockAtDpcLevel(KiDpcQueueLock(DpcData));
-            Prcb->DpcThreadActive = FALSE;
-            Prcb->DpcThreadRequested = FALSE;
+            KiClearDpcThreadState(Prcb);
             Empty = (BOOLEAN)(DpcData->DpcQueueDepth == 0);
             KeReleaseSpinLockFromDpcLevel(KiDpcQueueLock(DpcData));
             KeLowerIrql(OldIrql);
@@ -278,7 +277,7 @@ KiIsDpcThreadBusy(
     _In_ PKPRCB Prcb,
     _In_ PKTHREAD Thread)
 {
-    return (BOOLEAN)(Prcb->DpcThreadActive &&
+    return (BOOLEAN)(KiIsDpcThreadActive(Prcb) &&
                      (KiDpcThread[Prcb->Number] == Thread));
 }
 
@@ -455,16 +454,16 @@ KeInsertQueueDpc(
 
         if (DpcData == &Prcb->DpcData[DPC_THREADED])
         {
-            if (!Prcb->DpcThreadActive && !Prcb->DpcThreadRequested)
+            if (!KiIsDpcThreadActive(Prcb) && !KiIsDpcThreadRequested(Prcb))
             {
-                Prcb->DpcThreadRequested = TRUE;
+                KiSetDpcThreadRequested(Prcb);
                 NeedThread = TRUE;
             }
         }
-        else if (!Prcb->DpcInterruptRequested &&
+        else if (!KiIsDpcInterruptRequested(Prcb) &&
                  KiDpcNeedsInterrupt(Prcb, DpcData, Dpc, (BOOLEAN)(Prcb == CurrentPrcb)))
         {
-            Prcb->DpcInterruptRequested = TRUE;
+            KiSetDpcInterruptRequested(Prcb);
             NeedInterrupt = TRUE;
         }
 
@@ -673,10 +672,10 @@ KeQueryDpcWatchdogInformation(
 
     Prcb = KeGetCurrentPrcb();
 
-    WatchdogInformation->DpcTimeLimit = Prcb->DpcTimeLimit;
-    WatchdogInformation->DpcTimeCount = Prcb->DpcTimeCount;
-    WatchdogInformation->DpcWatchdogLimit = Prcb->DpcWatchdogPeriod;
-    WatchdogInformation->DpcWatchdogCount = Prcb->DpcWatchdogCount;
+    WatchdogInformation->DpcTimeLimit = KiPrcbDpcTimeLimit(Prcb);
+    WatchdogInformation->DpcTimeCount = KiPrcbDpcTimeCount(Prcb);
+    WatchdogInformation->DpcWatchdogLimit = KiPrcbDpcWatchdogPeriod(Prcb);
+    WatchdogInformation->DpcWatchdogCount = KiPrcbDpcWatchdogCount(Prcb);
     WatchdogInformation->Reserved = 0;
 
     return STATUS_SUCCESS;
@@ -703,7 +702,7 @@ KiRetireDpcList(
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     Prcb->DpcRoutineActive = TRUE;
-    Prcb->DpcWatchdogCount = 0;
+    KiPrcbDpcWatchdogCount(Prcb) = 0;
 
     /*
      * The caller arrives from a trap gate, which left interrupts off, and
@@ -731,7 +730,7 @@ KiRetireDpcList(
          * a whole, so the per-routine count starts again here while the
          * pass count carries on.
          */
-        Prcb->DpcTimeCount = 0;
+        KiPrcbDpcTimeCount(Prcb) = 0;
 
         Routine(Dpc, Context, SystemArgument1, SystemArgument2);
 
@@ -749,9 +748,9 @@ KiRetireDpcList(
 
     DpcData->ActiveDpc = NULL;
     Prcb->DpcRoutineActive = FALSE;
-    Prcb->DpcInterruptRequested = FALSE;
-    Prcb->DpcTimeCount = 0;
-    Prcb->DpcWatchdogCount = 0;
+    KiClearDpcInterruptRequested(Prcb);
+    KiPrcbDpcTimeCount(Prcb) = 0;
+    KiPrcbDpcWatchdogCount(Prcb) = 0;
 
     /* The rate is what the next queue decides its urgency against */
     Prcb->DpcRequestRate = ((DpcData->DpcCount - Prcb->DpcLastCount) +

@@ -95,10 +95,8 @@ extern KSPIN_LOCK KiNmiCallbackListLock;
 extern PVOID KeUserApcDispatcher;
 extern PVOID KeUserCallbackDispatcher;
 extern PVOID KeUserExceptionDispatcher;
-#if defined(_M_ARM64)
 extern PVOID KeUserExceptionDispatcherWorker;
 extern PVOID KeUserEmulationDispatcher;
-#endif
 extern PVOID KeRaiseUserExceptionDispatcher;
 #if (NTDDI_VERSION < NTDDI_WIN8)
 VOID
@@ -243,10 +241,6 @@ extern KAFFINITY KiIdleSummary;
 extern PVOID KeUserApcDispatcher;
 extern PVOID KeUserCallbackDispatcher;
 extern PVOID KeUserExceptionDispatcher;
-#if defined(_M_ARM64)
-extern PVOID KeUserExceptionDispatcherWorker;
-extern PVOID KeUserEmulationDispatcher;
-#endif
 extern PVOID KeRaiseUserExceptionDispatcher;
 extern ULONG KeTimeIncrement;
 extern ULONG KeTimeAdjustment;

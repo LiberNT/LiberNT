@@ -975,7 +975,7 @@ typedef struct _KPRCB
      * Windows dump readers obtain the saved processor context through
      * the OffsetPrcbContext member of KDDEBUGGER_DATA64.
      */
-    PCONTEXT CrashDumpContext;
+    PCONTEXT Context;
 #endif
 } KPRCB, *PKPRCB;
 
