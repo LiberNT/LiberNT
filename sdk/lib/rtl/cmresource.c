@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
  */
 
-#include <ntoskrnl.h>
+#include <rtl.h>
 
 ULONGLONG
 NTAPI

@@ -48,6 +48,7 @@ list(APPEND SOURCE
     avltable.c
     bitmap.c
     bootdata.c
+    cmresource.c
     compress.c
     crc32.c
     critical.c

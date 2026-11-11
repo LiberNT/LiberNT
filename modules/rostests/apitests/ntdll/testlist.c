@@ -173,6 +173,7 @@ extern void func_RtlMemoryStream(void);
 extern void func_PfxPrefixTable(void);
 extern void func_RtlCompareAltitudes(void);
 extern void func_RtlEnumerateGenericTableLikeADirectory(void);
+extern void func_RtlMemIoResource(void);
 extern void func_RtlMultipleAllocateHeap(void);
 extern void func_RtlNtPathNameToDosPathName(void);
 extern void func_RtlPortableOperatingSystem(void);
@@ -392,6 +393,7 @@ const struct test winetest_testlist[] =
     { "PfxPrefixTable", func_PfxPrefixTable },
     { "RtlCompareAltitudes", func_RtlCompareAltitudes },
     { "RtlEnumerateGenericTableLikeADirectory", func_RtlEnumerateGenericTableLikeADirectory },
+    { "RtlMemIoResource", func_RtlMemIoResource },
     { "RtlMultipleAllocateHeap",        func_RtlMultipleAllocateHeap },
     { "RtlNtPathNameToDosPathName",     func_RtlNtPathNameToDosPathName },
     { "RtlPortableOperatingSystem",     func_RtlPortableOperatingSystem },

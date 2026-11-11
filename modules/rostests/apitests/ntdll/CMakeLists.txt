@@ -193,6 +193,7 @@ list(APPEND SOURCE
     PfxPrefixTable.c
     RtlCompareAltitudes.c
     RtlEnumerateGenericTableLikeADirectory.c
+    RtlMemIoResource.c
     RtlMultipleAllocateHeap.c
     RtlNtPathNameToDosPathName.c
     RtlPortableOperatingSystem.c
