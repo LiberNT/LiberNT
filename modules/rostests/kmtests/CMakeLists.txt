@@ -303,6 +303,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_se/SeSddl.c
     ntos_se/SeQueryInfoToken.c
     ntos_se/SeTokenFiltering.c
+    ntos_se/SeAccessState.c
     ntos_tm/TmTransactions.c
     rtl/RtlBitmapKM.c
     rtl/RtlBitmapEx.c

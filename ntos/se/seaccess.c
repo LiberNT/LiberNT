@@ -62,11 +62,11 @@ SeCreateAccessStateEx(
      * A token allowed to traverse any directory says so once here, so every
      * check made with this state can skip asking again.
      */
-    /* TODO: TOKEN_IS_RESTRICTED is read back from these flags but nothing
-     * seeds it, so a restricted token is checked as an unrestricted one */
     Token = (PTOKEN)SeQuerySubjectContextToken(&AccessState->SubjectSecurityContext);
     if (Token != NULL && (Token->TokenFlags & TOKEN_HAS_TRAVERSE_PRIVILEGE))
         AccessState->Flags |= TOKEN_HAS_TRAVERSE_PRIVILEGE;
+    if (Token != NULL && (Token->TokenFlags & TOKEN_IS_RESTRICTED))
+        AccessState->Flags |= TOKEN_IS_RESTRICTED;
 
     return STATUS_SUCCESS;
 }
