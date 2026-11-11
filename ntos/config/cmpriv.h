@@ -139,6 +139,7 @@ NTSTATUS NTAPI CmpAddUnloadEvent(_Inout_ PCMHIVE Hive, _In_ PKEVENT Event);
 VOID NTAPI CmpSignalUnloadEvents(_Inout_ PCMHIVE Hive);
 VOID NTAPI CmpDiscardUnloadEvents(_Inout_ PCMHIVE Hive);
 PCMHIVE NTAPI CmpFindLoadedHive(_In_ PHHIVE Hive);
+VOID NTAPI CmpQueueAppHiveClose(_In_ PCMHIVE Hive);
 
 /* cmcompact.c */
 NTSTATUS NTAPI CmpCompactHive(_In_ PCMHIVE Hive);

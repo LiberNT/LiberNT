@@ -3713,16 +3713,26 @@ LSTATUS WINAPI RegLoadAppKeyW(const WCHAR *file, HKEY *result, REGSAM sam, DWORD
     OBJECT_ATTRIBUTES key_attr, file_attr;
     UNICODE_STRING keyW, fileW;
     ULARGE_INTEGER time;
+    LARGE_INTEGER delay;
     ULONG range, sequence;
     UCHAR seed[6];
     WCHAR name[64];
     HANDLE key = NULL;
     NTSTATUS status;
+    ULONG attempt;
 
     if (!file || !result || reserved)
         return ERROR_INVALID_PARAMETER;
 
-    if ((status = NtAllocateUuids( &time, &range, &sequence, seed )))
+    /* The UUID allocator asks for a retry until the clock has moved past its last range */
+    delay.QuadPart = -10000;
+    for (attempt = 0; attempt < 100; attempt++)
+    {
+        status = NtAllocateUuids( &time, &range, &sequence, seed );
+        if (status != STATUS_RETRY) break;
+        NtDelayExecution( FALSE, &delay );
+    }
+    if (status)
         return RtlNtStatusToDosError( status );
 
     swprintf( name, ARRAY_SIZE(name),

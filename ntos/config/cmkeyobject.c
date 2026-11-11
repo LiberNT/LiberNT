@@ -133,6 +133,7 @@ CmpDeleteKeyObject(
 
     DelistKeyBodyFromKCB(KeyBody, FALSE);
     KeyBody->KeyControlBlock = NULL;
+    CmpQueueAppHiveClose(CONTAINING_RECORD(Kcb->KeyHive, CMHIVE, Hive));
     CmpDereferenceKeyControlBlock(Kcb);
 
     CmpUnlockRegistry();

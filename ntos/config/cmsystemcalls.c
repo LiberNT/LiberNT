@@ -1957,6 +1957,7 @@ NtLoadKeyEx(
 
     PAGED_CODE();
 
+    /* FIXME: an application hive's root handle is opened for KEY_ALL_ACCESS instead of DesiredAccess */
     UNREFERENCED_PARAMETER(DesiredAccess);
 
     if (RootHandle != NULL && (Flags & REG_APP_HIVE) == 0) return STATUS_INVALID_PARAMETER_7;

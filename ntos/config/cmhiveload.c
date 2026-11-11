@@ -565,6 +565,110 @@ CmpDeepCopyKey(
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+CmpUnlinkAndReleaseHive(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ PCMHIVE CmHive);
+
+static
+NTSTATUS
+CmpOpenHiveRootByName(
+    _In_ PUNICODE_STRING Name,
+    _In_opt_ HANDLE RootDirectory,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_opt_ PHANDLE RootHandle,
+    _Out_opt_ PCM_KEY_BODY *RootBody)
+{
+    OBJECT_ATTRIBUTES RootAttributes;
+    PCM_KEY_BODY KeyBody;
+    HANDLE KeyHandle = NULL;
+    NTSTATUS Status;
+
+    /* The name is a kernel copy, so it is looked up in kernel mode; the caller's own handle is checked below */
+    InitializeObjectAttributes(&RootAttributes,
+                               Name,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               RootDirectory,
+                               NULL);
+
+    Status = ObOpenObjectByName(&RootAttributes,
+                                CmpKeyObjectType,
+                                KernelMode,
+                                NULL,
+                                KEY_ALL_ACCESS,
+                                NULL,
+                                &KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObReferenceObjectByHandle(KeyHandle,
+                                       0,
+                                       CmpKeyObjectType,
+                                       KernelMode,
+                                       (PVOID*)&KeyBody,
+                                       NULL);
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (RootHandle != NULL)
+    {
+        Status = ObOpenObjectByPointer(KeyBody,
+                                       (AccessMode == KernelMode) ? OBJ_KERNEL_HANDLE : 0,
+                                       NULL,
+                                       KEY_ALL_ACCESS,
+                                       CmpKeyObjectType,
+                                       AccessMode,
+                                       RootHandle);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(KeyBody);
+            return Status;
+        }
+    }
+
+    if (RootBody != NULL)
+    {
+        *RootBody = KeyBody;
+    }
+    else
+    {
+        ObDereferenceObject(KeyBody);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+PCMHIVE
+CmpFindSharedAppHive(
+    _In_ PCUNICODE_STRING FilePath)
+{
+    PCMHIVE Result = NULL;
+    PLIST_ENTRY Entry;
+    PCMHIVE Candidate;
+
+    ExAcquirePushLockShared(&CmpHiveListHeadLock);
+
+    for (Entry = CmpHiveListHead.Flink;
+         Entry != &CmpHiveListHead;
+         Entry = Entry->Flink)
+    {
+        Candidate = CONTAINING_RECORD(Entry, CMHIVE, HiveList);
+
+        if ((Candidate->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) continue;
+        if (Candidate->Flags & CMHIVE_FLAG_PROCESS_PRIVATE) continue;
+        if (Candidate->Hive.HiveFlags & HIVE_IS_UNLOADING) continue;
+        if (Candidate->RootKcb == NULL || Candidate->HiveRootPath.Length == 0) continue;
+        if (!RtlEqualUnicodeString(&Candidate->FileFullPath, FilePath, TRUE)) continue;
+
+        Result = Candidate;
+        break;
+    }
+
+    ExReleasePushLockShared(&CmpHiveListHeadLock);
+    return Result;
+}
+
 /*
  * Reads a hive file and hangs it under a name the caller chooses. Doing this
  * needs the restore privilege, because the file decides what the keys under
@@ -583,14 +687,10 @@ CmpLoadHiveAtName(
     _Out_opt_ PHANDLE RootHandle,
     _Out_opt_ PCM_KEY_BODY *RootBody)
 {
-    OBJECT_ATTRIBUTES RootAttributes;
     UNICODE_STRING FilePath;
     BOOLEAN Allocate = TRUE;
     PCMHIVE CmHive = NULL;
-    PCM_KEY_BODY KeyBody;
-    HANDLE KeyHandle = NULL;
     NTSTATUS Status;
-    ULONG Attributes;
 
     if (LoadedHive != NULL) *LoadedHive = NULL;
     if (RootHandle != NULL) *RootHandle = NULL;
@@ -611,6 +711,31 @@ CmpLoadHiveAtName(
     if (!NT_SUCCESS(Status)) return Status;
 
     ExAcquirePushLockExclusive(&CmpLoadHiveLock);
+
+    if ((Flags & (REG_APP_HIVE | REG_PROCESS_PRIVATE)) == REG_APP_HIVE &&
+        TrustClass == NULL)
+    {
+        CmHive = CmpFindSharedAppHive(&FilePath);
+        if (CmHive != NULL)
+        {
+            Status = STATUS_SUCCESS;
+            if (RootHandle != NULL || RootBody != NULL)
+            {
+                Status = CmpOpenHiveRootByName(&CmHive->HiveRootPath,
+                                               NULL,
+                                               AccessMode,
+                                               RootHandle,
+                                               RootBody);
+            }
+
+            if (NT_SUCCESS(Status) && LoadedHive != NULL) *LoadedHive = CmHive;
+
+            ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+                ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
+            return Status;
+        }
+    }
 
     Status = CmpInitHiveFromFile(&FilePath,
                                  (Flags & REG_NO_LAZY_FLUSH) ? HIVE_NOLAZYFLUSH
@@ -684,41 +809,22 @@ CmpLoadHiveAtName(
 
     if (RootHandle != NULL || RootBody != NULL)
     {
-        Attributes = OBJ_CASE_INSENSITIVE;
-        if (AccessMode == KernelMode) Attributes |= OBJ_KERNEL_HANDLE;
-
-        InitializeObjectAttributes(&RootAttributes,
-                                   TargetKey->ObjectName,
-                                   Attributes,
-                                   TargetKey->RootDirectory,
-                                   NULL);
-
-        Status = ObOpenObjectByName(&RootAttributes,
-                                    CmpKeyObjectType,
-                                    AccessMode,
-                                    NULL,
-                                    KEY_ALL_ACCESS,
-                                    NULL,
-                                    &KeyHandle);
-
-        if (NT_SUCCESS(Status) && RootBody != NULL)
+        Status = CmpOpenHiveRootByName(TargetKey->ObjectName,
+                                       TargetKey->RootDirectory,
+                                       AccessMode,
+                                       RootHandle,
+                                       RootBody);
+        if (!NT_SUCCESS(Status))
         {
-            Status = ObReferenceObjectByHandle(KeyHandle,
-                                               0,
-                                               CmpKeyObjectType,
-                                               KernelMode,
-                                               (PVOID*)&KeyBody,
-                                               NULL);
-            if (NT_SUCCESS(Status)) *RootBody = KeyBody;
-        }
+            if ((Flags & REG_APP_HIVE) == 0) CmpRemoveFromHiveFileList(CmHive);
 
-        if (NT_SUCCESS(Status) && RootHandle != NULL)
-        {
-            *RootHandle = KeyHandle;
-        }
-        else if (KeyHandle != NULL)
-        {
-            ZwClose(KeyHandle);
+            CmpLockRegistryExclusive();
+            /* FIXME: a hive linked without a root control block cannot be taken back out here */
+            if (CmHive->RootKcb != NULL) CmpUnlinkAndReleaseHive(CmHive->RootKcb, CmHive);
+            CmpUnlockRegistry();
+
+            ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            return Status;
         }
     }
 
@@ -748,47 +854,15 @@ CmLoadKey(
                              NULL);
 }
 
-/*
- * Takes a loaded hive back out. A hive with keys still open cannot go unless
- * the caller asks for it to be forced, in which case those keys are made to
- * answer that they are gone.
- */
-NTSTATUS
-NTAPI
-CmUnloadKey(
+static
+VOID
+CmpUnlinkAndReleaseHive(
     _In_ PCM_KEY_CONTROL_BLOCK Kcb,
-    _In_ ULONG Flags)
+    _In_ PCMHIVE CmHive)
 {
     PCM_KEY_NODE Node;
     HCELL_INDEX LinkCell;
     PHHIVE MasterHive;
-    PCMHIVE CmHive;
-    ULONG OpenCount;
-
-    if ((Kcb->Flags & KEY_HIVE_ENTRY) == 0) return STATUS_INVALID_PARAMETER;
-
-    if (!SeSinglePrivilegeCheck(SeRestorePrivilege, ExGetPreviousMode()))
-    {
-        return STATUS_PRIVILEGE_NOT_HELD;
-    }
-
-    CmHive = CmpFindLoadedHive(Kcb->KeyHive);
-    if (CmHive == NULL) return STATUS_INVALID_PARAMETER;
-
-    OpenCount = CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE);
-
-    if (OpenCount != 0)
-    {
-        if ((Flags & REG_FORCE_UNLOAD) == 0) return STATUS_CANNOT_DELETE;
-
-        CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
-    }
-
-    if (Kcb->RefCount > ((CmHive->RootKcb == Kcb) ? 2UL : 1UL) &&
-        (Flags & REG_FORCE_UNLOAD) == 0)
-    {
-        return STATUS_CANNOT_DELETE;
-    }
 
     CmpFlushHiveToDisk(CmHive, TRUE);
 
@@ -830,6 +904,48 @@ CmUnloadKey(
     CmpUnregisterAppHive(CmHive);
     CmpSignalUnloadEvents(CmHive);
     CmpDereferenceHive(CmHive);
+}
+
+/*
+ * Takes a loaded hive back out. A hive with keys still open cannot go unless
+ * the caller asks for it to be forced, in which case those keys are made to
+ * answer that they are gone.
+ */
+NTSTATUS
+NTAPI
+CmUnloadKey(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ ULONG Flags)
+{
+    PCMHIVE CmHive;
+    ULONG OpenCount;
+
+    if ((Kcb->Flags & KEY_HIVE_ENTRY) == 0) return STATUS_INVALID_PARAMETER;
+
+    if (!SeSinglePrivilegeCheck(SeRestorePrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    CmHive = CmpFindLoadedHive(Kcb->KeyHive);
+    if (CmHive == NULL) return STATUS_INVALID_PARAMETER;
+
+    OpenCount = CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE);
+
+    if (OpenCount != 0)
+    {
+        if ((Flags & REG_FORCE_UNLOAD) == 0) return STATUS_CANNOT_DELETE;
+
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
+    }
+
+    if (Kcb->RefCount > ((CmHive->RootKcb == Kcb) ? 2UL : 1UL) &&
+        (Flags & REG_FORCE_UNLOAD) == 0)
+    {
+        return STATUS_CANNOT_DELETE;
+    }
+
+    CmpUnlinkAndReleaseHive(Kcb, CmHive);
     return STATUS_SUCCESS;
 }
 
@@ -883,10 +999,62 @@ NTAPI
 CmpUnloadAppHiveIfUnused(
     _In_ PCMHIVE Hive)
 {
-    if ((Hive->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) return;
-    if (Hive->RootKcb != NULL && Hive->RootKcb->RefCount != 0) return;
+    PCM_KEY_CONTROL_BLOCK Kcb;
 
-    CmpDereferenceHive(Hive);
+    if ((Hive->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) return;
+
+    ExAcquirePushLockExclusive(&CmpLoadHiveLock);
+    CmpLockRegistryExclusive();
+
+    Kcb = Hive->RootKcb;
+    if (Kcb != NULL &&
+        (Hive->Hive.HiveFlags & HIVE_IS_UNLOADING) == 0 &&
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE) == 0 &&
+        Kcb->RefCount == 1)
+    {
+        CmpUnlinkAndReleaseHive(Kcb, Hive);
+    }
+
+    CmpUnlockRegistry();
+    ExReleasePushLockExclusive(&CmpLoadHiveLock);
+}
+
+typedef struct _CMP_APP_HIVE_CLOSE
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PCMHIVE Hive;
+} CMP_APP_HIVE_CLOSE, *PCMP_APP_HIVE_CLOSE;
+
+static
+VOID
+NTAPI
+CmpAppHiveCloseWorker(
+    _In_ PVOID Context)
+{
+    PCMP_APP_HIVE_CLOSE Close = Context;
+
+    CmpUnloadAppHiveIfUnused(Close->Hive);
+    CmpDereferenceHive(Close->Hive);
+    ExFreePoolWithTag(Close, TAG_CM);
+}
+
+VOID
+NTAPI
+CmpQueueAppHiveClose(
+    _In_ PCMHIVE Hive)
+{
+    PCMP_APP_HIVE_CLOSE Close;
+
+    if ((Hive->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) return;
+
+    Close = ExAllocatePoolZero(NonPagedPool, sizeof(*Close), TAG_CM);
+    /* FIXME: without memory the hive stays loaded until another of its keys is closed */
+    if (Close == NULL) return;
+
+    CmpReferenceHive(Hive);
+    Close->Hive = Hive;
+    ExInitializeWorkItem(&Close->WorkItem, CmpAppHiveCloseWorker, Close);
+    ExQueueWorkItem(&Close->WorkItem, DelayedWorkQueue);
 }
 
 /*
