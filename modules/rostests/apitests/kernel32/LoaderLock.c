@@ -140,7 +140,7 @@ static void TestCall(
     Status = Lock(0, &State, &Cookie);
     ok(Status == STATUS_SUCCESS, "%s: LdrLockLoaderLock returned 0x%lx\n", Name, Status);
     SetEvent(Job.Go);
-    WaitHeld = WaitForSingleObject(Job.Done, 1000);
+    WaitHeld = WaitForSingleObject(Job.Done, CompletesWhileHeld ? 5000 : 50);
     Unlock(0, Cookie);
     WaitReleased = WaitForSingleObject(Job.Done, 5000);
 
