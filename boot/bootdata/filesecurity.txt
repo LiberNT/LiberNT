@@ -27,6 +27,7 @@ file Windows/system.ini={CREATEDFILE}
 file Windows/system32/applaunch.exe={CREATEDFILE}
 file Windows/system32/d3dcompiler_43.dll={CREATEDFILE}
 file Windows/SysWOW64/d3dcompiler_43.dll={CREATEDFILE}
+file Windows/system32/icu.dll={CREATEDFILE}
 file Windows/system32/d3dx9_24.dll={CREATEDFILE}
 file Windows/system32/d3dx9_25.dll={CREATEDFILE}
 file Windows/system32/d3dx9_26.dll={CREATEDFILE}
