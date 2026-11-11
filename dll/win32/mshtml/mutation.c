@@ -1290,10 +1290,8 @@ static HRESULT mutation_observer_ctor_value(DispatchEx *dispex, LCID lcid,
         return E_UNEXPECTED;
 
     callback = params->rgvarg + (params->cArgs - 1);
-    if (V_VT(callback) != VT_DISPATCH) {
-        FIXME("Should return TypeMismatchError\n");
-        return E_FAIL;
-    }
+    if (V_VT(callback) != VT_DISPATCH)
+        return MSHTML_E_TYPE_MISMATCH;
 
     if (!res)
         return S_OK;

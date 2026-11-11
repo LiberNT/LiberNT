@@ -1171,6 +1171,10 @@ static HRESULT HostConstructor_call(script_ctx_t *ctx, FunctionInstance *func, j
                                              &ctx->jscaller->IServiceProvider_iface);
         if(hres == DISP_E_EXCEPTION)
             handle_dispatch_exception(ctx, &ei);
+#ifdef __REACTOS__
+        else if(FAILED(hres))
+            hres = throw_host_object_error(ctx, function->host_iface, hres);
+#endif
         if(SUCCEEDED(hres)) {
             if(r) hres = variant_to_jsval(ctx, &ret, r);
             VariantClear(&ret);
