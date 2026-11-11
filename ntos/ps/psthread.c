@@ -133,6 +133,8 @@ PspUserThreadStartup(
     PETHREAD Thread = PsGetCurrentThread();
     PEPROCESS Process = THREAD_TO_PROCESS(Thread);
 
+    KeEnterCriticalRegion();
+
     /* As for a system thread: the processor is the new thread's from here */
     KeLowerIrql(PASSIVE_LEVEL);
 
@@ -153,6 +155,8 @@ PspUserThreadStartup(
 
     if (!Thread->HideFromDebugger)
         DbgkCreateThread(Thread, Thread->Win32StartAddress);
+
+    KeLeaveCriticalRegion();
 
     if (Thread->Terminated)
     {

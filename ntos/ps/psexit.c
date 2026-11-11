@@ -222,8 +222,6 @@ PspExitThread(
 
     if (Thread->PicoNotifyExit) PspPicoThreadExit(Thread);
 
-    if (!Thread->HideFromDebugger) DbgkExitThread(ExitStatus);
-
     /* The windowing kernel takes its per-thread state down while the thread can still run */
     if ((Thread->Tcb.Win32Thread != NULL) && (PspW32ThreadCallout != NULL))
         PspW32ThreadCallout(Thread, PsW32ThreadCalloutExit);
@@ -250,6 +248,8 @@ PspExitThread(
 
     ExReleasePushLockExclusive(&Process->ProcessLock);
     KeLeaveCriticalRegion();
+
+    if (!LastThread && !Thread->HideFromDebugger) DbgkExitThread(ExitStatus);
 
     if (LastThread) PspNotifyExceptionPortOfExit(Thread, Process);
 
