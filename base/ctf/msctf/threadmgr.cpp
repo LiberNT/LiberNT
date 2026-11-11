@@ -472,6 +472,94 @@ CThreadMgr::~CThreadMgr()
     m_CompartmentMgr->Release();
 }
 
+class CThreadMgrLangBarItemMgr final : public ITfLangBarItemMgr
+{
+public:
+    static HRESULT Create(IUnknown *pOuter, ITfLangBarItemMgr **ppOut)
+    {
+        ITfLangBarItemMgr *pInner = NULL;
+        HRESULT hr = LangBarItemMgr_Constructor(&pInner);
+        if (FAILED(hr))
+            return hr;
+        CThreadMgrLangBarItemMgr *pThis = new(cicNoThrow) CThreadMgrLangBarItemMgr(pOuter, pInner);
+        pInner->Release();
+        if (!pThis)
+            return E_OUTOFMEMORY;
+        *ppOut = pThis;
+        return S_OK;
+    }
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override
+    {
+        if (!ppvObj)
+            return E_POINTER;
+        if (riid == IID_ITfLangBarItemMgr)
+        {
+            *ppvObj = static_cast<ITfLangBarItemMgr *>(this);
+            AddRef();
+            return S_OK;
+        }
+        return m_pOuter->QueryInterface(riid, ppvObj);
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_cRefs); }
+    STDMETHODIMP_(ULONG) Release() override
+    {
+        ULONG cRefs = InterlockedDecrement(&m_cRefs);
+        if (!cRefs)
+            delete this;
+        return cRefs;
+    }
+
+    STDMETHODIMP EnumItems(IEnumTfLangBarItems **ppEnum) override { return m_pInner->EnumItems(ppEnum); }
+    STDMETHODIMP GetItem(REFGUID rguid, ITfLangBarItem **ppItem) override { return m_pInner->GetItem(rguid, ppItem); }
+    STDMETHODIMP AddItem(ITfLangBarItem *punk) override { return m_pInner->AddItem(punk); }
+    STDMETHODIMP RemoveItem(ITfLangBarItem *punk) override { return m_pInner->RemoveItem(punk); }
+    STDMETHODIMP AdviseItemSink(ITfLangBarItemSink *punk, DWORD *pdwCookie, REFGUID rguidItem) override
+    {
+        return m_pInner->AdviseItemSink(punk, pdwCookie, rguidItem);
+    }
+    STDMETHODIMP UnadviseItemSink(DWORD dwCookie) override { return m_pInner->UnadviseItemSink(dwCookie); }
+    STDMETHODIMP GetItemFloatingRect(DWORD dwThreadId, REFGUID rguid, RECT *prc) override
+    {
+        return m_pInner->GetItemFloatingRect(dwThreadId, rguid, prc);
+    }
+    STDMETHODIMP GetItemsStatus(ULONG ulCount, const GUID *prgguid, DWORD *pdwStatus) override
+    {
+        return m_pInner->GetItemsStatus(ulCount, prgguid, pdwStatus);
+    }
+    STDMETHODIMP GetItemNum(ULONG *pulCount) override { return m_pInner->GetItemNum(pulCount); }
+    STDMETHODIMP GetItems(ULONG ulCount, ITfLangBarItem **ppItem, TF_LANGBARITEMINFO *pInfo, DWORD *pdwStatus,
+                          ULONG *pcFetched) override
+    {
+        return m_pInner->GetItems(ulCount, ppItem, pInfo, pdwStatus, pcFetched);
+    }
+    STDMETHODIMP AdviseItemsSink(ULONG ulCount, ITfLangBarItemSink **ppunk, const GUID *pguidItem,
+                                 DWORD *pdwCookie) override
+    {
+        return m_pInner->AdviseItemsSink(ulCount, ppunk, pguidItem, pdwCookie);
+    }
+    STDMETHODIMP UnadviseItemsSink(ULONG ulCount, DWORD *pdwCookie) override
+    {
+        return m_pInner->UnadviseItemsSink(ulCount, pdwCookie);
+    }
+
+private:
+    CThreadMgrLangBarItemMgr(IUnknown *pOuter, ITfLangBarItemMgr *pInner) : m_cRefs(1), m_pOuter(pOuter), m_pInner(pInner)
+    {
+        m_pOuter->AddRef();
+        m_pInner->AddRef();
+    }
+    ~CThreadMgrLangBarItemMgr()
+    {
+        m_pInner->Release();
+        m_pOuter->Release();
+    }
+
+    LONG m_cRefs;
+    IUnknown *m_pOuter;
+    ITfLangBarItemMgr *m_pInner;
+};
+
 STDMETHODIMP CThreadMgr::QueryInterface(REFIID iid, LPVOID *ppvObject)
 {
     *ppvObject = NULL;
@@ -495,6 +583,8 @@ STDMETHODIMP CThreadMgr::QueryInterface(REFIID iid, LPVOID *ppvObject)
         pUnk = static_cast<ITfSourceSingle *>(this);
     else if (iid == IID_ITfFunctionProvider)
         pUnk = static_cast<ITfFunctionProvider *>(this);
+    else if (iid == IID_ITfLangBarItemMgr)
+        return CThreadMgrLangBarItemMgr::Create(static_cast<ITfThreadMgrEx *>(this), (ITfLangBarItemMgr **)ppvObject);
 
     if (pUnk)
     {
