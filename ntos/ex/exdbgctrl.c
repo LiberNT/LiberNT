@@ -189,13 +189,30 @@ NtSystemDebugControl(
 
     if (Command == SysDbgGetLiveKernelDump)
     {
-        if (InputBufferLength != sizeof(SYSDBG_LIVEDUMP_CONTROL))
+        SYSDBG_LIVEDUMP_CONTROL Control;
+
+        if (((InputBufferLength != FIELD_OFFSET(SYSDBG_LIVEDUMP_CONTROL, SelectiveControl)) &&
+             (InputBufferLength != sizeof(SYSDBG_LIVEDUMP_CONTROL))) ||
+            (InputBuffer == NULL) ||
+            (OutputBufferLength != 0) ||
+            (OutputBuffer != NULL))
         {
             return STATUS_INFO_LENGTH_MISMATCH;
         }
 
-        /* TODO: a live kernel dump is not written */
-        return STATUS_NOT_IMPLEMENTED;
+        RtlZeroMemory(&Control, sizeof(Control));
+
+        _SEH2_TRY
+        {
+            RtlCopyMemory(&Control, InputBuffer, InputBufferLength);
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+
+        return KdpWriteLiveKernelDump(&Control, PreviousMode);
     }
 
     if (!KdDebuggerEnabled || KdPitchDebugger || KdDebuggerNotPresent)

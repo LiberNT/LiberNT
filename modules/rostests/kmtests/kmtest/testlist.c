@@ -26,6 +26,7 @@ KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoReadWrite;
+KMT_TESTFUNC Test_KdLiveDump;
 KMT_TESTFUNC Test_MmMapLockedPagesSpecifyCache;
 KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_NtSystemDebugControl;
@@ -82,6 +83,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
     { "IoReadWrite",                  Test_IoReadWrite },
+    { "KdLiveDump",                   Test_KdLiveDump },
     { "MmMapLockedPagesSpecifyCache", Test_MmMapLockedPagesSpecifyCache },
     { "NtCreateSection",              Test_NtCreateSection },
     { "NdisSgDma",                    Test_NdisSgDma },
