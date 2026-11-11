@@ -8,6 +8,60 @@
 #include "shelltest.h"
 #include <strsafe.h>
 #include <shellutils.h>
+#include <tlhelp32.h>
+
+struct PROCESS_STAMP
+{
+    DWORD Id;
+    FILETIME Created;
+};
+
+static UINT GetImageProcesses(PCWSTR Image, PROCESS_STAMP *Stamps, UINT Max)
+{
+    PROCESSENTRY32W Entry = { sizeof(Entry) };
+    HANDLE Snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    FILETIME Exited, Kernel, User;
+    HANDLE Process;
+    UINT Count = 0;
+
+    if (Snapshot == INVALID_HANDLE_VALUE)
+        return 0;
+    if (Process32FirstW(Snapshot, &Entry))
+    {
+        do
+        {
+            if (Count == Max || Entry.th32ProcessID == GetCurrentProcessId() || _wcsicmp(Entry.szExeFile, Image))
+                continue;
+            Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, Entry.th32ProcessID);
+            if (!Process)
+                continue;
+            if (GetProcessTimes(Process, &Stamps[Count].Created, &Exited, &Kernel, &User))
+                Stamps[Count++].Id = Entry.th32ProcessID;
+            CloseHandle(Process);
+        } while (Process32NextW(Snapshot, &Entry));
+    }
+    CloseHandle(Snapshot);
+    return Count;
+}
+
+/* Process ids are reused, so a process counts as new unless its id and creation time were seen before */
+static BOOL NewImageProcessStarted(PCWSTR Image, const PROCESS_STAMP *Before, UINT BeforeCount)
+{
+    PROCESS_STAMP After[32];
+    UINT AfterCount = GetImageProcesses(Image, After, ARRAYSIZE(After)), i, j;
+
+    for (i = 0; i < AfterCount; i++)
+    {
+        for (j = 0; j < BeforeCount; j++)
+        {
+            if (After[i].Id == Before[j].Id && !CompareFileTime(&After[i].Created, &Before[j].Created))
+                break;
+        }
+        if (j == BeforeCount)
+            return TRUE;
+    }
+    return FALSE;
+}
 
 static HRESULT CreateLink(PCWSTR Path, PCWSTR Target, PCWSTR Arguments)
 {
@@ -33,6 +87,8 @@ static void TestVerb(PCWSTR Folder, PCWSTR Verb, PCWSTR Name, BOOL Runs)
     HANDLE Event;
     BOOL Success;
     HRESULT hr;
+    PROCESS_STAMP Before[32];
+    UINT BeforeCount = 0;
 
     GetModuleFileNameW(NULL, Module, ARRAYSIZE(Module));
     StringCchPrintfW(Link, ARRAYSIZE(Link), L"%sselink-%s.lnk", Folder, Name);
@@ -49,6 +105,8 @@ static void TestVerb(PCWSTR Folder, PCWSTR Verb, PCWSTR Name, BOOL Runs)
     Info.lpVerb = Verb;
     Info.lpFile = Link;
     Info.nShow = SW_SHOWMINNOACTIVE;
+    if (!Runs)
+        BeforeCount = GetImageProcesses(PathFindFileNameW(Module), Before, ARRAYSIZE(Before));
     SetLastError(0xdeadbeef);
     Success = ShellExecuteExW(&Info);
     if (Runs)
@@ -62,7 +120,8 @@ static void TestVerb(PCWSTR Folder, PCWSTR Verb, PCWSTR Name, BOOL Runs)
         ok(!Success, "%S: ShellExecuteExW succeeded\n", Name);
         ok_long(GetLastError(), ERROR_NO_ASSOCIATION);
         ok((UINT_PTR)Info.hInstApp == SE_ERR_NOASSOC, "%S: hInstApp is %Iu\n", Name, (UINT_PTR)Info.hInstApp);
-        ok_long(WaitForSingleObject(Event, 1000), WAIT_TIMEOUT);
+        ok_long(WaitForSingleObject(Event, 0), WAIT_TIMEOUT);
+        ok(!NewImageProcessStarted(PathFindFileNameW(Module), Before, BeforeCount), "%S: a child was started\n", Name);
     }
     CloseHandle(Event);
     DeleteFileW(Link);
