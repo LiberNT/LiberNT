@@ -42,6 +42,7 @@ typedef struct _BACKUP_CONTEXT
     PUCHAR Memory;
     HANDLE StreamHandle;
     BOOLEAN FromFile;
+    BOOLEAN Skipped;
     LONGLONG FileOffset;
 
     BACKUP_PHASE Phase;
@@ -75,6 +76,7 @@ BasepBackupEndStream(
     }
     Context->InStream = FALSE;
     Context->FromFile = FALSE;
+    Context->Skipped = FALSE;
     Context->PrefixLength = 0;
     Context->HeaderLength = 0;
     Context->HeaderDone = 0;
@@ -263,13 +265,13 @@ BasepBackupQuerySecurity(
     IO_STATUS_BLOCK IoStatusBlock;
     SECURITY_INFORMATION Information = OWNER_SECURITY_INFORMATION |
                                        GROUP_SECURITY_INFORMATION |
-                                       DACL_SECURITY_INFORMATION;
+                                       DACL_SECURITY_INFORMATION |
+                                       LABEL_SECURITY_INFORMATION;
     PUCHAR Buffer;
     ULONG Size = 0x200;
     ULONG Needed;
     NTSTATUS Status;
 
-    /* TODO: integrity labels are neither backed up nor restored */
     Status = NtQueryInformationFile(File, &IoStatusBlock, &Access, sizeof(Access), FileAccessInformation);
     if (NT_SUCCESS(Status) && (Access.AccessFlags & ACCESS_SYSTEM_SECURITY))
         Information |= SACL_SECURITY_INFORMATION;
@@ -776,6 +778,8 @@ BasepBackupRestoreSecurity(
             Information |= OWNER_SECURITY_INFORMATION;
         if (NT_SUCCESS(RtlGetGroupSecurityDescriptor(Descriptor, &Sid, &Defaulted)) && Sid)
             Information |= GROUP_SECURITY_INFORMATION;
+        if (NT_SUCCESS(RtlGetSaclSecurityDescriptor(Descriptor, &Present, &Acl, &Defaulted)) && Present)
+            Information |= LABEL_SECURITY_INFORMATION;
     }
     if ((Access.AccessFlags & WRITE_DAC) &&
         NT_SUCCESS(RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Acl, &Defaulted)) && Present)
@@ -791,6 +795,67 @@ BasepBackupRestoreSecurity(
         return STATUS_SUCCESS;
 
     return NtSetSecurityObject(File, Information, Descriptor);
+}
+
+static
+NTSTATUS
+BasepBackupRestoreLink(
+    _In_ HANDLE File,
+    _In_reads_bytes_(Length) PUCHAR Data,
+    _In_ ULONG Length)
+{
+    PFILE_LINK_INFORMATION LinkInformation;
+    UNICODE_STRING NtName;
+    IO_STATUS_BLOCK IoStatusBlock;
+    PWSTR Path;
+    ULONG Characters = Length / sizeof(WCHAR);
+    ULONG Size;
+    NTSTATUS Status;
+
+    while (Characters && ((PCWSTR)Data)[Characters - 1] == UNICODE_NULL)
+        Characters--;
+    if (!Characters)
+        return STATUS_OBJECT_NAME_INVALID;
+
+    Path = RtlAllocateHeap(RtlGetProcessHeap(), 0, (Characters + 1) * sizeof(WCHAR));
+    if (!Path)
+        return STATUS_NO_MEMORY;
+    RtlCopyMemory(Path, Data, Characters * sizeof(WCHAR));
+    Path[Characters] = UNICODE_NULL;
+
+    Status = RtlDosPathNameToNtPathName_U_WithStatus(Path, &NtName, NULL, NULL);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Path);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Size = FIELD_OFFSET(FILE_LINK_INFORMATION, FileName) + NtName.Length;
+    LinkInformation = RtlAllocateHeap(RtlGetProcessHeap(), 0, Size);
+    if (!LinkInformation)
+    {
+        RtlFreeUnicodeString(&NtName);
+        return STATUS_NO_MEMORY;
+    }
+
+    LinkInformation->ReplaceIfExists = FALSE;
+    LinkInformation->RootDirectory = NULL;
+    LinkInformation->FileNameLength = NtName.Length;
+    RtlCopyMemory(LinkInformation->FileName, NtName.Buffer, NtName.Length);
+    RtlFreeUnicodeString(&NtName);
+
+    Status = NtSetInformationFile(File, &IoStatusBlock, LinkInformation, Size, FileLinkInformation);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, LinkInformation);
+    return Status;
+}
+
+static
+NTSTATUS
+BasepBackupAllocateMemory(
+    _Inout_ PBACKUP_CONTEXT Context)
+{
+    if (Context->DataSize > MAXULONG)
+        return STATUS_NO_MEMORY;
+    Context->Memory = RtlAllocateHeap(RtlGetProcessHeap(), 0, (SIZE_T)max(Context->DataSize, 1));
+    return Context->Memory ? STATUS_SUCCESS : STATUS_NO_MEMORY;
 }
 
 static
@@ -851,21 +916,37 @@ BasepBackupBeginRestoreStream(
             BasepBackupSetFileBody(Context, StreamHandle, 0);
             break;
 
+        case BACKUP_LINK:
+            if (Context->DataSize == 0 || Context->DataSize > UNICODE_STRING_MAX_BYTES ||
+                (Context->DataSize & (sizeof(WCHAR) - 1)))
+            {
+                return STATUS_OBJECT_NAME_INVALID;
+            }
+            return BasepBackupAllocateMemory(Context);
+
         case BACKUP_SECURITY_DATA:
+            if (!ProcessSecurity)
+                break;
+            return BasepBackupAllocateMemory(Context);
+
         case BACKUP_EA_DATA:
         case BACKUP_REPARSE_DATA:
-            if (Context->StreamId == BACKUP_SECURITY_DATA && !ProcessSecurity)
-                break;
-            if (Context->DataSize > MAXULONG)
-                return STATUS_NO_MEMORY;
-            Context->Memory = RtlAllocateHeap(RtlGetProcessHeap(), 0, (SIZE_T)max(Context->DataSize, 1));
-            if (!Context->Memory)
-                return STATUS_NO_MEMORY;
+            return BasepBackupAllocateMemory(Context);
+
+        case BACKUP_OBJECT_ID:
+            /* TODO: object identifier streams are skipped until the file system keeps object identifiers */
+            break;
+
+        case BACKUP_TXFS_DATA:
+            break;
+
+        case BACKUP_GHOSTED_FILE_EXTENTS:
+            /* TODO: ghosted extents are skipped: the file system interface that recreates them is not documented */
             break;
 
         default:
-            /* TODO: hard link (BACKUP_LINK), object identifier, property, TxF and ghosted-extent streams are skipped */
-            break;
+            /* FIXME: the last error for a stream type outside [MS-BKUP] 2.2 is not documented */
+            return STATUS_INVALID_PARAMETER;
     }
 
     return STATUS_SUCCESS;
@@ -881,6 +962,12 @@ BasepBackupEndRestoreStream(
     FILE_END_OF_FILE_INFORMATION EndOfFile;
     IO_STATUS_BLOCK IoStatusBlock;
     NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Context->Skipped)
+    {
+        BasepBackupEndStream(Context);
+        return STATUS_SUCCESS;
+    }
 
     switch (Context->StreamId)
     {
@@ -900,6 +987,10 @@ BasepBackupEndRestoreStream(
         case BACKUP_SECURITY_DATA:
             if (ProcessSecurity && Context->Memory && Context->DataSize)
                 Status = BasepBackupRestoreSecurity(File, Context->Memory, (ULONG)Context->DataSize);
+            break;
+
+        case BACKUP_LINK:
+            Status = BasepBackupRestoreLink(File, Context->Memory, (ULONG)Context->DataSize);
             break;
 
         case BACKUP_SPARSE_BLOCK:
@@ -1090,17 +1181,10 @@ BackupSeek(
     {
         Seeked.QuadPart = min(Requested.QuadPart, (ULONGLONG)(Context->DataSize - Context->DataDone));
         Context->DataDone += Seeked.QuadPart;
-        if (Seeked.QuadPart < Requested.QuadPart)
-        {
-            if (Context->Restore)
-                BasepBackupEndRestoreStream(Context, hFile, FALSE);
-            else
-                BasepBackupEndStream(Context);
-        }
-        else if (Context->Restore && Context->DataDone == Context->DataSize)
-        {
-            BasepBackupEndRestoreStream(Context, hFile, FALSE);
-        }
+        if (Context->Restore && Seeked.QuadPart)
+            Context->Skipped = TRUE;
+        if (Seeked.QuadPart < Requested.QuadPart || (Context->Restore && Context->DataDone == Context->DataSize))
+            BasepBackupEndStream(Context);
     }
 
     if (Seeked.QuadPart < Requested.QuadPart)

@@ -500,12 +500,13 @@ TestSeek(VOID)
 
 static
 BOOL
-Restore(
+RestoreWithAccess(
     _In_ PCWSTR Path,
     _In_reads_bytes_(Length) PUCHAR Data,
     _In_ ULONG Length,
     _In_ DWORD ChunkSize,
-    _In_ BOOL ProcessSecurity)
+    _In_ BOOL ProcessSecurity,
+    _In_ ACCESS_MASK Access)
 {
     LPVOID Context = NULL;
     HANDLE File;
@@ -514,8 +515,7 @@ Restore(
     DWORD Chunk;
     BOOL Result = TRUE;
 
-    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE | WRITE_DAC | WRITE_OWNER, 0, NULL, CREATE_ALWAYS,
-                       FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    File = CreateFileW(Path, Access, 0, NULL, CREATE_ALWAYS, FILE_FLAG_BACKUP_SEMANTICS, NULL);
     ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
     if (File == INVALID_HANDLE_VALUE)
         return FALSE;
@@ -532,6 +532,424 @@ Restore(
     ok(BackupWrite(File, NULL, 0, NULL, TRUE, FALSE, &Context), "BackupWrite abort failed with %lu\n", GetLastError());
     CloseHandle(File);
     return Result;
+}
+
+static
+BOOL
+Restore(
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Length) PUCHAR Data,
+    _In_ ULONG Length,
+    _In_ DWORD ChunkSize,
+    _In_ BOOL ProcessSecurity)
+{
+    return RestoreWithAccess(Path, Data, Length, ChunkSize, ProcessSecurity,
+                             GENERIC_READ | GENERIC_WRITE | WRITE_DAC | WRITE_OWNER);
+}
+
+static
+ULONG
+AppendStream(
+    _Out_writes_bytes_(HEADER_SIZE + NameSize + Size) PUCHAR Buffer,
+    _In_ DWORD Id,
+    _In_reads_bytes_opt_(NameSize) PCWSTR Name,
+    _In_ DWORD NameSize,
+    _In_reads_bytes_opt_(Size) const void *Data,
+    _In_ DWORD Size)
+{
+    DWORD Attributes = 0;
+    LARGE_INTEGER Size64;
+
+    Size64.QuadPart = Size;
+    memcpy(Buffer, &Id, sizeof(DWORD));
+    memcpy(Buffer + 4, &Attributes, sizeof(DWORD));
+    memcpy(Buffer + 8, &Size64, sizeof(Size64));
+    memcpy(Buffer + 16, &NameSize, sizeof(DWORD));
+    if (NameSize)
+        memcpy(Buffer + HEADER_SIZE, Name, NameSize);
+    if (Size)
+        memcpy(Buffer + HEADER_SIZE + NameSize, Data, Size);
+    return HEADER_SIZE + NameSize + Size;
+}
+
+static
+BOOL
+WriteOnce(
+    _In_ HANDLE File,
+    _In_reads_bytes_(Length) PUCHAR Data,
+    _In_ ULONG Length,
+    _Out_ PDWORD Error)
+{
+    LPVOID Context = NULL;
+    DWORD Written = 0xdeadbeef;
+    BOOL Result;
+
+    SetLastError(0xdeadbeef);
+    Result = BackupWrite(File, Data, Length, &Written, FALSE, FALSE, &Context);
+    *Error = GetLastError();
+    ok(!Result || Written == Length, "BackupWrite wrote %lu bytes of %lu\n", Written, Length);
+    ok(BackupWrite(File, NULL, 0, NULL, TRUE, FALSE, &Context), "BackupWrite abort failed with %lu\n", GetLastError());
+    return Result;
+}
+
+static
+VOID
+TestLinkStream(
+    _In_ PUCHAR Buffer)
+{
+    static const char Data[] = "link data";
+    BY_HANDLE_FILE_INFORMATION Info;
+    BY_HANDLE_FILE_INFORMATION LinkInfo;
+    PARSED_STREAM Streams[MAX_STREAMS];
+    WCHAR Path[MAX_PATH];
+    WCHAR Link[MAX_PATH];
+    WCHAR Link2[MAX_PATH];
+    UCHAR Check[64];
+    HANDLE File;
+    HANDLE Other;
+    ULONG Length;
+    ULONG Count;
+    DWORD Error;
+    DWORD Read;
+
+    MakePath(Path, L"linksrc.bin");
+    MakePath(Link, L"linkdst.bin");
+    MakePath(Link2, L"linkdst2.bin");
+    if (!WriteTestFile(Path, Data, sizeof(Data) - 1))
+        return;
+
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    Length = AppendStream(Buffer, BACKUP_LINK, NULL, 0, Link, (DWORD)(wcslen(Link) * sizeof(WCHAR)));
+    ok(WriteOnce(File, Buffer, Length, &Error), "BACKUP_LINK restore failed with %lu\n", Error);
+    ok(GetFileInformationByHandle(File, &Info), "GetFileInformationByHandle failed with %lu\n", GetLastError());
+    ok(Info.nNumberOfLinks == 2, "%lu links after a BACKUP_LINK restore, expected 2\n", Info.nNumberOfLinks);
+
+    Other = CreateFileW(Link, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                        OPEN_EXISTING, 0, NULL);
+    ok(Other != INVALID_HANDLE_VALUE, "The BACKUP_LINK name %S cannot be opened: %lu\n", Link, GetLastError());
+    if (Other != INVALID_HANDLE_VALUE)
+    {
+        ok(GetFileInformationByHandle(Other, &LinkInfo), "GetFileInformationByHandle failed with %lu\n", GetLastError());
+        ok(LinkInfo.nFileIndexLow == Info.nFileIndexLow && LinkInfo.nFileIndexHigh == Info.nFileIndexHigh,
+           "The BACKUP_LINK name is another file\n");
+        CloseHandle(Other);
+    }
+    Read = ReadTestFile(Link, Check, sizeof(Check));
+    ok(Read == sizeof(Data) - 1 && !memcmp(Check, Data, Read), "Data through the restored link differs (%lu bytes)\n", Read);
+
+    Length = AppendStream(Buffer, BACKUP_LINK, NULL, 0, Link2, (DWORD)((wcslen(Link2) + 1) * sizeof(WCHAR)));
+    ok(WriteOnce(File, Buffer, Length, &Error), "BACKUP_LINK restore of a null-terminated path failed with %lu\n", Error);
+    ok(GetFileAttributesW(Link2) != INVALID_FILE_ATTRIBUTES, "Null-terminated BACKUP_LINK name not created\n");
+
+    Length = AppendStream(Buffer, BACKUP_LINK, NULL, 0, Link, (DWORD)(wcslen(Link) * sizeof(WCHAR)));
+    ok(!WriteOnce(File, Buffer, Length, &Error), "BACKUP_LINK onto an existing name succeeded\n");
+    ok(Error == ERROR_ALREADY_EXISTS, "BACKUP_LINK onto an existing name failed with %lu\n", Error);
+
+    Length = AppendStream(Buffer, BACKUP_LINK, NULL, 0, NULL, 0);
+    ok(!WriteOnce(File, Buffer, Length, &Error), "BACKUP_LINK without a name succeeded\n");
+
+    if (Capture(File, FALSE, 0x1000, Buffer, &Length))
+    {
+        ok(Parse(Buffer, Length, Streams, &Count), "Malformed backup stream of %lu bytes\n", Length);
+        ok(FindStream(Streams, Count, BACKUP_LINK) == NULL, "BackupRead returned a BACKUP_LINK stream\n");
+        ok(Count == 1, "BackupRead of a linked file returned %lu streams, expected 1\n", Count);
+    }
+
+    CloseHandle(File);
+    DeleteFileW(Link2);
+    DeleteFileW(Link);
+    DeleteFileW(Path);
+}
+
+static
+VOID
+TestStreamTypes(
+    _In_ PUCHAR Buffer)
+{
+    static const char Data[] = "types";
+    static const UCHAR Payload[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    WCHAR Path[MAX_PATH];
+    UCHAR Check[64];
+    HANDLE File;
+    ULONG Length;
+    DWORD Error;
+    DWORD Read;
+
+    MakePath(Path, L"types.bin");
+    if (!WriteTestFile(Path, Data, sizeof(Data) - 1))
+        return;
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    Length = AppendStream(Buffer, BACKUP_TXFS_DATA, NULL, 0, Payload, sizeof(Payload));
+    ok(WriteOnce(File, Buffer, Length, &Error), "BACKUP_TXFS_DATA was not ignored: error %lu\n", Error);
+
+    Length = AppendStream(Buffer, BACKUP_PROPERTY_DATA, NULL, 0, Payload, sizeof(Payload));
+    ok(!WriteOnce(File, Buffer, Length, &Error), "BACKUP_PROPERTY_DATA was accepted\n");
+
+    Length = AppendStream(Buffer, 0, NULL, 0, Payload, sizeof(Payload));
+    ok(!WriteOnce(File, Buffer, Length, &Error), "Stream type 0 was accepted\n");
+
+    Length = AppendStream(Buffer, 0x20, NULL, 0, Payload, sizeof(Payload));
+    ok(!WriteOnce(File, Buffer, Length, &Error), "Stream type 0x20 was accepted\n");
+
+    CloseHandle(File);
+    Read = ReadTestFile(Path, Check, sizeof(Check));
+    ok(Read == sizeof(Data) - 1 && !memcmp(Check, Data, Read), "Ignored and refused streams changed the data (%lu bytes)\n", Read);
+    DeleteFileW(Path);
+}
+
+static
+VOID
+TestSeekRestore(
+    _In_ PUCHAR Buffer)
+{
+    PARSED_STREAM Streams[MAX_STREAMS];
+    PPARSED_STREAM Stream;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UCHAR EaBuffer[512];
+    WCHAR Path[MAX_PATH];
+    WCHAR Copy[MAX_PATH];
+    WCHAR Copy2[MAX_PATH];
+    LPVOID Context = NULL;
+    HANDLE File;
+    ULONG Length;
+    ULONG Count;
+    ULONG EaLength;
+    DWORD Written;
+    DWORD Low;
+    DWORD High;
+    NTSTATUS Status;
+
+    MakePath(Path, L"seekea.bin");
+    MakePath(Copy, L"seekea1.bin");
+    MakePath(Copy2, L"seekea2.bin");
+    if (!WriteTestFile(Path, "ea", 2))
+        return;
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    SetEa(File);
+    if (!Capture(File, FALSE, 0x1000, Buffer, &Length))
+    {
+        CloseHandle(File);
+        return;
+    }
+    CloseHandle(File);
+
+    ok(Parse(Buffer, Length, Streams, &Count), "Malformed backup stream of %lu bytes\n", Length);
+    Stream = FindStream(Streams, Count, BACKUP_EA_DATA);
+    ok(Stream != NULL, "No BACKUP_EA_DATA stream\n");
+    if (Stream && Stream->Size < sizeof(EaBuffer))
+    {
+        EaLength = (ULONG)Stream->Size;
+        Length = AppendStream(EaBuffer, BACKUP_EA_DATA, NULL, 0, Stream->Data, EaLength);
+        if (Restore(Copy, EaBuffer, Length, Length, FALSE))
+        {
+            File = CreateFileW(Copy2, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Copy2, GetLastError());
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                ok(BackupWrite(File, EaBuffer, HEADER_SIZE, &Written, FALSE, FALSE, &Context) && Written == HEADER_SIZE,
+                   "Writing the EA stream header failed with %lu\n", GetLastError());
+                Low = High = 0xdeadbeef;
+                ok(BackupSeek(File, EaLength, 0, &Low, &High, &Context), "BackupSeek over the EA data failed with %lu\n",
+                   GetLastError());
+                ok(Low == EaLength && High == 0, "BackupSeek over the EA data seeked %lu:%lu\n", High, Low);
+                ok(BackupWrite(File, NULL, 0, NULL, TRUE, FALSE, &Context), "BackupWrite abort failed with %lu\n",
+                   GetLastError());
+                Status = NtQueryEaFile(File, &IoStatusBlock, EaBuffer, sizeof(EaBuffer), FALSE, NULL, 0, NULL, TRUE);
+                ok(Status == STATUS_NO_EAS_ON_FILE, "A seeked-over EA stream was applied: 0x%lx\n", Status);
+                CloseHandle(File);
+            }
+
+            memset(EaBuffer, 0, sizeof(EaBuffer));
+            Length = AppendStream(EaBuffer, BACKUP_EA_DATA, NULL, 0, Stream->Data, EaLength + 8);
+            File = CreateFileW(Copy2, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+            ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Copy2, GetLastError());
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                Context = NULL;
+                ok(BackupWrite(File, EaBuffer, HEADER_SIZE + EaLength, &Written, FALSE, FALSE, &Context) &&
+                   Written == HEADER_SIZE + EaLength, "Writing the EA stream failed with %lu\n", GetLastError());
+                Low = High = 0xdeadbeef;
+                ok(BackupSeek(File, 8, 0, &Low, &High, &Context), "BackupSeek over the EA padding failed with %lu\n",
+                   GetLastError());
+                ok(Low == 8 && High == 0, "BackupSeek over the EA padding seeked %lu:%lu\n", High, Low);
+                ok(BackupWrite(File, NULL, 0, NULL, TRUE, FALSE, &Context), "BackupWrite abort failed with %lu\n",
+                   GetLastError());
+                Status = NtQueryEaFile(File, &IoStatusBlock, EaBuffer, sizeof(EaBuffer), FALSE, NULL, 0, NULL, TRUE);
+                ok(Status == STATUS_NO_EAS_ON_FILE, "A partly seeked-over EA stream was applied: 0x%lx\n", Status);
+                CloseHandle(File);
+            }
+        }
+    }
+
+    DeleteFileW(Copy2);
+    DeleteFileW(Copy);
+    DeleteFileW(Path);
+}
+
+static
+BOOL
+SetLowLabel(
+    _In_ HANDLE File)
+{
+    SID_IDENTIFIER_AUTHORITY LabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+    SECURITY_DESCRIPTOR Descriptor;
+    UCHAR AclBuffer[64];
+    UCHAR AceBuffer[32];
+    PSYSTEM_MANDATORY_LABEL_ACE Ace = (PSYSTEM_MANDATORY_LABEL_ACE)AceBuffer;
+    PACL Acl = (PACL)AclBuffer;
+    PSID LowSid = NULL;
+    NTSTATUS Status;
+
+    Status = RtlAllocateAndInitializeSid(&LabelAuthority, 1, SECURITY_MANDATORY_LOW_RID, 0, 0, 0, 0, 0, 0, 0, &LowSid);
+    if (NT_SUCCESS(Status))
+    {
+        Ace->Header.AceType = SYSTEM_MANDATORY_LABEL_ACE_TYPE;
+        Ace->Header.AceFlags = 0;
+        Ace->Header.AceSize = (USHORT)(FIELD_OFFSET(SYSTEM_MANDATORY_LABEL_ACE, SidStart) + RtlLengthSid(LowSid));
+        Ace->Mask = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+        Status = RtlCopySid(RtlLengthSid(LowSid), &Ace->SidStart, LowSid);
+    }
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateAcl(Acl, sizeof(AclBuffer), ACL_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAce(Acl, ACL_REVISION, MAXULONG, Ace, Ace->Header.AceSize);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateSecurityDescriptor(&Descriptor, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetSaclSecurityDescriptor(&Descriptor, TRUE, Acl, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = NtSetSecurityObject(File, LABEL_SECURITY_INFORMATION, &Descriptor);
+    ok(Status == STATUS_SUCCESS, "Setting the low integrity label failed with 0x%lx\n", Status);
+    if (LowSid)
+        RtlFreeSid(LowSid);
+    return NT_SUCCESS(Status);
+}
+
+static
+BOOL
+DescriptorHasLowLabel(
+    _In_ PSECURITY_DESCRIPTOR Descriptor)
+{
+    SID_IDENTIFIER_AUTHORITY LabelAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+    PSYSTEM_MANDATORY_LABEL_ACE Ace;
+    BOOLEAN Present = FALSE;
+    BOOLEAN Defaulted;
+    PACL Sacl = NULL;
+    PSID LowSid = NULL;
+    BOOL Found = FALSE;
+    ULONG Index;
+
+    if (!NT_SUCCESS(RtlGetSaclSecurityDescriptor(Descriptor, &Present, &Sacl, &Defaulted)) || !Present || !Sacl)
+        return FALSE;
+    if (!NT_SUCCESS(RtlAllocateAndInitializeSid(&LabelAuthority, 1, SECURITY_MANDATORY_LOW_RID, 0, 0, 0, 0, 0, 0, 0, &LowSid)))
+        return FALSE;
+    for (Index = 0; Index < Sacl->AceCount; Index++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Sacl, Index, (PVOID *)&Ace)))
+            break;
+        if (Ace->Header.AceType == SYSTEM_MANDATORY_LABEL_ACE_TYPE &&
+            Ace->Mask == SYSTEM_MANDATORY_LABEL_NO_WRITE_UP &&
+            RtlEqualSid((PSID)&Ace->SidStart, LowSid))
+        {
+            Found = TRUE;
+        }
+    }
+    RtlFreeSid(LowSid);
+    return Found;
+}
+
+static
+BOOL
+FileHasLowLabel(
+    _In_ PCWSTR Path)
+{
+    UCHAR Buffer[512];
+    HANDLE File;
+    ULONG Needed;
+    NTSTATUS Status;
+
+    File = CreateFileW(Path, READ_CONTROL, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                       FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+    Status = NtQuerySecurityObject(File, LABEL_SECURITY_INFORMATION, Buffer, sizeof(Buffer), &Needed);
+    ok(Status == STATUS_SUCCESS, "Querying the label of %S failed with 0x%lx\n", Path, Status);
+    CloseHandle(File);
+    return NT_SUCCESS(Status) && DescriptorHasLowLabel((PSECURITY_DESCRIPTOR)Buffer);
+}
+
+static
+VOID
+TestLabel(
+    _In_ PUCHAR Buffer)
+{
+    PARSED_STREAM Streams[MAX_STREAMS];
+    PPARSED_STREAM Stream;
+    WCHAR Path[MAX_PATH];
+    WCHAR Copy[MAX_PATH];
+    WCHAR Copy2[MAX_PATH];
+    HANDLE File;
+    ULONG Length;
+    ULONG Count;
+    BOOL Labelled;
+
+    MakePath(Path, L"label.bin");
+    MakePath(Copy, L"label1.bin");
+    MakePath(Copy2, L"label2.bin");
+    if (!WriteTestFile(Path, "label", 5))
+        return;
+    File = CreateFileW(Path, READ_CONTROL | WRITE_OWNER, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Labelled = SetLowLabel(File);
+    CloseHandle(File);
+    if (!Labelled)
+    {
+        DeleteFileW(Path);
+        return;
+    }
+    ok(FileHasLowLabel(Path), "The low label did not stick\n");
+
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    if (Capture(File, TRUE, 0x1000, Buffer, &Length))
+    {
+        ok(Parse(Buffer, Length, Streams, &Count), "Malformed backup stream of %lu bytes\n", Length);
+        Stream = FindStream(Streams, Count, BACKUP_SECURITY_DATA);
+        ok(Stream != NULL, "No BACKUP_SECURITY_DATA stream\n");
+        if (Stream)
+        {
+            ok(RtlValidRelativeSecurityDescriptor(Stream->Data, (ULONG)Stream->Size, 0),
+               "BACKUP_SECURITY_DATA is not a valid self-relative security descriptor\n");
+            ok(DescriptorHasLowLabel(Stream->Data), "BACKUP_SECURITY_DATA without ACCESS_SYSTEM_SECURITY lacks the label\n");
+        }
+
+        if (RestoreWithAccess(Copy, Buffer, Length, Length, TRUE, GENERIC_READ | GENERIC_WRITE | WRITE_DAC | WRITE_OWNER))
+            ok(FileHasLowLabel(Copy), "The label was not restored through a WRITE_OWNER handle\n");
+        if (RestoreWithAccess(Copy2, Buffer, Length, Length, TRUE, GENERIC_READ | GENERIC_WRITE | WRITE_DAC))
+            ok(!FileHasLowLabel(Copy2), "The label was restored without WRITE_OWNER\n");
+    }
+    CloseHandle(File);
+
+    DeleteFileW(Copy2);
+    DeleteFileW(Copy);
+    DeleteFileW(Path);
 }
 
 static
@@ -808,6 +1226,10 @@ START_TEST(BackupReadWrite)
         TestWrite(Buffer, Buffer2);
         TestSparse(Buffer);
         TestManyStreams();
+        TestLinkStream(Buffer);
+        TestStreamTypes(Buffer);
+        TestSeekRestore(Buffer);
+        TestLabel(Buffer);
     }
     if (Buffer)
         HeapFree(GetProcessHeap(), 0, Buffer);
