@@ -28,11 +28,19 @@ ExArchPostHalInitSystemPhase1(
     VOID)
 {
     KIRQL CurrentIrql;
+    PKPROCESS Process;
 
     KeReenableTimerInterrupt();
 
     /* HAL has moved interrupt MMIO to kernel VAs; retire its low aliases. */
     MiArm64UnmapEarlyDeviceAliases(KeLoaderBlock);
+
+    /* The bootstrap identity map in TTBR0 goes with them: walk the process root, as the other processors do */
+    Process = &PsGetCurrentProcess()->Pcb;
+    KiArm64WriteUserTtbr(KPROCESS_DTB0(Process) & ARM64_PTE_ADDR_MASK,
+                         KiArm64KernelTtbrBase(KPROCESS_DTB0(Process)),
+                         0,
+                         TRUE);
 
     /*
      * From this point the MM bootstrap mappings are in place and the timer
