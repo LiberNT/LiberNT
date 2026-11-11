@@ -37,6 +37,7 @@ HKR, , NoInstallClass, 0, 1
 %ACPI\DWC_OTG.DeviceDesc%=DWC2_Inst,ACPI\DWC_OTG
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB20
+%USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB30
 
 [IntelMfg]
 %PCI\VEN_8086&DEV_7020&CC_0C0300.DeviceDesc%=UHCI_Inst,PCI\VEN_8086&DEV_7020&CC_0C0300

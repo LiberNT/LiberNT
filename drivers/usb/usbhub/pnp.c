@@ -2271,6 +2271,17 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      0,
                                      L"USB\\UNKNOWN");
             }
+            /* TODO: SuperSpeed hub compatible and instance IDs */
+            else if ((PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_HUB_DEVICE) &&
+                     !(PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED))
+            {
+                RtlStringCbPrintfExW(Buffer,
+                                     Remaining,
+                                     NULL,
+                                     &Remaining,
+                                     0,
+                                     L"USB\\USB20_HUB");
+            }
             else if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_MULTI_INTERFACE)
             {
                 RtlStringCbPrintfExW(Buffer,
@@ -2486,7 +2497,23 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         case BusQueryInstanceID:
             DPRINT("USBH_PdoQueryId: BusQueryInstanceID\n");
 
-            if (PortExtension->SerialNumber)
+            if (PortExtension->SerialNumber &&
+                (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_HUB_DEVICE) &&
+                !(PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED))
+            {
+                Length = sizeof(L"MSFT20") - sizeof(UNICODE_NULL) + PortExtension->SN_DescriptorLength;
+                Id = ExAllocatePoolWithTag(PagedPool, Length, USB_HUB_TAG);
+
+                if (Id)
+                {
+                    RtlZeroMemory(Id, Length);
+                    RtlCopyMemory(Id, L"MSFT20", sizeof(L"MSFT20") - sizeof(UNICODE_NULL));
+                    RtlCopyMemory((PUCHAR)Id + sizeof(L"MSFT20") - sizeof(UNICODE_NULL),
+                                  PortExtension->SerialNumber,
+                                  PortExtension->SN_DescriptorLength);
+                }
+            }
+            else if (PortExtension->SerialNumber)
             {
                 Id = ExAllocatePoolWithTag(PagedPool,
                                            PortExtension->SN_DescriptorLength,
@@ -2563,6 +2590,35 @@ USBH_PdoQueryDeviceText(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         DeviceTextType != DeviceTextLocationInformation)
     {
         return Irp->IoStatus.Status;
+    }
+
+    if (DeviceTextType == DeviceTextLocationInformation)
+    {
+        ASSERT(PortExtension->HubExtension);
+        ASSERT(PortExtension->HubExtension->HubNumber != 0);
+
+        Length = 32 * sizeof(WCHAR);
+        DeviceText = ExAllocatePoolWithTag(PagedPool, Length, USB_HUB_TAG);
+
+        if (!DeviceText)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        Status = RtlStringCbPrintfW(DeviceText,
+                                    Length,
+                                    L"Port_#%04u.Hub_#%04lu",
+                                    PortExtension->PortNumber,
+                                    PortExtension->HubExtension->HubNumber);
+
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(DeviceText, USB_HUB_TAG);
+            return Status;
+        }
+
+        Irp->IoStatus.Information = (ULONG_PTR)DeviceText;
+        return STATUS_SUCCESS;
     }
 
     LanguageId = LANGIDFROMLCID(IoStack->Parameters.QueryDeviceText.LocaleId);

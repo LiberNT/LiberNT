@@ -179,6 +179,7 @@ USBH_PortChangeMarkConnect(
 
 extern PWSTR GenericUSBDeviceString;
 extern LONG USBH_NextDebugBusNumber;
+extern LONG USBH_NextHubNumber;
 
 typedef struct _USBHUB_PORT_DATA {
   USB_PORT_STATUS_AND_CHANGE PortStatus;
@@ -271,6 +272,7 @@ typedef struct _USBHUB_FDO_EXTENSION {
   ULONG DebugBusNumber;
   LONG EnumWorkerQueued;
   LONG EnumWorkerRerun;
+  ULONG HubNumber;
 } USBHUB_FDO_EXTENSION, *PUSBHUB_FDO_EXTENSION;
 
 typedef struct _USBHUB_PORT_PDO_EXTENSION {

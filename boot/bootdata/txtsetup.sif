@@ -50,6 +50,7 @@ PCI\VEN_1000&DEV_0030 = lsi_sas
 USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
 USB\ROOT_HUB20 = usbhub
+USB\ROOT_HUB30 = usbhub
 PCI\CC_0C0300 = usbuhci
 PCI\CC_0C0310 = usbohci
 PCI\CC_0C0320 = usbehci

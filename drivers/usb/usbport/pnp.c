@@ -3118,6 +3118,7 @@ USBPORT_GetDeviceHwIds(IN PDEVICE_OBJECT FdoDevice,
     SIZE_T Length = 0;
     size_t Remaining = sizeof(Buffer);
     PWCHAR EndBuffer;
+    PCWSTR Prefix;
 
     FdoExtension = FdoDevice->DeviceExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
@@ -3126,74 +3127,47 @@ USBPORT_GetDeviceHwIds(IN PDEVICE_OBJECT FdoDevice,
            FdoDevice,
            Packet->MiniPortFlags);
 
-    if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB2)
-    {
-        RtlStringCbPrintfExW(Buffer,
-                             Remaining,
-                             &EndBuffer,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB20&VID%04x&PID%04x&REV%04x",
-                             VendorID,
-                             DeviceID,
-                             RevisionID);
-
-        EndBuffer++;
-        Remaining -= sizeof(UNICODE_NULL);
-
-        RtlStringCbPrintfExW(EndBuffer,
-                             Remaining,
-                             &EndBuffer,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB20&VID%04x&PID%04x",
-                             VendorID,
-                             DeviceID);
-
-        EndBuffer++;
-        Remaining -= sizeof(UNICODE_NULL);
-
-        RtlStringCbPrintfExW(EndBuffer,
-                             Remaining,
-                             NULL,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB20");
-    }
+    if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB3)
+        Prefix = L"USB\\ROOT_HUB30";
+    else if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB2)
+        Prefix = L"USB\\ROOT_HUB20";
     else
-    {
-        RtlStringCbPrintfExW(Buffer,
-                             Remaining,
-                             &EndBuffer,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB&VID%04x&PID%04x&REV%04x",
-                             VendorID,
-                             DeviceID,
-                             RevisionID);
+        Prefix = L"USB\\ROOT_HUB";
 
-        EndBuffer++;
-        Remaining -= sizeof(UNICODE_NULL);
+    RtlStringCbPrintfExW(Buffer,
+                         Remaining,
+                         &EndBuffer,
+                         &Remaining,
+                         0,
+                         L"%ls&VID%04X&PID%04X&REV%04X",
+                         Prefix,
+                         VendorID,
+                         DeviceID,
+                         RevisionID);
 
-        RtlStringCbPrintfExW(EndBuffer,
-                             Remaining,
-                             &EndBuffer,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB&VID%04x&PID%04x",
-                             VendorID,
-                             DeviceID);
+    EndBuffer++;
+    Remaining -= sizeof(UNICODE_NULL);
 
-        EndBuffer++;
-        Remaining -= sizeof(UNICODE_NULL);
+    RtlStringCbPrintfExW(EndBuffer,
+                         Remaining,
+                         &EndBuffer,
+                         &Remaining,
+                         0,
+                         L"%ls&VID%04X&PID%04X",
+                         Prefix,
+                         VendorID,
+                         DeviceID);
 
-        RtlStringCbPrintfExW(EndBuffer,
-                             Remaining,
-                             NULL,
-                             &Remaining,
-                             0,
-                             L"USB\\ROOT_HUB");
-    }
+    EndBuffer++;
+    Remaining -= sizeof(UNICODE_NULL);
+
+    RtlStringCbPrintfExW(EndBuffer,
+                         Remaining,
+                         NULL,
+                         &Remaining,
+                         0,
+                         L"%ls",
+                         Prefix);
 
     Length = (sizeof(Buffer) - Remaining + 2 * sizeof(UNICODE_NULL));
 
@@ -3461,7 +3435,13 @@ USBPORT_PdoPnP(IN PDEVICE_OBJECT PdoDevice,
                 PUSBPORT_REGISTRATION_PACKET Packet;
                 Packet = &FdoExtension->MiniPortInterface->Packet;
 
-                if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB2)
+                if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB3)
+                {
+                    RtlStringCbPrintfW(Buffer,
+                                       sizeof(Buffer),
+                                       L"USB\\ROOT_HUB30");
+                }
+                else if (Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB2)
                 {
                     RtlStringCbPrintfW(Buffer,
                                        sizeof(Buffer),

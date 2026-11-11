@@ -31,6 +31,7 @@
 
 PWSTR GenericUSBDeviceString = NULL;
 LONG USBH_NextDebugBusNumber = 0;
+LONG USBH_NextHubNumber = 0;
 static LONG USBH_BootDeviceDiscoveryActive = TRUE;
 static LIST_ENTRY USBH_SerialNumberList;
 static FAST_MUTEX USBH_SerialNumberMutex;
@@ -6932,6 +6933,7 @@ USBH_AddDevice(IN PDRIVER_OBJECT DriverObject,
     RtlZeroMemory(HubExtension, sizeof(USBHUB_FDO_EXTENSION));
 
     HubExtension->Common.ExtensionType = USBH_EXTENSION_TYPE_HUB;
+    HubExtension->HubNumber = (ULONG)InterlockedIncrement(&USBH_NextHubNumber);
 
     LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, LowerPDO);
 
