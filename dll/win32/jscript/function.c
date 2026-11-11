@@ -998,6 +998,21 @@ static const builtin_info_t HostFunction_info = {
     .gc_traverse = Function_gc_traverse
 };
 
+static const builtin_prop_t HostMethod_props[] = {
+    {L"arguments",           NULL, 0,                        Function_get_arguments},
+    {L"caller",              NULL, 0,                        Function_get_caller},
+    {L"prototype",           NULL, 0,                        InterpretedFunction_get_prototype, InterpretedFunction_set_prototype}
+};
+
+static const builtin_info_t HostMethod_info = {
+    .class       = JSCLASS_FUNCTION,
+    .call        = Function_value,
+    .destructor  = Function_destructor,
+    .props_cnt   = ARRAY_SIZE(HostMethod_props),
+    .props       = HostMethod_props,
+    .gc_traverse = Function_gc_traverse
+};
+
 static HRESULT HostFunction_call(script_ctx_t *ctx, FunctionInstance *func, jsval_t vthis, unsigned flags,
          unsigned argc, jsval_t *argv, jsval_t *r)
 {
@@ -1097,8 +1112,8 @@ HRESULT create_host_function(script_ctx_t *ctx, const struct property_info *desc
     if(!ctx->function_constr)
         return E_UNEXPECTED;
 
-    hres = create_function(ctx, &HostFunction_info, &HostFunctionVtbl, sizeof(HostFunction), PROPF_METHOD,
-                           NULL, (void**)&function);
+    hres = create_function(ctx, flags == DISPATCH_METHOD ? &HostMethod_info : &HostFunction_info, &HostFunctionVtbl,
+                           sizeof(HostFunction), PROPF_METHOD, NULL, (void**)&function);
     if(FAILED(hres))
         return hres;
 
