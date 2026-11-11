@@ -386,6 +386,20 @@ NtReadFile(
 
     PAGED_CODE();
 
+    /* The buffer is probed before the caller's event is reset: a bad buffer leaves the event as it was */
+    if (ExGetPreviousMode() != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Buffer, Length, sizeof(UCHAR));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
     Status = IopBeginRequest(&Request,
                              FileHandle,
                              FILE_READ_DATA,
@@ -404,8 +418,6 @@ NtReadFile(
     {
         _SEH2_TRY
         {
-            ProbeForWrite(Buffer, Length, sizeof(UCHAR));
-
             if (ByteOffset != NULL)
             {
                 CapturedOffset = ProbeForReadLargeInteger(ByteOffset);
