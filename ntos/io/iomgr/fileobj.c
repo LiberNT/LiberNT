@@ -748,6 +748,7 @@ IopCreateStreamFileObject(
     PDEVICE_OBJECT Target;
     NTSTATUS Status;
     HANDLE Handle;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
@@ -786,6 +787,11 @@ IopCreateStreamFileObject(
     CreatedFileObject->DeviceObject = Target;
     CreatedFileObject->Flags = FO_STREAM_FILE;
 
+    /* A stream file counts on its device even during a removal, and deleting it gives the count back on any path */
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    Target->ReferenceCount++;
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
     if (FileObject != NULL)
     {
         CreatedFileObject->Vpb = FileObject->Vpb;
@@ -818,8 +824,6 @@ IopCreateStreamFileObject(
 
         if (FileObjectHandle != NULL) *FileObjectHandle = Handle;
     }
-
-    IopReferenceDeviceObject(Target);
 
     CreatedFileObject->Flags |= FO_HANDLE_CREATED;
 

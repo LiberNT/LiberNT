@@ -6,6 +6,7 @@
  */
 
 #include <kmt_test.h>
+#include <ndk/cmfuncs.h>
 #include <winuser.h>
 #include <winreg.h>
 #include <setupapi.h>
@@ -25,8 +26,8 @@ static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestF
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried", L"StartDmaV3", L"BusStateQueried", L"FailBus",
-                                 L"HideChild", L"ChildSurprised", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
-                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves" };
+                                 L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
+                                 L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -181,12 +182,15 @@ static HANDLE OpenDevice(DEVINST Device)
  * and leaves the tree; the waits only bound a lost request */
 static VOID CheckSurpriseRemoval(DEVINST Bus)
 {
+    PLUGPLAY_CONTROL_DEVICE_CONTROL_DATA Reset;
+    WCHAR Instance[MAX_DEVICE_ID_LEN];
     ULONG Status = 0, Problem = 0;
-    DWORD Start, Value = 0;
+    DWORD Start, Value = 0, Returned;
     DEVINST Child;
     HANDLE File;
 
-    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        CM_Get_Device_IDW(Child, Instance, RTL_NUMBER_OF(Instance), 0) != CR_SUCCESS)
     {
         ok(FALSE, "The bus has no child to remove\n");
         return;
@@ -199,7 +203,21 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
     SetRequest(L"HideChild", 1);
     ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
-    ok(ReadValue(L"ChildSurprised", &Value) && Value == 1, "The missing child was not surprise-removed\n");
+    ok(ReadValue(L"ChildSurprises", &Value) && Value == 1, "The missing child was not surprise-removed\n");
+
+    /* While it waits for its last close, the stack takes no state query, eject or reset, and a stream file of its
+     * driver is no close of its own */
+    SetRequest(L"EjectMissing", 1);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    SetRequest(L"EjectMissing", 0);
+    RtlInitUnicodeString(&Reset.DeviceInstance, Instance);
+    NtPlugPlayControl(PlugPlayControlResetDevice, &Reset, sizeof(Reset));
+    ok(DeviceIoControl(File, CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_NEITHER, FILE_ANY_ACCESS), NULL, 0, NULL, 0,
+                       &Returned, NULL),
+       "The child's driver opened no stream file: %lu\n", GetLastError());
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok(ReadValue(L"ChildSurprises", &Value) && Value == 1, "The missing child was surprise-removed again (%lu)\n", Value);
     ok(!ReadValue(L"ChildFdoRemoves", &Value), "The missing child was removed while a handle was open\n");
 
     CloseHandle(File);

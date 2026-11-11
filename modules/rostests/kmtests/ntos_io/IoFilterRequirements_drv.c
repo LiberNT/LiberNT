@@ -5,7 +5,7 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <ntddk.h>
+#include <ntifs.h>
 
 #define TEST_TAG 'qRFK'
 #define TEST_REPORTED_MAGIC 0x4B465251
@@ -38,6 +38,8 @@ static ULONG RelationsQueried;
 static ULONG BusStateQueried;
 static BOOLEAN FailRequested;
 static ULONG ChildFdoRemoves;
+static ULONG ChildSurprises;
+static PDEVICE_OBJECT MissingChild;
 static ULONG ChildPdoRemoves;
 static ULONG ChildPdoQueryRemoves;
 static ULONG BusFdoRemoves;
@@ -234,7 +236,9 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             return Status;
 
         case IRP_MN_SURPRISE_REMOVAL:
-            Record(L"ChildSurprised", 1);
+            Record(L"ChildSurprises", ++ChildSurprises);
+            /* A driver may still report its device's state once the device is gone */
+            IoInvalidateDeviceState(Extension->Pdo);
             Irp->IoStatus.Status = STATUS_SUCCESS;
             return Pass(Extension, Irp);
 
@@ -263,6 +267,7 @@ static NTSTATUS ReportChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
         if (Extension->Child != NULL)
         {
             ((PTEST_EXTENSION)Extension->Child->DeviceExtension)->Missing = TRUE;
+            MissingChild = Extension->Child;
             Extension->Child = NULL;
         }
         Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -330,6 +335,8 @@ static NTSTATUS BusFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension
                 EjectRequested = TRUE;
                 IoRequestDeviceEject(Extension->Child);
             }
+            if (MissingChild != NULL && Requested(L"EjectMissing"))
+                IoRequestDeviceEject(MissingChild);
             return ReportChild(DeviceObject, Extension, Irp);
 
         case IRP_MN_REMOVE_DEVICE:
@@ -425,7 +432,11 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             Extension->Removed = TRUE;
             Complete(Irp, STATUS_SUCCESS);
             if (Extension->Missing)
+            {
+                if (MissingChild == DeviceObject)
+                    MissingChild = NULL;
                 IoDeleteDevice(DeviceObject);
+            }
             return STATUS_SUCCESS;
 
         case IRP_MN_QUERY_DEVICE_RELATIONS:
@@ -458,6 +469,12 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             Status = STATUS_SUCCESS;
             break;
 
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+            if (Extension->Missing)
+                Irp->IoStatus.Information |= PNP_DEVICE_REMOVED;
+            Status = STATUS_SUCCESS;
+            break;
+
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
@@ -487,6 +504,19 @@ static NTSTATUS NTAPI TestCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     UNREFERENCED_PARAMETER(DeviceObject);
     return Complete(Irp, STATUS_SUCCESS);
+}
+
+/* Like a file system on its volume, the child's function driver opens and closes a stream file on its device */
+static NTSTATUS NTAPI TestDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    PTEST_EXTENSION Extension = DeviceObject->DeviceExtension;
+    PFILE_OBJECT Stream = NULL;
+
+    if (Extension->Kind == TestChildFdo)
+        Stream = IoCreateStreamFileObjectLite(NULL, Extension->Pdo);
+    if (Stream != NULL)
+        ObDereferenceObject(Stream);
+    return Complete(Irp, Stream != NULL ? STATUS_SUCCESS : STATUS_INVALID_DEVICE_REQUEST);
 }
 
 static NTSTATUS NTAPI TestPower(PDEVICE_OBJECT DeviceObject, PIRP Irp)
@@ -547,6 +577,7 @@ NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Registry
     DriverObject->MajorFunction[IRP_MJ_CREATE] = TestCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLEANUP] = TestCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = TestCreateClose;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = TestDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_PNP] = TestPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = TestPower;
     return STATUS_SUCCESS;

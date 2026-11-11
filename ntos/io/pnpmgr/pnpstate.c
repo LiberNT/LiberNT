@@ -993,6 +993,11 @@ PiProcessStartDevice(
                                &DeviceNode->InstancePath);
 }
 
+static
+BOOLEAN
+PiIsPendingCloses(
+    _In_ PDEVICE_NODE DeviceNode);
+
 /* An eject removes the device first and leaves the eject itself to its bus driver (IoRequestDeviceEject) */
 static
 NTSTATUS
@@ -1007,16 +1012,23 @@ PiEjectDevice(
 
     PAGED_CODE();
 
+    /* A stack waiting for its last close is surprise-removed already: its close path removes it */
+    if (PiIsPendingCloses(DeviceNode)) return STATUS_DELETE_PENDING;
+
     IopQueueTargetDeviceEvent(&GUID_DEVICE_KERNEL_INITIATED_EJECT, &DeviceNode->InstancePath);
 
     if (NT_SUCCESS(IopQueryDeviceCapabilities(DeviceNode, &Capabilities))) Supported = Capabilities.EjectSupported;
 
     /* TODO: the removal and ejection relations of the device are not queried and removed with it */
-    Status = PiQueryRemoveDevice(DeviceNode->PhysicalDeviceObject, &RemoveData);
+    Status = (DeviceNode->State == DeviceNodeRemoved) ? STATUS_SUCCESS :
+             PiQueryRemoveDevice(DeviceNode->PhysicalDeviceObject, &RemoveData);
     if (NT_SUCCESS(Status))
     {
-        PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
-        PiDevNodeStateMachine(DeviceNode);
+        if (DeviceNode->State != DeviceNodeRemoved)
+        {
+            PiSetDevNodeState(DeviceNode, DeviceNodeAwaitingQueuedRemoval);
+            PiDevNodeStateMachine(DeviceNode);
+        }
 
         PiSetDevNodeProblem(DeviceNode, CM_PROB_HELD_FOR_EJECT);
 
@@ -1514,6 +1526,9 @@ PiRunDeviceAction(
                 break;
 
             case PiActionResetDevice:
+                /* A stack waiting for its last close keeps waiting; its close path removes it */
+                if (PiIsPendingCloses(DeviceNode)) break;
+
                 PiClearDevNodeProblem(DeviceNode);
                 PiSetDevNodeState(DeviceNode, DeviceNodeUninitialized);
                 PiDevNodeStateMachine(DeviceNode);
@@ -1522,6 +1537,9 @@ PiRunDeviceAction(
             case PiActionQueryState:
             {
                 PNP_DEVICE_STATE DeviceState = 0;
+
+                /* Only a started device is asked for its state (IRP_MN_QUERY_PNP_DEVICE_STATE documentation) */
+                if (DeviceNode->State != DeviceNodeStarted) break;
 
                 Status = PiIrpQueryPnPDeviceState(DeviceNode, &DeviceState);
                 if (!NT_SUCCESS(Status)) break;
