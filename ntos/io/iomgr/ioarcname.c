@@ -19,6 +19,9 @@ PCHAR IoLoaderArcBootDeviceName = NULL;
 
 /* PRIVATE DATA ***************************************************************/
 
+#define IOP_BOOT_DEVICE_WAIT_ATTEMPTS   50
+#define IOP_BOOT_DEVICE_WAIT_MS         200
+
 static const UNICODE_STRING IopArcNamePrefix =
     RTL_CONSTANT_STRING(L"\\ArcName\\");
 
@@ -492,15 +495,32 @@ IopCreateArcNamesCd(
 }
 
 CODE_SEG("INIT")
+static
+BOOLEAN
+IopArcBootDeviceMayArriveLate(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PCSTR Name = LoaderBlock->ArcBootDeviceName;
+
+    return (BOOLEAN)(Name != NULL &&
+                     !IoRemoteBootClient &&
+                     _strnicmp(Name, "ramdisk(", 8) != 0 &&
+                     strstr(Name, "net(") == NULL);
+}
+
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 IopCreateArcNames(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     BOOLEAN FoundBoot = FALSE;
+    LARGE_INTEGER Delay;
     NTSTATUS Status;
+    ULONG Attempt;
 
     PAGED_CODE();
+    ASSERT(LoaderBlock != NULL);
 
     if (LoaderBlock->ArcBootDeviceName != NULL)
     {
@@ -516,17 +536,41 @@ IopCreateArcNames(
 
     /* TODO: ARC names for ramdisk and network boot devices */
 
-    Status = IopCreateArcNamesDisk(LoaderBlock, FALSE, &FoundBoot);
-    if (!NT_SUCCESS(Status)) return Status;
+    for (Attempt = 0; ; Attempt++)
+    {
+        Status = IopCreateArcNamesDisk(LoaderBlock, FALSE, &FoundBoot);
+        if (!NT_SUCCESS(Status)) return Status;
 
-    if (FoundBoot) return STATUS_SUCCESS;
+        if (!FoundBoot)
+        {
+            Status = IopCreateArcNamesCd(LoaderBlock, FALSE, &FoundBoot);
+            if (!NT_SUCCESS(Status)) return Status;
+        }
 
-    Status = IopCreateArcNamesCd(LoaderBlock, FALSE, &FoundBoot);
-    if (!NT_SUCCESS(Status)) return Status;
+        if (FoundBoot ||
+            Attempt == IOP_BOOT_DEVICE_WAIT_ATTEMPTS ||
+            !IopArcBootDeviceMayArriveLate(LoaderBlock))
+        {
+            break;
+        }
+
+        /* A bus can report the boot disk after the boot drivers' enumeration drained, a USB hub after its port debounce */
+        Delay.QuadPart = -(LONGLONG)IOP_BOOT_DEVICE_WAIT_MS * 10000;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+        PiPerformSyncDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumDeviceTree);
+    }
+
+    ASSERT(Attempt <= IOP_BOOT_DEVICE_WAIT_ATTEMPTS);
 
     if (!FoundBoot)
     {
         DPRINT1("I/O: no device answered to the ARC boot name %Z\n", &IoArcBootDeviceName);
+    }
+    else if (Attempt != 0)
+    {
+        DPRINT1("I/O: the boot device %Z answered after %lu ms\n",
+                &IoArcBootDeviceName,
+                Attempt * IOP_BOOT_DEVICE_WAIT_MS);
     }
 
     return STATUS_SUCCESS;
