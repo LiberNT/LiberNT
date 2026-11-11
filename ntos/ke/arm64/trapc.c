@@ -2583,48 +2583,6 @@ KiArm64HandleSynchronousException(
                 }
             }
 #endif
-#ifdef KDBG
-            /*
-             * Call KDBG to display crash diagnostics (registers, stack trace,
-             * modules) for kernel-mode faults. This runs regardless of KD state
-             * since KDBG provides valuable crash info even when KD is "enabled"
-             * for serial output but no interactive debugger is attached.
-             */
-            if (PreviousMode == KernelMode)
-            {
-                EXCEPTION_RECORD64 ExceptionRecord64;
-                CONTEXT KdbContext;
-
-                RtlZeroMemory(&ExceptionRecord64, sizeof(ExceptionRecord64));
-                if ((Status == STATUS_ACCESS_VIOLATION) ||
-                    (Status == STATUS_GUARD_PAGE_VIOLATION) ||
-                    (Status == STATUS_STACK_OVERFLOW))
-                {
-                    ExceptionRecord64.ExceptionCode = Status;
-                    ExceptionRecord64.NumberParameters = 2;
-                }
-                else
-                {
-                    ExceptionRecord64.ExceptionCode = STATUS_IN_PAGE_ERROR;
-                    ExceptionRecord64.NumberParameters = 3;
-                    ExceptionRecord64.ExceptionInformation[2] = Status;
-                }
-                ExceptionRecord64.ExceptionFlags = 0;
-                ExceptionRecord64.ExceptionAddress = Context->State.Elr;
-                ExceptionRecord64.ExceptionInformation[0] = KiArm64AccessTypeToExceptionInfo(WriteAccess, FALSE);
-                ExceptionRecord64.ExceptionInformation[1] = (ULONG_PTR)Context->State.FaultAddress;
-
-                RtlZeroMemory(&KdbContext, sizeof(KdbContext));
-                KdbContext.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_ARM64;
-
-                KeTrapFrameToContext(TrapFrame, Context->ExceptionFramePointer, &KdbContext);
-
-                KdbEnterDebuggerException(&ExceptionRecord64,
-                                          PreviousMode,
-                                          &KdbContext,
-                                          TRUE);
-            }
-#endif /* KDBG */
 
             {
                 EXCEPTION_RECORD ExceptionRecord;
