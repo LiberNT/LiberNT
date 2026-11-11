@@ -167,6 +167,7 @@ struct DocHost {
     LONG progress_max;
     BOOL drop_target_asked;
     BOOL download_begun;
+    BOOL hostui_shown;
 #endif
 
     READYSTATE ready_state;

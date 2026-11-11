@@ -1050,16 +1050,38 @@ static HRESULT WINAPI DocHostUIHandler_ShowUI(IDocHostUIHandler2 *iface, DWORD d
         IOleInPlaceFrame *pFrame, IOleInPlaceUIWindow *pDoc)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)->(%ld %p %p %p %p)\n", This, dwID, pActiveObject, pCommandTarget,
+          pFrame, pDoc);
+
+    if(!This->hostui)
+        return E_NOTIMPL;
+
+    This->hostui_shown = TRUE;
+    return IDocHostUIHandler_ShowUI(This->hostui, dwID, pActiveObject, pCommandTarget, pFrame, pDoc);
+#else
     FIXME("(%p)->(%ld %p %p %p %p)\n", This, dwID, pActiveObject, pCommandTarget,
           pFrame, pDoc);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_HideUI(IDocHostUIHandler2 *iface)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)\n", This);
+
+    /* Only the UI the container was asked to show is hidden again */
+    if(!This->hostui || !This->hostui_shown)
+        return E_NOTIMPL;
+
+    This->hostui_shown = FALSE;
+    return IDocHostUIHandler_HideUI(This->hostui);
+#else
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_UpdateUI(IDocHostUIHandler2 *iface)
