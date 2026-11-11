@@ -299,6 +299,15 @@ SepSidInTokenEx(
         case SEP_SID_SET_CAPABILITIES:
             LowBox = Token->LowBoxInfo;
             if (LowBox == NULL) return FALSE;
+
+            /* A package also answers to its own name and to every package, or only every restricted one */
+            if (RtlEqualSid(Wanted, LowBox->PackageSid) ||
+                RtlEqualSid(Wanted, SeAllRestrictedAppPackagesSid) ||
+                (!(LowBox->Flags & SEP_LOWBOX_LPAC) && RtlEqualSid(Wanted, SeAllAppPackagesSid)))
+            {
+                return TRUE;
+            }
+
             Entries = LowBox->Capabilities;
             Count = LowBox->CapabilityCount;
             break;

@@ -16,6 +16,7 @@ typedef struct _SEP_CHECK_CONTEXT
 {
     PISECURITY_DESCRIPTOR Descriptor;
     PTOKEN Token;
+    PTOKEN PrimaryToken;
     PSID PrincipalSelfSid;
     PGENERIC_MAPPING GenericMapping;
     POBJECT_TYPE_LIST_INTERNAL ObjectTypeList;
@@ -464,14 +465,22 @@ SepMandatoryDeniedRights(
     BOOLEAN SaclPresent = FALSE;
     BOOLEAN Defaulted;
     ACCESS_MASK Denied = 0;
+    PTOKEN Token = Context->Token;
     PACL Sacl = NULL;
     PACE Ace;
     ULONG Index;
     PSID Sid;
 
-    if (Context->Token == NULL) return 0;
+    if (Token == NULL) return 0;
 
-    if (!(Context->Token->MandatoryPolicy & TOKEN_MANDATORY_POLICY_NO_WRITE_UP)) return 0;
+    /* A package's token worn by a thread is held to the integrity of the process wearing it */
+    if (Token->TokenType == TokenImpersonation && Token->LowBoxInfo != NULL &&
+        Context->PrimaryToken != NULL)
+    {
+        Token = Context->PrimaryToken;
+    }
+
+    if (!(Token->MandatoryPolicy & TOKEN_MANDATORY_POLICY_NO_WRITE_UP)) return 0;
 
     if (NT_SUCCESS(RtlGetSaclSecurityDescriptor(Context->Descriptor, &SaclPresent, &Sacl, &Defaulted)) &&
         SaclPresent && Sacl != NULL)
@@ -491,7 +500,7 @@ SepMandatoryDeniedRights(
         }
     }
 
-    if (SepGetTokenIntegrityRid(Context->Token) >= ObjectRid) return 0;
+    if (SepGetTokenIntegrityRid(Token) >= ObjectRid) return 0;
 
     if (Policy & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP)
         Denied |= Context->GenericMapping->GenericWrite | DELETE | WRITE_DAC | WRITE_OWNER;
@@ -520,6 +529,7 @@ SepCheckList(
 {
     BOOLEAN Restricted = (Context->Token != NULL &&
                           Context->Token->RestrictedSidCount != 0);
+    BOOLEAN LowBox = (Context->Token != NULL && Context->Token->LowBoxInfo != NULL);
     ACCESS_MASK MandatoryDenied = SepMandatoryDeniedRights(Context);
     ULONG Entry;
 
@@ -553,6 +563,21 @@ SepCheckList(
             if (!NT_SUCCESS(Status2)) Status = Status2;
 
             Granted &= Second;
+        }
+
+        /* A package may only do what its name, its capabilities or every package are also allowed */
+        if (LowBox && NT_SUCCESS(Status))
+        {
+            ACCESS_MASK Third = 0;
+            NTSTATUS Status3;
+
+            Context->SidSet = SEP_SID_SET_CAPABILITIES;
+            Status3 = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
+                                    &Third);
+
+            if (!NT_SUCCESS(Status3)) Status = Status3;
+
+            Granted &= Third;
         }
 
         Granted &= ~MandatoryDenied;
@@ -684,6 +709,7 @@ SeAccessCheck(
     RtlZeroMemory(&Context, sizeof(Context));
     Context.Descriptor = SecurityDescriptor;
     Context.Token = (PTOKEN)SeQuerySubjectContextToken(SubjectSecurityContext);
+    Context.PrimaryToken = (PTOKEN)SubjectSecurityContext->PrimaryToken;
     Context.GenericMapping = GenericMapping;
     Context.MaximumAllowed = (DesiredAccess & MAXIMUM_ALLOWED) != 0;
 
@@ -869,6 +895,7 @@ SepAccessCheckByType(
     }
 
     SeCaptureSubjectContext(&SubjectContext);
+    Context.PrimaryToken = (PTOKEN)SubjectContext.PrimaryToken;
 
     if (EffectiveToken != NULL)
     {

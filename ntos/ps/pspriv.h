@@ -32,6 +32,8 @@
 #define PSP_CHILD_PROCESS_OVERRIDE                  0x02
 #define PSP_CHILD_PROCESS_RESTRICTED_UNLESS_SECURE  0x04
 
+#define PSP_ALL_APPLICATION_PACKAGES_OPT_OUT        0x01
+
 /* What the attribute list told us, once it has been read and checked */
 typedef struct _PSP_CREATE_ATTRIBUTES
 {

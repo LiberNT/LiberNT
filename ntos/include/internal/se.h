@@ -590,6 +590,7 @@ typedef struct _SEP_LOWBOX_INFO
 {
     ULONG Flags;
     ULONG LowBoxNumber;
+    ULONG SessionId;
     PSID PackageSid;
     ULONG CapabilityCount;
     PSID_AND_ATTRIBUTES Capabilities;
@@ -609,6 +610,11 @@ SepSidInTokenEx(
 ULONG
 NTAPI
 SepGetTokenIntegrityRid(
+    _In_ PACCESS_TOKEN Token);
+
+VOID
+NTAPI
+SepMarkLessPrivilegedAppContainer(
     _In_ PACCESS_TOKEN Token);
 
 

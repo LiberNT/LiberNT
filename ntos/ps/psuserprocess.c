@@ -335,8 +335,14 @@ PspCaptureAttributes(
                 break;
 
             case PsAttributeAllApplicationPackagesPolicy:
-                Attributes->AllApplicationPackagesPolicy =
-                    (ULONG)Safe[Index].Value;
+                if (Safe[Index].Size != sizeof(ULONG))
+                    return STATUS_INVALID_PARAMETER;
+
+                Status = PspCaptureAttributeValue(Safe[Index].ValuePtr,
+                                                  sizeof(ULONG),
+                                                  PreviousMode,
+                                                  &Attributes->AllApplicationPackagesPolicy);
+                if (!NT_SUCCESS(Status)) return Status;
                 break;
 
             case PsAttributeDesktopAppPolicy:
@@ -534,10 +540,17 @@ PspApplyCreateAttributes(
         PspUnlockMitigationPolicy();
     }
 
-    if (Attributes->AllApplicationPackagesPolicy != 0 ||
-        Attributes->DesktopAppPolicy != 0)
+    if (Attributes->AllApplicationPackagesPolicy & PSP_ALL_APPLICATION_PACKAGES_OPT_OUT)
     {
-        /* TODO: these two bound which namespace the process sees; nothing in the kernel reads them yet */
+        PACCESS_TOKEN Token = PsReferencePrimaryToken(Process);
+
+        SepMarkLessPrivilegedAppContainer(Token);
+        PsDereferencePrimaryToken(Token);
+    }
+
+    if (Attributes->DesktopAppPolicy != 0)
+    {
+        /* TODO: nothing in the kernel reads the desktop app policy yet */
         NOTHING;
     }
 

@@ -56,6 +56,19 @@ typedef struct _SEP_SYSTEM_PRIVILEGE
 
 #define SEP_PRIVILEGE_ON (SE_PRIVILEGE_ENABLED | SE_PRIVILEGE_ENABLED_BY_DEFAULT)
 
+/* The number a package is known by in one session, shared by every token made for it there */
+typedef struct _SEP_LOWBOX_NUMBER
+{
+    LIST_ENTRY Link;
+    ULONG SessionId;
+    ULONG Number;
+    ULONG References;
+    PSID Package;
+} SEP_LOWBOX_NUMBER, *PSEP_LOWBOX_NUMBER;
+
+static LIST_ENTRY SepLowBoxNumbers = {&SepLowBoxNumbers, &SepLowBoxNumbers};
+static EX_PUSH_LOCK SepLowBoxNumberLock;
+
 /* A privilege the token holds without it being on: the caller enables it */
 #define SEP_PRIVILEGE_HELD 0
 
@@ -267,6 +280,109 @@ SepNoteTokenGroupFlags(
     if (Token->RestrictedSidCount != 0) Token->TokenFlags |= TOKEN_IS_RESTRICTED;
 }
 
+/*
+ * Finds the number a package already has in a session, or gives it the
+ * lowest one nobody there holds.
+ */
+static
+NTSTATUS
+SepReferenceLowBoxNumber(
+    _In_ ULONG SessionId,
+    _In_ PSID Package,
+    _Out_ PULONG Number)
+{
+    PSEP_LOWBOX_NUMBER Entry;
+    PLIST_ENTRY Link;
+    ULONG Candidate = 1;
+    BOOLEAN Taken = TRUE;
+    ULONG Length;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&SepLowBoxNumberLock);
+
+    for (Link = SepLowBoxNumbers.Flink; Link != &SepLowBoxNumbers; Link = Link->Flink)
+    {
+        Entry = CONTAINING_RECORD(Link, SEP_LOWBOX_NUMBER, Link);
+        if (Entry->SessionId != SessionId || !RtlEqualSid(Entry->Package, Package)) continue;
+
+        Entry->References++;
+        *Number = Entry->Number;
+        ExReleasePushLockExclusive(&SepLowBoxNumberLock);
+        KeLeaveCriticalRegion();
+        return STATUS_SUCCESS;
+    }
+
+    while (Taken)
+    {
+        Taken = FALSE;
+        for (Link = SepLowBoxNumbers.Flink; Link != &SepLowBoxNumbers; Link = Link->Flink)
+        {
+            Entry = CONTAINING_RECORD(Link, SEP_LOWBOX_NUMBER, Link);
+            if (Entry->SessionId != SessionId || Entry->Number != Candidate) continue;
+
+            Candidate++;
+            Taken = TRUE;
+            break;
+        }
+    }
+
+    Length = RtlLengthSid(Package);
+    Entry = ExAllocatePoolWithTag(PagedPool, sizeof(*Entry) + Length, TAG_SE);
+    if (Entry == NULL)
+    {
+        ExReleasePushLockExclusive(&SepLowBoxNumberLock);
+        KeLeaveCriticalRegion();
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Entry->SessionId = SessionId;
+    Entry->Number = Candidate;
+    Entry->References = 1;
+    Entry->Package = (PSID)(Entry + 1);
+    RtlCopyMemory(Entry->Package, Package, Length);
+    InsertTailList(&SepLowBoxNumbers, &Entry->Link);
+
+    *Number = Candidate;
+
+    ExReleasePushLockExclusive(&SepLowBoxNumberLock);
+    KeLeaveCriticalRegion();
+    return STATUS_SUCCESS;
+}
+
+/* The last token of a package in a session gives its number back */
+static
+VOID
+SepDereferenceLowBoxNumber(
+    _In_ ULONG SessionId,
+    _In_ ULONG Number)
+{
+    PSEP_LOWBOX_NUMBER Entry;
+    PLIST_ENTRY Link;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&SepLowBoxNumberLock);
+
+    for (Link = SepLowBoxNumbers.Flink; Link != &SepLowBoxNumbers; Link = Link->Flink)
+    {
+        Entry = CONTAINING_RECORD(Link, SEP_LOWBOX_NUMBER, Link);
+        if (Entry->SessionId != SessionId || Entry->Number != Number) continue;
+
+        if (--Entry->References == 0)
+        {
+            RemoveEntryList(&Entry->Link);
+            ExFreePoolWithTag(Entry, TAG_SE);
+        }
+        break;
+    }
+
+    ExReleasePushLockExclusive(&SepLowBoxNumberLock);
+    KeLeaveCriticalRegion();
+}
+
 /* FIXME: the kept handles are each token's own, not shared per package and logon session */
 static
 NTSTATUS
@@ -278,7 +394,7 @@ SepMakeLowBoxInfo(
     _In_reads_opt_(HandleCount) PHANDLE Handles,
     _In_ KPROCESSOR_MODE HandleMode,
     _In_ ULONG Flags,
-    _In_ ULONG LowBoxNumber,
+    _In_ ULONG SessionId,
     _Out_ PSEP_LOWBOX_INFO *NewBox)
 {
     PSEP_LOWBOX_INFO Box;
@@ -306,7 +422,14 @@ SepMakeLowBoxInfo(
 
     RtlZeroMemory(Box, Size);
     Box->Flags = Flags;
-    Box->LowBoxNumber = LowBoxNumber;
+    Box->SessionId = SessionId;
+
+    Status = SepReferenceLowBoxNumber(SessionId, Package, &Box->LowBoxNumber);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Box, TAG_SE);
+        return Status;
+    }
 
     Cursor = (PUCHAR)(Box + 1);
 
@@ -364,6 +487,7 @@ SepMakeLowBoxInfo(
         for (i = 0; i < Box->HandleCount; i++)
             ObCloseHandle(Box->Handles[i], KernelMode);
 
+        SepDereferenceLowBoxNumber(Box->SessionId, Box->LowBoxNumber);
         ExFreePoolWithTag(Box, TAG_SE);
         return Status;
     }
@@ -384,6 +508,7 @@ SepFreeLowBoxInfo(
     for (i = 0; i < Box->HandleCount; i++)
         ObCloseHandle(Box->Handles[i], KernelMode);
 
+    SepDereferenceLowBoxNumber(Box->SessionId, Box->LowBoxNumber);
     ExFreePoolWithTag(Box, TAG_SE);
 }
 
@@ -406,7 +531,7 @@ SepCopyLowBoxInfo(
                              (PHANDLE)Box->Handles,
                              KernelMode,
                              Box->Flags,
-                             Box->LowBoxNumber,
+                             Box->SessionId,
                              (PSEP_LOWBOX_INFO *)&Copy->LowBoxInfo);
 }
 
@@ -1322,6 +1447,22 @@ SepSetTokenFlags(
     SepReleaseTokenLock((PTOKEN)Token);
 }
 
+/* A package that opted out of every-package entries answers only to its own name, its capabilities and every restricted package */
+VOID
+NTAPI
+SepMarkLessPrivilegedAppContainer(
+    _In_ PACCESS_TOKEN Token)
+{
+    PSEP_LOWBOX_INFO Box;
+
+    PAGED_CODE();
+
+    SepAcquireTokenLockExclusive((PTOKEN)Token);
+    Box = ((PTOKEN)Token)->LowBoxInfo;
+    if (Box != NULL) Box->Flags |= SEP_LOWBOX_LPAC;
+    SepReleaseTokenLock((PTOKEN)Token);
+}
+
 /* The copy of a token a new process is started with when it is given one */
 NTSTATUS
 NTAPI
@@ -2022,6 +2163,69 @@ NtFilterToken(
     return Status;
 }
 
+/*
+ * A package runs at low integrity, and what it makes is open to the package
+ * itself as well as to whoever its token already let in.
+ */
+static
+NTSTATUS
+SepLowerToPackage(
+    _Inout_ PTOKEN Token,
+    _In_ PSID Package)
+{
+    PACL Old = Token->DefaultDacl;
+    PISID Label;
+    PACL Dacl;
+    ULONG Size;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Token->IntegrityLevelIndex != MAXULONG)
+    {
+        Label = Token->UserAndGroups[Token->IntegrityLevelIndex].Sid;
+        if (Label != NULL && Label->SubAuthorityCount != 0 &&
+            Label->SubAuthority[Label->SubAuthorityCount - 1] > SECURITY_MANDATORY_LOW_RID)
+        {
+            Label->SubAuthority[Label->SubAuthorityCount - 1] = SECURITY_MANDATORY_LOW_RID;
+        }
+    }
+
+    Size = ((Old != NULL) ? Old->AclSize : sizeof(ACL)) +
+           FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(Package);
+    if (Size > MAXUSHORT) return STATUS_INVALID_ACL;
+
+    Dacl = ExAllocatePoolWithTag(PagedPool, Size, TAG_SE);
+    if (Dacl == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    if (Old != NULL)
+    {
+        RtlCopyMemory(Dacl, Old, Old->AclSize);
+        Dacl->AclSize = (USHORT)Size;
+        Status = STATUS_SUCCESS;
+    }
+    else
+    {
+        Status = RtlCreateAcl(Dacl, Size, ACL_REVISION);
+    }
+
+    if (NT_SUCCESS(Status)) Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, GENERIC_ALL, Package);
+    if (NT_SUCCESS(Status)) Status = SepGrowChangeablePart(Token, Size);
+
+    if (NT_SUCCESS(Status))
+    {
+        RtlCopyMemory((PUCHAR)Token->DynamicPart + Token->DynamicCharged - Token->DynamicAvailable,
+                      Dacl,
+                      Size);
+        Token->DefaultDacl = (PACL)((PUCHAR)Token->DynamicPart + Token->DynamicCharged -
+                                    Token->DynamicAvailable);
+        Token->DynamicAvailable -= Size;
+    }
+
+    ExFreePoolWithTag(Dacl, TAG_SE);
+    return Status;
+}
+
 /* A token that stands for one package and nothing else */
 __kernel_entry
 NTSTATUS
@@ -2158,7 +2362,7 @@ NtCreateLowBoxToken(
                                    Kept,
                                    PreviousMode,
                                    0,
-                                   0,
+                                   New->SessionId,
                                    &Box);
     }
 
@@ -2169,6 +2373,8 @@ NtCreateLowBoxToken(
 
         New->LowBoxInfo = Box;
         New->TokenFlags |= TOKEN_LOWBOX;
+
+        Status = SepLowerToPackage(New, Package);
     }
 
     if (NT_SUCCESS(Status))
