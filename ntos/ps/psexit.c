@@ -203,6 +203,8 @@ PspExitThread(
     if ((Thread->Tcb.Win32Thread != NULL) && (PspW32ThreadCallout != NULL))
         PspW32ThreadCallout(Thread, PsW32ThreadCalloutExit);
 
+    KeRundownThread();
+
     PspTlsThreadCleanup(Thread);
     PspRundownPropertySet(&Thread->PropertySet);
     PopReleaseThreadPowerObject(Thread->LegacyPowerObject);

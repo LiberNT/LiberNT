@@ -461,8 +461,11 @@ KeReleaseMutant(
     {
         if (Mutant->OwnerThread != Thread)
         {
+            NTSTATUS Status = Mutant->Abandoned ? STATUS_ABANDONED
+                                                : STATUS_MUTANT_NOT_OWNED;
+
             KiReleaseDispatcherLock(OldIrql);
-            ExRaiseStatus(STATUS_MUTANT_NOT_OWNED);
+            ExRaiseStatus(Status);
         }
 
         Mutant->Header.SignalState++;
