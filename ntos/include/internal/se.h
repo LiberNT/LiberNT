@@ -429,6 +429,17 @@ SepCopyPrimaryToken(
     _In_ PACCESS_TOKEN Token,
     _Out_ PACCESS_TOKEN* NewToken);
 
+ULONG
+NTAPI
+SepQueryTokenFlags(
+    _In_ PACCESS_TOKEN Token);
+
+VOID
+NTAPI
+SepSetTokenFlags(
+    _In_ PACCESS_TOKEN Token,
+    _In_ ULONG Flags);
+
 BOOLEAN
 NTAPI
 SeTokenIsInert(

@@ -242,22 +242,22 @@ PspCaptureAttributes(
             case PsAttributeMitigationOptions:
                 /*
                  * The mask may be given as one word or as a longer run of
-                 * them; only the first word is defined, and a caller that
-                 * sets anything beyond it is asking for something this
+                 * them; the first two words are defined, and a caller that
+                 * sets anything beyond them is asking for something this
                  * system does not have.
                  */
                 if (Safe[Index].Size < sizeof(ULONG64))
                 {
-                    Attributes->MitigationOptions =
+                    Attributes->MitigationOptions[0] =
                         (ULONGLONG)Safe[Index].Value;
                     break;
                 }
 
                 Status = PspCaptureAttributeValue(
                              Safe[Index].ValuePtr,
-                             sizeof(ULONGLONG),
+                             min(Safe[Index].Size, sizeof(Attributes->MitigationOptions)),
                              PreviousMode,
-                             &Attributes->MitigationOptions);
+                             Attributes->MitigationOptions);
                 if (!NT_SUCCESS(Status)) return Status;
                 break;
 
@@ -316,7 +316,14 @@ PspCaptureAttributes(
                 break;
 
             case PsAttributeChildProcessPolicy:
-                Attributes->ChildProcessPolicy = (ULONG)Safe[Index].Value;
+                if (Safe[Index].Size != sizeof(ULONG))
+                    return STATUS_INVALID_PARAMETER;
+
+                Status = PspCaptureAttributeValue(Safe[Index].ValuePtr,
+                                                  sizeof(ULONG),
+                                                  PreviousMode,
+                                                  &Attributes->ChildProcessPolicy);
+                if (!NT_SUCCESS(Status)) return Status;
                 break;
 
             case PsAttributeAllApplicationPackagesPolicy:
@@ -430,7 +437,6 @@ PspApplyCreateAttributes(
     _In_ KPROCESSOR_MODE PreviousMode)
 {
     HANDLE Jobs[PSP_MAX_CREATE_JOBS];
-    ULONG Policy;
     ULONG Index;
     NTSTATUS Status;
 
@@ -442,28 +448,8 @@ PspApplyCreateAttributes(
     if (Attributes->Win32kFilter != 0)
         Process->Win32KFilterSet = Attributes->Win32kFilter;
 
-    /*
-     * The mitigation mask carries four bits for each policy, in the order
-     * the policies are numbered, so each one is lifted out and set through
-     * the same path a later caller would use.
-     */
-    if (Attributes->MitigationOptions != 0)
-    {
-        for (Policy = 0; Policy < PSP_EXTENDED_POLICY_COUNT; Policy++)
-        {
-            ULONG Flags;
-
-            if (!PspIsExtendedMitigationPolicy(Policy)) continue;
-
-            Flags = (ULONG)((Attributes->MitigationOptions >>
-                             (Policy * 4)) & 0xF);
-            if (Flags == 0) continue;
-
-            PspLockMitigationPolicy();
-            PspStoreMitigationPolicy(Process, Policy, Flags);
-            PspUnlockMitigationPolicy();
-        }
-    }
+    if (Attributes->MitigationOptions[0] != 0 || Attributes->MitigationOptions[1] != 0)
+        PspApplyCreationMitigations(Process, Attributes->MitigationOptions);
 
     if (Attributes->MitigationAuditOptions != 0)
     {
@@ -527,12 +513,20 @@ PspApplyCreateAttributes(
         NOTHING;
     }
 
-    if (Attributes->ChildProcessPolicy != 0 ||
-        Attributes->AllApplicationPackagesPolicy != 0 ||
+    /* TODO: PSP_CHILD_PROCESS_OVERRIDE does not lift a restriction the new process would otherwise get */
+    if (Attributes->ChildProcessPolicy & (PSP_CHILD_PROCESS_RESTRICTED | PSP_CHILD_PROCESS_RESTRICTED_UNLESS_SECURE))
+    {
+        PspLockMitigationPolicy();
+        PspStoreMitigationPolicy(Process,
+                                 PSP_CHILD_PROCESS_POLICY,
+                                 (Attributes->ChildProcessPolicy & PSP_CHILD_PROCESS_RESTRICTED_UNLESS_SECURE) ? 0x5 : 0x1);
+        PspUnlockMitigationPolicy();
+    }
+
+    if (Attributes->AllApplicationPackagesPolicy != 0 ||
         Attributes->DesktopAppPolicy != 0)
     {
-        /* TODO: these three bound what the process may start and which
-         * namespace it sees; nothing in the kernel reads them yet */
+        /* TODO: these two bound which namespace the process sees; nothing in the kernel reads them yet */
         NOTHING;
     }
 

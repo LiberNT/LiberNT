@@ -135,6 +135,7 @@ static const CATEGORY_RULE Rules[] =
     { "kernel32_apitest", "GetModuleFileName", "core:loader" },
     { "kernel32_apitest", "ApiSetCoreSynch", "core:loader" },
     { "kernel32_apitest", "SystemImageCatalog", "core:loader" },
+    { "kernel32_apitest", "ProcessMitigationPolicy", "core:process" },
     { "kernel32_apitest", "SharedMemory*", "core:memory" },
     { "kernel32_apitest", "ProcessWorkingSetSize", "core:memory" },
     { "kernel32_apitest", "InitOnce", "core:threads" },

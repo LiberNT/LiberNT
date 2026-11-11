@@ -28,6 +28,10 @@
 /* How many jobs a creation may name */
 #define PSP_MAX_CREATE_JOBS 16
 
+#define PSP_CHILD_PROCESS_RESTRICTED                0x01
+#define PSP_CHILD_PROCESS_OVERRIDE                  0x02
+#define PSP_CHILD_PROCESS_RESTRICTED_UNLESS_SECURE  0x04
+
 /* What the attribute list told us, once it has been read and checked */
 typedef struct _PSP_CREATE_ATTRIBUTES
 {
@@ -46,7 +50,7 @@ typedef struct _PSP_CREATE_ATTRIBUTES
     ULONG ChildProcessPolicy;
     ULONG AllApplicationPackagesPolicy;
     ULONG DesktopAppPolicy;
-    ULONGLONG MitigationOptions;
+    ULONGLONG MitigationOptions[2];
     ULONGLONG MitigationAuditOptions;
     ULONGLONG OptionalXStateFeatures;
     USHORT MachineType;

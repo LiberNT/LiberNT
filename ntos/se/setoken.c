@@ -1292,6 +1292,31 @@ SepSecureTokenWithItself(
     return Status;
 }
 
+ULONG
+NTAPI
+SepQueryTokenFlags(
+    _In_ PACCESS_TOKEN Token)
+{
+    ULONG Flags;
+
+    SepAcquireTokenLockShared((PTOKEN)Token);
+    Flags = ((PTOKEN)Token)->TokenFlags;
+    SepReleaseTokenLock((PTOKEN)Token);
+
+    return Flags;
+}
+
+VOID
+NTAPI
+SepSetTokenFlags(
+    _In_ PACCESS_TOKEN Token,
+    _In_ ULONG Flags)
+{
+    SepAcquireTokenLockExclusive((PTOKEN)Token);
+    ((PTOKEN)Token)->TokenFlags |= Flags;
+    SepReleaseTokenLock((PTOKEN)Token);
+}
+
 /* The copy of a token a new process is started with when it is given one */
 NTSTATUS
 NTAPI

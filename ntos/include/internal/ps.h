@@ -879,30 +879,19 @@ extern PKWIN32_JOB_CALLOUT PspW32JobCallout;
 
 #define PSP_DEP_POLICY 0
 #define PSP_ASLR_POLICY 1
+#define PSP_DYNAMIC_CODE_POLICY 2
+#define PSP_STRICT_HANDLE_CHECK_POLICY 3
+#define PSP_SYSTEM_CALL_DISABLE_POLICY 4
 #define PSP_EXTENSION_POINT_DISABLE_POLICY 6
 #define PSP_CONTROL_FLOW_GUARD_POLICY 7
+#define PSP_SIGNATURE_POLICY 8
 #define PSP_FONT_DISABLE_POLICY 9
 #define PSP_IMAGE_LOAD_POLICY 10
 #define PSP_SYSTEM_CALL_FILTER_POLICY 11
 #define PSP_PAYLOAD_RESTRICTION_POLICY 12
+#define PSP_CHILD_PROCESS_POLICY 13
 #define PSP_SIDE_CHANNEL_ISOLATION_POLICY 14
 #define PSP_EXTENDED_POLICY_COUNT 16
-
-FORCEINLINE
-BOOLEAN
-PspIsExtendedMitigationPolicy(
-    _In_ ULONG Policy)
-{
-    return Policy == PSP_DEP_POLICY ||
-           Policy == PSP_ASLR_POLICY ||
-           Policy == PSP_EXTENSION_POINT_DISABLE_POLICY ||
-           Policy == PSP_CONTROL_FLOW_GUARD_POLICY ||
-           Policy == PSP_FONT_DISABLE_POLICY ||
-           Policy == PSP_IMAGE_LOAD_POLICY ||
-           Policy == PSP_SYSTEM_CALL_FILTER_POLICY ||
-           Policy == PSP_PAYLOAD_RESTRICTION_POLICY ||
-           Policy == PSP_SIDE_CHANNEL_ISOLATION_POLICY;
-}
 
 NTSTATUS
 NTAPI
@@ -925,6 +914,12 @@ PspStoreMitigationPolicy(
     _In_ PEPROCESS Process,
     _In_ ULONG Policy,
     _In_ ULONG Flags);
+
+VOID
+NTAPI
+PspApplyCreationMitigations(
+    _In_ PEPROCESS Process,
+    _In_reads_(2) const ULONGLONG *Options);
 
 #define PSP_PROCESS_POWER_THROTTLING_VALID_FLAGS 0x7
 

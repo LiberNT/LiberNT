@@ -843,26 +843,161 @@ PspUnlockMitigationPolicy(VOID)
     KeReleaseGuardedMutex(&PspMitigationLock);
 }
 
-/*
- * Writes one policy's flags into the words the process keeps them in. The
- * three words are laid out so that policy numbers below sixteen live in the
- * first two, each taking four bits.
- */
+/* Each documented PROCESS_MITIGATION_*_POLICY flag: its EPROCESS MitigationFlags(2/3) bit in the Windows 11 public symbols, or PSP_ELSEWHERE */
+#define PSP_MF1     0
+#define PSP_MF2     1
+#define PSP_MF3     2
+#define PSP_ELSEWHERE 3
+
+typedef struct _PSP_MITIGATION_BIT
+{
+    UCHAR Word;
+    UCHAR Bit;
+} PSP_MITIGATION_BIT;
+
+typedef struct _PSP_MITIGATION_LAYOUT
+{
+    UCHAR FlagCount;
+    USHORT RuntimeFlags;
+    PSP_MITIGATION_BIT Flags[12];
+} PSP_MITIGATION_LAYOUT;
+
+static const PSP_MITIGATION_LAYOUT PspMitigationLayouts[PSP_EXTENDED_POLICY_COUNT] =
+{
+    /* DEP: ExecuteDisable and DisableThunkEmulation of KPROCESS ExecuteOptions */
+    [PSP_DEP_POLICY] = {2, 0, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}}},
+    /* ASLR: bottom-up, ForceRelocateImages, HighEntropyASLREnabled, DisallowStrippedImages; bottom-up and high entropy come only from the image or creation */
+    [PSP_ASLR_POLICY] = {4, 0xA, {{PSP_ELSEWHERE, 0}, {PSP_MF1, 4}, {PSP_MF1, 5}, {PSP_MF1, 3}}},
+    /* DisableDynamicCode, ...AllowOptOut, ...AllowRemoteDowngrade, AuditDisableDynamicCode */
+    [PSP_DYNAMIC_CODE_POLICY] = {4, 0xF, {{PSP_MF1, 8}, {PSP_MF1, 9}, {PSP_MF1, 10}, {PSP_MF1, 11}}},
+    /* HANDLE_TABLE EnableHandleExceptions */
+    [PSP_STRICT_HANDLE_CHECK_POLICY] = {2, 0x3, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}}},
+    /* DisallowWin32kSystemCalls, AuditDisallowWin32kSystemCalls, DisallowFsctlSystemCalls, AuditDisallowFsctlSystemCalls */
+    [PSP_SYSTEM_CALL_DISABLE_POLICY] = {4, 0xF, {{PSP_MF1, 12}, {PSP_MF1, 13}, {PSP_MF3, 1}, {PSP_MF3, 2}}},
+    [PSP_EXTENSION_POINT_DISABLE_POLICY] = {1, 0x1, {{PSP_MF1, 7}}},
+    /* ControlFlowGuardEnabled, ...ExportSuppressionEnabled, ...Strict */
+    [PSP_CONTROL_FLOW_GUARD_POLICY] = {3, 0, {{PSP_MF1, 0}, {PSP_MF1, 1}, {PSP_MF1, 2}}},
+    /* the process's section signature level, SignatureMitigationOptIn, AuditBlockNonMicrosoftBinaries(AllowStore) */
+    [PSP_SIGNATURE_POLICY] = {5, 0x1F, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_MF1, 23}, {PSP_MF1, 24}, {PSP_MF1, 25}}},
+    /* DisableNonSystemFonts, AuditNonSystemFontLoading */
+    [PSP_FONT_DISABLE_POLICY] = {2, 0x3, {{PSP_MF1, 16}, {PSP_MF1, 17}}},
+    /* ProhibitRemoteImageMap, ProhibitLowILImageMap, PreferSystem32Images, and the two audits */
+    [PSP_IMAGE_LOAD_POLICY] = {5, 0x1F, {{PSP_MF1, 19}, {PSP_MF1, 21}, {PSP_MF1, 18}, {PSP_MF1, 20}, {PSP_MF1, 22}}},
+    /* a four-bit filter identifier: EPROCESS Win32KFilterSet, under EnableFilteredWin32kAPIs */
+    [PSP_SYSTEM_CALL_FILTER_POLICY] = {4, 0, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_ELSEWHERE, 2}, {PSP_ELSEWHERE, 3}}},
+    /* export and import address filters, then the three return-oriented checks, each with its audit */
+    [PSP_PAYLOAD_RESTRICTION_POLICY] = {12, 0, {{PSP_MF2, 0}, {PSP_MF2, 1}, {PSP_MF2, 2}, {PSP_MF2, 3},
+                                                    {PSP_MF2, 10}, {PSP_MF2, 11}, {PSP_MF2, 4}, {PSP_MF2, 5},
+                                                    {PSP_MF2, 6}, {PSP_MF2, 7}, {PSP_MF2, 8}, {PSP_MF2, 9}}},
+    /* TOKEN_NO_CHILD_PROCESS, TOKEN_AUDIT_NO_CHILD_PROCESS, TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE of the process token */
+    [PSP_CHILD_PROCESS_POLICY] = {3, 0x7, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_ELSEWHERE, 2}}},
+    /* RestrictIndirectBranchPrediction, IsolateSecurityDomain, DisablePageCombine, SpeculativeStoreBypassDisable, RestrictCoreSharing */
+    /* FIXME: the side-channel flags are recorded, but no barrier or page-combining rule acts on them */
+    [PSP_SIDE_CHANNEL_ISOLATION_POLICY] = {5, 0x1F, {{PSP_MF1, 30}, {PSP_MF1, 31}, {PSP_MF2, 12}, {PSP_MF2, 13}, {PSP_MF3, 0}}},
+};
+
+static
+volatile LONG *
+PspMitigationWord(
+    _In_ PEPROCESS Process,
+    _In_ UCHAR Word)
+{
+    if (Word == PSP_MF1) return (volatile LONG *)&Process->MitigationFlags;
+    if (Word == PSP_MF2) return (volatile LONG *)&Process->MitigationFlags2;
+    return (volatile LONG *)&Process->MitigationFlags3;
+}
+
+static
+ULONG
+PspQueryOtherMitigationFlags(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy)
+{
+    PACCESS_TOKEN Token;
+    ULONG TokenFlags;
+    ULONG Flags = 0;
+
+    switch (Policy)
+    {
+        case PSP_DEP_POLICY:
+            if (Process->Pcb.Flags.ExecuteDisable) Flags |= 0x1;
+            if (Process->Pcb.Flags.DisableThunkEmulation) Flags |= 0x2;
+            break;
+
+        case PSP_ASLR_POLICY:
+            /* FIXME: no Windows field records a bottom-up request; it is read from stack randomization */
+            if (!Process->MitigationFlagsValues.StackRandomizationDisabled) Flags |= 0x1;
+            break;
+
+        case PSP_STRICT_HANDLE_CHECK_POLICY:
+            /* FIXME: no Windows field keeps HandleExceptionsPermanentlyEnabled apart; checks once on stay on */
+            if (Process->ObjectTable != NULL && Process->ObjectTable->EnableHandleExceptions) Flags |= 0x3;
+            break;
+
+        case PSP_SIGNATURE_POLICY:
+            if (Process->SectionSignatureLevel >= SE_SIGNING_LEVEL_MICROSOFT) Flags |= 0x1;
+            else if (Process->SectionSignatureLevel >= SE_SIGNING_LEVEL_STORE) Flags |= 0x2;
+            break;
+
+        case PSP_SYSTEM_CALL_FILTER_POLICY:
+            if (Process->MitigationFlagsValues.EnableFilteredWin32kAPIs) Flags |= Process->Win32KFilterSet & 0xF;
+            break;
+
+        case PSP_CHILD_PROCESS_POLICY:
+            Token = PsReferencePrimaryToken(Process);
+            TokenFlags = SepQueryTokenFlags(Token);
+            PsDereferencePrimaryToken(Token);
+            if (TokenFlags & (TOKEN_NO_CHILD_PROCESS | TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE)) Flags |= 0x1;
+            if (TokenFlags & TOKEN_AUDIT_NO_CHILD_PROCESS) Flags |= 0x2;
+            if (TokenFlags & TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE) Flags |= 0x4;
+            break;
+
+        default:
+            break;
+    }
+
+    return Flags;
+}
+
+static
 VOID
-NTAPI
-PspStoreMitigationPolicy(
+PspStoreOtherMitigationFlags(
     _In_ PEPROCESS Process,
     _In_ ULONG Policy,
     _In_ ULONG Flags)
 {
-    ULONG Shift = (Policy % 8) * 4;
-    PULONG Word;
+    PACCESS_TOKEN Token;
+    ULONG TokenFlags = 0;
 
-    if (Policy < 8) Word = &Process->MitigationFlags;
-    else if (Policy < 16) Word = &Process->MitigationFlags2;
-    else Word = &Process->MitigationFlags3;
+    switch (Policy)
+    {
+        case PSP_STRICT_HANDLE_CHECK_POLICY:
+            if (Flags != 0 && Process->ObjectTable != NULL)
+                InterlockedOr((volatile LONG *)&Process->ObjectTable->Flags, OB_HANDLE_EXCEPTIONS_ENABLED);
+            break;
 
-    *Word = (*Word & ~(0xFUL << Shift)) | ((Flags & 0xFUL) << Shift);
+        case PSP_SIGNATURE_POLICY:
+            if ((Flags & 0x1) && Process->SectionSignatureLevel < SE_SIGNING_LEVEL_MICROSOFT)
+                Process->SectionSignatureLevel = SE_SIGNING_LEVEL_MICROSOFT;
+            if ((Flags & 0x2) && Process->SectionSignatureLevel < SE_SIGNING_LEVEL_STORE)
+                Process->SectionSignatureLevel = SE_SIGNING_LEVEL_STORE;
+            break;
+
+        case PSP_CHILD_PROCESS_POLICY:
+            if (Flags & 0x1)
+                TokenFlags |= (Flags & 0x4) ? TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE : TOKEN_NO_CHILD_PROCESS;
+            if (Flags & 0x2) TokenFlags |= TOKEN_AUDIT_NO_CHILD_PROCESS;
+            if (TokenFlags == 0) break;
+
+            Token = PsReferencePrimaryToken(Process);
+            SepSetTokenFlags(Token, TokenFlags);
+            PsDereferencePrimaryToken(Token);
+            break;
+
+        default:
+            /* TODO: the bottom-up request has no Windows field to go in; DEP is set through ProcessExecuteFlags */
+            break;
+    }
 }
 
 ULONG
@@ -871,14 +1006,49 @@ PsGetProcessMitigationPolicyFlags(
     _In_ PEPROCESS Process,
     _In_ ULONG Policy)
 {
-    ULONG Shift = (Policy % 8) * 4;
-    ULONG Word;
+    const PSP_MITIGATION_LAYOUT *Layout;
+    ULONG Flags;
+    ULONG Index;
 
-    if (Policy < 8) Word = Process->MitigationFlags;
-    else if (Policy < 16) Word = Process->MitigationFlags2;
-    else Word = Process->MitigationFlags3;
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return 0;
 
-    return (Word >> Shift) & 0xFUL;
+    Layout = &PspMitigationLayouts[Policy];
+    Flags = PspQueryOtherMitigationFlags(Process, Policy);
+
+    for (Index = 0; Index < Layout->FlagCount; Index++)
+    {
+        if (Layout->Flags[Index].Word == PSP_ELSEWHERE) continue;
+
+        if (*PspMitigationWord(Process, Layout->Flags[Index].Word) & (1UL << Layout->Flags[Index].Bit))
+            Flags |= 1UL << Index;
+    }
+
+    return Flags;
+}
+
+VOID
+NTAPI
+PspStoreMitigationPolicy(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy,
+    _In_ ULONG Flags)
+{
+    const PSP_MITIGATION_LAYOUT *Layout;
+    ULONG Index;
+
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return;
+
+    Layout = &PspMitigationLayouts[Policy];
+
+    for (Index = 0; Index < Layout->FlagCount; Index++)
+    {
+        if (!(Flags & (1UL << Index)) || Layout->Flags[Index].Word == PSP_ELSEWHERE) continue;
+
+        InterlockedOr(PspMitigationWord(Process, Layout->Flags[Index].Word),
+                      (LONG)(1UL << Layout->Flags[Index].Bit));
+    }
+
+    PspStoreOtherMitigationFlags(Process, Policy, Flags);
 }
 
 /*
@@ -893,26 +1063,103 @@ PspSetExtendedMitigationPolicy(
     _In_ ULONG Policy,
     _In_ ULONG Flags)
 {
+    const PSP_MITIGATION_LAYOUT *Layout;
     ULONG Current;
 
     PAGED_CODE();
 
-    if (!PspIsExtendedMitigationPolicy(Policy))
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return STATUS_INVALID_PARAMETER;
+
+    Layout = &PspMitigationLayouts[Policy];
+    if (Layout->RuntimeFlags == 0 || (Flags & ~((1UL << Layout->FlagCount) - 1)) != 0)
         return STATUS_INVALID_PARAMETER;
 
     PspLockMitigationPolicy();
 
-    Current = PsGetProcessMitigationPolicyFlags(Process, Policy);
+    /* Flags only the image or the creation options turn on are neither cleared nor set here */
+    Current = PsGetProcessMitigationPolicyFlags(Process, Policy) & Layout->RuntimeFlags;
+    Flags &= Layout->RuntimeFlags;
     if ((Current & ~Flags) != 0)
     {
         PspUnlockMitigationPolicy();
         return STATUS_ACCESS_DENIED;
     }
 
-    PspStoreMitigationPolicy(Process, Policy, Current | Flags);
+    /* Core sharing cannot be restricted here, which a caller is told rather than given a policy that does nothing */
+    if (Policy == PSP_SIDE_CHANNEL_ISOLATION_POLICY && ((Flags & ~Current) & 0x10))
+    {
+        PspUnlockMitigationPolicy();
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    PspStoreMitigationPolicy(Process, Policy, Flags & ~Current);
     PspUnlockMitigationPolicy();
 
     return STATUS_SUCCESS;
+}
+
+/* PROCESS_CREATION_MITIGATION_POLICY_* (word 0) and POLICY2_* (word 1): each two-bit option value and the policy flags it turns on */
+typedef struct _PSP_CREATION_MITIGATION
+{
+    UCHAR Word;
+    UCHAR Shift;
+    UCHAR Value;
+    UCHAR Policy;
+    ULONG Flags;
+} PSP_CREATION_MITIGATION;
+
+static const PSP_CREATION_MITIGATION PspCreationMitigations[] =
+{
+    {0, 8, 1, PSP_ASLR_POLICY, 0x2},
+    {0, 8, 3, PSP_ASLR_POLICY, 0x2 | 0x8},
+    {0, 16, 1, PSP_ASLR_POLICY, 0x1},
+    {0, 20, 1, PSP_ASLR_POLICY, 0x4},
+    {0, 24, 1, PSP_STRICT_HANDLE_CHECK_POLICY, 0x3},
+    {0, 28, 1, PSP_SYSTEM_CALL_DISABLE_POLICY, 0x1},
+    {0, 32, 1, PSP_EXTENSION_POINT_DISABLE_POLICY, 0x1},
+    {0, 36, 1, PSP_DYNAMIC_CODE_POLICY, 0x1},
+    {0, 36, 3, PSP_DYNAMIC_CODE_POLICY, 0x1 | 0x2},
+    {0, 44, 1, PSP_SIGNATURE_POLICY, 0x1},
+    {0, 44, 3, PSP_SIGNATURE_POLICY, 0x2},
+    {0, 48, 1, PSP_FONT_DISABLE_POLICY, 0x1},
+    {0, 48, 3, PSP_FONT_DISABLE_POLICY, 0x2},
+    {0, 52, 1, PSP_IMAGE_LOAD_POLICY, 0x1},
+    {0, 56, 1, PSP_IMAGE_LOAD_POLICY, 0x2},
+    {0, 60, 1, PSP_IMAGE_LOAD_POLICY, 0x4},
+    {1, 16, 1, PSP_SIDE_CHANNEL_ISOLATION_POLICY, 0x1},
+    {1, 56, 1, PSP_SYSTEM_CALL_DISABLE_POLICY, 0x4},
+};
+
+VOID
+NTAPI
+PspApplyCreationMitigations(
+    _In_ PEPROCESS Process,
+    _In_reads_(2) const ULONGLONG *Options)
+{
+    ULONG Index;
+
+    PspLockMitigationPolicy();
+
+    for (Index = 0; Index < RTL_NUMBER_OF(PspCreationMitigations); Index++)
+    {
+        const PSP_CREATION_MITIGATION *Entry = &PspCreationMitigations[Index];
+
+        if (((Options[Entry->Word] >> Entry->Shift) & 0x3) == Entry->Value)
+            PspStoreMitigationPolicy(Process, Entry->Policy, Entry->Flags);
+    }
+
+    /* Options with their own EPROCESS bits and no policy flag of their own */
+    if (((Options[1] >> 4) & 0x3) == 1)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 26);
+    if (((Options[1] >> 4) & 0x3) == 3)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 27);
+    if (((Options[1] >> 12) & 0x3) == 1)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 28);
+    if (((Options[1] >> 12) & 0x3) == 3)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, (1L << 28) | (1L << 29));
+
+    /* TODO: control flow guard, heap termination, the CET options, the dynamic-code downgrade and store-bypass options and the audit options are not applied */
+    PspUnlockMitigationPolicy();
 }
 
 /* TOKEN ATTRIBUTES ***********************************************************/

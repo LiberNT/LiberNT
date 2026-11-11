@@ -98,6 +98,7 @@ list(APPEND SOURCE
     OpenFileByIdRename.c
     LoaderLock.c
     PagingFileOpen.c
+    ProcessMitigationPolicy.c
     QuantumRoundRobin.c
     RegisterWaitPeriodic.c
     SandboxLaunch.c
