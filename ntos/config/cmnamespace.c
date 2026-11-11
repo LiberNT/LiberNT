@@ -952,20 +952,6 @@ CmpParseKeyWorker(
             break;
         }
 
-        if ((Child->Flags & KEY_PREDEF_HANDLE) && Last)
-        {
-            if (ParseContext != NULL)
-            {
-                ParseContext->PredefinedHandle =
-                    (HANDLE)(ULONG_PTR)Child->ValueList.Count;
-            }
-
-            HvReleaseCell(Hive, ChildCell);
-            /* TODO: the object manager must not make a handle for this status */
-            Status = STATUS_PREDEFINED_HANDLE;
-            break;
-        }
-
         Next = CmpCreateKeyControlBlock(Hive,
                                         ChildCell,
                                         Child,

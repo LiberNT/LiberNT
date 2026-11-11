@@ -159,6 +159,32 @@ CmpReleaseAttributes(
     Captured->Allocated = FALSE;
 }
 
+/* A predefined key opens to a real handle that the caller is told stands for something else */
+static
+BOOLEAN
+CmpIsPredefinedKeyHandle(
+    _In_ HANDLE KeyHandle)
+{
+    PCM_KEY_BODY KeyBody;
+    BOOLEAN Predefined;
+
+    if (!NT_SUCCESS(ObReferenceObjectByHandle(KeyHandle,
+                                              0,
+                                              CmpKeyObjectType,
+                                              KernelMode,
+                                              (PVOID*)&KeyBody,
+                                              NULL)))
+    {
+        return FALSE;
+    }
+
+    Predefined = (KeyBody->KeyControlBlock != NULL) &&
+                 (KeyBody->KeyControlBlock->Flags & KEY_PREDEF_HANDLE) != 0;
+
+    ObDereferenceObject(KeyBody);
+    return Predefined;
+}
+
 static
 NTSTATUS
 CmpReferenceKey(
@@ -180,6 +206,12 @@ CmpReferenceKey(
     {
         ObDereferenceObject(*KeyBody);
         return STATUS_KEY_DELETED;
+    }
+
+    if ((*KeyBody)->KeyControlBlock->Flags & KEY_PREDEF_HANDLE)
+    {
+        ObDereferenceObject(*KeyBody);
+        return STATUS_INVALID_HANDLE;
     }
 
     return STATUS_SUCCESS;
@@ -370,15 +402,12 @@ CmpOpenOrCreateKey(
                                 &ParseContext,
                                 &Local);
 
-    if (Status == STATUS_PREDEFINED_HANDLE)
-    {
-        Local = ParseContext.PredefinedHandle;
-    }
-
     if (Transaction != NULL) ObDereferenceObject(Transaction);
     CmpReleaseName(&CapturedClass);
 
     if (!NT_SUCCESS(Status)) return Status;
+
+    if (CmpIsPredefinedKeyHandle(Local)) Status = STATUS_PREDEFINED_HANDLE;
 
     _SEH2_TRY
     {
