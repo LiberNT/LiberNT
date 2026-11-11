@@ -601,6 +601,7 @@ typedef struct {
     X(HTMLTableColElement)                 \
     X(HTMLTableDataCellElement)            \
     X(HTMLTableElement)                    \
+    X(HTMLTableHeaderCellElement)          \
     X(HTMLTableRowElement)                 \
     X(HTMLTableSectionElement)             \
     X(HTMLTextAreaElement)                 \
@@ -1597,6 +1598,7 @@ HRESULT HTMLSelectElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**)
 HRESULT HTMLTable_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCaptionElement_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCell_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
+HRESULT HTMLTableHeaderCell_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableCol_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableRow_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);
 HRESULT HTMLTableSection_Create(HTMLDocumentNode*,nsIDOMElement*,HTMLElement**);

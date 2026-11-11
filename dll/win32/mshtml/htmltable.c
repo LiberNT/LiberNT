@@ -732,7 +732,16 @@ dispex_static_data_t HTMLTableDataCellElement_dispex = {
     .init_info    = HTMLTableCellElement_init_dispex_info,
 };
 
-HRESULT HTMLTableCell_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+dispex_static_data_t HTMLTableHeaderCellElement_dispex = {
+    .id           = OBJID_HTMLTableHeaderCellElement,
+    .prototype_id = OBJID_HTMLTableCellElement,
+    .vtbl         = &HTMLTableDataCellElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLTableCell_tid,
+    .init_info    = HTMLTableCellElement_init_dispex_info,
+};
+
+static HRESULT create_table_cell(HTMLDocumentNode *doc, nsIDOMElement *nselem, dispex_static_data_t *dispex_data,
+                                 HTMLElement **elem)
 {
     HTMLTableCell *ret;
     nsresult nsres;
@@ -746,13 +755,23 @@ HRESULT HTMLTableCell_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLE
     ret->IHTMLTableCell3_iface.lpVtbl = &HTMLTableCell3Vtbl;
     ret->element.node.vtbl = &HTMLTableCellImplVtbl;
 
-    HTMLElement_Init(&ret->element, doc, nselem, &HTMLTableDataCellElement_dispex);
+    HTMLElement_Init(&ret->element, doc, nselem, dispex_data);
 
     nsres = nsIDOMElement_QueryInterface(nselem, &IID_nsIDOMHTMLTableCellElement, (void**)&ret->nscell);
     assert(nsres == NS_OK);
 
     *elem = &ret->element;
     return S_OK;
+}
+
+HRESULT HTMLTableCell_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    return create_table_cell(doc, nselem, &HTMLTableDataCellElement_dispex, elem);
+}
+
+HRESULT HTMLTableHeaderCell_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    return create_table_cell(doc, nselem, &HTMLTableHeaderCellElement_dispex, elem);
 }
 
 struct HTMLTableRow {

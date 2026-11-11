@@ -170,7 +170,7 @@ static const tag_desc_t tag_descs[] = {
     {L"TD",             HTMLTableCell_Create},
     {L"TEXTAREA",       HTMLTextAreaElement_Create},
     {L"TFOOT",          HTMLTableSection_Create},
-    {L"TH",             HTMLElement_Ctor},
+    {L"TH",             HTMLTableHeaderCell_Create},
     {L"THEAD",          HTMLTableSection_Create},
     {L"TITLE",          HTMLTitleElement_Create},
     {L"TR",             HTMLTableRow_Create},
