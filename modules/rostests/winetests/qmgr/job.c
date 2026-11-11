@@ -533,7 +533,7 @@ static void test_CompleteLocal(void)
     hres = IBackgroundCopyJob_Resume(test_job);
     ok(hres == S_OK, "IBackgroundCopyJob_Resume\n");
 
-    for (i = 0; i < timeout_sec; ++i)
+    for (i = 0; i < timeout_sec * 100; ++i)
     {
         hres = IBackgroundCopyJob_GetState(test_job, &state);
         ok(hres == S_OK, "IBackgroundCopyJob_GetState\n");
@@ -549,13 +549,13 @@ static void test_CompleteLocal(void)
 
         if (state == BG_JOB_STATE_TRANSFERRED)
             break;
-        Sleep(1000);
+        Sleep(10);
     }
 
     if (state == BG_JOB_STATE_ERROR || state == BG_JOB_STATE_TRANSIENT_ERROR)
         handle_job_err();
 
-    ok(i < timeout_sec, "BITS jobs timed out\n");
+    ok(i < timeout_sec * 100, "BITS jobs timed out\n");
     hres = IBackgroundCopyJob_Complete(test_job);
     ok(hres == S_OK, "IBackgroundCopyJob_Complete\n");
     hres = IBackgroundCopyJob_GetState(test_job, &state);
@@ -611,7 +611,7 @@ static void test_CompleteLocalURL(void)
     hres = IBackgroundCopyJob_Resume(test_job);
     ok(hres == S_OK, "IBackgroundCopyJob_Resume\n");
 
-    for (i = 0; i < timeout_sec; ++i)
+    for (i = 0; i < timeout_sec * 100; ++i)
     {
         hres = IBackgroundCopyJob_GetState(test_job, &state);
         ok(hres == S_OK, "IBackgroundCopyJob_GetState\n");
@@ -627,14 +627,14 @@ static void test_CompleteLocalURL(void)
 
         if (state == BG_JOB_STATE_TRANSFERRED)
             break;
-        Sleep(1000);
+        Sleep(10);
     }
 
     if (state == BG_JOB_STATE_ERROR || state == BG_JOB_STATE_TRANSIENT_ERROR)
         handle_job_err();
 
 
-    ok(i < timeout_sec, "BITS jobs timed out\n");
+    ok(i < timeout_sec * 100, "BITS jobs timed out\n");
     hres = IBackgroundCopyJob_Complete(test_job);
     ok(hres == S_OK, "IBackgroundCopyJob_Complete\n");
     hres = IBackgroundCopyJob_GetState(test_job, &state);
@@ -775,7 +775,7 @@ static void test_HttpOptions(void)
     hr = IBackgroundCopyJob_Resume(test_job);
     ok(hr == S_OK, "got 0x%08lx\n", hr);
 
-    for (i = 0; i < timeout; i++)
+    for (i = 0; i < timeout * 100; i++)
     {
         hr = IBackgroundCopyJob_GetState(test_job, &state);
         ok(hr == S_OK, "got 0x%08lx\n", hr);
@@ -792,15 +792,15 @@ static void test_HttpOptions(void)
         }
 
         if (state == BG_JOB_STATE_TRANSFERRED) break;
-        Sleep(1000);
+        Sleep(10);
     }
 
     if (state == BG_JOB_STATE_ERROR || state == BG_JOB_STATE_TRANSIENT_ERROR)
         handle_job_err();
 
 
-    ok(i < timeout, "BITS job timed out\n");
-    if (i < timeout)
+    ok(i < timeout * 100, "BITS job timed out\n");
+    if (i < timeout * 100)
     {
         hr = IBackgroundCopyJob_GetError(test_job, &error);
         ok(hr == BG_E_ERROR_INFORMATION_UNAVAILABLE, "got 0x%08lx\n", hr);
