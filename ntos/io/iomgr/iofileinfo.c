@@ -1312,6 +1312,45 @@ NtSetInformationFile(
         return Status;
     }
 
+    /* The position of a synchronous file object is kept here, so no driver is asked to set it */
+    if (FileInformationClass == FilePositionInformation &&
+        (FileObject->Flags & FO_SYNCHRONOUS_IO))
+    {
+        LARGE_INTEGER Offset = ((PFILE_POSITION_INFORMATION)Buffer)->CurrentByteOffset;
+
+        ExFreePoolWithTag(Buffer, TAG_IOBUF);
+
+        if (Offset.QuadPart < 0 ||
+            ((FileObject->Flags & FO_NO_INTERMEDIATE_BUFFERING) &&
+             DeviceObject->SectorSize != 0 &&
+             (Offset.QuadPart % DeviceObject->SectorSize) != 0))
+        {
+            ObDereferenceObject(FileObject);
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        Status = IopLockFileObject(FileObject, PreviousMode);
+        if (NT_SUCCESS(Status))
+        {
+            FileObject->CurrentByteOffset = Offset;
+            IopUnlockFileObject(FileObject);
+
+            _SEH2_TRY
+            {
+                IoStatusBlock->Status = STATUS_SUCCESS;
+                IoStatusBlock->Information = 0;
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+
+        ObDereferenceObject(FileObject);
+        return Status;
+    }
+
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
