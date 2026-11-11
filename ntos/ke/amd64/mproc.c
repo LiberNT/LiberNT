@@ -13,6 +13,9 @@
 #define NDEBUG
 #include <debug.h>
 
+/* An application processor that has not reported in within 5 s is hung */
+#define AP_START_WAIT_TIME (5 * 10000000ULL)
+
 /* GLOBALS ****************************************************************/
 
 CODE_SEG("INIT")
@@ -55,6 +58,7 @@ KeStartAllProcessors(VOID)
     ULONG ProcessorCount;
     ULONG MaximumProcessors;
     ULONG Index;
+    ULONGLONG StartTime;
 
     MaximumProcessors = KeMaximumProcessors;
     if (KeNumprocSpecified)
@@ -140,8 +144,18 @@ KeStartAllProcessors(VOID)
             break;
 
         /* Wait for the AP to consume the loader block (KiInitializeKernel) */
+        StartTime = KeQueryInterruptTime();
         while (KeLoaderBlock->Prcb != 0)
         {
+            if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
+            {
+                KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                             (ULONG_PTR)(AP_START_WAIT_TIME / KeMaximumIncrement),
+                             0,
+                             (ULONG_PTR)&APInfo->Pcr.Prcb,
+                             ProcessorCount);
+            }
+
             KeMemoryBarrier();
             YieldProcessor();
         }
@@ -155,10 +169,20 @@ KeStartAllProcessors(VOID)
     ProcessorCount--;
 
     /* Each started processor makes itself active once it can take an IPI */
+    StartTime = KeQueryInterruptTime();
     for (Index = 1; Index <= ProcessorCount; Index++)
     {
         while ((KeActiveProcessors & AFFINITY_MASK(Index)) == 0)
         {
+            if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
+            {
+                KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                             (ULONG_PTR)(AP_START_WAIT_TIME / KeMaximumIncrement),
+                             0,
+                             (ULONG_PTR)KiProcessorBlock[Index],
+                             Index);
+            }
+
             KeMemoryBarrier();
             YieldProcessor();
         }

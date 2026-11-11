@@ -1,9 +1,10 @@
 # PROJECT:     LiberNT host-native tests
 # LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
-# PURPOSE:     AMD64 application processor becomes active only once it can take an IPI, never during a freeze
+# PURPOSE:     AMD64 application processor start: active once it can take an IPI, never during a freeze, within a bound
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 import argparse
 import pathlib
+import re
 import subprocess
 import tempfile
 
@@ -143,13 +144,14 @@ fixture = fixture.replace('@PUBLISH@', publish)
 fixture = fixture.replace('@STARTUP@', body(init_source, 'KiSystemStartupBootStack'))
 
 startup = r'''
+#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 typedef unsigned char UINT8, BOOLEAN;
 typedef unsigned long ULONG;
-typedef uint64_t ULONG64, ULONG_PTR, KAFFINITY;
+typedef uint64_t ULONG64, ULONG_PTR, ULONGLONG, KAFFINITY;
 typedef void *PVOID;
 typedef struct { unsigned short Pad[3]; unsigned short Limit; PVOID Base; } KDESCRIPTOR;
 typedef struct { KDESCRIPTOR Gdtr, Idtr; ULONG64 Cr0, Cr3, Cr4; unsigned short Tr; } KSPECIAL_REGISTERS;
@@ -170,7 +172,9 @@ typedef struct { ULONG_PTR KernelStack, Prcb, Thread; } LOADER_PARAMETER_BLOCK;
 #define DOUBLE_FAULT_STACK_SIZE 4096
 #define MAXIMUM_PROCESSORS 64
 #define DECLSPEC_ALIGN(n) __attribute__((aligned(n)))
+@DEFINES@
 #define EFLAGS_INTERRUPT_MASK 0x200
+#define CLOCK_WATCHDOG_TIMEOUT 0x101
 #define NonPagedPool 0
 #define TAG_KERNEL 0
 #define KGDT64_R0_CODE 0x10
@@ -180,6 +184,7 @@ typedef struct { ULONG_PTR KernelStack, Prcb, Thread; } LOADER_PARAMETER_BLOCK;
 #define ASSERT(x) CHECK(x)
 #define CHECK(x) do { if (!(x)) { printf("startup:%d: %s failed\n", __LINE__, #x); exit(1); } } while (0)
 #define AFFINITY_MASK(n) ((KAFFINITY)1 << (n))
+#define ALIGN_UP_BY(v, a) (((ULONG_PTR)(v) + ((a) - 1)) & ~((ULONG_PTR)(a) - 1))
 #define ALIGN_DOWN_BY(v, a) ((ULONG_PTR)(v) & ~((ULONG_PTR)(a) - 1))
 #define ALIGN_DOWN_POINTER_BY(v, a) ((PVOID)ALIGN_DOWN_BY((v), (a)))
 #define RtlCopyMemory(d, s, n) memcpy((d), (s), (n))
@@ -196,11 +201,15 @@ typedef struct _APINFO
     ETHREAD Thread;
     KTSS64 Tss;
 } APINFO, *PAPINFO;
-static ULONG KeMaximumProcessors = 3, KeNumprocSpecified, KeBootprocSpecified;
+static ULONG KeMaximumProcessors = 3, KeNumprocSpecified, KeBootprocSpecified, KeMaximumIncrement = 156250;
 static LOADER_PARAMETER_BLOCK Loader, *KeLoaderBlock = &Loader;
 static PKPRCB KiProcessorBlock[MAXIMUM_PROCESSORS];
-static KAFFINITY KeActiveProcessors = 1, Started;
+static KAFFINITY KeActiveProcessors, Started;
+static ULONGLONG Clock;
+static ULONG Mode, StopCode;
+static ULONG_PTR StopParameter[4];
 static unsigned Yields;
+static jmp_buf Stopped;
 static char Table[16];
 static PVOID ExAllocatePoolZero(int Pool, size_t Size, ULONG Tag) {
     PVOID p; (void)Pool; (void)Tag;
@@ -223,26 +232,53 @@ static void KiInitializeProcessorBootStructures(ULONG Number, PKIPCR Pcr, PKGDTE
     (void)g; (void)i; (void)t; (void)th; (void)ks; (void)ds; (void)df; (void)nm;
     Pcr->Prcb.Number = Number; Pcr->Prcb.SetMember = AFFINITY_MASK(Number);
 }
-/* The processor takes the loader block at once and becomes active a few spins later */
+/*
+ * Mode 0: the processor takes the loader block at once and becomes active a few spins later.
+ * Mode 1: it never takes the loader block. Mode 2: it takes it and never becomes active.
+ */
 static BOOLEAN HalStartNextProcessor(LOADER_PARAMETER_BLOCK *Block, PKPROCESSOR_STATE State) {
     PKPRCB Prcb = (PKPRCB)Block->Prcb; (void)State;
-    KiProcessorBlock[Prcb->Number] = Prcb;
     Started |= Prcb->SetMember;
+    if (Mode == 1) return TRUE;
+    KiProcessorBlock[Prcb->Number] = Prcb;
     Block->Prcb = 0;
     return TRUE;
 }
 static void YieldProcessor(void) {
-    if (++Yields > 100000) { printf("startup: the started processors never became active\n"); exit(1); }
-    if (Yields == 3) KeActiveProcessors |= Started;
+    if (++Yields > 100000) { printf("startup: mode %lu: the wait for the started processors never ended\n", Mode); exit(1); }
+    if (Yields == 3 && Mode == 0) KeActiveProcessors |= Started;
+}
+/* A second of interrupt time goes by at each reading */
+__attribute__((unused)) static ULONGLONG KeQueryInterruptTime(void) { Clock += 10000000; return Clock; }
+__attribute__((noreturn, unused)) static void KeBugCheckEx(ULONG Code, ULONG_PTR a, ULONG_PTR b, ULONG_PTR c, ULONG_PTR d) {
+    StopCode = Code; StopParameter[0] = a; StopParameter[1] = b; StopParameter[2] = c; StopParameter[3] = d;
+    longjmp(Stopped, 1);
 }
 static void KeStartAllProcessors(void) { @MPROC@ }
+static void Run(ULONG NewMode) {
+    Mode = NewMode; Yields = 0; Clock = 0; Started = 0; StopCode = 0;
+    KeActiveProcessors = 1;
+    memset(&Loader, 0, sizeof(Loader));
+    memset(KiProcessorBlock, 0, sizeof(KiProcessorBlock));
+    if (setjmp(Stopped) == 0)
+        KeStartAllProcessors();
+}
 int main(void) {
-    KeStartAllProcessors();
-    CHECK(Started == 6);
-    CHECK(KeActiveProcessors == 7);
+    Run(0);
+    CHECK(StopCode == 0 && Started == 6 && KeActiveProcessors == 7);
+    /* A processor that does not report in within 5 s is named in a CLOCK_WATCHDOG_TIMEOUT */
+    Run(1);
+    CHECK(StopCode == CLOCK_WATCHDOG_TIMEOUT && Started == 2);
+    CHECK(StopParameter[0] == 50000000 / KeMaximumIncrement && StopParameter[1] == 0);
+    CHECK(StopParameter[2] == Loader.Prcb && StopParameter[2] != 0 && StopParameter[3] == 1);
+    Run(2);
+    CHECK(StopCode == CLOCK_WATCHDOG_TIMEOUT && Started == 6);
+    CHECK(StopParameter[0] == 50000000 / KeMaximumIncrement && StopParameter[1] == 0);
+    CHECK(StopParameter[2] == (ULONG_PTR)KiProcessorBlock[1] && StopParameter[2] != 0 && StopParameter[3] == 1);
     return 0;
 }
 '''.replace('@MPROC@', body(mproc_source, 'KeStartAllProcessors'))
+startup = startup.replace('@DEFINES@', '\n'.join(re.findall(r'^#define AP_START_WAIT_TIME .*$', mproc_source, re.M)))
 
 with tempfile.TemporaryDirectory(prefix='ke-ap-start-') as tmp:
     path = pathlib.Path(tmp)
