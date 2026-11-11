@@ -7,6 +7,13 @@
 
 #include "precomp.h"
 
+#define TIMEOUT_PERIOD_MS 32
+#define SIGNAL_PERIOD_MS 320
+#define SIGNAL_AFTER_MS 160
+#define SIGNAL_CHECK_AFTER_MS 240
+#define ZERO_TIMEOUT_WINDOW_MS 64
+#define TIME_CHANGE_PERIOD_MS 240
+
 typedef struct _PERIODIC_WAIT_CONTEXT
 {
     volatile LONG Timeouts;
@@ -80,7 +87,7 @@ TestTimeoutRestartsTimer(
     PERIODIC_WAIT_CONTEXT Context;
     HANDLE Wait, Event;
 
-    if (StartPeriodicWait(&Wait, &Event, &Context, 100, Flags))
+    if (StartPeriodicWait(&Wait, &Event, &Context, TIMEOUT_PERIOD_MS, Flags))
     {
         ok(WaitForSingleObject(Context.TimeoutSemaphore, 5000) == WAIT_OBJECT_0,
            "Flags 0x%lx: the first timeout callback did not run\n", Flags);
@@ -100,13 +107,13 @@ TestSignalRestartsTimer(
     PERIODIC_WAIT_CONTEXT Context;
     HANDLE Wait, Event;
 
-    if (StartPeriodicWait(&Wait, &Event, &Context, 1500, Flags))
+    if (StartPeriodicWait(&Wait, &Event, &Context, SIGNAL_PERIOD_MS, Flags))
     {
-        Sleep(600);
+        Sleep(SIGNAL_AFTER_MS);
         SetEvent(Event);
         ok(WaitForSingleObject(Context.SignalSemaphore, 5000) == WAIT_OBJECT_0,
            "Flags 0x%lx: the signal callback did not run\n", Flags);
-        Sleep(1100);
+        Sleep(SIGNAL_CHECK_AFTER_MS);
         ok(Context.Timeouts == 0,
            "Flags 0x%lx: the timeout ran %ld times after the signal restarted the timer\n", Flags, Context.Timeouts);
         ok(Context.Signals == 1, "Flags 0x%lx: expected 1 signal callback, got %ld\n", Flags, Context.Signals);
@@ -124,12 +131,12 @@ TestZeroTimeout(
 
     if (StartPeriodicWait(&Wait, &Event, &Context, 0, Flags))
     {
-        Sleep(200);
+        Sleep(ZERO_TIMEOUT_WINDOW_MS);
         ok(UnregisterWaitEx(Wait, INVALID_HANDLE_VALUE), "UnregisterWaitEx failed, error %lu\n", GetLastError());
         Wait = NULL;
         Timeouts = Context.Timeouts;
         ok(Timeouts >= 2 && Timeouts <= 400,
-           "Flags 0x%lx: expected one zero timeout callback per clock tick, got %ld in 200 ms\n", Flags, Timeouts);
+           "Flags 0x%lx: expected one zero timeout callback per clock tick, got %ld in %u ms\n", Flags, Timeouts, ZERO_TIMEOUT_WINDOW_MS);
     }
     StopPeriodicWait(Wait, Event, &Context);
 }
@@ -183,14 +190,14 @@ TestSystemTimeChange(
         return;
     }
 
-    if (StartPeriodicWait(&Wait, &Event, &Context, 1500, Flags))
+    if (StartPeriodicWait(&Wait, &Event, &Context, TIME_CHANGE_PERIOD_MS, Flags))
     {
-        Sleep(100);
+        Sleep(32);
         if (ShiftSystemTime(Hour))
         {
-            Sleep(200);
+            Sleep(64);
             if (StartPeriodicWait(&OtherWait, &OtherEvent, &OtherContext, INFINITE, WT_EXECUTEDEFAULT))
-                Sleep(200);
+                Sleep(64);
             StopPeriodicWait(OtherWait, OtherEvent, &OtherContext);
             ok(Context.Timeouts == 0,
                "Flags 0x%lx: the timeout ran %ld times after the system time moved forward\n", Flags, Context.Timeouts);

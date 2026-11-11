@@ -8,6 +8,8 @@
 #include "precomp.h"
 #include "threadwait.h"
 
+#define WAIT_ALL_TIMEOUT_MS 96
+
 typedef enum _SIGNAL_KIND
 {
     SignalAutoEvent,
@@ -137,7 +139,7 @@ TestPulse(_In_ BOOL ManualReset)
     if ((Event == NULL) || (Mutex == NULL))
         return;
 
-    InitWait(&Context, Event, Mutex, TRUE, 300, Mutex);
+    InitWait(&Context, Event, Mutex, TRUE, WAIT_ALL_TIMEOUT_MS, Mutex);
     Thread = StartWait(&Context);
     ok(PulseEvent(Event), "PulseEvent failed with %lu\n", GetLastError());
     JoinWait(Thread);
@@ -170,7 +172,7 @@ TestPulseUnsatisfied(VOID)
     if ((Event == NULL) || (Mutex == NULL))
         return;
 
-    InitWait(&Context, Event, Mutex, TRUE, 300, Mutex);
+    InitWait(&Context, Event, Mutex, TRUE, WAIT_ALL_TIMEOUT_MS, Mutex);
     Thread = StartWait(&Context);
     ok(PulseEvent(Event), "PulseEvent failed with %lu\n", GetLastError());
     ok(ReleaseMutex(Mutex), "ReleaseMutex failed with %lu\n", GetLastError());
@@ -203,7 +205,7 @@ TestWaitAllQueuedFirst(_In_ SIGNAL_KIND Kind)
     if ((Object == NULL) || (Ready == NULL) || (Finish == NULL))
         return;
 
-    InitWait(&AllContext, Object, Ready, TRUE, 300, (Kind == SignalMutex) ? Object : NULL);
+    InitWait(&AllContext, Object, Ready, TRUE, WAIT_ALL_TIMEOUT_MS, (Kind == SignalMutex) ? Object : NULL);
     AllContext.Done = CreateEventW(NULL, TRUE, FALSE, NULL);
     AllContext.Finish = Finish;
     InitWait(&AnyContext, Object, NULL, FALSE, 2000, (Kind == SignalMutex) ? Object : NULL);
@@ -258,7 +260,7 @@ TestNotAllSignaled(_In_ SIGNAL_KIND Kind)
     if ((Object == NULL) || (Blocker == NULL) || (Finish == NULL))
         return;
 
-    InitWait(&AllContext, Object, Blocker, TRUE, 300, (Kind == SignalMutex) ? Object : NULL);
+    InitWait(&AllContext, Object, Blocker, TRUE, WAIT_ALL_TIMEOUT_MS, (Kind == SignalMutex) ? Object : NULL);
     AllContext.Done = CreateEventW(NULL, TRUE, FALSE, NULL);
     AllContext.Finish = Finish;
     InitWait(&AnyContext, Object, NULL, FALSE, 2000, (Kind == SignalMutex) ? Object : NULL);
