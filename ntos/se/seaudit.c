@@ -55,6 +55,27 @@ SepCheckAuditCaller(VOID)
     return Held ? STATUS_SUCCESS : STATUS_PRIVILEGE_NOT_HELD;
 }
 
+/* The client an alarm is raised for is named by a token the caller may query */
+static
+NTSTATUS
+SepCheckAuditClient(
+    _In_ HANDLE ClientToken)
+{
+    PTOKEN Token;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(ClientToken,
+                                       TOKEN_QUERY,
+                                       SeTokenObjectType,
+                                       ExGetPreviousMode(),
+                                       (PVOID *)&Token,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    ObDereferenceObject(Token);
+    return STATUS_SUCCESS;
+}
+
 /* A name the caller handed in has to be readable before it is used */
 static
 NTSTATUS
@@ -743,6 +764,8 @@ NtOpenObjectAuditAlarm(
     }
     _SEH2_END;
 
+    if (NT_SUCCESS(Status)) Status = SepCheckAuditClient(ClientToken);
+
     /* TODO: the alarm is accepted and not written down */
     return Status;
 }
@@ -823,6 +846,8 @@ NtPrivilegeObjectAuditAlarm(
     }
     _SEH2_END;
 
+    if (NT_SUCCESS(Status)) Status = SepCheckAuditClient(ClientToken);
+
     /* TODO: the alarm is accepted and not written down */
     return Status;
 }
@@ -857,6 +882,8 @@ NtPrivilegedServiceAuditAlarm(
         Status = _SEH2_GetExceptionCode();
     }
     _SEH2_END;
+
+    if (NT_SUCCESS(Status)) Status = SepCheckAuditClient(ClientToken);
 
     /* TODO: the alarm is accepted and not written down */
     return Status;

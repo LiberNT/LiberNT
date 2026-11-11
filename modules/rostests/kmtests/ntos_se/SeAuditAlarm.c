@@ -324,9 +324,41 @@ TestPrimaryTokenPrivilege(VOID)
     NtClose(Process);
 }
 
+/* K3: the client token an alarm names has to be one the caller may query */
+static
+VOID
+TestAlarmClientToken(VOID)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    HANDLE Query = NULL;
+    HANDLE NoQuery = NULL;
+    HANDLE Event = NULL;
+    NTSTATUS Status;
+
+    if (!StartImpersonatingSelf()) return;
+
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_QUERY, TRUE, &Query);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_IMPERSONATE, TRUE, &NoQuery);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    InitializeObjectAttributes(&Attributes, NULL, 0, NULL, NULL);
+    Status = NtCreateEvent(&Event, EVENT_ALL_ACCESS, &Attributes, NotificationEvent, FALSE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    if (Query != NULL) CheckAlarms(Query, STATUS_SUCCESS);
+    if (NoQuery != NULL) CheckAlarms(NoQuery, STATUS_ACCESS_DENIED);
+    if (Event != NULL) CheckAlarms(Event, STATUS_OBJECT_TYPE_MISMATCH);
+
+    if (Event != NULL) NtClose(Event);
+    if (NoQuery != NULL) NtClose(NoQuery);
+    if (Query != NULL) NtClose(Query);
+    StopImpersonating();
+}
+
 START_TEST(SeAuditAlarm)
 {
     TestAuditedChecks();
     TestNotImpersonating();
     TestPrimaryTokenPrivilege();
+    TestAlarmClientToken();
 }
