@@ -829,6 +829,18 @@ KiBugCheckDebugBreak(
     _SEH2_END;
 }
 
+/* The processor that owns the stop is the one running the thread that took it */
+BOOLEAN
+KiIsBugCheckEntryOwner(
+    _In_ PKPRCB Prcb)
+{
+    PKTHREAD Owner = InterlockedCompareExchangePointer((PVOID volatile *)&KeBugCheckOwner,
+                                                       NULL,
+                                                       NULL);
+
+    return (Owner != NULL) && (Owner == Prcb->CurrentThread);
+}
+
 /* PUBLIC FUNCTIONS: STOPPING **************************************************/
 
 /*

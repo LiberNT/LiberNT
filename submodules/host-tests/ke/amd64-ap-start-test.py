@@ -105,6 +105,14 @@ __attribute__((unused)) static void YieldProcessor(void) {
     if (Yields == ThawAfter) KiFreezeOwner = NULL;
 }
 __attribute__((noreturn)) static void KiIdleLoop(void) { CheckActive(); longjmp(Idle, 1); }
+/* The watchdog never fires here: these scenarios do not wait */
+typedef struct { int Valid; } KI_FREEZE_WAIT;
+__attribute__((unused)) static BOOLEAN KiHasFreezeFailure(void) { return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
+__attribute__((unused)) static void KiNoteFreezeEpoch(void) {}
+__attribute__((unused)) static void HalHaltSystem(void) { CHECK(!"a processor halted"); }
 @PUBLISH@
 static void KiSystemStartupBootStack(void) { @STARTUP@ }
 static void Run(const char *Name, PKPRCB FreezeOwner, unsigned Thaw) {

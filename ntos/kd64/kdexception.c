@@ -137,6 +137,8 @@ KdpReport(
     }
 
     Enable = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure())
+        return TRUE;
 
     KdpReportedMode = PreviousMode;
     KdpReportedFirstChance = !SecondChanceException;
@@ -149,6 +151,8 @@ KdpReport(
     KdSetOwedBreakpoints();
 
     KdExitDebugger(Enable);
+    if (KiHasFreezeFailure())
+        return TRUE;
 
     /*
      * The machine was held for as long as somebody took to read a screen, and

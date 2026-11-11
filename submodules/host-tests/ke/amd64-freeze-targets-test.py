@@ -84,6 +84,14 @@ static void YieldProcessor(void) {
         if (Cpus[i].IpiFrozen == IPI_FROZEN_STATE_THAW)
             Cpus[i].IpiFrozen = IPI_FROZEN_STATE_RUNNING;
 }
+/* The watchdog never fires here: these scenarios do not wait */
+typedef struct { int Valid; } KI_FREEZE_WAIT;
+__attribute__((unused)) static BOOLEAN KiHasFreezeFailure(void) { return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
+__attribute__((unused)) static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
+__attribute__((unused)) static void KiNoteFreezeEpoch(void) {}
+__attribute__((unused)) static void HalHaltSystem(void) { CHECK(!"a processor halted"); }
 @TARGETS@
 static void KxFreezeExecution(void) { @FREEZE@ }
 static void KxThawExecution(void) { @THAW@ }

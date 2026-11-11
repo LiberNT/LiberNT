@@ -24,7 +24,22 @@ KIRQL KiOldIrql;
 /* How deep the one freeze owner has nested its own freezes. */
 static ULONG KiFreezeDepth;
 
+/* Set when a processor never answered a freeze or a thaw: the machine is stopping. */
+static volatile LONG KiFreezeFailure;
+
 /* PUBLIC FUNCTIONS ***********************************************************/
+
+VOID
+KiSetFreezeFailure(VOID)
+{
+    InterlockedExchange(&KiFreezeFailure, TRUE);
+}
+
+BOOLEAN
+KiHasFreezeFailure(VOID)
+{
+    return InterlockedCompareExchange(&KiFreezeFailure, FALSE, FALSE) != FALSE;
+}
 
 /*
  * Stops every other processor and leaves this one holding the machine.
@@ -85,6 +100,17 @@ NTAPI
 KeThawExecution(
     _In_ BOOLEAN Enable)
 {
+    /* Nothing is let go after a failed freeze: only the owner of the stop goes on */
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+        {
+            for (;;)
+                HalHaltSystem();
+        }
+        return;
+    }
+
     ASSERT(KiFreezeDepth != 0);
 
     if (KiFreezeDepth > 1)
@@ -95,6 +121,8 @@ KeThawExecution(
     }
 
     KxThawExecution();
+    if (KiHasFreezeFailure())
+        return;
 
     KiFreezeDepth = 0;
     KiFreezeFlag = 0;

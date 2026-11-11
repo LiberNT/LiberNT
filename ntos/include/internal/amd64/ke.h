@@ -353,6 +353,8 @@ KeInvalidateTlbEntry(IN PVOID Address)
 VOID MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages);
 VOID MiAmd64ProcessTlbRequest(ULONG Source);
 VOID KiSendMemoryIpi(ULONG64 Targets);
+ULONG64 KiQueryFreezeEpoch(VOID);
+BOOLEAN KiIsFreezeActive(VOID);
 
 VOID
 NTAPI

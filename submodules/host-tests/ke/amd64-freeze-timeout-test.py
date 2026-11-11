@@ -4,6 +4,7 @@
 # COPYRIGHT:   Copyright 2026 LiberNT contributors
 import argparse
 import pathlib
+import re
 import subprocess
 import tempfile
 
@@ -54,6 +55,7 @@ typedef int KCONTINUE_STATUS;
 #define IPI_FROZEN_STATE_THAW 16
 #define IPI_FREEZE 1
 #define IPI_WATCHDOG_TIMEOUT 0x1db
+@DEFINES@
 #define ASSERT(x) assert(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define KeMemoryBarrier() __sync_synchronize()
@@ -165,6 +167,7 @@ int main(void) {
     return 0;
 }
 '''
+fixture = fixture.replace('@DEFINES@', '\n'.join(re.findall(r'^#define KI_FREEZE_WAIT_SECONDS .*$', source, re.M)))
 deferred = body('KiFreezeIfRequested').split('    Enable = KeDisableInterrupts();')[0].replace('    BOOLEAN Enable;\n', '')
 fixture = fixture.replace('@DEFERRED@', deferred)
 for marker, name in [('HANDLER','KiProcessorFreezeHandler'), ('WAIT','KiFreezeWaitForThaw'), ('NOTE','KiNoteFreezeEpoch'), ('EPOCH','KiQueryFreezeEpoch'), ('FAILURE','KiFreezeFailureRequiresReturn'), ('EXPIRED','KiFreezeWaitExpired'), ('FAILED','KiFreezeWaitFailed'), ('ACQUIRE','KiAcquireFreezeActiveSet'), ('RELEASE','KiReleaseFreezeActiveSet'), ('TARGETS','KiFreezeTargetSet'), ('FREEZE','KxFreezeExecution'), ('THAW','KxThawExecution')]:

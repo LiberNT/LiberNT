@@ -28,11 +28,24 @@ KdEnterDebugger(
 {
     BOOLEAN Enable;
 
+    /* After a failed freeze nobody talks to the host: the owner of the stop goes on alone */
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+        {
+            for (;;)
+                HalHaltSystem();
+        }
+        return FALSE;
+    }
+
     /* How long the machine is held is discounted from what it measures */
     KdTimerStart = KeQueryPerformanceCounter(NULL);
 
     /* Only one processor may be running while the host is being served */
     Enable = KeFreezeExecution(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure())
+        return Enable;
 
     KdpPortLock();
     KdEnteredDebugger = TRUE;
@@ -48,6 +61,16 @@ NTAPI
 KdExitDebugger(
     _In_ BOOLEAN Enable)
 {
+    if (KiHasFreezeFailure())
+    {
+        if (!KiIsBugCheckEntryOwner(KeGetCurrentPrcb()))
+        {
+            for (;;)
+                HalHaltSystem();
+        }
+        return;
+    }
+
     KdEnteredDebugger = FALSE;
     KdpPortUnlock();
 
@@ -180,6 +203,8 @@ KdRefreshDebuggerNotPresent(VOID)
     }
 
     Enable = KdEnterDebugger(NULL, NULL);
+    if (KiHasFreezeFailure())
+        return TRUE;
 
     if (KdpPollBreakInWithPortLock())
         KdDebuggerNotPresent = FALSE;

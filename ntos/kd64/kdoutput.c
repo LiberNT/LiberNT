@@ -769,6 +769,8 @@ KdpPrompt(
      * would.
      */
     Entered = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure())
+        return 0;
     Length = KdpPromptString(&Prompt, &Response);
     KdExitDebugger(Entered);
 
@@ -868,6 +870,8 @@ KdpSymbol(
     }
 
     Entered = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure())
+        return;
     KdpReportLoadSymbolsStateChange(&Path, SymbolInfo, Unload, ContextRecord);
     KdExitDebugger(Entered);
 }
@@ -939,6 +943,8 @@ KdpCommandString(
     }
 
     Entered = KdEnterDebugger(TrapFrame, ExceptionFrame);
+    if (KiHasFreezeFailure())
+        return;
     KdpReportCommandStringStateChange(NameString, CommandString, ContextRecord);
     KdExitDebugger(Entered);
 }
