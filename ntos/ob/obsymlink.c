@@ -142,10 +142,11 @@ ObpCreateSymbolicLinkName(
 {
     POBJECT_HEADER Header = OBJECT_TO_OBJECT_HEADER(SymbolicLink);
     POBJECT_HEADER_NAME_INFO NameInfo;
+    OBP_LOOKUP_CONTEXT Context;
     PDEVICE_MAP DeviceMap;
+    BOOLEAN Named;
+    UCHAR DriveType;
     ULONG Index;
-
-    SymbolicLink->DosDeviceDriveIndex = 0;
 
     NameInfo = ObpReferenceNameInfo(Header);
     if (NameInfo == NULL) return;
@@ -161,11 +162,27 @@ ObpCreateSymbolicLinkName(
 
     if (Index != 0 && DeviceMap != NULL)
     {
-        SymbolicLink->DosDeviceDriveIndex = Index;
+        /* Resolving the target goes through device maps itself, so it is done before the map lock is taken */
+        DriveType = ObpResolveDriveType(SymbolicLink);
 
         KeAcquireGuardedMutex(&ObpDeviceMapLock);
-        DeviceMap->DriveType[Index - 1] = ObpResolveDriveType(SymbolicLink);
-        DeviceMap->DriveMap |= 1u << (Index - 1);
+
+        /* A link already taken out of its directory had its letter withdrawn, so it is not published */
+        ObpInitializeLookupContext(&Context);
+        Named = (ObpLookupEntryDirectory(NameInfo->Directory,
+                                         &NameInfo->Name,
+                                         0,
+                                         FALSE,
+                                         &Context) == SymbolicLink);
+        ObpReleaseLookupContext(&Context);
+
+        if (Named)
+        {
+            SymbolicLink->DosDeviceDriveIndex = Index;
+            DeviceMap->DriveType[Index - 1] = DriveType;
+            DeviceMap->DriveMap |= 1u << (Index - 1);
+        }
+
         KeReleaseGuardedMutex(&ObpDeviceMapLock);
     }
 
@@ -180,9 +197,7 @@ ObpDeleteSymbolicLinkName(
     POBJECT_HEADER Header = OBJECT_TO_OBJECT_HEADER(SymbolicLink);
     POBJECT_HEADER_NAME_INFO NameInfo;
     PDEVICE_MAP DeviceMap;
-    ULONG Index = SymbolicLink->DosDeviceDriveIndex;
-
-    if (Index == 0) return;
+    ULONG Index;
 
     NameInfo = ObpReferenceNameInfo(Header);
     if (NameInfo == NULL) return;
@@ -190,15 +205,20 @@ ObpDeleteSymbolicLinkName(
     DeviceMap = (NameInfo->Directory != NULL) ?
                 NameInfo->Directory->DeviceMap : NULL;
 
-    if (DeviceMap != NULL)
+    /* Read under the lock a late publish takes, so the two cannot miss each other */
+    KeAcquireGuardedMutex(&ObpDeviceMapLock);
+
+    Index = SymbolicLink->DosDeviceDriveIndex;
+    if (Index != 0 && DeviceMap != NULL)
     {
-        KeAcquireGuardedMutex(&ObpDeviceMapLock);
         DeviceMap->DriveType[Index - 1] = DOSDEVICE_DRIVE_UNKNOWN;
         DeviceMap->DriveMap &= ~(1u << (Index - 1));
-        KeReleaseGuardedMutex(&ObpDeviceMapLock);
     }
 
     SymbolicLink->DosDeviceDriveIndex = 0;
+
+    KeReleaseGuardedMutex(&ObpDeviceMapLock);
+
     ObpDereferenceNameInfo(NameInfo);
 }
 

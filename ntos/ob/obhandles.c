@@ -1902,6 +1902,7 @@ ObInsertObject(
     AUX_ACCESS_DATA AuxData;
     BOOLEAN SdAllocated = FALSE;
     BOOLEAN IsNewObject;
+    BOOLEAN PublishDriveLetter = FALSE;
     NTSTATUS Status, RealStatus, ChargeStatus;
     PVOID FoundObject = Object;
 
@@ -1987,7 +1988,10 @@ ObInsertObject(
 
         /* A symbolic link publishes its drive letter once it is named */
         if (ObjectType == ObpSymbolicLinkObjectType && FoundObject == Object)
-            ObpCreateSymbolicLinkName(Object);
+        {
+            PublishDriveLetter = TRUE;
+            ObReferenceObject(Object);
+        }
     }
     else
     {
@@ -2102,6 +2106,13 @@ ObInsertObject(
         ObpFreeObjectCreateInformation(ObjectCreateInfo);
 
     ObpReleaseLookupContext(&Context);
+
+    /* Resolving the link's target walks the namespace, which the directory lock held until here would block */
+    if (PublishDriveLetter)
+    {
+        if (NT_SUCCESS(RealStatus)) ObpCreateSymbolicLinkName(Object);
+        ObDereferenceObject(Object);
+    }
 
     if (AccessState == &LocalAccessState) SeDeleteAccessState(AccessState);
 
