@@ -75,7 +75,7 @@ SepFindTokenQuestion(
 
     for (i = 0; i < RTL_NUMBER_OF(SepTokenQuestions); i++)
     {
-        if (SepTokenQuestions[i].Class == (UCHAR)Class)
+        if ((ULONG)SepTokenQuestions[i].Class == (ULONG)Class)
             return &SepTokenQuestions[i];
     }
 
@@ -221,7 +221,7 @@ SepAnswerAboutToken(
         {
             PTOKEN_USER Answer = Buffer;
 
-            Room = SepRoomForHolders(sizeof(TOKEN_USER), 1, Token->UserAndGroups);
+            Room = SepRoomForHolders(FIELD_OFFSET(TOKEN_USER, User), 1, Token->UserAndGroups);
             *Needed = Room;
 
             if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;

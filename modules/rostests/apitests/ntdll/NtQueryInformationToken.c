@@ -109,6 +109,7 @@ QueryTokenUserTests(
                                      BufferLength,
                                      &BufferLength);
     ok_ntstatus(Status, STATUS_SUCCESS);
+    ok_long(BufferLength, sizeof(TOKEN_USER) + RtlLengthSid(UserToken->User.Sid));
 
     RtlConvertSidToUnicodeString(&SidString, UserToken->User.Sid, TRUE);
     trace("=============== TokenUser ===============\n");
