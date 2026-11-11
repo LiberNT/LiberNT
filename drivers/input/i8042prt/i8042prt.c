@@ -333,10 +333,19 @@ i8042StartPacket(
 	IN ULONG ByteCount,
 	IN PIRP Irp)
 {
+	PKINTERRUPT Interrupt = DeviceExtension->HighestDIRQLInterrupt;
+	ULONG Initialized = (FdoDeviceExtension->Type == Mouse) ? MOUSE_INITIALIZED : KEYBOARD_INITIALIZED;
 	KIRQL Irql;
 	NTSTATUS Status;
 
-	Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
+	Status = I8042CorePacketStatus((ReadULongAcquire(&DeviceExtension->Flags) & Initialized) != 0, Interrupt);
+	if (!NT_SUCCESS(Status))
+	{
+		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
+		return Status;
+	}
+
+	Irql = KeAcquireInterruptSpinLock(Interrupt);
 
 	if (DeviceExtension->Packet.State != Idle)
 	{
@@ -379,7 +388,7 @@ done:
 		DeviceExtension->CurrentIrp = NULL;
 		DeviceExtension->CurrentIrpDevice = NULL;
 	}
-	KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+	KeReleaseInterruptSpinLock(Interrupt, Irql);
 
 	if (Status != STATUS_PENDING)
 		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);

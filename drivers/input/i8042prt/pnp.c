@@ -307,8 +307,9 @@ i8042ConnectKeyboardInterrupt(
         return Status;
     }
 
-    if (DirqlMax == PortDeviceExtension->KeyboardInterrupt.Dirql)
-        PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->KeyboardInterrupt.Object;
+    PortDeviceExtension->HighestDIRQLInterrupt = I8042CoreSyncInterrupt(
+        PortDeviceExtension->HighestDIRQLInterrupt, PortDeviceExtension->KeyboardInterrupt.Object,
+        PortDeviceExtension->KeyboardInterrupt.Dirql, DirqlMax);
     InterlockedOr((PLONG)&PortDeviceExtension->Flags, KEYBOARD_INITIALIZED);
     return STATUS_SUCCESS;
 }
@@ -357,8 +358,9 @@ i8042ConnectMouseInterrupt(
         goto cleanup;
     }
 
-    if (DirqlMax == PortDeviceExtension->MouseInterrupt.Dirql)
-        PortDeviceExtension->HighestDIRQLInterrupt = PortDeviceExtension->MouseInterrupt.Object;
+    PortDeviceExtension->HighestDIRQLInterrupt = I8042CoreSyncInterrupt(
+        PortDeviceExtension->HighestDIRQLInterrupt, PortDeviceExtension->MouseInterrupt.Object,
+        PortDeviceExtension->MouseInterrupt.Dirql, DirqlMax);
 
     InterlockedOr((PLONG)&PortDeviceExtension->Flags, MOUSE_INITIALIZED);
     Status = STATUS_SUCCESS;

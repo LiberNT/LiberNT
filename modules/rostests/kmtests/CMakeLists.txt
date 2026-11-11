@@ -195,6 +195,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoAcpiIoctl.c
     ntos_io/IoPciPdoPnp.c
     ntos_io/IoAcpiCmosRegion.c
+    ntos_io/IoI8042Sync.c
     ntos_io/IoErrorLogEntry.c
     ntos_io/IoPciD3Cold.c
     ntos_io/IoPciExpressInterfaces.c
@@ -338,6 +339,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ${COMMON_SOURCE}
 
     ${REACTOS_SOURCE_DIR}/drivers/bus/acpi/cmos_core.c
+    ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt/sync_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/gpuva_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/adapter_map_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/adapter_start_core.c
@@ -449,6 +451,7 @@ endif()
 add_library(kmtest_drv MODULE ${KMTEST_DRV_SOURCE})
 target_include_directories(kmtest_drv PRIVATE
     ${REACTOS_SOURCE_DIR}/drivers/bus/acpi
+    ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgmms2
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu

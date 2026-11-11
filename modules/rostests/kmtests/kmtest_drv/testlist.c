@@ -361,6 +361,7 @@ KMT_TESTFUNC Test_MmPrivatePages;
 KMT_TESTFUNC Test_IoStackKM;
 KMT_TESTFUNC Test_IoActivityId;
 KMT_TESTFUNC Test_IoAcpiCmosRegion;
+KMT_TESTFUNC Test_IoI8042Sync;
 KMT_TESTFUNC Test_IoAcpiIoctl;
 KMT_TESTFUNC Test_IoErrorLogEntry;
 KMT_TESTFUNC Test_IoPciPdoPnp;
@@ -559,6 +560,7 @@ const KMT_TEST TestList[] =
     { "IoModern",                           Test_IoModern },
     { "IoActivityId",                       Test_IoActivityId },
     { "IoAcpiCmosRegion",                   Test_IoAcpiCmosRegion },
+    { "IoI8042Sync",                        Test_IoI8042Sync },
     { "IoAcpiIoctl",                        Test_IoAcpiIoctl },
     { "IoErrorLogEntry",                    Test_IoErrorLogEntry },
     { "IoPciPdoPnp",                        Test_IoPciPdoPnp },
