@@ -1,4 +1,5 @@
 
+add_subdirectory(appinitdll)
 add_subdirectory(muitest)
 add_subdirectory(redirptest)
 

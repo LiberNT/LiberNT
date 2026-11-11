@@ -1,0 +1,5 @@
+add_library(kernel32_appinit MODULE appinitdll.c)
+set_module_type(kernel32_appinit win32dll ENTRYPOINT DllMain 12)
+add_importlibs(kernel32_appinit kernel32 ntdll)
+add_dependencies(kernel32_appinit psdk)
+add_rostests_file(TARGET kernel32_appinit)
