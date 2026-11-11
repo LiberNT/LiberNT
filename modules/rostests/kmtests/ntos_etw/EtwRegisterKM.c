@@ -5,6 +5,7 @@
  */
 
 #include <kmt_test.h>
+#include <evntrace.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -13,6 +14,51 @@ static const GUID KmtEtwProviderGuid = { 0x9f5ebcd1, 0x6c2f, 0x4f93, { 0xb1, 0x0
 
 #define KMT_ETW_REGISTRATIONS 1024
 #define KMT_ETW_TAG 'wtEK'
+
+static
+NTSTATUS
+KmtEtwWriteEx(
+    _In_ REGHANDLE RegHandle,
+    _In_ PCEVENT_DESCRIPTOR EventDescriptor,
+    _In_ ULONG Flags,
+    _In_ ULONG UserDataCount,
+    _In_reads_opt_(UserDataCount) PEVENT_DATA_DESCRIPTOR UserData)
+{
+    NTSTATUS Status;
+
+    _SEH2_TRY
+    {
+        Status = EtwWriteEx(RegHandle, EventDescriptor, 0, Flags, NULL, NULL, UserDataCount, UserData);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+static
+NTSTATUS
+KmtEtwWriteString(
+    _In_ REGHANDLE RegHandle,
+    _In_ PCWSTR String)
+{
+    NTSTATUS Status;
+
+    _SEH2_TRY
+    {
+        Status = EtwWriteString(RegHandle, TRACE_LEVEL_INFORMATION, 0, NULL, String);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
 
 static
 VOID
@@ -63,6 +109,8 @@ START_TEST(EtwRegisterKM)
 {
     REGHANDLE RegHandle = 0;
     EVENT_DESCRIPTOR EventDescriptor;
+    EVENT_DATA_DESCRIPTOR Data;
+    ULONG Value = 0x1234;
     NTSTATUS Status;
 
     Status = EtwRegister(&KmtEtwProviderGuid, NULL, NULL, &RegHandle);
@@ -83,8 +131,32 @@ START_TEST(EtwRegisterKM)
     Status = EtwWrite(RegHandle, &EventDescriptor, NULL, 0, NULL);
     ok_eq_hex(Status, STATUS_SUCCESS);
 
+    /* A handle that names no registration, whether or not anybody listens */
+    Status = EtwWrite(0, &EventDescriptor, NULL, 0, NULL);
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
+    Status = EtwWriteTransfer(0, &EventDescriptor, NULL, NULL, 0, NULL);
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
+
+    EventDataDescCreate(&Data, &Value, sizeof(Value));
+
+    Status = KmtEtwWriteEx(RegHandle, &EventDescriptor, 0, 0, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = KmtEtwWriteEx(RegHandle, &EventDescriptor, EVENT_WRITE_FLAG_NO_FAULTING, 1, &Data);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = KmtEtwWriteEx(0, &EventDescriptor, 0, 1, &Data);
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
+
+    Status = KmtEtwWriteString(RegHandle, L"kmtest");
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = KmtEtwWriteString(0, L"kmtest");
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
+
     Status = EtwUnregister(RegHandle);
     ok_eq_hex(Status, STATUS_SUCCESS);
+
+    /* A registration that has gone */
+    Status = EtwWrite(RegHandle, &EventDescriptor, NULL, 0, NULL);
+    ok_eq_hex(Status, STATUS_INVALID_HANDLE);
 
     TestRegistrationCapacity(&EventDescriptor);
 }

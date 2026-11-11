@@ -542,13 +542,12 @@ EtwProviderEnabled(
     return EtwpIsEnabled(Provider, Level, Keyword);
 }
 
+/* Logs an event of a registration somebody is listening to */
+static
 NTSTATUS
-NTAPI
-EtwWriteTransfer(
-    _In_ REGHANDLE RegHandle,
+EtwpLogEvent(
+    _In_ PETWP_PROVIDER Provider,
     _In_ PCEVENT_DESCRIPTOR EventDescriptor,
-    _In_opt_ LPCGUID ActivityId,
-    _In_opt_ LPCGUID RelatedActivityId,
     _In_ ULONG UserDataCount,
     _In_reads_opt_(UserDataCount) PEVENT_DATA_DESCRIPTOR UserData)
 {
@@ -557,33 +556,10 @@ EtwWriteTransfer(
         EVENT_TRACE_HEADER Header;
         MOF_FIELD Fields[MAX_MOF_FIELDS];
     } Event;
-    PETWP_PROVIDER Provider;
     NTSTATUS Status;
     ULONG FieldCount;
     ULONG LoggerId;
     ULONG Size;
-
-    UNREFERENCED_PARAMETER(ActivityId);
-    UNREFERENCED_PARAMETER(RelatedActivityId);
-
-    if (EventDescriptor == NULL) return STATUS_INVALID_PARAMETER;
-
-    if (UserDataCount > MAX_EVENT_DATA_DESCRIPTORS)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    if (ReadNoFence(&EtwpListeningCount) == 0) return STATUS_SUCCESS;
-
-    Provider = EtwpProviderFromHandle(RegHandle);
-    if (Provider == NULL) return STATUS_INVALID_HANDLE;
-
-    if (!EtwpIsEnabled(Provider,
-                       EventDescriptor->Level,
-                       EventDescriptor->Keyword))
-    {
-        return STATUS_SUCCESS;
-    }
 
     if (KeGetCurrentIrql() > APC_LEVEL)
     {
@@ -621,6 +597,41 @@ EtwWriteTransfer(
                                  KernelMode);
 }
 
+NTSTATUS
+NTAPI
+EtwWriteTransfer(
+    _In_ REGHANDLE RegHandle,
+    _In_ PCEVENT_DESCRIPTOR EventDescriptor,
+    _In_opt_ LPCGUID ActivityId,
+    _In_opt_ LPCGUID RelatedActivityId,
+    _In_ ULONG UserDataCount,
+    _In_reads_opt_(UserDataCount) PEVENT_DATA_DESCRIPTOR UserData)
+{
+    PETWP_PROVIDER Provider;
+
+    UNREFERENCED_PARAMETER(ActivityId);
+    UNREFERENCED_PARAMETER(RelatedActivityId);
+
+    if (EventDescriptor == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (UserDataCount > MAX_EVENT_DATA_DESCRIPTORS)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Provider = EtwpProviderFromHandle(RegHandle);
+    if (Provider == NULL) return STATUS_INVALID_HANDLE;
+
+    if (!EtwpIsEnabled(Provider,
+                       EventDescriptor->Level,
+                       EventDescriptor->Keyword))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    return EtwpLogEvent(Provider, EventDescriptor, UserDataCount, UserData);
+}
+
 /* Writes an event that belongs to no activity in particular */
 NTSTATUS
 NTAPI
@@ -637,6 +648,64 @@ EtwWrite(
                             NULL,
                             UserDataCount,
                             UserData);
+}
+
+NTSTATUS
+NTAPI
+EtwWriteEx(
+    _In_ REGHANDLE RegHandle,
+    _In_ PCEVENT_DESCRIPTOR EventDescriptor,
+    _In_ ULONG64 Filter,
+    _In_ ULONG Flags,
+    _In_opt_ LPCGUID ActivityId,
+    _In_opt_ LPCGUID RelatedActivityId,
+    _In_ ULONG UserDataCount,
+    _In_reads_opt_(UserDataCount) PEVENT_DATA_DESCRIPTOR UserData)
+{
+    UNREFERENCED_PARAMETER(Filter);
+    UNREFERENCED_PARAMETER(Flags);
+
+    /* TODO: leave out the sessions Filter names, and those excluding EVENT_WRITE_FLAG_INPRIVATE events, once an enable records its session */
+    return EtwWriteTransfer(RegHandle,
+                            EventDescriptor,
+                            ActivityId,
+                            RelatedActivityId,
+                            UserDataCount,
+                            UserData);
+}
+
+/* Writes a bare string, like a debug print that goes to the trace */
+NTSTATUS
+NTAPI
+EtwWriteString(
+    _In_ REGHANDLE RegHandle,
+    _In_ UCHAR Level,
+    _In_ ULONGLONG Keyword,
+    _In_opt_ LPCGUID ActivityId,
+    _In_ PCWSTR String)
+{
+    EVENT_DESCRIPTOR EventDescriptor;
+    EVENT_DATA_DESCRIPTOR Data;
+    PETWP_PROVIDER Provider;
+
+    UNREFERENCED_PARAMETER(ActivityId);
+
+    Provider = EtwpProviderFromHandle(RegHandle);
+    if (Provider == NULL) return STATUS_INVALID_HANDLE;
+
+    if (String == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (!EtwpIsEnabled(Provider, Level, Keyword)) return STATUS_SUCCESS;
+
+    RtlZeroMemory(&EventDescriptor, sizeof(EventDescriptor));
+    EventDescriptor.Level = Level;
+    EventDescriptor.Keyword = Keyword;
+
+    EventDataDescCreate(&Data,
+                        String,
+                        (ULONG)((wcslen(String) + 1) * sizeof(WCHAR)));
+
+    return EtwpLogEvent(Provider, &EventDescriptor, 1, &Data);
 }
 
 NTSTATUS
