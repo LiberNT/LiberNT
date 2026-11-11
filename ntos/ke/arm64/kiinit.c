@@ -1204,7 +1204,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
         (ULONG_PTR)(Value))
 
         LoaderBlock->Thread = ARM64_LDR_TO_VIRT(LoaderBlock->Thread);
-        LoaderBlock->Process = ARM64_LDR_TO_VIRT(LoaderBlock->Process);
+        LoaderBlock->Process = (ULONG_PTR)&KiInitialProcess.Pcb;
         if (LoaderBlock->KernelStack != 0)
         {
             LoaderBlock->KernelStack = ARM64_LDR_TO_VIRT(LoaderBlock->KernelStack);
