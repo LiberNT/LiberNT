@@ -195,6 +195,7 @@ typedef struct _ISP_DEVICE
     PKTHREAD Worker;
     volatile LONG StopWorker;
     volatile LONG Interrupts;
+    volatile LONG InterruptLogged;
 
     KMUTEX CommandLock;
     KMUTEX ChannelLock;

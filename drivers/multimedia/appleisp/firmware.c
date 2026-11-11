@@ -8,6 +8,7 @@
 #include "appleisp.h"
 
 #define ISP_DART_FRAMES ((ULONG)(APPLE_DART_PAGE_SIZE / PAGE_SIZE))
+#define ISP_POLL_MS             10
 
 static
 VOID
@@ -849,7 +850,9 @@ IspDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
-    ASSERT(Isp);
+    ASSERT(Isp && KeGetCurrentIrql() == DISPATCH_LEVEL);
+    if (!InterlockedExchange(&Isp->InterruptLogged, 1))
+        DbgPrint("appleisp: interrupt fired\n");
     KeSetEvent(&Isp->ReplyEvent, IO_NO_INCREMENT, FALSE);
     KeSetEvent(&Isp->WorkEvent, IO_NO_INCREMENT, FALSE);
 }
@@ -862,12 +865,18 @@ IspWorker(
 {
     PISP_DEVICE Isp = Context;
     LARGE_INTEGER Interval;
+    PLARGE_INTEGER Timeout;
 
-    Interval.QuadPart = -10 * 10000;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     for (;;)
     {
-        KeWaitForSingleObject(&Isp->WorkEvent, Executive, KernelMode, FALSE,
-                              Isp->FirmwareState == IspFirmwareRunning ? &Interval : NULL);
+        Timeout = NULL;
+        if (Isp->FirmwareState == IspFirmwareRunning && (!Isp->Interrupt || !Isp->Interrupts))
+        {
+            Interval.QuadPart = -10000LL * ISP_POLL_MS;
+            Timeout = &Interval;
+        }
+        KeWaitForSingleObject(&Isp->WorkEvent, Executive, KernelMode, FALSE, Timeout);
         if (Isp->StopWorker)
             break;
         if (Isp->FirmwareState != IspFirmwareRunning)
@@ -899,7 +908,10 @@ IspConnectInterrupt(
     {
         Isp->Interrupt = NULL;
         DbgPrint("appleisp: interrupt vector %lu not connected (%lx), polling\n", Partial->u.Interrupt.Vector, Status);
+        return;
     }
+    DbgPrint("appleisp: interrupt vector %lu level %lu connected\n", Partial->u.Interrupt.Vector,
+             Partial->u.Interrupt.Level);
 }
 
 static
