@@ -302,8 +302,18 @@ ExpBoostOwnerThread(
 {
     PKTHREAD Owner = (PKTHREAD)Entry->OwnerThread;
 
-    if ((Owner == NULL) ||
-        ((ULONG_PTR)Owner & EXP_RESOURCE_OWNER_POINTER_BITS))
+    if ((ULONG_PTR)Owner & EXP_RESOURCE_OWNER_POINTER_BITS)
+    {
+        if (!Entry->OwnerReferenced)
+        {
+            return;
+        }
+
+        Owner = (PKTHREAD)((ULONG_PTR)Owner &
+                           ~(ULONG_PTR)EXP_RESOURCE_OWNER_POINTER_BITS);
+    }
+
+    if (Owner == NULL)
     {
         return;
     }
@@ -338,6 +348,26 @@ ExpBoostResourceOwners(
     {
         ExpBoostOwnerThread(&Resource->OwnerTable[Index], WaiterPriority);
     }
+}
+
+/* The thread an owner pointer named is handed back for the caller to dereference outside the spin lock */
+static
+PKTHREAD
+ExpClearOwnerEntry(
+    _Inout_ POWNER_ENTRY Entry)
+{
+    PKTHREAD Referenced = NULL;
+
+    if (Entry->OwnerReferenced)
+    {
+        Referenced = (PKTHREAD)(Entry->OwnerThread &
+                                ~(ERESOURCE_THREAD)EXP_RESOURCE_OWNER_POINTER_BITS);
+        Entry->OwnerReferenced = 0;
+    }
+
+    Entry->OwnerThread = 0;
+
+    return Referenced;
 }
 
 static
@@ -798,6 +828,7 @@ ExReleaseResourceForThreadLite(
     _In_ ERESOURCE_THREAD Thread)
 {
     POWNER_ENTRY Entry;
+    PKTHREAD Referenced;
     KIRQL OldIrql;
 
     ASSERT(Thread != 0);
@@ -815,11 +846,17 @@ ExReleaseResourceForThreadLite(
             return;
         }
 
-        Resource->OwnerEntry.OwnerThread = 0;
+        Referenced = ExpClearOwnerEntry(&Resource->OwnerEntry);
         Resource->ActiveCount = 0;
         Resource->ActiveEntries = 0;
 
         ExpHandOverResource(Resource, OldIrql);
+
+        if (Referenced != NULL)
+        {
+            ObDereferenceObject(Referenced);
+        }
+
         return;
     }
 
@@ -842,17 +879,23 @@ ExReleaseResourceForThreadLite(
         return;
     }
 
-    Entry->OwnerThread = 0;
+    Referenced = ExpClearOwnerEntry(Entry);
 
     ASSERT(Resource->ActiveEntries > 0);
 
     if (--Resource->ActiveEntries != 0)
     {
         KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
-        return;
+    }
+    else
+    {
+        ExpHandOverResource(Resource, OldIrql);
     }
 
-    ExpHandOverResource(Resource, OldIrql);
+    if (Referenced != NULL)
+    {
+        ObDereferenceObject(Referenced);
+    }
 }
 
 VOID
@@ -906,24 +949,7 @@ ExSetResourceOwnerPointer(
     _Inout_ PERESOURCE Resource,
     _In_ PVOID OwnerPointer)
 {
-    ERESOURCE_THREAD Thread = (ERESOURCE_THREAD)KeGetCurrentThread();
-    POWNER_ENTRY Entry;
-    KIRQL OldIrql;
-
-    ASSERT(OwnerPointer != NULL);
-    ASSERT(((ULONG_PTR)OwnerPointer & EXP_RESOURCE_OWNER_POINTER_BITS) ==
-           EXP_RESOURCE_OWNER_POINTER_BITS);
-
-    KeAcquireSpinLock(&Resource->SpinLock, &OldIrql);
-
-    Entry = ExpFindEntryForThread(Resource, Thread);
-    if (Entry != NULL)
-    {
-        Entry->OwnerThread = (ERESOURCE_THREAD)OwnerPointer;
-        Resource->Flag |= ResourceReleaseByOtherThread;
-    }
-
-    KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
+    ExSetResourceOwnerPointerEx(Resource, OwnerPointer, 0);
 }
 
 VOID
@@ -933,10 +959,39 @@ ExSetResourceOwnerPointerEx(
     _In_ PVOID OwnerPointer,
     _In_ ULONG Flags)
 {
-    /* TODO: the flags of this routine are not published; none is honoured. */
-    UNREFERENCED_PARAMETER(Flags);
+    ERESOURCE_THREAD Thread = (ERESOURCE_THREAD)KeGetCurrentThread();
+    PKTHREAD Named = NULL;
+    POWNER_ENTRY Entry;
+    KIRQL OldIrql;
 
-    ExSetResourceOwnerPointer(Resource, OwnerPointer);
+    ASSERT(OwnerPointer != NULL);
+    ASSERT(((ULONG_PTR)OwnerPointer & EXP_RESOURCE_OWNER_POINTER_BITS) ==
+           EXP_RESOURCE_OWNER_POINTER_BITS);
+
+    if (Flags & FLAG_OWNER_POINTER_IS_THREAD)
+    {
+        Named = (PKTHREAD)((ULONG_PTR)OwnerPointer &
+                           ~(ULONG_PTR)EXP_RESOURCE_OWNER_POINTER_BITS);
+        ObReferenceObject(Named);
+    }
+
+    KeAcquireSpinLock(&Resource->SpinLock, &OldIrql);
+
+    Entry = ExpFindEntryForThread(Resource, Thread);
+    if (Entry != NULL)
+    {
+        Entry->OwnerThread = (ERESOURCE_THREAD)OwnerPointer;
+        Entry->OwnerReferenced = (Named != NULL);
+        Resource->Flag |= ResourceReleaseByOtherThread;
+        Named = NULL;
+    }
+
+    KeReleaseSpinLock(&Resource->SpinLock, OldIrql);
+
+    if (Named != NULL)
+    {
+        ObDereferenceObject(Named);
+    }
 }
 
 BOOLEAN

@@ -137,6 +137,7 @@ KMT_TESTFUNC Test_MmPteWin11KM;
 #endif
 KMT_TESTFUNC Test_ExResource;
 KMT_TESTFUNC Test_ExResourceBoost;
+KMT_TESTFUNC Test_ExResourceBoostOwnerPointer;
 KMT_TESTFUNC Test_ExRundown;
 KMT_TESTFUNC Test_ExSequencedList;
 KMT_TESTFUNC Test_ExSingleList;
@@ -468,6 +469,7 @@ const KMT_TEST TestList[] =
     { "ExLicenseDif",                       Test_ExLicenseDif },
     { "ExResource",                         Test_ExResource },
     { "ExResourceBoost",                    Test_ExResourceBoost },
+    { "ExResourceBoostOwnerPointer",        Test_ExResourceBoostOwnerPointer },
     { "ExRundown",                          Test_ExRundown },
     { "ExSequencedList",                    Test_ExSequencedList },
     { "ExSingleList",                       Test_ExSingleList },

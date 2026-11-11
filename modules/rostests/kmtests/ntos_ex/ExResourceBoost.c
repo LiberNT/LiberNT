@@ -19,7 +19,9 @@
 typedef enum _OWNER_KIND
 {
     OwnerExclusive,
-    OwnerShared
+    OwnerShared,
+    OwnerPointerThread,
+    OwnerPointerStorage
 } OWNER_KIND;
 
 typedef struct _BOOST_OWNER
@@ -27,6 +29,7 @@ typedef struct _BOOST_OWNER
     PERESOURCE Resource;
     OWNER_KIND Kind;
     KPRIORITY Priority;
+    ULONG_PTR Storage;
     KEVENT Acquired;
     KEVENT Release;
     HANDLE Handle;
@@ -57,6 +60,17 @@ OwnerThread(
         ExAcquireResourceSharedLite(Owner->Resource, TRUE);
     else
         ExAcquireResourceExclusiveLite(Owner->Resource, TRUE);
+
+    if (Owner->Kind == OwnerPointerThread)
+    {
+        Name |= 3;
+        ExSetResourceOwnerPointerEx(Owner->Resource, (PVOID)Name, FLAG_OWNER_POINTER_IS_THREAD);
+    }
+    else if (Owner->Kind == OwnerPointerStorage)
+    {
+        Name = (ERESOURCE_THREAD)&Owner->Storage | 3;
+        ExSetResourceOwnerPointerEx(Owner->Resource, (PVOID)Name, 0);
+    }
 
     KeSetEvent(&Owner->Acquired, IO_NO_INCREMENT, FALSE);
 
@@ -209,4 +223,10 @@ START_TEST(ExResourceBoost)
     TestBoost("exclusive owner", OwnerExclusive, 1, FALSE, BOOSTED_PRIORITY);
     TestBoost("boost disabled", OwnerExclusive, 1, TRUE, -1);
     TestBoost("shared owners", OwnerShared, 2, FALSE, BOOSTED_PRIORITY);
+}
+
+START_TEST(ExResourceBoostOwnerPointer)
+{
+    TestBoost("owner pointer naming a thread", OwnerPointerThread, 1, FALSE, BOOSTED_PRIORITY);
+    TestBoost("owner pointer naming storage", OwnerPointerStorage, 1, FALSE, -1);
 }
