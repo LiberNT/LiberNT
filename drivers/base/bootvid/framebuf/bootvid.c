@@ -18,6 +18,7 @@
 /* GLOBALS ********************************************************************/
 
 #define TAG_BOOTVID_BACKBUFFER 'bdiV'
+#define TAG_BOOTVID_SCALE 'sdiV'
 
 #define BOOTVID_FALLBACK_FONT_SCALE 2
 #define BOOTVID_FALLBACK_CELL_WIDTH (BOOTCHAR_WIDTH * BOOTVID_FALLBACK_FONT_SCALE)
@@ -51,6 +52,14 @@ static BOOT_FONT_RENDERER BootVidCompactFont;
 static BOOT_FONT_RENDERER BootVidStatusFont;
 static BOOLEAN VidpCompactFont = FALSE;
 
+static PULONG PhysicalColumns;
+static PULONG PhysicalRows;
+static ULONG ScaleWidth, ScaleHeight;
+
+static BOOLEAN TextUpdateDeferred;
+static BOOLEAN TextDamaged;
+static URECT TextDamage;
+
 NTSTATUS
 NTAPI
 VidSetVirtualFrameBuffer(
@@ -69,13 +78,48 @@ VidSetVirtualFrameBuffer(
 static __inline ULONG
 LogicalToPhysicalX(_In_ ULONG X)
 {
+    if (ScaleWidth && (X <= ScaleWidth))
+        return PhysicalColumns[X];
+
     return (ULONG)(((ULONGLONG)X * ScreenWidth) / VidpDisplayWidth);
 }
 
 static __inline ULONG
 LogicalToPhysicalY(_In_ ULONG Y)
 {
+    if (ScaleHeight && (Y <= ScaleHeight))
+        return PhysicalRows[Y];
+
     return (ULONG)(((ULONGLONG)Y * ScreenHeight) / VidpDisplayHeight);
+}
+
+static VOID
+BuildScaleTables(VOID)
+{
+    ULONG Index;
+
+    ScaleWidth = 0;
+    ScaleHeight = 0;
+
+    if (PhysicalColumns)
+        ExFreePoolWithTag(PhysicalColumns, TAG_BOOTVID_SCALE);
+
+    PhysicalColumns = ExAllocatePoolWithTag(NonPagedPool,
+                                            ((SIZE_T)VidpDisplayWidth + 1 + VidpDisplayHeight + 1) * sizeof(ULONG),
+                                            TAG_BOOTVID_SCALE);
+    if (!PhysicalColumns)
+        return;
+
+    PhysicalRows = PhysicalColumns + VidpDisplayWidth + 1;
+
+    for (Index = 0; Index <= VidpDisplayWidth; ++Index)
+        PhysicalColumns[Index] = LogicalToPhysicalX(Index);
+
+    for (Index = 0; Index <= VidpDisplayHeight; ++Index)
+        PhysicalRows[Index] = LogicalToPhysicalY(Index);
+
+    ScaleWidth = VidpDisplayWidth;
+    ScaleHeight = VidpDisplayHeight;
 }
 
 static __inline PULONG
@@ -357,6 +401,59 @@ FlushBackBufferRect(
 }
 
 static VOID
+DamageBackBufferRect(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    if (!TextUpdateDeferred)
+    {
+        FlushBackBufferRect(Left, Top, Width, Height);
+        return;
+    }
+
+    if (!Width || !Height)
+        return;
+
+    if (!TextDamaged)
+    {
+        TextDamage.Left = Left;
+        TextDamage.Top = Top;
+        TextDamage.Right = Left + Width;
+        TextDamage.Bottom = Top + Height;
+        TextDamaged = TRUE;
+        return;
+    }
+
+    TextDamage.Left = min(TextDamage.Left, Left);
+    TextDamage.Top = min(TextDamage.Top, Top);
+    TextDamage.Right = max(TextDamage.Right, Left + Width);
+    TextDamage.Bottom = max(TextDamage.Bottom, Top + Height);
+}
+
+VOID
+BeginTextUpdate(VOID)
+{
+    TextUpdateDeferred = TRUE;
+}
+
+VOID
+EndTextUpdate(VOID)
+{
+    TextUpdateDeferred = FALSE;
+
+    if (!TextDamaged)
+        return;
+
+    TextDamaged = FALSE;
+    FlushBackBufferRect(TextDamage.Left,
+                        TextDamage.Top,
+                        TextDamage.Right - TextDamage.Left,
+                        TextDamage.Bottom - TextDamage.Top);
+}
+
+static VOID
 ApplyPalette(VOID)
 {
     /* Screen redraw */
@@ -490,7 +587,7 @@ DisplayBitmapCharacter(
         }
     }
 
-    FlushBackBufferRect(Left, Top, Width, Height);
+    DamageBackBufferRect(Left, Top, Width, Height);
 }
 
 static ULONG
@@ -815,6 +912,7 @@ VidInitialize(
     }
 
     RtlZeroMemory(BackBuffer, BackBufferSize);
+    BuildScaleTables();
 
     /* Reset the video mode if requested */
     if (SetMode)
@@ -941,6 +1039,8 @@ VidUseCompactFont(VOID)
         return FALSE;
 
     VidpCompactFont = TRUE;
+    ScaleWidth = 0;
+    ScaleHeight = 0;
     VidpDisplayWidth = ScreenWidth;
     VidpDisplayHeight = ScreenHeight;
     VidpDisplayDpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
@@ -1108,7 +1208,7 @@ PreserveRow(
     /* On restore, mirror the backbuffer changes to the framebuffer */
     if (Restore)
     {
-        FlushBackBufferRect(0, CurrentTop, VidpDisplayWidth, Height);
+        DamageBackBufferRect(0, CurrentTop, VidpDisplayWidth, Height);
     }
 }
 
@@ -1141,10 +1241,10 @@ DoScroll(
         NewPosition += VidpDisplayWidth;
     }
 
-    FlushBackBufferRect(VidpScrollRegion.Left,
-                        VidpScrollRegion.Top,
-                        RowSize,
-                        Height);
+    DamageBackBufferRect(VidpScrollRegion.Left,
+                         VidpScrollRegion.Top,
+                         RowSize,
+                         Height);
 }
 
 VOID
@@ -1215,7 +1315,7 @@ DisplayCharacter(
         }
     }
 
-    FlushBackBufferRect(Left, Top, Width, Height);
+    DamageBackBufferRect(Left, Top, Width, Height);
 }
 
 VOID
