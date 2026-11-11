@@ -392,6 +392,7 @@ BOOLEAN IopIsSafeBootDeviceClass(_In_ PUNICODE_STRING ClassGuid);
 NTSTATUS IopLoadDriverForDevice(_In_ HANDLE ServiceHandle, _In_ BOOLEAN SafeBootClassAllowed,
                                 _Out_ PDRIVER_OBJECT *DriverObject);
 BOOLEAN NTAPI IopConfigureDeviceFromDriverDatabase(_In_ PDEVICE_NODE DeviceNode);
+VOID IopEnsureDeviceDriverKey(_In_ HANDLE InstanceKey);
 
 extern LIST_ENTRY DriverReinitListHead;
 extern KSPIN_LOCK DriverReinitListLock;

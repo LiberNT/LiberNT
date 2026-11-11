@@ -41,7 +41,6 @@ IopOpenInstanceKeyByPath(
     return Status;
 }
 
-static
 VOID
 IopEnsureDeviceDriverKey(
     _In_ HANDLE InstanceKey)

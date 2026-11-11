@@ -701,10 +701,16 @@ IoOpenDeviceRegistryKey(
 
     Status = PnpDeviceObjectToDeviceInstance(DeviceObject,
                                              &InstanceKey,
-                                             KEY_READ);
+                                             KEY_READ | KEY_SET_VALUE);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* A device of a class without a driver key gets one at its first open, as on Windows 11 */
     Status = IopGetRegistryValue(InstanceKey, L"Driver", &Information);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
+    {
+        IopEnsureDeviceDriverKey(InstanceKey);
+        Status = IopGetRegistryValue(InstanceKey, L"Driver", &Information);
+    }
     ZwClose(InstanceKey);
 
     if (!NT_SUCCESS(Status)) return Status;
