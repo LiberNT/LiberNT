@@ -1761,10 +1761,6 @@ static HRESULT invoke_builtin_function(DispatchEx *This, func_info_t *func, WORD
          * Native probably uses some undocumented interface in this case, but it should
          * be fine for us to allow IDispatchEx handle that.
          */
-        if(!caller && (This->info->vtbl->get_compat_mode ? This->info->vtbl->get_compat_mode(This)
-                       : dispex_compat_mode(This)) < COMPAT_MODE_IE9)
-            return E_NOTIMPL;
-
         hres = get_func_obj_entry(This, func, &entry);
         if(FAILED(hres))
             return hres;
@@ -2451,11 +2447,17 @@ static HRESULT WINAPI DispatchEx_InvokeEx(IWineJSDispatchHost *iface, DISPID id,
         return dispex_prop_get(This, id, lcid, pvarRes, pei, pspCaller);
 
     case DISPATCH_PROPERTYPUT: {
+        func_info_t *func;
+
         if(pdp->cArgs != 1 || (pdp->cNamedArgs == 1 && *pdp->rgdispidNamedArgs != DISPID_PROPERTYPUT)
            || pdp->cNamedArgs > 1) {
             FIXME("invalid args\n");
             return E_INVALIDARG;
         }
+        if(!pspCaller && get_dispid_type(id) == DISPEXPROP_BUILTIN && SUCCEEDED(get_builtin_func(This->info, id, &func))
+           && func->func_disp_idx >= 0 && (This->info->vtbl->get_compat_mode ? This->info->vtbl->get_compat_mode(This)
+                                           : dispex_compat_mode(This)) < COMPAT_MODE_IE9)
+            return E_NOTIMPL;
         return dispex_prop_put(This, id, lcid, pdp->rgvarg, pei, pspCaller);
     }
 
