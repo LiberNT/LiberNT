@@ -463,6 +463,32 @@ IoQueryFileDosDeviceName(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+IopQueryDeviceSecurityDescriptor(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PSECURITY_INFORMATION SecurityInformation,
+    _Out_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _Inout_ PULONG BufferLength)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&IopSecurityResource, TRUE);
+
+    Status = SeQuerySecurityDescriptorInfo(SecurityInformation,
+                                           SecurityDescriptor,
+                                           BufferLength,
+                                           &DeviceObject->SecurityDescriptor);
+
+    ExReleaseResourceLite(&IopSecurityResource);
+    KeLeaveCriticalRegion();
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 IopGetSetSecurityObject(
@@ -522,6 +548,14 @@ IopGetSetSecurityObject(
 
     if (!LocalFileObject)
     {
+        if (OperationCode == QuerySecurityDescriptor)
+        {
+            return IopQueryDeviceSecurityDescriptor(ObjectBody,
+                                                    SecurityInformation,
+                                                    SecurityDescriptor,
+                                                    BufferLength);
+        }
+
         return IopSetDeviceSecurityDescriptor(ObjectBody,
                                               SecurityInformation,
                                               SecurityDescriptor,
@@ -605,28 +639,35 @@ IopSetDeviceSecurityDescriptor(
     _In_ PGENERIC_MAPPING GenericMapping)
 {
     PEXTENDED_DEVOBJ_EXTENSION Extension;
+    PSECURITY_DESCRIPTOR Descriptor;
+    PSECURITY_DESCRIPTOR Held;
     NTSTATUS Status;
 
     PAGED_CODE();
 
     Extension = IoGetDevObjExtension(DeviceObject);
 
+    KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&IopSecurityResource, TRUE);
 
-    if (Extension->ExtensionFlags & DOE_DEFAULT_SD_PRESENT)
-    {
-        Extension->ExtensionFlags &= ~DOE_DEFAULT_SD_PRESENT;
-        DeviceObject->SecurityDescriptor = NULL;
-    }
+    Held = DeviceObject->SecurityDescriptor;
+    Descriptor = Held;
 
     Status = SeSetSecurityDescriptorInfo(DeviceObject,
                                          SecurityInformation,
                                          SecurityDescriptor,
-                                         &DeviceObject->SecurityDescriptor,
+                                         &Descriptor,
                                          PoolType,
                                          GenericMapping);
+    if (NT_SUCCESS(Status))
+    {
+        DeviceObject->SecurityDescriptor = Descriptor;
+        Extension->ExtensionFlags &= ~DOE_DEFAULT_SD_PRESENT;
+        SeDeassignSecurity(&Held);
+    }
 
     ExReleaseResourceLite(&IopSecurityResource);
+    KeLeaveCriticalRegion();
 
     UNREFERENCED_PARAMETER(BufferLength);
 

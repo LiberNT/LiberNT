@@ -264,6 +264,8 @@ IopDeleteDevice(
         IopFreeDeviceNode(DeviceNode);
     }
 
+    SeDeassignSecurity(&DeviceObject->SecurityDescriptor);
+
     if (DeviceObject->DriverObject != NULL)
     {
         ObDereferenceObject(DeviceObject->DriverObject);
