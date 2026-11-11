@@ -1808,14 +1808,15 @@ public:
     void DrawLock(HDC Dc, int Shift)
     {
         SYSTEMTIME Now;
-        WCHAR Date[96] = L"", Hint[96];
+        WCHAR Date[96] = L"", Hint[96], Format[32];
         int Center = Width / 2, Top = (int)(Height * 0.17f) + Shift;
         RECT Clock = {0, Top, Width, Top + S(170)};
         RECT DateRect = {0, Clock.bottom - S(4), Width, Clock.bottom + S(46)};
         RECT HintRect = {Center - S(400), Height - S(78), Center + S(400), Height - S(46)};
 
         GetLocalTime(&Now);
-        GetDateFormatW(LOCALE_USER_DEFAULT, 0, &Now, L"dddd, MMMM d", Date, _countof(Date));
+        LoadText(IDS_LOGONUI_DATE_FORMAT, Format, _countof(Format));
+        GetDateFormatW(LOCALE_USER_DEFAULT, 0, &Now, Format, Date, _countof(Date));
         Text(Dc, ClockFont, ClockText, Clock, DT_CENTER | DT_SINGLELINE | DT_BOTTOM, RGB(255, 255, 255));
         Text(Dc, DateFont, Date, DateRect, DT_CENTER | DT_SINGLELINE, RGB(244, 244, 244));
         LoadText(CadRequired ? (Locked() ? IDS_LOGONUI_HINT_CAD_UNLOCK : IDS_LOGONUI_HINT_CAD_SIGNIN)
