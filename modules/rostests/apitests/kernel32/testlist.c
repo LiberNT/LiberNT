@@ -162,6 +162,9 @@ extern void func_WaitFileHandle(void);
 extern void func_WaitForMultipleObjects(void);
 extern void func_WerRegisterFile(void);
 extern void func_WerRegistration(void);
+extern void func_WerCrashReport(void);
+extern void func_WerHangReport(void);
+extern void func_WerReport(void);
 extern void func_WideCharToMultiByte(void);
 extern void func_WinSaferRestrictions(void);
 extern void func_Wow64GetThreadContext(void);
@@ -333,6 +336,9 @@ const struct test winetest_testlist[] =
     { "WaitForMultipleObjects",      func_WaitForMultipleObjects },
     { "WerRegisterFile",             func_WerRegisterFile },
     { "WerRegistration",             func_WerRegistration },
+    { "WerCrashReport",              func_WerCrashReport },
+    { "WerHangReport",               func_WerHangReport },
+    { "WerReport",                   func_WerReport },
     { "WideCharToMultiByte",         func_WideCharToMultiByte },
     { "WinSaferRestrictions",        func_WinSaferRestrictions },
     { "Wow64ChildProcess",           func_Wow64ChildProcess },

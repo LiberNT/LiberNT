@@ -14,12 +14,16 @@ typedef enum {
 	frrvOk = 0,
 	frrvOkHeadless = 7,
 	frrvOkManifest = 1,
-	frrvOkQueued = 2
+	frrvOkQueued = 2,
+	frrvErrAnotherInstance = 8,
+	frrvErrNoMemory = 9,
+	frrvErrDoubleFault = 10
 } EFaultRepRetVal;
 BOOL WINAPI AddERExcludedApplicationA(LPCSTR);
 BOOL WINAPI AddERExcludedApplicationW(LPCWSTR);
 EFaultRepRetVal WINAPI ReportFault(LPEXCEPTION_POINTERS,DWORD);
 typedef EFaultRepRetVal (WINAPI *pfn_REPORTFAULT)(LPEXCEPTION_POINTERS,DWORD);
+HRESULT WINAPI WerReportHang(HWND,PCWSTR);
 #endif
 
 #ifdef UNICODE

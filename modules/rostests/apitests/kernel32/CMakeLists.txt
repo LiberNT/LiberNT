@@ -2,6 +2,7 @@
 add_subdirectory(appinitdll)
 add_subdirectory(muitest)
 add_subdirectory(redirptest)
+add_subdirectory(werhandler)
 
 add_message_headers(ANSI FormatMessage.mc)
 
@@ -166,6 +167,7 @@ list(APPEND SOURCE
     WaitForMultipleObjects.c
     WerRegisterFile.c
     WerRegistration.c
+    WerReporting.c
     WideCharToMultiByte.c
     WinSaferRestrictions.c
     Wow64GetThreadContext.c

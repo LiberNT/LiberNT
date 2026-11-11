@@ -113,6 +113,7 @@ set(WOW64_I386_EXECUTABLES
     tree
     userinit
     utilman
+    werfault
     wglgears_runner
     where
     whoami

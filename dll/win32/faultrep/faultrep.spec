@@ -12,3 +12,4 @@
 @ stub ReportKernelFaultA
 @ stub ReportKernelFaultDWW
 @ stub ReportKernelFaultW
+@ stdcall WerReportHang(ptr wstr)
