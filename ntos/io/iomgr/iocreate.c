@@ -375,9 +375,10 @@ IopOpenLinkOrRenameTarget(
 
     InitializeObjectAttributes(&ObjectAttributes,
                                &TargetName,
-                               FileObject->Flags & FO_OPENED_CASE_SENSITIVE
-                                   ? 0
-                                   : OBJ_CASE_INSENSITIVE,
+                               OBJ_KERNEL_HANDLE |
+                                   (FileObject->Flags & FO_OPENED_CASE_SENSITIVE
+                                        ? 0
+                                        : OBJ_CASE_INSENSITIVE),
                                RenameInfo->RootDirectory,
                                NULL);
 
@@ -410,7 +411,7 @@ IopOpenLinkOrRenameTarget(
                                        NULL);
     if (!NT_SUCCESS(Status))
     {
-        NtClose(*Handle);
+        ObCloseHandle(*Handle, KernelMode);
         *Handle = NULL;
         return Status;
     }
@@ -419,7 +420,7 @@ IopOpenLinkOrRenameTarget(
         IoGetRelatedDeviceObject(FileObject))
     {
         ObDereferenceObject(TargetFileObject);
-        NtClose(*Handle);
+        ObCloseHandle(*Handle, KernelMode);
         *Handle = NULL;
         return STATUS_NOT_SAME_DEVICE;
     }

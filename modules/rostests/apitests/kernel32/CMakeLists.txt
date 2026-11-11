@@ -127,6 +127,7 @@ list(APPEND SOURCE
     ReadFile.c
     ResourceUILanguage.c
     RemoteThreadInit.c
+    RenameAsyncHandle.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c
     SetCalendarInfo.c

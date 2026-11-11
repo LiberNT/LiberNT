@@ -1032,9 +1032,11 @@ NtSetInformationFile(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PIO_STACK_LOCATION StackPtr;
     PDEVICE_OBJECT DeviceObject;
+    IO_STATUS_BLOCK LocalIosb;
     PFILE_OBJECT FileObject;
     HANDLE TargetHandle = NULL;
     BOOLEAN Locked = FALSE;
+    KEVENT LocalEvent;
     NTSTATUS Status;
     PVOID Buffer;
     PIRP Irp;
@@ -1329,6 +1331,15 @@ NtSetInformationFile(
     Irp->RequestorMode = PreviousMode;
     Irp->Flags = IRP_BUFFERED_IO | IRP_DEALLOCATE_BUFFER |
                  IRP_DEFER_IO_COMPLETION;
+
+    /* The service has no event to signal, so on a file opened for asynchronous I/O it waits for the request itself */
+    if (!(FileObject->Flags & FO_SYNCHRONOUS_IO))
+    {
+        KeInitializeEvent(&LocalEvent, NotificationEvent, FALSE);
+        Irp->UserIosb = &LocalIosb;
+        Irp->UserEvent = &LocalEvent;
+        Irp->Flags |= IRP_SYNCHRONOUS_API;
+    }
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
 
@@ -1403,8 +1414,30 @@ NtSetInformationFile(
 
         if (Locked) IopUnlockFileObject(FileObject);
     }
+    else if (Status == STATUS_PENDING || !NT_ERROR(Status))
+    {
+        KeWaitForSingleObject(&LocalEvent, Executive, KernelMode, FALSE, NULL);
+        if (Status == STATUS_PENDING) Status = LocalIosb.Status;
 
-    if (TargetHandle != NULL) NtClose(TargetHandle);
+        if (PreviousMode == KernelMode)
+        {
+            *IoStatusBlock = LocalIosb;
+        }
+        else
+        {
+            _SEH2_TRY
+            {
+                IopWriteIoStatusBlock(IoStatusBlock, &LocalIosb, FALSE);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+            }
+            _SEH2_END;
+        }
+    }
+
+    if (TargetHandle != NULL) ObCloseHandle(TargetHandle, KernelMode);
 
     return Status;
 }
