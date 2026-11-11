@@ -21,6 +21,7 @@
 #define PMGR_PS_TARGET          0x0000000f
 #define PMGR_PS_ACTIVE          0xf
 #define PMGR_PS_CLKGATE         0x4
+#define PMGR_PS_PWRGATE         0x0
 #define PMGR_PS_TIMEOUT_US      100
 #define PMGR_MAX_DEPTH          8
 
@@ -192,4 +193,59 @@ ApplePmgrResetDevice(
     WRITE_REGISTER_ULONG(Mapping.Register, Value & ~(PMGR_RESET | PMGR_DEV_DISABLE));
     ApplePmgrUnmapDomain(&Mapping);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+ApplePmgrPowerOffDomains(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _In_ ULONG FirstIndex)
+{
+    PMGR_DOMAIN Mapping;
+    const VOID *Domains;
+    ULONG Length, Count, Index, Domain, Value, Wanted, Waited, Unused;
+    ULONG64 Phandle;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    Domains = FdtGetProperty(&Tree->Fdt, Node, "power-domains", &Length);
+    Count = Domains ? Length / sizeof(ULONG) : 0;
+    for (Index = Count; Index-- > FirstIndex;)
+    {
+        if (!FdtReadCells(Domains, Length, Index, 1, &Phandle) ||
+            (Domain = FdtDriverFindPhandle(Tree, (ULONG)Phandle)) == FDT_NO_NODE)
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        if (FdtGetProperty(&Tree->Fdt, Domain, "apple,always-on", &Unused) != NULL)
+            continue;
+        if (!ApplePmgrMapDomain(Tree, Domain, &Mapping))
+            return STATUS_DEVICE_CONFIGURATION_ERROR;
+        Value = READ_REGISTER_ULONG(Mapping.Register);
+        if (PMGR_PS_ACTUAL(Value) == PMGR_PS_PWRGATE && (Value & PMGR_PS_TARGET) == PMGR_PS_PWRGATE)
+        {
+            ApplePmgrUnmapDomain(&Mapping);
+            continue;
+        }
+        Wanted = (Value & ~(PMGR_AUTO_ENABLE | PMGR_FLAGS | PMGR_PS_TARGET)) | PMGR_PS_PWRGATE;
+        WRITE_REGISTER_ULONG(Mapping.Register, Wanted);
+        for (Waited = 0; Waited <= PMGR_PS_TIMEOUT_US; ++Waited)
+        {
+            Value = READ_REGISTER_ULONG(Mapping.Register);
+            if (PMGR_PS_ACTUAL(Value) == PMGR_PS_PWRGATE)
+                break;
+            KeStallExecutionProcessor(1);
+        }
+        if (Waited > PMGR_PS_TIMEOUT_US)
+        {
+            DPRINT1("Apple PMGR: power domain %s at %I64x did not turn off (%08lx)\n", Mapping.Label, Mapping.Physical,
+                    Value);
+            Status = STATUS_IO_TIMEOUT;
+        }
+        else
+        {
+            DPRINT1("Apple PMGR: power domain %s turned off (%08lx)\n", Mapping.Label, Value);
+        }
+        ApplePmgrUnmapDomain(&Mapping);
+    }
+    return Status;
 }

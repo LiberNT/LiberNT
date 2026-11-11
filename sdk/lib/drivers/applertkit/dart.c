@@ -830,3 +830,275 @@ AppleDartAdoptedRelease(
         MmUnmapIoSpace(Adopted->Base, Adopted->BaseSize);
     Adopted->Base = NULL;
 }
+
+static
+PULONG64
+AppleDartLeafEntry(
+    _In_ PDART_IDENTITY Identity,
+    _In_ ULONG64 Iova)
+{
+    PDART_TABLE Table = Identity->Top;
+    ULONG Level, Slot;
+
+    for (Level = Identity->Levels; Table && Level > 1; --Level)
+    {
+        Slot = (ULONG)(Iova >> (DART_PAGE_SHIFT + (Level - 1) * DART_LEVEL_BITS)) & (DART_TABLE_ENTRIES - 1);
+        Table = Table->Children[Slot];
+    }
+    return Table ? &Table->Entries[(Iova >> DART_PAGE_SHIFT) & (DART_TABLE_ENTRIES - 1)] : NULL;
+}
+
+static
+VOID
+AppleDartFreeTable(
+    _In_ PDART_TABLE Table)
+{
+    ULONG Slot;
+
+    if (Table->Children)
+    {
+        for (Slot = 0; Slot < DART_TABLE_ENTRIES; ++Slot)
+        {
+            if (Table->Children[Slot])
+                AppleDartFreeTable(Table->Children[Slot]);
+        }
+        ExFreePoolWithTag(Table->Children, DART_TAG);
+    }
+    MmFreeContiguousMemorySpecifyCache(Table->Entries, DART_PAGE_SIZE, MmCached);
+    ExFreePoolWithTag(Table, DART_TAG);
+}
+
+static
+VOID
+AppleDartDomainFlush(
+    _In_ PAPPLE_DART_DOMAIN Domain)
+{
+    ULONG Index;
+
+    KeMemoryBarrier();
+    for (Index = 0; Index < Domain->Streams; ++Index)
+        AppleDartFlush(Domain->Stream[Index].Base, Domain->Stream[Index].Sid, Domain->Owner);
+}
+
+static
+VOID
+AppleDartDomainRelease(
+    _Inout_ PAPPLE_DART_DOMAIN Domain)
+{
+    PDART_IDENTITY Tables = Domain->Tables;
+    ULONG Index;
+
+    for (Index = 0; Index < Domain->Streams; ++Index)
+        MmUnmapIoSpace(Domain->Stream[Index].Base, Domain->Stream[Index].BaseSize);
+    if (Tables)
+    {
+        if (Tables->Top)
+            AppleDartFreeTable(Tables->Top);
+        ExFreePoolWithTag(Tables, DART_TAG);
+    }
+    RtlZeroMemory(Domain, sizeof(*Domain));
+}
+
+NTSTATUS
+NTAPI
+AppleDartDomainCreate(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _In_z_ PCSTR Owner,
+    _Out_ PAPPLE_DART_DOMAIN Domain)
+{
+    PAPPLE_DART_DOMAIN_STREAM Stream;
+    const VOID *Iommus, *Compatible;
+    ULONG Length, CompatibleLength, Index, Dart, Cells, Size, Params3, Streams, Protect, InputBits, Ttbr, Tcr;
+    ULONG64 Phandle, Sid, Physical;
+    PDART_IDENTITY Tables;
+    PUCHAR Base;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    RtlZeroMemory(Domain, sizeof(*Domain));
+    Domain->Owner = Owner;
+    Iommus = FdtGetProperty(&Tree->Fdt, Node, "iommus", &Length);
+    if (!Iommus)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    for (Index = 0; NT_SUCCESS(Status) && FdtReadCells(Iommus, Length, Index, 1, &Phandle); Index += 2)
+    {
+        Dart = FdtDriverFindPhandle(Tree, (ULONG)Phandle);
+        if (Dart == FDT_NO_NODE || !FdtReadU32(&Tree->Fdt, Dart, "#iommu-cells", &Cells) || Cells != 1 ||
+            !FdtReadCells(Iommus, Length, Index + 1, 1, &Sid) || Domain->Streams == APPLE_DART_DOMAIN_STREAMS)
+        {
+            Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+            break;
+        }
+        Compatible = FdtGetProperty(&Tree->Fdt, Dart, "compatible", &CompatibleLength);
+        if (!FdtStringListContains(Compatible, CompatibleLength, "apple,t8110-dart"))
+        {
+            Status = STATUS_NOT_SUPPORTED;
+            break;
+        }
+        Base = FdtDriverMapReg(Tree, Dart, 0, &Physical, &Size);
+        if (!Base)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+        Stream = &Domain->Stream[Domain->Streams++];
+        Stream->Base = Base;
+        Stream->BaseSize = Size;
+        Stream->Sid = (ULONG)Sid;
+        Stream->Physical = Physical;
+        Params3 = AppleDartRead(Base, DART_T8110_PARAMS3);
+        Streams = AppleDartRead(Base, DART_T8110_PARAMS4) & 0x1ff;
+        Protect = AppleDartRead(Base, DART_T8110_PROTECT);
+        InputBits = (Params3 >> 16) & 0x3f;
+        DbgPrint("%s: DART %I64x stream %lu of %lu: params %08lx, %lu-bit addresses, protect %08lx\n", Owner, Physical,
+                 Stream->Sid, Streams, Params3, InputBits, Protect);
+        if (Stream->Sid >= Streams)
+            Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+        else if (Protect & DART_T8110_PROTECT_TCR)
+            Status = STATUS_ACCESS_DENIED;
+        else if (InputBits < DART_PAGE_SHIFT + DART_LEVEL_BITS + 1 || InputBits > DART_PAGE_SHIFT + 3 * DART_LEVEL_BITS ||
+                 (Domain->InputBits && InputBits != Domain->InputBits))
+            Status = STATUS_NOT_SUPPORTED;
+        Domain->InputBits = InputBits;
+    }
+    if (NT_SUCCESS(Status) && !Domain->Streams)
+        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+    if (NT_SUCCESS(Status))
+    {
+        Tables = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Tables), DART_TAG);
+        if (Tables)
+        {
+            RtlZeroMemory(Tables, sizeof(*Tables));
+            Tables->InputBits = Domain->InputBits;
+            Tables->Levels = (Domain->InputBits > DART_PAGE_SHIFT + 2 * DART_LEVEL_BITS) ? 3 : 2;
+            Domain->Tables = Tables;
+            Tables->Top = AppleDartAllocateTable(FALSE, &Tables->TopPhysical);
+        }
+        if (!Tables || !Tables->Top)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        DbgPrint("%s: DART domain over %lu streams not created: %lx\n", Owner, Domain->Streams, Status);
+        AppleDartDomainRelease(Domain);
+        return Status;
+    }
+    Domain->Levels = Tables->Levels;
+    Domain->TopPhysical = Tables->TopPhysical;
+    Ttbr = (ULONG)((Domain->TopPhysical >> DART_PAGE_SHIFT) << 2) | DART_T8110_TTBR_VALID;
+    Tcr = DART_T8110_TCR_TRANSLATE | (Domain->Levels == 3 ? DART_T8110_TCR_FOUR_LEVEL : 0);
+    ASSERT(((ULONG64)(Ttbr >> 2) << DART_PAGE_SHIFT) == Domain->TopPhysical);
+    for (Index = 0; Index < Domain->Streams; ++Index)
+    {
+        Stream = &Domain->Stream[Index];
+        AppleDartWrite(Stream->Base, DART_T8110_TCR + 4 * Stream->Sid, 0);
+        AppleDartWrite(Stream->Base, DART_T8110_TTBR + 4 * Stream->Sid, Ttbr);
+        AppleDartWrite(Stream->Base, DART_T8110_ENABLE_STREAMS + 4 * (Stream->Sid >> 5),
+                       AppleDartRead(Stream->Base, DART_T8110_ENABLE_STREAMS + 4 * (Stream->Sid >> 5)) |
+                           (1UL << (Stream->Sid & 31)));
+        AppleDartFlush(Stream->Base, Stream->Sid, Owner);
+        AppleDartWrite(Stream->Base, DART_T8110_TCR + 4 * Stream->Sid, Tcr);
+    }
+    DbgPrint("%s: DART domain of %lu streams translates %lu-bit addresses through %lu levels at %I64x\n", Owner,
+             Domain->Streams, Domain->InputBits, Domain->Levels, Domain->TopPhysical);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+AppleDartDomainMap(
+    _Inout_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _In_ ULONG64 Physical,
+    _In_ SIZE_T Length)
+{
+    PDART_IDENTITY Tables = Domain->Tables;
+    ULONG64 Span, Offset;
+    PULONG64 Entry;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    Span = ((ULONG64)Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
+    if (!Tables || !Length || !Span || ((Iova | Physical) & (DART_PAGE_SIZE - 1)) || Iova + Span < Iova ||
+        ((Iova + Span - 1) >> Domain->InputBits) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    for (Offset = 0; Offset < Span; Offset += DART_PAGE_SIZE)
+    {
+        Entry = AppleDartLeafEntry(Tables, Iova + Offset);
+        if (Entry && (*Entry & DART_PTE_VALID))
+            return STATUS_CONFLICTING_ADDRESSES;
+    }
+    for (Offset = 0; NT_SUCCESS(Status) && Offset < Span; Offset += DART_PAGE_SIZE)
+        Status = AppleDartMapPage(Tables, Iova + Offset, Physical + Offset);
+    if (!NT_SUCCESS(Status))
+    {
+        while (Offset)
+        {
+            Offset -= DART_PAGE_SIZE;
+            AppleDartUnmapPage(Tables, Iova + Offset);
+        }
+    }
+    AppleDartDomainFlush(Domain);
+    return Status;
+}
+
+VOID
+NTAPI
+AppleDartDomainUnmap(
+    _Inout_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _In_ SIZE_T Length)
+{
+    PDART_IDENTITY Tables = Domain->Tables;
+    ULONG64 Span, Offset;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT((Iova & (DART_PAGE_SIZE - 1)) == 0);
+    Span = ((ULONG64)Length + DART_PAGE_SIZE - 1) & ~(DART_PAGE_SIZE - 1);
+    if (!Tables)
+        return;
+    for (Offset = 0; Offset < Span; Offset += DART_PAGE_SIZE)
+        AppleDartUnmapPage(Tables, Iova + Offset);
+    AppleDartDomainFlush(Domain);
+}
+
+BOOLEAN
+NTAPI
+AppleDartDomainTranslate(
+    _In_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _Out_ PULONG64 Physical)
+{
+    PULONG64 Entry;
+
+    *Physical = 0;
+    if (!Domain->Tables)
+        return FALSE;
+    Entry = AppleDartLeafEntry(Domain->Tables, Iova);
+    if (!Entry || !(*Entry & DART_PTE_VALID))
+        return FALSE;
+    *Physical = ((*Entry & DART_PTE_ADDRESS_MASK) << 4) | (Iova & (DART_PAGE_SIZE - 1));
+    return TRUE;
+}
+
+VOID
+NTAPI
+AppleDartDomainDestroy(
+    _Inout_ PAPPLE_DART_DOMAIN Domain)
+{
+    PAPPLE_DART_DOMAIN_STREAM Stream;
+    ULONG Index;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    for (Index = 0; Index < Domain->Streams; ++Index)
+    {
+        Stream = &Domain->Stream[Index];
+        AppleDartWrite(Stream->Base, DART_T8110_TCR + 4 * Stream->Sid, 0);
+        AppleDartWrite(Stream->Base, DART_T8110_TTBR + 4 * Stream->Sid, 0);
+        AppleDartFlush(Stream->Base, Stream->Sid, Domain->Owner);
+    }
+    AppleDartDomainRelease(Domain);
+}

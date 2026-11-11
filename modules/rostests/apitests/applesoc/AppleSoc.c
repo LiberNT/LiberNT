@@ -6287,10 +6287,140 @@ TestMca(VOID)
     ok_int(SimMapCount, 0);
 }
 
+static
+VOID
+TestDartDomain(VOID)
+{
+    APPLE_DART_DOMAIN Domain;
+    FDT_DRIVER_TREE Tree;
+    ULONG64 Physical;
+    ULONG Usb;
+    NTSTATUS Status;
+
+    ResetSimulation(&Tree);
+    Usb = FindNode(&Tree, "apple,t8103-dwc3");
+    DART(0x08) = (42 << 24) | (42 << 16);
+    DART(0x0c) = 16;
+    Status = AppleDartDomainCreate(&Tree, Usb, "test", &Domain);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_int(Domain.Streams, 2);
+    ok_int(Domain.Levels, 3);
+    ok_int(Domain.InputBits, 42);
+    ok_hex(DART(0x1000), 9);
+    ok_hex(DART(0x1004), 9);
+    ok_hex(DART(0x1400) & 1, 1);
+    ok_hex(DART(0x1400), DART(0x1404));
+    ok_hex(DART(0xc00), 3);
+    ok(((ULONG64)(DART(0x1400) >> 2) << 14) == Domain.TopPhysical, "TTBR points at %I64x, tables at %I64x\n",
+       ((ULONG64)(DART(0x1400) >> 2) << 14), Domain.TopPhysical);
+
+    Status = AppleDartDomainMap(&Domain, 0x10000000000ULL, 0x10000a30000ULL, 0x8000);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(WalkDart(Domain.TopPhysical, 3, 0x10000000000ULL) == 0x10000a30000ULL, "First page maps to %I64x\n",
+       WalkDart(Domain.TopPhysical, 3, 0x10000000000ULL));
+    ok(WalkDart(Domain.TopPhysical, 3, 0x10000004000ULL) == 0x10000a34000ULL, "Second page maps to %I64x\n",
+       WalkDart(Domain.TopPhysical, 3, 0x10000004000ULL));
+    ok(WalkDart(Domain.TopPhysical, 3, 0x10000008000ULL) == 0, "A page past the range maps to %I64x\n",
+       WalkDart(Domain.TopPhysical, 3, 0x10000008000ULL));
+    ok(AppleDartDomainTranslate(&Domain, 0x10000004010ULL, &Physical) && Physical == 0x10000a34010ULL,
+       "Translation gave %I64x\n", Physical);
+    ok_hex(AppleDartDomainMap(&Domain, 0x10000004000ULL, 0x2000000000ULL, 0x4000), STATUS_CONFLICTING_ADDRESSES);
+    ok(WalkDart(Domain.TopPhysical, 3, 0x10000004000ULL) == 0x10000a34000ULL, "A refused mapping replaced a page\n");
+    ok_hex(AppleDartDomainMap(&Domain, 0x10000008001ULL, 0x2000000000ULL, 0x4000), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleDartDomainMap(&Domain, 0x10000008000ULL, 0x2000000000ULL, 0), STATUS_INVALID_PARAMETER);
+    ok_hex(AppleDartDomainMap(&Domain, 0x3ffffffc000ULL, 0x2000000000ULL, 0x8000), STATUS_INVALID_PARAMETER);
+
+    SimWriteCount = 0;
+    AppleDartDomainUnmap(&Domain, 0x10000000000ULL, 0x4000);
+    ok(!AppleDartDomainTranslate(&Domain, 0x10000000000ULL, &Physical), "Unmapped page still gives %I64x\n", Physical);
+    ok(AppleDartDomainTranslate(&Domain, 0x10000004000ULL, &Physical), "The neighbor page was unmapped\n");
+    ok_int(SimWriteCount, 2);
+    ok(SimWrites[0].Physical == SIM_DART_BASE + 0x80 && SimWrites[0].Value == 0x100, "First flush %I64x = %lx\n",
+       SimWrites[0].Physical, SimWrites[0].Value);
+    ok(SimWrites[1].Physical == SIM_DART_BASE + 0x80 && SimWrites[1].Value == 0x101, "Second flush %I64x = %lx\n",
+       SimWrites[1].Physical, SimWrites[1].Value);
+
+    AppleDartDomainDestroy(&Domain);
+    ok_hex(DART(0x1000), 0);
+    ok_hex(DART(0x1004), 0);
+    ok_hex(DART(0x1400), 0);
+    ok_hex(DART(0x1404), 0);
+    ok(Domain.Tables == NULL && Domain.Streams == 0, "The domain was not cleared\n");
+    ok_int(SimMapCount, 0);
+
+    ResetSimulation(&Tree);
+    DART(0x08) = (42 << 24) | (42 << 16);
+    DART(0x0c) = 16;
+    DART(0x200) = 1;
+    ok_hex(AppleDartDomainCreate(&Tree, Usb, "test", &Domain), STATUS_ACCESS_DENIED);
+    ok_hex(DART(0x1000), 0);
+    ok_int(SimMapCount, 0);
+
+    ResetSimulation(&Tree);
+    DART(0x08) = (42 << 24) | (42 << 16);
+    DART(0x0c) = 1;
+    ok_hex(AppleDartDomainCreate(&Tree, Usb, "test", &Domain), STATUS_DEVICE_CONFIGURATION_ERROR);
+    ok_int(SimMapCount, 0);
+
+    ResetSimulation(&Tree);
+    DART(0x08) = (42 << 24) | (20 << 16);
+    DART(0x0c) = 16;
+    ok_hex(AppleDartDomainCreate(&Tree, Usb, "test", &Domain), STATUS_NOT_SUPPORTED);
+    ok_int(SimMapCount, 0);
+}
+
+static
+VOID
+TestPmgrPowerOff(VOID)
+{
+    FDT_DRIVER_TREE Tree;
+    ULONG Nvme;
+    NTSTATUS Status;
+
+    ResetSimulation(&Tree);
+    Nvme = FindNode(&Tree, "apple,t8103-nvme-ans2");
+    PMGR(0x4d8) = 0xff;
+    PMGR(0x510) = 0x100003ff;
+    PMGR(0x5b0) = 0x100000ff;
+    Status = ApplePmgrPowerOffDomains(&Tree, Nvme, 1);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_int(SimWriteCount, 1);
+    ok(SimWrites[0].Physical == SIM_PMGR_BASE + 0x5b0, "Power-off went to %I64x\n", SimWrites[0].Physical);
+    ok_hex(SimWrites[0].Value, 0x000000f0);
+    ok_hex(PMGR(0x5b0), 0);
+    ok_hex(PMGR(0x510), 0x100003ff);
+    ok_hex(PMGR(0x4d8), 0xff);
+    ok_int(SimMapCount, 0);
+
+    SimWriteCount = 0;
+    Status = ApplePmgrPowerOffDomains(&Tree, Nvme, 0);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_int(SimWriteCount, 1);
+    ok(SimWrites[0].Physical == SIM_PMGR_BASE + 0x510, "Power-off went to %I64x\n", SimWrites[0].Physical);
+    ok_hex(SimWrites[0].Value, 0x000000f0);
+    ok_hex(PMGR(0x510), 0);
+    ok_hex(PMGR(0x4d8), 0xff);
+
+    SimWriteCount = 0;
+    Status = ApplePmgrPowerOffDomains(&Tree, Nvme, 0);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_int(SimWriteCount, 0);
+
+    ResetSimulation(&Tree);
+    SimPmgrStuck = TRUE;
+    PMGR(0x5b0) = 0x100000ff;
+    Status = ApplePmgrPowerOffDomains(&Tree, Nvme, 1);
+    ok_hex(Status, STATUS_IO_TIMEOUT);
+    ok(SimStalledMicroseconds >= 100, "Waited %lu us for the power state\n", SimStalledMicroseconds);
+    ok_int(SimMapCount, 0);
+}
+
 START_TEST(AppleSoc)
 {
     TestPmgr();
+    TestPmgrPowerOff();
     TestDart();
+    TestDartDomain();
     TestDartLowWindow();
     TestDartLowWindowM3Memory();
     TestDartAdopt();

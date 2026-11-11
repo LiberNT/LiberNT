@@ -20,3 +20,10 @@ NTAPI
 ApplePmgrResetDevice(
     _In_ PFDT_DRIVER_TREE Tree,
     _In_ ULONG Node);
+
+NTSTATUS
+NTAPI
+ApplePmgrPowerOffDomains(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _In_ ULONG FirstIndex);

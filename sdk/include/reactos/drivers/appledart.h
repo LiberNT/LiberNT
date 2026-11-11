@@ -109,3 +109,60 @@ VOID
 NTAPI
 AppleDartAdoptedRelease(
     _Inout_ PAPPLE_DART_ADOPTED Adopted);
+
+#define APPLE_DART_PAGE_SIZE        0x4000ULL
+#define APPLE_DART_DOMAIN_STREAMS   4
+
+typedef struct _APPLE_DART_DOMAIN_STREAM
+{
+    PUCHAR Base;
+    ULONG BaseSize;
+    ULONG Sid;
+    ULONG64 Physical;
+} APPLE_DART_DOMAIN_STREAM, *PAPPLE_DART_DOMAIN_STREAM;
+
+typedef struct _APPLE_DART_DOMAIN
+{
+    PCSTR Owner;
+    PVOID Tables;
+    ULONG InputBits;
+    ULONG Levels;
+    ULONG64 TopPhysical;
+    ULONG Streams;
+    APPLE_DART_DOMAIN_STREAM Stream[APPLE_DART_DOMAIN_STREAMS];
+} APPLE_DART_DOMAIN, *PAPPLE_DART_DOMAIN;
+
+NTSTATUS
+NTAPI
+AppleDartDomainCreate(
+    _In_ PFDT_DRIVER_TREE Tree,
+    _In_ ULONG Node,
+    _In_z_ PCSTR Owner,
+    _Out_ PAPPLE_DART_DOMAIN Domain);
+
+NTSTATUS
+NTAPI
+AppleDartDomainMap(
+    _Inout_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _In_ ULONG64 Physical,
+    _In_ SIZE_T Length);
+
+VOID
+NTAPI
+AppleDartDomainUnmap(
+    _Inout_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _In_ SIZE_T Length);
+
+BOOLEAN
+NTAPI
+AppleDartDomainTranslate(
+    _In_ PAPPLE_DART_DOMAIN Domain,
+    _In_ ULONG64 Iova,
+    _Out_ PULONG64 Physical);
+
+VOID
+NTAPI
+AppleDartDomainDestroy(
+    _Inout_ PAPPLE_DART_DOMAIN Domain);
