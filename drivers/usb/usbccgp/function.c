@@ -283,7 +283,8 @@ USBCCGP_InitInterfaceListOfFunctionDescriptor(
             break;
         }
 
-        if (Descriptor->bLength == sizeof(USB_INTERFACE_DESCRIPTOR) && Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+        if (Descriptor->bLength == sizeof(USB_INTERFACE_DESCRIPTOR) && Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE &&
+            Descriptor->bAlternateSetting == 0)
         {
             //
             // store interface descriptor
