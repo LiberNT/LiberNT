@@ -9,6 +9,10 @@
 #define NDEBUG
 #include <debug.h>
 
+#define POP_PROCESSOR_POWER_TAG 'pPoP'
+#define POP_PROCESSOR_PERF_PERIOD_MS 100
+#define POP_MAXIMUM_PERF_STATES 32
+
 /* GLOBALS ********************************************************************/
 
 SYSTEM_POWER_CAPABILITIES PopCapabilities;
@@ -785,6 +789,60 @@ PopPerfIdle(
     PopIdle0(PowerState);
 }
 
+static
+VOID
+FASTCALL
+PopIdleRegistered(
+    _In_ PPROCESSOR_POWER_STATE PowerState)
+{
+    PPROCESSOR_IDLE_HANDLER_INFO Handlers = PowerState->IdleHandlers;
+    PROCESSOR_IDLE_TIMES IdleTimes;
+    ULONG Index = (ULONG)(ULONG_PTR)PowerState->IdleState;
+    ULONGLONG Duration;
+
+    if ((Handlers == NULL) || (PowerState->IdleHandlersCount == 0))
+    {
+        HalProcessorIdle();
+        return;
+    }
+
+    if (Index >= PowerState->IdleHandlersCount)
+        Index = 0;
+
+    RtlZeroMemory(&IdleTimes, sizeof(IdleTimes));
+    IdleTimes.StartTime = KeQueryInterruptTime();
+
+    if (!NT_SUCCESS(Handlers[Index].Handler(Index, &IdleTimes)))
+    {
+        PowerState->ErrorCount++;
+        HalProcessorIdle();
+        return;
+    }
+
+    IdleTimes.EndTime = KeQueryInterruptTime();
+    Duration = IdleTimes.EndTime - IdleTimes.StartTime;
+
+    if (Index < RTL_NUMBER_OF(PowerState->TotalIdleStateTime))
+    {
+        PowerState->TotalIdleStateTime[Index] += Duration;
+        PowerState->TotalIdleTransitions[Index]++;
+    }
+
+    if ((Index + 1 < PowerState->IdleHandlersCount) &&
+        (Duration >= (ULONGLONG)Handlers[Index + 1].HardwareLatency * 40))
+    {
+        Index++;
+        PowerState->PromotionCount++;
+    }
+    else if ((Index > 0) && (Duration < (ULONGLONG)Handlers[Index].HardwareLatency * 20))
+    {
+        Index--;
+        PowerState->DemotionCount++;
+    }
+
+    PowerState->IdleState = (PVOID)(ULONG_PTR)Index;
+}
+
 VOID
 NTAPI
 PopPerfIdleDpc(
@@ -793,12 +851,173 @@ PopPerfIdleDpc(
     _In_opt_ PVOID SystemArgument1,
     _In_opt_ PVOID SystemArgument2)
 {
+    PKPRCB Prcb = DeferredContext;
+    PPROCESSOR_POWER_STATE PowerState = &Prcb->PowerState;
+    PSET_PROCESSOR_THROTTLE2 SetPerfLevel = PowerState->PerfSetThrottle;
+    ULONG TotalTime;
+    ULONG IdleTime;
+    ULONG TotalDelta;
+    ULONG IdleDelta;
+    ULONG Busy;
+    ULONG Target;
+
     UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(DeferredContext);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    /* TODO: how busy a processor has been does not change how it idles */
+    if ((SetPerfLevel == NULL) || (PowerState->PerfStatesCount == 0))
+        return;
+
+    TotalTime = Prcb->KernelTime + Prcb->UserTime;
+    IdleTime = (Prcb->IdleThread != NULL) ? Prcb->IdleThread->KernelTime : 0;
+    TotalDelta = TotalTime - PowerState->LastKernelUserTime;
+    IdleDelta = IdleTime - PowerState->PerfIdleTime;
+    PowerState->LastKernelUserTime = TotalTime;
+    PowerState->PerfIdleTime = IdleTime;
+
+    if (TotalDelta == 0)
+        return;
+
+    if (IdleDelta > TotalDelta)
+        IdleDelta = TotalDelta;
+
+    Busy = (ULONG)(((ULONGLONG)(TotalDelta - IdleDelta) * 100) / TotalDelta);
+    Target = PowerState->CurrentThrottle;
+
+    if (Busy >= 80)
+        Target = min((ULONG)PowerState->ProcessorMaxThrottle, Target + 20);
+    else if (Busy <= 20)
+        Target = max((ULONG)PowerState->ProcessorMinThrottle, (Target > 10) ? Target - 10 : 0);
+    else
+        Target = Busy + 10;
+
+    Target = max(Target, (ULONG)PowerState->ProcessorMinThrottle);
+    Target = min(Target, (ULONG)PowerState->ProcessorMaxThrottle);
+    Target = min(Target, (ULONG)PowerState->ThermalThrottleLimit);
+
+    PowerState->LastBusyPercentage = (UCHAR)Busy;
+    PowerState->LastAdjustedBusyPercentage = (UCHAR)Target;
+
+    if (Target == PowerState->CurrentThrottle)
+        return;
+
+    if (NT_SUCCESS(SetPerfLevel((UCHAR)Target)))
+        PowerState->CurrentThrottle = (UCHAR)Target;
+    else
+        PowerState->ErrorCount++;
+}
+
+/* The processor driver registers the idle and performance states of the processor it runs on */
+static
+NTSTATUS
+PopRegisterProcessorStateHandler2(
+    _In_reads_bytes_(InputBufferLength) PPROCESSOR_STATE_HANDLER2 Handler,
+    _In_ ULONG InputBufferLength)
+{
+    PPROCESSOR_IDLE_HANDLER_INFO IdleHandlers = NULL;
+    PPROCESSOR_IDLE_HANDLER_INFO OldIdleHandlers;
+    PPROCESSOR_PERF_STATE PerfStates = NULL;
+    PPROCESSOR_PERF_STATE OldPerfStates;
+    PPROCESSOR_POWER_STATE PowerState;
+    PSET_PROCESSOR_THROTTLE2 SetPerfLevel = Handler->SetPerfLevel;
+    LARGE_INTEGER DueTime;
+    ULONG IdleCount = Handler->NumIdleHandlers;
+    UCHAR PerfCount = Handler->NumPerfStates;
+    UCHAR MaxThrottle;
+    UCHAR MinThrottle;
+    ULONG Index;
+    KIRQL OldIrql;
+
+    if (InputBufferLength < FIELD_OFFSET(PROCESSOR_STATE_HANDLER2, PerfLevel))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    if ((IdleCount > MAX_IDLE_HANDLERS) || (PerfCount > POP_MAXIMUM_PERF_STATES) ||
+        ((PerfCount != 0) && (SetPerfLevel == NULL)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (FIELD_OFFSET(PROCESSOR_STATE_HANDLER2, PerfLevel) + PerfCount * sizeof(Handler->PerfLevel[0]) > InputBufferLength)
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    for (Index = 0; Index < IdleCount; Index++)
+    {
+        if (Handler->IdleHandler[Index].Handler == NULL)
+            return STATUS_INVALID_PARAMETER;
+    }
+
+    if (IdleCount != 0)
+    {
+        IdleHandlers = ExAllocatePoolWithTag(NonPagedPool, IdleCount * sizeof(*IdleHandlers), POP_PROCESSOR_POWER_TAG);
+        if (IdleHandlers == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+
+        RtlCopyMemory(IdleHandlers, Handler->IdleHandler, IdleCount * sizeof(*IdleHandlers));
+    }
+
+    if (PerfCount != 0)
+    {
+        PerfStates = ExAllocatePoolZero(NonPagedPool, PerfCount * sizeof(*PerfStates), POP_PROCESSOR_POWER_TAG);
+        if (PerfStates == NULL)
+        {
+            if (IdleHandlers != NULL)
+                ExFreePoolWithTag(IdleHandlers, POP_PROCESSOR_POWER_TAG);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        for (Index = 0; Index < PerfCount; Index++)
+        {
+            PerfStates[Index].PercentFrequency = Handler->PerfLevel[Index].PercentFrequency;
+            PerfStates[Index].MinCapacity = Handler->PerfLevel[Index].PercentFrequency;
+            PerfStates[Index].Flags = Handler->PerfLevel[Index].Flags;
+        }
+    }
+
+    MaxThrottle = (PerfCount != 0) ? Handler->PerfLevel[0].PercentFrequency : 100;
+    MinThrottle = (PerfCount != 0) ? Handler->PerfLevel[PerfCount - 1].PercentFrequency : 100;
+
+    OldIrql = KeRaiseIrqlToDpcLevel();
+
+    PowerState = &KeGetCurrentPrcb()->PowerState;
+    KeCancelTimer(&PowerState->PerfTimer);
+    KeRemoveQueueDpc(&PowerState->PerfDpc);
+
+    OldIdleHandlers = PowerState->IdleHandlers;
+    OldPerfStates = PowerState->PerfStates;
+
+    PowerState->IdleHandlers = IdleHandlers;
+    PowerState->IdleHandlersCount = IdleCount;
+    PowerState->IdleState = NULL;
+    PowerState->IdleFunction = (IdleCount != 0) ? PopIdleRegistered : PopIdle0;
+    PowerState->PerfStates = PerfStates;
+    PowerState->PerfStatesCount = PerfCount;
+    PowerState->PerfSetThrottle = SetPerfLevel;
+    PowerState->ProcessorMaxThrottle = MaxThrottle;
+    PowerState->ProcessorMinThrottle = MinThrottle;
+    PowerState->ThermalThrottleLimit = 100;
+    PowerState->CurrentThrottle = MaxThrottle;
+    PowerState->CurrentThrottleIndex = 0;
+    PowerState->LastKernelUserTime = KeGetCurrentPrcb()->KernelTime + KeGetCurrentPrcb()->UserTime;
+    PowerState->PerfIdleTime = (KeGetCurrentPrcb()->IdleThread != NULL) ? KeGetCurrentPrcb()->IdleThread->KernelTime : 0;
+
+    if (PerfCount != 0)
+    {
+        DueTime.QuadPart = -(LONGLONG)POP_PROCESSOR_PERF_PERIOD_MS * 10000;
+        KeSetTimerEx(&PowerState->PerfTimer, DueTime, POP_PROCESSOR_PERF_PERIOD_MS, &PowerState->PerfDpc);
+    }
+
+    KeLowerIrql(OldIrql);
+
+    if ((SetPerfLevel != NULL) && !NT_SUCCESS(SetPerfLevel(MaxThrottle)))
+        PowerState->ErrorCount++;
+
+    if (OldIdleHandlers != NULL)
+        ExFreePoolWithTag(OldIdleHandlers, POP_PROCESSOR_POWER_TAG);
+
+    if (OldPerfStates != NULL)
+        ExFreePoolWithTag(OldPerfStates, POP_PROCESSOR_POWER_TAG);
+
+    return STATUS_SUCCESS;
 }
 
 CODE_SEG("INIT")
@@ -812,6 +1031,9 @@ PoInitializePrcb(
     Prcb->PowerState.Idle0KernelTimeLimit = 0xFFFFFFFF;
     Prcb->PowerState.CurrentThrottle = 100;
     Prcb->PowerState.CurrentThrottleIndex = 0;
+    Prcb->PowerState.ThermalThrottleLimit = 100;
+    Prcb->PowerState.ProcessorMinThrottle = 100;
+    Prcb->PowerState.ProcessorMaxThrottle = 100;
     Prcb->PowerState.IdleFunction = PopIdle0;
 
     KeInitializeDpc(&Prcb->PowerState.PerfDpc, PopPerfIdleDpc, Prcb);
@@ -1307,10 +1529,11 @@ PopQueryProcessorInformation(
         Processor.MaxMhz = Prcb->MHz;
         /* FIXME: no performance states are tracked; the frequency measured at boot stands for the current one */
         Processor.CurrentMhz = Prcb->MHz;
-        Processor.MhzLimit = Prcb->MHz * Prcb->PowerState.CurrentThrottle / 100;
-        /* TODO: no processor idle states are registered, so none is reported */
-        Processor.MaxIdleState = 0;
-        Processor.CurrentIdleState = 0;
+        Processor.MhzLimit = (ULONG)(((ULONGLONG)Prcb->MHz *
+                                      min(Prcb->PowerState.ProcessorMaxThrottle, Prcb->PowerState.ThermalThrottleLimit)) / 100);
+        Processor.MaxIdleState = Prcb->PowerState.IdleHandlersCount;
+        Processor.CurrentIdleState = (Prcb->PowerState.IdleHandlersCount != 0) ?
+                                         (ULONG)(ULONG_PTR)Prcb->PowerState.IdleState + 1 : 0;
 
         RtlCopyMemory(&Output[Index], &Processor, sizeof(Processor));
     }
@@ -1436,6 +1659,16 @@ NtPowerInformation(
                                                      InputBufferLength,
                                                      OutputBuffer,
                                                      OutputBufferLength);
+                break;
+
+            case ProcessorStateHandler2:
+                /* TODO: the Windows 11 contract of this level is not sourced; LiberNT's processor driver registers through it */
+                if (PreviousMode != KernelMode)
+                    Status = STATUS_ACCESS_DENIED;
+                else if ((InputBuffer == NULL) || (OutputBuffer != NULL) || (OutputBufferLength != 0))
+                    Status = STATUS_INVALID_PARAMETER;
+                else
+                    Status = PopRegisterProcessorStateHandler2(InputBuffer, InputBufferLength);
                 break;
 
             case SystemPowerStateHandler:
