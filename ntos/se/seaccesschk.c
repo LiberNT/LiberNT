@@ -22,6 +22,7 @@ typedef struct _SEP_CHECK_CONTEXT
     ULONG ObjectTypeListLength;
     ULONG SidSet;
     BOOLEAN MaximumAllowed;
+    BOOLEAN CallerIsOwner;
 } SEP_CHECK_CONTEXT, *PSEP_CHECK_CONTEXT;
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -83,6 +84,54 @@ SepAceCoversEntry(
             Context->ObjectTypeList[Named].Level);
 }
 
+/* The Owner Rights identifier in an entry stands for whoever owns the object */
+static
+BOOLEAN
+SepAceSidApplies(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PSID Sid,
+    _In_ BOOLEAN Deny)
+{
+    if (RtlEqualSid(Sid, SeOwnerRightsSid)) return Context->CallerIsOwner;
+
+    return SepSidInTokenEx(Context->Token,
+                           Context->PrincipalSelfSid,
+                           Sid,
+                           Deny,
+                           Context->SidSet);
+}
+
+/* An entry for Owner Rights takes the place of what an owner may otherwise always do */
+static
+BOOLEAN
+SepDaclNamesOwnerRights(
+    _In_ PACL Dacl)
+{
+    PACE Ace;
+    ULONG Index;
+
+    for (Index = 0; Index < Dacl->AceCount; Index++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Dacl, Index, (PVOID *)&Ace))) break;
+        if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+        switch (Ace->Header.AceType)
+        {
+            case ACCESS_ALLOWED_ACE_TYPE:
+            case ACCESS_DENIED_ACE_TYPE:
+            case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+            case ACCESS_DENIED_OBJECT_ACE_TYPE:
+                if (RtlEqualSid(SepGetSidFromAce(Ace), SeOwnerRightsSid)) return TRUE;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    return FALSE;
+}
+
 /*
  * Walks a list once for one entry of the object type list. Entries are read in
  * order and the walk stops as soon as the answer can no longer change: a
@@ -122,14 +171,7 @@ SepWalkDacl(
         {
             case ACCESS_DENIED_ACE_TYPE:
             case ACCESS_DENIED_OBJECT_ACE_TYPE:
-                if (!SepSidInTokenEx(Context->Token,
-                                     Context->PrincipalSelfSid,
-                                     Sid,
-                                     TRUE,
-                                     Context->SidSet))
-                {
-                    break;
-                }
+                if (!SepAceSidApplies(Context, Sid, TRUE)) break;
 
                 if (Context->MaximumAllowed)
                 {
@@ -156,14 +198,7 @@ SepWalkDacl(
 
             case ACCESS_ALLOWED_ACE_TYPE:
             case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
-                if (!SepSidInTokenEx(Context->Token,
-                                     Context->PrincipalSelfSid,
-                                     Sid,
-                                     FALSE,
-                                     Context->SidSet))
-                {
-                    break;
-                }
+                if (!SepAceSidApplies(Context, Sid, FALSE)) break;
 
                 if (Context->MaximumAllowed)
                 {
@@ -236,12 +271,15 @@ SepCheckEntry(
      * Whoever owns something may always read and change what it says about
      * who may use it, whatever its list says.
      */
-    if (NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Context->Descriptor,
+    Context->CallerIsOwner =
+        NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Context->Descriptor,
                                                  &Owner,
                                                  &Defaulted)) &&
         Owner != NULL &&
         SepSidInTokenEx(Context->Token, Context->PrincipalSelfSid, Owner,
-                        FALSE, Context->SidSet))
+                        FALSE, Context->SidSet);
+
+    if (Context->CallerIsOwner && !SepDaclNamesOwnerRights(Dacl))
     {
         if (Context->MaximumAllowed)
         {
