@@ -939,6 +939,46 @@ PspBuildProcessParameters32(
 }
 #endif
 
+#ifdef _WIN64
+#define PSP_WOW64_X86_CODE_SELECTOR 0x23
+#define PSP_WOW64_X86_DATA_SELECTOR 0x2B
+#define PSP_WOW64_X86_TEB_SELECTOR  0x53
+
+static
+NTSTATUS
+PspCreateWow64CpuArea(
+    _In_ HANDLE ProcessHandle,
+    _Inout_ PINITIAL_TEB InitialTeb)
+{
+    WOW64_CPU_INIT CpuInit;
+    PXSAVE_FORMAT FxSave = (PXSAVE_FORMAT)CpuInit.Context.ExtendedRegisters;
+    ULONG_PTR Area;
+    NTSTATUS Status;
+
+    Area = ALIGN_DOWN_BY((ULONG_PTR)InitialTeb->StackBase - sizeof(CpuInit), 16);
+
+    RtlZeroMemory(&CpuInit, sizeof(CpuInit));
+    CpuInit.Cpu.Machine = IMAGE_FILE_MACHINE_I386;
+    CpuInit.Context.ContextFlags = WOW64_CONTEXT_FULL | WOW64_CONTEXT_FLOATING_POINT | WOW64_CONTEXT_EXTENDED_REGISTERS;
+    CpuInit.Context.FloatSave.ControlWord = 0x27F;
+    CpuInit.Context.FloatSave.TagWord = 0xFFFF;
+    FxSave->ControlWord = 0x27F;
+    FxSave->MxCsr = INITIAL_MXCSR;
+    CpuInit.Context.EFlags = 0x202;
+    CpuInit.Context.SegCs = PSP_WOW64_X86_CODE_SELECTOR;
+    CpuInit.Context.SegDs = PSP_WOW64_X86_DATA_SELECTOR;
+    CpuInit.Context.SegEs = PSP_WOW64_X86_DATA_SELECTOR;
+    CpuInit.Context.SegGs = PSP_WOW64_X86_DATA_SELECTOR;
+    CpuInit.Context.SegSs = PSP_WOW64_X86_DATA_SELECTOR;
+    CpuInit.Context.SegFs = PSP_WOW64_X86_TEB_SELECTOR;
+
+    Status = ZwWriteVirtualMemory(ProcessHandle, (PVOID)Area, &CpuInit, sizeof(CpuInit), NULL);
+    if (NT_SUCCESS(Status)) InitialTeb->StackBase = (PVOID)Area;
+
+    return Status;
+}
+#endif
+
 /*
  * Writes the process parameters into the new process, so that the loader
  * finds its command line and environment where the block says they are. The
@@ -1364,6 +1404,12 @@ NtCreateUserProcess(
                      0,
                      &InitialTeb);
     }
+
+#ifdef _WIN64
+    /* TODO: threads that NtCreateThreadEx makes in a WoW64 process get no CPU area until wow64.dll builds one */
+    if (NT_SUCCESS(Status) && Process->WoW64Process != NULL)
+        Status = PspCreateWow64CpuArea(NewProcess, &InitialTeb);
+#endif
 
     if (NT_SUCCESS(Status))
     {
