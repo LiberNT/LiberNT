@@ -85,6 +85,34 @@ NtfsVolumeNextReparsePoint(
                                      FileReference);
 }
 
+NTSTATUS
+NtfsVolumeCheckObjectIdSupport(
+    _In_ PNtfsVolume DiskVolume)
+{
+    if (!DiskVolume)
+        return STATUS_INVALID_PARAMETER;
+    return NtfsCheckObjectIdSupport(reinterpret_cast<PVolume>(DiskVolume));
+}
+
+NTSTATUS
+NtfsVolumeReadObjectId(
+    _In_ PNtfsVolume DiskVolume,
+    _Out_ PObjectIdEx ObjectId)
+{
+    PVolume Volume = reinterpret_cast<PVolume>(DiskVolume);
+    PFileRecord VolumeFile = NULL;
+    NTSTATUS Status;
+
+    if (!Volume || !Volume->MFT || !ObjectId)
+        return STATUS_INVALID_PARAMETER;
+    Status = Volume->MFT->GetFileRecord(_Volume, &VolumeFile);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = VolumeFile->ReadObjectId(ObjectId);
+    delete VolumeFile;
+    return Status;
+}
+
 void
 NtfsVolumeDestroy(
     _In_opt_ PNtfsVolume DiskVolume)

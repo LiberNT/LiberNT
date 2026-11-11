@@ -298,6 +298,45 @@ NtfsFileRecordDeleteExternalBacking(
 }
 
 NTSTATUS
+NtfsFileRecordReadObjectId(
+    _In_ PNtfsFileRecord Fr,
+    _Out_ PObjectIdEx ObjectId)
+{
+    if (!Fr || !ObjectId)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->ReadObjectId(ObjectId);
+}
+
+NTSTATUS
+NtfsFileRecordSetObjectId(
+    _In_ PNtfsFileRecord Fr,
+    _In_ const ObjectIdEx* ObjectId)
+{
+    if (!Fr || !ObjectId)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->SetObjectId(ObjectId);
+}
+
+NTSTATUS
+NtfsFileRecordSetObjectIdExtended(
+    _In_ PNtfsFileRecord Fr,
+    _In_reads_bytes_(48) const UCHAR* ExtendedInfo)
+{
+    if (!Fr || !ExtendedInfo)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->SetObjectIdExtended(ExtendedInfo);
+}
+
+NTSTATUS
+NtfsFileRecordDeleteObjectId(
+    _In_ PNtfsFileRecord Fr)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->DeleteObjectId();
+}
+
+NTSTATUS
 NtfsFileRecordReadExtendedAttributes(
     _In_ PNtfsFileRecord Fr,
     _In_opt_ PUCHAR Buffer,

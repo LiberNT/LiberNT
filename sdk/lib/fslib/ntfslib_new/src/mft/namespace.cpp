@@ -1129,9 +1129,13 @@ MasterFileTable::ReleaseFileRecordSet(
     ULONGLONG ExtentReferences[64];
     ULONG ExtentCount = 0;
     BOOLEAN HasReparseTag = FALSE;
+    BOOLEAN HasObjectId;
     ULONG ReparseTag = 0;
     PAttribute ReparseAttribute;
+    ObjectIdEx ObjectId;
     NTSTATUS Status;
+
+    HasObjectId = NT_SUCCESS(File->ReadObjectId(&ObjectId));
 
     ReparseAttribute = File->GetAttribute(TypeReparsePoint, NULL);
     if (ReparseAttribute)
@@ -1183,6 +1187,8 @@ MasterFileTable::ReleaseFileRecordSet(
                                             FileReference,
                                             TRUE);
         }
+        if (NT_SUCCESS(Status) && HasObjectId)
+            Status = NtfsUpdateObjectIdIndex(DiskVolume, &ObjectId, FileReference, TRUE);
     }
     if (NT_SUCCESS(Status) && ReleaseRuns)
     {

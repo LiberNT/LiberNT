@@ -26,6 +26,7 @@ target_sources(ntfslib_new PRIVATE
     filerecord/write/filedata.cpp
     filerecord/write/filename.cpp
     filerecord/write/move.cpp
+    filerecord/write/objectid.cpp
     filerecord/write/reparse.cpp
     filerecord/filerecord.cpp
     filerecord/fixup.cpp

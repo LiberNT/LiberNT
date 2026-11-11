@@ -47,6 +47,7 @@ extern void func_FileStorageInfo(void);
 extern void func_FileIoOverlappedRange(void);
 extern void func_FindFileNames(void);
 extern void func_FileInfoByHandleEx(void);
+extern void func_FileObjectId(void);
 extern void func_FindFiles(void);
 extern void func_FindPackagesByPackageFamily(void);
 extern void func_FLS(void);
@@ -224,6 +225,7 @@ const struct test winetest_testlist[] =
     { "FileIoOverlappedRange",       func_FileIoOverlappedRange },
     { "FindFileNames",               func_FindFileNames },
     { "FileInfoByHandleEx",          func_FileInfoByHandleEx },
+    { "FileObjectId",                func_FileObjectId },
     { "FindFiles",                   func_FindFiles },
     { "FindPackagesByPackageFamily", func_FindPackagesByPackageFamily },
     { "FLS",                         func_FLS },

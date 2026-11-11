@@ -886,6 +886,10 @@ public:
             const UCHAR* Buffer,
         _In_ ULONG BufferLength);
     NTSTATUS DeleteExternalBacking();
+    NTSTATUS ReadObjectId(_Out_ PObjectIdEx ObjectId);
+    NTSTATUS SetObjectId(_In_ const ObjectIdEx* ObjectId);
+    NTSTATUS SetObjectIdExtended(_In_reads_bytes_(48) const UCHAR* ExtendedInfo);
+    NTSTATUS DeleteObjectId();
     NTSTATUS ReadExtendedAttributes(
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength,
@@ -1370,6 +1374,15 @@ private:
         _In_ ULONG BufferLength,
         _In_ BOOLEAN Delete);
 
+    NTSTATUS
+    MakeObjectIdSpace(_In_ ULONG Required);
+
+    NTSTATUS
+    InsertObjectIdAttribute(_In_ const ObjectIdEx* ObjectId);
+
+    NTSTATUS
+    RemoveObjectIdAttribute();
+
     // ./write.cpp
     NTSTATUS
     UpdateNonResidentData(_In_ PAttribute TargetAttribute,
@@ -1428,6 +1441,17 @@ NTSTATUS
 NtfsUpdateReparseIndex(
     _In_ PVolume DiskVolume,
     _In_ ULONG ReparseTag,
+    _In_ ULONGLONG FileReference,
+    _In_ BOOLEAN Remove);
+
+NTSTATUS
+NtfsCheckObjectIdSupport(
+    _In_ PVolume DiskVolume);
+
+NTSTATUS
+NtfsUpdateObjectIdIndex(
+    _In_ PVolume DiskVolume,
+    _In_ const ObjectIdEx* ObjectId,
     _In_ ULONGLONG FileReference,
     _In_ BOOLEAN Remove);
 

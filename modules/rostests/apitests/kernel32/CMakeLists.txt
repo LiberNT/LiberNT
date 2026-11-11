@@ -51,6 +51,7 @@ list(APPEND SOURCE
     FileIoOverlappedRange.c
     FindFileNames.c
     FileInfoByHandleEx.c
+    FileObjectId.c
     FindFiles.c
     FindPackagesByPackageFamily.c
     FLS.c

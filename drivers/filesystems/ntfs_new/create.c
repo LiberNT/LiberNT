@@ -2896,6 +2896,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     FileCB->CreateOptions = IrpSp->Parameters.Create.Options;
     FileCB->PagingFileOpen = BooleanFlagOn(IrpSp->Flags, SL_OPEN_PAGING_FILE);
     FileCB->ManageVolumeAccess = SeSinglePrivilegeCheck(SeExports->SeManageVolumePrivilege, Irp->RequestorMode);
+    FileCB->RestoreAccess = SeSinglePrivilegeCheck(SeExports->SeRestorePrivilege, Irp->RequestorMode);
     if (NamedDataStream)
     {
         Status = NtfsCheckNamedStreamDisposition(CurrentFile,

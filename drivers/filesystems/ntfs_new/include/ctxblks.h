@@ -360,6 +360,7 @@ typedef struct _FCB
     BOOLEAN IsVolumeOpen;
     BOOLEAN CleanupComplete;
     BOOLEAN ManageVolumeAccess;
+    BOOLEAN RestoreAccess;
     BOOLEAN DismountedVolume;
     ULONG CreateOptions;
     ACCESS_MASK DesiredAccess;
