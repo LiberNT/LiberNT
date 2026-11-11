@@ -1344,6 +1344,28 @@ NtQueryInformationJobObject(
     return Status;
 }
 
+static
+NTSTATUS
+PspCopyJobInformation(
+    _Out_writes_bytes_(Length) PVOID Destination,
+    _In_reads_bytes_(Length) PVOID JobInformation,
+    _In_ ULONG Length)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Destination, JobInformation, Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 NtSetInformationJobObject(
@@ -1408,7 +1430,8 @@ NtSetInformationJobObject(
             }
 
             RtlZeroMemory(&Extended, sizeof(Extended));
-            RtlCopyMemory(&Extended, JobInformation, Length);
+            Status = PspCopyJobInformation(&Extended, JobInformation, Length);
+            if (!NT_SUCCESS(Status)) break;
 
             Valid = (JobInformationClass == JobObjectBasicLimitInformation)
                         ? PSP_JOB_BASIC_LIMIT_VALID_FLAGS
@@ -1496,7 +1519,18 @@ NtSetInformationJobObject(
                 break;
             }
 
-            Restrictions = *(PJOBOBJECT_BASIC_UI_RESTRICTIONS)JobInformation;
+            Status = PspCopyJobInformation(&Restrictions,
+                                           JobInformation,
+                                           sizeof(Restrictions));
+            if (!NT_SUCCESS(Status)) break;
+
+            if ((Restrictions.UIRestrictionsClass &
+                 ~JOB_OBJECT_UILIMIT_ALL) != 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+
             PsSetJobUIRestrictionsClass(Job,
                                         Restrictions.UIRestrictionsClass);
             Status = STATUS_SUCCESS;
@@ -1509,7 +1543,10 @@ NtSetInformationJobObject(
                 break;
             }
 
-            EndOfJob = *(PJOBOBJECT_END_OF_JOB_TIME_INFORMATION)JobInformation;
+            Status = PspCopyJobInformation(&EndOfJob,
+                                           JobInformation,
+                                           sizeof(EndOfJob));
+            if (!NT_SUCCESS(Status)) break;
 
             if (EndOfJob.EndOfJobTimeAction > JOB_OBJECT_POST_AT_END_OF_JOB)
             {
@@ -1528,7 +1565,10 @@ NtSetInformationJobObject(
                 break;
             }
 
-            Port = *(PJOBOBJECT_ASSOCIATE_COMPLETION_PORT)JobInformation;
+            Status = PspCopyJobInformation(&Port,
+                                           JobInformation,
+                                           sizeof(Port));
+            if (!NT_SUCCESS(Status)) break;
 
             /* A job is given one port for the rest of its life */
             if (Job->CompletionPort != NULL)
