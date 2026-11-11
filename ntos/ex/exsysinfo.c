@@ -1397,6 +1397,39 @@ NtQuerySystemInformation(
                 break;
             }
 
+            case SystemNumaProcessorMap:
+            {
+                PSYSTEM_NUMA_INFORMATION Numa = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_NUMA_INFORMATION,
+                                                  ActiveProcessorsAffinityMask);
+                GROUP_AFFINITY Affinity;
+                ULONG Room;
+                USHORT Node;
+
+                if (Length < Header)
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* A caller may ask for the header alone, or for as many nodes as it has room for */
+                Room = (Length - Header) / sizeof(Numa->ActiveProcessorsAffinityMask[0]);
+                if (Room > MAXIMUM_NUMA_NODES) Room = MAXIMUM_NUMA_NODES;
+
+                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
+                Numa->Reserved = 0;
+
+                for (Node = 0; Node < Room; Node++)
+                {
+                    KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+                    Numa->ActiveProcessorsAffinityMask[Node] = Affinity.Mask;
+                }
+
+                ResultLength = Header + Room * sizeof(Numa->ActiveProcessorsAffinityMask[0]);
+                break;
+            }
+
             case SystemNumaProximityNodeInformation:
             case SystemNodeDistanceInformation:
             {
@@ -1625,6 +1658,77 @@ ExpQuerySupportedProcessorArchitectures(
 }
 
 /*
+ * How the processors relate, as variable-sized records of the one relationship
+ * the caller names, or of all of them.
+ */
+static
+NTSTATUS
+ExpQueryLogicalProcessorRelationship(
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    LOGICAL_PROCESSOR_RELATIONSHIP Relationship;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Records = NULL;
+    ULONG Needed = 0;
+    NTSTATUS Status;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(Relationship))
+        return STATUS_INVALID_PARAMETER;
+
+    _SEH2_TRY
+    {
+        Relationship = *(LOGICAL_PROCESSOR_RELATIONSHIP *)InputBuffer;
+        if (PreviousMode != KernelMode)
+        {
+            if (ResultLength != NULL) ProbeForWriteUlong(ResultLength);
+            if (Length != 0) ProbeForWrite(SystemInformation, Length, sizeof(ULONG));
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if ((Relationship > RelationProcessorModule) && (Relationship != RelationAll))
+        return STATUS_INVALID_PARAMETER;
+
+    /* Asked without room, the kernel only says how much the records take */
+    Status = KeQueryLogicalProcessorRelationship(NULL, Relationship, NULL, &Needed);
+    if (Needed == 0)
+    {
+        Status = STATUS_SUCCESS;
+    }
+    else if (Length >= Needed)
+    {
+        Records = ExAllocatePoolWithTag(PagedPool, Needed, EXP_SYSINFO_TAG);
+        if (Records == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Status = KeQueryLogicalProcessorRelationship(NULL, Relationship, Records, &Needed);
+    }
+
+    _SEH2_TRY
+    {
+        if (ResultLength != NULL) *ResultLength = Needed;
+        if (NT_SUCCESS(Status) && Records != NULL)
+            RtlCopyMemory(SystemInformation, Records, Needed);
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Records != NULL) ExFreePoolWithTag(Records, EXP_SYSINFO_TAG);
+
+    return Status;
+}
+
+/*
  * The same questions, asked about something the caller names rather than about
  * the system as a whole.
  */
@@ -1647,9 +1751,10 @@ NtQuerySystemInformationEx(
     {
         _SEH2_TRY
         {
+            /* The smallest input is a group number, which a caller may keep anywhere a USHORT can live */
             if ((InputBuffer != NULL) && (InputBufferLength != 0))
             {
-                ProbeForRead(InputBuffer, InputBufferLength, sizeof(ULONG));
+                ProbeForRead(InputBuffer, InputBufferLength, sizeof(USHORT));
             }
         }
         _SEH2_EXCEPT(ExSystemExceptionFilter())
@@ -1674,11 +1779,18 @@ NtQuerySystemInformationEx(
                                                            ResultLength,
                                                            PreviousMode);
 
+        case SystemLogicalProcessorAndGroupInformation:
+            return ExpQueryLogicalProcessorRelationship(InputBuffer,
+                                                        InputBufferLength,
+                                                        SystemInformation,
+                                                        Length,
+                                                        ResultLength,
+                                                        PreviousMode);
+
         case SystemProcessorPerformanceInformation:
         case SystemProcessorIdleInformation:
         case SystemProcessorCycleTimeInformation:
         case SystemProcessorIdleCycleTimeInformation:
-        case SystemLogicalProcessorAndGroupInformation:
         {
             USHORT Group;
 
@@ -1701,12 +1813,6 @@ NtQuerySystemInformationEx(
             if (Group != 0)
             {
                 return STATUS_INVALID_PARAMETER;
-            }
-
-            if (SystemInformationClass ==
-                SystemLogicalProcessorAndGroupInformation)
-            {
-                SystemInformationClass = SystemLogicalProcessorInformation;
             }
 
             break;
