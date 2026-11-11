@@ -458,6 +458,7 @@ ExpSetTimeZoneInformation(
     {
         ExLocalTimeToSystemTime(&LocalTime, &NewTime);
         KeSetSystemTime(&NewTime, &SystemTime, FALSE, NULL);
+        PoNotifySystemTimeSet();
     }
 
     ExpLastTimeZoneBias = (ULONG)Bias;
@@ -524,6 +525,7 @@ ExUpdateSystemTimeFromCmos(
     if (MaxSepInSeconds == 0)
     {
         KeSetSystemTime(&NewTime, &SystemTime, UpdateInterruptTime, NULL);
+        PoNotifySystemTimeSet();
         return;
     }
 
@@ -536,6 +538,7 @@ ExUpdateSystemTimeFromCmos(
         (Difference.QuadPart < -Separation))
     {
         KeSetSystemTime(&NewTime, &SystemTime, UpdateInterruptTime, NULL);
+        PoNotifySystemTimeSet();
     }
 }
 
@@ -699,6 +702,7 @@ NtSetSystemTime(
     else
     {
         KeSetSystemTime(&NewTime, &OldTime, FALSE, NULL);
+        PoNotifySystemTimeSet();
 
         /*
          * The hardware clock is written in whatever it is understood to keep,

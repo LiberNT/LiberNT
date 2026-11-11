@@ -48,6 +48,7 @@ extern ULONG ExpInitializationPhase;
 extern ULONG ExpAltTimeZoneBias;
 extern LIST_ENTRY ExSystemLookasideListHead;
 extern PCALLBACK_OBJECT PowerStateCallback;
+extern PCALLBACK_OBJECT SetSystemTimeCallback;
 extern LIST_ENTRY ExPoolLookasideListHead;
 extern LIST_ENTRY ExpNonPagedLookasideListHead;
 extern LIST_ENTRY ExpPagedLookasideListHead;

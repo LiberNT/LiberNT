@@ -160,6 +160,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ex/ExTimeZone.c
     ntos_ex/ExSingleList.c
     ntos_ex/ExSystemInformation.c
+    ntos_ex/ExSystemTimeCallback.c
     ntos_ex/ExTimer.c
     ntos_ex/ExTimerExtra.c
     ntos_ex/InbvVirtualFrameBuffer.c

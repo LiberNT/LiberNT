@@ -11,6 +11,11 @@
 
 /* PRIVATE DATA ***************************************************************/
 
+extern PKWIN32_POWEREVENT_CALLOUT PopEventCallout;
+
+static WORK_QUEUE_ITEM PopSystemTimeChangeWorkItem;
+static volatile LONG PopSystemTimeChangeQueued;
+
 /* What one caller asks the system to keep on, and for how long */
 typedef struct _POP_KEEP_ON
 {
@@ -486,11 +491,41 @@ PoNotifyVSyncChange(
     PopVSyncState = State;
 }
 
+static
+VOID
+NTAPI
+PopNotifySystemTimeWorker(
+    _In_ PVOID Context)
+{
+    WIN32_POWEREVENT_PARAMETERS Parameters;
+    KAPC_STATE ApcState;
+    PVOID Session;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    InterlockedExchange(&PopSystemTimeChangeQueued, FALSE);
+
+    if (SetSystemTimeCallback != NULL)
+        ExNotifyCallback(SetSystemTimeCallback, NULL, NULL);
+
+    if ((PopEventCallout != NULL) && PopEnterConsoleSession(&Session, &ApcState))
+    {
+        Parameters.EventNumber = PsW32SystemTime;
+        Parameters.Code = 0;
+        (VOID)PopEventCallout(&Parameters);
+        PopLeaveConsoleSession(Session, &ApcState);
+    }
+}
+
 VOID
 NTAPI
 PoNotifySystemTimeSet(VOID)
 {
-    /* TODO: nothing is woken or rescheduled when the clock is put right */
+    if (InterlockedExchange(&PopSystemTimeChangeQueued, TRUE) != FALSE)
+        return;
+
+    ExInitializeWorkItem(&PopSystemTimeChangeWorkItem, PopNotifySystemTimeWorker, NULL);
+    ExQueueWorkItem(&PopSystemTimeChangeWorkItem, DelayedWorkQueue);
 }
 
 /*
