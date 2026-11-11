@@ -988,7 +988,7 @@ AdjustWindowRectExForDpi(_Inout_ LPRECT Rect, _In_ DWORD Style, _In_ BOOL Menu, 
         Adjust = 2;
     }
 
-    if (Style & WS_THICKFRAME)
+    if ((Style & WS_THICKFRAME) || ((Style & WS_CAPTION) == WS_CAPTION && GetSystemMetrics(SM_CXPADDEDBORDER)))
         Adjust += Metrics.iBorderWidth + Metrics.iPaddedBorderWidth;
 
     if ((Style & (WS_BORDER | WS_DLGFRAME)) || (ExStyle & WS_EX_DLGMODALFRAME))
