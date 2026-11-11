@@ -154,9 +154,11 @@ static BOOL check_window_exists(const char *name)
     char title[MAX_PATH];
 #ifdef __REACTOS__
     char win11_title[MAX_PATH + 16];
+    DWORD start;
+#else
+    int i;
 #endif
     HWND window = NULL;
-    int i;
 
     if (full_title())
     {
@@ -171,13 +173,32 @@ static BOOL check_window_exists(const char *name)
     sprintf(win11_title, "%s - File Explorer", title);
 #endif
 
+#ifdef __REACTOS__
+    /* Look every millisecond within the 4.5 s the growing steps below add up to */
+    start = GetTickCount();
+    do
+    {
+        if ((window = FindWindowA("ExplorerWClass", title)) ||
+            (window = FindWindowA("CabinetWClass", win11_title)) ||
+            (window = FindWindowA("CabinetWClass", title)))
+        {
+            SendMessageA(window, WM_SYSCOMMAND, SC_CLOSE, 0);
+            break;
+        }
+        Sleep(1);
+    } while (GetTickCount() - start < 4500);
+
+    if (!window)
+        return FALSE;
+
+    start = GetTickCount();
+    while (IsWindow(window) && GetTickCount() - start < 4500)
+        Sleep(1);
+#else
     for (i = 0; i < 10; i++)
     {
         Sleep(100 * i);
         if ((window = FindWindowA("ExplorerWClass", title)) ||
-#ifdef __REACTOS__
-            (window = FindWindowA("CabinetWClass", win11_title)) ||
-#endif
             (window = FindWindowA("CabinetWClass", title)))
         {
             SendMessageA(window, WM_SYSCOMMAND, SC_CLOSE, 0);
@@ -194,6 +215,7 @@ static BOOL check_window_exists(const char *name)
         if (!IsWindow(window))
             break;
     }
+#endif
 
     return TRUE;
 }
