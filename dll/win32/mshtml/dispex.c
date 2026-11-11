@@ -1169,6 +1169,10 @@ static HRESULT function_value(DispatchEx *dispex, LCID lcid, WORD flags, DISPPAR
     case DISPATCH_METHOD|DISPATCH_PROPERTYGET:
         if(!res)
             return E_INVALIDARG;
+        if(!params->cArgs) {
+            hres = format_func_disp_string(This->info->name, caller, res);
+            break;
+        }
         /* fall through */
     case DISPATCH_METHOD:
         if(!This->obj)
