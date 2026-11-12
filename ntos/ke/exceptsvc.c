@@ -229,19 +229,39 @@ KiRaiseException(
     KPROCESSOR_MODE PreviousMode = Thread->PreviousMode;
     EXCEPTION_RECORD LocalRecord;
     CONTEXT LocalContext;
-    ULONG ParameterCount;
+    SIZE_T ParameterSize;
 
     if (PreviousMode != KernelMode)
     {
+        /* A caller's record ends after the parameters it declares, so nothing past them is read */
+        RtlZeroMemory(&LocalRecord, sizeof(LocalRecord));
+
         _SEH2_TRY
         {
             ProbeForRead(Context, sizeof(CONTEXT), TYPE_ALIGNMENT(CONTEXT));
             RtlCopyMemory(&LocalContext, Context, sizeof(CONTEXT));
 
             ProbeForRead(ExceptionRecord,
-                         sizeof(EXCEPTION_RECORD),
+                         FIELD_OFFSET(EXCEPTION_RECORD, ExceptionInformation),
                          sizeof(ULONG));
-            LocalRecord = *(volatile EXCEPTION_RECORD *)ExceptionRecord;
+            RtlCopyMemory(&LocalRecord,
+                          ExceptionRecord,
+                          FIELD_OFFSET(EXCEPTION_RECORD, ExceptionInformation));
+
+            if (LocalRecord.NumberParameters > EXCEPTION_MAXIMUM_PARAMETERS)
+                _SEH2_YIELD(return STATUS_INVALID_PARAMETER);
+
+            ParameterSize = LocalRecord.NumberParameters *
+                            sizeof(LocalRecord.ExceptionInformation[0]);
+            if (ParameterSize != 0)
+            {
+                ProbeForRead(ExceptionRecord->ExceptionInformation,
+                             ParameterSize,
+                             sizeof(ULONG));
+                RtlCopyMemory(LocalRecord.ExceptionInformation,
+                              ExceptionRecord->ExceptionInformation,
+                              ParameterSize);
+            }
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
@@ -253,11 +273,12 @@ KiRaiseException(
     {
         LocalContext = *Context;
         LocalRecord = *ExceptionRecord;
+
+        if (LocalRecord.NumberParameters > EXCEPTION_MAXIMUM_PARAMETERS)
+            return STATUS_INVALID_PARAMETER;
     }
 
-    ParameterCount = LocalRecord.NumberParameters;
-    if (ParameterCount > EXCEPTION_MAXIMUM_PARAMETERS)
-        return STATUS_INVALID_PARAMETER;
+    ASSERT(LocalRecord.NumberParameters <= EXCEPTION_MAXIMUM_PARAMETERS);
 
     /*
      * The internal bit marks an exception the kernel raised against itself.
