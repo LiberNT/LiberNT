@@ -9,6 +9,7 @@
 #include <winuser.h>
 #include <setupapi.h>
 #include <cfgmgr32.h>
+#include <regstr.h>
 
 static
 BOOLEAN
@@ -195,6 +196,89 @@ static VOID CheckFirmwareResources(VOID)
     trace("%lu firmware resources\n", Resources);
 }
 
+static
+BOOLEAN
+IsNullDriverDevice(
+    _In_ DEVINST Device)
+{
+    WCHAR Value[MAX_PATH];
+    ULONG Flags = 0;
+    ULONG Size;
+
+    Size = sizeof(Value);
+    if (CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_DRIVER, NULL, Value, &Size, 0) != CR_SUCCESS) return FALSE;
+
+    Size = sizeof(Value);
+    if (CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_SERVICE, NULL, Value, &Size, 0) == CR_SUCCESS && Value[0] != UNICODE_NULL)
+        return FALSE;
+
+    Size = sizeof(Flags);
+    if (CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_CAPABILITIES, NULL, &Flags, &Size, 0) == CR_SUCCESS &&
+        (Flags & CM_DEVCAP_RAWDEVICEOK))
+    {
+        return FALSE;
+    }
+
+    Flags = 0;
+    Size = sizeof(Flags);
+    CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_CONFIGFLAGS, NULL, &Flags, &Size, 0);
+    return !(Flags & (CONFIGFLAG_REINSTALL | CONFIGFLAG_FAILEDINSTALL));
+}
+
+/* A device left needing install was offered to user mode: it has a class, from its installation or from the failed one */
+static VOID CheckInstallOffered(PCWSTR Id, DEVINST Device)
+{
+    ULONG Status = 0, Problem = 0;
+    WCHAR Guid[64];
+    ULONG Size = sizeof(Guid);
+
+    if (CM_Get_DevNode_Status(&Status, &Problem, Device, 0) != CR_SUCCESS || !(Status & DN_HAS_PROBLEM) ||
+        Problem != CM_PROB_FAILED_INSTALL)
+    {
+        return;
+    }
+
+    ok(CM_Get_DevNode_Registry_PropertyW(Device, CM_DRP_CLASSGUID, NULL, Guid, &Size, 0) == CR_SUCCESS,
+       "%ls needs install and was not offered to user mode\n", Id);
+}
+
+/* A null-driver device that cannot run raw stays down without a problem, also after a setup (Windows 11: "Configured" only) */
+static VOID CheckNullDrivers(VOID)
+{
+    ULONG Status, Problem, Size = 0, Checked = 0;
+    PWSTR List, Id;
+    DEVINST Device;
+
+    ok_eq_ulong(CMP_WaitNoPendingInstallEvents(5000), (ULONG)WAIT_OBJECT_0);
+
+    if (CM_Get_Device_ID_List_SizeW(&Size, NULL, CM_GETIDLIST_FILTER_PRESENT) != CR_SUCCESS || Size == 0) return;
+    List = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size * sizeof(WCHAR));
+    if (List == NULL) return;
+
+    if (CM_Get_Device_ID_ListW(NULL, List, Size, CM_GETIDLIST_FILTER_PRESENT) == CR_SUCCESS)
+    {
+        for (Id = List; *Id != UNICODE_NULL; Id += wcslen(Id) + 1)
+        {
+            if (CM_Locate_DevNodeW(&Device, Id, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS) continue;
+
+            CheckInstallOffered(Id, Device);
+            if (!IsNullDriverDevice(Device)) continue;
+
+            ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
+            ok(!(Status & (DN_STARTED | DN_HAS_PROBLEM)), "%ls: status 0x%lx, problem %lu\n", Id, Status, Problem);
+
+            ok_eq_ulong(CM_Setup_DevNode(Device, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+            ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
+            ok(!(Status & (DN_STARTED | DN_HAS_PROBLEM)), "%ls after a setup request: status 0x%lx, problem %lu\n", Id,
+               Status, Problem);
+            Checked++;
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, List);
+    ok(Checked != 0, "No present device is configured with a null driver\n");
+}
+
 START_TEST(IoDeviceTree)
 {
 #if defined(_M_IX86) || defined(_M_AMD64)
@@ -204,4 +288,5 @@ START_TEST(IoDeviceTree)
     CheckAcpiInstances();
     CheckBasicDisplayFallback();
     CheckFirmwareResources();
+    CheckNullDrivers();
 }

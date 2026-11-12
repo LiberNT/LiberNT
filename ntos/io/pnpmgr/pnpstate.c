@@ -812,20 +812,60 @@ PiCollectDeviceDrivers(
     return PiCollectFilters(List, ClassKey, L"UpperFilters", SafeBootClassAllowed);
 }
 
+/* An installation configured the device: it has its driver key and is not marked for another one */
+static
+BOOLEAN
+PiIsDeviceConfigured(
+    _In_ HANDLE InstanceKey,
+    _In_ ULONG ConfigFlags)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    BOOLEAN Configured;
+
+    PAGED_CODE();
+
+    if (ConfigFlags & (CONFIGFLAG_REINSTALL | CONFIGFLAG_FAILEDINSTALL)) return FALSE;
+    if (!NT_SUCCESS(IopGetRegistryValue(InstanceKey, L"Driver", &Information))) return FALSE;
+
+    Configured = (Information->Type == REG_SZ) && (Information->DataLength > sizeof(WCHAR));
+    ExFreePool(Information);
+    return Configured;
+}
+
+static
+BOOLEAN
+PiHasRegistryValue(
+    _In_ HANDLE Key,
+    _In_ PCWSTR ValueName)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopGetRegistryValue(Key, (PWSTR)ValueName, &Information))) return FALSE;
+
+    ExFreePool(Information);
+    return TRUE;
+}
+
 static
 NTSTATUS
 PiAttachDeviceDrivers(
     _In_ PDEVICE_NODE DeviceNode,
-    _In_ HANDLE InstanceKey)
+    _In_ HANDLE InstanceKey,
+    _Out_ PBOOLEAN NullDriver)
 {
     PDRIVER_ADD_DEVICE AddDevice;
     PI_DRIVER_LIST List;
     NTSTATUS AddStatus;
     NTSTATUS Status;
+    ULONG ConfigFlags;
     HANDLE ClassKey;
     ULONG Index;
 
     PAGED_CODE();
+
+    *NullDriver = FALSE;
 
     RtlZeroMemory(&List, sizeof(List));
     List.FunctionIndex = MAXULONG;
@@ -847,7 +887,23 @@ PiAttachDeviceDrivers(
         (List.FunctionIndex == MAXULONG) &&
         !(PiGetDwordValue(InstanceKey, L"Capabilities", 0) & PI_CAPABILITY_RAW_DEVICE_OK))
     {
-        PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_INSTALL);
+        ConfigFlags = PiGetDwordValue(InstanceKey, L"ConfigFlags", 0);
+
+        /* Configured with a null driver (AddService = ,2): Windows 11 leaves it down, without a problem */
+        if (PiIsDeviceConfigured(InstanceKey, ConfigFlags))
+        {
+            *NullDriver = TRUE;
+        }
+        else
+        {
+            PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_INSTALL);
+
+            /* TODO: a device registered from user mode but never installed (class set, no driver key) is not offered */
+            if (!(ConfigFlags & CONFIGFLAG_FAILEDINSTALL) && !PiHasRegistryValue(InstanceKey, L"ClassGUID"))
+            {
+                IopQueueDeviceInstallEvent(&GUID_DEVICE_ENUMERATED, &DeviceNode->InstancePath);
+            }
+        }
     }
 
     for (Index = 0; NT_SUCCESS(Status) && Index < List.Count; Index++)
@@ -970,6 +1026,7 @@ PiDevNodeAddDrivers(
     NTSTATUS Security = STATUS_SUCCESS;
     NTSTATUS Status;
     HANDLE InstanceKey = NULL;
+    BOOLEAN NullDriver;
 
     PAGED_CODE();
 
@@ -987,7 +1044,7 @@ PiDevNodeAddDrivers(
         if (!NT_SUCCESS(Status)) return;
     }
 
-    Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey);
+    Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey, &NullDriver);
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
         Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey);
 
@@ -1007,10 +1064,12 @@ PiDevNodeAddDrivers(
             DPRINT1("PnP: %wZ has a security descriptor that cannot be applied (%lx)\n", &DeviceNode->InstancePath, Security);
             PiSetDevNodeProblem(DeviceNode, CM_PROB_REGISTRY);
         }
-        PiSetDevNodeState(DeviceNode, DeviceNodeDriversAdded);
+        PiSetDevNodeState(DeviceNode, NullDriver ? DeviceNodeInitialized : DeviceNodeDriversAdded);
         return;
     }
 
+    /* Only a null driver keeps the state machine from looking at the device again */
+    PiClearDevNodeFlag(DeviceNode, DNF_NO_SERVICE);
     PiSetDevNodeState(DeviceNode, DeviceNodeInitialized);
 }
 
@@ -1522,12 +1581,13 @@ PiDevNodeStateMachine(
         switch (Node->State)
         {
             case DeviceNodeUninitialized:
+                PiClearDevNodeFlag(Node, DNF_NO_SERVICE);
                 PiSetDevNodeState(Node, DeviceNodeInitialized);
                 Progress = TRUE;
                 break;
 
             case DeviceNodeInitialized:
-                if (Node->Flags & DNF_HAS_PROBLEM) break;
+                if (Node->Flags & (DNF_HAS_PROBLEM | DNF_NO_SERVICE)) break;
 
                 PiDevNodeAddDrivers(Node);
                 Progress = (Node->State == DeviceNodeDriversAdded);

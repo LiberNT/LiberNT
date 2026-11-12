@@ -15,24 +15,33 @@ PnpLockdown=1
 [Models.NTx86]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
 %Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
 
 [Models.NTamd64]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
 %Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
 
 [Models.NTarm64]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
 %Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
 
 [Models.NTriscv64]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
 %Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
 
 [Fixture.NT]
 CopyFiles=DriverCopy
 
 [Fixture.NT.Services]
 AddService=KmtestFilterReq,0x2,FixtureService
+
+[NullFixture.NT]
+
+[NullFixture.NT.Services]
+AddService=,0x2
 
 [FixtureService]
 DisplayName=%Device%
@@ -56,4 +65,5 @@ iofilterrequirements_drv.sys=1
 [Strings]
 Provider="LiberNT kernel tests"
 Device="Kmtest filter requirements fixture"
+NullDevice="Kmtest null driver child"
 Disk="Kmtest driver package"

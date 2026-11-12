@@ -344,6 +344,7 @@ PiControlStartDevice(
     _In_ PPLUGPLAY_CONTROL_DEVICE_CONTROL_DATA Data,
     _In_ KPROCESSOR_MODE PreviousMode)
 {
+    PNP_DEVNODE_STATE State;
     PDEVICE_OBJECT DeviceObject;
     NTSTATUS Status;
 
@@ -355,8 +356,9 @@ PiControlStartDevice(
      * it, unless it still has a problem. A device taken down so that its
      * driver could be installed comes back through a fresh initialization.
      */
+    State = IopGetDeviceNode(DeviceObject)->State;
     Status = PiPerformSyncDeviceAction(DeviceObject,
-                                       (IopGetDeviceNode(DeviceObject)->State == DeviceNodeRemoved) ?
+                                       (State == DeviceNodeRemoved || State == DeviceNodeInitialized) ?
                                            PiActionResetDevice : PiActionEnumDeviceTree);
 
     ObDereferenceObject(DeviceObject);

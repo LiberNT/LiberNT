@@ -25,13 +25,14 @@ static const GUID ChildInterfaceGuid = { 0x5e1a6a42, 0x8c3b, 0x4b21, { 0x9c, 0x7
 static const WCHAR BusHardwareIds[] = L"ROOT\\KMTESTFILTERREQ\0";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstance[] = L"KMTEST\\FILTERREQCHILD\\0";
+static const WCHAR NullDeviceId[] = L"KMTEST\\FILTERREQNULL\\";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq";
 static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMagic", L"FilterBusKeptList", L"StartPrivateMask",
                                  L"StartCount", L"StopSeen", L"RestartPrivateMask", L"EjectChild", L"EjectAfterRemove",
                                  L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
-                                 L"LargeMemory", L"StartLargeMemory" };
+                                 L"LargeMemory", L"StartLargeMemory", L"NullChild" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -537,21 +538,75 @@ static VOID CheckFailed(DEVINST Bus)
     ok(ReadValue(L"BusFdoRemoves", &Value) && Value == 1, "The failed bus was not removed after its last close\n");
 }
 
-static VOID RemoveChild(VOID)
+static VOID RemoveInstance(PCWSTR Instance)
 {
     SP_DEVINFO_DATA Device = { sizeof(Device) };
     HDEVINFO Devices = SetupDiCreateDeviceInfoList(NULL, NULL);
 
     if (Devices == INVALID_HANDLE_VALUE)
         return;
-    if (SetupDiOpenDeviceInfoW(Devices, ChildInstance, NULL, 0, &Device))
+    if (SetupDiOpenDeviceInfoW(Devices, Instance, NULL, 0, &Device))
         SetupDiCallClassInstaller(DIF_REMOVE, Devices, &Device);
     SetupDiDestroyDeviceInfoList(Devices);
 }
 
+static BOOL FindNullChild(DEVINST Bus, PDEVINST Child, PWSTR Instance, ULONG Length)
+{
+    CONFIGRET Result;
+
+    for (Result = CM_Get_Child(Child, Bus, 0); Result == CR_SUCCESS; Result = CM_Get_Sibling(Child, *Child, 0))
+    {
+        if (CM_Get_Device_IDW(*Child, Instance, Length, 0) == CR_SUCCESS &&
+            !_wcsnicmp(Instance, NullDeviceId, wcslen(NullDeviceId)))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* A reported child whose staged driver is a null one is installed by user mode and left down without a problem */
+static VOID CheckNullChild(DEVINST Bus)
+{
+    WCHAR Driver[MAX_PATH], Instance[MAX_DEVICE_ID_LEN] = L"";
+    ULONG Status = 0, Problem = 0, Size;
+    BOOL Configured = FALSE;
+    DWORD Start;
+    DEVINST Child;
+
+    SetRequest(L"NullChild", 1);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    Start = GetTickCount();
+    do
+    {
+        Size = sizeof(Driver);
+        Configured = FindNullChild(Bus, &Child, Instance, RTL_NUMBER_OF(Instance)) &&
+                     CM_Get_DevNode_Status(&Status, &Problem, Child, 0) == CR_SUCCESS && !(Status & DN_HAS_PROBLEM) &&
+                     CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_DRIVER, NULL, Driver, &Size, 0) == CR_SUCCESS;
+        if (!Configured)
+            Sleep(10);
+    } while (!Configured && GetTickCount() - Start < 3000);
+
+    ok(Instance[0] != UNICODE_NULL, "The bus did not report the null driver child\n");
+    ok(Configured, "%ls was not installed (status 0x%lx, problem %lu)\n", Instance, Status, Problem);
+    ok(!(Status & DN_STARTED), "%ls was started (status 0x%lx)\n", Instance, Status);
+
+    SetRequest(L"NullChild", 0);
+    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    if (Instance[0] != UNICODE_NULL)
+        RemoveInstance(Instance);
+}
+
 static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath)
 {
-    BOOL Success, Reboot = FALSE;
+    BOOL Success, Staged, Reboot = FALSE;
+    WCHAR OemInf[MAX_PATH];
+    PWSTR OemName = NULL;
+
+    /* The child's driver package is only staged: the child is installed when its bus reports it */
+    Staged = SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, OemInf, RTL_NUMBER_OF(OemInf), NULL, &OemName);
+    ok(Staged, "Staging the fixture INF failed: %lu\n", GetLastError());
 
     Success = SetupDiSetDeviceRegistryPropertyW(Devices, Device, SPDRP_HARDWAREID, (const BYTE *)BusHardwareIds, sizeof(BusHardwareIds));
     ok(Success, "Setting hardware ID failed: %lu\n", GetLastError());
@@ -566,7 +621,9 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
     ok(Success, "Installing the bus fixture failed: %lu\n", GetLastError());
     if (Success)
     {
-        ok(InstallChild(InfPath), "Installing the child fixture failed\n");
+        ok(ChildStarted(Device->DevInst, 5000), "The child the bus reported was not installed and started\n");
+        if (!ChildStarted(Device->DevInst, 0))
+            ok(InstallChild(InfPath), "Installing the child fixture failed\n");
         CheckRecorded();
         CheckRestart();
         CheckReenumerate(Device->DevInst);
@@ -576,13 +633,17 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckRemoveTwice(Device->DevInst);
         CheckDeviceSecurity(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
+        CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);
     ok(Success, "Removing the test devnode failed: %lu\n", GetLastError());
-    RemoveChild();
+    RemoveInstance(ChildInstance);
+
+    if (Staged)
+        ok(SetupUninstallOEMInfW(OemName, SUOI_FORCEDELETE, NULL), "Removing the staged INF failed: %lu\n", GetLastError());
 }
 
 START_TEST(IoFilterRequirements)
