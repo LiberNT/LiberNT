@@ -17,6 +17,24 @@ endforeach()
 get_property(_ci_staged_files GLOBAL PROPERTY CI_SYSTEM_FILES)
 list(APPEND _ci_files ${_ci_staged_files})
 list(REMOVE_DUPLICATES _ci_files)
+
+if(REACTOS_BOOTSTRAP_KERNEL AND NOT _ci_files)
+    # The kernel-only profile builds no system images, so the catalog is empty
+    # by construction. Writing it here keeps the kernel's include path intact
+    # without pulling boot-media modules into its dependency graph.
+    file(WRITE "${REACTOS_BINARY_DIR}/sdk/lib/ci/catalog.h"
+"/* Generated for the kernel-only profile: no system images exist. Do not edit. */
+static const struct { ULONGLONG Size; UCHAR Hash[32]; } MiSystemImageCatalog[] = {};
+")
+    add_custom_target(ci_catalog)
+    foreach(_ci_kernel ntoskrnl nvs_neutral)
+        if(TARGET ${_ci_kernel})
+            add_dependencies(${_ci_kernel} ci_catalog)
+            target_include_directories(${_ci_kernel} PRIVATE "${REACTOS_BINARY_DIR}/sdk/lib/ci")
+        endif()
+    endforeach()
+    return()
+endif()
 foreach(_ci_file IN LISTS _ci_files)
     string(APPEND _ci_inputs "${_ci_file}\n")
 endforeach()

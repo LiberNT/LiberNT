@@ -46,6 +46,10 @@ option(REACTOS_BOOTSTRAP_BOOTLOADER
     "Build only the boot chain, for bringing up an architecture whose kernel backends do not exist yet"
     OFF)
 
+option(REACTOS_BOOTSTRAP_KERNEL
+    "Build the kernel and the boot chain only, for bringing up an architecture whose user mode does not exist yet"
+    OFF)
+
 # Alternative WinNT-compatible architecture string
 if(ARCH STREQUAL "i386")
     set(WINARCH "x86")
@@ -415,22 +419,28 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     #begin with boot so reactos_cab target is defined before all other modules
     add_subdirectory(boot)
     add_subdirectory(bootloader)
-    if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
+    if(NOT REACTOS_BOOTSTRAP_BOOTLOADER AND NOT REACTOS_BOOTSTRAP_KERNEL)
         add_subdirectory(base)
         add_subdirectory(dll)
     endif()
     set(FEX_ARM64EC_AVAILABLE OFF)
     add_subdirectory(submodules)
     if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
-        add_subdirectory(drivers)
+        if(NOT REACTOS_BOOTSTRAP_KERNEL)
+            add_subdirectory(drivers)
+        endif()
         add_subdirectory(hal)
     endif()
     add_subdirectory(sdk/lib)
     if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
-        add_subdirectory(media)
-        add_subdirectory(modules)
+        if(NOT REACTOS_BOOTSTRAP_KERNEL)
+            add_subdirectory(media)
+            add_subdirectory(modules)
+        endif()
         add_subdirectory(ntos)
-        add_subdirectory(subsystems)
+        if(NOT REACTOS_BOOTSTRAP_KERNEL)
+            add_subdirectory(subsystems)
+        endif()
     endif()
     add_subdirectory(sdk/tools/wpp)
 

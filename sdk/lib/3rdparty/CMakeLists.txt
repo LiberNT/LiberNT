@@ -2,6 +2,12 @@ if(ARCH STREQUAL "loongarch64")
     add_compile_options(-Wno-shorten-64-to-32)
 endif()
 
+if(REACTOS_BOOTSTRAP_KERNEL)
+    # Kernel-only bring-up: the boot chain links fatfs and freetype only.
+    add_subdirectory(fatfs)
+    add_subdirectory(freetype)
+    return()
+endif()
 
 add_subdirectory(adns)
 add_subdirectory(cardlib)
