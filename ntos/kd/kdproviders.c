@@ -143,6 +143,22 @@ KdpSelectDebugMode(
         else if (_strnicmp(Value, "FILE", 4) == 0)
         {
             KdpDebugMode.File = TRUE;
+            if (Value[4] == ':')
+            {
+                ULONG Length = 0;
+
+                while ((Value[5 + Length] != ANSI_NULL) && (Value[5 + Length] != ',') &&
+                       (Value[5 + Length] != ' ') && (Value[5 + Length] != '\t'))
+                {
+                    Length++;
+                }
+
+                if ((Length != 0) && (Length < sizeof(KdpBootLogPath)))
+                {
+                    RtlCopyMemory(KdpBootLogPath, Value + 5, Length);
+                    KdpBootLogPath[Length] = ANSI_NULL;
+                }
+            }
         }
         else if (_strnicmp(Value, "NET", 3) == 0)
         {

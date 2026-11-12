@@ -14,6 +14,8 @@
 
 /* PRIVATE DATA ***************************************************************/
 
+PKDP_EARLY_SCREEN_ROUTINE KdpEarlyScreenRoutine;
+
 /*
  * Whether the screen provider is allowed to write at all. Between the moment
  * a graphics driver takes the display and the moment the machine stops, the
@@ -482,6 +484,12 @@ KdpScreenPrint(
     _In_ PCCH String,
     _In_ ULONG Length)
 {
+    if ((Length != 0) && !InbvIsBootDriverInstalled() && (KdpEarlyScreenRoutine != NULL))
+    {
+        KdpEarlyScreenRoutine(String, Length);
+        return;
+    }
+
     if (!KdpScreenCanDraw() || (Length == 0))
         return;
 
