@@ -138,9 +138,6 @@ CmpLazyFlushWorker(
 
     CmpLazyFlushPending = FALSE;
 
-    /* The first turn of the flusher is the first moment a hive file can be
-       opened, because by then a file system is running */
-    CmpInitializeHiveList();
     CmpFlushSelfHealQueue();
 
     while (Flushed < CmpLazyFlushHiveCount)
