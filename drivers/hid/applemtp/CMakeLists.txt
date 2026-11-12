@@ -1,5 +1,5 @@
 
-add_library(applemtp MODULE applemtp.c applemtp.rc)
+add_library(applemtp MODULE applemtp.c touchpolicy.c applemtp.rc)
 set_module_type(applemtp kernelmodedriver)
 target_link_libraries(applemtp applertkit fdtdrv)
 add_importlibs(applemtp hidclass ntoskrnl hal)

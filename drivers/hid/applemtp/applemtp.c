@@ -13,6 +13,7 @@
 #include <reactos/drivers/appleadmac.h>
 #include <reactos/drivers/applesmc.h>
 #include <reactos/drivers/dumpstor.h>
+#include "touchpolicy.h"
 
 #define MTP_TAG 'pTMA'
 
@@ -240,6 +241,7 @@ typedef struct _MTP_DEVICE
 
     UCHAR TouchInterface;
     BOOLEAN TouchReady;
+    APPLE_MTP_TOUCH_START TouchStart;
     UCHAR MouseReportId;
     BOOLEAN KeyboardUsesReportIds;
     BOOLEAN TouchActive;
@@ -1441,8 +1443,11 @@ MtpStartTouch(
 
 static
 NTSTATUS
-MtpSmcSetGpio(
-    _In_ PAPPLE_SMC_GPIO Gpio)
+MtpSmcIoControl(
+    _In_ ULONG Code,
+    _Inout_updates_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_ ULONG OutputLength)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(APPLE_SMC_DEVICE_NAME);
     PFILE_OBJECT FileObject;
@@ -1452,12 +1457,14 @@ MtpSmcSetGpio(
     PIRP Irp;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(OutputLength <= Length);
     Status = IoGetDeviceObjectPointer(&Name, FILE_READ_DATA, &FileObject, &SmcDevice);
     if (!NT_SUCCESS(Status))
         return Status;
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    Irp = IoBuildDeviceIoControlRequest(IOCTL_APPLE_SMC_SET_GPIO, SmcDevice, Gpio, sizeof(*Gpio), NULL, 0, TRUE,
-                                        &Event, &Io);
+    Irp = IoBuildDeviceIoControlRequest(Code, SmcDevice, Buffer, Length, OutputLength ? Buffer : NULL, OutputLength,
+                                        TRUE, &Event, &Io);
     if (!Irp)
     {
         ObDereferenceObject(FileObject);
@@ -1471,6 +1478,28 @@ MtpSmcSetGpio(
     }
     ObDereferenceObject(FileObject);
     return Status;
+}
+
+static
+NTSTATUS
+MtpSmcSetGpio(
+    _In_ PAPPLE_SMC_GPIO Gpio)
+{
+    return MtpSmcIoControl(IOCTL_APPLE_SMC_SET_GPIO, Gpio, sizeof(*Gpio), 0);
+}
+
+static
+BOOLEAN
+MtpSmcReady(VOID)
+{
+    APPLE_SMC_KEY_DATA Data;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Data, sizeof(Data));
+    Data.Key = APPLE_SMC_KEY('#', 'K', 'E', 'Y');
+    Data.Length = sizeof(ULONG);
+    Status = MtpSmcIoControl(IOCTL_APPLE_SMC_READ_KEY, &Data, sizeof(Data), sizeof(Data));
+    return Status != STATUS_OBJECT_NAME_NOT_FOUND && Status != STATUS_DEVICE_NOT_READY;
 }
 
 static
@@ -1573,6 +1602,8 @@ MtpServiceInterfaces(
 
         if (IsTouch && Interface->Enabled && !Interface->FirmwareSent)
         {
+            if (!AppleMtpTouchMayStart(&Device->TouchStart, MtpSmcReady(), MtpNowMs(), MTP_SMC_WAIT_MS))
+                continue;
             Interface->FirmwareSent = TRUE;
             MtpStartTouch(Device, (UCHAR)Index);
             continue;
@@ -1648,6 +1679,8 @@ MtpWorker(
         WaitMs = AppleRtkitPollInterval(&Device->Rtkit, MTP_POLL_MS);
         if (!Device->Interrupt || !Device->Interrupts)
             WaitMs = MTP_POLL_MS;
+        if (Device->TouchStart.Waiting && (WaitMs == APPLE_RTKIT_NO_POLL || WaitMs > MTP_SMC_WAIT_STEP_MS))
+            WaitMs = MTP_SMC_WAIT_STEP_MS;
         Interval.QuadPart = -(LONGLONG)WaitMs * 10000;
         KeWaitForSingleObject(&Device->DataEvent, Executive, KernelMode, FALSE,
                               WaitMs == APPLE_RTKIT_NO_POLL ? NULL : &Interval);

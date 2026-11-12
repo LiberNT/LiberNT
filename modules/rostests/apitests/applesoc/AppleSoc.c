@@ -1061,6 +1061,7 @@ AcePdSleepMs(ULONG Milliseconds)
 
 #include "../../../../sdk/lib/drivers/applertkit/acepd.c"
 #include "../../../../drivers/wdm/audio/drivers/appleaudio/jackpolicy.c"
+#include "../../../../drivers/hid/applemtp/touchpolicy.c"
 #include "../hal/fdtbuild.h"
 
 #define PHANDLE_LW31        0x51
@@ -6455,6 +6456,25 @@ TestGpioInterrupt(VOID)
 
 static
 VOID
+TestMtpTouchStart(VOID)
+{
+    APPLE_MTP_TOUCH_START Start = { 0 };
+
+    ok_int(AppleMtpTouchMayStart(&Start, FALSE, 1000, 5000), FALSE);
+    ok_int(Start.Waiting, TRUE);
+    ok_int(AppleMtpTouchMayStart(&Start, FALSE, 3000, 5000), FALSE);
+    ok_int(AppleMtpTouchMayStart(&Start, TRUE, 3050, 5000), TRUE);
+    ok_int(Start.Waiting, FALSE);
+    ok_int(AppleMtpTouchMayStart(&Start, FALSE, 10000, 5000), FALSE);
+    ok_int(AppleMtpTouchMayStart(&Start, FALSE, 14999, 5000), FALSE);
+    ok_int(AppleMtpTouchMayStart(&Start, FALSE, 15000, 5000), TRUE);
+    ok_int(Start.Waiting, FALSE);
+    ok_int(AppleMtpTouchMayStart(&Start, TRUE, 20000, 5000), TRUE);
+    ok_int(Start.Waiting, FALSE);
+}
+
+static
+VOID
 TestJackPolicy(VOID)
 {
     APPLE_AUDIO_JACK_POLICY Policy;
@@ -7207,6 +7227,7 @@ START_TEST(AppleSoc)
     TestGpio();
     TestGpioInterrupt();
     TestJackPolicy();
+    TestMtpTouchStart();
     TestI2c();
     TestNco();
     TestAdmac();
