@@ -116,8 +116,11 @@ static LIST_ENTRY ExpWakeList;
 static KSPIN_LOCK ExpWakeListLock;
 static LONG References;
 static PKNORMAL_ROUTINE Queued;
-static PKSPIN_LOCK CancelOnRelease;
+static PKSPIN_LOCK CancelOnRelease, SetOnRelease;
 NTSTATUS NtCancelTimer(HANDLE TimerHandle, PBOOLEAN CurrentState);
+NTSTATUS NtSetTimer(HANDLE TimerHandle, PLARGE_INTEGER DueTime, PTIMER_APC_ROUTINE TimerApcRoutine, PVOID TimerContext,
+                    BOOLEAN WakeTimer, LONG Period, PBOOLEAN PreviousState);
+static void FirstRoutine(PVOID Context, PVOID Low, PVOID High);
 static void InitializeListHead(PLIST_ENTRY h) { h->Flink = h->Blink = h; }
 static BOOLEAN IsListEmpty(PLIST_ENTRY h) { return h->Flink == h; }
 static void InsertTailList(PLIST_ENTRY h, PLIST_ENTRY e) { e->Flink = h; e->Blink = h->Blink; h->Blink->Flink = e; h->Blink = e; }
@@ -132,10 +135,17 @@ static void KeAcquireSpinLock(PKSPIN_LOCK Lock, KIRQL *OldIrql) { *OldIrql = 0; 
 static void KeReleaseSpinLock(PKSPIN_LOCK Lock, KIRQL OldIrql) {
     (void)OldIrql;
     KeReleaseSpinLockFromDpcLevel(Lock);
-    if (Lock != CancelOnRelease)
-        return;
-    CancelOnRelease = NULL;
-    CHECK(NtCancelTimer(TheHandle, NULL) == STATUS_SUCCESS);
+    if (Lock == CancelOnRelease)
+    {
+        CancelOnRelease = NULL;
+        CHECK(NtCancelTimer(TheHandle, NULL) == STATUS_SUCCESS);
+    }
+    else if (Lock == SetOnRelease)
+    {
+        LARGE_INTEGER Due = { .QuadPart = -100000 };
+        SetOnRelease = NULL;
+        CHECK(NtSetTimer(TheHandle, &Due, FirstRoutine, NULL, TRUE, 0, NULL) == STATUS_SUCCESS);
+    }
 }
 static void ObReferenceObject(PVOID Object) { CHECK(Object == &TheTimer); References++; }
 static void ObDereferenceObject(PVOID Object) { CHECK(Object == &TheTimer); References--; }
@@ -262,9 +272,30 @@ static void SetAgainBeforeExpiry(void) {
     Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
     CHECK(Queued == SecondRoutine);
 }
+/* Whichever of a set and a cancel takes the timer last decides whether it can wake the system */
+static void WakeFollowsTheLastWord(void) {
+    LARGE_INTEGER Due = { .QuadPart = -100000 };
+    Scenario = "cancel as a waking setter lets go of the timer";
+    CreateTimer();
+    CancelOnRelease = &TheTimer.Lock;
+    CHECK(NtSetTimer(TheHandle, &Due, FirstRoutine, NULL, TRUE, 0, NULL) == STATUS_SUCCESS);
+    CHECK(CancelOnRelease == NULL);
+    CHECK(!TheTimer.KeTimer.Header.Inserted);
+    CHECK(!TheTimer.WakeTimer && IsListEmpty(&ExpWakeList));
+
+    Scenario = "waking set as a canceller lets go of the timer";
+    CreateTimer();
+    SetOnRelease = &TheTimer.Lock;
+    CHECK(NtCancelTimer(TheHandle, NULL) == STATUS_SUCCESS);
+    CHECK(SetOnRelease == NULL);
+    CHECK(TheTimer.KeTimer.Header.Inserted);
+    CHECK(TheTimer.WakeTimer && !IsListEmpty(&ExpWakeList));
+    CHECK(NtCancelTimer(TheHandle, NULL) == STATUS_SUCCESS);
+}
 int main(void) {
     SetThenCancel();
     SetAgainBeforeExpiry();
+    WakeFollowsTheLastWord();
     return 0;
 }
 '''

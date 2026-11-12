@@ -404,14 +404,10 @@ ExTimerRundown(VOID)
             References = ExpCancelTimerApc(Timer);
             KeCancelTimer(&Timer->KeTimer);
             ExpArmHighResolutionTimer(Timer, FALSE);
+            ExpSetWakeTimer(Timer, FALSE);
         }
 
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
-
-        if (References != 0)
-        {
-            ExpSetWakeTimer(Timer, FALSE);
-        }
 
         ObDereferenceObjectEx(Timer, References + 1);
     }
@@ -700,10 +696,9 @@ NtSetTimer(
                  Period,
                  ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
     ExpArmHighResolutionTimer(Timer, TRUE);
+    ExpSetWakeTimer(Timer, WakeTimer);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
-
-    ExpSetWakeTimer(Timer, WakeTimer);
 
     ObDereferenceObjectEx(Timer, References + 1);
 
@@ -777,10 +772,9 @@ NtCancelTimer(
     KeCancelTimer(&Timer->KeTimer);
     State = KeReadStateTimer(&Timer->KeTimer);
     ExpArmHighResolutionTimer(Timer, FALSE);
+    ExpSetWakeTimer(Timer, FALSE);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
-
-    ExpSetWakeTimer(Timer, FALSE);
 
     ObDereferenceObjectEx(Timer, References + 1);
 
