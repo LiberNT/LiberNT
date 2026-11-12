@@ -2095,11 +2095,55 @@ static BOOL notification_filter_matches( DEV_BROADCAST_HDR *filter, const WCHAR 
     return TRUE;
 }
 
-static DWORD WINAPI device_notify_proc( void *arg )
+#ifdef __REACTOS__
+/* The listener is registered before RegisterDeviceNotification returns, so no event that follows the call is lost */
+static plugplay_rpc_handle device_notify_connect( void )
 {
     WCHAR endpoint[] = L"\\pipe\\wine_plugplay";
     WCHAR protseq[] = L"ncacn_np";
+    plugplay_rpc_handle handle = NULL;
     RPC_WSTR binding_str;
+    DWORD err;
+
+    if ((err = RpcStringBindingComposeW( NULL, protseq, NULL, endpoint, NULL, &binding_str )))
+    {
+        ERR("RpcStringBindingCompose() failed, error %#lx\n", err);
+        return NULL;
+    }
+    err = RpcBindingFromStringBindingW( binding_str, &plugplay_binding_handle );
+    RpcStringFreeW( &binding_str );
+    if (err)
+    {
+        ERR("RpcBindingFromStringBinding() failed, error %#lx\n", err);
+        return NULL;
+    }
+
+    __TRY
+    {
+        handle = plugplay_register_listener();
+    }
+    __EXCEPT(rpc_filter)
+    {
+        err = map_exception_code( GetExceptionCode() );
+    }
+    __ENDTRY
+
+    if (!handle)
+    {
+        ERR("failed to open RPC handle, error %lu\n", err);
+        RpcBindingFree( &plugplay_binding_handle );
+    }
+    return handle;
+}
+#endif
+
+static DWORD WINAPI device_notify_proc( void *arg )
+{
+#ifndef __REACTOS__
+    WCHAR endpoint[] = L"\\pipe\\wine_plugplay";
+    WCHAR protseq[] = L"ncacn_np";
+    RPC_WSTR binding_str;
+#endif
     DWORD err = ERROR_SUCCESS;
     struct device_notify *notify, *event, *next;
     struct list events = LIST_INIT(events);
@@ -2112,7 +2156,8 @@ static DWORD WINAPI device_notify_proc( void *arg )
     SetThreadDescription( GetCurrentThread(), L"wine_sechost_device_notify" );
 #ifdef __REACTOS__
     device_notify_thread_id = GetCurrentThreadId();
-#endif
+    handle = arg;
+#else
 
     if ((err = RpcStringBindingComposeW( NULL, protseq, NULL, endpoint, NULL, &binding_str )))
     {
@@ -2142,6 +2187,7 @@ static DWORD WINAPI device_notify_proc( void *arg )
         ERR("failed to open RPC handle, error %lu\n", err);
         return 1;
     }
+#endif
 
     for (;;)
     {
@@ -2260,8 +2306,28 @@ HDEVNOTIFY WINAPI I_ScRegisterDeviceNotification( HANDLE handle, DEV_BROADCAST_H
     EnterCriticalSection( &service_cs );
     list_add_tail( &device_notify_list, &notify->entry );
 
+#ifdef __REACTOS__
+    if (!device_notify_thread)
+    {
+        plugplay_rpc_handle listener = device_notify_connect();
+
+        if (listener && !(device_notify_thread = CreateThread( NULL, 0, device_notify_proc, listener, 0, NULL )))
+        {
+            __TRY
+            {
+                plugplay_unregister_listener( listener );
+            }
+            __EXCEPT(rpc_filter)
+            {
+            }
+            __ENDTRY
+            RpcBindingFree( &plugplay_binding_handle );
+        }
+    }
+#else
     if (!device_notify_thread)
         device_notify_thread = CreateThread( NULL, 0, device_notify_proc, NULL, 0, NULL );
+#endif
 
     LeaveCriticalSection( &service_cs );
 
