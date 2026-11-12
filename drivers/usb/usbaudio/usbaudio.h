@@ -654,6 +654,11 @@ NTAPI
 USBAudioCreateFilterContext(
     _In_ PKSDEVICE Device);
 
+PUSB_AUDIO_STREAMING_INTERFACE_DESCRIPTOR
+UsbAudioFindPcmStreamingGeneral(
+    IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
+    IN PUSB_INTERFACE_DESCRIPTOR InterfaceDescriptor);
+
 PUSB_AUDIO_CONTROL_INPUT_TERMINAL_DESCRIPTOR
 UsbAudioGetStreamingTerminalDescriptorByIndex(
     _In_ PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,

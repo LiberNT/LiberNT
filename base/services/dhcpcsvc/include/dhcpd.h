@@ -220,6 +220,8 @@ struct client_state {
 	u_int16_t		  secs;
 	time_t			  first_sending;
 	time_t			  interval;
+	unsigned int		  discover_cycle;
+	unsigned int		  request_sends;
 	struct string_list	 *medium;
 	struct dhcp_packet	  packet;
 	int			  packet_length;
@@ -230,6 +232,7 @@ struct client_state {
 struct interface_info {
 	struct interface_info	*next;
 	struct hardware		 hw_address;
+	u_int8_t		 client_id[1 + sizeof(((struct hardware *)0)->haddr)];
 	struct in_addr		 primary_address;
 	char			 name[IFNAMSIZ];
 	int			 rfdesc;
@@ -408,6 +411,7 @@ void dhcpack(struct packet *);
 void dhcpnak(struct packet *);
 
 void send_discover(void *);
+void discover_panic(void *);
 void send_request(void *);
 void send_decline(void *);
 void send_release(void *);

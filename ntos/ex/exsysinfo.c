@@ -1,0 +1,2485 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     What the system will say about itself, and what may be told to it
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+#define NDEBUG
+#include <debug.h>
+#include <aux_klib.h>
+
+/* GLOBALS ********************************************************************/
+
+FAST_MUTEX ExpEnvironmentLock;
+
+ERESOURCE ExpFirmwareTableResource;
+LIST_ENTRY ExpFirmwareTableProviderListHead;
+
+/* PRIVATE DATA ***************************************************************/
+
+#define EXP_SYSINFO_TAG 'ofnI'
+
+/* Where the machine's own description is kept once the firmware has been read */
+#define EXP_SMBIOS_KEY \
+    L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\mssmbios\\Data"
+
+#define EXP_SMBIOS_VALUE L"SMBiosData"
+
+/*
+ * The vendor a variable named without one belongs to, which is the firmware's
+ * own, and the attributes such a variable is written with: kept across a
+ * restart and readable both before and after the system has started.
+ */
+static const GUID ExpVendorGuid =
+    { 0x8BE4DF61, 0x93CA, 0x11D2,
+      { 0xAA, 0x0D, 0x00, 0xE0, 0x98, 0x03, 0x2B, 0x8C } };
+
+#define EXP_FIRMWARE_ATTRIBUTES 0x00000007
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+/*
+ * Checks a caller's output buffer once, so every class below can be written as
+ * though the buffer were the kernel's own.
+ */
+static
+NTSTATUS
+ExpProbeSystemInfoBuffer(
+    _In_opt_ PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _In_opt_ PULONG ReturnLength,
+    _In_ ULONG Alignment,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (PreviousMode == KernelMode)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    _SEH2_TRY
+    {
+        if (BufferLength != 0)
+        {
+            ProbeForWrite(Buffer, BufferLength, Alignment);
+        }
+
+        if (ReturnLength != NULL)
+        {
+            ProbeForWriteUlong(ReturnLength);
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+#define EXP_BRAND_STRING_LENGTH 49
+
+static
+VOID
+ExpQueryProcessorBrandString(
+    _Out_writes_(EXP_BRAND_STRING_LENGTH) PCHAR Brand)
+{
+    RTL_QUERY_REGISTRY_TABLE Table[2];
+    WCHAR Wide[128];
+    UNICODE_STRING Name;
+    ANSI_STRING Ansi;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(Brand, EXP_BRAND_STRING_LENGTH);
+    RtlZeroMemory(Wide, sizeof(Wide));
+
+    RtlInitEmptyUnicodeString(&Name, Wide, sizeof(Wide) - sizeof(WCHAR));
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[0].Name = L"ProcessorNameString";
+    Table[0].EntryContext = &Name;
+
+    /* Every architecture records the processor's own name there while it boots */
+    if (!NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE,
+                                           L"\\Registry\\Machine\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                                           Table,
+                                           NULL,
+                                           NULL)))
+    {
+        return;
+    }
+
+    if (Name.Length > (EXP_BRAND_STRING_LENGTH - 1) * sizeof(WCHAR))
+        Name.Length = (EXP_BRAND_STRING_LENGTH - 1) * sizeof(WCHAR);
+
+    Ansi.Buffer = Brand;
+    Ansi.Length = 0;
+    Ansi.MaximumLength = EXP_BRAND_STRING_LENGTH;
+    (VOID)RtlUnicodeStringToAnsiString(&Ansi, &Name, FALSE);
+}
+
+static
+VOID
+ExpQueryDynamicTimeZone(
+    _Out_ PRTL_DYNAMIC_TIME_ZONE_INFORMATION Dynamic)
+{
+    RTL_QUERY_REGISTRY_TABLE Table[3];
+    UNICODE_STRING KeyName;
+    ULONG Disabled = 0;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(Dynamic, sizeof(*Dynamic));
+    RtlCopyMemory(Dynamic, &ExpTimeZoneInfo, sizeof(RTL_TIME_ZONE_INFORMATION));
+
+    RtlInitEmptyUnicodeString(&KeyName,
+                              Dynamic->TimeZoneKeyName,
+                              sizeof(Dynamic->TimeZoneKeyName) - sizeof(WCHAR));
+
+    RtlZeroMemory(Table, sizeof(Table));
+    Table[0].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[0].Name = L"TimeZoneKeyName";
+    Table[0].EntryContext = &KeyName;
+    Table[1].Flags = RTL_QUERY_REGISTRY_DIRECT;
+    Table[1].Name = L"DynamicDaylightTimeDisabled";
+    Table[1].EntryContext = &Disabled;
+
+    (VOID)RtlQueryRegistryValues(RTL_REGISTRY_CONTROL,
+                                 L"TimeZoneInformation",
+                                 Table,
+                                 NULL,
+                                 NULL);
+
+    Dynamic->DynamicDaylightTimeDisabled = (Disabled != 0);
+}
+
+static
+VOID
+ExpReportLength(
+    _Out_opt_ PULONG ReturnLength,
+    _In_ ULONG Length)
+{
+    if (ReturnLength == NULL)
+    {
+        return;
+    }
+
+    _SEH2_TRY
+    {
+        *ReturnLength = Length;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        /* The caller's own buffer went away; there is nothing left to report. */
+    }
+    _SEH2_END;
+}
+
+static
+NTSTATUS
+ExpQueryBasicInformation(
+    _Out_ PSYSTEM_BASIC_INFORMATION Basic)
+{
+    RtlZeroMemory(Basic, sizeof(*Basic));
+
+    Basic->Reserved = 0;
+    Basic->TimerResolution = KeMaximumIncrement;
+    Basic->PageSize = PAGE_SIZE;
+    Basic->NumberOfPhysicalPages = MmNumberOfPhysicalPages;
+    Basic->LowestPhysicalPageNumber = (ULONG)MmLowestPhysicalPage;
+    Basic->HighestPhysicalPageNumber = (ULONG)MmHighestPhysicalPage;
+    Basic->AllocationGranularity = MM_ALLOCATION_GRANULARITY;
+    Basic->MinimumUserModeAddress = (ULONG_PTR)MM_LOWEST_USER_ADDRESS;
+    Basic->MaximumUserModeAddress = (ULONG_PTR)MM_HIGHEST_USER_ADDRESS;
+    Basic->ActiveProcessorsAffinityMask = KeActiveProcessors;
+    Basic->NumberOfProcessors = (CCHAR)KeNumberProcessors;
+
+    return STATUS_SUCCESS;
+}
+
+/* A 32-bit process sees 2 GB of user space, or 4 GB when its image is large address aware, less the 64 KB that ends every user space */
+static
+VOID
+ExpLimitToEmulatedAddressSpace(
+    _Inout_ PSYSTEM_BASIC_INFORMATION Basic)
+{
+    SECTION_IMAGE_INFORMATION Image;
+
+    if (PsGetCurrentProcess()->WoW64Process == NULL) return;
+
+    MmGetImageInformation(&Image);
+
+    Basic->MaximumUserModeAddress =
+        (ULONG_PTR)((Image.ImageCharacteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) ? MAXULONG : MAXLONG) -
+        MM_ALLOCATION_GRANULARITY;
+}
+
+static
+NTSTATUS
+ExpQueryProcessorInformation(
+    _Out_ PSYSTEM_PROCESSOR_INFORMATION Processor,
+    _In_ BOOLEAN Emulation)
+{
+    ULONG FeatureBits = (ULONG)KeFeatureBits;
+
+    Processor->ProcessorArchitecture = (USHORT)KeProcessorArchitecture;
+    if (Emulation)
+        Processor->ProcessorArchitecture = (USHORT)KiEmulationProcessorArchitecture(PsGetCurrentProcess());
+    Processor->ProcessorLevel = (USHORT)KeProcessorLevel;
+    Processor->ProcessorRevision = (USHORT)KeProcessorRevision;
+    Processor->MaximumProcessors = (USHORT)KeNumberProcessors;
+    RtlCopyMemory(&Processor->ProcessorFeatureBits, &FeatureBits, sizeof(FeatureBits));
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * The time of day, told three ways: when the system started, what time it is
+ * now, and how long it has been up, so a caller does not have to work any of
+ * them out from the others and risk them disagreeing.
+ */
+static
+NTSTATUS
+ExpQueryTimeOfDay(
+    _Out_ PSYSTEM_TIMEOFDAY_INFORMATION TimeOfDay,
+    _In_ ULONG Length)
+{
+    SYSTEM_TIMEOFDAY_INFORMATION Local;
+
+    RtlZeroMemory(&Local, sizeof(Local));
+
+    Local.BootTime = KeBootTime;
+    KeQuerySystemTime(&Local.CurrentTime);
+    Local.TimeZoneBias = ExpTimeZoneBias;
+    Local.TimeZoneId = ExpTimeZoneId;
+    Local.Reserved = 0;
+    Local.BootTimeBias = KeBootTimeBias;
+    Local.SleepTimeBias = 0;
+
+    RtlCopyMemory(TimeOfDay, &Local, Length);
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+ExpQueryProcessorPerformance(
+    _Out_ PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Performance,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    ULONG Count;
+    ULONG Index;
+
+    /* A buffer too small for every processor is filled with the ones that fit */
+    Count = min((ULONG)KeNumberProcessors,
+                Length / (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION));
+    if (Count == 0)
+    {
+        *ReturnLength = KeNumberProcessors *
+                        (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    *ReturnLength = Count * (ULONG)sizeof(SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Index];
+
+        KiRefreshProcessorRunTime(Prcb);
+        RtlZeroMemory(&Performance[Index], sizeof(Performance[Index]));
+
+        Performance[Index].IdleTime.QuadPart =
+            (LONGLONG)Prcb->IdleThread->KernelTime * KeMaximumIncrement;
+        Performance[Index].KernelTime.QuadPart =
+            (LONGLONG)Prcb->KernelTime * KeMaximumIncrement;
+        Performance[Index].UserTime.QuadPart =
+            (LONGLONG)Prcb->UserTime * KeMaximumIncrement;
+        Performance[Index].DpcTime.QuadPart =
+            (LONGLONG)Prcb->DpcTime * KeMaximumIncrement;
+        Performance[Index].InterruptTime.QuadPart =
+            (LONGLONG)Prcb->InterruptTime * KeMaximumIncrement;
+        Performance[Index].InterruptCount = Prcb->InterruptCount;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Lists what is loaded in kernel space, in the order it was loaded, which is
+ * what a debugger or a tool that resolves an address needs.
+ */
+static
+NTSTATUS
+ExpQueryModuleInformationWorker(
+    _Out_opt_ PRTL_PROCESS_MODULES Modules,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    PLIST_ENTRY Entry;
+    PLDR_DATA_TABLE_ENTRY Module;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index = 0;
+    ANSI_STRING Ansi;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink)
+    {
+        Count++;
+    }
+
+    Needed = FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) +
+             Count * (ULONG)sizeof(RTL_PROCESS_MODULE_INFORMATION);
+
+    *ReturnLength = Needed;
+
+    if ((Modules == NULL) || (Length < Needed))
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    Modules->NumberOfModules = Count;
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink, Index++)
+    {
+        PRTL_PROCESS_MODULE_INFORMATION Info = &Modules->Modules[Index];
+
+        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+
+        RtlZeroMemory(Info, sizeof(*Info));
+
+        Info->Section = 0;
+        Info->MappedBase = NULL;
+        Info->ImageBase = Module->DllBase;
+        Info->ImageSize = Module->SizeOfImage;
+        Info->Flags = Module->Flags;
+        Info->LoadOrderIndex = (USHORT)Index;
+        Info->InitOrderIndex = 0;
+        Info->LoadCount = Module->LoadCount;
+
+        Ansi.Buffer = Info->FullPathName;
+        Ansi.Length = 0;
+        Ansi.MaximumLength = (USHORT)sizeof(Info->FullPathName);
+
+        if (NT_SUCCESS(RtlUnicodeStringToAnsiString(&Ansi,
+                                                    &Module->FullDllName,
+                                                    FALSE)))
+        {
+            PCHAR Separator = strrchr(Info->FullPathName, '\\');
+
+            Info->OffsetToFileName = (Separator != NULL) ?
+                (USHORT)(Separator - Info->FullPathName + 1) : 0;
+        }
+    }
+
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+
+    return Status;
+}
+
+/* FIXME: the ndk declares NextOffset as a ULONG; the list ends with a USHORT terminator as Windows and Wine have it */
+static
+NTSTATUS
+ExpQueryModuleInformationEx(
+    _Out_opt_ PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    PRTL_PROCESS_MODULE_INFORMATION_EX Info;
+    PIMAGE_NT_HEADERS NtHeaders;
+    PLDR_DATA_TABLE_ENTRY Module;
+    PLIST_ENTRY Entry;
+    ANSI_STRING Ansi;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index = 0;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink)
+    {
+        Count++;
+    }
+
+    Needed = Count * (ULONG)sizeof(RTL_PROCESS_MODULE_INFORMATION_EX) +
+             (ULONG)sizeof(USHORT);
+
+    *ReturnLength = Needed;
+
+    if (Buffer == NULL || Length < Needed)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+        return STATUS_INFO_LENGTH_MISMATCH;
+    }
+
+    for (Entry = PsLoadedModuleList.Flink;
+         Entry != &PsLoadedModuleList;
+         Entry = Entry->Flink, Index++)
+    {
+        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Info = (PRTL_PROCESS_MODULE_INFORMATION_EX)Buffer + Index;
+
+        RtlZeroMemory(Info, sizeof(*Info));
+
+        Info->NextOffset = sizeof(*Info);
+        Info->BaseInfo.ImageBase = Module->DllBase;
+        Info->BaseInfo.ImageSize = Module->SizeOfImage;
+        Info->BaseInfo.Flags = Module->Flags;
+        Info->BaseInfo.LoadOrderIndex = (USHORT)Index;
+        Info->BaseInfo.LoadCount = Module->LoadCount;
+        Info->ImageCheckSum = Module->CheckSum;
+        Info->TimeDateStamp = Module->TimeDateStamp;
+
+        NtHeaders = RtlImageNtHeader(Module->DllBase);
+        if (NtHeaders != NULL)
+            Info->DefaultBase = (PVOID)(ULONG_PTR)NtHeaders->OptionalHeader.ImageBase;
+
+        Ansi.Buffer = Info->BaseInfo.FullPathName;
+        Ansi.Length = 0;
+        Ansi.MaximumLength = (USHORT)sizeof(Info->BaseInfo.FullPathName);
+
+        if (NT_SUCCESS(RtlUnicodeStringToAnsiString(&Ansi,
+                                                    &Module->FullDllName,
+                                                    FALSE)))
+        {
+            PCHAR Separator = strrchr(Info->BaseInfo.FullPathName, '\\');
+
+            Info->BaseInfo.OffsetToFileName = (Separator != NULL) ?
+                (USHORT)(Separator - Info->BaseInfo.FullPathName + 1) : 0;
+        }
+    }
+
+    *(PUSHORT)((PRTL_PROCESS_MODULE_INFORMATION_EX)Buffer + Count) = 0;
+
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS NTAPI ExpCaptureUnicodeString(_Out_ PUNICODE_STRING,
+    _In_ PUNICODE_STRING);
+VOID NTAPI ExpFreeCapturedUnicodeString(_Inout_ PUNICODE_STRING);
+
+/* The classes served by this subsystem's other files */
+NTSTATUS NTAPI ExpQueryProcessInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG, _In_ BOOLEAN, _In_ ULONG, _In_ BOOLEAN);
+NTSTATUS NTAPI ExpQueryProcessIdInformation(
+    _Inout_ PSYSTEM_PROCESS_ID_INFORMATION);
+NTSTATUS NTAPI ExpQuerySessionProcessInformation(
+    _Inout_ PSYSTEM_SESSION_PROCESS_INFORMATION, _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryHandleInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG, _In_ BOOLEAN);
+NTSTATUS NTAPI ExpQueryObjectInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryLocksInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryLookasideInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryPerformanceInformation(
+    _Out_ PSYSTEM_PERFORMANCE_INFORMATION, _In_ ULONG, _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryInterruptInformation(
+    _Out_ PSYSTEM_INTERRUPT_INFORMATION, _In_ ULONG, _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryExceptionInformation(
+    _Out_ PSYSTEM_EXCEPTION_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryContextSwitchInformation(
+    _Out_ PSYSTEM_CONTEXT_SWITCH_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryProcessorIdleInformation(_Out_ PVOID, _In_ ULONG,
+    _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryProcessorCycleTimeInformation(_Out_ PVOID, _In_ ULONG,
+    _Out_ PULONG, _In_ BOOLEAN);
+NTSTATUS NTAPI ExpQueryTimeAdjustment(
+    _Out_ PSYSTEM_QUERY_TIME_ADJUST_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryDpcBehaviour(
+    _Out_ PSYSTEM_DPC_BEHAVIOR_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryPageFileInformation(_Out_opt_ PVOID, _In_ ULONG,
+    _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryMemoryListInformation(
+    _Out_ PSYSTEM_MEMORY_LIST_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryFileCacheInformation(
+    _Out_ PSYSTEM_FILECACHE_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryLogicalProcessorInformation(_Out_opt_ PVOID,
+    _In_ ULONG, _Out_ PULONG);
+NTSTATUS NTAPI ExpQueryBootEnvironmentInformation(
+    _Out_ PSYSTEM_BOOT_ENVIRONMENT_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryRegistryQuota(
+    _Out_ PSYSTEM_REGISTRY_QUOTA_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpQueryCpuSetInformation(_In_opt_ PVOID, _In_ ULONG,
+    _Out_opt_ PVOID, _In_ ULONG, _Out_opt_ PULONG, _In_ KPROCESSOR_MODE);
+
+NTSTATUS NTAPI ExpSetTimeAdjustment(
+    _In_ PSYSTEM_SET_TIME_ADJUST_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpSetDpcBehaviour(
+    _In_ PSYSTEM_DPC_BEHAVIOR_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpSetRegistryQuota(
+    _In_ PSYSTEM_REGISTRY_QUOTA_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpSetPrioritySeparation(_In_ PULONG, _In_ ULONG);
+NTSTATUS NTAPI ExpSetTimeSlipEvent(_In_ PHANDLE, _In_ ULONG);
+NTSTATUS NTAPI ExpSetObjectSecurityMode(_In_ PULONG, _In_ ULONG);
+NTSTATUS NTAPI ExpExtendServiceTable(
+    _In_ PUNICODE_STRING ImageName,
+    _In_ ULONG Length);
+NTSTATUS NTAPI ExpUnloadGdiDriver(_In_ PVOID *, _In_ ULONG);
+NTSTATUS NTAPI ExpSetLoadGdiDriver(
+    _Inout_ PSYSTEM_GDI_DRIVER_INFORMATION, _In_ ULONG, _In_ BOOLEAN);
+NTSTATUS NTAPI ExpSetFileCacheInformation(
+    _In_ PSYSTEM_FILECACHE_INFORMATION, _In_ ULONG);
+NTSTATUS NTAPI ExpSetLowPriorityIo(_In_ PULONG, _In_ ULONG);
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeSystemInformation(VOID)
+{
+    ExInitializeFastMutex(&ExpEnvironmentLock);
+    ExInitializeResourceLite(&ExpFirmwareTableResource);
+    InitializeListHead(&ExpFirmwareTableProviderListHead);
+}
+
+#undef ExGetPreviousMode
+KPROCESSOR_MODE
+NTAPI
+ExGetPreviousMode(VOID)
+{
+    return KeGetPreviousMode();
+}
+
+BOOLEAN
+NTAPI
+ExVerifySuite(
+    _In_ SUITE_TYPE SuiteType)
+{
+    if ((ULONG)SuiteType >= MaxSuiteType) return FALSE;
+
+    return (ExSuiteMask & (1UL << (ULONG)SuiteType)) != 0;
+}
+
+BOOLEAN
+NTAPI
+ExIsProcessorFeaturePresent(
+    _In_ ULONG ProcessorFeature)
+{
+    if (ProcessorFeature >= PROCESSOR_FEATURE_MAX)
+    {
+        return FALSE;
+    }
+
+    return SharedUserData->ProcessorFeatures[ProcessorFeature];
+}
+
+VOID
+NTAPI
+ExGetCurrentProcessorCounts(
+    _Out_ PULONG IdleCount,
+    _Out_ PULONG KernelAndUserCount,
+    _Out_ PULONG ProcessorNumber)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+
+    *IdleCount = Prcb->IdleThread->KernelTime;
+    *KernelAndUserCount = Prcb->KernelTime + Prcb->UserTime;
+    *ProcessorNumber = KeGetCurrentProcessorNumber();
+}
+
+VOID
+NTAPI
+ExGetCurrentProcessorCpuUsage(
+    _Out_ PULONG CpuUsage)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+    ULONG Total;
+    ULONG Idle;
+
+    Idle = Prcb->IdleThread->KernelTime;
+    Total = Prcb->KernelTime + Prcb->UserTime;
+
+    if (Total == 0)
+    {
+        *CpuUsage = 0;
+        return;
+    }
+
+    /* What is left once the idle thread's share is taken off the whole. */
+    if (Idle >= Total)
+    {
+        *CpuUsage = 0;
+        return;
+    }
+
+    *CpuUsage = ((Total - Idle) * 100) / Total;
+}
+
+/*
+ * Pins a caller's buffer in memory and gives the kernel an address of its own
+ * for it, so the buffer can be written at a level at which a fault is not
+ * allowed.
+ */
+NTSTATUS
+NTAPI
+ExLockUserBuffer(
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ LOCK_OPERATION Operation,
+    _Out_ PVOID *MappedSystemVa,
+    _Out_ PMDL *OutMdl)
+{
+    PMDL Mdl;
+    PVOID Mapped;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    *MappedSystemVa = NULL;
+    *OutMdl = NULL;
+
+    if (Length == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Mdl = IoAllocateMdl(BaseAddress, Length, FALSE, TRUE, NULL);
+    if (Mdl == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    _SEH2_TRY
+    {
+        MmProbeAndLockPages(Mdl, AccessMode, Operation);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (!NT_SUCCESS(Status))
+    {
+        IoFreeMdl(Mdl);
+        return Status;
+    }
+
+    Mapped = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);
+    if (Mapped == NULL)
+    {
+        MmUnlockPages(Mdl);
+        IoFreeMdl(Mdl);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    *MappedSystemVa = Mapped;
+    *OutMdl = Mdl;
+
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+ExUnlockUserBuffer(
+    _In_opt_ PMDL Mdl)
+{
+    if (Mdl == NULL)
+    {
+        return;
+    }
+
+    MmUnlockPages(Mdl);
+    IoFreeMdl(Mdl);
+}
+
+/*
+ * Hands back the machine's own description exactly as the firmware gave it,
+ * from where whoever read the firmware put it.
+ */
+NTSTATUS
+NTAPI
+ExpGetRawSMBiosTable(
+    _Out_opt_ PVOID Buffer,
+    _Out_ ULONG *OutSize,
+    _In_ ULONG BufferSize)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(EXP_SMBIOS_KEY);
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(EXP_SMBIOS_VALUE);
+    PKEY_VALUE_PARTIAL_INFORMATION Value;
+    HANDLE Key;
+    ULONG Length = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *OutSize = 0;
+
+    /* The table the loader handed over is the firmware's own; a copy a driver kept in the registry is the fallback */
+    Length = 0;
+    Status = WmipQueryRawSMBiosTables(&Length, NULL);
+    if (Status == STATUS_BUFFER_TOO_SMALL)
+    {
+        *OutSize = Length;
+        if (Buffer == NULL) return STATUS_SUCCESS;
+        if (BufferSize < Length) return STATUS_BUFFER_TOO_SMALL;
+
+        Status = WmipQueryRawSMBiosTables(&Length, Buffer);
+        ASSERT(!NT_SUCCESS(Status) || (Length == *OutSize));
+        return Status;
+    }
+    Length = 0;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenKey(&Key, KEY_READ, &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Status = ZwQueryValueKey(Key,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             NULL,
+                             0,
+                             &Length);
+    if ((Status != STATUS_BUFFER_TOO_SMALL) &&
+        (Status != STATUS_BUFFER_OVERFLOW))
+    {
+        ZwClose(Key);
+        return NT_SUCCESS(Status) ? STATUS_UNSUCCESSFUL : Status;
+    }
+
+    Value = ExAllocatePoolZero(PagedPool, Length, EXP_SYSINFO_TAG);
+    if (Value == NULL)
+    {
+        ZwClose(Key);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = ZwQueryValueKey(Key,
+                             &ValueName,
+                             KeyValuePartialInformation,
+                             Value,
+                             Length,
+                             &Length);
+
+    ZwClose(Key);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Value, EXP_SYSINFO_TAG);
+        return Status;
+    }
+
+    *OutSize = Value->DataLength;
+
+    if (Buffer == NULL)
+    {
+        ExFreePoolWithTag(Value, EXP_SYSINFO_TAG);
+        return STATUS_SUCCESS;
+    }
+
+    if (BufferSize < Value->DataLength)
+    {
+        ExFreePoolWithTag(Value, EXP_SYSINFO_TAG);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    RtlCopyMemory(Buffer, Value->Data, Value->DataLength);
+
+    ExFreePoolWithTag(Value, EXP_SYSINFO_TAG);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+ExpQueryModuleInformation(
+    _In_ PLIST_ENTRY KernelModeList,
+    _In_opt_ PLIST_ENTRY UserModeList,
+    _Out_opt_ PRTL_PROCESS_MODULES Modules,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength)
+{
+    UNREFERENCED_PARAMETER(KernelModeList);
+    UNREFERENCED_PARAMETER(UserModeList);
+
+    return ExpQueryModuleInformationWorker(Modules, Length, ReturnLength);
+}
+
+/*
+ * The loaded modules as a driver asks for them: one entry per module, either
+ * the base alone or the base with the size and the path it was loaded from.
+ * A caller with no buffer is told how much room the whole answer needs.
+ */
+NTSTATUS
+NTAPI
+RtlQueryModuleInformation(
+    _Inout_ PULONG BufferSize,
+    _In_ ULONG EntrySize,
+    _Out_opt_ PVOID Buffer)
+{
+    PAUX_MODULE_EXTENDED_INFO Entry;
+    PLDR_DATA_TABLE_ENTRY Module;
+    PLIST_ENTRY ListEntry;
+    ANSI_STRING Ansi;
+    ULONG Count = 0;
+    ULONG Needed;
+    ULONG Index = 0;
+
+    PAGED_CODE();
+
+    if ((EntrySize != sizeof(AUX_MODULE_BASIC_INFO)) &&
+        (EntrySize != sizeof(AUX_MODULE_EXTENDED_INFO)))
+    {
+        return STATUS_INVALID_PARAMETER_2;
+    }
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+
+    for (ListEntry = PsLoadedModuleList.Flink;
+         ListEntry != &PsLoadedModuleList;
+         ListEntry = ListEntry->Flink)
+    {
+        Count++;
+    }
+
+    Needed = Count * EntrySize;
+
+    if (Buffer == NULL)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+
+        *BufferSize = Needed;
+        return STATUS_SUCCESS;
+    }
+
+    if (*BufferSize < Needed)
+    {
+        ExReleaseResourceLite(&PsLoadedModuleResource);
+        KeLeaveCriticalRegion();
+
+        *BufferSize = Needed;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    for (ListEntry = PsLoadedModuleList.Flink;
+         ListEntry != &PsLoadedModuleList;
+         ListEntry = ListEntry->Flink, Index++)
+    {
+        Module = CONTAINING_RECORD(ListEntry,
+                                   LDR_DATA_TABLE_ENTRY,
+                                   InLoadOrderLinks);
+
+        Entry = (PAUX_MODULE_EXTENDED_INFO)((PUCHAR)Buffer + Index * EntrySize);
+
+        RtlZeroMemory(Entry, EntrySize);
+        Entry->BasicInfo.ImageBase = Module->DllBase;
+
+        if (EntrySize != sizeof(AUX_MODULE_EXTENDED_INFO)) continue;
+
+        Entry->ImageSize = Module->SizeOfImage;
+
+        Ansi.Buffer = Entry->FullPathName;
+        Ansi.Length = 0;
+        Ansi.MaximumLength = (USHORT)sizeof(Entry->FullPathName);
+
+        if (NT_SUCCESS(RtlUnicodeStringToAnsiString(&Ansi,
+                                                    &Module->FullDllName,
+                                                    FALSE)))
+        {
+            PCHAR Separator = strrchr(Entry->FullPathName, '\\');
+
+            Entry->FileNameOffset = (Separator != NULL) ?
+                (USHORT)(Separator - Entry->FullPathName + 1) : 0;
+        }
+    }
+
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+
+    *BufferSize = Needed;
+    return STATUS_SUCCESS;
+}
+
+ULONG
+NTAPI
+NtGetCurrentProcessorNumber(VOID)
+{
+    return KeGetCurrentProcessorNumber();
+}
+
+NTSTATUS
+NTAPI
+NtQuerySystemInformation(
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG UnsafeResultLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    ULONG ResultLength = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = ExpProbeSystemInfoBuffer(SystemInformation,
+                                      Length,
+                                      UnsafeResultLength,
+                                      (SystemInformationClass ==
+                                       SystemKernelDebuggerInformation) ?
+                                      TYPE_ALIGNMENT(SYSTEM_KERNEL_DEBUGGER_INFORMATION) :
+                                      sizeof(ULONG),
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    /* The class names its process in an input this form has no room for, so its worker refuses it without a length */
+    if (SystemInformationClass == SystemCpuSetInformation)
+    {
+        return ExpQueryCpuSetInformation(NULL, 0, SystemInformation, Length, UnsafeResultLength, PreviousMode);
+    }
+
+    _SEH2_TRY
+    {
+        switch (SystemInformationClass)
+        {
+            case SystemBasicInformation:
+            case SystemEmulationBasicInformation:
+            {
+                ResultLength = sizeof(SYSTEM_BASIC_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Status = ExpQueryBasicInformation(SystemInformation);
+                if (NT_SUCCESS(Status) &&
+                    (SystemInformationClass == SystemEmulationBasicInformation))
+                {
+                    ExpLimitToEmulatedAddressSpace(SystemInformation);
+                }
+                break;
+            }
+
+            case SystemProcessorInformation:
+            case SystemEmulationProcessorInformation:
+            {
+                ResultLength = FIELD_OFFSET(SYSTEM_PROCESSOR_INFORMATION, ProcessorFeatureBits) + sizeof(ULONG);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Status = ExpQueryProcessorInformation(SystemInformation,
+                                                      (BOOLEAN)(SystemInformationClass ==
+                                                                SystemEmulationProcessorInformation));
+                break;
+            }
+
+            case SystemTimeOfDayInformation:
+            {
+                if (Length > sizeof(SYSTEM_TIMEOFDAY_INFORMATION))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ResultLength = Length;
+                Status = ExpQueryTimeOfDay(SystemInformation, Length);
+                break;
+            }
+
+            case SystemProcessorPerformanceInformation:
+            {
+                Status = ExpQueryProcessorPerformance(SystemInformation,
+                                                      Length,
+                                                      &ResultLength);
+                break;
+            }
+
+            case SystemModuleInformation:
+            {
+                Status = ExpQueryModuleInformationWorker(SystemInformation,
+                                                         Length,
+                                                         &ResultLength);
+                break;
+            }
+
+            case SystemFlagsInformation:
+            {
+                ResultLength = sizeof(SYSTEM_FLAGS_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ((PSYSTEM_FLAGS_INFORMATION)SystemInformation)->Flags =
+                    NtGlobalFlag;
+                break;
+            }
+
+            case SystemKernelDebuggerInformation:
+            {
+                PSYSTEM_KERNEL_DEBUGGER_INFORMATION Debugger =
+                    SystemInformation;
+
+                ResultLength = sizeof(SYSTEM_KERNEL_DEBUGGER_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Debugger->KernelDebuggerEnabled = KdDebuggerEnabled;
+                Debugger->KernelDebuggerNotPresent = KdDebuggerNotPresent;
+                break;
+            }
+
+            case SystemComPlusPackage:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation = ReadNoFence((const volatile LONG *)&SharedUserData->ComPlusPackage);
+                break;
+            }
+
+            case SystemRangeStartInformation:
+            {
+                ResultLength = sizeof(ULONG_PTR);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG_PTR)SystemInformation =
+                    (ULONG_PTR)MmSystemRangeStart;
+                break;
+            }
+
+            case SystemCurrentTimeZoneInformation:
+            {
+                ResultLength = sizeof(RTL_TIME_ZONE_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PRTL_TIME_ZONE_INFORMATION)SystemInformation =
+                    ExpTimeZoneInfo;
+                break;
+            }
+
+            case SystemPoolTagInformation:
+            {
+                Status = ExGetPoolTagInfo(SystemInformation,
+                                          Length,
+                                          &ResultLength);
+                break;
+            }
+
+            case SystemProcessInformation:
+            case SystemExtendedProcessInformation:
+            case SystemFullProcessInformation:
+            {
+                Status = ExpQueryProcessInformation(
+                             SystemInformation,
+                             Length,
+                             &ResultLength,
+                             (BOOLEAN)(SystemInformationClass !=
+                                       SystemProcessInformation),
+                             0,
+                             FALSE);
+                break;
+            }
+
+            case SystemSessionProcessInformation:
+            {
+                ResultLength =
+                    sizeof(SYSTEM_SESSION_PROCESS_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Status = ExpQuerySessionProcessInformation(SystemInformation,
+                                                           &ResultLength);
+                break;
+            }
+
+            case SystemProcessIdInformation:
+            {
+                ResultLength = sizeof(SYSTEM_PROCESS_ID_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Status = ExpQueryProcessIdInformation(SystemInformation);
+                break;
+            }
+
+            case SystemHandleInformation:
+            case SystemExtendedHandleInformation:
+            {
+                Status = ExpQueryHandleInformation(
+                             SystemInformation,
+                             Length,
+                             &ResultLength,
+                             (BOOLEAN)(SystemInformationClass ==
+                                       SystemExtendedHandleInformation));
+                break;
+            }
+
+            case SystemObjectInformation:
+            {
+                Status = ExpQueryObjectInformation(SystemInformation,
+                                                   Length,
+                                                   &ResultLength);
+                break;
+            }
+
+            case SystemLocksInformation:
+            {
+                Status = ExpQueryLocksInformation(SystemInformation,
+                                                  Length,
+                                                  &ResultLength);
+                break;
+            }
+
+            case SystemLookasideInformation:
+            {
+                Status = ExpQueryLookasideInformation(SystemInformation,
+                                                      Length,
+                                                      &ResultLength);
+                break;
+            }
+
+            case SystemPerformanceInformation:
+            {
+                Status = ExpQueryPerformanceInformation(SystemInformation,
+                                                        Length,
+                                                        &ResultLength);
+                break;
+            }
+
+            case SystemInterruptInformation:
+            {
+                Status = ExpQueryInterruptInformation(SystemInformation,
+                                                      Length,
+                                                      &ResultLength);
+                break;
+            }
+
+            case SystemExceptionInformation:
+            {
+                ResultLength = sizeof(SYSTEM_EXCEPTION_INFORMATION);
+                Status = ExpQueryExceptionInformation(SystemInformation,
+                                                      Length);
+                break;
+            }
+
+            case SystemContextSwitchInformation:
+            {
+                ResultLength = sizeof(SYSTEM_CONTEXT_SWITCH_INFORMATION);
+                Status = ExpQueryContextSwitchInformation(SystemInformation,
+                                                          Length);
+                break;
+            }
+
+            case SystemProcessorIdleInformation:
+            {
+                Status = ExpQueryProcessorIdleInformation(SystemInformation,
+                                                          Length,
+                                                          &ResultLength);
+                break;
+            }
+
+            case SystemProcessorCycleTimeInformation:
+            case SystemProcessorIdleCycleTimeInformation:
+            {
+                Status = ExpQueryProcessorCycleTimeInformation(
+                             SystemInformation,
+                             Length,
+                             &ResultLength,
+                             (BOOLEAN)(SystemInformationClass ==
+                                       SystemProcessorIdleCycleTimeInformation));
+                break;
+            }
+
+            case SystemTimeAdjustmentInformation:
+            {
+                ResultLength =
+                    sizeof(SYSTEM_QUERY_TIME_ADJUST_INFORMATION);
+                Status = ExpQueryTimeAdjustment(SystemInformation, Length);
+                break;
+            }
+
+            case SystemDpcBehaviorInformation:
+            {
+                ResultLength = sizeof(SYSTEM_DPC_BEHAVIOR_INFORMATION);
+                Status = ExpQueryDpcBehaviour(SystemInformation, Length);
+                break;
+            }
+
+            case SystemPageFileInformation:
+            case SystemPageFileInformationEx:
+            {
+                Status = ExpQueryPageFileInformation(SystemInformation,
+                                                     Length,
+                                                     &ResultLength);
+                break;
+            }
+
+            case SystemMemoryListInformation:
+            {
+                ResultLength = sizeof(SYSTEM_MEMORY_LIST_INFORMATION);
+                Status = ExpQueryMemoryListInformation(SystemInformation,
+                                                       Length);
+                break;
+            }
+
+            case SystemFileCacheInformation:
+            case SystemFileCacheInformationEx:
+            {
+                ResultLength = sizeof(SYSTEM_FILECACHE_INFORMATION);
+                Status = ExpQueryFileCacheInformation(SystemInformation,
+                                                      Length);
+                break;
+            }
+
+            case SystemLogicalProcessorInformation:
+            {
+                Status = ExpQueryLogicalProcessorInformation(
+                             SystemInformation,
+                             Length,
+                             &ResultLength);
+                break;
+            }
+
+            case SystemBootEnvironmentInformation:
+            {
+                ResultLength = sizeof(SYSTEM_BOOT_ENVIRONMENT_INFORMATION);
+                Status = ExpQueryBootEnvironmentInformation(SystemInformation,
+                                                            Length);
+                break;
+            }
+
+            case SystemRegistryQuotaInformation:
+            {
+                ResultLength = sizeof(SYSTEM_REGISTRY_QUOTA_INFORMATION);
+                Status = ExpQueryRegistryQuota(SystemInformation, Length);
+                break;
+            }
+
+            case SystemPagedPoolInformation:
+            case SystemNonPagedPoolInformation:
+            {
+                /*
+                 * The whole of a pool is described entry by entry, which only a
+                 * pool built to be walked can do.
+                 */
+                ResultLength = sizeof(SYSTEM_POOL_INFORMATION);
+                Status = STATUS_NOT_IMPLEMENTED;
+                break;
+            }
+
+            case SystemFullMemoryInformation:
+            case SystemSummaryMemoryInformation:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation = (ULONG)MmNumberOfPhysicalPages;
+                break;
+            }
+
+            case SystemDeviceInformation:
+            {
+                PSYSTEM_DEVICE_INFORMATION Device = SystemInformation;
+
+                ResultLength = sizeof(SYSTEM_DEVICE_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* TODO: the I/O manager does not count its device objects by
+                   kind, so the counts are reported as none. */
+                RtlZeroMemory(Device, ResultLength);
+                break;
+            }
+
+            case SystemCallCountInformation:
+            {
+                PSYSTEM_CALL_COUNT_INFORMATION Calls = SystemInformation;
+
+                ResultLength = sizeof(SYSTEM_CALL_COUNT_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* The per-service counts are only kept when asked for at
+                   build time, which no shipping kernel is. */
+                Calls->Length = ResultLength;
+                Calls->NumberOfTables = 0;
+                break;
+            }
+
+            case SystemRecommendedSharedDataAlignment:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation =
+                    KeGetRecommendedSharedDataAlignment();
+                break;
+            }
+
+            case SystemObjectSecurityMode:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation = ObpObjectSecurityMode;
+                break;
+            }
+
+            case SystemPrioritySeperation:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PULONG)SystemInformation = PsPrioritySeparation;
+                break;
+            }
+
+            case SystemTimeZoneInformation:
+            {
+                ResultLength = sizeof(RTL_TIME_ZONE_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                *(PRTL_TIME_ZONE_INFORMATION)SystemInformation =
+                    ExpTimeZoneInfo;
+                break;
+            }
+
+            case SystemDynamicTimeZoneInformation:
+            {
+                RTL_DYNAMIC_TIME_ZONE_INFORMATION Dynamic;
+
+                ResultLength = sizeof(RTL_DYNAMIC_TIME_ZONE_INFORMATION);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ExpQueryDynamicTimeZone(&Dynamic);
+                *(PRTL_DYNAMIC_TIME_ZONE_INFORMATION)SystemInformation = Dynamic;
+                break;
+            }
+
+            case SystemNumaProcessorMap:
+            {
+                PSYSTEM_NUMA_INFORMATION Numa = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_NUMA_INFORMATION,
+                                                  ActiveProcessorsAffinityMask);
+                GROUP_AFFINITY Affinity;
+                ULONG Room;
+                USHORT Node;
+
+                if (Length < sizeof(Numa->HighestNodeNumber))
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* A caller may ask for the highest node alone, the header, or as many nodes as it has room for */
+                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
+                ResultLength = sizeof(Numa->HighestNodeNumber);
+                if (Length < Header) break;
+
+                Room = (Length - Header) / sizeof(Numa->ActiveProcessorsAffinityMask[0]);
+                if (Room > MAXIMUM_NUMA_NODES) Room = MAXIMUM_NUMA_NODES;
+
+                Numa->Reserved = 0;
+
+                for (Node = 0; Node < Room; Node++)
+                {
+                    KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+                    Numa->ActiveProcessorsAffinityMask[Node] = Affinity.Mask;
+                }
+
+                ResultLength = Header + Room * sizeof(Numa->ActiveProcessorsAffinityMask[0]);
+                break;
+            }
+
+            case SystemNumaAvailableMemory:
+            {
+                PSYSTEM_NUMA_INFORMATION Numa = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_NUMA_INFORMATION,
+                                                  AvailableMemory);
+                ULONG Room;
+                USHORT Node;
+
+                if (Length < Header)
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                Room = (Length - Header) / sizeof(Numa->AvailableMemory[0]);
+                if (Room > MAXIMUM_NUMA_NODES) Room = MAXIMUM_NUMA_NODES;
+
+                Numa->HighestNodeNumber = KeQueryHighestNodeNumber();
+                Numa->Reserved = 0;
+
+                /* TODO: the memory manager keeps no free count per node, so a machine with several nodes reports all of it on node 0 */
+                for (Node = 0; Node < Room; Node++)
+                {
+                    Numa->AvailableMemory[Node] = (Node == 0) ? ((ULONGLONG)MmAvailablePages << PAGE_SHIFT) : 0;
+                }
+
+                ResultLength = Header + Room * sizeof(Numa->AvailableMemory[0]);
+                break;
+            }
+
+            case SystemNumaProximityNodeInformation:
+            {
+                PSYSTEM_NUMA_PROXIMITY_MAP Map = SystemInformation;
+                ULONG ProximityId;
+                USHORT Node;
+
+                ResultLength = sizeof(SYSTEM_NUMA_PROXIMITY_MAP);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ProximityId = Map->NodeProximityId;
+                Status = STATUS_NOT_FOUND;
+                for (Node = 0; Node < KeNumberNodes; Node++)
+                {
+                    if (KeNodeBlock[Node] != NULL && KeNodeBlock[Node]->ProximityId == ProximityId)
+                    {
+                        Map->NodeNumber = Node;
+                        Status = STATUS_SUCCESS;
+                        break;
+                    }
+                }
+                break;
+            }
+
+            case SystemNodeDistanceInformation:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* One node means no distance to anywhere else. */
+                *(PULONG)SystemInformation = 0;
+                break;
+            }
+
+            case SystemHypervisorProcessorCountInformation:
+            {
+                ResultLength = sizeof(ULONG);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* Nothing is running underneath this kernel. */
+                *(PULONG)SystemInformation = 0;
+                break;
+            }
+
+            case SystemModuleInformationEx:
+            {
+                Status = ExpQueryModuleInformationEx(SystemInformation,
+                                                     Length,
+                                                     &ResultLength);
+                break;
+            }
+
+            case SystemProcessorBrandString:
+            {
+                CHAR Brand[EXP_BRAND_STRING_LENGTH];
+
+                ResultLength = sizeof(Brand);
+                if (Length < ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                ExpQueryProcessorBrandString(Brand);
+                RtlCopyMemory(SystemInformation, Brand, sizeof(Brand));
+                break;
+            }
+
+            case SystemFirmwareTableInformation:
+            {
+                PSYSTEM_FIRMWARE_TABLE_INFORMATION Request = SystemInformation;
+                const ULONG Header = FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer);
+                ULONG TableLength = 0;
+                ULONG Room;
+
+                if (Length < Header)
+                {
+                    ResultLength = Header;
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                /* The caller names the provider, the action and the table, and has the rest of its buffer for the answer */
+                Room = Length - Header;
+
+                if (Request->Action == SystemFirmwareTable_Get)
+                {
+                    Status = ExGetSystemFirmwareTable(Request->ProviderSignature,
+                                                      Request->TableID,
+                                                      Request->TableBuffer,
+                                                      Room,
+                                                      &TableLength);
+                }
+                else if (Request->Action == SystemFirmwareTable_Enumerate &&
+                         Request->ProviderSignature == SIG_ACPI)
+                {
+                    Status = ExpEnumerateAcpiTables(Request->TableBuffer, Room, &TableLength);
+                }
+                else if (Request->Action == SystemFirmwareTable_Enumerate)
+                {
+                    /* TODO: the firmware memory provider is not registered; the raw SMBIOS one has the one table */
+                    if (Request->ProviderSignature != SIG_RSMB)
+                    {
+                        Status = STATUS_NOT_IMPLEMENTED;
+                        break;
+                    }
+
+                    TableLength = sizeof(ULONG);
+                    if (Room < TableLength)
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
+                    }
+                    else
+                    {
+                        *(PULONG)Request->TableBuffer = 0;
+                        Status = STATUS_SUCCESS;
+                    }
+                }
+                else
+                {
+                    Status = STATUS_INVALID_PARAMETER;
+                    break;
+                }
+
+                if (NT_SUCCESS(Status) || (Status == STATUS_BUFFER_TOO_SMALL))
+                {
+                    Request->TableBufferLength = TableLength;
+                    ResultLength = Header + TableLength;
+                }
+                break;
+            }
+
+            default:
+            {
+                /*
+                 * TODO: the classes that are left describe things this kernel
+                 * does not have, or have no published layout to fill in.
+                 */
+                Status = STATUS_INVALID_INFO_CLASS;
+                break;
+            }
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    ExpReportLength(UnsafeResultLength, ResultLength);
+
+    return Status;
+}
+
+static
+NTSTATUS
+ExpQuerySupportedProcessorArchitectures(
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[4];
+    const BOOLEAN ReportEmulated = (KI_EMULATED_USER_MACHINE != 0) &&
+                                   (SystemInformationClass == SystemSupportedProcessorArchitectures2);
+    USHORT ProcessMachine = 0;
+    PEPROCESS Process;
+    HANDLE ProcessHandle;
+    ULONG Count = 0;
+    ULONG Needed;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(HANDLE))
+        return STATUS_INVALID_PARAMETER;
+
+    _SEH2_TRY
+    {
+        ProcessHandle = *(PHANDLE)InputBuffer;
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if (ProcessHandle != NULL)
+    {
+        Status = ObReferenceObjectByHandle(ProcessHandle,
+                                           PROCESS_QUERY_LIMITED_INFORMATION,
+                                           PsProcessType,
+                                           PreviousMode,
+                                           (PVOID*)&Process,
+                                           NULL);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        ProcessMachine = PsWow64GetProcessMachine(Process);
+        ObDereferenceObject(Process);
+    }
+
+    RtlZeroMemory(Machines, sizeof(Machines));
+
+    Machines[Count].Machine = IMAGE_FILE_MACHINE_NATIVE;
+    Machines[Count].KernelMode = 1;
+    Machines[Count].UserMode = 1;
+    Machines[Count].Native = 1;
+    Machines[Count].Process = (ProcessMachine == IMAGE_FILE_MACHINE_NATIVE);
+    if ((KI_EMULATED_USER_MACHINE != 0) && !ReportEmulated && (ProcessMachine == KI_EMULATED_USER_MACHINE))
+        Machines[Count].Process = 1;
+    Count++;
+
+    if (ReportEmulated)
+    {
+        Machines[Count].Machine = KI_EMULATED_USER_MACHINE;
+        Machines[Count].UserMode = 1;
+        Machines[Count].Process = (ProcessMachine == KI_EMULATED_USER_MACHINE);
+        Count++;
+    }
+
+    if (sizeof(PVOID) == sizeof(ULONGLONG))
+    {
+        Machines[Count].Machine = IMAGE_FILE_MACHINE_I386;
+        Machines[Count].UserMode = 1;
+        Machines[Count].WoW64Container = 1;
+        Machines[Count].Process = (ProcessMachine == IMAGE_FILE_MACHINE_I386);
+        Count++;
+    }
+
+    ASSERT(Count < RTL_NUMBER_OF(Machines));
+    Needed = (Count + 1) * sizeof(Machines[0]);
+
+    _SEH2_TRY
+    {
+        if (ResultLength != NULL)
+        {
+            if (PreviousMode != KernelMode) ProbeForWriteUlong(ResultLength);
+            *ResultLength = Needed;
+        }
+
+        if (Length < Needed)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            if (PreviousMode != KernelMode) ProbeForWrite(SystemInformation, Needed, sizeof(ULONG));
+            RtlCopyMemory(SystemInformation, Machines, Needed);
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+/*
+ * How the processors relate, as variable-sized records of the one relationship
+ * the caller names, or of all of them.
+ */
+static
+NTSTATUS
+ExpQueryLogicalProcessorRelationship(
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    LOGICAL_PROCESSOR_RELATIONSHIP Relationship;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Records = NULL;
+    ULONG Needed = 0;
+    NTSTATUS Status;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(Relationship))
+        return STATUS_INVALID_PARAMETER;
+
+    _SEH2_TRY
+    {
+        Relationship = *(LOGICAL_PROCESSOR_RELATIONSHIP *)InputBuffer;
+        if (PreviousMode != KernelMode)
+        {
+            if (ResultLength != NULL) ProbeForWriteUlong(ResultLength);
+            if (Length != 0) ProbeForWrite(SystemInformation, Length, sizeof(ULONG));
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    if ((Relationship > RelationProcessorModule) && (Relationship != RelationAll))
+        return STATUS_UNSUCCESSFUL;
+
+    /* Asked without room, the kernel only says how much the records take */
+    Status = KeQueryLogicalProcessorRelationship(NULL, Relationship, NULL, &Needed);
+    if (Needed == 0)
+    {
+        Status = STATUS_SUCCESS;
+    }
+    else if (Length >= Needed)
+    {
+        Records = ExAllocatePoolWithTag(PagedPool, Needed, EXP_SYSINFO_TAG);
+        if (Records == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+        Status = KeQueryLogicalProcessorRelationship(NULL, Relationship, Records, &Needed);
+    }
+
+    _SEH2_TRY
+    {
+        if (ResultLength != NULL) *ResultLength = Needed;
+        if (NT_SUCCESS(Status) && Records != NULL)
+            RtlCopyMemory(SystemInformation, Records, Needed);
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    if (Records != NULL) ExFreePoolWithTag(Records, EXP_SYSINFO_TAG);
+
+    return Status;
+}
+
+/*
+ * The same questions, asked about something the caller names rather than about
+ * the system as a whole.
+ */
+NTSTATUS
+NTAPI
+NtQuerySystemInformationEx(
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ResultLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            /* The smallest input is a group number, which a caller may keep anywhere a USHORT can live */
+            if ((InputBuffer != NULL) && (InputBufferLength != 0))
+            {
+                ProbeForRead(InputBuffer, InputBufferLength, sizeof(USHORT));
+            }
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    /*
+     * Only a handful of classes take an input of their own, and each of them
+     * names one processor or one group. The rest are the same question as the
+     * plain form asks, so they are passed straight through.
+     */
+    switch (SystemInformationClass)
+    {
+        case SystemSupportedProcessorArchitectures:
+        case SystemSupportedProcessorArchitectures2:
+            return ExpQuerySupportedProcessorArchitectures(SystemInformationClass,
+                                                           InputBuffer,
+                                                           InputBufferLength,
+                                                           SystemInformation,
+                                                           Length,
+                                                           ResultLength,
+                                                           PreviousMode);
+
+        case SystemCpuSetInformation:
+            return ExpQueryCpuSetInformation(InputBuffer,
+                                             InputBufferLength,
+                                             SystemInformation,
+                                             Length,
+                                             ResultLength,
+                                             PreviousMode);
+
+        case SystemLogicalProcessorAndGroupInformation:
+            return ExpQueryLogicalProcessorRelationship(InputBuffer,
+                                                        InputBufferLength,
+                                                        SystemInformation,
+                                                        Length,
+                                                        ResultLength,
+                                                        PreviousMode);
+
+        case SystemProcessorPerformanceInformation:
+        case SystemProcessorIdleInformation:
+        case SystemProcessorCycleTimeInformation:
+        case SystemProcessorIdleCycleTimeInformation:
+        {
+            USHORT Group;
+
+            if (InputBufferLength < sizeof(USHORT))
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            _SEH2_TRY
+            {
+                Group = *(PUSHORT)InputBuffer;
+            }
+            _SEH2_EXCEPT(ExSystemExceptionFilter())
+            {
+                _SEH2_YIELD(return _SEH2_GetExceptionCode());
+            }
+            _SEH2_END;
+
+            /* This kernel keeps every processor in one group. */
+            if (Group != 0)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
+
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    Status = NtQuerySystemInformation(SystemInformationClass,
+                                      SystemInformation,
+                                      Length,
+                                      ResultLength);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtSetSystemInformation(
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
+    _In_reads_bytes_opt_(Length) PVOID SystemInformation,
+    _In_ ULONG Length)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+
+    if ((PreviousMode != KernelMode) && (SystemInformation != NULL) &&
+        (Length != 0))
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(SystemInformation, Length, sizeof(ULONG));
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    _SEH2_TRY
+    {
+        switch (SystemInformationClass)
+        {
+            case SystemFlagsInformation:
+            {
+                if (Length != sizeof(SYSTEM_FLAGS_INFORMATION))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                NtGlobalFlag =
+                    ((PSYSTEM_FLAGS_INFORMATION)SystemInformation)->Flags;
+                break;
+            }
+
+            case SystemTimeAdjustmentInformation:
+            {
+                Status = ExpSetTimeAdjustment(SystemInformation, Length);
+                break;
+            }
+
+            case SystemCurrentTimeZoneInformation:
+            {
+                RTL_TIME_ZONE_INFORMATION TimeZone;
+
+                if (Length != sizeof(RTL_TIME_ZONE_INFORMATION))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeTimeZonePrivilege, PreviousMode))
+                {
+                    Status = STATUS_PRIVILEGE_NOT_HELD;
+                    break;
+                }
+
+                TimeZone = *(PRTL_TIME_ZONE_INFORMATION)SystemInformation;
+                Status = ExpSetTimeZoneInformation(&TimeZone);
+                break;
+            }
+
+            case SystemDpcBehaviorInformation:
+            {
+                Status = ExpSetDpcBehaviour(SystemInformation, Length);
+                break;
+            }
+
+            case SystemRegistryQuotaInformation:
+            {
+                Status = ExpSetRegistryQuota(SystemInformation, Length);
+                break;
+            }
+
+            case SystemPrioritySeperation:
+            {
+                Status = ExpSetPrioritySeparation(SystemInformation, Length);
+                break;
+            }
+
+            case SystemTimeSlipNotification:
+            {
+                Status = ExpSetTimeSlipEvent(SystemInformation, Length);
+                break;
+            }
+
+            case SystemObjectSecurityMode:
+            {
+                Status = ExpSetObjectSecurityMode(SystemInformation, Length);
+                break;
+            }
+
+            case SystemExtendServiceTableInformation:
+            {
+                Status = ExpExtendServiceTable(SystemInformation, Length);
+                break;
+            }
+
+            case SystemLoadGdiDriverInformation:
+            {
+                Status = ExpSetLoadGdiDriver(SystemInformation,
+                                             Length,
+                                             TRUE);
+                break;
+            }
+
+            case SystemLoadGdiDriverInSystemSpace:
+            {
+                Status = ExpSetLoadGdiDriver(SystemInformation,
+                                             Length,
+                                             FALSE);
+                break;
+            }
+
+            case SystemUnloadGdiDriverInformation:
+            {
+                Status = ExpUnloadGdiDriver(SystemInformation, Length);
+                break;
+            }
+
+            case SystemFileCacheInformation:
+            case SystemFileCacheInformationEx:
+            {
+                Status = ExpSetFileCacheInformation(SystemInformation,
+                                                    Length);
+                break;
+            }
+
+            case SystemLowPriorityIoInformation:
+            {
+                Status = ExpSetLowPriorityIo(SystemInformation, Length);
+                break;
+            }
+
+            case SystemVerifierAddDriverInformation:
+            case SystemVerifierRemoveDriverInformation:
+            case SystemVerifierThunkExtend:
+            case SystemVerifierInformation:
+            {
+                if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                /* TODO: the driver verifier is not present, so a driver cannot
+                   be put under it. */
+                Status = STATUS_NOT_SUPPORTED;
+                break;
+            }
+
+            case SystemCrashDumpStateInformation:
+            {
+                if (Length != sizeof(ULONG))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeDebugPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                /* TODO: no crash dump is written, so there is no state of one
+                   to turn on or off. */
+                Status = STATUS_NOT_SUPPORTED;
+                break;
+            }
+
+            case SystemSessionCreate:
+            case SystemSessionDetach:
+            {
+                ULONG SessionId;
+
+                if (Length != sizeof(ULONG))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                if (SystemInformationClass == SystemSessionDetach)
+                {
+                    Status = MmSessionDelete(*(PULONG)SystemInformation);
+                    break;
+                }
+
+                /* The new session's identifier comes back in the same word */
+                if (PreviousMode != KernelMode)
+                    ProbeForWriteUlong((PULONG)SystemInformation);
+
+                Status = MmSessionCreate(&SessionId);
+                if (NT_SUCCESS(Status))
+                    *(PULONG)SystemInformation = SessionId;
+                break;
+            }
+
+            case SystemMemoryListInformation:
+            {
+                if (Length != sizeof(ULONG))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (!SeSinglePrivilegeCheck(SeProfileSingleProcessPrivilege,
+                                            PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                /* TODO: the page lists cannot be emptied on request. */
+                Status = STATUS_NOT_IMPLEMENTED;
+                break;
+            }
+
+            case SystemComPlusPackage:
+            {
+                SECURITY_SUBJECT_CONTEXT Subject;
+                BOOLEAN Administrator;
+
+                if (Length != sizeof(ULONG))
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                if (PreviousMode != KernelMode)
+                {
+                    SeCaptureSubjectContext(&Subject);
+                    SeLockSubjectContext(&Subject);
+                    Administrator = SeTokenIsAdmin(SeQuerySubjectContextToken(&Subject));
+                    SeUnlockSubjectContext(&Subject);
+                    SeReleaseSubjectContext(&Subject);
+                    if (!Administrator)
+                    {
+                        Status = STATUS_ACCESS_DENIED;
+                        break;
+                    }
+                }
+
+                InterlockedExchange((PLONG)&MmWriteableSharedUserData->ComPlusPackage,
+                                    *(volatile LONG *)SystemInformation);
+                break;
+            }
+
+            case SystemAitSamplingValue:
+            case SystemRegistryAppendString:
+            case SystemWatchdogTimerHandler:
+            case SystemWatchdogTimerInformation:
+            case SystemRegisterFirmwareTableInformationHandler:
+            {
+                if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+                {
+                    Status = STATUS_ACCESS_DENIED;
+                    break;
+                }
+
+                /* TODO: nothing in this kernel keeps what these classes set. */
+                Status = STATUS_NOT_IMPLEMENTED;
+                break;
+            }
+
+            default:
+            {
+                /*
+                 * TODO: the classes that are left name things this kernel does
+                 * not have, or have no published layout to read.
+                 */
+                Status = STATUS_INVALID_INFO_CLASS;
+                break;
+            }
+        }
+    }
+    _SEH2_EXCEPT(ExSystemExceptionFilter())
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+/* ENVIRONMENT VARIABLES ******************************************************/
+
+/*
+ * The older form of the firmware variable interface. It names no vendor, so the
+ * variable is looked for under the firmware's own, and it carries its value as
+ * characters rather than as bytes.
+ */
+NTSTATUS
+NTAPI
+NtQuerySystemEnvironmentValue(
+    _In_ PUNICODE_STRING VariableName,
+    _Out_writes_bytes_(Length) PWSTR Value,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG ReturnLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    UNICODE_STRING Name;
+    PVOID Buffer;
+    ULONG Size = Length;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(Value, Length, sizeof(WCHAR));
+            if (ReturnLength != NULL) ProbeForWriteUlong(ReturnLength);
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    Status = ExpCaptureUnicodeString(&Name, VariableName);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Buffer = ExAllocatePoolZero(PagedPool, max(Length, 1), EXP_SYSINFO_TAG);
+    if (Buffer == NULL)
+    {
+        ExpFreeCapturedUnicodeString(&Name);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = ExGetFirmwareEnvironmentVariable(&Name,
+                                              (LPGUID)&ExpVendorGuid,
+                                              Buffer,
+                                              &Size,
+                                              NULL);
+
+    ExpFreeCapturedUnicodeString(&Name);
+
+    if (Status == STATUS_VARIABLE_NOT_FOUND)
+    {
+        Status = STATUS_UNSUCCESSFUL;
+    }
+    else if (NT_SUCCESS(Status))
+    {
+        _SEH2_TRY
+        {
+            RtlCopyMemory(Value, Buffer, Size);
+
+            if (ReturnLength != NULL)
+            {
+                *ReturnLength = Size;
+            }
+        }
+        _SEH2_EXCEPT(ExSystemExceptionFilter())
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+    else if (ReturnLength != NULL)
+    {
+        ExpReportLength(ReturnLength, Size);
+    }
+
+    ExFreePoolWithTag(Buffer, EXP_SYSINFO_TAG);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtSetSystemEnvironmentValue(
+    _In_ PUNICODE_STRING VariableName,
+    _In_ PUNICODE_STRING Value)
+{
+    UNICODE_STRING Name;
+    UNICODE_STRING Contents;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
+                                ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    Status = ExpCaptureUnicodeString(&Name, VariableName);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Status = ExpCaptureUnicodeString(&Contents, Value);
+    if (!NT_SUCCESS(Status))
+    {
+        ExpFreeCapturedUnicodeString(&Name);
+        return Status;
+    }
+
+    Status = ExSetFirmwareEnvironmentVariable(&Name,
+                                              (LPGUID)&ExpVendorGuid,
+                                              Contents.Buffer,
+                                              Contents.Length,
+                                              EXP_FIRMWARE_ATTRIBUTES);
+
+    ExpFreeCapturedUnicodeString(&Contents);
+    ExpFreeCapturedUnicodeString(&Name);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtQuerySystemEnvironmentValueEx(
+    _In_ PUNICODE_STRING VariableName,
+    _In_ LPGUID VendorGuid,
+    _Out_opt_ PVOID Value,
+    _Inout_ PULONG ReturnLength,
+    _Out_opt_ PULONG Attributes)
+{
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
+                                ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    return ExGetFirmwareEnvironmentVariable(VariableName,
+                                            VendorGuid,
+                                            Value,
+                                            ReturnLength,
+                                            Attributes);
+}
+
+NTSTATUS
+NTAPI
+NtSetSystemEnvironmentValueEx(
+    _In_ PUNICODE_STRING VariableName,
+    _In_ LPGUID VendorGuid,
+    _In_reads_bytes_opt_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _In_ ULONG Attributes)
+{
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
+                                ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    return ExSetFirmwareEnvironmentVariable(VariableName,
+                                            VendorGuid,
+                                            Value,
+                                            ValueLength,
+                                            Attributes);
+}
+
+/*
+ * Walks the firmware's variables. The firmware hands them over one at a time
+ * through a call this kernel does not reach, so nothing can be listed; the
+ * caller is told that rather than being handed an empty list it would believe.
+ */
+NTSTATUS
+NTAPI
+NtEnumerateSystemEnvironmentValuesEx(
+    _In_ ULONG InformationClass,
+    _In_ PVOID Buffer,
+    _In_ ULONG BufferLength)
+{
+    UNREFERENCED_PARAMETER(InformationClass);
+    UNREFERENCED_PARAMETER(Buffer);
+    UNREFERENCED_PARAMETER(BufferLength);
+
+    PAGED_CODE();
+
+    if (!SeSinglePrivilegeCheck(SeSystemEnvironmentPrivilege,
+                                ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    /* TODO: the HAL offers no way to ask for the next variable's name. */
+    return STATUS_NOT_IMPLEMENTED;
+}
+
+/* EOF */

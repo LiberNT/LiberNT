@@ -339,7 +339,7 @@ Test_ProcessAffinity(void)
         ok_hex(Status, STATUS_SUCCESS);
         if (NT_SUCCESS(Status))
             ok(BasicInfo.AffinityMask == Mask, "Affinity is %Ix, expected %Ix\n",
-               BasicInfo.AffinityMask, Mask);
+               (size_t)BasicInfo.AffinityMask, (size_t)Mask);
     }
 
     Status = NtSetInformationProcess(NtCurrentProcess(), ProcessAffinityMask,

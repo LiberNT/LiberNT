@@ -84,6 +84,7 @@ TestGetReturnStatus(
 
 #define KEY_USE_FASTIO              0x100
 #define KEY_RETURN_PENDING          0x200
+#define KEY_HOLD_PENDING            0x400
 
 #define KEY_DATA(c) (((c) & 0xff) << 24)
 #define KEY_GET_DATA(key) ((key) >> 24)

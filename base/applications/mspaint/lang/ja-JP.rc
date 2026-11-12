@@ -20,7 +20,7 @@ BEGIN
         MENUITEM "上書き保存(&S)\tCtrl+S", IDM_FILESAVE
         MENUITEM "名前を付けて保存(&A)...", IDM_FILESAVEAS
         MENUITEM SEPARATOR
-        MENUITEM "スキャナまたはカメラから...", IDM_FILEFROMSCANNERORCAMERA
+        MENUITEM "スキャナーまたはカメラから...", IDM_FILEFROMSCANNERORCAMERA
         MENUITEM SEPARATOR
         MENUITEM "ページ ビュー", IDM_FILEPAGEVIEW
         MENUITEM "ページ設定...", IDM_FILEPAGESETUP
@@ -94,8 +94,8 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "モダンなパレット", IDM_COLORSMODERNPALETTE
         MENUITEM "古いパレット", IDM_COLORSOLDPALETTE
-        MENUITEM "Grayscale palette", IDM_COLORSGRAYSCALE
-        MENUITEM "Monochrome palette", IDM_COLORSMONOCHROME
+        MENUITEM "グレースケール パレット", IDM_COLORSGRAYSCALE
+        MENUITEM "モノクロ パレット", IDM_COLORSMONOCHROME
     END
     POPUP "ヘルプ(&H)"
     BEGIN

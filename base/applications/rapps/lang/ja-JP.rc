@@ -40,7 +40,7 @@ IDR_LINKMENU MENU
 BEGIN
     POPUP ""
     BEGIN
-        MENUITEM "ブラウザでリンクを開く(&O)", ID_OPEN_LINK
+        MENUITEM "ブラウザーでリンクを開く(&O)", ID_OPEN_LINK
         MENUITEM "クリップボードにコピーする(&C)", ID_COPY_LINK
     END
 END
@@ -53,10 +53,10 @@ BEGIN
     GROUPBOX "全般", -1, 4, 2, 240, 61
     CONTROL "", IDC_GENERALLIST, "SysListView32", WS_TABSTOP | LVCHECKSTYLES, 15, 12, 219, 46, WS_EX_STATICEDGE
     GROUPBOX "ダウンロード処理", -1, 4, 65, 240, 51
-    LTEXT "ダウンロードするフォルダ:", -1, 16, 75, 100, 9
+    LTEXT "ダウンロードするフォルダー:", -1, 16, 75, 100, 9
     EDITTEXT IDC_DOWNLOAD_DIR_EDIT, 15, 86, 166, 12, WS_CHILD | WS_VISIBLE | WS_GROUP | ES_AUTOHSCROLL
     PUSHBUTTON "選択(&C)", IDC_CHOOSE, 187, 85, 50, 14
-    AUTOCHECKBOX "インストール後にプログラムのインストーラを削除する(&D)", IDC_DEL_AFTER_INSTALL, 16, 100, 218, 12
+    AUTOCHECKBOX "インストール後にプログラムのインストーラーを削除する(&D)", IDC_DEL_AFTER_INSTALL, 16, 100, 218, 12
     GROUPBOX "ソフトウェアのソース", -1, 4, 118, 240, 46
     AUTORADIOBUTTON "既定を使う", IDC_SOURCE_DEFAULT, 15, 132, 74, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "指定のソース", IDC_USE_SOURCE, 15, 147, 74, 10
@@ -152,7 +152,7 @@ STRINGTABLE
 BEGIN
     IDS_CAT_AUDIO "オーディオ"
     IDS_CAT_DEVEL "開発"
-    IDS_CAT_DRIVERS "ドライバ"
+    IDS_CAT_DRIVERS "ドライバー"
     IDS_CAT_EDU "教育"
     IDS_CAT_ENGINEER "工学"
     IDS_CAT_FINANCE "経営"
@@ -170,9 +170,9 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APPTITLE "ReactOS アプリ マネージャ"
+    IDS_APPTITLE "ReactOS アプリ マネージャー"
     IDS_APP_AUTHORS "Copyright 2009 Dmitry Chapyshev"
-    IDS_WELCOME_TITLE "ReactOS アプリ マネージャへようこそ!"
+    IDS_WELCOME_TITLE "ReactOS アプリ マネージャーへようこそ!"
     IDS_WELCOME_TEXT "左側からカテゴリを選択し、インストールまたはアンインストールするアプリを選んでください。\nReactOS ウェブ サイト: "
     IDS_WELCOME_URL "https://reactos.org"
 
@@ -185,20 +185,20 @@ STRINGTABLE
 BEGIN
     IDS_SEARCH_TEXT "検索..."
     IDS_APPS_COUNT "アプリ数: %d"
-    IDS_APPS_SELECT_COUNT "; Selected: %d"
+    IDS_APPS_SELECT_COUNT "; 選択: %d"
     IDS_INSTALLED "インストール済み"
     IDS_AVAILABLEFORINST "インストール可能"
     IDS_UPDATES "更新"
     IDS_APPLICATIONS "アプリ"
-    IDS_CHOOSE_FOLDER_TEXT "プログラムのダウンロードに使用するフォルダを選択してください:"
-    IDS_CHOOSE_FOLDER_ERROR "指定されたフォルダは存在しません。"
+    IDS_CHOOSE_FOLDER_TEXT "プログラムのダウンロードに使用するフォルダーを選択してください:"
+    IDS_CHOOSE_FOLDER_ERROR "指定されたフォルダーは存在しません。"
     IDS_URL_INVALID "指定されたURLは不正または未サポートです。修正して下さい。"
     IDS_APP_REG_REMOVE "レジストリからインストールされたプログラムに関するデータを削除してもよろしいですか?"
     IDS_INFORMATION "情報"
     IDS_UNABLE_TO_DOWNLOAD "パッケージをダウンロードできません。アドレスが見つかりません。"
     IDS_UNABLE_TO_DOWNLOAD2 "パッケージをダウンロードできません。インターネット接続を確認して下さい。"
     IDS_UNABLE_TO_REMOVE "レジストリからこのプログラムに関するデータを削除できません。"
-    IDS_UNABLE_TO_INSTALL "インストーラを開けません。"
+    IDS_UNABLE_TO_INSTALL "インストーラーを開けません。"
     IDS_UNABLE_TO_QUERY_CERT "証明書情報を取得できません。\n\nそれでも続けますか？"
     IDS_INTEG_CHECK_TITLE "パッケージの構成を確認しています..."
     IDS_INTEG_CHECK_FAIL "このパッケージは構成チェックに失格しました。おそらく壊れているか、インストール中に破損したと考えられます。このソフトを実行するのはお勧めできません。"
@@ -259,7 +259,7 @@ BEGIN
     IDS_CMD_USAGE "使い方: "
     IDS_CMD_NEED_PACKAGE_NAME "エラー: オプション %1 は 1 個以上のパッケージ名が必要です。\n"
     IDS_CMD_NEED_FILE_NAME "エラー: オプション %1 はファイル名が必要です。\n"
-    IDS_CMD_NEED_PARAMS "エラー: オプション %1 は 1 個以上のパラメータが必要です。\n"
+    IDS_CMD_NEED_PARAMS "エラー: オプション %1 は 1 個以上のパラメーターが必要です。\n"
     IDS_CMD_INVALID_OPTION "エラー: 未知または不正なコマンドラインオプションが指定されました。\n"
     IDS_CMD_FIND_RESULT_FOR "%1 の結果を探す:\n"
     IDS_CMD_PACKAGE_NOT_FOUND "パッケージ %1 を探すのに失敗しました。\n"

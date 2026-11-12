@@ -179,7 +179,7 @@ RtlpImageNtHeaderEx(
         /* Make sure the image size is at least big enough for the DOS header */
         if (Size < sizeof(IMAGE_DOS_HEADER))
         {
-            DPRINT1("Size too small\n");
+            DPRINT("Size too small\n");
             return STATUS_INVALID_IMAGE_FORMAT;
         }
     }
@@ -189,7 +189,7 @@ RtlpImageNtHeaderEx(
     if (DosHeader->e_magic != IMAGE_DOS_SIGNATURE)
     {
         /* Not a valid COFF */
-        DPRINT1("Invalid image DOS signature!\n");
+        DPRINT("Invalid image DOS signature!\n");
         return STATUS_INVALID_IMAGE_FORMAT;
     }
 
@@ -383,6 +383,16 @@ RtlImageRvaToVa(
     return (PVOID)((ULONG_PTR)BaseAddress + Rva +
                    (ULONG_PTR)SWAPD(Section->PointerToRawData) -
                    (ULONG_PTR)SWAPD(Section->VirtualAddress));
+}
+
+PVOID
+NTAPI
+RtlAddressInSectionTable(
+    _In_ PIMAGE_NT_HEADERS NtHeader,
+    _In_ PVOID BaseAddress,
+    _In_ ULONG Rva)
+{
+    return RtlImageRvaToVa(NtHeader, BaseAddress, Rva, NULL);
 }
 
 PIMAGE_BASE_RELOCATION

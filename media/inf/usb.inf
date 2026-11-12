@@ -18,6 +18,7 @@ DefaultDestDir = 12
 [GenericMfg]
 %USB\COMPOSITE.DeviceDesc% = usbccgp_Inst,USB\COMPOSITE
 %USB\CLASS_09.DeviceDesc% = usbhub_Inst,USB\CLASS_09
+%USB\CLASS_09.DeviceDesc% = usbhub_Inst,USB\USB20_HUB
 
 ;------------------------ GENERIC USB HUB DRIVER ------------------------
 

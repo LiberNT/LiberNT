@@ -66,8 +66,12 @@ MaximumAllowedAs(DWORD Rid, PCWSTR Name)
     ACCESS_MASK Granted = 0;
 
     if (!Token) return 0;
-    StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\BaseNamedObjects\\%s",
-                     NtCurrentPeb()->SessionId, Name);
+    /* Session 0 keeps its named objects in the global directory */
+    if (NtCurrentPeb()->SessionId == 0)
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\BaseNamedObjects\\%s", Name);
+    else
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\BaseNamedObjects\\%s",
+                         NtCurrentPeb()->SessionId, Name);
     RtlInitUnicodeString(&ObjectName, Path);
     InitializeObjectAttributes(&Attributes, &ObjectName, OBJ_CASE_INSENSITIVE, NULL, NULL);
     ok(ImpersonateLoggedOnUser(Token), "impersonation failed %lu\n", GetLastError());
@@ -358,8 +362,106 @@ TestTorture(void)
     ok(TortureFailures == 0, "integrity torture failures: %ld\n", TortureFailures);
 }
 
+#define MIC_CHILD_HIGHER_REFUSED   0x01
+#define MIC_CHILD_HIGHER_ACTED     0x02
+#define MIC_CHILD_SAME_REFUSED     0x04
+#define MIC_CHILD_SAME_DID_NOT_ACT 0x08
+
+/* Wears each token in turn and tells whether it could act as it */
+static DWORD
+RunImpersonationChild(char **Arguments)
+{
+    HANDLE Higher = (HANDLE)(ULONG_PTR)strtoul(Arguments[4], NULL, 16);
+    HANDLE Same = (HANDLE)(ULONG_PTR)strtoul(Arguments[5], NULL, 16);
+    DWORD Failures = 0;
+    HANDLE Event;
+
+    if (!SetThreadToken(NULL, Higher))
+    {
+        SbxChildFail(&Failures, MIC_CHILD_HIGHER_REFUSED, "SetThreadToken(higher)", GetLastError());
+    }
+    else
+    {
+        Event = OpenEventW(SYNCHRONIZE, FALSE, L"sbx_mic_impersonate");
+        if (Event || GetLastError() != ERROR_BAD_IMPERSONATION_LEVEL)
+            SbxChildFail(&Failures, MIC_CHILD_HIGHER_ACTED, "acted as the higher token", GetLastError());
+        if (Event) CloseHandle(Event);
+        RevertToSelf();
+    }
+
+    if (!SetThreadToken(NULL, Same))
+    {
+        SbxChildFail(&Failures, MIC_CHILD_SAME_REFUSED, "SetThreadToken(same level)", GetLastError());
+    }
+    else
+    {
+        Event = OpenEventW(SYNCHRONIZE, FALSE, L"sbx_mic_impersonate");
+        if (!Event) SbxChildFail(&Failures, MIC_CHILD_SAME_DID_NOT_ACT, "same-level token did not act", GetLastError());
+        else CloseHandle(Event);
+        RevertToSelf();
+    }
+
+    return Failures;
+}
+
+/* Starts a low integrity child that wears the two tokens it inherits */
+static void
+RunWearingChild(HANDLE LowPrimary, HANDLE Higher, HANDLE Same)
+{
+    WCHAR Application[MAX_PATH], CommandLine[MAX_PATH * 2];
+    STARTUPINFOW Startup = { sizeof(Startup) };
+    PROCESS_INFORMATION Info;
+    DWORD ExitCode;
+
+    ZeroMemory(&Info, sizeof(Info));
+    GetModuleFileNameW(NULL, Application, ARRAYSIZE(Application));
+    StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" Integrity child mic-impersonate %p %p",
+                     Application, Higher, Same);
+    ok(CreateProcessAsUserW(LowPrimary, Application, CommandLine, NULL, NULL, TRUE, CREATE_UNICODE_ENVIRONMENT,
+                            NULL, NULL, &Startup, &Info),
+       "low child creation failed %lu\n", GetLastError());
+    if (!Info.hProcess) return;
+
+    ExitCode = SbxWaitChild(&Info);
+    ok(ExitCode == 0, "low process wearing tokens: child failed with 0x%lx\n", ExitCode);
+}
+
+/* A process may wear a token above its own integrity, but only to tell whom it stands for */
+static void
+TestImpersonationAboveProcess(void)
+{
+    SECURITY_ATTRIBUTES Inherit = { sizeof(Inherit), NULL, TRUE };
+    HANDLE LowPrimary = SbxCreateIntegrityToken(SECURITY_MANDATORY_LOW_RID, TokenPrimary);
+    HANDLE Base = SbxOpenToken(TOKEN_ALL_ACCESS);
+    HANDLE Event = CreateTestEvent(L"sbx_mic_impersonate", L"D:(A;;GA;;;WD)S:(ML;;NW;;;LW)");
+    HANDLE Higher = NULL, Same = NULL;
+
+    ok(Event != NULL, "event creation failed %lu\n", GetLastError());
+    ok(LowPrimary && Base, "token setup failed %lu\n", GetLastError());
+
+    if (Event && LowPrimary && Base)
+    {
+        ok(DuplicateTokenEx(Base, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Higher) &&
+           DuplicateTokenEx(LowPrimary, TOKEN_ALL_ACCESS, &Inherit, SecurityImpersonation, TokenImpersonation, &Same),
+           "impersonation token creation failed %lu\n", GetLastError());
+        if (Higher && Same) RunWearingChild(LowPrimary, Higher, Same);
+    }
+
+    if (Same) CloseHandle(Same);
+    if (Higher) CloseHandle(Higher);
+    if (Base) CloseHandle(Base);
+    if (LowPrimary) CloseHandle(LowPrimary);
+    if (Event) CloseHandle(Event);
+}
+
 START_TEST(Integrity)
 {
+    char **Arguments;
+    int Count = winetest_get_mainargs(&Arguments);
+
+    if (SbxIsChild(Arguments, Count, "mic-impersonate") && Count >= 6)
+        ExitProcess(RunImpersonationChild(Arguments));
+
     TestUnlabeledObject();
     TestExplicitLabel();
     TestSddlLabelAtCreation();
@@ -367,4 +469,5 @@ START_TEST(Integrity)
     TestProcessAndThreadObjects();
     TestRegistry();
     TestTorture();
+    TestImpersonationAboveProcess();
 }

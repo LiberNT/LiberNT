@@ -119,23 +119,11 @@ KeContextToTrapFrame(IN PCONTEXT Context,
     /* Handle segment selectors */
     if (ContextFlags & CONTEXT_SEGMENTS)
     {
-        /* Check if this was a Kernel Trap */
-        if ((Context->SegCs & MODE_MASK) == KernelMode)
-        {
-            /* Set valid selectors */
-            TrapFrame->SegDs = KGDT64_R3_DATA | RPL_MASK;
-            TrapFrame->SegEs = KGDT64_R3_DATA | RPL_MASK;
-            TrapFrame->SegFs = KGDT64_R3_CMTEB | RPL_MASK;
-            TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
-        }
-        else
-        {
-            /* Copy selectors */
-            TrapFrame->SegDs = Context->SegDs;
-            TrapFrame->SegEs = Context->SegEs;
-            TrapFrame->SegFs = Context->SegFs;
-            TrapFrame->SegGs = Context->SegGs;
-        }
+        /* Set valid selectors */
+        TrapFrame->SegDs = KGDT64_R3_DATA | RPL_MASK;
+        TrapFrame->SegEs = KGDT64_R3_DATA | RPL_MASK;
+        TrapFrame->SegFs = KGDT64_R3_CMTEB | RPL_MASK;
+        TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
     }
 
     /* Handle debug registers */

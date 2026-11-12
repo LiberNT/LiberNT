@@ -11,6 +11,7 @@
 #include <debug.h>
 
 #define LX_PTY_MAX          4096
+#define LX_DEVPTS_MAX       1048576
 #define LX_PTS_MAJOR        136
 #define LX_TTY_GID          5
 
@@ -98,6 +99,7 @@ LxDevptsCreate(
     InitializeListHead(&Devpts->Ptys);
     Devpts->PtmxMode = 0;
     Devpts->Mode = 0600;
+    Devpts->Max = LX_DEVPTS_MAX;
 
     while ((Cursor != NULL) && (*Cursor != '\0'))
     {
@@ -114,10 +116,23 @@ LxDevptsCreate(
         }
         if (Key + KeyLength < End)
             Value = Key + KeyLength + 1;
-        /* FIXME: Linux fails the mount with EINVAL on an unknown option; unknown options are ignored here */
         if (Value == NULL)
-            continue;
-        if (LxDevptsOptionIs(Key, KeyLength, "mode") || LxDevptsOptionIs(Key, KeyLength, "ptmxmode"))
+        {
+            if ((KeyLength == 0) || LxDevptsOptionIs(Key, KeyLength, "newinstance"))
+                continue;
+            LxFree(Devpts);
+            return -LX_EINVAL;
+        }
+        if (LxDevptsOptionIs(Key, KeyLength, "max"))
+        {
+            if (!LxDevptsParseNumber(Value, End, 10, &Number) || (Number > LX_DEVPTS_MAX))
+            {
+                LxFree(Devpts);
+                return -LX_EINVAL;
+            }
+            Devpts->Max = Number;
+        }
+        else if (LxDevptsOptionIs(Key, KeyLength, "mode") || LxDevptsOptionIs(Key, KeyLength, "ptmxmode"))
         {
             if (!LxDevptsParseNumber(Value, End, 8, &Number))
             {
@@ -149,6 +164,11 @@ LxDevptsCreate(
                 Devpts->Uid = Number;
                 Devpts->UidSet = TRUE;
             }
+        }
+        else
+        {
+            LxFree(Devpts);
+            return -LX_EINVAL;
         }
     }
 
@@ -255,14 +275,15 @@ LxTtyCreate(
 
     if (!(Flags & LX_TTY_CONSOLE) && (Devpts != NULL))
     {
+        LONG Limit = ((Devpts->Max == 0) || (Devpts->Max > LX_PTY_MAX)) ? LX_PTY_MAX : (LONG)Devpts->Max;
+
         ExAcquireFastMutex(&Instance->Lock);
-        /* TODO: limit the instance to its max= option; only the global limit applies */
-        for (Index = 0; Index < LX_PTY_MAX; Index++)
+        for (Index = 0; Index < Limit; Index++)
         {
             if (!LxTtyIndexUsed(Devpts, Index))
                 break;
         }
-        if (Index == LX_PTY_MAX)
+        if (Index == Limit)
         {
             ExReleaseFastMutex(&Instance->Lock);
             LxFree(Tty);
@@ -1808,7 +1829,7 @@ LxPtmxOpen(
     NTSTATUS Status;
 
     *Result = NULL;
-    Status = LxTtyCreate(Process->Instance, Devpts, LX_TTY_LOCKED, Process->Fsuid, Process->Fsgid, 0, 0, &Tty);
+    Status = LxTtyCreate(Process->Instance, Devpts, LX_TTY_LOCKED, LxProcessCred(Process)->Fsuid, LxProcessCred(Process)->Fsgid, 0, 0, &Tty);
     if (Status == STATUS_TOO_MANY_OPENED_FILES)
         return -LX_ENOSPC;
     if (!NT_SUCCESS(Status))

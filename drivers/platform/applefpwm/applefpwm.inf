@@ -1,0 +1,44 @@
+; PROJECT:     LiberNT Apple PWM Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider = %LiberNT%
+DriverVer = 11/11/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg,NTarm64
+
+[StdMfg.NTarm64]
+%AppleFpwm.DeviceDesc% = AppleFpwm_Inst,FDT\apple_s5l-fpwm
+%PwmLeds.DeviceDesc% = AppleFpwm_Inst,FDT\pwm-leds
+
+[AppleFpwm_Inst.NT]
+CopyFiles = AppleFpwm_CopyFiles
+
+[AppleFpwm_CopyFiles]
+applefpwm.sys
+
+[AppleFpwm_Inst.NT.Services]
+AddService = applefpwm,0x00000002,AppleFpwm_Service
+
+[AppleFpwm_Service]
+DisplayName = %AppleFpwm.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applefpwm.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleFpwm.DeviceDesc = "Apple PWM Controller"
+PwmLeds.DeviceDesc = "PWM LEDs"
+AppleFpwm.ServiceDesc = "Apple PWM Driver"

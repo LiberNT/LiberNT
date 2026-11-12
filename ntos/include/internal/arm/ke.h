@@ -2,6 +2,7 @@
 
 #define KI_EMULATED_USER_MACHINE 0
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
+#define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 
 #include "intrin_i.h"
 
@@ -45,6 +46,10 @@
 
 #define KeSetContextReturnRegister(Context, ReturnValue) \
     ((Context)->R0 = (ReturnValue))
+
+/* TODO: this port's debug service passes no third or fourth argument yet */
+#define KeGetContextServiceArgument3(Context) ((ULONG_PTR)0)
+#define KeGetContextServiceArgument4(Context) ((ULONG_PTR)0)
 
 //
 // Macro to get trap and exception frame from a thread stack
@@ -198,7 +203,8 @@ KiEnterServiceException(
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
     UNREFERENCED_PARAMETER(State);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     return ExceptionFrame;
 }
 
@@ -220,8 +226,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 #define KiGetPreviousMode(tf) \
@@ -313,5 +318,8 @@ KiClearDpcThreadState(
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriod)
 #define KiClockTickSuspended(Prcb) FALSE
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #define KiIsUserModeTrap(TrapFrame) ((TrapFrame)->PreviousMode == UserMode)

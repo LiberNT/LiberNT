@@ -199,23 +199,25 @@ _dump_context(PCONTEXT pc)
 #endif
 }
 
-static VOID
+static EFaultRepRetVal
 BasepReportFault(IN PEXCEPTION_POINTERS ExceptionInfo)
 {
+    EFaultRepRetVal Result = frrvErrNoDW;
     pfn_REPORTFAULT ReportFault;
     HMODULE FaultRep;
 
     if (BaseRunningInServerProcess)
-        return;
+        return Result;
 
     FaultRep = LoadLibraryW(L"faultrep.dll");
     if (FaultRep == NULL)
-        return;
+        return Result;
 
     ReportFault = (pfn_REPORTFAULT)GetProcAddress(FaultRep, "ReportFault");
     if (ReportFault != NULL)
-        ReportFault(ExceptionInfo, 0);
+        Result = ReportFault(ExceptionInfo, 0);
     FreeLibrary(FaultRep);
+    return Result;
 }
 
 
@@ -520,7 +522,8 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
             return RetValue;
     }
 
-    BasepReportFault(ExceptionInfo);
+    if (BasepReportFault(ExceptionInfo) == frrvLaunchDebugger)
+        return EXCEPTION_CONTINUE_SEARCH;
 
     /*
      * Now pop up an error if needed. Check both the process-wide (Win32)
@@ -530,6 +533,7 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
         (RtlGetThreadErrorMode() & RTL_SEM_NOGPFAULTERRORBOX))
     {
         /* Do not display the pop-up error box, just transfer control to the exception handler */
+        BasepRunApplicationRecovery(ExceptionRecord->ExceptionCode);
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
@@ -844,6 +848,8 @@ UnhandledExceptionFilter(IN PEXCEPTION_POINTERS ExceptionInfo)
 
 
 Quit:
+    BasepRunApplicationRecovery(ExceptionRecord->ExceptionCode);
+
     /* If this is a second chance exception, kill the process */
     if (IsSecondChance)
         NtTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);

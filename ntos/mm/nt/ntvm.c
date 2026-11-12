@@ -232,7 +232,7 @@ MiDynamicCodeBlocked(
     Thread = PsGetCurrentThread();
     return !(THREAD_TO_PROCESS(Thread) == Process &&
              Process->MitigationFlagsValues.DisableDynamicCodeAllowOptOut &&
-             ReadAcquire(&Thread->DynamicCodeOptOut));
+             (ReadAcquire((volatile LONG *)&Thread->CrossThreadFlags) & CT_DISABLE_DYNAMIC_CODE_OPT_OUT_BIT));
 }
 
 static
@@ -2107,7 +2107,7 @@ NtAllocateUserPhysicalPages(
     Status = MiCaptureAweCount(NumberOfPages, &Count);
     if (!NT_SUCCESS(Status))
         return Status;
-    Count = min(Count, MiSystem.Pfn.FrameCount);
+    Count = min(Count, MiSystem.Pfn.FrameCount - MiSystem.Pfn.FirstFrame);
     Frames = ExAllocatePoolWithTag(NonPagedPool, (SIZE_T)Count * sizeof(*Frames), 'aAmM');
     if (Frames == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;

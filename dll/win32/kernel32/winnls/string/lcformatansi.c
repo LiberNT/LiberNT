@@ -231,15 +231,8 @@ INT WINAPI GetCurrencyFormatA(LCID lcid, DWORD dwFlags,
  */
 BOOL WINAPI EnumDateFormatsA(DATEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
 {
-    struct enumdateformats_context ctxt;
-
-    ctxt.type = CALLBACK_ENUMPROC;
-    ctxt.u.callback = (DATEFMT_ENUMPROCW)proc;
-    ctxt.lcid = lcid;
-    ctxt.flags = flags;
-    ctxt.unicode = FALSE;
-
-    return NLS_EnumDateFormats(&ctxt);
+    return Internal_EnumDateFormats((DATEFMT_ENUMPROCW)proc, NlsValidateLocale(&lcid, 0),
+                                    flags, FALSE, FALSE, FALSE, 0);
 }
 
 /**************************************************************************
@@ -250,8 +243,6 @@ BOOL WINAPI EnumDateFormatsA(DATEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
  */
 BOOL WINAPI EnumTimeFormatsA(TIMEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
 {
-    struct enumtimeformats_context ctxt;
-
     /* EnumTimeFormatsA doesn't support flags, EnumTimeFormatsW does. */
     if (flags & ~LOCALE_USE_CP_ACP)
     {
@@ -259,13 +250,8 @@ BOOL WINAPI EnumTimeFormatsA(TIMEFMT_ENUMPROCA proc, LCID lcid, DWORD flags)
         return FALSE;
     }
 
-    ctxt.type = CALLBACK_ENUMPROC;
-    ctxt.u.callback = (TIMEFMT_ENUMPROCW)proc;
-    ctxt.lcid = lcid;
-    ctxt.flags = flags;
-    ctxt.unicode = FALSE;
-
-    return NLS_EnumTimeFormats(&ctxt);
+    return Internal_EnumTimeFormats((TIMEFMT_ENUMPROCW)proc, NlsValidateLocale(&lcid, 0),
+                                    flags, FALSE, FALSE, 0);
 }
 
 /******************************************************************************
@@ -334,9 +320,30 @@ int WINAPI GetCalendarInfoA(LCID lcid, CALID Calendar, CALTYPE CalType,
  */
 int WINAPI SetCalendarInfoA(LCID Locale, CALID Calendar, CALTYPE CalType, LPCSTR lpCalData)
 {
-    FIXME("(%08x,%08x,%08x,%s): stub\n",
-          Locale, Calendar, CalType, debugstr_a(lpCalData));
-    return 0;
+    WCHAR Buffer[256];
+    DWORD CodePage = CP_ACP;
+
+    if (!lpCalData)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (!(CalType & CAL_USE_CP_ACP) &&
+        !GetLocaleInfoW(Locale, LOCALE_IDEFAULTANSICODEPAGE | LOCALE_RETURN_NUMBER,
+                        (LPWSTR)&CodePage, sizeof(CodePage) / sizeof(WCHAR)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    if (!MultiByteToWideChar(CodePage, 0, lpCalData, -1, Buffer, ARRAY_SIZE(Buffer)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+
+    return SetCalendarInfoW(Locale, Calendar, CalType, Buffer);
 }
 
 /* EOF */

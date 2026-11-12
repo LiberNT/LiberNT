@@ -37,6 +37,7 @@ static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ P
     PUSBPORT_REGISTRATION_PACKET Packet;
     PUSBPORT_TRANSFER Transfer;
     MPSTATUS MpStatus;
+    ULONG Retry;
 
     if ((Endpoint == NULL) || (Length > PAGE_SIZE) || ((Length != 0) && !UsePhysicalAddress && (Buffer == NULL)) || (UsePhysicalAddress && DirectionIn))
     {
@@ -92,7 +93,17 @@ static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ P
     InterlockedExchange(&DumpContext->Completed, 0);
     KeMemoryBarrier();
 
-    MpStatus = Packet->SubmitTransfer(FdoExtension->MiniPortExt, Endpoint + 1, &Transfer->TransferParameters, Transfer->MiniportTransfer, &Transfer->SgList);
+    for (Retry = 0; Retry < ROS_DUMP_POLL_ITERATIONS; Retry++)
+    {
+        MpStatus = Packet->SubmitTransfer(FdoExtension->MiniPortExt, Endpoint + 1, &Transfer->TransferParameters, Transfer->MiniportTransfer, &Transfer->SgList);
+        if (MpStatus != MP_STATUS_BUSY)
+            break;
+
+        KeStallExecutionProcessor(1);
+    }
+
+    if (MpStatus == MP_STATUS_BUSY)
+        return STATUS_IO_TIMEOUT;
     if (MpStatus != MP_STATUS_SUCCESS)
         return STATUS_IO_DEVICE_ERROR;
 
@@ -1069,6 +1080,54 @@ USBPORT_PdoDeviceControl(IN PDEVICE_OBJECT PdoDevice,
     return Status;
 }
 
+static
+NTSTATUS
+USBPORT_QueryUsbCapability(
+    _In_ PDEVICE_OBJECT PdoDevice,
+    _Inout_ PROS_USB_CAPABILITY_QUERY Query)
+{
+    PUSBPORT_RHDEVICE_EXTENSION PdoExtension = PdoDevice->DeviceExtension;
+    PUSBPORT_DEVICE_EXTENSION FdoExtension = PdoExtension->FdoDevice->DeviceExtension;
+    PUSBPORT_REGISTRATION_PACKET Packet = &FdoExtension->MiniPortInterface->Packet;
+    MPSTATUS MpStatus = MP_STATUS_NOT_SUPPORTED;
+    ULONG MaxStreams = 0;
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!Query || Query->Version != ROS_USB_CAPABILITY_QUERY_VERSION || Query->Size < sizeof(*Query))
+        return STATUS_INVALID_PARAMETER;
+
+    Query->ResultLength = 0;
+    if (IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_SELECTIVE_SUSPEND))
+        return STATUS_SUCCESS;
+
+    if (IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_STATIC_STREAMS))
+    {
+        if (!Query->OutputBuffer || Query->OutputBufferLength < sizeof(USHORT))
+            return STATUS_INVALID_PARAMETER;
+        if ((Packet->MiniPortFlags & USB_MINIPORT_FLAGS_USB3) && Packet->ReopenEndpoint && Packet->PassThru)
+        {
+            KeAcquireSpinLock(&FdoExtension->MiniportSpinLock, &OldIrql);
+            MpStatus = Packet->PassThru(FdoExtension->MiniPortExt, (PVOID)&GUID_ROS_USB_MINIPORT_MAX_STREAMS,
+                                        sizeof(MaxStreams), &MaxStreams);
+            KeReleaseSpinLock(&FdoExtension->MiniportSpinLock, OldIrql);
+        }
+        if (MpStatus != MP_STATUS_SUCCESS || MaxStreams == 0)
+            return STATUS_NOT_SUPPORTED;
+        *(PUSHORT)Query->OutputBuffer = (USHORT)min(MaxStreams, MAXUSHORT);
+        Query->ResultLength = sizeof(USHORT);
+        return STATUS_SUCCESS;
+    }
+
+    if (IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_DEVICE_CONNECTION_HIGH_SPEED_COMPATIBLE) ||
+        IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_DEVICE_CONNECTION_SUPER_SPEED_COMPATIBLE))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    return STATUS_NOT_IMPLEMENTED;
+}
+
 NTSTATUS
 NTAPI
 USBPORT_PdoInternalDeviceControl(IN PDEVICE_OBJECT PdoDevice,
@@ -1097,6 +1156,12 @@ USBPORT_PdoInternalDeviceControl(IN PDEVICE_OBJECT PdoDevice,
     if (IoCtl == IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE)
     {
         Status = USBPORT_GetKeyboardInterface(IoStack->Parameters.Others.Argument1);
+        goto Exit;
+    }
+
+    if (IoCtl == IOCTL_INTERNAL_REACTOS_USB_QUERY_CAPABILITY)
+    {
+        Status = USBPORT_QueryUsbCapability(PdoDevice, IoStack->Parameters.Others.Argument1);
         goto Exit;
     }
 

@@ -196,6 +196,63 @@ static void Test_ReadFile_async(HANDLE hFile)
     ol.Offset = 0;
 }
 
+static ULONG ReadFileExCalls;
+static DWORD ReadFileExError;
+static DWORD ReadFileExBytes;
+static LPOVERLAPPED ReadFileExOverlapped;
+
+static VOID WINAPI ReadFileExCompletion(DWORD dwErrorCode, DWORD dwNumberOfBytesTransfered, LPOVERLAPPED lpOverlapped)
+{
+    ReadFileExCalls++;
+    ReadFileExError = dwErrorCode;
+    ReadFileExBytes = dwNumberOfBytesTransfered;
+    ReadFileExOverlapped = lpOverlapped;
+}
+
+static void Test_ReadFileEx_pending(void)
+{
+    static const CHAR Data[] = "pending";
+    WCHAR PipeName[64];
+    UCHAR Buffer[16] = { 0 };
+    OVERLAPPED ol = { 0 };
+    HANDLE hServer, hClient;
+    DWORD dwWritten, dwWait;
+    BOOL bResult;
+
+    StringCchPrintfW(PipeName, ARRAYSIZE(PipeName), L"\\\\.\\pipe\\ReadFileEx_%lu", GetCurrentProcessId());
+    hServer = CreateNamedPipeW(PipeName, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE | PIPE_WAIT,
+                               1, 0, sizeof(Buffer), 0, NULL);
+    ok(hServer != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed: %lu\n", GetLastError());
+    if (hServer == INVALID_HANDLE_VALUE)
+        return;
+    hClient = CreateFileW(PipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(hClient != INVALID_HANDLE_VALUE, "CreateFileW failed: %lu\n", GetLastError());
+    if (hClient == INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(hServer);
+        return;
+    }
+
+    bResult = ReadFileEx(hServer, Buffer, sizeof(Buffer), &ol, ReadFileExCompletion);
+    ok_eq_bool(bResult, TRUE);
+    ok_eq_ulong(ReadFileExCalls, 0);
+
+    bResult = WriteFile(hClient, Data, sizeof(Data) - 1, &dwWritten, NULL);
+    ok_eq_bool(bResult, TRUE);
+    ok_eq_ulong(dwWritten, sizeof(Data) - 1);
+
+    dwWait = SleepEx(10000, TRUE);
+    ok_eq_ulong(dwWait, WAIT_IO_COMPLETION);
+    ok_eq_ulong(ReadFileExCalls, 1);
+    ok_eq_ulong(ReadFileExError, ERROR_SUCCESS);
+    ok_eq_ulong(ReadFileExBytes, sizeof(Data) - 1);
+    ok_eq_pointer(ReadFileExOverlapped, &ol);
+    ok(memcmp(Buffer, Data, sizeof(Data) - 1) == 0, "Unexpected data '%.16s'\n", (PCSTR)Buffer);
+
+    CloseHandle(hClient);
+    CloseHandle(hServer);
+}
+
 START_TEST(ReadFile)
 {
     CHAR FileName[MAX_PATH];
@@ -220,4 +277,6 @@ START_TEST(ReadFile)
     Test_ReadFile_async(hFile);
 
     CloseHandle(hFile);
+
+    Test_ReadFileEx_pending();
 }

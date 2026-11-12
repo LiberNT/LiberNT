@@ -909,8 +909,10 @@ BOOL HCR_GetClassNameW(REFIID riid, LPWSTR szDest, DWORD len)
 	if (HCR_RegOpenClassIDKey(riid, &hkey))
 #endif
 	{
-          if (!RegLoadMUIStringW(hkey, L"LocalizedString", szDest, len, NULL, 0, NULL) ||
-              !RegQueryValueExW(hkey, L"", 0, NULL, (LPBYTE)szDest, &len))
+          DWORD cbDest = buflen * sizeof(WCHAR);
+
+          if (!RegLoadMUIStringW(hkey, L"LocalizedString", szDest, cbDest, NULL, 0, NULL) ||
+              !RegQueryValueExW(hkey, L"", 0, NULL, (LPBYTE)szDest, &cbDest))
           {
 	    ret = TRUE;
 	  }

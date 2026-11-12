@@ -314,7 +314,7 @@ KdpNetInit(
         DispatchTable->KdpInitRoutine = KdpNetInit;
         InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
     }
-    else if (BootPhase == 1)
+    else if (BootPhase == KDP_BOOT_PHASE_BUSES)
     {
         Result = KdpNetInterface.Initialize(KeLoaderBlock);
         if (!NT_SUCCESS(Result))

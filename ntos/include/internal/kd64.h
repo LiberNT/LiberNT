@@ -110,6 +110,8 @@ KdSystemRootAvailable(
     VOID
 );
 
+extern CHAR KdpBootLogPath[128];
+
 VOID
 NTAPI
 KdInitializeBootLog(
@@ -128,9 +130,21 @@ KdShowShutdownLog(
     VOID
 );
 
+BOOLEAN
+NTAPI
+KdScreenIsBootLog(
+    VOID
+);
+
 VOID
 NTAPI
 KdEnableBugCheckDebugger(
+    VOID
+);
+
+BOOLEAN
+NTAPI
+KdBugCheckDebuggerRequested(
     VOID
 );
 
@@ -191,6 +205,12 @@ KdpTimeSlipDpcRoutine(
     IN PVOID DeferredContext,
     IN PVOID SystemArgument1,
     IN PVOID SystemArgument2
+);
+
+VOID
+NTAPI
+KdUpdateTimeSlipEvent(
+    _In_opt_ PKEVENT Event
 );
 
 //
@@ -704,14 +724,12 @@ KdpQueryDebugTimestamp(VOID);
 #define KdpQueryDebugTimestamp() KeQueryInterruptTime()
 #endif
 
-#if DBG && defined(KDBG)
 VOID NTAPI KdpLogWatchdogInitialize(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 VOID NTAPI KdpLogWatchdogDisable(VOID);
 VOID NTAPI KdpLogWatchdogNotePrint(VOID);
 VOID NTAPI KdpLogWatchdogSuspend(VOID);
 VOID NTAPI KdpLogWatchdogResume(VOID);
 VOID NTAPI KdpLogWatchdogCheck(_In_ ULONGLONG CurrentInterruptTime);
-#endif
 
 extern CHAR KdpMessageBuffer[KDP_MSG_BUFFER_SIZE];
 extern CHAR KdpPathBuffer[KDP_MSG_BUFFER_SIZE];
@@ -723,6 +741,10 @@ extern PCHAR KdPrintCircularBuffer;
 extern ULONG KdPrintBufferSize;
 extern ULONG KdPrintBufferChanges;
 extern KSPIN_LOCK KdpPrintSpinLock;
+
+VOID
+NTAPI
+KdpResetPrintLock(VOID);
 
 extern BREAKPOINT_ENTRY KdpBreakpointTable[KD_BREAKPOINT_MAX];
 extern KD_BREAKPOINT_TYPE KdpBreakpointInstruction;

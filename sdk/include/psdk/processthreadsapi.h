@@ -307,6 +307,64 @@ typedef struct _THREAD_POWER_THROTTLING_STATE
 
 #endif // (_WIN32_WINNT >= _WIN32_WINNT_WIN10_RS3) || defined(__REACTOS__)
 
+#if (_WIN32_WINNT >= 0x0600) || defined(__REACTOS__)
+
+#define PROCESS_AFFINITY_ENABLE_AUTO_UPDATE 0x00000001UL
+
+WINBASEAPI
+BOOL
+WINAPI
+SetProcessAffinityUpdateMode(
+    _In_ HANDLE hProcess,
+    _In_ DWORD dwFlags);
+
+WINBASEAPI
+BOOL
+WINAPI
+QueryProcessAffinityUpdateMode(
+    _In_ HANDLE hProcess,
+    _Out_opt_ LPDWORD lpdwFlags);
+
+#endif // (_WIN32_WINNT >= 0x0600) || defined(__REACTOS__)
+
+#if (_WIN32_WINNT >= 0x0A00) || defined(__REACTOS__)
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+GetProcessDefaultCpuSets(
+    _In_ HANDLE Process,
+    _Out_writes_to_opt_(CpuSetIdCount, *RequiredIdCount) PULONG CpuSetIds,
+    _In_ ULONG CpuSetIdCount,
+    _Always_(_Out_) PULONG RequiredIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+SetProcessDefaultCpuSets(
+    _In_ HANDLE Process,
+    _In_reads_opt_(CpuSetIdCount) const ULONG *CpuSetIds,
+    _In_ ULONG CpuSetIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+GetThreadSelectedCpuSets(
+    _In_ HANDLE Thread,
+    _Out_writes_to_opt_(CpuSetIdCount, *RequiredIdCount) PULONG CpuSetIds,
+    _In_ ULONG CpuSetIdCount,
+    _Always_(_Out_) PULONG RequiredIdCount);
+
+_Success_(return != FALSE)
+BOOL
+WINAPI
+SetThreadSelectedCpuSets(
+    _In_ HANDLE Thread,
+    _In_reads_(CpuSetIdCount) const ULONG *CpuSetIds,
+    _In_ ULONG CpuSetIdCount);
+
+#endif // (_WIN32_WINNT >= 0x0A00) || defined(__REACTOS__)
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

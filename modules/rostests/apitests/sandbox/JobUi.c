@@ -22,6 +22,8 @@
 #define CHILD_OWN_HANDLE_BLOCKED 0x2000
 #define CHILD_NOT_IN_JOB 0x4000
 #define CHILD_EXITWINDOWS_ALLOWED 0x8000
+#define CHILD_PRIVATE_ATOM_NAME 0x10000
+#define CHILD_PRIVATE_ATOM_DELETE 0x20000
 
 #define JOB_ATOM_NAME L"SbxJobUiAtom"
 
@@ -41,6 +43,8 @@ RunChild(HWND Blocked, HWND Granted)
     BOOL InJob = FALSE, Beep = FALSE;
     HWND Own;
     HGLOBAL Data;
+    ATOM Private, Deleted;
+    WCHAR Name[64];
 
     if (!IsProcessInJob(GetCurrentProcess(), NULL, &InJob) || !InJob)
         SbxChildFail(&Failures, CHILD_NOT_IN_JOB, "not in job", GetLastError());
@@ -53,8 +57,15 @@ RunChild(HWND Blocked, HWND Granted)
         SbxChildFail(&Failures, CHILD_DISPLAY_CHANGED, "ChangeDisplaySettings allowed", 0);
     if (GlobalFindAtomW(JOB_ATOM_NAME) != 0)
         SbxChildFail(&Failures, CHILD_GLOBAL_ATOM_VISIBLE, "global atom visible", 0);
-    if (GlobalAddAtomW(L"SbxJobUiChildAtom") == 0)
+    Private = GlobalAddAtomW(L"SbxJobUiChildAtom");
+    if (Private == 0)
         SbxChildFail(&Failures, CHILD_PRIVATE_ATOM_FAILED, "job-private atom", GetLastError());
+    else if (GlobalGetAtomNameW(Private, Name, ARRAYSIZE(Name)) != wcslen(L"SbxJobUiChildAtom") ||
+             wcscmp(Name, L"SbxJobUiChildAtom") != 0)
+        SbxChildFail(&Failures, CHILD_PRIVATE_ATOM_NAME, "job-private atom name", GetLastError());
+    Deleted = GlobalAddAtomW(L"SbxJobUiDeletedAtom");
+    if (Deleted == 0 || GlobalDeleteAtom(Deleted) != 0 || GlobalFindAtomW(L"SbxJobUiDeletedAtom") != 0)
+        SbxChildFail(&Failures, CHILD_PRIVATE_ATOM_DELETE, "job-private atom delete", GetLastError());
     if (ExitWindowsEx(0x80000000, 0))
         SbxChildFail(&Failures, CHILD_EXITWINDOWS_ALLOWED, "ExitWindowsEx allowed", 0);
 

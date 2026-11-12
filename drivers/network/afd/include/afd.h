@@ -277,6 +277,7 @@ typedef struct _AFD_FCB {
     PVOID SendDatagramBuffer;
     AFD_TDI_OBJECT AddressFile, Connection;
     AFD_IN_FLIGHT_REQUEST ConnectIrp, ListenIrp, ReceiveIrp, SendIrp, DisconnectIrp;
+    PIO_WORKITEM ReceiveWorkItem;
     AFD_DATA_WINDOW Send, Recv;
     UINT ReceiveWindowAllocationSize, PendingReceiveWindowSize, ReportedReceiveWindowSize;
     KMUTEX Mutex;

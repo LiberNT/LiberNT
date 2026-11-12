@@ -152,7 +152,7 @@ IsMiniNT(VOID)
 VOID WINAPI
 ServiceMain(DWORD argc, LPTSTR *argv)
 {
-    HANDLE hThread;
+    HANDLE hThread, hRpcReady;
     DWORD dwThreadId;
 
     UNREFERENCED_PARAMETER(argc);
@@ -184,14 +184,17 @@ ServiceMain(DWORD argc, LPTSTR *argv)
 
     UpdateServiceStatus(SERVICE_START_PENDING, 2);
 
+    hRpcReady = CreateEventW(NULL, TRUE, FALSE, NULL);
     hThread = CreateThread(NULL,
                            0,
                            RpcServerThread,
-                           NULL,
+                           hRpcReady,
                            0,
                            &dwThreadId);
     if (hThread != NULL)
         CloseHandle(hThread);
+    else if (hRpcReady != NULL)
+        SetEvent(hRpcReady);
 
     UpdateServiceStatus(SERVICE_START_PENDING, 3);
 
@@ -205,6 +208,12 @@ ServiceMain(DWORD argc, LPTSTR *argv)
         CloseHandle(hThread);
     else
         SetEvent(hBootInstallComplete);
+
+    if (hRpcReady != NULL)
+    {
+        WaitForSingleObject(hRpcReady, INFINITE);
+        CloseHandle(hRpcReady);
+    }
 
     UpdateServiceStatus(SERVICE_RUNNING, 0);
 

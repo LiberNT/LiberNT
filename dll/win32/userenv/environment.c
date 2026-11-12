@@ -439,6 +439,7 @@ SetSystemEnvironment(PWSTR* Environment)
     if (Error != ERROR_SUCCESS)
     {
         DPRINT1("RegOpenKeyExW() failed (Error %ld)\n", Error);
+        SetLastError((DWORD)Error);
         return FALSE;
     }
 
@@ -458,6 +459,7 @@ SetSystemEnvironment(PWSTR* Environment)
     {
         DPRINT1("RegQueryInforKey() failed (Error %ld)\n", Error);
         RegCloseKey(hEnvKey);
+        SetLastError((DWORD)Error);
         return FALSE;
     }
 
@@ -593,6 +595,7 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     if (!SetSystemEnvironment(Environment))
     {
         RtlDestroyEnvironment(*Environment);
+        *Environment = NULL;
         return FALSE;
     }
 
@@ -704,13 +707,10 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     if (hToken == NULL)
         return TRUE;
 
+    /* The user's own variables come only with the user's profile loaded (CreateEnvironmentBlock) */
     hKeyUser = GetCurrentUserKey(hToken);
     if (hKeyUser == NULL)
-    {
-        DPRINT1("GetCurrentUserKey() failed\n");
-        RtlDestroyEnvironment(*Environment);
-        return FALSE;
-    }
+        return TRUE;
 
     /* Set 'USERPROFILE' variable */
     Length = ARRAYSIZE(Buffer);

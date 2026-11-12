@@ -13,7 +13,7 @@
 #elif defined(_M_AMD64)
 #define CONTEXT_PC(Context) ((Context)->Rip)
 #define CONTEXT_SP(Context) ((Context)->Rsp)
-#elif defined(_M_ARM64)
+#elif defined(_M_ARM64) || defined(_M_RISCV64)
 #define CONTEXT_PC(Context) ((Context)->Pc)
 #define CONTEXT_SP(Context) ((Context)->Sp)
 #endif

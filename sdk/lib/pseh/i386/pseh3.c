@@ -113,6 +113,10 @@ _SEH3$_Unregister(
             CurrentFrame = CurrentFrame->Next;
         }
 
+        /* The except handler unregisters a frame before jumping to its __except block, the auto cleanup does it again */
+        if (CurrentFrame->EndOfChain == Frame->Next)
+            return;
+
         /* Make sure the head frame points to our frame */
         ASSERT(CurrentFrame->EndOfChain == Frame);
 
@@ -196,6 +200,10 @@ __attribute__((regparm(1)))
 _SEH3$_C_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame)
 {
+    /* A __finally that ran inline on a normal exit has already left its frame */
+    if (Frame->ScopeTable == NULL)
+        return;
+
     _SEH3$_Unregister(Frame);
 
     /* Check for __finally frames */
@@ -214,6 +222,10 @@ __attribute__((regparm(1)))
 _SEH3$_CPP_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame)
 {
+    /* A __finally that ran inline on a normal exit has already left its frame */
+    if (Frame->ScopeTable == NULL)
+        return;
+
     if (Frame->Handler)
         _SEH3$_UnregisterFrame(Frame);
     else

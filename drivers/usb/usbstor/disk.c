@@ -15,7 +15,31 @@
 #include <debug.h>
 
 // See CORE-10515 and CORE-10755
-#define USBSTOR_DEFAULT_MAX_PHYS_PAGES    (USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH / PAGE_SIZE + 1)
+static
+PFDO_DEVICE_EXTENSION
+USBSTOR_FdoFromDevice(
+    IN PDEVICE_OBJECT DeviceObject)
+{
+    PUSBSTOR_COMMON_DEVICE_EXTENSION Common = DeviceObject->DeviceExtension;
+    PFDO_DEVICE_EXTENSION FdoExtension;
+
+    if (Common->IsFDO)
+        FdoExtension = (PFDO_DEVICE_EXTENSION)Common;
+    else
+        FdoExtension = ((PPDO_DEVICE_EXTENSION)Common)->LowerDeviceObject->DeviceExtension;
+    ASSERT(FdoExtension->Common.IsFDO);
+    ASSERT(FdoExtension->MaxTransferLength == USBSTOR_USB2_MAX_TRANSFER_LENGTH ||
+           FdoExtension->MaxTransferLength == USBSTOR_USB3_MAX_TRANSFER_LENGTH);
+    return FdoExtension;
+}
+
+static
+ULONG
+USBSTOR_MaxPhysicalPages(
+    IN PFDO_DEVICE_EXTENSION FdoExtension)
+{
+    return FdoExtension->MaxTransferLength / PAGE_SIZE + 1;
+}
 
 static NTSTATUS USBSTOR_DumpCommand(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext, _In_reads_bytes_(CdbLength) PUCHAR Cdb, _In_ UCHAR CdbLength, _Inout_updates_bytes_opt_(DataLength) PVOID DataBuffer, _In_ PHYSICAL_ADDRESS DataPhysicalAddress, _In_ BOOLEAN DataIsPhysical, _In_ ULONG DataLength, _In_ BOOLEAN DataIn)
 {
@@ -211,10 +235,9 @@ IsRequestValid(PIRP Irp)
             return FALSE;
         }
 
-        if (TransferLength > USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH)
+        if (TransferLength > USBSTOR_FdoFromDevice(IoStack->DeviceObject)->MaxTransferLength)
         {
-            DPRINT1("IsRequestValid: Invalid Srb. TransferLength > %lu\n",
-                    (ULONG)USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH);
+            DPRINT1("IsRequestValid: Invalid Srb. TransferLength %lu is too long\n", TransferLength);
             return FALSE;
         }
     }
@@ -475,9 +498,9 @@ USBSTOR_HandleQueryProperty(
             FieldLengthSerialNumber = 0;
         }
 
-        // total length required is sizeof(STORAGE_DEVICE_DESCRIPTOR) + FieldLength + 4 extra null bytes - 1
-        // -1 due STORAGE_DEVICE_DESCRIPTOR contains one byte length of parameter data
-        TotalLength = sizeof(STORAGE_DEVICE_DESCRIPTOR) + FieldLengthVendor + FieldLengthProduct + FieldLengthRevision + FieldLengthSerialNumber + 3;
+        TotalLength = FIELD_OFFSET(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties) + INQUIRYDATABUFFERSIZE +
+                      FieldLengthVendor + FieldLengthProduct + FieldLengthRevision + 3 +
+                      (FieldLengthSerialNumber > 0 ? FieldLengthSerialNumber + 1 : 0);
 
         // initialize the device descriptor
         DeviceDescriptor = ExAllocatePoolZero(NonPagedPool, TotalLength, USB_STOR_TAG);
@@ -493,14 +516,15 @@ USBSTOR_HandleQueryProperty(
         DeviceDescriptor->RemovableMedia = InquiryData->RemovableMedia;
         DeviceDescriptor->CommandQueueing = FALSE;
         DeviceDescriptor->BusType = BusTypeUsb;
-        DeviceDescriptor->VendorIdOffset = sizeof(STORAGE_DEVICE_DESCRIPTOR) - sizeof(UCHAR);
+        DeviceDescriptor->VendorIdOffset = FIELD_OFFSET(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties) + INQUIRYDATABUFFERSIZE;
         DeviceDescriptor->ProductIdOffset = DeviceDescriptor->VendorIdOffset + FieldLengthVendor + 1;
         DeviceDescriptor->ProductRevisionOffset = DeviceDescriptor->ProductIdOffset + FieldLengthProduct + 1;
         DeviceDescriptor->SerialNumberOffset = (FieldLengthSerialNumber > 0 ? DeviceDescriptor->ProductRevisionOffset + FieldLengthRevision + 1 : 0);
-        DeviceDescriptor->RawPropertiesLength = FieldLengthVendor + FieldLengthProduct + FieldLengthRevision + FieldLengthSerialNumber + 3 + (FieldLengthSerialNumber > 0 ? + 1 : 0);
+        DeviceDescriptor->RawPropertiesLength = INQUIRYDATABUFFERSIZE;
+        RtlCopyMemory(DeviceDescriptor->RawDeviceProperties, InquiryData, INQUIRYDATABUFFERSIZE);
 
         // copy descriptors
-        Buffer = (PUCHAR)((ULONG_PTR)DeviceDescriptor + sizeof(STORAGE_DEVICE_DESCRIPTOR) - sizeof(UCHAR));
+        Buffer = (PUCHAR)DeviceDescriptor + DeviceDescriptor->VendorIdOffset;
 
         RtlCopyMemory(Buffer, InquiryData->VendorId, FieldLengthVendor);
         Buffer[FieldLengthVendor] = '\0';
@@ -520,7 +544,7 @@ USBSTOR_HandleQueryProperty(
 
             AnsiString.Buffer = (PCHAR)Buffer;
             AnsiString.Length = 0;
-            AnsiString.MaximumLength = FieldLengthSerialNumber * sizeof(WCHAR);
+            AnsiString.MaximumLength = (USHORT)(FieldLengthSerialNumber + 1);
 
             Status = RtlUnicodeStringToAnsiString(&AnsiString, &SerialNumber, FALSE);
             ASSERT(Status == STATUS_SUCCESS);
@@ -532,6 +556,12 @@ USBSTOR_HandleQueryProperty(
         DPRINT("Serial %s\n", (LPCSTR)((ULONG_PTR)DeviceDescriptor + DeviceDescriptor->SerialNumberOffset));
 
         TotalLength = min(TotalLength, IoStack->Parameters.DeviceIoControl.OutputBufferLength);
+        if (TotalLength < DeviceDescriptor->VendorIdOffset)
+        {
+            DeviceDescriptor->RawPropertiesLength =
+                (TotalLength > FIELD_OFFSET(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties)) ?
+                TotalLength - FIELD_OFFSET(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties) : 0;
+        }
         RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, DeviceDescriptor, TotalLength);
         ExFreePoolWithTag(DeviceDescriptor, USB_STOR_TAG);
 
@@ -560,6 +590,7 @@ USBSTOR_HandleQueryProperty(
 
         // get adapter descriptor, information is returned in the same buffer
         AdapterDescriptor = Irp->AssociatedIrp.SystemBuffer;
+        FDODeviceExtension = USBSTOR_FdoFromDevice(DeviceObject);
 
         // fill out descriptor
         // NOTE: STORAGE_ADAPTER_DESCRIPTOR_WIN8 may vary in size, so it's important to zero out
@@ -567,11 +598,11 @@ USBSTOR_HandleQueryProperty(
         *AdapterDescriptor = (STORAGE_ADAPTER_DESCRIPTOR_WIN8) {
             .Version = sizeof(STORAGE_ADAPTER_DESCRIPTOR_WIN8),
             .Size = sizeof(STORAGE_ADAPTER_DESCRIPTOR_WIN8),
-            .MaximumTransferLength = USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH,
-            .MaximumPhysicalPages = USBSTOR_DEFAULT_MAX_PHYS_PAGES,
+            .MaximumTransferLength = FDODeviceExtension->MaxTransferLength,
+            .MaximumPhysicalPages = USBSTOR_MaxPhysicalPages(FDODeviceExtension),
             .BusType = BusTypeUsb,
-            .BusMajorVersion = 2, //FIXME verify
-            .BusMinorVersion = 0 //FIXME
+            .BusMajorVersion = 2,
+            .BusMinorVersion = 0
         };
 
         // __debugbreak();
@@ -640,8 +671,8 @@ USBSTOR_HandleDeviceControl(
 
             Status = SptiHandleScsiPassthru(DeviceObject,
                                             Irp,
-                                            USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH,
-                                            USBSTOR_DEFAULT_MAX_PHYS_PAGES);
+                                            USBSTOR_FdoFromDevice(DeviceObject)->MaxTransferLength,
+                                            USBSTOR_MaxPhysicalPages(USBSTOR_FdoFromDevice(DeviceObject)));
             break;
         }
         case IOCTL_STORAGE_GET_MEDIA_SERIAL_NUMBER:
@@ -668,8 +699,8 @@ USBSTOR_HandleDeviceControl(
 
             if (Capabilities)
             {
-                Capabilities->MaximumTransferLength = USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH;
-                Capabilities->MaximumPhysicalPages = USBSTOR_DEFAULT_MAX_PHYS_PAGES;
+                Capabilities->MaximumTransferLength = USBSTOR_FdoFromDevice(DeviceObject)->MaxTransferLength;
+                Capabilities->MaximumPhysicalPages = USBSTOR_MaxPhysicalPages(USBSTOR_FdoFromDevice(DeviceObject));
                 Capabilities->SupportedAsynchronousEvents = 0;
                 Capabilities->AlignmentMask = 0;
                 Capabilities->TaggedQueuing = FALSE;

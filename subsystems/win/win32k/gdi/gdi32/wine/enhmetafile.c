@@ -62,6 +62,9 @@ typedef struct
 {
     ENHMETAHEADER  *emh;
     BOOL           on_disk;   /* true if metafile is on disk */
+#ifdef __REACTOS__
+    HANDLE         file;
+#endif
 } ENHMETAFILEOBJ;
 
 static const struct emr_name {
@@ -283,11 +286,32 @@ HENHMETAFILE EMF_Create_HENHMETAFILE(ENHMETAHEADER *emh, DWORD filesize, BOOL on
 
     metaObj->emh = emh;
     metaObj->on_disk = on_disk;
+#ifdef __REACTOS__
+    metaObj->file = NULL;
+#endif
 
     if (!(hmf = alloc_gdi_handle( metaObj, OBJ_ENHMETAFILE, NULL )))
         HeapFree( GetProcessHeap(), 0, metaObj );
     return hmf;
 }
+
+#ifdef __REACTOS__
+/* A metafile recorded to disk keeps its file open for reading until it is deleted */
+VOID EMF_KeepFile( HENHMETAFILE hmf, HANDLE file )
+{
+    ENHMETAFILEOBJ *metaObj;
+
+    EnterCriticalSection( &enhmetafile_cs );
+    metaObj = GDI_GetObjPtr( hmf, OBJ_ENHMETAFILE );
+    if (metaObj)
+    {
+        metaObj->file = file;
+        GDI_ReleaseObj( hmf );
+    }
+    else CloseHandle( file );
+    LeaveCriticalSection( &enhmetafile_cs );
+}
+#endif
 
 /****************************************************************************
  *          EMF_Delete_HENHMETAFILE
@@ -305,6 +329,9 @@ static BOOL EMF_Delete_HENHMETAFILE( HENHMETAFILE hmf )
             UnmapViewOfFile( metaObj->emh );
         else
             HeapFree( GetProcessHeap(), 0, metaObj->emh );
+#ifdef __REACTOS__
+        if (metaObj->file) CloseHandle( metaObj->file );
+#endif
         HeapFree( GetProcessHeap(), 0, metaObj );
         Ret = TRUE;
     }

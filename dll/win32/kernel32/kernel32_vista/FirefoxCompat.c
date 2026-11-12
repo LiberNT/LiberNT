@@ -86,20 +86,6 @@ GetCurrentPackageFullName(
     return APPMODEL_ERROR_NO_PACKAGE;
 }
 
-LONG
-WINAPI
-GetCurrentApplicationUserModelId(
-    _Inout_ UINT32 *applicationUserModelIdLength,
-    _Out_writes_opt_(*applicationUserModelIdLength) PWSTR applicationUserModelId)
-{
-    UNREFERENCED_PARAMETER(applicationUserModelId);
-
-    if (!applicationUserModelIdLength)
-        return ERROR_INVALID_PARAMETER;
-
-    return APPMODEL_ERROR_NO_APPLICATION;
-}
-
 typedef struct _K32_COPYFILE2_EXTENDED_PARAMETERS
 {
     DWORD dwSize;

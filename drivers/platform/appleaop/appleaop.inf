@@ -1,0 +1,45 @@
+; PROJECT:     LiberNT Apple AOP Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 11/11/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%AppleAop.DeviceDesc% = AppleAop_Inst,FDT\apple_t8103-aop
+%AppleAop.DeviceDesc% = AppleAop_Inst,FDT\apple_t8112-aop
+%AppleAop.DeviceDesc% = AppleAop_Inst,FDT\apple_t6000-aop
+%AppleAop.DeviceDesc% = AppleAop_Inst,FDT\apple_t6020-aop
+
+[AppleAop_Inst.NT]
+CopyFiles = AppleAop_CopyFiles
+
+[AppleAop_CopyFiles]
+appleaop.sys
+
+[AppleAop_Inst.NT.Services]
+AddService = appleaop,0x00000002,AppleAop_Service
+
+[AppleAop_Service]
+DisplayName = %AppleAop.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\appleaop.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleAop.DeviceDesc = "Apple Always-On Processor"
+AppleAop.ServiceDesc = "Apple AOP Driver"

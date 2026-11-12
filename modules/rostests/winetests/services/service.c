@@ -512,8 +512,8 @@ static inline void test_no_stop(void)
     }
     expect_event("RUNNING");
 
-    /* Let service thread terminate */
-    Sleep(1000);
+    /* Let service thread terminate: ServiceMain returns right after reporting RUNNING */
+    Sleep(50);
 
     res = QueryServiceStatus(service_handle, &status);
     ok(res, "QueryServiceStatus failed: %lu\n", GetLastError());

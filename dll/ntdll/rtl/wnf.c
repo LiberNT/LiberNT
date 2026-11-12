@@ -175,3 +175,27 @@ WinSqmEventEnabled(
 
     return FALSE;
 }
+
+HANDLE
+NTAPI
+WinSqmStartSession(
+    _In_opt_ GUID *SessionGuid,
+    _In_ ULONG SessionId,
+    _In_ ULONG Unknown)
+{
+    UNREFERENCED_PARAMETER(SessionGuid);
+    UNREFERENCED_PARAMETER(SessionId);
+    UNREFERENCED_PARAMETER(Unknown);
+
+    return INVALID_HANDLE_VALUE;
+}
+
+NTSTATUS
+NTAPI
+WinSqmEndSession(
+    _In_opt_ HANDLE Session)
+{
+    UNREFERENCED_PARAMETER(Session);
+
+    return STATUS_NOT_IMPLEMENTED;
+}

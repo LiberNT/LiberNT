@@ -15,7 +15,7 @@
 #include <wdmguid.h>
 #include <acpiioct.h>
 #include <reactos/drivers/reshubio.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 #define RISCV_PLATFORM_FDO 0x52504644UL
@@ -53,7 +53,7 @@ typedef struct _RISCV_PLATFORM_EXTENSION
     PDEVICE_OBJECT Children[RISCV_PLATFORM_MAX_CHILDREN];
 } RISCV_PLATFORM_EXTENSION;
 
-typedef struct _RISCV_FDT_DEVICE
+typedef struct _FDT_DEVICE
 {
     ULONG MemoryCount;
     ULONG64 MemoryBase[RISCV_PLATFORM_MAX_MEMORY];
@@ -64,10 +64,10 @@ typedef struct _RISCV_FDT_DEVICE
     ULONG GpioController[RISCV_PLATFORM_MAX_GPIOS];
     USHORT GpioPin[RISCV_PLATFORM_MAX_GPIOS];
     ULONG64 GpioConnectionId[RISCV_PLATFORM_MAX_GPIOS];
-} RISCV_FDT_DEVICE;
+} FDT_DEVICE;
 
-static RISCV_FDT HalpRiscvPlatformFdt;
-static ULONG HalpRiscvPlatformSoc = RISCV_FDT_NO_NODE;
+static FDT HalpRiscvPlatformFdt;
+static ULONG HalpRiscvPlatformSoc = FDT_NO_NODE;
 static BOOLEAN HalpRiscvPlatformFdtOpen;
 static PDRIVER_OBJECT HalpRiscvPlatformDriver;
 static ULONG64 HalpRiscvDebuggerBase;
@@ -77,7 +77,7 @@ static ULONG
 HalpRiscvFdtFindPhandle(_In_ ULONG Phandle);
 
 static BOOLEAN
-HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *Device);
+HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ FDT_DEVICE *Device);
 
 static NTSTATUS
 HalpRiscvCopyId(_In_reads_bytes_(Size) const WCHAR *Source,
@@ -98,29 +98,29 @@ HalpRiscvFdtHas(_In_ ULONG Node, _In_z_ const CHAR *Name)
 {
     ULONG Length;
 
-    return RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, Name, &Length) != NULL;
+    return FdtGetProperty(&HalpRiscvPlatformFdt, Node, Name, &Length) != NULL;
 }
 
 static BOOLEAN
 HalpRiscvFdtEnabled(_In_ ULONG Node)
 {
     ULONG Length;
-    const VOID *Property = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "status", &Length);
+    const VOID *Property = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "status", &Length);
 
-    return !Property || RiscvFdtStringListContains(Property, Length, "okay") ||
-           RiscvFdtStringListContains(Property, Length, "ok");
+    return !Property || FdtStringListContains(Property, Length, "okay") ||
+           FdtStringListContains(Property, Length, "ok");
 }
 
 static BOOLEAN
 HalpRiscvFdtIsSimpleBus(_In_ ULONG Node)
 {
     ULONG Length;
-    const VOID *Property = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
+    const VOID *Property = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
 
-    if (!Property || !RiscvFdtStringListContains(Property, Length, "simple-bus") ||
+    if (!Property || !FdtStringListContains(Property, Length, "simple-bus") ||
         !HalpRiscvFdtEnabled(Node))
         return FALSE;
-    Property = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "ranges", &Length);
+    Property = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "ranges", &Length);
     return Property && !Length;
 }
 
@@ -128,7 +128,7 @@ static VOID
 HalpRiscvFdtDmaTopology(_In_reads_(Depth) const ULONG *Path, _In_ ULONG Depth,
                         _Out_ RISCV_DMA_TOPOLOGY *Topology)
 {
-    const RISCV_FDT *Fdt = &HalpRiscvPlatformFdt;
+    const FDT *Fdt = &HalpRiscvPlatformFdt;
     ULONG Index;
 
     RtlZeroMemory(Topology, sizeof(*Topology));
@@ -147,21 +147,21 @@ HalpRiscvFdtDmaTopology(_In_reads_(Depth) const ULONG *Path, _In_ ULONG Depth,
     for (Index = Depth - 1; Index-- > 1;)
     {
         ULONG Length, ChildCells, SizeCells, ParentCells, Unused, Stride, Entry;
-        const VOID *Property = RiscvFdtGetProperty(Fdt, Path[Index], "dma-ranges", &Length);
+        const VOID *Property = FdtGetProperty(Fdt, Path[Index], "dma-ranges", &Length);
 
         if (!Property || !Length)
             continue;
-        RiscvFdtGetCellCounts(Fdt, Path[Index], &ChildCells, &SizeCells);
-        RiscvFdtGetCellCounts(Fdt, Path[Index - 1], &ParentCells, &Unused);
+        FdtGetCellCounts(Fdt, Path[Index], &ChildCells, &SizeCells);
+        FdtGetCellCounts(Fdt, Path[Index - 1], &ParentCells, &Unused);
         Stride = ChildCells + ParentCells + SizeCells;
         for (Entry = 0; Entry < Length / (Stride * sizeof(ULONG)) &&
                         Topology->WindowCount < RISCV_DMA_MAX_WINDOWS; ++Entry)
         {
             ULONG64 Bus, Cpu, Size;
 
-            if (!RiscvFdtReadCells(Property, Length, Entry * Stride, ChildCells, &Bus) ||
-                !RiscvFdtReadCells(Property, Length, Entry * Stride + ChildCells, ParentCells, &Cpu) ||
-                !RiscvFdtReadCells(Property, Length, Entry * Stride + ChildCells + ParentCells,
+            if (!FdtReadCells(Property, Length, Entry * Stride, ChildCells, &Bus) ||
+                !FdtReadCells(Property, Length, Entry * Stride + ChildCells, ParentCells, &Cpu) ||
+                !FdtReadCells(Property, Length, Entry * Stride + ChildCells + ParentCells,
                                    SizeCells, &Size) || !Size)
                 continue;
             Topology->BusBase[Topology->WindowCount] = Bus;
@@ -178,10 +178,10 @@ HalpRiscvFdtIsI2cController(_In_ ULONG Node)
     const CHAR *List, *Entry;
     ULONG Length, Cursor = 0, EntryLength, Index;
 
-    if (Node == RISCV_FDT_NO_NODE)
+    if (Node == FDT_NO_NODE)
         return FALSE;
-    List = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    List = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         for (Index = 0; Index + 3 <= EntryLength; ++Index)
         {
@@ -200,13 +200,13 @@ HalpRiscvFdtIsUartController(_In_ ULONG Node)
     const CHAR *List, *Entry, *Name;
     ULONG Length, Cursor = 0, EntryLength, Index, NameLength = 0;
 
-    if (Node == RISCV_FDT_NO_NODE)
+    if (Node == FDT_NO_NODE)
         return FALSE;
-    Name = RiscvFdtNodeName(&HalpRiscvPlatformFdt, Node, &NameLength);
+    Name = FdtNodeName(&HalpRiscvPlatformFdt, Node, &NameLength);
     if (Name && NameLength >= 6 && RtlEqualMemory(Name, "serial", 6) && (NameLength == 6 || Name[6] == '@'))
         return TRUE;
-    List = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    List = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         for (Index = 0; Index + 4 <= EntryLength; ++Index)
         {
@@ -259,28 +259,28 @@ HalpRiscvFdtGpioConnectionId(_In_ ULONG Node, _In_z_ const CHAR *Name, _In_ ULON
 }
 
 static VOID
-HalpRiscvFdtCollectGpios(_In_ ULONG Node, _In_ ULONG Depth, _Inout_ RISCV_FDT_DEVICE *Device)
+HalpRiscvFdtCollectGpios(_In_ ULONG Node, _In_ ULONG Depth, _Inout_ FDT_DEVICE *Device)
 {
-    const RISCV_FDT *Fdt = &HalpRiscvPlatformFdt;
+    const FDT *Fdt = &HalpRiscvPlatformFdt;
     ULONG Offset, Child, Length;
     const VOID *Status;
 
-    if (RiscvFdtToken(Fdt, Node) != RISCV_FDT_BEGIN_NODE)
+    if (FdtReadToken(Fdt, Node) != FDT_BEGIN_NODE)
         return;
-    for (Offset = RiscvFdtSkipToken(Fdt, Node); Offset != RISCV_FDT_NO_NODE; Offset = RiscvFdtSkipToken(Fdt, Offset))
+    for (Offset = FdtSkipToken(Fdt, Node); Offset != FDT_NO_NODE; Offset = FdtSkipToken(Fdt, Offset))
     {
-        ULONG Token = RiscvFdtToken(Fdt, Offset);
+        ULONG Token = FdtReadToken(Fdt, Offset);
         const UCHAR *Header, *Value;
         ULONG ValueLength, NameOffset, Cell, Cells, Specifier = 0;
         const CHAR *Name;
 
-        if (Token == RISCV_FDT_NOP)
+        if (Token == FDT_NOP)
             continue;
-        if (Token != RISCV_FDT_PROPERTY || Offset > Fdt->StructureSize - 3 * sizeof(ULONG))
+        if (Token != FDT_PROPERTY || Offset > Fdt->StructureSize - 3 * sizeof(ULONG))
             break;
         Header = Fdt->Blob + Fdt->StructureOffset + Offset + sizeof(ULONG);
-        ValueLength = RiscvFdtReadBigEndian32(Header);
-        NameOffset = RiscvFdtReadBigEndian32(Header + sizeof(ULONG));
+        ValueLength = FdtReadBigEndian32(Header);
+        NameOffset = FdtReadBigEndian32(Header + sizeof(ULONG));
         if (NameOffset >= Fdt->StringsSize || ValueLength > Fdt->StructureSize - (Offset + 3 * sizeof(ULONG)))
             break;
         Name = (const CHAR *)(Fdt->Blob + Fdt->StringsOffset + NameOffset);
@@ -290,7 +290,7 @@ HalpRiscvFdtCollectGpios(_In_ ULONG Node, _In_ ULONG Depth, _Inout_ RISCV_FDT_DE
         Cells = ValueLength / sizeof(ULONG);
         for (Cell = 0; Cell < Cells; ++Specifier)
         {
-            ULONG Phandle = RiscvFdtReadBigEndian32(Value + Cell * sizeof(ULONG));
+            ULONG Phandle = FdtReadBigEndian32(Value + Cell * sizeof(ULONG));
             ULONG Controller, GpioCells = 2;
 
             if (!Phandle)
@@ -299,15 +299,15 @@ HalpRiscvFdtCollectGpios(_In_ ULONG Node, _In_ ULONG Depth, _Inout_ RISCV_FDT_DE
                 continue;
             }
             Controller = HalpRiscvFdtFindPhandle(Phandle);
-            if (Controller == RISCV_FDT_NO_NODE)
+            if (Controller == FDT_NO_NODE)
                 break;
-            RiscvFdtReadU32(Fdt, Controller, "#gpio-cells", &GpioCells);
+            FdtReadU32(Fdt, Controller, "#gpio-cells", &GpioCells);
             if (!GpioCells || GpioCells > Cells - Cell - 1)
                 break;
-            if (RiscvFdtGetProperty(Fdt, Controller, "gpio-controller", &Length) &&
+            if (FdtGetProperty(Fdt, Controller, "gpio-controller", &Length) &&
                 Device->GpioCount < RISCV_PLATFORM_MAX_GPIOS)
             {
-                ULONG Pin = RiscvFdtReadBigEndian32(Value + (Cell + 1) * sizeof(ULONG));
+                ULONG Pin = FdtReadBigEndian32(Value + (Cell + 1) * sizeof(ULONG));
 
                 if (Pin <= MAXUSHORT)
                 {
@@ -322,11 +322,11 @@ HalpRiscvFdtCollectGpios(_In_ ULONG Node, _In_ ULONG Depth, _Inout_ RISCV_FDT_DE
     }
     if (Depth >= RISCV_PLATFORM_GPIO_DEPTH)
         return;
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE; Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
     {
-        Status = RiscvFdtGetProperty(Fdt, Child, "status", &Length);
-        if (Status && !RiscvFdtStringListContains(Status, Length, "okay") &&
-            !RiscvFdtStringListContains(Status, Length, "ok"))
+        Status = FdtGetProperty(Fdt, Child, "status", &Length);
+        if (Status && !FdtStringListContains(Status, Length, "okay") &&
+            !FdtStringListContains(Status, Length, "ok"))
             continue;
         HalpRiscvFdtCollectGpios(Child, Depth + 1, Device);
     }
@@ -398,7 +398,7 @@ static VOID
 HalpRiscvFdtRegisterConnections(_In_ ULONG Node, _In_ ULONG Bus)
 {
     static const UNICODE_STRING ResourceHubName = RTL_CONSTANT_STRING(RESOURCE_HUB_DEVICE_NAME);
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PFILE_OBJECT FileObject;
     PDEVICE_OBJECT HubDevice, Controller;
     UCHAR SerialBus = HalpRiscvFdtSerialBusType(Bus);
@@ -439,9 +439,9 @@ HalpRiscvFdtRegisterConnections(_In_ ULONG Node, _In_ ULONG Bus)
     {
         UCHAR Descriptor[RISCV_ACPI_UART_DESCRIPTOR_LENGTH] = { 0 };
         ULONG Speed = RISCV_UART_DEFAULT_SPEED, Length;
-        BOOLEAN RtsCts = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Bus, "uart-has-rtscts", &Length) != NULL;
+        BOOLEAN RtsCts = FdtGetProperty(&HalpRiscvPlatformFdt, Bus, "uart-has-rtscts", &Length) != NULL;
 
-        RiscvFdtReadU32(&HalpRiscvPlatformFdt, Node, "max-speed", &Speed);
+        FdtReadU32(&HalpRiscvPlatformFdt, Node, "max-speed", &Speed);
         Descriptor[0] = 0x8E;
         Descriptor[1] = RISCV_ACPI_UART_DESCRIPTOR_LENGTH - 3;
         Descriptor[3] = 2;
@@ -464,8 +464,8 @@ HalpRiscvFdtRegisterConnections(_In_ ULONG Node, _In_ ULONG Bus)
         UCHAR Descriptor[RISCV_ACPI_I2C_DESCRIPTOR_LENGTH] = { 0 };
         ULONG Address = 0, Speed = RISCV_I2C_DEFAULT_SPEED;
 
-        RiscvFdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address);
-        RiscvFdtReadU32(&HalpRiscvPlatformFdt, Bus, "clock-frequency", &Speed);
+        FdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address);
+        FdtReadU32(&HalpRiscvPlatformFdt, Bus, "clock-frequency", &Speed);
         Descriptor[0] = 0x8E;
         Descriptor[1] = RISCV_ACPI_I2C_DESCRIPTOR_LENGTH - 3;
         Descriptor[3] = 2;
@@ -487,31 +487,31 @@ HalpRiscvFdtRegisterConnections(_In_ ULONG Node, _In_ ULONG Bus)
 }
 
 static BOOLEAN
-HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *Device)
+HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ FDT_DEVICE *Device)
 {
-    const RISCV_FDT *Fdt = &HalpRiscvPlatformFdt;
+    const FDT *Fdt = &HalpRiscvPlatformFdt;
     const VOID *Property;
     ULONG Length, Index, Parent;
     ULONG64 Address, Size;
 
     RtlZeroMemory(Device, sizeof(*Device));
-    Property = RiscvFdtGetProperty(Fdt, Node, "status", &Length);
-    if (Property && !RiscvFdtStringListContains(Property, Length, "okay") &&
-        !RiscvFdtStringListContains(Property, Length, "ok"))
+    Property = FdtGetProperty(Fdt, Node, "status", &Length);
+    if (Property && !FdtStringListContains(Property, Length, "okay") &&
+        !FdtStringListContains(Property, Length, "ok"))
         return FALSE;
-    Property = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
+    Property = FdtGetProperty(Fdt, Node, "compatible", &Length);
     if (!Property || Length < 2 || ((const CHAR *)Property)[Length - 1] != '\0' ||
-        RiscvFdtStringListContains(Property, Length, "pci-host-ecam-generic") ||
-        RiscvFdtStringListContains(Property, Length, "starfive,jh7110-pcie") ||
-        RiscvFdtStringListContains(Property, Length, "google,goldfish-rtc") ||
-        (RiscvFdtGetProperty(Fdt, Node, "interrupt-controller", &Length) &&
-         !RiscvFdtGetProperty(Fdt, Node, "gpio-controller", &Length)))
+        FdtStringListContains(Property, Length, "pci-host-ecam-generic") ||
+        FdtStringListContains(Property, Length, "starfive,jh7110-pcie") ||
+        FdtStringListContains(Property, Length, "google,goldfish-rtc") ||
+        (FdtGetProperty(Fdt, Node, "interrupt-controller", &Length) &&
+         !FdtGetProperty(Fdt, Node, "gpio-controller", &Length)))
         return FALSE;
     HalpRiscvFdtCollectGpios(Node, 0, Device);
 
     for (Index = 0; Index < RISCV_PLATFORM_MAX_MEMORY; ++Index)
     {
-        if (!RiscvFdtReadReg(Fdt, Node, Bus, Index, &Address, &Size))
+        if (!FdtReadReg(Fdt, Node, Bus, Index, &Address, &Size))
             break;
         if (!Size || Size > MAXULONG || Address + Size < Address)
             continue;
@@ -519,15 +519,15 @@ HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *De
         Device->MemorySize[Device->MemoryCount++] = Size;
     }
 
-    Property = RiscvFdtGetProperty(Fdt, Node, "interrupts-extended", &Length);
+    Property = FdtGetProperty(Fdt, Node, "interrupts-extended", &Length);
     if (Property)
     {
         if (Length % (2 * sizeof(ULONG)))
             return FALSE;
         for (Index = 0; Index < Length / (2 * sizeof(ULONG)); ++Index)
         {
-            ULONG Phandle = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * 2 * sizeof(ULONG));
-            ULONG Source = RiscvFdtReadBigEndian32((const UCHAR *)Property + (Index * 2 + 1) * sizeof(ULONG));
+            ULONG Phandle = FdtReadBigEndian32((const UCHAR *)Property + Index * 2 * sizeof(ULONG));
+            ULONG Source = FdtReadBigEndian32((const UCHAR *)Property + (Index * 2 + 1) * sizeof(ULONG));
 
             if (!HalpRiscvPlicHasSource(Phandle, Source))
                 return FALSE;
@@ -535,19 +535,19 @@ HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *De
                 Device->Interrupt[Device->InterruptCount++] = Source;
         }
         return Device->MemoryCount || Device->InterruptCount || Device->GpioCount ||
-               RiscvFdtFirstChild(Fdt, Node) != RISCV_FDT_NO_NODE;
+               FdtFirstChild(Fdt, Node) != FDT_NO_NODE;
     }
 
-    Property = RiscvFdtGetProperty(Fdt, Node, "interrupts", &Length);
+    Property = FdtGetProperty(Fdt, Node, "interrupts", &Length);
     if (Property && !(Length % sizeof(ULONG)) &&
-        (RiscvFdtReadU32(Fdt, Node, "interrupt-parent", &Parent) ||
-         RiscvFdtReadU32(Fdt, Bus, "interrupt-parent", &Parent) ||
-         RiscvFdtReadU32(Fdt, HalpRiscvPlatformSoc, "interrupt-parent", &Parent) ||
-         RiscvFdtReadU32(Fdt, RiscvFdtRootNode(Fdt), "interrupt-parent", &Parent)))
+        (FdtReadU32(Fdt, Node, "interrupt-parent", &Parent) ||
+         FdtReadU32(Fdt, Bus, "interrupt-parent", &Parent) ||
+         FdtReadU32(Fdt, HalpRiscvPlatformSoc, "interrupt-parent", &Parent) ||
+         FdtReadU32(Fdt, FdtRootNode(Fdt), "interrupt-parent", &Parent)))
     {
         for (Index = 0; Index < Length / sizeof(ULONG); ++Index)
         {
-            ULONG Source = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * sizeof(ULONG));
+            ULONG Source = FdtReadBigEndian32((const UCHAR *)Property + Index * sizeof(ULONG));
 
             if (HalpRiscvPlicHasSource(Parent, Source) &&
                 Device->InterruptCount < RISCV_PLATFORM_MAX_INTERRUPTS)
@@ -555,7 +555,7 @@ HalpRiscvFdtDescribe(_In_ ULONG Node, _In_ ULONG Bus, _Out_ RISCV_FDT_DEVICE *De
         }
     }
     return Device->MemoryCount || Device->InterruptCount || Device->GpioCount ||
-           RiscvFdtFirstChild(Fdt, Node) != RISCV_FDT_NO_NODE || HalpRiscvFdtSerialBusType(Bus);
+           FdtFirstChild(Fdt, Node) != FDT_NO_NODE || HalpRiscvFdtSerialBusType(Bus);
 }
 
 static NTSTATUS
@@ -566,8 +566,8 @@ HalpRiscvFdtIds(_In_ ULONG Node, _In_ BOOLEAN All, _Out_ PULONG_PTR Information)
     ULONG Length, Cursor = 0, EntryLength, Characters = 1, Index;
     PWCHAR Ids, Out;
 
-    List = RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    List = FdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length);
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         Characters += RTL_NUMBER_OF(Prefix) + EntryLength;
         if (!All)
@@ -581,7 +581,7 @@ HalpRiscvFdtIds(_In_ ULONG Node, _In_ BOOLEAN All, _Out_ PULONG_PTR Information)
         return STATUS_INSUFFICIENT_RESOURCES;
     Out = Ids;
     Cursor = 0;
-    while ((Entry = RiscvFdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
     {
         RtlCopyMemory(Out, Prefix, sizeof(Prefix) - sizeof(WCHAR));
         Out += RTL_NUMBER_OF(Prefix) - 1;
@@ -605,7 +605,7 @@ static NTSTATUS
 HalpRiscvFdtInstanceId(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Information)
 {
     static const WCHAR Digits[] = L"0123456789abcdef";
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PWCHAR Id;
     ULONG Index;
 
@@ -616,8 +616,8 @@ HalpRiscvFdtInstanceId(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Informa
         ULONG64 Base = 0, Size;
         ULONG Address = 0;
 
-        RiscvFdtReadReg(&HalpRiscvPlatformFdt, Bus, HalpRiscvPlatformSoc, 0, &Base, &Size);
-        RiscvFdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address);
+        FdtReadReg(&HalpRiscvPlatformFdt, Bus, HalpRiscvPlatformSoc, 0, &Base, &Size);
+        FdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address);
         Id = ExAllocatePoolWithTag(PagedPool, 22 * sizeof(WCHAR), RISCV_PLATFORM_TAG);
         if (!Id)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -633,7 +633,7 @@ HalpRiscvFdtInstanceId(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Informa
     if (!Device.MemoryCount)
     {
         ULONG NameLength;
-        const CHAR *Name = RiscvFdtNodeName(&HalpRiscvPlatformFdt, Node, &NameLength);
+        const CHAR *Name = FdtNodeName(&HalpRiscvPlatformFdt, Node, &NameLength);
 
         if (!Name || !NameLength || NameLength >= RISCV_PLATFORM_MAX_NAME)
             return STATUS_NO_SUCH_DEVICE;
@@ -660,7 +660,7 @@ HalpRiscvFdtInstanceId(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Informa
 static NTSTATUS
 HalpRiscvFdtResources(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Information)
 {
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PCM_RESOURCE_LIST List;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Resource;
     ULONG Count, Index;
@@ -727,7 +727,7 @@ HalpRiscvFdtResources(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Informat
 static NTSTATUS
 HalpRiscvFdtRequirements(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Information)
 {
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Resource;
     ULONG Count, Index;
@@ -796,21 +796,21 @@ HalpRiscvFdtRequirements(_In_ ULONG Node, _In_ ULONG Bus, _Out_ PULONG_PTR Infor
 static ULONG
 HalpRiscvFdtFindPhandle(_In_ ULONG Phandle)
 {
-    const RISCV_FDT *Fdt = &HalpRiscvPlatformFdt;
-    ULONG Offset = RiscvFdtRootNode(Fdt), Value;
+    const FDT *Fdt = &HalpRiscvPlatformFdt;
+    ULONG Offset = FdtRootNode(Fdt), Value;
 
     if (!Phandle || Phandle == MAXULONG)
-        return RISCV_FDT_NO_NODE;
-    while (Offset != RISCV_FDT_NO_NODE)
+        return FDT_NO_NODE;
+    while (Offset != FDT_NO_NODE)
     {
-        if (RiscvFdtToken(Fdt, Offset) == RISCV_FDT_BEGIN_NODE &&
-            RiscvFdtReadU32(Fdt, Offset, "phandle", &Value) && Value == Phandle)
+        if (FdtReadToken(Fdt, Offset) == FDT_BEGIN_NODE &&
+            FdtReadU32(Fdt, Offset, "phandle", &Value) && Value == Phandle)
         {
             return Offset;
         }
-        Offset = RiscvFdtSkipToken(Fdt, Offset);
+        Offset = FdtSkipToken(Fdt, Offset);
     }
-    return RISCV_FDT_NO_NODE;
+    return FDT_NO_NODE;
 }
 
 static VOID
@@ -823,7 +823,7 @@ HalpRiscvFdtWriteSupply(_In_ HANDLE Key, _In_ PUNICODE_STRING Name, _In_ ULONG P
     OBJECT_ATTRIBUTES Attributes;
     HANDLE SupplyKey;
 
-    if (Node == RISCV_FDT_NO_NODE)
+    if (Node == FDT_NO_NODE)
         return;
     InitializeObjectAttributes(&Attributes, Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, Key, NULL);
     if (!NT_SUCCESS(ZwCreateKey(&SupplyKey, KEY_SET_VALUE | KEY_CREATE_SUB_KEY, &Attributes, 0, NULL,
@@ -837,14 +837,14 @@ static VOID
 HalpRiscvFdtWriteNode(_In_ HANDLE Key, _In_ ULONG Node, _In_ ULONG Depth)
 {
     static const CHAR Supply[] = "-supply";
-    const RISCV_FDT *Fdt = &HalpRiscvPlatformFdt;
-    ULONG Offset = RiscvFdtSkipToken(Fdt, Node), Child;
+    const FDT *Fdt = &HalpRiscvPlatformFdt;
+    ULONG Offset = FdtSkipToken(Fdt, Node), Child;
 
-    while (Offset != RISCV_FDT_NO_NODE)
+    while (Offset != FDT_NO_NODE)
     {
-        ULONG Token = RiscvFdtToken(Fdt, Offset);
+        ULONG Token = FdtReadToken(Fdt, Offset);
 
-        if (Token == RISCV_FDT_PROPERTY)
+        if (Token == FDT_PROPERTY)
         {
             const UCHAR *Header = Fdt->Blob + Fdt->StructureOffset + Offset + sizeof(ULONG);
             WCHAR Name[RISCV_PLATFORM_MAX_NAME];
@@ -854,8 +854,8 @@ HalpRiscvFdtWriteNode(_In_ HANDLE Key, _In_ ULONG Node, _In_ ULONG Depth)
 
             if (Offset > Fdt->StructureSize - 3 * sizeof(ULONG))
                 break;
-            ValueLength = RiscvFdtReadBigEndian32(Header);
-            NameOffset = RiscvFdtReadBigEndian32(Header + sizeof(ULONG));
+            ValueLength = FdtReadBigEndian32(Header);
+            NameOffset = FdtReadBigEndian32(Header + sizeof(ULONG));
             if (NameOffset >= Fdt->StringsSize ||
                 ValueLength > Fdt->StructureSize - (Offset + 3 * sizeof(ULONG)))
                 break;
@@ -871,27 +871,27 @@ HalpRiscvFdtWriteNode(_In_ HANDLE Key, _In_ ULONG Node, _In_ ULONG Depth)
                 if (Depth && ValueLength == sizeof(ULONG) && Index > sizeof(Supply) - 1 &&
                     RtlEqualMemory(Source + Index - (sizeof(Supply) - 1), Supply, sizeof(Supply) - 1))
                 {
-                    HalpRiscvFdtWriteSupply(Key, &ValueName, RiscvFdtReadBigEndian32(Header + 2 * sizeof(ULONG)));
+                    HalpRiscvFdtWriteSupply(Key, &ValueName, FdtReadBigEndian32(Header + 2 * sizeof(ULONG)));
                 }
             }
         }
-        else if (Token != RISCV_FDT_NOP)
+        else if (Token != FDT_NOP)
         {
             break;
         }
-        Offset = RiscvFdtSkipToken(Fdt, Offset);
+        Offset = FdtSkipToken(Fdt, Offset);
     }
 
     if (!Depth)
         return;
-    for (Child = RiscvFdtFirstChild(Fdt, Node); Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node); Child != FDT_NO_NODE;
+         Child = FdtNextSibling(Fdt, Child))
     {
         WCHAR Name[RISCV_PLATFORM_MAX_NAME];
         OBJECT_ATTRIBUTES Attributes;
         UNICODE_STRING KeyName;
         ULONG NameLength, Index;
-        const CHAR *Source = RiscvFdtNodeName(Fdt, Child, &NameLength);
+        const CHAR *Source = FdtNodeName(Fdt, Child, &NameLength);
         HANDLE ChildKey;
 
         if (!Source || !NameLength || NameLength >= RISCV_PLATFORM_MAX_NAME)
@@ -976,15 +976,15 @@ HalpRiscvGetPlatformDmaTopology(_In_opt_ PDEVICE_OBJECT PhysicalDeviceObject,
     if (!HalpRiscvPlatformFdtOpen)
     {
         if (!HalpRiscvDeviceTree ||
-            !RiscvFdtOpen(HalpRiscvDeviceTree, HalpRiscvDeviceTreeSize, &HalpRiscvPlatformFdt))
+            !FdtOpen(HalpRiscvDeviceTree, HalpRiscvDeviceTreeSize, &HalpRiscvPlatformFdt))
             return FALSE;
-        if (!RiscvFdtFindNode(&HalpRiscvPlatformFdt, "/soc", &HalpRiscvPlatformSoc, &Parent) ||
-            Parent != RiscvFdtRootNode(&HalpRiscvPlatformFdt))
-            HalpRiscvPlatformSoc = RISCV_FDT_NO_NODE;
+        if (!FdtFindNode(&HalpRiscvPlatformFdt, "/soc", &HalpRiscvPlatformSoc, &Parent) ||
+            Parent != FdtRootNode(&HalpRiscvPlatformFdt))
+            HalpRiscvPlatformSoc = FDT_NO_NODE;
         HalpRiscvPlatformFdtOpen = TRUE;
     }
-    Path[0] = RiscvFdtRootNode(&HalpRiscvPlatformFdt);
-    if (HalpRiscvPlatformSoc == RISCV_FDT_NO_NODE)
+    Path[0] = FdtRootNode(&HalpRiscvPlatformFdt);
+    if (HalpRiscvPlatformSoc == FDT_NO_NODE)
     {
         Path[1] = Path[0];
         HalpRiscvFdtDmaTopology(Path, 2, Topology);
@@ -1366,16 +1366,16 @@ HalpRiscvFdtEnumerateSerialBus(_In_ PDRIVER_OBJECT DriverObject, _Inout_ RISCV_P
     RISCV_PLATFORM_EXTENSION *ControllerExtension = ControllerDevice->DeviceExtension;
     RISCV_PLATFORM_EXTENSION *ChildExtension;
     ULONG Controller = ControllerExtension->Node;
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PDEVICE_OBJECT Child;
     ULONG Node, Length, Address;
 
-    for (Node = RiscvFdtFirstChild(&HalpRiscvPlatformFdt, Controller);
-         Node != RISCV_FDT_NO_NODE && Extension->ChildCount < RISCV_PLATFORM_MAX_CHILDREN;
-         Node = RiscvFdtNextSibling(&HalpRiscvPlatformFdt, Node))
+    for (Node = FdtFirstChild(&HalpRiscvPlatformFdt, Controller);
+         Node != FDT_NO_NODE && Extension->ChildCount < RISCV_PLATFORM_MAX_CHILDREN;
+         Node = FdtNextSibling(&HalpRiscvPlatformFdt, Node))
     {
-        if (!RiscvFdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length) ||
-            (HalpRiscvFdtIsI2cController(Controller) && !RiscvFdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address)) ||
+        if (!FdtGetProperty(&HalpRiscvPlatformFdt, Node, "compatible", &Length) ||
+            (HalpRiscvFdtIsI2cController(Controller) && !FdtReadU32(&HalpRiscvPlatformFdt, Node, "reg", &Address)) ||
             !HalpRiscvFdtDescribe(Node, Controller, &Device))
             continue;
         if (!NT_SUCCESS(IoCreateDevice(DriverObject, sizeof(*Extension), NULL,
@@ -1399,13 +1399,13 @@ HalpRiscvFdtEnumerate(_In_ PDRIVER_OBJECT DriverObject, _Inout_ RISCV_PLATFORM_E
                       _Inout_updates_(RISCV_PLATFORM_MAX_DEPTH) PULONG Path, _In_ ULONG Depth)
 {
     RISCV_PLATFORM_EXTENSION *ChildExtension;
-    RISCV_FDT_DEVICE Device;
+    FDT_DEVICE Device;
     PDEVICE_OBJECT Child;
     ULONG Bus = Path[Depth - 1], Node;
 
-    for (Node = RiscvFdtFirstChild(&HalpRiscvPlatformFdt, Bus);
-         Node != RISCV_FDT_NO_NODE && Extension->ChildCount < RISCV_PLATFORM_MAX_CHILDREN;
-         Node = RiscvFdtNextSibling(&HalpRiscvPlatformFdt, Node))
+    for (Node = FdtFirstChild(&HalpRiscvPlatformFdt, Bus);
+         Node != FDT_NO_NODE && Extension->ChildCount < RISCV_PLATFORM_MAX_CHILDREN;
+         Node = FdtNextSibling(&HalpRiscvPlatformFdt, Node))
     {
         Path[Depth] = Node;
         if (HalpRiscvFdtIsSimpleBus(Node))
@@ -1446,7 +1446,7 @@ HalpRiscvPlatformAddDevice(_In_ PDRIVER_OBJECT DriverObject,
     ULONG FirstBus = 0, LastBus = 0;
     BOOLEAN HasPci = HalpRiscvGetPciBusRange(&FirstBus, &LastBus);
 
-    if (!HasPci && HalpRiscvPlatformSoc == RISCV_FDT_NO_NODE)
+    if (!HasPci && HalpRiscvPlatformSoc == FDT_NO_NODE)
         return STATUS_NO_SUCH_DEVICE;
 
     Status = IoCreateDevice(DriverObject, sizeof(*Extension), NULL,
@@ -1487,11 +1487,11 @@ HalpRiscvPlatformAddDevice(_In_ PDRIVER_OBJECT DriverObject,
         Child->Flags &= ~DO_DEVICE_INITIALIZING;
     }
 
-    if (HalpRiscvPlatformSoc != RISCV_FDT_NO_NODE)
+    if (HalpRiscvPlatformSoc != FDT_NO_NODE)
     {
         ULONG Path[RISCV_PLATFORM_MAX_DEPTH];
 
-        Path[0] = RiscvFdtRootNode(&HalpRiscvPlatformFdt);
+        Path[0] = FdtRootNode(&HalpRiscvPlatformFdt);
         Path[1] = HalpRiscvPlatformSoc;
         HalpRiscvQueryDebuggerDevice();
         HalpRiscvFdtEnumerate(DriverObject, Extension, Path, 2);
@@ -1532,15 +1532,15 @@ HaliInitPnpDriver(VOID)
     ULONG FirstBus, LastBus, Parent;
 
     if (HalpRiscvDeviceTree &&
-        RiscvFdtOpen(HalpRiscvDeviceTree, HalpRiscvDeviceTreeSize, &HalpRiscvPlatformFdt))
+        FdtOpen(HalpRiscvDeviceTree, HalpRiscvDeviceTreeSize, &HalpRiscvPlatformFdt))
     {
-        if (!RiscvFdtFindNode(&HalpRiscvPlatformFdt, "/soc", &HalpRiscvPlatformSoc, &Parent) ||
-            Parent != RiscvFdtRootNode(&HalpRiscvPlatformFdt))
-            HalpRiscvPlatformSoc = RISCV_FDT_NO_NODE;
+        if (!FdtFindNode(&HalpRiscvPlatformFdt, "/soc", &HalpRiscvPlatformSoc, &Parent) ||
+            Parent != FdtRootNode(&HalpRiscvPlatformFdt))
+            HalpRiscvPlatformSoc = FDT_NO_NODE;
         HalpRiscvPlatformFdtOpen = TRUE;
     }
 
-    if (!HalpRiscvGetPciBusRange(&FirstBus, &LastBus) && HalpRiscvPlatformSoc == RISCV_FDT_NO_NODE)
+    if (!HalpRiscvGetPciBusRange(&FirstBus, &LastBus) && HalpRiscvPlatformSoc == FDT_NO_NODE)
         return STATUS_SUCCESS;
     return IoCreateDriver(&DriverName, HalpRiscvPlatformDriverEntry);
 }

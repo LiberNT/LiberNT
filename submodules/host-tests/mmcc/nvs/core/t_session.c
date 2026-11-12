@@ -10,6 +10,7 @@
 #include "mmharness.h"
 #include "ntsessionshim.h"
 
+PMI_SYSTEM MiSessionTestSystem;
 _Thread_local PEPROCESS MiSessionTestCurrent;
 volatile LONG MiSessionTestAllocations;
 volatile LONG MiSessionTestFailAllocate;
@@ -24,6 +25,8 @@ SessionProcessInitialize(PEPROCESS Process, PMI_PROCESS Native)
     Process->References = 1;
     Process->AddressSpaceInitialized = 2;
     Process->Vm.VmWorkingSetList = Native;
+    Native->Space.RootFrame = MiPfnAllocatePage(&MiSessionTestSystem->Pfn, 0);
+    CHECK(Native->Space.RootFrame != MI_FRAME_INVALID && Native->Space.RootFrame != 0);
 }
 
 static void
@@ -288,9 +291,15 @@ SessionMultipleMembers(void)
 void
 TestSession(void)
 {
+    TEST_WORLD World;
+
+    WorldCreate(&World, 256, 1, 1024);
+    MiSessionTestSystem = &World.System;
     SessionMultipleMembers();
     SessionCreateRace();
     SessionLifecycle();
     SessionAttachRundown();
     SessionMoveProcess();
+    MiSessionTestSystem = NULL;
+    WorldDestroy(&World);
 }

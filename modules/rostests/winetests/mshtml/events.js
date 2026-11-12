@@ -752,7 +752,6 @@ sync_test("mouse_event", function() {
     ok(e.cancelable === true, "cancelable = " + e.cancelable);
     ok(e.bubbles === true, "bubbles = " + e.bubbles);
     ok(e.detail === 1, "detail = " + e.detail);
-    todo_wine.
     ok(e.view === window, "view != window");
     ok(e.screenX === 2, "screenX = " + e.screenX);
     ok(e.screenY === 3, "screenY = " + e.screenY);
@@ -826,7 +825,6 @@ sync_test("ui_event", function() {
     ok(e.cancelable === true, "cancelable = " + e.cancelable);
     ok(e.bubbles === true, "bubbles = " + e.bubbles);
     ok(e.detail === 3, "detail = " + e.detail);
-    todo_wine.
     ok(e.view === window, "view != window");
 });
 

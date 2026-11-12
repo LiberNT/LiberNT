@@ -2929,6 +2929,7 @@ static HANDLE attached_thread[MAX_COUNT];
 static DWORD attached_thread_count;
 static HANDLE event, mutex, semaphore;
 static HANDLE stop_event, loader_lock_event, peb_lock_event, heap_lock_event, cs_lock_event, ack_event;
+static HANDLE exiting_event;
 static CRITICAL_SECTION cs_lock;
 static int test_dll_phase, inside_loader_lock, inside_peb_lock, inside_heap_lock, inside_cs_lock;
 static LONG fls_callback_count;
@@ -3247,7 +3248,7 @@ static BOOL WINAPI dll_entry_point(HINSTANCE hinst, DWORD reason, LPVOID param)
                 ok(GetLastError() == ERROR_ACCESS_DENIED, "expected ERROR_ACCESS_DENIED, got %ld\n", GetLastError());
             else
             {
-                ret = WaitForSingleObject(handle, 1000);
+                ret = WaitForSingleObject(handle, 50);
                 ok(ret == WAIT_TIMEOUT, "expected WAIT_TIMEOUT, got %#lx\n", ret);
                 CloseHandle(handle);
             }
@@ -3259,7 +3260,7 @@ static BOOL WINAPI dll_entry_point(HINSTANCE hinst, DWORD reason, LPVOID param)
         else
         {
             ok(handle != 0, "CreateThread error %ld\n", GetLastError());
-            ret = WaitForSingleObject(handle, 1000);
+            ret = WaitForSingleObject(handle, 50);
             ok(ret == WAIT_TIMEOUT, "expected WAIT_TIMEOUT, got %#lx\n", ret);
             ok(!noop_thread_started, "thread shouldn't start yet\n");
             CloseHandle(handle);
@@ -3281,7 +3282,7 @@ static BOOL WINAPI dll_entry_point(HINSTANCE hinst, DWORD reason, LPVOID param)
                 ok(GetLastError() == ERROR_ACCESS_DENIED, "expected ERROR_ACCESS_DENIED, got %ld\n", GetLastError());
             else
             {
-                ret = WaitForSingleObject(handle, 1000);
+                ret = WaitForSingleObject(handle, 50);
                 ok(ret == WAIT_TIMEOUT, "expected WAIT_TIMEOUT, got %#lx\n", ret);
                 CloseHandle(handle);
             }
@@ -3293,7 +3294,7 @@ static BOOL WINAPI dll_entry_point(HINSTANCE hinst, DWORD reason, LPVOID param)
         else
         {
             ok(handle != 0, "CreateRemoteThread error %ld\n", GetLastError());
-            ret = WaitForSingleObject(handle, 1000);
+            ret = WaitForSingleObject(handle, 50);
             ok(ret == WAIT_TIMEOUT, "expected WAIT_TIMEOUT, got %#lx\n", ret);
             ok(!noop_thread_started, "thread shouldn't start yet\n");
             CloseHandle(handle);
@@ -3539,7 +3540,6 @@ static void child_process(const char *dll_name, DWORD target_offset)
     CloseHandle(thread);
 
     ResetEvent(event);
-    Sleep(100);
 
     ok(attached_thread_count == 2, "attached thread count should be 2\n");
     for (i = 0; i < attached_thread_count; i++)
@@ -3573,8 +3573,6 @@ static void child_process(const char *dll_name, DWORD target_offset)
     ret = TerminateProcess(0, 195);
     ok(!ret, "TerminateProcess(0) should fail\n");
     ok(GetLastError() == ERROR_INVALID_HANDLE, "expected ERROR_INVALID_HANDLE, got %ld\n", GetLastError());
-
-    Sleep(100);
 
     affinity = 1;
     ret = pNtSetInformationProcess(process, ProcessAffinityMask, &affinity, sizeof(affinity));
@@ -3697,6 +3695,7 @@ static void child_process(const char *dll_name, DWORD target_offset)
 
         /* calling ExitProcess should cause a deadlock */
         trace("call ExitProcess(198)\n");
+        SetEvent(exiting_event);
         ExitProcess(198);
         ok(0, "ExitProcess should not return\n");
         break;
@@ -3987,10 +3986,13 @@ static void test_ExitProcess(void)
     if (pRtlAcquirePebLock && pRtlReleasePebLock)
     {
         *child_failures = -1;
+        ResetEvent(exiting_event);
         sprintf(cmdline, "\"%s\" loader %s %lu 5", argv[0], dll_name, target_offset);
         ret = CreateProcessA(argv[0], cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
         ok(ret, "CreateProcess(%s) error %ld\n", cmdline, GetLastError());
-        ret = WaitForSingleObject(pi.hProcess, 5000);
+        ret = WaitForSingleObject(exiting_event, 5000);
+        ok(ret == WAIT_OBJECT_0, "child process did not reach ExitProcess\n");
+        ret = WaitForSingleObject(pi.hProcess, 50);
         ok(ret == WAIT_TIMEOUT, "child process should fail to terminate\n");
         if (ret != WAIT_OBJECT_0)
         {
@@ -4849,6 +4851,7 @@ START_TEST(loader)
     mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, "winetest_loader");
     ok(mapping != 0, "CreateFileMapping failed\n");
     child_failures = MapViewOfFile(mapping, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, 4096);
+    exiting_event = CreateEventA(NULL, TRUE, FALSE, "winetest_loader_exiting");
     if (*child_failures == -1)
     {
         *child_failures = 0;

@@ -2304,6 +2304,10 @@ MountMgrVolumeMountPointCreated(IN PDEVICE_EXTENSION DeviceExtension,
             return Status;
         }
     }
+    else
+    {
+        FreePool(LinkTarget.Buffer);
+    }
 
     FreePool(SourceDeviceName.Buffer);
 
@@ -2542,6 +2546,10 @@ MountMgrVolumeMountPointDeleted(IN PDEVICE_EXTENSION DeviceExtension,
             FreePool(SourceSymbolicName.Buffer);
             return Status;
         }
+    }
+    else
+    {
+        FreePool(LinkTarget.Buffer);
     }
 
     FreePool(SourceDeviceName.Buffer);

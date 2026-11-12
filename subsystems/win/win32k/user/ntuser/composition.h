@@ -42,6 +42,9 @@ typedef struct _WND_REDIRECT
     BOOL      FrontValid;   /* front has been synced at least once            */
     LONG      cx;           /* buffer dimensions                              */
     LONG      cy;
+    BOOL      Virtual;
+    LONG      PhysCx;
+    LONG      PhysCy;
     LONG      FrontCx;
     LONG      FrontCy;
     BOOL      FrontHeld;

@@ -9,7 +9,8 @@ list(APPEND SOURCE
 
 list(APPEND PCH_SKIP_SOURCE
     guid.c
-    testlist.c)
+    testlist.c
+    ../mshtml/httpserver.c)
 
 add_executable(msxml6_winetest
     ${SOURCE}
@@ -17,7 +18,7 @@ add_executable(msxml6_winetest
 
 add_dependencies(msxml6_winetest xmlparser_idlheader_test)
 set_module_type(msxml6_winetest win32cui)
-add_importlibs(msxml6_winetest ole32 oleaut32 msvcrt kernel32)
+add_importlibs(msxml6_winetest ole32 oleaut32 wininet ws2_32 msvcrt kernel32)
 
 if(MSVC)
     add_importlibs(msxml6_winetest ntdll)

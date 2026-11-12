@@ -327,6 +327,7 @@ TdiThreadlessComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
 {
     PTDI_THREADLESS_CONTEXT ThreadlessContext = Context;
     PMDL Mdl, NextMdl;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     for (Mdl = Irp->MdlAddress; Mdl; Mdl = NextMdl)
     {
@@ -338,10 +339,13 @@ TdiThreadlessComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp, PVOID Context)
     Irp->MdlAddress = NULL;
 
     if (ThreadlessContext->CompletionRoutine)
-        ThreadlessContext->CompletionRoutine(DeviceObject, Irp, ThreadlessContext->CompletionContext);
+        Status = ThreadlessContext->CompletionRoutine(DeviceObject, Irp, ThreadlessContext->CompletionContext);
 
     ExFreePoolWithTag(ThreadlessContext, TAG_AFD_TDI_IRP_CONTEXT);
-    IoFreeIrp(Irp);
+
+    /* A completion routine that finishes its work later keeps the packet and frees it itself */
+    if (Status != STATUS_MORE_PROCESSING_REQUIRED)
+        IoFreeIrp(Irp);
 
     return STATUS_MORE_PROCESSING_REQUIRED;
 }

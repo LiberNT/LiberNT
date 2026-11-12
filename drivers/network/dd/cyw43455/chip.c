@@ -1428,10 +1428,11 @@ CywChipBringUp(
         }
     }
 
-    Status = CywFilIovarSetInt(Adapter, "mpc", 0);
-    if (!NT_SUCCESS(Status))
     {
-        DPRINT1("CYW: optional mpc setup failed 0x%08lx\n", Status);
+        ULONG Mpc = MAXULONG;
+
+        Status = CywFilIovarGet(Adapter, "mpc", &Mpc, sizeof(Mpc));
+        DPRINT1("CYW: radio minimum power consumption mode %lu, left at the firmware default (0x%08lx)\n", Mpc, Status);
     }
 
     if (Adapter->CpuCoreType == CywCpuCoreArmCr4)

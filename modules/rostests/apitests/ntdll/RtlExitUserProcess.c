@@ -142,6 +142,69 @@ TestExit(const char *Mode)
     CloseHandle(Mapping);
 }
 
+static DWORD WINAPI
+ExitAtOnce(LPVOID Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+    return 0;
+}
+
+static DWORD WINAPI
+WaitForRelease(LPVOID Parameter)
+{
+    return WaitForSingleObject((HANDLE)Parameter, EXIT_LIMIT_MS);
+}
+
+/* The exit walk resumes from a thread that has already ended; the walk must still reach the threads after it */
+static void
+TestWalkPastEndedThread(void)
+{
+    HANDLE Ended, Later, Release, Current, Next = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN Found = FALSE;
+    ULONG Steps;
+
+    Release = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Release != NULL, "CreateEvent failed: %lu\n", GetLastError());
+    if (Release == NULL)
+        return;
+    Ended = CreateThread(NULL, 0, ExitAtOnce, NULL, 0, NULL);
+    ok(Ended != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Ended == NULL)
+    {
+        CloseHandle(Release);
+        return;
+    }
+    ok(WaitForSingleObject(Ended, EXIT_LIMIT_MS) == WAIT_OBJECT_0, "The first thread did not end\n");
+    Later = CreateThread(NULL, 0, WaitForRelease, Release, 0, NULL);
+    ok(Later != NULL, "CreateThread failed: %lu\n", GetLastError());
+
+    Current = Ended;
+    for (Steps = 0; Steps < 64 && !Found; Steps++)
+    {
+        Status = NtGetNextThread(NtCurrentProcess(), Current, THREAD_QUERY_LIMITED_INFORMATION, 0, 0, &Next);
+        if (Current != Ended)
+            CloseHandle(Current);
+        Current = Ended;
+        if (!NT_SUCCESS(Status))
+            break;
+        Current = Next;
+        Found = (Later != NULL && GetThreadId(Next) == GetThreadId(Later));
+    }
+    if (Current != Ended)
+        CloseHandle(Current);
+    ok(Found, "The walk from the ended thread did not reach the later one (0x%lx after %lu steps)\n", Status, Steps);
+
+    SetEvent(Release);
+    if (Later != NULL)
+    {
+        WaitForSingleObject(Later, EXIT_LIMIT_MS);
+        CloseHandle(Later);
+    }
+    CloseHandle(Ended);
+    CloseHandle(Release);
+}
+
 START_TEST(RtlExitUserProcess)
 {
     char **Argv;
@@ -152,6 +215,7 @@ START_TEST(RtlExitUserProcess)
         RunChild(Argv[3], Argv[4]);
         return;
     }
+    TestWalkPastEndedThread();
     TestExit("rtl");
     TestExit("kernel32");
 }

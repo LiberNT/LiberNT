@@ -342,6 +342,24 @@ PsArchInitializeUserThreadContext(
     _In_ PVOID StackBase
 );
 
+NTSTATUS
+NTAPI
+PsGetWow64SystemDll(
+    _In_ PEPROCESS Process,
+    _Out_opt_ PVOID *DllBase,
+    _Out_opt_ PULONG RtlUserThreadStart
+);
+
+BOOLEAN
+NTAPI
+PsArchGetWow64StartContext(
+    _In_ PCONTEXT Context,
+    _Out_ PULONG Eip,
+    _Out_ PULONG Eax,
+    _Out_ PULONG Ebx,
+    _Out_ PULONG Esp
+);
+
 //
 // Security Routines
 //
@@ -369,6 +387,12 @@ PspSetPrimaryToken(
     IN PACCESS_TOKEN Token OPTIONAL,
     IN BOOLEAN Duplicate
 );
+
+VOID
+NTAPI
+PspLabelWithPrimaryToken(
+    _In_ PVOID Object,
+    _In_ PEPROCESS Process);
 
 NTSTATUS
 NTAPI
@@ -621,17 +645,20 @@ PspAssignProcessToJob(
     _In_ PEJOB Job
 );
 
+NTSTATUS
+NTAPI
+PspInheritParentJob(
+    _In_ PEPROCESS Process,
+    _In_opt_ PEPROCESS Parent,
+    _In_ ULONG Flags
+);
+
 VOID
 NTAPI
 PspExitProcessFromJob(
     _In_ PEPROCESS Process
 );
 
-VOID
-NTAPI
-PspNotifyJobProcessExit(
-    _In_ PEPROCESS Process
-);
 
 VOID
 NTAPI
@@ -704,7 +731,28 @@ PspGetOrSetUserContext(
 
 NTSTATUS
 NTAPI
+PsGetContextThread(
+    _In_ PETHREAD Thread,
+    _Inout_ PCONTEXT ThreadContext,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
+PsSetContextThread(
+    _In_ PETHREAD Thread,
+    _In_ PCONTEXT ThreadContext,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+NTSTATUS
+NTAPI
 PspArchCopyLiveWow64Context(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext);
+
+NTSTATUS
+NTAPI
+PspCopyWow64CpuAreaContext(
     _In_ PETHREAD Thread,
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext);
@@ -723,6 +771,10 @@ PspArchSetInstrumentationCallback(
     _In_reads_bytes_(Length) PVOID Information,
     _In_ ULONG Length,
     _In_ KPROCESSOR_MODE PreviousMode);
+
+BOOLEAN
+NTAPI
+PspArchManagesExecutableWrites(VOID);
 
 VOID
 NTAPI
@@ -829,32 +881,23 @@ extern PKWIN32_PROCESS_CALLOUT PspW32ProcessCallout;
 extern PKWIN32_THREAD_CALLOUT PspW32ThreadCallout;
 extern PKWIN32_JOB_CALLOUT PspW32JobCallout;
 
+#define CT_DISABLE_DYNAMIC_CODE_OPT_OUT_BIT 0x40000
+
 #define PSP_DEP_POLICY 0
 #define PSP_ASLR_POLICY 1
+#define PSP_DYNAMIC_CODE_POLICY 2
+#define PSP_STRICT_HANDLE_CHECK_POLICY 3
+#define PSP_SYSTEM_CALL_DISABLE_POLICY 4
 #define PSP_EXTENSION_POINT_DISABLE_POLICY 6
 #define PSP_CONTROL_FLOW_GUARD_POLICY 7
+#define PSP_SIGNATURE_POLICY 8
 #define PSP_FONT_DISABLE_POLICY 9
 #define PSP_IMAGE_LOAD_POLICY 10
 #define PSP_SYSTEM_CALL_FILTER_POLICY 11
 #define PSP_PAYLOAD_RESTRICTION_POLICY 12
+#define PSP_CHILD_PROCESS_POLICY 13
 #define PSP_SIDE_CHANNEL_ISOLATION_POLICY 14
 #define PSP_EXTENDED_POLICY_COUNT 16
-
-FORCEINLINE
-BOOLEAN
-PspIsExtendedMitigationPolicy(
-    _In_ ULONG Policy)
-{
-    return Policy == PSP_DEP_POLICY ||
-           Policy == PSP_ASLR_POLICY ||
-           Policy == PSP_EXTENSION_POINT_DISABLE_POLICY ||
-           Policy == PSP_CONTROL_FLOW_GUARD_POLICY ||
-           Policy == PSP_FONT_DISABLE_POLICY ||
-           Policy == PSP_IMAGE_LOAD_POLICY ||
-           Policy == PSP_SYSTEM_CALL_FILTER_POLICY ||
-           Policy == PSP_PAYLOAD_RESTRICTION_POLICY ||
-           Policy == PSP_SIDE_CHANNEL_ISOLATION_POLICY;
-}
 
 NTSTATUS
 NTAPI
@@ -878,6 +921,12 @@ PspStoreMitigationPolicy(
     _In_ ULONG Policy,
     _In_ ULONG Flags);
 
+VOID
+NTAPI
+PspApplyCreationMitigations(
+    _In_ PEPROCESS Process,
+    _In_reads_(2) const ULONGLONG *Options);
+
 #define PSP_PROCESS_POWER_THROTTLING_VALID_FLAGS 0x7
 
 typedef struct _PO_PROCESS_ENERGY_CONTEXT
@@ -899,6 +948,8 @@ extern PVOID PspSystemDllEntryPoint;
 extern PVOID PspRtlUserThreadStart;
 extern PVOID PspSystemDllInitBlock;
 extern PVOID PspSystemDllBase;
+extern PVOID PspSystemDllSection;
+extern PVOID PspWow64SystemDllSection;
 extern BOOLEAN PspUseJobSchedulingClasses;
 extern CHAR PspJobSchedulingClasses[PSP_JOB_SCHEDULING_CLASSES];
 extern ULONG PsRawPrioritySeparation;

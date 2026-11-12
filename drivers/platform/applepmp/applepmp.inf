@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple Power Management Processor Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider = %LiberNT%
+DriverVer = 11/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg,NTarm64
+
+[StdMfg.NTarm64]
+%ApplePmp.DeviceDesc% = ApplePmp_Inst,FDT\apple_t6030-pmp
+
+[ApplePmp_Inst.NT]
+CopyFiles = ApplePmp_CopyFiles
+
+[ApplePmp_CopyFiles]
+applepmp.sys
+
+[ApplePmp_Inst.NT.Services]
+AddService = applepmp,0x00000002,ApplePmp_Service
+
+[ApplePmp_Service]
+DisplayName = %ApplePmp.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applepmp.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+ApplePmp.DeviceDesc = "Apple Power Management Processor"
+ApplePmp.ServiceDesc = "Apple Power Management Processor Driver"

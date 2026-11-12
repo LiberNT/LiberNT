@@ -6,7 +6,7 @@ BEGIN
     BEGIN
         MENUITEM "新しいタスクの実行(&N)", ID_FILE_NEW
         MENUITEM SEPARATOR
-        MENUITEM "タスク マネージャの終了(&X)", ID_FILE_EXIT
+        MENUITEM "タスク マネージャーの終了(&X)", ID_FILE_EXIT
     END
     POPUP "オプション(&O)"
     BEGIN
@@ -56,7 +56,7 @@ BEGIN
         MENUITEM "ユーザーの切り替え(&S)\tWinKey+L", ID_SHUTDOWN_SWITCHUSER, GRAYED
         MENUITEM "コンピューターのロック(&K)\tWinKey+L", ID_SHUTDOWN_LOCKCOMPUTER
         MENUITEM "接続を切る(&D)", ID_SHUTDOWN_DISCONNECT, GRAYED
-        MENUITEM "コンピュータを切り離す(&E)", ID_SHUTDOWN_EJECT_COMPUTER, GRAYED
+        MENUITEM "コンピューターを切り離す(&E)", ID_SHUTDOWN_EJECT_COMPUTER, GRAYED
     END
     POPUP "ヘルプ(&H)"
     BEGIN
@@ -148,7 +148,7 @@ END
 IDD_TASKMGR_DIALOG DIALOGEX 0, 0, 264, 246
 STYLE DS_SHELLFONT | DS_CENTER | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_POPUP |
       WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
-CAPTION "タスク マネージャ"
+CAPTION "タスク マネージャー"
 MENU IDR_TASKMANAGER
 FONT 9, "MS UI Gothic"
 BEGIN
@@ -183,7 +183,7 @@ BEGIN
     GROUPBOX "CPU 使用率", IDC_CPU_USAGE_FRAME, 5, 5, 60, 54, 0, WS_EX_TRANSPARENT
     GROUPBOX "メモリ使用量", IDC_MEM_USAGE_FRAME, 5, 63, 60, 54, BS_LEFTTEXT, WS_EX_TRANSPARENT
     GROUPBOX "合計", IDC_TOTALS_FRAME, 5, 122, 114, 39, 0, WS_EX_TRANSPARENT
-    GROUPBOX "コミット チャージ (KB)", IDC_COMMIT_CHARGE_FRAME, 5, 166, 114, 39, 0, WS_EX_TRANSPARENT
+    GROUPBOX "コミット済み (KB)", IDC_COMMIT_CHARGE_FRAME, 5, 166, 114, 39, 0, WS_EX_TRANSPARENT
     GROUPBOX "物理メモリ (KB)", IDC_PHYSICAL_MEMORY_FRAME, 128, 122, 114, 39, 0, WS_EX_TRANSPARENT
     GROUPBOX "カーネル メモリ (KB)", IDC_KERNEL_MEMORY_FRAME, 128, 166, 114, 39, 0, WS_EX_TRANSPARENT
     LTEXT "ハンドル", IDS_TOTALS_HANDLE_COUNT, 12, 131, 57, 8
@@ -279,7 +279,7 @@ FONT 9, "MS UI Gothic"
 BEGIN
     DEFPUSHBUTTON "OK", IDOK, 84, 178, 50, 14
     PUSHBUTTON "キャンセル", IDCANCEL, 138, 178, 50, 14
-    LTEXT "タスク マネージャの [プロセス] ページに表示する列を選択します。", IDC_STATIC, 7, 7, 181, 17
+    LTEXT "タスク マネージャーの [プロセス] ページに表示する列を選択します。", IDC_STATIC, 7, 7, 181, 17
     AUTOCHECKBOX "イメージ名(&I)", IDC_IMAGENAME, 7, 28, 56, 10, WS_DISABLED | WS_TABSTOP
     AUTOCHECKBOX "PID (プロセス ID)(&P)", IDC_PID, 7, 39, 88, 10
     AUTOCHECKBOX "CPU 使用率(&C)", IDC_CPUUSAGE, 7, 50, 53, 10
@@ -312,18 +312,18 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APP_TITLE "タスク マネージャ"
-    IDC_TASKMGR "タスク マネージャ"
+    IDS_APP_TITLE "タスク マネージャー"
+    IDC_TASKMGR "タスク マネージャー"
     IDS_IDLE_PROCESS "システム アイドル プロセス"
 END
 
 STRINGTABLE
 BEGIN
     ID_FILE_NEW "新しいプログラムを実行します"
-    ID_OPTIONS_ALWAYSONTOP "最小化されない限り、常にタスク マネージャがほかのすべてのウィンドウよりも手前に表示されます"
-    ID_OPTIONS_MINIMIZEONUSE "[切り替え] 操作を実行すると、タスク マネージャが最小化されます"
-    ID_OPTIONS_HIDEWHENMINIMIZED "最小化されたときに、タスク マネージャを隠します"
-    ID_VIEW_REFRESH "[更新の頻度] の設定にかかわらず、今すぐタスク マネージャを更新します"
+    ID_OPTIONS_ALWAYSONTOP "最小化されない限り、常にタスク マネージャーがほかのすべてのウィンドウよりも手前に表示されます"
+    ID_OPTIONS_MINIMIZEONUSE "[切り替え] 操作を実行すると、タスク マネージャーが最小化されます"
+    ID_OPTIONS_HIDEWHENMINIMIZED "最小化されたときに、タスク マネージャーを隠します"
+    ID_VIEW_REFRESH "[更新の頻度] の設定にかかわらず、今すぐタスク マネージャーを更新します"
     ID_VIEW_LARGE "大きいアイコンを使ってタスクを表示します"
     ID_VIEW_SMALL "小さいアイコンを使ってタスクを表示します"
     ID_VIEW_DETAILS "各タスクの情報を表示します"
@@ -341,9 +341,9 @@ BEGIN
     ID_WINDOWS_MAXIMIZE "ウィンドウを最大化します"
     ID_WINDOWS_CASCADE "デスクトップ上でウィンドウを重ねて表示します"
     ID_WINDOWS_BRINGTOFRONT "ウィンドウを手前に表示しますが、切り替えません。"
-    ID_HELP_TOPICS "タスク マネージャのヘルプ トピックを表示します"
+    ID_HELP_TOPICS "タスク マネージャーのヘルプ トピックを表示します"
     ID_HELP_ABOUT "プログラム情報、バージョン番号、著作権を表示します"
-    ID_FILE_EXIT "タスク マネージャ アプリケーションを終了します"
+    ID_FILE_EXIT "タスク マネージャー アプリケーションを終了します"
     ID_OPTIONS_SHOW16BITTASKS "16 ビット タスクを、関連付けられた ntvdm.exe の下に表示します"
     ID_VIEW_SELECTCOLUMNS "[プロセス] ページに表示する列を選択します"
     ID_VIEW_SHOWKERNELTIMES "カーネル時間をパフォーマンス グラフ上に表示します"
@@ -356,10 +356,10 @@ STRINGTABLE
 BEGIN
     ID_ENDTASK "選択されているタスクに終了するよう指示します"
     ID_GOTOPROCESS "選択されているタスクのプロセスにフォーカスを切り替えます"
-    ID_RESTORE "隠れていたタスク マネージャを元に戻します"
+    ID_RESTORE "隠れていたタスク マネージャーを元に戻します"
     ID_PROCESS_PAGE_ENDPROCESS "システムからプロセスを削除します"
     ID_PROCESS_PAGE_ENDPROCESSTREE "このプロセスと子プロセスをすべて削除します"
-    ID_PROCESS_PAGE_DEBUG "このプロセスにデバッガを添付します"
+    ID_PROCESS_PAGE_DEBUG "このプロセスにデバッガーを添付します"
     ID_PROCESS_PAGE_SETAFFINITY "どのプロセッサでプロセスを実行するかを制御します"
     ID_PROCESS_PAGE_SETPRIORITY_REALTIME "プロセスをリアルタイム優先度クラスに設定します"
     ID_PROCESS_PAGE_SETPRIORITY_HIGH "プロセスを高優先度クラスに設定します"
@@ -415,20 +415,20 @@ BEGIN
     IDS_MENU_CPUHISTORY "CPU 履歴(&C)"
     IDS_MENU_SHOWKERNELTIMES "カーネル時間を表示する(&S)"
     IDS_CREATENEWTASK "新しいタスクの作成"
-    IDS_CREATENEWTASK_DESC "実行するプログラム名、または開くフォルダやドキュメント名、インターネット リソース名を入力してください。"
+    IDS_CREATENEWTASK_DESC "実行するプログラム名、または開くフォルダーやドキュメント名、インターネット リソース名を入力してください。"
     IDS_MSG_ACCESSPROCESSAFF "プロセスの関係へのアクセスまたは設定ができません"
     IDS_MSG_PROCESSONEPRO "プロセスは、少なくとも 1 つのプロセッサと関係を持たなければなりません。"
     IDS_MSG_INVALIDOPTION "無効なオプション"
-    IDS_MSG_UNABLEDEBUGPROCESS "デバッガを添付できません"
-    IDS_MSG_WARNINGDEBUG "警告: このプロセスをデバッグすると、データが失われる可能性があります。\nデバッガを添付しますか?"
-    IDS_MSG_TASKMGRWARNING "タスク マネージャの警告"
+    IDS_MSG_UNABLEDEBUGPROCESS "デバッガーを添付できません"
+    IDS_MSG_WARNINGDEBUG "警告: このプロセスをデバッグすると、データが失われる可能性があります。\nデバッガーを添付しますか?"
+    IDS_MSG_TASKMGRWARNING "タスク マネージャーの警告"
     IDS_MSG_WARNINGTERMINATING "警告: プロセスを終了すると、データが失われたり、システムが\n不安定になったりするなどの、予期しない結果になることがあります。\nプロセスを終了する前に、状態またはデータを保存するかどうかの\n確認メッセージは表示されません。プロセスを終了しますか?"
     IDS_MSG_UNABLETERMINATEPRO "プロセスを終了できません"
     IDS_MSG_CLOSESYSTEMPROCESS "このプロセスは危機的なシステムプロセスです。タスクマネジャはこのプロセスを終了してはならない。"
     IDS_MSG_UNABLECHANGEPRIORITY "優先度を変更できません"
     IDS_MSG_WARNINGCHANGEPRIORITY "警告: このプロセスの優先度クラスを変更すると、システムが不安定に\nなるなど、予期しない結果になることがあります。\n優先度クラスを変更しますか?"
     IDS_MSG_TRAYICONCPUUSAGE "CPU 使用率: %d%%"
-    IDS_STATUS_MEMUSAGE "メモリ使用量: %s / %s (%d%%)"
+    IDS_STATUS_MEMUSAGE "コミット済み: %s / %s (%d%%)"
     IDS_STATUS_CPUUSAGE "CPU: %3d%%"
     IDS_STATUS_PROCESSES "プロセス: %d"
     IDS_NOT_RESPONDING "応答なし"

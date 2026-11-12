@@ -366,6 +366,11 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-4445535400
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-444553540000}","IconPath",0x00010000,"%SystemRoot%\System32\setupapi.dll,-20"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{36FC9E60-C465-11CF-8056-444553540000}","NoInstallClass",0x00000000,"1"
 
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}",,0x00000000,"Universal Serial Bus devices"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","Class",0x00000000,"USBDevice"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","IconPath",0x00010000,"%SystemRoot%\System32\setupapi.dll,-20"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{88BAE032-5A81-49F0-BC3D-A4FF138216D6}","NoInstallClass",0x00000000,"1"
+
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}",,0x00000000,"USB Function Controller"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}","Class",0x00000000,"USBFunctionController"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{bbbe8734-08fa-4966-b6a6-4e5ad010cdd7}","Icon",0x00000000,"-20"
@@ -377,6 +382,41 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Class\{a0a588a4-c46f-4b37-b7ea-c82fe89870
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}","IconPath",0x00010000,"%SystemRoot%\System32\setupapi.dll,-39"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}","NoInstallClass",0x00000000,"1"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{a0a588a4-c46f-4b37-b7ea-c82fe89870c6}","SilentInstall",0x00000000,"1"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}",,0x00000000,"Batteries"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Class",0x00000000,"Battery"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Icon",0x00000000,"2"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Installer32",0x00000000,"batt.dll,BatteryClassInstall"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}",,0x00000000,"Bluetooth Radios"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}","Class",0x00000000,"Bluetooth"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}","Icon",0x00000000,"201"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}","Installer32",0x00000000,"bthci.dll,BluetoothClassInstaller"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}","NoInstallClass",0x00000000,"1"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96E-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Monitors"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96E-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Monitor"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96E-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-35"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96E-E325-11CE-BFC1-08002BE10318}","Installer32",0x00000000,"desk.cpl,MonitorClassInstaller"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E978-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Serial and parallel ports"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E978-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Ports"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E978-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-23"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E978-E325-11CE-BFC1-08002BE10318}","Installer32",0x00000000,"msports.dll,PortsClassInstaller"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E966-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Computer"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E966-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Computer"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E966-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-13"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}",,0x00000000,"Non-Plug and Play Drivers"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","Class",0x00000000,"LegacyDriver"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","Icon",0x00000000,"-19"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","NoDisplayClass",0x00000000,"1"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","EnumPropPages32",0x00000000,"syssetup.dll,LegacyDriverPropPageProvider"
+
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Other Devices"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Unknown"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-18"
 
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96A-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Hard disk controllers"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E96A-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"HDC"
@@ -2119,6 +2159,14 @@ HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Type",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\stornvme","Tag",0x00010001,0x00000006
 
+; vioblk driver (StorPort VirtIO block miniport)
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","ErrorControl",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Group",0x00000000,"SCSI Miniport"
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","ImagePath",0x00020000,"system32\drivers\vioblk.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\vioblk\Parameters","BusType",0x00010001,0x00000001
+
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","Group",0x00000000,"SCSI Miniport"
 HKLM,"SYSTEM\CurrentControlSet\Services\LSI_SAS","ImagePath",0x00020000,"system32\drivers\lsi_sas.sys"
@@ -2478,6 +2526,15 @@ HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","ImagePath",0x00020000,"%System
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","ObjectName",0x00000000,"LocalSystem"
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\WlanSvc","Type",0x00010001,0x00000110
+
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DependOnService",0x00010000,"RPCSS","PlugPlay"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","DisplayName",0x00000000,"Smart Card"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Description",0x00000000,"Manages access to smart cards read by this computer."
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ImagePath",0x00020000,"%SystemRoot%\system32\scardsvr.exe"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ObjectName",0x00000000,"LocalSystem"
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Type",0x00010001,0x00000010
 
 ; Simple TCP services
 HKLM,"SYSTEM\CurrentControlSet\Services\tcpsvcs","Description",0x00000000,%TCPSVCS_SERVICE_DECRIPTION%

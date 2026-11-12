@@ -83,6 +83,13 @@ DWORD
 SaveDefaultUserHive(VOID);
 
 VOID
+CreateMachineGuid(VOID);
+
+VOID
+CreateSystemIdSeed(
+    _In_ BOOL AllowFirmwareWrite);
+
+VOID
 StartWow64Registration(VOID);
 
 VOID

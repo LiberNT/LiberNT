@@ -2538,6 +2538,34 @@ DEFINE_TEST(test_unvolatile_4)
     return result == 3;
 }
 
+static int released_resources;
+
+static DECLSPEC_NOINLINE void release_resource(void)
+{
+    released_resources++;
+}
+
+/* fastfat FatOpenVolume pattern: a status set in the try decides whether the finally releases a resource */
+DEFINE_TEST(test_finally_status)
+{
+    int status = return_minusone();
+
+    released_resources = 0;
+
+    _SEH2_TRY
+    {
+        status = return_zero();
+    }
+    _SEH2_FINALLY
+    {
+        if (_SEH2_AbnormalTermination() || status < 0)
+            release_resource();
+    }
+    _SEH2_END;
+
+    return released_resources == 0;
+}
+
 DEFINE_TEST(test_finally_goto)
 {
     volatile int val = 0;
@@ -3315,6 +3343,7 @@ START_TEST(pseh)
 #endif
 		USE_TEST(test_unvolatile_4),
 		USE_TEST(test_finally_goto),
+		USE_TEST(test_finally_status),
 		USE_TEST(test_nested_exception),
 		USE_TEST(test_PSEH3_bug),
 		USE_TEST(test_PSEH3_bug2),
@@ -3325,9 +3354,6 @@ START_TEST(pseh)
 	for(i = 0; i < sizeof(testsuite) / sizeof(testsuite[0]); ++ i)
 	{
 		subtest_(__FILE__, __LINE__)(testsuite[i].name);
-#if defined(__clang__) && !defined(_WIN64)
-		todo_if(testsuite[i].func == test_abnorm_7)
-#endif
 		ok(call_test(testsuite[i].func), "%s failed\n", testsuite[i].name);
 	}
 }

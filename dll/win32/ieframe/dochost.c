@@ -145,7 +145,11 @@ void update_navigation_commands(DocHost *dochost)
     unsigned pos = dochost->travellog.loading_pos == -1 ? dochost->travellog.position : dochost->travellog.loading_pos;
 
     on_commandstate_change(dochost, CSC_NAVIGATEBACK, pos > 0);
+#ifdef __REACTOS__
+    on_commandstate_change(dochost, CSC_NAVIGATEFORWARD, pos + 1 < dochost->travellog.length);
+#else
     on_commandstate_change(dochost, CSC_NAVIGATEFORWARD, pos < dochost->travellog.length);
+#endif
 }
 
 static void notif_complete(DocHost *This, DISPID dispid)
@@ -242,6 +246,19 @@ static HRESULT get_doc_ready_state(DocHost *This, READYSTATE *ret)
     *ret = V_I4(&var);
     return S_OK;
 }
+
+#ifdef __REACTOS__
+BOOL is_document_loading(DocHost *This)
+{
+    READYSTATE ready_state;
+
+    if(!This->document)
+        return FALSE;
+    if(FAILED(get_doc_ready_state(This, &ready_state)))
+        return This->doc_state < READYSTATE_COMPLETE;
+    return ready_state < READYSTATE_COMPLETE;
+}
+#endif
 
 static void advise_prop_notif(DocHost *This, BOOL set)
 {
@@ -467,29 +484,78 @@ static void dump_travellog(DocHost *This)
         TRACE("%d: =>\n", i);
 }
 
+#ifdef __REACTOS__
+/* The history update comes before the page being left is replaced, while the host may already name the new URL */
+static WCHAR *get_left_page_url(DocHost *This)
+{
+    IHTMLDocument2 *doc;
+    WCHAR *url = NULL;
+    BSTR doc_url;
+
+    if(This->document && SUCCEEDED(IUnknown_QueryInterface(This->document, &IID_IHTMLDocument2, (void**)&doc))) {
+        if(SUCCEEDED(IHTMLDocument2_get_URL(doc, &doc_url)) && doc_url) {
+            url = wcsdup(doc_url);
+            SysFreeString(doc_url);
+        }
+        IHTMLDocument2_Release(doc);
+        if(url)
+            return url;
+    }
+
+    return This->url ? wcsdup(This->url) : NULL;
+}
+#endif
+
 static void update_travellog(DocHost *This)
 {
     travellog_entry_t *new_entry;
+#ifdef __REACTOS__
+    unsigned saved_pos;
+    WCHAR *url = get_left_page_url(This);
+#endif
 
     static const WCHAR about_schemeW[] = {'a','b','o','u','t',':'};
 
+#ifdef __REACTOS__
+    if(!url || !wcsnicmp(url, about_schemeW, ARRAY_SIZE(about_schemeW))) {
+        TRACE("Skipping about URL\n");
+        free(url);
+        return;
+    }
+#else
     if(This->url && !wcsnicmp(This->url, about_schemeW, ARRAY_SIZE(about_schemeW))) {
         TRACE("Skipping about URL\n");
         return;
     }
+#endif
 
     if(!This->travellog.log) {
+#ifdef __REACTOS__
+        This->travellog.log = calloc(4, sizeof(*This->travellog.log));
+        if(!This->travellog.log) {
+            free(url);
+            return;
+        }
+#else
         This->travellog.log = malloc(4 * sizeof(*This->travellog.log));
         if(!This->travellog.log)
             return;
+#endif
 
         This->travellog.size = 4;
     }else if(This->travellog.size < This->travellog.position+2) {
         travellog_entry_t *new_travellog;
 
         new_travellog = realloc(This->travellog.log, This->travellog.size * 2 * sizeof(*This->travellog.log));
+#ifdef __REACTOS__
+        if(!new_travellog) {
+            free(url);
+            return;
+        }
+#else
         if(!new_travellog)
             return;
+#endif
 
         This->travellog.log = new_travellog;
         This->travellog.size *= 2;
@@ -503,10 +569,17 @@ static void update_travellog(DocHost *This)
 
     new_entry = This->travellog.log + This->travellog.position;
 
+#ifdef __REACTOS__
+    free_travellog_entry(new_entry);
+    new_entry->url = url;
+    TRACE("Adding %s at %d\n", debugstr_w(url), This->travellog.position);
+    saved_pos = This->travellog.position;
+#else
     new_entry->url = wcsdup(This->url);
     TRACE("Adding %s at %d\n", debugstr_w(This->url), This->travellog.position);
     if(!new_entry->url)
         return;
+#endif
 
     new_entry->stream = get_travellog_stream(This);
 
@@ -519,8 +592,13 @@ static void update_travellog(DocHost *This)
          This->travellog.position = This->travellog.loading_pos;
          This->travellog.loading_pos = -1;
     }
+#ifdef __REACTOS__
+    if(saved_pos + 1 > This->travellog.length)
+        This->travellog.length = saved_pos + 1;
+#else
     if(This->travellog.position > This->travellog.length)
         This->travellog.length = This->travellog.position;
+#endif
 
     dump_travellog(This);
 }
@@ -730,6 +808,10 @@ static HRESULT WINAPI ClOleCommandTarget_QueryStatus(IOleCommandTarget *iface,
 
     TRACE("(%p)->(%s %lu %p %p)\n", This, debugstr_guid(pguidCmdGroup), cCmds, prgCmds,
           pCmdText);
+#ifdef __REACTOS__
+    if(!pguidCmdGroup && This->olecmd)
+        return IOleCommandTarget_QueryStatus(This->olecmd, pguidCmdGroup, cCmds, prgCmds, pCmdText);
+#endif
     for(i=0; prgCmds && i < cCmds; i++)
         TRACE("unsupported command %lu (%lx)\n", prgCmds[i].cmdID, prgCmds[i].cmdf);
 
@@ -784,6 +866,17 @@ static HRESULT WINAPI ClOleCommandTarget_Exec(IOleCommandTarget *iface,
         case OLECMDID_SETDOWNLOADSTATE:
             if(pvaIn && V_VT(pvaIn) == VT_I4)
                 This->busy = V_I4(pvaIn) ? VARIANT_TRUE : VARIANT_FALSE;
+#ifdef __REACTOS__
+            if(pvaIn && V_VT(pvaIn) == VT_I4 && V_I4(pvaIn)) {
+                VARIANTARG lock_icon;
+                DISPPARAMS lock_dp = {&lock_icon, NULL, 1, 0};
+
+                /* FIXME: a page loaded over a secure connection reports its key strength */
+                V_VT(&lock_icon) = VT_I4;
+                V_I4(&lock_icon) = secureLockIconUnsecure;
+                call_sink(This->cps.wbe2, DISPID_SETSECURELOCKICON, &lock_dp);
+            }
+#endif
             if(This->olecmd)
                 return IOleCommandTarget_Exec(This->olecmd, pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut);
 
@@ -957,16 +1050,38 @@ static HRESULT WINAPI DocHostUIHandler_ShowUI(IDocHostUIHandler2 *iface, DWORD d
         IOleInPlaceFrame *pFrame, IOleInPlaceUIWindow *pDoc)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)->(%ld %p %p %p %p)\n", This, dwID, pActiveObject, pCommandTarget,
+          pFrame, pDoc);
+
+    if(!This->hostui)
+        return E_NOTIMPL;
+
+    This->hostui_shown = TRUE;
+    return IDocHostUIHandler_ShowUI(This->hostui, dwID, pActiveObject, pCommandTarget, pFrame, pDoc);
+#else
     FIXME("(%p)->(%ld %p %p %p %p)\n", This, dwID, pActiveObject, pCommandTarget,
           pFrame, pDoc);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_HideUI(IDocHostUIHandler2 *iface)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)\n", This);
+
+    /* Only the UI the container was asked to show is hidden again */
+    if(!This->hostui || !This->hostui_shown)
+        return E_NOTIMPL;
+
+    This->hostui_shown = FALSE;
+    return IDocHostUIHandler_HideUI(This->hostui);
+#else
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_UpdateUI(IDocHostUIHandler2 *iface)
@@ -1043,8 +1158,19 @@ static HRESULT WINAPI DocHostUIHandler_GetDropTarget(IDocHostUIHandler2 *iface,
         IDropTarget *pDropTarget, IDropTarget **ppDropTarget)
 {
     DocHost *This = impl_from_IDocHostUIHandler2(iface);
+#ifdef __REACTOS__
+    TRACE("(%p)->(%p %p)\n", This, pDropTarget, ppDropTarget);
+
+    /* The container is asked once per host, when the host's drop target is first set up */
+    if(!This->hostui || This->drop_target_asked)
+        return E_NOTIMPL;
+
+    This->drop_target_asked = TRUE;
+    return IDocHostUIHandler_GetDropTarget(This->hostui, pDropTarget, ppDropTarget);
+#else
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI DocHostUIHandler_GetExternal(IDocHostUIHandler2 *iface,
@@ -1208,9 +1334,88 @@ static const IPropertyNotifySinkVtbl PropertyNotifySinkVtbl = {
     PropertyNotifySink_OnRequestEdit
 };
 
+#ifdef __REACTOS__
+static inline DocHost *impl_from_IDocHostShowUI(IDocHostShowUI *iface)
+{
+    return CONTAINING_RECORD(iface, DocHost, IDocHostShowUI_iface);
+}
+
+static HRESULT WINAPI DocHostShowUI_QueryInterface(IDocHostShowUI *iface, REFIID riid, void **ppv)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_QueryInterface(&This->IOleClientSite_iface, riid, ppv);
+}
+
+static ULONG WINAPI DocHostShowUI_AddRef(IDocHostShowUI *iface)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_AddRef(&This->IOleClientSite_iface);
+}
+
+static ULONG WINAPI DocHostShowUI_Release(IDocHostShowUI *iface)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    return IOleClientSite_Release(&This->IOleClientSite_iface);
+}
+
+static IDocHostShowUI *get_container_show_ui(DocHost *This)
+{
+    IDocHostShowUI *show_ui;
+
+    if(!This->hostui || FAILED(IDocHostUIHandler_QueryInterface(This->hostui, &IID_IDocHostShowUI, (void**)&show_ui)))
+        return NULL;
+    return show_ui;
+}
+
+static HRESULT WINAPI DocHostShowUI_ShowMessage(IDocHostShowUI *iface, HWND hwnd, LPOLESTR lpstrText,
+        LPOLESTR lpstrCaption, DWORD dwType, LPOLESTR lpstrHelpFile, DWORD dwHelpContext, LRESULT *plResult)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    IDocHostShowUI *show_ui;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p %s %s %lx)\n", This, hwnd, debugstr_w(lpstrText), debugstr_w(lpstrCaption), dwType);
+
+    if(!(show_ui = get_container_show_ui(This)))
+        return S_FALSE;
+
+    hres = IDocHostShowUI_ShowMessage(show_ui, hwnd, lpstrText, lpstrCaption, dwType, lpstrHelpFile, dwHelpContext, plResult);
+    IDocHostShowUI_Release(show_ui);
+    return hres;
+}
+
+static HRESULT WINAPI DocHostShowUI_ShowHelp(IDocHostShowUI *iface, HWND hwnd, LPOLESTR pszHelpFile,
+        UINT uCommand, DWORD dwData, POINT ptMouse, IDispatch *pDispatchObjectHit)
+{
+    DocHost *This = impl_from_IDocHostShowUI(iface);
+    IDocHostShowUI *show_ui;
+    HRESULT hres;
+
+    TRACE("(%p)->(%p %s %u %lx)\n", This, hwnd, debugstr_w(pszHelpFile), uCommand, dwData);
+
+    if(!(show_ui = get_container_show_ui(This)))
+        return S_FALSE;
+
+    hres = IDocHostShowUI_ShowHelp(show_ui, hwnd, pszHelpFile, uCommand, dwData, ptMouse, pDispatchObjectHit);
+    IDocHostShowUI_Release(show_ui);
+    return hres;
+}
+
+static const IDocHostShowUIVtbl DocHostShowUIVtbl = {
+    DocHostShowUI_QueryInterface,
+    DocHostShowUI_AddRef,
+    DocHostShowUI_Release,
+    DocHostShowUI_ShowMessage,
+    DocHostShowUI_ShowHelp
+};
+#endif
+
 void DocHost_Init(DocHost *This, IWebBrowser2 *wb, const IDocHostContainerVtbl* container)
 {
     This->IDocHostUIHandler2_iface.lpVtbl  = &DocHostUIHandler2Vtbl;
+#ifdef __REACTOS__
+    This->IDocHostShowUI_iface.lpVtbl      = &DocHostShowUIVtbl;
+#endif
     This->IOleCommandTarget_iface.lpVtbl   = &OleCommandTargetVtbl;
     This->IPropertyNotifySink_iface.lpVtbl = &PropertyNotifySinkVtbl;
 

@@ -355,6 +355,15 @@ kernel_mode_entry:
 
     if ((Flags) AND TF_DEBUG)
         SAVE_DEBUG_REGISTERS rbp, rax
+    else
+        /* Not saved on this path: a context must not report stack contents as debug registers */
+        xor eax, eax
+        mov [rbp + KTRAP_FRAME_Dr0], rax
+        mov [rbp + KTRAP_FRAME_Dr1], rax
+        mov [rbp + KTRAP_FRAME_Dr2], rax
+        mov [rbp + KTRAP_FRAME_Dr3], rax
+        mov [rbp + KTRAP_FRAME_Dr6], rax
+        mov [rbp + KTRAP_FRAME_Dr7], rax
     endif
 #ifdef _USE_ML
 debug_registers_saved:

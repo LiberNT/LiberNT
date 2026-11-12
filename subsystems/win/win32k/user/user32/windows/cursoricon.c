@@ -269,27 +269,154 @@ CURSORICON_ConvertPngToBmpIcon(
 
 /************* USER32 INTERNAL FUNCTIONS **********/
 
+static HCURSOR
+OutlineDefaultIBeam(HCURSOR Cursor)
+{
+    ICONINFO Icon = {0}, Out = {0};
+    BITMAP Bitmap;
+    BITMAPINFO Info = {0};
+    HDC Dc = NULL;
+    HBITMAP Render = NULL, Previous = NULL;
+    BYTE *Source = NULL, *Pixels = NULL, *Mask = NULL, *Rendered = NULL;
+    HCURSOR Result = NULL;
+    INT Width, Height, X, Y, Dx, Dy;
+    SIZE_T Size;
+    BOOL HasAlpha = FALSE;
+
+    if (!Cursor || !GetIconInfo(Cursor, &Icon))
+        return Cursor;
+    if (!Icon.hbmColor || !GetObjectW(Icon.hbmColor, sizeof(Bitmap), &Bitmap) ||
+        Bitmap.bmWidth <= 0 || Bitmap.bmHeight <= 0 ||
+        Bitmap.bmWidth > 1024 || Bitmap.bmHeight > 1024)
+        goto done;
+    Width = Bitmap.bmWidth;
+    Height = Bitmap.bmHeight;
+    Size = (SIZE_T)Width * Height * 4;
+    Source = HeapAlloc(GetProcessHeap(), 0, Size);
+    Dc = CreateCompatibleDC(NULL);
+    if (!Source || !Dc)
+        goto done;
+    Info.bmiHeader.biSize = sizeof(Info.bmiHeader);
+    Info.bmiHeader.biWidth = Width;
+    Info.bmiHeader.biHeight = -Height;
+    Info.bmiHeader.biPlanes = 1;
+    Info.bmiHeader.biBitCount = 32;
+    Render = CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Rendered, NULL, 0);
+    if (!Render)
+        goto done;
+    Previous = SelectObject(Dc, Render);
+    if (!Previous)
+        goto done;
+    memset(Rendered, 0xff, Size);
+    if (!DrawIconEx(Dc, 0, 0, Cursor, Width, Height, 0, NULL, DI_NORMAL) || !GdiFlush())
+        goto done;
+    for (Y = 0; Y < Height; ++Y)
+    {
+        for (X = 0; X < Width; ++X)
+        {
+            const BYTE *P = Rendered + ((SIZE_T)Y * Width + X) * 4;
+            BYTE *Q = Source + ((SIZE_T)Y * Width + X) * 4;
+            if (P[0] != P[1] || P[1] != P[2])
+                goto done;
+            Q[0] = Q[1] = Q[2] = 0;
+            Q[3] = 255 - P[0];
+            HasAlpha |= Q[3] != 0;
+        }
+    }
+    if (!HasAlpha)
+        goto done;
+    Info.bmiHeader.biWidth = Width + 2;
+    Info.bmiHeader.biHeight = -(Height + 2);
+    Info.bmiHeader.biSizeImage = 0;
+    Out.hbmColor = CreateDIBSection(Dc, &Info, DIB_RGB_COLORS, (void **)&Pixels, NULL, 0);
+    if (!Out.hbmColor)
+        goto done;
+    ZeroMemory(Pixels, (SIZE_T)(Width + 2) * (Height + 2) * 4);
+    for (Y = -1; Y <= Height; ++Y)
+    {
+        for (X = -1; X <= Width; ++X)
+        {
+            const BYTE *P = X >= 0 && X < Width && Y >= 0 && Y < Height ?
+                            Source + ((SIZE_T)Y * Width + X) * 4 : NULL;
+            BYTE *Q = Pixels + ((SIZE_T)(Y + 1) * (Width + 2) + X + 1) * 4;
+            BOOL Adjacent = FALSE;
+            if (P)
+                memcpy(Q, P, 4);
+            if (P && P[3] >= 128)
+                continue;
+            for (Dy = -1; Dy <= 1 && !Adjacent; ++Dy)
+                for (Dx = -1; Dx <= 1; ++Dx)
+                    if (X + Dx >= 0 && X + Dx < Width && Y + Dy >= 0 && Y + Dy < Height &&
+                        Source[((SIZE_T)(Y + Dy) * Width + X + Dx) * 4 + 3] >= 128)
+                    {
+                        Adjacent = TRUE;
+                        break;
+                    }
+            if (Adjacent)
+            {
+                Q[0] = Q[1] = Q[2] = P ? 255 - P[3] : 255;
+                Q[3] = 255;
+            }
+        }
+    }
+    Mask = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)(((Width + 17) / 16) * 2) * (Height + 2));
+    if (!Mask)
+        goto done;
+    for (Y = 0; Y < Height + 2; ++Y)
+        for (X = 0; X < Width + 2; ++X)
+            if (!Pixels[((SIZE_T)Y * (Width + 2) + X) * 4 + 3])
+                Mask[(SIZE_T)Y * (((Width + 17) / 16) * 2) + X / 8] |= 0x80 >> (X % 8);
+    Out.hbmMask = CreateBitmap(Width + 2, Height + 2, 1, 1, Mask);
+    if (!Out.hbmMask)
+        goto done;
+    Out.fIcon = FALSE;
+    Out.xHotspot = Icon.xHotspot + 1;
+    Out.yHotspot = Icon.yHotspot + 1;
+    Result = CreateIconIndirect(&Out);
+
+done:
+    if (Out.hbmColor) DeleteObject(Out.hbmColor);
+    if (Out.hbmMask) DeleteObject(Out.hbmMask);
+    if (Icon.hbmColor) DeleteObject(Icon.hbmColor);
+    if (Icon.hbmMask) DeleteObject(Icon.hbmMask);
+    if (Previous) SelectObject(Dc, Previous);
+    if (Render) DeleteObject(Render);
+    if (Dc) DeleteDC(Dc);
+    HeapFree(GetProcessHeap(), 0, Source);
+    HeapFree(GetProcessHeap(), 0, Mask);
+    if (Result)
+    {
+        DestroyCursor(Cursor);
+        return Result;
+    }
+    return Cursor;
+}
+
 VOID LoadSystemCursors(VOID)
 {
    if (!UserGetServerInfo(hIconSmWindows, ROS_SERVERINFO_HICONSMWINDOWS))
    {
+       ULONG Previous = User32BeginSystemDpiContext();
+
        TRACE("Loading System Cursors\n");
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NORMAL);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_IBEAM);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_WAIT,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_WAIT);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_CROSS,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_CROSS);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_UPARROW,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_UP);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_ICON,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_ICON);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZE,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENWSE,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENWSE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENESW,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENESW);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZEWE,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZEWE);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZENS,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZENS);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_SIZEALL,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_SIZEALL);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_NO,          IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_NO);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_HAND,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HAND);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_APPSTARTING, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_APPSTARTING);
-       NtUserSetSystemCursor(LoadImageW( 0, IDC_HELP,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE ), OCR_HELP);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_ARROW,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_NORMAL);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_IBEAM,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_IBEAM);
+       NtUserSetSystemCursor(OutlineDefaultIBeam(User32LoadOemImage(IDC_IBEAM, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE)), OCR_IBEAM);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_WAIT,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_WAIT);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_CROSS,       IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_CROSS);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_UPARROW,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_UP);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_ICON,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_ICON);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZE,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENWSE,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENWSE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENESW,    IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENESW);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZEWE,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZEWE);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZENS,      IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZENS);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_SIZEALL,     IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_SIZEALL);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_NO,          IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_NO);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_HAND,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_HAND);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_APPSTARTING, IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_APPSTARTING);
+       NtUserSetSystemCursor(User32LoadOemImage(IDC_HELP,        IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE), OCR_HELP);
+       User32EndSystemDpiContext(Previous);
    }
 }
 
@@ -322,6 +449,7 @@ VOID LoadUserCursors(VOID)
     DWORD BaseSize = 0, BaseSizeLength = sizeof(BaseSize), Type;
     HKEY Key = NULL;
     UINT i;
+    ULONG Previous = User32BeginSystemDpiContext();
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Cursors", 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
         Key = NULL;
@@ -331,6 +459,8 @@ VOID LoadUserCursors(VOID)
     {
         BaseSize = 0;
     }
+    if (BaseSize)
+        BaseSize = MulDiv(BaseSize, GetSystemMetrics(SM_CXCURSOR), 32);
     for (i = 0; i < ARRAYSIZE(UserCursorScheme); i++)
     {
         DWORD Size = sizeof(Path) - sizeof(WCHAR);
@@ -345,12 +475,17 @@ VOID LoadUserCursors(VOID)
                 Cursor = LoadImageW(NULL, Expanded, IMAGE_CURSOR, BaseSize, BaseSize, LR_LOADFROMFILE | LR_DEFAULTSIZE);
         }
         if (!Cursor)
-            Cursor = LoadImageW(NULL, UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
+        {
+            Cursor = User32LoadOemImage(UserCursorScheme[i].Resource, IMAGE_CURSOR, BaseSize, BaseSize, LR_DEFAULTSIZE);
+            if (UserCursorScheme[i].Id == OCR_IBEAM)
+                Cursor = OutlineDefaultIBeam(Cursor);
+        }
         if (Cursor && !NtUserSetSystemCursor(Cursor, UserCursorScheme[i].Id))
             DestroyCursor(Cursor);
     }
     if (Key)
         RegCloseKey(Key);
+    User32EndSystemDpiContext(Previous);
 }
 
 /* This callback routine is called directly after switching to gui mode */
@@ -1152,6 +1287,31 @@ done:
     return bResult;
 }
 
+static BOOL CURSORICON_GetCursorDataFromImage(
+    _Inout_ CURSORDATA* pdata,
+    _In_    const BYTE *pbImage,
+    _In_    DWORD cbImage
+)
+{
+    CURSORICONFILEDIR *pBmpDir;
+    DWORD BmpIconSize;
+    PBYTE pbBmpIcon;
+    BOOL bResult;
+
+    if (CURSORICON_GetCursorDataFromBMI(pdata, (const BITMAPINFO *)pbImage))
+        return TRUE;
+
+    pbBmpIcon = CURSORICON_ConvertPngToBmpIcon((PBYTE)pbImage, cbImage, &BmpIconSize);
+    if (!pbBmpIcon)
+        return FALSE;
+
+    pBmpDir = (CURSORICONFILEDIR *)pbBmpIcon;
+    bResult = CURSORICON_GetCursorDataFromBMI(pdata,
+                                              (const BITMAPINFO *)&pbBmpIcon[pBmpDir->idEntries[0].dwDIBOffset]);
+    HeapFree(GetProcessHeap(), 0, pbBmpIcon);
+    return bResult;
+}
+
 static BOOL CURSORICON_GetCursorDataFromIconInfo(
   _Out_ CURSORDATA* pCursorData,
   _In_  ICONINFO* pIconInfo
@@ -1361,6 +1521,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     riff_chunk_t seq_chunk = {0};
     const unsigned char *icon_chunk;
     const unsigned char *icon_data;
+    const unsigned char *fram_end;
 
     /* Find the root chunk */
     riff_find_chunk( ANI_ACON_ID, ANI_RIFF_ID, &root_chunk, &ACON_chunk );
@@ -1411,6 +1572,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     }
     icon_chunk = fram_chunk.data;
     icon_data = fram_chunk.data + (2 * sizeof(DWORD));
+    fram_end = fram_chunk.data + fram_chunk.data_size - sizeof(DWORD);
 
     if(pHeader->num_frames > 1)
     {
@@ -1429,8 +1591,17 @@ static BOOL CURSORICON_GetCursorDataFromANI(
     for(i=0; i < pHeader->num_frames; i++)
     {
         CURSORDATA* pFrameData;
-        const DWORD chunk_size = *(const DWORD *)(icon_chunk + sizeof(DWORD));
-        const BITMAPINFO* pbmi;
+        DWORD chunk_size;
+        const BYTE* pbImage;
+        DWORD cbImage;
+
+        if (icon_data > fram_end ||
+            *(const DWORD *)(icon_chunk + sizeof(DWORD)) > (DWORD)(fram_end - icon_data))
+        {
+            ERR("Frame %d does not fit in the frame list.\n", i);
+            goto error;
+        }
+        chunk_size = *(const DWORD *)(icon_chunk + sizeof(DWORD));
 
         if(pHeader->num_frames > 1)
             pFrameData = &pCurData->aspcur[i];
@@ -1466,17 +1637,19 @@ static BOOL CURSORICON_GetCursorDataFromANI(
                 pFrameData->cx = pHeader->width;
                 pFrameData->cy = pHeader->height;
             }
-            pbmi = (const BITMAPINFO *) (icon_data + pDirEntry->dwDIBOffset);
+            pbImage = icon_data + pDirEntry->dwDIBOffset;
+            cbImage = pDirEntry->dwDIBSize;
         }
         else
         {
             /* The chunks just describe bitmaps */
-            pbmi = (const BITMAPINFO *)icon_data;
+            pbImage = icon_data;
+            cbImage = chunk_size;
             pFrameData->xHotspot = pFrameData->yHotspot = 0;
         }
 
         /* Do the real work */
-        if (!CURSORICON_GetCursorDataFromBMI(pFrameData, pbmi))
+        if (!CURSORICON_GetCursorDataFromImage(pFrameData, pbImage, cbImage))
         {
             ERR("Unable to load frame %d.\n", i);
             goto error;
@@ -1489,7 +1662,7 @@ static BOOL CURSORICON_GetCursorDataFromANI(
 
 
         /* Next frame */
-        icon_chunk += chunk_size + (2 * sizeof(DWORD));
+        icon_chunk += ((chunk_size + 1) & ~1) + (2 * sizeof(DWORD));
         icon_data = icon_chunk + (2 * sizeof(DWORD));
     }
 
@@ -1873,8 +2046,8 @@ CURSORICON_LoadFromFileW(
 {
     const CURSORICONFILEDIRENTRY *entry;
     const CURSORICONFILEDIR *dir;
-    DWORD filesize = 0, BmpIconSize;
-    PBYTE bits, pbBmpIcon = NULL;
+    DWORD filesize = 0;
+    PBYTE bits;
     HANDLE hCurIcon = NULL;
     CURSORDATA cursorData = { 0 };
 
@@ -1906,33 +2079,10 @@ CURSORICON_LoadFromFileW(
     }
     cursorData.rt = LOWORD(bIcon ? RT_ICON : RT_CURSOR);
 
-    /* Try to load BMP icon */
-    if (!CURSORICON_GetCursorDataFromBMI(&cursorData, (PBITMAPINFO)(&bits[entry->dwDIBOffset])))
+    if (!CURSORICON_GetCursorDataFromImage(&cursorData, &bits[entry->dwDIBOffset], entry->dwDIBSize))
     {
-        /* Convert PNG raw data to BMP icon if the icon was PNG icon */
-        PBYTE pngBits = &bits[entry->dwDIBOffset];
-        pbBmpIcon = CURSORICON_ConvertPngToBmpIcon(pngBits, filesize, &BmpIconSize);
-        if (!pbBmpIcon)
-            goto end; /* Not PNG icon or failed */
-
-        /* Find icon entry from BMP icon */
-        dir = (CURSORICONFILEDIR *)pbBmpIcon;
-        entry = &dir->idEntries[0]; /* Only one entry */
-
-        /* A bit of preparation */
-        ZeroMemory(&cursorData, sizeof(cursorData));
-        cursorData.cx = cxDesired;
-        cursorData.cy = cyDesired;
-        cursorData.rt = LOWORD(bIcon ? RT_ICON : RT_CURSOR);
-
-        /* Can we load this BMP icon? */
-        if (!CURSORICON_GetCursorDataFromBMI(&cursorData, (PBITMAPINFO)(&pbBmpIcon[entry->dwDIBOffset])))
-        {
-            ERR("Failing file: '%S'.\n", lpszName);
-            goto end;
-        }
-
-        TRACE("Processing PNG/Vista icon: '%S'\n", lpszName);
+        ERR("Failing file: '%S'.\n", lpszName);
+        goto end;
     }
 
     hCurIcon = NtUserxCreateEmptyCurObject(FALSE);
@@ -1953,7 +2103,6 @@ end:
         if (cursorData.hbmColor) DeleteObject(cursorData.hbmColor);
         if (cursorData.hbmAlpha) DeleteObject(cursorData.hbmAlpha);
     }
-    HeapFree(GetProcessHeap(), 0, pbBmpIcon);
     UnmapViewOfFile(bits);
     return hCurIcon;
 }
@@ -3004,12 +3153,29 @@ HANDLE WINAPI LoadImageW(
             return BITMAP_LoadImageW(hinst, lpszName, cxDesired, cyDesired, fuLoad);
         case IMAGE_CURSOR:
         case IMAGE_ICON:
+            if (!hinst && !(fuLoad & (LR_SHARED | LR_LOADFROMFILE)))
+            {
+                SetLastError(uType == IMAGE_ICON ? ERROR_RESOURCE_TYPE_NOT_FOUND : ERROR_RESOURCE_NAME_NOT_FOUND);
+                return NULL;
+            }
             return CURSORICON_LoadImageW(hinst, lpszName, cxDesired, cyDesired, fuLoad, uType == IMAGE_ICON);
         default:
             SetLastError(ERROR_INVALID_PARAMETER);
             break;
     }
     return NULL;
+}
+
+HANDLE
+WINAPI
+User32LoadOemImage(
+  _In_ LPCWSTR lpszName,
+  _In_ UINT uType,
+  _In_ int cxDesired,
+  _In_ int cyDesired,
+  _In_ UINT fuLoad)
+{
+    return CURSORICON_LoadImageW(NULL, lpszName, cxDesired, cyDesired, fuLoad, uType == IMAGE_ICON);
 }
 
 int WINAPI LookupIconIdFromDirectory(
@@ -3474,7 +3640,7 @@ BOOL WINAPI SetSystemCursor(
 {
     if (hcur == NULL)
     {
-       hcur = LoadImageW(NULL, MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
+       hcur = User32LoadOemImage(MAKEINTRESOURCEW(id), IMAGE_CURSOR, 0, 0, LR_DEFAULTSIZE);
        if (hcur == NULL)
        {
           return FALSE;

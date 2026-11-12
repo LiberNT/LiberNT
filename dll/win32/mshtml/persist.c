@@ -457,6 +457,21 @@ HRESULT set_moniker(HTMLOuterWindow *window, IMoniker *mon, IUri *nav_uri, IBind
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static void query_pending_url(HTMLDocumentObj *This)
+{
+    BSTR url = NULL;
+
+    /* Switching to edit mode reloads the document without asking the container */
+    if(!This->doc_object_service || This->nscontainer->usermode == EDITMODE)
+        return;
+
+    /* TODO: use the pending URL the container reports */
+    if(SUCCEEDED(IDocObjectService_GetPendingUrl(This->doc_object_service, &url)))
+        SysFreeString(url);
+}
+#endif
+
 static void notif_readystate(HTMLOuterWindow *window)
 {
     HTMLInnerWindow *inner_window = window->base.inner_window;
@@ -470,7 +485,7 @@ static void notif_readystate(HTMLOuterWindow *window)
     if(frame_element)
         IHTMLDOMNode_AddRef(&frame_element->element.node.IHTMLDOMNode_iface);
 
-    if(is_main_content_window(window))
+    if(is_main_content_window(window) && window->browser->doc)
         call_property_onchanged(&window->browser->doc->cp_container, DISPID_READYSTATE);
 
     hres = create_document_event(inner_window->doc, EVENTID_READYSTATECHANGE, &event);
@@ -738,6 +753,9 @@ static HRESULT WINAPI DocObjPersistMoniker_Load(IPersistMoniker *iface, BOOL fFu
 
     prepare_for_binding(This, mon, FALSE);
     call_docview_84(This);
+#ifdef __REACTOS__
+    query_pending_url(This);
+#endif
     hres = set_moniker(This->window, mon, NULL, pibc, NULL, TRUE);
     IMoniker_Release(mon);
     if(FAILED(hres))
@@ -1213,6 +1231,9 @@ static HRESULT WINAPI DocObjPersistStreamInit_Load(IPersistStreamInit *iface, IS
     }
 
     prepare_for_binding(This, mon, FALSE);
+#ifdef __REACTOS__
+    query_pending_url(This);
+#endif
     hres = set_moniker(This->window, mon, NULL, NULL, NULL, TRUE);
     if(SUCCEEDED(hres))
         hres = channelbsc_load_stream(This->window->pending_window, mon, pStm);
@@ -1252,6 +1273,9 @@ static HRESULT WINAPI DocObjPersistStreamInit_InitNew(IPersistStreamInit *iface)
     }
 
     prepare_for_binding(This, mon, FALSE);
+#ifdef __REACTOS__
+    query_pending_url(This);
+#endif
     hres = set_moniker(This->window, mon, NULL, NULL, NULL, FALSE);
     if(SUCCEEDED(hres))
         hres = channelbsc_load_stream(This->window->pending_window, mon, NULL);

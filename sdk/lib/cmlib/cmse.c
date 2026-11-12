@@ -53,9 +53,7 @@ CmpRemoveSecurityCellList(IN PHHIVE Hive,
     /* Unlink the security block and free it */
     FlinkCell->Blink = SecurityData->Blink;
     BlinkCell->Flink = SecurityData->Flink;
-#ifdef USE_CM_CACHE
     CmpRemoveFromSecurityCache(Hive, SecurityCell);
-#endif
 
     /* Release the cells */
     HvReleaseCell(Hive, SecurityData->Blink);

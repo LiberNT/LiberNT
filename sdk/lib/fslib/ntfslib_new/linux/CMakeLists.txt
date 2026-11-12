@@ -43,7 +43,9 @@ add_library(ntfslib_linux STATIC
     "${NTFSLIB_ROOT}/src/filerecord/write/filedata.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/filename.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/move.cpp"
+    "${NTFSLIB_ROOT}/src/filerecord/write/objectid.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/write/reparse.cpp"
+    "${NTFSLIB_ROOT}/src/filerecord/write/streamrename.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/filerecord.cpp"
     "${NTFSLIB_ROOT}/src/filerecord/fixup.cpp"
     "${NTFSLIB_ROOT}/src/lfs/lfs.cpp"
@@ -298,6 +300,16 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
             NAME ntfslib_linux_growth_write
             COMMAND /bin/sh
                 "${CMAKE_CURRENT_LIST_DIR}/tests/growth_write_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFSCP_EXECUTABLE}"
+                "${NTFSCAT_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
+        add_test(
+            NAME ntfslib_linux_full_base_growth
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/full_base_growth_smoke.sh"
                 "$<TARGET_FILE:ntfslib_fuse>"
                 "${MKNTFS_EXECUTABLE}"
                 "${NTFSCP_EXECUTABLE}"

@@ -30,6 +30,8 @@ UsbNetGetHardwareContextSize(
     return UsbNetAlignedAdapterSize() + (USBNET_FIXED_PAGES + USBNET_MAX_TIERS - 1 + USBNET_MAX_SCRATCHPAD) * PAGE_SIZE;
 }
 
+C_ASSERT((USBNET_MAX_SLOTS + 1) * sizeof(ULONG64) <= 1024);
+
 static
 VOID
 UsbNetLayout(
@@ -181,7 +183,8 @@ UsbNetInitializeController(
 
     if (!NT_SUCCESS(Status) && (Adapter->PhonePort || Status == STATUS_DEVICE_NOT_CONNECTED))
     {
-        Status = UsbWaitForTethering(Adapter);
+        if (!UsbNetLocalBroadcast)
+            Status = UsbWaitForTethering(Adapter);
         if (!NT_SUCCESS(Status))
             Status = UsbStartEthernet(Adapter);
     }
@@ -196,7 +199,8 @@ UsbNetInitializeController(
     UsbNetTrace("USB debugger: using %04lx:%04lx on root port %lu, %lu hub(s) away, %lu Mbit/s\n",
                 (ULONG)Adapter->VendorId, (ULONG)Adapter->ProductId, Adapter->Devices[0].Port, Adapter->Tier,
                 UsbNetLinkSpeed(Adapter->Device->Speed));
-    UsbNetWaitForCarrier(Adapter);
+    if (!UsbNetLocalBroadcast)
+        UsbNetWaitForCarrier(Adapter);
 
     /* The transfer pending now reports to interrupter 0, which the OS owns once the controller is shared */
     if (Adapter->StatusActive)

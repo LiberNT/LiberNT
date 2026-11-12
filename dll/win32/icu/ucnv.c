@@ -1075,6 +1075,11 @@ void U_EXPORT2 u_UCharsToChars(const UChar *Source, char *Target, int32_t Length
         Target[i] = IcuIsInvariant(Source[i]) ? (char)Source[i] : 0;
 }
 
+int32_t U_EXPORT2 u_strlen(const UChar *String)
+{
+    return (int32_t)wcslen(String);
+}
+
 BOOL WINAPI DllMain(HINSTANCE Instance, DWORD Reason, LPVOID Reserved)
 {
     int32_t i;

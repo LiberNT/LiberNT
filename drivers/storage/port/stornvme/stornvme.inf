@@ -26,6 +26,7 @@ DefaultDestDir = 12
 
 [STORNVME]
 %NVME.DeviceDesc% = stornvme_Inst, PCI\CC_010802
+%ANS.DeviceDesc% = stornvme_Inst, FDT\apple_t8103-nvme-ans2
 
 [ControlFlags]
 ExcludeFromSelect = *
@@ -72,6 +73,7 @@ HKR,,TypesSupported,%REG_DWORD%,7
 ROS                     = "LiberNT"
 DeviceDesc              = "NVM Express Driver"
 NVME.DeviceDesc         = "Standard NVM Express Controller"
+ANS.DeviceDesc          = "Apple ANS NVM Express Controller"
 
 SPSVCINST_ASSOCSERVICE = 0x00000002
 SERVICE_KERNEL_DRIVER  = 1

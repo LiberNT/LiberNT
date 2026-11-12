@@ -23,6 +23,100 @@ static PDEVICE_OBJECT MainDevice;
 static KMT_PNP_VETO_STATE VetoState;
 static PDRIVER_DISPATCH PreviousDispatch[IRP_MJ_MAXIMUM_FUNCTION + 1];
 
+/* A registration made while the device handles its start request */
+static POHANDLE StartHandle;
+static KEVENT StartCallbackEvent;
+static volatile LONG StartIrpCompleted;
+static volatile LONG StartCallbacksBefore;
+static volatile LONG StartCallbacksAfter;
+static KMT_PO_FX_START_STATE StartState;
+
+static VOID StartCallbackSeen(VOID)
+{
+    if (StartIrpCompleted)
+        InterlockedIncrement(&StartCallbacksAfter);
+    else
+        InterlockedIncrement(&StartCallbacksBefore);
+    KeSetEvent(&StartCallbackEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID NTAPI StartActiveCallback(PVOID Context, ULONG Component)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(Component);
+    StartCallbackSeen();
+}
+
+static VOID NTAPI StartIdleConditionCallback(PVOID Context, ULONG Component)
+{
+    UNREFERENCED_PARAMETER(Context);
+    StartCallbackSeen();
+    PoFxCompleteIdleCondition(StartHandle, Component);
+}
+
+static VOID NTAPI StartIdleStateCallback(PVOID Context, ULONG Component, ULONG State)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(State);
+    StartCallbackSeen();
+    PoFxCompleteIdleState(StartHandle, Component);
+}
+
+static VOID NTAPI StartPowerRequiredCallback(PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    StartCallbackSeen();
+    PoFxReportDevicePoweredOn(StartHandle);
+}
+
+static VOID NTAPI StartPowerNotRequiredCallback(PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    StartCallbackSeen();
+    PoFxCompleteDevicePowerNotRequired(StartHandle);
+}
+
+static VOID StartRegister(PDEVICE_OBJECT Pdo)
+{
+    PO_FX_DEVICE Registration;
+    PO_FX_COMPONENT_IDLE_STATE IdleState;
+
+    KeClearEvent(&StartCallbackEvent);
+    StartIrpCompleted = 0;
+    StartCallbacksBefore = 0;
+    StartCallbacksAfter = 0;
+
+    RtlZeroMemory(&Registration, sizeof(Registration));
+    RtlZeroMemory(&IdleState, sizeof(IdleState));
+    Registration.Version = PO_FX_VERSION;
+    Registration.ComponentCount = 1;
+    Registration.Components[0].IdleStateCount = 1;
+    Registration.Components[0].IdleStates = &IdleState;
+    Registration.ComponentActiveConditionCallback = StartActiveCallback;
+    Registration.ComponentIdleConditionCallback = StartIdleConditionCallback;
+    Registration.ComponentIdleStateCallback = StartIdleStateCallback;
+    Registration.DevicePowerRequiredCallback = StartPowerRequiredCallback;
+    Registration.DevicePowerNotRequiredCallback = StartPowerNotRequiredCallback;
+
+    StartState.RegisterStatus = PoFxRegisterDevice(Pdo, &Registration, &StartHandle);
+    if (!NT_SUCCESS(StartState.RegisterStatus))
+    {
+        StartHandle = NULL;
+        return;
+    }
+
+    PoFxStartDevicePowerManagement(StartHandle);
+}
+
+static VOID StartUnregister(VOID)
+{
+    if (StartHandle == NULL)
+        return;
+
+    PoFxUnregisterDevice(StartHandle);
+    StartHandle = NULL;
+}
+
 static NTSTATUS NTAPI TestAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Pdo)
 {
     PDEVICE_OBJECT Fdo;
@@ -104,6 +198,10 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
         return Status;
     }
 
+    /* The devices other kernel tests create on the kmtest driver keep its own dispatch */
+    if (DeviceObject != TestDevice)
+        return PreviousDispatch[Stack->MajorFunction](DeviceObject, Irp);
+
     Extension = DeviceObject->DeviceExtension;
     Status = IoAcquireRemoveLock(&Extension->RemoveLock, Irp);
     if (!NT_SUCCESS(Status))
@@ -123,6 +221,7 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
                 Status = Irp->IoStatus.Status;
                 if (NT_SUCCESS(Status))
                 {
+                    StartRegister(Extension->Pdo);
                     Power.DeviceState = PowerDeviceD0;
                     PoSetPowerState(DeviceObject, DevicePowerState, Power);
                     ExAcquireFastMutex(&DeviceLock);
@@ -131,6 +230,7 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
                     ExReleaseFastMutex(&DeviceLock);
                 }
                 IoReleaseRemoveLock(&Extension->RemoveLock, Irp);
+                InterlockedExchange(&StartIrpCompleted, 1);
                 IoCompleteRequest(Irp, IO_NO_INCREMENT);
                 return Status;
 
@@ -173,6 +273,7 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             {
                 PDEVICE_OBJECT Lower = Extension->Lower;
 
+                StartUnregister();
                 ExAcquireFastMutex(&DeviceLock);
                 VetoState.Removes++;
                 TestDevice = NULL;
@@ -204,6 +305,7 @@ VOID KmtPoFxInitializePnp(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT ControlDev
 
     ExInitializeFastMutex(&DeviceLock);
     KeInitializeEvent(&StartedEvent, NotificationEvent, FALSE);
+    KeInitializeEvent(&StartCallbackEvent, NotificationEvent, FALSE);
     MainDevice = ControlDevice;
     for (Index = 0; Index <= IRP_MJ_MAXIMUM_FUNCTION; Index++)
     {
@@ -227,6 +329,15 @@ PDEVICE_OBJECT KmtPoFxAcquireDevice(PDEVICE_OBJECT *Pdo)
     if (Status != STATUS_SUCCESS)
         return NULL;
 
+    if (StartHandle != NULL)
+    {
+        Timeout.QuadPart = -10000LL * 2000;
+        KeWaitForSingleObject(&StartCallbackEvent, Executive, KernelMode, FALSE, &Timeout);
+        StartState.CallbacksBeforeStart = StartCallbacksBefore;
+        StartState.CallbacksAfterStart = StartCallbacksAfter;
+        StartUnregister();
+    }
+
     ExAcquireFastMutex(&DeviceLock);
     if (TestDevice)
     {
@@ -239,6 +350,11 @@ PDEVICE_OBJECT KmtPoFxAcquireDevice(PDEVICE_OBJECT *Pdo)
     }
     ExReleaseFastMutex(&DeviceLock);
     return Fdo;
+}
+
+VOID KmtPoFxGetStartState(PKMT_PO_FX_START_STATE State)
+{
+    *State = StartState;
 }
 
 VOID KmtPoFxReleaseDevice(PDEVICE_OBJECT Fdo)

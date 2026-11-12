@@ -195,6 +195,7 @@ KiIdleLoop(VOID)
             Prcb->CurrentThread = NewThread;
             NewThread->State = Running;
             KiReleasePrcbLock(Prcb);
+            KiWaitForThreadSwapOut(NewThread);
             KiSwapContext(APC_LEVEL, OldThread);
             if (KeGetCurrentIrql() > DISPATCH_LEVEL)
                 KfLowerIrql(DISPATCH_LEVEL);

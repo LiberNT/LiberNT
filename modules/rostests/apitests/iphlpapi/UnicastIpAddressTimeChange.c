@@ -14,6 +14,20 @@
 #include <netioapi.h>
 
 #define HOUR_100NS (36000000000LL)
+#define DAD_TIMEOUT_MS 5000
+
+static IN6_ADDR DadAddress;
+static HANDLE DadChanged;
+
+static VOID WINAPI
+DadAddressChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_NOTIFICATION_TYPE Type)
+{
+    if (Row && Row->Address.si_family == AF_INET6 &&
+        !memcmp(&Row->Address.Ipv6.sin6_addr, &DadAddress, sizeof(DadAddress)))
+    {
+        SetEvent(DadChanged);
+    }
+}
 
 static LONGLONG
 QuerySystemTime100ns(VOID)
@@ -132,7 +146,8 @@ CheckDuplicateAddressDetection(
 {
     static const UCHAR Prefix[8] = { 0xFD, 0x4C, 0x49, 0x4E, 0x54, 0x50, 0x00, 0x00 };
     MIB_UNICASTIPADDRESS_ROW Row, Current;
-    DWORD Status;
+    HANDLE Notify = NULL;
+    DWORD Status, Start, Elapsed;
 
     InitializeUnicastIpAddressEntry(&Row);
     Row.InterfaceLuid = Luid;
@@ -141,15 +156,33 @@ CheckDuplicateAddressDetection(
     Row.Address.Ipv6.sin6_addr.s6_addr[15] = 0x31;
     Row.OnLinkPrefixLength = 64;
 
+    DadAddress = Row.Address.Ipv6.sin6_addr;
+    DadChanged = CreateEventW(NULL, FALSE, FALSE, NULL);
+    ok_long(NotifyUnicastIpAddressChange(AF_INET6, DadAddressChanged, NULL, FALSE, &Notify), NO_ERROR);
+
     Status = CreateUnicastIpAddressEntry(&Row);
     ok_long(Status, NO_ERROR);
-    if (Status != NO_ERROR)
-        return;
-    Sleep(5000);
-    Current = Row;
-    ok_long(GetUnicastIpAddressEntry(&Current), NO_ERROR);
-    ok_long(Current.DadState, IpDadStatePreferred);
-    ok_long(DeleteUnicastIpAddressEntry(&Row), NO_ERROR);
+    if (Status == NO_ERROR)
+    {
+        Start = GetTickCount();
+        for (;;)
+        {
+            Current = Row;
+            if (GetUnicastIpAddressEntry(&Current) != NO_ERROR || Current.DadState != IpDadStateTentative)
+                break;
+            Elapsed = GetTickCount() - Start;
+            if (Elapsed >= DAD_TIMEOUT_MS || WaitForSingleObject(DadChanged, DAD_TIMEOUT_MS - Elapsed) != WAIT_OBJECT_0)
+                break;
+        }
+        Current = Row;
+        ok_long(GetUnicastIpAddressEntry(&Current), NO_ERROR);
+        ok_long(Current.DadState, IpDadStatePreferred);
+        ok_long(DeleteUnicastIpAddressEntry(&Row), NO_ERROR);
+    }
+
+    if (Notify)
+        ok_long(CancelMibChangeNotify2(Notify), NO_ERROR);
+    CloseHandle(DadChanged);
 }
 
 START_TEST(UnicastIpAddressTimeChange)

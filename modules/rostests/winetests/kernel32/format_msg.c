@@ -1120,7 +1120,8 @@ static void test_message_insufficient_buffer(void)
 
 static void test_message_insufficient_buffer_wide(void)
 {
-    DWORD ret, size, i;
+    static const DWORD sizes[] = { 1000, 0x7fff, 0x8000, 0x8001, 0xffff, 0x10000, 0x10001, 0x20000, 999999 };
+    DWORD ret, size, i, j;
     WCHAR out[8];
 
     SetLastError(0xdeadbeef);
@@ -1155,10 +1156,14 @@ static void test_message_insufficient_buffer_wide(void)
         broken(!lstrcmpW( out, L"xxxxxx" )), /* winxp */
         "Expected the buffer to be truncated\n");
 
-    for (size = 1000; size < 1000000; size += size / 10)
+    /* sizes around the 32K and 64K boundaries and one near a million, not the whole geometric sweep */
+    for (j = 0; j < ARRAY_SIZE(sizes); j++)
     {
-        WCHAR *tmp = HeapAlloc( GetProcessHeap(), 0, size * sizeof(WCHAR) );
-        WCHAR *buf = HeapAlloc( GetProcessHeap(), 0, size * sizeof(WCHAR) );
+        WCHAR *tmp, *buf;
+
+        size = sizes[j];
+        tmp = HeapAlloc( GetProcessHeap(), 0, size * sizeof(WCHAR) );
+        buf = HeapAlloc( GetProcessHeap(), 0, size * sizeof(WCHAR) );
         for (i = 0; i < size; i++) tmp[i] = 'A' + i % 26;
         tmp[size - 1] = 0;
         ret = FormatMessageW( FORMAT_MESSAGE_FROM_STRING, tmp, 0, 0, buf, size, NULL );

@@ -23,6 +23,7 @@
 #define TAG_LIVE_DUMP 'pDmK'
 #define TAG_CRASH_DUMP 'pDcK'
 #define KDP_DUMP_EXTENT_BUFFER_SIZE (64 * 1024)
+#define KDP_DUMP_MAX_IMAGES 4096
 #define KDP_RAW_DUMP_DEFAULT_MBR_TYPE 0x7f
 #define KDP_RAW_DUMP_LAYOUT_PARTITIONS 16
 #define KDP_RAW_DUMP_COPY_SIZE (1024 * 1024)
@@ -368,17 +369,17 @@ static NTSTATUS KdpWriteStorageVirtual(_In_reads_bytes_(Length) PVOID Buffer, _I
     return STATUS_SUCCESS;
 }
 
-#if defined(_M_AMD64)
+#ifdef _WIN64
 static ULONG_PTR NTAPI KdpCaptureLiveDumpContext(_In_ ULONG_PTR Argument)
 {
     UNREFERENCED_PARAMETER(Argument);
 
-    RtlCaptureContext(KeGetCurrentPrcb()->CrashDumpContext);
+    RtlCaptureContext(KiPrcbContext(KeGetCurrentPrcb()));
     return 0;
 }
 #endif
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_M_AMD64)
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_WIN64)
 static NTSTATUS KdpWriteDumpFileChunk(_In_ HANDLE FileHandle, _In_ HANDLE EventHandle, _In_reads_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _Inout_ PLARGE_INTEGER FileOffset)
 {
     IO_STATUS_BLOCK IoStatus;
@@ -1444,6 +1445,75 @@ static NTSTATUS KdpWriteCrashLog(VOID)
     return KdpCrashDumpState.Storage.Flush(KdpCrashDumpState.Storage.Context);
 }
 
+static ULONG64 KdpMarkDumpRange(_Inout_ PRTL_BITMAP Bitmap, _In_opt_ PVOID Base, _In_ SIZE_T Length)
+{
+    PHYSICAL_ADDRESS Physical;
+    ULONG_PTR Address;
+    ULONG_PTR End;
+    ULONG64 Frame;
+    ULONG64 Marked = 0;
+
+    if ((Base == NULL) || (Length == 0) || ((ULONG_PTR)Base + Length < (ULONG_PTR)Base))
+        return 0;
+
+    End = (ULONG_PTR)Base + Length;
+    for (Address = (ULONG_PTR)PAGE_ALIGN(Base); (Address != 0) && (Address < End); Address += PAGE_SIZE)
+    {
+        Physical = MmGetPhysicalAddress((PVOID)Address);
+        Frame = (ULONG64)Physical.QuadPart >> PAGE_SHIFT;
+        if ((Physical.QuadPart == 0) || (Frame >= Bitmap->SizeOfBitMap) || RtlCheckBit(Bitmap, (ULONG)Frame))
+            continue;
+
+        RtlSetBit(Bitmap, (ULONG)Frame);
+        Marked++;
+    }
+
+    return Marked;
+}
+
+static ULONG64 KdpMarkAnalysisPages(_Inout_ PRTL_BITMAP Bitmap)
+{
+    PLDR_DATA_TABLE_ENTRY Module;
+    PLIST_ENTRY ListEntry;
+    PKPRCB Prcb;
+    PKTHREAD Thread;
+    ULONG64 Marked = 0;
+    ULONG Modules = 0;
+    ULONG Processor;
+
+    if (PsLoadedModuleList.Flink != NULL)
+    {
+        for (ListEntry = PsLoadedModuleList.Flink;
+             (ListEntry != &PsLoadedModuleList) && (ListEntry != NULL) && (Modules < KDP_DUMP_MAX_IMAGES);
+             ListEntry = ListEntry->Flink, Modules++)
+        {
+            Module = CONTAINING_RECORD(ListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+            Marked += KdpMarkDumpRange(Bitmap, Module, sizeof(*Module));
+            Marked += KdpMarkDumpRange(Bitmap, Module->DllBase, Module->SizeOfImage);
+            Marked += KdpMarkDumpRange(Bitmap, Module->FullDllName.Buffer, Module->FullDllName.MaximumLength);
+            Marked += KdpMarkDumpRange(Bitmap, Module->BaseDllName.Buffer, Module->BaseDllName.MaximumLength);
+        }
+    }
+
+    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    {
+        Prcb = KiProcessorBlock[Processor];
+        if (Prcb == NULL)
+            continue;
+
+        Marked += KdpMarkDumpRange(Bitmap, Prcb, sizeof(*Prcb));
+        Thread = Prcb->CurrentThread;
+        if (Thread == NULL)
+            continue;
+
+        Marked += KdpMarkDumpRange(Bitmap, Thread, sizeof(*Thread));
+        if ((ULONG_PTR)Thread->StackBase > (ULONG_PTR)Thread->StackLimit)
+            Marked += KdpMarkDumpRange(Bitmap, (PVOID)Thread->StackLimit, (ULONG_PTR)Thread->StackBase - (ULONG_PTR)Thread->StackLimit);
+    }
+
+    return Marked;
+}
+
 static VOID KdpCaptureEarlyCrashDiagnostics(VOID)
 {
     ULONG RolloverCount;
@@ -1521,26 +1591,19 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
     if (KdpCrashDumpState.DumpType != DUMP_TYPE_FULL)
     {
         PSUMMARY_DUMP64 Summary = KdpCrashDumpState.Summary;
+        PFN_NUMBER Candidates;
         ULONG64 MaxPages;
-        ULONG Bit;
 
-        TotalPages = MmBuildDumpPageBitmap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.IncludeUserPages);
-        RequestedPages = TotalPages;
-
-        /* Drop the highest pages first if the dedicated target cannot take them all. */
         MaxPages = (KdpCrashDumpState.Capacity.QuadPart - DUMP_HEADER64_SIZE - KdpCrashDumpState.SummarySize) >> PAGE_SHIFT;
-        if (TotalPages > MaxPages)
-        {
-            for (Bit = KdpCrashDumpState.PageBitmap.SizeOfBitMap; (Bit-- > 0) && (TotalPages > MaxPages);)
-            {
-                if (RtlCheckBit(&KdpCrashDumpState.PageBitmap, Bit))
-                {
-                    RtlClearBit(&KdpCrashDumpState.PageBitmap, Bit);
-                    TotalPages--;
-                }
-            }
+        RtlClearAllBits(&KdpCrashDumpState.PageBitmap);
+        if (KdpMarkAnalysisPages(&KdpCrashDumpState.PageBitmap) > MaxPages)
+            RtlClearAllBits(&KdpCrashDumpState.PageBitmap);
+        TotalPages = MmBuildDumpPageBitmap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.IncludeUserPages,
+                                           (PFN_NUMBER)MaxPages, &Candidates);
+        RequestedPages = Candidates;
+        ASSERT(TotalPages <= MaxPages);
+        if (TotalPages < RequestedPages)
             KdpCrashDumpState.Header->Attributes.InsufficientDumpfileSize = TRUE;
-        }
 
         RtlZeroMemory(Summary, KdpCrashDumpState.SummarySize);
         Summary->Signature = DUMP_SUMMARY_SIGNATURE;
@@ -1788,7 +1851,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
 NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In_ KPROCESSOR_MODE PreviousMode)
 {
-#if defined(_M_AMD64)
+#ifdef _WIN64
     static LONG KdpLiveDumpActive;
     OBJECT_ATTRIBUTES ObjectAttributes;
     FILE_END_OF_FILE_INFORMATION EndOfFile;
@@ -1911,7 +1974,8 @@ NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In
         goto Exit;
     }
 
-    TotalPages = MmBuildDumpPageBitmap(&Bitmap, Control->Flags.IncludeUserSpaceMemoryPages ? TRUE : FALSE);
+    RtlClearAllBits(&Bitmap);
+    TotalPages = MmBuildDumpPageBitmap(&Bitmap, Control->Flags.IncludeUserSpaceMemoryPages ? TRUE : FALSE, (PFN_NUMBER)~0, NULL);
 
     RtlZeroMemory(Summary, SummarySize);
     Summary->Signature = DUMP_SUMMARY_SIGNATURE;

@@ -153,6 +153,11 @@ extern int bitmap_info_size( const BITMAPINFO * info, WORD coloruse ) DECLSPEC_H
 
 /* enhmetafile.c */
 extern HENHMETAFILE EMF_Create_HENHMETAFILE(ENHMETAHEADER *emh, DWORD filesize, BOOL on_disk ) DECLSPEC_HIDDEN;
+#ifdef __REACTOS__
+extern VOID EMF_KeepFile( HENHMETAFILE hmf, HANDLE file ) DECLSPEC_HIDDEN;
+extern VOID MF_KeepFile( HMETAFILE hmf, HANDLE file ) DECLSPEC_HIDDEN;
+extern HANDLE WINAPI GdiReopenMetaFileForReading( HANDLE file ) DECLSPEC_HIDDEN;
+#endif
 
 /* gdiobj.c */
 extern HGDIOBJ alloc_gdi_handle( void *obj, WORD type, const struct gdi_obj_funcs *funcs ) DECLSPEC_HIDDEN;

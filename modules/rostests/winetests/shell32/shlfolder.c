@@ -85,7 +85,7 @@ static WCHAR *make_wstr(const char *str)
 static BOOL check_window_exists(const char *name)
 {
     HWND window = NULL;
-    int i;
+    DWORD start;
 #ifdef __REACTOS__
     char win11_title[MAX_PATH + 16];
 
@@ -93,7 +93,8 @@ static BOOL check_window_exists(const char *name)
     sprintf(win11_title, "%s - File Explorer", name);
 #endif
 
-    for (i = 0; i < 10; i++)
+    start = GetTickCount();
+    do
     {
         if ((window = FindWindowA("ExplorerWClass", name))
 #ifdef __REACTOS__
@@ -105,19 +106,15 @@ static BOOL check_window_exists(const char *name)
             break;
         }
 
-        Sleep(100);
-    }
+        Sleep(1);
+    } while (GetTickCount() - start < 1000);
 
     if (!window)
         return FALSE;
 
-    for (i = 0; i < 10; i++)
-    {
-        if (!IsWindow(window))
-            break;
-
-        Sleep(100);
-    }
+    start = GetTickCount();
+    while (IsWindow(window) && GetTickCount() - start < 1000)
+        Sleep(1);
 
     return TRUE;
 }

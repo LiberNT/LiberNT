@@ -45,11 +45,18 @@ static PUCHAR BackBuffer = NULL;
 static SIZE_T BackBufferSize;
 
 static RGBQUAD CachedPalette[BV_MAX_COLORS];
+static ULONG NativePalette[BV_MAX_COLORS];
 static UCHAR CachedBlendPalette[BV_MAX_COLORS][BV_MAX_COLORS][MAXUCHAR + 1];
 static BOOT_FONT_RENDERER BootVidFont;
 static BOOT_FONT_RENDERER BootVidCompactFont;
 static BOOT_FONT_RENDERER BootVidStatusFont;
 static BOOLEAN VidpCompactFont = FALSE;
+
+static ULONG PixelScale;
+
+static BOOLEAN TextUpdateDeferred;
+static BOOLEAN TextDamaged;
+static URECT TextDamage;
 
 NTSTATUS
 NTAPI
@@ -69,12 +76,18 @@ VidSetVirtualFrameBuffer(
 static __inline ULONG
 LogicalToPhysicalX(_In_ ULONG X)
 {
+    if (PixelScale)
+        return X * PixelScale;
+
     return (ULONG)(((ULONGLONG)X * ScreenWidth) / VidpDisplayWidth);
 }
 
 static __inline ULONG
 LogicalToPhysicalY(_In_ ULONG Y)
 {
+    if (PixelScale)
+        return Y * PixelScale;
+
     return (ULONG)(((ULONGLONG)Y * ScreenHeight) / VidpDisplayHeight);
 }
 
@@ -268,7 +281,7 @@ FlushBackBufferRect(
             PULONG Pixel = FramePixel(Left, y);
 
             for (x = 0; x < Width; ++x)
-                Pixel[x] = CachedPalette[Back[x]];
+                Pixel[x] = NativePalette[Back[x]];
         }
         FlushFrameRect(Left, Top, Left + Width, Top + Height);
         return;
@@ -291,7 +304,7 @@ FlushBackBufferRect(
             Step = (LONG_PTR)StepY * VidpDisplayWidth + StepX;
             for (x = Physical.Left; x < Physical.Right; ++x)
             {
-                *Pixel++ = CachedPalette[BackBuffer[Index]];
+                *Pixel++ = NativePalette[BackBuffer[Index]];
                 Index += Step;
             }
         }
@@ -322,7 +335,7 @@ FlushBackBufferRect(
 
                     while (NativeX < NextNativeX)
                     {
-                        *Pixel++ = CachedPalette[Back[x]];
+                        *Pixel++ = NativePalette[Back[x]];
                         ++NativeX;
                     }
                 }
@@ -342,7 +355,7 @@ FlushBackBufferRect(
         {
             ULONG NativeX;
             ULONG NativeY;
-            ULONG Pixel = CachedPalette[Back[x]];
+            ULONG Pixel = NativePalette[Back[x]];
             ULONG PixelLeft = LogicalToPhysicalX(Left + x);
             ULONG PixelRight = LogicalToPhysicalX(Left + x + 1);
 
@@ -354,6 +367,59 @@ FlushBackBufferRect(
         }
     }
     FlushFrameRect(NativeLeft, LogicalToPhysicalY(Top), NativeRight, LogicalToPhysicalY(Top + Height));
+}
+
+static VOID
+DamageBackBufferRect(
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    if (!TextUpdateDeferred)
+    {
+        FlushBackBufferRect(Left, Top, Width, Height);
+        return;
+    }
+
+    if (!Width || !Height)
+        return;
+
+    if (!TextDamaged)
+    {
+        TextDamage.Left = Left;
+        TextDamage.Top = Top;
+        TextDamage.Right = Left + Width;
+        TextDamage.Bottom = Top + Height;
+        TextDamaged = TRUE;
+        return;
+    }
+
+    TextDamage.Left = min(TextDamage.Left, Left);
+    TextDamage.Top = min(TextDamage.Top, Top);
+    TextDamage.Right = max(TextDamage.Right, Left + Width);
+    TextDamage.Bottom = max(TextDamage.Bottom, Top + Height);
+}
+
+VOID
+BeginTextUpdate(VOID)
+{
+    TextUpdateDeferred = TRUE;
+}
+
+VOID
+EndTextUpdate(VOID)
+{
+    TextUpdateDeferred = FALSE;
+
+    if (!TextDamaged)
+        return;
+
+    TextDamaged = FALSE;
+    FlushBackBufferRect(TextDamage.Left,
+                        TextDamage.Top,
+                        TextDamage.Right - TextDamage.Left,
+                        TextDamage.Bottom - TextDamage.Top);
 }
 
 static VOID
@@ -412,6 +478,38 @@ FindClosestBlendedPaletteColor(
     return BestIndex;
 }
 
+static ULONG
+PackNativeChannel(
+    _In_ UCHAR Value,
+    _In_ ULONG Mask)
+{
+    ULONG Shift = 0;
+
+    while (!(Mask & (1UL << Shift)))
+        ++Shift;
+
+    return (ULONG)((((ULONGLONG)Value * (Mask >> Shift) + 127) / 255) << Shift) & Mask;
+}
+
+static ULONG
+PaletteToNative(
+    _In_ RGBQUAD Color)
+{
+    ULONG RedMask = VidpFrameBufferInfo.RedMask;
+    ULONG GreenMask = VidpFrameBufferInfo.GreenMask;
+    ULONG BlueMask = VidpFrameBufferInfo.BlueMask;
+
+    if (!RedMask || !GreenMask || !BlueMask ||
+        ((RedMask == 0x00FF0000) && (GreenMask == 0x0000FF00) && (BlueMask == 0x000000FF)))
+    {
+        return Color;
+    }
+
+    return PackNativeChannel(GetRValue(Color), RedMask) |
+           PackNativeChannel(GetGValue(Color), GreenMask) |
+           PackNativeChannel(GetBValue(Color), BlueMask);
+}
+
 static BOOLEAN
 CachePalette(
     _In_reads_(Count) const ULONG* Table,
@@ -425,6 +523,7 @@ CachePalette(
     {
         HasChanged |= !!((CachedPalette[i] ^ *Entry) & 0x00FFFFFF);
         CachedPalette[i] = *Entry | 0xFF000000;
+        NativePalette[i] = PaletteToNative(CachedPalette[i]);
     }
 
     return HasChanged;
@@ -490,7 +589,7 @@ DisplayBitmapCharacter(
         }
     }
 
-    FlushBackBufferRect(Left, Top, Width, Height);
+    DamageBackBufferRect(Left, Top, Width, Height);
 }
 
 static ULONG
@@ -532,7 +631,7 @@ VidInitialize(
     CM_MONITOR_DEVICE_DATA MonitorConfigData;
     INTERFACE_TYPE Interface;
     ULONG BusNumber;
-    ULONG Dpi, ReadableDpi, MaximumDpi;
+    ULONG Dpi, ReadableDpi, MaximumDpi, Scale;
     ULONG LogicalWidth, LogicalHeight, ScrollWidth;
     ULONG CompactPixelHeight, CompactCellHeight;
     SIZE_T BackBufferHeight, CompactBackBufferSize;
@@ -554,7 +653,6 @@ VidInitialize(
     /* The VRAM address must be page-aligned */
     if (VramAddress.QuadPart % PAGE_SIZE != 0) // DPRINTed for diagnostics on some systems
         DPRINT1("** VramAddress 0x%I64X isn't PAGE_SIZE aligned\n", VramAddress.QuadPart);
-    ASSERT(VramAddress.QuadPart % PAGE_SIZE == 0);
     if (VramSize % PAGE_SIZE != 0)
         DPRINT1("** VramSize %lu (0x%lx) isn't multiple of PAGE_SIZE\n", VramSize, VramSize);
     // ASSERT(VramSize % PAGE_SIZE == 0); // This assert may fail, e.g. 800x600@32bpp UEFI GOP display
@@ -670,10 +768,13 @@ VidInitialize(
     MaximumDpi = min((ULONG)(((ULONGLONG)ScreenWidth * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) / SCREEN_WIDTH), (ULONG)(((ULONGLONG)ScreenHeight * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) / SCREEN_HEIGHT));
     Dpi = min(Dpi, MaximumDpi);
 
-    LogicalWidth = (ULONG)(((ULONGLONG)ScreenWidth * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT + Dpi / 2) / Dpi);
-    LogicalHeight = (ULONG)(((ULONGLONG)ScreenHeight * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT + Dpi / 2) / Dpi);
-    LogicalWidth = max(LogicalWidth, SCREEN_WIDTH);
-    LogicalHeight = max(LogicalHeight, SCREEN_HEIGHT);
+    /* A fractional scale duplicates scattered rows and columns, which distorts glyphs as they scroll */
+    Scale = (Dpi + LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT / 2) / LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
+    Scale = max(min(Scale, min(ScreenWidth / SCREEN_WIDTH, ScreenHeight / SCREEN_HEIGHT)), 1);
+
+    LogicalWidth = max(ScreenWidth / Scale, SCREEN_WIDTH);
+    LogicalHeight = max(ScreenHeight / Scale, SCREEN_HEIGHT);
+    PixelScale = ((LogicalWidth * Scale <= ScreenWidth) && (LogicalHeight * Scale <= ScreenHeight)) ? Scale : 0;
 
     if (BootFontInitialize(&BootVidFont, LogicalWidth, LogicalHeight))
     {
@@ -711,7 +812,7 @@ VidInitialize(
     VidpDisplayHeight = LogicalHeight;
     VidpPhysicalWidth = ScreenWidth;
     VidpPhysicalHeight = ScreenHeight;
-    VidpDisplayDpi = Dpi;
+    VidpDisplayDpi = PixelScale ? (Scale * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) : Dpi;
     VidpScrollRegion.Left = 0;
     VidpScrollRegion.Top = 0;
     VidpScrollRegion.Right = ScrollWidth - 1;
@@ -941,6 +1042,7 @@ VidUseCompactFont(VOID)
         return FALSE;
 
     VidpCompactFont = TRUE;
+    PixelScale = 1;
     VidpDisplayWidth = ScreenWidth;
     VidpDisplayHeight = ScreenHeight;
     VidpDisplayDpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
@@ -1108,7 +1210,7 @@ PreserveRow(
     /* On restore, mirror the backbuffer changes to the framebuffer */
     if (Restore)
     {
-        FlushBackBufferRect(0, CurrentTop, VidpDisplayWidth, Height);
+        DamageBackBufferRect(0, CurrentTop, VidpDisplayWidth, Height);
     }
 }
 
@@ -1141,10 +1243,10 @@ DoScroll(
         NewPosition += VidpDisplayWidth;
     }
 
-    FlushBackBufferRect(VidpScrollRegion.Left,
-                        VidpScrollRegion.Top,
-                        RowSize,
-                        Height);
+    DamageBackBufferRect(VidpScrollRegion.Left,
+                         VidpScrollRegion.Top,
+                         RowSize,
+                         Height);
 }
 
 VOID
@@ -1215,7 +1317,7 @@ DisplayCharacter(
         }
     }
 
-    FlushBackBufferRect(Left, Top, Width, Height);
+    DamageBackBufferRect(Left, Top, Width, Height);
 }
 
 VOID
@@ -1237,7 +1339,7 @@ VidSolidColorFill(
         return;
     }
 
-    NativeColor = CachedPalette[Color];
+    NativeColor = NativePalette[Color];
     Right = min(Right, VidpDisplayWidth - 1);
     Bottom = min(Bottom, VidpDisplayHeight - 1);
     Width = Right - Left + 1;

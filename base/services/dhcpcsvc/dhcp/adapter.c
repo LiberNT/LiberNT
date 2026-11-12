@@ -412,6 +412,7 @@ AdapterRemove(
     if (proto)
         remove_protocol(proto);
     cancel_timeout(send_discover, &Adapter->DhclientInfo);
+    cancel_timeout(discover_panic, &Adapter->DhclientInfo);
     cancel_timeout(send_request, &Adapter->DhclientInfo);
     cancel_timeout(state_selecting, &Adapter->DhclientInfo);
     cancel_timeout(state_bound, &Adapter->DhclientInfo);
@@ -527,6 +528,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                         add_protocol(Adapter->DhclientInfo.name,
                                      Adapter->DhclientInfo.rfdesc,
                                      got_one, &Adapter->DhclientInfo);
+                        Adapter->DhclientInfo.client->discover_cycle = 0;
                         state_init(&Adapter->DhclientInfo);
 
                         SetEvent(hAdapterStateChangedEvent);
@@ -604,7 +606,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                 Adapter->DhclientConfig.timeout = DHCP_PANIC_TIMEOUT;
                 Adapter->DhclientConfig.initial_interval = DHCP_DISCOVER_INTERVAL;
                 Adapter->DhclientConfig.retry_interval = DHCP_DISCOVER_INTERVAL;
-                Adapter->DhclientConfig.select_interval = 1;
+                Adapter->DhclientConfig.select_interval = 0;
                 Adapter->DhclientConfig.reboot_timeout = DHCP_REBOOT_TIMEOUT;
                 Adapter->DhclientConfig.backoff_cutoff = DHCP_BACKOFF_MAX;
                 Adapter->DhclientState.interval =
@@ -622,6 +624,7 @@ DWORD WINAPI AdapterDiscoveryThread(LPVOID Context) {
                                      Adapter->DhclientInfo.rfdesc,
                                      got_one, &Adapter->DhclientInfo);
 
+                        Adapter->DhclientInfo.client->discover_cycle = 0;
                         state_init(&Adapter->DhclientInfo);
                     }
 

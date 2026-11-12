@@ -2572,6 +2572,7 @@ BOOLEAN NTAPI RtlFreeHeap(
                                      &BlockSize,
                                      MEM_RELEASE);
 
+        /* TODO: in user mode, flush the secure memory cache and retry when the block is secured memory */
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("HEAP: Failed releasing memory with Status 0x%08X. Heap %p, ptr %p, base address %p\n",
@@ -4040,28 +4041,6 @@ BOOLEAN NTAPI RtlValidateHeap(
 /*
  * @unimplemented
  */
-NTSTATUS NTAPI
-RtlEnumProcessHeaps(PHEAP_ENUMERATION_ROUTINE HeapEnumerationRoutine,
-                    PVOID lParam)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-/*
- * @unimplemented
- */
-BOOLEAN NTAPI
-RtlValidateProcessHeaps(VOID)
-{
-    UNIMPLEMENTED;
-    return TRUE;
-}
-
-
-/*
- * @unimplemented
- */
 BOOLEAN NTAPI
 RtlZeroHeap(
     IN PVOID HeapHandle,
@@ -4708,22 +4687,6 @@ RtlMultipleFreeHeap(IN PVOID HeapHandle,
     }
 
     return Index;
-}
-
-/*
- * Info:
- * - https://securityxploded.com/enumheaps.php
- * - https://evilcodecave.wordpress.com/2009/04/14/rtlqueryprocessheapinformation-as-anti-dbg-trick/
- */
-struct _DEBUG_BUFFER;
-
-NTSTATUS
-NTAPI
-RtlQueryProcessHeapInformation(
-    IN struct _DEBUG_BUFFER *DebugBuffer)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
 }
 
 /* EOF */

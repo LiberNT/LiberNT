@@ -539,7 +539,6 @@ HKCR,"Media Type\{e436eb83-524f-11ce-9f53-0020af0ba770}",,0x00000010
 HKCR,"Media Type\{e436eb83-524f-11ce-9f53-0020af0ba770}\{ffffffff-128f-4dd1-ad22-becfa66ce7aa}",,0x00000010
 HKCR,"Media Type\{e436eb83-524f-11ce-9f53-0020af0ba770}\{ffffffff-128f-4dd1-ad22-becfa66ce7aa}","0",0x00000000,"0,1,00,0"
 HKCR,"Media Type\{e436eb83-524f-11ce-9f53-0020af0ba770}\{ffffffff-128f-4dd1-ad22-becfa66ce7aa}","Source Filter",0x00000000,"{e436ebb5-524f-11ce-9f53-0020af0ba770}"
-HKLM,"SOFTWARE\Microsoft\Cryptography","MachineGuid",0x00000000,"7f3b3cd3-9e91-4a48-92cb-e0ec4e8da130"
 
 [devenum.dll]
 HKCR,"CLSID\{083863F1-70DE-11D0-BD40-00A0C911CE86}",,0x00000010

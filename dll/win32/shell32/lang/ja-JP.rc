@@ -51,8 +51,8 @@ BEGIN
     MENUITEM "貼り付け(&P)\tCtrl+V", FCIDM_SHVIEW_INSERT
     MENUITEM "ショートカットを貼り付け(&S)", FCIDM_SHVIEW_INSERTLINK
     MENUITEM SEPARATOR
-    MENUITEM "フォルダにコピー(&F)...", FCIDM_SHVIEW_COPYTO
-    MENUITEM "フォルダに移動(&V)...", FCIDM_SHVIEW_MOVETO
+    MENUITEM "フォルダーにコピー(&F)...", FCIDM_SHVIEW_COPYTO
+    MENUITEM "フォルダーに移動(&V)...", FCIDM_SHVIEW_MOVETO
     MENUITEM SEPARATOR
     MENUITEM "すべて選択(&A)\tCtrl+A", FCIDM_SHVIEW_SELECTALL
     MENUITEM "選択を反転(&I)", FCIDM_SHVIEW_INVERTSELECTION
@@ -105,14 +105,14 @@ BEGIN
             MENUITEM "大きいアイコン(&L)", IDM_LARGE_ICONS
             MENUITEM "小さいアイコン(&S)", IDM_SMALL_ICONS
         END
-        MENUITEM "フォルダを開く(&O)", IDM_OPEN_FOLDER
+        MENUITEM "フォルダーを開く(&O)", IDM_OPEN_FOLDER
         MENUITEM "テキストを表示(&S)", IDM_SHOW_TEXT
     END
 END
 
 IDD_BROWSE_FOR_FOLDER DIALOGEX 15, 40, 188, 192
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
-CAPTION "フォルダの参照"
+CAPTION "フォルダーの参照"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "", IDC_BROWSE_FOR_FOLDER_TITLE, 4, 4, 180, 24
@@ -124,14 +124,14 @@ END
 
 IDD_BROWSE_FOR_FOLDER_NEW DIALOGEX 15, 40, 218, 196
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_CAPTION | WS_SYSMENU
-CAPTION "フォルダの参照"
+CAPTION "フォルダーの参照"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "", IDC_BROWSE_FOR_FOLDER_TITLE, 10, 8, 198, 24
     LTEXT "", IDC_BROWSE_FOR_FOLDER_STATUS, 10, 25, 198, 12
     EDITTEXT IDC_BROWSE_FOR_FOLDER_FOLDER_TEXT, 12, 38, 194, 14, ES_AUTOHSCROLL | WS_GROUP
     CONTROL "", IDC_BROWSE_FOR_FOLDER_TREEVIEW, "SysTreeView32", TVS_SHOWSELALWAYS | TVS_EDITLABELS | TVS_LINESATROOT | TVS_HASLINES | TVS_HASBUTTONS | WS_BORDER | WS_TABSTOP, 12, 58, 194, 105
-    PUSHBUTTON "新しいフォルダの作成(&M)", IDC_BROWSE_FOR_FOLDER_NEW_FOLDER, 12, 188, 85, 14, WS_GROUP | WS_TABSTOP
+    PUSHBUTTON "新しいフォルダーの作成(&M)", IDC_BROWSE_FOR_FOLDER_NEW_FOLDER, 12, 188, 85, 14, WS_GROUP | WS_TABSTOP
     DEFPUSHBUTTON "OK", IDOK, 102, 174, 50, 14
     PUSHBUTTON "キャンセル", IDCANCEL, 156, 174, 50, 14
 END
@@ -183,7 +183,7 @@ CAPTION "実行"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON "", IDC_RUNDLG_ICON, 7, 11, 18, 20, WS_VISIBLE
-    LTEXT "実行するプログラム名、または開くフォルダや文書名、インターネット リソース名を入力してください。", 12289, 36, 11, 185, 18
+    LTEXT "実行するプログラム名、または開くフォルダーや文書名、インターネット リソース名を入力してください。", 12289, 36, 11, 185, 18
     LTEXT "名前(&O):", 12305, 7, 39, 27, 10
     CONTROL "", IDC_RUNDLG_EDITPATH, "COMBOBOX", WS_TABSTOP | WS_GROUP | WS_VSCROLL | WS_VISIBLE | CBS_AUTOHSCROLL | CBS_DROPDOWN, 36, 37, 184, 100
     DEFPUSHBUTTON "OK", IDOK, 62, 70, 50, 14
@@ -227,7 +227,7 @@ BEGIN
     ICON IDI_SHELL_EXTENDED_PROPERTIES, IDI_SHELL_EXTENDED_PROPERTIES, 5, 5, 21, 20, SS_ICON
     LTEXT "このショートカットに使用する拡張プロパティを選択してください。", -1, 5, 30, 210, 10
     CHECKBOX "異なる人物証明情報で実行する", IDC_SHORTEX_RUN_DIFFERENT, 25, 50, 150, 10
-    LTEXT "このオプションを使用するとこのショートカットを別のユーザーとして実行できます。また、自分自身で実行する場合、許可されていないプログラムの活動からコンピュータとデータを保護できます。", -1, 50, 60, 175, 40
+    LTEXT "このオプションを使用するとこのショートカットを別のユーザーとして実行できます。また、自分自身で実行する場合、許可されていないプログラムの活動からコンピューターとデータを保護できます。", -1, 50, 60, 175, 40
     CHECKBOX "別のメモリ領域で実行する", IDC_SHORTEX_RUN_SEPARATE, 25, 100, 150, 10, WS_DISABLED
     PUSHBUTTON "OK", IDOK, 63, 124, 50, 15, WS_VISIBLE
     PUSHBUTTON "中止", IDCANCEL, 120, 124, 50, 15, WS_VISIBLE
@@ -241,7 +241,7 @@ BEGIN
     ICON "", IDC_SHORTCUT_ICON, 16, 7, 32, 32, WS_VISIBLE
     EDITTEXT 14001, 58, 9, 170, 14, ES_LEFT
     LTEXT "ファイルの種類:", 14004, 8, 40, 55, 10
-    CONTROL "フォルダ", 14005, "edit", ES_LEFT | ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP | ES_AUTOHSCROLL, 58, 40, 170, 10
+    CONTROL "フォルダー", 14005, "edit", ES_LEFT | ES_READONLY | NOT WS_BORDER | NOT WS_TABSTOP | ES_AUTOHSCROLL, 58, 40, 170, 10
     LTEXT "", -1, 8, 31, 221, 1, SS_ETCHEDHORZ | WS_CHILD | WS_VISIBLE
     LTEXT "場所:", 14008, 8, 56, 55, 10
     EDITTEXT 14009, 58, 56, 170, 10, ES_LEFT | ES_READONLY | NOT WS_BORDER | ES_AUTOHSCROLL | NOT WS_TABSTOP
@@ -383,7 +383,7 @@ BEGIN
     ICON IDI_SHELL_SECURITY, -1, 7, 7, 21, 20
     LTEXT "このプログラムを実行するユーザーアカウントを選択してください", -1, 32, 12, 200, 16
     AUTORADIOBUTTON "現在のユーザー (%s)", IDC_RUNAS_CURRENT, 7, 35, 226, 10, WS_GROUP
-    AUTOCHECKBOX "&Protect my computer and data from unauthorized program activity\n\nThis option can prevent computer viruses from harming your computer or personal data, but selecting it might cause the program to function improperly.", IDC_RUNAS_SAFER, 18, 50, 210, 62, WS_DISABLED | WS_TABSTOP | BS_MULTILINE | BS_TOP
+    AUTOCHECKBOX "コンピューターとデータを未承認のプログラムの動作から保護する(&P)\n\nウイルスによる被害を防げますが、プログラムが正しく動作しなくなることがあります。", IDC_RUNAS_SAFER, 18, 50, 210, 62, WS_DISABLED | WS_TABSTOP | BS_MULTILINE | BS_TOP
     AUTORADIOBUTTON "次のユーザー:", IDC_RUNAS_OTHER, 7, 110, 226, 10
     LTEXT "ユーザー名:", -1, 18, 124, 54, 10
     COMBOBOX IDC_RUNAS_NAME, 75, 122, 134, 40, CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_VISIBLE | WS_TABSTOP
@@ -431,17 +431,17 @@ FONT 9, "MS UI Gothic", 0, 0, 0x0
 BEGIN
     GROUPBOX "タスク", -1, 7, 10, 249, 40
     CONTROL "", IDC_FOLDER_OPTIONS_TASKICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 14, 20, 21, 20
-    AUTORADIOBUTTON "フォルダに共通のタスクを表示する(&F)", IDC_FOLDER_OPTIONS_COMMONTASKS, 40, 20, 210, 10, WS_TABSTOP | WS_GROUP
-    AUTORADIOBUTTON "LiberNT クラシック フォルダを使用する(&I)", IDC_FOLDER_OPTIONS_CLASSICFOLDERS, 40, 32, 210, 10
-    GROUPBOX "フォルダの参照", -1, 7, 60, 249, 40, WS_TABSTOP
+    AUTORADIOBUTTON "フォルダーに共通のタスクを表示する(&F)", IDC_FOLDER_OPTIONS_COMMONTASKS, 40, 20, 210, 10, WS_TABSTOP | WS_GROUP
+    AUTORADIOBUTTON "LiberNT クラシック フォルダーを使用する(&I)", IDC_FOLDER_OPTIONS_CLASSICFOLDERS, 40, 32, 210, 10
+    GROUPBOX "フォルダーの参照", -1, 7, 60, 249, 40, WS_TABSTOP
     CONTROL "", IDC_FOLDER_OPTIONS_FOLDERICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 14, 70, 21, 20
-    AUTORADIOBUTTON "同じウィンドウでフォルダを開く(&M)", IDC_FOLDER_OPTIONS_SAMEWINDOW, 40, 70, 210, 10, WS_TABSTOP | WS_GROUP
-    AUTORADIOBUTTON "フォルダごとに異なるウィンドウで開く(&W)", IDC_FOLDER_OPTIONS_OWNWINDOW, 40, 82, 210, 10
+    AUTORADIOBUTTON "同じウィンドウでフォルダーを開く(&M)", IDC_FOLDER_OPTIONS_SAMEWINDOW, 40, 70, 210, 10, WS_TABSTOP | WS_GROUP
+    AUTORADIOBUTTON "フォルダーごとに異なるウィンドウで開く(&W)", IDC_FOLDER_OPTIONS_OWNWINDOW, 40, 82, 210, 10
     GROUPBOX "項目のクリック方法", -1, 7, 110, 249, 64
     CONTROL "", IDC_FOLDER_OPTIONS_CLICKICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 14, 120, 21, 20
     AUTORADIOBUTTON "シングルクリックで項目を開く(ポイントで選択) (&S)", IDC_FOLDER_OPTIONS_SINGLECLICK, 40, 120, 210, 10, WS_TABSTOP | WS_GROUP
     AUTORADIOBUTTON "ダブルクリックで項目を開く(シングルクリックで選択)(&D)", IDC_FOLDER_OPTIONS_DOUBLECLICK, 40, 156, 210, 10
-    AUTORADIOBUTTON "ブラウザに合わせてアイコンタイトルに下線を引く(&B)", IDC_FOLDER_OPTIONS_ULBROWSER, 50, 132, 200, 10, WS_TABSTOP | WS_GROUP
+    AUTORADIOBUTTON "ブラウザーに合わせてアイコンタイトルに下線を引く(&B)", IDC_FOLDER_OPTIONS_ULBROWSER, 50, 132, 200, 10, WS_TABSTOP | WS_GROUP
     AUTORADIOBUTTON "ポイントしたときのみアイコンタイトルに下線を引く(&P)", IDC_FOLDER_OPTIONS_ULPOINT, 50, 144, 200, 10
     PUSHBUTTON "デフォルトに戻す(&R)", IDC_FOLDER_OPTIONS_RESTORE, 167, 178, 90, 14
 END
@@ -451,11 +451,11 @@ STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION
 CAPTION "表示"
 FONT 9, "MS UI Gothic", 0, 0, 0x0
 BEGIN
-    GROUPBOX "フォルダの表示方法", -1, 7, 10, 249, 60
+    GROUPBOX "フォルダーの表示方法", -1, 7, 10, 249, 60
     ICON IDI_SHELL_PROGRAMS_FOLDER2, IDC_STATIC, 14, 20, 21, 20
-    LTEXT "このフォルダに使用している表示方法 (詳細表示や並べて表示など) をすべてのフォルダに適用できます。", -1, 40, 20, 213, 20
-    PUSHBUTTON "すべてのフォルダに適用(&L)", IDC_VIEW_APPLY_TO_ALL, 15, 50, 115, 14
-    PUSHBUTTON "すべてのフォルダをリセット(&R)", IDC_VIEW_RESET_ALL, 135, 50, 115, 14
+    LTEXT "このフォルダーに使用している表示方法 (詳細表示や並べて表示など) をすべてのフォルダーに適用できます。", -1, 40, 20, 213, 20
+    PUSHBUTTON "すべてのフォルダーに適用(&L)", IDC_VIEW_APPLY_TO_ALL, 15, 50, 115, 14
+    PUSHBUTTON "すべてのフォルダーをリセット(&R)", IDC_VIEW_RESET_ALL, 135, 50, 115, 14
     LTEXT "詳細設定:", -1, 7, 80, 100, 10
     CONTROL "", IDC_VIEW_TREEVIEW, "SysTreeView32", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | TVS_DISABLEDRAGDROP | TVS_LINESATROOT, 7, 90, 249, 111
     PUSHBUTTON "デフォルトに戻す(&D)", IDC_VIEW_RESTORE_DEFAULTS, 167, 204, 90, 14
@@ -489,9 +489,9 @@ BEGIN
     PUSHBUTTON "いいえ(&N)", IDNO, 150, 122, 60, 14
     PUSHBUTTON "キャンセル", IDCANCEL, 215, 122, 60, 14
     ICON 146, -1, 11, 10, 21, 20, SS_REALSIZECONTROL
-    LTEXT "このフォルダには既にファイル'%2'が存在します。", 12291, 44, 10, 231, 22, SS_NOPREFIX
-    LTEXT "このフォルダには既に読み取り専用ファイル'%2'が存在します。", 12292, 41, 10, 222, 22, SS_NOPREFIX
-    LTEXT "このフォルダには既にシステムファイル'%2'が存在します。", 12293, 41, 10, 222, 22, SS_NOPREFIX
+    LTEXT "このフォルダーには既にファイル'%2'が存在します。", 12291, 44, 10, 231, 22, SS_NOPREFIX
+    LTEXT "このフォルダーには既に読み取り専用ファイル'%2'が存在します。", 12292, 41, 10, 222, 22, SS_NOPREFIX
+    LTEXT "このフォルダーには既にシステムファイル'%2'が存在します。", 12293, 41, 10, 222, 22, SS_NOPREFIX
     LTEXT "既存のファイル", -1, 44, 35, 228, 10, SS_NOPREFIX
     LTEXT "(日付とサイズ不明)", 12302, 79, 51, 198, 20, SS_NOPREFIX
     ICON "", 12300, 50, 49, 21, 20, SS_REALSIZECONTROL
@@ -588,7 +588,7 @@ BEGIN
     GROUPBOX "チェックディスクオプション", -1, 7, 6, 179, 40
     PUSHBUTTON "キャンセル", IDCANCEL, 128, 95, 60, 14
     AUTOCHECKBOX "自動的にファイルシステムのエラーを修復する", 14000, 12, 15, 165, 10
-    AUTOCHECKBOX "バッドセクタをスキャンし回復を試みる(&S)", 14001, 12, 30, 165, 10
+    AUTOCHECKBOX "バッドセクターをスキャンし回復を試みる(&S)", 14001, 12, 30, 165, 10
     CONTROL "", 14002, "MSCTLS_PROGRESS32", 16, 7, 50, 179, 8
     LTEXT "", 14003, 60, 80, 170, 10
 END
@@ -673,18 +673,18 @@ CAPTION "カスタマイズ"
 STYLE DS_SHELLFONT | WS_CHILD | WS_CAPTION
 FONT 9, "MS UI Gothic"
 BEGIN
-    GROUPBOX "どんなフォルダが欲しいですか?", IDC_STATIC, 5, 5, 230, 65, WS_TABSTOP
-    LTEXT "このフォルダをテンプレートとして使う(&F):", IDC_STATIC, 15, 20, 210, 12
+    GROUPBOX "どんなフォルダーが欲しいですか?", IDC_STATIC, 5, 5, 230, 65, WS_TABSTOP
+    LTEXT "このフォルダーをテンプレートとして使う(&F):", IDC_STATIC, 15, 20, 210, 12
     COMBOBOX IDC_FOLDERCUST_COMBOBOX, 15, 35, 210, 300, CBS_HASSTRINGS | CBS_AUTOHSCROLL | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX "すべてのサブフォルダにも適用(&S)", IDC_FOLDERCUST_CHECKBOX, 15, 50, 210, 15
-    GROUPBOX "フォルダ画像", IDC_STATIC, 5, 75, 230, 85, WS_TABSTOP
-    LTEXT "サムネイル ビューではこのフォルダに中身を思わせる画像を置けます。", IDC_STATIC, 15, 87, 115, 33
+    AUTOCHECKBOX "すべてのサブフォルダーにも適用(&S)", IDC_FOLDERCUST_CHECKBOX, 15, 50, 210, 15
+    GROUPBOX "フォルダー画像", IDC_STATIC, 5, 75, 230, 85, WS_TABSTOP
+    LTEXT "サムネイル ビューではこのフォルダーに中身を思わせる画像を置けます。", IDC_STATIC, 15, 87, 115, 33
     PUSHBUTTON "画像を選ぶ(&P)...", IDC_FOLDERCUST_CHOOSE_PIC, 15, 120, 115, 15
     PUSHBUTTON "既定に戻す(&R)", IDC_FOLDERCUST_RESTORE_DEFAULTS, 15, 139, 115, 15
     LTEXT "プレビュー:", IDC_STATIC, 139, 85, 81, 11
     CONTROL "", IDC_FOLDERCUST_PREVIEW_BITMAP, "STATIC", SS_BITMAP | WS_GROUP, 150, 100, 60, 60
-    GROUPBOX "フォルダのアイコン", IDC_STATIC, 5, 165, 230, 50, WS_TABSTOP
-    LTEXT "サムネイル以外のすべてのビューについて、標準の「フォルダ」アイコンを別のアイコンに変更可能です。", IDC_STATIC, 15, 175, 210, 25
+    GROUPBOX "フォルダーのアイコン", IDC_STATIC, 5, 165, 230, 50, WS_TABSTOP
+    LTEXT "サムネイル以外のすべてのビューについて、標準の「フォルダー」アイコンを別のアイコンに変更可能です。", IDC_STATIC, 15, 175, 210, 25
     ICON 0, IDC_FOLDERCUST_ICON, 175, 194, 32, 30
     PUSHBUTTON "アイコン変更(&I)...", IDC_FOLDERCUST_CHANGE_ICON, 15, 195, 75, 15
 END
@@ -706,13 +706,13 @@ END
 STRINGTABLE
 BEGIN
     /* columns in the shellview */
-    IDS_SHV_COLUMN_NAME "作成者"
+    IDS_SHV_COLUMN_NAME "名前"
     IDS_SHV_COLUMN_SIZE "サイズ"
     IDS_SHV_COLUMN_TYPE "種類"
     IDS_SHV_COLUMN_MODIFIED "更新日時"
     IDS_SHV_COLUMN_ATTRIBUTES "属性"
     IDS_SHV_COLUMN_DISK_CAPACITY "合計サイズ"
-    IDS_SHV_COLUMN_DISK_AVAILABLE "空き容量"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "空き領域"
     IDS_SHV_COLUMN_OWNER "所有者"
     IDS_SHV_COLUMN_GROUP "グループ"
     IDS_SHV_COLUMN_FILENAME "ファイル名"
@@ -730,18 +730,24 @@ BEGIN
     IDS_SHV_COLUMN_LOCATION "場所"
     IDS_SHV_COLUMN_MODEL "モデル"
 
+    /* modern Computer folder view */
+    IDS_COMPUTER_DEVICES_AND_DRIVES "デバイスとドライブ (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "システムの場所 (%u)"
+    IDS_COMPUTER_FREE_SPACE "空き領域 %s/%s"
+    IDS_COMPUTER_FOLDERS "フォルダー (%u)"
+
     /* special folders */
     IDS_DESKTOP "デスクトップ"
-    IDS_MYCOMPUTER "マイ コンピュータ"
+    IDS_MYCOMPUTER "PC"
     IDS_RECYCLEBIN_FOLDER_NAME "ごみ箱"
     IDS_CONTROLPANEL "コントロール パネル"
     IDS_ADMINISTRATIVETOOLS "管理ツール"
 
     /* special folders descriptions */
-    IDS_ADMINISTRATIVETOOLS_DESCRIPTION "あなたのコンピュータに対する管理者設定を変更します。"
-    IDS_FOLDER_OPTIONS_DESCRIPTION "ファイルとフォルダの表示をカスタマイズし、ファイル関連付けを変更します。"
-    IDS_FONTS_DESCRIPTION "あなたのコンピュータのフォントを追加、変更、管理します。"
-    IDS_PRINTERS_DESCRIPTION "インストール済みのプリンタや FAX プリンタを表示し、新しいのを追加するのを助けます。"
+    IDS_ADMINISTRATIVETOOLS_DESCRIPTION "あなたのコンピューターに対する管理者設定を変更します。"
+    IDS_FOLDER_OPTIONS_DESCRIPTION "ファイルとフォルダーの表示をカスタマイズし、ファイル関連付けを変更します。"
+    IDS_FONTS_DESCRIPTION "あなたのコンピューターのフォントを追加、変更、管理します。"
+    IDS_PRINTERS_DESCRIPTION "インストール済みのプリンターや FAX プリンターを表示し、新しいのを追加するのを助けます。"
 
     /* About shell dialog version string */
     IDS_ABOUT_VERSION_STRING "バージョン %S (%S)"
@@ -761,29 +767,29 @@ BEGIN
     IDS_RESTORE "元に戻す"
     IDS_FORMATDRIVE "フォーマット..."
     IDS_RENAME "名前の変更"
-    IDS_PASTE "挿入"
+    IDS_PASTE "貼り付け"
     IDS_EJECT "取り出し"
     IDS_DISCONNECT "接続の切断"
     IDS_OPENFILELOCATION "ファイルの場所を開く(&I)"
     IDS_SENDTO_MENU "送る(&N)"
     IDS_COPYASPATHMENU "パスとしてコピー"
 
-    IDS_MOVEERRORTITLE "ファイルまたはフォルダの移動のエラー"
-    IDS_COPYERRORTITLE "ファイルまたはフォルダのコピーのエラー"
-    IDS_MOVEERRORSAMEFOLDER "移動できません '%s': 移動先のフォルダは移動元のフォルダと同じです。"
+    IDS_MOVEERRORTITLE "ファイルまたはフォルダーの移動のエラー"
+    IDS_COPYERRORTITLE "ファイルまたはフォルダーのコピーのエラー"
+    IDS_MOVEERRORSAMEFOLDER "移動できません '%s': 移動先のフォルダーは移動元のフォルダーと同じです。"
     IDS_MOVEERRORSAME "移動できません '%s': コピー元とコピー先のファイル名が同じです。"
     IDS_COPYERRORSAME "コピーできません '%s': コピー元とコピー先のファイル名が同じです。"
-    IDS_MOVEERRORSUBFOLDER "移動できません '%s': 移動先のフォルダは移動元のフォルダのサブフォルダです。"
-    IDS_COPYERRORSUBFOLDER "コピーできません '%s': コピー先のフォルダはコピー元のフォルダのサブフォルダです。"
+    IDS_MOVEERRORSUBFOLDER "移動できません '%s': 移動先のフォルダーは移動元のフォルダーのサブフォルダーです。"
+    IDS_COPYERRORSUBFOLDER "コピーできません '%s': コピー先のフォルダーはコピー元のフォルダーのサブフォルダーです。"
     IDS_MOVEERROR "移動できません '%s': %s"
     IDS_COPYERROR "コピーできません '%s': %s"
 
     IDS_CREATEFILE_DENIED "ファイル %1 を作成できません"
     IDS_CREATEFILE_CAPTION "ファイルの作成エラー"
-    IDS_CREATEFOLDER_DENIED "フォルダ '%1' を作成できません"
-    IDS_CREATEFOLDER_CAPTION "フォルダを作成できません"
+    IDS_CREATEFOLDER_DENIED "フォルダー '%1' を作成できません"
+    IDS_CREATEFOLDER_CAPTION "フォルダーを作成できません"
     IDS_DELETEITEM_CAPTION "ファイル削除の確認"
-    IDS_DELETEFOLDER_CAPTION "フォルダ削除の確認"
+    IDS_DELETEFOLDER_CAPTION "フォルダー削除の確認"
     IDS_DELETEITEM_TEXT "'%1' を削除してもよろしいですか?"
     IDS_DELETEMULTIPLE_TEXT "これら %1 個の項目を削除してもよろしいですか?"
     IDS_DELETESELECTED_TEXT "選択された項目を削除してもよろしいですか?"
@@ -791,9 +797,9 @@ BEGIN
     IDS_TRASHFOLDER_TEXT "'%1'とそれに含まれるものすべてをごみ箱に送ってもよろしいですか?"
     IDS_TRASHMULTIPLE_TEXT "%1 個の項目をごみ箱に送ってもよろしいですか?"
     IDS_CANTTRASH_TEXT "項目 '%1' はごみ箱に送れません。 代わりに削除してもよろしいですか?"
-    IDS_OVERWRITEFILE_TEXT "このフォルダには既にファイル'%1'が含まれています。\n\n置き換えてもよろしいですか?"
+    IDS_OVERWRITEFILE_TEXT "このフォルダーには既にファイル'%1'が含まれています。\n\n置き換えてもよろしいですか?"
     IDS_OVERWRITEFILE_CAPTION "ファイル上書きの確認"
-    IDS_OVERWRITEFOLDER_TEXT "このフォルダには既にフォルダ'%1'が含まれています。\n\nディレクトリフォルダ内のファイル名が選択されたフォルダ内のファイル名\nと同じ時は置き換えられます。それでも、フォルダを移動または\nコピーしますか?"
+    IDS_OVERWRITEFOLDER_TEXT "このフォルダーには既にフォルダー'%1'が含まれています。\n\nディレクトリフォルダー内のファイル名が選択されたフォルダー内のファイル名\nと同じ時は置き換えられます。それでも、フォルダーを移動または\nコピーしますか?"
 
     IDS_FILEOOP_COPYING "コピー中..."
     IDS_FILEOOP_MOVING "移動中..."
@@ -842,7 +848,7 @@ BEGIN
     IDS_NETHOOD "近くのネットワーク"
     IDS_TEMPLATES "テンプレート"
     IDS_APPDATA "アプリのデータ"
-    IDS_PRINTHOOD "近くのプリンタ"
+    IDS_PRINTHOOD "近くのプリンター"
     IDS_LOCAL_APPDATA "ローカル設定\\アプリのデータ"
     IDS_INTERNET_CACHE "インターネット一時ファイル"
     IDS_COOKIES "クッキー"
@@ -856,9 +862,9 @@ BEGIN
     IDS_COMMON_PICTURES "共有ドキュメント\\ピクチャ"
     IDS_COMMON_VIDEO "共有ドキュメント\\ビデオ"
     IDS_CDBURN_AREA "ローカル設定\\アプリのデータ\\Microsoft\\CD Burning"
-    IDS_NETWORKPLACE "マイ ネットワーク"
+    IDS_NETWORKPLACE "ネットワーク"
 
-    IDS_NEWFOLDER "新しいフォルダ"
+    IDS_NEWFOLDER "新しいフォルダー"
     IDS_NEWITEMFORMAT "新しい %s"
 
     IDS_DRIVE_FIXED "ローカル ディスク"
@@ -877,9 +883,9 @@ BEGIN
     IDS_SHELL_ABOUT_AUTHORS "制作者(&A)"
     IDS_SHELL_ABOUT_BACK "< 戻る(&B)"
     FCIDM_SHVIEW_NEW "新規作成(&W)"
-    FCIDM_SHVIEW_NEWFOLDER "フォルダ(&F)"
+    FCIDM_SHVIEW_NEWFOLDER "フォルダー(&F)"
     FCIDM_SHVIEW_NEWLINK "ショートカット(&L)"
-    IDS_FOLDER_OPTIONS "フォルダ オプション"
+    IDS_FOLDER_OPTIONS "フォルダー オプション"
     IDS_TASKBAR_OPTIONS "タスクバーとスタートメニュー"
     IDS_TASKBAR_OPTIONS_INFOTIP "表示される項目の種類や表示方法など、スタート メニューとタスク バーをカスタマイズします。"
     IDS_RECYCLEBIN_LOCATION "ごみ箱の場所"
@@ -900,7 +906,7 @@ BEGIN
     IDS_COLLAPSE "折りたたむ(&A)"
 
     /* Friendly File Type Names */
-    IDS_DIRECTORY "フォルダ"
+    IDS_DIRECTORY "フォルダー"
     IDS_BAT_FILE "LiberNT バッチ ファイル"
     IDS_CMD_FILE "LiberNT コマンド スクリプト"
     IDS_COM_FILE "DOS アプリケーション"
@@ -908,8 +914,8 @@ BEGIN
     IDS_CUR_FILE "カーソル"
     IDS_DB__FILE "データベース ファイル"
     IDS_DLL_FILE "アプリケーション 拡張"
-    IDS_DRV_FILE "デバイス ドライバ"
-    IDS_EFI_FILE "Extensible Firmware Interface Executable"
+    IDS_DRV_FILE "デバイス ドライバー"
+    IDS_EFI_FILE "EFI 実行可能ファイル"
     IDS_EXE_FILE "アプリケーション"
     IDS_NLS_FILE "各国語サポートファイル"
     IDS_OCX_FILE "ActiveX コントロール"
@@ -925,11 +931,11 @@ BEGIN
     IDS_PIF_FILE "NT VDM プログラム情報ファイル"
     IDS_SCR_FILE "スクリーン セーバー"
     IDS_SYS_FILE "システム ファイル"
-    IDS_VXD_FILE "仮想デバイス ドライバ"
+    IDS_VXD_FILE "仮想デバイス ドライバー"
     IDS_ANY_FILE "%s ファイル"
 
     IDS_OPEN_VERB "開く(&O)"
-    IDS_EXPLORE_VERB "エクスプローラで開く(&X)"
+    IDS_EXPLORE_VERB "エクスプローラーで開く(&X)"
     IDS_RUNAS_VERB "別のユーザーとして実行..."
     IDS_EDIT_VERB "編集"
     IDS_FIND_VERB "検索"
@@ -937,10 +943,10 @@ BEGIN
     IDS_CMD_VERB "ここでコマンドプロンプトを開く"
 
     IDS_MULTIPLETYPES   "複数の種類"
-    IDS_VARIOUSFOLDERS  "さまざまなフォルダ"
-    IDS_FILE_FOLDER "%u 個のファイル、 %u 個のフォルダ"
+    IDS_VARIOUSFOLDERS  "さまざまなフォルダー"
+    IDS_FILE_FOLDER "%u 個のファイル、 %u 個のフォルダー"
 
-    IDS_PRINTERS "プリンタ"
+    IDS_PRINTERS "プリンター"
     IDS_FONTS "フォント"
     IDS_INSTALLNEWFONT "新しいフォントのインストール..."
 
@@ -968,35 +974,35 @@ BEGIN
     IDS_RECYCLE_CLEANER_DESCRIPTION "ごみ箱には、パソコンから削除したファイルが含まれています。これらのファイルは、ごみ箱を空にするまで完全には削除されません。"
     IDS_RECYCLE_CLEANER_BUTTON_TEXT "ファイルを表示する(&V)"
 
-    IDS_TITLE_MYCOMP "マイ コンピュータ"
-    IDS_TITLE_MYNET "マイ ネットワーク"
+    IDS_TITLE_MYCOMP "PC"
+    IDS_TITLE_MYNET "ネットワーク"
     IDS_TITLE_BIN_1 "ごみ箱 (いっぱい)"
     IDS_TITLE_BIN_0 "ごみ箱 (空)"
 
-    IDS_ADVANCED_FOLDER "ファイルとフォルダ"
-    IDS_ADVANCED_NET_CRAWLER "自動的にネットワークフォルダとプリンタを検索する"
-    IDS_ADVANCED_FOLDER_SIZE_TIP "フォルダ チップにファイルサイズ情報を表示する"
-    IDS_ADVANCED_FRIENDLY_TREE "エクスプローラのフォルダ リストでシンプルなフォルダビューを表示する"
-    IDS_ADVANCED_WEB_VIEW_BARRICADE "システム フォルダの中身を表示する"
+    IDS_ADVANCED_FOLDER "ファイルとフォルダー"
+    IDS_ADVANCED_NET_CRAWLER "自動的にネットワークフォルダーとプリンターを検索する"
+    IDS_ADVANCED_FOLDER_SIZE_TIP "フォルダー チップにファイルサイズ情報を表示する"
+    IDS_ADVANCED_FRIENDLY_TREE "エクスプローラーのフォルダー リストでシンプルなフォルダー ビューを表示する"
+    IDS_ADVANCED_WEB_VIEW_BARRICADE "システム フォルダーの中身を表示する"
     IDS_ADVANCED_SHOW_FULL_PATH_ADDRESS "アドレス バーでフルパスを表示する"
     IDS_ADVANCED_SHOW_FULL_PATH "タイトルバーでフルパスを表示する"
     IDS_ADVANCED_DISABLE_THUMB_CACHE "サムネイルをキャッシュしない"
-    IDS_ADVANCED_HIDDEN "隠しファイルとフォルダ"
-    IDS_ADVANCED_DONT_SHOW_HIDDEN "隠しファイルとフォルダを表示しない"
-    IDS_ADVANCED_SHOW_HIDDEN "隠しファイルとフォルダを表示する"
+    IDS_ADVANCED_HIDDEN "隠しファイルとフォルダー"
+    IDS_ADVANCED_DONT_SHOW_HIDDEN "隠しファイルとフォルダーを表示しない"
+    IDS_ADVANCED_SHOW_HIDDEN "隠しファイルとフォルダーを表示する"
     IDS_ADVANCED_HIDE_FILE_EXT "既知のファイル タイプの拡張子を隠す"
     IDS_ADVANCED_SUPER_HIDDEN "保護されたオペレーティングシステムのファイルを隠す (推奨)"
-    IDS_ADVANCED_DESKTOP_PROCESS "別のプロセスでフォルダ ウィンドウを起動する"
-    IDS_ADVANCED_CLASSIC_VIEW_STATE "それぞれのフォルダ表示設定を記憶する"
-    IDS_ADVANCED_PERSIST_BROWSERS "ログオン時に以前のフォルダ ウィンドウを復元する"
-    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "マイ コンピュータでコントロール パネルを表示する"
+    IDS_ADVANCED_DESKTOP_PROCESS "別のプロセスでフォルダー ウィンドウを起動する"
+    IDS_ADVANCED_CLASSIC_VIEW_STATE "それぞれのフォルダー表示設定を記憶する"
+    IDS_ADVANCED_PERSIST_BROWSERS "ログオン時に以前のフォルダー ウィンドウを復元する"
+    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "マイ コンピューターでコントロール パネルを表示する"
     IDS_ADVANCED_SHOW_COMP_COLOR "暗号化または圧縮されたNTFSファイルを色付きで表示する"
-    IDS_ADVANCED_SHOW_INFO_TIP "フォルダとデスクトップの項目にポップアップ式の説明を表示する"
+    IDS_ADVANCED_SHOW_INFO_TIP "フォルダーとデスクトップの項目にポップアップ式の説明を表示する"
     IDS_ADVANCED_DISPLAY_FAVORITES "「お気に入り」を表示"
     IDS_ADVANCED_DISPLAY_LOG_OFF "「ログオフ」を表示"
     IDS_ADVANCED_EXPAND_CONTROL_PANEL "「コントロール パネル」を展開"
     IDS_ADVANCED_EXPAND_MY_DOCUMENTS "「マイ ドキュメント」を展開"
-    IDS_ADVANCED_EXPAND_PRINTERS "「プリンタ」を展開"
+    IDS_ADVANCED_EXPAND_PRINTERS "「プリンター」を展開"
     IDS_ADVANCED_EXPAND_MY_PICTURES "「マイ ピクチャ」を展開"
     IDS_ADVANCED_EXPAND_NET_CONNECTIONS "「マイ ネットワーク」を展開"
     IDS_ADVANCED_DISPLAY_RUN "「ファイル名を指定して実行」を表示"
@@ -1024,22 +1030,22 @@ BEGIN
     IDS_NO_ICONS "ファイル '%s' にはアイコン データがありません。\n\nリストからアイコンを選ぶか、別のファイルを指定してください。"
     IDS_FILE_NOT_FOUND "ファイル '%s' は見つかりませんでした。"
     IDS_LINK_INVALID "このショートカットが参照する項目 '%s' は、変更されたか移動したので、このショートカットはもう正常に動作しません。"
-    IDS_COPYTOMENU "フォルダにコピー(&F)..."
+    IDS_COPYTOMENU "フォルダーにコピー(&F)..."
     IDS_COPYTOTITLE "'%s' のコピー先を選択して「コピー」ボタンをクリックしてください。"
     IDS_COPYITEMS "項目のコピー先"
     IDS_COPYBUTTON "コピー"
-    IDS_MOVETOMENU "フォルダに移動(&V)..."
+    IDS_MOVETOMENU "フォルダーに移動(&V)..."
     IDS_MOVETOTITLE "'%s' の移動先を選択して「移動」ボタンをクリックしてください。"
     IDS_MOVEITEMS "項目の移動先"
     IDS_MOVEBUTTON "移動"
 
-    IDS_SYSTEMFOLDER "システムフォルダ"
+    IDS_SYSTEMFOLDER "システムフォルダー"
 
 END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "エクスプローラー"
+    IDS_SEARCHBAND_COMMAND "検索"
+    IDS_FOLDERSHORTCUT_TYPE "フォルダー ショートカット"
 END

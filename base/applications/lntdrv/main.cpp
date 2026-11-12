@@ -36,6 +36,7 @@ enum : UINT
     WM_APP_ACTION,
     WM_APP_NAME,
     WM_APP_SCAN_DONE,
+    WM_APP_SCAN_WAIT,
 };
 
 enum Page
@@ -88,6 +89,8 @@ struct FoundMessage
 {
     std::wstring InstanceId;
     std::vector<CatalogUpdate> Updates;
+    DWORD Error;
+    std::wstring Note;
 };
 
 struct Choice
@@ -222,14 +225,18 @@ std::wstring OfferedVersion(const CatalogUpdate &update)
 
 bool Updatable(const DeviceInfo &device)
 {
-    if (CatalogQueries(device).empty())
-        return false;
-    return NeedsDriver(device) || GenericDriver(device) || _wcsnicmp(device.Inf.c_str(), L"oem", 3) == 0;
+    return !CatalogQueries(device).empty();
 }
 
 bool Selectable(ChoiceState state)
 {
     return state == ChoiceState::Missing || state == ChoiceState::Newer;
+}
+
+bool SearchFailed(DWORD error)
+{
+    return error && error != ERROR_NOT_FOUND && error != ERROR_NOT_SUPPORTED && error != ERROR_CANCELLED &&
+           error != ERROR_LNTDRV_OTHER_ARCH && error != ERROR_LNTDRV_OTHER_WINDOWS;
 }
 
 DWORD SearchDevice(Catalog &catalog, const DeviceInfo &device, std::vector<CatalogUpdate> &updates)
@@ -553,10 +560,26 @@ public:
 
     void Run()
     {
+        class ScanThrottle : public ThrottleCallback
+        {
+        public:
+            ScanThrottle(HWND hwnd, UINT scan) : m_hwnd(hwnd), m_Scan(scan) {}
+
+            void operator()(DWORD seconds)
+            {
+                PostMessageW(m_hwnd, WM_APP_SCAN_WAIT, m_Scan, seconds);
+            }
+
+        private:
+            HWND m_hwnd;
+            UINT m_Scan;
+        };
         Catalog catalog;
+        ScanThrottle throttle(m_hwnd, m_Scan);
         DWORD failure = ERROR_SUCCESS;
 
         catalog.SetCancel(m_Cancel->Value());
+        catalog.SetThrottleCallback(&throttle);
         for (const DeviceInfo &device : m_Devices)
         {
             FoundMessage *found;
@@ -566,10 +589,12 @@ public:
 
             if (IsCancelled(m_Cancel))
                 break;
-            found = new FoundMessage{ device.InstanceId, std::vector<CatalogUpdate>() };
+            found = new FoundMessage{ device.InstanceId, std::vector<CatalogUpdate>(), ERROR_SUCCESS, std::wstring() };
             if (unnamed)
                 name = LocalDeviceName(device);
             error = SearchDevice(catalog, device, found->Updates);
+            found->Error = error;
+            found->Note = CatalogNote(device, found->Updates, error, catalog.OtherArchitectures());
             if (unnamed && name.empty())
                 name = found->Updates.empty() ? catalog.OtherModel() : found->Updates.front().Model;
             if (!name.empty())
@@ -578,8 +603,7 @@ public:
                 Post(m_hwnd, WM_APP_NAME, m_Scan, new NameMessage{ device.InstanceId, name });
             }
             OutputDebugStringW((L"[LNTDRV] " + (name.empty() ? device.Name : name) + L" (" + device.InstanceId +
-                                L"): " + CatalogNote(device, found->Updates, error, catalog.OtherArchitectures()) +
-                                L"\n").c_str());
+                                L"): " + found->Note + L"\n").c_str());
             Post(m_hwnd, WM_APP_FOUND, m_Scan, found);
             if (StopsCatalogScan(error) || error == ERROR_CANCELLED)
             {
@@ -767,6 +791,13 @@ private:
             case WM_PAINT:
                 PaintColumn();
                 return TRUE;
+            case WM_SYSCOMMAND:
+                if ((wParam & 0xFFF0) == IDM_ABOUT)
+                {
+                    Message(MAKEINTRESOURCEW(IDI_LNTDRV), LoadText(IDS_ABOUT_TEXT));
+                    return TRUE;
+                }
+                break;
             case WM_COMMAND:
                 switch (LOWORD(wParam))
                 {
@@ -853,10 +884,18 @@ private:
                 delete name;
                 return TRUE;
             }
+            case WM_APP_SCAN_WAIT:
+                if ((UINT)wParam == m_Scan && m_Scanning)
+                {
+                    m_ScanResume = lParam ? ClockText((DWORD)lParam) : std::wstring();
+                    UpdateScanStatus();
+                }
+                return TRUE;
             case WM_APP_SCAN_DONE:
                 if ((UINT)wParam == m_Scan)
                 {
                     m_Scanning = false;
+                    m_ScanResume.clear();
                     m_ScanError = (DWORD)lParam;
                     m_Resolving.clear();
                     KillTimer(m_hwnd, SpinnerTimer);
@@ -1080,12 +1119,18 @@ private:
         NONCLIENTMETRICSW metrics = { sizeof(metrics) };
         MARGINS margins = { 0, 0, 0, 0 };
         HICON icon = LoadIconW(m_Instance, MAKEINTRESOURCEW(IDI_LNTDRV));
+        HMENU systemMenu = GetSystemMenu(m_hwnd, FALSE);
         BITMAP bm;
         RECT rc;
         HDC hdc;
 
         SendMessageW(m_hwnd, WM_SETICON, ICON_BIG, (LPARAM)icon);
         SendMessageW(m_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)icon);
+        if (systemMenu)
+        {
+            AppendMenuW(systemMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(systemMenu, MF_STRING, IDM_ABOUT, LoadText(IDS_ABOUT_MENU).c_str());
+        }
         if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
         {
             LOGFONTW font = metrics.lfMessageFont;
@@ -1211,7 +1256,7 @@ private:
 
     bool EntryInUse(const HistoryEntry &entry) const
     {
-        for (const DeviceInfo &device : m_Devices)
+        for (const DeviceInfo &device : m_Present)
         {
             if (_wcsicmp(device.InstanceId.c_str(), entry.InstanceId.c_str()) == 0)
                 return !entry.Inf.empty() && _wcsicmp(device.Inf.c_str(), entry.Inf.c_str()) == 0;
@@ -1368,7 +1413,9 @@ private:
     {
         std::wstring text;
 
-        if (m_Scanning)
+        if (m_Scanning && !m_ScanResume.empty())
+            text = FormatText(IDS_SCAN_THROTTLED, m_ScanResume);
+        else if (m_Scanning)
             text = FormatText(IDS_SCAN_PROGRESS, NumberText(std::min(m_Scanned + 1, m_ScanTotal)),
                               NumberText(m_ScanTotal));
         else if (m_ScanError)
@@ -1396,6 +1443,7 @@ private:
         m_Scanned = 0;
         m_ScanTotal = devices.size();
         m_ScanError = ERROR_SUCCESS;
+        m_ScanResume.clear();
         m_Scanning = !devices.empty();
         for (const DeviceInfo &device : devices)
             m_Resolving.insert(device.InstanceId);
@@ -1442,6 +1490,11 @@ private:
                 SetCell(list, (int)i, 2, OfferedVersion(m_Found[device.InstanceId].Update));
                 ListView_SetCheckState(list, (int)i, Ticked(device));
                 m_Filling = false;
+                ListView_RedrawItems(list, (int)i, (int)i);
+            }
+            else if (SearchFailed(found.Error))
+            {
+                SetCell(list, (int)i, 1, found.Note);
                 ListView_RedrawItems(list, (int)i, (int)i);
             }
             else
@@ -1589,6 +1642,7 @@ private:
         HWND list = GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST);
 
         m_History = LoadHistory();
+        EnumerateDevices(m_Present);
         SendMessageW(list, WM_SETREDRAW, FALSE, 0);
         ListView_DeleteAllItems(list);
         for (const HistoryEntry &entry : m_History)
@@ -1649,10 +1703,12 @@ private:
     size_t m_Scanned = 0;
     size_t m_ScanTotal = 0;
     DWORD m_ScanError = ERROR_SUCCESS;
+    std::wstring m_ScanResume;
     bool m_Busy = false;
     UINT m_Frame = 0;
     bool m_Filling = false;
     std::vector<DeviceInfo> m_Devices;
+    std::vector<DeviceInfo> m_Present;
     std::vector<HistoryEntry> m_History;
     std::map<std::wstring, Choice> m_Found;
     std::map<std::wstring, bool> m_Selected;
@@ -1693,6 +1749,16 @@ public:
     {
         if (percent < 0 || percent % 25 == 0)
             Print(L"  " + text + (percent >= 0 ? L" " + NumberText(percent) + L"%" : std::wstring()));
+    }
+};
+
+class PrintThrottle : public ThrottleCallback
+{
+public:
+    void operator()(DWORD seconds)
+    {
+        if (seconds)
+            Print(L"  " + FormatText(IDS_SCAN_THROTTLED, ClockText(seconds)));
     }
 };
 
@@ -1789,14 +1855,17 @@ int RunCommand(int argc, LPWSTR *argv)
     if (_wcsicmp(command.c_str(), L"scan") == 0)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, false);
         size_t missing = 0;
 
+        catalog.SetThrottleCallback(&throttle);
+        for (const std::vector<DeviceInfo> &group : groups)
+            missing += group.size();
         for (const std::vector<DeviceInfo> &group : groups)
         {
             std::vector<CatalogUpdate> updates;
 
-            missing += group.size();
             error = SearchDevice(catalog, group.front(), updates);
             Print(GroupName(group) + L": " + CatalogNote(group.front(), updates, error, catalog.OtherArchitectures()));
             if (!updates.empty())
@@ -1810,10 +1879,12 @@ int RunCommand(int argc, LPWSTR *argv)
     if (installAll)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true);
         size_t installed = 0, failed = 0, absent = 0, missing = 0;
         bool restart = false;
 
+        catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
             missing += group.size();
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
@@ -1875,11 +1946,13 @@ int RunCommand(int argc, LPWSTR *argv)
     if (_wcsicmp(command.c_str(), L"search") == 0 || install)
     {
         Catalog catalog;
+        PrintThrottle throttle;
         std::vector<CatalogUpdate> updates;
         const CatalogUpdate *update = NULL;
         std::wstring detail;
         BOOL reboot = FALSE;
 
+        catalog.SetThrottleCallback(&throttle);
         if (!device)
         {
             Print(FormatText(IDS_CLI_NO_DEVICE, argc > 2 ? std::wstring(argv[2]) : std::wstring()));

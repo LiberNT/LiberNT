@@ -928,7 +928,7 @@ PopHiberOpenFile(
     if (NT_SUCCESS(Status))
         PopHiber.InHibernationPath = TRUE;
     else
-        /* FIXME: Windows keeps no hibernation file when a driver in its path fails the usage notification; storport and scsiport do not handle it yet */
+        /* FIXME: Windows keeps no hibernation file when a driver in its path fails the usage notification; scsiport does not handle it yet */
         DPRINT1("Hibernation path usage notification failed: 0x%08lx\n", Status);
 
     PopHiber.Capacity = Size;
@@ -1064,6 +1064,35 @@ PopHiberQueueStart(
         return;
 
     ExQueueWorkItem(&PopHiber.WorkItem, DelayedWorkQueue);
+}
+
+NTSTATUS
+NTAPI
+PopReserveHiberFileFromCaller(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    BOOLEAN Enable;
+
+    PAGED_CODE();
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(BOOLEAN) ||
+        OutputBuffer != NULL || OutputBufferLength != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (PreviousMode != KernelMode &&
+        !SeSinglePrivilegeCheck(SeCreatePagefilePrivilege, PreviousMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    Enable = *(volatile BOOLEAN *)InputBuffer;
+    return PopHiberReserve(Enable != FALSE);
 }
 
 VOID

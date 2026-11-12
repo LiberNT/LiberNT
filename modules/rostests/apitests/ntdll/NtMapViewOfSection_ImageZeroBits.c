@@ -44,14 +44,14 @@ START_TEST(NtMapViewOfSection_ImageZeroBits)
             Size = 0;
             Status = NtMapViewOfSection(Section, NtCurrentProcess(), &Views[j], UseMasks ? Masks[i] : Bits[i], 0, NULL,
                                         &Size, ViewShare, 0, PAGE_READONLY);
-            ok(NT_SUCCESS(Status), "Map mask %Ix view %lu failed: %lx\n", Masks[i], j, Status);
+            ok(NT_SUCCESS(Status), "Map mask %Ix view %lu failed: %lx\n", (size_t)Masks[i], j, Status);
             if (!NT_SUCCESS(Status))
             {
                 Views[j] = NULL;
                 continue;
             }
             ok(Size && (ULONG_PTR)Views[j] <= Masks[i] && Size - 1 <= Masks[i] - (ULONG_PTR)Views[j],
-               "View %p size %Ix exceeds mask %Ix\n", Views[j], Size, Masks[i]);
+               "View %p size %Ix exceeds mask %Ix\n", Views[j], (size_t)Size, (size_t)Masks[i]);
             ok(!((ULONG_PTR)Views[j] & 0xffff), "Unaligned view %p\n", Views[j]);
         }
         if (Views[0] && Views[1]) ok(Views[0] != Views[1], "Views overlap at %p\n", Views[0]);

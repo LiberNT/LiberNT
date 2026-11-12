@@ -132,6 +132,9 @@ struct DocHost {
     IDispatch           IDispatch_iface;
     IPropertyNotifySink IPropertyNotifySink_iface;
     IServiceProvider    IServiceProvider_iface;
+#ifdef __REACTOS__
+    IDocHostShowUI      IDocHostShowUI_iface;
+#endif
 
     /* Interfaces of InPlaceFrame object */
     IOleInPlaceFrame  IOleInPlaceFrame_iface;
@@ -162,6 +165,9 @@ struct DocHost {
 #ifdef __REACTOS__
     LONG progress;
     LONG progress_max;
+    BOOL drop_target_asked;
+    BOOL download_begun;
+    BOOL hostui_shown;
 #endif
 
     READYSTATE ready_state;
@@ -219,6 +225,7 @@ struct WebBrowser {
     DWORD folder_flags;
     DWORD dispatch_safety;
     VARIANT_BOOL register_drop_target;
+    BOOL closing;
 #endif
 
     IOleClientSite *client;
@@ -328,6 +335,9 @@ void create_doc_view_hwnd(DocHost*);
 void on_commandstate_change(DocHost*,LONG,BOOL);
 void notify_download_state(DocHost*,BOOL);
 void update_navigation_commands(DocHost *dochost);
+#ifdef __REACTOS__
+BOOL is_document_loading(DocHost*);
+#endif
 
 #define WM_DOCHOSTTASK (WM_USER+0x300)
 void push_dochost_task(DocHost*,task_header_t*,task_proc_t,task_destr_t,BOOL);

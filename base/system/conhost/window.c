@@ -2330,6 +2330,10 @@ static void apply_config( struct console *console, const struct console_config *
     console->edition_mode = config->edition_mode;
     console->history_mode = config->history_mode;
 
+#ifdef __REACTOS__
+    if (console->history_buffer_size != config->history_size)
+        set_history_buffer_size( console, config->history_size );
+#else
     if (console->history_size != config->history_size)
     {
         struct history_line **mem = NULL;
@@ -2356,6 +2360,7 @@ static void apply_config( struct console *console, const struct console_config *
             console->history_size = config->history_size;
         }
     }
+#endif
 
     if (config->insert_mode)
         console->mode |= ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS;
@@ -2399,7 +2404,11 @@ static void current_config( struct console *console, struct console_config *conf
 
     config->edition_mode = console->edition_mode;
     config->history_mode = console->history_mode;
+#ifdef __REACTOS__
+    config->history_size = console->history_buffer_size;
+#else
     config->history_size = console->history_size;
+#endif
 
     config->insert_mode = (console->mode & (ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS)) ==
         (ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS);

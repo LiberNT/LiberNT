@@ -9,6 +9,12 @@
     bx lr
     LEAF_END KeSwitchKernelStack
 
+    /* TODO: run KiRunStackCallout on the given stack */
+    LEAF_ENTRY KiCallOnKernelStack
+    __assertfail
+    bx lr
+    LEAF_END KiCallOnKernelStack
+
     LEAF_ENTRY KiPassiveRelease
     __assertfail
     bx lr

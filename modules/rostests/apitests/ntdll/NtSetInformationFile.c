@@ -69,6 +69,42 @@ TestFileAllocationInformation(VOID)
     CloseHandle(File);
 }
 
+static VOID
+TestFilePositionInformation(VOID)
+{
+    FILE_POSITION_INFORMATION Position;
+    IO_STATUS_BLOCK IoStatus;
+    NTSTATUS Status;
+    HANDLE File;
+    DWORD Result;
+
+    /* The null device keeps no position of its own; the synchronous file object does */
+    File = CreateFileW(L"NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+    {
+        skip("Cannot open NUL: %lu\n", GetLastError());
+        return;
+    }
+
+    Position.CurrentByteOffset.QuadPart = 12345;
+    Status = NtSetInformationFile(File, &IoStatus, &Position, sizeof(Position), FilePositionInformation);
+    ok_hex(Status, STATUS_SUCCESS);
+
+    Position.CurrentByteOffset.QuadPart = 0;
+    Status = NtQueryInformationFile(File, &IoStatus, &Position, sizeof(Position), FilePositionInformation);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(Position.CurrentByteOffset.QuadPart == 12345, "Position is %I64d\n", Position.CurrentByteOffset.QuadPart);
+
+    Position.CurrentByteOffset.QuadPart = -1;
+    Status = NtSetInformationFile(File, &IoStatus, &Position, sizeof(Position), FilePositionInformation);
+    ok_hex(Status, STATUS_INVALID_PARAMETER);
+
+    Result = SetFilePointer(File, 0, NULL, FILE_END);
+    ok(Result == 0, "SetFilePointer returned %lu, error %lu\n", Result, GetLastError());
+
+    CloseHandle(File);
+}
+
 START_TEST(NtSetInformationFile)
 {
     NTSTATUS Status;
@@ -80,4 +116,5 @@ START_TEST(NtSetInformationFile)
     ok(Status == STATUS_INVALID_INFO_CLASS, "Status = %lx\n", Status);
 
     TestFileAllocationInformation();
+    TestFilePositionInformation();
 }

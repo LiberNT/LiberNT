@@ -39,6 +39,9 @@ PKPRCB KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner;
 static volatile LONG64 KiFreezeEpoch;
 
+/* How long a freeze, a thaw or the active set may keep a processor waiting */
+#define KI_FREEZE_WAIT_SECONDS 10
+
 typedef struct _KI_FREEZE_WAIT
 {
     ULONG64 Start;
@@ -49,6 +52,8 @@ typedef struct _KI_FREEZE_WAIT
 } KI_FREEZE_WAIT;
 
 static VOID KiFreezeWaitForThaw(_In_ PKPRCB CurrentPrcb);
+
+/* FUNCTIONS *****************************************************************/
 
 static VOID
 KiNoteFreezeEpoch(VOID)
@@ -70,8 +75,18 @@ KiIsFreezeActive(VOID)
                                              NULL) != NULL;
 }
 
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb)
+{
+    return KiFreezeOwner == Prcb;
+}
+
+/* After a failed freeze only the processor that owns the stop goes on; any other one halts */
 static BOOLEAN
-KiFreezeFailureRequiresReturn(PKPRCB Prcb)
+KiFreezeFailureRequiresReturn(
+    _In_ PKPRCB Prcb)
 {
     if (!KiHasFreezeFailure())
         return FALSE;
@@ -81,8 +96,10 @@ KiFreezeFailureRequiresReturn(PKPRCB Prcb)
         HalHaltSystem();
 }
 
+/* Not counted while the debugger holds the machine or timing is relaxed; starts over when another freeze begins */
 static BOOLEAN
-KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait)
+KiFreezeWaitExpired(
+    _Inout_ KI_FREEZE_WAIT *Wait)
 {
     LARGE_INTEGER Counter, Frequency;
     ULONG64 Before, After;
@@ -112,11 +129,14 @@ KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait)
         return FALSE;
     }
 
-    return (Wait->Now - Wait->Start) / Wait->Frequency >= 10;
+    return (Wait->Now - Wait->Start) / Wait->Frequency >= KI_FREEZE_WAIT_SECONDS;
 }
 
+/* Answers TRUE when the caller is to stop waiting: it owns the stop and carries on with it */
 static BOOLEAN
-KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait)
+KiFreezeWaitFailed(
+    _In_ PKPRCB Prcb,
+    _Inout_ KI_FREEZE_WAIT *Wait)
 {
     if (KiFreezeFailureRequiresReturn(Prcb))
         return TRUE;
@@ -137,8 +157,6 @@ KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait)
                  Wait->Start,
                  0);
 }
-
-/* FUNCTIONS *****************************************************************/
 
 BOOLEAN
 KiProcessorFreezeHandler(
@@ -338,6 +356,7 @@ KiReleaseFreezeActiveSet(
         InterlockedExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner, NULL);
 }
 
+/* Active means the processor can take an IPI, and a frozen machine takes no new processor */
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -405,6 +424,8 @@ KxFreezeExecution(
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     BOOLEAN ReacquireActiveSet = FALSE;
+    BOOLEAN Acquired;
+    KAFFINITY Targets;
     KI_FREEZE_WAIT Wait = {0};
 
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
@@ -419,6 +440,7 @@ KxFreezeExecution(
     /* Try to acquire the freeze owner */
     while (InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeOwner, CurrentPrcb, NULL))
     {
+        /* The owner snapshots under the active set: do not hold it while waiting for that owner */
         if (!ReacquireActiveSet &&
             InterlockedCompareExchangePointer((volatile PVOID *)&KiFreezeActiveSetOwner,
                                               NULL,
@@ -452,15 +474,12 @@ KxFreezeExecution(
     /* We are the owner now and active */
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
 
-    {
-    BOOLEAN Acquired = KiAcquireFreezeActiveSet(CurrentPrcb);
-    KAFFINITY Targets;
-
+    /* No processor becomes active between the snapshot and the thaw */
+    Acquired = KiAcquireFreezeActiveSet(CurrentPrcb);
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
         return;
     Targets = KiFreezeTargetSet(CurrentPrcb);
     Wait.Valid = FALSE;
-
     KiReleaseFreezeActiveSet(CurrentPrcb, Acquired && !ReacquireActiveSet);
 
     /* Mark exactly the snapshot */
@@ -489,17 +508,36 @@ KxFreezeExecution(
     if (Targets != 0)
         KiIpiSend(Targets, IPI_FREEZE);
 
+    /* Wait for exactly the same set to be frozen */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-
         if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
             continue;
 
         while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
         {
+            BOOLEAN StopOwnerPending = FALSE;
+
             if (KiFreezeFailureRequiresReturn(CurrentPrcb))
                 return;
+
+            /* The processor that owns the stop never freezes: leave the machine to it now rather than after the watchdog */
+            for (ULONG j = i; j < KeNumberProcessors && j < MAXIMUM_PROCESSORS && !StopOwnerPending; j++)
+            {
+                PKPRCB PendingPrcb = KiProcessorBlock[j];
+
+                StopOwnerPending = PendingPrcb != NULL && (Targets & PendingPrcb->SetMember) != 0 &&
+                                   KiIsBugCheckEntryOwner(PendingPrcb);
+            }
+
+            if (StopOwnerPending)
+            {
+                KiSetFreezeFailure();
+                if (KiFreezeFailureRequiresReturn(CurrentPrcb))
+                    return;
+            }
+
             if (KiFreezeWaitExpired(&Wait) &&
                 TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN &&
                 KiFreezeWaitFailed(CurrentPrcb, &Wait))
@@ -508,9 +546,11 @@ KxFreezeExecution(
             KeMemoryBarrier();
         }
     }
-    }
+
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
         return;
+
+    /* All targets are frozen, we can continue */
 }
 
 VOID
@@ -544,10 +584,10 @@ KxThawExecution(
         TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_THAW;
     }
 
+    /* Wait for all targets to be running */
     for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-
         if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
             continue;
 

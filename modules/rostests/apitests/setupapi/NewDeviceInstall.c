@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that a new device with no driver finishes its installation without user interaction
+ * PURPOSE:     Test that a device created from user mode under the root is not offered for installation, and that nothing waits on the user
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -76,12 +76,14 @@ START_TEST(NewDeviceInstall)
     ok(Result == CR_SUCCESS, "CM_Create_DevInstW(%ls) failed: cr %lu\n", InstanceId, Result);
     if (Result == CR_SUCCESS)
     {
-        /* Windows 11 leaves a device created this way uninstalled; LiberNT installs it. Neither may wait on the user. */
+        /* Windows 11 leaves a device created this way uninstalled, with no install state; nothing may wait on the user */
         Attempted = WaitForInstallAttempt(Device, 10000, &Status, &Problem);
         ok(CMP_WaitNoPendingInstallEvents(5000) == WAIT_OBJECT_0, "An installation is still pending\n");
         Elapsed = GetTickCount() - Start;
         CM_Get_DevNode_Status(&Status, &Problem, Device, 0);
         ok(!(Status & DN_STARTED), "%ls: a device without a driver started, status 0x%lx\n", InstanceId, Status);
+        ok(!(GetConfigFlags(Device) & CONFIGFLAG_FAILEDINSTALL), "%ls was offered for installation, flags 0x%lx\n", InstanceId,
+           GetConfigFlags(Device));
         trace("MEASURE %ls: attempted %d status 0x%lx problem %lu flags 0x%lx after %lu ms\n",
               InstanceId, Attempted, Status, Problem, GetConfigFlags(Device), Elapsed);
     }

@@ -56,23 +56,30 @@ RunChild(SIZE_T FirstCommit, SIZE_T SecondCommit)
 }
 
 static void
-RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag)
+RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag, BOOL Nested)
 {
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION Limits;
     JOBOBJECT_ASSOCIATE_COMPLETION_PORT Port;
     LPPROC_THREAD_ATTRIBUTE_LIST Attributes;
     PROCESS_INFORMATION Info;
-    HANDLE Job, CompletionPort;
+    HANDLE Job, CompletionPort, JobList[2] = { NULL, NULL };
     SIZE_T Size = 0;
     DWORD ExitCode, Bytes, Length;
     ULONG_PTR Key;
     LPOVERLAPPED Overlapped;
-    BOOL SawLimit = FALSE;
+    BOOL SawLimit = FALSE, InInner = FALSE;
     ULONG Round;
 
     Job = CreateJobObjectW(NULL, NULL);
     ok(Job != NULL, "%s: CreateJobObject failed %lu\n", Tag, GetLastError());
     if (!Job) return;
+    JobList[0] = Job;
+    if (Nested)
+    {
+        JobList[1] = CreateJobObjectW(NULL, NULL);
+        ok(JobList[1] != NULL, "%s: inner CreateJobObject failed %lu\n", Tag, GetLastError());
+        if (!JobList[1]) { CloseHandle(Job); return; }
+    }
 
     CompletionPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
     ok(CompletionPort != NULL, "%s: CreateIoCompletionPort failed %lu\n", Tag, GetLastError());
@@ -99,7 +106,8 @@ RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag)
     InitializeProcThreadAttributeList(NULL, 1, 0, &Size);
     Attributes = HeapAlloc(GetProcessHeap(), 0, Size);
     ok(Attributes && InitializeProcThreadAttributeList(Attributes, 1, 0, &Size), "%s: attribute list failed\n", Tag);
-    ok(UpdateProcThreadAttribute(Attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, &Job, sizeof(Job), NULL, NULL),
+    ok(UpdateProcThreadAttribute(Attributes, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, JobList,
+                                 (Nested ? 2 : 1) * sizeof(HANDLE), NULL, NULL),
        "%s: JOB_LIST failed %lu\n", Tag, GetLastError());
 
     ok(SbxSpawnChild("JobMemory", LimitFlag == JOB_OBJECT_LIMIT_PROCESS_MEMORY ? "process" : "job",
@@ -107,6 +115,9 @@ RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag)
        "%s: child spawn failed %lu\n", Tag, GetLastError());
     if (Info.hProcess)
     {
+        if (Nested)
+            ok(IsProcessInJob(Info.hProcess, JobList[1], &InInner) && InInner,
+               "%s: child not in the nested job\n", Tag);
         ExitCode = SbxWaitChild(&Info);
         ok(ExitCode == 0, "%s: child failed with 0x%lx\n", Tag, ExitCode);
     }
@@ -133,6 +144,15 @@ RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag)
            Limits.PeakJobMemoryUsed >= Limits.PeakProcessMemoryUsed,
            "%s: peak job memory %Iu, peak process memory %Iu\n", Tag,
            Limits.PeakJobMemoryUsed, Limits.PeakProcessMemoryUsed);
+
+    if (Nested)
+    {
+        ZeroMemory(&Limits, sizeof(Limits));
+        ok(QueryInformationJobObject(JobList[1], JobObjectExtendedLimitInformation, &Limits, sizeof(Limits), &Length) &&
+           Limits.PeakJobMemoryUsed >= 32 * MB,
+           "%s: nested job peak %Iu\n", Tag, Limits.PeakJobMemoryUsed);
+        CloseHandle(JobList[1]);
+    }
 
     CloseHandle(CompletionPort);
     CloseHandle(Job);
@@ -230,8 +250,10 @@ START_TEST(JobMemory)
     if (SbxIsChild(Arguments, Count, "process")) ExitProcess(RunChild(32 * MB, 96 * MB));
     if (SbxIsChild(Arguments, Count, "job")) ExitProcess(RunChild(32 * MB, 72 * MB));
 
-    RunLimitCase(JOB_OBJECT_LIMIT_PROCESS_MEMORY, 96 * MB, JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT, "process limit");
-    RunLimitCase(JOB_OBJECT_LIMIT_JOB_MEMORY, 96 * MB, JOB_OBJECT_MSG_JOB_MEMORY_LIMIT, "job limit");
+    RunLimitCase(JOB_OBJECT_LIMIT_PROCESS_MEMORY, 96 * MB, JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT, "process limit", FALSE);
+    RunLimitCase(JOB_OBJECT_LIMIT_JOB_MEMORY, 96 * MB, JOB_OBJECT_MSG_JOB_MEMORY_LIMIT, "job limit", FALSE);
+    RunLimitCase(JOB_OBJECT_LIMIT_PROCESS_MEMORY, 96 * MB, JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT, "nested process limit", TRUE);
+    RunLimitCase(JOB_OBJECT_LIMIT_JOB_MEMORY, 96 * MB, JOB_OBJECT_MSG_JOB_MEMORY_LIMIT, "nested job limit", TRUE);
     TestBreakaway(TRUE);
     TestBreakaway(FALSE);
 }

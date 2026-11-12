@@ -106,6 +106,8 @@ static void KiNoteFreezeEpoch(void) { @NOTE@ }
 static BOOLEAN KiHasFreezeFailure(void) { return FALSE; }
 static void __attribute__((noreturn)) HalHaltSystem(void) { __builtin_trap(); }
 static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static void __attribute__((noreturn)) KiSetFreezeFailure(void) { __builtin_trap(); }
 static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
 static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) {

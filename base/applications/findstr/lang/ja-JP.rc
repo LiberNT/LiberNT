@@ -8,6 +8,6 @@ BEGIN
     /I  大文字小文字を無視します\n\
     /N  表示される行に1から番号を付けます\n\
     /V  文字列を含まない行を出力します"
-    IDS_NO_SUCH_FILE "FINDSTR: %s: そのようなファイルはありません\n"
-    IDS_CANNOT_OPEN "FINDSTR: %s: ファイルが開けません\n"
+    IDS_NO_SUCH_FILE "FINDSTR: %s を開けません\n"
+    IDS_CANNOT_OPEN "FINDSTR: %s を開けません\n"
 END

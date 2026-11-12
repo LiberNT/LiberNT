@@ -35,8 +35,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_PARITY "Even,Odd,None,Mark,Space"
+    IDS_PARITY "偶数,奇数,なし,マーク,スペース"
     IDS_STOPBITS "1,1.5,2"
-    IDS_FLOWCONTROL "Xon / Xoff,Hardware,None"
-    IDS_PORT_IN_USE " (in use)"
+    IDS_FLOWCONTROL "Xon / Xoff,ハードウェア,なし"
+    IDS_PORT_IN_USE " (使用中)"
 END

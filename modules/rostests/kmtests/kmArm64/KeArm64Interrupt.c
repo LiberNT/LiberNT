@@ -116,7 +116,7 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
     KMT_ISR_DISCONNECT State, NestedState, *WaitState = &State;
     KMT_ISR_CONTEXT Record;
     KINTERRUPT Interrupt, OtherInterrupt;
-    LARGE_INTEGER Frequency, Delay;
+    LARGE_INTEGER Frequency;
     LONGLONG Start;
     HANDLE Thread;
     NTSTATUS Status;
@@ -181,10 +181,10 @@ TestDisconnect(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql, ULONG
     if (NT_SUCCESS(Status))
     {
         Start = KeQueryPerformanceCounter(NULL).QuadPart;
-        Delay.QuadPart = -10000;
+        /* The nested ISR holds CLOCK_LEVEL, and on the clock owner that stops every timer */
         while (!InterlockedCompareExchange(&WaitState->Entered, 0, 0) &&
                KeQueryPerformanceCounter(NULL).QuadPart - Start < Frequency.QuadPart)
-            KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+            YieldProcessor();
 
         ok_eq_long(WaitState->Entered, 1);
         ok_eq_long(State.Finished, 0);

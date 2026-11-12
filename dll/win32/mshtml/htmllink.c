@@ -36,6 +36,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 struct HTMLLinkElement {
     HTMLElement element;
     IHTMLLinkElement IHTMLLinkElement_iface;
+    IHTMLLinkElement2 IHTMLLinkElement2_iface;
+    IHTMLLinkElement3 IHTMLLinkElement3_iface;
 
     nsIDOMHTMLLinkElement *nslink;
 };
@@ -332,6 +334,102 @@ static HRESULT HTMLLinkElementImpl_get_disabled(HTMLDOMNode *iface, VARIANT_BOOL
     return IHTMLLinkElement_get_disabled(&This->IHTMLLinkElement_iface, p);
 }
 
+static inline HTMLLinkElement *impl_from_IHTMLLinkElement2(IHTMLLinkElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLLinkElement, IHTMLLinkElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLLinkElement2, IHTMLLinkElement2,
+                      impl_from_IHTMLLinkElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLLinkElement2_put_target(IHTMLLinkElement2 *iface, BSTR v)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"target", v);
+}
+
+static HRESULT WINAPI HTMLLinkElement2_get_target(IHTMLLinkElement2 *iface, BSTR *p)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"target", p);
+}
+
+static const IHTMLLinkElement2Vtbl HTMLLinkElement2Vtbl = {
+    HTMLLinkElement2_QueryInterface,
+    HTMLLinkElement2_AddRef,
+    HTMLLinkElement2_Release,
+    HTMLLinkElement2_GetTypeInfoCount,
+    HTMLLinkElement2_GetTypeInfo,
+    HTMLLinkElement2_GetIDsOfNames,
+    HTMLLinkElement2_Invoke,
+    HTMLLinkElement2_put_target,
+    HTMLLinkElement2_get_target
+};
+
+static inline HTMLLinkElement *impl_from_IHTMLLinkElement3(IHTMLLinkElement3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLLinkElement, IHTMLLinkElement3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLLinkElement3, IHTMLLinkElement3,
+                      impl_from_IHTMLLinkElement3(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLLinkElement3_put_charset(IHTMLLinkElement3 *iface, BSTR v)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"charset", v);
+}
+
+static HRESULT WINAPI HTMLLinkElement3_get_charset(IHTMLLinkElement3 *iface, BSTR *p)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"charset", p);
+}
+
+static HRESULT WINAPI HTMLLinkElement3_put_hreflang(IHTMLLinkElement3 *iface, BSTR v)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"hreflang", v);
+}
+
+static HRESULT WINAPI HTMLLinkElement3_get_hreflang(IHTMLLinkElement3 *iface, BSTR *p)
+{
+    HTMLLinkElement *This = impl_from_IHTMLLinkElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"hreflang", p);
+}
+
+static const IHTMLLinkElement3Vtbl HTMLLinkElement3Vtbl = {
+    HTMLLinkElement3_QueryInterface,
+    HTMLLinkElement3_AddRef,
+    HTMLLinkElement3_Release,
+    HTMLLinkElement3_GetTypeInfoCount,
+    HTMLLinkElement3_GetTypeInfo,
+    HTMLLinkElement3_GetIDsOfNames,
+    HTMLLinkElement3_Invoke,
+    HTMLLinkElement3_put_charset,
+    HTMLLinkElement3_get_charset,
+    HTMLLinkElement3_put_hreflang,
+    HTMLLinkElement3_get_hreflang
+};
+
 static inline HTMLLinkElement *impl_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLLinkElement, element.node.event_target.dispex);
@@ -343,6 +441,10 @@ static void *HTMLLinkElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLLinkElement, riid))
         return &This->IHTMLLinkElement_iface;
+    if(IsEqualGUID(&IID_IHTMLLinkElement2, riid))
+        return &This->IHTMLLinkElement2_iface;
+    if(IsEqualGUID(&IID_IHTMLLinkElement3, riid))
+        return &This->IHTMLLinkElement3_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -379,6 +481,8 @@ static void HTMLLinkElement_init_dispex_info(dispex_data_t *info, compat_mode_t 
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLLinkElement_tid, link_hooks);
+    dispex_info_add_interface(info, IHTMLLinkElement2_tid, NULL);
+    dispex_info_add_interface(info, IHTMLLinkElement3_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -413,6 +517,8 @@ HRESULT HTMLLinkElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTM
         return E_OUTOFMEMORY;
 
     ret->IHTMLLinkElement_iface.lpVtbl = &HTMLLinkElementVtbl;
+    ret->IHTMLLinkElement2_iface.lpVtbl = &HTMLLinkElement2Vtbl;
+    ret->IHTMLLinkElement3_iface.lpVtbl = &HTMLLinkElement3Vtbl;
     ret->element.node.vtbl = &HTMLLinkElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLLinkElement_dispex);

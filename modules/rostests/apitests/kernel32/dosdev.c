@@ -19,6 +19,7 @@
  */
 
 #include "precomp.h"
+#include <ndk/obfuncs.h>
 
 #define SUBST_DRIVE_LETTER 'M'
 #define SUBST_DRIVE "M:"
@@ -371,8 +372,62 @@ static void test_QueryDosDeviceA(void)
     ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "Wrong last error. Expected %lu, got %lu\n", (DWORD)(ERROR_INSUFFICIENT_BUFFER), GetLastError());
 }
 
+#define LINK_DRIVE_LETTER 'Q'
+
+typedef struct _LINK_CREATE
+{
+    NTSTATUS Status;
+    HANDLE Handle;
+} LINK_CREATE, *PLINK_CREATE;
+
+static DWORD WINAPI CreateDriveLinkThread(PVOID Parameter)
+{
+    PLINK_CREATE Create = Parameter;
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\??\\Q:");
+    UNICODE_STRING Target = RTL_CONSTANT_STRING(L"\\??\\C:\\Windows");
+    OBJECT_ATTRIBUTES Attributes;
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Create->Status = NtCreateSymbolicLinkObject(&Create->Handle, SYMBOLIC_LINK_ALL_ACCESS, &Attributes, &Target);
+    return 0;
+}
+
+/* A drive letter whose target is another DOS device name is created, published and withdrawn */
+static void test_DriveLinkToDosDevice(void)
+{
+    LINK_CREATE Create = { STATUS_PENDING, NULL };
+    HANDLE Thread;
+    DWORD Wait;
+
+    if (GetLogicalDrives() & (1 << (LINK_DRIVE_LETTER - 'A')))
+    {
+        skip("Drive %c: already exists\n", LINK_DRIVE_LETTER);
+        return;
+    }
+
+    Thread = CreateThread(NULL, 0, CreateDriveLinkThread, &Create, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Thread == NULL)
+        return;
+
+    Wait = WaitForSingleObject(Thread, 5000);
+    ok(Wait == WAIT_OBJECT_0, "NtCreateSymbolicLinkObject did not return: %lu\n", Wait);
+    CloseHandle(Thread);
+    if (Wait != WAIT_OBJECT_0)
+        return;
+
+    ok(Create.Status == STATUS_SUCCESS, "NtCreateSymbolicLinkObject returned %lx\n", Create.Status);
+    if (!NT_SUCCESS(Create.Status))
+        return;
+
+    ok(GetLogicalDrives() & (1 << (LINK_DRIVE_LETTER - 'A')), "Drive %c: is not published\n", LINK_DRIVE_LETTER);
+    CloseHandle(Create.Handle);
+    ok(!(GetLogicalDrives() & (1 << (LINK_DRIVE_LETTER - 'A'))), "Drive %c: is still published\n", LINK_DRIVE_LETTER);
+}
+
 START_TEST(dosdev)
 {
+    test_DriveLinkToDosDevice();
     test_DefineDosDeviceA();
     test_QueryDosDeviceA();
 }

@@ -503,14 +503,13 @@ BaseInitAppcompatCacheSupport(VOID)
 }
 
 /*
- * @unimplemented
+ * @implemented
  */
-PVOID
+ULONG
 WINAPI
 GetComPlusPackageInstallStatus(VOID)
 {
-    STUB;
-    return NULL;
+    return SharedUserData->ComPlusPackage;
 }
 
 /*
@@ -609,6 +608,6 @@ BOOL
 WINAPI
 TermsrvAppInstallMode(VOID)
 {
-    STUB;
+    /* TODO: RD Session Host install mode (SetTermsrvAppInstallMode shape undocumented); EXECUTE mode reported */
     return FALSE;
 }

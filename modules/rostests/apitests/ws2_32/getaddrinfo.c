@@ -41,6 +41,7 @@ TestNodeName(VOID)
         PCSTR NodeName;
         PCSTR ExpectedAddress;
         INT Flags;
+        INT HintFlags;
     } Tests[] =
     {
         { "",                               LocalAddress },
@@ -55,9 +56,10 @@ TestNodeName(VOID)
         { "0.0.0.0:80",                     NULL },
         { "0.0.0.0.0",                      NULL },
         { "1.1.1.256",                      NULL },
-        { "1.2.3",                          NULL },
-        { "1.2.3.0x4",                      NULL },
-        { "1.2.3.010",                      NULL },
+        /* Not numeric, and a DNS server may still answer these as names, so only the parse is checked */
+        { "1.2.3",                          NULL,               0, AI_NUMERICHOST },
+        { "1.2.3.0x4",                      NULL,               0, AI_NUMERICHOST },
+        { "1.2.3.010",                      NULL,               0, AI_NUMERICHOST },
         /* let's just assume this one doesn't change any time soon ;) */
         { "google-public-dns-a.google.com", "8.8.8.8" },
     };
@@ -74,6 +76,7 @@ TestNodeName(VOID)
         trace("%d: '%s'\n", i, Tests[i].NodeName);
         StartSeh()
             AddrInfo = InvalidPointer;
+            Hints.ai_flags = Tests[i].HintFlags;
             Error = getaddrinfo(Tests[i].NodeName, NULL, &Hints, &AddrInfo);
             if (Tests[i].ExpectedAddress)
             {

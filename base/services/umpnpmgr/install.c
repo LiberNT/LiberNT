@@ -186,7 +186,8 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
             ((DeviceStatus & DN_STARTED) ||
              ((DeviceStatus & DN_HAS_PROBLEM) &&
               (DeviceProblem == CM_PROB_FAILED_START ||
-               DeviceProblem == CM_PROB_FAILED_POST_START))))
+               DeviceProblem == CM_PROB_FAILED_POST_START ||
+               DeviceProblem == CM_PROB_HELD_FOR_EJECT))))
         {
             State = DeviceInstallComplete;
         }
@@ -218,6 +219,27 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
 
 done:
     RegCloseKey(DeviceKey);
+    return State;
+}
+
+/* A device's arrival only asks that the device be installed while it still runs: one that left since is not set up again */
+static DEVICE_INSTALL_STATE
+GetArrivalInstallState(PCWSTR DeviceInstance)
+{
+    DEVICE_INSTALL_STATE State = GetDeviceInstallState(DeviceInstance);
+    DWORD DeviceStatus = 0;
+    DWORD DeviceProblem = 0;
+
+    if (State == DeviceStartRequired)
+        return DeviceInstallComplete;
+
+    if (State == DeviceInstallRequired &&
+        (PNP_GetDeviceStatus(NULL, (PWSTR)DeviceInstance, &DeviceStatus, &DeviceProblem, 0) != CR_SUCCESS ||
+         !(DeviceStatus & DN_STARTED)))
+    {
+        return DeviceInstallComplete;
+    }
+
     return State;
 }
 
@@ -431,7 +453,7 @@ SetupInstalledDevice(
 
 
 static BOOL
-InstallDevice(PCWSTR DeviceInstance)
+InstallDevice(PCWSTR DeviceInstance, BOOL Arrival)
 {
     DEVICE_INSTALL_STATE InstallState;
     BOOL DeviceInstalled = FALSE;
@@ -457,7 +479,7 @@ InstallDevice(PCWSTR DeviceInstance)
 
     ZeroMemory(&ProcessInfo, sizeof(ProcessInfo));
 
-    InstallState = GetDeviceInstallState(DeviceInstance);
+    InstallState = Arrival ? GetArrivalInstallState(DeviceInstance) : GetDeviceInstallState(DeviceInstance);
     if (InstallState == DeviceInstallComplete)
     {
         DPRINT("No need to install: %S\n", DeviceInstance);
@@ -1440,7 +1462,7 @@ DeviceInstallThread(LPVOID lpParameter)
                  currentDev[0] != UNICODE_NULL;
                  currentDev += lstrlenW(currentDev) + 1)
             {
-                InstallDevice(currentDev);
+                InstallDevice(currentDev, FALSE);
             }
         }
 
@@ -1457,7 +1479,7 @@ DeviceInstallThread(LPVOID lpParameter)
              currentDev[0] != UNICODE_NULL;
              currentDev += lstrlenW(currentDev) + 1)
         {
-            InstallDevice(currentDev);
+            InstallDevice(currentDev, FALSE);
         }
     }
     /* else: nothing to install, skip the spawn entirely. */
@@ -1542,7 +1564,8 @@ Step2:
             for (PLIST_ENTRY e = LocalBurst.Flink; e != &LocalBurst; e = e->Flink)
             {
                 DeviceInstallParams* p = CONTAINING_RECORD(e, DeviceInstallParams, ListEntry);
-                DEVICE_INSTALL_STATE InstallState = GetDeviceInstallState(p->DeviceIds);
+                DEVICE_INSTALL_STATE InstallState = p->Arrival ? GetArrivalInstallState(p->DeviceIds)
+                                                               : GetDeviceInstallState(p->DeviceIds);
 
                 if (InstallState == DeviceInstallRequired)
                 {
@@ -1585,7 +1608,7 @@ Step2:
         {
             PLIST_ENTRY e = RemoveHeadList(&LocalBurst);
             Params = CONTAINING_RECORD(e, DeviceInstallParams, ListEntry);
-            InstallDevice(Params->DeviceIds);
+            InstallDevice(Params->DeviceIds, Params->Arrival);
             HeapFree(GetProcessHeap(), 0, Params);
         }
     }

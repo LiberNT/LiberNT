@@ -42,6 +42,8 @@ NTSYSAPI NTSTATUS NTAPI NtAccessCheckByType(PSECURITY_DESCRIPTOR, PSID, HANDLE, 
 NTSYSAPI NTSTATUS NTAPI NtAccessCheckByTypeResultList(PSECURITY_DESCRIPTOR, PSID, HANDLE, ACCESS_MASK,
                                                    POBJECT_TYPE_LIST, ULONG, PGENERIC_MAPPING,
                                                    PPRIVILEGE_SET, PULONG, PACCESS_MASK, PNTSTATUS);
+NTSYSAPI NTSTATUS NTAPI NtDeleteObjectAuditAlarm(PUNICODE_STRING, PVOID, BOOLEAN);
+NTSYSAPI NTSTATUS NTAPI RtlSetInformationAcl(PACL, PVOID, ULONG, ACL_INFORMATION_CLASS);
 
 #endif
 NTSYSAPI NTSTATUS WINAPI RtlSetSecurityObject(SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
@@ -1335,10 +1337,30 @@ BOOL WINAPI AccessCheckAndAuditAlarmW( LPCWSTR subsystem, LPVOID id, LPWSTR type
                                        PGENERIC_MAPPING mapping, BOOL creation,
                                        LPDWORD granted, LPBOOL status, LPBOOL on_close )
 {
-    FIXME( "stub (%s,%p,%s,%s,%p,%08lx,%p,%x,%p,%p,%p)\n", debugstr_w(subsystem),
+    UNICODE_STRING subsystem_str, type_str, name_str;
+    ACCESS_MASK granted_access;
+    NTSTATUS access_status;
+    BOOLEAN generate_on_close;
+    BOOL ret;
+
+    TRACE( "(%s,%p,%s,%s,%p,%08lx,%p,%x,%p,%p,%p)\n", debugstr_w(subsystem),
            id, debugstr_w(type_name), debugstr_w(name), descr, access, mapping,
            creation, granted, status, on_close );
-    return TRUE;
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    RtlInitUnicodeString( &type_str, type_name );
+    RtlInitUnicodeString( &name_str, name );
+
+    ret = set_ntstatus( NtAccessCheckAndAuditAlarm( &subsystem_str, id, &type_str, &name_str, descr,
+                                                    access, mapping, creation != FALSE, &granted_access,
+                                                    &access_status, &generate_on_close ));
+    if (ret)
+    {
+        *granted = granted_access;
+        *status = set_ntstatus( access_status );
+        *on_close = generate_on_close;
+    }
+    return ret;
 }
 
 /******************************************************************************
@@ -1547,8 +1569,12 @@ void WINAPI MapGenericMask( PDWORD access, PGENERIC_MAPPING mapping )
  */
 BOOL WINAPI ObjectCloseAuditAlarmW( LPCWSTR subsystem, LPVOID id, BOOL on_close )
 {
-    FIXME( "stub (%s,%p,%x)\n", debugstr_w(subsystem), id, on_close );
-    return TRUE;
+    UNICODE_STRING subsystem_str;
+
+    TRACE( "(%s,%p,%x)\n", debugstr_w(subsystem), id, on_close );
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    return set_ntstatus( NtCloseObjectAuditAlarm( &subsystem_str, id, on_close != FALSE ));
 }
 
 /******************************************************************************
@@ -1556,8 +1582,12 @@ BOOL WINAPI ObjectCloseAuditAlarmW( LPCWSTR subsystem, LPVOID id, BOOL on_close 
  */
 BOOL WINAPI ObjectDeleteAuditAlarmW( LPCWSTR subsystem, LPVOID id, BOOL on_close )
 {
-    FIXME( "stub (%s,%p,%x)\n", debugstr_w(subsystem), id, on_close );
-    return TRUE;
+    UNICODE_STRING subsystem_str;
+
+    TRACE( "(%s,%p,%x)\n", debugstr_w(subsystem), id, on_close );
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    return set_ntstatus( NtDeleteObjectAuditAlarm( &subsystem_str, id, on_close != FALSE ));
 }
 
 /******************************************************************************
@@ -1568,10 +1598,23 @@ BOOL WINAPI ObjectOpenAuditAlarmW( LPCWSTR subsystem, LPVOID id, LPWSTR type, LP
                                    DWORD granted, PPRIVILEGE_SET privs, BOOL creation,
                                    BOOL access, LPBOOL on_close )
 {
-    FIXME( "stub (%s,%p,%s,%s,%p,%p,0x%08lx,0x%08lx,%p,%x,%x,%p)\n", debugstr_w(subsystem),
+    UNICODE_STRING subsystem_str, type_str, name_str;
+    BOOLEAN generate_on_close;
+    BOOL ret;
+
+    TRACE( "(%s,%p,%s,%s,%p,%p,0x%08lx,0x%08lx,%p,%x,%x,%p)\n", debugstr_w(subsystem),
            id, debugstr_w(type), debugstr_w(name), descr, token, desired, granted,
            privs, creation, access, on_close );
-    return TRUE;
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    RtlInitUnicodeString( &type_str, type );
+    RtlInitUnicodeString( &name_str, name );
+
+    ret = set_ntstatus( NtOpenObjectAuditAlarm( &subsystem_str, id, &type_str, &name_str, descr, token,
+                                                desired, granted, privs, creation != FALSE,
+                                                access != FALSE, &generate_on_close ));
+    if (ret) *on_close = generate_on_close;
+    return ret;
 }
 
 /******************************************************************************
@@ -1580,8 +1623,13 @@ BOOL WINAPI ObjectOpenAuditAlarmW( LPCWSTR subsystem, LPVOID id, LPWSTR type, LP
 BOOL WINAPI ObjectPrivilegeAuditAlarmW( LPCWSTR subsystem, LPVOID id, HANDLE token,
                                         DWORD desired, PPRIVILEGE_SET privs, BOOL granted )
 {
-    FIXME( "stub (%s,%p,%p,0x%08lx,%p,%x)\n", debugstr_w(subsystem), id, token, desired, privs, granted );
-    return TRUE;
+    UNICODE_STRING subsystem_str;
+
+    TRACE( "(%s,%p,%p,0x%08lx,%p,%x)\n", debugstr_w(subsystem), id, token, desired, privs, granted );
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    return set_ntstatus( NtPrivilegeObjectAuditAlarm( &subsystem_str, id, token, desired, privs,
+                                                      granted != FALSE ));
 }
 
 /******************************************************************************
@@ -1590,8 +1638,14 @@ BOOL WINAPI ObjectPrivilegeAuditAlarmW( LPCWSTR subsystem, LPVOID id, HANDLE tok
 BOOL WINAPI PrivilegedServiceAuditAlarmW( LPCWSTR subsystem, LPCWSTR service, HANDLE token,
                                           PPRIVILEGE_SET privs, BOOL granted )
 {
-    FIXME( "stub %s,%s,%p,%p,%x)\n", debugstr_w(subsystem), debugstr_w(service), token, privs, granted );
-    return TRUE;
+    UNICODE_STRING subsystem_str, service_str;
+
+    TRACE( "(%s,%s,%p,%p,%x)\n", debugstr_w(subsystem), debugstr_w(service), token, privs, granted );
+
+    RtlInitUnicodeString( &subsystem_str, subsystem );
+    RtlInitUnicodeString( &service_str, service );
+    return set_ntstatus( NtPrivilegedServiceAuditAlarm( &subsystem_str, &service_str, token, privs,
+                                                        granted != FALSE ));
 }
 
 /******************************************************************************
@@ -1599,8 +1653,9 @@ BOOL WINAPI PrivilegedServiceAuditAlarmW( LPCWSTR subsystem, LPCWSTR service, HA
  */
 BOOL WINAPI SetAclInformation( PACL acl, LPVOID info, DWORD len, ACL_INFORMATION_CLASS class )
 {
-    FIXME( "%p %p 0x%08lx 0x%08x - stub\n", acl, info, len, class );
-    return TRUE;
+    TRACE( "%p %p 0x%08lx 0x%08x\n", acl, info, len, class );
+
+    return set_ntstatus( RtlSetInformationAcl( acl, info, len, class ));
 }
 
 /******************************************************************************
@@ -1630,9 +1685,9 @@ BOOL WINAPI DeriveCapabilitySidsFromName( const WCHAR *cap_name, PSID **cap_grou
     *cap_group_sids = NULL;
     *cap_sids = NULL;
 
-    if (!(*cap_group_sids = RtlAllocateHeap( GetProcessHeap(), 0, *cap_group_sid_count * sizeof(**cap_group_sids) )))
+    if (!(*cap_group_sids = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, *cap_group_sid_count * sizeof(**cap_group_sids) )))
         goto done;
-    if (!(*cap_sids = RtlAllocateHeap( GetProcessHeap(), 0, *cap_sid_count * sizeof(**cap_sids) )))
+    if (!(*cap_sids = RtlAllocateHeap( GetProcessHeap(), HEAP_ZERO_MEMORY, *cap_sid_count * sizeof(**cap_sids) )))
         goto done;
 
     /* There is no obvious way to query returned subauthority count for RtlDeriveCapabilitySidsFromName,

@@ -14,8 +14,6 @@ Windows = "\"
 "Windows\SystemTemp" = 1
 "Windows\system32\applaunch.exe" = 1
 "Windows\unattend.inf" = 1
-"Windows\welcome.ini" = 1
-"Windows\welcome" = 1
 
 ; A file listed here keeps its installed copy when Setup upgrades LiberNT,
 ; and is copied only when it is missing.
@@ -42,6 +40,7 @@ PCI\VEN_104B&CC_0100 = buslogic
 ;PCI\CC_0105 = uniata
 ;PCI\CC_0106 = uniata
 PCI\CC_010601 = storahci
+ACPI\CLS_0001&SUBCLS_0006&PI_01 = storahci
 PCI\VEN_1000&DEV_0050 = lsi_sas
 PCI\VEN_1000&DEV_0054 = lsi_sas
 PCI\VEN_1000&DEV_0056 = lsi_sas
@@ -51,6 +50,7 @@ PCI\VEN_1000&DEV_0030 = lsi_sas
 USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
 USB\ROOT_HUB20 = usbhub
+USB\ROOT_HUB30 = usbhub
 PCI\CC_0C0300 = usbuhci
 PCI\CC_0C0310 = usbohci
 PCI\CC_0C0320 = usbehci

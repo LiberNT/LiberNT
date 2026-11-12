@@ -337,6 +337,44 @@ static HRESULT HTMLScriptElement_bind_to_tree(HTMLDOMNode *iface)
     return S_OK;
 }
 
+static inline HTMLScriptElement *impl_from_IHTMLScriptElement2(IHTMLScriptElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLScriptElement, IHTMLScriptElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLScriptElement2, IHTMLScriptElement2,
+                      impl_from_IHTMLScriptElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLScriptElement2_put_charset(IHTMLScriptElement2 *iface, BSTR v)
+{
+    HTMLScriptElement *This = impl_from_IHTMLScriptElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"charset", v);
+}
+
+static HRESULT WINAPI HTMLScriptElement2_get_charset(IHTMLScriptElement2 *iface, BSTR *p)
+{
+    HTMLScriptElement *This = impl_from_IHTMLScriptElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"charset", p);
+}
+
+static const IHTMLScriptElement2Vtbl HTMLScriptElement2Vtbl = {
+    HTMLScriptElement2_QueryInterface,
+    HTMLScriptElement2_AddRef,
+    HTMLScriptElement2_Release,
+    HTMLScriptElement2_GetTypeInfoCount,
+    HTMLScriptElement2_GetTypeInfo,
+    HTMLScriptElement2_GetIDsOfNames,
+    HTMLScriptElement2_Invoke,
+    HTMLScriptElement2_put_charset,
+    HTMLScriptElement2_get_charset
+};
+
 static inline HTMLScriptElement *impl_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLScriptElement, element.node.event_target.dispex);
@@ -348,6 +386,8 @@ static void *HTMLScriptElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLScriptElement, riid))
         return &This->IHTMLScriptElement_iface;
+    if(IsEqualGUID(&IID_IHTMLScriptElement2, riid))
+        return &This->IHTMLScriptElement2_iface;
 
     return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
 }
@@ -393,6 +433,7 @@ static void HTMLScriptElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLScriptElement_tid, hooks);
+    dispex_info_add_interface(info, IHTMLScriptElement2_tid, NULL);
 
     HTMLElement_init_dispex_info(info, mode);
 }
@@ -447,6 +488,7 @@ HRESULT HTMLScriptElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, H
         return E_OUTOFMEMORY;
 
     ret->IHTMLScriptElement_iface.lpVtbl = &HTMLScriptElementVtbl;
+    ret->IHTMLScriptElement2_iface.lpVtbl = &HTMLScriptElement2Vtbl;
     ret->element.node.vtbl = &HTMLScriptElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLScriptElement_dispex);

@@ -112,6 +112,7 @@ CreateWindowStationW(
         if (!NT_SUCCESS(Status))
         {
             ERR("Failed to open WindowStations directory\n");
+            SetLastError(RtlNtStatusToDosError(Status));
             return NULL;
         }
 
@@ -403,6 +404,7 @@ OpenWindowStationW(
     if(!NT_SUCCESS(Status))
     {
         ERR("Failed to open WindowStations directory\n");
+        SetLastError(RtlNtStatusToDosError(Status));
         return NULL;
     }
 

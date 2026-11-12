@@ -364,6 +364,20 @@ PopSleepCallWin32(
 
 BOOLEAN
 NTAPI
+PopEnterConsoleSession(
+    _Out_ PVOID *Session,
+    _Out_ PKAPC_STATE ApcState
+);
+
+VOID
+NTAPI
+PopLeaveConsoleSession(
+    _In_opt_ PVOID Session,
+    _In_ PKAPC_STATE ApcState
+);
+
+BOOLEAN
+NTAPI
 PopDetectAoAc(
     VOID
 );
@@ -386,6 +400,23 @@ PopGetDisplayState(
     VOID
 );
 
+NTSTATUS
+NTAPI
+PopSetSessionDisplayState(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopQueryPlatformInformation(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
 VOID
 NTAPI
 PopNoteDisplayActivity(
@@ -395,6 +426,12 @@ PopNoteDisplayActivity(
 BOOLEAN
 NTAPI
 PopIsDisplayRequired(
+    VOID
+);
+
+EXECUTION_STATE
+NTAPI
+PopQueryKeptOnState(
     VOID
 );
 
@@ -422,6 +459,33 @@ NTSTATUS
 NTAPI
 PopQuerySleepDisableReasons(
     _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopQuerySleepLogging(
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopQuerySleepTime(
+    _In_ POWER_INFORMATION_LEVEL Level,
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
+PopSetPowerStateHandler(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
     _In_ ULONG OutputBufferLength
 );
 
@@ -472,6 +536,16 @@ PopHiberReserve(
 
 NTSTATUS
 NTAPI
+PopReserveHiberFileFromCaller(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength
+);
+
+NTSTATUS
+NTAPI
 PopHiberPrepare(
     _Out_ PVOID *SystemContext
 );
@@ -496,14 +570,14 @@ PopHiberSystemHandler(
 
 VOID
 NTAPI
-PopCleanupPowerState(
-    IN PPOWER_STATE PowerState
-);
-
-VOID
-NTAPI
 PopReleaseThreadPowerObject(
     IN PVOID PowerObject
+);
+
+EXECUTION_STATE
+NTAPI
+PopQuerySystemState(
+    IN PVOID StateHandle
 );
 
 NTSTATUS
@@ -511,6 +585,20 @@ NTAPI
 PopAddRemoveSysCapsCallback(
     IN PVOID NotificationStructure,
     IN PVOID Context
+);
+
+VOID
+NTAPI
+PopInitializeButtons(
+    VOID
+);
+
+BOOLEAN
+NTAPI
+PopReadPowerSetting(
+    _In_ LPCGUID Setting,
+    _Out_writes_bytes_(Length) PVOID Value,
+    _In_ ULONG Length
 );
 
 VOID
@@ -541,6 +629,9 @@ PopApplyProcessorPowerSetting(
 
 VOID NTAPI PopInitializeThermalRequests(VOID);
 UCHAR NTAPI PopQuerySystemCoolingMode(VOID);
+BOOLEAN NTAPI PopInitializePowerRequests(VOID);
+NTSTATUS NTAPI PopCreatePowerRequest(_In_reads_bytes_(InputBufferLength) PVOID InputBuffer, _In_ ULONG InputBufferLength, _Out_writes_bytes_(OutputBufferLength) PVOID OutputBuffer, _In_ ULONG OutputBufferLength);
+NTSTATUS NTAPI PopActOnPowerRequest(_In_reads_bytes_(InputBufferLength) PVOID InputBuffer, _In_ ULONG InputBufferLength);
 
 typedef struct _POP_TTM_PROVIDER
 {
@@ -593,10 +684,48 @@ PopGracefulShutdown(
     IN PVOID Context
 );
 
+NTSTATUS
+NTAPI
+PopShutdownSystem(
+    IN POWER_ACTION SystemAction
+);
+
+NTSTATUS
+NTAPI
+PopShutdownSendDevices(
+    IN POWER_ACTION SystemAction
+);
+
 VOID
 NTAPI
 PopFlushVolumes(
     IN BOOLEAN ShuttingDown
+);
+
+NTSTATUS
+NTAPI
+PoRequestShutdownWait(
+    _In_ PETHREAD Thread
+);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+PopInitializeDevicePower(
+    VOID
+);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+PopInitializeVolumes(
+    VOID
+);
+
+PDEVICE_OBJECT_POWER_EXTENSION
+NTAPI
+PopGetDope(
+    _In_ PDEVICE_OBJECT DeviceObject
 );
 
 //

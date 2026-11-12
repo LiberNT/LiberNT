@@ -332,13 +332,19 @@ static HRESULT Map_has(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned ar
     return S_OK;
 }
 
-static HRESULT Map_get_size(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
+static HRESULT Map_get_size(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
 {
-    MapInstance *map = (MapInstance*)jsthis;
+    MapInstance *map;
+    HRESULT hres;
+
+    hres = get_map_this(ctx, vthis, &map);
+    if(FAILED(hres))
+        return hres;
 
     TRACE("%p\n", map);
 
-    *r = jsval_number(map->size);
+    if(r) *r = jsval_number(map->size);
     return S_OK;
 }
 
@@ -394,10 +400,6 @@ static const builtin_prop_t Map_prototype_props[] = {
     {L"set",        Map_set,       PROPF_METHOD|2},
 };
 
-static const builtin_prop_t Map_props[] = {
-    {L"size",       NULL,0,        Map_get_size, builtin_set_const},
-};
-
 static const builtin_info_t Map_prototype_info = {
     .class     = JSCLASS_OBJECT,
     .call      = Map_value,
@@ -408,8 +410,6 @@ static const builtin_info_t Map_prototype_info = {
 static const builtin_info_t Map_info = {
     .class       = JSCLASS_MAP,
     .call        = Map_value,
-    .props_cnt   = ARRAY_SIZE(Map_props),
-    .props       = Map_props,
     .destructor  = Map_destructor,
     .gc_traverse = Map_gc_traverse,
 };
@@ -543,6 +543,42 @@ static HRESULT Set_value(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned 
     return E_NOTIMPL;
 }
 
+static HRESULT Set_get_size(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned argc, jsval_t *argv,
+        jsval_t *r)
+{
+    MapInstance *set;
+    HRESULT hres;
+
+    hres = get_set_this(ctx, vthis, &set);
+    if(FAILED(hres))
+        return hres;
+
+    TRACE("%p\n", set);
+
+    if(r) *r = jsval_number(set->size);
+    return S_OK;
+}
+
+static HRESULT define_size_getter(script_ctx_t *ctx, jsdisp_t *prototype, builtin_invoke_t get)
+{
+    property_desc_t desc;
+    HRESULT hres;
+
+    desc.flags = PROPF_CONFIGURABLE;
+    desc.mask  = PROPF_CONFIGURABLE | PROPF_ENUMERABLE;
+    desc.explicit_getter = desc.explicit_setter = TRUE;
+    desc.explicit_value = FALSE;
+    desc.setter = NULL;
+
+    hres = create_builtin_function(ctx, get, NULL, NULL, PROPF_METHOD, NULL, &desc.getter);
+    if(FAILED(hres))
+        return hres;
+
+    hres = jsdisp_define_property(prototype, L"size", &desc);
+    jsdisp_release(desc.getter);
+    return hres;
+}
+
 static const builtin_prop_t Set_prototype_props[] = {
     {L"add",        Set_add,       PROPF_METHOD|1},
     {L"clear",      Set_clear,     PROPF_METHOD},
@@ -561,8 +597,6 @@ static const builtin_info_t Set_prototype_info = {
 static const builtin_info_t Set_info = {
     .class       = JSCLASS_SET,
     .call        = Set_value,
-    .props_cnt   = ARRAY_SIZE(Map_props),
-    .props       = Map_props,
     .destructor  = Map_destructor,
     .gc_traverse = Map_gc_traverse,
 };
@@ -898,6 +932,10 @@ HRESULT init_set_constructor(script_ctx_t *ctx)
     if(FAILED(hres))
         return hres;
 
+    hres = define_size_getter(ctx, ctx->set_prototype, Set_get_size);
+    if(FAILED(hres))
+        return hres;
+
     hres = create_builtin_constructor(ctx, Set_constructor, L"Set", NULL,
                                       PROPF_CONSTR, ctx->set_prototype, &constructor);
     if(FAILED(hres))
@@ -910,6 +948,10 @@ HRESULT init_set_constructor(script_ctx_t *ctx)
         return hres;
 
     hres = create_dispex(ctx, &Map_prototype_info, ctx->object_prototype, &ctx->map_prototype);
+    if(FAILED(hres))
+        return hres;
+
+    hres = define_size_getter(ctx, ctx->map_prototype, Map_get_size);
     if(FAILED(hres))
         return hres;
 

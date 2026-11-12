@@ -116,6 +116,8 @@ ScmServiceMapping = {SERVICE_READ,
 DWORD g_dwServiceBits = 0;
 
 static CRITICAL_SECTION ScmNotifyLock;
+CRITICAL_SECTION ScmStatusChangeLock;
+CONDITION_VARIABLE ScmStatusChanged;
 
 /* FUNCTIONS ***************************************************************/
 
@@ -229,6 +231,8 @@ VOID
 ScmInitServiceNotify(VOID)
 {
     InitializeCriticalSection(&ScmNotifyLock);
+    InitializeCriticalSection(&ScmStatusChangeLock);
+    InitializeConditionVariable(&ScmStatusChanged);
 }
 
 
@@ -313,6 +317,10 @@ ScmNotifyServiceStatus(PSERVICE lpService)
     DWORD dwMask;
 
     dwMask = 1 << (lpService->Status.dwCurrentState - SERVICE_STOPPED);
+
+    EnterCriticalSection(&ScmStatusChangeLock);
+    WakeAllConditionVariable(&ScmStatusChanged);
+    LeaveCriticalSection(&ScmStatusChangeLock);
 
     EnterCriticalSection(&ScmNotifyLock);
 

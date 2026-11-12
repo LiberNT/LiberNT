@@ -65,6 +65,7 @@ typedef struct _POOL_VA_REGION
 NTSTATUS PoolVaRegionInitialize(_Out_ PPOOL_VA_REGION Region, _In_ PVOID Base, _In_ SIZE_T Bytes,
                                 _In_ BOOLEAN Paged, _In_ PPOOL_BACKING Backing);
 PVOID PoolVaReserve(_Inout_ PPOOL_VA_REGION Region, _In_ SIZE_T UnitCount, _In_ UCHAR State);
+BOOLEAN PoolVaHasRun(_Inout_ PPOOL_VA_REGION Region, _In_ SIZE_T UnitCount);
 VOID PoolVaRelease(_Inout_ PPOOL_VA_REGION Region, _In_ PVOID Base, _In_ SIZE_T UnitCount);
 PVOID PoolVaAllocateMetadata(_Inout_ PPOOL_VA_REGION Region, _In_ SIZE_T Bytes);
 NTSTATUS PoolVaCommit(_Inout_ PPOOL_VA_REGION Region, _In_ PVOID Base, _In_ SIZE_T Bytes);

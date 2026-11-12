@@ -1,0 +1,297 @@
+/*
+ * PROJECT:     LiberNT Apple RTKit Library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     The render commands Mesa's Apple graphics drivers submit
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *              The command layout mirrors Mesa's include/drm-uapi/asahi_drm.h:
+ *              Copyright (C) The Asahi Linux Contributors
+ *              Copyright (C) 2018-2023 Collabora Ltd.
+ *              Copyright (C) 2014-2018 Broadcom
+ *              SPDX-License-Identifier: MIT
+ */
+
+#pragma once
+
+#define DRM_ASAHI_RENDER_VERTEX_SCRATCH         0x00000001
+#define DRM_ASAHI_RENDER_PROCESS_EMPTY_TILES    0x00000002
+#define DRM_ASAHI_RENDER_NO_VERTEX_CLUSTERING   0x00000004
+#define DRM_ASAHI_RENDER_DBIAS_IS_INT           0x00040000
+
+typedef struct _DRM_ASAHI_ZLS_BUFFER
+{
+    ULONG64 Base;
+    ULONG64 CompBase;
+    ULONG Stride;
+    ULONG CompStride;
+} DRM_ASAHI_ZLS_BUFFER, *PDRM_ASAHI_ZLS_BUFFER;
+
+typedef struct _DRM_ASAHI_TIMESTAMP
+{
+    ULONG Handle;
+    ULONG Offset;
+} DRM_ASAHI_TIMESTAMP, *PDRM_ASAHI_TIMESTAMP;
+
+typedef struct _DRM_ASAHI_TIMESTAMPS
+{
+    DRM_ASAHI_TIMESTAMP Start;
+    DRM_ASAHI_TIMESTAMP End;
+} DRM_ASAHI_TIMESTAMPS, *PDRM_ASAHI_TIMESTAMPS;
+
+typedef struct _DRM_ASAHI_HELPER_PROGRAM
+{
+    ULONG Binary;
+    ULONG Cfg;
+    ULONG64 Data;
+} DRM_ASAHI_HELPER_PROGRAM, *PDRM_ASAHI_HELPER_PROGRAM;
+
+typedef struct _DRM_ASAHI_BG_EOT
+{
+    ULONG Usc;
+    ULONG RsrcSpec;
+} DRM_ASAHI_BG_EOT, *PDRM_ASAHI_BG_EOT;
+
+typedef struct _DRM_ASAHI_CMD_RENDER
+{
+    ULONG Flags;
+    ULONG IspZlsPixels;
+    ULONG64 VdmCtrlStreamBase;
+    DRM_ASAHI_HELPER_PROGRAM VertexHelper;
+    DRM_ASAHI_HELPER_PROGRAM FragmentHelper;
+    ULONG64 IspScissorBase;
+    ULONG64 IspDbiasBase;
+    ULONG64 IspOclqryBase;
+    DRM_ASAHI_ZLS_BUFFER Depth;
+    DRM_ASAHI_ZLS_BUFFER Stencil;
+    ULONG64 ZlsCtrl;
+    ULONG64 PppMultisamplectl;
+    ULONG64 SamplerHeap;
+    ULONG PppCtrl;
+    USHORT WidthPx;
+    USHORT HeightPx;
+    USHORT Layers;
+    USHORT SamplerCount;
+    UCHAR UtileWidthPx;
+    UCHAR UtileHeightPx;
+    UCHAR Samples;
+    UCHAR SampleSizeB;
+    ULONG IspMergeUpperX;
+    ULONG IspMergeUpperY;
+    DRM_ASAHI_BG_EOT Bg;
+    DRM_ASAHI_BG_EOT Eot;
+    DRM_ASAHI_BG_EOT PartialBg;
+    DRM_ASAHI_BG_EOT PartialEot;
+    ULONG IspBgobjdepth;
+    ULONG IspBgobjvals;
+    DRM_ASAHI_TIMESTAMPS TsVtx;
+    DRM_ASAHI_TIMESTAMPS TsFrag;
+} DRM_ASAHI_CMD_RENDER, *PDRM_ASAHI_CMD_RENDER;
+
+C_ASSERT(sizeof(DRM_ASAHI_ZLS_BUFFER) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_ZLS_BUFFER, Stride) == 0x10);
+C_ASSERT(sizeof(DRM_ASAHI_HELPER_PROGRAM) == 0x10);
+C_ASSERT(sizeof(DRM_ASAHI_TIMESTAMPS) == 0x10);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, VdmCtrlStreamBase) == 0x08);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, VertexHelper) == 0x10);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, IspScissorBase) == 0x30);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, Depth) == 0x48);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, Stencil) == 0x60);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, ZlsCtrl) == 0x78);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, PppCtrl) == 0x90);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, WidthPx) == 0x94);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, UtileWidthPx) == 0x9c);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, IspMergeUpperX) == 0xa0);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, Bg) == 0xa8);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, PartialEot) == 0xc0);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, IspBgobjdepth) == 0xc8);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, TsVtx) == 0xd0);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_RENDER, TsFrag) == 0xe0);
+C_ASSERT(sizeof(DRM_ASAHI_CMD_RENDER) == 0xf0);
+
+#define DRM_ASAHI_MAX_CLUSTERS                  64
+#define DRM_ASAHI_FEATURE_SOFT_FAULTS           0x00000001
+
+typedef struct _DRM_ASAHI_PARAMS_GLOBAL
+{
+    ULONG64 Features;
+    ULONG GpuGeneration;
+    ULONG GpuVariant;
+    ULONG GpuRevision;
+    ULONG ChipId;
+    ULONG NumDies;
+    ULONG NumClustersTotal;
+    ULONG NumCoresPerCluster;
+    ULONG MaxFrequencyKhz;
+    ULONG64 CoreMasks[DRM_ASAHI_MAX_CLUSTERS];
+    ULONG64 VmStart;
+    ULONG64 VmEnd;
+    ULONG64 VmKernelMinSize;
+    ULONG MaxCommandsPerSubmission;
+    ULONG MaxAttachments;
+    ULONG64 CommandTimestampFrequencyHz;
+} DRM_ASAHI_PARAMS_GLOBAL, *PDRM_ASAHI_PARAMS_GLOBAL;
+
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, GpuGeneration) == 0x08);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, ChipId) == 0x14);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, MaxFrequencyKhz) == 0x24);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, CoreMasks) == 0x28);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, VmStart) == 0x228);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, MaxCommandsPerSubmission) == 0x240);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_PARAMS_GLOBAL, CommandTimestampFrequencyHz) == 0x248);
+C_ASSERT(sizeof(DRM_ASAHI_PARAMS_GLOBAL) == 0x250);
+
+#define DRM_ASAHI_GEM_WRITEBACK                 0x00000001
+#define DRM_ASAHI_GEM_VM_PRIVATE                0x00000002
+#define DRM_ASAHI_BIND_UNBIND                   0x00000001
+#define DRM_ASAHI_BIND_READ                     0x00000002
+#define DRM_ASAHI_BIND_WRITE                    0x00000004
+#define DRM_ASAHI_BIND_SINGLE_PAGE              0x00000008
+
+typedef struct _DRM_ASAHI_VM_CREATE
+{
+    ULONG64 KernelStart;
+    ULONG64 KernelEnd;
+    ULONG VmId;
+    ULONG Pad;
+} DRM_ASAHI_VM_CREATE, *PDRM_ASAHI_VM_CREATE;
+
+typedef struct _DRM_ASAHI_VM_DESTROY
+{
+    ULONG VmId;
+    ULONG Pad;
+} DRM_ASAHI_VM_DESTROY, *PDRM_ASAHI_VM_DESTROY;
+
+typedef struct _DRM_ASAHI_GEM_CREATE
+{
+    ULONG64 Size;
+    ULONG Flags;
+    ULONG VmId;
+    ULONG Handle;
+    ULONG Pad;
+} DRM_ASAHI_GEM_CREATE, *PDRM_ASAHI_GEM_CREATE;
+
+typedef struct _DRM_ASAHI_GEM_BIND_OP
+{
+    ULONG Flags;
+    ULONG Handle;
+    ULONG64 Offset;
+    ULONG64 Range;
+    ULONG64 Addr;
+} DRM_ASAHI_GEM_BIND_OP, *PDRM_ASAHI_GEM_BIND_OP;
+
+typedef struct _DRM_ASAHI_VM_BIND
+{
+    ULONG VmId;
+    ULONG NumBinds;
+    ULONG Stride;
+    ULONG Pad;
+    ULONG64 Userptr;
+} DRM_ASAHI_VM_BIND, *PDRM_ASAHI_VM_BIND;
+
+C_ASSERT(sizeof(DRM_ASAHI_VM_CREATE) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_VM_CREATE, VmId) == 0x10);
+C_ASSERT(sizeof(DRM_ASAHI_VM_DESTROY) == 0x08);
+C_ASSERT(sizeof(DRM_ASAHI_GEM_CREATE) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_GEM_CREATE, Handle) == 0x10);
+C_ASSERT(sizeof(DRM_ASAHI_GEM_BIND_OP) == 0x20);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_GEM_BIND_OP, Offset) == 0x08);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_GEM_BIND_OP, Addr) == 0x18);
+C_ASSERT(sizeof(DRM_ASAHI_VM_BIND) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_VM_BIND, Userptr) == 0x10);
+
+#define DRM_ASAHI_CMD_TYPE_RENDER               0
+#define DRM_ASAHI_CMD_TYPE_COMPUTE              1
+#define DRM_ASAHI_SET_VERTEX_ATTACHMENTS        2
+#define DRM_ASAHI_SET_FRAGMENT_ATTACHMENTS      3
+#define DRM_ASAHI_SET_COMPUTE_ATTACHMENTS       4
+#define DRM_ASAHI_BARRIER_NONE                  0xffff
+#define DRM_ASAHI_PRIORITY_LOW                  0
+#define DRM_ASAHI_PRIORITY_MEDIUM               1
+#define DRM_ASAHI_PRIORITY_HIGH                 2
+#define DRM_ASAHI_PRIORITY_REALTIME             3
+
+typedef struct _DRM_ASAHI_QUEUE_CREATE
+{
+    ULONG Flags;
+    ULONG VmId;
+    ULONG Priority;
+    ULONG QueueId;
+    ULONG64 UscExecBase;
+} DRM_ASAHI_QUEUE_CREATE, *PDRM_ASAHI_QUEUE_CREATE;
+
+typedef struct _DRM_ASAHI_QUEUE_DESTROY
+{
+    ULONG QueueId;
+    ULONG Pad;
+} DRM_ASAHI_QUEUE_DESTROY, *PDRM_ASAHI_QUEUE_DESTROY;
+
+typedef struct _DRM_ASAHI_CMD_HEADER
+{
+    USHORT CmdType;
+    USHORT Size;
+    USHORT VdmBarrier;
+    USHORT CdmBarrier;
+} DRM_ASAHI_CMD_HEADER, *PDRM_ASAHI_CMD_HEADER;
+
+typedef struct _DRM_ASAHI_SUBMIT
+{
+    ULONG64 Syncs;
+    ULONG64 Cmdbuf;
+    ULONG Flags;
+    ULONG QueueId;
+    ULONG InSyncCount;
+    ULONG OutSyncCount;
+    ULONG CmdbufSize;
+    ULONG Pad;
+} DRM_ASAHI_SUBMIT, *PDRM_ASAHI_SUBMIT;
+
+typedef struct _DRM_ASAHI_ATTACHMENT
+{
+    ULONG64 Pointer;
+    ULONG64 Size;
+    ULONG Pad;
+    ULONG Flags;
+} DRM_ASAHI_ATTACHMENT, *PDRM_ASAHI_ATTACHMENT;
+
+typedef struct _DRM_ASAHI_CMD_COMPUTE
+{
+    ULONG Flags;
+    ULONG SamplerCount;
+    ULONG64 CdmCtrlStreamBase;
+    ULONG64 CdmCtrlStreamEnd;
+    ULONG64 SamplerHeap;
+    DRM_ASAHI_HELPER_PROGRAM Helper;
+    DRM_ASAHI_TIMESTAMPS Ts;
+} DRM_ASAHI_CMD_COMPUTE, *PDRM_ASAHI_CMD_COMPUTE;
+
+C_ASSERT(sizeof(DRM_ASAHI_QUEUE_CREATE) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_QUEUE_CREATE, UscExecBase) == 0x10);
+C_ASSERT(sizeof(DRM_ASAHI_QUEUE_DESTROY) == 0x08);
+C_ASSERT(sizeof(DRM_ASAHI_CMD_HEADER) == 0x08);
+C_ASSERT(sizeof(DRM_ASAHI_SUBMIT) == 0x28);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_SUBMIT, QueueId) == 0x14);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_SUBMIT, CmdbufSize) == 0x20);
+C_ASSERT(sizeof(DRM_ASAHI_ATTACHMENT) == 0x18);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_COMPUTE, CdmCtrlStreamBase) == 0x08);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_COMPUTE, Helper) == 0x20);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_CMD_COMPUTE, Ts) == 0x30);
+C_ASSERT(sizeof(DRM_ASAHI_CMD_COMPUTE) == 0x40);
+
+#define DRM_ASAHI_BIND_OBJECT_OP_BIND           0
+#define DRM_ASAHI_BIND_OBJECT_OP_UNBIND         1
+#define DRM_ASAHI_BIND_OBJECT_USAGE_TIMESTAMPS  0x00000001
+
+typedef struct _DRM_ASAHI_GEM_BIND_OBJECT
+{
+    ULONG Op;
+    ULONG Flags;
+    ULONG Handle;
+    ULONG VmId;
+    ULONG64 Offset;
+    ULONG64 Range;
+    ULONG ObjectHandle;
+    ULONG Pad;
+} DRM_ASAHI_GEM_BIND_OBJECT, *PDRM_ASAHI_GEM_BIND_OBJECT;
+
+C_ASSERT(sizeof(DRM_ASAHI_GEM_BIND_OBJECT) == 0x28);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_GEM_BIND_OBJECT, Offset) == 0x10);
+C_ASSERT(FIELD_OFFSET(DRM_ASAHI_GEM_BIND_OBJECT, ObjectHandle) == 0x20);

@@ -78,9 +78,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_STORAGEINFO, 0, 2, 290, 18, SS_NOPREFIX
-    AUTORADIOBUTTON "&Expand drive C: now and restart", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "&Expand drive C: now", IDC_EXPANDNOW, 0, 28, 290, 10, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "&Not now", IDC_EXPANDLATER, 0, 42, 290, 10
-    LTEXT "LiberNT restarts once to finish, then this setup opens again.", IDC_STATIC, 0, 60, 290, 18
     LTEXT "You can also do it later: run lntexpandstorage in Command Prompt as an administrator. The components this setup offers next need more than 1 GB of free space.", IDC_STATIC, 0, 124, 290, 34
 END
 
@@ -289,8 +288,6 @@ BEGIN
     IDS_OOBE_STORAGETITLE "Use all of your storage"
     IDS_OOBE_STORAGESUBTITLE "LiberNT can grow drive C: to fill the storage device it runs from."
     IDS_OOBE_STORAGE_INFO "Drive C: is %I64u MB with %I64u MB free. The rest of the storage device is not used yet."
-    IDS_OOBE_EXPAND_RESTART "LiberNT restarts to expand drive C:"
-    IDS_OOBE_EXPAND_RESTART_TEXT "Drive C: grows to fill the storage device, then LiberNT restarts. This setup opens again after the restart."
     IDS_OOBE_EXPAND_FAILED "LiberNT could not expand drive C: (lntexpandstorage exit code %lu). Setup continues; you can try again later with lntexpandstorage in Command Prompt."
     IDS_OOBE_APPS_SPACE "The selected components need about %lu MB. Drive C: has %I64u MB free."
     IDS_OOBE_APPS_NOSPACE "Not enough free space for the selected components"
@@ -417,7 +414,11 @@ BEGIN
     AUTORADIOBUTTON "&Upgrade: install this version and keep files, settings and apps", IDC_UPGRADE_KEEP, 0, 0, 290, 10, WS_GROUP | WS_TABSTOP
     COMBOBOX IDC_UPGRADE_LIST, 12, 14, 278, 120, CBS_DROPDOWNLIST | WS_VSCROLL | WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "", IDC_UPGRADE_NEW, 0, 36, 290, 10, WS_GROUP | WS_TABSTOP
-    LTEXT "", IDC_UPGRADE_NOTE, 0, 56, 290, 100, SS_NOPREFIX
+    LTEXT "", IDC_UPGRADE_NOTE, 0, 56, 290, 44, SS_NOPREFIX
+    LTEXT "Start by default:", IDC_UPGRADE_DEFAULT_LABEL, 0, 105, 74, 9
+    AUTORADIOBUTTON "&LiberNT", IDC_UPGRADE_DEFAULT_LIBERNT, 76, 104, 70, 10, WS_GROUP | WS_TABSTOP
+    AUTORADIOBUTTON "", IDC_UPGRADE_DEFAULT_WINDOWS, 150, 104, 140, 10
+    LTEXT "", IDC_UPGRADE_WARNING, 0, 118, 290, 40, SS_NOPREFIX
 END
 
 STRINGTABLE
@@ -501,4 +502,60 @@ BEGIN
     IDS_UPDATE_COMPLETE_RETRYLOGON "LiberNT could not finish setting up %s. It tries again the next time an administrator signs in."
     IDS_UPDATE_COMPLETE_NOSPACE "%s could not be installed because the system drive does not have enough free space. LiberNT keeps the version you had and offers the update again."
     IDS_UPDATE_COMPLETE_DAMAGED "%s could not be installed because the downloaded copy is damaged. LiberNT keeps the version you had and downloads the update again."
+END
+
+STRINGTABLE
+BEGIN
+    IDS_HOST_STARTTITLE "Install or upgrade LiberNT"
+    IDS_HOST_STARTSUBTITLE "LiberNT is already installed on this computer."
+    IDS_HOST_INSTALLNEW "&Install a new copy of LiberNT alongside %s"
+    IDS_HOST_UPGRADENOTE "Upgrade replaces the LiberNT system files with this version and keeps your files, the apps you installed, the user accounts and the settings. The computer restarts, and LiberNT installs the upgrade while it starts.\n\nThis version: %s"
+    IDS_HOST_INSTALLNOTE "%s gives part of its space to a new partition, and the computer restarts into LiberNT Setup, which installs LiberNT there.\n\nThis version: %s"
+    IDS_HOST_SHRINKNOTE "Drag the slider to share the space. %s keeps its programs and files. Windows shrinks its partition when you start the installation."
+    IDS_HOST_NOSPACE "%s does not have enough free space to make room for LiberNT, which needs at least %I64u GB. Free some space in %s, then start Setup again."
+    IDS_HOST_NORESIZE "Windows cannot tell how far the %s partition can shrink (error 0x%08lx), so Setup cannot make room for LiberNT."
+    IDS_HOST_READYSUBTITLE "Review your choices. Setup starts changing your disk when you click Install."
+    IDS_HOST_READY_SHRINK "%s (%s) shrinks from %s to %s."
+    IDS_HOST_READY_CREATE "A new %s partition is created for LiberNT after it."
+    IDS_HOST_READY_PREPARED "LiberNT is installed in the %s partition that Setup prepared earlier."
+    IDS_HOST_READY_RESTART "Setup copies the LiberNT image (%s) to that partition, then restarts the computer into LiberNT Setup, which installs LiberNT there. Until then, nothing else changes."
+    IDS_HOST_READY_UPGRADE "Setup copies the LiberNT image (%s) to the LiberNT partition and restarts the computer. LiberNT installs the upgrade while it starts, and finishes it when an administrator signs in."
+    IDS_HOST_PROCESSTITLE "Preparing LiberNT Setup"
+    IDS_HOST_PROCESSSUBTITLE "Setup prepares the disk and the boot menu. The computer restarts when this is done."
+    IDS_HOST_STEP_SHRINK "Shrinking %s..."
+    IDS_HOST_STEP_CREATE "Creating the LiberNT partition..."
+    IDS_HOST_STEP_FORMAT "Formatting the LiberNT partition..."
+    IDS_HOST_STEP_COPY "Copying the LiberNT image..."
+    IDS_HOST_STEP_CHECK "Checking the copied image..."
+    IDS_HOST_STEP_BOOT "Adding LiberNT Setup to the boot menu..."
+    IDS_HOST_STEP_STAGE "Preparing the upgrade..."
+    IDS_HOST_PROGRESS "%I64u MB of %I64u MB"
+    IDS_HOST_DONETITLE "LiberNT Setup is ready"
+    IDS_HOST_DONE "Setup prepared the installation. The computer restarts into LiberNT Setup in a few seconds. Save your work in other apps first, or select Postpone: LiberNT Setup then starts the next time the computer restarts."
+    IDS_HOST_UPGRADEDONETITLE "The upgrade is ready"
+    IDS_HOST_UPGRADEDONE "Setup prepared the upgrade. The computer restarts in a few seconds, and LiberNT installs the upgrade while it starts. Save your work in other apps first, or select Postpone: the upgrade then starts the next time the computer restarts."
+    IDS_HOST_FAILEDTITLE "Setup could not prepare LiberNT"
+    IDS_HOST_FAILED "Setup stopped at this step: %s\n\nError %lu (0x%08lx)."
+    IDS_HOST_CANNOTTITLE "LiberNT cannot be installed from Windows"
+    IDS_HOST_NOTMEDIA "Start Setup from the LiberNT image: open the LiberNT .iso file in File Explorer, then run setup.exe from the drive that opens."
+    IDS_HOST_WRONGARCH "This LiberNT image is made for another processor architecture than this computer. Download the LiberNT image made for this computer."
+    IDS_HOST_NOUEFI "Windows started this computer in legacy BIOS mode. Setup can install LiberNT from Windows only on computers that start in UEFI mode. Start the computer from the LiberNT image instead."
+    IDS_HOST_NOGPT "Windows is on a disk that does not use the GPT partition style. Setup can install LiberNT from Windows only on GPT disks. Start the computer from the LiberNT image instead."
+    IDS_HOST_NOESP "Setup cannot find the EFI system partition that starts Windows (error %lu)."
+    IDS_HOST_ESPFULL "The EFI system partition needs %s of free space for the LiberNT Setup boot files."
+    IDS_HOST_SECUREBOOT_TITLE "Turn off Secure Boot first"
+    IDS_HOST_SECUREBOOT "Secure Boot is on. The LiberNT boot loader is not signed for Secure Boot, so this computer would refuse to start it. Turn off Secure Boot in the firmware settings, start Windows, then start Setup again."
+    IDS_HOST_FIRMWAREBTN "Restart to the firmware settings"
+    IDS_HOST_PENDING_TITLE "LiberNT Setup is ready to continue"
+    IDS_HOST_PENDING "Setup already prepared a %s partition for LiberNT on this computer. Continue to copy the image again and restart into LiberNT Setup, or undo the preparation to give the space back to %s."
+    IDS_HOST_CONTINUEBTN "Continue the installation"
+    IDS_HOST_UNDOBTN "Undo the preparation"
+    IDS_HOST_UNDONE "The preparation was undone, and %s has its space back."
+    IDS_HOST_UNDOFAILED "The preparation could not be undone completely (error %lu, 0x%08lx). Use Disk Management to delete the LiberNT partition and to extend %s."
+    IDS_HOST_INUSE "An upgrade of LiberNT on %s is not finished. Start LiberNT to finish it or to roll it back, then start Setup again."
+    IDS_HOST_NOSTORE "Setup cannot find the boot configuration of the LiberNT installation on %s, so it cannot upgrade it from Windows. Start LiberNT and upgrade it with LiberNT Update, or start the computer from the LiberNT image."
+    IDS_HOST_NOTADMIN "Setup needs administrator rights. Start it again and accept the administrator prompt."
+    IDS_HOST_LOWSPACE "The LiberNT partition on %s needs %s of free space for the upgrade image."
+    IDS_HOST_VOLUMEERRORS "%s has file system errors, so Windows cannot shrink it. Run ""chkdsk %s /f"" as an administrator, restart the computer so that Windows repairs the drive, then start Setup again."
+    IDS_HOST_CHECKINGSIZE "Windows is checking how much space %s can give to LiberNT..."
 END

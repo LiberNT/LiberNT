@@ -45,6 +45,7 @@ list(APPEND SOURCE
     devicetopology.idl
     dimm.idl
     directmanipulation.idl
+    dispatcherqueue.idl
     dispex.idl
     docobj.idl
     docobjectservice.idl
@@ -154,6 +155,8 @@ list(APPEND SOURCE
 #   rstbas.idl
 #   rstinf.idl
 #   rstloc.idl
+    sapi.idl
+    sapiddk.idl
     sensevts.idl
     sensorsapi.idl
     servprov.idl

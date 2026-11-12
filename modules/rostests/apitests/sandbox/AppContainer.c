@@ -63,6 +63,58 @@ CreateEventWithSddl(PCWSTR Name, PCWSTR Sddl)
     return Event;
 }
 
+/* A broker lets its package use the window station or desktop it shares with it; the old DACL comes back to restore */
+static PSECURITY_DESCRIPTOR
+GrantPackageWindowObject(HANDLE Object, PSID Package)
+{
+    PSECURITY_DESCRIPTOR Saved = NULL;
+    EXPLICIT_ACCESSW Grant;
+    PACL Old = NULL, New = NULL;
+
+    if (!Object ||
+        GetSecurityInfo(Object, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+                        NULL, NULL, &Old, NULL, &Saved) != ERROR_SUCCESS)
+        return NULL;
+    ZeroMemory(&Grant, sizeof(Grant));
+    Grant.grfAccessPermissions = GENERIC_ALL;
+    Grant.grfAccessMode = GRANT_ACCESS;
+    Grant.grfInheritance = NO_INHERITANCE;
+    Grant.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+    Grant.Trustee.ptstrName = (LPWSTR)Package;
+    if (SetEntriesInAclW(1, &Grant, Old, &New) != ERROR_SUCCESS ||
+        SetSecurityInfo(Object, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION,
+                        NULL, NULL, New, NULL) != ERROR_SUCCESS)
+    {
+        LocalFree(Saved);
+        Saved = NULL;
+    }
+    if (New) LocalFree(New);
+    return Saved;
+}
+
+static void
+RestoreWindowObject(HANDLE Object, PSECURITY_DESCRIPTOR Saved)
+{
+    BOOL Present = FALSE, Defaulted = FALSE;
+    PACL Dacl = NULL;
+
+    if (!Saved) return;
+    if (GetSecurityDescriptorDacl(Saved, &Present, &Dacl, &Defaulted) && Present)
+        SetSecurityInfo(Object, SE_WINDOW_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, Dacl, NULL);
+    LocalFree(Saved);
+}
+
+/* The child tells it made its named object, then keeps it until told the parent looked */
+static void
+HoldNamedObjectForParent(void)
+{
+    HANDLE Ready = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Global\\sbx_ac_child_ready");
+    HANDLE Done = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\sbx_ac_child_done");
+
+    if (Ready) { SetEvent(Ready); CloseHandle(Ready); }
+    if (Done) { WaitForSingleObject(Done, SBX_CHILD_TIMEOUT_MS); CloseHandle(Done); }
+}
+
 static HANDLE
 OpenAs(HANDLE Token, PCWSTR Name, DWORD Access, PDWORD Error)
 {
@@ -379,7 +431,7 @@ RunChild(BOOL Lpac, PCSTR ExpectedDesktop)
             OutputDebugStringW(L"\n");
         }
         SetEvent(Event);
-        Sleep(1500);
+        HoldNamedObjectForParent();
         CloseHandle(Event);
     }
     return Failures;
@@ -604,6 +656,10 @@ TestChild(BOOL Lpac)
     WCHAR Sddl[512];
     WCHAR Application[MAX_PATH] = L"", StageDirectory[MAX_PATH] = L"";
     HANDLE UserOnly = NULL, PackageEvent = NULL, AllPkg = NULL, RestrictedPkg = NULL, Directory = NULL, Named = NULL;
+    HANDLE Ready = NULL, Done = NULL;
+    HWINSTA Station = GetProcessWindowStation();
+    HDESK ThreadDesktop = GetThreadDesktop(GetCurrentThreadId());
+    PSECURITY_DESCRIPTOR StationSaved = NULL, DesktopSaved = NULL;
     DWORD ExitCode;
     BOOL Staged;
 
@@ -611,6 +667,9 @@ TestChild(BOOL Lpac)
     Capability = CapabilitySid(SECURITY_CAPABILITY_INTERNET_CLIENT);
     if (!Package || !Capability || !UserString) goto Cleanup;
     ConvertSidToStringSidW(Package, &PackageString);
+    StationSaved = GrantPackageWindowObject(Station, Package);
+    DesktopSaved = GrantPackageWindowObject(ThreadDesktop, Package);
+    ok(StationSaved && DesktopSaved, "granting the package the window station and desktop failed %lu\n", GetLastError());
     Staged = StageAppContainerImage(Package, UserString, Application, ARRAYSIZE(Application),
                                     StageDirectory, ARRAYSIZE(StageDirectory));
     ok(Staged,
@@ -626,6 +685,10 @@ TestChild(BOOL Lpac)
     StringCchPrintfW(Sddl, ARRAYSIZE(Sddl), L"D:(A;;GA;;;%s)(A;;GA;;;S-1-15-2-2)S:(ML;;NW;;;LW)", UserString);
     RestrictedPkg = CreateEventWithSddl(L"Global\\sbx_ac_child_restrictedpkg", Sddl);
     ok(UserOnly && PackageEvent && AllPkg && RestrictedPkg, "event creation failed %lu\n", GetLastError());
+    StringCchPrintfW(Sddl, ARRAYSIZE(Sddl), L"D:(A;;GA;;;%s)(A;;GA;;;%s)S:(ML;;NW;;;LW)", UserString, PackageString);
+    Ready = CreateEventWithSddl(L"Global\\sbx_ac_child_ready", Sddl);
+    Done = CreateEventWithSddl(L"Global\\sbx_ac_child_done", Sddl);
+    ok(Ready && Done, "handshake event creation failed %lu\n", GetLastError());
 
     Directory = NULL;
 
@@ -664,18 +727,15 @@ TestChild(BOOL Lpac)
             UNICODE_STRING Name;
             OBJECT_ATTRIBUTES ObjectAttributes;
             NTSTATUS Status = STATUS_OBJECT_NAME_NOT_FOUND;
-            ULONG Attempt;
+            HANDLE Waits[2] = { Ready, Info.hProcess };
             WCHAR Path[512];
             UNICODE_STRING DirectoryPath;
 
             StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\AppContainerNamedObjects\\%s\\sbx_ac_child_named", NtCurrentPeb()->SessionId, PackageString);
             RtlInitUnicodeString(&Name, Path);
             InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
-            for (Attempt = 0; Attempt < 40 && !NT_SUCCESS(Status); Attempt++)
-            {
-                Status = NtOpenEvent(&Named, EVENT_ALL_ACCESS, &ObjectAttributes);
-                if (!NT_SUCCESS(Status)) Sleep(100);
-            }
+            if (Ready) WaitForMultipleObjects(2, Waits, FALSE, SBX_CHILD_TIMEOUT_MS);
+            Status = NtOpenEvent(&Named, EVENT_ALL_ACCESS, &ObjectAttributes);
             StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\AppContainerNamedObjects\\%s", NtCurrentPeb()->SessionId, PackageString);
             RtlInitUnicodeString(&DirectoryPath, Path);
             InitializeObjectAttributes(&ObjectAttributes, &DirectoryPath, OBJ_CASE_INSENSITIVE, NULL, NULL);
@@ -703,11 +763,16 @@ TestChild(BOOL Lpac)
             ok(NT_SUCCESS(Status), "child named object not redirected into the AppContainer directory (0x%lx)\n", Status);
             if (Named) CloseHandle(Named);
         }
+        if (Done) SetEvent(Done);
         ExitCode = SbxWaitChild(&Info);
         ok(ExitCode == 0, "%s child failed with 0x%lx\n", Lpac ? "LPAC" : "AppContainer", ExitCode);
     }
 
 Cleanup:
+    RestoreWindowObject(ThreadDesktop, DesktopSaved);
+    RestoreWindowObject(Station, StationSaved);
+    if (Ready) CloseHandle(Ready);
+    if (Done) CloseHandle(Done);
     if (Attributes) { DeleteProcThreadAttributeList(Attributes); HeapFree(GetProcessHeap(), 0, Attributes); }
     if (Directory) NtClose(Directory);
     if (UserOnly) CloseHandle(UserOnly);
@@ -785,7 +850,8 @@ TestConcurrentCompositeChildren(PSID Package)
     HANDLE Job = NULL, UserOnly = NULL, PackageEvent = NULL;
     HANDLE AllPkg = NULL, RestrictedPkg = NULL;
     HDESK Desktop = NULL;
-    HWINSTA Station;
+    HWINSTA Station = NULL;
+    PSECURITY_DESCRIPTOR StationSaved = NULL;
     LPWSTR UserString = UserSidString(), PackageString = NULL;
     WCHAR Application[MAX_PATH] = L"", StageDirectory[MAX_PATH] = L"";
     WCHAR DesktopName[64], StationName[128], FullDesktopName[260];
@@ -846,6 +912,8 @@ TestConcurrentCompositeChildren(PSID Package)
                                              sizeof(StationName), &NameLength),
        "window station name query failed %lu\n", GetLastError());
     if (!Station || !StationName[0]) goto Cleanup;
+    StationSaved = GrantPackageWindowObject(Station, Package);
+    ok(StationSaved != NULL, "granting the package the window station failed %lu\n", GetLastError());
     StringCchPrintfW(FullDesktopName, ARRAYSIZE(FullDesktopName), L"%s\\%s",
                      StationName, DesktopName);
 
@@ -906,6 +974,7 @@ TestConcurrentCompositeChildren(PSID Package)
     }
 
 Cleanup:
+    RestoreWindowObject(Station, StationSaved);
     FreeTortureAttributes(LpacAttributes);
     FreeTortureAttributes(NormalAttributes);
     if (Job) CloseHandle(Job);

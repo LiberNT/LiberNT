@@ -57,6 +57,11 @@ static HRESULT WINAPI ClientSite_QueryInterface(IOleClientSite *iface, REFIID ri
     }else if(IsEqualGUID(&IID_IDocHostUIHandler2, riid)) {
         TRACE("(%p)->(IID_IDocHostUIHandler2 %p)\n", This, ppv);
         *ppv = &This->IDocHostUIHandler2_iface;
+#ifdef __REACTOS__
+    }else if(IsEqualGUID(&IID_IDocHostShowUI, riid)) {
+        TRACE("(%p)->(IID_IDocHostShowUI %p)\n", This, ppv);
+        *ppv = &This->IDocHostShowUI_iface;
+#endif
     }else if(IsEqualGUID(&IID_IOleDocumentSite, riid)) {
         TRACE("(%p)->(IID_IOleDocumentSite %p)\n", This, ppv);
         *ppv = &This->IOleDocumentSite_iface;
@@ -215,8 +220,31 @@ static HRESULT WINAPI InPlaceSite_OnInPlaceActivate(IOleInPlaceSiteEx *iface)
 static HRESULT WINAPI InPlaceSite_OnUIActivate(IOleInPlaceSiteEx *iface)
 {
     DocHost *This = impl_from_IOleInPlaceSiteEx(iface);
+#ifdef __REACTOS__
+    IOleInPlaceSiteEx *container_site;
+    IOleClientSite *client_site;
+    IOleObject *wb_obj;
+    HRESULT hres = S_OK;
+
+    TRACE("(%p)\n", This);
+
+    /* The document becomes UI active inside the browser only if the browser's own container agrees */
+    if(SUCCEEDED(IWebBrowser2_QueryInterface(This->wb, &IID_IOleObject, (void**)&wb_obj))) {
+        if(SUCCEEDED(IOleObject_GetClientSite(wb_obj, &client_site)) && client_site) {
+            if(SUCCEEDED(IOleClientSite_QueryInterface(client_site, &IID_IOleInPlaceSiteEx, (void**)&container_site))) {
+                hres = IOleInPlaceSiteEx_RequestUIActivate(container_site);
+                IOleInPlaceSiteEx_Release(container_site);
+            }
+            IOleClientSite_Release(client_site);
+        }
+        IOleObject_Release(wb_obj);
+    }
+
+    return hres == S_OK ? S_OK : E_FAIL;
+#else
     FIXME("(%p)\n", This);
     return E_NOTIMPL;
+#endif
 }
 
 static HRESULT WINAPI InPlaceSite_GetWindowContext(IOleInPlaceSiteEx *iface,
@@ -486,6 +514,12 @@ static HRESULT WINAPI ControlSite_TranslateAccelerator(IOleControlSite *iface, M
         }
         IOleObject_Release(wb_obj);
     }
+
+#ifdef __REACTOS__
+    /* Tab and F6 move the focus out of the document and are handled whatever the container answered */
+    if(pMsg && pMsg->message == WM_KEYDOWN && (pMsg->wParam == VK_TAB || pMsg->wParam == VK_F6))
+        return S_OK;
+#endif
 
     if(FAILED(hr))
         return S_FALSE;

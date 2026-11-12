@@ -1,0 +1,86 @@
+# LiberNT third-party reference: the Apple silicon graphics firmware interface
+# Update this file if more of this interface is taken, or if any of it is replaced.
+
+The Apple graphics processor is driven by a firmware the machine's boot chain loads, and that
+firmware has a private interface: structure layouts, a layout magic, register selectors, register
+windows and operating-point selections. Apple publishes none of it, and no hardware specification
+for it exists.
+
+LiberNT's description of that interface is taken from the Apple graphics driver of
+aurora-silicon/linux, at drivers/gpu/drm/asahi, which offers it under either of two licences:
+
+    Copyright (C) 2026 Eryk Wieliczko
+    Copyright (C) 2026 The Gravity Linux Contributors
+    SPDX-License-Identifier: GPL-2.0-only OR MIT
+
+    Repository:   https://github.com/aurora-silicon/linux
+    Read at:      git commit c880586efacb808b1cf5406d6079b76bf07d8722 (2026-11-10)
+
+LiberNT takes the MIT option. MIT asks only that the notice travel with the material, which is
+why the files below carry it in their own headers as well as being listed here. The GPL-2.0-only
+option was equally available and would also be compatible should LiberNT ever move to
+GPL-2.0-or-later; nothing here depends on which arm is chosen, and taking MIT keeps the material
+usable under both.
+
+What was taken is the description of the interface:
+
+  sdk/lib/drivers/applertkit/agxinit.c
+  sdk/include/reactos/drivers/appleagxinit.h
+      - the initial data's objects and the addresses the firmware looks for them at
+      - the root object's layout and its magic, 0x0c08e21e83800490, which names one firmware build
+      - the address-table geometry and level descriptors
+      - the ring protocol's state offsets and the submission record
+      - the work queues, the notifier, the job list and the scheduling context
+      - the allocator, its pools and its freelist seeding
+      - the compute, vertex and fragment work images, their sequences and their opcodes
+      - the register selectors of each engine: 22 for compute, 72 for vertex, 79 for fragment
+      - the fifteen register windows and the operating-point selections
+      - the tiler's parameter buffer, its block list and its control
+      - the vertex and fragment sequences, their timed packets and the work items' tails
+      - the vertex and fragment work items: their register values, state and parameter blocks
+      - the tiling parameters of a frame (queue/render.rs), the compact-pointer window
+        (g15/encode.rs, g15/hw.rs), the ISP macrotile size and the scene object
+      - the queue-info scheduling row, the scheduling context's initial bytes, the render and
+        compute allocators' identities and seeding, the parameter buffer's lists, maximum,
+        InitBM and C1 records and its growth request and reply (g15/fw/graph.rs,
+        g15/fw/buffer.rs, g15/fw/work.rs, g15/fw/channels.rs, g15/graph.rs, g15/pools.rs)
+      - the fixed client addresses the firmware objects are aliased at in every client address
+        space, the cache classes of each object and the client leaf words (g15/hw.rs,
+        g15/slots.rs, g15/vm.rs)
+      - the compute registers of this processor (g15/hw.rs, g15/encode.rs)
+      - the order the firmware is started in, device controls 0x13 and 9 before readiness
+        (g15/boot.rs), and the order a render or compute is published in: images, thresholds
+        and counters, the queue cursors, then the records and doorbells, fragment before vertex
+        (g15/engine.rs)
+
+  drivers/directx/appleagx/agxengine.c
+      - what the above describes, put together: the objects, the publication order and the
+        completion stamps; the scheduling, slot rotation, growth reserve and recovery of the
+        reference are not taken
+
+The render commands the driver accepts follow Mesa's copy of the same driver's user interface,
+include/drm-uapi/asahi_drm.h (SPDX-License-Identifier: MIT; Copyright (C) The Asahi Linux
+Contributors, 2018-2023 Collabora Ltd., 2014-2018 Broadcom), mirrored with NT types in
+sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it: render
+and compute commands, attachments, queues and the submission with its command headers. Its
+layout was measured by compiling Mesa's header, and the mirror asserts every offset. The global
+parameters it answers take the G15S user address range, the kernel range minimum, the command and
+attachment limits and the timestamp rate from g15/hw.rs, g15/params.rs and file.rs of the same
+driver (dual-licensed, MIT taken); the generation, revision, clusters and core masks are read
+from the machine.
+
+Not every file of that driver offers the MIT option. m3/agx_render.rs and m3/agx_render_state.rs
+are GPL-2.0-only; nothing was taken from them. The same frame geometry and compact-pointer rule
+were taken from the dual-licensed files named above instead.
+
+What was NOT taken, deliberately: that driver also carries generated board data - the hardware,
+globals and power images of one firmware build, captured from a running system rather than
+derived. LiberNT does not use it. Those objects of the initial data are therefore left empty, and
+the firmware is expected to object to that; what it says is the evidence the next work is built
+from.
+
+No code was taken. The implementation in LiberNT was written for LiberNT, in C, to NT's
+conventions, with its own structures and error handling. Where the machine itself can answer
+instead of the reference, it does: the graphics regions, the loaded firmware segments and the
+performance states are read from the Apple device tree the boot loader exports, and thirteen of
+the fifteen register windows were checked against the ranges this machine reports.

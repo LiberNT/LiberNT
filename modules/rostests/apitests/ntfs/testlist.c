@@ -10,10 +10,12 @@
 
 extern void func_MissingSecurity(void);
 extern void func_IndexMetadata(void);
+extern void func_FullBaseGrowth(void);
 
 const struct test winetest_testlist[] =
 {
     { "MissingSecurity", func_MissingSecurity },
     { "IndexMetadata", func_IndexMetadata },
+    { "FullBaseGrowth", func_FullBaseGrowth },
     { 0, 0 }
 };

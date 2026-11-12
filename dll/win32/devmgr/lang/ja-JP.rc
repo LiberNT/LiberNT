@@ -14,20 +14,20 @@ BEGIN
     IDS_ENABLEDEVICE "このデバイスを使う (有効)"
     IDS_DISABLEDEVICE "このデバイスを使わない (無効)"
     IDS_UNKNOWNDEVICE "未知のデバイス"
-    IDS_NODRIVERLOADED "このデバイスに対するドライバはインストールされていません。"
-    IDS_DEVONPARENT "on %1"
+    IDS_NODRIVERLOADED "このデバイスに対するドライバーはインストールされていません。"
+    IDS_DEVONPARENT "%1 上"
     IDS_TROUBLESHOOTDEV "問題究明(&T)..."
     IDS_ENABLEDEV "デバイスを有効にする(&N)"
-    IDS_REINSTALLDRV "ドライバを再インストールする(&I)"
+    IDS_REINSTALLDRV "ドライバーを再インストールする(&I)"
     IDS_PROPERTIES "プロパティ(&R)"
-    IDS_UPDATEDRV "ドライバを更新(&P)..."
-    IDS_REBOOT "コンピュータを再起動(&C)..."
+    IDS_UPDATEDRV "ドライバーを更新(&P)..."
+    IDS_REBOOT "コンピューターを再起動(&C)..."
     IDS_NOTAVAILABLE "利用不可"
     IDS_NOTDIGITALLYSIGNED "デジタル署名されていません"
-    IDS_NODRIVERS "このデバイスに対しては、ドライバ ファイルは不必要か読み込まれていません。"
+    IDS_NODRIVERS "このデバイスに対しては、ドライバー ファイルは不必要か読み込まれていません。"
     IDS_RESOURCE_COLUMN "リソースの種類"
     IDS_SETTING_COLUMN "セッティング"
-    IDS_RESOURCE_MEMORY_RANGE "メモリー範囲"
+    IDS_RESOURCE_MEMORY_RANGE "メモリ範囲"
     IDS_RESOURCE_INTERRUPT "IRQ"
     IDS_RESOURCE_DMA "DMA"
     IDS_RESOURCE_PORT "I/O 範囲"
@@ -39,27 +39,27 @@ STRINGTABLE
 BEGIN
     IDS_DEV_NO_PROBLEM "このデバイスは、正しく動作しています。"
     IDS_DEV_NOT_CONFIGURED "このデバイスは、正しく構成されていません。"
-    IDS_DEV_DEVLOADER_FAILED "コンピュータが２種類の %1 バスを報告しているため、LiberNT はこのデバイスに対するドライバを読み込めません。"
-    IDS_DEV_DEVLOADER_FAILED2 "このデバイスに対する %1 デバイスローダーは、デバイス ドライバを読み込みできませんでした。"
-    IDS_DEV_OUT_OF_MEMORY "このデバイスに対するドライバは、おそらく悪いか、あなたのシステムのメモリーやリソースが足りないようです。"
-    IDS_DEV_ENTRY_IS_WRONG_TYPE "このデバイスは、ドライバのいくつかが悪いか、レジストリが悪いため、正しく動作していません。"
-    IDS_DEV_LACKED_ARBITRATOR "このデバイスに対するドライバは、LiberNT がどのように扱うかわからないリソースを要求しました。"
+    IDS_DEV_DEVLOADER_FAILED "コンピューターが２種類の %1 バスを報告しているため、LiberNT はこのデバイスに対するドライバーを読み込めません。"
+    IDS_DEV_DEVLOADER_FAILED2 "このデバイスに対する %1 デバイスローダーは、デバイス ドライバーを読み込みできませんでした。"
+    IDS_DEV_OUT_OF_MEMORY "このデバイスに対するドライバーは、おそらく悪いか、あなたのシステムのメモリやリソースが足りないようです。"
+    IDS_DEV_ENTRY_IS_WRONG_TYPE "このデバイスは、ドライバーのいくつかが悪いか、レジストリが悪いため、正しく動作していません。"
+    IDS_DEV_LACKED_ARBITRATOR "このデバイスに対するドライバーは、LiberNT がどのように扱うかわからないリソースを要求しました。"
     IDS_DEV_BOOT_CONFIG_CONFLICT "別のデバイスがこのデバイスが必要とするリソースを使用中です。"
-    IDS_DEV_FAILED_FILTER "このデバイスに対するドライバは、再インストールされる必要があります。"
+    IDS_DEV_FAILED_FILTER "このデバイスに対するドライバーは、再インストールされる必要があります。"
     IDS_DEV_DEVLOADER_NOT_FOUND "デバイスを読み込むファイル %1 を LiberNT が読み込めないため、このデバイスは正しく動作していません。"
-    IDS_DEV_DEVLOADER_NOT_FOUND2 "このデバイスに対するドライバを読み込むファイル %1 が悪いため、このデバイスは正しく動作していません。"
-    IDS_DEV_DEVLOADER_NOT_FOUND3 "デバイス失敗: このデバイスに対するドライバを変更しようとしています。もしそれが機能しなければ、ハードウェアの文書を参照して下さい。"
-    IDS_DEV_INVALID_DATA "あなたのコンピュータの中の BIOS が、デバイスに対するリソースを不正に報告しているため、このデバイスは、正しく動作していません。"
+    IDS_DEV_DEVLOADER_NOT_FOUND2 "このデバイスに対するドライバーを読み込むファイル %1 が悪いため、このデバイスは正しく動作していません。"
+    IDS_DEV_DEVLOADER_NOT_FOUND3 "デバイス失敗: このデバイスに対するドライバーを変更しようとしています。もしそれが機能しなければ、ハードウェアの文書を参照して下さい。"
+    IDS_DEV_INVALID_DATA "あなたのコンピューターの中の BIOS が、デバイスに対するリソースを不正に報告しているため、このデバイスは、正しく動作していません。"
     IDS_DEV_INVALID_DATA2 "デバイス中の BIOS が、デバイスに対してリソースを不正に報告しているため、このデバイスは正しく動作していません。"
-    IDS_DEV_FAILED_START "このデバイスは、存在しないか、正しく動作していないか、すべてのドライバがインストールされていません。"
+    IDS_DEV_FAILED_START "このデバイスは、存在しないか、正しく動作していないか、すべてのドライバーがインストールされていません。"
     IDS_DEV_LIAR "LiberNT はこのデバイスの開始を試みるのをやめました。よってLiberNT は再びこのデバイスの開始を試みることはありません。"
     IDS_DEV_NORMAL_CONFLICT "このデバイスは、使用するための未割り当ての %1 リソースが見つかりません。"
-    IDS_DEV_NOT_VERIFIED "このデバイスは、存在しないか、正しく動作していないか、すべてのドライバがインストールされていません。"
-    IDS_DEV_NEED_RESTART "このデバイスは、あなたがコンピュータを再起動するまで正しく動作できません。"
+    IDS_DEV_NOT_VERIFIED "このデバイスは、存在しないか、正しく動作していないか、すべてのドライバーがインストールされていません。"
+    IDS_DEV_NEED_RESTART "このデバイスは、あなたがコンピューターを再起動するまで正しく動作できません。"
     IDS_DEV_REENUMERATION "このデバイスは、リソース競合を起こしています。"
     IDS_DEV_PARTIAL_LOG_CONF "LiberNT は、このデバイスが使用するすべてのリソースを識別できませんでした。"
-    IDS_DEV_UNKNOWN_RESOURCE "ドライバ情報ファイル %1 は、この子デバイスが、親デバイスの所有または認識しないリソースを使うことを伝えています。"
-    IDS_DEV_REINSTALL "このデバイスに対するドライバは、再インストールの必要があります。"
+    IDS_DEV_UNKNOWN_RESOURCE "ドライバー情報ファイル %1 は、この子デバイスが、親デバイスの所有または認識しないリソースを使うことを伝えています。"
+    IDS_DEV_REINSTALL "このデバイスに対するドライバーは、再インストールの必要があります。"
     IDS_DEV_REGISTRY "あなたのレジストリが悪いのかもしれません。"
     IDS_DEV_WILL_BE_REMOVED "LiberNT はこのデバイスを除去中です。"
     IDS_DEV_DISABLED "このデバイスは、開始していません。"
@@ -67,31 +67,31 @@ BEGIN
     IDS_DEV_DEVLOADER_NOT_READY "このデバイスのローダーは必要なドライバーを読み込みできません。"
     IDS_DEV_DEVLOADER_NOT_READY2 "" /* unused */
     IDS_DEV_DEVLOADER_NOT_READY3 "" /* unused */
-    IDS_DEV_DEVICE_NOT_THERE "このデバイスは、存在しないか、正しく機能していないか、必要なドライバがすべてインストールされていません。"
+    IDS_DEV_DEVICE_NOT_THERE "このデバイスは、存在しないか、正しく機能していないか、必要なドライバーがすべてインストールされていません。"
     IDS_DEV_MOVED "LiberNT は、このデバイスをセットアップしています。"
     IDS_DEV_TOO_EARLY "LiberNT は、このデバイスをセットアップしています。"
     IDS_DEV_NO_VALID_LOG_CONF "LiberNT は、このデバイスに対するリソースを指定できません。"
-    IDS_DEV_FAILED_INSTALL "このデバイスに対するドライバは、インストールされていません。"
+    IDS_DEV_FAILED_INSTALL "このデバイスに対するドライバーは、インストールされていません。"
     IDS_DEV_HARDWARE_DISABLED "このデバイスは、BIOS がリソースを提供しなかったため、無効になっています。"
-    IDS_DEV_CANT_SHARE_IRQ "このデバイスは、他のデバイスが使用中のIRQ (Interrupt Request) リソースを使っており、共有できません。\nあなたは、競合する設定を変更するか、競合を引き起こしているリアルモード ドライバを除去する必要があります。"
+    IDS_DEV_CANT_SHARE_IRQ "このデバイスは、他のデバイスが使用中のIRQ (Interrupt Request) リソースを使っており、共有できません。\nあなたは、競合する設定を変更するか、競合を引き起こしているリアルモード ドライバーを除去する必要があります。"
     IDS_DEV_FAILED_ADD "LiberNT がこのデバイスに必要なドライバーをロードできないため、このデバイスは正常に動作していません。"
-    IDS_DEV_DISABLED_SERVICE "セットアップ ファイルがあるドライブかネットワークの場所にアクセスできないため、LiberNT は、このデバイスに対するドライバをインストールできません。"
-    IDS_DEV_TRANSLATION_FAILED "このデバイスは、このドライバに応答していません。"
+    IDS_DEV_DISABLED_SERVICE "セットアップ ファイルがあるドライブかネットワークの場所にアクセスできないため、LiberNT は、このデバイスに対するドライバーをインストールできません。"
+    IDS_DEV_TRANSLATION_FAILED "このデバイスは、このドライバーに応答していません。"
     IDS_DEV_NO_SOFTCONFIG "LiberNT は、このデバイスに対する設定を決定できません。このデバイスに付属する文書と相談するか、構成をセットするためにリソース タブを使用して下さい。"
-    IDS_DEV_BIOS_TABLE "コンピュータのシステム ファームウェアには、このデバイスを適切に構成して使用するための十分な情報が含まれていません。\nこのデバイスを使用するには、コンピュータの製造元に問い合わせて、ファームウェアまたは BIOS のアップデートを入手してください。"
-    IDS_DEV_IRQ_TRANSLATION_FAILED "このデバイスは PCI 割り込みを要求していますが、ISA 割り込み用に構成されています (またはその逆)。\nこのデバイスの割り込みを再設定するには、コンピュータのシステム セットアップ プログラムを使用してください。"
-    IDS_DEV_FAILED_DRIVER_ENTRY "LiberNT は、このハードウェアに対するデバイス ドライバを初期化できません。"
-    IDS_DEV_DRIVER_FAILED_PRIOR_UNLOAD "以前のデバイス ドライバの実体がメモリー上にあるため、LiberNT は、このデバイス ドライバを読み込めません。"
-    IDS_DEV_DRIVER_FAILED_LOAD "LiberNT は、このハードウェアに対するデバイス ドライバを読み込めません。ドライバは、壊れているか見つかりません。"
+    IDS_DEV_BIOS_TABLE "コンピューターのシステム ファームウェアには、このデバイスを適切に構成して使用するための十分な情報が含まれていません。\nこのデバイスを使用するには、コンピューターの製造元に問い合わせて、ファームウェアまたは BIOS のアップデートを入手してください。"
+    IDS_DEV_IRQ_TRANSLATION_FAILED "このデバイスは PCI 割り込みを要求していますが、ISA 割り込み用に構成されています (またはその逆)。\nこのデバイスの割り込みを再設定するには、コンピューターのシステム セットアップ プログラムを使用してください。"
+    IDS_DEV_FAILED_DRIVER_ENTRY "LiberNT は、このハードウェアに対するデバイス ドライバーを初期化できません。"
+    IDS_DEV_DRIVER_FAILED_PRIOR_UNLOAD "以前のデバイス ドライバーの実体がメモリ上にあるため、LiberNT は、このデバイス ドライバーを読み込めません。"
+    IDS_DEV_DRIVER_FAILED_LOAD "LiberNT は、このハードウェアに対するデバイス ドライバーを読み込めません。ドライバーは、壊れているか見つかりません。"
     IDS_DEV_DRIVER_SERVICE_KEY_INVALID "レジストリ中にサービス キー情報が見つからないか、不正に記録されているため、LiberNT は、このハードウェアにアクセスできません。"
-    IDS_DEV_LEGACY_SERVICE_NO_DEVICES "LiberNT は、このハードウェアに対するデバイス ドライバを正しく読み込みましたが、ハードウェア デバイスが見つかりません。"
-    IDS_DEV_DUPLICATE_DEVICE "システムに重複したデバイスがすでに作動しているため、LiberNT はこのハードウェアに対するデバイス ドライバを読み込めません。"
+    IDS_DEV_LEGACY_SERVICE_NO_DEVICES "LiberNT は、このハードウェアに対するデバイス ドライバーを正しく読み込みましたが、ハードウェア デバイスが見つかりません。"
+    IDS_DEV_DUPLICATE_DEVICE "システムに重複したデバイスがすでに作動しているため、LiberNT はこのハードウェアに対するデバイス ドライバーを読み込めません。"
     IDS_DEV_FAILED_POST_START "LiberNT は、デバイスが問題を報告したため、このデバイスを停止しました。"
     IDS_DEV_HALTED "アプリケーションかサービスは、このハードウェア デバイスをシャットダウンしました。"
-    IDS_DEV_PHANTOM "現在、このハードウェア デバイスは、コンピュータに接続されていません。"
+    IDS_DEV_PHANTOM "現在、このハードウェア デバイスは、コンピューターに接続されていません。"
     IDS_DEV_SYSTEM_SHUTDOWN "OS がシャットダウン中のため、LiberNT は、このハードウェア デバイスへのアクセスを取得できません。"
-    IDS_DEV_HELD_FOR_EJECT "このハードウェアデバイスは安全に取り外せるように準備されていますが、コンピュータから取り外されていないため、LiberNT はこのデバイスを使用できません。"
-    IDS_DEV_DRIVER_BLOCKED "このデバイスに対するソフトウェアは、LiberNT との問題があることが分かっているため、起動がブロックされています。新しいドライバのハードウェアのベンダーに連絡して下さい。"
+    IDS_DEV_HELD_FOR_EJECT "このハードウェアデバイスは安全に取り外せるように準備されていますが、コンピューターから取り外されていないため、LiberNT はこのデバイスを使用できません。"
+    IDS_DEV_DRIVER_BLOCKED "このデバイスに対するソフトウェアは、LiberNT との問題があることが分かっているため、起動がブロックされています。新しいドライバーのハードウェアのベンダーに連絡して下さい。"
     IDS_DEV_REGISTRY_TOO_LARGE "LiberNT は、システム ハイブが大きすぎる（レジストリ サイズの制限を超えた）ため、新しいハードウェア デバイスを開始できません。"
     IDS_DEV_SETPROPERTIES_FAILED "LiberNT は、このデバイスの設定を変更できませんでした。"
 END
@@ -116,8 +116,8 @@ BEGIN
     IDS_PROP_CLASSUPPERFILTERS "クラス上位フィルター"
     IDS_PROP_CLASSLOWERFILTERS "クラス下位フィルター"
     IDS_PROP_CLASSINSTALLER "クラス インストーラー"
-    IDS_PROP_CLASSCOINSTALLER "クラス共同インストーラ"
-    IDS_PROP_DEVICECOINSTALLER "デバイス共同インストーラ"
+    IDS_PROP_CLASSCOINSTALLER "クラス共同インストーラー"
+    IDS_PROP_DEVICECOINSTALLER "デバイス共同インストーラー"
     IDS_PROP_FIRMWAREREVISION "ファームウェア リビジョン"
     IDS_PROP_CURRENTPOWERSTATE "現在の電源状態"
     IDS_PROP_POWERCAPABILITIES "電力能力"
@@ -161,23 +161,23 @@ END
 
 IDD_DEVICEDRIVER DIALOGEX 0, 0, 252, 218
 STYLE DS_SHELLFONT | WS_CHILD | WS_DISABLED | WS_CAPTION
-CAPTION "ドライバ"
+CAPTION "ドライバー"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON "", IDC_DEVICON, 7, 7, 20, 20
     LTEXT "", IDC_DEVNAME, 37, 9, 174, 16, SS_NOPREFIX
-    LTEXT "ドライバ 提供元:", -1, 37, 39, 60, 8, SS_NOPREFIX
-    EDITTEXT IDC_DRVPROVIDER, 100, 39, 146, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
-    LTEXT "ドライバの日付:", -1, 37, 53, 60, 8, SS_NOPREFIX
-    EDITTEXT IDC_DRVDATE, 100, 53, 145, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
-    LTEXT "ドライバのバージョン:", -1, 37, 67, 60, 8, SS_NOPREFIX
-    EDITTEXT IDC_DRVVERSION, 100, 67, 145, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
-    LTEXT "デジタル署名者:", -1, 37, 81, 60, 8, SS_NOPREFIX
-    EDITTEXT IDC_DIGITALSIGNER, 100, 81, 145, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
-    PUSHBUTTON "ドライバの詳細(&D)...", IDC_DRIVERDETAILS, 7, 106, 75, 15
-    LTEXT "ドライバ ファイルの詳細を表示します。", -1, 91, 110, 154, 17, SS_NOPREFIX
-    PUSHBUTTON "ドライバの更新(&U)...", IDC_UPDATEDRIVER, 7, 134, 75, 15
-    LTEXT "デバイス ドライバを更新します。", -1, 91, 138, 154, 17, SS_NOPREFIX
+    LTEXT "ドライバー 提供元:", -1, 37, 39, 66, 8, SS_NOPREFIX
+    EDITTEXT IDC_DRVPROVIDER, 104, 39, 142, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
+    LTEXT "ドライバーの日付:", -1, 37, 53, 66, 8, SS_NOPREFIX
+    EDITTEXT IDC_DRVDATE, 104, 53, 141, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
+    LTEXT "ドライバーのバージョン:", -1, 37, 67, 66, 8, SS_NOPREFIX
+    EDITTEXT IDC_DRVVERSION, 104, 67, 141, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
+    LTEXT "デジタル署名者:", -1, 37, 81, 66, 8, SS_NOPREFIX
+    EDITTEXT IDC_DIGITALSIGNER, 104, 81, 141, 12, NOT WS_TABSTOP | NOT WS_BORDER | ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON "ドライバーの詳細(&D)...", IDC_DRIVERDETAILS, 7, 106, 75, 15
+    LTEXT "ドライバー ファイルの詳細を表示します。", -1, 91, 110, 154, 17, SS_NOPREFIX
+    PUSHBUTTON "ドライバーの更新(&U)...", IDC_UPDATEDRIVER, 7, 134, 75, 15
+    LTEXT "デバイス ドライバーを更新します。", -1, 91, 138, 154, 17, SS_NOPREFIX
     PUSHBUTTON "ロールバック ドライバー(&R)", IDC_ROLLBACKDRIVER, 7, 162, 75, 15
     LTEXT "ドライバーの更新後にデバイスに障害が発生した場合は、以前にインストールしたドライバーにロールバックします。", -1, 91, 162, 154, 25, SS_NOPREFIX
     PUSHBUTTON "アンインストール(&U)", IDC_UNINSTALLDRIVER, 7, 190, 75, 15
@@ -186,12 +186,12 @@ END
 
 IDD_DRIVERDETAILS DIALOGEX 0, 0, 224, 230
 STYLE DS_SHELLFONT | DS_MODALFRAME | DS_CONTEXTHELP | WS_POPUPWINDOW | WS_VISIBLE | WS_DLGFRAME
-CAPTION "ドライバ ファイルの詳細"
+CAPTION "ドライバー ファイルの詳細"
 FONT 9, "MS UI Gothic"
 BEGIN
     ICON "", IDC_DEVICON, 7, 7, 20, 20
     LTEXT "", IDC_DEVNAME, 37, 9, 174, 16, SS_NOPREFIX
-    LTEXT "ドライバ ファイル(&D):", -1, 7, 36, 204, 8
+    LTEXT "ドライバー ファイル(&D):", -1, 7, 36, 204, 8
     CONTROL "", IDC_DRIVERFILES, "SysListView32", LVS_REPORT | LVS_NOCOLUMNHEADER |
             LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SHAREIMAGELISTS | LVS_SORTASCENDING |
             LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 7, 46, 209, 80
@@ -287,7 +287,7 @@ END
 
 STRINGTABLE
 BEGIN
-  IDS_APPNAME               "LiberNT デバイス マネージャ"
+  IDS_APPNAME               "LiberNT デバイス マネージャー"
   IDS_APP_AUTHORS           "Copyright 2015 Ged Murphy"
   IDS_CONFIRM_DISABLE       "このデバイスを無効にすると、機能が止まります。\nこれを本当に無効にしたいですか？"
   IDS_CONFIRM_UNINSTALL     "警告: あなたのシステムからこのデバイスをアンインストールしようとしています。\n続行したいですか？"
@@ -295,7 +295,7 @@ END
 
 STRINGTABLE
 BEGIN
-  IDS_MENU_UPDATE           "ドライバ ソフトウェアを更新..."
+  IDS_MENU_UPDATE           "ドライバー ソフトウェアを更新..."
   IDS_MENU_ENABLE           "有効にする"
   IDS_MENU_DISABLE          "無効にする"
   IDS_MENU_UNINSTALL        "アンインストール"
@@ -310,17 +310,17 @@ BEGIN
   IDS_TOOLTIP_SCAN          "ハードウェアの変更をスキャン"
   IDS_TOOLTIP_ENABLE        "有効にする"
   IDS_TOOLTIP_DISABLE       "無効にする"
-  IDS_TOOLTIP_UPDATE        "更新ドライバ ソフトウェア"
+  IDS_TOOLTIP_UPDATE        "更新ドライバー ソフトウェア"
   IDS_TOOLTIP_UNINSTALL     "アンインストール"
 END
 
 STRINGTABLE
 BEGIN
-  IDS_TYPE_MEMORY           "Memory"
-  IDS_TYPE_PORT             "Input/output (IO)"
-  IDS_TYPE_DMA              "Direct Memory Access (DMA)"
-  IDS_TYPE_IRQ              "Interrupt request (IRQ)"
-  IDS_TYPE_LARGEMEMORY      "Large Memory"
+  IDS_TYPE_MEMORY           "メモリ"
+  IDS_TYPE_PORT             "入出力 (IO)"
+  IDS_TYPE_DMA              "ダイレクト メモリ アクセス (DMA)"
+  IDS_TYPE_IRQ              "割り込み要求 (IRQ)"
+  IDS_TYPE_LARGEMEMORY      "ラージ メモリ"
 END
 
 /* Hints */
@@ -332,9 +332,9 @@ BEGIN
   IDS_HINT_ENABLE       " 選択中のデバイスを有効にします。"
   IDS_HINT_DISABLE      " 選択中のデバイスを無効にします。"
   IDS_HINT_UPDATE       " 選択中のデバイスに対するデバイス更新ソフトウェア ウィザードを起動します。"
-  IDS_HINT_UNINSTALL    " 選択中のデバイスに対するドライバをアンインストールします。"
-  IDS_HINT_ADD          " レガシー (非プラグ アンド プレイ) デバイスをコンピュータに追加します。"
-  IDS_HINT_ABOUT        " LiberNT デバイス マネージャについて."
+  IDS_HINT_UNINSTALL    " 選択中のデバイスに対するドライバーをアンインストールします。"
+  IDS_HINT_ADD          " レガシー (非プラグ アンド プレイ) デバイスをコンピューターに追加します。"
+  IDS_HINT_ABOUT        " LiberNT デバイス マネージャーについて."
   IDS_HINT_EXIT         " プログラムを終了します。"
 
   IDS_HINT_DEV_BY_TYPE  " ハードウェアの種類別にデバイスを表示します。"

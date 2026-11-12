@@ -2,5 +2,5 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 STRINGTABLE
 {
-    IDS_NOSRCFILEFOUND "ファイルまたはフォルダ '%ls' は見つかりません。"
+    IDS_NOSRCFILEFOUND "ファイルまたはフォルダー '%ls' は見つかりません。"
 }

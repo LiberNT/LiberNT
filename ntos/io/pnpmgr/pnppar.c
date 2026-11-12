@@ -11,7 +11,8 @@
 
 extern BOOLEAN PnPBootDriversLoaded;
 
-BOOLEAN PnpEnableParallelEnum = TRUE;
+/* FIXME: off until the paths a parallel walk shares are serialized (resource search and claim, the reinitialization pass) */
+BOOLEAN PnpEnableParallelEnum = FALSE;
 
 /* Dedicated worker pool: subtree workers block in IopSynchronousCall, so the shared queue won't do. */
 #define PI_PARALLEL_ENUM_MAX 8
@@ -218,6 +219,23 @@ PiRunParallel(
     return TRUE;
 }
 
+/* The state machine's first steps for one device: a device without a stack is initialized and gets its drivers */
+static
+VOID
+PiPrepareChildDrivers(_In_ PDEVICE_NODE Node)
+{
+    PAGED_CODE();
+
+    if (Node->State == DeviceNodeUninitialized)
+    {
+        PiClearDevNodeFlag(Node, DNF_NO_SERVICE);
+        PiSetDevNodeState(Node, DeviceNodeInitialized);
+    }
+
+    if (Node->State == DeviceNodeInitialized && !(Node->Flags & (DNF_HAS_PROBLEM | DNF_NO_SERVICE)))
+        PiDevNodeAddDrivers(Node);
+}
+
 static
 VOID
 NTAPI
@@ -282,7 +300,7 @@ PiProcessChildrenParallel(_In_ PDEVICE_NODE Parent)
     }
 
     for (i = 0; i < count; i++)
-        PiDevNodeAddDrivers(children[i]);
+        PiPrepareChildDrivers(children[i]);
 
     workCount = 0;
     for (i = 0; i < count; i++)

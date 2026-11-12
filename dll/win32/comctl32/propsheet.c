@@ -2849,13 +2849,77 @@ static LRESULT PROPSHEET_GetResult(HWND hwndDlg)
     return psInfo->result;
 }
 
+#ifdef __REACTOS__
+static BOOL PROPSHEET_GetPageTemplateSize(HPROPSHEETPAGE hpsp, const PropSheetInfo *psInfo, int *width, int *height)
+{
+  const DLGTEMPLATE *pTemplate = HPSP_load_template(hpsp, NULL);
+  DWORD dwFlags = HPSP_get_flags(hpsp);
+  const WORD *p;
+
+  if (!pTemplate)
+    return FALSE;
+  p = (const WORD *)pTemplate;
+  if (((const MyDLGTEMPLATEEX*)pTemplate)->signature == 0xFFFF)
+    p += 8;
+  else
+    p += 4;
+  p += 3;
+  *width = (WORD)p[0];
+  *height = (WORD)p[1];
+  if ((psInfo->ppshheader.dwFlags & (PSH_WIZARD97_OLD | PSH_WIZARD97_NEW)) &&
+      (psInfo->ppshheader.dwFlags & PSH_HEADER) &&
+      !(dwFlags & PSP_HIDEHEADER))
+  {
+    *height += 2 * WIZARD_PADDING + WIZARD_HEADER_HEIGHT;
+    *width += 2 * WIZARD_PADDING;
+  }
+  if (psInfo->ppshheader.dwFlags & PSH_WIZARD)
+  {
+    *height += 2 * WIZARD_PADDING;
+    *width += 2 * WIZARD_PADDING;
+  }
+  return TRUE;
+}
+#endif
+
 /******************************************************************************
  *            PROPSHEET_RecalcPageSizes
  */
 static BOOL PROPSHEET_RecalcPageSizes(HWND hwndDlg)
 {
+#ifdef __REACTOS__
+    PropSheetInfo *psInfo = GetPropW(hwndDlg, PropSheetInfoStr);
+    int i, width, height, maxWidth = 0, maxHeight = 0;
+
+    if (!psInfo)
+        return FALSE;
+    for (i = 0; i < psInfo->nPages; i++)
+    {
+        if (!psInfo->proppage[i].hpage ||
+            !PROPSHEET_GetPageTemplateSize(psInfo->proppage[i].hpage, psInfo, &width, &height))
+            continue;
+        maxWidth = max(maxWidth, width);
+        maxHeight = max(maxHeight, height);
+    }
+    if (!maxWidth || !maxHeight)
+        return FALSE;
+    psInfo->width = maxWidth;
+    psInfo->height = maxHeight;
+    if (psInfo->ppshheader.dwFlags & INTRNL_ANY_WIZARD)
+    {
+        PROPSHEET_AdjustSizeWizard(hwndDlg, psInfo);
+        PROPSHEET_AdjustButtonsWizard(hwndDlg, psInfo);
+    }
+    else if (PROPSHEET_SizeMismatch(hwndDlg, psInfo))
+    {
+        PROPSHEET_AdjustSize(hwndDlg, psInfo);
+        PROPSHEET_AdjustButtons(hwndDlg, psInfo);
+    }
+    return TRUE;
+#else
     FIXME("(%p): stub\n", hwndDlg);
     return FALSE;
+#endif
 }
 
 /******************************************************************************

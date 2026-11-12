@@ -28,7 +28,7 @@ Abstract:
 #define Dbg                              (DEBUG_TRACE_DEVIOSUP)
 
 #define CollectDiskIoStats(VCB,FUNCTION,IS_USER_IO,COUNT) {                                    \
-    PFILESYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors].Common;   \
+    PFILESYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors].Common;   \
     if (IS_USER_IO) {                                                                          \
         if ((FUNCTION) == IRP_MJ_WRITE) {                                                      \
             Stats->UserDiskWrites += (COUNT);                                                  \
@@ -967,7 +967,7 @@ Return Value:
     if (!FlagOn(Irp->Flags, IRP_PAGING_IO)) {
 
         PFILE_SYSTEM_STATISTICS Stats =
-            &FcbOrDcb->Vcb->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors];
+            &FcbOrDcb->Vcb->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors];
 
         if (IrpContext->MajorFunction == IRP_MJ_READ) {
             Stats->Fat.NonCachedReads += 1;
@@ -1114,7 +1114,7 @@ Return Value:
         } else {
 
             PFILE_SYSTEM_STATISTICS Stats =
-                &FcbOrDcb->Vcb->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors];
+                &FcbOrDcb->Vcb->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors];
 
             if (IrpContext->MajorFunction == IRP_MJ_READ) {
                 Stats->Fat.NonCachedDiskReads += 1;

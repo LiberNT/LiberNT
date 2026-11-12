@@ -277,7 +277,7 @@ HalpPciEnableMsiX(
 {
     UCHAR MsixOffset;
     USHORT Control;
-    USHORT TableOffsetReg;
+    ULONG TableOffsetReg;
     ULONG TableBarIndex;
     ULONG TableOffset;
     UCHAR ApicId;
@@ -345,6 +345,7 @@ HalpPciEnableMsiX(
     /* For extended capability space (offset >= 0x100): */
     /* Entry offset = TableOffset + (TableEntry * 16) */
 
+    /* FIXME: the MSI-X table lives in the memory BAR named by TableBarIndex, not in configuration space */
     ULONG EntryOffset = TableOffset + (TableEntry * MSIX_TABLE_ENTRY_SIZE);
 
     /* Write Address Low */

@@ -82,7 +82,7 @@ BEGIN
     IDS_DWL_FAILED "Geckoパッケージをダウンロードできません。ダウンロードするためにインターネット接続を確認して下さい。セットアップはGeckoをインストールせずに続行します。"
     IDS_CANTMAKEINETSHORTCUT "インターネット ショートカットの作成に失敗しました。"
     IDS_CANTMAKESHORTCUT "ショートカットの作成に失敗しました。"
-    IDS_NO_MEMORY "メモリーが割り当てできませんでした！"
+    IDS_NO_MEMORY "メモリが割り当てできませんでした！"
     IDS_NO_DIRECTORY "ディレクトリが与えられてません!"
     IDS_INVALID_PATH "与えられたパスは無効です!"
     IDS_INVALID_NAME "入力したショートカット名にファイル名としては無効な文字が含まれているか長すぎます。"

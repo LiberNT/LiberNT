@@ -381,6 +381,18 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     FCB->ReportedReceiveWindowSize = AfdReportedReceiveWindowSize;
     FCB->Send.Size = AfdSendWindowSize;
 
+    if (FCB->Flags & AFD_ENDPOINT_CONNECTIONLESS)
+    {
+        FCB->ReceiveWorkItem = IoAllocateWorkItem(DeviceObject);
+        if (!FCB->ReceiveWorkItem)
+        {
+            ExFreePoolWithTag(FCB, TAG_AFD_FCB);
+            Irp->IoStatus.Status = STATUS_NO_MEMORY;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_NO_MEMORY;
+        }
+    }
+
     KeInitializeMutex( &FCB->Mutex, 0 );
 
     for( i = 0; i < MAX_FUNCTIONS; i++ ) {
@@ -413,6 +425,8 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
                                                           TAG_AFD_TRANSPORT_ADDRESS);
 
         if( !FCB->TdiDeviceName.Buffer ) {
+            if (FCB->ReceiveWorkItem)
+                IoFreeWorkItem(FCB->ReceiveWorkItem);
             ExFreePoolWithTag(FCB, TAG_AFD_FCB);
             AFD_DbgPrint(MID_TRACE,("Could not copy target string\n"));
             Irp->IoStatus.Status = STATUS_NO_MEMORY;
@@ -447,6 +461,8 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         {
             ExFreePoolWithTag(FCB->TdiDeviceName.Buffer, TAG_AFD_TRANSPORT_ADDRESS);
         }
+        if (FCB->ReceiveWorkItem)
+            IoFreeWorkItem(FCB->ReceiveWorkItem);
         ExFreePoolWithTag(FCB, TAG_AFD_FCB);
         FileObject->FsContext = NULL;
     }
@@ -705,6 +721,9 @@ AfdCloseSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     {
         ExFreePoolWithTag(FCB->TdiDeviceName.Buffer, TAG_AFD_TRANSPORT_ADDRESS);
     }
+
+    if (FCB->ReceiveWorkItem)
+        IoFreeWorkItem(FCB->ReceiveWorkItem);
 
     ExFreePoolWithTag(FCB, TAG_AFD_FCB);
 

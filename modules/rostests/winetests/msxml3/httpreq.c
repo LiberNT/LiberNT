@@ -36,6 +36,9 @@
 #include "mshtml.h"
 
 #include "wine/test.h"
+#ifdef __REACTOS__
+#include "../mshtml/httpserver.h"
+#endif
 
 #define EXPECT_REF(node,ref) _expect_ref((IUnknown*)node, ref, __LINE__)
 static void _expect_ref(IUnknown* obj, ULONG ref, int line)
@@ -1922,10 +1925,18 @@ START_TEST(httpreq)
 
     IXMLHttpRequest_Release(xhr);
 
+#ifdef __REACTOS__
+    /* The requests load their test.winehq.org pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(L"invalid.host.test.winehq.org"), "the local http server did not start\n");
+#endif
+
     test_XMLHTTP();
     test_server_xhr();
     test_safe_httpreq();
     test_supporterrorinfo();
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     CoUninitialize();
 }

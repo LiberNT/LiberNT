@@ -35,6 +35,7 @@ typedef struct _POP_SLEEP_IRP_CONTEXT
 {
     PPOP_SLEEP_TRAVERSE Traverse;
     PDEVICE_NODE DeviceNode;
+    PDEVICE_OBJECT PhysicalDeviceObject;
     PDEVICE_OBJECT TopDeviceObject;
 } POP_SLEEP_IRP_CONTEXT, *PPOP_SLEEP_IRP_CONTEXT;
 
@@ -256,6 +257,68 @@ PopQuerySleepDisableReasons(
 
 NTSTATUS
 NTAPI
+PopQuerySleepLogging(
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    PAGED_CODE();
+
+    if (InputBuffer != NULL || OutputBuffer == NULL || OutputBufferLength == 0)
+        return STATUS_INVALID_PARAMETER;
+
+    return PopQuerySleepDisableReasons(OutputBuffer, OutputBufferLength);
+}
+
+NTSTATUS
+NTAPI
+PopQuerySleepTime(
+    _In_ POWER_INFORMATION_LEVEL Level,
+    _In_opt_ PVOID InputBuffer,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    ULONGLONG Time;
+
+    if (InputBuffer != NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (OutputBuffer == NULL || OutputBufferLength < sizeof(Time))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Time = (ULONGLONG)InterlockedCompareExchange64((Level == LastSleepTime) ? &PopLastSleepTime : &PopLastWakeTime,
+                                                   0,
+                                                   0);
+    RtlCopyMemory(OutputBuffer, &Time, sizeof(Time));
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PopSetPowerStateHandler(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    POWER_STATE_HANDLER Handler;
+
+    if (PreviousMode != KernelMode)
+        return STATUS_ACCESS_DENIED;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(Handler) ||
+        OutputBuffer != NULL || OutputBufferLength != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    RtlCopyMemory(&Handler, InputBuffer, sizeof(Handler));
+    return PopRegisterPowerStateHandler(&Handler);
+}
+
+NTSTATUS
+NTAPI
 PopRegisterPowerStateHandler(
     _In_ PPOWER_STATE_HANDLER PowerStateHandler)
 {
@@ -429,6 +492,7 @@ PopSleepIrpCompletion(
 
     PopSleepRecordStatus(Traverse, IrpContext->DeviceNode, Irp->IoStatus.Status);
     IoFreeIrp(Irp);
+    ObDereferenceObject(IrpContext->PhysicalDeviceObject);
     ObDereferenceObject(IrpContext->TopDeviceObject);
     ExFreePoolWithTag(IrpContext, POP_SLEEP_TAG);
 
@@ -473,7 +537,9 @@ PopSleepDeviceTraverse(
 
     IrpContext->Traverse = Traverse;
     IrpContext->DeviceNode = DeviceNode;
+    IrpContext->PhysicalDeviceObject = DeviceNode->PhysicalDeviceObject;
     IrpContext->TopDeviceObject = TopDeviceObject;
+    ObReferenceObject(IrpContext->PhysicalDeviceObject);
 
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
     Irp->IoStatus.Information = 0;
@@ -484,6 +550,11 @@ PopSleepDeviceTraverse(
     Stack->Parameters.Power.State.SystemState = Traverse->SystemState;
     Stack->Parameters.Power.ShutdownType = Traverse->PowerAction;
     IoSetCompletionRoutine(Irp, PopSleepIrpCompletion, IrpContext, TRUE, TRUE, TRUE);
+
+    DPRINT1("Sending the S%u %s request to %wZ\n",
+            Traverse->SystemState - PowerSystemWorking,
+            Traverse->MinorFunction == IRP_MN_QUERY_POWER ? "query" : "set",
+            &DeviceNode->InstancePath);
 
     InterlockedIncrement(&Traverse->Pending);
     PoCallDriver(TopDeviceObject, Irp);
@@ -583,6 +654,46 @@ PopSleepSendDevices(
     return PopSleepSendToPowerDevice(&Traverse);
 }
 
+/* Win32k lives in session space, which a thread outside the console session reaches only through a process of that session */
+BOOLEAN
+NTAPI
+PopEnterConsoleSession(
+    _Out_ PVOID *Session,
+    _Out_ PKAPC_STATE ApcState)
+{
+    ULONG ConsoleId = RtlGetActiveConsoleId();
+
+    *Session = NULL;
+    if (PsGetProcessSessionIdEx(PsGetCurrentProcess()) == ConsoleId)
+        return TRUE;
+
+    *Session = MmGetSessionById(ConsoleId);
+    if (*Session == NULL)
+        return FALSE;
+
+    if (!NT_SUCCESS(MmAttachSession(*Session, ApcState)))
+    {
+        MmQuitNextSession(*Session);
+        *Session = NULL;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+VOID
+NTAPI
+PopLeaveConsoleSession(
+    _In_opt_ PVOID Session,
+    _In_ PKAPC_STATE ApcState)
+{
+    if (Session == NULL)
+        return;
+
+    MmDetachSession(Session, ApcState);
+    MmQuitNextSession(Session);
+}
+
 VOID
 PopSleepCallWin32(
     _In_ POWERSTATETASK Task,
@@ -591,6 +702,8 @@ PopSleepCallWin32(
     _In_ ULONG Flags)
 {
     WIN32_POWERSTATE_PARAMETERS Parameters;
+    KAPC_STATE ApcState;
+    PVOID Session;
     NTSTATUS Status;
 
     if (PopStateCallout == NULL)
@@ -602,7 +715,15 @@ PopSleepCallWin32(
     Parameters.Flags = Flags;
     Parameters.PowerStateTask = Task;
 
+    if (!PopEnterConsoleSession(&Session, &ApcState))
+    {
+        DPRINT1("Win32 power state task %u skipped: no console session\n", Task);
+        return;
+    }
+
     Status = PopStateCallout(&Parameters);
+    PopLeaveConsoleSession(Session, &ApcState);
+
     if (!NT_SUCCESS(Status))
         DPRINT1("Win32 power state task %u failed: 0x%08lx\n", Task, Status);
 }
@@ -649,6 +770,31 @@ PopSleepIpiWorker(
     }
 
     return (ULONG_PTR)Status;
+}
+
+NTSTATUS
+NTAPI
+PopShutdownSendDevices(
+    _In_ POWER_ACTION SystemAction)
+{
+    PDEVICE_OBJECT PowerPdo;
+    PDEVICE_OBJECT PowerDevice = NULL;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (SystemAction != PowerActionShutdownReset &&
+        NT_SUCCESS(IopGetSystemPowerDeviceObject(&PowerPdo)))
+    {
+        PowerDevice = IoGetAttachedDeviceReference(PowerPdo);
+    }
+
+    Status = PopSleepSendDevices(PowerDevice, IRP_MN_SET_POWER, PowerSystemShutdown, SystemAction);
+
+    if (PowerDevice != NULL)
+        ObDereferenceObject(PowerDevice);
+
+    return Status;
 }
 
 NTSTATUS

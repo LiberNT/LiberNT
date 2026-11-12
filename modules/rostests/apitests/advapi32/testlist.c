@@ -2,9 +2,11 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_BcdStoreAccess(void);
 extern void func_AddMandatoryAce(void);
 extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
+extern void func_CreateProcessWithToken(void);
 extern void func_CreateService(void);
 extern void func_CryptCreateHash(void);
 extern void func_DuplicateTokenEx(void);
@@ -17,38 +19,56 @@ extern void func_InitiateShutdown(void);
 extern void func_ImpersonateRestricted(void);
 extern void func_IntegrityLabels(void);
 extern void func_LogonSession(void);
+extern void func_LogonSessionEnd(void);
 extern void func_LogonUserNetwork(void);
 extern void func_IsTextUnicode(void);
+extern void func_LocalSystemPrivileges(void);
 extern void func_LockServiceDatabase(void);
 extern void func_TokenDefaultDacl(void);
 extern void func_LookupAccountName(void);
 extern void func_LookupAccountSid(void);
+extern void func_MachineGuid(void);
 extern void func_OpenTrace(void);
+extern void func_PrivilegeNames(void);
 extern void func_QueryServiceConfig2(void);
 extern void func_RegCreateKeyEx(void);
 extern void func_RegCreateKeyTransacted(void);
 extern void func_RegEnumKey(void);
 extern void func_RegEnumValueW(void);
 extern void func_RegFlushKey(void);
+extern void func_RegCreateKeyLink(void);
+extern void func_RegNotifyThreadAgnostic(void);
+extern void func_RegNotifyThreadExit(void);
+extern void func_RegLoadAppKey(void);
 extern void func_RegOpenKeyExW(void);
 extern void func_RegOpenKeyTransacted(void);
 extern void func_RegQueryInfoKey(void);
 extern void func_RegQueryValueExW(void);
 extern void func_RtlEncryptMemory(void);
 extern void func_SaferIdentifyLevel(void);
+extern void func_SaferLevels(void);
+extern void func_SaferRules(void);
+extern void func_SeclogonCaller(void);
 extern void func_ServiceArgs(void);
 extern void func_ServiceCrash(void);
 extern void func_ServiceEnv(void);
 extern void func_TriggerInfo(void);
 extern void func_ServiceNetwork(void);
+extern void func_ServicePowerSetting(void);
+extern void func_StartServiceCtrlDispatcher(void);
 extern void func_TokenBnoIsolation(void);
+extern void func_TokenLinkedToken(void);
+extern void func_TraceEvents(void);
 extern void func_TraceGuids(void);
+extern void func_UserHiveAccess(void);
 
 const struct test winetest_testlist[] =
 {
+    { "BcdStoreAccess", func_BcdStoreAccess },
     { "AddMandatoryAce", func_AddMandatoryAce },
     { "ControlServiceEx", func_ControlServiceEx },
     { "CopySid", func_CopySid },
+    { "CreateProcessWithToken", func_CreateProcessWithToken },
     { "CreateService", func_CreateService },
     { "CryptCreateHash", func_CryptCreateHash },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
@@ -61,31 +81,47 @@ const struct test winetest_testlist[] =
     { "ImpersonateRestricted", func_ImpersonateRestricted },
     { "IntegrityLabels", func_IntegrityLabels },
     { "LogonSession", func_LogonSession },
+    { "LogonSessionEnd", func_LogonSessionEnd },
     { "LogonUserNetwork", func_LogonUserNetwork },
     { "IsTextUnicode" , func_IsTextUnicode },
     { "TokenDefaultDacl", func_TokenDefaultDacl },
+    { "LocalSystemPrivileges", func_LocalSystemPrivileges },
     { "LockServiceDatabase" , func_LockServiceDatabase },
     { "LookupAccountName", func_LookupAccountName },
     { "LookupAccountSid", func_LookupAccountSid },
+    { "MachineGuid", func_MachineGuid },
     { "OpenTrace", func_OpenTrace },
+    { "PrivilegeNames", func_PrivilegeNames },
     { "QueryServiceConfig2", func_QueryServiceConfig2 },
     { "RegCreateKeyEx", func_RegCreateKeyEx },
     { "RegCreateKeyTransacted", func_RegCreateKeyTransacted },
     { "RegEnumKey", func_RegEnumKey },
     { "RegEnumValueW", func_RegEnumValueW },
     { "RegFlushKey", func_RegFlushKey },
+    { "RegCreateKeyLink", func_RegCreateKeyLink },
+    { "RegNotifyThreadAgnostic", func_RegNotifyThreadAgnostic },
+    { "RegNotifyThreadExit", func_RegNotifyThreadExit },
+    { "RegLoadAppKey", func_RegLoadAppKey },
     { "RegQueryInfoKey", func_RegQueryInfoKey },
     { "RegOpenKeyExW", func_RegOpenKeyExW },
     { "RegOpenKeyTransacted", func_RegOpenKeyTransacted },
     { "RegQueryValueExW", func_RegQueryValueExW },
     { "RtlEncryptMemory", func_RtlEncryptMemory },
     { "SaferIdentifyLevel", func_SaferIdentifyLevel },
+    { "SaferLevels", func_SaferLevels },
+    { "SaferRules", func_SaferRules },
+    { "SeclogonCaller", func_SeclogonCaller },
     { "ServiceArgs", func_ServiceArgs },
     { "ServiceCrash", func_ServiceCrash },
     { "ServiceEnv", func_ServiceEnv },
     { "TriggerInfo", func_TriggerInfo },
     { "ServiceNetwork", func_ServiceNetwork },
+    { "ServicePowerSetting", func_ServicePowerSetting },
+    { "StartServiceCtrlDispatcher", func_StartServiceCtrlDispatcher },
     { "TokenBnoIsolation", func_TokenBnoIsolation },
+    { "TokenLinkedToken", func_TokenLinkedToken },
+    { "TraceEvents", func_TraceEvents },
     { "TraceGuids", func_TraceGuids },
+    { "UserHiveAccess", func_UserHiveAccess },
     { 0, 0 }
 };

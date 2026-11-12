@@ -9,6 +9,7 @@ spec2def(kernel32.dll kernel32.spec ADD_IMPORTLIB)
 add_library(kernel32_shared
     client/shared_utils.c
     client/file/fileutils.c
+    client/werreg.c
 )
 target_link_libraries(kernel32_shared PRIVATE pseh)
 add_dependencies(kernel32_shared psdk)
@@ -81,6 +82,7 @@ list(APPEND SOURCE
     client/file/npipe.c
     client/file/rw.c
     client/file/tape.c
+    client/file/transact.c
     client/file/volume.c
     client/file/volumeansi.c
     wine/actctx.c
@@ -90,6 +92,7 @@ list(APPEND SOURCE
     wine/profile.c
     wine/res.c
     wine/timezone.c
+    winnls/string/caldate.c
     winnls/string/casemap.c
     winnls/string/collation.c
     winnls/string/digitmap.c

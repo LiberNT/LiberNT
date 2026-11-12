@@ -1832,7 +1832,9 @@ static HRESULT WINAPI StorageBaseImpl_Stat(
       grfStatFlag);
 
     pstatstg->grfMode = This->openFlags;
+#ifndef __REACTOS__
     pstatstg->grfStateBits = This->stateBits;
+#endif
   }
 
 end:
@@ -2761,12 +2763,26 @@ static HRESULT WINAPI StorageBaseImpl_SetStateBits(
   DWORD         grfMask)     /* [in] */
 {
   StorageBaseImpl *This = impl_from_IStorage(iface);
+#ifdef __REACTOS__
+  DirEntry data;
+  HRESULT hr;
+#endif
 
   if (This->reverted)
     return STG_E_REVERTED;
 
+#ifdef __REACTOS__
+  hr = StorageBaseImpl_ReadDirEntry(This, This->storageDirEntry, &data);
+  if (SUCCEEDED(hr))
+  {
+    data.stateBits = (data.stateBits & ~grfMask) | (grfStateBits & grfMask);
+    hr = StorageBaseImpl_WriteDirEntry(This, This->storageDirEntry, &data);
+  }
+  return hr;
+#else
   This->stateBits = (This->stateBits & ~grfMask) | (grfStateBits & grfMask);
   return S_OK;
+#endif
 }
 
 /******************************************************************************
@@ -3309,6 +3325,13 @@ static void UpdateRawDirEntry(BYTE *buffer, const DirEntry *newData)
       OFFSET_PS_GUID,
       &newData->clsid);
 
+#ifdef __REACTOS__
+  StorageUtl_WriteDWord(
+    buffer,
+      OFFSET_PS_STATEBITS,
+      newData->stateBits);
+#endif
+
   StorageUtl_WriteDWord(
     buffer,
       OFFSET_PS_CTIMELOW,
@@ -3507,6 +3530,13 @@ static HRESULT StorageImpl_ReadDirEntry(
       currentEntry,
       OFFSET_PS_GUID,
       &buffer->clsid);
+
+#ifdef __REACTOS__
+    StorageUtl_ReadDWord(
+      currentEntry,
+      OFFSET_PS_STATEBITS,
+      &buffer->stateBits);
+#endif
 
     StorageUtl_ReadDWord(
       currentEntry,
@@ -6125,6 +6155,9 @@ static HRESULT WINAPI TransactedSnapshotImpl_Commit(
     {
       data.dirRootEntry = dir_root_ref;
       data.clsid = root_entry->data.clsid;
+#ifdef __REACTOS__
+      data.stateBits = root_entry->data.stateBits;
+#endif
       data.ctime = root_entry->data.ctime;
       data.mtime = root_entry->data.mtime;
 
@@ -6842,6 +6875,9 @@ static HRESULT WINAPI TransactedSharedImpl_Commit(
       prev_storage_ref = dst_data.dirRootEntry;
       dst_data.dirRootEntry = new_storage_ref;
       dst_data.clsid = src_data.clsid;
+#ifdef __REACTOS__
+      dst_data.stateBits = src_data.stateBits;
+#endif
       dst_data.ctime = src_data.ctime;
       dst_data.mtime = src_data.mtime;
       hr = StorageBaseImpl_WriteDirEntry(This->transactedParent, This->transactedParent->storageDirEntry, &dst_data);
@@ -7176,15 +7212,25 @@ void StorageUtl_CopyDirEntryToSTATSTG(
   }
 
   destination->cbSize            = source->size;
+#ifdef __REACTOS__
+  destination->mtime             = source->mtime;
+  destination->ctime             = source->ctime;
+  destination->atime             = source->mtime;
+#else
 /*
   currentReturnStruct->mtime     = {0}; TODO
   currentReturnStruct->ctime     = {0};
   currentReturnStruct->atime     = {0};
 */
+#endif
   destination->grfMode           = 0;
   destination->grfLocksSupported = 0;
   destination->clsid             = source->clsid;
+#ifdef __REACTOS__
+  destination->grfStateBits      = source->stateBits;
+#else
   destination->grfStateBits      = 0;
+#endif
   destination->reserved          = 0;
 }
 

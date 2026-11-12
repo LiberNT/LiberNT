@@ -8,6 +8,7 @@
 #pragma once
 
 struct reactos_shared_render_client;
+struct reactos_shared_render_exclusive;
 
 struct reactos_render_transport_ops
 {
@@ -46,3 +47,12 @@ reactos_shared_render_get_position(struct reactos_shared_render_client *client, 
 
 HANDLE
 reactos_shared_render_get_event(struct reactos_shared_render_client *client);
+
+HRESULT
+reactos_shared_render_open_exclusive(
+    DWORD endpoint_index,
+    const WAVEFORMATEXTENSIBLE *format,
+    const struct reactos_render_transport_ops *transport_ops,
+    struct reactos_shared_render_exclusive **exclusive);
+void
+reactos_shared_render_close_exclusive(struct reactos_shared_render_exclusive *exclusive);

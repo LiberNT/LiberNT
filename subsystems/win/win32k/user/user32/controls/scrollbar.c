@@ -498,10 +498,19 @@ IntScrollGetScrollBarRect(HWND Wnd, INT Bar, RECT *Rect,
   if (!pWnd) return FALSE;
   pSBInfo = DesktopPtrToUser(pWnd->pSBInfo);
 
-  *Rect = pWnd->rcClient;
-  OffsetRect( Rect, -pWnd->rcWindow.left, -pWnd->rcWindow.top );
-  if (pWnd->ExStyle & WS_EX_LAYOUTRTL)
-     mirror_rect( &pWnd->rcWindow, Rect );
+  {
+     RECT Client = pWnd->rcClient, Window = pWnd->rcWindow;
+
+     if (User32IsDpiVirtualThread())
+     {
+        User32DpiRectToLogical(&Client);
+        User32DpiRectToLogical(&Window);
+     }
+     *Rect = Client;
+     OffsetRect( Rect, -Window.left, -Window.top );
+     if (pWnd->ExStyle & WS_EX_LAYOUTRTL)
+        mirror_rect( &Window, Rect );
+  }
 
   switch (Bar)
     {
@@ -1182,9 +1191,17 @@ ScrollTrackScrollBar(HWND Wnd, INT SBType, POINT Pt)
       YOffset = Info.rcClient.top - Info.rcWindow.top;
 #else
       PWND pwnd = ValidateHwnd(Wnd);
+      RECT Client, Window;
       if (!pwnd) return;
-      XOffset = pwnd->rcClient.left - pwnd->rcWindow.left;
-      YOffset = pwnd->rcClient.top - pwnd->rcWindow.top;
+      Client = pwnd->rcClient;
+      Window = pwnd->rcWindow;
+      if (User32IsDpiVirtualThread())
+      {
+          User32DpiRectToLogical(&Client);
+          User32DpiRectToLogical(&Window);
+      }
+      XOffset = Client.left - Window.left;
+      YOffset = Client.top - Window.top;
 #endif
 //      RECT rect;
 //      WIN_GetRectangles( Wnd, COORDS_CLIENT, &rect, NULL );
@@ -1646,7 +1663,17 @@ BOOL WINAPI GetScrollBarInfo( _In_ HWND hwnd, _In_ LONG idObject, _Inout_ LPSCRO
     if (!pWnd) return FALSE;
     Ret = NtUserGetScrollBarInfo(hwnd, idObject, info); // This will be fixed once SB is server side.
     /* rcScrollBar needs to be in screen coordinates */
-    OffsetRect( &(info->rcScrollBar), pWnd->rcWindow.left, pWnd->rcWindow.top );
+    if (User32IsDpiVirtualThread())
+    {
+        RECT rcWindow;
+
+        if (GetWindowRect(hwnd, &rcWindow))
+            OffsetRect( &(info->rcScrollBar), rcWindow.left, rcWindow.top );
+    }
+    else
+    {
+        OffsetRect( &(info->rcScrollBar), pWnd->rcWindow.left, pWnd->rcWindow.top );
+    }
 #endif
     return Ret;
 }

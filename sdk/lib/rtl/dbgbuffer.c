@@ -404,6 +404,14 @@ RtlpQueryRemoteHeaps(
 
 NTSTATUS
 NTAPI
+RtlQueryProcessHeapInformation(
+    _Inout_ PRTL_DEBUG_INFORMATION Buffer)
+{
+    return RtlpQueryLocalHeaps(Buffer, (Buffer->Flags & RTL_DEBUG_QUERY_HEAP_BLOCKS) != 0);
+}
+
+NTSTATUS
+NTAPI
 RtlQueryProcessDebugInformation(
     _In_ ULONG ProcessId,
     _In_ ULONG DebugInfoClassMask,

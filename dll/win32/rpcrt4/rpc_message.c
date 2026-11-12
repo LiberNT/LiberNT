@@ -1820,7 +1820,15 @@ RPC_STATUS WINAPI I_RpcSend(PRPC_MESSAGE pMsg)
       RPCRT4_ReleaseConnection(conn);
       pMsg->ReservedForRuntime = NULL;
       status = RPCRT4_OpenBinding(bind, &conn, &cif->TransferSyntax, &cif->InterfaceId, &from_cache);
+#ifdef __REACTOS__
+      if (status != RPC_S_OK)
+      {
+          RPCRT4_ReleaseBinding(bind);
+          break;
+      }
+#else
       if (status != RPC_S_OK) break;
+#endif
       pMsg->ReservedForRuntime = conn;
   }
 
@@ -1894,6 +1902,9 @@ fail:
   free(hdr);
   RPCRT4_ReleaseConnection(conn);
   pMsg->ReservedForRuntime = NULL;
+#ifdef __REACTOS__
+  RPCRT4_ReleaseBinding(bind);
+#endif
   return status;
 }
 

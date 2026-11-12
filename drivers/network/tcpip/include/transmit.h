@@ -28,6 +28,7 @@ typedef struct IPFRAGMENT_CONTEXT {
     PNEIGHBOR_CACHE_ENTRY NCE;          /* Pointer to NCE to use */
     KEVENT Event;                       /* Signalled when the transmission is complete */
     NDIS_STATUS Status;                 /* Status of the transmission */
+    BOOLEAN Detached;
 } IPFRAGMENT_CONTEXT, *PIPFRAGMENT_CONTEXT;
 
 

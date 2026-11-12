@@ -2,12 +2,12 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 IDD_STARTPAGE DIALOGEX 0, 0, 317, 186
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加ウィザードへようこそ", IDC_FINISHTITLE, 114, 8, 203, 24
     LTEXT "このウィザードでは次の操作をお手伝いします：", -1, 114, 40, 182, 8
-    LTEXT "1) お使いのコンピュータへの新しいデバイスドライバのインストール。", -1, 121, 56, 184, 16
+    LTEXT "1) お使いのコンピューターへの新しいデバイスドライバーのインストール。", -1, 121, 56, 184, 16
     LTEXT "2) 問題が発生しているデバイスのトラブルシューティング。", -1, 121, 78, 185, 16
     ICON IDI_WARNINGICON, IDC_WARNINGICON, 124, 109, 20, 20
     LTEXT "もしあなたのハードウェアにインストール CD が付いていれば、キャンセルをクリックしてこのウィザードを閉じて、製造元の CD を使ってインストールすることをお勧めします。", 503, 150, 106, 155, 50
@@ -16,7 +16,7 @@ END
 
 IDD_SEARCHPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "", IDC_STATUSTEXT, 21, 8, 275, 32
@@ -25,17 +25,17 @@ END
 
 IDD_ISCONNECTEDPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
-    LTEXT "このハードウェアはあなたのコンピュータに以前すでに接続しましたか?", -1, 20, 11, 275, 8
+    LTEXT "このハードウェアはあなたのコンピューターに以前すでに接続しましたか?", -1, 20, 11, 275, 8
     AUTORADIOBUTTON "はい(&Y)、すでにハードウェアに接続しました", IDC_CONNECTED, 29, 23, 266, 8, WS_GROUP
     AUTORADIOBUTTON "いいえ(&N)、まだこのハードウェアを追加していません", IDC_NOTCONNECTED, 29, 35, 266, 8
 END
 
 IDD_PROBELISTPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "下のリストからインストールしたハードウェア デバイスを選択して、次へをクリックして、プロパティをチェックするか、現在の問題を調査して下さい。", -1, 21, 8, 275, 22
@@ -46,7 +46,7 @@ END
 
 IDD_SELECTWAYPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ウィザードは、別のハードウェアを検索し、インストールできます。または、インストールしたいハードウェアモデルを知っているなら、リストからそれを選択できます。", -1, 21, 8, 280, 24
@@ -57,7 +57,7 @@ END
 
 IDD_DETECTEDHWPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "", IDC_STATUSTEXT, 21, 9, 275, 40
@@ -67,7 +67,7 @@ END
 
 IDD_HWTYPESPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "もしハードウェアカテゴリを見たくなければ、「すべてのデバイスを見る」をクリックして下さい。", IDC_STATUSTEXT, 21, 9, 275, 18
@@ -77,7 +77,7 @@ END
 
 IDD_PROGRESSPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの検索には数分かかります。", -1, 21, 8, 275, 15
@@ -89,7 +89,7 @@ END
 
 IDD_FINISHPAGE DIALOGEX 0, 0, 317, 186
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加の完了", IDC_FINISHTITLE, 114, 8, 203, 24
@@ -100,7 +100,7 @@ END
 
 IDD_ISFOUNDPAGE DIALOGEX 0, 0, 317, 186
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加を実行させています", IDC_FINISHTITLE, 114, 8, 203, 24
@@ -111,7 +111,7 @@ END
 
 IDD_HWSTATUSPAGE DIALOGEX 0, 0, 317, 186
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加を実行させています", IDC_FINISHTITLE, 114, 8, 195, 28
@@ -123,57 +123,57 @@ END
 
 IDD_NOTCONNECTEDPAGE DIALOGEX 0, 0, 317, 186
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "ハードウェアの追加ウィザード"
+CAPTION "ハードウェアの追加"
 FONT 9, "MS UI Gothic"
 BEGIN
     LTEXT "ハードウェアの追加を続行できません", IDC_FINISHTITLE, 114, 8, 203, 28
-    LTEXT "続けるには、このハードウェアをあなたのコンピュータに接続して下さい。", -1, 114, 40, 193, 16
-    AUTOCHECKBOX "ハードウェアを接続するために、完了をクリックしたときにコンピュータの電源を切ります(&T)", IDC_TURNOFFCHECKBOX, 114, 64, 203, 20, BS_TOP | BS_MULTILINE
+    LTEXT "続けるには、このハードウェアをあなたのコンピューターに接続して下さい。", -1, 114, 40, 193, 16
+    AUTOCHECKBOX "ハードウェアを接続するために、完了をクリックしたときにコンピューターの電源を切ります(&T)", IDC_TURNOFFCHECKBOX, 114, 64, 203, 20, BS_TOP | BS_MULTILINE
     LTEXT "多くの場合、LiberNT は自動的に接続したハードウェアをインストールします。もし LiberNT が見つけられなければ、サポートされているソフトウェアをインストールするために、このウィザードを開き直すことができます。", -1, 114, 98, 193, 32
     LTEXT "このウィザードを閉じるには、キャンセルをクリックして下さい。", IDC_STATUSTEXT, 114, 166, 193, 8
 END
 
 IDD_SELECTDRIVERPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Add Hardware Wizard"
+CAPTION "ハードウェアの追加"
 FONT 8, "MS Shell Dlg"
 BEGIN
     ICON "", IDC_SELDRVICON, 14, 8, 20, 20
-    LTEXT "Select the manufacturer and model of your hardware device and then click Next. If you have a disk that contains the driver you want to install, click Have Disk.", IDC_STATUSTEXT, 44, 8, 266, 26
+    LTEXT "ハードウェア デバイスの製造元とモデルを選択して [次へ] をクリックしてください。インストールするドライバーが入ったディスクがある場合は、[ディスク使用] をクリックしてください。", IDC_STATUSTEXT, 44, 8, 266, 26
     CONTROL "", IDC_MFGLIST, "SysListView32", WS_BORDER | WS_GROUP | WS_TABSTOP | LVS_REPORT | LVS_NOSORTHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SORTASCENDING, 7, 40, 112, 76
     CONTROL "", IDC_MODELLIST, "SysListView32", WS_BORDER | WS_TABSTOP | LVS_REPORT | LVS_NOSORTHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_SORTASCENDING | LVS_SHAREIMAGELISTS, 125, 40, 185, 76
-    PUSHBUTTON "&Have Disk...", IDC_HAVEDISK, 240, 122, 70, 14
+    PUSHBUTTON "ディスク使用(&H)...", IDC_HAVEDISK, 240, 122, 70, 14
 END
 
 IDD_READYPAGE DIALOGEX 0, 0, 317, 143
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
-CAPTION "Add Hardware Wizard"
+CAPTION "ハードウェアの追加"
 FONT 8, "MS Shell Dlg"
 BEGIN
-    LTEXT "Hardware to install:", -1, 21, 8, 275, 8
+    LTEXT "インストールするハードウェア:", -1, 21, 8, 275, 8
     ICON "", IDC_READYICON, 28, 24, 20, 20
     LTEXT "", IDC_READYDEVICE, 58, 30, 238, 8, SS_NOPREFIX
-    LTEXT "To start installing your new hardware, click Next.", IDC_STATUSTEXT, 21, 60, 275, 8
+    LTEXT "新しいハードウェアのインストールを開始するには、[次へ] をクリックしてください。", IDC_STATUSTEXT, 21, 60, 275, 8
 END
 
 STRINGTABLE
 BEGIN
     IDS_CPLNAME "ハードウェアの追加"
-    IDS_CPLDESCRIPTION "コンピュータにハードウェアを追加します。"
+    IDS_CPLDESCRIPTION "コンピューターにハードウェアを追加します。"
     IDS_SEARCHTITLE "ウィザードが検索中です。お待ち下さい..."
     IDS_SEARCHTEXT "このウィザードは最近接続したハードウェアを検索していますが、まだインストールされていません。"
     IDS_ISCONNECTED "ハードウェアは接続済みですか?"
-    IDS_PROBELISTTITLE "以下のハードウェアはあなたのコンピュータにすでにインストール済みです"
+    IDS_PROBELISTTITLE "以下のハードウェアはあなたのコンピューターにすでにインストール済みです"
     IDS_ADDNEWDEVICE "新しいハードウェア デバイスを追加"
     IDS_SELECTWAYTITLE "このウィザードは、他のハードウェアのインストールを助けます"
-    IDS_NOTFOUNDTITLE "The wizard did not find any new hardware on your computer"
-    IDS_NOTFOUNDTEXT "If you know the specific hardware model you want to install, click Next to select it from a list."
-    IDS_FOUNDTITLE "The wizard found the following hardware on your computer"
-    IDS_SELECTDRIVERTITLE "Select the device driver you want to install for this hardware."
-    IDS_READYTITLE "The wizard is ready to install your hardware"
-    IDS_SHOWALLDEVICES "Show All Devices"
-    IDS_MANUFACTURER "Manufacturer"
-    IDS_MODEL "Model"
-    IDS_INFFILTER "Setup Information (*.inf)"
+    IDS_NOTFOUNDTITLE "このコンピューターで新しいハードウェアは見つかりませんでした"
+    IDS_NOTFOUNDTEXT "インストールするハードウェアのモデルがわかっている場合は、[次へ] をクリックして一覧から選択してください。"
+    IDS_FOUNDTITLE "このコンピューターで次のハードウェアが見つかりました"
+    IDS_SELECTDRIVERTITLE "このハードウェアにインストールするデバイス ドライバーを選択してください。"
+    IDS_READYTITLE "ハードウェアをインストールする準備ができました"
+    IDS_SHOWALLDEVICES "すべてのデバイスを表示"
+    IDS_MANUFACTURER "製造元"
+    IDS_MODEL "モデル"
+    IDS_INFFILTER "セットアップ情報 (*.inf)"
     IDS_HDTYPESTITLE "下のリストからインストールしたいハードウェアの種類を選択して下さい"
 END

@@ -87,6 +87,8 @@ HRESULT Object_toString(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsigned a
         str = L"[object Object]";
     }else if(jsdisp->builtin_info->to_string) {
         hres = jsdisp->builtin_info->to_string(jsdisp, &ret);
+    }else if(jsdisp->builtin_info->class == JSCLASS_ARGUMENTS && ctx->version >= SCRIPTLANGUAGEVERSION_ES5) {
+        str = L"[object Arguments]";
     }else if(names[jsdisp->builtin_info->class]) {
         str = names[jsdisp->builtin_info->class];
     }else {
@@ -617,7 +619,7 @@ static HRESULT to_property_descriptor(script_ctx_t *ctx, jsdisp_t *attr_obj, pro
 
     if(desc->explicit_getter || desc->explicit_setter) {
         if(desc->explicit_value)
-            hres = JS_E_PROP_DESC_MISMATCH;
+            hres = JS_E_INVALID_ACTION;
         else if(desc->mask & PROPF_WRITABLE)
             hres = JS_E_INVALID_WRITABLE_PROP_DESC;
     }

@@ -26,6 +26,15 @@
 #include "winternl.h"
 #include "wine/test.h"
 
+#ifdef __REACTOS__
+/* Two clock ticks still show a thread blocked or a timeout honoured, where Wine waits 100 ms */
+#define STILL_BLOCKED_MS 32
+#define ADDRESS_TIMEOUT_MS 32
+#else
+#define STILL_BLOCKED_MS 100
+#define ADDRESS_TIMEOUT_MS 100
+#endif
+
 #if defined (__REACTOS__) && (DLL_EXPORT_VERSION < 0x601)
 static
 NTSTATUS
@@ -603,12 +612,12 @@ static void test_wait_on_address(void)
         compare <<= size * 8;
 
         pNtQuerySystemTime(&start);
-        timeout.QuadPart = -100 * 10000;
+        timeout.QuadPart = -ADDRESS_TIMEOUT_MS * 10000;
         status = pRtlWaitOnAddress(&address, &compare, size, &timeout);
         pNtQuerySystemTime(&end);
         ok(status == STATUS_TIMEOUT, "got 0x%08lx\n", status);
         elapsed = (end.QuadPart - start.QuadPart) / 10000;
-        ok(90 <= elapsed && elapsed <= 900, "timed out in %lu ms\n", elapsed);
+        ok(ADDRESS_TIMEOUT_MS * 9 / 10 <= elapsed && elapsed <= ADDRESS_TIMEOUT_MS * 9, "timed out in %lu ms\n", elapsed);
 
         status = pRtlWaitOnAddress(&address, &compare, size << 1, &timeout);
         ok(!status, "got 0x%08lx\n", status);
@@ -712,7 +721,7 @@ static void test_resource(void)
     ret = pRtlAcquireResourceExclusive(&resource, FALSE);
     ok(ret == TRUE, "got %u\n", ret);
     thread = CreateThread(NULL, 0, resource_shared_thread, &resource, 0, NULL);
-    ok(WaitForSingleObject(thread_ready, 100) == WAIT_TIMEOUT, "expected timeout\n");
+    ok(WaitForSingleObject(thread_ready, STILL_BLOCKED_MS) == WAIT_TIMEOUT, "expected timeout\n");
 
     ret = pRtlAcquireResourceExclusive(&resource, FALSE);
     ok(ret == TRUE, "got %u\n", ret);
@@ -732,7 +741,7 @@ static void test_resource(void)
     ret = pRtlAcquireResourceShared(&resource, FALSE);
     ok(ret == TRUE, "got %u\n", ret);
     thread = CreateThread(NULL, 0, resource_exclusive_thread, &resource, 0, NULL);
-    ok(WaitForSingleObject(thread_ready, 100) == WAIT_TIMEOUT, "expected timeout\n");
+    ok(WaitForSingleObject(thread_ready, STILL_BLOCKED_MS) == WAIT_TIMEOUT, "expected timeout\n");
 
     ret = pRtlAcquireResourceExclusive(&resource, FALSE);
     ok(ret == FALSE, "got %u\n", ret);
@@ -750,7 +759,7 @@ static void test_resource(void)
     thread = CreateThread(NULL, 0, resource_shared_thread, &resource, 0, NULL);
     ok(!WaitForSingleObject(thread_ready, 1000), "wait failed\n");
     thread2 = CreateThread(NULL, 0, resource_exclusive_thread, &resource, 0, NULL);
-    ok(WaitForSingleObject(thread_ready, 100) == WAIT_TIMEOUT, "expected timeout\n");
+    ok(WaitForSingleObject(thread_ready, STILL_BLOCKED_MS) == WAIT_TIMEOUT, "expected timeout\n");
 
     ret = pRtlAcquireResourceExclusive(&resource, FALSE);
     ok(ret == FALSE, "got %u\n", ret);
@@ -837,7 +846,7 @@ static void test_tid_alert( char **argv )
     ret = pNtWaitForAlertByThreadId( (void *)0x123, &timeout );
     ok(ret == STATUS_ALERTED, "got %#lx\n", ret);
 
-    ret = WaitForSingleObject( thread, 100 );
+    ret = WaitForSingleObject( thread, STILL_BLOCKED_MS );
     ok(ret == WAIT_TIMEOUT, "got %ld\n", ret);
     ret = pNtAlertThreadByThreadId( (HANDLE)(DWORD_PTR)tid );
     ok(!ret, "got %#lx\n", ret);

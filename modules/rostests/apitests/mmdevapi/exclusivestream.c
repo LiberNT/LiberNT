@@ -201,6 +201,238 @@ done:
     if (event) CloseHandle(event);
 }
 
+#define CHILD_TIMEOUT_MILLISECONDS 30000
+
+struct held_stream
+{
+    IAudioClient *client;
+    IAudioRenderClient *render;
+    IAudioClock *clock;
+    HANDLE event;
+    UINT32 frames;
+    const WAVEFORMATEX *format;
+};
+
+static HRESULT initialize_shared(IMMDevice *device, DWORD flags, REFERENCE_TIME duration)
+{
+    IAudioClient *client;
+    WAVEFORMATEX *mix = NULL;
+    HRESULT hr;
+
+    hr = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL, (void **)&client);
+    if (FAILED(hr)) return hr;
+    hr = IAudioClient_GetMixFormat(client, &mix);
+    if (SUCCEEDED(hr))
+        hr = IAudioClient_Initialize(client, AUDCLNT_SHAREMODE_SHARED, flags, duration, 0, mix, NULL);
+    CoTaskMemFree(mix);
+    IAudioClient_Release(client);
+    return hr;
+}
+
+static HRESULT initialize_exclusive(IMMDevice *device, const WAVEFORMATEX *format, REFERENCE_TIME period)
+{
+    IAudioClient *client;
+    HRESULT hr;
+
+    hr = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL, (void **)&client);
+    if (FAILED(hr)) return hr;
+    hr = IAudioClient_Initialize(client, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                 period, period, format, NULL);
+    IAudioClient_Release(client);
+    return hr;
+}
+
+static unsigned pump_held(struct held_stream *held, unsigned count, HANDLE process, const char *when)
+{
+    HANDLE waits[2] = { held->event, process };
+    unsigned events = 0;
+    DWORD wait;
+
+    while (process || events < count)
+    {
+        wait = WaitForMultipleObjects(process ? 2 : 1, waits, FALSE, 2000);
+        if (wait == WAIT_OBJECT_0 + 1)
+            break;
+        ok(wait == WAIT_OBJECT_0, "%s: event %u: wait %lu\n", when, events, wait);
+        if (wait != WAIT_OBJECT_0 || !write_tone(held->render, held->frames, held->format, when))
+            break;
+        ++events;
+    }
+    return events;
+}
+
+static void check_held_advances(struct held_stream *held, const char *when)
+{
+    UINT64 before = 0, after = 0;
+    HRESULT hr;
+
+    hr = IAudioClock_GetPosition(held->clock, &before, NULL);
+    ok(hr == S_OK, "%s: GetPosition %#lx\n", when, hr);
+    ok(pump_held(held, 10, NULL, when) == 10, "%s: exclusive stream stopped getting events\n", when);
+    hr = IAudioClock_GetPosition(held->clock, &after, NULL);
+    ok(hr == S_OK, "%s: GetPosition %#lx\n", when, hr);
+    ok(after > before, "%s: exclusive position %I64u did not advance from %I64u\n", when, after, before);
+}
+
+static DWORD run_child(struct held_stream *held, const char *mode, DWORD rate, REFERENCE_TIME period)
+{
+    WCHAR path[MAX_PATH], command[MAX_PATH * 2];
+    PROCESS_INFORMATION process = { 0 };
+    STARTUPINFOW startup = { sizeof(startup) };
+    DWORD code = 0xdead;
+
+    GetModuleFileNameW(NULL, path, MAX_PATH);
+    swprintf(command, ARRAYSIZE(command), L"\"%s\" exclusivestream child %S %lu %I64d", path, mode, rate, period);
+    ok(CreateProcessW(path, command, NULL, NULL, FALSE, 0, NULL, NULL, &startup, &process),
+       "CreateProcess: %lu\n", GetLastError());
+    if (!process.hProcess) return code;
+    if (held)
+        pump_held(held, 0, process.hProcess, mode);
+    ok(WaitForSingleObject(process.hProcess, CHILD_TIMEOUT_MILLISECONDS) == WAIT_OBJECT_0,
+       "%s child did not finish\n", mode);
+    GetExitCodeProcess(process.hProcess, &code);
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+    return code;
+}
+
+static DWORD child_main(const char *mode, DWORD rate, REFERENCE_TIME period)
+{
+    IMMDeviceEnumerator *enumerator;
+    IMMDevice *device;
+    WAVEFORMATEX format;
+    HRESULT hr;
+
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    hr = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IMMDeviceEnumerator, (void **)&enumerator);
+    if (FAILED(hr)) return hr;
+    hr = IMMDeviceEnumerator_GetDefaultAudioEndpoint(enumerator, eRender, eConsole, &device);
+    IMMDeviceEnumerator_Release(enumerator);
+    if (FAILED(hr)) return hr;
+    init_format(&format, rate);
+    if (!strcmp(mode, "shared"))
+        hr = initialize_shared(device, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_NOPERSIST |
+                                       AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0);
+    else
+        hr = initialize_exclusive(device, &format, period);
+    IMMDevice_Release(device);
+    return hr;
+}
+
+static void test_held_endpoint(IMMDevice *device, const WAVEFORMATEX *format, REFERENCE_TIME period)
+{
+    struct held_stream held = { NULL, NULL, NULL, NULL, 0, format };
+    REFERENCE_TIME aligned;
+    DWORD code;
+    HRESULT hr;
+
+    held.client = initialize_aligned(device, format, period, &held.frames);
+    if (!held.client) return;
+    aligned = (REFERENCE_TIME)((10000000.0 * held.frames / format->nSamplesPerSec) + 0.5);
+    hr = IAudioClient_GetService(held.client, &IID_IAudioRenderClient, (void **)&held.render);
+    ok(hr == S_OK, "Render service %#lx\n", hr);
+    hr = IAudioClient_GetService(held.client, &IID_IAudioClock, (void **)&held.clock);
+    ok(hr == S_OK, "Clock service %#lx\n", hr);
+    held.event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    hr = IAudioClient_SetEventHandle(held.client, held.event);
+    ok(hr == S_OK, "SetEventHandle %#lx\n", hr);
+    if (!held.render || !held.clock || FAILED(hr) || !write_tone(held.render, held.frames, format, "held prefill"))
+        goto done;
+    hr = IAudioClient_Start(held.client);
+    ok(hr == S_OK, "Start %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    check_held_advances(&held, "started");
+
+    hr = initialize_shared(device, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_NOPERSIST |
+                                   AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0);
+    ok(hr == AUDCLNT_E_DEVICE_IN_USE, "shared event Initialize beside exclusive %#lx\n", hr);
+    check_held_advances(&held, "after shared event");
+    hr = initialize_shared(device, 0, 5000000);
+    ok(hr == AUDCLNT_E_DEVICE_IN_USE, "shared Initialize beside exclusive %#lx\n", hr);
+    check_held_advances(&held, "after shared");
+    hr = initialize_exclusive(device, format, aligned);
+    ok(hr == AUDCLNT_E_DEVICE_IN_USE, "second exclusive Initialize %#lx\n", hr);
+    check_held_advances(&held, "after second exclusive");
+
+    code = run_child(&held, "shared", format->nSamplesPerSec, aligned);
+    ok(code == AUDCLNT_E_DEVICE_IN_USE, "shared Initialize in another process %#lx\n", code);
+    check_held_advances(&held, "after other process shared");
+    code = run_child(&held, "exclusive", format->nSamplesPerSec, aligned);
+    ok(code == AUDCLNT_E_DEVICE_IN_USE, "exclusive Initialize in another process %#lx\n", code);
+    check_held_advances(&held, "after other process exclusive");
+
+    hr = IAudioClient_Stop(held.client);
+    ok(hr == S_OK, "Stop %#lx\n", hr);
+    hr = IAudioClient_Reset(held.client);
+    ok(hr == S_OK, "Reset %#lx\n", hr);
+    if (!write_tone(held.render, held.frames, format, "restart prefill")) goto done;
+    hr = IAudioClient_Start(held.client);
+    ok(hr == S_OK, "Start after the refused opens %#lx\n", hr);
+    if (SUCCEEDED(hr))
+        check_held_advances(&held, "restarted");
+    hr = IAudioClient_Stop(held.client);
+    ok(hr == S_OK, "Stop %#lx\n", hr);
+
+done:
+    if (held.clock) IAudioClock_Release(held.clock);
+    if (held.render) IAudioRenderClient_Release(held.render);
+    IAudioClient_Release(held.client);
+    if (held.event) CloseHandle(held.event);
+
+    hr = initialize_shared(device, AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_NOPERSIST |
+                                   AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 0);
+    ok(hr == S_OK, "shared Initialize after exclusive %#lx\n", hr);
+    code = run_child(NULL, "shared", format->nSamplesPerSec, aligned);
+    ok(code == S_OK, "shared Initialize in another process after exclusive %#lx\n", code);
+    code = run_child(NULL, "exclusive", format->nSamplesPerSec, aligned);
+    ok(code == S_OK, "exclusive Initialize in another process after exclusive %#lx\n", code);
+}
+
+static void test_exclusive_beside_shared(IMMDevice *device, const WAVEFORMATEX *format, REFERENCE_TIME period)
+{
+    IAudioClient *shared = NULL;
+    IAudioRenderClient *render = NULL;
+    WAVEFORMATEX *mix = NULL;
+    UINT32 frames = 0, padding;
+    BYTE *data;
+    HRESULT hr;
+
+    hr = IMMDevice_Activate(device, &IID_IAudioClient, CLSCTX_ALL, NULL, (void **)&shared);
+    ok(hr == S_OK, "Activate %#lx\n", hr);
+    if (FAILED(hr)) return;
+    hr = IAudioClient_GetMixFormat(shared, &mix);
+    ok(hr == S_OK, "GetMixFormat %#lx\n", hr);
+    if (SUCCEEDED(hr))
+        hr = IAudioClient_Initialize(shared, AUDCLNT_SHAREMODE_SHARED, 0, 5000000, 0, mix, NULL);
+    ok(hr == S_OK, "shared Initialize %#lx\n", hr);
+    if (SUCCEEDED(hr))
+        hr = IAudioClient_GetBufferSize(shared, &frames);
+    if (SUCCEEDED(hr))
+        hr = IAudioClient_GetService(shared, &IID_IAudioRenderClient, (void **)&render);
+    if (SUCCEEDED(hr))
+        hr = IAudioRenderClient_GetBuffer(render, frames, &data);
+    if (SUCCEEDED(hr))
+        hr = IAudioRenderClient_ReleaseBuffer(render, frames, AUDCLNT_BUFFERFLAGS_SILENT);
+    if (SUCCEEDED(hr))
+        hr = IAudioClient_Start(shared);
+    ok(hr == S_OK, "shared stream setup %#lx\n", hr);
+    if (FAILED(hr)) goto done;
+    Sleep(50);
+
+    hr = initialize_exclusive(device, format, period);
+    ok(hr == S_OK, "exclusive Initialize beside a started shared stream %#lx\n", hr);
+    hr = IAudioClient_GetCurrentPadding(shared, &padding);
+    ok(hr == AUDCLNT_E_DEVICE_INVALIDATED, "preempted shared GetCurrentPadding %#lx\n", hr);
+    hr = IAudioClient_Stop(shared);
+    ok(hr == S_FALSE, "preempted shared Stop %#lx\n", hr);
+
+done:
+    if (render) IAudioRenderClient_Release(render);
+    IAudioClient_Release(shared);
+    CoTaskMemFree(mix);
+}
+
 static void test_unequal_duration(IMMDevice *device, const WAVEFORMATEX *format, REFERENCE_TIME period)
 {
     IAudioClient *client;
@@ -223,6 +455,12 @@ START_TEST(exclusivestream)
     WAVEFORMATEX format;
     HRESULT hr;
     unsigned i;
+    char **argv;
+    int argc;
+
+    argc = winetest_get_mainargs(&argv);
+    if (argc >= 6 && !strcmp(argv[2], "child"))
+        ExitProcess(child_main(argv[3], strtoul(argv[4], NULL, 10), _strtoi64(argv[5], NULL, 10)));
 
     hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     ok(hr == S_OK, "CoInitializeEx %#lx\n", hr);
@@ -263,6 +501,8 @@ START_TEST(exclusivestream)
     test_unequal_duration(device, &format, default_period);
     test_stream(device, &format, default_period);
     test_stream(device, &format, minimum_period);
+    test_held_endpoint(device, &format, default_period);
+    test_exclusive_beside_shared(device, &format, default_period);
 
 done:
     if (device) IMMDevice_Release(device);

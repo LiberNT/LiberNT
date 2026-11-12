@@ -8,6 +8,7 @@
 #include "precomp.h"
 
 static HWND hWnd1, hWnd2, hWnd3, hWnd4;
+static UINT Activations[5];
 
 /* FIXME: test for HWND_TOP, etc...*/
 static int get_iwnd(HWND hWnd)
@@ -22,6 +23,9 @@ static int get_iwnd(HWND hWnd)
 LRESULT CALLBACK DWPTestProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     int iwnd = get_iwnd(hWnd);
+
+    if (message == WM_ACTIVATE && LOWORD(wParam) != WA_INACTIVE)
+        Activations[iwnd]++;
 
     if(message > WM_USER || !iwnd || IsDWmMsg(message) || IseKeyMsg(message))
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -493,6 +497,74 @@ static void Test_DWP_OwnerZOrder()
 
 }
 
+static BOOL IsAbove(HWND hWndTop, HWND hWndBelow)
+{
+    HWND hWnd;
+
+    for (hWnd = GetWindow(hWndTop, GW_HWNDNEXT); hWnd; hWnd = GetWindow(hWnd, GW_HWNDNEXT))
+    {
+        if (hWnd == hWndBelow)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void Test_DWP_Activate(void)
+{
+    static const struct
+    {
+        int First;
+        UINT FirstFlags;
+        int Second;
+        UINT SecondFlags;
+        int Active;
+    } Tests[] =
+    {
+        { 1, SWP_NOZORDER, 2, SWP_NOZORDER, 1 },
+        { 2, SWP_NOZORDER, 1, SWP_NOZORDER, 2 },
+        { 1, SWP_NOZORDER | SWP_NOACTIVATE, 2, SWP_NOZORDER, 2 },
+        { 1, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 2, SWP_NOZORDER, 1 },
+        { 1, SWP_NOSIZE, 2, SWP_NOSIZE, 1 },
+        { 1, SWP_NOZORDER, 4, SWP_NOZORDER, 1 },
+        { 4, SWP_NOZORDER, 1, SWP_NOZORDER, 4 },
+        { 3, SWP_NOZORDER, 2, SWP_NOZORDER, 3 },
+        { 3, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER, 2, SWP_NOZORDER, 3 },
+        { 1, SWP_NOZORDER, 2, 0, 1 },
+    };
+    HWND Windows[] = { NULL, hWnd1, hWnd2, hWnd3, hWnd4 };
+    HDWP hdwp;
+    UINT i;
+
+    for (i = 0; i < ARRAYSIZE(Tests); i++)
+    {
+        SetActiveWindow(hWnd3);
+        FlushMessages();
+        ok(GetActiveWindow() == hWnd3, "%u: hwnd%d is active before the test\n", i, get_iwnd(GetActiveWindow()));
+        hdwp = BeginDeferWindowPos(2);
+        hdwp = DeferWindowPos(hdwp, Windows[Tests[i].First], NULL, 40 + (i & 1) * 8, 20, 200, 210, Tests[i].FirstFlags);
+        hdwp = DeferWindowPos(hdwp, Windows[Tests[i].Second], NULL, 40 + (i & 1) * 8, 40, 220, 230, Tests[i].SecondFlags);
+        ok(hdwp != NULL, "%u: DeferWindowPos failed\n", i);
+        ZeroMemory(Activations, sizeof(Activations));
+        ok(EndDeferWindowPos(hdwp), "%u: EndDeferWindowPos failed\n", i);
+        FlushMessages();
+        ok(GetActiveWindow() == Windows[Tests[i].Active], "%u: hwnd%d is active, expected hwnd%d\n",
+           i, get_iwnd(GetActiveWindow()), Tests[i].Active);
+        if (Tests[i].First != Tests[i].Active)
+            ok(Activations[Tests[i].First] == 0, "%u: hwnd%d was activated %u times\n",
+               i, Tests[i].First, Activations[Tests[i].First]);
+        if (Tests[i].Second != Tests[i].Active)
+            ok(Activations[Tests[i].Second] == 0, "%u: hwnd%d was activated %u times\n",
+               i, Tests[i].Second, Activations[Tests[i].Second]);
+        if (Tests[i].Second != Tests[i].Active &&
+            GetWindow(Windows[Tests[i].Second], GW_OWNER) != Windows[Tests[i].Active])
+        {
+            ok(IsAbove(Windows[Tests[i].Active], Windows[Tests[i].Second]), "%u: hwnd%d is above hwnd%d\n",
+               i, Tests[i].Second, Tests[i].Active);
+        }
+    }
+    EMPTY_CACHE();
+}
+
 START_TEST(DeferWindowPos)
 {
     SetCursorPos(0,0);
@@ -520,6 +592,9 @@ START_TEST(DeferWindowPos)
 
     set_default_pos();
     Test_DWP_OwnerZOrder();
+
+    set_default_pos();
+    Test_DWP_Activate();
 
     DestroyWindow(hWnd4);
     DestroyWindow(hWnd3);

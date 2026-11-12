@@ -43,6 +43,8 @@ typedef BOOLEAN (NTAPI *PSOFTGPU_X86_BIOS_CALL)(ULONG, PSOFTGPU_X86_BIOS_REGISTE
 typedef FIRMWARE_TYPE (NTAPI *PSOFTGPU_GET_FIRMWARE_TYPE)(VOID);
 typedef NTSTATUS (NTAPI *PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER)(PVOID);
 typedef BOOLEAN (NTAPI *PSOFTGPU_GET_GOP_TRANSFORM)(PLOADER_PARAMETER_FRAMEBUFFER_TRANSFORM);
+typedef BOOLEAN (NTAPI *PSOFTGPU_GET_GOP_FRAMEBUFFER_INFO)(PSOFTGPU_LOADER_FRAMEBUFFER);
+typedef BOOLEAN (NTAPI *PSOFTGPU_HAS_VALID_GOP_FRAMEBUFFER)(VOID);
 
 static PSOFTGPU_X86_BIOS_CALL SoftGpuX86BiosCall;
 static ULONGLONG SoftGpuBootScreenSize;
@@ -479,7 +481,33 @@ typedef struct _SOFTGPU_ROOT_SHADOW
     UCHAR BlueSize;
     UCHAR BluePosition;
     ULONG Rotation;
+    ULONG Channel[3][256];
 } SOFTGPU_ROOT_SHADOW, *PSOFTGPU_ROOT_SHADOW;
+
+static ULONG
+SoftGpuRootScaleChannel(
+    _In_ ULONG Value,
+    _In_ UCHAR Size)
+{
+    if (Size <= 8)
+        return Value >> (8 - Size);
+
+    return (Value << (Size - 8)) | (Value >> (16 - Size));
+}
+
+static VOID
+SoftGpuRootBuildChannels(
+    _Inout_ PSOFTGPU_ROOT_SHADOW Shadow)
+{
+    ULONG Value;
+
+    for (Value = 0; Value < 256; Value++)
+    {
+        Shadow->Channel[0][Value] = SoftGpuRootScaleChannel(Value, Shadow->RedSize) << Shadow->RedPosition;
+        Shadow->Channel[1][Value] = SoftGpuRootScaleChannel(Value, Shadow->GreenSize) << Shadow->GreenPosition;
+        Shadow->Channel[2][Value] = SoftGpuRootScaleChannel(Value, Shadow->BlueSize) << Shadow->BluePosition;
+    }
+}
 
 static BOOLEAN
 SoftGpuVbeColorField(
@@ -740,6 +768,7 @@ SoftGpuVbeColdStart(
         Shadow->GreenPosition = Fields[3];
         Shadow->BlueSize = Fields[4];
         Shadow->BluePosition = Fields[5];
+        SoftGpuRootBuildChannels(Shadow);
         Shadow->ShadowSize = (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL * Height;
         Shadow->Shadow = ExAllocatePoolWithTag(NonPagedPool, Shadow->ShadowSize, SOFTGPU_POOL_TAG);
         Shadow->FrameBufferSize = (SIZE_T)Pitch * Height;
@@ -865,6 +894,120 @@ SoftGpuRootRotateScanout(
     return STATUS_SUCCESS;
 }
 
+static BOOLEAN
+SoftGpuRootMaskField(
+    _In_ ULONG Mask,
+    _Out_ PUCHAR Size,
+    _Out_ PUCHAR Position)
+{
+    UCHAR Shift = 0;
+    UCHAR Bits = 0;
+
+    *Size = 0;
+    *Position = 0;
+    if (Mask == 0)
+        return FALSE;
+
+    while (!(Mask & 1))
+    {
+        Mask >>= 1;
+        Shift++;
+    }
+    while (Mask & 1)
+    {
+        Mask >>= 1;
+        Bits++;
+    }
+
+    *Size = Bits;
+    *Position = Shift;
+    return Mask == 0 && Bits <= 16;
+}
+
+static NTSTATUS
+SoftGpuRootLoaderShadowStart(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _Inout_ PSOFTGPU_PLATFORM_CONFIG Config)
+{
+    PSOFTGPU_GET_GOP_FRAMEBUFFER_INFO GetInfo;
+    PSOFTGPU_HAS_VALID_GOP_FRAMEBUFFER HasValid;
+    SOFTGPU_LOADER_FRAMEBUFFER FrameBuffer;
+    PSOFTGPU_ROOT_SHADOW Shadow;
+    UCHAR Fields[6];
+    ULONG Width;
+    ULONG Height;
+    ULONG Pitch;
+
+    GetInfo = (PSOFTGPU_GET_GOP_FRAMEBUFFER_INFO)SoftGpuGetHalRoutine(L"InbvGetGopFrameBufferInfo");
+    HasValid = (PSOFTGPU_HAS_VALID_GOP_FRAMEBUFFER)SoftGpuGetHalRoutine(L"InbvHasValidGopFrameBuffer");
+    RtlZeroMemory(&FrameBuffer, sizeof(FrameBuffer));
+    if (GetInfo == NULL || HasValid == NULL || !HasValid() || !GetInfo(&FrameBuffer) ||
+        FrameBuffer.PixelFormat != SOFTGPU_DISPLAY_BYTES_PER_PIXEL * 8 ||
+        (FrameBuffer.RedMask == 0x00FF0000 && FrameBuffer.GreenMask == 0x0000FF00 && FrameBuffer.BlueMask == 0x000000FF) ||
+        !SoftGpuRootMaskField(FrameBuffer.RedMask, &Fields[0], &Fields[1]) ||
+        !SoftGpuRootMaskField(FrameBuffer.GreenMask, &Fields[2], &Fields[3]) ||
+        !SoftGpuRootMaskField(FrameBuffer.BlueMask, &Fields[4], &Fields[5]) ||
+        (FrameBuffer.RedMask & (FrameBuffer.GreenMask | FrameBuffer.BlueMask)) != 0 ||
+        (FrameBuffer.GreenMask & FrameBuffer.BlueMask) != 0 ||
+        FrameBuffer.FrameBufferBase.QuadPart == 0 ||
+        FrameBuffer.HorizontalResolution < SOFTGPU_VBE_MIN_WIDTH ||
+        FrameBuffer.VerticalResolution < SOFTGPU_VBE_MIN_HEIGHT ||
+        FrameBuffer.HorizontalResolution > SOFTGPU_MAX_DISPLAY_WIDTH ||
+        FrameBuffer.VerticalResolution > SOFTGPU_MAX_DISPLAY_HEIGHT ||
+        FrameBuffer.PixelsPerScanLine < FrameBuffer.HorizontalResolution ||
+        FrameBuffer.PixelsPerScanLine > SOFTGPU_MAX_DISPLAY_WIDTH)
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    Width = FrameBuffer.HorizontalResolution;
+    Height = FrameBuffer.VerticalResolution;
+    Pitch = FrameBuffer.PixelsPerScanLine * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    if ((ULONGLONG)Pitch * Height > FrameBuffer.FrameBufferSize)
+        return STATUS_NOT_SUPPORTED;
+
+    Shadow = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Shadow), SOFTGPU_POOL_TAG);
+    if (Shadow == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Shadow, sizeof(*Shadow));
+    Shadow->Width = Width;
+    Shadow->Height = Height;
+    Shadow->Pitch = Pitch;
+    Shadow->BytesPerPixel = SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    Shadow->RedSize = Fields[0];
+    Shadow->RedPosition = Fields[1];
+    Shadow->GreenSize = Fields[2];
+    Shadow->GreenPosition = Fields[3];
+    Shadow->BlueSize = Fields[4];
+    Shadow->BluePosition = Fields[5];
+    SoftGpuRootBuildChannels(Shadow);
+    Shadow->ShadowSize = (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL * Height;
+    Shadow->Shadow = ExAllocatePoolWithTag(NonPagedPool, Shadow->ShadowSize, SOFTGPU_POOL_TAG);
+    Shadow->FrameBufferSize = (SIZE_T)Pitch * Height;
+    Shadow->FrameBuffer = MmMapIoSpace(FrameBuffer.FrameBufferBase, Shadow->FrameBufferSize, MmWriteCombined);
+    if (Shadow->FrameBuffer == NULL)
+        Shadow->FrameBuffer = MmMapIoSpace(FrameBuffer.FrameBufferBase, Shadow->FrameBufferSize, MmNonCached);
+    if (Shadow->Shadow == NULL || Shadow->FrameBuffer == NULL)
+    {
+        SoftGpuFreeRootShadow(Shadow);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory(Shadow->Shadow, Shadow->ShadowSize);
+
+    DPRINT1("SOFTGPU: %lux%lu firmware framebuffer with masks %08lX/%08lX/%08lX shown through a converted copy\n",
+            Width, Height, FrameBuffer.RedMask, FrameBuffer.GreenMask, FrameBuffer.BlueMask);
+
+    Device->PlatformContext = Shadow;
+    Config->Width = Width;
+    Config->Height = Height;
+    Config->Format = D3DDDIFMT_X8R8G8B8;
+    Config->ScanoutPhysicalAddress = FrameBuffer.FrameBufferBase;
+    Config->ScanoutPitch = Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    Config->ScanoutSize = Shadow->ShadowSize;
+    Config->ScanoutShadow = Shadow->Shadow;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 SoftGpuPlatformValidatePdo(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject)
@@ -978,7 +1121,9 @@ SoftGpuPlatformQueryStart(
                 return STATUS_GRAPHICS_NOT_POST_DEVICE_DRIVER;
             }
         }
-        else if (Device == NULL || !NT_SUCCESS(SoftGpuVbeColdStart(Device, NULL, Config)))
+        else if (Device == NULL ||
+                 (!NT_SUCCESS(SoftGpuRootLoaderShadowStart(Device, Config)) &&
+                  !NT_SUCCESS(SoftGpuVbeColdStart(Device, NULL, Config))))
         {
             DPRINT1("SOFTGPU: no POST framebuffer; starting headless "
                     "%lux%lu software output\n",
@@ -1182,12 +1327,26 @@ SoftGpuPlatformScanoutWritten(
             continue;
         }
 
+        if (Shadow->BytesPerPixel == sizeof(ULONG))
+        {
+            PULONG Pixels = (PULONG)Destination;
+
+            for (X = FrameLeft; X < FrameRight; X++)
+            {
+                ULONG Pixel = Shadow->Shadow[Index];
+
+                *Pixels++ = Shadow->Channel[0][(Pixel >> 16) & 0xFF] | Shadow->Channel[1][(Pixel >> 8) & 0xFF] |
+                            Shadow->Channel[2][Pixel & 0xFF];
+                Index += Step;
+            }
+            continue;
+        }
+
         for (X = FrameLeft; X < FrameRight; X++)
         {
             ULONG Pixel = Shadow->Shadow[Index];
-            ULONG Value = ((((Pixel >> 16) & 0xFF) >> (8 - Shadow->RedSize)) << Shadow->RedPosition) |
-                          ((((Pixel >> 8) & 0xFF) >> (8 - Shadow->GreenSize)) << Shadow->GreenPosition) |
-                          (((Pixel & 0xFF) >> (8 - Shadow->BlueSize)) << Shadow->BluePosition);
+            ULONG Value = Shadow->Channel[0][(Pixel >> 16) & 0xFF] | Shadow->Channel[1][(Pixel >> 8) & 0xFF] |
+                          Shadow->Channel[2][Pixel & 0xFF];
 
             for (Byte = 0; Byte < Shadow->BytesPerPixel; Byte++)
                 Destination[Byte] = (UCHAR)(Value >> (Byte * 8));
@@ -1282,6 +1441,16 @@ MEMORY_CACHING_TYPE
 SoftGpuPlatformSegmentCacheType(VOID)
 {
     return MmCached;
+}
+
+NTSTATUS
+SoftGpuPlatformSetDisplayPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN On)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(On);
+    return STATUS_NOT_SUPPORTED;
 }
 
 NTSTATUS

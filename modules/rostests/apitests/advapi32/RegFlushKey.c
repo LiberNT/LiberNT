@@ -29,13 +29,21 @@ FileContains(
     _In_ ULONG Size)
 {
     LARGE_INTEGER FileSize;
+    ULONGLONG Deadline;
     HANDLE hFile;
     PBYTE Data;
     DWORD Read;
     ULONG i;
     BOOL Found = FALSE;
 
-    hFile = CreateFileW(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+    /* The last close unloads an application hive in the background, so its file is let go a moment later */
+    Deadline = GetTickCount64() + 2000;
+    do
+    {
+        hFile = CreateFileW(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (hFile != INVALID_HANDLE_VALUE || GetLastError() != ERROR_SHARING_VIOLATION) break;
+        Sleep(1);
+    } while (GetTickCount64() < Deadline);
     ok(hFile != INVALID_HANDLE_VALUE, "the hive file could not be opened (%lu)\n", GetLastError());
     if (hFile == INVALID_HANDLE_VALUE)
         return FALSE;

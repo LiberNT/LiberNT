@@ -277,8 +277,10 @@ static void handle_docobj_load(HTMLDocumentObj *doc)
 
     unlink_ref(&doc->nscontainer->editor_controller);
 
-    if(doc->nscontainer->usermode == EDITMODE)
+    if(doc->nscontainer->usermode == EDITMODE) {
         setup_editor_controller(doc->nscontainer);
+        update_doc(doc, UPDATE_UI);
+    }
 
     if(doc->client) {
         hres = IOleClientSite_QueryInterface(doc->client, &IID_IOleCommandTarget, (void**)&olecmd);
@@ -330,6 +332,18 @@ static nsresult handle_load(HTMLDocumentNode *doc, nsIDOMEvent *event)
     doc->window->dom_complete_time = get_time_stamp();
     if(!is_detached_window(doc->window))
         set_ready_state(doc->window->base.outer_window, READYSTATE_COMPLETE);
+
+#ifdef __REACTOS__
+    if(!doc_obj && doc->doc_obj && doc->doc_obj->doc_object_service && !is_detached_window(doc->window) &&
+       doc->window->base.outer_window->parent && !(doc->window->base.outer_window->load_flags & BINDING_REFRESH)) {
+        HTMLDocumentObj *top_doc = doc->doc_obj;
+
+        IUnknown_AddRef(top_doc->outer_unk);
+        IDocObjectService_FireDocumentComplete(top_doc->doc_object_service,
+                &doc->window->base.outer_window->base.IHTMLWindow2_iface, navNoHistory);
+        IUnknown_Release(top_doc->outer_unk);
+    }
+#endif
 
     if(doc_obj) {
         if(doc_obj->view_sink)

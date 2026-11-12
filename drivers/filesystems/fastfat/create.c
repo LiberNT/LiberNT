@@ -34,12 +34,12 @@ Abstract:
 //
 
 #define CollectCreateHitStatistics(VCB) {                                                \
-    PFILE_SYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors];   \
+    PFILE_SYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors];   \
     Stats->Fat.CreateHits += 1;                                                          \
 }
 
 #define CollectCreateStatistics(VCB,STATUS) {                                            \
-    PFILE_SYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorNumber() % FatData.NumberProcessors];   \
+    PFILE_SYSTEM_STATISTICS Stats = &(VCB)->Statistics[KeGetCurrentProcessorIndex() % FatData.NumberProcessors];   \
     if ((STATUS) == STATUS_SUCCESS) {                                                    \
         Stats->Fat.SuccessfulCreates += 1;                                               \
     } else {                                                                             \

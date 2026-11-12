@@ -53,6 +53,7 @@ LxThreadAttach(
 
     ExAcquireFastMutex(&Process->Lock);
     InsertTailList(&Process->Threads, &Thread->Link);
+    InterlockedExchange(&Thread->SharedWake, 1);
     if (Process->GroupStopCount != 0)
     {
         Process->GroupStopCount++;
@@ -81,6 +82,8 @@ LxThreadDetach(
     InitializeListHead(&Thread->Link);
     Last = IsListEmpty(&Process->Threads);
     ExReleaseFastMutex(&Process->Lock);
+    if (!Last && (InterlockedExchange(&Thread->SharedWake, 0) != 0))
+        LxSignalRetarget(Process, NULL, ~0ULL);
 
     ObDereferenceObject(Thread->EThread);
     Thread->EThread = NULL;
@@ -230,6 +233,8 @@ LxSignalWake(
         PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
         PLX_THREAD Base;
 
+        if (Tid == 0)
+            InterlockedExchange(&Thread->SharedWake, 1);
         if ((Thread->EThread == Current) || ((Tid != 0) && (Thread->Tid != Tid)))
             continue;
         Base = PsPicoGetThreadContext(Thread->EThread);
@@ -316,19 +321,6 @@ LxSignalTerminate(
 
 static
 BOOLEAN
-LxSignalTakenByCurrent(
-    _In_ PLX_PROCESS Target,
-    _In_opt_ PLX_THREAD TargetThread,
-    _In_ ULONG64 Bit)
-{
-    PLX_THREAD Current = LxCurrentThread();
-
-    return (Current != NULL) && (Current->Process == Target) && (Target->Mm == Target) &&
-           ((TargetThread == NULL) || (TargetThread == Current)) && !(Current->SigMask & Bit);
-}
-
-static
-BOOLEAN
 LxSignalBlocked(
     _In_ PLX_PROCESS Process,
     _In_opt_ PLX_THREAD TargetThread,
@@ -355,6 +347,104 @@ LxSignalBlocked(
         Blocked = FALSE;
     ExReleaseFastMutex(&Process->Lock);
     return Blocked;
+}
+
+static
+BOOLEAN
+LxSignalWants(
+    _In_ PLX_THREAD Thread,
+    _In_ ULONG64 Bits)
+{
+    return (Thread->EThread != NULL) && !PsIsThreadTerminating(Thread->EThread) && !Thread->Stopped &&
+           ((Bits & ~Thread->SigMask) != 0);
+}
+
+static
+ULONG
+LxSignalPickThread(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Bit)
+{
+    PLIST_ENTRY Entry;
+    PLX_THREAD Picked = NULL;
+    ULONG Tid = 0;
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+    ASSERT((Bit != 0) && ((Bit & (Bit - 1)) == 0));
+    ExAcquireFastMutex(&Process->Lock);
+    for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+    {
+        PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        if (!LxSignalWants(Thread, Bit))
+            continue;
+        if (Thread->Tid == Process->Pid)
+        {
+            Picked = Thread;
+            break;
+        }
+        if (Picked == NULL)
+            Picked = Thread;
+    }
+    if (Picked != NULL)
+    {
+        InterlockedExchange(&Picked->SharedWake, 1);
+        Tid = Picked->Tid;
+    }
+    ExReleaseFastMutex(&Process->Lock);
+    return Tid;
+}
+
+VOID
+LxSignalRetarget(
+    _In_ PLX_PROCESS Process,
+    _In_opt_ PLX_THREAD Thread,
+    _In_ ULONG64 Bits)
+{
+    PLIST_ENTRY Entry;
+    ULONG64 Left;
+    ULONG Tids[LX_MAX_WAKE];
+    ULONG Count = 0, Index;
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+    ASSERT((Thread == NULL) || (Thread->Process == Process));
+    ExAcquireFastMutex(&Process->Lock);
+    Left = (ULONG64)ReadNoFence64(&Process->Pending) & Bits;
+    for (Entry = Process->Threads.Flink; (Entry != &Process->Threads) && (Left != 0) && (Count < LX_MAX_WAKE);
+         Entry = Entry->Flink)
+    {
+        PLX_THREAD Other = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        if ((Other == Thread) || !LxSignalWants(Other, Left))
+            continue;
+        Left &= Other->SigMask;
+        InterlockedExchange(&Other->SharedWake, 1);
+        Tids[Count++] = Other->Tid;
+    }
+    ExReleaseFastMutex(&Process->Lock);
+    for (Index = 0; Index < Count; Index++)
+        LxSignalWake(Process, Tids[Index]);
+}
+
+VOID
+LxSignalRecheck(
+    _In_ PLX_THREAD Base,
+    _In_ PLX_THREAD Thread)
+{
+    ASSERT(Base->InKernel == 0);
+    if (!Thread->VforkExited && LxSignalPending(Thread) && (InterlockedExchange(&Base->SignalApc, 1) == 0))
+        LxSignalRetryExpired(NULL, Base);
+}
+
+ULONG64
+LxSignalPendingSet(
+    _In_ PLX_THREAD Thread)
+{
+    ULONG64 Pending = (ULONG64)ReadNoFence64(&Thread->Pending);
+
+    if (ReadNoFence(&Thread->SharedWake) != 0)
+        Pending |= (ULONG64)ReadNoFence64(&Thread->Process->Pending);
+    return Pending;
 }
 
 VOID
@@ -438,7 +528,7 @@ LxJobctlNotifyParent(
             RtlZeroMemory(&Info, sizeof(Info));
             Info.Code = Why;
             Info.Child.Pid = (LONG)LxPidNr(Parent, Child);
-            Info.Child.Uid = Child->Uid[0];
+            Info.Child.Uid = Child->Cred.Uid[0];
             Info.Child.Status = Status;
             LxSignalSend(Parent, NULL, LX_SIGCHLD, &Info);
         }
@@ -715,7 +805,7 @@ LxSignalSend(
     if (!Blocked &&
         ((Signal == LX_SIGKILL) ||
          ((Handler == LX_SIG_DFL) && !LxSignalStopsByDefault(Signal) && (ReadNoFence(&Target->Traced) == 0))) &&
-        !((Signal != LX_SIGKILL) && LxSignalDumpsCore(Signal) && LxSignalTakenByCurrent(Target, TargetThread, Bit)))
+        !((Signal != LX_SIGKILL) && LxSignalDumpsCore(Signal) && (Target->Mm == Target)))
     {
         if ((Signal == LX_SIGKILL) && (ReadNoFence(&Target->Traced) != 0) && (Target->Mm == Target) &&
             (Target->VmUsers == 0))
@@ -758,6 +848,12 @@ LxSignalSend(
     ExReleaseFastMutex(&Target->Lock);
 
     LxSignalNotifyFds(Target);
+    if (TargetThread == NULL)
+    {
+        Tid = LxSignalPickThread(Target, Bit);
+        if (Tid == 0)
+            return;
+    }
     LxSignalWake(Target, Tid);
 }
 
@@ -852,7 +948,7 @@ LxSignalTakeAction(
     if (Info != NULL)
         *Info = Process->PendingInfo[Signal - 1];
     if ((Action->Flags & LX_SA_RESETHAND) && (Action->Handler > LX_SIG_IGN))
-        RtlZeroMemory(&Process->SigAction[Signal - 1], sizeof(LX_SIGACTION));
+        Process->SigAction[Signal - 1].Handler = LX_SIG_DFL;
     ExReleaseFastMutex(&Process->Lock);
 }
 
@@ -864,26 +960,33 @@ LxSignalCheckPending(
 {
     PLX_PROCESS Process = Thread->Process;
     LONG64 Restart = Thread->Restart;
+    ULONG64 Blocked;
+    BOOLEAN Shared = FALSE;
 
     Thread->Restart = 0;
     for (;;)
     {
-        ULONG64 Deliverable = ((ULONG64)Thread->Pending | (ULONG64)Process->Pending) & ~Thread->SigMask;
+        ULONG64 Deliverable;
         LX_SIGACTION Action;
         LX_SIGINFO Info;
         ULONG64 Bit;
         LONG Signal = 1, Generation;
 
+        if (InterlockedExchange(&Thread->SharedWake, 0) != 0)
+            Shared = TRUE;
         if (Thread->PtraceWork & LX_PTW_TRAP)
         {
             LxPtraceTrap(Thread, TrapFrame, ExceptionFrame);
+            Shared = TRUE;
             continue;
         }
         if (Thread->JobctlStop)
         {
             LxJobctlStop(Thread, 0, 0, TrapFrame, ExceptionFrame);
+            Shared = TRUE;
             continue;
         }
+        Deliverable = ((ULONG64)Thread->Pending | (Shared ? (ULONG64)Process->Pending : 0)) & ~Thread->SigMask;
         if (Deliverable == 0)
             break;
 
@@ -925,7 +1028,10 @@ LxSignalCheckPending(
             if (LxSignalStopsByDefault(Signal))
             {
                 if ((Signal == LX_SIGSTOP) || !LxPgrpOrphaned(Process->Instance, Process->Pgid, NULL))
+                {
                     LxJobctlStop(Thread, Signal, Generation, TrapFrame, ExceptionFrame);
+                    Shared = TRUE;
+                }
                 continue;
             }
             if (LxSignalDumpsCore(Signal) && LxCoreDump(Thread, TrapFrame, ExceptionFrame, Signal))
@@ -938,8 +1044,13 @@ LxSignalCheckPending(
 
         if ((Restart == -LX_ERESTARTNOINTR) || ((Restart == -LX_ERESTARTSYS) && (Action.Flags & LX_SA_RESTART)))
             LxArchRestartSyscall(TrapFrame, Thread->RestartArgument);
+        Blocked = Thread->SigMask;
         if (!LxSignalDeliver(Thread, TrapFrame, ExceptionFrame, Signal, &Info, &Action))
             LxProcessExitGroup(Process, LX_SIGSEGV);
+        if (Shared && ((ULONG64)Process->Pending & ~Thread->SigMask))
+            InterlockedExchange(&Thread->SharedWake, 1);
+        if (Thread->SigMask & ~Blocked)
+            LxSignalRetarget(Process, Thread, Thread->SigMask & ~Blocked);
         return;
     }
 
@@ -948,8 +1059,12 @@ LxSignalCheckPending(
 
     if (Thread->Suspended)
     {
+        Blocked = Thread->SigMask;
         Thread->SigMask = Thread->SuspendMask;
         Thread->Suspended = FALSE;
+        InterlockedExchange(&Thread->SharedWake, 1);
+        if (Thread->SigMask & ~Blocked)
+            LxSignalRetarget(Process, Thread, Thread->SigMask & ~Blocked);
     }
 }
 
@@ -1001,13 +1116,13 @@ LX_SYSCALL(LxSysRtSigreturn)
         LxProcessExitGroup(Call->Process, LX_SIGSEGV);
 
     Call->Thread->SigMask = Mask & ~LX_UNBLOCKABLE;
+    InterlockedExchange(&Call->Thread->SharedWake, 1);
     return LX_SYSCALL_NO_RESULT;
 }
 
 LX_SYSCALL(LxSysRtSigsuspend)
 {
     PLX_THREAD Thread = Call->Thread;
-    PLX_PROCESS Process = Call->Process;
     LARGE_INTEGER Interval;
     ULONG64 Mask;
     LONG64 Result;
@@ -1021,9 +1136,10 @@ LX_SYSCALL(LxSysRtSigsuspend)
     Thread->SuspendMask = Thread->SigMask;
     Thread->Suspended = TRUE;
     Thread->SigMask = Mask & ~LX_UNBLOCKABLE;
+    InterlockedExchange(&Thread->SharedWake, 1);
 
     Interval.QuadPart = -10000000LL;
-    while (!(((ULONG64)Thread->Pending | (ULONG64)Process->Pending) & ~Thread->SigMask))
+    while (!(LxSignalPendingSet(Thread) & ~Thread->SigMask))
         KeDelayExecutionThread(UserMode, TRUE, &Interval);
 
     return -LX_EINTR;
@@ -1051,8 +1167,8 @@ LxSigwaitReady(
 {
     PLX_SIGWAIT_CONTEXT Wait = Context;
 
-    return (((ULONG64)Wait->Thread->Pending | (ULONG64)Wait->Thread->Process->Pending) &
-            (Wait->Mask | ~Wait->Thread->SigMask)) != 0;
+    return ((((ULONG64)Wait->Thread->Pending | (ULONG64)Wait->Thread->Process->Pending) & Wait->Mask) != 0) ||
+           ((LxSignalPendingSet(Wait->Thread) & ~Wait->Thread->SigMask) != 0);
 }
 
 LX_SYSCALL(LxSysRtSigtimedwait)
@@ -1135,7 +1251,8 @@ LxSignalQueue(
     Result = LxCopyFromUser(&Info, InfoPointer, sizeof(Info));
     if (Result != 0)
         return Result;
-    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) && (Tgid != LxPidNr(Call->Process, Call->Process)))
+    if (((Info.Code >= 0) || (Info.Code == LX_SI_TKILL)) &&
+        (Tgid != ((Tid != 0) ? LxPidNr(Call->Process, Call->Process) : LxTidNr(Call->Process, Call->Thread))))
         return -LX_EPERM;
     Info.Signo = Signal;
     if (LxSignalInfoHasUid(Signal, &Info))
@@ -1154,8 +1271,9 @@ LxSignalQueue(
     else
     {
         Target = LxProcessLookupNr(Call->Process, Tgid);
-        if (Target == NULL)
+        if ((Target == NULL) && (LxThreadLookupNr(Call->Process, Tgid, &Target) == NULL))
             return -LX_ESRCH;
+        ASSERT(Target != NULL);
     }
 
     Result = LxSignalPermitted(Call->Process, Target, Signal);
@@ -1190,15 +1308,16 @@ LX_SYSCALL(LxSysSigaltstack)
             return Result;
         if (OnStack)
             return -LX_EPERM;
-        if (New.Flags & LX_SS_DISABLE)
+        /* TODO: SS_AUTODISARM is rejected as on WSL1; Linux 4.7+ accepts it and disarms the stack on delivery. */
+        if ((New.Flags != 0) && (New.Flags != LX_SS_ONSTACK) && (New.Flags != LX_SS_DISABLE))
+            return -LX_EINVAL;
+        if (New.Flags == LX_SS_DISABLE)
         {
             RtlZeroMemory(&Thread->AltStack, sizeof(Thread->AltStack));
             Thread->AltStack.Flags = LX_SS_DISABLE;
         }
         else
         {
-            if (New.Flags & ~LX_SS_ONSTACK)
-                return -LX_EINVAL;
             if (New.Size < LX_MINSIGSTKSZ)
                 return -LX_ENOMEM;
             Thread->AltStack.Sp = New.Sp;
@@ -1235,10 +1354,13 @@ LxSignalPermitted(
     _In_ PLX_PROCESS Target,
     _In_ LONG Signal)
 {
+    PLX_CRED Cred;
+
     if (Sender == Target)
         return 0;
-    if ((Sender->Uid[1] == Target->Uid[2]) || (Sender->Uid[1] == Target->Uid[0]) ||
-        (Sender->Uid[0] == Target->Uid[2]) || (Sender->Uid[0] == Target->Uid[0]))
+    Cred = LxProcessCred(Sender);
+    if ((Cred->Uid[1] == Target->Cred.Uid[2]) || (Cred->Uid[1] == Target->Cred.Uid[0]) ||
+        (Cred->Uid[0] == Target->Cred.Uid[2]) || (Cred->Uid[0] == Target->Cred.Uid[0]))
     {
         return 0;
     }

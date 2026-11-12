@@ -82,6 +82,35 @@ add_library(user32 MODULE
     user32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/user32.def)
 
+find_program(CURRES_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cursors.in)
+file(STRINGS cursors.in _user32_cursor_lines REGEX "CURSOR")
+set(_user32_cursor_files "")
+foreach(_user32_cursor_line IN LISTS _user32_cursor_lines)
+    if(_user32_cursor_line MATCHES "\"([^\"]+)\"")
+        list(APPEND _user32_cursor_files ${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_MATCH_1})
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES _user32_cursor_files)
+set(_user32_cursors_res "")
+set(_user32_curres_args "")
+if(MSVC)
+    # rc.exe takes no resource of a predefined type from a file, so the linker gets them compiled
+    set(_user32_cursors_res ${CMAKE_CURRENT_BINARY_DIR}/user32_cursors.res)
+    set(_user32_curres_args ${_user32_cursors_res} ${REACTOS_SOURCE_DIR}/sdk/include/psdk/winuser.h)
+endif()
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/user32_cursors.rc ${_user32_cursors_res}
+    COMMAND ${CURRES_PYTHON_EXECUTABLE} ${REACTOS_SOURCE_DIR}/sdk/tools/curres.py ${CMAKE_CURRENT_SOURCE_DIR}/cursors.in ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/user32_cursors.rc
+        ${_user32_curres_args}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cursors.in ${REACTOS_SOURCE_DIR}/sdk/tools/curres.py ${_user32_cursor_files}
+    VERBATIM)
+set_source_files_properties(user32.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/user32_cursors.rc)
+if(MSVC)
+    set_source_files_properties(${_user32_cursors_res} PROPERTIES EXTERNAL_OBJECT TRUE GENERATED TRUE)
+    target_sources(user32 PRIVATE ${_user32_cursors_res})
+endif()
+
 if(WOW64_I386_RUNTIME AND ARCH STREQUAL "i386")
     target_compile_definitions(user32 PRIVATE WOW64_I386_RUNTIME)
 endif()

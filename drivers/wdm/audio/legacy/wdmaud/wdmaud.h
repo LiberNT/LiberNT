@@ -215,6 +215,11 @@ WdmAudGetEndpointState(
     IN PWDMAUD_DEVICE_INFO DeviceInfo);
 
 NTSTATUS
+WdmAudGetWaveConnector(
+    IN PIRP Irp,
+    IN PWDMAUD_DEVICE_INFO DeviceInfo);
+
+NTSTATUS
 WdmAudMidiCapabilities(
     IN PDEVICE_OBJECT DeviceObject,
     IN PWDMAUD_DEVICE_INFO DeviceInfo,
@@ -285,21 +290,13 @@ NTAPI
 WdmAudWaveInitialize(
     IN PDEVICE_OBJECT DeviceObject);
 
-ULONG
-ClosePin(
-    IN  PWDMAUD_CLIENT ClientInfo,
-    IN  ULONG FilterId,
-    IN  ULONG PinId,
-    IN  SOUND_DEVICE_TYPE DeviceType);
-
 NTSTATUS
 InsertPinHandle(
     IN  PWDMAUD_CLIENT ClientInfo,
     IN  ULONG FilterId,
     IN  ULONG PinId,
     IN  SOUND_DEVICE_TYPE DeviceType,
-    IN  HANDLE PinHandle,
-    IN  ULONG FreeIndex);
+    IN  HANDLE PinHandle);
 
 NTSTATUS
 GetSysAudioDevicePnpName(

@@ -1044,6 +1044,66 @@ SetProcessAffinityMask(IN HANDLE hProcess,
     return TRUE;
 }
 
+#define BASEP_AFFINITY_UPDATE_MODE_PERMANENT 0x00000002UL
+
+BOOL
+WINAPI
+SetProcessAffinityUpdateMode(IN HANDLE hProcess,
+                             IN DWORD dwFlags)
+{
+    ULONG UpdateMode;
+    NTSTATUS Status;
+
+    if (hProcess != NtCurrentProcess() ||
+        (dwFlags & ~PROCESS_AFFINITY_ENABLE_AUTO_UPDATE) != 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (dwFlags & PROCESS_AFFINITY_ENABLE_AUTO_UPDATE)
+        UpdateMode = PROCESS_AFFINITY_ENABLE_AUTO_UPDATE;
+    else
+        UpdateMode = BASEP_AFFINITY_UPDATE_MODE_PERMANENT;
+
+    Status = NtSetInformationProcess(hProcess,
+                                     ProcessAffinityUpdateMode,
+                                     &UpdateMode,
+                                     sizeof(UpdateMode));
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+BOOL
+WINAPI
+QueryProcessAffinityUpdateMode(IN HANDLE hProcess,
+                               OUT LPDWORD lpdwFlags OPTIONAL)
+{
+    ULONG UpdateMode;
+    NTSTATUS Status;
+
+    Status = NtQueryInformationProcess(hProcess,
+                                       ProcessAffinityUpdateMode,
+                                       &UpdateMode,
+                                       sizeof(UpdateMode),
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    if (lpdwFlags)
+        *lpdwFlags = UpdateMode & PROCESS_AFFINITY_ENABLE_AUTO_UPDATE;
+
+    return TRUE;
+}
+
 /*
  * @implemented
  */
@@ -3054,7 +3114,7 @@ BasepCreateUserProcess(IN HANDLE UserToken,
         AttributeList->Attributes[AttributeCount].Value = (ULONG_PTR)DebugHandle;
         AttributeCount++;
     }
-    EffectiveToken = UserToken ? UserToken : SaferToken;
+    EffectiveToken = SaferToken ? SaferToken : UserToken;
     if (Extended->SecurityCapabilities)
     {
         HANDLE BaseToken = EffectiveToken;
@@ -3206,11 +3266,6 @@ BasepCreateUserProcess(IN HANDLE UserToken,
     {
         HardErrorMode = SEM_FAILCRITICALERRORS;
         Status = NtSetInformationProcess(ProcessHandle, ProcessDefaultHardErrorMode, &HardErrorMode, sizeof(HardErrorMode));
-        if (!NT_SUCCESS(Status)) goto Failure;
-    }
-    if (SaferToken && !UserToken)
-    {
-        Status = BasepReplaceProcessThreadTokens(SaferToken, ProcessHandle, ThreadHandle);
         if (!NT_SUCCESS(Status)) goto Failure;
     }
     if (JobHandle)
@@ -4162,7 +4217,7 @@ StartScan:
 
     /* Have we already done, and do we need to do, SRP (WinSafer) checks? */
     if (!(SkipSaferAndAppCompat) &&
-        ~(dwCreationFlags & CREATE_PRESERVE_CODE_AUTHZ_LEVEL))
+        !(dwCreationFlags & CREATE_PRESERVE_CODE_AUTHZ_LEVEL))
     {
         /* Assume yes */
         SaferNeeded = TRUE;
@@ -4900,6 +4955,7 @@ StartScan:
         || ExtendedAttributes.ComponentFilterPresent
         || ExtendedAttributes.PseudoConsole
         || hUserToken
+        || TokenHandle
        )
     {
         Result = BasepCreateUserProcess(hUserToken, TokenHandle, JobHandle, &PathName, lpApplicationName, lpCommandLine, lpEnvironment, lpCurrentDirectory, &StartupInfo, dwCreationFlags | NoWindow, bInheritHandles, lpProcessAttributes, lpThreadAttributes, ParameterFlags, Flags, ParentProcess, InheritHandleList, InheritHandleCount, &PriorityClass, &ExtendedAttributes, lpProcessInformation);
@@ -5689,7 +5745,7 @@ Quickie:
     if (TokenHandle)
     {
         /* And if the user asked for one */
-        if (hUserToken)
+        if ((hUserToken) && (hNewToken))
         {
             /* Then return it */
             *hNewToken = TokenHandle;

@@ -296,6 +296,15 @@ VOID ARPReceive(
     NteDadConflict(Interface, SrcAddress.Address.IPv4Address, DstAddress.Address.IPv4Address, SenderHWAddress);
     if (!IsInterfaceAddress(Interface, &DstAddress))
     {
+        /* RFC 826: a sender already in the table is refreshed whoever the packet is for */
+        NCE = NBLocateNeighbor(&SrcAddress, Interface);
+        if (NCE)
+        {
+            if (!(NCE->State & NUD_PERMANENT))
+                NBUpdateNeighbor(NCE, SenderHWAddress, 0);
+            NBDereferenceNeighbor(NCE);
+        }
+
         ExFreePool(DataBuffer);
         Packet->Free(Packet);
         return;

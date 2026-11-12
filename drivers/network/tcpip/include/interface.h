@@ -30,3 +30,4 @@ VOID NteDadTimeout( VOID );
 VOID NteDadConflict( PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Sender, IPv4_RAW_ADDRESS Target, PVOID SenderLinkAddress );
 struct _IP4_ADDRESS_INFO;
 NTSTATUS IPQueryAddressV4( struct _IP4_ADDRESS_INFO *Info );
+NTSTATUS IPSetAddressV4( struct _IP4_ADDRESS_INFO *Info );

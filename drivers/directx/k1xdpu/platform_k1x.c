@@ -477,6 +477,16 @@ SoftGpuPlatformSegmentCacheType(VOID)
 }
 
 NTSTATUS
+SoftGpuPlatformSetDisplayPower(
+    _Inout_ PSOFTGPU_DEVICE Device,
+    _In_ BOOLEAN On)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(On);
+    return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
 SoftGpuPlatformQueryDescriptor(
     _In_ PSOFTGPU_DEVICE Device,
     _Inout_ PDXGK_DEVICE_DESCRIPTOR DeviceDescriptor)

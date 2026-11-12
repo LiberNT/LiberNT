@@ -110,3 +110,8 @@ DisplayCharacter(
 VOID
 ResetDisplay(
     _In_ BOOLEAN SetMode);
+
+#ifndef HAS_TEXT_UPDATE_BATCH
+#define BeginTextUpdate()
+#define EndTextUpdate()
+#endif

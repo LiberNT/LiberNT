@@ -769,6 +769,11 @@ static HRESULT WINAPI DocObjOleObject_SetExtent(IOleObject *iface, DWORD dwDrawA
 
     TRACE("(%p)->(%ld %p)\n", This, dwDrawAspect, psizel);
 
+#ifdef __REACTOS__
+    if (psizel->cx < 0 || psizel->cy < 0)
+        return E_FAIL;
+#endif
+
     if (dwDrawAspect != DVASPECT_CONTENT)
         return E_INVALIDARG;
 
@@ -3469,6 +3474,9 @@ static ULONG WINAPI HTMLDocumentObj_Release(IUnknown *iface)
     TRACE("(%p) ref = %lu\n", This, ref);
 
     if(!ref) {
+        /* The teardown runs Gecko code that can AddRef and Release this object again */
+        This->ref = 1;
+
         if(This->doc_node) {
             HTMLDocumentNode *doc_node = This->doc_node;
 

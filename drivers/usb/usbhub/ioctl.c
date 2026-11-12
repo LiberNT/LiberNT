@@ -72,6 +72,46 @@ static NTSTATUS USBH_GetKeyboardInterface(_In_ PUSBHUB_PORT_PDO_EXTENSION PortEx
 
 static
 NTSTATUS
+USBH_QueryUsbCapability(
+    _In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+    _Inout_ PROS_USB_CAPABILITY_QUERY Query)
+{
+    ULONG Speed = PortExtension->PortPdoFlags & (USBHUB_PDO_FLAG_PORT_HIGH_SPEED | USBHUB_PDO_FLAG_PORT_SUPER_SPEED);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!Query || Query->Version != ROS_USB_CAPABILITY_QUERY_VERSION || Query->Size < sizeof(*Query))
+        return STATUS_INVALID_PARAMETER;
+
+    Query->ResultLength = 0;
+    if (IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_DEVICE_CONNECTION_HIGH_SPEED_COMPATIBLE))
+        return Speed ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
+    if (IsEqualGUID(&Query->CapabilityType, &GUID_USB_CAPABILITY_DEVICE_CONNECTION_SUPER_SPEED_COMPATIBLE))
+        return (Speed & USBHUB_PDO_FLAG_PORT_SUPER_SPEED) ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
+    return USBH_ForwardDumpInterfaceRequest(PortExtension, IOCTL_INTERNAL_REACTOS_USB_QUERY_CAPABILITY, Query);
+}
+
+static
+NTSTATUS
+USBH_GetMsOs20DescriptorSet(
+    _In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+    _Inout_ PROS_USB_MSOS20_DESCRIPTOR_SET_QUERY Query)
+{
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    if (!Query || Query->Size < sizeof(*Query))
+        return STATUS_INVALID_PARAMETER;
+    Query->ResultLength = 0;
+    if (!PortExtension->MsOs20DescriptorSet)
+        return STATUS_NOT_SUPPORTED;
+    Query->ResultLength = PortExtension->MsOs20DescriptorSetLength;
+    if (!Query->Buffer || Query->BufferLength < PortExtension->MsOs20DescriptorSetLength)
+        return STATUS_BUFFER_TOO_SMALL;
+    RtlCopyMemory(Query->Buffer, PortExtension->MsOs20DescriptorSet, PortExtension->MsOs20DescriptorSetLength);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 USBH_GetMsOsVendorCode(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                        OUT PUCHAR VendorCode)
 {
@@ -1911,6 +1951,14 @@ USBH_PdoInternalControl(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
         case IOCTL_INTERNAL_REACTOS_USB_GET_KEYBOARD_INTERFACE:
             Status = USBH_GetKeyboardInterface(PortExtension, IoStack->Parameters.Others.Argument1);
+            break;
+
+        case IOCTL_INTERNAL_REACTOS_USB_QUERY_CAPABILITY:
+            Status = USBH_QueryUsbCapability(PortExtension, IoStack->Parameters.Others.Argument1);
+            break;
+
+        case IOCTL_INTERNAL_REACTOS_USB_GET_MSOS20_DESCRIPTOR_SET:
+            Status = USBH_GetMsOs20DescriptorSet(PortExtension, IoStack->Parameters.Others.Argument1);
             break;
 
         case IOCTL_INTERNAL_USB_SUBMIT_URB:

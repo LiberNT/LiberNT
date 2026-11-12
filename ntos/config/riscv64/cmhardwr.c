@@ -158,7 +158,7 @@ CmpInitializeMachineDependentConfiguration(
 
     RtlInitUnicodeString(&KeyName, L"CentralProcessor");
     InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, SystemHandle, NULL);
-    Status = NtCreateKey(&KeyHandle, KEY_READ | KEY_WRITE, &ObjectAttributes, 0, NULL, 0, &Disposition);
+    Status = NtCreateKey(&KeyHandle, KEY_READ | KEY_WRITE, &ObjectAttributes, 0, NULL, REG_OPTION_VOLATILE, &Disposition);
     if (!NT_SUCCESS(Status))
     {
         NtClose(SystemHandle);

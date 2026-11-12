@@ -440,6 +440,7 @@ XhciInitialize(
     Capabilities = XhciRead(Registers + XHCI_CAP_HCCPARAMS1);
     Adapter->Runtime = Runtime = Registers + (XhciRead(Registers + XHCI_CAP_RTSOFF) & ~0x1F);
     Adapter->Doorbells = Registers + (XhciRead(Registers + XHCI_CAP_DBOFF) & ~0x3);
+    /* FIXME: a controller with more than USBNET_MAX_SLOTS slots leaves the OS that many while it keeps the debugger's MaxSlotsEn */
     Adapter->MaxSlots = min(Params1 & 0xFF, USBNET_MAX_SLOTS);
     Adapter->MaxPorts = Params1 >> 24;
     Adapter->Interrupters = XHCI_HCS1_INTERRUPTERS(Params1);

@@ -348,16 +348,38 @@ static VOID RemoveQueueDpcExCheck(VOID)
     RtlZeroMemory(&Context, sizeof(Context));
     Context.RemoveQueueDpcEx = RemoveQueueDpcEx;
     Context.WaitValue = 2;
+    Context.WaitAffinity = (KAFFINITY)1;
+    KeInitializeEvent(&Context.WaitEvent, NotificationEvent, FALSE);
     TargetCpu = 1;
     KeInitializeDpc(&Context.Dpc, RemoveDpcRoutine, &Context);
     KeSetImportanceDpc(&Context.Dpc, HighImportance);
     KeSetTargetProcessorDpc(&Context.Dpc, (CCHAR)TargetCpu);
+
+    /* Placed before the DPC holds CPU 1: a thread readied then may be sent to that processor and stand by there */
+    WaitThread = KmtStartThread(RemoveDpcSignaledWaitThread, &Context);
+    if (!WaitThread)
+    {
+        KeRevertToUserAffinityThread();
+        return;
+    }
+    Started = WaitForValue(&Context.WaitReady, 1);
+    ok_bool_true(Started, "wait thread should be ready");
+    if (!Started)
+    {
+        KeSetEvent(&Context.WaitEvent, IO_NO_INCREMENT, FALSE);
+        KmtFinishThread(WaitThread, NULL);
+        KeRevertToUserAffinityThread();
+        return;
+    }
+
     ok_bool_true(KeInsertQueueDpc(&Context.Dpc, NULL, NULL), "queue remote active DPC");
     Started = WaitForValue(&Context.CallbackStarted, 1);
     ok_bool_true(Started, "remote DPC should start");
     if (!Started)
     {
         InterlockedExchange(&Context.CallbackRelease, 1);
+        KeSetEvent(&Context.WaitEvent, IO_NO_INCREMENT, FALSE);
+        KmtFinishThread(WaitThread, NULL);
         KeRevertToUserAffinityThread();
         return;
     }
@@ -374,15 +396,7 @@ static VOID RemoveQueueDpcExCheck(VOID)
     ok_bool_true(Context.CallbackInterruptsEnabled, "remote DPC callback interrupts");
     ok_eq_pointer(Context.CallbackDpcData, NULL);
 
-    WaitThread = KmtStartThread(RemoveDpcWaitThread, &Context);
-    if (!WaitThread)
-    {
-        InterlockedExchange(&Context.CallbackRelease, 1);
-        WaitForValue(&Context.CallbackFinished, 1);
-        KeRevertToUserAffinityThread();
-        return;
-    }
-
+    KeSetEvent(&Context.WaitEvent, IO_NO_INCREMENT, FALSE);
     WaitStarted = WaitForValue(&Context.WaitStarted, 1);
     ok_bool_true(WaitStarted, "wait thread should start");
     for (Spins = 0; Spins < 20000 && !Context.WaitFinished; Spins++)

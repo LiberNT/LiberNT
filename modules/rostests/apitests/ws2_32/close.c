@@ -7,6 +7,9 @@
 
 #include "ws2_32.h"
 #include <winuser.h>
+#include <ndk/extypes.h>
+#include <ndk/exfuncs.h>
+#include "../kernel32/threadwait.h"
 
 void Test_CloseDuplicatedSocket()
 {
@@ -56,9 +59,6 @@ void Test_CloseDuplicatedSocket()
 #define TIMEOUT_SEC 0
 #define TIMEOUT_USEC 100000
 
-// 250 ms
-#define TIME_SLEEP1 250
-
 #define THREAD_PROC_LOOPS 5
 
 #define LISTEN_PORT 22222
@@ -92,6 +92,7 @@ void Test_CloseWhileSelectSameSocket()
     SOCKET sock;
     struct sockaddr_in addrin;
     HANDLE hthread;
+    DWORD ThreadId;
 
     /* Create the socket */
     sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -111,10 +112,10 @@ void Test_CloseWhileSelectSameSocket()
     err = listen(sock, LISTEN_BACKLOG);
     ok(err == 0, "listen err = %d %d\n", err, WSAGetLastError());
 
-    hthread = CreateThread(NULL, 0, thread_proc, (void*)sock, 0, NULL);
+    hthread = CreateThread(NULL, 0, thread_proc, (void*)sock, 0, &ThreadId);
     ok(hthread != NULL, "CreateThread %ld\n", GetLastError());
 
-    Sleep(TIME_SLEEP1);
+    ok(WaitForThreadWaitState(ThreadId, NULL, ANY_WAIT_REASON, 5000), "The select thread did not block\n");
     err = closesocket(sock);
     ok(err == 0, "closesocket err = %d %d\n", err, WSAGetLastError());
 
@@ -130,6 +131,7 @@ void Test_CloseWhileSelectDuplicatedSocket()
     WSAPROTOCOL_INFOW ProtocolInfo;
     struct sockaddr_in addrin;
     HANDLE hthread;
+    DWORD ThreadId;
 
     /* Create the socket */
     sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -160,13 +162,13 @@ void Test_CloseWhileSelectDuplicatedSocket()
         return;
     }
 
-    hthread = CreateThread(NULL, 0, thread_proc, (void*)dup_sock, 0, NULL);
+    hthread = CreateThread(NULL, 0, thread_proc, (void*)dup_sock, 0, &ThreadId);
     ok(hthread != NULL, "CreateThread %ld\n", GetLastError());
 
     err = closesocket(sock);
     ok(err == 0, "closesocket err = %d %d\n", err, WSAGetLastError());
 
-    Sleep(TIME_SLEEP1);
+    ok(WaitForThreadWaitState(ThreadId, NULL, ANY_WAIT_REASON, 5000), "The select thread did not block\n");
     err = closesocket(dup_sock);
     ok(err == 0, "closesocket err = %d %d\n", err, WSAGetLastError());
 
@@ -371,6 +373,7 @@ static void Test_CloseRacesBlockedRecv(void)
     int Length = sizeof(Address), i, j, Failed = 0;
     PVOID Spray[SPRAY_COUNT];
     SOCKET Listener;
+    DWORD ThreadId;
 
     Listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     ok(Listener != INVALID_SOCKET, "socket failed with %d\n", WSAGetLastError());
@@ -394,10 +397,10 @@ static void Test_CloseRacesBlockedRecv(void)
         Server = accept(Listener, NULL, NULL);
         ok(Server != INVALID_SOCKET, "accept failed with %d\n", WSAGetLastError());
 
-        Thread = CreateThread(NULL, 0, BlockedRecvThread, &Context, 0, NULL);
+        Thread = CreateThread(NULL, 0, BlockedRecvThread, &Context, 0, &ThreadId);
         ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
         WaitForSingleObject(Context.Started, INFINITE);
-        Sleep(20);
+        ok(WaitForThreadWaitState(ThreadId, NULL, ANY_WAIT_REASON, 5000), "Iteration %d: recv did not block\n", i);
 
         ok(closesocket(Context.Client) == 0, "closesocket failed with %d\n", WSAGetLastError());
         for (j = 0; j < SPRAY_COUNT; j++)

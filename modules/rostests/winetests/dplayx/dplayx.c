@@ -1094,7 +1094,7 @@ static void checkNoMoreAccepts_( int line, SOCKET listenSock )
     FD_ZERO( &fds );
     FD_SET( listenSock, &fds );
     timeout.tv_sec = 0;
-    timeout.tv_usec = 100000;
+    timeout.tv_usec = 20000;
     wsResult = select( listenSock + 1, &fds, NULL, &fds, &timeout );
     ok_( __FILE__, line )( !wsResult, "select() returned %d.\n", wsResult );
 }
@@ -1169,7 +1169,7 @@ static void checkNoMoreMessages_( int line, SOCKET sock )
     FD_ZERO( &fds );
     FD_SET( sock, &fds );
     timeout.tv_sec = 0;
-    timeout.tv_usec = 100000;
+    timeout.tv_usec = 20000;
     select( sock + 1, &fds, NULL, &fds, &timeout );
 
     wsResult = recv( sock, buffer, sizeof( buffer ), 0 );
@@ -3351,7 +3351,7 @@ static void test_Open(void)
     {
         int count = 0;
 
-        enumSessionsParam = enumSessionsAsync( dp, &dpsdAppGuid, 100, countSessionsCallback, &count, 0 );
+        enumSessionsParam = enumSessionsAsync( dp, &dpsdAppGuid, 20, countSessionsCallback, &count, 0 );
 
         port = receiveEnumSessionsRequest( enumSock, &appGuid, NULL, 0 );
 
@@ -3392,7 +3392,7 @@ static void test_Open(void)
     {
         int count = 0;
 
-        enumSessionsParam = enumSessionsAsync( dp, &dpsdAppGuid, 100, countSessionsCallback, &count,
+        enumSessionsParam = enumSessionsAsync( dp, &dpsdAppGuid, 20, countSessionsCallback, &count,
                                                DPENUMSESSIONS_PASSWORDREQUIRED );
 
         port = receiveEnumSessionsRequest( enumSock, &appGuid, NULL, DPENUMSESSIONS_PASSWORDREQUIRED );
@@ -3578,7 +3578,7 @@ static void joinSession_( int line, IDirectPlay4 *dp, DPSESSIONDESC2 *dpsd, DPSE
     {
         int count = 0;
 
-        enumSessionsParam = enumSessionsAsync( dp, dpsd, 100, countSessionsCallback, &count, 0 );
+        enumSessionsParam = enumSessionsAsync( dp, dpsd, 20, countSessionsCallback, &count, 0 );
 
         port = receiveEnumSessionsRequest_( line, enumSock, &appGuid, NULL, 0 );
 
@@ -3871,7 +3871,7 @@ static void check_EnumSessions_( int line, IDirectPlay4 *dp, DPSESSIONDESC2 *dps
         callbackData.expectedCount = expectedSessionCount;
         callbackData.ansi = ansi;
 
-        param = enumSessionsAsync( dp, dpsd, 100, checkSessionListCallback, &callbackData, flags );
+        param = enumSessionsAsync( dp, dpsd, 20, checkSessionListCallback, &callbackData, flags );
 
         if ( requestExpected )
             port = receiveEnumSessionsRequest_( line, enumSock, &appGuid, expectedPassword, flags );
@@ -3968,7 +3968,7 @@ static void check_EnumSessions_async_( int line, DPSESSIONDESC2 *dpsd, IDirectPl
         callbackData.ansi = ansi;
 
         /* Do a sync enumeration first to fill the cache */
-        param = enumSessionsAsync( dp, dpsd, 100, checkSessionListCallback, &callbackData, 0 );
+        param = enumSessionsAsync( dp, dpsd, 20, checkSessionListCallback, &callbackData, 0 );
 
         port = receiveEnumSessionsRequest_( line, enumSock, &appGuid, NULL, 0 );
 
@@ -4007,7 +4007,7 @@ static void check_EnumSessions_async_( int line, DPSESSIONDESC2 *dpsd, IDirectPl
     callbackData.ansi = ansi;
 
     /* Read cache of last sync enumeration */
-    param = enumSessionsAsync( dp, dpsd, 100, checkSessionListCallback, &callbackData, DPENUMSESSIONS_ASYNC );
+    param = enumSessionsAsync( dp, dpsd, 20, checkSessionListCallback, &callbackData, DPENUMSESSIONS_ASYNC );
 
     receiveEnumSessionsRequest_( line, enumSock, &appGuid, NULL, DPENUMSESSIONS_ASYNC );
 
@@ -4048,7 +4048,7 @@ static void check_EnumSessions_async_( int line, DPSESSIONDESC2 *dpsd, IDirectPl
         callbackData.ansi = ansi;
 
         /* Retrieve results */
-        param = enumSessionsAsync( dp, dpsd, 100, checkSessionListCallback, &callbackData, DPENUMSESSIONS_ASYNC );
+        param = enumSessionsAsync( dp, dpsd, 20, checkSessionListCallback, &callbackData, DPENUMSESSIONS_ASYNC );
         hr = enumSessionsAsyncWait( param, 2000 );
         ok_( __FILE__, line )( hr == DP_OK, "got hr %#lx.\n", hr );
 
@@ -4069,7 +4069,7 @@ static void check_EnumSessions_async_( int line, DPSESSIONDESC2 *dpsd, IDirectPl
     callbackData.ansi = ansi;
 
     /* Stop enumeration */
-    param = enumSessionsAsync( dp, dpsd, 100, checkSessionListCallback, &callbackData, DPENUMSESSIONS_STOPASYNC );
+    param = enumSessionsAsync( dp, dpsd, 20, checkSessionListCallback, &callbackData, DPENUMSESSIONS_STOPASYNC );
     hr = enumSessionsAsyncWait( param, 2000 );
     ok_( __FILE__, line )( hr == DP_OK, "got hr %#lx.\n", hr );
 

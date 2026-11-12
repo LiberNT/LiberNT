@@ -14,6 +14,7 @@
 #include <wdmguid.h>
 
 #include "../halext.h"
+#include "../devtree.h"
 
 #ifndef NonPagedPoolNx
 #define NonPagedPoolNx NonPagedPool
@@ -414,4 +415,197 @@ HalpQueryReservedResources(
     return HALP_RESERVED_VECTOR_COUNT;
 }
 
+BOOLEAN
+NTAPI
+HalpQueryDeviceTree(
+    _Outptr_result_maybenull_ const VOID **Blob,
+    _Out_ PULONG Size)
+{
+    return HalpArm64GetDeviceTree(Blob, Size);
+}
+
+static const CHAR *const HalpAppleAicCompatibles[] =
+{
+    "apple,aic",
+    "apple,aic2",
+    "apple,t8122-aic3",
+};
+
+static const CHAR *const HalpGicCompatibles[] =
+{
+    "arm,gic-v3",
+    "arm,gic-400",
+    "arm,cortex-a15-gic",
+    "arm,cortex-a9-gic",
+    "arm,cortex-a7-gic",
+    "arm,pl390",
+};
+
+static
+BOOLEAN
+HalpCompatibleListContains(
+    _In_reads_bytes_(Length) const CHAR *List,
+    _In_ ULONG Length,
+    _In_reads_(Count) const CHAR *const *Names,
+    _In_ ULONG Count)
+{
+    ULONG Cursor = 0, EntryLength, Index;
+    const CHAR *Entry;
+
+    while ((Entry = FdtNextString(List, Length, &Cursor, &EntryLength)) != NULL)
+    {
+        for (Index = 0; Index < Count; ++Index)
+        {
+            if (strlen(Names[Index]) == EntryLength && !memcmp(Entry, Names[Index], EntryLength))
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+HalpTranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    ULONG Die = 0, Number, Flags, PerDie;
+
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+
+    if (HalpCompatibleListContains(Compatible, CompatibleLength, HalpAppleAicCompatibles,
+                                   RTL_NUMBER_OF(HalpAppleAicCompatibles)))
+    {
+        if (CellCount == 3)
+        {
+            Number = Cells[1];
+            Flags = Cells[2];
+        }
+        else if (CellCount == 4)
+        {
+            Die = Cells[1];
+            Number = Cells[2];
+            Flags = Cells[3];
+        }
+        else
+        {
+            return FALSE;
+        }
+        if (Cells[0] != 0)
+            return FALSE;
+        PerDie = HalpAppleAicIrqsPerDie();
+        if (Die && !PerDie)
+            return FALSE;
+        *Gsi = 32 + Die * PerDie + Number;
+        *EdgeTriggered = (Flags & 0x3) != 0;
+        return TRUE;
+    }
+
+    if (HalpCompatibleListContains(Compatible, CompatibleLength, HalpGicCompatibles,
+                                   RTL_NUMBER_OF(HalpGicCompatibles)))
+    {
+        if (CellCount < 3)
+            return FALSE;
+        if (Cells[0] == 0)
+            *Gsi = 32 + Cells[1];
+        else if (Cells[0] == 1)
+            *Gsi = 16 + Cells[1];
+        else
+            return FALSE;
+        *EdgeTriggered = (Cells[2] & 0x3) != 0;
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+HalArm64TranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    return HalpTranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, CellCount, Gsi, EdgeTriggered);
+}
+
 /* EOF */
+
+BOOLEAN
+NTAPI
+HalQueryPciRoutedInterrupt(
+    _In_ ULONG Segment,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function,
+    _In_ ULONG Pin,
+    _Out_ PULONG Gsi)
+{
+    static const PCSTR Compatibles[] = { "pci-host-ecam-generic" };
+    ULONG Node, Parent, Match, Length, MaskLength, Domain = 0, Offset, Index;
+    ULONG Address[4], Mask[4], Controller, ParentAddressCells, ParentInterruptCells, CompatibleLength;
+    ULONG Cells[4];
+    const UCHAR *Map, *MaskProperty;
+    const CHAR *Compatible;
+    const VOID *Blob;
+    BOOLEAN Edge;
+    FDT Fdt;
+    ULONG BlobSize;
+
+    *Gsi = 0;
+    if (HalAcpiGetTable(NULL, 'PCAF') || !HalpArm64GetDeviceTree(&Blob, &BlobSize) || !Blob ||
+        !FdtOpen(Blob, BlobSize, &Fdt) ||
+        !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
+        Pin < 1 || Pin > 4 || Device > 31 || Function > 7 || Bus > 255)
+        return FALSE;
+    if (FdtReadU32(&Fdt, Node, "linux,pci-domain", &Domain) && Domain != Segment)
+        return FALSE;
+    Map = FdtGetProperty(&Fdt, Node, "interrupt-map", &Length);
+    MaskProperty = FdtGetProperty(&Fdt, Node, "interrupt-map-mask", &MaskLength);
+    if (!Map || !MaskProperty || MaskLength != 4 * sizeof(ULONG))
+        return FALSE;
+    Address[0] = (Bus << 16) | (Device << 11) | (Function << 8);
+    Address[1] = Address[2] = 0;
+    Address[3] = Pin;
+    for (Index = 0; Index < 4; ++Index)
+        Mask[Index] = FdtReadBigEndian32(MaskProperty + Index * sizeof(ULONG));
+    for (Offset = 0; Offset + 5 * sizeof(ULONG) <= Length;)
+    {
+        BOOLEAN Hit = TRUE;
+
+        for (Index = 0; Index < 4; ++Index)
+        {
+            if ((Address[Index] ^ FdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG))) & Mask[Index])
+                Hit = FALSE;
+        }
+        Controller = HalpArm64FindDeviceTreePhandle(&Fdt, FdtReadBigEndian32(Map + Offset + 4 * sizeof(ULONG)));
+        if (Controller == FDT_NO_NODE)
+            return FALSE;
+        if (!FdtReadU32(&Fdt, Controller, "#address-cells", &ParentAddressCells))
+            ParentAddressCells = 0;
+        if (!FdtReadU32(&Fdt, Controller, "#interrupt-cells", &ParentInterruptCells) ||
+            ParentInterruptCells == 0 || ParentInterruptCells > RTL_NUMBER_OF(Cells))
+            return FALSE;
+        Offset += (5 + ParentAddressCells) * sizeof(ULONG);
+        if (Offset + ParentInterruptCells * sizeof(ULONG) > Length)
+            return FALSE;
+        if (Hit)
+        {
+            for (Index = 0; Index < ParentInterruptCells; ++Index)
+                Cells[Index] = FdtReadBigEndian32(Map + Offset + Index * sizeof(ULONG));
+            Compatible = FdtGetProperty(&Fdt, Controller, "compatible", &CompatibleLength);
+            return Compatible &&
+                   HalpTranslateDeviceTreeInterrupt(Compatible, CompatibleLength, Cells, ParentInterruptCells, Gsi, &Edge);
+        }
+        Offset += ParentInterruptCells * sizeof(ULONG);
+    }
+    return FALSE;
+}

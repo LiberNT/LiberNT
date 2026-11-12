@@ -854,7 +854,7 @@ BEGIN
     IDS_HISTORY "लोकल सेटिंग्स\\हिस्टरी"
     IDS_PROGRAM_FILES "प्रोग्राम फाइलें"
     IDS_MYPICTURES "मेरी तस्वीरें"
-    IDS_PROGRAM_FILES_COMMON "प्रोग्राम फाइलें\\सामान्य फाइलें"
+    IDS_PROGRAM_FILES_COMMON "प्रोग्राम फाइलें\\आम फाइलें"
     IDS_COMMON_DOCUMENTS "डॉक्यूमेंट"
     IDS_ADMINTOOLS "प्रारंभ मेनू\\प्रोग्राम\\प्रशासनिक उपकरण"
     IDS_COMMON_MUSIC "डॉक्यूमेंट\\मेरा संगीत"

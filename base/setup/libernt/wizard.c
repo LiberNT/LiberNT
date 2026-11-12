@@ -93,7 +93,7 @@ FillSummary(
 
     if (pSetupData->bUpgrade)
     {
-        DescribeUpgrade(Text, ARRAYSIZE(Text));
+        DescribeUpgrade(pSetupData, Text, ARRAYSIZE(Text));
         SetDlgItemTextW(hwndDlg, IDC_READY_SUMMARY, Text);
         return;
     }
@@ -178,7 +178,7 @@ ReadyPageProc(
     return FALSE;
 }
 
-static HBITMAP
+HBITMAP
 CreateAlphaLogo(
     _In_ HINSTANCE hInstance,
     _Out_ PSIZE Size)
@@ -249,7 +249,7 @@ Quit:
     return hAlpha;
 }
 
-static VOID
+VOID
 DrawLogo(
     _In_ LPDRAWITEMSTRUCT DrawItem,
     _In_ HBITMAP hLogo,

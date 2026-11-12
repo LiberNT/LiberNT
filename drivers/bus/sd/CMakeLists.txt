@@ -26,6 +26,7 @@ list(APPEND SOURCE
 
 add_library(sdbus MODULE ${SOURCE} sdbus.rc)
 set_module_type(sdbus kernelmodedriver)
+target_link_libraries(sdbus fdtdrv wdmguid)
 add_importlibs(sdbus ntoskrnl hal)
 add_pch(sdbus sdbus.h SOURCE)
 add_cd_file(TARGET sdbus DESTINATION reactos/system32/drivers NO_CAB FOR all)

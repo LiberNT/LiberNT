@@ -23,6 +23,8 @@
 #include <ks.h>
 #include <drivers/usbport/usbmport.h>
 #include <reactos/drivers/dumpstor.h>
+#include <reactos/drivers/usbmsos20.h>
+#include <reactos/drivers/usbcapability.h>
 
 #define USB_HUB_TAG 'BUHU'
 
@@ -179,6 +181,7 @@ USBH_PortChangeMarkConnect(
 
 extern PWSTR GenericUSBDeviceString;
 extern LONG USBH_NextDebugBusNumber;
+extern LONG USBH_NextHubNumber;
 
 typedef struct _USBHUB_PORT_DATA {
   USB_PORT_STATUS_AND_CHANGE PortStatus;
@@ -271,6 +274,7 @@ typedef struct _USBHUB_FDO_EXTENSION {
   ULONG DebugBusNumber;
   LONG EnumWorkerQueued;
   LONG EnumWorkerRerun;
+  ULONG HubNumber;
 } USBHUB_FDO_EXTENSION, *PUSBHUB_FDO_EXTENSION;
 
 typedef struct _USBHUB_PORT_PDO_EXTENSION {
@@ -317,6 +321,9 @@ typedef struct _USBHUB_PORT_PDO_EXTENSION {
   UCHAR MsOsVendorCode;
   CHAR MsCompatibleId[9];
   CHAR MsSubCompatibleId[9];
+  BOOLEAN MsOs20Ccgp;
+  USHORT MsOs20DescriptorSetLength;
+  PUCHAR MsOs20DescriptorSet;
 } USBHUB_PORT_PDO_EXTENSION, *PUSBHUB_PORT_PDO_EXTENSION;
 
 typedef struct _USBHUB_URB_TIMEOUT_CONTEXT {
@@ -559,6 +566,11 @@ USBH_GetDeviceType(
   IN PUSBHUB_FDO_EXTENSION HubExtension,
   IN PUSB_DEVICE_HANDLE DeviceHandle,
   OUT USB_DEVICE_TYPE * OutDeviceType);
+
+VOID
+NTAPI
+USBH_ApplyMsOs20Properties(
+  IN PUSBHUB_PORT_PDO_EXTENSION PortExtension);
 
 VOID
 NTAPI

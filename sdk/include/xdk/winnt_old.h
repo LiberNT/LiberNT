@@ -1161,6 +1161,7 @@ typedef struct _CFG_CALL_TARGET_INFO {
 #define WT_SET_MAX_THREADPOOL_THREADS(flags,limit) ((flags)|=(limit)<<16)
 typedef VOID (NTAPI *WORKERCALLBACKFUNC)(PVOID);
 typedef VOID (NTAPI *PFLS_CALLBACK_FUNCTION)(PVOID);
+typedef BOOLEAN (NTAPI *PSECURE_MEMORY_CACHE_CALLBACK)(_In_reads_bytes_(Range) PVOID Addr, _In_ SIZE_T Range);
 #if (_WIN32_WINNT >= 0x0501)
 #define ACTIVATION_CONTEXT_SECTION_ASSEMBLY_INFORMATION 1
 #define ACTIVATION_CONTEXT_SECTION_DLL_REDIRECTION 2
@@ -3266,6 +3267,14 @@ typedef struct _RTL_SRWLOCK {
   PVOID Ptr;
 } RTL_SRWLOCK, *PRTL_SRWLOCK;
 
+typedef struct _RTL_BARRIER {
+  DWORD Reserved1;
+  DWORD Reserved2;
+  ULONG_PTR Reserved3[2];
+  DWORD Reserved4;
+  DWORD Reserved5;
+} RTL_BARRIER, *PRTL_BARRIER;
+
 typedef LONG
 (NTAPI *PVECTORED_EXCEPTION_HANDLER)(
     struct _EXCEPTION_POINTERS *ExceptionInfo
@@ -4578,6 +4587,7 @@ typedef struct _JOBOBJECT_JOBSET_INFORMATION {
 #define ES_SYSTEM_REQUIRED                0x00000001
 #define ES_DISPLAY_REQUIRED               0x00000002
 #define ES_USER_PRESENT                   0x00000004
+#define ES_AWAYMODE_REQUIRED              0x00000040
 #define ES_CONTINUOUS                     0x80000000
 
 typedef enum _LATENCY_TIME {

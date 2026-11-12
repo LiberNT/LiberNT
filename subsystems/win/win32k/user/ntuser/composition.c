@@ -14,6 +14,7 @@
 #include "composition.h"
 #include "dcomposition.h"
 #include <reactos/dwmframe.h>
+#include "captioncache.h"
 #if defined(REACTOS_GRAPHICS_DRIVER_MODEL_WDDM)
 #include "drivers/wddm/wddm_bridge.h"
 #endif
@@ -40,6 +41,7 @@ typedef struct _REDIRECT_ENTRY
 {
     PWND         Wnd;
     WND_REDIRECT Redirect;
+    DWM_CAPTION_CACHE FrontCaption;
     RECTL        WindowRect;   /* last position submitted to the compositor    */
     BOOL         WindowRectValid;
     LONG         PaintCount;   /* BeginPaint..EndPaint depth on this tree      */
@@ -117,6 +119,12 @@ IntCompositionReleaseFrameSurfaces(VOID)
     }
 }
 
+static LONG
+IntCompositionFrameUnits(_In_ PWND Wnd, _In_ LONG Value)
+{
+    return UserDpiIsVirtualWindow(Wnd) ? UserDpiToPhysical(Value) : Value;
+}
+
 static ULONG
 IntCompositionFrameExtent(_In_ PWND Wnd, _In_ ATOM Atom)
 {
@@ -125,7 +133,8 @@ IntCompositionFrameExtent(_In_ PWND Wnd, _In_ ATOM Atom)
     if (Atom == 0)
         return 0;
     Encoded = (ULONG_PTR)UserGetProp(Wnd, Atom, FALSE);
-    return Encoded != 0 && Encoded <= DWM_MAX_NC_EXTEND + 1 ? (ULONG)(Encoded - 1) : 0;
+    return Encoded != 0 && Encoded <= DWM_MAX_NC_EXTEND + 1 ?
+           (ULONG)IntCompositionFrameUnits(Wnd, (LONG)(Encoded - 1)) : 0;
 }
 
 static ULONG_PTR
@@ -166,16 +175,16 @@ IntCompositionReadFrameExtension(_In_ PWND Wnd, _Inout_ PDWM_WIN Window)
             continue;
         if (State & DWM_CAPTION_STATE_RIGHT(Index))
         {
-            Window->CaptionButtons[Index].left = (LONG)Window->cx - (SHORT)HIWORD(Span);
-            Window->CaptionButtons[Index].right = (LONG)Window->cx - (SHORT)LOWORD(Span);
+            Window->CaptionButtons[Index].left = (LONG)Window->cx - IntCompositionFrameUnits(Wnd, (SHORT)HIWORD(Span));
+            Window->CaptionButtons[Index].right = (LONG)Window->cx - IntCompositionFrameUnits(Wnd, (SHORT)LOWORD(Span));
         }
         else
         {
-            Window->CaptionButtons[Index].left = (SHORT)LOWORD(Span);
-            Window->CaptionButtons[Index].right = (SHORT)HIWORD(Span);
+            Window->CaptionButtons[Index].left = IntCompositionFrameUnits(Wnd, (SHORT)LOWORD(Span));
+            Window->CaptionButtons[Index].right = IntCompositionFrameUnits(Wnd, (SHORT)HIWORD(Span));
         }
-        Window->CaptionButtons[Index].top = (SHORT)LOWORD(Row);
-        Window->CaptionButtons[Index].bottom = (SHORT)HIWORD(Row);
+        Window->CaptionButtons[Index].top = IntCompositionFrameUnits(Wnd, (SHORT)LOWORD(Row));
+        Window->CaptionButtons[Index].bottom = IntCompositionFrameUnits(Wnd, (SHORT)HIWORD(Row));
     }
     Window->CaptionState = (ULONG)State;
 }
@@ -241,6 +250,7 @@ IntCompositionCornerRadius(_In_ PWND Wnd)
  * disables it and the desktop reverts to classic direct drawing. */
 volatile BOOL          g_DwmAttached = FALSE;
 volatile LONGLONG      g_DwmLastFrameTime = 0;
+static volatile LONGLONG g_DwmWakePendingTime = 0;
 static LONGLONG        g_DwmWatchdogLastCheck = 0;
 static LONGLONG        g_DwmWatchdogStart = 0;
 /* Damage wake event for dwm (referenced from dwm's handle), so dwm blocks
@@ -447,7 +457,10 @@ static VOID
 IntCompositionDwmWake(VOID)
 {
     if (g_DwmWakeEvent != NULL)
+    {
+        InterlockedCompareExchange64(&g_DwmWakePendingTime, (LONGLONG)KeQueryInterruptTime(), 0);
         KeSetEvent(g_DwmWakeEvent, IO_NO_INCREMENT, FALSE);
+    }
 }
 
 VOID
@@ -465,6 +478,13 @@ IntCompositionMarkDamage(_In_ BOOL bFull)
         InterlockedExchange(&g_CompositionFullDamage, TRUE);
     InterlockedExchange(&g_CompositionDamaged, TRUE);
     IntCompositionDwmWake();
+}
+
+static VOID
+IntCompositionMarkPending(VOID)
+{
+    if (!InterlockedExchange(&g_CompositionDamaged, TRUE))
+        IntCompositionDwmWake();
 }
 
 /* Flush waiters capture only their process's outstanding publications. The
@@ -895,9 +915,14 @@ IntCompositionFreeDxSurface(_Inout_ PWND_REDIRECT r)
                 Publication->SurfaceId == SurfaceId)
             {
                 if (Publication->Delivered)
+                {
                     Publication->Retired = TRUE;
+                    IntCompositionMarkPending();
+                }
                 else
+                {
                     IntCompositionCompleteDxPublication(Publication);
+                }
             }
         }
         ObDereferenceObject(r->DxReadyEvent);
@@ -917,6 +942,7 @@ IntCompositionFreeDxSurface(_Inout_ PWND_REDIRECT r)
                     Publication->UpdateId == r->DxPublishedUpdateId)
                 {
                     Publication->Retired = TRUE;
+                    IntCompositionMarkPending();
                     break;
                 }
             }
@@ -1049,6 +1075,90 @@ IntCompositionDeviceBuffers(VOID)
                (PVOID volatile *)&g_DwmGpuOutputWindow, NULL, NULL) != NULL;
 }
 
+static ULONG
+IntCompositionLerpPixel(_In_ ULONG First, _In_ ULONG Second, _In_ ULONG Weight)
+{
+    ULONG RedBlue = ((First & 0x00FF00FF) * (256 - Weight) + (Second & 0x00FF00FF) * Weight) >> 8;
+    ULONG GreenAlpha = (((First >> 8) & 0x00FF00FF) * (256 - Weight) +
+                        ((Second >> 8) & 0x00FF00FF) * Weight) >> 8;
+
+    return (RedBlue & 0x00FF00FF) | ((GreenAlpha & 0x00FF00FF) << 8);
+}
+
+static LONG
+IntCompositionStretchSample(_In_ LONG Index, _In_ LONG Step, _In_ LONG Limit, _Out_ PLONG Weight)
+{
+    LONGLONG Sample = (((LONGLONG)(2 * Index + 1) * Step) >> 1) - 0x8000;
+    LONG Base;
+
+    if (Sample < 0)
+        Sample = 0;
+    Base = (LONG)(Sample >> 16);
+    *Weight = (LONG)((Sample >> 8) & 0xFF);
+    if (Base >= Limit - 1)
+    {
+        Base = Limit - 1;
+        *Weight = 0;
+    }
+    return Base;
+}
+
+static VOID
+IntCompositionBackToFrontRect(_In_ const WND_REDIRECT *r, _In_ const RECTL *Back, _Out_ PRECTL Front)
+{
+    Front->left = (LONG)(((LONGLONG)Back->left * r->PhysCx) / r->cx) - 2;
+    Front->top = (LONG)(((LONGLONG)Back->top * r->PhysCy) / r->cy) - 2;
+    Front->right = (LONG)(((LONGLONG)Back->right * r->PhysCx + r->cx - 1) / r->cx) + 2;
+    Front->bottom = (LONG)(((LONGLONG)Back->bottom * r->PhysCy + r->cy - 1) / r->cy) + 2;
+    Front->left = max(Front->left, 0);
+    Front->top = max(Front->top, 0);
+    Front->right = min(Front->right, r->PhysCx);
+    Front->bottom = min(Front->bottom, r->PhysCy);
+}
+
+static BOOL
+IntCompositionStretchBack(_In_ const WND_REDIRECT *r, _In_ PSURFACE Front, _In_ const RECTL *Rect)
+{
+    SURFOBJ *Source = &r->psurf->SurfObj, *Target = &Front->SurfObj;
+    LONG StepX, StepY, x, y, WeightX, WeightY, X0, X1, Y0, Y1;
+    PULONG Row0, Row1, Out;
+    RECTL Bounds;
+
+    if (Source->pvScan0 == NULL || Target->pvScan0 == NULL ||
+        Source->iBitmapFormat != BMF_32BPP || Target->iBitmapFormat != BMF_32BPP ||
+        r->cx <= 0 || r->cy <= 0 || r->PhysCx <= 0 || r->PhysCy <= 0 ||
+        Target->sizlBitmap.cx < r->PhysCx || Target->sizlBitmap.cy < r->PhysCy ||
+        Source->sizlBitmap.cx < r->cx || Source->sizlBitmap.cy < r->cy)
+    {
+        return FALSE;
+    }
+
+    Bounds.left = max(Rect->left, 0);
+    Bounds.top = max(Rect->top, 0);
+    Bounds.right = min(Rect->right, r->PhysCx);
+    Bounds.bottom = min(Rect->bottom, r->PhysCy);
+    StepX = (LONG)(((LONGLONG)r->cx << 16) / r->PhysCx);
+    StepY = (LONG)(((LONGLONG)r->cy << 16) / r->PhysCy);
+
+    for (y = Bounds.top; y < Bounds.bottom; y++)
+    {
+        Y0 = IntCompositionStretchSample(y, StepY, r->cy, &WeightY);
+        Y1 = min(Y0 + 1, r->cy - 1);
+        Row0 = (PULONG)((PUCHAR)Source->pvScan0 + (LONG_PTR)Y0 * Source->lDelta);
+        Row1 = (PULONG)((PUCHAR)Source->pvScan0 + (LONG_PTR)Y1 * Source->lDelta);
+        Out = (PULONG)((PUCHAR)Target->pvScan0 + (LONG_PTR)y * Target->lDelta);
+        for (x = Bounds.left; x < Bounds.right; x++)
+        {
+            X0 = IntCompositionStretchSample(x, StepX, r->cx, &WeightX);
+            X1 = min(X0 + 1, r->cx - 1);
+            Out[x] = IntCompositionLerpPixel(IntCompositionLerpPixel(Row0[X0], Row0[X1], WeightX),
+                                             IntCompositionLerpPixel(Row1[X0], Row1[X1], WeightX),
+                                             WeightY);
+        }
+    }
+    return TRUE;
+}
+
 /* FRONT buffer over a pageable section: win32k keeps a system-space view the
  * GDI surface wraps; dwm maps the same section read-only in user space and
  * composes straight from it — no per-frame pixel copies out of the kernel. */
@@ -1179,6 +1289,8 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
 {
     LONG cx = Wnd->rcWindow.right - Wnd->rcWindow.left;
     LONG cy = Wnd->rcWindow.bottom - Wnd->rcWindow.top;
+    BOOL Virtual = UserDpiIsVirtualWindow(Wnd);
+    LONG BackCx = cx, BackCy = cy;
     PSURFACE psurfNew, psurfNewFront = NULL;
     HBITMAP hbmpNew, hbmpNewFront = NULL;
     PVOID pBackSectionNew = NULL, pBackViewNew = NULL;
@@ -1206,7 +1318,14 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     UNREFERENCED_PARAMETER(Stride);
     UNREFERENCED_PARAMETER(Bytes);
 
-    if (r->psurf != NULL && r->cx == cx && r->cy == cy)
+    if (Virtual)
+    {
+        BackCx = max(UserDpiToLogical(Wnd->rcWindow.right) - UserDpiToLogical(Wnd->rcWindow.left), 1);
+        BackCy = max(UserDpiToLogical(Wnd->rcWindow.bottom) - UserDpiToLogical(Wnd->rcWindow.top), 1);
+    }
+
+    if (r->psurf != NULL && r->cx == BackCx && r->cy == BackCy && r->Virtual == Virtual &&
+        (!Virtual || (r->PhysCx == cx && r->PhysCy == cy)))
         return r->psurf;
 
     /* A failed allocation must not retry on every GetDC (multi-MB pool
@@ -1218,7 +1337,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
         return r->psurf;
     }
 
-    psurfNew = IntCompositionCreateSharedBuffer(cx, cy,
+    psurfNew = IntCompositionCreateSharedBuffer(BackCx, BackCy,
                                                 IntCompositionDeviceBuffers(),
                                                 &hbmpNew,
                                                 &pBackSectionNew,
@@ -1255,8 +1374,8 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
 
     rcCopy.left = 0;
     rcCopy.top = 0;
-    rcCopy.right = min(cx, r->cx);
-    rcCopy.bottom = min(cy, r->cy);
+    rcCopy.right = min(BackCx, r->cx);
+    rcCopy.bottom = min(BackCy, r->cy);
 
     if (rcCopy.right > 0 && rcCopy.bottom > 0)
     {
@@ -1297,7 +1416,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
 
             if (Device != NULL)
             {
-                RECTL Bounds = {0, 0, cx, cy};
+                RECTL Bounds = {0, 0, BackCx, BackCy};
                 EBRUSHOBJ Fill;
 
                 EBRUSHOBJ_vInit(&Fill, Brush, psurfNew, 0x00FFFFFF, 0, NULL);
@@ -1354,12 +1473,15 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     r->BackGeneration = ++g_FrontGeneration;
     r->BackGlobalShare = BackGlobalShareNew;
     r->BackDirtyRect.left = r->BackDirtyRect.top = 0;
-    r->BackDirtyRect.right = cx;
-    r->BackDirtyRect.bottom = cy;
+    r->BackDirtyRect.right = BackCx;
+    r->BackDirtyRect.bottom = BackCy;
     r->BackDirtyValid = TRUE;
 
-    r->cx = cx;
-    r->cy = cy;
+    r->cx = BackCx;
+    r->cy = BackCy;
+    r->Virtual = Virtual;
+    r->PhysCx = cx;
+    r->PhysCy = cy;
     if (bHold)
         IntCompositionFreeSurface(&Old, TRUE);
     return r->psurf;
@@ -1984,8 +2106,8 @@ IntCompositionOnWindowResize(_In_ PWND Wnd)
     if (e->Redirect.psurf != NULL && !Minimized &&
         ((e->Redirect.FrontHeld && !e->WindowRectValid) ||
          (!OldWindowRectValid &&
-          (e->Redirect.cx != Wnd->rcWindow.right - Wnd->rcWindow.left ||
-           e->Redirect.cy != Wnd->rcWindow.bottom - Wnd->rcWindow.top))))
+          ((e->Redirect.Virtual ? e->Redirect.PhysCx : e->Redirect.cx) != Wnd->rcWindow.right - Wnd->rcWindow.left ||
+           (e->Redirect.Virtual ? e->Redirect.PhysCy : e->Redirect.cy) != Wnd->rcWindow.bottom - Wnd->rcWindow.top))))
     {
         IntCompositionFreeSurface(&e->Redirect, TRUE);
     }
@@ -2139,7 +2261,7 @@ IntCompositionDamageBacking(_In_opt_ PSURFACE psurf,
                     else if ((LONGLONG)KeQueryInterruptTime() - g_Redirects[i].BatchStart <
                              COMPOSITION_DC_HOLD_100NS)
                     {
-                        InterlockedExchange(&g_CompositionDamaged, TRUE);
+                        IntCompositionMarkPending();
                         return;
                     }
                 }
@@ -2544,7 +2666,9 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
                           _In_ BOOL Synchronized)
 {
     PWND_REDIRECT Redirect = &Entry->Redirect;
-    RECTL Bounds = {0, 0, Redirect->cx, Redirect->cy};
+    LONG FrontCx = Redirect->Virtual ? Redirect->PhysCx : Redirect->cx;
+    LONG FrontCy = Redirect->Virtual ? Redirect->PhysCy : Redirect->cy;
+    RECTL Bounds = {0, 0, FrontCx, FrontCy};
     POINTL Origin = {0, 0};
     WND_REDIRECT New, Old;
     PPDEVOBJ ppdev;
@@ -2574,7 +2698,7 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     }
 
     RtlZeroMemory(&New, sizeof(New));
-    New.psurfFront = IntCompositionCreateSharedBuffer(Redirect->cx, Redirect->cy,
+    New.psurfFront = IntCompositionCreateSharedBuffer(FrontCx, FrontCy,
                                                       IntCompositionDeviceBuffers(),
                                                       &New.hbmpFront,
                                                       &New.FrontSection,
@@ -2588,10 +2712,13 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     }
 
     ppdev = IntCompositionLockDevice();
-    Copied = ppdev != NULL &&
-             IntEngBitBlt(&New.psurfFront->SurfObj, &Redirect->psurf->SurfObj,
-                          NULL, NULL, NULL, &Bounds, &Origin,
-                          NULL, NULL, NULL, ROP4_SRCCOPY);
+    if (Redirect->Virtual)
+        Copied = ppdev != NULL && IntCompositionStretchBack(Redirect, New.psurfFront, &Bounds);
+    else
+        Copied = ppdev != NULL &&
+                 IntEngBitBlt(&New.psurfFront->SurfObj, &Redirect->psurf->SurfObj,
+                              NULL, NULL, NULL, &Bounds, &Origin,
+                              NULL, NULL, NULL, ROP4_SRCCOPY);
     if (Copied)
         InterlockedExchange(&Redirect->BackDirtyValid, FALSE);
     IntCompositionUnlockDevice(ppdev);
@@ -2621,8 +2748,8 @@ IntCompositionPublishHeld(_Inout_ REDIRECT_ENTRY *Entry, _In_ LONGLONG Now,
     Redirect->BasePreviousUpdateId = 0;
     Redirect->BaseUpdateId = ++g_BaseUpdateSequence;
     Redirect->BaseDirtyRect = Bounds;
-    Redirect->FrontCx = Redirect->cx;
-    Redirect->FrontCy = Redirect->cy;
+    Redirect->FrontCx = FrontCx;
+    Redirect->FrontCy = FrontCy;
     Redirect->FrontHeld = FALSE;
     Redirect->FrontScaled = FALSE;
     Redirect->FrontOffset.x = Redirect->FrontOffset.y = 0;
@@ -2958,6 +3085,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     if (Input.BufBytes < DWM_FRAME_BYTES)
         return STATUS_BUFFER_TOO_SMALL;
 
+    InterlockedExchange64(&g_DwmWakePendingTime, 0);
+
     /* The previous frame's imports and GPU reads have completed before DWM
      * pulls another frame. Release the FRONT handles kept alive for it. */
     IntCompositionReleaseFrameSurfaces();
@@ -3139,7 +3268,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                     BackingDeferred = TRUE;
                     DeferredDamage = TRUE;
                 }
-                else if (InterlockedCompareExchange(&e->BackComplete, FALSE, TRUE) &&
+                else if (!e->Redirect.Virtual &&
+                         InterlockedCompareExchange(&e->BackComplete, FALSE, TRUE) &&
                          IntCompositionIsGLWindow(w) &&
                          !IntCompositionHasVisibleChild(w) &&
                          e->Redirect.BackGlobalShare == 0 &&
@@ -3155,11 +3285,24 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                         PublishedBounds = e->Redirect.BackDirtyRect;
                     Source.x = PublishedBounds.left;
                     Source.y = PublishedBounds.top;
-                    BackingPublished = IntEngBitBlt(
-                        &e->Redirect.psurfFront->SurfObj,
-                        &e->Redirect.psurf->SurfObj,
-                        NULL, NULL, NULL, &PublishedBounds, &Source,
-                        NULL, NULL, NULL, ROP4_SRCCOPY);
+                    if (e->Redirect.Virtual)
+                    {
+                        RECTL FrontBounds;
+
+                        IntCompositionBackToFrontRect(&e->Redirect, &PublishedBounds, &FrontBounds);
+                        PublishedBounds = FrontBounds;
+                        BackingPublished = IntCompositionStretchBack(&e->Redirect,
+                                                                     e->Redirect.psurfFront,
+                                                                     &PublishedBounds);
+                    }
+                    else
+                    {
+                        BackingPublished = IntEngBitBlt(
+                            &e->Redirect.psurfFront->SurfObj,
+                            &e->Redirect.psurf->SurfObj,
+                            NULL, NULL, NULL, &PublishedBounds, &Source,
+                            NULL, NULL, NULL, ROP4_SRCCOPY);
+                    }
                     if (BackingPublished)
                         InterlockedExchange(&e->BackComplete, FALSE);
                 }
@@ -3229,8 +3372,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         IntCompositionHeldRect(&e->Redirect, (PRECTL)&w->rcWindow, &Shown);
         g_DwmFrameWindows[count].x = Shown.left;
         g_DwmFrameWindows[count].y = Shown.top;
-        g_DwmFrameWindows[count].cx = Held ? e->Redirect.FrontCx : e->Redirect.cx;
-        g_DwmFrameWindows[count].cy = Held ? e->Redirect.FrontCy : e->Redirect.cy;
+        g_DwmFrameWindows[count].cx = (Held || e->Redirect.Virtual) ? e->Redirect.FrontCx : e->Redirect.cx;
+        g_DwmFrameWindows[count].cy = (Held || e->Redirect.Virtual) ? e->Redirect.FrontCy : e->Redirect.cy;
         g_DwmFrameWindows[count].SurfaceId = (ULONG)(e - g_Redirects);
         g_DwmFrameWindows[count].Generation = e->Redirect.Generation;
         g_DwmFrameWindows[count].Stride =
@@ -3379,16 +3522,16 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
                 UserHasWindowEdge(w->style, w->ExStyle))
             {
                 lf |= DWM_WINDOW_NC_SHADOW;
-                if (gpqForeground != NULL &&
-                    gpqForeground->spwndActive == w)
-                {
-                    lf |= DWM_WINDOW_ACTIVE;
-                }
-                if (AtomDwmDarkMode != 0 &&
-                    UserGetProp(w, AtomDwmDarkMode, FALSE) != NULL)
-                {
-                    lf |= DWM_WINDOW_DARK;
-                }
+            }
+            if (gpqForeground != NULL &&
+                gpqForeground->spwndActive == w)
+            {
+                lf |= DWM_WINDOW_ACTIVE;
+            }
+            if (AtomDwmDarkMode != 0 &&
+                UserGetProp(w, AtomDwmDarkMode, FALSE) != NULL)
+            {
+                lf |= DWM_WINDOW_DARK;
             }
             g_DwmFrameWindows[count].Alpha = alpha;
             g_DwmFrameWindows[count].ColorKey = (ULONG)key;
@@ -3480,6 +3623,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
             }
         }
         IntCompositionReadFrameExtension(w, &g_DwmFrameWindows[count]);
+        IntCompositionCaptionCache(&e->FrontCaption, Held, e->Redirect.Generation,
+                                   &g_DwmFrameWindows[count]);
         if (e->Redirect.FrontGlobalShare != 0)
         {
             SURFACE_ShareLockByPointer(e->Redirect.psurfFront);
@@ -3545,6 +3690,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     Frame.FullDamage = fullDamage ? 1 : 0;
     Frame.Dirty = (fullDamage || PositionDamageValid || ReadyDamage ||
                    AnimRunning) ? 1 : 0;
+    Frame.IdleRetryMs = PaintDamageDeferred ? DWM_DEFERRED_RETRY_MS : 0;
+    ASSERT(Frame.IdleRetryMs == 0 || InterlockedCompareExchange(&g_CompositionDamaged, FALSE, FALSE) != FALSE);
     Frame.DmgL = rcDmg.left;
     Frame.DmgT = rcDmg.top;
     Frame.DmgR = rcDmg.right;
@@ -3989,8 +4136,14 @@ IntCompositionSetDxLayer(
     Redirect->DxLayerX = Layer->LayerOffsetX;
     Redirect->DxLayerY = Layer->LayerOffsetY;
     Redirect->DxLayerClip = Layer->LayerClip;
-    Redirect->DxClientX += Layer->LayerOffsetX;
-    Redirect->DxClientY += Layer->LayerOffsetY;
+    if (Redirect->Virtual)
+    {
+        Redirect->DxLayerX = UserDpiToPhysical(Redirect->DxLayerX);
+        Redirect->DxLayerY = UserDpiToPhysical(Redirect->DxLayerY);
+        UserDpiRectToPhysical((PRECT)&Redirect->DxLayerClip);
+    }
+    Redirect->DxClientX += Redirect->DxLayerX;
+    Redirect->DxClientY += Redirect->DxLayerY;
 }
 
 static VOID
@@ -4001,7 +4154,8 @@ IntCompositionExportDxLayer(
 {
     PWND SourceWnd = Redirect->DxWindow ?
         ValidateHwndNoErr((HWND)(ULONG_PTR)Redirect->DxWindow) : NULL;
-    RECTL Backing = {0, 0, Redirect->cx, Redirect->cy};
+    RECTL Backing = {0, 0, Redirect->Virtual ? Redirect->PhysCx : Redirect->cx,
+                     Redirect->Virtual ? Redirect->PhysCy : Redirect->cy};
     RECTL Client, Clip;
 
     RtlZeroMemory(Visible, sizeof(*Visible));
@@ -4042,11 +4196,14 @@ IntCompositionUpdateDxPlacement(
 {
     LONG Width = SourceWnd->rcClient.right - SourceWnd->rcClient.left;
     LONG Height = SourceWnd->rcClient.bottom - SourceWnd->rcClient.top;
+    RECTL Logical = {0, 0, Width, Height};
 
+    if (Redirect->Virtual)
+        UserDpiGetLogicalClientRect(SourceWnd, &Logical);
     if (Width <= 0 || Height <= 0 ||
         (Redirect->DxInfo.Version != DWM_DX_SURFACE_INFO_VERSION_GPU &&
-         ((ULONG)Width != Redirect->DxInfo.Width ||
-          (ULONG)Height != Redirect->DxInfo.Height)))
+         ((ULONG)Logical.right != Redirect->DxInfo.Width ||
+          (ULONG)Logical.bottom != Redirect->DxInfo.Height)))
     {
         return FALSE;
     }
@@ -4303,6 +4460,7 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
         {
             ULONG ClientWidth = SourceWnd->rcClient.right - SourceWnd->rcClient.left;
             ULONG ClientHeight = SourceWnd->rcClient.bottom - SourceWnd->rcClient.top;
+            RECTL ClientLogical = {0, 0, (LONG)ClientWidth, (LONG)ClientHeight};
             BOOL Publish = Request.Action == DWM_DX_SURFACE_PUBLISH;
             BOOL Layer = Publish && (Request.Flags & DWM_DX_PUBLISH_LAYER) != 0;
             BOOL Supersede;
@@ -4310,12 +4468,14 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             PKEVENT ReadyEvent;
             DWM_DX_PUBLICATION *Publication = NULL;
 
+            if (Entry->Redirect.Virtual)
+                UserDpiGetLogicalClientRect(SourceWnd, &ClientLogical);
             if (Request.GlobalShare == 0 || Request.ReadyEvent == 0 ||
                 Request.ReadyEvent > (ULONGLONG)MAXULONG_PTR ||
                 Request.Info.Magic != DWM_DX_SURFACE_INFO_MAGIC ||
                 Request.Info.Width == 0 || Request.Info.Height == 0 ||
-                (!Layer && !Publish && (Request.Info.Width != ClientWidth ||
-                                        Request.Info.Height != ClientHeight)) ||
+                (!Layer && !Publish && (Request.Info.Width != (ULONG)ClientLogical.right ||
+                                        Request.Info.Height != (ULONG)ClientLogical.bottom)) ||
                 (Layer && !IntCompositionValidDxLayer(&Request)) ||
                 Request.Info.Width > MAXLONG || Request.Info.Height > MAXLONG)
             {
@@ -4462,8 +4622,8 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
             Entry->Redirect.DxGlobalShare = Request.GlobalShare;
             Entry->Redirect.DxAdapterLuid = Request.AdapterLuid;
             Entry->Redirect.DxInfo = Request.Info;
-            Entry->Redirect.DxDrawWidth = Layer ? Request.Info.Width : ClientWidth;
-            Entry->Redirect.DxDrawHeight = Layer ? Request.Info.Height : ClientHeight;
+            Entry->Redirect.DxDrawWidth = Layer ? (Entry->Redirect.Virtual ? (ULONG)UserDpiToPhysical(Request.Info.Width) : Request.Info.Width) : ClientWidth;
+            Entry->Redirect.DxDrawHeight = Layer ? (Entry->Redirect.Virtual ? (ULONG)UserDpiToPhysical(Request.Info.Height) : Request.Info.Height) : ClientHeight;
             Entry->Redirect.DxSourceWidth = (Request.Flags & DWM_DX_PUBLISH_SOURCE_REGION) ? Request.SourceWidth : Request.Info.Width;
             Entry->Redirect.DxSourceHeight = (Request.Flags & DWM_DX_PUBLISH_SOURCE_REGION) ? Request.SourceHeight : Request.Info.Height;
             Entry->Redirect.DxFlags = Publish ? Request.Flags : 0;
@@ -4595,6 +4755,15 @@ IntCompositionDwmDxSurface(_In_ PVOID pUser)
                 (ULONG)Entry->Redirect.psurf->SurfObj.lDelta;
             Request.Info.Format = DWM_DX_FORMAT_B8G8R8A8_UNORM;
             Request.UpdateRect = Entry->Redirect.rcClient;
+            if (Entry->Redirect.Virtual)
+            {
+                RECT Client = TopWnd->rcClient, Window = TopWnd->rcWindow;
+
+                UserDpiRectToLogical(&Client);
+                UserDpiRectToLogical(&Window);
+                RECTL_vOffsetRect((PRECTL)&Client, -Window.left, -Window.top);
+                Request.UpdateRect = *(PRECTL)&Client;
+            }
             break;
 
         case DWM_DX_SURFACE_CANCEL_GDI:
@@ -4984,8 +5153,10 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     REDIRECT_ENTRY *e = NULL;
     PDC pdc;
     RECTL rcOwn, rcSurf;
+    POINTL Origin, AncestorOrigin;
     PREGION prgn;
     BOOL bRedirect = FALSE;
+    BOOL Virtual;
 
     if (gbCompositionEnabled && Wnd != NULL)
     {
@@ -5052,6 +5223,18 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     /* Public DC queries still use screen coordinates, including when a
      * move leaves the origin within the backing surface unchanged. */
     pdc->erclWindow = rcOwn;
+    Virtual = e->Redirect.Virtual;
+    AncestorOrigin.x = ancestor->rcWindow.left;
+    AncestorOrigin.y = ancestor->rcWindow.top;
+    Origin.x = rcOwn.left;
+    Origin.y = rcOwn.top;
+    if (Virtual)
+    {
+        UserDpiPointToLogical((PPOINT)&AncestorOrigin);
+        UserDpiPointToLogical((PPOINT)&Origin);
+    }
+    Origin.x -= AncestorOrigin.x;
+    Origin.y -= AncestorOrigin.y;
 
     /* Cached DCE with a still-valid clip (no DCHF_VALIDATEVISRGN, no new clip
      * region) already redirected at the current backing and origin: the VisRgn
@@ -5060,8 +5243,8 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     if (!Revalidate &&
         (pdc->fs & DC_REDIRECTION) &&
         pdc->dclevel.pSurface == e->Redirect.psurf &&
-        pdc->ptlDCOrig.x == rcOwn.left - ancestor->rcWindow.left &&
-        pdc->ptlDCOrig.y == rcOwn.top - ancestor->rcWindow.top)
+        pdc->ptlDCOrig.x == Origin.x &&
+        pdc->ptlDCOrig.y == Origin.y)
     {
         DC_UnlockDc(pdc);
         return;
@@ -5102,9 +5285,18 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
         prgn = IntSysCreateRectpRgn(0, 0, 0, 0);
     if (prgn == NULL)
         return;
+    if (Virtual)
+    {
+        PREGION prgnLogical = UserDpiCreateLogicalRegion(prgn);
+
+        REGION_Delete(prgn);
+        prgn = prgnLogical;
+        if (prgn == NULL)
+            return;
+    }
 
     /* Screen -> backing coordinates, clamped to the backing extent. */
-    REGION_bOffsetRgn(prgn, -ancestor->rcWindow.left, -ancestor->rcWindow.top);
+    REGION_bOffsetRgn(prgn, -AncestorOrigin.x, -AncestorOrigin.y);
     rcSurf.left = 0;
     rcSurf.top = 0;
     rcSurf.right = e->Redirect.cx;
@@ -5129,13 +5321,13 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
         {
             /* The DCE clip region is in screen coordinates; bring it into
              * backing coordinates before combining. */
-            PREGION prgnTmp = IntSysCreateRectpRgn(0, 0, 0, 0);
+            PREGION prgnTmp = Virtual ? UserDpiCreateLogicalRegion(prgnClip)
+                                      : IntSysCreateRectpRgn(0, 0, 0, 0);
             if (prgnTmp != NULL)
             {
-                IntGdiCombineRgn(prgnTmp, prgnClip, NULL, RGN_COPY);
-                REGION_bOffsetRgn(prgnTmp,
-                                  -ancestor->rcWindow.left,
-                                  -ancestor->rcWindow.top);
+                if (!Virtual)
+                    IntGdiCombineRgn(prgnTmp, prgnClip, NULL, RGN_COPY);
+                REGION_bOffsetRgn(prgnTmp, -AncestorOrigin.x, -AncestorOrigin.y);
                 IntGdiCombineRgn(prgn, prgn, prgnTmp,
                                  (DcxFlags & DCX_INTERSECTRGN) ? RGN_AND : RGN_DIFF);
                 REGION_Delete(prgnTmp);
@@ -5168,8 +5360,7 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
 
     /* Publish surface, origin and visibility atomically under the DC lock. */
     DC_vSelectSurface(pdc, e->Redirect.psurf);
-    pdc->ptlDCOrig.x = rcOwn.left - ancestor->rcWindow.left;
-    pdc->ptlDCOrig.y = rcOwn.top - ancestor->rcWindow.top;
+    pdc->ptlDCOrig = Origin;
     DC_vSetBrushOrigin(pdc, pdc->dclevel.ptlBrushOrigin.x, pdc->dclevel.ptlBrushOrigin.y);
     pdc->dclevel.sizl.cx = e->Redirect.cx;
     pdc->dclevel.sizl.cy = e->Redirect.cy;
@@ -5190,6 +5381,7 @@ VOID
 IntCompositionWatchdog(VOID)
 {
     LONGLONG Now;
+    LONGLONG WakePending;
 
     if (g_DwmGpuOutputWindow == NULL && g_DwmGpuOutputOwner.Generation != 0)
         (VOID)IntCompositionReleaseGpuOutput(TRUE);
@@ -5201,7 +5393,10 @@ IntCompositionWatchdog(VOID)
     if (Now - g_DwmWatchdogLastCheck > (50LL * 1000000LL))
         g_DwmWatchdogStart = Now;
     g_DwmWatchdogLastCheck = Now;
-    if (Now - max(g_DwmLastFrameTime, g_DwmWatchdogStart) <= (300LL * 1000000LL))
+    WakePending = InterlockedCompareExchange64(&g_DwmWakePendingTime, 0, 0);
+    if (WakePending == 0)
+        return;
+    if (Now - max(max(g_DwmLastFrameTime, WakePending), g_DwmWatchdogStart) <= (300LL * 1000000LL))
         return; /* alive within 30 s */
 
     ERR("DWM went silent - tearing down composition, reverting to direct draw\n");
@@ -5246,6 +5441,7 @@ IntCompositionSetEnabled(_In_ BOOL bEnable)
         return STATUS_SUCCESS;
 
     gbCompositionEnabled = bEnable;
+    UserDpiUpdateVirtualization();
 
     if (bEnable)
     {

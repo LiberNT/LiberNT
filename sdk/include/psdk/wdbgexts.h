@@ -182,9 +182,13 @@ typedef union _ULPTR64
     ULONG_PTR ptr;
     ULONG64 ptr64;
 } ULPTR64;
+#define ULPTR64_INITIALIZER(Pointer) { (ULONG_PTR)(Pointer) }
+#define ULPTR64_VALUE(Pointer) ((ULPTR64){ (ULONG_PTR)(Pointer) })
 #else
 // #define ULPTR64 PVOID64
 #define ULPTR64 ULONG64
+#define ULPTR64_INITIALIZER(Pointer) ((ULONG64)(ULONG_PTR)(Pointer))
+#define ULPTR64_VALUE(Pointer) ((ULONG64)(ULONG_PTR)(Pointer))
 #endif
 
 typedef struct _KDDEBUGGER_DATA64
@@ -198,7 +202,7 @@ typedef struct _KDDEBUGGER_DATA64
     USHORT FramePointer;
     USHORT PaeEnabled:1;
     ULPTR64 KiCallUserMode;
-    ULONG64 KeUserCallbackDispatcher;
+    ULPTR64 KeUserCallbackDispatcher;
     ULPTR64 PsLoadedModuleList;
     ULPTR64 PsActiveProcessHead;
     ULPTR64 PspCidTable;

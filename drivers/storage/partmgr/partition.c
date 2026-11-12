@@ -459,6 +459,7 @@ VolumeDeleteMountPoints(
         {
             OutputSize = OutputBuffer->Size;
             ExFreePoolWithTag(OutputBuffer, TAG_PARTMGR);
+            OutputBuffer = NULL;
             continue;
         }
         /* Success or failure: stop the loop */

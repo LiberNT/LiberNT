@@ -61,6 +61,7 @@ add_custom_command(OUTPUT ${LXCORE_COPY}/mm.c ${LXCORE_COPY}/lxcore.h
 set(LXCORE_TESTS ${LXCORE_HOST}/t_lxmm.c ${LXCORE_HOST}/lxshim.c ${LXCORE_COPY}/mm.c)
 set_source_files_properties(${LXCORE_TESTS} PROPERTIES
     INCLUDE_DIRECTORIES "${LXCORE_HOST};${CMAKE_CURRENT_SOURCE_DIR};${LXCORE_SOURCE};${LXCORE_SOURCE}/arm64")
+set_source_files_properties(${LXCORE_COPY}/mm.c PROPERTIES COMPILE_OPTIONS -Wno-clobbered)
 set_source_files_properties(${REACTOS_HOST_SOURCE_ROOT}/ntos/rtl/rbtree.c PROPERTIES
     INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/../../../rtl/include")
 list(APPEND MM_TESTS ${LXCORE_TESTS} ${REACTOS_HOST_SOURCE_ROOT}/ntos/rtl/rbtree.c)
@@ -75,7 +76,7 @@ function(mm_test_variant NAME ARCH MACHINE)
         ${NVS_ROOT}/arch/${ARCH}/pte.c ${NVS_ROOT}/arch/${ARCH}/descriptor.c)
     target_compile_definitions(${NAME} PRIVATE MM_HOST_TEST MM_HOST_ALLOC_TEST CC_HOST_TEST ${MACHINE} ${ARGN})
     target_include_directories(${NAME} PRIVATE ${NVS_ROOT}/.. ${NVS_ROOT}/arch/${ARCH})
-    target_compile_options(${NAME} PRIVATE -Wall -Wextra -Wno-unused-parameter -g)
+    target_compile_options(${NAME} PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-multichar -g)
     find_package(Threads REQUIRED)
     target_link_libraries(${NAME} PRIVATE Threads::Threads)
     foreach(AREA ${MM_AREAS})

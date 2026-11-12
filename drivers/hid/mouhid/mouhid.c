@@ -402,6 +402,7 @@ MouHid_ReadCompletion(
         {
             /* store wheel status */
             MouseInputData.ButtonFlags |= MOUSE_WHEEL;
+            if (DeviceExtension->FlipFlopWheel) UsageValue = -UsageValue;
             MouseInputData.ButtonData = (USHORT)(UsageValue * WHEEL_DELTA);
         }
         else
@@ -1217,6 +1218,29 @@ MouHid_Pnp(
     }
 }
 
+static
+VOID
+MouHid_QueryDeviceParameters(
+    IN PDEVICE_OBJECT PhysicalDeviceObject,
+    IN PMOUHID_DEVICE_EXTENSION DeviceExtension)
+{
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"FlipFlopWheel");
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Value = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    HANDLE KeyHandle;
+    ULONG Length;
+    NTSTATUS Status;
+
+    Status = IoOpenDeviceRegistryKey(PhysicalDeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_READ, &KeyHandle);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, Value, sizeof(Buffer), &Length);
+    if (NT_SUCCESS(Status) && Value->Type == REG_DWORD && Value->DataLength == sizeof(ULONG))
+        DeviceExtension->FlipFlopWheel = (*(PULONG)Value->Data != 0);
+
+    ZwClose(KeyHandle);
+}
+
 NTSTATUS
 NTAPI
 MouHid_AddDevice(
@@ -1267,7 +1291,8 @@ MouHid_AddDevice(
     /* FIXME handle allocation error */
     ASSERT(DeviceExtension->Irp);
 
-    /* FIXME query parameter 'FlipFlopWheel', 'WheelScalingFactor' */
+    MouHid_QueryDeviceParameters(PhysicalDeviceObject, DeviceExtension);
+    /* TODO: query the 'WheelScalingFactor' device parameter */
 
     /* set power state to D0 */
     State.DeviceState =  PowerDeviceD0;

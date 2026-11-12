@@ -2384,6 +2384,7 @@ BOOLEAN NTAPI AhciHwResetBus(__in PVOID AdapterExtension, __in ULONG PathId)
 ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, __in PVOID BusInformation, __in PCHAR ArgumentString, __inout PPORT_CONFIGURATION_INFORMATION ConfigInfo, __in PBOOLEAN Reserved3)
 {
     AHCI_GHC ghc;
+    BOOLEAN isAbar;
     ULONG index, pci_cfg_len;
     PACCESS_RANGE accessRange;
     UCHAR pci_cfg_buf[sizeof(PCI_COMMON_CONFIG)];
@@ -2403,50 +2404,64 @@ ULONG NTAPI AhciHwFindAdapter(__in PVOID DeviceExtension, __in PVOID HwContext, 
     adapterExtension->SlotNumber = ConfigInfo->SlotNumber;
     adapterExtension->SystemIoBusNumber = ConfigInfo->SystemIoBusNumber;
 
-    // get PCI configuration header
-    pci_cfg_len = StorPortGetBusData(
-                        adapterExtension,
-                        PCIConfiguration,
-                        adapterExtension->SystemIoBusNumber,
-                        adapterExtension->SlotNumber,
-                        pci_cfg_buf,
-                        sizeof(PCI_COMMON_CONFIG));
-
-    if (pci_cfg_len != sizeof(PCI_COMMON_CONFIG))
+    abar = NULL;
+    if (ConfigInfo->AdapterInterfaceType == PCIBus)
     {
-        AhciDebugPrint("\tpci_cfg_len != %d :: %d", sizeof(PCI_COMMON_CONFIG), pci_cfg_len);
-        return SP_RETURN_ERROR;//Not a valid device at the given bus number
+        // get PCI configuration header
+        pci_cfg_len = StorPortGetBusData(
+                            adapterExtension,
+                            PCIConfiguration,
+                            adapterExtension->SystemIoBusNumber,
+                            adapterExtension->SlotNumber,
+                            pci_cfg_buf,
+                            sizeof(PCI_COMMON_CONFIG));
+
+        if (pci_cfg_len != sizeof(PCI_COMMON_CONFIG))
+        {
+            AhciDebugPrint("\tpci_cfg_len != %d :: %d", sizeof(PCI_COMMON_CONFIG), pci_cfg_len);
+            return SP_RETURN_ERROR;//Not a valid device at the given bus number
+        }
+
+        pciConfigData = (PPCI_COMMON_CONFIG)pci_cfg_buf;
+        adapterExtension->VendorID = pciConfigData->VendorID;
+        adapterExtension->DeviceID = pciConfigData->DeviceID;
+        adapterExtension->RevisionID = pciConfigData->RevisionID;
+        // The last PCI base address register (BAR[5], header offset 0x24) points to the AHCI base memory, it’s called ABAR (AHCI Base Memory Register).
+        adapterExtension->AhciBaseAddress = pciConfigData->u.type0.BaseAddresses[5] & (0xFFFFFFF0);
+
+        DPRINT("\tVendorID: %04x  DeviceID: %04x  RevisionID: %02x\n",
+                       adapterExtension->VendorID,
+                       adapterExtension->DeviceID,
+                       adapterExtension->RevisionID);
     }
 
-    pciConfigData = (PPCI_COMMON_CONFIG)pci_cfg_buf;
-    adapterExtension->VendorID = pciConfigData->VendorID;
-    adapterExtension->DeviceID = pciConfigData->DeviceID;
-    adapterExtension->RevisionID = pciConfigData->RevisionID;
-    // The last PCI base address register (BAR[5], header offset 0x24) points to the AHCI base memory, it’s called ABAR (AHCI Base Memory Register).
-    adapterExtension->AhciBaseAddress = pciConfigData->u.type0.BaseAddresses[5] & (0xFFFFFFF0);
-
-    DPRINT("\tVendorID: %04x  DeviceID: %04x  RevisionID: %02x\n",
-                   adapterExtension->VendorID,
-                   adapterExtension->DeviceID,
-                   adapterExtension->RevisionID);
-
     // 2.1.11
-    abar = NULL;
     if (ConfigInfo->NumberOfAccessRanges > 0)
     {
         accessRange = *(ConfigInfo->AccessRanges);
         for (index = 0; index < ConfigInfo->NumberOfAccessRanges; index++)
         {
-            if (accessRange[index].RangeStart.QuadPart == adapterExtension->AhciBaseAddress)
+            if (ConfigInfo->AdapterInterfaceType == PCIBus)
             {
-                abar = StorPortGetDeviceBase(adapterExtension,
-                                             ConfigInfo->AdapterInterfaceType,
-                                             ConfigInfo->SystemIoBusNumber,
-                                             accessRange[index].RangeStart,
-                                             accessRange[index].RangeLength,
-                                             !accessRange[index].RangeInMemory);
-                break;
+                isAbar = (accessRange[index].RangeStart.QuadPart == adapterExtension->AhciBaseAddress);
             }
+            else
+            {
+                // No PCI header on an ACPI adapter, so no ABAR to match: take the first memory range that fits the host control block
+                isAbar = accessRange[index].RangeInMemory &&
+                         accessRange[index].RangeLength >= FIELD_OFFSET(AHCI_MEMORY_REGISTERS, PortList);
+            }
+
+            if (!isAbar)
+                continue;
+
+            abar = StorPortGetDeviceBase(adapterExtension,
+                                         ConfigInfo->AdapterInterfaceType,
+                                         ConfigInfo->SystemIoBusNumber,
+                                         accessRange[index].RangeStart,
+                                         accessRange[index].RangeLength,
+                                         !accessRange[index].RangeInMemory);
+            break;
         }
     }
 
@@ -2629,7 +2644,7 @@ AhciHwUnitControl(
  */
 ULONG NTAPI DriverEntry(__in PVOID DriverObject, __in PVOID RegistryPath)
 {
-    ULONG status;
+    ULONG pciStatus, acpiStatus;
     // initialize the hardware data structure
     HW_INITIALIZATION_DATA hwInitializationData = {0};
 
@@ -2659,13 +2674,26 @@ ULONG NTAPI DriverEntry(__in PVOID DriverObject, __in PVOID RegistryPath)
     hwInitializationData.DeviceExtensionSize = sizeof(AHCI_ADAPTER_EXTENSION);
 
     // register our hw init data
-    status = StorPortInitialize(DriverObject,
-                                RegistryPath,
-                                &hwInitializationData,
-                                NULL);
+    pciStatus = StorPortInitialize(DriverObject,
+                                   RegistryPath,
+                                   &hwInitializationData,
+                                   NULL);
 
-    NT_ASSERT(status == STATUS_SUCCESS);
-    return status;
+    /* TODO: only the first memory range is requested; an ACPI adapter whose ABAR is not its first range will not start */
+    hwInitializationData.NumberOfAccessRanges = 1;
+    hwInitializationData.AdapterInterfaceType = ACPIBus;
+
+    acpiStatus = StorPortInitialize(DriverObject,
+                                    RegistryPath,
+                                    &hwInitializationData,
+                                    NULL);
+
+    /* Invalid initialization data is a bug here; a failed allocation is not */
+    NT_ASSERT(pciStatus != STATUS_INVALID_PARAMETER && pciStatus != STATUS_REVISION_MISMATCH);
+    NT_ASSERT(acpiStatus != STATUS_INVALID_PARAMETER && acpiStatus != STATUS_REVISION_MISMATCH);
+
+    // one registered bus type is enough to drive the adapters on it
+    return (pciStatus == STATUS_SUCCESS) ? pciStatus : acpiStatus;
 }// -- DriverEntry();
 
 /**

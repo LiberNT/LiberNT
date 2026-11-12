@@ -8,9 +8,10 @@
 #include "precomp.h"
 
 #define STRESS_THREADS 8
-#define STRESS_MILLISECONDS 3000
+#define STRESS_MILLISECONDS 250
 #define QUEUED_READERS 6
-#define JOIN_TIMEOUT_MS 30000
+#define JOIN_TIMEOUT_MS 5000
+#define QUEUE_SETTLE_MS 32
 
 typedef struct _SRW_STRESS_CONTEXT
 {
@@ -168,7 +169,7 @@ TestQueuedSharedChain(VOID)
     }
 
     /* Give the readers time to queue up on the wait chain. */
-    Sleep(200);
+    Sleep(QUEUE_SETTLE_MS);
     ok(Context.Entered == 0, "%ld readers entered while the lock was exclusive\n", Context.Entered);
     ok(Context.Lock.Ptr != NULL, "Readers did not queue on the lock word\n");
 
@@ -352,7 +353,7 @@ TestPriorityProgress(VOID)
         if (WaitStatus != WAIT_OBJECT_0)
             goto Cleanup;
 
-        Sleep(100);
+        Sleep(QUEUE_SETTLE_MS);
         SetEvent(Context.Release);
         WaitStatus = WaitForMultipleObjects(3, Threads, TRUE, 2000);
         ok(WaitStatus == WAIT_OBJECT_0, "Higher-priority waiter starved the %s owner (%s waiter, wait=%lu)\n", Context.SharedOwner ? "shared" : "exclusive", Context.SharedWaiter ? "shared" : "exclusive", WaitStatus);

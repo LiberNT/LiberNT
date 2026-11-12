@@ -24,6 +24,7 @@
 #include <usbuser.h>
 #include <drivers/usbport/usbmport.h>
 #include <reactos/drivers/dumpstor.h>
+#include <reactos/drivers/usbcapability.h>
 
 #if DBG
 #define USBPORT_LOG_IRQL(Tag)                                                      \
@@ -465,6 +466,7 @@ typedef struct _USBPORT_DEVICE_EXTENSION {
   PUSBPORT_MINIPORT_INTERFACE MiniPortInterface;
   USBPORT_RESOURCES UsbPortResources;
   PHYSICAL_ADDRESS MemoryBasePhysical; /* Physical address of memory BAR for MSI-X */
+  INTERFACE_TYPE BusInterfaceType; /* The bus the controller sits on, for its DMA adapter */
   PUSBPORT_COMMON_BUFFER_HEADER MiniPortCommonBuffer;
   KSPIN_LOCK MiniportSpinLock;
   /* Bus Interface */

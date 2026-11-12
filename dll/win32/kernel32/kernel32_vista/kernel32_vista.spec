@@ -32,7 +32,7 @@
 @ stdcall ApplicationRecoveryInProgress(ptr)
 @ stdcall CreateSymbolicLinkA(str str long)
 @ stdcall CreateSymbolicLinkW(wstr wstr long)
-@ stdcall EnumSystemLocalesEx(ptr long long ptr)
+@ stdcall EnumSystemLocalesEx(ptr long long ptr) kernel32.EnumSystemLocalesEx
 @ stdcall GetApplicationRecoveryCallback(ptr ptr ptr ptr ptr)
 @ stdcall GetApplicationRestart(ptr wstr ptr ptr)
 @ stdcall GetFileBandwidthReservation(ptr ptr ptr ptr ptr ptr)
@@ -41,16 +41,16 @@
 @ stdcall -ret64 GetEnabledXStateFeatures()
 @ stdcall GetFinalPathNameByHandleA(ptr str long long)
 @ stdcall GetFinalPathNameByHandleW(ptr wstr long long)
-@ stdcall GetLocaleInfoEx(wstr long ptr long)
+@ stdcall GetLocaleInfoEx(wstr long ptr long) kernel32.GetLocaleInfoEx
 @ stdcall GetSystemPreferredUILanguages(long ptr wstr ptr)
 @ stdcall GetThreadPreferredUILanguages(long ptr wstr ptr)
 @ stdcall GetThreadUILanguage()
 @ stdcall GetUILanguageInfo(long wstr wstr ptr ptr)
-@ stdcall GetUserDefaultLocaleName(wstr long)
+@ stdcall GetUserDefaultLocaleName(wstr long) kernel32.GetUserDefaultLocaleName
 @ stdcall GetUserPreferredUILanguages(long ptr wstr ptr)
-@ stdcall IsValidLocaleName(wstr)
-@ stdcall LCIDToLocaleName(long wstr long long)
-@ stdcall LocaleNameToLCID(wstr long)
+@ stdcall IsValidLocaleName(wstr) kernel32.IsValidLocaleName
+@ stdcall LCIDToLocaleName(long wstr long long) kernel32.LCIDToLocaleName
+@ stdcall LocaleNameToLCID(wstr long) kernel32.LocaleNameToLCID
 @ stdcall OpenFileById(ptr ptr long long ptr long)
 @ stdcall QueryFullProcessImageNameA(ptr long ptr ptr)
 @ stdcall QueryFullProcessImageNameW(ptr long ptr ptr)

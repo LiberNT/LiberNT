@@ -116,6 +116,66 @@ WaitOnAddress(volatile VOID *Address, PVOID CompareAddress, SIZE_T AddressSize, 
 }
 #endif
 
+BOOL
+WINAPI
+InitializeSynchronizationBarrier(
+    _Out_ LPSYNCHRONIZATION_BARRIER lpBarrier,
+    _In_ LONG lTotalThreads,
+    _In_ LONG lSpinCount)
+{
+    NTSTATUS Status;
+
+    if (lTotalThreads <= 0 || lSpinCount < -1)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    Status = RtlInitBarrier(lpBarrier, lTotalThreads, lSpinCount);
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+BOOL
+WINAPI
+EnterSynchronizationBarrier(
+    _Inout_ LPSYNCHRONIZATION_BARRIER lpBarrier,
+    _In_ DWORD dwFlags)
+{
+    ULONG Flags;
+
+    if (dwFlags & ~(SYNCHRONIZATION_BARRIER_FLAGS_SPIN_ONLY |
+                    SYNCHRONIZATION_BARRIER_FLAGS_BLOCK_ONLY |
+                    SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE))
+    {
+        RtlRaiseStatus(STATUS_INVALID_PARAMETER);
+    }
+
+    Flags = 0;
+    if (dwFlags & SYNCHRONIZATION_BARRIER_FLAGS_SPIN_ONLY)
+        Flags |= RTL_BARRIER_FLAGS_SPIN_ONLY;
+    if (dwFlags & SYNCHRONIZATION_BARRIER_FLAGS_BLOCK_ONLY)
+        Flags |= RTL_BARRIER_FLAGS_BLOCK_ONLY;
+    if (!(dwFlags & SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE))
+        Flags |= RTL_BARRIER_FLAGS_DELETE_SAFE;
+
+    return RtlBarrier(lpBarrier, Flags);
+}
+
+BOOL
+WINAPI
+DeleteSynchronizationBarrier(
+    _Inout_ LPSYNCHRONIZATION_BARRIER lpBarrier)
+{
+    RtlDeleteBarrier(lpBarrier);
+    return TRUE;
+}
+
 VOID
 WINAPI
 WakeAllConditionVariable(PCONDITION_VARIABLE ConditionVariable)

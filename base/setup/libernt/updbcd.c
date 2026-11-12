@@ -25,6 +25,7 @@
 #define BCD_OS_DEVICE           0x21000001
 #define BCD_DEFAULT_OBJECT      0x23000003
 #define BCD_DISPLAY_ORDER       0x24000001
+#define BCD_TOOLS_DISPLAY_ORDER 0x24000010
 
 #define BCD_DEVICE_PREFIX       16
 #define BCD_DEVICE_SIZE         0x08
@@ -39,10 +40,20 @@
 #define BCD_ELEMENT_DISK        0x38
 #define BCD_ELEMENT_PARTITION_SIZE 0x58
 #define BCD_DEVICE_PARTITION    6
+#define BCD_DEVICE_DISK         0
+#define BCD_DEVICE_RAMDISK_FLAGS 1
+#define BCD_DISK_RAMDISK        3
+#define BCD_FILE_VERSION        1
+#define BCD_FILE_PATH           5
+#define BCD_RAMDISK_DISK_TYPE   0x20
+#define BCD_RAMDISK_FILE        0x38
+#define BCD_RAMDISK_PARENT      0x44
 #define BCD_STYLE_GPT           0
 #define BCD_STYLE_MBR           1
 #define LAYOUT_PARTITIONS       128
 #define BCD_OPTIONS_CHARS       512
+#define BCD_LOAD_ATTEMPTS       50
+#define BCD_LOAD_RETRY_MS       100
 
 #define INSTALL_IMAGE_OPTION    L"INSTALLIMAGE="
 #define INSTALL_HASH_OPTION     L"INSTALLSHA256="
@@ -436,6 +447,7 @@ typedef struct _RUNNING_PARTITION
 
 static DWORD
 GetRunningPartition(
+    _In_opt_ PCWSTR SystemVolume,
     _Out_ PRUNNING_PARTITION Running)
 {
     WCHAR Path[MAX_PATH], Drive[MAX_PATH];
@@ -446,8 +458,13 @@ GetRunningPartition(
     HANDLE Device;
 
     ZeroMemory(Running, sizeof(*Running));
-    if (!GetEnvironmentVariableW(L"SystemDrive", Drive, ARRAYSIZE(Drive)) ||
-        FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\\\.\\%s", Drive)))
+    if (SystemVolume)
+    {
+        if (FAILED(StringCchCopyW(Path, ARRAYSIZE(Path), SystemVolume)))
+            return ERROR_PATH_NOT_FOUND;
+    }
+    else if (!GetEnvironmentVariableW(L"SystemDrive", Drive, ARRAYSIZE(Drive)) ||
+             FAILED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\\\.\\%s", Drive)))
     {
         return ERROR_PATH_NOT_FOUND;
     }
@@ -521,6 +538,7 @@ FindRunningEntry(
     _In_ HKEY Store,
     _In_ PCWSTR LoaderPath,
     _In_ PCWSTR Default,
+    _In_opt_ PCWSTR SystemVolume,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId)
 {
     RUNNING_PARTITION Running;
@@ -528,7 +546,7 @@ FindRunningEntry(
     DWORD Size = BCD_ORDER_MAX * sizeof(WCHAR);
     LONG Error;
 
-    Error = GetRunningPartition(&Running);
+    Error = GetRunningPartition(SystemVolume, &Running);
     if (Error != ERROR_SUCCESS)
     {
         DPRINT1("The partition of the running system is unknown (%ld)\n", Error);
@@ -608,6 +626,7 @@ AddBcdUpgradeEntry(
     _In_ PCWSTR LoaderPath,
     _In_ PCWSTR ImagePath,
     _In_ PCWSTR ImageHash,
+    _In_opt_ PCWSTR SystemVolume,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR EntryId,
     _Out_writes_(UPDATE_ID_CHARS) PWSTR PreviousDefault)
 {
@@ -622,7 +641,7 @@ AddBcdUpgradeEntry(
     if (Error == ERROR_SUCCESS && !IsBootEntry(Store, PreviousDefault, LoaderPath))
         Error = ERROR_INVALID_STATE;
     if (Error == ERROR_SUCCESS)
-        Error = FindRunningEntry(Store, LoaderPath, PreviousDefault, Running);
+        Error = FindRunningEntry(Store, LoaderPath, PreviousDefault, SystemVolume, Running);
     if (Error == ERROR_SUCCESS)
         Error = CreateEntryId(EntryId);
     if (Error == ERROR_SUCCESS)
@@ -649,6 +668,164 @@ AddBcdUpgradeEntry(
     if (Error != ERROR_SUCCESS && EntryId[0])
         RemoveBcdUpgradeEntries(Store, LoaderPath, PreviousDefault);
     DPRINT1("Upgrade boot entry %S after %S, cloned from %S: %ld\n", EntryId, PreviousDefault, Running, Error);
+    return Error;
+}
+
+DWORD
+OpenBcdStoreFile(
+    _In_ PCWSTR Path,
+    _Out_ PHKEY Store)
+{
+    BOOLEAN Enabled;
+    ULONG Attempt;
+    LONG Error;
+
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Enabled);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Enabled);
+    for (Attempt = 1; ; Attempt++)
+    {
+        Error = RegLoadAppKeyW(Path, Store, KEY_ALL_ACCESS, REG_PROCESS_APPKEY, 0);
+        if (Error == ERROR_ACCESS_DENIED)
+            Error = RegLoadAppKeyW(Path, Store, KEY_READ, REG_PROCESS_APPKEY, 0);
+        /* A hive file written a moment ago can still be open in another process, such as an antivirus scan */
+        if (Error != ERROR_SHARING_VIOLATION || Attempt >= BCD_LOAD_ATTEMPTS)
+            break;
+        Sleep(BCD_LOAD_RETRY_MS);
+    }
+    DPRINT1("Boot configuration store %S loaded: %ld (attempt %lu)\n", Path, Error, Attempt);
+    return Error;
+}
+
+DWORD
+BuildBcdPartitionDevice(
+    _In_ const GUID* PartitionId,
+    _In_ const GUID* DiskId,
+    _Out_writes_bytes_(*Size) PBYTE Element,
+    _Inout_ PDWORD Size)
+{
+    if (*Size < BCD_ELEMENT_PARTITION_SIZE)
+        return ERROR_INSUFFICIENT_BUFFER;
+
+    ZeroMemory(Element, BCD_ELEMENT_PARTITION_SIZE);
+    *(PULONG)(Element + BCD_ELEMENT_TYPE) = BCD_DEVICE_PARTITION;
+    *(PULONG)(Element + BCD_DEVICE_PREFIX + BCD_DEVICE_SIZE) = BCD_ELEMENT_PARTITION_SIZE - BCD_DEVICE_PREFIX;
+    CopyMemory(Element + BCD_ELEMENT_PARTITION, PartitionId, sizeof(GUID));
+    *(PULONG)(Element + BCD_ELEMENT_STYLE) = BCD_STYLE_GPT;
+    CopyMemory(Element + BCD_ELEMENT_DISK, DiskId, sizeof(GUID));
+    *Size = BCD_ELEMENT_PARTITION_SIZE;
+    return ERROR_SUCCESS;
+}
+
+DWORD
+BuildBcdRamdiskDevice(
+    _In_ const GUID* PartitionId,
+    _In_ const GUID* DiskId,
+    _In_ PCWSTR ImagePath,
+    _Out_writes_bytes_(*Size) PBYTE Element,
+    _Inout_ PDWORD Size)
+{
+    BYTE Parent[BCD_ELEMENT_PARTITION_SIZE];
+    DWORD ParentSize = sizeof(Parent), PathSize = (DWORD)((wcslen(ImagePath) + 1) * sizeof(WCHAR));
+    DWORD Total = BCD_RAMDISK_PARENT + (BCD_ELEMENT_PARTITION_SIZE - BCD_DEVICE_PREFIX) + PathSize;
+    DWORD Error;
+
+    if (*Size < Total)
+        return ERROR_INSUFFICIENT_BUFFER;
+    Error = BuildBcdPartitionDevice(PartitionId, DiskId, Parent, &ParentSize);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+
+    ZeroMemory(Element, Total);
+    *(PULONG)(Element + BCD_ELEMENT_TYPE) = BCD_DEVICE_DISK;
+    *(PULONG)(Element + BCD_ELEMENT_TYPE + sizeof(ULONG)) = BCD_DEVICE_RAMDISK_FLAGS;
+    *(PULONG)(Element + BCD_DEVICE_PREFIX + BCD_DEVICE_SIZE) = Total - BCD_DEVICE_PREFIX;
+    *(PULONG)(Element + BCD_RAMDISK_DISK_TYPE) = BCD_DISK_RAMDISK;
+    *(PULONG)(Element + BCD_RAMDISK_FILE) = BCD_FILE_VERSION;
+    *(PULONG)(Element + BCD_RAMDISK_FILE + sizeof(ULONG)) = Total - BCD_RAMDISK_FILE;
+    *(PULONG)(Element + BCD_RAMDISK_FILE + 2 * sizeof(ULONG)) = BCD_FILE_PATH;
+    CopyMemory(Element + BCD_RAMDISK_PARENT, Parent + BCD_DEVICE_PREFIX, ParentSize - BCD_DEVICE_PREFIX);
+    CopyMemory(Element + BCD_RAMDISK_PARENT + ParentSize - BCD_DEVICE_PREFIX, ImagePath, PathSize);
+    *Size = Total;
+    return ERROR_SUCCESS;
+}
+
+static BOOL
+IsMediumRamdisk(
+    _In_reads_bytes_(Size) const BYTE* Element,
+    _In_ DWORD Size)
+{
+    DWORD ParentSize;
+
+    if (Size < BCD_RAMDISK_PARENT + BCD_DEVICE_MIN ||
+        *(const ULONG*)(Element + BCD_ELEMENT_TYPE) != BCD_DEVICE_DISK ||
+        *(const ULONG*)(Element + BCD_RAMDISK_DISK_TYPE) != BCD_DISK_RAMDISK ||
+        *(const ULONG*)(Element + BCD_RAMDISK_FILE + 2 * sizeof(ULONG)) != BCD_FILE_PATH)
+    {
+        return FALSE;
+    }
+    ParentSize = *(const ULONG*)(Element + BCD_RAMDISK_PARENT + BCD_DEVICE_SIZE);
+    return ParentSize >= BCD_DEVICE_MIN &&
+           BCD_RAMDISK_PARENT + ParentSize + sizeof(WCHAR) <= Size &&
+           *(const WCHAR*)(Element + BCD_RAMDISK_PARENT + ParentSize) == UNICODE_NULL;
+}
+
+DWORD
+WriteSetupBootEntry(
+    _In_ HKEY Store,
+    _In_ PCWSTR ManagerPath,
+    _In_ PCWSTR LoaderPath,
+    _In_ PCWSTR Description,
+    _In_reads_bytes_(SystemSize) const BYTE* SystemDevice,
+    _In_ DWORD SystemSize,
+    _In_reads_bytes_(OsSize) const BYTE* OsDevice,
+    _In_ DWORD OsSize)
+{
+    BYTE Device[BCD_ELEMENT_MAX];
+    WCHAR OsId[UPDATE_ID_CHARS + 1], Order[UPDATE_ID_CHARS + 2], Path[96];
+    DWORD DeviceSize = sizeof(Device);
+    HKEY Key;
+    LONG Error;
+
+    Error = ReadString(Store, BCD_BOOTMGR, BCD_DEFAULT_OBJECT, OsId, ARRAYSIZE(OsId));
+    if (Error == ERROR_SUCCESS)
+        Error = ReadElement(Store, OsId, BCD_OS_DEVICE, REG_BINARY, Device, &DeviceSize);
+    if (Error != ERROR_SUCCESS)
+        return Error;
+    if (!IsMediumRamdisk(Device, DeviceSize))
+    {
+        /* FIXME: media that boot a RAM disk from a file inside them (boot.wim) cannot be started from a disk copy */
+        DPRINT1("The default entry %S of the medium does not boot a RAM disk of the whole medium\n", OsId);
+        return ERROR_NOT_SUPPORTED;
+    }
+
+    ZeroMemory(Order, sizeof(Order));
+    StringCchCopyW(Order, UPDATE_ID_CHARS, OsId);
+    Error = WriteElement(Store, BCD_BOOTMGR, BCD_APPLICATION_DEVICE, REG_BINARY, SystemDevice, SystemSize);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteString(Store, BCD_BOOTMGR, BCD_APPLICATION_PATH, ManagerPath);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteElement(Store, BCD_BOOTMGR, BCD_DISPLAY_ORDER, REG_MULTI_SZ, Order,
+                             (DWORD)((wcslen(Order) + 2) * sizeof(WCHAR)));
+    if (Error == ERROR_SUCCESS)
+        Error = WriteElement(Store, OsId, BCD_APPLICATION_DEVICE, REG_BINARY, SystemDevice, SystemSize);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteString(Store, OsId, BCD_APPLICATION_PATH, LoaderPath);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteString(Store, OsId, BCD_DESCRIPTION, Description);
+    if (Error == ERROR_SUCCESS)
+        Error = WriteElement(Store, OsId, BCD_OS_DEVICE, REG_BINARY, OsDevice, OsSize);
+
+    if (Error == ERROR_SUCCESS &&
+        SUCCEEDED(StringCchPrintfW(Path, ARRAYSIZE(Path), L"Objects\\%s\\Elements\\%08x", BCD_BOOTMGR,
+                                   BCD_TOOLS_DISPLAY_ORDER)) &&
+        RegOpenKeyExW(Store, Path, REG_OPTION_BACKUP_RESTORE, DELETE, &Key) == ERROR_SUCCESS)
+    {
+        Error = RtlNtStatusToDosError(NtDeleteKey(Key));
+        RegCloseKey(Key);
+    }
+    if (Error == ERROR_SUCCESS)
+        Error = RegFlushKey(Store);
+    DPRINT1("Setup boot entry %S written: %ld\n", OsId, Error);
     return Error;
 }
 

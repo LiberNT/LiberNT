@@ -750,6 +750,29 @@ static HRESULT WINAPI DocObjectService_FireBeforeNavigate2(
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static BOOL is_top_window(IHTMLWindow2 *window)
+{
+    IUnknown *top_unk, *window_unk;
+    IHTMLWindow2 *top = NULL;
+    BOOL ret = TRUE;
+
+    if(FAILED(IHTMLWindow2_get_top(window, &top)) || !top)
+        return TRUE;
+
+    if(SUCCEEDED(IHTMLWindow2_QueryInterface(top, &IID_IUnknown, (void**)&top_unk))) {
+        if(SUCCEEDED(IHTMLWindow2_QueryInterface(window, &IID_IUnknown, (void**)&window_unk))) {
+            ret = top_unk == window_unk;
+            IUnknown_Release(window_unk);
+        }
+        IUnknown_Release(top_unk);
+    }
+
+    IHTMLWindow2_Release(top);
+    return ret;
+}
+#endif
+
 static HRESULT WINAPI DocObjectService_FireNavigateComplete2(
         IDocObjectService* iface,
         IHTMLWindow2 *pHTMLWindow2,
@@ -766,6 +789,12 @@ static HRESULT WINAPI DocObjectService_FireNavigateComplete2(
     HRESULT hres;
 
     TRACE("%p %p %lx\n", This, pHTMLWindow2, dwFlags);
+
+#ifdef __REACTOS__
+    /* TODO: a frame's navigation fires its events on the frame's own browser object */
+    if(!is_top_window(pHTMLWindow2))
+        return S_OK;
+#endif
 
     update_navigation_commands(This->doc_host);
 
@@ -847,6 +876,12 @@ static HRESULT WINAPI DocObjectService_FireDocumentComplete(
     HRESULT hres;
 
     TRACE("%p %p %lx\n", This, pHTMLWindow, dwFlags);
+
+#ifdef __REACTOS__
+    /* TODO: a frame's navigation fires its events on the frame's own browser object */
+    if(!is_top_window(pHTMLWindow))
+        return S_OK;
+#endif
 
     hres = IHTMLWindow2_QueryInterface(pHTMLWindow, &IID_IHTMLPrivateWindow, (void**)&priv_window);
     if(FAILED(hres))

@@ -8,37 +8,30 @@ include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys ..)
 spec2def(kernel32_vista.dll kernel32_vista.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
+    ApplicationRecovery.c
     ApplicationRestart.c
     CompareObjectHandles.c
     DepPolicy.c
     DiscardVirtualMemory.c
     DllDirectory.c
     DynamicTimeZone.c
-    EnumSystemLocalesEx.c
     FirefoxCompat.c
     firmware.c
     GetActiveProcessorCount.c
     GetEnabledXStateFeatures.c
     GetOverlappedResultEx.c
-    GetLocaleInfoEx.c
     GetFileInformationByHandleEx.c
     GetFinalPathNameByHandle.c
     GetLogicalProcessorInformationEx.c
     GetNamedPipeClientProcessId.c
     GetProcessGroupAffinity.c
-    GetSystemDefaultLocaleName.c
     GetTickCount64.c
-    GetUserDefaultLocaleName.c
     InitOnce.c
-    IsValidLocaleName.c
-    LCIDToLocaleName.c
-    LocaleNameToLCID.c
     Packages.c
     ProcThreadAttributeList.c
     PrefetchVirtualMemory.c
     ProcessInformation.c
     ProcessMitigationPolicy.c
-    ResolveLocaleName.c
     SetDefaultDllDirectories.c
     SetFileInformationByHandle.c
     SetProcessValidCallTargets.c
@@ -48,6 +41,7 @@ list(APPEND SOURCE
     threadpool.c
     vista.c)
 
+set_source_files_properties(firmware.c PROPERTIES COMPILE_DEFINITIONS NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 add_library(kernel32_vista_static ${SOURCE})
 target_link_libraries(kernel32_vista_static ${PSEH_LIB})
 add_dependencies(kernel32_vista_static psdk)

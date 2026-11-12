@@ -82,6 +82,9 @@ struct context_handle_list
 {
     struct context_handle_list *next;
     NDR_SCONTEXT context_handle;
+#ifdef __REACTOS__
+    BOOL locked;
+#endif
 };
 
 struct threaddata
@@ -1013,7 +1016,11 @@ RpcBinding *RPCRT4_GetThreadCurrentCallHandle(void)
     return tdata->server_binding;
 }
 
+#ifdef __REACTOS__
+void RPCRT4_PushThreadContextHandle(NDR_SCONTEXT SContext, BOOL locked)
+#else
 void RPCRT4_PushThreadContextHandle(NDR_SCONTEXT SContext)
+#endif
 {
     struct threaddata *tdata = get_or_create_threaddata();
     struct context_handle_list *context_handle_list;
@@ -1024,16 +1031,29 @@ void RPCRT4_PushThreadContextHandle(NDR_SCONTEXT SContext)
     if (!context_handle_list) return;
 
     context_handle_list->context_handle = SContext;
+#ifdef __REACTOS__
+    context_handle_list->locked = locked;
+#endif
     context_handle_list->next = tdata->context_handle_list;
     tdata->context_handle_list = context_handle_list;
 }
 
+#ifdef __REACTOS__
+BOOL RPCRT4_RemoveThreadContextHandle(NDR_SCONTEXT SContext)
+#else
 void RPCRT4_RemoveThreadContextHandle(NDR_SCONTEXT SContext)
+#endif
 {
     struct threaddata *tdata = get_or_create_threaddata();
     struct context_handle_list *current, *prev;
+#ifdef __REACTOS__
+    BOOL locked;
+
+    if (!tdata) return TRUE;
+#else
 
     if (!tdata) return;
+#endif
 
     for (current = tdata->context_handle_list, prev = NULL; current; prev = current, current = current->next)
     {
@@ -1043,13 +1063,26 @@ void RPCRT4_RemoveThreadContextHandle(NDR_SCONTEXT SContext)
                 prev->next = current->next;
             else
                 tdata->context_handle_list = current->next;
+#ifdef __REACTOS__
+            locked = current->locked;
+            free(current);
+            return locked;
+#else
             free(current);
             return;
+#endif
         }
     }
+#ifdef __REACTOS__
+    return TRUE;
+#endif
 }
 
+#ifdef __REACTOS__
+NDR_SCONTEXT RPCRT4_PopThreadContextHandle(BOOL *locked)
+#else
 NDR_SCONTEXT RPCRT4_PopThreadContextHandle(void)
+#endif
 {
     struct threaddata *tdata = get_or_create_threaddata();
     struct context_handle_list *context_handle_list;
@@ -1062,6 +1095,9 @@ NDR_SCONTEXT RPCRT4_PopThreadContextHandle(void)
     tdata->context_handle_list = context_handle_list->next;
 
     context_handle = context_handle_list->context_handle;
+#ifdef __REACTOS__
+    *locked = context_handle_list->locked;
+#endif
     free(context_handle_list);
     return context_handle;
 }

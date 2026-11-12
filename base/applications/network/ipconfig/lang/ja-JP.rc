@@ -9,61 +9,61 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 
 STRINGTABLE
 BEGIN
-    IDS_HEADER "\nLiberNT IP 設定\n\n"
+    IDS_HEADER "\nLiberNT IP 構成\n\n"
     IDS_HOSTNAME            "\tホスト名  . . . . . . . . . . . . : %hs\n"
     IDS_PRIMARYDNSSUFFIX    "\tプライマリ DNS サフィックス . . . : %hs\n"
-    IDS_NODETYPEBCAST       "\tノードの種類  . . . . . . . . . . : ブロードキャスト\n"
-    IDS_NODETYPEP2P         "\tノードの種類  . . . . . . . . . . : ピアツーピア\n"
-    IDS_NODETYPEMIXED       "\tノードの種類  . . . . . . . . . . : 混合\n"
-    IDS_NODETYPEHYBRID      "\tノードの種類  . . . . . . . . . . : ハイブリッド\n"
-    IDS_NODETYPEUNKNOWN     "\tノードの種類  . . . . . . . . . . : 不明\n"
-    IDS_IPROUTINGNO         "\tIPv4 ルーティング有効 . . . . . . : いいえ\n"
-    IDS_IPROUTINGYES        "\tIPv4 ルーティング有効 . . . . . . : はい\n"
+    IDS_NODETYPEBCAST       "\tノード タイプ . . . . . . . . . . : ブロードキャスト\n"
+    IDS_NODETYPEP2P         "\tノード タイプ . . . . . . . . . . : ピアツーピア\n"
+    IDS_NODETYPEMIXED       "\tノード タイプ . . . . . . . . . . : 混合\n"
+    IDS_NODETYPEHYBRID      "\tノード タイプ . . . . . . . . . . : ハイブリッド\n"
+    IDS_NODETYPEUNKNOWN     "\tノード タイプ . . . . . . . . . . : 不明\n"
+    IDS_IPROUTINGNO         "\tIP ルーティング有効 . . . . . . . : いいえ\n"
+    IDS_IPROUTINGYES        "\tIP ルーティング有効 . . . . . . . : はい\n"
     IDS_WINSPROXYNO         "\tWINS プロキシ有効 . . . . . . . . : いいえ\n"
     IDS_WINSPROXYYES        "\tWINS プロキシ有効 . . . . . . . . : はい\n"
     IDS_DNSSUFFIXLIST       "\tDNS サフィックス検索リスト  . . . : %hs\n"
     IDS_EMPTYLINE           "\t                                    %hs\n"
     IDS_MEDIADISCONNECTED   "\tメディアの状態. . . . . . . . . . : 未接続\n"
-    IDS_CONNECTIONDNSSUFFIX "\t接続専用の DNS サフィックス . . . : %hs\n"
-    IDS_DESCRIPTION         "\t詳しい説明  . . . . . . . . . . . : "
+    IDS_CONNECTIONDNSSUFFIX "\t接続固有の DNS サフィックス . . . : %hs\n"
+    IDS_DESCRIPTION         "\t説明. . . . . . . . . . . . . . . : "
     IDS_PHYSICALADDRESS     "\t物理アドレス. . . . . . . . . . . : %hs\n"
     IDS_DHCPNO              "\tDHCP 有効 . . . . . . . . . . . . : いいえ\n"
     IDS_DHCPYES             "\tDHCP 有効 . . . . . . . . . . . . : はい\n"
-    IDS_AUTOCONFIGNO        "\t自動設定有効. . . . . . . . . . . : いいえ\n"
-    IDS_AUTOCONFIGYES       "\t自動設定有効. . . . . . . . . . . : はい\n"
-    IDS_IPADDRESS           "\tIP アドレス . . . . . . . . . . . : %hs\n"
-    IDS_SUBNETMASK          "\tサブネットマスク. . . . . . . . . : %hs\n"
-    IDS_DEFAULTGATEWAY      "\tデフォルトゲートウェイ. . . . . . : %hs\n"
+    IDS_AUTOCONFIGNO        "\t自動構成有効. . . . . . . . . . . : いいえ\n"
+    IDS_AUTOCONFIGYES       "\t自動構成有効. . . . . . . . . . . : はい\n"
+    IDS_IPADDRESS           "\tIPv4 アドレス . . . . . . . . . . : %hs\n"
+    IDS_SUBNETMASK          "\tサブネット マスク . . . . . . . . : %hs\n"
+    IDS_DEFAULTGATEWAY      "\tデフォルト ゲートウェイ . . . . . : %hs\n"
     IDS_DHCPSERVER          "\tDHCP サーバー . . . . . . . . . . : %hs\n"
     IDS_DNSSERVERS          "\tDNS サーバー. . . . . . . . . . . : %hs\n"
     IDS_PRIMARYWINSSERVER   "\tプライマリ WINS サーバー. . . . . : %hs\n"
     IDS_SECONDARYWINSSERVER "\tセカンダリ WINS サーバー. . . . . : %hs\n"
     IDS_LEASEOBTAINED       "\tリース取得. . . . . . . . . . . . : %s\n"
-    IDS_LEASEEXPIRES        "\tリース期限. . . . . . . . . . . . : %s\n"
-    IDS_IPV6ADDRESS         "\tIPv6 Address. . . . . . . . . . . : %hs"
-    IDS_TEMPIPV6ADDRESS     "\tTemporary IPv6 Address. . . . . . : %hs"
-    IDS_LINKLOCALIPV6ADDRESS "\tLink-local IPv6 Address . . . . . : %hs"
+    IDS_LEASEEXPIRES        "\tリースの有効期限. . . . . . . . . : %s\n"
+    IDS_IPV6ADDRESS         "\tIPv6 アドレス . . . . . . . . . . : %hs"
+    IDS_TEMPIPV6ADDRESS     "\t一時 IPv6 アドレス. . . . . . . . : %hs"
+    IDS_LINKLOCALIPV6ADDRESS "\tリンクローカル IPv6 アドレス. . . : %hs"
     IDS_DHCPV6IAID          "\tDHCPv6 IAID . . . . . . . . . . . : %lu\n"
-    IDS_DHCPV6DUID          "\tDHCPv6 Client DUID. . . . . . . . : %hs\n"
-    IDS_ADDRPREFERRED       "(Preferred) \n"
-    IDS_ADDRTENTATIVE       "(Tentative) \n"
-    IDS_ADDRDEPRECATED      "(Deprecated) \n"
-    IDS_ADDRDUPLICATE       "(Duplicate) \n"
+    IDS_DHCPV6DUID          "\tDHCPv6 クライアント DUID. . . . . : %hs\n"
+    IDS_ADDRPREFERRED       "(優先) \n"
+    IDS_ADDRTENTATIVE       "(暫定) \n"
+    IDS_ADDRDEPRECATED      "(非推奨) \n"
+    IDS_ADDRDUPLICATE       "(重複) \n"
     IDS_ADDREND             "\n"
-    IDS_CONNDNSSUFFIXLIST   "\tConnection-specific DNS Suffix Search List :\n"
+    IDS_CONNDNSSUFFIXLIST   "\t接続固有の DNS サフィックス検索の一覧:\n"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_UNKNOWNADAPTER "\n未知のアダプタ: %ls\n\n"
-    IDS_OTHER "\n他の種類のアダプタ: %ls\n\n"
-    IDS_ETH "\nイーサネット アダプタ: %ls\n\n"
-    IDS_TOKEN "\nトークンリング アダプタ: %ls\n\n"
-    IDS_FDDI "\nFDDI アダプタ: %ls\n\n"
-    IDS_PPP "\nPPP アダプタ: %ls\n\n"
-    IDS_LOOP "\nループバック アダプタ: %ls\n\n"
-    IDS_SLIP "\nSLIP アダプタ: %ls\n\n"
-    IDS_WIFI "\nワイヤレス ネットワーク アダプタ: %ls\n\n"
+    IDS_UNKNOWNADAPTER "\n不明なアダプター: %ls\n\n"
+    IDS_OTHER "\nその他の種類のアダプター: %ls\n\n"
+    IDS_ETH "\nイーサネット アダプター: %ls\n\n"
+    IDS_TOKEN "\nトークンリング アダプター: %ls\n\n"
+    IDS_FDDI "\nFDDI アダプター: %ls\n\n"
+    IDS_PPP "\nPPP アダプター: %ls\n\n"
+    IDS_LOOP "\nループバック アダプター: %ls\n\n"
+    IDS_SLIP "\nSLIP アダプター: %ls\n\n"
+    IDS_WIFI "\nワイヤレス ネットワーク アダプター: %ls\n\n"
 END
 
 STRINGTABLE
@@ -94,16 +94,16 @@ STRINGTABLE
 BEGIN
     IDS_DNSNORECORD         "\t種類 %ls のレコードはありません\n\n"
     IDS_DNSNONAME           "\t名前が存在しません。\n\n"
-    IDS_DNSFLUSHERROR       "DNSリゾルバ キャッシュをフラッシュできませんでした: "
-    IDS_DNSFLUSHSUCCESS     "DNSリゾルバ キャッシュは正常にフラッシュされました。\n"
+    IDS_DNSFLUSHERROR       "DNSリゾルバー キャッシュをフラッシュできませんでした: "
+    IDS_DNSFLUSHSUCCESS     "DNSリゾルバー キャッシュは正常にフラッシュされました。\n"
     IDS_DHCPNOTCONNECTED    "メディアが未接続の間は %ls での処理は実行できません\n"
-    IDS_DHCPNOTENABLED      "アダプタ %ls は DHCP に対して有効になっていません。\n"
-    IDS_DHCPNOADAPTER       "アダプタがこの操作を許可する状態にないため、操作は失敗しました。\n"
-    IDS_DHCPRELEASED        "アダプタ %ls に対する IP アドレス はすでに解放されています。\n"
-    IDS_DHCPRELEASEERROR    "インターフェース %ls の解放中にエラーが起きました: "
-    IDS_DHCPRENEWERROR      "インターフェース %ls の更新中にエラーが起きました: "
-    IDS_DHCPSETIDERROR      "Attempt to set the class id for adapter %ls failed: "
-    IDS_DHCPSETIDSUCCESS    "Successfully set the class id for adapter %ls.\n"
+    IDS_DHCPNOTENABLED      "アダプター %ls は DHCP に対して有効になっていません。\n"
+    IDS_DHCPNOADAPTER       "アダプターがこの操作を許可する状態にないため、操作は失敗しました。\n"
+    IDS_DHCPRELEASED        "アダプター %ls に対する IP アドレス はすでに解放されています。\n"
+    IDS_DHCPRELEASEERROR    "インターフェイス %ls の解放中にエラーが起きました: "
+    IDS_DHCPRENEWERROR      "インターフェイス %ls の更新中にエラーが起きました: "
+    IDS_DHCPSETIDERROR      "アダプター %ls のクラス ID を設定できませんでした: "
+    IDS_DHCPSETIDSUCCESS    "アダプター %ls のクラス ID を設定しました。\n"
 END
 
 STRINGTABLE
@@ -123,29 +123,29 @@ BEGIN
 オプション:\n\
     /?              このヘルプ　メッセージを表示します。\n\
     /all            すべての設定情報を表示します。\n\
-    /release        指定したアダプタの IPv4 アドレスを解放します。\n\
-    /renew          指定したアダプタの IPv4 アドレスを更新します。\n\
-    /flushdns       DNS リゾルバ キャッシュをフラッシュします。\n\
+    /release        指定したアダプターの IPv4 アドレスを解放します。\n\
+    /renew          指定したアダプターの IPv4 アドレスを更新します。\n\
+    /flushdns       DNS リゾルバー キャッシュをフラッシュします。\n\
     /registerdns    すべてのDHCPリースを更新し、DNS名を再登録します。\n\
-    /displaydns     DNS リゾルバ キャッシュの内容を表示します。\n\
-    /showclassid    アダプタで許可されているすべての DHCP クラス ID を表示します。\n\
+    /displaydns     DNS リゾルバー キャッシュの内容を表示します。\n\
+    /showclassid    アダプターで許可されているすべての DHCP クラス ID を表示します。\n\
     /setclassid     DHCP クラスIDを変更します。\n\
 \n\
-デフォルトでは、TCP/IPにバインドされている各アダプタのIPアドレス、\n\
+デフォルトでは、TCP/IPにバインドされている各アダプターのIPアドレス、\n\
 サブネットマスク、デフォルトゲートウェイのみが表示されます。\n\
 \n\
-解放と更新では、アダプタ名が指定されていない場合、TCP/IPにバインド\n\
-されているすべてのアダプタのIPアドレス・リースがリリースまたは更新されます。\n\
+解放と更新では、アダプター名が指定されていない場合、TCP/IPにバインド\n\
+されているすべてのアダプターのIPアドレス・リースがリリースまたは更新されます。\n\
 \n\
 setclassid の場合、classid が指定されていなければ、classid は削除されます。\n\
 \n\
 例:\n\
     > ipconfig                   ... 情報を表示します\n\
     > ipconfig /all              ... 詳細情報を表示します\n\
-    > ipconfig /renew            ... すべてのアダプタを更新します\n\
+    > ipconfig /renew            ... すべてのアダプターを更新します\n\
     > ipconfig /renew EL*        ... ELで始まる接続を更新します\n\
     > ipconfig /release *Con*    ... すべてのマッチする接続を解放します。\n\
                                      例 ""Local Area Connection 1"" または\n\
                                         ""Local Area Connection 2""\n"
-    IDS_CMDLINEERROR "\nError: unrecongnized or incomplete command line.\n"
+    IDS_CMDLINEERROR "\nエラー: コマンド ラインが認識できないか、不完全です。\n"
 END

@@ -423,6 +423,7 @@ LxBuildStack(
     _In_ BOOLEAN Secure,
     _Out_ PULONG64 StackPointer)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     PCSTR Platform = LxArchPlatform();
     ULONG64 Base = 0, Top, Cursor, ExecFnAddress, PlatformAddress, RandomAddress, ArgAddress, EnvAddress;
     ULONG64 Auxv[LX_AUXV_WORDS];
@@ -461,10 +462,10 @@ LxBuildStack(
     LX_AUX(LX_AT_BASE, InterpreterBase);
     LX_AUX(LX_AT_FLAGS, 0);
     LX_AUX(LX_AT_ENTRY, Main->Entry);
-    LX_AUX(LX_AT_UID, LxCredViewId(Process, FALSE, Process->Uid[0]));
-    LX_AUX(LX_AT_EUID, LxCredViewId(Process, FALSE, Process->Uid[1]));
-    LX_AUX(LX_AT_GID, LxCredViewId(Process, TRUE, Process->Gid[0]));
-    LX_AUX(LX_AT_EGID, LxCredViewId(Process, TRUE, Process->Gid[1]));
+    LX_AUX(LX_AT_UID, LxCredViewId(Process, FALSE, Cred->Uid[0]));
+    LX_AUX(LX_AT_EUID, LxCredViewId(Process, FALSE, Cred->Uid[1]));
+    LX_AUX(LX_AT_GID, LxCredViewId(Process, TRUE, Cred->Gid[0]));
+    LX_AUX(LX_AT_EGID, LxCredViewId(Process, TRUE, Cred->Gid[1]));
     LX_AUX(LX_AT_SECURE, Secure);
     LX_AUX(LX_AT_HWCAP, LxArchHwcap());
     LX_AUX(LX_AT_HWCAP2, LxArchHwcap2());
@@ -577,15 +578,16 @@ LxApplyRequestUser(
     _In_ PLX_PROCESS Process,
     _In_ PLX_EXEC_REQUEST Request)
 {
-    ULONG Count = min(Request->GroupCount, (ULONG)ARRAYSIZE(Process->Groups));
+    PLX_CRED Cred = LxProcessCred(Process);
+    ULONG Count = min(Request->GroupCount, (ULONG)ARRAYSIZE(Cred->Groups));
     LX_CRED_SAVE Old;
 
     ExAcquireFastMutex(&Process->Lock);
     LxCredSave(Process, &Old);
-    Process->Uid[0] = Process->Uid[1] = Process->Uid[2] = Process->Fsuid = Request->Uid;
-    Process->Gid[0] = Process->Gid[1] = Process->Gid[2] = Process->Fsgid = Request->Gid;
-    Process->GroupCount = Count;
-    RtlCopyMemory(Process->Groups, Request->Groups, Count * sizeof(ULONG));
+    Cred->Uid[0] = Cred->Uid[1] = Cred->Uid[2] = Cred->Fsuid = Request->Uid;
+    Cred->Gid[0] = Cred->Gid[1] = Cred->Gid[2] = Cred->Fsgid = Request->Gid;
+    Cred->GroupCount = Count;
+    RtlCopyMemory(Cred->Groups, Request->Groups, Count * sizeof(ULONG));
     LxCredFixSetuid(Process, &Old, FALSE);
     ExReleaseFastMutex(&Process->Lock);
 }
@@ -660,6 +662,7 @@ LxExecKillOtherThreads(
 {
     PLX_PROCESS Process = Thread->Process;
     PETHREAD Current = PsGetCurrentThread();
+    PLIST_ENTRY ChildEntry;
 
     for (;;)
     {
@@ -695,8 +698,20 @@ LxExecKillOtherThreads(
     }
 
     ExAcquireFastMutex(&Process->Lock);
+    if (Thread->Cred != &Process->Cred)
+    {
+        Process->Cred = *Thread->Cred;
+        Thread->Cred = &Process->Cred;
+    }
     if (Thread->Tid != Process->Pid)
     {
+        for (ChildEntry = Process->Children.Flink; ChildEntry != &Process->Children; ChildEntry = ChildEntry->Flink)
+        {
+            PLX_CHILD Child = CONTAINING_RECORD(ChildEntry, LX_CHILD, Link);
+
+            if (Child->Lx->ParentTid == Thread->Tid)
+                Child->Lx->ParentTid = Process->Pid;
+        }
         Thread->Tid = Process->Pid;
         RtlCopyMemory(Thread->NsTid, Process->NsPid, sizeof(Thread->NsTid));
     }
@@ -782,7 +797,7 @@ LxExecFileCaps(
     Caps->Effective = (Words[0] & LX_VFS_CAP_FLAGS_EFFECTIVE) != 0;
     Caps->Present = TRUE;
     if (Caps->Effective &&
-        (Caps->Permitted & ~((Caps->Permitted & Process->CapBounding) | (Caps->Inheritable & Process->CapInheritable))))
+        (Caps->Permitted & ~((Caps->Permitted & LxProcessCred(Process)->CapBounding) | (Caps->Inheritable & LxProcessCred(Process)->CapInheritable))))
     {
         return -LX_EPERM;
     }
@@ -870,7 +885,7 @@ LxExecImage(
         LxTmpfsInodeAttributes(LxTmpfsFileInode(Main.File), &Mode, &FileUid, &FileGid, &Device);
     if (Error == 0)
         MaySuid = (Main.File->Mount == NULL) || !(Main.File->Mount->Flags & LX_MS_NOSUID);
-    if ((Error == 0) && MaySuid && !Process->NoNewPrivs &&
+    if ((Error == 0) && MaySuid && !Thread->NoNewPrivs &&
         ((LxTmpfsFileInode(Main.File) != NULL) ||
          (LxNtReadLxAttributes(Main.File->Handle, &Mode, &FileUid, &FileGid, &Device) == 0)) && (Mode != MAXULONG) &&
         LxIdsMapped(Process, FileUid, FileGid))
@@ -914,10 +929,10 @@ LxExecImage(
     }
     LxCredSave(Process, &Old);
     if (SetUid)
-        Process->Uid[1] = FileUid;
+        LxProcessCred(Process)->Uid[1] = FileUid;
     if (SetGid)
-        Process->Gid[1] = FileGid;
-    CredFlags = LxCredExec(Process, &Old, &FileCaps);
+        LxProcessCred(Process)->Gid[1] = FileGid;
+    CredFlags = LxCredExec(Process, Thread, &Old, &FileCaps);
     if (SetUid || SetGid || (CredFlags & LX_CRED_EXEC_GAINED))
         Process->Personality &= ~LX_PER_CLEAR_ON_SETID;
     Process->Personality = LxArchExecPersonality(Process->Personality);

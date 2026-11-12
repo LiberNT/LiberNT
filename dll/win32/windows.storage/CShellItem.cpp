@@ -1501,7 +1501,7 @@ SHCreateShellItemArray(_In_opt_ PCIDLIST_ABSOLUTE pidlParent, _In_opt_ IShellFol
         pidlParent = allocatedParent;
     }
 
-    hr = SHCreateDataObject(pidlParent, cidl, ppidl, NULL, IID_PPV_ARG(IDataObject, &dataObject));
+    hr = IDataObject_Constructor(NULL, pidlParent, ppidl, cidl, FALSE, &dataObject);
     if (SUCCEEDED(hr))
         hr = SHCreateShellItemArrayFromDataObject(dataObject, IID_PPV_ARG(IShellItemArray, ppsiItemArray));
     ILFree(allocatedParent);

@@ -18,6 +18,57 @@ typedef struct _RTL_MUI_REGISTRY_VALUE
     ULONG CharacterCount;
 } RTL_MUI_REGISTRY_VALUE, *PRTL_MUI_REGISTRY_VALUE;
 
+typedef struct _RTL_MUI_THREAD_LANGUAGES
+{
+    ULONG Filter;
+    WCHAR Languages[ANYSIZE_ARRAY];
+} RTL_MUI_THREAD_LANGUAGES, *PRTL_MUI_THREAD_LANGUAGES;
+
+typedef struct _RTL_NLS_LOCALE_HEADER
+{
+    UINT Offset;
+    UINT Unknown1;
+    UINT Version;
+    UINT Magic;
+    UINT Unknown2[3];
+    USHORT HeaderSize;
+    USHORT LcidCount;
+    USHORT LocaleCount;
+    USHORT LocaleSize;
+    UINT LocalesOffset;
+    USHORT LcnameCount;
+    USHORT Pad;
+    UINT LcidsOffset;
+    UINT LcnamesOffset;
+    UINT Unknown3;
+    USHORT CalendarCount;
+    USHORT CalendarSize;
+    UINT CalendarsOffset;
+    UINT StringsOffset;
+} RTL_NLS_LOCALE_HEADER;
+
+typedef struct _RTL_NLS_LOCALE_LCNAME_INDEX
+{
+    USHORT Name;
+    USHORT Index;
+    UINT Lcid;
+} RTL_NLS_LOCALE_LCNAME_INDEX;
+
+typedef struct _RTL_NLS_LOCALE_DATA
+{
+    UINT SName;
+    UCHAR Reserved1[0x06e - 0x004];
+    USHORT IDefaultAnsiCodePage;
+    UCHAR Reserved2[0x114 - 0x070];
+    UINT SConsoleFallbackName;
+} RTL_NLS_LOCALE_DATA;
+
+C_ASSERT(FIELD_OFFSET(RTL_NLS_LOCALE_HEADER, LocalesOffset) == 0x24);
+C_ASSERT(FIELD_OFFSET(RTL_NLS_LOCALE_HEADER, LcnamesOffset) == 0x30);
+C_ASSERT(FIELD_OFFSET(RTL_NLS_LOCALE_HEADER, StringsOffset) == 0x40);
+C_ASSERT(FIELD_OFFSET(RTL_NLS_LOCALE_DATA, IDefaultAnsiCodePage) == 0x06e);
+C_ASSERT(FIELD_OFFSET(RTL_NLS_LOCALE_DATA, SConsoleFallbackName) == 0x114);
+
 #define RTL_MUI_MAX_PROCESS_LANGUAGES 5
 
 static PWSTR RtlpProcessPreferredLanguages;
@@ -251,8 +302,18 @@ RtlpHexDigitValue(WCHAR Character)
     return -1;
 }
 
+static BOOLEAN
+RtlpIsDefaultLanguageId(ULONG Value)
+{
+    return Value == LANGIDFROMLCID(LOCALE_SYSTEM_DEFAULT) ||
+           Value == LANGIDFROMLCID(LOCALE_USER_DEFAULT) ||
+           Value == LANGIDFROMLCID(LOCALE_CUSTOM_DEFAULT) ||
+           Value == LANGIDFROMLCID(LOCALE_CUSTOM_UI_DEFAULT) ||
+           Value == LANGIDFROMLCID(LOCALE_CUSTOM_UNSPECIFIED);
+}
+
 static NTSTATUS
-RtlpCanonicalizePreferredLanguage(DWORD Flags, PCWSTR Input, PWSTR Output, PULONG Length)
+RtlpCanonicalizePreferredLanguage(DWORD Flags, BOOLEAN RejectDefaultIds, PCWSTR Input, PWSTR Output, PULONG Length)
 {
     UNICODE_STRING LocaleName;
     LCID Locale;
@@ -271,6 +332,7 @@ RtlpCanonicalizePreferredLanguage(DWORD Flags, PCWSTR Input, PWSTR Output, PULON
             if (Digit < 0) return STATUS_INVALID_PARAMETER;
             Value = (Value << 4) | Digit;
         }
+        if (RejectDefaultIds && RtlpIsDefaultLanguageId(Value)) return STATUS_INVALID_PARAMETER;
         Locale = MAKELCID((LANGID)Value, SORT_DEFAULT);
     }
     else
@@ -291,11 +353,12 @@ RtlpCanonicalizePreferredLanguage(DWORD Flags, PCWSTR Input, PWSTR Output, PULON
 }
 
 static NTSTATUS
-RtlpNormalizeProcessPreferredLanguages(DWORD Flags,
-                                       PCZZWSTR Input,
-                                       PWSTR *Languages,
-                                       PULONG CharacterCount,
-                                       PULONG LanguageCount)
+RtlpNormalizePreferredLanguages(DWORD Flags,
+                                BOOLEAN RejectDefaultIds,
+                                PCZZWSTR Input,
+                                PWSTR *Languages,
+                                PULONG CharacterCount,
+                                PULONG LanguageCount)
 {
     WCHAR Canonical[RTL_MUI_MAX_PROCESS_LANGUAGES][LOCALE_NAME_MAX_LENGTH];
     ULONG Lengths[RTL_MUI_MAX_PROCESS_LANGUAGES];
@@ -315,6 +378,7 @@ RtlpNormalizeProcessPreferredLanguages(DWORD Flags,
         BOOLEAN Duplicate = FALSE;
 
         Status = RtlpCanonicalizePreferredLanguage(Flags,
+                                                   RejectDefaultIds,
                                                    Current,
                                                    Canonical[UniqueCount],
                                                    &Length);
@@ -375,6 +439,33 @@ RtlpNormalizeProcessPreferredLanguages(DWORD Flags,
     return STATUS_SUCCESS;
 }
 
+static NTSTATUS
+RtlpWriteEmptyLanguageList(PWSTR Buffer, PULONG Size)
+{
+    if (Buffer && *Size < 2)
+    {
+        *Size = 2;
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    if (Buffer)
+    {
+        Buffer[0] = UNICODE_NULL;
+        Buffer[1] = UNICODE_NULL;
+    }
+    *Size = 2;
+    return STATUS_SUCCESS;
+}
+
+static ULONG
+RtlpMultiStringCharacters(PCZZWSTR List)
+{
+    PCWSTR Current = List;
+
+    while (*Current) Current += wcslen(Current) + 1;
+    return (ULONG)(Current - List) + 1;
+}
+
 NTSTATUS
 NTAPI
 RtlGetProcessPreferredUILanguages(DWORD Flags, PULONG Count, PWSTR Buffer, PULONG Size)
@@ -399,20 +490,9 @@ RtlGetProcessPreferredUILanguages(DWORD Flags, PULONG Count, PWSTR Buffer, PULON
                                              Buffer,
                                              Size);
     }
-    else if (Buffer && *Size < 2)
-    {
-        *Size = 2;
-        Status = STATUS_BUFFER_TOO_SMALL;
-    }
     else
     {
-        if (Buffer)
-        {
-            Buffer[0] = UNICODE_NULL;
-            Buffer[1] = UNICODE_NULL;
-        }
-        *Size = 2;
-        Status = STATUS_SUCCESS;
+        Status = RtlpWriteEmptyLanguageList(Buffer, Size);
     }
     RtlReleasePebLock();
     return Status;
@@ -436,11 +516,12 @@ RtlSetProcessPreferredUILanguages(DWORD Flags, PCZZWSTR Buffer, PULONG Count)
 
     if (Buffer)
     {
-        Status = RtlpNormalizeProcessPreferredLanguages(Flags,
-                                                        Buffer,
-                                                        &Languages,
-                                                        &CharacterCount,
-                                                        &LanguageCount);
+        Status = RtlpNormalizePreferredLanguages(Flags,
+                                                 FALSE,
+                                                 Buffer,
+                                                 &Languages,
+                                                 &CharacterCount,
+                                                 &LanguageCount);
         if (!NT_SUCCESS(Status)) return Status;
     }
 
@@ -504,11 +585,370 @@ RtlGetSystemPreferredUILanguages(DWORD Flags, ULONG Reserved, PULONG Count, PWST
     return RtlpGetPreferredLanguageById(Flags, LanguageId, Count, Buffer, Size);
 }
 
+static VOID
+RtlpAppendMergedLanguage(PWSTR Merged, PULONG Used, PCWSTR Language, SIZE_T Length)
+{
+    PCWSTR Current;
+
+    if (!Length || Length >= LOCALE_NAME_MAX_LENGTH) return;
+
+    for (Current = Merged; *Current; Current += wcslen(Current) + 1)
+    {
+        if (wcslen(Current) == Length && !_wcsnicmp(Current, Language, Length)) return;
+    }
+
+    RtlCopyMemory(Merged + *Used, Language, Length * sizeof(WCHAR));
+    *Used += (ULONG)Length;
+    Merged[(*Used)++] = UNICODE_NULL;
+    Merged[*Used] = UNICODE_NULL;
+}
+
+static VOID
+RtlpAppendMergedList(PWSTR Merged, PULONG Used, PCZZWSTR List, BOOLEAN AddNeutral)
+{
+    PCWSTR Current;
+
+    for (Current = List; *Current; Current += wcslen(Current) + 1)
+    {
+        PCWSTR Dash = wcschr(Current, L'-');
+
+        RtlpAppendMergedLanguage(Merged, Used, Current, wcslen(Current));
+        if (AddNeutral && Dash) RtlpAppendMergedLanguage(Merged, Used, Current, Dash - Current);
+    }
+}
+
+static WCHAR
+RtlpUpcaseLocaleNameCharacter(WCHAR Character)
+{
+    if (Character >= L'a' && Character <= L'z') return Character - (L'a' - L'A');
+    if (Character == L'_') return L'-';
+    return Character;
+}
+
+static INT
+RtlpCompareLocaleNames(PCWSTR Name1, PCWSTR Name2)
+{
+    for (;;)
+    {
+        WCHAR Character1 = RtlpUpcaseLocaleNameCharacter(*Name1++);
+        WCHAR Character2 = RtlpUpcaseLocaleNameCharacter(*Name2++);
+
+        if (!Character1 || Character1 != Character2) return Character1 - Character2;
+    }
+}
+
+static const RTL_NLS_LOCALE_DATA *
+RtlpFindLocaleData(PCWSTR Name, PCWSTR *Strings)
+{
+    const RTL_NLS_LOCALE_HEADER *Header;
+    const RTL_NLS_LOCALE_LCNAME_INDEX *Index;
+    PVOID Base;
+    LCID DefaultLocale;
+    LONG Low, High;
+
+    if (!NT_SUCCESS(RtlGetLocaleFileMappingAddress(&Base, &DefaultLocale, NULL))) return NULL;
+
+    Header = (const RTL_NLS_LOCALE_HEADER *)((const UCHAR *)Base + ((const UINT *)Base)[4]);
+    Index = (const RTL_NLS_LOCALE_LCNAME_INDEX *)((const UCHAR *)Header + Header->LcnamesOffset);
+    *Strings = (PCWSTR)((const UCHAR *)Header + Header->StringsOffset);
+
+    Low = 0;
+    High = (LONG)Header->LcnameCount - 1;
+    while (Low <= High)
+    {
+        LONG Middle = (Low + High) / 2;
+        INT Result = RtlpCompareLocaleNames(Name, *Strings + Index[Middle].Name + 1);
+
+        if (Result < 0) High = Middle - 1;
+        else if (Result > 0) Low = Middle + 1;
+        else return (const RTL_NLS_LOCALE_DATA *)((const UCHAR *)Header + Header->LocalesOffset +
+                                                  (ULONG)Index[Middle].Index * Header->LocaleSize);
+    }
+    return NULL;
+}
+
+static BOOLEAN
+RtlpIsSameLanguage(PCWSTR Name1, PCWSTR Name2)
+{
+    for (;; Name1++, Name2++)
+    {
+        WCHAR Character1 = RtlpUpcaseLocaleNameCharacter(*Name1);
+        WCHAR Character2 = RtlpUpcaseLocaleNameCharacter(*Name2);
+
+        if (Character1 == L'-') Character1 = UNICODE_NULL;
+        if (Character2 == L'-') Character2 = UNICODE_NULL;
+        if (Character1 != Character2) return FALSE;
+        if (!Character1) return TRUE;
+    }
+}
+
+static BOOLEAN
+RtlpIsConsoleLanguage(DWORD Filter, PCWSTR Language, PCWSTR *Fallback)
+{
+    const RTL_NLS_LOCALE_DATA *Locale;
+    PCWSTR Strings;
+    PCWSTR FallbackName;
+    USHORT AnsiCodePage;
+    USHORT OemCodePage;
+    LCID Lcid;
+
+    *Fallback = NULL;
+    Locale = RtlpFindLocaleData(Language, &Strings);
+    if (!Locale) return TRUE;
+
+    FallbackName = Strings + Locale->SConsoleFallbackName + 1;
+    if (!RtlpIsSameLanguage(Language, FallbackName))
+    {
+        *Fallback = FallbackName;
+        return FALSE;
+    }
+
+    if (Filter != MUI_CONSOLE_FILTER) return TRUE;
+
+    /* FIXME: the console code page is approximated by the system ANSI code page, and English counts as legible in every code page */
+    RtlGetDefaultCodePage(&AnsiCodePage, &OemCodePage);
+    if (Locale->IDefaultAnsiCodePage == AnsiCodePage) return TRUE;
+    return NT_SUCCESS(RtlLocaleNameToLcid(Language, &Lcid, RTL_LOCALE_ALLOW_NEUTRAL_NAMES)) &&
+           PRIMARYLANGID(LANGIDFROMLCID(Lcid)) == LANG_ENGLISH;
+}
+
+static NTSTATUS
+RtlpFilterPreferredLanguages(DWORD Filter, PCZZWSTR List, PWSTR *Filtered, PULONG Characters)
+{
+    PCWSTR Current;
+    PCWSTR Fallback;
+    PWSTR Result;
+    ULONG Capacity = 1;
+    ULONG Used = 0;
+
+    for (Current = List; *Current; Current += wcslen(Current) + 1)
+        Capacity += (ULONG)wcslen(Current) + 1 + LOCALE_NAME_MAX_LENGTH + 1;
+
+    Result = RtlAllocateHeap(RtlGetProcessHeap(), 0, Capacity * sizeof(WCHAR));
+    if (!Result) return STATUS_NO_MEMORY;
+
+    Result[0] = UNICODE_NULL;
+    for (Current = List; *Current; Current += wcslen(Current) + 1)
+    {
+        if (RtlpIsConsoleLanguage(Filter, Current, &Fallback))
+            RtlpAppendMergedLanguage(Result, &Used, Current, wcslen(Current));
+    }
+    for (Current = List; *Current; Current += wcslen(Current) + 1)
+    {
+        if (!RtlpIsConsoleLanguage(Filter, Current, &Fallback) && Fallback)
+            RtlpAppendMergedLanguage(Result, &Used, Fallback, wcslen(Fallback));
+    }
+
+    *Filtered = Result;
+    *Characters = Used + 1;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+RtlpWriteFilteredLanguages(DWORD Flags, DWORD Filter, PCZZWSTR List, ULONG ListCharacters, PULONG Count, PWSTR Buffer, PULONG Size)
+{
+    PWSTR Filtered;
+    ULONG Characters;
+    NTSTATUS Status;
+
+    if (!Filter) return RtlpWritePreferredLanguages(Flags, List, ListCharacters, Count, Buffer, Size);
+
+    Status = RtlpFilterPreferredLanguages(Filter, List, &Filtered, &Characters);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Filtered[0]) Status = RtlpWritePreferredLanguages(Flags, Filtered, Characters, Count, Buffer, Size);
+    else Status = RtlpWriteEmptyLanguageList(Buffer, Size);
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Filtered);
+    return Status;
+}
+
+static PCZZWSTR
+RtlpGetThreadLanguageList(PDWORD Filter)
+{
+    PRTL_MUI_THREAD_LANGUAGES Thread = NtCurrentTeb()->PreferredLanguages;
+
+    *Filter = Thread ? Thread->Filter : 0;
+    return (Thread && Thread->Languages[0]) ? Thread->Languages : NULL;
+}
+
+static NTSTATUS
+RtlpStoreThreadLanguages(DWORD Filter, PCZZWSTR Languages)
+{
+    PTEB Teb = NtCurrentTeb();
+    PRTL_MUI_THREAD_LANGUAGES OldThread = Teb->PreferredLanguages;
+    PRTL_MUI_THREAD_LANGUAGES NewThread = NULL;
+    ULONG Characters = (Languages && Languages[0]) ? RtlpMultiStringCharacters(Languages) : 1;
+
+    if (Filter || Characters > 1)
+    {
+        NewThread = RtlAllocateHeap(RtlGetProcessHeap(), 0,
+                                    FIELD_OFFSET(RTL_MUI_THREAD_LANGUAGES, Languages) + (Characters + 1) * sizeof(WCHAR));
+        if (!NewThread) return STATUS_NO_MEMORY;
+
+        NewThread->Filter = Filter;
+        if (Characters > 1) RtlCopyMemory(NewThread->Languages, Languages, Characters * sizeof(WCHAR));
+        else NewThread->Languages[0] = UNICODE_NULL;
+        NewThread->Languages[Characters] = UNICODE_NULL;
+    }
+
+    Teb->PreferredLanguages = NewThread;
+    if (OldThread) RtlFreeHeap(RtlGetProcessHeap(), 0, OldThread);
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+RtlpGetMergedPreferredLanguages(DWORD Flags, PULONG Count, PWSTR Buffer, PULONG Size)
+{
+    WCHAR Process[RTL_MUI_MAX_PROCESS_LANGUAGES * LOCALE_NAME_MAX_LENGTH + 1];
+    WCHAR System[LOCALE_NAME_MAX_LENGTH + 1];
+    DWORD Filter;
+    PCWSTR Thread = RtlpGetThreadLanguageList(&Filter);
+    BOOLEAN AddNeutral = (Flags & MUI_MERGE_SYSTEM_FALLBACK) != 0;
+    UNICODE_STRING SystemName;
+    PWSTR User = NULL;
+    PWSTR Merged;
+    ULONG ListCount;
+    ULONG ProcessSize = RTL_NUMBER_OF(Process);
+    ULONG UserSize = 0;
+    ULONG Capacity;
+    ULONG Used = 0;
+    LANGID LanguageId;
+    NTSTATUS Status;
+
+    if (!NT_SUCCESS(RtlGetProcessPreferredUILanguages(MUI_LANGUAGE_NAME, &ListCount, Process, &ProcessSize)))
+    {
+        Process[0] = UNICODE_NULL;
+        ProcessSize = 1;
+    }
+
+    if (NT_SUCCESS(RtlGetUserPreferredUILanguages(MUI_LANGUAGE_NAME, 0, &ListCount, NULL, &UserSize)) && UserSize)
+    {
+        User = RtlAllocateHeap(RtlGetProcessHeap(), 0, UserSize * sizeof(WCHAR));
+        if (!User) return STATUS_NO_MEMORY;
+
+        if (!NT_SUCCESS(RtlGetUserPreferredUILanguages(MUI_LANGUAGE_NAME, 0, &ListCount, User, &UserSize)))
+        {
+            RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+            User = NULL;
+            UserSize = 0;
+        }
+    }
+
+    System[0] = UNICODE_NULL;
+    if (NT_SUCCESS(NtQueryInstallUILanguage(&LanguageId)))
+    {
+        SystemName.Buffer = System;
+        SystemName.Length = 0;
+        SystemName.MaximumLength = (LOCALE_NAME_MAX_LENGTH - 1) * sizeof(WCHAR);
+        if (NT_SUCCESS(RtlLcidToLocaleName(MAKELCID(LanguageId, SORT_DEFAULT), &SystemName, RTL_LOCALE_ALLOW_NEUTRAL_NAMES, FALSE)))
+            System[SystemName.Length / sizeof(WCHAR)] = UNICODE_NULL;
+        else
+            System[0] = UNICODE_NULL;
+    }
+    System[wcslen(System) + 1] = UNICODE_NULL;
+
+    Capacity = 2 * ((Thread ? RtlpMultiStringCharacters(Thread) : 1) + ProcessSize + UserSize + RTL_NUMBER_OF(System)) + 1;
+    Merged = RtlAllocateHeap(RtlGetProcessHeap(), 0, Capacity * sizeof(WCHAR));
+    if (!Merged)
+    {
+        if (User) RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+        return STATUS_NO_MEMORY;
+    }
+
+    Merged[0] = UNICODE_NULL;
+    if (Thread) RtlpAppendMergedList(Merged, &Used, Thread, AddNeutral);
+    RtlpAppendMergedList(Merged, &Used, Process, AddNeutral);
+    if (User) RtlpAppendMergedList(Merged, &Used, User, AddNeutral);
+    RtlpAppendMergedList(Merged, &Used, System, AddNeutral);
+
+    Status = RtlpWriteFilteredLanguages(Flags, Filter, Merged, Used + 1, Count, Buffer, Size);
+
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Merged);
+    if (User) RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 RtlGetThreadPreferredUILanguages(DWORD Flags, PULONG Count, PWSTR Buffer, PULONG Size)
 {
-    if (!Count || !Size) return STATUS_INVALID_PARAMETER;
+    PCWSTR Thread;
+    DWORD Filter;
 
-    return RtlpGetDefaultPreferredLanguage(Flags, Count, Buffer, Size);
+    if (!Count || !Size ||
+        (Flags & ~(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID | MUI_MERGE_SYSTEM_FALLBACK | MUI_MERGE_USER_FALLBACK | MUI_THREAD_LANGUAGES)) ||
+        ((Flags & MUI_LANGUAGE_NAME) && (Flags & MUI_LANGUAGE_ID)) ||
+        ((Flags & MUI_THREAD_LANGUAGES) && (Flags & (MUI_MERGE_SYSTEM_FALLBACK | MUI_MERGE_USER_FALLBACK))) ||
+        ((Flags & MUI_MERGE_SYSTEM_FALLBACK) && !(Flags & MUI_MERGE_USER_FALLBACK)) ||
+        (*Size && !Buffer))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (!(Flags & MUI_THREAD_LANGUAGES))
+        return RtlpGetMergedPreferredLanguages(Flags, Count, Buffer, Size);
+
+    Thread = RtlpGetThreadLanguageList(&Filter);
+    if (!Thread) return RtlpWriteEmptyLanguageList(Buffer, Size);
+
+    return RtlpWriteFilteredLanguages(Flags, Filter, Thread, RtlpMultiStringCharacters(Thread), Count, Buffer, Size);
 }
+
+NTSTATUS
+NTAPI
+RtlSetThreadPreferredUILanguages(DWORD Flags, PCZZWSTR Buffer, PULONG Count)
+{
+    static const DWORD FilterFlags = MUI_CONSOLE_FILTER | MUI_COMPLEX_SCRIPT_FILTER | MUI_RESET_FILTERS;
+    DWORD Filter = Flags & FilterFlags;
+    DWORD CurrentFilter;
+    PCZZWSTR Current = RtlpGetThreadLanguageList(&CurrentFilter);
+    PWSTR Languages = NULL;
+    ULONG CharacterCount = 0;
+    ULONG LanguageCount = 0;
+    NTSTATUS Status;
+
+    if ((Flags & ~(MUI_LANGUAGE_NAME | MUI_LANGUAGE_ID | FilterFlags)) ||
+        ((Flags & MUI_LANGUAGE_NAME) && (Flags & MUI_LANGUAGE_ID)) ||
+        (Filter & (Filter - 1)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Filter)
+    {
+        if (Buffer || Count) return STATUS_INVALID_PARAMETER;
+        return RtlpStoreThreadLanguages((Filter == MUI_RESET_FILTERS) ? 0 : Filter, Current);
+    }
+
+    if (Buffer)
+    {
+        Status = RtlpNormalizePreferredLanguages(Flags,
+                                                 TRUE,
+                                                 Buffer,
+                                                 &Languages,
+                                                 &CharacterCount,
+                                                 &LanguageCount);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+
+    Status = RtlpStoreThreadLanguages(CurrentFilter, Languages);
+    if (Languages) RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (Buffer && Count) *Count = LanguageCount;
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+RtlpFreeThreadPreferredUILanguages(VOID)
+{
+    PTEB Teb = NtCurrentTeb();
+    PVOID Languages = Teb->PreferredLanguages;
+
+    Teb->PreferredLanguages = NULL;
+    if (Languages) RtlFreeHeap(RtlGetProcessHeap(), 0, Languages);
+}
+
+

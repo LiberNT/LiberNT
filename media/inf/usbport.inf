@@ -33,10 +33,13 @@ HKR, , NoInstallClass, 0, 1
 %PCI\CC_0C0330.DeviceDesc%=XHCI_Inst,PCI\CC_0C0330
 %ACPI\PNP0D10.DeviceDesc%=XHCI_Inst,ACPI\PNP0D10
 %FDT\snps_dwc3.DeviceDesc%=XHCI_Inst,FDT\snps_dwc3
+%FDT\nvidia_tegra210-ehci.DeviceDesc%=TEGRA_EHCI_Inst,FDT\nvidia_tegra210-ehci
+%FDT\nvidia_tegra30-ehci.DeviceDesc%=TEGRA_EHCI_Inst,FDT\nvidia_tegra30-ehci
 %ACPI\BCM2848.DeviceDesc%=DWC2_Inst,ACPI\BCM2848
 %ACPI\DWC_OTG.DeviceDesc%=DWC2_Inst,ACPI\DWC_OTG
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB20
+%USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB30
 
 [IntelMfg]
 %PCI\VEN_8086&DEV_7020&CC_0C0300.DeviceDesc%=UHCI_Inst,PCI\VEN_8086&DEV_7020&CC_0C0300
@@ -97,6 +100,34 @@ ServiceType   = 1
 StartType     = 3
 ErrorControl  = 1
 ServiceBinary = %12%\usbehci.sys
+
+;--------------------- EHCI OF THE TEGRA SYSTEM ON CHIP -----------------
+
+; The controller only answers once its clock and its transceiver run, which a
+; boot loader may leave stopped, so a driver below the host controller driver
+; starts them before it is reached.
+
+[TEGRA_EHCI_Inst.NT]
+CopyFiles = TEGRA_EHCI_CopyFiles.NT
+AddReg = TEGRA_EHCI_AddReg.NT
+
+[TEGRA_EHCI_CopyFiles.NT]
+usbport.sys
+usbehci.sys
+tegrausbphy.sys
+
+[TEGRA_EHCI_AddReg.NT]
+HKR,,LowerFilters,0x00010000,"tegrausbphy"
+
+[TEGRA_EHCI_Inst.NT.Services]
+AddService = usbehci, 0x00000002, usbehci_Service_Inst
+AddService = tegrausbphy, 0x00000000, tegrausbphy_Service_Inst
+
+[tegrausbphy_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\tegrausbphy.sys
 LoadOrderGroup = Base
 AddReg = usbehci_Service_AddReg
 
@@ -186,6 +217,8 @@ PCI\CC_0C0320.DeviceDesc = "EHCI USB controller"
 PCI\CC_0C0330.DeviceDesc = "xHCI USB controller"
 ACPI\PNP0D10.DeviceDesc = "xHCI USB controller"
 FDT\snps_dwc3.DeviceDesc = "Synopsys DWC3 xHCI USB controller"
+FDT\nvidia_tegra210-ehci.DeviceDesc = "Tegra210 USB 2.0 Controller"
+FDT\nvidia_tegra30-ehci.DeviceDesc = "Tegra USB 2.0 Controller"
 ACPI\BCM2848.DeviceDesc = "Broadcom DWC2 USB controller"
 ACPI\DWC_OTG.DeviceDesc = "Synopsys DWC2 USB controller"
 USB\ROOT_HUB.DeviceDesc = "Root hub"

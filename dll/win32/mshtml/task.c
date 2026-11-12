@@ -33,6 +33,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(mshtml);
 
 #define WM_PROCESSTASK 0x8008
+#define WM_PROCESSTIMER 0x8009
 #define TIMER_ID 0x3000
 
 typedef struct {
@@ -103,6 +104,20 @@ static void unlink_event_task(event_task_t *task, thread_data_t *thread_data)
     list_remove(&task->entry);
 }
 
+static void set_thread_timer(thread_data_t *thread_data, task_timer_t *timer)
+{
+    DWORD tc = GetTickCount();
+
+    /* A timeout already due runs from the message queue, not at the next system timer tick */
+    if(timer->time <= tc && timer->type == TIMER_TIMEOUT) {
+        KillTimer(thread_data->thread_hwnd, TIMER_ID);
+        PostMessageW(thread_data->thread_hwnd, WM_PROCESSTIMER, 0, 0);
+        return;
+    }
+
+    SetTimer(thread_data->thread_hwnd, TIMER_ID, timer->time > tc ? timer->time - tc : 0, NULL);
+}
+
 static void release_task_timer(HWND thread_hwnd, task_timer_t *timer)
 {
     list_remove(&timer->entry);
@@ -118,12 +133,8 @@ static void unblock_timers(thread_data_t *thread_data)
         return;
     thread_data->timer_blocked = FALSE;
 
-    if(!list_empty(&thread_data->timer_list)) {
-        task_timer_t *timer = LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry);
-        DWORD tc = GetTickCount();
-
-        SetTimer(thread_data->thread_hwnd, TIMER_ID, timer->time > tc ? timer->time - tc : 0, NULL);
-    }
+    if(!list_empty(&thread_data->timer_list))
+        set_thread_timer(thread_data, LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry));
 }
 
 void remove_target_tasks(LONG target)
@@ -142,12 +153,8 @@ void remove_target_tasks(LONG target)
             release_task_timer(thread_data->thread_hwnd, timer);
     }
 
-    if(!list_empty(&thread_data->timer_list) && !thread_data->tasks_locked && !thread_data->blocking_xhr) {
-        DWORD tc = GetTickCount();
-
-        timer = LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry);
-        SetTimer(thread_data->thread_hwnd, TIMER_ID, timer->time > tc ? timer->time - tc : 0, NULL);
-    }
+    if(!list_empty(&thread_data->timer_list) && !thread_data->tasks_locked && !thread_data->blocking_xhr)
+        set_thread_timer(thread_data, LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry));
 
     LIST_FOR_EACH_SAFE(liter, ltmp, &thread_data->task_list) {
         task = LIST_ENTRY(liter, task_t, entry);
@@ -214,7 +221,7 @@ HRESULT set_task_timer(HTMLInnerWindow *window, LONG msec, enum timer_type timer
         return E_OUTOFMEMORY;
 
     if(msec < 1)
-        msec = 1;
+        msec = timer_type == TIMER_TIMEOUT ? 0 : 1;
 
     timer->id = id_cnt++;
     timer->window = window;
@@ -230,7 +237,7 @@ HRESULT set_task_timer(HTMLInnerWindow *window, LONG msec, enum timer_type timer
         if(thread_data->tasks_locked || thread_data->blocking_xhr)
             thread_data->timer_blocked = TRUE;
         else
-            SetTimer(thread_data->thread_hwnd, TIMER_ID, msec, NULL);
+            set_thread_timer(thread_data, timer);
     }
 
     *id = timer->id;
@@ -340,8 +347,7 @@ static LRESULT process_timer(void)
     do {
         tc = GetTickCount();
         if(timer == last_timer) {
-            timer = LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry);
-            SetTimer(thread_data->thread_hwnd, TIMER_ID, timer->time>tc ? timer->time-tc : 0, NULL);
+            set_thread_timer(thread_data, LIST_ENTRY(list_head(&thread_data->timer_list), task_timer_t, entry));
             goto done;
         }
 
@@ -376,6 +382,20 @@ done:
     if(!--thread_data->tasks_locked && (!list_empty(&thread_data->task_list) || !list_empty(&thread_data->event_task_list)))
         PostMessageW(thread_data->thread_hwnd, WM_PROCESSTASK, 0, 0);
     return 0;
+}
+
+static BOOL has_runnable_tasks(thread_data_t *thread_data)
+{
+    event_task_t *task;
+
+    if(!list_empty(&thread_data->task_list))
+        return TRUE;
+
+    LIST_FOR_EACH_ENTRY(task, &thread_data->event_task_list, event_task_t, entry) {
+        if((!task->thread_blocked || !thread_data->blocking_xhr) && !task->window->blocking_depth)
+            return TRUE;
+    }
+    return FALSE;
 }
 
 static LRESULT WINAPI hidden_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -421,6 +441,18 @@ static LRESULT WINAPI hidden_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
                 break;
         }
         return 0;
+    case WM_PROCESSTIMER:
+        thread_data = get_thread_data(FALSE);
+        if(!thread_data)
+            return 0;
+
+        /* Like WM_TIMER, a due timeout runs only after the queued tasks */
+        if(!thread_data->tasks_locked && has_runnable_tasks(thread_data)) {
+            PostMessageW(hwnd, WM_PROCESSTASK, 0, 0);
+            PostMessageW(hwnd, WM_PROCESSTIMER, 0, 0);
+            return 0;
+        }
+        return process_timer();
     case WM_TIMER:
         return process_timer();
     }

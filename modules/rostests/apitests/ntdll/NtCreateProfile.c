@@ -337,13 +337,13 @@ TestBufferSizeValidation(void)
             ok(Status == Tests[i].ExpectedStatus ||
                broken(Status == Tests[i].BrokenStatus),
                "[L%d] For RangeSize 0x%Ix, BucketSize %lu, BufferSize %lu, expected 0x%lx, got 0x%lx\n",
-               Tests[i].Line, Tests[i].RangeSize, Tests[i].BucketSize, Tests[i].BufferSize, Tests[i].ExpectedStatus, Status);
+               Tests[i].Line, (size_t)Tests[i].RangeSize, Tests[i].BucketSize, Tests[i].BufferSize, Tests[i].ExpectedStatus, Status);
         }
         else
         {
             ok(Status == Tests[i].ExpectedStatus,
                "[L%d] For RangeSize 0x%Ix, BucketSize %lu, BufferSize %lu, expected 0x%lx, got 0x%lx\n",
-               Tests[i].Line, Tests[i].RangeSize, Tests[i].BucketSize, Tests[i].BufferSize, Tests[i].ExpectedStatus, Status);
+               Tests[i].Line, (size_t)Tests[i].RangeSize, Tests[i].BucketSize, Tests[i].BufferSize, Tests[i].ExpectedStatus, Status);
         }
     }
 }

@@ -880,8 +880,10 @@ HalpInitializePICs(IN BOOLEAN EnableInterrupts)
     KeRegisterInterruptHandler(APIC_CLOCK_VECTOR, HalpClockInterrupt);
     KeRegisterInterruptHandler(CLOCK_IPI_VECTOR, HalpClockIpi);
 #ifndef _M_AMD64
+    HalpVectorToIndex[APIC_IPI_VECTOR] = APIC_RESERVED_VECTOR;
     KeRegisterInterruptHandler(APC_VECTOR, HalpApcInterrupt);
     KeRegisterInterruptHandler(DISPATCH_VECTOR, HalpDispatchInterrupt);
+    KeRegisterInterruptHandler(APIC_IPI_VECTOR, HalpIpiInterrupt);
 #endif
 
     /* Register the vectors for APC and dispatch interrupts */
@@ -986,6 +988,25 @@ HalpDispatchInterruptHandler(IN PKTRAP_FRAME TrapFrame)
 
     /* Exit the interrupt */
     KiEoiHelper(TrapFrame);
+}
+
+VOID
+FASTCALL
+HalpIpiInterruptHandler(IN PKTRAP_FRAME TrapFrame)
+{
+    KIRQL Irql;
+
+    KiEnterInterruptTrap(TrapFrame);
+
+    if (!HalBeginSystemInterrupt(IPI_LEVEL, APIC_IPI_VECTOR, &Irql))
+    {
+        KiEoiHelper(TrapFrame);
+        return;
+    }
+
+    KiIpiServiceRoutine(TrapFrame, NULL);
+
+    KiEndInterrupt(Irql, TrapFrame);
 }
 #endif
 

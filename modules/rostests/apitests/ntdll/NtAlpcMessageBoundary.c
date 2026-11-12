@@ -341,6 +341,44 @@ AlpcTestMisalignedMessages(
     ok(Status != STATUS_NOT_IMPLEMENTED, "misaligned message reached a stub\n");
 }
 
+static
+VOID
+AlpcTestKernelModeClaim(
+    _In_ HANDLE ConnectionPort,
+    _In_ HANDLE ClientPort,
+    _In_ BOOLEAN Datagram)
+{
+    UCHAR Received[sizeof(PORT_MESSAGE) + 64];
+    PPORT_MESSAGE Message;
+    SIZE_T Length = sizeof(Received);
+    USHORT Type;
+    NTSTATUS Status;
+
+    Message = AlpcBoundaryAllocateMessage(sizeof(PORT_MESSAGE) + 8, 8, LPC_KERNELMODE_MESSAGE);
+    ok(Message != NULL, "message allocation failed\n");
+    if (!Message)
+        return;
+
+    Status = NtAlpcSendWaitReceivePort(ClientPort, Datagram ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
+                                       Message, NULL, NULL, NULL, NULL, NULL);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Message);
+    if (!NT_SUCCESS(Status))
+    {
+        ok_hex(Status, STATUS_INVALID_PARAMETER);
+        return;
+    }
+
+    Status = AlpcBoundaryReceive(ConnectionPort, (PPORT_MESSAGE)Received, sizeof(Received), &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Type = ((PPORT_MESSAGE)Received)->u2.s2.Type;
+    ok((Type & LPC_KERNELMODE_MESSAGE) == 0, "a user-mode %s arrived as kernel mode (type 0x%x)\n",
+       Datagram ? "datagram" : "request", Type);
+    ok_eq_int(Type & 0xFF, Datagram ? LPC_DATAGRAM : LPC_REQUEST);
+}
+
 START_TEST(NtAlpcMessageBoundary)
 {
     static UNICODE_STRING PortName = RTL_CONSTANT_STRING(L"\\RPC Control\\NtdllApitestNtAlpcMessageBoundary");
@@ -356,6 +394,9 @@ START_TEST(NtAlpcMessageBoundary)
 
     if (AlpcTestSendLengthMatrix(ConnectionPort, ClientPort) && AlpcTestReceiveLengthMatrix(ConnectionPort, ClientPort))
         AlpcTestMisalignedMessages(ClientPort);
+
+    AlpcTestKernelModeClaim(ConnectionPort, ClientPort, TRUE);
+    AlpcTestKernelModeClaim(ConnectionPort, ClientPort, FALSE);
 
     AlpcTestCloseConnectedPorts(ConnectionPort, ServerPort, ClientPort);
 }

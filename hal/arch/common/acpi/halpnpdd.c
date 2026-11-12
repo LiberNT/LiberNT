@@ -11,6 +11,7 @@
 #include <hal.h>
 #include <halpnp.h>
 #include <halefi.h>
+#include <halfdt.h>
 
 #include <initguid.h>
 #include <wdmguid.h>
@@ -30,7 +31,8 @@ typedef enum _PDO_TYPE
 {
     AcpiPdo = 0x80,
     WdPdo,
-    UefiPdo
+    UefiPdo,
+    FdtPdo
 } PDO_TYPE;
 
 typedef enum _HALP_PNP_STATE
@@ -62,6 +64,8 @@ typedef struct _PDO_EXTENSION
     PFDO_EXTENSION ParentFdoExtension;
     PDEVICE_OBJECT ParentFdoDeviceObject;
     PDO_TYPE PdoType;
+    ULONG FdtNode;
+    ULONG FdtParent;
     FAST_MUTEX PnpStateLock;
     HALP_PNP_STATE PnpState;
     HALP_PNP_STATE PreviousPnpState;
@@ -122,7 +126,8 @@ NTSTATUS
 HalpCreatePdo(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PFDO_EXTENSION FdoExtension,
-    _In_ PDO_TYPE PdoType)
+    _In_ PDO_TYPE PdoType,
+    _Out_opt_ PPDO_EXTENSION *Created)
 {
     NTSTATUS Status;
     PDEVICE_OBJECT PdoDeviceObject;
@@ -159,6 +164,7 @@ HalpCreatePdo(
     ExReleaseFastMutex(&FdoExtension->ChildPdoLock);
 
     /* Initialization is finished */
+    if (Created) *Created = PdoExtension;
     PdoDeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
     return STATUS_SUCCESS;
 }
@@ -173,6 +179,34 @@ HalpDeletePdo(
     PdoExtension->ParentFdoDeviceObject = NULL;
     IoDeleteDevice(PdoExtension->PhysicalDeviceObject);
     ObDereferenceObject(ParentFdoDeviceObject);
+}
+
+static
+NTSTATUS
+HalpCreateFdtPdos(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    PHALP_FDT_DEVICE_NODE Devices;
+    PPDO_EXTENSION PdoExtension;
+    ULONG Count, Index;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    Devices = ExAllocatePoolWithTag(PagedPool, HALP_FDT_MAX_DEVICES * sizeof(*Devices), TAG_HAL);
+    if (!Devices) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Count = HalpFdtEnumerateDevices(Devices, HALP_FDT_MAX_DEVICES);
+    DPRINT1("HAL: %lu device-tree devices\n", Count);
+    for (Index = 0; Index < Count; Index++)
+    {
+        Status = HalpCreatePdo(DriverObject, FdoExtension, FdtPdo, &PdoExtension);
+        if (!NT_SUCCESS(Status)) break;
+        PdoExtension->FdtNode = Devices[Index].Node;
+        PdoExtension->FdtParent = Devices[Index].Parent;
+    }
+
+    ExFreePoolWithTag(Devices, TAG_HAL);
+    return Status;
 }
 
 NTSTATUS
@@ -222,8 +256,11 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
     /* Save the attachment */
     FdoExtension->AttachedDeviceObject = AttachedDevice;
 
-    /* Create the ACPI PDO */
-    Status = HalpCreatePdo(DriverObject, FdoExtension, AcpiPdo);
+    /* A platform described only by a device tree has no ACPI namespace to enumerate */
+    if (!HalAcpiGetTable(0, 'PCAF') && HalpFdtInitialize())
+        Status = HalpCreateFdtPdos(DriverObject, FdoExtension);
+    else
+        Status = HalpCreatePdo(DriverObject, FdoExtension, AcpiPdo, NULL);
     if (!NT_SUCCESS(Status))
     {
         /* Fail */
@@ -234,7 +271,7 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
     }
 
     if (HalpEfiHasFirmwareResources() &&
-        !NT_SUCCESS(HalpCreatePdo(DriverObject, FdoExtension, UefiPdo)))
+        !NT_SUCCESS(HalpCreatePdo(DriverObject, FdoExtension, UefiPdo, NULL)))
     {
         DPRINT1("HAL: Could not create the UEFI device object\n");
     }
@@ -563,6 +600,10 @@ HalpQueryResources(IN PDEVICE_OBJECT DeviceObject,
 
         return STATUS_SUCCESS;
     }
+    else if (DeviceExtension->PdoType == FdtPdo)
+    {
+        return HalpFdtQueryResources(DeviceExtension->FdtNode, DeviceExtension->FdtParent, Resources);
+    }
     else if (DeviceExtension->PdoType == WdPdo || DeviceExtension->PdoType == UefiPdo)
     {
         /* Watchdog doesn't */
@@ -588,6 +629,10 @@ HalpQueryResourceRequirements(IN PDEVICE_OBJECT DeviceObject,
     {
         /* Query ACPI requirements */
         return HalpQueryAcpiResourceRequirements(Requirements);
+    }
+    else if (DeviceExtension->PdoType == FdtPdo)
+    {
+        return HalpFdtQueryRequirements(DeviceExtension->FdtNode, DeviceExtension->FdtParent, Requirements);
     }
     else if (DeviceExtension->PdoType == WdPdo || DeviceExtension->PdoType == UefiPdo)
     {
@@ -617,6 +662,11 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
 
     /* Get the PDO type */
     PdoExtension = DeviceObject->DeviceExtension;
+    if (PdoExtension->PdoType == FdtPdo)
+    {
+        return HalpFdtQueryId(PdoExtension->FdtNode, PdoExtension->FdtParent, IdType, (PWCHAR *)BusQueryId);
+    }
+
     switch (PdoExtension->PdoType)
     {
         case AcpiPdo:
@@ -832,9 +882,9 @@ HalpDispatchPnpFdo(
             DPRINT("Querying interface for FDO\n");
             Status = HalpQueryInterface(DeviceObject,
                                         IoStackLocation->Parameters.QueryInterface.InterfaceType,
-                                        IoStackLocation->Parameters.QueryInterface.Size,
-                                        IoStackLocation->Parameters.QueryInterface.InterfaceSpecificData,
                                         IoStackLocation->Parameters.QueryInterface.Version,
+                                        IoStackLocation->Parameters.QueryInterface.InterfaceSpecificData,
+                                        IoStackLocation->Parameters.QueryInterface.Size,
                                         IoStackLocation->Parameters.QueryInterface.Interface,
                                         (PVOID)&Irp->IoStatus.Information);
             break;
@@ -899,7 +949,45 @@ HalpDispatchPnpPdo(
             PdoExtension->PnpState = HalpPnpStateStarted;
             PdoExtension->CurrentDevicePowerState = PowerDeviceD0;
             ExReleaseFastMutex(&PdoExtension->PnpStateLock);
+            if (PdoExtension->PdoType == FdtPdo)
+                HalpFdtPublishProperties(DeviceObject, PdoExtension->FdtNode, PdoExtension->FdtParent);
             Status = STATUS_SUCCESS;
+            break;
+
+        case IRP_MN_QUERY_BUS_INFORMATION:
+
+            if (PdoExtension->PdoType == FdtPdo)
+            {
+                PPNP_BUS_INFORMATION BusInformation = ExAllocatePoolWithTag(PagedPool, sizeof(*BusInformation), TAG_HAL);
+
+                if (!BusInformation)
+                {
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+                    break;
+                }
+                BusInformation->BusTypeGuid = GUID_BUS_TYPE_INTERNAL;
+                BusInformation->LegacyBusType = Internal;
+                BusInformation->BusNumber = 0;
+                Irp->IoStatus.Information = (ULONG_PTR)BusInformation;
+                Status = STATUS_SUCCESS;
+            }
+            else
+            {
+                Status = STATUS_NOT_SUPPORTED;
+            }
+            break;
+
+        case IRP_MN_QUERY_DEVICE_TEXT:
+
+            if (PdoExtension->PdoType == FdtPdo &&
+                IoStackLocation->Parameters.QueryDeviceText.DeviceTextType == DeviceTextDescription)
+            {
+                Status = HalpFdtQueryDeviceText(PdoExtension->FdtNode, (PWCHAR *)&Irp->IoStatus.Information);
+            }
+            else
+            {
+                Status = STATUS_NOT_SUPPORTED;
+            }
             break;
 
         case IRP_MN_REMOVE_DEVICE:
@@ -987,9 +1075,9 @@ HalpDispatchPnpPdo(
             DPRINT("Querying interface for PDO\n");
             Status = HalpQueryInterface(DeviceObject,
                                         IoStackLocation->Parameters.QueryInterface.InterfaceType,
-                                        IoStackLocation->Parameters.QueryInterface.Size,
-                                        IoStackLocation->Parameters.QueryInterface.InterfaceSpecificData,
                                         IoStackLocation->Parameters.QueryInterface.Version,
+                                        IoStackLocation->Parameters.QueryInterface.InterfaceSpecificData,
+                                        IoStackLocation->Parameters.QueryInterface.Size,
                                         IoStackLocation->Parameters.QueryInterface.Interface,
                                         (PVOID)&Irp->IoStatus.Information);
             break;
@@ -1013,6 +1101,8 @@ HalpDispatchPnpPdo(
 
             /* Call the worker */
             DPRINT("Querying the resource requirements for the PDO\n");
+            if (PdoExtension->PdoType == FdtPdo)
+                HalpFdtPublishProperties(DeviceObject, PdoExtension->FdtNode, PdoExtension->FdtParent);
             Status = HalpQueryResourceRequirements(DeviceObject,
                                                    (PVOID)&Irp->IoStatus.Information);
             break;
@@ -1200,6 +1290,7 @@ HaliInitPnpDriver(VOID)
     PAGED_CODE();
 
     /* Create the driver */
+    /* TODO: Windows 11 ARM64 reports this HAL as ROOT\ARM64_HAL\0000, so its driver is not ACPI_HAL there */
     RtlInitUnicodeString(&DriverString, L"\\Driver\\ACPI_HAL");
     Status = IoCreateDriver(&DriverString, HalpDriverEntry);
 

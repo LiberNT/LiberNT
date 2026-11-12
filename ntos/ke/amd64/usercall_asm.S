@@ -107,6 +107,10 @@ KiUserCallbackExit:
     /* Disable interrupts for return */
     cli
 
+    /* The callback is the outermost user level of its own kernel stack; NtCallbackReturn restores the caller's frame */
+    mov rdx, gs:[PcCurrentThread]
+    mov qword ptr [rdx + ThTrapFrame], 0
+
     RESTORE_USER_DEBUG_REGISTERS rsp
 
     /* Prepare user mode return address (rcx) and eflags (r11) for sysret */

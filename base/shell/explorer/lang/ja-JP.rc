@@ -23,7 +23,7 @@ BEGIN
         MENUITEM "デスクトップの表示(&S)", ID_SHELL_CMD_SHOW_DESKTOP
         MENUITEM "元に戻す(&U)", ID_SHELL_CMD_UNDO_ACTION
         MENUITEM SEPARATOR
-        MENUITEM "タスク マネージャ", ID_SHELL_CMD_OPEN_TASKMGR
+        MENUITEM "タスク マネージャー", ID_SHELL_CMD_OPEN_TASKMGR
         MENUITEM SEPARATOR
         MENUITEM "タスク バーを固定する(&L)", ID_LOCKTASKBAR
         MENUITEM "プロパティ(&R)", ID_SHELL_CMD_PROPERTIES
@@ -53,7 +53,7 @@ BEGIN
             MENUITEM "", -1, MFT_SEPARATOR
             MENUITEM "セキュリティ(&S)", IDM_SECURITY, MFT_STRING, MFS_ENABLED
             MENUITEM "ネットワーク接続(&N)", IDM_NETWORKCONNECTIONS, MFT_STRING, MFS_ENABLED
-            MENUITEM "プリンタとFAX(&P)", IDM_PRINTERSANDFAXES, MFT_STRING, MFS_ENABLED
+            MENUITEM "プリンターとFAX(&P)", IDM_PRINTERSANDFAXES, MFT_STRING, MFS_ENABLED
             MENUITEM "タスク バーと [スタート] メニュー(&)", IDM_TASKBARANDSTARTMENU, MFT_STRING, MFS_ENABLED
         END
         MENUITEM "検索(&C)", IDM_SEARCH, MFT_STRING, MFS_ENABLED
@@ -63,7 +63,7 @@ BEGIN
         MENUITEM "同期(&Y)", IDM_SYNCHRONIZE, MFT_STRING, MFS_ENABLED
         MENUITEM "%s のログオフ(&)...", IDM_LOGOFF, MFT_STRING, MFS_ENABLED
         MENUITEM "切断(&I)...", IDM_DISCONNECT, MFT_STRING, MFS_ENABLED
-        MENUITEM "コンピュータのロック(&E)", IDM_UNDOCKCOMPUTER, MFT_STRING, MFS_ENABLED
+        MENUITEM "コンピューターのロック(&E)", IDM_UNDOCKCOMPUTER, MFT_STRING, MFS_ENABLED
         MENUITEM "シャットダウン(&U)...", IDM_SHUTDOWN, MFT_STRING, MFS_ENABLED
     END
 END
@@ -90,7 +90,7 @@ FONT 9, "MS UI Gothic", 0, 0, 0x1
 BEGIN
     CONTROL "", IDC_TASKBARPROP_STARTMENU_BITMAP, "Static", SS_BITMAP | SS_SUNKEN,7, 7, 183, 108
     AUTORADIOBUTTON "スタート メニュー(&S)", IDC_TASKBARPROP_STARTMENU, 7, 135, 105, 10
-    LTEXT "このメニュー スタイルはフォルダ、お気に入りのプログラム、検索への簡単なアクセスを提供します。", IDC_TASKBARPROP_STARTMENUMODERNTEXT, 20, 145, 150, 24
+    LTEXT "このメニュー スタイルはフォルダー、お気に入りのプログラム、検索への簡単なアクセスを提供します。", IDC_TASKBARPROP_STARTMENUMODERNTEXT, 20, 145, 150, 24
     PUSHBUTTON "カスタマイズ(&C)...", IDC_TASKBARPROP_STARTMENUCUST, 180, 132, 65, 14
     AUTORADIOBUTTON "古風なスタート メニュー(&M)", IDC_TASKBARPROP_STARTMENUCLASSIC, 7, 175, 105, 10
     LTEXT "このメニュー スタイルは古い外観、機能性を提供します。", IDC_TASKBARPROP_STARTMENUCLASSICTEXT, 20, 185, 150, 24
@@ -160,7 +160,7 @@ BEGIN
     LTEXT            "", IDC_STATIC, 7, 51, 258, 1, NOT WS_GROUP
     AUTOCHECKBOX     "起動時にこのチェックを行わない(&D)", IDC_NOTCHECK, 7, 62, 139, 10
     ICON             32515, IDC_STATIC, 7, 7, 21, 20
-    LTEXT            "'%s' という名前の不正な名前のファイルまたはフォルダがあるため、アプリケーションが機能しないかも知れません。'%s' の名前を変更すれば、この問題は修正されます。今すぐ名前を変更したいですか？", IDC_STATIC, 34, 7, 224, 37
+    LTEXT            "'%s' という名前の不正な名前のファイルまたはフォルダーがあるため、アプリケーションが機能しないかも知れません。'%s' の名前を変更すれば、この問題は修正されます。今すぐ名前を変更したいですか？", IDC_STATIC, 34, 7, 224, 37
 END
 
 IDD_MODERNSTART_ADVANCED DIALOGEX 0, 0, 251, 198, 0
@@ -207,8 +207,8 @@ BEGIN
     IDS_START "スタート"
     IDS_PROPERTIES "プロパティ(&R)"
     IDS_OPEN_ALL_USERS "開く - すべてのユーザー(&P)"
-    IDS_EXPLORE_ALL_USERS "エクスプローラ - すべてのユーザー(&E)"
-    IDS_STARTUP_ERROR "システムは、エクスプローラを起動できません。レジストリが壊れているか、利用不可だからです。"
+    IDS_EXPLORE_ALL_USERS "エクスプローラー - すべてのユーザー(&E)"
+    IDS_STARTUP_ERROR "システムは、エクスプローラーを起動できません。レジストリが壊れているか、利用不可だからです。"
 END
 
 STRINGTABLE
@@ -218,4 +218,8 @@ BEGIN
     IDS_TRAYWND_UNDO_CASCADE "「重ねて表示」を元に戻す(&U)"
     IDS_TRAYWND_UNDO_TILE "「ウィンドウを並べて表示」を元に戻す(&U)"
     IDS_TRAYDESKBTN_TOOLTIP "デスクトップ / ウィンドウを表示"
+    IDS_TRAYCHEVRON_TOOLTIP "隠れているインジケーターを表示します"
+    IDS_TRAYCLOCK_NEWNOTIFICATION "%u 件の新しい通知"
+    IDS_TRAYCLOCK_NEWNOTIFICATIONS "%u 件の新しい通知"
+    IDS_TRAYQUICKSETTINGS_TOOLTIP "クイック設定"
 END

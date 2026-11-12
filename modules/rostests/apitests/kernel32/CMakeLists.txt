@@ -1,23 +1,43 @@
 
+add_subdirectory(appinitdll)
+add_subdirectory(loaderwait)
 add_subdirectory(muitest)
 add_subdirectory(redirptest)
+add_subdirectory(werhandler)
 
 add_message_headers(ANSI FormatMessage.mc)
 
 list(APPEND SOURCE
     ActCtxDependencyVersions.c
+    AlternateComputerNames.c
+    UniversalThunks.c
+    LoadAppInitDlls.c
+    ComPlusPackageInstallStatus.c
+    IntegratedDisplaySize.c
+    MessageWaitingIndicator.c
+    TermsrvAppInstallMode.c
     ConsoleAlias.c
     ApiSetCoreSynch.c
+    ApplicationRecovery.c
+    ApplicationRestart.c
+    AuditAlarmApis.c
     BaseSetLastNTError.c
     BaseThreadInitThunk.c
+    BackupReadWrite.c
+    CalendarDateTime.c
     CallbackCallingConventions.c
+    CallbackMayRunLong.c
     Arm64ThreadContext.c
+    ConsoleCommandHistory.c
     ConsoleCP.c
+    ConsoleFontInfo.c
     ConsoleInputSignal.c
+    ConsoleRequestStress.c
     ConsoleDbcsCells.c
     ConsoleProcessInheritance.c
     ConsoleVirtualTerminal.c
     CopyContext.c
+    CpuSetsApi.c
     CreateAfterMissingName.c
     CreateDirectoryRoot.c
     CreateProcess.c
@@ -25,9 +45,14 @@ list(APPEND SOURCE
     DeleteFileCase.c
     DeviceIoControl.c
     dosdev.c
+    EnumDateTimeFormats.c
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
     FileStorageInfo.c
+    FileIoOverlappedRange.c
+    FindFileNames.c
+    FileInfoByHandleEx.c
+    FileObjectId.c
     FindFiles.c
     FindPackagesByPackageFamily.c
     FLS.c
@@ -41,6 +66,7 @@ list(APPEND SOURCE
     GetFinalPathNameByHandle.c
     GetLocaleInfo.c
     GetModuleFileName.c
+    GetNumberOfConsoleMouseButtons.c
     GetNumaNodeProcessorMaskEx.c
     GetOsSafeBootMode.c
     GetPackageFamilyName.c
@@ -50,42 +76,63 @@ list(APPEND SOURCE
     GetTempFileName.c
     GetTempPath2.c
     GetThreadTimes.c
+    GetUILanguageInfo.c
     GetVolumeInformation.c
+    GetWsChangesEx.c
     HeapLowFragmentation.c
+    HighResolutionTimerClock.c
+    HeapSummary.c
+    IdleClockAccounting.c
     InitOnce.c
     interlck.c
     IoCompletion.c
+    CancelIoEx.c
     IsDBCSLeadByteEx.c
     JapaneseCalendar.c
     JobObject.c
     JobObjectUI.c
+    KernelBaseRegistry.c
+    KernelBaseUrl.c
     KnownDlls.c
     LCMapString.c
     LoadLibraryExW.c
+    LockFileClose.c
     LockFileEx.c
     OpenFileByIdRename.c
     LoaderLock.c
     PagingFileOpen.c
+    ProcessMitigationPolicy.c
     QuantumRoundRobin.c
     RegisterWaitPeriodic.c
     SandboxLaunch.c
+    SecurityBaseApis.c
     SystemImageCatalog.c
     TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
     StarvationBoost.c
     SystemTimeChangeTimers.c
+    TzSpecificLocalTimeEx.c
+    TimeZoneKeepsTime.c
     StdHandleInheritance.c
+    StreamRename.c
+    PosixRename.c
     LocaleNameToLCID.c
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
     MuiResources.c
     MultiByteToWideChar.c
+    NamedPipeClientComputerName.c
+    NlsStringApis.c
     NumaApis.c
+    PerfConsumer.c
+    PerfProvider.c
     Pipes.c
+    PackageIdentity.c
     PackageNames.c
     PixeloramaCompat.c
+    ProcessAffinityUpdateMode.c
     ProcessPreferredUILanguages.c
     PseudoConsoleCtrlC.c
     PseudoConsoleVtInput.c
@@ -94,30 +141,69 @@ list(APPEND SOURCE
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
+    ResourceUILanguage.c
+    ProcessWorkingSetSize.c
     RemoteThreadInit.c
+    RenameAsyncHandle.c
     RenameDirectoryOldPath.c
     ResizePseudoConsole.c
+    SetCalendarInfo.c
     SetComputerNameExW.c
     SetConsoleWindowInfo.c
     SetCurrentDirectory.c
     SetFileAllocationInfo.c
+    SetStdHandleEx.c
+    SecureMemoryCache.c
     SetThreadStackGuarantee.c
     SetUnhandledExceptionFilter.c
     SetWaitableTimerEx.c
     WaitableTimerHighResolution.c
+    WaitableTimerApcReset.c
+    WaitableTimerCancelAtApc.c
+    WaitableTimerCloseAtExpiry.c
+    WaitableTimerSignalTime.c
+    WaitableTimerThreadExit.c
     SwitchToThreadCost.c
     SuspendThread.c
+    SynchronizationBarrier.c
     SystemFirmware.c
+    SystemFirmwareAcpi.c
+    ProcessTokenSession.c
+    LimitedProcessQueries.c
+    SystemFileCacheSize.c
+    SecureBootFlag.c
     TerminateProcess.c
+    TerminateThread.c
+    TlsFree.c
+    ExitedClientId.c
+    ExitedProcessImage.c
+    ThreadKernelStack.c
+    SleepTickRounding.c
+    SwitchToThreadPriority.c
+    QueryInterruptTimePrecise.c
+    ProcessAffinityQueued.c
+    SwitchToThreadRoundRobin.c
+    YieldStealSwitch.c
     ThreadPowerThrottling.c
+    ThreadPreferredUILanguages.c
     ProcessPowerThrottling.c
+    TimerResolutionSleep.c
+    ThreadContextInCallback.c
+    TransactedFileApis.c
+    ProcessorEfficiency.c
     TunnelCache.c
     UEFIFirmware.c
+    VolumeMountPoints.c
     WaitFileHandle.c
     WaitForMultipleObjects.c
     WerRegisterFile.c
+    WerRegistration.c
+    WerReporting.c
     WideCharToMultiByte.c
+    WinSaferRestrictions.c
     Wow64GetThreadContext.c
+    Wow64ChildProcess.c
+    Wow64SuspendThread.c
     WriteFile.c
     WriteFileBadBuffer.c
     WriteFileSeekBack.c
@@ -125,6 +211,7 @@ list(APPEND SOURCE
 )
 
 list(APPEND PCH_SKIP_SOURCE
+    ../advapi32/svchlp.c
     testlist.c)
 
 add_executable(kernel32_apitest

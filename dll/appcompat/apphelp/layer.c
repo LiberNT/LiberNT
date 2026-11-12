@@ -219,7 +219,16 @@ NTSTATUS SdbpOpenKey(PUNICODE_STRING FullPath, BOOL bMachine, ACCESS_MASK Access
     Status = NtOpenKey(KeyHandle, Access | Wow64QueryFlag(), &ObjectLayer);
     if (!NT_SUCCESS(Status))
     {
-        SHIM_ERR("Unable to open Key  \"%wZ\" Status 0x%lx\n", FullPath, Status);
+        /* A profile that never had a compatibility layer set has no such key */
+        if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+            Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        {
+            SHIM_INFO("No Key \"%wZ\"\n", FullPath);
+        }
+        else
+        {
+            SHIM_ERR("Unable to open Key  \"%wZ\" Status 0x%lx\n", FullPath, Status);
+        }
         SdbFree(FullPath->Buffer);
         FullPath->Buffer = NULL;
     }

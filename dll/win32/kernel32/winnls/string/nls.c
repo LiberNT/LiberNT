@@ -1205,4 +1205,29 @@ GetNLSVersionEx(IN NLS_FUNCTION function,
     return TRUE;
 }
 
+int
+WINAPI
+GetDurationFormat(
+    _In_ LCID Locale,
+    _In_ DWORD dwFlags,
+    _In_opt_ CONST SYSTEMTIME *lpDuration,
+    _In_ ULONGLONG ullDuration,
+    _In_opt_ LPCWSTR lpFormat,
+    _Out_writes_opt_(cchDuration) LPWSTR lpDurationStr,
+    _In_ int cchDuration)
+{
+    WCHAR LocaleName[LOCALE_NAME_MAX_LENGTH];
+
+    if (!LCIDToLocaleName(Locale, LocaleName, ARRAYSIZE(LocaleName), 0))
+        return 0;
+
+    return GetDurationFormatEx(LocaleName,
+                               dwFlags,
+                               lpDuration,
+                               ullDuration,
+                               lpFormat,
+                               lpDurationStr,
+                               cchDuration);
+}
+
 /* EOF */

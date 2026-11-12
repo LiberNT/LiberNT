@@ -894,6 +894,9 @@ struct PARSENONCLIENTSTATE
     NONCLIENTMETRICSW metrics;
     BOOL metricsDirty;
     LOGFONTW iconTitleFont;
+#ifdef __REACTOS__
+    int dpi;
+#endif
 };
 
 static inline void parse_init_nonclient (struct PARSENONCLIENTSTATE* state)
@@ -908,6 +911,15 @@ static inline void parse_init_nonclient (struct PARSENONCLIENTSTATE* state)
         &state->metrics, 0);
     SystemParametersInfoW (SPI_GETICONTITLELOGFONT, sizeof (LOGFONTW),
         &state->iconTitleFont, 0);
+#ifdef __REACTOS__
+    {
+        HDC hdc = GetDC(NULL);
+
+        state->dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
+        if (hdc)
+            ReleaseDC(NULL, hdc);
+    }
+#endif
 
     SetThreadDpiAwarenessContext(old_context);
 }
@@ -922,6 +934,9 @@ static BOOL parse_handle_nonclient_font (struct PARSENONCLIENTSTATE* state,
     if (SUCCEEDED (MSSTYLES_GetFont (lpValue, lpValue + dwValueLen, &lpValue,
         &font)))
     {
+#ifdef __REACTOS__
+        font.lfHeight = -MulDiv(font.lfHeight, state->dpi, 72);
+#endif
         switch (iPropertyId)
         {
 	  case TMT_CAPTIONFONT:
@@ -962,6 +977,9 @@ static BOOL parse_handle_nonclient_size (struct PARSENONCLIENTSTATE* state,
     int size;
     LPCWSTR lpValueEnd = lpValue + dwValueLen;
     if(MSSTYLES_GetNextInteger(lpValue, lpValueEnd, &lpValue, &size)) {
+#ifdef __REACTOS__
+        size = MulDiv(size, state->dpi, 96);
+#endif
         switch (iPropertyId)
         {
             case TMT_SIZINGBORDERWIDTH:

@@ -7,7 +7,7 @@
 
 #include <uefildr.h>
 #include <Fdt.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WARNING);
@@ -58,19 +58,19 @@ static const CHAR *const K1WdtCompatibles[] = { "spacemit,k1x-wdt", "ky,x1-wdt",
 static
 BOOLEAN
 UefiFdtNodeIs(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ const CHAR *const *Compatibles)
 {
     const VOID *Property;
     ULONG Length;
 
-    Property = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
+    Property = FdtGetProperty(Fdt, Node, "compatible", &Length);
     if (Property == NULL)
         return FALSE;
     for (; *Compatibles; ++Compatibles)
     {
-        if (RiscvFdtStringListContains(Property, Length, *Compatibles))
+        if (FdtStringListContains(Property, Length, *Compatibles))
             return TRUE;
     }
     return FALSE;
@@ -79,15 +79,15 @@ UefiFdtNodeIs(
 static
 BOOLEAN
 UefiFdtNodeEnabled(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node)
 {
     const VOID *Property;
     ULONG Length;
 
-    Property = RiscvFdtGetProperty(Fdt, Node, "status", &Length);
-    return !Property || RiscvFdtStringListContains(Property, Length, "okay") ||
-           RiscvFdtStringListContains(Property, Length, "ok");
+    Property = FdtGetProperty(Fdt, Node, "status", &Length);
+    return !Property || FdtStringListContains(Property, Length, "okay") ||
+           FdtStringListContains(Property, Length, "ok");
 }
 
 static
@@ -194,7 +194,7 @@ P1Access(
 static
 VOID
 UefiStopP1Watchdog(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ ULONG Bus,
     _In_ ULONG BusParent)
@@ -203,11 +203,11 @@ UefiStopP1Watchdog(
     PUCHAR Registers;
     UCHAR Control;
 
-    if (Bus == RISCV_FDT_NO_NODE || BusParent == RISCV_FDT_NO_NODE ||
+    if (Bus == FDT_NO_NODE || BusParent == FDT_NO_NODE ||
         !UefiFdtNodeIs(Fdt, Bus, K1I2cCompatibles) || !UefiFdtNodeEnabled(Fdt, Bus) ||
-        !RiscvFdtReadReg(Fdt, Bus, BusParent, 0, &BusBase, &BusSize) ||
+        !FdtReadReg(Fdt, Bus, BusParent, 0, &BusBase, &BusSize) ||
         BusSize < K1X_I2C_DATA + sizeof(ULONG) ||
-        !RiscvFdtReadReg(Fdt, Node, Bus, 0, &Address, &Unused) || Address >= 0x80)
+        !FdtReadReg(Fdt, Node, Bus, 0, &Address, &Unused) || Address >= 0x80)
     {
         return;
     }
@@ -245,17 +245,17 @@ K1WdtWrite(
 static
 VOID
 UefiStopK1Watchdog(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ ULONG Parent)
 {
     ULONGLONG Base, Size, AprrBase, AprrSize;
     PUCHAR Registers;
 
-    if (Parent == RISCV_FDT_NO_NODE ||
-        !RiscvFdtReadReg(Fdt, Node, Parent, 0, &Base, &Size) ||
+    if (Parent == FDT_NO_NODE ||
+        !FdtReadReg(Fdt, Node, Parent, 0, &Base, &Size) ||
         Size < K1X_WDT_WCR + sizeof(ULONG) ||
-        !RiscvFdtReadReg(Fdt, Node, Parent, 1, &AprrBase, &AprrSize) ||
+        !FdtReadReg(Fdt, Node, Parent, 1, &AprrBase, &AprrSize) ||
         AprrSize < sizeof(ULONG))
     {
         return;
@@ -273,7 +273,7 @@ UefiStopK1Watchdog(
 static
 VOID
 UefiStopWatchdogsBelow(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Parent,
     _In_ ULONG GrandParent,
     _In_ ULONG Depth)
@@ -283,9 +283,9 @@ UefiStopWatchdogsBelow(
     if (Depth >= UEFI_FDT_MAXIMUM_DEPTH)
         return;
 
-    for (Node = RiscvFdtFirstChild(Fdt, Parent);
-         Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(Fdt, Node))
+    for (Node = FdtFirstChild(Fdt, Parent);
+         Node != FDT_NO_NODE;
+         Node = FdtNextSibling(Fdt, Node))
     {
         if (UefiFdtNodeEnabled(Fdt, Node))
         {
@@ -302,7 +302,7 @@ VOID
 UefiStopFirmwareWatchdogs(VOID)
 {
     EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root;
     UINTN Index;
 
@@ -314,14 +314,14 @@ UefiStopFirmwareWatchdogs(VOID)
         EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
 
         if (memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) ||
-            !RiscvFdtOpen(Entry->VendorTable, RISCV_FDT_MAXIMUM_SIZE, &Fdt))
+            !FdtOpen(Entry->VendorTable, FDT_MAXIMUM_SIZE, &Fdt))
         {
             continue;
         }
 
-        Root = RiscvFdtRootNode(&Fdt);
-        if (Root != RISCV_FDT_NO_NODE)
-            UefiStopWatchdogsBelow(&Fdt, Root, RISCV_FDT_NO_NODE, 0);
+        Root = FdtRootNode(&Fdt);
+        if (Root != FDT_NO_NODE)
+            UefiStopWatchdogsBelow(&Fdt, Root, FDT_NO_NODE, 0);
         return;
     }
 }

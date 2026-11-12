@@ -8,6 +8,10 @@
 #ifndef _RISCV64_KETYPES_H
 #define _RISCV64_KETYPES_H
 
+#define PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE 0x1A8
+/* TODO: no Windows layout evidence for PROCESSOR_POWER_STATE on riscv64 */
+#include <potypes.h>
+
 /* Software synchronization priority, below the clock and IPI levels. */
 #define SYNCH_LEVEL 12
 
@@ -318,6 +322,21 @@ struct _KPRCB
     volatile LONG MmCopyOnWriteCount;
     volatile LONG MmDemandZeroCount;
     volatile LONG MmTransitionCount;
+    volatile LONG MmCacheTransitionCount;
+    volatile LONG MmPageReadCount;
+    volatile LONG MmPageReadIoCount;
+    volatile LONG MmCacheReadCount;
+    volatile LONG MmCacheIoCount;
+    volatile LONG MmDirtyPagesWriteCount;
+    volatile LONG MmDirtyWriteIoCount;
+    volatile LONG MmMappedPagesWriteCount;
+    volatile LONG MmMappedWriteIoCount;
+    ULONG CcFastReadNoWait;
+    ULONG CcFastReadWait;
+    ULONG CcFastReadNotPossible;
+    ULONG CcCopyReadNoWait;
+    ULONG CcCopyReadWait;
+    ULONG CcCopyReadNoWaitMiss;
     volatile LONG IoReadOperationCount;
     volatile LONG IoWriteOperationCount;
     volatile LONG IoOtherOperationCount;
@@ -356,6 +375,8 @@ struct _KPCR
     PVOID KdVersionBlock;
     volatile LONG FenceState;
 };
+
+typedef KPCR KIPCR, *PKIPCR;
 
 /* Startup must install the PCR before calling these accessors. */
 #ifndef NTOS_MODE_USER

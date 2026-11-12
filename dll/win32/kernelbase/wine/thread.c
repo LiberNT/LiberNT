@@ -635,7 +635,21 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetThreadInformation( HANDLE thread, THREAD_INFORM
         case ThreadDynamicCodePolicy:
             return set_ntstatus( NtSetInformationThread( thread, ThreadDynamicCodePolicyInfo, info, size ));
         case ThreadPowerThrottling:
+#ifdef __REACTOS__
+        {
+            THREAD_POWER_THROTTLING_STATE state;
+
+            if (size < sizeof(state))
+            {
+                SetLastError( ERROR_INVALID_PARAMETER );
+                return FALSE;
+            }
+            state = *(const THREAD_POWER_THROTTLING_STATE *)info;
+            return set_ntstatus( NtSetInformationThread( thread, ThreadPowerThrottlingState, &state, sizeof(state) ));
+        }
+#else
             return set_ntstatus( NtSetInformationThread( thread, ThreadPowerThrottlingState, info, size ));
+#endif
         default:
             FIXME("Unsupported class %u.\n", info_class);
 #ifdef __REACTOS__
@@ -793,6 +807,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH TlsSetValue( DWORD index, LPVOID value )
 BOOL WINAPI Wow64GetThreadContext( HANDLE handle, WOW64_CONTEXT *context)
 {
 #ifdef __i386__
+    if (!is_wow64) return set_ntstatus( STATUS_NOT_IMPLEMENTED );
     return set_ntstatus( NtGetContextThread( handle, (CONTEXT *)context ));
 #elif defined(__x86_64__) || (defined(__REACTOS__) && defined(_WIN64))
     return set_ntstatus( RtlWow64GetThreadContext( handle, context ));
@@ -808,6 +823,7 @@ BOOL WINAPI Wow64GetThreadContext( HANDLE handle, WOW64_CONTEXT *context)
 BOOL WINAPI Wow64SetThreadContext( HANDLE handle, const WOW64_CONTEXT *context)
 {
 #ifdef __i386__
+    if (!is_wow64) return set_ntstatus( STATUS_NOT_IMPLEMENTED );
     return set_ntstatus( NtSetContextThread( handle, (const CONTEXT *)context ));
 #elif defined(__x86_64__) || (defined(__REACTOS__) && defined(_WIN64))
     return set_ntstatus( RtlWow64SetThreadContext( handle, context ));

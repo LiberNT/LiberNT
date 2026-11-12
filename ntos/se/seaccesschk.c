@@ -1,0 +1,1204 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Deciding access against a security descriptor
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+#define NDEBUG
+#include <debug.h>
+
+/* PRIVATE DATA ***************************************************************/
+
+/* What one walk of a list is deciding, and for whom */
+typedef struct _SEP_CHECK_CONTEXT
+{
+    PISECURITY_DESCRIPTOR Descriptor;
+    PTOKEN Token;
+    PTOKEN PrimaryToken;
+    PSID PrincipalSelfSid;
+    PGENERIC_MAPPING GenericMapping;
+    POBJECT_TYPE_LIST_INTERNAL ObjectTypeList;
+    ULONG ObjectTypeListLength;
+    ULONG SidSet;
+    BOOLEAN MaximumAllowed;
+    BOOLEAN CallerIsOwner;
+} SEP_CHECK_CONTEXT, *PSEP_CHECK_CONTEXT;
+
+/* What the condition of an entry comes to for the token being checked */
+typedef enum _SEP_CONDITION
+{
+    SepConditionFalse,
+    SepConditionTrue,
+    SepConditionUnknown
+} SEP_CONDITION;
+
+static const WCHAR SepProcUniqueName[] = L"TSA://ProcUnique";
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+static
+BOOLEAN
+SepIsObjectAce(
+    _In_ UCHAR AceType)
+{
+    return (AceType == ACCESS_ALLOWED_OBJECT_ACE_TYPE ||
+            AceType == ACCESS_DENIED_OBJECT_ACE_TYPE);
+}
+
+/*
+ * An entry that names an object type speaks for that type and for everything
+ * under it; one that names none speaks for the whole list.
+ */
+static
+BOOLEAN
+SepAceCoversEntry(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PACE Ace,
+    _In_ ULONG Entry,
+    _Out_ PBOOLEAN Known)
+{
+    PGUID Guid;
+    ULONG Named;
+
+    *Known = TRUE;
+
+    if (!SepIsObjectAce(Ace->Header.AceType)) return TRUE;
+
+    Guid = SepGetObjectTypeGuidFromAce(Ace,
+                                       Ace->Header.AceType ==
+                                       ACCESS_DENIED_OBJECT_ACE_TYPE);
+    if (Guid == NULL) return TRUE;
+
+    if (Context->ObjectTypeList == NULL)
+    {
+        /* Nothing was named to apply it to */
+        *Known = FALSE;
+        return FALSE;
+    }
+
+    if (!SepObjectTypeGuidInList(Context->ObjectTypeList,
+                                 Context->ObjectTypeListLength,
+                                 Guid,
+                                 &Named))
+    {
+        *Known = FALSE;
+        return FALSE;
+    }
+
+    if (Entry == Named) return TRUE;
+    if (Entry < Named) return FALSE;
+
+    /* Below the one it named, until the list climbs back up to its level */
+    return (Context->ObjectTypeList[Entry].Level >
+            Context->ObjectTypeList[Named].Level);
+}
+
+/* The Owner Rights identifier in an entry stands for whoever owns the object */
+static
+BOOLEAN
+SepAceSidApplies(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PSID Sid,
+    _In_ BOOLEAN Deny)
+{
+    if (RtlEqualSid(Sid, SeOwnerRightsSid)) return Context->CallerIsOwner;
+
+    return SepSidInTokenEx(Context->Token,
+                           Context->PrincipalSelfSid,
+                           Sid,
+                           Deny,
+                           Context->SidSet);
+}
+
+/* An entry for Owner Rights takes the place of what an owner may otherwise always do */
+static
+BOOLEAN
+SepDaclNamesOwnerRights(
+    _In_ PACL Dacl)
+{
+    PACE Ace;
+    ULONG Index;
+
+    for (Index = 0; Index < Dacl->AceCount; Index++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Dacl, Index, (PVOID *)&Ace))) break;
+        if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+        switch (Ace->Header.AceType)
+        {
+            case ACCESS_ALLOWED_ACE_TYPE:
+            case ACCESS_DENIED_ACE_TYPE:
+            case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+            case ACCESS_DENIED_OBJECT_ACE_TYPE:
+                if (RtlEqualSid(SepGetSidFromAce(Ace), SeOwnerRightsSid)) return TRUE;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    return FALSE;
+}
+
+/* Reads a count out of an expression without reading past its end */
+static
+BOOLEAN
+SepReadExpressionCount(
+    _Inout_ PUCHAR *Cursor,
+    _In_ PUCHAR End,
+    _Out_ PULONG Value)
+{
+    if ((SIZE_T)(End - *Cursor) < sizeof(ULONG)) return FALSE;
+
+    RtlCopyMemory(Value, *Cursor, sizeof(ULONG));
+    *Cursor += sizeof(ULONG);
+    return TRUE;
+}
+
+/*
+ * Settles the condition a process writes to keep its own objects to itself:
+ * that the token's TSA://ProcUnique attribute equals the two numbers given.
+ */
+/* TODO: conditional expressions other than TSA://ProcUnique equality come out unknown */
+static
+SEP_CONDITION
+SepEvaluateCondition(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PACE Ace)
+{
+    static const UCHAR Signature[] = {'a', 'r', 't', 'x'};
+    PISID Sid = (PISID)&((PKNOWN_ACE)Ace)->SidStart;
+    PUCHAR End = (PUCHAR)Ace + Ace->Header.AceSize;
+    PUCHAR Cursor = (PUCHAR)Sid;
+    PUCHAR Nested;
+    ULONG64 Values[2];
+    ULONG64 High;
+    ULONG64 Low;
+    ULONG Length;
+    ULONG Index;
+    WCHAR Character;
+
+    if (Context->Token == NULL) return SepConditionUnknown;
+
+    if ((SIZE_T)(End - Cursor) < RtlLengthRequiredSid(0)) return SepConditionUnknown;
+    Length = RtlLengthRequiredSid(Sid->SubAuthorityCount);
+    if ((SIZE_T)(End - Cursor) < Length) return SepConditionUnknown;
+    Cursor += Length;
+
+    if ((SIZE_T)(End - Cursor) < sizeof(Signature) ||
+        RtlCompareMemory(Cursor, Signature, sizeof(Signature)) != sizeof(Signature))
+    {
+        return SepConditionUnknown;
+    }
+    Cursor += sizeof(Signature);
+
+    /* A local attribute, named by its length in bytes */
+    if (Cursor >= End || *Cursor++ != 0xF8 ||
+        !SepReadExpressionCount(&Cursor, End, &Length) ||
+        Length != sizeof(SepProcUniqueName) - sizeof(WCHAR) ||
+        (SIZE_T)(End - Cursor) < Length)
+    {
+        return SepConditionUnknown;
+    }
+
+    for (Index = 0; Index < Length / sizeof(WCHAR); Index++)
+    {
+        RtlCopyMemory(&Character, Cursor + Index * sizeof(WCHAR), sizeof(WCHAR));
+        if (RtlUpcaseUnicodeChar(Character) != RtlUpcaseUnicodeChar(SepProcUniqueName[Index]))
+            return SepConditionUnknown;
+    }
+    Cursor += Length;
+
+    /* A composite of two signless decimal 64-bit numbers */
+    if (Cursor >= End || *Cursor++ != 0x50 ||
+        !SepReadExpressionCount(&Cursor, End, &Length) ||
+        (SIZE_T)(End - Cursor) < Length)
+    {
+        return SepConditionUnknown;
+    }
+    Nested = Cursor + Length;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Values); Index++)
+    {
+        if ((SIZE_T)(Nested - Cursor) < 3 + sizeof(ULONG64) ||
+            Cursor[0] != 0x04 ||
+            Cursor[1 + sizeof(ULONG64)] != 0x03 ||
+            Cursor[2 + sizeof(ULONG64)] != 0x02)
+        {
+            return SepConditionUnknown;
+        }
+
+        RtlCopyMemory(&Values[Index], Cursor + 1, sizeof(ULONG64));
+        Cursor += 3 + sizeof(ULONG64);
+    }
+
+    /* The equality operator, then only padding */
+    if (Cursor != Nested || Cursor >= End || *Cursor++ != 0x80) return SepConditionUnknown;
+
+    while (Cursor < End)
+    {
+        if (*Cursor++ != 0) return SepConditionUnknown;
+    }
+
+    if (Context->Token->ProcUnique.LowPart == 0 && Context->Token->ProcUnique.HighPart == 0)
+        return SepConditionFalse;
+
+    High = (ULONG)Context->Token->ProcUnique.HighPart;
+    Low = Context->Token->ProcUnique.LowPart;
+
+    if ((Values[0] == High && Values[1] == Low) || (Values[0] == Low && Values[1] == High))
+        return SepConditionTrue;
+
+    return SepConditionFalse;
+}
+
+/*
+ * Walks a list once for one entry of the object type list. Entries are read in
+ * order and the walk stops as soon as the answer can no longer change: a
+ * denial that touches what is still wanted settles it, and so does having
+ * granted everything.
+ */
+static
+VOID
+SepWalkDacl(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ PACL Dacl,
+    _In_ ULONG Entry,
+    _Inout_ PACCESS_CHECK_RIGHTS Rights)
+{
+    PACE Ace;
+    ULONG Index;
+
+    for (Index = 0; Index < Dacl->AceCount; Index++)
+    {
+        ACCESS_MASK Mask;
+        BOOLEAN Known;
+        PSID Sid;
+
+        if (!NT_SUCCESS(RtlGetAce(Dacl, Index, (PVOID *)&Ace))) break;
+
+        /* An entry kept only to be handed down decides nothing here */
+        if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+        if (!SepAceCoversEntry(Context, Ace, Entry, &Known) || !Known)
+            continue;
+
+        Sid = SepGetSidFromAce(Ace);
+        Mask = ((PKNOWN_ACE)Ace)->Mask;
+        RtlMapGenericMask(&Mask, Context->GenericMapping);
+
+        switch (Ace->Header.AceType)
+        {
+            case ACCESS_DENIED_ACE_TYPE:
+            case ACCESS_DENIED_OBJECT_ACE_TYPE:
+            case ACCESS_DENIED_CALLBACK_ACE_TYPE:
+                if (!SepAceSidApplies(Context, Sid, TRUE)) break;
+
+                /* A refusal whose condition cannot be settled still refuses */
+                if (Ace->Header.AceType == ACCESS_DENIED_CALLBACK_ACE_TYPE &&
+                    SepEvaluateCondition(Context, Ace) == SepConditionFalse)
+                {
+                    break;
+                }
+
+                if (Context->MaximumAllowed)
+                {
+                    /*
+                     * Asking for the most that is allowed reads the whole
+                     * list, so a refusal only takes away what an entry before
+                     * it had not already allowed.
+                     */
+                    Rights->DeniedAccessRights |=
+                        (Mask & ~Rights->GrantedAccessRights);
+                    break;
+                }
+
+                /* What is refused can no longer be asked for */
+                Rights->DeniedAccessRights |= Mask;
+
+                if (Mask & Rights->RemainingAccessRights)
+                {
+                    /* It touches what is still wanted, so that settles it */
+                    Rights->RemainingAccessRights |= MAXIMUM_ALLOWED;
+                    return;
+                }
+                break;
+
+            case ACCESS_ALLOWED_ACE_TYPE:
+            case ACCESS_ALLOWED_OBJECT_ACE_TYPE:
+            case ACCESS_ALLOWED_CALLBACK_ACE_TYPE:
+                if (!SepAceSidApplies(Context, Sid, FALSE)) break;
+
+                if (Ace->Header.AceType == ACCESS_ALLOWED_CALLBACK_ACE_TYPE &&
+                    SepEvaluateCondition(Context, Ace) != SepConditionTrue)
+                {
+                    break;
+                }
+
+                if (Context->MaximumAllowed)
+                {
+                    /* Everything not already refused is added to the answer */
+                    Rights->GrantedAccessRights |=
+                        (Mask & ~Rights->DeniedAccessRights);
+                    break;
+                }
+
+                /* Only what was asked for is handed over, never the whole
+                 * of what an entry would allow */
+                Rights->GrantedAccessRights |=
+                    (Mask & Rights->RemainingAccessRights);
+                Rights->RemainingAccessRights &= ~Mask;
+
+                if (Rights->RemainingAccessRights == 0) return;
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+
+/*
+ * Decides one entry of the object type list. A descriptor with no list at all
+ * allows everything; one with an empty list allows nothing.
+ */
+static
+NTSTATUS
+SepCheckEntry(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ ULONG Entry,
+    _In_ ACCESS_MASK Desired,
+    _In_ ACCESS_MASK AlreadyGranted,
+    _Out_ PACCESS_MASK GrantedAccess)
+{
+    ACCESS_CHECK_RIGHTS Rights;
+    ACCESS_MASK Wanted = Desired;
+    BOOLEAN DaclPresent = FALSE;
+    BOOLEAN Defaulted;
+    PACL Dacl = NULL;
+    PSID Owner = NULL;
+
+    *GrantedAccess = AlreadyGranted;
+
+    RtlZeroMemory(&Rights, sizeof(Rights));
+
+    if (!NT_SUCCESS(RtlGetDaclSecurityDescriptor(Context->Descriptor,
+                                                 &DaclPresent,
+                                                 &Dacl,
+                                                 &Defaulted)))
+    {
+        return STATUS_INVALID_SECURITY_DESCR;
+    }
+
+    if (!DaclPresent || Dacl == NULL)
+    {
+        /* Nothing says who may do what, so everything asked for is allowed */
+        if (Context->MaximumAllowed)
+            *GrantedAccess = AlreadyGranted | Context->GenericMapping->GenericAll;
+        else
+            *GrantedAccess = AlreadyGranted | Wanted;
+
+        return STATUS_SUCCESS;
+    }
+
+    /*
+     * Whoever owns something may always read and change what it says about
+     * who may use it, whatever its list says.
+     */
+    Context->CallerIsOwner =
+        NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Context->Descriptor,
+                                                 &Owner,
+                                                 &Defaulted)) &&
+        Owner != NULL &&
+        SepSidInTokenEx(Context->Token, Context->PrincipalSelfSid, Owner,
+                        FALSE, Context->SidSet);
+
+    if (Context->CallerIsOwner && !SepDaclNamesOwnerRights(Dacl))
+    {
+        if (Context->MaximumAllowed)
+        {
+            Rights.GrantedAccessRights |= READ_CONTROL | WRITE_DAC;
+        }
+        else
+        {
+            Rights.GrantedAccessRights |= (Wanted & (READ_CONTROL | WRITE_DAC));
+            Wanted &= ~(READ_CONTROL | WRITE_DAC);
+        }
+    }
+
+    Rights.RemainingAccessRights = Wanted & ~MAXIMUM_ALLOWED;
+
+    SepWalkDacl(Context, Dacl, Entry, &Rights);
+
+    if (Context->MaximumAllowed)
+    {
+        *GrantedAccess = AlreadyGranted | Rights.GrantedAccessRights;
+
+        return (*GrantedAccess != 0) ? STATUS_SUCCESS : STATUS_ACCESS_DENIED;
+    }
+
+    if (Rights.RemainingAccessRights != 0)
+    {
+        /* Something asked for was never allowed, so the whole ask fails,
+         * while what was granted on the way is still reported */
+        *GrantedAccess = AlreadyGranted | Rights.GrantedAccessRights;
+
+        return STATUS_ACCESS_DENIED;
+    }
+
+    *GrantedAccess = AlreadyGranted | Rights.GrantedAccessRights;
+
+    return STATUS_SUCCESS;
+}
+
+/* An unlabeled object is medium with no-write-up; READ_CONTROL and SYNCHRONIZE are never taken away */
+static
+ACCESS_MASK
+SepMandatoryDeniedRights(
+    _In_ PSEP_CHECK_CONTEXT Context)
+{
+    ULONG ObjectRid = SECURITY_MANDATORY_MEDIUM_RID;
+    ULONG Policy = SYSTEM_MANDATORY_LABEL_NO_WRITE_UP;
+    BOOLEAN SaclPresent = FALSE;
+    BOOLEAN Defaulted;
+    ACCESS_MASK Denied = 0;
+    PTOKEN Token = Context->Token;
+    PACL Sacl = NULL;
+    PACE Ace;
+    ULONG Index;
+    PSID Sid;
+
+    if (Token == NULL) return 0;
+
+    /* A package's token worn by a thread is held to the integrity of the process wearing it */
+    if (Token->TokenType == TokenImpersonation && Token->LowBoxInfo != NULL &&
+        Context->PrimaryToken != NULL)
+    {
+        Token = Context->PrimaryToken;
+    }
+
+    if (!(Token->MandatoryPolicy & TOKEN_MANDATORY_POLICY_NO_WRITE_UP)) return 0;
+
+    if (NT_SUCCESS(RtlGetSaclSecurityDescriptor(Context->Descriptor, &SaclPresent, &Sacl, &Defaulted)) &&
+        SaclPresent && Sacl != NULL)
+    {
+        for (Index = 0; Index < Sacl->AceCount; Index++)
+        {
+            if (!NT_SUCCESS(RtlGetAce(Sacl, Index, (PVOID *)&Ace))) break;
+            if (Ace->Header.AceType != SYSTEM_MANDATORY_LABEL_ACE_TYPE) continue;
+            if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+            Sid = (PSID)&((PSYSTEM_MANDATORY_LABEL_ACE)Ace)->SidStart;
+            if (*RtlSubAuthorityCountSid(Sid) == 0) break;
+
+            ObjectRid = *RtlSubAuthoritySid(Sid, *RtlSubAuthorityCountSid(Sid) - 1);
+            Policy = ((PSYSTEM_MANDATORY_LABEL_ACE)Ace)->Mask & SYSTEM_MANDATORY_LABEL_VALID_MASK;
+            break;
+        }
+    }
+
+    if (SepGetTokenIntegrityRid(Token) >= ObjectRid) return 0;
+
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_WRITE_UP)
+        Denied |= Context->GenericMapping->GenericWrite | DELETE | WRITE_DAC | WRITE_OWNER;
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_READ_UP)
+        Denied |= Context->GenericMapping->GenericRead;
+    if (Policy & SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP)
+        Denied |= Context->GenericMapping->GenericExecute;
+
+    return Denied & ~(READ_CONTROL | SYNCHRONIZE);
+}
+
+/*
+ * Decides every entry, for the groups a token carries and then again for the
+ * identifiers it was restricted to, because a restricted token may only do
+ * what both answers allow.
+ */
+static
+NTSTATUS
+SepCheckList(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _In_ ACCESS_MASK Desired,
+    _In_ ACCESS_MASK AlreadyGranted,
+    _In_ ULONG Entries,
+    _Out_writes_(Entries) PACCESS_MASK GrantedAccess,
+    _Out_writes_(Entries) PNTSTATUS AccessStatus)
+{
+    BOOLEAN Restricted = (Context->Token != NULL &&
+                          Context->Token->RestrictedSidCount != 0);
+    BOOLEAN LowBox = (Context->Token != NULL && Context->Token->LowBoxInfo != NULL);
+    ACCESS_MASK MandatoryDenied = SepMandatoryDeniedRights(Context);
+    ULONG Entry;
+
+    for (Entry = 0; Entry < Entries; Entry++)
+    {
+        ACCESS_MASK Granted = 0;
+        NTSTATUS Status;
+
+        /* A right the integrity level takes away fails the whole ask when it is named */
+        if ((Desired & ~MAXIMUM_ALLOWED & MandatoryDenied) ||
+            (!Context->MaximumAllowed && (AlreadyGranted & MandatoryDenied)))
+        {
+            GrantedAccess[Entry] = 0;
+            AccessStatus[Entry] = STATUS_ACCESS_DENIED;
+            continue;
+        }
+
+        Context->SidSet = SEP_SID_SET_GROUPS;
+        Status = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
+                               &Granted);
+
+        if (Restricted && NT_SUCCESS(Status))
+        {
+            ACCESS_MASK Second = 0;
+            NTSTATUS Status2;
+
+            Context->SidSet = SEP_SID_SET_RESTRICTED;
+            Status2 = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
+                                    &Second);
+
+            if (!NT_SUCCESS(Status2)) Status = Status2;
+
+            Granted &= Second;
+        }
+
+        /* A package may only do what its name, its capabilities or every package are also allowed */
+        if (LowBox && NT_SUCCESS(Status))
+        {
+            ACCESS_MASK Third = 0;
+            NTSTATUS Status3;
+
+            Context->SidSet = SEP_SID_SET_CAPABILITIES;
+            Status3 = SepCheckEntry(Context, Entry, Desired, AlreadyGranted & ~MandatoryDenied,
+                                    &Third);
+
+            if (!NT_SUCCESS(Status3)) Status = Status3;
+
+            Granted &= Third;
+        }
+
+        Granted &= ~MandatoryDenied;
+        if (NT_SUCCESS(Status) && Context->MaximumAllowed && Granted == 0) Status = STATUS_ACCESS_DENIED;
+
+        GrantedAccess[Entry] = Granted;
+        AccessStatus[Entry] = Status;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+/* Prepares what both the kernel and the system call paths decide against */
+static
+NTSTATUS
+SepPrepareCheck(
+    _In_ PSEP_CHECK_CONTEXT Context,
+    _Inout_ PACCESS_MASK Desired,
+    _Inout_ PACCESS_MASK AlreadyGranted,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
+    _Outptr_opt_result_maybenull_ PPRIVILEGE_SET *Privileges,
+    _In_ KPROCESSOR_MODE AccessMode)
+{
+    BOOLEAN Defaulted;
+    PSID Sid;
+
+    if (Privileges != NULL) *Privileges = NULL;
+
+    /* A descriptor that names nobody as its owner is not one */
+    Sid = NULL;
+    if (!NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Context->Descriptor,
+                                                  &Sid,
+                                                  &Defaulted)) ||
+        Sid == NULL)
+    {
+        return STATUS_INVALID_SECURITY_DESCR;
+    }
+
+    Sid = NULL;
+    if (!NT_SUCCESS(RtlGetGroupSecurityDescriptor(Context->Descriptor,
+                                                  &Sid,
+                                                  &Defaulted)))
+    {
+        return STATUS_INVALID_SECURITY_DESCR;
+    }
+
+    RtlMapGenericMask(Desired, Context->GenericMapping);
+
+    /* Two kinds of access are settled by privilege, not by the descriptor */
+    return SePrivilegePolicyCheck(Desired,
+                                  AlreadyGranted,
+                                  SubjectContext,
+                                  Context->Token,
+                                  Privileges,
+                                  AccessMode);
+}
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+BOOLEAN
+NTAPI
+SeAccessCheck(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext,
+    _In_ BOOLEAN SubjectContextLocked,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ACCESS_MASK PreviouslyGrantedAccess,
+    _Outptr_opt_ PPRIVILEGE_SET *Privileges,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PNTSTATUS AccessStatus)
+{
+    SEP_CHECK_CONTEXT Context;
+    ACCESS_MASK Granted = 0;
+    ACCESS_MASK Already = PreviouslyGrantedAccess;
+    ACCESS_MASK Wanted = DesiredAccess;
+    NTSTATUS Entry = STATUS_SUCCESS;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Privileges != NULL) *Privileges = NULL;
+
+    /* The kernel is trusted with whatever it asks of an object */
+    if (AccessMode == KernelMode)
+    {
+        if (DesiredAccess & MAXIMUM_ALLOWED)
+        {
+            *GrantedAccess = GenericMapping->GenericAll |
+                             (DesiredAccess & ~MAXIMUM_ALLOWED) |
+                             PreviouslyGrantedAccess;
+        }
+        else
+        {
+            *GrantedAccess = DesiredAccess | PreviouslyGrantedAccess;
+        }
+
+        *AccessStatus = STATUS_SUCCESS;
+        return TRUE;
+    }
+
+    if (DesiredAccess == 0 && PreviouslyGrantedAccess == 0)
+    {
+        /* Asking for nothing is not something that can be allowed */
+        *GrantedAccess = 0;
+        *AccessStatus = STATUS_ACCESS_DENIED;
+        return FALSE;
+    }
+
+    if (SecurityDescriptor == NULL)
+    {
+        *GrantedAccess = 0;
+        *AccessStatus = STATUS_ACCESS_DENIED;
+        return FALSE;
+    }
+
+    /* A thread impersonating below SecurityImpersonation may identify its client but not act for it */
+    if (SubjectSecurityContext->ClientToken != NULL &&
+        SubjectSecurityContext->ImpersonationLevel < SecurityImpersonation)
+    {
+        *GrantedAccess = 0;
+        *AccessStatus = STATUS_BAD_IMPERSONATION_LEVEL;
+        return FALSE;
+    }
+
+    if (!SubjectContextLocked) SeLockSubjectContext(SubjectSecurityContext);
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.Descriptor = SecurityDescriptor;
+    Context.Token = (PTOKEN)SeQuerySubjectContextToken(SubjectSecurityContext);
+    Context.PrimaryToken = (PTOKEN)SubjectSecurityContext->PrimaryToken;
+    Context.GenericMapping = GenericMapping;
+    Context.MaximumAllowed = (DesiredAccess & MAXIMUM_ALLOWED) != 0;
+
+    Status = SepPrepareCheck(&Context, &Wanted, &Already,
+                             SubjectSecurityContext, Privileges, AccessMode);
+    if (NT_SUCCESS(Status))
+    {
+        Status = SepCheckList(&Context, Wanted, Already, 1, &Granted, &Entry);
+        if (NT_SUCCESS(Status)) Status = Entry;
+    }
+
+    if (!SubjectContextLocked) SeUnlockSubjectContext(SubjectSecurityContext);
+
+    if (!NT_SUCCESS(Status))
+    {
+        /* Nothing is handed back from an ask that failed */
+        *GrantedAccess = 0;
+        *AccessStatus = Status;
+
+        if (Privileges != NULL && *Privileges != NULL)
+        {
+            SeFreePrivileges(*Privileges);
+            *Privileges = NULL;
+        }
+
+        return FALSE;
+    }
+
+    *GrantedAccess = Granted;
+    *AccessStatus = STATUS_SUCCESS;
+
+    return TRUE;
+}
+
+/*
+ * Answers whether a walk can be skipped: it can only when nothing in the list
+ * refuses anything and everyone is already allowed what is wanted.
+ */
+BOOLEAN
+NTAPI
+SeFastTraverseCheck(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_ PACCESS_STATE AccessState,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ KPROCESSOR_MODE AccessMode)
+{
+    BOOLEAN Present = FALSE;
+    BOOLEAN Defaulted;
+    PACL Dacl = NULL;
+    ULONG Index;
+    PACE Ace;
+
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(AccessState);
+
+    if (AccessMode == KernelMode) return TRUE;
+    if (SecurityDescriptor == NULL) return FALSE;
+
+    if (!NT_SUCCESS(RtlGetDaclSecurityDescriptor(SecurityDescriptor,
+                                                 &Present,
+                                                 &Dacl,
+                                                 &Defaulted)))
+    {
+        return FALSE;
+    }
+
+    /* Nothing says who may do what, so anyone may */
+    if (!Present || Dacl == NULL) return TRUE;
+
+    for (Index = 0; Index < Dacl->AceCount; Index++)
+    {
+        if (!NT_SUCCESS(RtlGetAce(Dacl, Index, (PVOID *)&Ace))) return FALSE;
+
+        if (Ace->Header.AceFlags & INHERIT_ONLY_ACE) continue;
+
+        /* Anything that refuses has to be read in order, so no shortcut */
+        if (Ace->Header.AceType != ACCESS_ALLOWED_ACE_TYPE) return FALSE;
+
+        if (!RtlEqualSid(SepGetSidFromAce(Ace), SeWorldSid)) continue;
+
+        if ((((PKNOWN_ACE)Ace)->Mask & DesiredAccess) == DesiredAccess)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+/* SYSTEM CALLS ***************************************************************/
+
+/*
+ * The three system calls differ only in what they are asked about, so they
+ * all come through here. The order the arguments are refused in is part of
+ * what callers see, so it does not change: what cannot be read at all, then
+ * rights the caller should have mapped itself, then the token, then the
+ * descriptor, then the list.
+ */
+NTSTATUS
+SepAccessCheckByType(
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_opt_ PSID PrincipalSelfSid,
+    _In_opt_ HANDLE ClientToken,
+    _In_opt_ PTOKEN EffectiveToken,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
+    _In_ ULONG ObjectTypeListLength,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _Out_opt_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_opt_ PULONG PrivilegeSetLength,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PNTSTATUS AccessStatus,
+    _In_ BOOLEAN ResultList,
+    _In_ BOOLEAN ReturnPrivilegeSet)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    POBJECT_TYPE_LIST_INTERNAL Captured = NULL;
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    SECURITY_SUBJECT_CONTEXT SubjectContext;
+    PPRIVILEGE_SET Used = NULL;
+    PACCESS_MASK Granted = NULL;
+    PNTSTATUS Results = NULL;
+    GENERIC_MAPPING Mapping;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ACCESS_MASK Already = 0;
+    ACCESS_MASK Wanted = DesiredAccess;
+    PSID SelfSid = NULL;
+    SEP_CHECK_CONTEXT Context;
+    ULONG Entries = 1;
+    ULONG SetLength = 0;
+    ULONG Needed;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(&Context, sizeof(Context));
+
+    if (ResultList && ObjectTypeListLength == 0)
+        return STATUS_INVALID_PARAMETER;
+
+    if (ResultList) Entries = ObjectTypeListLength;
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForRead(GenericMapping, sizeof(GENERIC_MAPPING), sizeof(ULONG));
+            Mapping = *GenericMapping;
+
+            if (ReturnPrivilegeSet)
+            {
+                ProbeForWriteUlong(PrivilegeSetLength);
+                SetLength = *PrivilegeSetLength;
+
+                if (SetLength != 0)
+                    ProbeForWrite(PrivilegeSet, SetLength, sizeof(ULONG));
+            }
+
+            ProbeForWrite(GrantedAccess,
+                          (SIZE_T)Entries * sizeof(ACCESS_MASK),
+                          sizeof(ULONG));
+            ProbeForWrite(AccessStatus,
+                          (SIZE_T)Entries * sizeof(NTSTATUS),
+                          sizeof(ULONG));
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+    else
+    {
+        Mapping = *GenericMapping;
+        if (ReturnPrivilegeSet) SetLength = *PrivilegeSetLength;
+    }
+
+    /* A caller has to map its own rights before asking about them */
+    if (DesiredAccess & (GENERIC_READ | GENERIC_WRITE |
+                         GENERIC_EXECUTE | GENERIC_ALL))
+    {
+        return STATUS_GENERIC_NOT_MAPPED;
+    }
+
+    SeCaptureSubjectContext(&SubjectContext);
+    Context.PrimaryToken = (PTOKEN)SubjectContext.PrimaryToken;
+
+    if (EffectiveToken != NULL)
+    {
+        /* A caller asking in its own name is answered for by what it acts
+         * with, whichever kind of token that is */
+        Context.Token = EffectiveToken;
+        ObReferenceObject(Context.Token);
+    }
+    else
+    {
+        Status = ObReferenceObjectByHandle(ClientToken,
+                                           TOKEN_QUERY,
+                                           SeTokenObjectType,
+                                           PreviousMode,
+                                           (PVOID *)&Context.Token,
+                                           NULL);
+        if (NT_SUCCESS(Status))
+        {
+            /* Only a token taken from somebody else answers for them, and
+             * only one taken at a level that may be acted on */
+            if (Context.Token->TokenType != TokenImpersonation)
+                Status = STATUS_NO_IMPERSONATION_TOKEN;
+            else if (Context.Token->ImpersonationLevel < SecurityIdentification)
+                Status = STATUS_BAD_IMPERSONATION_LEVEL;
+        }
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Status = SeCaptureObjectTypeList(ObjectTypeList,
+                                         ObjectTypeListLength,
+                                         PreviousMode,
+                                         &Captured);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        if (SecurityDescriptor == NULL)
+        {
+            Status = STATUS_INVALID_SECURITY_DESCR;
+        }
+        else
+        {
+            Status = SeCaptureSecurityDescriptor(SecurityDescriptor,
+                                                 PreviousMode,
+                                                 PagedPool,
+                                                 FALSE,
+                                                 &Descriptor);
+            if (Status == STATUS_UNKNOWN_REVISION)
+                Status = STATUS_REVISION_MISMATCH;
+        }
+    }
+
+    if (NT_SUCCESS(Status) &&
+        ((PISECURITY_DESCRIPTOR)Descriptor)->Revision !=
+        SECURITY_DESCRIPTOR_REVISION)
+    {
+        Status = STATUS_REVISION_MISMATCH;
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        BOOLEAN Defaulted;
+        PSID Named = NULL;
+
+        if (!NT_SUCCESS(RtlGetOwnerSecurityDescriptor(Descriptor,
+                                                      &Named,
+                                                      &Defaulted)) ||
+            Named == NULL)
+        {
+            Status = STATUS_INVALID_SECURITY_DESCR;
+        }
+        else
+        {
+            Named = NULL;
+            if (!NT_SUCCESS(RtlGetGroupSecurityDescriptor(Descriptor,
+                                                          &Named,
+                                                          &Defaulted)) ||
+                Named == NULL)
+            {
+                Status = STATUS_INVALID_SECURITY_DESCR;
+            }
+        }
+    }
+
+    /* What the caller says "self" means is read only once the rest is sound */
+    if (NT_SUCCESS(Status) && PrincipalSelfSid != NULL)
+    {
+        Status = SepCaptureSid(PrincipalSelfSid, PreviousMode, PagedPool,
+                               TRUE, &SelfSid);
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Granted = ExAllocatePoolWithTag(PagedPool,
+                                        (SIZE_T)Entries *
+                                        (sizeof(ACCESS_MASK) + sizeof(NTSTATUS)),
+                                        TAG_SE);
+        if (Granted == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+        else Results = (PNTSTATUS)&Granted[Entries];
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Context.Descriptor = Descriptor;
+        Context.PrincipalSelfSid = SelfSid;
+        Context.GenericMapping = &Mapping;
+        Context.ObjectTypeList = Captured;
+        Context.ObjectTypeListLength = ObjectTypeListLength;
+        Context.MaximumAllowed = (DesiredAccess & MAXIMUM_ALLOWED) != 0;
+        Context.SidSet = SEP_SID_SET_GROUPS;
+
+        SeLockSubjectContext(&SubjectContext);
+
+        Status = SepPrepareCheck(&Context, &Wanted, &Already,
+                                 &SubjectContext, &Used, PreviousMode);
+        if (Status == STATUS_PRIVILEGE_NOT_HELD || (NT_SUCCESS(Status) && Wanted == 0 && Already == 0))
+        {
+            ULONG Index;
+
+            /* A missing privilege, or asking for nothing, refuses the access and still answers the question */
+            for (Index = 0; Index < Entries; Index++)
+            {
+                Granted[Index] = 0;
+                Results[Index] = NT_SUCCESS(Status) ? STATUS_ACCESS_DENIED : Status;
+            }
+
+            Status = STATUS_SUCCESS;
+        }
+        else if (NT_SUCCESS(Status))
+        {
+            Status = SepCheckList(&Context, Wanted, Already, Entries,
+                                  Granted, Results);
+
+            /*
+             * Asking about one thing and being refused hands back nothing;
+             * asking about a list hands back what each entry did get.
+             */
+            if (NT_SUCCESS(Status) && !ResultList && !NT_SUCCESS(Results[0]))
+                Granted[0] = 0;
+        }
+
+        SeUnlockSubjectContext(&SubjectContext);
+    }
+
+    /* What privileges carried the answer is reported in the caller's own set */
+    if (NT_SUCCESS(Status))
+    {
+        ULONG Count = (Used != NULL) ? Used->PrivilegeCount : 0;
+
+        Needed = (ULONG)(FIELD_OFFSET(PRIVILEGE_SET, Privilege) +
+                         (SIZE_T)Count * sizeof(LUID_AND_ATTRIBUTES));
+
+        /* The caller's set always has to hold at least one privilege, and its length is only told back when too short */
+        if (Needed < sizeof(PRIVILEGE_SET)) Needed = sizeof(PRIVILEGE_SET);
+
+        _SEH2_TRY
+        {
+            if (ReturnPrivilegeSet)
+            {
+                if (SetLength < Needed)
+                {
+                    *PrivilegeSetLength = Needed;
+                    Status = STATUS_BUFFER_TOO_SMALL;
+                }
+                else
+                {
+                    PrivilegeSet->PrivilegeCount = Count;
+                    PrivilegeSet->Control = (Used != NULL) ? Used->Control : 0;
+
+                    if (Count != 0)
+                    {
+                        RtlCopyMemory(PrivilegeSet->Privilege,
+                                      Used->Privilege,
+                                      Count * sizeof(LUID_AND_ATTRIBUTES));
+                    }
+                }
+            }
+
+            if (NT_SUCCESS(Status))
+            {
+                RtlCopyMemory(GrantedAccess,
+                              Granted,
+                              (SIZE_T)Entries * sizeof(ACCESS_MASK));
+                RtlCopyMemory(AccessStatus,
+                              Results,
+                              (SIZE_T)Entries * sizeof(NTSTATUS));
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+
+    if (Used != NULL) SeFreePrivileges(Used);
+    if (Granted != NULL) ExFreePoolWithTag(Granted, TAG_SE);
+    if (Captured != NULL) SeReleaseObjectTypeList(Captured, PreviousMode);
+    if (Descriptor != NULL)
+        SeReleaseSecurityDescriptor(Descriptor, PreviousMode, FALSE);
+    if (Context.Token != NULL) ObDereferenceObject(Context.Token);
+    if (SelfSid != NULL) SepReleaseSid(SelfSid, PreviousMode, TRUE);
+
+    SeReleaseSubjectContext(&SubjectContext);
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+NtAccessCheck(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_ HANDLE ClientToken,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _Out_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_ PULONG PrivilegeSetLength,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PNTSTATUS AccessStatus)
+{
+    PAGED_CODE();
+
+    return SepAccessCheckByType(SecurityDescriptor,
+                                NULL,
+                                ClientToken,
+                                NULL,
+                                DesiredAccess,
+                                NULL,
+                                0,
+                                GenericMapping,
+                                PrivilegeSet,
+                                PrivilegeSetLength,
+                                GrantedAccess,
+                                AccessStatus,
+                                FALSE,
+                                TRUE);
+}
+
+NTSTATUS
+NTAPI
+NtAccessCheckByType(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_opt_ PSID PrincipalSelfSid,
+    _In_ HANDLE ClientToken,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_reads_opt_(ObjectTypeListLength) POBJECT_TYPE_LIST ObjectTypeList,
+    _In_ ULONG ObjectTypeListLength,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _Out_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_ PULONG PrivilegeSetLength,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PNTSTATUS AccessStatus)
+{
+    PAGED_CODE();
+
+    return SepAccessCheckByType(SecurityDescriptor,
+                                PrincipalSelfSid,
+                                ClientToken,
+                                NULL,
+                                DesiredAccess,
+                                ObjectTypeList,
+                                ObjectTypeListLength,
+                                GenericMapping,
+                                PrivilegeSet,
+                                PrivilegeSetLength,
+                                GrantedAccess,
+                                AccessStatus,
+                                FALSE,
+                                TRUE);
+}
+
+NTSTATUS
+NTAPI
+NtAccessCheckByTypeResultList(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_opt_ PSID PrincipalSelfSid,
+    _In_ HANDLE ClientToken,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_reads_(ObjectTypeListLength) POBJECT_TYPE_LIST ObjectTypeList,
+    _In_ ULONG ObjectTypeListLength,
+    _In_ PGENERIC_MAPPING GenericMapping,
+    _Out_ PPRIVILEGE_SET PrivilegeSet,
+    _Inout_ PULONG PrivilegeSetLength,
+    _Out_writes_(ObjectTypeListLength) PACCESS_MASK GrantedAccess,
+    _Out_writes_(ObjectTypeListLength) PNTSTATUS AccessStatus)
+{
+    PAGED_CODE();
+
+    return SepAccessCheckByType(SecurityDescriptor,
+                                PrincipalSelfSid,
+                                ClientToken,
+                                NULL,
+                                DesiredAccess,
+                                ObjectTypeList,
+                                ObjectTypeListLength,
+                                GenericMapping,
+                                PrivilegeSet,
+                                PrivilegeSetLength,
+                                GrantedAccess,
+                                AccessStatus,
+                                TRUE,
+                                TRUE);
+}
+
+/* EOF */

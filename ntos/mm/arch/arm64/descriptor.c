@@ -51,7 +51,8 @@ static const MI_ARCH_DESCRIPTOR MiArchDescriptor =
     TRUE,
     0,
     /* TODO: region rotation suits the BCM2712 memory controller, not ARM64 as such; let the board enable it instead. */
-    TRUE
+    TRUE,
+    MI_ARM64_SESSION_TOP_ENTRIES
 };
 
 const MI_ARCH_DESCRIPTOR *

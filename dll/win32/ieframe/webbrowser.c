@@ -603,6 +603,9 @@ static HRESULT WINAPI WebBrowser_get_Busy(IWebBrowser2 *iface, VARIANT_BOOL *pBo
 
     TRACE("(%p)->(%p)\n", This, pBool);
 
+    if(!This->client)
+        return E_FAIL;
+
     *pBool = This->doc_host.busy;
     return S_OK;
 }

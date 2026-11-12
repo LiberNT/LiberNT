@@ -44,8 +44,10 @@ class CControlPanelFolder :
         CComPtr<IShellFolder2> m_regFolder;
         LONG m_cBackReferences;
         CComHeapPtr<WCHAR> m_pszRemoteComputer;
+        struct APPLET_LIST *m_pApplets;
 
         HRESULT WINAPI ExecuteFromIdList(LPCITEMIDLIST pidl);
+        struct APPLET_LIST *GetApplets(HWND hwndOwner);
 
     public:
         CControlPanelFolder();

@@ -498,6 +498,35 @@ ENDFUNC
 
 PUBLIC KiGeneralProtectionFault
 FUNC KiGeneralProtectionFault
+    .pushframe code
+    .endprolog
+
+    /* An IRETQ that faults on its way to user mode does so after SWAPGS */
+    test byte ptr [rsp + 8 + MfSegCs], 1
+    jnz KiGeneralProtectionFaultTrap
+    push rax
+    mov rax, [rsp + 16 + MfRip]
+    cmp word ptr [rax], HEX(0CF48)
+    jne KiGpfKernelFault
+    mov rax, [rsp + 16 + MfRsp]
+    test byte ptr [rax + MfSegCs], 1
+    jz KiGpfKernelFault
+    push rcx
+    mov rcx, [rsp + 8]
+    mov [rax - 16], rcx
+    mov rcx, [rsp + 16]
+    mov [rax - 8], rcx
+    pop rcx
+    lea rsp, [rax - 16]
+    pop rax
+    jmp KiUserIretqFault
+
+KiGpfKernelFault:
+    pop rax
+    jmp KiGeneralProtectionFaultTrap
+ENDFUNC
+
+FUNC KiGeneralProtectionFaultTrap
     /* We have an error code */
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
@@ -532,6 +561,18 @@ KiGpfExit:
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
+FUNC KiUserIretqFault
+    EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
+
+    test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
+    jz KiUserIretqFaultDispatch
+    sti
+
+KiUserIretqFaultDispatch:
+    DispatchException STATUS_ACCESS_VIOLATION, 2, 0, -1, 0
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
+ENDFUNC
+
 
 PUBLIC KiPageFault
 FUNC KiPageFault
@@ -553,6 +594,15 @@ FUNC KiPageFault
     jnz SkipStackCheck
     test rcx, rcx
     jz SkipStackCheck
+    /* A previous frame on another stack, such as the one a stack callout left, says nothing about this one */
+    mov r10, [rax + ThStackLimit]
+    mov r11, [rax + ThStackBase]
+    cmp rcx, r10
+    jb SkipStackCheck
+    cmp rcx, r11
+    jae SkipStackCheck
+    cmp rbp, r11
+    jae SkipStackCheck
     cmp rcx, rbp
     jbe KernelStackOverflow
     sub rcx, rbp
@@ -735,6 +785,17 @@ FUNC KiAlignmentFault
     /* We have an error code */
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
+    /* Only user mode can take an alignment check */
+    test byte ptr [rbp + KTRAP_FRAME_SegCs], MODE_MASK
+    jz KiAlignmentFaultFatal
+
+    sti
+
+    DispatchException STATUS_DATATYPE_MISALIGNMENT, 0, 0, 0, 0
+
+    ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
+
+KiAlignmentFaultFatal:
     /* Bugcheck */
     Fatal EXCEPTION_ALIGNMENT_CHECK
 #ifdef _USE_ML
@@ -900,6 +961,7 @@ KiApcInterruptEoiDone:
  *     PKPRCB Prcb);
  */
 EXTERN KiRetireDpcList:PROC
+EXTERN KiRunStackCallout:PROC
 
 /*
  * VOID
@@ -923,6 +985,34 @@ PUBLIC KiRetireDpcListInDpcStack
 
     /* Call KiRetireDpcList on the given stack */
     call KiRetireDpcList
+
+    /* Restore stack, cleanup and return */
+    mov rsp, rbp
+    pop rbp
+    ret
+.ENDP
+
+/*
+ * VOID
+ * KiCallOnKernelStack(
+ *     PVOID Context,
+ *     PVOID StackTop);
+ */
+PUBLIC KiCallOnKernelStack
+.PROC KiCallOnKernelStack
+    push rbp
+    .pushreg rbp
+    mov rbp, rsp
+    .setframe rbp, 0
+    .endprolog
+
+    /* Switch to the given stack; rcx still holds the context */
+    mov rsp, rdx
+
+    /* The stack is 16 byte aligned, allocate 32 bytes home space */
+    sub rsp, 32
+
+    call KiRunStackCallout
 
     /* Restore stack, cleanup and return */
     mov rsp, rbp
@@ -1229,6 +1319,11 @@ NoUserApcPending:
     jnz SystemServiceInstrumented
 
 SystemServiceInstrumentationDone:
+    /* SYSRET to an address outside the user range faults in kernel mode on Intel CPUs */
+    mov rdx, rcx
+    shr rdx, 47
+    jnz SystemServiceIretq
+
     /* Load user mode stack (It was copied to the trap frame) */
     mov rsp, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
 
@@ -1252,6 +1347,22 @@ SystemServiceInstrumentationDone:
 
     /* return to user mode */
     sysretq
+
+SystemServiceIretq:
+    mov [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip], rcx
+    mov word ptr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_SegCs], (KGDT64_R3_CODE OR RPL_MASK)
+    mov r8, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rsp]
+    mov r9, rbp
+    add rsp, MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rip
+    swapgs
+    pxor xmm0, xmm0
+    pxor xmm1, xmm1
+    pxor xmm2, xmm2
+    pxor xmm3, xmm3
+    pxor xmm4, xmm4
+    pxor xmm5, xmm5
+    xor edx, edx
+    iretq
 
 SystemServiceInstrumented:
     mov rdx, [rdx + ThApcState + AsProcess]
@@ -1416,9 +1527,10 @@ FUNC KiZwSystemService
     mov dil, byte ptr [r11 + KTHREAD_PreviousMode]
     mov byte ptr [rbp + KTRAP_FRAME_PreviousMode], dil
 
-    /* Save the old trap frame in TrapFrame.Rdx */
+    /* Link the old trap frame and mark this one as a kernel-mode frame */
     mov rdi, [r11 + KTHREAD_TrapFrame]
-    mov [rbp + KTRAP_FRAME_Rdx], rdi
+    mov [rbp + KTRAP_FRAME_TrapFrame], rdi
+    mov word ptr [rbp + KTRAP_FRAME_SegCs], KGDT64_R0_CODE
 
     /* Set the new trap frame and previous mode */
     mov [r11 + ThTrapFrame], rbp
@@ -1446,7 +1558,7 @@ FUNC KiZwSystemService
 
     /* Restore the old trap frame */
     mov r11, gs:[PcCurrentThread]
-    mov rsi, [rbp + KTRAP_FRAME_Rdx]
+    mov rsi, [rbp + KTRAP_FRAME_TrapFrame]
     mov [r11 + KTHREAD_TrapFrame], rsi
 
     /* Restore PreviousMode from the trap frame */

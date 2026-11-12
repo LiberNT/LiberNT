@@ -9,6 +9,8 @@
 
 #include "precomp.h"
 
+#include <sptilib.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -99,6 +101,26 @@ PortGetDriverInitData(
             return &InitData->HwInitData;
 
         ListEntry = ListEntry->Flink;
+    }
+
+    return NULL;
+}
+
+
+PHW_INITIALIZATION_DATA
+PortGetVirtualDriverInitData(
+    PDRIVER_OBJECT_EXTENSION DriverExtension)
+{
+    PDRIVER_INIT_DATA InitData;
+    PLIST_ENTRY ListEntry;
+
+    for (ListEntry = DriverExtension->InitDataListHead.Flink;
+         ListEntry != &DriverExtension->InitDataListHead;
+         ListEntry = ListEntry->Flink)
+    {
+        InitData = CONTAINING_RECORD(ListEntry, DRIVER_INIT_DATA, Entry);
+        if (InitData->HwInitData.FeatureSupport & STOR_FEATURE_VIRTUAL_MINIPORT)
+            return &InitData->HwInitData;
     }
 
     return NULL;
@@ -387,6 +409,44 @@ PortGetSrbSenseBuffer(
 }
 
 static
+PFDO_DEVICE_EXTENSION
+PortMiniportFdo(
+    _In_opt_ PVOID HwDeviceExtension)
+{
+    PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+
+    if (HwDeviceExtension == NULL)
+        return NULL;
+    MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+    return MiniportExtension->Miniport->DeviceExtension;
+}
+
+static
+BOOLEAN
+PortClaimCompletion(
+    _In_opt_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PVOID Srb,
+    _In_ PIRP Irp)
+{
+    PSTOR_SRB_CONTEXT SrbContext;
+
+    if ((Irp->Tail.Overlay.DriverContext[3] == PORT_DUMP_IRP_MARKER) ||
+        ((DeviceExtension != NULL) && DeviceExtension->DumpMode))
+    {
+        return TRUE;
+    }
+
+    SrbContext = PortGetSrbContext(Irp);
+    ASSERT(SrbContext != NULL);
+    if ((SrbContext != NULL) && PortFdoClaimRequest(SrbContext, FALSE))
+        return TRUE;
+
+    DPRINT1("Storport: the miniport completed request %p twice or before starting it\n", Srb);
+    ASSERT(FALSE);
+    return FALSE;
+}
+
+static
 VOID
 PortCompleteRequest(
     _In_opt_ PFDO_DEVICE_EXTENSION DeviceExtension,
@@ -397,8 +457,25 @@ PortCompleteRequest(
     PSRBEX_DATA_SCSI_CDB16 ScsiData;
     PSTOR_SRB_CONTEXT SrbContext;
     PSCSI_REQUEST_BLOCK LegacySrb;
+    UCHAR SrbStatus;
 
     LegacySrb = Srb;
+    SrbContext = PortGetSrbContext(Irp);
+    SrbStatus = PortIsExtendedSrb(Srb) ? ((PSTORAGE_REQUEST_BLOCK)Srb)->SrbStatus : LegacySrb->SrbStatus;
+    if ((DeviceExtension != NULL) && !DeviceExtension->DumpMode &&
+        (Irp->Tail.Overlay.DriverContext[3] != PORT_DUMP_IRP_MARKER) && (SrbContext != NULL) &&
+        (SrbContext->LegacySrb != NULL) && (SrbContext->LegacySrb->Function == SRB_FUNCTION_EXECUTE_SCSI) &&
+        (SRB_STATUS(SrbStatus) == SRB_STATUS_BUSY))
+    {
+        ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+        LegacySrb = SrbContext->LegacySrb;
+        LegacySrb->SrbStatus = SRB_STATUS_PENDING;
+        LegacySrb->SrbExtension = NULL;
+        PortFreeSrbContext(Irp);
+        PortFdoRetryBusyRequest(DeviceExtension, Irp);
+        return;
+    }
+
     if (PortIsExtendedSrb(Srb))
     {
         ExtendedSrb = (PSTORAGE_REQUEST_BLOCK)Srb;
@@ -434,6 +511,9 @@ PortCompleteRequest(
     {
         return;
     }
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    ASSERT((PortGetSrbContext(Irp) != NULL) && (PortGetSrbContext(Irp)->State == PORT_SRB_COMPLETED));
 
     /*
      * The miniport is done with this request. Translate the SRB
@@ -638,6 +718,47 @@ PortAddDevice(
                     PortFdoBusChangeDpc,
                     DeviceExtension);
     KeInitializeEvent(&DeviceExtension->RequestsDrained, NotificationEvent, TRUE);
+    KeInitializeSpinLock(&DeviceExtension->ActiveLock);
+    InitializeListHead(&DeviceExtension->ActiveRequests);
+    KeInitializeTimer(&DeviceExtension->TimeoutTimer);
+    KeInitializeDpc(&DeviceExtension->TimeoutDpc,
+                    PortFdoTimeoutDpc,
+                    DeviceExtension);
+    KeInitializeEvent(&DeviceExtension->ResetIdle, NotificationEvent, TRUE);
+    DeviceExtension->TimeoutsStopped = TRUE;
+    KeInitializeEvent(&DeviceExtension->TimeoutsStopEvent, NotificationEvent, TRUE);
+    KeInitializeEvent(&DeviceExtension->Recovered, NotificationEvent, TRUE);
+    DeviceExtension->ChannelLock = 0;
+    KeInitializeDpc(&DeviceExtension->CompleteRequestsDpc, PortFdoCompleteRequestsDpc, DeviceExtension);
+    KeInitializeTimer(&DeviceExtension->BusyRetryTimer);
+    KeInitializeDpc(&DeviceExtension->BusyRetryDpc, PortFdoBusyRetryDpc, DeviceExtension);
+    InitializeSListHead(&DeviceExtension->CompleteRequestsFree);
+    InitializeSListHead(&DeviceExtension->CompleteRequestsPending);
+    DeviceExtension->CompleteRequestsPool = ExAllocatePoolWithTag(NonPagedPool,
+                                                                  PORT_COMPLETE_REQUESTS_DEFERRED *
+                                                                      sizeof(PORT_COMPLETE_REQUESTS),
+                                                                  TAG_RESET_REQUEST);
+    if (DeviceExtension->CompleteRequestsPool != NULL)
+    {
+        ULONG Index;
+
+        for (Index = 0; Index < PORT_COMPLETE_REQUESTS_DEFERRED; Index++)
+        {
+            InterlockedPushEntrySList(&DeviceExtension->CompleteRequestsFree,
+                                      &((PPORT_COMPLETE_REQUESTS)DeviceExtension->CompleteRequestsPool)[Index].Entry);
+        }
+    }
+    DeviceExtension->ResetWorkItem = IoAllocateWorkItem(Fdo);
+    if ((DeviceExtension->ResetWorkItem == NULL) || (DeviceExtension->CompleteRequestsPool == NULL))
+    {
+        if (DeviceExtension->ResetWorkItem != NULL)
+            IoFreeWorkItem(DeviceExtension->ResetWorkItem);
+        if (DeviceExtension->CompleteRequestsPool != NULL)
+            ExFreePoolWithTag(DeviceExtension->CompleteRequestsPool, TAG_RESET_REQUEST);
+        PortDeleteScsiPortLinks(DeviceExtension);
+        IoDeleteDevice(Fdo);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     /* Attach the FDO to the device stack */
     Status = IoAttachDeviceToDeviceStackSafe(Fdo,
@@ -646,6 +767,8 @@ PortAddDevice(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("IoAttachDeviceToDeviceStackSafe() failed (Status 0x%08lx)\n", Status);
+        IoFreeWorkItem(DeviceExtension->ResetWorkItem);
+        ExFreePoolWithTag(DeviceExtension->CompleteRequestsPool, TAG_RESET_REQUEST);
         PortDeleteScsiPortLinks(DeviceExtension);
         IoDeleteDevice(Fdo);
         return Status;
@@ -831,13 +954,23 @@ PortQueryDeviceProperty(
         Descriptor->SerialNumberOffset = (ULONG)(Buffer - (PUCHAR)Descriptor);
         RtlCopyMemory(Buffer, PdoExtension->SerialNumber, strlen(PdoExtension->SerialNumber) + 1);
     }
-    Descriptor->RawPropertiesLength = DescriptorLength -
-                                      FIELD_OFFSET(STORAGE_DEVICE_DESCRIPTOR, RawDeviceProperties);
+    Descriptor->RawPropertiesLength = 0;
 
     Irp->IoStatus.Information = min(OutputLength, DescriptorLength);
     RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, Descriptor, Irp->IoStatus.Information);
     ExFreePoolWithTag(Descriptor, TAG_INQUIRY_DATA);
     return STATUS_SUCCESS;
+}
+
+
+static
+ULONG
+PortMaximumPhysicalPages(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension)
+{
+    ULONG Breaks = FdoExtension->Miniport.PortConfig.NumberOfPhysicalBreaks;
+
+    return (Breaks == SP_UNINITIALIZED_VALUE) ? SP_UNINITIALIZED_VALUE : Breaks + 1;
 }
 
 
@@ -887,14 +1020,14 @@ PortQueryAdapterProperty(
     Descriptor->Version = sizeof(*Descriptor);
     Descriptor->Size = sizeof(*Descriptor);
     Descriptor->MaximumTransferLength = FdoExtension->Miniport.PortConfig.MaximumTransferLength;
-    Descriptor->MaximumPhysicalPages = FdoExtension->Miniport.PortConfig.NumberOfPhysicalBreaks + 1;
+    Descriptor->MaximumPhysicalPages = PortMaximumPhysicalPages(FdoExtension);
     Descriptor->AlignmentMask = FdoExtension->Miniport.PortConfig.AlignmentMask;
-    Descriptor->AdapterUsesPio = FALSE;
+    Descriptor->AdapterUsesPio = FdoExtension->Miniport.PortConfig.VirtualDevice;
     Descriptor->AdapterScansDown = FALSE;
     Descriptor->CommandQueueing = FdoExtension->Miniport.PortConfig.TaggedQueuing;
     Descriptor->AcceleratedTransfer = TRUE;
     Descriptor->BusType = PortStorageBusType(FdoExtension);
-    Descriptor->BusMajorVersion = 1;
+    Descriptor->BusMajorVersion = 2;
     Descriptor->BusMinorVersion = 0;
 
     Irp->IoStatus.Information = sizeof(*Descriptor);
@@ -970,6 +1103,28 @@ PortDispatchDeviceControl(
             {
                 Status = STATUS_INVALID_DEVICE_REQUEST;
             }
+            break;
+
+        case IOCTL_SCSI_PASS_THROUGH:
+        case IOCTL_SCSI_PASS_THROUGH_DIRECT:
+            if (ExtensionType != PdoExtension)
+            {
+                Status = STATUS_INVALID_DEVICE_REQUEST;
+                break;
+            }
+
+            PdoDeviceExtension = DeviceObject->DeviceExtension;
+            if ((Stack->MinorFunction == 0) && PdoDeviceExtension->DeviceClaimed)
+            {
+                Status = STATUS_INVALID_DEVICE_REQUEST;
+                break;
+            }
+
+            ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+            Status = SptiHandleScsiPassthru(DeviceObject,
+                                            Irp,
+                                            PdoDeviceExtension->FdoExtension->Miniport.PortConfig.MaximumTransferLength,
+                                            PortMaximumPhysicalPages(PdoDeviceExtension->FdoExtension));
             break;
 
         case IOCTL_SCSI_GET_ADDRESS:
@@ -1209,14 +1364,19 @@ StorPortBusy(
     _In_ PVOID HwDeviceExtension,
     _In_ ULONG RequestsToComplete)
 {
-    DPRINT1("StorPortBuzy()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+
+    if ((DeviceExtension == NULL) || DeviceExtension->DumpMode || (KeGetCurrentIrql() > DISPATCH_LEVEL))
+    {
+        /* TODO: defer busy notifications made above DISPATCH_LEVEL */
+        return FALSE;
+    }
+    return PortFdoSetBusy(DeviceExtension, FALSE, 0, 0, 0, RequestsToComplete);
 }
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 VOID
@@ -1228,8 +1388,44 @@ StorPortCompleteRequest(
     _In_ UCHAR Lun,
     _In_ UCHAR SrbStatus)
 {
-    DPRINT1("StorPortCompleteRequest()\n");
-    UNIMPLEMENTED;
+    PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+    PFDO_DEVICE_EXTENSION DeviceExtension;
+    PPORT_COMPLETE_REQUESTS Request;
+    PSLIST_ENTRY Entry;
+
+    ASSERT(HwDeviceExtension != NULL);
+
+    MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+    DeviceExtension = MiniportExtension->Miniport->DeviceExtension;
+    ASSERT(DeviceExtension != NULL);
+    if (DeviceExtension->DumpMode)
+    {
+        /* TODO: complete the outstanding dump request in dump mode */
+        return;
+    }
+
+    if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+    {
+        PortFdoCompleteRequests(DeviceExtension, PathId, TargetId, Lun, SrbStatus, MAXLONG64);
+        return;
+    }
+
+    Entry = InterlockedPopEntrySList(&DeviceExtension->CompleteRequestsFree);
+    ASSERT(Entry != NULL);
+    if (Entry == NULL)
+    {
+        DPRINT1("Storport: more than %u deferred StorPortCompleteRequest calls, dropping %u:%u:%u\n",
+                PORT_COMPLETE_REQUESTS_DEFERRED, PathId, TargetId, Lun);
+        return;
+    }
+    Request = CONTAINING_RECORD(Entry, PORT_COMPLETE_REQUESTS, Entry);
+    Request->LastStarted = InterlockedCompareExchange64(&DeviceExtension->StartSequence, 0, 0);
+    Request->PathId = PathId;
+    Request->TargetId = TargetId;
+    Request->Lun = Lun;
+    Request->SrbStatus = SrbStatus;
+    InterlockedPushEntrySList(&DeviceExtension->CompleteRequestsPending, &Request->Entry);
+    KeInsertQueueDpc(&DeviceExtension->CompleteRequestsDpc, NULL, NULL);
 }
 
 
@@ -1286,7 +1482,7 @@ StorPortDebugPrint(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -1298,14 +1494,19 @@ StorPortDeviceBusy(
     _In_ UCHAR Lun,
     _In_ ULONG RequestsToComplete)
 {
-    DPRINT1("StorPortDeviceBusy()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+
+    if ((DeviceExtension == NULL) || DeviceExtension->DumpMode || (KeGetCurrentIrql() > DISPATCH_LEVEL))
+    {
+        /* TODO: defer busy notifications made above DISPATCH_LEVEL */
+        return FALSE;
+    }
+    return PortFdoSetBusy(DeviceExtension, TRUE, PathId, TargetId, Lun, RequestsToComplete);
 }
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -1316,9 +1517,14 @@ StorPortDeviceReady(
     _In_ UCHAR TargetId,
     _In_ UCHAR Lun)
 {
-    DPRINT1("StorPortDeviceReady()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+
+    if ((DeviceExtension == NULL) || DeviceExtension->DumpMode || (KeGetCurrentIrql() > DISPATCH_LEVEL))
+    {
+        /* TODO: defer ready notifications made above DISPATCH_LEVEL */
+        return FALSE;
+    }
+    return PortFdoSetBusy(DeviceExtension, TRUE, PathId, TargetId, Lun, 0);
 }
 
 
@@ -2489,6 +2695,9 @@ StorPortGetBusData(
 
     Interface = &MiniportExtension->Miniport->DeviceExtension->BusInterface;
 
+    if (!MiniportExtension->Miniport->DeviceExtension->BusInitialized || Interface->GetBusData == NULL)
+        return 0;
+
     if (BusDataType == 4)
         BusDataType = 0;
 
@@ -3027,10 +3236,12 @@ StorPortNotification(
             if (Srb != NULL)
                 DPRINT("StorPort: RequestComplete %p function 0x%02x status 0x%02x\n", Srb, Srb->Function, Srb->SrbStatus);
             Irp = Srb != NULL ? PortGetOriginalRequestFromSrb(Srb) : NULL;
+            if ((Irp != NULL) && !PortClaimCompletion(DeviceExtension, Srb, Irp))
+                Irp = NULL;
             if (Irp != NULL)
             {
                 if ((DeviceExtension != NULL) && !DeviceExtension->DumpMode &&
-                    ((KeGetCurrentIrql() > DISPATCH_LEVEL) ||
+                    ((KeGetCurrentIrql() > DISPATCH_LEVEL) || !PortStartIoSerialized(DeviceExtension) ||
                      (DeviceExtension->StartIoOwner == KeGetCurrentProcessorNumberEx(NULL))))
                 {
                     Irp->Tail.Overlay.DriverContext[1] = Srb;
@@ -3287,7 +3498,7 @@ StorPortQuerySystemTime(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3295,9 +3506,14 @@ NTAPI
 StorPortReady(
     _In_ PVOID HwDeviceExtension)
 {
-    DPRINT1("StorPortReady()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+
+    if ((DeviceExtension == NULL) || DeviceExtension->DumpMode || (KeGetCurrentIrql() > DISPATCH_LEVEL))
+    {
+        /* TODO: defer ready notifications made above DISPATCH_LEVEL */
+        return FALSE;
+    }
+    return PortFdoSetBusy(DeviceExtension, FALSE, 0, 0, 0, 0);
 }
 
 
@@ -3403,6 +3619,9 @@ StorPortSetBusDataByOffset(
             DeviceExtension, MiniportExtension);
 
     Interface = &MiniportExtension->Miniport->DeviceExtension->BusInterface;
+
+    if (!MiniportExtension->Miniport->DeviceExtension->BusInitialized || Interface->SetBusData == NULL)
+        return 0;
 
     /* Miniports pass PCIConfiguration; the bus interface speaks WHICHSPACE. */
     if (BusDataType == PCIConfiguration)

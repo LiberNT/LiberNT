@@ -243,6 +243,8 @@ NtfsGetAttributeInfo(PNtfsVolume DiskVolume,
 
     if (NtfsVolumeIsReadOnly(DiskVolume))
         Buffer->FileSystemAttributes |= FILE_READ_ONLY_VOLUME;
+    else
+        Buffer->FileSystemAttributes |= FILE_SUPPORTS_TRANSACTIONS;
 
     Buffer->MaximumComponentNameLength = 255;
 
@@ -482,6 +484,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     // Do not force buffered or direct I/O at FS level; leave to I/O manager/CC
     if (TargetDeviceObject->AlignmentRequirement > FSDeviceObject->AlignmentRequirement)
         FSDeviceObject->AlignmentRequirement = TargetDeviceObject->AlignmentRequirement;
+    FSDeviceObject->SectorSize = (USHORT)DiskGeometry.BytesPerSector;
 
     // Set up FastIo dispatch table for this volume
     FSDeviceObject->DriverObject->FastIoDispatch = &FastIoDispatch;
@@ -533,6 +536,9 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     // Give VolCB access to Ntfs Partition object
     VolCB->DiskVolume = DiskVolume;
     VolCB->BytesPerSector = DiskGeometry.BytesPerSector;
+    NtfsTxfInitializeVolume(VolCB);
+    if (NtfsTxfVolumeSupported(VolCB))
+        FSDeviceObject->Flags |= DO_SUPPORTS_TRANSACTIONS;
 
     // Set up storage device in VolCB.
     VolCB->StorageDevice = TargetDeviceObject;

@@ -263,6 +263,9 @@ KiDispatchExceptionToUser(
     TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
     TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
 
+    /* The dispatcher runs without the alignment checking the faulting code may have asked for */
+    TrapFrame->EFlags &= ~EFLAGS_ALIGN_CHECK;
+
     /* Set RIP to the User-mode Dispatcher */
     TrapFrame->Rip = (ULONG64)KeUserExceptionDispatcher;
     KiInstrumentTrapFrame(TrapFrame);
@@ -360,6 +363,53 @@ KiForwardExceptionToDebugPort(
     return Handled;
 }
 
+/* What is left of a kernel fault no handler took, for the log before the debugger or the bugcheck */
+static
+VOID
+KiDumpUnhandledKernelFault(
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    UCHAR Instructions[8] = { 0 };
+    ULONG Offset;
+
+    if (MmIsAddressValid((PVOID)TrapFrame->Rip) &&
+        MmIsAddressValid((PVOID)(TrapFrame->Rip + sizeof(Instructions) - 1)))
+    {
+        RtlCopyMemory(Instructions, (PVOID)TrapFrame->Rip, sizeof(Instructions));
+    }
+
+    /* Rbx, Rsi and Rdi are not in the trap frame, only in the exception frame */
+    DPRINT1("KiDispatchException: unhandled kernel exception at RIP=%p\n"
+            "  Instruction bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n"
+            "  ErrorCode=%p EFlags=%lx Cs=%x process %s\n"
+            "  RAX=%p RCX=%p RDX=%p R8=%p\n"
+            "  R9=%p R10=%p R11=%p RBP=%p RSP=%p\n",
+            (PVOID)TrapFrame->Rip,
+            Instructions[0], Instructions[1], Instructions[2], Instructions[3],
+            Instructions[4], Instructions[5], Instructions[6], Instructions[7],
+            (PVOID)(ULONG_PTR)TrapFrame->ErrorCode, TrapFrame->EFlags,
+            TrapFrame->SegCs, PsGetProcessImageFileName(PsGetCurrentProcess()),
+            (PVOID)TrapFrame->Rax, (PVOID)TrapFrame->Rcx, (PVOID)TrapFrame->Rdx,
+            (PVOID)TrapFrame->R8, (PVOID)TrapFrame->R9, (PVOID)TrapFrame->R10,
+            (PVOID)TrapFrame->R11, (PVOID)TrapFrame->Rbp, (PVOID)TrapFrame->Rsp);
+
+    for (Offset = 0; Offset < 24 * sizeof(ULONG64); Offset += 4 * sizeof(ULONG64))
+    {
+        PULONG64 Words = (PULONG64)(TrapFrame->Rsp + Offset);
+
+        if ((TrapFrame->Rsp < (ULONG64)MM_SYSTEM_RANGE_START) ||
+            !MmIsAddressValid(Words) ||
+            !MmIsAddressValid(&Words[3]))
+        {
+            break;
+        }
+
+        DPRINT1("  Stack+%02lx: %p %p %p %p\n",
+                Offset, (PVOID)Words[0], (PVOID)Words[1],
+                (PVOID)Words[2], (PVOID)Words[3]);
+    }
+}
+
 VOID
 NTAPI
 KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
@@ -425,6 +475,8 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
             /* If the Debugger couldn't handle it, dispatch the exception */
             if (RtlDispatchException(ExceptionRecord, &Context)) goto Handled;
         }
+
+        KiDumpUnhandledKernelFault(TrapFrame);
 
         /* This is a second-chance exception, only for the debugger */
         if (KiDebugRoutine(TrapFrame,
@@ -816,14 +868,6 @@ KiGeneralProtectionFaultHandler(
     /* Get Instruction Pointer */
     Instructions = (PUCHAR)TrapFrame->Rip;
 
-    /* Check for IRET */
-    if (Instructions[0] == 0x48 && Instructions[1] == 0xCF)
-    {
-        /* Not implemented */
-        UNIMPLEMENTED;
-        ASSERT(FALSE);
-    }
-
     /* Check for RDMSR/WRMSR */
     if ((Instructions[0] == 0xF) &&            // 2-byte opcode
         ((Instructions[1] == 0x30) ||        // RDMSR
@@ -833,15 +877,6 @@ KiGeneralProtectionFaultHandler(
         return STATUS_ACCESS_VIOLATION;
     }
 
-    DPRINT1("KiGeneralProtectionFaultHandler: unhandled kernel GPF at RIP=%p\n"
-            "  Instruction bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n"
-            "  RAX=%p RCX=%p RDX=%p\n"
-            "  ErrorCode=%p\n",
-            (PVOID)TrapFrame->Rip,
-            Instructions[0], Instructions[1], Instructions[2], Instructions[3],
-            Instructions[4], Instructions[5], Instructions[6], Instructions[7],
-            (PVOID)TrapFrame->Rax, (PVOID)TrapFrame->Rcx, (PVOID)TrapFrame->Rdx,
-            (PVOID)(ULONG_PTR)TrapFrame->ErrorCode);
     return STATUS_ACCESS_VIOLATION;
 }
 
@@ -978,25 +1013,43 @@ KiXmmExceptionHandler(
 NTSTATUS
 NTAPI
 KiContinueExtendedState(
-    _In_ PCONTEXT Context,
-    _In_ ULONG ContextFlags)
+    _In_ PCONTEXT SourceContext,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
     PCONTEXT_EX ContextEx;
     PXSAVE_AREA_HEADER Header;
-    PUCHAR UserXState, XState;
-    ULONG Length;
+    PUCHAR UserXState = NULL, XState;
+    ULONG Length = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     if ((ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE || !KiGetUserXStateFeatures())
         return STATUS_SUCCESS;
 
-    ContextEx = (PCONTEXT_EX)(Context + 1);
-    ProbeForRead(ContextEx, sizeof(*ContextEx), sizeof(ULONG));
-    Length = ContextEx->XState.Length;
-    UserXState = (PUCHAR)ContextEx + ContextEx->XState.Offset;
+    ContextEx = (PCONTEXT_EX)(SourceContext + 1);
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+            ProbeForRead(ContextEx, sizeof(*ContextEx), sizeof(ULONG));
+
+        Length = ContextEx->XState.Length;
+        UserXState = (PUCHAR)ContextEx + ContextEx->XState.Offset;
+
+        if ((PreviousMode != KernelMode) && (Length >= sizeof(XSAVE_AREA_HEADER)) &&
+            (Length <= KiGetUserXStateMaximumLength()))
+        {
+            ProbeForRead(UserXState, Length, sizeof(ULONG));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
     if (Length < sizeof(XSAVE_AREA_HEADER) || Length > KiGetUserXStateMaximumLength())
         return STATUS_INVALID_PARAMETER;
-    ProbeForRead(UserXState, Length, sizeof(ULONG));
 
     XState = ExAllocatePoolWithTag(NonPagedPool, Length + KiGetUserXStateScratchSize(), TAG_KE_XSTATE);
     if (!XState)

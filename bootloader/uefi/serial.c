@@ -106,6 +106,14 @@ UefiSerialIsCom1(
 }
 
 static
+BOOLEAN
+UefiSerialFirmwareIsUBoot(VOID)
+{
+    return GlobalSystemTable->FirmwareVendor &&
+           _wcsnicmp(GlobalSystemTable->FirmwareVendor, L"Das U-Boot", 10) == 0;
+}
+
+static
 VOID
 UefiSerialProbe(VOID)
 {
@@ -154,10 +162,12 @@ UefiSerialProbe(VOID)
     if (UefiSerialCount)
         return;
 
+    /* U-Boot's console is the board's serial line and panel, so the log goes there too */
     UefiSerialUseConsole = GlobalSystemTable->ConOut &&
-                           EFI_ERROR(BootServices->LocateProtocol(&UefiGraphicsOutputGuid,
-                                                                  NULL,
-                                                                  &GraphicsOutput));
+                           (UefiSerialFirmwareIsUBoot() ||
+                            EFI_ERROR(BootServices->LocateProtocol(&UefiGraphicsOutputGuid,
+                                                                   NULL,
+                                                                   &GraphicsOutput)));
 }
 
 static
@@ -304,6 +314,28 @@ FwDebugPrint(
     }
     UdpLogWrite(Text);
     BootLogWrite(Text);
+
+    if (FwDebugScreen && !BootServicesExitedFlag && GlobalSystemTable && GlobalSystemTable->ConOut)
+    {
+        CHAR16 Wide[128];
+        ULONG Count = 0;
+
+        for (Next = Text; *Next; Next++)
+        {
+            if (*Next == '\n')
+                Wide[Count++] = L'\r';
+            Wide[Count++] = (UCHAR)*Next;
+            if (Count >= RTL_NUMBER_OF(Wide) - 2)
+            {
+                Wide[Count] = UNICODE_NULL;
+                GlobalSystemTable->ConOut->OutputString(GlobalSystemTable->ConOut, Wide);
+                Count = 0;
+            }
+        }
+        Wide[Count] = UNICODE_NULL;
+        if (Count)
+            GlobalSystemTable->ConOut->OutputString(GlobalSystemTable->ConOut, Wide);
+    }
 }
 
 static

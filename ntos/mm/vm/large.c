@@ -53,7 +53,7 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
             MI_ASSERT(MiArchPteIsValid(Pte) ? MiArchPteIsBlock(Pte, Arch->LargePageLevel)
                       : MiSoftKind(Pte) == MiSoftResident);
             Frame = MiLargeFrame(Pte);
-            MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+            MI_ASSERT(MiPfnTracked(Db, Frame) && Pages <= Db->FrameCount - Frame);
             MI_ASSERT(Frame % Pages == 0);
             MI_ASSERT(MI_ATOMIC_READ64(&Space->LargePages) >= Pages);
             MiArchPteWrite(Slot, 0);
@@ -194,7 +194,7 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
             Status = STATUS_NO_MEMORY;
             break;
         }
-        MI_ASSERT(Pages <= Db->FrameCount && Frame <= Db->FrameCount - Pages);
+        MI_ASSERT(MiPfnTracked(Db, Frame) && Pages <= Db->FrameCount - Frame);
         MI_ASSERT(Frame % Pages == 0);
         for (i = 0; Segment == NULL && i < Pages; i++)
         {
@@ -206,7 +206,7 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
         }
         MiPtWrite(Space, Va, Slot, Table, MI_PROT_IS_ACCESSIBLE(Protection)
             ? MiArchPteMakeBlock(Frame, Protection,
-                (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | MI_LEAF_DIRTY)
+                MI_SPACE_LEAF_OWNER(Space) | MI_LEAF_DIRTY)
             : MiSoftMake(MiSoftResident, Protection, Frame));
         if (Segment == NULL)
             MI_ATOMIC_ADD64(&Space->PrivatePages, Pages);
@@ -325,7 +325,7 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
                                                   : MiSoftProtection(Pte);
         Value = MI_PROT_IS_ACCESSIBLE(Protection)
             ? MiArchPteMakeBlock(MiLargeFrame(Pte), Protection,
-                (Space->IsSystem ? MI_LEAF_GLOBAL : MI_LEAF_USER) | MI_LEAF_DIRTY)
+                MI_SPACE_LEAF_OWNER(Space) | MI_LEAF_DIRTY)
             : MiSoftMake(MiSoftResident, Protection, MiLargeFrame(Pte));
         MiArchPteWrite(Slot, Value);
         MiArchTlbInvalidate(Va, Large >> PAGE_SHIFT, TRUE);

@@ -510,6 +510,12 @@ static nsresult NSAPI XMLHttpReqEventListener_HandleEvent(nsIDOMEventListener *i
         }
     }
 
+    if(event->event_id == EVENTID_READYSTATECHANGE && ready_state == READYSTATE_INTERACTIVE
+       && This->xhr->ready_state == READYSTATE_INTERACTIVE) {
+        IDOMEvent_Release(&event->IDOMEvent_iface);
+        return NS_OK;
+    }
+
     This->xhr->ready_state = ready_state;
     dispatch_event(&This->xhr->event_target, event);
     IDOMEvent_Release(&event->IDOMEvent_iface);
@@ -1165,10 +1171,8 @@ static HRESULT WINAPI HTMLXMLHttpRequest_private_put_responseType(IWineXMLHttpRe
 
     TRACE("(%p)->(%s)\n", This, debugstr_w(v));
 
-    if(This->xhr.ready_state < READYSTATE_LOADING || This->xhr.ready_state > READYSTATE_INTERACTIVE) {
-        /* FIXME: Return InvalidStateError */
-        return E_FAIL;
-    }
+    if(This->xhr.ready_state < READYSTATE_LOADING || This->xhr.ready_state > READYSTATE_LOADED)
+        return MSHTML_E_INVALID_STATE;
 
     for(i = 0; i < ARRAY_SIZE(response_type_desc); i++)
         if(!wcscmp(v, response_type_desc[i].str))
@@ -1775,6 +1779,15 @@ static const tid_t HTMLXMLHttpRequest_iface_tids[] = {
     IHTMLXMLHttpRequest2_tid,
     0
 };
+static const dispex_constant_t xhr_constants[] = {
+    {L"UNSENT",           0},
+    {L"OPENED",           1},
+    {L"HEADERS_RECEIVED", 2},
+    {L"LOADING",          3},
+    {L"DONE",             4},
+    {NULL}
+};
+
 dispex_static_data_t XMLHttpRequest_dispex = {
     .id               = OBJID_XMLHttpRequest,
     .init_constructor = HTMLXMLHttpRequestFactory_init,
@@ -1782,6 +1795,7 @@ dispex_static_data_t XMLHttpRequest_dispex = {
     .disp_tid         = DispHTMLXMLHttpRequest_tid,
     .iface_tids       = HTMLXMLHttpRequest_iface_tids,
     .init_info        = HTMLXMLHttpRequest_init_dispex_info,
+    .constants        = xhr_constants,
 };
 
 

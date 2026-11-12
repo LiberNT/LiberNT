@@ -137,7 +137,7 @@ BEGIN
     STRING_NEWFILE_RICHTEXT,       "リッチテキスト文書"
     STRING_NEWFILE_TXT,            "テキスト文書"
     STRING_NEWFILE_TXT_UNICODE,    "Unicodeテキスト文書"
-    STRING_PRINTER_FILES_PRN,      "プリンタファイル (*.PRN)"
+    STRING_PRINTER_FILES_PRN,      "プリンター ファイル (*.PRN)"
 END
 
 STRINGTABLE

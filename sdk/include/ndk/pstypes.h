@@ -448,6 +448,12 @@ typedef struct _PS_CREATE_INFO
 #define JOB_OBJECT_LIMIT_SUBSET_AFFINITY         0x4000
 
 //
+// What the end of a job's time does to the processes in it
+//
+#define JOB_OBJECT_TERMINATE_AT_END_OF_JOB      0
+#define JOB_OBJECT_POST_AT_END_OF_JOB           1
+
+//
 // Job UI Restriction Flags
 //
 #define JOB_OBJECT_UILIMIT_NONE                 0x0000
@@ -1850,6 +1856,7 @@ typedef struct _ETHREAD
     volatile LONG ExecutableWriteAllowed;
 #if defined(__REACTOS__)
     CHAR Win32kPriorityFloor;
+    /* TODO: unused since the opt-out moved to CrossThreadFlags.DisableDynamicCodeOptOut; remove with the next pstypes.h change */
     volatile LONG DynamicCodeOptOut;
 #endif
 } ETHREAD;
@@ -3061,7 +3068,12 @@ typedef struct _JOBOBJECT_SECURITY_LIMIT_INFORMATION
 typedef struct _JOBOBJECT_END_OF_JOB_TIME_INFORMATION
 {
     ULONG EndOfJobTimeAction;
-} JOBOBJECT_END_OF_JOB_TIME_INFORMATION, PJOBOBJECT_END_OF_JOB_TIME_INFORMATION;
+} JOBOBJECT_END_OF_JOB_TIME_INFORMATION, *PJOBOBJECT_END_OF_JOB_TIME_INFORMATION;
+
+typedef struct _JOBOBJECT_JOBSET_INFORMATION
+{
+    ULONG MemberLevel;
+} JOBOBJECT_JOBSET_INFORMATION, *PJOBOBJECT_JOBSET_INFORMATION;
 
 typedef struct _JOBOBJECT_ASSOCIATE_COMPLETION_PORT
 {

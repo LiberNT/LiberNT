@@ -8,6 +8,7 @@ set(IDL_FLAGS ${OLD_IDL_FLAGS})
 
 list(APPEND SOURCE
     EmbeddedPointers.c
+    ServerRestart.c
     testlist.c
     ${CMAKE_CURRENT_BINARY_DIR}/embedded_c.c
     ${CMAKE_CURRENT_BINARY_DIR}/embedded_s.c)

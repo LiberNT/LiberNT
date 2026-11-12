@@ -109,6 +109,7 @@ QueryTokenUserTests(
                                      BufferLength,
                                      &BufferLength);
     ok_ntstatus(Status, STATUS_SUCCESS);
+    ok_long(BufferLength, sizeof(TOKEN_USER) + RtlLengthSid(UserToken->User.Sid));
 
     RtlConvertSidToUnicodeString(&SidString, UserToken->User.Sid, TRUE);
     trace("=============== TokenUser ===============\n");
@@ -1033,6 +1034,36 @@ QueryTokenOriginTests(
     }
 }
 
+static
+VOID
+QueryTokenLinkedTokenTests(
+    _In_ HANDLE Token)
+{
+    NTSTATUS Status;
+    TOKEN_ELEVATION_TYPE Type;
+    TOKEN_LINKED_TOKEN Linked;
+    ULONG Length;
+
+    Status = NtQueryInformationToken(Token, TokenElevationType, &Type, sizeof(Type), &Length);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Linked.LinkedToken = NULL;
+    Status = NtQueryInformationToken(Token, TokenLinkedToken, &Linked, sizeof(Linked), &Length);
+    if (Type == TokenElevationTypeDefault)
+    {
+        ok_ntstatus(Status, STATUS_NO_SUCH_LOGON_SESSION);
+    }
+    else
+    {
+        ok_ntstatus(Status, STATUS_SUCCESS);
+        ok(Linked.LinkedToken != NULL, "No linked token for elevation type %d\n", Type);
+    }
+    if (NT_SUCCESS(Status) && Linked.LinkedToken != NULL)
+        NtClose(Linked.LinkedToken);
+}
+
 START_TEST(NtQueryInformationToken)
 {
     NTSTATUS Status;
@@ -1092,6 +1123,7 @@ START_TEST(NtQueryInformationToken)
     QueryTokenSessionIdTests(Token);
     QueryTokenIsSandboxInert(Token);
     QueryTokenOriginTests(Token);
+    QueryTokenLinkedTokenTests(Token);
 
     NtClose(Token);
 }

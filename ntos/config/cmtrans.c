@@ -832,7 +832,7 @@ CmpTransCopyKey(
     if (NT_SUCCESS(Status) && Source->Security != HCELL_NIL)
     {
         CmpLockHiveSecurity(Hive);
-        Status = CmpCopyKeySecurity(Hive, Source->Security, Hive, Storage, &Anchors[Storage], &SecurityCell);
+        Status = CmpCopyKeySecurity(Hive, SourceCell, Hive, Storage, &Anchors[Storage], &SecurityCell);
         CmpUnlockHiveSecurity(Hive);
         if (NT_SUCCESS(Status))
         {

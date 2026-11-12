@@ -192,23 +192,45 @@ private:
 
 DEFINE_GUID(GUID_LBI_SYSTEM_HELP, 0xED9D5450, 0xEBE6, 0x4255, 0x82, 0x89, 0xF8, 0xA3, 0x1E, 0x68, 0x72, 0x28);
 DEFINE_GUID(CLSID_SYSTEM_HELP_SERVICE, 0x5D997390, 0x8320, 0x400A, 0x88, 0xE5, 0x35, 0xB0, 0xC1, 0x20, 0xF9, 0x0B);
+DEFINE_GUID(GUID_LBI_SYSTEM_CORRECTION, 0x190F67A2, 0x024F, 0x40D9, 0xAA, 0xBA, 0x43, 0x9F, 0x5C, 0x80, 0x8F, 0x67);
 
-class CSystemHelpItem final
-    : public ITfLangBarItem
+class CSystemLangBarItem final
+    : public ITfLangBarItemButton
     , public ITfSource
+    , public ITfSystemLangBarItem
+    , public ITfSystemDeviceTypeLangBarItem
+    , public ITfSystemLangBarItemText
 {
 public:
-    CSystemHelpItem() : m_refs(1), m_sinks(NULL), m_cSinks(0), m_nextCookie(1) { }
+    CSystemLangBarItem(REFCLSID rclsidService, REFGUID rguidItem, DWORD dwStyle, ULONG ulSort, UINT uDescId,
+                       BOOL fSystem)
+        : m_refs(1), m_fSystem(fSystem), m_dwStatus(0), m_dwIconMode(0), m_hIcon(NULL), m_sinks(NULL), m_cSinks(0)
+    {
+        ZeroMemory(&m_info, sizeof(m_info));
+        m_info.clsidService = rclsidService;
+        m_info.guidItem = rguidItem;
+        m_info.dwStyle = dwStyle;
+        m_info.ulSort = ulSort;
+        LoadStringW(g_hInst, uDescId, m_info.szDescription, _countof(m_info.szDescription));
+        m_szText[0] = UNICODE_NULL;
+        m_szTooltip[0] = UNICODE_NULL;
+    }
 
     STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override
     {
         if (!ppvObj)
             return E_POINTER;
         *ppvObj = NULL;
-        if (riid == IID_IUnknown || riid == IID_ITfLangBarItem)
-            *ppvObj = static_cast<ITfLangBarItem *>(this);
+        if (riid == IID_IUnknown || riid == IID_ITfLangBarItem || riid == IID_ITfLangBarItemButton)
+            *ppvObj = static_cast<ITfLangBarItemButton *>(this);
         else if (riid == IID_ITfSource)
             *ppvObj = static_cast<ITfSource *>(this);
+        else if (m_fSystem && riid == IID_ITfSystemLangBarItem)
+            *ppvObj = static_cast<ITfSystemLangBarItem *>(this);
+        else if (m_fSystem && riid == IID_ITfSystemDeviceTypeLangBarItem)
+            *ppvObj = static_cast<ITfSystemDeviceTypeLangBarItem *>(this);
+        else if (m_fSystem && riid == IID_ITfSystemLangBarItemText)
+            *ppvObj = static_cast<ITfSystemLangBarItemText *>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -227,34 +249,55 @@ public:
     {
         if (!pInfo)
             return E_INVALIDARG;
-        ZeroMemory(pInfo, sizeof(*pInfo));
-        pInfo->clsidService = CLSID_SYSTEM_HELP_SERVICE;
-        pInfo->guidItem = GUID_LBI_SYSTEM_HELP;
-        pInfo->dwStyle = TF_LBI_STYLE_BTN_MENU;
-        pInfo->ulSort = (ULONG)-30;
-        LoadStringW(g_hInst, IDS_LANGBAR_HELP, pInfo->szDescription, _countof(pInfo->szDescription));
+        *pInfo = m_info;
         return S_OK;
     }
     STDMETHODIMP GetStatus(DWORD *pdwStatus) override
     {
         if (!pdwStatus)
             return E_INVALIDARG;
-        *pdwStatus = 0;
+        *pdwStatus = m_dwStatus;
         return S_OK;
     }
-    STDMETHODIMP Show(BOOL fShow) override { return S_OK; }
+    STDMETHODIMP Show(BOOL fShow) override
+    {
+        m_dwStatus = fShow ? (m_dwStatus & ~TF_LBI_STATUS_HIDDEN) : (m_dwStatus | TF_LBI_STATUS_HIDDEN);
+        return S_OK;
+    }
     STDMETHODIMP GetTooltipString(BSTR *pbstrToolTip) override
     {
-        if (!pbstrToolTip)
+        return AllocString(m_szTooltip, pbstrToolTip);
+    }
+
+    STDMETHODIMP OnClick(TfLBIClick click, POINT pt, const RECT *prcArea) override { return S_OK; }
+    STDMETHODIMP InitMenu(ITfMenu *pMenu) override
+    {
+        for (ULONG i = 0; i < m_cSinks; ++i)
+            m_sinks[i].sink->InitMenu(pMenu);
+        return S_OK;
+    }
+    STDMETHODIMP OnMenuSelect(UINT wID) override { return m_fSystem ? E_FAIL : S_OK; }
+    STDMETHODIMP GetIcon(HICON *phIcon) override
+    {
+        if (!phIcon)
             return E_INVALIDARG;
-        *pbstrToolTip = SysAllocString(L"");
-        return *pbstrToolTip ? S_OK : E_OUTOFMEMORY;
+        *phIcon = NULL;
+        if (m_hIcon && !(m_dwIconMode & TF_DTLBI_USEPROFILEICON))
+            *phIcon = CopyIcon(m_hIcon);
+        return S_OK;
+    }
+    STDMETHODIMP GetText(BSTR *pbstrText) override
+    {
+        return AllocString(m_szText, pbstrText);
     }
 
     STDMETHODIMP AdviseSink(REFIID riid, IUnknown *punk, DWORD *pdwCookie) override
     {
         if (!punk || !pdwCookie)
             return E_INVALIDARG;
+        if (!m_fSystem)
+            return CONNECT_E_CANNOTCONNECT;
+        *pdwCookie = (DWORD)-1;
         if (riid != IID_ITfSystemLangBarItemSink)
             return CONNECT_E_CANNOTCONNECT;
         ITfSystemLangBarItemSink *sink = NULL;
@@ -268,24 +311,69 @@ public:
             return E_OUTOFMEMORY;
         }
         m_sinks = sinks;
-        m_sinks[m_cSinks].cookie = m_nextCookie++;
+        DWORD cookie = 1;
+        while (FindSink(cookie) >= 0)
+            ++cookie;
+        m_sinks[m_cSinks].cookie = cookie;
         m_sinks[m_cSinks].sink = sink;
-        *pdwCookie = m_sinks[m_cSinks].cookie;
+        *pdwCookie = cookie;
         ++m_cSinks;
         return S_OK;
     }
     STDMETHODIMP UnadviseSink(DWORD dwCookie) override
     {
-        for (ULONG i = 0; i < m_cSinks; ++i)
+        if (!m_fSystem)
+            return E_FAIL;
+        if (dwCookie == (DWORD)-1)
+            return E_INVALIDARG;
+        LONG i = FindSink(dwCookie);
+        if (i < 0)
+            return CONNECT_E_NOCONNECTION;
+        m_sinks[i].sink->Release();
+        MoveMemory(&m_sinks[i], &m_sinks[i + 1], (m_cSinks - i - 1) * sizeof(*m_sinks));
+        --m_cSinks;
+        return S_OK;
+    }
+
+    STDMETHODIMP SetIcon(HICON hIcon) override
+    {
+        HICON hCopy = NULL;
+        if (hIcon)
         {
-            if (m_sinks[i].cookie != dwCookie)
-                continue;
-            m_sinks[i].sink->Release();
-            MoveMemory(&m_sinks[i], &m_sinks[i + 1], (m_cSinks - i - 1) * sizeof(*m_sinks));
-            --m_cSinks;
-            return S_OK;
+            hCopy = CopyIcon(hIcon);
+            if (!hCopy)
+                return E_FAIL;
         }
-        return CONNECT_E_NOCONNECTION;
+        if (m_hIcon)
+            DestroyIcon(m_hIcon);
+        m_hIcon = hCopy;
+        return S_OK;
+    }
+    STDMETHODIMP SetTooltipString(WCHAR *pchToolTip, ULONG cch) override
+    {
+        return CopyText(m_szTooltip, _countof(m_szTooltip), pchToolTip, cch);
+    }
+
+    STDMETHODIMP SetIconMode(DWORD dwFlags) override
+    {
+        m_dwIconMode = dwFlags;
+        return S_OK;
+    }
+    STDMETHODIMP GetIconMode(DWORD *pdwFlags) override
+    {
+        if (!pdwFlags)
+            return E_INVALIDARG;
+        *pdwFlags = m_dwIconMode;
+        return S_OK;
+    }
+
+    STDMETHODIMP SetItemText(const WCHAR *pch, ULONG cch) override
+    {
+        return CopyText(m_szText, _countof(m_szText), pch, cch);
+    }
+    STDMETHODIMP GetItemText(BSTR *pbstrText) override
+    {
+        return AllocString(m_szText, pbstrText);
     }
 
 private:
@@ -295,17 +383,53 @@ private:
         ITfSystemLangBarItemSink *sink;
     };
 
-    ~CSystemHelpItem()
+    ~CSystemLangBarItem()
     {
+        if (m_hIcon)
+            DestroyIcon(m_hIcon);
         for (ULONG i = 0; i < m_cSinks; ++i)
             m_sinks[i].sink->Release();
         cicMemFree(m_sinks);
     }
 
+    LONG FindSink(DWORD dwCookie) const
+    {
+        for (ULONG i = 0; i < m_cSinks; ++i)
+        {
+            if (m_sinks[i].cookie == dwCookie)
+                return (LONG)i;
+        }
+        return -1;
+    }
+
+    static HRESULT AllocString(LPCWSTR psz, BSTR *pbstr)
+    {
+        if (!pbstr)
+            return E_INVALIDARG;
+        *pbstr = SysAllocString(psz);
+        return *pbstr ? S_OK : E_OUTOFMEMORY;
+    }
+
+    static HRESULT CopyText(LPWSTR pszDest, ULONG cchDest, const WCHAR *pch, ULONG cch)
+    {
+        if (!pch && cch)
+            return E_INVALIDARG;
+        pszDest[0] = UNICODE_NULL;
+        if (cch)
+            lstrcpynW(pszDest, pch, (INT)min(cch, cchDest));
+        return S_OK;
+    }
+
     LONG m_refs;
+    BOOL m_fSystem;
+    TF_LANGBARITEMINFO m_info;
+    DWORD m_dwStatus;
+    DWORD m_dwIconMode;
+    HICON m_hIcon;
+    WCHAR m_szText[TF_LBI_DESC_MAXLEN];
+    WCHAR m_szTooltip[MAX_PATH];
     SinkEntry *m_sinks;
     ULONG m_cSinks;
-    DWORD m_nextCookie;
 };
 
 class CTipInputModeIndicator final : public ITfLangBarItemSink
@@ -931,11 +1055,30 @@ HRESULT LangBarItemMgr_Constructor(ITfLangBarItemMgr **ppOut)
     CLangBarItemMgr *pMgr = new(cicNoThrow) CLangBarItemMgr();
     if (!pMgr)
         return E_OUTOFMEMORY;
-    CSystemHelpItem *pHelp = new(cicNoThrow) CSystemHelpItem();
-    if (pHelp)
+    static const struct
     {
-        pMgr->AddItem(pHelp);
-        pHelp->Release();
+        const CLSID *pclsidService;
+        const GUID *pguidItem;
+        DWORD dwStyle;
+        ULONG ulSort;
+        UINT uDescId;
+        BOOL fSystem;
+    } s_SystemItems[] = {
+        { &CLSID_SYSTEMLANGBARITEM, &GUID_LBI_CTRL, TF_LBI_STYLE_BTN_MENU, 0, IDS_LANGBAR_LANGUAGE, FALSE },
+        { &CLSID_SYSTEMLANGBARITEM, &GUID_LBI_SYSTEM_CORRECTION, TF_LBI_STYLE_BTN_BUTTON | TF_LBI_STYLE_HIDDENBYDEFAULT,
+          0, IDS_LANGBAR_CORRECTION, FALSE },
+        { &CLSID_SYSTEMLANGBARITEM, &GUID_TFCAT_TIP_KEYBOARD, TF_LBI_STYLE_BTN_MENU, 0, IDS_LANGBAR_KEYBOARD, TRUE },
+        { &CLSID_SYSTEM_HELP_SERVICE, &GUID_LBI_SYSTEM_HELP, TF_LBI_STYLE_BTN_MENU, (ULONG)-30, IDS_LANGBAR_HELP, TRUE },
+    };
+    for (UINT i = 0; i < _countof(s_SystemItems); ++i)
+    {
+        CSystemLangBarItem *pItem = new(cicNoThrow) CSystemLangBarItem(
+            *s_SystemItems[i].pclsidService, *s_SystemItems[i].pguidItem, s_SystemItems[i].dwStyle,
+            s_SystemItems[i].ulSort, s_SystemItems[i].uDescId, s_SystemItems[i].fSystem);
+        if (!pItem)
+            continue;
+        pMgr->AddItem(static_cast<ITfLangBarItemButton *>(pItem));
+        pItem->Release();
     }
     pMgr->Register();
     *ppOut = pMgr;

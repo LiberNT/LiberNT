@@ -1042,17 +1042,18 @@ LxAccessCheck(
     _In_ ULONG Mode,
     _In_ ULONG Flags)
 {
-    ULONG Fsuid = Process->Fsuid, Fsgid = Process->Fsgid;
-    ULONG64 Effective = Process->CapEffective;
+    PLX_CRED Cred = LxProcessCred(Process);
+    ULONG Fsuid = Cred->Fsuid, Fsgid = Cred->Fsgid;
+    ULONG64 Effective = Cred->CapEffective;
 
     if (Mode == 0)
         return 0;
     if (!(Flags & LX_AT_EACCESS))
     {
-        Fsuid = Process->Uid[0];
-        Fsgid = Process->Gid[0];
-        if (!(Process->SecureBits & LX_SECBIT_NO_SETUID_FIXUP))
-            Effective = (Process->Uid[0] == LxCredMakeId(Process, FALSE, 0)) ? Process->CapPermitted : 0;
+        Fsuid = Cred->Uid[0];
+        Fsgid = Cred->Gid[0];
+        if (!(Cred->SecureBits & LX_SECBIT_NO_SETUID_FIXUP))
+            Effective = (Cred->Uid[0] == LxCredMakeId(Process, FALSE, 0)) ? Cred->CapPermitted : 0;
     }
     return LxPermissionAs(Process, Fsuid, Fsgid, Effective, Stat->Mode, Stat->Uid, Stat->Gid, Mode);
 }
@@ -2691,13 +2692,14 @@ LxXattrInGroup(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Gid)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG Index;
 
-    if (Process->Gid[1] == Gid)
+    if (Cred->Gid[1] == Gid)
         return TRUE;
-    for (Index = 0; Index < Process->GroupCount; Index++)
+    for (Index = 0; Index < Cred->GroupCount; Index++)
     {
-        if (Process->Groups[Index] == Gid)
+        if (Cred->Groups[Index] == Gid)
             return TRUE;
     }
     return FALSE;
@@ -2711,6 +2713,7 @@ LxXattrPermission(
     _In_ PLX_XATTR_TARGET Target,
     _In_ BOOLEAN Write)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     BOOLEAN Admin = LxCapable(Process, LX_CAP_SYS_ADMIN);
     ULONG Type = Target->Type & LX_S_IFMT;
     ULONG Bits;
@@ -2728,7 +2731,7 @@ LxXattrPermission(
         return Write ? -LX_EPERM : -LX_ENODATA;
     if (Target->Mode == MAXULONG)
         return 0;
-    if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && Write && (Process->Fsuid != Target->Uid) &&
+    if ((Type == LX_S_IFDIR) && (Target->Mode & LX_S_ISVTX) && Write && (Cred->Fsuid != Target->Uid) &&
         !LxCapableWrtIds(Process, Target->Uid, Target->Gid, LX_CAP_FOWNER))
     {
         return -LX_EPERM;
@@ -2738,7 +2741,7 @@ LxXattrPermission(
     {
         return 0;
     }
-    if (Process->Fsuid == Target->Uid)
+    if (Cred->Fsuid == Target->Uid)
         Bits = Target->Mode >> 6;
     else if (LxXattrInGroup(Process, Target->Gid))
         Bits = Target->Mode >> 3;

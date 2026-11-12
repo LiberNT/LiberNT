@@ -52,6 +52,42 @@ report_service_status(DWORD dwCurrentState,
     service_ok(res, "SetServiceStatus(%d) failed: %lu\n", dwCurrentState, GetLastError());
 }
 
+/* A LocalSystem service has the profile the machine lists for the LocalSystem account */
+static void
+check_system_profile(void)
+{
+    WCHAR szRawPath[MAX_PATH], szExpected[MAX_PATH], szValue[MAX_PATH];
+    DWORD dwSize = sizeof(szRawPath) - sizeof(WCHAR);
+    DWORD dwType = REG_NONE;
+    HKEY hKey;
+    LONG lError;
+
+    lError = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                           L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\S-1-5-18",
+                           0, KEY_QUERY_VALUE, &hKey);
+    service_ok(lError == ERROR_SUCCESS, "The LocalSystem profile is not listed: %ld\n", lError);
+    if (lError != ERROR_SUCCESS)
+        return;
+
+    ZeroMemory(szRawPath, sizeof(szRawPath));
+    lError = RegQueryValueExW(hKey, L"ProfileImagePath", NULL, &dwType, (LPBYTE)szRawPath, &dwSize);
+    RegCloseKey(hKey);
+    service_ok(lError == ERROR_SUCCESS && (dwType == REG_SZ || dwType == REG_EXPAND_SZ),
+               "ProfileImagePath: error %ld, type %lu\n", lError, dwType);
+    if (lError != ERROR_SUCCESS)
+        return;
+
+    dwSize = ExpandEnvironmentStringsW(szRawPath, szExpected, ARRAYSIZE(szExpected));
+    service_ok(dwSize != 0 && dwSize <= ARRAYSIZE(szExpected), "ExpandEnvironmentStringsW failed: %lu\n", GetLastError());
+    if (dwSize == 0 || dwSize > ARRAYSIZE(szExpected))
+        return;
+
+    dwSize = GetEnvironmentVariableW(L"USERPROFILE", szValue, ARRAYSIZE(szValue));
+    service_ok(dwSize != 0 && dwSize < ARRAYSIZE(szValue) && _wcsicmp(szValue, szExpected) == 0,
+               "USERPROFILE is %S, expected %S\n", (dwSize != 0 && dwSize < ARRAYSIZE(szValue)) ? szValue : L"(none)",
+               szExpected);
+}
+
 static VOID WINAPI service_handler(DWORD ctrl)
 {
     switch(ctrl)
@@ -99,6 +135,8 @@ service_main(DWORD dwArgc, LPWSTR* lpszArgv)
     service_ok(dwSize != 0, "ALLUSERSPROFILE envvar not found, or GetEnvironmentVariableW failed: %lu\n", GetLastError());
     dwSize = GetEnvironmentVariableW(L"USERPROFILE", NULL, 0);
     service_ok(dwSize != 0, "USERPROFILE envvar not found, or GetEnvironmentVariableW failed: %lu\n", GetLastError());
+    if (dwArgc > 1 && _wcsicmp(lpszArgv[1], L"SystemProfile") == 0)
+        check_system_profile();
 #if 0 // May not always exist
     dwSize = GetEnvironmentVariableW(L"USERNAME", NULL, 0);
     service_ok(dwSize != 0, "USERNAME envvar not found, or GetEnvironmentVariableW failed: %lu\n", GetLastError());
@@ -173,6 +211,18 @@ my_test_server(PCSTR service_nameA,
     SC_HANDLE hSC = NULL;
     SC_HANDLE hService = NULL;
     SERVICE_STATUS ServiceStatus;
+    PCWSTR Args[] = {L"SystemProfile"};
+    BOOL bSystemProfile;
+    HKEY hKey;
+    LONG lError;
+
+    /* The LocalSystem profile gives the service its USERPROFILE only once it is loaded (CreateEnvironmentBlock) */
+    lError = RegOpenKeyExW(HKEY_USERS, L"S-1-5-18", 0, KEY_QUERY_VALUE, &hKey);
+    bSystemProfile = (lError == ERROR_SUCCESS || lError == ERROR_ACCESS_DENIED);
+    if (lError == ERROR_SUCCESS)
+        RegCloseKey(hKey);
+    if (!bSystemProfile)
+        skip("The LocalSystem profile is not loaded: %ld\n", lError);
 
     /* Open the SCM */
     hSC = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
@@ -197,7 +247,7 @@ my_test_server(PCSTR service_nameA,
     }
 
     /* Start it */
-    if (!StartServiceW(hService, 0, NULL))
+    if (!StartServiceW(hService, bSystemProfile ? 1 : 0, bSystemProfile ? Args : NULL))
     {
         skip("StartServiceW failed with error %lu!\n", GetLastError());
         goto Cleanup;

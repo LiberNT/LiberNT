@@ -342,7 +342,7 @@ HRESULT Function_invoke(jsdisp_t *func_this, jsval_t vthis, WORD flags, unsigned
     return function->vtbl->call(function->dispex.ctx, function, vthis, flags, argc, argv, r);
 }
 
-static HRESULT Function_get_caller(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
+HRESULT Function_get_caller(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
 {
     FunctionInstance *function = function_from_jsdisp(jsthis);
     call_frame_t *frame;
@@ -512,7 +512,8 @@ static HRESULT Function_apply(script_ctx_t *ctx, jsval_t vthis, WORD flags, unsi
         }else {
             jsval_t res;
 #ifdef __REACTOS__
-            hres = disp_call_value(ctx, get_object(vthis), this_val, DISPATCH_METHOD | DISPATCH_JSCRIPT_NOPROPERTYGET, cnt, args, &res);
+            hres = disp_call_value(ctx, get_object(vthis), this_val, ctx->version < SCRIPTLANGUAGEVERSION_ES5
+                    ? DISPATCH_METHOD | DISPATCH_JSCRIPT_NOPROPERTYGET : DISPATCH_METHOD, cnt, args, &res);
 #else
             hres = disp_call_value(ctx, get_object(vthis), this_val, DISPATCH_METHOD, cnt, args, &res);
 #endif
@@ -636,7 +637,7 @@ HRESULT Function_get_value(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
     return S_OK;
 }
 
-static HRESULT Function_get_arguments(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
+HRESULT Function_get_arguments(script_ctx_t *ctx, jsdisp_t *jsthis, jsval_t *r)
 {
     FunctionInstance *function = function_from_jsdisp(jsthis);
     call_frame_t *frame;
@@ -997,6 +998,21 @@ static const builtin_info_t HostFunction_info = {
     .gc_traverse = Function_gc_traverse
 };
 
+static const builtin_prop_t HostMethod_props[] = {
+    {L"arguments",           NULL, 0,                        Function_get_arguments},
+    {L"caller",              NULL, 0,                        Function_get_caller},
+    {L"prototype",           NULL, 0,                        InterpretedFunction_get_prototype, InterpretedFunction_set_prototype}
+};
+
+static const builtin_info_t HostMethod_info = {
+    .class       = JSCLASS_FUNCTION,
+    .call        = Function_value,
+    .destructor  = Function_destructor,
+    .props_cnt   = ARRAY_SIZE(HostMethod_props),
+    .props       = HostMethod_props,
+    .gc_traverse = Function_gc_traverse
+};
+
 static HRESULT HostFunction_call(script_ctx_t *ctx, FunctionInstance *func, jsval_t vthis, unsigned flags,
          unsigned argc, jsval_t *argv, jsval_t *r)
 {
@@ -1096,8 +1112,8 @@ HRESULT create_host_function(script_ctx_t *ctx, const struct property_info *desc
     if(!ctx->function_constr)
         return E_UNEXPECTED;
 
-    hres = create_function(ctx, &HostFunction_info, &HostFunctionVtbl, sizeof(HostFunction), PROPF_METHOD,
-                           NULL, (void**)&function);
+    hres = create_function(ctx, flags == DISPATCH_METHOD ? &HostMethod_info : &HostFunction_info, &HostFunctionVtbl,
+                           sizeof(HostFunction), PROPF_METHOD, NULL, (void**)&function);
     if(FAILED(hres))
         return hres;
 
@@ -1170,6 +1186,10 @@ static HRESULT HostConstructor_call(script_ctx_t *ctx, FunctionInstance *func, j
                                              &ctx->jscaller->IServiceProvider_iface);
         if(hres == DISP_E_EXCEPTION)
             handle_dispatch_exception(ctx, &ei);
+#ifdef __REACTOS__
+        else if(FAILED(hres))
+            hres = throw_host_object_error(ctx, function->host_iface, hres);
+#endif
         if(SUCCEEDED(hres)) {
             if(r) hres = variant_to_jsval(ctx, &ret, r);
             VariantClear(&ret);

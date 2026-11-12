@@ -916,6 +916,14 @@ static HRESULT typeinfo_invoke(DispatchEx *This, func_info_t *func, WORD flags, 
     hres = ITypeInfo_Invoke(ti, unk, func->id, flags, &params, res, ei, &argerr);
 
     IUnknown_Release(unk);
+
+    if(hres == DISP_E_EXCEPTION && ei && FAILED(ei->scode) && dispex_compat_mode(This) >= COMPAT_MODE_IE9) {
+        hres = ei->scode;
+        SysFreeString(ei->bstrSource);
+        SysFreeString(ei->bstrDescription);
+        SysFreeString(ei->bstrHelpFile);
+        memset(ei, 0, sizeof(*ei));
+    }
     return hres;
 }
 
@@ -947,9 +955,15 @@ static HRESULT format_func_disp_string(const WCHAR *name, IServiceProvider *call
     static const WCHAR func_suffixW[] =
         {'(',')',' ','{','\n',' ',' ',' ',' ','[','n','a','t','i','v','e',' ','c','o','d','e',']','\n','}','\n'};
 
-    /* FIXME: This probably should be more generic. Also we should try to get IID_IActiveScriptSite and SID_GetCaller. */
+    IDispatch *security_window;
+
+    /* FIXME: This probably should be more generic. */
     if(!caller)
         return E_ACCESSDENIED;
+
+    /* FIXME: the caller's security window is looked up as Windows does but not checked against this function */
+    if((security_window = get_caller_security_window(caller)))
+        IDispatch_Release(security_window);
 
     name_len = wcslen(name);
     ptr = str = SysAllocStringLen(NULL, name_len + ARRAY_SIZE(func_prefixW) + ARRAY_SIZE(func_suffixW));
@@ -1155,6 +1169,10 @@ static HRESULT function_value(DispatchEx *dispex, LCID lcid, WORD flags, DISPPAR
     case DISPATCH_METHOD|DISPATCH_PROPERTYGET:
         if(!res)
             return E_INVALIDARG;
+        if(!params->cArgs) {
+            hres = format_func_disp_string(This->info->name, caller, res);
+            break;
+        }
         /* fall through */
     case DISPATCH_METHOD:
         if(!This->obj)
@@ -2441,11 +2459,17 @@ static HRESULT WINAPI DispatchEx_InvokeEx(IWineJSDispatchHost *iface, DISPID id,
         return dispex_prop_get(This, id, lcid, pvarRes, pei, pspCaller);
 
     case DISPATCH_PROPERTYPUT: {
+        func_info_t *func;
+
         if(pdp->cArgs != 1 || (pdp->cNamedArgs == 1 && *pdp->rgdispidNamedArgs != DISPID_PROPERTYPUT)
            || pdp->cNamedArgs > 1) {
             FIXME("invalid args\n");
             return E_INVALIDARG;
         }
+        if(!pspCaller && get_dispid_type(id) == DISPEXPROP_BUILTIN && SUCCEEDED(get_builtin_func(This->info, id, &func))
+           && func->func_disp_idx >= 0 && (This->info->vtbl->get_compat_mode ? This->info->vtbl->get_compat_mode(This)
+                                           : dispex_compat_mode(This)) < COMPAT_MODE_IE9)
+            return E_NOTIMPL;
         return dispex_prop_put(This, id, lcid, pdp->rgvarg, pei, pspCaller);
     }
 
@@ -2777,9 +2801,8 @@ static HRESULT WINAPI JSDispatchHost_GetJSDispatch(IWineJSDispatchHost *iface, I
 HRESULT dispex_index_prop_desc(DispatchEx *dispex, DISPID id, struct property_info *desc)
 {
     desc->id = id;
-    desc->flags = PROPF_WRITABLE | PROPF_CONFIGURABLE;
-    if(dispex->info->vtbl->next_dispid)
-        desc->flags |= PROPF_ENUMERABLE;
+    /* TODO: next_id does not enumerate the indices of collections */
+    desc->flags = PROPF_WRITABLE | PROPF_CONFIGURABLE | PROPF_ENUMERABLE;
     desc->name = NULL;
     desc->index = id - MSHTML_DISPID_CUSTOM_MIN;
     desc->iid = 0;

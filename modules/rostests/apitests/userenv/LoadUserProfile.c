@@ -8,6 +8,7 @@
 #include <apitest.h>
 // #include <windef.h>
 // #include <winbase.h>
+#include <winreg.h>
 #include <sddl.h>
 #include <userenv.h>
 #include <strsafe.h>
@@ -198,6 +199,18 @@ START_TEST(LoadUserProfile)
         ok(Success, "LoadUserProfileW(ProfileInfo[%d]) failed with error %lu\n", i, GetLastError());
         ok(ProfileInfo[i].hProfile != NULL, "ProfileInfo[%d].hProfile == NULL\n", i);
         trace("ProfileInfo[%d].hProfile = 0x%p\n", i, ProfileInfo[i].hProfile);
+    }
+
+    /* A loaded profile carries the per-user settings, also when this load made it */
+    if (ProfileInfo[0].hProfile != NULL)
+    {
+        HKEY hKey;
+        LONG Error;
+
+        Error = RegOpenKeyExW((HKEY)ProfileInfo[0].hProfile, L"Control Panel", 0, KEY_READ, &hKey);
+        ok(Error == ERROR_SUCCESS, "RegOpenKeyExW(Control Panel) failed with error %ld\n", Error);
+        if (Error == ERROR_SUCCESS)
+            RegCloseKey(hKey);
     }
 
     i = ARRAYSIZE(ProfileInfo);

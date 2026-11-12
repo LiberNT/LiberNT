@@ -30,7 +30,7 @@ STYLE DS_SHELLFONT | WS_CHILD | WS_CAPTION
 CAPTION "代替構成"
 FONT 9, "MS UI Gothic"
 BEGIN
-    LTEXT "このコンピュータが複数のネットワークで使用されている場合は、以下の代替IP設定を入力してください", -1, 9, 9, 220, 20
+    LTEXT "このコンピューターが複数のネットワークで使用されている場合は、以下の代替IP設定を入力してください", -1, 9, 9, 220, 20
     GROUPBOX "", -1, 9, 57, 228, 125, BS_GROUPBOX
     CONTROL "自動プライベート IP アドレス(&T)", IDC_ALTAPIPA, "BUTTON", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 14, 40, 210, 12
     CONTROL "ユーザー設定(&S)", IDC_ALTSTATIC, "BUTTON", BS_AUTORADIOBUTTON, 14, 55, 70, 12
@@ -153,7 +153,7 @@ BEGIN
     EDITTEXT IDC_SUFFIX, 5, 25, 190, 12, WS_TABSTOP
     LTEXT "ドメイン サフィックス:", -1, 5, 10, 120, 12
     PUSHBUTTON "", IDC_OK, 50, 50, 50, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 110, 50, 50, 14
+    PUSHBUTTON "キャンセル", IDCANCEL, 110, 50, 50, 14
 END
 
 IDD_TCPIP_FILTER_DLG DIALOGEX 0, 0, 305, 220
@@ -161,7 +161,7 @@ STYLE DS_SHELLFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "TCP/IP フィルタリング"
 FONT 9, "MS UI Gothic"
 BEGIN
-    CHECKBOX "TCP/IPフィルタリングを有効にする (すべてのアダプタ)", IDC_USE_FILTER, 15, 5, 190, 12, BS_AUTOCHECKBOX | WS_TABSTOP
+    CHECKBOX "TCP/IPフィルタリングを有効にする (すべてのアダプター)", IDC_USE_FILTER, 15, 5, 190, 12, BS_AUTOCHECKBOX | WS_TABSTOP
     GROUPBOX "", -1, 5, 30, 90, 150
     CONTROL "すべて許可", IDC_TCP_ALLOW_ALL, "BUTTON", BS_AUTORADIOBUTTON | WS_GROUP | WS_TABSTOP, 15, 30, 70, 12
     CONTROL "許可のみ", IDC_TCP_RESTRICT, "BUTTON", BS_AUTORADIOBUTTON | WS_TABSTOP, 15, 44, 70, 12
@@ -200,7 +200,7 @@ STYLE DS_SHELLFONT | WS_CHILD | WS_CAPTION
 CAPTION "上級者向け"
 FONT 9, "MS UI Gothic"
 BEGIN
-    LTEXT "このネットワークアダプタには以下のプロパティがあります。左側で変更したいプロパティをクリックし、右側でその値を選択してください。", -1, 7, 7, 218, 24, WS_GROUP
+    LTEXT "このネットワークアダプターには以下のプロパティがあります。左側で変更したいプロパティをクリックし、右側でその値を選択してください。", -1, 7, 7, 218, 24, WS_GROUP
     LTEXT "プロパティ(&P):", -1, 7, 37, 60, 8, WS_GROUP
     LISTBOX IDC_PROPERTY_NAME, 7, 48, 124, 124, LBS_STANDARD | WS_TABSTOP
     LTEXT "値(&V):", -1, 151, 37, 60, 8, WS_GROUP
@@ -213,13 +213,13 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_NET_CONNECT_ETHERNET "Ethernet"
+    IDS_NET_CONNECT_ETHERNET "イーサネット"
     IDS_NET_CONNECT_WIFI "Wi-Fi"
-    IDS_NET_CONNECT_BLUETOOTH "Bluetooth Network Connection"
-    IDS_NET_CONNECT_CELLULAR "Cellular"
-    IDS_NO_IPADDR_SET "アダプタには少なくとも 1 つの IP アドレスが必要です。1 つ入力してください。"
+    IDS_NET_CONNECT_BLUETOOTH "Bluetooth ネットワーク接続"
+    IDS_NET_CONNECT_CELLULAR "携帯電話"
+    IDS_NO_IPADDR_SET "アダプターには少なくとも 1 つの IP アドレスが必要です。1 つ入力してください。"
     IDS_NO_SUBMASK_SET "サブネットマスクが指定されていないアドレスを入力しました。サブネットマスクを追加してください。"
-    IDS_TCPFILTERDESC "TCP/IP フィルタリングを使用すると、コンピュータに到達する TCP/IP ネットワーク トラフィックの種類を制御できます。"
+    IDS_TCPFILTERDESC "TCP/IP フィルタリングを使用すると、コンピューターに到達する TCP/IP ネットワーク トラフィックの種類を制御できます。"
     IDS_TCPFILTER "TCP/IP フィルタリング"
     IDS_IPADDR "IP アドレス"
     IDS_SUBMASK "サブネット マスク"
@@ -237,12 +237,12 @@ BEGIN
     IDS_PORT_RANGE "ポート番号は 0 より大きく 65536 より小さくなければなりません。この範囲内の番号を入力してください。"
     IDS_PROT_RANGE "プロトコル番号は 0 より大きく 256 より小さくなければなりません。この範囲内の数値を入力してください。"
     IDS_DUP_NUMBER "追加しようとしている番号は既にリストに存在します。別の番号を入力してください。"
-    IDS_DISABLE_FILTER "このグローバル TCP/IP 設定を無効にすると、すべてのアダプタに影響します。"
+    IDS_DISABLE_FILTER "このグローバル TCP/IP 設定を無効にすると、すべてのアダプターに影響します。"
     IDS_NO_SUFFIX "現在の検索方法の設定では、少なくとも 1 つの DNS サフィックスが必要です。DNS サフィックスを入力するか、設定を変更してください。"
     IDS_DOMAIN_SUFFIX "ドメイン サフィックスは有効なサフィックスではありません。"
     IDS_DNS_SUFFIX "DNS ドメイン名「%s」は有効な DNS 名ではありません。"
     IDS_DUP_SUFFIX "DNS サフィックスはすでにリストに存在します。"
     IDS_DUP_IPADDR "IP アドレスはすでにリストに存在します。"
     IDS_DUP_GW "デフォルト ゲートウェイはすでにリストに存在します。"
-    IDS_METRIC_RANGE "Please enter a metric value between 1 and 9999."
+    IDS_METRIC_RANGE "1 から 9999 までのメトリック値を入力してください。"
 END

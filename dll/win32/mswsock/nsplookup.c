@@ -957,7 +957,7 @@ NSP_NbnsStart(_In_ PCWSTR Name, _Out_ PNSP_NBNS_QUERY *Result)
     Label[15] = 0x00;
     for (i = 0; i < Length; i++)
     {
-        if (Name[i] > 0x7E)
+        if (Name[i] > 0x7E || wcschr(L"\\/:*?\"<>|", Name[i]))
         {
             HeapFree(GetProcessHeap(), 0, Query);
             return NULL;

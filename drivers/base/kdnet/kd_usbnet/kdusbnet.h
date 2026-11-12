@@ -136,7 +136,7 @@
 #define USBNET_TRB_SIZE             16
 #define USBNET_RING_SIZE            (USBNET_RING_TRBS * USBNET_TRB_SIZE)
 #define USBNET_MAX_SCRATCHPAD       128
-#define USBNET_MAX_SLOTS            8
+#define USBNET_MAX_SLOTS            127
 #define USBNET_CONTROL_SIZE         4096
 #define USBNET_RX_SIZE              4096
 #define USBNET_TX_SIZE              4096
@@ -388,6 +388,7 @@ typedef struct _USBNET_ADAPTER
 } USBNET_ADAPTER, *PUSBNET_ADAPTER;
 
 extern PKDNET_EXTENSIBILITY_IMPORTS KdNetExtensibilityImports;
+extern BOOLEAN UsbNetLocalBroadcast;
 
 FORCEINLINE
 ULONG

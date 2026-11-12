@@ -165,7 +165,6 @@ static BOOL activate_and_query(const char *name, const GUID *scheme, const SCHEM
     }
     LocalFree(active);
     query_scheme_settings(name, scheme, expected);
-    Sleep(500);
     query_processor_information(name);
     return TRUE;
 }
@@ -470,7 +469,6 @@ START_TEST(power_profile)
     test_legacy_policy_contract();
     query_scheme_settings("original", original, NULL);
     query_processor_information("original-prime");
-    Sleep(500);
     query_processor_information("original");
 
     activate_and_query("balanced", &balanced_scheme, &balanced_expected);

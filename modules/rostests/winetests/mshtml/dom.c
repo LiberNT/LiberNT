@@ -4309,33 +4309,24 @@ static void test_attr_collection_builtins(IHTMLDocument2 *doc)
         L"body",      L"onhashchange", L"onoffline", L"ononline", NULL,
         L"br",        L"clear", NULL,
         L"button",    L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", NULL,
-        L"caption",   L"align", L"vAlign", NULL,
         L"center",    L"cite", L"clear", L"width", NULL,
         L"code",      L"cite", L"dateTime", NULL,
         L"col",       L"align", L"bgColor", L"ch", L"chOff", L"span", L"vAlign", L"width", NULL,
         L"embed",     L"align", L"codeBase", L"type", NULL,
-        L"fieldset",  L"align", NULL,
         L"font",      L"color", L"face", L"size", NULL,
         L"form",      L"accept-charset", L"encType", NULL,
-        L"frame",     L"borderColor", L"longDesc", NULL,
         L"frameset",  L"border", L"borderColor", L"cols", L"frameBorder", L"frameSpacing", L"name", L"onafterprint", L"onbeforeprint", L"onbeforeunload", L"onload", L"onunload", L"rows", NULL,
         L"h1",        L"align", L"cite", L"clear", L"width", NULL,
         L"i",         L"cite", L"dateTime", NULL,
-        L"iframe",    L"longDesc", NULL,
-        L"img",       L"longDesc", NULL,
-        L"input",     L"accept", L"cache", L"dynsrc", L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", L"useMap", NULL,
+        L"input",     L"cache", L"dynsrc", L"formaction", L"formenctype", L"formmethod", L"formnovalidate", L"formtarget", NULL,
         L"label",     L"for", NULL,
-        L"legend",    L"align", NULL,
-        L"link",      L"charset", L"hreflang", L"target", NULL,
         L"map",       L"name", NULL,
-        L"meta",      L"http-equiv", L"scheme", NULL,
-        L"object",    L"alt", L"archive", L"border", L"classid", L"data", L"declare", L"object", L"standby", L"useMap", NULL,
-        L"option",    L"label", NULL,
+        L"meta",      L"http-equiv", NULL,
+        L"object",    L"classid", L"data", L"object", NULL,
         L"p",         L"align", L"cite", L"clear", L"width", NULL,
-        L"param",     L"name", L"type", L"value", L"valueType", NULL,
         L"pre",       L"cite", L"clear", L"width", NULL,
         L"q",         L"cite", L"dateTime", NULL,
-        L"script",    L"charset", L"for", NULL,
+        L"script",    L"for", NULL,
         L"select",    L"align", NULL,
         L"span",      L"cite", L"dateTime", L"nofocusrect", NULL,
         L"tbody",     L"align", L"bgColor", L"ch", L"chOff", L"vAlign", NULL,
@@ -14427,7 +14418,7 @@ static void test_elem_names(IHTMLDocument2 *doc)
     col = doc_get_elems_by_name(doc, L"Xxx");
     hres = IHTMLElementCollection_get_length(col, &len);
     ok(hres == S_OK, "get_length failed: %08lx\n", hres);
-    todo_wine ok(len == 1, "len = %ld\n", len);
+    ok(len == 1, "len = %ld\n", len);
     IHTMLElementCollection_Release(col);
 }
 

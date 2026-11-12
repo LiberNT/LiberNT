@@ -266,7 +266,7 @@ START_TEST(NtWriteFile)
     /* Now, testing aligned/non aligned writes */
 
     BufferSize = SizeOfSector();
-    trace("Sector is %Iu bytes\n", BufferSize);
+    trace("Sector is %Iu bytes\n", (size_t)BufferSize);
 
     Status = NtAllocateVirtualMemory(NtCurrentProcess(),
                                      &Buffer,

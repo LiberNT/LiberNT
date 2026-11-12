@@ -70,50 +70,32 @@ SetIrpIoStatus(
     return Status;
 }
 
-ULONG
-ClosePin(
-    IN  PWDMAUD_CLIENT ClientInfo,
-    IN  ULONG FilterId,
-    IN  ULONG PinId,
-    IN  SOUND_DEVICE_TYPE DeviceType)
-{
-    ULONG Index;
-
-    for(Index = 0; Index < ClientInfo->NumPins; Index++)
-    {
-        if (ClientInfo->hPins[Index].FilterId == FilterId && ClientInfo->hPins[Index].PinId == PinId && ClientInfo->hPins[Index].Handle && ClientInfo->hPins[Index].Type == DeviceType)
-        {
-            if (ClientInfo->hPins[Index].Type != MIXER_DEVICE_TYPE)
-            {
-                ZwClose(ClientInfo->hPins[Index].Handle);
-            }
-            ClientInfo->hPins[Index].Handle = NULL;
-            return Index;
-        }
-    }
-    return MAXULONG;
-}
-
 NTSTATUS
 InsertPinHandle(
     IN  PWDMAUD_CLIENT ClientInfo,
     IN  ULONG FilterId,
     IN  ULONG PinId,
     IN  SOUND_DEVICE_TYPE DeviceType,
-    IN  HANDLE PinHandle,
-    IN  ULONG FreeIndex)
+    IN  HANDLE PinHandle)
 {
     PWDMAUD_HANDLE Handles;
+    ULONG Index;
 
-    if (FreeIndex != MAXULONG)
+    ASSERT(PinHandle);
+
+    for (Index = 0; Index < ClientInfo->NumPins; Index++)
     {
-        /* re-use a free index */
-        ClientInfo->hPins[FreeIndex].Handle = PinHandle;
-        ClientInfo->hPins[FreeIndex].FilterId = FilterId;
-        ClientInfo->hPins[FreeIndex].PinId = PinId;
-        ClientInfo->hPins[FreeIndex].Type = DeviceType;
+        if (!ClientInfo->hPins[Index].Handle)
+        {
+            /* re-use a free index */
+            ASSERT(!ClientInfo->hPins[Index].NotifyEvent);
+            ClientInfo->hPins[Index].Handle = PinHandle;
+            ClientInfo->hPins[Index].FilterId = FilterId;
+            ClientInfo->hPins[Index].PinId = PinId;
+            ClientInfo->hPins[Index].Type = DeviceType;
 
-        return STATUS_SUCCESS;
+            return STATUS_SUCCESS;
+        }
     }
 
     Handles = AllocateItem(NonPagedPool, sizeof(WDMAUD_HANDLE) * (ClientInfo->NumPins+1));
@@ -376,7 +358,7 @@ GetSysAudioDevicePnpName(
 
     /* allocate buffer for the device */
     *Device = AllocateItem(NonPagedPool, BytesReturned);
-    if (!Device)
+    if (!*Device)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     /* query sysaudio again for the device path */

@@ -728,6 +728,7 @@ SetDefaultLayoutOrTip(_In_ LPCWSTR psz, _In_ DWORD dwFlags)
     HKEY hUserProfile;
     BOOL bFound;
     INT index;
+    HKL hkl;
 
     if (!psz || !ParseEntry(psz, &entry) || entry.fEmpty)
     {
@@ -765,6 +766,15 @@ SetDefaultLayoutOrTip(_In_ LPCWSTR psz, _In_ DWORD dwFlags)
                                                                 &entry.guidProfile);
         }
         ReleaseProfiles(pProfiles, hMsctf);
+    }
+
+    hkl = LoadLayoutForKlid(EntryPreloadKlid(&entry));
+    if (hkl)
+    {
+        if (!(dwFlags & SDLOT_NOAPPLYTOCURRENTSESSION))
+            SystemParametersInfoW(SPI_SETDEFAULTINPUTLANG, 0, &hkl, 0);
+        if (dwFlags & SDLOT_APPLYTOCURRENTTHREAD)
+            ActivateKeyboardLayout(hkl, 0);
     }
 
     return TRUE;

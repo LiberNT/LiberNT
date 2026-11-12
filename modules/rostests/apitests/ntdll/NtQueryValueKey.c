@@ -86,7 +86,7 @@ START_TEST(NtQueryValueKey)
         ok(StringData[2] == '\\', "Data[2] = %x\n", StringData[2]);
         ok(iswalnum(StringData[3]), "Data[3] = %x\n", StringData[3]);
         ok(StringData[Info->DataLength / sizeof(WCHAR) - 1] == UNICODE_NULL,
-           "Data[%Iu] = %x\n", Info->DataLength / sizeof(WCHAR) - 1, StringData[Info->DataLength / sizeof(WCHAR) - 1]);
+           "Data[%Iu] = %x\n", (size_t)(Info->DataLength / sizeof(WCHAR) - 1), StringData[Info->DataLength / sizeof(WCHAR) - 1]);
     }
 
     /* If the buffer isn't 64 bit aligned, the data won't be, either */
@@ -108,6 +108,32 @@ START_TEST(NtQueryValueKey)
     }
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
+
+    /* A name that passes the probe but faults when the kernel copies it */
+    {
+        PVOID Reserved = NULL;
+        SIZE_T ReservedSize = 0x10000;
+        UNICODE_STRING UnreadableName;
+
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Reserved, 0, &ReservedSize, MEM_RESERVE, PAGE_READWRITE);
+        ok_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            UnreadableName.Buffer = Reserved;
+            UnreadableName.Length = 16;
+            UnreadableName.MaximumLength = 16;
+            ResultLength = 0x55555555;
+            Status = NtQueryValueKey(KeyHandle,
+                                     &UnreadableName,
+                                     KeyValuePartialInformation,
+                                     NULL,
+                                     0,
+                                     &ResultLength);
+            ok_hex(Status, STATUS_ACCESS_VIOLATION);
+            ReservedSize = 0;
+            NtFreeVirtualMemory(NtCurrentProcess(), &Reserved, &ReservedSize, MEM_RELEASE);
+        }
+    }
 
 Exit:
     Status = NtClose(KeyHandle);

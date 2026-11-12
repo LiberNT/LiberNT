@@ -1060,6 +1060,13 @@ StartServiceCtrlDispatcherA(const SERVICE_TABLE_ENTRYA *lpServiceStartTable)
         i++;
     }
 
+    /* A table without a service would leave the dispatcher looking up entry 0 of nothing */
+    if (i == 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
     dwActiveServiceCount = i;
 
     /* Allocate the service table */
@@ -1157,6 +1164,13 @@ StartServiceCtrlDispatcherW(const SERVICE_TABLE_ENTRYW *lpServiceStartTable)
     while (lpServiceStartTable[i].lpServiceProc != NULL)
     {
         i++;
+    }
+
+    /* A table without a service would leave the dispatcher looking up entry 0 of nothing */
+    if (i == 0)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
     }
 
     dwActiveServiceCount = i;

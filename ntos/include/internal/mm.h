@@ -23,6 +23,7 @@ extern PFN_NUMBER MmAvailablePages;
 extern PFN_NUMBER MmResidentAvailablePages;
 extern ULONG MmThrottleTop;
 extern ULONG MmThrottleBottom;
+extern ULONG MmReadClusterSize;
 
 extern LIST_ENTRY MmLoadedUserImageList;
 
@@ -548,7 +549,9 @@ PFN_NUMBER
 NTAPI
 MmBuildDumpPageBitmap(
     _Inout_ PRTL_BITMAP Bitmap,
-    _In_ BOOLEAN IncludeUserPages);
+    _In_ BOOLEAN IncludeUserPages,
+    _In_ PFN_NUMBER MaximumPages,
+    _Out_opt_ PPFN_NUMBER CandidatePages);
 
 #define MM_HIBERNATE_SKIP 0
 #define MM_HIBERNATE_ZERO 1
@@ -704,6 +707,18 @@ MmGetSessionIdEx(
     IN PEPROCESS Process
 );
 
+NTSTATUS
+NTAPI
+MmSessionCreate(
+    _Out_ PULONG SessionId
+);
+
+NTSTATUS
+NTAPI
+MmSessionDelete(
+    _In_ ULONG SessionId
+);
+
 /* marea.c *******************************************************************/
 
 NTSTATUS
@@ -822,8 +837,20 @@ MmBuildMdlFromPages(
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
+MmArmInitSystem(
+    _In_ ULONG Phase,
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
 MmInitSystem(IN ULONG Phase,
              IN PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+MmFreeLoaderBlock(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 
 /* pagefile.c ****************************************************************/
@@ -835,11 +862,6 @@ MmAllocSwapPage(VOID);
 VOID
 NTAPI
 MmFreeSwapPage(SWAPENTRY Entry);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-MmInitPagingFile(VOID);
 
 BOOLEAN
 NTAPI
@@ -1566,6 +1588,17 @@ MmGetImageInformation(
 
 NTSTATUS
 NTAPI
+MmCreateSectionForDataScan(
+    _Out_ PVOID *SectionObject,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Inout_ PLARGE_INTEGER MaximumSize,
+    _In_ ULONG SectionPageProtection,
+    _In_ ULONG AllocationAttributes,
+    _In_ PFILE_OBJECT FileObject);
+
+NTSTATUS
+NTAPI
 MmGetSectionImageInformation(
     IN PSECTION SectionObject,
     OUT PSECTION_IMAGE_INFORMATION ImageInformation
@@ -1848,12 +1881,10 @@ MmIsSystemImageImportingModule(
     _In_ PCUNICODE_STRING ModuleName
 );
 
-#ifdef CONFIG_SMP
 BOOLEAN
 NTAPI
 MmVerifyImageIsOkForMpUse(
     _In_ PVOID BaseAddress);
-#endif // CONFIG_SMP
 
 NTSTATUS
 NTAPI
@@ -1894,6 +1925,13 @@ NTSTATUS
 NTAPI
 MmGrowKernelStack(
     IN PVOID StackPointer
+);
+
+NTSTATUS
+NTAPI
+MmGrowKernelStackEx(
+    _In_ PVOID StackPointer,
+    _In_ ULONG GrowSize
 );
 
 

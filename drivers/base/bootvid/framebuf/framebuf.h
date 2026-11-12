@@ -36,6 +36,14 @@ SetPixel(
 
 #define HAS_NATIVE_BUFFER_TO_SCREEN_BLT
 
+#define HAS_TEXT_UPDATE_BATCH
+
+VOID
+BeginTextUpdate(VOID);
+
+VOID
+EndTextUpdate(VOID);
+
 BOOLEAN
 VidBufferToScreenBltNative(
     _In_reads_bytes_(Delta * Height) PUCHAR Buffer,

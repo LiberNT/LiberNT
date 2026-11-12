@@ -126,7 +126,7 @@ PciIdeXSetBusData(
      */
     KeAcquireSpinLock(&Controller->Lock, &OldIrql);
 
-    Status = PciIdeXGetBusData(DeviceExtension, Buffer, ConfigDataOffset, BufferLength);
+    Status = PciIdeXGetBusData(DeviceExtension, CurrentBuffer, ConfigDataOffset, BufferLength);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
 

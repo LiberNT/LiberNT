@@ -10,10 +10,10 @@ BEGIN
           -1, 12, 20, 222, 29
     AUTOCHECKBOX "固定キー機能を使う(&U)", IDC_STICKY_BOX, 12, 49, 126, 14
     PUSHBUTTON "設定(&S)", IDC_STICKY_BUTTON, 144, 49, 90, 14
-    GROUPBOX "フィルタ キー機能", -1, 6, 79, 234, 62
-    LTEXT "フィルタ キー機能を使うと、速いキー入力や繰り返されたキー入力を無視したり、繰り返し入力の間隔を長くしたりすることができます。",
+    GROUPBOX "フィルター キー機能", -1, 6, 79, 234, 62
+    LTEXT "フィルター キー機能を使うと、速いキー入力や繰り返されたキー入力を無視したり、繰り返し入力の間隔を長くしたりすることができます。",
           -1, 12, 89, 222, 29
-    AUTOCHECKBOX "フィルタ キー機能を使う(&F)", IDC_FILTER_BOX, 12, 121, 126, 14
+    AUTOCHECKBOX "フィルター キー機能を使う(&F)", IDC_FILTER_BOX, 12, 121, 126, 14
     PUSHBUTTON "設定(&E)", IDC_FILTER_BUTTON, 144, 121, 90, 14
     GROUPBOX "切り替えキー機能", -1, 6, 148, 234, 55
     LTEXT "切り替えキー機能を使うと、CapsLock、NumLock、ScrollLock キーを押したときに音を鳴らします。",
@@ -74,7 +74,7 @@ CAPTION "マウス"
 FONT 9, "MS UI Gothic", 0, 0, 0x0
 BEGIN
     GROUPBOX "マウス キー機能", -1, 6, 11, 234, 62
-    LTEXT "マウス キー機能を使うと、テンキーを使ってマウス ポインタを操作できます。",
+    LTEXT "マウス キー機能を使うと、テンキーを使ってマウス ポインターを操作できます。",
           -1, 12, 20, 222, 29
     AUTOCHECKBOX "マウス キー機能(&M)", IDC_MOUSE_BOX, 12, 49, 126, 14
     PUSHBUTTON "設定(&S)", IDC_MOUSE_BUTTON, 144, 49, 90, 14
@@ -132,14 +132,14 @@ END
 
 IDD_FILTERKEYSOPTIONS DIALOGEX 0, 0, 246, 220
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "フィルタ キー設定"
+CAPTION "フィルター キー設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     GROUPBOX "キーボード ショートカット", -1, 6, 11, 234, 62
-    LTEXT "フィルタ キーのショートカットは:\n<右Shift>を8秒間押し続ける。",
+    LTEXT "フィルター キーのショートカットは:\n<右Shift>を8秒間押し続ける。",
           -1, 12, 20, 222, 29
     AUTOCHECKBOX "ショートカットを使う(&U)", IDC_FILTER_ACTIVATE_CHECK, 12, 49, 126, 14
-    GROUPBOX "フィルタ オプション", -1, 6, 79, 234, 79
+    GROUPBOX "フィルター オプション", -1, 6, 79, 234, 79
     AUTORADIOBUTTON "連続したキーストロークを無視する(&O)", IDC_FILTER_BOUNCE_RADIO,
                     12, 91, 120, 11, WS_GROUP | WS_TABSTOP
     AUTORADIOBUTTON "素早いキーストロークを無視して、リピート率を遅くする(&N)", IDC_FILTER_REPEAT_RADIO,
@@ -151,7 +151,7 @@ BEGIN
     GROUPBOX "通知", -1, 6, 161, 234, 41
     AUTOCHECKBOX "キーが押されたか受け付けたとき音を鳴らす(&B)", IDC_FILTER_SOUND_CHECK,
                  12, 169, 222, 10
-    AUTOCHECKBOX "スクリーンにフィルタ キーの状態を表示(&H)", IDC_FILTER_STATUS_CHECK,
+    AUTOCHECKBOX "スクリーンにフィルター キーの状態を表示(&H)", IDC_FILTER_STATUS_CHECK,
                  12, 188, 222, 10
     DEFPUSHBUTTON "OK", IDOK, 135, 207, 50, 14
     PUSHBUTTON "キャンセル", IDCANCEL, 189, 207, 50, 14
@@ -197,7 +197,7 @@ BEGIN
           -1, 12, 20, 222, 29
     AUTOCHECKBOX "ショートカットを使う(&U)", IDC_MOUSEKEYS_ACTIVATE_CHECK,
                  12, 49, 222, 14
-    GROUPBOX "ポインタ速度", -1, 6, 83, 234, 83
+    GROUPBOX "ポインター速度", -1, 6, 83, 234, 83
     LTEXT "最高速度(&T):", -1, 12, 96, 48, 11
     LTEXT "低い", -1, 66, 96, 18, 11
     CONTROL "", IDC_MOUSEKEYS_SPEED_TRACK, "msctls_trackbar32", TBS_AUTOTICKS | WS_TABSTOP,
@@ -212,7 +212,7 @@ BEGIN
                  12, 142, 222, 14
     LTEXT "NumLock が次のときにマウスキーを使う:", -1, 6, 171, 120, 11
     AUTORADIOBUTTON "O&n", IDC_MOUSEKEYS_ON_RADIO, 162, 171, 30, 11
-    AUTORADIOBUTTON "Of&f", IDC_MOUSEKEYS_OFF_RADIO, 198, 171, 30, 11
+    AUTORADIOBUTTON "オフ(&F)", IDC_MOUSEKEYS_OFF_RADIO, 198, 171, 30, 11
     AUTOCHECKBOX "スクリーンにマウスキー状態を表示(&S)", IDC_MOUSEKEYS_STATUS_CHECK,
                  6, 184, 222, 14
     DEFPUSHBUTTON "OK", IDOK, 135, 207, 50, 14
@@ -221,7 +221,7 @@ END
 
 IDD_BOUNCEKEYSOPTIONS DIALOGEX 0, 0, 246, 220
 STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "高度なフィルタ キーの設定"
+CAPTION "高度なフィルター キーの設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     GROUPBOX "バウンス キー", -1, 6, 11, 234, 47

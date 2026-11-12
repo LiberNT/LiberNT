@@ -35,7 +35,7 @@
 
 typedef LONG64 LONGLONG;
 typedef union _LARGE_INTEGER { LONG64 QuadPart; } LARGE_INTEGER, *PLARGE_INTEGER;
-typedef struct _SECTION_OBJECT_POINTERS { PVOID SharedCacheMap; PVOID DataSectionObject; PVOID ImageSectionObject; } SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
+typedef struct _SECTION_OBJECT_POINTERS { PVOID DataSectionObject; PVOID SharedCacheMap; PVOID ImageSectionObject; } SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
 typedef struct _FILE_OBJECT
 {
     PSECTION_OBJECT_POINTERS SectionObjectPointer;
@@ -79,7 +79,7 @@ typedef struct _PUBLIC_BCB
 } PUBLIC_BCB, *PPUBLIC_BCB;
 typedef struct _IO_STATUS_BLOCK { NTSTATUS Status; ULONG_PTR Information; } IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
 
-#define InterlockedIncrement(p) (CC_ATOMIC_ADD32((p), 1) + 1)
+#define InterlockedIncrement(p) __sync_add_and_fetch((p), 1)
 #define CcGetFileSizePointer(FO) ((PLARGE_INTEGER)((FO)->SectionObjectPointer->SharedCacheMap) + 1)
 
 extern ULONG CcMapDataWait, CcMapDataNoWait, CcPinReadWait, CcPinReadNoWait, CcPinMappedDataCount;

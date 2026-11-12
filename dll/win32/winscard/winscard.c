@@ -19,6 +19,9 @@
 
 #include <stdarg.h>
 #define WINSCARDAPI
+#ifdef __REACTOS__
+#define WINSCARDDATA
+#endif
 #include "windef.h"
 #include "winbase.h"
 #include "winscard.h"
@@ -33,7 +36,8 @@
 WINE_DEFAULT_DEBUG_CHANNEL(winscard);
 
 #ifdef __REACTOS__
-#define UNIX_CALL( func, params ) ((void)(params), SCARD_E_NO_SERVICE)
+LONG ScardBackendCall( ULONG func, void *params );
+#define UNIX_CALL( func, params ) ScardBackendCall( unix_ ## func, params )
 #else
 #define UNIX_CALL( func, params ) WINE_UNIX_CALL( unix_ ## func, params )
 #endif
@@ -585,6 +589,10 @@ static LONG map_states_inA( const SCARD_READERSTATEA *src, struct reader_state *
     {
         if (src[i].szReader && ansi_to_utf8( src[i].szReader, (char **)&dst[i].reader ) < 0)
             return SCARD_E_NO_MEMORY;
+#ifdef __REACTOS__
+        dst[i].current_state = src[i].dwCurrentState;
+        dst[i].userdata = (ULONG_PTR)src[i].pvUserData;
+#endif
     }
     return SCARD_S_SUCCESS;
 }
@@ -648,6 +656,10 @@ static LONG map_states_inW( SCARD_READERSTATEW *src, struct reader_state *dst, D
     {
         if (src[i].szReader && utf16_to_utf8( src[i].szReader, (char **)&dst[i].reader ) < 0)
             return SCARD_E_NO_MEMORY;
+#ifdef __REACTOS__
+        dst[i].current_state = src[i].dwCurrentState;
+        dst[i].userdata = (ULONG_PTR)src[i].pvUserData;
+#endif
     }
     return SCARD_S_SUCCESS;
 }
@@ -893,6 +905,12 @@ LONG WINAPI SCardTransmit( SCARDHANDLE connect, const SCARD_IO_REQUEST *send, co
         }
         *recv_buflen = recv_buflen64;
     }
+#ifdef __REACTOS__
+    else if (ret == SCARD_E_INSUFFICIENT_BUFFER)
+    {
+        *recv_buflen = recv_buflen64;
+    }
+#endif
 
     TRACE( "returning %#lx\n", ret );
     return ret;

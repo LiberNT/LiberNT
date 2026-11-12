@@ -290,6 +290,8 @@ AuthPortThreadRoutine(PVOID Param)
             default:
                 TRACE("Received request (ApiNumber: %lu)\n", RequestMsg.ApiNumber);
 
+                LsapLockLogonSessions();
+
                 switch (RequestMsg.ApiNumber)
                 {
                     case LSASS_REQUEST_CALL_AUTHENTICATION_PACKAGE:
@@ -350,6 +352,7 @@ AuthPortThreadRoutine(PVOID Param)
                         break;
                 }
 
+                LsapUnlockLogonSessions();
                 break;
         }
     }

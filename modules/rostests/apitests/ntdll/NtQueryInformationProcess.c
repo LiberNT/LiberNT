@@ -280,10 +280,10 @@ Test_ProcessBasicInformation(void)
     /* Trace the returned data (1) */
     trace("[1] BasicInfo.ExitStatus = %lx\n", BasicInfo.ExitStatus);
     trace("[1] BasicInfo.PebBaseAddress = %p\n", BasicInfo.PebBaseAddress);
-    trace("[1] BasicInfo.AffinityMask = %Ix\n", BasicInfo.AffinityMask);
+    trace("[1] BasicInfo.AffinityMask = %Ix\n", (size_t)BasicInfo.AffinityMask);
     trace("[1] BasicInfo.BasePriority = %ld\n", BasicInfo.BasePriority);
-    trace("[1] BasicInfo.UniqueProcessId = %Iu\n", BasicInfo.UniqueProcessId);
-    trace("[1] BasicInfo.InheritedFromUniqueProcessId = %Iu\n", BasicInfo.InheritedFromUniqueProcessId);
+    trace("[1] BasicInfo.UniqueProcessId = %Iu\n", (size_t)BasicInfo.UniqueProcessId);
+    trace("[1] BasicInfo.InheritedFromUniqueProcessId = %Iu\n", (size_t)BasicInfo.InheritedFromUniqueProcessId);
 
     /* Again, this time with a return length */
     Length = 0x55555555;
@@ -299,10 +299,10 @@ Test_ProcessBasicInformation(void)
     /* Trace the returned data (2) */
     trace("[2] BasicInfo.ExitStatus = %lx\n", BasicInfo.ExitStatus);
     trace("[2] BasicInfo.PebBaseAddress = %p\n", BasicInfo.PebBaseAddress);
-    trace("[2] BasicInfo.AffinityMask = %Ix\n", BasicInfo.AffinityMask);
+    trace("[2] BasicInfo.AffinityMask = %Ix\n", (size_t)BasicInfo.AffinityMask);
     trace("[2] BasicInfo.BasePriority = %ld\n", BasicInfo.BasePriority);
-    trace("[2] BasicInfo.UniqueProcessId = %Iu\n", BasicInfo.UniqueProcessId);
-    trace("[2] BasicInfo.InheritedFromUniqueProcessId = %Iu\n", BasicInfo.InheritedFromUniqueProcessId);
+    trace("[2] BasicInfo.UniqueProcessId = %Iu\n", (size_t)BasicInfo.UniqueProcessId);
+    trace("[2] BasicInfo.InheritedFromUniqueProcessId = %Iu\n", (size_t)BasicInfo.InheritedFromUniqueProcessId);
 }
 
 static
@@ -397,11 +397,11 @@ Test_ProcessQuotaLimits(void)
     ok_hex(Status, STATUS_SUCCESS);
 
     /* Trace the returned data (1) */
-    trace("[1] QuotaLimits.PagedPoolLimit = %Iu\n", QuotaLimits.PagedPoolLimit);
-    trace("[1] QuotaLimits.NonPagedPoolLimit = %Iu\n", QuotaLimits.NonPagedPoolLimit);
-    trace("[1] QuotaLimits.MinimumWorkingSetSize = %Iu\n", QuotaLimits.MinimumWorkingSetSize);
-    trace("[1] QuotaLimits.MaximumWorkingSetSize = %Iu\n", QuotaLimits.MaximumWorkingSetSize);
-    trace("[1] QuotaLimits.PagefileLimit = %Iu\n", QuotaLimits.PagefileLimit);
+    trace("[1] QuotaLimits.PagedPoolLimit = %Iu\n", (size_t)QuotaLimits.PagedPoolLimit);
+    trace("[1] QuotaLimits.NonPagedPoolLimit = %Iu\n", (size_t)QuotaLimits.NonPagedPoolLimit);
+    trace("[1] QuotaLimits.MinimumWorkingSetSize = %Iu\n", (size_t)QuotaLimits.MinimumWorkingSetSize);
+    trace("[1] QuotaLimits.MaximumWorkingSetSize = %Iu\n", (size_t)QuotaLimits.MaximumWorkingSetSize);
+    trace("[1] QuotaLimits.PagefileLimit = %Iu\n", (size_t)QuotaLimits.PagefileLimit);
     trace("[1] QuotaLimits.TimeLimit = %I64d\n", QuotaLimits.TimeLimit.QuadPart);
 
     /* Again, this time with a return length */
@@ -416,11 +416,11 @@ Test_ProcessQuotaLimits(void)
     ok_dec(Length, sizeof(QuotaLimits));
 
     /* Trace the returned data (2) */
-    trace("[2] QuotaLimits.PagedPoolLimit = %Iu\n", QuotaLimits.PagedPoolLimit);
-    trace("[2] QuotaLimits.NonPagedPoolLimit = %Iu\n", QuotaLimits.NonPagedPoolLimit);
-    trace("[2] QuotaLimits.MinimumWorkingSetSize = %Iu\n", QuotaLimits.MinimumWorkingSetSize);
-    trace("[2] QuotaLimits.MaximumWorkingSetSize = %Iu\n", QuotaLimits.MaximumWorkingSetSize);
-    trace("[2] QuotaLimits.PagefileLimit = %Iu\n", QuotaLimits.PagefileLimit);
+    trace("[2] QuotaLimits.PagedPoolLimit = %Iu\n", (size_t)QuotaLimits.PagedPoolLimit);
+    trace("[2] QuotaLimits.NonPagedPoolLimit = %Iu\n", (size_t)QuotaLimits.NonPagedPoolLimit);
+    trace("[2] QuotaLimits.MinimumWorkingSetSize = %Iu\n", (size_t)QuotaLimits.MinimumWorkingSetSize);
+    trace("[2] QuotaLimits.MaximumWorkingSetSize = %Iu\n", (size_t)QuotaLimits.MaximumWorkingSetSize);
+    trace("[2] QuotaLimits.PagefileLimit = %Iu\n", (size_t)QuotaLimits.PagefileLimit);
     trace("[2] QuotaLimits.TimeLimit = %I64d\n", QuotaLimits.TimeLimit.QuadPart);
 }
 
@@ -492,11 +492,11 @@ Test_ProcessQuotaLimitsEx(void)
     ok_hex(Status, STATUS_SUCCESS);
 
     /* Trace the returned data (1) */
-    trace("[1] QuotaLimitsEx.PagedPoolLimit = %Iu\n", QuotaLimitsEx.PagedPoolLimit);
-    trace("[1] QuotaLimitsEx.NonPagedPoolLimit = %Iu\n", QuotaLimitsEx.NonPagedPoolLimit);
-    trace("[1] QuotaLimitsEx.MinimumWorkingSetSize = %Iu\n", QuotaLimitsEx.MinimumWorkingSetSize);
-    trace("[1] QuotaLimitsEx.MaximumWorkingSetSize = %Iu\n", QuotaLimitsEx.MaximumWorkingSetSize);
-    trace("[1] QuotaLimitsEx.PagefileLimit = %Iu\n", QuotaLimitsEx.PagefileLimit);
+    trace("[1] QuotaLimitsEx.PagedPoolLimit = %Iu\n", (size_t)QuotaLimitsEx.PagedPoolLimit);
+    trace("[1] QuotaLimitsEx.NonPagedPoolLimit = %Iu\n", (size_t)QuotaLimitsEx.NonPagedPoolLimit);
+    trace("[1] QuotaLimitsEx.MinimumWorkingSetSize = %Iu\n", (size_t)QuotaLimitsEx.MinimumWorkingSetSize);
+    trace("[1] QuotaLimitsEx.MaximumWorkingSetSize = %Iu\n", (size_t)QuotaLimitsEx.MaximumWorkingSetSize);
+    trace("[1] QuotaLimitsEx.PagefileLimit = %Iu\n", (size_t)QuotaLimitsEx.PagefileLimit);
     trace("[1] QuotaLimitsEx.TimeLimit = %I64d\n", QuotaLimitsEx.TimeLimit.QuadPart);
     //trace("[1] QuotaLimitsEx.WorkingSetLimit = %Iu\n", QuotaLimitsEx.WorkingSetLimit); // Not used on Win2k3
     trace("[1] QuotaLimitsEx.Flags = %lx\n", QuotaLimitsEx.Flags);
@@ -514,11 +514,11 @@ Test_ProcessQuotaLimitsEx(void)
     ok_dec(Length, sizeof(QuotaLimitsEx));
 
     /* Trace the returned data (2) */
-    trace("[2] QuotaLimitsEx.PagedPoolLimit = %Iu\n", QuotaLimitsEx.PagedPoolLimit);
-    trace("[2] QuotaLimitsEx.NonPagedPoolLimit = %Iu\n", QuotaLimitsEx.NonPagedPoolLimit);
-    trace("[2] QuotaLimitsEx.MinimumWorkingSetSize = %Iu\n", QuotaLimitsEx.MinimumWorkingSetSize);
-    trace("[2] QuotaLimitsEx.MaximumWorkingSetSize = %Iu\n", QuotaLimitsEx.MaximumWorkingSetSize);
-    trace("[2] QuotaLimitsEx.PagefileLimit = %Iu\n", QuotaLimitsEx.PagefileLimit);
+    trace("[2] QuotaLimitsEx.PagedPoolLimit = %Iu\n", (size_t)QuotaLimitsEx.PagedPoolLimit);
+    trace("[2] QuotaLimitsEx.NonPagedPoolLimit = %Iu\n", (size_t)QuotaLimitsEx.NonPagedPoolLimit);
+    trace("[2] QuotaLimitsEx.MinimumWorkingSetSize = %Iu\n", (size_t)QuotaLimitsEx.MinimumWorkingSetSize);
+    trace("[2] QuotaLimitsEx.MaximumWorkingSetSize = %Iu\n", (size_t)QuotaLimitsEx.MaximumWorkingSetSize);
+    trace("[2] QuotaLimitsEx.PagefileLimit = %Iu\n", (size_t)QuotaLimitsEx.PagefileLimit);
     trace("[2] QuotaLimitsEx.TimeLimit = %I64d\n", QuotaLimitsEx.TimeLimit.QuadPart);
     //trace("[2] QuotaLimitsEx.WorkingSetLimit = %Iu\n", QuotaLimitsEx.WorkingSetLimit); // Not used on Win2k3
     trace("[2] QuotaLimitsEx.Flags = %lx\n", QuotaLimitsEx.Flags);

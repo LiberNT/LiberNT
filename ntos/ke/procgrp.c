@@ -11,6 +11,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#define TAG_KE_CACHE 'cPeK'
+
 /* PRIVATE TYPES *************************************************************/
 
 /* KeSetTimer2 and friends are internal exports not declared by the DDK. */
@@ -1369,11 +1371,315 @@ KeQueryPrcbAddress(
     return KiProcessorBlock[Number];
 }
 
+/* Sampled once at boot: the relationship query runs up to DISPATCH_LEVEL and cannot visit each processor */
+static PKI_CACHE_RECORD KiProcessorCaches;
+static ULONG KiProcessorCacheCount;
+static KI_PROCESSOR_DOMAINS KiProcessorDomains;
+
+CODE_SEG("INIT")
+static
+VOID
+KiAddProcessorDomain(
+    _In_ KI_TOPOLOGY_LEVEL Level,
+    _In_ KAFFINITY Set)
+{
+    ULONG Index;
+
+    ASSERT(Set != 0);
+
+    for (Index = 0; Index < KiProcessorDomains.Count[Level]; Index++)
+    {
+        if (KiProcessorDomains.Sets[Level][Index] == Set)
+            return;
+    }
+
+    ASSERT(KiProcessorDomains.Count[Level] < MAXIMUM_PROCESSORS);
+    if (KiProcessorDomains.Count[Level] < MAXIMUM_PROCESSORS)
+        KiProcessorDomains.Sets[Level][KiProcessorDomains.Count[Level]++] = Set;
+}
+
+/* A level the architecture does not describe: a core is a processor's SMT set, a module a core, a die a package */
+CODE_SEG("INIT")
+static
+VOID
+KiCompleteProcessorDomains(
+    _In_reads_opt_(PackageCount) PKAFFINITY Packages,
+    _In_ ULONG PackageCount)
+{
+    KAFFINITY Active = KeActiveProcessors;
+    PKPRCB Prcb;
+    ULONG Index;
+
+    if (KiProcessorDomains.Count[KiTopologyCore] == 0)
+    {
+        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        {
+            Prcb = KiProcessorBlock[Index];
+            if ((Prcb == NULL) || !(Active & Prcb->SetMember))
+                continue;
+
+            KiAddProcessorDomain(KiTopologyCore,
+                                 ((KAFFINITY)Prcb->MultiThreadProcessorSet & Active) | Prcb->SetMember);
+        }
+    }
+
+    if (KiProcessorDomains.Count[KiTopologyPackage] == 0)
+    {
+        for (Index = 0; Index < PackageCount; Index++)
+        {
+            if (Packages[Index] & Active)
+                KiAddProcessorDomain(KiTopologyPackage, Packages[Index] & Active);
+        }
+
+        if (KiProcessorDomains.Count[KiTopologyPackage] == 0)
+            KiAddProcessorDomain(KiTopologyPackage, Active);
+    }
+
+    if (KiProcessorDomains.Count[KiTopologyModule] == 0)
+    {
+        RtlCopyMemory(KiProcessorDomains.Sets[KiTopologyModule],
+                      KiProcessorDomains.Sets[KiTopologyCore],
+                      sizeof(KiProcessorDomains.Sets[KiTopologyCore]));
+        KiProcessorDomains.Count[KiTopologyModule] = KiProcessorDomains.Count[KiTopologyCore];
+    }
+
+    if (KiProcessorDomains.Count[KiTopologyDie] == 0)
+    {
+        RtlCopyMemory(KiProcessorDomains.Sets[KiTopologyDie],
+                      KiProcessorDomains.Sets[KiTopologyPackage],
+                      sizeof(KiProcessorDomains.Sets[KiTopologyPackage]));
+        KiProcessorDomains.Count[KiTopologyDie] = KiProcessorDomains.Count[KiTopologyPackage];
+    }
+
+#if DBG
+    {
+        KAFFINITY Seen;
+        ULONG Level;
+
+        for (Level = 0; Level < KiTopologyLevels; Level++)
+        {
+            Seen = 0;
+            for (Index = 0; Index < KiProcessorDomains.Count[Level]; Index++)
+            {
+                ASSERT((Seen & KiProcessorDomains.Sets[Level][Index]) == 0);
+                Seen |= KiProcessorDomains.Sets[Level][Index];
+            }
+            ASSERT(Seen == Active);
+        }
+    }
+#endif
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiCaptureProcessorTopology(VOID)
+{
+    PKI_CACHE_RECORD Records;
+    PKAFFINITY Packages = NULL;
+    ULONG Count = 0, Sets = 0;
+
+    PAGED_CODE();
+
+    Records = ExAllocatePoolWithTag(PagedPool,
+                                    (KI_MAX_CACHE_RECORDS * sizeof(KI_CACHE_RECORD)) +
+                                    (MAXIMUM_PROCESSORS * sizeof(KAFFINITY)),
+                                    TAG_KE_CACHE);
+    if (Records != NULL)
+    {
+        Packages = (PKAFFINITY)(Records + KI_MAX_CACHE_RECORDS);
+        KiQueryProcessorTopology(Records, KI_MAX_CACHE_RECORDS, &Count, Packages, MAXIMUM_PROCESSORS, &Sets);
+    }
+
+    if (Count != 0)
+    {
+        KiProcessorCaches = ExAllocatePoolWithTag(NonPagedPoolNx,
+                                                  Count * sizeof(KI_CACHE_RECORD),
+                                                  TAG_KE_CACHE);
+        if (KiProcessorCaches != NULL)
+        {
+            RtlCopyMemory(KiProcessorCaches, Records, Count * sizeof(KI_CACHE_RECORD));
+            KiProcessorCacheCount = Count;
+        }
+    }
+
+    KiQueryProcessorDomains(&KiProcessorDomains);
+    KiCompleteProcessorDomains(Packages, Sets);
+
+    if (Records != NULL)
+        ExFreePoolWithTag(Records, TAG_KE_CACHE);
+}
+
+static
+VOID
+KiAppendDomainRecords(
+    _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer,
+    _Inout_ PULONG Offset,
+    _In_ LOGICAL_PROCESSOR_RELATIONSHIP Relationship,
+    _In_ KI_TOPOLOGY_LEVEL Level,
+    _In_ KAFFINITY Filter)
+{
+    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Processor.GroupMask) + sizeof(GROUP_AFFINITY);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
+    KAFFINITY Set;
+    ULONG Index;
+
+    for (Index = 0; Index < KiProcessorDomains.Count[Level]; Index++)
+    {
+        Set = KiProcessorDomains.Sets[Level][Index];
+        if (!(Set & Filter))
+            continue;
+
+        if (Buffer != NULL)
+        {
+            Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + *Offset);
+            RtlZeroMemory(Record, Size);
+            Record->Relationship = Relationship;
+            Record->Size = Size;
+            Record->Processor.Flags = ((Level == KiTopologyCore) && ((Set & (Set - 1)) != 0)) ? LTP_PC_SMT : 0;
+            Record->Processor.EfficiencyClass =
+                (Level == KiTopologyCore) ? KiProcessorBlock[(UCHAR)RtlFindLeastSignificantBit((ULONGLONG)Set)]->PowerState.ArchitecturalEfficiencyClass : 0;
+            Record->Processor.GroupCount = 1;
+            Record->Processor.GroupMask[0].Mask = Set;
+            Record->Processor.GroupMask[0].Group = 0;
+        }
+
+        *Offset += Size;
+    }
+}
+
+static
+VOID
+KiAppendCacheRecords(
+    _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer,
+    _Inout_ PULONG Offset,
+    _In_ KAFFINITY Filter)
+{
+    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Cache) + sizeof(CACHE_RELATIONSHIP);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
+    PKI_CACHE_RECORD Cache;
+    ULONG Index;
+
+    for (Index = 0; Index < KiProcessorCacheCount; Index++)
+    {
+        Cache = &KiProcessorCaches[Index];
+        if (!(Cache->ProcessorSet & Filter))
+            continue;
+
+        if (Buffer != NULL)
+        {
+            Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + *Offset);
+            RtlZeroMemory(Record, Size);
+            Record->Relationship = RelationCache;
+            Record->Size = Size;
+            Record->Cache.Level = Cache->Descriptor.Level;
+            Record->Cache.Associativity = Cache->Descriptor.Associativity;
+            Record->Cache.LineSize = Cache->Descriptor.LineSize;
+            Record->Cache.CacheSize = Cache->Descriptor.Size;
+            Record->Cache.Type = Cache->Descriptor.Type;
+            Record->Cache.GroupCount = 1;
+            Record->Cache.GroupMask.Mask = Cache->ProcessorSet & KeActiveProcessors;
+            Record->Cache.GroupMask.Group = 0;
+        }
+
+        *Offset += Size;
+    }
+}
+
+static
+VOID
+KiAppendNumaRecords(
+    _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer,
+    _Inout_ PULONG Offset,
+    _In_ KAFFINITY Filter)
+{
+    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, NumaNode) + sizeof(NUMA_NODE_RELATIONSHIP);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
+    USHORT HighestNode = KeQueryHighestNodeNumber();
+    GROUP_AFFINITY Affinity;
+    USHORT Node;
+
+    for (Node = 0; Node <= HighestNode; Node++)
+    {
+        KeQueryNodeActiveAffinity(Node, &Affinity, NULL);
+        if (!(Affinity.Mask & Filter))
+            continue;
+
+        if (Buffer != NULL)
+        {
+            Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + *Offset);
+            RtlZeroMemory(Record, Size);
+            Record->Relationship = RelationNumaNode;
+            Record->Size = Size;
+            Record->NumaNode.NodeNumber = Node;
+            Record->NumaNode.GroupCount = 1;
+            Record->NumaNode.GroupMask.Mask = Affinity.Mask;
+            Record->NumaNode.GroupMask.Group = Affinity.Group;
+        }
+
+        *Offset += Size;
+    }
+}
+
+static
+VOID
+KiAppendGroupRecord(
+    _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer,
+    _Inout_ PULONG Offset)
+{
+    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Group.GroupInfo) + sizeof(PROCESSOR_GROUP_INFO);
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
+
+    if (Buffer != NULL)
+    {
+        Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + *Offset);
+        RtlZeroMemory(Record, Size);
+        Record->Relationship = RelationGroup;
+        Record->Size = Size;
+        Record->Group.MaximumGroupCount = 1;
+        Record->Group.ActiveGroupCount = 1;
+        Record->Group.GroupInfo[0].MaximumProcessorCount = (UCHAR)KeQueryMaximumProcessorCount();
+        Record->Group.GroupInfo[0].ActiveProcessorCount = (UCHAR)KeQueryActiveProcessorCount(NULL);
+        Record->Group.GroupInfo[0].ActiveProcessorMask = KeActiveProcessors;
+    }
+
+    *Offset += Size;
+}
+
+/* Every relationship of one kind, or of all of them; RelationAll leaves out the dies, as Windows 11 does */
+static
+ULONG
+KiAppendProcessorRelationships(
+    _In_ LOGICAL_PROCESSOR_RELATIONSHIP RelationshipType,
+    _In_ KAFFINITY Filter,
+    _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer)
+{
+    BOOLEAN All = (RelationshipType == RelationAll);
+    ULONG Offset = 0;
+
+    if (All || (RelationshipType == RelationProcessorCore))
+        KiAppendDomainRecords(Buffer, &Offset, RelationProcessorCore, KiTopologyCore, Filter);
+    if (All || (RelationshipType == RelationProcessorModule))
+        KiAppendDomainRecords(Buffer, &Offset, RelationProcessorModule, KiTopologyModule, Filter);
+    if (RelationshipType == RelationProcessorDie)
+        KiAppendDomainRecords(Buffer, &Offset, RelationProcessorDie, KiTopologyDie, Filter);
+    if (All || (RelationshipType == RelationProcessorPackage))
+        KiAppendDomainRecords(Buffer, &Offset, RelationProcessorPackage, KiTopologyPackage, Filter);
+    if (All || (RelationshipType == RelationCache))
+        KiAppendCacheRecords(Buffer, &Offset, Filter);
+    if (All || (RelationshipType == RelationNumaNode) || (RelationshipType == RelationNumaNodeEx))
+        KiAppendNumaRecords(Buffer, &Offset, Filter);
+    if (All || (RelationshipType == RelationGroup))
+        KiAppendGroupRecord(Buffer, &Offset);
+
+    return Offset;
+}
+
 /*
  * @implemented
  *
  * Builds the SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX records describing the
- * single-group / single-node topology, honoring the length-probe protocol.
+ * single-group topology, honoring the length-probe protocol.
  */
 NTSTATUS
 NTAPI
@@ -1383,24 +1689,16 @@ KeQueryLogicalProcessorRelationship(
     _Out_writes_bytes_opt_(*Length) PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Information,
     _Inout_ PULONG Length)
 {
-    const ULONG CoreSize = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Processor.GroupMask) + sizeof(GROUP_AFFINITY);
-    const ULONG NumaSize = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, NumaNode) + sizeof(NUMA_NODE_RELATIONSHIP);
-    const ULONG GroupSize = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Group.GroupInfo) + sizeof(PROCESSOR_GROUP_INFO);
     KAFFINITY ActiveMask = KeActiveProcessors;
-    ULONG ActiveCount = KeQueryActiveProcessorCount(NULL);
-    ULONG MaximumCount = KeQueryMaximumProcessorCount();
-    KAFFINITY CoreMask = ActiveMask;
-    ULONG CoreCount = ActiveCount;
-    ULONG RequiredLength = 0;
-    ULONG Offset = 0;
-    PUCHAR Buffer = (PUCHAR)Information;
-    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
-    ULONG Index;
+    KAFFINITY Filter = ActiveMask;
+    ULONG RequiredLength;
 
     if (Length == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    /* An explicit processor restricts the enumerated cores to that processor. */
+    ASSERT(KiProcessorDomains.Count[KiTopologyPackage] != 0);
+
+    /* An explicit processor restricts the records to the ones that include it. */
     if (ProcessorNumber != NULL)
     {
         if ((ProcessorNumber->Group != 0) ||
@@ -1410,91 +1708,18 @@ KeQueryLogicalProcessorRelationship(
             return STATUS_INVALID_PARAMETER;
         }
 
-        CoreMask = (KAFFINITY)1 << ProcessorNumber->Number;
-        CoreCount = 1;
+        Filter = (KAFFINITY)1 << ProcessorNumber->Number;
     }
 
-    /* Compute the required byte count for the requested relationship(s). */
-    if ((RelationshipType == RelationProcessorCore) || (RelationshipType == RelationAll))
-        RequiredLength += CoreSize * CoreCount;
-    if ((RelationshipType == RelationProcessorPackage) || (RelationshipType == RelationAll))
-        RequiredLength += CoreSize;
-    if ((RelationshipType == RelationNumaNode) || (RelationshipType == RelationAll))
-        RequiredLength += NumaSize;
-    if ((RelationshipType == RelationGroup) || (RelationshipType == RelationAll))
-        RequiredLength += GroupSize;
-
+    RequiredLength = KiAppendProcessorRelationships(RelationshipType, Filter, NULL);
     if ((Information == NULL) || (*Length < RequiredLength))
     {
         *Length = RequiredLength;
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    /* Processor cores: one record per active core in the enumerated set. */
-    if ((RelationshipType == RelationProcessorCore) || (RelationshipType == RelationAll))
-    {
-        for (Index = 0; Index < (8 * sizeof(KAFFINITY)); Index++)
-        {
-            if (!((CoreMask >> Index) & 1))
-                continue;
-
-            Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + Offset);
-            RtlZeroMemory(Record, CoreSize);
-            Record->Relationship = RelationProcessorCore;
-            Record->Size = CoreSize;
-            Record->Processor.Flags = 0;
-            Record->Processor.EfficiencyClass = 0;
-            Record->Processor.GroupCount = 1;
-            Record->Processor.GroupMask[0].Mask = (KAFFINITY)1 << Index;
-            Record->Processor.GroupMask[0].Group = 0;
-            Offset += CoreSize;
-        }
-    }
-
-    /* Single physical package spanning all active processors. */
-    if ((RelationshipType == RelationProcessorPackage) || (RelationshipType == RelationAll))
-    {
-        Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + Offset);
-        RtlZeroMemory(Record, CoreSize);
-        Record->Relationship = RelationProcessorPackage;
-        Record->Size = CoreSize;
-        Record->Processor.Flags = 0;
-        Record->Processor.EfficiencyClass = 0;
-        Record->Processor.GroupCount = 1;
-        Record->Processor.GroupMask[0].Mask = ActiveMask;
-        Record->Processor.GroupMask[0].Group = 0;
-        Offset += CoreSize;
-    }
-
-    /* Single NUMA node (node 0). */
-    if ((RelationshipType == RelationNumaNode) || (RelationshipType == RelationAll))
-    {
-        Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + Offset);
-        RtlZeroMemory(Record, NumaSize);
-        Record->Relationship = RelationNumaNode;
-        Record->Size = NumaSize;
-        Record->NumaNode.NodeNumber = 0;
-        Record->NumaNode.GroupMask.Mask = ActiveMask;
-        Record->NumaNode.GroupMask.Group = 0;
-        Offset += NumaSize;
-    }
-
-    /* Single processor group (group 0). */
-    if ((RelationshipType == RelationGroup) || (RelationshipType == RelationAll))
-    {
-        Record = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)(Buffer + Offset);
-        RtlZeroMemory(Record, GroupSize);
-        Record->Relationship = RelationGroup;
-        Record->Size = GroupSize;
-        Record->Group.MaximumGroupCount = 1;
-        Record->Group.ActiveGroupCount = 1;
-        Record->Group.GroupInfo[0].MaximumProcessorCount = (UCHAR)MaximumCount;
-        Record->Group.GroupInfo[0].ActiveProcessorCount = (UCHAR)ActiveCount;
-        Record->Group.GroupInfo[0].ActiveProcessorMask = ActiveMask;
-        Offset += GroupSize;
-    }
-
-    *Length = Offset;
+    *Length = KiAppendProcessorRelationships(RelationshipType, Filter, (PUCHAR)Information);
+    ASSERT(*Length == RequiredLength);
     return STATUS_SUCCESS;
 }
 
@@ -1541,17 +1766,15 @@ KeSetSelectedCpuSetsThread(
     _In_ ULONG CpuSetCount,
     _In_reads_(CpuSetCount) PULONG64 CpuSetMasks)
 {
-    KAFFINITY Active = KeActiveProcessors;
+    KAFFINITY Selected;
+    KAFFINITY Affinity;
+    KIRQL OldIrql;
     ULONG i;
 
     if (Thread == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    /* An empty selection clears any restriction, which is the honest default. */
-    if (CpuSetCount == 0)
-        return STATUS_SUCCESS;
-
-    if (CpuSetMasks == NULL)
+    if ((CpuSetCount != 0) && (CpuSetMasks == NULL))
         return STATUS_INVALID_PARAMETER;
 
     /* Only group 0 exists, so no other group may carry a selection. */
@@ -1561,16 +1784,24 @@ KeSetSelectedCpuSetsThread(
             return STATUS_NOT_SUPPORTED;
     }
 
-    if (CpuSetMasks[0] == 0)
-        return STATUS_SUCCESS;
+    Selected = (CpuSetCount != 0) ? (KAFFINITY)CpuSetMasks[0] : 0;
+    if ((Selected & ~KeActiveProcessors) != 0)
+        return STATUS_INVALID_PARAMETER;
 
-    /* A selection covering every active processor imposes no real restriction.
-     * A proper subset would require per-thread CPU-set state that cannot be
-     * stored without changing the KTHREAD layout, so it is honestly rejected. */
-    if ((CpuSetMasks[0] & Active) == Active)
-        return STATUS_SUCCESS;
+    OldIrql = KiAcquireDispatcherLock();
+    KiAcquireThreadLock(Thread);
 
-    return STATUS_NOT_SUPPORTED;
+    Affinity = KiThreadUserAffinityMask(Thread);
+    if ((Affinity & Selected) != 0)
+        Affinity &= Selected;
+
+    if (!Thread->SystemAffinityActive)
+        KiSetAffinityThread(Thread, Affinity);
+
+    KiReleaseThreadLock(Thread);
+    KiReleaseDispatcherLock(OldIrql);
+
+    return STATUS_SUCCESS;
 }
 
 /*

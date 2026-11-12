@@ -141,6 +141,43 @@ static void DoTestComputerName(HKEY hKeyHN, HKEY hKeyCN, LPCWSTR pszNewName, BOO
     ok_long(Error, ERROR_SUCCESS);
 }
 
+static void DoTestDnsSuffix(HKEY hKeyHN, LPCWSTR pszNewSuffix, BOOL bValid)
+{
+    LONG Error, OldError;
+    BOOL ret;
+    DWORD cbData, cbOld, dwType;
+    WCHAR szOld[MAX_PATH], szNew[MAX_PATH];
+
+    trace("Testing DNS suffix '%S':\n", pszNewSuffix);
+
+    cbOld = sizeof(szOld);
+    OldError = RegQueryValueExW(hKeyHN, L"NV Domain", NULL, &dwType, (LPBYTE)szOld, &cbOld);
+
+    SetLastError(0xDEADFACE);
+    ret = SetComputerNameExW(ComputerNamePhysicalDnsDomain, pszNewSuffix);
+    ok_int(ret, bValid);
+    if (bValid)
+        ok_long(GetLastError(), ERROR_SUCCESS);
+    else
+        ok_long(GetLastError(), ERROR_INVALID_PARAMETER);
+
+    if (bValid)
+    {
+        szNew[0] = UNICODE_NULL;
+        cbData = sizeof(szNew);
+        Error = RegQueryValueExW(hKeyHN, L"NV Domain", NULL, NULL, (LPBYTE)szNew, &cbData);
+        ok_long(Error, ERROR_SUCCESS);
+        ok(lstrcmpW(szNew, pszNewSuffix) == 0, "NV Domain is '%S', expected '%S'\n", szNew, pszNewSuffix);
+    }
+
+    if (OldError == ERROR_SUCCESS)
+        Error = RegSetValueExW(hKeyHN, L"NV Domain", 0, dwType, (LPBYTE)szOld, cbOld);
+    else
+        Error = RegDeleteValueW(hKeyHN, L"NV Domain");
+    ok(Error == ERROR_SUCCESS || (OldError != ERROR_SUCCESS && Error == ERROR_FILE_NOT_FOUND),
+       "Restoring NV Domain failed with %ld\n", Error);
+}
+
 START_TEST(SetComputerNameExW)
 {
     HKEY hKeyHN, hKeyCN;
@@ -272,6 +309,14 @@ START_TEST(SetComputerNameExW)
         szName[2] = UNICODE_NULL;
         DoTestComputerName(hKeyHN, hKeyCN, szName, FALSE);
     }
+
+    DoTestDnsSuffix(hKeyHN, L"", TRUE);
+    DoTestDnsSuffix(hKeyHN, L"example", TRUE);
+    DoTestDnsSuffix(hKeyHN, L"libernt-apitest.example.com", TRUE);
+    DoTestDnsSuffix(hKeyHN, L"corp.libernt-apitest.example", TRUE);
+    DoTestDnsSuffix(hKeyHN, L"bad..example.com", FALSE);
+    DoTestDnsSuffix(hKeyHN, L"bad suffix.example.com", FALSE);
+    DoTestDnsSuffix(hKeyHN, L"bad:suffix.example.com", FALSE);
 
     /* Close keys */
     Error = RegCloseKey(hKeyHN);

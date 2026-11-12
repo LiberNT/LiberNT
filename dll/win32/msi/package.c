@@ -1453,6 +1453,10 @@ UINT MSI_OpenPackageW(LPCWSTR szPackage, DWORD dwOptions, MSIPACKAGE **pPackage)
         {
             if (GetFileAttributesW( file ) == INVALID_FILE_ATTRIBUTES)
                 return ERROR_FILE_NOT_FOUND;
+#ifdef __REACTOS__
+            if (r == ERROR_FUNCTION_FAILED)
+                return ERROR_INSTALL_PACKAGE_INVALID;
+#endif
             return r;
         }
         r = get_local_package( db, localfile );

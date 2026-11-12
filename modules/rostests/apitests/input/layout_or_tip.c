@@ -328,6 +328,48 @@ static void TestParsing(void)
     check_str(GetLanguages, "en-US|ja|ko|zh-Hans-CN|zh-Hant-TW");
 }
 
+#define SDLOT_NOAPPLYTOCURRENTSESSION 0x00000001
+#define SDLOT_APPLYTOCURRENTTHREAD    0x00000002
+
+static HKL GetDefaultInputLang(void)
+{
+    HKL hkl = NULL;
+
+    SystemParametersInfoW(SPI_GETDEFAULTINPUTLANG, 0, &hkl, 0);
+    return hkl;
+}
+
+static void TestDefaultFlags(void)
+{
+    HKL hklSaved = GetDefaultInputLang();
+    HKL hklUs = (HKL)(ULONG_PTR)0x04090409, hklDe = (HKL)(ULONG_PTR)0x04070407;
+
+    SetState(L"en-US", L"0409:00000409", L"00000409");
+    check_install(L"0407:00000407", 0, TRUE);
+    ActivateKeyboardLayout(hklUs, 0);
+
+    ok_int(pSetDefaultLayoutOrTip(L"0409:00000409", 0), TRUE);
+    ok(GetDefaultInputLang() == hklUs, "flags 0: default input language %p\n", GetDefaultInputLang());
+
+    ok_int(pSetDefaultLayoutOrTip(L"0407:00000407", SDLOT_NOAPPLYTOCURRENTSESSION), TRUE);
+    check_str(GetPreload, "00000407|00000409");
+    ok(GetDefaultInputLang() == hklUs, "NOAPPLYTOCURRENTSESSION: default input language %p\n", GetDefaultInputLang());
+
+    ok_int(pSetDefaultLayoutOrTip(L"0407:00000407", SDLOT_APPLYTOCURRENTTHREAD), TRUE);
+    ok(GetDefaultInputLang() == hklDe, "APPLYTOCURRENTTHREAD: default input language %p\n", GetDefaultInputLang());
+    ok(GetKeyboardLayout(0) == hklDe, "APPLYTOCURRENTTHREAD: thread layout %p\n", GetKeyboardLayout(0));
+
+    ActivateKeyboardLayout(hklUs, 0);
+    ok_int(pSetDefaultLayoutOrTip(L"0409:00000409", 0), TRUE);
+    ok(GetDefaultInputLang() == hklUs, "flags 0 again: default input language %p\n", GetDefaultInputLang());
+    ok_int(pSetDefaultLayoutOrTip(L"0407:00000407", SDLOT_NOAPPLYTOCURRENTSESSION | SDLOT_APPLYTOCURRENTTHREAD), TRUE);
+    ok(GetDefaultInputLang() == hklUs, "both flags: default input language %p\n", GetDefaultInputLang());
+    ok(GetKeyboardLayout(0) == hklDe, "both flags: thread layout %p\n", GetKeyboardLayout(0));
+
+    ActivateKeyboardLayout(hklUs, 0);
+    SystemParametersInfoW(SPI_SETDEFAULTINPUTLANG, 0, &hklSaved, 0);
+}
+
 static void TestMore(void)
 {
     TestParsing();
@@ -498,6 +540,7 @@ START_TEST(layout_or_tip)
     check_str(GetPreload, "00000407");
 
     TestMore();
+    TestDefaultFlags();
 
     RestoreKey(s_szUserProfile, L"UserProfile");
     RestoreKey(s_szPreload, L"Preload");

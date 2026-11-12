@@ -81,6 +81,7 @@ UefiReadMemoryMap(
     for (Retry = 0; Retry < UEFI_MAP_RETRIES; Retry++)
     {
         *MapSize = UefiMapCapacity;
+        *DescriptorSize = sizeof(EFI_MEMORY_DESCRIPTOR);
         Status = BootServices->GetMemoryMap(MapSize,
                                             UefiMap,
                                             MapKey,

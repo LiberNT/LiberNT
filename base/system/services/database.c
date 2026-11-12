@@ -596,6 +596,81 @@ done:
 }
 
 
+static
+BOOL
+ScmSystemProfileHiveExists(VOID)
+{
+    WCHAR szRawPath[MAX_PATH];
+    WCHAR szHivePath[MAX_PATH];
+    DWORD dwSize = sizeof(szRawPath);
+    DWORD dwType;
+    DWORD cch;
+    HKEY hKey;
+    LONG Error;
+
+    Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\S-1-5-18",
+                          0,
+                          KEY_QUERY_VALUE,
+                          &hKey);
+    if (Error != ERROR_SUCCESS)
+        return FALSE;
+
+    Error = RegQueryValueExW(hKey, L"ProfileImagePath", NULL, &dwType, (LPBYTE)szRawPath, &dwSize);
+    RegCloseKey(hKey);
+    if (Error != ERROR_SUCCESS || (dwType != REG_SZ && dwType != REG_EXPAND_SZ) ||
+        dwSize < sizeof(WCHAR) || dwSize > sizeof(szRawPath))
+    {
+        return FALSE;
+    }
+    szRawPath[ARRAYSIZE(szRawPath) - 1] = UNICODE_NULL;
+
+    cch = ExpandEnvironmentStringsW(szRawPath, szHivePath, ARRAYSIZE(szHivePath));
+    if (cch == 0 || cch > ARRAYSIZE(szHivePath) ||
+        FAILED(StringCchCatW(szHivePath, ARRAYSIZE(szHivePath), L"\\ntuser.dat")))
+    {
+        return FALSE;
+    }
+
+    return GetFileAttributesW(szHivePath) != INVALID_FILE_ATTRIBUTES;
+}
+
+
+/* The hive is made by setup from the default profile, so it is only loaded, never made here */
+VOID
+ScmLoadSystemProfile(VOID)
+{
+    PROFILEINFOW ProfileInfo;
+    HANDLE hToken;
+
+    /* TODO: on the first boot of a preinstalled image setup makes the hive only after the first services started, which then get the Default profile */
+    if (!ScmSystemProfileHiveExists())
+        return;
+
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_QUERY | TOKEN_IMPERSONATE | TOKEN_DUPLICATE | TOKEN_ADJUST_PRIVILEGES,
+                          &hToken))
+    {
+        DPRINT1("OpenProcessToken() failed (Error %lu)\n", GetLastError());
+        return;
+    }
+
+    ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
+    ProfileInfo.dwSize = sizeof(ProfileInfo);
+    ProfileInfo.dwFlags = PI_NOUI;
+    ProfileInfo.lpUserName = L"SYSTEM";
+
+    ScmEnableBackupRestorePrivileges(hToken, TRUE);
+    if (!LoadUserProfileW(hToken, &ProfileInfo))
+        DPRINT1("LoadUserProfileW() for the system account failed (Error %lu)\n", GetLastError());
+    else
+        RegCloseKey(ProfileInfo.hProfile);
+    ScmEnableBackupRestorePrivileges(hToken, FALSE);
+
+    CloseHandle(hToken);
+}
+
+
 static DWORD
 ScmCreateOrReferenceServiceImage(PSERVICE pService)
 {
@@ -925,6 +1000,24 @@ ScmImageHasServices(PSERVICE_IMAGE pServiceImage)
     return FALSE;
 }
 
+/* A LocalSystem service gets the environment of that account, the one the manager runs as, with its profile */
+static BOOL
+ScmCreateServiceEnvironment(HANDLE hToken, LPVOID *lpEnvironment)
+{
+    HANDLE hSystemToken;
+    BOOL bResult;
+
+    if (hToken != NULL)
+        return CreateEnvironmentBlock(lpEnvironment, hToken, FALSE);
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &hSystemToken))
+        return FALSE;
+
+    bResult = CreateEnvironmentBlock(lpEnvironment, hSystemToken, TRUE);
+    CloseHandle(hSystemToken);
+    return bResult;
+}
+
 /* A recovery program runs under the account of the service, like its processes. */
 DWORD
 ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
@@ -949,7 +1042,7 @@ ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
     {
         ZeroMemory(&StartupInfo, sizeof(StartupInfo));
         StartupInfo.cb = sizeof(StartupInfo);
-        if (!CreateEnvironmentBlock(&lpEnvironment, Image.hToken, Image.hToken == NULL))
+        if (!ScmCreateServiceEnvironment(Image.hToken, &lpEnvironment))
             lpEnvironment = NULL;
 
         if (Image.hToken != NULL)
@@ -2274,7 +2367,7 @@ ScmStartUserModeService(PSERVICE Service,
     {
         /* No user token: Run the service under the LocalSystem account */
 
-        if (!CreateEnvironmentBlock(&lpEnvironment, NULL, TRUE))
+        if (!ScmCreateServiceEnvironment(NULL, &lpEnvironment))
         {
             /* We failed, run the service with the current environment */
             DPRINT1("CreateEnvironmentBlock() failed with error %d; service '%S' will run with current environment\n",
@@ -2375,6 +2468,101 @@ Quit:
 static DWORD
 ScmLoadService(PSERVICE Service,
                DWORD argc,
+               const PCWSTR* argv);
+
+
+static
+DWORD
+ScmWaitForDependency(
+    _In_ PSERVICE Dependency)
+{
+    ULONGLONG Deadline = GetTickCount64() + PipeTimeout;
+    ULONGLONG Now;
+    DWORD dwState;
+
+    EnterCriticalSection(&ScmStatusChangeLock);
+    for (;;)
+    {
+        dwState = Dependency->Status.dwCurrentState;
+        Now = GetTickCount64();
+        if (dwState != SERVICE_START_PENDING || Now >= Deadline)
+            break;
+        SleepConditionVariableCS(&ScmStatusChanged, &ScmStatusChangeLock, (DWORD)(Deadline - Now));
+    }
+    LeaveCriticalSection(&ScmStatusChangeLock);
+
+    if (dwState == SERVICE_RUNNING)
+        return ERROR_SUCCESS;
+    DPRINT1("Dependency %S of a starting service is in state %lu\n", Dependency->lpServiceName, dwState);
+    return ERROR_SERVICE_DEPENDENCY_FAIL;
+}
+
+
+static
+DWORD
+ScmStartDependencies(
+    _In_ PSERVICE Service)
+{
+    static ULONG Depth;
+    PSERVICE Dependency;
+    LPWSTR lpServices = NULL;
+    LPWSTR lpName;
+    HKEY hServiceKey;
+    DWORD dwError = ERROR_SUCCESS;
+
+    if (ScmOpenServiceKey(Service->lpServiceName, KEY_READ, &hServiceKey) != ERROR_SUCCESS)
+        return ERROR_SUCCESS;
+    ScmReadString(hServiceKey, L"DependOnService", &lpServices);
+    RegCloseKey(hServiceKey);
+    if (lpServices == NULL)
+        return ERROR_SUCCESS;
+
+    /* TODO: DependOnGroup is not checked before a start. */
+    if (++Depth > 32)
+    {
+        dwError = ERROR_CIRCULAR_DEPENDENCY;
+        goto Done;
+    }
+    for (lpName = lpServices; *lpName != UNICODE_NULL; lpName += wcslen(lpName) + 1)
+    {
+        Dependency = ScmGetServiceEntryByName(lpName);
+        if (Dependency == NULL)
+        {
+            DPRINT1("Service %S depends on the missing service %S\n", Service->lpServiceName, lpName);
+            dwError = ERROR_SERVICE_DEPENDENCY_DELETED;
+            break;
+        }
+        if (Dependency == Service)
+            continue;
+        if (Dependency->Status.dwCurrentState == SERVICE_STOPPED)
+        {
+            if (Dependency->dwStartType == SERVICE_DISABLED)
+            {
+                dwError = ERROR_SERVICE_DEPENDENCY_FAIL;
+                break;
+            }
+            dwError = ScmLoadService(Dependency, 0, NULL);
+            if (dwError != ERROR_SUCCESS && dwError != ERROR_SERVICE_ALREADY_RUNNING)
+            {
+                dwError = dwError == ERROR_CIRCULAR_DEPENDENCY ? dwError : ERROR_SERVICE_DEPENDENCY_FAIL;
+                break;
+            }
+        }
+        dwError = ScmWaitForDependency(Dependency);
+        if (dwError != ERROR_SUCCESS)
+            break;
+    }
+
+Done:
+    --Depth;
+    HeapFree(GetProcessHeap(), 0, lpServices);
+    return dwError;
+}
+
+
+static DWORD
+ScmLoadService(PSERVICE Service,
+               DWORD argc,
                const PCWSTR* argv)
 {
     PSERVICE_GROUP Group = Service->lpGroup;
@@ -2400,7 +2588,12 @@ ScmLoadService(PSERVICE Service,
 
     DPRINT("Service->Type: %lu\n", Service->Status.dwServiceType);
 
-    if (Service->Status.dwServiceType & SERVICE_DRIVER)
+    dwError = ScmStartDependencies(Service);
+    if (dwError != ERROR_SUCCESS)
+    {
+        DPRINT1("Service %S cannot start, its dependencies failed: %lu\n", Service->lpServiceName, dwError);
+    }
+    else if (Service->Status.dwServiceType & SERVICE_DRIVER)
     {
         /* Start the driver */
         dwError = ScmStartDriver(Service);

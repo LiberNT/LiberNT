@@ -924,3 +924,13 @@ KiDisplayBugCheckRegisterState(
         KiDisplayAndLogBugCheckString(Line);
     }
 }
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    /* TODO: report the core types of hybrid processors as efficiency classes */
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+}

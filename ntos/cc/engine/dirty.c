@@ -326,11 +326,11 @@ CcDirtyCanWrite(
 {
     LONG64 Pages = ((LONG64)BytesToWrite + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
-    if (CC_ATOMIC_READ64(&Cache->TotalDirtyPages) + Pages > Cache->DirtyPageThreshold)
+    if (CC_ATOMIC_READ64(&Cache->TotalDirtyPages) + min(Pages, Cache->DirtyPageThreshold) > Cache->DirtyPageThreshold)
         return FALSE;
 
     if (Map != NULL && Map->DirtyPageThreshold != 0 &&
-        CC_ATOMIC_READ64(&Map->DirtyPages) + Pages > Map->DirtyPageThreshold)
+        CC_ATOMIC_READ64(&Map->DirtyPages) + min(Pages, Map->DirtyPageThreshold) > Map->DirtyPageThreshold)
     {
         return FALSE;
     }

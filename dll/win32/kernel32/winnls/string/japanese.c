@@ -221,6 +221,18 @@ static PCJAPANESE_ERA JapaneseEra_Load(DWORD *pdwCount)
     return s_JapaneseEraTable;
 }
 
+PCJAPANESE_ERA JapaneseEra_GetTable(DWORD *pdwCount)
+{
+    PCJAPANESE_ERA pTable = JapaneseEra_Load(pdwCount);
+
+    if (pTable == NULL || *pdwCount == 0 || *pdwCount > JAPANESE_ERA_MAX)
+    {
+        *pdwCount = 0;
+        return NULL;
+    }
+    return pTable;
+}
+
 static BOOL JapaneseEra_ToSystemTime(PCJAPANESE_ERA pEra, LPSYSTEMTIME pst)
 {
     ASSERT(pEra != NULL);

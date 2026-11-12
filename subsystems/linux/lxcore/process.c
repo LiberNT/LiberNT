@@ -345,8 +345,8 @@ LxProcessCreate(
     Process->ExitSignal = LX_SIGCHLD;
     Process->LoginUid = MAXULONG;
     Process->SessionId = MAXULONG;
-    Process->CapBounding = LX_CAP_FULL_SET & ~(1ULL << LX_CAP_SYS_TIME);
-    Process->CapPermitted = Process->CapEffective = Process->CapBounding;
+    Process->Cred.CapBounding = LX_CAP_FULL_SET & ~(1ULL << LX_CAP_SYS_TIME);
+    Process->Cred.CapPermitted = Process->Cred.CapEffective = Process->Cred.CapBounding;
     Process->StartTime = (LONG64)KeQueryInterruptTime();
     LxProcessDefaultLimits(Process->Limits);
     LxNsAttachRoot(Process, Instance);
@@ -388,19 +388,7 @@ LxProcessFork(
     RtlCopyMemory(Process->Comm, Parent->Comm, sizeof(Process->Comm));
     RtlCopyMemory(Process->SigAction, Parent->SigAction, sizeof(Process->SigAction));
     RtlCopyMemory(Process->Limits, Parent->Limits, sizeof(Process->Limits));
-    RtlCopyMemory(Process->Uid, Parent->Uid, sizeof(Process->Uid));
-    RtlCopyMemory(Process->Gid, Parent->Gid, sizeof(Process->Gid));
-    Process->Fsuid = Parent->Fsuid;
-    Process->Fsgid = Parent->Fsgid;
-    Process->GroupCount = Parent->GroupCount;
-    RtlCopyMemory(Process->Groups, Parent->Groups, sizeof(Process->Groups));
-    Process->NoNewPrivs = Parent->NoNewPrivs;
-    Process->SecureBits = Parent->SecureBits;
-    Process->CapInheritable = Parent->CapInheritable;
-    Process->CapPermitted = Parent->CapPermitted;
-    Process->CapEffective = Parent->CapEffective;
-    Process->CapBounding = Parent->CapBounding;
-    Process->CapAmbient = Parent->CapAmbient;
+    Process->Cred = *LxProcessCred(Parent);
     Process->Dumpable = Parent->Dumpable;
     Process->CoreFilter = Parent->CoreFilter;
     Process->OomScoreAdj = Parent->OomScoreAdj;
@@ -554,6 +542,7 @@ LxThreadCreateCommon(
 
     LxProcessReference(Process);
     Thread->Process = Process;
+    Thread->Cred = &Process->Cred;
     InitializeListHead(&Thread->Link);
     Thread->AltStack.Flags = LX_SS_DISABLE;
     Thread->Sched.UtilMax = 1024;
@@ -910,6 +899,74 @@ LxProcessPublishName(
 }
 
 static
+ULONG
+LxProcessLiveTid(
+    _In_ PLX_PROCESS Process)
+{
+    if (IsListEmpty(&Process->Threads))
+        return Process->Pid;
+    return CONTAINING_RECORD(Process->Threads.Flink, LX_THREAD, Link)->Tid;
+}
+
+static
+VOID
+LxProcessSendParentDeath(
+    _In_ PLX_PROCESS Child)
+{
+    ULONG64 Signals = 0;
+    PLIST_ENTRY Entry;
+    ULONG Signal;
+
+    ExAcquireFastMutex(&Child->Lock);
+    for (Entry = Child->Threads.Flink; Entry != &Child->Threads; Entry = Entry->Flink)
+    {
+        PLX_THREAD Thread = CONTAINING_RECORD(Entry, LX_THREAD, Link);
+
+        if ((Thread->PdeathSignal != 0) && (Thread->PdeathSignal <= LX_NSIG))
+            Signals |= 1ULL << (Thread->PdeathSignal - 1);
+    }
+    if (Child->Exited)
+        Signals = 0;
+    ExReleaseFastMutex(&Child->Lock);
+    for (Signal = 1; Signal <= LX_NSIG; Signal++)
+    {
+        if (Signals & (1ULL << (Signal - 1)))
+            LxSignalSend(Child, NULL, (LONG)Signal, NULL);
+    }
+}
+
+VOID
+LxProcessThreadExited(
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG Tid)
+{
+    for (;;)
+    {
+        PLX_PROCESS Orphan = NULL;
+        PLIST_ENTRY Entry;
+
+        ExAcquireFastMutex(&Process->Lock);
+        for (Entry = Process->Children.Flink; Entry != &Process->Children; Entry = Entry->Flink)
+        {
+            PLX_CHILD Child = CONTAINING_RECORD(Entry, LX_CHILD, Link);
+
+            if (Child->Lx->ParentTid == Tid)
+            {
+                Child->Lx->ParentTid = LxProcessLiveTid(Process);
+                Orphan = Child->Lx;
+                LxProcessReference(Orphan);
+                break;
+            }
+        }
+        ExReleaseFastMutex(&Process->Lock);
+        if (Orphan == NULL)
+            break;
+        LxProcessSendParentDeath(Orphan);
+        LxProcessDereference(Orphan);
+    }
+}
+
+static
 PLX_PROCESS
 LxProcessFindReaper(
     _In_ PLX_PROCESS Process)
@@ -994,7 +1051,7 @@ LxProcessNotifyParent(
             Info.Child.Status = (Status >> 8) & 0xFF;
         }
         Info.Child.Pid = (LONG)LxPidNr(Parent, Child);
-        Info.Child.Uid = Child->Uid[0];
+        Info.Child.Uid = Child->Cred.Uid[0];
         LxSignalSend(Parent, NULL, (LONG)Child->ExitSignal, &Info);
     }
     LxPollWake(&Parent->ChildPoll, LX_POLLIN);
@@ -1061,9 +1118,7 @@ LxProcessExited(
         {
             PLX_CHILD Child = CONTAINING_RECORD(RemoveHeadList(&Orphans), LX_CHILD, Link);
 
-            /* FIXME: Linux sends the parent-death signal when the creating thread exits, not the whole process */
-            if (!Child->Lx->Exited && (Child->Lx->PdeathSignal != 0))
-                LxSignalSend(Child->Lx, NULL, (LONG)Child->Lx->PdeathSignal, NULL);
+            LxProcessSendParentDeath(Child->Lx);
             if ((Reaper == NULL) || Reaper->Exited)
             {
                 LxProcessUnregister(Child->Lx);
@@ -1073,6 +1128,7 @@ LxProcessExited(
             }
             Child->Lx->ParentPid = Reaper->Pid;
             ExAcquireFastMutex(&Reaper->Lock);
+            Child->Lx->ParentTid = LxProcessLiveTid(Reaper);
             InsertTailList(&Reaper->Children, &Child->Link);
             ExReleaseFastMutex(&Reaper->Lock);
             if (Child->Lx->Exited)

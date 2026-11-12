@@ -697,6 +697,8 @@ QueryDeviceInformation(
         Id = AllocatePool(sizeof(MOUNTDEV_UNIQUE_ID));
         if (!Id)
         {
+            if (DeviceName && DeviceName->Length)
+                FreePool(DeviceName->Buffer);
             ObDereferenceObject(DeviceObject);
             ObDereferenceObject(FileObject);
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -721,6 +723,8 @@ QueryDeviceInformation(
             Id = AllocatePool(Size);
             if (!Id)
             {
+                if (DeviceName && DeviceName->Length)
+                    FreePool(DeviceName->Buffer);
                 ObDereferenceObject(DeviceObject);
                 ObDereferenceObject(FileObject);
                 return STATUS_INSUFFICIENT_RESOURCES;
@@ -745,7 +749,7 @@ QueryDeviceInformation(
         {
             /* In case of failure, also free the rest */
             FreePool(Id);
-            if (DeviceName->Length)
+            if (DeviceName && DeviceName->Length)
                 FreePool(DeviceName->Buffer);
 
             ObDereferenceObject(DeviceObject);

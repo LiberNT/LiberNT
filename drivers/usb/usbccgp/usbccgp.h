@@ -7,6 +7,8 @@
 #include <usb100.h>
 #include <usbdlib.h>
 #include <reactos/drivers/dumpstor.h>
+#include <reactos/drivers/usbcapability.h>
+#include <reactos/drivers/usbmsos20.h>
 
 #include <stdio.h>
 
@@ -43,6 +45,8 @@ typedef struct
     KSPIN_LOCK Lock;                                         // reset / cycle port list lock
     PUCHAR MsCompatDescriptor;
     ULONG MsCompatDescriptorLength;
+    PUCHAR MsOs20DescriptorSet;
+    ULONG MsOs20DescriptorSetLength;
 }FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 #define USBCCPG_TAG 'cbsu'
@@ -106,6 +110,11 @@ NTSTATUS
 AllocateInterfaceDescriptorsArray(
     IN PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor,
     OUT PUSB_INTERFACE_DESCRIPTOR **OutArray);
+
+VOID
+USBCCGP_ApplyMsOs20Properties(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PPDO_DEVICE_EXTENSION PDODeviceExtension);
 
 /* misc.c */
 

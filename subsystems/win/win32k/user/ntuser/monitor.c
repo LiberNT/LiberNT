@@ -556,6 +556,8 @@ NtUserEnumDisplayMonitors(
             SetLastNtError(Status);
             return FALSE;
         }
+        if (hdc == NULL && UserDpiIsVirtualCaller())
+            UserDpiRectToPhysical((PRECT)&rc);
     }
 
     if (hdc != NULL)
@@ -641,6 +643,12 @@ NtUserEnumDisplayMonitors(
             prcMonitorList[i].top -= DcRect.top;
             prcMonitorList[i].bottom -= DcRect.top;
         }
+    }
+
+    if (hdc == NULL && UserDpiIsVirtualCaller())
+    {
+        for (i = 0; i < cMonitors; i++)
+            UserDpiRectToLogical((PRECT)&prcMonitorList[i]);
     }
 
     for (i = 0; i < cMonitors; i++)
@@ -739,6 +747,11 @@ NtUserGetMonitorInfo(
     /* Fill monitor info */
     MonitorInfo.rcMonitor = pMonitor->rcMonitor;
     MonitorInfo.rcWork = pMonitor->rcWork;
+    if (UserDpiIsVirtualCaller())
+    {
+        UserDpiRectToLogical(&MonitorInfo.rcMonitor);
+        UserDpiRectToLogical(&MonitorInfo.rcWork);
+    }
     MonitorInfo.dwFlags = 0;
     if (pMonitor->IsPrimary)
         MonitorInfo.dwFlags |= MONITORINFOF_PRIMARY;
@@ -805,6 +818,9 @@ NtUserMonitorFromPoint(
         return NULL;
     }
 
+    if (UserDpiIsVirtualCaller())
+        UserDpiPointToPhysical(&pt);
+
     /* Fill rect (bottom-right exclusive) */
     rc.left = pt.x;
     rc.right = pt.x + 1;
@@ -864,6 +880,8 @@ NtUserMonitorFromRect(
         return NULL;
     }
 
+    if (UserDpiIsVirtualCaller())
+        UserDpiRectToPhysical((PRECT)&Rect);
     if (RECTL_bIsEmptyRect(&Rect))
     {
         Rect.right = Rect.left + 1;

@@ -36,11 +36,13 @@ static DWORD WINAPI WakeThread(LPVOID Context)
 
 START_TEST(ApiSetCoreSynch)
 {
-    HMODULE hApiSet, hKernelBase;
+    HMODULE hApiSet, hSystemApiSet, hKernelBase;
     LONG Compare;
     BOOL Success;
     DWORD Error, WaitResult;
     HANDLE Thread;
+    PVOID OldRedirection;
+    BOOL Redirected;
 
     hApiSet = LoadLibraryW(API_SET_NAME);
     if (hApiSet == NULL)
@@ -70,6 +72,19 @@ START_TEST(ApiSetCoreSynch)
     {
         ok(GetProcAddress(hKernelBase, "WaitOnAddress") == (FARPROC)pWaitOnAddress,
            "WaitOnAddress did not redirect to kernelbase\n");
+    }
+
+    /* In a WoW64 process the set still resolves to the loaded host while the file system is not redirected */
+    Redirected = Wow64DisableWow64FsRedirection(&OldRedirection);
+    hSystemApiSet = LoadLibraryExW(API_SET_NAME, NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (Redirected) Wow64RevertWow64FsRedirection(OldRedirection);
+    ok(hSystemApiSet != NULL, "%S did not resolve in the system directory, error %lu\n",
+       API_SET_NAME, GetLastError());
+    if (hSystemApiSet != NULL)
+    {
+        ok(GetProcAddress(hSystemApiSet, "WaitOnAddress") == (FARPROC)pWaitOnAddress,
+           "the system directory search loaded a second copy of the host\n");
+        FreeLibrary(hSystemApiSet);
     }
 
     /* A wait whose compare value already differs returns at once. */

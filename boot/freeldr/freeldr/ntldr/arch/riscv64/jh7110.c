@@ -7,7 +7,7 @@
 
 #include <freeldr.h>
 #include <drivers/bootvid/framebuf.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include <jh7110disp.h>
 
 extern ULONG_PTR VramAddress;
@@ -36,17 +36,17 @@ RiscvJh7110ResumeDisplay(
 {
     const JH7110DISP_MODE *Mode = &Jh7110DispMode1080p60;
     JH7110DISP Display;
-    RISCV_FDT Fdt;
+    FDT Fdt;
     const VOID *Compatible;
     ULONGLONG FrameBuffer;
     ULONG Length, Cpus, Pitch;
 
-    if (!DeviceTree || !RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
+    if (!DeviceTree || !FdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
         return;
-    Compatible = RiscvFdtGetProperty(&Fdt, RiscvFdtRootNode(&Fdt), "compatible", &Length);
-    if (!RiscvFdtStringListContains(Compatible, Length, "starfive,jh7110") ||
-        !RiscvFdtFindNode(&Fdt, "/cpus", &Cpus, NULL) ||
-        !RiscvFdtReadU32(&Fdt, Cpus, "timebase-frequency", &RiscvJh7110TimebaseFrequency) ||
+    Compatible = FdtGetProperty(&Fdt, FdtRootNode(&Fdt), "compatible", &Length);
+    if (!FdtStringListContains(Compatible, Length, "starfive,jh7110") ||
+        !FdtFindNode(&Fdt, "/cpus", &Cpus, NULL) ||
+        !FdtReadU32(&Fdt, Cpus, "timebase-frequency", &RiscvJh7110TimebaseFrequency) ||
         !RiscvJh7110TimebaseFrequency)
     {
         return;

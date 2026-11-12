@@ -19,11 +19,11 @@ ATTRIB [+R | -R] [+A | -A] [+S | -S] [+H | -H] [ファイル] ...\n\
   A   アーカイブ属性。\n\
   S   システム ファイル属性。\n\
   H   隠しファイル属性。\n\
-  /S  現在のフォルダとすべてのサブフォルダの一致するファイルを\n\
+  /S  現在のフォルダーとすべてのサブフォルダーの一致するファイルを\n\
       処理します。\n\
-  /D  フォルダも処理します。\n\n\
-パラメータを指定しないで ATTRIB と入力すると、すべてのファイルの属性を表示します。\n"
+  /D  フォルダーも処理します。\n\n\
+パラメーターを指定しないで ATTRIB と入力すると、すべてのファイルの属性を表示します。\n"
     STRING_CONSOLE_ERROR "不明なエラー: %d\n"
     STRING_FILE_NOT_FOUND "File not found - '%s'\n"
-    STRING_ERROR_INVALID_PARAM_FORMAT "無効なパラメータの書式です。 - %s\n"
+    STRING_ERROR_INVALID_PARAM_FORMAT "無効なパラメーターの書式です。 - %s\n"
 END

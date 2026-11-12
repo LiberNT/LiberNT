@@ -1090,7 +1090,9 @@ AlpcpCompleteWithStatus(
     {
         AlpcpSignalWaiter(Message->WaitingThread);
     }
-    else if (!(Message->State & (ALPC_MSG_STATE_IN_CANCELED_QUEUE | ALPC_MSG_STATE_IMPERSONATING)))
+    else if (!(Message->State & (ALPC_MSG_STATE_IN_CANCELED_QUEUE |
+                                 ALPC_MSG_STATE_IMPERSONATING |
+                                 ALPC_MSG_STATE_ACCEPT_IN_PROGRESS)))
     {
         AlpcpFreeMessage(Message);
     }

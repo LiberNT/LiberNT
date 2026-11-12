@@ -366,9 +366,14 @@ BOOLEAN NTAPI ChpeAutoEtwCheckCoverage(PVOID a0)
     return EtwCheckCoverage(a0);
 }
 
-ULONG_PTR NTAPI ChpeStubEtwCreateTraceInstanceId(PVOID a0, PVOID a1)
+/* Native definition: dll/ntdll/etw/trace.c */
+#ifdef EtwCreateTraceInstanceId
+#undef EtwCreateTraceInstanceId
+#endif
+ULONG NTAPI EtwCreateTraceInstanceId(PVOID a0, PVOID a1);
+ULONG NTAPI ChpeAutoEtwCreateTraceInstanceId(PVOID a0, PVOID a1)
 {
-    return 0;
+    return EtwCreateTraceInstanceId(a0, a1);
 }
 
 ULONG_PTR NTAPI ChpeStubEtwDeliverDataBlock(ULONG a0)
@@ -476,9 +481,14 @@ ULONGLONG NTAPI ChpeAutoEtwGetTraceLoggerHandle(PVOID a0)
     return EtwGetTraceLoggerHandle(a0);
 }
 
-ULONG_PTR NTAPI ChpeStubEtwLogTraceEvent(ULONG a0, ULONG a1)
+/* Native definition: dll/ntdll/etw/trace.c */
+#ifdef EtwLogTraceEvent
+#undef EtwLogTraceEvent
+#endif
+ULONG NTAPI EtwLogTraceEvent(ULONGLONG a0, PVOID a1);
+ULONG NTAPI ChpeAutoEtwLogTraceEvent(ULONGLONG a0, PVOID a1)
 {
-    return 0;
+    return EtwLogTraceEvent(a0, a1);
 }
 
 ULONG_PTR NTAPI ChpeStubEtwNotificationRegister(PVOID a0, ULONG a1, ULONG a2, ULONG a3, PVOID a4)
@@ -541,14 +551,24 @@ ULONG_PTR NTAPI ChpeStubEtwSetMark(ULONG a0, ULONG a1, ULONG a2)
     return 0;
 }
 
-ULONG_PTR NTAPI ChpeStubEtwTraceEventInstance(double a0, PVOID a1, PVOID a2, PVOID a3)
+/* Native definition: dll/ntdll/etw/trace.c */
+#ifdef EtwTraceEventInstance
+#undef EtwTraceEventInstance
+#endif
+ULONG NTAPI EtwTraceEventInstance(ULONGLONG a0, PVOID a1, PVOID a2, PVOID a3);
+ULONG NTAPI ChpeAutoEtwTraceEventInstance(ULONGLONG a0, PVOID a1, PVOID a2, PVOID a3)
 {
-    return 0;
+    return EtwTraceEventInstance(a0, a1, a2, a3);
 }
 
-ULONG_PTR NTAPI ChpeStubEtwTraceMessageVa(ULONGLONG a0, ULONG a1, PVOID a2, ULONG a3, PVOID a4)
+/* Native definition: dll/ntdll/etw/trace.c */
+#ifdef EtwTraceMessageVa
+#undef EtwTraceMessageVa
+#endif
+ULONG NTAPI EtwTraceMessageVa(ULONGLONG a0, ULONG a1, PVOID a2, USHORT a3, PVOID a4);
+ULONG NTAPI ChpeAutoEtwTraceMessageVa(ULONGLONG a0, ULONG a1, PVOID a2, USHORT a3, PVOID a4)
 {
-    return 0;
+    return EtwTraceMessageVa(a0, a1, a2, a3, a4);
 }
 
 ULONG_PTR NTAPI ChpeStubEtwUnregister(ULONGLONG a0)
@@ -1459,6 +1479,12 @@ NTSTATUS NTAPI ChpeAutoNtCreateTimer(PHANDLE a0, ACCESS_MASK a1, POBJECT_ATTRIBU
     return NtCreateTimer(a0, a1, a2, a3);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtCreateTimer), __typeof__(&NtCreateTimer)), "NtCreateTimer bridge signature mismatch");
+
+NTSTATUS NTAPI ChpeAutoNtCreateTimer2(PHANDLE a0, PVOID a1, POBJECT_ATTRIBUTES a2, ULONG a3, ACCESS_MASK a4)
+{
+    return NtCreateTimer2(a0, a1, a2, a3, a4);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtCreateTimer2), __typeof__(&NtCreateTimer2)), "NtCreateTimer2 bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoNtCreateToken(PHANDLE a0, ACCESS_MASK a1, POBJECT_ATTRIBUTES a2, TOKEN_TYPE a3, PLUID a4, PLARGE_INTEGER a5, PTOKEN_USER a6, PTOKEN_GROUPS a7, PTOKEN_PRIVILEGES a8, PTOKEN_OWNER a9, PTOKEN_PRIMARY_GROUP a10, PTOKEN_DEFAULT_DACL a11, PTOKEN_SOURCE a12)
 {
@@ -2867,7 +2893,7 @@ NTSTATUS NTAPI ChpeAutoNtSetIoCompletion(HANDLE a0, PVOID a1, PVOID a2, NTSTATUS
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtSetIoCompletion), __typeof__(&NtSetIoCompletion)), "NtSetIoCompletion bridge signature mismatch");
 
-NTSTATUS NTAPI ChpeAutoNtSetIoCompletionEx(HANDLE a0, HANDLE a1, ULONG_PTR a2, ULONG_PTR a3, NTSTATUS a4, SIZE_T a5)
+NTSTATUS NTAPI ChpeAutoNtSetIoCompletionEx(HANDLE a0, HANDLE a1, PVOID a2, PVOID a3, NTSTATUS a4, SIZE_T a5)
 {
     return NtSetIoCompletionEx(a0, a1, a2, a3, a4, a5);
 }
@@ -3168,26 +3194,6 @@ NTSTATUS NTAPI ChpeAutoNtYieldExecution(VOID)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoNtYieldExecution), __typeof__(&NtYieldExecution)), "NtYieldExecution bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubNtdllDefWindowProc_A(ULONG a0, ULONG a1, ULONG a2, ULONG a3)
-{
-    return 0;
-}
-
-ULONG_PTR NTAPI ChpeStubNtdllDefWindowProc_W(ULONG a0, ULONG a1, ULONG a2, ULONG a3)
-{
-    return 0;
-}
-
-ULONG_PTR NTAPI ChpeStubNtdllDialogWndProc_A(ULONG a0, ULONG a1, ULONG a2, ULONG a3)
-{
-    return 0;
-}
-
-ULONG_PTR NTAPI ChpeStubNtdllDialogWndProc_W(ULONG a0, ULONG a1, ULONG a2, ULONG a3)
-{
-    return 0;
-}
-
 /* Native definition: sdk/lib/rtl/prefix.c */
 #ifdef PfxFindPrefix
 #undef PfxFindPrefix
@@ -3401,9 +3407,14 @@ NTSTATUS NTAPI ChpeAutoRtlAddIntegrityLabelToBoundaryDescriptor(PVOID * a0, PSID
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlAddIntegrityLabelToBoundaryDescriptor), __typeof__(&RtlAddIntegrityLabelToBoundaryDescriptor)), "RtlAddIntegrityLabelToBoundaryDescriptor bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlAddressInSectionTable(PVOID a0, PVOID a1, ULONG a2)
+/* Native definition: sdk/lib/rtl/image.c */
+#ifdef RtlAddressInSectionTable
+#undef RtlAddressInSectionTable
+#endif
+PVOID NTAPI RtlAddressInSectionTable(PVOID a0, PVOID a1, ULONG a2);
+PVOID NTAPI ChpeAutoRtlAddressInSectionTable(PVOID a0, PVOID a1, ULONG a2)
 {
-    return 0;
+    return RtlAddressInSectionTable(a0, a1, a2);
 }
 
 NTSTATUS NTAPI ChpeAutoRtlAdjustPrivilege(ULONG a0, BOOLEAN a1, BOOLEAN a2, PBOOLEAN a3)
@@ -3551,10 +3562,11 @@ void NTAPI ChpeAutoRtlAssert(PVOID a0, PVOID a1, ULONG a2, PCHAR a3)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlAssert), __typeof__(&RtlAssert)), "RtlAssert bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlBarrier(PVOID a0, ULONG a1)
+BOOLEAN NTAPI ChpeAutoRtlBarrier(PRTL_BARRIER a0, ULONG a1)
 {
-    return 0;
+    return RtlBarrier(a0, a1);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlBarrier), __typeof__(&RtlBarrier)), "RtlBarrier bridge signature mismatch");
 
 ULONG_PTR NTAPI ChpeStubRtlBarrierForDelete(ULONG a0, ULONG a1)
 {
@@ -3627,14 +3639,24 @@ ULONG_PTR NTAPI ChpeStubRtlCloneUserProcess(ULONG a0, ULONG a1, ULONG a2, ULONG 
     return 0;
 }
 
-ULONG_PTR NTAPI ChpeStubRtlCmDecodeMemIoResource(PVOID a0, PVOID a1)
+/* Native definition: sdk/lib/rtl/cmresource.c */
+#ifdef RtlCmDecodeMemIoResource
+#undef RtlCmDecodeMemIoResource
+#endif
+ULONGLONG NTAPI RtlCmDecodeMemIoResource(PVOID a0, PVOID a1);
+ULONGLONG NTAPI ChpeAutoRtlCmDecodeMemIoResource(PVOID a0, PVOID a1)
 {
-    return 0;
+    return RtlCmDecodeMemIoResource(a0, a1);
 }
 
-ULONG_PTR NTAPI ChpeStubRtlCmEncodeMemIoResource(PVOID a0, ULONG a1, ULONG a2, ULONG a3)
+/* Native definition: sdk/lib/rtl/cmresource.c */
+#ifdef RtlCmEncodeMemIoResource
+#undef RtlCmEncodeMemIoResource
+#endif
+NTSTATUS NTAPI RtlCmEncodeMemIoResource(PVOID a0, UCHAR a1, ULONGLONG a2, ULONGLONG a3);
+NTSTATUS NTAPI ChpeAutoRtlCmEncodeMemIoResource(PVOID a0, UCHAR a1, ULONGLONG a2, ULONGLONG a3)
 {
-    return 0;
+    return RtlCmEncodeMemIoResource(a0, a1, a2, a3);
 }
 
 ULONG_PTR NTAPI ChpeStubRtlCommitDebugInfo(PVOID a0, ULONG a1)
@@ -3654,9 +3676,14 @@ ULONG NTAPI ChpeAutoRtlCompactHeap(HANDLE a0, ULONG a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlCompactHeap), __typeof__(&RtlCompactHeap)), "RtlCompactHeap bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlCompareAltitudes(PCWSTR a0, PCWSTR a1)
+/* Native definition: sdk/lib/rtl/altitude.c */
+#ifdef RtlCompareAltitudes
+#undef RtlCompareAltitudes
+#endif
+LONG NTAPI RtlCompareAltitudes(PVOID a0, PVOID a1);
+LONG NTAPI ChpeAutoRtlCompareAltitudes(PVOID a0, PVOID a1)
 {
-    return 0;
+    return RtlCompareAltitudes(a0, a1);
 }
 
 SIZE_T NTAPI ChpeAutoRtlCompareMemoryUlong(PVOID a0, SIZE_T a1, ULONG a2)
@@ -3808,11 +3835,6 @@ void * NTAPI ChpeAutoRtlCopyMemory(void * a0, const void * a1, size_t a2)
     return memmove(a0, a1, a2);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlCopyMemory), __typeof__(&memmove)), "RtlCopyMemory bridge signature mismatch");
-
-ULONG_PTR NTAPI ChpeStubRtlCopyMemoryNonTemporal(PVOID a0, PVOID a1, ULONG a2)
-{
-    return 0;
-}
 
 HRESULT NTAPI ChpeAutoRtlCopyMemoryStreamTo(struct IStream * a0, struct IStream * a1, ULARGE_INTEGER a2, PULARGE_INTEGER a3, PULARGE_INTEGER a4)
 {
@@ -3967,7 +3989,7 @@ NTSTATUS NTAPI ChpeAutoRtlCreateSecurityDescriptor(PSECURITY_DESCRIPTOR a0, ULON
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlCreateSecurityDescriptor), __typeof__(&RtlCreateSecurityDescriptor)), "RtlCreateSecurityDescriptor bridge signature mismatch");
 
-/* Native definition: sdk/lib/rtl/sid.c */
+/* Native definition: dll/ntdll/rtl/capability.c */
 #ifdef RtlCreateServiceSid
 #undef RtlCreateServiceSid
 #endif
@@ -4173,10 +4195,11 @@ VOID NTAPI ChpeAutoRtlDeleteHashTable(PVOID a0)
     RtlDeleteHashTable(a0);
 }
 
-ULONG_PTR NTAPI ChpeStubRtlDeleteBarrier(ULONG a0)
+void NTAPI ChpeAutoRtlDeleteBarrier(PRTL_BARRIER a0)
 {
-    return 0;
+    RtlDeleteBarrier(a0);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlDeleteBarrier), __typeof__(&RtlDeleteBarrier)), "RtlDeleteBarrier bridge signature mismatch");
 
 void NTAPI ChpeAutoRtlDeleteBoundaryDescriptor(PVOID a0)
 {
@@ -4242,10 +4265,11 @@ NTSTATUS NTAPI ChpeAutoRtlDeleteTimerQueueEx(HANDLE a0, HANDLE a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlDeleteTimerQueueEx), __typeof__(&RtlDeleteTimerQueueEx)), "RtlDeleteTimerQueueEx bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlDeregisterSecureMemoryCacheCallback(PVOID a0)
+NTSTATUS NTAPI ChpeAutoRtlDeregisterSecureMemoryCacheCallback(PRTL_SECURE_MEMORY_CACHE_CALLBACK a0)
 {
-    return 0;
+    return RtlDeregisterSecureMemoryCacheCallback(a0);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlDeregisterSecureMemoryCacheCallback), __typeof__(&RtlDeregisterSecureMemoryCacheCallback)), "RtlDeregisterSecureMemoryCacheCallback bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlDeregisterWait(HANDLE a0)
 {
@@ -4438,15 +4462,11 @@ ULONG_PTR NTAPI ChpeStubRtlEnableEarlyCriticalSectionEventCreation(VOID)
     return 0;
 }
 
-/* Native definition: sdk/lib/rtl/heap.c */
-#ifdef RtlEnumProcessHeaps
-#undef RtlEnumProcessHeaps
-#endif
-NTSTATUS NTAPI RtlEnumProcessHeaps(PVOID a0, PVOID a1);
-NTSTATUS NTAPI ChpeAutoRtlEnumProcessHeaps(PVOID a0, PVOID a1)
+NTSTATUS NTAPI ChpeAutoRtlEnumProcessHeaps(PHEAP_ENUMERATION_ROUTINE a0, PVOID a1)
 {
     return RtlEnumProcessHeaps(a0, a1);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlEnumProcessHeaps), __typeof__(&RtlEnumProcessHeaps)), "RtlEnumProcessHeaps bridge signature mismatch");
 
 /* Native definition: sdk/lib/rtl/hashtable.c */
 #ifdef RtlEnumerateEntryHashTable
@@ -4927,10 +4947,11 @@ ULONG NTAPI ChpeAutoRtlGetCurrentDirectory_U(ULONG a0, PWSTR a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlGetCurrentDirectory_U), __typeof__(&RtlGetCurrentDirectory_U)), "RtlGetCurrentDirectory_U bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlGetCurrentTransaction(VOID)
+HANDLE NTAPI ChpeAutoRtlGetCurrentTransaction(VOID)
 {
-    return 0;
+    return RtlGetCurrentTransaction();
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlGetCurrentTransaction), __typeof__(&RtlGetCurrentTransaction)), "RtlGetCurrentTransaction bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlGetDaclSecurityDescriptor(PSECURITY_DESCRIPTOR a0, PBOOLEAN a1, PACL * a2, PBOOLEAN a3)
 {
@@ -5250,10 +5271,11 @@ void NTAPI ChpeAutoRtlInitUTF8String(PUTF8_STRING a0, PCSZ a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlInitUTF8String), __typeof__(&RtlInitUTF8String)), "RtlInitUTF8String bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlInitBarrier(ULONG a0, ULONG a1)
+NTSTATUS NTAPI ChpeAutoRtlInitBarrier(PRTL_BARRIER a0, LONG a1, LONG a2)
 {
-    return 0;
+    return RtlInitBarrier(a0, a1, a2);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlInitBarrier), __typeof__(&RtlInitBarrier)), "RtlInitBarrier bridge signature mismatch");
 
 void NTAPI ChpeAutoRtlInitCodePageTable(PUSHORT a0, PCPTABLEINFO a1)
 {
@@ -5460,14 +5482,24 @@ NTSTATUS NTAPI ChpeAutoRtlIntegerToUnicodeString(ULONG a0, ULONG a1, PUNICODE_ST
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlIntegerToUnicodeString), __typeof__(&RtlIntegerToUnicodeString)), "RtlIntegerToUnicodeString bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlIoDecodeMemIoResource(PVOID a0, PVOID a1, PVOID a2, PVOID a3)
+/* Native definition: sdk/lib/rtl/cmresource.c */
+#ifdef RtlIoDecodeMemIoResource
+#undef RtlIoDecodeMemIoResource
+#endif
+ULONGLONG NTAPI RtlIoDecodeMemIoResource(PVOID a0, PVOID a1, PVOID a2, PVOID a3);
+ULONGLONG NTAPI ChpeAutoRtlIoDecodeMemIoResource(PVOID a0, PVOID a1, PVOID a2, PVOID a3)
 {
-    return 0;
+    return RtlIoDecodeMemIoResource(a0, a1, a2, a3);
 }
 
-ULONG_PTR NTAPI ChpeStubRtlIoEncodeMemIoResource(PVOID a0, ULONG a1, ULONG a2, ULONG a3, ULONG a4, ULONG a5)
+/* Native definition: sdk/lib/rtl/cmresource.c */
+#ifdef RtlIoEncodeMemIoResource
+#undef RtlIoEncodeMemIoResource
+#endif
+NTSTATUS NTAPI RtlIoEncodeMemIoResource(PVOID a0, UCHAR a1, ULONGLONG a2, ULONGLONG a3, ULONGLONG a4, ULONGLONG a5);
+NTSTATUS NTAPI ChpeAutoRtlIoEncodeMemIoResource(PVOID a0, UCHAR a1, ULONGLONG a2, ULONGLONG a3, ULONGLONG a4, ULONGLONG a5)
 {
-    return 0;
+    return RtlIoEncodeMemIoResource(a0, a1, a2, a3, a4, a5);
 }
 
 PSTR NTAPI ChpeAutoRtlIpv4AddressToStringA(const struct in_addr * a0, PCHAR a1)
@@ -6126,15 +6158,11 @@ NTSTATUS NTAPI ChpeAutoRtlQueryProcessDebugInformation(ULONG a0, ULONG a1, PRTL_
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlQueryProcessDebugInformation), __typeof__(&RtlQueryProcessDebugInformation)), "RtlQueryProcessDebugInformation bridge signature mismatch");
 
-/* Native definition: sdk/lib/rtl/heap.c */
-#ifdef RtlQueryProcessHeapInformation
-#undef RtlQueryProcessHeapInformation
-#endif
-NTSTATUS NTAPI RtlQueryProcessHeapInformation(PVOID a0);
-NTSTATUS NTAPI ChpeAutoRtlQueryProcessHeapInformation(PVOID a0)
+NTSTATUS NTAPI ChpeAutoRtlQueryProcessHeapInformation(PRTL_DEBUG_INFORMATION a0)
 {
     return RtlQueryProcessHeapInformation(a0);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlQueryProcessHeapInformation), __typeof__(&RtlQueryProcessHeapInformation)), "RtlQueryProcessHeapInformation bridge signature mismatch");
 
 ULONG_PTR NTAPI ChpeStubRtlQueryProcessLockInformation(PVOID a0)
 {
@@ -6420,10 +6448,11 @@ void NTAPI ChpeAutoRtlSetCurrentEnvironment(PWSTR a0, PWSTR * a1)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetCurrentEnvironment), __typeof__(&RtlSetCurrentEnvironment)), "RtlSetCurrentEnvironment bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlSetCurrentTransaction(PVOID a0)
+LOGICAL NTAPI ChpeAutoRtlSetCurrentTransaction(HANDLE a0)
 {
-    return 0;
+    return RtlSetCurrentTransaction(a0);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetCurrentTransaction), __typeof__(&RtlSetCurrentTransaction)), "RtlSetCurrentTransaction bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlSetDaclSecurityDescriptor(PSECURITY_DESCRIPTOR a0, BOOLEAN a1, PACL a2, BOOLEAN a3)
 {
@@ -6578,10 +6607,11 @@ NTSTATUS NTAPI ChpeAutoRtlSetThreadPoolStartFunc(PRTL_START_POOL_THREAD a0, PRTL
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetThreadPoolStartFunc), __typeof__(&RtlSetThreadPoolStartFunc)), "RtlSetThreadPoolStartFunc bridge signature mismatch");
 
-ULONG_PTR NTAPI ChpeStubRtlSetThreadPreferredUILanguages(ULONG a0, PVOID a1, PVOID a2)
+NTSTATUS NTAPI ChpeAutoRtlSetThreadPreferredUILanguages(DWORD a0, PCZZWSTR a1, PULONG a2)
 {
-    return 0;
+    return RtlSetThreadPreferredUILanguages(a0, a1, a2);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlSetThreadPreferredUILanguages), __typeof__(&RtlSetThreadPreferredUILanguages)), "RtlSetThreadPreferredUILanguages bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlSetTimeZoneInformation(PRTL_TIME_ZONE_INFORMATION a0)
 {
@@ -6836,10 +6866,11 @@ BOOLEAN NTAPI ChpeAutoRtlTraceDatabaseValidate(PVOID a0)
     return RtlTraceDatabaseValidate(a0);
 }
 
-ULONG_PTR NTAPI ChpeStubRtlTryAcquirePebLock(VOID)
+LOGICAL NTAPI ChpeAutoRtlTryAcquirePebLock(VOID)
 {
-    return 0;
+    return RtlTryAcquirePebLock();
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlTryAcquirePebLock), __typeof__(&RtlTryAcquirePebLock)), "RtlTryAcquirePebLock bridge signature mismatch");
 
 LONG NTAPI ChpeAutoRtlUnhandledExceptionFilter2(PEXCEPTION_POINTERS a0, PCSTR a1)
 {
@@ -7097,15 +7128,11 @@ BOOLEAN NTAPI ChpeAutoRtlValidateHeap(HANDLE a0, ULONG a1, PVOID a2)
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlValidateHeap), __typeof__(&RtlValidateHeap)), "RtlValidateHeap bridge signature mismatch");
 
-/* Native definition: sdk/lib/rtl/heap.c */
-#ifdef RtlValidateProcessHeaps
-#undef RtlValidateProcessHeaps
-#endif
-BOOLEAN NTAPI RtlValidateProcessHeaps(VOID);
 BOOLEAN NTAPI ChpeAutoRtlValidateProcessHeaps(VOID)
 {
     return RtlValidateProcessHeaps();
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlValidateProcessHeaps), __typeof__(&RtlValidateProcessHeaps)), "RtlValidateProcessHeaps bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoRtlValidateUnicodeString(ULONG a0, PCUNICODE_STRING a1)
 {
@@ -7734,9 +7761,14 @@ ULONG_PTR NTAPI ChpeStubWinSqmAddToStreamEx(PVOID a0, ULONG a1, ULONG a2, PVOID 
     return 0;
 }
 
-ULONG_PTR NTAPI ChpeStubWinSqmEndSession(PVOID a0)
+/* Native definition: dll/ntdll/rtl/wnf.c */
+#ifdef WinSqmEndSession
+#undef WinSqmEndSession
+#endif
+NTSTATUS NTAPI WinSqmEndSession(PVOID a0);
+NTSTATUS NTAPI ChpeAutoWinSqmEndSession(PVOID a0)
 {
-    return 0;
+    return WinSqmEndSession(a0);
 }
 
 /* Native definition: dll/ntdll/rtl/wnf.c */
@@ -7795,11 +7827,6 @@ VOID NTAPI ChpeAutoWinSqmSetDWORD64(PVOID a0, ULONG a1, ULONGLONG a2)
 }
 
 ULONG_PTR NTAPI ChpeStubWinSqmSetString(PVOID a0, ULONG a1, PVOID a2)
-{
-    return 0;
-}
-
-ULONG_PTR NTAPI ChpeStubWinSqmStartSession(PVOID a0)
 {
     return 0;
 }
@@ -8381,6 +8408,12 @@ NTSTATUS NTAPI ChpeAutoZwCreateTimer(PHANDLE a0, ACCESS_MASK a1, POBJECT_ATTRIBU
     return ZwCreateTimer(a0, a1, a2, a3);
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwCreateTimer), __typeof__(&ZwCreateTimer)), "ZwCreateTimer bridge signature mismatch");
+
+NTSTATUS NTAPI ChpeAutoZwCreateTimer2(PHANDLE a0, PVOID a1, POBJECT_ATTRIBUTES a2, ULONG a3, ACCESS_MASK a4)
+{
+    return NtCreateTimer2(a0, a1, a2, a3, a4);
+}
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoZwCreateTimer2), __typeof__(&NtCreateTimer2)), "ZwCreateTimer2 bridge signature mismatch");
 
 NTSTATUS NTAPI ChpeAutoZwCreateToken(PHANDLE a0, ACCESS_MASK a1, POBJECT_ATTRIBUTES a2, TOKEN_TYPE a3, PLUID a4, PLARGE_INTEGER a5, PTOKEN_USER a6, PTOKEN_GROUPS a7, PTOKEN_PRIVILEGES a8, PTOKEN_OWNER a9, PTOKEN_PRIMARY_GROUP a10, PTOKEN_DEFAULT_DACL a11, PTOKEN_SOURCE a12)
 {
@@ -10500,10 +10533,11 @@ int NTAPI ChpeAuto_vsnwprintf_s(wchar_t * a0, size_t a1, size_t a2, const wchar_
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAuto_vsnwprintf_s), __typeof__(&_vsnwprintf_s)), "_vsnwprintf_s bridge signature mismatch");
 
-ULONG_PTR CDECL ChpeStub_vswprintf(PVOID a0, PCWSTR a1, PVOID a2)
+int NTAPI ChpeAuto_vswprintf(wchar_t * a0, const wchar_t * a1, va_list a2)
 {
-    return 0;
+    return _vswprintf(a0, a1, a2);
 }
+_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAuto_vswprintf), __typeof__(&_vswprintf)), "_vswprintf bridge signature mismatch");
 
 int NTAPI ChpeAuto_wcsicmp(const wchar_t * a0, const wchar_t * a1)
 {

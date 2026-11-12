@@ -10,6 +10,7 @@
 /* INCLUDES *****************************************************************/
 
 #include <ntdll.h>
+#include <winnls.h>
 #include <apisets.h>
 #include <reactos/chpe.h>
 
@@ -117,6 +118,16 @@ RtlReleasePebLock(VOID)
 {
    PPEB Peb = NtCurrentPeb ();
    RtlLeaveCriticalSection(Peb->FastPebLock);
+}
+
+/*
+ * @implemented
+ */
+LOGICAL
+NTAPI
+RtlTryAcquirePebLock(VOID)
+{
+    return RtlTryEnterCriticalSection(NtCurrentPeb()->FastPebLock);
 }
 
 /*
@@ -622,6 +633,28 @@ IMAGE_RESOURCE_DIRECTORY *find_first_entry( IMAGE_RESOURCE_DIRECTORY *dir,
                                             void *root, int want_dir );
 int push_language( USHORT *list, ULONG pos, WORD lang );
 
+static int push_thread_ui_languages( USHORT *list, int pos )
+{
+    WCHAR languages[5 * 5 + 1];
+    ULONG count, size = RTL_NUMBER_OF(languages);
+    PCWSTR current;
+
+    if (!NT_SUCCESS(RtlGetThreadPreferredUILanguages( MUI_THREAD_LANGUAGES | MUI_LANGUAGE_ID, &count, languages, &size )))
+        return pos;
+
+    for (current = languages; *current; current += wcslen( current ) + 1)
+    {
+        UNICODE_STRING string;
+        ULONG value;
+
+        RtlInitUnicodeString( &string, current );
+        if (!NT_SUCCESS(RtlUnicodeStringToInteger( &string, 16, &value ))) continue;
+        pos = push_language( list, pos, (WORD)value );
+        pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(value), SUBLANG_NEUTRAL ) );
+    }
+    return pos;
+}
+
 /**********************************************************************
  *  find_entry
  *
@@ -633,9 +666,9 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
     ULONG size;
     void *root;
     IMAGE_RESOURCE_DIRECTORY *resdirptr;
-    USHORT list[10];  /* list of languages to try */
+    USHORT list[20];  /* list of languages to try */
     int i, pos = 0;
-    LCID user_lcid, system_lcid;
+    LANGID ui_language;
 
     root = RtlImageDirectoryEntryToData( BaseAddress, TRUE, IMAGE_DIRECTORY_ENTRY_RESOURCE, &size );
     if (!root) return STATUS_RESOURCE_DATA_NOT_FOUND;
@@ -668,29 +701,28 @@ NTSTATUS LdrpFindModuleResourceEntry( PVOID BaseAddress, LDR_RESOURCE_INFO *info
         /* user defaults, unless SYS_DEFAULT sublanguage specified  */
         if (SUBLANGID(info->Language) != SUBLANG_SYS_DEFAULT)
         {
-            /* 4. current thread locale language */
-            pos = push_language( list, pos, LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale) );
-            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale)), SUBLANG_NEUTRAL ) );
+            /* 4. thread UI languages */
+            pos = push_thread_ui_languages( list, pos );
 
-            if (NT_SUCCESS(NtQueryDefaultLocale(TRUE, &user_lcid)))
+            if (NT_SUCCESS(NtQueryDefaultUILanguage(&ui_language)))
             {
-                /* 5. user locale language */
-                pos = push_language( list, pos, LANGIDFROMLCID(user_lcid) );
+                /* 5. user UI language */
+                pos = push_language( list, pos, ui_language );
 
-                /* 6. user locale language with neutral sublanguage  */
-                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(user_lcid), SUBLANG_NEUTRAL ) );
+                /* 6. user UI language with neutral sublanguage  */
+                pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
             }
         }
 
         /* now system defaults */
 
-        if (NT_SUCCESS(NtQueryDefaultLocale(FALSE, &system_lcid)))
+        if (NT_SUCCESS(NtQueryInstallUILanguage(&ui_language)))
         {
-            /* 7. system locale language */
-            pos = push_language( list, pos, LANGIDFROMLCID( system_lcid ) );
+            /* 7. system UI language */
+            pos = push_language( list, pos, ui_language );
 
-            /* 8. system locale language with neutral sublanguage */
-            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(system_lcid), SUBLANG_NEUTRAL ) );
+            /* 8. system UI language with neutral sublanguage */
+            pos = push_language( list, pos, MAKELANGID( PRIMARYLANGID(ui_language), SUBLANG_NEUTRAL ) );
         }
 
         /* 9. English */
@@ -1384,16 +1416,29 @@ LdrpApplyFileNameRedirection(
 
     if (*RedirectedDll)
     {
-        UNICODE_STRING NtSystemRoot;
+        UNICODE_STRING SystemDirectory;
         static const UNICODE_STRING System32 = RTL_CONSTANT_STRING(L"\\System32\\");
+        static const UNICODE_STRING Backslash = RTL_CONSTANT_STRING(L"\\");
+        PCUNICODE_STRING Separator;
         PUNICODE_STRING ResultPath = NULL;
 
         /* This is an apiset we can use */
         if (ApiSetRedirected)
             *ApiSetRedirected = TRUE;
-        RtlInitUnicodeString(&NtSystemRoot, SharedUserData->NtSystemRoot);
 
-        SIZE_T Needed = System32.Length + ApisetName.Length + NtSystemRoot.Length + sizeof(UNICODE_NULL);
+        /* The host is the module of that name in the process's own system directory, where its known DLLs live */
+        if (LdrpKnownDllPath.Length != 0)
+        {
+            SystemDirectory = LdrpKnownDllPath;
+            Separator = &Backslash;
+        }
+        else
+        {
+            RtlInitUnicodeString(&SystemDirectory, SharedUserData->NtSystemRoot);
+            Separator = &System32;
+        }
+
+        SIZE_T Needed = SystemDirectory.Length + Separator->Length + ApisetName.Length + sizeof(UNICODE_NULL);
 
         if (StaticString && StaticString->MaximumLength >= (USHORT)Needed)
         {
@@ -1419,8 +1464,8 @@ LdrpApplyFileNameRedirection(
             return STATUS_INVALID_PARAMETER;
         }
 
-        RtlAppendUnicodeStringToString(ResultPath, &NtSystemRoot);
-        RtlAppendUnicodeStringToString(ResultPath, &System32);
+        RtlAppendUnicodeStringToString(ResultPath, &SystemDirectory);
+        RtlAppendUnicodeStringToString(ResultPath, Separator);
         RtlAppendUnicodeStringToString(ResultPath, &ApisetName);
 
         /* Log each apiset->host mapping once per process — the resolves

@@ -40,6 +40,7 @@ struct HTMLObjectElement {
 
     IHTMLObjectElement IHTMLObjectElement_iface;
     IHTMLObjectElement2 IHTMLObjectElement2_iface;
+    IHTMLObjectElement3 IHTMLObjectElement3_iface;
     IWineHTMLObjectPrivate IWineHTMLObjectPrivate_iface;
 
     nsIDOMHTMLObjectElement *nsobject;
@@ -651,6 +652,155 @@ static HRESULT HTMLObjectElement_get_readystate(HTMLDOMNode *iface, BSTR *p)
     return E_NOTIMPL;
 }
 
+static inline HTMLObjectElement *impl_from_IHTMLObjectElement3(IHTMLObjectElement3 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLObjectElement, IHTMLObjectElement3_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLObjectElement3, IHTMLObjectElement3,
+                      impl_from_IHTMLObjectElement3(iface)->plugin_container.element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLObjectElement3_put_archive(IHTMLObjectElement3 *iface, BSTR v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->plugin_container.element, L"archive", v);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_archive(IHTMLObjectElement3 *iface, BSTR *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->plugin_container.element, L"archive", p);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_put_alt(IHTMLObjectElement3 *iface, BSTR v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->plugin_container.element, L"alt", v);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_alt(IHTMLObjectElement3 *iface, BSTR *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->plugin_container.element, L"alt", p);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_put_declare(IHTMLObjectElement3 *iface, VARIANT_BOOL v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%x)\n", This, v);
+
+    return elem_put_bool_attr(&This->plugin_container.element, L"declare", v);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_declare(IHTMLObjectElement3 *iface, VARIANT_BOOL *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_bool_attr(&This->plugin_container.element, L"declare", p);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_put_standby(IHTMLObjectElement3 *iface, BSTR v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->plugin_container.element, L"standby", v);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_standby(IHTMLObjectElement3 *iface, BSTR *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->plugin_container.element, L"standby", p);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_put_border(IHTMLObjectElement3 *iface, VARIANT v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+    const PRUnichar *str;
+    nsAString nsstr;
+    HRESULT hres;
+
+    TRACE("(%p)->(%s)\n", This, debugstr_variant(&v));
+
+    hres = variant_to_nsstr(&v, FALSE, &nsstr);
+    if(FAILED(hres))
+        return hres;
+
+    nsAString_GetData(&nsstr, &str);
+    hres = elem_string_attr_setter(&This->plugin_container.element, L"border", str ? str : L"");
+    nsAString_Finish(&nsstr);
+    return hres;
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_border(IHTMLObjectElement3 *iface, VARIANT *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    V_VT(p) = VT_BSTR;
+    return elem_get_reflected_string(&This->plugin_container.element, L"border", &V_BSTR(p));
+}
+
+static HRESULT WINAPI HTMLObjectElement3_put_useMap(IHTMLObjectElement3 *iface, BSTR v)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->plugin_container.element, L"useMap", v);
+}
+
+static HRESULT WINAPI HTMLObjectElement3_get_useMap(IHTMLObjectElement3 *iface, BSTR *p)
+{
+    HTMLObjectElement *This = impl_from_IHTMLObjectElement3(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->plugin_container.element, L"useMap", p);
+}
+
+static const IHTMLObjectElement3Vtbl HTMLObjectElement3Vtbl = {
+    HTMLObjectElement3_QueryInterface,
+    HTMLObjectElement3_AddRef,
+    HTMLObjectElement3_Release,
+    HTMLObjectElement3_GetTypeInfoCount,
+    HTMLObjectElement3_GetTypeInfo,
+    HTMLObjectElement3_GetIDsOfNames,
+    HTMLObjectElement3_Invoke,
+    HTMLObjectElement3_put_archive,
+    HTMLObjectElement3_get_archive,
+    HTMLObjectElement3_put_alt,
+    HTMLObjectElement3_get_alt,
+    HTMLObjectElement3_put_declare,
+    HTMLObjectElement3_get_declare,
+    HTMLObjectElement3_put_standby,
+    HTMLObjectElement3_get_standby,
+    HTMLObjectElement3_put_border,
+    HTMLObjectElement3_get_border,
+    HTMLObjectElement3_put_useMap,
+    HTMLObjectElement3_get_useMap
+};
+
 static inline HTMLObjectElement *impl_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLObjectElement, plugin_container.element.node.event_target.dispex);
@@ -665,6 +815,8 @@ static void *HTMLObjectElement_query_interface(DispatchEx *dispex, REFIID riid)
         return &This->IHTMLObjectElement_iface;
     if(IsEqualGUID(&IID_IHTMLObjectElement2, riid))
         return &This->IHTMLObjectElement2_iface;
+    if(IsEqualGUID(&IID_IHTMLObjectElement3, riid))
+        return &This->IHTMLObjectElement3_iface;
     if(IsEqualGUID(&IID_IWineHTMLObjectPrivate, riid))
         return &This->IWineHTMLObjectPrivate_iface;
     if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
@@ -736,6 +888,7 @@ static void HTMLObjectElement_init_dispex_info(dispex_data_t *info, compat_mode_
         {DISPID_UNKNOWN}
     };
     dispex_info_add_interface(info, IHTMLObjectElement2_tid, NULL);
+    dispex_info_add_interface(info, IHTMLObjectElement3_tid, NULL);
     dispex_info_add_interface(info, IHTMLObjectElement_tid, hooks);
     if(mode >= COMPAT_MODE_IE10)
         dispex_info_add_interface(info, IWineHTMLObjectPrivate_tid, NULL);
@@ -779,6 +932,7 @@ HRESULT HTMLObjectElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, H
 
     ret->IHTMLObjectElement_iface.lpVtbl = &HTMLObjectElementVtbl;
     ret->IHTMLObjectElement2_iface.lpVtbl = &HTMLObjectElement2Vtbl;
+    ret->IHTMLObjectElement3_iface.lpVtbl = &HTMLObjectElement3Vtbl;
     ret->IWineHTMLObjectPrivate_iface.lpVtbl = &WineHTMLObjectPrivateVtbl;
     ret->plugin_container.element.node.vtbl = &HTMLObjectElementImplVtbl;
 
@@ -986,6 +1140,280 @@ HRESULT HTMLEmbedElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HT
     ret->element.node.vtbl = &HTMLEmbedElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLEmbedElement_dispex);
+    *elem = &ret->element;
+    return S_OK;
+}
+
+struct HTMLParamElement {
+    HTMLElement element;
+
+    IHTMLParamElement IHTMLParamElement_iface;
+    IHTMLParamElement2 IHTMLParamElement2_iface;
+};
+
+typedef struct HTMLParamElement HTMLParamElement;
+
+static inline HTMLParamElement *impl_from_IHTMLParamElement(IHTMLParamElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLParamElement, IHTMLParamElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLParamElement, IHTMLParamElement,
+                      impl_from_IHTMLParamElement(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLParamElement_put_name(IHTMLParamElement *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"name", v);
+}
+
+static HRESULT WINAPI HTMLParamElement_get_name(IHTMLParamElement *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"name", p);
+}
+
+static HRESULT WINAPI HTMLParamElement_put_value(IHTMLParamElement *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"value", v);
+}
+
+static HRESULT WINAPI HTMLParamElement_get_value(IHTMLParamElement *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"value", p);
+}
+
+static HRESULT WINAPI HTMLParamElement_put_type(IHTMLParamElement *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"type", v);
+}
+
+static HRESULT WINAPI HTMLParamElement_get_type(IHTMLParamElement *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"type", p);
+}
+
+static HRESULT WINAPI HTMLParamElement_put_valueType(IHTMLParamElement *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"valueType", v);
+}
+
+static HRESULT WINAPI HTMLParamElement_get_valueType(IHTMLParamElement *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"valueType", p);
+}
+
+static const IHTMLParamElementVtbl HTMLParamElementVtbl = {
+    HTMLParamElement_QueryInterface,
+    HTMLParamElement_AddRef,
+    HTMLParamElement_Release,
+    HTMLParamElement_GetTypeInfoCount,
+    HTMLParamElement_GetTypeInfo,
+    HTMLParamElement_GetIDsOfNames,
+    HTMLParamElement_Invoke,
+    HTMLParamElement_put_name,
+    HTMLParamElement_get_name,
+    HTMLParamElement_put_value,
+    HTMLParamElement_get_value,
+    HTMLParamElement_put_type,
+    HTMLParamElement_get_type,
+    HTMLParamElement_put_valueType,
+    HTMLParamElement_get_valueType
+};
+
+static inline HTMLParamElement *impl_from_IHTMLParamElement2(IHTMLParamElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLParamElement, IHTMLParamElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLParamElement2, IHTMLParamElement2,
+                      impl_from_IHTMLParamElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLParamElement2_put_name(IHTMLParamElement2 *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"name", v);
+}
+
+static HRESULT WINAPI HTMLParamElement2_get_name(IHTMLParamElement2 *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"name", p);
+}
+
+static HRESULT WINAPI HTMLParamElement2_put_type(IHTMLParamElement2 *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"type", v);
+}
+
+static HRESULT WINAPI HTMLParamElement2_get_type(IHTMLParamElement2 *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"type", p);
+}
+
+static HRESULT WINAPI HTMLParamElement2_put_value(IHTMLParamElement2 *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"value", v);
+}
+
+static HRESULT WINAPI HTMLParamElement2_get_value(IHTMLParamElement2 *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"value", p);
+}
+
+static HRESULT WINAPI HTMLParamElement2_put_valueType(IHTMLParamElement2 *iface, BSTR v)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"valueType", v);
+}
+
+static HRESULT WINAPI HTMLParamElement2_get_valueType(IHTMLParamElement2 *iface, BSTR *p)
+{
+    HTMLParamElement *This = impl_from_IHTMLParamElement2(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"valueType", p);
+}
+
+static const IHTMLParamElement2Vtbl HTMLParamElement2Vtbl = {
+    HTMLParamElement2_QueryInterface,
+    HTMLParamElement2_AddRef,
+    HTMLParamElement2_Release,
+    HTMLParamElement2_GetTypeInfoCount,
+    HTMLParamElement2_GetTypeInfo,
+    HTMLParamElement2_GetIDsOfNames,
+    HTMLParamElement2_Invoke,
+    HTMLParamElement2_put_name,
+    HTMLParamElement2_get_name,
+    HTMLParamElement2_put_type,
+    HTMLParamElement2_get_type,
+    HTMLParamElement2_put_value,
+    HTMLParamElement2_get_value,
+    HTMLParamElement2_put_valueType,
+    HTMLParamElement2_get_valueType
+};
+
+static inline HTMLParamElement *HTMLParamElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLParamElement, element.node.event_target.dispex);
+}
+
+static void *HTMLParamElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLParamElement *This = HTMLParamElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLParamElement, riid))
+        return &This->IHTMLParamElement_iface;
+    if(IsEqualGUID(&IID_IHTMLParamElement2, riid))
+        return &This->IHTMLParamElement2_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLParamElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLParamElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLParamElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLParamElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+static void HTMLParamElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLParamElement_tid, NULL);
+    dispex_info_add_interface(info, IHTMLParamElement2_tid, NULL);
+}
+
+dispex_static_data_t HTMLParamElement_dispex = {
+    .id           = OBJID_HTMLParamElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLParamElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLParamElement_tid,
+    .init_info    = HTMLParamElement_init_dispex_info,
+};
+
+HRESULT HTMLParamElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLParamElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLParamElement_iface.lpVtbl = &HTMLParamElementVtbl;
+    ret->IHTMLParamElement2_iface.lpVtbl = &HTMLParamElement2Vtbl;
+    ret->element.node.vtbl = &HTMLParamElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLParamElement_dispex);
+
     *elem = &ret->element;
     return S_OK;
 }

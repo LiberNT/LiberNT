@@ -10,6 +10,154 @@
 #include <reactos/arm64/early_uart.h>
 #include "../../winload/winload.h"
 
+BOOLEAN Arm64IsKernelVaMapped(ULONGLONG Va);
+
+#include <reactos/arm64/earlyfont.h>
+
+#define OSL_FB_CELL_HEIGHT 14
+
+extern VOID (*Arm64TrapScreenRoutine)(PCSTR Text);
+extern UINT8 arm64_exception_vectors[];
+extern ULONG_PTR VramAddress;
+
+static volatile ULONG *OslFbBase;
+static ULONG OslFbWidth;
+static ULONG OslFbHeight;
+static ULONG OslFbStride;
+static ULONG OslFbScale;
+static ULONG OslFbColumns;
+static ULONG OslFbRows;
+static ULONG OslFbRow;
+static ULONG OslFbColumn;
+static ULONG OslFbColor;
+static BOOLEAN OslFbRowCleared;
+
+static
+BOOLEAN
+OslFbTranslates(
+    _In_ ULONG_PTR Address)
+{
+    ULONG64 Result;
+
+    if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
+        ARM64_AT(S1E2W, Address);
+    else
+        ARM64_AT(S1E1W, Address);
+    ARM64_ISB();
+    Result = ARM64_READ_SYSREG(PAR_EL1);
+    return (Result & 1) == 0;
+}
+
+static
+VOID
+OslFbFill(
+    _In_ volatile ULONG *Pixels,
+    _In_ ULONG Count,
+    _In_ ULONG Color)
+{
+    ULONG_PTR Line;
+    ULONG Index;
+
+    for (Index = 0; Index < Count; Index++)
+        Pixels[Index] = Color;
+    for (Line = (ULONG_PTR)Pixels & ~63ULL; Line < (ULONG_PTR)(Pixels + Count); Line += 64)
+        ARM64_DC(CIVAC, Line);
+}
+
+static
+VOID
+OslFbPuts(
+    _In_ PCSTR Text)
+{
+    ULONG Y, X, SubY, SubX;
+
+    if (!OslFbBase)
+        return;
+
+    if (!OslFbTranslates((ULONG_PTR)OslFbBase) ||
+        !OslFbTranslates((ULONG_PTR)(OslFbBase + (SIZE_T)(OslFbHeight - 1) * OslFbStride)))
+    {
+        volatile ULONG *Alias = (volatile ULONG *)(ARM64_PHYS_MAP_BASE | (ULONG_PTR)OslFbBase);
+
+        if (!OslFbTranslates((ULONG_PTR)Alias) ||
+            !OslFbTranslates((ULONG_PTR)(Alias + (SIZE_T)(OslFbHeight - 1) * OslFbStride)))
+        {
+            return;
+        }
+        OslFbBase = Alias;
+    }
+
+    for (; *Text; Text++)
+    {
+        if (*Text == '\n' || OslFbColumn >= OslFbColumns)
+        {
+            OslFbColumn = 0;
+            OslFbRow = (OslFbRow + 1) % OslFbRows;
+            OslFbRowCleared = FALSE;
+            if (*Text == '\n')
+                continue;
+        }
+
+        if (!OslFbRowCleared)
+        {
+            for (Y = 0; Y < OSL_FB_CELL_HEIGHT * OslFbScale; Y++)
+                OslFbFill(OslFbBase + (SIZE_T)(OslFbRow * OSL_FB_CELL_HEIGHT * OslFbScale + Y) * OslFbStride, OslFbWidth, 0);
+            OslFbRowCleared = TRUE;
+        }
+
+        for (Y = 0; Y < EARLY_FONT_HEIGHT; Y++)
+        {
+            UCHAR Bits = ((UCHAR)*Text >= EARLY_FONT_FIRST_CHAR && (UCHAR)*Text <= EARLY_FONT_LAST_CHAR) ?
+                         EarlyFont8x13[(UCHAR)*Text - EARLY_FONT_FIRST_CHAR][Y] : 0xFF;
+
+            for (SubY = 0; SubY < OslFbScale; SubY++)
+            {
+                volatile ULONG *Pixels = OslFbBase +
+                                         (SIZE_T)(OslFbRow * OSL_FB_CELL_HEIGHT * OslFbScale + Y * OslFbScale + SubY) * OslFbStride +
+                                         OslFbColumn * EARLY_FONT_WIDTH * OslFbScale;
+
+                for (X = 0; X < EARLY_FONT_WIDTH; X++)
+                {
+                    for (SubX = 0; SubX < OslFbScale; SubX++)
+                        Pixels[X * OslFbScale + SubX] = (Bits & (0x80 >> X)) ? OslFbColor : 0;
+                }
+                for (X = 0; X < EARLY_FONT_WIDTH * OslFbScale; X += 16)
+                    ARM64_DC(CIVAC, (ULONG_PTR)(Pixels + X));
+            }
+        }
+        OslFbColumn++;
+    }
+    ARM64_DSB(SY);
+}
+
+static
+VOID
+OslFbPrepare(VOID)
+{
+    if (!FrameBufferData || !VramAddress || FrameBufferData->BitsPerPixel != 32 ||
+        FrameBufferData->ScreenWidth < 320 || FrameBufferData->ScreenHeight < 200 ||
+        FrameBufferData->PixelsPerScanLine < FrameBufferData->ScreenWidth)
+    {
+        return;
+    }
+
+    OslFbWidth = FrameBufferData->ScreenWidth;
+    OslFbHeight = FrameBufferData->ScreenHeight;
+    OslFbStride = FrameBufferData->PixelsPerScanLine;
+    OslFbScale = (OslFbWidth >= 2048) ? 2 : 1;
+    OslFbColumns = OslFbWidth / (EARLY_FONT_WIDTH * OslFbScale);
+    OslFbRows = OslFbHeight / (OSL_FB_CELL_HEIGHT * OslFbScale);
+    OslFbRow = 0;
+    OslFbRowCleared = FALSE;
+    OslFbColumn = 0;
+    OslFbColor = FrameBufferData->PixelMasks.RedMask | FrameBufferData->PixelMasks.GreenMask |
+                 FrameBufferData->PixelMasks.BlueMask;
+    if (!OslFbColor)
+        OslFbColor = 0x00FFFFFF;
+    OslFbBase = (volatile ULONG *)(VramAddress + FrameBufferData->FrameBufferOffset);
+    Arm64TrapScreenRoutine = OslFbPuts;
+}
+
 const PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
 const PFN_NUMBER MmArchMaxRamdiskPage = MM_MAX_PAGE_LOADER;
 
@@ -70,8 +218,10 @@ OslArchMapFirmwareRuntime(
 VOID
 OslArchInitialize(VOID)
 {
+    Arm64DescribeDeviceTreePlatform();
     EarlyUartInitialize(0);
     FwLateDebugPutChar = Arm64LateDebugPutChar;
+    Arm64InstallAppleSmbios();
 }
 
 VOID
@@ -101,7 +251,21 @@ OslArchPrepareHandoff(
         return FALSE;
 
     Arm64PreparePageTables();
+    if (FrameBufferData && VramAddress)
+    {
+        ULONGLONG FrameBase = VramAddress + FrameBufferData->FrameBufferOffset;
+        ULONGLONG FrameEnd = FrameBase + (ULONGLONG)FrameBufferData->PixelsPerScanLine * FrameBufferData->ScreenHeight * sizeof(ULONG);
+
+        FrameBase &= ~((ULONGLONG)MM_PAGE_SIZE - 1);
+        FrameEnd = (FrameEnd + MM_PAGE_SIZE - 1) & ~((ULONGLONG)MM_PAGE_SIZE - 1);
+        if (!Arm64IsKernelVaMapped(ARM64_PHYS_MAP_BASE | FrameBase) &&
+            !Arm64MapVirtualMemory(ARM64_PHYS_MAP_BASE | FrameBase, FrameBase, FrameEnd - FrameBase, ARM64_MEM_ATTR_NORMAL_WC))
+            ERR("winload: framebuffer alias mapping failed\n");
+    }
+    OslFbPrepare();
     FwExitBootServices();
+    Arm64StopFirmwareWatchdog();
+    Arm64SetVbarAuto((ULONG_PTR)arm64_exception_vectors);
     WinLdrSetProcessorContext(OSL_NT_VERSION);
     RtlZeroMemory((PVOID)KI_USER_SHARED_DATA, MM_PAGE_SIZE);
     return TRUE;

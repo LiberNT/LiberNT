@@ -11,6 +11,7 @@
 	.global KiSwapContextInternal
 	.extern KfLowerIrql
 	.extern KiRetireDpcList
+	.extern KiRunStackCallout
 	.extern KiTrapReturn
 	.extern KiSaveVfpState
 	.extern KiRestoreVfpState
@@ -36,6 +37,24 @@ KiRetireDpcListInDpcStack:
     bl      KiRetireDpcList
 
 .Lretire_dpc_done:
+    ldp     x29, x30, [sp], #16
+    ret
+    .seh_endproc
+
+    .global KiCallOnKernelStack
+    .seh_proc KiCallOnKernelStack
+KiCallOnKernelStack:
+    stp     x29, x30, [sp, #-16]!
+    .seh_save_fplr_x 16
+    mov     x29, sp
+    .seh_set_fp
+    .seh_endprologue
+
+    mov     sp, x1
+    sub     sp, sp, #16
+    bl      KiRunStackCallout
+    mov     sp, x29
+
     ldp     x29, x30, [sp], #16
     ret
     .seh_endproc
@@ -91,6 +110,7 @@ KiThreadStartup:
     mov     x27, xzr
     mov     x28, xzr
     mov     x29, xzr
+    mov     x30, xzr
 
     /* ARM64: When we enter here, SP points to KSWITCH_FRAME.
      * The KSTART_FRAME is immediately above it (higher address).
@@ -148,9 +168,17 @@ KiThreadStartup:
 	    cbz     x16, .Lthreadstart_bad_return
 	    ldr     x0, [x16, #ThTrapFrame]     /* x0 = TrapFrame */
 	    cbz     x0, .Lthreadstart_bad_return
-	    str     xzr, [x16, #ThTrapFrame]    /* init frame is below InitialStack */
 
 	    sub     x1, x0, #KEXCEPTION_FRAME_LENGTH /* x1 = ExceptionFrame */
+
+	    mov     x19, x0
+	    mov     x20, x1
+	    bl      KiArm64ThreadStartupExit
+	    mrs     x18, tpidr_el1
+	    ldr     x16, [x18, #PcCurrentThread]
+	    str     xzr, [x16, #ThTrapFrame]    /* init frame is below InitialStack */
+	    mov     x0, x19
+	    mov     x1, x20
 
 	    b       KiTrapReturn                /* Never returns (ERET) */
 
@@ -187,7 +215,7 @@ KiThreadStartup:
  */
     .seh_proc KiSwapContext
 KiSwapContext:
-    msr     daifset, #0x2
+    msr     daifset, #0x3
     .seh_nop
     isb
     .seh_nop
@@ -266,7 +294,7 @@ KiSwapContext:
      */
     mrs     x18, tpidr_el1
 
-    msr     daifclr, #0x2
+    msr     daifclr, #0x3
 
     ldr     x30, [sp, #ExReturn]   /* Load caller's return address */
     add     sp, sp, #KI_SWAP_EXCEPTION_FRAME_LENGTH

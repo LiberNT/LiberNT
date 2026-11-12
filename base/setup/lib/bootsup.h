@@ -19,5 +19,10 @@ InstallBootManagerAndBootEntries(
     _In_ PCUNICODE_STRING DestinationArcPath,
     _In_ ULONG_PTR Options);
 
+NTSTATUS
+NTAPI
+RemoveHostSetupBoot(
+    _In_ PCUNICODE_STRING SystemRootPath);
+
 
 /* EOF */

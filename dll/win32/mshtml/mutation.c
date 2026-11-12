@@ -283,7 +283,12 @@ static void parse_complete(HTMLDocumentObj *doc)
     call_property_onchanged(&doc->cp_container, 1005);
     call_explorer_69(doc);
 
+#ifdef __REACTOS__
+    if(doc->doc_object_service && !(doc->window->load_flags & BINDING_REFRESH) &&
+       (doc->webbrowser || (doc->download_state && !doc->is_mhtml)))
+#else
     if(doc->webbrowser && !(doc->window->load_flags & BINDING_REFRESH))
+#endif
         IDocObjectService_FireNavigateComplete2(doc->doc_object_service, &doc->window->base.IHTMLWindow2_iface, 0);
 
     /* FIXME: IE7 calls EnableModelless(TRUE), EnableModelless(FALSE) and sets interactive state here */
@@ -309,6 +314,15 @@ static nsresult run_end_load(HTMLDocumentNode *This, nsISupports *arg1, nsISuppo
         parse_complete(doc_obj);
         IUnknown_Release(doc_obj->outer_unk);
     }
+#ifdef __REACTOS__
+    else if(window->base.outer_window && window->base.outer_window->parent && doc_obj->doc_object_service &&
+            !(window->base.outer_window->load_flags & BINDING_REFRESH)) {
+        IUnknown_AddRef(doc_obj->outer_unk);
+        IDocObjectService_FireNavigateComplete2(doc_obj->doc_object_service,
+                &window->base.outer_window->base.IHTMLWindow2_iface, navNoHistory | navNoReadFromCache);
+        IUnknown_Release(doc_obj->outer_unk);
+    }
+#endif
 
     bind_event_scripts(This);
 
@@ -1290,10 +1304,8 @@ static HRESULT mutation_observer_ctor_value(DispatchEx *dispex, LCID lcid,
         return E_UNEXPECTED;
 
     callback = params->rgvarg + (params->cArgs - 1);
-    if (V_VT(callback) != VT_DISPATCH) {
-        FIXME("Should return TypeMismatchError\n");
-        return E_FAIL;
-    }
+    if (V_VT(callback) != VT_DISPATCH)
+        return MSHTML_E_TYPE_MISMATCH;
 
     if (!res)
         return S_OK;

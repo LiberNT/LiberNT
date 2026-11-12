@@ -330,6 +330,30 @@ MiSegmentChargeCommit(
 }
 
 static
+MI_PTE
+MiSegmentSettledOriginalPte(
+    _In_ PMI_SYSTEM System,
+    _In_ ULONG Frame,
+    _In_ PMI_PTE Proto)
+{
+    PMI_PFN Entry = &System->Pfn.Pfn[Frame];
+
+    for (;;)
+    {
+        KIRQL OldIrql = MiPfnLock(&System->Pfn, Frame);
+        MI_PTE OriginalPte = Entry->OriginalPte;
+        BOOLEAN Busy = (BOOLEAN)((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT) != 0);
+
+        MI_ASSERT(Entry->PteAddress == (ULONG64)(ULONG_PTR)Proto);
+        MI_ASSERT(Entry->State == MiPageActive && Entry->ReferenceCount != 0);
+        MiPfnUnlock(&System->Pfn, Frame, OldIrql);
+        if (!Busy)
+            return OriginalPte;
+        MI_PAUSE();
+    }
+}
+
+static
 VOID
 MiSegmentDiscardPage(
     _Inout_ PMI_SEGMENT Segment,
@@ -341,6 +365,7 @@ MiSegmentDiscardPage(
     {
         MI_PTE Pte = MiArchPteRead(Proto);
         MI_SOFT_KIND Kind = MiSoftKind(Pte);
+        MI_PTE OriginalPte;
         ULONG Frame;
 
         if (Kind == MiSoftPageFile)
@@ -361,10 +386,11 @@ MiSegmentDiscardPage(
         if (!MiPfnReactivate(&System->Pfn, Frame, (ULONG64)(ULONG_PTR)Proto))
             continue;
 
-        if (MiSoftKind(System->Pfn.Pfn[Frame].OriginalPte) == MiSoftPageFile)
+        OriginalPte = MiSegmentSettledOriginalPte(System, Frame, Proto);
+        if (MiSoftKind(OriginalPte) == MiSoftPageFile)
             MiArchPteWrite(Proto, MiSoftMake(MiSoftDemandZero, MiSoftProtection(Pte), 0));
         else
-            MiArchPteWrite(Proto, System->Pfn.Pfn[Frame].OriginalPte);
+            MiArchPteWrite(Proto, OriginalPte);
 
         MiReleasePageBacking(System, Frame);
         MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
@@ -789,7 +815,7 @@ MiSegmentAdoptFrame(
     PMI_PTE Proto;
     MI_PTE Pte;
 
-    if (Segment->Kind != MiSegmentPageFileBacked || Frame >= System->Pfn.FrameCount)
+    if (Segment->Kind != MiSegmentPageFileBacked || !MiPfnTracked(&System->Pfn, Frame))
         return STATUS_INVALID_PARAMETER;
 
     MI_MUTEX_ACQUIRE(&Segment->Lock);
@@ -1539,7 +1565,8 @@ MiReleaseViewPageEx(
     if (Clones && MiCloneDeletePage(Space, VirtualAddress, Slot, TableFrame, NewValue))
         return;
 
-    if (!MiArchPteIsValid(Pte) || !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE))
+    if (!MiArchPteIsValid(Pte) || !MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) ||
+        !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE))
     {
         if (Pte == NewValue)
             return;
@@ -1603,7 +1630,7 @@ MiTlbBatchFlush(
 
         MI_ASSERT((Entry->Va & (PAGE_SIZE - 1)) == 0);
         MI_ASSERT(i == 0 || Batch->Entry[i - 1].Va <= Entry->Va);
-        MI_ASSERT(Entry->Frame < System->Pfn.FrameCount);
+        MI_ASSERT(MiPfnTracked(&System->Pfn, Entry->Frame));
         MI_ASSERT(MI_ATOMIC_READ32(&System->Pfn.Pfn[Entry->Frame].ShareCount) > 0);
         MI_ASSERT((Entry->Segment == NULL) == (Entry->Proto == NULL));
         MI_ASSERT(Entry->Clone == NULL || (Entry->Segment == NULL && !Entry->Private));
@@ -1692,7 +1719,7 @@ MiTlbBatchInsert(
 
     MI_ASSERT(Batch != NULL && Batch->Count < MI_TLB_BATCH_SIZE);
     MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
-    MI_ASSERT(Frame < Space->System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&Space->System->Pfn, Frame));
     MI_ASSERT(MI_ATOMIC_READ32(&Space->System->Pfn.Pfn[Frame].ShareCount) > 0);
     MI_ASSERT((Segment == NULL) == (Proto == NULL));
     MI_ASSERT(Clone == NULL || (Segment == NULL && !Private));
@@ -1887,15 +1914,9 @@ MiCopyOnWrite(
     if (Vad->Type == MiVadPrivate || !(MI_PFN_FLAGS(&System->Pfn.Pfn[OldFrame]) & MI_PFN_FLAG_PROTOTYPE))
         return STATUS_ACCESS_VIOLATION;
 
-    if (!MiChargeCommit(Space, 1))
-        return STATUS_COMMITMENT_LIMIT;
-
     Frame = MiPfnAllocatePage(&System->Pfn, Space->IsSystem ? 0 : MI_ALLOCATE_HIGH);
     if (Frame == MI_FRAME_INVALID)
-    {
-        MiReturnCommit(Space, 1);
         return STATUS_NO_MEMORY;
-    }
 
     Source = MiPfnMapFrame(&System->Pfn, OldFrame);
     Target = MiPfnMapFrame(&System->Pfn, Frame);
@@ -1911,7 +1932,6 @@ MiCopyOnWrite(
         if (!NT_SUCCESS(Status))
         {
             MiPfnShareDecrement(&System->Pfn, Frame, TRUE);
-            MiReturnCommit(Space, 1);
             return Status;
         }
         Protection |= Cache;
@@ -2052,7 +2072,8 @@ MiSetMappedViewProtection(
             continue;
 
         if (Pte == 0 || MiSoftKind(Pte) == MiSoftPrototype ||
-            (MiArchPteIsValid(Pte) && (MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE)))
+            (MiArchPteIsValid(Pte) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) &&
+             (MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE)))
         {
             MiReleaseViewPage(Space, Vad, Va, Slot, TableFrame, MiSoftMake(MiSoftPrototype, Protection, 0));
         }
@@ -2872,7 +2893,7 @@ MiAssertPendingReads(
         MI_ASSERT(Link->Flink->Blink == Link && Link->Blink->Flink == Link);
         MI_ASSERT(Read->Segment == Segment && Read->Proto != NULL && Read->Mapping != NULL);
         MI_ASSERT(MiSoftKind(Read->Original) == MiSoftSubsection);
-        MI_ASSERT(Read->Frame < Segment->System->Pfn.FrameCount && Read->Bytes <= PAGE_SIZE);
+        MI_ASSERT(MiPfnTracked(&Segment->System->Pfn, Read->Frame) && Read->Bytes <= PAGE_SIZE);
         for (OtherLink = Segment->PendingReads.Flink; OtherLink != Link; OtherLink = OtherLink->Flink)
         {
             PMI_SEGMENT_READ Other = CONTAINING_RECORD(OtherLink, MI_SEGMENT_READ, Link);
@@ -3327,10 +3348,17 @@ MiWritePrototypePage(
 
         if (NT_SUCCESS(Status))
         {
-            MI_MUTEX_ACQUIRE(&Segment->FlushLock);
-            Status = MiSegmentWritePage(Segment, Page, Frame, Entry->OriginalPte);
-            MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, (BOOLEAN)NT_SUCCESS(Status));
-            MI_MUTEX_RELEASE(&Segment->FlushLock);
+            if (MI_MUTEX_TRY_ACQUIRE(&Segment->FlushLock))
+            {
+                Status = MiSegmentWritePage(Segment, Page, Frame, Entry->OriginalPte);
+                MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, (BOOLEAN)NT_SUCCESS(Status));
+                MI_MUTEX_RELEASE(&Segment->FlushLock);
+            }
+            else
+            {
+                Status = STATUS_CANT_WAIT;
+                MiPfnWriteComplete(&System->Pfn, Frame, Entry->OriginalPte, FALSE);
+            }
 
             if (Segment->FileOps.ReleaseForModWrite != NULL)
                 Segment->FileOps.ReleaseForModWrite(Segment->FileContext, ModWriteToken);

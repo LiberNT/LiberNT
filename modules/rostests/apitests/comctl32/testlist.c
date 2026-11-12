@@ -6,6 +6,7 @@ extern void func_ImageListApi(void);
 extern void func_ListViewGroups(void);
 extern void func_LoadIconWithScaleDown(void);
 extern void func_propsheetv6(void);
+extern void func_PropSheetRecalc(void);
 extern void func_TabControlKeys(void);
 extern void func_StatusBarResize(void);
 extern void func_TaskDialogTitle(void);
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "ListViewGroups", func_ListViewGroups },
     { "LoadIconWithScaleDown", func_LoadIconWithScaleDown },
     { "propsheetv6", func_propsheetv6 },
+    { "PropSheetRecalc", func_PropSheetRecalc },
     { "TabControlKeys", func_TabControlKeys },
     { "StatusBarResize", func_StatusBarResize },
     { "TaskDialogTitle", func_TaskDialogTitle },

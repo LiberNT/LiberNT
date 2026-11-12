@@ -469,6 +469,32 @@ NTSTATUS
 NtfsFileRecordDeleteExternalBacking(
     _In_ NtfsFileRecord *FileRecord);
 
+NTSTATUS
+NtfsFileRecordReadObjectId(
+    _In_ NtfsFileRecord *FileRecord,
+    _Out_ PObjectIdEx ObjectId);
+
+NTSTATUS
+NtfsFileRecordSetObjectId(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_ const ObjectIdEx* ObjectId);
+
+NTSTATUS
+NtfsFileRecordSetObjectIdExtended(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_reads_bytes_(48) const UCHAR* ExtendedInfo);
+
+NTSTATUS
+NtfsFileRecordDeleteObjectId(
+    _In_ NtfsFileRecord *FileRecord);
+
+NTSTATUS
+NtfsFileRecordRenameDataStream(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_opt_ PWSTR OldName,
+    _In_opt_ PWSTR NewName,
+    _In_ BOOLEAN ReplaceIfExists);
+
 /*
  * Validates and projects IO_REPARSE_TAG_SYMLINK or
  * IO_REPARSE_TAG_MOUNT_POINT data without allocating or copying strings.
@@ -731,6 +757,14 @@ NtfsMasterFileTableGetLinkShortName(
     _Out_ PUNICODE_STRING ShortName);
 
 NTSTATUS
+NtfsMasterFileTableEnumerateLinks(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord File,
+    _Inout_ PULONG Context,
+    _Out_ PULONGLONG ParentReference,
+    _Out_ PUNICODE_STRING LinkName);
+
+NTSTATUS
 NtfsMasterFileTableIsDescendantDirectory(
     _In_ PNtfsMasterFileTable Mft,
     _In_ ULONGLONG FileReference,
@@ -961,6 +995,15 @@ NtfsVolumeNextReparsePoint(
     _In_ BOOLEAN Inclusive,
     _Out_ PULONG Tag,
     _Out_ PULONGLONG FileReference);
+
+NTSTATUS
+NtfsVolumeCheckObjectIdSupport(
+    _In_ PNtfsVolume DiskVolume);
+
+NTSTATUS
+NtfsVolumeReadObjectId(
+    _In_ PNtfsVolume DiskVolume,
+    _Out_ PObjectIdEx ObjectId);
 
 void
 NtfsVolumeDestroy(

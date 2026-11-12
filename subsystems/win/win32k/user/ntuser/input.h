@@ -112,6 +112,38 @@ typedef struct _RAWINPUT_HID_TARGET
 VOID NTAPI RawInputProcessHidReport(HANDLE hDevice, const UCHAR *Report, ULONG Length);
 ULONG NTAPI RawInputGetHidTargets(PRAWINPUT_HID_TARGET Targets, ULONG MaxTargets);
 
+/* Device files of the raw input thread that close for their device's removal */
+typedef struct _INPUT_HOLD
+{
+    KMUTEX Lock;
+    FAST_MUTEX QueueLock;
+    LIST_ENTRY Requests;
+    LIST_ENTRY Targets;
+    PKEVENT Wake;
+} INPUT_HOLD, *PINPUT_HOLD;
+
+typedef struct _INPUT_HOLD_FILE
+{
+    HANDLE Handle;
+    HANDLE EventHandle;
+    PKEVENT ReadEvent;
+    struct _INPUT_HOLD_TARGET *Target;
+    BOOLEAN Closed;
+} INPUT_HOLD_FILE, *PINPUT_HOLD_FILE;
+
+typedef VOID (NTAPI *PINPUT_HOLD_ENDED)(PVOID Owner, PINPUT_HOLD_FILE File, PCUNICODE_STRING Path, BOOLEAN Reopen,
+                                        PVOID Context);
+
+VOID NTAPI InputHoldInitialize(PINPUT_HOLD Hold, PKEVENT Wake);
+NTSTATUS NTAPI InputHoldOpen(PINPUT_HOLD_FILE File, PUNICODE_STRING Path, ACCESS_MASK DesiredAccess);
+NTSTATUS NTAPI InputHoldIoctl(PINPUT_HOLD_FILE File, ULONG IoControlCode, PVOID Buffer, ULONG Length);
+VOID NTAPI InputHoldFollow(PINPUT_HOLD Hold, PINPUT_HOLD_FILE File, PCUNICODE_STRING Path, PVOID Owner,
+                           PDRIVER_OBJECT DriverObject);
+NTSTATUS NTAPI InputHoldRead(PINPUT_HOLD Hold, PINPUT_HOLD_FILE File, PIO_STATUS_BLOCK Iosb, PVOID Buffer, ULONG Length);
+VOID NTAPI InputHoldClose(PINPUT_HOLD Hold, PINPUT_HOLD_FILE File, BOOLEAN ReadPending);
+VOID NTAPI InputHoldProcessRequests(PINPUT_HOLD Hold, PINPUT_HOLD_ENDED Ended, PVOID Context);
+VOID NTAPI InputHoldStop(PINPUT_HOLD Hold);
+
 /* HID consumer controls */
 #define HIDINPUT_MAX_DEVICES 8
 #define HIDINPUT_MAX_RAW_DEVICES 16

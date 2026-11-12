@@ -347,8 +347,12 @@ MaximumAllowedAs(HANDLE Token, PCWSTR Name)
     NTSTATUS Status;
     ACCESS_MASK Granted = 0;
 
-    StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\BaseNamedObjects\\%s",
-                     NtCurrentPeb()->SessionId, Name);
+    /* Session 0 keeps its named objects in the global directory */
+    if (NtCurrentPeb()->SessionId == 0)
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\BaseNamedObjects\\%s", Name);
+    else
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"\\Sessions\\%lu\\BaseNamedObjects\\%s",
+                         NtCurrentPeb()->SessionId, Name);
     RtlInitUnicodeString(&ObjectName, Path);
     InitializeObjectAttributes(&Attributes, &ObjectName, OBJ_CASE_INSENSITIVE, NULL, NULL);
     ok(ImpersonateLoggedOnUser(Token), "impersonation failed %lu\n", GetLastError());

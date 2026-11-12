@@ -17,6 +17,10 @@
 #define KDP_USB_FIRST_KEY               2
 #define KDP_USB_ERROR_ROLLOVER          0x01
 #define KDP_USB_FIRST_USAGE             0x04
+#define KDP_USB_MODIFIER_CTRL           0x11
+#define KDP_USB_MODIFIER_ALT            0x44
+#define KDP_USB_USAGE_B                 0x05
+#define KDP_USB_USAGE_K                 0x0E
 
 typedef struct _KDP_USB_KEYBOARD
 {
@@ -196,10 +200,8 @@ KdpUsbKeyboardTryGetChar(
     ULONG Length;
     NTSTATUS Status;
     ULONG i;
+    BOOLEAN Stopped = KeBugCheckActive || KdTermCrashMode;
     CHAR c;
-
-    if (!KeBugCheckActive && !KdTermCrashMode)
-        return -1;
 
     c = KdpUsbKeyboardDequeue(ScanCode);
     if (c != -1)
@@ -209,6 +211,8 @@ KdpUsbKeyboardTryGetChar(
     {
         Keyboard = &KdpUsbKeyboards[i];
         if (!InterlockedCompareExchange(&Keyboard->Valid, 0, 0))
+            continue;
+        if (!Stopped && !(Keyboard->Interface.Flags & ROS_USB_KEYBOARD_POLL_WHILE_RUNNING))
             continue;
 
         if (!Keyboard->Prepared)
@@ -224,6 +228,67 @@ KdpUsbKeyboardTryGetChar(
     }
 
     return KdpUsbKeyboardDequeue(ScanCode);
+}
+
+static BOOLEAN
+KdpUsbReportHoldsChord(
+    _In_reads_bytes_(ROS_USB_KEYBOARD_BOOT_REPORT_SIZE) PUCHAR Report)
+{
+    BOOLEAN B = FALSE, K = FALSE;
+    ULONG i;
+
+    if (((Report[0] & KDP_USB_MODIFIER_CTRL) == 0) || ((Report[0] & KDP_USB_MODIFIER_ALT) == 0))
+        return FALSE;
+
+    for (i = KDP_USB_FIRST_KEY; i < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE; i++)
+    {
+        if (Report[i] == KDP_USB_USAGE_B)
+            B = TRUE;
+        else if (Report[i] == KDP_USB_USAGE_K)
+            K = TRUE;
+    }
+
+    return B && K;
+}
+
+BOOLEAN
+KdpUsbKeyboardChordHeld(VOID)
+{
+    UCHAR Report[ROS_USB_KEYBOARD_BOOT_REPORT_SIZE];
+    PKDP_USB_KEYBOARD Keyboard;
+    BOOLEAN Held = FALSE;
+    ULONG Length;
+    NTSTATUS Status;
+    ULONG i;
+
+    if (!KeBugCheckActive && !KdTermCrashMode)
+        return FALSE;
+
+    for (i = 0; i < KDP_USB_KEYBOARD_MAX; i++)
+    {
+        Keyboard = &KdpUsbKeyboards[i];
+        if (!InterlockedCompareExchange(&Keyboard->Valid, 0, 0))
+            continue;
+
+        if (!Keyboard->Prepared)
+        {
+            Keyboard->Prepared = TRUE;
+            Keyboard->Interface.Prepare(Keyboard->Interface.Context);
+        }
+
+        RtlZeroMemory(Report, sizeof(Report));
+        Status = Keyboard->Interface.Poll(Keyboard->Interface.Context, Report, sizeof(Report), &Length);
+        if ((Status == STATUS_SUCCESS) && (Length > KDP_USB_FIRST_KEY) &&
+            (Report[KDP_USB_FIRST_KEY] != KDP_USB_ERROR_ROLLOVER))
+        {
+            RtlCopyMemory(Keyboard->LastReport, Report, sizeof(Keyboard->LastReport));
+        }
+
+        if (KdpUsbReportHoldsChord(Keyboard->LastReport))
+            Held = TRUE;
+    }
+
+    return Held;
 }
 
 /* EOF */

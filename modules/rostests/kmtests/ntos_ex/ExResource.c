@@ -197,21 +197,21 @@ TestResourceUndocumentedShortcuts(
     /* ExEnterCriticalRegionAndAcquireResourceShared, ExEnterCriticalRegionAndAcquireSharedWaitForExclusive */
     Count = 0;
     Ret = pExEnterCriticalRegionAndAcquireResourceShared(Res); ++Count;
-    ok_eq_pointer(Ret, GetNTVersion() <= _WIN32_WINNT_WS03 ? KeGetCurrentThread()->Win32Thread : NULL);
+    ok_eq_pointer(Ret, PsGetCurrentThreadWin32Thread());
     ok_bool_true(KeAreApcsDisabled(), "KeAreApcsDisabled returned");
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);
     CheckResourceStatus(Res, FALSE, Count, 0LU, 0LU);
 
     Ret = pExEnterCriticalRegionAndAcquireResourceShared(Res); ++Count;
-    ok_eq_pointer(Ret, GetNTVersion() <= _WIN32_WINNT_WS03 ? KeGetCurrentThread()->Win32Thread : NULL);
+    ok_eq_pointer(Ret, PsGetCurrentThreadWin32Thread());
     ok_bool_true(KeAreApcsDisabled(), "KeAreApcsDisabled returned");
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);
     CheckResourceStatus(Res, FALSE, Count, 0LU, 0LU);
 
     pExEnterCriticalRegionAndAcquireSharedWaitForExclusive(Res); ++Count;
-    ok_eq_pointer(Ret, GetNTVersion() <= _WIN32_WINNT_WS03 ? KeGetCurrentThread()->Win32Thread : NULL);
+    ok_eq_pointer(Ret, PsGetCurrentThreadWin32Thread());
     ok_bool_true(KeAreApcsDisabled(), "KeAreApcsDisabled returned");
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);
@@ -242,14 +242,14 @@ TestResourceUndocumentedShortcuts(
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);
     Ret = pExEnterCriticalRegionAndAcquireResourceExclusive(Res); ++Count;
-    ok_eq_pointer(Ret, GetNTVersion() <= _WIN32_WINNT_WS03 ? KeGetCurrentThread()->Win32Thread : NULL);
+    ok_eq_pointer(Ret, PsGetCurrentThreadWin32Thread());
     ok_bool_true(KeAreApcsDisabled(), "KeAreApcsDisabled returned");
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);
     CheckResourceStatus(Res, TRUE, Count, 0LU, 0LU);
 
     Ret = pExEnterCriticalRegionAndAcquireResourceExclusive(Res); ++Count;
-    ok_eq_pointer(Ret, GetNTVersion() <= _WIN32_WINNT_WS03 ? KeGetCurrentThread()->Win32Thread : NULL);
+    ok_eq_pointer(Ret, PsGetCurrentThreadWin32Thread());
     ok_bool_true(KeAreApcsDisabled(), "KeAreApcsDisabled returned");
     if (pKeAreAllApcsDisabled)
         ok_eq_bool(pKeAreAllApcsDisabled(), AreApcsDisabled);

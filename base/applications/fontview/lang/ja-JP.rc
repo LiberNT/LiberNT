@@ -11,10 +11,10 @@ STRINGTABLE
 BEGIN
     IDS_INSTALL "インストール(&I)"
     IDS_PRINT "印刷(&P)"
-    IDS_STRING "LiberNT は万人に開かれたコンピュータのシステムです。1234567890"
+    IDS_STRING "LiberNT は万人に開かれたコンピューターのシステムです。1234567890"
     IDS_OPEN "フォントを開く..."
     IDS_ERROR "エラー"
-    IDS_ERROR_NOMEM "処理の完了に充分なメモリーがありません。"
+    IDS_ERROR_NOMEM "処理の完了に充分なメモリがありません。"
     IDS_ERROR_NOFONT "ファイル %1 は有効なフォントファイルではありません。"
     IDS_ERROR_NOCLASS "ウィンドウ クラスを初期化できません。"
     IDS_ERROR_ISINSTALLED "このフォントはインストール済みです!" 

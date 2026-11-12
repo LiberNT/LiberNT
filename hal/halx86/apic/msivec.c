@@ -21,10 +21,13 @@
 typedef struct _MSI_ALLOCATION_STATE {
     BOOLEAN Allocated;                      /* TRUE if vector is allocated */
     KIRQL Irql;                             /* IRQL for this vector */
+    BOOLEAN Targeted;
+    UCHAR Processor;
 } MSI_ALLOCATION_STATE, *PMSI_ALLOCATION_STATE;
 
 static MSI_ALLOCATION_STATE HalpMsiVectorState[MSI_VECTOR_COUNT];
 static KSPIN_LOCK HalpMsiVectorLock;
+static ULONG HalpMsiNextProcessor;
 extern PPROCESSOR_IDENTITY HalpProcessorIdentity;
 
 static BOOLEAN
@@ -91,6 +94,61 @@ HalConvertDeviceIdtToIrql(
     _In_ ULONG Vector)
 {
     return HalpVectorToIrql((UCHAR)Vector);
+}
+
+/* A message vector keeps one processor for every caller, and one allowed several processors takes the next in turn */
+static
+ULONG
+HalpSelectMessageProcessor(
+    _In_ ULONG Vector,
+    _In_ KAFFINITY TargetProcessors)
+{
+    PMSI_ALLOCATION_STATE State;
+    KAFFINITY Mask = TargetProcessors;
+    ULONG Processor;
+    ULONG Candidate;
+    ULONG Step;
+    KIRQL OldIrql;
+
+    if (Mask == 0)
+        Mask = HalpDefaultInterruptAffinity ? HalpDefaultInterruptAffinity
+                                            : KeQueryActiveProcessors();
+
+    Processor = HalpSelectTargetProcessor(Mask);
+    if (Vector < MSI_VECTOR_MIN || Vector > MSI_VECTOR_MAX)
+        return Processor;
+
+    State = &HalpMsiVectorState[Vector - MSI_VECTOR_MIN];
+
+    OldIrql = KeAcquireSpinLockRaiseToDpc(&HalpMsiVectorLock);
+
+    if (State->Allocated)
+    {
+        if (State->Targeted && (Mask & ((KAFFINITY)1 << State->Processor)))
+        {
+            Processor = State->Processor;
+        }
+        else
+        {
+            for (Step = 0; Step < sizeof(KAFFINITY) * 8; Step++)
+            {
+                Candidate = (HalpMsiNextProcessor + Step) % (sizeof(KAFFINITY) * 8);
+                if (Mask & ((KAFFINITY)1 << Candidate))
+                {
+                    Processor = Candidate;
+                    break;
+                }
+            }
+
+            HalpMsiNextProcessor = Processor + 1;
+            State->Processor = (UCHAR)Processor;
+            State->Targeted = TRUE;
+        }
+    }
+
+    KeReleaseSpinLock(&HalpMsiVectorLock, OldIrql);
+
+    return Processor;
 }
 
 NTSTATUS
@@ -179,7 +237,8 @@ HalpGetMessageRoutingInfo(
     }
 
     TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-    TargetInfo.TargetProcessors = RoutingInfo->TargetProcessors;
+    TargetInfo.TargetProcessors = (KAFFINITY)1 << HalpSelectMessageProcessor(RoutingInfo->Vector,
+                                                                             RoutingInfo->TargetProcessors);
     TargetInfo.ProcessorNumber = 0;
     TargetInfo.DestinationId = 0;
     Status = HalpGetInterruptTargetInformation(&TargetInfo);
@@ -370,6 +429,7 @@ HalpFreeMsiVector(
     /* Mark as unallocated */
     HalpMsiVectorState[Index].Allocated = FALSE;
     HalpMsiVectorState[Index].Irql = 0;
+    HalpMsiVectorState[Index].Targeted = FALSE;
 
     /* Clear from general HAL vector table */
     HalpVectorToIndex[Vector] = APIC_FREE_VECTOR;

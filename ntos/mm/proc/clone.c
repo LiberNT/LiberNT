@@ -107,7 +107,8 @@ static BOOLEAN
 MiClonePteMayBeClone(PMI_ADDRESS_SPACE Space, MI_PTE Pte)
 {
     if (MiArchPteIsValid(Pte))
-        return (MI_PFN_FLAGS(&Space->System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE) != 0;
+        return MiPfnTracked(&Space->System->Pfn, MiArchPteFrame(Pte)) &&
+               (MI_PFN_FLAGS(&Space->System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE) != 0;
     return MiSoftKind(Pte) == MiSoftPrototype;
 }
 
@@ -134,7 +135,7 @@ MiAssertPublishedCloneRange(PMI_ADDRESS_SPACE Space, PMI_CLONE_RANGE Range)
         MI_ASSERT(Slot != NULL);
         Pte = MiArchPteRead(Slot);
         if (MiArchPteIsValid(Pte))
-            MI_ASSERT(MiArchPteFrame(Pte) < Space->System->Pfn.FrameCount);
+            MI_ASSERT(MiPfnTracked(&Space->System->Pfn, MiArchPteFrame(Pte)));
         MI_ASSERT(MiClonePteMayBeClone(Space, Pte));
     }
     MI_ASSERT(Live == Range->Live);
@@ -543,7 +544,8 @@ static BOOLEAN
 MiClonePrivatePte(PMI_SYSTEM System, MI_PTE Pte)
 {
     if (MiArchPteIsValid(Pte))
-        return !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE);
+        return !MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) ||
+               !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PROTOTYPE);
     return MiSoftKind(Pte) == MiSoftTransition || MiSoftKind(Pte) == MiSoftPageFile;
 }
 

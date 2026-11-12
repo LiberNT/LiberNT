@@ -1270,6 +1270,81 @@ done:
 
 static
 NTSTATUS
+LsapAddIntegrityGroup(
+    IN PVOID TokenInformation,
+    IN LSA_TOKEN_INFORMATION_TYPE TokenInformationType)
+{
+    SID_IDENTIFIER_AUTHORITY MandatoryAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+    PLSA_TOKEN_INFORMATION_V1 TokenInfo1;
+    PTOKEN_GROUPS Groups;
+    PSID User;
+    PSID Label;
+    ULONG Rid = SECURITY_MANDATORY_MEDIUM_RID;
+    ULONG Count;
+    ULONG UserRid;
+    ULONG i;
+
+    if (TokenInformationType != LsaTokenInformationV1) return STATUS_SUCCESS;
+
+    TokenInfo1 = (PLSA_TOKEN_INFORMATION_V1)TokenInformation;
+    User = TokenInfo1->User.User.Sid;
+    Count = (TokenInfo1->Groups != NULL) ? TokenInfo1->Groups->GroupCount : 0;
+
+    for (i = 0; i < Count; i++)
+    {
+        if (TokenInfo1->Groups->Groups[i].Attributes & SE_GROUP_INTEGRITY) return STATUS_SUCCESS;
+
+        if ((TokenInfo1->Groups->Groups[i].Attributes & SE_GROUP_ENABLED) &&
+            RtlEqualSid(TokenInfo1->Groups->Groups[i].Sid, LsapAdministratorsSid))
+        {
+            Rid = SECURITY_MANDATORY_HIGH_RID;
+        }
+    }
+
+    if (User != NULL &&
+        *RtlSubAuthorityCountSid(User) == 1 &&
+        RtlEqualMemory(RtlIdentifierAuthoritySid(User), &NtAuthority, sizeof(NtAuthority)))
+    {
+        UserRid = *RtlSubAuthoritySid(User, 0);
+        if (UserRid == SECURITY_LOCAL_SYSTEM_RID ||
+            UserRid == SECURITY_LOCAL_SERVICE_RID ||
+            UserRid == SECURITY_NETWORK_SERVICE_RID)
+        {
+            Rid = SECURITY_MANDATORY_SYSTEM_RID;
+        }
+    }
+
+    Groups = RtlAllocateHeap(RtlGetProcessHeap(),
+                             HEAP_ZERO_MEMORY,
+                             sizeof(TOKEN_GROUPS) + Count * sizeof(SID_AND_ATTRIBUTES));
+    if (Groups == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Label = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, RtlLengthRequiredSid(1));
+    if (Label == NULL)
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlInitializeSid(Label, &MandatoryAuthority, 1);
+    *RtlSubAuthoritySid(Label, 0) = Rid;
+
+    for (i = 0; i < Count; i++)
+        Groups->Groups[i] = TokenInfo1->Groups->Groups[i];
+
+    Groups->Groups[Count].Sid = Label;
+    Groups->Groups[Count].Attributes = SE_GROUP_INTEGRITY | SE_GROUP_INTEGRITY_ENABLED;
+    Groups->GroupCount = Count + 1;
+
+    if (TokenInfo1->Groups != NULL) RtlFreeHeap(RtlGetProcessHeap(), 0, TokenInfo1->Groups);
+    TokenInfo1->Groups = Groups;
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 LsapSetTokenOwner(
     IN PVOID TokenInformation,
     IN LSA_TOKEN_INFORMATION_TYPE TokenInformationType)
@@ -1688,6 +1763,11 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
 
     Status = LsapAddSamGroups(TokenInformation,
                               TokenInformationType);
+    if (NT_SUCCESS(Status))
+    {
+        Status = LsapAddIntegrityGroup(TokenInformation,
+                                       TokenInformationType);
+    }
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapAddSamGroups() failed (Status 0x%08lx)\n", Status);

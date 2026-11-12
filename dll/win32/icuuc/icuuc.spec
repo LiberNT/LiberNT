@@ -7,6 +7,7 @@
 @ cdecl u_errorName(long) icu.u_errorName
 @ cdecl u_charsToUChars(ptr ptr long) icu.u_charsToUChars
 @ cdecl u_UCharsToChars(ptr ptr long) icu.u_UCharsToChars
+@ cdecl u_strlen(wstr) icu.u_strlen
 @ cdecl ucnv_cbFromUWriteUChars(ptr ptr ptr long ptr) icu.ucnv_cbFromUWriteUChars
 @ cdecl ucnv_cbToUWriteUChars(ptr ptr long long ptr) icu.ucnv_cbToUWriteUChars
 @ cdecl ucnv_close(ptr) icu.ucnv_close

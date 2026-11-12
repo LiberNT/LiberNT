@@ -16,9 +16,13 @@
 #define STATUS_INVALID_SYSTEM_SERVICE ((NTSTATUS)0xC000001C)
 #define STATUS_ALREADY_COMMITTED ((NTSTATUS)0xC0000021)
 #define STATUS_PROCESS_IS_TERMINATING ((NTSTATUS)0xC000010A)
+#define STATUS_NOT_FOUND ((NTSTATUS)0xC0000225)
+#define PASSIVE_LEVEL 0
+#define KeGetCurrentIrql() (MiHostIrql)
+#define MiSystem (*MiSessionTestSystem)
 #define ASSERT MI_ASSERT
-#define InterlockedIncrement(p) (MI_ATOMIC_ADD32(p, 1) + 1)
-#define InterlockedDecrement(p) (MI_ATOMIC_ADD32(p, -1) - 1)
+#define InterlockedIncrement(p) __sync_add_and_fetch((p), 1)
+#define InterlockedDecrement(p) __sync_sub_and_fetch((p), 1)
 #define InterlockedCompareExchange(p, n, o) MI_ATOMIC_CAS32(p, n, o)
 #define InterlockedExchange(p, n) __atomic_exchange_n(p, n, __ATOMIC_SEQ_CST)
 #define InterlockedAnd(p, n) __atomic_fetch_and(p, n, __ATOMIC_SEQ_CST)
@@ -46,6 +50,7 @@ struct _EPROCESS_HOST
     SESSION_TEST_RUNDOWN RundownProtect;
 };
 
+extern PMI_SYSTEM MiSessionTestSystem;
 extern _Thread_local PEPROCESS MiSessionTestCurrent;
 extern volatile LONG MiSessionTestAllocations;
 extern volatile LONG MiSessionTestFailAllocate;
@@ -55,6 +60,13 @@ static inline PEPROCESS PsGetCurrentProcess(VOID) { return MiSessionTestCurrent;
 static inline VOID KeInitializeGuardedMutex(KGUARDED_MUTEX *Lock) { MI_MUTEX_INIT(Lock); }
 static inline VOID KeAcquireGuardedMutex(KGUARDED_MUTEX *Lock) { MI_MUTEX_ACQUIRE(Lock); }
 static inline VOID KeReleaseGuardedMutex(KGUARDED_MUTEX *Lock) { MI_MUTEX_RELEASE(Lock); }
+static inline PLIST_ENTRY RemoveHeadList(PLIST_ENTRY Head)
+{
+    PLIST_ENTRY Entry = Head->Flink;
+
+    RemoveEntryList(Entry);
+    return Entry;
+}
 static inline PVOID ExAllocatePoolWithTag(ULONG Pool, SIZE_T Size, ULONG Tag)
 {
     PVOID Allocation;

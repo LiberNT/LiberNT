@@ -89,6 +89,7 @@ list(APPEND SOURCE
     ${SOURCE_CRT_TESTS}
     ${crt_asm}
     CommandLine.c
+    ExitFlush.c
     ieee.c
     popen.c
     splitpath.c

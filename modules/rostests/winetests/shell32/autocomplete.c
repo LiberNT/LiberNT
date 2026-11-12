@@ -27,6 +27,9 @@
 #include "shlguid.h"
 #include "shldisp.h"
 #include "shlobj.h"
+#ifdef __REACTOS__
+#include <tlhelp32.h>
+#endif
 
 #include "wine/test.h"
 
@@ -446,15 +449,78 @@ static HRESULT string_enumerator_create(void **ppv, WCHAR **suggestions, int cou
     return S_OK;
 }
 
+#ifdef __REACTOS__
+static FILETIME input_time;
+
+/* Thread ids are reused, so a thread counts as started by the input from its creation time */
+static UINT get_running_threads_since_input(HANDLE *threads, UINT max)
+{
+    THREADENTRY32 entry = { sizeof(entry) };
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    FILETIME created, exited, kernel, user;
+    HANDLE thread;
+    UINT count = 0;
+
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return 0;
+    if (Thread32First(snapshot, &entry))
+    {
+        do
+        {
+            if (entry.th32OwnerProcessID != GetCurrentProcessId() || count == max)
+                continue;
+            thread = OpenThread(SYNCHRONIZE | THREAD_QUERY_INFORMATION, FALSE, entry.th32ThreadID);
+            if (!thread)
+                continue;
+            if (GetThreadTimes(thread, &created, &exited, &kernel, &user) &&
+                CompareFileTime(&created, &input_time) >= 0 &&
+                WaitForSingleObject(thread, 0) == WAIT_TIMEOUT)
+                threads[count++] = thread;
+            else
+                CloseHandle(thread);
+        } while (Thread32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return count;
+}
+#endif
+
 static void dispatch_messages(void)
 {
     MSG msg;
+#ifdef __REACTOS__
+    HANDLE threads[16];
+    DWORD start = GetTickCount(), elapsed;
+    UINT count, i;
+
+    /* An input hands its completion to a worker thread that exits once it posted the result */
+    for (;;)
+    {
+        while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }
+        count = get_running_threads_since_input(threads, ARRAY_SIZE(threads));
+        elapsed = GetTickCount() - start;
+        if (count && elapsed < 100)
+            MsgWaitForMultipleObjects(count, threads, FALSE, 100 - elapsed, QS_ALLINPUT);
+        for (i = 0; i < count; i++)
+            CloseHandle(threads[i]);
+        if (!count || elapsed >= 100)
+            break;
+    }
+#else
     Sleep(33);
+#endif
     while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE))
     {
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
+#ifdef __REACTOS__
+    GetSystemTimeAsFileTime(&input_time);
+#endif
 }
 
 #define check_dropdown(acdropdown, hwnd_edit, list, list_num) check_dropdown_(__FILE__, __LINE__, acdropdown, hwnd_edit, list, list_num)
@@ -821,6 +887,9 @@ static void test_custom_source(void)
     ok(hr == S_OK, "IAutoComplete_Init failed: %lx\n", hr);
 
     SetFocus(hwnd_edit);
+#ifdef __REACTOS__
+    GetSystemTimeAsFileTime(&input_time);
+#endif
     SendMessageW(hwnd_edit, WM_CHAR, 'a', 1);
     SendMessageW(hwnd_edit, WM_CHAR, 'u', 1);
     dispatch_messages();

@@ -4832,8 +4832,60 @@ void test_WritePwrScheme(void)
 
 }
 
+static const GUID BuiltinSchemes[] =
+{
+   {0x381b4222, 0xf694, 0x41f0, {0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e}},
+   {0xa1841308, 0x3541, 0x4fab, {0xbc, 0x81, 0xf7, 0x15, 0x56, 0xf2, 0x0b, 0x4a}},
+   {0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8c, 0x63, 0x5c}},
+};
+static const GUID VideoSubgroup = {0x7516b95f, 0xf776, 0x4464, {0x8c, 0x53, 0x06, 0x16, 0x7f, 0x40, 0xcc, 0x99}};
+static const GUID VideoTimeout = {0x3c0bc021, 0xc8a8, 0x4e07, {0xa9, 0x73, 0x6b, 0x14, 0xcb, 0xcb, 0x2b, 0x7e}};
+static const GUID SleepSubgroup = {0x238c9fa8, 0x0aad, 0x41ed, {0x83, 0xf4, 0x97, 0xbe, 0x24, 0x2c, 0x8f, 0x20}};
+static const GUID StandbyTimeout = {0x29f6c1db, 0x86da, 0x48c5, {0x9f, 0xdb, 0xf2, 0xb6, 0x7b, 0x1f, 0x44, 0xda}};
+static const GUID HibernateTimeout = {0x9d7815a6, 0x7ee4, 0x497e, {0x88, 0x88, 0x51, 0x5a, 0x05, 0xf0, 0x23, 0x64}};
+static const GUID DiskSubgroup = {0x0012ee47, 0x9041, 0x4b5d, {0x9b, 0x77, 0x53, 0x5f, 0xba, 0x8b, 0x14, 0x42}};
+static const GUID DiskTimeout = {0x6738e2c4, 0xe8a5, 0x4a42, {0xb1, 0x6a, 0xe0, 0x40, 0xe7, 0x69, 0x75, 0x6e}};
+static const GUID *LegacySubgroups[] = {&VideoSubgroup, &SleepSubgroup, &SleepSubgroup, &DiskSubgroup};
+static const GUID *LegacySettings[] = {&VideoTimeout, &StandbyTimeout, &HibernateTimeout, &DiskTimeout};
+static DWORD SavedTimeouts[ARRAYSIZE(BuiltinSchemes)][ARRAYSIZE(LegacySettings)][2];
+
+static void save_scheme_timeouts(void)
+{
+   UINT i, j;
+
+   for (i = 0; i < ARRAYSIZE(BuiltinSchemes); i++)
+   {
+      for (j = 0; j < ARRAYSIZE(LegacySettings); j++)
+      {
+         PowerReadACValueIndex(NULL, &BuiltinSchemes[i], LegacySubgroups[j], LegacySettings[j], &SavedTimeouts[i][j][0]);
+         PowerReadDCValueIndex(NULL, &BuiltinSchemes[i], LegacySubgroups[j], LegacySettings[j], &SavedTimeouts[i][j][1]);
+      }
+   }
+}
+
+static void restore_scheme_timeouts(const GUID *active)
+{
+   UINT i, j;
+
+   for (i = 0; i < ARRAYSIZE(BuiltinSchemes); i++)
+   {
+      for (j = 0; j < ARRAYSIZE(LegacySettings); j++)
+      {
+         PowerWriteACValueIndex(NULL, &BuiltinSchemes[i], LegacySubgroups[j], LegacySettings[j], SavedTimeouts[i][j][0]);
+         PowerWriteDCValueIndex(NULL, &BuiltinSchemes[i], LegacySubgroups[j], LegacySettings[j], SavedTimeouts[i][j][1]);
+      }
+   }
+   ok(PowerSetActiveScheme(NULL, active) == ERROR_SUCCESS, "restoring the active power scheme failed\n");
+}
+
 START_TEST(power)
 {
+   GUID *active = NULL;
+
+   /* The legacy calls below write their policies into the GUID schemes, as on Windows 11 */
+   ok(PowerGetActiveScheme(NULL, &active) == ERROR_SUCCESS, "PowerGetActiveScheme failed\n");
+   save_scheme_timeouts();
+
    if (1)
       skip("CallNtPowerInformation test is broken and fails on Windows\n");
    else
@@ -4866,4 +4918,9 @@ START_TEST(power)
    test_WriteGlobalPwrPolicy();
    test_WriteProcessorPwrScheme();
 
+   if (active)
+   {
+      restore_scheme_timeouts(active);
+      LocalFree(active);
+   }
 }

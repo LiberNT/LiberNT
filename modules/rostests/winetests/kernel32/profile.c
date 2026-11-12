@@ -519,6 +519,26 @@ static void create_test_file(LPCSTR name, LPCSTR data, DWORD size)
     CloseHandle(hfile);
 }
 
+static void age_test_file(LPCSTR name)
+{
+    ULARGE_INTEGER time;
+    FILETIME ft;
+    HANDLE hfile;
+
+    GetSystemTimeAsFileTime(&ft);
+    time.LowPart = ft.dwLowDateTime;
+    time.HighPart = ft.dwHighDateTime;
+    time.QuadPart -= 30000000;
+    ft.dwLowDateTime = time.LowPart;
+    ft.dwHighDateTime = time.HighPart;
+
+    hfile = CreateFileA(name, FILE_WRITE_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                        OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(hfile != INVALID_HANDLE_VALUE, "cannot open %s\n", name);
+    ok(SetFileTime(hfile, NULL, NULL, &ft), "SetFileTime failed, error %lu\n", GetLastError());
+    CloseHandle(hfile);
+}
+
 static BOOL emptystr_ok(CHAR emptystr[MAX_PATH])
 {
     int i;
@@ -589,8 +609,8 @@ static void test_GetPrivateProfileString(const char *content, const char *descri
     create_test_file(filename, content, lstrlenA(content));
 
     /* Run this test series with caching. Wine won't cache profile
-       files younger than 2.1 seconds. */
-    Sleep(2500);
+       files younger than 2.1 seconds, so the file is made older. */
+    age_test_file(filename);
 
     /* lpAppName is NULL */
     memset(buf, 0xc, sizeof(buf));

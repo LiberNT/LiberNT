@@ -37,6 +37,7 @@ struct HTMLImg {
     HTMLElement element;
 
     IHTMLImgElement IHTMLImgElement_iface;
+    IHTMLImgElement2 IHTMLImgElement2_iface;
 
     nsIDOMHTMLImageElement *nsimg;
 };
@@ -615,6 +616,44 @@ static HRESULT HTMLImgElement_get_readystate(HTMLDOMNode *iface, BSTR *p)
     return IHTMLImgElement_get_readyState(&This->IHTMLImgElement_iface, p);
 }
 
+static inline HTMLImg *impl_from_IHTMLImgElement2(IHTMLImgElement2 *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLImg, IHTMLImgElement2_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLImgElement2, IHTMLImgElement2,
+                      impl_from_IHTMLImgElement2(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLImgElement2_put_longDesc(IHTMLImgElement2 *iface, BSTR v)
+{
+    HTMLImg *This = impl_from_IHTMLImgElement2(iface);
+
+    TRACE("(%p)->(%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"longDesc", v);
+}
+
+static HRESULT WINAPI HTMLImgElement2_get_longDesc(IHTMLImgElement2 *iface, BSTR *p)
+{
+    HTMLImg *This = impl_from_IHTMLImgElement2(iface);
+
+    TRACE("(%p)->(%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"longDesc", p);
+}
+
+static const IHTMLImgElement2Vtbl HTMLImgElement2Vtbl = {
+    HTMLImgElement2_QueryInterface,
+    HTMLImgElement2_AddRef,
+    HTMLImgElement2_Release,
+    HTMLImgElement2_GetTypeInfoCount,
+    HTMLImgElement2_GetTypeInfo,
+    HTMLImgElement2_GetIDsOfNames,
+    HTMLImgElement2_Invoke,
+    HTMLImgElement2_put_longDesc,
+    HTMLImgElement2_get_longDesc
+};
+
 static inline HTMLImg *HTMLImg_from_DispatchEx(DispatchEx *iface)
 {
     return CONTAINING_RECORD(iface, HTMLImg, element.node.event_target.dispex);
@@ -626,6 +665,8 @@ static void *HTMLImgElement_query_interface(DispatchEx *dispex, REFIID riid)
 
     if(IsEqualGUID(&IID_IHTMLImgElement, riid))
         return &This->IHTMLImgElement_iface;
+    if(IsEqualGUID(&IID_IHTMLImgElement2, riid))
+        return &This->IHTMLImgElement2_iface;
     if(IsEqualGUID(&IID_IHTMLDatabinding, riid))
         return &This->element.IHTMLDatabinding_iface;
 
@@ -689,6 +730,7 @@ static void HTMLImgElement_init_dispex_info(dispex_data_t *info, compat_mode_t m
     const dispex_hook_t *const img_hooks = img_ie11_hooks + 1;
 
     dispex_info_add_interface(info, IHTMLImgElement_tid, mode >= COMPAT_MODE_IE11 ? img_ie11_hooks : img_hooks);
+    dispex_info_add_interface(info, IHTMLImgElement2_tid, NULL);
     if(mode < COMPAT_MODE_IE11)
         dispex_info_add_interface(info, IHTMLDatabinding_tid, NULL);
 
@@ -713,6 +755,7 @@ HRESULT HTMLImgElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTML
         return E_OUTOFMEMORY;
 
     ret->IHTMLImgElement_iface.lpVtbl = &HTMLImgElementVtbl;
+    ret->IHTMLImgElement2_iface.lpVtbl = &HTMLImgElement2Vtbl;
     ret->element.node.vtbl = &HTMLImgElementImplVtbl;
 
     HTMLElement_Init(&ret->element, doc, nselem, &HTMLImageElement_dispex);

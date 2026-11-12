@@ -159,8 +159,11 @@ NTSTATUS PortFdoInitializeRequestPools(_In_ PFDO_DEVICE_EXTENSION FdoExtension)
             Count = 256;
         if (Count > MAXULONG / Size)
             return STATUS_INVALID_PARAMETER;
-        FdoExtension->SrbExtensionPool = PortAllocateDmaBuffer(
-            FdoExtension, Count * Size, FALSE, &Address);
+        if (FdoExtension->Miniport.PortConfig.VirtualDevice)
+            FdoExtension->SrbExtensionPool = ExAllocatePoolWithTag(NonPagedPool, Count * Size, TAG_SRB_EXTENSION);
+        else
+            FdoExtension->SrbExtensionPool = PortAllocateDmaBuffer(
+                FdoExtension, Count * Size, FALSE, &Address);
         if (!FdoExtension->SrbExtensionPool)
             return STATUS_INSUFFICIENT_RESOURCES;
         for (Index = 0; Index < Count; Index++)
@@ -221,6 +224,8 @@ PortDmaListControl(PDEVICE_OBJECT DeviceObject, PIRP UnusedIrp,
         Request->Sgl->List[Index].PhysicalAddress = DmaList->Elements[Index].Address;
         Request->Sgl->List[Index].Length = DmaList->Elements[Index].Length;
     }
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    PortFdoTrackRequest(Fdo, Request);
     if (MiniportBuildIo(&Fdo->Miniport, Srb))
         MiniportStartIo(&Fdo->Miniport, Srb);
     return;
@@ -768,7 +773,11 @@ VOID PortFreeSrbContext(_In_ PIRP Irp)
         return;
 
     FdoExtension = SrbContext->FdoExtension;
-    Pooled = FdoExtension != NULL && FdoExtension->RequestPoolsReady;
+    ASSERT(FdoExtension != NULL);
+    PortFdoUntrackRequest(FdoExtension, SrbContext);
+    if (SrbContext->WasRecovering)
+        PortFdoRequestRecovered(FdoExtension);
+    Pooled = FdoExtension->RequestPoolsReady;
 
     if (SrbContext->DmaList)
     {
@@ -812,7 +821,7 @@ VOID PortFreeSrbContext(_In_ PIRP Irp)
         ExFreePoolWithTag(SrbContext, TAG_SRB_CONTEXT);
 
     Irp->Tail.Overlay.DriverContext[0] = NULL;
-    PortFdoEndRequest(FdoExtension);
+    PortFdoEndRequest(FdoExtension, Irp);
 }
 
 
@@ -915,18 +924,20 @@ PortSubmitSrb(
     KIRQL Irql;
     BOOLEAN Pending = FALSE;
 
+    Irp->Tail.Overlay.DriverContext[0] = NULL;
     if (FdoExtension->RequestPoolsReady)
         SrbContext = ExAllocateFromNPagedLookasideList(&FdoExtension->SrbContextLookaside);
     else
         SrbContext = ExAllocatePoolWithTag(NonPagedPool, sizeof(STOR_SRB_CONTEXT), TAG_SRB_CONTEXT);
     if (SrbContext == NULL)
     {
-        PortFdoEndRequest(FdoExtension);
+        PortFdoEndRequest(FdoExtension, Irp);
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Fail;
     }
 
     RtlZeroMemory(SrbContext, sizeof(STOR_SRB_CONTEXT));
+    InitializeListHead(&SrbContext->ActiveEntry);
     Irp->Tail.Overlay.DriverContext[0] = SrbContext;
     SrbContext->LegacySrb = Srb;
     SrbContext->FdoExtension = FdoExtension;
@@ -980,7 +991,19 @@ PortSubmitSrb(
     IoMarkIrpPending(Irp);
     Pending = TRUE;
 
-    if (Srb->DataTransferLength && Irp->MdlAddress)
+    if (Srb->DataTransferLength && Irp->MdlAddress && FdoExtension->Miniport.PortConfig.VirtualDevice)
+    {
+        ASSERT(FdoExtension->DmaAdapter == NULL);
+        if (PortMapsDataBuffer(FdoExtension, Srb))
+        {
+            Status = PortMapDataBuffer(SrbContext, Irp->MdlAddress, Srb);
+            if (!NT_SUCCESS(Status))
+                goto Fail;
+            if (MiniportSrb != Srb)
+                ((PSTORAGE_REQUEST_BLOCK)MiniportSrb)->DataBuffer = Srb->DataBuffer;
+        }
+    }
+    else if (Srb->DataTransferLength && Irp->MdlAddress)
     {
         PDMA_ADAPTER Adapter = FdoExtension->DmaAdapter;
         if (Adapter->DmaOperations->Size <
@@ -1020,11 +1043,10 @@ PortSubmitSrb(
         return STATUS_PENDING;
     }
 
-    if (!MiniportBuildIo(&FdoExtension->Miniport, MiniportSrb))
-        return STATUS_PENDING;
-
     KeRaiseIrql(DISPATCH_LEVEL, &Irql);
-    MiniportStartIo(&FdoExtension->Miniport, MiniportSrb);
+    PortFdoTrackRequest(FdoExtension, SrbContext);
+    if (MiniportBuildIo(&FdoExtension->Miniport, MiniportSrb))
+        MiniportStartIo(&FdoExtension->Miniport, MiniportSrb);
     KeLowerIrql(Irql);
 
     return STATUS_PENDING;
@@ -1625,6 +1647,26 @@ PortPdoPnp(
             }
             break;
         }
+
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+            ASSERT(PdoExtension->FdoExtension != NULL);
+            Status = PortSendDeviceUsageNotification(PdoExtension->FdoExtension->Device,
+                                                     Stack->Parameters.UsageNotification.Type,
+                                                     Stack->Parameters.UsageNotification.InPath);
+            if (NT_SUCCESS(Status))
+            {
+                PortAdjustUsageCount(&PdoExtension->Usage, Stack);
+                IoInvalidateDeviceState(DeviceObject);
+            }
+            break;
+
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+            if (PortIsInUsagePath(&PdoExtension->Usage))
+            {
+                Information |= PNP_DEVICE_NOT_DISABLEABLE;
+                Status = STATUS_SUCCESS;
+            }
+            break;
 
         default:
             break;

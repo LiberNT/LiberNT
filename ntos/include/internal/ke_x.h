@@ -29,6 +29,16 @@ KeGetPreviousMode(VOID)
 }
 #endif
 
+/* Kernel setup targets a processor that KeNumberProcessors may not count yet */
+FORCEINLINE
+VOID
+KiSetTargetProcessorDpc(
+    _Inout_ PKDPC Dpc,
+    _In_ CCHAR Number)
+{
+    Dpc->Number = (USHORT)(KI_DPC_TARGET_PROCESSOR_OFFSET + Number);
+}
+
 FORCEINLINE
 VOID
 KiRequestDispatchInterrupt(
@@ -1129,6 +1139,7 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
 {
     ULONG Hand;
     PKTIMER_TABLE_ENTRY TableEntry;
+    BOOLEAN WasHead;
 
     /* Remove the timer from the timer list and check if it's empty */
     Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
@@ -1137,15 +1148,22 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
     ASSERT(Timer->TimerListEntry.Flink != NULL && Timer->TimerListEntry.Blink != NULL);
     ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
     ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
+    TableEntry = &KiTimerTableListHead[Hand];
+    WasHead = (TableEntry->Entry.Flink == &Timer->TimerListEntry);
     if (RemoveEntryList(&Timer->TimerListEntry))
     {
         /* Get the respective timer table entry */
-        TableEntry = &KiTimerTableListHead[Hand];
         if (&TableEntry->Entry == TableEntry->Entry.Flink)
         {
             /* Set the entry to an infinite absolute time */
             TableEntry->Time.HighPart = 0xFFFFFFFF;
         }
+    }
+    else if (WasHead)
+    {
+        ASSERT(!IsListEmpty(&TableEntry->Entry));
+        TableEntry->Time.QuadPart =
+            CONTAINING_RECORD(TableEntry->Entry.Flink, KTIMER, TimerListEntry)->DueTime.QuadPart;
     }
 
     /* Clear the list entries on dbg builds so we can tell the timer is gone */
@@ -1153,20 +1171,6 @@ KiRemoveEntryTimer(IN PKTIMER Timer)
     Timer->TimerListEntry.Flink = NULL;
     Timer->TimerListEntry.Blink = NULL;
 #endif
-}
-
-FORCEINLINE
-VOID
-KiAcquireTimerAdjustmentLock(VOID)
-{
-    KeAcquireSpinLockAtDpcLevel(&KiTimerAdjustmentLock);
-}
-
-FORCEINLINE
-VOID
-KiReleaseTimerAdjustmentLock(VOID)
-{
-    KeReleaseSpinLockFromDpcLevel(&KiTimerAdjustmentLock);
 }
 
 //
@@ -1183,7 +1187,6 @@ KxInsertTimer(IN PKTIMER Timer,
 
     /* The caller owns the timer object; acquire its table lock second */
     LockQueue = KiAcquireTimerLock(Hand);
-    KiReleaseTimerAdjustmentLock();
 
     if (!Timer->Header.Inserted)
     {
@@ -1201,6 +1204,66 @@ KxInsertTimer(IN PKTIMER Timer,
     else
     {
         /* The timer is table-owned; release both locks */
+        KiReleaseTimerLock(LockQueue);
+        KiReleaseDispatcherObject(&Timer->Header);
+    }
+}
+
+/*
+ * Arms a thread's own wait timer. A deadline that passes before the timer is
+ * in the table is not signalled here, because its thread has not started to
+ * wait yet: the timer is taken back out and the thread reports the timeout.
+ */
+FORCEINLINE
+BOOLEAN
+KxInsertThreadWaitTimer(IN PKTIMER Timer,
+                        IN ULONG Hand)
+{
+    PKSPIN_LOCK_QUEUE LockQueue;
+    BOOLEAN Armed = TRUE;
+
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+    ASSERT(Timer->Header.Inserted);
+
+    LockQueue = KiAcquireTimerLock(Hand);
+
+    if (KiInsertTimerTable(Timer, Hand))
+    {
+        KiRemoveEntryTimer(Timer);
+        Timer->Header.Inserted = FALSE;
+        Armed = FALSE;
+    }
+
+    KiReleaseTimerLock(LockQueue);
+    KiReleaseDispatcherObject(&Timer->Header);
+    return Armed;
+}
+
+FORCEINLINE
+VOID
+KxInsertTimerNoRelease(IN PKTIMER Timer,
+                       IN ULONG Hand)
+{
+    PKSPIN_LOCK_QUEUE LockQueue;
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+
+    /* Establish the same object-to-table lock order as timer setters */
+    KiAcquireDispatcherObject(&Timer->Header);
+    LockQueue = KiAcquireTimerLock(Hand);
+
+    if (!Timer->Header.Inserted)
+    {
+        KiReleaseTimerLock(LockQueue);
+        KiReleaseDispatcherObject(&Timer->Header);
+        return;
+    }
+
+    if (KiInsertTimerTable(Timer, Hand))
+    {
+        KiCompleteTimer(Timer, LockQueue);
+    }
+    else
+    {
         KiReleaseTimerLock(LockQueue);
         KiReleaseDispatcherObject(&Timer->Header);
     }
@@ -1264,18 +1327,15 @@ KiComputeDueTime(IN PKTIMER Timer,
 // Also called by timer code when canceling an inserted timer.
 // Removes a timer from it's tree.
 //
-
 FORCEINLINE
 BOOLEAN
 KxRemoveTreeTimer(IN PKTIMER Timer)
 {
-    ULONG Hand;
+    ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
     PKSPIN_LOCK_QUEUE LockQueue;
     PKTIMER_TABLE_ENTRY TimerEntry;
     BOOLEAN Removed = FALSE;
-
-    KiAcquireTimerAdjustmentLock();
-    Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
+    BOOLEAN WasHead;
 
     /* Acquire timer lock */
     LockQueue = KiAcquireTimerLock(Hand);
@@ -1295,15 +1355,22 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
             ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
             ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
         }
+        TimerEntry = &KiTimerTableListHead[Hand];
+        WasHead = (TimerEntry->Entry.Flink == &Timer->TimerListEntry);
         if (Timer->TimerListEntry.Flink && RemoveEntryList(&Timer->TimerListEntry))
         {
             /* Get the entry and check if it's empty */
-            TimerEntry = &KiTimerTableListHead[Hand];
             if (IsListEmpty(&TimerEntry->Entry))
             {
                 /* Clear the time then */
                 TimerEntry->Time.HighPart = 0xFFFFFFFF;
             }
+        }
+        else if (WasHead)
+        {
+            ASSERT(!IsListEmpty(&TimerEntry->Entry));
+            TimerEntry->Time.QuadPart =
+                CONTAINING_RECORD(TimerEntry->Entry.Flink, KTIMER, TimerListEntry)->DueTime.QuadPart;
         }
         Timer->TimerListEntry.Flink = NULL;
         Timer->TimerListEntry.Blink = NULL;
@@ -1311,7 +1378,6 @@ KxRemoveTreeTimer(IN PKTIMER Timer)
 
     /* Release the timer lock */
     KiReleaseTimerLock(LockQueue);
-    KiReleaseTimerAdjustmentLock();
     return Removed;
 }
 
@@ -1378,60 +1444,6 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
     /* Calculate the timer handle */
     *Hand = KiComputeTimerTableIndex(DueTime);
     Timer->Header.Hand = (UCHAR)*Hand;
-}
-
-FORCEINLINE
-BOOLEAN
-KxIsThreadWaitTimerExpired(IN PKTIMER Timer,
-                           IN PLARGE_INTEGER Interval,
-                           IN KPROCESSOR_MODE WaitMode,
-                           IN OUT PULONG Hand)
-{
-    BOOLEAN Absolute = (Interval->QuadPart >= 0);
-    BOOLEAN Expired;
-
-    if (Absolute)
-    {
-        KiAcquireTimerAdjustmentLock();
-        KxSetTimerForThreadWait(Timer, *Interval, WaitMode, Hand);
-    }
-
-    Expired = (KeQueryInterruptTime() >= Timer->DueTime.QuadPart);
-    if (Absolute) KiReleaseTimerAdjustmentLock();
-    return Expired;
-}
-FORCEINLINE
-VOID
-KxInsertTimerNoRelease(IN PKTIMER Timer,
-                       IN ULONG Hand,
-                       IN PLARGE_INTEGER Interval,
-                       IN KPROCESSOR_MODE WaitMode)
-{
-    PKSPIN_LOCK_QUEUE LockQueue;
-    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
-
-    KiAcquireDispatcherObject(&Timer->Header);
-    KiAcquireTimerAdjustmentLock();
-    if (!Timer->Header.Inserted)
-    {
-        KiReleaseTimerAdjustmentLock();
-        KiReleaseDispatcherObject(&Timer->Header);
-        return;
-    }
-
-    if (Interval->QuadPart >= 0)
-        KxSetTimerForThreadWait(Timer, *Interval, WaitMode, &Hand);
-
-    LockQueue = KiAcquireTimerLock(Hand);
-    KiReleaseTimerAdjustmentLock();
-
-    if (KiInsertTimerTable(Timer, Hand))
-        KiCompleteTimer(Timer, LockQueue);
-    else
-    {
-        KiReleaseTimerLock(LockQueue);
-        KiReleaseDispatcherObject(&Timer->Header);
-    }
 }
 
 //
@@ -1519,7 +1531,8 @@ KxTryBeginThreadWait(IN PKTHREAD Thread)
 }
 
 //
-// Leaves the dispatcher on the way back to the top of a wait loop. When the
+// Releases the dispatcher database and leaves the dispatcher on the way back
+// to the top of a wait loop. When the
 // loop retries for a deliverable kernel APC, the APC interrupt was requested
 // while IRQL masked it and fires as IRQL drops. A hypervisor that does not
 // see the guest lower CR8 (VirtualBox on Hyper-V) injects it only at the next
@@ -1532,7 +1545,7 @@ KxExitDispatcherForRetry(IN PKTHREAD Thread)
 {
     KIRQL WaitIrql = Thread->WaitIrql;
 
-    KiExitDispatcher(WaitIrql);
+    KiReleaseDispatcherLock(WaitIrql);
     if (KiIsKernelApcDeliverable(Thread, WaitIrql))
         HalRequestSoftwareInterrupt(APC_LEVEL);
 }
@@ -1918,7 +1931,10 @@ KiWaitForThreadSwapOut(IN PKTHREAD Thread)
         YieldProcessor();
     }
 #elif KI_THREAD_HANDOFF_USES_RUNNING
-    ASSERT(!Thread->Running);
+    while (Thread->Running)
+    {
+        YieldProcessor();
+    }
 #else
     UNREFERENCED_PARAMETER(Thread);
 #endif
@@ -2006,8 +2022,7 @@ KxQueueReadyThread(IN PKTHREAD Thread,
     /* Check if this thread is allowed to run in this CPU */
 #ifdef CONFIG_SMP
     if ((KiThreadAffinityMask(Thread) & Prcb->SetMember) &&
-        (!KiIsProcessorParked(Prcb) ||
-         !(KiThreadAffinityMask(Thread) & KiGetNonParkedProcessorSet())))
+        !KiShouldVacateProcessor(Thread, Prcb))
 #else
     if (TRUE)
 #endif
@@ -2066,47 +2081,56 @@ KiSelectReadyThread(IN KPRIORITY Priority,
     ULONG PrioritySet;
     LONG HighPriority;
     PLIST_ENTRY ListEntry;
-    PKTHREAD Thread = NULL;
+    PKTHREAD Thread;
 
-    /* Save the current mask and get the priority set for the CPU */
-    PrioritySet = Prcb->ReadySummary >> Priority;
-    if (!PrioritySet) goto Quickie;
+    if (Priority > HIGH_PRIORITY)
+        return NULL;
 
-    /* Get the highest priority possible */
-    BitScanReverse((PULONG)&HighPriority, PrioritySet);
-    ASSERT((PrioritySet & PRIORITY_MASK(HighPriority)) != 0);
-    HighPriority += Priority;
-
-    /* Make sure the list isn't empty at the highest priority */
-    ASSERT(IsListEmpty(&Prcb->DispatcherReadyListHead[HighPriority]) == FALSE);
-    KiAssertReadyQueue(Prcb, HighPriority);
-
-    /* Get the first thread on the list */
-    ListEntry = Prcb->DispatcherReadyListHead[HighPriority].Flink;
-    Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
-
-    /* Make sure this thread is here for a reason */
-    ASSERT(Thread != Prcb->IdleThread);
-    ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
-    ASSERT(ListEntry->Flink->Blink == ListEntry && ListEntry->Blink->Flink == ListEntry);
-    ASSERT(HighPriority == Thread->Priority);
-    ASSERT(KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number));
-    ASSERT(Thread->NextProcessor == Prcb->Number);
-
-    /* Remove it from the list */
-    if (RemoveEntryList(&Thread->WaitListEntry))
+    for (;;)
     {
-        /* The list is empty now, reset the ready summary */
-        Prcb->ReadySummary ^= PRIORITY_MASK(HighPriority);
-    }
-    KiAssertReadyQueue(Prcb, HighPriority);
+        /* Save the current mask and get the priority set for the CPU */
+        PrioritySet = Prcb->ReadySummary >> Priority;
+        if (!PrioritySet) return NULL;
 
-    /* Sanity check and return the thread */
-Quickie:
-    ASSERT((Thread == NULL) ||
-           (Thread->BasePriority == 0) ||
-           (Thread->Priority != 0));
-    return Thread;
+        /* Get the highest priority possible */
+        BitScanReverse((PULONG)&HighPriority, PrioritySet);
+        ASSERT((PrioritySet & PRIORITY_MASK(HighPriority)) != 0);
+        HighPriority += Priority;
+
+        /* Make sure the list isn't empty at the highest priority */
+        ASSERT(IsListEmpty(&Prcb->DispatcherReadyListHead[HighPriority]) == FALSE);
+        KiAssertReadyQueue(Prcb, HighPriority);
+
+        /* Get the first thread on the list */
+        ListEntry = Prcb->DispatcherReadyListHead[HighPriority].Flink;
+        Thread = CONTAINING_RECORD(ListEntry, KTHREAD, WaitListEntry);
+
+        /* Make sure this thread is here for a reason */
+        ASSERT(Thread != Prcb->IdleThread);
+        ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
+        ASSERT(ListEntry->Flink->Blink == ListEntry && ListEntry->Blink->Flink == ListEntry);
+        ASSERT(HighPriority == Thread->Priority);
+        ASSERT(Thread->NextProcessor == Prcb->Number);
+
+        /* Remove it from the list */
+        if (RemoveEntryList(&Thread->WaitListEntry))
+        {
+            /* The list is empty now, reset the ready summary */
+            Prcb->ReadySummary ^= PRIORITY_MASK(HighPriority);
+        }
+        KiAssertReadyQueue(Prcb, HighPriority);
+
+        /* An affinity narrowed while the thread was on its way here is honoured by placing it again */
+        if (!(KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number)))
+        {
+            KiInsertDeferredReadyList(Thread);
+            continue;
+        }
+
+        /* Sanity check and return the thread */
+        ASSERT((Thread->BasePriority == 0) || (Thread->Priority != 0));
+        return Thread;
+    }
 }
 
 //

@@ -46,8 +46,8 @@ BEGIN
             UDS_AUTOBUDDY | UDS_ARROWKEYS | WS_BORDER | WS_GROUP, 56, 123, 12, 13
     LTEXT "分間", IDC_MINTEXT, 80, 125, 20, 9
     AUTOCHECKBOX "復帰時にパスワードを確認する(&P)", IDC_SCREENS_USEPASSCHK, 109, 120, 125, 19
-    GROUPBOX "モニタの省電力機能", IDC_SCREENS_DUMMY2, 8, 150, 230, 41
-    LTEXT "モニタの電源設定を変更するには、[電源] を クリックしてください。", IDC_STATIC, 16, 161, 146, 27
+    GROUPBOX "モニターの省電力機能", IDC_SCREENS_DUMMY2, 8, 150, 230, 41
+    LTEXT "モニターの電源設定を変更するには、[電源] を クリックしてください。", IDC_STATIC, 16, 161, 146, 27
     PUSHBUTTON "電源(&O)...", IDC_SCREENS_POWER_BUTTON, 167, 165, 61, 15
 END
 
@@ -129,7 +129,7 @@ CAPTION "設定"
 FONT 9, "MS UI Gothic"
 BEGIN
     CONTROL "", IDC_RESOLUTION_PREVIEW, "Static", SS_OWNERDRAW, 70, 10, 105, 74
-    LTEXT "モニタのアイコンを実際のモニタの配列と一致するように移動してください。", IDC_SETTINGS_MONTEXT, 3, 3, 240, 20
+    LTEXT "モニターのアイコンを実際のモニターの配列と一致するように移動してください。", IDC_SETTINGS_MONTEXT, 3, 3, 240, 20
     CONTROL "", IDC_SETTINGS_MONSEL, "MONITORSELWNDCLASS", WS_CHILD | WS_VISIBLE |
             WS_TABSTOP, 3, 23, 240, 82, WS_EX_CLIENTEDGE
     LTEXT "ディスプレイ(&D):", 1820, 3, 107, 70, 9
@@ -153,8 +153,8 @@ BEGIN
     GROUPBOX "デスクトップのアイコン", IDC_STATIC, 6, 4, 212, 40
     AUTOCHECKBOX "マイ ドキュメント(&D)", IDC_ICONS_MYDOCS, 14, 14, 100, 12
     AUTOCHECKBOX "マイ ネットワーク(&N)", IDC_ICONS_MYNET, 116, 14, 100, 12
-    AUTOCHECKBOX "マイ コンピュータ(&M)", IDC_ICONS_MYCOMP, 14, 28, 100, 12
-    AUTOCHECKBOX "インターネット ブラウザ(&I)", IDC_ICONS_INTERNET, 116, 28, 100, 12
+    AUTOCHECKBOX "マイ コンピューター(&M)", IDC_ICONS_MYCOMP, 14, 28, 100, 12
+    AUTOCHECKBOX "インターネット ブラウザー(&I)", IDC_ICONS_INTERNET, 116, 28, 100, 12
     CONTROL "", IDC_ICONS_LISTVIEW, "SysListView32",
             LVS_ICON | LVS_ALIGNLEFT | LVS_AUTOARRANGE | LVS_SINGLESEL | WS_BORDER | WS_TABSTOP | WS_HSCROLL,
             6, 60, 212, 56
@@ -172,8 +172,8 @@ BEGIN
     COMBOBOX IDC_FONTSIZE_COMBO, 14, 30, 223, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT "", IDC_FONTSIZE_CUSTOM, 14, 46, 223, 12
     GROUPBOX "互換性", -1, 7, 67, 237, 97
-    LTEXT "色の設定を変更した後にコンピュータを再起動しないと、プログラムが正常に動作しないことがあります。\n\n色の設定を変更した後の動作:", -1, 12, 78, 228, 34
-    AUTORADIOBUTTON "新しい色の設定を適用する前に、コンピュータを再起動す(&R)", IDC_RESTART_RB, 14, 116, 228, 10
+    LTEXT "色の設定を変更した後にコンピューターを再起動しないと、プログラムが正常に動作しないことがあります。\n\n色の設定を変更した後の動作:", -1, 12, 78, 228, 34
+    AUTORADIOBUTTON "新しい色の設定を適用する前に、コンピューターを再起動す(&R)", IDC_RESTART_RB, 14, 116, 228, 10
     AUTORADIOBUTTON "再起動せずに、新しい色の設定を適用す(&N)", IDC_WITHOUTREBOOT_RB, 14, 131, 228, 10
     AUTORADIOBUTTON "新しい色の設定を適用する前に確認す(&K)", IDC_ASKME_RB, 14, 146, 228, 10
 END
@@ -227,8 +227,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_MULTIPLEMONITORS "(マルチ モニタ)"
-    IDS_UNKNOWNMONITOR "(不明なモニタ)"
+    IDS_MULTIPLEMONITORS "(マルチ モニター)"
+    IDS_UNKNOWNMONITOR "(不明なモニター)"
     IDS_ADVANCEDTITLEFMT "%s と %s"
 END
 
@@ -297,6 +297,6 @@ STRINGTABLE
 BEGIN
     IDS_DISPLAY_SETTINGS "表示設定"
     IDS_APPLY_FAILED "新しい設定の適用に失敗しました..."
-    IDS_APPLY_NEEDS_RESTART "変更を反映するにはコンピュータを再起動する必要があります。"
+    IDS_APPLY_NEEDS_RESTART "変更を反映するにはコンピューターを再起動する必要があります。"
     IDS_TIMEOUTTEXT "%d 秒後に以前の設定に戻します。"
 END

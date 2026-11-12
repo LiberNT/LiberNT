@@ -169,6 +169,12 @@ typedef struct _KERNEL_USER_TIMES {
   LARGE_INTEGER UserTime;
 } KERNEL_USER_TIMES, *PKERNEL_USER_TIMES;
 
+typedef enum _SUBSYSTEM_INFORMATION_TYPE {
+  SubsystemInformationTypeWin32 = 0,
+  SubsystemInformationTypeWSL = 1,
+  MaxSubsystemInformationType
+} SUBSYSTEM_INFORMATION_TYPE, *PSUBSYSTEM_INFORMATION_TYPE;
+
 /* NtXxx Functions */
 
 typedef enum _SYSTEM_FIRMWARE_TABLE_ACTION {

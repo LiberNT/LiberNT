@@ -26,6 +26,7 @@
 #include "softgpu.h"
 #include "softgpu_2d_core.h"
 #include "vsync_policy_core.h"
+#include "slab_handoff_core.h"
 
 /* CONSTANTS *****************************************************************/
 
@@ -153,7 +154,11 @@
 #define SOFTGPU_DECLARED_WDDM_VERSION DXGKDDI_WDDMv3_2_ENUM
 #endif
 
+#if defined(SOFTGPU_PLATFORM_PHYSICAL_ADDRESSING)
+#define SOFTGPU_GPUMMU_END_TO_END 0
+#else
 #define SOFTGPU_GPUMMU_END_TO_END 1
+#endif
 #define SOFTGPU_DIAGNOSTIC_PAYLOAD_VERSION 1
 
 static const GUID g_RxgkShadowPresentInterfaceGuid =
@@ -176,6 +181,41 @@ typedef struct _SOFTGPU_DIAGNOSTIC_PAYLOAD
     ULONG AdapterContextAvailable;
 } SOFTGPU_DIAGNOSTIC_PAYLOAD, *PSOFTGPU_DIAGNOSTIC_PAYLOAD;
 
+static FAST_MUTEX SoftGpuSlabHandoffLock;
+static SOFTGPU_SLAB_HANDOFF SoftGpuSlabHandoff;
+
+static VOID
+SoftGpuFreeSlab(
+    _In_ const SOFTGPU_SLAB *Slab)
+{
+    PAGED_CODE();
+
+    if (!SoftGpuSlabIsEmpty(Slab))
+        MmFreeContiguousMemorySpecifyCache(Slab->Base, Slab->Size, Slab->CacheType);
+}
+
+static BOOLEAN
+SoftGpuTakeParkedSlab(
+    _In_ SIZE_T Size,
+    _In_ PHYSICAL_ADDRESS HighestAddress,
+    _In_ MEMORY_CACHING_TYPE CacheType,
+    _Out_ PSOFTGPU_SLAB Adopted)
+{
+    BOOLEAN Taken;
+
+    PAGED_CODE();
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    Taken = SoftGpuSlabHandoffTake(&SoftGpuSlabHandoff,
+                                   Size,
+                                   (ULONGLONG)HighestAddress.QuadPart,
+                                   CacheType,
+                                   Adopted);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+    ASSERT(Taken == !SoftGpuSlabIsEmpty(Adopted));
+    return Taken;
+}
+
 static NTSTATUS
 SoftGpuAllocateFrameBuffer(
     _Inout_ PSOFTGPU_DEVICE Device,
@@ -192,6 +232,7 @@ SoftGpuAllocateFrameBuffer(
     SIZE_T OldFrameBufferSize;
     MEMORY_CACHING_TYPE NewCacheType;
     MEMORY_CACHING_TYPE OldCacheType;
+    SOFTGPU_SLAB Parked;
 
     if (Device == NULL ||
         ((Device->FrameBuffer == NULL) !=
@@ -231,12 +272,22 @@ SoftGpuAllocateFrameBuffer(
         HighAddress.QuadPart = (LONGLONG)-1;
     SkipBytes.QuadPart = 0;
     NewCacheType = SoftGpuPlatformSegmentCacheType();
-    NewFrameBuffer = MmAllocateContiguousMemorySpecifyCache(
-                         AllocationSize,
-                         LowAddress,
-                         HighAddress,
-                         SkipBytes,
-                         NewCacheType);
+    if (SoftGpuTakeParkedSlab(AllocationSize, HighestAddress, NewCacheType, &Parked))
+    {
+        DPRINT1("SOFTGPU: adopted the %Iu-byte slab of a stopped adapter at 0x%I64x\n",
+                Parked.Size, Parked.Physical.QuadPart);
+        NewFrameBuffer = Parked.Base;
+        AllocationSize = Parked.Size;
+    }
+    else
+    {
+        NewFrameBuffer = MmAllocateContiguousMemorySpecifyCache(
+                             AllocationSize,
+                             LowAddress,
+                             HighAddress,
+                             SkipBytes,
+                             NewCacheType);
+    }
     if (NewFrameBuffer == NULL)
     {
         DPRINT1("SOFTGPU: failed to allocate %Iu-byte framebuffer\n",
@@ -307,7 +358,7 @@ static const DXGK_DRIVERCAPS SOFTGPU_DRIVER_CAPS =
     /* PresentationCaps.Value = 0 */
     .MaxOverlays                = SOFTGPU_MAX_OVERLAYS,
     .GammaRampCaps.Value        = 0,
-    .SchedulingCaps.Value       = 0,
+    .SchedulingCaps.VSyncPowerSaveAware = 1,
     .MemoryManagementCaps.Value = 0,
     .GpuEngineTopology.NbAsymetricProcessingNodes = SOFTGPU_ENGINE_COUNT,
     .WDDMVersion                = SOFTGPU_DECLARED_WDDM_VERSION,
@@ -341,6 +392,7 @@ DriverEntry(
            DriverObject, RegistryPath);
 
     RtlZeroMemory(&InitData, sizeof(InitData));
+    ExInitializeFastMutex(&SoftGpuSlabHandoffLock);
 
     InitData.Version = SOFTGPU_DECLARED_INTERFACE_VERSION;
 
@@ -364,7 +416,9 @@ DriverEntry(
 #endif
 
     /* --- Interrupt / DPC ------------------------------------------------- */
+#if defined(SOFTGPU_PLATFORM_HARDWARE_3D)
     InitData.DxgkDdiInterruptRoutine                = SoftGpuDdiInterruptRoutine;
+#endif
     InitData.DxgkDdiDpcRoutine                      = SoftGpuDdiDpcRoutine;
 
     /* --- Memory management ----------------------------------------------- */
@@ -481,6 +535,9 @@ DriverEntry(
         return Status;
     }
 
+#if defined(SOFTGPU_PLATFORM_DRIVER_ENTRY)
+    SoftGpuPlatformDriverEntry(DriverObject);
+#endif
     DPRINT("SOFTGPU: DriverEntry success\n");
     return STATUS_SUCCESS;
 }
@@ -1101,9 +1158,8 @@ SoftGpuQueryAcpiPanel(
  *
  * IRQL: PASSIVE_LEVEL
  */
-NTSTATUS
-APIENTRY
-SoftGpuDdiStartDevice(
+static NTSTATUS
+SoftGpuStartDevice(
     _In_  PVOID             MiniportDeviceContext,
     _In_  PDXGK_START_INFO  DxgkStartInfo,
     _In_  PDXGK_INTERFACE   DxgkInterface,
@@ -1405,6 +1461,9 @@ SoftGpuDdiStartDevice(
     }
     Device->VsyncTimer = ExAllocateTimer(SoftGpuVsyncTimerCallback, Device, EX_TIMER_HIGH_RESOLUTION);
     Device->VsyncTimerInitialized = Device->VsyncTimer != NULL;
+    Device->VsyncTimerRunning = FALSE;
+    Device->VsyncPhaseOrigin = 0;
+    Device->DisplayPowerOff = FALSE;
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     InterlockedExchange(&Device->VsyncEnabled, 0);
     KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
@@ -1424,6 +1483,39 @@ SoftGpuDdiStartDevice(
 CleanupStart:
     SoftGpuScanoutStop(Device);
     (VOID)SoftGpuPlatformStopScanout(Device);
+    return Status;
+}
+
+NTSTATUS
+APIENTRY
+SoftGpuDdiStartDevice(
+    _In_  PVOID             MiniportDeviceContext,
+    _In_  PDXGK_START_INFO  DxgkStartInfo,
+    _In_  PDXGK_INTERFACE   DxgkInterface,
+    _Out_ PULONG            NumberOfVideoPresentSources,
+    _Out_ PULONG            NumberOfChildren)
+{
+    SOFTGPU_SLAB Release;
+    NTSTATUS Status;
+    BOOLEAN Unadopted;
+
+    PAGED_CODE();
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    SoftGpuSlabHandoffBeginStart(&SoftGpuSlabHandoff);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+
+    Status = SoftGpuStartDevice(MiniportDeviceContext,
+                                DxgkStartInfo,
+                                DxgkInterface,
+                                NumberOfVideoPresentSources,
+                                NumberOfChildren);
+
+    ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+    Unadopted = SoftGpuSlabHandoffEndStart(&SoftGpuSlabHandoff, &Release);
+    ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+    if (Unadopted)
+        SoftGpuFreeSlab(&Release);
     return Status;
 }
 
@@ -1475,7 +1567,10 @@ SoftGpuDdiStopDevice(
     InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
     if (Device->VsyncTimerInitialized)
     {
+        KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
         Device->VsyncTimerInitialized = FALSE;
+        Device->VsyncTimerRunning = FALSE;
+        KeReleaseSpinLock(&Device->FenceLock, OldIrql);
         ExDeleteTimer(Device->VsyncTimer, TRUE, TRUE, NULL);
         Device->VsyncTimer = NULL;
     }
@@ -1506,9 +1601,18 @@ SoftGpuDdiStopDevice(
 
     if (Device->FrameBuffer != NULL)
     {
-        MmFreeContiguousMemorySpecifyCache(Device->FrameBuffer,
-                                           Device->FrameBufferSize,
-                                           Device->FrameBufferCacheType);
+        SOFTGPU_SLAB Slab;
+        BOOLEAN Parked;
+
+        Slab.Base = Device->FrameBuffer;
+        Slab.Size = Device->FrameBufferSize;
+        Slab.Physical = Device->FrameBufferPhys;
+        Slab.CacheType = Device->FrameBufferCacheType;
+        ExAcquireFastMutex(&SoftGpuSlabHandoffLock);
+        Parked = SoftGpuSlabHandoffPark(&SoftGpuSlabHandoff, &Slab);
+        ExReleaseFastMutex(&SoftGpuSlabHandoffLock);
+        if (!Parked)
+            SoftGpuFreeSlab(&Slab);
         Device->FrameBuffer = NULL;
         Device->FrameBufferSize = 0;
         Device->FrameBufferPhys.QuadPart = 0;
@@ -1709,6 +1813,7 @@ SoftGpuDdiQueryAdapterInfo(
         GpuMmuCaps->NoExecuteMemorySupported = 1;
         GpuMmuCaps->ZeroInPteSupported = 1;
         GpuMmuCaps->CacheCoherentMemorySupported = 1;
+        GpuMmuCaps->CachedPageTables = 1;
         GpuMmuCaps->PageTableUpdateMode = DXGK_PAGETABLEUPDATE_CPU_VIRTUAL;
         GpuMmuCaps->VirtualAddressBitCount = SOFTGPU_GPUVA_BIT_COUNT;
         GpuMmuCaps->PageTableLevelCount = SOFTGPU_GPUVA_LEVELS;
@@ -3050,7 +3155,7 @@ SoftGpuDdiQueryChildStatus(
 
 
 /* =========================================================================
- * Timeout recovery stubs
+ * Timeout recovery
  * =========================================================================
  */
 
@@ -3059,7 +3164,38 @@ APIENTRY
 SoftGpuDdiResetFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    KIRQL OldIrql;
+    ULONG NodeOrdinal;
+
+    PAGED_CODE();
+
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    Device->Resetting = 1;
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        if (Device->Engines[NodeOrdinal].DpcInitialized)
+            KeRemoveQueueDpc(&Device->Engines[NodeOrdinal].DpcObject);
+    }
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
+    KeFlushQueuedDpcs();
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    for (NodeOrdinal = 0; NodeOrdinal < SOFTGPU_ENGINE_COUNT; NodeOrdinal++)
+    {
+        PSOFTGPU_ENGINE Engine = &Device->Engines[NodeOrdinal];
+
+        Engine->SubmitRingHead = Engine->SubmitRingTail;
+        Engine->CompletedFence = Engine->CurrentFence;
+        Engine->NotifiedFence = Engine->CurrentFence;
+        Engine->EngineActive = 0;
+    }
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
+
+    DPRINT1("SOFTGPU: ResetFromTimeout dropped queued work on adapter %p\n", Device);
     return STATUS_SUCCESS;
 }
 
@@ -3068,7 +3204,17 @@ APIENTRY
 SoftGpuDdiRestartFromTimeout(
     _In_ PVOID MiniportDeviceContext)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if (Device == NULL || Device->Magic != SOFTGPU_DEVICE_MAGIC)
+        return STATUS_INVALID_PARAMETER;
+
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
+    Device->Resetting = 0;
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
     return STATUS_SUCCESS;
 }
 
@@ -3094,16 +3240,34 @@ SoftGpuDdiSetPowerState(
     _In_ DEVICE_POWER_STATE DevicePowerState,
     _In_ POWER_ACTION       ActionType)
 {
-    UNREFERENCED_PARAMETER(MiniportDeviceContext);
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    BOOLEAN Off;
+    NTSTATUS Status;
+
+    PAGED_CODE();
     UNREFERENCED_PARAMETER(ActionType);
 
-    if (DeviceUid != 0 && DeviceUid != 1)
+    if (DeviceUid != DISPLAY_ADAPTER_HW_ID && DeviceUid != 0 && DeviceUid != 1)
         return STATUS_INVALID_PARAMETER;
 
-    if (DevicePowerState > PowerDeviceD3)
+    if (DevicePowerState < PowerDeviceD0 || DevicePowerState > PowerDeviceD3)
         return STATUS_INVALID_PARAMETER;
 
-    return STATUS_SUCCESS;
+    if (DeviceUid != SOFTGPU_CHILD_UID)
+        return STATUS_SUCCESS;
+
+    ASSERT(Device != NULL && Device->Magic == SOFTGPU_DEVICE_MAGIC);
+    Off = DevicePowerState != PowerDeviceD0;
+    if (Off == Device->DisplayPowerOff)
+        return STATUS_SUCCESS;
+    Status = SoftGpuPlatformSetDisplayPower(Device, !Off);
+    DbgPrint("SOFTGPU: display power %s (D%d): %lx\n", Off ? "off" : "on",
+             DevicePowerState - PowerDeviceD0, Status);
+    if (Status == STATUS_NOT_SUPPORTED)
+        Status = STATUS_SUCCESS;
+    if (NT_SUCCESS(Status))
+        Device->DisplayPowerOff = Off;
+    return Status;
 }
 
 
@@ -3117,8 +3281,8 @@ SoftGpuSetVsyncState(
     _Inout_ PSOFTGPU_DEVICE Device,
     _In_ DXGK_CRTC_VSYNC_STATE VsyncState)
 {
-    LARGE_INTEGER Due;
     SOFTGPU_VSYNC_POLICY Policy;
+    KIRQL OldIrql;
 
     if (!Device->VsyncTimerInitialized ||
         !SoftGpuVsyncEvaluatePolicy((ULONG)VsyncState, &Policy))
@@ -3128,24 +3292,15 @@ SoftGpuSetVsyncState(
                    : STATUS_INVALID_PARAMETER;
     }
 
+    KeAcquireSpinLock(&Device->FenceLock, &OldIrql);
     InterlockedExchange(
         &Device->VsyncEnabled,
         Policy.NotificationEnabled ? 1 : 0);
-
-    if (Policy.PhaseEnabled)
-    {
-        if (InterlockedExchange(&Device->VsyncPhaseEnabled, 1) == 0)
-        {
-            Due.QuadPart = -166667;
-            ExSetTimer(Device->VsyncTimer, Due.QuadPart, -Due.QuadPart, NULL);
-        }
-    }
-    else
-    {
-        InterlockedExchange(&Device->VsyncPhaseEnabled, 0);
-        if (Policy.CancelTimer)
-            ExCancelTimer(Device->VsyncTimer, NULL);
-    }
+    InterlockedExchange(&Device->VsyncPhaseEnabled, Policy.PhaseEnabled ? 1 : 0);
+    if (Policy.CancelTimer)
+        Device->VsyncPhaseOrigin = 0;
+    SoftGpuVsyncTimerUpdateLocked(Device);
+    KeReleaseSpinLock(&Device->FenceLock, OldIrql);
 
     return STATUS_SUCCESS;
 }

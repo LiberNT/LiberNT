@@ -1,9 +1,9 @@
 
-spec2def(winusb.dll winusb.spec)
+spec2def(winusb.dll winusb.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE
     main.c
-    unsupported.c
+    api.c
     ${CMAKE_CURRENT_BINARY_DIR}/winusb_stubs.c
     ${CMAKE_CURRENT_BINARY_DIR}/winusb.def)
 

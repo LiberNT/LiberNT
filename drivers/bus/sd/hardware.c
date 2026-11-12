@@ -8,6 +8,7 @@
 #include "hardware.h"
 
 #include <acpiioct.h>
+#include <reactos/drivers/fdtdrv.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -30,6 +31,13 @@ SdBusHardwareRelease(
     _In_ PFDO_EXTENSION FdoExtension)
 {
     PSDBUS_HARDWARE_EXTENSION HardwareExtension;
+
+    if (FdoExtension->Gl9755Pll)
+    {
+        FdoExtension->Gl9755Pll = FALSE;
+        if (FdoExtension->Gl9755Bus.InterfaceDereference)
+            FdoExtension->Gl9755Bus.InterfaceDereference(FdoExtension->Gl9755Bus.Context);
+    }
 
     HardwareExtension = FdoExtension->HardwareExtension;
     if (HardwareExtension == NULL)
@@ -696,6 +704,199 @@ SdBusHardwareGetBaseClock(
     return HardwareExtension->Ops->GetBaseClock(FdoExtension);
 }
 
+#define GL9755_CONFIG_WT            0x800
+#define GL9755_CONFIG_WT_EN         0x00000001UL
+#define GL9755_CONFIG_PECONF        0x44
+#define GL9755_PECONF_LFCLK         0x00007000UL
+#define GL9755_PECONF_DMACLK        0x20000000UL
+#define GL9755_PECONF_INVERT_CD     0x40000000UL
+#define GL9755_PECONF_INVERT_WP     0x80000000UL
+#define GL9755_CONFIG_PLL           0x64
+#define GL9755_PLL_LDIV             0x000003FFUL
+#define GL9755_PLL_PDIV             0x00007000UL
+#define GL9755_PLL_DIR              0x00008000UL
+#define GL9755_PLLSSC_STEP          0x1F000000UL
+#define GL9755_PLLSSC_EN            0x80000000UL
+#define GL9755_CONFIG_PLLSSC        0x68
+#define GL9755_PLLSSC_PPM           0x0000FFFFUL
+#define GL9755_CONFIG_MISC          0x78
+#define GL9755_MISC_SSC_OFF         0x04000000UL
+
+static
+NTSTATUS
+SdBusQueryPciBusInterface(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _Out_ PBUS_INTERFACE_STANDARD Bus)
+{
+    PDEVICE_OBJECT Top;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION Stack;
+    KEVENT Event;
+    PIRP Irp;
+    NTSTATUS Status;
+
+    RtlZeroMemory(Bus, sizeof(*Bus));
+    Top = IoGetAttachedDeviceReference(FdoExtension->PhysicalDevice);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, Top, NULL, 0, NULL, &Event, &IoStatus);
+    if (!Irp)
+    {
+        ObDereferenceObject(Top);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MinorFunction = IRP_MN_QUERY_INTERFACE;
+    Stack->Parameters.QueryInterface.InterfaceType = &GUID_BUS_INTERFACE_STANDARD;
+    Stack->Parameters.QueryInterface.Size = sizeof(*Bus);
+    Stack->Parameters.QueryInterface.Version = 1;
+    Stack->Parameters.QueryInterface.Interface = (PINTERFACE)Bus;
+    Stack->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+    Status = IoCallDriver(Top, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    ObDereferenceObject(Top);
+    if (NT_SUCCESS(Status) && (!Bus->GetBusData || !Bus->SetBusData))
+        Status = STATUS_NOT_SUPPORTED;
+    return Status;
+}
+
+static
+BOOLEAN
+SdBusGl9755ConfigWrite(
+    _In_ PBUS_INTERFACE_STANDARD Bus,
+    _In_ ULONG Offset,
+    _In_ ULONG Value)
+{
+    return Bus->SetBusData(Bus->Context, PCI_WHICHSPACE_CONFIG, &Value, Offset, sizeof(Value)) == sizeof(Value);
+}
+
+static
+BOOLEAN
+SdBusGl9755ConfigRead(
+    _In_ PBUS_INTERFACE_STANDARD Bus,
+    _In_ ULONG Offset,
+    _Out_ PULONG Value)
+{
+    return Bus->GetBusData(Bus->Context, PCI_WHICHSPACE_CONFIG, Value, Offset, sizeof(*Value)) == sizeof(*Value);
+}
+
+static
+VOID
+SdBusGl9755DisablePll(
+    _In_ PBUS_INTERFACE_STANDARD Bus)
+{
+    ULONG WriteEnable, Pll;
+
+    if (!SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_WT, &WriteEnable))
+        return;
+    SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_WT, WriteEnable | GL9755_CONFIG_WT_EN);
+    if (SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_PLL, &Pll))
+        SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_PLL, Pll & ~(GL9755_PLL_DIR | GL9755_PLLSSC_EN));
+    SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_WT, WriteEnable & ~GL9755_CONFIG_WT_EN);
+}
+
+static
+VOID
+SdBusGl9755SetPll(
+    _In_ PBUS_INTERFACE_STANDARD Bus,
+    _In_ ULONG Step,
+    _In_ ULONG Ppm,
+    _In_ ULONG Ldiv,
+    _In_ ULONG Pdiv)
+{
+    ULONG WriteEnable, Misc, Pll, Ssc;
+    LARGE_INTEGER Delay;
+
+    if (!SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_WT, &WriteEnable))
+        return;
+    SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_WT, WriteEnable | GL9755_CONFIG_WT_EN);
+    if (SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_MISC, &Misc) &&
+        SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_PLL, &Pll) &&
+        SdBusGl9755ConfigRead(Bus, GL9755_CONFIG_PLLSSC, &Ssc))
+    {
+        Pll &= ~(GL9755_PLLSSC_STEP | GL9755_PLLSSC_EN);
+        Pll |= (Step << 24) | ((Misc & GL9755_MISC_SSC_OFF) ? 0 : GL9755_PLLSSC_EN);
+        Ssc = (Ssc & ~GL9755_PLLSSC_PPM) | Ppm;
+        SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_PLLSSC, Ssc);
+        SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_PLL, Pll);
+        Pll &= ~(GL9755_PLL_LDIV | GL9755_PLL_PDIV | GL9755_PLL_DIR);
+        Pll |= Ldiv | (Pdiv << 12) | GL9755_PLL_DIR;
+        SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_PLL, Pll);
+    }
+    SdBusGl9755ConfigWrite(Bus, GL9755_CONFIG_WT, WriteEnable & ~GL9755_CONFIG_WT_EN);
+    if (KeGetCurrentIrql() <= APC_LEVEL)
+    {
+        Delay.QuadPart = -10000LL;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    else
+    {
+        KeStallExecutionProcessor(1000);
+    }
+}
+
+VOID
+SdBusHardwareSetPllClock(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONG TargetClockKhz)
+{
+    if (!FdoExtension->Gl9755Pll)
+        return;
+    SdBusGl9755DisablePll(&FdoExtension->Gl9755Bus);
+    if (TargetClockKhz == 100000)
+        SdBusGl9755SetPll(&FdoExtension->Gl9755Bus, 0xE, 0x51EC, 0x244, 1);
+    else if (TargetClockKhz == 50000)
+        SdBusGl9755SetPll(&FdoExtension->Gl9755Bus, 0xE, 0x51EC, 0x244, 3);
+}
+
+static
+VOID
+SdBusGl9755ApplyPlatformConfig(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    BUS_INTERFACE_STANDARD Bus;
+    FDT_DRIVER_TREE Tree;
+    ULONG Length, WriteEnable, Peconf, Updated;
+    BOOLEAN InvertCd = FALSE, InvertWp = FALSE, Done = FALSE;
+
+    if (NT_SUCCESS(FdtDriverOpenByCompatible("pci17a0,9755", &Tree)))
+    {
+        InvertCd = FdtGetProperty(&Tree.Fdt, Tree.Node, "cd-inverted", &Length) != NULL;
+        InvertWp = FdtGetProperty(&Tree.Fdt, Tree.Node, "wp-inverted", &Length) != NULL;
+        FdtDriverClose(&Tree);
+    }
+    if (!NT_SUCCESS(SdBusQueryPciBusInterface(FdoExtension, &Bus)))
+    {
+        DPRINT1("SdBusHardwareAttach: GL9755 configuration space is not reachable\n");
+        return;
+    }
+    if (SdBusGl9755ConfigRead(&Bus, GL9755_CONFIG_WT, &WriteEnable) &&
+        SdBusGl9755ConfigWrite(&Bus, GL9755_CONFIG_WT, WriteEnable | GL9755_CONFIG_WT_EN) &&
+        SdBusGl9755ConfigRead(&Bus, GL9755_CONFIG_PECONF, &Peconf))
+    {
+        Updated = Peconf & ~(GL9755_PECONF_LFCLK | GL9755_PECONF_DMACLK);
+        if (InvertCd)
+            Updated |= GL9755_PECONF_INVERT_CD;
+        if (InvertWp)
+            Updated |= GL9755_PECONF_INVERT_WP;
+        Done = SdBusGl9755ConfigWrite(&Bus, GL9755_CONFIG_PECONF, Updated);
+        SdBusGl9755ConfigWrite(&Bus, GL9755_CONFIG_WT, WriteEnable & ~GL9755_CONFIG_WT_EN);
+        DPRINT1("SdBusHardwareAttach: GL9755 PECONF %08lx -> %08lx (card detect %s, write protect %s): %s\n", Peconf,
+                Updated, InvertCd ? "inverted" : "normal", InvertWp ? "inverted" : "normal", Done ? "ok" : "failed");
+    }
+    else
+    {
+        DPRINT1("SdBusHardwareAttach: GL9755 vendor configuration registers are not accessible\n");
+    }
+    SdBusGl9755DisablePll(&Bus);
+    FdoExtension->Gl9755Bus = Bus;
+    FdoExtension->Gl9755Pll = TRUE;
+}
+
 NTSTATUS
 SdBusHardwareAttach(
     _In_ PFDO_EXTENSION FdoExtension)
@@ -705,6 +906,7 @@ SdBusHardwareAttach(
     static const PCWSTR Bcm2835SdHostIds[] = { L"BCM2855" };
     static const PCWSTR BrcmstbIds[] = { L"BRCM5D12", L"80860F16" };
     static const PCWSTR Bcm2847Ids[] = { L"BCM2847" };
+    static const PCWSTR GenesysGl975xIds[] = { L"VEN_17A0&DEV_9750", L"VEN_17A0&DEV_9755" };
     PDEVICE_OBJECT Pdo;
     ULONG SupportedModes = 0;
     NTSTATUS Status;
@@ -718,6 +920,24 @@ SdBusHardwareAttach(
     if (Pdo == NULL)
     {
         return STATUS_SUCCESS;
+    }
+
+    {
+        BUS_INTERFACE_STANDARD Bus;
+
+        if (NT_SUCCESS(SdBusQueryPciBusInterface(FdoExtension, &Bus)))
+        {
+            FdoExtension->PciDevice = TRUE;
+            Bus.InterfaceDereference(Bus.Context);
+        }
+    }
+
+    if (SdBusDeviceMatchesAnyId(Pdo, GenesysGl975xIds, RTL_NUMBER_OF(GenesysGl975xIds)))
+    {
+        FdoExtension->DwordReadsOnly = TRUE;
+        DPRINT1("SdBusHardwareAttach: Genesys GL975x, 8 and 16-bit registers are read as 32-bit words\n");
+        if (SdBusDeviceMatchesAnyId(Pdo, &GenesysGl975xIds[1], 1))
+            SdBusGl9755ApplyPlatformConfig(FdoExtension);
     }
 
     if (SdBusDeviceMatchesAnyId(Pdo, SpacemitK1Ids, RTL_NUMBER_OF(SpacemitK1Ids)))

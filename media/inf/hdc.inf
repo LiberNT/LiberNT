@@ -327,6 +327,7 @@ HKR, , Installer32,    0, "syssetup.dll,HdcClassInstaller"
 %PCI\CC_0104.DeviceDesc%=PciIde_Inst,PCI\CC_0104                       ; Device ID for generic Dual PCI IDE  (UNKNOWN_PCI_IDE)
 %PCI\CC_0105.DeviceDesc%=PciIde_Inst,PCI\CC_0105                       ; Device ID for generic Dual PCI IDE  (UNKNOWN_PCI_IDE)
 %PCI\CC_010601.DeviceDesc%=StorAhci_Inst,PCI\CC_010601                 ; AHCI 1.0 controller: keep the storahci binding the CDDB used on first boot
+%PCI\CC_010601.DeviceDesc%=StorAhci_Inst,ACPI\CLS_0001&SUBCLS_0006&PI_01     ; AHCI controller enumerated by ACPI
 %PCI\CC_0106.DeviceDesc%=PciIde_Inst,PCI\CC_0106                       ; Device ID for generic Dual PCI IDE  (UNKNOWN_PCI_IDE)
 %ataChan.DeviceDesc%=Atapi_Inst, Internal_IDE_Channel
 %*PNP0600.PriDeviceDesc%=Atapi_Inst, Primary_IDE_Channel

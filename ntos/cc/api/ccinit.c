@@ -414,6 +414,24 @@ CcPfInitializePrefetcher(VOID)
 {
 }
 
+VOID
+NTAPI
+CcNtQueryDirtyPages(
+    _Out_ PULONG TotalDirtyPages,
+    _Out_ PULONG DirtyPageThreshold)
+{
+    *TotalDirtyPages = (ULONG)CC_ATOMIC_READ64(&CcNtCache.TotalDirtyPages);
+    *DirtyPageThreshold = (ULONG)CcNtCache.DirtyPageThreshold;
+}
+
+VOID
+NTAPI
+CcNtSetDirtyPageThreshold(
+    _In_ ULONG DirtyPageThreshold)
+{
+    CcNtCache.DirtyPageThreshold = DirtyPageThreshold;
+}
+
 #ifdef KDBG
 #include <kdbg/kdb.h>
 

@@ -474,8 +474,22 @@
 @ stdcall OpenThreadToken(long long long ptr) kernelbase.OpenThreadToken
 @ stdcall -ret64 OpenTraceA(ptr)
 @ stdcall -ret64 OpenTraceW(ptr)
+@ stdcall -version=0x600+ PerfAddCounters(ptr ptr long)
+@ stdcall -version=0x600+ PerfCloseQueryHandle(ptr)
 @ stdcall -version=0x600+ PerfCreateInstance(long ptr wstr long) kernelbase.PerfCreateInstance
+@ stdcall -version=0x600+ PerfDecrementULongCounterValue(long ptr long long) kernelbase.PerfDecrementULongCounterValue
+@ stdcall -version=0x600+ PerfDecrementULongLongCounterValue(long ptr long int64) kernelbase.PerfDecrementULongLongCounterValue
+@ stdcall -version=0x600+ PerfDeleteCounters(ptr ptr long)
 @ stdcall -version=0x600+ PerfDeleteInstance(long ptr) kernelbase.PerfDeleteInstance
+@ stdcall -version=0x600+ PerfEnumerateCounterSet(wstr ptr long ptr)
+@ stdcall -version=0x600+ PerfEnumerateCounterSetInstances(wstr ptr ptr long ptr)
+@ stdcall -version=0x600+ PerfIncrementULongCounterValue(long ptr long long) kernelbase.PerfIncrementULongCounterValue
+@ stdcall -version=0x600+ PerfIncrementULongLongCounterValue(long ptr long int64) kernelbase.PerfIncrementULongLongCounterValue
+@ stdcall -version=0x600+ PerfOpenQueryHandle(wstr ptr)
+@ stdcall -version=0x600+ PerfQueryCounterData(ptr ptr long ptr)
+@ stdcall -version=0x600+ PerfQueryCounterInfo(ptr ptr long ptr)
+@ stdcall -version=0x600+ PerfQueryCounterSetRegistrationInfo(wstr ptr long long ptr long ptr)
+@ stdcall -version=0x600+ PerfQueryInstance(long ptr wstr long) kernelbase.PerfQueryInstance
 @ stdcall -version=0x600+ PerfSetCounterRefValue(long ptr long ptr) kernelbase.PerfSetCounterRefValue
 @ stdcall -version=0x600+ PerfSetCounterSetInfo(long ptr long) kernelbase.PerfSetCounterSetInfo
 @ stdcall -version=0x600+ PerfSetULongCounterValue(long ptr long long) kernelbase.PerfSetULongCounterValue
@@ -605,19 +619,19 @@
 @ stdcall SaferCloseLevel(ptr)
 @ stdcall SaferComputeTokenFromLevel(ptr ptr ptr long ptr)
 @ stdcall SaferCreateLevel(long long long ptr ptr)
-@ stub SaferGetLevelInformation
+@ stdcall SaferGetLevelInformation(ptr long ptr long ptr)
 @ stdcall SaferGetPolicyInformation(long long long ptr ptr ptr)
 @ stdcall SaferIdentifyLevel(long ptr ptr ptr)
 @ stdcall SaferRecordEventLogEntry(ptr wstr ptr)
 @ stdcall SaferSetLevelInformation(ptr long ptr long)
-@ stub SaferSetPolicyInformation
+@ stdcall SaferSetPolicyInformation(long long long ptr ptr)
 @ stub SaferiChangeRegistryScope
 @ stub SaferiCompareTokenLevels
 @ stdcall SaferiIsExecutableFileType(wstr long)
 @ stub SaferiPopulateDefaultsInRegistry
 @ stub SaferiRecordEventLogEntry
 @ stub SaferiReplaceProcessThreadTokens
-@ stub SaferiSearchMatchingHashRules
+@ stdcall SaferiSearchMatchingHashRules(long ptr long long ptr ptr)
 @ stdcall SetAclInformation(ptr ptr long long) kernelbase.SetAclInformation
 @ stub SetEntriesInAccessListA
 @ stub SetEntriesInAccessListW
@@ -704,7 +718,7 @@
 @ stdcall SystemFunction040(ptr long long) # RtlEncryptMemory
 @ stdcall SystemFunction041(ptr long long) # RtlDecryptMemory
 @ stdcall -version=0x502 TraceEvent(double ptr) ntdll.EtwTraceEvent
-@ stdcall -version=0x600+ TraceEvent(double ptr) EtwTraceEvent
+@ stdcall -version=0x600+ TraceEvent(int64 ptr) ntdll.EtwLogTraceEvent
 @ stdcall TraceEventInstance(double ptr ptr ptr) ntdll.EtwTraceEventInstance
 @ varargs TraceMessage() ntdll.EtwTraceMessage
 @ stdcall TraceMessageVa() ntdll.EtwTraceMessageVa

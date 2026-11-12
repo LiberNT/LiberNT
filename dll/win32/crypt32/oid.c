@@ -1270,16 +1270,16 @@ static const struct OIDInfoConstructor {
     const WCHAR *pwszCNGAlgid;
     const WCHAR *pwszCNGExtraAlgid;
 } oidInfoConstructors[] = {
- { 1, szOID_OIWSEC_sha1,               CALG_SHA1,     L"sha1", NULL },
- { 1, szOID_OIWSEC_sha1,               CALG_SHA1,     L"sha", NULL },
+ { 1, szOID_OIWSEC_sha1,               CALG_SHA1,     L"sha1", NULL, BCRYPT_SHA1_ALGORITHM },
+ { 1, szOID_OIWSEC_sha1,               CALG_SHA1,     L"sha", NULL, BCRYPT_SHA1_ALGORITHM },
  { 1, szOID_OIWSEC_sha,                CALG_SHA,      L"sha", NULL },
- { 1, szOID_RSA_MD5,                   CALG_MD5,      L"md5", NULL },
- { 1, szOID_RSA_MD4,                   CALG_MD4,      L"md4", NULL },
- { 1, szOID_RSA_MD2,                   CALG_MD2,      L"md2", NULL },
+ { 1, szOID_RSA_MD5,                   CALG_MD5,      L"md5", NULL, BCRYPT_MD5_ALGORITHM },
+ { 1, szOID_RSA_MD4,                   CALG_MD4,      L"md4", NULL, BCRYPT_MD4_ALGORITHM },
+ { 1, szOID_RSA_MD2,                   CALG_MD2,      L"md2", NULL, BCRYPT_MD2_ALGORITHM },
  /* NOTE: Windows Vista+ uses -1 instead of CALG_SHA_* following SHA entries. */
- { 1, szOID_NIST_sha256,               CALG_SHA_256,  L"sha256", NULL },
- { 1, szOID_NIST_sha384,               CALG_SHA_384,  L"sha384", NULL },
- { 1, szOID_NIST_sha512,               CALG_SHA_512,  L"sha512", NULL },
+ { 1, szOID_NIST_sha256,               CALG_SHA_256,  L"sha256", NULL, BCRYPT_SHA256_ALGORITHM },
+ { 1, szOID_NIST_sha384,               CALG_SHA_384,  L"sha384", NULL, BCRYPT_SHA384_ALGORITHM },
+ { 1, szOID_NIST_sha512,               CALG_SHA_512,  L"sha512", NULL, BCRYPT_SHA512_ALGORITHM },
 
  { 2, szOID_OIWSEC_desCBC,             CALG_DES,      L"des", NULL },
  { 2, szOID_RSA_DES_EDE3_CBC,          CALG_3DES,     L"3des", NULL },

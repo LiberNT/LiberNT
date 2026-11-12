@@ -205,6 +205,28 @@ RtlpSecurityCheckPrivilege(HANDLE Token)
     Privileges.Control = PRIVILEGE_SET_ALL_NECESSARY;
     Privileges.Privilege[0].Luid.LowPart = SE_SECURITY_PRIVILEGE;
     Status = NtPrivilegeCheck(Token, &Privileges, &Result);
+    if (Status == STATUS_NO_IMPERSONATION_TOKEN)
+    {
+        PTOKEN_PRIVILEGES Held = NULL;
+        ULONG Index;
+
+        /* A primary token is not taken by a privilege check, so it is asked whether the privilege is on */
+        Status = RtlpSecurityQueryToken(Token, TokenPrivileges, (PVOID *)&Held);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        Result = FALSE;
+        for (Index = 0; Index < Held->PrivilegeCount; ++Index)
+        {
+            if (Held->Privileges[Index].Luid.LowPart == SE_SECURITY_PRIVILEGE &&
+                Held->Privileges[Index].Luid.HighPart == 0 &&
+                (Held->Privileges[Index].Attributes & SE_PRIVILEGE_ENABLED))
+            {
+                Result = TRUE;
+            }
+        }
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Held);
+        Status = STATUS_SUCCESS;
+    }
     if (!NT_SUCCESS(Status)) return Status;
     return Result ? STATUS_SUCCESS : STATUS_PRIVILEGE_NOT_HELD;
 }
@@ -1578,27 +1600,4 @@ RtlConvertToAutoInheritSecurityObject(IN PSECURITY_DESCRIPTOR ParentDescriptor,
                                                   ObjectType,
                                                   IsDirectoryObject,
                                                   GenericMapping);
-}
-
-/*
- * @unimplemented
- */
-NTSTATUS
-NTAPI
-RtlRegisterSecureMemoryCacheCallback(IN PRTL_SECURE_MEMORY_CACHE_CALLBACK Callback)
-{
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
-}
-
-/*
- * @unimplemented
- */
-BOOLEAN
-NTAPI
-RtlFlushSecureMemoryCache(IN PVOID MemoryCache,
-                          IN OPTIONAL SIZE_T MemoryLength)
-{
-    UNIMPLEMENTED;
-    return FALSE;
 }

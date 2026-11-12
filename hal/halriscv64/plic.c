@@ -6,7 +6,7 @@
  */
 
 #include <ntifs.h>
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include "halp.h"
 
 #define RISCV_PLIC_ENABLE_BASE       0x2000UL
@@ -37,7 +37,7 @@ static KSPIN_LOCK HalpRiscvPlicEnableLock;
 /* Only the boot hart's supervisor context is owned by this uniprocessor HAL. */
 static BOOLEAN
 HalpRiscvFindSupervisorCpuIntc(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG64 BootHartId,
     _Out_ PULONG Phandle)
 {
@@ -45,30 +45,30 @@ HalpRiscvFindSupervisorCpuIntc(
     const VOID *Property;
 
     if (BootHartId > MAXULONG ||
-        !RiscvFdtFindNode(Fdt, "/cpus", &Cpus, NULL) ||
-        !RiscvFdtReadU32(Fdt, Cpus, "#address-cells", &Cells) || Cells != 1 ||
-        !RiscvFdtReadU32(Fdt, Cpus, "#size-cells", &Cells) || Cells != 0)
+        !FdtFindNode(Fdt, "/cpus", &Cpus, NULL) ||
+        !FdtReadU32(Fdt, Cpus, "#address-cells", &Cells) || Cells != 1 ||
+        !FdtReadU32(Fdt, Cpus, "#size-cells", &Cells) || Cells != 0)
         return FALSE;
 
-    for (Cpu = RiscvFdtFirstChild(Fdt, Cpus);
-         Cpu != RISCV_FDT_NO_NODE;
-         Cpu = RiscvFdtNextSibling(Fdt, Cpu))
+    for (Cpu = FdtFirstChild(Fdt, Cpus);
+         Cpu != FDT_NO_NODE;
+         Cpu = FdtNextSibling(Fdt, Cpu))
     {
-        Property = RiscvFdtGetProperty(Fdt, Cpu, "device_type", &Length);
-        if (!RiscvFdtStringListContains(Property, Length, "cpu"))
+        Property = FdtGetProperty(Fdt, Cpu, "device_type", &Length);
+        if (!FdtStringListContains(Property, Length, "cpu"))
             continue;
-        if (!RiscvFdtReadU32(Fdt, Cpu, "reg", &Hart) || Hart != BootHartId)
+        if (!FdtReadU32(Fdt, Cpu, "reg", &Hart) || Hart != BootHartId)
             continue;
 
-        for (Intc = RiscvFdtFirstChild(Fdt, Cpu);
-             Intc != RISCV_FDT_NO_NODE;
-             Intc = RiscvFdtNextSibling(Fdt, Intc))
+        for (Intc = FdtFirstChild(Fdt, Cpu);
+             Intc != FDT_NO_NODE;
+             Intc = FdtNextSibling(Fdt, Intc))
         {
-            Property = RiscvFdtGetProperty(Fdt, Intc, "compatible", &Length);
-            if (!RiscvFdtStringListContains(Property, Length, "riscv,cpu-intc"))
+            Property = FdtGetProperty(Fdt, Intc, "compatible", &Length);
+            if (!FdtStringListContains(Property, Length, "riscv,cpu-intc"))
                 continue;
-            if (!RiscvFdtReadU32(Fdt, Intc, "#interrupt-cells", &Cells) || Cells != 1 ||
-                !RiscvFdtReadU32(Fdt, Intc, "phandle", Phandle) ||
+            if (!FdtReadU32(Fdt, Intc, "#interrupt-cells", &Cells) || Cells != 1 ||
+                !FdtReadU32(Fdt, Intc, "phandle", Phandle) ||
                 *Phandle == 0 || *Phandle == MAXULONG)
                 return FALSE;
             return TRUE;
@@ -84,49 +84,49 @@ HalpRiscvInitializePlic(
     _In_ SIZE_T DeviceTreeSize,
     _In_ ULONG64 BootHartId)
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root, Soc, Parent, Node, Length, CpuPhandle, Index, PairCount, Value, Phandle;
     ULONG SupervisorContext = MAXULONG;
     ULONG64 Address, Size;
     const VOID *Property;
 
-    if (!RiscvFdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
+    if (!FdtOpen(DeviceTree, DeviceTreeSize, &Fdt))
         return FALSE;
-    Root = RiscvFdtRootNode(&Fdt);
-    if (!RiscvFdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
+    Root = FdtRootNode(&Fdt);
+    if (!FdtFindNode(&Fdt, "/soc", &Soc, &Parent) || Parent != Root)
         return TRUE;
 
-    for (Node = RiscvFdtFirstChild(&Fdt, Soc);
-         Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(&Fdt, Node))
+    for (Node = FdtFirstChild(&Fdt, Soc);
+         Node != FDT_NO_NODE;
+         Node = FdtNextSibling(&Fdt, Node))
     {
-        Property = RiscvFdtGetProperty(&Fdt, Node, "compatible", &Length);
-        if (!RiscvFdtStringListContains(Property, Length, "sifive,plic-1.0.0") &&
-            !RiscvFdtStringListContains(Property, Length, "riscv,plic0"))
+        Property = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+        if (!FdtStringListContains(Property, Length, "sifive,plic-1.0.0") &&
+            !FdtStringListContains(Property, Length, "riscv,plic0"))
             continue;
         if (HalpRiscvPlic.Present ||
             !HalpRiscvFindSupervisorCpuIntc(&Fdt, BootHartId, &CpuPhandle))
             return FALSE;
 
-        Property = RiscvFdtGetProperty(&Fdt, Node, "reg", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "reg", &Length);
         if (!Property || Length != 4 * sizeof(ULONG) ||
-            !RiscvFdtReadCells(Property, Length, 0, 2, &Address) ||
-            !RiscvFdtReadCells(Property, Length, 2, 2, &Size) ||
+            !FdtReadCells(Property, Length, 0, 2, &Address) ||
+            !FdtReadCells(Property, Length, 2, 2, &Size) ||
             !Size || (Address & (PAGE_SIZE - 1)) || (Size & (PAGE_SIZE - 1)) ||
             Address >= RISCV_PLIC_PHYSICAL_LIMIT ||
             Size > RISCV_PLIC_PHYSICAL_LIMIT - Address ||
-            !RiscvFdtReadU32(&Fdt, Node, "riscv,ndev", &Value) ||
+            !FdtReadU32(&Fdt, Node, "riscv,ndev", &Value) ||
             Value == 0 || Value > RISCV_PLIC_MAX_SOURCE)
             return FALSE;
 
-        Property = RiscvFdtGetProperty(&Fdt, Node, "interrupts-extended", &Length);
+        Property = FdtGetProperty(&Fdt, Node, "interrupts-extended", &Length);
         if (!Property || !Length || (Length % (2 * sizeof(ULONG))))
             return FALSE;
         PairCount = Length / (2 * sizeof(ULONG));
         for (Index = 0; Index < PairCount; ++Index)
         {
-            ULONG Phandle = RiscvFdtReadBigEndian32((const UCHAR *)Property + Index * 2 * sizeof(ULONG));
-            ULONG Cause = RiscvFdtReadBigEndian32((const UCHAR *)Property + (Index * 2 + 1) * sizeof(ULONG));
+            ULONG Phandle = FdtReadBigEndian32((const UCHAR *)Property + Index * 2 * sizeof(ULONG));
+            ULONG Cause = FdtReadBigEndian32((const UCHAR *)Property + (Index * 2 + 1) * sizeof(ULONG));
 
             if (Phandle == CpuPhandle && Cause == 9)
             {
@@ -144,9 +144,9 @@ HalpRiscvInitializePlic(
                 ((Value + 32) / 32) * sizeof(ULONG) > Size)
             return FALSE;
 
-        if (!RiscvFdtReadU32(&Fdt, Node, "phandle", &Phandle) || !Phandle ||
+        if (!FdtReadU32(&Fdt, Node, "phandle", &Phandle) || !Phandle ||
             Phandle == MAXULONG ||
-            !RiscvFdtReadU32(&Fdt, Node, "#interrupt-cells", &Index) || Index != 1)
+            !FdtReadU32(&Fdt, Node, "#interrupt-cells", &Index) || Index != 1)
             return FALSE;
 
         HalpRiscvPlic.PhysicalAddress = Address;

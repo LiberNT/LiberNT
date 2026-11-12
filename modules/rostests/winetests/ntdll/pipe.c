@@ -457,11 +457,12 @@ static void CALLBACK userapc(ULONG_PTR dwParam)
 }
 
 static BOOL open_succeeded;
+static HANDLE listen_returned;
 static DWORD WINAPI thread(PVOID main_thread)
 {
     HANDLE h;
 
-    Sleep(400);
+    WaitNamedPipeW(testpipe, 5000);
 
     if (main_thread) {
         DWORD ret;
@@ -469,15 +470,13 @@ static DWORD WINAPI thread(PVOID main_thread)
         ret = pQueueUserAPC(&userapc, main_thread, 0);
         ok(ret, "can't queue user apc, GetLastError: %lx\n", GetLastError());
         CloseHandle(main_thread);
+        WaitForSingleObject(listen_returned, 5000);
     }
-
-    Sleep(400);
 
     h = CreateFileW(testpipe, GENERIC_WRITE | GENERIC_READ, 0, 0, OPEN_EXISTING, 0, 0);
 
     if (h != INVALID_HANDLE_VALUE) {
         open_succeeded = TRUE;
-        Sleep(100);
         CloseHandle(h);
     } else
         open_succeeded = FALSE;
@@ -498,6 +497,7 @@ static void test_alertable(void)
 
     hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     ok(hEvent != INVALID_HANDLE_VALUE, "can't create event, GetLastError: %lx\n", GetLastError());
+    listen_returned = CreateEventW(NULL, TRUE, FALSE, NULL);
 
     res = create_pipe(&hPipe, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_ALERT);
     ok(!res, "NtCreateNamedPipeFile returned %lx\n", res);
@@ -522,6 +522,7 @@ static void test_alertable(void)
     /* wine_todo: the earlier NtFsControlFile call gets cancelled after the pipe gets set into listen state
                   instead of before, so this NtFsControlFile will fail STATUS_INVALID_HANDLE */
     res = listen_pipe(hPipe, hEvent, &iosb, TRUE);
+    SetEvent(listen_returned);
     todo_wine ok(res == STATUS_CANCELLED, "NtFsControlFile returned %lx\n", res);
 
     ok(userapc_called, "user apc didn't run\n");
@@ -552,6 +553,7 @@ static void test_alertable(void)
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
     CloseHandle(hEvent);
+    CloseHandle(listen_returned);
     CloseHandle(hPipe);
 }
 
@@ -1119,9 +1121,9 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     apc_count = 0;
-    SleepEx( 1, FALSE ); /* non-alertable sleep */
+    SleepEx( 0, FALSE ); /* non-alertable sleep */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc not called\n" );
 
     /* with no event, the pipe handle itself gets signaled */
@@ -1143,9 +1145,9 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( is_signaled( read ), "read handle is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     apc_count = 0;
-    SleepEx( 1, FALSE ); /* non-alertable sleep */
+    SleepEx( 0, FALSE ); /* non-alertable sleep */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc not called\n" );
 
     /* now read with data ready */
@@ -1164,9 +1166,9 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, FALSE ); /* non-alertable sleep */
+    SleepEx( 0, FALSE ); /* non-alertable sleep */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc not called\n" );
 
     /* now partial read with data ready */
@@ -1208,9 +1210,9 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, FALSE ); /* non-alertable sleep */
+    SleepEx( 0, FALSE ); /* non-alertable sleep */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc not called\n" );
     apc_count = 0;
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
@@ -1219,9 +1221,9 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, FALSE ); /* non-alertable sleep */
+    SleepEx( 0, FALSE ); /* non-alertable sleep */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc not called\n" );
 
     /* try read with no data */
@@ -1238,12 +1240,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ret = WriteFile( write, buffer, 1, &written, NULL );
     ok(ret && written == 1, "WriteFile error %ld\n", GetLastError());
     /* partial read is good enough */
-    Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+    Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc was not called\n" );
 
     /* read from disconnected pipe */
@@ -1257,7 +1259,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( !apc_count, "apc was called\n" );
     CloseHandle( read );
 
@@ -1270,7 +1272,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( !apc_count, "apc was called\n" );
     CloseHandle( read );
 
@@ -1285,7 +1287,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );  /* not reset on invalid handle */
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( !apc_count, "apc was called\n" );
 
     /* disconnect while async read is in progress */
@@ -1300,12 +1302,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
     ok( !apc_count, "apc was called\n" );
     CloseHandle( write );
-    Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+    Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_PIPE_BROKEN, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc was not called\n" );
     CloseHandle( read );
 
@@ -1325,12 +1327,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     /* Cancel by other handle */
     status = pNtCancelIoFile( read, &iosb2 );
     ok(status == STATUS_SUCCESS, "failed to cancel by different handle: %lx\n", status);
-    Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+    Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc was not called\n" );
 
     apc_count = 0;
@@ -1344,19 +1346,19 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( !apc_count, "apc was called\n" );
     /* Close queued handle */
     CloseHandle( read );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
     status = pNtCancelIoFile( read, &iosb2 );
     ok(status == STATUS_INVALID_HANDLE, "cancelled by closed handle?\n");
     status = pNtCancelIoFile( handle, &iosb2 );
     ok(status == STATUS_SUCCESS, "failed to cancel: %lx\n", status);
-    Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+    Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
     ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
-    SleepEx( 1, TRUE ); /* alertable sleep */
+    SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc was not called\n" );
     CloseHandle( handle );
     CloseHandle( write );
@@ -1377,12 +1379,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( !apc_count, "apc was called\n" );
         status = pNtCancelIoFileEx( read, &iosb, &iosb2 );
         ok(status == STATUS_SUCCESS, "Failed to cancel I/O\n");
-        Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+        Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
         ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
         ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
         ok( is_signaled( event ), "event is not signaled\n" );
         ok( !apc_count, "apc was called\n" );
-        SleepEx( 1, TRUE ); /* alertable sleep */
+        SleepEx( 0, TRUE ); /* alertable sleep */
         ok( apc_count == 1, "apc was not called\n" );
 
         /* Duplicate iosb */
@@ -1403,12 +1405,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( !apc_count, "apc was called\n" );
         status = pNtCancelIoFileEx( read, &iosb, &iosb2 );
         ok(status == STATUS_SUCCESS, "Failed to cancel I/O\n");
-        Sleep(1);  /* FIXME: needed for wine to run the i/o apc  */
+        Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
         ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
         ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
         ok( is_signaled( event ), "event is not signaled\n" );
         ok( !apc_count, "apc was called\n" );
-        SleepEx( 1, TRUE ); /* alertable sleep */
+        SleepEx( 0, TRUE ); /* alertable sleep */
         ok( apc_count == 2, "apc was not called\n" );
 
         CloseHandle( read );
@@ -1706,7 +1708,17 @@ struct blocking_thread_args
     HANDLE client;
     HANDLE pipe;
     HANDLE event;
+    HANDLE main_thread;
 };
+
+static void wait_io_pending(HANDLE thread)
+{
+    BOOL pending = FALSE;
+    unsigned int i;
+
+    for (i = 0; i < 100000 && GetThreadIOPendingFlag(thread, &pending) && !pending; i++)
+        SwitchToThread();
+}
 
 static DWORD WINAPI blocking_thread(void *arg)
 {
@@ -1723,7 +1735,7 @@ static DWORD WINAPI blocking_thread(void *arg)
         if (res != WAIT_OBJECT_0) break;
         switch(ctx->cmd) {
         case BLOCKING_THREAD_WRITE:
-            Sleep(100);
+            wait_io_pending(ctx->main_thread);
             if(ctx->event)
                 ok(!is_signaled(ctx->event), "event is signaled\n");
             ok(!ioapc_called, "ioapc called\n");
@@ -1734,7 +1746,7 @@ static DWORD WINAPI blocking_thread(void *arg)
             ok(is_signaled(ctx->pipe), "pipe is not signaled\n");
             break;
         case BLOCKING_THREAD_READ:
-            Sleep(100);
+            wait_io_pending(ctx->main_thread);
             if(ctx->event)
                 ok(!is_signaled(ctx->event), "event is signaled\n");
             ok(!ioapc_called, "ioapc called\n");
@@ -1769,6 +1781,7 @@ static void test_blocking(ULONG options)
 
     ctx.wait = CreateEventW(NULL, FALSE, FALSE, NULL);
     ctx.done = CreateEventW(NULL, FALSE, FALSE, NULL);
+    ctx.main_thread = pOpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
     thread = CreateThread(NULL, 0, blocking_thread, &ctx, 0, 0);
     ok(thread != INVALID_HANDLE_VALUE, "can't create thread, GetLastError: %lx\n", GetLastError());
 
@@ -1886,6 +1899,7 @@ static void test_blocking(ULONG options)
 
     CloseHandle(ctx.wait);
     CloseHandle(ctx.done);
+    CloseHandle(ctx.main_thread);
     CloseHandle(thread);
 }
 

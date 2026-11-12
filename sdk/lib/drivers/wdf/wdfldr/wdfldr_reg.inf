@@ -1,0 +1,8 @@
+; Kernel Mode Driver Framework loader (wdfldr.sys)
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","Group",0x00000000,"WdfLoadGroup"
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","DisplayName",0x00000000,"Kernel Mode Driver Framework Loader"
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","ImagePath",0x00020000,"system32\drivers\wdfldr.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\WdfLdr","Type",0x00010001,0x00000001

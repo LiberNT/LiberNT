@@ -158,6 +158,57 @@ static PSID report_fault_user(BYTE *buffer, DWORD size)
     return ok ? ((TOKEN_USER *)buffer)->User.Sid : NULL;
 }
 
+static BOOL report_fault_launch_host(const WCHAR *directory, const WCHAR *arguments, BOOL native, PROCESS_INFORMATION *info)
+{
+    WCHAR path[MAX_PATH], cmd[MAX_PATH + 96];
+    STARTUPINFOW startup;
+    PVOID redirection = NULL;
+    BOOL ok;
+
+    if (_snwprintf(path, ARRAYSIZE(path), L"%s\\werfault.exe", directory) < 0 ||
+        _snwprintf(cmd, ARRAYSIZE(cmd), L"\"%s\" %s", path, arguments) < 0)
+        return FALSE;
+    path[ARRAYSIZE(path) - 1] = 0;
+    cmd[ARRAYSIZE(cmd) - 1] = 0;
+
+    memset(&startup, 0, sizeof(startup));
+    startup.cb = sizeof(startup);
+    if (native && !Wow64DisableWow64FsRedirection(&redirection))
+        return FALSE;
+    ok = CreateProcessW(path, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &startup, info);
+    if (native)
+        Wow64RevertWow64FsRedirection(redirection);
+    return ok;
+}
+
+static EFaultRepRetVal report_fault_host(LPEXCEPTION_POINTERS pep)
+{
+    WCHAR self[MAX_PATH], directory[MAX_PATH], arguments[96];
+    PROCESS_INFORMATION info;
+    DWORD code;
+    UINT len;
+
+    if (GetModuleFileNameW(NULL, self, ARRAYSIZE(self)) && !lstrcmpiW(report_fault_name(self), L"werfault.exe"))
+        return frrvErrNoDW;
+
+    len = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
+    if (!len || len >= ARRAYSIZE(directory))
+        return frrvErrNoDW;
+
+    _snwprintf(arguments, ARRAYSIZE(arguments), L"-u -p %lu -t %lu -x 0x%Ix",
+               GetCurrentProcessId(), GetCurrentThreadId(), (ULONG_PTR)pep);
+    arguments[ARRAYSIZE(arguments) - 1] = 0;
+    if (!report_fault_launch_host(directory, arguments, FALSE, &info))
+        return frrvErrNoDW;
+
+    CloseHandle(info.hThread);
+    WaitForSingleObject(info.hProcess, INFINITE);
+    if (!GetExitCodeProcess(info.hProcess, &code) || code > frrvErrDoubleFault)
+        code = frrvErr;
+    CloseHandle(info.hProcess);
+    return (EFaultRepRetVal)code;
+}
+
 EFaultRepRetVal WINAPI ReportFault(LPEXCEPTION_POINTERS pep, DWORD dwOpt)
 {
     WCHAR app_path[MAX_PATH], module_path[MAX_PATH], app_version[32], module_version[32];
@@ -227,11 +278,69 @@ EFaultRepRetVal WINAPI ReportFault(LPEXCEPTION_POINTERS pep, DWORD dwOpt)
     strings[13] = L"";
     strings[14] = L"";
 
-    if (!(source = RegisterEventSourceW(NULL, L"Application Error")))
-        return frrvErrNoDW;
-    ok = ReportEventW(source, EVENTLOG_ERROR_TYPE, 100, 1000, report_fault_user(user, sizeof(user)), ARRAYSIZE(strings), 0, strings, NULL);
-    DeregisterEventSource(source);
-    return ok ? frrvOkQueued : frrvErrNoDW;
+    if ((source = RegisterEventSourceW(NULL, L"Application Error")))
+    {
+        ok = ReportEventW(source, EVENTLOG_ERROR_TYPE, 100, 1000, report_fault_user(user, sizeof(user)), ARRAYSIZE(strings), 0, strings, NULL);
+        DeregisterEventSource(source);
+        if (!ok)
+            WARN("Application Error event not recorded\n");
+    }
+    return report_fault_host(pep);
+}
+
+/*************************************************************************
+ * WerReportHang  [FAULTREP.@]
+ */
+HRESULT WINAPI WerReportHang(HWND hwndHungApp, PCWSTR pwzHungApplicationName)
+{
+    DWORD (WINAPI *get_window_thread_process_id)(HWND, DWORD *);
+    BOOL (WINAPI *is_window)(HWND);
+    WCHAR directory[MAX_PATH], arguments[64];
+    BOOL self_wow64 = FALSE, target_wow64 = FALSE, native = FALSE;
+    PROCESS_INFORMATION info;
+    DWORD pid = 0, tid = 0;
+    HMODULE user32;
+    HANDLE process;
+    UINT len;
+
+    TRACE("%p %s\n", hwndHungApp, debugstr_w(pwzHungApplicationName));
+    if (pwzHungApplicationName && lstrlenW(pwzHungApplicationName) >= 128)
+        return E_INVALIDARG;
+
+    if (!(user32 = LoadLibraryW(L"user32.dll")))
+        return HRESULT_FROM_WIN32(GetLastError());
+    is_window = (void *)GetProcAddress(user32, "IsWindow");
+    get_window_thread_process_id = (void *)GetProcAddress(user32, "GetWindowThreadProcessId");
+    if (is_window && get_window_thread_process_id && hwndHungApp && is_window(hwndHungApp))
+        tid = get_window_thread_process_id(hwndHungApp, &pid);
+    FreeLibrary(user32);
+    if (!tid || !pid)
+        return HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE);
+
+    /* FIXME: the application name is not shown: the host has no hang reporting dialog */
+    if ((process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)))
+    {
+        IsWow64Process(process, &target_wow64);
+        CloseHandle(process);
+    }
+    IsWow64Process(GetCurrentProcess(), &self_wow64);
+
+    if (!self_wow64 && target_wow64)
+        len = GetSystemWow64DirectoryW(directory, ARRAYSIZE(directory));
+    else
+        len = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
+    native = self_wow64 && !target_wow64;
+    if (!len || len >= ARRAYSIZE(directory))
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    _snwprintf(arguments, ARRAYSIZE(arguments), L"-h -p %lu -t %lu", pid, tid);
+    arguments[ARRAYSIZE(arguments) - 1] = 0;
+    if (!report_fault_launch_host(directory, arguments, native, &info))
+        return HRESULT_FROM_WIN32(GetLastError());
+
+    CloseHandle(info.hThread);
+    CloseHandle(info.hProcess);
+    return S_OK;
 }
 #else
 EFaultRepRetVal WINAPI ReportFault(LPEXCEPTION_POINTERS pep, DWORD dwOpt)

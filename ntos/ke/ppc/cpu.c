@@ -114,3 +114,33 @@ KiQueryProcessorTopology(
     *RecordCount = 0;
     *SetCount = 0;
 }
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    RtlZeroMemory(Domains, sizeof(*Domains));
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+}
+
+BOOLEAN
+NTAPI
+KiUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN CallerFrame)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(CallerFrame);
+
+    /* TODO: walk the PowerPC function tables without the loaded module lock; a backtrace stops at its first frame */
+    return FALSE;
+}

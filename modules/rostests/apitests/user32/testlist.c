@@ -3,6 +3,7 @@
 #include <apitest.h>
 
 extern void func_RegisterTouchWindow(void);
+extern void func_AltTabHook(void);
 extern void func_AttachThreadInput(void);
 extern void func_CalculatePopupWindowPosition(void);
 extern void func_CallbackNesting(void);
@@ -16,6 +17,7 @@ extern void func_CreateDialog(void);
 extern void func_CreateIconFromResourceEx(void);
 extern void func_CoveredWindow(void);
 extern void func_CreateWindowEx(void);
+extern void func_CrossThreadWindowPos(void);
 extern void func_DeferWindowPos(void);
 extern void func_DefFrameProc(void);
 extern void func_DeskWallpaper(void);
@@ -27,6 +29,10 @@ extern void func_DialogDpiChangeBehavior(void);
 extern void func_DpiHostingBehavior(void);
 extern void func_DM_REPOSITION(void);
 extern void func_Dpi(void);
+extern void func_DpiAwareness(void);
+extern void func_DpiProcessDefault(void);
+extern void func_DpiScaling(void);
+extern void func_DpiVirtualization(void);
 extern void func_DrawIconEx(void);
 extern void func_DrawText(void);
 extern void func_desktop(void);
@@ -35,6 +41,7 @@ extern void func_ClipboardAccess(void);
 extern void func_ClipboardData(void);
 extern void func_EnableScrollBar(void);
 extern void func_EnumDisplaySettings(void);
+extern void func_ForegroundAfterHide(void);
 extern void func_ForegroundRetake(void);
 extern void func_ForegroundRight(void);
 extern void func_ForegroundStartup(void);
@@ -55,6 +62,7 @@ extern void func_GetUserObjectInformation(void);
 extern void func_GetWindowPlacement(void);
 extern void func_GhostWindow(void);
 extern void func_GW_ENABLEDPOPUP(void);
+extern void func_HiddenChildWindowPos(void);
 extern void func_ImeWindow(void);
 extern void func_InitializeLpkHooks(void);
 extern void func_InputMessageSource(void);
@@ -98,6 +106,7 @@ extern void func_ScrollWindowEx(void);
 extern void func_UnhookWinEvent(void);
 extern void func_SendMessageTimeout(void);
 extern void func_SendMessageTimeoutHung(void);
+extern void func_ServiceAccountDesktop(void);
 extern void func_SetActiveWindow(void);
 extern void func_SetCursorPos(void);
 extern void func_SetFocus(void);
@@ -123,6 +132,8 @@ extern void func_UserHandleGrantAccess(void);
 extern void func_VirtualKey(void);
 extern void func_WaitForInputIdle(void);
 extern void func_WindowBand(void);
+extern void func_WindowStationErrors(void);
+extern void func_WindowStationSecurity(void);
 extern void func_CallWindowProc(void);
 extern void func_WndProc(void);
 extern void func_wsprintfApi(void);
@@ -130,6 +141,7 @@ extern void func_wsprintfApi(void);
 const struct test winetest_testlist[] =
 {
     { "RegisterTouchWindow", func_RegisterTouchWindow },
+    { "AltTabHook", func_AltTabHook },
     { "AttachThreadInput", func_AttachThreadInput },
     { "CalculatePopupWindowPosition", func_CalculatePopupWindowPosition },
     { "CallbackNesting", func_CallbackNesting },
@@ -143,6 +155,7 @@ const struct test winetest_testlist[] =
     { "CreateIconFromResourceEx", func_CreateIconFromResourceEx },
     { "CoveredWindow", func_CoveredWindow },
     { "CreateWindowEx", func_CreateWindowEx },
+    { "CrossThreadWindowPos", func_CrossThreadWindowPos },
     { "DeferWindowPos", func_DeferWindowPos },
     { "DefFrameProc", func_DefFrameProc },
     { "DeskWallpaper", func_DeskWallpaper },
@@ -154,6 +167,10 @@ const struct test winetest_testlist[] =
     { "DpiHostingBehavior", func_DpiHostingBehavior },
     { "DM_REPOSITION", func_DM_REPOSITION },
     { "Dpi", func_Dpi },
+    { "DpiAwareness", func_DpiAwareness },
+    { "DpiProcessDefault", func_DpiProcessDefault },
+    { "DpiScaling", func_DpiScaling },
+    { "DpiVirtualization", func_DpiVirtualization },
     { "DrawIconEx", func_DrawIconEx },
     { "DrawText", func_DrawText },
     { "desktop", func_desktop },
@@ -162,6 +179,7 @@ const struct test winetest_testlist[] =
     { "ClipboardData", func_ClipboardData },
     { "EnableScrollBar", func_EnableScrollBar },
     { "EnumDisplaySettings", func_EnumDisplaySettings },
+    { "ForegroundAfterHide", func_ForegroundAfterHide },
     { "ForegroundRetake", func_ForegroundRetake },
     { "ForegroundRight", func_ForegroundRight },
     { "ForegroundStartup", func_ForegroundStartup },
@@ -182,6 +200,7 @@ const struct test winetest_testlist[] =
     { "GetWindowPlacement", func_GetWindowPlacement },
     { "GhostWindow", func_GhostWindow },
     { "GW_ENABLEDPOPUP", func_GW_ENABLEDPOPUP },
+    { "HiddenChildWindowPos", func_HiddenChildWindowPos },
     { "ImeWindow", func_ImeWindow },
     { "InitializeLpkHooks", func_InitializeLpkHooks },
     { "InputMessageSource", func_InputMessageSource },
@@ -225,6 +244,7 @@ const struct test winetest_testlist[] =
     { "UnhookWinEvent", func_UnhookWinEvent },
     { "SendMessageTimeout", func_SendMessageTimeout },
     { "SendMessageTimeoutHung", func_SendMessageTimeoutHung },
+    { "ServiceAccountDesktop", func_ServiceAccountDesktop },
     { "SetActiveWindow", func_SetActiveWindow },
     { "SetCursorPos", func_SetCursorPos },
     { "SetFocus", func_SetFocus },
@@ -250,6 +270,8 @@ const struct test winetest_testlist[] =
     { "VirtualKey", func_VirtualKey },
     { "WaitForInputIdle", func_WaitForInputIdle },
     { "WindowBand", func_WindowBand },
+    { "WindowStationErrors", func_WindowStationErrors },
+    { "WindowStationSecurity", func_WindowStationSecurity },
     { "CallWindowProc", func_CallWindowProc },
     { "WndProc", func_WndProc },
     { "wsprintfApi", func_wsprintfApi },

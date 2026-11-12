@@ -44,19 +44,19 @@ ReAllocBuffer(
                                   Size);
     if (!NewBuffer)
     {
-        skip("RtlReAllocateHeap failed for size %Iu (%s)\n", Size, Action);
+        skip("RtlReAllocateHeap failed for size %Iu (%s)\n", (size_t)Size, Action);
         return FALSE;
     }
     *Buffer = NewBuffer;
     ok_hex(RtlSizeHeap(RtlGetProcessHeap(), 0, NewBuffer), Size);
     if (OldSize < Size)
     {
-        ok(CheckBuffer(NewBuffer, OldSize, 0x7a), "CheckBuffer failed at size 0x%Ix -> 0x%Ix\n", OldSize, Size);
-        ok(CheckBuffer(NewBuffer + OldSize, Size - OldSize, 0), "HEAP_ZERO_MEMORY not respected for 0x%Ix -> 0x%Ix\n", OldSize, Size);
+        ok(CheckBuffer(NewBuffer, OldSize, 0x7a), "CheckBuffer failed at size 0x%Ix -> 0x%Ix\n", (size_t)OldSize, (size_t)Size);
+        ok(CheckBuffer(NewBuffer + OldSize, Size - OldSize, 0), "HEAP_ZERO_MEMORY not respected for 0x%Ix -> 0x%Ix\n", (size_t)OldSize, (size_t)Size);
     }
     else
     {
-        ok(CheckBuffer(NewBuffer, Size, 0x7a), "CheckBuffer failed at size 0x%Ix -> 0x%Ix\n", OldSize, Size);
+        ok(CheckBuffer(NewBuffer, Size, 0x7a), "CheckBuffer failed at size 0x%Ix -> 0x%Ix\n", (size_t)OldSize, (size_t)Size);
     }
     *OldSizePtr = Size;
     return TRUE;
@@ -87,10 +87,10 @@ START_TEST(RtlReAllocateHeap)
                              OldSize);
     if (!Buffer)
     {
-        skip("RtlAllocateHeap failed for size %Iu\n", OldSize);
+        skip("RtlAllocateHeap failed for size %Iu\n", (size_t)OldSize);
         return;
     }
-    ok(CheckBuffer(Buffer, OldSize, 0), "HEAP_ZERO_MEMORY not respected for 0x%Ix\n", OldSize);
+    ok(CheckBuffer(Buffer, OldSize, 0), "HEAP_ZERO_MEMORY not respected for 0x%Ix\n", (size_t)OldSize);
 
     for (Size = 0x78000; Size < 0x90000 && Continue; Size += 0x100)
     {
@@ -111,7 +111,7 @@ START_TEST(RtlReAllocateHeap)
                              OldSize);
     if (!Buffer)
     {
-        skip("RtlAllocateHeap failed for size %Iu\n", OldSize);
+        skip("RtlAllocateHeap failed for size %Iu\n", (size_t)OldSize);
         return;
     }
 

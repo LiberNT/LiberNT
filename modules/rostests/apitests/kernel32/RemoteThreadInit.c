@@ -130,8 +130,6 @@ TestDebuggerReattach(
 
         Success = DebugActiveProcessStop(ProcessInfo.dwProcessId);
         ok(Success, "Round %lu: DebugActiveProcessStop failed, error %lu\n", Round, GetLastError());
-
-        Sleep(1000);
     }
 
     FinishChild(&ProcessInfo, 1);

@@ -4532,8 +4532,70 @@ INT WINAPI UrlCompareW(const WCHAR *url1, const WCHAR *url2, BOOL ignore_slash)
     return -1;
 }
 
+#ifdef __REACTOS__
+static bool scheme_has_authority( URL_SCHEME scheme )
+{
+    switch (scheme)
+    {
+        case URL_SCHEME_FTP:
+        case URL_SCHEME_HTTP:
+        case URL_SCHEME_GOPHER:
+        case URL_SCHEME_NNTP:
+        case URL_SCHEME_TELNET:
+        case URL_SCHEME_WAIS:
+        case URL_SCHEME_HTTPS:
+            return true;
+
+        default:
+            return false;
+    }
+}
+#endif
+
 HRESULT WINAPI UrlFixupW(const WCHAR *url, WCHAR *translatedUrl, DWORD maxChars)
 {
+#ifdef __REACTOS__
+    WCHAR fixed[INTERNET_MAX_URL_LENGTH];
+    const WCHAR *rest;
+    PARSEDURLW base;
+    DWORD len;
+
+    TRACE("%s, %p, %ld\n", wine_dbgstr_w(url), translatedUrl, maxChars);
+
+    if (!url)
+        return E_FAIL;
+    if (!translatedUrl || !maxChars)
+        return E_INVALIDARG;
+
+    base.cbSize = sizeof(base);
+    /* TODO: correct a misspelled scheme to a known one, giving priority to its first character */
+    if (ParseURLW(url, &base) != S_OK || base.nScheme == URL_SCHEME_UNKNOWN)
+        return S_FALSE;
+
+    len = lstrlenW(url);
+    if (len >= ARRAY_SIZE(fixed))
+        return E_INVALIDARG;
+
+    if (scheme_has_authority(base.nScheme) && !(base.pszSuffix[0] == '/' && base.pszSuffix[1] == '/'))
+    {
+        for (rest = base.pszSuffix; *rest == '/' || *rest == '\\'; rest++)
+            ;
+        len = base.cchProtocol + 3 + lstrlenW(rest);
+        if (len >= ARRAY_SIZE(fixed))
+            return E_INVALIDARG;
+        memcpy(fixed, url, base.cchProtocol * sizeof(WCHAR));
+        memcpy(fixed + base.cchProtocol, L"://", 3 * sizeof(WCHAR));
+        lstrcpyW(fixed + base.cchProtocol + 3, rest);
+    }
+    else
+        lstrcpyW(fixed, url);
+
+    if (len + 1 > maxChars)
+        return E_POINTER;
+
+    memmove(translatedUrl, fixed, (len + 1) * sizeof(WCHAR));
+    return S_OK;
+#else
     DWORD srcLen;
 
     FIXME("%s, %p, %ld stub\n", wine_dbgstr_w(url), translatedUrl, maxChars);
@@ -4547,6 +4609,7 @@ HRESULT WINAPI UrlFixupW(const WCHAR *url, WCHAR *translatedUrl, DWORD maxChars)
     lstrcpynW(translatedUrl, url, (maxChars < srcLen) ? maxChars : srcLen);
 
     return S_OK;
+#endif
 }
 
 const char * WINAPI UrlGetLocationA(const char *url)
@@ -4860,9 +4923,18 @@ BOOL WINAPI UrlIsA(const char *url, URLIS Urlis)
     case URLIS_URL:
         return PathIsURLA(url);
 
+#ifdef __REACTOS__
+    case URLIS_HASQUERY:
+        return url[strcspn(url, "?#")] == '?';
+
+    /* TODO: URLIS_NOHISTORY and URLIS_APPLIABLE: which URLs they select is not documented */
+    case URLIS_NOHISTORY:
+    case URLIS_APPLIABLE:
+#else
     case URLIS_NOHISTORY:
     case URLIS_APPLIABLE:
     case URLIS_HASQUERY:
+#endif
     default:
         FIXME("(%s %d): stub\n", debugstr_a(url), Urlis);
     }
@@ -4906,9 +4978,18 @@ BOOL WINAPI UrlIsW(const WCHAR *url, URLIS Urlis)
     case URLIS_URL:
         return PathIsURLW(url);
 
+#ifdef __REACTOS__
+    case URLIS_HASQUERY:
+        return url[wcscspn(url, L"?#")] == '?';
+
+    /* TODO: URLIS_NOHISTORY and URLIS_APPLIABLE: which URLs they select is not documented */
+    case URLIS_NOHISTORY:
+    case URLIS_APPLIABLE:
+#else
     case URLIS_NOHISTORY:
     case URLIS_APPLIABLE:
     case URLIS_HASQUERY:
+#endif
     default:
         FIXME("(%s %d): stub\n", debugstr_w(url), Urlis);
     }
@@ -5363,8 +5444,19 @@ HRESULT WINAPI UrlHashW(const WCHAR *url, unsigned char *dest, DWORD dest_len)
 
 BOOL WINAPI IsInternetESCEnabled(void)
 {
+#ifdef __REACTOS__
+    DWORD value = 0, size = sizeof(value);
+
+    TRACE("\n");
+
+    if (RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\ZoneMap",
+                     L"IEHarden", RRF_RT_REG_DWORD, NULL, &value, &size))
+        return FALSE;
+    return value != 0;
+#else
     FIXME(": stub\n");
     return FALSE;
+#endif
 }
 
 #endif // !STATIC_PATHCCH

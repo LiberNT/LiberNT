@@ -1012,6 +1012,168 @@ CheckModifiedSigner(HCRYPTMSG Msg, DWORD ExpectedCount, ULONG Line)
 
 static
 VOID
+CheckContentSignature(const BYTE *Data, DWORD Size, BOOL Expected, DWORD Error, int Line)
+{
+    HCRYPTMSG Msg = Decode(Data, Size);
+    BOOL Ret;
+
+    ok_(__FILE__, Line)(Msg != NULL, "Cannot decode the message (0x%lx)\n", GetLastError());
+    if (!Msg)
+        return;
+    SetLastError(0xdeadbeef);
+    Ret = CryptMsgControl(Msg, 0, CMSG_CTRL_VERIFY_SIGNATURE, Signer->pCertInfo);
+    ok_(__FILE__, Line)(Ret == Expected, "verify returned %d (0x%lx)\n", Ret, GetLastError());
+    if (!Expected)
+        ok_(__FILE__, Line)(GetLastError() == Error, "error 0x%lx, expected 0x%lx\n", GetLastError(), Error);
+    CryptMsgClose(Msg);
+}
+
+static
+VOID
+TestContentDigest(VOID)
+{
+    CRYPT_ATTR_BLOB TimeBlob = { sizeof(SigningTime), SigningTime };
+    CRYPT_ATTRIBUTE TimeAttribute = { (LPSTR)szOID_RSA_signingTime, 1, &TimeBlob };
+    CMSG_SIGNER_ENCODE_INFO SignerInfo;
+    CMSG_SIGNED_ENCODE_INFO SignedInfo;
+    BYTE *Encoded = NULL;
+    DWORD Size = 0, i;
+    HCRYPTMSG Msg;
+
+    InitSigner(&SignerInfo, Signer, SignerProv, szOID_NIST_sha256);
+    SignerInfo.cAuthAttr = 1;
+    SignerInfo.rgAuthAttr = &TimeAttribute;
+    ZeroMemory(&SignedInfo, sizeof(SignedInfo));
+    SignedInfo.cbSize = sizeof(SignedInfo);
+    SignedInfo.cSigners = 1;
+    SignedInfo.rgSigners = &SignerInfo;
+    Msg = CryptMsgOpenToEncode(ENCODING, 0, CMSG_SIGNED, &SignedInfo, NULL, NULL);
+    if (Msg && CryptMsgUpdate(Msg, Content, sizeof(Content), TRUE))
+        Encoded = GetParam(Msg, CMSG_CONTENT_PARAM, 0, &Size);
+    if (Msg)
+        CryptMsgClose(Msg);
+    ok(Encoded != NULL, "Cannot sign the content (0x%lx)\n", GetLastError());
+    if (!Encoded)
+        return;
+
+    CheckContentSignature(Encoded, Size, TRUE, 0, __LINE__);
+    for (i = 0; i + sizeof(Content) <= Size; i++)
+    {
+        if (!memcmp(Encoded + i, Content, sizeof(Content)))
+        {
+            Encoded[i] ^= 0x20;
+            break;
+        }
+    }
+    ok(i + sizeof(Content) <= Size, "content not found in the message\n");
+    CheckContentSignature(Encoded, Size, FALSE, CRYPT_E_HASH_VALUE, __LINE__);
+    HeapFree(GetProcessHeap(), 0, Encoded);
+}
+
+static
+DWORD
+Header(const BYTE *Data, DWORD Offset, DWORD *Length)
+{
+    if (Data[Offset + 1] == 0x82)
+    {
+        *Length = (Data[Offset + 2] << 8) | Data[Offset + 3];
+        return 4;
+    }
+    *Length = Data[Offset + 1] & 0x7f;
+    return (Data[Offset + 1] & 0x80) ? 0 : 2;
+}
+
+static
+BOOL
+AddLength(BYTE *Data, DWORD Offset, DWORD Extra)
+{
+    DWORD Length;
+
+    if (Header(Data, Offset, &Length) != 4 || Length + Extra > 0xffff)
+        return FALSE;
+    Length += Extra;
+    Data[Offset + 2] = (BYTE)(Length >> 8);
+    Data[Offset + 3] = (BYTE)Length;
+    return TRUE;
+}
+
+static
+VOID
+TestAttributeCertificate(const BYTE *Message, DWORD MessageSize)
+{
+    static const BYTE AttrCert[] =
+    {
+        0xa1, 0x77, 0x30, 0x62,
+        0xa1, 0x13, 0xa4, 0x11, 0x30, 0x0f, 0x31, 0x0d, 0x30, 0x0b, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c, 0x04, 'T', 'e', 's', 't',
+        0x30, 0x13, 0xa4, 0x11, 0x30, 0x0f, 0x31, 0x0d, 0x30, 0x0b, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c, 0x04, 'T', 'e', 's', 't',
+        0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00,
+        0x02, 0x01, 0x01,
+        0x30, 0x22, 0x18, 0x0f, '2', '0', '2', '6', '0', '1', '0', '1', '0', '0', '0', '0', '0', '0', 'Z',
+        0x18, 0x0f, '2', '0', '2', '7', '0', '1', '0', '1', '0', '0', '0', '0', '0', '0', 'Z',
+        0x30, 0x00,
+        0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00,
+        0x03, 0x02, 0x00, 0x00,
+    };
+    DWORD Outer = 0, Explicit, SignedData, Child, Certs = 0, End, Length, Hdr, Count = 0, Size = sizeof(Count);
+    BYTE *Data;
+    HCRYPTMSG Msg;
+    HCERTSTORE Store;
+    PCCERT_CONTEXT Cert = NULL;
+    BOOL Ret;
+
+    Data = HeapAlloc(GetProcessHeap(), 0, MessageSize + sizeof(AttrCert));
+    if (!Data)
+        return;
+    memcpy(Data, Message, MessageSize);
+    Hdr = Header(Data, Outer, &Length);
+    Explicit = Outer + Hdr + 2 + Data[Outer + Hdr + 1];
+    SignedData = Explicit + Header(Data, Explicit, &Length);
+    Hdr = Header(Data, SignedData, &Length);
+    End = SignedData + Hdr + Length;
+    for (Child = SignedData + Hdr; Hdr && Child < End && !Certs; Child += Hdr + Length)
+    {
+        if (Data[Child] == 0xa0)
+            Certs = Child;
+        if (!(Hdr = Header(Data, Child, &Length)))
+            break;
+    }
+    ok(Certs && Hdr == 4, "certificate set not found\n");
+    if (!Certs || Hdr != 4)
+    {
+        HeapFree(GetProcessHeap(), 0, Data);
+        return;
+    }
+    End = Certs + Hdr + Length;
+    memmove(Data + End + sizeof(AttrCert), Data + End, MessageSize - End);
+    memcpy(Data + End, AttrCert, sizeof(AttrCert));
+    ok(AddLength(Data, Outer, sizeof(AttrCert)) && AddLength(Data, Explicit, sizeof(AttrCert)) &&
+       AddLength(Data, SignedData, sizeof(AttrCert)) && AddLength(Data, Certs, sizeof(AttrCert)),
+       "Cannot adjust the lengths\n");
+
+    Msg = Decode(Data, MessageSize + sizeof(AttrCert));
+    ok(Msg != NULL, "Cannot decode a certificate set with an attribute certificate (0x%lx)\n", GetLastError());
+    if (Msg)
+    {
+        ok(CryptMsgGetParam(Msg, CMSG_CERT_COUNT_PARAM, 0, &Count, &Size), "CMSG_CERT_COUNT_PARAM failed (0x%lx)\n",
+           GetLastError());
+        ok_long(Count, 3);
+        Store = CertOpenStore(CERT_STORE_PROV_MSG, ENCODING, 0, 0, Msg);
+        ok(Store != NULL, "Cannot open the message store (0x%lx)\n", GetLastError());
+        for (Count = 0; Store && (Cert = CertEnumCertificatesInStore(Store, Cert)); Count++)
+            ;
+        ok_long(Count, 3);
+        if (Store)
+            CertCloseStore(Store, 0);
+        SetLastError(0xdeadbeef);
+        Ret = CryptMsgControl(Msg, 0, CMSG_CTRL_VERIFY_SIGNATURE, Signer->pCertInfo);
+        ok(Ret, "verify failed (0x%lx)\n", GetLastError());
+        CryptMsgClose(Msg);
+    }
+    HeapFree(GetProcessHeap(), 0, Data);
+}
+
+static
+VOID
 TestUnauthControls(const BYTE *Message, DWORD MessageSize, BYTE *SignerInfo, DWORD SignerInfoSize)
 {
     CMSG_CTRL_ADD_SIGNER_UNAUTH_ATTR_PARA Add = { sizeof(Add), 0, { 0, NULL } };
@@ -1164,6 +1326,8 @@ START_TEST(Countersign)
     }
     TestCountersign(Msg, &Countersignature);
     TestUnauthControls(Message, MessageSize, SignerInfo, SignerInfoSize);
+    TestContentDigest();
+    TestAttributeCertificate(Message, MessageSize);
 
     HeapFree(GetProcessHeap(), 0, Countersignature.pbData);
     HeapFree(GetProcessHeap(), 0, SignerInfo);

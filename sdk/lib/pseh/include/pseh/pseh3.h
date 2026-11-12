@@ -233,6 +233,19 @@ __attribute__((regparm(1)))
 _SEH3$_AutoCleanup(
     volatile SEH3$_REGISTRATION_FRAME *Frame);
 
+void
+__attribute__((regparm(1)))
+_SEH3$_Unregister(
+    volatile SEH3$_REGISTRATION_FRAME *Frame);
+
+/* Entered only through the registration, the finally body would see the registration-time values */
+#define _SEH3$_FINALLY_ON_NORMAL_EXIT() \
+    do { \
+        _SEH3$_Unregister(&_SEH3$_TrylevelFrame); \
+        _SEH3$_TrylevelFrame.ScopeTable = 0; \
+        goto _SEH3$_l_FilterOrFinally; \
+    } while (0)
+
 /* These are only dummies here */
 #define _SEH3$_DECLARE_CLEANUP_FUNC(_Name)
 #define _SEH3$_DEFINE_CLEANUP_FUNC(_Name)
@@ -258,7 +271,7 @@ _SEH3$_AutoCleanup(
         asm volatile ("#\n" : : : "eax", "ebx", "ecx", "edx", "esi", "edi", "flags", "memory"); \
         /* This construct makes sure that the finally function returns */ \
         /* a proper value at the end */ \
-        for (; ; (void)({_SEH3$_NESTED_FUNC_RETURN(0); 0;}))
+        for (; ; (void)({ if (_SEH3$_TrylevelFrame.ExceptionPointers == 0) goto _SEH3$_l_EndTry; _SEH3$_NESTED_FUNC_RETURN(0); 0;}))
 
 #define _SEH3$_FILTER(_Filter, _FilterExpression) (&&_SEH3$_l_FilterOrFinally)
 #define _SEH3$_FINALLY(_Finally) (&&_SEH3$_l_FilterOrFinally)
@@ -345,6 +358,8 @@ _Pragma("GCC diagnostic pop") \
         /* Invoke the finally function (an inline dummy in the __except case) */ \
         _SEH3$_FinallyFunction(1); \
     }
+
+#define _SEH3$_FINALLY_ON_NORMAL_EXIT() goto _SEH3$_l_EndTry
 
 #endif /* __cplusplus || __clang__ */
 
@@ -447,7 +462,7 @@ _Pragma("GCC diagnostic pop") \
         /* Set ExceptionPointers to 0, this is used by _abnormal_termination() */ \
          _SEH3$_TrylevelFrame.ExceptionPointers = 0; \
 \
-        goto _SEH3$_l_EndTry; \
+        _SEH3$_FINALLY_ON_NORMAL_EXIT(); \
 \
     _SEH3$_l_BeforeTry: (void)0; \
         _SEH3$_ASM_GOTO(_SEH3$_l_OnException); \

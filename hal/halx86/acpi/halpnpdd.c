@@ -35,4 +35,34 @@ HalpQueryReservedResources(OUT PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptors OPTIO
     return 0;
 }
 
+BOOLEAN
+NTAPI
+HalpQueryDeviceTree(
+    _Outptr_result_maybenull_ const VOID **Blob,
+    _Out_ PULONG Size)
+{
+    *Blob = NULL;
+    *Size = 0;
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+HalpTranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    UNREFERENCED_PARAMETER(Compatible);
+    UNREFERENCED_PARAMETER(CompatibleLength);
+    UNREFERENCED_PARAMETER(Cells);
+    UNREFERENCED_PARAMETER(CellCount);
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+    return FALSE;
+}
+
 /* EOF */

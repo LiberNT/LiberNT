@@ -106,7 +106,13 @@ typedef struct _CM_KEY_NODE
     };
     HCELL_INDEX Security;
     HCELL_INDEX Class;
-    ULONG MaxNameLen;
+    struct
+    {
+        ULONG MaxNameLen:16;
+        ULONG UserFlags:4;
+        ULONG VirtControlFlags:4;
+        ULONG Debug:8;
+    };
     ULONG MaxClassLen;
     ULONG MaxValueNameLen;
     ULONG MaxValueDataLen;

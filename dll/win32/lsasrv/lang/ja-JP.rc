@@ -100,4 +100,6 @@ BEGIN
     IDS_TIME_ZONE_PRIVILEGE "タイム ゾーンの変更"
     IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "シンボリック リンクの作成"
     IDS_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE "同じセッションで別のユーザーの偽装トークンを取得します"
+    IDS_TRUSTED_CREDMAN_ACCESS_PRIVILEGE "Access Credential Manager as a trusted caller"
+    IDS_RELABEL_PRIVILEGE "Modify an object label"
 END

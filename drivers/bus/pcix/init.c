@@ -198,17 +198,17 @@ NTAPI
 PciGetAcpiTable(IN ULONG TableCode)
 {
     PDESCRIPTION_HEADER Header;
-    PACPI_BIOS_MULTI_NODE AcpiMultiNode;
+    PACPI_BIOS_MULTI_NODE AcpiMultiNode = NULL;
     PRSDT Rsdt;
     PXSDT Xsdt;
-    ULONG EntryCount, TableLength, Offset, CurrentEntry;
-    PVOID TableBuffer, MappedAddress;
+    ULONG EntryCount, TableLength, RsdtLength, Offset, CurrentEntry;
+    PVOID TableBuffer = NULL, MappedAddress;
     PHYSICAL_ADDRESS PhysicalAddress;
     NTSTATUS Status;
 
     /* Try to find the RSDT or XSDT */
     Status = PciAcpiFindRsdt(&AcpiMultiNode);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) || !AcpiMultiNode)
     {
         /* No ACPI on the machine */
         DPRINT1("AcpiFindRsdt() Failed!\n");
@@ -220,7 +220,11 @@ PciGetAcpiTable(IN ULONG TableCode)
                                  sizeof(DESCRIPTION_HEADER),
                                  MmNonCached);
     Header = MappedAddress;
-    if (!Header) return NULL;
+    if (!Header)
+    {
+        ExFreePoolWithTag(AcpiMultiNode, 0);
+        return NULL;
+    }
 
     /* Check how big the table really is and get rid of the temporary header */
     TableLength = Header->Length;
@@ -228,8 +232,9 @@ PciGetAcpiTable(IN ULONG TableCode)
     Header = NULL;
 
     /* Map its true size */
+    RsdtLength = TableLength;
     MappedAddress = MmMapIoSpace(AcpiMultiNode->RsdtAddress,
-                                 TableLength,
+                                 RsdtLength,
                                  MmNonCached);
     Rsdt = MappedAddress;
     Xsdt = MappedAddress;
@@ -291,22 +296,32 @@ PciGetAcpiTable(IN ULONG TableCode)
         /* Check if this is the table that's being asked for */
         if (Header->Signature == TableCode)
         {
+            TableLength = Header->Length;
+            MmUnmapIoSpace(Header, sizeof(DESCRIPTION_HEADER));
+            if (TableLength < sizeof(DESCRIPTION_HEADER))
+                break;
+            Header = MmMapIoSpace(PhysicalAddress, TableLength, MmNonCached);
+            if (!Header) break;
+
             /* Allocate a buffer for it */
             TableBuffer = ExAllocatePoolWithTag(PagedPool,
-                                                Header->Length,
+                                                TableLength,
                                                 PCI_POOL_TAG);
-            if (!TableBuffer) break;
-
-            /* Copy the table into the buffer */
-            RtlCopyMemory(TableBuffer, Header, Header->Length);
+            if (TableBuffer)
+            {
+                /* Copy the table into the buffer */
+                RtlCopyMemory(TableBuffer, Header, TableLength);
+            }
+            MmUnmapIoSpace(Header, TableLength);
+            break;
         }
 
         /* Done with this table, keep going */
         MmUnmapIoSpace(Header, sizeof(DESCRIPTION_HEADER));
     }
 
-    if (Header) MmUnmapIoSpace(Header, sizeof(DESCRIPTION_HEADER));
-    return NULL;
+    MmUnmapIoSpace(Rsdt, RsdtLength);
+    return TableBuffer;
 }
 
 NTSTATUS

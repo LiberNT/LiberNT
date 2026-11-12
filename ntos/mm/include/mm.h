@@ -56,6 +56,7 @@ typedef struct _MI_ADDRESS_SPACE
     struct _MI_SYSTEM *System;
     ULONG RootFrame;
     BOOLEAN IsSystem;
+    BOOLEAN IsSession;
     MI_RWLOCK Lock;
     MI_VAD_ROOT VadRoot;
     MI_VAD_ROOT AweRoot;
@@ -108,6 +109,8 @@ typedef struct _MI_SYSTEM
     const MI_ARCH_DESCRIPTOR *Arch;
     MI_PFN_DATABASE Pfn;
     MI_ADDRESS_SPACE SystemSpace;
+    ULONG64 SessionStart;
+    ULONG64 SessionEnd;
     volatile LONG64 CommittedPages;
     LONG64 CommitLimit;
     volatile LONG64 AwePages;
@@ -142,10 +145,17 @@ MiSystemGetExpandCommit(_In_ PMI_SYSTEM System)
     return (PMI_EXPAND_COMMIT)MI_ATOMIC_READ_POINTER(&System->ExpandCommit);
 }
 
-NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FrameCount,
-                            _In_ ULONG CpuCount, _In_ LONG64 CommitLimit);
+NTSTATUS MiSystemInitialize(_Out_ PMI_SYSTEM System, _In_ PMI_PFN PfnArray, _In_ ULONG FirstFrame,
+                            _In_ ULONG FrameCount, _In_ ULONG CpuCount, _In_ LONG64 CommitLimit);
 NTSTATUS MiAddressSpaceCreate(_Inout_ PMI_SYSTEM System, _Out_ PMI_ADDRESS_SPACE Space);
 VOID MiAddressSpaceDestroy(_Inout_ PMI_ADDRESS_SPACE Space);
+NTSTATUS MiSessionSpaceCreate(_Inout_ PMI_SYSTEM System, _Out_ PMI_ADDRESS_SPACE Space);
+VOID MiSessionSpaceDestroy(_Inout_ PMI_ADDRESS_SPACE Space);
+VOID MiSessionSpaceLink(_In_ PMI_ADDRESS_SPACE Session, _Inout_ PMI_ADDRESS_SPACE Process, _In_ BOOLEAN Link);
+NTSTATUS MiSystemReserveSessionRange(_Inout_ PMI_SYSTEM System);
+
+#define MI_SPACE_LEAF_OWNER(Space) \
+    ((Space)->IsSystem ? ((Space)->IsSession ? 0 : MI_LEAF_GLOBAL) : MI_LEAF_USER)
 NTSTATUS MiAddressSpaceAdopt(_Inout_ PMI_SYSTEM System, _Out_ PMI_ADDRESS_SPACE Space, _In_ ULONG RootFrame,
                              _In_ BOOLEAN IsSystem);
 NTSTATUS MiSystemAdoptBootMappings(_Inout_ PMI_SYSTEM System);

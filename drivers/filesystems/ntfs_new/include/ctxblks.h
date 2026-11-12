@@ -86,6 +86,16 @@ typedef struct _VolumeContextBlock
     FAST_MUTEX IdleFcbMutex;
     LIST_ENTRY IdleFcbList;
     ULONG IdleFcbCount;
+
+    FAST_MUTEX TxfMutex;
+    LIST_ENTRY TxfTransactions;
+    LONG TxfActiveCount;
+    ULONG TxfNextId;
+    EX_PUSH_LOCK TxfStagingLock;
+    BOOLEAN TxfStagingReady;
+    UNICODE_STRING TxfDeviceName;
+    LONG TxfRecoveryPending;
+    PETHREAD TxfRecoveryThread;
 } VolumeContextBlock, *PVolumeContextBlock;
 
 #define NTFS_MAX_MISSING_NAMES 256
@@ -350,6 +360,7 @@ typedef struct _FCB
     BOOLEAN IsVolumeOpen;
     BOOLEAN CleanupComplete;
     BOOLEAN ManageVolumeAccess;
+    BOOLEAN RestoreAccess;
     BOOLEAN DismountedVolume;
     ULONG CreateOptions;
     ACCESS_MASK DesiredAccess;
@@ -412,6 +423,13 @@ typedef struct _FCB
     struct _NtfsCachedRecord* CachedRecord;
 
     struct _NTFS_PAGING_FILE* PagingFile;
+
+    struct _NTFS_TXF_TRANSACTION* Txf;
+    UNICODE_STRING TxfLogicalName;
+    ULONGLONG TxfReaderReference;
+    PVOID TxfDeleteChange;
+    ULONG TxfInjectIndex;
+    BOOLEAN TxfPhysicalDone;
 
     /* Links this block into the volume's idle list while it is not in use. */
     LIST_ENTRY IdleLink;
@@ -612,3 +630,82 @@ NtfsReleaseMetadata(_In_ PVolumeContextBlock VolCB)
     if (Last)
         ExfReleasePushLockExclusive(&VolCB->MetadataGate);
 }
+
+typedef struct _NTFS_TXF_OPEN
+{
+    struct _NTFS_TXF_TRANSACTION* Txf;
+    UNICODE_STRING LogicalName;
+    BOOLEAN Reader;
+    BOOLEAN Staged;
+} NTFS_TXF_OPEN, *PNTFS_TXF_OPEN;
+
+VOID
+NtfsTxfInitializeVolume(_Inout_ PVolumeContextBlock VolCB);
+
+BOOLEAN
+NtfsTxfVolumeSupported(_In_ PVolumeContextBlock VolCB);
+
+NTSTATUS
+NtfsTxfPrepareCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
+                     _In_ PIRP Irp,
+                     _Inout_ PNTFS_TXF_OPEN Open);
+
+NTSTATUS
+NtfsTxfCheckOpen(_In_ PVolumeContextBlock VolCB,
+                 _Inout_ PFileContextBlock FileCB,
+                 _In_ PIO_STACK_LOCATION IrpSp,
+                 _Inout_ PNTFS_TXF_OPEN Open);
+
+VOID
+NtfsTxfReleaseOpen(_Inout_ PNTFS_TXF_OPEN Open);
+
+VOID
+NtfsTxfReleaseFileContext(_In_ PVolumeContextBlock VolCB,
+                          _Inout_ PFileContextBlock FileCB);
+
+VOID
+NtfsTxfCleanup(_In_ PVolumeContextBlock VolCB,
+               _Inout_ PFileContextBlock FileCB);
+
+NTSTATUS
+NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
+                      _Inout_ PFileContextBlock FileCB,
+                      _In_ ULONG Flags,
+                      _Out_ PBOOLEAN Handled);
+
+NTSTATUS
+NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
+              _Inout_ PFileContextBlock FileCB,
+              _In_opt_ PFileContextBlock TargetFileCB,
+              _In_ PCUNICODE_STRING LeafName,
+              _In_ BOOLEAN ReplaceIfExists,
+              _In_ BOOLEAN Link);
+
+NTSTATUS
+NtfsTxfCheckNewName(_In_ PVolumeContextBlock VolCB,
+                    _In_ PCUNICODE_STRING NewName);
+
+PCUNICODE_STRING
+NtfsTxfDisplayName(_In_ PFileContextBlock FileCB);
+
+NTSTATUS
+NtfsTxfNormalizedName(_In_ PVolumeContextBlock VolCB,
+                      _In_ PFileContextBlock FileCB,
+                      _Out_writes_(Capacity) PWCHAR Path,
+                      _In_ ULONG Capacity,
+                      _Out_ PULONG PathLength);
+
+BOOLEAN
+NtfsTxfKeepDirectoryEntry(_In_ PVolumeContextBlock VolCB,
+                          _In_ PFileContextBlock FileCB,
+                          _In_reads_(NameLength) PCWSTR Name,
+                          _In_ USHORT NameLength);
+
+NTSTATUS
+NtfsTxfNextDirectoryEntry(_In_ PVolumeContextBlock VolCB,
+                          _Inout_ PFileContextBlock FileCB,
+                          _In_opt_ PUNICODE_STRING FileNameFilter,
+                          _In_ FILE_INFORMATION_CLASS InformationClass,
+                          _Out_writes_bytes_(*Length) PVOID Buffer,
+                          _Inout_ PULONG Length,
+                          _Out_ PULONG EntrySize);

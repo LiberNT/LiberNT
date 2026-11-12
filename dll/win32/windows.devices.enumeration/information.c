@@ -295,6 +295,25 @@ static HRESULT activate_property_set( HSTRING name, IPropertySet **propset )
     }
     return IActivationFactory_ActivateInstance( factory, (IInspectable **)propset );
 }
+
+static HRESULT get_property_value_statics( HSTRING name, IPropertyValueStatics **statics )
+{
+    static IPropertyValueStatics *cached_statics;
+    IPropertyValueStatics *previous;
+    HRESULT hr;
+
+    if (!(*statics = InterlockedCompareExchangePointer( (void **)&cached_statics, NULL, NULL )))
+    {
+        if (FAILED(hr = RoGetActivationFactory( name, &IID_IPropertyValueStatics, (void **)statics ))) return hr;
+        if ((previous = InterlockedCompareExchangePointer( (void **)&cached_statics, *statics, NULL )))
+        {
+            IPropertyValueStatics_Release( *statics );
+            *statics = previous;
+        }
+    }
+    IPropertyValueStatics_AddRef( *statics );
+    return S_OK;
+}
 #endif
 
 static HRESULT create_device_properties( const DEVPROPERTY *props, ULONG len, IMap_HSTRING_IInspectable **map )
@@ -322,7 +341,11 @@ static HRESULT create_device_properties( const DEVPROPERTY *props, ULONG len, IM
     if (FAILED(hr)) goto done;
 
     WindowsCreateStringReference( propertyvalue_name, wcslen( propertyvalue_name ), &hdr, &str );
+#ifdef __REACTOS__
+    hr = get_property_value_statics( str, &propval_statics );
+#else
     hr = RoGetActivationFactory( str, &IID_IPropertyValueStatics, (void **)&propval_statics );
+#endif
 
     for (i = 0; SUCCEEDED(hr) && i < len; i++)
     {

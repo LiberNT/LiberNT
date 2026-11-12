@@ -85,9 +85,21 @@ ExpPoolAllocate(
     if (PoolTagTrackerCount(&ExpPoolState.Tracker) < (ULONG)KeNumberProcessors)
         ExpPoolExpandTracker();
 
-    Block = PoolHeapAllocateEx(Heap, NumberOfBytes, Tag, HeapFlags, &Actual);
-    if (Block == NULL && HeapIndex == EX_POOL_HEAP_NONPAGED && ExpPoolAttachExpansion())
+    for (BOOLEAN RoomRetried = FALSE;;)
+    {
+        LONG Generation = (LONG)POOL_LOAD_ACQUIRE32(&ExpPoolState.Generation[HeapIndex]);
+        EX_POOL_GROWTH Growth;
+
         Block = PoolHeapAllocateEx(Heap, NumberOfBytes, Tag, HeapFlags, &Actual);
+        if (Block != NULL)
+            break;
+
+        Growth = ExpPoolGrow(HeapIndex, NumberOfBytes, Generation);
+        if (Growth == ExpPoolGrowthFailed || (Growth == ExpPoolGrowthRoom && RoomRetried))
+            break;
+        if (Growth == ExpPoolGrowthRoom)
+            RoomRetried = TRUE;
+    }
 
     if (Block != NULL)
     {

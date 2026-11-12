@@ -24,7 +24,7 @@ BEGIN
     IDS_PWR_AC "交流電源"
     IDS_PWR_HOURS_REMAINING "残り %1!u!:%2!02u! 時間 (%3!u!%%)"
     IDS_PWR_MINUTES_REMAINING "残り %1!u! 分 (%2!u!%%)"
-    IDS_PWR_FULLY_CHARGED "Fully charged"
+    IDS_PWR_FULLY_CHARGED "充電完了"
 
     //Hotplug related strings
     IDS_HOTPLUG_REMOVE_1 "安全なハードウェアの取り外し"
@@ -44,13 +44,13 @@ BEGIN
     IDS_VOL_OPEN "音量調整を開く(&O)"
     IDS_VOL_RUN "SNDVOL32.EXE"
     IDS_VOL_MUTED "音量 (ミュート中)"
-    IDS_VOL_NODEVICE "No Audio Output Device is installed."
+    IDS_VOL_NODEVICE "オーディオ出力デバイスがインストールされていません。"
 
     //Keyboard-Mouse related strings
     IDS_KEYS_STICKY "スティッキー キー"
     IDS_KEYS_MOUSE "マウス キー"
-    IDS_KEYS_FILTER "フィルタ キー"
-    IDS_BT_DEVICES "Bluetooth Devices"
-    IDS_BT_SHOW "Show Bluetooth &Devices"
-    IDS_BT_SETTINGS "Open &Settings"
+    IDS_KEYS_FILTER "フィルター キー"
+    IDS_BT_DEVICES "Bluetooth デバイス"
+    IDS_BT_SHOW "Bluetooth デバイスの表示(&D)"
+    IDS_BT_SETTINGS "設定を開く(&S)"
 END

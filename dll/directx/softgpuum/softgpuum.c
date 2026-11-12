@@ -24,6 +24,7 @@
 #define SOFTGPUUM_OVERLAY_MAGIC  0x5347554fu /* 'SGUO' */
 
 #define SOFTGPUUM_MAX_SUBRESOURCES 32u
+#define SOFTGPUUM_PITCH_ALIGNMENT 64u
 
 /* Linear 2D resources only. Texture means a blit-addressable linear surface,
  * not texture sampling; no 3D state or draw entry is exposed below. */
@@ -313,7 +314,8 @@ SoftGpuUmSurfaceGeometry(
         return FALSE;
     }
 
-    *Pitch = Surface->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    *Pitch = (Surface->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL + SOFTGPUUM_PITCH_ALIGNMENT - 1) &
+             ~(SOFTGPUUM_PITCH_ALIGNMENT - 1);
     SurfaceSize = (ULONGLONG)*Pitch * Surface->Height;
     if (SurfaceSize == 0 ||
         SurfaceSize > (ULONGLONG)SOFTGPU_MAX_SURFACE_SIZE ||

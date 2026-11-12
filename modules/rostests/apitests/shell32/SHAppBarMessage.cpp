@@ -28,7 +28,7 @@
 
 #define INTERVAL 250
 #define LONG_INTERVAL 2500
-#define AUTOHIDE_SETTLE 600
+#define AUTOHIDE_SETTLE 100
 
 static const TCHAR s_szName[] = TEXT("AppBarSample");
 static RECT s_rcPrimaryMonitor;
@@ -82,8 +82,8 @@ SHAppBarMessageWrap(DWORD dwMessage, PAPPBARDATA pData)
 
 void SlideWindow(HWND hwnd, LPRECT prc)
 {
-#define SLIDE_HIDE 400
-#define SLIDE_SHOW 150
+#define SLIDE_HIDE 0
+#define SLIDE_SHOW 0
     RECT rcOld, rcNew = *prc;
     GetWindowRect(hwnd, &rcOld);
 
@@ -527,7 +527,7 @@ protected:
     {
         if (m_fAutoHide)
         {
-            SetTimer(hwnd, IDT_AUTOHIDE, 500, NULL);
+            SetTimer(hwnd, IDT_AUTOHIDE, 50, NULL);
         }
     }
 
@@ -1062,7 +1062,6 @@ public:
         ok_long(rcWork.top, s_rcWorkArea.top);
         ok_long(rcWork.right, s_rcWorkArea.right - 30);
         ok_long(rcWork.bottom, s_rcWorkArea.bottom);
-        Sleep(INTERVAL);
 
         GetWindowRect(s_hwnd2, &rc2);
         pt.x = (rc2.left + rc2.right) / 2;
@@ -1070,7 +1069,7 @@ public:
         MOVE(pt.x, pt.y);
         LEFT_DOWN();
         MOVE(pt.x + 64, pt.y + 64);
-        Sleep(INTERVAL);
+        WaitFor([this] { return m_fMoving; }, LONG_INTERVAL);
 
         pt.x = s_rcWorkArea.left + 80;
         pt.y = (s_rcWorkArea.top + s_rcWorkArea.bottom) / 2;
@@ -1087,7 +1086,6 @@ public:
         ok_long(rcWork.top, s_rcWorkArea.top);
         ok_long(rcWork.right, s_rcWorkArea.right);
         ok_long(rcWork.bottom, s_rcWorkArea.bottom);
-        Sleep(INTERVAL);
     }
 
     void TEST_Dragging()
@@ -1102,12 +1100,12 @@ public:
         pt.y = (rc.top + rc.bottom) / 2;
         MOVE(pt.x, pt.y);
         LEFT_DOWN();
-        Sleep(INTERVAL);
+        WaitFor([this] { return m_fMoving; }, LONG_INTERVAL);
 
         pt.x = (s_rcWorkArea.left + s_rcWorkArea.right) / 2;
         pt.y = s_rcWorkArea.top;
         MOVE(pt.x, pt.y);
-        Sleep(INTERVAL);
+        WaitFor([this] { return m_bDragged && m_uSide == ABE_TOP; }, LONG_INTERVAL);
 
         pt.x = s_rcWorkArea.right - 1;
         pt.y = (s_rcWorkArea.top + s_rcWorkArea.bottom) / 2;

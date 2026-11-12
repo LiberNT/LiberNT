@@ -7,6 +7,7 @@
 #include "precomp.h"
 
 #define MAX_RECORD 30
+#define APC_SETTLE_MS 32
 
 static LONG s_record_count = 0;
 static DWORD s_record[MAX_RECORD + 1] = { 0 };
@@ -109,21 +110,21 @@ static void JustDoIt(LPTHREAD_START_ROUTINE fn)
     hThread = CreateThread(NULL, 0, fn, NULL, 0, &dwThreadId);
     ok(hThread != NULL, "hThread was NULL\n");
 
-    Sleep(100);
+    Sleep(APC_SETTLE_MS);
 
     AddValueToRecord(7);
     ok_long(QueueUserAPC(DoUserAPC1, hThread, 1), 1);
     AddValueToRecord(8);
     ReleaseSemaphore(s_hMainRecorded, 1, NULL);
 
-    Sleep(100);
+    Sleep(APC_SETTLE_MS);
 
     AddValueToRecord(9);
     ok_long(QueueUserAPC(DoUserAPC2, hThread, 2), 1);
     AddValueToRecord(10);
     ReleaseSemaphore(s_hMainRecorded, 1, NULL);
 
-    Sleep(100);
+    Sleep(APC_SETTLE_MS);
 
     AddValueToRecord(11);
     ok_long(QueueUserAPC(DoUserAPC3, hThread, 3), 1);

@@ -489,6 +489,20 @@ NtfsMasterFileTableGetLinkShortName(
 }
 
 NTSTATUS
+NtfsMasterFileTableEnumerateLinks(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord File,
+    _Inout_ PULONG Context,
+    _Out_ PULONGLONG ParentReference,
+    _Out_ PUNICODE_STRING LinkName)
+{
+    if (!Mft || !File || !Context || !ParentReference || !LinkName)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PMasterFileTable>(Mft)->
+        EnumerateLinks(reinterpret_cast<PFileRecord>(File), Context, ParentReference, LinkName);
+}
+
+NTSTATUS
 NtfsMasterFileTableIsDescendantDirectory(
     _In_ PNtfsMasterFileTable Mft,
     _In_ ULONGLONG FileReference,

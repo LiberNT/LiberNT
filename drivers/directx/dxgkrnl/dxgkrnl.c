@@ -99,6 +99,45 @@ DxgkBeginKmdTransaction(
     return TRUE;
 }
 
+BOOLEAN
+DxgkBeginKmdTransactionAfterReset(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Delay;
+
+    PAGED_CODE();
+    if (Adapter == NULL)
+        return FALSE;
+    Delay.QuadPart = -(LONGLONG)(1000 * 10);
+    while (!DxgkBeginKmdTransaction(Adapter))
+    {
+        if (InterlockedCompareExchange(&Adapter->VBlankResetActive, 0, 0) == 0 ||
+            InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0)
+            return DxgkBeginKmdTransaction(Adapter);
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    return TRUE;
+}
+
+BOOLEAN
+DxgkBeginKmdTransactionPastMonitorPower(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    LARGE_INTEGER Delay;
+
+    PAGED_CODE();
+    if (Adapter == NULL)
+        return FALSE;
+    Delay.QuadPart = -(LONGLONG)(1000 * 10);
+    while (!DxgkBeginKmdTransaction(Adapter))
+    {
+        if (InterlockedCompareExchange(&Adapter->KmdMonitorPowerWindow, 0, 0) == 0)
+            return DxgkBeginKmdTransaction(Adapter);
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    return TRUE;
+}
+
 VOID
 DxgkEndKmdTransaction(
     _In_ PDXGKRNL_ADAPTER Adapter)
@@ -145,7 +184,7 @@ DxgkYieldKmdTransactionForContextRoom(
     if (!NT_SUCCESS(Status))
         return Status;
     Trace = DxgPresentTraceProducerBegin(Context, DxgTraceTransactionReacquire);
-    Status = DxgkBeginKmdTransaction(Adapter) ? STATUS_SUCCESS : STATUS_DELETE_PENDING;
+    Status = DxgkBeginKmdTransactionPastMonitorPower(Adapter) ? STATUS_SUCCESS : STATUS_DELETE_PENDING;
     DxgPresentTraceProducerEnd(Trace, Status);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -451,6 +490,46 @@ BOOLEAN
 DxgkpBootLogHoldsDisplay(VOID)
 {
     return InbvCheckDisplayOwnership();
+}
+
+BOOLEAN
+DxgkpScreenLogRequested(VOID)
+{
+    static LONG Requested = -1;
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
+    struct
+    {
+        KEY_VALUE_PARTIAL_INFORMATION Header;
+        WCHAR Text[1024];
+    } Value;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+    ULONG Length;
+    LONG Result = 0;
+
+    PAGED_CODE();
+
+    if (ReadAcquire(&Requested) >= 0)
+        return ReadAcquire(&Requested) != 0;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (KD_DEBUGGER_ENABLED && NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+    {
+        RtlZeroMemory(&Value, sizeof(Value));
+        if (NT_SUCCESS(ZwQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, &Value,
+                                       sizeof(Value) - sizeof(WCHAR), &Length)) &&
+            Value.Header.Type == REG_SZ &&
+            wcsstr(_wcsupr((PWSTR)Value.Header.Data), L"DEBUGPORT=SCREEN") != NULL)
+        {
+            Result = 1;
+        }
+
+        ZwClose(KeyHandle);
+    }
+
+    InterlockedExchange(&Requested, Result);
+    return Result != 0;
 }
 
 /*

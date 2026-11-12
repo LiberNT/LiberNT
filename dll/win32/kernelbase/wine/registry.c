@@ -254,6 +254,9 @@ static NTSTATUS open_subkey( HKEY *subkey, HKEY root, UNICODE_STRING *name, DWOR
 
     str.Buffer = name->Buffer;
     str.Length = i * sizeof(WCHAR);
+#ifdef __REACTOS__
+    str.MaximumLength = str.Length;
+#endif
 
     if (i < len)
         options &= ~REG_OPTION_OPEN_LINK;
@@ -455,6 +458,9 @@ static NTSTATUS create_subkey( HKEY *subkey, HKEY root, UNICODE_STRING *name, DW
 
     str.Buffer = name->Buffer;
     str.Length = i * sizeof(WCHAR);
+#ifdef __REACTOS__
+    str.MaximumLength = str.Length;
+#endif
 
     if (i < len)
         options &= ~REG_OPTION_CREATE_LINK;
@@ -502,6 +508,15 @@ static NTSTATUS create_key( HKEY *retkey, HKEY root, UNICODE_STRING name, ULONG 
 
         if (!status || status != STATUS_OBJECT_NAME_NOT_FOUND)
             return status;
+#ifdef __REACTOS__
+        {
+            /* A single name the kernel cannot create, a link whose target has no parent, cannot be made a piece at a time */
+            DWORD i, len = name.Length / sizeof(WCHAR);
+
+            for (i = 0; i < len && name.Buffer[i] != '\\'; i++);
+            if (i == len) return status;
+        }
+#endif
     }
 
     status = open_key( &subkey_root, root, &name, options & REG_OPTION_OPEN_LINK, access, TRUE );
@@ -2881,17 +2896,42 @@ LSTATUS WINAPI RegSaveKeyExA( HKEY hkey, LPCSTR file, SECURITY_ATTRIBUTES *sa, D
  */
 LSTATUS WINAPI RegRestoreKeyW( HKEY hkey, LPCWSTR lpFile, DWORD dwFlags )
 {
+#ifdef __REACTOS__
+    UNICODE_STRING nameW;
+    OBJECT_ATTRIBUTES attr;
+    IO_STATUS_BLOCK io;
+    NTSTATUS status;
+    HANDLE file;
+#endif
+
     TRACE("(%p,%s,%ld)\n",hkey,debugstr_w(lpFile),dwFlags);
 
     /* It seems to do this check before the hkey check */
     if (!lpFile || !*lpFile)
         return ERROR_INVALID_PARAMETER;
 
+#ifdef __REACTOS__
+    if (!(hkey = get_special_root_hkey( hkey ))) return ERROR_INVALID_HANDLE;
+
+    if ((status = RtlDosPathNameToNtPathName_U_WithStatus( lpFile, &nameW, NULL, NULL )))
+        return RtlNtStatusToDosError( status );
+
+    InitializeObjectAttributes( &attr, &nameW, OBJ_CASE_INSENSITIVE, 0, NULL );
+    status = NtOpenFile( &file, FILE_GENERIC_READ, &attr, &io, FILE_SHARE_READ,
+                         FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT );
+    RtlFreeUnicodeString( &nameW );
+    if (status) return RtlNtStatusToDosError( status );
+
+    status = NtRestoreKey( hkey, file, dwFlags );
+    NtClose( file );
+    return RtlNtStatusToDosError( status );
+#else
     FIXME("(%p,%s,%ld): stub\n",hkey,debugstr_w(lpFile),dwFlags);
 
     /* Check for file existence */
 
     return ERROR_SUCCESS;
+#endif
 }
 
 
@@ -3146,10 +3186,53 @@ LSTATUS WINAPI RegNotifyChangeKeyValue( HKEY hkey, BOOL fWatchSubTree,
  */
 LSTATUS WINAPI RegOpenUserClassesRoot( HANDLE hToken, DWORD dwOptions, REGSAM samDesired, PHKEY phkResult )
 {
+#ifdef __REACTOS__
+    static const WCHAR prefixW[] = L"\\Registry\\User\\";
+    static const WCHAR suffixW[] = L"\\Software\\Classes";
+    BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    TOKEN_USER *user = (TOKEN_USER *)buffer;
+    UNICODE_STRING sidW, nameW;
+    OBJECT_ATTRIBUTES attr;
+    NTSTATUS status;
+    HANDLE key;
+    ULONG len;
+
+    TRACE("(%p, 0x%lx, 0x%lx, %p)\n", hToken, dwOptions, samDesired, phkResult);
+
+    if (dwOptions || !phkResult) return ERROR_INVALID_PARAMETER;
+
+    if ((status = NtQueryInformationToken( hToken, TokenUser, buffer, sizeof(buffer), &len )))
+        return RtlNtStatusToDosError( status );
+    if ((status = RtlConvertSidToUnicodeString( &sidW, user->User.Sid, TRUE )))
+        return RtlNtStatusToDosError( status );
+
+    nameW.Length = 0;
+    nameW.MaximumLength = sizeof(prefixW) + sidW.Length + sizeof(suffixW);
+    if (!(nameW.Buffer = HeapAlloc( GetProcessHeap(), 0, nameW.MaximumLength )))
+    {
+        RtlFreeUnicodeString( &sidW );
+        return ERROR_NOT_ENOUGH_MEMORY;
+    }
+    RtlAppendUnicodeToString( &nameW, prefixW );
+    RtlAppendUnicodeStringToString( &nameW, &sidW );
+    RtlAppendUnicodeToString( &nameW, suffixW );
+    RtlFreeUnicodeString( &sidW );
+
+    InitializeObjectAttributes( &attr, &nameW, REG_KEY_ATTRIBUTES, 0, NULL );
+    status = NtOpenKeyEx( &key, samDesired, &attr, 0 );
+    HeapFree( GetProcessHeap(), 0, nameW.Buffer );
+    if (status) return RtlNtStatusToDosError( status );
+
+    /* FIXME: subkeys found only on the machine side merge with the caller's HKEY_CURRENT_USER, not the token user's classes */
+    *phkResult = key;
+    MakeHKCRKey( phkResult );
+    return ERROR_SUCCESS;
+#else
     FIXME("(%p, 0x%lx, 0x%lx, %p) semi-stub\n", hToken, dwOptions, samDesired, phkResult);
 
     *phkResult = HKEY_CLASSES_ROOT;
     return ERROR_SUCCESS;
+#endif
 }
 
 
@@ -3645,16 +3728,26 @@ LSTATUS WINAPI RegLoadAppKeyW(const WCHAR *file, HKEY *result, REGSAM sam, DWORD
     OBJECT_ATTRIBUTES key_attr, file_attr;
     UNICODE_STRING keyW, fileW;
     ULARGE_INTEGER time;
+    LARGE_INTEGER delay;
     ULONG range, sequence;
     UCHAR seed[6];
     WCHAR name[64];
     HANDLE key = NULL;
     NTSTATUS status;
+    ULONG attempt;
 
     if (!file || !result || reserved)
         return ERROR_INVALID_PARAMETER;
 
-    if ((status = NtAllocateUuids( &time, &range, &sequence, seed )))
+    /* The UUID allocator asks for a retry until the clock has moved past its last range */
+    delay.QuadPart = -10000;
+    for (attempt = 0; attempt < 100; attempt++)
+    {
+        status = NtAllocateUuids( &time, &range, &sequence, seed );
+        if (status != STATUS_RETRY) break;
+        NtDelayExecution( FALSE, &delay );
+    }
+    if (status)
         return RtlNtStatusToDosError( status );
 
     swprintf( name, ARRAY_SIZE(name),
@@ -4010,6 +4103,14 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
 
     *new_uskey = NULL;
 
+#ifdef __REACTOS__
+    if (!(flags & (SHREGSET_HKCU | SHREGSET_FORCE_HKCU | SHREGSET_HKLM | SHREGSET_FORCE_HKLM)) ||
+        (flags & ~(SHREGSET_HKCU | SHREGSET_FORCE_HKCU | SHREGSET_HKLM | SHREGSET_FORCE_HKLM)))
+        return ERROR_INVALID_PARAMETER;
+
+    if (!(ret_key = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ret_key))))
+        return ERROR_NOT_ENOUGH_MEMORY;
+#else
     if (flags & ~SHREGSET_FORCE_HKCU)
     {
         FIXME("unsupported flags 0x%08lx\n", flags);
@@ -4017,6 +4118,7 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
     }
 
     ret_key = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ret_key));
+#endif
     lstrcpynW(ret_key->path, path, ARRAY_SIZE(ret_key->path));
 
     if (relative_key)
@@ -4030,6 +4132,44 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
         ret_key->HKLMstart = HKEY_LOCAL_MACHINE;
     }
 
+#ifdef __REACTOS__
+    if (flags & (SHREGSET_HKCU | SHREGSET_FORCE_HKCU))
+    {
+        ret = RegCreateKeyExW(ret_key->HKCUstart, path, 0, NULL, 0, samDesired, NULL, &ret_key->HKCUkey, NULL);
+        if (ret)
+        {
+            ret_key->HKCUkey = 0;
+            if (flags & SHREGSET_FORCE_HKCU)
+            {
+                SHRegCloseUSKey(ret_key);
+                return ret;
+            }
+        }
+    }
+
+    if (flags & (SHREGSET_HKLM | SHREGSET_FORCE_HKLM))
+    {
+        ret = RegCreateKeyExW(ret_key->HKLMstart, path, 0, NULL, 0, samDesired, NULL, &ret_key->HKLMkey, NULL);
+        if (ret)
+        {
+            ret_key->HKLMkey = 0;
+            if (flags & SHREGSET_FORCE_HKLM)
+            {
+                SHRegCloseUSKey(ret_key);
+                return ret;
+            }
+        }
+    }
+
+    if (!ret_key->HKCUkey && !ret_key->HKLMkey)
+    {
+        SHRegCloseUSKey(ret_key);
+        return ret;
+    }
+
+    *new_uskey = ret_key;
+    return ERROR_SUCCESS;
+#else
     if (flags & SHREGSET_FORCE_HKCU)
     {
         ret = RegCreateKeyExW(ret_key->HKCUstart, path, 0, NULL, 0, samDesired, NULL, &ret_key->HKCUkey, NULL);
@@ -4040,6 +4180,7 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
     }
 
     return ret;
+#endif
 }
 
 LONG WINAPI SHRegCloseUSKey(HUSKEY hUSKey)

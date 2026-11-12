@@ -1314,6 +1314,10 @@ static void test_live_modules_proc(WCHAR* exename, BOOL with_32)
         case EXCEPTION_DEBUG_EVENT:
             break;
         }
+        /* the loader breakpoint comes once every statically imported module is reported */
+        if (de.dwDebugEventCode == EXCEPTION_DEBUG_EVENT &&
+            de.u.Exception.ExceptionRecord.ExceptionCode == (is_wow64 ? STATUS_WX86_BREAKPOINT : EXCEPTION_BREAKPOINT))
+            break;
         ret = ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
         ok(ret, "ContinueDebugEvent failed: %lu\n", GetLastError());
     }

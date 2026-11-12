@@ -74,6 +74,12 @@ DbgkExitThread(
 
 VOID
 NTAPI
+DbgkCloseThreadDebugObject(
+    IN PETHREAD Thread
+);
+
+VOID
+NTAPI
 DbgkMapViewOfSection(
     IN PVOID Section,
     IN PVOID BaseAddress,
@@ -110,6 +116,24 @@ HANDLE
 NTAPI
 DbgkpSectionToFileHandle(
     IN PVOID Section
+);
+
+extern FAST_MUTEX DbgkpProcessDebugPortMutex;
+
+VOID
+NTAPI
+DbgkpWakeTarget(
+    _In_ PDEBUG_EVENT DebugEvent
+);
+
+NTSTATUS
+NTAPI
+DbgkpQueueMessage(
+    _In_ PEPROCESS Process,
+    _In_ PETHREAD Thread,
+    _Inout_ PDBGKM_MSG ApiMsg,
+    _In_ ULONG Flags,
+    _In_opt_ PDEBUG_OBJECT TargetObject
 );
 
 VOID

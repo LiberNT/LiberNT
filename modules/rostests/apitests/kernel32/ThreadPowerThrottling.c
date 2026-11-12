@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include <ndk/psfuncs.h>
 
 C_ASSERT(sizeof(THREAD_POWER_THROTTLING_STATE) == 3 * sizeof(ULONG));
 
@@ -59,7 +60,19 @@ START_TEST(ThreadPowerThrottling)
     CheckPowerThrottling(GetCurrentThread(), &State, sizeof(State), FALSE, ERROR_INVALID_PARAMETER);
 
     State.StateMask = 0;
-    CheckPowerThrottling(GetCurrentThread(), &State, sizeof(State) - 1, FALSE, ERROR_BAD_LENGTH);
+    CheckPowerThrottling(GetCurrentThread(), &State, sizeof(State) - 1, FALSE, ERROR_INVALID_PARAMETER);
+    CheckPowerThrottling(GetCurrentThread(), &State, sizeof(State) + 1, TRUE, ERROR_SUCCESS);
     CheckPowerThrottling((HANDLE)(ULONG_PTR)0x1234, &State, sizeof(State), FALSE, ERROR_INVALID_HANDLE);
-    CheckPowerThrottling(GetCurrentThread(), NULL, sizeof(State), FALSE, ERROR_NOACCESS);
+    StartSeh()
+        SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, NULL, sizeof(State));
+    EndSeh(STATUS_ACCESS_VIOLATION);
+
+    ok_ntstatus(NtSetInformationThread(GetCurrentThread(), ThreadPowerThrottlingState, &State, sizeof(State) - 1),
+                STATUS_INFO_LENGTH_MISMATCH);
+    ok_ntstatus(NtSetInformationThread(GetCurrentThread(), ThreadPowerThrottlingState, &State, sizeof(State) + 1),
+                STATUS_INFO_LENGTH_MISMATCH);
+    ok_ntstatus(NtSetInformationThread(GetCurrentThread(), ThreadPowerThrottlingState, NULL, sizeof(State)),
+                STATUS_ACCESS_VIOLATION);
+    ok_ntstatus(NtSetInformationThread(GetCurrentThread(), ThreadPowerThrottlingState, &State, sizeof(State)),
+                STATUS_SUCCESS);
 }

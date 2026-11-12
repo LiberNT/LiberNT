@@ -113,14 +113,20 @@ void init_reactos_wow64_environment(void)
 {
     RTL_USER_PROCESS_PARAMETERS32 *params32;
     WCHAR buffer[64], *env, *env32 = NULL;
+    const WCHAR *native_env;
     SIZE_T size, alloc_size;
     UNICODE_STRING value;
     PEB32 *peb32 = NULL;
 
     if (current_machine != IMAGE_FILE_MACHINE_I386) return;
     if (NtQueryInformationProcess( GetCurrentProcess(), ProcessWow64Information, &peb32, sizeof(peb32), NULL ) || !peb32) return;
-    if (!(params32 = ULongToPtr( peb32->ProcessParameters )) || !params32->Environment) return;
-    if (!(env = copy_environment( ULongToPtr( params32->Environment ) ))) return;
+    if (!(params32 = ULongToPtr( peb32->ProcessParameters ))) return;
+
+    /* The native loader moved the environment into its heap and released the block both parameter sets were given */
+    params32->Environment = 0;
+    params32->EnvironmentSize = 0;
+    native_env = NtCurrentTeb()->Peb->ProcessParameters->Environment;
+    if (!native_env || !(env = copy_environment( native_env ))) return;
 
     copy_environment_var( &env, L"ProgramFiles(x86)", L"ProgramFiles" );
     copy_environment_var( &env, L"CommonProgramFiles(x86)", L"CommonProgramFiles" );

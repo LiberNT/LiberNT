@@ -28,6 +28,9 @@
 
 #include "wine/test.h"
 #ifdef __REACTOS__
+#include <tlhelp32.h>
+#endif
+#ifdef __REACTOS__
 #include "winehacks.h"
 #endif
 
@@ -790,7 +793,7 @@ static void testCtrlHandler(void)
     if(!(GetVersion() & 0x80000000))
         /* ... and next line leads to an unhandled exception on 9x.  Avoid it on 9x. */
         ok(GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0), "Couldn't send ctrl-c event\n");
-    ok(WaitForSingleObject(mch_event, 3000) == WAIT_TIMEOUT && mch_count == 0, "Event shouldn't have been sent\n");
+    ok(WaitForSingleObject(mch_event, 200) == WAIT_TIMEOUT && mch_count == 0, "Event shouldn't have been sent\n");
     CloseHandle(mch_event);
     ok(SetConsoleCtrlHandler(mch, FALSE), "Couldn't remove handler\n");
     ok(!SetConsoleCtrlHandler(mch, FALSE), "Shouldn't succeed\n");
@@ -5291,6 +5294,52 @@ static BOOL WINAPI mch_child(DWORD event)
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static DWORD mch_child_threads[64];
+static DWORD mch_child_thread_count;
+
+static BOOL mch_child_snapshot(DWORD *threads, DWORD *count, DWORD max)
+{
+    THREADENTRY32 entry = { sizeof(entry) };
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+
+    *count = 0;
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return FALSE;
+    if (Thread32First(snapshot, &entry))
+    {
+        do
+        {
+            if (entry.th32OwnerProcessID == GetCurrentProcessId() && *count < max)
+                threads[(*count)++] = entry.th32ThreadID;
+        } while (Thread32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return TRUE;
+}
+
+/* A control event delivered by now runs its handler on a thread of its own: wait for every thread started since the snapshot */
+static void mch_child_wait_new_threads(DWORD timeout)
+{
+    DWORD start = GetTickCount(), now[64], count, i, j;
+    BOOL found;
+
+    do
+    {
+        found = FALSE;
+        if (!mch_child_snapshot(now, &count, ARRAY_SIZE(now)))
+            return;
+        for (i = 0; i < count && !found; i++)
+        {
+            found = TRUE;
+            for (j = 0; j < mch_child_thread_count; j++)
+                if (now[i] == mch_child_threads[j]) found = FALSE;
+        }
+        if (found) Sleep(1);
+    } while (found && GetTickCount() - start < timeout);
+}
+#endif
+
 static void test_CtrlHandlerSubsystem(void)
 {
     static char guiexec[MAX_PATH];
@@ -5328,6 +5377,9 @@ static void test_CtrlHandlerSubsystem(void)
     char buf[MAX_PATH];
     DWORD exit_code;
     HANDLE event_child;
+#ifdef __REACTOS__
+    HANDLE event_distributed;
+#endif
     char **argv;
     DWORD saved_console_flags;
     DWORD pgid;
@@ -5345,6 +5397,10 @@ static void test_CtrlHandlerSubsystem(void)
 
     event_child = CreateEventA(&inheritable_attr, FALSE, FALSE, NULL);
     ok(event_child != NULL, "Couldn't create event\n");
+#ifdef __REACTOS__
+    event_distributed = CreateEventA(&inheritable_attr, TRUE, FALSE, NULL);
+    ok(event_distributed != NULL, "Couldn't create event\n");
+#endif
 
     saved_console_flags = RtlGetCurrentPeb()->ProcessParameters->ConsoleFlags;
 
@@ -5357,7 +5413,12 @@ static void test_CtrlHandlerSubsystem(void)
     {
         winetest_push_context("test #%u", i);
 
+#ifdef __REACTOS__
+        ResetEvent(event_distributed);
+        res = snprintf(buf, ARRAY_SIZE(buf), "\"%s\" console ctrl_handler %p %p", tests[i].use_cui ? cuiexec : guiexec, event_child, event_distributed);
+#else
         res = snprintf(buf, ARRAY_SIZE(buf), "\"%s\" console ctrl_handler %p", tests[i].use_cui ? cuiexec : guiexec, event_child);
+#endif
         ok((LONG)res >= 0 && res < ARRAY_SIZE(buf), "Truncated string %s (%lu)\n", buf, res);
 
         ret = CreateProcessA(NULL, buf, NULL, NULL, TRUE, tests[i].cp_flags,
@@ -5388,6 +5449,11 @@ static void test_CtrlHandlerSubsystem(void)
         ret = GenerateConsoleCtrlEvent(CTRL_C_EVENT, pgid);
         ok(ret || broken(GetLastError() == ERROR_INVALID_PARAMETER) /* Win7 */,
            "GenerateConsoleCtrlEvent failed: %lu\n", GetLastError());
+#ifdef __REACTOS__
+        /* A child that must not get the event can stop waiting for it once the call has distributed it */
+        if (tests[i].child_event == NO_EVENT)
+            SetEvent(event_distributed);
+#endif
 
         res = WaitForSingleObject(info.hProcess, 2000);
         ok(res == WAIT_OBJECT_0, "Expecting child to be terminated\n");
@@ -5450,6 +5516,9 @@ static void test_CtrlHandlerSubsystem(void)
     CloseHandle(info.hThread);
 
     CloseHandle(event_child);
+#ifdef __REACTOS__
+    CloseHandle(event_distributed);
+#endif
 
     RtlGetCurrentPeb()->ProcessParameters->ConsoleFlags = saved_console_flags;
     ret = SetConsoleCtrlHandler(mydummych, FALSE);
@@ -5487,6 +5556,26 @@ START_TEST(console)
         return;
     }
 
+#ifdef __REACTOS__
+    if (argc == 5 && !strcmp(argv[2], "ctrl_handler"))
+    {
+        HANDLE event, waits[2];
+
+        SetConsoleCtrlHandler(mch_child, TRUE);
+        mch_child_kill_event = CreateEventA(NULL, FALSE, FALSE, NULL);
+        ok(mch_child_kill_event != NULL, "Couldn't create event\n");
+        sscanf(argv[3], "%p", &event);
+        sscanf(argv[4], "%p", &waits[1]);
+        mch_child_snapshot(mch_child_threads, &mch_child_thread_count, ARRAY_SIZE(mch_child_threads));
+        ret = SetEvent(event);
+        ok(ret, "SetEvent failed\n");
+
+        waits[0] = mch_child_kill_event;
+        if (WaitForMultipleObjects(2, waits, FALSE, 200) == WAIT_OBJECT_0 + 1)
+            mch_child_wait_new_threads(200);
+        ExitProcess(mch_child_event);
+    }
+#else
     if (argc == 4 && !strcmp(argv[2], "ctrl_handler"))
     {
         HANDLE event;
@@ -5498,9 +5587,10 @@ START_TEST(console)
         ret = SetEvent(event);
         ok(ret, "SetEvent failed\n");
 
-        WaitForSingleObject(mch_child_kill_event, 1000); /* enough for all events to be distributed? */
+        WaitForSingleObject(mch_child_kill_event, 200); /* enough for all events to be distributed? */
         ExitProcess(mch_child_event);
     }
+#endif
 
     if (argc == 4 && !strcmp(argv[2], "no_ctrl_handler"))
     {

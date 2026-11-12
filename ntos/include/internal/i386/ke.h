@@ -2,6 +2,7 @@
 
 #define KI_EMULATED_USER_MACHINE 0
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
+#define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 
 #ifndef __ASM__
 
@@ -93,6 +94,20 @@ KeSetContextReturnRegister(PCONTEXT Context, ULONG_PTR ReturnValue)
 
 FORCEINLINE
 ULONG_PTR
+KeGetContextServiceArgument3(PCONTEXT Context)
+{
+    return Context->Ebx;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(PCONTEXT Context)
+{
+    return Context->Edi;
+}
+
+FORCEINLINE
+ULONG_PTR
 KeGetContextStackRegister(PCONTEXT Context)
 {
     return Context->Esp;
@@ -144,7 +159,8 @@ KiEnterServiceException(
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
     UNREFERENCED_PARAMETER(State);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     return ExceptionFrame;
 }
 
@@ -166,8 +182,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 
@@ -204,6 +219,12 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 //
 #define KeGetContextSwitches(Prcb)  \
     CONTAINING_RECORD(Prcb, KIPCR, PrcbData)->ContextSwitches
+
+/* TODO: the x86 processor block keeps the Vista layout, which has no Group member; x86 runs one processor group */
+#define KiPrcbGroup(Prcb) ((VOID)(Prcb), (USHORT)0)
+
+/* TODO: the x86 processor block keeps the Vista pointer pairs and no per-processor pool lookaside list is set up behind them */
+#define KiPrcbPoolLookaside(Prcb, Paged, Index) ((VOID)(Prcb), (VOID)(Paged), (VOID)(Index), (PGENERAL_LOOKASIDE_POOL)NULL)
 
 //
 // Macro to get the second level cache size field name which differs between
@@ -1160,7 +1181,16 @@ extern ULONG KiDpcTimeCount[MAXIMUM_PROCESSORS];
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimit)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchDogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriod)
+extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+#define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
+#define KI_PRCB_CPU_TYPE_OFFSET FIELD_OFFSET(KPRCB, CpuType)
+#define KI_PRCB_VENDOR_STRING_OFFSET FIELD_OFFSET(KPRCB, VendorString)
+/* TODO: this processor block has no context pointer, so the debugger data names none */
+#define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) FALSE
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #define _KeIsExecutingDpc() ((BOOLEAN)__readfsbyte(FIELD_OFFSET(KIPCR, PrcbData.DpcRoutineActive)))
 

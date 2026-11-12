@@ -257,6 +257,7 @@ LxIpcInsert(
     _In_ LONG Key,
     _In_ ULONG Flags)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     PLX_IPC_IDS Ids = &Namespace->Ids[Type];
     LONG Max, Index, Tries;
 
@@ -285,8 +286,8 @@ LxIpcInsert(
     Object->Seq = (USHORT)Ids->Seq;
     Object->Id = (Ids->Seq << LX_IPCMNI_SHIFT) + Index;
     Object->Key = Key;
-    Object->Uid = Object->Cuid = Process->Uid[1];
-    Object->Gid = Object->Cgid = Process->Gid[1];
+    Object->Uid = Object->Cuid = Cred->Uid[1];
+    Object->Gid = Object->Cgid = Cred->Gid[1];
     Object->Mode = Flags & 0777;
     Object->Ctime = LxIpcNow();
     InitializeListHead(&Object->Waiters);
@@ -346,13 +347,14 @@ LxIpcInGroup(
     _In_ PLX_PROCESS Process,
     _In_ ULONG Gid)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG Index;
 
-    if (Process->Gid[1] == Gid)
+    if (Cred->Gid[1] == Gid)
         return TRUE;
-    for (Index = 0; Index < Process->GroupCount; Index++)
+    for (Index = 0; Index < Cred->GroupCount; Index++)
     {
-        if (Process->Groups[Index] == Gid)
+        if (Cred->Groups[Index] == Gid)
             return TRUE;
     }
     return FALSE;
@@ -365,10 +367,11 @@ LxIpcCheck(
     _In_ PLX_IPC_OBJECT Object,
     _In_ ULONG Flags)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     ULONG Requested = (Flags >> 6) | (Flags >> 3) | Flags;
     ULONG Granted = Object->Mode;
 
-    if ((Process->Uid[1] == Object->Cuid) || (Process->Uid[1] == Object->Uid))
+    if ((Cred->Uid[1] == Object->Cuid) || (Cred->Uid[1] == Object->Uid))
         Granted >>= 6;
     else if (LxIpcInGroup(Process, Object->Cgid) || LxIpcInGroup(Process, Object->Gid))
         Granted >>= 3;
@@ -386,7 +389,8 @@ LxIpcOwner(
     _In_ PLX_PROCESS Process,
     _In_ PLX_IPC_OBJECT Object)
 {
-    return (Process->Uid[1] == Object->Uid) || (Process->Uid[1] == Object->Cuid) ||
+    PLX_CRED Cred = LxProcessCred(Process);
+    return (Cred->Uid[1] == Object->Uid) || (Cred->Uid[1] == Object->Cuid) ||
            LxNsCapable(Process, LxNsOwner(Object->Namespace->Owner), LX_CAP_SYS_ADMIN);
 }
 

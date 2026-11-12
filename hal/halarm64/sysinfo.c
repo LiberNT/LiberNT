@@ -12,6 +12,7 @@
 #include <hal.h>
 #include <reactos/hal/msi.h>
 #include <reactos/hal/acpi_pci.h>
+#include "halext.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -188,7 +189,13 @@ NTAPI
 HalConvertDeviceIdtToIrql(
     _In_ ULONG Vector)
 {
-    UNREFERENCED_PARAMETER(Vector);
+    if ((HalpArm64MsiRoutingCount != 0) &&
+        ((Vector - HalpArm64MsiRoutingBase) < HalpArm64MsiRoutingCount))
+    {
+        return HALP_ARM64_MSI_DEFAULT_IRQL;
+    }
+
+    /* TODO: a line-based vector's IRQL is only known to HalGetInterruptVector */
     return 0;
 }
 
@@ -281,16 +288,28 @@ HalGetMessageRoutingInfo(
     if (RoutingInfo->Vector == 0)
         return STATUS_INVALID_PARAMETER;
 
-    TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
-    TargetInfo.TargetProcessors = RoutingInfo->TargetProcessors;
-    TargetInfo.ProcessorNumber = 0;
-    TargetInfo.DestinationId = 0;
-    Status = HalGetInterruptTargetInformation(&TargetInfo);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (HalpArm64InterruptController && HalpArm64InterruptController->DeliversToAnyProcessor)
+    {
+        RoutingInfo->TargetProcessors &= KeQueryActiveProcessors();
+        if (RoutingInfo->TargetProcessors == 0)
+            RoutingInfo->TargetProcessors = KeQueryActiveProcessors();
+        RoutingInfo->DestinationId = 0;
+    }
+    else
+    {
+        /* TODO: a message's processor is not kept per vector and taken in turn over its affinity as in the x86 HAL */
+        TargetInfo.Version = HAL_INTERRUPT_TARGET_INFORMATION_VERSION;
+        TargetInfo.TargetProcessors = RoutingInfo->TargetProcessors;
+        TargetInfo.ProcessorNumber = 0;
+        TargetInfo.DestinationId = 0;
+        Status = HalGetInterruptTargetInformation(&TargetInfo);
+        if (!NT_SUCCESS(Status))
+            return Status;
 
-    RoutingInfo->TargetProcessors = TargetInfo.TargetProcessors;
-    RoutingInfo->DestinationId = TargetInfo.DestinationId;
+        RoutingInfo->TargetProcessors = TargetInfo.TargetProcessors;
+        RoutingInfo->DestinationId = TargetInfo.DestinationId;
+    }
+    ASSERT(RoutingInfo->TargetProcessors != 0);
     if (RoutingInfo->Irql == 0)
         RoutingInfo->Irql = HalConvertDeviceIdtToIrql(RoutingInfo->Vector);
     {
@@ -301,6 +320,12 @@ HalGetMessageRoutingInfo(
         {
             RoutingInfo->MessageAddress.QuadPart = (LONGLONG)MsiAddress;
             RoutingInfo->MessageData = (USHORT)MsiData;
+        }
+        else if (HalpArm64MsiDoorbell && RoutingInfo->Vector >= HalpArm64MsiDoorbell->FirstVector &&
+                 RoutingInfo->Vector - HalpArm64MsiDoorbell->FirstVector < HalpArm64MsiDoorbell->VectorCount)
+        {
+            RoutingInfo->MessageAddress.QuadPart = (LONGLONG)HalpArm64MsiDoorbell->Address;
+            RoutingInfo->MessageData = (USHORT)(RoutingInfo->Vector - HalpArm64MsiDoorbell->FirstVector);
         }
         else
         {

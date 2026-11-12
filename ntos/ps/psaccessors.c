@@ -1,0 +1,1475 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     What a driver may ask about a process or a thread, and the few
+ *              things it may set
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+#include "pspriv.h"
+#define NDEBUG
+#include <debug.h>
+
+/* What a graphics driver reports about a process that stopped answering */
+#define PSP_FAULT_CRASHED           0x1
+#define PSP_FAULT_HANG              0x2
+#define PSP_FAULT_GHOST             0x4
+#define PSP_FAULT_PREFILTER         0x8
+
+/* The counters a process keeps of those reports do not go past this */
+#define PSP_FAULT_COUNT_MAX         7
+
+/* GLOBALS ********************************************************************/
+
+BOOLEAN PspDiskCountersEnabled;
+
+static KGUARDED_MUTEX PspMitigationLock;
+static BOOLEAN PspMitigationLockReady;
+
+/* PROCESS IDENTITY ***********************************************************/
+
+HANDLE
+NTAPI
+PsGetCurrentProcessId(VOID)
+{
+    return PsGetCurrentThread()->Cid.UniqueProcess;
+}
+
+HANDLE
+NTAPI
+PsGetProcessId(
+    _In_ PEPROCESS Process)
+{
+    return Process->UniqueProcessId;
+}
+
+HANDLE
+NTAPI
+PsGetProcessInheritedFromUniqueProcessId(
+    _In_ PEPROCESS Process)
+{
+    return Process->InheritedFromUniqueProcessId;
+}
+
+PCHAR
+NTAPI
+PsGetProcessImageFileName(
+    _In_ PEPROCESS Process)
+{
+    return (PCHAR)Process->ImageFileName;
+}
+
+ULONGLONG
+NTAPI
+PsGetProcessSequenceNumber(
+    _In_ PEPROCESS Process)
+{
+    return Process->SequenceNumber;
+}
+
+/*
+ * A value that tells one run of a process from every other, across reboots.
+ * The sequence number names the process within this boot, and the boot
+ * identifier is folded in above it so that two processes from two boots never
+ * share a key.
+ */
+ULONGLONG
+NTAPI
+PsGetProcessStartKey(
+    _In_ PEPROCESS Process)
+{
+    return Process->SequenceNumber |
+           ((ULONGLONG)SharedUserData->BootId << 48);
+}
+
+LARGE_INTEGER
+NTAPI
+PsGetProcessExitTime(VOID)
+{
+    return PsGetCurrentProcess()->ExitTime;
+}
+
+LONGLONG
+NTAPI
+PsGetProcessCreateTimeQuadPart(
+    _In_ PEPROCESS Process)
+{
+    return Process->CreateTime.QuadPart;
+}
+
+NTSTATUS
+NTAPI
+PsGetProcessExitStatus(
+    _In_ PEPROCESS Process)
+{
+    return Process->ExitStatus;
+}
+
+BOOLEAN
+NTAPI
+PsGetProcessExitProcessCalled(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->ProcessExiting != 0);
+}
+
+USHORT
+NTAPI
+PsGetProcessMachine(
+    _In_ PEPROCESS Process)
+{
+    return Process->Machine;
+}
+
+/*
+ * Which machine the process's 32-bit code is written for. A process that runs
+ * no 32-bit code answers with its own machine.
+ */
+USHORT
+NTAPI
+PsWow64GetProcessMachine(
+    _In_ PEPROCESS Process)
+{
+    if (Process->WoW64Process == NULL) return Process->Machine;
+
+    return IMAGE_FILE_MACHINE_I386;
+}
+
+ULONG
+NTAPI
+PsGetCurrentProcessSessionId(VOID)
+{
+    return MmGetSessionId(PsGetCurrentProcess());
+}
+
+ULONG
+NTAPI
+PsGetProcessSessionId(
+    _In_ PEPROCESS Process)
+{
+    return MmGetSessionId(Process);
+}
+
+/*
+ * The same, except that a process which belongs to no session says so rather
+ * than naming session zero.
+ */
+ULONG
+NTAPI
+PsGetProcessSessionIdEx(
+    _In_ PEPROCESS Process)
+{
+    return MmGetSessionIdEx(Process);
+}
+
+PPEB
+NTAPI
+PsGetProcessPeb(
+    _In_ PEPROCESS Process)
+{
+    return Process->Peb;
+}
+
+struct _PEB32 *
+NTAPI
+PsGetProcessPeb32(
+    _In_ PEPROCESS Process)
+{
+    if (Process->WoW64Process == NULL) return NULL;
+
+    return (struct _PEB32 *)Process->WoW64Process->Peb;
+}
+
+PVOID
+NTAPI
+PsGetProcessWow64Process(
+    _In_ PEPROCESS Process)
+{
+    return Process->WoW64Process;
+}
+
+PVOID
+NTAPI
+PsGetCurrentProcessWow64Process(VOID)
+{
+    return PsGetCurrentProcess()->WoW64Process;
+}
+
+PVOID
+NTAPI
+PsGetProcessSectionBaseAddress(
+    _In_ PEPROCESS Process)
+{
+    return Process->SectionBaseAddress;
+}
+
+PVOID
+NTAPI
+PsGetProcessDebugPort(
+    _In_ PEPROCESS Process)
+{
+    return Process->DebugPort;
+}
+
+BOOLEAN
+NTAPI
+PsIsProcessBeingDebugged(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->DebugPort != NULL);
+}
+
+PVOID
+NTAPI
+PsGetProcessSecurityPort(
+    _In_ PEPROCESS Process)
+{
+    return Process->SecurityPort;
+}
+
+NTSTATUS
+NTAPI
+PsSetProcessSecurityPort(
+    _Inout_ PEPROCESS Process,
+    _In_ PVOID SecurityPort)
+{
+    Process->SecurityPort = SecurityPort;
+    return STATUS_SUCCESS;
+}
+
+ULONG
+NTAPI
+PsGetProcessPriorityClass(
+    _In_ PEPROCESS Process)
+{
+    return Process->PriorityClass;
+}
+
+BOOLEAN
+NTAPI
+PsIsSystemProcess(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->SystemProcess != 0);
+}
+
+/*
+ * Whether the process is one the system will not let another process read or
+ * change. The two answers are not the same: a process protected outright is
+ * closed to everything, while one protected lightly still allows a few of
+ * the things a debugger needs.
+ */
+LOGICAL
+NTAPI
+PsIsProtectedProcess(
+    _In_ PEPROCESS Process)
+{
+    return (Process->Protection.Type != PsProtectedTypeNone);
+}
+
+LOGICAL
+NTAPI
+PsIsProtectedProcessLight(
+    _In_ PEPROCESS Process)
+{
+    return (Process->Protection.Type == PsProtectedTypeProtectedLight);
+}
+
+BOOLEAN
+NTAPI
+PsIsProcessCommitRelinquished(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->RelinquishedCommit != 0);
+}
+
+/* WINDOWING STATE ************************************************************/
+
+PVOID
+NTAPI
+PsGetProcessWin32Process(
+    _In_ PEPROCESS Process)
+{
+    return Process->Win32Process;
+}
+
+PVOID
+NTAPI
+PsGetCurrentProcessWin32Process(VOID)
+{
+    return PsGetCurrentProcess()->Win32Process;
+}
+
+/*
+ * Attaches the windowing kernel's own state to the process, or takes it off.
+ * The old value the caller passes is what it expects to find, so two callers
+ * cannot each believe they attached theirs.
+ */
+NTSTATUS
+NTAPI
+PsSetProcessWin32Process(
+    _Inout_ PEPROCESS Process,
+    _In_opt_ PVOID Win32Process,
+    _In_opt_ PVOID OldWin32Process)
+{
+    PVOID Found;
+
+    Found = InterlockedCompareExchangePointer(&Process->Win32Process,
+                                              Win32Process,
+                                              OldWin32Process);
+
+    return (Found == OldWin32Process) ? STATUS_SUCCESS
+                                      : STATUS_UNSUCCESSFUL;
+}
+
+PVOID
+NTAPI
+PsGetProcessWin32WindowStation(
+    _In_ PEPROCESS Process)
+{
+    return Process->Win32WindowStation;
+}
+
+VOID
+NTAPI
+PsSetProcessWindowStation(
+    _Inout_ PEPROCESS Process,
+    _In_opt_ PVOID WindowStation)
+{
+    Process->Win32WindowStation = WindowStation;
+}
+
+PVOID
+NTAPI
+PsGetThreadWin32Thread(
+    _In_ PETHREAD Thread)
+{
+    return Thread->Tcb.Win32Thread;
+}
+
+PVOID
+NTAPI
+PsGetCurrentThreadWin32Thread(VOID)
+{
+    return PsGetCurrentThread()->Tcb.Win32Thread;
+}
+
+/*
+ * The windowing kernel reads its per-thread state and holds off APCs in one
+ * step, because every call it makes with that state in hand has to run to
+ * the end without an APC in between.
+ */
+PVOID
+NTAPI
+PsGetCurrentThreadWin32ThreadAndEnterCriticalRegion(
+    _Out_ PHANDLE ProcessId)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+
+    *ProcessId = Thread->Cid.UniqueProcess;
+    KeEnterCriticalRegion();
+
+    return Thread->Tcb.Win32Thread;
+}
+
+PVOID
+NTAPI
+PsSetThreadWin32Thread(
+    _Inout_ PETHREAD Thread,
+    _In_opt_ PVOID Win32Thread,
+    _In_opt_ PVOID OldWin32Thread)
+{
+    return InterlockedCompareExchangePointer(&Thread->Tcb.Win32Thread,
+                                             Win32Thread,
+                                             OldWin32Thread);
+}
+
+PVOID
+NTAPI
+PsGetProcessDxgProcess(
+    _In_ PEPROCESS Process)
+{
+    return Process->DxgProcess;
+}
+
+VOID
+NTAPI
+PsSetProcessDxgProcess(
+    _Inout_ PEPROCESS Process,
+    _In_opt_ PVOID DxgProcess)
+{
+    Process->DxgProcess = DxgProcess;
+}
+
+/*
+ * A graphics driver tells the process manager that a process stopped
+ * answering, or came back wrong. The counts saturate rather than wrap,
+ * because what matters is that it happened more than a few times.
+ */
+VOID
+NTAPI
+PsSetProcessFaultInformation(
+    _Inout_ PEPROCESS Process,
+    _In_ PVOID FaultInformation)
+{
+    ULONG Flags = *(PULONG)FaultInformation;
+
+    if ((Flags & PSP_FAULT_CRASHED) != 0) Process->Crashed = TRUE;
+
+    if ((Flags & PSP_FAULT_HANG) != 0 &&
+        Process->HangCount != PSP_FAULT_COUNT_MAX)
+    {
+        Process->HangCount++;
+    }
+
+    if ((Flags & PSP_FAULT_GHOST) != 0 &&
+        Process->GhostCount != PSP_FAULT_COUNT_MAX)
+    {
+        Process->GhostCount++;
+    }
+
+    if ((Flags & PSP_FAULT_PREFILTER) != 0) Process->PrefilterException = TRUE;
+}
+
+/*
+ * Asks the windowing kernel to put every process's windows into a state, as
+ * the shell does when it shows or hides the desktop.
+ */
+NTSTATUS
+NTAPI
+PsSetProcessesWindowState(
+    _In_ ULONG WindowState,
+    _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(WindowState);
+    UNREFERENCED_PARAMETER(Context);
+
+    /* TODO: hand the request to the windowing kernel once it registers a
+     * window-state provider; with none, there are no windows to change */
+    return STATUS_SUCCESS;
+}
+
+/* THREAD IDENTITY ************************************************************/
+
+HANDLE
+NTAPI
+PsGetCurrentThreadId(VOID)
+{
+    return PsGetCurrentThread()->Cid.UniqueThread;
+}
+
+HANDLE
+NTAPI
+PsGetThreadId(
+    _In_ PETHREAD Thread)
+{
+    return Thread->Cid.UniqueThread;
+}
+
+HANDLE
+NTAPI
+PsGetThreadProcessId(
+    _In_ PETHREAD Thread)
+{
+    return Thread->Cid.UniqueProcess;
+}
+
+HANDLE
+NTAPI
+PsGetCurrentThreadProcessId(VOID)
+{
+    return PsGetCurrentThread()->Cid.UniqueProcess;
+}
+
+PEPROCESS
+NTAPI
+PsGetThreadProcess(
+    _In_ PETHREAD Thread)
+{
+    return THREAD_TO_PROCESS(Thread);
+}
+
+PEPROCESS
+NTAPI
+PsGetCurrentThreadProcess(VOID)
+{
+    return PsGetCurrentProcess();
+}
+
+ULONG
+NTAPI
+PsGetThreadSessionId(
+    _In_ PETHREAD Thread)
+{
+    return MmGetSessionId(THREAD_TO_PROCESS(Thread));
+}
+
+PTEB
+NTAPI
+PsGetThreadTeb(
+    _In_ PETHREAD Thread)
+{
+    return Thread->Tcb.Teb;
+}
+
+PVOID
+NTAPI
+PsGetCurrentThreadTeb(VOID)
+{
+    return PsGetCurrentThread()->Tcb.Teb;
+}
+
+PVOID
+NTAPI
+PsGetCurrentThreadStackBase(VOID)
+{
+    return PsGetCurrentThread()->Tcb.StackBase;
+}
+
+PVOID
+NTAPI
+PsGetCurrentThreadStackLimit(VOID)
+{
+    return (PVOID)PsGetCurrentThread()->Tcb.StackLimit;
+}
+
+KPROCESSOR_MODE
+NTAPI
+PsGetCurrentThreadPreviousMode(VOID)
+{
+    return PsGetCurrentThread()->Tcb.PreviousMode;
+}
+
+BOOLEAN
+NTAPI
+PsIsSystemThread(
+    _In_ PETHREAD Thread)
+{
+    return (BOOLEAN)(Thread->SystemThread != 0);
+}
+
+BOOLEAN
+NTAPI
+PsIsThreadImpersonating(
+    _In_ PETHREAD Thread)
+{
+    return (BOOLEAN)(Thread->ActiveImpersonationInfo != 0);
+}
+
+BOOLEAN
+NTAPI
+PsIsThreadTerminating(
+    _In_ PETHREAD Thread)
+{
+    return (BOOLEAN)(Thread->Terminated != 0);
+}
+
+ULONG
+NTAPI
+PsGetThreadFreezeCount(
+    _In_ PETHREAD Thread)
+{
+    return (ULONG)(UCHAR)Thread->Tcb.FreezeCount;
+}
+
+BOOLEAN
+NTAPI
+PsGetThreadHardErrorsAreDisabled(
+    _In_ PETHREAD Thread)
+{
+    return (BOOLEAN)(Thread->HardErrorsAreDisabled != 0);
+}
+
+VOID
+NTAPI
+PsSetThreadHardErrorsAreDisabled(
+    _Inout_ PETHREAD Thread,
+    _In_ BOOLEAN HardErrorsAreDisabled)
+{
+    if (HardErrorsAreDisabled)
+        PspSetCrossThreadFlag(Thread, CT_HARD_ERRORS_ARE_DISABLED_BIT);
+    else
+        PspClearCrossThreadFlag(Thread, CT_HARD_ERRORS_ARE_DISABLED_BIT);
+}
+
+/* SCHEDULING AND STACKS ******************************************************/
+
+/*
+ * A region a caller runs in while it holds something the scheduler must not
+ * take it off for. It holds off ordinary APCs, so nothing runs on the thread
+ * in between, and leaves the special ones alone.
+ */
+VOID
+NTAPI
+PsEnterPriorityRegion(VOID)
+{
+    KeEnterCriticalRegion();
+}
+
+VOID
+NTAPI
+PsLeavePriorityRegion(VOID)
+{
+    KeLeaveCriticalRegion();
+}
+
+/*
+ * The windowing kernel keeps a thread from falling below a priority while it
+ * holds a lock everything else is waiting on. The floor that was in force is
+ * handed back, so the caller can put it back when it is done.
+ */
+CHAR
+NTAPI
+PsAdjustWin32kPriorityFloor(
+    _Inout_ PETHREAD Thread,
+    _In_ LONG PriorityFloor)
+{
+    return KeExchangePriorityFloorThread(&Thread->Tcb,
+                                         &Thread->Win32kPriorityFloor,
+                                         PriorityFloor);
+}
+
+/*
+ * Keeps a thread's kernel stack in memory. A caller that is about to walk
+ * another thread's stack holds it this way, because a stack that was swapped
+ * out while being read would fault where no fault may be taken.
+ */
+VOID
+NTAPI
+PsReferenceKernelStack(
+    _Inout_ PETHREAD Thread)
+{
+    InterlockedIncrement((PLONG)&Thread->KernelStackReference);
+}
+
+VOID
+NTAPI
+PsDereferenceKernelStack(
+    _Inout_ PETHREAD Thread)
+{
+    InterlockedDecrement((PLONG)&Thread->KernelStackReference);
+}
+
+/*
+ * Says whose work the calling thread is doing, so that the cycles it burns
+ * and the power it costs are charged where the work came from rather than
+ * to whichever thread happened to pick the work up. A ticket that names no
+ * thread clears the attribution.
+ */
+NTSTATUS
+NTAPI
+PspSetWorkOnBehalfTicket(
+    _In_ PETHREAD Thread,
+    _In_ PRTL_WORK_ON_BEHALF_TICKET_EX Ticket)
+{
+    PETHREAD Behalf = NULL;
+    PETHREAD Previous;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (Ticket->Ticket.ThreadId != 0)
+    {
+        Status = PsLookupThreadByThreadId(
+                     (HANDLE)(ULONG_PTR)Ticket->Ticket.ThreadId,
+                     &Behalf);
+        if (!NT_SUCCESS(Status)) return Status;
+
+        /*
+         * The ticket also carries when the named thread was made, so a
+         * thread identifier that has since been given to another thread
+         * does not pass for the one the ticket was written for.
+         */
+        if ((ULONG)Behalf->CreateTime.LowPart !=
+            Ticket->Ticket.ThreadCreationTimeLow)
+        {
+            ObDereferenceObject(Behalf);
+            return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    Previous = InterlockedExchangePointer((PVOID*)&Thread->WorkOnBehalfThread,
+                                          Behalf);
+
+    if (Previous != NULL) ObDereferenceObject(Previous);
+
+    return STATUS_SUCCESS;
+}
+
+/* CONTAINERS *****************************************************************/
+
+/*
+ * A silo is the container a process runs in. This system runs everything in
+ * the host silo, which is named by nothing at all, so every question about a
+ * silo is answered from that.
+ */
+PESILO
+NTAPI
+PsGetHostSilo(VOID)
+{
+    return NULL;
+}
+
+BOOLEAN
+NTAPI
+PsIsHostSilo(
+    _In_ PESILO Silo)
+{
+    return (BOOLEAN)(Silo == NULL);
+}
+
+PESILO
+NTAPI
+PsGetCurrentServerSilo(VOID)
+{
+    return NULL;
+}
+
+PESILO
+NTAPI
+PsGetProcessServerSilo(
+    _In_ PEPROCESS Process)
+{
+    return (PESILO)Process->ServerSilo;
+}
+
+BOOLEAN
+NTAPI
+PsIsCurrentThreadInServerSilo(VOID)
+{
+    return FALSE;
+}
+
+ULONG
+NTAPI
+PsGetServerSiloServiceSessionId(
+    _In_opt_ PESILO Silo)
+{
+    UNREFERENCED_PARAMETER(Silo);
+
+    /* The host silo's services run in the session the system runs in */
+    return 0;
+}
+
+PESILO
+NTAPI
+PsAttachSiloToCurrentThread(
+    _In_opt_ PESILO Silo)
+{
+    PETHREAD Thread = PsGetCurrentThread();
+    PESILO Previous = (PESILO)Thread->Silo;
+
+    Thread->Silo = (struct _EJOB *)Silo;
+    return Previous;
+}
+
+VOID
+NTAPI
+PsDetachSiloFromCurrentThread(
+    _In_opt_ PESILO PreviousSilo)
+{
+    PsGetCurrentThread()->Silo = (struct _EJOB *)PreviousSilo;
+}
+
+/* SYSTEM-CALL FILTERING ******************************************************/
+
+/*
+ * A process may be told that it may not call the windowing kernel, or that
+ * only part of it is open to the process. Nothing sets that today, so every
+ * process is allowed everything and nothing is audited.
+ */
+ULONG
+NTAPI
+PsGetWin32KFilterSet(VOID)
+{
+    return 0;
+}
+
+BOOLEAN
+NTAPI
+PsIsWin32KFilterEnabled(VOID)
+{
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+PsIsWin32KFilterAuditEnabled(VOID)
+{
+    return FALSE;
+}
+
+BOOLEAN
+NTAPI
+PsIsWin32KFilterEnabledForProcess(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->MitigationFlagsValues.EnableFilteredWin32kAPIs != 0);
+}
+
+BOOLEAN
+NTAPI
+PsIsWin32KFilterAuditEnabledForProcess(
+    _In_ PEPROCESS Process)
+{
+    return (BOOLEAN)(Process->MitigationFlagsValues.AuditFilteredWin32kAPIs != 0);
+}
+
+/* MITIGATION POLICY **********************************************************/
+
+/*
+ * The mitigation policies of a process are read and written as whole words,
+ * and a caller that asks for one policy must not see half of an update to
+ * another, so one lock covers all of them.
+ */
+VOID
+NTAPI
+PspLockMitigationPolicy(VOID)
+{
+    if (!PspMitigationLockReady)
+    {
+        KeInitializeGuardedMutex(&PspMitigationLock);
+        PspMitigationLockReady = TRUE;
+    }
+
+    KeAcquireGuardedMutex(&PspMitigationLock);
+}
+
+VOID
+NTAPI
+PspUnlockMitigationPolicy(VOID)
+{
+    KeReleaseGuardedMutex(&PspMitigationLock);
+}
+
+/* Each documented PROCESS_MITIGATION_*_POLICY flag: its EPROCESS MitigationFlags(2/3) bit in the Windows 11 public symbols, or PSP_ELSEWHERE */
+#define PSP_MF1     0
+#define PSP_MF2     1
+#define PSP_MF3     2
+#define PSP_ELSEWHERE 3
+
+typedef struct _PSP_MITIGATION_BIT
+{
+    UCHAR Word;
+    UCHAR Bit;
+} PSP_MITIGATION_BIT;
+
+typedef struct _PSP_MITIGATION_LAYOUT
+{
+    UCHAR FlagCount;
+    USHORT RuntimeFlags;
+    PSP_MITIGATION_BIT Flags[12];
+} PSP_MITIGATION_LAYOUT;
+
+static const PSP_MITIGATION_LAYOUT PspMitigationLayouts[PSP_EXTENDED_POLICY_COUNT] =
+{
+    /* DEP: ExecuteDisable and DisableThunkEmulation of KPROCESS ExecuteOptions */
+    [PSP_DEP_POLICY] = {2, 0, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}}},
+    /* ASLR: bottom-up, ForceRelocateImages, HighEntropyASLREnabled, DisallowStrippedImages; bottom-up and high entropy come only from the image or creation */
+    [PSP_ASLR_POLICY] = {4, 0xA, {{PSP_ELSEWHERE, 0}, {PSP_MF1, 4}, {PSP_MF1, 5}, {PSP_MF1, 3}}},
+    /* DisableDynamicCode, ...AllowOptOut, ...AllowRemoteDowngrade, AuditDisableDynamicCode */
+    [PSP_DYNAMIC_CODE_POLICY] = {4, 0xF, {{PSP_MF1, 8}, {PSP_MF1, 9}, {PSP_MF1, 10}, {PSP_MF1, 11}}},
+    /* HANDLE_TABLE EnableHandleExceptions */
+    [PSP_STRICT_HANDLE_CHECK_POLICY] = {2, 0x3, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}}},
+    /* DisallowWin32kSystemCalls, AuditDisallowWin32kSystemCalls, DisallowFsctlSystemCalls, AuditDisallowFsctlSystemCalls */
+    [PSP_SYSTEM_CALL_DISABLE_POLICY] = {4, 0xF, {{PSP_MF1, 12}, {PSP_MF1, 13}, {PSP_MF3, 1}, {PSP_MF3, 2}}},
+    [PSP_EXTENSION_POINT_DISABLE_POLICY] = {1, 0x1, {{PSP_MF1, 7}}},
+    /* ControlFlowGuardEnabled, ...ExportSuppressionEnabled, ...Strict */
+    [PSP_CONTROL_FLOW_GUARD_POLICY] = {3, 0, {{PSP_MF1, 0}, {PSP_MF1, 1}, {PSP_MF1, 2}}},
+    /* the process's section signature level, SignatureMitigationOptIn, AuditBlockNonMicrosoftBinaries(AllowStore) */
+    [PSP_SIGNATURE_POLICY] = {5, 0x1F, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_MF1, 23}, {PSP_MF1, 24}, {PSP_MF1, 25}}},
+    /* DisableNonSystemFonts, AuditNonSystemFontLoading */
+    [PSP_FONT_DISABLE_POLICY] = {2, 0x3, {{PSP_MF1, 16}, {PSP_MF1, 17}}},
+    /* ProhibitRemoteImageMap, ProhibitLowILImageMap, PreferSystem32Images, and the two audits */
+    [PSP_IMAGE_LOAD_POLICY] = {5, 0x1F, {{PSP_MF1, 19}, {PSP_MF1, 21}, {PSP_MF1, 18}, {PSP_MF1, 20}, {PSP_MF1, 22}}},
+    /* a four-bit filter identifier: EPROCESS Win32KFilterSet, under EnableFilteredWin32kAPIs */
+    [PSP_SYSTEM_CALL_FILTER_POLICY] = {4, 0, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_ELSEWHERE, 2}, {PSP_ELSEWHERE, 3}}},
+    /* export and import address filters, then the three return-oriented checks, each with its audit */
+    [PSP_PAYLOAD_RESTRICTION_POLICY] = {12, 0, {{PSP_MF2, 0}, {PSP_MF2, 1}, {PSP_MF2, 2}, {PSP_MF2, 3},
+                                                    {PSP_MF2, 10}, {PSP_MF2, 11}, {PSP_MF2, 4}, {PSP_MF2, 5},
+                                                    {PSP_MF2, 6}, {PSP_MF2, 7}, {PSP_MF2, 8}, {PSP_MF2, 9}}},
+    /* TOKEN_NO_CHILD_PROCESS, TOKEN_AUDIT_NO_CHILD_PROCESS, TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE of the process token */
+    [PSP_CHILD_PROCESS_POLICY] = {3, 0x7, {{PSP_ELSEWHERE, 0}, {PSP_ELSEWHERE, 1}, {PSP_ELSEWHERE, 2}}},
+    /* RestrictIndirectBranchPrediction, IsolateSecurityDomain, DisablePageCombine, SpeculativeStoreBypassDisable, RestrictCoreSharing */
+    /* FIXME: the side-channel flags are recorded, but no barrier or page-combining rule acts on them */
+    [PSP_SIDE_CHANNEL_ISOLATION_POLICY] = {5, 0x1F, {{PSP_MF1, 30}, {PSP_MF1, 31}, {PSP_MF2, 12}, {PSP_MF2, 13}, {PSP_MF3, 0}}},
+};
+
+static
+volatile LONG *
+PspMitigationWord(
+    _In_ PEPROCESS Process,
+    _In_ UCHAR Word)
+{
+    if (Word == PSP_MF1) return (volatile LONG *)&Process->MitigationFlags;
+    if (Word == PSP_MF2) return (volatile LONG *)&Process->MitigationFlags2;
+    return (volatile LONG *)&Process->MitigationFlags3;
+}
+
+static
+ULONG
+PspQueryOtherMitigationFlags(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy)
+{
+    PACCESS_TOKEN Token;
+    ULONG TokenFlags;
+    ULONG Flags = 0;
+
+    switch (Policy)
+    {
+        case PSP_DEP_POLICY:
+            if (Process->Pcb.Flags.ExecuteDisable) Flags |= 0x1;
+            if (Process->Pcb.Flags.DisableThunkEmulation) Flags |= 0x2;
+            break;
+
+        case PSP_ASLR_POLICY:
+            /* FIXME: no Windows field records a bottom-up request; it is read from stack randomization */
+            if (!Process->MitigationFlagsValues.StackRandomizationDisabled) Flags |= 0x1;
+            break;
+
+        case PSP_STRICT_HANDLE_CHECK_POLICY:
+            /* FIXME: no Windows field keeps HandleExceptionsPermanentlyEnabled apart; checks once on stay on */
+            if (Process->ObjectTable != NULL && Process->ObjectTable->EnableHandleExceptions) Flags |= 0x3;
+            break;
+
+        case PSP_SIGNATURE_POLICY:
+            if (Process->SectionSignatureLevel >= SE_SIGNING_LEVEL_MICROSOFT) Flags |= 0x1;
+            else if (Process->SectionSignatureLevel >= SE_SIGNING_LEVEL_STORE) Flags |= 0x2;
+            break;
+
+        case PSP_SYSTEM_CALL_FILTER_POLICY:
+            if (Process->MitigationFlagsValues.EnableFilteredWin32kAPIs) Flags |= Process->Win32KFilterSet & 0xF;
+            break;
+
+        case PSP_CHILD_PROCESS_POLICY:
+            Token = PsReferencePrimaryToken(Process);
+            TokenFlags = SepQueryTokenFlags(Token);
+            PsDereferencePrimaryToken(Token);
+            if (TokenFlags & (TOKEN_NO_CHILD_PROCESS | TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE)) Flags |= 0x1;
+            if (TokenFlags & TOKEN_AUDIT_NO_CHILD_PROCESS) Flags |= 0x2;
+            if (TokenFlags & TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE) Flags |= 0x4;
+            break;
+
+        default:
+            break;
+    }
+
+    return Flags;
+}
+
+static
+VOID
+PspStoreOtherMitigationFlags(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy,
+    _In_ ULONG Flags)
+{
+    PACCESS_TOKEN Token;
+    ULONG TokenFlags = 0;
+
+    switch (Policy)
+    {
+        case PSP_STRICT_HANDLE_CHECK_POLICY:
+            if (Flags != 0 && Process->ObjectTable != NULL)
+                InterlockedOr((volatile LONG *)&Process->ObjectTable->Flags, OB_HANDLE_EXCEPTIONS_ENABLED);
+            break;
+
+        case PSP_SIGNATURE_POLICY:
+            if ((Flags & 0x1) && Process->SectionSignatureLevel < SE_SIGNING_LEVEL_MICROSOFT)
+                Process->SectionSignatureLevel = SE_SIGNING_LEVEL_MICROSOFT;
+            if ((Flags & 0x2) && Process->SectionSignatureLevel < SE_SIGNING_LEVEL_STORE)
+                Process->SectionSignatureLevel = SE_SIGNING_LEVEL_STORE;
+            break;
+
+        case PSP_CHILD_PROCESS_POLICY:
+            if (Flags & 0x1)
+                TokenFlags |= (Flags & 0x4) ? TOKEN_NO_CHILD_PROCESS_UNLESS_SECURE : TOKEN_NO_CHILD_PROCESS;
+            if (Flags & 0x2) TokenFlags |= TOKEN_AUDIT_NO_CHILD_PROCESS;
+            if (TokenFlags == 0) break;
+
+            Token = PsReferencePrimaryToken(Process);
+            SepSetTokenFlags(Token, TokenFlags);
+            PsDereferencePrimaryToken(Token);
+            break;
+
+        default:
+            /* TODO: the bottom-up request has no Windows field to go in; DEP is set through ProcessExecuteFlags */
+            break;
+    }
+}
+
+ULONG
+NTAPI
+PsGetProcessMitigationPolicyFlags(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy)
+{
+    const PSP_MITIGATION_LAYOUT *Layout;
+    ULONG Flags;
+    ULONG Index;
+
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return 0;
+
+    Layout = &PspMitigationLayouts[Policy];
+    Flags = PspQueryOtherMitigationFlags(Process, Policy);
+
+    for (Index = 0; Index < Layout->FlagCount; Index++)
+    {
+        if (Layout->Flags[Index].Word == PSP_ELSEWHERE) continue;
+
+        if (*PspMitigationWord(Process, Layout->Flags[Index].Word) & (1UL << Layout->Flags[Index].Bit))
+            Flags |= 1UL << Index;
+    }
+
+    return Flags;
+}
+
+VOID
+NTAPI
+PspStoreMitigationPolicy(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy,
+    _In_ ULONG Flags)
+{
+    const PSP_MITIGATION_LAYOUT *Layout;
+    ULONG Index;
+
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return;
+
+    Layout = &PspMitigationLayouts[Policy];
+
+    for (Index = 0; Index < Layout->FlagCount; Index++)
+    {
+        if (!(Flags & (1UL << Index)) || Layout->Flags[Index].Word == PSP_ELSEWHERE) continue;
+
+        InterlockedOr(PspMitigationWord(Process, Layout->Flags[Index].Word),
+                      (LONG)(1UL << Layout->Flags[Index].Bit));
+    }
+
+    PspStoreOtherMitigationFlags(Process, Policy, Flags);
+}
+
+/*
+ * Sets one of the policies a process may change after it has started. A
+ * policy that is already on cannot be turned off, because a process that
+ * could lift its own mitigation would gain nothing from having one.
+ */
+NTSTATUS
+NTAPI
+PspSetExtendedMitigationPolicy(
+    _In_ PEPROCESS Process,
+    _In_ ULONG Policy,
+    _In_ ULONG Flags)
+{
+    const PSP_MITIGATION_LAYOUT *Layout;
+    ULONG Current;
+
+    PAGED_CODE();
+
+    if (Policy >= PSP_EXTENDED_POLICY_COUNT) return STATUS_INVALID_PARAMETER;
+
+    Layout = &PspMitigationLayouts[Policy];
+    if (Layout->RuntimeFlags == 0 || (Flags & ~((1UL << Layout->FlagCount) - 1)) != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    PspLockMitigationPolicy();
+
+    /* Flags only the image or the creation options turn on are neither cleared nor set here */
+    Current = PsGetProcessMitigationPolicyFlags(Process, Policy) & Layout->RuntimeFlags;
+    Flags &= Layout->RuntimeFlags;
+    if ((Current & ~Flags) != 0)
+    {
+        PspUnlockMitigationPolicy();
+        return STATUS_ACCESS_DENIED;
+    }
+
+    /* Core sharing cannot be restricted here, which a caller is told rather than given a policy that does nothing */
+    if (Policy == PSP_SIDE_CHANNEL_ISOLATION_POLICY && ((Flags & ~Current) & 0x10))
+    {
+        PspUnlockMitigationPolicy();
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    PspStoreMitigationPolicy(Process, Policy, Flags & ~Current);
+    PspUnlockMitigationPolicy();
+
+    return STATUS_SUCCESS;
+}
+
+/* PROCESS_CREATION_MITIGATION_POLICY_* (word 0) and POLICY2_* (word 1): each two-bit option value and the policy flags it turns on */
+typedef struct _PSP_CREATION_MITIGATION
+{
+    UCHAR Word;
+    UCHAR Shift;
+    UCHAR Value;
+    UCHAR Policy;
+    ULONG Flags;
+} PSP_CREATION_MITIGATION;
+
+static const PSP_CREATION_MITIGATION PspCreationMitigations[] =
+{
+    {0, 8, 1, PSP_ASLR_POLICY, 0x2},
+    {0, 8, 3, PSP_ASLR_POLICY, 0x2 | 0x8},
+    {0, 16, 1, PSP_ASLR_POLICY, 0x1},
+    {0, 20, 1, PSP_ASLR_POLICY, 0x4},
+    {0, 24, 1, PSP_STRICT_HANDLE_CHECK_POLICY, 0x3},
+    {0, 28, 1, PSP_SYSTEM_CALL_DISABLE_POLICY, 0x1},
+    {0, 32, 1, PSP_EXTENSION_POINT_DISABLE_POLICY, 0x1},
+    {0, 36, 1, PSP_DYNAMIC_CODE_POLICY, 0x1},
+    {0, 36, 3, PSP_DYNAMIC_CODE_POLICY, 0x1 | 0x2},
+    {0, 44, 1, PSP_SIGNATURE_POLICY, 0x1},
+    {0, 44, 3, PSP_SIGNATURE_POLICY, 0x2},
+    {0, 48, 1, PSP_FONT_DISABLE_POLICY, 0x1},
+    {0, 48, 3, PSP_FONT_DISABLE_POLICY, 0x2},
+    {0, 52, 1, PSP_IMAGE_LOAD_POLICY, 0x1},
+    {0, 56, 1, PSP_IMAGE_LOAD_POLICY, 0x2},
+    {0, 60, 1, PSP_IMAGE_LOAD_POLICY, 0x4},
+    {1, 16, 1, PSP_SIDE_CHANNEL_ISOLATION_POLICY, 0x1},
+    {1, 56, 1, PSP_SYSTEM_CALL_DISABLE_POLICY, 0x4},
+};
+
+VOID
+NTAPI
+PspApplyCreationMitigations(
+    _In_ PEPROCESS Process,
+    _In_reads_(2) const ULONGLONG *Options)
+{
+    ULONG Index;
+
+    PspLockMitigationPolicy();
+
+    for (Index = 0; Index < RTL_NUMBER_OF(PspCreationMitigations); Index++)
+    {
+        const PSP_CREATION_MITIGATION *Entry = &PspCreationMitigations[Index];
+
+        if (((Options[Entry->Word] >> Entry->Shift) & 0x3) == Entry->Value)
+            PspStoreMitigationPolicy(Process, Entry->Policy, Entry->Flags);
+    }
+
+    /* Options with their own EPROCESS bits and no policy flag of their own */
+    if (((Options[1] >> 4) & 0x3) == 1)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 26);
+    if (((Options[1] >> 4) & 0x3) == 3)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 27);
+    if (((Options[1] >> 12) & 0x3) == 1)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, 1L << 28);
+    if (((Options[1] >> 12) & 0x3) == 3)
+        InterlockedOr((volatile LONG *)&Process->MitigationFlags, (1L << 28) | (1L << 29));
+
+    /* TODO: control flow guard, heap termination, the CET options, the dynamic-code downgrade and store-bypass options and the audit options are not applied */
+    PspUnlockMitigationPolicy();
+}
+
+/* TOKEN ATTRIBUTES ***********************************************************/
+
+/*
+ * Two things a caller wants to know about a token without reading it: whether
+ * it belongs to a part of the system itself, and whether it belongs to an
+ * application that was installed as a package.
+ */
+VOID
+NTAPI
+PsQueryProcessAttributesByToken(
+    _In_ PACCESS_TOKEN Token,
+    _Out_opt_ PBOOLEAN SystemAppIdentifier,
+    _Out_opt_ PBOOLEAN PackagedApplication)
+{
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(Token);
+
+    /* TODO: answer from the token's package claim and its app-container
+     * number once a token carries them */
+    if (SystemAppIdentifier != NULL) *SystemAppIdentifier = FALSE;
+    if (PackagedApplication != NULL) *PackagedApplication = FALSE;
+}
+
+/* ACCOUNTING *****************************************************************/
+
+BOOLEAN
+NTAPI
+PsIsDiskCountersEnabled(VOID)
+{
+    return PspDiskCountersEnabled;
+}
+
+/*
+ * Adds what a disk did for a process to the process's own account. A process
+ * that has nowhere to keep the account is passed over rather than given one,
+ * because the counters are only kept when somebody asked for them.
+ */
+VOID
+NTAPI
+PsUpdateDiskCounters(
+    _Inout_ PEPROCESS Process,
+    _In_ ULONG64 BytesRead,
+    _In_ ULONG64 BytesWritten,
+    _In_ ULONG ReadOperationCount,
+    _In_ ULONG WriteOperationCount,
+    _In_ ULONG FlushOperationCount)
+{
+    PPROCESS_DISK_COUNTERS Counters = Process->DiskCounters;
+
+    if (Counters == NULL) return;
+
+    InterlockedExchangeAdd64((PLONG64)&Counters->BytesRead, BytesRead);
+    InterlockedExchangeAdd64((PLONG64)&Counters->BytesWritten, BytesWritten);
+    InterlockedExchangeAdd64((PLONG64)&Counters->ReadOperationCount,
+                             ReadOperationCount);
+    InterlockedExchangeAdd64((PLONG64)&Counters->WriteOperationCount,
+                             WriteOperationCount);
+    InterlockedExchangeAdd64((PLONG64)&Counters->FlushOperationCount,
+                             FlushOperationCount);
+}
+
+/* IMAGES *********************************************************************/
+
+/*
+ * Whether a process is allowed to map this image. A process told to accept
+ * only images that come from somewhere trusted refuses the rest.
+ */
+NTSTATUS
+NTAPI
+PsCheckImageLoadPolicy(
+    _In_ PFILE_OBJECT FileObject)
+{
+    PEPROCESS Process = PsGetCurrentProcess();
+
+    PAGED_CODE();
+
+    UNREFERENCED_PARAMETER(FileObject);
+
+    UNREFERENCED_PARAMETER(Process);
+
+    /* TODO: refuse a remote or a low-integrity image when the process asked
+     * for ProhibitRemoteImageMap or ProhibitLowILImageMap */
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Hands back the file the process was started from, with a reference the
+ * caller gives back. A process started from no image has none.
+ */
+NTSTATUS
+NTAPI
+PsReferenceProcessFilePointer(
+    _In_ PEPROCESS Process,
+    _Outptr_ PFILE_OBJECT *FileObject)
+{
+    PAGED_CODE();
+
+    *FileObject = NULL;
+
+    PspLockProcessSecurityShared(Process);
+
+    if (Process->ImageFilePointer != NULL)
+    {
+        ObReferenceObject(Process->ImageFilePointer);
+        *FileObject = Process->ImageFilePointer;
+    }
+
+    PspUnlockProcessSecurityShared(Process);
+
+    return (*FileObject != NULL) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+}
+
+/* WORKING-SET WATCHING *******************************************************/
+
+typedef struct _PSP_WS_WATCH_RECORD
+{
+    PVOID FaultingPc;
+    PVOID FaultingVa;
+    HANDLE FaultingThreadId;
+} PSP_WS_WATCH_RECORD, *PPSP_WS_WATCH_RECORD;
+
+typedef struct _PSP_WS_WATCH
+{
+    KSPIN_LOCK SpinLock;
+    ULONG Count;
+    ULONG Lost;
+    PSP_WS_WATCH_RECORD Records[PSP_WS_WATCH_RECORDS];
+} PSP_WS_WATCH, *PPSP_WS_WATCH;
+
+typedef struct _PSP_WS_WATCH_INFORMATION_EX
+{
+    PROCESS_WS_WATCH_INFORMATION BasicInfo;
+    ULONG_PTR FaultingThreadId;
+    ULONG_PTR Flags;
+} PSP_WS_WATCH_INFORMATION_EX, *PPSP_WS_WATCH_INFORMATION_EX;
+
+VOID
+NTAPI
+PsWatchWorkingSet(
+    _In_ PEPROCESS Process,
+    _In_ PVOID FaultingPc,
+    _In_ PVOID FaultingVa)
+{
+    PPSP_WS_WATCH Watch = (PPSP_WS_WATCH)Process->WorkingSetWatch;
+    KIRQL OldIrql;
+
+    if (Watch == NULL) return;
+
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+
+    if (Watch->Count < PSP_WS_WATCH_RECORDS)
+    {
+        Watch->Records[Watch->Count].FaultingPc = FaultingPc;
+        Watch->Records[Watch->Count].FaultingVa = FaultingVa;
+        Watch->Records[Watch->Count].FaultingThreadId = PsGetCurrentThreadId();
+        Watch->Count++;
+    }
+    else
+    {
+        Watch->Lost++;
+    }
+
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+}
+
+static
+NTSTATUS
+PspCopyWorkingSetWatch(
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _In_reads_(Count) const PSP_WS_WATCH_RECORD *Records,
+    _In_ ULONG Count,
+    _In_ ULONG Lost,
+    _In_ BOOLEAN Extended)
+{
+    PSP_WS_WATCH_INFORMATION_EX Record;
+    ULONG RecordSize;
+    ULONG Index;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RecordSize = Extended ? sizeof(PSP_WS_WATCH_INFORMATION_EX) : sizeof(PROCESS_WS_WATCH_INFORMATION);
+    ASSERT(Length >= (Count + 1) * RecordSize);
+
+    _SEH2_TRY
+    {
+        for (Index = 0; Index <= Count; Index++)
+        {
+            RtlZeroMemory(&Record, sizeof(Record));
+            if (Index < Count)
+            {
+                Record.BasicInfo.FaultingPc = Records[Index].FaultingPc;
+                Record.BasicInfo.FaultingVa = Records[Index].FaultingVa;
+                Record.FaultingThreadId = (ULONG_PTR)Records[Index].FaultingThreadId;
+            }
+            else
+            {
+                Record.BasicInfo.FaultingVa = (PVOID)(ULONG_PTR)Lost;
+            }
+
+            RtlCopyMemory((PUCHAR)Buffer + Index * RecordSize, &Record, RecordSize);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
+PspQueryWorkingSetWatch(
+    _In_ PEPROCESS Process,
+    _Out_writes_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ReturnLength,
+    _In_ BOOLEAN Extended)
+{
+    PPSP_WS_WATCH Watch = (PPSP_WS_WATCH)Process->WorkingSetWatch;
+    PPSP_WS_WATCH_RECORD Records;
+    ULONG RecordSize;
+    ULONG Count;
+    ULONG Lost;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *ReturnLength = 0;
+
+    if (Watch == NULL) return STATUS_UNSUCCESSFUL;
+
+    RecordSize = Extended ? sizeof(PSP_WS_WATCH_INFORMATION_EX) : sizeof(PROCESS_WS_WATCH_INFORMATION);
+
+    Records = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(Watch->Records), TAG_PS_WS_WATCH);
+    if (Records == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    Count = Watch->Count;
+    Lost = Watch->Lost;
+    RtlCopyMemory(Records, Watch->Records, Count * sizeof(PSP_WS_WATCH_RECORD));
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+
+    *ReturnLength = (Count + 1) * RecordSize;
+    if (Length < *ReturnLength)
+    {
+        ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    Status = PspCopyWorkingSetWatch(Buffer, Length, Records, Count, Lost, Extended);
+    ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    RtlMoveMemory(Watch->Records,
+                  &Watch->Records[Count],
+                  (Watch->Count - Count) * sizeof(PSP_WS_WATCH_RECORD));
+    Watch->Count -= Count;
+    Watch->Lost -= Lost;
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Turns the recording on or off. Turning it on twice is refused, because the
+ * second caller would silently take over the first one's records.
+ */
+NTSTATUS
+NTAPI
+PspSetWorkingSetWatch(
+    _In_ PEPROCESS Process,
+    _In_ BOOLEAN Enable)
+{
+    PPSP_WS_WATCH Watch;
+
+    PAGED_CODE();
+
+    if (!Enable)
+    {
+        Watch = InterlockedExchangePointer((PVOID*)&Process->WorkingSetWatch,
+                                           NULL);
+        if (Watch == NULL) return STATUS_UNSUCCESSFUL;
+
+        Process->WriteWatch = FALSE;
+        ExFreePoolWithTag(Watch, TAG_PS_WS_WATCH);
+        return STATUS_SUCCESS;
+    }
+
+    if (Process->WorkingSetWatch != NULL) return STATUS_PORT_ALREADY_SET;
+
+    Watch = ExAllocatePoolZero(NonPagedPoolNx, sizeof(PSP_WS_WATCH), TAG_PS_WS_WATCH);
+    if (Watch == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    KeInitializeSpinLock(&Watch->SpinLock);
+
+    if (InterlockedCompareExchangePointer((PVOID*)&Process->WorkingSetWatch,
+                                          Watch,
+                                          NULL) != NULL)
+    {
+        ExFreePoolWithTag(Watch, TAG_PS_WS_WATCH);
+        return STATUS_PORT_ALREADY_SET;
+    }
+
+    Process->WriteWatch = TRUE;
+    return STATUS_SUCCESS;
+}

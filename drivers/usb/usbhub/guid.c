@@ -7,5 +7,6 @@
 #include <usbiodef.h>
 #include <hubbusif.h>
 #include <usbbusif.h>
+#include <usbdlib.h>
 
 /* NO CODE HERE, THIS IS JUST REQUIRED FOR THE GUID DEFINITIONS */

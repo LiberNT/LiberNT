@@ -102,6 +102,7 @@ struct _CD_SERVER
     LONG ScratchBusy;
     ULONG ScratchSize;
     PUCHAR Scratch;
+    HANDLE DeliveredProcessId;
 };
 
 typedef struct _CD_FILE
@@ -115,6 +116,7 @@ typedef struct _CD_FILE
     LIST_ENTRY MirrorEntry;
     LONG NoEventIrps;
     BOOLEAN Opening;
+    KEVENT WaitEvent;
 } CD_FILE, *PCD_FILE;
 
 typedef struct _CD_REQUEST
@@ -133,6 +135,7 @@ typedef struct _CD_REQUEST
     NTSTATUS Status;
     ULONG_PTR Information;
     PVOID OutBuffer;
+    HANDLE ProcessId;
     KEVENT Done;
 } CD_REQUEST, *PCD_REQUEST;
 
@@ -239,6 +242,14 @@ VOID
 CdSyncFileEvent(
     _In_ PCD_FILE File)
 {
+    if (File->FileObject->Flags & FO_INDIRECT_WAIT_OBJECT)
+    {
+        if (File->Mirror && File->Mirror->Signaled)
+            KeSetEvent(&File->WaitEvent, IO_NO_INCREMENT, FALSE);
+        else
+            KeClearEvent(&File->WaitEvent);
+        return;
+    }
     if (File->NoEventIrps)
         return;
     if (File->Opening)
@@ -278,7 +289,7 @@ VOID
 CdUpdateFileEvent(
     _In_ PCD_FILE File)
 {
-    if (File->FileObject->Busy)
+    if (File->FileObject->Busy && !(File->FileObject->Flags & FO_INDIRECT_WAIT_OBJECT))
         return;
     CdSyncFileEvent(File);
 }
@@ -722,11 +733,13 @@ CdFinishIrp(
         PCD_FILE File = FileObject->FsContext;
         KIRQL OldIrql;
 
-        KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
-        OldIrql = ExAcquireSpinLockShared(&CdLock);
+        OldIrql = ExAcquireSpinLockExclusive(&CdLock);
+        /* A request queued on the file after this one owns the event: signalling it would end that wait early */
+        if (File->NoEventIrps == 1)
+            KeSetEvent(&FileObject->Event, IO_NO_INCREMENT, FALSE);
         if (InterlockedDecrement(&File->NoEventIrps) == 0 && (FileObject->Flags & FO_SYNCHRONOUS_IO))
             CdUpdateFileEventShared(File, TRUE);
-        ExReleaseSpinLockShared(&CdLock, OldIrql);
+        ExReleaseSpinLockExclusive(&CdLock, OldIrql);
         ObDereferenceObject(FileObject);
     }
 }
@@ -844,6 +857,7 @@ CdQueueIrp(
     Request->InData = InSize ? InData : NULL;
     Request->InSize = InSize;
     Request->OutSize = OutSize;
+    Request->ProcessId = PsGetCurrentProcessId();
 
     Irp->Tail.Overlay.DriverContext[0] = Request;
     Irp->Tail.Overlay.DriverContext[1] = NULL;
@@ -1247,6 +1261,7 @@ CdServerGetNext(
             *Information = sizeof(Reply) + Request->InSize;
             Request->InData = NULL;
             Request->Delivered = TRUE;
+            Server->DeliveredProcessId = Request->ProcessId;
             if (Request->Async)
             {
                 PLIST_ENTRY Entry = Request->Entry.Flink;
@@ -1352,6 +1367,19 @@ CdServerIoctl(
         case IOCTL_CONDRV_SETUP_INPUT:
             return STATUS_NOT_SUPPORTED;
 
+        case IOCTL_CONDRV_GET_CLIENT_PROCESS:
+        {
+            PULONG ProcessId = Irp->AssociatedIrp.SystemBuffer;
+
+            if (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*ProcessId))
+                return STATUS_INVALID_PARAMETER;
+            OldIrql = ExAcquireSpinLockShared(&CdLock);
+            *ProcessId = HandleToULong(Server->DeliveredProcessId);
+            ExReleaseSpinLockShared(&CdLock, OldIrql);
+            Irp->IoStatus.Information = sizeof(*ProcessId);
+            return STATUS_SUCCESS;
+        }
+
         case IOCTL_CONDRV_GET_PROCESS_LIST:
         {
             NTSTATUS Status;
@@ -1438,6 +1466,30 @@ CdConnectionIoctl(
                 Status = STATUS_INVALID_HANDLE;
             }
             ExReleaseSpinLockExclusive(&CdLock, OldIrql);
+            return Status;
+        }
+
+        case IOCTL_CONDRV_CLIENT_REQUEST:
+        {
+            PCONDRV_CLIENT_REQUEST Header = Irp->AssociatedIrp.SystemBuffer;
+            PFILE_OBJECT Target;
+
+            if (InLength < sizeof(*Header))
+                return STATUS_INVALID_PARAMETER;
+            Status = ObReferenceObjectByHandle(UlongToHandle(Header->Handle),
+                                               (ACCESS_MASK)((Header->Code >> 14) & 3),
+                                               *IoFileObjectType,
+                                               Irp->RequestorMode,
+                                               (PVOID*)&Target,
+                                               NULL);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            /* Only the fast I/O routine serves the request; a console file falls back to its own IOCTL */
+            if (IoGetRelatedDeviceObject(Target) != Stack->DeviceObject || !Target->FsContext)
+                Status = STATUS_INVALID_HANDLE;
+            else
+                Status = STATUS_NOT_SUPPORTED;
+            ObDereferenceObject(Target);
             return Status;
         }
 
@@ -1680,8 +1732,18 @@ CdDispatchCreate(
         }
         if (File->Type != CdFileServer && File->Type != CdFileConnection)
         {
-            KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
-            File->Opening = TRUE;
+            if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+            {
+                /* A synchronous handle waits on its own input event; the file event belongs to the I/O manager */
+                KeInitializeEvent(&File->WaitEvent, NotificationEvent, FALSE);
+                FileObject->FsContext2 = &File->WaitEvent;
+                FileObject->Flags |= FO_INDIRECT_WAIT_OBJECT;
+            }
+            else
+            {
+                KeInitializeEvent(&FileObject->Event, SynchronizationEvent, FALSE);
+                File->Opening = TRUE;
+            }
             CdSyncFileEvent(File);
         }
     }
@@ -2401,6 +2463,7 @@ CdFastIoDeviceControl(
     if (!Request)
         return FALSE;
     RtlZeroMemory(Request, sizeof(*Request));
+    Request->ProcessId = PsGetCurrentProcessId();
     if (InputBufferLength)
         Request->InData = Request + 1;
     if (OutputBufferLength)

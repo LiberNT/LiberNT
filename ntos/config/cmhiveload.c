@@ -1,0 +1,1607 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Bringing a hive file into the namespace and taking it back out
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+#define NDEBUG
+#include <debug.h>
+
+#include "cmpriv.h"
+
+/* GLOBALS ********************************************************************/
+
+PKEVENT CmpLoadWorkerEvent = NULL;
+LONG CmpLoadWorkerIncrement = 0;
+
+/* PRIVATE DATA ***************************************************************/
+
+typedef struct _CM_COPY_ITEM
+{
+    HCELL_INDEX Source;
+    HCELL_INDEX DestinationParent;
+} CM_COPY_ITEM, *PCM_COPY_ITEM;
+
+typedef struct _CM_COPY_STACK
+{
+    ULONG Count;
+    ULONG Size;
+    PCM_COPY_ITEM Items;
+} CM_COPY_STACK, *PCM_COPY_STACK;
+
+#define CMP_COPY_STACK_GROW 64
+
+/* PRIVATE FUNCTIONS **********************************************************/
+
+static
+BOOLEAN
+CmpCopyStackPush(
+    _Inout_ PCM_COPY_STACK Stack,
+    _In_ HCELL_INDEX Source,
+    _In_ HCELL_INDEX DestinationParent)
+{
+    PCM_COPY_ITEM Items;
+    ULONG Size;
+
+    if (Stack->Count == Stack->Size)
+    {
+        Size = Stack->Size + CMP_COPY_STACK_GROW;
+        Items = ExAllocatePoolZero(PagedPool,
+                                   Size * sizeof(CM_COPY_ITEM),
+                                   TAG_REGISTRY_STACK);
+        if (Items == NULL) return FALSE;
+
+        if (Stack->Items != NULL)
+        {
+            RtlCopyMemory(Items,
+                          Stack->Items,
+                          Stack->Count * sizeof(CM_COPY_ITEM));
+            ExFreePool(Stack->Items);
+        }
+
+        Stack->Items = Items;
+        Stack->Size = Size;
+    }
+
+    Stack->Items[Stack->Count].Source = Source;
+    Stack->Items[Stack->Count].DestinationParent = DestinationParent;
+    Stack->Count++;
+    return TRUE;
+}
+
+static
+BOOLEAN
+CmpCopyStackPop(
+    _Inout_ PCM_COPY_STACK Stack,
+    _Out_ PCM_COPY_ITEM Item)
+{
+    if (Stack->Count == 0) return FALSE;
+
+    Stack->Count--;
+    *Item = Stack->Items[Stack->Count];
+    return TRUE;
+}
+
+static
+VOID
+CmpCopyStackFree(
+    _Inout_ PCM_COPY_STACK Stack)
+{
+    if (Stack->Items != NULL) ExFreePool(Stack->Items);
+
+    Stack->Items = NULL;
+    Stack->Count = 0;
+    Stack->Size = 0;
+}
+
+/*
+ * Copies one key, and only that key: the copy starts out with no children,
+ * its own copy of its values and class, and its own security cell.
+ */
+static
+HCELL_INDEX
+CmpCopyOneKey(
+    _In_ PHHIVE SourceHive,
+    _In_ HCELL_INDEX SourceCell,
+    _In_ PHHIVE DestinationHive,
+    _In_ HSTORAGE_TYPE StorageType,
+    _Inout_ PHCELL_INDEX SecurityAnchor)
+{
+    PCM_KEY_NODE Source;
+    PCM_KEY_NODE Target;
+    PCELL_DATA SourceClass;
+    PCELL_DATA TargetClass;
+    HCELL_INDEX NewCell;
+    HCELL_INDEX ClassCell;
+    HCELL_INDEX SecurityCell;
+    NTSTATUS Status;
+
+    NewCell = CmpCopyCell(SourceHive, SourceCell, DestinationHive, StorageType);
+    if (NewCell == HCELL_NIL) return HCELL_NIL;
+
+    Source = (PCM_KEY_NODE)HvGetCell(SourceHive, SourceCell);
+    if (Source == NULL)
+    {
+        HvFreeCell(DestinationHive, NewCell);
+        return HCELL_NIL;
+    }
+
+    Target = (PCM_KEY_NODE)HvGetCell(DestinationHive, NewCell);
+    if (Target == NULL)
+    {
+        HvReleaseCell(SourceHive, SourceCell);
+        HvFreeCell(DestinationHive, NewCell);
+        return HCELL_NIL;
+    }
+
+    Target->SubKeyCounts[Stable] = 0;
+    Target->SubKeyCounts[Volatile] = 0;
+    Target->SubKeyLists[Stable] = HCELL_NIL;
+    Target->SubKeyLists[Volatile] = HCELL_NIL;
+    Target->ValueList.Count = 0;
+    Target->ValueList.List = HCELL_NIL;
+    Target->Security = HCELL_NIL;
+    Target->Class = HCELL_NIL;
+    Target->Parent = HCELL_NIL;
+    Target->Flags &= ~(KEY_HIVE_ENTRY | KEY_HIVE_EXIT);
+
+    if (Source->ValueList.Count != 0)
+    {
+        Status = CmpCopyKeyValueList(SourceHive,
+                                     &Source->ValueList,
+                                     DestinationHive,
+                                     &Target->ValueList,
+                                     StorageType);
+        if (!NT_SUCCESS(Status))
+        {
+            HvReleaseCell(DestinationHive, NewCell);
+            HvReleaseCell(SourceHive, SourceCell);
+            HvFreeCell(DestinationHive, NewCell);
+            return HCELL_NIL;
+        }
+    }
+
+    if (Source->Class != HCELL_NIL && Source->ClassLength != 0)
+    {
+        ClassCell = HvAllocateCell(DestinationHive,
+                                   Source->ClassLength,
+                                   StorageType,
+                                   NewCell);
+        if (ClassCell != HCELL_NIL)
+        {
+            SourceClass = (PCELL_DATA)HvGetCell(SourceHive, Source->Class);
+            TargetClass = (PCELL_DATA)HvGetCell(DestinationHive, ClassCell);
+
+            if (SourceClass != NULL && TargetClass != NULL)
+            {
+                RtlCopyMemory(TargetClass->u.KeyString,
+                              SourceClass->u.KeyString,
+                              Source->ClassLength);
+                Target->Class = ClassCell;
+                Target->ClassLength = Source->ClassLength;
+            }
+
+            if (TargetClass != NULL) HvReleaseCell(DestinationHive, ClassCell);
+            if (SourceClass != NULL) HvReleaseCell(SourceHive, Source->Class);
+        }
+    }
+
+    HvReleaseCell(DestinationHive, NewCell);
+    HvReleaseCell(SourceHive, SourceCell);
+
+    Status = CmpCopyKeySecurity(SourceHive,
+                                SourceCell,
+                                DestinationHive,
+                                StorageType,
+                                SecurityAnchor,
+                                &SecurityCell);
+    if (NT_SUCCESS(Status) && SecurityCell != HCELL_NIL)
+    {
+        Target = (PCM_KEY_NODE)HvGetCell(DestinationHive, NewCell);
+
+        if (Target != NULL)
+        {
+            Target->Security = SecurityCell;
+            HvReleaseCell(DestinationHive, NewCell);
+        }
+    }
+
+    HvMarkCellDirty(DestinationHive, NewCell, FALSE);
+    return NewCell;
+}
+
+/* Walks a key and everything under it, deepest first, and frees it all */
+static
+NTSTATUS
+CmpDeleteKeyTree(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX Cell,
+    _In_ BOOLEAN KeepRoot)
+{
+    CM_COPY_STACK Stack = {0, 0, NULL};
+    PCM_KEY_NODE Node;
+    CM_COPY_ITEM Item;
+    HCELL_INDEX Child;
+    ULONG Children;
+    ULONG i;
+
+    if (!CmpCopyStackPush(&Stack, Cell, HCELL_NIL))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    for (i = 0; i < Stack.Count; i++)
+    {
+        Item = Stack.Items[i];
+
+        Node = (PCM_KEY_NODE)HvGetCell(Hive, Item.Source);
+        if (Node == NULL) continue;
+
+        Children = Node->SubKeyCounts[Stable] + Node->SubKeyCounts[Volatile];
+
+        for (Child = 0; Child < Children; Child++)
+        {
+            HCELL_INDEX Found = CmpFindSubKeyByNumber(Hive, Node, Child);
+
+            if (Found == HCELL_NIL) continue;
+            if (!CmpCopyStackPush(&Stack, Found, Item.Source))
+            {
+                HvReleaseCell(Hive, Item.Source);
+                CmpCopyStackFree(&Stack);
+                return STATUS_INSUFFICIENT_RESOURCES;
+            }
+        }
+
+        HvReleaseCell(Hive, Item.Source);
+    }
+
+    while (CmpCopyStackPop(&Stack, &Item))
+    {
+        if (Item.Source == Cell && KeepRoot) continue;
+
+        CmpMarkKeyDirty(Hive, Item.Source, FALSE);
+        CmpFreeKeyByCell(Hive, Item.Source, Item.DestinationParent != HCELL_NIL);
+    }
+
+    CmpCopyStackFree(&Stack);
+
+    if (!KeepRoot) return STATUS_SUCCESS;
+
+    Node = (PCM_KEY_NODE)HvGetCell(Hive, Cell);
+    if (Node == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    if (HvMarkCellDirty(Hive, Cell, FALSE))
+    {
+        Node->SubKeyCounts[Stable] = 0;
+        Node->SubKeyCounts[Volatile] = 0;
+        Node->SubKeyLists[Stable] = HCELL_NIL;
+        Node->SubKeyLists[Volatile] = HCELL_NIL;
+    }
+
+    HvReleaseCell(Hive, Cell);
+    return STATUS_SUCCESS;
+}
+
+PCMHIVE
+NTAPI
+CmpFindLoadedHive(
+    _In_ PHHIVE Hive)
+{
+    PCMHIVE Result = NULL;
+    PLIST_ENTRY Entry;
+    PCMHIVE Candidate;
+
+    ExAcquirePushLockShared(&CmpHiveListHeadLock);
+
+    for (Entry = CmpHiveListHead.Flink;
+         Entry != &CmpHiveListHead;
+         Entry = Entry->Flink)
+    {
+        Candidate = CONTAINING_RECORD(Entry, CMHIVE, HiveList);
+
+        if (&Candidate->Hive != Hive) continue;
+
+        Result = Candidate;
+        break;
+    }
+
+    ExReleasePushLockShared(&CmpHiveListHeadLock);
+    return Result;
+}
+
+/* FIXME: the hardware tree lives in the master hive instead of a volatile hive of its own */
+static
+BOOLEAN
+CmpIsHardwareTree(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb)
+{
+    UNICODE_STRING Hardware = RTL_CONSTANT_STRING(L"\\REGISTRY\\MACHINE\\HARDWARE");
+    PUNICODE_STRING Name;
+    BOOLEAN Inside;
+
+    Name = CmpConstructName(Kcb);
+    if (Name == NULL) return FALSE;
+
+    Inside = RtlPrefixUnicodeString(&Hardware, Name, TRUE) &&
+             (Name->Length == Hardware.Length ||
+              Name->Buffer[Hardware.Length / sizeof(WCHAR)] == OBJ_NAME_PATH_SEPARATOR);
+
+    ExFreePool(Name);
+    return Inside;
+}
+
+static
+NTSTATUS
+CmpBuildHiveFilePath(
+    _In_ POBJECT_ATTRIBUTES SourceFile,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PUNICODE_STRING FilePath)
+{
+    POBJECT_NAME_INFORMATION RootName;
+    ULONG Length = 0;
+    ULONG Total;
+    NTSTATUS Status;
+    PVOID Root;
+    PWCHAR Buffer;
+    USHORT Used;
+
+    *FilePath = *SourceFile->ObjectName;
+    if (SourceFile->RootDirectory == NULL) return STATUS_SUCCESS;
+
+    Status = ObReferenceObjectByHandle(SourceFile->RootDirectory,
+                                       0,
+                                       NULL,
+                                       AccessMode,
+                                       &Root,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObQueryNameString(Root, NULL, 0, &Length);
+    if (Length < sizeof(OBJECT_NAME_INFORMATION))
+    {
+        ObDereferenceObject(Root);
+        return NT_SUCCESS(Status) ? STATUS_OBJECT_PATH_INVALID : Status;
+    }
+
+    RootName = ExAllocatePoolWithTag(PagedPool, Length, TAG_CM);
+    if (RootName == NULL)
+    {
+        ObDereferenceObject(Root);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = ObQueryNameString(Root, RootName, Length, &Length);
+    ObDereferenceObject(Root);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return Status;
+    }
+
+    Total = (ULONG)RootName->Name.Length + sizeof(WCHAR) +
+            SourceFile->ObjectName->Length;
+    if (Total > MAXUSHORT - sizeof(WCHAR))
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return STATUS_OBJECT_NAME_INVALID;
+    }
+
+    Buffer = ExAllocatePoolZero(PagedPool, Total + sizeof(WCHAR), TAG_CM);
+    if (Buffer == NULL)
+    {
+        ExFreePoolWithTag(RootName, TAG_CM);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    RtlCopyMemory(Buffer, RootName->Name.Buffer, RootName->Name.Length);
+    Used = RootName->Name.Length;
+    ExFreePoolWithTag(RootName, TAG_CM);
+
+    if (Used == 0 || Buffer[Used / sizeof(WCHAR) - 1] != OBJ_NAME_PATH_SEPARATOR)
+    {
+        Buffer[Used / sizeof(WCHAR)] = OBJ_NAME_PATH_SEPARATOR;
+        Used += sizeof(WCHAR);
+    }
+
+    RtlCopyMemory((PUCHAR)Buffer + Used,
+                  SourceFile->ObjectName->Buffer,
+                  SourceFile->ObjectName->Length);
+    Used += SourceFile->ObjectName->Length;
+
+    FilePath->Buffer = Buffer;
+    FilePath->Length = Used;
+    FilePath->MaximumLength = Used + sizeof(WCHAR);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+CmpRememberHiveFileNames(
+    _Inout_ PCMHIVE Hive,
+    _In_ PCUNICODE_STRING FilePath,
+    _In_opt_ PCUNICODE_STRING RootPath)
+{
+    PWCHAR Buffer;
+
+    Buffer = ExAllocatePoolZero(PagedPool,
+                                FilePath->Length + sizeof(WCHAR),
+                                TAG_CM);
+    if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Buffer, FilePath->Buffer, FilePath->Length);
+    Hive->FileFullPath.Buffer = Buffer;
+    Hive->FileFullPath.Length = FilePath->Length;
+    Hive->FileFullPath.MaximumLength = FilePath->Length + sizeof(WCHAR);
+
+    if (RootPath == NULL) return STATUS_SUCCESS;
+
+    Buffer = ExAllocatePoolZero(PagedPool,
+                                RootPath->Length + sizeof(WCHAR),
+                                TAG_CM);
+    if (Buffer == NULL) return STATUS_SUCCESS;
+
+    RtlCopyMemory(Buffer, RootPath->Buffer, RootPath->Length);
+    Hive->HiveRootPath.Buffer = Buffer;
+    Hive->HiveRootPath.Length = RootPath->Length;
+    Hive->HiveRootPath.MaximumLength = RootPath->Length + sizeof(WCHAR);
+    return STATUS_SUCCESS;
+}
+
+/* PUBLIC FUNCTIONS ***********************************************************/
+
+NTSTATUS
+NTAPI
+CmpCmdHiveOpen(
+    _In_ POBJECT_ATTRIBUTES FileAttributes,
+    _In_opt_ PSECURITY_CLIENT_CONTEXT ImpersonationContext,
+    _Inout_ PBOOLEAN Allocate,
+    _Out_ PCMHIVE *NewHive,
+    _In_ ULONG CheckFlags)
+{
+    NTSTATUS Status;
+
+    *NewHive = NULL;
+
+    if (FileAttributes->ObjectName == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (ImpersonationContext != NULL)
+    {
+        Status = SeImpersonateClientEx(ImpersonationContext, NULL);
+        if (!NT_SUCCESS(Status)) return Status;
+    }
+
+    Status = CmpInitHiveFromFile(FileAttributes->ObjectName,
+                                 NULL,
+                                 0,
+                                 NewHive,
+                                 Allocate,
+                                 CheckFlags);
+
+    if (ImpersonationContext != NULL) PsRevertToSelf();
+
+    return Status;
+}
+
+/* Hangs a copied key under its new parent, which it then names as its parent */
+static
+BOOLEAN
+CmpLinkCopiedKey(
+    _In_ PHHIVE Hive,
+    _In_ HCELL_INDEX Parent,
+    _In_ HCELL_INDEX Child)
+{
+    PCM_KEY_NODE Node;
+
+    if (!CmpAddSubKey(Hive, Parent, Child)) return FALSE;
+
+    Node = (PCM_KEY_NODE)HvGetCell(Hive, Child);
+    if (Node == NULL) return FALSE;
+
+    Node->Parent = Parent;
+    HvReleaseCell(Hive, Child);
+    return TRUE;
+}
+
+NTSTATUS
+NTAPI
+CmpDeepCopyKey(
+    _In_ PHHIVE SourceHive,
+    _In_ HCELL_INDEX SrcKeyCell,
+    _In_ PHHIVE DestinationHive,
+    _In_ HSTORAGE_TYPE StorageType,
+    _Out_opt_ PHCELL_INDEX DestKeyCell)
+{
+    CM_COPY_STACK Stack = {0, 0, NULL};
+    HCELL_INDEX SecurityAnchor = HCELL_NIL;
+    HCELL_INDEX Root = HCELL_NIL;
+    HCELL_INDEX NewCell;
+    PCM_KEY_NODE Node;
+    CM_COPY_ITEM Item;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Children;
+    ULONG i;
+
+    if (DestKeyCell != NULL) *DestKeyCell = HCELL_NIL;
+
+    if (!CmpCopyStackPush(&Stack, SrcKeyCell, HCELL_NIL))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    while (CmpCopyStackPop(&Stack, &Item))
+    {
+        NewCell = CmpCopyOneKey(SourceHive,
+                                Item.Source,
+                                DestinationHive,
+                                StorageType,
+                                &SecurityAnchor);
+        if (NewCell == HCELL_NIL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+
+        if (Item.DestinationParent == HCELL_NIL)
+        {
+            Root = NewCell;
+        }
+        else if (!CmpLinkCopiedKey(DestinationHive,
+                                   Item.DestinationParent,
+                                   NewCell))
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+
+        Node = (PCM_KEY_NODE)HvGetCell(SourceHive, Item.Source);
+        if (Node == NULL) continue;
+
+        Children = Node->SubKeyCounts[Stable] + Node->SubKeyCounts[Volatile];
+
+        for (i = 0; i < Children; i++)
+        {
+            HCELL_INDEX Child = CmpFindSubKeyByNumber(SourceHive, Node, i);
+
+            if (Child == HCELL_NIL) continue;
+            if (!CmpCopyStackPush(&Stack, Child, NewCell))
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
+        }
+
+        HvReleaseCell(SourceHive, Item.Source);
+
+        if (!NT_SUCCESS(Status)) break;
+    }
+
+    CmpCopyStackFree(&Stack);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (DestKeyCell != NULL) *DestKeyCell = Root;
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+CmpUnlinkAndReleaseHive(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ PCMHIVE CmHive);
+
+static
+NTSTATUS
+CmpOpenHiveRootByName(
+    _In_ PUNICODE_STRING Name,
+    _In_opt_ HANDLE RootDirectory,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_opt_ PHANDLE RootHandle,
+    _Out_opt_ PCM_KEY_BODY *RootBody)
+{
+    OBJECT_ATTRIBUTES RootAttributes;
+    PCM_KEY_BODY KeyBody;
+    HANDLE KeyHandle = NULL;
+    NTSTATUS Status;
+
+    /* The name is a kernel copy, so it is looked up in kernel mode; the caller's own handle is checked below */
+    InitializeObjectAttributes(&RootAttributes,
+                               Name,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               RootDirectory,
+                               NULL);
+
+    Status = ObOpenObjectByName(&RootAttributes,
+                                CmpKeyObjectType,
+                                KernelMode,
+                                NULL,
+                                KEY_ALL_ACCESS,
+                                NULL,
+                                &KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObReferenceObjectByHandle(KeyHandle,
+                                       0,
+                                       CmpKeyObjectType,
+                                       KernelMode,
+                                       (PVOID*)&KeyBody,
+                                       NULL);
+    ZwClose(KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (RootHandle != NULL)
+    {
+        Status = ObOpenObjectByPointer(KeyBody,
+                                       (AccessMode == KernelMode) ? OBJ_KERNEL_HANDLE : 0,
+                                       NULL,
+                                       KEY_ALL_ACCESS,
+                                       CmpKeyObjectType,
+                                       AccessMode,
+                                       RootHandle);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(KeyBody);
+            return Status;
+        }
+    }
+
+    if (RootBody != NULL)
+    {
+        *RootBody = KeyBody;
+    }
+    else
+    {
+        ObDereferenceObject(KeyBody);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+PCMHIVE
+CmpFindSharedAppHive(
+    _In_ PCUNICODE_STRING FilePath)
+{
+    PCMHIVE Result = NULL;
+    PLIST_ENTRY Entry;
+    PCMHIVE Candidate;
+
+    ExAcquirePushLockShared(&CmpHiveListHeadLock);
+
+    for (Entry = CmpHiveListHead.Flink;
+         Entry != &CmpHiveListHead;
+         Entry = Entry->Flink)
+    {
+        Candidate = CONTAINING_RECORD(Entry, CMHIVE, HiveList);
+
+        if ((Candidate->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) continue;
+        if (Candidate->Flags & CMHIVE_FLAG_PROCESS_PRIVATE) continue;
+        if (Candidate->Hive.HiveFlags & HIVE_IS_UNLOADING) continue;
+        if (Candidate->RootKcb == NULL || Candidate->HiveRootPath.Length == 0) continue;
+        if (!RtlEqualUnicodeString(&Candidate->FileFullPath, FilePath, TRUE)) continue;
+
+        Result = Candidate;
+        break;
+    }
+
+    ExReleasePushLockShared(&CmpHiveListHeadLock);
+    return Result;
+}
+
+/*
+ * Reads a hive file and hangs it under a name the caller chooses. Doing this
+ * needs the restore privilege, because the file decides what the keys under
+ * that name say about who may read them. An application hive is exempt: it
+ * belongs to the process that asked for it and nothing else can reach it.
+ */
+NTSTATUS
+NTAPI
+CmpLoadHiveAtName(
+    _In_ POBJECT_ATTRIBUTES TargetKey,
+    _In_ POBJECT_ATTRIBUTES SourceFile,
+    _In_ ULONG Flags,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_opt_ PCMHIVE TrustClass,
+    _Out_opt_ PCMHIVE *LoadedHive,
+    _Out_opt_ PHANDLE RootHandle,
+    _Out_opt_ PCM_KEY_BODY *RootBody)
+{
+    UNICODE_STRING FilePath;
+    BOOLEAN Allocate = TRUE;
+    PCMHIVE CmHive = NULL;
+    NTSTATUS Status;
+
+    if (LoadedHive != NULL) *LoadedHive = NULL;
+    if (RootHandle != NULL) *RootHandle = NULL;
+    if (RootBody != NULL) *RootBody = NULL;
+
+    if (TargetKey->ObjectName == NULL || SourceFile->ObjectName == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if ((Flags & REG_APP_HIVE) == 0 &&
+        !SeSinglePrivilegeCheck(SeRestorePrivilege, AccessMode))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    Status = CmpBuildHiveFilePath(SourceFile, AccessMode, &FilePath);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    ExAcquirePushLockExclusive(&CmpLoadHiveLock);
+
+    if ((Flags & (REG_APP_HIVE | REG_PROCESS_PRIVATE)) == REG_APP_HIVE &&
+        TrustClass == NULL)
+    {
+        CmHive = CmpFindSharedAppHive(&FilePath);
+        if (CmHive != NULL)
+        {
+            Status = STATUS_SUCCESS;
+            if (RootHandle != NULL || RootBody != NULL)
+            {
+                Status = CmpOpenHiveRootByName(&CmHive->HiveRootPath,
+                                               NULL,
+                                               AccessMode,
+                                               RootHandle,
+                                               RootBody);
+            }
+
+            if (NT_SUCCESS(Status) && LoadedHive != NULL) *LoadedHive = CmHive;
+
+            ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+                ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
+            return Status;
+        }
+    }
+
+    Status = CmpInitHiveFromFile(&FilePath,
+                                 TargetKey->ObjectName,
+                                 (Flags & REG_NO_LAZY_FLUSH) ? HIVE_NOLAZYFLUSH
+                                                             : 0,
+                                 &CmHive,
+                                 &Allocate,
+                                 CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                                 CM_CHECK_REGISTRY_PURGE_VOLATILES);
+    if (!NT_SUCCESS(Status))
+    {
+        ExReleasePushLockExclusive(&CmpLoadHiveLock);
+        if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+            ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
+        return Status;
+    }
+
+    if (Flags & REG_APP_HIVE) CmHive->Flags |= CMHIVE_FLAG_APPLICATION_HIVE;
+
+    if ((Flags & REG_PROCESS_PRIVATE) || TrustClass != NULL)
+    {
+        if (Flags & REG_PROCESS_PRIVATE)
+        {
+            CmHive->Flags |= CMHIVE_FLAG_PROCESS_PRIVATE;
+        }
+
+        Status = CmpRegisterAppHive(
+            CmHive,
+            (Flags & REG_PROCESS_PRIVATE) ? PsGetCurrentProcess() : NULL,
+            TrustClass);
+        if (!NT_SUCCESS(Status))
+        {
+            CmpDestroyHive(CmHive);
+            ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+                ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
+            return Status;
+        }
+    }
+
+    if (Flags & REG_WHOLE_HIVE_VOLATILE)
+    {
+        CmHive->Hive.HiveFlags |= HIVE_VOLATILE;
+    }
+
+    CmpRememberHiveFileNames(CmHive,
+                             &FilePath,
+                             TargetKey->ObjectName);
+
+    if (FilePath.Buffer != SourceFile->ObjectName->Buffer)
+        ExFreePoolWithTag(FilePath.Buffer, TAG_CM);
+
+    CmpLockRegistryExclusive();
+
+    Status = CmpLinkHiveToMaster(TargetKey->ObjectName,
+                                 TargetKey->RootDirectory,
+                                 CmHive,
+                                 (BOOLEAN)Allocate,
+                                 TargetKey->SecurityDescriptor);
+
+    CmpUnlockRegistry();
+
+    if (!NT_SUCCESS(Status))
+    {
+        CmpUnregisterAppHive(CmHive);
+        CmpDestroyHive(CmHive);
+        ExReleasePushLockExclusive(&CmpLoadHiveLock);
+        return Status;
+    }
+
+    if ((Flags & REG_APP_HIVE) == 0) CmpAddToHiveFileList(CmHive);
+
+    if (RootHandle != NULL || RootBody != NULL)
+    {
+        Status = CmpOpenHiveRootByName(TargetKey->ObjectName,
+                                       TargetKey->RootDirectory,
+                                       AccessMode,
+                                       RootHandle,
+                                       RootBody);
+        if (!NT_SUCCESS(Status))
+        {
+            if ((Flags & REG_APP_HIVE) == 0) CmpRemoveFromHiveFileList(CmHive);
+
+            CmpLockRegistryExclusive();
+            /* FIXME: a hive linked without a root control block cannot be taken back out here */
+            if (CmHive->RootKcb != NULL) CmpUnlinkAndReleaseHive(CmHive->RootKcb, CmHive);
+            CmpUnlockRegistry();
+
+            ExReleasePushLockExclusive(&CmpLoadHiveLock);
+            return Status;
+        }
+    }
+
+    if (LoadedHive != NULL) *LoadedHive = CmHive;
+
+    ExReleasePushLockExclusive(&CmpLoadHiveLock);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+CmLoadKey(
+    _In_ POBJECT_ATTRIBUTES TargetKey,
+    _In_ POBJECT_ATTRIBUTES SourceFile,
+    _In_ ULONG Flags,
+    _In_ PCM_KEY_BODY KeyBody)
+{
+    UNREFERENCED_PARAMETER(KeyBody);
+
+    return CmpLoadHiveAtName(TargetKey,
+                             SourceFile,
+                             Flags,
+                             ExGetPreviousMode(),
+                             NULL,
+                             NULL,
+                             NULL,
+                             NULL);
+}
+
+static
+VOID
+CmpUnlinkAndReleaseHive(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ PCMHIVE CmHive)
+{
+    PCM_KEY_NODE Node;
+    HCELL_INDEX LinkCell;
+    PHHIVE MasterHive;
+
+    CmpFlushHiveToDisk(CmHive, TRUE);
+
+    Node = (PCM_KEY_NODE)HvGetCell(&CmHive->Hive,
+                                   CmHive->Hive.BaseBlock->RootCell);
+    LinkCell = (Node != NULL) ? Node->Parent : HCELL_NIL;
+    if (Node != NULL)
+    {
+        HvReleaseCell(&CmHive->Hive, CmHive->Hive.BaseBlock->RootCell);
+    }
+
+    if (LinkCell != HCELL_NIL && CmiVolatileHive != NULL)
+    {
+        MasterHive = &CmiVolatileHive->Hive;
+
+        Node = (PCM_KEY_NODE)HvGetCell(MasterHive, LinkCell);
+        if (Node != NULL)
+        {
+            HCELL_INDEX Parent = Node->Parent;
+
+            HvReleaseCell(MasterHive, LinkCell);
+
+            CmpRemoveSubKey(MasterHive, Parent, LinkCell);
+            HvFreeCell(MasterHive, LinkCell);
+        }
+    }
+
+    Kcb->Delete = TRUE;
+    CmpRemoveKeyControlBlock(Kcb);
+
+    if (CmHive->RootKcb != NULL)
+    {
+        CmHive->RootKcb = NULL;
+        CmpDereferenceKeyControlBlock(Kcb);
+    }
+
+    CmHive->Hive.HiveFlags |= HIVE_IS_UNLOADING;
+
+    CmpUnregisterAppHive(CmHive);
+    CmpSignalUnloadEvents(CmHive);
+    CmpDereferenceHive(CmHive);
+}
+
+static
+BOOLEAN
+CmpIsMachineHive(
+    _In_ PCMHIVE CmHive)
+{
+    ULONG i;
+
+    for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++)
+    {
+        if (CmpMachineHiveList[i].CmHive == CmHive) return TRUE;
+    }
+
+    return FALSE;
+}
+
+/*
+ * Takes a loaded hive back out. A hive with keys still open cannot go unless
+ * the caller asks for it to be forced, in which case those keys are made to
+ * answer that they are gone.
+ */
+NTSTATUS
+NTAPI
+CmUnloadKey(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ ULONG Flags)
+{
+    PCMHIVE CmHive;
+    ULONG OpenCount;
+
+    if ((Kcb->Flags & KEY_HIVE_ENTRY) == 0) return STATUS_INVALID_PARAMETER;
+
+    if (!SeSinglePrivilegeCheck(SeRestorePrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    CmHive = CmpFindLoadedHive(Kcb->KeyHive);
+    if (CmHive == NULL) return STATUS_INVALID_PARAMETER;
+
+    if (CmpIsMachineHive(CmHive)) return STATUS_ACCESS_DENIED;
+
+    OpenCount = CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE);
+
+    if (OpenCount != 0)
+    {
+        if ((Flags & REG_FORCE_UNLOAD) == 0) return STATUS_CANNOT_DELETE;
+
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
+    }
+
+    if (Kcb->RefCount > ((CmHive->RootKcb == Kcb) ? 2UL : 1UL) &&
+        (Flags & REG_FORCE_UNLOAD) == 0)
+    {
+        return STATUS_CANNOT_DELETE;
+    }
+
+    CmpUnlinkAndReleaseHive(Kcb, CmHive);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * An application hive belongs to one process and is not announced in the hive
+ * list, so nothing outside that process has any business finding it.
+ */
+NTSTATUS
+NTAPI
+CmpLoadAppHive(
+    _In_ POBJECT_ATTRIBUTES TargetKey,
+    _In_ POBJECT_ATTRIBUTES SourceFile,
+    _In_ ULONG Flags,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_opt_ PCM_KEY_BODY *RootBody,
+    _Out_opt_ PCMHIVE *LoadedHive)
+{
+    PCMHIVE Hive = NULL;
+    NTSTATUS Status;
+
+    if (RootBody != NULL) *RootBody = NULL;
+    if (LoadedHive != NULL) *LoadedHive = NULL;
+
+    Status = CmpLoadHiveAtName(TargetKey,
+                               SourceFile,
+                               Flags | REG_APP_HIVE,
+                               AccessMode,
+                               NULL,
+                               &Hive,
+                               NULL,
+                               RootBody);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    CmpCompleteAppHiveLoad(Hive);
+
+    if (LoadedHive != NULL) *LoadedHive = Hive;
+    return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+CmpCompleteAppHiveLoad(
+    _In_ PCMHIVE Hive)
+{
+    Hive->Hive.HiveFlags |= HIVE_NOLAZYFLUSH;
+    Hive->CreatorOwner = NULL;
+}
+
+VOID
+NTAPI
+CmpUnloadAppHiveIfUnused(
+    _In_ PCMHIVE Hive)
+{
+    PCM_KEY_CONTROL_BLOCK Kcb;
+
+    if ((Hive->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) return;
+
+    ExAcquirePushLockExclusive(&CmpLoadHiveLock);
+    CmpLockRegistryExclusive();
+
+    Kcb = Hive->RootKcb;
+    if (Kcb != NULL &&
+        (Hive->Hive.HiveFlags & HIVE_IS_UNLOADING) == 0 &&
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE) == 0 &&
+        Kcb->RefCount == 1)
+    {
+        CmpUnlinkAndReleaseHive(Kcb, Hive);
+    }
+
+    CmpUnlockRegistry();
+    ExReleasePushLockExclusive(&CmpLoadHiveLock);
+}
+
+typedef struct _CMP_APP_HIVE_CLOSE
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PCMHIVE Hive;
+} CMP_APP_HIVE_CLOSE, *PCMP_APP_HIVE_CLOSE;
+
+static
+VOID
+NTAPI
+CmpAppHiveCloseWorker(
+    _In_ PVOID Context)
+{
+    PCMP_APP_HIVE_CLOSE Close = Context;
+
+    CmpUnloadAppHiveIfUnused(Close->Hive);
+    CmpDereferenceHive(Close->Hive);
+    ExFreePoolWithTag(Close, TAG_CM);
+}
+
+VOID
+NTAPI
+CmpQueueAppHiveClose(
+    _In_ PCMHIVE Hive)
+{
+    PCMP_APP_HIVE_CLOSE Close;
+
+    if ((Hive->Flags & CMHIVE_FLAG_APPLICATION_HIVE) == 0) return;
+
+    Close = ExAllocatePoolZero(NonPagedPool, sizeof(*Close), TAG_CM);
+    /* FIXME: without memory the hive stays loaded until another of its keys is closed */
+    if (Close == NULL) return;
+
+    CmpReferenceHive(Hive);
+    Close->Hive = Hive;
+    ExInitializeWorkItem(&Close->WorkItem, CmpAppHiveCloseWorker, Close);
+    ExQueueWorkItem(&Close->WorkItem, DelayedWorkQueue);
+}
+
+/*
+ * Writes a key and everything under it out as a hive file of its own, which
+ * is what a backup of part of the registry is.
+ */
+NTSTATUS
+NTAPI
+CmSaveKey(
+    _In_ PCM_KEY_CONTROL_BLOCK Kcb,
+    _In_ HANDLE FileHandle,
+    _In_ ULONG Flags)
+{
+    HCELL_INDEX RootCell = HCELL_NIL;
+    PCM_KEY_NODE Node;
+    PCMHIVE Target;
+    NTSTATUS Status;
+
+    UNREFERENCED_PARAMETER(Flags);
+
+    if (!SeSinglePrivilegeCheck(SeBackupPrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (Kcb->Delete) return STATUS_KEY_DELETED;
+
+    if (Kcb->KeyHive == &CmiVolatileHive->Hive && !CmpIsHardwareTree(Kcb))
+        return STATUS_ACCESS_DENIED;
+
+    Status = CmpInitializeHive(&Target,
+                               HINIT_CREATE,
+                               HIVE_VOLATILE,
+                               HFILE_TYPE_PRIMARY,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               0);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = CmpDeepCopyKey(Kcb->KeyHive,
+                            Kcb->KeyCell,
+                            &Target->Hive,
+                            Stable,
+                            &RootCell);
+    if (!NT_SUCCESS(Status) || RootCell == HCELL_NIL)
+    {
+        CmpDestroyHive(Target);
+        return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
+    }
+
+    Node = (PCM_KEY_NODE)HvGetCell(&Target->Hive, RootCell);
+    if (Node != NULL)
+    {
+        Node->Flags |= KEY_HIVE_ENTRY | KEY_NO_DELETE;
+        Node->Parent = HCELL_NIL;
+        HvMarkCellDirty(&Target->Hive, RootCell, FALSE);
+        HvReleaseCell(&Target->Hive, RootCell);
+    }
+
+    Target->Hive.BaseBlock->RootCell = RootCell;
+    Target->Hive.HiveFlags &= ~HIVE_VOLATILE;
+    Target->FileHandles[HFILE_TYPE_PRIMARY] = FileHandle;
+
+    Status = HvWriteHive(&Target->Hive) ? STATUS_SUCCESS
+                                        : STATUS_REGISTRY_IO_FAILED;
+
+    Target->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+    Target->Hive.HiveFlags |= HIVE_VOLATILE;
+    CmpDestroyHive(Target);
+    return Status;
+}
+
+/*
+ * Writes out one tree laid over another: everything the low key says, with
+ * everything the high key says on top of it.
+ */
+NTSTATUS
+NTAPI
+CmSaveMergedKeys(
+    _In_ PCM_KEY_CONTROL_BLOCK HighKcb,
+    _In_ PCM_KEY_CONTROL_BLOCK LowKcb,
+    _In_ HANDLE FileHandle)
+{
+    HCELL_INDEX RootCell = HCELL_NIL;
+    PCM_KEY_NODE Node;
+    PCMHIVE Target;
+    NTSTATUS Status;
+
+    if (!SeSinglePrivilegeCheck(SeBackupPrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    Status = CmpInitializeHive(&Target,
+                               HINIT_CREATE,
+                               HIVE_VOLATILE,
+                               HFILE_TYPE_PRIMARY,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               0);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = CmpDeepCopyKey(LowKcb->KeyHive,
+                            LowKcb->KeyCell,
+                            &Target->Hive,
+                            Stable,
+                            &RootCell);
+
+    if (NT_SUCCESS(Status) && RootCell != HCELL_NIL)
+    {
+        Status = CmpOverlayKeyTree(HighKcb->KeyHive,
+                                   HighKcb->KeyCell,
+                                   &Target->Hive,
+                                   RootCell,
+                                   Stable);
+    }
+
+    if (!NT_SUCCESS(Status) || RootCell == HCELL_NIL)
+    {
+        CmpDestroyHive(Target);
+        return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
+    }
+
+    Node = (PCM_KEY_NODE)HvGetCell(&Target->Hive, RootCell);
+    if (Node != NULL)
+    {
+        Node->Flags |= KEY_HIVE_ENTRY | KEY_NO_DELETE;
+        Node->Parent = HCELL_NIL;
+        HvMarkCellDirty(&Target->Hive, RootCell, FALSE);
+        HvReleaseCell(&Target->Hive, RootCell);
+    }
+
+    Target->Hive.BaseBlock->RootCell = RootCell;
+    Target->Hive.HiveFlags &= ~HIVE_VOLATILE;
+    Target->FileHandles[HFILE_TYPE_PRIMARY] = FileHandle;
+
+    Status = HvWriteHive(&Target->Hive) ? STATUS_SUCCESS
+                                        : STATUS_REGISTRY_IO_FAILED;
+
+    Target->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+    Target->Hive.HiveFlags |= HIVE_VOLATILE;
+    CmpDestroyHive(Target);
+    return Status;
+}
+
+/* Frees the values of a list and the list itself, all already dirty */
+static
+VOID
+CmpFreeValueList(
+    _In_ PHHIVE Hive,
+    _Inout_ PCHILD_LIST ValueList)
+{
+    PCELL_DATA List;
+    ULONG i;
+
+    if (ValueList->List == HCELL_NIL) return;
+
+    List = HvGetCell(Hive, ValueList->List);
+    if (List != NULL)
+    {
+        for (i = 0; i < ValueList->Count; i++)
+        {
+            if (!CmpFreeValue(Hive, List->u.KeyList[i]))
+                HvFreeCell(Hive, List->u.KeyList[i]);
+        }
+
+        HvReleaseCell(Hive, ValueList->List);
+    }
+
+    HvFreeCell(Hive, ValueList->List);
+    ValueList->Count = 0;
+    ValueList->List = HCELL_NIL;
+}
+
+/*
+ * Throws away what a key holds and puts the contents of a hive file there
+ * instead, which is how a backup is read back in.
+ */
+NTSTATUS
+NTAPI
+CmpRestoreKeyFromFile(
+    _In_ PCM_KEY_BODY KeyBody,
+    _In_ HANDLE FileHandle,
+    _In_ ULONG Flags)
+{
+    PCM_KEY_CONTROL_BLOCK Kcb = KeyBody->KeyControlBlock;
+    HSTORAGE_TYPE Type;
+    CHILD_LIST NewValues = {0, HCELL_NIL};
+    CHILD_LIST OldValues;
+    HCELL_INDEX SourceRoot;
+    HCELL_INDEX NewChild;
+    PCM_KEY_NODE Source;
+    PCM_KEY_NODE Target;
+    PCMHIVE Loaded;
+    NTSTATUS Status;
+    ULONG Children;
+    ULONG i;
+
+    if (!SeSinglePrivilegeCheck(SeRestorePrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (Kcb == NULL || Kcb->Delete) return STATUS_KEY_DELETED;
+    if (Kcb->KeyHive->ReadOnly) return STATUS_ACCESS_DENIED;
+
+    /* TODO: REG_WHOLE_HIVE_VOLATILE restores into the key like any other restore instead of making a volatile hive */
+
+    Type = HvGetCellType(Kcb->KeyCell);
+
+    Status = CmpInitializeHive(&Loaded,
+                               HINIT_FILE,
+                               HIVE_VOLATILE,
+                               HFILE_TYPE_PRIMARY,
+                               NULL,
+                               FileHandle,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                               CM_CHECK_REGISTRY_PURGE_VOLATILES);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    SourceRoot = Loaded->Hive.BaseBlock->RootCell;
+    Source = (PCM_KEY_NODE)HvGetCell(&Loaded->Hive, SourceRoot);
+    if (Source == NULL)
+    {
+        Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+        CmpDestroyHive(Loaded);
+        return STATUS_REGISTRY_CORRUPT;
+    }
+
+    /* Keys still open under the key would be left on freed cells, so only a forced restore takes them away */
+    if (CmpEnumerateOpenSubKeys(Kcb, TRUE, FALSE) != 0)
+    {
+        if ((Flags & REG_FORCE_RESTORE) == 0)
+        {
+            HvReleaseCell(&Loaded->Hive, SourceRoot);
+            Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+            CmpDestroyHive(Loaded);
+            /* FIXME: the status Windows gives here is not verified; this is the one a hive unload gives */
+            return STATUS_CANNOT_DELETE;
+        }
+
+        CmpEnumerateOpenSubKeys(Kcb, TRUE, TRUE);
+    }
+
+    /* The key takes the values of the saved root in place of its own */
+    Status = CmpCopyKeyValueList(&Loaded->Hive,
+                                 &Source->ValueList,
+                                 Kcb->KeyHive,
+                                 &NewValues,
+                                 Type);
+
+    if (NT_SUCCESS(Status))
+        Status = CmpDeleteKeyTree(Kcb->KeyHive, Kcb->KeyCell, TRUE);
+
+    Children = Source->SubKeyCounts[Stable] + Source->SubKeyCounts[Volatile];
+
+    for (i = 0; NT_SUCCESS(Status) && i < Children; i++)
+    {
+        HCELL_INDEX Child = CmpFindSubKeyByNumber(&Loaded->Hive, Source, i);
+
+        if (Child == HCELL_NIL) continue;
+
+        Status = CmpDeepCopyKey(&Loaded->Hive,
+                                Child,
+                                Kcb->KeyHive,
+                                Type,
+                                &NewChild);
+        if (!NT_SUCCESS(Status)) break;
+
+        if (!CmpLinkCopiedKey(Kcb->KeyHive, Kcb->KeyCell, NewChild))
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+    }
+
+    Target = NULL;
+    if (NT_SUCCESS(Status))
+    {
+        Target = (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell);
+        if (Target == NULL ||
+            !CmpMarkKeyDirty(Kcb->KeyHive, Kcb->KeyCell, FALSE))
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        OldValues = Target->ValueList;
+        Target->ValueList = NewValues;
+        Target->MaxNameLen = Source->MaxNameLen;
+        Target->MaxClassLen = Source->MaxClassLen;
+        Target->MaxValueNameLen = Source->MaxValueNameLen;
+        Target->MaxValueDataLen = Source->MaxValueDataLen;
+        NewValues.Count = 0;
+        NewValues.List = HCELL_NIL;
+        CmpFreeValueList(Kcb->KeyHive, &OldValues);
+    }
+
+    if (Target != NULL) HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+    CmpFreeValueList(Kcb->KeyHive, &NewValues);
+
+    HvReleaseCell(&Loaded->Hive, SourceRoot);
+    Loaded->FileHandles[HFILE_TYPE_PRIMARY] = NULL;
+    CmpDestroyHive(Loaded);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    CmpCleanUpSubKeyInfo(Kcb);
+    CmpCleanUpKcbValueCache(Kcb);
+    CmpTouchKey(Kcb->KeyHive, Kcb->KeyCell);
+
+    Target = (PCM_KEY_NODE)HvGetCell(Kcb->KeyHive, Kcb->KeyCell);
+    if (Target != NULL)
+    {
+        CmpUpdateKcbFromNode(Kcb, Target);
+        HvReleaseCell(Kcb->KeyHive, Kcb->KeyCell);
+    }
+
+    if (Flags & REG_NO_LAZY_FLUSH) return STATUS_SUCCESS;
+
+    CmpReportNotify(Kcb, Kcb->KeyHive, Kcb->KeyCell, REG_NOTIFY_CHANGE_NAME);
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Puts a different file behind a loaded hive. The hive goes on running from
+ * what it has in memory; the new file is what the next boot will read.
+ */
+NTSTATUS
+NTAPI
+CmpReplaceHiveFile(
+    _In_ PCMHIVE Hive,
+    _In_ PCUNICODE_STRING NewFileName,
+    _In_ PCUNICODE_STRING OldFileName)
+{
+    PFILE_RENAME_INFORMATION Rename;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Handle;
+    NTSTATUS Status;
+    ULONG Size;
+
+    if (!SeSinglePrivilegeCheck(SeRestorePrivilege, ExGetPreviousMode()))
+    {
+        return STATUS_PRIVILEGE_NOT_HELD;
+    }
+
+    if (Hive->FileFullPath.Length == 0) return STATUS_INVALID_PARAMETER;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               (PUNICODE_STRING)&Hive->FileFullPath,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenFile(&Handle,
+                        DELETE | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatus,
+                        0,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Size = (ULONG)FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) +
+           OldFileName->Length;
+
+    Rename = ExAllocatePoolZero(PagedPool, Size, TAG_CM);
+    if (Rename == NULL)
+    {
+        ZwClose(Handle);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Rename->ReplaceIfExists = TRUE;
+    Rename->RootDirectory = NULL;
+    Rename->FileNameLength = OldFileName->Length;
+    RtlCopyMemory(Rename->FileName, OldFileName->Buffer, OldFileName->Length);
+
+    Status = ZwSetInformationFile(Handle,
+                                  &IoStatus,
+                                  Rename,
+                                  Size,
+                                  FileRenameInformation);
+    ExFreePool(Rename);
+    ZwClose(Handle);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               (PUNICODE_STRING)NewFileName,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+
+    Status = ZwOpenFile(&Handle,
+                        DELETE | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatus,
+                        0,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Size = (ULONG)FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) +
+           Hive->FileFullPath.Length;
+
+    Rename = ExAllocatePoolZero(PagedPool, Size, TAG_CM);
+    if (Rename == NULL)
+    {
+        ZwClose(Handle);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Rename->ReplaceIfExists = TRUE;
+    Rename->RootDirectory = NULL;
+    Rename->FileNameLength = Hive->FileFullPath.Length;
+    RtlCopyMemory(Rename->FileName,
+                  Hive->FileFullPath.Buffer,
+                  Hive->FileFullPath.Length);
+
+    Status = ZwSetInformationFile(Handle,
+                                  &IoStatus,
+                                  Rename,
+                                  Size,
+                                  FileRenameInformation);
+    ExFreePool(Rename);
+    ZwClose(Handle);
+
+    /* The replacement is what the next boot reads; this one goes on from memory */
+    return Status;
+}
+
+/*
+ * One boot-time thread per hive, so a slow disk only holds up the hive that
+ * lives on it.
+ */
+CODE_SEG("INIT")
+VOID
+NTAPI
+CmpLoadHiveThread(
+    _In_ PVOID StartContext)
+{
+    PHIVE_LIST_ENTRY ListEntry = StartContext;
+    UNICODE_STRING FileName;
+    UNICODE_STRING RootName;
+    BOOLEAN Allocate = TRUE;
+    PCMHIVE CmHive = NULL;
+    NTSTATUS Status;
+    PWCHAR Buffer;
+    SIZE_T Size;
+
+    ListEntry->ThreadStarted = TRUE;
+
+    Size = (wcslen(ListEntry->BaseName) + 1) * sizeof(WCHAR);
+
+    Buffer = ExAllocatePoolZero(PagedPool, Size, TAG_CM);
+    if (Buffer == NULL)
+    {
+        ListEntry->ThreadFinished = TRUE;
+        if (CmpLoadWorkerEvent != NULL)
+        {
+            KeSetEvent(CmpLoadWorkerEvent, 0, FALSE);
+        }
+
+        PsTerminateSystemThread(STATUS_INSUFFICIENT_RESOURCES);
+        return;
+    }
+
+    RtlCopyMemory(Buffer, ListEntry->BaseName, Size);
+    RtlInitUnicodeString(&FileName, Buffer);
+    RtlInitUnicodeString(&RootName, ListEntry->Name);
+
+    Status = CmpInitHiveFromFile(&FileName,
+                                 &RootName,
+                                 ListEntry->HHiveFlags,
+                                 &CmHive,
+                                 &Allocate,
+                                 CM_CHECK_REGISTRY_VALIDATE_HIVE |
+                                 CM_CHECK_REGISTRY_PURGE_VOLATILES);
+    if (NT_SUCCESS(Status))
+    {
+        CmHive->Flags |= ListEntry->CmHiveFlags;
+        CmpRememberHiveFileNames(CmHive, &FileName, &RootName);
+        ListEntry->CmHive = CmHive;
+        ListEntry->Allocate = Allocate;
+    }
+
+    ExFreePool(Buffer);
+
+    ListEntry->ThreadFinished = TRUE;
+
+    if (CmpLoadWorkerEvent != NULL)
+    {
+        KeSetEvent(CmpLoadWorkerEvent, 0, FALSE);
+    }
+
+    PsTerminateSystemThread(Status);
+}

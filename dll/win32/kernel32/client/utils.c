@@ -10,6 +10,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <k32.h>
+#include <winsafer.h>
 #ifdef _M_IX86
 #include "i386/ketypes.h"
 #elif defined _M_AMD64
@@ -1296,9 +1297,132 @@ BaseMarkFileForDelete(IN HANDLE FileHandle,
                          FileDispositionInformation);
 }
 
-/*
- * @unimplemented
- */
+typedef BOOL (WINAPI *PSAFER_IDENTIFY_LEVEL)(DWORD, PSAFER_CODE_PROPERTIES, SAFER_LEVEL_HANDLE *, PVOID);
+typedef BOOL (WINAPI *PSAFER_GET_LEVEL_INFORMATION)(SAFER_LEVEL_HANDLE, SAFER_OBJECT_INFO_CLASS, PVOID, DWORD, PDWORD);
+typedef BOOL (WINAPI *PSAFER_COMPUTE_TOKEN_FROM_LEVEL)(SAFER_LEVEL_HANDLE, HANDLE, PHANDLE, DWORD, PVOID);
+typedef BOOL (WINAPI *PSAFER_RECORD_EVENT_LOG_ENTRY)(SAFER_LEVEL_HANDLE, PCWSTR, PVOID);
+typedef BOOL (WINAPI *PSAFER_CLOSE_LEVEL)(SAFER_LEVEL_HANDLE);
+
+static RTL_RUN_ONCE BasepSaferOnce = RTL_RUN_ONCE_INIT;
+static PSAFER_IDENTIFY_LEVEL pSaferIdentifyLevel;
+static PSAFER_GET_LEVEL_INFORMATION pSaferGetLevelInformation;
+static PSAFER_COMPUTE_TOKEN_FROM_LEVEL pSaferComputeTokenFromLevel;
+static PSAFER_RECORD_EVENT_LOG_ENTRY pSaferRecordEventLogEntry;
+static PSAFER_CLOSE_LEVEL pSaferCloseLevel;
+
+static ULONG
+NTAPI
+BasepLoadSaferApi(PRTL_RUN_ONCE RunOnce, PVOID Parameter, PVOID *Context)
+{
+    UNICODE_STRING Advapi = RTL_CONSTANT_STRING(L"advapi32.dll");
+    ANSI_STRING Identify = RTL_CONSTANT_STRING("SaferIdentifyLevel");
+    ANSI_STRING GetInfo = RTL_CONSTANT_STRING("SaferGetLevelInformation");
+    ANSI_STRING Compute = RTL_CONSTANT_STRING("SaferComputeTokenFromLevel");
+    ANSI_STRING Record = RTL_CONSTANT_STRING("SaferRecordEventLogEntry");
+    ANSI_STRING Close = RTL_CONSTANT_STRING("SaferCloseLevel");
+    PVOID Module;
+
+    if (!NT_SUCCESS(LdrLoadDll(NULL, NULL, &Advapi, &Module)))
+        return TRUE;
+
+    if (!NT_SUCCESS(LdrGetProcedureAddress(Module, &Identify, 0, (PVOID *)&pSaferIdentifyLevel)) ||
+        !NT_SUCCESS(LdrGetProcedureAddress(Module, &GetInfo, 0, (PVOID *)&pSaferGetLevelInformation)) ||
+        !NT_SUCCESS(LdrGetProcedureAddress(Module, &Compute, 0, (PVOID *)&pSaferComputeTokenFromLevel)) ||
+        !NT_SUCCESS(LdrGetProcedureAddress(Module, &Record, 0, (PVOID *)&pSaferRecordEventLogEntry)) ||
+        !NT_SUCCESS(LdrGetProcedureAddress(Module, &Close, 0, (PVOID *)&pSaferCloseLevel)))
+    {
+        pSaferIdentifyLevel = NULL;
+    }
+
+    return TRUE;
+}
+
+static ULONG
+BasepQuerySaferTransparentEnabled(HANDLE RootDirectory, PCWSTR KeyPath)
+{
+    UNICODE_STRING KeyName, ValueName = RTL_CONSTANT_STRING(L"TransparentEnabled");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    ULONG ResultLength, Value = 0;
+    HANDLE KeyHandle;
+    NTSTATUS Status;
+
+    RtlInitUnicodeString(&KeyName, KeyPath);
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE, RootDirectory, NULL);
+    if (!NT_SUCCESS(NtOpenKey(&KeyHandle, KEY_QUERY_VALUE, &ObjectAttributes)))
+        return 0;
+
+    Status = NtQueryValueKey(KeyHandle, &ValueName, KeyValuePartialInformation, Buffer, sizeof(Buffer), &ResultLength);
+    if (NT_SUCCESS(Status) && Info->Type == REG_DWORD && Info->DataLength == sizeof(ULONG))
+        RtlCopyMemory(&Value, Info->Data, sizeof(ULONG));
+
+    NtClose(KeyHandle);
+    return Value;
+}
+
+/* TODO: TransparentEnabled 2 (all software files) does not make the loader check DLLs against the policy */
+static BOOLEAN
+BasepIsSaferEnforced(VOID)
+{
+    HANDLE UserKey;
+    ULONG Value;
+
+    Value = BasepQuerySaferTransparentEnabled(NULL,
+        L"\\Registry\\Machine\\Software\\Policies\\Microsoft\\Windows\\Safer\\CodeIdentifiers");
+    if (Value)
+        return TRUE;
+
+    if (!NT_SUCCESS(RtlOpenCurrentUser(KEY_READ, &UserKey)))
+        return FALSE;
+
+    Value = BasepQuerySaferTransparentEnabled(UserKey, L"Software\\Policies\\Microsoft\\Windows\\Safer\\CodeIdentifiers");
+    NtClose(UserKey);
+    return Value != 0;
+}
+
+static NTSTATUS
+BasepEvaluateSaferLevel(IN HANDLE Token,
+                        IN LPWSTR ApplicationName,
+                        IN HANDLE FileHandle,
+                        OUT PHANDLE NewToken)
+{
+    SAFER_CODE_PROPERTIES_V2 Properties;
+    SAFER_LEVEL_HANDLE Level;
+    DWORD LevelId, Size;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RtlZeroMemory(&Properties, sizeof(Properties));
+    Properties.cbSize = sizeof(Properties);
+    Properties.dwCheckFlags = SAFER_CRITERIA_IMAGEPATH | SAFER_CRITERIA_IMAGEHASH | SAFER_CRITERIA_AUTHENTICODE;
+    Properties.ImagePath = ApplicationName;
+    Properties.hImageFileHandle = FileHandle;
+
+    if (!pSaferIdentifyLevel(1, (PSAFER_CODE_PROPERTIES)&Properties, &Level, NULL))
+        return STATUS_UNSUCCESSFUL;
+
+    if (!pSaferGetLevelInformation(Level, SaferObjectLevelId, &LevelId, sizeof(LevelId), &Size))
+    {
+        Status = STATUS_UNSUCCESSFUL;
+    }
+    else if (LevelId == SAFER_LEVELID_DISALLOWED)
+    {
+        pSaferRecordEventLogEntry(Level, ApplicationName, NULL);
+        Status = (NTSTATUS)0xFFFFFFFF;
+    }
+    else if (LevelId != SAFER_LEVELID_FULLYTRUSTED)
+    {
+        if (!pSaferComputeTokenFromLevel(Level, Token, NewToken, SAFER_TOKEN_NULL_IF_EQUAL, NULL))
+        {
+            *NewToken = NULL;
+            Status = STATUS_ACCESS_DENIED;
+        }
+    }
+
+    pSaferCloseLevel(Level);
+    return Status;
+}
+
 NTSTATUS
 WINAPI
 BasepCheckWinSaferRestrictions(IN HANDLE UserToken,
@@ -1308,30 +1432,47 @@ BasepCheckWinSaferRestrictions(IN HANDLE UserToken,
                                OUT PHANDLE NewToken,
                                OUT PHANDLE JobHandle)
 {
+    HANDLE Token = UserToken, ProcessToken = NULL;
+    ULONG Inert = FALSE, Length;
     NTSTATUS Status;
 
-    /* Validate that there's a name */
-    if ((ApplicationName) && *(ApplicationName))
+    if (!ApplicationName || !*ApplicationName)
+        return STATUS_INVALID_PARAMETER;
+
+    if (!InJob || !NewToken || !JobHandle)
+        return STATUS_ACCESS_VIOLATION;
+
+    *InJob = FALSE;
+    *NewToken = NULL;
+    *JobHandle = NULL;
+
+    if (!BasepIsSaferEnforced())
+        return STATUS_SUCCESS;
+
+    if (!Token)
     {
-        /* Validate that the required output parameters are there */
-        if ((InJob) && (NewToken) && (JobHandle))
-        {
-            /* Do the work (one day...) */
-            DPRINT("BasepCheckWinSaferRestrictions is UNIMPLEMENTED\n");
-            Status = STATUS_SUCCESS;
-        }
-        else
-        {
-            /* Act as if SEH hit this */
-            Status = STATUS_ACCESS_VIOLATION;
-        }
+        Status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &ProcessToken);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Token = ProcessToken;
+    }
+
+    Status = NtQueryInformationToken(Token, TokenSandBoxInert, &Inert, sizeof(Inert), &Length);
+    if (!NT_SUCCESS(Status) || !Inert)
+    {
+        RtlRunOnceExecuteOnce(&BasepSaferOnce, BasepLoadSaferApi, NULL, NULL);
+        /* TODO: no job object is created for the SAFER_POLICY_JOBID_* identity flags */
+        Status = pSaferIdentifyLevel ?
+                 BasepEvaluateSaferLevel(Token, ApplicationName, FileHandle, NewToken) :
+                 STATUS_SUCCESS;
     }
     else
     {
-        /* Input is invalid */
-        Status = STATUS_INVALID_PARAMETER;
+        Status = STATUS_SUCCESS;
     }
 
-    /* Return the status */
+    if (ProcessToken)
+        NtClose(ProcessToken);
+
     return Status;
 }

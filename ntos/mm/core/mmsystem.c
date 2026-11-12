@@ -140,6 +140,7 @@ NTSTATUS
 MiSystemInitialize(
     _Out_ PMI_SYSTEM System,
     _In_ PMI_PFN PfnArray,
+    _In_ ULONG FirstFrame,
     _In_ ULONG FrameCount,
     _In_ ULONG CpuCount,
     _In_ LONG64 CommitLimit)
@@ -149,7 +150,7 @@ MiSystemInitialize(
     RtlZeroMemory(System, sizeof(*System));
     System->Arch = MiArchDescribe();
     System->CommitLimit = CommitLimit;
-    MiPfnDbInitialize(&System->Pfn, PfnArray, FrameCount, CpuCount);
+    MiPfnDbInitialize(&System->Pfn, PfnArray, FirstFrame, FrameCount, CpuCount);
     MiPfnDbSetDirectFrames(&System->Pfn, System->Arch->DirectFrameCount);
     MiPfnDbSetRegionRotation(&System->Pfn, System->Arch->PrefersRegionRotation);
     System->Pfn.Owner = System;
@@ -226,6 +227,119 @@ MiAddressSpaceDestroy(
     MiLockRangeReset(Space);
     MiPfnShareDecrement(&Space->System->Pfn, Space->RootFrame, TRUE);
     Space->RootFrame = 0;
+}
+
+static
+VOID
+MiSessionSpaceUnpinTops(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Limit)
+{
+    PMI_SYSTEM System = Space->System;
+    ULONG64 Span = 1ULL << System->Arch->Level[System->Arch->PagingLevels - 1].Shift;
+    ULONG64 Va;
+
+    for (Va = System->SessionStart; Va < Limit && Va <= System->SessionEnd; Va += Span)
+    {
+        MiPtUnpinRange(Space, Va, PAGE_SIZE);
+        if (Va + Span < Va)
+            break;
+    }
+}
+
+NTSTATUS
+MiSessionSpaceCreate(
+    _Inout_ PMI_SYSTEM System,
+    _Out_ PMI_ADDRESS_SPACE Space)
+{
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    ULONG64 Span = 1ULL << Arch->Level[Arch->PagingLevels - 1].Shift;
+    NTSTATUS Status;
+    ULONG64 Va;
+
+    if (System->SessionEnd <= System->SessionStart)
+        return STATUS_NOT_SUPPORTED;
+
+    MI_ASSERT((System->SessionStart & (Span - 1)) == 0);
+    MI_ASSERT(((System->SessionEnd + 1) & (Span - 1)) == 0);
+    MI_ASSERT(System->SessionStart >= Arch->SystemAddressStart && System->SessionEnd <= Arch->SystemAddressEnd);
+
+    Status = MiSpaceInitialize(System, Space, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Space->IsSession = TRUE;
+    Space->LowestVa = System->SessionStart;
+    Space->HighestVa = System->SessionEnd;
+    MiVadRootInitialize(&Space->VadRoot, Space->LowestVa >> PAGE_SHIFT, Space->HighestVa >> PAGE_SHIFT);
+    MiVadRootInitialize(&Space->CloneRoot, Space->LowestVa >> PAGE_SHIFT, Space->HighestVa >> PAGE_SHIFT);
+
+    for (Va = System->SessionStart; Va <= System->SessionEnd; Va += Span)
+    {
+        Status = MiPtPinRange(Space, Va, PAGE_SIZE);
+        if (!NT_SUCCESS(Status))
+        {
+            MiSessionSpaceUnpinTops(Space, Va + PAGE_SIZE);
+            MiAddressSpaceDestroy(Space);
+            return Status;
+        }
+        if (Va + Span < Va)
+            break;
+    }
+
+    MI_ASSERT(Space->IsSystem && Space->IsSession && Space->RootFrame != 0);
+    MI_ASSERT(Space->VadRoot.NodeCount == 0 && Space->LowestVa == System->SessionStart &&
+              Space->HighestVa == System->SessionEnd);
+    return STATUS_SUCCESS;
+}
+
+VOID
+MiSessionSpaceDestroy(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    MI_ASSERT(Space->IsSystem && Space->IsSession && Space->RootFrame != 0);
+    MI_ASSERT(Space != &Space->System->SystemSpace);
+    MiCleanAddressSpace(Space);
+    MiSessionSpaceUnpinTops(Space, Space->HighestVa);
+    MiAddressSpaceDestroy(Space);
+}
+
+VOID
+MiSessionSpaceLink(
+    _In_ PMI_ADDRESS_SPACE Session,
+    _Inout_ PMI_ADDRESS_SPACE Process,
+    _In_ BOOLEAN Link)
+{
+    PMI_SYSTEM System = Session->System;
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    LONG Top = Arch->PagingLevels - 1;
+    ULONG First = (ULONG)((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+    ULONG Last = (ULONG)((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+    PMI_PTE From;
+    PMI_PTE To;
+    ULONG Index;
+
+    MI_ASSERT(Session->IsSystem && Session->IsSession && Session->RootFrame != 0);
+    MI_ASSERT(!Process->IsSystem && !Process->IsSession && Process->RootFrame != 0);
+    MI_ASSERT(Session->System == Process->System && Session->RootFrame != Process->RootFrame);
+    MI_ASSERT(System->SessionEnd > System->SessionStart && First <= Last);
+
+    From = MiArchMapFrame(Session->RootFrame);
+    To = MiArchMapFrame(Process->RootFrame);
+
+    for (Index = First; Index <= Last; Index++)
+    {
+        MI_ASSERT(MiArchPteIsValid(MiArchPteRead(&From[Index])));
+        MI_ASSERT(Link ? (MiArchPteRead(&To[Index]) == 0) :
+                         (MiArchPteRead(&To[Index]) == MiArchPteRead(&From[Index])));
+        MiArchPteWrite(&To[Index], Link ? MiArchPteRead(&From[Index]) : 0);
+    }
+
+    MiArchUnmapFrame(To);
+    MiArchUnmapFrame(From);
+
+    if (!Link)
+        MiArchTlbInvalidateAll(TRUE);
 }
 
 #if DBG || defined(MM_HOST_TEST)

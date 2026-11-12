@@ -47,6 +47,15 @@ MiMemoryTypeIsInvisible(
 }
 
 static
+BOOLEAN
+MiMemoryTypeIsLoaderData(
+    _In_ TYPE_OF_MEMORY MemoryType)
+{
+    return (BOOLEAN)(MemoryType == LoaderOsloaderHeap || MemoryType == LoaderRegistryData ||
+                     MemoryType == LoaderNlsData);
+}
+
+static
 PMEMORY_ALLOCATION_DESCRIPTOR
 MiScanMemoryDescriptors(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -382,10 +391,10 @@ MiInitializePhase0(
     PMEMORY_ALLOCATION_DESCRIPTOR Largest;
     ULONG64 LargestEnd;
     ULONG64 PhysicalBytes;
-    ULONG64 NonPagedBytes, PagedBytes, SystemPteBytes, ExecutableBytes;
+    ULONG64 NonPagedBytes, PagedBytes, SystemPteBytes;
     ULONG64 SharedPhysical;
     PEPROCESS Process = PsGetCurrentProcess();
-    ULONG FrameCount, PfnPages, PfnFirst, ExecPages;
+    ULONG FirstFrame, FrameCount, PfnPages, PfnFirst, ExecPages;
     PLIST_ENTRY Entry;
     NTSTATUS Status;
     PMI_PFN PfnArray;
@@ -402,9 +411,10 @@ MiInitializePhase0(
     if (Largest == NULL || MmNumberOfPhysicalPages < MI_MINIMUM_PHYSICAL_PAGES)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, MmLowestPhysicalPage, MmHighestPhysicalPage, 0);
 
+    FirstFrame = (ULONG)MmLowestPhysicalPage;
     FrameCount = (ULONG)(MmHighestPhysicalPage + 1);
-    PfnPages = (ULONG)BYTES_TO_PAGES((ULONG64)FrameCount * sizeof(MI_PFN));
-    ExecPages = (ULONG)BYTES_TO_PAGES(((ULONG64)FrameCount + 31) / 32 * sizeof(LONG));
+    PfnPages = (ULONG)BYTES_TO_PAGES((ULONG64)(FrameCount - FirstFrame) * sizeof(MI_PFN));
+    ExecPages = (ULONG)BYTES_TO_PAGES(((ULONG64)(FrameCount - FirstFrame) + 31) / 32 * sizeof(LONG));
 
     if (LargestEnd - Largest->BasePage < PfnPages + ExecPages + 1024)
         KeBugCheckEx(INSTALL_MORE_MEMORY, MmNumberOfPhysicalPages, PfnPages, (ULONG_PTR)(LargestEnd - Largest->BasePage), 1);
@@ -412,13 +422,13 @@ MiInitializePhase0(
     PfnFirst = (ULONG)(LargestEnd - PfnPages - ExecPages);
     PfnArray = MiArchMapFrame(PfnFirst);
 
-    Status = MiSystemInitialize(&MiSystem, PfnArray, FrameCount, MI_PFN_CPU_CACHES,
+    Status = MiSystemInitialize(&MiSystem, PfnArray, FirstFrame, FrameCount, MI_PFN_CPU_CACHES,
                                 (LONG64)MmNumberOfPhysicalPages);
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x494E4954, (ULONG_PTR)Status, 0, 0);
 
-    DbgPrint("Page frame database: %lu MB at %012I64x for %lu frames\n", PfnPages >> (20 - PAGE_SHIFT),
-             (ULONG64)PfnFirst << PAGE_SHIFT, FrameCount);
+    DbgPrint("Page frame database: %lu MB at %012I64x for %lu frames from %lx\n", PfnPages >> (20 - PAGE_SHIFT),
+             (ULONG64)PfnFirst << PAGE_SHIFT, FrameCount - FirstFrame, FirstFrame);
     RtlZeroMemory(MiArchMapFrame(PfnFirst + PfnPages), (SIZE_T)ExecPages << PAGE_SHIFT);
     MiPfnDbSetExecClean(&MiSystem.Pfn, (volatile LONG *)MiArchMapFrame(PfnFirst + PfnPages));
     MiPfnMarkInUse(&MiSystem.Pfn, PfnFirst, PfnPages + ExecPages);
@@ -452,7 +462,14 @@ MiInitializePhase0(
              (ULONG)MiSystem.SystemSpace.VadRoot.NodeCount, MiPfnAvailablePages(&MiSystem.Pfn) >> (20 - PAGE_SHIFT));
     Status = MiSystemReserveTopLevelHole(&MiSystem);
     if (NT_SUCCESS(Status))
+        Status = MiSystemReserveSessionRange(&MiSystem);
+    if (NT_SUCCESS(Status))
         Status = MiSystemPopulateTopLevel(&MiSystem);
+    if (NT_SUCCESS(Status) && MiSystem.SessionEnd > MiSystem.SessionStart)
+    {
+        MmSessionBase = (PVOID)(ULONG_PTR)MiSystem.SessionStart;
+        MmSessionSize = (SIZE_T)(MiSystem.SessionEnd - MiSystem.SessionStart + 1);
+    }
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x544F504C, (ULONG_PTR)Status, 0, 0);
 
@@ -476,7 +493,6 @@ MiInitializePhase0(
         NonPagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
         PagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
     }
-    ExecutableBytes = NonPagedBytes / 2;
 
     Status = MiSystemPtesInitialize(&MiSystem, SystemPteBytes >> PAGE_SHIFT, MI_SYSPTE_CPU_CACHES);
     if (!NT_SUCCESS(Status))
@@ -520,10 +536,8 @@ MiInitializePhase0(
 
     MiPoolLayout.NonPagedResidentBase = MmNonPagedPoolStart;
     MiPoolLayout.NonPagedResidentBytes = MI_BOOT_RESIDENT_POOL_BYTES;
-    MiPoolLayout.NonPagedExpansionBase = MmNonPagedPoolExpansionStart;
-    MiPoolLayout.NonPagedExpansionBytes = (SIZE_T)(NonPagedBytes - MI_BOOT_RESIDENT_POOL_BYTES - ExecutableBytes);
-    MiPoolLayout.ExecutableBase = (PUCHAR)MmNonPagedPoolStart + NonPagedBytes - ExecutableBytes;
-    MiPoolLayout.ExecutableBytes = (SIZE_T)ExecutableBytes;
+    MiPoolLayout.NonPagedSharedBase = MmNonPagedPoolExpansionStart;
+    MiPoolLayout.NonPagedSharedBytes = (SIZE_T)(NonPagedBytes - MI_BOOT_RESIDENT_POOL_BYTES);
     MiPoolLayout.PagedBase = MmPagedPoolStart;
     MiPoolLayout.PagedBytes = (SIZE_T)PagedBytes;
 
@@ -614,6 +628,7 @@ MiInitializePhase0(
     MiReportBootImages(LoaderBlock);
 }
 
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 MmArmInitSystem(
@@ -667,12 +682,150 @@ MiArm64UnmapEarlyDeviceAliases(
     MiArchBootClearUserHalf(MiBootRootFrame);
 }
 
+static
+BOOLEAN
+MiIsLoaderDataFrame(
+    _In_ ULONG Frame)
+{
+    PMI_PFN Entry;
+
+    if (Frame >= MiSystem.Pfn.FrameCount)
+        return FALSE;
+
+    Entry = &MiSystem.Pfn.Pfn[Frame];
+    return (BOOLEAN)(Entry->State == MiPageActive && Entry->ShareCount == 1 && Entry->ReferenceCount == 1 &&
+                     Entry->PteAddress == 0 &&
+                     !(MI_PFN_FLAGS(Entry) & (MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PINNED)));
+}
+
+static
+PMI_PTE
+MiLoaderAliasSlot(
+    _In_ ULONG Frame,
+    _Out_ PULONG TableFrame,
+    _Out_ PBOOLEAN Mapped)
+{
+    PMI_ADDRESS_SPACE Space = &MiSystem.SystemSpace;
+    ULONG64 Alias = MiArchBootFrameAlias(Frame);
+    ULONG64 Physical;
+    PMI_PTE Slot;
+    MI_PTE Pte;
+
+    *TableFrame = 0;
+    *Mapped = FALSE;
+    if (Alias == 0 || (Frame < MiSystem.Pfn.DirectFrames && Alias == (ULONG64)(ULONG_PTR)MiArchMapFrame(Frame)))
+        return NULL;
+
+    Slot = MiPtLookup(Space, Alias, TableFrame);
+    if (Slot == NULL)
+    {
+        *Mapped = (BOOLEAN)(MiPtTranslate(Space, Alias, &Physical, NULL) && (Physical >> PAGE_SHIFT) == Frame);
+        return NULL;
+    }
+
+    Pte = MiArchPteRead(Slot);
+    *Mapped = (BOOLEAN)(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
+    return *Mapped ? Slot : NULL;
+}
+
 VOID
 NTAPI
 MmFreeLoaderBlock(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    UNREFERENCED_PARAMETER(LoaderBlock);
+    PMI_ADDRESS_SPACE Space = &MiSystem.SystemSpace;
+    PMI_PHYSICAL_RANGE Ranges;
+    ULONG Count = 0, Index, Frame, TableFrame;
+    ULONG64 Freed = 0, Cleared = 0;
+    PLIST_ENTRY Entry;
+    BOOLEAN Mapped;
+    PMI_PTE Slot;
+
+    for (Entry = LoaderBlock->MemoryDescriptorListHead.Flink;
+         Entry != &LoaderBlock->MemoryDescriptorListHead;
+         Entry = Entry->Flink)
+    {
+        PMEMORY_ALLOCATION_DESCRIPTOR Descriptor = CONTAINING_RECORD(Entry, MEMORY_ALLOCATION_DESCRIPTOR,
+                                                                     ListEntry);
+
+        if (Descriptor->PageCount != 0 && MiMemoryTypeIsLoaderData(Descriptor->MemoryType))
+            Count++;
+    }
+
+    if (Count == 0)
+        return;
+
+    Ranges = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(*Ranges), 'dLmM');
+    if (Ranges == NULL)
+        return;
+
+    Index = 0;
+    for (Entry = LoaderBlock->MemoryDescriptorListHead.Flink;
+         Entry != &LoaderBlock->MemoryDescriptorListHead && Index < Count;
+         Entry = Entry->Flink)
+    {
+        PMEMORY_ALLOCATION_DESCRIPTOR Descriptor = CONTAINING_RECORD(Entry, MEMORY_ALLOCATION_DESCRIPTOR,
+                                                                     ListEntry);
+
+        if (Descriptor->PageCount == 0 || !MiMemoryTypeIsLoaderData(Descriptor->MemoryType))
+            continue;
+
+        Ranges[Index].BasePage = Descriptor->BasePage;
+        Ranges[Index].PageCount = Descriptor->PageCount;
+        Ranges[Index].Flags = 0;
+        Index++;
+    }
+    Count = Index;
+
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Frame = (ULONG)Ranges[Index].BasePage;
+             Frame < Ranges[Index].BasePage + Ranges[Index].PageCount;
+             Frame++)
+        {
+            if (!MiIsLoaderDataFrame(Frame))
+                continue;
+
+            Slot = MiLoaderAliasSlot(Frame, &TableFrame, &Mapped);
+            if (Slot == NULL)
+                continue;
+
+            MiPtWrite(Space, MiArchBootFrameAlias(Frame), Slot, TableFrame, 0);
+            Cleared++;
+        }
+    }
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+
+    if (Cleared != 0)
+        MiArchTlbInvalidateAll(TRUE);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Frame = (ULONG)Ranges[Index].BasePage;
+             Frame < Ranges[Index].BasePage + Ranges[Index].PageCount;
+             Frame++)
+        {
+            if (!MiIsLoaderDataFrame(Frame))
+                continue;
+
+            MiLoaderAliasSlot(Frame, &TableFrame, &Mapped);
+            if (Mapped)
+                continue;
+
+            MiPfnShareDecrement(&MiSystem.Pfn, Frame, TRUE);
+            Freed++;
+        }
+    }
+
+    ExFreePoolWithTag(Ranges, 'dLmM');
+
+    MmResidentAvailablePages += (PFN_NUMBER)Freed;
+    MmAvailablePages = (PFN_NUMBER)MiPfnAvailablePages(&MiSystem.Pfn);
+    MI_ATOMIC_ADD64(&MiSystem.CommitLimit, (LONG64)Freed);
+    MmTotalCommitLimit = (SIZE_T)MI_ATOMIC_READ64(&MiSystem.CommitLimit);
+    MmTotalCommitLimitMaximum += (SIZE_T)Freed;
+    MmtotalCommitLimitMaximum = MmTotalCommitLimitMaximum;
 }
 
 VOID

@@ -331,33 +331,72 @@ system_fallback_config[] =
     { "2D30-2D7F",              L"Noto Sans Tifinagh" },
 
     /* CJK Radicals Supplement - 2E80-2EFF */
+#ifdef __REACTOS__
+
+    { "2E80-2EFF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "2E80-2EFF",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
+#ifdef __REACTOS__
+    { "2E80-2EFF",              L"Noto Sans CJK TC, Noto Sans SC, Noto Sans JP", L"zh-Hant" },
+#else
     { "2E80-2EFF",              L"Noto Sans CJK TC", L"zh-Hant" },
+#endif
+#ifdef __REACTOS__
+    { "2E80-2EFF",              L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
     { "2E80-2EFF",              L"Noto Sans CJK KR", L"ko" },
+#endif
 
     /* CJK Symbols and Punctuation - 3000-303F
        Hiragana                    - 3040-309F
        Katakana                    - 30A0-30FF
        Katakana Phonetic Ext.      - 31F0-31FF */
+#ifdef __REACTOS__
+
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK SC", L"zh-Hans" },
-    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK TC", L"zh-Hant" },
-    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK KR", L"ko" },
+#endif
 #ifdef __REACTOS__
-    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP, Noto Sans JP" },
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK TC, Noto Sans SC, Noto Sans JP", L"zh-Hant" },
+#else
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK TC", L"zh-Hant" },
+#endif
+#ifdef __REACTOS__
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK KR", L"ko" },
+#endif
+#ifdef __REACTOS__
+    { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "3000-30FF, 31F0-31FF",   L"Noto Sans CJK JP" },
 #endif
 
     /* CJK Unified Ext A - 3400-4DBF
        CJK Unified       - 4E00-9FFF */
+#ifdef __REACTOS__
+
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK SC", L"zh-Hans" },
-    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK TC", L"zh-Hant" },
-    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK KR", L"ko" },
+#endif
 #ifdef __REACTOS__
-    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP, Noto Sans JP" },
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK TC, Noto Sans SC, Noto Sans JP", L"zh-Hant" },
+#else
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK TC", L"zh-Hant" },
+#endif
+#ifdef __REACTOS__
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK KR", L"ko" },
+#endif
+#ifdef __REACTOS__
+    { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "3400-4DBF, 4E00-9FFF",   L"Noto Sans CJK JP" },
 #endif
@@ -375,27 +414,58 @@ system_fallback_config[] =
     { "AA00-AA5F",              L"Noto Sans Cham" },
 
     /* CJK Compatibility Ideographs - F900-FAFF */
+#ifdef __REACTOS__
+
+    { "F900-FAFF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "F900-FAFF",              L"Noto Sans CJK SC", L"zh-Hans" },
-    { "F900-FAFF",              L"Noto Sans CJK TC", L"zh-Hant" },
-    { "F900-FAFF",              L"Noto Sans CJK KR", L"ko" },
+#endif
 #ifdef __REACTOS__
-    { "F900-FAFF",              L"Noto Sans CJK JP, Noto Sans JP" },
+    { "F900-FAFF",              L"Noto Sans CJK TC, Noto Sans SC, Noto Sans JP", L"zh-Hant" },
+#else
+    { "F900-FAFF",              L"Noto Sans CJK TC", L"zh-Hant" },
+#endif
+#ifdef __REACTOS__
+    { "F900-FAFF",              L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
+    { "F900-FAFF",              L"Noto Sans CJK KR", L"ko" },
+#endif
+#ifdef __REACTOS__
+    { "F900-FAFF",              L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "F900-FAFF",              L"Noto Sans CJK JP" },
 #endif
 
     /* Vertical Forms - FE10-FE1F */
+#ifdef __REACTOS__
+
+    { "FE10-FE1F",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "FE10-FE1F",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
+#ifdef __REACTOS__
+    { "FE10-FE1F",              L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
     { "FE10-FE1F",              L"Noto Sans CJK KR", L"ko" },
+#endif
     { "FE10-FE1F",              L"Noto Sans CJK TC" },
 
     /* CJK Compatibility Forms - FE30-FE4F
        Small Form Variants     - FE50-FE6F */
+#ifdef __REACTOS__
+
+    { "FE30-FE6F",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
 
     { "FE30-FE6F",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
+#ifdef __REACTOS__
+    { "FE30-FE6F",              L"Noto Sans CJK KR, Noto Sans JP, Noto Sans SC", L"ko" },
+#else
     { "FE30-FE6F",              L"Noto Sans CJK KR", L"ko" },
+#endif
 #ifdef __REACTOS__
     { "FE30-FE6F",              L"Noto Sans CJK JP, Noto Sans JP", L"ja" },
 #else
@@ -404,11 +474,15 @@ system_fallback_config[] =
     { "FE30-FE6F",              L"Noto Sans CJK TC" },
 
     /* Halfwidth and Fullwidth Forms */
+#ifdef __REACTOS__
+    { "FF00-FFEF",              L"Noto Sans CJK SC, Noto Sans SC", L"zh-Hans" },
+#else
     { "FF00-FFEF",              L"Noto Sans CJK SC", L"zh-Hans" },
+#endif
     { "FF00-FFEF",              L"Noto Sans CJK TC", L"zh-Hant" },
     { "FF00-FFEF",              L"Noto Sans CJK KR", L"ko" },
 #ifdef __REACTOS__
-    { "FF00-FFEF",              L"Noto Sans CJK JP, Noto Sans JP" },
+    { "FF00-FFEF",              L"Noto Sans CJK JP, Noto Sans JP, Noto Sans SC" },
 #else
     { "FF00-FFEF",              L"Noto Sans CJK JP" },
 #endif
@@ -440,15 +514,44 @@ static inline unsigned int text_source_get_char_length(const struct text_source_
 
 static void text_source_read_more(struct text_source_context *context)
 {
-    if ((context->chunk_length - context->cursor) > 1) return;
-
     context->position += context->cursor;
     context->cursor = 0;
+    context->text = NULL;
+    context->chunk_length = 0;
     if (FAILED(context->status = IDWriteTextAnalysisSource_GetTextAtPosition(context->source, context->position,
             &context->text, &context->chunk_length)))
     {
+        context->text = NULL;
+        context->chunk_length = 0;
         context->end = TRUE;
     }
+}
+
+static void text_source_complete_pair(struct text_source_context *context)
+{
+    const WCHAR *text = NULL;
+    UINT32 chunk_length = 0;
+    HRESULT hr;
+
+    /* Windows 11 reads past a trailing high surrogate only while the requested range continues. */
+    if (context->chunk_length - context->cursor != 1 || !IS_HIGH_SURROGATE(context->text[context->cursor]) ||
+            context->consumed + 1 >= context->length)
+        return;
+
+    hr = IDWriteTextAnalysisSource_GetTextAtPosition(context->source, context->position + context->cursor,
+            &text, &chunk_length);
+    if (FAILED(hr))
+    {
+        context->status = hr;
+        context->end = TRUE;
+        return;
+    }
+    if (!text || !chunk_length) return;
+
+    context->position += context->cursor;
+    context->cursor = 0;
+    context->text = text;
+    context->chunk_length = chunk_length;
 }
 
 static void text_source_get_u32_char(struct text_source_context *context)
@@ -457,7 +560,7 @@ static void text_source_get_u32_char(struct text_source_context *context)
     UINT32 available;
 
     /* Make sure to have full pair of surrogates */
-    text_source_read_more(context);
+    text_source_complete_pair(context);
 
     available = context->chunk_length - context->cursor;
     text = context->text + context->cursor;
@@ -493,7 +596,7 @@ static BOOL text_source_get_next_u32_char(struct text_source_context *context)
         context->ch = 0;
         context->end = TRUE;
     }
-    else if (context->cursor < context->chunk_length)
+    else if (context->text && context->cursor < context->chunk_length)
     {
         text_source_get_u32_char(context);
     }
@@ -2536,6 +2639,41 @@ static UINT32 fallback_font_get_supported_length(IDWriteFont3 *font, IDWriteText
     return mapped;
 }
 
+#ifdef __REACTOS__
+static BOOL fallback_is_simplified_chinese(const WCHAR *name)
+{
+    return !wcsicmp(name, L"zh") || !wcsicmp(name, L"zh-CN") || !wcsicmp(name, L"zh-SG") ||
+            !wcsnicmp(name, L"zh-Hans", 7);
+}
+
+static BOOL fallback_is_traditional_chinese(const WCHAR *name)
+{
+    return !wcsicmp(name, L"zh-TW") || !wcsicmp(name, L"zh-HK") || !wcsicmp(name, L"zh-MO") ||
+            !wcsnicmp(name, L"zh-Hant", 7);
+}
+
+static struct fallback_locale *fallback_get_parent_locale(const struct list *locales, const WCHAR *name)
+{
+    struct fallback_locale *locale;
+    WCHAR parent[LOCALE_NAME_MAX_LENGTH];
+    const WCHAR *dash;
+
+    if (fallback_is_simplified_chinese(name))
+        name = L"zh-Hans";
+    else if (fallback_is_traditional_chinese(name))
+        name = L"zh-Hant";
+    if ((locale = font_fallback_get_locale(locales, name, false)))
+        return locale;
+
+    dash = wcschr(name, '-');
+    if (!dash || dash - name >= ARRAY_SIZE(parent))
+        return font_fallback_get_locale(locales, L"", true);
+    memcpy(parent, name, (dash - name) * sizeof(WCHAR));
+    parent[dash - name] = 0;
+    return font_fallback_get_locale(locales, parent, true);
+}
+#endif
+
 static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallback, IDWriteTextAnalysisSource *source,
         UINT32 position, UINT32 text_length, DWRITE_FONT_WEIGHT weight, DWRITE_FONT_STYLE style,
         DWRITE_FONT_STRETCH stretch, IDWriteFont **ret_font, UINT32 *ret_length, float *scale)
@@ -2548,6 +2686,9 @@ static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallbac
     UINT32 i, length = 0, mapped;
     IDWriteFont3 *font;
     HRESULT hr;
+#ifdef __REACTOS__
+    WCHAR user_locale[LOCALE_NAME_MAX_LENGTH];
+#endif
 
     /* ~0u is a marker for system fallback data */
     data = fallback->data.count == ~0u ? &system_fallback : &fallback->data;
@@ -2559,6 +2700,15 @@ static HRESULT fallback_map_characters(const struct dwrite_fontfallback *fallbac
 
     length = length ? min(length, text_length) : text_length;
     if (!locale_name) locale_name = L"";
+
+#ifdef __REACTOS__
+    if (data == &system_fallback)
+    {
+        if (!*locale_name && GetUserDefaultLocaleName(user_locale, ARRAY_SIZE(user_locale))) locale_name = user_locale;
+        locale = fallback_get_parent_locale(&data->locales, locale_name);
+    }
+    else
+#endif
 
     /* Lookup locale entry once, if specific locale is missing neutral one will be returned. */
     locale = font_fallback_get_locale(&data->locales, locale_name, true);

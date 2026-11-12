@@ -31,6 +31,10 @@ const unsigned DetailWorkers = 6;
 const WCHAR DetailsKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog";
 const unsigned MaximumAttempts = 3;
 const size_t RowsPerPage = 25;
+const ULONGLONG ThrottleWindow = 300 * 1000;
+const ULONGLONG ThrottleMargin = 10 * 1000;
+const ULONGLONG ThrottlePoll = 30 * 1000;
+const ULONGLONG MaximumThrottleWait = 2 * (ThrottleWindow + ThrottleMargin);
 
 std::string Utf8(const std::wstring &text)
 {
@@ -188,6 +192,8 @@ bool LastPage(const std::string &html)
     return page >= pages;
 }
 
+}
+
 DWORD ParseResults(const std::string &html, const std::wstring &query, std::vector<CatalogUpdate> &updates,
                    size_t &rows)
 {
@@ -254,6 +260,9 @@ DWORD ParseResults(const std::string &html, const std::wstring &query, std::vect
     return rows ? ERROR_SUCCESS : ERROR_LNTDRV_CATALOG_FORMAT;
 }
 
+namespace
+{
+
 bool AllowedDownloadHost(const std::wstring &host)
 {
     static const WCHAR *const Suffixes[] = { L".windowsupdate.com", L".microsoft.com" };
@@ -290,8 +299,10 @@ void CopyDetails(CatalogUpdate &update, const CatalogUpdate &details)
 {
     update.Architecture = details.Architecture;
     update.Model = details.Model;
+    update.DriverVersion = details.DriverVersion;
     update.HardwareIds = details.HardwareIds;
     update.Detailed = true;
+    UseDriverVersion(update);
 }
 
 bool LoadDetails(CatalogUpdate &update)
@@ -301,7 +312,7 @@ bool LoadDetails(CatalogUpdate &update)
     HKEY key;
     LONG error;
     std::wstring text, ids;
-    size_t first, second;
+    size_t first, second, third;
 
     if (RegOpenKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
         return false;
@@ -317,12 +328,14 @@ bool LoadDetails(CatalogUpdate &update)
     text = value.data();
     first = text.find(L'|');
     second = first == std::wstring::npos ? first : text.find(L'|', first + 1);
-    if (second == std::wstring::npos)
+    third = second == std::wstring::npos ? second : text.find(L'|', second + 1);
+    if (third == std::wstring::npos)
         return false;
     update.Architecture = text.substr(0, first);
     update.Model = text.substr(first + 1, second - first - 1);
+    update.DriverVersion = text.substr(third + 1);
     update.HardwareIds.clear();
-    ids = text.substr(second + 1);
+    ids = text.substr(second + 1, third - second - 1);
     for (size_t start = 0; start < ids.size();)
     {
         size_t end = ids.find(L';', start);
@@ -334,6 +347,7 @@ bool LoadDetails(CatalogUpdate &update)
         start = end + 1;
     }
     update.Detailed = true;
+    UseDriverVersion(update);
     return true;
 }
 
@@ -344,6 +358,7 @@ void SaveDetails(const CatalogUpdate &update)
 
     for (size_t i = 0; i < update.HardwareIds.size(); i++)
         text += (i ? L";" : L"") + update.HardwareIds[i];
+    text += L"|" + update.DriverVersion;
     if (RegCreateKeyExW(HKEY_CURRENT_USER, DetailsKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
         return;
     RegSetValueExW(key, update.Id.c_str(), 0, REG_SZ, (const BYTE *)text.c_str(),
@@ -417,7 +432,28 @@ private:
 
 }
 
-Catalog::Catalog() : m_Cancel(NULL)
+void UseDriverVersion(CatalogUpdate &update)
+{
+    if ((update.Version.empty() || !iswdigit(update.Version[0])) && !update.DriverVersion.empty() &&
+        iswdigit(update.DriverVersion[0]))
+    {
+        update.Version = update.DriverVersion;
+    }
+}
+
+ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now)
+{
+    if (windowStart && now - windowStart < ThrottleWindow + ThrottleMargin)
+        return ThrottleWindow + ThrottleMargin - (now - windowStart);
+    return ThrottlePoll;
+}
+
+ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now)
+{
+    return !windowStart || now - windowStart >= ThrottleWindow ? now : windowStart;
+}
+
+Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_WindowStart(0)
 {
     DWORD timeout = 30000;
 
@@ -441,9 +477,27 @@ void Catalog::SetCancel(volatile LONG *cancel)
     m_Cancel = cancel;
 }
 
+void Catalog::SetThrottleCallback(ThrottleCallback *callback)
+{
+    m_Throttle = callback;
+}
+
 bool Catalog::Cancelled() const
 {
     return m_Cancel && InterlockedCompareExchange(m_Cancel, 0, 0) != 0;
+}
+
+DWORD Catalog::WaitThrottle(ULONGLONG delay)
+{
+    ULONGLONG end = GetTickCount64() + delay;
+
+    if (m_Throttle)
+        (*m_Throttle)((DWORD)((delay + 999) / 1000));
+    while (!Cancelled() && GetTickCount64() < end)
+        Sleep(100);
+    if (m_Throttle)
+        (*m_Throttle)(0);
+    return Cancelled() ? ERROR_CANCELLED : ERROR_SUCCESS;
 }
 
 DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status)
@@ -584,6 +638,7 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
                        L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + NumberText(page) : std::wstring());
     std::string html;
     size_t rows = 0;
+    ULONGLONG waited = 0;
     DWORD error;
 
     updates.clear();
@@ -594,11 +649,26 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
         last = cached->second.second;
         return ERROR_SUCCESS;
     }
-    error = Fetch(L"GET", url, std::string(), html);
-    if (!error)
-        error = ParseResults(html, query, updates, rows);
+    for (;;)
+    {
+        ULONGLONG delay;
+
+        error = Fetch(L"GET", url, std::string(), html);
+        if (!error)
+            error = ParseResults(html, query, updates, rows);
+        if (error != ERROR_LNTDRV_CATALOG_THROTTLED)
+            break;
+        delay = ThrottleDelay(m_WindowStart, GetTickCount64());
+        if (waited + delay > MaximumThrottleWait)
+            return error;
+        error = WaitThrottle(delay);
+        if (error)
+            return error;
+        waited += delay;
+    }
     if (error)
         return error;
+    m_WindowStart = ThrottleWindowStart(m_WindowStart, GetTickCount64());
     last = rows < RowsPerPage || LastPage(html);
     m_Pages[key] = std::make_pair(updates, last);
     return ERROR_SUCCESS;
@@ -638,6 +708,7 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
     update.Model = models.substr(0, models.find(L','));
     while (!update.Model.empty() && update.Model[update.Model.size() - 1] == L' ')
         update.Model.pop_back();
+    update.DriverVersion = HtmlText(Inner(html, "id=\"ScopedViewHandler_version\"", "</span>"));
     update.HardwareIds.clear();
     pos = html.find("id=\"driverhwIDs\"");
     if (pos != std::string::npos)
@@ -659,6 +730,7 @@ DWORD Catalog::QueryDetails(CatalogUpdate &update)
         }
     }
     update.Detailed = true;
+    UseDriverVersion(update);
     m_Details[update.Id] = update;
     SaveDetails(update);
     return ERROR_SUCCESS;

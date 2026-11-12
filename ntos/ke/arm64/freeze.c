@@ -441,6 +441,14 @@ KxThawExecution(
     KiArm64RequestThaw(CurrentPrcb);
 }
 
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb)
+{
+    return KiFreezeOwner == Prcb;
+}
+
 #else /* !CONFIG_SMP */
 
 static PKPRCB KiSingleProcessorFreezeOwner;
@@ -498,6 +506,14 @@ KxThawExecution(
     }
 
     KiSingleProcessorFreezeOwner = NULL;
+}
+
+BOOLEAN
+NTAPI
+KxIsFreezeOwner(
+    _In_ PKPRCB Prcb)
+{
+    return KiSingleProcessorFreezeOwner == Prcb;
 }
 
 #endif /* CONFIG_SMP */

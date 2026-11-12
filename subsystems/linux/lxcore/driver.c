@@ -105,6 +105,7 @@ LxPicoSystemCall(
     }
     LxArchApplySpeculation(LxThreadOf(PsGetCurrentThread()), TrapFrame);
     Base->InKernel--;
+    LxSignalRecheck(Base, LxThreadOf(PsGetCurrentThread()));
 }
 
 static
@@ -195,6 +196,8 @@ LxPicoDispatchException(
     if (Handled)
         LxArchApplySpeculation(LxThreadOf(PsGetCurrentThread()), TrapFrame);
     Base->InKernel--;
+    if (Handled)
+        LxSignalRecheck(Base, Thread);
     return Handled;
 }
 
@@ -278,6 +281,8 @@ LxPicoThreadExit(
 
     Last = LxThreadDetach(Thread);
     Process = Thread->Process;
+    if (!Last)
+        LxProcessThreadExited(Process, Thread->Tid);
     if (Last &&
         (Process->SharedVm || ((Process->Mm == Process) && (Process->VmUsers != 0) && !Process->OwnerGone)))
     {

@@ -20,7 +20,7 @@ MiSpaceAdoptCommon(
     const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
     PMI_PFN Root;
 
-    if (RootFrame >= System->Pfn.FrameCount)
+    if (!MiPfnTracked(&System->Pfn, RootFrame))
         return STATUS_INVALID_PARAMETER;
 
     Root = &System->Pfn.Pfn[RootFrame];
@@ -71,7 +71,7 @@ MiAdoptTable(
     ULONG Index;
 
     MI_ASSERT(Level >= 0 && (ULONG)Level + 1 < Arch->PagingLevels);
-    MI_ASSERT(Frame < System->Pfn.FrameCount && ParentFrame < System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&System->Pfn, Frame) && MiPfnTracked(&System->Pfn, ParentFrame));
     MI_ASSERT(ParentIndex < Arch->Level[Level + 1].EntryCount);
     MI_ASSERT(System->Pfn.Pfn[ParentFrame].PageTableOwner == Space);
     MI_ASSERT(MI_PFN_FLAGS(&System->Pfn.Pfn[ParentFrame]) & MI_PFN_FLAG_PAGE_TABLE);
@@ -101,7 +101,7 @@ MiAdoptTable(
         MI_PTE Pte = MiArchPteRead(&Table[Index]);
         ULONG64 Child = MiArchPteFrame(Pte);
 
-        if (!MiArchPteIsValid(Pte) || MiArchPteIsBlock(Pte, (ULONG)Level) || Child >= System->Pfn.FrameCount)
+        if (!MiArchPteIsValid(Pte) || MiArchPteIsBlock(Pte, (ULONG)Level) || !MiPfnTracked(&System->Pfn, Child))
             continue;
 
         if (MI_PFN_FLAGS(&System->Pfn.Pfn[Child]) & MI_PFN_FLAG_PAGE_TABLE)
@@ -149,7 +149,7 @@ MiSystemAdoptBootMappings(
             return STATUS_CONFLICTING_ADDRESSES;
         }
 
-        if (!MiArchPteIsBlock(Pte, (ULONG)Top) && MiArchPteFrame(Pte) < System->Pfn.FrameCount &&
+        if (!MiArchPteIsBlock(Pte, (ULONG)Top) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) &&
             !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PAGE_TABLE))
         {
             MiAdoptTable(Space, (ULONG)MiArchPteFrame(Pte), Space->RootFrame, Index, Top - 1);
@@ -212,6 +212,70 @@ MiSystemReserveTopLevelHole(
 }
 
 NTSTATUS
+MiSystemReserveSessionRange(
+    _Inout_ PMI_SYSTEM System)
+{
+    PMI_ADDRESS_SPACE Space = &System->SystemSpace;
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    ULONG64 SpanPages;
+    ULONG64 Vpn;
+    PMI_VAD Vad;
+
+    System->SessionStart = 0;
+    System->SessionEnd = 0;
+
+    if (Arch->SessionTopLevelEntries == 0)
+        return STATUS_SUCCESS;
+
+    SpanPages = 1ULL << (Arch->Level[Arch->PagingLevels - 1].Shift - PAGE_SHIFT);
+
+    Vad = MI_ALLOCATE(sizeof(*Vad));
+    if (Vad == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Vad, sizeof(*Vad));
+    Vad->Type = MiVadSystem;
+    Vad->Protection = MI_PROT_NOACCESS;
+
+    if (!MiVadFindEmptyRange(&Space->VadRoot, SpanPages * Arch->SessionTopLevelEntries, SpanPages, &Vpn))
+    {
+        MI_FREE(Vad);
+        return STATUS_NO_MEMORY;
+    }
+
+    Vad->Node.StartingVpn = Vpn;
+    Vad->Node.EndingVpn = Vpn + SpanPages * Arch->SessionTopLevelEntries - 1;
+    if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
+    {
+        MI_FREE(Vad);
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    System->SessionStart = Vad->Node.StartingVpn << PAGE_SHIFT;
+    System->SessionEnd = (Vad->Node.EndingVpn << PAGE_SHIFT) + PAGE_SIZE - 1;
+
+    MI_ASSERT((Vad->Node.StartingVpn & (SpanPages - 1)) == 0);
+    MI_ASSERT(System->SessionStart >= Arch->SystemAddressStart && System->SessionEnd <= Arch->SystemAddressEnd);
+    MI_ASSERT(System->SessionEnd - System->SessionStart + 1 ==
+              (SpanPages * Arch->SessionTopLevelEntries) << PAGE_SHIFT);
+    MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
+    {
+        PMI_PTE Root = MiArchMapFrame(Space->RootFrame);
+        LONG Top = Arch->PagingLevels - 1;
+        ULONG Index;
+
+        for (Index = (ULONG)((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+             Index <= (ULONG)((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+             Index++)
+        {
+            MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(&Root[Index])));
+        }
+        MiArchUnmapFrame(Root);
+    }
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 MiSystemPopulateTopLevel(
     _Inout_ PMI_SYSTEM System)
 {
@@ -231,6 +295,13 @@ MiSystemPopulateTopLevel(
 
         if (MiArchPteRead(&Root[Index]) != 0)
             continue;
+
+        if (System->SessionEnd > System->SessionStart &&
+            Index >= ((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask) &&
+            Index <= ((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask))
+        {
+            continue;
+        }
 
         Table = MiPfnAllocatePage(&System->Pfn, MI_ALLOCATE_ZEROED);
         if (Table == MI_FRAME_INVALID)

@@ -23,6 +23,8 @@
 #define TYPE_WINDOWS10_BUILD    10240
 #define TYPE_WINDOWS_COLOR      RGB(0, 120, 215)
 #define TYPE_LIBERNT_COLOR      RGB(16, 137, 62)
+#define TYPE_PREPARED_SETUP     L"\\$LiberNT.~BT\\setup.ini"
+#define TYPE_PREPARED_SECTION   L"Setup"
 
 typedef struct _TYPE_STATE
 {
@@ -253,6 +255,64 @@ FindWindowsInstallation(
     SetCursor(OldCursor);
 }
 
+static PPARTENTRY
+FindPreparedPartition(
+    _In_ PSETUPDATA pSetupData,
+    _Out_writes_(MAX_PATH) PWSTR SetupFile)
+{
+    PLIST_ENTRY DiskLink, PartLink;
+
+    if (!pSetupData->PartitionList)
+        return NULL;
+
+    for (DiskLink = pSetupData->PartitionList->DiskListHead.Flink;
+         DiskLink != &pSetupData->PartitionList->DiskListHead;
+         DiskLink = DiskLink->Flink)
+    {
+        PDISKENTRY DiskEntry = CONTAINING_RECORD(DiskLink, DISKENTRY, ListEntry);
+
+        for (PartLink = DiskEntry->PrimaryPartListHead.Flink;
+             PartLink != &DiskEntry->PrimaryPartListHead;
+             PartLink = PartLink->Flink)
+        {
+            PPARTENTRY PartEntry = CONTAINING_RECORD(PartLink, PARTENTRY, ListEntry);
+            PVOLENTRY Volume = PartEntry->Volume;
+
+            if (PartEntry->IsPartitioned && !PartEntry->New && Volume && !Volume->New &&
+                SUCCEEDED(StringCchPrintfW(SetupFile, MAX_PATH, L"\\\\?\\GLOBALROOT%s" TYPE_PREPARED_SETUP,
+                                           Volume->Info.DeviceName)) &&
+                GetFileAttributesW(SetupFile) != INVALID_FILE_ATTRIBUTES)
+            {
+                return PartEntry;
+            }
+        }
+    }
+    return NULL;
+}
+
+BOOLEAN
+PlanPreparedInstall(
+    _Inout_ PSETUPDATA pSetupData)
+{
+    WCHAR SetupFile[MAX_PATH];
+    PPARTENTRY Prepared = FindPreparedPartition(pSetupData, SetupFile);
+
+    if (!Prepared || !PlanVolumeFormat(Prepared->Volume, L"NTFS", NULL))
+        return FALSE;
+
+    GetPrivateProfileStringW(TYPE_PREPARED_SECTION, L"WindowsName", L"", pSetupData->WindowsName,
+                             ARRAYSIZE(pSetupData->WindowsName), SetupFile);
+    if (!pSetupData->WindowsName[0])
+        LoadStringW(pSetupData->hInstance, IDS_TYPE_WINDOWS, pSetupData->WindowsName, ARRAYSIZE(pSetupData->WindowsName));
+    pSetupData->bWindowsFirst = GetPrivateProfileIntW(TYPE_PREPARED_SECTION, L"WindowsFirst", 0, SetupFile) != 0;
+    pSetupData->bAlongside = TRUE;
+    pSetupData->bPrepared = TRUE;
+    InstallPartition = Prepared;
+    TypeState.Planned = TRUE;
+    DPRINT1("LiberNT is installed in the partition prepared from Windows on %S\n", Prepared->Volume->Info.DeviceName);
+    return TRUE;
+}
+
 static ULONGLONG
 GetSplitWindowsMb(
     _In_ HWND hwndDlg)
@@ -280,7 +340,7 @@ UpdateSplitLabels(
     SetDlgItemTextW(hwndDlg, IDC_TYPE_LNTSIZE, Text);
 }
 
-static VOID
+VOID
 PaintSplitChannel(
     _In_ HWND hTrack,
     _In_ HDC hdc,
@@ -537,6 +597,11 @@ InstallTypePageProc(
         }
 
         case SPN_QUERYSKIP:
+            if (pSetupData->bPrepared)
+            {
+                SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, TRUE);
+                return TRUE;
+            }
             if (FromImage && !TypeState.Planned)
                 FindWindowsInstallation(pSetupData);
             SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, !TypeState.Found);

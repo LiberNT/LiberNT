@@ -387,6 +387,10 @@ DISPEX_IDISPATCH_IMPL(HTMLEventObj, IHTMLEventObj, impl_from_IHTMLEventObj(iface
 static HRESULT WINAPI HTMLEventObj_get_srcElement(IHTMLEventObj *iface, IHTMLElement **p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    HTMLElement *elem;
+    cpp_bool connected;
+    nsresult nsres;
+    HRESULT hres;
 
     TRACE("(%p)->(%p)\n", This, p);
 
@@ -395,7 +399,20 @@ static HRESULT WINAPI HTMLEventObj_get_srcElement(IHTMLEventObj *iface, IHTMLEle
         return S_OK;
     }
 
-    return IDOMEvent_get_srcElement(&This->event->IDOMEvent_iface, p);
+    hres = IDOMEvent_get_srcElement(&This->event->IDOMEvent_iface, p);
+    if(FAILED(hres) || !*p)
+        return hres;
+
+    elem = unsafe_impl_from_IHTMLElement(*p);
+    if(!elem || !elem->node.doc)
+        return S_OK;
+
+    nsres = nsIDOMNode_Contains(elem->node.doc->node.nsnode, elem->node.nsnode, &connected);
+    if(NS_SUCCEEDED(nsres) && !connected) {
+        IHTMLElement_Release(*p);
+        *p = NULL;
+    }
+    return S_OK;
 }
 
 static HRESULT WINAPI HTMLEventObj_get_altKey(IHTMLEventObj *iface, VARIANT_BOOL *p)
@@ -473,6 +490,11 @@ static HRESULT WINAPI HTMLEventObj_get_shiftKey(IHTMLEventObj *iface, VARIANT_BO
     return S_OK;
 }
 
+static VARIANT *event_obj_return_value(HTMLEventObj *This)
+{
+    return This->event ? &This->event->return_value : &This->return_value;
+}
+
 static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT v)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
@@ -484,7 +506,7 @@ static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT
         return DISP_E_BADVARTYPE;
     }
 
-    This->return_value = v;
+    *event_obj_return_value(This) = v;
     if(!V_BOOL(&v) && This->event)
         IDOMEvent_preventDefault(&This->event->IDOMEvent_iface);
     return S_OK;
@@ -493,11 +515,18 @@ static HRESULT WINAPI HTMLEventObj_put_returnValue(IHTMLEventObj *iface, VARIANT
 static HRESULT WINAPI HTMLEventObj_get_returnValue(IHTMLEventObj *iface, VARIANT *p)
 {
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
+    VARIANT *return_value = event_obj_return_value(This);
 
     TRACE("(%p)->(%p)\n", This, p);
 
+    if(V_VT(return_value) == VT_EMPTY && This->event && dispex_compat_mode(&This->dispex) >= COMPAT_MODE_IE9) {
+        V_VT(p) = VT_BOOL;
+        V_BOOL(p) = variant_bool(!This->event->prevent_default);
+        return S_OK;
+    }
+
     V_VT(p) = VT_EMPTY;
-    return VariantCopy(p, &This->return_value);
+    return VariantCopy(p, return_value);
 }
 
 static HRESULT WINAPI HTMLEventObj_put_cancelBubble(IHTMLEventObj *iface, VARIANT_BOOL v)
@@ -516,6 +545,11 @@ static HRESULT WINAPI HTMLEventObj_get_cancelBubble(IHTMLEventObj *iface, VARIAN
     HTMLEventObj *This = impl_from_IHTMLEventObj(iface);
 
     TRACE("(%p)->(%p)\n", This, p);
+
+    if(!This->event) {
+        *p = VARIANT_FALSE;
+        return S_OK;
+    }
 
     return IDOMEvent_get_cancelBubble(&This->event->IDOMEvent_iface, p);
 }
@@ -1842,6 +1876,20 @@ static HTMLEventObj *alloc_event_obj(DOMEvent *event, HTMLInnerWindow *script_gl
     return event_obj;
 }
 
+static HTMLEventObj *create_event_arg(DOMEvent *event)
+{
+    return event->event_obj ? alloc_event_obj(event, NULL) : NULL;
+}
+
+static void release_event_arg(HTMLEventObj *event_obj)
+{
+    DOMEvent *event = event_obj->event;
+
+    event_obj->event = NULL;
+    IDOMEvent_Release(&event->IDOMEvent_iface);
+    IHTMLEventObj_Release(&event_obj->IHTMLEventObj_iface);
+}
+
 HRESULT create_event_obj(DOMEvent *event, HTMLDocumentNode *doc, IHTMLEventObj **ret)
 {
     HTMLEventObj *event_obj;
@@ -2140,6 +2188,7 @@ static void DOMEvent_unlink(DispatchEx *dispex)
 static void DOMEvent_destructor(DispatchEx *dispex)
 {
     DOMEvent *This = DOMEvent_from_DispatchEx(dispex);
+    VariantClear(&This->return_value);
     free(This->type);
     free(This);
 }
@@ -2191,10 +2240,23 @@ static HRESULT WINAPI DOMUIEvent_get_detail(IDOMUIEvent *iface, LONG *p)
     return S_OK;
 }
 
+static mozIDOMWindow *get_view_window(IHTMLWindow2 *view)
+{
+    HTMLOuterWindow *window = unsafe_outer_window_from_IHTMLWindow2(view);
+    mozIDOMWindow *ret = NULL;
+
+    if(window && window->nswindow)
+        nsIDOMWindow_GetInnerWindow(window->nswindow, &ret);
+    else if(view)
+        FIXME("unsupported view %p\n", view);
+    return ret;
+}
+
 static HRESULT WINAPI DOMUIEvent_initUIEvent(IDOMUIEvent *iface, BSTR type, VARIANT_BOOL can_bubble,
         VARIANT_BOOL cancelable, IHTMLWindow2 *view, LONG detail)
 {
     DOMUIEvent *This = impl_from_IDOMUIEvent(iface);
+    mozIDOMWindow *view_window;
     nsAString type_str;
     nsresult nsres;
     HRESULT hres;
@@ -2206,17 +2268,17 @@ static HRESULT WINAPI DOMUIEvent_initUIEvent(IDOMUIEvent *iface, BSTR type, VARI
         return S_OK;
     }
 
-    if(view)
-        FIXME("view argument is not supported\n");
-
     hres = IDOMEvent_initEvent(&This->event.IDOMEvent_iface, type, can_bubble, cancelable);
     if(FAILED(hres))
         return hres;
 
+    view_window = get_view_window(view);
     nsAString_InitDepend(&type_str, type);
     nsres = nsIDOMUIEvent_InitUIEvent(This->nsevent, &type_str, !!can_bubble, !!cancelable,
-                                      NULL /* FIXME */, detail);
+                                      view_window, detail);
     nsAString_Finish(&type_str);
+    if(view_window)
+        mozIDOMWindow_Release(view_window);
     if(NS_FAILED(nsres)) {
         FIXME("InitUIEvent failed: %08lx\n", nsres);
         return E_FAIL;
@@ -2476,9 +2538,6 @@ static HRESULT WINAPI DOMMouseEvent_initMouseEvent(IDOMMouseEvent *iface, BSTR t
         return S_OK;
     }
 
-    if(view)
-        FIXME("view argument is not supported\n");
-
     if(related_target) {
         hres = get_gecko_target(related_target, &nstarget);
         if(FAILED(hres))
@@ -2487,12 +2546,16 @@ static HRESULT WINAPI DOMMouseEvent_initMouseEvent(IDOMMouseEvent *iface, BSTR t
 
     hres = IDOMEvent_initEvent(&This->ui_event.event.IDOMEvent_iface, type, can_bubble, cancelable);
     if(SUCCEEDED(hres)) {
+        mozIDOMWindow *view_window = get_view_window(view);
+
         nsAString_InitDepend(&type_str, type);
         nsres = nsIDOMMouseEvent_InitMouseEvent(This->nsevent, &type_str, can_bubble, cancelable,
-                                                NULL /* FIXME */, detail, screen_x, screen_y,
+                                                view_window, detail, screen_x, screen_y,
                                                 client_x, client_y, !!ctrl_key, !!alt_key, !!shift_key,
                                                 !!meta_key, button, nstarget);
         nsAString_Finish(&type_str);
+        if(view_window)
+            mozIDOMWindow_Release(view_window);
         if(NS_FAILED(nsres)) {
             FIXME("InitMouseEvent failed: %08lx\n", nsres);
             return E_FAIL;
@@ -3583,11 +3646,19 @@ static const tid_t Event_iface_tids[] = {
     0
 };
 
+static const dispex_constant_t event_constants[] = {
+    {L"CAPTURING_PHASE", DEP_CAPTURING_PHASE},
+    {L"AT_TARGET",       DEP_AT_TARGET},
+    {L"BUBBLING_PHASE",  DEP_BUBBLING_PHASE},
+    {NULL}
+};
+
 dispex_static_data_t Event_dispex = {
     .id         = OBJID_Event,
     .vtbl       = &DOMEvent_dispex_vtbl,
     .disp_tid   = DispDOMEvent_tid,
     .iface_tids = Event_iface_tids,
+    .constants  = event_constants,
 };
 
 static const dispex_static_data_vtbl_t DOMUIEvent_dispex_vtbl = {
@@ -3655,6 +3726,16 @@ static const tid_t KeyboardEvent_iface_tids[] = {
     0
 };
 
+static const dispex_constant_t keyboard_event_constants[] = {
+    {L"DOM_KEY_LOCATION_STANDARD", 0},
+    {L"DOM_KEY_LOCATION_LEFT",     1},
+    {L"DOM_KEY_LOCATION_RIGHT",    2},
+    {L"DOM_KEY_LOCATION_NUMPAD",   3},
+    {L"DOM_KEY_LOCATION_MOBILE",   4},
+    {L"DOM_KEY_LOCATION_JOYSTICK", 5},
+    {NULL}
+};
+
 dispex_static_data_t KeyboardEvent_dispex = {
     .id           = OBJID_KeyboardEvent,
     .prototype_id = OBJID_UIEvent,
@@ -3662,6 +3743,7 @@ dispex_static_data_t KeyboardEvent_dispex = {
     .disp_tid     = DispDOMKeyboardEvent_tid,
     .iface_tids   = KeyboardEvent_iface_tids,
     .init_info    = KeyboardEvent_init_dispex_info,
+    .constants    = keyboard_event_constants,
 };
 
 static void DOMPageTransitionEvent_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
@@ -4279,6 +4361,8 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
     }
 
     for(listener = listeners; listener < listeners + listeners_cnt; listener++) {
+        HTMLEventObj *event_arg = NULL;
+
         if(listener->type != LISTENER_TYPE_ATTACHED) {
             DISPID named_arg = DISPID_THIS;
             VARIANTARG args[2];
@@ -4287,9 +4371,12 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
             V_VT(args) = VT_DISPATCH;
             V_DISPATCH(args) = (IDispatch *)dispex_outer_iface(&event_target->dispex);
 
+            if(dispatch_mode == DISPATCH_LEGACY)
+                event_arg = create_event_arg(event);
+
             V_VT(args+1) = VT_DISPATCH;
-            V_DISPATCH(args+1) = dispatch_mode == DISPATCH_LEGACY
-                ? (IDispatch*)event->event_obj : (IDispatch*)&event->IDOMEvent_iface;
+            V_DISPATCH(args+1) = dispatch_mode != DISPATCH_LEGACY ? (IDispatch*)&event->IDOMEvent_iface
+                : event_arg ? (IDispatch*)&event_arg->IHTMLEventObj_iface : (IDispatch*)event->event_obj;
             V_VT(&v) = VT_EMPTY;
 
             TRACE("%p %s >>>\n", event_target, debugstr_w(event->type));
@@ -4316,8 +4403,10 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
             VARIANTARG arg;
             DISPPARAMS dp = {&arg, NULL, 1, 0};
 
+            event_arg = create_event_arg(event);
+
             V_VT(&arg) = VT_DISPATCH;
-            V_DISPATCH(&arg) = (IDispatch*)event->event_obj;
+            V_DISPATCH(&arg) = event_arg ? (IDispatch*)&event_arg->IHTMLEventObj_iface : (IDispatch*)event->event_obj;
             V_VT(&v) = VT_EMPTY;
 
             TRACE("%p %s attached >>>\n", event_target, debugstr_w(event->type));
@@ -4338,6 +4427,9 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
                 WARN("%p %s attached <<< %08lx\n", event_target, debugstr_w(event->type), hres);
             }
         }
+
+        if(event_arg)
+            release_event_arg(event_arg);
 
         if(event->stop_immediate_propagation)
             break;
@@ -4361,14 +4453,21 @@ static void call_event_handlers(EventTarget *event_target, DOMEvent *event, disp
                     continue;
 
                 for(i=0; i < cp->sinks_size; i++) {
+                    HTMLEventObj *event_arg = NULL;
+
                     if(!cp->sinks[i].disp)
                         continue;
+
+                    if(cp->data->pass_event_arg)
+                        event_arg = create_event_arg(event);
 
                     V_VT(&v) = VT_EMPTY;
 
                     TRACE("%p cp %s [%u] >>>\n", event_target, debugstr_w(event->type), i);
                     hres = call_cp_func(cp->sinks[i].disp, event_info[event->event_id].dispid,
-                            cp->data->pass_event_arg ? event->event_obj : NULL, &v);
+                            !cp->data->pass_event_arg ? NULL : event_arg ? &event_arg->IHTMLEventObj_iface : event->event_obj, &v);
+                    if(event_arg)
+                        release_event_arg(event_arg);
                     if(hres == S_OK) {
                         TRACE("%p cp %s [%u] <<<\n", event_target, debugstr_w(event->type), i);
 
@@ -4587,8 +4686,13 @@ HRESULT fire_event(HTMLDOMNode *node, const WCHAR *event_name, VARIANT *event_va
             return E_OUTOFMEMORY;
     }
 
-    if(!event_obj->event)
+    if(!event_obj->event) {
         hres = create_document_event(node->doc, eid, &event_obj->event);
+        if(SUCCEEDED(hres)) {
+            event_obj->event->return_value = event_obj->return_value;
+            V_VT(&event_obj->return_value) = VT_EMPTY;
+        }
+    }
 
     if(SUCCEEDED(hres)) {
         event_obj->event->event_obj = &event_obj->IHTMLEventObj_iface;

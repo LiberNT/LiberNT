@@ -11,6 +11,7 @@ extern void func_addresslistsort(void);
 extern void func_bind(void);
 extern void func_broadcast(void);
 extern void func_close(void);
+extern void func_connect_any(void);
 extern void func_connect_select(void);
 extern void func_dualstack(void);
 extern void func_getaddrinfo(void);
@@ -23,8 +24,11 @@ extern void func_nonblocking(void);
 extern void func_nostartup(void);
 extern void func_open_osfhandle(void);
 extern void func_pollable_event(void);
+extern void func_loopback_pingpong(void);
 extern void func_recv(void);
 extern void func_send(void);
+extern void func_sendto_neighbor(void);
+extern void func_udp_queue(void);
 extern void func_udp_quic(void);
 extern void func_WSAAsync(void);
 extern void func_WSAIoctl(void);
@@ -43,6 +47,7 @@ const struct test winetest_testlist[] =
     { "bind", func_bind },
     { "broadcast", func_broadcast },
     { "close", func_close },
+    { "connect_any", func_connect_any },
     { "connect_select", func_connect_select },
     { "dualstack", func_dualstack },
     { "getaddrinfo", func_getaddrinfo },
@@ -55,8 +60,11 @@ const struct test winetest_testlist[] =
     { "nostartup", func_nostartup },
     { "open_osfhandle", func_open_osfhandle },
     { "pollable_event", func_pollable_event },
+    { "loopback_pingpong", func_loopback_pingpong },
     { "recv", func_recv },
     { "send", func_send },
+    { "sendto_neighbor", func_sendto_neighbor },
+    { "udp_queue", func_udp_queue },
     { "udp_quic", func_udp_quic },
     { "WSAAsync", func_WSAAsync },
     { "WSAIoctl", func_WSAIoctl },

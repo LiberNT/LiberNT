@@ -106,7 +106,7 @@ KiInitializePcr(
     /* Set pointers to ourselves */
     Pcr->Self = (PKPCR)Pcr;
     Pcr->CurrentPrcb = &Pcr->Prcb;
-    Pcr->Prcb.CrashDumpContext = &Pcr->Prcb.ProcessorState.ContextFrame;
+    Pcr->Prcb.Context = &Pcr->Prcb.ProcessorState.ContextFrame;
 
     /* Set the PCR Version */
     Pcr->MajorVersion = PCR_MAJOR_VERSION;
@@ -208,6 +208,9 @@ KiInitializeCpu(PKIPCR Pcr)
     __writecr0(__readcr0() & ~CR0_MP);
 
     __writecr0(__readcr0() | CR0_NE);
+
+    /* Let user mode ask for alignment checking */
+    __writecr0(__readcr0() | CR0_AM);
 
     /* Check if XSAVE is supported */
     if (FeatureBits & KF_XSTATE)
@@ -547,7 +550,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
     else
     {
-        /* The number comes from the PRCB: KeNumberProcessors++ is not atomic */
+        /* An application processor was numbered when its PRCB was built */
         Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
         Cpu = Pcr->Prcb.Number;
     }

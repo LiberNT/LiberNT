@@ -54,7 +54,14 @@ DBG_DEFAULT_CHANNEL(WARNING);
 /* UART output using runtime-detected address from early_uart.h */
 #include <reactos/arm64/early_uart.h>
 
-static inline VOID UartPuts(const char *String) { EarlyUartPuts(String); }
+extern volatile BOOLEAN BootServicesExitedFlag;
+
+static inline VOID UartPuts(const char *String)
+{
+    EarlyUartPuts(String);
+    if (FwDebugScreen && !BootServicesExitedFlag)
+        FwDebugPrint(String);
+}
 
 /* ARRAYSIZE fallback if not defined */
 #ifndef ARRAYSIZE
@@ -233,6 +240,8 @@ typedef char arm64_mair_must_match_nt[
 
 /* From entry.S; keeps execution at EL1 like Windows boot loaders */
 VOID Arm64EnsureEl1EntryState(VOID);
+VOID Arm64DropToEl1KeepState(VOID);
+extern UINT8 arm64_exception_vectors[];
 
 /* SCTLR_EL1 bits */
 #define SCTLR_EL1_M             (1ULL << 0)
@@ -921,7 +930,7 @@ typedef struct _ARM64_MAPPING_REQUEST
     ULONGLONG VirtualBase;
     ULONGLONG PhysicalBase;
     ULONGLONG Size;
-    ULONG Attributes;
+    ULONGLONG Attributes;
     BOOLEAN TableOnly;
 } ARM64_MAPPING_REQUEST, *PARM64_MAPPING_REQUEST;
 
@@ -955,7 +964,7 @@ static BOOLEAN Arm64MappingPlanAddMapping(PARM64_MAPPING_PLAN Plan,
                                           ULONGLONG VirtualBase,
                                           ULONGLONG PhysicalBase,
                                           ULONGLONG Size,
-                                          ULONG Attributes,
+                                          ULONGLONG Attributes,
                                           BOOLEAN TableOnly);
 static BOOLEAN Arm64MappingPlanEnsureTables(PARM64_MAPPING_PLAN Plan,
                                             ULONGLONG VirtualBase,
@@ -2030,23 +2039,37 @@ Arm64MappingPlanAddMapping(
     ULONGLONG VirtualBase,
     ULONGLONG PhysicalBase,
     ULONGLONG Size,
-    ULONG Attributes,
+    ULONGLONG Attributes,
     BOOLEAN TableOnly)
 {
     if (Size == 0)
         return TRUE;
-
-    if (Plan->RequestCount >= ARM64_PLAN_MAX_REQUESTS)
-    {
-        ERR("ARM64: Mapping plan request overflow (max %u)\n", ARM64_PLAN_MAX_REQUESTS);
-        return FALSE;
-    }
 
     ULONGLONG alignedVa = VirtualBase & ~(PAGE_SIZE - 1ULL);
     ULONGLONG alignedPa = PhysicalBase & ~(PAGE_SIZE - 1ULL);
     ULONGLONG offset = PhysicalBase - alignedPa;
     ULONGLONG alignedSize = Size + offset;
     alignedSize = (alignedSize + PAGE_SIZE - 1ULL) & ~(PAGE_SIZE - 1ULL);
+
+    if (Plan->RequestCount != 0)
+    {
+        ARM64_MAPPING_REQUEST *Last = &Plan->Requests[Plan->RequestCount - 1];
+
+        if (Last->Target == Target && Last->TableOnly == TableOnly &&
+            Last->Attributes == Attributes &&
+            Last->VirtualBase + Last->Size == alignedVa &&
+            Last->PhysicalBase + Last->Size == alignedPa)
+        {
+            Last->Size += alignedSize;
+            return TRUE;
+        }
+    }
+
+    if (Plan->RequestCount >= ARM64_PLAN_MAX_REQUESTS)
+    {
+        ERR("ARM64: Mapping plan request overflow (max %u)\n", ARM64_PLAN_MAX_REQUESTS);
+        return FALSE;
+    }
 
     ARM64_MAPPING_REQUEST *Request = &Plan->Requests[Plan->RequestCount++];
     Request->Target = Target;
@@ -2710,11 +2733,13 @@ VOID Arm64EnablePageTables(VOID)
      * plain EL2, program the EL1 register set from EL2 first and only then drop
      * with ERET.  Dropping before TTBR/TCR/SCTLR_EL1 are ready faults on RPi5.
      */
-    if (el == 2 && !el12)
+    BOOLEAN vhe_transition = FALSE;
+
+    if (el == 2)
     {
         transition_to_el1 = TRUE;
+        vhe_transition = el12;
         el = 1;
-        el12 = FALSE;
     }
 
     /* Compose TCR after ensuring final EL */
@@ -2906,11 +2931,18 @@ VOID Arm64EnablePageTables(VOID)
 
     if (transition_to_el1)
     {
-        Arm64EnsureEl1EntryState();
+        Arm64DropToEl1KeepState();
         if (get_effective_el() != 1)
         {
             return;
         }
+        el12 = FALSE;
+        TLBI_VMALLE1IS();
+        ARM64_DSB_ISH();
+        ARM64_ISB();
+        Arm64SetVbarAuto((ULONG_PTR)arm64_exception_vectors);
+        if (vhe_transition)
+            sctlr = 0x30D0198DULL;
     }
 
     /* 3. Re-enable MMU and Cache (Original SCTLR flags) */
@@ -2961,6 +2993,25 @@ static VOID ensure_page_tables_initialized(VOID)
 }
 
 /* ---------- Public MMU control ---------- */
+
+BOOLEAN Arm64IsKernelVaMapped(ULONGLONG Va)
+{
+    UINT64 *Table = arm64_kernel_l0_table;
+    ULONG Level;
+
+    for (Level = 0; Table && Level < 4; Level++)
+    {
+        UINT64 Entry = Table[(Va >> (39 - 9 * Level)) & 0x1FF];
+
+        if (!DESC_VALID(Entry))
+            return FALSE;
+        if (Level == 3 || (Entry & 3) == 1)
+            return TRUE;
+        Table = (UINT64 *)PA_TO_VA(Entry & PTE_ADDR_MASK);
+    }
+
+    return FALSE;
+}
 
 VOID Arm64PreparePageTables(VOID)
 {

@@ -79,6 +79,8 @@ BEGIN
     IDS_FINISH "完成(&F)"
     IDS_DEVICES_TITLE "此电脑的驱动程序"
     IDS_DEVICES_SUBTITLE "没有驱动程序或使用第三方驱动程序，且在 Microsoft 更新目录中有更新驱动程序的设备。勾选要安装的设备。"
+    IDS_ABOUT_MENU "关于 LiberNT 驱动程序安装程序(&A)..."
+    IDS_ABOUT_TEXT "LiberNT 驱动程序安装程序\nCopyright (C) 2026 Ahmed ARIF\n根据 GNU 通用公共许可证第 3 版或更高版本授权。\n\n驱动程序从 Microsoft 更新目录下载，该目录是 Microsoft Corporation 提供的服务。\nMicrosoft 更新目录：Copyright (c) Microsoft Corporation. 保留所有权利。\n每个驱动程序包归其发布者所有，并受该发布者的许可条款约束。"
     IDS_INSTALL_TITLE "正在安装驱动程序"
     IDS_INSTALL_SUBTITLE "请等待驱动程序安装完成。"
     IDS_DONE_TITLE "已完成"
@@ -182,4 +184,5 @@ BEGIN
     IDS_SCAN_FOUND "为 %1 个设备找到了更新的驱动程序。"
     IDS_SCAN_NONE "Microsoft 更新目录中没有可为此电脑安装的新内容。"
     IDS_RESULT_UNSIGNED "签名未验证"
+    IDS_SCAN_THROTTLED "搜索将于 %1 继续。Microsoft 更新目录正在限制来自此电脑的搜索。"
 END

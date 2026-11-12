@@ -63,7 +63,8 @@
 
 #define USB_MAXCHILDREN 16
 #define MAX_LUN 0xF
-#define USBSTOR_DEFAULT_MAX_TRANSFER_LENGTH (256 * 1024)
+#define USBSTOR_USB2_MAX_TRANSFER_LENGTH (64 * 1024)
+#define USBSTOR_USB3_MAX_TRANSFER_LENGTH (512 * 1024)
 
 #define CBW_SIGNATURE 0x43425355
 #define CSW_SIGNATURE 0x53425355
@@ -160,6 +161,8 @@ typedef struct
     BOOLEAN RequestTimerDpcRunning;
     BOOLEAN RequestTimedOut;
     BOOLEAN DeferredCompletionReset;
+    USBD_HANDLE UsbdHandle;
+    ULONG MaxTransferLength;
 }FDO_DEVICE_EXTENSION, *PFDO_DEVICE_EXTENSION;
 
 typedef struct

@@ -12,6 +12,7 @@ list(APPEND SOURCE
      read.c
      registry.c
      security.c
+     txf.c
      vol.c
      write.c
 )

@@ -63,11 +63,36 @@ KdpScanCodeToChar(
     _In_ UCHAR ScanCode,
     _In_ BOOLEAN Shift);
 
+BOOLEAN
+KdpTerminalPollBreakIn(VOID);
+
+CHAR
+KdbpTryGetCharSerial(
+    _In_ ULONG Retry);
+
+VOID
+KdbpSendCommandSerial(
+    _In_ PCSTR Command);
+
+CHAR
+KdbpTryGetCharKeyboard(
+    _Out_ PULONG ScanCode,
+    _In_ ULONG Retry);
+
 VOID
 KdpUsbKeyboardInitialize(VOID);
 
 CHAR
 KdpUsbKeyboardTryGetChar(
     _Out_ PULONG ScanCode);
+
+BOOLEAN
+KdpKeyboardChordHeld(VOID);
+
+BOOLEAN
+KdpArchKeyboardControllerPresent(VOID);
+
+BOOLEAN
+KdpUsbKeyboardChordHeld(VOID);
 
 /* EOF */

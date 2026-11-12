@@ -6,7 +6,7 @@
  */
 
 #include "kdnet.h"
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 #include <kdfdt.h>
 
 #define KDNET_DBG2_SIGNATURE        0x32474244
@@ -93,13 +93,13 @@ KdpEnumerateDebugPortTable(
 static
 BOOLEAN
 KdpTreeNodeEnabled(
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_ ULONG Node)
 {
     const CHAR *Status;
     ULONG Length;
 
-    Status = RiscvFdtGetProperty(Tree, Node, "status", &Length);
+    Status = FdtGetProperty(Tree, Node, "status", &Length);
     if (!Status)
         return TRUE;
 
@@ -110,7 +110,7 @@ KdpTreeNodeEnabled(
 static
 BOOLEAN
 KdpTreeTranslate(
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_reads_(Depth) const ULONG *Ancestors,
     _In_ ULONG Depth,
     _Inout_ PULONGLONG Address)
@@ -121,12 +121,12 @@ KdpTreeTranslate(
 
     while (Depth > 1)
     {
-        Ranges = RiscvFdtGetProperty(Tree, Ancestors[Depth - 1], "ranges", &Length);
+        Ranges = FdtGetProperty(Tree, Ancestors[Depth - 1], "ranges", &Length);
         if (!Ranges)
             return FALSE;
 
-        RiscvFdtGetCellCounts(Tree, Ancestors[Depth - 1], &ChildCells, &SizeCells);
-        RiscvFdtGetCellCounts(Tree, Ancestors[Depth - 2], &ParentCells, &Unused);
+        FdtGetCellCounts(Tree, Ancestors[Depth - 1], &ChildCells, &SizeCells);
+        FdtGetCellCounts(Tree, Ancestors[Depth - 2], &ParentCells, &Unused);
         EntryCells = ChildCells + ParentCells + SizeCells;
         if (Length)
         {
@@ -135,9 +135,9 @@ KdpTreeTranslate(
 
             for (Index = 0; (Index + EntryCells) * sizeof(ULONG) <= Length; Index += EntryCells)
             {
-                if (!RiscvFdtReadCells(Ranges, Length, Index, ChildCells, &Child) ||
-                    !RiscvFdtReadCells(Ranges, Length, Index + ChildCells, ParentCells, &Parent) ||
-                    !RiscvFdtReadCells(Ranges, Length, Index + ChildCells + ParentCells, SizeCells, &Size))
+                if (!FdtReadCells(Ranges, Length, Index, ChildCells, &Child) ||
+                    !FdtReadCells(Ranges, Length, Index + ChildCells, ParentCells, &Parent) ||
+                    !FdtReadCells(Ranges, Length, Index + ChildCells + ParentCells, SizeCells, &Size))
                 {
                     return FALSE;
                 }
@@ -164,7 +164,7 @@ BOOLEAN
 KdpTreeNode(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PKDNET_PLATFORM_CALLBACK Callback,
-    _In_ const RISCV_FDT *Tree,
+    _In_ const FDT *Tree,
     _In_ ULONG Node,
     _In_reads_(Depth) const ULONG *Ancestors,
     _In_ ULONG Depth)
@@ -176,15 +176,15 @@ KdpTreeNode(
     ULONGLONG Address, Size;
     CHAR Character;
 
-    Compatible = RiscvFdtGetProperty(Tree, Node, "compatible", &Length);
+    Compatible = FdtGetProperty(Tree, Node, "compatible", &Length);
     if (!Compatible || !KdpTreeNodeEnabled(Tree, Node) ||
-        !RiscvFdtReadReg(Tree, Node, Ancestors[Depth - 1], 0, &Address, &Size) ||
+        !FdtReadReg(Tree, Node, Ancestors[Depth - 1], 0, &Address, &Size) ||
         !Size || Size > MAXULONG || !KdpTreeTranslate(Tree, Ancestors, Depth, &Address))
     {
         return FALSE;
     }
 
-    while ((Name = RiscvFdtNextString(Compatible, Length, &Cursor, &NameLength)) != NULL)
+    while ((Name = FdtNextString(Compatible, Length, &Cursor, &NameLength)) != NULL)
     {
         if (!NameLength || NameLength + sizeof("kd_fdt_.dll") > RTL_NUMBER_OF(Device.ModuleName))
             continue;
@@ -228,13 +228,13 @@ KdpEnumerateDeviceTree(
 {
     ULONG Path[KDNET_TREE_DEPTH], Depth = 0, Node, Next, Size;
     const VOID *Blob;
-    RISCV_FDT Tree;
+    FDT Tree;
 
-    if (!KdNetArchGetDeviceTree(LoaderBlock, &Blob, &Size) || !RiscvFdtOpen(Blob, Size, &Tree))
+    if (!KdNetArchGetDeviceTree(LoaderBlock, &Blob, &Size) || !FdtOpen(Blob, Size, &Tree))
         return FALSE;
 
-    Node = RiscvFdtRootNode(&Tree);
-    if (Node == RISCV_FDT_NO_NODE)
+    Node = FdtRootNode(&Tree);
+    if (Node == FDT_NO_NODE)
         return FALSE;
 
     for (;;)
@@ -242,8 +242,8 @@ KdpEnumerateDeviceTree(
         if (Depth && KdpTreeNode(LoaderBlock, Callback, &Tree, Node, Path, Depth))
             return TRUE;
 
-        Next = Depth + 1 < KDNET_TREE_DEPTH ? RiscvFdtFirstChild(&Tree, Node) : RISCV_FDT_NO_NODE;
-        if (Next != RISCV_FDT_NO_NODE)
+        Next = Depth + 1 < KDNET_TREE_DEPTH ? FdtFirstChild(&Tree, Node) : FDT_NO_NODE;
+        if (Next != FDT_NO_NODE)
         {
             Path[Depth++] = Node;
             Node = Next;
@@ -255,8 +255,8 @@ KdpEnumerateDeviceTree(
             if (!Depth)
                 return FALSE;
 
-            Next = RiscvFdtNextSibling(&Tree, Node);
-            if (Next != RISCV_FDT_NO_NODE)
+            Next = FdtNextSibling(&Tree, Node);
+            if (Next != FDT_NO_NODE)
             {
                 Node = Next;
                 break;

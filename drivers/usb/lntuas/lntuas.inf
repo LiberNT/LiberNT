@@ -1,0 +1,72 @@
+;
+; PROJECT:     LiberNT USB Attached SCSI Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Installs the StorPort USB Attached SCSI miniport on UAS interfaces
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+;
+
+[Version]
+Signature  = "$Windows NT$"
+Class      = SCSIAdapter
+ClassGuid  = {4D36E97B-E325-11CE-BFC1-08002BE10318}
+Provider   = %ROS%
+DriverVer  = 11/11/2026,10.0.0.1
+
+[SourceDisksNames]
+1 = %DeviceDesc%,,,
+
+[SourceDisksFiles]
+lntuas.sys = 1
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%UasMfg% = LNTUAS
+
+[LNTUAS]
+%UAS.DeviceDesc% = lntuas_Inst, USB\Class_08&SubClass_06&Prot_62
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[lntuas_Inst]
+CopyFiles = lntuas_CopyFiles
+
+[lntuas_Inst.Services]
+AddService = lntuas, %SPSVCINST_ASSOCSERVICE%, lntuas_Service_Inst, Miniport_EventLog_Inst
+
+[lntuas_Service_Inst]
+DisplayName    = %DeviceDesc%
+ServiceType    = %SERVICE_KERNEL_DRIVER%
+StartType      = %SERVICE_DEMAND_START%
+ErrorControl   = %SERVICE_ERROR_NORMAL%
+ServiceBinary  = %12%\lntuas.sys
+LoadOrderGroup = SCSI Miniport
+AddReg         = lntuas_Service_AddReg
+
+[lntuas_Service_AddReg]
+HKR, "Parameters", "BusType", %REG_DWORD%, 0x00000007
+
+[lntuas_CopyFiles]
+lntuas.sys,,,1
+
+[Miniport_EventLog_Inst]
+AddReg = Miniport_EventLog_AddReg
+
+[Miniport_EventLog_AddReg]
+HKR,,EventMessageFile,%REG_EXPAND_SZ%,"%%SystemRoot%%\System32\IoLogMsg.dll"
+HKR,,TypesSupported,%REG_DWORD%,7
+
+[Strings]
+ROS                     = "LiberNT"
+UasMfg                  = "USB Attached SCSI (UAS) Compatible Device"
+DeviceDesc              = "USB Attached SCSI Driver"
+UAS.DeviceDesc          = "USB Attached SCSI (UAS) Mass Storage Device"
+
+SPSVCINST_ASSOCSERVICE = 0x00000002
+SERVICE_KERNEL_DRIVER  = 1
+SERVICE_DEMAND_START   = 3
+SERVICE_ERROR_NORMAL   = 1
+REG_EXPAND_SZ          = 0x00020000
+REG_DWORD              = 0x00010001

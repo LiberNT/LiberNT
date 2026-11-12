@@ -251,7 +251,10 @@ PspMapApiSetSchema(
     SIZE_T ViewSize = 0;
     NTSTATUS Status;
 
-    Status = MmMapViewOfSection(PspApiSetSection, Process, &Base, MAXULONG, 0, NULL,
+    if (PspApiSetSection == NULL) return STATUS_SUCCESS;
+
+    Status = MmMapViewOfSection(PspApiSetSection, Process, &Base,
+                                (PsGetProcessPeb32(Process) != NULL) ? MAXULONG : 0, 0, NULL,
                                 &ViewSize, ViewShare, 0, PAGE_READONLY);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -259,6 +262,8 @@ PspMapApiSetSchema(
     _SEH2_TRY
     {
         Process->Peb->ApiSetMap = Base;
+        if (PsGetProcessPeb32(Process) != NULL)
+            PsGetProcessPeb32(Process)->ApiSetMap = PtrToUlong(Base);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

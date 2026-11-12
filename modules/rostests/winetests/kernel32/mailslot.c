@@ -378,7 +378,7 @@ static int mailslot_test(void)
     ok( CloseHandle( hSlot ), "closing the mailslot\n");
 
     /* test timeouts */
-    hSlot = CreateMailslotA( szmspath, 0, 1000, NULL );
+    hSlot = CreateMailslotA( szmspath, 0, 100, NULL );
     ok( hSlot != INVALID_HANDLE_VALUE , "valid mailslot failed\n");
     count = 0;
     memset(buffer, 0, sizeof buffer);
@@ -386,7 +386,7 @@ static int mailslot_test(void)
     ok( !ReadFile( hSlot, buffer, sizeof buffer, &count, NULL), "slot read\n");
     ok( GetLastError() == ERROR_SEM_TIMEOUT, "wrong error %lu\n", GetLastError() );
     dwTimeout = GetTickCount() - dwTimeout;
-    ok( dwTimeout >= 900, "timeout too short %lu\n", dwTimeout );
+    ok( dwTimeout >= 90, "timeout too short %lu\n", dwTimeout );
     ok( CloseHandle( hSlot ), "closing the mailslot\n");
 
     InitializeObjectAttributes( &attr, &nt_path, 0, NULL, NULL );

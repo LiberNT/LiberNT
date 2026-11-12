@@ -14,6 +14,10 @@ LONG NTAPI RtlCheckTokenMembershipEx(HANDLE TokenHandle, PSID SidToCheck, ULONG 
 #define CTMF_VALID_FLAGS (CTMF_INCLUDE_APPCONTAINER | CTMF_INCLUDE_LPAC)
 #define BASEP_ROUND_UP(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
 
+#ifndef BACKUP_SECURITY_INFORMATION
+#define BACKUP_SECURITY_INFORMATION 0x00010000L
+#endif
+
 static
 BOOL
 BasepOpenEffectiveToken(
@@ -508,4 +512,27 @@ AddResourceAttributeAce(
     if (Acl->AclRevision < AceRevision)
         Acl->AclRevision = (BYTE)AceRevision;
     return TRUE;
+}
+
+VOID
+WINAPI
+QuerySecurityAccessMask(
+    _In_ SECURITY_INFORMATION SecurityInformation,
+    _Out_ LPDWORD DesiredAccess)
+{
+    DWORD Access = 0;
+
+    if (SecurityInformation & (OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                               DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION |
+                               ATTRIBUTE_SECURITY_INFORMATION | SCOPE_SECURITY_INFORMATION |
+                               BACKUP_SECURITY_INFORMATION))
+    {
+        Access |= READ_CONTROL;
+    }
+
+    if (SecurityInformation & (SACL_SECURITY_INFORMATION | BACKUP_SECURITY_INFORMATION))
+        Access |= ACCESS_SYSTEM_SECURITY;
+
+    /* TODO: PROCESS_TRUST_LABEL and ACCESS_FILTER information have no documented right and add none */
+    *DesiredAccess = Access;
 }

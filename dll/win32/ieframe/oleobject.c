@@ -454,6 +454,26 @@ static ULONG WINAPI OleObject_Release(IOleObject *iface)
     return IUnknown_Release(This->hlink_frame.outer);
 }
 
+#ifdef __REACTOS__
+static void stop_loading_document(DocHost *doc_host, BOOL notify_container)
+{
+    VARIANT state;
+
+    on_commandstate_change(doc_host, CSC_NAVIGATEBACK, FALSE);
+    on_commandstate_change(doc_host, CSC_NAVIGATEFORWARD, FALSE);
+    on_commandstate_change(doc_host, CSC_UPDATECOMMANDS, FALSE);
+
+    if(notify_container && doc_host->olecmd) {
+        V_VT(&state) = VT_I4;
+        V_I4(&state) = 0;
+        IOleCommandTarget_Exec(doc_host->olecmd, NULL, OLECMDID_SETDOWNLOADSTATE, OLECMDEXECOPT_DODEFAULT, &state, NULL);
+    }
+
+    if(doc_host->download_begun)
+        notify_download_state(doc_host, FALSE);
+}
+#endif
+
 static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, LPOLECLIENTSITE pClientSite)
 {
     WebBrowser *This = impl_from_IOleObject(iface);
@@ -481,11 +501,18 @@ static HRESULT WINAPI OleObject_SetClientSite(IOleObject *iface, LPOLECLIENTSITE
             IOleCommandTarget_AddRef(olecmd);
     }
 
+#ifdef __REACTOS__
+    if(!pClientSite && is_document_loading(&This->doc_host))
+        stop_loading_document(&This->doc_host, !This->closing);
+#endif
+
     release_client_site(This, !pClientSite);
 
     if(!pClientSite) {
+#ifndef __REACTOS__
         on_commandstate_change(&This->doc_host, CSC_NAVIGATEBACK, FALSE);
         on_commandstate_change(&This->doc_host, CSC_NAVIGATEFORWARD, FALSE);
+#endif
 
         if(This->doc_host.document)
             deactivate_document(&This->doc_host);
@@ -619,7 +646,14 @@ static HRESULT WINAPI OleObject_Close(IOleObject *iface, DWORD dwSaveOption)
     client = This->client;
     if(This->client)
         IOleClientSite_AddRef(This->client);
+#ifdef __REACTOS__
+    /* A download stopped by closing the object is not reported to the container's command target */
+    This->closing = TRUE;
     hres = IOleObject_SetClientSite(iface, NULL);
+    This->closing = FALSE;
+#else
+    hres = IOleObject_SetClientSite(iface, NULL);
+#endif
     This->client_closed = client;
 
     if(This->advise_holder)

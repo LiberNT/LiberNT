@@ -1323,7 +1323,13 @@ ScanForUnpartitionedDiskSpace(
             StartSector = 2048ULL;
         else
             StartSector = (ULONGLONG)DiskEntry->SectorAlignment;
-        SectorCount = AlignDown(GetUsableSectorLimit(DiskEntry), DiskEntry->SectorAlignment) - StartSector;
+        SectorCount = AlignDown(GetUsableSectorLimit(DiskEntry), DiskEntry->SectorAlignment);
+        if (SectorCount <= StartSector)
+        {
+            DPRINT1("Disk %lu has no room for a partition after sector %I64u\n", DiskEntry->DiskNumber, StartSector);
+            return;
+        }
+        SectorCount -= StartSector;
 
         NewPartEntry = CreateInsertBlankRegion(DiskEntry,
                                                &DiskEntry->PrimaryPartListHead,

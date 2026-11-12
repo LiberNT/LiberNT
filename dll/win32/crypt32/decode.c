@@ -612,6 +612,7 @@ struct AsnArrayItemSize
 {
     DWORD encodedLen;
     DWORD size;
+    DWORD offset;
 };
 
 /* Decodes an array of like types into a structure described by a struct
@@ -693,6 +694,7 @@ static BOOL CRYPT_AsnDecodeArray(const struct AsnArrayDescriptor *arrayDesc,
                             /* Ignore an item that failed to decode but the decoder doesn't want to fail the whole process */
                             if (!size)
                             {
+                                decoded += itemEncoded;
                                 ptr += itemEncoded;
                                 continue;
                             }
@@ -715,6 +717,7 @@ static BOOL CRYPT_AsnDecodeArray(const struct AsnArrayDescriptor *arrayDesc,
                                 decoded += itemDecoded;
                                 itemSizes[cItems - 1].encodedLen = itemEncoded;
                                 itemSizes[cItems - 1].size = size;
+                                itemSizes[cItems - 1].offset = ptr - pbEncoded;
                                 bytesNeeded += size;
                                 ptr += itemEncoded;
                             }
@@ -754,12 +757,11 @@ static BOOL CRYPT_AsnDecodeArray(const struct AsnArrayDescriptor *arrayDesc,
                         rgItems = *(void **)((BYTE *)pcItems -
                          arrayDesc->countOffset + arrayDesc->arrayOffset);
                     nextData = (BYTE *)rgItems + cItems * arrayDesc->itemSize;
-                    for (i = 0, ptr = pbEncoded + 1 + lenBytes; ret &&
-                     i < cItems && ptr - pbEncoded - 1 - lenBytes <
-                     dataLen; i++)
+                    for (i = 0; ret && i < cItems; i++)
                     {
                         DWORD itemDecoded;
 
+                        ptr = pbEncoded + itemSizes[i].offset;
                         if (arrayDesc->hasPointer)
                             *(BYTE **)((BYTE *)rgItems + i * arrayDesc->itemSize
                              + arrayDesc->pointerOffset) = nextData;
@@ -769,10 +771,7 @@ static BOOL CRYPT_AsnDecodeArray(const struct AsnArrayDescriptor *arrayDesc,
                          (BYTE *)rgItems + i * arrayDesc->itemSize,
                          &itemSizes[i].size, &itemDecoded);
                         if (ret)
-                        {
                             nextData += itemSizes[i].size - arrayDesc->itemSize;
-                            ptr += itemDecoded;
-                        }
                     }
                     if (!ret && (dwFlags & CRYPT_DECODE_ALLOC_FLAG))
                         CRYPT_FreeSpace(pDecodePara, pvStructInfo);
@@ -5059,14 +5058,20 @@ static BOOL CRYPT_AsnDecodeGeneralizedTime(const BYTE *pbEncoded,
                     if (ret && len > 0 && (*pbEncoded == '.' ||
                      *pbEncoded == ','))
                     {
-                        BYTE digits;
+                        WORD scale = 100;
 
                         pbEncoded++;
                         len--;
-                        /* workaround macro weirdness */
-                        digits = min(len, 3);
-                        CRYPT_TIME_GET_DIGITS(pbEncoded, len, digits,
-                         sysTime.wMilliseconds);
+                        if (!len || !isdigit(*pbEncoded))
+                        {
+                            SetLastError(CRYPT_E_ASN1_CORRUPT);
+                            ret = FALSE;
+                        }
+                        for (; ret && len > 0 && isdigit(*pbEncoded); pbEncoded++, len--)
+                        {
+                            sysTime.wMilliseconds += (*pbEncoded - '0') * scale;
+                            scale /= 10;
+                        }
                     }
                     if (ret)
                         ret = CRYPT_AsnDecodeTimeZone(pbEncoded, len,

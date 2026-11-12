@@ -163,7 +163,6 @@ SetUserHiveSecurity(
                                   0,
                                   0};
     PSID Sids[sizeof(SidStrings) / sizeof(SidStrings[0])] = {NULL};
-    SECURITY_DESCRIPTOR SecurityDescriptor;
     PACL pDacl = NULL;
     DWORD dwDaclSize;
     DWORD dwError = ERROR_SUCCESS;
@@ -204,17 +203,11 @@ SetUserHiveSecurity(
         }
     }
 
-    if (!InitializeSecurityDescriptor(&SecurityDescriptor, SECURITY_DESCRIPTOR_REVISION) ||
-        !SetSecurityDescriptorDacl(&SecurityDescriptor, TRUE, pDacl, FALSE))
-    {
-        dwError = GetLastError();
-        goto done;
-    }
-
-    dwError = RegOpenKeyExW(HKEY_USERS, pszSidString, 0, WRITE_DAC, &hKey);
+    dwError = RegOpenKeyExW(HKEY_USERS, pszSidString, 0, READ_CONTROL | WRITE_DAC, &hKey);
     if (dwError == ERROR_SUCCESS)
     {
-        dwError = RegSetKeySecurity(hKey, DACL_SECURITY_INFORMATION, &SecurityDescriptor);
+        dwError = SetSecurityInfo(hKey, SE_REGISTRY_KEY, DACL_SECURITY_INFORMATION,
+                                  NULL, NULL, pDacl, NULL);
         RegCloseKey(hKey);
     }
 
@@ -695,6 +688,8 @@ CopySystemProfile(
     HANDLE hToken = NULL;
     PSID pUserSid = NULL;
     HKEY hProfileKey = NULL;
+    HANDLE hProfileMutex;
+    WCHAR szSystemSid[] = L"S-1-5-18";
     DWORD dwDisposition;
     BOOL bResult = FALSE;
     DWORD cchSize;
@@ -709,6 +704,15 @@ CopySystemProfile(
         DPRINT1("Failed to open the process token (Error %lu)\n", GetLastError());
         return FALSE;
     }
+
+    /* Made under the lock a load of the system profile takes, so a profile loaded first is never written over */
+    hProfileMutex = CreateProfileMutex(szSystemSid);
+    if (hProfileMutex == NULL)
+    {
+        CloseHandle(hToken);
+        return FALSE;
+    }
+    WaitForSingleObject(hProfileMutex, INFINITE);
 
     pUserSid = GetUserSid(hToken);
     if (pUserSid == NULL)
@@ -801,7 +805,7 @@ CopySystemProfile(
 
     /* Copy the default profile into the new profile directory */
     // FIXME: Security!
-    if (!CopyDirectory(szProfilePath, szDefaultProfilePath))
+    if (!CopyDirectory(szProfilePath, szDefaultProfilePath, TRUE))
     {
         DPRINT1("Failed to copy the default profile directory (Error %lu)\n", GetLastError());
         goto done;
@@ -815,7 +819,7 @@ CopySystemProfile(
         CreateDirectoryW(szProfilePath, NULL);
         if (SUCCEEDED(StringCchCatW(szProfilePath, ARRAYSIZE(szProfilePath), L"\\systemprofile")) &&
             (CreateDirectoryW(szProfilePath, NULL) || GetLastError() == ERROR_ALREADY_EXISTS) &&
-            !CopyDirectory(szProfilePath, szDefaultProfilePath))
+            !CopyDirectory(szProfilePath, szDefaultProfilePath, TRUE))
         {
             DPRINT1("Failed to copy the default profile to the WoW64 system profile (Error %lu)\n", GetLastError());
         }
@@ -834,6 +838,9 @@ done:
 
     if (hToken != NULL)
         CloseHandle(hToken);
+
+    ReleaseMutex(hProfileMutex);
+    CloseHandle(hProfileMutex);
 
     return bResult;
 }
@@ -1119,7 +1126,7 @@ CreateUserProfileExW(
 
 
     // FIXME: Security!
-    if (!CopyDirectory(szUserProfilePath, szDefaultUserPath))
+    if (!CopyDirectory(szUserProfilePath, szDefaultUserPath, FALSE))
     {
         DPRINT1("Error: %lu\n", GetLastError());
         return FALSE;
@@ -2269,7 +2276,7 @@ LoadUserProfileW(
                 goto cleanup;
             }
 
-            if (!CopyDirectory(szProfileListPath, szDefaultProfilePath))
+            if (!CopyDirectory(szProfileListPath, szDefaultProfilePath, FALSE))
             {
                 DPRINT1("CopyDirectory(%S, %S) failed (Error %lu)\n", szProfileListPath, szDefaultProfilePath, GetLastError());
                 goto cleanup;
@@ -2348,6 +2355,7 @@ LoadUserProfileW(
         if (bNewProfile)
         {
             if (!ConvertStringSidToSidW(SidString.Buffer, &pProfileSid) ||
+                !CreateUserHive(SidString.Buffer, szProfileListPath) ||
                 !SetUserHiveSecurity(SidString.Buffer, pProfileSid))
             {
                 dwError = GetLastError();

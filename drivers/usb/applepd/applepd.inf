@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple USB-C Power Delivery Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %LiberNT%
+DriverVer = 11/07/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg
+
+[StdMfg]
+%ApplePd.DeviceDesc% = ApplePd_Inst,FDT\apple_t8103-spmi
+
+[ApplePd_Inst.NT]
+CopyFiles = ApplePd_CopyFiles
+
+[ApplePd_CopyFiles]
+applepd.sys
+
+[ApplePd_Inst.NT.Services]
+AddService = applepd,0x00000002,ApplePd_Service
+
+[ApplePd_Service]
+DisplayName = %ApplePd.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applepd.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+ApplePd.DeviceDesc = "Apple USB-C Power Delivery Controllers"
+ApplePd.ServiceDesc = "Apple USB-C Power Delivery Driver"

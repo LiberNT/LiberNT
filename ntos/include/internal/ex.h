@@ -11,27 +11,44 @@ extern RTL_TIME_ZONE_INFORMATION ExpTimeZoneInfo;
 extern LARGE_INTEGER ExpTimeZoneBias;
 extern ULONG ExpTimeZoneId;
 extern ULONG ExpTickCountMultiplier;
+
+ULONG
+NTAPI
+ExComputeTickCountMultiplier(
+    _In_ ULONG TimeIncrement);
+
+NTSTATUS
+NTAPI
+ExGetSystemFirmwareTable(
+    _In_ ULONG FirmwareTableProviderSignature,
+    _In_ ULONG FirmwareTableID,
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID FirmwareTableBuffer,
+    _In_ ULONG BufferLength,
+    _Out_opt_ PULONG ReturnLength);
 extern ULONG ExpLastTimeZoneBias;
 extern BOOLEAN ExpRealTimeIsUniversal;
-extern POBJECT_TYPE ExEventPairObjectType;
 extern POBJECT_TYPE _ExEventObjectType, _ExSemaphoreObjectType;
 extern FAST_MUTEX ExpEnvironmentLock;
 extern ERESOURCE ExpFirmwareTableResource;
 extern ERESOURCE ExpTimeRefreshLock;
 extern LIST_ENTRY ExpFirmwareTableProviderListHead;
 extern FIRMWARE_TYPE ExpFirmwareType;
+extern SYSTEM_BOOT_ENVIRONMENT_INFORMATION ExpBootEnvironmentInformation;
 extern BOOLEAN ExpIsWinPEMode;
 extern ULONG ExpResourceTimeoutCount;
 extern LIST_ENTRY ExpSystemResourcesList;
+extern KSPIN_LOCK ExpResourceSpinLock;
 extern ULONG ExpAnsiCodePageDataOffset, ExpOemCodePageDataOffset;
 extern ULONG ExpUnicodeCaseTableDataOffset;
 extern PVOID ExpNlsSectionPointer;
+extern EX_WORK_QUEUE ExWorkerQueue[MaximumWorkQueue];
 extern ULONG NtGlobalFlag;
 extern UNICODE_STRING NtSystemRoot;
 extern ULONG ExpInitializationPhase;
 extern ULONG ExpAltTimeZoneBias;
 extern LIST_ENTRY ExSystemLookasideListHead;
 extern PCALLBACK_OBJECT PowerStateCallback;
+extern PCALLBACK_OBJECT SetSystemTimeCallback;
 extern LIST_ENTRY ExPoolLookasideListHead;
 extern LIST_ENTRY ExpNonPagedLookasideListHead;
 extern LIST_ENTRY ExpPagedLookasideListHead;
@@ -42,6 +59,7 @@ extern ULONG ExDelayedWorkerThreads;
 
 extern PVOID ExpDefaultErrorPort;
 extern PEPROCESS ExpDefaultErrorPortProcess;
+extern BOOLEAN ExReadyForErrors;
 
 /*
  * NT/Cm Version Info variables
@@ -91,10 +109,23 @@ ExpDebuggerWorker(
 
 NTSTATUS
 NTAPI
+WmipQueryRawSMBiosTables(
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer);
+
+NTSTATUS
+NTAPI
 ExpGetRawSMBiosTable(
     _Out_opt_ PVOID Buffer,
     _Out_ ULONG *OutSize,
     _In_ ULONG BufferSize);
+
+NTSTATUS
+NTAPI
+ExpEnumerateAcpiTables(
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _Out_ PULONG ReturnLength);
 
 #ifdef _WIN64
 #define HANDLE_LOW_BITS     (PAGE_SHIFT - 4)
@@ -143,14 +174,8 @@ typedef struct _ETIMER
     ULONG ApcQueuedSequence;
     ULONGLONG ApcQueuedDueTime;
     BOOLEAN HighResolution;
-    BOOLEAN HighResolutionArmed;
-    LIST_ENTRY HighResolutionLink;
+    KI_HIGH_RESOLUTION_DEADLINE HighResolutionDeadline;
 } ETIMER, *PETIMER;
-
-VOID
-NTAPI
-ExpQueueTimerApcAfterWait(
-    _Inout_ PETIMER Timer);
 
 typedef struct
 {
@@ -273,12 +298,12 @@ ExRefreshTimeZoneInformation(
 CODE_SEG("INIT")
 VOID
 NTAPI
-ExpInitializeWorkerQueues(VOID);
+ExpInitializeWorkerThreads(VOID);
 
 CODE_SEG("INIT")
 VOID
 NTAPI
-ExpInitializeWorkerThreads(VOID);
+ExpInitializeSecureBoot(VOID);
 
 VOID
 NTAPI
@@ -305,6 +330,11 @@ CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitializeCallbacks(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpInitializeCallbackObjects(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN
@@ -377,11 +407,6 @@ CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitializeKeyedEventImplementation(VOID);
-
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-ExpInitializeEventPairImplementation(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN
@@ -1661,7 +1686,13 @@ ExReleaseTimeRefreshLock(
 VOID
 NTAPI
 ExpSetHighResolutionClock(
-    IN BOOLEAN Active
+    IN ULONG Resolution
+);
+
+VOID
+NTAPI
+ExReleaseProcessTimerResolution(
+    _Inout_ PEPROCESS Process
 );
 
 VOID

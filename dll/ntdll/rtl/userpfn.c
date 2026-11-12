@@ -10,7 +10,12 @@
 static const VOID *RtlpUserPfnClientA;
 static const VOID *RtlpUserPfnClientW;
 static const VOID *RtlpUserPfnClientWorker;
+static ULONG RtlpUserPfnClientASize;
+static ULONG RtlpUserPfnClientWSize;
 static LONG RtlpUserPfnInitialized;
+
+#define RTLP_USER_PFN_DEFWINDOWPROC 4
+#define RTLP_USER_PFN_DIALOGWNDPROC 10
 
 NTSTATUS
 NTAPI
@@ -34,6 +39,8 @@ RtlInitializeNtUserPfn(
     RtlpUserPfnClientA = ClientA;
     RtlpUserPfnClientW = ClientW;
     RtlpUserPfnClientWorker = ClientWorker;
+    RtlpUserPfnClientASize = ClientASize;
+    RtlpUserPfnClientWSize = ClientWSize;
     InterlockedExchange(&RtlpUserPfnInitialized, TRUE);
     return STATUS_SUCCESS;
 }
@@ -62,4 +69,76 @@ RtlResetNtUserPfn(VOID)
         return STATUS_INVALID_PARAMETER;
 
     return STATUS_SUCCESS;
+}
+
+static LRESULT
+RtlpCallNtUserPfn(
+    _In_ BOOLEAN Unicode,
+    _In_ ULONG Index,
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    const ULONG64 *Table;
+    ULONG Size;
+    WNDPROC Proc;
+
+    if (ReadAcquire(&RtlpUserPfnInitialized) != TRUE)
+        return 0;
+
+    Table = Unicode ? RtlpUserPfnClientW : RtlpUserPfnClientA;
+    Size = Unicode ? RtlpUserPfnClientWSize : RtlpUserPfnClientASize;
+    if (Size / sizeof(ULONG64) <= Index)
+        return 0;
+
+    Proc = (WNDPROC)(ULONG_PTR)Table[Index];
+    if (!Proc)
+        return 0;
+
+    return Proc(hWnd, Msg, wParam, lParam);
+}
+
+LRESULT
+WINAPI
+NtdllDefWindowProc_A(
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    return RtlpCallNtUserPfn(FALSE, RTLP_USER_PFN_DEFWINDOWPROC, hWnd, Msg, wParam, lParam);
+}
+
+LRESULT
+WINAPI
+NtdllDefWindowProc_W(
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    return RtlpCallNtUserPfn(TRUE, RTLP_USER_PFN_DEFWINDOWPROC, hWnd, Msg, wParam, lParam);
+}
+
+LRESULT
+WINAPI
+NtdllDialogWndProc_A(
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    return RtlpCallNtUserPfn(FALSE, RTLP_USER_PFN_DIALOGWNDPROC, hWnd, Msg, wParam, lParam);
+}
+
+LRESULT
+WINAPI
+NtdllDialogWndProc_W(
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    return RtlpCallNtUserPfn(TRUE, RTLP_USER_PFN_DIALOGWNDPROC, hWnd, Msg, wParam, lParam);
 }

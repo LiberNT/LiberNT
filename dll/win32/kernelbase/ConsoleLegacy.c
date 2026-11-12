@@ -108,6 +108,37 @@ SetStdHandle(
     return FALSE;
 }
 
+BOOL
+WINAPI
+SetStdHandleEx(
+    _In_ DWORD nStdHandle,
+    _In_ HANDLE hHandle,
+    _Out_opt_ PHANDLE phPrevValue)
+{
+    RTL_USER_PROCESS_PARAMETERS *Parameters = NtCurrentTeb()->Peb->ProcessParameters;
+    HANDLE *Slot;
+
+    switch (nStdHandle)
+    {
+        case STD_INPUT_HANDLE:
+            Slot = &Parameters->hStdInput;
+            break;
+        case STD_OUTPUT_HANDLE:
+            Slot = &Parameters->hStdOutput;
+            break;
+        case STD_ERROR_HANDLE:
+            Slot = &Parameters->hStdError;
+            break;
+        default:
+            SetLastError(ERROR_INVALID_HANDLE);
+            return FALSE;
+    }
+    if (phPrevValue)
+        *phPrevValue = *Slot;
+    *Slot = hHandle;
+    return TRUE;
+}
+
 HANDLE
 WINAPI
 OpenConsoleW(
@@ -383,24 +414,6 @@ BOOL
 WINAPI
 GetConsoleSelectionInfo(
     _Out_ PCONSOLE_SELECTION_INFO lpConsoleSelectionInfo)
-{
-    return ConsoleNotImplemented();
-}
-
-BOOL
-WINAPI
-SetConsoleNumberOfCommandsA(
-    _In_ DWORD dwNumCommands,
-    _In_ LPCSTR lpExeName)
-{
-    return ConsoleNotImplemented();
-}
-
-BOOL
-WINAPI
-SetConsoleNumberOfCommandsW(
-    _In_ DWORD dwNumCommands,
-    _In_ LPCWSTR lpExeName)
 {
     return ConsoleNotImplemented();
 }

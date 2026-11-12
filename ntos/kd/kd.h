@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cportlib/cportlib.h>
+
 /* KD ROUTINES ***************************************************************/
 
 struct _KD_DISPATCH_TABLE;
 
+#define KDP_BOOT_PHASE_BUSES 2
 #define KDP_BOOT_PHASE_SYSTEM_ROOT 6
 
 typedef
@@ -34,6 +37,33 @@ KdIoReadLine(
     _In_ SIZE_T Size);
 
 
+/*
+ * The stop the engine is reporting right now. The engine puts these up before
+ * it says anything, so that an interactive debugger inside this kernel can
+ * answer the report with the registers in front of it instead of asking for
+ * them over a link to itself.
+ */
+extern PCONTEXT KdpReportedContext;
+extern KPROCESSOR_MODE KdpReportedMode;
+extern BOOLEAN KdpReportedFirstChance;
+
+VOID
+NTAPI
+KdpSelectDebugMode(
+    _In_opt_ struct _LOADER_PARAMETER_BLOCK *LoaderBlock);
+
+NTSTATUS
+NTAPI
+KdpInitializeProviders(
+    _In_ ULONG BootPhase);
+
+VOID
+NTAPI
+KdpProvidersPrint(
+    _In_reads_bytes_(Length) PCCH String,
+    _In_ ULONG Length);
+
+
 /* INIT ROUTINES *************************************************************/
 
 BOOLEAN
@@ -59,6 +89,14 @@ KdpScreenEnterStop(
 VOID
 KdpScreenRelease(
     _In_ BOOLEAN DisplayAcquired);
+
+VOID
+KdpScreenEnterBugCheck(
+    _In_ BOOLEAN FollowPrints);
+
+VOID
+KdpScreenHoldOutput(
+    _In_ BOOLEAN Hold);
 
 NTSTATUS
 NTAPI

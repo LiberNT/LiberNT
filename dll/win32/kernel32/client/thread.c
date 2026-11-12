@@ -730,6 +730,23 @@ SuspendThread(IN HANDLE hThread)
     return PreviousSuspendCount;
 }
 
+DWORD
+WINAPI
+Wow64SuspendThread(IN HANDLE hThread)
+{
+    ULONG PreviousSuspendCount;
+    NTSTATUS Status;
+
+    Status = BasepSuspendWow64Thread(hThread, &PreviousSuspendCount);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return -1;
+    }
+
+    return PreviousSuspendCount;
+}
+
 /*
  * @implemented
  */
@@ -1056,13 +1073,40 @@ LANGID
 WINAPI
 SetThreadUILanguage(IN LANGID LangId)
 {
-    /* LangId == 0 selects a language best supporting the console; keep the
-     * thread's current UI language in that case, like modern Windows. */
-    if (LangId == 0)
-        return LANGIDFROMLCID(NtCurrentTeb()->CurrentLocale);
+    WCHAR Language[LOCALE_NAME_MAX_LENGTH + 1];
+    UNICODE_STRING Name;
+    NTSTATUS Status;
+    ULONG Count;
 
-    /* The thread UI language lives in the TEB. */
-    NtCurrentTeb()->CurrentLocale = MAKELCID(LangId, SORT_DEFAULT);
+    if (LangId == 0)
+    {
+        RtlSetThreadPreferredUILanguages(MUI_CONSOLE_FILTER, NULL, NULL);
+        return GetThreadUILanguage();
+    }
+
+    Name.Buffer = Language;
+    Name.Length = 0;
+    Name.MaximumLength = (LOCALE_NAME_MAX_LENGTH - 1) * sizeof(WCHAR);
+    if (LangId == LANGIDFROMLCID(LOCALE_SYSTEM_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_USER_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_UI_DEFAULT) ||
+        LangId == LANGIDFROMLCID(LOCALE_CUSTOM_UNSPECIFIED) ||
+        !NT_SUCCESS(RtlLcidToLocaleName(MAKELCID(LangId, SORT_DEFAULT), &Name, RTL_LOCALE_ALLOW_NEUTRAL_NAMES, FALSE)))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return 0;
+    }
+    Language[Name.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    Language[Name.Length / sizeof(WCHAR) + 1] = UNICODE_NULL;
+
+    Status = RtlSetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, Language, &Count);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return 0;
+    }
+
     return LangId;
 }
 
@@ -1348,17 +1392,17 @@ TlsFree(IN DWORD Index)
         {
             /* Use the expansion bitmap */
             TlsBitmap = Peb->TlsExpansionBitmap;
-            Index = TlsIndex;
         }
     }
     else
     {
         /* Use the normal bitmap */
         TlsBitmap = Peb->TlsBitmap;
+        TlsIndex = Index;
     }
 
     /* Check if the index was set */
-    BitSet = RtlAreBitsSet(TlsBitmap, Index, 1);
+    BitSet = RtlAreBitsSet(TlsBitmap, TlsIndex, 1);
     if (BitSet)
     {
         /* Tell the kernel to free the TLS cells */
@@ -1374,7 +1418,7 @@ TlsFree(IN DWORD Index)
         }
 
         /* Clear the bit */
-        RtlClearBits(TlsBitmap, Index, 1);
+        RtlClearBits(TlsBitmap, TlsIndex, 1);
     }
     else
     {

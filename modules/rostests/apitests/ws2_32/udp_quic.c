@@ -293,11 +293,28 @@ TestIpv6DualStackSetup(void)
 }
 
 
+/* A sender's datagrams are delivered in order, so a fence sent after them arrives once they all have */
+static BOOL
+WaitForDelivery(SOCKET Sender, SOCKET Fence, const struct sockaddr_in *FenceAddress)
+{
+    struct timeval Timeout = { 1, 0 };
+    fd_set ReadSet;
+    CHAR Byte = 0;
+
+    if (sendto(Sender, &Byte, 1, 0, (const struct sockaddr *)FenceAddress, sizeof(*FenceAddress)) != 1)
+        return FALSE;
+    FD_ZERO(&ReadSet);
+    FD_SET(Fence, &ReadSet);
+    if (select(0, &ReadSet, NULL, NULL, &Timeout) != 1)
+        return FALSE;
+    return recv(Fence, &Byte, 1, 0) == 1;
+}
+
 static void
 TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuffer, BOOL BeforeBind)
 {
-    struct sockaddr_in ReceiverAddress, SenderAddress;
-    SOCKET Receiver = INVALID_SOCKET, Sender = INVALID_SOCKET;
+    struct sockaddr_in ReceiverAddress, SenderAddress, FenceAddress;
+    SOCKET Receiver = INVALID_SOCKET, Sender = INVALID_SOCKET, Fence = INVALID_SOCKET;
     CHAR Data[1200];
     BOOL Seen[100] = { FALSE };
     BOOL SawGrowthMarker = FALSE;
@@ -309,9 +326,10 @@ TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuf
 
     Receiver = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     Sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    ok(Receiver != INVALID_SOCKET && Sender != INVALID_SOCKET,
+    Fence = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(Receiver != INVALID_SOCKET && Sender != INVALID_SOCKET && Fence != INVALID_SOCKET,
        "%s: socket failed with %d\n", Tag, WSAGetLastError());
-    if (Receiver == INVALID_SOCKET || Sender == INVALID_SOCKET)
+    if (Receiver == INVALID_SOCKET || Sender == INVALID_SOCKET || Fence == INVALID_SOCKET)
         goto Cleanup;
 
     if (BeforeBind)
@@ -333,6 +351,13 @@ TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuf
     Length = sizeof(SenderAddress);
     Result = getsockname(Sender, (struct sockaddr *)&SenderAddress, &Length);
     ok(Result == 0, "%s: sender getsockname failed with %d\n", Tag, WSAGetLastError());
+    FenceAddress = ReceiverAddress;
+    FenceAddress.sin_port = 0;
+    Result = bind(Fence, (const struct sockaddr *)&FenceAddress, sizeof(FenceAddress));
+    ok(Result == 0, "%s: fence bind failed with %d\n", Tag, WSAGetLastError());
+    Length = sizeof(FenceAddress);
+    Result = getsockname(Fence, (struct sockaddr *)&FenceAddress, &Length);
+    ok(Result == 0, "%s: fence getsockname failed with %d\n", Tag, WSAGetLastError());
     if (Connected)
     {
         Result = connect(Receiver, (const struct sockaddr *)&SenderAddress, sizeof(SenderAddress));
@@ -358,9 +383,8 @@ TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuf
             ok(0, "%s: sendto %d returned %d error %d\n", Tag, i, Result, WSAGetLastError());
             goto Cleanup;
         }
-        Sleep(1);
     }
-    Sleep(200);
+    ok(WaitForDelivery(Sender, Fence, &FenceAddress), "%s: the queue did not settle, error %d\n", Tag, WSAGetLastError());
     if (Grow)
     {
         Size = 1024 * 1024;
@@ -370,7 +394,7 @@ TestReceiveBufferQueue(BOOL Connected, BOOL SmallBuffer, BOOL Grow, BOOL ZeroBuf
         Result = sendto(Sender, Data, sizeof(Data), 0,
                         (const struct sockaddr *)&ReceiverAddress, sizeof(ReceiverAddress));
         ok(Result == sizeof(Data), "%s: growth send returned %d\n", Tag, Result);
-        Sleep(200);
+        ok(WaitForDelivery(Sender, Fence, &FenceAddress), "%s: the growth send did not settle, error %d\n", Tag, WSAGetLastError());
     }
     Result = ioctlsocket(Receiver, FIONBIO, &NonBlocking);
     ok(Result == 0, "%s: FIONBIO failed with %d\n", Tag, WSAGetLastError());
@@ -421,6 +445,8 @@ Cleanup:
         closesocket(Receiver);
     if (Sender != INVALID_SOCKET)
         closesocket(Sender);
+    if (Fence != INVALID_SOCKET)
+        closesocket(Fence);
 }
 
 

@@ -1,0 +1,51 @@
+; PROJECT:     LiberNT Apple Display Coprocessor Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Apple silicon display driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=11/10/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%LiberNT%=LiberNT,NTarm64
+
+[LiberNT.NTarm64]
+%AppleDcp.DeviceDesc%=AppleDcp_Install,FDT\apple_dcp
+
+[AppleDcp_Install]
+CopyFiles=AppleDcp_CopyFiles
+AddReg=AppleDcp_SoftwareSettings
+
+[AppleDcp_CopyFiles]
+appledcp.sys
+
+[AppleDcp_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,"Device Description",%REG_SZ%,"%AppleDcp.DeviceDesc%"
+
+[AppleDcp_Install.Services]
+AddService=appledcp,0x00000002,AppleDcp_Service
+
+[AppleDcp_Service]
+DisplayName=%AppleDcp.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=0
+ServiceBinary=%12%\appledcp.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT"
+AppleDcp.DeviceDesc="Apple Silicon Display (WDDM)"
+AppleDcp.ServiceDesc="LiberNT Apple Silicon WDDM Display Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000

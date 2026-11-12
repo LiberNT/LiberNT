@@ -25,7 +25,10 @@
 #include <rpcproxy.h>
 #include <ndk/cmfuncs.h>
 #include <ndk/exfuncs.h>
+#include <ntsecapi.h>
 #include <strsafe.h>
+#define WIDL_using_Windows_System_Profile
+#include <windows.system.profile.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1153,6 +1156,145 @@ GetPreinstallUserName(
     return UserName[0] != UNICODE_NULL;
 }
 
+VOID
+CreateMachineGuid(VOID)
+{
+    RPC_WSTR UuidString;
+    UUID Uuid;
+    HKEY hKey;
+    LONG Error;
+
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Microsoft\\Cryptography",
+                            0,
+                            NULL,
+                            0,
+                            KEY_QUERY_VALUE | KEY_SET_VALUE | KEY_WOW64_64KEY,
+                            NULL,
+                            &hKey,
+                            NULL);
+    if (Error != ERROR_SUCCESS)
+    {
+        DPRINT1("Cannot open the Cryptography key (error %ld)\n", Error);
+        return;
+    }
+
+    Error = RegQueryValueExW(hKey, L"MachineGuid", NULL, NULL, NULL, NULL);
+    if (Error == ERROR_FILE_NOT_FOUND &&
+        UuidCreate(&Uuid) == RPC_S_OK &&
+        UuidToStringW(&Uuid, &UuidString) == RPC_S_OK)
+    {
+        Error = RegSetValueExW(hKey,
+                               L"MachineGuid",
+                               0,
+                               REG_SZ,
+                               (PBYTE)UuidString,
+                               (DWORD)((wcslen((PCWSTR)UuidString) + 1) * sizeof(WCHAR)));
+        RpcStringFreeW(&UuidString);
+    }
+    if (Error != ERROR_SUCCESS)
+        DPRINT1("Cannot create the machine GUID (error %ld)\n", Error);
+
+    RegCloseKey(hKey);
+}
+
+#define SYSTEM_ID_SEED_BYTES 32
+#define SYSTEM_ID_SEED_VARIABLE L"SystemIdentificationSeed"
+#define SYSTEM_ID_SEED_VENDOR L"{8af810c6-b3f8-47db-b467-966847f996dc}"
+
+static
+DWORD
+ReadFirmwareSystemIdSeed(
+    _Out_writes_bytes_(SYSTEM_ID_SEED_BYTES) PBYTE Seed,
+    _In_ BOOL AllowCreate)
+{
+    DWORD Length;
+
+    Length = GetFirmwareEnvironmentVariableExW(SYSTEM_ID_SEED_VARIABLE,
+                                               SYSTEM_ID_SEED_VENDOR,
+                                               Seed,
+                                               SYSTEM_ID_SEED_BYTES,
+                                               NULL);
+    if (Length == SYSTEM_ID_SEED_BYTES)
+        return ERROR_SUCCESS;
+    if (Length != 0)
+        return ERROR_INVALID_DATA;
+    if (GetLastError() != ERROR_ENVVAR_NOT_FOUND || !AllowCreate)
+        return GetLastError();
+
+    if (!RtlGenRandom(Seed, SYSTEM_ID_SEED_BYTES) ||
+        !SetFirmwareEnvironmentVariableExW(SYSTEM_ID_SEED_VARIABLE,
+                                           SYSTEM_ID_SEED_VENDOR,
+                                           Seed,
+                                           SYSTEM_ID_SEED_BYTES,
+                                           VARIABLE_ATTRIBUTE_NON_VOLATILE |
+                                           VARIABLE_ATTRIBUTE_BOOTSERVICE_ACCESS |
+                                           VARIABLE_ATTRIBUTE_RUNTIME_ACCESS))
+    {
+        return GetLastError();
+    }
+
+    return ERROR_SUCCESS;
+}
+
+VOID
+CreateSystemIdSeed(
+    _In_ BOOL AllowFirmwareWrite)
+{
+    BYTE Seed[SYSTEM_ID_SEED_BYTES];
+    DWORD Source = SystemIdentificationSource_Registry;
+    HKEY hKey;
+    LONG Error;
+
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\LiberNT\\SystemIdentification",
+                            0,
+                            NULL,
+                            0,
+                            KEY_QUERY_VALUE | KEY_SET_VALUE | KEY_WOW64_64KEY,
+                            NULL,
+                            &hKey,
+                            NULL);
+    if (Error != ERROR_SUCCESS)
+    {
+        DPRINT1("Cannot open the system identification key (error %ld)\n", Error);
+        return;
+    }
+
+    if (RegQueryValueExW(hKey, L"Seed", NULL, NULL, NULL, NULL) != ERROR_FILE_NOT_FOUND)
+    {
+        RegCloseKey(hKey);
+        return;
+    }
+
+    /* TODO: Take the TPM source (endorsement key) first when a TPM is present; UEFI is used instead. */
+    if (pSetupEnablePrivilege(SE_SYSTEM_ENVIRONMENT_NAME, TRUE))
+    {
+        Error = ReadFirmwareSystemIdSeed(Seed, AllowFirmwareWrite);
+        if (Error == ERROR_SUCCESS)
+            Source = SystemIdentificationSource_Uefi;
+        else
+            DPRINT1("No firmware system identification seed (error %ld)\n", Error);
+        pSetupEnablePrivilege(SE_SYSTEM_ENVIRONMENT_NAME, FALSE);
+    }
+
+    if (Source == SystemIdentificationSource_Registry && !RtlGenRandom(Seed, sizeof(Seed)))
+    {
+        DPRINT1("Cannot generate the system identification seed\n");
+        RegCloseKey(hKey);
+        return;
+    }
+
+    Error = RegSetValueExW(hKey, L"Source", 0, REG_DWORD, (PBYTE)&Source, sizeof(Source));
+    if (Error == ERROR_SUCCESS)
+        Error = RegSetValueExW(hKey, L"Seed", 0, REG_BINARY, Seed, sizeof(Seed));
+    if (Error != ERROR_SUCCESS)
+        DPRINT1("Cannot store the system identification seed (error %ld)\n", Error);
+
+    SecureZeroMemory(Seed, sizeof(Seed));
+    RegCloseKey(hKey);
+}
+
 static
 VOID
 ScheduleFirstBootSetup(VOID)
@@ -1215,6 +1357,28 @@ EndSystemSetup(VOID)
 }
 
 static
+VOID
+LoadSystemProfile(VOID)
+{
+    PROFILEINFOW ProfileInfo;
+    HANDLE hToken;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_IMPERSONATE | TOKEN_DUPLICATE, &hToken))
+        return;
+
+    ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
+    ProfileInfo.dwSize = sizeof(ProfileInfo);
+    ProfileInfo.dwFlags = PI_NOUI;
+    ProfileInfo.lpUserName = L"SYSTEM";
+    if (LoadUserProfileW(hToken, &ProfileInfo))
+        RegCloseKey(ProfileInfo.hProfile);
+    else
+        DPRINT1("LoadUserProfileW() for the system account failed (Error %lu)\n", GetLastError());
+
+    CloseHandle(hToken);
+}
+
+static
 DWORD
 InstallLiveCD(VOID)
 {
@@ -1235,15 +1399,18 @@ InstallLiveCD(VOID)
     InitializeProgramFilesDir();
     if (!CommonInstall())
         goto error;
+    CreateMachineGuid();
 
     bPreinstall = GetPreinstallUserName(UserName, ARRAYSIZE(UserName));
+    CreateSystemIdSeed(bPreinstall);
     if (bPreinstall)
     {
         if (!InitializeProfiles())
             goto error;
         InitializeDefaultUserLocale();
-        if (SaveDefaultUserHive() != ERROR_SUCCESS)
+        if (SaveDefaultUserHive() != ERROR_SUCCESS || !CopySystemProfile(0))
             goto error;
+        LoadSystemProfile();
         if (!GetComputerNameW(ComputerName, &cchComputerName))
             goto error;
         Status = SetAccountsDomainSid(NULL, ComputerName);

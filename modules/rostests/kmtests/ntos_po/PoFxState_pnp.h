@@ -15,6 +15,14 @@ typedef struct _KMT_PNP_VETO_STATE
 } KMT_PNP_VETO_STATE;
 
 #ifdef KMT_KERNEL_MODE
+typedef struct _KMT_PO_FX_START_STATE
+{
+    NTSTATUS RegisterStatus;
+    LONG CallbacksBeforeStart;
+    LONG CallbacksAfterStart;
+} KMT_PO_FX_START_STATE, *PKMT_PO_FX_START_STATE;
+
+VOID KmtPoFxGetStartState(PKMT_PO_FX_START_STATE State);
 VOID KmtPoFxInitializePnp(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT ControlDevice);
 PDEVICE_OBJECT KmtPoFxAcquireDevice(PDEVICE_OBJECT *Pdo);
 VOID KmtPoFxReleaseDevice(PDEVICE_OBJECT Fdo);

@@ -133,7 +133,6 @@ KiInitializeContextThread(IN PKTHREAD Thread,
         Context = &LocalContext;
         ContextFlags = CONTEXT_CONTROL;
 
-        /* Zero out the trap frame and save area */
         RtlZeroMemory(&InitFrame->TrapFrame,
                       KTRAP_FRAME_LENGTH + sizeof(FX_SAVE_AREA));
 
@@ -340,6 +339,8 @@ KiIdleLoop(VOID)
             Prcb->CurrentThread = NewThread;
             NewThread->State = Running;
             KiReleasePrcbLock(Prcb);
+
+            KiWaitForThreadSwapOut(NewThread);
 
             _enable();
             KiSwapContext(APC_LEVEL, OldThread);

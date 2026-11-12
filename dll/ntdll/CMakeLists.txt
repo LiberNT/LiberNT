@@ -47,10 +47,13 @@ list(APPEND SOURCE
     ldr/ldrpe.c
     ldr/ldrutils.c
     ldr/verifier.c
+    rtl/barrier.c
     rtl/exit.c
     rtl/mui.c
     rtl/nls.c
+    rtl/secmem.c
     rtl/telemetry.c
+    rtl/transaction.c
     rtl/userpfn.c
     rtl/wnf.c
     rtl/time.c

@@ -3002,7 +3002,12 @@ BuspBuildStableInstanceId(
             size_t len = strlen(Device->pnp.unique_id);
             if (len >= MaxChars) len = MaxChars - 1;
             for (size_t i = 0; i < len; ++i)
-                Out[i] = (WCHAR)(unsigned char)Device->pnp.unique_id[i];
+            {
+                unsigned char c = (unsigned char)Device->pnp.unique_id[i];
+
+                /* An ID may not hold a space, a comma or a non-ASCII character; Windows 8.1 lists ACPI\PNP0A06\CPU_HOTPLUG_RESOURCES */
+                Out[i] = (c <= ' ' || c > 0x7F || c == ',') ? L'_' : (WCHAR)c;
+            }
             Out[len] = UNICODE_NULL;
             return (ULONG)len;
         }
@@ -3580,6 +3585,58 @@ Bus_PDO_QueryDeviceCaps(
     return STATUS_SUCCESS;
 }
 
+static
+ULONG
+BuspFormatClassCodeIds(
+    _In_ struct acpi_device *Device,
+    _Out_writes_to_(BufferLength, return) PWCHAR Buffer,
+    _In_ ULONG BufferLength)
+{
+    ULONG Value[3] = { 0 };
+    ULONG Length = 0;
+    ULONG i;
+
+    C_ASSERT(ACPI_PCICLS_STRING_SIZE >= 7);
+
+    if (!Device->flags.class_code ||
+        BufferLength < 2 * RTL_NUMBER_OF("ACPI\\CLS_0000&SUBCLS_0000&PI_00") + 1)
+    {
+        return 0;
+    }
+
+    for (i = 0; i < 6; i++)
+    {
+        CHAR Digit = Device->pnp.class_code[i];
+        ULONG Nibble;
+
+        if (Digit >= '0' && Digit <= '9')
+            Nibble = Digit - '0';
+        else if (Digit >= 'A' && Digit <= 'F')
+            Nibble = Digit - 'A' + 10;
+        else if (Digit >= 'a' && Digit <= 'f')
+            Nibble = Digit - 'a' + 10;
+        else
+            return 0;
+
+        Value[i / 2] = (Value[i / 2] << 4) | Nibble;
+    }
+
+    /* TODO: the vendor-qualified _CLS identifiers (ACPI\VEN_vvv&CLS_...) are not reported */
+    Length += (ULONG)swprintf(&Buffer[Length],
+                              BufferLength - Length,
+                              L"ACPI\\CLS_%04lX&SUBCLS_%04lX&PI_%02lX",
+                              Value[0], Value[1], Value[2]);
+    Buffer[Length++] = UNICODE_NULL;
+
+    Length += (ULONG)swprintf(&Buffer[Length],
+                              BufferLength - Length,
+                              L"ACPI\\CLS_%04lX&SUBCLS_%04lX",
+                              Value[0], Value[1]);
+    Buffer[Length++] = UNICODE_NULL;
+
+    return Length;
+}
+
 NTSTATUS
 Bus_PDO_QueryDeviceId(
      PPDO_DEVICE_DATA     DeviceData,
@@ -3767,27 +3824,35 @@ Bus_PDO_QueryDeviceId(
                 temp[length++] = UNICODE_NULL;
                 temp[length++] = UNICODE_NULL;
             }
-            else if (Device->flags.compatible_ids && Device->pnp.cid_list)
-            {
-                for (i = 0; i < Device->pnp.cid_list->Count; i++)
-                {
-                    length += (ULONG)swprintf(&temp[length],
-                                              RTL_NUMBER_OF(temp) - length,
-                                              L"ACPI\\%hs",
-                                              Device->pnp.cid_list->Ids[i].String);
-                    temp[length++] = UNICODE_NULL;
-
-                    length += (ULONG)swprintf(&temp[length],
-                                              RTL_NUMBER_OF(temp) - length,
-                                              L"*%hs",
-                                              Device->pnp.cid_list->Ids[i].String);
-                    temp[length++] = UNICODE_NULL;
-                }
-                temp[length++] = UNICODE_NULL;
-            }
             else
             {
-                break; /* No compatible IDs */
+                if (Device->flags.compatible_ids && Device->pnp.cid_list)
+                {
+                    for (i = 0; i < Device->pnp.cid_list->Count; i++)
+                    {
+                        length += (ULONG)swprintf(&temp[length],
+                                                  RTL_NUMBER_OF(temp) - length,
+                                                  L"ACPI\\%hs",
+                                                  Device->pnp.cid_list->Ids[i].String);
+                        temp[length++] = UNICODE_NULL;
+
+                        length += (ULONG)swprintf(&temp[length],
+                                                  RTL_NUMBER_OF(temp) - length,
+                                                  L"*%hs",
+                                                  Device->pnp.cid_list->Ids[i].String);
+                        temp[length++] = UNICODE_NULL;
+                    }
+                }
+
+                /* Membership of a class is less specific than a _CID, so it ranks after every _CID */
+                length += BuspFormatClassCodeIds(Device,
+                                                 &temp[length],
+                                                 RTL_NUMBER_OF(temp) - length);
+
+                if (length == 0)
+                    break; /* No compatible IDs */
+
+                temp[length++] = UNICODE_NULL;
             }
 
             NT_ASSERT(length * sizeof(WCHAR) <= sizeof(temp));

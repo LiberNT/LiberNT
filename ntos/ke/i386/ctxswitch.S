@@ -16,6 +16,7 @@
 EXTERN @KiSwapContextEntry@8:PROC
 EXTERN @KiSwapContextExit@8:PROC
 EXTERN @KiRetireDpcList@4:PROC
+EXTERN @KiRunStackCallout@4:PROC
 EXTERN @KiEnterV86Mode@4:PROC
 EXTERN @KiExitV86Mode@4:PROC
 EXTERN _KeI386FxsrPresent:DWORD
@@ -126,6 +127,18 @@ PUBLIC @KiRetireDpcListInDpcStack@8
     mov esp, edx
     push eax
     call @KiRetireDpcList@4
+
+    /* Return on original stack */
+    pop esp
+    ret
+
+PUBLIC @KiCallOnKernelStack@8
+@KiCallOnKernelStack@8:
+    /* Switch stacks and run the callout; ecx still holds the context */
+    mov eax, esp
+    mov esp, edx
+    push eax
+    call @KiRunStackCallout@4
 
     /* Return on original stack */
     pop esp

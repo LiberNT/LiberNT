@@ -302,6 +302,95 @@ WritebackConcurrentRedirty(BOOLEAN ModifiedWriter)
     WorldDestroy(&World);
 }
 
+typedef struct _PAGEFILE_REDIRTY
+{
+    TEST_WORLD *World;
+    PMI_ADDRESS_SPACE Space;
+    ULONG64 Base;
+    ULONG64 Value;
+    volatile LONG Copied;
+    volatile LONG Written;
+} PAGEFILE_REDIRTY;
+
+/* The first write's data is in the page file; a CPU faults the page back, writes and trims it before the write completes */
+static void
+PagefileWhileMapped(PVOID Context)
+{
+    PAGEFILE_REDIRTY *State = Context;
+
+    if (MI_ATOMIC_READ32(&State->Copied) != 0)
+        return;
+    MI_ATOMIC_ADD32(&State->Copied, 1);
+    while (MI_ATOMIC_READ32(&State->Written) == 0)
+        sched_yield();
+}
+
+static void *
+PagefileRedirtyWorker(PVOID Context)
+{
+    PAGEFILE_REDIRTY *State = Context;
+
+    MiHostCpu = MachineCpu = 1;
+    while (MI_ATOMIC_READ32(&State->Copied) == 0)
+        sched_yield();
+    CHECK(NT_SUCCESS(UserWrite64(State->World, 1, State->Base, State->Value)));
+    CHECK(MiTrimAddressSpace(State->Space, 1, TRUE) == 1);
+    MI_ATOMIC_ADD32(&State->Written, 1);
+    return NULL;
+}
+
+static void
+PagefileConcurrentRedirty(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    PAGEFILE_REDIRTY State = { .World = &World, .Space = &Space, .Value = 0xAABBCCDDEEFF0011ULL };
+    ULONG64 Size = PAGE_SIZE, Initial = 0x1122334455667788ULL, Stored;
+    ULONG Frame;
+    MI_PTE Pte;
+    NTSTATUS Status;
+    pthread_t Worker;
+
+    WorldCreate(&World, 256, 2, 10000);
+    WorldAttachPageFile(&World, 64);
+    CHECK(NT_SUCCESS(MiAddressSpaceCreate(&World.System, &Space)));
+    WorldAttach(&World, 0, &Space);
+    WorldAttach(&World, 1, &Space);
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &State.Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT,
+                                             MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, State.Base, Initial)));
+    CHECK(MiTrimAddressSpace(&Space, 1, TRUE) == 1);
+    World.Paging.AfterWrite = PagefileWhileMapped;
+    World.Paging.AfterWriteContext = &State;
+    MI_ASSERT(pthread_create(&Worker, NULL, PagefileRedirtyWorker, &State) == 0);
+    CHECK(MiWriteModifiedPages(&World.System, 1) == 1);
+    MI_ASSERT(pthread_join(Worker, NULL) == 0);
+    World.Paging.AfterWrite = NULL;
+
+    /* Written to while its first write was outstanding, the page is modified again, not clean */
+    CHECK(MiPfnListCount(&World.System.Pfn, MiPageModified) == 1);
+    CHECK(MiWriteModifiedPages(&World.System, 1) == 1);
+    CHECK(World.Paging.WriteCalls == 2);
+    Pte = MiArchPteRead(MiPtLookup(&Space, State.Base, NULL));
+    CHECK(MiSoftKind(Pte) == MiSoftTransition);
+    Frame = (ULONG)MiSoftValue(Pte);
+    CHECK(MiSoftKind(World.System.Pfn.Pfn[Frame].OriginalPte) == MiSoftPageFile);
+    memcpy(&Stored, World.Paging.Store + MiSoftValue(World.System.Pfn.Pfn[Frame].OriginalPte) * PAGE_SIZE,
+           sizeof(Stored));
+    CHECK(Stored == State.Value);
+    CHECK(UserRead64(&World, 0, State.Base, &Status) == State.Value);
+    CHECK(NT_SUCCESS(Status));
+
+    Size = 0;
+    CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Space, &State.Base, &Size, MI_MEM_RELEASE)));
+    WorldAttach(&World, 0, NULL);
+    WorldAttach(&World, 1, NULL);
+    MiAddressSpaceDestroy(&Space);
+    CHECK(WorldCheck(&World) == 0);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
 typedef struct _PAGEFILE_PUBLICATION_TEST
 {
     TEST_WORLD *World;
@@ -370,6 +459,7 @@ TestWriteback(void)
     ULONG Calls;
 
     PagefilePublication();
+    PagefileConcurrentRedirty();
     WritebackSizeReentry();
     WritebackFailureProgress();
     WritebackPastUnwritablePages();

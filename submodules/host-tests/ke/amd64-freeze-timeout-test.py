@@ -4,6 +4,7 @@
 # COPYRIGHT:   Copyright 2026 LiberNT contributors
 import argparse
 import pathlib
+import re
 import subprocess
 import tempfile
 
@@ -54,15 +55,16 @@ typedef int KCONTINUE_STATUS;
 #define IPI_FROZEN_STATE_THAW 16
 #define IPI_FREEZE 1
 #define IPI_WATCHDOG_TIMEOUT 0x1db
+@DEFINES@
 #define ASSERT(x) assert(x)
 #define RtlZeroMemory(p,n) memset((p),0,(n))
 #define KeMemoryBarrier() __sync_synchronize()
-static KPRCB Cpus[2];
-static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner, KiFreezeActiveSetOwner, KdpPortOwnerPrcb;
+static KPRCB Cpus[3];
+static PKPRCB KiProcessorBlock[3] = {&Cpus[0], &Cpus[1], &Cpus[2]}, KiFreezeOwner, KiFreezeActiveSetOwner, KdpPortOwnerPrcb;
 static volatile LONG64 KiFreezeEpoch;
 static ULONG KeNumberProcessors = 2;
 static KAFFINITY KeActiveProcessors = 3;
-static BOOLEAN KiRelaxedTiming, KdEnteredDebugger, Failure, CrashOwner;
+static BOOLEAN KiRelaxedTiming, KdEnteredDebugger, Failure, CrashOwner, TargetCrashOwner, LaterCrashOwner;
 static unsigned Mode, Yields, ExitReason;
 static LONG64 Clock;
 static jmp_buf Exit;
@@ -75,7 +77,7 @@ static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return __sync_add_and
 static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 v, LONG64 old) { return __sync_val_compare_and_swap(p, old, v); }
 static BOOLEAN KiHasFreezeFailure(void) { return Failure; }
 static void KiSetFreezeFailure(void) { Failure = TRUE; }
-static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB p) { assert(p == &Cpus[0]); return CrashOwner; }
+static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB p) { return p == &Cpus[0] ? CrashOwner : p == &Cpus[1] ? TargetCrashOwner : LaterCrashOwner; }
 static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *freq) {
     LARGE_INTEGER result; freq->QuadPart = 1; result.QuadPart = Clock++;
     if (result.QuadPart == 10) {
@@ -100,12 +102,17 @@ static void KiSaveProcessorState(PKTRAP_FRAME t, PKEXCEPTION_FRAME e) { (void)t;
 static void KiRestoreProcessorState(PKTRAP_FRAME t, PKEXCEPTION_FRAME e) { (void)t; (void)e; assert(0); }
 static BOOLEAN KiProcessorFreezeHandler(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame) { @HANDLER@ }
 static void KiFreezeIfRequested(void) { @DEFERRED@ assert(0); }
-static void KiIpiSend(KAFFINITY targets, int type) { assert(targets == 2 && type == IPI_FREEZE); Cpus[1].IpiFrozen = Mode == 9 ? IPI_FROZEN_STATE_FROZEN : IPI_FROZEN_STATE_SAVING; }
+static void KiIpiSend(KAFFINITY targets, int type) {
+    assert(targets == (Mode == 12 ? 6 : 2) && type == IPI_FREEZE);
+    if (Mode != 10 && Mode != 12) Cpus[1].IpiFrozen = Mode == 9 ? IPI_FROZEN_STATE_FROZEN : IPI_FROZEN_STATE_SAVING;
+}
 static void YieldProcessor(void) {
     Yields++;
     assert(Yields < 1000);
     if (Mode == 4 && Yields == 25) Cpus[1].IpiFrozen = IPI_FROZEN_STATE_FROZEN;
     if (Mode == 5 && Yields == 3) Failure = TRUE;
+    if (Mode == 11 && Yields == 2) Cpus[0].IpiFrozen = IPI_FROZEN_STATE_TARGET_FREEZE;
+    if (Mode == 11 && Yields == 5) Failure = TRUE;
 }
 static void KiNoteFreezeEpoch(void) { @NOTE@ }
 static ULONG64 KiQueryFreezeEpoch(void) { @EPOCH@ }
@@ -120,7 +127,8 @@ static void KxThawExecution(void) { @THAW@ }
 static void Reset(void) {
     memset(Cpus,0,sizeof(Cpus)); Cpus[0].SetMember=1; Cpus[1].SetMember=2; Cpus[1].Number=1;
     KiFreezeOwner=KiFreezeActiveSetOwner=NULL; KiFreezeEpoch=0; Clock=0; Yields=ExitReason=0;
-    KiRelaxedTiming=KdEnteredDebugger=Failure=CrashOwner=FALSE; Mode=0;
+    KiRelaxedTiming=KdEnteredDebugger=Failure=CrashOwner=TargetCrashOwner=LaterCrashOwner=FALSE; Mode=0;
+    KeNumberProcessors=2; KeActiveProcessors=3;
 }
 int main(void) {
     Reset();
@@ -162,9 +170,22 @@ int main(void) {
     Reset(); Mode=8; KiFreezeActiveSetOwner=&Cpus[1]; KiRelaxedTiming=FALSE; Cpus[1].SetMember=0; KeActiveProcessors=1;
     KxFreezeExecution(); assert(!Failure && KiFreezeOwner==&Cpus[0]); KeActiveProcessors=3;
     Reset(); Mode=9; KiFreezeOwner=&Cpus[1]; KxFreezeExecution(); assert(!Failure && KiFreezeOwner==&Cpus[0]);
+    Reset(); Mode=10; TargetCrashOwner=TRUE;
+    if (setjmp(Exit)==0) { KxFreezeExecution(); assert(!"freeze of the stop owner returned"); }
+    assert(ExitReason==2 && Failure && Clock<10 && Cpus[1].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
+    Reset(); Mode=11; KiFreezeOwner=&Cpus[1]; CrashOwner=TRUE;
+    if (setjmp(Exit)==0) KxFreezeExecution();
+    assert(ExitReason==0 && Failure && Clock<10 && KiFreezeOwner==&Cpus[1] && Cpus[0].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
+    Reset(); Mode=11; KiFreezeOwner=&Cpus[1]; CrashOwner=TRUE; KiRelaxedTiming=TRUE;
+    if (setjmp(Exit)==0) KxFreezeExecution();
+    assert(ExitReason==0 && Failure && Yields==5 && KiFreezeOwner==&Cpus[1] && Cpus[0].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
+    Reset(); Mode=12; KeNumberProcessors=3; KeActiveProcessors=7; Cpus[2].SetMember=4; Cpus[2].Number=2; LaterCrashOwner=TRUE;
+    if (setjmp(Exit)==0) { KxFreezeExecution(); assert(!"freeze behind a silent target returned"); }
+    assert(ExitReason==2 && Failure && Clock<10 && Cpus[1].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE && Cpus[2].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
     return 0;
 }
 '''
+fixture = fixture.replace('@DEFINES@', '\n'.join(re.findall(r'^#define KI_FREEZE_WAIT_SECONDS .*$', source, re.M)))
 deferred = body('KiFreezeIfRequested').split('    Enable = KeDisableInterrupts();')[0].replace('    BOOLEAN Enable;\n', '')
 fixture = fixture.replace('@DEFERRED@', deferred)
 for marker, name in [('HANDLER','KiProcessorFreezeHandler'), ('WAIT','KiFreezeWaitForThaw'), ('NOTE','KiNoteFreezeEpoch'), ('EPOCH','KiQueryFreezeEpoch'), ('FAILURE','KiFreezeFailureRequiresReturn'), ('EXPIRED','KiFreezeWaitExpired'), ('FAILED','KiFreezeWaitFailed'), ('ACQUIRE','KiAcquireFreezeActiveSet'), ('RELEASE','KiReleaseFreezeActiveSet'), ('TARGETS','KiFreezeTargetSet'), ('FREEZE','KxFreezeExecution'), ('THAW','KxThawExecution')]:

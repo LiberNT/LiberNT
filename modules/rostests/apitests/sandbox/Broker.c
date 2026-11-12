@@ -244,7 +244,7 @@ LaunchBroker(HANDLE Lockdown, HANDLE Initial, HANDLE SharedUntrusted,
                             PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON;
     DWORD ChildPolicy = PROCESS_CREATION_CHILD_PROCESS_RESTRICTED;
     WCHAR Application[MAX_PATH], CommandLine[MAX_PATH * 2], *FileName;
-    WCHAR DesktopPath[] = L"WinSta0\\sbx_broker_desktop";
+    WCHAR Station[64], DesktopPath[96];
     STARTUPINFOEXW Startup;
     BOOL Success;
     HANDLE Inherit[2];
@@ -283,6 +283,9 @@ LaunchBroker(HANDLE Lockdown, HANDLE Initial, HANDLE SharedUntrusted,
                      Application, GetCurrentProcessId(), (SIZE_T)(ULONG_PTR)gBrokerWindow,
                      (SIZE_T)(ULONG_PTR)Run->Inherited, (SIZE_T)(ULONG_PTR)Run->NotInherited,
                      (SIZE_T)(ULONG_PTR)Run->Untrusted);
+    ok(GetUserObjectInformationW(GetProcessWindowStation(), UOI_NAME, Station, sizeof(Station), NULL) &&
+       SUCCEEDED(StringCchPrintfW(DesktopPath, ARRAYSIZE(DesktopPath), L"%s\\sbx_broker_desktop", Station)),
+       "run %lu: window station name failed %lu\n", Index, GetLastError());
     ZeroMemory(&Startup, sizeof(Startup));
     Startup.StartupInfo.cb = sizeof(Startup);
     Startup.StartupInfo.lpDesktop = Desktop ? DesktopPath : NULL;

@@ -24,6 +24,17 @@
 #include "winuser.h"
 
 
+#ifdef __REACTOS__
+/* The waits only have to outlast the clock change by a margin, which a fraction of Wine's seconds keeps */
+#define TIMEOUT_TEST_MS 800
+#define TIMEOUT_SETTLE_MS 160
+#define TIMEOUT_THRESHOLD_MS 500
+#else
+#define TIMEOUT_TEST_MS 3000
+#define TIMEOUT_SETTLE_MS 500
+#define TIMEOUT_THRESHOLD_MS 2000
+#endif
+
 static void test_timer(void)
 {
     HANDLE handle;
@@ -78,11 +89,11 @@ static DWORD WINAPI thread_WaitForSingleObject(void *arg)
     event = CreateEventW(NULL, FALSE, FALSE, NULL);
     ok(event != NULL, "CreateEvent failed\n");
     t = GetTickCount();
-    r = WaitForSingleObject(event, 3000);
+    r = WaitForSingleObject(event, TIMEOUT_TEST_MS);
     ok(r == WAIT_TIMEOUT, "WiatForSingleObject returned %lx\n", r);
     CloseHandle(event);
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -90,9 +101,9 @@ static DWORD WINAPI thread_Sleep(void *arg)
 {
     DWORD t = GetTickCount();
 
-    Sleep(3000);
+    Sleep(TIMEOUT_TEST_MS);
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -100,9 +111,9 @@ static DWORD WINAPI thread_SleepEx(void *arg)
 {
     DWORD t = GetTickCount();
 
-    SleepEx(3000, TRUE);
+    SleepEx(TIMEOUT_TEST_MS, TRUE);
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -112,7 +123,7 @@ static DWORD WINAPI thread_WaitableTimer_rel(void *arg)
     HANDLE timer;
     DWORD t, r;
 
-    li.QuadPart = -3 * TICKSPERSEC;
+    li.QuadPart = -(LONGLONG)TIMEOUT_TEST_MS * (TICKSPERSEC / 1000);
 
     timer = CreateWaitableTimerA(NULL, TRUE, NULL);
     ok(timer != NULL, "CreateWaitableTimer failed\n");
@@ -125,7 +136,7 @@ static DWORD WINAPI thread_WaitableTimer_rel(void *arg)
     ok(r == WAIT_OBJECT_0, "WaitForSingleObject returned %ld\n", r);
     CloseHandle(timer);
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -139,7 +150,7 @@ static DWORD WINAPI thread_WaitableTimer_abs(void *arg)
     GetSystemTimeAsFileTime(&ft);
     li.u.LowPart = ft.dwLowDateTime;
     li.u.HighPart = ft.dwHighDateTime;
-    li.QuadPart += 3 * TICKSPERSEC;
+    li.QuadPart += (LONGLONG)TIMEOUT_TEST_MS * (TICKSPERSEC / 1000);
 
     timer = CreateWaitableTimerA(NULL, TRUE, NULL);
     ok(timer != NULL, "CreateWaitableTimer failed\n");
@@ -152,7 +163,7 @@ static DWORD WINAPI thread_WaitableTimer_abs(void *arg)
     ok(r == WAIT_OBJECT_0, "WaitForSingleObject returned %ld\n", r);
     CloseHandle(timer);
     t = GetTickCount() - t;
-    ok(t < 2000, "t = %ld\n", t);
+    ok(t < TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -168,7 +179,7 @@ static DWORD WINAPI thread_WaitableTimer_period(void *arg)
     ok(timer != NULL, "CreateWaitableTimer failed\n");
 
     t = GetTickCount();
-    r = SetWaitableTimer(timer, &li, 3000, NULL, NULL, FALSE);
+    r = SetWaitableTimer(timer, &li, TIMEOUT_TEST_MS, NULL, NULL, FALSE);
     ok(r, "SetWaitableTimer failed\n");
 
     r = WaitForSingleObject(timer, INFINITE);
@@ -178,7 +189,7 @@ static DWORD WINAPI thread_WaitableTimer_period(void *arg)
     ok(r == WAIT_OBJECT_0, "WaitForSingleObject returned %ld\n", r);
     CloseHandle(timer);
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     return 0;
 }
 
@@ -188,7 +199,7 @@ static DWORD WINAPI thread_SetTimer(void *arg)
     UINT_PTR timer;
     MSG msg;
 
-    timer = SetTimer(NULL, 0, 3000, NULL);
+    timer = SetTimer(NULL, 0, TIMEOUT_TEST_MS, NULL);
     ok(timer, "SetTimer failed (%ld)\n", GetLastError());
 
     while (GetMessageW(&msg, NULL, 0, 0))
@@ -198,7 +209,7 @@ static DWORD WINAPI thread_SetTimer(void *arg)
     }
 
     t = GetTickCount() - t;
-    ok(t > 2000, "t = %ld\n", t);
+    ok(t > TIMEOUT_THRESHOLD_MS, "t = %ld\n", t);
     KillTimer(NULL, timer);
     return 0;
 }
@@ -225,7 +236,7 @@ static void test_timeouts(void)
     for(i=0; i<ARRAY_SIZE(threads); i++)
         ok(threads[i] != NULL, "CreateThread failed\n");
 
-    Sleep(500);
+    Sleep(TIMEOUT_SETTLE_MS);
     adjust_system_time(10);
 
     for (i=0; i<ARRAY_SIZE(threads); i++)

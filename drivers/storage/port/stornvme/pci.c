@@ -20,6 +20,8 @@ NvmeMaskDeviceInterrupts(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN Mask)
     ULONG CapOffset;
     ULONG Guard;
 
+    if (Device->Transport)
+        return;
     if (StorPortGetBusData(Device, PCIConfiguration, Device->SystemIoBusNumber,
                            Device->SlotNumber, Config, sizeof(Config)) < 64)
         return;
@@ -247,7 +249,6 @@ NvmeFindAdapter(_In_ PVOID DeviceExtension,
     return SP_RETURN_FOUND;
 }
 
-static
 BOOLEAN
 NTAPI
 NvmeHwInitialize(_In_ PVOID DeviceExtension)
@@ -297,7 +298,6 @@ NvmeHwInitialize(_In_ PVOID DeviceExtension)
     return TRUE;
 }
 
-static
 BOOLEAN
 NTAPI
 NvmeHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId)
@@ -309,6 +309,45 @@ NvmeHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId)
 }
 
 static
+VOID
+NvmeLimitMessageRequirements(_Inout_ PIO_RESOURCE_REQUIREMENTS_LIST Requirements,
+                             _In_ ULONG Limit)
+{
+    PIO_RESOURCE_LIST Source = &Requirements->List[0];
+    PIO_RESOURCE_LIST Target = Source;
+    ULONG Alternative;
+
+    for (Alternative = 0; Alternative < Requirements->AlternativeLists; Alternative++)
+    {
+        USHORT Version = Source->Version;
+        USHORT Revision = Source->Revision;
+        ULONG Count = Source->Count;
+        PIO_RESOURCE_LIST Next = (PIO_RESOURCE_LIST)&Source->Descriptors[Count];
+        ULONG Index, Kept = 0, Messages = 0;
+
+        for (Index = 0; Index < Count; Index++)
+        {
+            PIO_RESOURCE_DESCRIPTOR Descriptor = &Source->Descriptors[Index];
+
+            if (Descriptor->Type == CmResourceTypeInterrupt &&
+                (Descriptor->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) &&
+                Descriptor->u.Interrupt.MinimumVector == CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN &&
+                Descriptor->u.Interrupt.MaximumVector == CM_RESOURCE_INTERRUPT_MESSAGE_TOKEN &&
+                ++Messages > Limit)
+            {
+                continue;
+            }
+            RtlMoveMemory(&Target->Descriptors[Kept++], Descriptor, sizeof(*Descriptor));
+        }
+        Target->Version = Version;
+        Target->Revision = Revision;
+        Target->Count = Kept;
+        Target = (PIO_RESOURCE_LIST)&Target->Descriptors[Kept];
+        Source = Next;
+    }
+    Requirements->ListSize = (ULONG)((PUCHAR)Target - (PUCHAR)Requirements);
+}
+
 SCSI_ADAPTER_CONTROL_STATUS
 NTAPI
 NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
@@ -330,6 +369,19 @@ NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
                 SupportedTypes[ScsiStopAdapter] = TRUE;
             if (ScsiRestartAdapter < List->MaxControlType)
                 SupportedTypes[ScsiRestartAdapter] = TRUE;
+            if (ScsiAdapterFilterResourceRequirements < List->MaxControlType)
+                SupportedTypes[ScsiAdapterFilterResourceRequirements] = TRUE;
+            return ScsiAdapterControlSuccess;
+        }
+
+        case ScsiAdapterFilterResourceRequirements:
+        {
+            PSTOR_FILTER_RESOURCE_REQUIREMENTS Filter = (PSTOR_FILTER_RESOURCE_REQUIREMENTS)Parameters;
+            ULONG Processors = KeQueryActiveProcessorCount(NULL);
+
+            if (Filter->IoResourceRequirementsList != NULL)
+                NvmeLimitMessageRequirements(Filter->IoResourceRequirementsList,
+                                             min(max(Processors, 1), NVME_MAX_IO_QUEUES) + 1);
             return ScsiAdapterControlSuccess;
         }
 
@@ -358,7 +410,6 @@ NvmeHwAdapterControl(_In_ PVOID DeviceExtension,
     }
 }
 
-static
 SCSI_UNIT_CONTROL_STATUS
 NTAPI
 NvmeHwUnitControl(_In_ PVOID DeviceExtension,
@@ -420,6 +471,7 @@ NTAPI
 DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
 {
     HW_INITIALIZATION_DATA InitData;
+    ULONG Status;
 
     RtlZeroMemory(&InitData, sizeof(InitData));
     InitData.HwInitializationDataSize = sizeof(InitData);
@@ -439,7 +491,10 @@ DriverEntry(_In_ PVOID DriverObject, _In_ PVOID RegistryPath)
     InitData.TaggedQueuing = TRUE;
     InitData.AutoRequestSense = TRUE;
     InitData.MultipleRequestPerLu = TRUE;
-    InitData.FeatureSupport = STOR_FEATURE_SUPPORTS_NVME_ADAPTER;
+    InitData.FeatureSupport = STOR_FEATURE_SUPPORTS_NVME_ADAPTER | STOR_FEATURE_ADAPTER_CONTROL_PRE_FINDADAPTER;
 
-    return StorPortInitialize(DriverObject, RegistryPath, &InitData, NULL);
+    Status = StorPortInitialize(DriverObject, RegistryPath, &InitData, NULL);
+    if (NvmeRegisterPlatformAdapters(DriverObject, RegistryPath, &InitData) == STATUS_SUCCESS)
+        Status = STATUS_SUCCESS;
+    return Status;
 }

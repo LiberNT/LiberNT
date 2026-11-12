@@ -144,7 +144,7 @@ LxSignalPending(
 {
     if (Thread == NULL)
         return FALSE;
-    return ((((ULONG64)Thread->Pending | (ULONG64)Thread->Process->Pending) & ~Thread->SigMask) != 0) ||
+    return ((LxSignalPendingSet(Thread) & ~Thread->SigMask) != 0) ||
            Thread->JobctlStop || ((Thread->PtraceWork & LX_PTW_TRAP) != 0);
 }
 
@@ -300,6 +300,7 @@ LxSetWaitMask(
     Thread->SuspendMask = Thread->SigMask;
     Thread->Suspended = TRUE;
     Thread->SigMask = Mask & ~((1ULL << (LX_SIGKILL - 1)) | (1ULL << (LX_SIGSTOP - 1)));
+    InterlockedExchange(&Thread->SharedWake, 1);
 }
 
 typedef struct _LX_FILE_WAITER
@@ -404,7 +405,7 @@ LxPollCore(
     _In_ PLX_PROCESS Process,
     _Inout_updates_(Count) PLX_POLL_ITEM Items,
     _In_ ULONG Count,
-    _In_opt_ PLX_TIMESPEC Timeout)
+    _Inout_opt_ PLX_TIMESPEC Timeout)
 {
     PLX_POLL_WAITER Waiter;
     PLX_POLL_ENTRY Entries;
@@ -499,6 +500,16 @@ LxPollCore(
         }
     }
 
+    if ((Timeout != NULL) && (Deadline.QuadPart != MAXLONGLONG))
+    {
+        LONG64 Left;
+
+        Now.QuadPart = (LONG64)KeQueryInterruptTime();
+        Left = max(Deadline.QuadPart - Now.QuadPart, 0);
+        Timeout->Seconds = Left / 10000000;
+        Timeout->Nanoseconds = (Left % 10000000) * 100;
+    }
+
     for (Index = 0; Index < Count; Index++)
     {
         LxPollRemove(&Entries[Index]);
@@ -512,12 +523,34 @@ LxPollCore(
 }
 
 static
+VOID
+LxPollWriteTimeLeft(
+    _In_ PLX_CALL Call,
+    _In_ ULONG64 UserTimeout,
+    _In_ PLX_TIMESPEC Left,
+    _In_ BOOLEAN Timeval)
+{
+    LX_TIMEVAL Value;
+
+    if ((UserTimeout == 0) || (Call->Process->Personality & LX_PER_STICKY_TIMEOUTS))
+        return;
+    if (!Timeval)
+    {
+        (VOID)LxCopyToUser(UserTimeout, Left, sizeof(*Left));
+        return;
+    }
+    Value.Seconds = Left->Seconds;
+    Value.Microseconds = Left->Nanoseconds / 1000;
+    (VOID)LxCopyToUser(UserTimeout, &Value, sizeof(Value));
+}
+
+static
 LONG64
 LxPollUserItems(
     _Inout_ PLX_CALL Call,
     _In_ ULONG64 UserItems,
     _In_ ULONG64 Count,
-    _In_opt_ PLX_TIMESPEC Timeout,
+    _Inout_opt_ PLX_TIMESPEC Timeout,
     _In_ ULONG64 SigMask,
     _In_ ULONG64 SigSize)
 {
@@ -562,8 +595,11 @@ LX_SYSCALL(LxSysPpoll)
         if ((Timeout.Seconds < 0) || (Timeout.Nanoseconds < 0) || (Timeout.Nanoseconds >= 1000000000))
             return -LX_EINVAL;
     }
-    return LxPollUserItems(Call, Call->Args[0], Call->Args[1], (Call->Args[2] != 0) ? &Timeout : NULL,
-                           Call->Args[3], Call->Args[4]);
+    Result = LxPollUserItems(Call, Call->Args[0], Call->Args[1], (Call->Args[2] != 0) ? &Timeout : NULL,
+                             Call->Args[3], Call->Args[4]);
+    if (Call->Args[2] != 0)
+        LxPollWriteTimeLeft(Call, Call->Args[2], &Timeout, FALSE);
+    return Result;
 }
 
 LX_SYSCALL(LxSysPoll)
@@ -587,7 +623,7 @@ LxSelectCore(
     _Inout_ PLX_CALL Call,
     _In_ LONG Nfds,
     _In_reads_(3) PULONG64 Sets,
-    _In_opt_ PLX_TIMESPEC Timeout,
+    _Inout_opt_ PLX_TIMESPEC Timeout,
     _In_ ULONG64 SigMask,
     _In_ ULONG64 SigSize)
 {
@@ -691,6 +727,8 @@ LX_SYSCALL(LxSysPselect6)
         Result = LxCopyFromUser(&Timeout, Call->Args[4], sizeof(Timeout));
         if (Result != 0)
             return Result;
+        if ((Timeout.Seconds < 0) || (Timeout.Nanoseconds < 0) || (Timeout.Nanoseconds >= 1000000000))
+            return -LX_EINVAL;
     }
     if (Call->Args[5] != 0)
     {
@@ -698,8 +736,11 @@ LX_SYSCALL(LxSysPselect6)
         if (Result != 0)
             return Result;
     }
-    return LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, SigArgs[0],
-                        SigArgs[1]);
+    Result = LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, SigArgs[0],
+                          SigArgs[1]);
+    if (Call->Args[4] != 0)
+        LxPollWriteTimeLeft(Call, Call->Args[4], &Timeout, FALSE);
+    return Result;
 }
 
 LX_SYSCALL(LxSysSelect)
@@ -719,8 +760,10 @@ LX_SYSCALL(LxSysSelect)
         Timeout.Seconds = Timeval.Seconds + Timeval.Microseconds / 1000000;
         Timeout.Nanoseconds = (Timeval.Microseconds % 1000000) * 1000;
     }
-    /* FIXME: Linux writes the time left back to the timeval; it is left unchanged */
-    return LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, 0, 0);
+    Result = LxSelectCore(Call, (LONG)Call->Args[0], Sets, (Call->Args[4] != 0) ? &Timeout : NULL, 0, 0);
+    if (Call->Args[4] != 0)
+        LxPollWriteTimeLeft(Call, Call->Args[4], &Timeout, TRUE);
+    return Result;
 }
 
 static

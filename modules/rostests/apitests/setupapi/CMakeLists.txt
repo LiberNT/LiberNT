@@ -2,8 +2,10 @@
 list(APPEND SOURCE
     ClassInstallParams.c
     devclass.c
+    DevicePdoName.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
+    InboxClasses.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
     NewDeviceInstall.c
@@ -14,6 +16,7 @@ list(APPEND SOURCE
     SetupInstallFile.c
     SetupInstallRegisterDlls.c
     SetupInstallServicesFromInfSectionEx.c
+    SysButtonDevices.c
     UsbInterfaceIds.c
     testlist.c)
 

@@ -1142,3 +1142,14 @@ KiDisplayBugCheckRegisterState(
         KiDisplayAndLogBugCheckString(Line);
     }
 }
+
+BOOLEAN
+NTAPI
+KiUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN CallerFrame)
+{
+    UNREFERENCED_PARAMETER(CallerFrame);
+
+    return KiUnwindFrameRecord(Context);
+}

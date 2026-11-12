@@ -82,6 +82,13 @@ USBCCGP_FreeFunctionDescriptors(
         FDODeviceExtension->MsCompatDescriptor = NULL;
         FDODeviceExtension->MsCompatDescriptorLength = 0;
     }
+
+    if (FDODeviceExtension->MsOs20DescriptorSet)
+    {
+        FreeItem(FDODeviceExtension->MsOs20DescriptorSet);
+        FDODeviceExtension->MsOs20DescriptorSet = NULL;
+        FDODeviceExtension->MsOs20DescriptorSetLength = 0;
+    }
 }
 
 static VOID

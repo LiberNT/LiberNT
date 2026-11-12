@@ -71,7 +71,7 @@ vfatKdbgHandler(
         else
         {
             PLIST_ENTRY ListEntry;
-            PDEVICE_EXTENSION DeviceExt;
+            PDEVICE_EXTENSION DeviceExt = NULL;
 
             for (ListEntry = VfatGlobalData->VolumeListHead.Flink;
                  ListEntry != &VfatGlobalData->VolumeListHead;

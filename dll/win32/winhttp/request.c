@@ -2017,6 +2017,23 @@ static int get_receive_response_timeout( struct request *request )
     return request->receive_response_timeout;
 }
 
+#ifdef __REACTOS__
+static DWORD secure_failure_flag( DWORD error )
+{
+    switch (error)
+    {
+    case ERROR_WINHTTP_SECURE_CERT_REV_FAILED: return WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED;
+    case ERROR_WINHTTP_SECURE_INVALID_CERT: return WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT;
+    case ERROR_WINHTTP_SECURE_CERT_REVOKED: return WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED;
+    case ERROR_WINHTTP_SECURE_INVALID_CA: return WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA;
+    case ERROR_WINHTTP_SECURE_CERT_CN_INVALID: return WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID;
+    case ERROR_WINHTTP_SECURE_CERT_DATE_INVALID: return WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID;
+    case ERROR_WINHTTP_SECURE_CERT_WRONG_USAGE: return WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE;
+    default: return 0;
+    }
+}
+#endif
+
 static DWORD open_connection( struct request *request )
 {
     BOOL is_secure = request->hdr.flags & WINHTTP_FLAG_SECURE;
@@ -2026,6 +2043,9 @@ static DWORD open_connection( struct request *request )
     WCHAR *addressW = NULL;
     INTERNET_PORT port;
     DWORD ret, len;
+#ifdef __REACTOS__
+    DWORD secure_failure;
+#endif
 
     if (request->netconn) goto done;
 
@@ -2159,6 +2179,14 @@ static DWORD open_connection( struct request *request )
                 request->netconn = NULL;
                 free( addressW );
                 netconn_release( netconn );
+#ifdef __REACTOS__
+                if ((secure_failure = secure_failure_flag( ret )))
+                {
+                    send_callback( &request->hdr, WINHTTP_CALLBACK_STATUS_SECURE_FAILURE, &secure_failure,
+                                   sizeof(secure_failure) );
+                    return ERROR_WINHTTP_SECURE_FAILURE;
+                }
+#endif
                 return ret;
             }
         }

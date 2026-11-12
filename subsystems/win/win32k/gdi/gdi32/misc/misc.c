@@ -21,11 +21,14 @@
  * FILE:            win32ss/gdi/gdi32/misc/misc.c
  * PURPOSE:         Miscellaneous functions
  * PROGRAMMER:      Thomas Weidenmueller <w3seek@reactos.com>
+ *                  Ahmed ARIF <arif.ing@outlook.com>
  * UPDATE HISTORY:
  *      2004/09/04  Created
  */
 
 #include <precomp.h>
+#include <ndk/iofuncs.h>
+#include <ndk/obfuncs.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -1099,4 +1102,44 @@ GdiAddGlsRecord(HDC hdc,
     UNIMPLEMENTED;
     SetLastError(ERROR_CALL_NOT_IMPLEMENTED);
     return 0;
+}
+
+/* A metafile recorded to disk keeps its file open for reading until it is deleted, so the file cannot be written meanwhile */
+HANDLE
+WINAPI
+GdiReopenMetaFileForReading(
+    _In_ HANDLE File)
+{
+    POBJECT_NAME_INFORMATION Name = NULL;
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Reopened = NULL;
+    ULONG Length = 0;
+
+    NtQueryObject(File, ObjectNameInformation, NULL, 0, &Length);
+    if (Length != 0)
+    {
+        Name = HeapAlloc(GetProcessHeap(), 0, Length);
+        if (Name && !NT_SUCCESS(NtQueryObject(File, ObjectNameInformation, Name, Length, &Length)))
+        {
+            HeapFree(GetProcessHeap(), 0, Name);
+            Name = NULL;
+        }
+    }
+
+    CloseHandle(File);
+
+    if (Name)
+    {
+        InitializeObjectAttributes(&Attributes, &Name->Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+        if (!NT_SUCCESS(NtCreateFile(&Reopened, GENERIC_READ | SYNCHRONIZE, &Attributes, &IoStatus, NULL, 0,
+                                     FILE_SHARE_READ, FILE_OPEN,
+                                     FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0)))
+        {
+            Reopened = NULL;
+        }
+        HeapFree(GetProcessHeap(), 0, Name);
+    }
+
+    return Reopened;
 }

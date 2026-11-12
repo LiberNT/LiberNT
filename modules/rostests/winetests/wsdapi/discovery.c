@@ -71,7 +71,23 @@ typedef struct messageStorage {
     int                   messageCount;
     HANDLE                threadHandles[MAX_LISTENING_THREADS];
     int                   numThreadHandles;
+    HANDLE                matched;
+    const char*           wantedAction;
 } messageStorage;
+
+static void expect_message(messageStorage *msgStorage, const char *action)
+{
+    msgStorage->matched = CreateEventW(NULL, TRUE, FALSE, NULL);
+    msgStorage->wantedAction = action;
+}
+
+static void wait_for_message(messageStorage *msgStorage, DWORD timeout)
+{
+    WaitForSingleObject(msgStorage->matched, timeout);
+    msgStorage->running = FALSE;
+    WaitForMultipleObjects(msgStorage->numThreadHandles, msgStorage->threadHandles, TRUE, 1000);
+    CloseHandle(msgStorage->matched);
+}
 
 static LPWSTR utf8_to_wide(const char *utf8String)
 {
@@ -203,6 +219,9 @@ static DWORD WINAPI listening_thread(LPVOID lpParam)
 
             LeaveCriticalSection(&msgStorage->criticalSection);
 
+            if (msgStorage->wantedAction && strstr(buffer, msgStorage->wantedAction) && strstr(buffer, publisherId))
+                SetEvent(msgStorage->matched);
+
             if (msgStorage->messageCount >= MAX_CACHED_MESSAGES)
             {
                 /* Stop all threads */
@@ -223,7 +242,7 @@ static DWORD WINAPI listening_thread(LPVOID lpParam)
 static BOOL start_listening_udp_unicast(messageStorage *msgStorage, struct sockaddr_in *address)
 {
     listenerThreadParams *parameter = NULL;
-    const DWORD receive_timeout = 500;
+    const DWORD receive_timeout = 50;
     const UINT reuse_addr = 1;
     HANDLE hThread;
     SOCKET s = 0;
@@ -238,7 +257,7 @@ static BOOL start_listening_udp_unicast(messageStorage *msgStorage, struct socka
     /* Bind the socket to the local interface so we can receive data */
     if (bind(s, (struct sockaddr *) address, sizeof(struct sockaddr_in)) == SOCKET_ERROR) goto cleanup;
 
-    /* Set a 500ms receive timeout */
+    /* Set a 50ms receive timeout */
     if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *) &receive_timeout, sizeof(receive_timeout)) == SOCKET_ERROR)
         goto cleanup;
 
@@ -267,7 +286,7 @@ static void start_listening(messageStorage *msgStorage, const char *multicastAdd
 {
     struct addrinfo *multicastAddr = NULL, *bindAddr = NULL, *interfaceAddr = NULL;
     listenerThreadParams *parameter = NULL;
-    const DWORD receiveTimeout = 500;
+    const DWORD receiveTimeout = 50;
     const UINT reuseAddr = 1;
     HANDLE hThread;
     SOCKET s = 0;
@@ -304,7 +323,7 @@ static void start_listening(messageStorage *msgStorage, const char *multicastAdd
     if (multicastAddr->ai_family == AF_INET6)
         ((SOCKADDR_IN6 *)multicastAddr->ai_addr)->sin6_scope_id = 0;
 
-    /* Set a 500ms receive timeout */
+    /* Set a 50ms receive timeout */
     if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&receiveTimeout, sizeof(receiveTimeout)) == SOCKET_ERROR) goto cleanup;
 
     /* Allocate memory for thread parameters */
@@ -642,6 +661,7 @@ static HRESULT WINAPI IWSDiscoveryPublisherNotifyImpl_ProbeHandler(IWSDiscoveryP
 
                 msg_storage->running = TRUE;
                 InitializeCriticalSection(&msg_storage->criticalSection);
+                expect_message(msg_storage, "<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/ProbeMatches</wsa:Action>");
 
                 ok(start_listening_udp_unicast(msg_storage, (struct sockaddr_in *) &remote_sock) == TRUE,
                     "Unable to listen on local socket for UDP messages\n");
@@ -678,13 +698,8 @@ static HRESULT WINAPI IWSDiscoveryPublisherNotifyImpl_ProbeHandler(IWSDiscoveryP
                 WSDFreeLinkedMemory(endpoint_any_element);
                 WSDFreeLinkedMemory(ref_param_any_element);
 
-                /* Wait up to 2 seconds for messages to be received */
-                if (WaitForMultipleObjects(msg_storage->numThreadHandles, msg_storage->threadHandles, TRUE, 5000) == WAIT_TIMEOUT)
-                {
-                    /* Wait up to 1 more second for threads to terminate */
-                    msg_storage->running = FALSE;
-                    WaitForMultipleObjects(msg_storage->numThreadHandles, msg_storage->threadHandles, TRUE, 1000);
-                }
+                /* Wait up to 5 seconds for the message to be received */
+                wait_for_message(msg_storage, 5000);
 
                 for (i = 0; i < msg_storage->numThreadHandles; i++)
                 {
@@ -954,6 +969,7 @@ static void Publish_tests(void)
 
     msgStorage->running = TRUE;
     InitializeCriticalSection(&msgStorage->criticalSection);
+    expect_message(msgStorage, "<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Hello</wsa:Action>");
 
     ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
     ok(ret == 0, "WSAStartup failed (ret = %d)\n", ret);
@@ -1020,13 +1036,8 @@ static void Publish_tests(void)
 
     ok(rc == S_OK, "Publish failed: %08lx\n", rc);
 
-    /* Wait up to 2 seconds for messages to be received */
-    if (WaitForMultipleObjects(msgStorage->numThreadHandles, msgStorage->threadHandles, TRUE, 2000) == WAIT_TIMEOUT)
-    {
-        /* Wait up to 1 more second for threads to terminate */
-        msgStorage->running = FALSE;
-        WaitForMultipleObjects(msgStorage->numThreadHandles, msgStorage->threadHandles, TRUE, 1000);
-    }
+    /* Wait up to 2 seconds for the message to be received */
+    wait_for_message(msgStorage, 2000);
 
     DeleteCriticalSection(&msgStorage->criticalSection);
 
@@ -1170,6 +1181,7 @@ static void UnPublish_tests(void)
 
     msg_storage->running = TRUE;
     InitializeCriticalSection(&msg_storage->criticalSection);
+    expect_message(msg_storage, "<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Bye</wsa:Action>");
 
     ret = WSAStartup(MAKEWORD(2, 2), &wsa_data);
     ok(ret == 0, "WSAStartup failed (ret = %d)\n", ret);
@@ -1195,12 +1207,7 @@ static void UnPublish_tests(void)
     ok(rc == S_OK, "Unpublish failed: %08lx\n", rc);
 
     /* Wait up to 2 seconds for messages to be received */
-    if (WaitForMultipleObjects(msg_storage->numThreadHandles, msg_storage->threadHandles, TRUE, 2000) == WAIT_TIMEOUT)
-    {
-        /* Wait up to 1 more second for threads to terminate */
-        msg_storage->running = FALSE;
-        WaitForMultipleObjects(msg_storage->numThreadHandles, msg_storage->threadHandles, TRUE, 1000);
-    }
+    wait_for_message(msg_storage, 2000);
 
     DeleteCriticalSection(&msg_storage->criticalSection);
 

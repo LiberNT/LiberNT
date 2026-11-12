@@ -28,6 +28,7 @@ typedef enum _ARM64_PLATFORM_ID
 {
     Arm64PlatformUnknown = 0,
     Arm64PlatformGenericAcpi,   /* SPCR/DBG2 gave us a usable serial port */
+    Arm64PlatformDeviceTree,
     Arm64PlatformMax
 } ARM64_PLATFORM_ID;
 
@@ -43,6 +44,11 @@ typedef enum _ARM64_UART_INTERFACE
     Arm64UartNs16550,
     Arm64UartQcomGeni,
     Arm64UartBcm2835Mini,
+    /* 16550 register file spaced four bytes apart and read as 32-bit words,
+     * as a 16550 SPCR/DBG2 entry whose address structure declares a 32-bit
+     * access describes it. Values travel in the loader block, so new
+     * interfaces are appended. */
+    Arm64UartNs16550Mmio32,
     Arm64UartMax
 } ARM64_UART_INTERFACE;
 
@@ -70,6 +76,9 @@ typedef enum _ARM64_UART_INTERFACE
 #define ARM64_NS16550_LSR           0x005   /* Line Status Register */
 #define ARM64_NS16550_LSR_DR        0x01    /* Data Ready */
 #define ARM64_NS16550_LSR_THRE      0x20    /* Transmit Holding Register Empty */
+
+/* Register index to byte offset for Arm64UartNs16550Mmio32 */
+#define ARM64_NS16550_MMIO32(Offset) ((Offset) << 2)
 
 /*
  * BCM2835 mini UART register offsets from the AUX base address reported by
@@ -571,6 +580,16 @@ EarlyUartPutc(CHAR Ch)
             EARLY_UART_WRITE8_AT(BaseVa, ARM64_NS16550_THR, (UCHAR)Ch);
             break;
 
+        case Arm64UartNs16550Mmio32:
+            while (!(EARLY_UART_READ_AT(BaseVa, ARM64_NS16550_MMIO32(ARM64_NS16550_LSR)) &
+                     ARM64_NS16550_LSR_THRE))
+            {
+                EARLY_UART_YIELD();
+            }
+
+            EARLY_UART_WRITE_AT(BaseVa, ARM64_NS16550_MMIO32(ARM64_NS16550_THR), (UINT32)(UCHAR)Ch);
+            break;
+
         case Arm64UartBcm2835Mini:
             while (!(EARLY_UART_READ_AT(BaseVa, ARM64_BCM2835_MINI_UART_LSR) & ARM64_BCM2835_MINI_UART_LSR_TX_EMPTY))
             {
@@ -620,6 +639,16 @@ EarlyUartGetc(_Out_ UCHAR *Byte)
                 return FALSE;
 
             *Byte = EARLY_UART_READ8_AT(BaseVa, ARM64_NS16550_RBR);
+            break;
+
+        case Arm64UartNs16550Mmio32:
+            if (!(EARLY_UART_READ_AT(BaseVa, ARM64_NS16550_MMIO32(ARM64_NS16550_LSR)) &
+                  ARM64_NS16550_LSR_DR))
+            {
+                return FALSE;
+            }
+
+            *Byte = (UCHAR)(EARLY_UART_READ_AT(BaseVa, ARM64_NS16550_MMIO32(ARM64_NS16550_RBR)) & 0xFF);
             break;
 
         case Arm64UartBcm2835Mini:

@@ -1533,6 +1533,17 @@ KiArm64UserServiceDispatch(
     KiSystemService(Thread, TrapFrame, Instruction);
 }
 
+VOID
+KiArm64ThreadStartupExit(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(TrapFrame->PreviousMode == UserMode);
+
+    KiArm64DeliverPendingUserApc(ExceptionFrame, TrapFrame, TRUE);
+}
+
 BOOLEAN
 KiArm64UserServiceComplete(
     _Inout_ PKTRAP_FRAME TrapFrame)
@@ -2583,48 +2594,6 @@ KiArm64HandleSynchronousException(
                 }
             }
 #endif
-#ifdef KDBG
-            /*
-             * Call KDBG to display crash diagnostics (registers, stack trace,
-             * modules) for kernel-mode faults. This runs regardless of KD state
-             * since KDBG provides valuable crash info even when KD is "enabled"
-             * for serial output but no interactive debugger is attached.
-             */
-            if (PreviousMode == KernelMode)
-            {
-                EXCEPTION_RECORD64 ExceptionRecord64;
-                CONTEXT KdbContext;
-
-                RtlZeroMemory(&ExceptionRecord64, sizeof(ExceptionRecord64));
-                if ((Status == STATUS_ACCESS_VIOLATION) ||
-                    (Status == STATUS_GUARD_PAGE_VIOLATION) ||
-                    (Status == STATUS_STACK_OVERFLOW))
-                {
-                    ExceptionRecord64.ExceptionCode = Status;
-                    ExceptionRecord64.NumberParameters = 2;
-                }
-                else
-                {
-                    ExceptionRecord64.ExceptionCode = STATUS_IN_PAGE_ERROR;
-                    ExceptionRecord64.NumberParameters = 3;
-                    ExceptionRecord64.ExceptionInformation[2] = Status;
-                }
-                ExceptionRecord64.ExceptionFlags = 0;
-                ExceptionRecord64.ExceptionAddress = Context->State.Elr;
-                ExceptionRecord64.ExceptionInformation[0] = KiArm64AccessTypeToExceptionInfo(WriteAccess, FALSE);
-                ExceptionRecord64.ExceptionInformation[1] = (ULONG_PTR)Context->State.FaultAddress;
-
-                RtlZeroMemory(&KdbContext, sizeof(KdbContext));
-                KdbContext.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_ARM64;
-
-                KeTrapFrameToContext(TrapFrame, Context->ExceptionFramePointer, &KdbContext);
-
-                KdbEnterDebuggerException(&ExceptionRecord64,
-                                          PreviousMode,
-                                          &KdbContext,
-                                          TRUE);
-            }
-#endif /* KDBG */
 
             {
                 EXCEPTION_RECORD ExceptionRecord;
@@ -2797,6 +2766,25 @@ KiArm64HandleSynchronousException(
                     case BREAKPOINT_PROMPT:
                     {
                         USHORT ReturnLength;
+
+                        if (!KdpPromptBuffersAccessible((PCHAR)Context->State.Registers.X[1],
+                                                        (USHORT)Context->State.Registers.X[2],
+                                                        (PCHAR)Context->State.Registers.X[3],
+                                                        (USHORT)Context->State.Registers.X[4],
+                                                        Mode))
+                        {
+                            EXCEPTION_RECORD ExceptionRecord;
+
+                            RtlZeroMemory(&ExceptionRecord, sizeof(ExceptionRecord));
+                            ExceptionRecord.ExceptionCode = STATUS_BREAKPOINT;
+                            ExceptionRecord.ExceptionAddress = (PVOID)(ULONG_PTR)Context->State.Elr;
+                            ExceptionRecord.NumberParameters = 3;
+                            ExceptionRecord.ExceptionInformation[0] = BREAKPOINT_PROMPT;
+                            ExceptionRecord.ExceptionInformation[1] = Context->State.Registers.X[1];
+                            ExceptionRecord.ExceptionInformation[2] = Context->State.Registers.X[2];
+                            KiDispatchException(&ExceptionRecord, Context->ExceptionFramePointer, TrapFrame, Mode, TRUE);
+                            goto HandledExit;
+                        }
 
                         ReturnLength = KdpPrompt(
                             (PCHAR)Context->State.Registers.X[1],

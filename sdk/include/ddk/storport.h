@@ -1876,6 +1876,8 @@ typedef union _CDB {
 
 #define CDB12GENERIC_LENGTH                  12
 
+#define CDB_FORCE_MEDIA_ACCESS               0x08
+
 #define SETBITON                             1
 
 #define SETBITOFF                            0
@@ -2886,11 +2888,25 @@ typedef struct _DESCRIPTOR_SENSE_DATA {
 
 #define SCSI_ADSENSE_LUN_COMMUNICATION                     0x08
 
+#define SCSI_ADSENSE_WRITE_ERROR                           0x0C
+
+#define SCSI_ADSENSE_UNRECOVERED_ERROR                     0x11
+
+#define SCSI_ADSENSE_PARAMETER_LIST_LENGTH                 0x1A
+
+#define SCSI_ADSENSE_ILLEGAL_COMMAND                       0x20
+
 #define SCSI_ADSENSE_ILLEGAL_BLOCK                         0x21
 
 #define SCSI_ADSENSE_INVALID_CDB                           0x24
 
+#define SCSI_ADSENSE_INVALID_FIELD_PARAMETER_LIST          0x26
+
+#define SCSI_ADSENSE_WRITE_PROTECT                         0x27
+
 #define SCSI_ADSENSE_MEDIUM_CHANGED                        0x28
+
+#define SCSI_ADSENSE_PARAMETERS_CHANGED                    0x2A
 
 #define SCSI_ADSENSE_NO_MEDIA_IN_DEVICE                    0x3a
 
@@ -2901,6 +2917,8 @@ typedef struct _DESCRIPTOR_SENSE_DATA {
 #define SCSI_SESNEQ_COMM_CRC_ERROR               0x03
 
 #define SCSI_SENSEQ_MEDIUM_REMOVAL                      0x01
+
+#define SCSI_SENSEQ_CAPACITY_DATA_CHANGED               0x09
 
 #define FILE_DEVICE_SCSI 0x0000001b
 

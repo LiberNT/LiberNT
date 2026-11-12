@@ -983,6 +983,17 @@ static HRESULT WINAPI HTMLDocument_get_linkColor(IHTMLDocument2 *iface, VARIANT 
 
     nsAString_Init(&nsstr, NULL);
     nsres = nsIDOMHTMLDocument_GetLinkColor(This->html_document, &nsstr);
+    if(NS_SUCCEEDED(nsres)) {
+        const PRUnichar *color;
+
+        nsAString_GetData(&nsstr, &color);
+        if(!*color) {
+            nsAString_Finish(&nsstr);
+            V_VT(p) = VT_BSTR;
+            V_BSTR(p) = SysAllocString(L"#0000ff");
+            return V_BSTR(p) ? S_OK : E_OUTOFMEMORY;
+        }
+    }
     return return_nsstr_variant(nsres, &nsstr, NSSTR_COLOR, p);
 }
 
@@ -2655,6 +2666,8 @@ static HRESULT WINAPI HTMLDocument3_getElementsByName(IHTMLDocument3 *iface, BST
     WCHAR *selector;
     nsresult nsres;
     static const WCHAR formatW[] = L"*[id=%s],*[name=%s]";
+    static const WCHAR legacy_formatW[] = L"*[id=\"%s\" i],*[name=\"%s\" i]";
+    const WCHAR *format = dispex_compat_mode(&This->node.event_target.dispex) < COMPAT_MODE_IE9 ? legacy_formatW : formatW;
 
     TRACE("(%p)->(%s %p)\n", This, debugstr_w(v), ppelColl);
 
@@ -2664,10 +2677,10 @@ static HRESULT WINAPI HTMLDocument3_getElementsByName(IHTMLDocument3 *iface, BST
         return E_NOTIMPL;
     }
 
-    selector = malloc(2 * SysStringLen(v) * sizeof(WCHAR) + sizeof(formatW));
+    selector = malloc(2 * SysStringLen(v) * sizeof(WCHAR) + sizeof(legacy_formatW));
     if(!selector)
         return E_OUTOFMEMORY;
-    swprintf(selector, 2*SysStringLen(v) + ARRAY_SIZE(formatW), formatW, v, v);
+    swprintf(selector, 2*SysStringLen(v) + ARRAY_SIZE(legacy_formatW), format, v, v);
 
     /*
      * NOTE: IE getElementsByName implementation differs from Gecko. It searches both name and id attributes.
@@ -5507,6 +5520,8 @@ static HRESULT HTMLDocumentNode_invoke(DispatchEx *dispex, DISPID id, LCID lcid,
     unsigned i;
     HRESULT hres;
 
+    if(flags == DISPATCH_PROPERTYPUT && This->node.event_target.dispex.jsdisp)
+        return S_FALSE;
     if(flags != DISPATCH_PROPERTYGET && flags != (DISPATCH_METHOD|DISPATCH_PROPERTYGET))
         return MSHTML_E_INVALID_PROPERTY;
 

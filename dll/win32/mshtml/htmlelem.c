@@ -86,7 +86,7 @@ static const tag_desc_t tag_descs[] = {
     {L"BR",             HTMLBRElement_Create},
     {L"BUTTON",         HTMLButtonElement_Create, button_attr_only_names},
     {L"CANVAS",         HTMLElement_Ctor},
-    {L"CAPTION",        HTMLElement_Ctor},
+    {L"CAPTION",        HTMLTableCaptionElement_Create},
     {L"CENTER",         HTMLBlockElement_Create},
     {L"CITE",           HTMLPhraseElement_Create},
     {L"CODE",           HTMLPhraseElement_Create},
@@ -102,7 +102,7 @@ static const tag_desc_t tag_descs[] = {
     {L"DT",             HTMLDTElement_Create},
     {L"EM",             HTMLPhraseElement_Create},
     {L"EMBED",          HTMLEmbedElement_Create, embed_attr_only_names},
-    {L"FIELDSET",       HTMLElement_Ctor},
+    {L"FIELDSET",       HTMLFieldSetElement_Create},
     {L"FIGCAPTION",     HTMLElement_Ctor},
     {L"FIGURE",         HTMLElement_Ctor},
     {L"FONT",           HTMLFontElement_Create},
@@ -127,7 +127,7 @@ static const tag_desc_t tag_descs[] = {
     {L"INS",            HTMLModElement_Create},
     {L"KBD",            HTMLPhraseElement_Create},
     {L"LABEL",          HTMLLabelElement_Create},
-    {L"LEGEND",         HTMLElement_Ctor},
+    {L"LEGEND",         HTMLLegendElement_Create},
     {L"LI",             HTMLLIElement_Create},
     {L"LINK",           HTMLLinkElement_Create},
     {L"LISTING",        HTMLBlockElement_Create},
@@ -144,7 +144,7 @@ static const tag_desc_t tag_descs[] = {
     {L"OPTGROUP",       HTMLElement_Ctor},
     {L"OPTION",         HTMLOptionElement_Create},
     {L"P",              HTMLParaElement_Create, para_attr_only_names},
-    {L"PARAM",          HTMLElement_Ctor},
+    {L"PARAM",          HTMLParamElement_Create},
     {L"PLAINTEXT",      HTMLBlockElement_Create},
     {L"PRE",            HTMLPreElement_Create},
     {L"PROGRESS",       HTMLElement_Ctor},
@@ -170,7 +170,7 @@ static const tag_desc_t tag_descs[] = {
     {L"TD",             HTMLTableCell_Create},
     {L"TEXTAREA",       HTMLTextAreaElement_Create},
     {L"TFOOT",          HTMLTableSection_Create},
-    {L"TH",             HTMLElement_Ctor},
+    {L"TH",             HTMLTableHeaderCell_Create},
     {L"THEAD",          HTMLTableSection_Create},
     {L"TITLE",          HTMLTitleElement_Create},
     {L"TR",             HTMLTableRow_Create},
@@ -540,6 +540,8 @@ HRESULT create_nselem(HTMLDocumentNode *doc, const WCHAR *tag, nsIDOMElement **r
     nsAString_Finish(&tag_str);
     if(NS_FAILED(nsres)) {
         ERR("CreateElement failed: %08lx\n", nsres);
+        if(nsres == NS_ERROR_DOM_INVALID_CHARACTER_ERR && dispex_compat_mode(&doc->node.event_target.dispex) >= COMPAT_MODE_IE9)
+            return MSHTML_E_INVALID_CHARACTER;
         return E_FAIL;
     }
 
@@ -5140,8 +5142,7 @@ static HRESULT WINAPI HTMLElement6_setAttributeNS(IHTMLElement6 *iface, VARIANT 
     nsAString_GetData(&ns_str, &ns);
     if((!ns || !ns[0]) && wcschr(strAttributeName, ':')) {
         nsAString_Finish(&ns_str);
-        /* FIXME: Return NamespaceError */
-        return E_FAIL;
+        return MSHTML_E_NAMESPACE;
     }
 
     if(!This->dom_element) {
@@ -8737,6 +8738,7 @@ static HRESULT get_ie8_attr_ref_by_name(HTMLAttributeCollection *This, const WCH
 
 static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, attr_ref_t *ref)
 {
+    static BOOL warned;
     DISPID id = DISPID_STARTENUM;
     unsigned attr_only_pos = 0;
     LONG len = -1;
@@ -8749,7 +8751,10 @@ static HRESULT get_attr_ref_by_idx(HTMLAttributeCollection *This, LONG *idx, att
     if(is_ie8_attr_col(This))
         return get_ie8_attr_ref_by_idx(This, idx, ref);
 
-    FIXME("filter non-enumerable attributes out\n");
+    if(!warned) {
+        FIXME("filter non-enumerable attributes out\n");
+        warned = TRUE;
+    }
 
     while(1) {
         hres = dispex_next_attr_id(&This->elem->node.event_target.dispex, id, &id);

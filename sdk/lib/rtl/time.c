@@ -172,6 +172,7 @@ RtlTimeFieldsToTime(IN PTIME_FIELDS TimeFields,
 {
     ULONG CurMonth;
     TIME_FIELDS IntTimeFields;
+    LONGLONG Elapsed;
 
     RtlCopyMemory(&IntTimeFields,
                   TimeFields,
@@ -191,17 +192,22 @@ RtlTimeFieldsToTime(IN PTIME_FIELDS TimeFields,
     }
 
     /* Compute the time */
-    Time->QuadPart = DaysSinceEpoch(IntTimeFields.Year);
+    Elapsed = DaysSinceEpoch(IntTimeFields.Year);
     for (CurMonth = 1; CurMonth < IntTimeFields.Month; CurMonth++)
     {
-        Time->QuadPart += MonthLengths[IsLeapYear(IntTimeFields.Year)][CurMonth - 1];
+        Elapsed += MonthLengths[IsLeapYear(IntTimeFields.Year)][CurMonth - 1];
     }
-    Time->QuadPart += IntTimeFields.Day - 1;
-    Time->QuadPart *= SECSPERDAY;
-    Time->QuadPart += IntTimeFields.Hour * SECSPERHOUR + IntTimeFields.Minute * SECSPERMIN +
-                      IntTimeFields.Second;
-    Time->QuadPart *= TICKSPERSEC;
-    Time->QuadPart += IntTimeFields.Milliseconds * TICKSPERMSEC;
+    Elapsed += IntTimeFields.Day - 1;
+    Elapsed *= SECSPERDAY;
+    Elapsed += IntTimeFields.Hour * SECSPERHOUR + IntTimeFields.Minute * SECSPERMIN +
+               IntTimeFields.Second;
+
+    if (Elapsed > (MAXLONGLONG - IntTimeFields.Milliseconds * TICKSPERMSEC) / TICKSPERSEC)
+    {
+        return FALSE;
+    }
+
+    Time->QuadPart = Elapsed * TICKSPERSEC + IntTimeFields.Milliseconds * TICKSPERMSEC;
 
     return TRUE;
 }

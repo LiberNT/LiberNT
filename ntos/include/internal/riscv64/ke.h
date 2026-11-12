@@ -8,9 +8,11 @@
 
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
 #define KI_EMULATED_USER_SYSTEM_DLL L"\\SystemRoot\\SystemAMD64\\ntdll.dll"
+#define KiEmulationProcessorArchitecture(Process) PROCESSOR_ARCHITECTURE_INTEL
 
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiRiscvCallUserMode
+#define KiArchCallUserMode(Frame, Result, ResultLength) KiRiscvCallUserMode((Frame), (Result), (ResultLength))
 
 NTSTATUS
 NTAPI
@@ -146,6 +148,20 @@ KeSetContextReturnRegister(_Inout_ PCONTEXT Context, _In_ ULONG_PTR ReturnValue)
 
 FORCEINLINE
 ULONG_PTR
+KeGetContextServiceArgument3(_In_ PCONTEXT Context)
+{
+    return Context->A3;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(_In_ PCONTEXT Context)
+{
+    return Context->A4;
+}
+
+FORCEINLINE
+ULONG_PTR
 KeGetContextStackRegister(_In_ PCONTEXT Context)
 {
     return Context->Sp;
@@ -273,8 +289,8 @@ VOID NTAPI KiRiscvRestoreVectorState(_In_ PKTHREAD Thread);
 VOID NTAPI KiRiscvSynchronizeInstructionStream(_In_ PKTHREAD Thread);
 BOOLEAN NTAPI KiRiscvHandleVectorFirstUse(_Inout_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI KiRiscvRundownVectorState(_In_ PKTHREAD Thread);
-struct _RISCV_FDT;
-VOID NTAPI KiRiscvCaptureCacheTopology(_In_ const struct _RISCV_FDT *Fdt, _In_ ULONG Cpus);
+struct _FDT;
+VOID NTAPI KiRiscvCaptureCacheTopology(_In_ const struct _FDT *Fdt, _In_ ULONG Cpus);
 ULONG NTAPI KiRiscvQueryFeatureFlags(VOID);
 VOID NTAPI KiRiscvEnableUserCacheBlockOperations(VOID);
 VOID NTAPI KiRiscvEnableUserTimeCounter(VOID);
@@ -387,7 +403,7 @@ KiGetLinkedTrapFrame(
 }
 
 /* System services that raise or continue unlink the service trap frame on
- * entry; the trap frame holds every register, so nothing else is saved. */
+ * the way out; the trap frame holds every register, so nothing else is saved. */
 typedef struct _KI_SERVICE_EXCEPTION_STATE
 {
     UCHAR Reserved;
@@ -406,7 +422,8 @@ KiEnterServiceException(
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
     UNREFERENCED_PARAMETER(State);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     return ExceptionFrame;
 }
 
@@ -428,8 +445,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 FORCEINLINE
@@ -534,7 +550,16 @@ KiClearDpcThreadState(
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+#define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
+/* TODO: this processor block has no type, vendor or context fields, so the debugger data names none */
+#define KI_PRCB_CPU_TYPE_OFFSET 0
+#define KI_PRCB_VENDOR_STRING_OFFSET 0
+#define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #ifdef __cplusplus
 extern "C" {

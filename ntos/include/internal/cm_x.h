@@ -131,6 +131,24 @@ CmpAcquireKcbLockExclusiveByKey(IN ULONG ConvKey)
 }
 
 //
+// Tries to acquire a KCB lock exclusively by key, for callers that already
+// hold a lock ordered after the KCB locks
+//
+FORCEINLINE
+BOOLEAN
+CmpTryToAcquireKcbLockExclusiveByKey(IN ULONG ConvKey)
+{
+    ULONG Index = GET_HASH_INDEX(ConvKey);
+
+    ASSERT(CmpCacheTable[Index].Owner != KeGetCurrentThread());
+    if (!ExTryToAcquirePushLockExclusive(&CmpCacheTable[Index].Lock))
+        return FALSE;
+
+    CmpCacheTable[Index].Owner = KeGetCurrentThread();
+    return TRUE;
+}
+
+//
 // Shared acquires a KCB by key
 //
 FORCEINLINE

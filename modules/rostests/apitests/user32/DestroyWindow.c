@@ -2,7 +2,7 @@
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Test that process termination finishes a window destructor
- *              abandoned in user mode
+ *              abandoned in user mode, and that thread termination frees the thread's windows
  */
 #include "precomp.h"
 
@@ -120,6 +120,45 @@ Cleanup:
     winetest_pop_context();
 }
 
+static HWND TerminatedWindow;
+
+static DWORD WINAPI
+TerminatedThreadProc(LPVOID Parameter)
+{
+    TerminatedWindow = CreateWindowExW(0, L"STATIC", L"Terminated thread window", WS_OVERLAPPEDWINDOW,
+                                       0, 0, 64, 64, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    SetEvent(Parameter);
+    Sleep(INFINITE);
+    return 0;
+}
+
+static void
+TestTerminatedThreadWindow(void)
+{
+    HANDLE Ready, Thread;
+    DWORD Wait, ExitCode = 0;
+
+    Ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Ready != NULL, "CreateEvent failed: %lu\n", GetLastError());
+    if (!Ready)
+        return;
+    Thread = CreateThread(NULL, 0, TerminatedThreadProc, Ready, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Thread)
+    {
+        Wait = WaitForSingleObject(Ready, 10000);
+        ok(Wait == WAIT_OBJECT_0, "Thread did not create its window: %#lx\n", Wait);
+        ok(IsWindow(TerminatedWindow), "Thread window %p was not created\n", TerminatedWindow);
+        ok(TerminateThread(Thread, 0x55), "TerminateThread failed: %lu\n", GetLastError());
+        Wait = WaitForSingleObject(Thread, 10000);
+        ok(Wait == WAIT_OBJECT_0, "Thread termination did not finish: %#lx\n", Wait);
+        ok(GetExitCodeThread(Thread, &ExitCode) && ExitCode == 0x55, "Unexpected thread exit %#lx\n", ExitCode);
+        ok(!IsWindow(TerminatedWindow), "Window survived thread termination\n");
+        CloseHandle(Thread);
+    }
+    CloseHandle(Ready);
+}
+
 START_TEST(DestroyWindow)
 {
     int Argc;
@@ -141,4 +180,5 @@ START_TEST(DestroyWindow)
 
     TestInterruptedDestroy(0);
     TestInterruptedDestroy(1);
+    TestTerminatedThreadWindow();
 }

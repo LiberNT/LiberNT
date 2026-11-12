@@ -43,6 +43,18 @@
 
 #define MDI_FIRST_CHILD_ID 2004
 
+#ifdef __REACTOS__
+#define FLUSH_EVENTS_MS 64
+#define FLUSH_QUIET_MS 10
+#define WAIT_IDLE_DELAY_MS 32
+#define WAIT_IDLE_TIMEOUT_MS 160
+#else
+#define FLUSH_EVENTS_MS 200
+#define FLUSH_QUIET_MS 100
+#define WAIT_IDLE_DELAY_MS 200
+#define WAIT_IDLE_TIMEOUT_MS 1000
+#endif
+
 /* undocumented SWP flags - from SDK 3.1 */
 #define SWP_NOCLIENTSIZE	0x0800
 #define SWP_NOCLIENTMOVE	0x1000
@@ -2686,8 +2698,8 @@ static void add_message_(int line, const struct recvd_message *msg)
 static void flush_events(void)
 {
     MSG msg;
-    int diff = 200;
-    int min_timeout = 100;
+    int diff = FLUSH_EVENTS_MS;
+    int min_timeout = FLUSH_QUIET_MS;
     DWORD time = GetTickCount() + diff;
 
     while (diff > 0)
@@ -12009,10 +12021,19 @@ static VOID CALLBACK tfunc(HWND hwnd, UINT uMsg, UINT_PTR id, DWORD dwTime)
 }
 
 #define TIMER_ID                 0x19
+#ifdef __REACTOS__
+#define TIMER_COUNT              32 /* 31 samples */
+#else
 #define TIMER_COUNT              500 /* 499 samples */
+#endif
 #define TIMER_DURATION_EXPECTED  10000 /* 10 ms */
 #define TIMER_DURATION_ALT       15600 /* 15.6 ms */
+#ifdef __REACTOS__
+/* A virtual machine's host delivers clock interrupts milliseconds late, on Windows 11 too: a median within half a tick of one tick passes */
+#define TIMER_DURATION_TOLERANCE (TIMER_DURATION_ALT / 2)
+#else
 #define TIMER_DURATION_TOLERANCE 1000 /* 1 ms */
+#endif
 
 static int count = 0;
 static ULONGLONG timer_ticks[TIMER_COUNT];
@@ -19572,7 +19593,7 @@ static DWORD CALLBACK do_wait_idle_child_thread( void *arg )
     MSG msg;
 
     PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE );
-    Sleep( 200 );
+    Sleep( WAIT_IDLE_DELAY_MS );
     MsgWaitForMultipleObjects( 0, NULL, FALSE, 100, QS_ALLINPUT );
     return 0;
 }
@@ -19606,36 +19627,36 @@ static void do_wait_idle_child( int arg )
         break;
     case 1:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, 0, 0, 0, PM_REMOVE );
         break;
     case 2:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE );
         PostThreadMessageA( GetCurrentThreadId(), WM_COMMAND, 0x1234, 0xabcd );
         PeekMessageA( &msg, 0, 0, 0, PM_REMOVE );
         break;
     case 3:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         SendMessageA( HWND_BROADCAST, WM_WININICHANGE, 0, 0 );
         break;
     case 4:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE|PM_NOYIELD )) DispatchMessageA( &msg );
         break;
     case 5:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessageA( &msg );
         break;
     case 6:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         while (PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE ))
         {
@@ -19645,84 +19666,84 @@ static void do_wait_idle_child( int arg )
         break;
     case 7:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         SetTimer( hwnd, 3, 1, NULL );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE|PM_NOYIELD )) DispatchMessageA( &msg );
         break;
     case 8:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE );
         MsgWaitForMultipleObjects( 0, NULL, FALSE, 100, QS_ALLINPUT );
         break;
     case 9:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessageA( &msg );
         for (;;) GetMessageA( &msg, 0, 0, 0 );
         break;
     case 10:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         hwnd = CreateWindowExA(0, "TestClass", NULL, WS_POPUP|WS_VISIBLE, 0, 0, 10, 10, 0, 0, 0, NULL);
         SetTimer( hwnd, 3, 1, NULL );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessageA( &msg );
         break;
     case 11:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         return;  /* exiting the process makes WaitForInputIdle return success too */
     case 12:
         PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         MsgWaitForMultipleObjects( 0, NULL, FALSE, 100, QS_ALLINPUT );
         SetEvent( start_event );
         break;
     case 13:
         SetEvent( start_event );
         PeekMessageA( &msg, 0, 0, 0, PM_NOREMOVE );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         thread = CreateThread( NULL, 0, do_wait_idle_child_thread, NULL, 0, &id );
         WaitForSingleObject( thread, 10000 );
         CloseHandle( thread );
         break;
     case 14:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, HWND_TOPMOST, 0, 0, PM_NOREMOVE );
         break;
     case 15:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, HWND_BROADCAST, 0, 0, PM_NOREMOVE );
         break;
     case 16:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, HWND_BOTTOM, 0, 0, PM_NOREMOVE );
         break;
     case 17:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, (HWND)0xdeadbeef, 0, 0, PM_NOREMOVE );
         break;
     case 18:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, HWND_NOTOPMOST, 0, 0, PM_NOREMOVE );
         break;
     case 19:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, HWND_MESSAGE, 0, 0, PM_NOREMOVE );
         break;
     case 20:
         SetEvent( start_event );
-        Sleep( 200 );
+        Sleep( WAIT_IDLE_DELAY_MS );
         PeekMessageA( &msg, GetDesktopWindow(), 0, 0, PM_NOREMOVE );
         break;
     }
@@ -19734,7 +19755,7 @@ static void do_wait_idle_child( int arg )
 
 static LRESULT CALLBACK wait_idle_proc( HWND hwnd, UINT msg, WPARAM wp, LPARAM lp )
 {
-    if (msg == WM_WININICHANGE) Sleep( 200 );  /* make sure the child waits */
+    if (msg == WM_WININICHANGE) Sleep( WAIT_IDLE_DELAY_MS );  /* make sure the child waits */
     return DefWindowProcA( hwnd, msg, wp, lp );
 }
 
@@ -19827,7 +19848,7 @@ static void test_WaitForInputIdle( char *argv0 )
             ok( ret == WAIT_OBJECT_0, "%u: WaitForSingleObject failed\n", i );
             if (ret == WAIT_OBJECT_0)
             {
-                ret = WaitForInputIdle( pi.hProcess, 1000 );
+                ret = WaitForInputIdle( pi.hProcess, WAIT_IDLE_TIMEOUT_MS );
                 if (ret == WAIT_FAILED)
                     ok( console_app ||
                         ret == wait_idle_expect[i].exp ||
@@ -19839,7 +19860,7 @@ static void test_WaitForInputIdle( char *argv0 )
                         "%u: WaitForInputIdle error %08x expected %08lx\n",
                         i, ret, wait_idle_expect[i].exp );
                 SetEvent( end_event );
-                WaitForSingleObject( pi.hProcess, 1000 );  /* give it a chance to exit on its own */
+                WaitForSingleObject( pi.hProcess, WAIT_IDLE_TIMEOUT_MS );  /* give it a chance to exit on its own */
             }
             TerminateProcess( pi.hProcess, 0 );  /* just in case */
             ret = WaitForSingleObject( pi.hProcess, 30000 );

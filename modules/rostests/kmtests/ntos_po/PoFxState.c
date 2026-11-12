@@ -284,8 +284,20 @@ Cleanup:
     PoFxUnregisterDevice(Context.Handle);
 }
 
+static VOID TestStartRegistration(VOID)
+{
+    KMT_PO_FX_START_STATE State;
+
+    trace("PoFx registration during IRP_MN_START_DEVICE\n");
+    KmtPoFxGetStartState(&State);
+    ok_eq_hex(State.RegisterStatus, STATUS_SUCCESS);
+    ok_eq_long(State.CallbacksBeforeStart, 0);
+    ok(State.CallbacksAfterStart > 0, "No callback after the start request completed\n");
+}
+
 static VOID TestPoFxBody(PDEVICE_OBJECT Pdo)
 {
+    TestStartRegistration();
     TestDeferredUnregister(Pdo);
     TestActivateDuringIdle(Pdo, TestIdleCondition);
     TestActivateDuringIdle(Pdo, TestIdleF1);

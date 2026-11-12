@@ -19,6 +19,26 @@ DEBUG_CHANNEL(kernel32file);
     CTL_CODE(FILE_DEVICE_NAMED_PIPE, 12, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #endif
 
+#ifndef FILE_PIPE_COMPUTER_NAME_LENGTH
+#define FILE_PIPE_COMPUTER_NAME_LENGTH 15
+
+typedef struct _FILE_PIPE_CLIENT_PROCESS_BUFFER_EX
+{
+    PVOID ClientSession;
+    PVOID ClientProcess;
+    USHORT ClientComputerNameLength;
+    WCHAR ClientComputerBuffer[FILE_PIPE_COMPUTER_NAME_LENGTH + 1];
+} FILE_PIPE_CLIENT_PROCESS_BUFFER_EX, *PFILE_PIPE_CLIENT_PROCESS_BUFFER_EX;
+#endif
+
+typedef struct _BASEP_PIPE_CLIENT_PROCESS_BUFFER_EX64
+{
+    ULONGLONG ClientSession;
+    ULONGLONG ClientProcess;
+    USHORT ClientComputerNameLength;
+    WCHAR ClientComputerBuffer[FILE_PIPE_COMPUTER_NAME_LENGTH + 1];
+} BASEP_PIPE_CLIENT_PROCESS_BUFFER_EX64;
+
 /* GLOBALS ********************************************************************/
 
 LONG ProcessPipeId;
@@ -1448,6 +1468,112 @@ GetNamedPipeClientSessionId(IN HANDLE hNamedPipe,
                             OUT PULONG ClientSessionId)
 {
     return NpGetPipeAttribute(hNamedPipe, "ClientSessionId", sizeof("ClientSessionId"), ClientSessionId);
+}
+
+BOOL
+WINAPI
+GetNamedPipeClientComputerNameW(IN HANDLE Pipe,
+                                OUT LPWSTR ClientComputerName,
+                                IN ULONG ClientComputerNameLength)
+{
+    union
+    {
+        FILE_PIPE_CLIENT_PROCESS_BUFFER_EX Native;
+        BASEP_PIPE_CLIENT_PROCESS_BUFFER_EX64 Wide;
+    } Buffer;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+    ULONGLONG ClientSession;
+    ULONG NameLength;
+    PCWSTR Name;
+
+    RtlZeroMemory(&Buffer, sizeof(Buffer));
+    Status = NtFsControlFile(Pipe, NULL, NULL, NULL, &Iosb, FSCTL_PIPE_QUERY_CLIENT_PROCESS,
+                             NULL, 0, &Buffer, sizeof(Buffer));
+    if (Status == STATUS_PENDING)
+    {
+        Status = NtWaitForSingleObject(Pipe, FALSE, NULL);
+        if (NT_SUCCESS(Status)) Status = Iosb.Status;
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    if (Iosb.Information == sizeof(Buffer.Wide))
+    {
+        ClientSession = Buffer.Wide.ClientSession;
+        NameLength = Buffer.Wide.ClientComputerNameLength;
+        Name = Buffer.Wide.ClientComputerBuffer;
+    }
+    else if (Iosb.Information == sizeof(Buffer.Native))
+    {
+        ClientSession = (ULONG_PTR)Buffer.Native.ClientSession;
+        NameLength = Buffer.Native.ClientComputerNameLength;
+        Name = Buffer.Native.ClientComputerBuffer;
+    }
+    else
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
+    }
+
+    if (ClientSession == 0)
+    {
+        SetLastError(ERROR_PIPE_LOCAL);
+        return FALSE;
+    }
+
+    NameLength = min(NameLength, FILE_PIPE_COMPUTER_NAME_LENGTH * sizeof(WCHAR)) & ~(sizeof(WCHAR) - 1);
+    if (NameLength + sizeof(UNICODE_NULL) > ClientComputerNameLength)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    RtlCopyMemory(ClientComputerName, Name, NameLength);
+    ClientComputerName[NameLength / sizeof(WCHAR)] = UNICODE_NULL;
+    return TRUE;
+}
+
+BOOL
+WINAPI
+GetNamedPipeClientComputerNameA(IN HANDLE Pipe,
+                                OUT LPSTR ClientComputerName,
+                                IN ULONG ClientComputerNameLength)
+{
+    WCHAR NameW[FILE_PIPE_COMPUTER_NAME_LENGTH + 1];
+    ULONG NameLength, AnsiLength, Written;
+    NTSTATUS Status;
+
+    if (!GetNamedPipeClientComputerNameW(Pipe, NameW, sizeof(NameW)))
+        return FALSE;
+
+    NameLength = (ULONG)wcslen(NameW) * sizeof(WCHAR);
+    Status = RtlUnicodeToMultiByteSize(&AnsiLength, NameW, NameLength);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    if (AnsiLength + sizeof(ANSI_NULL) > ClientComputerNameLength)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+
+    Status = RtlUnicodeToMultiByteN(ClientComputerName, AnsiLength, &Written, NameW, NameLength);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    ClientComputerName[Written] = ANSI_NULL;
+    return TRUE;
 }
 
 /* EOF */

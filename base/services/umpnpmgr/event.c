@@ -228,7 +228,6 @@ BroadcastDeviceNodesChanged(VOID)
 }
 
 
-static
 BOOL
 GetPhysicalDeviceObjectName(
     _In_ PCWSTR DeviceInstance,
@@ -309,12 +308,13 @@ VOID
 BroadcastTargetRemoveComplete(
     _In_ PCWSTR DeviceInstance)
 {
+    WCHAR PdoName[MAX_PATH] = {0};
     PPDO_NAME_ENTRY Entry;
     PDEV_BROADCAST_HANDLE pEventData;
     DWORD dwSize;
 
     Entry = FindPdoName(DeviceInstance);
-    if (Entry == NULL)
+    if (Entry == NULL && !GetPhysicalDeviceObjectName(DeviceInstance, PdoName, sizeof(PdoName)))
         return;
 
     dwSize = FIELD_OFFSET(DEV_BROADCAST_HANDLE, dbch_data) + 2 * sizeof(WCHAR);
@@ -324,10 +324,11 @@ BroadcastTargetRemoveComplete(
         pEventData->dbch_size = dwSize;
         pEventData->dbch_devicetype = DBT_DEVTYP_HANDLE;
         pEventData->dbch_nameoffset = -1;
-        BroadcastListenerEvent(DBT_DEVICEREMOVECOMPLETE, Entry->PdoName, (PBYTE)pEventData, dwSize);
+        BroadcastListenerEvent(DBT_DEVICEREMOVECOMPLETE, Entry ? Entry->PdoName : PdoName, (PBYTE)pEventData, dwSize);
         HeapFree(GetProcessHeap(), 0, pEventData);
     }
-    ForgetPdoName(Entry);
+    if (Entry != NULL)
+        ForgetPdoName(Entry);
 }
 
 
@@ -357,6 +358,7 @@ ProcessTargetDeviceEvent(
     else if (UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_SAFE_REMOVAL, &RpcStatus))
     {
         DPRINT1("Safe removal: %S\n", PnpEvent->TargetDevice.DeviceIds);
+        BroadcastTargetRemoveComplete(PnpEvent->TargetDevice.DeviceIds);
         BroadcastDeviceNodesChanged();
     }
     else if (UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_SURPRISE_REMOVAL, &RpcStatus))
@@ -557,6 +559,7 @@ ProcessDeviceInstallEvent(
     _In_ PPLUGPLAY_EVENT_BLOCK PnpEvent)
 {
     DeviceInstallParams* Params;
+    RPC_STATUS RpcStatus;
     DWORD len;
     DWORD DeviceIdLength;
     DPRINT("ProcessDeviceInstallEvent(%p)\n", PnpEvent);
@@ -576,6 +579,7 @@ ProcessDeviceInstallEvent(
         Params = HeapAlloc(GetProcessHeap(), 0, len);
         if (Params)
         {
+            Params->Arrival = UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_ARRIVAL, &RpcStatus);
             wcscpy(Params->DeviceIds, PnpEvent->InstallDevice.DeviceId);
 
             /* Queue the event (will be dequeued by DeviceInstallThread) */

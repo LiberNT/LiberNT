@@ -92,7 +92,7 @@ TestSmallDirectoryBuffer(VOID)
         {
             PFILE_DIRECTORY_INFORMATION Information = (PFILE_DIRECTORY_INFORMATION)&Buffer;
             ok(IoStatus.Information == Expected[i], "Class %u returned %Iu bytes, expected %lu\n",
-               Classes[i], IoStatus.Information, Expected[i]);
+               Classes[i], (size_t)IoStatus.Information, Expected[i]);
             ok(Information->FileNameLength == Filter.Length, "Class %u returned name length %lu\n",
                Classes[i], Information->FileNameLength);
             if (Information->FileNameLength == Filter.Length)

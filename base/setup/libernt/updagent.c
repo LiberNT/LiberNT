@@ -957,7 +957,7 @@ StageUpdate(
     Error = OpenBcdStore(&Store);
     if (Error != ERROR_SUCCESS)
         return Error;
-    Error = AddBcdUpgradeEntry(Store, UPDATE_DESCRIPTION, STAGE_LOADER_PATH, STAGE_IMAGE_PATH, ImageHash,
+    Error = AddBcdUpgradeEntry(Store, UPDATE_DESCRIPTION, STAGE_LOADER_PATH, STAGE_IMAGE_PATH, ImageHash, NULL,
                                EntryId, PreviousDefault);
     RegCloseKey(Store);
     if (Error == ERROR_SUCCESS)
@@ -1004,7 +1004,17 @@ CheckThread(
 static VOID
 RestartToInstall(VOID)
 {
+    USHORT Current;
     BOOLEAN Enabled;
+
+    RtlAdjustPrivilege(SE_SYSTEM_ENVIRONMENT_PRIVILEGE, TRUE, FALSE, &Enabled);
+    if (GetFirmwareEnvironmentVariableExW(L"BootCurrent", EFI_GLOBAL_VARIABLE_GUID, &Current, sizeof(Current),
+                                          NULL) == sizeof(Current) &&
+        !SetFirmwareEnvironmentVariableExW(L"BootNext", EFI_GLOBAL_VARIABLE_GUID, &Current, sizeof(Current),
+                                           EFI_VARIABLE_BOOT_ATTRIBUTES))
+    {
+        DPRINT1("BootNext Boot%04X not set, error %lu\n", Current, GetLastError());
+    }
 
     RtlAdjustPrivilege(SE_SHUTDOWN_PRIVILEGE, TRUE, FALSE, &Enabled);
     if (!ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OPERATINGSYSTEM | SHTDN_REASON_MINOR_UPGRADE |
@@ -1930,7 +1940,7 @@ ShowCompleteMessage(
 static INT
 RunComplete(VOID)
 {
-    WCHAR Path[MAX_PATH], Stage[32];
+    WCHAR Path[MAX_PATH], Stage[32], ImageHash[SHA256_CHARS];
     INT_PTR Result;
     UINT MessageId;
 
@@ -1942,7 +1952,8 @@ RunComplete(VOID)
 
     StagePath(UPDATE_STAGE_REQUEST, Path);
     GetPrivateProfileStringW(UPDATE_STAGE_SECTION, L"TagName", L"", Update.TagName, ARRAYSIZE(Update.TagName), Path);
-    if (GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"TagId", 0, Path) == 0)
+    GetPrivateProfileStringW(UPDATE_STAGE_SECTION, L"ImageSha256", L"", ImageHash, ARRAYSIZE(ImageHash), Path);
+    if (ImageHash[0] == UNICODE_NULL)
         return RemoveStage() == ERROR_SUCCESS ? ERROR_NOT_FOUND : ERROR_RETRY;
     if (GetPrivateProfileIntW(UPDATE_STAGE_SECTION, L"Completed", 0, Path) != 0)
         return RemoveStage();

@@ -30,8 +30,7 @@ typedef struct _TOUCHINPUT_ARRIVAL
 
 typedef struct _TOUCHINPUT_DEVICE
 {
-    HANDLE Handle;
-    PFILE_OBJECT FileObject;
+    INPUT_HOLD_FILE File;
     PHIDP_PREPARSED_DATA PreparsedData;
     HIDP_CAPS Caps;
     PCHAR Report;
@@ -63,6 +62,7 @@ typedef struct _TOUCHINPUT_STATE
     FAST_MUTEX ArrivalLock;
     LIST_ENTRY Arrivals;
     PVOID NotificationEntry;
+    INPUT_HOLD Hold;
     TOUCHINPUT_DEVICE Devices[TOUCHINPUT_MAX_DEVICES];
 } TOUCHINPUT_STATE, *PTOUCHINPUT_STATE;
 
@@ -75,6 +75,29 @@ static PDRIVER_OBJECT gTouchInputDriverObject;
 static PTOUCHINPUT_STATE gTouchInput;
 
 static
+VOID
+TouchInputQueueArrival(
+    _In_ PTOUCHINPUT_STATE State,
+    _In_ PCUNICODE_STRING Path)
+{
+    PTOUCHINPUT_ARRIVAL Arrival;
+
+    Arrival = ExAllocatePoolWithTag(PagedPool, sizeof(*Arrival) + Path->Length, USERTAG_HIDDESC);
+    if (!Arrival)
+        return;
+
+    Arrival->Path.Buffer = (PWCH)(Arrival + 1);
+    Arrival->Path.Length = Path->Length;
+    Arrival->Path.MaximumLength = Path->Length;
+    RtlCopyMemory(Arrival->Path.Buffer, Path->Buffer, Path->Length);
+
+    ExAcquireFastMutex(&State->ArrivalLock);
+    InsertTailList(&State->Arrivals, &Arrival->ListEntry);
+    ExReleaseFastMutex(&State->ArrivalLock);
+    KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static
 NTSTATUS
 NTAPI
 TouchInputInterfaceNotification(
@@ -83,26 +106,11 @@ TouchInputInterfaceNotification(
 {
     PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
     PTOUCHINPUT_STATE State = Context;
-    PTOUCHINPUT_ARRIVAL Arrival;
-    USHORT Length;
 
     if (!IsEqualGUID(&Notification->Event, &TouchInputInterfaceArrival))
         return STATUS_SUCCESS;
 
-    Length = Notification->SymbolicLinkName->Length;
-    Arrival = ExAllocatePoolWithTag(PagedPool, sizeof(*Arrival) + Length, USERTAG_HIDDESC);
-    if (!Arrival)
-        return STATUS_SUCCESS;
-
-    Arrival->Path.Buffer = (PWCH)(Arrival + 1);
-    Arrival->Path.Length = Length;
-    Arrival->Path.MaximumLength = Length;
-    RtlCopyMemory(Arrival->Path.Buffer, Notification->SymbolicLinkName->Buffer, Length);
-
-    ExAcquireFastMutex(&State->ArrivalLock);
-    InsertTailList(&State->Arrivals, &Arrival->ListEntry);
-    ExReleaseFastMutex(&State->ArrivalLock);
-    KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
+    TouchInputQueueArrival(State, Notification->SymbolicLinkName);
     return STATUS_SUCCESS;
 }
 
@@ -114,16 +122,7 @@ TouchInputIoctl(
     _Out_writes_bytes_(Length) PVOID Buffer,
     _In_ ULONG Length)
 {
-    IO_STATUS_BLOCK Iosb;
-    NTSTATUS Status;
-
-    Status = ZwDeviceIoControlFile(Device->Handle, NULL, NULL, NULL, &Iosb, IoControlCode, NULL, 0, Buffer, Length);
-    if (Status == STATUS_PENDING)
-    {
-        KeWaitForSingleObject(&Device->FileObject->Event, Executive, KernelMode, FALSE, NULL);
-        Status = Iosb.Status;
-    }
-    return Status;
+    return InputHoldIoctl(&Device->File, IoControlCode, Buffer, Length);
 }
 
 static
@@ -167,17 +166,8 @@ VOID
 TouchInputClose(
     _Inout_ PTOUCHINPUT_DEVICE Device)
 {
-    if (Device->Handle)
-    {
-        if (Device->Status == STATUS_PENDING)
-        {
-            (void)ZwCancelIoFile(Device->Handle, &Device->Iosb);
-            KeWaitForSingleObject(&Device->FileObject->Event, Executive, KernelMode, FALSE, NULL);
-        }
-        ObCloseHandle(Device->Handle, KernelMode);
-    }
-    if (Device->FileObject)
-        ObDereferenceObject(Device->FileObject);
+    if (gTouchInput && Device->File.Handle)
+        InputHoldClose(&gTouchInput->Hold, &Device->File, Device->Status == STATUS_PENDING);
     if (Device->Source)
     {
         UserEnterExclusive();
@@ -286,17 +276,15 @@ TouchInputAttach(
     _Inout_ PTOUCHINPUT_STATE State,
     _In_ PUNICODE_STRING Path)
 {
-    OBJECT_ATTRIBUTES ObjectAttributes;
     HID_COLLECTION_INFORMATION Information;
     PTOUCHINPUT_DEVICE Device = NULL;
-    IO_STATUS_BLOCK Iosb;
     ULONG Maximum = 0;
     ULONG Index;
     NTSTATUS Status;
 
     for (Index = 0; Index < TOUCHINPUT_MAX_DEVICES; Index++)
     {
-        if (State->Devices[Index].Handle)
+        if (State->Devices[Index].File.Handle)
         {
             if (RtlEqualUnicodeString(&State->Devices[Index].Path, Path, TRUE))
                 return;
@@ -332,21 +320,7 @@ TouchInputAttach(
     Device->Path.Length = Path->Length;
     Device->Path.MaximumLength = Path->Length;
 
-    InitializeObjectAttributes(&ObjectAttributes, Path, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
-    Status = ZwOpenFile(&Device->Handle, FILE_READ_DATA, &ObjectAttributes, &Iosb, FILE_SHARE_READ | FILE_SHARE_WRITE, 0);
-    if (NT_SUCCESS(Status))
-    {
-        Status = ObReferenceObjectByHandle(Device->Handle, 0, *IoFileObjectType, KernelMode, (PVOID *)&Device->FileObject, NULL);
-        if (!NT_SUCCESS(Status))
-        {
-            ObCloseHandle(Device->Handle, KernelMode);
-            Device->Handle = NULL;
-        }
-    }
-    else
-    {
-        Device->Handle = NULL;
-    }
+    Status = InputHoldOpen(&Device->File, Path, FILE_READ_DATA);
     if (!NT_SUCCESS(Status))
     {
         ERR("Touch screen %wZ could not be opened: 0x%08lx\n", Path, Status);
@@ -366,6 +340,7 @@ TouchInputAttach(
         return;
     }
 
+    InputHoldFollow(&State->Hold, &Device->File, Path, Device, gTouchInputDriverObject);
     Device->Status = STATUS_SUCCESS;
     Device->Iosb.Information = 0;
     DbgPrint("Touch screen %wZ: %lu contacts, %lu per report\n", Path, Device->Capacity, Device->FingerCount);
@@ -539,6 +514,7 @@ TouchInputStart(VOID)
     KeInitializeEvent(&State->ArrivalEvent, SynchronizationEvent, FALSE);
     ExInitializeFastMutex(&State->ArrivalLock);
     InitializeListHead(&State->Arrivals);
+    InputHoldInitialize(&State->Hold, &State->ArrivalEvent);
     gTouchInput = State;
 
     Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange,
@@ -567,13 +543,14 @@ TouchInputStop(VOID)
         return;
 
     if (State->NotificationEntry)
-        IoUnregisterPlugPlayNotification(State->NotificationEntry);
+        IoUnregisterPlugPlayNotificationEx(State->NotificationEntry);
 
     for (Index = 0; Index < TOUCHINPUT_MAX_DEVICES; Index++)
     {
-        if (State->Devices[Index].Handle)
+        if (State->Devices[Index].File.Handle)
             TouchInputClose(&State->Devices[Index]);
     }
+    InputHoldStop(&State->Hold);
 
     while (!IsListEmpty(&State->Arrivals))
     {
@@ -593,7 +570,6 @@ TouchInputPrepareWait(
 {
     PTOUCHINPUT_STATE State = gTouchInput;
     PTOUCHINPUT_DEVICE Device;
-    LARGE_INTEGER ByteOffset;
     ULONG Expected = 1;
     ULONG Index;
 
@@ -601,24 +577,22 @@ TouchInputPrepareWait(
         return 0;
 
     WaitObjects[(*WaitCount)++] = &State->ArrivalEvent;
-    ByteOffset.QuadPart = 0;
 
     for (Index = 0; Index < TOUCHINPUT_MAX_DEVICES; Index++)
     {
         Device = &State->Devices[Index];
-        if (!Device->Handle)
+        if (!Device->File.Handle)
             continue;
 
         Expected++;
         if (Device->Status != STATUS_PENDING)
         {
-            Device->Status = ZwReadFile(Device->Handle, NULL, NULL, NULL, &Device->Iosb, Device->Report,
-                                        Device->ReportLength, &ByteOffset, NULL);
+            Device->Status = InputHoldRead(&State->Hold, &Device->File, &Device->Iosb, Device->Report, Device->ReportLength);
             if (Device->Status != STATUS_PENDING && NT_SUCCESS(Device->Status))
                 Device->Status = Device->Iosb.Status;
         }
         if (Device->Status == STATUS_PENDING)
-            WaitObjects[(*WaitCount)++] = &Device->FileObject->Event;
+            WaitObjects[(*WaitCount)++] = Device->File.ReadEvent;
     }
     return Expected;
 }
@@ -640,13 +614,33 @@ TouchInputSignaled(
     for (Index = 0; Index < TOUCHINPUT_MAX_DEVICES; Index++)
     {
         Device = &State->Devices[Index];
-        if (Device->Handle && Device->Status == STATUS_PENDING && Object == &Device->FileObject->Event)
+        if (Device->File.Handle && Device->Status == STATUS_PENDING && Object == Device->File.ReadEvent)
         {
             Device->Status = Device->Iosb.Status;
             return TRUE;
         }
     }
     return FALSE;
+}
+
+/* A removal reported for a touch screen: its file closes; a cancelled removal opens it again */
+static
+VOID
+NTAPI
+TouchInputHoldEnded(
+    _In_ PVOID Owner,
+    _In_opt_ PINPUT_HOLD_FILE File,
+    _In_ PCUNICODE_STRING Path,
+    _In_ BOOLEAN Reopen,
+    _In_opt_ PVOID Context)
+{
+    PTOUCHINPUT_STATE State = Context;
+
+    ASSERT(State != NULL);
+    if (File)
+        TouchInputClose(Owner);
+    if (Reopen)
+        TouchInputQueueArrival(State, Path);
 }
 
 BOOLEAN
@@ -662,6 +656,8 @@ TouchInputProcess(VOID)
 
     if (!State)
         return FALSE;
+
+    InputHoldProcessRequests(&State->Hold, TouchInputHoldEnded, State);
 
     for (;;)
     {
@@ -679,7 +675,7 @@ TouchInputProcess(VOID)
     for (Index = 0; Index < TOUCHINPUT_MAX_DEVICES; Index++)
     {
         Device = &State->Devices[Index];
-        if (!Device->Handle || Device->Status == STATUS_PENDING)
+        if (!Device->File.Handle || Device->Status == STATUS_PENDING)
             continue;
 
         if (NT_SUCCESS(Device->Status))

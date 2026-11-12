@@ -294,6 +294,9 @@ AcpiOsGetRootPointer (
         return (ACPI_PHYSICAL_ADDRESS)PhysicalAddress.QuadPart;
     }
 
+    if (KeLoaderBlock && KeLoaderBlock->FirmwareInformation.FirmwareTypeEfi)
+        return 0;
+
     AcpiFindRootPointer(&pa);
     return pa;
 }

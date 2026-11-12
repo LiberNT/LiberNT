@@ -116,6 +116,26 @@ function(add_rpcproxy_files)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endfunction()
 
+function(get_idl_includes __idl_file __out)
+    set(__deps)
+    if(NOT IS_ABSOLUTE ${__idl_file})
+        set(__idl_file ${CMAKE_CURRENT_SOURCE_DIR}/${__idl_file})
+    endif()
+    if(EXISTS ${__idl_file})
+        file(STRINGS ${__idl_file} __lines REGEX "^[ \t]*#[ \t]*include[ \t]+[\"<][^\">]+\\.idl[\">]")
+        foreach(__line ${__lines})
+            string(REGEX REPLACE "^[ \t]*#[ \t]*include[ \t]+[\"<]([^\">]+)[\">].*$" "\\1" __include "${__line}")
+            foreach(__dir ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOURCE_DIR}/sdk/include ${REACTOS_SOURCE_DIR}/sdk/include/psdk ${REACTOS_SOURCE_DIR}/sdk/include/reactos)
+                if(EXISTS ${__dir}/${__include})
+                    list(APPEND __deps ${__dir}/${__include})
+                    break()
+                endif()
+            endforeach()
+        endforeach()
+    endif()
+    set(${__out} ${__deps} PARENT_SCOPE)
+endfunction()
+
 function(add_rpc_files __type)
     get_includes(INCLUDES)
     get_defines(DEFINES)
@@ -133,12 +153,13 @@ function(add_rpc_files __type)
     foreach(FILE ${ARGN})
         get_filename_component(__name ${FILE} NAME_WLE)
         set(__name ${__name}${__suffix})
+        get_idl_includes(${FILE} __idl_includes)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${__name}.c ${CMAKE_CURRENT_BINARY_DIR}/${__name}.h
             # We generate the two files in two passes because WIDL accepts only one custom file name as output
             COMMAND native-widl ${INCLUDES} ${DEFINES} ${IDL_FLAGS} -Oicf ${__additional_flags} ${__server_client} -o ${CMAKE_CURRENT_BINARY_DIR}/${__name}.c -H ${__name}.h ${FILE}
             COMMAND native-widl ${INCLUDES} ${DEFINES} ${IDL_FLAGS} -Oicf ${__additional_flags} -h -o ${CMAKE_CURRENT_BINARY_DIR}/${__name}.h ${FILE}
-            DEPENDS ${FILE} native-widl
+            DEPENDS ${FILE} ${__idl_includes} native-widl
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     endforeach()
 endfunction()
@@ -173,12 +194,13 @@ function(add_rpc_file __type __idl_file)
     endif()
     get_filename_component(__name ${__idl_file} NAME_WE)
     set(__name ${__name}${__suffix})
+    get_idl_includes(${__idl_file} __idl_includes)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${__name}.c ${CMAKE_CURRENT_BINARY_DIR}/${__name}.h
         # We generate the two files in two passes because WIDL accepts only one custom file name as output
         COMMAND native-widl ${INCLUDES} ${DEFINES} ${IDL_FLAGS} ${__additional_flags} ${__server_client} -o ${CMAKE_CURRENT_BINARY_DIR}/${__name}.c -H ${__name}.h ${__idl_file}
         COMMAND native-widl ${INCLUDES} ${DEFINES} ${IDL_FLAGS} ${__additional_flags} -h -o ${CMAKE_CURRENT_BINARY_DIR}/${__name}.h ${__idl_file}
-        DEPENDS ${__idl_file} native-widl
+        DEPENDS ${__idl_file} ${__idl_includes} native-widl
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endfunction()
 

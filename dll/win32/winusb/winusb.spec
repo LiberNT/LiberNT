@@ -9,8 +9,8 @@
 @ stdcall WinUsb_GetPipePolicy(ptr long long ptr ptr)
 @ stdcall WinUsb_GetPowerPolicy(ptr long ptr ptr)
 @ stdcall WinUsb_Initialize(ptr ptr)
-@ stub WinUsb_ParseConfigurationDescriptor
-@ stub WinUsb_ParseDescriptors
+@ stdcall WinUsb_ParseConfigurationDescriptor(ptr ptr long long long long long)
+@ stdcall WinUsb_ParseDescriptors(ptr long ptr long)
 @ stdcall WinUsb_QueryDeviceInformation(ptr long ptr ptr)
 @ stdcall WinUsb_QueryInterfaceSettings(ptr long ptr)
 @ stdcall WinUsb_QueryPipe(ptr long long ptr)
@@ -20,3 +20,17 @@
 @ stdcall WinUsb_SetPipePolicy(ptr long long long ptr)
 @ stdcall WinUsb_SetPowerPolicy(ptr long long ptr)
 @ stdcall WinUsb_WritePipe(ptr long ptr long ptr ptr)
+
+# LiberNT exports the documented winusb.h functions that the Wine spec lacks.
+@ stdcall WinUsb_QueryPipeEx(ptr long long ptr)
+@ stdcall WinUsb_GetCurrentFrameNumber(ptr ptr ptr)
+@ stdcall WinUsb_GetAdjustedFrameNumber(ptr int64)
+@ stdcall WinUsb_RegisterIsochBuffer(ptr long ptr long ptr)
+@ stdcall WinUsb_UnregisterIsochBuffer(ptr)
+@ stdcall WinUsb_WriteIsochPipe(ptr long long ptr ptr)
+@ stdcall WinUsb_ReadIsochPipe(ptr long long ptr long ptr ptr)
+@ stdcall WinUsb_WriteIsochPipeAsap(ptr long long long ptr)
+@ stdcall WinUsb_ReadIsochPipeAsap(ptr long long long long ptr ptr)
+@ stdcall WinUsb_StartTrackingForTimeSync(ptr ptr)
+@ stdcall WinUsb_GetCurrentFrameNumberAndQpc(ptr ptr)
+@ stdcall WinUsb_StopTrackingForTimeSync(ptr ptr)

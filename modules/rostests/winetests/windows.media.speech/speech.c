@@ -39,6 +39,9 @@
 #include "windows.media.speechsynthesis.h"
 #ifdef __REACTOS__
 #include "mmdeviceapi.h"
+#ifdef __REACTOS__
+#include "robuffer.h"
+#endif
 #endif
 #include "wine/test.h"
 
@@ -835,6 +838,66 @@ static void test_ActivationFactory(void)
     RoUninitialize();
 }
 
+#ifdef __REACTOS__
+static void check_synthesis_wave(ISpeechSynthesisStream *stream, IBuffer *buffer, UINT64 size)
+{
+    IContentTypeProvider *content_type;
+    IBufferByteAccess *byte_access;
+    UINT32 riff, fmt_size, data_size, length = 0;
+    const WCHAR *raw;
+    WAVEFORMATEX fmt;
+    HSTRING type;
+    BYTE *bytes;
+    HRESULT hr;
+
+    hr = ISpeechSynthesisStream_QueryInterface(stream, &IID_IContentTypeProvider, (void **)&content_type);
+    ok(hr == S_OK, "QueryInterface(IID_IContentTypeProvider) failed, hr %#lx.\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        hr = IContentTypeProvider_get_ContentType(content_type, &type);
+        ok(hr == S_OK, "get_ContentType failed, hr %#lx.\n", hr);
+        raw = WindowsGetStringRawBuffer(type, NULL);
+        ok(!wcscmp(raw, L"audio/wav"), "got content type %s.\n", debugstr_w(raw));
+        WindowsDeleteString(type);
+        IContentTypeProvider_Release(content_type);
+    }
+
+    hr = IBuffer_get_Length(buffer, &length);
+    ok(hr == S_OK, "get_Length failed, hr %#lx.\n", hr);
+    ok(length == size, "read %u bytes of %I64u.\n", length, size);
+    if (length < 44) return;
+
+    hr = IBuffer_QueryInterface(buffer, &IID_IBufferByteAccess, (void **)&byte_access);
+    ok(hr == S_OK, "QueryInterface(IID_IBufferByteAccess) failed, hr %#lx.\n", hr);
+    if (FAILED(hr)) return;
+    hr = IBufferByteAccess_Buffer(byte_access, &bytes);
+    ok(hr == S_OK, "Buffer failed, hr %#lx.\n", hr);
+
+    ok(!memcmp(bytes, "RIFF", 4), "got %s.\n", debugstr_an((char *)bytes, 4));
+    memcpy(&riff, bytes + 4, sizeof(riff));
+    ok(riff == length - 8, "RIFF size %u, stream size %u.\n", riff, length);
+    ok(!memcmp(bytes + 8, "WAVEfmt ", 8), "got %s.\n", debugstr_an((char *)bytes + 8, 8));
+    memcpy(&fmt_size, bytes + 16, sizeof(fmt_size));
+    ok(fmt_size == 18, "fmt size %u.\n", fmt_size);
+    memset(&fmt, 0, sizeof(fmt));
+    memcpy(&fmt, bytes + 20, min(fmt_size, sizeof(fmt)));
+    ok(fmt.wFormatTag == WAVE_FORMAT_PCM, "format tag %u.\n", fmt.wFormatTag);
+    ok(fmt.nChannels == 1, "%u channels.\n", fmt.nChannels);
+    ok(fmt.nSamplesPerSec == 16000, "%lu samples per second.\n", fmt.nSamplesPerSec);
+    ok(fmt.wBitsPerSample == 16, "%u bits per sample.\n", fmt.wBitsPerSample);
+    ok(fmt.nBlockAlign == fmt.nChannels * fmt.wBitsPerSample / 8, "block align %u.\n", fmt.nBlockAlign);
+    ok(fmt.nAvgBytesPerSec == fmt.nSamplesPerSec * fmt.nBlockAlign, "%lu bytes per second.\n", fmt.nAvgBytesPerSec);
+    if (fmt_size <= length - 28)
+    {
+        ok(!memcmp(bytes + 20 + fmt_size, "data", 4), "got %s.\n", debugstr_an((char *)bytes + 20 + fmt_size, 4));
+        memcpy(&data_size, bytes + 24 + fmt_size, sizeof(data_size));
+        ok(data_size == length - 28 - fmt_size, "data size %u, stream size %u.\n", data_size, length);
+        ok(data_size > 0, "no audio data.\n");
+    }
+    IBufferByteAccess_Release(byte_access);
+}
+#endif
+
 static void test_SpeechSynthesizer(void)
 {
     static const WCHAR *simple_ssml =
@@ -1119,6 +1182,9 @@ skip_voices:
     IAsyncOperationWithProgress_IBuffer_UINT32_GetResults(operation_read_async, &buffer2);
     ok(hr == S_OK, "_GetResults failed, hr %#lx\n", hr);
     ok(buffer2 == buffer, "got %p, %p.\n", buffer, buffer2);
+#ifdef __REACTOS__
+    check_synthesis_wave(ss_stream, buffer2, value);
+#endif
     IBuffer_Release(buffer);
     ref = IAsyncOperationWithProgress_IBuffer_UINT32_Release(operation_read_async);
     ok(!ref, "got refcount %ld.\n", ref);

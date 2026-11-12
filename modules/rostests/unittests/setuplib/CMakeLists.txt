@@ -7,6 +7,7 @@ include_directories(
 
 list(APPEND SOURCE
     IsValidInstallDirectory.c
+    PartitionListRegions.c
     PrepareUpgradeFileCopy.c
     testlist.c
     precomp.h)

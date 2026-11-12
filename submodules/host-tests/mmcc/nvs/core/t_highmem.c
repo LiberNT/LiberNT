@@ -211,7 +211,7 @@ HighMemWindowConcurrent(void)
         CHECK(FrameIsFilled(&World, Workers[i].Frame, (UCHAR)(0x60 + i)));
         MiPfnShareDecrement(Db, Workers[i].Frame, TRUE);
     }
-    CHECK(Db->Window.Busy == 0 && Db->Window.Maps >= 1024 * RTL_NUMBER_OF(Workers));
+    CHECK(Db->Window.Busy == 0 && Db->Window.Maps >= (LONG64)(1024 * RTL_NUMBER_OF(Workers)));
     CHECK(Db->Window.Flushes != 0);
     CHECK(MiPfnDbCheck(Db) == 0);
     WorldExpectClean(&World, HM_FRAMES);

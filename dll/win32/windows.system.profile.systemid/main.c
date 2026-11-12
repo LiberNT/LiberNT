@@ -21,6 +21,8 @@
 #include "private.h"
 #ifdef __REACTOS__
 #include "robuffer.h"
+#include "winreg.h"
+#include "bcrypt.h"
 #endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(systemid);
@@ -239,6 +241,44 @@ static const struct ISystemIdentificationInfoVtbl system_identification_info_vtb
 
 DEFINE_IINSPECTABLE( system_id_statics, ISystemIdentificationStatics, struct system_id_statics, IActivationFactory_iface )
 
+#ifdef __REACTOS__
+#define SYSTEM_ID_SEED_BYTES 32
+#define SYSTEM_ID_BYTES 32
+
+static SystemIdentificationSource read_system_id( BYTE *id )
+{
+    BYTE seed[SYSTEM_ID_SEED_BYTES];
+    DWORD source, size;
+    HKEY key;
+    LONG ret;
+
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, L"SOFTWARE\\LiberNT\\SystemIdentification", 0,
+                       KEY_QUERY_VALUE | KEY_WOW64_64KEY, &key ))
+        return SystemIdentificationSource_None;
+
+    size = sizeof(source);
+    ret = RegQueryValueExW( key, L"Source", NULL, NULL, (BYTE *)&source, &size );
+    if (!ret && size == sizeof(source))
+    {
+        size = sizeof(seed);
+        ret = RegQueryValueExW( key, L"Seed", NULL, NULL, seed, &size );
+        if (!ret && size != sizeof(seed)) ret = ERROR_INVALID_DATA;
+    }
+    else if (!ret) ret = ERROR_INVALID_DATA;
+    RegCloseKey( key );
+    if (ret || (source != SystemIdentificationSource_Uefi && source != SystemIdentificationSource_Registry))
+        return SystemIdentificationSource_None;
+
+    /* TODO: Mix in the publisher ID of a packaged caller; every unpackaged app gets the same ID. */
+    /* FIXME: Any caller can read the seed and derive another publisher's ID; Windows derives it out of reach (INFO_NEEDED). */
+    /* FIXME: Windows 11 returns different ID bytes on every call (undocumented structure, INFO_NEEDED); these never change. */
+    if (BCryptHash( BCRYPT_SHA256_ALG_HANDLE, NULL, 0, seed, sizeof(seed), id, SYSTEM_ID_BYTES ))
+        source = SystemIdentificationSource_None;
+    SecureZeroMemory( seed, sizeof(seed) );
+    return source;
+}
+#endif
+
 static HRESULT get_system_id( IBuffer **system_id, SystemIdentificationSource *system_id_source )
 {
     static const WCHAR *buffer_statics_name = L"Windows.Storage.Streams.Buffer";
@@ -246,13 +286,37 @@ static HRESULT get_system_id( IBuffer **system_id, SystemIdentificationSource *s
     IActivationFactory *factory = NULL;
     HSTRING str = NULL;
     HRESULT hr = WindowsCreateString( buffer_statics_name, wcslen( buffer_statics_name ), &str );
+#ifdef __REACTOS__
+    SystemIdentificationSource source;
+    IBufferByteAccess *byte_access;
+    BYTE id[SYSTEM_ID_BYTES];
+    BYTE *bytes;
 
+    source = read_system_id( id );
+    if (SUCCEEDED(hr)) hr = RoGetActivationFactory( str, &IID_IActivationFactory, (void **)&factory );
+    if (SUCCEEDED(hr)) hr = IActivationFactory_QueryInterface( factory, &IID_IBufferFactory, (void **)&buffer_factory );
+    if (SUCCEEDED(hr)) hr = IBufferFactory_Create( buffer_factory, source == SystemIdentificationSource_None ? 0 : sizeof(id), system_id );
+    if (SUCCEEDED(hr) && source != SystemIdentificationSource_None)
+    {
+        hr = IBuffer_QueryInterface( *system_id, &IID_IBufferByteAccess, (void **)&byte_access );
+        if (SUCCEEDED(hr))
+        {
+            hr = IBufferByteAccess_Buffer( byte_access, &bytes );
+            if (SUCCEEDED(hr)) memcpy( bytes, id, sizeof(id) );
+            IBufferByteAccess_Release( byte_access );
+        }
+        if (SUCCEEDED(hr)) hr = IBuffer_put_Length( *system_id, sizeof(id) );
+        if (FAILED(hr)) IBuffer_Release( *system_id );
+    }
+    if (SUCCEEDED(hr)) *system_id_source = source;
+#else
     FIXME( "returning empty ID.\n" );
 
     if (SUCCEEDED(hr)) hr = RoGetActivationFactory( str, &IID_IActivationFactory, (void **)&factory );
     if (SUCCEEDED(hr)) hr = IActivationFactory_QueryInterface( factory, &IID_IBufferFactory, (void **)&buffer_factory );
     if (SUCCEEDED(hr)) hr = IBufferFactory_Create( buffer_factory, 0, system_id );
     if (SUCCEEDED(hr)) *system_id_source = SystemIdentificationSource_None;
+#endif
 
     if (buffer_factory) IBufferFactory_Release( buffer_factory );
     if (factory) IActivationFactory_Release( factory );

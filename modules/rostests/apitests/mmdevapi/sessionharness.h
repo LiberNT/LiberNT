@@ -76,7 +76,7 @@ extern HRESULT reactos_audio_session_set_state(const struct reactos_audio_sessio
 extern void reactos_audio_sessions_shutdown(void);
 
 #define SESSION_REGISTRY_TEST_MAGIC     0x53534152
-#define SESSION_REGISTRY_TEST_VERSION   1
+#define SESSION_REGISTRY_TEST_VERSION   2
 #define SESSION_REGISTRY_TEST_CAPACITY  128
 
 typedef struct _TEST_SHARED_SESSION
@@ -97,6 +97,8 @@ typedef struct _TEST_SHARED_SESSION
     WCHAR ProcessPath[MAX_PATH];
     WCHAR DisplayName[128];
     WCHAR IconPath[MAX_PATH];
+    volatile LONG PeakBits;
+    volatile LONG PeakTick;
 } TEST_SHARED_SESSION;
 
 typedef struct _TEST_SHARED_REGISTRY

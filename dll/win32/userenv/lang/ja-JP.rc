@@ -21,7 +21,7 @@ BEGIN
     IDS_FAVORITES "お気に入り"
     IDS_MYDOCUMENTS "マイ ドキュメント"
     IDS_NETHOOD "近くのネットワーク"
-    IDS_PRINTHOOD "近くのプリンタ"
+    IDS_PRINTHOOD "近くのプリンター"
     IDS_RECENT "最近使った項目"
     IDS_SENDTO "送る"
     IDS_TEMPLATES "テンプレート"

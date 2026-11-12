@@ -9,6 +9,7 @@
 #include <ndk/obfuncs.h>
 
 #define DAY_100NS (864000000000LL)
+#define RELATIVE_DUE_100NS (4000000LL)
 
 typedef struct _ABSOLUTE_WAIT
 {
@@ -93,13 +94,13 @@ START_TEST(SystemTimeChangeTimers)
 
     DueTime.QuadPart = QuerySystemTime100ns() + 30000000;
     ok(SetWaitableTimer(AbsoluteTimer, &DueTime, 0, NULL, NULL, FALSE), "SetWaitableTimer failed, error %lu\n", GetLastError());
-    DueTime.QuadPart = -30000000;
+    DueTime.QuadPart = -RELATIVE_DUE_100NS;
     ok(SetWaitableTimer(RelativeTimer, &DueTime, 0, NULL, NULL, FALSE), "SetWaitableTimer failed, error %lu\n", GetLastError());
     Wait.DueTime.QuadPart = QuerySystemTime100ns() + 30000000;
     Thread = CreateThread(NULL, 0, AbsoluteWaitThread, &Wait, 0, NULL);
     ok(Thread != NULL, "CreateThread failed, error %lu\n", GetLastError());
 
-    Sleep(100);
+    Sleep(32);
     if (!ShiftSystemTime(DAY_100NS))
     {
         skip("SetSystemTime failed, error %lu\n", GetLastError());

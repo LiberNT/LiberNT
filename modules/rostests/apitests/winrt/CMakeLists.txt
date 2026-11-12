@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     AppInstallManager.c
+    DispatcherQueue.c
     guid.c
     NotificationData.c
     PenDevice.c

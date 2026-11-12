@@ -644,6 +644,43 @@ static void TestThreadFocus(TSF_FIXTURE *pFixture)
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
+static void TestLangBarItemMgr(TSF_FIXTURE *pFixture)
+{
+    typedef HRESULT (WINAPI *FN_TF_CreateLangBarItemMgr)(ITfLangBarItemMgr **);
+    FN_TF_CreateLangBarItemMgr fn;
+    ITfLangBarItemMgr *pMgr = NULL, *pMgr2 = NULL, *pMgr3 = NULL;
+    ITfThreadMgr *pBack = NULL;
+    ULONG cItems = 0, cItems2 = 0;
+    HRESULT hr;
+
+    hr = pFixture->pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void **)&pMgr);
+    ok_hr(hr, S_OK);
+    if (!pMgr)
+        return;
+    fn = (FN_TF_CreateLangBarItemMgr)GetProcAddress(GetModuleHandleW(L"msctf.dll"), "TF_CreateLangBarItemMgr");
+    ok(fn != NULL, "no TF_CreateLangBarItemMgr\n");
+    if (fn)
+        ok_hr(fn(&pMgr2), S_OK);
+    hr = pFixture->pThreadMgr->QueryInterface(IID_ITfLangBarItemMgr, (void **)&pMgr3);
+    ok_hr(hr, S_OK);
+    hr = pMgr->QueryInterface(IID_ITfThreadMgr, (void **)&pBack);
+    ok_hr(hr, S_OK);
+    ok(pBack == pFixture->pThreadMgr, "got %p, thread manager %p\n", pBack, pFixture->pThreadMgr);
+    if (pBack)
+        pBack->Release();
+    ok(pMgr != pMgr2, "the thread manager returned the TF_CreateLangBarItemMgr object\n");
+    ok_hr(pMgr->GetItemNum(&cItems), S_OK);
+    if (pMgr2)
+    {
+        ok_hr(pMgr2->GetItemNum(&cItems2), S_OK);
+        ok_long(cItems, cItems2);
+        pMgr2->Release();
+    }
+    if (pMgr3)
+        pMgr3->Release();
+    pMgr->Release();
+}
+
 START_TEST(threadmgr)
 {
     TSF_FIXTURE fixture;
@@ -677,6 +714,7 @@ START_TEST(threadmgr)
             skip("The test text service did not activate\n");
         }
         TestThreadFocus(&fixture);
+        TestLangBarItemMgr(&fixture);
     }
     Fixture_Done(&fixture);
     {

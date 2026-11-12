@@ -17,6 +17,9 @@ static SETIDEAL SetIdeal;
 static GETNODE GetNode;
 static volatile LONG Failures;
 static DWORD CpuCount;
+static LONG CaseStart;
+#define CASE_BEGIN() (CaseStart = Failures)
+#define LEDGER(...) do { if (winetest_debug > 1 || Failures != CaseStart) printf(__VA_ARGS__); } while (0)
 #define CHECK(c) do { BOOL Passed = !!(c); DWORD Error = GetLastError(); ok(Passed, "error=%lu\n", Error); if (!Passed) InterlockedIncrement(&Failures); SetLastError(Error); } while (0)
 
 static DWORD WINAPI Stress(PVOID Arg)
@@ -49,10 +52,12 @@ static void ProcessorProbes(void)
     DWORD error, exception;
     USHORT node;
     HANDLE workers[8];
+    CASE_BEGIN();
     CHECK(GetIdeal(GetCurrentThread(), &original));
-    printf("ORIGINAL group=%u number=%u reserved=%u cpus=%lu\n", original.Group, original.Number, original.Reserved, CpuCount);
+    LEDGER("ORIGINAL group=%u number=%u reserved=%u cpus=%lu\n", original.Group, original.Number, original.Reserved, CpuCount);
     for (g = 0; g < 3; ++g) for (i = 0; i < 8; ++i) for (r = 0; r < 2; ++r)
     {
+        CASE_BEGIN();
         input.Group = groups[g]; input.Number = (BYTE)nums[i]; input.Reserved = (BYTE)r;
         memset(&previous, 0xcc, sizeof(previous)); SetLastError(0xdeadbeef);
         result = SetIdeal(GetCurrentThread(), &input, &previous); error = GetLastError();
@@ -60,22 +65,28 @@ static void ProcessorProbes(void)
         if (!result) CHECK(error == ERROR_INVALID_PARAMETER && previous.Group == 0xcccc && previous.Number == 0xcc && previous.Reserved == 0xcc);
         else CHECK(error == 0xdeadbeef);
         CHECK(input.Group == groups[g] && input.Number == nums[i] && input.Reserved == r);
-        printf("SET g=%u n=%u r=%u ret=%u err=%lu prev=%04x/%02x/%02x input=%04x/%02x/%02x\n", groups[g], (unsigned)nums[i], r, result, error, previous.Group, previous.Number, previous.Reserved, input.Group, input.Number, input.Reserved);
+        LEDGER("SET g=%u n=%u r=%u ret=%u err=%lu prev=%04x/%02x/%02x input=%04x/%02x/%02x\n", groups[g], (unsigned)nums[i], r, result, error, previous.Group, previous.Number, previous.Reserved, input.Group, input.Number, input.Reserved);
         node = 0xcccc; SetLastError(0xdeadbeef);
         result = GetNode(&input, &node); error = GetLastError();
         CHECK(result == (groups[g] == 0 && nums[i] < CpuCount && r == 0));
         if (!result) CHECK(error == ERROR_INVALID_PARAMETER && node == 0xffff);
         else CHECK(node == 0 && error == 0xdeadbeef);
-        printf("NUMA g=%u n=%u r=%u ret=%u err=%lu node=%04x\n", groups[g], (unsigned)nums[i], r, result, error, node);
+        LEDGER("NUMA g=%u n=%u r=%u ret=%u err=%lu node=%04x\n", groups[g], (unsigned)nums[i], r, result, error, node);
     }
+    input.Group = 0; input.Number = (BYTE)(CpuCount - 1); input.Reserved = 0;
+    CHECK(SetIdeal(GetCurrentThread(), &input, NULL));
+    input.Number = 0; memset(&previous, 0xcc, sizeof(previous));
+    CHECK(SetIdeal(GetCurrentThread(), &input, &previous));
+    CHECK(previous.Group == 0 && previous.Number == CpuCount - 1 && previous.Reserved == 0);
     for (h = 0; h < 4; ++h)
     {
         memset(&output, 0xcc, sizeof(output)); SetLastError(0xdeadbeef);
         result = GetIdeal(handles[h], &output); error = GetLastError();
-        printf("GET handle=%u ret=%u err=%lu out=%04x/%02x/%02x\n", h, result, error, output.Group, output.Number, output.Reserved);
+        LEDGER("GET handle=%u ret=%u err=%lu out=%04x/%02x/%02x\n", h, result, error, output.Group, output.Number, output.Reserved);
     }
     for (i = 0; i < 5; ++i)
     {
+        CASE_BEGIN();
         input = original; exception = 0; result = FALSE; SetLastError(0xdeadbeef);
         _SEH2_TRY
         {
@@ -88,7 +99,7 @@ static void ProcessorProbes(void)
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { exception = _SEH2_GetExceptionCode(); }
         _SEH2_END;
         CHECK(exception == EXCEPTION_ACCESS_VIOLATION);
-        printf("POINTER case=%u ret=%u err=%lu exception=%08lx\n", i, result, GetLastError(), exception);
+        LEDGER("POINTER case=%u ret=%u err=%lu exception=%08lx\n", i, result, GetLastError(), exception);
     }
     CHECK(SetIdeal(GetCurrentThread(), &original, NULL));
     for (i = 0; i < 8; ++i) { workers[i] = CreateThread(NULL, 0, Stress, (PVOID)(ULONG_PTR)i, 0, NULL); CHECK(workers[i] != NULL); }
@@ -106,17 +117,18 @@ static void AccessProbes(void)
     {
         HANDLE thread = OpenThread(masks[i], FALSE, GetCurrentThreadId());
         BOOL result;
+        CASE_BEGIN();
         CHECK(thread != NULL);
         SetLastError(0xdeadbeef);
         result = GetIdeal(thread, &output);
         CHECK(result == (masks[i] == THREAD_QUERY_INFORMATION || masks[i] == THREAD_QUERY_LIMITED_INFORMATION));
         if (!result) CHECK(GetLastError() == ERROR_ACCESS_DENIED);
-        printf("ACCESS_GET mask=%lx ret=%u error=%lu\n", masks[i], result, GetLastError());
+        LEDGER("ACCESS_GET mask=%lx ret=%u error=%lu\n", masks[i], result, GetLastError());
         SetLastError(0xdeadbeef);
         result = SetIdeal(thread, &original, &previous);
         CHECK(result == (masks[i] == THREAD_SET_INFORMATION));
         if (!result) CHECK(GetLastError() == ERROR_ACCESS_DENIED);
-        printf("ACCESS_SET mask=%lx ret=%u error=%lu\n", masks[i], result, GetLastError());
+        LEDGER("ACCESS_SET mask=%lx ret=%u error=%lu\n", masks[i], result, GetLastError());
         CloseHandle(thread);
     }
 }
@@ -140,12 +152,13 @@ static void SecurityProbes(void)
         {
             SECURITY_STATUS status = 0xdeadbeef;
             DWORD exception = 0;
+            CASE_BEGIN();
             memset(buffer, 0xcc, sizeof(buffer)); SetLastError(0xdeadbeef);
             _SEH2_TRY { status = funcs[f](nul ? NULL : &empty, attrs[a], buffer, sizes[s]); }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { exception = _SEH2_GetExceptionCode(); }
             _SEH2_END;
             CHECK(status == SEC_E_INVALID_HANDLE && exception == 0 && buffer[0] == 0xcc);
-            printf("SEC f=%u a=%lx size=%lu null=%u status=%08lx err=%lu exception=%08lx first=%02x\n", f, attrs[a], sizes[s], nul, status, GetLastError(), exception, buffer[0]);
+            LEDGER("SEC f=%u a=%lx size=%lu null=%u status=%08lx err=%lu exception=%08lx first=%02x\n", f, attrs[a], sizes[s], nul, status, GetLastError(), exception, buffer[0]);
         }
     }
 }
@@ -170,10 +183,11 @@ static void ValidSecurityProbes(void)
     BYTE data[128];
     SECURITY_STATUS status;
 
+    CASE_BEGIN();
     CHECK(set && query);
     if (!set || !query) return;
     status = table->AcquireCredentialsHandleW(NULL, L"NTLM", SECPKG_CRED_OUTBOUND, NULL, NULL, NULL, NULL, &cred, &expiry);
-    printf("SEC_ACQUIRE status=%08lx\n", status);
+    LEDGER("SEC_ACQUIRE status=%08lx\n", status);
     CHECK(status == SEC_E_OK);
     if (status != SEC_E_OK) return;
     for (a = 0; a < 6; ++a)
@@ -183,27 +197,28 @@ static void ValidSecurityProbes(void)
         _SEH2_TRY { status = set(&cred, attrs[a], data, sizeof(data)); }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { exception = _SEH2_GetExceptionCode(); }
         _SEH2_END;
-        printf("SEC_VALID_SET a=%lx status=%08lx exception=%08lx\n", attrs[a], status, exception);
+        LEDGER("SEC_VALID_SET a=%lx status=%08lx exception=%08lx\n", attrs[a], status, exception);
     }
     status = table->InitializeSecurityContextW(&cred, NULL, L"localhost", ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_CONNECTION, 0, SECURITY_NATIVE_DREP, NULL, 0, &context, &desc, &flags, &expiry);
-    printf("SEC_INITIALIZE status=%08lx\n", status);
+    LEDGER("SEC_INITIALIZE status=%08lx\n", status);
     CHECK(status == SEC_I_CONTINUE_NEEDED || status == SEC_E_OK);
     if (status == SEC_I_CONTINUE_NEEDED || status == SEC_E_OK)
     {
         SECURITY_STATUS hs;
-        printf("SEC_OLD_QUERY status=%08lx\n", table->QueryContextAttributesW(&context, SECPKG_ATTR_SIZES, data));
+        hs = table->QueryContextAttributesW(&context, SECPKG_ATTR_SIZES, data);
+        LEDGER("SEC_OLD_QUERY status=%08lx\n", hs);
         hs = table->AcquireCredentialsHandleW(NULL, L"NTLM", SECPKG_CRED_INBOUND, NULL, NULL, NULL, NULL, &inbound, &expiry);
-        printf("SEC_INBOUND status=%08lx\n", hs);
+        LEDGER("SEC_INBOUND status=%08lx\n", hs);
         if (hs == SEC_E_OK)
         {
             hs = table->AcceptSecurityContext(&inbound, NULL, &desc, ASC_REQ_ALLOCATE_MEMORY | ASC_REQ_CONNECTION, SECURITY_NATIVE_DREP, &server, &challengeDesc, &flags, &expiry);
-            printf("SEC_ACCEPT status=%08lx\n", hs);
+            LEDGER("SEC_ACCEPT status=%08lx\n", hs);
             if (hs == SEC_I_CONTINUE_NEEDED || hs == SEC_E_OK)
             {
                 table->FreeContextBuffer(token.pvBuffer);
                 token.pvBuffer = NULL; token.cbBuffer = 0;
                 hs = table->InitializeSecurityContextW(&cred, &context, L"localhost", ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_CONNECTION, 0, SECURITY_NATIVE_DREP, &challengeDesc, 0, &context, &desc, &flags, &expiry);
-                printf("SEC_COMPLETE status=%08lx\n", hs);
+                LEDGER("SEC_COMPLETE status=%08lx\n", hs);
                 CHECK(hs == SEC_E_OK);
                 table->DeleteSecurityContext(&server);
             }
@@ -214,6 +229,7 @@ static void ValidSecurityProbes(void)
         {
             BYTE expected[128];
             SECURITY_STATUS oldStatus;
+            CASE_BEGIN();
             memset(data, 0xcc, sizeof(data));
             memset(expected, 0xcc, sizeof(expected));
             oldStatus = table->QueryContextAttributesW(&context, attrs[a], expected);
@@ -222,7 +238,7 @@ static void ValidSecurityProbes(void)
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER) { exception = _SEH2_GetExceptionCode(); }
             _SEH2_END;
             CHECK(exception == 0 && status == oldStatus && !memcmp(data, expected, sizeof(data)));
-            printf("SEC_VALID_QUERY a=%lx size=%lu status=%08lx exception=%08lx first=%02x guard=%02x\n", attrs[a], size, status, exception, data[0], data[size]);
+            LEDGER("SEC_VALID_QUERY a=%lx size=%lu status=%08lx exception=%08lx first=%02x guard=%02x\n", attrs[a], size, status, exception, data[0], data[size]);
         }
         table->DeleteSecurityContext(&context);
     }

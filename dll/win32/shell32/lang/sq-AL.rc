@@ -842,7 +842,7 @@ BEGIN
     IDS_PROGRAMS "Fillo Menu\\Programe"
     IDS_PERSONAL "Dokumentet e'mi"
     IDS_FAVORITES "Preferuarat"
-    IDS_STARTUP "Fillo Menu\\Programe\\FilloTani"
+    IDS_STARTUP "Fillo Menu\\Programe\\Fillimi"
     IDS_RECENT "Fundift"
     IDS_SENDTO "DërguarTek"
     IDS_STARTMENU "Fillo Menu"

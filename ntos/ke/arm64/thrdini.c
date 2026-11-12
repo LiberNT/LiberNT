@@ -235,6 +235,7 @@ KiArm64IdleDispatchNextThread(_In_ PKPRCB Prcb, _In_ BOOLEAN AdvertiseIdle)
     KiReleasePrcbLock(Prcb);
 
     ASSERT(OldThread != NULL);
+    KiWaitForThreadSwapOut(NewThread);
     KiSwapContext(APC_LEVEL, OldThread);
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) KeLowerIrql(DISPATCH_LEVEL);
     return TRUE;
@@ -359,9 +360,11 @@ KiIdleLoop(VOID)
         {
             ULONG64 IdleStart, IdleEnd;
 
+            KiArm64ClockArmForIdle(Prcb);
             IdleStart = ARM64_READ_SYSREG(CNTVCT_EL0);
             Prcb->PowerState.IdleFunction(&Prcb->PowerState);
             IdleEnd = ARM64_READ_SYSREG(CNTVCT_EL0);
+            KiArm64ClockResumeFromIdle(Prcb);
             _enable();
             KiArm64IdleCounterTicks[Prcb->Number] += IdleEnd - IdleStart;
         }
@@ -544,6 +547,7 @@ KiDispatchInterrupt(VOID)
             KxQueueReadyThread(OldThread, Prcb);
         }
 
+        KiWaitForThreadSwapOut(NewThread);
         KiSwapContext(APC_LEVEL, OldThread);
     }
 }

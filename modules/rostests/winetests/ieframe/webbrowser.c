@@ -40,6 +40,9 @@
 #include "shdeprecated.h"
 #include "shlguid.h"
 #include "exdispid.h"
+#ifdef __REACTOS__
+#include "../mshtml/httpserver.h"
+#endif
 #include "mimeinfo.h"
 #include "hlink.h"
 #include "docobjectservice.h"
@@ -4546,6 +4549,9 @@ START_TEST(webbrowser)
         }
         IHTMLDocument2_Release(doc);
     }
+
+    /* The navigations load their http pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
 #endif
 
     test_SetQueryNetSessionCount();
@@ -4579,5 +4585,8 @@ START_TEST(webbrowser)
     test_SetAdvise();
     test_com_aggregation();
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     OleUninitialize();
 }

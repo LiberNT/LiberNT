@@ -72,7 +72,7 @@ MmBuildMdlForNonPagedPool(
         ASSERT(Physical != 0);
         Pages[i] = (PFN_NUMBER)(Physical >> PAGE_SHIFT);
 
-        if (Pages[i] >= MiSystem.Pfn.FrameCount)
+        if (!MiPfnTracked(&MiSystem.Pfn, Pages[i]))
             IoSpace = TRUE;
     }
 
@@ -115,7 +115,7 @@ MiProbeAndLockNonpageablePages(
         }
 
         Frame = Physical >> PAGE_SHIFT;
-        if (Frame < Db->FrameCount && Db->Pfn[Frame].State != MiPageUnusable)
+        if (MiPfnTracked(Db, Frame) && Db->Pfn[Frame].State != MiPageUnusable)
         {
             KIRQL OldIrql = MiPfnLock(Db, (ULONG)Frame);
 
@@ -193,7 +193,7 @@ MmProbeAndLockPages(
 
     for (i = 0; i < Count; i++)
     {
-        if (Pages[i] >= MiSystem.Pfn.FrameCount)
+        if (!MiPfnTracked(&MiSystem.Pfn, Pages[i]))
             Mdl->MdlFlags |= MDL_IO_SPACE;
         else if (Operation != IoReadAccess)
             MiPfnExecCleanClear(&MiSystem.Pfn, (ULONG)Pages[i]);
@@ -301,7 +301,7 @@ MmProbeAndLockSelectedPages(
         {
             if (Addresses[i] < (ULONG64)(ULONG_PTR)MmSystemRangeStart)
                 UserPages = TRUE;
-            if (Pages[i] >= MiSystem.Pfn.FrameCount)
+            if (!MiPfnTracked(&MiSystem.Pfn, Pages[i]))
                 Mdl->MdlFlags |= MDL_IO_SPACE;
             else if (Operation != IoReadAccess)
                 MiPfnExecCleanClear(&MiSystem.Pfn, (ULONG)Pages[i]);
@@ -707,7 +707,7 @@ MmFreePagesFromMdl(
     ASSERT(!(Mdl->MdlFlags & MDL_IO_SPACE));
 
     for (i = 0; i < Count && Pages[i] != MI_MDL_PFN_END; i++)
-        ASSERT(Pages[i] < MiSystem.Pfn.FrameCount);
+        ASSERT(MiPfnTracked(&MiSystem.Pfn, Pages[i]));
     Count = i;
     MiPfnSetCacheFrames(&MiSystem.Pfn, (const MI_FRAME_NUMBER *)Pages, Count, 0);
 

@@ -169,6 +169,8 @@ NTAPI
 VidDisplayString(
     _In_ PCSTR String)
 {
+    BeginTextUpdate();
+
     /* Start looping the string */
     for (; *String; ++String)
     {
@@ -241,4 +243,6 @@ VidDisplayString(
             }
         }
     }
+
+    EndTextUpdate();
 }

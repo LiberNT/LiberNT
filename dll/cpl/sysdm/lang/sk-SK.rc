@@ -262,9 +262,9 @@ BEGIN
     LTEXT "%s", IDC_SPACEAVAIL, 88, 92, 104, 9
     LTEXT "&Počiatočná veľkosť (v MB):", -1, 22, 118, 88, 9
     LTEXT "Ma&ximálna veľkosť (v MB):", -1, 22, 131, 85, 9
-    AUTORADIOBUTTON "&Vlastná veľkosť:", IDC_CUSTOM, 20, 105, 74, 9, WS_GROUP
-    AUTORADIOBUTTON "Veľkosť určovaná &systémom", IDC_SYSMANSIZE, 20, 145, 103, 9
-    AUTORADIOBUTTON "N&epoužívať stránkovací súbor", IDC_NOPAGEFILE, 20, 158, 108,9
+    AUTORADIOBUTTON "&Vlastná veľkosť:", IDC_CUSTOM, 20, 104, 74, 12, WS_GROUP
+    AUTORADIOBUTTON "Veľkosť určovaná &systémom", IDC_SYSMANSIZE, 20, 144, 103, 12
+    AUTORADIOBUTTON "N&epoužívať stránkovací súbor", IDC_NOPAGEFILE, 20, 157, 108,12
     EDITTEXT IDC_INITIALSIZE, 111, 114, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     EDITTEXT IDC_MAXSIZE, 111, 129, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     PUSHBUTTON "&Nastaviť", IDC_SET, 158, 154, 50, 15

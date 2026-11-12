@@ -16,6 +16,8 @@
 #include <drivers/acpi/acpi.h>
 
 #include <reactos/arm64/early_uart.h>
+#include <Fdt.h>
+#include <libernt/fdtlib.h>
 
 /*
  * Global runtime-detected UART state.
@@ -127,6 +129,9 @@ EarlyUartDiagInterfaceName(_In_ ARM64_UART_INTERFACE Interface)
 
         case Arm64UartNs16550:
             return "ns16550";
+
+        case Arm64UartNs16550Mmio32:
+            return "ns16550-mmio32";
 
         case Arm64UartQcomGeni:
             return "qcom-geni";
@@ -263,6 +268,9 @@ EarlyUartDiagGeniProbe(_In_ UINT64 Address)
 
 #define ACPI_GAS_SPACE_SYSTEM_MEMORY    0
 #define ACPI_GAS_SPACE_SYSTEM_IO        1
+
+#define ACPI_GAS_ACCESS_BYTE            1
+#define ACPI_GAS_ACCESS_DWORD           3
 
 #pragma pack(push, 1)
 /* ACPI SPCR (Serial Port Console Redirection) table */
@@ -404,7 +412,10 @@ EarlyUartFindAcpiTable(ULONG Signature)
  * if they were PL011.
  */
 static ARM64_UART_INTERFACE
-EarlyUartInterfaceFromSubtype(USHORT Subtype)
+EarlyUartInterfaceFromSubtype(
+    _In_ USHORT Subtype,
+    _In_ UCHAR AccessSize,
+    _In_ UCHAR BitWidth)
 {
     switch (Subtype)
     {
@@ -417,6 +428,14 @@ EarlyUartInterfaceFromSubtype(USHORT Subtype)
         case SERIAL_SUBTYPE_16550_SUBSET:
         case SERIAL_SUBTYPE_NS16550_NV:
         case SERIAL_SUBTYPE_16550_WITH_GAS:
+            /*
+             * A 16550 register file declared as 32-bit accesses is the one
+             * spaced four bytes apart (Tegra, dw-apb-uart); byte accesses at
+             * those offsets would land on the wrong registers.
+             */
+            if (AccessSize == ACPI_GAS_ACCESS_DWORD || BitWidth == 32)
+                return Arm64UartNs16550Mmio32;
+
             return Arm64UartNs16550;
 
         case SERIAL_SUBTYPE_BCM2835:    /* Raspberry Pi AUX mini UART */
@@ -453,6 +472,7 @@ EarlyUartProbeCandidate(
 
         case Arm64UartPl011:
         case Arm64UartNs16550:
+        case Arm64UartNs16550Mmio32:
         case Arm64UartBcm2835Mini:
             return TRUE;
 
@@ -513,7 +533,9 @@ EarlyUartLocateSpcrAddress(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
         return 0;
     }
 
-    Interface = EarlyUartInterfaceFromSubtype(Spcr->InterfaceType);
+    Interface = EarlyUartInterfaceFromSubtype(Spcr->InterfaceType,
+                                              Spcr->SerialPort.AccessSize,
+                                              Spcr->SerialPort.BitWidth);
     EarlyUartDiagPuts("[EUART] SPCR: interface=");
     EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
     EarlyUartDiagPuts("\n");
@@ -652,7 +674,9 @@ EarlyUartLocateDbg2Address(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
             continue;
         }
 
-        Interface = EarlyUartInterfaceFromSubtype(Dev->PortSubtype);
+        Interface = EarlyUartInterfaceFromSubtype(Dev->PortSubtype,
+                                                  Gas->AccessSize,
+                                                  Gas->BitWidth);
         EarlyUartDiagPuts("[EUART] DBG2: interface=");
         EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
         EarlyUartDiagPuts("\n");
@@ -674,9 +698,98 @@ EarlyUartLocateDbg2Address(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
     return 0;
 }
 
+static UINT64
+EarlyUartLocateDeviceTreeAddress(_Out_ ARM64_UART_INTERFACE *UartInterface)
+{
+    EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
+    ARM64_UART_INTERFACE Interface;
+    const VOID *Compatible;
+    const CHAR *Path;
+    ULONGLONG Address;
+    ULONGLONG Size;
+    FDT Fdt;
+    ULONG Chosen;
+    ULONG Parent;
+    ULONG Length;
+    ULONG Value;
+    ULONG Node;
+    UINTN Index;
+
+    *UartInterface = Arm64UartUnknown;
+    if (!GlobalSystemTable || !GlobalSystemTable->ConfigurationTable)
+        return 0;
+    for (Index = 0; Index < GlobalSystemTable->NumberOfTableEntries; ++Index)
+    {
+        EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
+
+        if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)) &&
+            FdtOpen(Entry->VendorTable, FDT_MAXIMUM_SIZE, &Fdt))
+        {
+            break;
+        }
+    }
+    if (Index == GlobalSystemTable->NumberOfTableEntries)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: not found\n");
+        return 0;
+    }
+    if (!FdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
+    {
+        EarlyUartDiagPuts("[EUART] FDT: no /chosen\n");
+        return 0;
+    }
+    Path = FdtGetProperty(&Fdt, Chosen, "stdout-path", &Length);
+    if (!Path)
+        Path = FdtGetProperty(&Fdt, Chosen, "linux,stdout-path", &Length);
+    if (!Path || Length == 0 || Path[Length - 1] != '\0' ||
+        !FdtResolvePath(&Fdt, Path, &Node, &Parent, NULL) || Parent == FDT_NO_NODE)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: no resolvable stdout-path\n");
+        return 0;
+    }
+    Compatible = FdtGetProperty(&Fdt, Node, "compatible", &Length);
+    if (FdtStringListContains(Compatible, Length, "arm,pl011"))
+    {
+        Interface = Arm64UartPl011;
+    }
+    else if (FdtStringListContains(Compatible, Length, "ns16550a") ||
+             FdtStringListContains(Compatible, Length, "ns16550"))
+    {
+        if ((FdtReadU32(&Fdt, Node, "reg-shift", &Value) && Value != 0) ||
+            (FdtReadU32(&Fdt, Node, "reg-io-width", &Value) && Value != 1))
+        {
+            EarlyUartDiagPuts("[EUART] FDT: ns16550 register layout not supported\n");
+            return 0;
+        }
+        Interface = Arm64UartNs16550;
+    }
+    else
+    {
+        EarlyUartDiagPuts("[EUART] FDT: stdout-path has no supported compatible\n");
+        return 0;
+    }
+    if (!FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Size) || Address == 0 || Size == 0)
+    {
+        EarlyUartDiagPuts("[EUART] FDT: stdout-path has no usable reg\n");
+        return 0;
+    }
+    EarlyUartDiagPuts("[EUART] FDT: ");
+    EarlyUartDiagPuts(Path);
+    EarlyUartDiagPuts(" addr=0x");
+    EarlyUartDiagHex(Address, 16);
+    EarlyUartDiagPuts(" interface=");
+    EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
+    EarlyUartDiagPuts("\n");
+    if (!EarlyUartProbeCandidate(Address, Interface))
+        return 0;
+    *UartInterface = Interface;
+    return Address;
+}
+
 ARM64_PLATFORM_ID
 EarlyUartDetectPlatform(VOID)
 {
+    ARM64_PLATFORM_ID PlatformId = Arm64PlatformGenericAcpi;
     ARM64_UART_INTERFACE Interface;
     UINT64 Address;
 
@@ -685,6 +798,11 @@ EarlyUartDetectPlatform(VOID)
     Address = EarlyUartLocateSpcrAddress(&Interface);
     if (Address == 0)
         Address = EarlyUartLocateDbg2Address(&Interface);
+    if (Address == 0)
+    {
+        Address = EarlyUartLocateDeviceTreeAddress(&Interface);
+        PlatformId = Arm64PlatformDeviceTree;
+    }
 
     if (Address == 0)
     {
@@ -697,7 +815,7 @@ EarlyUartDetectPlatform(VOID)
 
     EarlyUartBaseAddress = Address;
     EarlyUartInterface = Interface;
-    EarlyUartPlatformId = Arm64PlatformGenericAcpi;
+    EarlyUartPlatformId = PlatformId;
 
     EarlyUartDiagPuts("[EUART] detect: base=0x");
     EarlyUartDiagHex(EarlyUartBaseAddress, 16);

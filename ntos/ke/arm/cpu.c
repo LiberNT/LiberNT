@@ -228,3 +228,20 @@ KiQueryProcessorTopology(
     *RecordCount = 0;
     *SetCount = 0;
 }
+
+VOID
+NTAPI
+KiQueryProcessorDomains(
+    _Out_ PKI_PROCESSOR_DOMAINS Domains)
+{
+    RtlZeroMemory(Domains, sizeof(*Domains));
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiQueryProcessorEfficiencyClasses(
+    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+{
+    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+}

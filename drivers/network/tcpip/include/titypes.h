@@ -142,6 +142,8 @@ typedef struct _ADDRESS_FILE {
     DATAGRAM_SEND_ROUTINE Send;           /* Routine to send a datagram */
     PVOID UdpPcb;
     LIST_ENTRY ReceiveQueue;              /* List of outstanding receive requests */
+    LIST_ENTRY DatagramQueue;
+    ULONG QueuedBytes;
     LIST_ENTRY TransmitQueue;             /* List of outstanding transmit requests */
     struct _CONNECTION_ENDPOINT *Connection;
     /* Associated connection or NULL if no associated connection exist */

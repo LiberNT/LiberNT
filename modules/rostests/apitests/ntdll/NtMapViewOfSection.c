@@ -650,7 +650,7 @@ Test_PageFileSection(void)
     /* WoW64 returns STATUS_NO_MEMORY */
     ok((Status == STATUS_NO_MEMORY) || (Status == STATUS_INVALID_VIEW_SIZE),
        "got wrong Status: 0x%lx\n", Status);
-    ok(ViewSize == 0, "wrong ViewSize: 0x%Ix\n", ViewSize);
+    ok(ViewSize == 0, "wrong ViewSize: 0x%Ix\n", (size_t)ViewSize);
 #endif
 
     /* Map with PAGE_NOACCESS */
@@ -2042,7 +2042,7 @@ Test_Truncate(VOID)
     {
         // First we test data that was truncated even before the file mapping was opened
         Length = strlen((char*)BaseAddress);
-        ok(Length == 6, "Old data was not properly erased! (Length=%Iu)\n", Length);
+        ok(Length == 6, "Old data was not properly erased! (Length=%Iu)\n", (size_t)Length);
     }
 
     // Now we truncate the file on disk some more
@@ -2056,7 +2056,7 @@ Test_Truncate(VOID)
     if (BaseAddress)
     {
         Length = strlen((char*)BaseAddress);
-        ok(Length == 6, "Length should not have changed! (Length=%Iu)\n", Length);
+        ok(Length == 6, "Length should not have changed! (Length=%Iu)\n", (size_t)Length);
     }
 
     // Unmap and set the end shorter.

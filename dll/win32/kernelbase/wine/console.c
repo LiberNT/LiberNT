@@ -155,8 +155,20 @@ static NTSTATUS console_request( HANDLE handle, DWORD code, void *in_buff, DWORD
     if (console_connection && is_client_request_ioctl( code ))
         status = console_client_request( handle, code, in_buff, in_count, out_buff, out_count, io );
     if (status == STATUS_NOT_SUPPORTED)
+    {
+        io->Status = STATUS_PENDING;
         status = NtDeviceIoControlFile( handle, NULL, NULL, NULL, io, code, in_buff, in_count,
                                         out_buff, out_count );
+        /* A handle opened for overlapped I/O comes back before the request is done; a console call waits for it */
+        if (status == STATUS_PENDING)
+        {
+            while (*(volatile NTSTATUS *)&io->Status == STATUS_PENDING)
+            {
+                if (!NT_SUCCESS( NtWaitForSingleObject( handle, FALSE, NULL ) )) break;
+            }
+            status = io->Status;
+        }
+    }
     return status;
 }
 #endif
@@ -591,6 +603,82 @@ static DWORD alias_list_w( DWORD code, const WCHAR *exe, WCHAR *buffer, DWORD le
     HeapFree( GetProcessHeap(), 0, result );
     return size;
 }
+
+static BOOL history_ioctl( DWORD code, const WCHAR *exe, unsigned int count, void *out_buff, DWORD out_count,
+                           DWORD *read )
+{
+    HANDLE console = RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle;
+    size_t exe_size = wcslen( exe ) * sizeof(WCHAR);
+    size_t size = offsetof( struct condrv_history_params, exe ) + exe_size;
+    struct condrv_history_params *params;
+    BOOL ret;
+
+    if (!(params = HeapAlloc( GetProcessHeap(), 0, size )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return FALSE;
+    }
+    params->count = count;
+    memcpy( params->exe, exe, exe_size );
+    ret = console_ioctl( console, code, params, size, out_buff, out_count, read );
+    HeapFree( GetProcessHeap(), 0, params );
+    return ret;
+}
+
+static struct condrv_alias_result *history_get( const WCHAR *exe, DWORD capacity )
+{
+    size_t out_size = offsetof( struct condrv_alias_result, buffer ) + capacity;
+    struct condrv_alias_result *result;
+    DWORD read = 0;
+
+    if (!(result = HeapAlloc( GetProcessHeap(), 0, out_size )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return NULL;
+    }
+    if (!history_ioctl( IOCTL_CONDRV_GET_HISTORY, exe, 0, result, out_size, &read ) ||
+        read < offsetof( struct condrv_alias_result, buffer ))
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        return NULL;
+    }
+    return result;
+}
+
+static struct condrv_alias_result *history_get_all( const WCHAR *exe )
+{
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!(result = history_get( exe, 0 ))) return NULL;
+    size = result->size;
+    HeapFree( GetProcessHeap(), 0, result );
+    return history_get( exe, size );
+}
+
+static DWORD history_list_a( const WCHAR *exe, char *buffer, DWORD len, BOOL copy )
+{
+    struct condrv_alias_result *result;
+    DWORD needed;
+
+    if (!(result = history_get_all( exe ))) return 0;
+    needed = result->size ? WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR),
+                                                 NULL, 0, NULL, NULL ) : 0;
+    if (copy)
+    {
+        if (needed > len)
+        {
+            HeapFree( GetProcessHeap(), 0, result );
+            SetLastError( ERROR_BUFFER_OVERFLOW );
+            return 0;
+        }
+        if (needed)
+            WideCharToMultiByte( GetConsoleCP(), 0, result->buffer, result->size / sizeof(WCHAR), buffer, len,
+                                 NULL, NULL );
+    }
+    HeapFree( GetProcessHeap(), 0, result );
+    return needed;
+}
 #endif
 
 /******************************************************************
@@ -899,8 +987,25 @@ DWORD WINAPI CtrlRoutine( void *arg )
  */
 void WINAPI ExpungeConsoleCommandHistoryA( LPCSTR exename )
 {
+#ifdef __REACTOS__
+    WCHAR *wexe;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return;
+    }
+    if (!(wexe = alias_wide( exename )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return;
+    }
+    history_ioctl( IOCTL_CONDRV_EXPUNGE_HISTORY, wexe, 0, NULL, 0, NULL );
+    HeapFree( GetProcessHeap(), 0, wexe );
+#else
     FIXME( ": (%s) stub!\n", debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+#endif
 }
 
 
@@ -909,8 +1014,17 @@ void WINAPI ExpungeConsoleCommandHistoryA( LPCSTR exename )
  */
 void WINAPI ExpungeConsoleCommandHistoryW( LPCWSTR exename )
 {
+#ifdef __REACTOS__
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return;
+    }
+    history_ioctl( IOCTL_CONDRV_EXPUNGE_HISTORY, exename, 0, NULL, 0, NULL );
+#else
     FIXME( ": (%s) stub!\n", debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
+#endif
 }
 
 
@@ -1286,9 +1400,28 @@ DWORD WINAPI GetConsoleAliasesLengthW( LPWSTR unknown )
  */
 DWORD WINAPI GetConsoleCommandHistoryA( LPSTR buffer, DWORD len, LPCSTR exename )
 {
+#ifdef __REACTOS__
+    WCHAR *wexe;
+    DWORD ret;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(wexe = alias_wide( exename )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return 0;
+    }
+    ret = history_list_a( wexe, buffer, buffer ? len : 0, TRUE );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+#else
     FIXME( ": (%p, 0x%lx, %s) stub\n", buffer, len, debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -1297,9 +1430,31 @@ DWORD WINAPI GetConsoleCommandHistoryA( LPSTR buffer, DWORD len, LPCSTR exename 
  */
 DWORD WINAPI GetConsoleCommandHistoryW( LPWSTR buffer, DWORD len, LPCWSTR exename )
 {
+#ifdef __REACTOS__
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(result = history_get( exename, buffer ? len : 0 ))) return 0;
+    size = result->size;
+    if (size > (buffer ? len : 0))
+    {
+        HeapFree( GetProcessHeap(), 0, result );
+        SetLastError( ERROR_BUFFER_OVERFLOW );
+        return 0;
+    }
+    if (size) memcpy( buffer, result->buffer, size );
+    HeapFree( GetProcessHeap(), 0, result );
+    return size;
+#else
     FIXME( ": (%p, 0x%lx, %s) stub\n", buffer, len, debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -1308,9 +1463,28 @@ DWORD WINAPI GetConsoleCommandHistoryW( LPWSTR buffer, DWORD len, LPCWSTR exenam
  */
 DWORD WINAPI GetConsoleCommandHistoryLengthA( LPCSTR exename )
 {
+#ifdef __REACTOS__
+    WCHAR *wexe;
+    DWORD ret;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(wexe = alias_wide( exename )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return 0;
+    }
+    ret = history_list_a( wexe, NULL, 0, FALSE );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+#else
     FIXME( ": (%s) stub!\n", debugstr_a(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -1319,9 +1493,24 @@ DWORD WINAPI GetConsoleCommandHistoryLengthA( LPCSTR exename )
  */
 DWORD WINAPI GetConsoleCommandHistoryLengthW( LPCWSTR exename )
 {
+#ifdef __REACTOS__
+    struct condrv_alias_result *result;
+    DWORD size;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return 0;
+    }
+    if (!(result = history_get( exename, 0 ))) return 0;
+    size = result->size;
+    HeapFree( GetProcessHeap(), 0, result );
+    return size;
+#else
     FIXME( ": (%s) stub!\n", debugstr_w(exename) );
     SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
     return 0;
+#endif
 }
 
 
@@ -1730,9 +1919,19 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetNumberOfConsoleInputEvents( HANDLE handle, DWOR
  */
 BOOL WINAPI GetNumberOfConsoleMouseButtons( DWORD *count )
 {
+#ifdef __REACTOS__
+    DWORD buttons;
+
+    if (!console_ioctl( RtlGetCurrentPeb()->ProcessParameters->ConsoleHandle, IOCTL_CONDRV_GET_MOUSE_BUTTONS,
+                        NULL, 0, &buttons, sizeof(buttons), NULL ))
+        return FALSE;
+    *count = buttons;
+    return TRUE;
+#else
     FIXME( "(%p): stub\n", count );
     *count = 2;
     return TRUE;
+#endif
 }
 
 
@@ -2141,6 +2340,46 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetConsoleMode( HANDLE handle, DWORD mode )
     TRACE( "(%p,%lx)\n", handle, mode );
     return console_ioctl( handle, IOCTL_CONDRV_SET_MODE, &mode, sizeof(mode), NULL, 0, NULL );
 }
+
+
+#ifdef __REACTOS__
+/******************************************************************
+ *	SetConsoleNumberOfCommandsA   (kernelbase.@)
+ */
+BOOL WINAPI SetConsoleNumberOfCommandsA( DWORD count, LPCSTR exename )
+{
+    WCHAR *wexe;
+    BOOL ret;
+
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    if (!(wexe = alias_wide( exename )))
+    {
+        SetLastError( ERROR_NOT_ENOUGH_MEMORY );
+        return FALSE;
+    }
+    ret = history_ioctl( IOCTL_CONDRV_SET_HISTORY_COMMANDS, wexe, count, NULL, 0, NULL );
+    HeapFree( GetProcessHeap(), 0, wexe );
+    return ret;
+}
+
+
+/******************************************************************
+ *	SetConsoleNumberOfCommandsW   (kernelbase.@)
+ */
+BOOL WINAPI SetConsoleNumberOfCommandsW( DWORD count, LPCWSTR exename )
+{
+    if (!exename)
+    {
+        SetLastError( ERROR_INVALID_PARAMETER );
+        return FALSE;
+    }
+    return history_ioctl( IOCTL_CONDRV_SET_HISTORY_COMMANDS, exename, count, NULL, 0, NULL );
+}
+#endif
 
 
 /******************************************************************************
@@ -2882,10 +3121,23 @@ void WINAPI ClosePseudoConsole( HPCON handle )
 HRESULT WINAPI ResizePseudoConsole( HPCON handle, COORD size )
 {
 #ifdef __REACTOS__
-    if (!handle) return E_INVALIDARG;
-#endif
+    struct pseudo_console *pseudo_console = handle;
+    USHORT packet[3];
+    DWORD written;
+
+    TRACE( "%p (%d,%d)\n", handle, size.X, size.Y );
+
+    if (!pseudo_console || size.X < 0 || size.Y < 0) return E_INVALIDARG;
+    packet[0] = CONDRV_PTY_SIGNAL_RESIZE_WINDOW;
+    packet[1] = size.X;
+    packet[2] = size.Y;
+    if (!WriteFile( pseudo_console->signal, packet, sizeof(packet), &written, NULL ))
+        return HRESULT_FROM_WIN32( GetLastError() );
+    return S_OK;
+#else
     FIXME( "%p (%u,%u) stub, faking success\n", handle, size.X, size.Y );
     return S_OK;
+#endif
 }
 
 static BOOL is_tty_handle( HANDLE handle )

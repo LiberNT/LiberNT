@@ -201,6 +201,159 @@ USBHUB_GetBusInterfaceUSBDI(IN PDEVICE_OBJECT DeviceObject,
     return Status;
 }
 
+static
+PUSB_BUS_INTERFACE_USBDI_V2
+USBH_PdoRootUsbdi(
+    _In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension)
+{
+    PUSBHUB_FDO_EXTENSION HubExtension = PortExtension->HubExtension;
+
+    if (!HubExtension)
+        HubExtension = PortExtension->RootHubExtension;
+    ASSERT(HubExtension != NULL);
+    return &HubExtension->BusInterfaceUSBDI;
+}
+
+static
+VOID
+USB_BUSIFFN
+USBH_PdoUsbdiReference(
+    _In_ PVOID BusContext)
+{
+    PUSBHUB_PORT_PDO_EXTENSION PortExtension = BusContext;
+
+    ObReferenceObject(PortExtension->Common.SelfDevice);
+}
+
+static
+VOID
+USB_BUSIFFN
+USBH_PdoUsbdiDereference(
+    _In_ PVOID BusContext)
+{
+    PUSBHUB_PORT_PDO_EXTENSION PortExtension = BusContext;
+
+    ObDereferenceObject(PortExtension->Common.SelfDevice);
+}
+
+static
+VOID
+USB_BUSIFFN
+USBH_PdoUsbdiGetVersion(
+    _In_ PVOID BusContext,
+    _Out_opt_ PUSBD_VERSION_INFORMATION VersionInformation,
+    _Out_opt_ PULONG HcdCapabilities)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(BusContext);
+
+    Root->GetUSBDIVersion(Root->BusContext, VersionInformation, HcdCapabilities);
+}
+
+static
+NTSTATUS
+USB_BUSIFFN
+USBH_PdoUsbdiQueryBusTime(
+    _In_ PVOID BusContext,
+    _Out_opt_ PULONG CurrentFrame)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(BusContext);
+
+    return Root->QueryBusTime(Root->BusContext, CurrentFrame);
+}
+
+static
+NTSTATUS
+USB_BUSIFFN
+USBH_PdoUsbdiSubmitIsoOutUrb(
+    _In_ PVOID BusContext,
+    _In_ PURB Urb)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(BusContext);
+
+    return Root->SubmitIsoOutUrb(Root->BusContext, Urb);
+}
+
+static
+NTSTATUS
+USB_BUSIFFN
+USBH_PdoUsbdiQueryBusInformation(
+    _In_ PVOID BusContext,
+    _In_ ULONG Level,
+    _Inout_ PVOID BusInformationBuffer,
+    _Out_ PULONG BusInformationBufferLength,
+    _Out_opt_ PULONG BusInformationActualLength)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(BusContext);
+
+    return Root->QueryBusInformation(Root->BusContext, Level, BusInformationBuffer, BusInformationBufferLength,
+                                     BusInformationActualLength);
+}
+
+static
+BOOLEAN
+USB_BUSIFFN
+USBH_PdoUsbdiIsDeviceHighSpeed(
+    _In_opt_ PVOID BusContext)
+{
+    PUSBHUB_PORT_PDO_EXTENSION PortExtension = BusContext;
+
+    ASSERT(PortExtension != NULL);
+    return (PortExtension->PortPdoFlags & (USBHUB_PDO_FLAG_PORT_HIGH_SPEED | USBHUB_PDO_FLAG_PORT_SUPER_SPEED)) != 0;
+}
+
+static
+NTSTATUS
+USB_BUSIFFN
+USBH_PdoUsbdiEnumLogEntry(
+    _In_ PVOID BusContext,
+    _In_ ULONG DriverTag,
+    _In_ ULONG EnumTag,
+    _In_ ULONG P1,
+    _In_ ULONG P2)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(BusContext);
+
+    return Root->EnumLogEntry(Root->BusContext, DriverTag, EnumTag, P1, P2);
+}
+
+static
+NTSTATUS
+USBH_PdoQueryUsbdiInterface(
+    _In_ PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+    _In_ PIO_STACK_LOCATION IoStack,
+    _In_ NTSTATUS CurrentStatus)
+{
+    PUSB_BUS_INTERFACE_USBDI_V2 Interface = (PUSB_BUS_INTERFACE_USBDI_V2)IoStack->Parameters.QueryInterface.Interface;
+    PUSB_BUS_INTERFACE_USBDI_V2 Root = USBH_PdoRootUsbdi(PortExtension);
+    USHORT Version = IoStack->Parameters.QueryInterface.Version;
+    USHORT Size;
+
+    if (Version > USB_BUSIF_USBDI_VERSION_2 || !Root->GetUSBDIVersion)
+        return CurrentStatus;
+
+    Size = Version == USB_BUSIF_USBDI_VERSION_0 ? sizeof(USB_BUS_INTERFACE_USBDI_V0) :
+           Version == USB_BUSIF_USBDI_VERSION_1 ? sizeof(USB_BUS_INTERFACE_USBDI_V1) :
+                                                  sizeof(USB_BUS_INTERFACE_USBDI_V2);
+    if (!Interface || IoStack->Parameters.QueryInterface.Size < Size)
+        return STATUS_INVALID_PARAMETER;
+
+    Interface->Size = Size;
+    Interface->Version = Version;
+    Interface->BusContext = PortExtension;
+    Interface->InterfaceReference = USBH_PdoUsbdiReference;
+    Interface->InterfaceDereference = USBH_PdoUsbdiDereference;
+    Interface->GetUSBDIVersion = USBH_PdoUsbdiGetVersion;
+    Interface->QueryBusTime = USBH_PdoUsbdiQueryBusTime;
+    Interface->SubmitIsoOutUrb = USBH_PdoUsbdiSubmitIsoOutUrb;
+    Interface->QueryBusInformation = USBH_PdoUsbdiQueryBusInformation;
+    if (Version >= USB_BUSIF_USBDI_VERSION_1)
+        Interface->IsDeviceHighSpeed = USBH_PdoUsbdiIsDeviceHighSpeed;
+    if (Version >= USB_BUSIF_USBDI_VERSION_2)
+        Interface->EnumLogEntry = USBH_PdoUsbdiEnumLogEntry;
+    USBH_PdoUsbdiReference(PortExtension);
+    return STATUS_SUCCESS;
+}
+
 VOID
 NTAPI
 USBH_QueryCapabilities(IN PDEVICE_OBJECT DeviceObject,
@@ -2271,6 +2424,17 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                                      0,
                                      L"USB\\UNKNOWN");
             }
+            /* TODO: SuperSpeed hub compatible and instance IDs */
+            else if ((PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_HUB_DEVICE) &&
+                     !(PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED))
+            {
+                RtlStringCbPrintfExW(Buffer,
+                                     Remaining,
+                                     NULL,
+                                     &Remaining,
+                                     0,
+                                     L"USB\\USB20_HUB");
+            }
             else if (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_MULTI_INTERFACE)
             {
                 RtlStringCbPrintfExW(Buffer,
@@ -2486,7 +2650,23 @@ USBH_PdoQueryId(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         case BusQueryInstanceID:
             DPRINT("USBH_PdoQueryId: BusQueryInstanceID\n");
 
-            if (PortExtension->SerialNumber)
+            if (PortExtension->SerialNumber &&
+                (PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_HUB_DEVICE) &&
+                !(PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED))
+            {
+                Length = sizeof(L"MSFT20") - sizeof(UNICODE_NULL) + PortExtension->SN_DescriptorLength;
+                Id = ExAllocatePoolWithTag(PagedPool, Length, USB_HUB_TAG);
+
+                if (Id)
+                {
+                    RtlZeroMemory(Id, Length);
+                    RtlCopyMemory(Id, L"MSFT20", sizeof(L"MSFT20") - sizeof(UNICODE_NULL));
+                    RtlCopyMemory((PUCHAR)Id + sizeof(L"MSFT20") - sizeof(UNICODE_NULL),
+                                  PortExtension->SerialNumber,
+                                  PortExtension->SN_DescriptorLength);
+                }
+            }
+            else if (PortExtension->SerialNumber)
             {
                 Id = ExAllocatePoolWithTag(PagedPool,
                                            PortExtension->SN_DescriptorLength,
@@ -2563,6 +2743,35 @@ USBH_PdoQueryDeviceText(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
         DeviceTextType != DeviceTextLocationInformation)
     {
         return Irp->IoStatus.Status;
+    }
+
+    if (DeviceTextType == DeviceTextLocationInformation)
+    {
+        ASSERT(PortExtension->HubExtension);
+        ASSERT(PortExtension->HubExtension->HubNumber != 0);
+
+        Length = 32 * sizeof(WCHAR);
+        DeviceText = ExAllocatePoolWithTag(PagedPool, Length, USB_HUB_TAG);
+
+        if (!DeviceText)
+        {
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        Status = RtlStringCbPrintfW(DeviceText,
+                                    Length,
+                                    L"Port_#%04u.Hub_#%04lu",
+                                    PortExtension->PortNumber,
+                                    PortExtension->HubExtension->HubNumber);
+
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(DeviceText, USB_HUB_TAG);
+            return Status;
+        }
+
+        Irp->IoStatus.Information = (ULONG_PTR)DeviceText;
+        return STATUS_SUCCESS;
     }
 
     LanguageId = LANGIDFROMLCID(IoStack->Parameters.QueryDeviceText.LocaleId);
@@ -2852,6 +3061,8 @@ USBH_PdoStartDevice(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
     {
         Guid = &GUID_DEVINTERFACE_USB_DEVICE;
     }
+
+    USBH_ApplyMsOs20Properties(PortExtension);
 
     Status = USBH_SymbolicLink(PortExtension, Guid, TRUE);
 
@@ -3493,13 +3704,14 @@ USBH_PdoPnP(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                 break;
             }
 
-            *IsCompleteIrp = 0;
-
             if (IsEqualGUIDAligned(IoStack->Parameters.QueryInterface.InterfaceType,
                                    &USB_BUS_INTERFACE_USBDI_GUID))
             {
-                IoStack->Parameters.QueryInterface.InterfaceSpecificData = PortExtension->DeviceHandle;
+                Status = USBH_PdoQueryUsbdiInterface(PortExtension, IoStack, Irp->IoStatus.Status);
+                break;
             }
+
+            *IsCompleteIrp = 0;
 
             HubExtension = PortExtension->HubExtension;
 

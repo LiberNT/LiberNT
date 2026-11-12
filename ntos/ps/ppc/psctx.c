@@ -129,6 +129,13 @@ PspArchSetInstrumentationCallback(
     return STATUS_INVALID_INFO_CLASS;
 }
 
+BOOLEAN
+NTAPI
+PspArchManagesExecutableWrites(VOID)
+{
+    return FALSE;
+}
+
 VOID
 NTAPI
 PspArchInitializeUserThreadStartup(
@@ -141,4 +148,32 @@ PspArchInitializeUserThreadStartup(
                         NULL,
                         PspSystemDllBase,
                         NULL);
+}
+
+NTSTATUS
+NTAPI
+PspArchCopyLiveWow64Context(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SetContext);
+
+    return STATUS_NOT_FOUND;
+}
+
+NTSTATUS
+NTAPI
+PspArchCopyWow64DebugRegisters(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SetContext);
+
+    return STATUS_SUCCESS;
 }

@@ -333,10 +333,24 @@ i8042StartPacket(
 	IN ULONG ByteCount,
 	IN PIRP Irp)
 {
+	PKINTERRUPT Interrupt = DeviceExtension->HighestDIRQLInterrupt;
+	ULONG Initialized = (FdoDeviceExtension->Type == Mouse) ? MOUSE_INITIALIZED : KEYBOARD_INITIALIZED;
+	LARGE_INTEGER Timeout;
 	KIRQL Irql;
 	NTSTATUS Status;
 
-	Irql = KeAcquireInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt);
+	Status = I8042CorePacketStatus((ReadULongAcquire(&DeviceExtension->Flags) & Initialized) != 0, Interrupt);
+	if (!NT_SUCCESS(Status))
+	{
+		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
+		return Status;
+	}
+
+	/* Armed before the packet can complete, so a finished packet always cancels its own timer */
+	Timeout.QuadPart = -(LONGLONG)I8042_PACKET_TIMEOUT_MS * 10000;
+	KeSetTimer(&DeviceExtension->PacketTimer, Timeout, &DeviceExtension->PacketTimeoutDpc);
+
+	Irql = KeAcquireInterruptSpinLock(Interrupt);
 
 	if (DeviceExtension->Packet.State != Idle)
 	{
@@ -379,10 +393,14 @@ done:
 		DeviceExtension->CurrentIrp = NULL;
 		DeviceExtension->CurrentIrpDevice = NULL;
 	}
-	KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+	KeReleaseInterruptSpinLock(Interrupt, Irql);
 
 	if (Status != STATUS_PENDING)
+	{
+		if (Status != STATUS_DEVICE_BUSY)
+			KeCancelTimer(&DeviceExtension->PacketTimer);
 		i8042FailPacket(FdoDeviceExtension->Fdo, Irp, Status);
+	}
 	return Status;
 }
 
@@ -499,6 +517,8 @@ DriverEntry(
 	RtlZeroMemory(DriverExtension, sizeof(I8042_DRIVER_EXTENSION));
 	KeInitializeSpinLock(&DriverExtension->Port.SpinLock);
 	KeInitializeMutex(&DriverExtension->Port.PnpMutex, 0);
+	KeInitializeTimer(&DriverExtension->Port.PacketTimer);
+	KeInitializeDpc(&DriverExtension->Port.PacketTimeoutDpc, i8042PacketTimeoutDpc, &DriverExtension->Port);
 	InitializeListHead(&DriverExtension->DeviceListHead);
 	KeInitializeSpinLock(&DriverExtension->DeviceListLock);
 

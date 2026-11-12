@@ -66,6 +66,8 @@ static void put_logical_proc_info_ex( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32 
     {
     case RelationProcessorCore:
     case RelationProcessorPackage:
+    case RelationProcessorDie:
+    case RelationProcessorModule:
         info32->Processor.Flags           = info->Processor.Flags;
         info32->Processor.EfficiencyClass = info->Processor.EfficiencyClass;
         info32->Processor.GroupCount      = info->Processor.GroupCount;
@@ -75,8 +77,10 @@ static void put_logical_proc_info_ex( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32 
         break;
     case RelationNumaNode:
         info32->NumaNode.NodeNumber = info->NumaNode.NodeNumber;
-        put_group_affinity( &info32->NumaNode.GroupMask, &info->NumaNode.GroupMask );
-        info32->Size += sizeof(info32->NumaNode);
+        info32->NumaNode.GroupCount = info->NumaNode.GroupCount;
+        for (i = 0; i < max( info->NumaNode.GroupCount, 1U ); i++)
+            put_group_affinity( &info32->NumaNode.GroupMasks[i], &info->NumaNode.GroupMasks[i] );
+        info32->Size += offsetof( NUMA_NODE_RELATIONSHIP32, GroupMasks ) + i * sizeof(GROUP_AFFINITY32);
         break;
     case RelationCache:
         info32->Cache.Level         = info->Cache.Level;
@@ -84,8 +88,10 @@ static void put_logical_proc_info_ex( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32 
         info32->Cache.LineSize      = info->Cache.LineSize;
         info32->Cache.CacheSize     = info->Cache.CacheSize;
         info32->Cache.Type          = info->Cache.Type;
-        put_group_affinity( &info32->Cache.GroupMask, &info->Cache.GroupMask );
-        info32->Size += sizeof(info32->Cache);
+        info32->Cache.GroupCount    = info->Cache.GroupCount;
+        for (i = 0; i < max( info->Cache.GroupCount, 1U ); i++)
+            put_group_affinity( &info32->Cache.GroupMasks[i], &info->Cache.GroupMasks[i] );
+        info32->Size += offsetof( CACHE_RELATIONSHIP32, GroupMasks ) + i * sizeof(GROUP_AFFINITY32);
         break;
     case RelationGroup:
         info32->Group.MaximumGroupCount = info->Group.MaximumGroupCount;
@@ -784,13 +790,17 @@ NTSTATUS WINAPI wow64_NtQuerySystemInformationEx( UINT *args )
                 {
                 case RelationProcessorCore:
                 case RelationProcessorPackage:
+                case RelationProcessorDie:
+                case RelationProcessorModule:
                     size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, Processor.GroupMask[ex->Processor.GroupCount] );
                     break;
                 case RelationNumaNode:
-                    size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, NumaNode ) + sizeof( ex32->NumaNode );
+                    size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, NumaNode.GroupMasks ) +
+                             max( ex->NumaNode.GroupCount, 1U ) * sizeof(GROUP_AFFINITY32);
                     break;
                 case RelationCache:
-                    size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, Cache ) + sizeof( ex32->Cache );
+                    size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, Cache.GroupMasks ) +
+                             max( ex->Cache.GroupCount, 1U ) * sizeof(GROUP_AFFINITY32);
                     break;
                 case RelationGroup:
                     size32 = offsetof( SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX32, Group.GroupInfo[ex->Group.MaximumGroupCount] );
@@ -799,7 +809,11 @@ NTSTATUS WINAPI wow64_NtQuerySystemInformationEx( UINT *args )
                     size32 = 0;
                     continue;
                 }
-                if (pos32 + size32 <= len) put_logical_proc_info_ex( ex32, ex );
+                if (pos32 + size32 <= len)
+                {
+                    memset( ex32, 0, size32 );
+                    put_logical_proc_info_ex( ex32, ex );
+                }
             }
             if (pos32 > len) status = STATUS_INFO_LENGTH_MISMATCH;
             size = pos32;

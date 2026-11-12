@@ -141,6 +141,10 @@ FltpAttachFilterDevice(
     {
         FilterDevice->Flags |= DO_DIRECT_IO;
     }
+    if (Target->Flags & DO_SUPPORTS_TRANSACTIONS)
+    {
+        FilterDevice->Flags |= DO_SUPPORTS_TRANSACTIONS;
+    }
     if (Target->Characteristics & FILE_DEVICE_SECURE_OPEN)
     {
         FilterDevice->Characteristics |= FILE_DEVICE_SECURE_OPEN;

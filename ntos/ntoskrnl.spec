@@ -349,11 +349,16 @@
 @ stdcall InbvSetTextColor(long)
 @ stdcall InbvSolidColorFill(long long long long long)
 @ extern -constant InitSafeBootMode
-@ fastcall -arch=i386,arm,arm64 InterlockedCompareExchange(ptr long long)
-@ fastcall -arch=i386,arm,arm64 InterlockedDecrement(ptr)
-@ fastcall -arch=i386,arm,arm64 InterlockedExchange(ptr long)
-@ fastcall -arch=i386,arm,arm64 InterlockedExchangeAdd(ptr long)
-@ fastcall -arch=i386,arm,arm64 InterlockedIncrement(ptr)
+@ fastcall -arch=i386 InterlockedCompareExchange(ptr long long) @InterlockedCompareExchange@12
+@ fastcall -arch=arm,arm64 InterlockedCompareExchange(ptr long long)
+@ fastcall -arch=i386 InterlockedDecrement(ptr) @InterlockedDecrement@4
+@ fastcall -arch=arm,arm64 InterlockedDecrement(ptr)
+@ fastcall -arch=i386 InterlockedExchange(ptr long) @InterlockedExchange@8
+@ fastcall -arch=arm,arm64 InterlockedExchange(ptr long)
+@ fastcall -arch=i386 InterlockedExchangeAdd(ptr long) @InterlockedExchangeAdd@8
+@ fastcall -arch=arm,arm64 InterlockedExchangeAdd(ptr long)
+@ fastcall -arch=i386 InterlockedIncrement(ptr) @InterlockedIncrement@4
+@ fastcall -arch=arm,arm64 InterlockedIncrement(ptr)
 @ fastcall -arch=i386 InterlockedPopEntrySList(ptr)
 @ fastcall -arch=i386 InterlockedPushEntrySList(ptr ptr)
 @ stdcall -arch=arm InterlockedPopEntrySList(ptr) RtlInterlockedPopEntrySList
@@ -363,7 +368,7 @@
 @ stdcall IoAcquireRemoveLockEx(ptr ptr str long long)
 @ stdcall IoAcquireVpbSpinLock(ptr)
 @ extern IoAdapterObjectType
-@ stdcall IoAllocateAdapterChannel(ptr ptr long ptr ptr)
+@ stdcall IoAllocateAdapterChannel(ptr ptr long ptr ptr) IopAllocateAdapterChannel
 @ stdcall IoAllocateController(ptr ptr ptr ptr)
 @ stdcall IoAllocateDriverObjectExtension(ptr ptr long ptr)
 @ stdcall IoAllocateErrorLogEntry(ptr long)
@@ -1952,7 +1957,7 @@
 @ stdcall -arch=win64 RtlOpenCurrentUser()
 @ stdcall -arch=win64 RtlQueryInformationAcl()
 @ stdcall -arch=win64 RtlRaiseStatus()
-@ stdcall -arch=win64 RtlSetControlSecurityDescriptor()
+@ stdcall RtlSetControlSecurityDescriptor(ptr long long)
 @ stdcall -arch=win64 RtlSystemTimeToLocalTime()
 @ stdcall RtlUTF8ToUnicodeN(ptr long ptr str long)
 @ stdcall -arch=win64 RtlValidAcl()
@@ -2151,9 +2156,9 @@
 @ stdcall -arch=win64 EtwSetInformation(int64 long ptr long)
 @ stdcall EtwTelemetryCoverageReport(ptr)
 @ stub -arch=win64 EtwWriteEndScenario
-@ stub -arch=win64 EtwWriteEx
+@ stdcall EtwWriteEx(int64 ptr int64 long ptr ptr long ptr)
 @ stub -arch=win64 EtwWriteStartScenario
-@ stub -arch=win64 EtwWriteString
+@ stdcall EtwWriteString(int64 long int64 ptr ptr)
 @ stdcall -arch=win64 EtwWriteTransfer(int64 ptr ptr ptr long ptr)
 @ stdcall EtwpDisableStackWalkApc()
 @ stdcall EtwpReenableStackWalkApc(long)
@@ -2282,7 +2287,7 @@
 @ stub -arch=win64 ExUnregisterExtension
 @ stdcall -arch=win64 ExUnsubscribeWnfStateChange(ptr)
 @ stub -arch=win64 ExUpdateLicenseData
-@ stub -arch=win64 ExfTryAcquirePushLockShared
+@ fastcall -arch=win64 ExfTryAcquirePushLockShared(ptr)
 @ cdecl FirstEntrySList(ptr)
 @ stdcall FsRtlAcknowledgeEcp(ptr)
 @ stub -arch=win64 FsRtlAcquireEofLock
@@ -2557,7 +2562,7 @@
 @ stdcall IoUnregisterBootDriverCallback(ptr)
 @ stub -arch=win64 IoUnregisterContainerNotification
 @ stub -arch=win64 IoUnregisterIoTracking
-@ stdcall -arch=win64 IoUnregisterPlugPlayNotificationEx(ptr)
+@ stdcall IoUnregisterPlugPlayNotificationEx(ptr)
 @ stub -arch=win64 IoUnregisterPriorityCallback
 @ stub -arch=win64 IoUpdateLinkShareAccess
 @ stub -arch=win64 IoUpdateLinkShareAccessEx
@@ -2822,12 +2827,12 @@
 @ stdcall -arch=win64 PcwRegister(ptr ptr)
 @ stdcall -arch=win64 PcwUnregister(ptr)
 @ stub -arch=win64 PfFileInfoNotify
-@ stub -arch=win64 PoClearPowerRequest
+@ stdcall PoClearPowerRequest(ptr long)
 @ stub -arch=win64 PoCpuIdledSinceLastCallImprecise
 @ stdcall PoCreatePowerLimitRequest(ptr ptr ptr ptr)
-@ stub -arch=win64 PoCreatePowerRequest
+@ stdcall PoCreatePowerRequest(ptr ptr ptr)
 @ stdcall PoDeletePowerLimitRequest(ptr)
-@ stub -arch=win64 PoDeletePowerRequest
+@ stdcall PoDeletePowerRequest(ptr)
 @ stub -arch=arm64 PoDirectedDripsClearDeviceFlags
 @ stub -arch=arm64 PoDirectedDripsSetDeviceFlags
 @ stdcall PoDisableSleepStates(long long ptr)
@@ -2865,7 +2870,7 @@
 @ stub -arch=win64 PoSetFixedWakeSource
 @ stub -arch=win64 PoSetPowerButtonHoldState
 @ stdcall PoSetPowerLimitValue(ptr ptr long ptr)
-@ stub -arch=win64 PoSetPowerRequest
+@ stdcall PoSetPowerRequest(ptr long)
 @ stub -arch=win64 PoSetSystemWakeDevice
 @ stdcall PoSetUserPresent(long)
 @ stub -arch=win64 PoStartDeviceBusy
@@ -3016,7 +3021,7 @@
 @ stub -arch=win64 RtlClearBitsEx
 @ stdcall RtlCmDecodeMemIoResource(ptr ptr)
 @ stdcall RtlCmEncodeMemIoResource(ptr long int64 int64)
-@ stub -arch=win64 RtlCompareAltitudes
+@ stdcall RtlCompareAltitudes(ptr ptr)
 @ stub -arch=win64 RtlCompareExchangePointerMapping
 @ stub -arch=win64 RtlCompareExchangePropertyStore
 @ stdcall RtlCompareUnicodeStrings(wstr long wstr long long)
@@ -3242,7 +3247,7 @@
 @ stub -arch=win64 SeGetCachedSigningLevel
 @ stub -arch=win64 SeGetLinkedToken
 @ stub -arch=win64 SeGetLogonSessionToken
-@ stdcall SeIsParentOfChildAppContainer(long long long)
+@ stdcall SeIsParentOfChildAppContainer(ptr ptr)
 @ stub -arch=win64 SeMarkLogonSessionForTerminationNotificationEx
 @ stub -arch=win64 SeOpenObjectAuditAlarmForNonObObject
 @ stub -arch=win64 SeOpenObjectAuditAlarmWithTransaction
@@ -3256,7 +3261,7 @@
 @ stub -arch=win64 SeRegisterImageVerificationCallback
 @ stub -arch=win64 SeRegisterLogonSessionTerminatedRoutineEx
 @ stub -arch=win64 SeReportSecurityEventWithSubCategory
-@ stdcall SeSecurityAttributePresent(ptr ptr)
+@ stdcall SeSecurityAttributePresent(ptr ptr long)
 @ stub -arch=win64 SeSetSecurityAttributesToken
 @ stub -arch=win64 SeSetSecurityAttributesTokenEx
 @ stub -arch=win64 SeSetSessionIdTokenWithLinked

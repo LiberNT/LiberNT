@@ -46,7 +46,7 @@ ServerThread(
 
     ok(Message.Header.u1.s1.TotalLength == RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message),
        "TotalLength = %u, expected %Iu\n",
-       Message.Header.u1.s1.TotalLength, RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
+       Message.Header.u1.s1.TotalLength, (size_t)RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
     ok(Message.Header.u1.s1.DataLength == sizeof(TEST_CONNECTION_INFO),
        "DataLength = %u\n", Message.Header.u1.s1.DataLength);
     ok(Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST,
@@ -77,7 +77,7 @@ ServerThread(
 
     ok(Message.Header.u1.s1.TotalLength == RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message),
        "TotalLength = %u, expected %Iu\n",
-       Message.Header.u1.s1.TotalLength, RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
+       Message.Header.u1.s1.TotalLength, (size_t)RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
     ok(Message.Header.u1.s1.DataLength == sizeof(TEST_CONNECTION_INFO),
        "DataLength = %u\n", Message.Header.u1.s1.DataLength);
     ok(Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST,
@@ -201,6 +201,81 @@ ClientThread(
     return 0;
 }
 
+static UNICODE_STRING ExitPortName = RTL_CONSTANT_STRING(L"\\NtdllApitestNtAcceptConnectPortExitPort");
+
+static
+UINT
+CALLBACK
+ExitClientThread(
+    _Inout_ PVOID Parameter)
+{
+    NTSTATUS *ConnectStatus = Parameter;
+    HANDLE PortHandle = NULL;
+    TEST_CONNECTION_INFO ConnectInfo;
+    ULONG ConnectInfoLength = sizeof(ConnectInfo);
+    SECURITY_QUALITY_OF_SERVICE SecurityQos;
+
+    SecurityQos.Length = sizeof(SecurityQos);
+    SecurityQos.ImpersonationLevel = SecurityIdentification;
+    SecurityQos.EffectiveOnly = TRUE;
+    SecurityQos.ContextTrackingMode = SECURITY_STATIC_TRACKING;
+    ConnectInfo.Signature = TEST_CONNECTION_INFO_SIGNATURE1;
+    *ConnectStatus = NtConnectPort(&PortHandle, &ExitPortName, &SecurityQos, NULL, NULL, NULL, &ConnectInfo, &ConnectInfoLength);
+    if (NT_SUCCESS(*ConnectStatus)) NtClose(PortHandle);
+    return 0;
+}
+
+static
+VOID
+TestClientExitBeforeComplete(VOID)
+{
+    NTSTATUS Status, ConnectStatus = STATUS_PENDING;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE ConnectionPort, ServerPort = NULL, ClientThread;
+    TEST_MESSAGE Message;
+    LARGE_INTEGER Timeout;
+    UINT ThreadId = 0;
+
+    InitializeObjectAttributes(&ObjectAttributes, &ExitPortName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtCreatePort(&ConnectionPort, &ObjectAttributes, sizeof(TEST_CONNECTION_INFO), sizeof(TEST_MESSAGE), 2 * sizeof(TEST_MESSAGE));
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    ClientThread = (HANDLE)_beginthreadex(NULL, 0, ExitClientThread, &ConnectStatus, 0, &ThreadId);
+    ok(ClientThread != NULL, "_beginthreadex failed\n");
+    if (ClientThread == NULL)
+    {
+        NtClose(ConnectionPort);
+        return;
+    }
+
+    RtlZeroMemory(&Message, sizeof(Message));
+    Timeout.QuadPart = -5000LL * 10000;
+    Status = NtReplyWaitReceivePortEx(ConnectionPort, NULL, NULL, &Message.Header, &Timeout);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (Status == STATUS_SUCCESS)
+    {
+        ok(Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST, "Type = %x\n", Message.Header.u2.s2.Type);
+        ok(Message.Header.ClientId.UniqueThread == UlongToHandle(ThreadId),
+           "UniqueThread = %p, expected %x\n", Message.Header.ClientId.UniqueThread, ThreadId);
+        Status = NtAcceptConnectPort(&ServerPort, NULL, &Message.Header, TRUE, NULL, NULL);
+        ok_hex(Status, STATUS_SUCCESS);
+    }
+
+    ok(TerminateThread(ClientThread, 0x55), "TerminateThread failed with %lu\n", GetLastError());
+    ok_eq_ulong(WaitForSingleObject(ClientThread, 5000), WAIT_OBJECT_0);
+    CloseHandle(ClientThread);
+
+    if (ServerPort != NULL)
+    {
+        Status = NtCompleteConnectPort(ServerPort);
+        /* TODO: pin NtCompleteConnectPort's status for a client that exited once Windows 11 is measured */
+        trace("NtCompleteConnectPort for a client that exited: 0x%lx\n", Status);
+        ok_hex(NtClose(ServerPort), STATUS_SUCCESS);
+    }
+    ok_hex(NtClose(ConnectionPort), STATUS_SUCCESS);
+}
+
 START_TEST(NtAcceptConnectPort)
 {
     NTSTATUS Status;
@@ -263,4 +338,6 @@ START_TEST(NtAcceptConnectPort)
 
     Status = NtClose(PortHandle);
     ok_hex(Status, STATUS_SUCCESS);
+
+    TestClientExitBeforeComplete();
 }

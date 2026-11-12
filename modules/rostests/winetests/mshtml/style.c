@@ -328,7 +328,6 @@ static void test_set_csstext(IHTMLStyle *style)
     hres = IHTMLStyle_get_background(style, &str);
     ok(hres == S_OK, "get_background failed: %08lx\n", hres);
     if(compat_mode < COMPAT_IE9)
-        todo_wine
         ok(wcsstr(str, L"url(http://test.winehq.org/i m\ta\\g\\\\e\n%28%28\\%28.png)") != NULL, "background = %s\n", wine_dbgstr_w(str));
     else
         ok(!str, "background = %s\n", wine_dbgstr_w(str));
@@ -352,7 +351,6 @@ static void test_set_csstext(IHTMLStyle *style)
 
     hres = IHTMLCSSStyleDeclaration_get_cssText(css_style, &str);
     ok(hres == S_OK, "get_cssText failed: %08lx\n", hres);
-    todo_wine_if(compat_mode < COMPAT_IE9)
     ok(!lstrcmpW(str, compat_mode >= COMPAT_IE9 ? L"float: left;" : L"FLOAT: left"),
        "cssFloat = %s\n", wine_dbgstr_w(str));
     SysFreeString(str);
@@ -2927,7 +2925,6 @@ static void test_body_style(IHTMLStyle *style)
     hres = IHTMLStyle_get_background(style, &str);
     ok(hres == S_OK, "get_background failed: %08lx\n", hres);
     if(compat_mode < COMPAT_IE9)
-        todo_wine
         ok(wcsstr(str, L"url(http://test.winehq.org/tests/winehq_snapshot/)") != NULL, "background = %s\n", wine_dbgstr_w(str));
     else
         ok(wcsstr(str, L"url(\"http://test.winehq.org/tests/winehq_snapshot/\")") != NULL, "background = %s\n", wine_dbgstr_w(str));
@@ -2941,7 +2938,6 @@ static void test_body_style(IHTMLStyle *style)
     hres = IHTMLStyle_get_background(style, &str);
     ok(hres == S_OK, "get_background failed: %08lx\n", hres);
     if(compat_mode < COMPAT_IE9)
-        todo_wine
         ok(wcsstr(str, L"url(http://test.winehq.org/i m\ta\\g\\\\e\n%28%28\\%28.png)") != NULL, "background = %s\n", wine_dbgstr_w(str));
     else
         ok(wcsstr(str, L"url(\"http://test.winehq.org/tests/winehq_snapshot/\")") != NULL, "background = %s\n", wine_dbgstr_w(str));

@@ -254,9 +254,9 @@ BEGIN
     LTEXT "%s", IDC_SPACEAVAIL, 88, 92, 104, 9
     LTEXT "&Начален размер (МБ):", -1, 22, 118, 77, 9
     LTEXT "Размер до (МБ):", -1, 22, 131, 64, 9
-    AUTORADIOBUTTON "За&даден размер", IDC_CUSTOM, 20, 105, 80, 9, WS_GROUP
-    AUTORADIOBUTTON "Определен от &системата размер", IDC_SYSMANSIZE, 20, 145, 135, 9
-    AUTORADIOBUTTON "Без обменен файл", IDC_NOPAGEFILE, 20, 158, 135, 9
+    AUTORADIOBUTTON "За&даден размер", IDC_CUSTOM, 20, 104, 80, 12, WS_GROUP
+    AUTORADIOBUTTON "Определен от &системата размер", IDC_SYSMANSIZE, 20, 144, 135, 12
+    AUTORADIOBUTTON "Без обменен файл", IDC_NOPAGEFILE, 20, 157, 135, 12
     EDITTEXT IDC_INITIALSIZE, 100, 114, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     EDITTEXT IDC_MAXSIZE, 100, 129, 44, 13, NOT WS_BORDER, WS_EX_CLIENTEDGE
     PUSHBUTTON "Задаване", IDC_SET, 158, 154, 50, 15

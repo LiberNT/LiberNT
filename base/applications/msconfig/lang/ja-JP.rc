@@ -66,7 +66,7 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD | WS_CLIPCHILDREN
 FONT 9, "MS UI Gothic"
 BEGIN
     GROUPBOX "起動の種類の選択", -1, 10, 10, 340, 150, 0, WS_EX_TRANSPARENT
-    CONTROL "通常起動(&N) - すべてのデバイスドライバとサービスを読み込む", IDC_CBX_NORMAL_START, "Button", 0x50010009, 20, 30, 260, 10
+    CONTROL "通常起動(&N) - すべてのデバイスドライバーとサービスを読み込む", IDC_CBX_NORMAL_START, "Button", 0x50010009, 20, 30, 260, 10
     CONTROL "診断的起動(&D) - 基本的なデバイスとサービスのみを読み込む", IDC_CBX_DIAGNOSTIC_START, "Button", 0x50010009, 20, 45, 260, 10
     CONTROL "選択的起動(&E)", IDC_CBX_SELECTIVE_STARTUP, "Button", 0x50010009, 20, 60, 260, 10
     AUTOCHECKBOX "ファイル SYSTEM.INI を処理(&R)", IDC_CBX_SYSTEM_INI, 30, 80, 260, 10
@@ -150,8 +150,8 @@ BEGIN
     IDS_TOOLS_INFO_NAME "バージョン"
     IDS_TOOLS_INFO_DESCR "バージョン情報を表示します。"
     IDS_TOOLS_INFO_CMD "winver.exe"
-    IDS_TOOLS_REGEDIT_NAME "レジストリ エディタ"
-    IDS_TOOLS_REGEDIT_DESCR "レジストリ エディタを開きます。"
+    IDS_TOOLS_REGEDIT_NAME "レジストリ エディター"
+    IDS_TOOLS_REGEDIT_DESCR "レジストリ エディターを開きます。"
     IDS_TOOLS_REGEDIT_CMD "regedit.exe"
     IDS_TOOLS_SYSDM_NAME "システムプロパティ"
     IDS_TOOLS_SYSDM_DESCR "このコンピューターに関する情報を表示します。"

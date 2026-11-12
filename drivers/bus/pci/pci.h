@@ -145,6 +145,7 @@ typedef struct _PDO_DEVICE_EXTENSION
     BOOLEAN PlatformPoweredDown;
     D3COLD_LAST_TRANSITION_STATUS D3ColdLastTransition;
     PIO_WORKITEM D3ColdWorkItem;
+    BOOLEAN Started;
 } PDO_DEVICE_EXTENSION, *PPDO_DEVICE_EXTENSION;
 
 typedef struct _PCI_ROOT_BUS_INTERFACE
@@ -513,6 +514,10 @@ NTSTATUS
 PdoPowerControl(
     PDEVICE_OBJECT DeviceObject,
     PIRP Irp);
+
+UCHAR
+PciPdoExpressPortType(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension);
 
 VOID
 PciSetPowerLevel(

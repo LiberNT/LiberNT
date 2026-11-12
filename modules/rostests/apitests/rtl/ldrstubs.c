@@ -10,6 +10,7 @@ BOOLEAN LdrpShutdownInProgress;
 HANDLE LdrpShutdownThreadId;
 RTL_CRITICAL_SECTION LdrpLoaderLock;
 RTL_SRWLOCK LdrpModuleDatatableLock;
+UNICODE_STRING LdrpKnownDllPath;
 
 VOID
 NTAPI
@@ -42,4 +43,11 @@ NTAPI
 LdrpGetResourceModuleForEntry(PVOID BaseAddress, PVOID Entry)
 {
     return BaseAddress;
+}
+
+LANGID
+NTAPI
+RtlpGetThreadUILanguage(VOID)
+{
+    return 0;
 }

@@ -115,6 +115,11 @@ Author:
 #define PROCESSOR_ARCHITECTURE_ALPHA64  7
 #define PROCESSOR_ARCHITECTURE_MSIL     8
 #define PROCESSOR_ARCHITECTURE_AMD64    9
+#define PROCESSOR_ARCHITECTURE_IA32_ON_WIN64 10
+#define PROCESSOR_ARCHITECTURE_NEUTRAL  11
+#define PROCESSOR_ARCHITECTURE_ARM64    12
+#define PROCESSOR_ARCHITECTURE_ARM32_ON_WIN64 13
+#define PROCESSOR_ARCHITECTURE_IA32_ON_ARM64 14
 /* ReactOS-native RISC-V64 architecture ID; keep in sync with winnt_old.h. */
 #define PROCESSOR_ARCHITECTURE_RISCV64  15
 #define PROCESSOR_ARCHITECTURE_UNKNOWN  0xFFFF
@@ -1714,6 +1719,44 @@ typedef struct _UMS_CONTROL_BLOCK
 //
 // Kernel Stack Segment and Control (Win8+, layout stable through Win11 26100)
 //
+#if defined(_M_AMD64)
+// Win11 amd64 layout: ntkrnlmp.pdb 10.0.26100.8036 _KERNEL_STACK_SEGMENT (0x40) and
+// _KSTACK_CONTROL (0x50), matching the Kc* offsets of the SDK's ksamd64.inc.
+typedef struct _KERNEL_STACK_SEGMENT
+{
+    ULONG_PTR StackBase;                                 // 0x00
+    ULONG_PTR StackLimit;                                // 0x08
+    ULONG_PTR KernelStack;                               // 0x10
+    ULONG_PTR InitialStack;                              // 0x18
+    ULONG_PTR KernelShadowStackBase;                     // 0x20
+    ULONG_PTR KernelShadowStackLimit;                    // 0x28 _KERNEL_SHADOW_STACK_LIMIT
+    ULONG_PTR KernelShadowStack;                         // 0x30
+    ULONG_PTR KernelShadowStackInitial;                  // 0x38
+} KERNEL_STACK_SEGMENT, *PKERNEL_STACK_SEGMENT;
+
+typedef struct _KSTACK_CONTROL
+{
+    ULONG_PTR StackBase;                                 // 0x00
+    union                                                // 0x08
+    {
+        ULONG_PTR ActualLimit;
+        ULONG_PTR StackExpansion:1;
+    };
+    KERNEL_STACK_SEGMENT Previous;                       // 0x10
+} KSTACK_CONTROL, *PKSTACK_CONTROL;
+
+C_ASSERT(sizeof(KERNEL_STACK_SEGMENT) == 0x40);
+C_ASSERT(FIELD_OFFSET(KERNEL_STACK_SEGMENT, KernelShadowStackBase) == 0x20);
+C_ASSERT(FIELD_OFFSET(KERNEL_STACK_SEGMENT, KernelShadowStackInitial) == 0x38);
+C_ASSERT(sizeof(KSTACK_CONTROL) == 0x50);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, ActualLimit) == 0x08);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackBase) == 0x10);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackLimit) == 0x18);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelStack) == 0x20);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x28);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelShadowStackBase) == 0x30);
+C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelShadowStackInitial) == 0x48);
+#else
 typedef struct _KERNEL_STACK_SEGMENT
 {
     ULONG_PTR StackBase;
@@ -1767,6 +1810,7 @@ C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.StackLimit) == 0x28);
 C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.KernelStack) == 0x30);
 C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x38);
 #endif
+#endif /* _M_AMD64 */
 
 #define KSTACK_ACTUAL_LIMIT_EXPANDED 1
 #endif /* NTDDI_WIN8 */
@@ -3841,7 +3885,10 @@ typedef struct _KPROCESS
             LONG AutoAlignment:1;
             LONG DisableBoost:1;
             LONG DisableQuantum:1;
-            LONG ReservedFlags:29;
+            LONG DeepFreeze:1;
+            LONG TimerVirtualization:1;
+            LONG CheckStackExtents:1;
+            LONG ReservedFlags:26;
         };
         LONG ProcessFlags;
     };
@@ -3862,6 +3909,10 @@ typedef struct _KPROCESS
 #if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
     ULONGLONG CycleTime;
 #endif // ]
+    /* FIXME: the x86 offsets of these Windows 10 members are not known here; this layout is the Vista one */
+    ULONGLONG ContextSwitches;
+    ULONG FreezeCount;
+    ULONG ReadyTime;
 } KPROCESS;
 
 #endif

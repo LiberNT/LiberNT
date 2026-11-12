@@ -30,7 +30,7 @@ BEGIN
     CONTROL         "正確な遠近法補正を可能にする",
                     IDC_CHECK_PERSPECTIVE,"Button",BS_AUTOCHECKBOX |
                     WS_TABSTOP,24,208,160,10
-    CONTROL         "テクスチャ フィルタを有効にする",IDC_CHECK_FILTERING,
+    CONTROL         "テクスチャ フィルターを有効にする",IDC_CHECK_FILTERING,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,24,220,160,10
     CONTROL         "スムーズ シェーディングを有効に",IDC_CHECK_SHADING,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,24,232,160,10

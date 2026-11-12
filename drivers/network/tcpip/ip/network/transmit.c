@@ -36,6 +36,13 @@ VOID IPSendComplete
 	 ("Called. Context (0x%X)  NdisPacket (0x%X)  NdisStatus (0x%X)\n",
 	  Context, NdisPacket, NdisStatus));
 
+    if (IFC->Detached)
+    {
+        FreeNdisPacket(NdisPacket);
+        ExFreePoolWithTag(IFC, IFC_TAG);
+        return;
+    }
+
 	IFC->Status = NdisStatus;
 	KeSetEvent(&IFC->Event, 0, FALSE);
 }
@@ -58,7 +65,7 @@ NTSTATUS IPSendFragment(
     TI_DbgPrint(MAX_TRACE, ("Called. NdisPacket (0x%X)  NCE (0x%X).\n", NdisPacket, NCE));
 
     TI_DbgPrint(MAX_TRACE, ("NCE->State = %d.\n", NCE->State));
-    return NBQueuePacket(NCE, NdisPacket, IPSendComplete, IFC);
+    return NBQueuePacket(NCE, NdisPacket, IPSendComplete, IFC) ? NDIS_STATUS_SUCCESS : NDIS_STATUS_RESOURCES;
 }
 
 BOOLEAN PrepareNextFragment(
@@ -200,6 +207,7 @@ NTSTATUS SendFragments(
     IFC->Position     = 0;
     IFC->BytesLeft    = IPPacket->TotalSize - IPPacket->HeaderSize;
     IFC->Data         = (PVOID)((ULONG_PTR)IFC->Header + IPPacket->HeaderSize);
+    IFC->Detached     = FALSE;
     KeInitializeEvent(&IFC->Event, NotificationEvent, FALSE);
 
     TI_DbgPrint(MID_TRACE,("Copying header from %x to %x (%d)\n",
@@ -207,6 +215,23 @@ NTSTATUS SendFragments(
 			   IPPacket->HeaderSize));
 
     RtlCopyMemory( IFC->Header, IPPacket->Header, IPPacket->HeaderSize );
+
+    /* A datagram sent whole is owned by its fragment buffer: the sender does not wait for the neighbor to resolve */
+    if (PrepareNextFragment(IFC) && IFC->BytesLeft == 0)
+    {
+        IPPacket->Free(IPPacket);
+        IFC->Detached = TRUE;
+        NdisStatus = IPSendFragment(IFC->NdisPacket, NCE, IFC);
+        if (!NT_SUCCESS(NdisStatus))
+        {
+            FreeNdisPacket(IFC->NdisPacket);
+            ExFreePoolWithTag(IFC, IFC_TAG);
+        }
+        return NdisStatus;
+    }
+    IFC->Position = 0;
+    IFC->BytesLeft = IPPacket->TotalSize - IPPacket->HeaderSize;
+    IFC->DatagramData = ((PCHAR)IPPacket->Header) + IPPacket->HeaderSize;
 
     while (PrepareNextFragment(IFC))
     {

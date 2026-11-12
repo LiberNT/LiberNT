@@ -6,7 +6,7 @@
  */
 
 #include <ntifs.h>
-#include <reactos/riscv64/fdt.h>
+#include <libernt/fdt.h>
 #include "halp.h"
 
 static
@@ -69,7 +69,7 @@ HalpRiscvReadTimebaseFrequency(
     ULONG64 Value = 0;
 
     if ((Frequency == NULL) ||
-        !RiscvFdtValidateHeader(DeviceTree,
+        !FdtValidateHeader(DeviceTree,
                                 DeviceTreeSize,
                                 &TotalSize) ||
         (TotalSize != DeviceTreeSize))
@@ -78,13 +78,13 @@ HalpRiscvReadTimebaseFrequency(
     }
 
     StructureOffset =
-        RiscvFdtReadBigEndian32(Blob + RISCV_FDT_OFFSET_STRUCTURE);
+        FdtReadBigEndian32(Blob + FDT_OFFSET_STRUCTURE);
     StructureSize =
-        RiscvFdtReadBigEndian32(Blob + RISCV_FDT_OFFSET_STRUCTURE_SIZE);
+        FdtReadBigEndian32(Blob + FDT_OFFSET_STRUCTURE_SIZE);
     StringsOffset =
-        RiscvFdtReadBigEndian32(Blob + RISCV_FDT_OFFSET_STRINGS);
+        FdtReadBigEndian32(Blob + FDT_OFFSET_STRINGS);
     StringsSize =
-        RiscvFdtReadBigEndian32(Blob + RISCV_FDT_OFFSET_STRINGS_SIZE);
+        FdtReadBigEndian32(Blob + FDT_OFFSET_STRINGS_SIZE);
     Structure = Blob + StructureOffset;
     Strings = Blob + StringsOffset;
 
@@ -93,13 +93,13 @@ HalpRiscvReadTimebaseFrequency(
 
     while (Offset <= StructureSize - sizeof(ULONG))
     {
-        ULONG Token = RiscvFdtReadBigEndian32(Structure + Offset);
+        ULONG Token = FdtReadBigEndian32(Structure + Offset);
         SIZE_T EncodedLength;
 
         Offset += sizeof(ULONG);
         switch (Token)
         {
-            case RISCV_FDT_BEGIN_NODE:
+            case FDT_BEGIN_NODE:
                 if (!HalpRiscvFindStringEnd(
                         (const CHAR *)Structure + Offset,
                         StructureSize - Offset,
@@ -128,7 +128,7 @@ HalpRiscvReadTimebaseFrequency(
                     return FALSE;
                 break;
 
-            case RISCV_FDT_END_NODE:
+            case FDT_END_NODE:
                 if (Depth < 0)
                     return FALSE;
                 if (Depth == CpusDepth)
@@ -136,15 +136,15 @@ HalpRiscvReadTimebaseFrequency(
                 --Depth;
                 break;
 
-            case RISCV_FDT_PROPERTY:
+            case FDT_PROPERTY:
             {
                 ULONG Length, NameOffset;
                 const CHAR *Name;
 
                 if (Offset > StructureSize - 2 * sizeof(ULONG))
                     return FALSE;
-                Length = RiscvFdtReadBigEndian32(Structure + Offset);
-                NameOffset = RiscvFdtReadBigEndian32(
+                Length = FdtReadBigEndian32(Structure + Offset);
+                NameOffset = FdtReadBigEndian32(
                     Structure + Offset + sizeof(ULONG));
                 Offset += 2 * sizeof(ULONG);
                 if ((Length > StructureSize - Offset) ||
@@ -165,7 +165,7 @@ HalpRiscvReadTimebaseFrequency(
                 {
                     if (FoundFrequency || (Length != sizeof(ULONG)))
                         return FALSE;
-                    Value = RiscvFdtReadBigEndian32(Structure + Offset);
+                    Value = FdtReadBigEndian32(Structure + Offset);
                     if (Value == 0)
                         return FALSE;
                     FoundFrequency = TRUE;
@@ -177,10 +177,10 @@ HalpRiscvReadTimebaseFrequency(
                 break;
             }
 
-            case RISCV_FDT_NOP:
+            case FDT_NOP:
                 break;
 
-            case RISCV_FDT_END:
+            case FDT_END:
                 if (Depth != -1)
                     return FALSE;
                 FoundEnd = TRUE;

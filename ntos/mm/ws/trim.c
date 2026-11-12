@@ -28,8 +28,10 @@ MiTrimPage(
         return FALSE;
 
     MI_ASSERT(!MI_VAD_IS_DIRECT(Vad));
-    MI_ASSERT(MiArchPteFrame(Pte) < System->Pfn.FrameCount);
+    MI_ASSERT(MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)));
     Frame = (ULONG)MiArchPteFrame(Pte);
+    if (!MiPfnTracked(&System->Pfn, Frame))
+        return FALSE;
     Entry = &System->Pfn.Pfn[Frame];
 
     if (MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PAGE_TABLE)
@@ -493,7 +495,7 @@ MiWritePageFileCluster(
 #if DBG || defined(MM_HOST_TEST)
     for (i = 0; i < Count; i++)
     {
-        MI_ASSERT(Frames[i] < System->Pfn.FrameCount);
+        MI_ASSERT(MiPfnTracked(&System->Pfn, Frames[i]));
         MI_ASSERT(MI_PFN_FLAGS(&System->Pfn.Pfn[Frames[i]]) & MI_PFN_FLAG_IN_FLIGHT);
         MI_ASSERT(Slots[i] != 0);
         MI_ASSERT(i == 0 || Slots[i] == Slots[i - 1] + 1);
@@ -559,7 +561,7 @@ MiWriteModifiedPages(
             break;
 
         MI_ASSERT(Written <= MaximumPages && Count <= MaximumPages - Written && Count < Limit);
-        MI_ASSERT(Frame < System->Pfn.FrameCount);
+        MI_ASSERT(MiPfnTracked(&System->Pfn, Frame));
         Entry = &System->Pfn.Pfn[Frame];
         MI_ASSERT(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT);
 

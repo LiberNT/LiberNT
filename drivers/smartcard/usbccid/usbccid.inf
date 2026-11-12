@@ -1,0 +1,41 @@
+; USBCCID.INF
+
+; Installation file for USB CCID smart card readers
+
+[Version]
+Signature  = "$Windows NT$"
+LayoutFile = layout.inf
+Class      = SmartCardReader
+ClassGUID  = {50DD5230-BA8A-11D1-BF5D-0000F805F530}
+Provider   = %ReactOS%
+DriverVer  = 11/10/2026,1.00.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+[GenericMfg]
+%UsbCcid.DeviceDesc% = UsbCcid_Inst,USB\Class_0B&SubClass_00
+%UsbCcid.DeviceDesc% = UsbCcid_Inst,USB\Class_0B
+
+[UsbCcid_Inst.NT]
+CopyFiles = UsbCcid_CopyFiles.NT
+
+[UsbCcid_CopyFiles.NT]
+usbccid.sys
+
+[UsbCcid_Inst.NT.Services]
+AddService = usbccid, 0x00000002, UsbCcid_Service_Inst
+
+[UsbCcid_Service_Inst]
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\usbccid.sys
+
+[Strings]
+ReactOS = "LiberNT Project"
+GenericMfg = "(Generic smart card readers)"
+UsbCcid.DeviceDesc = "USB Smart Card Reader"

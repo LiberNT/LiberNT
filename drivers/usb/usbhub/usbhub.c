@@ -31,6 +31,7 @@
 
 PWSTR GenericUSBDeviceString = NULL;
 LONG USBH_NextDebugBusNumber = 0;
+LONG USBH_NextHubNumber = 0;
 static LONG USBH_BootDeviceDiscoveryActive = TRUE;
 static LIST_ENTRY USBH_SerialNumberList;
 static FAST_MUTEX USBH_SerialNumberMutex;
@@ -5179,6 +5180,39 @@ USBH_PdoSetCapabilities(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
     }
 }
 
+#define USBHUB_MASS_STORAGE_SCSI_SUBCLASS 0x06
+#define USBHUB_MASS_STORAGE_UAS_PROTOCOL  0x62
+
+static
+BOOLEAN
+USBH_HasUasStreamsSetting(IN PUSB_CONFIGURATION_DESCRIPTOR ConfigDescriptor,
+                          IN PUSB_INTERFACE_DESCRIPTOR Interface)
+{
+    PUCHAR At = (PUCHAR)ConfigDescriptor;
+    PUCHAR End = At + ConfigDescriptor->wTotalLength;
+    BOOLEAN InSetting = FALSE;
+
+    while (At + 2 <= End && At[0] >= 2 && At + At[0] <= End)
+    {
+        if (At[1] == USB_INTERFACE_DESCRIPTOR_TYPE && At[0] >= sizeof(USB_INTERFACE_DESCRIPTOR))
+        {
+            PUSB_INTERFACE_DESCRIPTOR Setting = (PUSB_INTERFACE_DESCRIPTOR)At;
+
+            InSetting = Setting->bInterfaceNumber == Interface->bInterfaceNumber &&
+                        Setting->bInterfaceClass == USB_DEVICE_CLASS_STORAGE &&
+                        Setting->bInterfaceSubClass == USBHUB_MASS_STORAGE_SCSI_SUBCLASS &&
+                        Setting->bInterfaceProtocol == USBHUB_MASS_STORAGE_UAS_PROTOCOL;
+        }
+        else if (InSetting && At[1] == USB_SUPERSPEED_ENDPOINT_COMPANION_DESCRIPTOR_TYPE && At[0] >= 6 &&
+                 (At[3] & 0x1F))
+        {
+            return TRUE;
+        }
+        At += At[0];
+    }
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
@@ -5249,12 +5283,13 @@ USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
        3) The device must have a single configuration.
     */
 
-    if (((PortExtension->DeviceDescriptor.bDeviceClass == USB_DEVICE_CLASS_RESERVED) ||
-        (PortExtension->DeviceDescriptor.bDeviceClass == USB_DEVICE_CLASS_MISCELLANEOUS &&
-         PortExtension->DeviceDescriptor.bDeviceSubClass == 0x02 &&
-         PortExtension->DeviceDescriptor.bDeviceProtocol == 0x01)) &&
-         (ConfigDescriptor->bNumInterfaces > 1) &&
-         (PortExtension->DeviceDescriptor.bNumConfigurations < 2))
+    if (((((PortExtension->DeviceDescriptor.bDeviceClass == USB_DEVICE_CLASS_RESERVED) ||
+           (PortExtension->DeviceDescriptor.bDeviceClass == USB_DEVICE_CLASS_MISCELLANEOUS &&
+            PortExtension->DeviceDescriptor.bDeviceSubClass == 0x02 &&
+            PortExtension->DeviceDescriptor.bDeviceProtocol == 0x01)) &&
+          (ConfigDescriptor->bNumInterfaces > 1)) ||
+         PortExtension->MsOs20Ccgp) &&
+        (PortExtension->DeviceDescriptor.bNumConfigurations < 2))
     {
         DPRINT("USBH_ProcessDeviceInformation: Multi-Interface configuration\n");
 
@@ -5288,6 +5323,14 @@ USBH_ProcessDeviceInformation(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
         RtlCopyMemory(&PortExtension->InterfaceDescriptor,
                       Pid,
                       sizeof(PortExtension->InterfaceDescriptor));
+
+        if ((PortExtension->PortPdoFlags & USBHUB_PDO_FLAG_PORT_SUPER_SPEED) &&
+            Pid->bInterfaceClass == USB_DEVICE_CLASS_STORAGE &&
+            Pid->bInterfaceSubClass == USBHUB_MASS_STORAGE_SCSI_SUBCLASS &&
+            USBH_HasUasStreamsSetting(ConfigDescriptor, Pid))
+        {
+            PortExtension->InterfaceDescriptor.bInterfaceProtocol = USBHUB_MASS_STORAGE_UAS_PROTOCOL;
+        }
 
         if (Pid->bInterfaceClass == USB_DEVICE_CLASS_HUB)
         {
@@ -5733,6 +5776,13 @@ USBH_FreeCachedStrings(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
         return;
     }
 
+    String = InterlockedExchangePointer((PVOID)&PortExtension->MsOs20DescriptorSet, NULL);
+
+    if (String)
+    {
+        ExFreePoolWithTag(String, USB_HUB_TAG);
+    }
+
     String = InterlockedExchangePointer((PVOID)&PortExtension->ProductString, NULL);
 
     if (String)
@@ -5867,6 +5917,297 @@ USBH_CopyMsCompatibleString(OUT PCHAR Destination,
     }
 }
 
+static
+NTSTATUS
+USBH_SyncGetBosDescriptor(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+                          OUT PVOID Buffer,
+                          IN ULONG Length,
+                          OUT PULONG Transferred)
+{
+    struct _URB_CONTROL_DESCRIPTOR_REQUEST *Urb;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    *Transferred = 0;
+    Urb = ExAllocatePoolZero(NonPagedPool, sizeof(*Urb), USB_HUB_TAG);
+    if (!Urb)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Urb->Hdr.Function = URB_FUNCTION_GET_DESCRIPTOR_FROM_DEVICE;
+    Urb->Hdr.Length = sizeof(*Urb);
+    Urb->TransferBufferLength = Length;
+    Urb->TransferBuffer = Buffer;
+    Urb->DescriptorType = USB_BOS_DESCRIPTOR_TYPE;
+
+    Status = USBH_SyncSubmitUrb(PortExtension->Common.SelfDevice, (PURB)Urb);
+    if (NT_SUCCESS(Status))
+    {
+        *Transferred = Urb->TransferBufferLength;
+    }
+
+    ExFreePoolWithTag(Urb, USB_HUB_TAG);
+    return Status;
+}
+
+static
+NTSTATUS
+USBH_GetMsOs20DescriptorSet(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
+                            IN UCHAR VendorCode,
+                            OUT PVOID Buffer,
+                            IN ULONG Length,
+                            OUT PULONG Transferred)
+{
+    struct _URB_CONTROL_VENDOR_OR_CLASS_REQUEST *Urb;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    *Transferred = 0;
+    Urb = ExAllocatePoolZero(NonPagedPool, sizeof(*Urb), USB_HUB_TAG);
+    if (!Urb)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Urb->Hdr.Length = sizeof(*Urb);
+    Urb->Hdr.Function = URB_FUNCTION_VENDOR_DEVICE;
+    Urb->TransferFlags = USBD_TRANSFER_DIRECTION_IN | USBD_SHORT_TRANSFER_OK;
+    Urb->TransferBufferLength = Length;
+    Urb->TransferBuffer = Buffer;
+    Urb->Request = VendorCode;
+    Urb->Value = 0;
+    Urb->Index = MS_OS_20_DESCRIPTOR_INDEX;
+
+    Status = USBH_SyncSubmitUrb(PortExtension->Common.SelfDevice, (PURB)Urb);
+    if (NT_SUCCESS(Status) && USBD_SUCCESS(Urb->Hdr.Status))
+    {
+        *Transferred = Urb->TransferBufferLength;
+    }
+    else if (NT_SUCCESS(Status))
+    {
+        Status = STATUS_UNSUCCESSFUL;
+    }
+
+    ExFreePoolWithTag(Urb, USB_HUB_TAG);
+    return Status;
+}
+
+static
+BOOLEAN
+USBH_QueryMsOs20Descriptors(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
+{
+    MS_OS_20_DESCRIPTOR_SET_INFORMATION Best, Info;
+    PUSB_DEVICE_CAPABILITY_PLATFORM_DESCRIPTOR Capability;
+    const MS_OS_20_DESCRIPTOR_HEADER *Feature;
+    const MS_OS_20_COMPATIBLE_ID_DESCRIPTOR *CompatibleId;
+    USB_BOS_DESCRIPTOR Header;
+    ROS_USB_MSOS20_WALK Walk;
+    PUCHAR Bos = NULL, Set = NULL;
+    CHAR Id[9];
+    ULONG Offset, Data, Transferred;
+    BOOLEAN Found = FALSE;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    Set = InterlockedExchangePointer((PVOID *)&PortExtension->MsOs20DescriptorSet, NULL);
+    if (Set)
+    {
+        ExFreePoolWithTag(Set, USB_HUB_TAG);
+        Set = NULL;
+    }
+    PortExtension->MsOs20DescriptorSetLength = 0;
+
+    if (PortExtension->DeviceDescriptor.bcdUSB < 0x0201)
+    {
+        return FALSE;
+    }
+
+    Status = USBH_SyncGetBosDescriptor(PortExtension, &Header, sizeof(Header), &Transferred);
+    if (!NT_SUCCESS(Status) || Transferred < sizeof(Header) ||
+        Header.bDescriptorType != USB_BOS_DESCRIPTOR_TYPE || Header.bLength < sizeof(Header) ||
+        Header.wTotalLength < Header.bLength)
+    {
+        return FALSE;
+    }
+
+    Bos = ExAllocatePoolWithTag(NonPagedPool, Header.wTotalLength, USB_HUB_TAG);
+    if (!Bos)
+    {
+        return FALSE;
+    }
+
+    RtlZeroMemory(&Best, sizeof(Best));
+    Status = USBH_SyncGetBosDescriptor(PortExtension, Bos, Header.wTotalLength, &Transferred);
+    if (NT_SUCCESS(Status) && Transferred == Header.wTotalLength)
+    {
+        for (Offset = Header.bLength; Offset + 3 <= Transferred; Offset += Bos[Offset])
+        {
+            Capability = (PUSB_DEVICE_CAPABILITY_PLATFORM_DESCRIPTOR)(Bos + Offset);
+            if (Capability->bLength < 3 || Offset + Capability->bLength > Transferred)
+            {
+                break;
+            }
+
+            if (Capability->bDescriptorType != USB_DEVICE_CAPABILITY_DESCRIPTOR_TYPE ||
+                Capability->bDevCapabilityType != USB_DEVICE_CAPABILITY_PLATFORM ||
+                Capability->bLength < FIELD_OFFSET(USB_DEVICE_CAPABILITY_PLATFORM_DESCRIPTOR, CapabililityData) +
+                                      sizeof(MS_OS_20_DESCRIPTOR_SET_INFORMATION) ||
+                RtlCompareMemory(&Capability->PlatformCapabilityUuid,
+                                 &GUID_USB_MSOS20_PLATFORM_CAPABILITY_ID,
+                                 sizeof(GUID)) != sizeof(GUID))
+            {
+                continue;
+            }
+
+            for (Data = FIELD_OFFSET(USB_DEVICE_CAPABILITY_PLATFORM_DESCRIPTOR, CapabililityData);
+                 Data + sizeof(Info) <= Capability->bLength;
+                 Data += sizeof(Info))
+            {
+                RtlCopyMemory(&Info, (PUCHAR)Capability + Data, sizeof(Info));
+                if (Info.dwWindowsVersion <= NTDDI_WIN11_GE &&
+                    (!Found || Info.dwWindowsVersion > Best.dwWindowsVersion))
+                {
+                    Best = Info;
+                    Found = TRUE;
+                }
+            }
+        }
+    }
+
+    ExFreePoolWithTag(Bos, USB_HUB_TAG);
+
+    if (!Found)
+    {
+        return FALSE;
+    }
+
+    DPRINT("USBH_QueryMsOs20Descriptors: version %08lx length %u vendor code %02x\n",
+           Best.dwWindowsVersion, Best.wMSOSDescriptorSetTotalLength, Best.bMS_VendorCode);
+
+    /* TODO: MS OS 2.0 alternate enumeration (bAltEnumCode) */
+    if (Best.wMSOSDescriptorSetTotalLength < sizeof(MS_OS_20_SET_HEADER))
+    {
+        return TRUE;
+    }
+
+    Set = ExAllocatePoolWithTag(NonPagedPool, Best.wMSOSDescriptorSetTotalLength, USB_HUB_TAG);
+    if (!Set)
+    {
+        return TRUE;
+    }
+
+    Status = USBH_GetMsOs20DescriptorSet(PortExtension,
+                                         Best.bMS_VendorCode,
+                                         Set,
+                                         Best.wMSOSDescriptorSetTotalLength,
+                                         &Transferred);
+    if (!NT_SUCCESS(Status) ||
+        !RosUsbMsOs20BeginWalk(&Walk, Set, Transferred) ||
+        Walk.Length != Best.wMSOSDescriptorSetTotalLength)
+    {
+        DPRINT1("USBH_QueryMsOs20Descriptors: no valid descriptor set: %lx, %lu bytes\n", Status, Transferred);
+        ExFreePoolWithTag(Set, USB_HUB_TAG);
+        return TRUE;
+    }
+
+    while ((Feature = RosUsbMsOs20NextFeature(&Walk)) != NULL)
+    {
+        if (Walk.FirstInterface != -1)
+        {
+            continue;
+        }
+
+        switch (Feature->wDescriptorType)
+        {
+            case MS_OS_20_FEATURE_COMPATBLE_ID:
+                if (Feature->wLength != sizeof(*CompatibleId))
+                {
+                    break;
+                }
+                CompatibleId = (const MS_OS_20_COMPATIBLE_ID_DESCRIPTOR *)Feature;
+                RtlZeroMemory(Id, sizeof(Id));
+                RtlCopyMemory(Id, CompatibleId->CompatibleID, sizeof(CompatibleId->CompatibleID));
+                USBH_CopyMsCompatibleString(PortExtension->MsCompatibleId, Id);
+                if (PortExtension->MsCompatibleId[0])
+                {
+                    RtlZeroMemory(Id, sizeof(Id));
+                    RtlCopyMemory(Id, CompatibleId->SubCompatibleID, sizeof(CompatibleId->SubCompatibleID));
+                    USBH_CopyMsCompatibleString(PortExtension->MsSubCompatibleId, Id);
+                }
+                break;
+
+            case MS_OS_20_FEATURE_CCGP_DEVICE:
+                if (Feature->wLength == sizeof(MS_OS_20_DESCRIPTOR_HEADER))
+                {
+                    PortExtension->MsOs20Ccgp = TRUE;
+                }
+                break;
+
+            case MS_OS_20_FEATURE_REG_PROPERTY:
+                break;
+
+            default:
+                /* TODO: MS OS 2.0 minimum resume time, model ID and vendor revision features */
+                break;
+        }
+    }
+
+    if (Walk.Malformed)
+    {
+        DPRINT1("USBH_QueryMsOs20Descriptors: malformed descriptor set at offset %lu\n", Walk.Offset);
+    }
+
+    PortExtension->MsOs20DescriptorSetLength = (USHORT)Walk.Length;
+    InterlockedExchangePointer((PVOID *)&PortExtension->MsOs20DescriptorSet, Set);
+    return TRUE;
+}
+
+VOID
+NTAPI
+USBH_ApplyMsOs20Properties(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
+{
+    const MS_OS_20_DESCRIPTOR_HEADER *Feature;
+    ROS_USB_MSOS20_WALK Walk;
+    HANDLE Key;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (!PortExtension->MsOs20DescriptorSet ||
+        !RosUsbMsOs20BeginWalk(&Walk, PortExtension->MsOs20DescriptorSet, PortExtension->MsOs20DescriptorSetLength))
+    {
+        return;
+    }
+
+    Status = IoOpenDeviceRegistryKey(PortExtension->Common.SelfDevice,
+                                     PLUGPLAY_REGKEY_DEVICE,
+                                     KEY_WRITE,
+                                     &Key);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("USBH_ApplyMsOs20Properties: no device key: %lx\n", Status);
+        return;
+    }
+
+    while ((Feature = RosUsbMsOs20NextFeature(&Walk)) != NULL)
+    {
+        if (Walk.FirstInterface == -1 && Feature->wDescriptorType == MS_OS_20_FEATURE_REG_PROPERTY)
+        {
+            Status = RosUsbMsOs20ApplyRegistryProperty(Key, Feature);
+            if (!NT_SUCCESS(Status))
+            {
+                DPRINT1("USBH_ApplyMsOs20Properties: registry property failed: %lx\n", Status);
+            }
+        }
+    }
+
+    ZwClose(Key);
+}
+
 VOID
 NTAPI
 USBH_QueryMsOsDescriptors(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
@@ -5886,6 +6227,12 @@ USBH_QueryMsOsDescriptors(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension)
     PortExtension->MsOsVendorCode = 0;
     RtlZeroMemory(PortExtension->MsCompatibleId, sizeof(PortExtension->MsCompatibleId));
     RtlZeroMemory(PortExtension->MsSubCompatibleId, sizeof(PortExtension->MsSubCompatibleId));
+    PortExtension->MsOs20Ccgp = FALSE;
+
+    if (USBH_QueryMsOs20Descriptors(PortExtension))
+    {
+        return;
+    }
 
     RtlStringCbPrintfW(KeyPath,
                        sizeof(KeyPath),
@@ -6932,6 +7279,7 @@ USBH_AddDevice(IN PDRIVER_OBJECT DriverObject,
     RtlZeroMemory(HubExtension, sizeof(USBHUB_FDO_EXTENSION));
 
     HubExtension->Common.ExtensionType = USBH_EXTENSION_TYPE_HUB;
+    HubExtension->HubNumber = (ULONG)InterlockedIncrement(&USBH_NextHubNumber);
 
     LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, LowerPDO);
 

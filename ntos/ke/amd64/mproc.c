@@ -13,7 +13,7 @@
 #define NDEBUG
 #include <debug.h>
 
-/* 5 s in 100ns units */
+/* An application processor that has not reported in within 5 s is hung */
 #define AP_START_WAIT_TIME (5 * 10000000ULL)
 
 /* GLOBALS ****************************************************************/
@@ -52,12 +52,13 @@ KeStartAllProcessors(VOID)
 {
     PVOID KernelStack = NULL;
     PVOID DPCStack = NULL;
-    PVOID APInfoBase = NULL;
     PAPINFO APInfo = NULL;
     PKPROCESSOR_STATE ProcessorState;
     KDESCRIPTOR Gdtr, Idtr;
     ULONG ProcessorCount;
     ULONG MaximumProcessors;
+    ULONG Index;
+    ULONGLONG StartTime;
 
     MaximumProcessors = KeMaximumProcessors;
     if (KeNumprocSpecified)
@@ -70,16 +71,10 @@ KeStartAllProcessors(VOID)
     {
         KernelStack = NULL;
         DPCStack = NULL;
-        APInfoBase = NULL;
 
-        /* APINFO holds a page aligned IDT and GDT; the pool only promises natural alignment */
-        APInfoBase = ExAllocatePoolZero(NonPagedPool,
-                                        sizeof(*APInfo) + PAGE_SIZE,
-                                        TAG_KERNEL);
-        if (!APInfoBase)
+        APInfo = ExAllocatePoolZero(NonPagedPool, sizeof(*APInfo), TAG_KERNEL);
+        if (!APInfo)
             break;
-
-        APInfo = (PAPINFO)ALIGN_UP_BY((ULONG_PTR)APInfoBase, PAGE_SIZE);
         ASSERT(ALIGN_DOWN_POINTER_BY(APInfo, PAGE_SIZE) == APInfo);
 
         KernelStack = MmCreateKernelStack(FALSE, 0);
@@ -148,31 +143,24 @@ KeStartAllProcessors(VOID)
         if (!HalStartNextProcessor(KeLoaderBlock, ProcessorState))
             break;
 
-        /* Bounded: an AP that never reports in used to hang the boot processor */
+        /* Wait for the AP to consume the loader block (KiInitializeKernel) */
+        StartTime = KeQueryInterruptTime();
+        while (KeLoaderBlock->Prcb != 0)
         {
-            ULONGLONG StartTime = KeQueryInterruptTime();
-
-            while (KeLoaderBlock->Prcb != 0)
-            {
-                KeMemoryBarrier();
-                YieldProcessor();
-
-                if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
-                    break;
-            }
-
-            if (KeLoaderBlock->Prcb != 0)
+            if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
             {
                 KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
-                             0,
+                             (ULONG_PTR)(AP_START_WAIT_TIME / KeMaximumIncrement),
                              0,
                              (ULONG_PTR)&APInfo->Pcr.Prcb,
                              ProcessorCount);
             }
+
+            KeMemoryBarrier();
+            YieldProcessor();
         }
 
         APInfo = NULL;
-        APInfoBase = NULL;
         KernelStack = NULL;
         DPCStack = NULL;
     }
@@ -180,49 +168,28 @@ KeStartAllProcessors(VOID)
     /* The last allocation belongs to a CPU that did not start */
     ProcessorCount--;
 
-    /* Active publishing happens later: wait for the active set, bounded */
-    if (ProcessorCount != 0)
+    /* Each started processor makes itself active once it can take an IPI */
+    StartTime = KeQueryInterruptTime();
+    for (Index = 1; Index <= ProcessorCount; Index++)
     {
-        ULONGLONG StartTime = KeQueryInterruptTime();
-
-        for (;;)
+        while ((KeActiveProcessors & AFFINITY_MASK(Index)) == 0)
         {
-            ULONG Index, Pending = 0, FailedIndex = 0;
-            PKPRCB FailedPrcb = NULL;
-
-            for (Index = 1; Index <= ProcessorCount; Index++)
-            {
-                PKPRCB Prcb = KiProcessorBlock[Index];
-
-                if (Prcb == NULL || (KeActiveProcessors & Prcb->SetMember) == 0)
-                {
-                    if (Pending == 0)
-                    {
-                        FailedIndex = Index;
-                        FailedPrcb = Prcb;
-                    }
-                    Pending++;
-                }
-            }
-
-            if (Pending == 0)
-                break;
-
             if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
             {
                 KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
+                             (ULONG_PTR)(AP_START_WAIT_TIME / KeMaximumIncrement),
                              0,
-                             0,
-                             (ULONG_PTR)FailedPrcb,
-                             FailedIndex);
+                             (ULONG_PTR)KiProcessorBlock[Index],
+                             Index);
             }
 
+            KeMemoryBarrier();
             YieldProcessor();
         }
     }
 
-    if (APInfoBase)
-        ExFreePoolWithTag(APInfoBase, TAG_KERNEL);
+    if (APInfo)
+        ExFreePoolWithTag(APInfo, TAG_KERNEL);
     if (KernelStack)
         MmDeleteKernelStack(KernelStack, FALSE);
     if (DPCStack)

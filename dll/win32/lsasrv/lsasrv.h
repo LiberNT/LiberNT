@@ -450,6 +450,12 @@ LsapCreateTokenSd(
 VOID
 LsapInitLogonSessions(VOID);
 
+VOID
+LsapLockLogonSessions(VOID);
+
+VOID
+LsapUnlockLogonSessions(VOID);
+
 NTSTATUS
 NTAPI
 LsapCreateLogonSession(IN PLUID LogonId);

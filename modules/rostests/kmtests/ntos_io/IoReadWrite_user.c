@@ -301,6 +301,100 @@ TestWrite(
     }
 }
 
+static HANDLE HeldReadFile;
+static HANDLE HeldReadReady;
+static IO_STATUS_BLOCK HeldReadIoStatus;
+static UCHAR HeldReadBuffer[TEST_FILE_SIZE];
+static NTSTATUS HeldReadStatus;
+static IO_STATUS_BLOCK HeldReadIoStatusAtReturn;
+static UCHAR HeldReadByteAtReturn;
+static LONG HeldReadApcs;
+static LONG HeldReadApcsAtReturn;
+
+static
+VOID
+NTAPI
+HeldReadApc(
+    _In_ ULONG_PTR Parameter)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+    InterlockedIncrement(&HeldReadApcs);
+}
+
+static
+DWORD
+WINAPI
+HeldReadThread(
+    _In_ PVOID Context)
+{
+    LARGE_INTEGER Offset;
+    ULONG Key = KEY_HOLD_PENDING | KEY_SUCCEED | KEY_DATA(0x22);
+
+    UNREFERENCED_PARAMETER(Context);
+
+    Offset.QuadPart = 0;
+    SetEvent(HeldReadReady);
+    HeldReadStatus = NtReadFile(HeldReadFile,
+                                NULL,
+                                NULL,
+                                NULL,
+                                &HeldReadIoStatus,
+                                HeldReadBuffer,
+                                sizeof(HeldReadBuffer),
+                                &Offset,
+                                &Key);
+    HeldReadIoStatusAtReturn = HeldReadIoStatus;
+    HeldReadByteAtReturn = HeldReadBuffer[TEST_FILE_SIZE - 1];
+    HeldReadApcsAtReturn = HeldReadApcs;
+    return 0;
+}
+
+/* A user APC interrupts an alertable synchronous read whose request the driver cannot cancel */
+static
+VOID
+TestAlertedHeldRead(
+    _In_ HANDLE FileHandle)
+{
+    HANDLE Thread;
+    DWORD Result;
+
+    HeldReadFile = FileHandle;
+    HeldReadApcs = 0;
+    HeldReadApcsAtReturn = 0;
+    HeldReadByteAtReturn = 0x55;
+    HeldReadStatus = 0x55555555;
+    RtlFillMemory(&HeldReadIoStatus, sizeof(HeldReadIoStatus), 0x55);
+    RtlFillMemory(&HeldReadIoStatusAtReturn, sizeof(HeldReadIoStatusAtReturn), 0x55);
+    RtlFillMemory(HeldReadBuffer, sizeof(HeldReadBuffer), 0x55);
+    HeldReadReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(HeldReadReady != NULL, "CreateEvent failed with %lu\n", GetLastError());
+    if (!HeldReadReady)
+        return;
+
+    Thread = CreateThread(NULL, 0, HeldReadThread, NULL, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (!Thread)
+    {
+        CloseHandle(HeldReadReady);
+        return;
+    }
+
+    ok_eq_ulong(WaitForSingleObject(HeldReadReady, 5000), WAIT_OBJECT_0);
+    ok(QueueUserAPC(HeldReadApc, Thread, 0), "QueueUserAPC failed with %lu\n", GetLastError());
+    Result = WaitForSingleObject(Thread, 5000);
+    ok_eq_ulong(Result, WAIT_OBJECT_0);
+
+    /* The service may only return once the driver completed the request */
+    ok_eq_hex(HeldReadStatus, STATUS_SUCCESS);
+    ok_eq_hex(HeldReadIoStatusAtReturn.Status, STATUS_SUCCESS);
+    ok_eq_ulongptr(HeldReadIoStatusAtReturn.Information, TEST_FILE_SIZE);
+    ok_eq_hex(HeldReadByteAtReturn, 0x22);
+    ok_eq_long(HeldReadApcsAtReturn, 1L);
+
+    CloseHandle(Thread);
+    CloseHandle(HeldReadReady);
+}
+
 START_TEST(IoReadWrite)
 {
     HANDLE FileHandle;
@@ -351,6 +445,27 @@ START_TEST(IoReadWrite)
         TestWrite(FileHandle, FALSE, FALSE, TRUE);
         trace("Non-Cached write, allow FastIo, pending return\n");
         TestWrite(FileHandle, FALSE, TRUE, TRUE);
+        NtClose(FileHandle);
+    }
+
+    RtlFillMemory(&IoStatus, sizeof(IoStatus), 0x55);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &NonCachedFileName,
+                               OBJ_CASE_INSENSITIVE,
+                               NULL,
+                               NULL);
+    Status = NtOpenFile(&FileHandle,
+                        FILE_ALL_ACCESS,
+                        &ObjectAttributes,
+                        &IoStatus,
+                        0,
+                        FILE_NON_DIRECTORY_FILE |
+                        FILE_SYNCHRONOUS_IO_ALERT);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!skip(NT_SUCCESS(Status), "No file\n"))
+    {
+        trace("Non-Cached alertable read held by the driver\n");
+        TestAlertedHeldRead(FileHandle);
         NtClose(FileHandle);
     }
 

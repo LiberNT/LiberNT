@@ -9,6 +9,9 @@ set(BOOTLOADER_TIMEOUT 3 CACHE STRING "Seconds the boot menu waits before starti
 option(BOOTLOADER_DISPLAY_MENU "Show the boot menu even with a single entry" ON)
 option(BOOTLOADER_KERNEL_DEBUG "Start the kernel with debug output on serial, screen and log file, and verbose loading; debug builds always keep the serial port" ON)
 set(BOOTLOADER_LOAD_OPTIONS "KDWATCHDOG=0" CACHE STRING "Extra kernel load options of the default entry")
+# A medium the system cannot write to, such as a RAM disk on a machine with no
+# storage driver, keeps no log file; those boards ask for the screen instead.
+set(BOOTLOADER_DEBUG_PORT "FILE" CACHE STRING "Where the kernel debugger writes: FILE, SCREEN, NET or COMn")
 if(BOOTLOADER_KERNEL STREQUAL "ntkrnlmp.exe")
     set(BOOTLOADER_KERNEL "ntoskrnl.exe" CACHE STRING "Kernel image of the default entry" FORCE)
 endif()
@@ -105,7 +108,7 @@ endif()
 
 if(BOOTLOADER_KERNEL_DEBUG)
     set(BCD_SOS 01)
-    set(BOOTLOADER_DEBUG_LOAD_OPTIONS " DEBUGPORT=FILE")
+    set(BOOTLOADER_DEBUG_LOAD_OPTIONS " DEBUGPORT=${BOOTLOADER_DEBUG_PORT}")
 else()
     set(BCD_SOS 00)
     set(BOOTLOADER_DEBUG_LOAD_OPTIONS "")

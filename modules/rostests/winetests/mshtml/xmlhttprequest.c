@@ -28,6 +28,9 @@
 #include "mshtmdid.h"
 #include "objsafe.h"
 #include "wine/test.h"
+#ifdef __REACTOS__
+#include "httpserver.h"
+#endif
 
 #define DEFINE_EXPECT(func) \
     static BOOL expect_ ## func = FALSE, called_ ## func = FALSE
@@ -1309,6 +1312,10 @@ START_TEST(xmlhttprequest)
     static const WCHAR expect_response_text[] = L"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<a>TEST</a>";
 
     CoInitialize(NULL);
+#ifdef __REACTOS__
+    /* The http checks load their pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
+#endif
 
     content_type = SysAllocString(L"Content-Type");
     doc = create_doc_from_url(start_url);
@@ -1326,5 +1333,8 @@ START_TEST(xmlhttprequest)
     }
     SysFreeString(content_type);
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     CoUninitialize();
 }

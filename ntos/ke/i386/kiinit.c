@@ -15,6 +15,8 @@
 
 /* GLOBALS *******************************************************************/
 
+PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+
 /* Boot and double-fault/NMI/DPC stack */
 UCHAR DECLSPEC_ALIGN(PAGE_SIZE) P0BootStackData[KERNEL_STACK_SIZE] = {0};
 UCHAR DECLSPEC_ALIGN(PAGE_SIZE) KiDoubleFaultStackData[KERNEL_STACK_SIZE] = {0};
@@ -323,6 +325,7 @@ KiInitializePcr(IN ULONG ProcessorNumber,
     /* Set pointers to ourselves */
     Pcr->SelfPcr = (PKPCR)Pcr;
     Pcr->Prcb = &Pcr->PrcbData;
+    KiProcessorContext[ProcessorNumber] = &Pcr->PrcbData.ProcessorState.ContextFrame;
 
     /* Set the PCR Version */
     Pcr->MajorVersion = PCR_MAJOR_VERSION;

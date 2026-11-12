@@ -1,0 +1,69 @@
+;
+; PROJECT:     LiberNT WinUSB driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Installs WinUSB on devices with the WINUSB Microsoft OS compatible ID
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+;
+
+[Version]
+Signature = "$Windows NT$"
+Class     = USBDevice
+ClassGuid = {88BAE032-5A81-49F0-BC3D-A4FF138216D6}
+Provider  = %LiberNT%
+DriverVer = 11/11/2026,10.0.26100.1
+
+[ClassInstall32]
+AddReg = USBDevice_Class_AddReg
+
+[USBDevice_Class_AddReg]
+HKR, , , 0, %USBDeviceClassName%
+HKR, , NoInstallClass, , 1
+HKR, , IconPath, %REG_MULTI_SZ%, "%%SystemRoot%%\system32\setupapi.dll,-20"
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[SourceDisksNames]
+1 = %WinUsbDiskName%,,,
+
+[SourceDisksFiles]
+winusb.sys = 1
+
+[Manufacturer]
+%WinUsbMfg% = WinUsbModels
+
+[WinUsbModels]
+%USB\MS_COMP_WINUSB.DeviceDesc% = WINUSB, USB\MS_COMP_WINUSB
+
+[WINUSB.NT]
+CopyFiles = WINUSB_CopyFiles
+
+[WINUSB_CopyFiles]
+winusb.sys
+
+[WINUSB.NT.Services]
+AddService = WINUSB, %SPSVCINST_ASSOCSERVICE%, WINUSB_Service_Inst
+
+[WINUSB_Service_Inst]
+DisplayName   = %WinUsbServiceName%
+ServiceType   = %SERVICE_KERNEL_DRIVER%
+StartType     = %SERVICE_DEMAND_START%
+ErrorControl  = %SERVICE_ERROR_NORMAL%
+ServiceBinary = %12%\winusb.sys
+
+[Strings]
+LiberNT = "LiberNT Project"
+SPSVCINST_ASSOCSERVICE = 0x00000002
+SERVICE_KERNEL_DRIVER = 1
+SERVICE_DEMAND_START = 3
+SERVICE_ERROR_NORMAL = 1
+REG_MULTI_SZ = 0x00010000
+
+USBDeviceClassName = "Universal Serial Bus devices"
+WinUsbMfg = "WinUsb Device"
+USB\MS_COMP_WINUSB.DeviceDesc = "WinUsb Device"
+WinUsbServiceName = "WinUsb Driver"
+WinUsbDiskName = "WinUSB driver files"

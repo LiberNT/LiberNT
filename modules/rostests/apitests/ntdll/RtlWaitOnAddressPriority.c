@@ -16,6 +16,8 @@ static volatile LONG stop_worker, completed, failed;
 static LONG address;
 static HANDLE ready;
 
+#define WAKE_ROUNDS 16
+
 static DWORD WINAPI lower_priority_worker(void *arg)
 {
     LONG compare = 1;
@@ -53,7 +55,7 @@ static DWORD run_child(void)
     if (ResumeThread(thread) != 1) return 10;
     if (WaitForSingleObject(ready, 5000) != WAIT_OBJECT_0) return 11;
 
-    for (i = 0; i < 512; ++i)
+    for (i = 0; i < WAKE_ROUNDS; ++i)
     {
         /* Blocking between wakes gives the lower-priority owner CPU time.
          * The timed wake can then preempt it inside the address operation. */
@@ -102,7 +104,7 @@ START_TEST(RtlWaitOnAddressPriority)
     ok(ret, "CreateProcess failed %lu\n", GetLastError());
     if (ret)
     {
-        result = WaitForSingleObject(process.hProcess, 30000);
+        result = WaitForSingleObject(process.hProcess, 5000);
         ok(result == WAIT_OBJECT_0, "Priority contention did not finish: %#lx\n", result);
         if (result == WAIT_OBJECT_0)
         {

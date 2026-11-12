@@ -180,9 +180,18 @@ static BOOL async_info_complete( struct async_info *impl, BOOL called_async )
     IInspectable *operation = impl->IInspectable_outer;
     PROPVARIANT result = {0};
     HRESULT hr;
+#ifdef __REACTOS__
+    IUnknown *invoker, *param;
+#endif
 
     hr = impl->callback( impl->invoker, impl->param, &result, called_async );
     if (!called_async && hr == STATUS_PENDING) return FALSE;
+
+#ifdef __REACTOS__
+    /* A finished operation lets go of what started it before anyone can see that it finished */
+    if ((invoker = InterlockedExchangePointer( (void **)&impl->invoker, NULL ))) IUnknown_Release( invoker );
+    if ((param = InterlockedExchangePointer( (void **)&impl->param, NULL ))) IUnknown_Release( param );
+#endif
 
     EnterCriticalSection( &impl->cs );
     if (impl->status != Closed) impl->status = FAILED(hr) ? Error : Completed;

@@ -8,6 +8,7 @@
 
 #define KI_EMULATED_USER_MACHINE 0
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
+#define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 
 /* The switch backend completes the outgoing-thread handoff on the new stack. */
 #define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
@@ -176,6 +177,23 @@ KeSetContextReturnRegister(_Inout_ PCONTEXT Context, _In_ ULONG_PTR ReturnValue)
     Context->Gpr3 = ReturnValue;
 }
 
+/* TODO: this port's debug service passes no third or fourth argument yet */
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument3(_In_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return 0;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(_In_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return 0;
+}
+
 FORCEINLINE
 ULONG_PTR
 KeGetContextStackRegister(_In_ PCONTEXT Context)
@@ -257,6 +275,7 @@ BOOLEAN NTAPI KiUserTrap(_In_ PKTRAP_FRAME TrapFrame);
 
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiPpcCallUserMode
+#define KiArchCallUserMode(Frame, Result, ResultLength) KiPpcCallUserMode((Frame), (Result), (ResultLength))
 
 NTSTATUS
 NTAPI
@@ -316,7 +335,7 @@ KiGetLinkedTrapFrame(
 }
 
 /* System services that raise or continue unlink the service trap frame on
- * entry; the trap frame holds every register, so nothing else is saved. */
+ * the way out; the trap frame holds every register, so nothing else is saved. */
 typedef struct _KI_SERVICE_EXCEPTION_STATE
 {
     UCHAR Reserved;
@@ -335,7 +354,8 @@ KiEnterServiceException(
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(PreviousMode);
     UNREFERENCED_PARAMETER(State);
-    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(TrapFrame);
     return ExceptionFrame;
 }
 
@@ -357,8 +377,7 @@ KiLeaveServiceException(
     _In_ PKTHREAD Thread,
     _In_ PKTRAP_FRAME TrapFrame)
 {
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(TrapFrame);
+    Thread->TrapFrame = KiGetLinkedTrapFrame(TrapFrame);
 }
 
 FORCEINLINE
@@ -457,4 +476,13 @@ KiClearDpcThreadState(
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+#define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
+/* TODO: this processor block has no type, vendor or context fields, so the debugger data names none */
+#define KI_PRCB_CPU_TYPE_OFFSET 0
+#define KI_PRCB_VENDOR_STRING_OFFSET 0
+#define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) FALSE
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)

@@ -908,6 +908,11 @@ E1000MapHardwareResources(
                     DPRINT1("E1000: Mapped memory BAR0 at %p (PA: 0x%I64x, Len: %u)\n",
                              Adapter->IoBase, Adapter->IoAddress.QuadPart, Adapter->IoLength);
                 }
+                else if (Resource->u.Memory.Length == E1000_PCH_FLASH_LENGTH && Adapter->FlashAddress.QuadPart == 0)
+                {
+                    Adapter->FlashAddress = Resource->u.Memory.Start;
+                    Adapter->FlashLength = Resource->u.Memory.Length;
+                }
                 else if (Resource->u.Memory.Length == (16 * 1024))
                 {
                     /* MSI-X BAR */
@@ -1227,6 +1232,12 @@ E1000FreeAdapterResources(
     {
         MmUnmapIoSpace(Adapter->IoBase, Adapter->IoLength);
         Adapter->IoBase = NULL;
+    }
+
+    if (Adapter->FlashBase != NULL)
+    {
+        MmUnmapIoSpace(Adapter->FlashBase, Adapter->FlashLength);
+        Adapter->FlashBase = NULL;
     }
 
     /* Unmap MSI-X table */

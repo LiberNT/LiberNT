@@ -715,7 +715,6 @@ _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(DEVICE_RESET_HANDLER)
 NTSTATUS
-NTAPI
 DEVICE_RESET_HANDLER(
     _In_ PVOID InterfaceContext,
     _In_ DEVICE_RESET_TYPE ResetType,
@@ -737,7 +736,6 @@ _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(DEVICE_QUERY_BUS_SPECIFIC_RESET_HANDLER)
 NTSTATUS
-NTAPI
 DEVICE_QUERY_BUS_SPECIFIC_RESET_HANDLER(
     _In_ PVOID InterfaceContext,
     _Out_ PULONG ResetInfoCount,
@@ -759,7 +757,6 @@ _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(DEVICE_BUS_SPECIFIC_RESET_HANDLER)
 NTSTATUS
-NTAPI
 DEVICE_BUS_SPECIFIC_RESET_HANDLER(
     _In_ PVOID InterfaceContext,
     _In_ CONST GUID *BusType,
@@ -784,7 +781,6 @@ _IRQL_requires_same_
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(GET_DEVICE_RESET_STATUS)
 NTSTATUS
-NTAPI
 GET_DEVICE_RESET_STATUS(
     _In_ PVOID InterfaceContext,
     _Out_ PBOOLEAN IsResetting,

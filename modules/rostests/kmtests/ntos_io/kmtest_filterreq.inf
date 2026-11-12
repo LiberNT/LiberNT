@@ -1,0 +1,69 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+[Version]
+Signature="$WINDOWS NT$"
+Class=System
+ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider=%Provider%
+DriverVer=10/01/2026,1.0.0.0
+CatalogFile=kmtest_filterreq.cat
+PnpLockdown=1
+
+[Manufacturer]
+%Provider%=Models,NTx86,NTamd64,NTarm64,NTriscv64
+
+[Models.NTx86]
+%Device%=Fixture,ROOT\KMTESTFILTERREQ
+%Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
+
+[Models.NTamd64]
+%Device%=Fixture,ROOT\KMTESTFILTERREQ
+%Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
+
+[Models.NTarm64]
+%Device%=Fixture,ROOT\KMTESTFILTERREQ
+%Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
+
+[Models.NTriscv64]
+%Device%=Fixture,ROOT\KMTESTFILTERREQ
+%Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
+
+[Fixture.NT]
+CopyFiles=DriverCopy
+
+[Fixture.NT.Services]
+AddService=KmtestFilterReq,0x2,FixtureService
+
+[NullFixture.NT]
+
+[NullFixture.NT.Services]
+AddService=,0x2
+
+[FixtureService]
+DisplayName=%Device%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\iofilterrequirements_drv.sys
+
+[DestinationDirs]
+DriverCopy=12
+
+[DriverCopy]
+iofilterrequirements_drv.sys,,,0x10
+
+[SourceDisksNames]
+1=%Disk%,,,
+
+[SourceDisksFiles]
+iofilterrequirements_drv.sys=1
+
+[Strings]
+Provider="LiberNT kernel tests"
+Device="Kmtest filter requirements fixture"
+NullDevice="Kmtest null driver child"
+Disk="Kmtest driver package"

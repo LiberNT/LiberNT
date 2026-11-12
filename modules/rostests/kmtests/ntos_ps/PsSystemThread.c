@@ -68,6 +68,87 @@ TestSystemThread(VOID)
     ObCloseHandle(ThreadHandle, KernelMode);
 }
 
+static KEVENT WaitReasonReady;
+static KEVENT WaitReasonRelease;
+
+static
+VOID
+NTAPI
+WaitReasonThreadRoutine(
+    _In_ PVOID Context)
+{
+    LARGE_INTEGER Timeout;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    Timeout.QuadPart = -10LL * 1000 * 1000 * 10;
+    KeSetEvent(&WaitReasonReady, IO_NO_INCREMENT, TRUE);
+    KeWaitForSingleObject(&WaitReasonRelease, UserRequest, KernelMode, FALSE, &Timeout);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static
+VOID
+TestWaitReason(VOID)
+{
+    SYSTEM_THREAD_INFORMATION Information;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    LARGE_INTEGER Timeout;
+    HANDLE ThreadHandle;
+    PETHREAD Thread;
+    NTSTATUS Status;
+    ULONG Length;
+
+    KeInitializeEvent(&WaitReasonReady, NotificationEvent, FALSE);
+    KeInitializeEvent(&WaitReasonRelease, NotificationEvent, FALSE);
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL, WaitReasonThreadRoutine, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = ObReferenceObjectByHandle(ThreadHandle, THREAD_ALL_ACCESS, *PsThreadType, KernelMode, (PVOID *)&Thread, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        KeSetEvent(&WaitReasonRelease, IO_NO_INCREMENT, FALSE);
+        ObCloseHandle(ThreadHandle, KernelMode);
+        return;
+    }
+
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    Status = KeWaitForSingleObject(&WaitReasonReady, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    /* The thread holds the dispatcher lock from KeSetEvent(Wait = TRUE) into its wait, so a zero wait comes after it */
+    Timeout.QuadPart = 0;
+    Status = KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_TIMEOUT);
+
+    RtlZeroMemory(&Information, sizeof(Information));
+    Status = ZwQueryInformationThread(ThreadHandle,
+                                      ThreadSystemThreadInformation,
+                                      &Information,
+                                      sizeof(Information),
+                                      &Length);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok_eq_ulong(Length, (ULONG)sizeof(Information));
+        ok_eq_ulong(Information.ThreadState, (ULONG)Waiting);
+        ok_eq_ulong(Information.WaitReason, (ULONG)UserRequest);
+        ok_eq_pointer(Information.ClientId.UniqueThread, PsGetThreadId(Thread));
+    }
+
+    KeSetEvent(&WaitReasonRelease, IO_NO_INCREMENT, FALSE);
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    Status = KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    ObDereferenceObject(Thread);
+    ObCloseHandle(ThreadHandle, KernelMode);
+}
+
 static
 VOID
 TestCurrentIdentity(VOID)
@@ -122,6 +203,7 @@ TestLookup(VOID)
 START_TEST(PsSystemThread)
 {
     TestSystemThread();
+    TestWaitReason();
     TestCurrentIdentity();
     TestLookup();
 }

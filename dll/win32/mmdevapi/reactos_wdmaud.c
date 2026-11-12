@@ -131,6 +131,7 @@ struct reactos_stream
     struct reactos_shared_capture_client *shared_capture;
     struct reactos_shared_capture_sink *capture_sink;
     struct reactos_shared_capture_sink *exclusive_capture;
+    struct reactos_shared_render_exclusive *exclusive_render;
     UINT64 capture_clock_base;
     UINT32 capture_packet_flags;
     UINT64 capture_packet_position;
@@ -550,6 +551,62 @@ HRESULT reactos_endpoint_volume_initialize(
         state->mute_supported = TRUE;
     }
 
+    return S_OK;
+}
+
+HRESULT reactos_wave_connector(const GUID *guid, WCHAR **path, ULONG *pin)
+{
+    WDMAUD_DEVICE_INFO info;
+    EDataFlow flow;
+    DWORD index;
+    char *device;
+    WCHAR *buffer;
+    ULONG size;
+
+    if (!guid || !path || !pin)
+        return E_POINTER;
+    *path = NULL;
+    *pin = ~0u;
+
+    if (!get_device_name_from_guid(guid, &device, &flow))
+        return AUDCLNT_E_DEVICE_INVALIDATED;
+    if (!parse_device_name(device, &flow, &index) || is_loopback_device_name(device))
+    {
+        free(device);
+        return E_NOTFOUND;
+    }
+    free(device);
+
+    if (!open_wdmaud())
+        return AUDCLNT_E_DEVICE_INVALIDATED;
+
+    ZeroMemory(&info, sizeof(info));
+    info.DeviceType = device_type_from_flow(flow);
+    info.DeviceIndex = index;
+    if (!wdmaud_ioctl(IOCTL_GETWAVECONNECTOR, &info))
+        return GetLastError() == ERROR_NOT_FOUND ? E_NOTFOUND : wdmaud_error_hresult();
+
+    size = info.u.Connector.DeviceInterfaceStringSize;
+    if (size < sizeof(WCHAR) || size % sizeof(WCHAR))
+        return E_UNEXPECTED;
+    if (!(buffer = malloc(size)))
+        return E_OUTOFMEMORY;
+
+    ZeroMemory(&info, sizeof(info));
+    info.DeviceType = device_type_from_flow(flow);
+    info.DeviceIndex = index;
+    info.u.Connector.DeviceInterfaceString = buffer;
+    info.u.Connector.DeviceInterfaceStringSize = size;
+    if (!wdmaud_ioctl(IOCTL_GETWAVECONNECTOR, &info))
+    {
+        free(buffer);
+        return wdmaud_error_hresult();
+    }
+
+    buffer[size / sizeof(WCHAR) - 1] = 0;
+    assert(info.u.Connector.PinId != ~0u);
+    *path = buffer;
+    *pin = info.u.Connector.PinId;
     return S_OK;
 }
 
@@ -3001,6 +3058,23 @@ static NTSTATUS reactos_create_stream(struct create_stream_params *params)
                 goto failed;
             }
         }
+        else
+        {
+            WAVEFORMATEXTENSIBLE engine_format;
+
+            if (!fill_mix_format(params->device, params->flow, &mix))
+            {
+                params->result = AUDCLNT_E_UNSUPPORTED_FORMAT;
+                goto failed;
+            }
+            copy_wdmaud_format(&engine_format, &mix.Format);
+            hr = reactos_shared_render_open_exclusive(stream->index, &engine_format, &shared_render_transport_ops, &stream->exclusive_render);
+            if (FAILED(hr))
+            {
+                params->result = hr;
+                goto failed;
+            }
+        }
         if (FAILED(hr = open_stream_pin(stream)))
         {
             params->result = hr;
@@ -3077,6 +3151,7 @@ failed:
     close_stream_pin(stream);
     if (stream->exclusive_capture)
         reactos_shared_capture_close_exclusive(stream->exclusive_capture);
+    reactos_shared_render_close_exclusive(stream->exclusive_render);
     DeleteCriticalSection(&stream->lock);
     if (stream->stop_event)
         CloseHandle(stream->stop_event);
@@ -3124,6 +3199,7 @@ static NTSTATUS reactos_release_stream(struct release_stream_params *params)
     close_stream_pin(stream);
     if (stream->exclusive_capture)
         reactos_shared_capture_close_exclusive(stream->exclusive_capture);
+    reactos_shared_render_close_exclusive(stream->exclusive_render);
     stream->magic = 0;
     if (stream->stop_event)
         CloseHandle(stream->stop_event);

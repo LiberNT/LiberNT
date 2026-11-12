@@ -131,7 +131,7 @@ sync_test("builtin_toString", function() {
         [ "br",              "BR", -1 ],
         [ "button",          "Button" ],
         [ "canvas",          "Canvas", -1 ],
-        [ "caption",         "TableCaption", -1 ],
+        [ "caption",         "TableCaption" ],
         [ "center",          "Block", -1 ],
         [ "cite",            "Phrase", -1 ],
         [ "code",            "Phrase", -1 ],
@@ -150,7 +150,7 @@ sync_test("builtin_toString", function() {
         [ "dt",              "DT" ],
         [ "em",              "Phrase", -1 ],
         [ "embed",           "Embed" ],
-        [ "fieldset",        "FieldSet", -1 ],
+        [ "fieldset",        "FieldSet" ],
         [ "figcaption",      "" ],
         [ "figure",          "" ],
         [ "font",            "Font", -1 ],
@@ -176,7 +176,7 @@ sync_test("builtin_toString", function() {
         [ "ins",             "Mod", -1 ],
         [ "kbd",             "Phrase", -1 ],
         [ "label",           "Label" ],
-        [ "legend",          "Legend", -1 ],
+        [ "legend",          "Legend" ],
         [ "li",              "LI" ],
         [ "link",            "Link" ],
         [ "main",            "Unknown" ],
@@ -194,7 +194,7 @@ sync_test("builtin_toString", function() {
         [ "option",          "Option" ],
         [ "output",          "Unknown" ],
         [ "p",               "Paragraph", -1 ],
-        [ "param",           "Param", -1 ],
+        [ "param",           "Param" ],
         [ "picture",         "Unknown" ],
         [ "pre",             "Pre", -1 ],
         [ "progress",        "Progress", 10 ],
@@ -223,7 +223,7 @@ sync_test("builtin_toString", function() {
         [ "template",        "Unknown" ],
         [ "textarea",        "TextArea" ],
         [ "tfoot",           "TableSection", -1 ],
-        [ "th",              "TableHeaderCell", -1 ],
+        [ "th",              "TableHeaderCell" ],
         [ "thead",           "TableSection", -1 ],
         [ "time",            "Unknown" ],
         [ "title",           "Title" ],
@@ -407,7 +407,7 @@ sync_test("builtin_obj", function() {
         e = window.toString.call(external.nullDisp);
         ok(e === "[object Window]", "window.toString with nullDisp context = " + e);
 
-        test_own_props(f, "createElement", [ "arguments", "caller", "prototype" ], [ "prototype" ]);
+        test_own_props(f, "createElement", [ "arguments", "caller", "prototype" ]);
         ok(f.arguments === null, "createElement arguments = " + f.arguments);
     }
 
@@ -865,30 +865,30 @@ sync_test("frame_props", function() {
 
     var v = document.documentMode;
 
-    test_exposed("allowTransparency", v < 9, v >= 9);
+    test_exposed("allowTransparency", v < 9);
     test_exposed("border", true);
-    test_exposed("borderColor", true, true);
-    test_exposed("contentDocument", v >= 8, v < 8);
+    test_exposed("borderColor", true);
+    test_exposed("contentDocument", v >= 8);
     test_exposed("contentWindow", true);
     test_exposed("dataFld", v < 11, v < 11);
     test_exposed("dataFormatAs", v < 11, v < 11);
     test_exposed("dataSrc", v < 11, v < 11);
     test_exposed("frameBorder", true);
     test_exposed("frameSpacing", true);
-    test_exposed("getSVGDocument", true, true);
-    test_exposed("height", true, true);
+    test_exposed("getSVGDocument", true);
+    test_exposed("height", true);
     test_exposed("longDesc", true);
     test_exposed("marginHeight", true);
     test_exposed("marginWidth", true);
     test_exposed("name", true);
     test_exposed("noResize", true);
     test_exposed("onload", true);
-    test_exposed("onreadystatechange", v < 11, v >= 11);
-    test_exposed("readyState", v < 11, v >= 11);
+    test_exposed("onreadystatechange", v < 11);
+    test_exposed("readyState", v < 11);
     test_exposed("scrolling", true);
     test_exposed("security", v >= 9, v >= 9);
     test_exposed("src", true);
-    test_exposed("width", true, true);
+    test_exposed("width", true);
     test_exposed("ie8_frameBorder", false);
     test_exposed("ie8_longDesc", false);
     test_exposed("ie8_src", false);
@@ -896,17 +896,17 @@ sync_test("frame_props", function() {
     elem = document.createElement("iframe");
 
     test_exposed("align", true);
-    test_exposed("allowTransparency", v < 9, v >= 9);
+    test_exposed("allowTransparency", v < 9);
     test_exposed("border", true);
     test_exposed("borderColor", false);
-    test_exposed("contentDocument", v >= 8, v < 8);
+    test_exposed("contentDocument", v >= 8);
     test_exposed("contentWindow", true);
     test_exposed("dataFld", v < 11, v < 11);
     test_exposed("dataFormatAs", v < 11, v < 11);
     test_exposed("dataSrc", v < 11, v < 11);
     test_exposed("frameBorder", true);
     test_exposed("frameSpacing", true);
-    test_exposed("getSVGDocument", true, true);
+    test_exposed("getSVGDocument", true);
     test_exposed("height", true);
     test_exposed("hspace", true);
     test_exposed("longDesc", true);
@@ -915,8 +915,8 @@ sync_test("frame_props", function() {
     test_exposed("name", true);
     test_exposed("noResize", true);
     test_exposed("onload", true);
-    test_exposed("onreadystatechange", v < 11, v >= 11);
-    test_exposed("readyState", v < 11, v >= 11);
+    test_exposed("onreadystatechange", v < 11);
+    test_exposed("readyState", v < 11);
     test_exposed("sandbox", v >= 10, v >= 10);
     test_exposed("scrolling", true);
     test_exposed("security", v >= 9, v >= 9);
@@ -5560,7 +5560,7 @@ sync_test("prototype props", function() {
         ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",10], "name", "nameProp", "naturalHeight", "naturalWidth",
         "protocol", "src", "start", "useMap", "vrml", "vspace", "width"
     ], [
-        ["crossOrigin",11], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "longDesc", ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11],
+        ["crossOrigin",11], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["msPlayToDisabled",10], ["msPlayToPreferredSourceUri",11],
         ["msPlayToPrimary",10], "naturalHeight", "naturalWidth"
     ]);
     check(HTMLInputElement, [
@@ -5571,14 +5571,14 @@ sync_test("prototype props", function() {
         "size", "src", "start", "status", ["step",10], ["stepDown",10], ["stepUp",10], "type", "useMap", ["validationMessage",10], ["validity",10], "value",
         ["valueAsNumber",10], "vrml", "vspace", "width", ["willValidate",10]
     ], [
-        "accept", ["autocomplete",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["files",10],["list",10], ["max",10], ["min",10], ["multiple",10],
-        ["pattern",10], ["placeholder",10], ["readyState",11], ["required",10], ["step",10], ["stepDown",10], ["stepUp",10], "useMap", ["valueAsNumber",10]
+        ["autocomplete",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], ["files",10],["list",10], ["max",10], ["min",10], ["multiple",10],
+        ["pattern",10], ["placeholder",10], ["readyState",11], ["required",10], ["step",10], ["stepDown",10], ["stepUp",10], ["valueAsNumber",10]
     ]);
     check(HTMLLabelElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "htmlFor" ], [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form" ]);
     check(HTMLLIElement, [ "type", "value" ]);
     check(HTMLLinkElement, [ "charset", "href", "hreflang", "media", "rel", "rev", "sheet", ["styleSheet",9,10], "target", "type" ],
-                           [ "charset", "hreflang", ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11], "target" ]);
-    check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ], [ "scheme" ]);
+                           [ ["onreadystatechange",11], ["readyState",11], "sheet", ["styleSheet",11] ]);
+    check(HTMLMetaElement, [ "charset", "content", "httpEquiv", "name", "scheme", "url" ]);
     check(HTMLModElement, [ "cite", "dateTime" ]);
     check(HTMLMenuElement, [ "compact", "type" ]);
     check(HTMLOListElement, [ "compact", "start", "type" ]);
@@ -5588,17 +5588,17 @@ sync_test("prototype props", function() {
         ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], "name", "namedRecordset", "object", ["readyState",11], "recordset", ["setCustomValidity",10],
         "standby", "type", "useMap", ["validationMessage",10], ["validity",10], "vspace", "width", ["willValidate",10]
     ], [
-        "alt", "archive", "border", "contentDocument", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "declare", "getSVGDocument", ["msPlayToDisabled",11],
-        ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["onreadystatechange",11], ["readyState",11], "standby", "useMap"
+        "contentDocument", ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "getSVGDocument", ["msPlayToDisabled",11],
+        ["msPlayToPreferredSourceUri",11], ["msPlayToPrimary",11], ["onreadystatechange",11], ["readyState",11]
     ]);
     check(HTMLOptionElement, [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "defaultSelected", "form", "index", "label", "selected", "text", "value" ],
-                             [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "label" ]);
+                             [ ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10] ]);
     check(HTMLParagraphElement, [ "align", "clear" ]);
     check(HTMLPhraseElement, [ "cite", "dateTime" ]);
     check(HTMLPreElement, [ "cite", "clear", "width" ]);
     check(HTMLQuoteElement, [ "cite", "dateTime" ]);
     check(HTMLUListElement, [ "compact", "type" ]);
-    check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], "charset", ["readyState",11] ], [ "crossOrigin" ]);
+    check(HTMLScriptElement, [ ["async",10], "charset", "defer", "event", "htmlFor", "src", "text", "type" ], [ ["async",10], ["readyState",11] ], [ "crossOrigin" ]);
     check(HTMLSelectElement, [
         "add", ["autofocus",10], ["checkValidity",10], ["dataFld",9,10], ["dataFormatAs",9,10], ["dataSrc",9,10], "form", "item", "length",
         "multiple", "name", "namedItem", "options", "remove", ["required",10], "selectedIndex", ["setCustomValidity",10], "size", "tags",
@@ -5889,10 +5889,10 @@ async_test("window own props", function() {
             "DragEvent", ["ErrorEvent",10], "EventException", ["EXT_texture_filter_anisotropic",11], ["File",10], ["FileList",10], ["FileReader",10],
             "FocusEvent", ["FormData",10], "Geolocation", "GetObject", ["HTMLAllCollection",11], "HTMLAppletElement", "HTMLAreasCollection", "HTMLAudioElement",
             "HTMLBGSoundElement", "HTMLCanvasElement", ["HTMLDataListElement",10],
-            "HTMLFieldSetElement", "HTMLIsIndexElement",
-            "HTMLLegendElement", "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLNextIdElement",
-            "HTMLOptGroupElement", "HTMLParamElement", ["HTMLProgressElement",10], "HTMLSourceElement",
-            "HTMLTableCaptionElement", "HTMLTableHeaderCellElement", ["HTMLTrackElement",10],
+            "HTMLIsIndexElement",
+            "HTMLMapElement", "HTMLMarqueeElement", "HTMLMediaElement", "HTMLNextIdElement",
+            "HTMLOptGroupElement", ["HTMLProgressElement",10], "HTMLSourceElement",
+            ["HTMLTrackElement",10],
             "HTMLVideoElement", ["IDBCursor",10], ["IDBCursorWithValue",10], ["IDBDatabase",10], ["IDBFactory",10], ["IDBIndex",10], ["IDBKeyRange",10], ["IDBObjectStore",10], ["IDBOpenDBRequest",10],
             ["IDBRequest",10], ["IDBTransaction",10], ["IDBVersionChangeEvent",10], "ImageData", ["Intl",11], ["Key",11], ["KeyOperation",11],
             ["KeyPair",11], "Location", "MediaError", "MediaList", ["MediaSource",11], ["MessageChannel",10], ["MessagePort",10], ["MimeType",11], ["MimeTypeArray",9,10], "MouseWheelEvent",

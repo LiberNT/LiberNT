@@ -1,0 +1,42 @@
+; PROJECT:     LiberNT Apple CPU Performance Driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature = "$Windows NT$"
+Class = System
+ClassGUID = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider = %LiberNT%
+DriverVer = 11/11/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[Manufacturer]
+%StdMfg% = StdMfg,NTarm64
+
+[StdMfg.NTarm64]
+%AppleCpufreq.DeviceDesc% = AppleCpufreq_Inst,FDT\apple_t8112-cluster-cpufreq
+
+[AppleCpufreq_Inst.NT]
+CopyFiles = AppleCpufreq_CopyFiles
+
+[AppleCpufreq_CopyFiles]
+applecpufreq.sys
+
+[AppleCpufreq_Inst.NT.Services]
+AddService = applecpufreq,0x00000002,AppleCpufreq_Service
+
+[AppleCpufreq_Service]
+DisplayName = %AppleCpufreq.ServiceDesc%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %12%\applecpufreq.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+LiberNT = "LiberNT Project"
+StdMfg = "(Standard system devices)"
+AppleCpufreq.DeviceDesc = "Apple CPU Cluster Performance Controller"
+AppleCpufreq.ServiceDesc = "Apple CPU Performance Driver"

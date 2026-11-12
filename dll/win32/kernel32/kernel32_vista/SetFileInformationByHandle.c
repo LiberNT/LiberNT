@@ -22,21 +22,9 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
 
     switch (class)
     {
-    case FileNameInfo:
-    case FileStreamInfo:
-    case FileIdBothDirectoryInfo:
-    case FileIdBothDirectoryRestartInfo:
-    case FileFullDirectoryInfo:
-    case FileFullDirectoryRestartInfo:
-    case FileStorageInfo:
-    case FileAlignmentInfo:
-    case FileIdInfo:
-    case FileIdExtdDirectoryInfo:
-    case FileIdExtdDirectoryRestartInfo:
-        FIXME( "%p, %u, %p, %lu\n", file, class, info, size );
-        SetLastError( ERROR_CALL_NOT_IMPLEMENTED );
-        return FALSE;
-
+    case FileCaseSensitiveInfo:
+        status = NtSetInformationFile( file, &io, info, size, FileCaseSensitiveInformation );
+        break;
     case FileAllocationInfo:
         status = NtSetInformationFile( file, &io, info, size, FileAllocationInformation );
         break;
@@ -57,6 +45,14 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
         break;
     case FileRenameInfo:
     case FileRenameInfoEx:
+        if (((FILE_RENAME_INFORMATION *)info)->RootDirectory ||
+            (size >= FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + sizeof(WCHAR) &&
+             ((FILE_RENAME_INFORMATION *)info)->FileName[0] == L':'))
+        {
+            status = NtSetInformationFile( file, &io, info, size,
+                    class == FileRenameInfo ? FileRenameInformation : FileRenameInformationEx );
+            break;
+        }
         {
             FILE_RENAME_INFORMATION *rename_info;
             UNICODE_STRING nt_name;
@@ -76,6 +72,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
                         class == FileRenameInfo ? FileRenameInformation : FileRenameInformationEx );
                 HeapFree( GetProcessHeap(), 0, rename_info );
             }
+            else
+                status = STATUS_NO_MEMORY;
             RtlFreeUnicodeString( &nt_name );
             break;
         }
@@ -83,6 +81,18 @@ BOOL WINAPI DECLSPEC_HOTPATCH SetFileInformationByHandle( HANDLE file, FILE_INFO
     case FileCompressionInfo:
     case FileAttributeTagInfo:
     case FileRemoteProtocolInfo:
+    case FileNameInfo:
+    case FileStreamInfo:
+    case FileIdBothDirectoryInfo:
+    case FileIdBothDirectoryRestartInfo:
+    case FileFullDirectoryInfo:
+    case FileFullDirectoryRestartInfo:
+    case FileStorageInfo:
+    case FileAlignmentInfo:
+    case FileIdInfo:
+    case FileIdExtdDirectoryInfo:
+    case FileIdExtdDirectoryRestartInfo:
+    case FileNormalizedNameInfo:
     default:
         SetLastError( ERROR_INVALID_PARAMETER );
         return FALSE;

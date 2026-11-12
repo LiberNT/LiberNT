@@ -28,6 +28,7 @@ HKR, , Icon,           0, "-13"
 
 [GenericMfg]
 %acpipic_up.DeviceDesc% = NO_DRV,acpipic_up
+%acpiapic.DeviceDesc% = NO_DRV,acpiapic
 %acpi_arm64.DeviceDesc% = NO_DRV,ACPIARM64
 %e_isa_up.DeviceDesc% = NO_DRV,e_isa_up
 
@@ -58,6 +59,7 @@ ComputerClassName = "Computer"
 
 GenericMfg = "(Generic computers)"
 acpipic_up.DeviceDesc = "ACPI Uniprocessor PC"
+acpiapic.DeviceDesc = "ACPI APIC-based PC"
 acpi_arm64.DeviceDesc = "ACPI ARM64-based PC"
 e_isa_up.DeviceDesc = "Standard Uniprocessor PC"
 

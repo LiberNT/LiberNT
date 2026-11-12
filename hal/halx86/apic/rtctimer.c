@@ -29,6 +29,7 @@ static ULONG HalpCurrentFractionalIncrement;
 static ULONG HalpRunningFraction;
 static BOOLEAN HalpSetClockRate;
 static UCHAR HalpNextClockRate;
+static ULONG HalpNextTimeIncrement;
 
 static LONG HalpClockIpiTickOffset;
 
@@ -141,6 +142,28 @@ HalpProgramApicTimerClock(UCHAR ClockRate)
     ApicWrite(APIC_TICR, (ULONG)max(Count, 1));
 }
 
+/* The local APIC timer runs at any period, so it is given the exact increment asked for */
+static
+VOID
+HalpSetApicTimerIncrement(ULONG Increment)
+{
+    LVT_REGISTER LvtEntry;
+    ULONG64 Count;
+
+    HalpCurrentTimeIncrement = Increment;
+    HalpCurrentFractionalIncrement = 0;
+
+    Count = HalpApicTimerFrequency * Increment / 10000000ULL;
+
+    LvtEntry.Long = 0;
+    LvtEntry.Vector = APIC_CLOCK_VECTOR;
+    LvtEntry.TimerMode = 1;
+    LvtEntry.Mask = 0;
+    ApicWrite(APIC_TDCR, TIMER_DV_DivideBy1);
+    ApicWrite(APIC_TMRLVTR, LvtEntry.Long);
+    ApicWrite(APIC_TICR, (ULONG)max(Count, 1));
+}
+
 VOID
 RtcSetClockRate(UCHAR ClockRate)
 {
@@ -198,7 +221,8 @@ HalpInitializeClock(VOID)
 
         RtcSetClockRate(HalpCurrentClockRate);
 
-        HalpMinimumTimeIncrement = RtcClockRateToPreciseIncrement(RtcMinimumClockRate) / 1000;
+        /* The finest period is a millisecond, which the timer gives exactly */
+        HalpMinimumTimeIncrement = 10000;
         HalpMaximumTimeIncrement = RtcClockRateToPreciseIncrement(RtcMaximumClockRate) / 1000;
         KeSetTimeIncrement(HalpMaximumTimeIncrement, HalpMinimumTimeIncrement);
 
@@ -255,7 +279,7 @@ HalpRestoreClock(VOID)
 
     if (HalpApicTimerClock)
     {
-        RtcSetClockRate(HalpCurrentClockRate);
+        HalpSetApicTimerIncrement(HalpCurrentTimeIncrement);
         return;
     }
 
@@ -318,7 +342,10 @@ HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
     if (HalpSetClockRate)
     {
         /* Set new clock rate */
-        RtcSetClockRate(HalpNextClockRate);
+        if (HalpApicTimerClock)
+            HalpSetApicTimerIncrement(HalpNextTimeIncrement);
+        else
+            RtcSetClockRate(HalpNextClockRate);
 
         /* We're done */
         HalpSetClockRate = FALSE;
@@ -381,6 +408,14 @@ HalSetTimeIncrement(IN ULONG Increment)
 {
     UCHAR Rate;
     ULONG NextIncrement;
+
+    if (HalpApicTimerClock)
+    {
+        Increment = min(max(Increment, HalpMinimumTimeIncrement), HalpMaximumTimeIncrement);
+        HalpNextTimeIncrement = Increment;
+        HalpSetClockRate = TRUE;
+        return Increment;
+    }
 
     /* Lookup largest value below given Increment */
     for (Rate = RtcMinimumClockRate; Rate < RtcMaximumClockRate; Rate++)

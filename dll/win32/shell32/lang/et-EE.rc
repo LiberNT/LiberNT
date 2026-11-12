@@ -845,7 +845,7 @@ BEGIN
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Hiljutised"
     IDS_SENDTO "SendTo"
-    IDS_STARTMENU "Start Menüü"
+    IDS_STARTMENU "Start Menu"
     IDS_MYMUSIC "Minu muusika"
     IDS_MYVIDEO "Minu videod"
     IDS_DESKTOPDIRECTORY "Desktop"

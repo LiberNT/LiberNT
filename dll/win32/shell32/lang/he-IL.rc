@@ -845,7 +845,7 @@ BEGIN
     IDS_STARTUP "תפריט ההתחלה\\תכניות\\הפעלה"
     IDS_RECENT "אחרונים"
     IDS_SENDTO "שלח אל"
-    IDS_STARTMENU "תפריט התחל"
+    IDS_STARTMENU "תפריט ההתחלה"
     IDS_MYMUSIC "המוסיקה שלי"
     IDS_MYVIDEO "הוידאו שלי"
     IDS_DESKTOPDIRECTORY "שולחן העבודה"

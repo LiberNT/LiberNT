@@ -23,6 +23,7 @@ static BOOLEAN ExpectingSetAttributes = FALSE;
 static ULONG ExpectedSetAttributes = -1;
 static BOOLEAN ExpectingQueryAttributes = FALSE;
 static ULONG ReturnQueryAttributes = -1;
+static HANDLE RemotePipeClient;
 
 NTSTATUS
 TestEntry(
@@ -53,6 +54,105 @@ TestUnload(
     IN PDRIVER_OBJECT DriverObject)
 {
     PAGED_CODE();
+
+    if (RemotePipeClient)
+    {
+        ZwClose(RemotePipeClient);
+        RemotePipeClient = NULL;
+    }
+}
+
+static
+NTSTATUS
+SendKernelFsControl(
+    IN HANDLE FileHandle,
+    IN ULONG FsControlCode,
+    IN PVOID InputBuffer,
+    IN ULONG InputLength)
+{
+    PFILE_OBJECT FileObject;
+    PIO_STACK_LOCATION IoStack;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    PAGED_CODE();
+
+    Status = ObReferenceObjectByHandle(FileHandle, 0, *IoFileObjectType, KernelMode, (PVOID *)&FileObject, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(FsControlCode, IoGetRelatedDeviceObject(FileObject),
+                                        InputBuffer, InputLength, NULL, 0, FALSE, &Event, &IoStatus);
+    if (!Irp)
+    {
+        ObDereferenceObject(FileObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    IoStack = IoGetNextIrpStackLocation(Irp);
+    IoStack->MajorFunction = IRP_MJ_FILE_SYSTEM_CONTROL;
+    IoStack->MinorFunction = IRP_MN_KERNEL_CALL;
+    IoStack->FileObject = FileObject;
+
+    Status = IoCallDriver(IoGetRelatedDeviceObject(FileObject), Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(FileObject);
+    return Status;
+}
+
+static
+NTSTATUS
+AttachRemotePipeClient(
+    IN PKMT_REMOTE_PIPE_CLIENT Request)
+{
+    FILE_PIPE_CLIENT_PROCESS_BUFFER_EX ClientProcess;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    UNICODE_STRING PipeName;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (RemotePipeClient)
+        return STATUS_DEVICE_BUSY;
+
+    Request->PipeName[RTL_NUMBER_OF(Request->PipeName) - 1] = UNICODE_NULL;
+    RtlInitUnicodeString(&PipeName, Request->PipeName);
+    InitializeObjectAttributes(&ObjectAttributes, &PipeName, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwCreateFile(&RemotePipeClient, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, &ObjectAttributes,
+                          &IoStatus, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN,
+                          FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+    if (!NT_SUCCESS(Status))
+    {
+        RemotePipeClient = NULL;
+        return Status;
+    }
+
+    RtlZeroMemory(&ClientProcess, sizeof(ClientProcess));
+    ClientProcess.ClientSession = Request->ClientSession;
+    ClientProcess.ClientProcess = Request->ClientProcess;
+    ClientProcess.ClientComputerNameLength = Request->ComputerNameLength;
+    RtlCopyMemory(ClientProcess.ClientComputerBuffer, Request->ComputerName,
+                  min(sizeof(ClientProcess.ClientComputerBuffer), sizeof(Request->ComputerName)));
+
+    Status = SendKernelFsControl(RemotePipeClient, FSCTL_PIPE_SET_CLIENT_PROCESS, &ClientProcess,
+                                 Request->WithComputerName ? sizeof(FILE_PIPE_CLIENT_PROCESS_BUFFER_EX)
+                                                           : sizeof(FILE_PIPE_CLIENT_PROCESS_BUFFER));
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(RemotePipeClient);
+        RemotePipeClient = NULL;
+    }
+
+    return Status;
 }
 
 static
@@ -107,6 +207,48 @@ TestMessageHandler(
             ExpectedSetAttributes = *(PULONG)Buffer;
             ExpectingSetAttributes = TRUE;
             DPRINT("IOCTL_EXPECT_SET_ATTRIBUTES: %lu\n", ExpectedSetAttributes);
+            break;
+        }
+        case IOCTL_SECURE_MEMORY:
+        {
+            PKMT_SECURE_MEMORY Request = Buffer;
+
+            if (InLength != sizeof(*Request) || *OutLength < sizeof(*Request))
+                return STATUS_INVALID_PARAMETER;
+
+            Request->SecureHandle = MmSecureVirtualMemory(Request->Address, Request->Size, Request->ProbeMode);
+            *OutLength = sizeof(*Request);
+            if (Request->SecureHandle == NULL)
+                return STATUS_UNSUCCESSFUL;
+            break;
+        }
+        case IOCTL_UNSECURE_MEMORY:
+        {
+            PKMT_SECURE_MEMORY Request = Buffer;
+
+            if (InLength != sizeof(*Request))
+                return STATUS_INVALID_PARAMETER;
+
+            MmUnsecureVirtualMemory(Request->SecureHandle);
+            *OutLength = 0;
+            break;
+        }
+        case IOCTL_ATTACH_REMOTE_PIPE_CLIENT:
+        {
+            if (InLength != sizeof(KMT_REMOTE_PIPE_CLIENT))
+                return STATUS_INVALID_PARAMETER;
+
+            *OutLength = 0;
+            return AttachRemotePipeClient(Buffer);
+        }
+        case IOCTL_DETACH_REMOTE_PIPE_CLIENT:
+        {
+            *OutLength = 0;
+            if (!RemotePipeClient)
+                return STATUS_INVALID_HANDLE;
+
+            ZwClose(RemotePipeClient);
+            RemotePipeClient = NULL;
             break;
         }
         default:

@@ -42,6 +42,7 @@
 typedef struct
 {
     LIST_ENTRY ListEntry;
+    BOOL Arrival;
     WCHAR DeviceIds[ANYSIZE_ARRAY];
 } DeviceInstallParams;
 
@@ -77,6 +78,19 @@ InitializeListeners(VOID);
 
 VOID
 BroadcastListenerEvent(
+    _In_ DWORD Code,
+    _In_ PCWSTR Path,
+    _In_reads_bytes_(Size) const BYTE *Data,
+    _In_ UINT Size);
+
+BOOL
+GetPhysicalDeviceObjectName(
+    _In_ PCWSTR DeviceInstance,
+    _Out_writes_bytes_(BufferSize) PWSTR Buffer,
+    _In_ ULONG BufferSize);
+
+BOOL
+QueryListeners(
     _In_ DWORD Code,
     _In_ PCWSTR Path,
     _In_reads_bytes_(Size) const BYTE *Data,

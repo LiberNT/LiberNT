@@ -69,7 +69,12 @@ typedef struct _HAL_ARM64_INTERRUPT_CONTROLLER
     VOID (*InitializeProcessor)(_In_ ULONG ProcessorNumber);
     BOOLEAN (*Phase0Initialize)(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
     BOOLEAN (*Phase1MapRuntimeMmio)(VOID);
+    ULONG IntIdLimit;
+
+    BOOLEAN DeliversToAnyProcessor;
 } HAL_ARM64_INTERRUPT_CONTROLLER, *PHAL_ARM64_INTERRUPT_CONTROLLER;
+
+#define HAL_ARM64_CONTROLLER_INTID_MAX 4128
 
 /* NULL when a GIC drives interrupts. */
 extern const HAL_ARM64_INTERRUPT_CONTROLLER *HalpArm64InterruptController;
@@ -100,6 +105,43 @@ typedef struct _HAL_ARM64_PCI_CONFIG_BACKEND
 extern const HAL_ARM64_PCI_CONFIG_BACKEND *HalpArm64PciConfigBackend;
 
 /* ------------------------------------------------------------------ */
+/*  System reset contract, for SoCs whose firmware offers no PSCI     */
+/*  SYSTEM_RESET. Restart runs at HIGH_LEVEL with interrupts off.     */
+/* ------------------------------------------------------------------ */
+
+typedef struct _HAL_ARM64_SYSTEM_RESET
+{
+    PCSTR Name;
+    VOID (*Restart)(VOID);
+} HAL_ARM64_SYSTEM_RESET, *PHAL_ARM64_SYSTEM_RESET;
+
+extern const HAL_ARM64_SYSTEM_RESET *HalpArm64SystemReset;
+
+/* ------------------------------------------------------------------ */
+/*  MSI doorbell contract, for SoCs whose MSIs are a write of the     */
+/*  message index to one doorbell address that raises a fixed range   */
+/*  of interrupt controller lines.                                    */
+/* ------------------------------------------------------------------ */
+
+typedef struct _HAL_ARM64_MSI_DOORBELL
+{
+    PCSTR Name;
+    ULONG64 Address;
+    ULONG FirstVector;
+    ULONG VectorCount;
+} HAL_ARM64_MSI_DOORBELL, *PHAL_ARM64_MSI_DOORBELL;
+
+extern const HAL_ARM64_MSI_DOORBELL *HalpArm64MsiDoorbell;
+
+typedef struct _HAL_ARM64_PROCESSOR_IDLE
+{
+    PCSTR Name;
+    VOID (*Idle)(VOID);
+} HAL_ARM64_PROCESSOR_IDLE, *PHAL_ARM64_PROCESSOR_IDLE;
+
+extern const HAL_ARM64_PROCESSOR_IDLE *HalpArm64ProcessorIdle;
+
+/* ------------------------------------------------------------------ */
 /*  Registration (called from platform probes)                        */
 /* ------------------------------------------------------------------ */
 
@@ -110,6 +152,18 @@ HalpArm64RegisterInterruptController(
 NTSTATUS
 HalpArm64RegisterPciConfigBackend(
     _In_ const HAL_ARM64_PCI_CONFIG_BACKEND *Backend);
+
+NTSTATUS
+HalpArm64RegisterSystemReset(
+    _In_ const HAL_ARM64_SYSTEM_RESET *Reset);
+
+NTSTATUS
+HalpArm64RegisterMsiDoorbell(
+    _In_ const HAL_ARM64_MSI_DOORBELL *Doorbell);
+
+NTSTATUS
+HalpArm64RegisterProcessorIdle(
+    _In_ const HAL_ARM64_PROCESSOR_IDLE *Idle);
 
 /* ------------------------------------------------------------------ */
 /*  Generic HAL consumption                                           */

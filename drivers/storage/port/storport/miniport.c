@@ -538,12 +538,21 @@ MiniportStartIo(
 
     DPRINT("StorPort: HwStartIo request %p function 0x%02x length %u status 0x%02x\n", Srb, Srb->Function, Srb->Length, Srb->SrbStatus);
 
-    Serialize = (Miniport->DeviceExtension->PerfConcurrentChannels <= 1);
+    if (Miniport->DeviceExtension->DumpMode)
+        return Miniport->InitData->HwStartIo(&Miniport->MiniportExtension->HwDeviceExtension, Srb);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    Serialize = PortStartIoSerialized(Miniport->DeviceExtension);
     if (Serialize)
         PortAcquireSpinLock(Miniport->DeviceExtension, StartIoLock, NULL, &LockHandle);
+    else
+        ExAcquireSpinLockSharedAtDpcLevel(&Miniport->DeviceExtension->ChannelLock);
+    PortFdoStartRequestIo(Miniport->DeviceExtension, Srb);
     Result = Miniport->InitData->HwStartIo(&Miniport->MiniportExtension->HwDeviceExtension, Srb);
     if (Serialize)
         PortReleaseSpinLock(Miniport->DeviceExtension, &LockHandle);
+    else
+        ExReleaseSpinLockSharedFromDpcLevel(&Miniport->DeviceExtension->ChannelLock);
     DPRINT("StorPort: HwStartIo returned %u, status 0x%02x\n", Result, Srb->SrbStatus);
 
     return Result;

@@ -95,7 +95,7 @@ BEGIN
     LTEXT "一般的な設定かカスタム設定のどちらを使うかをお選び下さい:", IDC_STATIC, 53, 7, 240, 20
     AUTORADIOBUTTON "一般的な設定", IDC_NETWORK_TYPICAL, 53, 27, 253, 18, WS_TABSTOP | WS_GROUP
     AUTORADIOBUTTON "カスタム設定", IDC_NETWORK_CUSTOM, 53, 72, 253, 18, WS_TABSTOP
-    LTEXT "LiberNT ネットワークのクライアント、LiberNT ネットワークのファイルとプリンタ共有、自動アドレッシングによるTCP/IP通信プロトコルを使ってネットワーク接続を作成します。", IDC_STATIC, 65, 45, 240, 30
+    LTEXT "LiberNT ネットワークのクライアント、LiberNT ネットワークのファイルとプリンター共有、自動アドレッシングによるTCP/IP通信プロトコルを使ってネットワーク接続を作成します。", IDC_STATIC, 65, 45, 240, 30
     LTEXT "手動によるネットワーク コンポーネントの設定を可能にします。", IDC_STATIC, 65, 90, 243, 20
 END
 
@@ -119,9 +119,9 @@ STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYS
 CAPTION "LiberNT セットアップ"
 FONT 9, "MS UI Gothic"
 BEGIN
-    LTEXT "このコンピュータをドメインのメンバーにしたいですか? (あなたはこの情報をネットワーク管理者から取得できます)", IDC_STATIC, 33, 2, 263, 50
-    AUTORADIOBUTTON "いいえ、このコンピュータはワークグループの一部になります。", IDC_SELECT_WORKGROUP, 33, 32, 253, 20, WS_TABSTOP | WS_GROUP
-    AUTORADIOBUTTON "はい、このコンピュータはドメインの一部になります。", IDC_SELECT_DOMAIN, 33, 47, 253, 20, WS_TABSTOP
+    LTEXT "このコンピューターをドメインのメンバーにしたいですか? (あなたはこの情報をネットワーク管理者から取得できます)", IDC_STATIC, 33, 2, 263, 50
+    AUTORADIOBUTTON "いいえ、このコンピューターはワークグループの一部になります。", IDC_SELECT_WORKGROUP, 33, 32, 253, 20, WS_TABSTOP | WS_GROUP
+    AUTORADIOBUTTON "はい、このコンピューターはドメインの一部になります。", IDC_SELECT_DOMAIN, 33, 47, 253, 20, WS_TABSTOP
     LTEXT "ワークグループかドメイン名:", IDC_STATIC, 33, 72, 126, 10
     EDITTEXT IDC_DOMAIN_NAME, 33, 82, 126, 14, WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL
     LTEXT "注意: もし、あなたがドメインに参加する充分な権限がないか、ドメインに入る方法を知らなければ、今はワークグループを選択するだけです。このオプションは、後で変更できます。", IDC_STATIC, 33, 107, 263, 50
@@ -178,11 +178,11 @@ BEGIN
     IDS_NETWORKINITTITLE "ネットワーク インストール"
     IDS_NETWORKINITSUBTITLE "必要なネットワーク コンポーネントをインストールします。"
     IDS_NETWORKSETTINGSTITLE "ネットワークの設定"
-    IDS_NETWORKSETTINGSSUBTITLE "別のネットワーク、別のコンピュータ、そしてインターネットに接続するために使うネットワーク ソフトウェアをインストールします。"
+    IDS_NETWORKSETTINGSSUBTITLE "別のネットワーク、別のコンピューター、そしてインターネットに接続するために使うネットワーク ソフトウェアをインストールします。"
     IDS_NETWORKCOMPONENTTITLE "ネットワーク コンポーネント"
-    IDS_NETWORKCOMPONENTSUBTITLE "あなたのコンピュータで使われるネットワーク コンポーネントを決定して下さい。新しいコンポーネントを追加するには、インストールをクリックして下さい。"
-    IDS_NETWORKDOMAINTITLE "ワークグループかコンピュータ ドメイン"
-    IDS_NETWORKDOMAINSUBTITLE "ドメインは、ネットワーク管理者によって定義された、コンピュータのグループです。ワークグループは、同じワークグループの名前を共有するコンピュータのグループです。"
+    IDS_NETWORKCOMPONENTSUBTITLE "あなたのコンピューターで使われるネットワーク コンポーネントを決定して下さい。新しいコンポーネントを追加するには、インストールをクリックして下さい。"
+    IDS_NETWORKDOMAINTITLE "ワークグループかコンピューター ドメイン"
+    IDS_NETWORKDOMAINSUBTITLE "このコンピューターをワークグループの一部として使うか、ネットワーク ドメインの一部として使うかを指定してください。"
     IDS_REACTOS_SETUP "LiberNT セットアップ"
     IDS_WZD_DOMAIN_NAME "セットアップは、あなたがあなたのドメインかワークグループの名前を入力するまで続行できません。"
 END

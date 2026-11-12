@@ -1,0 +1,12 @@
+/*
+ * PROJECT:     LiberNT Apple Silicon PCIe Driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Apple silicon PCIe driver version resource
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#define REACTOS_VERSION_DLL
+#define REACTOS_STR_FILE_DESCRIPTION "Apple Silicon PCIe Driver"
+#define REACTOS_STR_INTERNAL_NAME "applepcie"
+#define REACTOS_STR_ORIGINAL_FILENAME "applepcie.sys"
+#include <reactos/version.rc>

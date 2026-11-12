@@ -21,12 +21,14 @@ struct notify_request
     NTSTATUS status;
     IO_STATUS_BLOCK iosb;
     BOOL win32;
+    HANDLE started;
 };
 static DWORD WINAPI waiter(void *p)
 {
     struct notify_request *r = (struct notify_request *)p;
     r->iosb.Status = (NTSTATUS)0xdeadbeef;
     r->iosb.Information = 0xdeadbeef;
+    SetEvent(r->started);
     if (r->win32)
     {
         r->status = RegNotifyChangeKeyValue(r->key, r->tree, r->filter, NULL, FALSE);
@@ -35,6 +37,60 @@ static DWORD WINAPI waiter(void *p)
     r->status = notify(r->key, 0, 0, 0, &r->iosb, r->filter, r->tree, 0, 0, FALSE);
     return 0;
 }
+static BOOL thread_waiting(DWORD tid)
+{
+    ULONG size = 0x40000;
+    PVOID buffer;
+    NTSTATUS status;
+    BOOL waiting = FALSE;
+
+    for (;;)
+    {
+        buffer = HeapAlloc(GetProcessHeap(), 0, size);
+        if (!buffer)
+            return FALSE;
+        status = NtQuerySystemInformation(SystemProcessInformation, buffer, size, NULL);
+        if (status != STATUS_INFO_LENGTH_MISMATCH)
+            break;
+        HeapFree(GetProcessHeap(), 0, buffer);
+        size *= 2;
+    }
+
+    if (NT_SUCCESS(status))
+    {
+        PSYSTEM_PROCESS_INFORMATION process = buffer;
+        while (process->UniqueProcessId != UlongToHandle(GetCurrentProcessId()) && process->NextEntryOffset)
+            process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)process + process->NextEntryOffset);
+        if (process->UniqueProcessId == UlongToHandle(GetCurrentProcessId()))
+        {
+            PSYSTEM_THREAD_INFORMATION thread = (PSYSTEM_THREAD_INFORMATION)(process + 1);
+            for (ULONG i = 0; i < process->NumberOfThreads; i++)
+            {
+                if (thread[i].ClientId.UniqueThread == UlongToHandle(tid))
+                    waiting = (thread[i].ThreadState == Waiting);
+            }
+        }
+    }
+
+    HeapFree(GetProcessHeap(), 0, buffer);
+    return waiting;
+}
+
+static BOOL wait_until_blocked(HANDLE thread, DWORD tid, HANDLE started)
+{
+    ULONGLONG deadline = GetTickCount64() + 5000;
+
+    if (WaitForSingleObject(started, 5000) != WAIT_OBJECT_0)
+        return FALSE;
+    while (WaitForSingleObject(thread, 0) == WAIT_TIMEOUT && GetTickCount64() < deadline)
+    {
+        if (thread_waiting(tid))
+            return TRUE;
+        SwitchToThread();
+    }
+    return FALSE;
+}
+
 START_TEST(NtNotifyChangeKey)
 {
     WCHAR path[96];
@@ -48,10 +104,11 @@ START_TEST(NtNotifyChangeKey)
         HKEY key = 0, child = 0;
         CHECK(RegCreateKeyExW(HKEY_CURRENT_USER, path, 0, 0, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, 0, &key, 0) == 0);
         CHECK(RegCreateKeyExW(key, L"Child", 0, 0, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, 0, &child, 0) == 0);
-        struct notify_request r = {key, (ULONG)(which == 2 ? REG_NOTIFY_CHANGE_NAME : REG_NOTIFY_CHANGE_LAST_SET), (BOOLEAN)(which == 1), 0, {{0}, 0}, which >= 8};
-        HANDLE thread = CreateThread(0, 0, waiter, &r, 0, 0);
+        struct notify_request r = {key, (ULONG)(which == 2 ? REG_NOTIFY_CHANGE_NAME : REG_NOTIFY_CHANGE_LAST_SET), (BOOLEAN)(which == 1), 0, {{0}, 0}, which >= 8, CreateEventW(0, TRUE, FALSE, 0)};
+        DWORD tid = 0;
+        HANDLE thread = CreateThread(0, 0, waiter, &r, 0, &tid);
         CHECK(thread != 0);
-        Sleep(200);
+        CHECK(wait_until_blocked(thread, tid, r.started));
         CHECK(WaitForSingleObject(thread, 0) == WAIT_TIMEOUT);
         DWORD value = 1;
         if (which == 0 || which == 1 || which == 8)
@@ -79,7 +136,7 @@ START_TEST(NtNotifyChangeKey)
         else if (which == 5)
         {
             CHECK(RegSetValueExW(child, L"Value", 0, REG_DWORD, (BYTE *)&value, 4) == 0);
-            CHECK(WaitForSingleObject(thread, 100) == WAIT_TIMEOUT);
+            CHECK(WaitForSingleObject(thread, 0) == WAIT_TIMEOUT && thread_waiting(tid));
             CHECK(RegSetValueExW(key, L"Value", 0, REG_DWORD, (BYTE *)&value, 4) == 0);
         }
         else if (which == 6)
@@ -88,13 +145,13 @@ START_TEST(NtNotifyChangeKey)
             CHECK(RegCreateKeyExW(key, L"Added", 0, 0, REG_OPTION_VOLATILE, KEY_ALL_ACCESS, 0, &added, 0) == 0);
             if (added)
                 RegCloseKey(added);
-            CHECK(WaitForSingleObject(thread, 100) == WAIT_TIMEOUT);
+            CHECK(WaitForSingleObject(thread, 0) == WAIT_TIMEOUT && thread_waiting(tid));
             CHECK(RegDeleteKeyW(key, L"Added") == 0);
             CHECK(RegSetValueExW(key, L"Value", 0, REG_DWORD, (BYTE *)&value, 4) == 0);
         }
         else
             CHECK(TerminateThread(thread, 77));
-        DWORD wait = WaitForSingleObject(thread, 5000);
+        DWORD wait = WaitForSingleObject(thread, (which == 7) ? 1000 : 5000);
         CHECK(wait == WAIT_OBJECT_0);
         if (wait == WAIT_OBJECT_0 && which >= 8)
             CHECK(r.status == ERROR_SUCCESS);
@@ -111,6 +168,7 @@ START_TEST(NtNotifyChangeKey)
             WaitForSingleObject(thread, 1000);
         }
         CloseHandle(thread);
+        CloseHandle(r.started);
         if (child)
         {
             RegCloseKey(child);

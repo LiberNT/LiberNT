@@ -283,7 +283,8 @@ USBCCGP_InitInterfaceListOfFunctionDescriptor(
             break;
         }
 
-        if (Descriptor->bLength == sizeof(USB_INTERFACE_DESCRIPTOR) && Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE)
+        if (Descriptor->bLength == sizeof(USB_INTERFACE_DESCRIPTOR) && Descriptor->bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE &&
+            Descriptor->bAlternateSetting == 0)
         {
             //
             // store interface descriptor
@@ -357,6 +358,133 @@ USBCCGP_GetMsCompatDescriptor(
 
     FreeItem(Urb);
     return Status;
+}
+
+static IO_COMPLETION_ROUTINE USBCCGP_MsOs20Complete;
+
+static
+NTSTATUS
+NTAPI
+USBCCGP_MsOs20Complete(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PIRP Irp,
+    IN PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+    KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+NTSTATUS
+USBCCGP_GetMsOs20Set(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension,
+    IN OUT PROS_USB_MSOS20_DESCRIPTOR_SET_QUERY Query)
+{
+    PIO_STACK_LOCATION IoStack;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    Irp = IoAllocateIrp(FDODeviceExtension->NextDeviceObject->StackSize, FALSE);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    IoStack = IoGetNextIrpStackLocation(Irp);
+    IoStack->MajorFunction = IRP_MJ_INTERNAL_DEVICE_CONTROL;
+    IoStack->Parameters.DeviceIoControl.IoControlCode = IOCTL_INTERNAL_REACTOS_USB_GET_MSOS20_DESCRIPTOR_SET;
+    IoStack->Parameters.Others.Argument1 = Query;
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    IoSetCompletionRoutine(Irp, USBCCGP_MsOs20Complete, &Event, TRUE, TRUE, TRUE);
+
+    if (IoCallDriver(FDODeviceExtension->NextDeviceObject, Irp) == STATUS_PENDING)
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+    Status = Irp->IoStatus.Status;
+    IoFreeIrp(Irp);
+    return Status;
+}
+
+static
+VOID
+USBCCGP_QueryMsOs20Set(
+    IN PFDO_DEVICE_EXTENSION FDODeviceExtension)
+{
+    ROS_USB_MSOS20_DESCRIPTOR_SET_QUERY Query;
+    ROS_USB_MSOS20_WALK Walk;
+    PUCHAR Set;
+    NTSTATUS Status;
+
+    if (FDODeviceExtension->MsOs20DescriptorSet)
+    {
+        FreeItem(FDODeviceExtension->MsOs20DescriptorSet);
+        FDODeviceExtension->MsOs20DescriptorSet = NULL;
+        FDODeviceExtension->MsOs20DescriptorSetLength = 0;
+    }
+
+    RtlZeroMemory(&Query, sizeof(Query));
+    Query.Size = sizeof(Query);
+    Status = USBCCGP_GetMsOs20Set(FDODeviceExtension, &Query);
+    if (Status != STATUS_BUFFER_TOO_SMALL || !Query.ResultLength)
+        return;
+
+    Set = AllocateItem(NonPagedPool, Query.ResultLength);
+    if (!Set)
+        return;
+    Query.Buffer = Set;
+    Query.BufferLength = Query.ResultLength;
+    Status = USBCCGP_GetMsOs20Set(FDODeviceExtension, &Query);
+    if (!NT_SUCCESS(Status) || !RosUsbMsOs20BeginWalk(&Walk, Set, Query.ResultLength))
+    {
+        FreeItem(Set);
+        return;
+    }
+
+    FDODeviceExtension->MsOs20DescriptorSet = Set;
+    FDODeviceExtension->MsOs20DescriptorSetLength = Query.ResultLength;
+}
+
+VOID
+USBCCGP_ApplyMsOs20Properties(
+    IN PDEVICE_OBJECT DeviceObject,
+    IN PPDO_DEVICE_EXTENSION PDODeviceExtension)
+{
+    PFDO_DEVICE_EXTENSION FDODeviceExtension = PDODeviceExtension->FDODeviceExtension;
+    const MS_OS_20_DESCRIPTOR_HEADER *Feature;
+    ROS_USB_MSOS20_WALK Walk;
+    HANDLE Key;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (!FDODeviceExtension || !FDODeviceExtension->MsOs20DescriptorSet || !PDODeviceExtension->FunctionDescriptor ||
+        !RosUsbMsOs20BeginWalk(&Walk, FDODeviceExtension->MsOs20DescriptorSet,
+                               FDODeviceExtension->MsOs20DescriptorSetLength))
+    {
+        return;
+    }
+
+    Status = IoOpenDeviceRegistryKey(DeviceObject, PLUGPLAY_REGKEY_DEVICE, KEY_WRITE, &Key);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("USBCCGP: no device key for MS OS 2.0 properties: %lx\n", Status);
+        return;
+    }
+
+    while ((Feature = RosUsbMsOs20NextFeature(&Walk)) != NULL)
+    {
+        if (Walk.FirstInterface == (LONG)PDODeviceExtension->FunctionDescriptor->FunctionNumber &&
+            Feature->wDescriptorType == MS_OS_20_FEATURE_REG_PROPERTY)
+        {
+            Status = RosUsbMsOs20ApplyRegistryProperty(Key, Feature);
+            if (!NT_SUCCESS(Status))
+                DPRINT1("USBCCGP: MS OS 2.0 registry property failed: %lx\n", Status);
+        }
+    }
+    ZwClose(Key);
 }
 
 static
@@ -436,8 +564,41 @@ USBCCGP_FormatMsCompatIds(
     OUT PWCHAR Buffer)
 {
     PUCHAR Descriptor = FDODeviceExtension->MsCompatDescriptor;
+    const MS_OS_20_COMPATIBLE_ID_DESCRIPTOR *Feature;
     ULONG Offset, Count, Index = 0;
     CHAR Compatible[9], SubCompatible[9];
+    UCHAR Raw[9];
+    ROS_USB_MSOS20_WALK Walk;
+
+    if (FDODeviceExtension->MsOs20DescriptorSet)
+    {
+        if (!RosUsbMsOs20BeginWalk(&Walk, FDODeviceExtension->MsOs20DescriptorSet,
+                                   FDODeviceExtension->MsOs20DescriptorSetLength))
+        {
+            return 0;
+        }
+        while ((Feature = (const MS_OS_20_COMPATIBLE_ID_DESCRIPTOR *)RosUsbMsOs20NextFeature(&Walk)) != NULL)
+        {
+            if (Walk.FirstInterface != FirstInterface || Feature->wDescriptorType != MS_OS_20_FEATURE_COMPATBLE_ID ||
+                Feature->wLength != sizeof(*Feature))
+            {
+                continue;
+            }
+            RtlZeroMemory(Raw, sizeof(Raw));
+            RtlCopyMemory(Raw, Feature->CompatibleID, sizeof(Feature->CompatibleID));
+            if (!USBCCGP_CopyMsCompatString(Compatible, Raw))
+                return 0;
+            RtlZeroMemory(Raw, sizeof(Raw));
+            RtlCopyMemory(Raw, Feature->SubCompatibleID, sizeof(Feature->SubCompatibleID));
+            if (USBCCGP_CopyMsCompatString(SubCompatible, Raw))
+            {
+                Index += _swprintf(&Buffer[Index], L"USB\\MS_COMP_%S&MS_SUBCOMP_%S", Compatible, SubCompatible) + 1;
+            }
+            Index += _swprintf(&Buffer[Index], L"USB\\MS_COMP_%S", Compatible) + 1;
+            return Index;
+        }
+        return 0;
+    }
 
     if (!Descriptor)
         return 0;
@@ -1087,7 +1248,8 @@ USBCCGP_EnumWithAudioLegacy(
         //
         InterfaceDescriptor = USBD_ParseConfigurationDescriptorEx(FDODeviceExtension->ConfigurationDescriptor, FDODeviceExtension->ConfigurationDescriptor, Index, 0, -1, -1, -1);
         DPRINT("Index %lu Descriptor %p\n", Index, InterfaceDescriptor);
-        ASSERT(InterfaceDescriptor);
+        if (!InterfaceDescriptor)
+            return STATUS_UNSUCCESSFUL;
 
         if (InterfaceDescriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO)
         {
@@ -1114,6 +1276,9 @@ USBCCGP_EnumWithAudioLegacy(
             return STATUS_UNSUCCESSFUL;
         }
     }
+
+    if (!FirstDescriptor)
+        return STATUS_UNSUCCESSFUL;
 
     //
     // this is an composite audio device
@@ -1194,7 +1359,9 @@ USBCCGP_EnumerateFunctions(
     FDODeviceExtension = (PFDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
     ASSERT(FDODeviceExtension->Common.IsFDO);
 
-    USBCCGP_QueryMsCompatIds(FDODeviceExtension);
+    USBCCGP_QueryMsOs20Set(FDODeviceExtension);
+    if (!FDODeviceExtension->MsOs20DescriptorSet)
+        USBCCGP_QueryMsCompatIds(FDODeviceExtension);
 
     //
     // first try with filter driver

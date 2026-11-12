@@ -70,63 +70,6 @@ void WINAPI DECLSPEC_HOTPATCH RaiseFailFastException( EXCEPTION_RECORD *record, 
     for (;;) NtRaiseException( record, context, FALSE );
 }
 
-static LONG wer_flags_initialized;
-static LONG wer_flags;
-
-/***********************************************************************
- *         WerGetFlags   (kernelbase.@)
- */
-HRESULT WINAPI WerGetFlags( HANDLE process, DWORD *flags )
-{
-    DWORD process_id;
-
-    if (!process || !flags) return E_INVALIDARG;
-
-    if (process == GetCurrentProcess()) process_id = GetCurrentProcessId();
-    else if (!(process_id = GetProcessId( process ))) return HRESULT_FROM_WIN32( GetLastError() );
-
-    if (process_id != GetCurrentProcessId() ||
-        !InterlockedCompareExchange( &wer_flags_initialized, 0, 0 ))
-        return HRESULT_FROM_WIN32( ERROR_NOT_FOUND );
-
-    *flags = InterlockedCompareExchange( &wer_flags, 0, 0 );
-    return S_OK;
-}
-
-/***********************************************************************
- *         WerSetFlags   (kernelbase.@)
- */
-HRESULT WINAPI WerSetFlags( DWORD flags )
-{
-    InterlockedExchange( &wer_flags, flags );
-    InterlockedExchange( &wer_flags_initialized, TRUE );
-    return S_OK;
-}
-
-HRESULT WINAPI WerRegisterMemoryBlock(void *block, DWORD size)
-{
-    FIXME("(%p %lu): crash-report memory registration is not implemented\n", block, size);
-    return E_NOTIMPL;
-}
-
-HRESULT WINAPI WerUnregisterMemoryBlock(void *block)
-{
-    FIXME("(%p): crash-report memory registration is not implemented\n", block);
-    return E_NOTIMPL;
-}
-
-HRESULT WINAPI WerRegisterFile(const WCHAR *file, WER_REGISTER_FILE_TYPE type, DWORD flags)
-{
-    FIXME("(%s, %d, %lu): crash-report file registration is not implemented\n", debugstr_w(file), type, flags);
-    return E_NOTIMPL;
-}
-
-HRESULT WINAPI WerUnregisterFile(const WCHAR *file)
-{
-    FIXME("(%s): crash-report file registration is not implemented\n", debugstr_w(file));
-    return E_NOTIMPL;
-}
-
 #else /* __REACTOS__ */
 
 #include <stdio.h>

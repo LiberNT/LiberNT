@@ -52,6 +52,22 @@ static OSL_PARAMETERS OslParameters;
 static BM_STARTUP OslStartup;
 
 VOID
+OslTrace(
+    _In_z_ _Printf_format_string_ PCSTR Format,
+    ...)
+{
+    CHAR Text[OSL_OPTIONS_CHARS];
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+    RtlStringCbVPrintfA(Text, sizeof(Text) - 1, Format, Arguments);
+    va_end(Arguments);
+
+    RtlStringCbCatA(Text, sizeof(Text), "\n");
+    FwDebugPrint(Text);
+}
+
+VOID
 UiMessageBox(
     _In_ PCSTR Format,
     ...)
@@ -317,9 +333,12 @@ OslMain(VOID)
     DK_DEVICE OsDevice;
     SIZE_T Length;
 
+    OslTrace("OS loader: selecting the boot entry");
     Entry = OslSelectEntry();
     if (!Entry)
         return;
+
+    OslTrace("OS loader: reading the boot entry");
 
     if (!OslGetParameters(Entry, &OslParameters) ||
         !OslNarrow(SystemRoot, sizeof(SystemRoot) - 1, OslParameters.SystemRoot) ||
@@ -330,10 +349,13 @@ OslMain(VOID)
     }
 
     AppendBootTimeOptions(Options, sizeof(Options), &OslStartup);
+    FwDebugScreen = OslHasDebugPort(Options, "SCREEN");
 
     Length = strlen(SystemRoot);
     if (Length == 0 || SystemRoot[Length - 1] != '\\')
         RtlStringCbCatA(SystemRoot, sizeof(SystemRoot), "\\");
+
+    OslTrace("OS loader: system root %s, options %s", SystemRoot, Options);
 
     if (OslParameters.OsDevice.Ramdisk)
     {
@@ -394,12 +416,14 @@ OslMain(VOID)
 
     LoaderBlock->ConfigurationRoot = OslBuildConfigurationTree(LoaderBlock);
 
+    OslTrace("OS loader: loading the SYSTEM hive");
     if (!OslLoadSystemHive(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The SYSTEM registry hive is missing or corrupt.\r\n");
         return;
     }
 
+    OslTrace("OS loader: loading %ls and %ls", OslParameters.KernelFile, OslParameters.HalFile);
     Kernel = OslLoadCoreImage(LoaderBlock,
                               &OsDevice,
                               Directory,
@@ -433,12 +457,14 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("OS loader: loading the NLS files");
     if (!OslLoadNlsData(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The national language support files could not be loaded.\r\n");
         return;
     }
 
+    OslTrace("OS loader: loading the boot drivers");
     if (!OslLoadBootDrivers(LoaderBlock, &OsDevice, SystemRoot))
     {
         FwPrint(L"The boot driver list could not be built.\r\n");
@@ -453,6 +479,7 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("OS loader: preparing the kernel address space");
     if (!OslArchPrepareHandoff(LoaderBlock))
     {
         FwPrint(L"The kernel address space could not be prepared.\r\n");
@@ -476,8 +503,10 @@ BlMain(VOID)
     PUCHAR Stack;
 
     FwDebugAnnounce("LiberNT OS Loader", FALSE);
+    OslTrace("OS loader: describing the platform");
     OslArchInitialize();
 
+    OslTrace("OS loader: reading the memory map");
     if (!MmInitializeMemoryManager())
     {
         FwPrint(L"The memory map could not be read.\r\n");
@@ -486,6 +515,7 @@ BlMain(VOID)
 
     BlHeapAllocator = MmHeapAllocate;
 
+    OslTrace("OS loader: allocating the loader stack");
     Stack = MmAllocateMemoryWithType(OSL_STACK_SIZE, LoaderOsloaderStack);
     if (!Stack)
     {
@@ -494,5 +524,6 @@ BlMain(VOID)
     }
 
     BasicStack = Stack + OSL_STACK_SIZE;
+    OslTrace("OS loader: switching to the loader stack at %p", BasicStack);
     OslArchSwitchStack();
 }

@@ -50,7 +50,7 @@ TestFill(const char *Name, PMEMSET Function)
                     if (DataFailures <= 4)
                     {
                         trace("%s mismatch: offset=%lu length=%Iu index=%Iu expected=%02x actual=%02x\n", Name, Offset,
-                              Length, Index, Want, Buffer[Index]);
+                              (size_t)Length, (size_t)Index, Want, Buffer[Index]);
                     }
                     break;
                 }

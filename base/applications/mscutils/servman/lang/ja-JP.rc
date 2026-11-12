@@ -10,7 +10,7 @@ BEGIN
     END
     POPUP "操作"
     BEGIN
-        MENUITEM "別のコンピュータへ接続...", ID_CONNECT, GRAYED
+        MENUITEM "別のコンピューターへ接続...", ID_CONNECT, GRAYED
         MENUITEM SEPARATOR
         MENUITEM "開始", ID_START, GRAYED
         MENUITEM "停止", ID_STOP, GRAYED
@@ -89,8 +89,8 @@ BEGIN
     LTEXT "スタートアップの種類:", IDC_STATIC, 6, 108, 53, 11
     LTEXT "サービスの状態:", IDC_STATIC, 4, 138, 53, 11
     LTEXT "", IDC_SERV_STATUS, 70, 138, 176, 11, WS_CHILD | WS_VISIBLE
-    LTEXT "ここでサービスを開始するときに適用する開始パラメータを指定できます。", IDC_STATIC, 6, 177, 240, 15
-    LTEXT "開始パラメータ:", IDC_STATIC, 6, 200, 58, 11
+    LTEXT "ここでサービスを開始するときに適用する開始パラメーターを指定できます。", IDC_STATIC, 6, 177, 240, 15
+    LTEXT "開始パラメーター:", IDC_STATIC, 6, 200, 58, 11
     EDITTEXT IDC_START_PARAM, 68, 199, 178, 13, WS_CHILD | WS_VISIBLE | WS_TABSTOP
     PUSHBUTTON "編集", IDC_EDIT, 192, 215, 54, 15, WS_DISABLED
 END
@@ -121,14 +121,14 @@ CAPTION "回復"
 FONT 9, "MS UI Gothic", 0, 0
 STYLE DS_SHELLFONT | WS_BORDER | WS_VISIBLE | WS_DLGFRAME | WS_SYSMENU | WS_GROUP | WS_TABSTOP
 BEGIN
-    LTEXT "このサービスが失敗した場合のコンピュータの応答を選択します。", IDC_STATIC, 7, 7, 238, 8
+    LTEXT "このサービスが失敗した場合のコンピューターの応答を選択します。", IDC_STATIC, 7, 7, 238, 8
     LTEXT "最初の失敗(&F):", IDC_STATIC, 7, 24, 92, 8
     COMBOBOX IDC_FIRST_FAILURE, 104, 22, 141, 147, WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST
     LTEXT "二番目の失敗(&S):", IDC_STATIC, 7, 41, 92, 8
     COMBOBOX IDC_SECOND_FAILURE, 104, 39, 141, 147, WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST
     LTEXT "その後の失敗:", IDC_STATIC, 7, 58, 92, 8
     COMBOBOX IDC_SUBSEQUENT_FAILURES, 104, 56, 141, 147, WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST
-    LTEXT "失敗カウンタのリセット(&O):", IDC_STATIC, 7, 75, 72, 8
+    LTEXT "失敗カウンターのリセット(&O):", IDC_STATIC, 7, 75, 72, 8
     EDITTEXT IDC_RESET_TIME, 104, 73, 40, 13, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_LEFT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT "日後", IDC_STATIC, 150, 75, 95, 8
     LTEXT "サービスの再開(&V):", IDC_RESTART_TEXT1, 7, 92, 92, 8
@@ -141,7 +141,7 @@ BEGIN
     LTEXT "コマンドライン引数(&C):", IDC_RUN_TEXT2, 14, 155, 108, 8
     EDITTEXT IDC_PARAMETERS, 128, 152, 110, 14
     AUTOCHECKBOX "失敗回数をコマンドラインの末尾に追加する(&E) (/fail=%1%)", IDC_ADD_FAILCOUNT, 14, 171, 219, 10, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_TOP | BS_MULTILINE
-    PUSHBUTTON "コンピュータの再起動オプション(&R)...", IDC_RESTART_OPTIONS, 116, 197, 129, 14
+    PUSHBUTTON "コンピューターの再起動オプション(&R)...", IDC_RESTART_OPTIONS, 116, 197, 129, 14
 END
 
 IDD_DLG_DEPEND DIALOGEX 6, 6, 253, 225
@@ -155,7 +155,7 @@ BEGIN
     CONTROL "", IDC_DEPEND_TREE2, "SysTreeView32", WS_BORDER | WS_CHILDWINDOW |
             WS_VISIBLE | WS_TABSTOP | TVS_HASBUTTONS | TVS_HASLINES |
             TVS_LINESATROOT | TVS_DISABLEDRAGDROP, 8, 151, 236, 68
-    LTEXT "他のサービス、システム ドライバ、読み込み順グループなどに依存しているサービスがあります。システム コンポーネントが停止するか、または正常に実行されない場合、依存するサービスが影響されている場合があります。", IDC_STATIC, 8, 7, 238, 26
+    LTEXT "他のサービス、システム ドライバー、読み込み順グループなどに依存しているサービスがあります。システム コンポーネントが停止するか、または正常に実行されない場合、依存するサービスが影響されている場合があります。", IDC_STATIC, 8, 7, 238, 26
     LTEXT "このサービスが依存するコンポーネント:", IDC_STATIC, 8, 57, 236, 9
     LTEXT "次のコンポーネントがこのサービスに依存しています:", IDC_STATIC, 8, 140, 236, 9
     LTEXT "", IDC_DEPEND_SERVICE, 8, 38, 236, 13
@@ -290,7 +290,7 @@ BEGIN
     IDS_HINT_BLANK " "
     IDS_HINT_EXPORT " 現在のリストをファイルにエクスポートします。"
     IDS_HINT_EXIT " このプログラムを終了します。"
-    IDS_HINT_CONNECT " 他のコンピュータを管理します。"
+    IDS_HINT_CONNECT " 他のコンピューターを管理します。"
     IDS_HINT_START " 選択したサービスを開始します。"
     IDS_HINT_STOP " 選択したサービスを停止します。"
     IDS_HINT_PAUSE " 選択したサービスを一時停止します。"
@@ -307,7 +307,7 @@ BEGIN
     IDS_HINT_DETAILS " 各アイテムの情報をウィンドウに表示します。"
     IDS_HINT_CUST " 表示をカスタマイズします。"
     IDS_HINT_HELP " ヘルプ ウィンドウを表示します。"
-    IDS_HINT_ABOUT " LiberNT サービス マネージャについて表示します。"
+    IDS_HINT_ABOUT " LiberNT サービス マネージャーについて表示します。"
     IDS_HINT_SYS_RESTORE " このウィンドウを通常の大きさに復元します。"
     IDS_HINT_SYS_MOVE " このウィンドウを移動します。"
     IDS_HINT_SYS_SIZE " このウィンドウの大きさを変更します。"
@@ -319,7 +319,7 @@ END
 /* Application title */
 STRINGTABLE
 BEGIN
-    IDS_APPNAME "LiberNT サービス マネージャ"
+    IDS_APPNAME "LiberNT サービス マネージャー"
     IDS_APPAUTHORS "Copyright (C) 2005-2007 by Ged Murphy (gedmurphy@reactos.org)"
 END
 
@@ -328,7 +328,7 @@ BEGIN
     IDS_NO_ACTION "何もしない"
     IDS_RESTART_SERVICE "サービスを再起動する"
     IDS_RUN_PROGRAM "プログラムを実行する"
-    IDS_RESTART_COMPUTER "コンピュータを再起動"
+    IDS_RESTART_COMPUTER "コンピューターを再起動"
 END
 
 STRINGTABLE

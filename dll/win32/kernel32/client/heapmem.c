@@ -250,25 +250,54 @@ BOOL
 WINAPI
 HeapSummary(HANDLE hHeap,
             DWORD dwFlags,
-            PVOID Summary)
+            LPHEAP_SUMMARY lpSummary)
 {
+    RTL_HEAP_WALK_ENTRY Entry;
+    SIZE_T Allocated = 0;
+    SIZE_T Committed = 0;
+    SIZE_T UnCommitted = 0;
     NTSTATUS Status;
-    RTL_HEAP_USAGE Usage;
 
-    /* Fill in the length information */
-    Usage.Length = sizeof(Usage);
+    UNREFERENCED_PARAMETER(dwFlags);
 
-    /* Call RTL. Gone in Vista, so commented out */
-    Status = STATUS_NOT_IMPLEMENTED; //RtlUsageHeap(hHeap, dwFlags, &Usage);
-    if (!NT_SUCCESS(Status))
+    if (lpSummary->cb != sizeof(*lpSummary))
     {
-        /* We failed */
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (!RtlLockHeap(hHeap))
+    {
+        BaseSetLastNTError(STATUS_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    RtlZeroMemory(&Entry, sizeof(Entry));
+    while (NT_SUCCESS(Status = RtlWalkHeap(hHeap, &Entry)))
+    {
+        if (Entry.Flags & RTL_HEAP_ENTRY_BUSY)
+        {
+            Allocated += Entry.DataSize;
+        }
+        else if (Entry.Flags & RTL_HEAP_ENTRY_REGION)
+        {
+            Committed += Entry.Segment.CommittedSize;
+            UnCommitted += Entry.Segment.UnCommittedSize;
+        }
+    }
+
+    RtlUnlockHeap(hHeap);
+
+    if (Status != STATUS_NO_MORE_ENTRIES)
+    {
         BaseSetLastNTError(Status);
         return FALSE;
     }
 
-    /* FIXME: Summary == Usage?! */
-    RtlCopyMemory(Summary, &Usage, sizeof(Usage));
+    lpSummary->cbAllocated = Allocated;
+    lpSummary->cbCommitted = Committed;
+    lpSummary->cbReserved = Committed + UnCommitted;
+    lpSummary->cbMaxReserve = lpSummary->cbReserved;
     return TRUE;
 }
 

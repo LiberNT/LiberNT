@@ -403,6 +403,12 @@ NTSTATUS TCPConnect
         AddrInitIPv4(&RemoteAddress, IPv4Address);
     }
 
+    if (RemoteAddress.Type == IP_ADDRESS_V4 ? !RemoteAddress.Address.IPv4Address : AddrIsUnspecified(&RemoteAddress))
+    {
+        UnlockObject(Connection);
+        return STATUS_INVALID_ADDRESS;
+    }
+
     if (Connection->AddressFile->Address.Type != RemoteAddress.Type &&
         !(Connection->AddressFile->DualStack && RemoteAddress.Type == IP_ADDRESS_V4))
     {

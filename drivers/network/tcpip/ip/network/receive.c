@@ -722,6 +722,29 @@ VOID IPv4Forward(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     NBDereferenceNeighbor(NCE);
 }
 
+static BOOLEAN IPv4IsDhcpClientDatagram(PIP_PACKET IPPacket)
+{
+    PIPv4_HEADER Header = (PIPv4_HEADER)IPPacket->Header;
+    USHORT DestinationPort;
+
+    if (Header->Protocol != IPPROTO_UDP ||
+        (WN2H(Header->FlagsFragOfs) & (IPv4_FRAGOFS_MASK | IPv4_MF_MASK)) != 0 ||
+        IPPacket->TotalSize < IPPacket->HeaderSize + 4)
+    {
+        return FALSE;
+    }
+
+    if (CopyPacketToBuffer((PCHAR)&DestinationPort,
+                           IPPacket->NdisPacket,
+                           IPPacket->Position + IPPacket->HeaderSize + 2,
+                           sizeof(DestinationPort)) != sizeof(DestinationPort))
+    {
+        return FALSE;
+    }
+
+    return DestinationPort == WH2N(IP_DHCP_CLIENT_PORT);
+}
+
 VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
 /*
  * FUNCTION: Receives an IPv4 datagram (or fragment)
@@ -804,7 +827,8 @@ VOID IPv4Receive(PIP_INTERFACE IF, PIP_PACKET IPPacket)
     AddrInitIPv4(&IPPacket->SrcAddr, ((PIPv4_HEADER)IPPacket->Header)->SrcAddr);
     AddrInitIPv4(&IPPacket->DstAddr, ((PIPv4_HEADER)IPPacket->Header)->DstAddr);
 
-    if (!IPv4AcceptDestination(IF, &IPPacket->DstAddr, &Forward))
+    if (!IPv4AcceptDestination(IF, &IPPacket->DstAddr, &Forward) &&
+        (Forward || !IPv4IsDhcpClientDatagram(IPPacket)))
     {
         if (!Forward)
             return;

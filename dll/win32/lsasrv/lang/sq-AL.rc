@@ -97,4 +97,6 @@ BEGIN
     IDS_TIME_ZONE_PRIVILEGE "Change the time zone"
     IDS_CREATE_SYMBOLIC_LINK_PRIVILEGE "Create symbolic links"
     IDS_DELEGATE_SESSION_USER_IMPERSONATE_PRIVILEGE "Obtain an impersonation token for another user in the same session"
+    IDS_TRUSTED_CREDMAN_ACCESS_PRIVILEGE "Access Credential Manager as a trusted caller"
+    IDS_RELABEL_PRIVILEGE "Modify an object label"
 END

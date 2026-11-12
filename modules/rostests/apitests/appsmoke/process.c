@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests process start, DLL directory inheritance and termination in an address wait
+ * PURPOSE:     Tests process start, environment and DLL directory inheritance and termination in an address wait
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -10,6 +10,7 @@
 #define PROBE_DLL L"apsmkdir.dll"
 #define CHILD_COUNT 16
 #define CHILD_BUDGET_MS 5000
+#define FAIRNESS_WINDOW_MS 500
 
 typedef LONG NTSTATUS;
 typedef NTSTATUS (NTAPI *RTL_WAIT_ON_ADDRESS)(const void *, const void *, SIZE_T, const LARGE_INTEGER *);
@@ -23,6 +24,11 @@ static volatile LONG WaitValue;
 static volatile LONG WaiterState;
 static volatile LONG ApcCount;
 
+typedef BOOL (WINAPI *QUERY_THREAD_CYCLE_TIME)(HANDLE, PULONG64);
+typedef BOOL (WINAPI *QUERY_IDLE_PROCESSOR_CYCLE_TIME)(PULONG, PULONG64);
+
+static QUERY_THREAD_CYCLE_TIME pQueryThreadCycleTime;
+static QUERY_IDLE_PROCESSOR_CYCLE_TIME pQueryIdleProcessorCycleTime;
 static volatile LONG StopSpinning;
 
 static DWORD WINAPI ComputeSpinner(void *Context)
@@ -43,47 +49,70 @@ static DWORD WINAPI YieldSpinner(void *Context)
     return 0;
 }
 
-static ULONGLONG ThreadCpuTime(HANDLE Thread)
+static ULONGLONG ThreadCycles(HANDLE Thread)
 {
-    FILETIME Creation, Exit, Kernel, User;
+    ULONG64 Cycles = 0;
 
-    if (!GetThreadTimes(Thread, &Creation, &Exit, &Kernel, &User))
+    if (!pQueryThreadCycleTime(Thread, &Cycles))
         return 0;
 
-    return (((ULONGLONG)Kernel.dwHighDateTime << 32) | Kernel.dwLowDateTime) +
-           (((ULONGLONG)User.dwHighDateTime << 32) | User.dwLowDateTime);
+    return Cycles;
+}
+
+static ULONGLONG IdleCycles(void)
+{
+    ULONG64 Times[MAXIMUM_WAIT_OBJECTS];
+    ULONG Length = sizeof(Times), Index;
+    ULONGLONG Total = 0;
+
+    if (!pQueryIdleProcessorCycleTime(&Length, Times))
+        return 0;
+
+    for (Index = 0; Index < Length / sizeof(Times[0]); Index++)
+        Total += Times[Index];
+
+    return Total;
 }
 
 START_TEST(yield_fairness)
 {
     HANDLE Threads[MAXIMUM_WAIT_OBJECTS];
+    HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
     SYSTEM_INFO Info;
-    ULONGLONG ComputeTime = 0, YieldTime;
-    DWORD Count, Index, Elapsed, Start;
+    ULONGLONG BusyCycles = 0, YieldCycles, IdleBefore, Idle;
+    DWORD Count, Index;
+
+    pQueryThreadCycleTime = (QUERY_THREAD_CYCLE_TIME)GetProcAddress(Kernel32, "QueryThreadCycleTime");
+    pQueryIdleProcessorCycleTime = (QUERY_IDLE_PROCESSOR_CYCLE_TIME)GetProcAddress(Kernel32, "QueryIdleProcessorCycleTime");
+    if (!pQueryThreadCycleTime || !pQueryIdleProcessorCycleTime)
+    {
+        skip("Cycle times are not available\n");
+        return;
+    }
 
     GetSystemInfo(&Info);
     Count = min(Info.dwNumberOfProcessors, MAXIMUM_WAIT_OBJECTS - 1);
     StopSpinning = 0;
+    IdleBefore = IdleCycles();
     for (Index = 0; Index < Count; Index++)
         Threads[Index] = CreateThread(NULL, 0, ComputeSpinner, NULL, 0, NULL);
     Threads[Count] = CreateThread(NULL, 0, YieldSpinner, NULL, 0, NULL);
 
-    Start = GetTickCount();
-    Sleep(2000);
+    Sleep(FAIRNESS_WINDOW_MS);
+    Idle = IdleCycles() - IdleBefore;
     StopSpinning = 1;
     ok(WaitForMultipleObjects(Count + 1, Threads, TRUE, 10000) == WAIT_OBJECT_0, "The spinners did not stop\n");
-    Elapsed = GetTickCount() - Start;
 
     for (Index = 0; Index < Count; Index++)
-        ComputeTime += ThreadCpuTime(Threads[Index]);
-    YieldTime = ThreadCpuTime(Threads[Count]);
+        BusyCycles += ThreadCycles(Threads[Index]);
+    YieldCycles = ThreadCycles(Threads[Count]);
     for (Index = 0; Index <= Count; Index++)
         CloseHandle(Threads[Index]);
 
-    ok(YieldTime / 10000 < Elapsed / 4, "A yielding thread used %lu ms of %lu ms beside %lu busy threads\n",
-       (ULONG)(YieldTime / 10000), Elapsed, Count);
-    ok(ComputeTime / 10000 > (ULONGLONG)Elapsed * Count * 3 / 4, "%lu busy threads used %lu ms in %lu ms\n",
-       Count, (ULONG)(ComputeTime / 10000), Elapsed);
+    ok(YieldCycles < BusyCycles / Count / 4, "A yielding thread used %I64u cycles beside %lu busy threads that used %I64u\n",
+       YieldCycles, Count, BusyCycles);
+    ok(Idle < BusyCycles / 3, "The processors idled %I64u cycles while %lu busy threads used %I64u\n",
+       Idle, Count, BusyCycles);
 }
 
 START_TEST(os_version)
@@ -201,6 +230,47 @@ START_TEST(child_start)
 
     ok(Failed == 0, "%u of %u children failed to start; first exit code %#lx\n", Failed, Index, FirstCode);
     trace("Slowest of %u children: %lu ms\n", Index, Slowest);
+}
+
+START_TEST(environment)
+{
+    USHORT ProcessMachine = IMAGE_FILE_MACHINE_UNKNOWN, NativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    const WCHAR *Native = NULL;
+    WCHAR Value[64] = L"";
+    DWORD ExitCode, Elapsed, Length;
+    BOOL InTime;
+
+    if (AppSmokeIsRole("child"))
+    {
+        Length = GetEnvironmentVariableW(L"APPSMOKE_INHERITED", Value, ARRAYSIZE(Value));
+        ok(Length == 3 && !wcscmp(Value, L"yes"), "The child got %lu characters of its parent's variable\n", Length);
+        return;
+    }
+
+    ok(IsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine), "IsWow64Process2: %lu\n", GetLastError());
+    if (NativeMachine == IMAGE_FILE_MACHINE_AMD64)
+        Native = L"AMD64";
+    else if (NativeMachine == IMAGE_FILE_MACHINE_ARM64)
+        Native = L"ARM64";
+
+    /* WOW64 Implementation Details: a 32-bit process sees x86, and the native architecture in PROCESSOR_ARCHITEW6432 */
+    if (ProcessMachine == IMAGE_FILE_MACHINE_I386 && Native != NULL)
+    {
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITECTURE", Value, ARRAYSIZE(Value));
+        ok(Length != 0 && !wcscmp(Value, L"x86"), "PROCESSOR_ARCHITECTURE is %ls\n", Length ? Value : L"not set");
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITEW6432", Value, ARRAYSIZE(Value));
+        ok(Length != 0 && !wcscmp(Value, Native), "PROCESSOR_ARCHITEW6432 is %ls\n", Length ? Value : L"not set");
+    }
+    else if (sizeof(void *) == 8)
+    {
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITEW6432", Value, ARRAYSIZE(Value));
+        ok(Length == 0, "A 64-bit process has PROCESSOR_ARCHITEW6432 %ls\n", Value);
+    }
+
+    ok(SetEnvironmentVariableW(L"APPSMOKE_INHERITED", L"yes"), "SetEnvironmentVariable: %lu\n", GetLastError());
+    InTime = AppSmokeRunSelf("environment", "child", CHILD_BUDGET_MS, &ExitCode, &Elapsed);
+    ok(InTime && !ExitCode, "Child of the environment: exit code %#lx after %lu ms\n", ExitCode, Elapsed);
+    SetEnvironmentVariableW(L"APPSMOKE_INHERITED", NULL);
 }
 
 static DWORD WINAPI BlockedWaiter(void *Context)

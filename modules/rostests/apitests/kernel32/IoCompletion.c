@@ -8,6 +8,7 @@
 #include "threadwait.h"
 
 typedef BOOL (WINAPI *PWAIT_ON_ADDRESS)(volatile VOID *, PVOID, SIZE_T, DWORD);
+typedef VOID (WINAPI *PWAKE_BY_ADDRESS_ALL)(PVOID);
 
 typedef enum _WORKER_BLOCK_KIND
 {
@@ -29,11 +30,12 @@ typedef struct _ACTIVE_WORKER_CONTEXT
     volatile LONG *Order;
     volatile LONG Go;
     volatile LONG Release;
+    volatile LONG Wake;
     volatile LONG Address;
     BOOL GotPacket;
     ULONG_PTR Key;
     DWORD WaitResult;
-    LONG Finished;
+    volatile LONG Finished;
 } ACTIVE_WORKER_CONTEXT;
 
 typedef struct _BLOCKED_WORKER_CONTEXT
@@ -161,6 +163,7 @@ ActiveWorkerThread(_Inout_ PVOID Parameter)
     HANDLE Handles[2];
     LONG Compare = 0;
     DWORD Bytes;
+    ULONG Spins;
 
     Context->GotPacket = GetQueuedCompletionStatus(Context->Port, &Bytes, &Context->Key, &Overlapped, 5000);
     SetEvent(Context->Packet);
@@ -169,19 +172,20 @@ ActiveWorkerThread(_Inout_ PVOID Parameter)
     switch (Context->Kind)
     {
         case BlockSingle:
-            Context->WaitResult = WaitForSingleObject(Context->Event, 600);
+            Context->WaitResult = WaitForSingleObject(Context->Event, 5000);
             break;
         case BlockMultiple:
             Handles[0] = Context->Event;
             Handles[1] = Context->Event2;
-            Context->WaitResult = WaitForMultipleObjects(2, Handles, FALSE, 600);
+            Context->WaitResult = WaitForMultipleObjects(2, Handles, FALSE, 5000);
             break;
         case BlockDelay:
-            Sleep(600);
-            Context->WaitResult = WAIT_TIMEOUT;
+            for (Spins = 0; (Spins < 5000) && (InterlockedCompareExchange(&Context->Wake, 0, 0) == 0); Spins++)
+                Sleep(1);
+            Context->WaitResult = InterlockedCompareExchange(&Context->Wake, 0, 0) ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
             break;
         case BlockAddress:
-            Context->WaitResult = Context->WaitOnAddress(&Context->Address, &Compare, sizeof(Compare), 600) ?
+            Context->WaitResult = Context->WaitOnAddress(&Context->Address, &Compare, sizeof(Compare), 5000) ?
                                   WAIT_OBJECT_0 : GetLastError();
             break;
         default:
@@ -242,6 +246,7 @@ TestWorkerBlockActivatesQueue(_In_ WORKER_BLOCK_KIND Kind)
     BLOCKED_WORKER_CONTEXT Blocked;
     HANDLE Threads[2] = { NULL, NULL };
     volatile LONG Order = 0;
+    PWAKE_BY_ADDRESS_ALL WakeByAddressAllProc;
     DWORD BlockedId = 0;
     DWORD Result;
     BOOL Interrupted = (Kind == BlockInterruptedAlertable);
@@ -252,8 +257,9 @@ TestWorkerBlockActivatesQueue(_In_ WORKER_BLOCK_KIND Kind)
     Active.Order = &Order;
     Active.WaitResult = WAIT_FAILED;
     Active.WaitOnAddress = (PWAIT_ON_ADDRESS)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "WaitOnAddress");
+    WakeByAddressAllProc = (PWAKE_BY_ADDRESS_ALL)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "WakeByAddressAll");
     Blocked.Order = &Order;
-    if ((Kind == BlockAddress) && (Active.WaitOnAddress == NULL))
+    if ((Kind == BlockAddress) && ((Active.WaitOnAddress == NULL) || (WakeByAddressAllProc == NULL)))
     {
         skip("WaitOnAddress is not available\n");
         return;
@@ -296,9 +302,10 @@ TestWorkerBlockActivatesQueue(_In_ WORKER_BLOCK_KIND Kind)
 
         if (Interrupted)
         {
-            Result = WaitForSingleObject(Threads[1], 300);
-            ok(Result == WAIT_TIMEOUT,
-               "A worker that never blocked released another worker: %#lx\n", Result);
+            SpinUntilSet(&Active.Finished);
+            ok(WaitForThreadWaitState(BlockedId, NULL, WrQueue, 5000),
+               "A worker that never blocked released another worker (state %lu, wait reason %lu)\n",
+               LastThreadState, LastWaitReason);
         }
         else
         {
@@ -307,6 +314,11 @@ TestWorkerBlockActivatesQueue(_In_ WORKER_BLOCK_KIND Kind)
         }
     }
 
+    SetEvent(Active.Event);
+    InterlockedExchange(&Active.Address, 1);
+    if (WakeByAddressAllProc != NULL)
+        WakeByAddressAllProc((PVOID)&Active.Address);
+    InterlockedExchange(&Active.Wake, 1);
     InterlockedExchange(&Active.Go, 1);
     InterlockedExchange(&Active.Release, 1);
     if (Threads[0] != NULL)
@@ -329,8 +341,8 @@ TestWorkerBlockActivatesQueue(_In_ WORKER_BLOCK_KIND Kind)
         {
             ok(Blocked.Finished < Active.Finished, "The second worker waited until %s returned (%ld, %ld)\n",
                BlockNames[Kind], Blocked.Finished, Active.Finished);
-            ok(Active.WaitResult == ((Kind == BlockAddress) ? ERROR_TIMEOUT : WAIT_TIMEOUT),
-               "%s returned %#lx\n", BlockNames[Kind], Active.WaitResult);
+            ok(Active.WaitResult == WAIT_OBJECT_0, "%s returned %#lx instead of ending on its wake-up\n",
+               BlockNames[Kind], Active.WaitResult);
         }
     }
 
@@ -464,12 +476,141 @@ TestPortClosedUnderBlockedWorker(VOID)
     CloseHandle(Event);
 }
 
+static VOID
+TestCloseWithQueuedPackets(VOID)
+{
+    HANDLE Port;
+    ULONG Index;
+    BOOL Success;
+
+    Port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 1);
+    ok(Port != NULL, "CreateIoCompletionPort failed with %lu\n", GetLastError());
+    if (Port == NULL)
+        return;
+
+    for (Index = 0; Index != 3; ++Index)
+    {
+        Success = PostQueuedCompletionStatus(Port, Index, 0x7000 + Index, (LPOVERLAPPED)(ULONG_PTR)(0x7100 + Index));
+        ok(Success, "PostQueuedCompletionStatus %lu failed with %lu\n", Index, GetLastError());
+    }
+
+    ok(CloseHandle(Port), "Closing a port with queued packets failed with %lu\n", GetLastError());
+}
+
+typedef struct _PORT_READ_CONTEXT
+{
+    HANDLE Pipe;
+    OVERLAPPED Overlapped;
+    CHAR Buffer[16];
+    BOOL Result;
+    DWORD Error;
+} PORT_READ_CONTEXT;
+
+static DWORD WINAPI
+PortReadThread(PVOID Parameter)
+{
+    PORT_READ_CONTEXT *Context = Parameter;
+
+    Context->Result = ReadFile(Context->Pipe, Context->Buffer, sizeof(Context->Buffer), NULL, &Context->Overlapped);
+    Context->Error = GetLastError();
+    return 0;
+}
+
+/* A port-bound read with no event belongs to the file: its thread's exit does not cancel it */
+static VOID
+TestPortReadOutlivesThread(BOOL Cancel)
+{
+    static const WCHAR PipeName[] = L"\\\\.\\pipe\\IoCompletionPortRead";
+    PORT_READ_CONTEXT Context;
+    LPOVERLAPPED Overlapped;
+    HANDLE Server, Client, Port, Thread;
+    ULONG_PTR Key;
+    DWORD Bytes, Result;
+    BOOL Success;
+
+    Server = CreateNamedPipeW(PipeName, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
+                              PIPE_TYPE_BYTE | PIPE_WAIT, 1, 64, 64, 0, NULL);
+    ok(Server != INVALID_HANDLE_VALUE, "CreateNamedPipeW failed with %lu\n", GetLastError());
+    if (Server == INVALID_HANDLE_VALUE)
+        return;
+
+    Client = CreateFileW(PipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(Client != INVALID_HANDLE_VALUE, "CreateFileW failed with %lu\n", GetLastError());
+    Port = CreateIoCompletionPort(Server, NULL, 0x4321, 0);
+    ok(Port != NULL, "CreateIoCompletionPort failed with %lu\n", GetLastError());
+    if (Client == INVALID_HANDLE_VALUE || Port == NULL)
+    {
+        if (Client != INVALID_HANDLE_VALUE) CloseHandle(Client);
+        if (Port != NULL) CloseHandle(Port);
+        CloseHandle(Server);
+        return;
+    }
+
+    ZeroMemory(&Context, sizeof(Context));
+    Context.Pipe = Server;
+    Thread = CreateThread(NULL, 0, PortReadThread, &Context, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed with %lu\n", GetLastError());
+    if (Thread != NULL)
+    {
+        Result = WaitForSingleObject(Thread, 5000);
+        ok(Result == WAIT_OBJECT_0, "The reading thread did not exit (%lu)\n", Result);
+        CloseHandle(Thread);
+    }
+    ok(!Context.Result && Context.Error == ERROR_IO_PENDING,
+       "ReadFile returned %d with %lu instead of a pending read\n", Context.Result, Context.Error);
+
+    Overlapped = NULL;
+    Success = GetQueuedCompletionStatus(Port, &Bytes, &Key, &Overlapped, 0);
+    ok(!Success && GetLastError() == WAIT_TIMEOUT,
+       "The exit of the issuing thread completed the read (%d, %lu)\n", Success, GetLastError());
+    ok(Overlapped == NULL, "Got overlapped %p after a timeout\n", Overlapped);
+
+    if (Cancel)
+    {
+        Success = CancelIoEx(Server, &Context.Overlapped);
+        ok(Success, "CancelIoEx did not find the read of the exited thread (%lu)\n", GetLastError());
+    }
+    else
+    {
+        Success = WriteFile(Client, "abc", 3, &Bytes, NULL);
+        ok(Success && Bytes == 3, "WriteFile failed with %lu\n", GetLastError());
+    }
+
+    Bytes = 0xdeadbeef;
+    Key = 0;
+    Overlapped = NULL;
+    SetLastError(0xdeadbeef);
+    Success = GetQueuedCompletionStatus(Port, &Bytes, &Key, &Overlapped, 5000);
+    ok(Key == 0x4321, "Got key %#Ix\n", Key);
+    ok(Overlapped == &Context.Overlapped, "Got overlapped %p instead of %p\n", Overlapped, &Context.Overlapped);
+    if (Cancel)
+    {
+        ok(!Success && GetLastError() == ERROR_OPERATION_ABORTED,
+           "GetQueuedCompletionStatus returned %d with %lu\n", Success, GetLastError());
+        ok(Bytes == 0, "Got %lu bytes\n", Bytes);
+        ok((NTSTATUS)Context.Overlapped.Internal == STATUS_CANCELLED, "Internal is %#Ix\n", Context.Overlapped.Internal);
+    }
+    else
+    {
+        ok(Success, "GetQueuedCompletionStatus failed with %lu\n", GetLastError());
+        ok(Bytes == 3, "Got %lu bytes\n", Bytes);
+        ok(Context.Overlapped.Internal == STATUS_SUCCESS, "Internal is %#Ix\n", Context.Overlapped.Internal);
+        ok(Context.Overlapped.InternalHigh == 3, "InternalHigh is %Iu\n", Context.Overlapped.InternalHigh);
+        ok(!memcmp(Context.Buffer, "abc", 3), "The read returned the wrong data\n");
+    }
+
+    CloseHandle(Client);
+    CloseHandle(Server);
+    CloseHandle(Port);
+}
+
 START_TEST(IoCompletion)
 {
     DEQUEUE_WAIT_CONTEXT DequeueContext;
     DIRECT_WAIT_CONTEXT DirectContexts[2];
     OWN_QUEUE_WAIT_CONTEXT OwnContext;
     HANDLE ReadyHandles[2];
+    DWORD ThreadIds[2];
     HANDLE Threads[2];
     LPOVERLAPPED Overlapped;
     HANDLE Handles[2];
@@ -533,7 +674,7 @@ START_TEST(IoCompletion)
         DirectContexts[Index].Result = WAIT_FAILED;
         DirectContexts[Index].Timeout = 5000;
         ReadyHandles[Index] = DirectContexts[Index].Ready;
-        Threads[Index] = CreateThread(NULL, 0, DirectWaitThread, &DirectContexts[Index], 0, NULL);
+        Threads[Index] = CreateThread(NULL, 0, DirectWaitThread, &DirectContexts[Index], 0, &ThreadIds[Index]);
         ok(ReadyHandles[Index] != NULL, "CreateEventW failed with %lu\n", GetLastError());
         ok(Threads[Index] != NULL, "CreateThread failed with %lu\n", GetLastError());
     }
@@ -541,7 +682,9 @@ START_TEST(IoCompletion)
     {
         Result = WaitForMultipleObjects(2, ReadyHandles, TRUE, 5000);
         ok(Result == WAIT_OBJECT_0, "Direct waiters did not become ready: %#lx\n", Result);
-        Sleep(100);
+        for (Index = 0; Index != 2; ++Index)
+            ok(WaitForThreadWaitState(ThreadIds[Index], NULL, UserRequest, 5000),
+               "Direct waiter %lu did not block (state %lu, reason %lu)\n", Index, LastThreadState, LastWaitReason);
         Success = PostQueuedCompletionStatus(Port, 21, 0x2001, (LPOVERLAPPED)(ULONG_PTR)0x2002);
         ok(Success, "PostQueuedCompletionStatus failed with %lu\n", GetLastError());
         Result = WaitForMultipleObjects(2, Threads, TRUE, 5000);
@@ -566,18 +709,19 @@ START_TEST(IoCompletion)
     DequeueContext.Bytes = 0;
     DequeueContext.Key = 0;
     DequeueContext.Overlapped = NULL;
-    Threads[0] = CreateThread(NULL, 0, DequeueWaitThread, &DequeueContext, 0, NULL);
+    Threads[0] = CreateThread(NULL, 0, DequeueWaitThread, &DequeueContext, 0, &ThreadIds[0]);
     DirectContexts[0].Port = MixedPort;
     DirectContexts[0].Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
     DirectContexts[0].Result = WAIT_FAILED;
-    DirectContexts[0].Timeout = 250;
+    DirectContexts[0].Timeout = 5000;
     Threads[1] = NULL;
     if (MixedPort && DequeueContext.Ready && Threads[0])
     {
         Result = WaitForSingleObject(DequeueContext.Ready, 5000);
         ok(Result == WAIT_OBJECT_0, "Dequeue waiter did not become ready: %#lx\n", Result);
-        Sleep(100);
-        Threads[1] = CreateThread(NULL, 0, DirectWaitThread, &DirectContexts[0], 0, NULL);
+        ok(WaitForThreadWaitState(ThreadIds[0], NULL, WrQueue, 5000),
+           "Dequeue waiter did not block (state %lu, reason %lu)\n", LastThreadState, LastWaitReason);
+        Threads[1] = CreateThread(NULL, 0, DirectWaitThread, &DirectContexts[0], 0, &ThreadIds[1]);
     }
     ok(DequeueContext.Ready != NULL, "CreateEventW failed with %lu\n", GetLastError());
     ok(DirectContexts[0].Ready != NULL, "CreateEventW failed with %lu\n", GetLastError());
@@ -587,14 +731,24 @@ START_TEST(IoCompletion)
     {
         Result = WaitForSingleObject(DirectContexts[0].Ready, 5000);
         ok(Result == WAIT_OBJECT_0, "Direct waiter did not become ready: %#lx\n", Result);
-        Sleep(100);
+        ok(WaitForThreadWaitState(ThreadIds[1], NULL, UserRequest, 5000),
+           "Direct waiter did not block (state %lu, reason %lu)\n", LastThreadState, LastWaitReason);
         Success = PostQueuedCompletionStatus(MixedPort, 31, 0x3001, (LPOVERLAPPED)(ULONG_PTR)0x3002);
         ok(Success, "PostQueuedCompletionStatus failed with %lu\n", GetLastError());
-        Result = WaitForMultipleObjects(2, Threads, TRUE, 5000);
-        ok(Result == WAIT_OBJECT_0, "Mixed waiters did not exit: %#lx\n", Result);
+        Result = WaitForSingleObject(Threads[0], 5000);
+        ok(Result == WAIT_OBJECT_0, "Dequeue waiter did not exit: %#lx\n", Result);
         ok(DequeueContext.Success, "GetQueuedCompletionStatus failed in dequeue waiter\n");
         ok(DequeueContext.Key == 0x3001, "Expected completion key 0x3001, got %p\n", (PVOID)DequeueContext.Key);
-        ok(DirectContexts[0].Result == WAIT_TIMEOUT, "Direct waiter returned %#lx instead of WAIT_TIMEOUT\n", DirectContexts[0].Result);
+        ok(WaitForThreadWaitState(ThreadIds[1], NULL, UserRequest, 5000),
+           "The packet of the dequeue waiter also ended the direct wait (state %lu, reason %lu)\n", LastThreadState, LastWaitReason);
+        Success = PostQueuedCompletionStatus(MixedPort, 32, 0x3003, (LPOVERLAPPED)(ULONG_PTR)0x3004);
+        ok(Success, "PostQueuedCompletionStatus failed with %lu\n", GetLastError());
+        Result = WaitForSingleObject(Threads[1], 5000);
+        ok(Result == WAIT_OBJECT_0, "Direct waiter did not exit: %#lx\n", Result);
+        ok(DirectContexts[0].Result == WAIT_OBJECT_0, "Direct waiter returned %#lx\n", DirectContexts[0].Result);
+        Key = 0;
+        Success = GetQueuedCompletionStatus(MixedPort, &Bytes, &Key, &Overlapped, 0);
+        ok(Success && Key == 0x3003, "The direct wait took the packet (%d, key %p)\n", Success, (PVOID)Key);
     }
     if (Threads[0]) CloseHandle(Threads[0]);
     if (Threads[1]) CloseHandle(Threads[1]);
@@ -611,14 +765,15 @@ START_TEST(IoCompletion)
     DequeueContext.Key = 0x55555555;
     DequeueContext.Overlapped = (LPOVERLAPPED)(ULONG_PTR)0x55555555;
     DequeueContext.Error = ERROR_SUCCESS;
-    Threads[0] = CreateThread(NULL, 0, DequeueWaitThread, &DequeueContext, 0, NULL);
+    Threads[0] = CreateThread(NULL, 0, DequeueWaitThread, &DequeueContext, 0, &ThreadIds[0]);
     ok(DequeueContext.Ready != NULL, "CreateEventW failed with %lu\n", GetLastError());
     ok(Threads[0] != NULL, "CreateThread failed with %lu\n", GetLastError());
     if (MixedPort && DequeueContext.Ready && Threads[0])
     {
         Result = WaitForSingleObject(DequeueContext.Ready, 5000);
         ok(Result == WAIT_OBJECT_0, "Close waiter did not become ready: %#lx\n", Result);
-        Sleep(100);
+        ok(WaitForThreadWaitState(ThreadIds[0], NULL, WrQueue, 5000),
+           "Close waiter did not block (state %lu, reason %lu)\n", LastThreadState, LastWaitReason);
         CloseHandle(MixedPort);
         MixedPort = NULL;
         Result = WaitForSingleObject(Threads[0], 5000);
@@ -655,7 +810,7 @@ START_TEST(IoCompletion)
     {
         Success = PostQueuedCompletionStatus(OwnPort, 41, 0x4001, (LPOVERLAPPED)(ULONG_PTR)0x4002);
         ok(Success, "PostQueuedCompletionStatus failed with %lu\n", GetLastError());
-        Threads[0] = CreateThread(NULL, 0, OwnQueueMultipleWaitThread, &OwnContext, 0, NULL);
+        Threads[0] = CreateThread(NULL, 0, OwnQueueMultipleWaitThread, &OwnContext, 0, &ThreadIds[0]);
     }
     ok(Threads[0] != NULL, "CreateThread failed with %lu\n", GetLastError());
     if (Threads[0])
@@ -664,7 +819,8 @@ START_TEST(IoCompletion)
         ok(Result == WAIT_OBJECT_0, "Associated waiter did not become ready: %#lx\n", Result);
         ok(OwnContext.PrimeSuccess, "GetQueuedCompletionStatus failed for priming packet\n");
         ok(OwnContext.PrimeKey == 0x4001, "Expected priming key 0x4001, got %p\n", (PVOID)OwnContext.PrimeKey);
-        Sleep(100);
+        ok(WaitForThreadWaitState(ThreadIds[0], NULL, UserRequest, 5000),
+           "Associated waiter did not block (state %lu, reason %lu)\n", LastThreadState, LastWaitReason);
         Success = PostQueuedCompletionStatus(OwnPort, 42, 0x4003, (LPOVERLAPPED)(ULONG_PTR)0x4004);
         ok(Success, "PostQueuedCompletionStatus failed with %lu\n", GetLastError());
         Result = WaitForSingleObject(Threads[0], 5000);
@@ -700,9 +856,12 @@ START_TEST(IoCompletion)
     TestCrossPortWaits(FALSE);
     TestCrossPortWaits(TRUE);
     TestPortClosedUnderBlockedWorker();
+    TestCloseWithQueuedPackets();
     TestWorkerBlockActivatesQueue(BlockSingle);
     TestWorkerBlockActivatesQueue(BlockMultiple);
     TestWorkerBlockActivatesQueue(BlockDelay);
     TestWorkerBlockActivatesQueue(BlockAddress);
     TestWorkerBlockActivatesQueue(BlockInterruptedAlertable);
+    TestPortReadOutlivesThread(FALSE);
+    TestPortReadOutlivesThread(TRUE);
 }

@@ -3419,6 +3419,8 @@ RegOpenKeyExW(HKEY hKey,
         return ERROR_INVALID_HANDLE;
     }
 
+    *phkResult = NULL;
+
     if (IsPredefKey(hKey) && (!lpSubKey || !*lpSubKey))
     {
         *phkResult = hKey;

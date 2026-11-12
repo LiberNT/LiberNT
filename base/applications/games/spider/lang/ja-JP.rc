@@ -47,8 +47,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_SPI_NAME "スパイダ"
-    IDS_SPI_ABOUT "Gregor Schneider によるスパイダ ソリティア\nCardLib バージョン 1.0"
+    IDS_SPI_NAME "スパイダー"
+    IDS_SPI_ABOUT "Gregor Schneider によるスパイダー ソリティア\nCardLib バージョン 1.0"
     IDS_SPI_QUIT "現在のゲームを終了しますか?"
     IDS_SPI_WIN "おめでとう、あなたの勝ちです!"
     IDS_SPI_DEAL "もう一度カードを配りますか?"
@@ -64,7 +64,7 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "カードの装飾(&D)...", IDM_GAME_DECK
         MENUITEM SEPARATOR
-        MENUITEM "スパイダの終了(&E)", IDM_GAME_EXIT
+        MENUITEM "スパイダーの終了(&E)", IDM_GAME_EXIT
     END
     POPUP "ヘルプ(&H)"
     BEGIN

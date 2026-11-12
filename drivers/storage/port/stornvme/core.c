@@ -35,6 +35,11 @@ NvmeWaitReady(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG DesiredReady)
     {
         ULONG Status = NvmeReadRegister(Device, NVME_REG_CSTS);
 
+        if (Status == MAXULONG)
+        {
+            DPRINT1("stornvme: CSTS reads all ones, the controller is gone\n");
+            return FALSE;
+        }
         if ((Status & NVME_CSTS_RDY) == DesiredReady)
             return TRUE;
         if (DesiredReady != 0 && (Status & NVME_CSTS_CFS))
@@ -97,7 +102,7 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
         return MAXULONG;
 
     NextTail = (Queue->SqTail + 1) % Queue->Entries;
-    if (NextTail == Queue->SqHead)
+    if (!Device->Transport && NextTail == Queue->SqHead)
         return MAXULONG;
 
     for (Slot = 0; Slot < Queue->Entries; Slot++)
@@ -116,6 +121,11 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     AdminSlot->Srb = Srb;
 
     Command->CDW0 = (Command->CDW0 & 0xFFFF) | (Slot << 16);
+    if (Device->Transport)
+    {
+        Device->Transport->Submit(Device, Queue, Slot, Command);
+        return Slot;
+    }
     Queue->Sq[Queue->SqTail] = *Command;
     KeMemoryBarrier();
     Queue->SqTail = NextTail;
@@ -128,7 +138,6 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
  * the caller's batch and completed after the lock drops; internal slots are
  * handled in place.
  */
-static
 ULONG
 NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
                                   _Out_ PNVME_COMPLETED_SRB Batch,
@@ -162,6 +171,8 @@ NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
         Queue->CqHead = (Queue->CqHead + 1) % Queue->Entries;
         if (Queue->CqHead == 0)
             Queue->Phase ^= 1;
+        if (Device->Transport)
+            Device->Transport->Completed(Device, Queue, CommandId);
 
         if (CommandId < NVME_ADMIN_QUEUE_ENTRIES)
         {
@@ -497,7 +508,8 @@ NvmeScanNamespaces(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG NamespaceCount
     NVME_COMMAND_SET_OPCODE(&Command, NVME_ADMIN_IDENTIFY, 0);
     Command.PRP1 = Device->IdentifyPhysical;
     Command.CDW10 = NVME_CNS_ACTIVE_NS;
-    if (Device->Version >= NVME_VERSION(1, 1) && NvmeAdminCommandSync(Device, &Command, NULL))
+    if (Device->Version >= NVME_VERSION(1, 1) && !Device->IdentifyCnsLimited &&
+        NvmeAdminCommandSync(Device, &Command, NULL))
     {
         PULONG List = (PULONG)Device->IdentifyBuffer;
 
@@ -538,6 +550,8 @@ NvmeStartController(_In_ PNVME_DEVICE_EXTENSION Device, _In_ BOOLEAN FirstStart)
                       ((Device->AdminQueue.Entries - 1) << 16) | (Device->AdminQueue.Entries - 1));
     NvmeWriteRegister64(Device, NVME_REG_ASQ, Device->AdminQueue.SqPhysical);
     NvmeWriteRegister64(Device, NVME_REG_ACQ, Device->AdminQueue.CqPhysical);
+    if (Device->Transport && Device->Transport->ConfigureController)
+        Device->Transport->ConfigureController(Device);
     NvmeWriteRegister(Device, NVME_REG_CC, NVME_CC_CSS_NVM | NVME_CC_IOSQES | NVME_CC_IOCQES | NVME_CC_EN);
     if (!NvmeWaitReady(Device, NVME_CSTS_RDY))
     {

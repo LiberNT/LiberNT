@@ -42,6 +42,16 @@
 
 #ifndef WM_SYSTIMER
 #define WM_SYSTIMER 0x0118
+
+#ifdef __REACTOS__
+#define FLUSH_EVENTS_MS 64
+#define FLUSH_QUIET_MS 10
+#define FLUSH_REQUIET_MS 10
+#else
+#define FLUSH_EVENTS_MS 200
+#define FLUSH_QUIET_MS 100
+#define FLUSH_REQUIET_MS 50
+#endif
 #endif
 
 #define LONG_PTR INT_PTR
@@ -125,8 +135,8 @@ static void dump_minmax_info( const MINMAXINFO *minmax )
 static void flush_events( BOOL remove_messages )
 {
     MSG msg;
-    int diff = 200;
-    int min_timeout = 100;
+    int diff = FLUSH_EVENTS_MS;
+    int min_timeout = FLUSH_QUIET_MS;
     DWORD time = GetTickCount() + diff;
 
     while (diff > 0)
@@ -135,7 +145,7 @@ static void flush_events( BOOL remove_messages )
         if (remove_messages)
             while (PeekMessageA( &msg, 0, 0, 0, PM_REMOVE )) DispatchMessageA( &msg );
         diff = time - GetTickCount();
-        min_timeout = 50;
+        min_timeout = FLUSH_REQUIET_MS;
     }
 }
 

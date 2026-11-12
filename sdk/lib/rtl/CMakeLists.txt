@@ -41,12 +41,14 @@ list(APPEND SOURCE
     wine_debug.c
     access.c
     acl.c
+    altitude.c
     appverifier.c
     assert.c
     atom.c
     avltable.c
     bitmap.c
     bootdata.c
+    cmresource.c
     compress.c
     crc32.c
     critical.c

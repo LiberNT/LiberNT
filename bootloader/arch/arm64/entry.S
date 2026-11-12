@@ -56,15 +56,13 @@ Arm64EnsureEl1EntryState:
     mrs x16, cpacr_el1
 
     /* Clear E2H and TGE before entering EL1 */
-    bic x3, x3, x4        /* clear E2H */
-    mov x4, #1
-    lsl x4, x4, #27
-    bic x3, x3, x4        /* clear TGE */
-    mov x4, #1
-    lsl x4, x4, #31
-    orr x3, x3, x4        /* set RW: EL1 is AArch64 */
+    mov x3, #0x80000000
+    movk x3, #0x300, lsl #32
     msr hcr_el2, x3
     isb
+
+    mrs x3, hcr_el2
+    tbnz x3, #34, el2_e2h_res1
 
     /* Now the *_EL1 mnemonics target the real EL1 registers. Restore. */
     msr sctlr_el1, x10
@@ -77,15 +75,23 @@ Arm64EnsureEl1EntryState:
     isb
     b el2_common
 
+el2_e2h_res1:
+    msr S3_5_C1_C0_0, x10
+    msr S3_5_C2_C0_2, x11
+    msr S3_5_C2_C0_0, x12
+    msr S3_5_C2_C0_1, x13
+    msr S3_5_C10_C2_0, x14
+    msr S3_5_C12_C0_0, x15
+    msr S3_5_C1_C0_2, x16
+    isb
+    b el2_common
+
 el2_no_vhe:
     /* Non-VHE EL2: set RW=1 and clear TGE before entering EL1 */
-    mov x4, #1
-    lsl x4, x4, #27
-    bic x3, x3, x4
-    mov x4, #1
-    lsl x4, x4, #31
-    orr x3, x3, x4
+    mov x3, #0x80000000
+    movk x3, #0x300, lsl #32
     msr hcr_el2, x3
+    isb
 
 el2_common:
     /*
@@ -94,14 +100,36 @@ el2_common:
      * hypervisor) may have programmed an offset that the kernel relies on.
      * Only initialise it if it reads back as some absurd uninitialised value.
      */
+    mrs x1, midr_el1
+    msr vpidr_el2, x1
+    mrs x1, mpidr_el1
+    msr vmpidr_el2, x1
+
+    mrs x5, hcr_el2
     mrs x1, cnthctl_el2
     mov x2, #3
+    tbz x5, #34, .Lloader_cnthctl_e2h0
+    lsl x2, x2, #10
+.Lloader_cnthctl_e2h0:
     orr x1, x1, x2        /* EL1PCEN | EL1PCTEN */
     msr cnthctl_el2, x1
 
     /* Permit SIMD/FPU and system instructions at EL1 */
-    msr cptr_el2, xzr
+    mov x1, xzr
+    tbz x5, #34, .Lloader_cptr_e2h0
+    mov x1, #0x300000
+.Lloader_cptr_e2h0:
+    msr cptr_el2, x1
     msr hstr_el2, xzr
+    tbz x5, #34, .Lloader_vm_timer_done
+    mrs x4, midr_el1
+    ubfx x4, x4, #24, #8
+    cmp x4, #0x61
+    b.ne .Lloader_vm_timer_done
+    mrs x4, S3_5_C15_C1_3
+    orr x4, x4, #3
+    msr S3_5_C15_C1_3, x4
+.Lloader_vm_timer_done:
     /* Expose implemented event counters to EL1 instead of reserving all for EL2. */
     mov x2, xzr
     mrs x1, id_aa64dfr0_el1
@@ -138,6 +166,20 @@ el2_common:
     cbz x1, 3f
     sub sp, sp, x1
 3:
+    ret
+
+.globl Arm64DropToEl1KeepState
+Arm64DropToEl1KeepState:
+    mrs x0, CurrentEL
+    lsr x0, x0, #2
+    cmp x0, #2
+    b.ne .Lloader_keep_state_done
+    mov x3, #0x80000000
+    movk x3, #0x300, lsl #32
+    msr hcr_el2, x3
+    isb
+    b el2_common
+.Lloader_keep_state_done:
     ret
 
 /* ARM64 UEFI entry point */

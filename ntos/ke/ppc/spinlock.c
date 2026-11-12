@@ -122,16 +122,22 @@ VOID
 FASTCALL
 KeAcquireInStackQueuedSpinLock(_Inout_ PKSPIN_LOCK SpinLock, _Out_ PKLOCK_QUEUE_HANDLE LockHandle)
 {
+    LockHandle->LockQueue.Next = NULL;
+    LockHandle->LockQueue.Lock = SpinLock;
+
     KeRaiseIrql(DISPATCH_LEVEL, &LockHandle->OldIrql);
-    KeAcquireInStackQueuedSpinLockAtDpcLevel(SpinLock, LockHandle);
+    KxAcquireQueuedSpinLock(&LockHandle->LockQueue);
 }
 
 VOID
 FASTCALL
 KeAcquireInStackQueuedSpinLockRaiseToSynch(_Inout_ PKSPIN_LOCK SpinLock, _Out_ PKLOCK_QUEUE_HANDLE LockHandle)
 {
+    LockHandle->LockQueue.Next = NULL;
+    LockHandle->LockQueue.Lock = SpinLock;
+
     KeRaiseIrql(SYNCH_LEVEL, &LockHandle->OldIrql);
-    KeAcquireInStackQueuedSpinLockAtDpcLevel(SpinLock, LockHandle);
+    KxAcquireQueuedSpinLock(&LockHandle->LockQueue);
 }
 
 VOID

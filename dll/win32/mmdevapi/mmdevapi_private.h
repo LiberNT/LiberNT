@@ -197,6 +197,9 @@ extern HRESULT reactos_endpoint_mute_get(const struct reactos_endpoint_volume_st
                                          BOOL *mute);
 extern HRESULT reactos_endpoint_mute_set(const struct reactos_endpoint_volume_state *state,
                                          BOOL mute);
+extern HRESULT reactos_wave_connector(const GUID *guid, WCHAR **path, ULONG *pin);
+extern HRESULT reactos_device_topology_create(MMDevice *device, IDeviceTopology **out);
+extern HRESULT reactos_filter_device_get(const WCHAR *id, IMMDevice **out);
 extern HRESULT reactos_audio_session_register(IMMDevice *device, const GUID *session_guid,
                                               UINT32 channels,
                                               struct reactos_audio_session_id *id,

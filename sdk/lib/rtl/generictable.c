@@ -398,23 +398,6 @@ RtlEnumerateGenericTableWithoutSplaying(IN PRTL_GENERIC_TABLE Table,
 }
 
 /*
- * @unimplemented
- */
-PVOID
-NTAPI
-RtlEnumerateGenericTableLikeADirectory(IN PRTL_AVL_TABLE Table,
-                                       IN PRTL_AVL_MATCH_FUNCTION MatchFunction,
-                                       IN PVOID MatchData,
-                                       IN ULONG NextFlag,
-                                       IN OUT PVOID *RestartKey,
-                                       IN OUT PULONG DeleteCount,
-                                       IN OUT PVOID Buffer)
-{
-    UNIMPLEMENTED;
-    return 0;
-}
-
-/*
  * @implemented
  */
 PVOID

@@ -14,6 +14,7 @@ list(APPEND SOURCE
     ps2pp.c
     readwrite.c
     registry.c
+    sync_core.c
     i8042prt.h)
 
 add_library(i8042prt MODULE

@@ -2061,11 +2061,62 @@ SerCx2DdiPioTransmitPurgeFifoComplete(
 static
 VOID
 NTAPI
-SerCx2DdiNoOperation(
+SerCx2DdiPioTransmitInitializeTransactionComplete(
     _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
-    ...)
+    _In_ SERCX2PIOTRANSMIT PioTransmit,
+    _In_ BOOLEAN InitSuccess)
 {
     UNREFERENCED_PARAMETER(ClientGlobals);
+    UNREFERENCED_PARAMETER(PioTransmit);
+    UNREFERENCED_PARAMETER(InitSuccess);
+}
+
+static
+VOID
+NTAPI
+SerCx2DdiPioReceiveInitializeTransactionComplete(
+    _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
+    _In_ SERCX2PIORECEIVE PioReceive,
+    _In_ BOOLEAN InitSuccess)
+{
+    UNREFERENCED_PARAMETER(ClientGlobals);
+    UNREFERENCED_PARAMETER(PioReceive);
+    UNREFERENCED_PARAMETER(InitSuccess);
+}
+
+static
+VOID
+NTAPI
+SerCx2DdiPioTransmitCleanupTransactionComplete(
+    _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
+    _In_ SERCX2PIOTRANSMIT PioTransmit)
+{
+    UNREFERENCED_PARAMETER(ClientGlobals);
+    UNREFERENCED_PARAMETER(PioTransmit);
+}
+
+static
+VOID
+NTAPI
+SerCx2DdiPioReceiveCleanupTransactionComplete(
+    _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
+    _In_ SERCX2PIORECEIVE PioReceive)
+{
+    UNREFERENCED_PARAMETER(ClientGlobals);
+    UNREFERENCED_PARAMETER(PioReceive);
+}
+
+static
+VOID
+NTAPI
+SerCx2DdiSaveReceiveFifoOnD0Exit(
+    _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
+    _In_ SERCX2PIORECEIVE PioReceive,
+    _In_ ULONG FifoSize)
+{
+    UNREFERENCED_PARAMETER(ClientGlobals);
+    UNREFERENCED_PARAMETER(PioReceive);
+    UNREFERENCED_PARAMETER(FifoSize);
 }
 
 
@@ -2576,13 +2627,13 @@ static PVOID SerCx2Functions[SercxFunctionTableNumEntries] =
     SerCx2DdiSystemDmaCleanupTransactionComplete,
     SerCx2DdiSystemDmaCleanupTransactionComplete,
     SerCx2DdiSystemDmaReceiveNewDataNotification,
-    SerCx2DdiNoOperation,
-    SerCx2DdiNoOperation,
-    SerCx2DdiNoOperation,
-    SerCx2DdiNoOperation,
+    SerCx2DdiPioTransmitInitializeTransactionComplete,
+    SerCx2DdiPioReceiveInitializeTransactionComplete,
+    SerCx2DdiPioTransmitCleanupTransactionComplete,
+    SerCx2DdiPioReceiveCleanupTransactionComplete,
     SerCx2DdiPioTransmitReady,
     SerCx2DdiPioReceiveReady,
-    SerCx2DdiNoOperation,
+    SerCx2DdiSaveReceiveFifoOnD0Exit,
     SerCx2DdiPioTransmitDrainFifoComplete,
     SerCx2DdiPioTransmitPurgeFifoComplete,
     SerCx2DdiSystemDmaTransmitDrainFifoComplete,

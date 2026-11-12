@@ -1602,10 +1602,34 @@ BOOL WINAPI GetVersionExW( OSVERSIONINFOW *info )
 /***********************************************************************
  *         GetCurrentApplicationUserModelId   (kernelbase.@)
  */
+#ifdef __REACTOS__
+static LONG get_package_identity( HANDLE process )
+{
+    HANDLE token;
+    NTSTATUS status;
+
+    if ((status = NtOpenProcessToken( process, TOKEN_QUERY, &token )))
+        return RtlNtStatusToDosError( status );
+    NtClose( token );
+    /* TODO: read the package identity of a packaged process from its token; LiberNT deploys no packages */
+    return APPMODEL_ERROR_NO_PACKAGE;
+}
+#endif
+
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentApplicationUserModelId( UINT32 *length, WCHAR *id )
 {
+#ifdef __REACTOS__
+    LONG ret;
+
+    TRACE( "(%p %p)\n", length, id );
+
+    if (!length) return ERROR_INVALID_PARAMETER;
+    ret = get_package_identity( GetCurrentProcess() );
+    return ret == APPMODEL_ERROR_NO_PACKAGE ? APPMODEL_ERROR_NO_APPLICATION : ret;
+#else
     FIXME( "(%p %p): stub\n", length, id );
     return APPMODEL_ERROR_NO_APPLICATION;
+#endif
 }
 
 /***********************************************************************
@@ -1613,8 +1637,15 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentApplicationUserModelId( UINT32 *le
  */
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackageFamilyName( UINT32 *length, WCHAR *name )
 {
+#ifdef __REACTOS__
+    TRACE( "(%p %p)\n", length, name );
+
+    if (!length) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( GetCurrentProcess() );
+#else
     FIXME( "(%p %p): stub\n", length, name );
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 
@@ -1633,8 +1664,15 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackageFullName( UINT32 *length, W
  */
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackageId( UINT32 *len, BYTE *buffer )
 {
+#ifdef __REACTOS__
+    TRACE( "(%p %p)\n", len, buffer );
+
+    if (!len) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( GetCurrentProcess() );
+#else
     FIXME( "(%p %p): stub\n", len, buffer );
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 /***********************************************************************
@@ -1642,8 +1680,15 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackageId( UINT32 *len, BYTE *buff
  */
 LONG WINAPI GetCurrentPackageInfo( const UINT32 flags, UINT32 *buffer_size, BYTE *buffer, UINT32 *count )
 {
+#ifdef __REACTOS__
+    TRACE( "(%#x %p %p %p)\n", flags, buffer_size, buffer, count );
+
+    if (!buffer_size) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( GetCurrentProcess() );
+#else
     FIXME( "(%#x %p %p %p): stub\n", flags, buffer_size, buffer, count );
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 /***********************************************************************
@@ -1651,8 +1696,15 @@ LONG WINAPI GetCurrentPackageInfo( const UINT32 flags, UINT32 *buffer_size, BYTE
  */
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackagePath( UINT32 *length, WCHAR *path )
 {
+#ifdef __REACTOS__
+    TRACE( "(%p %p)\n", length, path );
+
+    if (!length) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( GetCurrentProcess() );
+#else
     FIXME( "(%p %p): stub\n", length, path );
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 
@@ -1661,8 +1713,15 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetCurrentPackagePath( UINT32 *length, WCHAR
  */
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFullName( HANDLE process, UINT32 *length, WCHAR *name )
 {
+#ifdef __REACTOS__
+    TRACE( "(%p %p %p)\n", process, length, name );
+
+    if (!process || !length) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( process );
+#else
     FIXME( "(%p %p %p): stub\n", process, length, name );
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 
@@ -1671,12 +1730,20 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFullName( HANDLE process, UINT32 *
  */
 LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFamilyName( HANDLE process, UINT32 *length, WCHAR *name )
 {
+#ifdef __REACTOS__
+    TRACE( "(%p %p %p)\n", process, length, name );
+#else
     FIXME( "(%p %p %p): stub\n", process, length, name );
+#endif
 
     if (!process || !length)
         return ERROR_INVALID_PARAMETER;
 
+#ifdef __REACTOS__
+    return get_package_identity( process );
+#else
     return APPMODEL_ERROR_NO_PACKAGE;
+#endif
 }
 
 /***********************************************************************

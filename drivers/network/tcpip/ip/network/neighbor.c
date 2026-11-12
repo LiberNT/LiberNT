@@ -301,6 +301,30 @@ VOID NBSendSolicit(PNEIGHBOR_CACHE_ENTRY NCE)
                 NCE->Interface);
 }
 
+/* An address that just became usable resolves the neighbors that were waiting for it at once */
+VOID NBSolicitIncomplete(PIP_INTERFACE Interface)
+{
+    ULONGLONG Now = KeQueryInterruptTime();
+    PNEIGHBOR_CACHE_ENTRY NCE;
+    KIRQL OldIrql;
+    ULONG i;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    for (i = 0; i <= NB_HASHMASK; ++i)
+    {
+        TcpipAcquireSpinLockAtDpcLevel(&NeighborCache[i].Lock);
+        for (NCE = NeighborCache[i].Cache; NCE; NCE = NCE->Next)
+        {
+            if (NCE->Interface != Interface || (NCE->State & NUD_PERMANENT) || !(NCE->State & NUD_INCOMPLETE))
+                continue;
+            NBSendSolicit(NCE);
+            NCE->NextSolicit = Now + (ULONGLONG)Interface->RetransmitTime * 10000;
+        }
+        TcpipReleaseSpinLockFromDpcLevel(&NeighborCache[i].Lock);
+    }
+    KeLowerIrql(OldIrql);
+}
+
 VOID NBInvalidateNeighborsForInterface(PIP_INTERFACE Interface)
 {
     KIRQL OldIrql;

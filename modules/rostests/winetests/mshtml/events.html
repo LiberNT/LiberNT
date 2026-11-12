@@ -98,7 +98,6 @@ function test_handler_this() {
         var b = target.attachEvent("onclick", function(event_arg) {
             ok(this === window, "this !== window");
             calls.push(name+"*");
-            with(todo_wine)
             ok(event_arg != window.event, "event_arg == window.event");
         });
         ok(b, "attachEvent failed");
@@ -188,7 +187,6 @@ function test_event_target() {
     });
 
     div.click();
-    with(todo_wine)
     ok(last_event_arg.srcElement === null, "srcElement != null");
 
     document.body.removeChild(div);

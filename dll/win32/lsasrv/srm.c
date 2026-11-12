@@ -44,20 +44,32 @@ LsapAsync(
 }
 
 static
-DWORD
-WINAPI
-LsapRmServerThread(
-    PVOID StartContext)
+VOID
+LsapLogonSessionDeleted(
+    PLSAP_RM_API_MESSAGE Message)
+{
+    static const LUID SystemLuid = SYSTEM_LUID;
+    PLUID LogonId = &Message->u.LogonLuid;
+
+    /* The well-known sessions, the system's own and the service accounts', stay */
+    if (LogonId->HighPart == 0 && LogonId->LowPart <= SystemLuid.LowPart)
+        return;
+
+    LsapLockLogonSessions();
+    LsapDeleteLogonSession(LogonId);
+    LsapUnlockLogonSessions();
+}
+
+static
+HANDLE
+LsapRmAcceptKernel(VOID)
 {
     LSAP_RM_API_MESSAGE Message;
-    PPORT_MESSAGE ReplyMessage;
-    HANDLE MessagePort, DummyPortHandle;
+    HANDLE MessagePort;
     SIZE_T BufferLength;
-    ULONG MessageType;
     NTSTATUS Status;
 
-    /* Listen on the LSA command port */
-    do
+    for (;;)
     {
         BufferLength = sizeof(Message);
         Status = NtAlpcSendWaitReceivePort(SeLsaCommandPort,
@@ -68,37 +80,57 @@ LsapRmServerThread(
                                            &BufferLength,
                                            NULL,
                                            NULL);
-    } while (NT_SUCCESS(Status) &&
-             ((Message.Header.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE)) != LPC_CONNECTION_REQUEST));
-    if (!NT_SUCCESS(Status))
-    {
-        ERR("LsapRmServerThread - Port Listen failed 0x%lx\n", Status);
-        return Status;
+        if (!NT_SUCCESS(Status))
+        {
+            ERR("LsapRmAcceptKernel - Port Listen failed 0x%lx\n", Status);
+            return NULL;
+        }
+
+        if ((Message.Header.u2.s2.Type & ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE)) !=
+            LPC_CONNECTION_REQUEST)
+        {
+            continue;
+        }
+
+        Status = NtAlpcAcceptConnectPort(&MessagePort,
+                                         SeLsaCommandPort,
+                                         0,
+                                         NULL,
+                                         NULL,
+                                         NULL,
+                                         &Message.Header,
+                                         NULL,
+                                         TRUE);
+        if (NT_SUCCESS(Status)) return MessagePort;
+
+        ERR("LsapRmAcceptKernel - Port Accept Connect failed 0x%lx\n", Status);
     }
+}
 
-    /* Accept the connection */
-    Status = NtAlpcAcceptConnectPort(&MessagePort,
-                                     SeLsaCommandPort,
-                                     0,
-                                     NULL,
-                                     NULL,
-                                     NULL,
-                                     &Message.Header,
-                                     NULL,
-                                     TRUE);
-    if (!NT_SUCCESS(Status))
+static
+DWORD
+WINAPI
+LsapRmServerThread(
+    PVOID StartContext)
+{
+    LSAP_RM_API_MESSAGE Message;
+    PPORT_MESSAGE ReplyMessage = NULL;
+    HANDLE MessagePort = NULL, DummyPortHandle;
+    SIZE_T BufferLength;
+    ULONG MessageType;
+    NTSTATUS Status;
+
+    for (;;)
     {
-        ERR("LsapRmServerThread - Port Accept Connect failed 0x%lx\n", Status);
-        return Status;
-    }
+        /* Only the kernel can connect, and it connects again after losing the port */
+        if (MessagePort == NULL)
+        {
+            MessagePort = LsapRmAcceptKernel();
+            if (MessagePort == NULL) return STATUS_PORT_DISCONNECTED;
 
-    /* No reply yet */
-    ReplyMessage = NULL;
+            ReplyMessage = NULL;
+        }
 
-    /* Start looping */
-    while (TRUE)
-    {
-        /* Wait for a message */
         BufferLength = sizeof(Message);
         Status = NtAlpcSendWaitReceivePort(MessagePort,
                                            ReplyMessage ? ALPC_MSGFLG_REPLY_MESSAGE : 0,
@@ -111,66 +143,72 @@ LsapRmServerThread(
         if (!NT_SUCCESS(Status))
         {
             ERR("LsapRmServerThread - Failed to get message: 0x%lx\n", Status);
-            if (!ReplyMessage) return Status;
+            if (ReplyMessage == NULL)
+            {
+                NtClose(MessagePort);
+                MessagePort = NULL;
+            }
             ReplyMessage = NULL;
             continue;
         }
 
+        ReplyMessage = NULL;
         MessageType = Message.Header.u2.s2.Type &
                       ~(LPC_CONTINUATION_REQUIRED | LPC_NO_IMPERSONATE | LPC_KERNELMODE_MESSAGE);
 
-        /* Check if this is a connection request */
-        if (MessageType == LPC_CONNECTION_REQUEST)
+        switch (MessageType)
         {
-            /* Reject connection request */
-            NtAlpcAcceptConnectPort(&DummyPortHandle,
-                                    SeLsaCommandPort,
-                                    0,
-                                    NULL,
-                                    NULL,
-                                    NULL,
-                                    &Message.Header,
-                                    NULL,
-                                    FALSE);
+            case LPC_CONNECTION_REQUEST:
+                NtAlpcAcceptConnectPort(&DummyPortHandle,
+                                        SeLsaCommandPort,
+                                        0,
+                                        NULL,
+                                        NULL,
+                                        NULL,
+                                        &Message.Header,
+                                        NULL,
+                                        FALSE);
+                break;
 
-            /* Start over */
-            ReplyMessage = NULL;
-            continue;
+            case LPC_PORT_CLOSED:
+            case LPC_CLIENT_DIED:
+                NtClose(MessagePort);
+                MessagePort = NULL;
+                break;
+
+            case LPC_REQUEST:
+                ReplyMessage = &Message.Header;
+
+                switch (Message.ApiNumber)
+                {
+                    case LsapAdtWriteLogApi:
+                        LsapAdtWriteLog(&Message);
+                        break;
+
+                    case LsapAsyncApi:
+                        LsapAsync(&Message);
+                        break;
+
+                    case LsapComponentTestApi:
+                        LsapComponentTest(&Message);
+                        break;
+
+                    case LsapLogonSessionDeletedApi:
+                        LsapLogonSessionDeleted(&Message);
+                        break;
+
+                    default:
+                        ERR("LsapRmServerThread - invalid API number: 0x%lx\n",
+                            Message.ApiNumber);
+                        ReplyMessage = NULL;
+                }
+                break;
+
+            default:
+                ERR("LsapRmServerThread - unexpected message type: 0x%lx\n",
+                    Message.Header.u2.s2.Type);
+                break;
         }
-
-        /* Check if this is an actual request */
-        if (MessageType == LPC_REQUEST)
-        {
-            ReplyMessage = &Message.Header;
-
-            switch (Message.ApiNumber)
-            {
-                case LsapAdtWriteLogApi:
-                    LsapAdtWriteLog(&Message);
-                    break;
-
-                case LsapAsyncApi:
-                    LsapAsync(&Message);
-                    break;
-
-                case LsapComponentTestApi:
-                    LsapComponentTest(&Message);
-                    break;
-
-                default:
-                    ERR("LsapRmServerThread - invalid API number: 0x%lx\n",
-                        Message.ApiNumber);
-                    ReplyMessage = NULL;
-            }
-
-            continue;
-        }
-
-        ERR("LsapRmServerThread - unexpected message type: 0x%lx\n",
-            Message.Header.u2.s2.Type);
-
-        /* Start over */
-        ReplyMessage = NULL;
     }
 }
 
@@ -180,14 +218,19 @@ LsapRmInitializeServer(VOID)
     UNICODE_STRING Name;
     OBJECT_ATTRIBUTES ObjectAttributes;
     ALPC_PORT_ATTRIBUTES PortAttributes;
+    SECURITY_DESCRIPTOR PortSd;
+    ACL PortDacl;
     HANDLE InitEvent;
     HANDLE ThreadHandle;
     DWORD ThreadId;
     NTSTATUS Status;
 
-    /* Create the LSA command port */
+    /* Create the LSA command port, which only the kernel may connect to */
+    RtlCreateSecurityDescriptor(&PortSd, SECURITY_DESCRIPTOR_REVISION);
+    RtlCreateAcl(&PortDacl, sizeof(PortDacl), ACL_REVISION);
+    RtlSetDaclSecurityDescriptor(&PortSd, TRUE, &PortDacl, FALSE);
     RtlInitUnicodeString(&Name, L"\\SeLsaCommandPort");
-    InitializeObjectAttributes(&ObjectAttributes, &Name, 0, NULL, NULL);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, 0, NULL, &PortSd);
     RtlZeroMemory(&PortAttributes, sizeof(PortAttributes));
     PortAttributes.MaxMessageLength = PORT_MAXIMUM_MESSAGE_LENGTH;
     PortAttributes.MaxPoolUsage = 2 * PAGE_SIZE;

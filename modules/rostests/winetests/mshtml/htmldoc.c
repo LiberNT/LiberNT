@@ -46,6 +46,9 @@
 #include "tlogstg.h"
 #include "exdispid.h"
 #include "mshtml_test.h"
+#ifdef __REACTOS__
+#include "httpserver.h"
+#endif
 #include "mscoree.h"
 #include "exdisp.h"
 
@@ -228,7 +231,7 @@ static BOOL expect_InPlaceUIWindow_SetActiveObject_active = TRUE;
 static BOOL ipsex, ipsw;
 static BOOL set_clientsite, container_locked;
 static BOOL readystate_set_loading = FALSE, readystate_set_interactive = FALSE, load_from_stream;
-static BOOL editmode = FALSE, ignore_external_qi;
+static BOOL editmode = FALSE, ignore_external_qi, pump_on_parse_complete;
 static BOOL inplace_deactivated, open_call;
 static BOOL loading_js, loading_hash, is_refresh, is_from_hist;
 static DWORD status_code = HTTP_STATUS_OK;
@@ -341,6 +344,7 @@ static BOOL iface_cmp(IUnknown *iface1, IUnknown *iface2)
 static void test_timer(DWORD flags)
 {
     BOOL *b = &called_Exec_SETTITLE;
+    DWORD end;
     MSG msg;
 
     if(flags & EXPECT_UPDATEUI) {
@@ -351,9 +355,14 @@ static void test_timer(DWORD flags)
     if(flags & EXPECT_SETTITLE)
         SET_EXPECT(Exec_SETTITLE);
 
-    while(!*b && GetMessageA(&msg, doc_hwnd, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageA(&msg);
+    end = GetTickCount() + 10000;
+    while(!*b && (LONG)(end - GetTickCount()) > 0) {
+        if(PeekMessageA(&msg, doc_hwnd, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }else {
+            MsgWaitForMultipleObjects(0, NULL, FALSE, 50, QS_ALLINPUT);
+        }
     }
 
     if(flags & EXPECT_UPDATEUI) {
@@ -1162,6 +1171,19 @@ static ULONG WINAPI PropertyNotifySink_Release(IPropertyNotifySink *iface)
     return 1;
 }
 
+static void pump_doc_messages(DWORD ms)
+{
+    DWORD end = GetTickCount() + ms;
+    MSG msg;
+
+    while((LONG)(end - GetTickCount()) > 0) {
+        if(PeekMessageA(&msg, doc_hwnd, 0, 0, PM_REMOVE))
+            DispatchMessageA(&msg);
+        else
+            Sleep(10);
+    }
+}
+
 static HRESULT WINAPI PropertyNotifySink_OnChanged(IPropertyNotifySink *iface, DISPID dispID)
 {
     if(resetting_document)
@@ -1185,6 +1207,9 @@ static HRESULT WINAPI PropertyNotifySink_OnChanged(IPropertyNotifySink *iface, D
         return S_OK;
     case 1005:
         CHECK_EXPECT2(OnChanged_1005);
+        /* Let the UI update armed when parsing completes fire before the load completes, as on a slow machine */
+        if(pump_on_parse_complete)
+            pump_doc_messages(300);
         if(!editmode)
             test_readyState(NULL);
         readystate_set_interactive = (load_state != LD_INTERACTIVE);
@@ -9399,7 +9424,9 @@ static void test_editing_mode(BOOL do_load, BOOL use_design_mode)
     IOleObject_Release(oleobj);
 
     test_MSHTML_QueryStatus(doc, OLECMDF_SUPPORTED);
+    pump_on_parse_complete = TRUE;
     test_download(DWL_VERBDONE | DWL_EX_GETHOSTINFO | (do_load ? DWL_CSS|DWL_TRYCSS : 0));
+    pump_on_parse_complete = FALSE;
 
     SET_EXPECT(SetStatusText); /* ignore race in native mshtml */
     test_timer(EXPECT_UPDATEUI);
@@ -9815,6 +9842,10 @@ START_TEST(htmldoc)
 
     container_hwnd = create_container_window();
     register_protocol();
+#ifdef __REACTOS__
+    /* The http checks load their pages from a loopback server, with their URLs unchanged */
+    ok(start_local_http_server(NULL), "the local http server did not start\n");
+#endif
 
     asynchronous_binding = TRUE;
     test_HTMLDocument_hlink(HTTP_STATUS_NOT_FOUND);
@@ -9844,6 +9875,9 @@ START_TEST(htmldoc)
     test_com_aggregation(&CLSID_HTMLDocument);
     test_iframes();
 
+#ifdef __REACTOS__
+    stop_local_http_server();
+#endif
     DestroyWindow(container_hwnd);
     CoUninitialize();
 }

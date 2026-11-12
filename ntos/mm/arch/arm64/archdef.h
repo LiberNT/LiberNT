@@ -28,3 +28,5 @@
 #define MI_ARCH_L3_BITS        9
 #define MI_ARCH_L4_SHIFT       0
 #define MI_ARCH_L4_BITS        0
+
+#define MI_ARM64_SESSION_TOP_ENTRIES 1

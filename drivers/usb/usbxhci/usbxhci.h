@@ -16,6 +16,7 @@
 #include <usbdlib.h>
 #include <drivers/usbport/usbmport.h>
 #include <drivers/kdusbshare.h>
+#include <reactos/drivers/usbcapability.h>
 
 #include "hardware.h"
 
@@ -54,6 +55,9 @@ typedef struct _XHCI_ISO_PACKET_CONTEXT XHCI_ISO_PACKET_CONTEXT, *PXHCI_ISO_PACK
 #define XHCI_QUIRK_VBOX_POLL_XFERS    0x00000800
 #define XHCI_QUIRK_QEMU_POLL_XFERS    0x00001000
 #define XHCI_QUIRK_IS_QEMU_XHCI       0x00002000
+#define XHCI_QUIRK_BROKEN_PORT_PED    0x00004000
+
+#define XHCI_DWC3_GSNPSID             0xC120
 
 /* Mask of quirks that force transfer polling for the fallback event drain.
  * Board-specific controllers must request polling via a registry quirk
@@ -96,6 +100,7 @@ typedef struct _XHCI_RING {
     ULONG DequeueIndex;
     ULONG CycleState;
     BOOLEAN UsesCommonBuffer;
+    BOOLEAN ResumePending;
 } XHCI_RING, *PXHCI_RING;
 
 struct _XHCI_ENDPOINT;
@@ -135,9 +140,8 @@ typedef struct _XHCI_DEVICE_SLOT {
     BOOLEAN IsHub;
     BOOLEAN HubFieldsConfigured; /* Hub/MTT/MaxPorts/TTT applied via Configure Endpoint */
     volatile LONG Ep0NeedsDequeueReset;
-    volatile LONG Ep0NeedsStallReset;    /* Set on stall, cleared by next submit at PASSIVE */
-    volatile LONG Ep0StallResetQueued;   /* Prevent duplicate stall-reset workers */
-    KEVENT Ep0StallResetEvent;
+    BOOLEAN DebugAdopted;
+    XHCI_CONTEXT_ALLOCATION OwnDeviceContext;
 } XHCI_DEVICE_SLOT, *PXHCI_DEVICE_SLOT;
 
 typedef struct _XHCI_PROTOCOL_SEGMENT {
@@ -210,6 +214,8 @@ typedef struct _XHCI_EXTENSION {
   LIST_ENTRY CommandContextList;
   KSPIN_LOCK CommandLock;
   KSPIN_LOCK EventRingLock;
+  volatile LONG EventClaimTicket;
+  volatile LONG EventTicketOnCpu[MAXIMUM_PROCESSORS];
   LIST_ENTRY DeferredTransferList;
   KSPIN_LOCK DeferredTransferLock;
     PHYSICAL_ADDRESS DeviceContextsPhysical;
@@ -247,6 +253,11 @@ typedef struct _XHCI_EXTENSION {
   ULONG BounceBufferSize;
   ULONG BounceBuffersInUseMask;
   KSPIN_LOCK BounceBufferLock;
+  PVOID BouncePoolBase;
+  ULONG BounceReservedSlots;
+  struct _XHCI_TRANSFER *BounceReservationOwner;
+  struct _XHCI_ENDPOINT *BounceReservationEndpoint;
+  BOOLEAN BounceWaiters;
   /* MSI/MSI-X discovery (message interrupts not yet connected on ReactOS) */
   BOOLEAN MsiSupported;
     BOOLEAN MsixSupported;
@@ -279,6 +290,13 @@ typedef struct _XHCI_EXTENSION {
   BOOLEAN TimerResolutionRaised;
   BOOLEAN DebugShare;
   KD_USB_SHARE DebugShareInfo;
+  BOOLEAN DebugHubShare;
+  UCHAR DebugHubCount;
+  UCHAR DebugHubSlot[KD_USB_SHARE_MAX_SLOTS];
+  UCHAR DebugHubPort[KD_USB_SHARE_MAX_SLOTS];
+  UCHAR DebugNextSpeed[KD_USB_SHARE_MAX_SLOTS];
+  ULONG DebugHubRoute[KD_USB_SHARE_MAX_SLOTS];
+  volatile LONG DebugPortChange[KD_USB_SHARE_MAX_SLOTS];
   XHCI_COMMAND_CONTEXT FrozenCommand;
 } XHCI_EXTENSION, *PXHCI_EXTENSION;
 
@@ -292,6 +310,8 @@ typedef struct _XHCI_ENDPOINT {
     PUSBPORT_SCATTER_GATHER_LIST PendingSgList;
     struct _XHCI_TRANSFER *ActiveTransfer;
     LIST_ENTRY ActiveTransferList;
+    struct _XHCI_TRANSFER *StalledEp0Transfer;
+    volatile LONG Ep0StallResetHeld;
     volatile LONG PendingWorkCount;
     volatile LONG ResetInProgress;
     volatile LONG ResetDataToggle;
@@ -313,6 +333,7 @@ typedef struct _XHCI_ENDPOINT {
     UCHAR InterruptTarget;
     USHORT ReservedStreamId;
     USHORT MaxStreamId;
+    volatile LONG PausedByPort;
     BOOLEAN StreamsEnabled;
     UCHAR StreamReserved[1];
     PXHCI_STREAM_CONTEXT StreamContexts;
@@ -334,6 +355,8 @@ typedef struct _XHCI_TRANSFER {
     PVOID TransferHandle;
     ULONGLONG TdFirstTrbPointer;
     ULONGLONG CompletionTrbPointer;
+    ULONGLONG StoppedTrbPointer;
+    ULONG StoppedBytes;
     ULONG RequestedLength;
     ULONG BytesTransferred;
     ULONG UsbdStatus;
@@ -353,7 +376,8 @@ typedef struct _XHCI_TRANSFER {
     ULONG BounceLength;
     LONG BounceSlot;
     BOOLEAN BounceDataIn;
-    UCHAR BounceReserved[3];
+    UCHAR BounceSlotCount;
+    UCHAR BounceReserved[2];
 } XHCI_TRANSFER, *PXHCI_TRANSFER;
 
 #define XHCI_TRANSFER_FLAG_SET_ADDRESS   0x00000001

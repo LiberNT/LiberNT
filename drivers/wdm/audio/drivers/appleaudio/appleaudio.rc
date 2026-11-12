@@ -1,0 +1,16 @@
+/*
+ * PROJECT:         LiberNT Apple Silicon Audio Driver
+ * LICENSE:         GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * COPYRIGHT:       Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <windows.h>
+#include <ntverp.h>
+
+#define VER_FILETYPE                    VFT_DRV
+#define VER_FILESUBTYPE                 VFT2_DRV_SOUND
+#define VER_FILEDESCRIPTION_STR         "Apple Silicon Audio Driver"
+#define VER_INTERNALNAME_STR            "appleaudio"
+#define VER_ORIGINALFILENAME_STR        "appleaudio.sys"
+
+#include "common.ver"

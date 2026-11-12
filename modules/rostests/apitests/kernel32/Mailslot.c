@@ -13,6 +13,18 @@
 static DWORD dInMsg  = MSG;
 static DWORD dOutMsg = 0x0;
 
+static
+VOID
+WaitIoPending(
+        HANDLE hThread)
+{
+    BOOL Pending = FALSE;
+    ULONG i;
+
+    for (i = 0; i < 100000 && GetThreadIOPendingFlag(hThread, &Pending) && !Pending; i++)
+        SwitchToThread();
+}
+
 DWORD
 WINAPI
 MailSlotWriter(
@@ -26,7 +38,7 @@ MailSlotWriter(
     ok(hMailslot != INVALID_HANDLE_VALUE, "CreateFile failed, results might not be accurate\n");
     if (hMailslot != INVALID_HANDLE_VALUE)
     {
-        Sleep(1000);
+        WaitIoPending((HANDLE)lpParam);
         ok(WriteFile(hMailslot, &dInMsg, sizeof(dInMsg), &cbWritten, (LPOVERLAPPED) NULL), "Slot write failed\n");
         CloseHandle(hMailslot);
     }
@@ -41,12 +53,14 @@ MailSlotReader(
     HANDLE hMailslotClient;
     DWORD cbRead;
     HANDLE hThread;
+    HANDLE hReader;
 
     hMailslotClient = CreateMailslot(LMS, 0L, MAILSLOT_WAIT_FOREVER, (LPSECURITY_ATTRIBUTES) NULL);
     ok(hMailslotClient != INVALID_HANDLE_VALUE, "CreateMailslot failed\n");
     if (hMailslotClient != INVALID_HANDLE_VALUE)
     {
-        hThread = CreateThread(NULL,0, MailSlotWriter, NULL, 0, NULL);
+        hReader = OpenThread(THREAD_QUERY_INFORMATION, FALSE, GetCurrentThreadId());
+        hThread = CreateThread(NULL,0, MailSlotWriter, hReader, 0, NULL);
         ok(hThread != INVALID_HANDLE_VALUE, "CreateThread failed\n");
         if (hThread != INVALID_HANDLE_VALUE)
         {
@@ -54,6 +68,7 @@ MailSlotReader(
             WaitForSingleObject(hThread, INFINITE);
             CloseHandle(hThread);
         }
+        CloseHandle(hReader);
         CloseHandle(hMailslotClient);
     }
     return 0;

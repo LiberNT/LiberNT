@@ -1340,6 +1340,16 @@ ExSetTimerResolution(
   _In_ ULONG DesiredTime,
   _In_ BOOLEAN SetResolution);
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+NTKERNELAPI
+VOID
+NTAPI
+ExQueryTimerResolution(
+  _Out_ PULONG MaximumTime,
+  _Out_ PULONG MinimumTime,
+  _Out_ PULONG CurrentTime);
+#endif
+
 NTKERNELAPI
 VOID
 NTAPI

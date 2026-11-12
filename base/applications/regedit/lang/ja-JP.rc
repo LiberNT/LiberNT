@@ -46,7 +46,7 @@ BEGIN
     STRING_FILE_NOT_FOUND "regedit: ファイル '%1' は見つかりませんでした。\n"
     STRING_CANNOT_OPEN_FILE "regedit: ファイル '%1' が開けません。.\n"
     STRING_UNHANDLED_ACTION "regedit: ハンドルされないアクションです。\n"
-    STRING_OUT_OF_MEMORY "regedit: メモリー不足です! (%1!S!, 行 %2!u!)\n"
+    STRING_OUT_OF_MEMORY "regedit: メモリ不足です! (%1!S!, 行 %2!u!)\n"
     STRING_INVALID_HEX "regedit: 不正な16進数の値です。\n"
     STRING_CSV_HEX_ERROR "regedit: 16進数のデータを変換できません。不正な値が '%1' で見つかりました。\n"
     STRING_ESCAPE_SEQUENCE "regedit: 認識されないエスケープシーケンスです [\\%1!c!]\n"
@@ -81,7 +81,7 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "印刷(&P)...\tCtrl+P", ID_REGISTRY_PRINT, GRAYED
         MENUITEM SEPARATOR
-        MENUITEM "レジストリ エディタの終了(&X)", ID_REGISTRY_EXIT
+        MENUITEM "レジストリ エディターの終了(&X)", ID_REGISTRY_EXIT
     END
     POPUP "編集(&E)"
     BEGIN
@@ -287,7 +287,7 @@ BEGIN
     LTEXT "未定", IDC_UNDETERMINED, 18, 230, 46, 8, WS_DISABLED
     LTEXT "共有", IDC_SHARED, 18, 240, 48, 8, WS_DISABLED
     LTEXT "デバイス専用", IDC_DEVICE_EXCLUSIVE, 72, 230, 58, 8, WS_DISABLED
-    LTEXT "ドライバ専用", IDC_DRIVER_EXCLUSIVE, 72, 240, 54, 8, WS_DISABLED
+    LTEXT "ドライバー専用", IDC_DRIVER_EXCLUSIVE, 72, 240, 54, 8, WS_DISABLED
     RTEXT "ｲﾝﾀｰﾌｪｲｽの種類:", IDC_STATIC, 144, 220, 58, 8
     LTEXT "", IDC_INTERFACETYPE, 205, 220, 66, 8
     RTEXT "バス番号:", IDC_STATIC, 151, 230, 51, 8
@@ -410,7 +410,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_APP_TITLE "レジストリ エディタ"
+    IDS_APP_TITLE "レジストリ エディター"
     IDC_REGEDIT "REGEDIT"
     IDC_REGEDIT_FRAME "REGEDIT_FRAME"
 END
@@ -421,7 +421,7 @@ BEGIN
     ID_EDIT_MENU "値やキーを編集するコマンドです"
     ID_VIEW_MENU "レジストリ ウィンドウをカスタマイズするコマンドです"
     ID_FAVOURITES_MENU "頻繁に使用されるキーにアクセスするコマンドです"
-    ID_HELP_MENU "ヘルプとレジストリ エディタのバージョン情報を表示するコマンドです"
+    ID_HELP_MENU "ヘルプとレジストリ エディターのバージョン情報を表示するコマンドです"
     ID_EDIT_NEW_MENU "新しいキーや値を作成するコマンドです"
 END
 
@@ -432,22 +432,22 @@ BEGIN
     ID_EDIT_NEW_STRINGVALUE "新しい文字列値を追加します"
     ID_EDIT_NEW_BINARYVALUE "新しいバイナリ値を追加します"
     ID_EDIT_NEW_DWORDVALUE "新しい DWORD 値を追加します"
-    ID_EDIT_NEW_MULTISTRINGVALUE "Adds a new multi string value"
-    ID_EDIT_NEW_EXPANDABLESTRINGVALUE "Adds a new expandable string value"
+    ID_EDIT_NEW_MULTISTRINGVALUE "新しい複数行文字列値を追加します"
+    ID_EDIT_NEW_EXPANDABLESTRINGVALUE "新しい展開可能な文字列値を追加します"
     ID_REGISTRY_IMPORTREGISTRYFILE "テキスト ファイルをレジストリにインポートします"
     ID_REGISTRY_EXPORTREGISTRYFILE "レジストリの一部または全体をテキスト ファイルにエクスポートします"
     ID_REGISTRY_LOADHIVE "ハイブ ファイルをレジストリに読み込みます"
     ID_REGISTRY_UNLOADHIVE "レジストリからハイブをアンロードします"
-    ID_REGISTRY_CONNECTNETWORKREGISTRY "リモート コンピュータのレジストリに接続します"
-    ID_REGISTRY_DISCONNECTNETWORKREGISTRY "リモート コンピュータのレジストリを切断します"
+    ID_REGISTRY_CONNECTNETWORKREGISTRY "リモート コンピューターのレジストリに接続します"
+    ID_REGISTRY_DISCONNECTNETWORKREGISTRY "リモート コンピューターのレジストリを切断します"
     ID_REGISTRY_PRINT "レジストリの一部または全体を印刷します"
-//    ID_HELP_HELPTOPICS "レジストリ エディタのヘルプを開きます"
+//    ID_HELP_HELPTOPICS "レジストリ エディターのヘルプを開きます"
     ID_HELP_ABOUT "プログラムの情報、バージョン番号および著作権を表示します"
 END
 
 STRINGTABLE
 BEGIN
-    ID_REGISTRY_EXIT "レジストリ エディタを終了します"
+    ID_REGISTRY_EXIT "レジストリ エディターを終了します"
     ID_FAVOURITES_ADDTOFAVOURITES "お気に入りの一覧にキーを追加します"
     ID_FAVOURITES_REMOVEFAVOURITE "お気に入りの一覧からキーを削除します"
     ID_VIEW_STATUSBAR "ステータス バーの表示/非表示を切り替えます"
@@ -468,7 +468,7 @@ BEGIN
     IDS_BAD_VALUE "'%s' の値を照会できません。"
     IDS_UNSUPPORTED_TYPE "この種類のキーは編集できません (%ld)。"
     IDS_TOO_BIG_VALUE "値が大きすぎます (%ld)。"
-    IDS_MULTI_SZ_EMPTY_STRING "REG_MULTI_SZ 型のデータに空白文字列を含むことはできません。\nレジストリ エディタは検出した空白文字列を削除します。"
+    IDS_MULTI_SZ_EMPTY_STRING "REG_MULTI_SZ 型のデータに空白文字列を含むことはできません。\nレジストリ エディターは検出した空白文字列を削除します。"
     IDS_QUERY_DELETE_KEY_ONE "このキーを削除してもよろしいですか?"
     IDS_QUERY_DELETE_KEY_MORE "これらのキーをすべて削除してもよろしいですか?"
     IDS_QUERY_DELETE_KEY_CONFIRM "キーの削除の確認"
@@ -479,7 +479,7 @@ BEGIN
     IDS_ERR_DELETEVALUE "指定された値のすべてを削除できません!"
     IDS_ERR_RENVAL_CAPTION "値の名前を変更するときにエラーが発生しました。"
     IDS_ERR_RENVAL_TOEMPTY "%s の名前を変更できません。指定された値の名前には文字が含まれていません。別の名前でやり直してください。"
-    IDS_QUERY_IMPORT_HIVE_CAPTION "Confirm Key Restoration"
+    IDS_QUERY_IMPORT_HIVE_CAPTION "キーの復元の確認"
     IDS_QUERY_IMPORT_HIVE_MSG "現在選択中のキーの最上部にキーが格納されます。\nこのキーのすべての値とサブキーが削除されます。\nこの処理を続行しますか?"
     IDS_NEW_KEY "新しいキー #%d"
     IDS_NEW_VALUE "新しい値 #%d"
@@ -491,7 +491,7 @@ BEGIN
     IDS_DEFAULT_VALUE_NAME "(既定値)"
     IDS_VALUE_NOT_SET "(値の設定なし)"
     IDS_UNKNOWN_TYPE "種類不明: (0x%lx)"
-    IDS_MY_COMPUTER "マイ コンピュータ"
+    IDS_MY_COMPUTER "マイ コンピューター"
     IDS_IMPORT_REG_FILE "レジストリ ファイルのインポート"
     IDS_EXPORT_REG_FILE "レジストリ ファイルのエクスポート"
     IDS_LOAD_HIVE "ハイブを読み込む"

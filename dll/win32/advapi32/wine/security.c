@@ -2789,6 +2789,7 @@ BOOL WINAPI CreateProcessWithLogonW( LPCWSTR user_name, LPCWSTR domain, LPCWSTR 
     return FALSE;
 }
 
+#ifndef __REACTOS__
 /******************************************************************************
  * CreateProcessWithTokenW [ADVAPI32.@]
  */
@@ -2805,6 +2806,7 @@ BOOL WINAPI CreateProcessWithTokenW(HANDLE token, DWORD logon_flags, LPCWSTR app
     return CreateProcessAsUserW( token, application_name, command_line, NULL, NULL, FALSE, creation_flags,
                                  environment, current_directory, startup_info, process_information );
 }
+#endif /* __REACTOS__ */
 
 /******************************************************************************
  * GetNamedSecurityInfoA [ADVAPI32.@]
@@ -3274,7 +3276,6 @@ BOOL WINAPI SaferIdentifyLevel(DWORD count, SAFER_CODE_PROPERTIES *properties, S
     *handle = (SAFER_LEVEL_HANDLE)0xdeadbeef;
     return TRUE;
 }
-#endif
 
 /******************************************************************************
  * SaferSetLevelInformation   [ADVAPI32.@]
@@ -3294,6 +3295,7 @@ BOOL WINAPI SaferiIsExecutableFileType(const WCHAR *path, BOOLEAN shell_execute)
     FIXME("(%s, %u) stub\n", debugstr_w(path), shell_execute);
     return FALSE;
 }
+#endif
 
 /******************************************************************************
  * LookupSecurityDescriptorPartsA   [ADVAPI32.@]

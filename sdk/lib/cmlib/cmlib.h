@@ -1119,9 +1119,11 @@ CmpDereferenceSecurityCell(
 #if !defined(CMLIB_HOST) && !defined(_BLDR_)
 VOID NTAPI CmpLockHiveSecurity(IN PHHIVE Hive);
 VOID NTAPI CmpUnlockHiveSecurity(IN PHHIVE Hive);
+VOID NTAPI CmpRemoveFromSecurityCache(IN PHHIVE Hive, IN HCELL_INDEX SecurityCell);
 #else
 #define CmpLockHiveSecurity(Hive) ((void)(Hive))
 #define CmpUnlockHiveSecurity(Hive) ((void)(Hive))
+#define CmpRemoveFromSecurityCache(Hive, SecurityCell) ((void)(Hive), (void)(SecurityCell))
 #endif
 
 NTSTATUS

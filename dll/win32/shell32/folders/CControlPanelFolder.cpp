@@ -299,16 +299,70 @@ BOOL CControlPanelEnum::CreateCPanelEnumList(DWORD dwFlags)
     return TRUE;
 }
 
+struct APPLET_LIST
+{
+    UINT Count;
+    PITEMID_CHILD Items[ANYSIZE_ARRAY];
+};
+
+static VOID FreeAppletList(APPLET_LIST *pList)
+{
+    for (UINT i = 0; i < pList->Count; i++)
+        ILFree(pList->Items[i]);
+    SHFree(pList);
+}
+
 CControlPanelFolder::CControlPanelFolder()
 {
     pidlRoot = NULL;    /* absolute pidl */
     m_cBackReferences = 0;
+    m_pApplets = NULL;
 }
 
 CControlPanelFolder::~CControlPanelFolder()
 {
     TRACE("-- destroying IShellFolder(%p)\n", this);
+    if (m_pApplets)
+        FreeAppletList(m_pApplets);
     SHFree(pidlRoot);
+}
+
+/* Listing the applets loads every one of them, so a folder lists them once for all the names it parses */
+APPLET_LIST *CControlPanelFolder::GetApplets(HWND hwndOwner)
+{
+    CComPtr<IEnumIDList> pEnum;
+    CSimpleArray<PITEMID_CHILD> Items;
+    PITEMID_CHILD pidlChild;
+    APPLET_LIST *pList;
+
+    if (m_pApplets)
+        return m_pApplets;
+
+    if (FAILED(EnumObjects(hwndOwner, SHCONTF_NONFOLDERS, &pEnum)))
+        return NULL;
+
+    while (pEnum->Next(1, &pidlChild, NULL) == S_OK)
+    {
+        if (!_ILGetCPanelPointer(pidlChild) || !Items.Add(pidlChild))
+            ILFree(pidlChild);
+    }
+
+    pList = (APPLET_LIST *)SHAlloc(FIELD_OFFSET(APPLET_LIST, Items) + Items.GetSize() * sizeof(pList->Items[0]));
+    if (!pList)
+    {
+        for (int i = 0; i < Items.GetSize(); i++)
+            ILFree(Items[i]);
+        return NULL;
+    }
+
+    pList->Count = (UINT)Items.GetSize();
+    for (UINT i = 0; i < pList->Count; i++)
+        pList->Items[i] = Items[i];
+
+    if (InterlockedCompareExchangePointer((PVOID *)&m_pApplets, pList, NULL) != NULL)
+        FreeAppletList(pList);
+
+    return m_pApplets;
 }
 
 /**************************************************************************
@@ -327,16 +381,19 @@ HRESULT WINAPI CControlPanelFolder::ParseDisplayName(
     if (SUCCEEDED(hr) || !lpszDisplayName || !ppidl)
         return hr;
 
-    CComPtr<IEnumIDList> pEnum;
-    if (FAILED(EnumObjects(hwndOwner, SHCONTF_NONFOLDERS, &pEnum)))
+    APPLET_LIST *pApplets = GetApplets(hwndOwner);
+    if (!pApplets)
         return hr;
 
-    PITEMID_CHILD pidlChild;
-    while (pEnum->Next(1, &pidlChild, NULL) == S_OK)
+    for (UINT i = 0; i < pApplets->Count; i++)
     {
+        PITEMID_CHILD pidlChild = pApplets->Items[i];
         PIDLCPanelStruct *pCPanel = _ILGetCPanelPointer(pidlChild);
-        if (pCPanel && !lstrcmpiW(pCPanel->szName + pCPanel->offsDispName, lpszDisplayName))
+        if (!lstrcmpiW(pCPanel->szName + pCPanel->offsDispName, lpszDisplayName))
         {
+            pidlChild = ILClone(pidlChild);
+            if (!pidlChild)
+                return E_OUTOFMEMORY;
             if (pdwAttributes && *pdwAttributes)
             {
                 DWORD dwAttributes = ~0u;
@@ -348,7 +405,6 @@ HRESULT WINAPI CControlPanelFolder::ParseDisplayName(
             *ppidl = pidlChild;
             return S_OK;
         }
-        ILFree(pidlChild);
     }
     return hr;
 }

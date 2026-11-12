@@ -438,7 +438,10 @@ typedef struct _DWM_FRAME_HEADER
     ULONG ScreenMirror;       /* in : dwm can mirror frames for screen reads */
     ULONG ScreenReadServed;   /* in : last request mirrored, 0 = none */
     ULONG ScreenReadRequest;  /* out: a screen read waits for a mirror */
+    ULONG IdleRetryMs;
 } DWM_FRAME_HEADER, *PDWM_FRAME_HEADER;
+
+#define DWM_DEFERRED_RETRY_MS 200
 
 /* DwmEnableBlurBehindWindow exchange. The HRGN is consumed synchronously in
  * the caller's GDI handle table and copied into kernel-owned window state. */

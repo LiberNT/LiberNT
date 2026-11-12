@@ -333,7 +333,7 @@ UnmapViewOfFile(LPCVOID lpBaseAddress)
     if (!NT_SUCCESS(Status))
     {
         /* Check if the pages were protected */
-        if (Status == STATUS_INVALID_PAGE_PROTECTION)
+        if (Status == STATUS_INVALID_PAGE_PROTECTION || Status == STATUS_UNABLE_TO_FREE_VM)
         {
             /* Flush the region if it was a "secure memory cache" */
             if (RtlFlushSecureMemoryCache((PVOID)lpBaseAddress, 0))

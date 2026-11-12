@@ -188,7 +188,7 @@ MiWriteWatchResetLocked(
         {
             MI_PTE Clean = MiArchPteSetDirty(Pte, FALSE);
 
-            MI_ASSERT(MiArchPteFrame(Pte) < Space->System->Pfn.FrameCount);
+            MI_ASSERT(MiPfnTracked(&Space->System->Pfn, MiArchPteFrame(Pte)));
             MI_ASSERT(MiArchPteIsLeafDescriptor(Clean) && MiArchPteIsWritable(Clean));
             MI_ASSERT(!MiArchPteIsDirty(Clean) && MiArchPteFrame(Clean) == MiArchPteFrame(Pte));
             MiPfnSetModified(&Space->System->Pfn, (ULONG)MiArchPteFrame(Pte));

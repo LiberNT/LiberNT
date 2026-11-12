@@ -128,7 +128,11 @@ NtUserCallNoParam(DWORD Routine)
         case NOPARAM_ROUTINE_GETMSESSAGEPOS:
         {
             PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
-            Result = (DWORD_PTR)MAKELONG(pti->ptLast.x, pti->ptLast.y);
+            POINT Last = pti->ptLast;
+
+            if (UserDpiIsVirtualThread(pti))
+                UserDpiPointToLogical(&Last);
+            Result = (DWORD_PTR)MAKELONG(Last.x, Last.y);
             break;
         }
 
@@ -364,7 +368,7 @@ NtUserCallOneParam(
             break;
 
         case ONEPARAM_ROUTINE_ROS_GETSYSTEMMETRICS:
-            Result = UserGetSystemMetrics((ULONG)Param);
+            Result = UserGetCallerSystemMetrics((ULONG)Param);
             break;
 
         case ONEPARAM_ROUTINE_ROS_GETSYSCOLOR:
@@ -408,6 +412,12 @@ NtUserCallOneParam(
                     break;
                 case ROS_SERVERINFO_SRVIFLAGS:
                     Result = gpsi->dwSRVIFlags;
+                    break;
+                case ROS_SERVERINFO_LOGPIXELS:
+                    Result = gpsi->dmLogPixels;
+                    break;
+                case ROS_SERVERINFO_PADDEDBORDER:
+                    Result = gpsi->aiSysMet[SM_CXPADDEDBORDER];
                     break;
                 default:
                     EngSetLastError(ERROR_INVALID_PARAMETER);
@@ -598,9 +608,13 @@ NtUserCallOneParam(
             }
             _SEH2_TRY
             {
+                POINT Cursor = gpsi->ptCursor;
+
+                if (UserDpiIsVirtualThread(pti))
+                    UserDpiPointToLogical(&Cursor);
                 ProbeForWrite((POINT*)Param,sizeof(POINT),1);
                pptl = (PPOINTL)Param;
-               *pptl = gpsi->ptCursor;
+               *pptl = *(PPOINTL)&Cursor;
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
@@ -948,6 +962,11 @@ NtUserCallTwoParam(
             break;
 
         case TWOPARAM_ROUTINE_SETCURSORPOS:
+            if (UserDpiIsVirtualCaller())
+            {
+                Param1 = (DWORD_PTR)(INT)UserDpiToPhysical((INT)Param1);
+                Param2 = (DWORD_PTR)(INT)UserDpiToPhysical((INT)Param2);
+            }
             Ret = (DWORD_PTR)UserSetCursorPos((int)Param1, (int)Param2, 0, 0, FALSE);
             break;
 
@@ -1243,6 +1262,23 @@ NtUserCallHwnd(
             UserLeave();
             return State;
         }
+
+        case HWND_ROUTINE_ROS_ENABLENCDPISCALING:
+        {
+            PWND Window;
+            BOOL Ret = FALSE;
+
+            UserEnterShared();
+            Window = UserGetWindowObject(hWnd);
+            if (Window && Window->head.pti == PsGetCurrentThreadWin32Thread() && !(Window->style & WS_CHILD) &&
+                !(Window->state2 & WNDS2_WMCREATEMSGPROCESSED) &&
+                NTUSER_DPI_CONTEXT_GET_AWARENESS(Window->DpiContext) == DPI_AWARENESS_PER_MONITOR_AWARE)
+            {
+                Ret = TRUE;
+            }
+            UserLeave();
+            return Ret;
+        }
     }
 
     STUB;
@@ -1326,13 +1362,18 @@ NtUserCallHwndParam(
             {
                 if (Routine == HWNDPARAM_ROUTINE_ROS_GETCLIENTRECT)
                 {
+                    Rect = Window->rcClient;
+                    if (UserDpiIsVirtualCaller())
+                        UserDpiRectToLogical(&Rect);
+                    Rect.right -= Rect.left;
+                    Rect.bottom -= Rect.top;
                     Rect.left = Rect.top = 0;
-                    Rect.right = Window->rcClient.right - Window->rcClient.left;
-                    Rect.bottom = Window->rcClient.bottom - Window->rcClient.top;
                 }
                 else
                 {
                     Rect = Window->rcWindow;
+                    if (UserDpiIsVirtualCaller())
+                        UserDpiRectToLogical(&Rect);
                 }
                 Ret = TRUE;
             }
@@ -1366,6 +1407,11 @@ NtUserCallHwndParam(
             {
                 Info.rcWindow = Window->rcWindow;
                 Info.rcClient = Window->rcClient;
+                if (UserDpiIsVirtualCaller())
+                {
+                    UserDpiRectToLogical(&Info.rcWindow);
+                    UserDpiRectToLogical(&Info.rcClient);
+                }
                 Info.style = Window->style;
                 Info.ExStyle = Window->ExStyle;
                 Info.state = Window->state;

@@ -394,7 +394,11 @@ DxgkpOpenKeyedMutexCommon(
     *OutHandle = 0;
     Mutex = DxgkpFindKeyedMutexBySharedHandle(SharedHandle);
     if (Mutex == NULL)
+    {
+        if (PrivateData != NULL)
+            ExFreePoolWithTag(PrivateData, TAG_DXGK_KEYEDMUTEX);
         return STATUS_INVALID_PARAMETER;
+    }
 
     /* Private data is only adopted if the mutex does not already carry some;
      * the creator's copy is the authoritative one. */
@@ -458,11 +462,7 @@ DxgkOpenKeyedMutex2(
         return Status;
     Status = DxgkpOpenKeyedMutexCommon(pData->hSharedHandle, PrivateData, pData->PrivateRuntimeDataSize, &Handle);
     if (!NT_SUCCESS(Status))
-    {
-        if (PrivateData != NULL)
-            ExFreePoolWithTag(PrivateData, TAG_DXGK_KEYEDMUTEX);
         return Status;
-    }
     pData->hKeyedMutex = Handle;
     return STATUS_SUCCESS;
 }

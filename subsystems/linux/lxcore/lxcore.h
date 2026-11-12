@@ -221,6 +221,7 @@ typedef struct _LX_DEVPTS
     ULONG Mode;
     ULONG Uid;
     ULONG Gid;
+    ULONG Max;
     BOOLEAN UidSet;
     BOOLEAN GidSet;
 } LX_DEVPTS, *PLX_DEVPTS;
@@ -579,6 +580,22 @@ struct _LX_CGROUP
     LONG64 PidsEventsLocal;
 };
 
+typedef struct _LX_CRED
+{
+    ULONG Uid[3];
+    ULONG Gid[3];
+    ULONG Fsuid;
+    ULONG Fsgid;
+    ULONG GroupCount;
+    ULONG Groups[32];
+    ULONG SecureBits;
+    ULONG64 CapInheritable;
+    ULONG64 CapPermitted;
+    ULONG64 CapEffective;
+    ULONG64 CapBounding;
+    ULONG64 CapAmbient;
+} LX_CRED, *PLX_CRED;
+
 struct _LX_PROCESS
 {
     volatile LONG RefCount;
@@ -640,26 +657,14 @@ struct _LX_PROCESS
     ULONG NsPid[LX_PIDNS_MAX_LEVEL];
     LONG64 StartTime;
     LONG OomScoreAdj;
-    ULONG PdeathSignal;
+    ULONG ParentTid;
     LX_RLIMIT Limits[16];
     LX_POLL_HEAD ExitPoll;
     LX_POLL_HEAD SignalPoll;
     LX_POLL_HEAD ChildPoll;
-    ULONG Uid[3];
-    ULONG Gid[3];
-    ULONG Fsuid;
-    ULONG Fsgid;
-    ULONG GroupCount;
-    ULONG Groups[32];
+    LX_CRED Cred;
     ULONG Dumpable;
-    BOOLEAN NoNewPrivs;
     BOOLEAN Execed;
-    ULONG SecureBits;
-    ULONG64 CapInheritable;
-    ULONG64 CapPermitted;
-    ULONG64 CapEffective;
-    ULONG64 CapBounding;
-    ULONG64 CapAmbient;
     ULONG ExitSignal;
     ULONG64 MinFlt;
     LX_USAGE ExitUsage;
@@ -771,6 +776,7 @@ struct _LX_THREAD
     ULONG CurrentSyscall;
     LONG InKernel;
     volatile LONG SignalApc;
+    volatile LONG SharedWake;
     PEX_TIMER SignalRetry;
     ULONG64 CurrentArgs[6];
     ULONG64 RobustList;
@@ -795,6 +801,10 @@ struct _LX_THREAD
     volatile LONG PtraceWork;
     LONG ExitCode;
     ULONG PtraceVforkPid;
+    PLX_CRED Cred;
+    LX_CRED OwnCred;
+    ULONG PdeathSignal;
+    BOOLEAN NoNewPrivs;
     PLX_KEY ThreadKeyring;
     PLX_KEY ProcessKeyring;
     PLX_KEY SessionKeyring;
@@ -1514,10 +1524,11 @@ LONG LxUserNsGetMax(_In_ PLX_PROCESS Process);
 LONG LxUserNsSetMax(_In_ PLX_PROCESS Process, _In_ LONG64 Value);
 BOOLEAN LxInGroup(_In_ PLX_PROCESS Process, _In_ ULONG Gid);
 ULONG LxCredMakeId(_In_ PLX_PROCESS Process, _In_ BOOLEAN Group, _In_ ULONG Id);
+PLX_CRED LxProcessCred(_In_ PLX_PROCESS Process);
 VOID LxCredSave(_In_ PLX_PROCESS Process, _Out_ PLX_CRED_SAVE Save);
 VOID LxCredFixSetuid(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old, _In_ BOOLEAN FileSystem);
-VOID LxCredCommit(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old);
-ULONG LxCredExec(_Inout_ PLX_PROCESS Process, _In_ PLX_CRED_SAVE Old, _In_ PLX_FILE_CAPS FileCaps);
+VOID LxCredCommit(_Inout_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread, _In_ PLX_CRED_SAVE Old);
+ULONG LxCredExec(_Inout_ PLX_PROCESS Process, _Inout_ PLX_THREAD Thread, _In_ PLX_CRED_SAVE Old, _In_ PLX_FILE_CAPS FileCaps);
 BOOLEAN LxCredRootOwnsNs(_In_ PLX_PROCESS Process, _In_ ULONG RootId);
 LONG LxCredSetCapabilities(_Inout_ PLX_PROCESS Process, _In_ ULONG64 Effective, _In_ ULONG64 Permitted,
                            _In_ ULONG64 Inheritable);
@@ -1546,6 +1557,7 @@ BOOLEAN LxMmPickLayout(_Inout_ PLX_PROCESS Process);
 ULONG64 LxMmRandomOffset(VOID);
 ULONG64 LxMmRandomizeBrk(_In_ ULONG64 Base);
 VOID LxProcessExited(_In_ PLX_PROCESS Process, _In_ NTSTATUS ExitStatus);
+VOID LxProcessThreadExited(_In_ PLX_PROCESS Process, _In_ ULONG Tid);
 VOID LxItimerRelease(_In_ PLX_PROCESS Process);
 VOID LxPosixTimersRelease(_In_ PLX_PROCESS Process, _In_ BOOLEAN Free);
 VOID LxProcessRegister(_In_ PLX_PROCESS Process);
@@ -1638,6 +1650,9 @@ BOOLEAN LxThreadDetach(_In_ PLX_THREAD Thread);
 BOOLEAN LxSignalIgnoredByDefault(_In_ LONG Signal);
 BOOLEAN LxSignalStopsByDefault(_In_ LONG Signal);
 VOID LxSignalWakeThread(_In_ PLX_PROCESS Process, _In_ ULONG Tid);
+ULONG64 LxSignalPendingSet(_In_ PLX_THREAD Thread);
+VOID LxSignalRecheck(_In_ PLX_THREAD Base, _In_ PLX_THREAD Thread);
+VOID LxSignalRetarget(_In_ PLX_PROCESS Process, _In_opt_ PLX_THREAD Thread, _In_ ULONG64 Bits);
 VOID LxSignalForce(_In_ PLX_THREAD Thread, _In_ LONG Signal, _In_ PLX_SIGINFO Info);
 ULONG LxSeccompAuditArch(VOID);
 VOID LxPtraceInitialize(VOID);

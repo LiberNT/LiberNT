@@ -31,6 +31,7 @@ static LIST_ENTRY PopStandbyPausedList;
 static KTIMER PopDisplayIdleTimer;
 static KDPC PopDisplayIdleDpc;
 static WORK_QUEUE_ITEM PopDisplayIdleWorkItem;
+static PVOID PopVideoTimeoutWatch;
 static volatile LONG PopDisplayIdleQueued;
 static volatile LONG PopDisplayActivityTick;
 
@@ -160,6 +161,8 @@ PopPublishDisplayState(
     ULONG MonitorOn = (State != PowerMonitorOff);
     ULONG Value = State;
     ULONG Condition;
+    KAPC_STATE ApcState;
+    PVOID Session;
 
     for (Condition = PoAc; Condition < PoConditionMaximum; Condition++)
     {
@@ -171,11 +174,12 @@ PopPublishDisplayState(
     {
         PopSleepCallWin32(PowerState_MonitorOff, PowerActionSleep, PowerSystemWorking, 0);
     }
-    else if (PopEventCallout != NULL)
+    else if (PopEventCallout != NULL && PopEnterConsoleSession(&Session, &ApcState))
     {
         Parameters.EventNumber = PsW32DisplayState;
         Parameters.Code = State;
         (VOID)PopEventCallout(&Parameters);
+        PopLeaveConsoleSession(Session, &ApcState);
     }
 }
 
@@ -242,6 +246,51 @@ PopGetDisplayState(VOID)
     return (MONITOR_DISPLAY_STATE)InterlockedCompareExchange(&PopDisplayTarget, 0, 0);
 }
 
+NTSTATUS
+NTAPI
+PopSetSessionDisplayState(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength)
+{
+    ULONG State;
+
+    if (PreviousMode != KernelMode)
+        return STATUS_NOT_IMPLEMENTED;
+
+    if (InputBuffer == NULL || InputBufferLength != sizeof(ULONG))
+        return STATUS_INVALID_PARAMETER;
+
+    State = *(PULONG)InputBuffer;
+    if (State > PowerMonitorDim)
+        return STATUS_INVALID_PARAMETER;
+
+    PopRequestDisplayState((MONITOR_DISPLAY_STATE)State);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PopQueryPlatformInformation(
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength)
+{
+    POWER_PLATFORM_INFORMATION Information;
+
+    if (InputBuffer != NULL || InputBufferLength != 0 || OutputBuffer == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    if (OutputBufferLength < sizeof(Information))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlZeroMemory(&Information, sizeof(Information));
+    Information.AoAc = PopAoAc;
+    RtlCopyMemory(OutputBuffer, &Information, sizeof(Information));
+    return STATUS_SUCCESS;
+}
+
 VOID
 NTAPI
 PopNoteDisplayActivity(VOID)
@@ -253,17 +302,11 @@ PopNoteDisplayActivity(VOID)
 
 static
 VOID
-NTAPI
-PopDisplayIdleWorker(
-    _In_ PVOID Context)
+PopCheckDisplayIdle(VOID)
 {
     ULONG Timeout;
     ULONG Now;
     ULONG Idle;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    InterlockedExchange(&PopDisplayIdleQueued, 0);
 
     Timeout = PopGetVideoTimeout();
     if (Timeout == 0 || PopGetDisplayState() != PowerMonitorOn || PopIsDisplayRequired())
@@ -277,6 +320,37 @@ PopDisplayIdleWorker(
 
     DPRINT1("The display idled out after %lu seconds\n", Timeout);
     PopRequestDisplayState(PowerMonitorOff);
+}
+
+static
+VOID
+NTAPI
+PopDisplayIdleWorker(
+    _In_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    InterlockedExchange(&PopDisplayIdleQueued, 0);
+    PopCheckDisplayIdle();
+}
+
+/* A new timeout applies to the time already spent idle, not only from the next periodic check */
+static
+NTSTATUS
+NTAPI
+PopVideoTimeoutChanged(
+    _In_ LPCGUID SettingGuid,
+    _In_reads_bytes_(ValueLength) PVOID Value,
+    _In_ ULONG ValueLength,
+    _Inout_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(SettingGuid);
+    UNREFERENCED_PARAMETER(Value);
+    UNREFERENCED_PARAMETER(ValueLength);
+    UNREFERENCED_PARAMETER(Context);
+
+    PopCheckDisplayIdle();
+    return STATUS_SUCCESS;
 }
 
 static
@@ -306,6 +380,7 @@ PopInitializeStandby(VOID)
     KeInitializeMutex(&PopDisplayLock, 0);
     ExInitializeWorkItem(&PopDisplayWorkItem, PopDisplayWorker, NULL);
     InitializeListHead(&PopStandbyPausedList);
+    PopPublishDisplayState(PopDisplayState);
 
     PopDisplayActivityTick = (LONG)PopTickMilliseconds();
     ExInitializeWorkItem(&PopDisplayIdleWorkItem, PopDisplayIdleWorker, NULL);
@@ -313,4 +388,13 @@ PopInitializeStandby(VOID)
     KeInitializeTimerEx(&PopDisplayIdleTimer, SynchronizationTimer);
     DueTime.QuadPart = -10000000LL;
     KeSetTimerEx(&PopDisplayIdleTimer, DueTime, 1000, &PopDisplayIdleDpc);
+
+    if (!NT_SUCCESS(PoRegisterPowerSettingCallback(NULL,
+                                                   &GUID_VIDEO_POWERDOWN_TIMEOUT,
+                                                   PopVideoTimeoutChanged,
+                                                   NULL,
+                                                   &PopVideoTimeoutWatch)))
+    {
+        DPRINT1("Display timeout changes are seen only by the periodic check\n");
+    }
 }

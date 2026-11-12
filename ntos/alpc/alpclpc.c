@@ -1343,6 +1343,18 @@ AlpcpAcceptLegacyConnection(
     }
 
     AlpcpAcquirePortLock(ConnectionPort);
+    ASSERT(Message->State & ALPC_MSG_STATE_ACCEPT_IN_PROGRESS);
+    ASSERT(!(Message->State & (ALPC_MSG_STATE_ACCEPTED | ALPC_MSG_STATE_REFUSED)));
+    if ((Message->State & ALPC_MSG_STATE_CANCELED) || (ConnectionPort->Flags & ALPC_PORT_FLAG_CLOSED))
+    {
+        Status = (Message->State & ALPC_MSG_STATE_CANCELED) ? STATUS_REPLY_MESSAGE_MISMATCH : STATUS_PORT_DISCONNECTED;
+        AlpcpReleasePortLock(ConnectionPort);
+        ObCloseHandle(Handle, PreviousMode);
+        ObDereferenceObject(ServerPort);
+        ObDereferenceObject(ConnectionPort);
+        ExFreePoolWithTag(Info, 'IcpA');
+        return Status;
+    }
     if (!PortContext) ServerPort->PortContext = Handle;
     Info->Domain = ConnectionPort->Domain;
     AlpcpReferenceDomain(Info->Domain);
@@ -1563,9 +1575,11 @@ AlpcpCompleteLegacyConnect(
     Port->ConnectThread = NULL;
     if (!Message) return Thread;
 
+    ASSERT(Message->State & ALPC_MSG_STATE_ACCEPT_IN_PROGRESS);
     Message->State &= ~ALPC_MSG_STATE_ACCEPT_IN_PROGRESS;
     if (Message->WaitingThread != Thread)
     {
+        AlpcpReclaimCanceledMessage(Message);
         AlpcpFreeMessage(Message);
     }
     else if (Accept)

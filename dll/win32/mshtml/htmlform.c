@@ -975,3 +975,227 @@ HRESULT HTMLFormElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTM
     *elem = &ret->element;
     return S_OK;
 }
+
+struct HTMLFieldSetElement {
+    HTMLElement element;
+
+    IHTMLFieldSetElement IHTMLFieldSetElement_iface;
+};
+
+typedef struct HTMLFieldSetElement HTMLFieldSetElement;
+
+static inline HTMLFieldSetElement *impl_from_IHTMLFieldSetElement(IHTMLFieldSetElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFieldSetElement, IHTMLFieldSetElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLFieldSetElement, IHTMLFieldSetElement,
+                      impl_from_IHTMLFieldSetElement(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLFieldSetElement_put_align(IHTMLFieldSetElement *iface, BSTR v)
+{
+    HTMLFieldSetElement *This = impl_from_IHTMLFieldSetElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"align", v);
+}
+
+static HRESULT WINAPI HTMLFieldSetElement_get_align(IHTMLFieldSetElement *iface, BSTR *p)
+{
+    HTMLFieldSetElement *This = impl_from_IHTMLFieldSetElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"align", p);
+}
+
+static const IHTMLFieldSetElementVtbl HTMLFieldSetElementVtbl = {
+    HTMLFieldSetElement_QueryInterface,
+    HTMLFieldSetElement_AddRef,
+    HTMLFieldSetElement_Release,
+    HTMLFieldSetElement_GetTypeInfoCount,
+    HTMLFieldSetElement_GetTypeInfo,
+    HTMLFieldSetElement_GetIDsOfNames,
+    HTMLFieldSetElement_Invoke,
+    HTMLFieldSetElement_put_align,
+    HTMLFieldSetElement_get_align
+};
+
+static inline HTMLFieldSetElement *HTMLFieldSetElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLFieldSetElement, element.node.event_target.dispex);
+}
+
+static void *HTMLFieldSetElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLFieldSetElement *This = HTMLFieldSetElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLFieldSetElement, riid))
+        return &This->IHTMLFieldSetElement_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLFieldSetElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLFieldSetElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLFieldSetElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLFieldSetElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+/* TODO: IHTMLFieldSetElement2 (form) */
+static void HTMLFieldSetElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLFieldSetElement_tid, NULL);
+}
+
+dispex_static_data_t HTMLFieldSetElement_dispex = {
+    .id           = OBJID_HTMLFieldSetElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLFieldSetElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLFieldSetElement_tid,
+    .init_info    = HTMLFieldSetElement_init_dispex_info,
+};
+
+HRESULT HTMLFieldSetElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLFieldSetElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLFieldSetElement_iface.lpVtbl = &HTMLFieldSetElementVtbl;
+    ret->element.node.vtbl = &HTMLFieldSetElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLFieldSetElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}
+
+struct HTMLLegendElement {
+    HTMLElement element;
+
+    IHTMLLegendElement IHTMLLegendElement_iface;
+};
+
+typedef struct HTMLLegendElement HTMLLegendElement;
+
+static inline HTMLLegendElement *impl_from_IHTMLLegendElement(IHTMLLegendElement *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLLegendElement, IHTMLLegendElement_iface);
+}
+
+DISPEX_IDISPATCH_IMPL(HTMLLegendElement, IHTMLLegendElement,
+                      impl_from_IHTMLLegendElement(iface)->element.node.event_target.dispex)
+
+static HRESULT WINAPI HTMLLegendElement_put_align(IHTMLLegendElement *iface, BSTR v)
+{
+    HTMLLegendElement *This = impl_from_IHTMLLegendElement(iface);
+
+    TRACE("(%%p)->(%%s)\n", This, debugstr_w(v));
+
+    return elem_put_reflected_string(&This->element, L"align", v);
+}
+
+static HRESULT WINAPI HTMLLegendElement_get_align(IHTMLLegendElement *iface, BSTR *p)
+{
+    HTMLLegendElement *This = impl_from_IHTMLLegendElement(iface);
+
+    TRACE("(%%p)->(%%p)\n", This, p);
+
+    return elem_get_reflected_string(&This->element, L"align", p);
+}
+
+static const IHTMLLegendElementVtbl HTMLLegendElementVtbl = {
+    HTMLLegendElement_QueryInterface,
+    HTMLLegendElement_AddRef,
+    HTMLLegendElement_Release,
+    HTMLLegendElement_GetTypeInfoCount,
+    HTMLLegendElement_GetTypeInfo,
+    HTMLLegendElement_GetIDsOfNames,
+    HTMLLegendElement_Invoke,
+    HTMLLegendElement_put_align,
+    HTMLLegendElement_get_align
+};
+
+static inline HTMLLegendElement *HTMLLegendElement_from_DispatchEx(DispatchEx *iface)
+{
+    return CONTAINING_RECORD(iface, HTMLLegendElement, element.node.event_target.dispex);
+}
+
+static void *HTMLLegendElement_query_interface(DispatchEx *dispex, REFIID riid)
+{
+    HTMLLegendElement *This = HTMLLegendElement_from_DispatchEx(dispex);
+
+    if(IsEqualGUID(&IID_IHTMLLegendElement, riid))
+        return &This->IHTMLLegendElement_iface;
+
+    return HTMLElement_query_interface(&This->element.node.event_target.dispex, riid);
+}
+
+static const NodeImplVtbl HTMLLegendElementImplVtbl = {
+    .clsid                 = &CLSID_HTMLLegendElement,
+    .cpc_entries           = HTMLElement_cpc,
+    .clone                 = HTMLElement_clone,
+    .get_attr_col          = HTMLElement_get_attr_col
+};
+
+static const event_target_vtbl_t HTMLLegendElement_event_target_vtbl = {
+    {
+        HTMLELEMENT_DISPEX_VTBL_ENTRIES,
+        .query_interface= HTMLLegendElement_query_interface,
+        .destructor     = HTMLElement_destructor,
+        .traverse       = HTMLElement_traverse,
+        .unlink         = HTMLElement_unlink
+    },
+    HTMLELEMENT_EVENT_TARGET_VTBL_ENTRIES,
+    .handle_event       = HTMLElement_handle_event
+};
+
+/* TODO: IHTMLLegendElement2 (form) */
+static void HTMLLegendElement_init_dispex_info(dispex_data_t *info, compat_mode_t mode)
+{
+    HTMLElement_init_dispex_info(info, mode);
+    dispex_info_add_interface(info, IHTMLLegendElement_tid, NULL);
+}
+
+dispex_static_data_t HTMLLegendElement_dispex = {
+    .id           = OBJID_HTMLLegendElement,
+    .prototype_id = OBJID_HTMLElement,
+    .vtbl         = &HTMLLegendElement_event_target_vtbl.dispex_vtbl,
+    .disp_tid     = DispHTMLLegendElement_tid,
+    .init_info    = HTMLLegendElement_init_dispex_info,
+};
+
+HRESULT HTMLLegendElement_Create(HTMLDocumentNode *doc, nsIDOMElement *nselem, HTMLElement **elem)
+{
+    HTMLLegendElement *ret;
+
+    ret = calloc(1, sizeof(*ret));
+    if(!ret)
+        return E_OUTOFMEMORY;
+
+    ret->IHTMLLegendElement_iface.lpVtbl = &HTMLLegendElementVtbl;
+    ret->element.node.vtbl = &HTMLLegendElementImplVtbl;
+
+    HTMLElement_Init(&ret->element, doc, nselem, &HTMLLegendElement_dispex);
+
+    *elem = &ret->element;
+    return S_OK;
+}

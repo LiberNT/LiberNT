@@ -28,6 +28,31 @@ static ULONG TestLastFastReadKey;
 static ULONG TestLastFastWriteKey;
 static PFILE_OBJECT TestFileObject;
 static PDEVICE_OBJECT TestDeviceObject;
+static KTIMER TestHoldTimer;
+static KDPC TestHoldDpc;
+static PIRP TestHeldIrp;
+
+static KDEFERRED_ROUTINE TestCompleteHeldIrp;
+
+static
+VOID
+NTAPI
+TestCompleteHeldIrp(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PIRP Irp = TestHeldIrp;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(DeferredContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    TestHeldIrp = NULL;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+}
 
 NTSTATUS
 TestEntry(
@@ -50,6 +75,9 @@ TestEntry(
     TestFastIoDispatch.FastIoRead = TestFastIoRead;
     TestFastIoDispatch.FastIoWrite = TestFastIoWrite;
     DriverObject->FastIoDispatch = &TestFastIoDispatch;
+
+    KeInitializeTimer(&TestHoldTimer);
+    KeInitializeDpc(&TestHoldDpc, TestCompleteHeldIrp, NULL);
 
     KmtRegisterIrpHandler(IRP_MJ_CREATE, NULL, TestIrpHandler);
     KmtRegisterIrpHandler(IRP_MJ_CLEANUP, NULL, TestIrpHandler);
@@ -341,6 +369,17 @@ TestIrpHandler(
                                 IoStack->Parameters.Read.ByteOffset.QuadPart,
                                 IoStack->Parameters.Read.Key,
                                 &Irp->IoStatus);
+        if (IoStack->Parameters.Read.Key & KEY_HOLD_PENDING)
+        {
+            LARGE_INTEGER DueTime;
+
+            /* Held without a cancel routine, so the request cannot be cancelled until the timer completes it */
+            IoMarkIrpPending(Irp);
+            TestHeldIrp = Irp;
+            DueTime.QuadPart = -50 * 10000LL;
+            KeSetTimer(&TestHoldTimer, DueTime, &TestHoldDpc);
+            return STATUS_PENDING;
+        }
     }
     else if (IoStack->MajorFunction == IRP_MJ_WRITE)
     {

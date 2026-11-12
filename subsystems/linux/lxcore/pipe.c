@@ -505,6 +505,7 @@ LxPipeCreatePair(
     _Out_ PLX_FILE *ReadEnd,
     _Out_ PLX_FILE *WriteEnd)
 {
+    PLX_CRED Cred = LxProcessCred(Process);
     PLX_PIPE Pipe = LxPipeCreate();
     CHAR Name[40];
 
@@ -513,8 +514,8 @@ LxPipeCreatePair(
         return -LX_ENOMEM;
     if (Process != NULL)
     {
-        Pipe->Uid = Process->Fsuid;
-        Pipe->Gid = Process->Fsgid;
+        Pipe->Uid = Cred->Fsuid;
+        Pipe->Gid = Cred->Fsgid;
     }
 
     *ReadEnd = LxPipeOpenEnd(Pipe, LX_O_RDONLY | (Flags & LX_O_NONBLOCK));

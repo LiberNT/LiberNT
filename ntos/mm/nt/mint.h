@@ -80,6 +80,11 @@ VOID MiReleaseTargetProcess(_Inout_ PMI_PROCESS_REFERENCE Reference);
 #define MI_PROCESS_OF(Process)  ((PMI_PROCESS)(Process)->Vm.Instance.VmWorkingSetList)
 #define MI_IS_SYSTEM_VA(Va)     ((ULONG_PTR)(Va) >= (ULONG_PTR)MmSystemRangeStart)
 
+PMI_ADDRESS_SPACE MiSessionSpaceOfProcess(_In_ PEPROCESS Process);
+BOOLEAN MiSessionHasImage(_In_ PEPROCESS Process, _In_ PVOID LdrEntry);
+NTSTATUS MiSessionAddImage(_In_ PEPROCESS Process, _In_ PVOID LdrEntry);
+VOID MiSessionRemoveImage(_In_ PEPROCESS Process, _In_ PVOID LdrEntry);
+
 FORCEINLINE
 PMI_ADDRESS_SPACE
 MiSpaceOfProcess(
@@ -110,6 +115,14 @@ MiSpaceForAddress(
 
     if (MiArchIsSelfMapAddress((ULONG64)(ULONG_PTR)Address) && Process->Vm.Instance.VmWorkingSetList != NULL)
         return MiSpaceOfProcess(Process);
+
+    if (MmIsSessionAddress(Address))
+    {
+        PMI_ADDRESS_SPACE Session = MiSessionSpaceOfProcess(Process);
+
+        if (Session != NULL)
+            return Session;
+    }
 
     return &MiSystem.SystemSpace;
 }

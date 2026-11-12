@@ -16,12 +16,12 @@
 #define KD_LOG_WATCHDOG_100NS_PER_SECOND 10000000ULL
 #define KD_LOG_WATCHDOG_BUGCHECK_TYPE 2
 
+#if defined(KDBG) && DBG
 static DECLSPEC_ALIGN(8) volatile LONG64 KdpLogWatchdogLastPrintTime;
 static ULONGLONG KdpLogWatchdogTimeout;
 static volatile LONG KdpLogWatchdogState;
 static volatile LONG KdpLogWatchdogSuspendCount;
 
-#if defined(KDBG) && DBG
 static BOOLEAN KdpLogWatchdogIsSeparator(_In_ CHAR Character)
 {
     return Character == ' ' || Character == '\t' || Character == ',' || Character == '/';

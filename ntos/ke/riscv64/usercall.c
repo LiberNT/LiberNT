@@ -335,6 +335,7 @@ KeUserModeCallback(
         return Status;
 
     Thread->CallbackNestingLevel++;
+    /* TODO: a callout this stack cannot hold fails instead of going on through KiCallUserModeWithStack */
     CallbackStatus = KiRiscvCallUserMode(&CallbackFrame, Result, ResultLength);
     Thread->CallbackNestingLevel--;
     ASSERT(Thread->TrapFrame == OuterFrame);

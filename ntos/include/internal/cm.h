@@ -217,7 +217,7 @@ typedef struct _CACHED_CHILD_LIST
     ULONG Count;
     union
     {
-        ULONG ValueList;
+        ULONG_PTR ValueList;
         struct _CM_KEY_CONTROL_BLOCK *RealKcb;
     };
 } CACHED_CHILD_LIST, *PCACHED_CHILD_LIST;
@@ -275,6 +275,7 @@ typedef struct _CMP_CALLBACK_ITEM
 typedef struct _CMP_CALLBACK_CALL
 {
     ULONG Count;
+    ULONG PostCount;
     REG_NOTIFY_CLASS PostClass;
     PVOID PreInformation;
     PVOID *CallContext;
@@ -918,21 +919,6 @@ CmpDeleteKeyObject(
 
 NTSTATUS
 NTAPI
-CmpParseKey(
-    IN PVOID ParseObject,
-    IN PVOID ObjectType,
-    IN OUT PACCESS_STATE AccessState,
-    IN KPROCESSOR_MODE AccessMode,
-    IN ULONG Attributes,
-    IN OUT PUNICODE_STRING CompleteName,
-    IN OUT PUNICODE_STRING RemainingName,
-    IN OUT PVOID Context OPTIONAL,
-    IN PSECURITY_QUALITY_OF_SERVICE SecurityQos OPTIONAL,
-    OUT PVOID *Object
-);
-
-NTSTATUS
-NTAPI
 CmpParseKeyEx(
     IN PVOID ParseObject,
     IN PVOID ObjectType,
@@ -1038,6 +1024,7 @@ NTSTATUS
 NTAPI
 CmpInitHiveFromFile(
     IN PCUNICODE_STRING HiveName,
+    IN PCUNICODE_STRING LinkName OPTIONAL,
     IN ULONG HiveFlags,
     OUT PCMHIVE *Hive,
     IN OUT PBOOLEAN New,
@@ -1078,7 +1065,7 @@ CmpTestRegistryLock(
 );
 
 NTSTATUS NTAPI CmpAppHiveAccessMode(PCMHIVE Hive, ACCESS_MASK DesiredAccess, KPROCESSOR_MODE AccessMode, KPROCESSOR_MODE *EffectiveMode);
-BOOLEAN NTAPI CmpCreateRootNode(PHHIVE Hive, PCWSTR Name, PHCELL_INDEX Index);
+BOOLEAN NTAPI CmpCreateRootNode(PHHIVE Hive, PCUNICODE_STRING Name, PHCELL_INDEX Index);
 NTSTATUS NTAPI CmpLoadAppHive(POBJECT_ATTRIBUTES TargetKey, POBJECT_ATTRIBUTES SourceFile, ULONG Flags, KPROCESSOR_MODE AccessMode, PCM_KEY_BODY *RootBody, PCMHIVE *LoadedHive);
 VOID NTAPI CmpReferenceHive(PCMHIVE Hive);
 VOID NTAPI CmpDereferenceHive(PCMHIVE Hive);
@@ -1430,6 +1417,12 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 CmpInitializeProcessorClockFromFirmware(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+CmpInitializeSystemBiosInformation(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 CODE_SEG("INIT")

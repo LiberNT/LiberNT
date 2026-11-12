@@ -133,7 +133,7 @@ cleanup:
     if (LocalKmtHandle != INVALID_HANDLE_VALUE)
         CloseHandle(LocalKmtHandle);
 
-    DPRINT("Callback handler dying! Error code %lu", Error);
+    DPRINT("Callback handler dying! Error code %lu\n", Error);
     return Error;
 }
 

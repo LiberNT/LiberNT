@@ -14050,6 +14050,24 @@ interface IHTMLImgElement : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLImgElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f826-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLImgElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLIMGELEMENT2_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLIMGELEMENT2_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLImageElementFactory interface
  */
 [
@@ -14225,7 +14243,7 @@ coclass HTMLImg
     WINE_HTMLDATAELEMENT_INTERFACES;
     interface IHTMLControlElement;
     interface IHTMLImgElement;
- /* interface IHTMLImgElement2; */
+    interface IHTMLImgElement2;
  /* interface IHTMLImgElement3; */
  /* interface IHTMLImgElement4; */
  /* interface IHTMLMSImgElement; */
@@ -16252,6 +16270,30 @@ interface IHTMLInputElement : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLInputElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f821-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLInputElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLINPUTELEMENT2_ACCEPT), displaybind, bindable]
+    HRESULT accept([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLINPUTELEMENT2_ACCEPT), displaybind, bindable]
+    HRESULT accept([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLINPUTELEMENT2_USEMAP), displaybind, bindable]
+    HRESULT useMap([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLINPUTELEMENT2_USEMAP), displaybind, bindable]
+    HRESULT useMap([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLInputTextElement interface
  */
 [
@@ -16637,7 +16679,7 @@ coclass HTMLInputElement
     WINE_HTMLDATAELEMENT_INTERFACES;
     interface IHTMLControlElement;
     interface IHTMLInputElement;
- /* interface IHTMLInputElement2; */
+    interface IHTMLInputElement2;
     interface IHTMLInputTextElement;
     interface IHTMLInputTextElement2;
  /* interface IHTMLInputHiddenElement; */
@@ -27731,6 +27773,46 @@ interface IHTMLTableCaption : IDispatch
 }
 
 /*****************************************************************************
+ *    DispHTMLTableCaption dispinterface
+ */
+[
+    hidden,
+    uuid(3050f508-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLTableCaption
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLTABLECAPTION_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECAPTION_ALIGN)]
+    BSTR align();
+
+    [propput, id(DISPID_IHTMLTABLECAPTION_VALIGN)]
+    void vAlign(BSTR v);
+
+    [propget, id(DISPID_IHTMLTABLECAPTION_VALIGN)]
+    BSTR vAlign();
+}
+
+/*****************************************************************************
+ *    HTMLTableCaption coclass
+ */
+[
+    noncreatable,
+    uuid(3050f2ec-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLTableCaption
+{
+    [default]         dispinterface DispHTMLTableCaption;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLTableCaption;
+}
+
+/*****************************************************************************
  *    IHTMLTable interface
  */
 [
@@ -29366,6 +29448,54 @@ interface IHTMLObjectElement2 : IDispatch
 }
 
 /*****************************************************************************
+ *    IHTMLObjectElement3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f827-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLObjectElement3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_ARCHIVE), displaybind, bindable]
+    HRESULT archive([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_ARCHIVE), displaybind, bindable]
+    HRESULT archive([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_ALT), displaybind, bindable]
+    HRESULT alt([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_ALT), displaybind, bindable]
+    HRESULT alt([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_DECLARE), displaybind, bindable]
+    HRESULT declare([in] VARIANT_BOOL v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_DECLARE), displaybind, bindable]
+    HRESULT declare([retval, out] VARIANT_BOOL *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_STANDBY), displaybind, bindable]
+    HRESULT standby([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_STANDBY), displaybind, bindable]
+    HRESULT standby([retval, out] BSTR *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_BORDER)]
+    HRESULT border([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_BORDER)]
+    HRESULT border([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLOBJECTELEMENT3_USEMAP), displaybind, bindable]
+    HRESULT useMap([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLOBJECTELEMENT3_USEMAP), displaybind, bindable]
+    HRESULT useMap([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
  *    IHTMLDivElement interface
  */
 [
@@ -29832,7 +29962,7 @@ coclass HTMLObjectElement
     interface IHTMLControlElement;
     interface IHTMLObjectElement;
     interface IHTMLObjectElement2;
- /* interface IHTMLObjectElement3; */
+    interface IHTMLObjectElement3;
  /* interface IHTMLObjectElement4; */
  /* interface IGetSVGDocument; */
  /* interface IHTMLObjectElement5; */
@@ -29880,6 +30010,125 @@ methods:
 
     [propget, id(DISPID_IHTMLPARAMELEMENT2_IE8_VALUETYPE)]
     BSTR ie8_valueType();
+}
+
+/*****************************************************************************
+ *    HTMLParamElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f83e-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLParamElement
+{
+    [default]         dispinterface DispHTMLParamElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLParamElement;
+    interface IHTMLParamElement2;
+}
+
+/*****************************************************************************
+ *    IHTMLFieldSetElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3e7-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFieldSetElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLFieldSetElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f545-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLFieldSetElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLFIELDSETELEMENT_ALIGN)]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLFieldSetElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3e8-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLFieldSetElement
+{
+    [default]         dispinterface DispHTMLFieldSetElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLFieldSetElement;
+}
+
+/*****************************************************************************
+ *    IHTMLLegendElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f3ea-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLLegendElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    HRESULT align([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    HRESULT align([retval, out] BSTR *p);
+}
+
+/*****************************************************************************
+ *    DispHTMLLegendElement dispinterface
+ */
+[
+    hidden,
+    uuid(3050f546-98b5-11cf-bb82-00aa00bdce0b)
+]
+dispinterface DispHTMLLegendElement
+{
+properties:
+methods:
+    WINE_HTMLELEMENT_DISPINTERFACE_DECL;
+
+    [propput, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    void align(BSTR v);
+
+    [propget, id(DISPID_IHTMLLEGENDELEMENT_ALIGN)]
+    BSTR align();
+}
+
+/*****************************************************************************
+ *    HTMLLegendElement coclass
+ */
+[
+    noncreatable,
+    uuid(3050f3e9-98b5-11cf-bb82-00aa00bdce0b)
+]
+coclass HTMLLegendElement
+{
+    [default]         dispinterface DispHTMLLegendElement;
+    WINE_HTMLELEMENT_INTERFACES;
+    interface IHTMLLegendElement;
 }
 
 /*****************************************************************************
@@ -30039,6 +30288,24 @@ interface IHTMLFrameBase2 : IDispatch
     HRESULT allowTransparency([retval, out] VARIANT_BOOL *p);
 }
 
+/*****************************************************************************
+ *    IHTMLFrameBase3 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f82e-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameBase3 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEBASE3_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([in] BSTR v);
+
+    [propget, id(DISPID_IHTMLFRAMEBASE3_LONGDESC), displaybind, bindable]
+    HRESULT longDesc([retval, out] BSTR *p);
+}
+
 #define WINE_IHTMLFRAMEBASE2_DISPINTERFACE_DECL                         \
     [propget, id(DISPID_IHTMLFRAMEBASE2_CONTENTWINDOW)]                 \
     IHTMLWindow2 *contentWindow();                                      \
@@ -30062,6 +30329,63 @@ interface IHTMLFrameBase2 : IDispatch
     WINE_IHTMLFRAMEBASE_DISPINTERFACE_DECL;   \
     WINE_IHTMLFRAMEBASE2_DISPINTERFACE_DECL;  \
     WINE_IHTMLFRAMEBASE3_DISPINTERFACE_DECL
+
+/*****************************************************************************
+ *    IGetSVGDocument interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(305105ab-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IGetSVGDocument : IDispatch
+{
+    [id(DISPID_IGETSVGDOCUMENT_GETSVGDOCUMENT)]
+    HRESULT getSVGDocument([retval, out] IDispatch **ppSVGDocument);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameElement interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f313-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameElement : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT_BORDERCOLOR)]
+    HRESULT borderColor([retval, out] VARIANT *p);
+}
+
+/*****************************************************************************
+ *    IHTMLFrameElement2 interface
+ */
+[
+    odl,
+    oleautomation,
+    dual,
+    uuid(3050f7f5-98b5-11cf-bb82-00aa00bdce0b)
+]
+interface IHTMLFrameElement2 : IDispatch
+{
+    [propput, id(DISPID_IHTMLFRAMEELEMENT2_HEIGHT)]
+    HRESULT height([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT2_HEIGHT)]
+    HRESULT height([retval, out] VARIANT *p);
+
+    [propput, id(DISPID_IHTMLFRAMEELEMENT2_WIDTH)]
+    HRESULT width([in] VARIANT v);
+
+    [propget, id(DISPID_IHTMLFRAMEELEMENT2_WIDTH)]
+    HRESULT width([retval, out] VARIANT *p);
+}
 
 /*****************************************************************************
  *    IHTMLFrameElement3 interface
@@ -30165,11 +30489,11 @@ coclass HTMLFrameElement
     interface IHTMLControlElement;
     interface IHTMLFrameBase;
     interface IHTMLFrameBase2;
- /* interface IHTMLFrameBase3; */
- /* interface IHTMLFrameElement; */
- /* interface IHTMLFrameElement2; */
+    interface IHTMLFrameBase3;
+    interface IHTMLFrameElement;
+    interface IHTMLFrameElement2;
     interface IHTMLFrameElement3;
- /* interface IGetSVGDocument; */
+    interface IGetSVGDocument;
 }
 
 /*****************************************************************************
@@ -30340,11 +30664,11 @@ coclass HTMLIFrame
     interface IHTMLControlElement;
     interface IHTMLFrameBase;
     interface IHTMLFrameBase2;
- /* interface IHTMLFrameBase3; */
+    interface IHTMLFrameBase3;
     interface IHTMLIFrameElement;
     interface IHTMLIFrameElement2;
     interface IHTMLIFrameElement3;
- /* interface IGetSVGDocument; */
+    interface IGetSVGDocument;
 }
 
 /*****************************************************************************

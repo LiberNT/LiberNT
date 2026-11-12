@@ -2773,7 +2773,7 @@ NdisIDeviceIoControl(
   PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
   NDIS_STATUS Status = STATUS_NOT_SUPPORTED;
   ULONG ControlCode;
-  ULONG Written;
+  ULONG Written = 0;
 
   Irp->IoStatus.Information = 0;
 

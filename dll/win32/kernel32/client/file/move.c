@@ -119,6 +119,7 @@ BasepMoveFileDelayed(
     }
     RtlInitUnicodeString(&PendingOperationsString, PendingOperations);
 
+    /* TODO: write the pending rename inside the thread's current transaction (NtCreateKeyTransacted) */
     InitializeObjectAttributes(&ObjectAttributes,
                                &SessionManagerString,
                                OBJ_OPENIF | OBJ_CASE_INSENSITIVE,

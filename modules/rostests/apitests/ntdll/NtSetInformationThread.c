@@ -235,9 +235,53 @@ Test_ThreadNameInformation(void)
                            sizeof(NameInfo));
 }
 
+static
+void
+Test_ThreadAffinityMask(void)
+{
+    SYSTEM_BASIC_INFORMATION System;
+    PROCESS_BASIC_INFORMATION Process;
+    THREAD_BASIC_INFORMATION Thread;
+    KAFFINITY Original, Mask;
+    NTSTATUS Status;
+
+    Status = NtQuerySystemInformation(SystemBasicInformation, &System, sizeof(System), NULL);
+    ok_hex(Status, STATUS_SUCCESS);
+    Status = NtQueryInformationProcess(NtCurrentProcess(), ProcessBasicInformation, &Process, sizeof(Process), NULL);
+    ok_hex(Status, STATUS_SUCCESS);
+    Status = NtQueryInformationThread(NtCurrentThread(), ThreadBasicInformation, &Thread, sizeof(Thread), NULL);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ok(Process.AffinityMask == System.ActiveProcessorsAffinityMask,
+       "Process affinity %Ix, active processors %Ix\n",
+       (size_t)Process.AffinityMask, (size_t)System.ActiveProcessorsAffinityMask);
+    Original = Thread.AffinityMask;
+
+    Mask = ~(KAFFINITY)0;
+    Status = NtSetInformationThread(NtCurrentThread(), ThreadAffinityMask, &Mask, sizeof(Mask));
+    ok_hex(Status, STATUS_SUCCESS);
+    Status = NtQueryInformationThread(NtCurrentThread(), ThreadBasicInformation, &Thread, sizeof(Thread), NULL);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok(Thread.AffinityMask == Process.AffinityMask,
+       "Thread affinity %Ix, process affinity %Ix\n", (size_t)Thread.AffinityMask, (size_t)Process.AffinityMask);
+
+    Mask = ~System.ActiveProcessorsAffinityMask;
+    if (Mask != 0)
+    {
+        Status = NtSetInformationThread(NtCurrentThread(), ThreadAffinityMask, &Mask, sizeof(Mask));
+        ok_hex(Status, STATUS_INVALID_PARAMETER);
+    }
+
+    Status = NtSetInformationThread(NtCurrentThread(), ThreadAffinityMask, &Original, sizeof(Original));
+    ok_hex(Status, STATUS_SUCCESS);
+}
+
 START_TEST(NtSetInformationThread)
 {
     Test_ThreadPriorityClass();
     Test_ThreadSetAlignmentProbe();
     Test_ThreadNameInformation();
+    Test_ThreadAffinityMask();
 }

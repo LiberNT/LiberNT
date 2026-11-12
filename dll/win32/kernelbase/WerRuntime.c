@@ -7,32 +7,34 @@
 
 #include <windows.h>
 #include <winternl.h>
-
-#define WER_MAX_REGISTERED_RUNTIME_EXCEPTION_MODULES 16
+#include <werapi.h>
+#include <basewer.h>
 
 typedef struct _WER_RUNTIME_MODULE
 {
-    LIST_ENTRY Entry;
-    UNICODE_STRING DllName;
-    PVOID Context;
+    BASE_WER_ENTRY Shared;
+    WCHAR Name[ANYSIZE_ARRAY];
 } WER_RUNTIME_MODULE, *PWER_RUNTIME_MODULE;
 
 static SRWLOCK WerRuntimeLock = SRWLOCK_INIT;
-static LIST_ENTRY WerRuntimeModules = {&WerRuntimeModules, &WerRuntimeModules};
 static ULONG WerRuntimeModuleCount;
 
-static PWER_RUNTIME_MODULE
+static PULONG64
 FindRuntimeModule(
+    _In_ PBASE_WER_REGISTRATION Registration,
     _In_ PCUNICODE_STRING DllName,
     _In_opt_ PVOID Context)
 {
-    PLIST_ENTRY Entry;
     PWER_RUNTIME_MODULE Module;
+    UNICODE_STRING Name;
+    PULONG64 Link;
 
-    for (Entry = WerRuntimeModules.Flink; Entry != &WerRuntimeModules; Entry = Entry->Flink)
+    for (Link = &Registration->RuntimeModules; *Link; Link = &Module->Shared.Next)
     {
-        Module = CONTAINING_RECORD(Entry, WER_RUNTIME_MODULE, Entry);
-        if (Module->Context == Context && RtlEqualUnicodeString(&Module->DllName, DllName, TRUE)) return Module;
+        Module = (PWER_RUNTIME_MODULE)(ULONG_PTR)*Link;
+        Name.Buffer = Module->Name;
+        Name.Length = Name.MaximumLength = (USHORT)Module->Shared.NameLength;
+        if (Module->Shared.Address == (ULONG_PTR)Context && RtlEqualUnicodeString(&Name, DllName, TRUE)) return Link;
     }
 
     return NULL;
@@ -44,25 +46,27 @@ WerRegisterRuntimeExceptionModule(
     _In_ PCWSTR DllName,
     _In_opt_ PVOID Context)
 {
+    PBASE_WER_REGISTRATION Registration;
     PWER_RUNTIME_MODULE Module;
     UNICODE_STRING Name;
-    SIZE_T AllocationSize;
+    PULONG64 Link;
 
     if (!DllName) return E_INVALIDARG;
+    if (BaseWerGetState() & BASE_WER_RECOVERY_IN_PROGRESS) return WER_E_INVALID_STATE;
     RtlInitUnicodeString(&Name, DllName);
-    AllocationSize = sizeof(*Module) + Name.Length + sizeof(WCHAR);
-    Module = RtlAllocateHeap(NtCurrentTeb()->Peb->ProcessHeap, 0, AllocationSize);
+    Registration = BaseWerGetRegistration(TRUE);
+    if (!Registration) return E_OUTOFMEMORY;
+    Module = RtlAllocateHeap(NtCurrentTeb()->Peb->ProcessHeap, HEAP_ZERO_MEMORY,
+                             FIELD_OFFSET(WER_RUNTIME_MODULE, Name[Name.Length / sizeof(WCHAR) + 1]));
     if (!Module) return E_OUTOFMEMORY;
 
-    Module->DllName.Buffer = (PWSTR)(Module + 1);
-    Module->DllName.Length = Name.Length;
-    Module->DllName.MaximumLength = Name.Length + sizeof(WCHAR);
-    RtlCopyMemory(Module->DllName.Buffer, Name.Buffer, Name.Length);
-    Module->DllName.Buffer[Name.Length / sizeof(WCHAR)] = UNICODE_NULL;
-    Module->Context = Context;
+    RtlCopyMemory(Module->Name, Name.Buffer, Name.Length);
+    Module->Shared.NameLength = Name.Length;
+    Module->Shared.Name = (ULONG_PTR)Module->Name;
+    Module->Shared.Address = (ULONG_PTR)Context;
 
     RtlAcquireSRWLockExclusive(&WerRuntimeLock);
-    if (FindRuntimeModule(&Name, Context))
+    if (FindRuntimeModule(Registration, &Name, Context))
     {
         RtlReleaseSRWLockExclusive(&WerRuntimeLock);
         RtlFreeHeap(NtCurrentTeb()->Peb->ProcessHeap, 0, Module);
@@ -75,7 +79,8 @@ WerRegisterRuntimeExceptionModule(
         return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
     }
 
-    InsertTailList(&WerRuntimeModules, &Module->Entry);
+    for (Link = &Registration->RuntimeModules; *Link; Link = &((PBASE_WER_ENTRY)(ULONG_PTR)*Link)->Next);
+    InterlockedExchange64((PLONG64)Link, (LONG64)(ULONG_PTR)Module);
     WerRuntimeModuleCount++;
     RtlReleaseSRWLockExclusive(&WerRuntimeLock);
     return S_OK;
@@ -87,21 +92,27 @@ WerUnregisterRuntimeExceptionModule(
     _In_ PCWSTR DllName,
     _In_opt_ PVOID Context)
 {
+    PBASE_WER_REGISTRATION Registration;
     PWER_RUNTIME_MODULE Module;
     UNICODE_STRING Name;
+    PULONG64 Link;
 
     if (!DllName) return E_INVALIDARG;
+    if (BaseWerGetState() & BASE_WER_RECOVERY_IN_PROGRESS) return WER_E_INVALID_STATE;
     RtlInitUnicodeString(&Name, DllName);
+    Registration = BaseWerGetRegistration(FALSE);
+    if (!Registration) return WER_E_NOT_FOUND;
 
     RtlAcquireSRWLockExclusive(&WerRuntimeLock);
-    Module = FindRuntimeModule(&Name, Context);
-    if (!Module)
+    Link = FindRuntimeModule(Registration, &Name, Context);
+    if (!Link)
     {
         RtlReleaseSRWLockExclusive(&WerRuntimeLock);
-        return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+        return WER_E_NOT_FOUND;
     }
 
-    RemoveEntryList(&Module->Entry);
+    Module = (PWER_RUNTIME_MODULE)(ULONG_PTR)*Link;
+    InterlockedExchange64((PLONG64)Link, (LONG64)Module->Shared.Next);
     WerRuntimeModuleCount--;
     RtlReleaseSRWLockExclusive(&WerRuntimeLock);
     RtlFreeHeap(NtCurrentTeb()->Peb->ProcessHeap, 0, Module);
@@ -111,12 +122,16 @@ WerUnregisterRuntimeExceptionModule(
 VOID
 WerCleanupRuntimeExceptionModules(VOID)
 {
+    PBASE_WER_REGISTRATION Registration = BaseWerGetRegistration(FALSE);
     PWER_RUNTIME_MODULE Module;
 
+    if (!Registration) return;
+
     RtlAcquireSRWLockExclusive(&WerRuntimeLock);
-    while (!IsListEmpty(&WerRuntimeModules))
+    while (Registration->RuntimeModules)
     {
-        Module = CONTAINING_RECORD(RemoveHeadList(&WerRuntimeModules), WER_RUNTIME_MODULE, Entry);
+        Module = (PWER_RUNTIME_MODULE)(ULONG_PTR)Registration->RuntimeModules;
+        InterlockedExchange64((PLONG64)&Registration->RuntimeModules, (LONG64)Module->Shared.Next);
         RtlFreeHeap(NtCurrentTeb()->Peb->ProcessHeap, 0, Module);
     }
     WerRuntimeModuleCount = 0;

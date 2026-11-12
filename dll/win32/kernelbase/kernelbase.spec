@@ -202,6 +202,7 @@
 @ stdcall DeleteAce(ptr long)
 @ stdcall DeleteBoundaryDescriptor(ptr) kernel32.DeleteBoundaryDescriptor
 @ stdcall -version=0x600+ DeleteProcThreadAttributeList(ptr) kernel32.DeleteProcThreadAttributeList
+@ stdcall DeleteSynchronizationBarrier(ptr) kernel32.DeleteSynchronizationBarrier
 @ stdcall DestroyPrivateObjectSecurity(ptr)
 @ stdcall DeviceIoControl(long long ptr long ptr long ptr ptr) kernel32.DeviceIoControl
 @ stdcall DisablePredefinedHandleTableInternal(long)
@@ -217,12 +218,13 @@
 @ stdcall EncodePointer(ptr) ntdll.RtlEncodePointer
 @ stdcall EncodeSystemPointer(ptr) ntdll.RtlEncodeSystemPointer
 @ stdcall EnterCriticalSection(ptr) ntdll.RtlEnterCriticalSection
+@ stdcall EnterSynchronizationBarrier(ptr long) kernel32.EnterSynchronizationBarrier
 @ stdcall EnumCalendarInfoExEx(ptr wstr long wstr long long)
 @ stdcall EnumCalendarInfoExW(ptr long long long)
 @ stdcall EnumCalendarInfoW(ptr long long long)
-@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long) kernel32.EnumDateFormatsExEx
-@ stdcall EnumDateFormatsExW(ptr long long) kernel32.EnumDateFormatsExW
-@ stdcall EnumDateFormatsW(ptr long long) kernel32.EnumDateFormatsW
+@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long)
+@ stdcall EnumDateFormatsExW(ptr long long)
+@ stdcall EnumDateFormatsW(ptr long long)
 @ stdcall -version=0x601+ EnumDeviceDrivers(ptr long ptr) kernel32.K32EnumDeviceDrivers
 @ stdcall EnumDynamicTimeZoneInformation(long ptr)
 @ stdcall EnumLanguageGroupLocalesW(ptr long long ptr) kernel32.EnumLanguageGroupLocalesW
@@ -245,8 +247,8 @@
 @ stdcall EnumSystemLocalesA(ptr long)
 @ stdcall EnumSystemLocalesEx(ptr long long ptr)
 @ stdcall EnumSystemLocalesW(ptr long)
-@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long) kernel32.EnumTimeFormatsEx
-@ stdcall EnumTimeFormatsW(ptr long long) kernel32.EnumTimeFormatsW
+@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long)
+@ stdcall EnumTimeFormatsW(ptr long long)
 @ stdcall EnumUILanguagesW(ptr long long) kernel32.EnumUILanguagesW
 @ stdcall EqualDomainSid(ptr ptr ptr)
 @ stdcall EqualPrefixSid(ptr ptr)
@@ -293,6 +295,7 @@
 @ stdcall FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long)
 @ stdcall FindNextChangeNotification(long) kernel32.FindNextChangeNotification
 @ stdcall FindNextFileA(long ptr) kernel32.FindNextFileA
+@ stdcall -version=0x600+ FindNextFileNameW(ptr ptr ptr) kernel32.FindNextFileNameW
 @ stdcall FindNextFileW(long ptr) kernel32.FindNextFileW
 @ stdcall FindNextStreamW(ptr ptr) kernel32.FindNextStreamW
 @ stdcall FindNextVolumeW(long ptr long) kernel32.FindNextVolumeW
@@ -330,6 +333,7 @@
 @ stdcall GetAclInformation(ptr ptr long long)
 @ stdcall GetAppContainerAce(ptr long ptr ptr)
 @ stdcall GetAppContainerNamedObjectPath(ptr ptr long ptr ptr)
+@ stdcall -version=0x600+ GetApplicationRecoveryCallback(ptr ptr ptr ptr ptr) kernel32.GetApplicationRecoveryCallback
 @ stdcall -version=0x600+ GetApplicationRestartSettings(ptr ptr ptr ptr) kernel32.GetApplicationRestartSettings
 @ stdcall GetApplicationUserModelIdFromToken(ptr ptr ptr)
 @ stub GetCPFileNameFromRegistry
@@ -388,7 +392,7 @@
 @ stdcall GetCurrentDirectoryW(long ptr) kernel32.GetCurrentDirectoryW
 @ stdcall GetCurrentPackageFamilyName(ptr ptr)
 @ stdcall -version=0x602+ GetCurrentPackageFullName(ptr ptr) kernel32.GetCurrentPackageFullName
-@ stdcall -version=0x602+ GetCurrentPackageId(ptr ptr) kernel32.GetCurrentPackageId
+@ stdcall GetCurrentPackageId(ptr ptr)
 @ stdcall GetCurrentPackageInfo(long ptr ptr ptr)
 @ stdcall GetCurrentPackagePath(ptr ptr)
 @ stdcall -norelay GetCurrentProcess() kernel32.GetCurrentProcess
@@ -411,6 +415,7 @@
 @ stdcall GetDiskFreeSpaceW(wstr ptr ptr ptr ptr) kernel32.GetDiskFreeSpaceW
 @ stdcall GetDriveTypeA(str) kernel32.GetDriveTypeA
 @ stdcall GetDriveTypeW(wstr) kernel32.GetDriveTypeW
+@ stdcall GetDurationFormatEx(wstr long ptr int64 wstr ptr long)
 @ stdcall -version=0x600+ GetDynamicTimeZoneInformation(ptr) kernel32.GetDynamicTimeZoneInformation
 @ stdcall -version=0x602+ GetDynamicTimeZoneInformationEffectiveYears(ptr ptr ptr) kernel32.GetDynamicTimeZoneInformationEffectiveYears
 @ stdcall -version=0x601+ GetEnabledXStateFeatures() kernel32.GetEnabledXStateFeatures
@@ -459,10 +464,10 @@
 @ stdcall GetLastError() ntdll.RtlGetLastWin32Error
 @ stdcall GetLengthSid(ptr)
 @ stdcall GetLocalTime(ptr) kernel32.GetLocalTime
-@ stdcall GetLocaleInfoA(long long ptr long) kernel32.GetLocaleInfoA
-@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long) kernel32.GetLocaleInfoEx
+@ stdcall GetLocaleInfoA(long long ptr long)
+@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long)
 @ stub GetLocaleInfoHelper
-@ stdcall GetLocaleInfoW(long long ptr long) kernel32.GetLocaleInfoW
+@ stdcall GetLocaleInfoW(long long ptr long)
 @ stdcall GetLogicalDriveStringsW(long ptr) kernel32.GetLogicalDriveStringsW
 @ stdcall GetLogicalDrives() kernel32.GetLogicalDrives
 @ stdcall GetLogicalProcessorInformation(ptr ptr) kernel32.GetLogicalProcessorInformation
@@ -486,7 +491,7 @@
 @ stdcall GetNLSVersionEx(long wstr ptr)
 @ stub GetNamedLocaleHashNode
 @ stub -version=0x600+ GetNamedPipeAttribute() kernel32.GetNamedPipeAttribute
-@ stub -version=0x600+ GetNamedPipeClientComputerNameW() kernel32.GetNamedPipeClientComputerNameW
+@ stdcall -version=0x600+ GetNamedPipeClientComputerNameW(ptr ptr long) kernel32.GetNamedPipeClientComputerNameW
 @ stdcall GetNamedPipeHandleStateW(long ptr ptr ptr ptr wstr long) kernel32.GetNamedPipeHandleStateW
 @ stdcall GetNamedPipeInfo(long ptr ptr ptr ptr) kernel32.GetNamedPipeInfo
 @ stdcall GetNativeSystemInfo(ptr) kernel32.GetNativeSystemInfo
@@ -512,6 +517,7 @@
 @ stdcall GetPriorityClass(long) kernel32.GetPriorityClass
 @ stdcall GetPrivateObjectSecurity(ptr long ptr long ptr)
 @ stdcall GetProcAddress(long str) kernel32.GetProcAddress
+@ stdcall GetProcessDefaultCpuSets(ptr ptr long ptr)
 @ stdcall -version=0x601+ GetProcessGroupAffinity(long ptr ptr) kernel32.GetProcessGroupAffinity
 @ stdcall GetProcessHandleCount(long ptr) kernel32.GetProcessHandleCount
 @ stdcall GetProcessHeap() kernel32.GetProcessHeap
@@ -548,6 +554,7 @@
 @ stdcall GetSidSubAuthorityCount(ptr)
 @ stdcall GetStartupInfoW(ptr) kernel32.GetStartupInfoW
 @ stdcall GetStdHandle(long)
+@ stdcall GetStringScripts(long wstr long ptr long)
 @ stub GetStringTableEntry
 @ stdcall GetStringTypeA(long long str long ptr)
 @ stdcall GetStringTypeExW(long long wstr long ptr)
@@ -555,7 +562,7 @@
 @ stdcall GetSystemCpuSetInformation(ptr long ptr ptr long)
 @ stdcall GetSystemDefaultLCID() kernel32.GetSystemDefaultLCID
 @ stdcall GetSystemDefaultLangID() kernel32.GetSystemDefaultLangID
-@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long) kernel32.GetSystemDefaultLocaleName
+@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long)
 @ stdcall GetSystemDefaultUILanguage() kernel32.GetSystemDefaultUILanguage
 @ stdcall GetSystemDirectoryA(ptr long) kernel32.GetSystemDirectoryA
 @ stdcall GetSystemDirectoryW(ptr long) kernel32.GetSystemDirectoryW
@@ -593,6 +600,7 @@
 @ stdcall GetThreadPreferredUILanguages(long ptr ptr ptr)
 @ stdcall GetThreadPriority(long) kernel32.GetThreadPriority
 @ stdcall GetThreadPriorityBoost(long ptr) kernel32.GetThreadPriorityBoost
+@ stdcall GetThreadSelectedCpuSets(ptr ptr long ptr)
 @ stdcall GetThreadTimes(long ptr ptr ptr ptr) kernel32.GetThreadTimes
 @ stdcall -version=0x600+ GetThreadUILanguage() kernel32.GetThreadUILanguage
 @ stdcall GetTickCount() kernel32.GetTickCount
@@ -610,7 +618,7 @@
 @ stdcall GetUserDefaultGeoName(ptr long)
 @ stdcall GetUserDefaultLCID() kernel32.GetUserDefaultLCID
 @ stdcall GetUserDefaultLangID() kernel32.GetUserDefaultLangID
-@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long) kernel32.GetUserDefaultLocaleName
+@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long)
 @ stdcall GetUserDefaultUILanguage() kernel32.GetUserDefaultUILanguage
 @ stdcall GetUserGeoID(long)
 @ stub GetUserInfo
@@ -672,6 +680,7 @@
 @ stdcall -version=0x601+ InitializeProcessForWsWatch(long) kernel32.K32InitializeProcessForWsWatch
 @ stdcall InitializeSListHead(ptr) ntdll.RtlInitializeSListHead
 @ stdcall -version=0x600+ InitializeSRWLock(ptr) ntdll.RtlInitializeSRWLock
+@ stdcall InitializeSynchronizationBarrier(ptr long long) kernel32.InitializeSynchronizationBarrier
 @ stdcall InitializeSecurityDescriptor(ptr long)
 @ stdcall InitializeSid(ptr ptr long)
 @ stdcall -arch=i386,ppc InterlockedCompareExchange(ptr long long) kernel32.InterlockedCompareExchange
@@ -767,7 +776,7 @@
 @ stdcall LCMapStringW(long long wstr long ptr long)
 @ stdcall LeaveCriticalSection(ptr) ntdll.RtlLeaveCriticalSection
 @ stdcall -version=0x600+ LeaveCriticalSectionWhenCallbackReturns(ptr ptr) ntdll.TpCallbackLeaveCriticalSectionOnCompletion
-@ stub LoadAppInitDlls
+@ stdcall LoadAppInitDlls()
 @ stdcall LoadLibraryA(str) kernel32.LoadLibraryA
 @ stdcall LoadLibraryExA(str long long) kernel32.LoadLibraryExA
 @ stdcall LoadLibraryExW(wstr long long) kernel32.LoadLibraryExW
@@ -950,7 +959,12 @@
 @ stdcall PeekConsoleInputW(ptr ptr long ptr)
 @ stdcall PeekNamedPipe(long ptr long ptr ptr ptr) kernel32.PeekNamedPipe
 @ stdcall PerfCreateInstance(long ptr wstr long)
+@ stdcall PerfDecrementULongCounterValue(long ptr long long)
+@ stdcall PerfDecrementULongLongCounterValue(long ptr long int64)
 @ stdcall PerfDeleteInstance(long ptr)
+@ stdcall PerfIncrementULongCounterValue(long ptr long long)
+@ stdcall PerfIncrementULongLongCounterValue(long ptr long int64)
+@ stdcall PerfQueryInstance(long ptr wstr long)
 @ stdcall PerfSetCounterRefValue(long ptr long ptr)
 @ stdcall PerfSetCounterSetInfo(long ptr long)
 @ stdcall PerfSetULongCounterValue(long ptr long long)
@@ -983,7 +997,7 @@
 @ stdcall QueryPerformanceFrequency(ptr) kernel32.QueryPerformanceFrequency
 @ stdcall QueryProcessAffinityUpdateMode(ptr ptr) kernel32.QueryProcessAffinityUpdateMode
 @ stdcall -version=0x600+ QueryProcessCycleTime(ptr ptr) kernel32.QueryProcessCycleTime
-@ stub QuerySecurityAccessMask
+@ stdcall QuerySecurityAccessMask(long ptr)
 @ stdcall -version=0x600+ QueryThreadCycleTime(ptr ptr) kernel32.QueryThreadCycleTime
 @ stdcall QueryThreadpoolStackInformation(ptr ptr)
 @ stdcall QueryVirtualMemoryInformation(long ptr long ptr long ptr)
@@ -1160,6 +1174,7 @@
 @ stdcall SetFileAttributesA(str long) kernel32.SetFileAttributesA
 @ stdcall SetFileAttributesW(wstr long) kernel32.SetFileAttributesW
 @ stdcall -version=0x600+ SetFileInformationByHandle(ptr long ptr long) kernel32.SetFileInformationByHandle
+@ stdcall -version=0x600+ SetFileIoOverlappedRange(ptr ptr long) kernel32.SetFileIoOverlappedRange
 @ stdcall SetFilePointer(long long ptr long) kernel32.SetFilePointer
 @ stdcall SetFilePointerEx(long double ptr long) kernel32.SetFilePointerEx
 @ stdcall SetFileSecurityW(wstr long ptr)
@@ -1170,13 +1185,13 @@
 @ stdcall SetKernelObjectSecurity(long long ptr)
 @ stdcall SetLastError(long) ntdll.RtlSetLastWin32Error
 @ stdcall SetLocalTime(ptr) kernel32.SetLocalTime
-@ stdcall SetLocaleInfoW(long long wstr) kernel32.SetLocaleInfoW
+@ stdcall SetLocaleInfoW(long long wstr)
 @ stdcall SetNamedPipeHandleState(long ptr ptr ptr) kernel32.SetNamedPipeHandleState
 @ stdcall SetPriorityClass(long long) kernel32.SetPriorityClass
 @ stdcall SetPrivateObjectSecurity(long ptr ptr ptr long)
 @ stdcall SetPrivateObjectSecurityEx(long ptr ptr long ptr long)
 @ stdcall SetProcessAffinityUpdateMode(ptr long) kernel32.SetProcessAffinityUpdateMode
-@ stub SetProcessDefaultCpuSets
+@ stdcall SetProcessDefaultCpuSets(ptr ptr long)
 @ stub SetProcessGroupAffinity
 @ stdcall SetProcessInformation(long long ptr long) kernel32.SetProcessInformation
 @ stdcall SetProcessMitigationPolicy(long ptr long) kernel32.SetProcessMitigationPolicy
@@ -1193,7 +1208,7 @@
 @ stdcall SetSecurityDescriptorRMControl(ptr ptr) advapi32.SetSecurityDescriptorRMControl
 @ stdcall SetSecurityDescriptorSacl(ptr long ptr long)
 @ stdcall SetStdHandle(long long)
-@ stdcall -version=0x600+ SetStdHandleEx(long long ptr) kernel32.SetStdHandleEx
+@ stdcall -version=0x600+ SetStdHandleEx(long long ptr)
 @ stdcall SetSystemFileCacheSize(long long long) kernel32.SetSystemFileCacheSize
 @ stdcall SetSystemTime(ptr) kernel32.SetSystemTime
 @ stdcall SetSystemTimeAdjustment(long long) kernel32.SetSystemTimeAdjustment
@@ -1208,7 +1223,7 @@
 @ stdcall SetThreadPreferredUILanguages(long ptr ptr)
 @ stdcall SetThreadPriority(long long) kernel32.SetThreadPriority
 @ stdcall SetThreadPriorityBoost(long long) kernel32.SetThreadPriorityBoost
-@ stub SetThreadSelectedCpuSets
+@ stdcall SetThreadSelectedCpuSets(ptr ptr long)
 @ stdcall SetThreadStackGuarantee(ptr) kernel32.SetThreadStackGuarantee
 @ stdcall SetThreadToken(ptr ptr)
 @ stdcall SetThreadUILanguage(long) kernel32.SetThreadUILanguage
@@ -1298,14 +1313,14 @@
 @ stdcall SwitchToThread() kernel32.SwitchToThread
 @ stdcall SystemTimeToFileTime(ptr ptr) kernel32.SystemTimeToFileTime
 @ stdcall SystemTimeToTzSpecificLocalTime(ptr ptr ptr) kernel32.SystemTimeToTzSpecificLocalTime
-@ stub SystemTimeToTzSpecificLocalTimeEx
+@ stdcall SystemTimeToTzSpecificLocalTimeEx(ptr ptr ptr) kernel32.SystemTimeToTzSpecificLocalTimeEx
 @ stdcall TerminateProcess(ptr long) kernel32.TerminateProcess
 @ stdcall TerminateThread(ptr long) kernel32.TerminateThread
 @ stdcall TlsAlloc() kernel32.TlsAlloc
 @ stdcall TlsFree(long) kernel32.TlsFree
 @ stdcall -norelay TlsGetValue(long) kernel32.TlsGetValue
 @ stdcall -norelay TlsSetValue(long ptr) kernel32.TlsSetValue
-@ stdcall TraceEvent(double ptr) advapi32.TraceEvent
+@ stdcall TraceEvent(int64 ptr) ntdll.EtwLogTraceEvent
 @ varargs TraceMessage(int64 long ptr long) ntdll.EtwTraceMessage
 @ stdcall TraceMessageVa(int64 long ptr long ptr) ntdll.EtwTraceMessageVa
 @ stdcall TransactNamedPipe(long ptr long ptr long ptr ptr) kernel32.TransactNamedPipe
@@ -1315,7 +1330,7 @@
 @ stdcall TryEnterCriticalSection(ptr) ntdll.RtlTryEnterCriticalSection
 @ stdcall TrySubmitThreadpoolCallback(ptr ptr ptr)
 @ stdcall TzSpecificLocalTimeToSystemTime(ptr ptr ptr) kernel32.TzSpecificLocalTimeToSystemTime
-@ stub TzSpecificLocalTimeToSystemTimeEx
+@ stdcall TzSpecificLocalTimeToSystemTimeEx(ptr ptr ptr) kernel32.TzSpecificLocalTimeToSystemTimeEx
 @ stdcall UnhandledExceptionFilter(ptr) kernel32.UnhandledExceptionFilter
 @ stdcall UnlockFile(long long long long long) kernel32.UnlockFile
 @ stdcall UnlockFileEx(long long long long ptr) kernel32.UnlockFileEx
@@ -1358,6 +1373,7 @@
 @ stdcall VerLanguageNameW(long wstr long) kernel32.VerLanguageNameW
 @ stdcall VerQueryValueA(ptr str ptr ptr)
 @ stdcall VerQueryValueW(ptr wstr ptr ptr)
+@ stdcall VerifyScripts(long wstr long wstr long)
 @ stdcall PrefetchVirtualMemory(ptr ptr ptr long) kernel32.PrefetchVirtualMemory
 @ stdcall VerSetConditionMask(long long long long) ntdll.VerSetConditionMask
 @ stdcall VirtualAlloc(ptr long long long) kernel32.VirtualAlloc
@@ -1405,6 +1421,7 @@
 @ stdcall Wow64GetThreadContext(long ptr)
 @ stdcall Wow64RevertWow64FsRedirection(ptr) kernel32.Wow64RevertWow64FsRedirection
 @ stdcall Wow64SetThreadContext(long ptr)
+@ stdcall Wow64SuspendThread(ptr) kernel32.Wow64SuspendThread
 @ stdcall WriteConsoleA(long ptr long ptr ptr)
 @ stdcall WriteConsoleInputA(long ptr long ptr)
 @ stdcall WriteConsoleInputW(long ptr long ptr)

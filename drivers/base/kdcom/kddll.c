@@ -446,7 +446,7 @@ KdSendPacket(
 
                 /* Reset debugger state */
                 KD_DEBUGGER_NOT_PRESENT = TRUE;
-                SharedUserData->KdDebuggerEnabled &= ~0x00000002;
+                MmWriteableSharedUserData->KdDebuggerEnabled &= ~0x00000002;
                 CurrentPacketId = INITIAL_PACKET_ID | SYNC_PACKET_ID;
                 RemotePacketId  = INITIAL_PACKET_ID;
 

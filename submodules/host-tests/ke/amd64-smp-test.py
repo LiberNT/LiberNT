@@ -167,6 +167,8 @@ static void KiNoteFreezeEpoch(void) { @NOTE@ }
 static ULONG64 KiQueryFreezeEpoch(void) { @EPOCH@ }
 static BOOLEAN KiIsFreezeActive(void) { @ACTIVE@ }
 static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static void KiSetFreezeFailure(void) { assert(!"a freeze failed"); }
 static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
 static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) { assert(0); }
@@ -235,6 +237,7 @@ typedef struct { ULONG_PTR Prcb, Thread, KernelStack; } LOADER;
 #define AP_START_WAIT_TIME (5 * 10000000ULL)
 #define EFLAGS_INTERRUPT_MASK 0x200
 #define CLOCK_WATCHDOG_TIMEOUT 0x101
+#define AFFINITY_MASK(n) ((ULONG64)1 << (n))
 #define NonPagedPool 0
 #define TAG_KERNEL 0
 #define KGDT64_R0_CODE 1
@@ -250,7 +253,7 @@ typedef struct { ULONG_PTR Prcb, Thread, KernelStack; } LOADER;
 #define RtlCopyMemory(d,s,n) memcpy(d,s,n)
 #define RtlZeroMemory(d,n) memset(d,0,n)
 #define min(a,b) ((a)<(b)?(a):(b))
-static ULONG KeMaximumProcessors = 2, KeNumprocSpecified, KeBootprocSpecified;
+static ULONG KeMaximumProcessors = 2, KeNumprocSpecified, KeBootprocSpecified, KeMaximumIncrement = 156250;
 static LOADER Loader, *KeLoaderBlock = &Loader;
 static KPRCB *KiProcessorBlock[2];
 static ULONG64 KeActiveProcessors;
@@ -258,7 +261,8 @@ static int Mode, BugcheckCode;
 static ULONGLONG Clock;
 static jmp_buf FailStop;
 static char Table[16];
-static void *ExAllocatePoolZero(int pool, size_t size, int tag) { (void)pool; (void)tag; return calloc(1,size); }
+/* As documented, PAGE_SIZE or more comes back page aligned */
+static void *ExAllocatePoolZero(int pool, size_t size, int tag) { void *p; (void)pool; (void)tag; if (posix_memalign(&p, size >= PAGE_SIZE ? PAGE_SIZE : 16, size)) return NULL; memset(p, 0, size); return p; }
 static void ExFreePoolWithTag(void *p, int tag) { (void)tag; free(p); }
 static void *MmCreateKernelStack(int a, int b) { (void)a; (void)b; return malloc(8192); }
 static void MmDeleteKernelStack(void *p, int a) { (void)a; free(p); }
