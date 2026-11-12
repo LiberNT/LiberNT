@@ -368,6 +368,36 @@ FstubNextDriveLetterByName(
     FstubNextDriveLetter(MountManager, &Name);
 }
 
+static
+UCHAR
+FstubAssignBootLetter(
+    _In_ PCUNICODE_STRING DeviceName)
+{
+    WCHAR Buffer[8];
+    UNICODE_STRING LinkName;
+    UCHAR Letter;
+
+    for (Letter = 'C'; Letter <= 'Z'; Letter++)
+    {
+        if (!NT_SUCCESS(RtlStringCbPrintfW(Buffer,
+                                           sizeof(Buffer),
+                                           L"\\??\\%c:",
+                                           Letter)))
+        {
+            return 0;
+        }
+
+        RtlInitUnicodeString(&LinkName, Buffer);
+        if (NT_SUCCESS(IoCreateSymbolicLink(&LinkName,
+                                            (PUNICODE_STRING)DeviceName)))
+        {
+            return Letter;
+        }
+    }
+
+    return 0;
+}
+
 /* Every partition a disk lays out gets a letter, unless the mount manager keeps it from one */
 static
 VOID
@@ -486,6 +516,7 @@ xHalIoAssignDriveLetters(
         NT_SUCCESS(RtlAnsiStringToUnicodeString(&BootDevice, NtDeviceName, TRUE)))
     {
         BootLetter = FstubNextDriveLetter(MountManager, &BootDevice);
+        if (BootLetter == 0) BootLetter = FstubAssignBootLetter(&BootDevice);
         RtlFreeUnicodeString(&BootDevice);
     }
 
