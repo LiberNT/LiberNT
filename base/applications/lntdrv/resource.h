@@ -22,7 +22,10 @@
 #define IDC_SELECT_ALL               1016
 #define IDC_SELECT_NONE              1017
 #define IDC_PROGRESS_TEXT            1020
+#define IDC_PROGRESS_ITEM            1021
 #define IDC_PROGRESS_DETAIL          1022
+#define IDC_PROGRESS_TOTAL           1023
+#define IDC_PROGRESS_COUNT           1024
 #define IDC_RESULTS                  1040
 #define IDC_DONE_NOTE                1041
 #define IDC_HISTORY_LIST             1050

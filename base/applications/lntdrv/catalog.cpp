@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <set>
 #include <wctype.h>
 
 namespace lntdrv
@@ -24,9 +25,9 @@ namespace
 
 const WCHAR CatalogRoot[] = L"https://www.catalog.update.microsoft.com/";
 const size_t MaximumPage = 8 * 1024 * 1024;
-const size_t MaximumDetails = 160;
+const size_t MaximumDetails = 100;
 const size_t WantedMatches = 3;
-const unsigned MaximumPages = 10;
+const unsigned MaximumPages = 4;
 const unsigned DetailWorkers = 6;
 const WCHAR DetailsKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog";
 const WCHAR SearchesKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog\\Searches";
@@ -34,6 +35,9 @@ const WCHAR ThrottleKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog\\Throttle";
 const WCHAR SearchLock[] = L"Local\\LiberNT.DriverCatalog.Search";
 const unsigned MaximumAttempts = 3;
 const size_t RowsPerPage = 25;
+const unsigned DownloadConnections = 8;
+const ULONGLONG MinimumSegment = 1024 * 1024;
+const size_t ListedHardwareIds = 300;
 const ULONGLONG ThrottleWindow = 300 * 1000;
 const ULONGLONG ThrottleMargin = 10 * 1000;
 const ULONGLONG ThrottlePoll = 30 * 1000;
@@ -532,18 +536,20 @@ void SaveWindowStart(ULONGLONG value)
     RegCloseKey(key);
 }
 
-bool Supports(const CatalogUpdate &update, const std::vector<std::wstring> &queries)
+std::set<std::wstring> &RunningSearches()
 {
-    if (update.HardwareIds.empty())
-        return true;
-    for (const std::wstring &query : queries)
-    {
-        std::wstring id = Upper(query);
+    static std::set<std::wstring> running;
+    return running;
+}
 
-        if (std::find(update.HardwareIds.begin(), update.HardwareIds.end(), id) != update.HardwareIds.end())
-            return true;
-    }
-    return false;
+bool ClaimSearch(const std::wstring &key)
+{
+    return RunningSearches().insert(key).second;
+}
+
+void ReleaseSearch(const std::wstring &key)
+{
+    RunningSearches().erase(key);
 }
 
 struct DetailsWork
@@ -572,6 +578,13 @@ DWORD WINAPI DetailsWorker(LPVOID parameter)
             InterlockedExchange(&work->Error, (LONG)error);
     }
     return 0;
+}
+
+bool TransientError(DWORD error, DWORD status, unsigned attempt)
+{
+    return error == ERROR_INTERNET_TIMEOUT || error == ERROR_INTERNET_CONNECTION_RESET ||
+           error == ERROR_INTERNET_CONNECTION_ABORTED || (error == ERROR_INTERNET_CANNOT_CONNECT && attempt == 0) ||
+           (error == ERROR_BAD_NET_RESP && (status == 408 || status == 429 || status >= 500));
 }
 
 std::wstring Key(const CatalogUpdate &update)
@@ -607,6 +620,90 @@ void UseDriverVersion(CatalogUpdate &update)
     }
 }
 
+std::wstring HardwareIdCore(const std::wstring &id)
+{
+    static const WCHAR *Tokens[] = { L"&DEV_", L"&PID_" };
+    std::wstring upper = Upper(id);
+
+    for (const WCHAR *token : Tokens)
+    {
+        size_t at = upper.find(token);
+        size_t end;
+
+        if (at == std::wstring::npos)
+            continue;
+        end = upper.find(L'&', at + wcslen(token));
+        return id.substr(0, end == std::wstring::npos ? id.size() : end);
+    }
+    return std::wstring();
+}
+
+std::vector<std::wstring> CatalogSearchTerms(const std::vector<std::wstring> &ids)
+{
+    std::vector<std::wstring> terms;
+
+    for (const std::wstring &id : ids)
+    {
+        std::wstring core = HardwareIdCore(id);
+        const std::wstring &term = core.empty() ? id : core;
+        bool seen = std::find_if(terms.begin(), terms.end(), [&term](const std::wstring &other) {
+                        return _wcsicmp(other.c_str(), term.c_str()) == 0;
+                    }) != terms.end();
+
+        if (!term.empty() && !seen)
+            terms.push_back(term);
+    }
+    return terms;
+}
+
+bool SupportsHardwareIds(const CatalogUpdate &update, const std::vector<std::wstring> &ids)
+{
+    if (update.HardwareIds.empty())
+        return true;
+    for (const std::wstring &id : ids)
+    {
+        std::wstring upper = Upper(id);
+
+        if (std::find(update.HardwareIds.begin(), update.HardwareIds.end(), upper) != update.HardwareIds.end())
+            return true;
+    }
+    if (update.HardwareIds.size() < ListedHardwareIds)
+        return false;
+    for (const std::wstring &id : ids)
+    {
+        std::wstring core = Upper(HardwareIdCore(id));
+
+        if (core.empty())
+            continue;
+        for (const std::wstring &listed : update.HardwareIds)
+        {
+            if (listed.compare(0, core.size(), core) == 0 &&
+                (listed.size() == core.size() || listed[core.size()] == L'&'))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<std::pair<ULONGLONG, ULONGLONG>> DownloadRanges(ULONGLONG size)
+{
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> ranges;
+    ULONGLONG count = std::min<ULONGLONG>(DownloadConnections, size / MinimumSegment), start = 0;
+
+    if (count < 2)
+        return ranges;
+    for (ULONGLONG i = 0; i < count; i++)
+    {
+        ULONGLONG length = size / count + (i < size % count ? 1 : 0);
+
+        ranges.push_back(std::make_pair(start, start + length - 1));
+        start += length;
+    }
+    return ranges;
+}
+
 ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now)
 {
     if (windowStart && now - windowStart < ThrottleWindow + ThrottleMargin)
@@ -627,11 +724,17 @@ ULONGLONG ThrottleJitter(ULONGLONG seed)
     return seed % ThrottleSpread;
 }
 
-Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_Lock(NULL), m_Searches(0)
+Catalog::Catalog()
+    : m_Cancel(NULL), m_Throttle(NULL), m_Lock(NULL), m_Searches(0), m_DetailWorkers(DetailWorkers), m_Wait(true),
+      m_Deferred(false)
 {
     DWORD timeout = 30000;
 
+    ULONG connections = DownloadConnections + 2;
+
     m_Session = InternetOpenW(L"LiberNT-Driver-Installer/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    InternetSetOptionW(NULL, INTERNET_OPTION_MAX_CONNS_PER_SERVER, &connections, sizeof(connections));
+    InternetSetOptionW(NULL, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, &connections, sizeof(connections));
     if (m_Session)
     {
         InternetSetOptionW(m_Session, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
@@ -657,6 +760,44 @@ void Catalog::SetCancel(volatile LONG *cancel)
 void Catalog::SetThrottleCallback(ThrottleCallback *callback)
 {
     m_Throttle = callback;
+}
+
+void Catalog::SetThrottleWait(bool wait)
+{
+    m_Wait = wait;
+}
+
+void Catalog::SetDetailWorkers(unsigned workers)
+{
+    m_DetailWorkers = workers ? workers : 1;
+}
+
+volatile LONG *Catalog::Cancel() const
+{
+    return m_Cancel;
+}
+
+ThrottleCallback *Catalog::Throttle() const
+{
+    return m_Throttle;
+}
+
+bool Catalog::Deferred() const
+{
+    return m_Deferred;
+}
+
+DWORD Catalog::WaitForSearchWindow()
+{
+    DWORD error;
+
+    if (!m_Deferred)
+        return ERROR_SUCCESS;
+    error = WaitThrottle(ThrottleDelay(LoadWindowStart(), NowMilliseconds()) +
+                         ThrottleJitter(GetTickCount64() ^ ((ULONGLONG)GetCurrentProcessId() << 32)));
+    if (!error)
+        m_Deferred = false;
+    return error;
 }
 
 bool Catalog::Cancelled() const
@@ -698,18 +839,15 @@ DWORD Catalog::WaitThrottle(ULONGLONG delay)
     return Cancelled() ? ERROR_CANCELLED : ERROR_SUCCESS;
 }
 
-DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status)
+DWORD Catalog::OpenRequest(LPCWSTR verb, const std::wstring &url, HINTERNET &connection, HINTERNET &request)
 {
-    static const WCHAR Form[] = L"Content-Type: application/x-www-form-urlencoded\r\n";
     LPCWSTR accept[] = { L"*/*", NULL };
     URL_COMPONENTSW parts = { sizeof(parts) };
     WCHAR host[256], path[2048], extra[2048];
-    DWORD flags, size = sizeof(status);
-    ULONGLONG total = 0;
-    WCHAR length[32] = L"";
-    std::vector<BYTE> buffer(64 * 1024);
+    DWORD flags;
 
-    status = 0;
+    connection = NULL;
+    request = NULL;
     if (!m_Session)
         return GetLastError() ? GetLastError() : ERROR_INTERNET_INTERNAL_ERROR;
     parts.lpszHostName = host;
@@ -722,20 +860,36 @@ DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string
         return GetLastError();
     if (parts.nScheme != INTERNET_SCHEME_HTTPS && parts.nScheme != INTERNET_SCHEME_HTTP)
         return ERROR_INTERNET_UNRECOGNIZED_SCHEME;
-
-    InternetHandle connection(InternetConnectW(m_Session, std::wstring(host, parts.dwHostNameLength).c_str(),
-                                               parts.nPort, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0));
-    if (!connection.Get())
+    connection = InternetConnectW(m_Session, std::wstring(host, parts.dwHostNameLength).c_str(), parts.nPort, NULL,
+                                  NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    if (!connection)
         return GetLastError();
     flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_UI | INTERNET_FLAG_NO_COOKIES |
             INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTP | INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTPS |
             (parts.nScheme == INTERNET_SCHEME_HTTPS ? INTERNET_FLAG_SECURE : 0);
-    InternetHandle request(HttpOpenRequestW(connection.Get(), verb,
-                                            (std::wstring(path, parts.dwUrlPathLength) +
-                                             std::wstring(extra, parts.dwExtraInfoLength)).c_str(),
-                                            NULL, NULL, accept, flags, 0));
-    if (!request.Get())
+    request = HttpOpenRequestW(connection, verb,
+                               (std::wstring(path, parts.dwUrlPathLength) +
+                                std::wstring(extra, parts.dwExtraInfoLength)).c_str(),
+                               NULL, NULL, accept, flags, 0);
+    if (!request)
         return GetLastError();
+    return ERROR_SUCCESS;
+}
+
+DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status)
+{
+    static const WCHAR Form[] = L"Content-Type: application/x-www-form-urlencoded\r\n";
+    HINTERNET connectionHandle, requestHandle;
+    DWORD size = sizeof(status), error;
+    ULONGLONG total = 0;
+    WCHAR length[32] = L"";
+    std::vector<BYTE> buffer(64 * 1024);
+
+    status = 0;
+    error = OpenRequest(verb, url, connectionHandle, requestHandle);
+    InternetHandle connection(connectionHandle), request(requestHandle);
+    if (error)
+        return error;
     if (!HttpSendRequestW(request.Get(), body.empty() ? NULL : Form, body.empty() ? 0 : (DWORD)-1L,
                           body.empty() ? NULL : (LPVOID)body.data(), (DWORD)body.size()))
     {
@@ -751,7 +905,7 @@ DWORD Catalog::SendOnce(LPCWSTR verb, const std::wstring &url, const std::string
 
     for (;;)
     {
-        DWORD read = 0, error;
+        DWORD read = 0;
 
         if (Cancelled())
             return ERROR_CANCELLED;
@@ -773,7 +927,6 @@ DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &bo
     for (unsigned attempt = 0; attempt < MaximumAttempts; attempt++)
     {
         DWORD status = 0;
-        bool transient;
 
         if (Cancelled())
             return ERROR_CANCELLED;
@@ -788,11 +941,7 @@ DWORD Catalog::Send(LPCWSTR verb, const std::wstring &url, const std::string &bo
                 return error;
         }
         error = SendOnce(verb, url, body, sink, status);
-        transient = error == ERROR_INTERNET_TIMEOUT || error == ERROR_INTERNET_CONNECTION_RESET ||
-                    error == ERROR_INTERNET_CONNECTION_ABORTED ||
-                    (error == ERROR_INTERNET_CANNOT_CONNECT && attempt == 0) ||
-                    (error == ERROR_BAD_NET_RESP && (status == 408 || status == 429 || status >= 500));
-        if (!transient)
+        if (!TransientError(error, status, attempt))
             break;
     }
     return error;
@@ -848,7 +997,7 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
     }
     for (;;)
     {
-        bool locked;
+        bool locked, claimed = true;
 
         error = LockSearches(locked);
         if (error)
@@ -860,12 +1009,35 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
             m_Pages[key] = std::make_pair(updates, last);
             return ERROR_SUCCESS;
         }
+        if (!m_Wait && m_Deferred)
+        {
+            if (locked)
+                ReleaseMutex(m_Lock);
+            return ERROR_LNTDRV_CATALOG_THROTTLED;
+        }
+        if (locked)
+        {
+            claimed = ClaimSearch(key);
+            ReleaseMutex(m_Lock);
+        }
+        if (!claimed)
+        {
+            if (Cancelled())
+                return ERROR_CANCELLED;
+            Sleep(100);
+            continue;
+        }
         error = Fetch(L"GET", url, std::string(), html);
         if (!error)
             error = ParseResults(html, query, updates, rows);
+        if (locked)
+            LockSearches(locked);
+        if (locked)
+            ReleaseSearch(key);
         if (!error)
         {
             m_Searches++;
+            m_Deferred = false;
             SaveWindowStart(ThrottleWindowStart(LoadWindowStart(), NowMilliseconds()));
             last = rows < RowsPerPage || LastPage(html);
             SaveSearch(key, updates, last);
@@ -874,6 +1046,11 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
             ReleaseMutex(m_Lock);
         if (error != ERROR_LNTDRV_CATALOG_THROTTLED)
             break;
+        if (!m_Wait)
+        {
+            m_Deferred = true;
+            return error;
+        }
         error = WaitThrottle(ThrottleDelay(LoadWindowStart(), NowMilliseconds()) +
                              ThrottleJitter(GetTickCount64() ^ ((ULONGLONG)GetCurrentProcessId() << 32)));
         if (error)
@@ -970,7 +1147,7 @@ DWORD Catalog::QueryAllDetails(std::vector<CatalogUpdate> &updates)
             pending.push_back(&update);
         }
     }
-    for (size_t i = 0; i < pending.size() && i < DetailWorkers; i++)
+    for (size_t i = 0; i < pending.size() && i < m_DetailWorkers; i++)
     {
         HANDLE thread = CreateThread(NULL, 0, DetailsWorker, &work, 0, NULL);
         if (thread)
@@ -992,94 +1169,129 @@ DWORD Catalog::QueryAllDetails(std::vector<CatalogUpdate> &updates)
     return (DWORD)work.Error;
 }
 
-DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector<CatalogUpdate> &updates)
+DWORD Catalog::Finish(SearchPlan &plan) const
+{
+    plan.Complete = true;
+    if (!plan.Updates.empty())
+    {
+        std::stable_sort(plan.Updates.begin(), plan.Updates.end(),
+                         [](const CatalogUpdate &left, const CatalogUpdate &right) {
+                             int order;
+
+                             if (left.Fit != right.Fit)
+                                 return left.Fit > right.Fit;
+                             order = CompareVersions(left.Version, right.Version);
+                             if (order)
+                                 return order > 0;
+                             return DateKey(left.LastUpdated) > DateKey(right.LastUpdated);
+                         });
+        plan.Error = ERROR_SUCCESS;
+        return plan.Error;
+    }
+    if (!plan.Rows)
+        plan.Error = plan.Failure ? plan.Failure : ERROR_NOT_FOUND;
+    else if (!plan.Fits)
+        plan.Error = ERROR_LNTDRV_OTHER_WINDOWS;
+    else if (!plan.Supported)
+        plan.Error = ERROR_NOT_FOUND;
+    else
+        plan.Error = ERROR_LNTDRV_OTHER_ARCH;
+    for (const std::wstring &other : plan.Others)
+        plan.OtherArchitectures += (plan.OtherArchitectures.empty() ? L"" : L", ") + other;
+    return plan.Error;
+}
+
+DWORD Catalog::NextTerm(SearchPlan &plan) const
+{
+    if (!plan.Updates.empty())
+        return Finish(plan);
+    plan.Term++;
+    plan.Page = 0;
+    plan.Detailed = 0;
+    plan.Seen.clear();
+    if (plan.Term >= plan.Terms.size())
+        return Finish(plan);
+    return ERROR_SUCCESS;
+}
+
+DWORD Catalog::Advance(SearchPlan &plan)
 {
     SystemTarget system = CurrentSystem();
-    std::vector<std::wstring> others;
-    bool rows = false, fits = false, supported = false;
-    DWORD failure = ERROR_SUCCESS;
+    std::vector<CatalogUpdate> found, fresh;
+    bool last = true;
+    DWORD error;
+
+    if (plan.Complete)
+        return plan.Error;
+    if (plan.Term >= plan.Terms.size())
+        return Finish(plan);
+    error = SearchPage(plan.Terms[plan.Term], plan.Page, found, last);
+    if (error == ERROR_CANCELLED || StopsCatalogScan(error))
+        return error;
+    if (error)
+    {
+        plan.Failure = error;
+        return NextTerm(plan);
+    }
+    plan.Rows = plan.Rows || !found.empty();
+    for (CatalogUpdate &row : found)
+    {
+        std::wstring key = Key(row);
+
+        row.Fit = ProductFit(row.Products, system);
+        if (row.Fit <= 0 || std::find(plan.Seen.begin(), plan.Seen.end(), key) != plan.Seen.end())
+            continue;
+        plan.Seen.push_back(key);
+        fresh.push_back(row);
+    }
+    plan.Fits = plan.Fits || !fresh.empty();
+    if (fresh.size() > MaximumDetails - plan.Detailed)
+        fresh.resize(MaximumDetails - plan.Detailed);
+    plan.Detailed += fresh.size();
+    error = QueryAllDetails(fresh);
+    if (error)
+        return error;
+    for (const CatalogUpdate &update : fresh)
+    {
+        if (!update.Detailed || !SupportsHardwareIds(update, plan.Ids))
+            continue;
+        plan.Supported = true;
+        if (ArchitectureMatches(update.Architecture))
+        {
+            plan.Updates.push_back(update);
+            continue;
+        }
+        if (plan.OtherModel.empty())
+            plan.OtherModel = update.Model;
+        if (std::find(plan.Others.begin(), plan.Others.end(), update.Architecture) == plan.Others.end())
+            plan.Others.push_back(update.Architecture);
+    }
+    plan.Page++;
+    if (plan.Updates.size() >= WantedMatches || last || plan.Page >= MaximumPages || plan.Detailed >= MaximumDetails)
+        return NextTerm(plan);
+    return ERROR_SUCCESS;
+}
+
+DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector<CatalogUpdate> &updates)
+{
+    SearchPlan plan;
 
     updates.clear();
     m_OtherArchitectures.clear();
     m_OtherModel.clear();
-    for (const std::wstring &query : queries)
+    plan.Terms = CatalogSearchTerms(queries);
+    plan.Ids = queries;
+    while (!plan.Complete)
     {
-        std::vector<std::wstring> seen;
-        size_t detailed = 0;
+        DWORD error = Advance(plan);
 
-        for (unsigned page = 0; page < MaximumPages && detailed < MaximumDetails; page++)
-        {
-            std::vector<CatalogUpdate> found, fresh;
-            bool last = true;
-            DWORD status = SearchPage(query, page, found, last);
-
-            if (status == ERROR_CANCELLED || StopsCatalogScan(status))
-                return status;
-            if (status)
-            {
-                failure = status;
-                break;
-            }
-            rows = rows || !found.empty();
-            for (CatalogUpdate &row : found)
-            {
-                std::wstring key = Key(row);
-
-                row.Fit = ProductFit(row.Products, system);
-                if (row.Fit <= 0 || std::find(seen.begin(), seen.end(), key) != seen.end())
-                    continue;
-                seen.push_back(key);
-                fresh.push_back(row);
-            }
-            fits = fits || !fresh.empty();
-            if (fresh.size() > MaximumDetails - detailed)
-                fresh.resize(MaximumDetails - detailed);
-            detailed += fresh.size();
-            status = QueryAllDetails(fresh);
-            if (status)
-                return status;
-            for (const CatalogUpdate &update : fresh)
-            {
-                if (!update.Detailed || !Supports(update, queries))
-                    continue;
-                supported = true;
-                if (ArchitectureMatches(update.Architecture))
-                {
-                    updates.push_back(update);
-                    continue;
-                }
-                if (m_OtherModel.empty())
-                    m_OtherModel = update.Model;
-                if (std::find(others.begin(), others.end(), update.Architecture) == others.end())
-                    others.push_back(update.Architecture);
-            }
-            if (updates.size() >= WantedMatches || last)
-                break;
-        }
-        if (!updates.empty())
-        {
-            std::stable_sort(updates.begin(), updates.end(), [](const CatalogUpdate &left, const CatalogUpdate &right) {
-                int order;
-
-                if (left.Fit != right.Fit)
-                    return left.Fit > right.Fit;
-                order = CompareVersions(left.Version, right.Version);
-                if (order)
-                    return order > 0;
-                return DateKey(left.LastUpdated) > DateKey(right.LastUpdated);
-            });
-            return ERROR_SUCCESS;
-        }
+        if (error == ERROR_CANCELLED || (!plan.Complete && StopsCatalogScan(error)))
+            return error;
     }
-    if (!rows)
-        return failure ? failure : ERROR_NOT_FOUND;
-    if (!fits)
-        return ERROR_LNTDRV_OTHER_WINDOWS;
-    if (!supported)
-        return ERROR_NOT_FOUND;
-    for (const std::wstring &other : others)
-        m_OtherArchitectures += (m_OtherArchitectures.empty() ? L"" : L", ") + other;
-    return ERROR_LNTDRV_OTHER_ARCH;
+    updates = plan.Updates;
+    m_OtherArchitectures = plan.OtherArchitectures;
+    m_OtherModel = plan.OtherModel;
+    return plan.Error;
 }
 
 unsigned Catalog::Searches() const
@@ -1167,15 +1379,188 @@ DWORD Catalog::QueryFiles(const std::wstring &id, std::vector<CatalogFile> &file
     return files.empty() ? ERROR_NOT_FOUND : ERROR_SUCCESS;
 }
 
-DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, ProgressCallback *progress)
+DWORD Catalog::QuerySize(const std::wstring &url, ULONGLONG &size, bool &ranges)
+{
+    HINTERNET connectionHandle, requestHandle;
+    WCHAR text[64] = L"";
+    DWORD status = 0, length = sizeof(status), error;
+
+    size = 0;
+    ranges = false;
+    error = OpenRequest(L"HEAD", url, connectionHandle, requestHandle);
+    InternetHandle connection(connectionHandle), request(requestHandle);
+    if (error)
+        return error;
+    if (!HttpSendRequestW(request.Get(), NULL, 0, NULL, 0))
+        return GetLastError();
+    if (!HttpQueryInfoW(request.Get(), HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &length, NULL))
+        return GetLastError();
+    if (status != 200)
+        return ERROR_BAD_NET_RESP;
+    length = sizeof(text) - sizeof(WCHAR);
+    if (HttpQueryInfoW(request.Get(), HTTP_QUERY_CONTENT_LENGTH, text, &length, NULL))
+        size = _wcstoui64(text, NULL, 10);
+    text[0] = L'\0';
+    length = sizeof(text) - sizeof(WCHAR);
+    if (HttpQueryInfoW(request.Get(), HTTP_QUERY_ACCEPT_RANGES, text, &length, NULL))
+        ranges = _wcsicmp(text, L"bytes") == 0;
+    return ERROR_SUCCESS;
+}
+
+DWORD Catalog::FetchRange(Segment &segment, HANDLE file, DWORD &status)
+{
+    ULONGLONG from = segment.From + segment.Done;
+    std::wstring range = L"Range: bytes=" + NumberText(from) + L"-" + NumberText(segment.To) + L"\r\n";
+    std::wstring expected = L"bytes " + NumberText(from) + L"-";
+    HINTERNET connectionHandle, requestHandle;
+    WCHAR answered[128] = L"";
+    DWORD size = sizeof(status), error;
+    LARGE_INTEGER offset;
+    std::vector<BYTE> buffer(64 * 1024);
+
+    status = 0;
+    error = OpenRequest(L"GET", *segment.Url, connectionHandle, requestHandle);
+    InternetHandle connection(connectionHandle), request(requestHandle);
+    if (error)
+        return error;
+    if (!HttpSendRequestW(request.Get(), range.c_str(), (DWORD)-1L, NULL, 0))
+        return GetLastError();
+    if (!HttpQueryInfoW(request.Get(), HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status, &size, NULL))
+        return GetLastError();
+    if (status != 206)
+        return ERROR_BAD_NET_RESP;
+    size = sizeof(answered) - sizeof(WCHAR);
+    if (!HttpQueryInfoW(request.Get(), HTTP_QUERY_CONTENT_RANGE, answered, &size, NULL) ||
+        _wcsnicmp(answered, expected.c_str(), expected.size()) != 0)
+    {
+        return ERROR_BAD_NET_RESP;
+    }
+    offset.QuadPart = (LONGLONG)from;
+    if (!SetFilePointerEx(file, offset, NULL, FILE_BEGIN))
+        return GetLastError();
+    for (;;)
+    {
+        DWORD read = 0, written = 0;
+
+        if (Cancelled())
+            return ERROR_CANCELLED;
+        if (!InternetReadFile(request.Get(), buffer.data(), (DWORD)buffer.size(), &read))
+            return GetLastError();
+        if (!read)
+            break;
+        if (segment.From + segment.Done + read > segment.To + 1)
+            return ERROR_BAD_NET_RESP;
+        if (!WriteFile(file, buffer.data(), read, &written, NULL) || written != read)
+            return GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
+        segment.Done += read;
+        InterlockedExchangeAdd64(segment.Received, (LONG64)read);
+    }
+    return segment.From + segment.Done == segment.To + 1 ? ERROR_SUCCESS : ERROR_INTERNET_CONNECTION_RESET;
+}
+
+DWORD Catalog::FetchSegment(Segment &segment)
+{
+    HANDLE file = CreateFileW(segment.Path->c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    unsigned failures = 0;
+    DWORD error = ERROR_SUCCESS;
+
+    if (file == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    while (failures < MaximumAttempts)
+    {
+        ULONGLONG before = segment.Done;
+        DWORD status = 0;
+
+        for (DWORD waited = 0; waited < 1000 * failures && !Cancelled(); waited += 100)
+            Sleep(100);
+        if (Cancelled())
+        {
+            error = ERROR_CANCELLED;
+            break;
+        }
+        error = FetchRange(segment, file, status);
+        if (!error || !TransientError(error, status, failures))
+            break;
+        failures = segment.Done > before ? 1 : failures + 1;
+    }
+    CloseHandle(file);
+    return error;
+}
+
+DWORD WINAPI Catalog::SegmentMain(LPVOID parameter)
+{
+    Segment *segment = (Segment *)parameter;
+
+    segment->Error = segment->Owner->FetchSegment(*segment);
+    return 0;
+}
+
+DWORD Catalog::DownloadSegments(const std::wstring &url, const std::wstring &path, ULONGLONG size,
+                                ProgressCallback *progress)
+{
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> ranges = DownloadRanges(size);
+    std::vector<Segment> segments(ranges.size());
+    std::vector<HANDLE> threads;
+    volatile LONG64 received = 0;
+    LARGE_INTEGER end;
+    HANDLE file;
+    DWORD error = ERROR_SUCCESS;
+
+    file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    end.QuadPart = (LONGLONG)size;
+    if (!SetFilePointerEx(file, end, NULL, FILE_BEGIN) || !SetEndOfFile(file))
+        error = GetLastError();
+    CloseHandle(file);
+    if (error)
+        return error;
+    for (size_t i = 0; i < ranges.size(); i++)
+    {
+        HANDLE thread;
+
+        segments[i] = Segment{ this, &url, &path, ranges[i].first, ranges[i].second, 0, &received, ERROR_SUCCESS };
+        thread = CreateThread(NULL, 0, SegmentMain, &segments[i], 0, NULL);
+        if (thread)
+            threads.push_back(thread);
+        else
+            segments[i].Error = FetchSegment(segments[i]);
+    }
+    while (!threads.empty())
+    {
+        DWORD wait = WaitForMultipleObjects((DWORD)threads.size(), threads.data(), TRUE, 100);
+
+        if (progress)
+            (*progress)((ULONGLONG)InterlockedCompareExchange64(&received, 0, 0), size);
+        if (wait == WAIT_TIMEOUT)
+            continue;
+        if (wait >= WAIT_OBJECT_0 + threads.size())
+        {
+            for (HANDLE thread : threads)
+                WaitForSingleObject(thread, INFINITE);
+        }
+        break;
+    }
+    for (HANDLE thread : threads)
+        CloseHandle(thread);
+    for (const Segment &segment : segments)
+    {
+        if (segment.Error)
+            return segment.Error;
+    }
+    if (progress)
+        (*progress)(size, size);
+    return ERROR_SUCCESS;
+}
+
+DWORD Catalog::DownloadStream(const std::wstring &url, const std::wstring &path, ProgressCallback *progress)
 {
     class FileSink : public Sink
     {
     public:
-        FileSink(HANDLE handle, BCRYPT_ALG_HANDLE algorithm, BCRYPT_HASH_HANDLE &hash, ProgressCallback *progress)
-            : m_Handle(handle), m_Algorithm(algorithm), m_Hash(hash), m_Progress(progress), m_Received(0)
-        {
-        }
+        FileSink(HANDLE handle, ProgressCallback *progress) : m_Handle(handle), m_Progress(progress), m_Received(0) {}
 
         DWORD Write(const BYTE *data, DWORD size, ULONGLONG total)
         {
@@ -1183,8 +1568,6 @@ DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, Progr
 
             if (!WriteFile(m_Handle, data, size, &written, NULL) || written != size)
                 return GetLastError() ? GetLastError() : ERROR_WRITE_FAULT;
-            if (BCryptHashData(m_Hash, (PUCHAR)data, size, 0) != 0)
-                return ERROR_NOT_SUPPORTED;
             m_Received += size;
             if (m_Progress)
                 (*m_Progress)(m_Received, total);
@@ -1194,63 +1577,56 @@ DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, Progr
         DWORD Reset()
         {
             m_Received = 0;
-            BCryptDestroyHash(m_Hash);
-            m_Hash = NULL;
             if (SetFilePointer(m_Handle, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER || !SetEndOfFile(m_Handle))
                 return GetLastError();
-            return BCryptCreateHash(m_Algorithm, &m_Hash, NULL, 0, NULL, 0, 0) == 0 ? ERROR_SUCCESS
-                                                                                     : ERROR_NOT_SUPPORTED;
+            return ERROR_SUCCESS;
         }
 
     private:
         HANDLE m_Handle;
-        BCRYPT_ALG_HANDLE m_Algorithm;
-        BCRYPT_HASH_HANDLE &m_Hash;
         ProgressCallback *m_Progress;
         ULONGLONG m_Received;
     };
-    BCRYPT_ALG_HANDLE algorithm = NULL;
-    BCRYPT_HASH_HANDLE hash = NULL;
-    BYTE digest[20];
-    std::vector<BYTE> existing;
-    std::wstring partial = path + L".partial";
-    HANDLE handle;
-    DWORD error = ERROR_SUCCESS;
+    HANDLE handle = CreateFileW(path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    DWORD error;
 
-    if (HashFile(path, BCRYPT_SHA1_ALGORITHM, existing) == ERROR_SUCCESS && existing == file.Sha1)
+    if (handle == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    {
+        FileSink sink(handle, progress);
+
+        error = Send(L"GET", url, std::string(), sink);
+    }
+    CloseHandle(handle);
+    return error;
+}
+
+DWORD Catalog::Download(const CatalogFile &file, const std::wstring &path, ProgressCallback *progress)
+{
+    std::vector<BYTE> digest;
+    std::wstring partial = path + L".partial";
+    ULONGLONG size = 0;
+    bool ranges = false;
+    DWORD error;
+
+    if (HashFile(path, BCRYPT_SHA1_ALGORITHM, digest) == ERROR_SUCCESS && digest == file.Sha1)
     {
         WIN32_FILE_ATTRIBUTE_DATA data;
         if (progress && GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
         {
-            ULONGLONG size = ((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow;
-            (*progress)(size, size);
+            ULONGLONG length = ((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow;
+            (*progress)(length, length);
         }
         return ERROR_SUCCESS;
     }
-    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA1_ALGORITHM, NULL, 0) != 0)
-        return ERROR_NOT_SUPPORTED;
-    if (BCryptCreateHash(algorithm, &hash, NULL, 0, NULL, 0, 0) != 0)
-    {
-        BCryptCloseAlgorithmProvider(algorithm, 0);
-        return ERROR_NOT_SUPPORTED;
-    }
-    handle = CreateFileW(partial.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (handle == INVALID_HANDLE_VALUE)
-        error = GetLastError();
+    if (QuerySize(file.Url, size, ranges) == ERROR_SUCCESS && ranges && DownloadRanges(size).size() > 1)
+        error = DownloadSegments(file.Url, partial, size, progress);
     else
-    {
-        FileSink sink(handle, algorithm, hash, progress);
-
-        error = Send(L"GET", file.Url, std::string(), sink);
-        CloseHandle(handle);
-    }
-    if (!error && (!hash || BCryptFinishHash(hash, digest, sizeof(digest), 0) != 0))
-        error = ERROR_NOT_SUPPORTED;
-    if (!error && (file.Sha1.size() != sizeof(digest) || memcmp(file.Sha1.data(), digest, sizeof(digest)) != 0))
+        error = DownloadStream(file.Url, partial, progress);
+    if (!error)
+        error = HashFile(partial, BCRYPT_SHA1_ALGORITHM, digest);
+    if (!error && (file.Sha1.empty() || digest != file.Sha1))
         error = ERROR_CRC;
-    if (hash)
-        BCryptDestroyHash(hash);
-    BCryptCloseAlgorithmProvider(algorithm, 0);
     if (!error && !MoveFileExW(partial.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
         error = GetLastError();
     if (error)

@@ -1,7 +1,8 @@
 /*
  * PROJECT:     LiberNT Driver Installer - Unit-tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test the catalog search page parser and cache, the search throttle wait and the offered version
+ * PURPOSE:     Test the catalog search page parser and cache, the search terms, the hardware-id filter, the search
+ *              throttle wait and the offered version
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -135,6 +136,92 @@ static void CheckSearchCache()
     ok(EncodeSearchPage(rows, true, Saved).empty(), "row with a tab was encoded\n");
 }
 
+static void CheckCore(const wchar_t *id, const wchar_t *expected)
+{
+    ok(HardwareIdCore(id) == expected, "'%ls': core '%ls', expected '%ls'\n", id, HardwareIdCore(id).c_str(), expected);
+}
+
+static void CheckSearchTerms()
+{
+    static const wchar_t *Display[] = {
+        L"PCI\\VEN_8086&DEV_3185&SUBSYS_20758086&REV_03", L"PCI\\VEN_8086&DEV_3185&SUBSYS_20758086",
+        L"PCI\\VEN_8086&DEV_3185&CC_030000",              L"PCI\\VEN_8086&DEV_3185&CC_0300",
+        L"PCI\\VEN_8086&DEV_3185&REV_03",                 L"PCI\\VEN_8086&DEV_3185",
+        L"PCI\\VEN_8086&CC_030000",                       L"PCI\\VEN_8086&CC_0300"
+    };
+    static const wchar_t *Expected[] = { L"PCI\\VEN_8086&DEV_3185", L"PCI\\VEN_8086&CC_030000",
+                                         L"PCI\\VEN_8086&CC_0300" };
+    std::vector<std::wstring> ids(Display, Display + ARRAYSIZE(Display));
+    std::vector<std::wstring> terms = CatalogSearchTerms(ids);
+
+    CheckCore(L"PCI\\VEN_8086&DEV_3185&SUBSYS_20758086&REV_03", L"PCI\\VEN_8086&DEV_3185");
+    CheckCore(L"PCI\\VEN_8086&DEV_3185", L"PCI\\VEN_8086&DEV_3185");
+    CheckCore(L"USB\\VID_8087&PID_0A2B&REV_0001", L"USB\\VID_8087&PID_0A2B");
+    CheckCore(L"HID\\VID_046D&PID_C52B&REV_1203&MI_01&COL01", L"HID\\VID_046D&PID_C52B");
+    CheckCore(L"ACPI\\VEN_QEMU&DEV_0002", L"ACPI\\VEN_QEMU&DEV_0002");
+    CheckCore(L"PCI\\VEN_8086&CC_030000", L"");
+    CheckCore(L"ACPI\\QEMU0002", L"");
+
+    ok(terms.size() == ARRAYSIZE(Expected), "%u search terms for 8 ids, expected %u\n", (unsigned)terms.size(),
+       (unsigned)ARRAYSIZE(Expected));
+    for (size_t i = 0; i < ARRAYSIZE(Expected) && i < terms.size(); i++)
+        ok(terms[i] == Expected[i], "term %u is '%ls', expected '%ls'\n", (unsigned)i, terms[i].c_str(), Expected[i]);
+
+    ids.clear();
+    ids.push_back(L"ACPI\\VEN_QEMU&DEV_0002");
+    ids.push_back(L"ACPI\\QEMU0002");
+    terms = CatalogSearchTerms(ids);
+    ok(terms.size() == 2 && terms[0] == ids[0] && terms[1] == ids[1], "ACPI device: %u terms\n",
+       (unsigned)terms.size());
+}
+
+static void CheckSupported()
+{
+    const std::wstring Core = L"PCI\\VEN_8086&DEV_7A70";
+    std::vector<std::wstring> ids;
+    CatalogUpdate update;
+
+    ids.push_back(L"PCI\\VEN_8086&DEV_7A70&SUBSYS_00908086&REV_11");
+    ids.push_back(L"PCI\\VEN_8086&DEV_7A70&SUBSYS_00908086");
+    ids.push_back(L"PCI\\VEN_8086&DEV_7A70");
+
+    ok(SupportsHardwareIds(update, ids), "update without a hardware-id list was rejected\n");
+
+    update.HardwareIds.push_back(L"PCI\\VEN_8086&DEV_51F0&SUBSYS_00748086");
+    update.HardwareIds.push_back(L"PCI\\VEN_8086&DEV_7A70&SUBSYS_00908086");
+    ok(SupportsHardwareIds(update, ids), "exact hardware id was rejected\n");
+
+    update.HardwareIds.clear();
+    update.HardwareIds.push_back(L"PCI\\VEN_8086&DEV_7A70&SUBSYS_00308086");
+    ok(!SupportsHardwareIds(update, ids), "another subsystem in a complete list was accepted\n");
+
+    while (update.HardwareIds.size() < 300)
+        update.HardwareIds.push_back(Core + L"&SUBSYS_" + NumberText(update.HardwareIds.size()) + L"8086");
+    ok(SupportsHardwareIds(update, ids), "same device in a truncated list was rejected\n");
+
+    update.HardwareIds.clear();
+    while (update.HardwareIds.size() < 300)
+        update.HardwareIds.push_back(L"PCI\\VEN_8086&DEV_51F0&SUBSYS_" + NumberText(update.HardwareIds.size()) +
+                                     L"8086");
+    ok(!SupportsHardwareIds(update, ids), "another device in a truncated list was accepted\n");
+}
+
+static void CheckRanges(ULONGLONG size, size_t expected)
+{
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> ranges = DownloadRanges(size);
+    ULONGLONG next = 0;
+    bool contiguous = true;
+
+    ok(ranges.size() == expected, "%I64u bytes: %u ranges, expected %u\n", size, (unsigned)ranges.size(),
+       (unsigned)expected);
+    for (const std::pair<ULONGLONG, ULONGLONG> &range : ranges)
+    {
+        contiguous = contiguous && range.first == next && range.second >= range.first;
+        next = range.second + 1;
+    }
+    ok(contiguous && (ranges.empty() || next == size), "%I64u bytes: ranges do not cover the file exactly\n", size);
+}
+
 static void CheckVersion(const wchar_t *row, const wchar_t *details, const wchar_t *expected)
 {
     CatalogUpdate update;
@@ -151,6 +238,15 @@ START_TEST(CatalogRules)
     CheckParser();
     CheckThrottle();
     CheckSearchCache();
+    CheckSearchTerms();
+    CheckSupported();
+    CheckRanges(0, 0);
+    CheckRanges(23552, 0);
+    CheckRanges(2 * 1024 * 1024 - 1, 0);
+    CheckRanges(2 * 1024 * 1024, 2);
+    CheckRanges(5033164, 4);
+    CheckRanges(24432640, 8);
+    CheckRanges(550478830, 8);
     CheckVersion(L"n/a", L"10.1.13.2", L"10.1.13.2");
     CheckVersion(L"", L"10.60.615.2022", L"10.60.615.2022");
     CheckVersion(L"31.0.101.2140", L"31.0.101.2141", L"31.0.101.2140");
