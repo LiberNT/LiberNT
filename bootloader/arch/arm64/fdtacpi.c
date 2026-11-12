@@ -33,6 +33,7 @@ DBG_DEFAULT_CHANNEL(WINDOWS);
 
 #define FDTACPI_SERIAL_16550                0x00
 #define FDTACPI_SERIAL_PL011                0x03
+#define FDTACPI_SERIAL_16550_WITH_GAS       0x12
 #define FDTACPI_SPCR_GIC_INTERRUPT          0x08
 #define FDTACPI_SPCR_BAUD_115200            7
 #define FDTACPI_GAS_ACCESS_BYTE             1
@@ -615,6 +616,7 @@ FdtAcpiDescribeUart(
     ULONG Parent;
     ULONG RegShift = 0;
     ULONG IoWidth = 1;
+    BOOLEAN IoWidthStated;
     ULONG Trigger;
     ULONGLONG Size;
 
@@ -640,15 +642,30 @@ FdtAcpiDescribeUart(
     else if (FdtAcpiIsCompatible(&Platform->Fdt, Node, FdtAcpiNs16550Compatible))
     {
         FdtReadU32(&Platform->Fdt, Node, "reg-shift", &RegShift);
-        FdtReadU32(&Platform->Fdt, Node, "reg-io-width", &IoWidth);
+        IoWidthStated = FdtReadU32(&Platform->Fdt, Node, "reg-io-width", &IoWidth);
 
-        /* TODO: describe 16550 UARTs with spaced registers once the early UART honors the stride */
-        if (RegShift != 0 || IoWidth != 1)
+        if (RegShift == 0 && IoWidth == 1)
+        {
+            Platform->UartInterfaceType = FDTACPI_SERIAL_16550;
+            Platform->UartBitWidth = 8;
+            Platform->UartAccessSize = FDTACPI_GAS_ACCESS_BYTE;
+        }
+        else if (RegShift == 2 && (IoWidth == 4 || !IoWidthStated))
+        {
+            /*
+             * Registers four bytes apart, as a device that states the stride
+             * but no access width has them: the address structure declares the
+             * 32-bit access that reaches them.
+             */
+            Platform->UartInterfaceType = FDTACPI_SERIAL_16550_WITH_GAS;
+            Platform->UartBitWidth = 32;
+            Platform->UartAccessSize = FDTACPI_GAS_ACCESS_DWORD;
+        }
+        else
+        {
+            /* TODO: describe byte-wide registers at a stride, which no address structure expresses */
             return;
-
-        Platform->UartInterfaceType = FDTACPI_SERIAL_16550;
-        Platform->UartBitWidth = 8;
-        Platform->UartAccessSize = FDTACPI_GAS_ACCESS_BYTE;
+        }
     }
     else
     {

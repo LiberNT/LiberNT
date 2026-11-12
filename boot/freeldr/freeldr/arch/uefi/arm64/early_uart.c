@@ -129,6 +129,9 @@ EarlyUartDiagInterfaceName(_In_ ARM64_UART_INTERFACE Interface)
         case Arm64UartNs16550:
             return "ns16550";
 
+        case Arm64UartNs16550Mmio32:
+            return "ns16550-mmio32";
+
         case Arm64UartQcomGeni:
             return "qcom-geni";
 
@@ -264,6 +267,9 @@ EarlyUartDiagGeniProbe(_In_ UINT64 Address)
 
 #define ACPI_GAS_SPACE_SYSTEM_MEMORY    0
 #define ACPI_GAS_SPACE_SYSTEM_IO        1
+
+#define ACPI_GAS_ACCESS_BYTE            1
+#define ACPI_GAS_ACCESS_DWORD           3
 
 #pragma pack(push, 1)
 /* ACPI SPCR (Serial Port Console Redirection) table */
@@ -405,7 +411,10 @@ EarlyUartFindAcpiTable(ULONG Signature)
  * if they were PL011.
  */
 static ARM64_UART_INTERFACE
-EarlyUartInterfaceFromSubtype(USHORT Subtype)
+EarlyUartInterfaceFromSubtype(
+    _In_ USHORT Subtype,
+    _In_ UCHAR AccessSize,
+    _In_ UCHAR BitWidth)
 {
     switch (Subtype)
     {
@@ -418,6 +427,14 @@ EarlyUartInterfaceFromSubtype(USHORT Subtype)
         case SERIAL_SUBTYPE_16550_SUBSET:
         case SERIAL_SUBTYPE_NS16550_NV:
         case SERIAL_SUBTYPE_16550_WITH_GAS:
+            /*
+             * A 16550 register file declared as 32-bit accesses is the one
+             * spaced four bytes apart (Tegra, dw-apb-uart); byte accesses at
+             * those offsets would land on the wrong registers.
+             */
+            if (AccessSize == ACPI_GAS_ACCESS_DWORD || BitWidth == 32)
+                return Arm64UartNs16550Mmio32;
+
             return Arm64UartNs16550;
 
         case SERIAL_SUBTYPE_BCM2835:    /* Raspberry Pi AUX mini UART */
@@ -454,6 +471,7 @@ EarlyUartProbeCandidate(
 
         case Arm64UartPl011:
         case Arm64UartNs16550:
+        case Arm64UartNs16550Mmio32:
         case Arm64UartBcm2835Mini:
             return TRUE;
 
@@ -514,7 +532,9 @@ EarlyUartLocateSpcrAddress(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
         return 0;
     }
 
-    Interface = EarlyUartInterfaceFromSubtype(Spcr->InterfaceType);
+    Interface = EarlyUartInterfaceFromSubtype(Spcr->InterfaceType,
+                                              Spcr->SerialPort.AccessSize,
+                                              Spcr->SerialPort.BitWidth);
     EarlyUartDiagPuts("[EUART] SPCR: interface=");
     EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
     EarlyUartDiagPuts("\n");
@@ -653,7 +673,9 @@ EarlyUartLocateDbg2Address(_Out_opt_ ARM64_UART_INTERFACE *UartInterface)
             continue;
         }
 
-        Interface = EarlyUartInterfaceFromSubtype(Dev->PortSubtype);
+        Interface = EarlyUartInterfaceFromSubtype(Dev->PortSubtype,
+                                                  Gas->AccessSize,
+                                                  Gas->BitWidth);
         EarlyUartDiagPuts("[EUART] DBG2: interface=");
         EarlyUartDiagPuts(EarlyUartDiagInterfaceName(Interface));
         EarlyUartDiagPuts("\n");
