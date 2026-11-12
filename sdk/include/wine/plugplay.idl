@@ -46,4 +46,7 @@ interface plugplay
     void plugplay_unregister_listener([in] plugplay_rpc_handle handle);
     void plugplay_send_event([in, string] const WCHAR *path, [in] DWORD event_code,
                              [in, size_is(size)] const BYTE *data, [in] unsigned int size);
+#ifdef __REACTOS__
+    void plugplay_answer_event([in] plugplay_rpc_handle handle, [in] DWORD result);
+#endif
 }

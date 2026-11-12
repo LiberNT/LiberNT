@@ -14,6 +14,7 @@
 #include <setupapi.h>
 #include <cfgmgr32.h>
 #include <newdev.h>
+#include <dbt.h>
 
 /* ok_eq_ulong evaluates its value twice: a call with an effect goes through this once */
 #define ok_once(call, expected) \
@@ -590,6 +591,163 @@ static VOID CheckFailedStack(DEVINST Bus)
 
 /* A driver registered for target device change on the child is asked before the child's removal: refusing keeps the
  * child and tells it the removal is cancelled; closing its handle lets the child go and tells it the removal completes */
+/* An application holding the child registered its window on its handle; it denies the query or closes the handle */
+typedef struct _APP_HOLDER
+{
+    HANDLE File;
+    HWND Window;
+    HDEVNOTIFY Notify;
+    BOOL Deny;
+    HANDLE Ready;
+    HANDLE Heard;
+    DWORD Codes[8];
+    LONG Count;
+} APP_HOLDER, *PAPP_HOLDER;
+
+static APP_HOLDER AppHolder;
+
+static LRESULT CALLBACK AppHolderProc(HWND Window, UINT Message, WPARAM wParam, LPARAM lParam)
+{
+    LONG Index;
+
+    if (Message != WM_DEVICECHANGE)
+        return DefWindowProcW(Window, Message, wParam, lParam);
+
+    Index = InterlockedIncrement(&AppHolder.Count) - 1;
+    if (Index < (LONG)RTL_NUMBER_OF(AppHolder.Codes))
+        AppHolder.Codes[Index] = (DWORD)wParam;
+    SetEvent(AppHolder.Heard);
+
+    if (wParam != DBT_DEVICEQUERYREMOVE)
+        return TRUE;
+    if (AppHolder.Deny)
+        return BROADCAST_QUERY_DENY;
+    CloseHandle(AppHolder.File);
+    AppHolder.File = INVALID_HANDLE_VALUE;
+    return TRUE;
+}
+
+static DWORD WINAPI AppHolderThread(PVOID Context)
+{
+    DEV_BROADCAST_HANDLE Filter;
+    WNDCLASSW Class;
+    MSG Message;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    ZeroMemory(&Class, sizeof(Class));
+    Class.lpfnWndProc = AppHolderProc;
+    Class.hInstance = GetModuleHandleW(NULL);
+    Class.lpszClassName = L"KmtestAppHolder";
+    RegisterClassW(&Class);
+    AppHolder.Window = CreateWindowExW(0, Class.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, Class.hInstance, NULL);
+
+    ZeroMemory(&Filter, sizeof(Filter));
+    Filter.dbch_size = sizeof(Filter);
+    Filter.dbch_devicetype = DBT_DEVTYP_HANDLE;
+    Filter.dbch_handle = AppHolder.File;
+    if (AppHolder.Window != NULL)
+        AppHolder.Notify = RegisterDeviceNotificationW(AppHolder.Window, &Filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+    SetEvent(AppHolder.Ready);
+
+    while (AppHolder.Notify != NULL && GetMessageW(&Message, NULL, 0, 0) > 0)
+        DispatchMessageW(&Message);
+
+    if (AppHolder.Notify != NULL)
+        UnregisterDeviceNotification(AppHolder.Notify);
+    if (AppHolder.Window != NULL)
+        DestroyWindow(AppHolder.Window);
+    UnregisterClassW(Class.lpszClassName, Class.hInstance);
+    return 0;
+}
+
+static BOOL HeardCode(DWORD Code, DWORD Timeout)
+{
+    DWORD Start = GetTickCount();
+    LONG Index;
+
+    for (;;)
+    {
+        for (Index = 0; Index < AppHolder.Count && Index < (LONG)RTL_NUMBER_OF(AppHolder.Codes); Index++)
+        {
+            if (AppHolder.Codes[Index] == Code)
+                return TRUE;
+        }
+        if (GetTickCount() - Start >= Timeout || WaitForSingleObject(AppHolder.Heard, Timeout - (GetTickCount() - Start)) != WAIT_OBJECT_0)
+            return FALSE;
+    }
+}
+
+static VOID CheckApplicationHolder(DEVINST Bus, DEVINST Child, BOOL Deny)
+{
+    WCHAR VetoName[MAX_PATH], Path[MAX_PATH] = L"\\\\?\\GLOBALROOT";
+    PNP_VETO_TYPE VetoType = PNP_VetoTypeUnknown;
+    ULONG Size = sizeof(Path) - sizeof(L"\\\\?\\GLOBALROOT");
+    HANDLE Thread;
+    CONFIGRET Result;
+
+    ZeroMemory(&AppHolder, sizeof(AppHolder));
+    AppHolder.Deny = Deny;
+    ok_once(CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_PHYSICAL_DEVICE_OBJECT_NAME, NULL,
+                                              Path + wcslen(Path), &Size, 0), (ULONG)CR_SUCCESS);
+    AppHolder.File = CreateFileW(Path, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(AppHolder.File != INVALID_HANDLE_VALUE, "%ls cannot be opened: %lu\n", Path, GetLastError());
+    if (AppHolder.File == INVALID_HANDLE_VALUE)
+        return;
+
+    AppHolder.Ready = CreateEventW(NULL, FALSE, FALSE, NULL);
+    AppHolder.Heard = CreateEventW(NULL, FALSE, FALSE, NULL);
+    Thread = CreateThread(NULL, 0, AppHolderThread, NULL, 0, NULL);
+    ok(Thread != NULL, "The holder thread did not start: %lu\n", GetLastError());
+    if (Thread != NULL)
+    {
+        ok_once(WaitForSingleObject(AppHolder.Ready, 1000), WAIT_OBJECT_0);
+        ok(AppHolder.Notify != NULL, "The window did not register on the handle\n");
+
+        Result = CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK);
+        ok(HeardCode(DBT_DEVICEQUERYREMOVE, 0), "The window was not asked before the removal\n");
+        if (Deny)
+        {
+            ok_eq_ulong(Result, (ULONG)CR_REMOVE_VETOED);
+            ok_eq_ulong((ULONG)VetoType, (ULONG)PNP_VetoWindowsApp);
+            ok(ChildStarted(Bus, 0), "The child went although the application denied its removal\n");
+            ok(HeardCode(DBT_DEVICEQUERYREMOVEFAILED, 1000), "The window did not hear that the removal failed\n");
+        }
+        else
+        {
+            ok_eq_ulong(Result, (ULONG)CR_SUCCESS);
+            ok(AppHolder.File == INVALID_HANDLE_VALUE, "The window kept its handle\n");
+            ok(HeardCode(DBT_DEVICEREMOVECOMPLETE, 1000), "The window did not hear that the removal completed\n");
+        }
+
+        if (AppHolder.Window != NULL)
+            PostMessageW(AppHolder.Window, WM_QUIT, 0, 0);
+        ok_once(WaitForSingleObject(Thread, 1000), WAIT_OBJECT_0);
+        CloseHandle(Thread);
+    }
+
+    if (AppHolder.File != INVALID_HANDLE_VALUE)
+        CloseHandle(AppHolder.File);
+    CloseHandle(AppHolder.Ready);
+    CloseHandle(AppHolder.Heard);
+}
+
+static VOID CheckApplicationRemoval(DEVINST Bus)
+{
+    DEVINST Child;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child\n");
+        return;
+    }
+
+    CheckApplicationHolder(Bus, Child, TRUE);
+    CheckApplicationHolder(Bus, Child, FALSE);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+}
+
 static VOID CheckTargetRemoval(DEVINST Bus)
 {
     WCHAR VetoName[MAX_PATH];
@@ -935,6 +1093,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckEarlySecurity(Device->DevInst);
         CheckFailedStack(Device->DevInst);
         CheckTargetRemoval(Device->DevInst);
+        CheckApplicationRemoval(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);

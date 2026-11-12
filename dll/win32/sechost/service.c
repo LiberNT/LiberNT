@@ -2152,6 +2152,9 @@ static DWORD WINAPI device_notify_proc( void *arg )
     unsigned int size;
     WCHAR *path;
     BYTE *buf;
+#ifdef __REACTOS__
+    DWORD answer;
+#endif
 
     SetThreadDescription( GetCurrentThread(), L"wine_sechost_device_notify" );
 #ifdef __REACTOS__
@@ -2220,6 +2223,9 @@ static DWORD WINAPI device_notify_proc( void *arg )
         }
         LeaveCriticalSection(&service_cs);
 
+#ifdef __REACTOS__
+        answer = TRUE;
+#endif
         LIST_FOR_EACH_ENTRY_SAFE( event, next, &events, struct device_notify, entry )
         {
 #ifdef __REACTOS__
@@ -2230,7 +2236,8 @@ static DWORD WINAPI device_notify_proc( void *arg )
             {
                 device_notify_delivering = source;
                 LeaveCriticalSection( &service_cs );
-                event->callback( event->handle, code, event->header );
+                if (event->callback( event->handle, code, event->header ) == BROADCAST_QUERY_DENY)
+                    answer = BROADCAST_QUERY_DENY;
                 EnterCriticalSection( &service_cs );
                 device_notify_delivering = NULL;
                 WakeAllConditionVariable( &device_notify_delivered );
@@ -2247,6 +2254,21 @@ static DWORD WINAPI device_notify_proc( void *arg )
             list_remove( &event->entry );
             free( event );
         }
+
+#ifdef __REACTOS__
+        /* The PnP manager waits for every process to answer whether its registrations let the device go */
+        if (code == DBT_DEVICEQUERYREMOVE)
+        {
+            __TRY
+            {
+                plugplay_answer_event( handle, answer );
+            }
+            __EXCEPT(rpc_filter)
+            {
+            }
+            __ENDTRY
+        }
+#endif
 
         MIDL_user_free(buf);
         MIDL_user_free(path);
