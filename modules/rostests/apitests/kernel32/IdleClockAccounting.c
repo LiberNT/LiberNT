@@ -133,7 +133,7 @@ TestProcessorTimesAcrossIdle(_In_ DWORD_PTR ProcessorMask, _In_ ULONG Count)
 {
     SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION Before[MAX_TEST_PROCESSORS];
     SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION After[MAX_TEST_PROCESSORS];
-    ULONGLONG Start, Wall, Total, Idle;
+    ULONGLONG Start, Wall, Total, Idle, IdleSum = 0;
     ULONG Processor;
 
     WakeEveryProcessor(ProcessorMask);
@@ -157,7 +157,11 @@ TestProcessorTimesAcrossIdle(_In_ DWORD_PTR ProcessorMask, _In_ ULONG Count)
            "Processor %lu was charged %I64u us over %I64u us\n", Processor, Total / 10, Wall / 10);
         ok(Idle <= Total + TICK_100NS,
            "Processor %lu idle %I64u us exceeds its total %I64u us\n", Processor, Idle / 10, Total / 10);
+        IdleSum += Idle;
     }
+
+    ok(IdleSum + ACCOUNTING_SLACK_100NS >= Wall,
+       "Only %I64u us idle over %I64u us on %lu processors\n", IdleSum / 10, Wall / 10, Count);
 }
 
 START_TEST(IdleClockAccounting)

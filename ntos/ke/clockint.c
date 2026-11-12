@@ -881,13 +881,11 @@ KiUpdateRunTime(
         Prcb->InterruptTime += Ticks;
         Prcb->KernelTime += Ticks;
     }
-    else if ((Irql == DISPATCH_LEVEL) || Prcb->DpcRoutineActive)
+    else if (Prcb->DpcRoutineActive)
     {
         Prcb->DpcTime += Ticks;
         Prcb->KernelTime += Ticks;
-
-        if (Prcb->DpcRoutineActive)
-            KiChargeDpcWatchdog(Prcb, Ticks);
+        KiChargeDpcWatchdog(Prcb, Ticks);
     }
     else if (KiWasInUserMode(TrapFrame))
     {
