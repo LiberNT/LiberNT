@@ -1439,7 +1439,14 @@ FdoHandleRemoveDevice(
     }
 
     InterlockedExchange(&FdoExtension->Removed, TRUE);
-    IoAcquireRemoveLock(&FdoExtension->RemoveLock, Irp);
+
+    // A surprise-removed disk gets IRP_MN_REMOVE_DEVICE again once the removal is confirmed
+    if (!NT_SUCCESS(IoAcquireRemoveLock(&FdoExtension->RemoveLock, Irp)))
+    {
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return STATUS_SUCCESS;
+    }
 
     // The lower driver must see removal before we wait for its pending I/O.
     IoSkipCurrentIrpStackLocation(Irp);

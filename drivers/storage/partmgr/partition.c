@@ -487,6 +487,12 @@ PartitionHandleRemove(
 
     PAGED_CODE();
 
+    /* A surprise-removed partition gets IRP_MN_REMOVE_DEVICE again once the removal is confirmed */
+    if (FinalRemove && !NT_SUCCESS(IoAcquireRemoveLock(&PartExt->RemoveLock, PartExt)))
+    {
+        return STATUS_SUCCESS;
+    }
+
     if (PartExt->VolumeInterfaceName.Buffer && !PartExt->Removed && !fdoExtension->Removed)
     {
         /* Notify MountMgr to delete all associated mount points.
@@ -507,7 +513,6 @@ PartitionHandleRemove(
     PartitionReleaseHold(PartExt, STATUS_DEVICE_DOES_NOT_EXIST, TRUE);
     if (FinalRemove)
     {
-        IoAcquireRemoveLock(&PartExt->RemoveLock, PartExt);
         IoReleaseRemoveLockAndWait(&PartExt->RemoveLock, PartExt);
 
         if (PartExt->Attached)
