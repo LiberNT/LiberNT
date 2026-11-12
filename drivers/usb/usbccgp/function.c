@@ -1248,7 +1248,8 @@ USBCCGP_EnumWithAudioLegacy(
         //
         InterfaceDescriptor = USBD_ParseConfigurationDescriptorEx(FDODeviceExtension->ConfigurationDescriptor, FDODeviceExtension->ConfigurationDescriptor, Index, 0, -1, -1, -1);
         DPRINT("Index %lu Descriptor %p\n", Index, InterfaceDescriptor);
-        ASSERT(InterfaceDescriptor);
+        if (!InterfaceDescriptor)
+            return STATUS_UNSUCCESSFUL;
 
         if (InterfaceDescriptor->bInterfaceClass != USB_DEVICE_CLASS_AUDIO)
         {
@@ -1275,6 +1276,9 @@ USBCCGP_EnumWithAudioLegacy(
             return STATUS_UNSUCCESSFUL;
         }
     }
+
+    if (!FirstDescriptor)
+        return STATUS_UNSUCCESSFUL;
 
     //
     // this is an composite audio device
