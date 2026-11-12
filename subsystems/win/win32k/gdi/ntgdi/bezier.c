@@ -35,7 +35,7 @@
   */
 
 #define BEZIERSHIFTBITS 4
-#define BEZIERSHIFTUP(x)    ((x)<<BEZIERSHIFTBITS)
+#define BEZIERSHIFTUP(x)    ((x)*(1<<BEZIERSHIFTBITS))
 #define BEZIERPIXEL        BEZIERSHIFTUP(1)
 #define BEZIERSHIFTDOWN(x)  (((x)+(1<<(BEZIERSHIFTBITS-1)))>>BEZIERSHIFTBITS)
 /* maximum depth of recursion */

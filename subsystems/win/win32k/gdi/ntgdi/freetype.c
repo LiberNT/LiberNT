@@ -8361,8 +8361,8 @@ IntExtTextOutW(
     }
 
     IntLPtoDP(dc, &Start, 1);
-    RealXStart64 = ((LONGLONG)Start.x + dc->ptlDCOrig.x) << 6;
-    RealYStart64 = ((LONGLONG)Start.y + dc->ptlDCOrig.y) << 6;
+    RealXStart64 = ((LONGLONG)Start.x + dc->ptlDCOrig.x) * 64;
+    RealYStart64 = ((LONGLONG)Start.y + dc->ptlDCOrig.y) * 64;
 
     MaskRect.left = 0;
     MaskRect.top = 0;
