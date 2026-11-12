@@ -19,7 +19,6 @@ DefaultDestDir = 12
 
 [GenericMfg]
 %*PNP0C08.DeviceDesc% = ACPI_Inst,*PNP0C08
-%COMPOSITE_BATTERY.DeviceDesc% = CompBatt_Inst,COMPOSITE_BATTERY
 
 ;------------------------------ ACPI DRIVER -----------------------------
 
@@ -39,24 +38,6 @@ ErrorControl  = 1
 ServiceBinary = %12%\acpi.sys
 LoadOrderGroup = Boot Bus Extender
 
-;---------------------------- COMPBATT DRIVER ---------------------------
-
-[CompBatt_Inst.NT]
-CopyFiles = CompBatt_CopyFiles.NT
-
-[CompBatt_CopyFiles.NT]
-compbatt.sys
-
-[CompBatt_Inst.NT.Services]
-AddService = compbatt, 0x00000002, compbatt_Service_Inst
-
-[compbatt_Service_Inst]
-ServiceType   = 1
-StartType     = 3
-ErrorControl  = 1
-ServiceBinary = %12%\compbatt.sys
-LoadOrderGroup = System Bus Extender
-
 ;-------------------------------- STRINGS -------------------------------
 
 [Strings]
@@ -66,7 +47,6 @@ ReactOS = "LiberNT Project"
 ; Localizable
 GenericMfg = "(Generic system devices)"
 *PNP0C08.DeviceDesc = "Microsoft ACPI-Compliant System"
-COMPOSITE_BATTERY.DeviceDesc = "Composite battery"
 
 [Strings.0405]
 GenericMfg = "(Generická systémová zařízení)"

@@ -11,19 +11,13 @@ DriverVer  = 02/28/2010,1.00
 
 [DestinationDirs]
 DefaultDestDir = 12
-Class_CopyFiles = 11
 
 [ClassInstall32.NT]
 AddReg = BatteryClass.NT.AddReg
-CopyFiles = Class_CopyFiles
-
-[Class_CopyFiles]
-batt.dll
 
 [BatteryClass.NT.AddReg]
 HKR, , ,               0, %BatteryClassName%
 HKR, , Icon, 0, "2"
-HKR, , Installer32, 0, "batt.dll,BatteryClassInstall"
 
 [Manufacturer]
 %GenericMfg% = GenericMfg

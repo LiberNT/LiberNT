@@ -18,15 +18,16 @@ static const struct
 {
     const GUID *ClassGuid;
     PCWSTR ClassName;
+    BOOL NoInstaller;
 } InboxClasses[] =
 {
-    { &GUID_DEVCLASS_BATTERY, L"Battery" },
-    { &GUID_DEVCLASS_BLUETOOTH, L"Bluetooth" },
-    { &GUID_DEVCLASS_COMPUTER, L"Computer" },
-    { &GUID_DEVCLASS_LEGACYDRIVER, L"LegacyDriver" },
-    { &GUID_DEVCLASS_MONITOR, L"Monitor" },
-    { &GUID_DEVCLASS_PORTS, L"Ports" },
-    { &GUID_DEVCLASS_UNKNOWN, L"Unknown" },
+    { &GUID_DEVCLASS_BATTERY, L"Battery", TRUE },
+    { &GUID_DEVCLASS_BLUETOOTH, L"Bluetooth", FALSE },
+    { &GUID_DEVCLASS_COMPUTER, L"Computer", FALSE },
+    { &GUID_DEVCLASS_LEGACYDRIVER, L"LegacyDriver", FALSE },
+    { &GUID_DEVCLASS_MONITOR, L"Monitor", FALSE },
+    { &GUID_DEVCLASS_PORTS, L"Ports", FALSE },
+    { &GUID_DEVCLASS_UNKNOWN, L"Unknown", FALSE },
 };
 
 START_TEST(InboxClasses)
@@ -53,6 +54,12 @@ START_TEST(InboxClasses)
         ok(ClassKey != INVALID_HANDLE_VALUE, "%S: SetupDiOpenClassRegKey failed: %lu\n", InboxClasses[Index].ClassName,
            GetLastError());
         if (ClassKey != INVALID_HANDLE_VALUE)
+        {
+            if (InboxClasses[Index].NoInstaller)
+            {
+                ok_long(RegQueryValueExW(ClassKey, L"Installer32", NULL, NULL, NULL, NULL), ERROR_FILE_NOT_FOUND);
+            }
             RegCloseKey(ClassKey);
+        }
     }
 }

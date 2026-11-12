@@ -386,7 +386,6 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Class\{a0a588a4-c46f-4b37-b7ea-c82fe89870
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}",,0x00000000,"Batteries"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Class",0x00000000,"Battery"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Icon",0x00000000,"2"
-HKLM,"SYSTEM\CurrentControlSet\Control\Class\{72631E54-78A4-11D0-BCF7-00AA00B7B32A}","Installer32",0x00000000,"batt.dll,BatteryClassInstall"
 
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}",,0x00000000,"Bluetooth Radios"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{E0CBF06C-CD8B-4647-BB8A-263B43F0F974}","Class",0x00000000,"Bluetooth"
