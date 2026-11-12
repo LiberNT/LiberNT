@@ -1069,16 +1069,30 @@ NtSetInformationProcess(
                                               sizeof(Writes));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Writes.Version != 1)
+            if (Process != PsGetCurrentProcess())
+            {
+                Status = STATUS_NOT_SUPPORTED;
+                break;
+            }
+
+            if (Writes.Version != 2)
+            {
+                Status = STATUS_REVISION_MISMATCH;
+                break;
+            }
+
+            if (Writes.ThreadAllowWrites)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            /* FIXME: the memory manager raises no exception on a write to executable memory; the request is only recorded */
+            Status = MmSetProcessExecutableWriteTracking(Process,
+                                                         Writes.ProcessEnableWriteExceptions != 0);
+            if (!NT_SUCCESS(Status)) break;
+
             Process->ManageExecutableMemoryWrites =
                 Writes.ProcessEnableWriteExceptions ? 1 : 0;
-            Status = STATUS_SUCCESS;
             break;
 
         case ProcessSubsystemProcess:

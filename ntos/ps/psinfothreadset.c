@@ -895,7 +895,19 @@ NtSetInformationThread(
                                                     sizeof(Writes));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Writes.Version != 1)
+            if (Thread != PsGetCurrentThread())
+            {
+                Status = STATUS_NOT_SUPPORTED;
+                break;
+            }
+
+            if (Writes.Version != 2)
+            {
+                Status = STATUS_REVISION_MISMATCH;
+                break;
+            }
+
+            if (Writes.ProcessEnableWriteExceptions)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
