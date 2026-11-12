@@ -602,6 +602,55 @@ StreamSocketConnectComplete(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     return Status;
 }
 
+static
+NTSTATUS
+StreamSocketStartConnect(PAFD_FCB FCB, PIRP Irp, UINT Function)
+{
+    PLIST_ENTRY Entry;
+    NTSTATUS Status;
+
+    ASSERT(FCB->SharedData.State == SOCKET_STATE_CONNECTING);
+    ASSERT(FCB->ConnectIrp.InFlightRequest == NULL);
+
+    Status = QueueUserModeIrp(FCB, Irp, Function);
+    if (Status != STATUS_PENDING)
+    {
+        FCB->SharedData.State = SOCKET_STATE_BOUND;
+        return Status;
+    }
+
+    Status = TdiConnect(&FCB->ConnectIrp.InFlightRequest,
+                        FCB->Connection.Object,
+                        FCB->ConnectCallInfo,
+                        FCB->ConnectReturnInfo,
+                        StreamSocketConnectComplete,
+                        FCB);
+    if (Status == STATUS_PENDING)
+        return STATUS_PENDING;
+
+    for (Entry = FCB->PendingIrpList[Function].Flink;
+         Entry != &FCB->PendingIrpList[Function];
+         Entry = Entry->Flink)
+    {
+        if (Entry != &Irp->Tail.Overlay.ListEntry)
+            continue;
+
+        /* TdiConnect failed before calling the transport, so StreamSocketConnectComplete did not run */
+        ASSERT(!NT_SUCCESS(Status));
+        ASSERT(FCB->ConnectIrp.InFlightRequest == NULL);
+        RemoveEntryList(Entry);
+        FCB->SharedData.State = SOCKET_STATE_BOUND;
+        Irp->IoStatus.Status = Status;
+        Irp->IoStatus.Information = 0;
+        if (Irp->MdlAddress) UnlockRequest(Irp, IoGetCurrentIrpStackLocation(Irp));
+        (void)IoSetCancelRoutine(Irp, NULL);
+        IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+        break;
+    }
+
+    return STATUS_PENDING;
+}
+
 /* Return the socket object for ths request only if it is a connected or
    stream type. */
 NTSTATUS
@@ -739,19 +788,7 @@ AfdStreamSocketConnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
             FCB->SharedData.State = SOCKET_STATE_CONNECTING;
 
             AFD_DbgPrint(MID_TRACE,("Queueing IRP %p\n", Irp));
-            Status = QueueUserModeIrp(FCB, Irp, FUNCTION_CONNECT);
-            if (Status == STATUS_PENDING)
-            {
-                Status = TdiConnect(&FCB->ConnectIrp.InFlightRequest,
-                                    FCB->Connection.Object,
-                                    FCB->ConnectCallInfo,
-                                    FCB->ConnectReturnInfo,
-                                    StreamSocketConnectComplete,
-                                    FCB);
-            }
-
-            if (Status != STATUS_PENDING)
-                FCB->SharedData.State = SOCKET_STATE_BOUND;
+            Status = StreamSocketStartConnect(FCB, Irp, FUNCTION_CONNECT);
 
             SocketStateUnlock(FCB);
 
@@ -895,19 +932,7 @@ AfdStreamSocketSuperConnect(
         FCB->SharedData.State = SOCKET_STATE_CONNECTING;
 
         AFD_DbgPrint(MID_TRACE,("Queueing IRP %p\n", Irp));
-        Status = QueueUserModeIrp( FCB, Irp, FUNCTION_CONNECTEX );
-        if (Status == STATUS_PENDING)
-        {
-            Status = TdiConnect(&FCB->ConnectIrp.InFlightRequest,
-                                FCB->Connection.Object,
-                                FCB->ConnectCallInfo,
-                                FCB->ConnectReturnInfo,
-                                StreamSocketConnectComplete,
-                                FCB );
-        }
-
-        if (Status != STATUS_PENDING)
-            FCB->SharedData.State = SOCKET_STATE_BOUND;
+        Status = StreamSocketStartConnect(FCB, Irp, FUNCTION_CONNECTEX);
 
         SocketStateUnlock(FCB);
 
