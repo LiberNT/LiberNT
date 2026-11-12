@@ -595,7 +595,7 @@ MMixerGetJackProperty(
     if (Status != MM_STATUS_MORE_ENTRIES ||
         BytesReturned < sizeof(KSMULTIPLE_ITEM))
     {
-        return Status == MM_STATUS_MORE_ENTRIES
+        return (Status == MM_STATUS_MORE_ENTRIES || Status == MM_STATUS_SUCCESS)
             ? MM_STATUS_UNSUCCESSFUL
             : Status;
     }
