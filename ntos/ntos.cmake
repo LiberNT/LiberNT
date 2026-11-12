@@ -555,6 +555,7 @@ elseif(ARCH STREQUAL "ppc")
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/usercall.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/ppc/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/ppc/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/ppc/ioaccess.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/ppc/kdsup.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/atomic64.c

@@ -131,3 +131,16 @@ KiQueryProcessorEfficiencyClasses(
 {
     RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
 }
+
+BOOLEAN
+NTAPI
+KiUnwindFrame(
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN CallerFrame)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(CallerFrame);
+
+    /* TODO: walk the PowerPC function tables without the loaded module lock; a backtrace stops at its first frame */
+    return FALSE;
+}

@@ -476,6 +476,12 @@ KiClearDpcThreadState(
 #define KiPrcbDpcTimeLimit(Prcb) ((Prcb)->DpcTimeLimitTicks)
 #define KiPrcbDpcWatchdogCount(Prcb) ((Prcb)->DpcWatchdogCount)
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
+extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+#define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
+/* TODO: this processor block has no type, vendor or context fields, so the debugger data names none */
+#define KI_PRCB_CPU_TYPE_OFFSET 0
+#define KI_PRCB_VENDOR_STRING_OFFSET 0
+#define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) FALSE
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
 #define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
