@@ -134,10 +134,12 @@ ReadDriverDword(
 static
 UINT
 GetConnectionNameId(
-    _In_ HKEY hDriverKey)
+    _In_ HKEY hDriverKey,
+    _In_ PCNET_INF_KEYWORDS Keywords)
 {
-    DWORD IfType = ReadDriverDword(hDriverKey, L"*IfType");
-    DWORD PhysicalMedium = ReadDriverDword(hDriverKey, L"*PhysicalMediaType");
+    DWORD IfType = Keywords->IfType ? Keywords->IfType : ReadDriverDword(hDriverKey, L"*IfType");
+    DWORD PhysicalMedium = Keywords->PhysicalMediaType ? Keywords->PhysicalMediaType
+                                                       : ReadDriverDword(hDriverKey, L"*PhysicalMediaType");
 
     if (IfType == IF_TYPE_IEEE80211 || PhysicalMedium == NdisPhysicalMediumNative802_11)
         return IDS_NET_CONNECT_WIFI;
@@ -777,7 +779,7 @@ InstallNetDevice(
         ERR("RegSetValueExW() failed with error 0x%lx\n", rc);
         goto cleanup;
     }
-    NameId = GetConnectionNameId(hKey);
+    NameId = GetConnectionNameId(hKey, Keywords);
     RegCloseKey(hKey);
     hKey = NULL;
 
