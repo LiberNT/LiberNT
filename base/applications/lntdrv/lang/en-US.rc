@@ -21,6 +21,7 @@ BEGIN
     LTEXT "", IDC_DEVICES_STATUS, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 12, 290, 116
     LTEXT "", IDC_DEVICES_NOTE, 0, 132, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    CONTROL "", IDC_CATALOG_LINK, "SysLink", WS_TABSTOP, 180, 149, 50, 9
     PUSHBUTTON "&Details", IDC_DETAILS, 0, 146, 56, 14
     PUSHBUTTON "Select &all", IDC_SELECT_ALL, 60, 146, 56, 14
     PUSHBUTTON "&Clear all", IDC_SELECT_NONE, 120, 146, 56, 14
@@ -181,4 +182,6 @@ BEGIN
     IDS_SCAN_NONE "The Microsoft Update Catalog has nothing new to install for this PC."
     IDS_RESULT_UNSIGNED "signature not verified"
     IDS_SCAN_THROTTLED "Searching resumes at %1. The Microsoft Update Catalog is limiting searches from this PC."
+    IDS_CATALOG_LINK "<a>Legal notices</a>"
+    IDS_CATALOG_NOTICE "Drivers are downloaded from the Microsoft Update Catalog, a service of Microsoft Corporation.\nMicrosoft Update Catalog: Copyright (c) Microsoft Corporation. All rights reserved.\nMicrosoft and Windows are trademarks of the Microsoft group of companies. LiberNT is not affiliated with Microsoft Corporation.\n\nEach driver package belongs to its publisher and is covered by the publisher's own license terms."
 END

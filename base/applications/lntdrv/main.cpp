@@ -916,7 +916,8 @@ public:
 
     INT_PTR Run(HINSTANCE instance)
     {
-        INITCOMMONCONTROLSEX controls = { sizeof(controls), ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS };
+        INITCOMMONCONTROLSEX controls = { sizeof(controls),
+                                          ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS | ICC_LINK_CLASS };
 
         InitCommonControlsEx(&controls);
         m_Instance = instance;
@@ -1142,6 +1143,8 @@ private:
 
             if (header->idFrom == IDC_DEVICES)
                 return OnDeviceNotify(page, header);
+            else if (header->idFrom == IDC_CATALOG_LINK && (header->code == NM_CLICK || header->code == NM_RETURN))
+                Message(TD_INFORMATION_ICON, LoadText(IDS_CATALOG_NOTICE));
             else if (header->idFrom == IDC_HISTORY_LIST && header->code == LVN_ITEMCHANGED)
                 UpdateButtons();
         }
@@ -1349,6 +1352,7 @@ private:
                          SWP_NOACTIVATE);
         }
         InitList(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES), LVS_EX_CHECKBOXES, deviceColumns);
+        SetDlgItemTextW(m_Pages[PageDevices], IDC_CATALOG_LINK, LoadText(IDS_CATALOG_LINK).c_str());
         InitList(GetDlgItem(m_Pages[PageDone], IDC_RESULTS), 0, resultColumns);
         InitList(GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST), 0, historyColumns);
 

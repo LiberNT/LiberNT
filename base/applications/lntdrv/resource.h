@@ -21,6 +21,7 @@
 #define IDC_DETAILS                  1014
 #define IDC_SELECT_ALL               1016
 #define IDC_SELECT_NONE              1017
+#define IDC_CATALOG_LINK             1019
 #define IDC_PROGRESS_TEXT            1020
 #define IDC_PROGRESS_ITEM            1021
 #define IDC_PROGRESS_DETAIL          1022
@@ -148,3 +149,5 @@
 #define IDS_RESULT_UNSIGNED          2129
 #define IDS_ERROR_THROTTLED          2130
 #define IDS_SCAN_THROTTLED           2131
+#define IDS_CATALOG_LINK             2132
+#define IDS_CATALOG_NOTICE           2133

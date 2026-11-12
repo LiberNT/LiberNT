@@ -21,6 +21,7 @@ BEGIN
     LTEXT "", IDC_DEVICES_STATUS, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 12, 290, 116
     LTEXT "", IDC_DEVICES_NOTE, 0, 132, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    CONTROL "", IDC_CATALOG_LINK, "SysLink", WS_TABSTOP, 180, 149, 50, 9
     PUSHBUTTON "&Détails", IDC_DETAILS, 0, 146, 56, 14
     PUSHBUTTON "&Tout cocher", IDC_SELECT_ALL, 60, 146, 56, 14
     PUSHBUTTON "Tout d&écocher", IDC_SELECT_NONE, 120, 146, 56, 14
@@ -181,4 +182,6 @@ BEGIN
     IDS_SCAN_NONE "Le catalogue Microsoft Update n'a rien de nouveau à installer pour ce PC."
     IDS_RESULT_UNSIGNED "signature non vérifiée"
     IDS_SCAN_THROTTLED "La recherche reprend à %1. Le catalogue Microsoft Update limite les recherches de ce PC."
+    IDS_CATALOG_LINK "<a>Mentions légales</a>"
+    IDS_CATALOG_NOTICE "Les pilotes sont téléchargés depuis le catalogue Microsoft Update, un service de Microsoft Corporation.\nCatalogue Microsoft Update : Copyright (c) Microsoft Corporation. Tous droits réservés.\nMicrosoft et Windows sont des marques du groupe de sociétés Microsoft. LiberNT n'est pas affilié à Microsoft Corporation.\n\nChaque pilote appartient à son éditeur et est couvert par les conditions de licence de celui-ci."
 END

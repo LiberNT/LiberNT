@@ -28,6 +28,7 @@ BEGIN
     LTEXT "", IDC_DEVICES_STATUS, 0, 0, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
     CONTROL "", IDC_DEVICES, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP, 0, 12, 290, 116
     LTEXT "", IDC_DEVICES_NOTE, 0, 132, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    CONTROL "", IDC_CATALOG_LINK, "SysLink", WS_TABSTOP, 180, 149, 50, 9
     PUSHBUTTON "详细信息(&D)", IDC_DETAILS, 0, 146, 56, 14
     PUSHBUTTON "全选(&A)", IDC_SELECT_ALL, 60, 146, 56, 14
     PUSHBUTTON "全部清除(&C)", IDC_SELECT_NONE, 120, 146, 56, 14
@@ -188,4 +189,6 @@ BEGIN
     IDS_SCAN_NONE "Microsoft 更新目录中没有可为此电脑安装的新内容。"
     IDS_RESULT_UNSIGNED "签名未验证"
     IDS_SCAN_THROTTLED "搜索将于 %1 继续。Microsoft 更新目录正在限制来自此电脑的搜索。"
+    IDS_CATALOG_LINK "<a>法律声明</a>"
+    IDS_CATALOG_NOTICE "驱动程序从 Microsoft 更新目录下载，该服务由 Microsoft Corporation 提供。\nMicrosoft 更新目录: Copyright (c) Microsoft Corporation. All rights reserved.\nMicrosoft 和 Windows 是 Microsoft 集团公司的商标。LiberNT 与 Microsoft Corporation 无关联。\n\n每个驱动程序包均归其发布者所有，并受发布者自身的许可条款约束。"
 END
