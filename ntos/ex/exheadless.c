@@ -743,7 +743,23 @@ HeadlessDispatch(
 
     if (HeadlessGlobals == NULL)
     {
-        return STATUS_UNSUCCESSFUL;
+        if (Command != HeadlessCmdQueryInformation)
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
+
+        if ((OutputBuffer == NULL) || (OutputBufferSize == NULL) ||
+            (*OutputBufferSize < sizeof(HEADLESS_RSP_QUERY_INFO)))
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        RtlZeroMemory(OutputBuffer, sizeof(HEADLESS_RSP_QUERY_INFO));
+        ((PHEADLESS_RSP_QUERY_INFO)OutputBuffer)->PortType =
+            HeadlessUndefinedPortType;
+        *OutputBufferSize = sizeof(HEADLESS_RSP_QUERY_INFO);
+
+        return STATUS_SUCCESS;
     }
 
     KeAcquireSpinLock(&HeadlessGlobals->SpinLock, &OldIrql);
