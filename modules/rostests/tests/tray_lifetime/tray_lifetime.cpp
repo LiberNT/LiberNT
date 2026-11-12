@@ -164,7 +164,7 @@ static void ReplaceDuringPosition(void)
     CallbackQueue->UpdateInfo(CallbackSource);
 }
 
-int main(void)
+int wmain(void)
 {
     INITCOMMONCONTROLSEX Controls = {sizeof(Controls), ICC_BAR_CLASSES};
     InitCommonControlsEx(&Controls);
