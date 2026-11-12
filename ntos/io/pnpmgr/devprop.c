@@ -1285,6 +1285,19 @@ IoGetDevicePropertyData(
 }
 
 NTSTATUS
+PiSetInstanceProperty(
+    _In_ HANDLE InstanceKey,
+    _In_ CONST DEVPROPKEY *PropertyKey,
+    _In_ DEVPROPTYPE Type,
+    _In_ ULONG Size,
+    _In_reads_bytes_opt_(Size) PVOID Data)
+{
+    PAGED_CODE();
+    ASSERT(InstanceKey != NULL);
+    return IopWritePropertyData(InstanceKey, PropertyKey, Type, Size, Data);
+}
+
+NTSTATUS
 NTAPI
 IoSetDevicePropertyData(
     _In_ PDEVICE_OBJECT Pdo,

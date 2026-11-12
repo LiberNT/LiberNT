@@ -1069,6 +1069,14 @@ PiSetDevNodeText(
     _In_ PDEVICE_NODE DeviceNode,
     _In_ HANDLE InstanceKey);
 
+NTSTATUS
+PiSetInstanceProperty(
+    _In_ HANDLE InstanceKey,
+    _In_ CONST DEVPROPKEY *PropertyKey,
+    _In_ DEVPROPTYPE Type,
+    _In_ ULONG Size,
+    _In_reads_bytes_opt_(Size) PVOID Data);
+
 //
 // Initialization Routines
 //

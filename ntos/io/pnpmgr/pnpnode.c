@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include "../ioint.h"
+#include <devpkey.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -550,6 +551,7 @@ PiSetDevNodeText(
 {
     UNICODE_STRING ValueName;
     PWSTR DeviceText = NULL;
+    ULONG TextSize, ResultLength;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -560,14 +562,28 @@ PiSetDevNodeText(
                                   &DeviceText);
     if (NT_SUCCESS(Status) && DeviceText != NULL)
     {
-        RtlInitUnicodeString(&ValueName, L"DeviceDesc");
+        TextSize = (ULONG)((wcslen(DeviceText) + 1) * sizeof(WCHAR));
+        PiSetInstanceProperty(InstanceKey,
+                              &DEVPKEY_Device_BusReportedDeviceDesc,
+                              DEVPROP_TYPE_STRING,
+                              TextSize,
+                              DeviceText);
 
-        ZwSetValueKey(InstanceKey,
-                      &ValueName,
-                      0,
-                      REG_SZ,
-                      DeviceText,
-                      (ULONG)((wcslen(DeviceText) + 1) * sizeof(WCHAR)));
+        RtlInitUnicodeString(&ValueName, L"DeviceDesc");
+        if (ZwQueryValueKey(InstanceKey,
+                            &ValueName,
+                            KeyValuePartialInformation,
+                            NULL,
+                            0,
+                            &ResultLength) == STATUS_OBJECT_NAME_NOT_FOUND)
+        {
+            ZwSetValueKey(InstanceKey,
+                          &ValueName,
+                          0,
+                          REG_SZ,
+                          DeviceText,
+                          TextSize);
+        }
 
         ExFreePool(DeviceText);
         DeviceText = NULL;
