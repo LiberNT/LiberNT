@@ -1,0 +1,27 @@
+; PROJECT:     LiberNT ARM64 boot hive
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Apple silicon boot driver services
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[AddReg]
+
+; Apple silicon laptops: the internal keyboard sits behind the MTP coprocessor and DockChannel.
+HKLM,"SYSTEM\CurrentControlSet\Services\applemtp","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\applemtp","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\applemtp","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\applemtp","ImagePath",0x00020000,"system32\drivers\applemtp.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\applemtp","Group",0x00000000,"Extended Base"
+
+; Apple silicon System Management Controller.
+HKLM,"SYSTEM\CurrentControlSet\Services\applesmc","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\applesmc","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\applesmc","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\applesmc","ImagePath",0x00020000,"system32\drivers\applesmc.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\applesmc","Group",0x00000000,"Extended Base"
+
+; Apple silicon Type-C USB controllers: a DWC3 core in host mode behind a DART.
+HKLM,"SYSTEM\CurrentControlSet\Services\appledwc3","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\appledwc3","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\appledwc3","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\appledwc3","ImagePath",0x00020000,"system32\drivers\appledwc3.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\appledwc3","Group",0x00000000,"Boot Bus Extender"

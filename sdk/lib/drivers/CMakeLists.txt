@@ -1,7 +1,7 @@
 
 add_compile_definitions(_GCC_SAL_CHECK_RETURN)
 
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     add_subdirectory(applertkit)
 endif()
 add_subdirectory(arblib)

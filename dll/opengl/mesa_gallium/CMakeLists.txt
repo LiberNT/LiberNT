@@ -175,7 +175,7 @@ endif()
 # precompiled by a build-machine Mesa (mesa_clc, asahi_clc).
 set(MESA_ASAHI_PRECOMPILED_DIR "${REACTOS_BINARY_DIR}/submodules/mesa-host-clc" CACHE PATH
     "Build-machine Mesa tree holding the precompiled Apple shader libraries")
-if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME AND
+if(ARCH STREQUAL "arm64" AND APPLE_SILICON_SUPPORT AND NOT ARM64EC_RUNTIME AND
    EXISTS "${MESA_ASAHI_PRECOMPILED_DIR}/src/asahi/lib/libagx_shaders.c")
     list(APPEND _mesa_features -DMESA_ASAHI:BOOL=ON -DMESA_ASAHI_PRECOMPILED_DIR:PATH=${MESA_ASAHI_PRECOMPILED_DIR})
 else()

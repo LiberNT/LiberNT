@@ -140,7 +140,8 @@ profiles/
   apply.cmake
   amd64/{profiles.def,generic.cmake,lattepandamu.cmake}
   i386/{profiles.def,generic.cmake,pc98.cmake,xbox.cmake}
-  arm64/{profiles.def,generic.cmake,profile_raspberry.cmake}
+  arm64/{profiles.def,generic.cmake,profile_raspberry.cmake,profile_nintendo_switch.cmake,
+         profile_macbook_m3.cmake}
 ```
 
 Each `<variant>.cmake` declares `ROSCONFIG_PROFILE_PACKAGES`, a list of CMake
@@ -161,12 +162,16 @@ boards' driver sets in one image: SD/SDIO, DWC2, SMSC95xx and RP1 Ethernet,
 CYW43xx Wi-Fi, display, OpenGL and audio, plus the pinned `rpi3winsync`
 Windows 10 BSP snapshot. Existing `rpi3` and `rpi5` selections migrate to this
 combined profile in both menuconfig and CMake. Hardware IDs retain each
-device's driver binding. AMD64 additionally provides `lattepandamu`.
+device's driver binding. `profile_nintendo_switch` builds the Tegra drivers and
+the Switch SD card, and `profile_macbook_m3`, displayed as **MacBook (Apple
+M3)**, builds the Apple silicon drivers. The CYW43xx Wi-Fi driver serves both
+the Raspberry Pi and Apple silicon profiles. AMD64 additionally provides
+`lattepandamu`.
 The Raspberry Pi and LattePanda Mu profiles expose the HTTP boot
 option. Enabling it from the `Boot options` menu builds the FreeLdr HTTP path,
 makes it the zero-timeout default boot entry, and packages the board's external
-UEFI network stack. Generic builds keep the Pi-specific drivers and hardware
-bindings disabled.
+UEFI network stack. Generic builds keep the Raspberry Pi, Tegra and Apple
+silicon drivers and hardware bindings disabled.
 
 Profile-owned config values are enforced when the profile is applied, so an
 existing tree can switch profiles without retaining stale values from the old

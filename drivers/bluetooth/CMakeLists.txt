@@ -8,7 +8,7 @@ if(REALTEK_BT_FIRMWARE_DIR)
     endforeach()
 endif()
 
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     add_subdirectory(bcmpcibt)
 endif()
 add_subdirectory(btha2dp)

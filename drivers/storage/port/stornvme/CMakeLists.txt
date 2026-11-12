@@ -5,7 +5,7 @@ list(APPEND SOURCE
     queue.c
     scsi.c)
 
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     list(APPEND SOURCE apple.c)
 else()
     list(APPEND SOURCE platform_none.c)
@@ -15,7 +15,7 @@ add_library(stornvme MODULE ${SOURCE} stornvme.rc)
 
 set_module_type(stornvme kernelmodedriver)
 add_importlibs(stornvme storport ntoskrnl hal)
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     target_link_libraries(stornvme applertkit fdtdrv)
 endif()
 

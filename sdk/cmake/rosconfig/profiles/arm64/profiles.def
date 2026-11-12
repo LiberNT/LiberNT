@@ -5,6 +5,7 @@ config PROFILE_ARM64
     value generic "Generic ARM64"
     value profile_raspberry "Raspberry Pi 3/5"
     value profile_nintendo_switch "Nintendo Switch (minimal)"
+    value profile_macbook_m3 "MacBook (Apple M3)"
     default generic
     depends ARCH=arm64
     help
@@ -20,4 +21,8 @@ config PROFILE_ARM64
       hekate's L4T loader through Switchroot's U-Boot with its EFI loader
       (switchsdimg, LiberNT-switch-sd.img). The system runs from RAM.
       WoW64, the FEX ARM64EC emulator, FFmpeg, LLVMpipe, Wine Mono, rosapps
-      and the tests are left out.
+      and the tests are left out. Only this profile builds the Tegra drivers.
+
+      MacBook (Apple M3) adds the Apple silicon drivers: RTKit coprocessors,
+      PCIe, Type-C USB, keyboard and trackpad, SMC, battery, display, GPU,
+      audio, camera, BCM43xx PCIe Wi-Fi and Bluetooth.

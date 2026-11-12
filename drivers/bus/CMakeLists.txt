@@ -1,6 +1,6 @@
 
 add_subdirectory(acpi)
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     add_subdirectory(applepcie)
 endif()
 # ISA PnP accesses resources through the HAL; the bus determines its presence.

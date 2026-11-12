@@ -1,6 +1,6 @@
 
 add_subdirectory(ac97)
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     add_subdirectory(appleaopmic)
     add_subdirectory(appleaudio)
 endif()

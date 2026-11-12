@@ -1,4 +1,4 @@
-if(ARCH STREQUAL "arm64")
+if((ARCH STREQUAL "arm64") AND APPLE_SILICON_SUPPORT)
     add_subdirectory(appleaopsensor)
     add_subdirectory(applemtp)
 endif()
