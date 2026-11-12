@@ -947,10 +947,82 @@ static void Test_KeyedMutex_V2_Lifecycle(void)
        "Double DestroyKeyedMutex (v2) should fail, got 0x%08lX\n", (long)Status);
 }
 
+static void Test_KeyedMutex_V2_OpenPrivateData(void)
+{
+    PFND3DKMT_CREATEKEYEDMUTEX2 pCreate;
+    PFND3DKMT_OPENKEYEDMUTEX2   pOpen;
+    PFND3DKMT_DESTROYKEYEDMUTEX pDestroy;
+    D3DKMT_CREATEKEYEDMUTEX2 create;
+    D3DKMT_OPENKEYEDMUTEX2   open;
+    D3DKMT_DESTROYKEYEDMUTEX destroy;
+    UCHAR Data[16];
+    NTSTATUS Status;
+    ULONG Round;
+
+    pCreate  = (PFND3DKMT_CREATEKEYEDMUTEX2)LoadD3DKMTProc("D3DKMTCreateKeyedMutex2");
+    pOpen    = (PFND3DKMT_OPENKEYEDMUTEX2)  LoadD3DKMTProc("D3DKMTOpenKeyedMutex2");
+    pDestroy = (PFND3DKMT_DESTROYKEYEDMUTEX)LoadD3DKMTProc("D3DKMTDestroyKeyedMutex");
+    if (!pCreate || !pOpen || !pDestroy)
+    {
+        skip("D3DKMTCreateKeyedMutex2/OpenKeyedMutex2/DestroyKeyedMutex not exported\n");
+        return;
+    }
+
+    memset(Data, 0x5A, sizeof(Data));
+    for (Round = 0; Round < 4; Round++)
+    {
+        memset(&open, 0, sizeof(open));
+        open.hSharedHandle = (D3DKMT_HANDLE)0xBADBABE4;
+        open.pPrivateRuntimeData = Data;
+        open.PrivateRuntimeDataSize = sizeof(Data);
+        Status = pOpen(&open);
+        ok(!NT_SUCCESS(Status), "OpenKeyedMutex2(bogus shared handle) round %lu returned 0x%08lX\n",
+           Round, (long)Status);
+        ok(open.hKeyedMutex == 0, "OpenKeyedMutex2(bogus shared handle) returned handle 0x%08lX\n",
+           (unsigned long)open.hKeyedMutex);
+    }
+
+    memset(&create, 0, sizeof(create));
+    create.pPrivateRuntimeData = Data;
+    create.PrivateRuntimeDataSize = sizeof(Data);
+    Status = pCreate(&create);
+    if (!NT_SUCCESS(Status))
+    {
+        skip("D3DKMTCreateKeyedMutex2 with private data refused (0x%08lX)\n", (long)Status);
+        return;
+    }
+    ok(create.hSharedHandle != 0, "CreateKeyedMutex2 returned no shared handle\n");
+
+    for (Round = 0; Round < 4; Round++)
+    {
+        memset(&open, 0, sizeof(open));
+        open.hSharedHandle = create.hSharedHandle;
+        open.pPrivateRuntimeData = Data;
+        open.PrivateRuntimeDataSize = sizeof(Data);
+        Status = pOpen(&open);
+        ok_succeeded(Status, "OpenKeyedMutex2(shared handle) round %lu failed (0x%08lX)\n", Round, (long)Status);
+        if (!NT_SUCCESS(Status))
+            break;
+        ok(open.hKeyedMutex != 0 && open.hKeyedMutex != create.hKeyedMutex,
+           "OpenKeyedMutex2 returned handle 0x%08lX (creator 0x%08lX)\n",
+           (unsigned long)open.hKeyedMutex, (unsigned long)create.hKeyedMutex);
+        memset(&destroy, 0, sizeof(destroy));
+        destroy.hKeyedMutex = open.hKeyedMutex;
+        Status = pDestroy(&destroy);
+        ok_succeeded(Status, "DestroyKeyedMutex(opened handle) failed (0x%08lX)\n", (long)Status);
+    }
+
+    memset(&destroy, 0, sizeof(destroy));
+    destroy.hKeyedMutex = create.hKeyedMutex;
+    Status = pDestroy(&destroy);
+    ok_succeeded(Status, "DestroyKeyedMutex(creator handle) failed (0x%08lX)\n", (long)Status);
+}
+
 START_TEST(keyedmutexlife)
 {
     Test_KeyedMutex_NullContracts();
     Test_KeyedMutex_BogusHandles();
     Test_KeyedMutex_V1_Lifecycle();
     Test_KeyedMutex_V2_Lifecycle();
+    Test_KeyedMutex_V2_OpenPrivateData();
 }
