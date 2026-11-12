@@ -40,7 +40,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     LTEXT "", IDC_PROGRESS_TEXT, 0, 44, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
-    LTEXT "", IDC_PROGRESS_DETAIL, 0, 58, 290, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    LTEXT "", IDC_PROGRESS_DETAIL, 0, 58, 220, 9, SS_NOPREFIX | SS_ENDELLIPSIS
+    LTEXT "", IDC_PROGRESS_SPEED, 222, 58, 68, 9, SS_NOPREFIX | SS_RIGHT
     CONTROL "", IDC_PROGRESS_ITEM, "msctls_progress32", PBS_SMOOTH, 0, 70, 290, 8
     CONTROL "", IDC_PROGRESS_TOTAL, "msctls_progress32", PBS_SMOOTH, 0, 88, 290, 8
     LTEXT "", IDC_PROGRESS_COUNT, 0, 99, 290, 9, SS_NOPREFIX
@@ -106,7 +107,7 @@ BEGIN
     IDS_PROGRESS_UNPACK "正在解压 %1"
     IDS_PROGRESS_VERIFY "正在检查程序包签名"
     IDS_PROGRESS_CHECK "正在检查驱动程序是否适合此设备"
-    IDS_PROGRESS_INSTALL "正在为 %1 安装驱动程序"
+    IDS_PROGRESS_INSTALL "正在安装: %1"
     IDS_RESULT_INSTALLED "已安装"
     IDS_RESULT_REBOOT "已安装，需要重新启动"
     IDS_RESULT_SKIPPED "已有驱动程序"
@@ -191,4 +192,7 @@ BEGIN
     IDS_SCAN_THROTTLED "搜索将于 %1 继续。Microsoft 更新目录正在限制来自此电脑的搜索。"
     IDS_CATALOG_LINK "<a>法律声明</a>"
     IDS_CATALOG_NOTICE "驱动程序从 Microsoft 更新目录下载，该服务由 Microsoft Corporation 提供。\nMicrosoft 更新目录: Copyright (c) Microsoft Corporation. All rights reserved.\nMicrosoft 和 Windows 是 Microsoft 集团公司的商标。LiberNT 与 Microsoft Corporation 无关联。\n\n每个驱动程序包均归其发布者所有，并受发布者自身的许可条款约束。"
+    IDS_PROGRESS_DOWNLOADING "正在下载: %1"
+    IDS_SPEED_KB "%1 KB/秒"
+    IDS_SPEED_MB "%1 MB/秒"
 END

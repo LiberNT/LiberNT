@@ -222,6 +222,15 @@ static void CheckRanges(ULONGLONG size, size_t expected)
     ok(contiguous && (ranges.empty() || next == size), "%I64u bytes: ranges do not cover the file exactly\n", size);
 }
 
+static void CheckSpeed(ULONGLONG rate, const wchar_t *expected, bool megabytes)
+{
+    bool unit = false;
+    std::wstring number = SpeedNumber(rate, unit);
+
+    ok(number == expected && unit == megabytes, "%I64u B/s: '%ls' %s, expected '%ls' %s\n", rate, number.c_str(),
+       unit ? "MB" : "KB", expected, megabytes ? "MB" : "KB");
+}
+
 static void CheckVersion(const wchar_t *row, const wchar_t *details, const wchar_t *expected)
 {
     CatalogUpdate update;
@@ -247,6 +256,11 @@ START_TEST(CatalogRules)
     CheckRanges(5033164, 4);
     CheckRanges(24432640, 8);
     CheckRanges(550478830, 8);
+    CheckSpeed(0, L"", false);
+    CheckSpeed(400, L"1", false);
+    CheckSpeed(838110, L"818", false);
+    CheckSpeed(1024 * 1024, L"1.0", true);
+    CheckSpeed(12 * 1024 * 1024 + 512 * 1024, L"12.5", true);
     CheckVersion(L"n/a", L"10.1.13.2", L"10.1.13.2");
     CheckVersion(L"", L"10.60.615.2022", L"10.60.615.2022");
     CheckVersion(L"31.0.101.2140", L"31.0.101.2141", L"31.0.101.2140");

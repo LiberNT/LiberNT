@@ -27,6 +27,7 @@
 #define IDC_PROGRESS_DETAIL          1022
 #define IDC_PROGRESS_TOTAL           1023
 #define IDC_PROGRESS_COUNT           1024
+#define IDC_PROGRESS_SPEED           1025
 #define IDC_RESULTS                  1040
 #define IDC_DONE_NOTE                1041
 #define IDC_HISTORY_LIST             1050
@@ -151,3 +152,6 @@
 #define IDS_SCAN_THROTTLED           2131
 #define IDS_CATALOG_LINK             2132
 #define IDS_CATALOG_NOTICE           2133
+#define IDS_PROGRESS_DOWNLOADING     2134
+#define IDS_SPEED_KB                 2135
+#define IDS_SPEED_MB                 2136

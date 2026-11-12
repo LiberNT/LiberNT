@@ -77,6 +77,7 @@ const UINT SpinnerInterval = 90;
 const int SpinnerDots[8][2] = { { 1000, 0 }, { 707, 707 }, { 0, 1000 }, { -707, 707 },
                                 { -1000, 0 }, { -707, -707 }, { 0, -1000 }, { 707, -707 } };
 const size_t MaximumCandidates = 3;
+const ULONGLONG RatePeriod = 700;
 const unsigned SearchWorkers = 6;
 const unsigned ScanDetailWorkers = 2;
 
@@ -84,6 +85,7 @@ struct ProgressMessage
 {
     std::wstring Text;
     std::wstring Detail;
+    std::wstring Speed;
     int Percent;
     size_t Finished;
     size_t Total;
@@ -138,9 +140,9 @@ class Reporter
 public:
     virtual void operator()(const std::wstring &text, int percent) const = 0;
 
-    virtual void Download(const std::wstring &text, int percent) const
+    virtual void Download(const std::wstring &text, int percent, const std::wstring &speed) const
     {
-        (*this)(text, percent);
+        (*this)(speed.empty() ? text : text + L" " + speed, percent);
     }
 };
 
@@ -401,19 +403,27 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     class DownloadProgress : public ProgressCallback
     {
     public:
-        DownloadProgress(const Reporter &reporter, const std::wstring &file)
-            : m_Report(reporter), m_Name(file), m_Last(-2)
+        DownloadProgress(const Reporter &reporter, const std::wstring &name)
+            : m_Report(reporter), m_Name(name), m_Last(-2), m_Tick(GetTickCount64()), m_Bytes(0), m_Rate(0)
         {
         }
 
         void operator()(ULONGLONG received, ULONGLONG total)
         {
+            ULONGLONG now = GetTickCount64(), elapsed = now - m_Tick;
             int step = total ? (int)(received * 100 / total) : (int)(received >> 18);
+
+            if (elapsed >= RatePeriod && received >= m_Bytes)
+            {
+                m_Rate = (received - m_Bytes) * 1000 / elapsed;
+                m_Tick = now;
+                m_Bytes = received;
+            }
             if (step != m_Last)
             {
                 m_Last = step;
-                m_Report.Download(FormatText(IDS_PROGRESS_DOWNLOAD, m_Name, NumberText(received / 1024)),
-                                  total ? step : -1);
+                m_Report.Download(FormatText(IDS_PROGRESS_DOWNLOADING, m_Name), total ? step : -1,
+                                  SpeedText(m_Rate));
             }
         }
 
@@ -421,9 +431,13 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
         const Reporter &m_Report;
         const std::wstring &m_Name;
         int m_Last;
+        ULONGLONG m_Tick;
+        ULONGLONG m_Bytes;
+        ULONGLONG m_Rate;
     };
     Catalog catalog;
     std::vector<CatalogFile> files;
+    std::wstring offered = update.Model.empty() ? update.Title : update.Model;
     std::wstring directory = PackageDirectory(update.Id), package = directory + L"\\package";
     HistoryEntry entry;
     PackageDriver driver;
@@ -457,7 +471,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     for (size_t i = 0; !error && i < files.size(); i++)
     {
         std::wstring name = SafeFileName(files[i].FileName), path = directory + L"\\" + name;
-        DownloadProgress progress(report, name);
+        DownloadProgress progress(report, offered);
 
         if (name.empty())
         {
@@ -467,7 +481,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
         error = catalog.Download(files[i], path, &progress);
         if (!error)
         {
-            report(FormatText(IDS_PROGRESS_UNPACK, name), -1);
+            report(FormatText(IDS_PROGRESS_UNPACK, offered), -1);
             error = ExtractPackage(path, package);
         }
     }
@@ -503,7 +517,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
         error = ERROR_CANCELLED;
     if (!error)
     {
-        report(FormatText(IDS_PROGRESS_INSTALL, device.Name), -1);
+        report(FormatText(IDS_PROGRESS_INSTALL, offered), -1);
         error = InstallPackageDriver(owner, driver, false, reboot);
     }
     entry.Result = error;
@@ -792,12 +806,14 @@ public:
 
     void operator()(const std::wstring &text, int percent) const
     {
-        Post(m_hwnd, WM_APP_PROGRESS, m_Job, new ProgressMessage{ m_Step, text, percent, m_Finished, m_Total });
+        Post(m_hwnd, WM_APP_PROGRESS, m_Job,
+             new ProgressMessage{ m_Step, text, std::wstring(), percent, m_Finished, m_Total });
     }
 
-    void Download(const std::wstring &, int percent) const
+    void Download(const std::wstring &text, int percent, const std::wstring &speed) const
     {
-        (*this)(std::wstring(), percent);
+        Post(m_hwnd, WM_APP_PROGRESS, m_Job,
+             new ProgressMessage{ m_Step, text, speed, percent, m_Finished, m_Total });
     }
 
 private:
@@ -857,7 +873,7 @@ public:
                                 OutcomeText(outcome) + L"\n").c_str());
             installed->Outcomes.push_back(outcome);
             Post(m_hwnd, WM_APP_PROGRESS, m_Job,
-                 new ProgressMessage{ step, std::wstring(), 100, m_Offset + i + 1, m_Total });
+                 new ProgressMessage{ step, std::wstring(), std::wstring(), 100, m_Offset + i + 1, m_Total });
         }
         Post(m_hwnd, WM_APP_INSTALLED, m_Job, installed);
     }
@@ -994,6 +1010,8 @@ private:
                 {
                     SetProgress(m_Pages[m_Current], progress->Text,
                                 IsCancelled(m_Cancel) ? LoadText(IDS_INSTALL_CANCELLING) : progress->Detail);
+                    SetDlgItemTextW(m_Pages[m_Current], IDC_PROGRESS_SPEED,
+                                    IsCancelled(m_Cancel) ? L"" : progress->Speed.c_str());
                     SetItemProgress(IsCancelled(m_Cancel) ? -1 : progress->Percent);
                     SetTotalProgress(progress->Finished, progress->Total);
                 }
@@ -1771,6 +1789,8 @@ private:
     {
         SetDlgItemTextW(page, IDC_PROGRESS_TEXT, text.c_str());
         SetDlgItemTextW(page, IDC_PROGRESS_DETAIL, detail.c_str());
+        if (detail.empty())
+            SetDlgItemTextW(page, IDC_PROGRESS_SPEED, L"");
     }
 
     void SetItemProgress(int percent)

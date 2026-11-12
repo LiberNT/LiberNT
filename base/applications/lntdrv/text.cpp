@@ -11,6 +11,7 @@
 #include <wininet.h>
 #include <setupapi.h>
 
+#include <algorithm>
 #include <vector>
 
 namespace lntdrv
@@ -110,6 +111,29 @@ bool IsOfflineError(DWORD error)
 bool StopsCatalogScan(DWORD error)
 {
     return IsOfflineError(error) || error == ERROR_LNTDRV_CATALOG_THROTTLED;
+}
+
+std::wstring SpeedNumber(ULONGLONG bytesPerSecond, bool &megabytes)
+{
+    ULONGLONG tenths;
+
+    megabytes = bytesPerSecond >= 1024 * 1024;
+    if (!bytesPerSecond)
+        return std::wstring();
+    if (!megabytes)
+        return NumberText(std::max<ULONGLONG>(bytesPerSecond / 1024, 1));
+    tenths = bytesPerSecond * 10 / (1024 * 1024);
+    return NumberText(tenths / 10) + L"." + NumberText(tenths % 10);
+}
+
+std::wstring SpeedText(ULONGLONG bytesPerSecond)
+{
+    bool megabytes = false;
+    std::wstring number = SpeedNumber(bytesPerSecond, megabytes);
+
+    if (number.empty())
+        return number;
+    return FormatText(megabytes ? IDS_SPEED_MB : IDS_SPEED_KB, number);
 }
 
 std::wstring ErrorText(DWORD error)

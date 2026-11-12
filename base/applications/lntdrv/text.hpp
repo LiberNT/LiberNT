@@ -36,6 +36,8 @@ std::wstring FormatText(UINT id, const std::wstring &first, const std::wstring &
                         const std::wstring &fourth);
 std::wstring NumberText(ULONGLONG value);
 std::wstring ClockText(DWORD seconds);
+std::wstring SpeedNumber(ULONGLONG bytesPerSecond, bool &megabytes);
+std::wstring SpeedText(ULONGLONG bytesPerSecond);
 std::wstring ErrorText(DWORD error);
 bool IsOfflineError(DWORD error);
 bool StopsCatalogScan(DWORD error);
