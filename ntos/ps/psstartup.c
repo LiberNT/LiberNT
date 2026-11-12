@@ -89,8 +89,15 @@ PspProcessOpen(
     PAGED_CODE();
 
     /* A handle that may query everything may also query the limited subset */
-    if (*GrantedAccess & PROCESS_QUERY_INFORMATION)
+    if ((*GrantedAccess & PROCESS_QUERY_INFORMATION) ||
+        ((*GrantedAccess & (PROCESS_VM_OPERATION | PROCESS_VM_WRITE)) ==
+         (PROCESS_VM_OPERATION | PROCESS_VM_WRITE)))
+    {
         *GrantedAccess |= PROCESS_QUERY_LIMITED_INFORMATION;
+    }
+
+    if (*GrantedAccess & PROCESS_SET_INFORMATION)
+        *GrantedAccess |= PROCESS_SET_LIMITED_INFORMATION;
 
     /* TODO: hold a reference on the process's session space while handles live */
     return STATUS_SUCCESS;
@@ -136,6 +143,9 @@ PspThreadOpen(
 
     if (*GrantedAccess & THREAD_SET_INFORMATION)
         *GrantedAccess |= THREAD_SET_LIMITED_INFORMATION;
+
+    if (*GrantedAccess & THREAD_SUSPEND_RESUME)
+        *GrantedAccess |= THREAD_RESUME;
 
     return STATUS_SUCCESS;
 }
