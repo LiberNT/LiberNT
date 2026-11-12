@@ -12,6 +12,7 @@ extern void func_battery(void);
 extern void func_hardware_text(void);
 extern void func_performance_layout(void);
 extern void func_shortcuts(void);
+extern void func_wheel_scroll(void);
 
 const struct test winetest_testlist[] =
 {
@@ -19,5 +20,6 @@ const struct test winetest_testlist[] =
     { "hardware_text", func_hardware_text },
     { "performance_layout", func_performance_layout },
     { "shortcuts", func_shortcuts },
+    { "wheel_scroll", func_wheel_scroll },
     { 0, 0 }
 };

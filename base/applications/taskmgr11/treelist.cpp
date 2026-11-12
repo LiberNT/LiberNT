@@ -6,6 +6,7 @@
  */
 
 #include "app.h"
+#include "wheel_scroll.h"
 
 #define TL_CLASS L"TM11TreeList"
 
@@ -21,6 +22,7 @@ struct TreeList
     int  rowH, headerH;
     int  scrollY;         /* pixels */
     int  scrollX;
+    int  wheelRemainder;
     int  hotRow;          /* index or -1 */
     LONGLONG selKey;      /* 0 = none */
     int  sortCol;         /* col id, -1 none */
@@ -40,7 +42,7 @@ struct TreeList
     BOOL tracking;
 
     TreeList() : hwnd(NULL), owner(NULL), dblHeader(FALSE), rowH(0), headerH(0),
-                 scrollY(0), scrollX(0), hotRow(-1), selKey(0), sortCol(-1),
+                 scrollY(0), scrollX(0), wheelRemainder(0), hotRow(-1), selKey(0), sortCol(-1),
                  sortDesc(TRUE), focus(FALSE), resizeCol(-1), resizeStartX(0),
                  resizeStartW(0), hotHeader(-1), vDrag(FALSE), hDrag(FALSE),
                  dragOff(0), vHot(FALSE), hHot(FALSE), tracking(FALSE)
@@ -586,8 +588,7 @@ static LRESULT CALLBACK TLProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
     case WM_MOUSEWHEEL:
     {
-        int lines = -GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * 3;
-        t->scrollY += lines * t->rowH;
+        t->scrollY += TmWheelScroll(&t->wheelRemainder, GET_WHEEL_DELTA_WPARAM(wp), 3 * t->rowH);
         ClampScroll(t);
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;

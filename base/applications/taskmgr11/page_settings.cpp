@@ -6,6 +6,7 @@
  */
 
 #include "app.h"
+#include "wheel_scroll.h"
 
 #define PGO_CLASS L"TM11PageSettings"
 
@@ -47,10 +48,11 @@ static const WCHAR* s_speedNames[] = { L"High", L"Normal", L"Low", L"Paused" };
 struct SettingsPage : Page
 {
     int scrollY;
+    int wheelRemainder;
     int hotRow;
     int contentH;
 
-    SettingsPage() : scrollY(0), hotRow(-1), contentH(0) {}
+    SettingsPage() : scrollY(0), wheelRemainder(0), hotRow(-1), contentH(0) {}
 
     const WCHAR* Title() { return L"Settings"; }
 
@@ -291,7 +293,7 @@ static LRESULT CALLBACK PgSetProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         int page = rc.bottom - rc.top;
         int maxY = pg->contentH - page;
         if (maxY < 0) maxY = 0;
-        pg->scrollY -= GET_WHEEL_DELTA_WPARAM(wp) / WHEEL_DELTA * S(48);
+        pg->scrollY += TmWheelScroll(&pg->wheelRemainder, GET_WHEEL_DELTA_WPARAM(wp), S(48));
         if (pg->scrollY < 0) pg->scrollY = 0;
         if (pg->scrollY > maxY) pg->scrollY = maxY;
         InvalidateRect(hwnd, NULL, FALSE);

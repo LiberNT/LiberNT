@@ -7,6 +7,7 @@
 
 #include "app.h"
 #include "performance_layout.h"
+#include "wheel_scroll.h"
 
 #define PGF_CLASS L"TM11PagePerf"
 
@@ -23,6 +24,7 @@ struct PerformancePage : Page
     int  sel;
     int  hotTile;
     int  railScroll;
+    int  wheelRemainder;
     int  cpuGraphMode;
     int  gpuGraphMode;
     BOOL showKernelTimes;
@@ -32,7 +34,7 @@ struct PerformancePage : Page
     RECT railClip;
     RECT rcPane;
 
-    PerformancePage() : sel(0), hotTile(-1), railScroll(0),
+    PerformancePage() : sel(0), hotTile(-1), railScroll(0), wheelRemainder(0),
                         cpuGraphMode(CPU_GRAPH_DEFAULT),
                         gpuGraphMode(GPU_GRAPH_ALL_ENGINES),
                         showKernelTimes(FALSE), trackingMouse(FALSE),
@@ -1678,8 +1680,7 @@ static LRESULT CALLBACK PgPerfProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         ScreenToClient(hwnd, &pt);
         if (pt.x >= pg->railClip.left && pt.x < pg->railClip.right)
         {
-            int delta = GET_WHEEL_DELTA_WPARAM(wp);
-            pg->ScrollRail(-delta * S(84) / WHEEL_DELTA);
+            pg->ScrollRail(TmWheelScroll(&pg->wheelRemainder, GET_WHEEL_DELTA_WPARAM(wp), S(84)));
         }
         return 0;
     }

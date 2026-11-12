@@ -9,7 +9,8 @@ add_executable(taskmgr11_apitest
     hardware_text.c
     performance_layout.c
     shortcuts.c
-    testlist.c)
+    testlist.c
+    wheel_scroll.c)
 
 target_include_directories(taskmgr11_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/applications/taskmgr11)
 set_module_type(taskmgr11_apitest win32cui)
