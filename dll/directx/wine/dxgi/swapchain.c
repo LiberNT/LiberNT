@@ -400,11 +400,16 @@ static BOOL d3d11_swapchain_composition_rects(struct d3d11_swapchain *swapchain,
 #endif
 
 static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
-        unsigned int sync_interval, unsigned int flags, const RECT *src_rect,
-        const RECT *dst_rect)
+        unsigned int sync_interval, unsigned int flags, const RECT *dirty_rects,
+        unsigned int dirty_count, const RECT *scroll_rect, const POINT *scroll_offset)
 {
+    const RECT *src_rect = NULL, *dst_rect = NULL;
+    const RECT *src_rects = dirty_rects, *dst_rects = dirty_rects;
+    unsigned int i, rect_count = dirty_count;
+    bool partial = dirty_count || scroll_rect;
 #ifdef __REACTOS__
     RECT unscaled_rect, composition_source, composition_target, source_rect;
+    RECT mapped_stack[16], *mapped = mapped_stack;
 #endif
     HRESULT hr;
 
@@ -440,9 +445,9 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
     }
 
 #ifdef __REACTOS__
-    if (swapchain->composition)
+    if (swapchain->composition && !dirty_count)
     {
-        if (!d3d11_swapchain_composition_rects(swapchain, src_rect, &composition_source, &composition_target))
+        if (!d3d11_swapchain_composition_rects(swapchain, NULL, &composition_source, &composition_target))
         {
             InterlockedIncrement(&swapchain->present_count);
             return S_OK;
@@ -450,7 +455,31 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
         src_rect = &composition_source;
         dst_rect = &composition_target;
     }
-    else if (!dst_rect && swapchain->scaling == DXGI_SCALING_NONE)
+    else if (swapchain->composition)
+    {
+        unsigned int mapped_count = 0;
+
+        if (dirty_count > ARRAY_SIZE(mapped_stack) / 2
+                && !(mapped = malloc(2 * dirty_count * sizeof(*mapped))))
+            return E_OUTOFMEMORY;
+        for (i = 0; i < dirty_count; ++i)
+        {
+            if (d3d11_swapchain_composition_rects(swapchain, &dirty_rects[i],
+                    &mapped[mapped_count], &mapped[dirty_count + mapped_count]))
+                ++mapped_count;
+        }
+        if (!mapped_count)
+        {
+            if (mapped != mapped_stack)
+                free(mapped);
+            InterlockedIncrement(&swapchain->present_count);
+            return S_OK;
+        }
+        src_rects = mapped;
+        dst_rects = &mapped[dirty_count];
+        rect_count = mapped_count;
+    }
+    else if (!partial && swapchain->scaling == DXGI_SCALING_NONE)
     {
         struct wined3d_swapchain_desc wined3d_desc;
         HWND window = d3d11_swapchain_get_hwnd(swapchain);
@@ -476,7 +505,7 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
             dst_rect = &unscaled_rect;
         }
     }
-    if (!swapchain->composition && !src_rect)
+    if (!swapchain->composition && !partial)
     {
         struct wined3d_swapchain_desc wined3d_desc;
 
@@ -494,8 +523,17 @@ static HRESULT d3d11_swapchain_present(struct d3d11_swapchain *swapchain,
     }
 #endif
 
-    if (SUCCEEDED(hr = wined3d_swapchain_present(swapchain->wined3d_swapchain,
-            src_rect, dst_rect, NULL, sync_interval, 0)))
+    if (partial)
+        hr = wined3d_swapchain_present_rects(swapchain->wined3d_swapchain,
+                src_rects, dst_rects, rect_count, scroll_rect, scroll_offset, NULL, sync_interval, 0);
+    else
+        hr = wined3d_swapchain_present(swapchain->wined3d_swapchain,
+                src_rect, dst_rect, NULL, sync_interval, 0);
+#ifdef __REACTOS__
+    if (mapped != mapped_stack)
+        free(mapped);
+#endif
+    if (SUCCEEDED(hr))
         InterlockedIncrement(&swapchain->present_count);
     return hr;
 }
@@ -506,7 +544,7 @@ static HRESULT STDMETHODCALLTYPE DECLSPEC_HOTPATCH d3d11_swapchain_Present(IDXGI
 
     TRACE("iface %p, sync_interval %u, flags %#x.\n", iface, sync_interval, flags);
 
-    return d3d11_swapchain_present(swapchain, sync_interval, flags, NULL, NULL);
+    return d3d11_swapchain_present(swapchain, sync_interval, flags, NULL, 0, NULL, NULL);
 }
 
 static HRESULT STDMETHODCALLTYPE d3d11_swapchain_GetBuffer(IDXGISwapChain4 *iface,
@@ -1035,24 +1073,39 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_Present1(IDXGISwapChain4 *iface
         UINT sync_interval, UINT flags, const DXGI_PRESENT_PARAMETERS *present_parameters)
 {
     struct d3d11_swapchain *swapchain = d3d11_swapchain_from_IDXGISwapChain4(iface);
+    const RECT *scroll_rect = NULL;
+    const POINT *scroll_offset = NULL;
 #ifdef __REACTOS__
     struct wined3d_swapchain_desc wined3d_desc;
+    static const POINT no_offset;
+    RECT source, *combined;
+    HRESULT hr;
 #endif
-    RECT dirty_rect, rect;
+    RECT rect;
     UINT i;
 
     TRACE("iface %p, sync_interval %u, flags %#x, present_parameters %p.\n",
             iface, sync_interval, flags, present_parameters);
 
-    if (!present_parameters || !present_parameters->DirtyRectsCount)
-        return d3d11_swapchain_present(swapchain, sync_interval, flags, NULL, NULL);
-    if (!present_parameters->pDirtyRects)
+    if (!present_parameters)
+        return d3d11_swapchain_present(swapchain, sync_interval, flags, NULL, 0, NULL, NULL);
+    if (present_parameters->DirtyRectsCount && !present_parameters->pDirtyRects)
         return DXGI_ERROR_INVALID_CALL;
+    if (present_parameters->pScrollRect)
+    {
+        scroll_rect = present_parameters->pScrollRect;
+        scroll_offset = present_parameters->pScrollOffset;
+    }
+    if (!present_parameters->DirtyRectsCount && !scroll_rect)
+        return d3d11_swapchain_present(swapchain, sync_interval, flags, NULL, 0, NULL, NULL);
 
 #ifdef __REACTOS__
     wined3d_mutex_lock();
     wined3d_swapchain_get_desc(swapchain->wined3d_swapchain, &wined3d_desc);
     wined3d_mutex_unlock();
+    if (wined3d_desc.swap_effect == WINED3D_SWAP_EFFECT_DISCARD
+            || wined3d_desc.swap_effect == WINED3D_SWAP_EFFECT_FLIP_DISCARD)
+        return DXGI_ERROR_INVALID_CALL;
     for (i = 0; i < present_parameters->DirtyRectsCount; ++i)
     {
         rect = present_parameters->pDirtyRects[i];
@@ -1060,29 +1113,52 @@ static HRESULT STDMETHODCALLTYPE d3d11_swapchain_Present1(IDXGISwapChain4 *iface
                 || rect.right > (LONG)wined3d_desc.backbuffer_width
                 || rect.bottom > (LONG)wined3d_desc.backbuffer_height)
             return DXGI_ERROR_INVALID_CALL;
-        if (i)
-            UnionRect(&dirty_rect, &dirty_rect, &rect);
-        else
-            dirty_rect = rect;
+    }
+    if (scroll_rect)
+    {
+        if (wined3d_desc.swap_effect != WINED3D_SWAP_EFFECT_FLIP_SEQUENTIAL)
+            return DXGI_ERROR_INVALID_CALL;
+        if (!scroll_offset)
+            scroll_offset = &no_offset;
+        source = *scroll_rect;
+        OffsetRect(&source, -scroll_offset->x, -scroll_offset->y);
+        if (IsRectEmpty(scroll_rect) || scroll_rect->left < 0 || scroll_rect->top < 0
+                || scroll_rect->right > (LONG)wined3d_desc.backbuffer_width
+                || scroll_rect->bottom > (LONG)wined3d_desc.backbuffer_height
+                || source.left < 0 || source.top < 0
+                || source.right > (LONG)wined3d_desc.backbuffer_width
+                || source.bottom > (LONG)wined3d_desc.backbuffer_height)
+            return DXGI_ERROR_INVALID_CALL;
+
+        if (swapchain->composition)
+        {
+            /* TODO: scroll the on-screen content of a composition swap chain; its scrolled rectangle is presented from the back buffer */
+            if (!(combined = malloc((present_parameters->DirtyRectsCount + 1) * sizeof(*combined))))
+                return E_OUTOFMEMORY;
+            if (present_parameters->DirtyRectsCount)
+                memcpy(combined, present_parameters->pDirtyRects,
+                        present_parameters->DirtyRectsCount * sizeof(*combined));
+            combined[present_parameters->DirtyRectsCount] = *scroll_rect;
+            hr = d3d11_swapchain_present(swapchain, sync_interval, flags, combined,
+                    present_parameters->DirtyRectsCount + 1, NULL, NULL);
+            free(combined);
+            return hr;
+        }
     }
 #else
-    dirty_rect = present_parameters->pDirtyRects[0];
-    if (dirty_rect.right < dirty_rect.left || dirty_rect.bottom < dirty_rect.top)
-        return DXGI_ERROR_INVALID_CALL;
-    for (i = 1; i < present_parameters->DirtyRectsCount; ++i)
+    for (i = 0; i < present_parameters->DirtyRectsCount; ++i)
     {
         rect = present_parameters->pDirtyRects[i];
         if (rect.right < rect.left || rect.bottom < rect.top)
             return DXGI_ERROR_INVALID_CALL;
-        UnionRect(&dirty_rect, &dirty_rect, &rect);
     }
+    if (scroll_rect)
+        FIXME("Scroll data is not supported.\n");
+    scroll_rect = NULL;
 #endif
 
-    if (present_parameters->pScrollRect || present_parameters->pScrollOffset)
-        TRACE("Present scroll data is covered by the retained CPU buffer.\n");
-
-    return d3d11_swapchain_present(swapchain, sync_interval, flags,
-            &dirty_rect, &dirty_rect);
+    return d3d11_swapchain_present(swapchain, sync_interval, flags, present_parameters->pDirtyRects,
+            present_parameters->DirtyRectsCount, scroll_rect, scroll_offset);
 }
 
 static BOOL STDMETHODCALLTYPE d3d11_swapchain_IsTemporaryMonoSupported(IDXGISwapChain4 *iface)

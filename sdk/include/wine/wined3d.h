@@ -2962,6 +2962,9 @@ struct wined3d_swapchain_state * __cdecl wined3d_swapchain_get_state(struct wine
 ULONG __cdecl wined3d_swapchain_incref(struct wined3d_swapchain *swapchain);
 HRESULT __cdecl wined3d_swapchain_present(struct wined3d_swapchain *swapchain, const RECT *src_rect,
         const RECT *dst_rect, HWND dst_window_override, unsigned int swap_interval, uint32_t flags);
+HRESULT __cdecl wined3d_swapchain_present_rects(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        HWND dst_window_override, unsigned int swap_interval, uint32_t flags);
 HRESULT __cdecl wined3d_swapchain_resize_buffers(struct wined3d_swapchain *swapchain, unsigned int buffer_count,
         unsigned int width, unsigned int height, enum wined3d_format_id format_id,
         enum wined3d_multisample_type multisample_type, unsigned int multisample_quality,
