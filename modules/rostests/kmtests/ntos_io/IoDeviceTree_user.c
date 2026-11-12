@@ -225,15 +225,16 @@ IsNullDriverDevice(
     return !(Flags & (CONFIGFLAG_REINSTALL | CONFIGFLAG_FAILEDINSTALL));
 }
 
-/* A device left needing install was offered to user mode: it has a class, from its installation or from the failed one */
-static VOID CheckInstallOffered(PCWSTR Id, DEVINST Device)
+/* A bus-reported device left needing install was offered to user mode: its install or its failure gave it a class */
+static VOID CheckInstallOffered(PCWSTR Id, DEVINST Device, DEVINST Root)
 {
     ULONG Status = 0, Problem = 0;
     WCHAR Guid[64];
     ULONG Size = sizeof(Guid);
+    DEVINST Parent;
 
     if (CM_Get_DevNode_Status(&Status, &Problem, Device, 0) != CR_SUCCESS || !(Status & DN_HAS_PROBLEM) ||
-        Problem != CM_PROB_FAILED_INSTALL)
+        Problem != CM_PROB_FAILED_INSTALL || CM_Get_Parent(&Parent, Device, 0) != CR_SUCCESS || Parent == Root)
     {
         return;
     }
@@ -246,10 +247,11 @@ static VOID CheckInstallOffered(PCWSTR Id, DEVINST Device)
 static VOID CheckNullDrivers(VOID)
 {
     ULONG Status, Problem, Size = 0, Checked = 0;
+    DEVINST Device, Root = 0;
     PWSTR List, Id;
-    DEVINST Device;
 
     ok_eq_ulong(CMP_WaitNoPendingInstallEvents(5000), (ULONG)WAIT_OBJECT_0);
+    ok_eq_ulong(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
 
     if (CM_Get_Device_ID_List_SizeW(&Size, NULL, CM_GETIDLIST_FILTER_PRESENT) != CR_SUCCESS || Size == 0) return;
     List = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size * sizeof(WCHAR));
@@ -261,7 +263,7 @@ static VOID CheckNullDrivers(VOID)
         {
             if (CM_Locate_DevNodeW(&Device, Id, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS) continue;
 
-            CheckInstallOffered(Id, Device);
+            CheckInstallOffered(Id, Device, Root);
             if (!IsNullDriverDevice(Device)) continue;
 
             ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);

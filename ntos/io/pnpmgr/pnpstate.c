@@ -833,22 +833,6 @@ PiIsDeviceConfigured(
 }
 
 static
-BOOLEAN
-PiHasRegistryValue(
-    _In_ HANDLE Key,
-    _In_ PCWSTR ValueName)
-{
-    PKEY_VALUE_FULL_INFORMATION Information;
-
-    PAGED_CODE();
-
-    if (!NT_SUCCESS(IopGetRegistryValue(Key, (PWSTR)ValueName, &Information))) return FALSE;
-
-    ExFreePool(Information);
-    return TRUE;
-}
-
-static
 NTSTATUS
 PiAttachDeviceDrivers(
     _In_ PDEVICE_NODE DeviceNode,
@@ -896,10 +880,11 @@ PiAttachDeviceDrivers(
         }
         else
         {
+            /* FIXME: Windows 11 leaves a device user mode created under the root without a problem until it is set up */
             PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_INSTALL);
 
-            /* TODO: a device registered from user mode but never installed (class set, no driver key) is not offered */
-            if (!(ConfigFlags & CONFIGFLAG_FAILEDINSTALL) && !PiHasRegistryValue(InstanceKey, L"ClassGUID"))
+            /* Windows 11 never offers a device user mode created under the root (CM_Create_DevInst) */
+            if (!(ConfigFlags & CONFIGFLAG_FAILEDINSTALL) && DeviceNode->Parent != IopRootDeviceNode)
             {
                 IopQueueDeviceInstallEvent(&GUID_DEVICE_ENUMERATED, &DeviceNode->InstancePath);
             }
