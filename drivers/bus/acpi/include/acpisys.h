@@ -68,6 +68,7 @@ typedef struct _PDO_DEVICE_DATA
     ULONG PciRootIoWindowCount;
     struct { ULONGLONG Start; ULONGLONG End; } PciRootIoWindows[ACPI_PCI_MAX_WINDOWS];
     BOOLEAN Reported;
+    PDEVICE_OBJECT ParentPciRoot;
     LIST_ENTRY NotificationList;
     KSPIN_LOCK NotificationLock;
     ULONG NotificationRegistrationCount;
@@ -392,6 +393,16 @@ NTSTATUS
 Bus_PDO_QueryDeviceRelations(
      PPDO_DEVICE_DATA     DeviceData,
       PIRP   Irp );
+
+NTSTATUS
+Bus_QueryChildRelations(
+    _In_ PFDO_DEVICE_DATA FdoData,
+    _In_opt_ PDEVICE_OBJECT ParentPciRoot,
+    _Inout_ PIRP Irp);
+
+BOOLEAN
+BuspIsPciRootDevice(
+    _In_ PPDO_DEVICE_DATA DeviceData);
 
 NTSTATUS
 Bus_PDO_QueryBusInformation(
