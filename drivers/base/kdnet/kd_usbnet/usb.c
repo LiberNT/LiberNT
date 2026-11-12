@@ -77,6 +77,14 @@ UsbHasPhoneInterface(
 
 static
 BOOLEAN
+UsbPhoneHeld(
+    _In_ PUSBNET_ADAPTER Adapter)
+{
+    return Adapter->HoldPhone && Adapter->PhoneRoute;
+}
+
+static
+BOOLEAN
 UsbFindControl(
     _In_reads_bytes_(Length) const UCHAR *Data,
     _In_ ULONG Length,
@@ -382,7 +390,7 @@ UsbProbeHubPort(
     }
 
     Status = UsbProbeTier(Adapter, Tier + 1);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && (!UsbPhoneHeld(Adapter) || Child->Route == Adapter->PhoneRoute))
     {
         XhciDisableSlot(Adapter, Child);
         Adapter->Tier = Tier;
@@ -457,8 +465,9 @@ UsbEnumerateHub(
             continue;
         }
 
-        if (NT_SUCCESS(UsbProbeHubPort(Adapter, Tier, Port)))
-            return STATUS_SUCCESS;
+        Status = UsbProbeHubPort(Adapter, Tier, Port);
+        if (NT_SUCCESS(Status) || UsbPhoneHeld(Adapter))
+            return Status;
     }
 
     return STATUS_NO_SUCH_DEVICE;
@@ -532,13 +541,17 @@ UsbProbeDevice(
         if (!NT_SUCCESS(Status) || Got < sizeof(USB_CONFIGURATION_DESCRIPTOR))
             continue;
 
-        if (!Tier && UsbHasPhoneInterface(Data, Got))
+        if (UsbHasPhoneInterface(Data, Got))
+        {
             Adapter->PhonePort = Device->Port;
+            Adapter->PhoneRoute = Device->Route;
+        }
 
         if (!UsbFindControl(Data, Got, &Function) || !UsbFindEndpoints(Data, Got, &Function))
             continue;
 
-        Phone = Function.Protocol == UsbNetRndis || (!Tier && Adapter->PhonePort == Device->Port);
+        Phone = Function.Protocol == UsbNetRndis ||
+                (Adapter->PhonePort == Device->Port && Adapter->PhoneRoute == Device->Route);
         if (!Phone && !Adapter->AcceptEthernet)
         {
             if (!Adapter->EthernetPort)
@@ -573,7 +586,7 @@ UsbProbeTier(
     Device->Ports = 0;
     Device->ThinkTime = 0;
     Status = UsbProbeDevice(Adapter, Tier);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status) && !UsbPhoneHeld(Adapter))
     {
         Adapter->Tier = Tier;
         Adapter->Device = Device;
@@ -679,6 +692,9 @@ UsbProbeRootPort(
         if (NT_SUCCESS(Status))
             return STATUS_SUCCESS;
 
+        if (UsbPhoneHeld(Adapter))
+            return Status;
+
         XhciDisableSlot(Adapter, Device);
     }
 
@@ -701,6 +717,7 @@ UsbFindFunction(
 
     Adapter->WaitPort = 0;
     Adapter->PhonePort = 0;
+    Adapter->PhoneRoute = 0;
     Adapter->EthernetPort = 0;
     if (!XhciWaitForConnections(Adapter))
         return STATUS_NO_SUCH_DEVICE;
@@ -734,12 +751,66 @@ UsbStartEthernet(
     return Status;
 }
 
+static
+BOOLEAN
+UsbWaitPortConnected(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ ULONG Port,
+    _Out_ PBOOLEAN Changed)
+{
+    USHORT PortStatus, PortChange;
+    ULONG Value;
+    BOOLEAN Dropped = FALSE;
+
+    if (UsbPhoneHeld(Adapter))
+    {
+        if (UsbPathAlive(Adapter) &&
+            NT_SUCCESS(UsbHubPortStatus(Adapter, Adapter->Device, Adapter->Devices[Adapter->Tier + 1].HubPort,
+                                        &PortStatus, &PortChange)))
+        {
+            *Changed = (PortChange & HUB_PORT_CHANGE_CONNECTION) != 0;
+            return (PortStatus & USB_PORT_STATUS_CONNECT) != 0;
+        }
+
+        UsbNetTrace("USB debugger: the hub of the phone on root port %lu stopped answering\n", Port);
+        UsbReleaseDevices(Adapter);
+        Adapter->PhoneRoute = 0;
+        Dropped = TRUE;
+    }
+
+    Value = XhciRead(Adapter->Operational + XHCI_OP_PORTSC(Port));
+    *Changed = Dropped || (Value & XHCI_PORT_CONNECT_CHANGE);
+    return (Value & XHCI_PORT_CONNECTED) != 0;
+}
+
+static
+NTSTATUS
+UsbProbeWaitPort(
+    _In_ PUSBNET_ADAPTER Adapter,
+    _In_ ULONG Port)
+{
+    ULONG Tier = Adapter->Tier, HubPort;
+
+    Adapter->PhonePort = 0;
+    if (!UsbPhoneHeld(Adapter))
+    {
+        Adapter->PhoneRoute = 0;
+        return UsbProbeRootPort(Adapter, Port);
+    }
+
+    Adapter->PhoneRoute = 0;
+    HubPort = Adapter->Devices[Tier + 1].HubPort;
+    UsbHubPortFeature(Adapter, &Adapter->Devices[Tier], USB_REQUEST_CLEAR_FEATURE, HUB_FEATURE_C_PORT_CONNECTION,
+                      HubPort);
+    return UsbProbeHubPort(Adapter, Tier, HubPort);
+}
+
 NTSTATUS
 UsbWaitForTethering(
     _In_ PUSBNET_ADAPTER Adapter)
 {
-    ULONG Port = Adapter->PhonePort ? Adapter->PhonePort : Adapter->WaitPort, Waited = 0, Gone = 0, Value;
-    BOOLEAN Phone = FALSE;
+    ULONG Port = Adapter->PhonePort ? Adapter->PhonePort : Adapter->WaitPort, Waited = 0, Gone = 0;
+    BOOLEAN Phone = FALSE, Probe = Adapter->PhoneRoute != 0, Changed;
 
     if (!Port)
         return STATUS_NO_SUCH_DEVICE;
@@ -747,21 +818,36 @@ UsbWaitForTethering(
     if (Adapter->PhonePort != Port)
         UsbNetTrace("USB debugger: the device on root port %lu left during its reset, waiting for it\n", Port);
 
+    Adapter->PhoneRoute = 0;
+    Adapter->HoldPhone = TRUE;
     for (;;)
     {
+        if (Probe)
+        {
+            Probe = FALSE;
+            if (NT_SUCCESS(UsbProbeWaitPort(Adapter, Port)))
+            {
+                Adapter->HoldPhone = FALSE;
+                return STATUS_SUCCESS;
+            }
+
+            if (Adapter->PhonePort != Port)
+                break;
+        }
+
         if (!Phone && Adapter->PhonePort == Port)
         {
             Phone = TRUE;
             UsbNetSetMessage(STATUS_DEVICE_NOT_CONNECTED,
                              L"Connect the computer to your phone and enable USB tethering");
-            UsbNetTrace("USB debugger: turn on USB tethering on the phone on root port %lu, the boot waits for it "
-                        "(unplug the phone to boot without the debugger)\n", Port);
+            UsbNetTrace("USB debugger: turn on USB tethering on the phone on root port %lu, %lu hub(s) away, "
+                        "the boot waits for it (unplug the phone to boot without the debugger)\n",
+                        Port, UsbPhoneHeld(Adapter) ? Adapter->Tier + 1 : 0);
         }
 
         XhciStall(USBNET_PHONE_STEP * 1000);
         Waited += USBNET_PHONE_STEP;
-        Value = XhciRead(Adapter->Operational + XHCI_OP_PORTSC(Port));
-        if (!(Value & XHCI_PORT_CONNECTED))
+        if (!UsbWaitPortConnected(Adapter, Port, &Changed))
         {
             Gone += USBNET_PHONE_STEP;
             if (Gone >= USBNET_PHONE_GONE)
@@ -771,7 +857,7 @@ UsbWaitForTethering(
         }
 
         Gone = 0;
-        if (!(Value & XHCI_PORT_CONNECT_CHANGE))
+        if (!Changed)
         {
             if (!Phone && Waited >= USBNET_PHONE_GONE)
                 break;
@@ -784,16 +870,14 @@ UsbWaitForTethering(
 
         XhciStall(USBNET_PHONE_SETTLE * 1000);
         Waited += USBNET_PHONE_SETTLE;
-        Adapter->PhonePort = 0;
-        if (NT_SUCCESS(UsbProbeRootPort(Adapter, Port)))
-            return STATUS_SUCCESS;
-
-        if (Adapter->PhonePort != Port)
-            break;
+        Probe = TRUE;
     }
 
+    UsbReleaseDevices(Adapter);
+    Adapter->HoldPhone = FALSE;
     UsbNetSetMessage(STATUS_NO_SUCH_DEVICE, NULL);
     UsbNetTrace("USB debugger: stopped waiting for root port %lu\n", Port);
     Adapter->PhonePort = 0;
+    Adapter->PhoneRoute = 0;
     return STATUS_NO_SUCH_DEVICE;
 }

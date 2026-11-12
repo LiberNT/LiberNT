@@ -348,6 +348,8 @@ typedef struct _USBNET_ADAPTER
     BOOLEAN Shared;
     ULONG WaitPort;
     ULONG PhonePort;
+    ULONG PhoneRoute;
+    BOOLEAN HoldPhone;
     ULONG EthernetPort;
     BOOLEAN AcceptEthernet;
     BOOLEAN Phone;
