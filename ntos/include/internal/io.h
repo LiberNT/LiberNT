@@ -1942,6 +1942,12 @@ extern ERESOURCE IopDeviceTreeResource;
 extern KMUTEX IopResourceAssignmentLock;
 #define IOP_SERVICE_ENUM_LOCK_COUNT 32
 extern KMUTEX IopServiceEnumLocks[IOP_SERVICE_ENUM_LOCK_COUNT];
+
+VOID
+NTAPI
+PiUpdateServiceEnum(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ BOOLEAN Add);
 extern ULONG IopTraceLevel;
 extern GENERAL_LOOKASIDE IopMdlLookasideList;
 extern GENERIC_MAPPING IopCompletionMapping;

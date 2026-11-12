@@ -1061,7 +1061,10 @@ PiDevNodeAddDrivers(
 
     Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey, &NullDriver);
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
+    {
         Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey, TRUE);
+        PiUpdateServiceEnum(DeviceNode, TRUE);
+    }
 
     ZwClose(InstanceKey);
 

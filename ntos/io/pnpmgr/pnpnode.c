@@ -345,6 +345,116 @@ IopFreeDeviceNode(
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+PiUpdateServiceEnum(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ BOOLEAN Add)
+{
+    static const WCHAR ServicesPath[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\";
+    UNICODE_STRING KeyName, ValueName, CountName, NextName;
+    PKEY_VALUE_FULL_INFORMATION Information;
+    WCHAR IndexBuffer[12], NextBuffer[12];
+    ULONG Count = 0, Index, Found, Hash = 0, i;
+    HANDLE EnumKey;
+    NTSTATUS Status;
+    PKMUTEX Lock;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(DeviceNode != NULL);
+
+    if (DeviceNode->ServiceName.Length == 0 || DeviceNode->InstancePath.Length == 0) return;
+
+    KeyName.MaximumLength = (USHORT)(sizeof(ServicesPath) + DeviceNode->ServiceName.Length + sizeof(L"\\Enum"));
+    KeyName.Length = 0;
+    KeyName.Buffer = ExAllocatePoolWithTag(PagedPool, KeyName.MaximumLength, TAG_IO);
+    if (KeyName.Buffer == NULL) return;
+    RtlAppendUnicodeToString(&KeyName, ServicesPath);
+    RtlAppendUnicodeStringToString(&KeyName, &DeviceNode->ServiceName);
+    RtlAppendUnicodeToString(&KeyName, L"\\Enum");
+
+    for (i = 0; i < DeviceNode->ServiceName.Length / sizeof(WCHAR); i++)
+        Hash = Hash * 31 + RtlUpcaseUnicodeChar(DeviceNode->ServiceName.Buffer[i]);
+    Lock = &IopServiceEnumLocks[Hash % IOP_SERVICE_ENUM_LOCK_COUNT];
+    KeWaitForSingleObject(Lock, Executive, KernelMode, FALSE, NULL);
+
+    Status = Add ? IopCreateRegistryKeyEx(&EnumKey, NULL, &KeyName, KEY_ALL_ACCESS, REG_OPTION_VOLATILE, NULL)
+                 : IopOpenRegistryKeyEx(&EnumKey, NULL, &KeyName, KEY_ALL_ACCESS);
+    ExFreePoolWithTag(KeyName.Buffer, TAG_IO);
+    if (!NT_SUCCESS(Status))
+    {
+        KeReleaseMutex(Lock, FALSE);
+        return;
+    }
+
+    if (NT_SUCCESS(IopGetRegistryValue(EnumKey, L"Count", &Information)))
+    {
+        if (Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+            Count = *(PULONG)((PUCHAR)Information + Information->DataOffset);
+        ExFreePool(Information);
+    }
+
+    Found = MAXULONG;
+    for (Index = 0; Index < Count && Found == MAXULONG; Index++)
+    {
+        RtlStringCbPrintfW(IndexBuffer, sizeof(IndexBuffer), L"%lu", Index);
+        if (!NT_SUCCESS(IopGetRegistryValue(EnumKey, IndexBuffer, &Information))) continue;
+        if (Information->Type == REG_SZ)
+        {
+            UNICODE_STRING Listed;
+
+            Listed.Buffer = (PWCHAR)((PUCHAR)Information + Information->DataOffset);
+            Listed.Length = (USHORT)Information->DataLength;
+            while (Listed.Length >= sizeof(WCHAR) && Listed.Buffer[Listed.Length / sizeof(WCHAR) - 1] == UNICODE_NULL)
+                Listed.Length -= sizeof(WCHAR);
+            Listed.MaximumLength = Listed.Length;
+            if (RtlEqualUnicodeString(&Listed, &DeviceNode->InstancePath, TRUE)) Found = Index;
+        }
+        ExFreePool(Information);
+    }
+
+    RtlInitUnicodeString(&CountName, L"Count");
+    RtlInitUnicodeString(&NextName, L"NextInstance");
+
+    if (Add && Found == MAXULONG)
+    {
+        RtlStringCbPrintfW(IndexBuffer, sizeof(IndexBuffer), L"%lu", Count);
+        RtlInitUnicodeString(&ValueName, IndexBuffer);
+        Status = ZwSetValueKey(EnumKey, &ValueName, 0, REG_SZ, DeviceNode->InstancePath.Buffer,
+                               DeviceNode->InstancePath.Length + sizeof(WCHAR));
+        if (NT_SUCCESS(Status))
+        {
+            Count++;
+            ZwSetValueKey(EnumKey, &CountName, 0, REG_DWORD, &Count, sizeof(Count));
+            ZwSetValueKey(EnumKey, &NextName, 0, REG_DWORD, &Count, sizeof(Count));
+        }
+    }
+    else if (!Add && Found != MAXULONG)
+    {
+        ASSERT(Found < Count);
+        for (Index = Found + 1; Index < Count; Index++)
+        {
+            RtlStringCbPrintfW(IndexBuffer, sizeof(IndexBuffer), L"%lu", Index);
+            if (!NT_SUCCESS(IopGetRegistryValue(EnumKey, IndexBuffer, &Information))) continue;
+            RtlStringCbPrintfW(NextBuffer, sizeof(NextBuffer), L"%lu", Index - 1);
+            RtlInitUnicodeString(&ValueName, NextBuffer);
+            ZwSetValueKey(EnumKey, &ValueName, 0, Information->Type,
+                          (PUCHAR)Information + Information->DataOffset, Information->DataLength);
+            ExFreePool(Information);
+        }
+        RtlStringCbPrintfW(IndexBuffer, sizeof(IndexBuffer), L"%lu", Count - 1);
+        RtlInitUnicodeString(&ValueName, IndexBuffer);
+        ZwDeleteValueKey(EnumKey, &ValueName);
+        Count--;
+        ZwSetValueKey(EnumKey, &CountName, 0, REG_DWORD, &Count, sizeof(Count));
+        ZwSetValueKey(EnumKey, &NextName, 0, REG_DWORD, &Count, sizeof(Count));
+    }
+
+    ZwClose(EnumKey);
+    KeReleaseMutex(Lock, FALSE);
+}
+
 PNP_DEVNODE_STATE
 PiSetDevNodeState(
     _In_ PDEVICE_NODE DeviceNode,
@@ -368,6 +478,9 @@ PiSetDevNodeState(
     }
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    if (NewState == DeviceNodeRemoved && Previous != DeviceNodeRemoved)
+        PiUpdateServiceEnum(DeviceNode, FALSE);
 
     DPRINT("PnP: %wZ moved from %s to %s\n",
            &DeviceNode->InstancePath,
