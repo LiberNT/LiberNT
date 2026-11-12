@@ -209,13 +209,55 @@ IopApplyInterruptAffinityPolicy(
     }
 }
 
+/* Whether a range of Length bytes at Start ends at or below Maximum, without wrapping around */
 static
-VOID
+BOOLEAN
+IopRangeFits(
+    _In_ ULONGLONG Start,
+    _In_ ULONGLONG Length,
+    _In_ ULONGLONG Maximum)
+{
+    if (Length == 0) return (Start <= Maximum);
+    if (Start > MAXULONGLONG - (Length - 1)) return FALSE;
+
+    return (Start + (Length - 1) <= Maximum);
+}
+
+/* The first start at or above Minimum that the alignment allows, if its range fits below Maximum */
+static
+BOOLEAN
+IopFirstAlignedStart(
+    _In_ ULONGLONG Minimum,
+    _In_ ULONGLONG Alignment,
+    _In_ ULONGLONG Length,
+    _In_ ULONGLONG Maximum,
+    _Out_ PULONGLONG Start)
+{
+    ULONGLONG Remainder;
+
+    if (Alignment == 0) Alignment = 1;
+
+    Remainder = Minimum % Alignment;
+    if (Remainder != 0)
+    {
+        if (Minimum > MAXULONGLONG - (Alignment - Remainder)) return FALSE;
+        Minimum += Alignment - Remainder;
+    }
+
+    *Start = Minimum;
+    return IopRangeFits(Minimum, Length, Maximum);
+}
+
+static
+NTSTATUS
 IopDescribeFromRequirement(
     _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
+    ULONGLONG Alignment = 0;
+    ULONGLONG Maximum = 0;
     ULONGLONG Minimum = 0;
+    ULONGLONG Start;
     ULONGLONG Length;
 
     RtlZeroMemory(Descriptor, sizeof(*Descriptor));
@@ -227,20 +269,38 @@ IopDescribeFromRequirement(
     switch (Requirement->Type)
     {
         case CmResourceTypePort:
-            Descriptor->u.Port.Start = Requirement->u.Port.MinimumAddress;
+            if (!IopFirstAlignedStart((ULONGLONG)Requirement->u.Port.MinimumAddress.QuadPart,
+                                      Requirement->u.Port.Alignment,
+                                      Requirement->u.Port.Length,
+                                      (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart,
+                                      &Start))
+            {
+                return STATUS_CONFLICTING_ADDRESSES;
+            }
+            Descriptor->u.Port.Start.QuadPart = (LONGLONG)Start;
             Descriptor->u.Port.Length = Requirement->u.Port.Length;
             break;
 
         case CmResourceTypeMemory:
-            Descriptor->u.Memory.Start = Requirement->u.Memory.MinimumAddress;
+            if (!IopFirstAlignedStart((ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart,
+                                      Requirement->u.Memory.Alignment,
+                                      Requirement->u.Memory.Length,
+                                      (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart,
+                                      &Start))
+            {
+                return STATUS_CONFLICTING_ADDRESSES;
+            }
+            Descriptor->u.Memory.Start.QuadPart = (LONGLONG)Start;
             Descriptor->u.Memory.Length = Requirement->u.Memory.Length;
             break;
 
-        /* A window of 4 GB or more keeps its scaled length (CM_RESOURCE_MEMORY_LARGE) */
+        /* A window of 4 GB or more keeps its scaled length; it carries exactly one CM_RESOURCE_MEMORY_LARGE flag */
         case CmResourceTypeMemoryLarge:
-            Length = RtlIoDecodeMemIoResource(Requirement, NULL, &Minimum, NULL);
-            if (!NT_SUCCESS(RtlCmEncodeMemIoResource(Descriptor, CmResourceTypeMemoryLarge, Length, Minimum)))
-                Descriptor->u.Memory.Length = 0;
+            Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum);
+            if (Length == 0) return STATUS_INVALID_PARAMETER;
+            if (!IopFirstAlignedStart(Minimum, Alignment, Length, Maximum, &Start)) return STATUS_CONFLICTING_ADDRESSES;
+            if (!NT_SUCCESS(RtlCmEncodeMemIoResource(Descriptor, CmResourceTypeMemoryLarge, Length, Start)))
+                return STATUS_INVALID_PARAMETER;
             break;
 
         case CmResourceTypeInterrupt:
@@ -287,6 +347,8 @@ IopDescribeFromRequirement(
         default:
             break;
     }
+
+    return STATUS_SUCCESS;
 }
 
 static
@@ -306,9 +368,10 @@ IopAdvanceCandidate(
             Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, NULL, &Maximum);
             if (Alignment == 0) Alignment = 1;
 
+            if ((ULONGLONG)Descriptor->u.Memory.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
             Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Alignment;
 
-            if (Length == 0 || Next + Length - 1 > Maximum) return FALSE;
+            if (Length == 0 || !IopRangeFits(Next, Length, Maximum)) return FALSE;
 
             Descriptor->u.Memory.Start.QuadPart = (LONGLONG)Next;
             return TRUE;
@@ -317,10 +380,10 @@ IopAdvanceCandidate(
             Alignment = Requirement->u.Port.Alignment;
             if (Alignment == 0) Alignment = 1;
 
+            if ((ULONGLONG)Descriptor->u.Port.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
             Next = (ULONGLONG)Descriptor->u.Port.Start.QuadPart + Alignment;
 
-            if (Next + Requirement->u.Port.Length - 1 >
-                (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart)
+            if (!IopRangeFits(Next, Requirement->u.Port.Length, (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart))
             {
                 return FALSE;
             }
@@ -332,10 +395,10 @@ IopAdvanceCandidate(
             Alignment = Requirement->u.Memory.Alignment;
             if (Alignment == 0) Alignment = 1;
 
+            if ((ULONGLONG)Descriptor->u.Memory.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
             Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Alignment;
 
-            if (Next + Requirement->u.Memory.Length - 1 >
-                (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart)
+            if (!IopRangeFits(Next, Requirement->u.Memory.Length, (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart))
             {
                 return FALSE;
             }
@@ -435,6 +498,7 @@ IopPickOneDescriptor(
 {
     KAFFINITY LineAffinity = 0;
     ULONG Attempts = 0;
+    NTSTATUS Status;
 
     if (Requirement->Type == CmResourceTypeInterrupt &&
         (Requirement->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
@@ -442,7 +506,8 @@ IopPickOneDescriptor(
         return IopAllocateMessageInterrupt(Requirement, Descriptor);
     }
 
-    IopDescribeFromRequirement(Requirement, Descriptor);
+    Status = IopDescribeFromRequirement(Requirement, Descriptor);
+    if (!NT_SUCCESS(Status)) return Status;
 
     if (Requirement->Type == CmResourceTypeInterrupt)
     {
@@ -483,9 +548,9 @@ IopPickOneDescriptor(
             Requirement->Type,
             DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
 
-    IopDescribeFromRequirement(Requirement, Descriptor);
+    Status = IopDescribeFromRequirement(Requirement, Descriptor);
     if (Requirement->Type == CmResourceTypeInterrupt) Descriptor->u.Interrupt.Affinity = LineAffinity;
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 static

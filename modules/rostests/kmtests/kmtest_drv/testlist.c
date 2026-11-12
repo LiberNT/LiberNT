@@ -180,6 +180,7 @@ KMT_TESTFUNC Test_IoDeviceInterface;
 KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
 KMT_TESTFUNC Test_IoInterfaceOrderCheck;
+KMT_TESTFUNC Test_IoResourceSearch;
 KMT_TESTFUNC Test_IoStorageDumpPath;
 KMT_TESTFUNC Test_IoWmiAcpi;
 KMT_TESTFUNC Test_ZwWriteFileAppend;
@@ -577,6 +578,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },
     { "IoEvent",                            Test_IoEvent },
     { "-IoInterfaceOrderCheck",             Test_IoInterfaceOrderCheck },
+    { "IoResourceSearch",                   Test_IoResourceSearch },
     { "IoStorageDumpPath",            Test_IoStorageDumpPath },
     { "IoFilesystem",                       Test_IoFilesystem },
     { "IoInterrupt",                        Test_IoInterrupt },

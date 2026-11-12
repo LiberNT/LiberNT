@@ -103,6 +103,14 @@ IopResDbIsAncestorOrSelf(_In_ PDEVICE_NODE Ancestor, _In_ PDEVICE_NODE DeviceNod
     return FALSE;
 }
 
+/* The last address of a range; one that would wrap around runs to the top of the address space */
+static
+UINT64
+IopResDbLast(_In_ UINT64 Start, _In_ UINT64 Length)
+{
+    return (Length - 1 > MAXULONGLONG - Start) ? MAXULONGLONG : Start + (Length - 1);
+}
+
 static
 BOOLEAN
 IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE aOwner, _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR b, _In_opt_ PDEVICE_NODE bOwner)
@@ -121,17 +129,20 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
         case CmResourceTypeMemoryLarge:
         {
             UINT64 aStart, bStart;
-            UINT64 aEnd = RtlCmDecodeMemIoResource(a, &aStart);
-            UINT64 bEnd = RtlCmDecodeMemIoResource(b, &bStart);
-            aEnd += aStart;
-            bEnd += bStart;
-            if (!(aStart < bEnd && bStart < aEnd))
+            UINT64 aLength = RtlCmDecodeMemIoResource(a, &aStart);
+            UINT64 bLength = RtlCmDecodeMemIoResource(b, &bStart);
+            UINT64 aLast, bLast;
+            if (aLength == 0 || bLength == 0)
                 return FALSE;
-            if ((a->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && aStart <= bStart && aEnd >= bEnd)
+            aLast = IopResDbLast(aStart, aLength);
+            bLast = IopResDbLast(bStart, bLength);
+            if (aStart > bLast || bStart > aLast)
+                return FALSE;
+            if ((a->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && aStart <= bStart && aLast >= bLast)
             {
                 return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(aOwner, bOwner) : FALSE;
             }
-            if ((b->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && bStart <= aStart && bEnd >= aEnd)
+            if ((b->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && bStart <= aStart && bLast >= aLast)
             {
                 return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(bOwner, aOwner) : FALSE;
             }
@@ -139,15 +150,19 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
         }
         case CmResourceTypePort:
         {
-            UINT64 aStart = (UINT64)a->u.Port.Start.QuadPart, aEnd = aStart + a->u.Port.Length;
-            UINT64 bStart = (UINT64)b->u.Port.Start.QuadPart, bEnd = bStart + b->u.Port.Length;
-            if (!(aStart < bEnd && bStart < aEnd))
+            UINT64 aStart = (UINT64)a->u.Port.Start.QuadPart, aLast;
+            UINT64 bStart = (UINT64)b->u.Port.Start.QuadPart, bLast;
+            if (a->u.Port.Length == 0 || b->u.Port.Length == 0)
                 return FALSE;
-            if ((a->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && aStart <= bStart && aEnd >= bEnd)
+            aLast = IopResDbLast(aStart, a->u.Port.Length);
+            bLast = IopResDbLast(bStart, b->u.Port.Length);
+            if (aStart > bLast || bStart > aLast)
+                return FALSE;
+            if ((a->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && aStart <= bStart && aLast >= bLast)
             {
                 return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(aOwner, bOwner) : FALSE;
             }
-            if ((b->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && bStart <= aStart && bEnd >= aEnd)
+            if ((b->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && bStart <= aStart && bLast >= aLast)
             {
                 return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(bOwner, aOwner) : FALSE;
             }
