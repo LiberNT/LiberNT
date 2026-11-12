@@ -501,6 +501,12 @@ BcmBtDeliverQueued(
             return;
 
         Packet = BcmBtTakePacket(Dev);
+        if (!Packet)
+        {
+            if (!NT_SUCCESS(WdfRequestRequeue(Request)))
+                WdfRequestComplete(Request, STATUS_CANCELLED);
+            return;
+        }
         if (!NT_SUCCESS(WdfRequestRetrieveOutputMemory(Request, &Memory)))
         {
             WdfRequestComplete(Request, STATUS_INVALID_PARAMETER);
