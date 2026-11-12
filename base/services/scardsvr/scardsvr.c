@@ -181,6 +181,15 @@ ScSetProtocol(
         return SCARD_E_PROTO_MISMATCH;
     if (Error != ERROR_SUCCESS)
         return ScMapError(Error);
+    if (Returned < sizeof(Selected))
+    {
+        DWORD Attribute = SCARD_ATTR_CURRENT_PROTOCOL_TYPE;
+
+        Error = ScIoctl(Reader, IOCTL_SMARTCARD_GET_ATTRIBUTE, &Attribute, sizeof(Attribute), &Selected,
+                        sizeof(Selected), &Returned);
+        if (Error != ERROR_SUCCESS)
+            return ScMapError(Error);
+    }
     EnterCriticalSection(&ScLock);
     Reader->State = SCARD_SPECIFIC;
     Reader->Protocol = Selected;

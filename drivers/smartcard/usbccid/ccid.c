@@ -451,8 +451,20 @@ CcidTransmitTpdu(
 
     if (Smartcard->CardCapabilities.Protocol.Selected == SCARD_PROTOCOL_T0)
     {
+        ULONG RequestLength = Smartcard->IoRequest.RequestBufferLength;
+        PUCHAR Apdu = Smartcard->IoRequest.RequestBuffer + sizeof(SCARD_IO_REQUEST);
+
+        /* ISO/IEC 7816-3 sends a short case 4 command to a T=0 card as case 3, without Le */
+        if (RequestLength >= sizeof(SCARD_IO_REQUEST) + 6 &&
+            Apdu[4] != 0 &&
+            RequestLength == sizeof(SCARD_IO_REQUEST) + 6 + Apdu[4])
+        {
+            Smartcard->IoRequest.RequestBufferLength--;
+        }
+
         Request->BufferLength = 0;
         Status = SmartcardT0Request(Smartcard);
+        Smartcard->IoRequest.RequestBufferLength = RequestLength;
         if (!NT_SUCCESS(Status))
             return Status;
         Status = CcidXfrBlock(Reader, Request->Buffer, Request->BufferLength, 0, Reply->Buffer, Reply->BufferSize,
