@@ -247,6 +247,8 @@ elseif(ARCH STREQUAL "riscv64")
         arch/riscv64/jh7110.c
         arch/riscv64/watchdog.c
         arch/riscv64/winldr.c)
+elseif(ARCH STREQUAL "loongarch64")
+    include(arch/loongarch64/sources.cmake)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND WINLOAD_ASM_SOURCE
         arch/amd64/resume.S
