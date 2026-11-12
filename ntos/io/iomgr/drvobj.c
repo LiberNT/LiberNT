@@ -1197,6 +1197,7 @@ IopRunReinitializationList(
 
         Item = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
 
+        /* FIXME: concurrent passes (NtLoadDriver beside the PnP worker) share *TailEntry, so a routine that registers itself again can run twice in one pass, and two items of one driver race on DriverExtension->Count */
         Item->ReinitRoutine(Item->DriverObject,
                             Item->Context,
                             ++Item->DriverObject->DriverExtension->Count);
