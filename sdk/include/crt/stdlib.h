@@ -1151,19 +1151,23 @@ extern "C" {
     _In_z_ char *_Str,
     _In_opt_ _locale_t _Locale);
 
+#ifndef _lrotl
   _Check_return_
   unsigned long
   __cdecl
   _lrotl(
     _In_ unsigned long _Val,
     _In_ int _Shift);
+#endif
 
+#ifndef _lrotr
   _Check_return_
   unsigned long
   __cdecl
   _lrotr(
     _In_ unsigned long _Val,
     _In_ int _Shift);
+#endif
 
   _CRTIMP
   void

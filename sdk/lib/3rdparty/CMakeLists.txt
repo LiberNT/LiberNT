@@ -1,3 +1,7 @@
+if(ARCH STREQUAL "loongarch64")
+    add_compile_options(-Wno-shorten-64-to-32)
+endif()
+
 
 add_subdirectory(adns)
 add_subdirectory(cardlib)

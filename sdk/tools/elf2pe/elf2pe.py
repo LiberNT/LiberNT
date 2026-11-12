@@ -24,10 +24,18 @@ REL_BASED_HIGHLOW = 3
 REL_BASED_DIR64 = 10
 
 ABSOLUTE_RELOCATIONS = {
-    'x86_64': {1: (REL_BASED_DIR64, 8), 10: (REL_BASED_HIGHLOW, 4), 11: (REL_BASED_HIGHLOW, 4)},
-    'aarch64': {257: (REL_BASED_DIR64, 8), 258: (REL_BASED_HIGHLOW, 4)},
-    'riscv64': {1: (REL_BASED_HIGHLOW, 4), 2: (REL_BASED_DIR64, 8)},
-    'loongarch64': {1: (REL_BASED_HIGHLOW, 4), 2: (REL_BASED_DIR64, 8)},
+    'x86_64': {1: (REL_BASED_DIR64, 8), 10: (REL_BASED_HIGHLOW, 4), 11: (REL_BASED_HIGHLOW, 4),
+               8: (REL_BASED_DIR64, 8)},
+    'aarch64': {257: (REL_BASED_DIR64, 8), 258: (REL_BASED_HIGHLOW, 4), 1027: (REL_BASED_DIR64, 8)},
+    'riscv64': {1: (REL_BASED_HIGHLOW, 4), 2: (REL_BASED_DIR64, 8), 3: (REL_BASED_DIR64, 8)},
+    'loongarch64': {1: (REL_BASED_HIGHLOW, 4), 2: (REL_BASED_DIR64, 8), 3: (REL_BASED_DIR64, 8)},
+}
+
+RELATIVE_RELOCATIONS = {
+    'x86_64': {8},
+    'aarch64': {1027},
+    'riscv64': {3},
+    'loongarch64': {3},
 }
 
 SHT_PROGBITS = 1
@@ -43,6 +51,7 @@ SHN_UNDEF = 0
 SHN_ABS = 0xFFF1
 
 ET_EXEC = 2
+ET_DYN = 3
 
 IMAGE_FILE_EXECUTABLE_IMAGE = 0x0002
 IMAGE_FILE_LARGE_ADDRESS_AWARE = 0x0020
@@ -75,8 +84,8 @@ class ElfImage:
          _, _, _, _, self.section_entry_size,
          self.section_count, self.string_section) = struct.unpack_from(
             '<HHIQQQIHHHHHH', data, 16)
-        if self.type != ET_EXEC:
-            raise ValueError('only a linked (ET_EXEC) image can be assembled')
+        if self.type not in (ET_EXEC, ET_DYN):
+            raise ValueError('only a linked ELF image can be assembled')
         if self.machine not in ELF_MACHINES:
             raise ValueError(f'unsupported ELF machine {self.machine}')
         self.sections = [list(struct.unpack_from('<IIQQQQIIQQ', data,
@@ -185,7 +194,9 @@ def collect_relocations(elf):
     return relocations
 
 
-def relocated_value(elf, regions, address, symbol_index, addend, shift, width):
+def relocated_value(elf, regions, address, symbol_index, addend, shift, width, relative=False):
+    if relative:
+        return addend if addend is not None else 0
     if addend is not None:
         if symbol_index >= len(elf.symbols):
             raise ValueError(f'relocation at 0x{address:x} references no symbol')
@@ -213,7 +224,8 @@ def patch_relocations(elf, regions, relocations, machine, shift):
             skipped += 1
             continue
         _, width = table[kind]
-        value = relocated_value(elf, regions, address, symbol_index, addend, shift, width)
+        value = relocated_value(elf, regions, address, symbol_index, addend, shift, width,
+                                kind in RELATIVE_RELOCATIONS[machine])
         struct.pack_into('<Q' if width == 8 else '<I', elf.data, elf.file_offset(address),
                          value & ((1 << (width * 8)) - 1))
         patched += 1

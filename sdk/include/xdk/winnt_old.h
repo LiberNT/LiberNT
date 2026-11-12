@@ -5331,6 +5331,11 @@ FORCEINLINE struct _TEB * NtCurrentTeb(VOID)
     __asm__("mv %0, tp" : "=r"(Teb));
     return Teb;
 }
+#elif defined(_M_LOONGARCH64)
+FORCEINLINE struct _TEB * NtCurrentTeb(VOID)
+{
+    return (struct _TEB *)__builtin_thread_pointer();
+}
 FORCEINLINE PVOID GetCurrentFiber(VOID)
 {
 #ifdef NONAMELESSUNION
@@ -5374,6 +5379,15 @@ DbgRaiseAssertionFailure(VOID)
 FORCEINLINE VOID YieldProcessor(VOID)
 {
     /* Do not require Zihintpause on the RV64GC baseline. */
+    __asm__ __volatile__("nop" ::: "memory");
+}
+#endif
+#define DbgRaiseAssertionFailure() __debugbreak()
+#elif defined(_M_LOONGARCH64)
+#ifndef _LOONGARCH64_YIELD_PROCESSOR_DEFINED
+#define _LOONGARCH64_YIELD_PROCESSOR_DEFINED
+FORCEINLINE VOID YieldProcessor(VOID)
+{
     __asm__ __volatile__("nop" ::: "memory");
 }
 #endif

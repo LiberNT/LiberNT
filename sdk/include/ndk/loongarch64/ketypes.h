@@ -34,6 +34,10 @@
 #define IPI_FROZEN_STATE_SAVING        6
 #define IPI_FROZEN_FLAG_ACTIVE         0x20
 
+#define INITIAL_STALL_COUNT     100
+/* TODO: no Windows LoongArch64 stack-size contract exists; the panic stack is kernel-stack sized like the RISC-V port. */
+#define DOUBLE_FAULT_STACK_SIZE KERNEL_STACK_SIZE
+
 #define LDT_ENTRY ULONG
 
 typedef struct _KTRAP_FRAME KTRAP_FRAME, *PKTRAP_FRAME;
