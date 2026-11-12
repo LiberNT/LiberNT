@@ -1150,6 +1150,7 @@ PiRemoveFailedStack(
         ExFreePool(DeviceNode->ResourceRequirements);
         DeviceNode->ResourceRequirements = NULL;
     }
+    if (!(DeviceNode->Flags & DNF_MADEUP)) PiClearDevNodeFlag(DeviceNode, DNF_NO_RESOURCE_REQUIRED);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
 }
@@ -1284,7 +1285,7 @@ PiRestartInPlace(
     if (DeviceNode->ResourceRequirements != NULL) ExFreePool(DeviceNode->ResourceRequirements);
     DeviceNode->ResourceRequirements = Requirements;
 
-    if (Requirements != NULL) IopFilterResourceRequirements(DeviceNode);
+    IopFilterResourceRequirements(DeviceNode);
 
     Status = PiIrpStartDevice(DeviceNode);
     if (NT_SUCCESS(Status)) return;
@@ -1487,6 +1488,7 @@ PiSendRemoval(
         ExFreePool(DeviceNode->ResourceRequirements);
         DeviceNode->ResourceRequirements = NULL;
     }
+    if (!(DeviceNode->Flags & DNF_MADEUP)) PiClearDevNodeFlag(DeviceNode, DNF_NO_RESOURCE_REQUIRED);
 
     /* A surprise-removed device keeps its stack until nothing holds it open (IRP_MN_REMOVE_DEVICE documentation) */
     if (Surprise)

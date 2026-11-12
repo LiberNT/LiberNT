@@ -998,7 +998,7 @@ IopAssignDeviceResources(
         PIO_RESOURCE_REQUIREMENTS_LIST Requirements = NULL;
 
         Status = PiIrpQueryResourceRequirements(DeviceNode, &Requirements);
-        if (NT_SUCCESS(Status) && Requirements != NULL)
+        if (NT_SUCCESS(Status))
         {
             DeviceNode->ResourceRequirements = Requirements;
             PiSetDevNodeFlag(DeviceNode,

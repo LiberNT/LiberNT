@@ -280,6 +280,19 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
     PIO_RESOURCE_REQUIREMENTS_LIST Filtered;
     NTSTATUS Status;
 
+    if (Requested(L"NoRequirements"))
+    {
+        Record(L"NoListFilterSeen", (Supplied == NULL && Current == NULL) ? 1 : 2);
+        Status = IoForwardIrpSynchronously(Extension->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
+        if (Irp->IoStatus.Information != 0 || Requested(L"NoListEmpty"))
+            return Complete(Irp, Status);
+        Filtered = BuildRequirements(2, FALSE, FALSE, FALSE);
+        if (Filtered == NULL)
+            return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
+        Irp->IoStatus.Information = (ULONG_PTR)Filtered;
+        return Complete(Irp, STATUS_SUCCESS);
+    }
+
     Record(L"FilterInformationIsList", Current != NULL && Current == Supplied);
     Record(L"FilterReportedMagic", (Current != NULL && Current->AlternativeLists == 1 && Current->List[0].Count == 1)
                                        ? Current->List[0].Descriptors[0].u.DevicePrivate.Data[0] : 0);
@@ -322,6 +335,9 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartConnection", StartedConnection(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartLargeMemory", StartedLargeMemory(Stack->Parameters.StartDevice.AllocatedResources));
+            if (Requested(L"NoRequirements"))
+                Record(Starts == 1 ? L"NoListStartMask" : L"NoListRestartMask",
+                       StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
             /* The child leaves disabling its interface to the PnP manager when it goes */
             if (NT_SUCCESS(Status) && Extension->Interface.Buffer == NULL &&
                 NT_SUCCESS(IoRegisterDeviceInterface(Extension->Pdo, &ChildInterfaceGuid, NULL, &Extension->Interface)))
@@ -613,6 +629,11 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
+            if (Requested(L"NoRequirements"))
+            {
+                Status = STATUS_SUCCESS;
+                break;
+            }
             Requirements = BuildRequirements(1, FALSE, FALSE, FALSE);
             Status = Requirements ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
             if (Requirements != NULL)
