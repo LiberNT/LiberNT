@@ -24,6 +24,7 @@ list(APPEND SOURCE
     LookupAccountSid.c
     MachineGuid.c
     OpenTrace.c
+    PrivilegeNames.c
     QueryServiceConfig2.c
     RegCreateKeyEx.c
     RegCreateKeyTransacted.c
