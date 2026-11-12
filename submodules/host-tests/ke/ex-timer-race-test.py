@@ -292,10 +292,29 @@ static void WakeFollowsTheLastWord(void) {
     CHECK(TheTimer.WakeTimer && !IsListEmpty(&ExpWakeList));
     CHECK(NtCancelTimer(TheHandle, NULL) == STATUS_SUCCESS);
 }
+static void SetEightTimesBeforeExpiry(void) {
+    LARGE_INTEGER Soon = { .QuadPart = -5000 }, Later = { .QuadPart = -5000000 };
+    PKDEFERRED_ROUTINE Routine;
+    PVOID Context;
+    int Setting;
+    Scenario = "set eight times while an expiry is on its way";
+    CreateTimer();
+    CHECK(NtSetTimer(TheHandle, &Soon, FirstRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    Expire(&Routine, &Context);
+    for (Setting = 0; Setting < 8; Setting++)
+        CHECK(NtSetTimer(TheHandle, &Later, SecondRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    /* The one-shot setting that stands is still armed, so the expiry cannot be its own */
+    CHECK(Queued == NULL);
+    Expire(&Routine, &Context);
+    Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    CHECK(Queued == SecondRoutine);
+}
 int main(void) {
     SetThenCancel();
     SetAgainBeforeExpiry();
     WakeFollowsTheLastWord();
+    SetEightTimesBeforeExpiry();
     return 0;
 }
 '''

@@ -28,7 +28,7 @@ KSPIN_LOCK ExpWakeListLock;
 
 #define EXP_TIMER_TAG 'emiT'
 
-/* FIXME: only three bits of the setting count fit beside the timer pointer, so an expiry eight settings old passes for the current one */
+/* FIXME: only three bits of the setting count fit beside the timer pointer, so an expiry eight settings old passes for a periodic setting */
 #define EXP_TIMER_ARMING_MASK 0x7
 
 /*
@@ -145,8 +145,9 @@ ExpTimerDpcRoutine(
 
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
 
-    /* An expiry captured before the timer was set again belongs to the earlier arming */
-    if (Arming != (Timer->SetSequence & EXP_TIMER_ARMING_MASK))
+    /* An expiry captured before the timer was set again, or while a one-shot setting is still armed, is an earlier arming's */
+    if ((Arming != (Timer->SetSequence & EXP_TIMER_ARMING_MASK)) ||
+        ((Timer->Period == 0) && Timer->KeTimer.Header.Inserted))
     {
         KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
         return;
