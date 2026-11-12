@@ -513,21 +513,23 @@ IoReportResourceUsage(
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (DeviceObject != NULL) DeviceNode = IopGetDeviceNode(DeviceObject);
+
+    /* A usage found free is recorded before anyone else can look */
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+
     Status = IopDetectResourceConflict(ResourceList, TRUE, NULL);
     if (Status == STATUS_CONFLICTING_ADDRESSES)
     {
         *ConflictDetected = TRUE;
-
-        if (!OverrideConflict) return STATUS_CONFLICTING_ADDRESSES;
-    }
-    else if (!NT_SUCCESS(Status))
-    {
-        return Status;
+        if (OverrideConflict) Status = STATUS_SUCCESS;
     }
 
-    if (DeviceObject != NULL) DeviceNode = IopGetDeviceNode(DeviceObject);
+    if (NT_SUCCESS(Status)) IopResDbReserve(DeviceNode, ResourceList, NULL);
 
-    IopResDbReserve(DeviceNode, ResourceList, NULL);
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+
+    if (!NT_SUCCESS(Status)) return Status;
 
     return IopUpdateResourceMap(DeviceNode,
                                 L"OtherDrivers",
@@ -628,25 +630,29 @@ IoAssignResources(
 
     if (RequestedResources == NULL) return STATUS_INVALID_PARAMETER;
 
+    /* The settings found free are claimed before anyone else can search */
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+
     Status = IopFixupResourceListWithRequirements(RequestedResources,
                                                   &Assigned,
                                                   NULL);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Status = IoReportResourceUsage(NULL,
-                                   DriverObject,
-                                   NULL,
-                                   0,
-                                   DeviceObject,
-                                   Assigned,
-                                   PnpDetermineResourceListSize(Assigned),
-                                   FALSE,
-                                   &Conflict);
-    if (!NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status))
     {
-        ExFreePool(Assigned);
-        return Status;
+        Status = IoReportResourceUsage(NULL,
+                                       DriverObject,
+                                       NULL,
+                                       0,
+                                       DeviceObject,
+                                       Assigned,
+                                       PnpDetermineResourceListSize(Assigned),
+                                       FALSE,
+                                       &Conflict);
+        if (!NT_SUCCESS(Status) && Assigned != NULL) ExFreePool(Assigned);
     }
+
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+
+    if (!NT_SUCCESS(Status)) return Status;
 
     *AllocatedResources = Assigned;
 

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The resource search starts at an aligned address, refuses a malformed large window and never wraps around
+ * PURPOSE:     The resource search: aligned candidates, valid large windows, no wraparound, distinct concurrent settings
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -63,6 +63,73 @@ DescribeMemory(
     Requirement->u.Memory.MaximumAddress.QuadPart = (LONGLONG)Maximum;
 }
 
+typedef struct _RACE_ASSIGNMENT
+{
+    PKEVENT Go;
+    ULONGLONG Minimum;
+    ULONGLONG Start;
+    NTSTATUS Status;
+} RACE_ASSIGNMENT, *PRACE_ASSIGNMENT;
+
+static
+VOID
+NTAPI
+RaceAssign(
+    _In_ PVOID Context)
+{
+    PRACE_ASSIGNMENT Race = Context;
+    IO_RESOURCE_DESCRIPTOR Requirement;
+
+    KeWaitForSingleObject(Race->Go, Executive, KernelMode, FALSE, NULL);
+    DescribeMemory(&Requirement, Race->Minimum, Race->Minimum + 0x1FFF, 0x1000, 0x1000);
+    Race->Status = Assign(&Requirement, &Race->Start);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* Two assignments asked for at once from a window with room for both never get the same page */
+static
+VOID
+CheckConcurrentAssignments(VOID)
+{
+    RACE_ASSIGNMENT Race[2];
+    PVOID Threads[2];
+    HANDLE Handle;
+    KEVENT Go;
+    ULONG Round, Index, Shared = 0, Failed = 0;
+    NTSTATUS Status;
+
+    for (Round = 0; Round < 32; Round++)
+    {
+        KeInitializeEvent(&Go, NotificationEvent, FALSE);
+        for (Index = 0; Index < 2; Index++)
+        {
+            Race[Index].Go = &Go;
+            Race[Index].Minimum = 0x720000000ULL + Round * 0x10000ULL;
+            Race[Index].Start = 0;
+            Race[Index].Status = STATUS_UNSUCCESSFUL;
+            Threads[Index] = NULL;
+            Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, RaceAssign, &Race[Index]);
+            if (!NT_SUCCESS(Status)) continue;
+            ObReferenceObjectByHandle(Handle, SYNCHRONIZE, *PsThreadType, KernelMode, &Threads[Index], NULL);
+            ZwClose(Handle);
+        }
+
+        KeSetEvent(&Go, IO_NO_INCREMENT, FALSE);
+        for (Index = 0; Index < 2; Index++)
+        {
+            if (Threads[Index] == NULL) continue;
+            KeWaitForSingleObject(Threads[Index], Executive, KernelMode, FALSE, NULL);
+            ObDereferenceObject(Threads[Index]);
+        }
+
+        if (!NT_SUCCESS(Race[0].Status) || !NT_SUCCESS(Race[1].Status)) Failed++;
+        else if (Race[0].Start == Race[1].Start) Shared++;
+    }
+
+    ok_eq_ulong(Failed, 0UL);
+    ok_eq_ulong(Shared, 0UL);
+}
+
 START_TEST(IoResourceSearch)
 {
     IO_RESOURCE_DESCRIPTOR Requirement;
@@ -116,4 +183,6 @@ START_TEST(IoResourceSearch)
     DescribeMemory(&Requirement, TOP_PAGE, MAXULONGLONG, 0x1000, 0x1000);
     Status = Assign(&Requirement, &Start);
     ok(!NT_SUCCESS(Status) || Start >= TOP_PAGE, "the search wrapped around to 0x%I64x\n", Start);
+
+    CheckConcurrentAssignments();
 }

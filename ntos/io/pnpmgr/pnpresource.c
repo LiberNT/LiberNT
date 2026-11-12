@@ -1023,23 +1023,31 @@ IopAssignDeviceResources(
         return STATUS_SUCCESS;
     }
 
+    /* A setting found free stays free until the device holds it: the search and the claim are one step */
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+
     Status = IopFixupResourceListWithRequirements(
         DeviceNode->ResourceRequirements,
         &Assigned,
         DeviceNode);
+    if (NT_SUCCESS(Status) && Assigned != NULL)
+    {
+        Status = IopResDbReserve(DeviceNode, Assigned, &Conflict);
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(Assigned, TAG_IO_RESOURCE);
+            Assigned = NULL;
+        }
+    }
+
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Assigned == NULL)
     {
         PiSetDevNodeFlag(DeviceNode, DNF_NO_RESOURCE_REQUIRED);
         return STATUS_SUCCESS;
-    }
-
-    Status = IopResDbReserve(DeviceNode, Assigned, &Conflict);
-    if (!NT_SUCCESS(Status))
-    {
-        ExFreePoolWithTag(Assigned, TAG_IO_RESOURCE);
-        return Status;
     }
 
     Status = IopSetDeviceResources(DeviceNode, Assigned);
