@@ -3,7 +3,9 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     LoongArch64 UEFI loader runtime support
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *              Copyright 2026 Zhou Ji Yang <yinglanxing@gmail.com>
  */
+
 
 #include <blefi.h>
 #include <stdarg.h>

@@ -3,7 +3,9 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     LoongArch64 OS loader hooks
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *              Copyright 2026 Zhou Ji Yang <yinglanxing@gmail.com>
  */
+
 
 #include "../../winload/winload.h"
 #include "loongarch64.h"

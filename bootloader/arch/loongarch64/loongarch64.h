@@ -2,8 +2,9 @@
  * PROJECT:     LiberNT Boot Loader
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     LoongArch64 loader handoff definitions
- * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ * COPYRIGHT:   Copyright 2026 Zhou Ji Yang <yinglanxing@gmail.com>
  */
+
 
 #pragma once
 
