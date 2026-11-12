@@ -30,6 +30,7 @@ LocateStarted(
     return TRUE;
 }
 
+#if defined(_M_IX86) || defined(_M_AMD64)
 /* IoReportDetectedDevice names the device ROOT\<service>\0000 and gives it DETECTED<interface>\<service> and DETECTED\<service> */
 static
 VOID
@@ -51,6 +52,7 @@ CheckReportedHal(VOID)
     ok(_wcsicmp(Ids + wcslen(Ids) + 1, L"DETECTED\\ACPI_HAL") == 0,
        "second compatible ID %ls\n", Ids + wcslen(Ids) + 1);
 }
+#endif
 
 /* A reported device's driver object name never becomes part of a root device ID */
 static
