@@ -256,7 +256,7 @@ Test_ThreadAffinityMask(void)
 
     ok(Process.AffinityMask == System.ActiveProcessorsAffinityMask,
        "Process affinity %Ix, active processors %Ix\n",
-       Process.AffinityMask, System.ActiveProcessorsAffinityMask);
+       (size_t)Process.AffinityMask, (size_t)System.ActiveProcessorsAffinityMask);
     Original = Thread.AffinityMask;
 
     Mask = ~(KAFFINITY)0;
@@ -265,7 +265,7 @@ Test_ThreadAffinityMask(void)
     Status = NtQueryInformationThread(NtCurrentThread(), ThreadBasicInformation, &Thread, sizeof(Thread), NULL);
     ok_hex(Status, STATUS_SUCCESS);
     ok(Thread.AffinityMask == Process.AffinityMask,
-       "Thread affinity %Ix, process affinity %Ix\n", Thread.AffinityMask, Process.AffinityMask);
+       "Thread affinity %Ix, process affinity %Ix\n", (size_t)Thread.AffinityMask, (size_t)Process.AffinityMask);
 
     Mask = ~System.ActiveProcessorsAffinityMask;
     if (Mask != 0)

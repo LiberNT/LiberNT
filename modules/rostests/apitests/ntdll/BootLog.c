@@ -141,7 +141,7 @@ START_TEST(BootLog)
     Status = NtReadFile(File, NULL, NULL, NULL, &IoStatus, Data, Size, &Offset, NULL);
     NtClose(File);
     ok_ntstatus(Status, STATUS_SUCCESS);
-    ok(IoStatus.Information == Size, "Read %Iu of %lu bytes\n", IoStatus.Information, Size);
+    ok(IoStatus.Information == Size, "Read %Iu of %lu bytes\n", (size_t)IoStatus.Information, Size);
     if (!NT_SUCCESS(Status) || (IoStatus.Information != Size))
     {
         RtlFreeHeap(RtlGetProcessHeap(), 0, Data);

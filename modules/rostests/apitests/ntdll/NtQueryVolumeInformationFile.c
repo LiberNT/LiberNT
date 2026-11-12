@@ -72,7 +72,7 @@ TestFileFsVolumeInformation(HANDLE handle)
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, NULL, 0, FileFsVolumeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     status = NtQueryVolumeInformationFile(handle, NULL, VolumeInfo, 0, FileFsVolumeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
@@ -81,25 +81,25 @@ TestFileFsVolumeInformation(HANDLE handle)
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, (PUCHAR)Buffer + 2, sizeof(FILE_FS_VOLUME_INFORMATION), FileFsVolumeInformation);
     ok(status == STATUS_DATATYPE_MISALIGNMENT, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, VolumeInfo, 0, FileFsVolumeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, VolumeInfo, FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel), FileFsVolumeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, VolumeInfo, sizeof(FILE_FS_VOLUME_INFORMATION) - 1, FileFsVolumeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
@@ -111,16 +111,16 @@ TestFileFsVolumeInformation(HANDLE handle)
         ok(VolumeInfo->VolumeLabelLength <= sizeof(FILE_FS_VOLUME_INFORMATION) - FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel),
            "VolumeInfo->VolumeLabelLength = %lu\n", VolumeInfo->VolumeLabelLength);
         ok(IoStatusBlock.Information >= FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel),
-           "IoStatusBlock.Information = %Iu, expected >=%lu\n", IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel));
+           "IoStatusBlock.Information = %Iu, expected >=%lu\n", (size_t)IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel));
         ok(IoStatusBlock.Information <= sizeof(FILE_FS_VOLUME_INFORMATION),
-           "IoStatusBlock.Information = %Iu, expected <=%lu\n", IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_VOLUME_INFORMATION));
+           "IoStatusBlock.Information = %Iu, expected <=%lu\n", (size_t)IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_VOLUME_INFORMATION));
     }
     else
     {
         ok(VolumeInfo->VolumeLabelLength > sizeof(FILE_FS_VOLUME_INFORMATION) - FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel),
            "VolumeInfo->VolumeLabelLength = %lu\n", VolumeInfo->VolumeLabelLength);
         ok(IoStatusBlock.Information == sizeof(FILE_FS_VOLUME_INFORMATION),
-           "IoStatusBlock.Information = %Iu, expected %lu\n", IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_VOLUME_INFORMATION));
+           "IoStatusBlock.Information = %Iu, expected %lu\n", (size_t)IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_VOLUME_INFORMATION));
     }
     ok(VolumeInfo->VolumeLabel[VolumeInfo->VolumeLabelLength / sizeof(WCHAR)] == 0x5555,
        "Got %x\n", VolumeInfo->VolumeLabel[VolumeInfo->VolumeLabelLength / sizeof(WCHAR)]);
@@ -131,7 +131,7 @@ TestFileFsVolumeInformation(HANDLE handle)
     ok(status == STATUS_SUCCESS, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == STATUS_SUCCESS, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
     ok(IoStatusBlock.Information == FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel) + VolumeInfo->VolumeLabelLength,
-       "IoStatusBlock.Information = %Iu, expected %lu+%lu\n", IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel), VolumeInfo->VolumeLabelLength);
+       "IoStatusBlock.Information = %Iu, expected %lu+%lu\n", (size_t)IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel), VolumeInfo->VolumeLabelLength);
     ok(VolumeInfo->VolumeCreationTime.QuadPart != 0x5555555555555555, "VolumeInfo->VolumeCreationTime = %I64d\n", VolumeInfo->VolumeCreationTime.QuadPart);
     ok(VolumeInfo->VolumeSerialNumber != 0x55555555, "VolumeInfo->VolumeSerialNumber = %lu\n", VolumeInfo->VolumeSerialNumber);
     ok(VolumeInfo->SupportsObjects == FALSE || VolumeInfo->SupportsObjects == TRUE, "VolumeInfo->SupportsObjects = %u\n", VolumeInfo->SupportsObjects);
@@ -159,7 +159,7 @@ TestFileFsAttributeInformation(HANDLE handle)
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, NULL, 0, FileFsAttributeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     status = NtQueryVolumeInformationFile(handle, NULL, AttributeInfo, 0, FileFsAttributeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
@@ -168,25 +168,25 @@ TestFileFsAttributeInformation(HANDLE handle)
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, (PUCHAR)Buffer + 2, sizeof(FILE_FS_ATTRIBUTE_INFORMATION), FileFsAttributeInformation);
     ok(status == STATUS_DATATYPE_MISALIGNMENT, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, AttributeInfo, 0, FileFsAttributeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, AttributeInfo, FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName), FileFsAttributeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
     status = NtQueryVolumeInformationFile(handle, &IoStatusBlock, AttributeInfo, sizeof(FILE_FS_ATTRIBUTE_INFORMATION) - 1, FileFsAttributeInformation);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == 0x55555555, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
-    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", IoStatusBlock.Information);
+    ok(IoStatusBlock.Information == (ULONG_PTR)0x5555555555555555, "IoStatusBlock.Information = %Iu\n", (size_t)IoStatusBlock.Information);
 
     RtlFillMemory(Buffer, sizeof(Buffer), 0x55);
     RtlFillMemory(&IoStatusBlock, sizeof(IoStatusBlock), 0x55);
@@ -196,7 +196,7 @@ TestFileFsAttributeInformation(HANDLE handle)
     ok(AttributeInfo->FileSystemNameLength == sizeof(FILE_FS_ATTRIBUTE_INFORMATION) - FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName),
        "AttributeInfo->FileSystemNameLength = %lu\n", AttributeInfo->FileSystemNameLength);
     ok(IoStatusBlock.Information == sizeof(FILE_FS_ATTRIBUTE_INFORMATION),
-       "IoStatusBlock.Information = %Iu, expected %lu\n", IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
+       "IoStatusBlock.Information = %Iu, expected %lu\n", (size_t)IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
     ok(AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)] == 0x5555,
        "Got %x\n", AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)]);
 
@@ -208,7 +208,7 @@ TestFileFsAttributeInformation(HANDLE handle)
     ok(AttributeInfo->FileSystemNameLength == sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + 1 - FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName),
        "AttributeInfo->FileSystemNameLength = %lu\n", AttributeInfo->FileSystemNameLength);
     ok(IoStatusBlock.Information == sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + 1,
-       "IoStatusBlock.Information = %Iu, expected %lu\n", IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
+       "IoStatusBlock.Information = %Iu, expected %lu\n", (size_t)IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
     ok((AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)] & 0xff00) == 0x5500,
        "Got %x\n", AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)]);
     ok(AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR) + 1] == 0x5555,
@@ -224,7 +224,7 @@ TestFileFsAttributeInformation(HANDLE handle)
         ok(AttributeInfo->FileSystemNameLength == sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + sizeof(WCHAR) - FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName),
            "AttributeInfo->FileSystemNameLength = %lu\n", AttributeInfo->FileSystemNameLength);
         ok(IoStatusBlock.Information == sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + sizeof(WCHAR),
-           "IoStatusBlock.Information = %Iu, expected %lu\n", IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
+           "IoStatusBlock.Information = %Iu, expected %lu\n", (size_t)IoStatusBlock.Information, (ULONG)sizeof(FILE_FS_ATTRIBUTE_INFORMATION));
         ok(AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)] == 0x5555,
            "Got %x\n", AttributeInfo->FileSystemName[AttributeInfo->FileSystemNameLength / sizeof(WCHAR)]);
     }
@@ -235,7 +235,7 @@ TestFileFsAttributeInformation(HANDLE handle)
     ok(status == STATUS_SUCCESS, "Got status 0x%lx\n", status);
     ok(IoStatusBlock.Status == STATUS_SUCCESS, "IoStatusBlock.Status = 0x%lx\n", IoStatusBlock.Status);
     ok(IoStatusBlock.Information == FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName) + AttributeInfo->FileSystemNameLength,
-       "IoStatusBlock.Information = %Iu, expected %lu+%lu\n", IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName), AttributeInfo->FileSystemNameLength);
+       "IoStatusBlock.Information = %Iu, expected %lu+%lu\n", (size_t)IoStatusBlock.Information, (ULONG)FIELD_OFFSET(FILE_FS_ATTRIBUTE_INFORMATION, FileSystemName), AttributeInfo->FileSystemNameLength);
     ok(AttributeInfo->FileSystemAttributes != 0x55555555, "AttributeInfo->FileSystemAttributes = 0x%lx\n", AttributeInfo->FileSystemAttributes);
     ok(AttributeInfo->MaximumComponentNameLength != 0x55555555, "AttributeInfo->MaximumComponentNameLength = 0x%lx\n", AttributeInfo->MaximumComponentNameLength);
     ok(AttributeInfo->FileSystemNameLength % sizeof(WCHAR) == 0, "AttributeInfo->FileSystemNameLength = %lu\n", AttributeInfo->FileSystemNameLength);

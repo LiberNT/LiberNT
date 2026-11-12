@@ -46,7 +46,7 @@ ServerThread(
 
     ok(Message.Header.u1.s1.TotalLength == RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message),
        "TotalLength = %u, expected %Iu\n",
-       Message.Header.u1.s1.TotalLength, RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
+       Message.Header.u1.s1.TotalLength, (size_t)RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
     ok(Message.Header.u1.s1.DataLength == sizeof(TEST_CONNECTION_INFO),
        "DataLength = %u\n", Message.Header.u1.s1.DataLength);
     ok(Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST,
@@ -77,7 +77,7 @@ ServerThread(
 
     ok(Message.Header.u1.s1.TotalLength == RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message),
        "TotalLength = %u, expected %Iu\n",
-       Message.Header.u1.s1.TotalLength, RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
+       Message.Header.u1.s1.TotalLength, (size_t)RTL_SIZEOF_THROUGH_FIELD(TEST_MESSAGE, Message));
     ok(Message.Header.u1.s1.DataLength == sizeof(TEST_CONNECTION_INFO),
        "DataLength = %u\n", Message.Header.u1.s1.DataLength);
     ok(Message.Header.u2.s2.Type == LPC_CONNECTION_REQUEST,

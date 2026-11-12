@@ -69,7 +69,7 @@ TestCopyFunction(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
                         if (DataFailures <= 4)
                         {
                             trace("%s mismatch: dst=%lu src=%lu length=%Iu index=%lu expected=%02x actual=%02x\n",
-                                  Name, Destination, Source, Length, Index,
+                                  Name, Destination, Source, (size_t)Length, Index,
                                   Expected[Index], Actual[Index]);
                         }
                         break;
@@ -139,7 +139,7 @@ TestLargeCopy(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
         }
 
         Result = Function(Target, Origin, Length);
-        ok(Result == Target, "%s case %Iu returned %p instead of %p\n", Name, CaseIndex, Result, Target);
+        ok(Result == Target, "%s case %Iu returned %p instead of %p\n", Name, (size_t)CaseIndex, Result, Target);
         for (Index = 0; Index < Length; ++Index)
         {
             UCHAR Want = Cases[CaseIndex].Overlap ? Copy[Source + Index] : Buffer[Source + Index];
@@ -150,12 +150,12 @@ TestLargeCopy(const char *Name, PMEMMOVE Function, BOOL AllowOverlap)
                 break;
             }
         }
-        ok(Mismatch == (SIZE_T)-1, "%s case %Iu differs at byte %Iu\n", Name, CaseIndex, Mismatch);
+        ok(Mismatch == (SIZE_T)-1, "%s case %Iu differs at byte %Iu\n", Name, (size_t)CaseIndex, (size_t)Mismatch);
         if (!Cases[CaseIndex].Overlap)
         {
             ok(Destination == 0 || Copy[Destination - 1] == 0xCC, "%s case %Iu wrote before the destination\n", Name,
-               CaseIndex);
-            ok(Copy[Destination + Length] == 0xCC, "%s case %Iu wrote past the destination\n", Name, CaseIndex);
+               (size_t)CaseIndex);
+            ok(Copy[Destination + Length] == 0xCC, "%s case %Iu wrote past the destination\n", Name, (size_t)CaseIndex);
         }
     }
 

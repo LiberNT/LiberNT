@@ -25,7 +25,7 @@ START_TEST(MemoryAccounting)
     if (NT_SUCCESS(Status))
     {
         ok(Cache.CurrentSize % Basic.PageSize == 0,
-           "cache CurrentSize is not page-aligned bytes: %Iu\n", Cache.CurrentSize);
+           "cache CurrentSize is not page-aligned bytes: %Iu\n", (size_t)Cache.CurrentSize);
         ok(Cache.PeakSize >= Cache.CurrentSize, "cache peak smaller than current\n");
         ok(Cache.CurrentSize / Basic.PageSize <= Cache.CurrentSizeIncludingTransitionInPages,
            "cache byte count exceeds including-transition page count\n");
@@ -61,7 +61,7 @@ START_TEST(MemoryAccounting)
     if (NT_SUCCESS(Status))
         ok((LONGLONG)Committed.CommittedPages - Before.CommittedPages >= (LONGLONG)Pages / 2,
            "system commit did not reflect untouched allocation: %lu -> %lu (expected ~%Iu pages)\n",
-           Before.CommittedPages, Committed.CommittedPages, Pages);
+           Before.CommittedPages, Committed.CommittedPages, (size_t)Pages);
 
     Size = 0;
     Status = NtFreeVirtualMemory(NtCurrentProcess(), &Base, &Size, MEM_RELEASE);

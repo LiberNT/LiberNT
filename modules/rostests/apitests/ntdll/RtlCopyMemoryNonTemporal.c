@@ -27,10 +27,10 @@ CheckCopies(
         Length = Lengths[Index];
         RtlFillMemory(Destination, sizeof(Destination), 0xcc);
         pCopy(Destination + 3, Source + 5, Length);
-        ok(RtlCompareMemory(Destination + 3, Source + 5, Length) == Length, "%s: %Iu bytes not copied\n", Name, Length);
+        ok(RtlCompareMemory(Destination + 3, Source + 5, Length) == Length, "%s: %Iu bytes not copied\n", Name, (size_t)Length);
         ok(Destination[0] == 0xcc && Destination[1] == 0xcc && Destination[2] == 0xcc,
-           "%s: %Iu bytes wrote before the destination\n", Name, Length);
-        ok(Destination[3 + Length] == 0xcc, "%s: %Iu bytes wrote past the destination\n", Name, Length);
+           "%s: %Iu bytes wrote before the destination\n", Name, (size_t)Length);
+        ok(Destination[3 + Length] == 0xcc, "%s: %Iu bytes wrote past the destination\n", Name, (size_t)Length);
     }
 }
 

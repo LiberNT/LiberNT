@@ -144,9 +144,9 @@ START_TEST(ProcessPoolQuota)
         ok(Held.NonPagedPoolUsage + Held.PagedPoolUsage > Baseline.NonPagedPoolUsage + Baseline.PagedPoolUsage,
            "Creating %u events charged no pool quota\n", QUOTA_THREADS * QUOTA_EVENTS);
         ok(Held.PeakNonPagedPoolUsage >= Held.NonPagedPoolUsage, "Non-paged peak %Iu below usage %Iu\n",
-           Held.PeakNonPagedPoolUsage, Held.NonPagedPoolUsage);
+           (size_t)Held.PeakNonPagedPoolUsage, (size_t)Held.NonPagedPoolUsage);
         ok(Held.PeakPagedPoolUsage >= Held.PagedPoolUsage, "Paged peak %Iu below usage %Iu\n",
-           Held.PeakPagedPoolUsage, Held.PagedPoolUsage);
+           (size_t)Held.PeakPagedPoolUsage, (size_t)Held.PagedPoolUsage);
     }
 
     SetEvent(Close);
@@ -159,15 +159,15 @@ START_TEST(ProcessPoolQuota)
         {
             ok(After.NonPagedPoolUsage == Baseline.NonPagedPoolUsage,
                "Non-paged quota usage %Iu after closing, baseline %Iu\n",
-               After.NonPagedPoolUsage, Baseline.NonPagedPoolUsage);
+               (size_t)After.NonPagedPoolUsage, (size_t)Baseline.NonPagedPoolUsage);
             ok(After.PagedPoolUsage == Baseline.PagedPoolUsage,
                "Paged quota usage %Iu after closing, baseline %Iu\n",
-               After.PagedPoolUsage, Baseline.PagedPoolUsage);
+               (size_t)After.PagedPoolUsage, (size_t)Baseline.PagedPoolUsage);
         }
         else
         {
             trace("The quota block is shared (usage %Iu), exact balance not checked\n",
-                  Baseline.NonPagedPoolUsage + Baseline.PagedPoolUsage);
+                  (size_t)(Baseline.NonPagedPoolUsage + Baseline.PagedPoolUsage));
         }
     }
 
