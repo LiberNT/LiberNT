@@ -806,6 +806,19 @@ CmpSetSystemValues(
         }
     }
 
+    if (LoaderBlock->ArcHalDeviceName != NULL)
+    {
+        RtlInitAnsiString(&Narrow, LoaderBlock->ArcHalDeviceName);
+
+        if (NT_SUCCESS(RtlAnsiStringToUnicodeString(&BootDevice,
+                                                    &Narrow,
+                                                    TRUE)))
+        {
+            CmpWriteStringValue(KeyHandle, L"FirmwareBootDevice", &BootDevice);
+            RtlFreeUnicodeString(&BootDevice);
+        }
+    }
+
     ZwClose(KeyHandle);
 }
 

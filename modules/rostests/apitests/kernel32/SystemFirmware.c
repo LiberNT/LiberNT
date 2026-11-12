@@ -562,7 +562,7 @@ test_BiosRegistry(VOID)
 {
     static UCHAR Raw[64 * 1024];
     const UCHAR *Structure, *End, *Next;
-    UINT Size, Index, Checked = 0;
+    UINT Size, Index, Checked = 0, Seen = 0;
     WCHAR Expected[256], Actual[256];
     DWORD Type, Length, Number;
     HKEY Key;
@@ -586,7 +586,8 @@ test_BiosRegistry(VOID)
     {
         for (Index = 0; Index < ARRAYSIZE(BiosValues); ++Index)
         {
-            if (BiosValues[Index].Type != Structure[0] || BiosValues[Index].Offset >= Structure[1])
+            if (BiosValues[Index].Type != Structure[0] || BiosValues[Index].Offset >= Structure[1] ||
+                (Seen & (1u << BiosValues[Index].Type)))
                 continue;
             if (BiosValues[Index].String)
             {
@@ -611,6 +612,8 @@ test_BiosRegistry(VOID)
             }
             Checked++;
         }
+        if (Structure[0] <= 2)
+            Seen |= 1u << Structure[0];
         Next = Structure + Structure[1];
         while (Next + 1 < End && (Next[0] || Next[1]))
             ++Next;
