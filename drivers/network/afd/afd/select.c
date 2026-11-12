@@ -168,6 +168,7 @@ AfdReleasePollRequest(PIRP Irp, PAFD_POLL_INFO PollReq)
     if (!Request32)
         return;
 
+    Request32->HandleCount = PollReq->HandleCount;
     for (i = 0; i < PollReq->HandleCount; i++)
     {
         Request32->Handles[i].Events = PollReq->Handles[i].Events;
@@ -273,6 +274,11 @@ BOOLEAN SignalSocket(PAFD_ACTIVE_POLL Poll OPTIONAL, PIRP _Irp OPTIONAL, PAFD_PO
               PollReq->Handles[i].Status));
     }
     UnlockHandles( AFD_HANDLES(Irp), PollReq->HandleCount );
+    if (Status == STATUS_TIMEOUT)
+    {
+        PollReq->HandleCount = 0;
+        Irp->IoStatus.Information = FIELD_OFFSET(AFD_POLL_INFO, Handles);
+    }
     AfdReleasePollRequest( Irp, PollReq );
     if( Irp->MdlAddress ) UnlockRequest( Irp, IoGetCurrentIrpStackLocation( Irp ) );
     AFD_DbgPrint(MID_TRACE,("Completing\n"));
