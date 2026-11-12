@@ -1640,12 +1640,10 @@ KsecGetRsaOid(
     _Out_ PCSYMCRYPT_OID *Oids,
     _Out_ SIZE_T *OidCount)
 {
+    *Oids = NULL;
+    *OidCount = 0;
     if (HashName == NULL)
-    {
-        *Oids = NULL;
-        *OidCount = 0;
         return STATUS_SUCCESS;
-    }
     if (KsecEqualWideString(HashName, BCRYPT_SHA256_ALGORITHM))
         *Oids = SymCryptSha256OidList;
     else if (KsecEqualWideString(HashName, BCRYPT_SHA384_ALGORITHM))
