@@ -4,6 +4,7 @@ list(APPEND SOURCE
     AddMandatoryAce.c
     ControlServiceEx.c
     CopySid.c
+    CreateProcessWithToken.c
     CreateService.c
     CryptCreateHash.c
     DuplicateTokenEx.c

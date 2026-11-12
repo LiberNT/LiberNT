@@ -23,6 +23,7 @@ list(APPEND SOURCE
     misc/logon.c
     misc/msi.c
     misc/perflib.c
+    misc/seclogon.c
     misc/shutdown.c
     misc/sysfunc.c
     misc/unicode.c

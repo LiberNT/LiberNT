@@ -52,6 +52,81 @@ StopRpcServer(VOID)
 }
 
 
+/* A token handed over by the caller is used only for a caller that may impersonate (CreateProcessWithTokenW) */
+static
+BOOL
+SeclTakeCallerToken(
+    _In_ handle_t hBinding,
+    _In_ SECL_REQUEST *pRequest,
+    _Out_ PHANDLE phToken)
+{
+    PRIVILEGE_SET Privilege;
+    HANDLE hClientToken = NULL;
+    HANDLE hCallerProcess = NULL;
+    HANDLE hCallerToken = NULL;
+    BOOL bHeld = FALSE;
+    BOOL bTaken = FALSE;
+    DWORD dwError = ERROR_PRIVILEGE_NOT_HELD;
+    BOOL bResult;
+
+    *phToken = NULL;
+
+    Privilege.PrivilegeCount = 1;
+    Privilege.Control = PRIVILEGE_SET_ALL_NECESSARY;
+    Privilege.Privilege[0].Attributes = 0;
+    if (!LookupPrivilegeValueW(NULL, SE_IMPERSONATE_NAME, &Privilege.Privilege[0].Luid))
+        return FALSE;
+
+    if (RpcImpersonateClient(hBinding) != RPC_S_OK)
+    {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+
+    if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hClientToken))
+    {
+        if (!PrivilegeCheck(hClientToken, &Privilege, &bHeld))
+            bHeld = FALSE;
+        CloseHandle(hClientToken);
+    }
+
+    /* The handle is taken as the caller, so it comes only from a process the caller could take it from itself */
+    if (bHeld)
+    {
+        hCallerProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, pRequest->dwProcessId);
+        bTaken = hCallerProcess != NULL &&
+                 DuplicateHandle(hCallerProcess,
+                                 (HANDLE)pRequest->hToken,
+                                 GetCurrentProcess(),
+                                 &hCallerToken,
+                                 0,
+                                 FALSE,
+                                 DUPLICATE_SAME_ACCESS);
+        dwError = GetLastError();
+        if (hCallerProcess != NULL)
+            CloseHandle(hCallerProcess);
+    }
+
+    RpcRevertToSelf();
+
+    if (!bTaken)
+    {
+        SetLastError(dwError);
+        return FALSE;
+    }
+
+    bResult = DuplicateTokenEx(hCallerToken,
+                               MAXIMUM_ALLOWED,
+                               NULL,
+                               SecurityImpersonation,
+                               TokenPrimary,
+                               phToken);
+    CloseHandle(hCallerToken);
+
+    return bResult;
+}
+
+
 VOID
 __stdcall
 SeclCreateProcessWithLogonW(
@@ -60,9 +135,11 @@ SeclCreateProcessWithLogonW(
     _Out_ SECL_RESPONSE *pResponse)
 {
     STARTUPINFOW StartupInfo;
-    PROCESS_INFORMATION ProcessInfo;
+    PROCESS_INFORMATION ProcessInfo = {0};
 
     PROFILEINFOW ProfileInfo;
+    PVOID pEnvironment = NULL;
+    DWORD dwCreationFlags;
     HANDLE hToken = NULL;
     HANDLE hTargetProcessHandle = NULL;
     DWORD SessionId;
@@ -98,12 +175,21 @@ SeclCreateProcessWithLogonW(
     ZeroMemory(&ProfileInfo, sizeof(ProfileInfo));
 
     /* Logon */
-    rc = LogonUser(pRequest->Username,
-                   pRequest->Domain,
-                   pRequest->Password,
-                   LOGON32_LOGON_INTERACTIVE,
-                   LOGON32_PROVIDER_DEFAULT,
-                   &hToken);
+    if (pRequest->hToken != 0)
+    {
+        rc = SeclTakeCallerToken(hBinding,
+                                 pRequest,
+                                 &hToken);
+    }
+    else
+    {
+        rc = LogonUser(pRequest->Username,
+                       pRequest->Domain,
+                       pRequest->Password,
+                       LOGON32_LOGON_INTERACTIVE,
+                       LOGON32_PROVIDER_DEFAULT,
+                       &hToken);
+    }
     if (rc == FALSE)
     {
         dwError = GetLastError();
@@ -138,24 +224,35 @@ SeclCreateProcessWithLogonW(
     /* Initialize the startup information */
     ZeroMemory(&StartupInfo, sizeof(StartupInfo));
     StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.lpDesktop = pRequest->Desktop;
 
-    /* FIXME: Get startup info from the caller */
+    /* FIXME: Get the rest of the startup info from the caller */
+    /* TODO: give the user access to the window station and desktop the process is started on */
 
-    /* Initialize the process information */
-    ZeroMemory(&ProcessInfo, sizeof(ProcessInfo));
+    /* Without an environment of its own, the process gets the one made from the user's profile */
+    dwCreationFlags = pRequest->dwCreationFlags;
+    rc = TRUE;
+    if (pRequest->Environment == NULL)
+    {
+        rc = CreateEnvironmentBlock(&pEnvironment, hToken, FALSE);
+        dwCreationFlags |= CREATE_UNICODE_ENVIRONMENT;
+    }
 
     /* Create Process */
-    rc = CreateProcessAsUserW(hToken,
-                              pRequest->ApplicationName,
-                              pRequest->CommandLine,
-                              NULL,  // lpProcessAttributes,
-                              NULL,  // lpThreadAttributes,
-                              FALSE, // bInheritHandles,
-                              pRequest->dwCreationFlags,
-                              pRequest->Environment,  // lpEnvironment,
-                              pRequest->CurrentDirectory,
-                              &StartupInfo,
-                              &ProcessInfo);
+    if (rc)
+    {
+        rc = CreateProcessAsUserW(hToken,
+                                  pRequest->ApplicationName,
+                                  pRequest->CommandLine,
+                                  NULL,  // lpProcessAttributes,
+                                  NULL,  // lpThreadAttributes,
+                                  FALSE, // bInheritHandles,
+                                  dwCreationFlags,
+                                  pEnvironment ? pEnvironment : pRequest->Environment,
+                                  pRequest->CurrentDirectory,
+                                  &StartupInfo,
+                                  &ProcessInfo);
+    }
     if (rc == FALSE)
     {
         dwError = GetLastError();
@@ -187,6 +284,9 @@ SeclCreateProcessWithLogonW(
     }
 
 done:
+    if (pEnvironment != NULL)
+        DestroyEnvironmentBlock(pEnvironment);
+
     if (hTargetProcessHandle)
         CloseHandle(hTargetProcessHandle);
 

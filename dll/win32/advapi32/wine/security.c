@@ -2789,6 +2789,7 @@ BOOL WINAPI CreateProcessWithLogonW( LPCWSTR user_name, LPCWSTR domain, LPCWSTR 
     return FALSE;
 }
 
+#ifndef __REACTOS__
 /******************************************************************************
  * CreateProcessWithTokenW [ADVAPI32.@]
  */
@@ -2805,6 +2806,7 @@ BOOL WINAPI CreateProcessWithTokenW(HANDLE token, DWORD logon_flags, LPCWSTR app
     return CreateProcessAsUserW( token, application_name, command_line, NULL, NULL, FALSE, creation_flags,
                                  environment, current_directory, startup_info, process_information );
 }
+#endif /* __REACTOS__ */
 
 /******************************************************************************
  * GetNamedSecurityInfoA [ADVAPI32.@]
