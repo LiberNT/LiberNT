@@ -223,29 +223,49 @@ IopRangeFits(
     return (Start + (Length - 1) <= Maximum);
 }
 
-/* The first start at or above Minimum that the alignment allows, if its range fits below Maximum */
 static
 BOOLEAN
-IopFirstAlignedStart(
+IopLastAlignedStart(
     _In_ ULONGLONG Minimum,
     _In_ ULONGLONG Alignment,
     _In_ ULONGLONG Length,
     _In_ ULONGLONG Maximum,
     _Out_ PULONGLONG Start)
 {
-    ULONGLONG Remainder;
+    ULONGLONG Last;
 
     if (Alignment == 0) Alignment = 1;
 
-    Remainder = Minimum % Alignment;
-    if (Remainder != 0)
+    if (Length == 0)
     {
-        if (Minimum > MAXULONGLONG - (Alignment - Remainder)) return FALSE;
-        Minimum += Alignment - Remainder;
+        Last = Maximum;
+    }
+    else
+    {
+        if (Maximum < Length - 1) return FALSE;
+        Last = Maximum - (Length - 1);
     }
 
-    *Start = Minimum;
-    return IopRangeFits(Minimum, Length, Maximum);
+    Last -= Last % Alignment;
+    if (Last < Minimum || !IopRangeFits(Last, Length, Maximum)) return FALSE;
+
+    *Start = Last;
+    return TRUE;
+}
+
+static
+BOOLEAN
+IopPreviousAlignedStart(
+    _In_ ULONGLONG Minimum,
+    _In_ ULONGLONG Alignment,
+    _Inout_ PULONGLONG Start)
+{
+    if (Alignment == 0) Alignment = 1;
+    if (*Start < Alignment || *Start - Alignment < Minimum) return FALSE;
+
+    *Start -= Alignment;
+    ASSERT((*Start % Alignment) == 0);
+    return TRUE;
 }
 
 static
@@ -269,11 +289,11 @@ IopDescribeFromRequirement(
     switch (Requirement->Type)
     {
         case CmResourceTypePort:
-            if (!IopFirstAlignedStart((ULONGLONG)Requirement->u.Port.MinimumAddress.QuadPart,
-                                      Requirement->u.Port.Alignment,
-                                      Requirement->u.Port.Length,
-                                      (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart,
-                                      &Start))
+            if (!IopLastAlignedStart((ULONGLONG)Requirement->u.Port.MinimumAddress.QuadPart,
+                                     Requirement->u.Port.Alignment,
+                                     Requirement->u.Port.Length,
+                                     (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart,
+                                     &Start))
             {
                 return STATUS_CONFLICTING_ADDRESSES;
             }
@@ -282,11 +302,11 @@ IopDescribeFromRequirement(
             break;
 
         case CmResourceTypeMemory:
-            if (!IopFirstAlignedStart((ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart,
-                                      Requirement->u.Memory.Alignment,
-                                      Requirement->u.Memory.Length,
-                                      (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart,
-                                      &Start))
+            if (!IopLastAlignedStart((ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart,
+                                     Requirement->u.Memory.Alignment,
+                                     Requirement->u.Memory.Length,
+                                     (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart,
+                                     &Start))
             {
                 return STATUS_CONFLICTING_ADDRESSES;
             }
@@ -298,7 +318,7 @@ IopDescribeFromRequirement(
         case CmResourceTypeMemoryLarge:
             Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum);
             if (Length == 0) return STATUS_INVALID_PARAMETER;
-            if (!IopFirstAlignedStart(Minimum, Alignment, Length, Maximum, &Start)) return STATUS_CONFLICTING_ADDRESSES;
+            if (!IopLastAlignedStart(Minimum, Alignment, Length, Maximum, &Start)) return STATUS_CONFLICTING_ADDRESSES;
             if (!NT_SUCCESS(RtlCmEncodeMemIoResource(Descriptor, CmResourceTypeMemoryLarge, Length, Start)))
                 return STATUS_INVALID_PARAMETER;
             break;
@@ -358,6 +378,7 @@ IopAdvanceCandidate(
     _Inout_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     ULONGLONG Alignment;
+    ULONGLONG Minimum;
     ULONGLONG Maximum;
     ULONGLONG Length;
     ULONGLONG Next;
@@ -365,25 +386,18 @@ IopAdvanceCandidate(
     switch (Requirement->Type)
     {
         case CmResourceTypeMemoryLarge:
-            Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, NULL, &Maximum);
-            if (Alignment == 0) Alignment = 1;
-
-            if ((ULONGLONG)Descriptor->u.Memory.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
-            Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Alignment;
-
-            if (Length == 0 || !IopRangeFits(Next, Length, Maximum)) return FALSE;
+            Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum);
+            Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart;
+            if (Length == 0 || !IopPreviousAlignedStart(Minimum, Alignment, &Next)) return FALSE;
 
             Descriptor->u.Memory.Start.QuadPart = (LONGLONG)Next;
             return TRUE;
 
         case CmResourceTypePort:
-            Alignment = Requirement->u.Port.Alignment;
-            if (Alignment == 0) Alignment = 1;
-
-            if ((ULONGLONG)Descriptor->u.Port.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
-            Next = (ULONGLONG)Descriptor->u.Port.Start.QuadPart + Alignment;
-
-            if (!IopRangeFits(Next, Requirement->u.Port.Length, (ULONGLONG)Requirement->u.Port.MaximumAddress.QuadPart))
+            Next = (ULONGLONG)Descriptor->u.Port.Start.QuadPart;
+            if (!IopPreviousAlignedStart((ULONGLONG)Requirement->u.Port.MinimumAddress.QuadPart,
+                                         Requirement->u.Port.Alignment,
+                                         &Next))
             {
                 return FALSE;
             }
@@ -392,13 +406,10 @@ IopAdvanceCandidate(
             return TRUE;
 
         case CmResourceTypeMemory:
-            Alignment = Requirement->u.Memory.Alignment;
-            if (Alignment == 0) Alignment = 1;
-
-            if ((ULONGLONG)Descriptor->u.Memory.Start.QuadPart > MAXULONGLONG - Alignment) return FALSE;
-            Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart + Alignment;
-
-            if (!IopRangeFits(Next, Requirement->u.Memory.Length, (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart))
+            Next = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart;
+            if (!IopPreviousAlignedStart((ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart,
+                                         Requirement->u.Memory.Alignment,
+                                         &Next))
             {
                 return FALSE;
             }

@@ -822,15 +822,15 @@ static VOID RestartChild(DEVINST Bus)
 }
 
 /* A memory window of 4 GB or more is assigned whole, with its scaled length (CM_RESOURCE_MEMORY_LARGE): here
- * 8 GB at its 64 GB minimum */
+ * 8 GB at the top of its 64 to 256 GB range */
 static VOID CheckLargeMemory(DEVINST Bus)
 {
     DWORD Value = 0;
 
     SetRequest(L"LargeMemory", 1);
     RestartChild(Bus);
-    ok(ReadValue(L"StartLargeMemory", &Value) && Value == (8 | (64 << 16)),
-       "The child got no 8 GB window at 64 GB (0x%lx)\n", Value);
+    ok(ReadValue(L"StartLargeMemory", &Value) && Value == (8 | (248 << 16)),
+       "The child got no 8 GB window at 248 GB (0x%lx)\n", Value);
 
     SetRequest(L"LargeMemory", 0);
     RestartChild(Bus);

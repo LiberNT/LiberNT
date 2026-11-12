@@ -118,6 +118,54 @@ CheckDescriptorsOfOneList(VOID)
     ExFreePoolWithTag(List, 'sRmK');
 }
 
+#define TIGHT_WINDOW 0x750000000ULL
+#define TIGHT_WINDOW_LENGTH 0x1010000ULL
+
+static
+VOID
+CheckTightWindow(VOID)
+{
+    static const ULONG Lengths[2] = { 0x8000, 0x1000000 };
+    PIO_RESOURCE_REQUIREMENTS_LIST List;
+    PCM_RESOURCE_LIST Allocated = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    ULONGLONG Start[2] = { 0, 0 };
+    ULONG Size, Index;
+    NTSTATUS Status;
+
+    Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + sizeof(IO_RESOURCE_DESCRIPTOR);
+    List = ExAllocatePoolZero(PagedPool, Size, 'sRmK');
+    ok(List != NULL, "no memory for the requirements\n");
+    if (List == NULL) return;
+
+    List->ListSize = Size;
+    List->InterfaceType = Internal;
+    List->AlternativeLists = 1;
+    List->List[0].Version = 1;
+    List->List[0].Revision = 1;
+    List->List[0].Count = 2;
+    for (Index = 0; Index < 2; Index++)
+    {
+        DescribeMemory(&List->List[0].Descriptors[Index], TIGHT_WINDOW, TIGHT_WINDOW + TIGHT_WINDOW_LENGTH - 1,
+                       Lengths[Index], Lengths[Index]);
+    }
+
+    Status = IoAssignResources(&RegistryPath, NULL, KmtDriverObject, NULL, List, &Allocated);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status) && Allocated != NULL)
+    {
+        ok_eq_ulong(Allocated->List[0].PartialResourceList.Count, 2UL);
+        Partial = Allocated->List[0].PartialResourceList.PartialDescriptors;
+        for (Index = 0; Index < 2 && Index < Allocated->List[0].PartialResourceList.Count; Index++)
+            RtlCmDecodeMemIoResource(&Partial[Index], &Start[Index]);
+        ok_eq_hex64(Start[0], TIGHT_WINDOW + TIGHT_WINDOW_LENGTH - 0x8000);
+        ok_eq_hex64(Start[1], TIGHT_WINDOW);
+        ExFreePool(Allocated);
+    }
+
+    ExFreePoolWithTag(List, 'sRmK');
+}
+
 #define RACE_THREADS 8
 #define RACE_WINDOW 0x720000000ULL
 #define RACE_WINDOW_LENGTH 0x1000000ULL
@@ -238,11 +286,10 @@ START_TEST(IoResourceSearch)
     ULONGLONG Start;
     NTSTATUS Status;
 
-    /* The candidates are aligned up from the minimum */
+    /* The search takes the highest aligned candidate */
     DescribeMemory(&Requirement, 0x700001001ULL, 0x7000FFFFFULL, 0x1000, 0x1000);
     ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
-    ok((Start % 0x1000) == 0 && Start > 0x700001001ULL && Start + 0xFFF <= 0x7000FFFFFULL,
-       "the window starts at 0x%I64x, not aligned within the requirement\n", Start);
+    ok_eq_hex64(Start, 0x7000FF000ULL);
 
     /* A large window carries exactly one CM_RESOURCE_MEMORY_LARGE flag */
     RtlZeroMemory(&Requirement, sizeof(Requirement));
@@ -285,5 +332,6 @@ START_TEST(IoResourceSearch)
     ok(!NT_SUCCESS(Status) || Start >= TOP_PAGE, "the search wrapped around to 0x%I64x\n", Start);
 
     CheckDescriptorsOfOneList();
+    CheckTightWindow();
     CheckConcurrentAssignments();
 }
