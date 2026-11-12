@@ -106,6 +106,14 @@ UefiSerialIsCom1(
 }
 
 static
+BOOLEAN
+UefiSerialFirmwareIsUBoot(VOID)
+{
+    return GlobalSystemTable->FirmwareVendor &&
+           _wcsnicmp(GlobalSystemTable->FirmwareVendor, L"Das U-Boot", 10) == 0;
+}
+
+static
 VOID
 UefiSerialProbe(VOID)
 {
@@ -154,10 +162,12 @@ UefiSerialProbe(VOID)
     if (UefiSerialCount)
         return;
 
+    /* U-Boot's console is the board's serial line and panel, so the log goes there too */
     UefiSerialUseConsole = GlobalSystemTable->ConOut &&
-                           EFI_ERROR(BootServices->LocateProtocol(&UefiGraphicsOutputGuid,
-                                                                  NULL,
-                                                                  &GraphicsOutput));
+                           (UefiSerialFirmwareIsUBoot() ||
+                            EFI_ERROR(BootServices->LocateProtocol(&UefiGraphicsOutputGuid,
+                                                                   NULL,
+                                                                   &GraphicsOutput)));
 }
 
 static
