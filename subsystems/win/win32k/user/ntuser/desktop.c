@@ -2014,7 +2014,7 @@ IntDrawScaledWallpaper(
     PDC pdc;
     BOOL Ret;
 
-    if (!UserIsEnteredExclusive())
+    if (!UserIsEnteredExclusive() || cx <= 0 || cy <= 0)
         return NtGdiStretchBlt(hDC, x, y, cx, cy, hWallpaperDC, xSrc, ySrc, cxSrc, cySrc, SRCCOPY, CLR_INVALID);
 
     pdc = DC_LockDc(hDC);
