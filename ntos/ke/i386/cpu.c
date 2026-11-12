@@ -1684,18 +1684,6 @@ KeFlushEntireTb(IN BOOLEAN Invalid,
     /* Flush the TB for the Current CPU, and update the flush stamp */
     KeFlushCurrentTb();
 
-#ifdef CONFIG_SMP
-    /* If this is MP, wait for the other processors to finish */
-    if (TargetAffinity)
-    {
-        /* Sanity check */
-        ASSERT(Prcb == KeGetCurrentPrcb());
-
-        /* FIXME: TODO */
-        ASSERTMSG("Not yet implemented\n", FALSE);
-    }
-#endif
-
     /* Update the flush stamp and return to original IRQL */
     InterlockedExchangeAdd(&KiTbFlushTimeStamp, 1);
     KeLowerIrql(OldIrql);

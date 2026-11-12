@@ -371,7 +371,6 @@ endif()
 list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/ex/zw.S)
 
 if(ARCH STREQUAL "i386")
-    # TODO: i386 has no interprocessor request file; the other targets use ke/<arch>/ipi.c
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/fastinterlck_asm.S
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/ioport.S
@@ -389,6 +388,7 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/exp.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/freeze.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/i386/ipi.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/irqobj.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/ldt.c
