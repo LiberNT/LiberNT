@@ -687,6 +687,26 @@ PspAllocateUserStack(
 
 static
 NTSTATUS
+PspSetImageMachine(
+    _In_ PEPROCESS Process,
+    _In_ PVOID Section)
+{
+    SECTION_IMAGE_INFORMATION ImageInformation;
+    NTSTATUS Status;
+
+    ASSERT(Process->WoW64Process == NULL);
+
+    Status = MmGetSectionImageInformation(Section, &ImageInformation);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Process->Machine = ((KI_EMULATED_USER_MACHINE != 0) && (ImageInformation.Machine == KI_EMULATED_USER_MACHINE))
+                           ? KI_EMULATED_USER_MACHINE
+                           : IMAGE_FILE_MACHINE_NATIVE;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 PspCreateWow64Process(
     _In_ PEPROCESS Process,
     _In_ PVOID Section,
@@ -797,6 +817,7 @@ PspCreateProcessFromOperands(
 
         Status = MmCreatePeb(Process, &InitialPeb, &Peb);
         if (NT_SUCCESS(Status)) Process->Peb = Peb;
+        if (NT_SUCCESS(Status)) Status = PspSetImageMachine(Process, Operands->Section);
         if (NT_SUCCESS(Status)) Status = PspCreateWow64Process(Process, Operands->Section, &InitialPeb);
         if (NT_SUCCESS(Status)) Status = PspMapApiSetSchema(Process);
     }
