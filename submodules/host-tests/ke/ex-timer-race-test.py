@@ -107,6 +107,8 @@ typedef struct { KTIMER KeTimer; KAPC TimerApc; KDPC TimerDpc; LIST_ENTRY Active
                  BOOLEAN ApcAssociated, WakeTimer; LIST_ENTRY WakeTimerListEntry; ULONG SetSequence, ApcQueuedSequence;
                  BOOLEAN HighResolution; KI_HIGH_RESOLUTION_DEADLINE HighResolutionDeadline; } ETIMER, *PETIMER;
 typedef void *PEXT_CALLBACK, *PEXT_DELETE_CALLBACK;
+typedef void (*PWORKER_THREAD_ROUTINE)(PVOID);
+typedef struct { PWORKER_THREAD_ROUTINE WorkerRoutine; PVOID Parameter; } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
 static const char *Scenario = "setup";
 static ETHREAD TheThread;
 static ETIMER TheTimer __attribute__((aligned(16)));

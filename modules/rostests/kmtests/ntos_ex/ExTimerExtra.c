@@ -177,6 +177,102 @@ TestExtendedTimer(VOID)
     ok_eq_bool(Result, TRUE);
 }
 
+static KEVENT TimerDeletedEvent;
+static volatile LONG DeleteTestCalls;
+static volatile LONG CallsBeforeDelete;
+static volatile LONG RefusedInCallback;
+
+static
+VOID
+NTAPI
+TimerDeleted(
+    _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    CallsBeforeDelete = DeleteTestCalls;
+    KeSetEvent(&TimerDeletedEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
+NTAPI
+DeleteTestCallback(
+    _In_ PEX_TIMER Timer,
+    _In_opt_ PVOID Context)
+{
+    PEXT_DELETE_PARAMETERS Parameters = Context;
+    LONG Refused = 0;
+
+    if ((InterlockedIncrement(&DeleteTestCalls) != 1) || (Parameters == NULL))
+        return;
+
+    if (!ExDeleteTimer(Timer, FALSE, FALSE, Parameters))
+        Refused |= 1;
+    if (!ExSetTimer(Timer, -10LL * 1000 * 10, 0, NULL))
+        Refused |= 2;
+    if (!ExCancelTimer(Timer, NULL))
+        Refused |= 4;
+    if (!ExDeleteTimer(Timer, TRUE, FALSE, NULL))
+        Refused |= 8;
+    RefusedInCallback = Refused;
+}
+
+static
+PEX_TIMER
+StartDeleteTest(
+    _In_opt_ PVOID Context)
+{
+    KeInitializeEvent(&TimerDeletedEvent, NotificationEvent, FALSE);
+    DeleteTestCalls = 0;
+    CallsBeforeDelete = -1;
+    RefusedInCallback = 0;
+    return ExAllocateTimer(DeleteTestCallback, Context, 0);
+}
+
+/* Without Wait the object outlives the expiry and callback it still has, then goes (WDK, Deleting a System-Allocated Timer Object) */
+static
+VOID
+TestDeleteWithoutWaiting(VOID)
+{
+    EXT_DELETE_PARAMETERS Parameters;
+    LARGE_INTEGER Timeout;
+    PEX_TIMER Timer;
+    NTSTATUS Status;
+
+    ExInitializeDeleteTimerParameters(&Parameters);
+    Parameters.DeleteCallback = TimerDeleted;
+    Timeout.QuadPart = -10LL * 1000 * 1000;
+
+    Timer = StartDeleteTest(NULL);
+    if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
+        return;
+    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 10, 0, NULL), FALSE);
+    ok_eq_bool(ExDeleteTimer(Timer, FALSE, FALSE, &Parameters), FALSE);
+    Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(CallsBeforeDelete, 1L);
+
+    Timer = StartDeleteTest(NULL);
+    if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
+        return;
+    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 1000 * 10, 0, NULL), FALSE);
+    ok_eq_bool(ExDeleteTimer(Timer, TRUE, FALSE, &Parameters), TRUE);
+    Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(CallsBeforeDelete, 0L);
+
+    Timer = StartDeleteTest(&Parameters);
+    if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
+        return;
+    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 10, 10LL * 1000 * 10, NULL), FALSE);
+    Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(RefusedInCallback, 15L);
+    ok_eq_long(CallsBeforeDelete, 2L);
+    ok_eq_long(DeleteTestCalls, 2L);
+}
+
 #define HIGH_RESOLUTION_EXPIRIES 4
 
 typedef VOID (NTAPI *PEX_QUERY_TIMER_RESOLUTION)(PULONG MaximumTime, PULONG MinimumTime, PULONG CurrentTime);
@@ -299,5 +395,6 @@ START_TEST(ExTimerExtra)
     TestPeriodicDpc();
     TestCancelBeforeFire();
     TestExtendedTimer();
+    TestDeleteWithoutWaiting();
     TestHighResolutionTimer();
 }

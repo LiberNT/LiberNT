@@ -110,9 +110,13 @@ typedef struct _EX_TIMER *PEX_TIMER;
 typedef void (*PEXT_CALLBACK)(PEX_TIMER, PVOID);
 typedef void (*PEXT_DELETE_CALLBACK)(PVOID);
 typedef void *PEXT_SET_PARAMETERS, *PEXT_CANCEL_PARAMETERS;
+typedef void (*PWORKER_THREAD_ROUTINE)(PVOID);
+typedef struct { PWORKER_THREAD_ROUTINE WorkerRoutine; PVOID Parameter; } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
 #define EX_TIMER_HIGH_RESOLUTION 0x4
 #define EX_TIMER_NOTIFICATION (1UL << 31)
 #define NonPagedPool 0
+#define DelayedWorkQueue 0
+#define PASSIVE_LEVEL 0
 #define UserMode 1
 static const char *Scenario = "setup";
 static ETHREAD TheThread;
@@ -177,6 +181,10 @@ static ULONGLONG KiRoundToDefaultTimerResolution(ULONGLONG DueTime) { return (Du
 static void KiArmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline, ULONGLONG DueTime) { Deadline->Armed = TRUE; Deadline->DueTime = DueTime; }
 static void KiDisarmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline) { Deadline->Armed = FALSE; }
 static void KeFlushQueuedDpcs(void) {}
+static KIRQL KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
+static void ExInitializeWorkItem(PWORK_QUEUE_ITEM Item, PWORKER_THREAD_ROUTINE Routine, PVOID Parameter) { Item->WorkerRoutine = Routine; Item->Parameter = Parameter; }
+static void ExQueueWorkItem(PWORK_QUEUE_ITEM Item, int Queue) { (void)Item; (void)Queue; CHECK(!"a timer nobody deleted was queued for deletion"); }
+static void ExFreePoolWithTag(PVOID P, ULONG Tag) { (void)Tag; free(P); }
 static void KeInitializeTimerEx(PKTIMER Timer, TIMER_TYPE Type) { (void)Type; memset(Timer, 0, sizeof(*Timer)); }
 static void KeInitializeDpc(PKDPC Dpc, PKDEFERRED_ROUTINE Routine, PVOID Context) { Dpc->DeferredRoutine = Routine; Dpc->DeferredContext = Context; }
 static BOOLEAN KeRemoveQueueDpc(PKDPC Dpc) { (void)Dpc; return FALSE; }
@@ -229,7 +237,7 @@ static PVOID ExAllocatePoolZero(int Pool, size_t Size, ULONG Tag) { (void)Pool; 
 '''
 fixture += region('/* PRIVATE DATA', '/* PUBLIC FUNCTIONS')
 for name in ['ExpCreateTimer', 'NtCreateTimer', 'NtSetTimer', 'NtCancelTimer',
-             'ExpRearmHighResolutionTimer', 'ExpExTimerDpcRoutine', 'ExAllocateTimer', 'ExSetTimer', 'ExCancelTimer']:
+             'ExpRearmHighResolutionTimer', 'ExpFinishTimerDelete', 'ExpDeleteTimerWorker', 'ExpQueueTimerDelete', 'ExpExTimerDpcRoutine', 'ExAllocateTimer', 'ExSetTimer', 'ExCancelTimer']:
     fixture += definition(name)
 fixture += r"""
 static int Callbacks;
@@ -283,7 +291,7 @@ static void DriverTimers(void) {
     Scenario = "a default-resolution driver timer counts its period in milliseconds";
     Timer = ExAllocateTimer(NULL, NULL, 0);
     CHECK(!ExSetTimer(Timer, -55000, 55000, NULL));
-    CHECK(LastPeriod == 5 && LastDpc == NULL && !Timer->Deadline.Armed);
+    CHECK(LastPeriod == 5 && LastDpc == &Timer->Dpc && !Timer->Deadline.Armed);
     free(Timer);
 }
 static void NamedTimers(void) {

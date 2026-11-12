@@ -44,9 +44,12 @@ typedef struct _EX_TIMER
     PEXT_DELETE_CALLBACK DeleteCallback;
     PVOID DeleteContext;
     ULONG Attributes;
-    volatile LONG RefCount;
-    BOOLEAN DpcQueued;
     KSPIN_LOCK Lock;
+    BOOLEAN Disabled;
+    BOOLEAN DeleteAfterExpiry;
+    BOOLEAN DeleteQueued;
+    BOOLEAN ExpiredWhileDisabled;
+    WORK_QUEUE_ITEM DeleteWorkItem;
     BOOLEAN HighResolutionSet;
     LONGLONG Period;
     ULONGLONG ScheduledTime;
@@ -901,6 +904,52 @@ ExpRearmHighResolutionTimer(
     KiArmHighResolutionDeadline(&Timer->Deadline, Timer->KeTimer.DueTime.QuadPart);
 }
 
+/* The object goes first, then the driver hears about it (WDK, ExTimerDeleteCallback) */
+static
+VOID
+ExpFinishTimerDelete(
+    _In_ PEX_TIMER Timer)
+{
+    PEXT_DELETE_CALLBACK DeleteCallback = Timer->DeleteCallback;
+    PVOID DeleteContext = Timer->DeleteContext;
+
+    ASSERT(Timer->Disabled);
+    ASSERT(!Timer->KeTimer.Header.Inserted && !Timer->Deadline.Armed);
+
+    ExFreePoolWithTag(Timer, EXP_TIMER_TAG);
+
+    if (DeleteCallback != NULL)
+        DeleteCallback(DeleteContext);
+}
+
+static
+VOID
+NTAPI
+ExpDeleteTimerWorker(
+    _In_ PVOID Context)
+{
+    PEX_TIMER Timer = Context;
+
+    ASSERT(Timer->Disabled && Timer->DeleteQueued);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    /* Taking the timer table's lock puts an expiry the clock is still handing out ahead of the flush */
+    KeCancelTimer(&Timer->KeTimer);
+
+    /* An expiry already under way, or the callback that asked for the deletion, finishes first */
+    KeFlushQueuedDpcs();
+    ExpFinishTimerDelete(Timer);
+}
+
+static
+VOID
+ExpQueueTimerDelete(
+    _In_ PEX_TIMER Timer)
+{
+    ExInitializeWorkItem(&Timer->DeleteWorkItem, ExpDeleteTimerWorker, Timer);
+    ExQueueWorkItem(&Timer->DeleteWorkItem, DelayedWorkQueue);
+}
+
 static
 VOID
 NTAPI
@@ -911,36 +960,59 @@ ExpExTimerDpcRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     PEX_TIMER Timer = DeferredContext;
+    BOOLEAN Call = TRUE;
+    BOOLEAN Delete = FALSE;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+
+    /* A timer that was being deleted goes off at most once more (WDK, Deleting a System-Allocated Timer Object) */
+    if (Timer->Disabled)
     {
-        KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
-
-        /* A timer set again since it went off keeps the setting it was given */
-        if (Timer->HighResolutionSet && !Timer->KeTimer.Header.Inserted)
+        /* A one-shot timer still on the table was set again after the expiry this routine is for */
+        if ((Timer->KeTimer.Period != 0) || !Timer->KeTimer.Header.Inserted)
         {
-            if (Timer->Period != 0)
-            {
-                ExpRearmHighResolutionTimer(Timer);
-            }
-            else
-            {
-                Timer->HighResolutionSet = FALSE;
-                KiDisarmHighResolutionDeadline(&Timer->Deadline);
-            }
+            Call = !Timer->ExpiredWhileDisabled;
+            Timer->ExpiredWhileDisabled = TRUE;
         }
-
-        KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
+    }
+    else if ((Timer->Attributes & EX_TIMER_HIGH_RESOLUTION) &&
+             Timer->HighResolutionSet && !Timer->KeTimer.Header.Inserted)
+    {
+        /* A timer set again since it went off keeps the setting it was given */
+        if (Timer->Period != 0)
+        {
+            ExpRearmHighResolutionTimer(Timer);
+        }
+        else
+        {
+            Timer->HighResolutionSet = FALSE;
+            KiDisarmHighResolutionDeadline(&Timer->Deadline);
+        }
     }
 
-    if (Timer->Callback != NULL)
+    KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
+
+    if (Call && Timer->Callback != NULL)
     {
         Timer->Callback((PEX_TIMER)Timer, Timer->CallbackContext);
     }
+
+    KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+    if (Timer->ExpiredWhileDisabled && Timer->DeleteAfterExpiry && !Timer->DeleteQueued)
+    {
+        KeCancelTimer(&Timer->KeTimer);
+        KiDisarmHighResolutionDeadline(&Timer->Deadline);
+        Timer->DeleteQueued = TRUE;
+        Delete = TRUE;
+    }
+    KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
+
+    if (Delete)
+        ExpQueueTimerDelete(Timer);
 }
 
 PEX_TIMER
@@ -963,7 +1035,6 @@ ExAllocateTimer(
     Timer->Callback = Callback;
     Timer->CallbackContext = CallbackContext;
     Timer->Attributes = Attributes;
-    Timer->RefCount = 1;
     KeInitializeSpinLock(&Timer->Lock);
 
     KeInitializeTimerEx(&Timer->KeTimer,
@@ -991,11 +1062,18 @@ ExSetTimer(
 
     Due.QuadPart = DueTime;
 
+    KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+
+    /* A timer being deleted takes no more settings (WDK, Deleting a System-Allocated Timer Object) */
+    if (Timer->Disabled)
+    {
+        KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        return FALSE;
+    }
+
     /* The period of a high-resolution timer is kept to the hundred nanoseconds it is given in (WDK, High-resolution timers) */
     if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
     {
-        KeAcquireSpinLock(&Timer->Lock, &OldIrql);
-
         WasSet = KeSetTimerEx(&Timer->KeTimer, Due, 0, &Timer->Dpc);
         Timer->Period = Period;
         Timer->ScheduledTime = Timer->KeTimer.DueTime.QuadPart;
@@ -1013,10 +1091,10 @@ ExSetTimer(
      */
     Interval = (LONG)(Period / 10000);
 
-    return KeSetTimerEx(&Timer->KeTimer,
-                        Due,
-                        Interval,
-                        (Timer->Callback != NULL) ? &Timer->Dpc : NULL);
+    WasSet = KeSetTimerEx(&Timer->KeTimer, Due, Interval, &Timer->Dpc);
+
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
+    return WasSet;
 }
 
 BOOLEAN
@@ -1030,18 +1108,26 @@ ExCancelTimer(
 
     UNREFERENCED_PARAMETER(Parameters);
 
-    if (!(Timer->Attributes & EX_TIMER_HIGH_RESOLUTION))
-        return KeCancelTimer(&Timer->KeTimer);
-
     KeAcquireSpinLock(&Timer->Lock, &OldIrql);
-    WasSet = KeCancelTimer(&Timer->KeTimer);
-    Timer->HighResolutionSet = FALSE;
-    KiDisarmHighResolutionDeadline(&Timer->Deadline);
-    KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
+    if (Timer->Disabled)
+    {
+        KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        return FALSE;
+    }
+
+    WasSet = KeCancelTimer(&Timer->KeTimer);
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        Timer->HighResolutionSet = FALSE;
+        KiDisarmHighResolutionDeadline(&Timer->Deadline);
+    }
+
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
     return WasSet;
 }
 
+/* A timer still set goes off first unless cancelled; without Wait a worker frees it once no routine can run */
 BOOLEAN
 NTAPI
 ExDeleteTimer(
@@ -1053,31 +1139,53 @@ ExDeleteTimer(
     BOOLEAN WasSet = FALSE;
     KIRQL OldIrql;
 
-    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    ASSERT(KeGetCurrentIrql() <= (Wait ? APC_LEVEL : DISPATCH_LEVEL));
+    ASSERT(Cancel || !Wait);
+
+    /* FIXME: Windows stops the machine when Wait comes without Cancel; the stop code is not documented, so the timer is cancelled instead */
+    if (Wait)
+        Cancel = TRUE;
+
+    KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+
+    if (Timer->Disabled)
     {
-        KeAcquireSpinLock(&Timer->Lock, &OldIrql);
-        Timer->HighResolutionSet = FALSE;
-        KiDisarmHighResolutionDeadline(&Timer->Deadline);
         KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        return FALSE;
+    }
+
+    Timer->Disabled = TRUE;
+    if (Parameters != NULL)
+    {
+        Timer->DeleteCallback = Parameters->DeleteCallback;
+        Timer->DeleteContext = Parameters->DeleteContext;
     }
 
     if (Cancel)
-    {
         WasSet = KeCancelTimer(&Timer->KeTimer);
-    }
 
-    if (Wait)
+    /* A periodic timer is off the table for a moment each time the clock puts it back */
+    if (Timer->KeTimer.Header.Inserted || (Timer->KeTimer.Period != 0))
     {
-        KeFlushQueuedDpcs();
+        Timer->DeleteAfterExpiry = TRUE;
+        KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        return FALSE;
     }
 
-    if ((Parameters != NULL) && (Parameters->DeleteCallback != NULL))
+    Timer->HighResolutionSet = FALSE;
+    KiDisarmHighResolutionDeadline(&Timer->Deadline);
+    Timer->DeleteQueued = !Wait;
+
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
+
+    if (!Wait)
     {
-        Parameters->DeleteCallback(Parameters->DeleteContext);
+        ExpQueueTimerDelete(Timer);
+        return WasSet;
     }
 
-    ExFreePoolWithTag(Timer, EXP_TIMER_TAG);
-
+    KeFlushQueuedDpcs();
+    ExpFinishTimerDelete(Timer);
     return WasSet;
 }
 
