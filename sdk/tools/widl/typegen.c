@@ -472,6 +472,7 @@ static unsigned int get_stack_size( const var_t *var, unsigned int *stack_align,
             break;
         case CPU_ARM64:
         case CPU_RISCV64:
+        case CPU_LOONGARCH64:
             by_val = (stack_size <= 2 * pointer_size);
             break;
         case CPU_ARM:
@@ -1700,6 +1701,10 @@ static void write_proc_func_interp( FILE *file, int indent, const type_t *iface,
 
     switch (target.cpu)
     {
+    case CPU_LOONGARCH64:
+        /* TODO: generate the LoongArch64 LP64D parameter layout. */
+        error("RPC format strings are not implemented for this target\n");
+        break;
     case CPU_x86_64:
     case CPU_ARM64EC:
     {

@@ -147,6 +147,8 @@ elseif(ARCH STREQUAL "arm64")
     set(EFI_PLATFORM_ID "aa64")
 elseif(ARCH STREQUAL "riscv64")
     set(EFI_PLATFORM_ID "riscv64")
+elseif(ARCH STREQUAL "loongarch64")
+    set(EFI_PLATFORM_ID "loongarch64")
 elseif(ARCH STREQUAL "ppc")
     # Windows NT PowerPC machines boot through ARC firmware; there is no UEFI
     # boot image for this architecture.

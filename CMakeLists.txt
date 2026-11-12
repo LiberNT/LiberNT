@@ -30,7 +30,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # check that the ARCH (target architecture) variable is defined
 if(NOT ARCH)
-    message(FATAL_ERROR "Target architecture (ARCH) is not defined. Please, choose one of: i386, amd64, arm, arm64, riscv64, ppc")
+    message(FATAL_ERROR "Target architecture (ARCH) is not defined. Please, choose one of: i386, amd64, arm, arm64, riscv64, loongarch64, ppc")
 endif()
 # Now the ARCH variable will be in lowercase.
 # It is needed because STREQUAL comparison
@@ -40,7 +40,11 @@ endif()
 string(TOLOWER ${ARCH} ARCH)
 
 # set possible values for cmake GUI
-set_property(CACHE ARCH PROPERTY STRINGS "i386" "amd64" "arm" "arm64" "riscv64" "ppc")
+set_property(CACHE ARCH PROPERTY STRINGS "i386" "amd64" "arm" "arm64" "riscv64" "loongarch64" "ppc")
+
+option(REACTOS_BOOTSTRAP_BOOTLOADER
+    "Build only the boot chain, for bringing up an architecture whose kernel backends do not exist yet"
+    OFF)
 
 # Alternative WinNT-compatible architecture string
 if(ARCH STREQUAL "i386")
@@ -307,6 +311,9 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         # Clang defines _M_RISCV64 with the Microsoft-compatible value (100).
         add_compile_definitions(_RISCV64_ _WIN64)
         set(ARCH_64BIT TRUE)
+    elseif(ARCH STREQUAL "loongarch64")
+        add_compile_definitions(_LOONGARCH64_ __loongarch64__ _WIN32 _WIN64 __ROS_LONG64__)
+        set(ARCH_64BIT TRUE)
     elseif(ARCH STREQUAL "ppc")
         # Clang defines _M_PPC with the Microsoft-compatible CPU value.
         add_compile_definitions(_PPC_ WIN32)
@@ -408,17 +415,23 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     #begin with boot so reactos_cab target is defined before all other modules
     add_subdirectory(boot)
     add_subdirectory(bootloader)
-    add_subdirectory(base)
-    add_subdirectory(dll)
+    if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
+        add_subdirectory(base)
+        add_subdirectory(dll)
+    endif()
     set(FEX_ARM64EC_AVAILABLE OFF)
     add_subdirectory(submodules)
-    add_subdirectory(drivers)
-    add_subdirectory(hal)
+    if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
+        add_subdirectory(drivers)
+        add_subdirectory(hal)
+    endif()
     add_subdirectory(sdk/lib)
-    add_subdirectory(media)
-    add_subdirectory(modules)
-    add_subdirectory(ntos)
-    add_subdirectory(subsystems)
+    if(NOT REACTOS_BOOTSTRAP_BOOTLOADER)
+        add_subdirectory(media)
+        add_subdirectory(modules)
+        add_subdirectory(ntos)
+        add_subdirectory(subsystems)
+    endif()
     add_subdirectory(sdk/tools/wpp)
 
     if(ARCH STREQUAL "arm64" AND ENABLE_FEX_ARM64EC AND FEX_ARM64EC_AVAILABLE AND NOT ARM64EC_RUNTIME)
