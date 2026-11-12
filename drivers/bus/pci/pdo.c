@@ -2107,9 +2107,15 @@ PdoReadPciBar(PPDO_DEVICE_EXTENSION DeviceExtension,
               PULONG OriginalValue,
               PULONG NewValue)
 {
+    PPCI_DEVICE PciDevice = DeviceExtension->PciDevice;
+    ULONG Index = (Offset - FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses)) / sizeof(ULONG);
     ULONG Size;
     ULONG AllOnes;
     USHORT Segment = PciPdoGetSegment(DeviceExtension);
+
+    ASSERT(Offset >= FIELD_OFFSET(PCI_COMMON_CONFIG, u.type0.BaseAddresses));
+    ASSERT((Offset % sizeof(ULONG)) == 0);
+    ASSERT(Index < PCI_TYPE0_ADDRESSES);
 
     /* Read the original value */
     Size = PciPdoGetBusDataByOffset(DeviceExtension,
@@ -2120,6 +2126,13 @@ PdoReadPciBar(PPDO_DEVICE_EXTENSION DeviceExtension,
     {
         DPRINT1("Wrong size %lu (seg %u)\n", Size, Segment);
         return FALSE;
+    }
+
+    /* A started function keeps decoding while it is queried again, so its registers are sized once */
+    if (PciDevice->BarSizeValid & (1 << Index))
+    {
+        *NewValue = PciDevice->BarSize[Index];
+        return TRUE;
     }
 
     /* Write all ones to determine which bits are held to zero */
@@ -2156,6 +2169,8 @@ PdoReadPciBar(PPDO_DEVICE_EXTENSION DeviceExtension,
         return FALSE;
     }
 
+    PciDevice->BarSize[Index] = *NewValue;
+    PciDevice->BarSizeValid |= (UCHAR)(1 << Index);
     return TRUE;
 }
 
