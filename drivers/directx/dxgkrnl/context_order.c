@@ -889,7 +889,7 @@ Failure:
     return Status;
 }
 
-NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT const *Contexts, _In_ ULONG ContextCount, _In_ DXGK_CONTEXT_SYNC_OPERATION SyncOperation, _In_reads_opt_(ObjectCount) const D3DKMT_HANDLE *ObjectHandles, _In_ ULONG ObjectCount, _In_ ULONG SignalFlags, _In_ UINT64 PayloadValue, _In_reads_opt_(ObjectCount) CONST UINT64 *PayloadValueArray, _In_ KPROCESSOR_MODE AccessMode)
+static NTSTATUS DxgkpContextOrderAdmitSignalOnce(_In_reads_(ContextCount) PDXGKRNL_CONTEXT const *Contexts, _In_ ULONG ContextCount, _In_ DXGK_CONTEXT_SYNC_OPERATION SyncOperation, _In_reads_opt_(ObjectCount) const D3DKMT_HANDLE *ObjectHandles, _In_ ULONG ObjectCount, _In_ ULONG SignalFlags, _In_ UINT64 PayloadValue, _In_reads_opt_(ObjectCount) CONST UINT64 *PayloadValueArray, _In_ KPROCESSOR_MODE AccessMode)
 {
     PDXGKRNL_CONTEXT SortedContexts[DXGMMS2_CONTEXT_STREAM_MAX_BROADCAST_CONTEXTS];
     DXGMMS2_CONTEXT_STREAM_HANDLE StreamHandles[DXGMMS2_CONTEXT_STREAM_MAX_BROADCAST_CONTEXTS];
@@ -1003,6 +1003,34 @@ Failure:
     ASSERT(ReferencedCount <= ContextCount);
     DxgkpContextOrderFreeUnpublishedOperation(Operation);
     return Status;
+}
+
+NTSTATUS DxgkContextOrderAdmitSignal(_In_reads_(ContextCount) PDXGKRNL_CONTEXT const *Contexts, _In_ ULONG ContextCount, _In_ DXGK_CONTEXT_SYNC_OPERATION SyncOperation, _In_reads_opt_(ObjectCount) const D3DKMT_HANDLE *ObjectHandles, _In_ ULONG ObjectCount, _In_ ULONG SignalFlags, _In_ UINT64 PayloadValue, _In_reads_opt_(ObjectCount) CONST UINT64 *PayloadValueArray, _In_ KPROCESSOR_MODE AccessMode)
+{
+    ULONGLONG Deadline = 0;
+    ULONG Index;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    for (;;)
+    {
+        Status = DxgkpContextOrderAdmitSignalOnce(Contexts, ContextCount, SyncOperation, ObjectHandles, ObjectCount,
+                                                  SignalFlags, PayloadValue, PayloadValueArray, AccessMode);
+        if (Status != STATUS_DEVICE_BUSY)
+            return Status;
+        /* A failed admission publishes nothing; wait for room with no lock held, as wait and work admission do. */
+        if (Contexts[0]->Device->Adapter != NULL &&
+            Contexts[0]->Device->Adapter->KmdTransactionOwnerThread == PsGetCurrentThread())
+            return Status;
+        if (Deadline == 0)
+            Deadline = KeQueryInterruptTime() + (ULONGLONG)VIDSCH_CONTEXT_BACKPRESSURE_MS * 10000ULL;
+        for (Index = 0; Index < ContextCount; ++Index)
+        {
+            Status = DxgkContextOrderWaitForRoom(Contexts[Index], Deadline);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+    }
 }
 
 NTSTATUS
