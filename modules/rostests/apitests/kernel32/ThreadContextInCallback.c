@@ -10,6 +10,7 @@
 
 #define CALLBACK_CLASS L"ThreadContextInCallback"
 
+#ifdef _M_AMD64
 static volatile LONG spin_stop;
 static volatile ULONG_PTR spin_frame;
 static HANDLE spin_entered, window_ready;
@@ -45,6 +46,7 @@ static DWORD WINAPI window_thread(void *arg)
     DestroyWindow(spin_window);
     return 2;
 }
+#endif
 
 START_TEST(ThreadContextInCallback)
 {
