@@ -972,6 +972,9 @@ ExpInitializeExecutive(
     SharedUserData->NtMinorVersion = NtMinorVersion;
     SharedUserData->NtBuildNumber = NtBuildNumber & 0xFFFF;
 
+    /* The tests tell this kernel from Windows by this value in the unused end of the shared page */
+    *(PULONG)((ULONG_PTR)SharedUserData + PAGE_SIZE - sizeof(ULONG)) = 0x8EAC705;
+
     if (!HalInitSystem(0, LoaderBlock))
     {
         KeBugCheck(HAL_INITIALIZATION_FAILED);
