@@ -607,13 +607,7 @@ KiIdleSchedule(
 
     Thread = KiSelectReadyThread(0, Prcb);
     if (Thread == NULL)
-    {
         Thread = KiStealReadyThread(Prcb, 0);
-
-        /* It may have been queued while still switching off its last processor */
-        if (Thread != NULL)
-            KiWaitForThreadSwapOut(Thread);
-    }
 
     if (Thread == NULL) return Prcb->IdleThread;
 

@@ -340,6 +340,8 @@ KiIdleLoop(VOID)
             NewThread->State = Running;
             KiReleasePrcbLock(Prcb);
 
+            KiWaitForThreadSwapOut(NewThread);
+
             _enable();
             KiSwapContext(APC_LEVEL, OldThread);
 
