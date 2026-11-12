@@ -168,9 +168,17 @@ KiThreadStartup:
 	    cbz     x16, .Lthreadstart_bad_return
 	    ldr     x0, [x16, #ThTrapFrame]     /* x0 = TrapFrame */
 	    cbz     x0, .Lthreadstart_bad_return
-	    str     xzr, [x16, #ThTrapFrame]    /* init frame is below InitialStack */
 
 	    sub     x1, x0, #KEXCEPTION_FRAME_LENGTH /* x1 = ExceptionFrame */
+
+	    mov     x19, x0
+	    mov     x20, x1
+	    bl      KiArm64ThreadStartupExit
+	    mrs     x18, tpidr_el1
+	    ldr     x16, [x18, #PcCurrentThread]
+	    str     xzr, [x16, #ThTrapFrame]    /* init frame is below InitialStack */
+	    mov     x0, x19
+	    mov     x1, x20
 
 	    b       KiTrapReturn                /* Never returns (ERET) */
 

@@ -1533,6 +1533,17 @@ KiArm64UserServiceDispatch(
     KiSystemService(Thread, TrapFrame, Instruction);
 }
 
+VOID
+KiArm64ThreadStartupExit(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame)
+{
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(TrapFrame->PreviousMode == UserMode);
+
+    KiArm64DeliverPendingUserApc(ExceptionFrame, TrapFrame, TRUE);
+}
+
 BOOLEAN
 KiArm64UserServiceComplete(
     _Inout_ PKTRAP_FRAME TrapFrame)
