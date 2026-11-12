@@ -1,0 +1,4305 @@
+{
+  "scope": "Windows 11 24H2 26100.1742 N550JK with pinned vendor drivers and KDNET attached",
+  "privilege": "S-1-5-18 SYSTEM, interactive session 1; verified by whoami",
+  "reference_date": "2026-11-12",
+  "fixtures": {
+    "ndis_reset": {
+      "binary_sha256": "de4781c6c930a0b56a315ad00e4e1c3f0d8e48bde598a9128f0c591285dde1b6",
+      "same_binary_as_fresh_libernt": true,
+      "named_check_multisets_equal_to_native_libernt_and_host": true,
+      "pass_count": 968,
+      "fail_count": 0,
+      "checks": [
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.allocate",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.context",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "io_workitem_self_free",
+          "check": "PASS work.self_free_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 8
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_success",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 8
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_failure",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 10
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 4
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.pending",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.start_before_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "asynchronous_completion",
+          "check": "PASS reset.duplicate_completion_ignored",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 8
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 4
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "completion_inside_callback",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 10
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.dpc_deferred",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.pending_ownership",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_not_idle",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_duplicate_ignored",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.restored_once",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_addressing_completion",
+          "check": "PASS work.resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.inline_deferred",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.worker_tail_keeps_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "dpc_completion_inside_callback",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 5
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.allocation_failure_no_restore",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "io_allocation_failure",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 5
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.wrapper_failure_no_restore",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS work.failed_wrapper_releases_io",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "wrapper_allocation_failure",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_failure",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_preserved",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "restore_adapter_not_ready",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 6
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.restore_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.restore_lookahead",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.restore_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.restore_lifetime_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.driver_called_once",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.modern_start_end",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.no_legacy_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.halt_references_released",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.idle",
+          "occurrences": 1
+        },
+        {
+          "case": "previous_failure_restore_success",
+          "check": "PASS reset.result",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 8
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 9
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.queue_critical",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.single_queue",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.queued",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 4
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.indication_header",
+          "occurrences": 2
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 2
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 8
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 8
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.end_reentrant_rejected",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.no_exception",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_reset_end",
+          "check": "PASS reset.end_reentrant_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_1",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_1",
+          "check": "PASS reset.rundown_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_1",
+          "check": "PASS reset.rundown_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_2",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 2
+        },
+        {
+          "case": "rundown_failure_2",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_2",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_2",
+          "check": "PASS reset.rundown_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_2",
+          "check": "PASS reset.rundown_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_3",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 3
+        },
+        {
+          "case": "rundown_failure_3",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 2
+        },
+        {
+          "case": "rundown_failure_3",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 2
+        },
+        {
+          "case": "rundown_failure_3",
+          "check": "PASS reset.rundown_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_3",
+          "check": "PASS reset.rundown_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_4",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "rundown_failure_4",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 3
+        },
+        {
+          "case": "rundown_failure_4",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 3
+        },
+        {
+          "case": "rundown_failure_4",
+          "check": "PASS reset.rundown_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "rundown_failure_4",
+          "check": "PASS reset.rundown_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "closing_admission",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "closing_admission",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "closing_admission",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "closing_admission",
+          "check": "PASS reset.closing_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "closing_admission",
+          "check": "PASS reset.closing_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.root_allocation_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_0",
+          "check": "PASS reset.root_allocation_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS work.device",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS work.nonpaged",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 4
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.root_allocation_refused",
+          "occurrences": 1
+        },
+        {
+          "case": "root_allocation_failure_1",
+          "check": "PASS reset.root_allocation_unwound",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.thread_created",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.acquire_owner",
+          "occurrences": 12
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.state_access_owned",
+          "occurrences": 18
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.adapter_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.device",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.nonpaged",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.queue_critical",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.single_queue",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.queue_accepted",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.queued",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.lock_not_recursive",
+          "occurrences": 8
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.indication_unlocked",
+          "occurrences": 4
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.modern_handle",
+          "occurrences": 4
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.indication_header",
+          "occurrences": 4
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.indication_payload",
+          "occurrences": 4
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.callback_unlocked",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.callback_handle",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS work.free_not_queued",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.old_tail_reached",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.reference_owner",
+          "occurrences": 12
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.reference_nonnegative",
+          "occurrences": 12
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.old_tail_resumed",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS reset.no_exception",
+          "occurrences": 2
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.old_root_returned",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.new_reset_rejected",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.thread_finished",
+          "occurrences": 1
+        },
+        {
+          "case": "overlapping_reset_generations",
+          "check": "PASS race.both_resets_completed",
+          "occurrences": 1
+        }
+      ],
+      "reported_result": "RESULT failures=0",
+      "original_process_exit_code": null,
+      "exit_code_note": "Original Start-Process wrapper lost the exit code; do not rewrite it from stdout."
+    },
+    "ndis_oid": {
+      "binary_sha256": "991999e2b4d28dcdefc0f30c461d3330a18d1b8e901cb55c30bfe4a049efcadf",
+      "same_binary_as_fresh_libernt": true,
+      "named_check_multisets_equal_to_native_libernt_and_host": true,
+      "pass_count": 667,
+      "fail_count": 0,
+      "checks": [
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.first_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 4
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.first_dispatched",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.second_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.second_waits_for_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 2
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.next_dispatched_after_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.completed_once_each",
+          "occurrences": 1
+        },
+        {
+          "case": "ordinary_oid_serialization",
+          "check": "PASS oid.resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.dpc_request_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 2
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "dispatch_request_at_dispatch_level",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.module_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_first_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_context",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 6
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_first_dispatched",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_second_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_second_waits",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_next_after_completion",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.filter_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_holds_request_without_forwarding",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.sync_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "synchronous_miniport",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.inline_accepted",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 2
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "inline_completion_before_handler_return",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.selected_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.selected_not_submitted",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_selected_before_worker",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.active_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 4
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.queued_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.queued_not_submitted",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.active_request_preserved",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_queued_behind_active",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.handler_cancel_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.cancel_deferred_in_handler",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.cancel_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.cancel_after_handler_returns",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.cancel_request_id",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.handler_cancel_once",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_miniport_handler",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.module_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.filter_active_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.filter_context",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 6
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.filter_queued_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.filter_queued_not_submitted",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.no_cancel_before_filter_dispatch",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_filter_cancel_before_dispatch",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.module_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.retire_race_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.filter_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.no_cancel_after_stage_retired",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_frame_retired_after_selection",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 4
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 4
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.module_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.forward_first_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.forward_second_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.filter_context",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 12
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.upcall_context",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.upcall_is_active",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 10
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 2
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "filter_forward_and_completion_chain",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.module_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.upcall_cancel_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.filter_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 7
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.upcall_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.upcall_is_active",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.filter_cancel_deferred_in_upcall",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.filter_cancel_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.cancel_after_upcall_returns",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.filter_cancel_was_dispatched",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 5
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.upcall_cancel_once",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_during_filter_completion_upcall",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 4
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 4
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.module_owned",
+          "occurrences": 8
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.clone_inline_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.filter_context",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.filter_irql",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.no_parallel_filter_request",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.clone_allocated",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 12
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.miniport_context",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.miniport_passive",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.no_parallel_regular_request",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.upcall_context",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.upcall_clone",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.upcall_is_active",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.origin_request",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.origin_status",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 4
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 10
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 6
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.completion_recognized",
+          "occurrences": 1
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.clone_freed_inline",
+          "occurrences": 1
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 2
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.clone_sync_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "clone_freed_by_completion_before_worker_tail",
+          "check": "PASS oid.clone_freed_sync",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.prepublication_context",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.prepublication_frame",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.prepublication_no_raw_cancel",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.prepublication_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.module_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.prepublication_not_submitted",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "cancel_filter_before_queue_publication",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 8
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 10
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.allocation_failure_returned",
+          "occurrences": 3
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 6
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "resource_failure_cleanup",
+          "check": "PASS oid.rundown_failure_returned",
+          "occurrences": 3
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.work_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.assert.Frame != NULL ? Frame->Stage == NULL : Context->MiniportStage == NULL",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.closing_pending",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.origin_adapter",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.origin_request",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.origin_identity",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.origin_status",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.assert.Stage->Calls != 0",
+          "occurrences": 2
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.legacy_owned",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.rundown_owned",
+          "occurrences": 3
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.lifecycle_owned",
+          "occurrences": 2
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.closing_not_submitted",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.all_resources_released",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.context_registry_empty",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.all_rundowns_released",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.no_queued_work",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.all_module_pins_released",
+          "occurrences": 1
+        },
+        {
+          "case": "adapter_closes_before_worker_dispatch",
+          "check": "PASS oid.all_lifetime_pins_released",
+          "occurrences": 1
+        }
+      ],
+      "reported_result": "RESULT failures=0",
+      "original_process_exit_code": null,
+      "exit_code_note": "Original Start-Process wrapper lost the exit code; do not rewrite it from stdout."
+    },
+    "nwifi_rekey": {
+      "binary_sha256": "54f95df614a375fcd17f5835a5662212606c5a5b7c50bcf2d3fcc95b3b03671f",
+      "same_binary_as_fresh_libernt": true,
+      "named_check_multisets_equal_to_native_libernt_and_host": true,
+      "pass_count": 47,
+      "fail_count": 0,
+      "checks": [
+        {
+          "case": "",
+          "check": "PASS rsna.init",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS frame.eapol",
+          "occurrences": 9
+        },
+        {
+          "case": "",
+          "check": "PASS first.message2",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS worker.single_queued",
+          "occurrences": 4
+        },
+        {
+          "case": "",
+          "check": "PASS first.full_worker",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS first.message4_deferred",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS key.set_request",
+          "occurrences": 8
+        },
+        {
+          "case": "",
+          "check": "PASS link.secure",
+          "occurrences": 2
+        },
+        {
+          "case": "",
+          "check": "PASS first.keys_and_link",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS association.invalidates_installed_keys",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS association.new_generation",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS rekey.invalidates_installed_keys",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS rekey.same_association_generation",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS retransmit.same_generation",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS retransmit.same_snonce",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS rekey.full_worker",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS rekey.message4_deferred",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS rekey.keys_and_link",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS message3_retransmit.no_reinstall",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS group.group_worker",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS group.keeps_pairwise_state",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS group.only_group_installed",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS stale.group_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS stale.old_worker_does_not_install",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS association.fresh_snonce",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS association.old_message3_rejected",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS association.old_keys_not_reinstalled",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS notifications.no_failure",
+          "occurrences": 1
+        }
+      ],
+      "reported_result": "RESULT failures=0",
+      "original_process_exit_code": null,
+      "exit_code_note": "Original Start-Process wrapper lost the exit code; do not rewrite it from stdout."
+    }
+  },
+  "limits": [
+    "These are LiberNT source fixtures with controlled boundaries, not tests of Windows kernel internals.",
+    "Named checks and occurrence counts are compared per case; thread print order is not a contract.",
+    "Original OS process exit codes are unknown. RESULT failures=0 is retained as output only.",
+    "A separate wrapper probe captured exact exit codes 0 and 7; it does not retroactively supply fixture exit codes.",
+    "Integration on upstream ef127fb4ff017222210e9b8c4321d82b3e3e0c0c remains pending."
+  ]
+}

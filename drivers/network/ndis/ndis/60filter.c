@@ -1406,6 +1406,8 @@ NdisFRestartFilter(
  *  slots; filter clones share the same context with a separate reference.
  * ============================================================================ */
 
+typedef struct _NDIS6_OID_STAGE NDIS6_OID_STAGE, *PNDIS6_OID_STAGE;
+
 typedef struct _NDIS6_FILTER_OID_FRAME
 {
     struct _NDIS6_FILTER_OID_FRAME *Previous;
@@ -1414,6 +1416,7 @@ typedef struct _NDIS6_FILTER_OID_FRAME
     volatile LONG References;
     BOOLEAN CancelIndicated;
     BOOLEAN CancelForwarded;
+    PNDIS6_OID_STAGE Stage;
 } NDIS6_FILTER_OID_FRAME, *PNDIS6_FILTER_OID_FRAME;
 
 typedef struct _NDIS6_FILTER_OID_CONTEXT
@@ -1435,7 +1438,19 @@ typedef struct _NDIS6_FILTER_OID_CONTEXT
     BOOLEAN OriginCancelIssued;
     BOOLEAN MiniportCancelIssued;
     BOOLEAN Completing;
+    LIST_ENTRY Stages;
+    PNDIS6_OID_STAGE MiniportStage;
+    BOOLEAN DetachRequested;
+    BOOLEAN QueueCancelled;
 } NDIS6_FILTER_OID_CONTEXT, *PNDIS6_FILTER_OID_CONTEXT;
+
+static VOID Ndis6OidStageCompleteFrame(PNDIS6_FILTER_OID_FRAME Frame);
+static PNDIS6_OID_STAGE Ndis6OidStageEnterFrame(PNDIS6_FILTER_OID_FRAME Frame);
+static PNDIS6_OID_STAGE Ndis6OidStageEnterMiniport(PNDIS6_FILTER_OID_CONTEXT Context);
+static VOID Ndis6OidStageComplete(PNDIS6_OID_STAGE Stage);
+static VOID Ndis6OidStageLeave(PNDIS6_OID_STAGE Stage);
+static BOOLEAN Ndis6OidStageCancelFrame(PNDIS6_FILTER_OID_FRAME Frame);
+static BOOLEAN Ndis6OidStageCancelMiniport(PNDIS6_FILTER_OID_CONTEXT Context);
 
 #define NDIS6_FILTER_OID_CONTEXT_SIGNATURE 'oFNn'
 #define NDIS6_FILTER_OID_CONTEXT_TAG       'cONn'
@@ -1490,8 +1505,10 @@ Ndis6FilterOidDereferenceContext(
 {
     if (InterlockedDecrement(&Context->References) == 0)
     {
+        PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Context->Adapter);
         Context->Signature = 0;
         ExFreePoolWithTag(Context, NDIS6_FILTER_OID_CONTEXT_TAG);
+        ExReleaseRundownProtection(&Ext->LifecycleRundown);
     }
 }
 
@@ -1538,6 +1555,7 @@ Ndis6FilterOidPushFrame(
     Frame->References = 1;
     Frame->CancelIndicated = FALSE;
     Frame->CancelForwarded = FALSE;
+    Frame->Stage = NULL;
 
     KeAcquireSpinLock(&Context->Lock, &OldIrql);
     Frame->Previous = Context->Top;
@@ -1581,7 +1599,10 @@ Ndis6FilterOidPopFrame(
     KeReleaseSpinLock(&Context->Lock, OldIrql);
 
     if (Removed)
+    {
+        Ndis6OidStageCompleteFrame(Frame);
         Ndis6FilterOidDereferenceFrame(Frame);
+    }
 }
 
 static VOID
@@ -1616,13 +1637,19 @@ Ndis6FilterOidCreateContext(
     if (Ext == NULL)
         return NULL;
 
+    if (!ExAcquireRundownProtection(&Ext->LifecycleRundown))
+        return NULL;
     Context = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Context), NDIS6_FILTER_OID_CONTEXT_TAG);
     if (Context == NULL)
+    {
+        ExReleaseRundownProtection(&Ext->LifecycleRundown);
         return NULL;
+    }
 
     RtlZeroMemory(Context, sizeof(*Context));
     Context->Signature = NDIS6_FILTER_OID_CONTEXT_SIGNATURE;
     InitializeListHead(&Context->ListEntry);
+    InitializeListHead(&Context->Stages);
     KeInitializeSpinLock(&Context->Lock);
     /* One reference belongs to the request and one pins this dispatch call. */
     Context->References = 2;
@@ -1686,12 +1713,16 @@ Ndis6FilterOidDetachContext(
     PNDIS6_ADAPTER_EXT Ext;
     KIRQL OldIrql;
     BOOLEAN Removed = FALSE;
+    BOOLEAN FirstDetach = FALSE;
 
     Ext = Context->Adapter != NULL ? NDIS6_EXT(Context->Adapter) : NULL;
     if (Ext != NULL)
     {
         KeAcquireSpinLock(&Ext->FilterOidContextListLock, &OldIrql);
-        if (InterlockedCompareExchange(&Context->Listed, FALSE, TRUE) == TRUE)
+        FirstDetach = !Context->DetachRequested;
+        Context->DetachRequested = TRUE;
+        if (IsListEmpty(&Context->Stages) &&
+            InterlockedCompareExchange(&Context->Listed, FALSE, TRUE) == TRUE)
         {
             RemoveEntryList(&Context->ListEntry);
             InitializeListHead(&Context->ListEntry);
@@ -1700,17 +1731,15 @@ Ndis6FilterOidDetachContext(
         KeReleaseSpinLock(&Ext->FilterOidContextListLock, OldIrql);
     }
 
-    if (!Removed)
-        return;
-
-    if (Ndis6FilterOidGetContext(OidRequest) == Context)
+    if (FirstDetach && Ndis6FilterOidGetContext(OidRequest) == Context)
         Ndis6FilterOidWriteReserved(OidRequest, NULL, NULL);
-    if (Context->OriginalRequest != OidRequest &&
+    if (FirstDetach && Context->OriginalRequest != OidRequest &&
         Ndis6FilterOidGetContext(Context->OriginalRequest) == Context)
     {
         Ndis6FilterOidWriteReserved(Context->OriginalRequest, NULL, NULL);
     }
-    Ndis6FilterOidDereferenceContext(Context);
+    if (Removed)
+        Ndis6FilterOidDereferenceContext(Context);
 }
 
 typedef struct _NDIS6_CLONED_OID_REQUEST
@@ -1884,6 +1913,7 @@ Ndis6FilterContinueOidCompletion(
 
         if (OidHandler != NULL || DirectHandler != NULL)
         {
+            PNDIS6_OID_STAGE Stage = Context->DirectRequest ? NULL : Ndis6OidStageEnterFrame(Frame);
             BOOLEAN IsOriginCompletion =
                 Context->FilterOriginated && Frame->Previous == NULL;
 
@@ -1904,6 +1934,7 @@ Ndis6FilterContinueOidCompletion(
             {
                 OidHandler(Module->FilterModuleContext, OidRequest, Status);
             }
+            Ndis6OidStageLeave(Stage);
             Ndis6FilterOidDereferenceFrame(Frame);
             return;
         }
@@ -1921,6 +1952,8 @@ Ndis6FilterContinueOidCompletion(
             Ndis6CompleteOidRequestToOrigin(Adapter, OidRequest, Status);
     }
 }
+
+#include "oidqueue.h"
 
 /* ============================================================================
  *  Filter OID forward
@@ -1970,12 +2003,12 @@ Ndis6FilterDispatchOidRequest(
             return Status;
         }
 
-        Status = Top->DriverBlock->Characteristics.OidRequestHandler(Top->FilterModuleContext, OidRequest);
+        Status = Ndis6OidStageQueue(Context, Context->Top, Top, OidRequest);
         Ndis6DereferenceFilterModule(Top);
     }
     else
     {
-        Ndis6FilterOidSetActiveRequest(Context, OidRequest, TRUE);
+        Ndis6FilterOidSetActiveRequest(Context, OidRequest, FALSE);
         Status = Ndis6FilterTerminalOidRequest(Adapter, OidRequest);
     }
 
@@ -2060,7 +2093,7 @@ Ndis6FilterTerminalOidRequest(
     if (Ndis6QueryCachedMediumOid(Ext, OidRequest, &Status))
         return Status;
 
-    return Ext->DriverBlock->Characteristics.OidRequestHandler(Ext->MiniportAdapterContext, OidRequest);
+    return Ndis6OidStageQueue(Ndis6FilterOidGetContext(OidRequest), NULL, NULL, OidRequest);
 }
 
 BOOLEAN
@@ -2070,6 +2103,7 @@ Ndis6FilterCompleteOidFromMiniport(
     _In_ NDIS_STATUS Status)
 {
     PNDIS6_FILTER_OID_CONTEXT Context;
+    PNDIS6_OID_STAGE Stage;
 
     if (Adapter == NULL || OidRequest == NULL)
         return FALSE;
@@ -2083,12 +2117,16 @@ Ndis6FilterCompleteOidFromMiniport(
     }
 
     Ndis6FilterOidReferenceContext(Context);
+    Stage = Ndis6OidStageEnterMiniport(Context);
     if (!Ndis6FilterOidBeginCompletion(Context, OidRequest))
     {
+        Ndis6OidStageLeave(Stage);
         Ndis6FilterOidDereferenceContext(Context);
         return TRUE;
     }
+    Ndis6OidStageComplete(Stage);
     Ndis6FilterContinueOidCompletion(Context, OidRequest, Status);
+    Ndis6OidStageLeave(Stage);
     Ndis6FilterOidDereferenceContext(Context);
     return TRUE;
 }
@@ -2287,7 +2325,7 @@ NdisFOidRequest(
             return Status;
         }
 
-        Status = Next->DriverBlock->Characteristics.OidRequestHandler(Next->FilterModuleContext, OidRequest);
+        Status = Ndis6OidStageQueue(Context, NextFrame, Next, OidRequest);
         Ndis6DereferenceFilterModule(Next);
 
         if (Status != NDIS_STATUS_PENDING &&
@@ -2298,7 +2336,7 @@ NdisFOidRequest(
     }
     else
     {
-        Ndis6FilterOidSetActiveRequest(Context, OidRequest, TRUE);
+        Ndis6FilterOidSetActiveRequest(Context, OidRequest, FALSE);
         Status = Ndis6FilterTerminalOidRequest(Adapter, OidRequest);
     }
 
@@ -2324,6 +2362,7 @@ NdisFOidRequestComplete(
     PNDIS6_FILTER_MODULE Module = (PNDIS6_FILTER_MODULE)NdisFilterHandle;
     PNDIS6_FILTER_OID_CONTEXT Context;
     PNDIS6_FILTER_OID_FRAME Frame;
+    PNDIS6_OID_STAGE Stage;
 
     if (OidRequest == NULL)
         return;
@@ -2345,9 +2384,11 @@ NdisFOidRequestComplete(
         Ndis6FilterOidDereferenceContext(Context);
         return;
     }
+    Stage = Ndis6OidStageEnterFrame(Frame);
     (VOID)Ndis6FilterOidBeginCompletion(Context, OidRequest);
     Ndis6FilterOidPopFrame(Context, Frame);
     Ndis6FilterContinueOidCompletion(Context, OidRequest, Status);
+    Ndis6OidStageLeave(Stage);
     Ndis6FilterOidDereferenceFrame(Frame);
     Ndis6FilterOidDereferenceContext(Context);
 }
@@ -2577,7 +2618,7 @@ Ndis6FilterOidCancelContext(
 
     KeAcquireSpinLock(&Context->Lock, &OldIrql);
     if (InterlockedCompareExchange(&Context->Listed, TRUE, TRUE) != TRUE ||
-        Context->Completing)
+        (Context->Completing && Context->DirectRequest))
     {
         KeReleaseSpinLock(&Context->Lock, OldIrql);
         return;
@@ -2623,6 +2664,11 @@ Ndis6FilterOidCancelContext(
 
     if (Module != NULL)
     {
+        if (!DirectRequest && Ndis6OidStageCancelFrame(Frame))
+        {
+            Ndis6FilterOidDereferenceFrame(Frame);
+            return;
+        }
         if (DirectRequest)
         {
             Module->DriverBlock->Characteristics.CancelDirectOidRequestHandler(Module->FilterModuleContext, RequestId);
@@ -2634,6 +2680,9 @@ Ndis6FilterOidCancelContext(
         Ndis6FilterOidDereferenceFrame(Frame);
         return;
     }
+
+    if (!DirectRequest && Ndis6OidStageCancelMiniport(Context))
+        return;
 
     if (!AtMiniport || Context->Adapter == NULL)
         return;
@@ -2684,7 +2733,8 @@ Ndis6FilterOidFindProtocolContextForCancel(
 
         KeAcquireSpinLock(&Candidate->Lock, &ContextIrql);
         if (InterlockedCompareExchange(&Candidate->Listed, TRUE, TRUE) == TRUE &&
-            !Candidate->Completing &&
+            (!Candidate->Completing ||
+             (!Candidate->DirectRequest && Ndis6OidStageHasPendingLocked(Candidate))) &&
             Candidate->DirectRequest == DirectRequest &&
             Candidate->OriginHandle == OriginHandle &&
             Candidate->OriginRequestId == RequestId &&
@@ -2734,6 +2784,10 @@ Ndis6FilterOidFrameForwardedRequestMatchesLocked(
     if (TargetFrame != NULL)
         return TargetFrame->RequestId == RequestId;
 
+    if (!Context->DirectRequest && Context->MiniportStage != NULL &&
+        !Context->MiniportStage->Completed)
+        return Context->MiniportStage->RequestId == RequestId;
+
     return Context->AtMiniport && Context->ActiveRequestId == RequestId;
 }
 
@@ -2767,7 +2821,8 @@ Ndis6FilterOidFindContextForCancel(
 
         KeAcquireSpinLock(&Candidate->Lock, &ContextIrql);
         if (InterlockedCompareExchange(&Candidate->Listed, TRUE, TRUE) == TRUE &&
-            !Candidate->Completing &&
+            (!Candidate->Completing ||
+             (!Candidate->DirectRequest && Ndis6OidStageHasPendingLocked(Candidate))) &&
             Candidate->DirectRequest == DirectRequest)
         {
             for (Frame = Candidate->Top;

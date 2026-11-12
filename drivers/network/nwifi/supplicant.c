@@ -1063,6 +1063,21 @@ NwifiSupplicantSeedFirmware(
     return Status;
 }
 
+static VOID
+NwifiSupplicantResetSessionLocked(
+    _In_opt_ PNWIFI_SUPPLICANT Sup)
+{
+    if (Sup != NULL && Sup->Initialised)
+    {
+        RsnaReset(&Sup->Ctx);
+        Sup->Generation++;
+        Sup->KeysInstalled = FALSE;
+        Sup->InstallQueued = 0;
+        Sup->InstalledGroupSerial = 0;
+        Sup->GroupInstallQueued = FALSE;
+    }
+}
+
 VOID
 NwifiSupplicantSetAssociation(
     _In_ PNWIFI_MSM Msm,
@@ -1078,6 +1093,7 @@ NwifiSupplicantSetAssociation(
     Sup = Msm->Supplicant;
     if (Sup != NULL && Sup->Initialised)
     {
+        NwifiSupplicantResetSessionLocked(Sup);
         RsnaSetApAddr(&Sup->Ctx, ApMac);
         RsnaSetRsnxe(&Sup->Ctx, NULL, 0);
         while (RequestIes != NULL && Offset + 2 <= RequestIeLength)
@@ -1129,19 +1145,8 @@ VOID
 NwifiSupplicantResetSession(
     _In_ PNWIFI_MSM Msm)
 {
-    PNWIFI_SUPPLICANT Sup;
-
     NdisAcquireSpinLock(&Msm->Lock);
-    Sup = Msm->Supplicant;
-    if (Sup != NULL && Sup->Initialised)
-    {
-        RsnaReset(&Sup->Ctx);
-        Sup->Generation++;
-        Sup->KeysInstalled = FALSE;
-        Sup->InstallQueued = 0;
-        Sup->InstalledGroupSerial = 0;
-        Sup->GroupInstallQueued = FALSE;
-    }
+    NwifiSupplicantResetSessionLocked(Msm->Supplicant);
     NdisReleaseSpinLock(&Msm->Lock);
 }
 
