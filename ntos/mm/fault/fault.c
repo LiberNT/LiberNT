@@ -315,6 +315,7 @@ MiFaultWorker(
     KIRQL OldIrql;
     BOOLEAN ManagedWrite;
     BOOLEAN WasValid = FALSE;
+    BOOLEAN Charged;
 
     if (VirtualAddress < Space->LowestVa || VirtualAddress > Space->HighestVa ||
         MiArchIsSelfMapAddress(VirtualAddress))
@@ -397,7 +398,28 @@ RetryPage:
         if (Status == STATUS_PENDING_COPY)
         {
             WasValid = FALSE;
+            MiPfnUnlock(&System->Pfn, TableFrame, OldIrql);
+            Charged = MiChargeCommit(Space, 1);
+            OldIrql = MiPfnLock(&System->Pfn, TableFrame);
+            if (!Charged)
+            {
+                Status = STATUS_COMMITMENT_LIMIT;
+                goto Complete;
+            }
+            if (MiArchPteRead(Slot) != RawPte)
+            {
+                MiPfnUnlock(&System->Pfn, TableFrame, OldIrql);
+                MiReturnCommit(Space, 1);
+                OldIrql = MiPfnLock(&System->Pfn, TableFrame);
+                goto RetryPage;
+            }
             Status = MiCopyOnWrite(Space, Vad, PageVa, Slot, TableFrame, Pte);
+            if (!NT_SUCCESS(Status))
+            {
+                MiPfnUnlock(&System->Pfn, TableFrame, OldIrql);
+                MiReturnCommit(Space, 1);
+                OldIrql = MiPfnLock(&System->Pfn, TableFrame);
+            }
         }
         goto Complete;
     }

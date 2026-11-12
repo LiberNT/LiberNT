@@ -870,6 +870,88 @@ SectionCopyOnWrite(void)
     WorldDestroy(&World);
 }
 
+typedef struct _COW_OWNER
+{
+    LONG64 Used;
+    KIRQL HighestIrql;
+    BOOLEAN Refuse;
+} COW_OWNER;
+
+static
+BOOLEAN
+CowOwnerCharge(_In_ PVOID Owner, _In_ LONG64 Pages)
+{
+    COW_OWNER *Budget = Owner;
+
+    if (MiHostIrql > Budget->HighestIrql)
+        Budget->HighestIrql = MiHostIrql;
+    if (Budget->Refuse)
+        return FALSE;
+    Budget->Used += Pages;
+    return TRUE;
+}
+
+static
+VOID
+CowOwnerReturn(_In_ PVOID Owner, _In_ LONG64 Pages)
+{
+    COW_OWNER *Budget = Owner;
+
+    if (MiHostIrql > Budget->HighestIrql)
+        Budget->HighestIrql = MiHostIrql;
+    Budget->Used -= Pages;
+}
+
+static
+void
+SectionCopyOnWriteOwnerCharge(void)
+{
+    TEST_WORLD World;
+    TEST_FILE File;
+    MI_ADDRESS_SPACE A;
+    PMI_SEGMENT Segment;
+    COW_OWNER Owner = { 0, 0, FALSE };
+    ULONG64 BaseA = 0;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 1024, 1, 100000);
+    WorldAttachPageFile(&World, 256);
+    FileCreate(&File, 0x10000);
+    SpaceCreate(&World, 0, &A);
+    World.System.ChargeOwnerCommit = CowOwnerCharge;
+    World.System.ReturnOwnerCommit = CowOwnerReturn;
+    A.CommitOwner = &Owner;
+
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, 0x10000, MI_PROT_READONLY, &TestFileOps,
+                                     &File, NULL, 0, &Segment)));
+    CHECK(NT_SUCCESS(Map(&A, Segment, &BaseA, 0, 0, MI_PROT_WRITECOPY)));
+    MiSegmentDereference(Segment);
+
+    CHECK(UserRead64(&World, 0, BaseA + 0x2000, &Status) == *(ULONG64 *)(File.Data + 0x2000));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, BaseA + 0x2000, 0x5151)));
+    CHECK(MI_ATOMIC_READ64(&A.CopyOnWriteFaults) == 1);
+    CHECK(Owner.Used == 1 && MI_ATOMIC_READ64(&A.CommittedPages) == 1);
+    CHECK(Owner.HighestIrql <= 1);
+
+    Owner.Refuse = TRUE;
+    CHECK(UserRead64(&World, 0, BaseA + 0x4000, &Status) == *(ULONG64 *)(File.Data + 0x4000));
+    CHECK(UserWrite64(&World, 0, BaseA + 0x4000, 0x5252) == STATUS_COMMITMENT_LIMIT);
+    CHECK(Owner.Used == 1 && MI_ATOMIC_READ64(&A.CommittedPages) == 1);
+    CHECK(UserRead64(&World, 0, BaseA + 0x4000, &Status) == *(ULONG64 *)(File.Data + 0x4000));
+    Owner.Refuse = FALSE;
+
+    CHECK(NT_SUCCESS(MiUnmapView(&A, BaseA)));
+    CHECK(Owner.Used == 0 && MI_ATOMIC_READ64(&A.CommittedPages) == 0);
+    CHECK(Owner.HighestIrql <= 1);
+    World.System.ChargeOwnerCommit = NULL;
+    World.System.ReturnOwnerCommit = NULL;
+    SpaceDestroy(&World, 0, &A);
+
+    WorldExpectClean(&World, 1024);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
 static
 void
 SectionSystemSpaceView(void)
@@ -2026,6 +2108,7 @@ TestSection(void)
     SectionViewCommitCompatibility();
     SectionReservedPageFile();
     SectionCopyOnWrite();
+    SectionCopyOnWriteOwnerCharge();
     SectionSystemSpaceView();
     SectionViewOutlivesOwner();
     SectionUnusedCache();
