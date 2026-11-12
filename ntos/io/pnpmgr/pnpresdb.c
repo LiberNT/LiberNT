@@ -179,6 +179,10 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
             UINT32 bStart = b->u.BusNumber.Start, bEnd = bStart + b->u.BusNumber.Length;
             if (!(aStart < bEnd && bStart < aEnd))
                 return FALSE;
+            if (aOwner && bOwner && aStart <= bStart && aEnd >= bEnd && IopResDbIsAncestorOrSelf(aOwner, bOwner))
+                return FALSE;
+            if (aOwner && bOwner && bStart <= aStart && bEnd >= aEnd && IopResDbIsAncestorOrSelf(bOwner, aOwner))
+                return FALSE;
             if ((a->ShareDisposition == CmResourceShareShared &&
                  aStart < bStart && aEnd >= bEnd) ||
                 (b->ShareDisposition == CmResourceShareShared &&
