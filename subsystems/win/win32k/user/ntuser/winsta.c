@@ -508,8 +508,8 @@ co_IntInitializeDesktopGraphics(VOID)
 
     /* Show the desktop */
     pdesk = IntGetActiveDesktop();
-    ASSERT(pdesk);
-    co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN], TRUE);
+    if (pdesk != NULL)
+        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN], TRUE);
 
     /* HACK: display wallpaper on all secondary displays */
     {
@@ -533,13 +533,17 @@ co_IntInitializeDesktopGraphics(VOID)
 VOID FASTCALL
 IntEndDesktopGraphics(VOID)
 {
+    PDESKTOP pdesk;
+
     if (NULL != ScreenDeviceContext)
     {  // No need to allocate a new dcattr.
         GreSetDCOwner(ScreenDeviceContext, GDI_OBJ_HMGR_POWNED);
         GreDeleteObject(ScreenDeviceContext);
         ScreenDeviceContext = NULL;
     }
-    IntHideDesktop(IntGetActiveDesktop());
+    pdesk = IntGetActiveDesktop();
+    if (pdesk != NULL)
+        IntHideDesktop(pdesk);
     IntDestroyPrimarySurface();
 }
 
