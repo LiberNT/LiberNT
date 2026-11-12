@@ -1563,9 +1563,11 @@ AlpcpCompleteLegacyConnect(
     Port->ConnectThread = NULL;
     if (!Message) return Thread;
 
+    ASSERT(Message->State & ALPC_MSG_STATE_ACCEPT_IN_PROGRESS);
     Message->State &= ~ALPC_MSG_STATE_ACCEPT_IN_PROGRESS;
     if (Message->WaitingThread != Thread)
     {
+        AlpcpReclaimCanceledMessage(Message);
         AlpcpFreeMessage(Message);
     }
     else if (Accept)
