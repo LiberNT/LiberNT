@@ -18,6 +18,7 @@ list(APPEND SOURCE
     LogonSessionEnd.c
     LogonUserNetwork.c
     IsTextUnicode.c
+    LocalSystemPrivileges.c
     LockServiceDatabase.c
     LookupAccountName.c
     LookupAccountSid.c
