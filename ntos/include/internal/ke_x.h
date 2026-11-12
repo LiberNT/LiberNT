@@ -1931,7 +1931,7 @@ KiWaitForThreadSwapOut(IN PKTHREAD Thread)
         YieldProcessor();
     }
 #elif KI_THREAD_HANDOFF_USES_RUNNING
-    while (Thread->Running)
+    while (*(volatile BOOLEAN *)&Thread->Running)
     {
         YieldProcessor();
     }

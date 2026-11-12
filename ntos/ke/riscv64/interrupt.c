@@ -457,6 +457,7 @@ KiDispatchInterrupt(VOID)
 
     /* Releases the PRCB lock. */
     KxQueueReadyThread(OldThread, Prcb);
+    KiWaitForThreadSwapOut(NewThread);
     KiSwapContext(APC_LEVEL, OldThread);
 }
 
