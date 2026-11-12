@@ -158,6 +158,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ex/ExPools.c
     ntos_ex/ExPushLock.c
     ntos_ex/ExResource.c
+    ntos_ex/ExResourceDeleteHeld.c
     ntos_ex/ExResourceBoost.c
     ntos_ex/ExResourceExtra.c
     ntos_ex/ExRundown.c

@@ -675,6 +675,40 @@ ExReinitializeResourceLite(
     return STATUS_SUCCESS;
 }
 
+/* A file system tearing a volume down deletes the resources it still holds itself */
+static
+__inline
+BOOLEAN
+ExpHeldOnlyByCurrentThread(
+    _In_ PERESOURCE Resource)
+{
+    ERESOURCE_THREAD Thread = (ERESOURCE_THREAD)KeGetCurrentThread();
+    ULONG Size = ExpOwnerTableSize(Resource);
+    ULONG Index;
+
+    if (Resource->ActiveCount == 0)
+    {
+        return TRUE;
+    }
+
+    if (Resource->OwnerEntry.OwnerThread != 0 &&
+        Resource->OwnerEntry.OwnerThread != Thread)
+    {
+        return FALSE;
+    }
+
+    for (Index = 1; Index < Size; Index++)
+    {
+        if (Resource->OwnerTable[Index].OwnerThread != 0 &&
+            Resource->OwnerTable[Index].OwnerThread != Thread)
+        {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 NTSTATUS
 NTAPI
 ExDeleteResourceLite(
@@ -682,7 +716,7 @@ ExDeleteResourceLite(
 {
     KIRQL OldIrql;
 
-    ASSERT(Resource->ActiveCount == 0);
+    ASSERT(ExpHeldOnlyByCurrentThread(Resource));
     ASSERT(Resource->NumberOfSharedWaiters == 0);
     ASSERT(Resource->NumberOfExclusiveWaiters == 0);
 
