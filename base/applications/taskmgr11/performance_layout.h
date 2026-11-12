@@ -24,3 +24,14 @@ static inline int TmCpuStatsLayout(int columns[3], int speedWidth,
         width = uptimeWidth + spacing;
     return width;
 }
+
+enum { CPU_GRAPH_OVERALL = 0, CPU_GRAPH_LOGICAL = 1 };
+
+#define CPU_GRAPH_DEFAULT CPU_GRAPH_LOGICAL
+
+static inline int TmCpuGraphShown(int mode, int processorCount)
+{
+    if (mode == CPU_GRAPH_LOGICAL && processorCount > 1)
+        return CPU_GRAPH_LOGICAL;
+    return CPU_GRAPH_OVERALL;
+}

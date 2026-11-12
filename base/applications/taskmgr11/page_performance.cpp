@@ -11,7 +11,6 @@
 #define PGF_CLASS L"TM11PagePerf"
 
 enum { RES_CPU = 0, RES_MEM, RES_DISK, RES_NET, RES_GPU, RES_COUNT };
-enum { CPU_GRAPH_OVERALL = 0, CPU_GRAPH_LOGICAL = 1 };
 
 /* -1 shows every engine at once, which is what Windows opens with; any
  * other value names the single engine to fill the graph area with. */
@@ -34,7 +33,7 @@ struct PerformancePage : Page
     RECT rcPane;
 
     PerformancePage() : sel(0), hotTile(-1), railScroll(0),
-                        cpuGraphMode(CPU_GRAPH_OVERALL),
+                        cpuGraphMode(CPU_GRAPH_DEFAULT),
                         gpuGraphMode(GPU_GRAPH_ALL_ENGINES),
                         showKernelTimes(FALSE), trackingMouse(FALSE),
                         selectionRestored(FALSE)
@@ -1233,7 +1232,7 @@ struct PerformancePage : Page
             if (graphBottom < graphTop + S(90))
                 graphBottom = graphTop + S(90);
             RECT graph = { pane.left, graphTop, pane.right, graphBottom };
-            if (cpuGraphMode == CPU_GRAPH_LOGICAL && d.nCpu > 1)
+            if (TmCpuGraphShown(cpuGraphMode, d.nCpu) == CPU_GRAPH_LOGICAL)
                 PaintLogicalCpuGraphs(dc, graph);
             else
                 PaintHistoryGraph(dc, graph, L"% Utilization", L"100%",

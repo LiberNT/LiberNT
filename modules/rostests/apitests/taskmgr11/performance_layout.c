@@ -23,4 +23,11 @@ START_TEST(performance_layout)
     width = TmCpuStatsLayout(columns, 300, 400, 72, 12);
     ok(width - columns[0] >= 300 + 6, "long speed text is clipped\n");
     ok(width >= 400 + 6, "long uptime text is clipped\n");
+
+    ok(TmCpuGraphShown(CPU_GRAPH_DEFAULT, 4) == CPU_GRAPH_LOGICAL,
+       "a new Task Manager must open on one graph per logical processor\n");
+    ok(TmCpuGraphShown(CPU_GRAPH_DEFAULT, 1) == CPU_GRAPH_OVERALL,
+       "a single processor has only the overall graph\n");
+    ok(TmCpuGraphShown(CPU_GRAPH_OVERALL, 4) == CPU_GRAPH_OVERALL,
+       "the overall graph must stay selectable\n");
 }
