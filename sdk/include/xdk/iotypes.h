@@ -8032,6 +8032,11 @@ typedef struct _REPARSE_GUID_DATA_BUFFER {
 #define IO_REPARSE_TAG_SYMLINK                  (0xA000000CL)
 #define IO_REPARSE_TAG_IIS_CACHE                (0xA0000010L)
 #define IO_REPARSE_TAG_DFSR                     (0x80000012L)
+#define IO_REPARSE_TAG_LX_SYMLINK               (0xA000001DL)
+#define IO_REPARSE_TAG_AF_UNIX                  (0x80000023L)
+#define IO_REPARSE_TAG_LX_FIFO                  (0x80000024L)
+#define IO_REPARSE_TAG_LX_CHR                   (0x80000025L)
+#define IO_REPARSE_TAG_LX_BLK                   (0x80000026L)
 
 #pragma pack(4)
 typedef struct _REPARSE_INDEX_KEY {
