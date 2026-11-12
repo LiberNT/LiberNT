@@ -6,6 +6,7 @@
  */
 
 #include "ndis6_internal.h"
+#include <ntstrsafe.h>
 
 #ifndef EXPORT
 #define EXPORT NTAPI
@@ -238,6 +239,132 @@ Ndis6DereferenceFilterDriver(
     ExReleaseRundownProtection(&Block->CallbackRundown);
 }
 
+#define NDIS6_FILTER_MEDIUM_BIT(Medium) (1UL << (ULONG)(Medium))
+
+static BOOLEAN
+Ndis6FilterTokenIs(
+    _In_reads_(Length) PCWSTR Token,
+    _In_ ULONG Length,
+    _In_z_ PCWSTR Name)
+{
+    return Length == wcslen(Name) && _wcsnicmp(Token, Name, Length) == 0;
+}
+
+static BOOLEAN
+Ndis6FilterListHas(
+    _In_reads_(Count) PCWSTR List,
+    _In_ ULONG Count,
+    _In_z_ PCWSTR Name)
+{
+    ULONG Start = 0;
+    ULONG Index;
+
+    for (Index = 0; Index <= Count; Index++)
+    {
+        if (Index == Count || List[Index] == L',' || List[Index] == UNICODE_NULL)
+        {
+            ULONG First = Start;
+            ULONG Last = Index;
+
+            while (First < Last && List[First] == L' ')
+                First++;
+            while (Last > First && List[Last - 1] == L' ')
+                Last--;
+            if (Ndis6FilterTokenIs(&List[First], Last - First, Name))
+                return TRUE;
+            Start = Index + 1;
+        }
+    }
+    return FALSE;
+}
+
+static ULONG
+Ndis6QueryFilterString(
+    _In_ HANDLE Key,
+    _In_z_ PCWSTR ValueName,
+    _Out_writes_(Capacity) PWCHAR Buffer,
+    _In_ ULONG Capacity)
+{
+    UCHAR Storage[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 128 * sizeof(WCHAR)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Storage;
+    UNICODE_STRING Name;
+    ULONG Length = 0;
+    ULONG Count;
+
+    ASSERT(Capacity > 0);
+    Buffer[0] = UNICODE_NULL;
+    RtlInitUnicodeString(&Name, ValueName);
+    if (!NT_SUCCESS(ZwQueryValueKey(Key, &Name, KeyValuePartialInformation, Info, sizeof(Storage), &Length)) ||
+        (Info->Type != REG_SZ && Info->Type != REG_MULTI_SZ))
+    {
+        return 0;
+    }
+
+    Count = min(Info->DataLength / sizeof(WCHAR), Capacity - 1);
+    RtlCopyMemory(Buffer, Info->Data, Count * sizeof(WCHAR));
+    Buffer[Count] = UNICODE_NULL;
+    while (Count > 0 && Buffer[Count - 1] == UNICODE_NULL)
+        Count--;
+    return Count;
+}
+
+static VOID
+Ndis6ReadFilterBindingConfig(
+    _Inout_ PNDIS6_FILTER_DRIVER_BLOCK Block)
+{
+    static const WCHAR Prefix[] =
+        L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E974-E325-11CE-BFC1-08002BE10318}\\";
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING KeyName;
+    WCHAR Path[160];
+    WCHAR Value[128];
+    HANDLE Ndi;
+    HANDLE Interfaces;
+    ULONG Count;
+
+    PAGED_CODE();
+
+    if (Block->Characteristics.UniqueName.Length == 0 ||
+        !NT_SUCCESS(RtlStringCchCopyW(Path, RTL_NUMBER_OF(Path), Prefix)) ||
+        !NT_SUCCESS(RtlStringCchCatNW(Path, RTL_NUMBER_OF(Path), Block->Characteristics.UniqueName.Buffer,
+                                      Block->Characteristics.UniqueName.Length / sizeof(WCHAR))) ||
+        !NT_SUCCESS(RtlStringCchCatW(Path, RTL_NUMBER_OF(Path), L"\\Ndi")))
+    {
+        return;
+    }
+
+    RtlInitUnicodeString(&KeyName, Path);
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&Ndi, KEY_READ, &ObjectAttributes)))
+        return;
+
+    Count = Ndis6QueryFilterString(Ndi, L"FilterClass", Value, RTL_NUMBER_OF(Value));
+    Block->MediumConverter = Count >= 19 && _wcsnicmp(Value, L"ms_medium_converter", 19) == 0;
+
+    RtlInitUnicodeString(&KeyName, L"Interfaces");
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, Ndi, NULL);
+    if (NT_SUCCESS(ZwOpenKey(&Interfaces, KEY_READ, &ObjectAttributes)))
+    {
+        Count = Ndis6QueryFilterString(Interfaces, L"FilterMediaTypes", Value, RTL_NUMBER_OF(Value));
+        if (Ndis6FilterListHas(Value, Count, L"ethernet"))
+            Block->MediaTypeMask |= NDIS6_FILTER_MEDIUM_BIT(NdisMedium802_3);
+        if (Ndis6FilterListHas(Value, Count, L"wlan"))
+            Block->MediaTypeMask |= NDIS6_FILTER_MEDIUM_BIT(NdisMediumNative802_11);
+
+        Count = Ndis6QueryFilterString(Interfaces, L"UpperRange", Value, RTL_NUMBER_OF(Value));
+        if (Block->MediumConverter && Ndis6FilterListHas(Value, Count, L"ndis5"))
+            Block->ConvertedMedium = NdisMedium802_3;
+        else
+            Block->MediumConverter = FALSE;
+        ZwClose(Interfaces);
+    }
+    else
+    {
+        Block->MediumConverter = FALSE;
+    }
+    ZwClose(Ndi);
+}
+
 NDIS_STATUS
 EXPORT
 NdisFRegisterFilterDriver(
@@ -292,6 +419,8 @@ NdisFRegisterFilterDriver(
         return Status;
     }
 
+    Ndis6ReadFilterBindingConfig(Block);
+
     if (Block->Characteristics.SetOptionsHandler != NULL)
     {
         *NdisFilterDriverHandle = (NDIS_HANDLE)Block;
@@ -315,6 +444,53 @@ NdisFRegisterFilterDriver(
     return NDIS_STATUS_SUCCESS;
 }
 
+/* Protocols bound to the medium a converter presented cannot stay bound once it leaves */
+static VOID
+Ndis6UnbindConvertedProtocols(
+    _In_ PNDIS6_FILTER_DRIVER_BLOCK Block)
+{
+    PLOGICAL_ADAPTER *Adapters;
+    SIZE_T Capacity = 0;
+    SIZE_T Count = 0;
+    SIZE_T Index;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+    ASSERT(Block->MediumConverter);
+
+    KeAcquireSpinLock(&Block->ModuleListLock, &OldIrql);
+    for (Entry = Block->ModuleList.Flink; Entry != &Block->ModuleList; Entry = Entry->Flink)
+        Capacity++;
+    KeReleaseSpinLock(&Block->ModuleListLock, OldIrql);
+    if (Capacity == 0)
+        return;
+
+    Adapters = ExAllocatePoolWithTag(NonPagedPool, Capacity * sizeof(*Adapters), NDIS6_FILTER_SNAPSHOT_TAG);
+    if (Adapters == NULL)
+        return;
+
+    KeAcquireSpinLock(&Block->ModuleListLock, &OldIrql);
+    for (Entry = Block->ModuleList.Flink; Entry != &Block->ModuleList && Count < Capacity; Entry = Entry->Flink)
+    {
+        PNDIS6_FILTER_MODULE Module = CONTAINING_RECORD(Entry, NDIS6_FILTER_MODULE, DriverLink);
+
+        if (Module->UpperMedium != Module->LowerMedium && Module->Adapter != NULL &&
+            Ndis6ReferenceAdapterLifecycle(Module->Adapter))
+        {
+            Adapters[Count++] = Module->Adapter;
+        }
+    }
+    KeReleaseSpinLock(&Block->ModuleListLock, OldIrql);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        Ndis6UnbindProtocolsFromAdapter(Adapters[Index]);
+        Ndis6DereferenceAdapterLifecycle(Adapters[Index]);
+    }
+    ExFreePoolWithTag(Adapters, NDIS6_FILTER_SNAPSHOT_TAG);
+}
+
 VOID
 EXPORT
 NdisFDeregisterFilterDriver(
@@ -328,6 +504,9 @@ NdisFDeregisterFilterDriver(
         return;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (Block->MediumConverter)
+        Ndis6UnbindConvertedProtocols(Block);
 
     (VOID)KeWaitForSingleObject(&g_Ndis6FilterLifecycleMutex, Executive, KernelMode, FALSE, NULL);
 
@@ -533,6 +712,13 @@ Ndis6AttachFilterModuleLocked(
         return NDIS_STATUS_SUCCESS;
     }
 
+    if (Block->MediaTypeMask != 0 &&
+        (!Ext->GeneralAttrsValid || (ULONG)Ext->GeneralAttrs.MediaType >= 32 ||
+         !(Block->MediaTypeMask & NDIS6_FILTER_MEDIUM_BIT(Ext->GeneralAttrs.MediaType))))
+    {
+        return NDIS_STATUS_SUCCESS;
+    }
+
     /* A closing block is being removed from the global list. Treat it as
      * absent instead of turning an unrelated mandatory attach into failure. */
     if (!Ndis6ReferenceFilterDriver(Block))
@@ -555,6 +741,9 @@ Ndis6AttachFilterModuleLocked(
     ExInitializeRundownProtection(&Module->RundownRef);
     KeInitializeEvent(&Module->PauseEvent, NotificationEvent, FALSE);
     KeInitializeEvent(&Module->RestartEvent, NotificationEvent, FALSE);
+    Module->LowerMedium = Ext->GeneralAttrs.MediaType;
+    Module->UpperMedium = (Block->MediumConverter && Block->MediaTypeMask != 0) ? Block->ConvertedMedium
+                                                                              : Module->LowerMedium;
 
     Ndis6BuildFilterAttachParameters(Adapter, Block, &Params);
     Status = Block->Characteristics.AttachHandler((NDIS_HANDLE)Module, Block->FilterDriverContext, &Params);
@@ -769,6 +958,11 @@ Ndis6AttachFilterDriverToAllAdapters(
         if (Status != NDIS_STATUS_SUCCESS && Status != NDIS_STATUS_CLOSING)
         {
             DbgPrint("NDIS6: late filter attach failed 0x%08lx\n", (ULONG)Status);
+        }
+        else if (Status == NDIS_STATUS_SUCCESS && Block->MediumConverter)
+        {
+            /* Protocols that refused the miniport's own medium may take the converted one */
+            Ndis6BindAllProtocolsToAdapter(Adapter);
         }
 
         Ndis6DereferenceAdapterLifecycle(Adapter);

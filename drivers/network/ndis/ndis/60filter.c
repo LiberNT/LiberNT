@@ -384,6 +384,30 @@ Ndis6FilterChainFindLocked(
     return NULL;
 }
 
+NDIS_MEDIUM
+Ndis6AdapterProtocolMedium(
+    _In_ PNDIS6_ADAPTER_EXT Ext)
+{
+    NDIS_MEDIUM Medium;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    ASSERT(Ext != NULL);
+    Medium = Ext->GeneralAttrs.MediaType;
+
+    KeAcquireSpinLock(&Ext->FilterModuleListLock, &OldIrql);
+    for (Entry = Ext->FilterModuleList.Blink; Entry != &Ext->FilterModuleList; Entry = Entry->Blink)
+    {
+        PNDIS6_FILTER_MODULE Module = CONTAINING_RECORD(Entry, NDIS6_FILTER_MODULE, ListEntry);
+
+        ASSERT(Module->Signature == NDIS6_FILTER_MODULE_SIGNATURE);
+        if (Module->LowerMedium == Medium)
+            Medium = Module->UpperMedium;
+    }
+    KeReleaseSpinLock(&Ext->FilterModuleListLock, OldIrql);
+    return Medium;
+}
+
 /* The returned module owns one rundown reference. Detach marks the module
  * closing and drains that reference before unlinking it from this list. */
 static PNDIS6_FILTER_MODULE

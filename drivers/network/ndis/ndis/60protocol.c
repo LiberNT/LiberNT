@@ -206,7 +206,7 @@ Ndis6BuildBindParameters(
         Params->LowestIfIndex = Ext->IfIndex;
         if (Ext->GeneralAttrsValid)
         {
-            Params->MediaType            = Ext->GeneralAttrs.MediaType;
+            Params->MediaType            = Ndis6AdapterProtocolMedium(Ext);
             Params->PhysicalMediumType   = Ext->GeneralAttrs.PhysicalMediumType;
             Params->MtuSize              = Ext->GeneralAttrs.MtuSize;
             Params->MaxXmitLinkSpeed     = Ext->GeneralAttrs.MaxXmitLinkSpeed;
@@ -1179,7 +1179,23 @@ Ndis6UnbindAllProtocolsFromAdapter(
         return;
 
     InterlockedExchange(&Ext->ProtocolBindingsClosing, 1);
+    Ndis6UnbindProtocolsFromAdapter(Adapter);
+}
 
+VOID
+Ndis6UnbindProtocolsFromAdapter(
+    _In_ PLOGICAL_ADAPTER Adapter)
+{
+    PNDIS6_ADAPTER_EXT Ext;
+
+    if (Adapter == NULL || !Adapter->IsNdis6)
+        return;
+
+    Ext = NDIS6_EXT(Adapter);
+    if (Ext == NULL)
+        return;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     if (InterlockedCompareExchange(&g_Ndis6ProtocolDriverListState, 2, 2) != 2)
         return;
 
@@ -1364,7 +1380,7 @@ NdisOpenAdapterEx(
         UINT         i;
         BOOLEAN      Matched = FALSE;
         if (Ext != NULL && Ext->GeneralAttrsValid)
-            AdapterMedium = Ext->GeneralAttrs.MediaType;
+            AdapterMedium = Ndis6AdapterProtocolMedium(Ext);
 
         if (OpenParams->MediumArray != NULL && OpenParams->MediumArraySize > 0)
         {

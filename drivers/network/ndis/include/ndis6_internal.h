@@ -404,6 +404,8 @@ typedef struct _NDIS6_FILTER_MODULE
      * like NDIS_FILTER_ATTRIBUTES_MANDATORY. */
     ULONG                                   Flags;
     BOOLEAN                                 AttributesValid;
+    NDIS_MEDIUM                             LowerMedium;
+    NDIS_MEDIUM                             UpperMedium;
 } NDIS6_FILTER_MODULE, *PNDIS6_FILTER_MODULE;
 
 #define NDIS6_FILTER_MODULE_SIGNATURE 'mFNn'
@@ -997,6 +999,9 @@ typedef struct _NDIS6_FILTER_DRIVER_BLOCK
     PWCHAR                              UniqueNameBuffer;
     PWCHAR                              ServiceNameBuffer;
     NDIS_FILTER_DRIVER_CHARACTERISTICS  Characteristics;
+    ULONG                               MediaTypeMask;
+    BOOLEAN                             MediumConverter;
+    NDIS_MEDIUM                         ConvertedMedium;
 } NDIS6_FILTER_DRIVER_BLOCK, *PNDIS6_FILTER_DRIVER_BLOCK;
 
 #define NDIS6_FILTER_DRIVER_SIGNATURE 'dFNn'
@@ -1009,6 +1014,14 @@ Ndis6FilterDriverListInit(VOID);
 
 NDIS_STATUS
 Ndis6AttachFiltersToAdapter(
+    _In_ PLOGICAL_ADAPTER Adapter);
+
+NDIS_MEDIUM
+Ndis6AdapterProtocolMedium(
+    _In_ PNDIS6_ADAPTER_EXT Ext);
+
+VOID
+Ndis6BindAllProtocolsToAdapter(
     _In_ PLOGICAL_ADAPTER Adapter);
 
 VOID
@@ -1206,6 +1219,10 @@ Ndis6BuildProtocolSection(
 
 VOID
 Ndis6UnbindAllProtocolsFromAdapter(
+    _In_ PLOGICAL_ADAPTER Adapter);
+
+VOID
+Ndis6UnbindProtocolsFromAdapter(
     _In_ PLOGICAL_ADAPTER Adapter);
 
 NDIS_STATUS
