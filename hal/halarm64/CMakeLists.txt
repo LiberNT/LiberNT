@@ -48,6 +48,8 @@ list(APPEND SOURCES
     ${HAL_COMMON_DIR}/acpi/halacpi.c
     ${HAL_COMMON_DIR}/acpi/halpnpdd.c
     ${HAL_COMMON_DIR}/acpi/tables.c
+    ${HAL_COMMON_DIR}/acpi/acpival.c
+    ${HAL_COMMON_DIR}/acpi/acpifault.c
     ${HAL_ARM64_SOURCE_DIR}/acpi/halacpi.c
     ${HAL_ARM64_SOURCE_DIR}/acpi/halpnpdd.c
     ${HAL_ARM64_SOURCE_DIR}/acpi/arm64.c

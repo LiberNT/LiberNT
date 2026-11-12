@@ -21,8 +21,6 @@ foreach(_table classes vendors)
 endforeach()
 
 list(APPEND SOURCE
-    acpi/acpival.c
-    acpi/acpifault.c
     generic/display.c
     generic/efi.c
     generic/fdtpnp.c

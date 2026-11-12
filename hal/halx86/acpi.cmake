@@ -5,6 +5,8 @@ list(APPEND HAL_ACPI_SOURCE
     ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halacpi.c
     ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halpnpdd.c
     ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/tables.c
+    ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpival.c
+    ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpifault.c
     acpi/halacpi.c
     acpi/halpnpdd.c
     acpi/busemul.c
