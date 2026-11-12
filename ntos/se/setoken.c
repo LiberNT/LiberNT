@@ -667,6 +667,23 @@ SepAssembleToken(
     return STATUS_SUCCESS;
 }
 
+/* An unchanged duplicate stands for the same security context, so it keeps the source's ModifiedId */
+/* TODO: whether a copy made EffectiveOnly keeps the ModifiedId is not documented; it gets a new one */
+static
+BOOLEAN
+SepCopyKeepsModifiedId(
+    _In_ PTOKEN Token,
+    _In_ BOOLEAN EffectiveOnly,
+    _In_ TOKEN_TYPE Type,
+    _In_ SECURITY_IMPERSONATION_LEVEL Level)
+{
+    if (EffectiveOnly)
+        return FALSE;
+
+    return (Type == TokenPrimary) ||
+           (Token->TokenType == TokenImpersonation && Level == Token->ImpersonationLevel);
+}
+
 /*
  * Makes a second token that says what the first one says. What was turned off
  * at the time can be dropped for good, which is what a caller asks for when
@@ -681,6 +698,7 @@ SepCloneToken(
     _In_ SECURITY_IMPERSONATION_LEVEL Level,
     _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_ KPROCESSOR_MODE AccessMode,
+    _In_ BOOLEAN KeepModifiedId,
     _Out_ PTOKEN *NewToken)
 {
     SEP_TOKEN_CONTENTS Contents;
@@ -775,6 +793,8 @@ SepCloneToken(
 
     /* A copy stands for the same process as the token it was made from */
     if (NT_SUCCESS(Status)) (*NewToken)->ProcUnique = Token->ProcUnique;
+
+    if (NT_SUCCESS(Status) && KeepModifiedId) (*NewToken)->ModifiedId = Token->ModifiedId;
 
     SepReleaseTokenLock(Token);
 
@@ -1334,6 +1354,7 @@ SeCopyClientToken(
                            Level,
                            NULL,
                            PreviousMode,
+                           FALSE,
                            (PTOKEN *)NewToken);
     if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
 
@@ -1357,6 +1378,7 @@ SepCopyImpersonationToken(
                            Level,
                            NULL,
                            PreviousMode,
+                           FALSE,
                            (PTOKEN *)NewToken);
     if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
 
@@ -1504,6 +1526,7 @@ SepCopyPrimaryToken(
                            SecurityAnonymous,
                            NULL,
                            KernelMode,
+                           FALSE,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -1544,6 +1567,7 @@ SeSubProcessToken(
                            SecurityAnonymous,
                            NULL,
                            KernelMode,
+                           FALSE,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
 
@@ -1925,6 +1949,7 @@ NtDuplicateToken(
                                    Level,
                                    ObjectAttributes,
                                    PreviousMode,
+                                   SepCopyKeepsModifiedId(Token, EffectiveOnly, TokenType, Level),
                                    &New);
         }
 
@@ -2374,6 +2399,7 @@ NtCreateLowBoxToken(
                                Token->ImpersonationLevel,
                                ObjectAttributes,
                                PreviousMode,
+                               FALSE,
                                &New);
         ObDereferenceObject(Token);
     }
