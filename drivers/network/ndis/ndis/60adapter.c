@@ -675,6 +675,11 @@ Ndis6InitializeLogicalAdapter(
     Ext->DefaultPortAuthStates.RcvAuthorizationState = NdisPortAuthorized;
     KeInitializeSpinLock(&Ext->WdfReferenceLock);
     KeInitializeEvent(&Ext->WdfReferenceDrainEvent, NotificationEvent, TRUE);
+    KeInitializeTimer(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Timer);
+    KeInitializeDpc(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Dpc, MiniportHangDpc, Adapter);
+    KeInitializeSpinLock(&Adapter->HangTimerLock);
+    Adapter->HangTimerInitialized = FALSE;
+    Adapter->HangTimerStopping = TRUE;
     KeInitializeSpinLock(&Ext->IsrLock);
     Ext->InterruptRundownState = NDIS6_INTERRUPT_RUNDOWN_STOPPING;
     KeInitializeEvent(&Ext->InterruptDrainEvent, NotificationEvent, TRUE);
@@ -1084,6 +1089,12 @@ Ndis6CallMiniportInitializeEx(
         Ndis6FreePorts(Ext);
         Status = NDIS_STATUS_FAILURE;
     }
+    else if (Ext->DriverBlock->Characteristics.CheckForHangHandlerEx != NULL)
+    {
+        if (Adapter->NdisMiniportBlock.CheckForHangSeconds == 0)
+            Adapter->NdisMiniportBlock.CheckForHangSeconds = 2;
+        MiniStartHangTimer(Adapter);
+    }
 
     return Status;
 }
@@ -1111,6 +1122,7 @@ Ndis6CallMiniportHaltEx(
         return;
 
     Ndis6SetNetInterfaceState(Adapter, FALSE);
+    MiniStopHangTimer(Adapter);
 
     /* Close registration-time bind/attach admission before pausing. A late
      * filter registration can otherwise observe Initialized while final halt
@@ -1764,6 +1776,11 @@ Ndis6CreateImInstance(
     Ext->DefaultPortAuthStates.RcvControlState = NdisPortControlStateUncontrolled;
     Ext->DefaultPortAuthStates.SendAuthorizationState = NdisPortAuthorized;
     Ext->DefaultPortAuthStates.RcvAuthorizationState = NdisPortAuthorized;
+    KeInitializeTimer(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Timer);
+    KeInitializeDpc(&Adapter->NdisMiniportBlock.WakeUpDpcTimer.Dpc, MiniportHangDpc, Adapter);
+    KeInitializeSpinLock(&Adapter->HangTimerLock);
+    Adapter->HangTimerInitialized = FALSE;
+    Adapter->HangTimerStopping = TRUE;
     KeInitializeSpinLock(&Ext->IsrLock);
     Ext->InterruptRundownState = NDIS6_INTERRUPT_RUNDOWN_STOPPING;
     KeInitializeEvent(&Ext->InterruptDrainEvent, NotificationEvent, TRUE);

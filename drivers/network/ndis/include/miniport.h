@@ -223,6 +223,21 @@ NDIS_STATUS
 MiniReset(
     PLOGICAL_ADAPTER Adapter);
 
+VOID
+MiniStartHangTimer(
+    PLOGICAL_ADAPTER Adapter);
+
+VOID
+MiniStopHangTimer(
+    PLOGICAL_ADAPTER Adapter);
+
+VOID NTAPI
+MiniportHangDpc(
+    PKDPC Dpc,
+    PVOID DeferredContext,
+    PVOID SystemArgument1,
+    PVOID SystemArgument2);
+
 VOID NTAPI
 MiniResetComplete(
     IN NDIS_HANDLE MiniportAdapterHandle,

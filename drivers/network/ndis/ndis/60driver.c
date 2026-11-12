@@ -699,6 +699,8 @@ NdisMSetMiniportAttributes(
             RtlZeroMemory(&Ext->RegistrationAttrs, sizeof(Ext->RegistrationAttrs));
             RtlCopyMemory(&Ext->RegistrationAttrs, Reg, Reg->Header.Size);
             Ext->RegistrationAttrsValid = TRUE;
+            if (Reg->CheckForHangTimeInSeconds > 0)
+                Adapter->NdisMiniportBlock.CheckForHangSeconds = Reg->CheckForHangTimeInSeconds;
             Ext->DefaultPortActive =
                 (Reg->AttributeFlags & NDIS_MINIPORT_ATTRIBUTES_CONTROLS_DEFAULT_PORT) == 0;
 

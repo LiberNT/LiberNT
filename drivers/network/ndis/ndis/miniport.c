@@ -1234,7 +1234,7 @@ MiniReset(
    return Status;
 }
 
-static VOID
+VOID
 MiniStartHangTimer(
     PLOGICAL_ADAPTER Adapter)
 {
@@ -1260,7 +1260,7 @@ MiniStartHangTimer(
     KeReleaseSpinLock(&Adapter->HangTimerLock, OldIrql);
 }
 
-static VOID
+VOID
 MiniStopHangTimer(
     PLOGICAL_ADAPTER Adapter)
 {
@@ -1305,10 +1305,7 @@ MiniportHangDpc(
   UNREFERENCED_PARAMETER(SystemArgument1);
   UNREFERENCED_PARAMETER(SystemArgument2);
 
-  /* dev-nt6-1: NDIS 6 adapters never have the legacy WakeUpDpcTimer
-   * armed (the bridge never starts it). If we somehow get here for an
-   * NDIS 6 adapter, bail. */
-  if (Adapter == NULL || Adapter->IsNdis6)
+  if (Adapter == NULL)
       return;
 
   KeAcquireSpinLockAtDpcLevel(&Adapter->HangTimerLock);
