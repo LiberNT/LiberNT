@@ -1168,8 +1168,11 @@ SeSetSecurityDescriptorInfoEx(
         Control &= ~(SE_SACL_DEFAULTED | SE_SACL_AUTO_INHERITED);
 
         /* A part set under the inheritance model marks the SACL as converted to it (Automatic Propagation of Inheritable ACEs) */
-        if (Given.Control & (SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ))
+        if ((Given.Control & (SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ)) ==
+            (SE_SACL_AUTO_INHERITED | SE_SACL_AUTO_INHERIT_REQ))
+        {
             Control |= SE_SACL_AUTO_INHERITED;
+        }
     }
 
     if (NT_SUCCESS(Status))
