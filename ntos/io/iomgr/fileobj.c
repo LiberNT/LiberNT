@@ -117,15 +117,21 @@ IopDeleteFile(
             IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLEANUP, 0);
         }
 
-        IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE, 0);
-
-        FsRtlPTeardownPerFileObjectContexts(FileObject);
-
+        /* The file system frees a VPB it swapped out once the count it sees in the close reaches zero */
         Vpb = FileObject->Vpb;
         if (Vpb != NULL && !(FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
         {
-            IopDereferenceVpbAndFree(Vpb);
+            KIRQL OldIrql;
+
+            IoAcquireVpbSpinLock(&OldIrql);
+            ASSERT(Vpb->ReferenceCount > 0);
+            Vpb->ReferenceCount--;
+            IoReleaseVpbSpinLock(OldIrql);
         }
+
+        IopSendCloseIrp(DeviceObject, FileObject, IRP_MJ_CLOSE, 0);
+
+        FsRtlPTeardownPerFileObjectContexts(FileObject);
     }
 
     if (FileObject->FileName.Buffer != NULL)

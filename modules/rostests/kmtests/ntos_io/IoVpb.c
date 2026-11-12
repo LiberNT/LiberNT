@@ -13,6 +13,11 @@
 
 #define TEST_DISK_BYTES (1024 * 1024)
 #define TEST_SECTOR_BYTES 512
+#define TEST_VPB_TAG ' BPV'
+
+static LONG TestCloseVpbReferences;
+static PVPB TestWatchedVpb;
+static PDEVICE_OBJECT TestCloseDevice;
 
 static
 NTSTATUS
@@ -38,8 +43,11 @@ TestDiskIrp(
     PVOID Buffer = Irp->AssociatedIrp.SystemBuffer;
     PVOID Data;
 
-    UNREFERENCED_PARAMETER(DeviceObject);
-
+    if (IoStackLocation->MajorFunction == IRP_MJ_CLOSE && TestWatchedVpb != NULL)
+    {
+        TestCloseDevice = DeviceObject;
+        InterlockedExchange(&TestCloseVpbReferences, (LONG)TestWatchedVpb->ReferenceCount);
+    }
     if (IoStackLocation->MajorFunction == IRP_MJ_READ)
     {
         Data = Irp->MdlAddress ? MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority) : Irp->UserBuffer;
@@ -101,6 +109,7 @@ TestDiskIrp(
 }
 
 static PDEVICE_OBJECT TestDisk;
+static PDEVICE_OBJECT TestVolume;
 static PDRIVER_DISPATCH TestSavedDispatch[IRP_MJ_MAXIMUM_FUNCTION + 1];
 
 static
@@ -112,7 +121,7 @@ TestDiskDispatch(
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
 
-    if (DeviceObject == TestDisk)
+    if (DeviceObject == TestDisk || (TestVolume != NULL && DeviceObject == TestVolume))
         return TestDiskIrp(DeviceObject, Irp, Stack);
     ASSERT(TestSavedDispatch[Stack->MajorFunction] != NULL);
     return TestSavedDispatch[Stack->MajorFunction](DeviceObject, Irp);
@@ -188,6 +197,106 @@ TestRawMount(VOID)
     TestDisk = NULL;
 }
 
+/* A fastfat-style failed mount: the stream file drops its VPB reference before the close, the swapped VPB stays */
+static
+VOID
+TestStreamFileClose(VOID)
+{
+    static const UCHAR Majors[] = { IRP_MJ_CREATE, IRP_MJ_CLEANUP, IRP_MJ_CLOSE, IRP_MJ_READ,
+                                    IRP_MJ_DEVICE_CONTROL, IRP_MJ_INTERNAL_DEVICE_CONTROL, IRP_MJ_FLUSH_BUFFERS };
+    PDEVICE_OBJECT Disk, Volume;
+    PFILE_OBJECT Stream;
+    PVPB Mounted, Spare;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+    ULONG Index;
+
+    Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_DISK, 0, FALSE, &Disk);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_DISK_FILE_SYSTEM, 0, FALSE, &Volume);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteDevice(Disk);
+        return;
+    }
+    Volume->StackSize = Disk->StackSize + 1;
+    TestDisk = Disk;
+    TestVolume = Volume;
+    for (Index = 0; Index < RTL_NUMBER_OF(Majors); Index++)
+    {
+        TestSavedDispatch[Majors[Index]] = KmtDriverObject->MajorFunction[Majors[Index]];
+        InterlockedExchangePointer((PVOID *)&KmtDriverObject->MajorFunction[Majors[Index]], (PVOID)TestDiskDispatch);
+    }
+    Disk->Flags &= ~DO_DEVICE_INITIALIZING;
+    Volume->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    Mounted = Disk->Vpb;
+    IoAcquireVpbSpinLock(&OldIrql);
+    Mounted->DeviceObject = Volume;
+    IoReleaseVpbSpinLock(OldIrql);
+
+    Stream = IoCreateStreamFileObject(NULL, Disk);
+    ok(Stream != NULL, "No stream file object\n");
+    Spare = ExAllocatePoolWithTag(NonPagedPool, sizeof(VPB), TEST_VPB_TAG);
+    ok(Spare != NULL, "No spare VPB\n");
+    if (Stream != NULL && Spare != NULL)
+    {
+        ok_eq_pointer(Stream->DeviceObject, Disk);
+        ok_eq_ulong(Mounted->ReferenceCount, 1UL);
+        Stream->Vpb = Mounted;
+        RtlZeroMemory(Spare, sizeof(VPB));
+        Spare->Type = IO_TYPE_VPB;
+        Spare->Size = sizeof(VPB);
+        Spare->RealDevice = Disk;
+        IoAcquireVpbSpinLock(&OldIrql);
+        Disk->Vpb = Spare;
+        IoReleaseVpbSpinLock(OldIrql);
+
+        TestCloseDevice = NULL;
+        TestWatchedVpb = Mounted;
+        TestCloseVpbReferences = -1;
+        ObDereferenceObject(Stream);
+        for (Index = 0; Index < 200 && InterlockedCompareExchange(&TestCloseVpbReferences, -1, -1) == -1; Index++)
+        {
+            LARGE_INTEGER Interval;
+
+            Interval.QuadPart = -10LL * 1000 * 10;
+            KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+        }
+        TestWatchedVpb = NULL;
+        ok_eq_pointer(TestCloseDevice, Volume);
+        ok_eq_long(TestCloseVpbReferences, 0L);
+        ok_eq_ulong(Spare->ReferenceCount, 0UL);
+        ok_eq_hex(Mounted->Type, IO_TYPE_VPB);
+        ok_eq_pointer(Mounted->RealDevice, Disk);
+        if (Mounted->Type == IO_TYPE_VPB && Mounted->RealDevice == Disk && Mounted->ReferenceCount == 0)
+        {
+            Mounted->DeviceObject = NULL;
+            ExFreePool(Mounted);
+        }
+    }
+    else
+    {
+        if (Stream != NULL)
+            ObDereferenceObject(Stream);
+        if (Spare != NULL)
+            ExFreePoolWithTag(Spare, TEST_VPB_TAG);
+        IoAcquireVpbSpinLock(&OldIrql);
+        Mounted->DeviceObject = NULL;
+        IoReleaseVpbSpinLock(OldIrql);
+    }
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Majors); Index++)
+        InterlockedExchangePointer((PVOID *)&KmtDriverObject->MajorFunction[Majors[Index]], (PVOID)TestSavedDispatch[Majors[Index]]);
+    IoDeleteDevice(Volume);
+    IoDeleteDevice(Disk);
+    TestVolume = NULL;
+    TestDisk = NULL;
+}
+
 /* A file system registration readies the control device, so that filters may attach to it from the notification */
 static
 VOID
@@ -260,4 +369,5 @@ START_TEST(IoVpb)
 
     TestRawMount();
     TestFileSystemRegistration();
+    TestStreamFileClose();
 }
