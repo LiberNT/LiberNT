@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that a process's pool quota limit bounds the objects it creates
+ * PURPOSE:     Tests that pool limits set on a process sharing the default quota block do not bound the objects it creates
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -42,11 +42,12 @@ START_TEST(ObjectQuotaLimit)
     Limits.NonPagedPoolLimit = Pooled.NonPagedPoolUsage + LIMIT_HEADROOM;
     Limits.PagefileLimit = (SIZE_T)-1;
     Status = NtSetInformationProcess(NtCurrentProcess(), ProcessQuotaLimits, &Limits, sizeof(Limits));
-    if (!NT_SUCCESS(Status))
-    {
-        skip("Could not give the process its own quota block: 0x%08lx\n", Status);
-        return;
-    }
+    ok(Status == STATUS_SUCCESS, "ProcessQuotaLimits returned 0x%08lx\n", Status);
+
+    Status = NtQueryInformationProcess(NtCurrentProcess(), ProcessPooledUsageAndLimits, &Pooled, sizeof(Pooled), NULL);
+    ok(Status == STATUS_SUCCESS, "ProcessPooledUsageAndLimits returned 0x%08lx\n", Status);
+    ok(Pooled.NonPagedPoolLimit != Limits.NonPagedPoolLimit, "The shared block took the non-paged limit %Iu\n", (size_t)Limits.NonPagedPoolLimit);
+    ok(Pooled.PagedPoolLimit != Limits.PagedPoolLimit, "The shared block took the paged limit %Iu\n", (size_t)Limits.PagedPoolLimit);
 
     for (Count = 0; Count < MAX_EVENTS; Count++)
     {
@@ -58,8 +59,7 @@ START_TEST(ObjectQuotaLimit)
         }
     }
 
-    ok(Count < MAX_EVENTS, "%u events fit in %u bytes of non-paged pool quota\n", MAX_EVENTS, LIMIT_HEADROOM);
-    ok(Error == ERROR_NOT_ENOUGH_QUOTA, "The event past the limit failed with %lu\n", Error);
+    ok(Count == MAX_EVENTS, "Only %lu events were created: %lu\n", Count, Error);
 
     for (Index = 0; Index < Count; Index++)
         CloseHandle(Events[Index]);
