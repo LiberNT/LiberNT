@@ -419,6 +419,37 @@ FwHalt(VOID)
         ;
 }
 
+#define FW_READ_CHUNK (8 * 1024 * 1024)
+
+static
+BOOLEAN
+FwReadFileChunks(
+    _In_ EFI_FILE_PROTOCOL* File,
+    _In_ PCWSTR Path,
+    _Out_writes_bytes_(Size) PUCHAR Data,
+    _In_ UINTN Size)
+{
+    CHAR Line[FW_FILE_NAME_CHARS + 64];
+    UINTN Done = 0, Chunk;
+
+    while (Done < Size)
+    {
+        Chunk = min(Size - Done, FW_READ_CHUNK);
+        if (EFI_ERROR(File->Read(File, &Chunk, Data + Done)) || Chunk == 0)
+            return FALSE;
+
+        Done += Chunk;
+        if (Size > FW_READ_CHUNK)
+        {
+            RtlStringCchPrintfA(Line, RTL_NUMBER_OF(Line), "%ls: %I64u of %I64u MB read\n",
+                                Path, (ULONGLONG)Done >> 20, (ULONGLONG)Size >> 20);
+            FwDebugPrint(Line);
+        }
+    }
+
+    return TRUE;
+}
+
 PVOID
 FwReadDeviceFile(
     _In_ PVOID Device,
@@ -457,9 +488,7 @@ FwReadDeviceFile(
         {
             Length = (UINTN)FileInfo.Info.FileSize;
             Data = FwAllocatePages(Length);
-            if (Data &&
-                (EFI_ERROR(File->Read(File, &Length, Data)) ||
-                 Length != FileInfo.Info.FileSize))
+            if (Data && !FwReadFileChunks(File, Path, Data, Length))
             {
                 FwFreePages(Data, (SIZE_T)FileInfo.Info.FileSize);
                 Data = NULL;

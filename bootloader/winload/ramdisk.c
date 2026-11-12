@@ -67,6 +67,8 @@ RdAdvance(
     if (Percent == RdPercent)
         return;
 
+    if (Percent / 10 != RdPercent / 10)
+        OslTrace("RAM disk: %lu%% of %I64u MB", Percent, RdTotalBytes >> 20);
     RdPercent = Percent;
     FwPrint(L"\rLoading files... %lu%%", Percent);
 }
@@ -559,12 +561,14 @@ OslBuildRamdisk(
 
     if (!Image && Path[0] != UNICODE_NULL)
     {
+        OslTrace("RAM disk: reading %ls", Path);
         if (Parent.Type == BcdDeviceBoot)
             File.Memory = FwReadBootFile(Path, &FileSize);
         else if (DkOpenBcdDevice(&Parent, &ParentDevice))
             File.Memory = FsReadFile(&ParentDevice, Path, &FileSize);
 
         File.Size = FileSize;
+        OslTrace("RAM disk: %ls is %lu bytes", Path, FileSize);
         if (File.Memory)
             HaveMedium = FALSE;
         else if (!HaveMedium || !RdLoadIsoFile(&Medium, Descriptor, Path, &File))
@@ -623,6 +627,7 @@ OslBuildRamdisk(
     }
 
     FwPrint(L"\r                      \r");
+    OslTrace("RAM disk: %s, %I64u MB", Success ? "built" : "failed", RdSize >> 20);
 
     if (File.Memory)
         FwFreePages(File.Memory, (SIZE_T)File.Size);

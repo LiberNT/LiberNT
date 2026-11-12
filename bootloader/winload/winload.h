@@ -145,6 +145,11 @@ AppendBootTimeOptions(
     _In_ SIZE_T BootOptionsSize,
     _In_ PBM_STARTUP Startup);
 
+VOID
+OslTrace(
+    _In_z_ _Printf_format_string_ PCSTR Format,
+    ...);
+
 BOOLEAN
 OslBuildRamdisk(
     _In_ PBCD_DEVICE BcdDevice,
