@@ -643,6 +643,7 @@ ScmLoadSystemProfile(VOID)
     PROFILEINFOW ProfileInfo;
     HANDLE hToken;
 
+    /* TODO: on the first boot of a preinstalled image setup makes the hive only after the first services started, which then get the Default profile */
     if (!ScmSystemProfileHiveExists())
         return;
 
@@ -999,6 +1000,24 @@ ScmImageHasServices(PSERVICE_IMAGE pServiceImage)
     return FALSE;
 }
 
+/* A LocalSystem service gets the environment of that account, the one the manager runs as, with its profile */
+static BOOL
+ScmCreateServiceEnvironment(HANDLE hToken, LPVOID *lpEnvironment)
+{
+    HANDLE hSystemToken;
+    BOOL bResult;
+
+    if (hToken != NULL)
+        return CreateEnvironmentBlock(lpEnvironment, hToken, FALSE);
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE, &hSystemToken))
+        return FALSE;
+
+    bResult = CreateEnvironmentBlock(lpEnvironment, hSystemToken, TRUE);
+    CloseHandle(hSystemToken);
+    return bResult;
+}
+
 /* A recovery program runs under the account of the service, like its processes. */
 DWORD
 ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
@@ -1023,7 +1042,7 @@ ScmRunServiceCommand(PSERVICE pService, LPWSTR lpCommandLine)
     {
         ZeroMemory(&StartupInfo, sizeof(StartupInfo));
         StartupInfo.cb = sizeof(StartupInfo);
-        if (!CreateEnvironmentBlock(&lpEnvironment, Image.hToken, Image.hToken == NULL))
+        if (!ScmCreateServiceEnvironment(Image.hToken, &lpEnvironment))
             lpEnvironment = NULL;
 
         if (Image.hToken != NULL)
@@ -2348,7 +2367,7 @@ ScmStartUserModeService(PSERVICE Service,
     {
         /* No user token: Run the service under the LocalSystem account */
 
-        if (!CreateEnvironmentBlock(&lpEnvironment, NULL, TRUE))
+        if (!ScmCreateServiceEnvironment(NULL, &lpEnvironment))
         {
             /* We failed, run the service with the current environment */
             DPRINT1("CreateEnvironmentBlock() failed with error %d; service '%S' will run with current environment\n",
