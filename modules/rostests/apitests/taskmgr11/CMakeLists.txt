@@ -8,6 +8,7 @@ add_executable(taskmgr11_apitest
     battery.c
     hardware_text.c
     performance_layout.c
+    shortcuts.c
     testlist.c)
 
 target_include_directories(taskmgr11_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/applications/taskmgr11)
