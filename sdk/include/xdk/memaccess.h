@@ -75,6 +75,13 @@ MemoryBarrier (
 # define _ReleaseBarrier()                    __asm__ __volatile__("lwsync" ::: "memory")
 # define _DataSynchronizationBarrier()        MemoryBarrier()
 # define _InstructionSynchronizationBarrier() __asm__ __volatile__("isync" ::: "memory")
+#elif defined(_LOONGARCH64_) || defined(__loongarch64__)
+/* dbar 0 orders every load and store; ibar 0 orders instruction fetches. */
+# define MemoryBarrier()                      __asm__ __volatile__("dbar 0" ::: "memory")
+# define _AcquireBarrier()                    __asm__ __volatile__("dbar 0" ::: "memory")
+# define _ReleaseBarrier()                    __asm__ __volatile__("dbar 0" ::: "memory")
+# define _DataSynchronizationBarrier()        MemoryBarrier()
+# define _InstructionSynchronizationBarrier() __asm__ __volatile__("ibar 0" ::: "memory")
 #else
 #error Unsupported architecture
 #endif /* _M_ARM */
@@ -192,10 +199,16 @@ WriteNoFence16 (
     __iso_volatile_store16(Destination, Value);
 }
 
+#if defined(__ROS_LONG64__)
+#define _MemAccessLong int
+#else
+#define _MemAccessLong long
+#endif
+
 __forceinline
-long
+_MemAccessLong
 ReadNoFence (
-    _In_ _Interlocked_operand_ long const volatile *Source)
+    _In_ _Interlocked_operand_ _MemAccessLong const volatile *Source)
 {
     return __iso_volatile_load32((const volatile int*)Source);
 }
@@ -203,8 +216,8 @@ ReadNoFence (
 __forceinline
 void
 WriteNoFence (
-    _Out_ _Interlocked_operand_ long volatile *Destination,
-    _In_ long Value)
+    _Out_ _Interlocked_operand_ _MemAccessLong volatile *Destination,
+    _In_ _MemAccessLong Value)
 {
     __iso_volatile_store32((volatile int*)Destination, Value);
 }
