@@ -146,6 +146,7 @@ list(APPEND SOURCE
     user/ntuser/hotkey.c
     user/ntuser/ime.c
     user/ntuser/input.c
+    user/ntuser/inputhold.c
     user/ntuser/job.c
     user/ntuser/keyboard.c
     user/ntuser/kbdlayout.c
