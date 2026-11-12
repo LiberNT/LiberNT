@@ -1097,6 +1097,9 @@ ClassPnp(
 				Status = STATUS_UNSUCCESSFUL;
 			}
 
+			if (DeviceExtension->InterfaceName.Length != 0)
+				if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, TRUE)))
+				    DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);
 			if (NT_SUCCESS(Status))
 			{
 				InitializeObjectAttributes(&ObjectAttributes,
@@ -1116,9 +1119,6 @@ ClassPnp(
 			}
 			else
 				DeviceExtension->FileHandle = NULL;
-			if (DeviceExtension->InterfaceName.Length != 0)
-				if (!NT_SUCCESS(IoSetDeviceInterfaceState(&DeviceExtension->InterfaceName, TRUE)))
-				    DPRINT1("IoSetDeviceInterfaceState(%wZ) failed\n", &DeviceExtension->InterfaceName);
 			if (NT_SUCCESS(Status))
 				ClassStartWaitWake(DeviceExtension);
 			Irp->IoStatus.Status = Status;
