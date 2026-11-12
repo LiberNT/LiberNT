@@ -8,6 +8,7 @@
 
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
 #define KI_EMULATED_USER_SYSTEM_DLL L"\\SystemRoot\\SystemAMD64\\ntdll.dll"
+#define KiEmulationProcessorArchitecture(Process) PROCESSOR_ARCHITECTURE_INTEL
 
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiRiscvCallUserMode

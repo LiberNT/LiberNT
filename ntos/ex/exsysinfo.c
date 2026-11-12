@@ -229,8 +229,8 @@ ExpQueryProcessorInformation(
     ULONG FeatureBits = (ULONG)KeFeatureBits;
 
     Processor->ProcessorArchitecture = (USHORT)KeProcessorArchitecture;
-    if (Emulation && sizeof(PVOID) == sizeof(ULONGLONG))
-        Processor->ProcessorArchitecture = PROCESSOR_ARCHITECTURE_INTEL;
+    if (Emulation)
+        Processor->ProcessorArchitecture = (USHORT)KiEmulationProcessorArchitecture(PsGetCurrentProcess());
     Processor->ProcessorLevel = (USHORT)KeProcessorLevel;
     Processor->ProcessorRevision = (USHORT)KeProcessorRevision;
     Processor->MaximumProcessors = (USHORT)KeNumberProcessors;

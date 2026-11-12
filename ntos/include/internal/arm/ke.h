@@ -2,6 +2,7 @@
 
 #define KI_EMULATED_USER_MACHINE 0
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
+#define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 
 #include "intrin_i.h"
 
