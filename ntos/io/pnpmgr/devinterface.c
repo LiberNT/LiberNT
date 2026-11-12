@@ -363,6 +363,42 @@ IopAnnounceInterface(
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 }
 
+/* A device that leaves the tree lets go of its interfaces: they stay registered without a device until it comes back */
+VOID
+IopForgetDeviceInterfaces(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+{
+    PIOP_DEVICE_INTERFACE Interface;
+    PLIST_ENTRY Entry;
+    ULONG Released = 0;
+
+    PAGED_CODE();
+    ASSERT(PhysicalDeviceObject != NULL);
+
+    KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
+
+    for (Entry = IopDeviceInterfaceListHead.Flink; Entry != &IopDeviceInterfaceListHead; Entry = Entry->Flink)
+    {
+        Interface = CONTAINING_RECORD(Entry, IOP_DEVICE_INTERFACE, ListEntry);
+        if (Interface->PhysicalDeviceObject != PhysicalDeviceObject) continue;
+
+        /* The removal that comes before a device leaves the tree disabled its interfaces */
+        ASSERT(!Interface->Enabled);
+        if (Interface->Enabled) continue;
+
+        Interface->PhysicalDeviceObject = NULL;
+        Released++;
+    }
+
+    KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+    while (Released != 0)
+    {
+        ObDereferenceObject(PhysicalDeviceObject);
+        Released--;
+    }
+}
+
 VOID
 IopSetInterfaceLinked(
     _In_ PIOP_DEVICE_INTERFACE Interface,
@@ -577,7 +613,7 @@ IoRegisterDeviceInterface(
 
     if (Interface != NULL)
     {
-        ObDereferenceObject(Previous);
+        if (Previous != NULL) ObDereferenceObject(Previous);
         ExFreePoolWithTag(NewInterface, TAG_IO_NAME);
     }
 

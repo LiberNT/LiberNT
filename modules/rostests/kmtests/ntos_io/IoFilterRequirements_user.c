@@ -7,6 +7,7 @@
 
 #include <kmt_test.h>
 #include <ndk/cmfuncs.h>
+#include <ndk/setypes.h>
 #include <sddl.h>
 #include <winuser.h>
 #include <winreg.h>
@@ -36,7 +37,8 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
-                                 L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart" };
+                                 L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart",
+                                 L"DriverUnloaded" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -718,6 +720,39 @@ static VOID CheckNullChild(DEVINST Bus)
         RemoveInstance(Instance);
 }
 
+static BOOL WaitValue(PCWSTR Name, DWORD Timeout)
+{
+    DWORD Start = GetTickCount(), Value;
+
+    while (!ReadValue(Name, &Value) && GetTickCount() - Start < Timeout)
+        Sleep(10);
+    return ReadValue(Name, &Value) && Value != 0;
+}
+
+/* A PnP driver is unloaded and loaded again once its devices are gone, the interfaces they registered included */
+static VOID CheckDriverReload(DEVINST Bus)
+{
+    UNICODE_STRING Service = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq");
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    BOOLEAN Enabled;
+    NTSTATUS Status;
+
+    SetRequest(L"FailBus", 0);
+    ok_once(CM_Query_And_Remove_SubTreeW(Bus, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    Status = RtlAdjustPrivilege(SE_LOAD_DRIVER_PRIVILEGE, TRUE, FALSE, &Enabled);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = NtUnloadDriver(&Service);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(WaitValue(L"DriverUnloaded", 1000), "The fixture driver was not unloaded\n");
+
+    Status = NtLoadDriver(&Service);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_once(CM_Setup_DevNode(Bus, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The bus did not start again with its driver loaded again\n");
+}
+
 static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath)
 {
     BOOL Success, Staged, Reboot = FALSE;
@@ -757,6 +792,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
+        CheckDriverReload(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);

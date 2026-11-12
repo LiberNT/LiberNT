@@ -1499,6 +1499,8 @@ PiDeleteDevNode(
     ExReleaseResourceLite(&IopDeviceTreeResource);
     KeLeaveCriticalRegion();
 
+    IopForgetDeviceInterfaces(DeviceObject);
+
     ObDereferenceObject(DeviceObject);
 }
 
