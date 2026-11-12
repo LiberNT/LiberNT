@@ -236,6 +236,7 @@ list(APPEND SOURCE
     StackProbe.c
     SystemInfo.c
     Timer.c
+    UserHiveLinks.c
     precomp.h)
 
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")

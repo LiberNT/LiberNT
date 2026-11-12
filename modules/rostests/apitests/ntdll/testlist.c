@@ -221,6 +221,7 @@ extern void func_ScanfSecure(void);
 extern void func_StackProbe(void);
 extern void func_TimerResolution(void);
 extern void func_SehHandlerLocals(void);
+extern void func_UserHiveLinks(void);
 #if defined(_M_IX86) || defined(_M_AMD64)
 extern void func_UserModeException(void);
 #endif
@@ -451,6 +452,7 @@ const struct test winetest_testlist[] =
     { "StackProbe",                     func_StackProbe },
     { "TimerResolution",                func_TimerResolution },
     { "SehHandlerLocals",               func_SehHandlerLocals },
+    { "UserHiveLinks",                  func_UserHiveLinks },
 #if defined(_M_IX86) || defined(_M_AMD64)
     { "UserModeException",              func_UserModeException },
 #endif

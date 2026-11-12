@@ -1060,6 +1060,8 @@ CmpInitializeHiveList(VOID)
 
     if (sizeof(PVOID) == sizeof(ULONGLONG)) CmpCreateWow64Links();
 
+    CmpCreateBootLink(L"\\REGISTRY\\USER\\S-1-5-18", L"\\Registry\\User\\.Default");
+
     CmpSetVersionData();
     CmpMarkPerformanceKeys();
 }
