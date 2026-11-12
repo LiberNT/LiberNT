@@ -869,6 +869,7 @@ WskBind(_In_ PWSK_SOCKET SocketParam, _In_ PSOCKADDR LocalAddress, _Reserved_ UL
     }
     if (Socket->LocalAddressHandle != NULL)
     {
+        ExFreePoolWithTag(ta, TAG_NETIO);
         status = STATUS_INVALID_PARAMETER;
         goto err_out;
     }
