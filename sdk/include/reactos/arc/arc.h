@@ -972,6 +972,89 @@ typedef struct _RISCV64_LOADER_BLOCK
 #endif
 } RISCV64_LOADER_BLOCK, *PRISCV64_LOADER_BLOCK;
 
+/* ReactOS-private LoongArch64 loader payload. No Microsoft NT/LoongArch64
+ * loader contract exists; version and size must be checked before adding
+ * fields.
+ *
+ * The loader hands over a 48-bit four-level address space: one root page used
+ * as both PGDL and PGDH, whose kernel half (PGD indices 256-511) holds only
+ * the shared user data page. Every other structure the kernel touches before
+ * its memory manager runs lives in the DMW1 direct map
+ * (0x9000_0000_0000_0000 + physical address), which needs no page-table entry. */
+#define LOONGARCH64_LOADER_BLOCK_VERSION                 1
+#define LOONGARCH64_LOADER_FLAG_CPUID_VALID              0x0000000000000001ULL
+#define LOONGARCH64_LOADER_FLAG_CPUCONFIG_VALID          0x0000000000000002ULL
+/* Pgdl/Pgdh/Pwcl/Pwch/StlbPs/Dmw/DirectMapBase are the live register values. */
+#define LOONGARCH64_LOADER_FLAG_ADDRESS_SPACE_VALID      0x0000000000000004ULL
+#define LOONGARCH64_LOADER_FLAG_SHARED_USER_DATA         0x0000000000000008ULL
+#define LOONGARCH64_LOADER_FLAG_EXCEPTION_STUB           0x0000000000000010ULL
+#define LOONGARCH64_LOADER_FLAG_EARLY_CONSOLE            0x0000000000000020ULL
+#define LOONGARCH64_LOADER_FLAG_EARLY_DEVICE_RANGES      0x0000000000000040ULL
+#define LOONGARCH64_LOADER_REQUIRED_FLAGS                0x000000000000001FULL
+#define LOONGARCH64_LOADER_OPTIONAL_FLAGS                0x0000000000000060ULL
+#define LOONGARCH64_LOADER_PAGE_SHIFT                    12
+#define LOONGARCH64_LOADER_PAGE_SIZE                     (1ULL << LOONGARCH64_LOADER_PAGE_SHIFT)
+#define LOONGARCH64_LOADER_UNCACHED_BASE                 0x8000000000000000ULL
+#define LOONGARCH64_LOADER_DIRECT_MAP_BASE               0x9000000000000000ULL
+#define LOONGARCH64_LOADER_WRITE_COMBINE_BASE            0xA000000000000000ULL
+#define LOONGARCH64_LOADER_PHYSICAL_LIMIT                0x0001000000000000ULL
+/* KI_USER_SHARED_DATA (0xFFFFF78000000000) lives at PGD index 495. */
+#define LOONGARCH64_LOADER_SHARED_USER_DATA_PGD_INDEX    495
+#define LOONGARCH64_LOADER_MAX_EARLY_DEVICE_RANGES       16
+
+/* Early console register interfaces. Values are wire constants. */
+#define LOONGARCH64_EARLY_CONSOLE_NONE                   0
+#define LOONGARCH64_EARLY_CONSOLE_NS16550                1 /* 8250/16550 register file, reg-shift/reg-io-width applied */
+
+typedef struct _LOONGARCH64_LOADER_EARLY_DEVICE_RANGE
+{
+    ULONGLONG BaseAddress;
+    ULONGLONG Length;
+} LOONGARCH64_LOADER_EARLY_DEVICE_RANGE, *PLOONGARCH64_LOADER_EARLY_DEVICE_RANGE;
+
+typedef struct _LOONGARCH64_LOADER_BLOCK
+{
+#if defined(_LOONGARCH64_) || defined(_M_LOONGARCH64) || defined(__loongarch64__) || defined(__loongarch64)
+    ULONG Version;
+    ULONG Size;
+    ULONGLONG Flags;
+    ULONGLONG CpuId;                     /* CSR.CPUID of the boot CPU. */
+    ULONGLONG CpuCfg1;                   /* CPUCFG1: PALEN/VALEN and ISA facts. */
+    ULONGLONG CpuCfg2;                   /* CPUCFG2: FP/LSX/LASX/LBT feature bits. */
+    ULONGLONG PageDirectoryRoot;         /* Physical address of the boot root page. */
+    ULONGLONG Pgdl;                      /* Value written to CSR.PGDL. */
+    ULONGLONG Pgdh;                      /* Value written to CSR.PGDH. */
+    ULONGLONG Pwcl;                      /* Value written to CSR.PWCL. */
+    ULONGLONG Pwch;                      /* Value written to CSR.PWCH. */
+    ULONGLONG Dmw[4];                    /* DMW0-DMW3 as written. */
+    ULONG StlbPs;                        /* CSR.STLBPS, 12 for 4 KiB pages. */
+    ULONG Asid;                          /* CSR.ASID at handoff. */
+    ULONGLONG DirectMapBase;             /* Cached direct map, DMW1. */
+    ULONGLONG UncachedBase;              /* Uncached direct map, DMW0. */
+    ULONGLONG WriteCombineBase;          /* Write-combining direct map, DMW2. */
+    ULONGLONG PhysicalLimit;             /* Size of every direct map window. */
+    ULONGLONG HighestMappedPhysicalAddress; /* Highest RAM byte the loader used. */
+    ULONGLONG PcrPage;                   /* Virtual address of the boot KPCR. */
+    ULONGLONG DpcStack;                  /* Top of the DPC/interrupt stack. */
+    ULONGLONG SharedUserDataPage;        /* Physical address of the page at KI_USER_SHARED_DATA. */
+    ULONGLONG ExceptionStub;             /* Virtual address installed in CSR.EENTRY. */
+    ULONGLONG ExceptionStubPhysical;     /* Physical address installed in CSR.TLBRENTRY. */
+    ULONGLONG EarlyConsoleAddress;       /* Physical MMIO base, 0 if none. */
+    ULONGLONG EarlyConsoleLength;        /* Length of the register window. */
+    ULONG EarlyConsoleInterface;         /* LOONGARCH64_EARLY_CONSOLE_* */
+    ULONG EarlyConsoleRegisterShift;     /* reg-shift, default 0. */
+    ULONG EarlyConsoleRegisterWidth;     /* reg-io-width in bytes, default 1. */
+    ULONG EarlyDeviceRangeCount;
+    LOONGARCH64_LOADER_EARLY_DEVICE_RANGE EarlyDeviceRanges[LOONGARCH64_LOADER_MAX_EARLY_DEVICE_RANGES];
+#else
+    ULONG PlaceHolder;
+#endif
+} LOONGARCH64_LOADER_BLOCK, *PLOONGARCH64_LOADER_BLOCK;
+
+#if defined(_LOONGARCH64_) || defined(_M_LOONGARCH64) || defined(__loongarch64__) || defined(__loongarch64)
+C_ASSERT(sizeof(LOONGARCH64_LOADER_BLOCK) == 488);
+#endif
+
 //
 // Firmware information block (NT6+)
 //
@@ -1095,10 +1178,16 @@ typedef struct _LOADER_PARAMETER_BLOCK
         ARM_LOADER_BLOCK Arm;
         ARM64_LOADER_BLOCK Arm64;
         RISCV64_LOADER_BLOCK Riscv64;
+        LOONGARCH64_LOADER_BLOCK LoongArch64;
     } u;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     FIRMWARE_INFORMATION_LOADER_BLOCK FirmwareInformation;
 #endif
 } LOADER_PARAMETER_BLOCK, *PLOADER_PARAMETER_BLOCK;
+
+#if defined(_LOONGARCH64_) || defined(_M_LOONGARCH64) || defined(__loongarch64__) || defined(__loongarch64)
+C_ASSERT(FIELD_OFFSET(LOADER_PARAMETER_BLOCK, u) == 248);
+C_ASSERT(FIELD_OFFSET(LOADER_PARAMETER_BLOCK, FirmwareInformation) == 736);
+#endif
 
 #endif

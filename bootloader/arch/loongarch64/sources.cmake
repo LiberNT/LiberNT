@@ -4,4 +4,7 @@
 list(APPEND WINLOAD_ASM_SOURCE
     arch/loongarch64/uefiasm.S)
 
-# TODO: winldr.c and archosl.c once the kernel handoff ABI is defined.
+list(APPEND WINLOAD_SOURCE
+    arch/loongarch64/archosl.c
+    arch/loongarch64/runtime.c
+    arch/loongarch64/winldr.c)
