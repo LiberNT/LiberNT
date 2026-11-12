@@ -172,6 +172,7 @@ KMT_TESTFUNC Test_IoGetRequestorProcess;
 KMT_TESTFUNC Test_IoCreateDeviceSecure;
 KMT_TESTFUNC Test_IoDeleteDeviceName;
 KMT_TESTFUNC Test_IoReadPartitionTable;
+KMT_TESTFUNC Test_IoPciMessageEnable;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoCreateFileAccessCheck;
 KMT_TESTFUNC Test_IoCreateSystemThread;
@@ -633,6 +634,7 @@ const KMT_TEST TestList[] =
     { "IoPciExpressInterfaces",             Test_IoPciExpressInterfaces },
     { "IoPciEnumeration",                   Test_IoPciEnumeration },
     { "IoPciRom",                           Test_IoPciRom },
+    { "IoPciMessageEnable",                 Test_IoPciMessageEnable },
     { "IoStackLimits",                      Test_IoStackLimits },
     { "IoVpb",                              Test_IoVpb },
     { "SmcLib",                             Test_SmcLib },

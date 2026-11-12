@@ -189,6 +189,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCreateDeviceSecure.c
     ntos_io/IoDeleteDeviceName.c
     ntos_io/IoReadPartitionTable.c
+    ntos_io/IoPciMessageEnable.c
     ntos_io/IoCreateFile.c
     ntos_io/IoCreateFileAccessCheck.c
     ntos_io/IoCreateSystemThread.c
