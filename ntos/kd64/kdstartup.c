@@ -177,7 +177,7 @@ KdpPublishVersion(
 
     KdDebuggerDataBlock.KernBase = KdVersionBlock.KernBase;
     KdDebuggerDataBlock.BreakpointWithStatus =
-        (ULONG64)(ULONG_PTR)DbgBreakPointWithStatus;
+        ULPTR64_VALUE(DbgBreakPointWithStatus);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -234,13 +234,13 @@ NTAPI
 KdUpdateDataBlock(VOID)
 {
     KdDebuggerDataBlock.MmPageSize = PAGE_SIZE;
-    KdDebuggerDataBlock.PsLoadedModuleList = (ULONG64)(ULONG_PTR)&PsLoadedModuleList;
-    KdDebuggerDataBlock.PsActiveProcessHead = (ULONG64)(ULONG_PTR)&PsActiveProcessHead;
-    KdDebuggerDataBlock.PspCidTable = (ULONG64)(ULONG_PTR)&PspCidTable;
-    KdDebuggerDataBlock.KdPrintCircularBuffer = (ULONG64)(ULONG_PTR)KdPrintCircularBuffer;
+    KdDebuggerDataBlock.PsLoadedModuleList = ULPTR64_VALUE(&PsLoadedModuleList);
+    KdDebuggerDataBlock.PsActiveProcessHead = ULPTR64_VALUE(&PsActiveProcessHead);
+    KdDebuggerDataBlock.PspCidTable = ULPTR64_VALUE(&PspCidTable);
+    KdDebuggerDataBlock.KdPrintCircularBuffer = ULPTR64_VALUE(KdPrintCircularBuffer);
     KdDebuggerDataBlock.KdPrintCircularBufferEnd =
-        (ULONG64)(ULONG_PTR)KdPrintCircularBuffer + KdPrintBufferSize;
-    KdDebuggerDataBlock.KeLoaderBlock = (ULONG64)(ULONG_PTR)&KeLoaderBlock;
+        ULPTR64_VALUE(KdPrintCircularBuffer + KdPrintBufferSize);
+    KdDebuggerDataBlock.KeLoaderBlock = ULPTR64_VALUE(&KeLoaderBlock);
 }
 
 /*

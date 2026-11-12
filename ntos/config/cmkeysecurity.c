@@ -480,7 +480,7 @@ NTAPI
 CmpHiveRootSecurityDescriptor(VOID)
 {
     static SID_IDENTIFIER_AUTHORITY PackageAuthority =
-        SECURITY_APP_PACKAGE_AUTHORITY;
+        {SECURITY_APP_PACKAGE_AUTHORITY};
     static const ULONG RegistryReadCapability[] =
     {
         SECURITY_CAPABILITY_BASE_RID, SECURITY_CAPABILITY_APP_RID,

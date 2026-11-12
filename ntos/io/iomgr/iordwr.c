@@ -970,7 +970,7 @@ IopScatterGather(
     LARGE_INTEGER CapturedOffset;
     ULONG CapturedKey = 0;
     IOP_REQUEST Request;
-    PVOID FirstPage;
+    PVOID FirstPage = NULL;
     NTSTATUS Status;
     ULONG PageCount;
     PMDL Mdl;

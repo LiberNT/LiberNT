@@ -41,7 +41,11 @@ NTAPI
 IoClearIrpExtraCreateParameter(
     _Inout_ PIRP Irp)
 {
+    NTSTATUS Status;
+
     PAGED_CODE();
 
-    (VOID)FsRtlSetEcpListIntoIrp(Irp, NULL);
+    Status = FsRtlSetEcpListIntoIrp(Irp, NULL);
+    ASSERT(NT_SUCCESS(Status));
+    DBG_UNREFERENCED_LOCAL_VARIABLE(Status);
 }
