@@ -5580,6 +5580,7 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
             if (DeviceExtension->Type == RamdiskDrive)
             {
                 Status = RamdiskQueryCapabilities(DeviceObject, Irp);
+                goto ReleaseAndReturn;
             }
             break;
         }
@@ -5637,6 +5638,11 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
             IoSkipCurrentIrpStackLocation(Irp);
             Status = IoCallDriver(DeviceExtension->AttachedDevice, Irp);
         }
+    }
+    else
+    {
+        Irp->IoStatus.Status = Status;
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
     }
 
     /* Release the lock and return status */
