@@ -116,7 +116,6 @@ ADDRESS_USAGE HalpDefaultIoSpace =
         {0x70,  0x2},  /* CMOS  */
         {0xF0,  0x10}, /* x87 Coprocessor */
 #endif
-        {0xCF8, 0x8},  /* PCI 0 */
         {0, 0}
     }
 };
