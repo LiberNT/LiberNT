@@ -46,7 +46,7 @@ add_library(felix86_zydis OBJECT ${FELIX86_ZYDIS_SOURCES})
 target_include_directories(felix86_zydis PRIVATE ${FELIX86_INCLUDE_DIRECTORIES})
 target_compile_definitions(felix86_zydis PRIVATE
     ${FELIX86_ZYDIS_DEFINITIONS}
-    ZYAN_NO_LIBC
+    NDEBUG
     ZYDIS_DISABLE_ENCODER
     ZYDIS_DISABLE_AVX512
     ZYDIS_DISABLE_KNC)
