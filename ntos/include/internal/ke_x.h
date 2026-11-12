@@ -1021,8 +1021,8 @@ KiRecalculateDueTime(IN PLARGE_INTEGER OriginalDueTime,
     if (OriginalDueTime->QuadPart >= 0) return OriginalDueTime;
 
     /* Otherwise, query the interrupt time and recalculate */
-    NewDueTime->QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
-    NewDueTime->QuadPart -= DueTime->QuadPart;
+    NewDueTime->QuadPart = (LONGLONG)((ULONGLONG)KiQueryInterruptTimePrecise(NULL, FALSE) -
+                                      (ULONGLONG)DueTime->QuadPart);
     return NewDueTime;
 }
 
@@ -1311,7 +1311,7 @@ KiComputeDueTime(IN PKTIMER Timer,
     InterruptTime.QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
 
     /* Recalculate due time */
-    Timer->DueTime.QuadPart = InterruptTime.QuadPart - DueTime.QuadPart;
+    Timer->DueTime.QuadPart = (ULONGLONG)InterruptTime.QuadPart - (ULONGLONG)DueTime.QuadPart;
 
     /* Get the handle */
     *Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
@@ -1433,7 +1433,7 @@ KxSetTimerForThreadWait(IN PKTIMER Timer,
 
     /* Calculate the due time */
     InterruptTime.QuadPart = KiQueryInterruptTimePrecise(NULL, FALSE);
-    DueTime = InterruptTime.QuadPart - Interval.QuadPart;
+    DueTime = (ULONGLONG)InterruptTime.QuadPart - (ULONGLONG)Interval.QuadPart;
     if ((WaitMode == UserMode) &&
         !((PEPROCESS)KeGetCurrentThread()->ApcState.Process)->SetTimerResolution)
     {

@@ -160,6 +160,61 @@ TestInterruptedTimerWait(VOID)
     }
 }
 
+static VOID NTAPI
+FarDueTimeEventDpc(PKDPC Dpc, PVOID DeferredContext,
+                   PVOID SystemArgument1, PVOID SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+    KeSetEvent(DeferredContext, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID
+TestFarRelativeDueTime(VOID)
+{
+    TIMER_WAIT_APC_CONTEXT Context;
+    KTIMER ApcTimer, EventTimer, FarTimer;
+    KDPC ApcDpc, EventDpc;
+    KEVENT Event;
+    LARGE_INTEGER DueTime, Timeout;
+    NTSTATUS Status;
+
+    Timeout.QuadPart = MINLONGLONG;
+
+    KeInitializeTimer(&FarTimer);
+    ok_bool_false(KeSetTimer(&FarTimer, Timeout, NULL), "Timer should not already be inserted");
+    ok_eq_long(KeReadStateTimer(&FarTimer), 0L);
+    ok_bool_true(KeCancelTimer(&FarTimer), "Timer should be cancellable");
+
+    /* An APC interrupts the wait so its timeout is recalculated before the event ends it */
+    RtlZeroMemory(&Context, sizeof(Context));
+    KeInitializeEvent(&Context.ApcDone, NotificationEvent, FALSE);
+    KeInitializeApc(&Context.Apc, KeGetCurrentThread(), OriginalApcEnvironment,
+                    TimerWaitApc, NULL, NULL, KernelMode, NULL);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    KeInitializeTimer(&ApcTimer);
+    KeInitializeTimer(&EventTimer);
+    KeInitializeDpc(&ApcDpc, TimerWaitDpc, &Context);
+    KeInitializeDpc(&EventDpc, FarDueTimeEventDpc, &Event);
+    DueTime.QuadPart = -5 * 10000;
+    KeSetTimer(&ApcTimer, DueTime, &ApcDpc);
+    DueTime.QuadPart = -20 * 10000;
+    KeSetTimer(&EventTimer, DueTime, &EventDpc);
+
+    Status = KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(Context.Delivered, 1);
+
+    KeCancelTimer(&ApcTimer);
+    KeCancelTimer(&EventTimer);
+    KeFlushQueuedDpcs();
+    if (Context.Inserted)
+        KeWaitForSingleObject(&Context.ApcDone, Executive, KernelMode, FALSE, NULL);
+    ok(Context.Inserted, "APC was not queued for the far timeout wait\n");
+    ok_irql(PASSIVE_LEVEL);
+}
+
 static VOID
 TestTimerBucketCancellation(VOID)
 {
@@ -198,5 +253,6 @@ START_TEST(KeTimer)
     ok_irql(PASSIVE_LEVEL);
     KmtSetIrql(PASSIVE_LEVEL);
     TestInterruptedTimerWait();
+    TestFarRelativeDueTime();
     TestTimerBucketCancellation();
 }
