@@ -989,7 +989,6 @@ ReconcileThisDatabaseWithMasterWorker(IN PVOID Parameter)
                     Status = AddRemoteDatabaseEntry(DatabaseHandle, DatabaseEntry);
                     if (!NT_SUCCESS(Status))
                     {
-                       FreePool(DatabaseEntry);
                        goto FreeUniqueId;
                     }
 
@@ -1148,7 +1147,8 @@ FreeUniqueId:
 ReleaseDeviceLock:
     MmpReleaseDeviceLock(DeviceExtension);
 FreeDBEntry:
-    FreePool(DatabaseEntry);
+    if (DatabaseEntry != NULL)
+        FreePool(DatabaseEntry);
 FreeVolume:
     FreePool(VolumeName.Buffer);
 CloseReparse:
