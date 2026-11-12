@@ -263,16 +263,12 @@ void CDECL wined3d_swapchain_set_composition(struct wined3d_swapchain *swapchain
 }
 #endif
 
-HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
-        const RECT *src_rect, const RECT *dst_rect, HWND dst_window_override,
-        unsigned int swap_interval, uint32_t flags)
+static HRESULT swapchain_present_rects(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        HWND dst_window_override, unsigned int swap_interval, uint32_t flags)
 {
     const struct wined3d_swapchain_desc *desc = &swapchain->state.desc;
     RECT s, d;
-
-    TRACE("swapchain %p, src_rect %s, dst_rect %s, dst_window_override %p, swap_interval %u, flags %#x.\n",
-            swapchain, wine_dbgstr_rect(src_rect), wine_dbgstr_rect(dst_rect),
-            dst_window_override, swap_interval, flags);
 
     if (flags)
         FIXME("Ignoring flags %#x.\n", flags);
@@ -286,13 +282,13 @@ HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
         return WINED3DERR_INVALIDCALL;
     }
 
-    if (!src_rect)
+    if (!src_rects)
     {
         SetRect(&s, 0, 0, desc->backbuffer_width, desc->backbuffer_height);
-        src_rect = &s;
+        src_rects = &s;
     }
 
-    if (!dst_rect)
+    if (!dst_rects)
     {
 #ifdef __REACTOS__
         if (!desc->windowed || swapchain->composition)
@@ -302,15 +298,45 @@ HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
             SetRect(&d, 0, 0, desc->backbuffer_width, desc->backbuffer_height);
         else
             GetClientRect(swapchain->win_handle, &d);
-        dst_rect = &d;
+        dst_rects = &d;
     }
 
-    wined3d_cs_emit_present(swapchain->device->cs, swapchain, src_rect,
-            dst_rect, dst_window_override, swap_interval, flags);
+    wined3d_cs_emit_present(swapchain->device->cs, swapchain, src_rects,
+            dst_rects, rect_count, scroll_rect, scroll_offset, dst_window_override, swap_interval, flags);
 
     wined3d_mutex_unlock();
 
     return WINED3D_OK;
+}
+
+HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,
+        const RECT *src_rect, const RECT *dst_rect, HWND dst_window_override,
+        unsigned int swap_interval, uint32_t flags)
+{
+    TRACE("swapchain %p, src_rect %s, dst_rect %s, dst_window_override %p, swap_interval %u, flags %#x.\n",
+            swapchain, wine_dbgstr_rect(src_rect), wine_dbgstr_rect(dst_rect),
+            dst_window_override, swap_interval, flags);
+
+    return swapchain_present_rects(swapchain, src_rect, dst_rect, 1, NULL, NULL,
+            dst_window_override, swap_interval, flags);
+}
+
+HRESULT CDECL wined3d_swapchain_present_rects(struct wined3d_swapchain *swapchain,
+        const RECT *src_rects, const RECT *dst_rects, unsigned int rect_count,
+        const RECT *scroll_rect, const POINT *scroll_offset, HWND dst_window_override,
+        unsigned int swap_interval, uint32_t flags)
+{
+    TRACE("swapchain %p, src_rects %p, dst_rects %p, rect_count %u, scroll_rect %s, scroll_offset %p, "
+            "dst_window_override %p, swap_interval %u, flags %#x.\n", swapchain, src_rects, dst_rects,
+            rect_count, wine_dbgstr_rect(scroll_rect), scroll_offset, dst_window_override, swap_interval, flags);
+
+    if (scroll_rect && !scroll_offset)
+        return WINED3DERR_INVALIDCALL;
+    if (rect_count ? !src_rects || !dst_rects : !scroll_rect)
+        return WINED3DERR_INVALIDCALL;
+
+    return swapchain_present_rects(swapchain, src_rects, dst_rects, rect_count, scroll_rect, scroll_offset,
+            dst_window_override, swap_interval, flags);
 }
 
 HRESULT CDECL wined3d_swapchain_get_front_buffer_data(const struct wined3d_swapchain *swapchain,
@@ -506,34 +532,93 @@ static BOOL swapchain_composition_rects(const struct wined3d_swapchain *swapchai
 }
 #endif
 
+static void swapchain_present_bounds(const RECT *src_rects, const RECT *dst_rects,
+        unsigned int rect_count, const RECT *scroll_rect, RECT *src_bounds, RECT *dst_bounds)
+{
+    unsigned int i;
+
+    SetRectEmpty(src_bounds);
+    SetRectEmpty(dst_bounds);
+    for (i = 0; i < rect_count; ++i)
+    {
+        UnionRect(src_bounds, src_bounds, &src_rects[i]);
+        UnionRect(dst_bounds, dst_bounds, &dst_rects[i]);
+    }
+    if (scroll_rect)
+    {
+        UnionRect(src_bounds, src_bounds, scroll_rect);
+        UnionRect(dst_bounds, dst_bounds, scroll_rect);
+    }
+}
+
+static bool swapchain_scroll_pieces(const RECT *scroll_rect, const RECT *dirty_rects,
+        unsigned int dirty_count, RECT **out_pieces, unsigned int *out_count)
+{
+    unsigned int count = 1, next_count, i, j;
+    RECT *pieces, *next, cut, piece;
+
+    if (!(pieces = malloc(sizeof(*pieces))))
+        return false;
+    pieces[0] = *scroll_rect;
+
+    for (i = 0; i < dirty_count && count; ++i)
+    {
+        if (!(next = malloc(count * 4 * sizeof(*next))))
+        {
+            free(pieces);
+            return false;
+        }
+        next_count = 0;
+        for (j = 0; j < count; ++j)
+        {
+            piece = pieces[j];
+            if (!IntersectRect(&cut, &piece, &dirty_rects[i]))
+            {
+                next[next_count++] = piece;
+                continue;
+            }
+            if (cut.top > piece.top)
+                SetRect(&next[next_count++], piece.left, piece.top, piece.right, cut.top);
+            if (cut.bottom < piece.bottom)
+                SetRect(&next[next_count++], piece.left, cut.bottom, piece.right, piece.bottom);
+            if (cut.left > piece.left)
+                SetRect(&next[next_count++], piece.left, cut.top, cut.left, cut.bottom);
+            if (cut.right < piece.right)
+                SetRect(&next[next_count++], cut.right, cut.top, piece.right, cut.bottom);
+        }
+        free(pieces);
+        pieces = next;
+        count = next_count;
+    }
+
+    *out_pieces = pieces;
+    *out_count = count;
+    return true;
+}
+
 /* The is a fallback for cases where we e.g. can't create a GL context or
  * Vulkan swapchain for the swapchain window. */
 static void swapchain_blit_gdi(struct wined3d_swapchain *swapchain,
-        struct wined3d_context *context, const RECT *src_rect, const RECT *dst_rect)
+        struct wined3d_context *context, const RECT *src_rects, const RECT *dst_rects, unsigned int rect_count,
+        const RECT *scroll_rect, const POINT *scroll_offset)
 {
     struct wined3d_texture *back_buffer = swapchain->back_buffers[0];
     D3DKMT_DESTROYDCFROMMEMORY destroy_desc;
     D3DKMT_CREATEDCFROMMEMORY create_desc;
     const struct wined3d_format *format;
-    RECT source_rect = *src_rect;
-    RECT draw_rect = *dst_rect;
     unsigned int row_pitch, slice_pitch;
+    unsigned int i;
     NTSTATUS status;
     HBITMAP bitmap;
     HDC src_dc;
 
     static unsigned int once;
 
-    TRACE("swapchain %p, context %p, src_rect %s, dst_rect %s.\n",
-            swapchain, context, wine_dbgstr_rect(src_rect), wine_dbgstr_rect(dst_rect));
+    TRACE("swapchain %p, context %p, src_rects %p, dst_rects %p, rect_count %u, scroll_rect %p.\n",
+            swapchain, context, src_rects, dst_rects, rect_count, scroll_rect);
 
     if (!once++)
         FIXME("Using GDI present.\n");
-
-#ifdef __REACTOS__
-    if (swapchain->composition && !swapchain_composition_rects(swapchain, &source_rect, &draw_rect))
-        return;
-#endif
 
     format = back_buffer->resource.format;
     if (!format->ddi_format)
@@ -566,22 +651,36 @@ static void swapchain_blit_gdi(struct wined3d_swapchain *swapchain,
 
     TRACE("Created source DC %p, bitmap %p for backbuffer %p.\n", src_dc, bitmap, back_buffer);
 
-#ifdef __REACTOS__
-    if (swapchain->composition && swapchain->premultiplied_alpha)
-    {
-        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    if (scroll_rect && !BitBlt(swapchain->dc, scroll_rect->left, scroll_rect->top,
+            scroll_rect->right - scroll_rect->left, scroll_rect->bottom - scroll_rect->top,
+            swapchain->dc, scroll_rect->left - scroll_offset->x, scroll_rect->top - scroll_offset->y, SRCCOPY))
+        ERR("Failed to scroll.\n");
 
-        PatBlt(swapchain->dc, draw_rect.left, draw_rect.top,
-                draw_rect.right - draw_rect.left, draw_rect.bottom - draw_rect.top, BLACKNESS);
-        if (!GdiAlphaBlend(swapchain->dc, draw_rect.left, draw_rect.top,
-                draw_rect.right - draw_rect.left, draw_rect.bottom - draw_rect.top,
-                src_dc, source_rect.left, source_rect.top,
-                source_rect.right - source_rect.left, source_rect.bottom - source_rect.top, blend))
-            ERR("Failed to alpha blend.\n");
-    }
-    else
-#endif
+    for (i = 0; i < rect_count; ++i)
     {
+        RECT source_rect = src_rects[i];
+        RECT draw_rect = dst_rects[i];
+
+        if (IsRectEmpty(&source_rect) || IsRectEmpty(&draw_rect))
+            continue;
+#ifdef __REACTOS__
+        if (swapchain->composition && !swapchain_composition_rects(swapchain, &source_rect, &draw_rect))
+            continue;
+
+        if (swapchain->composition && swapchain->premultiplied_alpha)
+        {
+            BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+
+            PatBlt(swapchain->dc, draw_rect.left, draw_rect.top,
+                    draw_rect.right - draw_rect.left, draw_rect.bottom - draw_rect.top, BLACKNESS);
+            if (!GdiAlphaBlend(swapchain->dc, draw_rect.left, draw_rect.top,
+                    draw_rect.right - draw_rect.left, draw_rect.bottom - draw_rect.top,
+                    src_dc, source_rect.left, source_rect.top,
+                    source_rect.right - source_rect.left, source_rect.bottom - source_rect.top, blend))
+                ERR("Failed to alpha blend.\n");
+            continue;
+        }
+#endif
         if (!StretchBlt(swapchain->dc, draw_rect.left, draw_rect.top,
                 draw_rect.right - draw_rect.left, draw_rect.bottom - draw_rect.top,
                 src_dc, source_rect.left, source_rect.top,
@@ -622,6 +721,45 @@ static void swapchain_blit(const struct wined3d_swapchain *swapchain,
     device->blitter->ops->blitter_blit(device->blitter, WINED3D_BLIT_OP_COLOR_BLIT, context, texture, 0,
             location, src_rect, texture, 0, WINED3D_LOCATION_DRAWABLE, dst_rect, NULL, filter, NULL);
     wined3d_texture_invalidate_location(texture, 0, WINED3D_LOCATION_DRAWABLE);
+}
+
+/* Context activation is done by the caller. */
+static void swapchain_gl_scroll(struct wined3d_swapchain *swapchain, struct wined3d_context *context,
+        const RECT *scroll_rect, const POINT *scroll_offset, const RECT *dirty_rects, unsigned int dirty_count)
+{
+    struct wined3d_texture *texture = swapchain->back_buffers[0];
+    struct wined3d_device *device = swapchain->device;
+    unsigned int count, i;
+    RECT *pieces, source;
+
+    if (texture->resource.multisample_type)
+    {
+        /* TODO: scroll a multisampled swap chain */
+        return;
+    }
+
+    if (!swapchain_scroll_pieces(scroll_rect, dirty_rects, dirty_count, &pieces, &count))
+    {
+        ERR("Failed to allocate the scroll pieces.\n");
+        return;
+    }
+
+    wined3d_texture_validate_location(texture, 0, WINED3D_LOCATION_DRAWABLE);
+    for (i = 0; i < count; ++i)
+    {
+        source = pieces[i];
+        OffsetRect(&source, -scroll_offset->x, -scroll_offset->y);
+        device->blitter->ops->blitter_blit(device->blitter, WINED3D_BLIT_OP_COLOR_BLIT, context, texture, 0,
+                WINED3D_LOCATION_DRAWABLE, &source, texture, 0, WINED3D_LOCATION_TEXTURE_RGB, &pieces[i],
+                NULL, WINED3D_TEXF_NONE, NULL);
+    }
+    wined3d_texture_validate_location(texture, 0, WINED3D_LOCATION_TEXTURE_RGB);
+    wined3d_texture_invalidate_location(texture, 0, ~WINED3D_LOCATION_TEXTURE_RGB);
+
+    for (i = 0; i < count; ++i)
+        swapchain_blit(swapchain, context, &pieces[i], &pieces[i]);
+
+    free(pieces);
 }
 
 static void swapchain_gl_set_swap_interval(struct wined3d_swapchain *swapchain,
@@ -722,14 +860,19 @@ static bool swapchain_present_is_partial_copy(struct wined3d_swapchain *swapchai
     return false;
 }
 
-static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
-        const RECT *src_rect, const RECT *dst_rect, unsigned int swap_interval, uint32_t flags)
+static void swapchain_gl_present(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        unsigned int swap_interval, uint32_t flags)
 {
     struct wined3d_texture *back_buffer = swapchain->back_buffers[0];
     const struct wined3d_pixel_format *pixel_format;
     const struct wined3d_gl_info *gl_info;
     struct wined3d_context_gl *context_gl;
     struct wined3d_context *context;
+    RECT src_bounds, dst_bounds;
+    unsigned int i;
+
+    swapchain_present_bounds(src_rects, dst_rects, rect_count, scroll_rect, &src_bounds, &dst_bounds);
 
     context = context_acquire(swapchain->device, swapchain->front_buffer, 0);
     context_gl = wined3d_context_gl(context);
@@ -749,9 +892,9 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
 #endif
             context_gl->dc == wined3d_device_gl(swapchain->device)->backup_dc
             || (pixel_format->swap_method != WGL_SWAP_COPY_ARB
-            && swapchain_present_is_partial_copy(swapchain, dst_rect)))
+            && swapchain_present_is_partial_copy(swapchain, &dst_bounds)))
     {
-        swapchain_blit_gdi(swapchain, context, src_rect, dst_rect);
+        swapchain_blit_gdi(swapchain, context, src_rects, dst_rects, rect_count, scroll_rect, scroll_offset);
     }
     else
     {
@@ -761,18 +904,26 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
 
         wined3d_texture_load_location(back_buffer, 0, context, back_buffer->resource.draw_binding);
 
-#ifdef __REACTOS__
-        if (swapchain->composition)
-        {
-            RECT composition_source_rect = *src_rect;
-            RECT composition_draw_rect = *dst_rect;
+        if (scroll_rect)
+            swapchain_gl_scroll(swapchain, context, scroll_rect, scroll_offset, dst_rects, rect_count);
 
-            if (swapchain_composition_rects(swapchain, &composition_source_rect, &composition_draw_rect))
-                swapchain_blit(swapchain, context, &composition_source_rect, &composition_draw_rect);
-        }
-        else
+        for (i = 0; i < rect_count; ++i)
+        {
+            if (IsRectEmpty(&src_rects[i]) || IsRectEmpty(&dst_rects[i]))
+                continue;
+#ifdef __REACTOS__
+            if (swapchain->composition)
+            {
+                RECT composition_source_rect = src_rects[i];
+                RECT composition_draw_rect = dst_rects[i];
+
+                if (swapchain_composition_rects(swapchain, &composition_source_rect, &composition_draw_rect))
+                    swapchain_blit(swapchain, context, &composition_source_rect, &composition_draw_rect);
+                continue;
+            }
 #endif
-        swapchain_blit(swapchain, context, src_rect, dst_rect);
+            swapchain_blit(swapchain, context, &src_rects[i], &dst_rects[i]);
+        }
 
         if (swapchain->device->context_count > 1)
         {
@@ -787,6 +938,10 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain,
     if (context->d3d_info->fences)
         wined3d_context_gl_submit_command_fence(context_gl);
 
+#ifdef __REACTOS__
+    /* Buffer zero stays stable for flip-sequential clients, as in the GDI path. */
+    if (swapchain->state.desc.swap_effect != WINED3D_SWAP_EFFECT_FLIP_SEQUENTIAL)
+#endif
     wined3d_swapchain_gl_rotate(swapchain, context);
 
     TRACE("SwapBuffers called, Starting new frame\n");
@@ -1377,20 +1532,30 @@ static void wined3d_swapchain_vk_rotate(struct wined3d_swapchain *swapchain, str
     device_invalidate_state(swapchain->device, STATE_FRAMEBUFFER);
 }
 
-static void swapchain_vk_present(struct wined3d_swapchain *swapchain, const RECT *src_rect,
-        const RECT *dst_rect, unsigned int swap_interval, uint32_t flags)
+static void swapchain_vk_present(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        unsigned int swap_interval, uint32_t flags)
 {
     struct wined3d_swapchain_vk *swapchain_vk = wined3d_swapchain_vk(swapchain);
     struct wined3d_texture *back_buffer = swapchain->back_buffers[0];
     struct wined3d_context_vk *context_vk;
+    RECT src_bounds, dst_bounds;
+    const RECT *src_rect = &src_bounds, *dst_rect = &dst_bounds;
     VkResult vr;
     HRESULT hr;
 
+    /* TODO: present each Vulkan rect individually, as the GL path does */
+    swapchain_present_bounds(src_rects, dst_rects, rect_count, scroll_rect, &src_bounds, &dst_bounds);
+
     context_vk = wined3d_context_vk(context_acquire(swapchain->device, back_buffer, 0));
 
-    if (!swapchain_vk->vk_swapchain || swapchain_present_is_partial_copy(swapchain, dst_rect))
+    if (scroll_rect)
     {
-        swapchain_blit_gdi(swapchain, &context_vk->c, src_rect, dst_rect);
+        swapchain_blit_gdi(swapchain, &context_vk->c, src_rects, dst_rects, rect_count, scroll_rect, scroll_offset);
+    }
+    else if (!swapchain_vk->vk_swapchain || swapchain_present_is_partial_copy(swapchain, dst_rect))
+    {
+        swapchain_blit_gdi(swapchain, &context_vk->c, src_rect, dst_rect, 1, NULL, NULL);
     }
     else
     {
@@ -1519,14 +1684,19 @@ done:
     SetRectEmpty(&swapchain->front_buffer_update);
 }
 
-static void swapchain_gdi_present(struct wined3d_swapchain *swapchain,
-        const RECT *src_rect, const RECT *dst_rect, unsigned int swap_interval, uint32_t flags)
+static void swapchain_gdi_present(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        unsigned int swap_interval, uint32_t flags)
 {
     struct wined3d_dc_info *front, *back;
+    RECT src_bounds, dst_bounds;
     HBITMAP bitmap;
     void *heap_pointer;
     void *heap_memory;
+    unsigned int i;
     HDC dc;
+
+    swapchain_present_bounds(src_rects, dst_rects, rect_count, scroll_rect, &src_bounds, &dst_bounds);
 
     front = &swapchain->front_buffer->dc_info[0];
     back = &swapchain->back_buffers[0]->dc_info[0];
@@ -1537,11 +1707,16 @@ static void swapchain_gdi_present(struct wined3d_swapchain *swapchain,
         /* Our CPU composition path exposes a stable buffer zero to DXGI. Keep
          * its contents across presents, as flip-sequential clients commonly
          * update only the damaged part of the retained frame. */
-        BitBlt(front->dc, src_rect->left, src_rect->top,
-                src_rect->right - src_rect->left,
-                src_rect->bottom - src_rect->top,
-                back->dc, src_rect->left, src_rect->top, SRCCOPY);
-        swapchain->front_buffer_update = *src_rect;
+        if (scroll_rect)
+            BitBlt(front->dc, scroll_rect->left, scroll_rect->top,
+                    scroll_rect->right - scroll_rect->left, scroll_rect->bottom - scroll_rect->top,
+                    front->dc, scroll_rect->left - scroll_offset->x, scroll_rect->top - scroll_offset->y, SRCCOPY);
+        for (i = 0; i < rect_count; ++i)
+            BitBlt(front->dc, src_rects[i].left, src_rects[i].top,
+                    src_rects[i].right - src_rects[i].left,
+                    src_rects[i].bottom - src_rects[i].top,
+                    back->dc, src_rects[i].left, src_rects[i].top, SRCCOPY);
+        swapchain->front_buffer_update = src_bounds;
         goto present;
     }
 #endif
@@ -1585,8 +1760,9 @@ static const struct wined3d_swapchain_ops swapchain_no3d_ops =
 };
 
 #ifdef __REACTOS__
-static void swapchain_null_present(struct wined3d_swapchain *swapchain,
-        const RECT *src_rect, const RECT *dst_rect, unsigned int swap_interval, uint32_t flags)
+static void swapchain_null_present(struct wined3d_swapchain *swapchain, const RECT *src_rects,
+        const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
+        unsigned int swap_interval, uint32_t flags)
 {
 }
 
