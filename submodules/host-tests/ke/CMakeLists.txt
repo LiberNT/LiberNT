@@ -45,6 +45,8 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ex.workqueue_startup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/workqueue-startup-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ex.workqueue_dynamic_exit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/workqueue-dynamic-exit-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ex.timer_race COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ex-timer-race-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
     endif()

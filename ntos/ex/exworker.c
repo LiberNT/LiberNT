@@ -297,16 +297,8 @@ ExpWorkerThreadEntryPoint(
         ExpDeregisterWorkerThread(Worker);
     }
 
+    ASSERT(Parameters.Dynamic);
     InterlockedDecrement(&Queue->DynamicThreadCount);
-
-    if (Parameters.QueueType == CriticalWorkQueue)
-    {
-        InterlockedDecrement((PLONG)&ExpAdditionalCriticalWorkerThreads);
-    }
-    else if (Parameters.QueueType == DelayedWorkQueue)
-    {
-        InterlockedDecrement((PLONG)&ExpAdditionalDelayedWorkerThreads);
-    }
 }
 
 static
