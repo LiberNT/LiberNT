@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, the instances of a device share the link named without their reference strings, an alias keeps the reference string, and IoUnregisterPlugPlayNotificationEx waits for a running notification
+ * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, the instances of a device share the link named without their reference strings, an alias keeps the reference string, the Linked value is written with APCs enabled, and IoUnregisterPlugPlayNotificationEx waits for a running notification
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -60,6 +60,69 @@ InterfaceNotified(
     InterlockedDecrement(&State->Depth);
     if (State->Count == RTL_NUMBER_OF(State->Events)) KeSetEvent(&State->Done, IO_NO_INCREMENT, FALSE);
     return STATUS_SUCCESS;
+}
+
+typedef struct _LINKED_WRITES
+{
+    PETHREAD Thread;
+    ULONG Writes;
+    BOOLEAN ApcsDisabled;
+} LINKED_WRITES, *PLINKED_WRITES;
+
+static
+NTSTATUS
+NTAPI
+LinkedWritten(
+    _In_ PVOID CallbackContext,
+    _In_opt_ PVOID Argument1,
+    _In_opt_ PVOID Argument2)
+{
+    static const UNICODE_STRING Linked = RTL_CONSTANT_STRING(L"Linked");
+    PREG_SET_VALUE_KEY_INFORMATION Information = Argument2;
+    PLINKED_WRITES Writes = CallbackContext;
+
+    if ((REG_NOTIFY_CLASS)(ULONG_PTR)Argument1 != RegNtPreSetValueKey || Information == NULL ||
+        PsGetCurrentThread() != Writes->Thread || !RtlEqualUnicodeString(Information->ValueName, &Linked, TRUE))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    Writes->Writes++;
+    if (KeAreAllApcsDisabled()) Writes->ApcsDisabled = TRUE;
+    return STATUS_SUCCESS;
+}
+
+/* A registry filter sees the Linked value written where it may wait for I/O or call back into the PnP manager */
+static
+VOID
+CheckLinkedWrite(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    UNICODE_STRING Reference = RTL_CONSTANT_STRING(L"L");
+    UNICODE_STRING Altitude = RTL_CONSTANT_STRING(L"426789.17");
+    UNICODE_STRING Link = { 0 };
+    LINKED_WRITES Writes = { 0 };
+    LARGE_INTEGER Cookie;
+    NTSTATUS Status;
+
+    Writes.Thread = PsGetCurrentThread();
+
+    Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &Reference, &Link);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = CmRegisterCallbackEx(LinkedWritten, &Altitude, KmtDriverObject, &Writes, &Cookie, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok_once(IoSetDeviceInterfaceState(&Link, TRUE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+        ok_once(CmUnRegisterCallback(Cookie), STATUS_SUCCESS);
+        ok_eq_ulong(Writes.Writes, 2UL);
+        ok(!Writes.ApcsDisabled, "the Linked value was written with APCs disabled\n");
+    }
+
+    RtlFreeUnicodeString(&Link);
 }
 
 typedef struct _UNREGISTER_STATE
@@ -533,6 +596,7 @@ START_TEST(IoInterfaceOrderCheck)
         IoUnregisterPlugPlayNotification(NotifyEntry);
     }
 
+    CheckLinkedWrite(Pdo);
     CheckUnregisterWaits(Pdo);
 
     RtlFreeUnicodeString(&First);

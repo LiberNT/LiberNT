@@ -698,6 +698,7 @@ IoInitSystem(
     DriverBootReinitTailEntry = NULL;
 
     KeInitializeGuardedMutex(&IopDeviceInterfaceLock);
+    KeInitializeMutex(&IopInterfaceLinkedLock, 0);
 
     ExInitializeResourceLite(&IopDatabaseResource);
     ExInitializeResourceLite(&IopSecurityResource);

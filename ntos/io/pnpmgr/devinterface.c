@@ -15,6 +15,7 @@
 
 LIST_ENTRY IopDeviceInterfaceListHead;
 KGUARDED_MUTEX IopDeviceInterfaceLock;
+KMUTEX IopInterfaceLinkedLock;
 
 /* PRIVATE DATA ***************************************************************/
 
@@ -399,6 +400,7 @@ IopForgetDeviceInterfaces(
     }
 }
 
+static
 VOID
 IopSetInterfaceLinked(
     _In_ PIOP_DEVICE_INTERFACE Interface,
@@ -455,6 +457,29 @@ IopSetInterfaceLinked(
 
     ZwSetValueKey(ControlKey, &LinkedName, 0, REG_DWORD, &Value, sizeof(Value));
     ZwClose(ControlKey);
+}
+
+/* The registry is written outside the interface lock, where registry filters may call back into the PnP manager;
+ * of changes written out of order, the one made last stays */
+VOID
+IopWriteInterfaceLinked(
+    _In_ PIOP_DEVICE_INTERFACE Interface,
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ BOOLEAN Linked,
+    _In_ ULONG Toggle)
+{
+    PAGED_CODE();
+    ASSERT(IopDeviceInterfaceLock.Owner != KeGetCurrentThread());
+
+    KeWaitForSingleObject(&IopInterfaceLinkedLock, Executive, KernelMode, FALSE, NULL);
+
+    if ((LONG)(Toggle - Interface->LinkedToggle) > 0)
+    {
+        IopSetInterfaceLinked(Interface, PhysicalDeviceObject, Linked);
+        Interface->LinkedToggle = Toggle;
+    }
+
+    KeReleaseMutex(&IopInterfaceLinkedLock, FALSE);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -697,6 +722,7 @@ IoSetDeviceInterfaceState(
     PIOP_DEVICE_INTERFACE Interface;
     PDEVICE_OBJECT PhysicalDeviceObject;
     NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Toggle;
 
     PAGED_CODE();
 
@@ -731,15 +757,15 @@ IoSetDeviceInterfaceState(
 
     Interface->Enabled = Enable;
     Interface->Unannounced++;
+    Toggle = ++Interface->Toggles;
     if (!Enable) IopDropInterfaceLink(Interface);
 
     PhysicalDeviceObject = Interface->PhysicalDeviceObject;
     ObReferenceObject(PhysicalDeviceObject);
 
-    IopSetInterfaceLinked(Interface, PhysicalDeviceObject, Enable);
-
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
+    IopWriteInterfaceLinked(Interface, PhysicalDeviceObject, Enable, Toggle);
     IopAnnounceInterface(Interface);
 
     ObDereferenceObject(PhysicalDeviceObject);

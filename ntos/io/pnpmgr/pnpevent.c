@@ -230,6 +230,7 @@ IopDisableDeviceInterfaces(
 {
     PIOP_DEVICE_INTERFACE Interface;
     PLIST_ENTRY Entry;
+    ULONG Toggle;
 
     PAGED_CODE();
 
@@ -255,11 +256,12 @@ IopDisableDeviceInterfaces(
 
         Interface->Enabled = FALSE;
         Interface->Unannounced++;
+        Toggle = ++Interface->Toggles;
         IopDropInterfaceLink(Interface);
-        IopSetInterfaceLinked(Interface, DeviceNode->PhysicalDeviceObject, FALSE);
 
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
+        IopWriteInterfaceLinked(Interface, DeviceNode->PhysicalDeviceObject, FALSE, Toggle);
         IopAnnounceInterface(Interface);
 
         KeAcquireGuardedMutex(&IopDeviceInterfaceLock);

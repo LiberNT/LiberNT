@@ -84,6 +84,8 @@ typedef struct _IOP_DEVICE_INTERFACE
     BOOLEAN Announced;
     BOOLEAN Announcing;
     ULONG Unannounced;
+    ULONG Toggles;
+    ULONG LinkedToggle;
 } IOP_DEVICE_INTERFACE, *PIOP_DEVICE_INTERFACE;
 
 typedef struct _IOP_DEVICE_REFERENCE
@@ -503,14 +505,16 @@ USHORT IopGetBusTypeGuidIndex(_In_ LPGUID BusTypeGuid);
 
 extern LIST_ENTRY IopDeviceInterfaceListHead;
 extern KGUARDED_MUTEX IopDeviceInterfaceLock;
+extern KMUTEX IopInterfaceLinkedLock;
 
 NTSTATUS IopOpenInterfaceClassKey(_In_ CONST GUID *ClassGuid,
                                   _In_ BOOLEAN Create,
                                   _Out_ PHANDLE KeyHandle);
 
-VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
-                           _In_ PDEVICE_OBJECT PhysicalDeviceObject,
-                           _In_ BOOLEAN Linked);
+VOID IopWriteInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
+                             _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+                             _In_ BOOLEAN Linked,
+                             _In_ ULONG Toggle);
 
 VOID IopDropInterfaceLink(_In_ PIOP_DEVICE_INTERFACE Interface);
 
