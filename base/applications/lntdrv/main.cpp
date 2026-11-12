@@ -1096,6 +1096,14 @@ private:
                         ContinueInstall();
                 }
                 return TRUE;
+            case WM_NOTIFY:
+            {
+                NMHDR *header = (NMHDR *)lParam;
+
+                if (header->idFrom == IDC_CATALOG_LINK && (header->code == NM_CLICK || header->code == NM_RETURN))
+                    Message(NULL, LoadText(IDS_CATALOG_NOTICE));
+                return TRUE;
+            }
             case WM_TIMER:
                 if (wParam == SpinnerTimer)
                 {
@@ -1159,8 +1167,6 @@ private:
 
             if (header->idFrom == IDC_DEVICES)
                 return OnDeviceNotify(page, header);
-            else if (header->idFrom == IDC_CATALOG_LINK && (header->code == NM_CLICK || header->code == NM_RETURN))
-                Message(TD_INFORMATION_ICON, LoadText(IDS_CATALOG_NOTICE));
             else if (header->idFrom == IDC_HISTORY_LIST && header->code == LVN_ITEMCHANGED)
                 UpdateButtons();
         }
@@ -1368,7 +1374,7 @@ private:
                          SWP_NOACTIVATE);
         }
         InitList(GetDlgItem(m_Pages[PageDevices], IDC_DEVICES), LVS_EX_CHECKBOXES, deviceColumns);
-        SetDlgItemTextW(m_Pages[PageDevices], IDC_CATALOG_LINK, LoadText(IDS_CATALOG_LINK).c_str());
+        SetDlgItemTextW(m_hwnd, IDC_CATALOG_LINK, LoadText(IDS_CATALOG_LINK).c_str());
         InitList(GetDlgItem(m_Pages[PageDone], IDC_RESULTS), 0, resultColumns);
         InitList(GetDlgItem(m_Pages[PageHistory], IDC_HISTORY_LIST), 0, historyColumns);
 
