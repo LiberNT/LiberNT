@@ -1156,16 +1156,17 @@ VOID
 NTAPI
 FreeMachineInformation(VOID)
 {
-    ASSERT(MachineInformation);
+    if (!MachineInformation) return;
 
     /* Free every cached string of machine information */
-    if (MachineInformation->MachineName) SacFreePool(MachineInformation);
+    if (MachineInformation->MachineName) SacFreePool(MachineInformation->MachineName);
     if (MachineInformation->MachineGuid) SacFreePool(MachineInformation->MachineGuid);
     if (MachineInformation->ProcessorArchitecture) SacFreePool(MachineInformation->ProcessorArchitecture);
     if (MachineInformation->MajorVersion) SacFreePool(MachineInformation->MajorVersion);
     if (MachineInformation->BuildNumber) SacFreePool(MachineInformation->BuildNumber);
     if (MachineInformation->ProductType) SacFreePool(MachineInformation->ProductType);
     if (MachineInformation->ServicePack) SacFreePool(MachineInformation->ServicePack);
+    SacFreePool(MachineInformation);
 }
 
 BOOLEAN
