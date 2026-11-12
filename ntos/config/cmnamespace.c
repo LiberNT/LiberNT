@@ -1056,7 +1056,7 @@ CmpParseKeyEx(
     RtlZeroMemory(&Information, sizeof(Information));
 
     Information.CompleteName = CompleteName;
-    Information.RootObject = ParseObject;
+    Information.RootObject = (ParseObject == CmpRegistryNamespaceRoot) ? CmpRegistryRootObject : ParseObject;
     Information.ObjectType = ObjectType;
     if (ParseContext != NULL) Information.Class = &ParseContext->Class;
     Information.Options = (ParseContext != NULL) ? ParseContext->CreateOptions : 0;

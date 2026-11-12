@@ -1030,6 +1030,7 @@ SepCreateSystemProcessToken(VOID)
     if (!NT_SUCCESS(SepAssembleToken(&Contents, NULL, KernelMode, 0, &Token)))
         return NULL;
 
+    ObDeleteCapturedInsertInfo(Token);
     Token->TokenInUse = TRUE;
     return Token;
 }
@@ -1080,6 +1081,7 @@ SepMakeAnonymousToken(
     if (!NT_SUCCESS(SepAssembleToken(&Contents, NULL, KernelMode, 0, &Token)))
         return NULL;
 
+    ObDeleteCapturedInsertInfo(Token);
     return Token;
 }
 
@@ -1322,13 +1324,18 @@ SeCopyClientToken(
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PACCESS_TOKEN *NewToken)
 {
-    return SepCloneToken(Token,
-                         FALSE,
-                         TokenImpersonation,
-                         Level,
-                         NULL,
-                         PreviousMode,
-                         (PTOKEN *)NewToken);
+    NTSTATUS Status;
+
+    Status = SepCloneToken(Token,
+                           FALSE,
+                           TokenImpersonation,
+                           Level,
+                           NULL,
+                           PreviousMode,
+                           (PTOKEN *)NewToken);
+    if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
+
+    return Status;
 }
 
 NTSTATUS
@@ -1340,13 +1347,18 @@ SepCopyImpersonationToken(
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PACCESS_TOKEN *NewToken)
 {
-    return SepCloneToken(Token,
-                         EffectiveOnly,
-                         TokenImpersonation,
-                         Level,
-                         NULL,
-                         PreviousMode,
-                         (PTOKEN *)NewToken);
+    NTSTATUS Status;
+
+    Status = SepCloneToken(Token,
+                           EffectiveOnly,
+                           TokenImpersonation,
+                           Level,
+                           NULL,
+                           PreviousMode,
+                           (PTOKEN *)NewToken);
+    if (NT_SUCCESS(Status)) ObDeleteCapturedInsertInfo(*NewToken);
+
+    return Status;
 }
 
 /* A token a process runs with is secured by what it says itself: its default owner, its primary group, its default DACL and its own integrity level */
@@ -1493,6 +1505,8 @@ SepCopyPrimaryToken(
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
 
+    ObDeleteCapturedInsertInfo(New);
+
     /* Every process is told apart from the one whose token it was given */
     ExAllocateLocallyUniqueId(&New->ProcUnique);
 
@@ -1530,6 +1544,8 @@ SeSubProcessToken(
                            KernelMode,
                            &New);
     if (!NT_SUCCESS(Status)) return Status;
+
+    ObDeleteCapturedInsertInfo(New);
 
     /*
      * A new process starts with the privileges its token is meant to have on,

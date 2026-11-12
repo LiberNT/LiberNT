@@ -96,6 +96,8 @@ FsRtlCreateSectionForDataScan(
         HandleAttributes = ObjectAttributes->Attributes & OBJ_KERNEL_HANDLE;
     }
 
+    ObDeleteCapturedInsertInfo(Section);
+
     Status = ObOpenObjectByPointer(Section,
                                    HandleAttributes,
                                    NULL,

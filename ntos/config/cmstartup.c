@@ -377,11 +377,38 @@ CmpCreateRegistryRoot(VOID)
                                        KEY_READ,
                                        CmpKeyObjectType,
                                        KernelMode,
-                                       (PVOID*)&CmpRegistryRootObject,
+                                       (PVOID*)&CmpRegistryNamespaceRoot,
                                        NULL);
     if (!NT_SUCCESS(Status)) return Status;
 
-    CmpRegistryNamespaceRoot = CmpRegistryRootObject;
+    if (!CmpReferenceKeyControlBlock(Kcb)) return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = ObCreateObject(KernelMode,
+                            CmpKeyObjectType,
+                            NULL,
+                            KernelMode,
+                            NULL,
+                            sizeof(CM_KEY_BODY),
+                            0,
+                            0,
+                            (PVOID*)&KeyBody);
+    if (!NT_SUCCESS(Status))
+    {
+        CmpDereferenceKeyControlBlock(Kcb);
+        return Status;
+    }
+
+    RtlZeroMemory(KeyBody, sizeof(CM_KEY_BODY));
+
+    KeyBody->Type = CM_KEY_BODY_TYPE;
+    KeyBody->KeyControlBlock = Kcb;
+    KeyBody->ProcessID = PsGetCurrentProcessId();
+    InitializeListHead(&KeyBody->ContextListHead);
+    InitializeListHead(&KeyBody->KeyBodyList);
+    EnlistKeyBodyWithKCB(KeyBody, 0);
+
+    ASSERT(OBJECT_TO_OBJECT_HEADER(KeyBody)->Flags & OB_FLAG_CREATE_INFO);
+    CmpRegistryRootObject = KeyBody;
     return STATUS_SUCCESS;
 }
 

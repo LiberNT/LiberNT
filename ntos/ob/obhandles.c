@@ -777,6 +777,21 @@ ObpIncrementHandleCount(
 
     ObpAcquireObjectLock(Header);
 
+    if (Header->Flags & OB_FLAG_CREATE_INFO)
+    {
+        BOOLEAN NewObject;
+
+        Status = ObpChargeQuotaForObject(Header, ObjectType, &NewObject);
+        if (!NT_SUCCESS(Status))
+        {
+            ObpReleaseObjectLock(Header);
+            return Status;
+        }
+
+        ASSERT(NewObject);
+        ASSERT(!(Header->Flags & OB_FLAG_CREATE_INFO));
+    }
+
     /* An exclusive object answers to one process only */
     if (Header->Flags & OB_FLAG_EXCLUSIVE)
     {
@@ -1766,6 +1781,9 @@ ObOpenObjectByPointer(
     FoundType = ObpGetObjectTypeFromHeader(Header);
     if (ObjectType != NULL && ObjectType != FoundType)
         return STATUS_OBJECT_TYPE_MISMATCH;
+
+    if ((Header->Flags & OB_FLAG_CREATE_INFO) && (Header->ObjectCreateInfo != NULL))
+        return STATUS_INVALID_PARAMETER;
 
     /* The object has to survive the open whatever happens to the caller's
      * own reference */

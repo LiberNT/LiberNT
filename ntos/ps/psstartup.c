@@ -354,6 +354,8 @@ PspBuildSystemProcess(VOID)
     Status = MmInitializeHandBuiltProcess2(Process);
     if (!NT_SUCCESS(Status)) return FALSE;
 
+    ObDeleteCapturedInsertInfo(Process);
+
     Status = ObOpenObjectByPointer(Process,
                                    OBJ_KERNEL_HANDLE,
                                    NULL,
