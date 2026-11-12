@@ -44,6 +44,7 @@ list(APPEND SOURCE
     DefaultActCtx.c
     DeleteFileCase.c
     DeviceIoControl.c
+    EmulatedProcess.c
     dosdev.c
     EnumDateTimeFormats.c
     EnumSystemCodePages.c

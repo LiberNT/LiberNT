@@ -11,7 +11,6 @@
 /* INCLUDES ****************************************************************/
 
 #include <k32.h>
-#include <reactos/emulation.h>
 #include <wow64shared.h>
 
 #define NDEBUG
@@ -2090,26 +2089,6 @@ IsWow64Process2(IN HANDLE hProcess,
 }
 
 static
-BOOLEAN
-BasepIsEmulatedMachine(IN USHORT Machine)
-{
-    WCHAR Buffer[MAX_PATH];
-    UNICODE_STRING Path;
-
-    if (Machine != IMAGE_FILE_MACHINE_AMD64) return FALSE;
-
-    RtlInitEmptyUnicodeString(&Path, Buffer, sizeof(Buffer) - sizeof(UNICODE_NULL));
-    if (!NT_SUCCESS(RtlAppendUnicodeToString(&Path, SharedUserData->NtSystemRoot)) ||
-        !NT_SUCCESS(RtlAppendUnicodeToString(&Path, L"\\System32\\" EMULATION_HOST_IMAGE_AMD64)))
-    {
-        return FALSE;
-    }
-
-    Buffer[Path.Length / sizeof(WCHAR)] = UNICODE_NULL;
-    return RtlDoesFileExists_U(Buffer);
-}
-
-static
 NTSTATUS
 BasepQuerySupportedMachines(OUT SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION *Machines,
                             IN ULONG Count)
@@ -2123,6 +2102,24 @@ BasepQuerySupportedMachines(OUT SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMA
                                       Machines,
                                       (Count - 1) * sizeof(*Machines),
                                       NULL);
+}
+
+static
+BOOLEAN
+BasepIsEmulatedMachine(IN USHORT Machine)
+{
+    SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[8];
+    ULONG Index;
+
+    if (!NT_SUCCESS(BasepQuerySupportedMachines(Machines, RTL_NUMBER_OF(Machines))))
+        return FALSE;
+
+    for (Index = 0; Machines[Index].Machine; Index++)
+    {
+        if (Machines[Index].Machine == Machine)
+            return Machines[Index].UserMode && !Machines[Index].WoW64Container;
+    }
+    return FALSE;
 }
 
 /*

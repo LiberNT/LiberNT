@@ -39,6 +39,7 @@ extern void func_CreateProcess(void);
 extern void func_DefaultActCtx(void);
 extern void func_DeleteFileCase(void);
 extern void func_DeviceIoControl(void);
+extern void func_EmulatedProcess(void);
 extern void func_dosdev(void);
 extern void func_EnumDateTimeFormats(void);
 extern void func_EnumSystemCodePages(void);
@@ -246,6 +247,7 @@ const struct test winetest_testlist[] =
     { "DefaultActCtx",               func_DefaultActCtx },
     { "DeleteFileCase",              func_DeleteFileCase },
     { "DeviceIoControl",             func_DeviceIoControl },
+    { "EmulatedProcess",             func_EmulatedProcess },
     { "dosdev",                      func_dosdev },
     { "EnumDateTimeFormats",         func_EnumDateTimeFormats },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },

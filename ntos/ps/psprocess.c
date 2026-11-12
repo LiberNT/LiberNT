@@ -200,6 +200,19 @@ PspAllocateProcess(
         Process->DefaultHardErrorProcessing = SEM_FAILCRITICALERRORS;
     }
 
+    if (Section != NULL)
+    {
+        SECTION_IMAGE_INFORMATION ImageInformation;
+
+        Status = MmGetSectionImageInformation(Section, &ImageInformation);
+        if (NT_SUCCESS(Status))
+        {
+            Process->Machine = (KI_EMULATED_USER_MACHINE != 0 &&
+                                ImageInformation.Machine == KI_EMULATED_USER_MACHINE) ?
+                               KI_EMULATED_USER_MACHINE : IMAGE_FILE_MACHINE_NATIVE;
+        }
+    }
+
     PspInheritQuota(Process, Parent);
     ObInheritDeviceMap(Parent, Process);
 

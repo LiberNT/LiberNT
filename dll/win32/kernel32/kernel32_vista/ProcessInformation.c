@@ -54,7 +54,7 @@ GetProcessInformation(
                 Machine = IMAGE_FILE_MACHINE_AMD64;
 
             RtlZeroMemory(Machines, sizeof(Machines));
-            Status = NtQuerySystemInformationEx(SystemSupportedProcessorArchitectures, &hProcess, sizeof(hProcess),
+            Status = NtQuerySystemInformationEx(SystemSupportedProcessorArchitectures2, &hProcess, sizeof(hProcess),
                                                 Machines, sizeof(Machines) - sizeof(Machines[0]), NULL);
             if (!NT_SUCCESS(Status))
                 break;
