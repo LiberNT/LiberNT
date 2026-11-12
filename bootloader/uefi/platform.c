@@ -372,10 +372,12 @@ FwStartImage(
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
-    _In_ PCWSTR Path)
+    _In_ PCWSTR Path,
+    _In_opt_ PCWSTR LoadOptions)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
     EFI_DEVICE_PATH_PROTOCOL *DevicePath, *Node, *FilePath;
+    EFI_LOADED_IMAGE_PROTOCOL* LoadedImage;
     EFI_HANDLE Handle;
     SIZE_T DeviceSize, NodeSize;
     PUCHAR Buffer;
@@ -428,6 +430,19 @@ FwStartFirmwareApplication(
     }
 
     FwFree(Buffer);
+
+    if (LoadOptions)
+    {
+        if (EFI_ERROR(BootServices->HandleProtocol(Handle, &FwLoadedImageProtocolGuid, (VOID**)&LoadedImage)))
+        {
+            BootServices->UnloadImage(Handle);
+            return FALSE;
+        }
+
+        LoadedImage->LoadOptions = (VOID*)LoadOptions;
+        LoadedImage->LoadOptionsSize = (UINT32)((wcslen(LoadOptions) + 1) * sizeof(WCHAR));
+    }
+
     return !EFI_ERROR(BootServices->StartImage(Handle, NULL, NULL));
 }
 

@@ -198,20 +198,23 @@ FwDevicePathSize(
     return (PUCHAR)Node - (PUCHAR)Path;
 }
 
+static
 BOOLEAN
-FwGetBootDiskIndex(
+FwFindVolumeDisk(
+    _In_opt_ EFI_HANDLE Volume,
+    _In_ BOOLEAN FixedOnly,
     _Out_ PULONG Index)
 {
     EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
-    EFI_DEVICE_PATH_PROTOCOL *BootPath, *DiskPath, *Node;
-    EFI_HANDLE Handle = FwGetBootDeviceHandle();
+    EFI_DEVICE_PATH_PROTOCOL *VolumePath, *DiskPath, *Node;
     DK_DEVICE Disk;
     SIZE_T Size;
     ULONG Count;
     UINTN i;
 
-    if (!Handle ||
-        EFI_ERROR(BootServices->HandleProtocol(Handle, &FwDevicePathGuid, (VOID**)&BootPath)) ||
+    *Index = MAXULONG;
+    if (!Volume ||
+        EFI_ERROR(BootServices->HandleProtocol(Volume, &FwDevicePathGuid, (VOID**)&VolumePath)) ||
         !FwGetDisk(0, &Disk))
     {
         return FALSE;
@@ -219,15 +222,18 @@ FwGetBootDiskIndex(
 
     for (i = 0, Count = 0; i < FwDiskHandleCount; i++)
     {
-        if (!FwOpenBlockDevice(FwDiskHandles[i], TRUE, &Disk))
+        if (!FwOpenBlockDevice(FwDiskHandles[i], TRUE, &Disk) ||
+            (FixedOnly && FwIsUsbVolume(FwDiskHandles[i])))
+        {
             continue;
+        }
 
         if (!EFI_ERROR(BootServices->HandleProtocol(FwDiskHandles[i], &FwDevicePathGuid, (VOID**)&DiskPath)))
         {
             Size = FwDevicePathSize(DiskPath);
-            Node = (EFI_DEVICE_PATH_PROTOCOL*)((PUCHAR)BootPath + Size);
-            if (Size < FwDevicePathSize(BootPath) &&
-                RtlEqualMemory(BootPath, DiskPath, Size) &&
+            Node = (EFI_DEVICE_PATH_PROTOCOL*)((PUCHAR)VolumePath + Size);
+            if (Size < FwDevicePathSize(VolumePath) &&
+                RtlEqualMemory(VolumePath, DiskPath, Size) &&
                 DevicePathType(Node) == MEDIA_DEVICE_PATH &&
                 DevicePathSubType(Node) == MEDIA_HARDDRIVE_DP)
             {
@@ -240,6 +246,21 @@ FwGetBootDiskIndex(
     }
 
     return FALSE;
+}
+
+BOOLEAN
+FwGetBootDiskIndex(
+    _Out_ PULONG Index)
+{
+    return FwFindVolumeDisk(FwGetBootDeviceHandle(), FALSE, Index);
+}
+
+BOOLEAN
+FwGetVolumeDiskNumber(
+    _In_ PVOID Device,
+    _Out_ PULONG Number)
+{
+    return FwFindVolumeDisk(Device, TRUE, Number);
 }
 
 static

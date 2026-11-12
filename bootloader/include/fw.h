@@ -81,13 +81,19 @@ FwGetVolumeLabel(
     _Out_writes_z_(Chars) PWSTR Label,
     _In_ ULONG Chars);
 
+BOOLEAN
+FwGetVolumeDiskNumber(
+    _In_ PVOID Device,
+    _Out_ PULONG Number);
+
 PCWSTR
 FwGetRemovableMediaPath(VOID);
 
 BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
-    _In_ PCWSTR Path);
+    _In_ PCWSTR Path,
+    _In_opt_ PCWSTR LoadOptions);
 
 DECLSPEC_NORETURN
 VOID

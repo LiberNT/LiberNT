@@ -900,12 +900,24 @@ FwGetRemovableMediaPath(VOID)
 }
 
 BOOLEAN
+FwGetVolumeDiskNumber(
+    _In_ PVOID Device,
+    _Out_ PULONG Number)
+{
+    UNREFERENCED_PARAMETER(Device);
+    *Number = MAXULONG;
+    return FALSE;
+}
+
+BOOLEAN
 FwStartFirmwareApplication(
     _In_ PVOID Device,
-    _In_ PCWSTR Path)
+    _In_ PCWSTR Path,
+    _In_opt_ PCWSTR LoadOptions)
 {
     UNREFERENCED_PARAMETER(Device);
     UNREFERENCED_PARAMETER(Path);
+    UNREFERENCED_PARAMETER(LoadOptions);
     return FALSE;
 }
 

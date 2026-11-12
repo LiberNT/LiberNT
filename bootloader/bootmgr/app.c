@@ -72,7 +72,7 @@ BmStartApplication(
 
     if (Entry->FirmwareDevice)
     {
-        Started = FwStartFirmwareApplication(Entry->FirmwareDevice, Entry->FirmwarePath);
+        Started = FwStartFirmwareApplication(Entry->FirmwareDevice, Entry->FirmwarePath, Entry->FirmwareOptions);
         if (!Started)
             FwPrint(L"%s could not be started.\r\n", Entry->FirmwarePath);
         return Started;

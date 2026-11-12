@@ -149,11 +149,13 @@ typedef struct _BM_ENTRY
     WCHAR Description[BM_DESCRIPTION_CHARS];
     PVOID FirmwareDevice;
     PCWSTR FirmwarePath;
+    PCWSTR FirmwareOptions;
 } BM_ENTRY, *PBM_ENTRY;
 
 #define BM_FILE_NAME_CHARS 64
 #define BM_STARTUP_OPTION  L"STARTUP="
 #define BM_UNDO_UPDATE_OPTION L"UNDOUPDATE"
+#define BM_START_DEFAULT_OPTION L"STARTDEFAULT"
 
 typedef struct _BM_STARTUP
 {
