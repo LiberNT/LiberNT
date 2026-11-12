@@ -46,6 +46,49 @@ TestProcessImageName(VOID)
     RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
 }
 
+static
+VOID
+TestHandleCount(VOID)
+{
+    SYSTEM_HANDLE_INFORMATION Handles;
+    PSYSTEM_HANDLE_INFORMATION Buffer;
+    ULONG Length = 0;
+    ULONG Count;
+    NTSTATUS Status;
+
+    RtlFillMemory(&Handles, sizeof(Handles), 0xCC);
+    Status = NtQuerySystemInformation(SystemHandleInformation, &Handles, sizeof(Handles), NULL);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok(Handles.NumberOfHandles != 0xCCCCCCCC, "Handle count not written on a short buffer\n");
+    Count = Handles.NumberOfHandles;
+
+    RtlFillMemory(&Handles, sizeof(Handles), 0xCC);
+    Status = NtQuerySystemInformation(SystemHandleInformation, &Handles, sizeof(Handles), &Length);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok(Handles.NumberOfHandles != 0xCCCCCCCC, "Handle count not written on a short buffer\n");
+    ok(Length > sizeof(Handles), "Handle information length %lu\n", Length);
+    trace("Handle count %lu, length %lu\n", Handles.NumberOfHandles, Length);
+
+    Length += 0x10000;
+    Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length);
+    if (!Buffer)
+    {
+        skip("Could not allocate handle information\n");
+        return;
+    }
+    Status = NtQuerySystemInformation(SystemHandleInformation, Buffer, Length, &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok(Buffer->NumberOfHandles > 1, "Handle count %lu\n", Buffer->NumberOfHandles);
+        ok(Length == FIELD_OFFSET(SYSTEM_HANDLE_INFORMATION, Handles) + Buffer->NumberOfHandles * sizeof(Buffer->Handles[0]),
+           "Length %lu for %lu handles\n", Length, Buffer->NumberOfHandles);
+        ok(Count <= Buffer->NumberOfHandles + 64 && Count + 64 >= Buffer->NumberOfHandles,
+           "Short-buffer count %lu, full count %lu\n", Count, Buffer->NumberOfHandles);
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
+}
+
 START_TEST(NtQuerySystemInformation)
 {
     NTSTATUS Status;
@@ -73,6 +116,7 @@ START_TEST(NtQuerySystemInformation)
     }
 
     TestProcessImageName();
+    TestHandleCount();
 
     /* Both loaded-image lists must be initialized even when no user images
      * have been registered with the kernel's module list. */

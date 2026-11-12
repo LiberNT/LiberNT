@@ -198,21 +198,28 @@ ExpQueryHandleInformation(
 
     *ReturnLength = Header + Walk.Used;
 
+    /* The count is written whenever it fits, so a short buffer still learns it */
+    if ((Output != NULL) && (Length >= Header))
+    {
+        if (Extended)
+        {
+            PSYSTEM_HANDLE_INFORMATION_EX Info = Output;
+
+            Info->NumberOfHandles = Walk.Count;
+            Info->Reserved = 0;
+        }
+        else
+        {
+            ((PSYSTEM_HANDLE_INFORMATION)Output)->NumberOfHandles = Walk.Count;
+        }
+    }
+
     if ((Output == NULL) || (Length < Header) || Walk.Overflow)
     {
         Status = STATUS_INFO_LENGTH_MISMATCH;
     }
-    else if (Extended)
-    {
-        PSYSTEM_HANDLE_INFORMATION_EX Info = Output;
-
-        Info->NumberOfHandles = Walk.Count;
-        Info->Reserved = 0;
-        Status = STATUS_SUCCESS;
-    }
     else
     {
-        ((PSYSTEM_HANDLE_INFORMATION)Output)->NumberOfHandles = Walk.Count;
         Status = STATUS_SUCCESS;
     }
 
