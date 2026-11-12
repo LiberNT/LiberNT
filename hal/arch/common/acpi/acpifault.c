@@ -8,7 +8,7 @@
 #ifdef HALP_ACPI_HOST
 /* The host test supplies the base types and DbgPrint. */
 #else
-#include <hal.h>
+#include <ntifs.h>
 #endif
 #include <acpifault.h>
 
