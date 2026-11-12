@@ -187,6 +187,7 @@ KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
 KMT_TESTFUNC Test_IoInterfaceOrderCheck;
 KMT_TESTFUNC Test_IoResourceSearch;
+KMT_TESTFUNC Test_IoMessageInterruptClaim;
 KMT_TESTFUNC Test_IoCreateDriverContext;
 KMT_TESTFUNC Test_PciLineInterrupt;
 KMT_TESTFUNC Test_IoStorageDumpPath;
@@ -596,6 +597,7 @@ const KMT_TEST TestList[] =
     { "IoEvent",                            Test_IoEvent },
     { "-IoInterfaceOrderCheck",             Test_IoInterfaceOrderCheck },
     { "IoResourceSearch",                   Test_IoResourceSearch },
+    { "IoMessageInterruptClaim",            Test_IoMessageInterruptClaim },
     { "IoCreateDriverContext",              Test_IoCreateDriverContext },
     { "PciLineInterrupt",                   Test_PciLineInterrupt },
     { "IoStorageDumpPath",            Test_IoStorageDumpPath },

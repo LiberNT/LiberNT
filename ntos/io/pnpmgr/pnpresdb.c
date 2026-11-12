@@ -173,6 +173,9 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
             return TRUE;
         }
         case CmResourceTypeInterrupt:
+            /* A message interrupt holds a vector the HAL handed out, not an interrupt line */
+            if ((a->Flags & CM_RESOURCE_INTERRUPT_MESSAGE) || (b->Flags & CM_RESOURCE_INTERRUPT_MESSAGE))
+                return FALSE;
             return (a->u.Interrupt.Vector == b->u.Interrupt.Vector);
         case CmResourceTypeBusNumber:
         {
