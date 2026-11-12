@@ -162,8 +162,35 @@ TestPoolCounts(VOID)
     ok(After.NonPagedPoolPages != 0, "no nonpaged pool pages\n");
 }
 
+/* The device counts are the ones the class drivers keep in the I/O manager's configuration */
+static
+VOID
+TestDeviceCounts(VOID)
+{
+    PCONFIGURATION_INFORMATION Configuration = IoGetConfigurationInformation();
+    SYSTEM_DEVICE_INFORMATION Devices;
+    ULONG ReturnLength = 0;
+    NTSTATUS Status;
+
+    RtlFillMemory(&Devices, sizeof(Devices), 0xCC);
+    Status = ZwQuerySystemInformation(SystemDeviceInformation, &Devices, sizeof(Devices), &ReturnLength);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(ReturnLength, (ULONG)sizeof(Devices));
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ok_eq_ulong(Devices.NumberOfDisks, Configuration->DiskCount);
+    ok_eq_ulong(Devices.NumberOfFloppies, Configuration->FloppyCount);
+    ok_eq_ulong(Devices.NumberOfCdRoms, Configuration->CdRomCount);
+    ok_eq_ulong(Devices.NumberOfTapes, Configuration->TapeCount);
+    ok_eq_ulong(Devices.NumberOfSerialPorts, Configuration->SerialCount);
+    ok_eq_ulong(Devices.NumberOfParallelPorts, Configuration->ParallelCount);
+    ok(Devices.NumberOfDisks != 0, "a system started from a disk reports no disk\n");
+}
+
 START_TEST(ExSystemInformation)
 {
     TestLogicalProcessorInformation();
     TestPoolCounts();
+    TestDeviceCounts();
 }

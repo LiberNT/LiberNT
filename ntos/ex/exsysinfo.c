@@ -1341,6 +1341,7 @@ NtQuerySystemInformation(
             case SystemDeviceInformation:
             {
                 PSYSTEM_DEVICE_INFORMATION Device = SystemInformation;
+                PCONFIGURATION_INFORMATION Configuration = IoGetConfigurationInformation();
 
                 ResultLength = sizeof(SYSTEM_DEVICE_INFORMATION);
                 if (Length != ResultLength)
@@ -1349,9 +1350,12 @@ NtQuerySystemInformation(
                     break;
                 }
 
-                /* TODO: the I/O manager does not count its device objects by
-                   kind, so the counts are reported as none. */
-                RtlZeroMemory(Device, ResultLength);
+                Device->NumberOfDisks = Configuration->DiskCount;
+                Device->NumberOfFloppies = Configuration->FloppyCount;
+                Device->NumberOfCdRoms = Configuration->CdRomCount;
+                Device->NumberOfTapes = Configuration->TapeCount;
+                Device->NumberOfSerialPorts = Configuration->SerialCount;
+                Device->NumberOfParallelPorts = Configuration->ParallelCount;
                 break;
             }
 
