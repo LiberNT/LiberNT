@@ -685,18 +685,15 @@ HidClassPDO_PnP(
         }
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
-        case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_REMOVE_DEVICE:
         {
-            //
-            // no/op
-            //
-#if 0
             Status = STATUS_SUCCESS;
-#else
-            DPRINT1("Denying removal of HID device due to IRP cancellation bugs\n");
+            break;
+        }
+        case IRP_MN_QUERY_STOP_DEVICE:
+        {
+            /* FIXME: a collection refuses to stop, so the resources of its parent are never rebalanced */
             Status = STATUS_UNSUCCESSFUL;
-#endif
             break;
         }
         default:
