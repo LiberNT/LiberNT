@@ -35,6 +35,11 @@ typedef struct _CM_SMBIOS_HEADER
 #define CM_SMBIOS_PROCESSOR_MANUFACTURER 0x07
 #define CM_SMBIOS_PROCESSOR_VERSION      0x10
 #define CM_SMBIOS_PROCESSOR_SPEED        0x16
+#define CM_SMBIOS_PROCESSOR_TYPE         0x05
+#define CM_SMBIOS_PROCESSOR_MAX_SPEED    0x14
+#define CM_SMBIOS_PROCESSOR_STATUS       0x18
+#define CM_SMBIOS_PROCESSOR_CENTRAL      3
+#define CM_SMBIOS_PROCESSOR_POPULATED    0x40
 
 static UNICODE_STRING CmpDescriptionPath = RTL_CONSTANT_STRING(
     L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM");
@@ -495,6 +500,65 @@ CmpGetSmbiosProcessorStrings(
                                   NULL);
 }
 
+static
+CODE_SEG("INIT")
+USHORT
+CmpReadSmbiosProcessorMHz(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PCM_SMBIOS_HEADER Header;
+    PUCHAR Mapped, End, Current;
+    USHORT MaxSpeed, CurrentSpeed, Speed, Found = 0;
+    SIZE_T Size;
+
+    Mapped = CmpMapSmbiosTable(LoaderBlock, &Size);
+    if (Mapped == NULL) return 0;
+
+    End = Mapped + Size;
+    Current = Mapped;
+    while (Current + sizeof(CM_SMBIOS_HEADER) <= End)
+    {
+        Header = (PCM_SMBIOS_HEADER)Current;
+        if ((Header->Type == CM_SMBIOS_TYPE_END) ||
+            (Header->Length < sizeof(CM_SMBIOS_HEADER)) ||
+            (Current + Header->Length > End))
+        {
+            break;
+        }
+
+        if ((Header->Type == CM_SMBIOS_TYPE_PROCESSOR) &&
+            (Header->Length >= CM_SMBIOS_PROCESSOR_STATUS) &&
+            (Current[CM_SMBIOS_PROCESSOR_TYPE] == CM_SMBIOS_PROCESSOR_CENTRAL) &&
+            ((Header->Length <= CM_SMBIOS_PROCESSOR_STATUS) ||
+             (Current[CM_SMBIOS_PROCESSOR_STATUS] & CM_SMBIOS_PROCESSOR_POPULATED)))
+        {
+            RtlCopyMemory(&MaxSpeed, Current + CM_SMBIOS_PROCESSOR_MAX_SPEED, sizeof(MaxSpeed));
+            RtlCopyMemory(&CurrentSpeed, Current + CM_SMBIOS_PROCESSOR_SPEED, sizeof(CurrentSpeed));
+            Speed = ((CurrentSpeed != 0) && (CurrentSpeed != MAXUSHORT)) ? CurrentSpeed : MaxSpeed;
+            if ((Speed != 0) && (Speed != MAXUSHORT))
+            {
+                if (Found == 0)
+                {
+                    Found = Speed;
+                }
+                else if (Found != Speed)
+                {
+                    Found = 0;
+                    break;
+                }
+            }
+        }
+
+        Current += Header->Length;
+        while ((Current + 1 < End) && ((Current[0] != 0) || (Current[1] != 0)))
+            Current++;
+        Current += 2;
+    }
+
+    MmUnmapIoSpace(Mapped, Size);
+    return Found;
+}
+
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -502,9 +566,21 @@ CmpInitializeProcessorClockFromFirmware(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     USHORT Speed = 0;
+    PKPRCB Prcb;
+    ULONG Number;
 
     CmpReadSmbiosProcessor(LoaderBlock, NULL, 0, NULL, 0, &Speed);
     CmpProcessorMHz = Speed;
+
+    Speed = CmpReadSmbiosProcessorMHz(LoaderBlock);
+    if (Speed == 0) return;
+
+    for (Number = 0; Number < (ULONG)KeNumberProcessors; Number++)
+    {
+        Prcb = KiProcessorBlock[Number];
+        if ((Prcb != NULL) && (Prcb->MHz == 0))
+            Prcb->MHz = Speed;
+    }
 }
 
 /*
