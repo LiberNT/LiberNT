@@ -780,7 +780,7 @@ SepCloneToken(
     Contents.ExpirationTime = Token->ExpirationTime;
     Contents.Source = Token->TokenSource;
     Contents.Type = Type;
-    Contents.Level = (Type == TokenImpersonation) ? Level : SecurityAnonymous;
+    Contents.Level = Level;
     Contents.SessionId = Token->SessionId;
     Contents.MandatoryPolicy = Token->MandatoryPolicy;
     Contents.Flags = Token->TokenFlags;
@@ -792,7 +792,11 @@ SepCloneToken(
                               NewToken);
 
     /* A copy stands for the same process as the token it was made from */
-    if (NT_SUCCESS(Status)) (*NewToken)->ProcUnique = Token->ProcUnique;
+    if (NT_SUCCESS(Status))
+    {
+        (*NewToken)->ProcUnique = Token->ProcUnique;
+        (*NewToken)->ModifiedId = Token->ModifiedId;
+    }
 
     if (NT_SUCCESS(Status) && KeepModifiedId) (*NewToken)->ModifiedId = Token->ModifiedId;
 
