@@ -381,6 +381,74 @@ SetupDiGetClassImageListExA(
     return ret;
 }
 
+static LPCWSTR
+SETUP_FileName(IN LPCWSTR Path)
+{
+    LPCWSTR Name = strrchrW(Path, '\\');
+
+    return Name ? Name + 1 : Path;
+}
+
+static BOOL
+SETUP_GetIconPath(
+    IN HKEY hClassKey,
+    OUT PINT OutIndex,
+    OUT LPWSTR *OutDllName)
+{
+    WCHAR Module[MAX_PATH];
+    LPWSTR Value, Path, Comma;
+    DWORD dwRegType, dwLength, cchPath;
+    LONG rc;
+
+    rc = RegQueryValueExW(hClassKey, L"IconPath", NULL, &dwRegType, NULL, &dwLength);
+    if (rc != ERROR_SUCCESS ||
+        (dwRegType != REG_MULTI_SZ && dwRegType != REG_SZ && dwRegType != REG_EXPAND_SZ) ||
+        dwLength < sizeof(WCHAR))
+    {
+        return FALSE;
+    }
+    Value = MyMalloc(dwLength + 2 * sizeof(WCHAR));
+    if (!Value)
+        return FALSE;
+    rc = RegQueryValueExW(hClassKey, L"IconPath", NULL, NULL, (LPBYTE)Value, &dwLength);
+    if (rc != ERROR_SUCCESS)
+    {
+        MyFree(Value);
+        return FALSE;
+    }
+    Value[dwLength / sizeof(WCHAR)] = UNICODE_NULL;
+
+    Comma = strrchrW(Value, ',');
+    if (!Comma || Comma == Value)
+    {
+        MyFree(Value);
+        return FALSE;
+    }
+    *Comma = UNICODE_NULL;
+
+    cchPath = ExpandEnvironmentStringsW(Value, NULL, 0);
+    Path = cchPath ? MyMalloc(cchPath * sizeof(WCHAR)) : NULL;
+    if (!Path || ExpandEnvironmentStringsW(Value, Path, cchPath) != cchPath)
+    {
+        MyFree(Path);
+        MyFree(Value);
+        return FALSE;
+    }
+
+    *OutIndex = -atoiW(Comma + 1);
+    *OutDllName = Path;
+    MyFree(Value);
+
+    /* ExtractIconExW(-1) counts icons, so load this module's own icons by resource id */
+    if (*OutIndex > 0 && GetModuleFileNameW(hInstance, Module, ARRAYSIZE(Module)) &&
+        !strcmpiW(SETUP_FileName(Path), SETUP_FileName(Module)))
+    {
+        MyFree(Path);
+        *OutDllName = NULL;
+    }
+    return TRUE;
+}
+
 static BOOL WINAPI
 SETUP_GetClassIconInfo(IN CONST GUID *ClassGuid, OUT PINT OutIndex, OUT LPWSTR *OutDllName)
 {
@@ -394,6 +462,11 @@ SETUP_GetClassIconInfo(IN CONST GUID *ClassGuid, OUT PINT OutIndex, OUT LPWSTR *
         hKey = SetupDiOpenClassRegKey(ClassGuid, KEY_QUERY_VALUE);
         if (hKey != INVALID_HANDLE_VALUE)
         {
+            if (SETUP_GetIconPath(hKey, OutIndex, OutDllName))
+            {
+                RegCloseKey(hKey);
+                return TRUE;
+            }
             SETUP_GetIconIndex(hKey, &iconIndex);
         }
     }
