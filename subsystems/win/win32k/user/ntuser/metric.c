@@ -79,7 +79,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     TRACE("ncm.iCaptionWidth=%d,GetSystemMetrics(SM_CYSIZE)=%d,GetSystemMetrics(SM_CXFRAME)=%d,avcwCaption=%d \n",
            V(gspv.ncm.iCaptionWidth), piSysMet[SM_CYSIZE],piSysMet[SM_CXFRAME], V(gspv.tmCaptionFont.tmAveCharWidth));
 
-    piSysMet[SM_CXMIN] = 3 * piSysMet[SM_CYSIZE]
+    piSysMet[SM_CXMIN] = 3 * piSysMet[SM_CXSIZE]
                          + piSysMet[SM_CYSIZE] + 4
                          + 4 * V(gspv.tmCaptionFont.tmAveCharWidth)
                          + 2 * (piSysMet[SM_CXFRAME] + piSysMet[SM_CXPADDEDBORDER]);
