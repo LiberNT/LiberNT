@@ -2576,8 +2576,6 @@ PciPdoAppendBarRequirements(
 }
 
 
-static UCHAR PciPdoExpressPortType(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
-
 static
 BOOLEAN
 PciPdoSizeSecondaryMemory(
@@ -4080,7 +4078,6 @@ InterfacePciDevicePresentEx(
 static VOID PciSaveMsiState(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
 static VOID PciRestoreMsiState(_In_ PPDO_DEVICE_EXTENSION DeviceExtension);
 
-static
 UCHAR
 PciPdoExpressPortType(
     _In_ PPDO_DEVICE_EXTENSION DeviceExtension)

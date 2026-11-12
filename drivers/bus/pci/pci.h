@@ -515,6 +515,10 @@ PdoPowerControl(
     PDEVICE_OBJECT DeviceObject,
     PIRP Irp);
 
+UCHAR
+PciPdoExpressPortType(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension);
+
 VOID
 PciSetPowerLevel(
     _In_ PPCI_DEVICE Device,
