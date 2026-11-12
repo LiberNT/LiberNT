@@ -1214,6 +1214,8 @@ CmInitSystem1(VOID)
     Status = CmpInitializeHardwareConfiguration(KeLoaderBlock);
     if (!NT_SUCCESS(Status)) return FALSE;
 
+    CmpInitializeSystemBiosInformation(KeLoaderBlock);
+
     CmpSetSystemValues(KeLoaderBlock);
 
     CmpCmdInit(ExpInTextModeSetup);

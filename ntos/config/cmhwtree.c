@@ -39,6 +39,36 @@ typedef struct _CM_SMBIOS_HEADER
 static UNICODE_STRING CmpDescriptionPath = RTL_CONSTANT_STRING(
     L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM");
 
+static UNICODE_STRING CmpBiosDescriptionPath = RTL_CONSTANT_STRING(
+    L"\\REGISTRY\\MACHINE\\HARDWARE\\DESCRIPTION\\SYSTEM\\BIOS");
+
+typedef struct _CM_SMBIOS_BIOS_VALUE
+{
+    UCHAR Type;
+    UCHAR Offset;
+    BOOLEAN String;
+    PCWSTR Name;
+} CM_SMBIOS_BIOS_VALUE, *PCM_SMBIOS_BIOS_VALUE;
+
+static const CM_SMBIOS_BIOS_VALUE CmpSmbiosBiosValues[] =
+{
+    { 2, 0x04, TRUE, L"BaseBoardManufacturer" },
+    { 2, 0x05, TRUE, L"BaseBoardProduct" },
+    { 2, 0x06, TRUE, L"BaseBoardVersion" },
+    { 0, 0x14, FALSE, L"BiosMajorRelease" },
+    { 0, 0x15, FALSE, L"BiosMinorRelease" },
+    { 0, 0x08, TRUE, L"BIOSReleaseDate" },
+    { 0, 0x04, TRUE, L"BIOSVendor" },
+    { 0, 0x05, TRUE, L"BIOSVersion" },
+    { 0, 0x16, FALSE, L"ECFirmwareMajorRelease" },
+    { 0, 0x17, FALSE, L"ECFirmwareMinorRelease" },
+    { 1, 0x1A, TRUE, L"SystemFamily" },
+    { 1, 0x04, TRUE, L"SystemManufacturer" },
+    { 1, 0x05, TRUE, L"SystemProductName" },
+    { 1, 0x19, TRUE, L"SystemSKU" },
+    { 1, 0x06, TRUE, L"SystemVersion" },
+};
+
 static USHORT CmpProcessorMHz = 0;
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -386,6 +416,66 @@ CmpWriteDwordValue(
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+CmpInitializeSystemBiosInformation(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    const CM_SMBIOS_BIOS_VALUE *Value;
+    PCM_SMBIOS_HEADER Header;
+    PUCHAR Table, End, Current, Strings;
+    HANDLE KeyHandle;
+    SIZE_T Size;
+    ULONG Index;
+    NTSTATUS Status;
+
+    Table = CmpMapSmbiosTable(LoaderBlock, &Size);
+    if (Table == NULL) return;
+
+    Status = CmpCreateHardwareKey(NULL, &CmpBiosDescriptionPath, &KeyHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("CM: the BIOS description key could not be created (0x%08lx)\n", Status);
+        MmUnmapIoSpace(Table, Size);
+        return;
+    }
+
+    End = Table + Size;
+    Current = Table;
+    while (Current + sizeof(CM_SMBIOS_HEADER) <= End)
+    {
+        Header = (PCM_SMBIOS_HEADER)Current;
+        if ((Header->Type == CM_SMBIOS_TYPE_END) ||
+            (Header->Length < sizeof(CM_SMBIOS_HEADER)) ||
+            (Current + Header->Length > End))
+        {
+            break;
+        }
+
+        Strings = Current + Header->Length;
+        for (Index = 0; Index < RTL_NUMBER_OF(CmpSmbiosBiosValues); Index++)
+        {
+            Value = &CmpSmbiosBiosValues[Index];
+            if ((Value->Type != Header->Type) || (Value->Offset >= Header->Length))
+                continue;
+
+            if (Value->String)
+                CmpWriteAnsiValue(KeyHandle, Value->Name, CmpSmbiosString(Strings, End, Current[Value->Offset]));
+            else
+                CmpWriteDwordValue(KeyHandle, Value->Name, Current[Value->Offset]);
+        }
+
+        Current = Strings;
+        while ((Current + 1 < End) && ((Current[0] != 0) || (Current[1] != 0)))
+            Current++;
+        Current += 2;
+    }
+
+    ZwClose(KeyHandle);
+    MmUnmapIoSpace(Table, Size);
+}
 
 CODE_SEG("INIT")
 BOOLEAN
