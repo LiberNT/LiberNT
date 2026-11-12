@@ -178,6 +178,16 @@ IopGetInterfaceLinkObjectName(
     LinkObjectName->MaximumLength = LinkObjectName->Length;
 }
 
+VOID
+IopSplitInterfaceLink(
+    _In_ PCUNICODE_STRING SymbolicLinkName,
+    _Out_ PUNICODE_STRING LinkObjectName,
+    _Out_ PUNICODE_STRING ReferenceString)
+{
+    IopGetInterfaceLinkObjectName(SymbolicLinkName, LinkObjectName);
+    IopReferenceFromLinkName(SymbolicLinkName, ReferenceString);
+}
+
 NTSTATUS
 IopOpenInterfaceClassKey(
     _In_ CONST GUID *ClassGuid,

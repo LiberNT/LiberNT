@@ -11,6 +11,7 @@
 
 static const GUID TestInterface = {0x8f6d2a43, 0x61c4, 0x4bd8, {0x9a, 0x35, 0x2b, 0x9e, 0x0f, 0x5c, 0x7d, 0x11}};
 static const GUID AliasInterface = {0x3b0e6c21, 0x9a47, 0x4f15, {0x8d, 0x2e, 0x6c, 0x1f, 0x0b, 0x7a, 0x9e, 0x52}};
+static const DEVPROPKEY TestProperty = {{0x6a1d3c58, 0x2e4f, 0x4b91, {0x8c, 0x07, 0x5d, 0x3e, 0x9a, 0x41, 0xf2, 0x6b}}, 2};
 
 static
 BOOLEAN
@@ -166,6 +167,9 @@ START_TEST(IoInterfaceOrderCheck)
     UNICODE_STRING Third = { 0 };
     UNICODE_STRING AliasA = { 0 };
     UNICODE_STRING Alias;
+    DEVPROPTYPE Type;
+    ULONG Required;
+    ULONG Value;
     UNICODE_STRING Entry;
     UNICODE_STRING DeviceName;
     PDEVICE_OBJECT Pdo;
@@ -181,6 +185,17 @@ START_TEST(IoInterfaceOrderCheck)
 
     Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceA, &First);
     ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        /* The interface's properties hang from its class, the GUID that ends its device's link */
+        Value = 0x5a5a;
+        ok_eq_hex(IoSetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, DEVPROP_TYPE_UINT32, sizeof(Value), &Value),
+                  STATUS_SUCCESS);
+        Value = 0;
+        ok_eq_hex(IoGetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, sizeof(Value), &Value, &Required, &Type),
+                  STATUS_SUCCESS);
+        ok_eq_ulong(Value, 0x5a5aUL);
+    }
     if (NT_SUCCESS(Status)) Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceB, &Second);
     ok_eq_hex(Status, STATUS_SUCCESS);
 

@@ -507,6 +507,10 @@ VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
 
 VOID IopDropInterfaceLink(_In_ PIOP_DEVICE_INTERFACE Interface);
 
+VOID IopSplitInterfaceLink(_In_ PCUNICODE_STRING SymbolicLinkName,
+                           _Out_ PUNICODE_STRING LinkObjectName,
+                           _Out_ PUNICODE_STRING ReferenceString);
+
 /* devprop.c */
 
 NTSTATUS IopInterfaceLinkToRegistryName(_In_ PUNICODE_STRING SymbolicLinkName,

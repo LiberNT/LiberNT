@@ -1084,69 +1084,40 @@ IopInterfaceLinkToRegistryName(
     _Out_ PUNICODE_STRING RegistryName,
     _Out_ PUNICODE_STRING ReferenceString)
 {
+    USHORT GuidChars = (USHORT)(sizeof(L"{00000000-0000-0000-0000-000000000000}") / sizeof(WCHAR) - 1);
     UNICODE_STRING GuidString;
+    UNICODE_STRING Base;
     NTSTATUS Status;
     PWCHAR Buffer;
-    USHORT Count = SymbolicLinkName->Length / sizeof(WCHAR);
-    USHORT Index;
-    USHORT Open = 0;
-    USHORT Close = 0;
-    BOOLEAN Found = FALSE;
+    USHORT Count;
 
     PAGED_CODE();
 
     RtlInitEmptyUnicodeString(RegistryName, NULL, 0);
-    RtlInitEmptyUnicodeString(ReferenceString, NULL, 0);
 
-    if (Count < 4) return STATUS_INVALID_PARAMETER;
+    /* The class is the GUID that ends the link of the device and class, whatever braces the instance part holds */
+    IopSplitInterfaceLink(SymbolicLinkName, &Base, ReferenceString);
 
-    for (Index = 0; Index < Count; Index++)
-    {
-        if (SymbolicLinkName->Buffer[Index] == L'{' && !Found)
-        {
-            Open = Index;
-            Found = TRUE;
-        }
-        else if (SymbolicLinkName->Buffer[Index] == L'}' && Found)
-        {
-            Close = Index;
-            break;
-        }
-    }
+    Count = Base.Length / sizeof(WCHAR);
+    if (Count < 4 + 1 + GuidChars || Base.Buffer[Count - GuidChars - 1] != L'#') return STATUS_INVALID_PARAMETER;
 
-    if (!Found || Close == 0) return STATUS_INVALID_PARAMETER;
-
-    GuidString.Buffer = SymbolicLinkName->Buffer + Open;
-    GuidString.Length = (USHORT)((Close - Open + 1) * sizeof(WCHAR));
+    GuidString.Buffer = &Base.Buffer[Count - GuidChars];
+    GuidString.Length = (USHORT)(GuidChars * sizeof(WCHAR));
     GuidString.MaximumLength = GuidString.Length;
 
     Status = RtlGUIDFromString(&GuidString, ClassGuid);
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (Close + 1 < Count)
-    {
-        if (SymbolicLinkName->Buffer[Close + 1] != OBJ_NAME_PATH_SEPARATOR)
-        {
-            return STATUS_INVALID_PARAMETER;
-        }
-
-        ReferenceString->Buffer = &SymbolicLinkName->Buffer[Close + 2];
-        ReferenceString->Length = (USHORT)((Count - Close - 2) * sizeof(WCHAR));
-        ReferenceString->MaximumLength = ReferenceString->Length;
-    }
-
     Buffer = ExAllocatePoolZero(PagedPool,
-                                (Close + 2) * sizeof(WCHAR),
+                                Base.Length + sizeof(WCHAR),
                                 TAG_IO_NAME);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    RtlCopyMemory(Buffer,
-                  SymbolicLinkName->Buffer,
-                  (Close + 1) * sizeof(WCHAR));
+    RtlCopyMemory(Buffer, Base.Buffer, Base.Length);
 
     RegistryName->Buffer = Buffer;
-    RegistryName->Length = (USHORT)((Close + 1) * sizeof(WCHAR));
-    RegistryName->MaximumLength = (USHORT)((Close + 2) * sizeof(WCHAR));
+    RegistryName->Length = Base.Length;
+    RegistryName->MaximumLength = (USHORT)(Base.Length + sizeof(WCHAR));
 
     if (Buffer[0] == L'\\' && Buffer[1] == L'?' && Buffer[2] == L'?' &&
         Buffer[3] == L'\\')

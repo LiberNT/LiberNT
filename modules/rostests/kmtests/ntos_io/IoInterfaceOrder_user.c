@@ -54,8 +54,9 @@ START_TEST(IoInterfaceOrder)
     ok(Devices != INVALID_HANDLE_VALUE, "SetupDiCreateDeviceInfoList failed: %lu\n", GetLastError());
     if (Devices == INVALID_HANDLE_VALUE) return;
 
-    Success = SetupDiCreateDeviceInfoW(Devices, L"KmtestIfOrder", &SystemClass, L"Kmtest interface order", NULL,
-                                       DICD_GENERATE_ID, &Device);
+    /* Braces in the instance path, as ROOT\{guid}\NNNN devices have, must not hide the interface class */
+    Success = SetupDiCreateDeviceInfoW(Devices, L"{4b8e2a91-6c3d-4f57-9a1e-2d7c5b9f0e63}", &SystemClass,
+                                       L"Kmtest interface order", NULL, DICD_GENERATE_ID, &Device);
     if (Success)
     {
         Success = SetupDiSetDeviceRegistryPropertyW(Devices, &Device, SPDRP_HARDWAREID, (const BYTE *)HardwareIds,
