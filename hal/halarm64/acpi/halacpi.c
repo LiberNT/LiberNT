@@ -9,6 +9,7 @@
 /* INCLUDES *******************************************************************/
 
 #include <hal.h>
+#include <acpifault.h>
 #include <halacpi_arm64.h>
 #include <halpcie.h>
 #include <ntifs.h>
@@ -2255,6 +2256,7 @@ HalReportResourceUsage(VOID)
     INTERFACE_TYPE InterfaceType;
     UNICODE_STRING HalString;
 
+    HalpAcpiReportFaults();
     HalpInitDma();
 
     /* FIXME: Initialize MCA bus */

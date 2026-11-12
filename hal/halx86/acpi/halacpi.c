@@ -9,6 +9,7 @@
 /* INCLUDES *******************************************************************/
 
 #include <hal.h>
+#include <acpifault.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -302,6 +303,8 @@ HalReportResourceUsage(VOID)
 {
     INTERFACE_TYPE InterfaceType;
     UNICODE_STRING HalString;
+
+    HalpAcpiReportFaults();
 
     /* FIXME: Initialize DMA 64-bit support */
 
