@@ -1,0 +1,62 @@
+; PROJECT:     LiberNT Tegra USB transceiver driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Tegra EHCI controller installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=USB
+ClassGUID={36FC9E60-C465-11CF-8056-444553540000}
+Provider=%ProviderName%
+CatalogFile=tegrausbphy.cat
+DriverVer=11/12/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=NvidiaMfg,NTARM64
+
+[NvidiaMfg.NTARM64]
+%TEGRA210_EHCI.DeviceDesc%=TEGRA_EHCI_Inst,FDT\nvidia_tegra210-ehci
+%TEGRA30_EHCI.DeviceDesc%=TEGRA_EHCI_Inst,FDT\nvidia_tegra30-ehci
+
+; The controller only answers once its clock and its transceiver run, which a
+; boot loader may leave stopped, so a driver below the host controller driver
+; starts them before it is reached.
+
+[TEGRA_EHCI_Inst.NT]
+Include=usbport.inf
+Needs=EHCI_Inst.NT
+CopyFiles=TEGRA_EHCI_CopyFiles.NT
+AddReg=TEGRA_EHCI_AddReg.NT
+
+[TEGRA_EHCI_CopyFiles.NT]
+tegrausbphy.sys
+
+[TEGRA_EHCI_AddReg.NT]
+HKR,,LowerFilters,0x00010000,"tegrausbphy"
+
+[TEGRA_EHCI_Inst.NT.Services]
+Include=usbport.inf
+Needs=EHCI_Inst.NT.Services
+AddService=tegrausbphy,0x00000000,TEGRAUSBPHY_Service_Inst
+
+[TEGRAUSBPHY_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\tegrausbphy.sys
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+tegrausbphy.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="NVIDIA"
+DiskName="Tegra USB Driver Disk"
+TEGRA210_EHCI.DeviceDesc="Tegra210 USB 2.0 Controller"
+TEGRA30_EHCI.DeviceDesc="Tegra USB 2.0 Controller"
