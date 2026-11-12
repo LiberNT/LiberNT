@@ -45,8 +45,9 @@ KdpPortLock(VOID)
 
     if (KdpPortOwnerPrcb != Prcb)
     {
+        while (InterlockedCompareExchangePointer((PVOID volatile *)&KdpPortOwnerPrcb, Prcb, NULL) != NULL)
+            YieldProcessor();
         KxAcquireSpinLock(&KdpDebuggerLock);
-        KdpPortOwnerPrcb = Prcb;
         KdpPortNesting = 0;
     }
 
@@ -92,9 +93,8 @@ KdpPortUnlock(VOID)
     if (KdpPortNesting == 0)
     {
         KdpPortLocked = FALSE;
-        KdpPortOwnerPrcb = NULL;
-        KeMemoryBarrier();
         KxReleaseSpinLock(&KdpDebuggerLock);
+        InterlockedExchangePointer((PVOID volatile *)&KdpPortOwnerPrcb, NULL);
     }
 
     KeRestoreInterrupts(Interrupts);
