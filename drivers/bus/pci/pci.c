@@ -1424,7 +1424,7 @@ PciCreateDeviceIDString(PUNICODE_STRING DeviceID,
               L"PCI\\VEN_%04X&DEV_%04X&SUBSYS_%08X&REV_%02X",
               Device->PciConfig.VendorID,
               Device->PciConfig.DeviceID,
-              (Device->PciConfig.u.type0.SubSystemID << 16) +
+              ((ULONG)Device->PciConfig.u.type0.SubSystemID << 16) +
               Device->PciConfig.u.type0.SubVendorID,
               Device->PciConfig.RevisionID);
 
@@ -1457,7 +1457,7 @@ PciCreateHardwareIDsString(PUNICODE_STRING HardwareIDs,
                        L"PCI\\VEN_%04X&DEV_%04X&SUBSYS_%08X&REV_%02X",
                        Device->PciConfig.VendorID,
                        Device->PciConfig.DeviceID,
-                       (Device->PciConfig.u.type0.SubSystemID << 16) +
+                       ((ULONG)Device->PciConfig.u.type0.SubSystemID << 16) +
                        Device->PciConfig.u.type0.SubVendorID,
                        Device->PciConfig.RevisionID);
     Index++;
@@ -1466,7 +1466,7 @@ PciCreateHardwareIDsString(PUNICODE_STRING HardwareIDs,
                        L"PCI\\VEN_%04X&DEV_%04X&SUBSYS_%08X",
                        Device->PciConfig.VendorID,
                        Device->PciConfig.DeviceID,
-                       (Device->PciConfig.u.type0.SubSystemID << 16) +
+                       ((ULONG)Device->PciConfig.u.type0.SubSystemID << 16) +
                        Device->PciConfig.u.type0.SubVendorID);
     Index++;
 
