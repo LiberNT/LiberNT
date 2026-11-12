@@ -1004,11 +1004,13 @@ static ULONG SimStalledMicroseconds;
 #define KeQueryInterruptTime() ((ULONG64)(SimSleptMs * 10000ULL + SimStalledMicroseconds * 10ULL))
 #define KeSynchronizeExecution(Interrupt, Routine, Context) ((Routine)(Context))
 
+static ULONG SimSleepGranularityMs;
+
 static
 VOID
 PcieSleepMs(ULONG Milliseconds)
 {
-    SimSleptMs += Milliseconds;
+    SimSleptMs += max(Milliseconds, SimSleepGranularityMs);
 }
 
 static
@@ -5590,7 +5592,7 @@ TestPcie(VOID)
     FDT_DRIVER_TREE Tree;
     APPLE_PCIE Pcie;
     PAPPLE_PCIE_PORT Port;
-    ULONG Node, ResetLow, PerstOff, ResetHigh;
+    ULONG Node, ResetLow, PerstOff, ResetHigh, SleptBefore;
     NTSTATUS Status;
 
     ResetSimulation(&Tree);
@@ -5668,6 +5670,16 @@ TestPcie(VOID)
     Status = ApplePcieStartPort(&Tree, &Pcie, Port);
     ok_hex(Status, STATUS_DEVICE_NOT_CONNECTED);
     ok(!Port->LinkUp && Port->LinkWaitMs == 500, "No link: %u after %lu ms\n", Port->LinkUp, Port->LinkWaitMs);
+
+    PCIEPORT(0x208) = 0;
+    PCIEPORT(0x804) = 0;
+    SimSleepGranularityMs = 11;
+    SleptBefore = SimSleptMs;
+    Status = ApplePcieStartPort(&Tree, &Pcie, Port);
+    ok_hex(Status, STATUS_DEVICE_NOT_CONNECTED);
+    ok(Port->LinkWaitMs >= 500 && Port->LinkWaitMs < 500 + 11, "No link with coarse sleeps: gave up after %lu ms\n", Port->LinkWaitMs);
+    ok(SimSleptMs - SleptBefore < 2000, "No link with coarse sleeps: the port took %lu ms\n", SimSleptMs - SleptBefore);
+    SimSleepGranularityMs = 0;
     SimPcieNoLink = FALSE;
 
     PCIEPORT(0x208) = 0;

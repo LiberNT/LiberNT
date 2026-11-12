@@ -102,6 +102,14 @@ PcieSleepMs(
 
 static
 ULONG
+PcieElapsedMs(
+    _In_ ULONG64 Start)
+{
+    return (ULONG)((KeQueryInterruptTime() - Start) / 10000);
+}
+
+static
+ULONG
 PcieRead(
     _In_ PAPPLE_PCIE_REGION Region,
     _In_ ULONG Offset)
@@ -286,7 +294,8 @@ PcieBringUpLink(
     _Inout_ PAPPLE_PCIE Pcie,
     _Inout_ PAPPLE_PCIE_PORT Port)
 {
-    ULONG ResetController, ResetPin, PwrenController = FDT_NO_NODE, PwrenPin = 0, Length, Waited;
+    ULONG ResetController, ResetPin, PwrenController = FDT_NO_NODE, PwrenPin = 0, Length;
+    ULONG64 Start;
     BOOLEAN ResetActiveLow, PwrenActiveLow = FALSE, Pwren;
     const VOID *Compatible;
     NTSTATUS Status;
@@ -325,9 +334,10 @@ PcieBringUpLink(
     PcieMask(&Port->Registers, PORT_PERST, 0, PORT_PERST_OFF);
     PcieSetResetPin(Pcie, ResetPin, ResetActiveLow, FALSE);
     PcieSleepMs(PCIE_PERST_SETTLE_MS);
-    for (Waited = 0; !(PcieRead(&Port->Registers, PORT_STATUS) & PORT_STATUS_READY); ++Waited)
+    Start = KeQueryInterruptTime();
+    while (!(PcieRead(&Port->Registers, PORT_STATUS) & PORT_STATUS_READY))
     {
-        if (Waited >= PCIE_READY_TIMEOUT_MS)
+        if (PcieElapsedMs(Start) >= PCIE_READY_TIMEOUT_MS)
             return STATUS_IO_TIMEOUT;
         PcieSleepMs(1);
     }
@@ -448,7 +458,8 @@ ApplePcieStartPort(
     _Inout_ PAPPLE_PCIE Pcie,
     _Inout_ PAPPLE_PCIE_PORT Port)
 {
-    ULONG Index, Waited;
+    ULONG Index;
+    ULONG64 Start;
     NTSTATUS Status;
 
     Port->WasUp = (PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP) != 0;
@@ -482,14 +493,15 @@ ApplePcieStartPort(
 
     if (!Port->WasUp)
     {
+        Start = KeQueryInterruptTime();
         PcieWrite(&Port->Registers, PORT_LTSSMCTL, PORT_LTSSMCTL_START);
-        for (Waited = 0; !(PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP); ++Waited)
+        while (!(PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP))
         {
-            if (Waited >= PCIE_LINK_TIMEOUT_MS)
+            if (PcieElapsedMs(Start) >= PCIE_LINK_TIMEOUT_MS)
                 break;
             PcieSleepMs(1);
         }
-        Port->LinkWaitMs = Waited;
+        Port->LinkWaitMs = PcieElapsedMs(Start);
     }
     Port->LinkUp = (PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP) != 0;
     return Port->LinkUp ? STATUS_SUCCESS : STATUS_DEVICE_NOT_CONNECTED;
