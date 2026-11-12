@@ -229,6 +229,8 @@ ExpWorkerThreadEntryPoint(
     PEX_WORK_QUEUE Queue = &ExWorkerQueue[Parameters.QueueType];
     PEXP_WORKER_THREAD Worker;
     PWORK_QUEUE_ITEM WorkItem;
+    PWORKER_THREAD_ROUTINE WorkerRoutine;
+    PVOID WorkerParameter;
     PLIST_ENTRY Entry;
     LARGE_INTEGER Timeout;
     PKTHREAD Thread = KeGetCurrentThread();
@@ -270,24 +272,26 @@ ExpWorkerThreadEntryPoint(
          * The item is handed back to whoever queued it before it runs, because
          * the routine is free to reuse or free the item itself.
          */
-        WorkItem->List.Flink = NULL;
-        WorkItem->WorkerRoutine(WorkItem->Parameter);
+        WorkerRoutine = WorkItem->WorkerRoutine;
+        WorkerParameter = WorkItem->Parameter;
+        WritePointerRelease((PVOID volatile *)&WorkItem->List.Flink, NULL);
+        WorkerRoutine(WorkerParameter);
 
         if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         {
             KeBugCheckEx(WORKER_THREAD_RETURNED_AT_BAD_IRQL,
-                         (ULONG_PTR)WorkItem->WorkerRoutine,
+                         (ULONG_PTR)WorkerRoutine,
                          KeGetCurrentIrql(),
-                         (ULONG_PTR)WorkItem->Parameter,
+                         (ULONG_PTR)WorkerParameter,
                          (ULONG_PTR)WorkItem);
         }
 
         if (Thread->ApcStateIndex != 0)
         {
             KeBugCheckEx(WORKER_THREAD_RETURNED_AT_BAD_IRQL,
-                         (ULONG_PTR)WorkItem->WorkerRoutine,
+                         (ULONG_PTR)WorkerRoutine,
                          0,
-                         (ULONG_PTR)WorkItem->Parameter,
+                         (ULONG_PTR)WorkerParameter,
                          (ULONG_PTR)WorkItem);
         }
     }

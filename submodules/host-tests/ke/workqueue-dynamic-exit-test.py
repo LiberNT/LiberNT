@@ -41,7 +41,8 @@ typedef void *PVOID, *HANDLE;
 typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *PLIST_ENTRY;
 typedef struct { LIST_ENTRY EntryListHead; } KQUEUE;
 typedef struct { KQUEUE WorkerQueue; LONG DynamicThreadCount; ULONG WorkItemsProcessed; } EX_WORK_QUEUE, *PEX_WORK_QUEUE;
-typedef struct { LIST_ENTRY List; void (*WorkerRoutine)(PVOID); PVOID Parameter; } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
+typedef void (*PWORKER_THREAD_ROUTINE)(PVOID);
+typedef struct { LIST_ENTRY List; PWORKER_THREAD_ROUTINE WorkerRoutine; PVOID Parameter; } WORK_QUEUE_ITEM, *PWORK_QUEUE_ITEM;
 typedef struct { UCHAR ApcStateIndex; } KTHREAD, *PKTHREAD;
 typedef struct { WORK_QUEUE_TYPE QueueType; BOOLEAN Dynamic; } EXP_WORKER_THREAD_CONTEXT, *PEXP_WORKER_THREAD_CONTEXT;
 typedef struct { int Unused; } EXP_WORKER_THREAD, *PEXP_WORKER_THREAD;
@@ -68,6 +69,7 @@ static int Removals, Ran, Registered;
 static PKTHREAD KeGetCurrentThread(void) { return &CurrentThread; }
 static KIRQL KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
 static void ExFreePoolWithTag(PVOID p, ULONG tag) { (void)tag; free(p); }
+static void WritePointerRelease(PVOID volatile *Destination, PVOID Value) { *Destination = Value; }
 static KPRIORITY ExpWorkerPriority(WORK_QUEUE_TYPE q) { (void)q; return 12; }
 static void KeSetBasePriorityThread(PKTHREAD t, KPRIORITY p) { (void)t; (void)p; }
 static PEXP_WORKER_THREAD ExpRegisterWorkerThread(WORK_QUEUE_TYPE q, BOOLEAN dynamic) {
