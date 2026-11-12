@@ -1092,21 +1092,16 @@ NtSetValueKey(
 
         if (NT_SUCCESS(Status) && DataSize != 0)
         {
-            if (Data == NULL)
+            if (PreviousMode != KernelMode)
             {
-                Status = STATUS_INVALID_PARAMETER;
+                ProbeForRead(Data, DataSize, 1);
             }
-            else
-            {
-                if (PreviousMode != KernelMode)
-                {
-                    ProbeForRead(Data, DataSize, 1);
-                }
 
-                Copy = ExAllocatePoolZero(PagedPool, DataSize, TAG_CM);
-                if (Copy == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
-                else RtlCopyMemory(Copy, Data, DataSize);
-            }
+            (VOID)*(volatile UCHAR *)Data;
+
+            Copy = ExAllocatePoolZero(PagedPool, DataSize, TAG_CM);
+            if (Copy == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+            else RtlCopyMemory(Copy, Data, DataSize);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
