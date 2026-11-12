@@ -8,6 +8,7 @@
 #include "precomp.h"
 
 
+#include <dbt.h>
 #include <wlanapi.h>
 #include <netlistmgr.h>
 extern "C"
@@ -316,15 +317,29 @@ NetShellTrayIcon(DWORD dwType, DWORD dwOperStatus, NLM_CONNECTIVITY Conn, int nQ
 
 #define NETTIMERID 0xFABC
 
+#define NETSHELL_RETRY_TIMER   1
+#define NETSHELL_REFRESH_TIMER 2
+#define NETSHELL_REFRESH_DELAY 500
+
 CLanStatus::CLanStatus() :
     m_lpNetMan(NULL),
     m_pHead(NULL),
-    m_hwndRetry(NULL)
+    m_hwndWatch(NULL),
+    m_hInterfaceNotify(NULL)
 {
 }
 
+static VOID WINAPI
+NetShellConnectionsChanged(PVOID CallerContext, PMIB_IPINTERFACE_ROW Row, MIB_NOTIFICATION_TYPE NotificationType)
+{
+    UNREFERENCED_PARAMETER(Row);
+
+    if (NotificationType == MibAddInstance || NotificationType == MibDeleteInstance)
+        PostMessageW((HWND)CallerContext, WM_NETCONNECTIONSCHANGED, 0, 0);
+}
+
 LRESULT CALLBACK
-CLanStatus::RetryWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+CLanStatus::WatchWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     CLanStatus *pThis;
 
@@ -333,57 +348,68 @@ CLanStatus::RetryWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)((CREATESTRUCTW *)lParam)->lpCreateParams);
         return TRUE;
     }
+
     pThis = (CLanStatus *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (pThis && (uMsg == WM_TIMER || (uMsg == WM_DEVICECHANGE && wParam == 0x0007)))
+    if (!pThis)
+        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+
+    switch (uMsg)
     {
-        pThis->InitializeNetTaskbarNotifications();
-        return 0;
+        case WM_DEVICECHANGE:
+            if (wParam == DBT_DEVNODES_CHANGED || wParam == DBT_DEVICEARRIVAL || wParam == DBT_DEVICEREMOVECOMPLETE)
+                SetTimer(hwnd, NETSHELL_REFRESH_TIMER, NETSHELL_REFRESH_DELAY, NULL);
+            return TRUE;
+
+        case WM_NETCONNECTIONSCHANGED:
+            SetTimer(hwnd, NETSHELL_REFRESH_TIMER, NETSHELL_REFRESH_DELAY, NULL);
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == NETSHELL_REFRESH_TIMER)
+                KillTimer(hwnd, NETSHELL_REFRESH_TIMER);
+            pThis->InitializeNetTaskbarNotifications();
+            return 0;
     }
+
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 VOID
-CLanStatus::StartRetry()
+CLanStatus::StartWatch()
 {
     WNDCLASSW wc;
 
-    if (m_hwndRetry)
+    if (m_hwndWatch)
         return;
-    ZeroMemory(&wc, sizeof(wc));
-    wc.lpfnWndProc = RetryWndProc;
-    wc.hInstance = netshell_hInstance;
-    wc.lpszClassName = L"NetshellLanStatusRetry";
-    RegisterClassW(&wc);
-    m_hwndRetry = CreateWindowExW(0, wc.lpszClassName, NULL, WS_OVERLAPPED, 0, 0, 0, 0,
-                                  NULL, NULL, netshell_hInstance, this);
-    if (m_hwndRetry)
-        SetTimer(m_hwndRetry, 1, 5000, NULL);
-}
 
-VOID
-CLanStatus::StopRetry()
-{
-    if (!m_hwndRetry)
-        return;
-    KillTimer(m_hwndRetry, 1);
-    DestroyWindow(m_hwndRetry);
-    m_hwndRetry = NULL;
+    ZeroMemory(&wc, sizeof(wc));
+    wc.lpfnWndProc = WatchWndProc;
+    wc.hInstance = netshell_hInstance;
+    wc.lpszClassName = L"NetshellLanStatusWatch";
+    RegisterClassW(&wc);
+    m_hwndWatch = CreateWindowExW(0, wc.lpszClassName, NULL, WS_OVERLAPPED, 0, 0, 0, 0,
+                                  NULL, NULL, netshell_hInstance, this);
+    if (m_hwndWatch)
+        NotifyIpInterfaceChange(AF_UNSPEC, NetShellConnectionsChanged, m_hwndWatch, FALSE, &m_hInterfaceNotify);
 }
 
 HRESULT
 CLanStatus::InitializeNetTaskbarNotifications()
 {
-    HRESULT hr = S_OK;
+    HRESULT hr;
 
-    if (!m_pHead)
-        hr = EnumerateTrayConnections();
+    StartWatch();
+    hr = EnumerateTrayConnections();
     if (!m_pHead)
     {
         TRACE("LanStatus: no network connections enumerated (hr %08x), retrying later\n", hr);
-        StartRetry();
-        return S_OK;
+        if (m_hwndWatch)
+            SetTimer(m_hwndWatch, NETSHELL_RETRY_TIMER, 5000, NULL);
     }
-    StopRetry();
+    else if (m_hwndWatch)
+    {
+        KillTimer(m_hwndWatch, NETSHELL_RETRY_TIMER);
+    }
     return S_OK;
 }
 
@@ -1537,6 +1563,57 @@ LANStatusDlg(
     return FALSE;
 }
 
+NOTIFICATION_ITEM *
+CLanStatus::FindTrayConnection(const GUID *pGuid)
+{
+    NOTIFICATION_ITEM *pItem;
+
+    for (pItem = m_pHead; pItem; pItem = pItem->pNext)
+    {
+        if (IsEqualGUID(pItem->guidItem, *pGuid))
+            return pItem;
+    }
+    return NULL;
+}
+
+UINT
+CLanStatus::FreeTrayId()
+{
+    NOTIFICATION_ITEM *pItem;
+    UINT uID;
+
+    for (uID = 1; uID < NETSHELL_MAX_TRAY; uID++)
+    {
+        for (pItem = m_pHead; pItem && pItem->uID != uID; pItem = pItem->pNext)
+            ;
+        if (!pItem)
+            return uID;
+    }
+    return 0;
+}
+
+BOOL
+CLanStatus::RemoveTrayConnection(NOTIFICATION_ITEM *pItem)
+{
+    LANSTATUSUI_CONTEXT *pContext;
+    NOTIFYICONDATAW nid;
+
+    pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
+    if (pContext && pContext->hwndDlg)
+        return FALSE;
+
+    ZeroMemory(&nid, sizeof(nid));
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = pItem->hwndDlg;
+    nid.uID = pItem->uID;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+    DestroyWindow(pItem->hwndDlg);
+    pItem->pNet->Release();
+    if (pContext)
+        CoTaskMemFree(pContext);
+    return TRUE;
+}
+
 HRESULT
 CLanStatus::EnumerateTrayConnections()
 {
@@ -1548,25 +1625,15 @@ CLanStatus::EnumerateTrayConnections()
     NETCON_PROPERTIES* pProps;
     HRESULT hr;
     ULONG Count;
-    ULONG Index;
-    NOTIFICATION_ITEM * pItem, *pLast = NULL;
+    UINT uID;
+    NOTIFICATION_ITEM *pItem, **ppLink;
     LANSTATUSUI_CONTEXT * pContext;
 
     TRACE("InitializeNetTaskbarNotifications\n");
 
-    if (m_pHead)
-    {
-       pItem = m_pHead;
-       while (pItem)
-       {
-           pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(
-               GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
-           if (pContext)
-               UpdateLanStatus(NULL, pContext);
-           pItem = pItem->pNext;
-       }
-       return S_OK;
-    }
+    for (pItem = m_pHead; pItem; pItem = pItem->pNext)
+        pItem->Seen = FALSE;
+
     /* get an instance to of IConnectionManager */
     hr = CNetConnectionManager_CreateInstance(IID_PPV_ARG(INetConnectionManager, &pNetConMan));
     if (FAILED_UNEXPECTEDLY(hr))
@@ -1576,7 +1643,6 @@ CLanStatus::EnumerateTrayConnections()
     if (FAILED_UNEXPECTEDLY(hr))
         return hr;
 
-    Index = 1;
     while (TRUE)
     {
         pNetCon.Release();
@@ -1584,27 +1650,54 @@ CLanStatus::EnumerateTrayConnections()
         if (hr != S_OK)
             break;
 
+        if (FAILED(pNetCon->GetProperties(&pProps)))
+            continue;
+
+        pItem = FindTrayConnection(&pProps->guidId);
+        if (pItem)
+        {
+            pItem->Seen = TRUE;
+            pContext = reinterpret_cast<LANSTATUSUI_CONTEXT *>(GetWindowLongPtrW(pItem->hwndDlg, DWLP_USER));
+            if (pContext)
+                UpdateLanStatus(NULL, pContext);
+            NcFreeNetconProperties(pProps);
+            continue;
+        }
+
+        uID = FreeTrayId();
+        if (!uID)
+        {
+            NcFreeNetconProperties(pProps);
+            break;
+        }
+
         TRACE("new connection\n");
         pItem = static_cast<NOTIFICATION_ITEM*>(CoTaskMemAlloc(sizeof(NOTIFICATION_ITEM)));
         if (!pItem)
+        {
+            NcFreeNetconProperties(pProps);
             break;
+        }
 
         pContext = static_cast<LANSTATUSUI_CONTEXT*>(CoTaskMemAlloc(sizeof(LANSTATUSUI_CONTEXT)));
         if (!pContext)
         {
             CoTaskMemFree(pItem);
+            NcFreeNetconProperties(pProps);
             break;
         }
 
         ZeroMemory(pContext, sizeof(LANSTATUSUI_CONTEXT));
-        pContext->uID = Index;
+        pContext->uID = uID;
         pContext->pNet = pNetCon;
         pContext->Status = -1;
-        pContext->dwAdapterIndex = Index;
-        pItem->uID = Index;
+        pContext->dwAdapterIndex = uID;
+        pItem->uID = uID;
         pItem->pNext = NULL;
+        pItem->Seen = TRUE;
         pItem->pNet = pNetCon;
         pItem->pNet->AddRef();
+        CopyMemory(&pItem->guidItem, &pProps->guidId, sizeof(GUID));
         hwndDlg = CreateDialogParamW(netshell_hInstance, MAKEINTRESOURCEW(IDD_STATUS), NULL, LANStatusDlg, (LPARAM)pContext);
         if (!hwndDlg)
         {
@@ -1612,24 +1705,22 @@ CLanStatus::EnumerateTrayConnections()
             pItem->pNet->Release();
             CoTaskMemFree(pContext);
             CoTaskMemFree(pItem);
+            NcFreeNetconProperties(pProps);
             continue;
         }
 
         ZeroMemory(&nid, sizeof(nid));
         nid.cbSize = sizeof(nid);
-        nid.uID = Index++;
+        nid.uID = uID;
         nid.uFlags = NIF_MESSAGE;
         nid.uVersion = NOTIFYICON_VERSION;
         nid.uCallbackMessage = WM_SHOWSTATUSDLG;
         nid.hWnd = hwndDlg;
 
-        hr = pNetCon->GetProperties(&pProps);
-        if (SUCCEEDED(hr))
         {
             NET_LUID Luid;
             NET_IFINDEX IfIndex;
 
-            CopyMemory(&pItem->guidItem, &pProps->guidId, sizeof(GUID));
             if (!ConvertInterfaceGuidToLuid(&pProps->guidId, &Luid) &&
                 !ConvertInterfaceLuidToIndex(&Luid, &IfIndex))
             {
@@ -1674,12 +1765,9 @@ CLanStatus::EnumerateTrayConnections()
         TRACE("LanStatus tray icon %u state %lu flags %lx icon %p\n", nid.uID, nid.dwState, nid.uFlags, nid.hIcon);
         if (Shell_NotifyIconW(NIM_ADD, &nid))
         {
-            if (pLast)
-                pLast->pNext = pItem;
-            else
-                m_pHead = pItem;
-
-            pLast = pItem;
+            for (ppLink = &m_pHead; *ppLink; ppLink = &(*ppLink)->pNext)
+                ;
+            *ppLink = pItem;
             UpdateLanStatus(NULL, pContext);
             NetShellStartNotify(pContext);
         }
@@ -1694,6 +1782,21 @@ CLanStatus::EnumerateTrayConnections()
 
         if (nid.uFlags & NIF_ICON)
             DestroyIcon(nid.hIcon);
+    }
+
+    if (hr == S_FALSE)
+    {
+        for (ppLink = &m_pHead; *ppLink;)
+        {
+            pItem = *ppLink;
+            if (pItem->Seen || !RemoveTrayConnection(pItem))
+            {
+                ppLink = &pItem->pNext;
+                continue;
+            }
+            *ppLink = pItem->pNext;
+            CoTaskMemFree(pItem);
+        }
     }
 
     m_lpNetMan = pNetConMan;

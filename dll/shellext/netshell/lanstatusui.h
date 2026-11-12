@@ -5,6 +5,7 @@
 
 #define WM_SHOWSTATUSDLG    (WM_USER+10)
 #define WM_NETSTATUSCHANGED (WM_USER+11)
+#define WM_NETCONNECTIONSCHANGED (WM_USER+12)
 
 struct INetworkListManager;
 
@@ -15,6 +16,7 @@ typedef struct tagNotificationItem
     UINT uID;
     HWND hwndDlg;
     INetConnection *pNet;
+    BOOL Seen;
 } NOTIFICATION_ITEM;
 
 typedef struct
@@ -61,13 +63,16 @@ class CLanStatus:
         HRESULT InitializeNetTaskbarNotifications();
         HRESULT EnumerateTrayConnections();
         HRESULT ShowStatusDialogByCLSID(const GUID *pguidCmdGroup);
-        VOID StartRetry();
-        VOID StopRetry();
-        static LRESULT CALLBACK RetryWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+        NOTIFICATION_ITEM *FindTrayConnection(const GUID *pGuid);
+        UINT FreeTrayId();
+        BOOL RemoveTrayConnection(NOTIFICATION_ITEM *pItem);
+        VOID StartWatch();
+        static LRESULT CALLBACK WatchWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
         CComPtr<INetConnectionManager> m_lpNetMan;
         NOTIFICATION_ITEM *m_pHead;
-        HWND m_hwndRetry;
+        HWND m_hwndWatch;
+        HANDLE m_hInterfaceNotify;
 
     public:
         DECLARE_NO_REGISTRY()
