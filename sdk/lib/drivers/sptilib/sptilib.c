@@ -45,7 +45,8 @@ SptiFreeIrpContext(
     {
         if (Irp->MdlAddress)
         {
-            MmUnlockPages(Irp->MdlAddress);
+            if (Irp->MdlAddress->MdlFlags & MDL_PAGES_LOCKED)
+                MmUnlockPages(Irp->MdlAddress);
             IoFreeMdl(Irp->MdlAddress);
         }
         Irp->MdlAddress = NULL;

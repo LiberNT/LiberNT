@@ -9,6 +9,7 @@
 
 #include <winioctl.h>
 #include <mountdev.h>
+#include <ntddscsi.h>
 
 WCHAR Letter;
 HANDLE Device;
@@ -254,6 +255,57 @@ QuerySuggestedLinkName(VOID)
     ok_type(Size == 0, "Invalid output size: %ld\n", Size);
 }
 
+typedef struct _TEST_SPTD
+{
+    SCSI_PASS_THROUGH_DIRECT Sptd;
+    UCHAR Sense[32];
+} TEST_SPTD;
+
+static BOOL ScsiInquiry(HANDLE Disk, PVOID Data)
+{
+    TEST_SPTD Request;
+    DWORD Returned;
+
+    ZeroMemory(&Request, sizeof(Request));
+    Request.Sptd.Length = sizeof(Request.Sptd);
+    Request.Sptd.CdbLength = 6;
+    Request.Sptd.SenseInfoLength = sizeof(Request.Sense);
+    Request.Sptd.DataIn = SCSI_IOCTL_DATA_IN;
+    Request.Sptd.DataTransferLength = 36;
+    Request.Sptd.TimeOutValue = 5;
+    Request.Sptd.DataBuffer = Data;
+    Request.Sptd.SenseInfoOffset = FIELD_OFFSET(TEST_SPTD, Sense);
+    Request.Sptd.Cdb[0] = 0x12;
+    Request.Sptd.Cdb[4] = 36;
+    return DeviceIoControl(Disk, IOCTL_SCSI_PASS_THROUGH_DIRECT, &Request, sizeof(Request),
+                           &Request, sizeof(Request), &Returned, NULL);
+}
+
+static void Test_ScsiPassThroughDirectBadBuffer(void)
+{
+    UCHAR Inquiry[36];
+    PVOID Reserved;
+    HANDLE Disk;
+
+    Disk = CreateFileW(L"\\\\.\\PhysicalDrive0", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, OPEN_EXISTING, 0, NULL);
+    if (Disk == INVALID_HANDLE_VALUE)
+    {
+        skip("PhysicalDrive0 is not available: %lu\n", GetLastError());
+        return;
+    }
+
+    Reserved = VirtualAlloc(NULL, 0x10000, MEM_RESERVE, PAGE_READWRITE);
+    ok(Reserved != NULL, "VirtualAlloc failed: %lu\n", GetLastError());
+    if (Reserved)
+    {
+        ok(!ScsiInquiry(Disk, Reserved), "A pass-through with an unreadable buffer succeeded\n");
+        VirtualFree(Reserved, 0, MEM_RELEASE);
+    }
+    ok(ScsiInquiry(Disk, Inquiry), "A pass-through with a valid buffer failed: %lu\n", GetLastError());
+    CloseHandle(Disk);
+}
+
 START_TEST(DeviceIoControl)
 {
     UINT Ret;
@@ -262,6 +314,7 @@ START_TEST(DeviceIoControl)
     BOOL DiskDone, CdRomDone;
 
     Test_DeviceIoControl_Parameters();
+    Test_ScsiPassThroughDirectBadBuffer();
 
     DiskDone = FALSE;
     CdRomDone = FALSE;
