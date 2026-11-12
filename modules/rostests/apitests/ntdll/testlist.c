@@ -227,6 +227,7 @@ extern void func_UserModeException(void);
 
 extern void func_ProcessPoolQuota(void);
 extern void func_ProcessUserModeIopl(void);
+extern void func_LinkReparseLimit(void);
 extern void func_ObjectQuotaLimit(void);
 extern void func_RtlWnfAndSqm(void);
 extern void func_WinSqmSession(void);
@@ -464,6 +465,7 @@ const struct test winetest_testlist[] =
 
     { "ProcessPoolQuota",               func_ProcessPoolQuota },
     { "ProcessUserModeIopl",            func_ProcessUserModeIopl },
+    { "LinkReparseLimit",               func_LinkReparseLimit },
     { "ObjectQuotaLimit",               func_ObjectQuotaLimit },
     { "RtlWnfAndSqm", func_RtlWnfAndSqm },
     { "WinSqmSession", func_WinSqmSession },

@@ -751,6 +751,30 @@ CmpCreateLinkNode(
  * way sends the whole lookup back to the object manager with a new name.
  */
 static
+ULONG
+CmpCountNameComponents(
+    _In_ PCUNICODE_STRING Name)
+{
+    ULONG Count = 0, Index;
+    BOOLEAN InComponent = FALSE;
+
+    for (Index = 0; Index < Name->Length / sizeof(WCHAR); Index++)
+    {
+        if (Name->Buffer[Index] == OBJ_NAME_PATH_SEPARATOR)
+        {
+            InComponent = FALSE;
+        }
+        else if (!InComponent)
+        {
+            InComponent = TRUE;
+            Count++;
+        }
+    }
+
+    return Count;
+}
+
+static
 NTSTATUS
 CmpParseKeyWorker(
     _In_ PVOID ParseObject,
@@ -790,6 +814,7 @@ CmpParseKeyWorker(
 
     if (ObjectType != CmpKeyObjectType) return STATUS_OBJECT_TYPE_MISMATCH;
     if (ParseKey->Type != CM_KEY_BODY_TYPE) return STATUS_OBJECT_TYPE_MISMATCH;
+    if (CmpCountNameComponents(RemainingName) > CMP_SUBKEY_LEVELS_DEPTH_LIMIT) return STATUS_INVALID_PARAMETER;
 
     Create = (ParseContext != NULL) && ParseContext->CreateOperation;
 
@@ -895,6 +920,12 @@ CmpParseKeyWorker(
             if (!Last || !Create || Hidden)
             {
                 Status = STATUS_OBJECT_NAME_NOT_FOUND;
+                break;
+            }
+
+            if (Current->TotalLevels >= CMP_KEY_DEPTH_MAX)
+            {
+                Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 

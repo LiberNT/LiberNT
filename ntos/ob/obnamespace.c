@@ -29,7 +29,7 @@ WCHAR ObpUnsecureGlobalNamesBuffer[128] = {0};
 ULONG ObpUnsecureGlobalNamesLength = sizeof(ObpUnsecureGlobalNamesBuffer);
 
 /* The number of reparses one lookup may follow before it gives up. */
-#define OBP_MAX_REPARSE 30
+#define OBP_MAX_REPARSE 63
 
 /* PRIVATE FUNCTIONS **********************************************************/
 

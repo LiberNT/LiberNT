@@ -11,6 +11,7 @@
 #define CMP_VALUE_NAME_MAX       0x8000
 #define CMP_KEY_NAME_MAX         0x8000
 #define CMP_KEY_COMPONENT_MAX    (256 * sizeof(WCHAR))
+#define CMP_KEY_DEPTH_MAX        512
 #define CMP_CLASS_NAME_MAX       0x8000
 #define CMP_HASH_TABLE_DEFAULT   2048
 #define CMP_DELAYED_CLOSE_MAX    512
