@@ -191,6 +191,17 @@ Status SQLiteIndex::FindRoots()
     return ValidateSchema();
 }
 
+static bool SupportedIndexSchema(const std::map<std::string, std::string> &metadata)
+{
+    const auto major = metadata.find("majorVersion");
+    const auto identifier = metadata.find("databaseIdentifier");
+
+    /* Minor revisions of schema 2 only add keys and tables, which are looked up by name */
+    if (major == metadata.end() || major->second != "2")
+        return false;
+    return identifier != metadata.end() && !identifier->second.empty();
+}
+
 Status SQLiteIndex::ValidateSchema()
 {
     const auto packages = schemas_.find("packages");
@@ -219,8 +230,8 @@ Status SQLiteIndex::ValidateSchema()
             metadata[values[0].text] = values[1].text;
         return Status::Ok();
     });
-    if (metadata["majorVersion"] != "2" || metadata["minorVersion"] != "0" || metadata["databaseIdentifier"].empty())
-        return Status::Fail(ERROR_NOT_SUPPORTED, "WinGet index metadata is not schema version 2.0");
+    if (!SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_NOT_SUPPORTED, "WinGet index metadata is not a version 2 schema");
     return Status::Ok();
 }
 
@@ -569,6 +580,26 @@ Status RunSQLiteIndexSelfTests()
     query.field = SearchField::Name;
     if (MatchRank(package, query) < 0)
         return Status::Fail(ERROR_ASSERTION_FAILURE, "name search did not inspect the name field");
+
+    std::map<std::string, std::string> metadata;
+    metadata["majorVersion"] = "2";
+    metadata["minorVersion"] = "0";
+    metadata["databaseIdentifier"] = "{E06BBACF-D97C-4632-B0CE-3105BD4E05AA}";
+    if (!SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "the 2.0 index schema must stay supported");
+    metadata["minorVersion"] = "1";
+    if (!SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "a later minor revision of schema 2 must be supported");
+    metadata.erase("minorVersion");
+    if (!SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "schema 2 must not require a minor revision");
+    metadata["majorVersion"] = "3";
+    if (SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "a later major schema must be rejected");
+    metadata["majorVersion"] = "2";
+    metadata["databaseIdentifier"].clear();
+    if (SupportedIndexSchema(metadata))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "an index without a database identifier must be rejected");
     return Status::Ok();
 }
 
