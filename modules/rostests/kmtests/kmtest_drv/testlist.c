@@ -184,6 +184,7 @@ KMT_TESTFUNC Test_IoCreateFileAccessCheck;
 KMT_TESTFUNC Test_IoCreateSystemThread;
 KMT_TESTFUNC Test_IoCustomTargetEventReport;
 KMT_TESTFUNC Test_IoDeviceInterface;
+KMT_TESTFUNC Test_IoDeviceTextProperties;
 KMT_TESTFUNC Test_IoDeviceSecurity;
 KMT_TESTFUNC Test_IoEvent;
 KMT_TESTFUNC Test_IoInterfaceOrderCheck;
@@ -595,6 +596,7 @@ const KMT_TEST TestList[] =
     { "ZwWriteFileAppend",                  Test_ZwWriteFileAppend },
     { "-IoCustomTargetEventReport",         Test_IoCustomTargetEventReport },
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
+    { "IoDeviceTextProperties",             Test_IoDeviceTextProperties },
     { "IoDeviceSecurity",                   Test_IoDeviceSecurity },
     { "IoEvent",                            Test_IoEvent },
     { "-IoInterfaceOrderCheck",             Test_IoInterfaceOrderCheck },

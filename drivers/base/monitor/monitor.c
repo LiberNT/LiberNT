@@ -7,6 +7,8 @@
 
 #include "monitor.h"
 #include <ntddvdeo.h>
+#include <initguid.h>
+#include <devpkey.h>
 
 #define NDEBUG
 #include <debug.h>
@@ -223,6 +225,34 @@ MonitorUnsupported(
 }
 
 static
+VOID
+MonitorSetFriendlyName(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    WCHAR Name[256];
+    DEVPROPTYPE Type = DEVPROP_TYPE_EMPTY;
+    ULONG Required = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_FriendlyName, 0, 0, 0, NULL, &Required, &Type);
+    if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
+        return;
+
+    RtlZeroMemory(Name, sizeof(Name));
+    Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_BusReportedDeviceDesc, 0, 0, sizeof(Name) - sizeof(WCHAR),
+                                     Name, &Required, &Type);
+    if (!NT_SUCCESS(Status) || Type != DEVPROP_TYPE_STRING || Name[0] == UNICODE_NULL)
+        return;
+
+    Status = IoSetDevicePropertyData(Pdo, &DEVPKEY_Device_FriendlyName, 0, 0, DEVPROP_TYPE_STRING,
+                                     (ULONG)((wcslen(Name) + 1) * sizeof(WCHAR)), Name);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Could not set the friendly name of the monitor: 0x%lx\n", Status);
+}
+
+static
 NTSTATUS
 NTAPI
 MonitorAddDevice(
@@ -256,6 +286,7 @@ MonitorAddDevice(
         return Status;
     }
 
+    MonitorSetFriendlyName(PhysicalDeviceObject);
     DeviceObject->Flags |= DO_POWER_PAGABLE | DO_BUFFERED_IO;
     DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
     return STATUS_SUCCESS;

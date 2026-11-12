@@ -21,6 +21,10 @@ Revision History:
 --*/
 
 #include "disk.h"
+#ifdef __REACTOS__
+#include <initguid.h>
+#include <devpkey.h>
+#endif
 
 
 #ifdef DEBUG_USE_WPP
@@ -47,6 +51,39 @@ extern BOOLEAN DiskIsPastReinit;
 #pragma alloc_text(PAGE, DiskRemoveDevice)
 #endif
 
+
+#ifdef __REACTOS__
+static
+VOID
+DiskSetFriendlyName(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    WCHAR Name[256];
+    DEVPROPTYPE Type = DEVPROP_TYPE_EMPTY;
+    ULONG Required = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_FriendlyName, 0, 0, 0, NULL, &Required, &Type);
+    if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
+        return;
+
+    RtlZeroMemory(Name, sizeof(Name));
+    Status = IoGetDevicePropertyData(Pdo, &DEVPKEY_Device_BusReportedDeviceDesc, 0, 0, sizeof(Name) - sizeof(WCHAR),
+                                     Name, &Required, &Type);
+    if (!NT_SUCCESS(Status) || Type != DEVPROP_TYPE_STRING || Name[0] == UNICODE_NULL)
+        return;
+
+    Status = IoSetDevicePropertyData(Pdo, &DEVPKEY_Device_FriendlyName, 0, 0, DEVPROP_TYPE_STRING,
+                                     (ULONG)((wcslen(Name) + 1) * sizeof(WCHAR)), Name);
+    if (!NT_SUCCESS(Status))
+    {
+        TracePrint((TRACE_LEVEL_ERROR, TRACE_FLAG_PNP, "DiskAddDevice: Error %#08lx setting the friendly name\n",
+                    Status));
+    }
+}
+#endif
 
 NTSTATUS
 NTAPI /* ReactOS Change: GCC Does not support STDCALL by default */
@@ -189,6 +226,9 @@ Return Value:
         //
 
         configurationInformation->DiskCount++;
+#ifdef __REACTOS__
+        DiskSetFriendlyName(PhysicalDeviceObject);
+#endif
 
     }
 

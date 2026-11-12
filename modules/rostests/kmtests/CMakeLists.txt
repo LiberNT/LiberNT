@@ -200,6 +200,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoCsqKM.c
     ntos_io/IoCustomTargetEvent.c
     ntos_io/IoDeviceInterface.c
+    ntos_io/IoDeviceTextProperties.c
     ntos_io/IoDeviceSecurity.c
     ntos_io/IoDriverKey.c
     ntos_io/IoDriverSection.c

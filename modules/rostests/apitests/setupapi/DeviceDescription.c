@@ -11,8 +11,19 @@
 #include <windows.h>
 #include <initguid.h>
 #include <devpkey.h>
+#include <devguid.h>
 #include <setupapi.h>
 #include <cfgmgr32.h>
+
+static BOOL
+GetStringProperty(HDEVINFO Devices, SP_DEVINFO_DATA *Device, const DEVPROPKEY *Key, PWSTR Text, DWORD Count)
+{
+    DEVPROPTYPE Type = DEVPROP_TYPE_EMPTY;
+
+    ZeroMemory(Text, Count * sizeof(WCHAR));
+    return SetupDiGetDevicePropertyW(Devices, Device, Key, &Type, (PBYTE)Text, (Count - 1) * sizeof(WCHAR), NULL, 0) &&
+           Type == DEVPROP_TYPE_STRING;
+}
 
 static BOOL
 ReadDriverDescription(HDEVINFO Devices, SP_DEVINFO_DATA *Device, PWSTR Text, DWORD Count)
@@ -38,11 +49,13 @@ START_TEST(DeviceDescription)
     WCHAR DriverDesc[512];
     WCHAR DeviceDesc[512];
     WCHAR BusDesc[512];
+    WCHAR FriendlyName[512];
     DEVPROPTYPE Type;
     HDEVINFO Devices;
     DWORD Index;
     ULONG Compared = 0;
     ULONG PciDevices = 0;
+    ULONG NamedDevices = 0;
     BOOL Result;
 
     Devices = SetupDiGetClassDevsW(NULL, NULL, NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT);
@@ -68,6 +81,18 @@ START_TEST(DeviceDescription)
                "%ls: bus reported description type %lu\n", InstanceId, Type);
         }
 
+        if (IsEqualGUID(&Device.ClassGuid, &GUID_DEVCLASS_DISKDRIVE) ||
+            IsEqualGUID(&Device.ClassGuid, &GUID_DEVCLASS_MONITOR))
+        {
+            NamedDevices++;
+            ok(GetStringProperty(Devices, &Device, &DEVPKEY_Device_BusReportedDeviceDesc, BusDesc, ARRAYSIZE(BusDesc)),
+               "%ls: no bus reported description: %lu\n", InstanceId, GetLastError());
+            ok(GetStringProperty(Devices, &Device, &DEVPKEY_Device_FriendlyName, FriendlyName, ARRAYSIZE(FriendlyName)),
+               "%ls: no friendly name: %lu\n", InstanceId, GetLastError());
+            ok(!wcscmp(FriendlyName, BusDesc), "%ls: friendly name '%ls', bus reported '%ls'\n",
+               InstanceId, FriendlyName, BusDesc);
+        }
+
         if (!_wcsnicmp(InstanceId, L"SWD\\", 4) ||
             !ReadDriverDescription(Devices, &Device, DriverDesc, ARRAYSIZE(DriverDesc)))
         {
@@ -84,6 +109,8 @@ START_TEST(DeviceDescription)
     }
 
     ok(Compared != 0, "No device with a driver\n");
-    trace("%lu devices with a driver, %lu PCI devices\n", Compared, PciDevices);
+    ok(NamedDevices != 0, "No disk drive or monitor\n");
+    trace("%lu devices with a driver, %lu PCI devices, %lu disk drives and monitors\n", Compared, PciDevices,
+          NamedDevices);
     SetupDiDestroyDeviceInfoList(Devices);
 }
