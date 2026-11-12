@@ -9,6 +9,7 @@ extern void func_DrawThemeParentBackground(void);
 extern void func_DwmCaptionButton(void);
 extern void func_GetThemeParseErrorInfo(void);
 extern void func_CustomCaptionInset(void);
+extern void func_MenuTheme(void);
 extern void func_NonClientActivate(void);
 extern void func_NonClientBorder(void);
 extern void func_NonClientCaption(void);
@@ -30,6 +31,7 @@ const struct test winetest_testlist[] =
     { "DwmCaptionButton", func_DwmCaptionButton },
     { "GetThemeParseErrorInfo", func_GetThemeParseErrorInfo },
     { "CustomCaptionInset", func_CustomCaptionInset },
+    { "MenuTheme", func_MenuTheme },
     { "NonClientActivate", func_NonClientActivate },
     { "NonClientBorder", func_NonClientBorder },
     { "NonClientCaption", func_NonClientCaption },
