@@ -503,6 +503,24 @@ SmcInitBootState(
 
 static
 VOID
+SmcSetNotifications(
+    _Inout_ PSMC_DEVICE Device,
+    _In_ BOOLEAN Enable)
+{
+    UCHAR Flag = Enable ? 1 : 0;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ExAcquireFastMutex(&Device->Lock);
+    Status = Device->Initialized ? SmcWriteKey(Device, APPLE_SMC_KEY('N', 'T', 'A', 'P'), &Flag, sizeof(Flag))
+                                 : STATUS_DEVICE_NOT_READY;
+    ExReleaseFastMutex(&Device->Lock);
+    if (!NT_SUCCESS(Status))
+        DbgPrint("applesmc: notifications could not be %s: %lx\n", Enable ? "enabled" : "disabled", Status);
+}
+
+static
+VOID
 SmcPrepareShutdown(
     _Inout_ PSMC_DEVICE Device,
     _In_ POWER_ACTION Action)
@@ -511,6 +529,7 @@ SmcPrepareShutdown(
     ULONG Warning = PowerOff ? APPLE_SMC_KEY('o', 'f', 'f', 'w') : APPLE_SMC_KEY('r', 'e', 's', 't');
     NTSTATUS Status;
 
+    SmcSetNotifications(Device, FALSE);
     ExAcquireFastMutex(&Device->Lock);
     Status = SmcWriteKey(Device, APPLE_SMC_KEY('M', 'B', 'S', 'E'), (const UCHAR *)&Warning, sizeof(Warning));
     ExReleaseFastMutex(&Device->Lock);
@@ -684,6 +703,8 @@ VOID
 SmcStopHardware(
     _Inout_ PSMC_DEVICE Device)
 {
+    if (Device->Thread)
+        SmcSetNotifications(Device, FALSE);
     ExAcquireFastMutex(&Device->Lock);
     Device->Ready = FALSE;
     ExReleaseFastMutex(&Device->Lock);
@@ -807,6 +828,7 @@ SmcStartHardware(
     ExAcquireFastMutex(&Device->Lock);
     Device->Ready = TRUE;
     ExReleaseFastMutex(&Device->Lock);
+    SmcSetNotifications(Device, TRUE);
     return STATUS_SUCCESS;
 }
 
