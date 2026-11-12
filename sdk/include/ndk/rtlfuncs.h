@@ -2112,10 +2112,10 @@ _byteswap_ushort(
     _In_ unsigned short _Short);
 
 _Check_return_
-unsigned long
+ULONG
 __cdecl
 _byteswap_ulong(
-    _In_ unsigned long _Long);
+    _In_ ULONG _Long);
 
 _Check_return_
 unsigned __int64
