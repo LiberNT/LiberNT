@@ -559,7 +559,7 @@ NTAPI
 ExpSetHighResolutionClock(
     _In_ ULONG Resolution)
 {
-    KeTimeIncrement = HalSetTimeIncrement((Resolution != 0) ? Resolution : KeMaximumIncrement);
+    KiSetRequestedTimeIncrement((Resolution != 0) ? Resolution : KeMaximumIncrement);
 }
 
 VOID
@@ -768,6 +768,7 @@ NtQueryTimerResolution(
     PAGED_CODE();
 
     ExQueryTimerResolution(&Maximum, &Minimum, &Current);
+    Current = KiQueryRequestedTimeIncrement();
 
     if (ExGetPreviousMode() == KernelMode)
     {
@@ -832,13 +833,13 @@ NtSetTimerResolution(
 
     if (PreviousMode == KernelMode)
     {
-        *CurrentTime = KeTimeIncrement;
+        *CurrentTime = KiQueryRequestedTimeIncrement();
         return Status;
     }
 
     _SEH2_TRY
     {
-        *CurrentTime = KeTimeIncrement;
+        *CurrentTime = KiQueryRequestedTimeIncrement();
     }
     _SEH2_EXCEPT(ExSystemExceptionFilter())
     {

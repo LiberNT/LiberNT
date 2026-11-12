@@ -46,13 +46,18 @@ typedef struct _EX_TIMER
     ULONG Attributes;
     volatile LONG RefCount;
     BOOLEAN DpcQueued;
+    KSPIN_LOCK Lock;
+    BOOLEAN HighResolutionSet;
+    LONGLONG Period;
+    ULONGLONG ScheduledTime;
+    KI_HIGH_RESOLUTION_DEADLINE Deadline;
 } EX_TIMER;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
- * A high-resolution timer keeps the clock at its finest step while it is set,
- * through the counted request drivers share. Called with the timer's lock held.
+ * A high-resolution timer hands the kernel the moment it is next due, so the
+ * clock can come round for it. Called with the timer's lock held.
  */
 static
 VOID
@@ -60,12 +65,13 @@ ExpArmHighResolutionTimer(
     _Inout_ PETIMER Timer,
     _In_ BOOLEAN Arm)
 {
-    if (!Timer->HighResolution || (Timer->HighResolutionArmed == Arm))
+    if (!Timer->HighResolution)
         return;
 
-    Timer->HighResolutionArmed = Arm;
-    /* FIXME: called under the timer lock and from the timer DPC, at DISPATCH_LEVEL, where the WDK allows ExSetTimerResolution only up to APC_LEVEL */
-    ExSetTimerResolution(KeMinimumIncrement, Arm);
+    if (Arm && Timer->KeTimer.Header.Inserted)
+        KiArmHighResolutionDeadline(&Timer->HighResolutionDeadline, Timer->KeTimer.DueTime.QuadPart);
+    else
+        KiDisarmHighResolutionDeadline(&Timer->HighResolutionDeadline);
 }
 
 /* Called with the timer's lock held; the thread's own lock guards the list of timers it set */
@@ -146,9 +152,8 @@ ExpTimerDpcRoutine(
         return;
     }
 
-    /* A one-shot timer that went off and was not set again needs the fine clock no more */
-    if ((Timer->Period == 0) && !Timer->KeTimer.Header.Inserted)
-        ExpArmHighResolutionTimer(Timer, FALSE);
+    /* A one-shot timer that went off needs the fine clock no more; a periodic one needs it for its next period */
+    ExpArmHighResolutionTimer(Timer, Timer->KeTimer.Header.Inserted);
 
     if (!Timer->ApcAssociated)
     {
@@ -604,6 +609,7 @@ NtSetTimer(
     PETHREAD Thread = PsGetCurrentThread();
     PETIMER Timer;
     LARGE_INTEGER SafeDueTime;
+    ULONGLONG Now;
     BOOLEAN State;
     LONG References;
     KIRQL OldIrql;
@@ -658,7 +664,6 @@ NtSetTimer(
     Timer->SetSequence++;
     KeInitializeDpc(&Timer->TimerDpc, ExpTimerDpcRoutine, ExpTimerDpcContext(Timer));
     Timer->Period = Period;
-    ExpArmHighResolutionTimer(Timer, TRUE);
 
     if (TimerApcRoutine != NULL)
     {
@@ -681,10 +686,20 @@ NtSetTimer(
         KeReleaseSpinLockFromDpcLevel(&Thread->ActiveTimerListLock);
     }
 
+    /* A process that asked for no timer resolution gets its timer on the default tick (timeBeginPeriod, Windows 10 2004) */
+    if ((PreviousMode != KernelMode) && !Timer->HighResolution && (SafeDueTime.QuadPart < 0) &&
+        !PsGetCurrentProcess()->SetTimerResolution)
+    {
+        /* FIXME: the later periods of a periodic timer are not moved to the default tick */
+        Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+        SafeDueTime.QuadPart = -(LONGLONG)(KiRoundToDefaultTimerResolution(Now - SafeDueTime.QuadPart) - Now);
+    }
+
     KeSetTimerEx(&Timer->KeTimer,
                  SafeDueTime,
                  Period,
                  ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
+    ExpArmHighResolutionTimer(Timer, TRUE);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
@@ -879,6 +894,35 @@ NtQueryTimer(
 
 /* TIMERS A DRIVER KEEPS TO ITSELF ********************************************/
 
+/*
+ * A high-resolution timer is due again a whole period, in hundreds of
+ * nanoseconds, after the moment it was last due; periods that went by while the
+ * system was busy are skipped rather than delivered late. Called with the
+ * timer's lock held.
+ */
+static
+VOID
+ExpRearmHighResolutionTimer(
+    _Inout_ PEX_TIMER Timer)
+{
+    LARGE_INTEGER Due;
+    ULONGLONG Now;
+
+    ASSERT(Timer->Period > 0);
+
+    Now = KiQueryInterruptTimePrecise(NULL, FALSE);
+    Timer->ScheduledTime += (ULONGLONG)Timer->Period;
+    if (Timer->ScheduledTime <= Now)
+    {
+        Timer->ScheduledTime += ((Now - Timer->ScheduledTime) / (ULONGLONG)Timer->Period + 1) *
+                                (ULONGLONG)Timer->Period;
+    }
+
+    Due.QuadPart = -(LONGLONG)(Timer->ScheduledTime - Now);
+    KeSetTimerEx(&Timer->KeTimer, Due, 0, &Timer->Dpc);
+    KiArmHighResolutionDeadline(&Timer->Deadline, Timer->KeTimer.DueTime.QuadPart);
+}
+
 static
 VOID
 NTAPI
@@ -893,6 +937,27 @@ ExpExTimerDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+
+        /* A timer set again since it went off keeps the setting it was given */
+        if (Timer->HighResolutionSet && !Timer->KeTimer.Header.Inserted)
+        {
+            if (Timer->Period != 0)
+            {
+                ExpRearmHighResolutionTimer(Timer);
+            }
+            else
+            {
+                Timer->HighResolutionSet = FALSE;
+                KiDisarmHighResolutionDeadline(&Timer->Deadline);
+            }
+        }
+
+        KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
+    }
 
     if (Timer->Callback != NULL)
     {
@@ -921,6 +986,7 @@ ExAllocateTimer(
     Timer->CallbackContext = CallbackContext;
     Timer->Attributes = Attributes;
     Timer->RefCount = 1;
+    KeInitializeSpinLock(&Timer->Lock);
 
     KeInitializeTimerEx(&Timer->KeTimer,
                         (Attributes & EX_TIMER_NOTIFICATION) ?
@@ -940,10 +1006,28 @@ ExSetTimer(
 {
     LARGE_INTEGER Due;
     LONG Interval;
+    BOOLEAN WasSet;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(Parameters);
 
     Due.QuadPart = DueTime;
+
+    /* The period of a high-resolution timer is kept to the hundred nanoseconds it is given in (WDK, High-resolution timers) */
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+
+        WasSet = KeSetTimerEx(&Timer->KeTimer, Due, 0, &Timer->Dpc);
+        Timer->Period = Period;
+        Timer->ScheduledTime = Timer->KeTimer.DueTime.QuadPart;
+        Timer->HighResolutionSet = TRUE;
+        if (Timer->KeTimer.Header.Inserted)
+            KiArmHighResolutionDeadline(&Timer->Deadline, Timer->ScheduledTime);
+
+        KeReleaseSpinLock(&Timer->Lock, OldIrql);
+        return WasSet;
+    }
 
     /*
      * The period is given in the same units as the due time, but the kernel's
@@ -963,9 +1047,21 @@ ExCancelTimer(
     _Inout_ PEX_TIMER Timer,
     _In_opt_ PEXT_CANCEL_PARAMETERS Parameters)
 {
+    BOOLEAN WasSet;
+    KIRQL OldIrql;
+
     UNREFERENCED_PARAMETER(Parameters);
 
-    return KeCancelTimer(&Timer->KeTimer);
+    if (!(Timer->Attributes & EX_TIMER_HIGH_RESOLUTION))
+        return KeCancelTimer(&Timer->KeTimer);
+
+    KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+    WasSet = KeCancelTimer(&Timer->KeTimer);
+    Timer->HighResolutionSet = FALSE;
+    KiDisarmHighResolutionDeadline(&Timer->Deadline);
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
+
+    return WasSet;
 }
 
 BOOLEAN
@@ -977,6 +1073,15 @@ ExDeleteTimer(
     _In_opt_ PEXT_DELETE_PARAMETERS Parameters)
 {
     BOOLEAN WasSet = FALSE;
+    KIRQL OldIrql;
+
+    if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
+    {
+        KeAcquireSpinLock(&Timer->Lock, &OldIrql);
+        Timer->HighResolutionSet = FALSE;
+        KiDisarmHighResolutionDeadline(&Timer->Deadline);
+        KeReleaseSpinLock(&Timer->Lock, OldIrql);
+    }
 
     if (Cancel)
     {

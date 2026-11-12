@@ -99,6 +99,13 @@ static BOOLEAN KiInterruptTimeFrozen;
 /* The bucket of the timer table the clock has checked up to. */
 static ULONG KiTimerScanHand;
 
+static KSPIN_LOCK KiClockStepLock;
+static LIST_ENTRY KiHighResolutionDeadlines = { &KiHighResolutionDeadlines, &KiHighResolutionDeadlines };
+static ULONG KiRequestedIncrement;
+static ULONG KiGrantedIncrement;
+static ULONG KiAppliedRequest;
+static BOOLEAN KiClockStepBoosted;
+
 static LONGLONG KiQpcScaleFrequency;
 static ULONGLONG KiQpcSystemTimeIncrement;
 static UCHAR KiQpcSystemTimeIncrementShift;
@@ -1084,6 +1091,116 @@ KiSetTimeAdjustment(
     KiTimeAdjustmentEnabled = Enabled;
 
     KeLowerIrql(OldIrql);
+}
+
+static
+VOID
+KiApplyClockStep(VOID)
+{
+    PKI_HIGH_RESOLUTION_DEADLINE Deadline;
+    PLIST_ENTRY Entry;
+    ULONGLONG Earliest = 0;
+    ULONG Requested;
+    BOOLEAN Boost;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    for (Entry = KiHighResolutionDeadlines.Flink;
+         Entry != &KiHighResolutionDeadlines;
+         Entry = Entry->Flink)
+    {
+        Deadline = CONTAINING_RECORD(Entry, KI_HIGH_RESOLUTION_DEADLINE, Link);
+        ASSERT(Deadline->Armed && (Deadline->DueTime != 0));
+
+        if ((Earliest == 0) || (Deadline->DueTime < Earliest))
+            Earliest = Deadline->DueTime;
+    }
+
+    /* Without a clock that interrupts at the deadline, the finest step is held while one is armed (WDK, High-resolution timers) */
+    Boost = !KiSetClockDeadline(Earliest) && (Earliest != 0);
+    Requested = (KiRequestedIncrement != 0) ? KiRequestedIncrement : KeMaximumIncrement;
+
+    if ((KiGrantedIncrement != 0) &&
+        (Requested == KiAppliedRequest) &&
+        (Boost == KiClockStepBoosted))
+    {
+        return;
+    }
+
+    KiGrantedIncrement = HalSetTimeIncrement(Requested);
+    KeTimeIncrement = Boost ? HalSetTimeIncrement(KeMinimumIncrement) : KiGrantedIncrement;
+    KiAppliedRequest = Requested;
+    KiClockStepBoosted = Boost;
+}
+
+VOID
+NTAPI
+KiArmHighResolutionDeadline(
+    _Inout_ PKI_HIGH_RESOLUTION_DEADLINE Deadline,
+    _In_ ULONGLONG DueTime)
+{
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    ASSERT(DueTime != 0);
+
+    KeAcquireSpinLock(&KiClockStepLock, &OldIrql);
+
+    if (!Deadline->Armed)
+    {
+        InsertTailList(&KiHighResolutionDeadlines, &Deadline->Link);
+        Deadline->Armed = TRUE;
+    }
+
+    Deadline->DueTime = DueTime;
+    KiApplyClockStep();
+
+    KeReleaseSpinLock(&KiClockStepLock, OldIrql);
+}
+
+VOID
+NTAPI
+KiDisarmHighResolutionDeadline(
+    _Inout_ PKI_HIGH_RESOLUTION_DEADLINE Deadline)
+{
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    KeAcquireSpinLock(&KiClockStepLock, &OldIrql);
+
+    if (Deadline->Armed)
+    {
+        RemoveEntryList(&Deadline->Link);
+        Deadline->Armed = FALSE;
+        KiApplyClockStep();
+    }
+
+    KeReleaseSpinLock(&KiClockStepLock, OldIrql);
+}
+
+VOID
+NTAPI
+KiSetRequestedTimeIncrement(
+    _In_ ULONG Increment)
+{
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    KeAcquireSpinLock(&KiClockStepLock, &OldIrql);
+    KiRequestedIncrement = Increment;
+    KiApplyClockStep();
+    KeReleaseSpinLock(&KiClockStepLock, OldIrql);
+}
+
+ULONG
+NTAPI
+KiQueryRequestedTimeIncrement(VOID)
+{
+    ULONG Granted = *(volatile ULONG *)&KiGrantedIncrement;
+
+    return (Granted != 0) ? Granted : KeMaximumIncrement;
 }
 
 /*

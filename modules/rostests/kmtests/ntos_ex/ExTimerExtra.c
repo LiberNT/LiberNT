@@ -177,6 +177,87 @@ TestExtendedTimer(VOID)
     ok_eq_bool(Result, TRUE);
 }
 
+#define HIGH_RESOLUTION_EXPIRIES 4
+
+typedef VOID (NTAPI *PEX_QUERY_TIMER_RESOLUTION)(PULONG MaximumTime, PULONG MinimumTime, PULONG CurrentTime);
+
+static ULONGLONG HighResolutionTimes[HIGH_RESOLUTION_EXPIRIES];
+static volatile LONG HighResolutionCount;
+
+static
+VOID
+NTAPI
+HighResolutionTimerCallback(
+    _In_ PEX_TIMER Timer,
+    _In_opt_ PVOID Context)
+{
+    ULONG64 Counter;
+    LONG Index = InterlockedIncrement(&HighResolutionCount) - 1;
+
+    UNREFERENCED_PARAMETER(Timer);
+
+    if (Index < HIGH_RESOLUTION_EXPIRIES)
+        HighResolutionTimes[Index] = KeQueryInterruptTimePrecise(&Counter);
+    if (Index == HIGH_RESOLUTION_EXPIRIES - 1)
+        KeSetEvent(Context, IO_NO_INCREMENT, FALSE);
+}
+
+/* A high-resolution timer never expires early and keeps its period to the hundred nanoseconds (WDK, High-resolution timers) */
+static
+VOID
+TestHighResolutionTimer(VOID)
+{
+    const LONGLONG Period = 55000;
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"ExQueryTimerResolution");
+    PEX_QUERY_TIMER_RESOLUTION QueryTimerResolution;
+    ULONG Maximum, Minimum, Before, Armed, After;
+    LARGE_INTEGER Timeout;
+    ULONGLONG Start;
+    ULONG64 Counter;
+    PEX_TIMER Timer;
+    NTSTATUS Status;
+    BOOLEAN Result;
+    LONG Index;
+
+    QueryTimerResolution = (PEX_QUERY_TIMER_RESOLUTION)MmGetSystemRoutineAddress(&Name);
+    if (skip(QueryTimerResolution != NULL, "ExQueryTimerResolution is not exported\n"))
+        return;
+
+    QueryTimerResolution(&Maximum, &Minimum, &Before);
+
+    KeInitializeEvent(&TimerEvent, NotificationEvent, FALSE);
+    HighResolutionCount = 0;
+    Timer = ExAllocateTimer(HighResolutionTimerCallback, &TimerEvent, EX_TIMER_HIGH_RESOLUTION);
+    ok(Timer != NULL, "ExAllocateTimer failed\n");
+    if (Timer == NULL)
+        return;
+
+    Start = KeQueryInterruptTimePrecise(&Counter);
+    Result = ExSetTimer(Timer, -Period, Period, NULL);
+    ok_eq_bool(Result, FALSE);
+    QueryTimerResolution(&Maximum, &Minimum, &Armed);
+    trace("resolution %lu before, %lu while a high-resolution timer is set\n", Before, Armed);
+
+    Timeout.QuadPart = -10LL * 1000 * 1000 * 5;
+    Status = KeWaitForSingleObject(&TimerEvent, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Result = ExCancelTimer(Timer, NULL);
+    ok_bool_true(Result, "cancel armed periodic");
+
+    for (Index = 0; Index < HIGH_RESOLUTION_EXPIRIES; Index++)
+    {
+        ok(HighResolutionTimes[Index] >= Start + (ULONGLONG)(Index + 1) * Period,
+           "expiry %ld at %I64u, before %I64u\n", Index, HighResolutionTimes[Index] - Start, (ULONGLONG)(Index + 1) * Period);
+    }
+
+    Result = ExDeleteTimer(Timer, TRUE, TRUE, NULL);
+    ok_eq_bool(Result, FALSE);
+
+    /* With no high-resolution timer set the clock goes back to the step it ran at */
+    QueryTimerResolution(&Maximum, &Minimum, &After);
+    ok_eq_ulong(After, Before);
+}
+
 /* Fatal contract check, run individually in a disposable guest.
  * Windows 11 stops with TIMER_OR_DPC_INVALID (9, 0, Attributes, 0). */
 START_TEST(ExTimerInvalidAttributes)
@@ -218,4 +299,5 @@ START_TEST(ExTimerExtra)
     TestPeriodicDpc();
     TestCancelBeforeFire();
     TestExtendedTimer();
+    TestHighResolutionTimer();
 }

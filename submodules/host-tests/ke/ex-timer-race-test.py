@@ -78,6 +78,7 @@ typedef unsigned char BOOLEAN, *PBOOLEAN, UCHAR, KIRQL, KPROCESSOR_MODE;
 typedef uint32_t ULONG, ACCESS_MASK;
 typedef int32_t LONG, NTSTATUS, KPRIORITY;
 typedef uint64_t ULONGLONG;
+typedef int64_t LONGLONG;
 typedef uintptr_t ULONG_PTR, KSPIN_LOCK, *PKSPIN_LOCK;
 typedef void *PVOID, *HANDLE, **PHANDLE;
 typedef union { int64_t QuadPart; } LARGE_INTEGER, *PLARGE_INTEGER;
@@ -92,6 +93,8 @@ typedef struct _KDPC { PKDEFERRED_ROUTINE DeferredRoutine; PVOID DeferredContext
 typedef struct { BOOLEAN Inserted; LONG SignalState; } DISPATCHER_HEADER;
 typedef struct { DISPATCHER_HEADER Header; LARGE_INTEGER DueTime; PKDPC Dpc; LONG Period; } KTIMER, *PKTIMER;
 typedef struct _KTHREAD { int Unused; } KTHREAD, *PKTHREAD;
+typedef struct { LIST_ENTRY Link; ULONGLONG DueTime; BOOLEAN Armed; } KI_HIGH_RESOLUTION_DEADLINE, *PKI_HIGH_RESOLUTION_DEADLINE;
+typedef struct { ULONG SetTimerResolution; } EPROCESS, *PEPROCESS;
 typedef struct _KAPC *PKAPC;
 typedef void (*PKNORMAL_ROUTINE)(PVOID, PVOID, PVOID);
 typedef void (*PKKERNEL_ROUTINE)(PKAPC, PKNORMAL_ROUTINE *, PVOID *, PVOID *, PVOID *);
@@ -102,7 +105,7 @@ typedef struct _KAPC { PKTHREAD Thread; PKKERNEL_ROUTINE KernelRoutine; PKRUNDOW
 typedef struct { KTHREAD Tcb; KSPIN_LOCK ActiveTimerListLock; LIST_ENTRY ActiveTimerListHead; } ETHREAD, *PETHREAD;
 typedef struct { KTIMER KeTimer; KAPC TimerApc; KDPC TimerDpc; LIST_ENTRY ActiveTimerListEntry; KSPIN_LOCK Lock; LONG Period;
                  BOOLEAN ApcAssociated, WakeTimer; LIST_ENTRY WakeTimerListEntry; ULONG SetSequence, ApcQueuedSequence;
-                 BOOLEAN HighResolution, HighResolutionArmed; } ETIMER, *PETIMER;
+                 BOOLEAN HighResolution; KI_HIGH_RESOLUTION_DEADLINE HighResolutionDeadline; } ETIMER, *PETIMER;
 typedef void *PEXT_CALLBACK, *PEXT_DELETE_CALLBACK;
 static const char *Scenario = "setup";
 static ETHREAD TheThread;
@@ -111,7 +114,6 @@ static HANDLE TheHandle = (HANDLE)(ULONG_PTR)0x44;
 static POBJECT_TYPE ExTimerObjectType;
 static LIST_ENTRY ExpWakeList;
 static KSPIN_LOCK ExpWakeListLock;
-static ULONG KeMinimumIncrement = 5000;
 static LONG References;
 static PKNORMAL_ROUTINE Queued;
 static PKSPIN_LOCK CancelOnRelease;
@@ -159,7 +161,12 @@ static NTSTATUS ObInsertObject(PVOID Object, PVOID Passed, ACCESS_MASK Access, U
     *Handle = TheHandle;
     return STATUS_SUCCESS;
 }
-static ULONG ExSetTimerResolution(ULONG Resolution, BOOLEAN Set) { (void)Set; return Resolution; }
+static EPROCESS TheProcess;
+static PEPROCESS PsGetCurrentProcess(void) { return &TheProcess; }
+static ULONGLONG KiQueryInterruptTimePrecise(PVOID QpcTimeStamp, BOOLEAN Unbiased) { (void)QpcTimeStamp; (void)Unbiased; return 0; }
+static ULONGLONG KiRoundToDefaultTimerResolution(ULONGLONG DueTime) { return DueTime; }
+static void KiArmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline, ULONGLONG DueTime) { Deadline->Armed = TRUE; Deadline->DueTime = DueTime; }
+static void KiDisarmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline) { Deadline->Armed = FALSE; }
 static void KeFlushQueuedDpcs(void) {}
 static void KeInitializeTimerEx(PKTIMER Timer, TIMER_TYPE Type) { (void)Type; memset(Timer, 0, sizeof(*Timer)); }
 static void KeInitializeDpc(PKDPC Dpc, PKDEFERRED_ROUTINE Routine, PVOID Context) { Dpc->DeferredRoutine = Routine; Dpc->DeferredContext = Context; }

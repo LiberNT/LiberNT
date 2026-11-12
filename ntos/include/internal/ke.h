@@ -141,6 +141,33 @@ BOOLEAN
 NTAPI
 KiSetClockDeadline(ULONGLONG InterruptTime);
 
+typedef struct _KI_HIGH_RESOLUTION_DEADLINE
+{
+    LIST_ENTRY Link;
+    ULONGLONG DueTime;
+    BOOLEAN Armed;
+} KI_HIGH_RESOLUTION_DEADLINE, *PKI_HIGH_RESOLUTION_DEADLINE;
+
+VOID
+NTAPI
+KiArmHighResolutionDeadline(
+    _Inout_ PKI_HIGH_RESOLUTION_DEADLINE Deadline,
+    _In_ ULONGLONG DueTime);
+
+VOID
+NTAPI
+KiDisarmHighResolutionDeadline(
+    _Inout_ PKI_HIGH_RESOLUTION_DEADLINE Deadline);
+
+VOID
+NTAPI
+KiSetRequestedTimeIncrement(
+    _In_ ULONG Increment);
+
+ULONG
+NTAPI
+KiQueryRequestedTimeIncrement(VOID);
+
 extern volatile ULONG KiTickPhase;
 
 extern ULONGLONG KeBootTimeBias;
