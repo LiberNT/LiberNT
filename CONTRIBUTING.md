@@ -72,7 +72,7 @@ You may use AI tools. Tell us in the pull request which parts they helped with a
 ### Rules and Recommendations
 
 - *Use one identity and keep it.* Pick a name (your real name or a handle) and an e-mail address, and use the same pair for every commit and in your GitHub profile (in the [Name field here][GitHub Profile Settings]). We accept pseudonymous contributions, but not anonymous ones. If you ever need to change either, say so in your pull request so we can link the old and new identity.
-  - The e-mail can be your GitHub `noreply` address, found in your GitHub [e-mail settings][GitHub Email Settings], or any working address you control, such as `handle+github@yourprovider.example`. It must stay reachable.
+  - The e-mail can be your GitHub `noreply` address, found in your GitHub [e-mail settings][GitHub Email Settings], or any address you control, such as `handle+github@yourprovider.example`. It does not need to receive mail: with a `noreply` address we contact you through your GitHub account. What matters is that it is yours and that you use the same one every time.
   - Handles in any script are welcome. If yours is not in Latin letters, consider adding a romanised form to your GitHub profile bio so others can find and mention you.
 - *Ensure your contribution is properly described.* Include the relevant issue number if applicable.
 - *Put only related changes.* It will make reviewing easier as the reviewer needs to recall less information about the existing source code that is changed.
