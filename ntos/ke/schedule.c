@@ -406,7 +406,9 @@ KiDeferredReadyThread(
         (Current != NULL) &&
         (Current != Thread) &&
         (Priority > (KPRIORITY)Current->Priority) &&
-        !Current->DeferPreemption)
+        !Current->DeferPreemption &&
+        !((Current == Prcb->IdleThread) && Prcb->DpcRoutineActive &&
+          (KiThreadAffinityMask(Thread) & KeActiveProcessors & ~Prcb->SetMember)))
     {
         if (Current != Prcb->IdleThread)
             Current->Preempted = TRUE;
