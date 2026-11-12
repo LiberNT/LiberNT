@@ -468,8 +468,8 @@ ExpSetTimeZoneInformation(
     MmWriteableSharedUserData->TimeZoneBias.High1Time = ExpTimeZoneBias.HighPart;
     MmWriteableSharedUserData->TimeZoneId = ExpTimeZoneId;
 
-    /* The system time stays; a clock that keeps local time is rewritten in the new local time */
-    if (!ExpRealTimeIsUniversal)
+    /* The system time stays; a local-time clock is rewritten when a bias in force changes, and only read at boot */
+    if (!ExpRealTimeIsUniversal && (ExpLastTimeZoneBias != (ULONG)-1) && (ExpLastTimeZoneBias != (ULONG)Bias))
     {
         ExSystemTimeToLocalTime(&SystemTime, &LocalTime);
         RtlTimeToTimeFields(&LocalTime, &TimeFields);
