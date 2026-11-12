@@ -22,10 +22,19 @@ START_TEST(KeClockKeepAlive)
         return;
     }
 
-    /* The first processor owns the clock; the last one is counted by it */
+    /* The clock owner counts the periods; the processor held off must be another one */
     Processor = (ULONG)(KeNumberProcessors - 1);
     PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Processor);
     Prcb = KeGetCurrentPrcb();
+#if defined(_M_ARM) || defined(_M_ARM64)
+    while (Prcb->ClockOwner && Processor > 0)
+    {
+        Processor--;
+        KeSetSystemAffinityThreadEx((KAFFINITY)1 << Processor);
+        Prcb = KeGetCurrentPrcb();
+    }
+    ok(!Prcb->ClockOwner, "Only the clock owner is left to hold off\n");
+#endif
 
     KeRaiseIrql(HIGH_LEVEL, &OldIrql);
     KeStallExecutionProcessor(100 * 1000);
