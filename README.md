@@ -300,6 +300,8 @@ LiberNT is licensed under the [GNU GPL 3.0](COPYING). Code inherited from other 
 
 The changes made in LiberNT are Copyright © 2026 the LiberNT contributors. Inherited and third-party code keeps the copyright notices of its authors. See [CREDITS.md](CREDITS.md).
 
+The GPL covers the code, not the brand. LiberNT™ and the LiberNT logo are the project's marks, and the artwork in `media/graphics/branding` is copyright its author, all rights reserved. [TRADEMARK.md](TRADEMARK.md) says what you may do with them without asking: refer to the project, redistribute an official build unchanged, link to us. A modified build needs its own name.
+
 LiberNT is an independent project. It is not affiliated with, endorsed by or sponsored by Microsoft. Windows® is a registered trademark of Microsoft Corporation.
 
 ---
