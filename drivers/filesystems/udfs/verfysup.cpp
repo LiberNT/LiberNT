@@ -166,7 +166,7 @@ UDFVerifyVolume(
     IO_STATUS_BLOCK Iosb;
     ULONG MediaChangeCount = 0;
     NTSTATUS RC = STATUS_UNSUCCESSFUL;
-    ULONG Mode;
+    ULONG Mode = WCACHE_MODE_ROM;
     BOOLEAN UnsafeIoctl = (Vcb->VCBFlags & UDF_VCB_FLAGS_UNSAFE_IOCTL) ? TRUE : FALSE;
 
     //  Update the real device in the IrpContext from the Vpb.  There was no available

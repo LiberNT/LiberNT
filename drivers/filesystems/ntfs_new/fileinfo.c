@@ -1301,7 +1301,7 @@ NtfsSetLinkInformation(_In_ PVolumeContextBlock VolCB,
 {
     PNtfsMasterFileTable Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
     PFILE_OBJECT TargetFileObject;
-    PFileContextBlock TargetFileCB;
+    PFileContextBlock TargetFileCB = NULL;
     PNtfsFileRecord ExistingRecord = NULL;
     PNtfsFileRecord RefreshedRecord = NULL;
     UNICODE_STRING ParentName;
@@ -2223,7 +2223,7 @@ NtfsSetRenameInformation(_In_ PVolumeContextBlock VolCB,
                          _In_ KPROCESSOR_MODE AccessMode)
 {
     PFILE_OBJECT TargetFileObject;
-    PFileContextBlock TargetFileCB;
+    PFileContextBlock TargetFileCB = NULL;
     PNtfsFileRecord RefreshedRecord = NULL;
     PNtfsFileRecord ExistingRecord = NULL;
     UNICODE_STRING ParentName;
