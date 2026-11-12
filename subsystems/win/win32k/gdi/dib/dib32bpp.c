@@ -813,6 +813,48 @@ DIB_32BPP_AlphaBlend(SURFOBJ* Dest, SURFOBJ* Source, RECTL* DestRect,
     (DestRect->left << 2));
   SrcBpp = BitsPerFormat(Source->iBitmapFormat);
 
+  if ((BlendFunc.AlphaFormat & AC_SRC_ALPHA) != 0 &&
+      BlendFunc.SourceConstantAlpha == 255 &&
+      Source->iBitmapFormat == BMF_32BPP &&
+      (ColorTranslation == NULL || (ColorTranslation->flXlate & XO_TRIVIAL) != 0) &&
+      OrigDestRect->right - OrigDestRect->left == SourceRect->right - SourceRect->left &&
+      OrigDestRect->bottom - OrigDestRect->top == SourceRect->bottom - SourceRect->top)
+  {
+    LONG Width = DestRect->right - DestRect->left;
+    LONG Y;
+
+    ASSERT(DestRect->left >= OrigDestRect->left && DestRect->right <= OrigDestRect->right);
+    ASSERT(DestRect->top >= OrigDestRect->top && DestRect->bottom <= OrigDestRect->bottom);
+    for (Y = DestRect->top; Y < DestRect->bottom; Y++)
+    {
+      PULONG DstRow = (PULONG)((ULONG_PTR)Dest->pvScan0 + Y * Dest->lDelta + (DestRect->left << 2));
+      const ULONG *SrcRow = (const ULONG *)((ULONG_PTR)Source->pvScan0 +
+        (SourceRect->top + Y - OrigDestRect->top) * Source->lDelta +
+        ((SourceRect->left + DestRect->left - OrigDestRect->left) << 2));
+      LONG X;
+
+      for (X = 0; X < Width; X++)
+      {
+        SrcPixel.ul = SrcRow[X];
+        if (SrcPixel.ul == 0)
+          continue;
+        if (SrcPixel.col.alpha == 255)
+        {
+          DstRow[X] = SrcPixel.ul;
+          continue;
+        }
+        Alpha = SrcPixel.col.alpha;
+        DstPixel.ul = DstRow[X];
+        DstPixel.col.red = DIB_BlendOver(SrcPixel.col.red, DstPixel.col.red, Alpha);
+        DstPixel.col.green = DIB_BlendOver(SrcPixel.col.green, DstPixel.col.green, Alpha);
+        DstPixel.col.blue = DIB_BlendOver(SrcPixel.col.blue, DstPixel.col.blue, Alpha);
+        DstPixel.col.alpha = DIB_BlendOver(SrcPixel.col.alpha, DstPixel.col.alpha, Alpha);
+        DstRow[X] = DstPixel.ul;
+      }
+    }
+    return TRUE;
+  }
+
   Rows = 0;
    while (++Rows <= DestRect->bottom - DestRect->top)
   {
