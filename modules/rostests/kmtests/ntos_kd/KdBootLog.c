@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The kernel log reaches lastboot.log at the boot volume root
+ * PURPOSE:     The kernel log reaches the file DEBUGPORT=FILE: names, or lastboot.log at the boot volume root
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -53,6 +53,84 @@ GetBootLogName(
 
     Name->Length = Index * sizeof(WCHAR);
     return RtlAppendUnicodeToString(Name, L"lastboot.log");
+}
+
+static
+NTSTATUS
+GetFilePortName(
+    _Out_ PUNICODE_STRING Name)
+{
+    static const WCHAR Option[] = L"DEBUGPORT=FILE:";
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
+    ULONG OptionLength = RTL_NUMBER_OF(Option) - 1;
+    PKEY_VALUE_PARTIAL_INFORMATION Value;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PCWSTR Options, Path;
+    ULONG Size, Count, Index, Length;
+    HANDLE Key;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &KeyName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwOpenKey(&Key, KEY_QUERY_VALUE, &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Size = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 1024 * sizeof(WCHAR);
+    Value = ExAllocatePoolWithTag(PagedPool, Size, 'LBmK');
+    if (Value == NULL)
+    {
+        ZwClose(Key);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Status = ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Value, Size, &Size);
+    ZwClose(Key);
+    if (NT_SUCCESS(Status) && Value->Type != REG_SZ) Status = STATUS_OBJECT_TYPE_MISMATCH;
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Value, 'LBmK');
+        return Status;
+    }
+
+    Options = (PCWSTR)Value->Data;
+    Count = Value->DataLength / sizeof(WCHAR);
+    Status = STATUS_NOT_FOUND;
+    for (Index = 0; Index + OptionLength <= Count; Index++)
+    {
+        if (Index != 0 && Options[Index - 1] != L' ' && Options[Index - 1] != L'/') continue;
+        if (_wcsnicmp(&Options[Index], Option, OptionLength) != 0) continue;
+
+        Path = &Options[Index + OptionLength];
+        for (Length = 0; Index + OptionLength + Length < Count; Length++)
+        {
+            if (Path[Length] == UNICODE_NULL || Path[Length] == L' ' || Path[Length] == L',' || Path[Length] == L'\t')
+                break;
+        }
+
+        if (Length == 0 || (Length >= 4 && _wcsnicmp(Path, L"GPT{", 4) == 0))
+        {
+            Status = STATUS_NOT_SUPPORTED;
+            break;
+        }
+
+        Name->Length = (USHORT)(Length * sizeof(WCHAR));
+        Name->MaximumLength = Name->Length + sizeof(WCHAR);
+        Name->Buffer = ExAllocatePoolWithTag(PagedPool, Name->MaximumLength, 'LBmK');
+        if (Name->Buffer == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+
+        RtlCopyMemory(Name->Buffer, Path, Name->Length);
+        Name->Buffer[Length] = UNICODE_NULL;
+        Status = STATUS_SUCCESS;
+        break;
+    }
+
+    ExFreePoolWithTag(Value, 'LBmK');
+    return Status;
 }
 
 static
@@ -177,7 +255,14 @@ START_TEST(KdBootLog)
     BOOLEAN Found = FALSE, Stamped = FALSE;
     ULONG Try, Count = 0;
 
-    Status = GetBootLogName(&Name);
+    Status = GetFilePortName(&Name);
+    if (Status == STATUS_NOT_SUPPORTED)
+    {
+        skip(FALSE, "DEBUGPORT=FILE names a partition by its GUID\n");
+        return;
+    }
+    if (Status == STATUS_NOT_FOUND)
+        Status = GetBootLogName(&Name);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status)) return;
 
