@@ -8,7 +8,7 @@ if(DLL_EXPORT_VERSION GREATER_EQUAL 0xA00)
         "")
 endif()
 
-add_executable(dwm main.c)
+add_executable(dwm main.c dwm.rc)
 set_module_type(dwm win32gui UNICODE)
 if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     target_link_options(dwm PRIVATE
