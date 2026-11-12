@@ -4423,11 +4423,16 @@ PciPdoFunctionLevelReset(
     BOOLEAN Version2;
     ULONG Waited, Id = MAXULONG;
 
-    PciPdoGetBusDataByOffset(DeviceExtension, &Express.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, ExpressCapabilities),
-                             sizeof(Express.AsUSHORT));
+    if (PciPdoGetBusDataByOffset(DeviceExtension, &Express.AsUSHORT,
+                                 Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, ExpressCapabilities),
+                                 sizeof(Express.AsUSHORT)) != sizeof(Express.AsUSHORT) ||
+        PciPdoGetBusDataByOffset(DeviceExtension, &Control.AsUSHORT,
+                                 Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceControl),
+                                 sizeof(Control.AsUSHORT)) != sizeof(Control.AsUSHORT))
+    {
+        return STATUS_DEVICE_NOT_CONNECTED;
+    }
     Version2 = Express.CapabilityVersion >= 2;
-    PciPdoGetBusDataByOffset(DeviceExtension, &Control.AsUSHORT, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, DeviceControl),
-                             sizeof(Control.AsUSHORT));
     PciPdoGetBusDataByOffset(DeviceExtension, &LinkControl, Offset + FIELD_OFFSET(PCI_EXPRESS_CAPABILITY, LinkControl),
                              sizeof(LinkControl));
     if (Version2)
