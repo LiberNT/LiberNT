@@ -160,21 +160,21 @@ MiPfnExecCleanTest(_In_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
     return Db->ExecClean != NULL && MiPfnTracked(Db, Frame) &&
            (MI_ATOMIC_READ32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5]) &
-            (1L << ((Frame - Db->FirstFrame) & 31))) != 0;
+            (1UL << ((Frame - Db->FirstFrame) & 31))) != 0;
 }
 
 static __inline VOID
 MiPfnExecCleanSet(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
     if (Db->ExecClean != NULL && MiPfnTracked(Db, Frame))
-        MI_ATOMIC_OR32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], 1L << ((Frame - Db->FirstFrame) & 31));
+        MI_ATOMIC_OR32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], 1UL << ((Frame - Db->FirstFrame) & 31));
 }
 
 static __inline VOID
 MiPfnExecCleanClear(_Inout_ PMI_PFN_DATABASE Db, _In_ ULONG Frame)
 {
     if (MiPfnExecCleanTest(Db, Frame))
-        MI_ATOMIC_AND32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], ~(1L << ((Frame - Db->FirstFrame) & 31)));
+        MI_ATOMIC_AND32(&Db->ExecClean[(Frame - Db->FirstFrame) >> 5], ~(1UL << ((Frame - Db->FirstFrame) & 31)));
 }
 
 /* MDL aliases of managed RAM must retain the allocation's cache attributes.
