@@ -1172,6 +1172,7 @@ PciAddDevice(
                                                        PhysicalDeviceObject);
     DeviceExtension->PhysicalDeviceObject = PhysicalDeviceObject;
     InitializeListHead(&DeviceExtension->SlotNotifyListHead);
+    InitializeListHead(&DeviceExtension->ArbiterListHead);
 
     DeviceExtension->State = PciNotStarted;
 
