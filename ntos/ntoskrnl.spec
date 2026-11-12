@@ -349,11 +349,16 @@
 @ stdcall InbvSetTextColor(long)
 @ stdcall InbvSolidColorFill(long long long long long)
 @ extern -constant InitSafeBootMode
-@ fastcall -arch=i386,arm,arm64 InterlockedCompareExchange(ptr long long)
-@ fastcall -arch=i386,arm,arm64 InterlockedDecrement(ptr)
-@ fastcall -arch=i386,arm,arm64 InterlockedExchange(ptr long)
-@ fastcall -arch=i386,arm,arm64 InterlockedExchangeAdd(ptr long)
-@ fastcall -arch=i386,arm,arm64 InterlockedIncrement(ptr)
+@ fastcall -arch=i386 InterlockedCompareExchange(ptr long long) @InterlockedCompareExchange@12
+@ fastcall -arch=arm,arm64 InterlockedCompareExchange(ptr long long)
+@ fastcall -arch=i386 InterlockedDecrement(ptr) @InterlockedDecrement@4
+@ fastcall -arch=arm,arm64 InterlockedDecrement(ptr)
+@ fastcall -arch=i386 InterlockedExchange(ptr long) @InterlockedExchange@8
+@ fastcall -arch=arm,arm64 InterlockedExchange(ptr long)
+@ fastcall -arch=i386 InterlockedExchangeAdd(ptr long) @InterlockedExchangeAdd@8
+@ fastcall -arch=arm,arm64 InterlockedExchangeAdd(ptr long)
+@ fastcall -arch=i386 InterlockedIncrement(ptr) @InterlockedIncrement@4
+@ fastcall -arch=arm,arm64 InterlockedIncrement(ptr)
 @ fastcall -arch=i386 InterlockedPopEntrySList(ptr)
 @ fastcall -arch=i386 InterlockedPushEntrySList(ptr ptr)
 @ stdcall -arch=arm InterlockedPopEntrySList(ptr) RtlInterlockedPopEntrySList
