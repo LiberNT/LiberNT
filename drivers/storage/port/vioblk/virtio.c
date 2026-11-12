@@ -597,7 +597,7 @@ VblkQueueRequest(_In_ PVBLK_DEVICE_EXTENSION Device,
     USHORT Slot;
 
     if (!Device->DeviceReady)
-        return SRB_STATUS_BUSY;
+        return SRB_STATUS_NO_HBA;
 
     Physical = StorPortGetPhysicalAddress(Device, NULL, Dma, &Length);
     if (Physical.QuadPart == 0 || Length < sizeof(*Dma))

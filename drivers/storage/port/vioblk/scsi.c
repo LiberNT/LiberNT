@@ -82,7 +82,7 @@ VblkBuildSense(_Out_writes_bytes_(18) PUCHAR Sense, _In_ UCHAR SenseKey, _In_ UC
 }
 
 static
-VOID
+BOOLEAN
 VblkCompleteWithSense(_In_ PVBLK_DEVICE_EXTENSION Device,
                       _In_ PSCSI_REQUEST_BLOCK Srb,
                       _In_ UCHAR SenseKey,
@@ -91,6 +91,7 @@ VblkCompleteWithSense(_In_ PVBLK_DEVICE_EXTENSION Device,
 {
     UCHAR SrbStatus = SRB_STATUS_ERROR;
     UCHAR Sense[18];
+    BOOLEAN Delivered = FALSE;
 
     if (Srb->SenseInfoBuffer != NULL && Srb->SenseInfoBufferLength != 0 &&
         (Srb->SrbFlags & SRB_FLAGS_DISABLE_AUTOSENSE) == 0)
@@ -99,9 +100,11 @@ VblkCompleteWithSense(_In_ PVBLK_DEVICE_EXTENSION Device,
         Srb->SenseInfoBufferLength = (UCHAR)min(sizeof(Sense), Srb->SenseInfoBufferLength);
         RtlCopyMemory(Srb->SenseInfoBuffer, Sense, Srb->SenseInfoBufferLength);
         SrbStatus |= SRB_STATUS_AUTOSENSE_VALID;
+        Delivered = TRUE;
     }
     Srb->ScsiStatus = SCSISTAT_CHECK_CONDITION;
     VblkCompleteSrb(Device, Srb, SrbStatus);
+    return Delivered;
 }
 
 static
@@ -232,19 +235,16 @@ VblkHandleInquiry(_In_ PVBLK_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOCK S
                 VblkSubmitGetId(Device, Srb);
                 return;
             }
+            if (Device->SerialLength == 0)
+            {
+                Length = 4;
+                break;
+            }
             Designator[0] = 0x02;
             Designator[1] = 0x01;
             RtlCopyMemory(&Designator[4], VBLK_VENDOR_ID, 8);
-            if (Device->SerialLength != 0)
-            {
-                RtlCopyMemory(&Designator[12], Device->Serial, Device->SerialLength);
-                IdentifierLength = 8 + Device->SerialLength;
-            }
-            else
-            {
-                RtlCopyMemory(&Designator[12], VBLK_PRODUCT_ID, 16);
-                IdentifierLength = 8 + 16;
-            }
+            RtlCopyMemory(&Designator[12], Device->Serial, Device->SerialLength);
+            IdentifierLength = 8 + Device->SerialLength;
             Designator[3] = (UCHAR)IdentifierLength;
             Length = 4 + 4 + IdentifierLength;
             VblkPut16(&Buffer[2], Length - 4);
@@ -334,6 +334,11 @@ VblkHandleModeSense(_In_ PVBLK_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOCK
         VblkCompleteIllegal(Device, Srb, SCSI_ADSENSE_INVALID_CDB);
         return;
     }
+    if (PageControl == 3)
+    {
+        VblkCompleteIllegal(Device, Srb, VBLK_ADSENSE_SAVING_NOT_SUPPORTED);
+        return;
+    }
 
     RtlZeroMemory(Buffer, sizeof(Buffer));
     if (BlockDescriptor)
@@ -395,6 +400,11 @@ VblkHandleModeSelect(_In_ PVBLK_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOC
     PUCHAR Data = (PUCHAR)Srb->DataBuffer;
     ULONG Offset;
 
+    if ((Cdb[1] & 0x01) != 0)
+    {
+        VblkCompleteIllegal(Device, Srb, SCSI_ADSENSE_INVALID_CDB);
+        return;
+    }
     if (ParameterLength == 0)
     {
         VblkCompleteSrb(Device, Srb, SRB_STATUS_SUCCESS);
@@ -407,6 +417,11 @@ VblkHandleModeSelect(_In_ PVBLK_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOC
     }
 
     Offset = HeaderLength + (Ten ? VblkGet16(&Data[6]) : Data[3]);
+    if (Offset > ParameterLength)
+    {
+        VblkCompleteIllegal(Device, Srb, SCSI_ADSENSE_PARAMETER_LIST_LENGTH);
+        return;
+    }
     while (Offset < ParameterLength)
     {
         UCHAR PageCode;
@@ -805,9 +820,11 @@ VblkExecuteScsi(_In_ PVBLK_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOCK Srb
 
     if (Device->CapacityChanged)
     {
-        Device->CapacityChanged = FALSE;
-        VblkCompleteWithSense(Device, Srb, SCSI_SENSE_UNIT_ATTENTION,
-                              SCSI_ADSENSE_PARAMETERS_CHANGED, SCSI_SENSEQ_CAPACITY_DATA_CHANGED);
+        if (VblkCompleteWithSense(Device, Srb, SCSI_SENSE_UNIT_ATTENTION,
+                                  SCSI_ADSENSE_PARAMETERS_CHANGED, SCSI_SENSEQ_CAPACITY_DATA_CHANGED))
+        {
+            Device->CapacityChanged = FALSE;
+        }
         return;
     }
 

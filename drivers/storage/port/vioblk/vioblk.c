@@ -18,8 +18,8 @@ VblkDrainQueue(_In_ PVBLK_DEVICE_EXTENSION Device)
 }
 
 static
-BOOLEAN
-VblkRestartLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
+VOID
+VblkStopLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
 {
     ULONG Index;
 
@@ -34,7 +34,18 @@ VblkRestartLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
             VblkCompleteSrb(Device, Srb, SRB_STATUS_BUS_RESET);
         }
     }
-    return VblkStartDevice(Device);
+}
+
+static
+BOOLEAN
+VblkRestartLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
+{
+    VblkStopLocked(Device);
+    if (VblkStartDevice(Device))
+        return TRUE;
+
+    DPRINT1("vioblk: device did not come back after a reset\n");
+    return FALSE;
 }
 
 static
@@ -204,6 +215,25 @@ VblkResetSynchronized(_In_ PVOID DeviceExtension, _In_opt_ PVOID Context)
 static
 BOOLEAN
 NTAPI
+VblkStopSynchronized(_In_ PVOID DeviceExtension, _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    VblkStopLocked((PVBLK_DEVICE_EXTENSION)DeviceExtension);
+    return TRUE;
+}
+
+static
+BOOLEAN
+NTAPI
+VblkStartSynchronized(_In_ PVOID DeviceExtension, _In_opt_ PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return VblkStartDevice((PVBLK_DEVICE_EXTENSION)DeviceExtension);
+}
+
+static
+BOOLEAN
+NTAPI
 VblkHwResetBus(_In_ PVOID DeviceExtension, _In_ ULONG PathId)
 {
     UNREFERENCED_PARAMETER(PathId);
@@ -236,11 +266,12 @@ VblkHwAdapterControl(_In_ PVOID DeviceExtension,
         }
 
         case ScsiStopAdapter:
-            VblkStopDevice(Device);
+            StorPortSynchronizeAccess(Device, VblkStopSynchronized, NULL);
             return ScsiAdapterControlSuccess;
 
         case ScsiRestartAdapter:
-            return VblkStartDevice(Device) ? ScsiAdapterControlSuccess : ScsiAdapterControlUnsuccessful;
+            return StorPortSynchronizeAccess(Device, VblkStartSynchronized, NULL) ?
+                   ScsiAdapterControlSuccess : ScsiAdapterControlUnsuccessful;
 
         default:
             return ScsiAdapterControlUnsuccessful;

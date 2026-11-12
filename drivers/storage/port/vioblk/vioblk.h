@@ -117,6 +117,8 @@
 #define VBLK_DIRECT_MIN_REQUESTS                4U
 #define VBLK_RESET_TIMEOUT_US                   1000000
 
+#define VBLK_ADSENSE_SAVING_NOT_SUPPORTED       0x39
+
 #define VBLK_VENDOR_ID                          "VirtIO  "
 #define VBLK_PRODUCT_ID                         "Block Device    "
 #define VBLK_PRODUCT_REVISION                   "1.0 "
