@@ -279,18 +279,6 @@ BcmBtAllocateShared(
 
     if (Dev->BlockCount)
         return STATUS_SUCCESS;
-    {
-        PHYSICAL_ADDRESS Low, High, Boundary;
-        PVOID Probe;
-
-        Low.QuadPart = 0;
-        High.QuadPart = -1;
-        Boundary.QuadPart = 0;
-        Probe = MmAllocateContiguousMemorySpecifyCache(499712, Low, High, Boundary, MmNonCached);
-        DPRINT1("BCMBT: DIAG 499712-byte contiguous probe %p\n", Probe);
-        if (Probe)
-            MmFreeContiguousMemorySpecifyCache(Probe, 499712, MmNonCached);
-    }
     BcmBtConfigureRings(Dev);
     Status = BcmBtLayout(Dev);
     if (!NT_SUCCESS(Status))
