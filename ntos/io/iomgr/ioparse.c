@@ -597,7 +597,7 @@ IopSendCreateIrp(
     _In_opt_ PSECURITY_QUALITY_OF_SERVICE SecurityQos,
     _Out_ PIRP *CreatedIrp)
 {
-    PIO_SECURITY_CONTEXT SecurityContext;
+    IO_SECURITY_CONTEXT SecurityContext;
     PIO_STACK_LOCATION StackPtr;
     NTSTATUS Status;
     KEVENT Event;
@@ -607,23 +607,15 @@ IopSendCreateIrp(
 
     *CreatedIrp = NULL;
 
-    SecurityContext = ExAllocatePoolZero(NonPagedPool,
-                                         sizeof(IO_SECURITY_CONTEXT),
-                                         TAG_IO);
-    if (SecurityContext == NULL) return STATUS_INSUFFICIENT_RESOURCES;
-
-    SecurityContext->SecurityQos = SecurityQos;
-    SecurityContext->AccessState = AccessState;
-    SecurityContext->DesiredAccess = AccessState->RemainingDesiredAccess |
-                                     AccessState->PreviouslyGrantedAccess;
-    SecurityContext->FullCreateOptions = OpenPacket->CreateOptions;
+    RtlZeroMemory(&SecurityContext, sizeof(SecurityContext));
+    SecurityContext.SecurityQos = SecurityQos;
+    SecurityContext.AccessState = AccessState;
+    SecurityContext.DesiredAccess = AccessState->RemainingDesiredAccess |
+                                    AccessState->PreviouslyGrantedAccess;
+    SecurityContext.FullCreateOptions = OpenPacket->CreateOptions;
 
     Irp = IoAllocateIrp(DeviceObject->StackSize, FALSE);
-    if (Irp == NULL)
-    {
-        ExFreePoolWithTag(SecurityContext, TAG_IO);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
+    if (Irp == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
@@ -635,7 +627,6 @@ IopSendCreateIrp(
     Irp->AssociatedIrp.SystemBuffer = OpenPacket->EaBuffer;
     Irp->Tail.Overlay.Thread = PsGetCurrentThread();
     Irp->Tail.Overlay.OriginalFileObject = FileObject;
-    Irp->Tail.Overlay.DriverContext[0] = SecurityContext;
 
     /* The parameter list travels in this cell for as long as the create runs */
     Irp->UserBuffer = &OpenPacket->DriverCreateContext.ExtraCreateParameter;
@@ -669,7 +660,7 @@ IopSendCreateIrp(
     {
         case CreateFileTypeNone:
             StackPtr->MajorFunction = IRP_MJ_CREATE;
-            StackPtr->Parameters.Create.SecurityContext = SecurityContext;
+            StackPtr->Parameters.Create.SecurityContext = &SecurityContext;
             StackPtr->Parameters.Create.Options =
                 (OpenPacket->Disposition << 24) |
                 (OpenPacket->CreateOptions & 0x00FFFFFF);
@@ -681,7 +672,7 @@ IopSendCreateIrp(
 
         case CreateFileTypeNamedPipe:
             StackPtr->MajorFunction = IRP_MJ_CREATE_NAMED_PIPE;
-            StackPtr->Parameters.CreatePipe.SecurityContext = SecurityContext;
+            StackPtr->Parameters.CreatePipe.SecurityContext = &SecurityContext;
             StackPtr->Parameters.CreatePipe.Options =
                 (OpenPacket->Disposition << 24) |
                 (OpenPacket->CreateOptions & 0x00FFFFFF);
@@ -694,7 +685,7 @@ IopSendCreateIrp(
         case CreateFileTypeMailslot:
             StackPtr->MajorFunction = IRP_MJ_CREATE_MAILSLOT;
             StackPtr->Parameters.CreateMailslot.SecurityContext =
-                SecurityContext;
+                &SecurityContext;
             StackPtr->Parameters.CreateMailslot.Options =
                 (OpenPacket->Disposition << 24) |
                 (OpenPacket->CreateOptions & 0x00FFFFFF);
@@ -705,7 +696,6 @@ IopSendCreateIrp(
             break;
 
         default:
-            ExFreePoolWithTag(SecurityContext, TAG_IO);
             IoFreeIrp(Irp);
             return STATUS_INVALID_PARAMETER;
     }
@@ -826,12 +816,6 @@ IopCompleteCreate(
     NTSTATUS Status = DispatchStatus;
 
     PAGED_CODE();
-
-    if (Irp->Tail.Overlay.DriverContext[0] != NULL)
-    {
-        ExFreePoolWithTag(Irp->Tail.Overlay.DriverContext[0], TAG_IO);
-        Irp->Tail.Overlay.DriverContext[0] = NULL;
-    }
 
     OpenPacket->Information = Irp->IoStatus.Information;
 
