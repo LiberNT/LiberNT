@@ -239,6 +239,7 @@ TestDeleteWithoutWaiting(VOID)
     LARGE_INTEGER Timeout;
     PEX_TIMER Timer;
     NTSTATUS Status;
+    BOOLEAN Result;
 
     ExInitializeDeleteTimerParameters(&Parameters);
     Parameters.DeleteCallback = TimerDeleted;
@@ -247,8 +248,10 @@ TestDeleteWithoutWaiting(VOID)
     Timer = StartDeleteTest(NULL);
     if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
         return;
-    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 10, 0, NULL), FALSE);
-    ok_eq_bool(ExDeleteTimer(Timer, FALSE, FALSE, &Parameters), FALSE);
+    Result = ExSetTimer(Timer, -10LL * 1000 * 10, 0, NULL);
+    ok_eq_bool(Result, FALSE);
+    Result = ExDeleteTimer(Timer, FALSE, FALSE, &Parameters);
+    ok_eq_bool(Result, FALSE);
     Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(CallsBeforeDelete, 1L);
@@ -256,8 +259,10 @@ TestDeleteWithoutWaiting(VOID)
     Timer = StartDeleteTest(NULL);
     if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
         return;
-    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 1000 * 10, 0, NULL), FALSE);
-    ok_eq_bool(ExDeleteTimer(Timer, TRUE, FALSE, &Parameters), TRUE);
+    Result = ExSetTimer(Timer, -10LL * 1000 * 1000 * 10, 0, NULL);
+    ok_eq_bool(Result, FALSE);
+    Result = ExDeleteTimer(Timer, TRUE, FALSE, &Parameters);
+    ok_eq_bool(Result, TRUE);
     Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(CallsBeforeDelete, 0L);
@@ -265,7 +270,8 @@ TestDeleteWithoutWaiting(VOID)
     Timer = StartDeleteTest(&Parameters);
     if (skip(Timer != NULL, "ExAllocateTimer failed\n"))
         return;
-    ok_eq_bool(ExSetTimer(Timer, -10LL * 1000 * 10, 10LL * 1000 * 10, NULL), FALSE);
+    Result = ExSetTimer(Timer, -10LL * 1000 * 10, 10LL * 1000 * 10, NULL);
+    ok_eq_bool(Result, FALSE);
     Status = KeWaitForSingleObject(&TimerDeletedEvent, Executive, KernelMode, FALSE, &Timeout);
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok_eq_long(RefusedInCallback, 15L);
