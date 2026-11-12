@@ -25,6 +25,12 @@ KGUARDED_MUTEX PiNotifyTargetDeviceLock;
 
 static ULONGLONG PiNotifyTargetRegistrations;
 
+typedef struct _PI_NOTIFY_CALL
+{
+    LIST_ENTRY ListEntry;
+    PKTHREAD Thread;
+} PI_NOTIFY_CALL, *PPI_NOTIFY_CALL;
+
 typedef struct _IOP_ASYNC_TARGET_CHANGE
 {
     WORK_QUEUE_ITEM Item;
@@ -75,6 +81,53 @@ PiDereferenceNotifyEntry(
     if (Entry->Session != NULL) MmQuitNextSession(Entry->Session);
 
     ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
+}
+
+static
+BOOLEAN
+PiNotifyCallsElsewhere(
+    _In_ PIOP_PNP_NOTIFY_ENTRY Entry,
+    _In_opt_ PKTHREAD Thread)
+{
+    PLIST_ENTRY ListEntry;
+
+    for (ListEntry = Entry->Calls.Flink; ListEntry != &Entry->Calls; ListEntry = ListEntry->Flink)
+    {
+        if (CONTAINING_RECORD(ListEntry, PI_NOTIFY_CALL, ListEntry)->Thread != Thread) return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+PiEnterNotifyCall(
+    _Inout_ PIOP_PNP_NOTIFY_ENTRY Entry,
+    _Out_ PPI_NOTIFY_CALL Call)
+{
+    ASSERT(!Entry->Unregistered);
+
+    PiReferenceNotifyEntry(Entry);
+    Call->Thread = KeGetCurrentThread();
+    InsertTailList(&Entry->Calls, &Call->ListEntry);
+}
+
+static
+VOID
+PiLeaveNotifyCall(
+    _Inout_ PIOP_PNP_NOTIFY_ENTRY Entry,
+    _Inout_ PPI_NOTIFY_CALL Call)
+{
+    ASSERT(Call->Thread == KeGetCurrentThread());
+    ASSERT(Entry->ReferenceCount > 0);
+
+    RemoveEntryList(&Call->ListEntry);
+
+    if (Entry->CallsDone != NULL && !PiNotifyCallsElsewhere(Entry, Entry->Unregistering))
+    {
+        ASSERT(Entry->Unregistered);
+        KeSetEvent(Entry->CallsDone, IO_NO_INCREMENT, FALSE);
+    }
 }
 
 /* A routine a session driver registered runs inside that driver's session */
@@ -165,6 +218,7 @@ PiRunNotifyList(
 {
     PIOP_PNP_NOTIFY_ENTRY Entry;
     PLIST_ENTRY ListEntry;
+    PI_NOTIFY_CALL Call;
 
     PAGED_CODE();
 
@@ -194,7 +248,7 @@ PiRunNotifyList(
             continue;
         }
 
-        PiReferenceNotifyEntry(Entry);
+        PiEnterNotifyCall(Entry, &Call);
 
         KeReleaseGuardedMutex(Lock);
 
@@ -202,6 +256,7 @@ PiRunNotifyList(
 
         KeAcquireGuardedMutex(Lock);
 
+        PiLeaveNotifyCall(Entry, &Call);
         ListEntry = Entry->ListEntry.Flink;
         PiDereferenceNotifyEntry(Entry);
     }
@@ -275,6 +330,7 @@ PiRunTargetNotify(
     PLIST_ENTRY ListEntry;
     NTSTATUS Status = STATUS_SUCCESS;
     ULONGLONG Last;
+    PI_NOTIFY_CALL Call;
     PVOID Payload;
 
     PAGED_CODE();
@@ -324,13 +380,15 @@ PiRunTargetNotify(
             Notification.FileObject = Entry->FileObject;
         }
 
-        PiReferenceNotifyEntry(Entry);
+        PiEnterNotifyCall(Entry, &Call);
 
         KeReleaseGuardedMutex(&PiNotifyTargetDeviceLock);
 
         Status = PiInvokeNotifyEntry(Entry, Payload);
 
         KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
+
+        PiLeaveNotifyCall(Entry, &Call);
 
         if (StopOnFailure && !NT_SUCCESS(Status))
         {
@@ -452,6 +510,7 @@ IoRegisterPlugPlayNotification(
     Entry->Context = Context;
     Entry->DriverObject = DriverObject;
     Entry->ReferenceCount = 1;
+    InitializeListHead(&Entry->Calls);
 
     ObReferenceObject(DriverObject);
 
@@ -539,13 +598,14 @@ IoRegisterPlugPlayNotification(
     return STATUS_SUCCESS;
 }
 
+static
 NTSTATUS
-NTAPI
-IoUnregisterPlugPlayNotification(
-    _In_ PVOID NotificationEntry)
+PiUnregisterNotifyEntry(
+    _In_ PIOP_PNP_NOTIFY_ENTRY Entry,
+    _In_ BOOLEAN WaitForCalls)
 {
-    PIOP_PNP_NOTIFY_ENTRY Entry = NotificationEntry;
     PKGUARDED_MUTEX Lock;
+    KEVENT CallsDone;
 
     PAGED_CODE();
 
@@ -569,12 +629,34 @@ IoUnregisterPlugPlayNotification(
 
     KeAcquireGuardedMutex(Lock);
 
-    /* The registration's own reference goes; the entry leaves its list with the last one */
-    if (!Entry->Unregistered)
+    if (Entry->Unregistered)
     {
-        Entry->Unregistered = TRUE;
-        PiDereferenceNotifyEntry(Entry);
+        KeReleaseGuardedMutex(Lock);
+        return STATUS_SUCCESS;
     }
+
+    Entry->Unregistered = TRUE;
+
+    /* The callback the caller may be running in is the only one left once the routine returns */
+    if (WaitForCalls && PiNotifyCallsElsewhere(Entry, KeGetCurrentThread()))
+    {
+        ASSERT(Entry->CallsDone == NULL);
+
+        KeInitializeEvent(&CallsDone, NotificationEvent, FALSE);
+        Entry->CallsDone = &CallsDone;
+        Entry->Unregistering = KeGetCurrentThread();
+
+        KeReleaseGuardedMutex(Lock);
+        KeWaitForSingleObject(&CallsDone, Executive, KernelMode, FALSE, NULL);
+        KeAcquireGuardedMutex(Lock);
+
+        ASSERT(!PiNotifyCallsElsewhere(Entry, KeGetCurrentThread()));
+        Entry->CallsDone = NULL;
+        Entry->Unregistering = NULL;
+    }
+
+    /* The registration's own reference goes; the entry leaves its list with the last one */
+    PiDereferenceNotifyEntry(Entry);
 
     KeReleaseGuardedMutex(Lock);
 
@@ -583,10 +665,22 @@ IoUnregisterPlugPlayNotification(
 
 NTSTATUS
 NTAPI
+IoUnregisterPlugPlayNotification(
+    _In_ PVOID NotificationEntry)
+{
+    PAGED_CODE();
+
+    return PiUnregisterNotifyEntry(NotificationEntry, FALSE);
+}
+
+NTSTATUS
+NTAPI
 IoUnregisterPlugPlayNotificationEx(
     _In_ PVOID NotificationEntry)
 {
-    return IoUnregisterPlugPlayNotification(NotificationEntry);
+    PAGED_CODE();
+
+    return PiUnregisterNotifyEntry(NotificationEntry, TRUE);
 }
 
 NTSTATUS

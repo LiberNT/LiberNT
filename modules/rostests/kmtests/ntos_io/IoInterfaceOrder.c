@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, the instances of a device share the link named without their reference strings, and an alias keeps the reference string
+ * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, the instances of a device share the link named without their reference strings, an alias keeps the reference string, and IoUnregisterPlugPlayNotificationEx waits for a running notification
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -18,6 +18,7 @@ static const GUID TestInterface = {0x8f6d2a43, 0x61c4, 0x4bd8, {0x9a, 0x35, 0x2b
 static const GUID AliasInterface = {0x3b0e6c21, 0x9a47, 0x4f15, {0x8d, 0x2e, 0x6c, 0x1f, 0x0b, 0x7a, 0x9e, 0x52}};
 static const DEVPROPKEY TestProperty = {{0x6a1d3c58, 0x2e4f, 0x4b91, {0x8c, 0x07, 0x5d, 0x3e, 0x9a, 0x41, 0xf2, 0x6b}}, 2};
 static const GUID NotifyInterface = {0x9c4e1b27, 0x5d83, 0x4a6f, {0xb1, 0x2e, 0x7f, 0x05, 0xc9, 0x3a, 0x68, 0xd4}};
+static const GUID UnregisterInterface = {0x2d7f4a90, 0x13b6, 0x4c5e, {0xa8, 0x41, 0x6e, 0x2c, 0x9b, 0x07, 0xf3, 0x5d}};
 
 typedef struct _NOTIFY_STATE
 {
@@ -59,6 +60,181 @@ InterfaceNotified(
     InterlockedDecrement(&State->Depth);
     if (State->Count == RTL_NUMBER_OF(State->Events)) KeSetEvent(&State->Done, IO_NO_INCREMENT, FALSE);
     return STATUS_SUCCESS;
+}
+
+typedef struct _UNREGISTER_STATE
+{
+    PUNICODE_STRING Link;
+    PVOID Entry;
+    KAFFINITY Affinity;
+    KEVENT Entered;
+    KEVENT Release;
+    KEVENT Calling;
+    volatile LONG Finished;
+    LONG SawFinished;
+    NTSTATUS Unregistered;
+    NTSTATUS Enabled;
+} UNREGISTER_STATE, *PUNREGISTER_STATE;
+
+static
+NTSTATUS
+NTAPI
+UnregisterNotified(
+    _In_ PVOID NotificationStructure,
+    _Inout_opt_ PVOID Context)
+{
+    PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
+    PUNREGISTER_STATE State = Context;
+    LARGE_INTEGER Timeout;
+
+    if (State == NULL || !IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL) ||
+        !RtlEqualUnicodeString(Notification->SymbolicLinkName, State->Link, TRUE))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    KeSetEvent(&State->Entered, IO_NO_INCREMENT, FALSE);
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    KeWaitForSingleObject(&State->Release, Executive, KernelMode, FALSE, &Timeout);
+    InterlockedExchange(&State->Finished, TRUE);
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+NTAPI
+EnableInterfaceThread(
+    _In_ PVOID Context)
+{
+    PUNREGISTER_STATE State = Context;
+
+    State->Enabled = IoSetDeviceInterfaceState(State->Link, TRUE);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* Runs above the starting thread on its processor, so without a wait inside the call it returns before the callback is let go */
+static
+VOID
+NTAPI
+UnregisterThread(
+    _In_ PVOID Context)
+{
+    PUNREGISTER_STATE State = Context;
+
+    KeSetSystemAffinityThread(State->Affinity);
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY);
+    KeSetEvent(&State->Calling, IO_NO_INCREMENT, FALSE);
+    State->Unregistered = IoUnregisterPlugPlayNotificationEx(State->Entry);
+    State->SawFinished = InterlockedCompareExchange(&State->Finished, 0, 0);
+    KeRevertToUserAffinityThread();
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+static
+PKTHREAD
+StartThread(
+    _In_ PKSTART_ROUTINE Routine,
+    _In_ PVOID Context)
+{
+    PKTHREAD Thread = NULL;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, Routine, Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return NULL;
+
+    Status = ObReferenceObjectByHandle(Handle, SYNCHRONIZE, *PsThreadType, KernelMode, (PVOID *)&Thread, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ZwClose(Handle);
+    return NT_SUCCESS(Status) ? Thread : NULL;
+}
+
+static
+BOOLEAN
+JoinThread(
+    _In_opt_ PKTHREAD Thread)
+{
+    LARGE_INTEGER Timeout;
+    NTSTATUS Status;
+
+    if (Thread == NULL) return TRUE;
+
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    Status = KeWaitForSingleObject(Thread, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ObDereferenceObject(Thread);
+    return Status == STATUS_SUCCESS;
+}
+
+/* IoUnregisterPlugPlayNotificationEx returns once the callback another thread is running has returned */
+static
+VOID
+CheckUnregisterWaits(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    UNICODE_STRING Reference = RTL_CONSTANT_STRING(L"U");
+    UNICODE_STRING Link = { 0 };
+    PUNREGISTER_STATE State;
+    PKTHREAD Enabler, Unregisterer = NULL;
+    LARGE_INTEGER Timeout;
+    BOOLEAN Joined;
+    NTSTATUS Status;
+
+    State = ExAllocatePoolZero(NonPagedPool, sizeof(*State), 'rUmK');
+    ok(State != NULL, "no memory for the state\n");
+    if (State == NULL) return;
+
+    KeInitializeEvent(&State->Entered, NotificationEvent, FALSE);
+    KeInitializeEvent(&State->Release, NotificationEvent, FALSE);
+    KeInitializeEvent(&State->Calling, NotificationEvent, FALSE);
+    State->Link = &Link;
+    State->Unregistered = STATUS_PENDING;
+
+    Status = IoRegisterDeviceInterface(Pdo, &UnregisterInterface, &Reference, &Link);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange, 0, (PVOID)&UnregisterInterface,
+                                                KmtDriverObject, UnregisterNotified, State, &State->Entry);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeUnicodeString(&Link);
+        ExFreePoolWithTag(State, 'rUmK');
+        return;
+    }
+
+    KeSetSystemAffinityThread((KAFFINITY)1);
+    State->Affinity = (KAFFINITY)1;
+
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    Enabler = StartThread(EnableInterfaceThread, State);
+    ok_once(KeWaitForSingleObject(&State->Entered, Executive, KernelMode, FALSE, &Timeout), STATUS_SUCCESS);
+    if (Enabler != NULL) Unregisterer = StartThread(UnregisterThread, State);
+    if (Unregisterer != NULL)
+        ok_once(KeWaitForSingleObject(&State->Calling, Executive, KernelMode, FALSE, &Timeout), STATUS_SUCCESS);
+    KeSetEvent(&State->Release, IO_NO_INCREMENT, FALSE);
+
+    Joined = JoinThread(Unregisterer);
+    Joined = JoinThread(Enabler) && Joined;
+    KeRevertToUserAffinityThread();
+
+    if (Enabler != NULL) ok_eq_hex(State->Enabled, STATUS_SUCCESS);
+    if (Unregisterer != NULL)
+    {
+        ok_eq_hex(State->Unregistered, STATUS_SUCCESS);
+        ok(State->SawFinished, "IoUnregisterPlugPlayNotificationEx returned while the callback still ran\n");
+    }
+    else
+    {
+        IoUnregisterPlugPlayNotificationEx(State->Entry);
+    }
+
+    ok_once(IoSetDeviceInterfaceState(&Link, FALSE), STATUS_SUCCESS);
+    RtlFreeUnicodeString(&Link);
+    if (Joined) ExFreePoolWithTag(State, 'rUmK');
 }
 
 static
@@ -356,6 +532,8 @@ START_TEST(IoInterfaceOrderCheck)
            "the notifications did not come as arrival, removal, arrival, removal\n");
         IoUnregisterPlugPlayNotification(NotifyEntry);
     }
+
+    CheckUnregisterWaits(Pdo);
 
     RtlFreeUnicodeString(&First);
     RtlFreeUnicodeString(&Second);
