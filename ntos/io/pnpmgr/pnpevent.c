@@ -621,6 +621,7 @@ NtPlugPlayControl(
                 PiReportVetoName(Data, &RemoveData.VetoName, PreviousMode);
             }
 
+            PiReleaseQueryRemoveData(&RemoveData);
             ObDereferenceObject(DeviceObject);
             break;
         }

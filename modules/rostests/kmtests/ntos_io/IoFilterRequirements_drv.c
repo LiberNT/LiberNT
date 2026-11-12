@@ -6,6 +6,8 @@
  */
 
 #include <ntifs.h>
+#include <initguid.h>
+#include <wdmguid.h>
 
 #define TEST_TAG 'qRFK'
 #define TEST_REPORTED_MAGIC 0x4B465251
@@ -627,10 +629,152 @@ static NTSTATUS NTAPI TestCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 }
 
 /* Like a file system on its volume, the child's function driver opens and closes a stream file on its device */
+/* A holder of the child registers for target device change on its handle, then refuses the removal or closes the handle */
+#define HOLD_REFUSE 1
+#define HOLD_CLOSE 2
+#define HOLD_REREGISTER 4
+static HANDLE HoldHandle;
+static PFILE_OBJECT HoldFile;
+static PVOID HoldEntry;
+static ULONG HoldMode;
+static ULONG HoldQueryRemoves;
+static ULONG HoldCancels;
+static ULONG HoldCompletes;
+static ULONG HoldReregistrations;
+static PDRIVER_OBJECT HoldDriver;
+static WCHAR HoldNameBuffer[128];
+static UNICODE_STRING HoldName;
+
+static VOID HoldClose(VOID)
+{
+    if (HoldFile != NULL)
+        ObDereferenceObject(HoldFile);
+    HoldFile = NULL;
+    if (HoldHandle != NULL)
+        ZwClose(HoldHandle);
+    HoldHandle = NULL;
+}
+
+static NTSTATUS NTAPI HoldNotify(PVOID NotificationStructure, PVOID Context);
+
+static NTSTATUS HoldOpen(VOID)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&Attributes, &HoldName, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwCreateFile(&HoldHandle, FILE_READ_ATTRIBUTES, &Attributes, &Iosb, NULL, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                          FILE_OPEN, 0, NULL, 0);
+    if (!NT_SUCCESS(Status))
+    {
+        HoldHandle = NULL;
+        return Status;
+    }
+
+    Status = ObReferenceObjectByHandle(HoldHandle, 0, *IoFileObjectType, KernelMode, (PVOID *)&HoldFile, NULL);
+    if (NT_SUCCESS(Status))
+        Status = IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange, 0, HoldFile, HoldDriver, HoldNotify, NULL,
+                                                &HoldEntry);
+    if (!NT_SUCCESS(Status))
+    {
+        HoldEntry = NULL;
+        HoldClose();
+    }
+    return Status;
+}
+
+/* The documented handler of a cancelled removal: unregister, reopen the device and register on the new handle */
+static VOID HoldReregister(VOID)
+{
+    IoUnregisterPlugPlayNotification(HoldEntry);
+    HoldEntry = NULL;
+    HoldClose();
+    Record(L"HoldReregistered", NT_SUCCESS(HoldOpen()));
+}
+
+static NTSTATUS NTAPI HoldNotify(PVOID NotificationStructure, PVOID Context)
+{
+    PTARGET_DEVICE_REMOVAL_NOTIFICATION Notification = NotificationStructure;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (IsEqualGUID(&Notification->Event, &GUID_TARGET_DEVICE_QUERY_REMOVE))
+    {
+        Record(L"HoldQueryRemoves", ++HoldQueryRemoves);
+        if (HoldMode == HOLD_REFUSE || HoldMode == HOLD_REREGISTER)
+            return STATUS_UNSUCCESSFUL;
+        HoldClose();
+    }
+    else if (IsEqualGUID(&Notification->Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED))
+    {
+        Record(L"HoldCancels", ++HoldCancels);
+        /* A round that also calls the new registration would loop; three are enough to tell */
+        if (HoldMode == HOLD_REREGISTER && HoldReregistrations++ < 3)
+            HoldReregister();
+    }
+    else if (IsEqualGUID(&Notification->Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE))
+    {
+        Record(L"HoldCompletes", ++HoldCompletes);
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS HoldChild(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extension, ULONG Mode)
+{
+    UCHAR Buffer[sizeof(OBJECT_NAME_INFORMATION) + 128 * sizeof(WCHAR)];
+    POBJECT_NAME_INFORMATION Name = (POBJECT_NAME_INFORMATION)Buffer;
+    ULONG Length;
+    NTSTATUS Status;
+
+    if (Extension->Kind != TestBusFdo || Extension->Child == NULL || HoldEntry != NULL)
+        return STATUS_INVALID_DEVICE_REQUEST;
+
+    Status = ObQueryNameString(Extension->Child, Name, sizeof(Buffer), &Length);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Name->Name.Length > sizeof(HoldNameBuffer))
+        return STATUS_NAME_TOO_LONG;
+
+    RtlCopyMemory(HoldNameBuffer, Name->Name.Buffer, Name->Name.Length);
+    HoldName.Buffer = HoldNameBuffer;
+    HoldName.Length = Name->Name.Length;
+    HoldName.MaximumLength = sizeof(HoldNameBuffer);
+    HoldDriver = DeviceObject->DriverObject;
+    HoldMode = Mode;
+    HoldReregistrations = 0;
+
+    return HoldOpen();
+}
+
+static VOID ReleaseChild(VOID)
+{
+    if (HoldEntry != NULL)
+        IoUnregisterPlugPlayNotification(HoldEntry);
+    HoldEntry = NULL;
+    HoldClose();
+}
+
 static NTSTATUS NTAPI TestDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     PTEST_EXTENSION Extension = DeviceObject->DeviceExtension;
+    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PFILE_OBJECT Stream = NULL;
+
+    switch (Stack->Parameters.DeviceIoControl.IoControlCode)
+    {
+        case CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS):
+            if (Stack->Parameters.DeviceIoControl.InputBufferLength < sizeof(ULONG))
+                return Complete(Irp, STATUS_INVALID_PARAMETER);
+            return Complete(Irp, HoldChild(DeviceObject, Extension, *(PULONG)Irp->AssociatedIrp.SystemBuffer));
+
+        case CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS):
+            ReleaseChild();
+            return Complete(Irp, STATUS_SUCCESS);
+
+        default:
+            break;
+    }
 
     if (Extension->Kind == TestChildFdo)
         Stream = IoCreateStreamFileObjectLite(NULL, Extension->Pdo);

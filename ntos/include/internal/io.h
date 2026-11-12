@@ -1849,12 +1849,17 @@ typedef struct _PI_QUERY_REMOVE_DATA
 {
     PNP_VETO_TYPE VetoType;
     UNICODE_STRING VetoName;
+    PVOID VetoObject;
 } PI_QUERY_REMOVE_DATA, *PPI_QUERY_REMOVE_DATA;
 
 NTSTATUS
 PiQueryRemoveDevice(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Out_ PPI_QUERY_REMOVE_DATA RemoveData);
+
+VOID
+PiReleaseQueryRemoveData(
+    _Inout_ PPI_QUERY_REMOVE_DATA RemoveData);
 
 VOID
 PiQueueDeviceActionEx(
@@ -1891,6 +1896,12 @@ PiNotifyTargetDeviceChange(
     _In_ LPCGUID Event,
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_opt_ PTARGET_DEVICE_CUSTOM_NOTIFICATION CustomNotification);
+
+CODE_SEG("PAGE")
+NTSTATUS
+PiNotifyTargetDeviceQueryRemove(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PDRIVER_OBJECT *VetoDriver);
 
 //
 // PnP IRPs

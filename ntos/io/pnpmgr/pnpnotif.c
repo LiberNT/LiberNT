@@ -23,6 +23,8 @@ KGUARDED_MUTEX PiNotifyTargetDeviceLock;
 
 /* PRIVATE DATA ***************************************************************/
 
+static ULONGLONG PiNotifyTargetRegistrations;
+
 typedef struct _IOP_ASYNC_TARGET_CHANGE
 {
     WORK_QUEUE_ITEM Item;
@@ -68,7 +70,6 @@ PiDereferenceNotifyEntry(
     ASSERT(Entry->Unregistered);
     RemoveEntryList(&Entry->ListEntry);
 
-    if (Entry->FileObject != NULL) ObDereferenceObject(Entry->FileObject);
     if (Entry->DeviceObject != NULL) ObDereferenceObject(Entry->DeviceObject);
     if (Entry->DriverObject != NULL) ObDereferenceObject(Entry->DriverObject);
     if (Entry->Session != NULL) MmQuitNextSession(Entry->Session);
@@ -78,7 +79,7 @@ PiDereferenceNotifyEntry(
 
 /* A routine a session driver registered runs inside that driver's session */
 static
-VOID
+NTSTATUS
 PiInvokeNotifyEntry(
     _In_ PIOP_PNP_NOTIFY_ENTRY Entry,
     _In_ PVOID NotificationStructure)
@@ -91,8 +92,7 @@ PiInvokeNotifyEntry(
     if (Entry->Session == NULL)
     {
         ASSERT(!MmIsSessionAddress((PVOID)Entry->CallbackRoutine));
-        Entry->CallbackRoutine(NotificationStructure, Entry->Context);
-        return;
+        return Entry->CallbackRoutine(NotificationStructure, Entry->Context);
     }
 
     Status = MmAttachSession(Entry->Session, &ApcState);
@@ -100,12 +100,14 @@ PiInvokeNotifyEntry(
     {
         /* The session is ending, and its drivers with it */
         DPRINT1("PnP: notification %p skipped, its session is going (%lx)\n", Entry, Status);
-        return;
+        return STATUS_SUCCESS;
     }
 
-    Entry->CallbackRoutine(NotificationStructure, Entry->Context);
+    Status = Entry->CallbackRoutine(NotificationStructure, Entry->Context);
 
     MmDetachSession(Entry->Session, &ApcState);
+
+    return Status;
 }
 
 static
@@ -257,23 +259,31 @@ PiNotifyHardwareProfileChange(
                     NULL);
 }
 
-CODE_SEG("PAGE")
-VOID
-PiNotifyTargetDeviceChange(
+/* Calls the registrants of a device in turn; with StopOnFailure, the first one that fails ends the round and is named */
+static
+NTSTATUS
+PiRunTargetNotify(
     _In_ LPCGUID Event,
     _In_ PDEVICE_OBJECT DeviceObject,
-    _In_opt_ PTARGET_DEVICE_CUSTOM_NOTIFICATION CustomNotification)
+    _In_opt_ PTARGET_DEVICE_CUSTOM_NOTIFICATION CustomNotification,
+    _In_ BOOLEAN StopOnFailure,
+    _Out_opt_ PDRIVER_OBJECT *VetoDriver)
 {
     TARGET_DEVICE_REMOVAL_NOTIFICATION Notification;
     PIOP_PNP_NOTIFY_ENTRY Entry;
     PDEVICE_NODE DeviceNode;
     PLIST_ENTRY ListEntry;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONGLONG Last;
     PVOID Payload;
 
     PAGED_CODE();
+    ASSERT(!StopOnFailure || VetoDriver != NULL);
+
+    if (VetoDriver != NULL) *VetoDriver = NULL;
 
     DeviceNode = IopGetDeviceNode(DeviceObject);
-    if (DeviceNode == NULL) return;
+    if (DeviceNode == NULL) return STATUS_SUCCESS;
 
     if (CustomNotification != NULL)
     {
@@ -292,6 +302,8 @@ PiNotifyTargetDeviceChange(
 
     KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
 
+    Last = PiNotifyTargetRegistrations;
+
     ListEntry = DeviceNode->TargetDeviceNotify.Flink;
     while (ListEntry != &DeviceNode->TargetDeviceNotify)
     {
@@ -300,7 +312,8 @@ PiNotifyTargetDeviceChange(
                                   ListEntry);
         ListEntry = ListEntry->Flink;
 
-        if (Entry->Unregistered) continue;
+        /* A registration made during the round, as a cancelled removal's handler makes one, waits for the next round */
+        if (Entry->Unregistered || Entry->Registration > Last) continue;
 
         if (CustomNotification != NULL)
         {
@@ -315,15 +328,50 @@ PiNotifyTargetDeviceChange(
 
         KeReleaseGuardedMutex(&PiNotifyTargetDeviceLock);
 
-        PiInvokeNotifyEntry(Entry, Payload);
+        Status = PiInvokeNotifyEntry(Entry, Payload);
 
         KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
 
+        if (StopOnFailure && !NT_SUCCESS(Status))
+        {
+            ObReferenceObject(Entry->DriverObject);
+            *VetoDriver = Entry->DriverObject;
+            PiDereferenceNotifyEntry(Entry);
+            break;
+        }
+
+        Status = STATUS_SUCCESS;
         ListEntry = Entry->ListEntry.Flink;
         PiDereferenceNotifyEntry(Entry);
     }
 
     KeReleaseGuardedMutex(&PiNotifyTargetDeviceLock);
+
+    return Status;
+}
+
+CODE_SEG("PAGE")
+VOID
+PiNotifyTargetDeviceChange(
+    _In_ LPCGUID Event,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PTARGET_DEVICE_CUSTOM_NOTIFICATION CustomNotification)
+{
+    PAGED_CODE();
+
+    PiRunTargetNotify(Event, DeviceObject, CustomNotification, FALSE, NULL);
+}
+
+/* The registrants are asked before the drivers; the first one that fails keeps the device */
+CODE_SEG("PAGE")
+NTSTATUS
+PiNotifyTargetDeviceQueryRemove(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PDRIVER_OBJECT *VetoDriver)
+{
+    PAGED_CODE();
+
+    return PiRunTargetNotify(&GUID_TARGET_DEVICE_QUERY_REMOVE, DeviceObject, NULL, TRUE, VetoDriver);
 }
 
 VOID
@@ -432,14 +480,11 @@ IoRegisterPlugPlayNotification(
                 return STATUS_INVALID_PARAMETER;
             }
 
+            /* The PnP manager holds no reference on the file object (IoRegisterPlugPlayNotification documentation) */
             Entry->FileObject = EventCategoryData;
-            ObReferenceObject(Entry->FileObject);
 
-            DeviceNode = IopGetDeviceNode(
-                IoGetRelatedDeviceObject(Entry->FileObject));
-            if (DeviceNode == NULL)
+            if (!NT_SUCCESS(IopGetRelatedTargetDevice(Entry->FileObject, &DeviceNode)))
             {
-                ObDereferenceObject(Entry->FileObject);
                 ObDereferenceObject(DriverObject);
                 ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
                 return STATUS_INVALID_DEVICE_REQUEST;
@@ -451,13 +496,13 @@ IoRegisterPlugPlayNotification(
             if (!NT_SUCCESS(PiBindNotifySession(Entry)))
             {
                 ObDereferenceObject(Entry->DeviceObject);
-                ObDereferenceObject(Entry->FileObject);
                 ObDereferenceObject(DriverObject);
                 ExFreePoolWithTag(Entry, TAG_PNP_NOTIFY);
                 return STATUS_INVALID_PARAMETER;
             }
 
             KeAcquireGuardedMutex(&PiNotifyTargetDeviceLock);
+            Entry->Registration = ++PiNotifyTargetRegistrations;
             InsertTailList(&DeviceNode->TargetDeviceNotify,
                            &Entry->ListEntry);
             KeReleaseGuardedMutex(&PiNotifyTargetDeviceLock);

@@ -481,42 +481,215 @@ IopQueryDeviceCapabilities(
     return STATUS_SUCCESS;
 }
 
+#define PI_REMOVAL_NOTIFIED 0x01
+#define PI_REMOVAL_QUERIED  0x02
+
+/* A device removed already, or waiting for its last close after a surprise removal, is asked nothing */
+static
+BOOLEAN
+PiIsQueryRemoveTarget(
+    _In_ PDEVICE_NODE Node)
+{
+    return Node->State != DeviceNodeRemoved &&
+           Node->State != DeviceNodeRemovePendingCloses &&
+           Node->State != DeviceNodeDeletePendingCloses &&
+           Node->State != DeviceNodeDeleted;
+}
+
+/* The devices a removal reaches: the device and its descendants, children before their parents */
+static
 NTSTATUS
-PiQueryRemoveDevice(
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _Out_ PPI_QUERY_REMOVE_DATA RemoveData)
+PiCollectRemovalNodes(
+    _In_ PDEVICE_NODE Root,
+    _Outptr_result_maybenull_ PDEVICE_NODE **Nodes,
+    _Out_ PULONG Count)
+{
+    PDEVICE_NODE *Collected = NULL;
+    PDEVICE_NODE Node;
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONG Total = 0;
+    ULONG Index = 0;
+    ULONG Pass;
+
+    PAGED_CODE();
+
+    *Nodes = NULL;
+    *Count = 0;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&IopDeviceTreeResource, TRUE);
+
+    for (Pass = 0; Pass < 2 && NT_SUCCESS(Status); Pass++)
+    {
+        Index = 0;
+        for (Node = Root; Node->Child != NULL; Node = Node->Child);
+
+        for (;;)
+        {
+            /* States change under the tree lock, not the resource: the second pass keeps to what the first one counted */
+            if (PiIsQueryRemoveTarget(Node) && (Collected == NULL || Index < Total))
+            {
+                if (Collected != NULL)
+                {
+                    ObReferenceObject(Node->PhysicalDeviceObject);
+                    Collected[Index] = Node;
+                }
+                Index++;
+            }
+
+            if (Node == Root) break;
+
+            if (Node->Sibling != NULL)
+            {
+                for (Node = Node->Sibling; Node->Child != NULL; Node = Node->Child);
+            }
+            else
+            {
+                Node = Node->Parent;
+            }
+        }
+
+        if (Pass == 0)
+        {
+            Total = Index;
+            if (Total == 0) break;
+
+            Collected = ExAllocatePoolWithTag(PagedPool, Total * sizeof(*Collected), TAG_IO);
+            if (Collected == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
+
+    if (Collected != NULL && Index == 0)
+    {
+        ExFreePoolWithTag(Collected, TAG_IO);
+        Collected = NULL;
+    }
+
+    if (Collected != NULL)
+    {
+        ASSERT(Index <= Total);
+        *Nodes = Collected;
+        *Count = Index;
+    }
+
+    return Status;
+}
+
+static
+VOID
+PiSendQueryRemoveIrp(
+    _In_ PDEVICE_NODE Node,
+    _In_ UCHAR MinorFunction,
+    _Out_opt_ PNTSTATUS Result)
 {
     IO_STACK_LOCATION StackLocation;
-    PDEVICE_NODE DeviceNode;
     PVOID Information = NULL;
     NTSTATUS Status;
 
     PAGED_CODE();
 
+    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+    StackLocation.MajorFunction = IRP_MJ_PNP;
+    StackLocation.MinorFunction = MinorFunction;
+
+    Status = IopSynchronousCall(Node->PhysicalDeviceObject, &StackLocation, &Information);
+    if (Result != NULL) *Result = Status;
+}
+
+/* Each device of the subtree, children first, asks its target registrants, then its drivers; a refusal puts back what was reached */
+NTSTATUS
+PiQueryRemoveDevice(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Out_ PPI_QUERY_REMOVE_DATA RemoveData)
+{
+    PDRIVER_OBJECT VetoDriver = NULL;
+    PDEVICE_NODE *Nodes = NULL;
+    PDEVICE_NODE DeviceNode;
+    PDEVICE_NODE Node;
+    PUCHAR Reached = NULL;
+    NTSTATUS Status;
+    ULONG Count = 0;
+    ULONG Index;
+    ULONG Undo;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(RemoveData, sizeof(*RemoveData));
     RemoveData->VetoType = PNP_VetoTypeUnknown;
-    RtlInitEmptyUnicodeString(&RemoveData->VetoName, NULL, 0);
-
-    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
-
-    StackLocation.MajorFunction = IRP_MJ_PNP;
-    StackLocation.MinorFunction = IRP_MN_QUERY_REMOVE_DEVICE;
-
-    Status = IopSynchronousCall(DeviceObject, &StackLocation, &Information);
-    if (NT_SUCCESS(Status)) return STATUS_SUCCESS;
-
-    /* Whoever answered the query keeps the device: everything the query
-     * reached is told to put it back the way it was */
-    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
-    StackLocation.MajorFunction = IRP_MJ_PNP;
-    StackLocation.MinorFunction = IRP_MN_CANCEL_REMOVE_DEVICE;
-    IopSynchronousCall(DeviceObject, &StackLocation, &Information);
-
-    RemoveData->VetoType = PNP_VetoDevice;
 
     DeviceNode = IopGetDeviceNode(DeviceObject);
-    if (DeviceNode != NULL) RemoveData->VetoName = DeviceNode->InstancePath;
+    if (DeviceNode == NULL) return STATUS_INVALID_DEVICE_REQUEST;
 
-    return STATUS_PLUGPLAY_QUERY_VETOED;
+    Status = PiCollectRemovalNodes(DeviceNode, &Nodes, &Count);
+    if (!NT_SUCCESS(Status) || Count == 0) return Status;
+
+    Reached = ExAllocatePoolZero(PagedPool, Count, TAG_IO);
+    if (Reached == NULL) Status = STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Index = 0; NT_SUCCESS(Status) && Index < Count; Index++)
+    {
+        Node = Nodes[Index];
+
+        Reached[Index] |= PI_REMOVAL_NOTIFIED;
+        Status = PiNotifyTargetDeviceQueryRemove(Node->PhysicalDeviceObject, &VetoDriver);
+        if (!NT_SUCCESS(Status))
+        {
+            ASSERT(VetoDriver != NULL);
+            RemoveData->VetoType = PNP_VetoDriver;
+            RemoveData->VetoName = VetoDriver->DriverName;
+            RemoveData->VetoObject = VetoDriver;
+            break;
+        }
+
+        /* A query that failed reached the drivers that answered it: they are told to put the device back too */
+        Reached[Index] |= PI_REMOVAL_QUERIED;
+        PiSendQueryRemoveIrp(Node, IRP_MN_QUERY_REMOVE_DEVICE, &Status);
+        if (!NT_SUCCESS(Status))
+        {
+            ObReferenceObject(Node->PhysicalDeviceObject);
+            RemoveData->VetoType = PNP_VetoDevice;
+            RemoveData->VetoName = Node->InstancePath;
+            RemoveData->VetoObject = Node->PhysicalDeviceObject;
+            break;
+        }
+    }
+
+    if (!NT_SUCCESS(Status) && Reached != NULL)
+    {
+        for (Undo = min(Index + 1, Count); Undo-- > 0;)
+        {
+            Node = Nodes[Undo];
+
+            if (Reached[Undo] & PI_REMOVAL_QUERIED)
+                PiSendQueryRemoveIrp(Node, IRP_MN_CANCEL_REMOVE_DEVICE, NULL);
+
+            if (Reached[Undo] & PI_REMOVAL_NOTIFIED)
+                PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_CANCELLED, Node->PhysicalDeviceObject, NULL);
+        }
+
+        if (RemoveData->VetoType != PNP_VetoTypeUnknown) Status = STATUS_PLUGPLAY_QUERY_VETOED;
+    }
+
+    for (Index = 0; Index < Count; Index++) ObDereferenceObject(Nodes[Index]->PhysicalDeviceObject);
+
+    if (Reached != NULL) ExFreePoolWithTag(Reached, TAG_IO);
+    ExFreePoolWithTag(Nodes, TAG_IO);
+
+    return Status;
+}
+
+/* What a query-remove holds to name its veto goes once the name has been reported */
+VOID
+PiReleaseQueryRemoveData(
+    _Inout_ PPI_QUERY_REMOVE_DATA RemoveData)
+{
+    PAGED_CODE();
+
+    if (RemoveData->VetoObject != NULL) ObDereferenceObject(RemoveData->VetoObject);
+    RtlZeroMemory(RemoveData, sizeof(*RemoveData));
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/

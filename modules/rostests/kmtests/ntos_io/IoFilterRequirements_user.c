@@ -38,7 +38,8 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
                                  L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart",
-                                 L"DriverUnloaded", L"HoldEntry", L"EntryHeld", L"SlowAddDevice", L"AddDeviceEntered" };
+                                 L"DriverUnloaded", L"HoldEntry", L"EntryHeld", L"SlowAddDevice", L"AddDeviceEntered",
+                                 L"HoldQueryRemoves", L"HoldCancels", L"HoldCompletes", L"HoldReregistered" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -584,6 +585,67 @@ static VOID CheckFailedStack(DEVINST Bus)
     ok_once(LiveStacks(), 1UL);
 }
 
+#define IOCTL_HOLD_CHILD CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_RELEASE_CHILD CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+/* A driver registered for target device change on the child is asked before the child's removal: refusing keeps the
+ * child and tells it the removal is cancelled; closing its handle lets the child go and tells it the removal completes */
+static VOID CheckTargetRemoval(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DWORD Mode, Returned, Value = 0;
+    DEVINST Child;
+    HANDLE File;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child\n");
+        return;
+    }
+    File = OpenDevice(Bus, 0);
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    Mode = 1;
+    ok(DeviceIoControl(File, IOCTL_HOLD_CHILD, &Mode, sizeof(Mode), NULL, 0, &Returned, NULL),
+       "The holder did not register on the child: %lu\n", GetLastError());
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_REMOVE_VETOED);
+    ok(ChildStarted(Bus, 0), "The child went although its holder refused\n");
+    ok(ReadValue(L"HoldQueryRemoves", &Value) && Value == 1, "The holder was not asked (%lu)\n", Value);
+    ok(ReadValue(L"HoldCancels", &Value) && Value == 1, "The holder did not hear the removal was cancelled (%lu)\n", Value);
+    ok(DeviceIoControl(File, IOCTL_RELEASE_CHILD, NULL, 0, NULL, 0, &Returned, NULL), "Release failed: %lu\n", GetLastError());
+
+    /* A holder that registers again when the removal is cancelled is told once; its new registration hears the next query */
+    Mode = 4;
+    ok(DeviceIoControl(File, IOCTL_HOLD_CHILD, &Mode, sizeof(Mode), NULL, 0, &Returned, NULL),
+       "The holder did not register on the child: %lu\n", GetLastError());
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_REMOVE_VETOED);
+    ok(ReadValue(L"HoldCancels", &Value) && Value == 2, "The cancelled removal reached the holder %lu times\n", Value - 1);
+    ok(ReadValue(L"HoldReregistered", &Value) && Value == 1, "The holder did not register again (%lu)\n", Value);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_REMOVE_VETOED);
+    ok(ReadValue(L"HoldQueryRemoves", &Value) && Value == 3, "The new registration was not asked (%lu)\n", Value);
+    ok(ReadValue(L"HoldCancels", &Value) && Value == 3, "The second cancelled removal reached the holder %lu times\n", Value - 2);
+    ok(ChildStarted(Bus, 0), "The child went although its holder refused\n");
+    ok(DeviceIoControl(File, IOCTL_RELEASE_CHILD, NULL, 0, NULL, 0, &Returned, NULL), "Release failed: %lu\n", GetLastError());
+
+    Mode = 2;
+    ok(DeviceIoControl(File, IOCTL_HOLD_CHILD, &Mode, sizeof(Mode), NULL, 0, &Returned, NULL),
+       "The holder did not register on the child: %lu\n", GetLastError());
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok(ReadValue(L"HoldQueryRemoves", &Value) && Value == 4, "The holder was not asked again (%lu)\n", Value);
+    ok(ReadValue(L"HoldCompletes", &Value) && Value == 1, "The holder did not hear the removal completed (%lu)\n", Value);
+    ok(DeviceIoControl(File, IOCTL_RELEASE_CHILD, NULL, 0, NULL, 0, &Returned, NULL), "Release failed: %lu\n", GetLastError());
+
+    CloseHandle(File);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+}
+
 static VOID RestartChild(DEVINST Bus)
 {
     WCHAR VetoName[MAX_PATH];
@@ -872,6 +934,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckDeviceSecurity(Device->DevInst);
         CheckEarlySecurity(Device->DevInst);
         CheckFailedStack(Device->DevInst);
+        CheckTargetRemoval(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);

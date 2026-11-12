@@ -61,6 +61,7 @@ typedef struct _IOP_PNP_NOTIFY_ENTRY
     PVOID Session;
     volatile LONG ReferenceCount;
     BOOLEAN Unregistered;
+    ULONGLONG Registration;
 } IOP_PNP_NOTIFY_ENTRY, *PIOP_PNP_NOTIFY_ENTRY;
 
 typedef struct _IOP_PLUGPLAY_EVENT_BLOCK

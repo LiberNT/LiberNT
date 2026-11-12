@@ -375,15 +375,20 @@ KdpReloadService(
 
     for (Index = 0; Index < Reload->Count; Index++)
     {
-        DeviceStatus = PiQueryRemoveDevice(Reload->Devices[Index], &RemoveData);
-        if (!NT_SUCCESS(DeviceStatus))
+        RtlZeroMemory(&RemoveData, sizeof(RemoveData));
+        DeviceStatus = PiPerformSyncDeviceActionEx(Reload->Devices[Index], PiActionQueryRemoveDevice, &RemoveData);
+        if (NT_SUCCESS(DeviceStatus))
+        {
+            DeviceStatus = PiPerformSyncDeviceAction(Reload->Devices[Index], PiActionRemoveDevice);
+        }
+        else
         {
             DPRINT1("KD: Removing a %wZ device failed 0x%lx (veto %d %wZ)\n",
                     Service, DeviceStatus, RemoveData.VetoType, &RemoveData.VetoName);
-            if (NT_SUCCESS(Status))
-                Status = DeviceStatus;
         }
-        RtlFreeUnicodeString(&RemoveData.VetoName);
+        if (!NT_SUCCESS(DeviceStatus) && NT_SUCCESS(Status))
+            Status = DeviceStatus;
+        PiReleaseQueryRemoveData(&RemoveData);
     }
 
     if (KdpDriverObjectExists(Service))
@@ -391,7 +396,7 @@ KdpReloadService(
 
     for (Index = 0; Index < Reload->Count; Index++)
     {
-        DeviceStatus = PiPerformSyncDeviceAction(Reload->Devices[Index], PiActionStartDevice);
+        DeviceStatus = PiPerformSyncDeviceAction(Reload->Devices[Index], PiActionResetDevice);
         if (!NT_SUCCESS(DeviceStatus) && NT_SUCCESS(Status))
             Status = DeviceStatus;
         ObDereferenceObject(Reload->Devices[Index]);

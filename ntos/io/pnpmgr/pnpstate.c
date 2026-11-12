@@ -1224,7 +1224,7 @@ PiEjectDevice(
 {
     DEVICE_CAPABILITIES Capabilities;
     IO_STACK_LOCATION StackLocation;
-    PI_QUERY_REMOVE_DATA RemoveData;
+    PI_QUERY_REMOVE_DATA RemoveData = { 0 };
     BOOLEAN Supported = FALSE;
     NTSTATUS Status;
 
@@ -1262,6 +1262,8 @@ PiEjectDevice(
 
     IopQueueTargetDeviceEvent(NT_SUCCESS(Status) ? &GUID_DEVICE_EJECT : &GUID_DEVICE_EJECT_VETOED,
                               &DeviceNode->InstancePath);
+
+    PiReleaseQueryRemoveData(&RemoveData);
 
     return Status;
 }
@@ -1459,6 +1461,12 @@ PiSendRemoval(
     IO_STACK_LOCATION StackLocation;
 
     PAGED_CODE();
+
+    /* Registrants learn a device goes before its drivers do; a surprise-removed one told them at its surprise removal */
+    if (!Surprise && !PiIsPendingCloses(DeviceNode))
+    {
+        PiNotifyTargetDeviceChange(&GUID_TARGET_DEVICE_REMOVE_COMPLETE, DeviceNode->PhysicalDeviceObject, NULL);
+    }
 
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
 
@@ -1843,6 +1851,8 @@ PiRunDeviceAction(
                 }
                 if (Request->RemoveData != NULL)
                     *Request->RemoveData = RemoveData;
+                else
+                    PiReleaseQueryRemoveData(&RemoveData);
                 break;
 
             case PiActionRemoveDevice:
