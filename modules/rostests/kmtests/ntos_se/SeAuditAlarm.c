@@ -177,6 +177,39 @@ CheckAudited(
     }
 }
 
+/* LocalSystem holds the security and take-ownership privileges disabled; a caller that needs them turns them on */
+static
+BOOLEAN
+EnableOwnershipPrivileges(VOID)
+{
+    struct
+    {
+        ULONG PrivilegeCount;
+        LUID_AND_ATTRIBUTES Privileges[2];
+    } Privileges;
+    HANDLE Thread;
+    NTSTATUS Status;
+
+    Status = NtOpenThreadToken(NtCurrentThread(), TOKEN_ADJUST_PRIVILEGES, TRUE, &Thread);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Privileges.PrivilegeCount = 2;
+    Privileges.Privileges[0].Luid.LowPart = SE_SECURITY_PRIVILEGE;
+    Privileges.Privileges[0].Luid.HighPart = 0;
+    Privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    Privileges.Privileges[1].Luid.LowPart = SE_TAKE_OWNERSHIP_PRIVILEGE;
+    Privileges.Privileges[1].Luid.HighPart = 0;
+    Privileges.Privileges[1].Attributes = SE_PRIVILEGE_ENABLED;
+
+    Status = NtAdjustPrivilegesToken(Thread, FALSE, (PTOKEN_PRIVILEGES)&Privileges, 0, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    NtClose(Thread);
+
+    return Status == STATUS_SUCCESS;
+}
+
 /* K0: the audited checks work from user mode, and need no privilege set of the caller's */
 static
 VOID
@@ -188,8 +221,11 @@ TestAuditedChecks(VOID)
     CheckAudited(FILE_WRITE_DATA, STATUS_SUCCESS, STATUS_ACCESS_DENIED, 0);
 
     /* Two privileges carry these rights, which the services have no set to report in */
-    CheckAudited(ACCESS_SYSTEM_SECURITY | WRITE_OWNER, STATUS_SUCCESS, STATUS_SUCCESS,
-                 ACCESS_SYSTEM_SECURITY | WRITE_OWNER);
+    if (EnableOwnershipPrivileges())
+    {
+        CheckAudited(ACCESS_SYSTEM_SECURITY | WRITE_OWNER, STATUS_SUCCESS, STATUS_SUCCESS,
+                     ACCESS_SYSTEM_SECURITY | WRITE_OWNER);
+    }
 
     StopImpersonating();
 }
