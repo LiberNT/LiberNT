@@ -1424,6 +1424,12 @@ KiCallUserMode(
     IN PULONG OutputLength
 );
 
+NTSTATUS
+NTAPI
+KiCallUserModeWithStack(
+    _Out_ PVOID *Result,
+    _Out_ PULONG ResultLength);
+
 DECLSPEC_NORETURN
 VOID
 FASTCALL
