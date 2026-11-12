@@ -261,6 +261,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeApcScheduling.c
     ntos_ke/KeApcDpcTransitions.c
     ntos_ke/KeDeferredReady.c
+    ntos_ke/KeIdleSteal.c
     ntos_ke/KeBadInstructionPointer.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeBugCheckStop.c
@@ -298,6 +299,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeTimer2KM.c
     ntos_ke/KeWaitMultiple.c
     ntos_mm/MmAllocateContiguousNode.c
+    ntos_mm/MmContiguousCacheTypes.c
     ntos_mm/MmDriverMemory.c
     ntos_mm/MmMdl.c
     ntos_mm/MmMdlDispatch.c

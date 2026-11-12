@@ -258,6 +258,7 @@ KMT_TESTFUNC Test_KeTrapFilterX87;
 KMT_TESTFUNC Test_KeStandbySteal;
 #endif
 KMT_TESTFUNC Test_KeDeferredReady;
+KMT_TESTFUNC Test_KeIdleSteal;
 KMT_TESTFUNC Test_KeCacheInvalidation;
 KMT_TESTFUNC Test_KeClockKeepAlive;
 KMT_TESTFUNC Test_KeClockWatchdog;
@@ -336,6 +337,7 @@ KMT_TESTFUNC Test_KeTimer;
 KMT_TESTFUNC Test_KeWaitMultiple;
 KMT_TESTFUNC Test_KernelType;
 KMT_TESTFUNC Test_MmAllocateContiguousNode;
+KMT_TESTFUNC Test_MmContiguousCacheTypes;
 KMT_TESTFUNC Test_MmMdl;
 KMT_TESTFUNC Test_MmMdlDispatch;
 KMT_TESTFUNC Test_MmLargePages;
@@ -690,6 +692,7 @@ const KMT_TEST TestList[] =
     { "KeStandbySteal",                     Test_KeStandbySteal },
 #endif
     { "KeDeferredReady",                    Test_KeDeferredReady },
+    { "KeIdleSteal",                        Test_KeIdleSteal },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
     { "KeClockKeepAlive",                   Test_KeClockKeepAlive },
     { "-KeClockWatchdog",                   Test_KeClockWatchdog },
@@ -756,6 +759,7 @@ const KMT_TEST TestList[] =
     { "KeWaitMultiple",                     Test_KeWaitMultiple },
     { "KernelType",                         Test_KernelType },
     { "MmAllocateContiguousNode",           Test_MmAllocateContiguousNode },
+    { "MmContiguousCacheTypes",             Test_MmContiguousCacheTypes },
     { "MmMdl",                              Test_MmMdl },
     { "MmMdlDispatch",                      Test_MmMdlDispatch },
     { "MmLargePages",                       Test_MmLargePages },
