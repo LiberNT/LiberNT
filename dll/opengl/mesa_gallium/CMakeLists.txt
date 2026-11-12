@@ -171,6 +171,17 @@ else()
     list(APPEND _mesa_features -DMESA_D3D12:BOOL=OFF)
 endif()
 
+# OpenGL on the Apple GPU, over the appleagx render node. Its OpenCL shader libraries are
+# precompiled by a build-machine Mesa (mesa_clc, asahi_clc).
+set(MESA_ASAHI_PRECOMPILED_DIR "${REACTOS_BINARY_DIR}/submodules/mesa-host-clc" CACHE PATH
+    "Build-machine Mesa tree holding the precompiled Apple shader libraries")
+if(ARCH STREQUAL "arm64" AND NOT ARM64EC_RUNTIME AND
+   EXISTS "${MESA_ASAHI_PRECOMPILED_DIR}/src/asahi/lib/libagx_shaders.c")
+    list(APPEND _mesa_features -DMESA_ASAHI:BOOL=ON -DMESA_ASAHI_PRECOMPILED_DIR:PATH=${MESA_ASAHI_PRECOMPILED_DIR})
+else()
+    list(APPEND _mesa_features -DMESA_ASAHI:BOOL=OFF)
+endif()
+
 ExternalProject_Add(mesa_gallium_build
     EXCLUDE_FROM_ALL TRUE
     PREFIX "${MESA_WORK_DIR}/cmake-prefix"
