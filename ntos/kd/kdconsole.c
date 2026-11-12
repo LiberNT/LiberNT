@@ -315,14 +315,17 @@ KdpInitTerminal(VOID)
 BOOLEAN
 KdpTerminalPollBreakIn(VOID)
 {
-    ULONG ScanCode;
     CHAR Char;
 
     /* The network terminal keeps its own count of what the host sent */
     if (KdpDebugMode.Net && KdpNetPollBreakIn())
         return TRUE;
 
-    Char = KdpTryGetChar(&ScanCode, 1);
+    /* The PC keyboard controller belongs to its driver while the system runs: a byte read here is taken from it */
+    if (!KdTermSerial && !KdpDebugMode.Net)
+        return FALSE;
+
+    Char = KdbpTryGetCharSerial(1);
 
     if (Char == (CHAR)-1)
         return FALSE;
