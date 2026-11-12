@@ -488,6 +488,82 @@ CheckSetSizes(
     }
 }
 
+static
+ULONG
+FindProcessorSet(
+    _In_ PTEST_PROCESSOR_SETS Sets,
+    _In_ KAFFINITY Mask)
+{
+    ULONG i;
+
+    for (i = 0; i < Sets->Count; i++)
+    {
+        if (Sets->Sets[i] & Mask)
+            return i;
+    }
+
+    return MAXULONG;
+}
+
+/* The older class and the CPU sets describe the same cores as the relationship records */
+static
+VOID
+CheckCoreViews(
+    _In_ PTEST_PROCESSOR_SETS Cores)
+{
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Legacy;
+    PSYSTEM_CPU_SET_INFORMATION CpuSets, A, B;
+    ULONG Length = 0, CoreRecords = 0, Core, i, j;
+    HANDLE Process = NULL;
+    NTSTATUS Status;
+
+    Status = NtQuerySystemInformation(SystemLogicalProcessorInformation, NULL, 0, &Length);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH, "SystemLogicalProcessorInformation: status 0x%lx\n", Status);
+    Legacy = (Length != 0) ? RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length) : NULL;
+    if (Legacy != NULL)
+    {
+        Status = NtQuerySystemInformation(SystemLogicalProcessorInformation, Legacy, Length, &Length);
+        ok(Status == STATUS_SUCCESS, "SystemLogicalProcessorInformation: status 0x%lx\n", Status);
+        for (i = 0; (Status == STATUS_SUCCESS) && (i < Length / sizeof(*Legacy)); i++)
+        {
+            if (Legacy[i].Relationship != RelationProcessorCore)
+                continue;
+
+            CoreRecords++;
+            Core = FindProcessorSet(Cores, Legacy[i].ProcessorMask);
+            ok(Core != MAXULONG && Cores->Sets[Core] == Legacy[i].ProcessorMask,
+               "Legacy core 0x%I64x is not a core\n", (ULONGLONG)Legacy[i].ProcessorMask);
+            ok(Legacy[i].ProcessorCore.Flags == ((CountProcessors(Legacy[i].ProcessorMask) > 1) ? LTP_PC_SMT : 0),
+               "Legacy core 0x%I64x: flags 0x%x\n", (ULONGLONG)Legacy[i].ProcessorMask, Legacy[i].ProcessorCore.Flags);
+        }
+        ok(CoreRecords == Cores->Count, "Legacy: %lu cores, %lu relationship cores\n", CoreRecords, Cores->Count);
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Legacy);
+    }
+
+    Length = 0;
+    Status = NtQuerySystemInformationEx(SystemCpuSetInformation, &Process, sizeof(Process), NULL, 0, &Length);
+    ok(Status == STATUS_BUFFER_TOO_SMALL, "SystemCpuSetInformation: status 0x%lx\n", Status);
+    CpuSets = (Length != 0) ? RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length) : NULL;
+    if (CpuSets == NULL)
+        return;
+
+    Status = NtQuerySystemInformationEx(SystemCpuSetInformation, &Process, sizeof(Process), CpuSets, Length, &Length);
+    ok(Status == STATUS_SUCCESS, "SystemCpuSetInformation: status 0x%lx\n", Status);
+    for (i = 0; (Status == STATUS_SUCCESS) && (i < Length / sizeof(*CpuSets)); i++)
+    {
+        A = &CpuSets[i];
+        for (j = 0; j < Length / sizeof(*CpuSets); j++)
+        {
+            B = &CpuSets[j];
+            ok((A->CpuSet.CoreIndex == B->CpuSet.CoreIndex) ==
+               (FindProcessorSet(Cores, (KAFFINITY)1 << A->CpuSet.LogicalProcessorIndex) ==
+                FindProcessorSet(Cores, (KAFFINITY)1 << B->CpuSet.LogicalProcessorIndex)),
+               "CPU sets %lu and %lu: core %u and %u\n", A->CpuSet.Id, B->CpuSet.Id, A->CpuSet.CoreIndex, B->CpuSet.CoreIndex);
+        }
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, CpuSets);
+}
+
 /* LIBERNT_TEST_CPU_TOPOLOGY gives the QEMU -smp topology of the run, as "sockets=2,dies=1,cores=2,threads=2" */
 static
 void
@@ -565,6 +641,7 @@ Test_LogicalProcessorRelationships(void)
     CollectProcessorSets(RelationProcessorModule, Active, &Modules);
     CollectProcessorSets(RelationProcessorDie, Active, &Dies);
     CollectProcessorSets(RelationProcessorPackage, Active, &Packages);
+    CheckCoreViews(&Cores);
     CheckNested("Core", &Cores, &Modules);
     CheckNested("Module", &Modules, &Dies);
     CheckNested("Die", &Dies, &Packages);

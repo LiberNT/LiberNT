@@ -522,15 +522,30 @@ ExpQueryFileCacheInformation(
 }
 
 static
-BOOLEAN
-ExpIsCoreMaster(
-    _In_ ULONG Index)
+PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX
+ExpQueryProcessorCores(
+    _Out_ PULONG Length)
 {
-    PKPRCB Prcb = KiProcessorBlock[Index];
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Cores;
+    NTSTATUS Status;
 
-    return (Prcb != NULL) &&
-           ((KeActiveProcessors & Prcb->SetMember) != 0) &&
-           (Prcb->MultiThreadSetMaster == Prcb);
+    *Length = 0;
+    Status = KeQueryLogicalProcessorRelationship(NULL, RelationProcessorCore, NULL, Length);
+    if ((Status != STATUS_INFO_LENGTH_MISMATCH) || (*Length == 0))
+        return NULL;
+
+    Cores = ExAllocatePoolWithTag(PagedPool, *Length, EXP_SYSPERF_TAG);
+    if (Cores == NULL)
+        return NULL;
+
+    Status = KeQueryLogicalProcessorRelationship(NULL, RelationProcessorCore, Cores, Length);
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Cores, EXP_SYSPERF_TAG);
+        return NULL;
+    }
+
+    return Cores;
 }
 
 static
@@ -570,19 +585,28 @@ ExpQueryLogicalProcessorInformation(
     _Out_ PULONG ReturnLength)
 {
     PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Record;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Cores, Core;
     PKI_CACHE_RECORD Caches;
     PKAFFINITY Packages;
     GROUP_AFFINITY Affinity;
     USHORT HighestNode = KeQueryHighestNodeNumber();
     ULONG CacheCount;
     ULONG PackageCount;
+    ULONG CoresLength;
     ULONG Count = 0;
     ULONG Written = 0;
     ULONG Needed;
     ULONG Index;
+    ULONG Offset;
     USHORT Node;
 
     PAGED_CODE();
+
+    Cores = ExpQueryProcessorCores(&CoresLength);
+    if (Cores == NULL)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     Caches = ExAllocatePoolWithTag(PagedPool,
                                    KI_MAX_CACHE_RECORDS * sizeof(KI_CACHE_RECORD) +
@@ -590,6 +614,7 @@ ExpQueryLogicalProcessorInformation(
                                    EXP_SYSPERF_TAG);
     if (Caches == NULL)
     {
+        ExFreePoolWithTag(Cores, EXP_SYSPERF_TAG);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -608,9 +633,11 @@ ExpQueryLogicalProcessorInformation(
         PackageCount = 1;
     }
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    for (Offset = 0; Offset < CoresLength; Offset += Core->Size)
     {
-        if (ExpIsCoreMaster(Index)) Count++;
+        Core = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)((PUCHAR)Cores + Offset);
+        ASSERT(Core->Relationship == RelationProcessorCore && Core->Size != 0);
+        Count++;
     }
 
     for (Node = 0; Node <= HighestNode; Node++)
@@ -627,26 +654,24 @@ ExpQueryLogicalProcessorInformation(
     if ((Buffer == NULL) || (Length < Needed))
     {
         ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
+        ExFreePoolWithTag(Cores, EXP_SYSPERF_TAG);
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
     _SEH2_TRY
     {
-        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        for (Offset = 0; Offset < CoresLength; Offset += Core->Size)
         {
-            PKPRCB Prcb = KiProcessorBlock[Index];
-
-            if (!ExpIsCoreMaster(Index)) continue;
+            Core = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)((PUCHAR)Cores + Offset);
 
             Record = ExpNextLogicalProcessorRecord(Buffer,
                                                    &Written,
                                                    Count,
                                                    RelationProcessorCore,
-                                                   (KAFFINITY)Prcb->MultiThreadProcessorSet);
+                                                   Core->Processor.GroupMask[0].Mask);
             if (Record == NULL) break;
 
-            Record->ProcessorCore.Flags =
-                (Prcb->MultiThreadProcessorSet != Prcb->SetMember) ? LTP_PC_SMT : 0;
+            Record->ProcessorCore.Flags = Core->Processor.Flags;
         }
 
         for (Index = 0; Index < CacheCount; Index++)
@@ -688,6 +713,7 @@ ExpQueryLogicalProcessorInformation(
     _SEH2_FINALLY
     {
         ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
+        ExFreePoolWithTag(Cores, EXP_SYSPERF_TAG);
     }
     _SEH2_END;
 
@@ -781,6 +807,36 @@ ExpLastLevelCacheIndex(
     return (UCHAR)Lowest;
 }
 
+static
+UCHAR
+ExpCoreIndex(
+    _In_ ULONG Index,
+    _In_reads_bytes_opt_(CoresLength) PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Cores,
+    _In_ ULONG CoresLength)
+{
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Core;
+    KAFFINITY Shared = AFFINITY_MASK(Index);
+    ULONG Offset;
+    ULONG Lowest;
+
+    for (Offset = 0; (Cores != NULL) && (Offset < CoresLength); Offset += Core->Size)
+    {
+        Core = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)((PUCHAR)Cores + Offset);
+        if (Core->Size == 0)
+            break;
+
+        if (Core->Processor.GroupMask[0].Mask & AFFINITY_MASK(Index))
+        {
+            Shared = Core->Processor.GroupMask[0].Mask;
+            break;
+        }
+    }
+
+    for (Lowest = 0; !(Shared & AFFINITY_MASK(Lowest)); Lowest++);
+
+    return (UCHAR)Lowest;
+}
+
 /* One set per logical processor, named 0x100 plus its index (Windows Internals 7th ed., Part 1, ch. 4) */
 NTSTATUS
 NTAPI
@@ -793,9 +849,11 @@ ExpQueryCpuSetInformation(
     _In_ KPROCESSOR_MODE PreviousMode)
 {
     PSYSTEM_CPU_SET_INFORMATION Records = SystemInformation;
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Cores;
     PKI_CACHE_RECORD Caches;
     PEPROCESS Process;
     HANDLE ProcessHandle;
+    ULONG CoresLength;
     ULONG CacheCount = 0;
     ULONG SetCount;
     ULONG Count = 0;
@@ -875,12 +933,13 @@ ExpQueryCpuSetInformation(
         KiQueryProcessorTopology(Caches, KI_MAX_CACHE_RECORDS, &CacheCount, NULL, 0, &SetCount);
     }
 
+    Cores = ExpQueryProcessorCores(&CoresLength);
+
     _SEH2_TRY
     {
         for (Index = 0; (Index < (ULONG)KeNumberProcessors) && (Written < Count); Index++)
         {
             PSYSTEM_CPU_SET_INFORMATION Record = &Records[Written];
-            PKPRCB Prcb = KiProcessorBlock[Index];
 
             if (!(KeActiveProcessors & AFFINITY_MASK(Index))) continue;
 
@@ -890,8 +949,7 @@ ExpQueryCpuSetInformation(
             Record->CpuSet.Id = 0x100 + Index;
             Record->CpuSet.Group = 0;
             Record->CpuSet.LogicalProcessorIndex = (UCHAR)Index;
-            Record->CpuSet.CoreIndex = (UCHAR)((Prcb->MultiThreadSetMaster != NULL) ?
-                                                Prcb->MultiThreadSetMaster->Number : Index);
+            Record->CpuSet.CoreIndex = ExpCoreIndex(Index, Cores, CoresLength);
             Record->CpuSet.LastLevelCacheIndex =
                 ExpLastLevelCacheIndex(Index, Caches, (Caches != NULL) ? CacheCount : 0);
             Record->CpuSet.NumaNodeIndex = ExpProcessorNode(Index);
@@ -909,6 +967,7 @@ ExpQueryCpuSetInformation(
     _SEH2_END;
 
     if (Caches != NULL) ExFreePoolWithTag(Caches, EXP_SYSPERF_TAG);
+    if (Cores != NULL) ExFreePoolWithTag(Cores, EXP_SYSPERF_TAG);
 
     return Status;
 }
