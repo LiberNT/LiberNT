@@ -311,9 +311,15 @@ HalpParseApicTables(
             {
                 DPRINT01(" UNIMPLEMENTED: Type %u, Length %u\n",
                          AcpiHeader->Type, AcpiHeader->Length);
-                HalpAcpiRecordFault(APIC_SIGNATURE, HalpAcpiFaultUnsupportedEntry, AcpiHeader->Type,
-                                    (ULONG)((ULONG_PTR)AcpiHeader - (ULONG_PTR)MadtTable),
-                                    AcpiHeader->Length, 0);
+                /* NMI descriptions do not change how the APIC is initialized */
+                if ((AcpiHeader->Type != ACPI_MADT_TYPE_NMI_SOURCE) &&
+                    (AcpiHeader->Type != ACPI_MADT_TYPE_LOCAL_APIC_NMI) &&
+                    (AcpiHeader->Type != ACPI_MADT_TYPE_LOCAL_X2APIC_NMI))
+                {
+                    HalpAcpiRecordFault(APIC_SIGNATURE, HalpAcpiFaultUnsupportedEntry, AcpiHeader->Type,
+                                        (ULONG)((ULONG_PTR)AcpiHeader - (ULONG_PTR)MadtTable),
+                                        AcpiHeader->Length, 0);
+                }
                 break;
             }
         }
