@@ -1106,7 +1106,7 @@ ExReleaseResourceAndLeaveCriticalRegion(
 /* TODO: the priority region is not published, so a critical region is entered
    in its place and the caller's priority is left alone. */
 VOID
-FASTCALL
+NTAPI
 ExpEnterPriorityRegionAndAcquireResourceShared(
     _Inout_ PERESOURCE Resource)
 {

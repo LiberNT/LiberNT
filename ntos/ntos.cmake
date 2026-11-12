@@ -382,6 +382,7 @@ if(ARCH STREQUAL "i386")
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/exinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/i386/interlck.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/abios.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/cpu.c
@@ -403,6 +404,8 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ps/i386/psldt.c
         ${REACTOS_SOURCE_DIR}/ntos/vdm/vdmmain.c
         ${REACTOS_SOURCE_DIR}/ntos/vdm/vdmexec.c)
+    # x86 debuggers read control space as the processor state at an offset: kd64/i386/kdx86.c
+    list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdcontrolspace.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/boot.S

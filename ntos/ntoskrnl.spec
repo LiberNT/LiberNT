@@ -1952,7 +1952,7 @@
 @ stdcall -arch=win64 RtlOpenCurrentUser()
 @ stdcall -arch=win64 RtlQueryInformationAcl()
 @ stdcall -arch=win64 RtlRaiseStatus()
-@ stdcall -arch=win64 RtlSetControlSecurityDescriptor()
+@ stdcall RtlSetControlSecurityDescriptor(ptr long long)
 @ stdcall -arch=win64 RtlSystemTimeToLocalTime()
 @ stdcall RtlUTF8ToUnicodeN(ptr long ptr str long)
 @ stdcall -arch=win64 RtlValidAcl()
@@ -2557,7 +2557,7 @@
 @ stdcall IoUnregisterBootDriverCallback(ptr)
 @ stub -arch=win64 IoUnregisterContainerNotification
 @ stub -arch=win64 IoUnregisterIoTracking
-@ stdcall -arch=win64 IoUnregisterPlugPlayNotificationEx(ptr)
+@ stdcall IoUnregisterPlugPlayNotificationEx(ptr)
 @ stub -arch=win64 IoUnregisterPriorityCallback
 @ stub -arch=win64 IoUpdateLinkShareAccess
 @ stub -arch=win64 IoUpdateLinkShareAccessEx
@@ -3242,7 +3242,7 @@
 @ stub -arch=win64 SeGetCachedSigningLevel
 @ stub -arch=win64 SeGetLinkedToken
 @ stub -arch=win64 SeGetLogonSessionToken
-@ stdcall SeIsParentOfChildAppContainer(long long long)
+@ stdcall SeIsParentOfChildAppContainer(ptr ptr)
 @ stub -arch=win64 SeMarkLogonSessionForTerminationNotificationEx
 @ stub -arch=win64 SeOpenObjectAuditAlarmForNonObObject
 @ stub -arch=win64 SeOpenObjectAuditAlarmWithTransaction
@@ -3256,7 +3256,7 @@
 @ stub -arch=win64 SeRegisterImageVerificationCallback
 @ stub -arch=win64 SeRegisterLogonSessionTerminatedRoutineEx
 @ stub -arch=win64 SeReportSecurityEventWithSubCategory
-@ stdcall SeSecurityAttributePresent(ptr ptr)
+@ stdcall SeSecurityAttributePresent(ptr ptr long)
 @ stub -arch=win64 SeSetSecurityAttributesToken
 @ stub -arch=win64 SeSetSecurityAttributesTokenEx
 @ stub -arch=win64 SeSetSessionIdTokenWithLinked
