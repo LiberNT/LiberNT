@@ -820,6 +820,26 @@ NtAlpcAcceptConnectPort(
     }
 
     AlpcpAcquirePortLock(ConnectionPort);
+    ASSERT(Message->State & ALPC_MSG_STATE_ACCEPT_IN_PROGRESS);
+    ASSERT(!(Message->State & (ALPC_MSG_STATE_ACCEPTED | ALPC_MSG_STATE_REFUSED)));
+
+    /* A client that stopped waiting while the port was made keeps no port, so the server gets none either */
+    if (Message->State & ALPC_MSG_STATE_CANCELED)
+    {
+        Message->State &= ~ALPC_MSG_STATE_ACCEPT_IN_PROGRESS;
+        AlpcpCompleteWithStatus(Message, ALPC_MSG_STATE_REFUSED, STATUS_PORT_CONNECTION_REFUSED);
+        AlpcpReleasePortLock(ConnectionPort);
+
+        ObCloseHandle(Handle, PreviousMode);
+        ObDereferenceObject(ServerPort);
+        ObDereferenceObject(Info->ConnectionPort);
+        ExFreePoolWithTag(Info, 'IcpA');
+        ObDereferenceObject(ClientThread);
+        if (SendAttributes) ExFreePoolWithTag(SendAttributes, 'AcpA');
+        ObDereferenceObject(ConnectionPort);
+        return STATUS_REPLY_MESSAGE_MISMATCH;
+    }
+
     ClientPort = Message->Connection.ClientPort;
     Info->Domain = ConnectionPort->Domain;
     AlpcpReferenceDomain(Info->Domain);
