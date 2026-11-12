@@ -22,7 +22,14 @@ static __inline__ __attribute__((__always_inline__, __noreturn__)) void __la64_f
 }
 #define __fastfail __la64_fastfail
 
-#define _disable() __asm__ __volatile__("csrwr $zero, 0x0" ::: "memory")
+static __inline__ __attribute__((__always_inline__)) void __la64_set_ie(int Enable)
+{
+    register unsigned long Mask __asm__("$t0") = 4;
+    register unsigned long Value __asm__("$t1") = Enable ? 4 : 0;
+    __asm__ __volatile__("csrxchg %0, %1, 0x0" :: "r"(Value), "r"(Mask) : "memory");
+}
+#define _disable() __la64_set_ie(0)
+#define _enable()  __la64_set_ie(1)
 
 static __inline__ unsigned char __la64_bit_scan_forward(unsigned int *Index, unsigned int Mask)
 {

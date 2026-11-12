@@ -69,7 +69,6 @@ def main(argv):
         kind != 'exe')
     with open(target, 'wb') as output:
         output.write(image)
-    os.unlink(elf_image)
 
     print(f'{target}: {len(sections)} sections, entry 0x{shift:x} shift, '
           f'{patched} fixups, {skipped} other relocations')
