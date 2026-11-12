@@ -54,8 +54,8 @@ typedef struct _AFUNIX_ENDPOINT
     LIST_ENTRY ListenQueue;
     LIST_ENTRY ConnectQueue;
     ULONG ConnectQueueCount;
-    HANDLE MarkerFile;
-    UNICODE_STRING MarkerPath;
+    ULONG VolumeSerialNumber;
+    LARGE_INTEGER FileId;
 } AFUNIX_ENDPOINT, *PAFUNIX_ENDPOINT;
 
 typedef struct _AFUNIX_CONNECTION
