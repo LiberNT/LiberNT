@@ -54,6 +54,9 @@ KMT_TESTFUNC Test_Dxgmms2VidMm;
 #ifdef KMT_DXGK_WDDM_ABI
 KMT_TESTFUNC Test_DxgkWddmAbi;
 #endif
+#ifdef KMT_KUBSAN
+KMT_TESTFUNC Test_KubsanHandlers;
+#endif
 #ifdef KMT_SOFTGPU_GPUVA_ISOLATION
 KMT_TESTFUNC Test_SoftGpuGpuVaIsolation;
 #endif
@@ -231,6 +234,7 @@ KMT_TESTFUNC Test_KdbLocks;
 KMT_TESTFUNC Test_KdbThreadApc;
 KMT_TESTFUNC Test_KdChangeOption;
 KMT_TESTFUNC Test_KdbSystemBreak;
+KMT_TESTFUNC Test_KdShutdownCrash;
 KMT_TESTFUNC Test_KdDebuggerPresent;
 KMT_TESTFUNC Test_KdPrintComponent;
 KMT_TESTFUNC Test_KdPrintStatus;
@@ -500,6 +504,9 @@ const KMT_TEST TestList[] =
 #ifdef KMT_DXGK_WDDM_ABI
     { "DxgkWddmAbi",                       Test_DxgkWddmAbi },
 #endif
+#ifdef KMT_KUBSAN
+    { "KubsanHandlers",                    Test_KubsanHandlers },
+#endif
 #ifdef KMT_SOFTGPU_GPUVA_ISOLATION
     { "SoftGpuGpuVaIsolation",             Test_SoftGpuGpuVaIsolation },
 #endif
@@ -649,6 +656,7 @@ const KMT_TEST TestList[] =
     { "-KdTimeSlipEvent",                   Test_KdTimeSlipEvent },
     { "-KdbSchedulerCommands",              Test_KdbSchedulerCommands },
     { "-KdbSystemBreak",                    Test_KdbSystemBreak },
+    { "-KdShutdownCrash",                   Test_KdShutdownCrash },
     { "-KdbDeviceCommands",                 Test_KdbDeviceCommands },
     { "-KdbCliCommands",                    Test_KdbCliCommands },
     { "-KdbObjectCommands",                 Test_KdbObjectCommands },

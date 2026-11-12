@@ -242,6 +242,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_kd/KdbObjectCommands.c
     ntos_kd/KdbSchedulerCommands.c
     ntos_kd/KdbSystemBreak.c
+    ntos_kd/KdShutdownCrash.c
     ntos_kd/KdbThreadApc.c
     ntos_kd/KdChangeOption.c
     ntos_kd/KdDebuggerPresent.c
@@ -431,6 +432,10 @@ if(REACTOS_USE_WDDM AND (REACTOS_WDDM_TARGET_LEVEL GREATER_EQUAL 2000))
     set(KMTEST_SOFTGPU_GPUVA_ISOLATION TRUE)
 endif()
 
+if(ENABLE_KERNEL_UBSAN)
+    list(APPEND KMTEST_DRV_SOURCE kubsan/KubsanHandlers.c)
+endif()
+
 if(ARCH STREQUAL "amd64")
     list(APPEND KMTEST_DRV_SOURCE ntos_ke/amd64/KeSwitchHandoff.c ntos_ke/amd64/KeTrapDebugRegisters.c ntos_ke/amd64/KeTrapFilterX87.c ntos_ke/amd64/KeXState.c)
 endif()
@@ -508,6 +513,9 @@ target_include_directories(kmtest_drv PRIVATE
 if(KMTEST_DXGK_WDDM_ABI)
     target_compile_definitions(kmtest_drv PRIVATE
         KMT_DXGK_WDDM_ABI)
+endif()
+if(ENABLE_KERNEL_UBSAN)
+    target_compile_definitions(kmtest_drv PRIVATE KMT_KUBSAN)
 endif()
 if(KMTEST_SOFTGPU_GPUVA_ISOLATION)
     target_compile_definitions(kmtest_drv PRIVATE

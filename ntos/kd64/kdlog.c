@@ -264,6 +264,19 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
 
         if (KdpBootLogStopping)
         {
+            if (!Trimmed && (KdpBootLogDevice != NULL))
+            {
+                if ((KdpBootLogExtents == NULL) || (KdpBootLogWritten + KDP_BOOT_LOG_RESERVE_SIZE > KdpBootLogReserveEnd))
+                    KdpBootLogExtendReserve();
+
+                if ((KdpBootLogExtents != NULL) && NT_SUCCESS(ZwFlushBuffersFile(KdpBootLogHandle, &IoStatus)))
+                {
+                    KdpBootLogPublish();
+                    KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
+                    PsTerminateSystemThread(STATUS_SUCCESS);
+                }
+            }
+
             if (!Trimmed)
             {
                 if (KdpBootLogDevice != NULL)
