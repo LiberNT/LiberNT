@@ -254,6 +254,9 @@ static NTSTATUS open_subkey( HKEY *subkey, HKEY root, UNICODE_STRING *name, DWOR
 
     str.Buffer = name->Buffer;
     str.Length = i * sizeof(WCHAR);
+#ifdef __REACTOS__
+    str.MaximumLength = str.Length;
+#endif
 
     if (i < len)
         options &= ~REG_OPTION_OPEN_LINK;
@@ -455,6 +458,9 @@ static NTSTATUS create_subkey( HKEY *subkey, HKEY root, UNICODE_STRING *name, DW
 
     str.Buffer = name->Buffer;
     str.Length = i * sizeof(WCHAR);
+#ifdef __REACTOS__
+    str.MaximumLength = str.Length;
+#endif
 
     if (i < len)
         options &= ~REG_OPTION_CREATE_LINK;
@@ -502,6 +508,15 @@ static NTSTATUS create_key( HKEY *retkey, HKEY root, UNICODE_STRING name, ULONG 
 
         if (!status || status != STATUS_OBJECT_NAME_NOT_FOUND)
             return status;
+#ifdef __REACTOS__
+        {
+            /* A single name the kernel cannot create, a link whose target has no parent, cannot be made a piece at a time */
+            DWORD i, len = name.Length / sizeof(WCHAR);
+
+            for (i = 0; i < len && name.Buffer[i] != '\\'; i++);
+            if (i == len) return status;
+        }
+#endif
     }
 
     status = open_key( &subkey_root, root, &name, options & REG_OPTION_OPEN_LINK, access, TRUE );
