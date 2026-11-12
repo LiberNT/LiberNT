@@ -1,3 +1,8 @@
+/*
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF
+ *              Copyright 2026 Zhou Ji Yang <yinglanxing@gmail.com>
+ */
 
 #ifndef _LOONGARCH64_KETYPES_H
 #define _LOONGARCH64_KETYPES_H

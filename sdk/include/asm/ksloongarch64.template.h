@@ -1,3 +1,9 @@
+/*
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF
+ *              Copyright 2026 Zhou Ji Yang <yinglanxing@gmail.com>
+ */
+
 HEADER("Context"),
 OFFSET(CxContextFlags, CONTEXT, ContextFlags),
 OFFSET(CxFcsr, CONTEXT, Fcsr),
