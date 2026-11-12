@@ -27,9 +27,14 @@ static const USHORT E1kIgbDeviceIds[] =
     0x1533, 0x1536, 0x1537, 0x1538, 0x1539, 0x157B, 0x157C
 };
 
-static const USHORT E1kPchDeviceIds[] =
+static const struct
 {
-    0x15A0
+    USHORT DeviceId;
+    E1K_PCH_GENERATION Generation;
+} E1kPchDevices[] =
+{
+    { 0x15A0, E1kPchLpt },
+    { 0x15F9, E1kPchTgp },
 };
 
 static
@@ -107,13 +112,29 @@ E1kClassifyDevice(
             return E1kClassIgb;
     }
 
-    for (i = 0; i < RTL_NUMBER_OF(E1kPchDeviceIds); i++)
+    for (i = 0; i < RTL_NUMBER_OF(E1kPchDevices); i++)
     {
-        if (E1kPchDeviceIds[i] == Device->DeviceID)
+        if (E1kPchDevices[i].DeviceId == Device->DeviceID)
             return E1kClassPch;
     }
 
     return E1kClassNone;
+}
+
+static
+E1K_PCH_GENERATION
+E1kPchGeneration(
+    _In_ USHORT DeviceId)
+{
+    ULONG i;
+
+    for (i = 0; i < RTL_NUMBER_OF(E1kPchDevices); i++)
+    {
+        if (E1kPchDevices[i].DeviceId == DeviceId)
+            return E1kPchDevices[i].Generation;
+    }
+
+    return E1kPchLpt;
 }
 
 static
@@ -173,14 +194,15 @@ E1kReceiveDone(
 
 static
 BOOLEAN
-E1kPhyAccess(
+E1kPhyAccessAt(
     _In_ PE1K_ADAPTER Adapter,
+    _In_ ULONG PhyAddress,
     _In_ ULONG Command,
     _Out_ PUSHORT Value)
 {
     ULONG Data, i;
 
-    E1kWrite(Adapter, E1K_REG_MDIC, Command | E1K_MDIC_ADDRESS);
+    E1kWrite(Adapter, E1K_REG_MDIC, Command | PhyAddress);
     for (i = 0; i < 200; i++)
     {
         E1kStall(50);
@@ -193,6 +215,16 @@ E1kPhyAccess(
     }
 
     return FALSE;
+}
+
+static
+BOOLEAN
+E1kPhyAccess(
+    _In_ PE1K_ADAPTER Adapter,
+    _In_ ULONG Command,
+    _Out_ PUSHORT Value)
+{
+    return E1kPhyAccessAt(Adapter, E1K_MDIC_ADDRESS, Command, Value);
 }
 
 static
@@ -343,6 +375,183 @@ E1kPchConfigurePhy(
     }
 
     E1kPchRelease(Adapter);
+}
+
+static
+VOID
+E1kPchSetForceSmbus(
+    _In_ PE1K_ADAPTER Adapter,
+    _In_ BOOLEAN Force)
+{
+    ULONG Value = E1kRead(Adapter, E1K_REG_CTRL_EXT);
+
+    E1kWrite(Adapter, E1K_REG_CTRL_EXT, Force ? Value | E1K_CTRL_EXT_FORCE_SMBUS : Value & ~E1K_CTRL_EXT_FORCE_SMBUS);
+}
+
+/* Power-cycles the PHY through the LANPHYPC pin so a PHY left in its low power state answers on MDIO again */
+static
+VOID
+E1kPchToggleLanPhyPc(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG Value, i;
+
+    Value = E1kRead(Adapter, E1K_REG_FEXTNVM3) & ~E1K_FEXTNVM3_PHY_CFG_COUNTER_MASK;
+    E1kWrite(Adapter, E1K_REG_FEXTNVM3, Value | E1K_FEXTNVM3_PHY_CFG_COUNTER_50MSEC);
+
+    Value = (E1kRead(Adapter, E1K_REG_CTRL) | E1K_CTRL_LANPHYPC_OVERRIDE) & ~E1K_CTRL_LANPHYPC_VALUE;
+    E1kWrite(Adapter, E1K_REG_CTRL, Value);
+    E1kRead(Adapter, E1K_REG_STATUS);
+    E1kStall(20);
+    E1kWrite(Adapter, E1K_REG_CTRL, Value & ~E1K_CTRL_LANPHYPC_OVERRIDE);
+    E1kRead(Adapter, E1K_REG_STATUS);
+
+    for (i = 0; i < 20; i++)
+    {
+        E1kStall(5000);
+        if (E1kRead(Adapter, E1K_REG_CTRL_EXT) & E1K_CTRL_EXT_LPCD)
+            break;
+    }
+    E1kStall(30000);
+}
+
+static
+BOOLEAN
+E1kPchPhyIsAccessible(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    USHORT High, Low, Value, Ignored;
+    ULONG Attempt;
+    BOOLEAN Found = FALSE;
+
+    for (Attempt = 0; Attempt < 2 && !Found; Attempt++)
+    {
+        Found = E1kPhyAccessAt(Adapter, E1K_MDIC_ADDRESS_MII, E1K_MDIC_READ | (E1K_MII_PHYSID1 << E1K_MDIC_REGISTER), &High) &&
+                High != 0xFFFF &&
+                E1kPhyAccessAt(Adapter, E1K_MDIC_ADDRESS_MII, E1K_MDIC_READ | (E1K_MII_PHYSID2 << E1K_MDIC_REGISTER), &Low) &&
+                Low != 0xFFFF && (High | Low) != 0;
+    }
+
+    if (Found && !(E1kRead(Adapter, E1K_REG_FWSM) & E1K_FWSM_FW_VALID))
+    {
+        if (E1kPchPhyAccess(Adapter, E1K_PCH_PHY_SMB_CTRL_PAGE, E1K_PCH_PHY_SMB_CTRL, E1K_MDIC_READ, &Value))
+        {
+            E1kPchPhyAccess(Adapter, E1K_PCH_PHY_SMB_CTRL_PAGE, E1K_PCH_PHY_SMB_CTRL,
+                            E1K_MDIC_WRITE | (Value & ~E1K_PCH_PHY_SMB_CTRL_FORCE_SMBUS), &Ignored);
+        }
+        E1kPchSetForceSmbus(Adapter, FALSE);
+    }
+
+    return Found;
+}
+
+static
+VOID
+E1kPchExitUlpWithoutFirmware(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    USHORT Value, Ignored;
+
+    E1kPchToggleLanPhyPc(Adapter);
+
+    if (!E1kPchPhyAccess(Adapter, E1K_PCH_PHY_SMB_CTRL_PAGE, E1K_PCH_PHY_SMB_CTRL, E1K_MDIC_READ, &Value))
+    {
+        E1kPchSetForceSmbus(Adapter, TRUE);
+        E1kStall(50000);
+        if (!E1kPchPhyAccess(Adapter, E1K_PCH_PHY_SMB_CTRL_PAGE, E1K_PCH_PHY_SMB_CTRL, E1K_MDIC_READ, &Value))
+            return;
+    }
+    E1kPchPhyAccess(Adapter, E1K_PCH_PHY_SMB_CTRL_PAGE, E1K_PCH_PHY_SMB_CTRL,
+                    E1K_MDIC_WRITE | (Value & ~E1K_PCH_PHY_SMB_CTRL_FORCE_SMBUS), &Ignored);
+    E1kPchSetForceSmbus(Adapter, FALSE);
+
+    if (!E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PM_CTRL_PAGE, E1K_PCH_PHY_PM_CTRL, E1K_MDIC_READ, &Value))
+        return;
+    E1kPchPhyAccess(Adapter, E1K_PCH_PHY_PM_CTRL_PAGE, E1K_PCH_PHY_PM_CTRL,
+                    E1K_MDIC_WRITE | Value | E1K_PCH_PHY_PM_CTRL_K1_ENABLE, &Ignored);
+
+    if (!E1kPchPhyAccess(Adapter, E1K_PCH_PHY_ULP_CONFIG1_PAGE, E1K_PCH_PHY_ULP_CONFIG1, E1K_MDIC_READ, &Value))
+        return;
+    Value &= ~(E1K_PCH_PHY_ULP_CONFIG1_IND | E1K_PCH_PHY_ULP_CONFIG1_STICKY_ULP |
+               E1K_PCH_PHY_ULP_CONFIG1_RESET_TO_SMBUS | E1K_PCH_PHY_ULP_CONFIG1_WOL_HOST |
+               E1K_PCH_PHY_ULP_CONFIG1_INBAND_EXIT | E1K_PCH_PHY_ULP_CONFIG1_EN_ULP_LANPHYPC |
+               E1K_PCH_PHY_ULP_CONFIG1_DIS_CLR_STICKY_ON_PERST | E1K_PCH_PHY_ULP_CONFIG1_DISABLE_SMB_PERST);
+    E1kPchPhyAccess(Adapter, E1K_PCH_PHY_ULP_CONFIG1_PAGE, E1K_PCH_PHY_ULP_CONFIG1, E1K_MDIC_WRITE | Value, &Ignored);
+    E1kPchPhyAccess(Adapter, E1K_PCH_PHY_ULP_CONFIG1_PAGE, E1K_PCH_PHY_ULP_CONFIG1,
+                    E1K_MDIC_WRITE | Value | E1K_PCH_PHY_ULP_CONFIG1_START, &Ignored);
+
+    E1kWrite(Adapter, E1K_REG_FEXTNVM7, E1kRead(Adapter, E1K_REG_FEXTNVM7) & ~E1K_FEXTNVM7_DISABLE_SMB_PERST);
+}
+
+/* An I219 PHY the firmware left in ultra low power mode does not answer on MDIO and keeps the link down */
+static
+VOID
+E1kPchExitUlp(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    ULONG Value, i;
+
+    if (E1kRead(Adapter, E1K_REG_FWSM) & E1K_FWSM_FW_VALID)
+    {
+        Value = E1kRead(Adapter, E1K_REG_H2ME);
+        E1kWrite(Adapter, E1K_REG_H2ME, (Value & ~E1K_H2ME_ULP) | E1K_H2ME_ENFORCE_SETTINGS);
+        for (i = 0; i < 250 && (E1kRead(Adapter, E1K_REG_FWSM) & E1K_FWSM_ULP_CFG_DONE); i++)
+            E1kStall(10000);
+        E1kWrite(Adapter, E1K_REG_H2ME, E1kRead(Adapter, E1K_REG_H2ME) & ~E1K_H2ME_ENFORCE_SETTINGS);
+        return;
+    }
+
+    if (!E1kPchAcquire(Adapter))
+        return;
+    E1kPchExitUlpWithoutFirmware(Adapter);
+    E1kPchRelease(Adapter);
+}
+
+static
+VOID
+E1kPchPreparePhy(
+    _In_ PE1K_ADAPTER Adapter)
+{
+    BOOLEAN Blocked, Accessible;
+    ULONG Control;
+
+    Blocked = E1kPchResetBlocked(Adapter);
+    if (!E1kPchAcquire(Adapter))
+        return;
+
+    Accessible = E1kPchPhyIsAccessible(Adapter);
+    if (!Accessible)
+    {
+        E1kPchSetForceSmbus(Adapter, TRUE);
+        E1kStall(50000);
+        Accessible = E1kPchPhyIsAccessible(Adapter);
+    }
+
+    if (!Accessible && !Blocked)
+    {
+        E1kPchToggleLanPhyPc(Adapter);
+        Accessible = E1kPchPhyIsAccessible(Adapter);
+        if (!Accessible)
+        {
+            E1kPchSetForceSmbus(Adapter, FALSE);
+            Accessible = E1kPchPhyIsAccessible(Adapter);
+        }
+    }
+
+    E1kPchRelease(Adapter);
+
+    if (!Accessible || Blocked || !E1kPchAcquire(Adapter))
+        return;
+
+    Control = E1kRead(Adapter, E1K_REG_CTRL);
+    E1kWrite(Adapter, E1K_REG_CTRL, Control | E1K_CTRL_PHY_RST);
+    E1kRead(Adapter, E1K_REG_STATUS);
+    E1kStall(100);
+    E1kWrite(Adapter, E1K_REG_CTRL, Control);
+    E1kRead(Adapter, E1K_REG_STATUS);
+    E1kStall(150);
+    E1kPchRelease(Adapter);
+    E1kPchWaitConfigDone(Adapter);
 }
 
 static
@@ -528,6 +737,14 @@ E1kInitializeController(
 
     if (Adapter->Class == E1kClassPch)
     {
+        Adapter->PchGeneration = E1kPchGeneration(Device->DeviceID);
+        if (Adapter->PchGeneration >= E1kPchTgp)
+        {
+            E1kWrite(Adapter, E1K_REG_EXTCNF_CTRL, E1kRead(Adapter, E1K_REG_EXTCNF_CTRL) | E1K_EXTCNF_CTRL_GATE_PHY_CFG);
+            E1kPchExitUlp(Adapter);
+            E1kPchPreparePhy(Adapter);
+        }
+
         E1kWrite(Adapter, E1K_REG_CTRL, E1kRead(Adapter, E1K_REG_CTRL) | E1K_CTRL_GIO_MASTER_DISABLE);
         for (i = 0; i < 800; i++)
         {
@@ -592,6 +809,8 @@ E1kInitializeController(
 
     if (Adapter->Class == E1kClassPch)
         E1kWrite(Adapter, E1K_REG_KABGTXD, E1kRead(Adapter, E1K_REG_KABGTXD) | E1K_KABGTXD_BGSQLBIAS);
+    if (Adapter->Class == E1kClassPch && Adapter->PchGeneration >= E1kPchTgp)
+        E1kWrite(Adapter, E1K_REG_FFLT_DBG, E1kRead(Adapter, E1K_REG_FFLT_DBG) | E1K_FFLT_DBG_DONT_GATE_WAKE_DMA_CLK);
 
     Control = E1kRead(Adapter, E1K_REG_CTRL);
     Control &= ~(E1K_CTRL_LRST | E1K_CTRL_PHY_RST | E1K_CTRL_ILOS | E1K_CTRL_VME);
