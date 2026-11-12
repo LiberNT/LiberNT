@@ -990,15 +990,3 @@ LxHugeFileCreate(PCSTR Path)
 {
     return NULL;
 }
-
-BOOLEAN
-LxDrmIsFile(PLX_FILE File)
-{
-    return FALSE;
-}
-
-LONG64
-LxDrmMmap(PLX_PROCESS Process, PLX_FILE File, ULONG64 Address, ULONG64 Length, ULONG Prot, ULONG Flags, ULONG64 Offset)
-{
-    return -LX_ENODEV;
-}
