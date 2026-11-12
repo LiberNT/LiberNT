@@ -68,6 +68,7 @@ PRELUDE = r'''
 #define DISPATCH_LEVEL 2
 #define SYNCH_LEVEL 12
 #define CLOCK_LEVEL 13
+#define IPI_LEVEL 14
 #define TIMER_TABLE_SIZE 1
 #define TIMER_WAIT_BLOCK 3
 #define KernelMode 0

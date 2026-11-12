@@ -1,6 +1,6 @@
 # PROJECT:     LiberNT host-native tests
 # LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
-# PURPOSE:     A system time set on one processor survives the clock tick on another
+# PURPOSE:     A system time set on one processor survives the clock tick and the sleep resume on another
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 import argparse
 import pathlib
@@ -42,12 +42,14 @@ fixture = r'''
 #define APC_LEVEL 1
 #define SYNCH_LEVEL 12
 #define CLOCK_LEVEL 13
+#define IPI_LEVEL 14
 #define TIMER_TABLE_SIZE 4
 #define UNREFERENCED_PARAMETER(x) ((void)(x))
 #define FIELD_OFFSET(t, f) offsetof(t, f)
 #define CONTAINING_RECORD(a, t, f) ((t *)((char *)(a) - offsetof(t, f)))
 #define CHECK(x) do { if (!(x)) { printf("%d: %s failed\n", __LINE__, #x); exit(1); } } while (0)
 #define ASSERT_IRQL_LESS_OR_EQUAL(x) ((void)0)
+#define ASSERT(x) CHECK(x)
 typedef unsigned char BOOLEAN, UCHAR, KIRQL;
 typedef unsigned long ULONG;
 typedef uint64_t ULONGLONG, KSPIN_LOCK, *PKSPIN_LOCK;
@@ -65,12 +67,12 @@ static KSPIN_LOCK KiSystemTimeLock __attribute__((unused));
 static KUSER_SHARED_DATA Shared, *MmWriteableSharedUserData = &Shared;
 static KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
 static LARGE_INTEGER KeBootTime;
-static ULONGLONG KeBootTimeBias;
+static ULONGLONG KeBootTimeBias, KiInterruptTimeBias;
 static BOOLEAN KiInterruptTimeFrozen, KiTimeAdjustmentEnabled;
 static ULONG KeTimeAdjustment, KeMaximumIncrement = 156250;
 static __thread int OnClockOwner;
-static volatile int Interleave, SetStarted, SetDone;
-static LARGE_INTEGER NewTime = {.QuadPart = 0x01DC000000000000LL};
+static volatile int Interleave, SetStarted, SetDone, LowHolder;
+static LARGE_INTEGER NewTime = {.QuadPart = 0x01DC000000000000LL}, *SetTime = &NewTime;
 static LARGE_INTEGER KiReadSystemTime(volatile KSYSTEM_TIME *Time) { LARGE_INTEGER r; r.QuadPart = *(volatile LONGLONG *)Time; return r; }
 static void KiWriteSystemTime(volatile KSYSTEM_TIME *Time, LARGE_INTEGER Value) { Time->High2Time = Value.HighPart; __atomic_store_n((LONGLONG *)Time, Value.QuadPart, __ATOMIC_RELEASE); }
 static ULONGLONG KiGetInterruptTime(void) { return (ULONGLONG)KiReadSystemTime(&KiInterruptTimeValue).QuadPart; }
@@ -94,9 +96,14 @@ static ULONGLONG KiGetSystemTime(void) {
     return Value;
 }
 static __thread KIRQL Irql;
-__attribute__((unused)) static KIRQL KfRaiseIrql(KIRQL New) { KIRQL Old = Irql; Irql = New; return Old; }
+__attribute__((unused)) static KIRQL KfRaiseIrql(KIRQL New) { KIRQL Old = Irql; CHECK(New >= Old); Irql = New; return Old; }
+__attribute__((unused)) static KIRQL KeGetCurrentIrql(void) { return Irql; }
 __attribute__((unused)) static void KeLowerIrql(KIRQL New) { Irql = New; }
-__attribute__((unused)) static void KxAcquireSpinLock(PKSPIN_LOCK Lock) { while (__atomic_exchange_n(Lock, 1, __ATOMIC_ACQUIRE)) sched_yield(); }
+/* The sleep IPI takes the lock, so a holder below IPI_LEVEL could be interrupted by it on its own processor */
+__attribute__((unused)) static void KxAcquireSpinLock(PKSPIN_LOCK Lock) {
+    if (Irql < IPI_LEVEL) LowHolder = 1;
+    while (__atomic_exchange_n(Lock, 1, __ATOMIC_ACQUIRE)) sched_yield();
+}
 __attribute__((unused)) static void KxReleaseSpinLock(PKSPIN_LOCK Lock) { __atomic_store_n(Lock, 0, __ATOMIC_RELEASE); }
 static KIRQL KiAcquireDispatcherLock(void) { return KfRaiseIrql(SYNCH_LEVEL); }
 static void KiReleaseDispatcherLock(KIRQL Old) { KeLowerIrql(Old); }
@@ -112,12 +119,13 @@ static void KiAcquireDispatcherObject(void *Header) { (void)Header; }
 static void KxInsertTimer(PKTIMER Timer, ULONG Hand) { (void)Timer; (void)Hand; CHECK(0); }
 ULONGLONG KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem) { @TICK@ }
 void KeSetSystemTime(PLARGE_INTEGER NewSystemTime, PLARGE_INTEGER OldSystemTime, BOOLEAN FixInterruptTime, PLARGE_INTEGER HalTime) { @SET@ }
+void KiResumeClockTime(ULONGLONG SleepTime) { @RESUME@ }
 static LARGE_INTEGER Previous;
 static void *Setter(void *Unused) {
     (void)Unused;
     while (!__atomic_load_n(&SetStarted, __ATOMIC_ACQUIRE))
         sched_yield();
-    KeSetSystemTime(&NewTime, &Previous, FALSE, NULL);
+    KeSetSystemTime(SetTime, &Previous, FALSE, NULL);
     __atomic_store_n(&SetDone, 1, __ATOMIC_RELEASE);
     return NULL;
 }
@@ -129,23 +137,58 @@ int main(void) {
         InitializeListHead(&KiTimerTableListHead[i].Entry);
     KiWriteSystemTime(&KiSystemTimeValue, Start);
     KeBootTime.QuadPart = Start.QuadPart - 1000;
+    LARGE_INTEGER Resumed = {.QuadPart = 0x01DD000000000000LL};
+    int Failed = 0;
     OnClockOwner = 1;
+    Irql = CLOCK_LEVEL;
     Interleave = 1;
     CHECK(pthread_create(&Thread, NULL, Setter, NULL) == 0);
     (void)KiUpdateSharedTime(156250, TRUE);
     CHECK(pthread_join(Thread, NULL) == 0);
+    CHECK(Irql == CLOCK_LEVEL);
     if (KiReadSystemTime(&KiSystemTimeValue).QuadPart != NewTime.QuadPart)
     {
         printf("the clock tick put the old time back over the time that was set\n");
-        return 1;
+        Failed = 1;
     }
-    /* The time set and the boot time moved by the same amount, measured from the tick */
-    CHECK(Previous.QuadPart == Start.QuadPart + 156250);
-    CHECK(KeBootTime.QuadPart == NewTime.QuadPart - 156250 - 1000);
-    return 0;
+    else
+    {
+        /* The time set and the boot time moved by the same amount, measured from the tick */
+        CHECK(Previous.QuadPart == Start.QuadPart + 156250);
+        CHECK(KeBootTime.QuadPart == NewTime.QuadPart - 156250 - 1000);
+    }
+
+    /* Processor 0 resumes the clock in the sleep IPI while another processor, already released, sets the time */
+    KiWriteSystemTime(&KiSystemTimeValue, Start);
+    KiInterruptTimeFrozen = TRUE;
+    SetTime = &Resumed;
+    SetStarted = SetDone = 0;
+    Irql = IPI_LEVEL;
+    Interleave = 1;
+    CHECK(pthread_create(&Thread, NULL, Setter, NULL) == 0);
+    KiResumeClockTime(30000000);
+    CHECK(pthread_join(Thread, NULL) == 0);
+    CHECK(!KiInterruptTimeFrozen && KiInterruptTimeBias == 30000000);
+    if (KiReadSystemTime(&KiSystemTimeValue).QuadPart != Resumed.QuadPart)
+    {
+        printf("the sleep resume put the old time back over the time that was set\n");
+        Failed = 1;
+    }
+    else
+    {
+        CHECK(Previous.QuadPart == Start.QuadPart + 30000000);
+    }
+
+    if (LowHolder)
+    {
+        printf("the system time lock was taken below IPI_LEVEL\n");
+        Failed = 1;
+    }
+    return Failed;
 }
 '''
 fixture = fixture.replace('@TICK@', body('KiUpdateSharedTime')).replace('@SET@', body('KeSetSystemTime'))
+fixture = fixture.replace('@RESUME@', body('KiResumeClockTime'))
 with tempfile.TemporaryDirectory(prefix='ke-clock-set-time-') as tmp:
     path = pathlib.Path(tmp)
     (path / 'test.c').write_text(fixture)

@@ -80,7 +80,8 @@ static BOOLEAN KiQuantumCalibrated;
 static volatile KSYSTEM_TIME KiInterruptTimeValue;
 static volatile KSYSTEM_TIME KiSystemTimeValue;
 
-/* The clock owner's tick reads and writes the system time back; a set from another processor must not fall in between */
+/* The clock owner's tick reads and writes the system time back; a set from another processor must not fall in between.
+   It is held at IPI_LEVEL, as the sleep IPI resumes the clock under it. */
 static KSPIN_LOCK KiSystemTimeLock;
 
 /* How much interrupt time has been left out of the bias-free reading, which is
@@ -586,6 +587,7 @@ KiUpdateSharedTime(
     LARGE_INTEGER Interrupt, System, Tick;
     ULONGLONG InterruptTime;
     ULONG Ticks;
+    KIRQL OldIrql;
 
     if (KiInterruptTimeFrozen)
         return KiGetInterruptTime();
@@ -607,6 +609,7 @@ KiUpdateSharedTime(
      * outside reference is applied without the clock period changing. With no
      * slew in force it moves by exactly the period that just elapsed.
      */
+    OldIrql = KfRaiseIrql(IPI_LEVEL);
     KxAcquireSpinLock(&KiSystemTimeLock);
     System.QuadPart = (LONGLONG)(KiGetSystemTime() +
                                  (KiTimeAdjustmentEnabled ? KeTimeAdjustment
@@ -614,6 +617,7 @@ KiUpdateSharedTime(
     KiWriteSystemTime(&KiSystemTimeValue, System);
     KiPublishSystemTimeWithBaseline(Interrupt, System);
     KxReleaseSpinLock(&KiSystemTimeLock);
+    KeLowerIrql(OldIrql);
 
     /* The tick count only advances on a whole default-length period */
     if (KeMaximumIncrement == 0)
@@ -989,8 +993,8 @@ KeSetSystemTime(
 
     OldIrql = KiAcquireDispatcherLock();
 
-    /* Above the clock, so the tick on this processor cannot wait for the lock it holds */
-    ClockIrql = KfRaiseIrql(CLOCK_LEVEL);
+    /* Above the clock and the sleep IPI, so neither can wait on this processor for the lock it holds */
+    ClockIrql = KfRaiseIrql(IPI_LEVEL);
     KxAcquireSpinLock(&KiSystemTimeLock);
 
     Previous.QuadPart = (LONGLONG)KiGetSystemTime();
@@ -1241,12 +1245,16 @@ KiResumeClockTime(
 {
     LARGE_INTEGER Interrupt, System;
 
+    ASSERT(KeGetCurrentIrql() >= IPI_LEVEL);
+
     Interrupt.QuadPart = (LONGLONG)(KiGetInterruptTime() + SleepTime);
     KiWriteInterruptTime(Interrupt);
 
+    KxAcquireSpinLock(&KiSystemTimeLock);
     System.QuadPart = (LONGLONG)(KiGetSystemTime() + SleepTime);
     KiWriteSystemTime(&KiSystemTimeValue, System);
     KiPublishSystemTimeWithBaseline(Interrupt, System);
+    KxReleaseSpinLock(&KiSystemTimeLock);
 
     KiInterruptTimeBias += SleepTime;
     KiInterruptTimeFrozen = FALSE;
