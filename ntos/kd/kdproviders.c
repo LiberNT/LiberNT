@@ -164,6 +164,17 @@ KdpSelectDebugMode(
         {
             KdpDebugMode.Net = TRUE;
         }
+        else if ((_strnicmp(Value, "COM", 3) == 0) && (Value[3] == ':'))
+        {
+            ULONG Address = strtoul(Value + 4, NULL, 0);
+
+            if (Address != 0)
+            {
+                KdpDebugMode.Serial = TRUE;
+                SerialPortNumber = 0;
+                SerialPortInfo.Address = UlongToPtr(Address);
+            }
+        }
         else if (_strnicmp(Value, "COM", 3) == 0)
         {
             ULONG Number = KdpReadDecimal(Value + 3);
