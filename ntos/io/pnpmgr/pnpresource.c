@@ -238,14 +238,15 @@ IopLastAlignedStart(
 
     if (Length == 0)
     {
-        Last = Maximum;
-    }
-    else
-    {
-        if (Maximum < Length - 1) return FALSE;
-        Last = Maximum - (Length - 1);
+        if ((Minimum % Alignment) != 0 && Minimum > MAXULONGLONG - (Alignment - Minimum % Alignment)) return FALSE;
+        Last = (Minimum % Alignment) ? Minimum + (Alignment - Minimum % Alignment) : Minimum;
+        if (Last > Maximum) return FALSE;
+        *Start = Last;
+        return TRUE;
     }
 
+    if (Maximum < Length - 1) return FALSE;
+    Last = Maximum - (Length - 1);
     Last -= Last % Alignment;
     if (Last < Minimum || !IopRangeFits(Last, Length, Maximum)) return FALSE;
 
@@ -302,10 +303,11 @@ IopDescribeFromRequirement(
             break;
 
         case CmResourceTypeMemory:
+            Maximum = min((ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart, MmGetPhysicalAddressLimit() - 1);
             if (!IopLastAlignedStart((ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart,
                                      Requirement->u.Memory.Alignment,
                                      Requirement->u.Memory.Length,
-                                     (ULONGLONG)Requirement->u.Memory.MaximumAddress.QuadPart,
+                                     Maximum,
                                      &Start))
             {
                 return STATUS_CONFLICTING_ADDRESSES;
@@ -314,10 +316,17 @@ IopDescribeFromRequirement(
             Descriptor->u.Memory.Length = Requirement->u.Memory.Length;
             break;
 
-        /* A window of 4 GB or more keeps its scaled length; it carries exactly one CM_RESOURCE_MEMORY_LARGE flag */
+        /* A window of 4 GB or more keeps its scaled length */
         case CmResourceTypeMemoryLarge:
             Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum);
-            if (Length == 0) return STATUS_INVALID_PARAMETER;
+            if (Length == 0)
+            {
+                Descriptor->Type = CmResourceTypeMemory;
+                Descriptor->Flags &= ~CM_RESOURCE_MEMORY_LARGE;
+                Descriptor->u.Memory.Start.QuadPart = Requirement->u.Memory.MinimumAddress.QuadPart;
+                break;
+            }
+            Maximum = min(Maximum, MmGetPhysicalAddressLimit() - 1);
             if (!IopLastAlignedStart(Minimum, Alignment, Length, Maximum, &Start)) return STATUS_CONFLICTING_ADDRESSES;
             if (!NT_SUCCESS(RtlCmEncodeMemIoResource(Descriptor, CmResourceTypeMemoryLarge, Length, Start)))
                 return STATUS_INVALID_PARAMETER;
@@ -505,6 +514,7 @@ NTSTATUS
 IopPickOneDescriptor(
     _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
     _In_opt_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PVOID Claimant,
     _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
     _In_ ULONG ChosenCount,
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
@@ -545,7 +555,7 @@ IopPickOneDescriptor(
 
     while (Attempts < 0x10000)
     {
-        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, NULL) &&
+        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, Claimant, NULL) &&
             !IopResDbConflictsWithChosen(Descriptor, DeviceNode, Chosen, ChosenCount))
         {
             return STATUS_SUCCESS;
@@ -587,7 +597,8 @@ NTAPI
 IopFixupResourceListWithRequirements(
     IN PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList,
     OUT PCM_RESOURCE_LIST *ResourceList,
-    _In_opt_ PDEVICE_NODE DeviceNode)
+    _In_opt_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PVOID Claimant)
 {
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
     PCM_RESOURCE_LIST Allocated;
@@ -651,6 +662,7 @@ IopFixupResourceListWithRequirements(
             {
                 Status = IopPickOneDescriptor(&List->Descriptors[Choice],
                                               DeviceNode,
+                                              Claimant,
                                               Partial,
                                               Count,
                                               &Partial[Count]);
@@ -1041,7 +1053,8 @@ IopAssignDeviceResources(
     Status = IopFixupResourceListWithRequirements(
         DeviceNode->ResourceRequirements,
         &Assigned,
-        DeviceNode);
+        DeviceNode,
+        NULL);
     if (NT_SUCCESS(Status) && Assigned != NULL)
     {
         Status = IopResDbReserve(DeviceNode, Assigned, &Conflict);

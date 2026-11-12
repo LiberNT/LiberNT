@@ -103,13 +103,10 @@ ULONG
 RtlpMemIoLargeShift(
     _In_ USHORT Flags)
 {
-    switch (Flags & CM_RESOURCE_MEMORY_LARGE)
-    {
-        case CM_RESOURCE_MEMORY_LARGE_40: return 8;
-        case CM_RESOURCE_MEMORY_LARGE_48: return 16;
-        case CM_RESOURCE_MEMORY_LARGE_64: return 32;
-        default: return 0;
-    }
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_40) return 8;
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_48) return 16;
+    if (Flags & CM_RESOURCE_MEMORY_LARGE_64) return 32;
+    return 0;
 }
 
 ULONGLONG

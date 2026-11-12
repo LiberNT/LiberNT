@@ -336,6 +336,13 @@ MmIsIoSpaceActive(
     return TRUE;
 }
 
+ULONG64
+MmGetPhysicalAddressLimit(VOID)
+{
+    ASSERT(MiArchDescribe()->PhysicalAddressBits < 64);
+    return 1ULL << MiArchDescribe()->PhysicalAddressBits;
+}
+
 BOOLEAN
 NTAPI
 MmIsThisAnNtAsSystem(VOID)

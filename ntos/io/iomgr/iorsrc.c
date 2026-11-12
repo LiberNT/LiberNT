@@ -193,6 +193,7 @@ NTAPI
 IopDetectResourceConflict(
     IN PCM_RESOURCE_LIST ResourceList,
     IN BOOLEAN Silent,
+    _In_opt_ PVOID Claimant,
     OUT OPTIONAL PCM_PARTIAL_RESOURCE_DESCRIPTOR ConflictingDescriptor)
 {
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
@@ -221,7 +222,7 @@ IopDetectResourceConflict(
         {
             Conflict = ConflictingDescriptor;
 
-            Conflicted = IopResDbCheckDescriptor(Descriptor, NULL, Conflict);
+            Conflicted = IopResDbCheckDescriptor(Descriptor, NULL, Claimant, Conflict);
             if (Conflicted)
             {
                 if (!Silent)
@@ -483,12 +484,12 @@ IoReportResourceUsage(
 {
     PCM_RESOURCE_LIST ResourceList;
     PDEVICE_NODE DeviceNode = NULL;
+    PVOID Claimant;
     NTSTATUS Status;
 
     PAGED_CODE();
 
     UNREFERENCED_PARAMETER(DriverClassName);
-    UNREFERENCED_PARAMETER(DriverObject);
 
     *ConflictDetected = FALSE;
 
@@ -514,20 +515,22 @@ IoReportResourceUsage(
     }
 
     if (DeviceObject != NULL) DeviceNode = IopGetDeviceNode(DeviceObject);
+    Claimant = (DeviceList != NULL && DeviceObject != NULL) ? (PVOID)DeviceObject : (PVOID)DriverObject;
+    ASSERT(Claimant != NULL);
 
     IopResDbEnsureSeeded();
 
     /* A usage found free is recorded before anyone else can look */
     KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
 
-    Status = IopDetectResourceConflict(ResourceList, TRUE, NULL);
+    Status = IopDetectResourceConflict(ResourceList, TRUE, Claimant, NULL);
     if (Status == STATUS_CONFLICTING_ADDRESSES)
     {
         *ConflictDetected = TRUE;
         if (OverrideConflict) Status = STATUS_SUCCESS;
     }
 
-    if (NT_SUCCESS(Status)) IopResDbReserve(DeviceNode, ResourceList, NULL);
+    if (NT_SUCCESS(Status)) IopResDbReplaceClaim(DeviceNode, Claimant, ResourceList);
 
     KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
 
@@ -624,6 +627,7 @@ IoAssignResources(
     PCM_RESOURCE_LIST Assigned = NULL;
     BOOLEAN Conflict = FALSE;
     NTSTATUS Status;
+    ULONG Size;
 
     PAGED_CODE();
 
@@ -639,19 +643,21 @@ IoAssignResources(
 
     Status = IopFixupResourceListWithRequirements(RequestedResources,
                                                   &Assigned,
-                                                  NULL);
-    if (NT_SUCCESS(Status))
+                                                  NULL,
+                                                  DeviceObject ? (PVOID)DeviceObject : (PVOID)DriverObject);
+    if (NT_SUCCESS(Status) && Assigned != NULL)
     {
+        Size = PnpDetermineResourceListSize(Assigned);
         Status = IoReportResourceUsage(NULL,
                                        DriverObject,
-                                       NULL,
-                                       0,
+                                       DeviceObject ? NULL : Assigned,
+                                       DeviceObject ? 0 : Size,
                                        DeviceObject,
-                                       Assigned,
-                                       PnpDetermineResourceListSize(Assigned),
+                                       DeviceObject ? Assigned : NULL,
+                                       DeviceObject ? Size : 0,
                                        FALSE,
                                        &Conflict);
-        if (!NT_SUCCESS(Status) && Assigned != NULL) ExFreePool(Assigned);
+        if (!NT_SUCCESS(Status)) ExFreePool(Assigned);
     }
 
     KeReleaseMutex(&IopResourceAssignmentLock, FALSE);

@@ -561,6 +561,9 @@ PFN_NUMBER
 NTAPI
 MmHibernationFrameLimit(VOID);
 
+ULONG64
+MmGetPhysicalAddressLimit(VOID);
+
 UCHAR
 NTAPI
 MmQueryHibernationFrame(

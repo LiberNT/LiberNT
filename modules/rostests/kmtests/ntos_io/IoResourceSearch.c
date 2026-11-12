@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The resource search: aligned candidates, valid large windows, no wraparound, distinct concurrent settings
+ * PURPOSE:     The resource search: highest free setting, large windows, the physical address range, claims per owner
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -220,7 +220,7 @@ CheckConcurrentAssignments(VOID)
     PVOID Threads[RACE_THREADS];
     LARGE_INTEGER Timeout;
     HANDLE Handle;
-    ULONG Index, Other, Count, Shared = 0, Failed = 0, Created = 0, Joined = 0;
+    ULONG Index, Count, Failed = 0, Created = 0, Joined = 0;
     NTSTATUS Status;
 
     Count = min((ULONG)KeNumberProcessors, (ULONG)RACE_THREADS);
@@ -260,50 +260,25 @@ CheckConcurrentAssignments(VOID)
     for (Index = 0; Index < Count; Index++)
     {
         if (Threads[Index] == NULL) continue;
-        if (!NT_SUCCESS(Race[Index].Status))
-        {
-            Failed++;
-            continue;
-        }
-        for (Other = Index + 1; Other < Count; Other++)
-        {
-            if (Threads[Other] != NULL && NT_SUCCESS(Race[Other].Status) && Race[Other].Start == Race[Index].Start) Shared++;
-        }
+        if (!NT_SUCCESS(Race[Index].Status)) Failed++;
     }
 
     ok_eq_ulong(Failed, 0UL);
-    ok_eq_ulong(Shared, 0UL);
 
     /* A thread still running owns its slot; the slots stay */
     if (Joined == Created) ExFreePoolWithTag(State, 'sRmK');
 }
 
-START_TEST(IoResourceSearch)
+static
+NTSTATUS
+ClaimPage(
+    _In_opt_ PDEVICE_OBJECT Device,
+    _In_ ULONGLONG Start,
+    _In_ ULONG Length,
+    _Out_ PBOOLEAN Conflict)
 {
-    IO_RESOURCE_DESCRIPTOR Requirement;
     CM_RESOURCE_LIST Claim;
-    BOOLEAN Conflict;
-    ULONGLONG Start;
-    NTSTATUS Status;
 
-    /* The search takes the highest aligned candidate */
-    DescribeMemory(&Requirement, 0x700001001ULL, 0x7000FFFFFULL, 0x1000, 0x1000);
-    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
-    ok_eq_hex64(Start, 0x7000FF000ULL);
-
-    /* A large window carries exactly one CM_RESOURCE_MEMORY_LARGE flag */
-    RtlZeroMemory(&Requirement, sizeof(Requirement));
-    Requirement.Type = CmResourceTypeMemoryLarge;
-    Requirement.ShareDisposition = CmResourceShareDeviceExclusive;
-    Requirement.u.Memory.Length = 2;
-    Requirement.u.Memory.Alignment = 1;
-    Requirement.u.Memory.MinimumAddress.QuadPart = 0x800000000LL;
-    Requirement.u.Memory.MaximumAddress.QuadPart = 0x8FFFFFFFFLL;
-    ok(!NT_SUCCESS(Assign(&Requirement, &Start)), "a large window without a size flag got 0x%I64x\n", Start);
-    Requirement.Flags = CM_RESOURCE_MEMORY_LARGE_40 | CM_RESOURCE_MEMORY_LARGE_48;
-    ok(!NT_SUCCESS(Assign(&Requirement, &Start)), "a large window with two size flags got 0x%I64x\n", Start);
-
-    /* A range that ends at the top of the address space overlaps a second claim of it */
     RtlZeroMemory(&Claim, sizeof(Claim));
     Claim.Count = 1;
     Claim.List[0].InterfaceType = Internal;
@@ -313,18 +288,81 @@ START_TEST(IoResourceSearch)
     Claim.List[0].PartialResourceList.PartialDescriptors[0].Type = CmResourceTypeMemory;
     Claim.List[0].PartialResourceList.PartialDescriptors[0].ShareDisposition = CmResourceShareDeviceExclusive;
     Claim.List[0].PartialResourceList.PartialDescriptors[0].Flags = CM_RESOURCE_MEMORY_READ_WRITE;
-    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)TOP_PAGE;
-    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Length = 0x1000;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)Start;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Length = Length;
 
-    Conflict = TRUE;
-    Status = IoReportResourceUsage(NULL, KmtDriverObject, &Claim, sizeof(Claim), NULL, NULL, 0, FALSE, &Conflict);
-    ok_eq_hex(Status, STATUS_SUCCESS);
-    ok(!Conflict, "the first claim of the top page conflicted\n");
+    *Conflict = FALSE;
+    if (Device != NULL)
+        return IoReportResourceUsage(NULL, KmtDriverObject, NULL, 0, Device, &Claim, sizeof(Claim), FALSE, Conflict);
+    return IoReportResourceUsage(NULL, KmtDriverObject, &Claim, sizeof(Claim), NULL, NULL, 0, FALSE, Conflict);
+}
 
-    Conflict = FALSE;
-    Status = IoReportResourceUsage(NULL, KmtDriverObject, &Claim, sizeof(Claim), NULL, NULL, 0, FALSE, &Conflict);
-    ok_eq_hex(Status, STATUS_CONFLICTING_ADDRESSES);
-    ok(Conflict, "a second claim of the top page did not conflict\n");
+#define CLAIM_A 0x770000000ULL
+#define CLAIM_B 0x771000000ULL
+
+/* A driver's claim replaces its previous one; the driver and its device claim apart */
+static
+VOID
+CheckClaimOwners(VOID)
+{
+    PDEVICE_OBJECT Device = KmtDriverObject->DeviceObject;
+    IO_RESOURCE_DESCRIPTOR Requirement;
+    ULONGLONG First = 0, Second = 0;
+    BOOLEAN Conflict;
+
+    DescribeMemory(&Requirement, 0x760000000ULL, 0x7600FFFFFULL, 0x1000, 0x1000);
+    ok_once(Assign(&Requirement, &First), STATUS_SUCCESS);
+    ok_once(Assign(&Requirement, &Second), STATUS_SUCCESS);
+    ok_eq_hex64(First, 0x7600FF000ULL);
+    ok_eq_hex64(Second, 0x7600FF000ULL);
+
+    if (skip(Device != NULL, "The test driver has no device\n")) return;
+    ok_once(ClaimPage(NULL, CLAIM_A, 0x1000, &Conflict), STATUS_SUCCESS);
+    ok_once(ClaimPage(Device, CLAIM_A, 0x1000, &Conflict), STATUS_CONFLICTING_ADDRESSES);
+    ok(Conflict, "the device's claim of the driver's page did not conflict\n");
+    ok_once(ClaimPage(NULL, CLAIM_B, 0x1000, &Conflict), STATUS_SUCCESS);
+    ok_once(ClaimPage(Device, CLAIM_A, 0x1000, &Conflict), STATUS_SUCCESS);
+    ok(!Conflict, "the page the driver gave up still conflicted\n");
+    ok_once(ClaimPage(Device, CLAIM_B, 0x1000, &Conflict), STATUS_CONFLICTING_ADDRESSES);
+}
+
+START_TEST(IoResourceSearch)
+{
+    IO_RESOURCE_DESCRIPTOR Requirement;
+    BOOLEAN Conflict;
+    ULONGLONG Start;
+    NTSTATUS Status;
+
+    /* The search takes the highest aligned candidate */
+    DescribeMemory(&Requirement, 0x700001001ULL, 0x7000FFFFFULL, 0x1000, 0x1000);
+    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
+    ok_eq_hex64(Start, 0x7000FF000ULL);
+
+    /* A large window without a size flag has no length and is set at its minimum; of two flags the 40-bit one counts */
+    RtlZeroMemory(&Requirement, sizeof(Requirement));
+    Requirement.Type = CmResourceTypeMemoryLarge;
+    Requirement.ShareDisposition = CmResourceShareDeviceExclusive;
+    Requirement.u.Memory.Length = 2;
+    Requirement.u.Memory.Alignment = 1;
+    Requirement.u.Memory.MinimumAddress.QuadPart = 0x800000000LL;
+    Requirement.u.Memory.MaximumAddress.QuadPart = 0x8FFFFFFFFLL;
+    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
+    ok_eq_hex64(Start, 0x800000000ULL);
+    Requirement.Flags = CM_RESOURCE_MEMORY_LARGE_40 | CM_RESOURCE_MEMORY_LARGE_48;
+    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
+    ok_eq_hex64(Start, 0x8FFFFFE00ULL);
+
+    /* Memory beyond the physical address range is never free */
+    ok_once(ClaimPage(NULL, TOP_PAGE, 0x1000, &Conflict), STATUS_CONFLICTING_ADDRESSES);
+    ok(Conflict, "a claim of the top page did not conflict\n");
+#if defined(_M_ARM64)
+    ok_once(ClaimPage(NULL, 0xFFFFFFFFF000ULL, 0x1000, &Conflict), STATUS_SUCCESS);
+    ok_once(ClaimPage(NULL, 0x1000000000000ULL, 0x1000, &Conflict), STATUS_CONFLICTING_ADDRESSES);
+    ok_once(ClaimPage(NULL, 0xFFFFFFFFF000ULL, 0x2000, &Conflict), STATUS_CONFLICTING_ADDRESSES);
+    DescribeMemory(&Requirement, 0xFFFFFFFF0000ULL, 0x100000000FFFFULL, 0x1000, 0x1000);
+    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
+    ok_eq_hex64(Start, 0xFFFFFFFFF000ULL);
+#endif
 
     /* The search does not step past the top to address 0 */
     DescribeMemory(&Requirement, TOP_PAGE, MAXULONGLONG, 0x1000, 0x1000);
@@ -333,5 +371,6 @@ START_TEST(IoResourceSearch)
 
     CheckDescriptorsOfOneList();
     CheckTightWindow();
+    CheckClaimOwners();
     CheckConcurrentAssignments();
 }

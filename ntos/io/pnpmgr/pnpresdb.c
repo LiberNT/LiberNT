@@ -24,6 +24,7 @@ typedef struct _PI_RES_ENTRY
 {
     LIST_ENTRY ListEntry;
     PDEVICE_NODE Owner;
+    PVOID Claimant;
     CM_PARTIAL_RESOURCE_DESCRIPTOR Desc;
 } PI_RES_ENTRY, *PPI_RES_ENTRY;
 
@@ -202,7 +203,7 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
 /* Conflicts are logged but still recorded (non-enforcing). */
 static
 NTSTATUS
-IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _In_ BOOLEAN SkipInternalInterrupts, _Out_opt_ PBOOLEAN Conflict)
+IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _In_opt_ PCM_RESOURCE_LIST ResourceList, _In_ BOOLEAN SkipInternalInterrupts, _Out_opt_ PBOOLEAN Conflict)
 {
     PCM_FULL_RESOURCE_DESCRIPTOR full;
     ULONG i, j;
@@ -235,6 +236,7 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST
             if (entry == NULL)
                 continue;
             entry->Owner = DeviceNode;
+            entry->Claimant = Claimant;
             entry->Desc = *desc;
 
             KeAcquireSpinLock(&IopResBuckets[cls].Lock, &irql);
@@ -266,17 +268,29 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST
 NTSTATUS
 IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _Out_opt_ PBOOLEAN Conflict)
 {
-    return IopResDbReserveList(DeviceNode, ResourceList, FALSE, Conflict);
+    return IopResDbReserveList(DeviceNode, NULL, ResourceList, FALSE, Conflict);
 }
 
 /* Check one candidate descriptor against the database; returns the conflicting entry. */
 BOOLEAN
-IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
+IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
 {
     PI_RES_CLASS cls;
     PLIST_ENTRY le;
     KIRQL irql;
     BOOLEAN found = FALSE;
+    UINT64 Start, Length;
+
+    if (Candidate->Type == CmResourceTypeMemory || Candidate->Type == CmResourceTypeMemoryLarge)
+    {
+        Length = RtlCmDecodeMemIoResource(Candidate, &Start);
+        if (Length != 0 && IopResDbLast(Start, Length) >= MmGetPhysicalAddressLimit())
+        {
+            if (Conflicting)
+                *Conflicting = *Candidate;
+            return TRUE;
+        }
+    }
 
     if (!IopResDbReady || !IopResClassFromType(Candidate->Type, &cls))
         return FALSE;
@@ -286,6 +300,8 @@ IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_
     {
         PPI_RES_ENTRY entry = CONTAINING_RECORD(le, PI_RES_ENTRY, ListEntry);
         if (CandidateOwner != NULL && entry->Owner == CandidateOwner)
+            continue;
+        if (Claimant != NULL && entry->Claimant == Claimant)
             continue;
         if (IopResDbConflict(Candidate, CandidateOwner, &entry->Desc, entry->Owner))
         {
@@ -339,7 +355,7 @@ IopResDbCheckList(_In_opt_ PCM_RESOURCE_LIST ResourceList)
 
         for (j = 0; j < partial->Count; j++, desc = CmiGetNextPartialDescriptor(desc))
         {
-            if (IopResDbCheckDescriptor(desc, NULL, NULL))
+            if (IopResDbCheckDescriptor(desc, NULL, NULL, NULL))
                 return TRUE;
         }
 
@@ -347,6 +363,47 @@ IopResDbCheckList(_In_opt_ PCM_RESOURCE_LIST ResourceList)
     }
 
     return FALSE;
+}
+
+static
+VOID
+IopResDbReleaseClaim(_In_ PVOID Claimant)
+{
+    ULONG cls;
+
+    ASSERT(Claimant != NULL);
+    for (cls = 0; cls < PiResClassMax; cls++)
+    {
+        PLIST_ENTRY le;
+        KIRQL irql;
+
+        KeAcquireSpinLock(&IopResBuckets[cls].Lock, &irql);
+        le = IopResBuckets[cls].List.Flink;
+        while (le != &IopResBuckets[cls].List)
+        {
+            PPI_RES_ENTRY entry = CONTAINING_RECORD(le, PI_RES_ENTRY, ListEntry);
+            le = le->Flink;
+            if (entry->Claimant == Claimant)
+            {
+                RemoveEntryList(&entry->ListEntry);
+                ExFreePoolWithTag(entry, TAG_IO);
+            }
+        }
+        KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
+    }
+}
+
+NTSTATUS
+IopResDbReplaceClaim(_In_opt_ PDEVICE_NODE DeviceNode, _In_ PVOID Claimant, _In_ PCM_RESOURCE_LIST ResourceList)
+{
+    ASSERT(Claimant != NULL);
+    if (!IopResDbReady)
+        return STATUS_SUCCESS;
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+    IopResDbReleaseClaim(Claimant);
+    IopResDbReserveList(DeviceNode, Claimant, ResourceList, FALSE, NULL);
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+    return STATUS_SUCCESS;
 }
 
 VOID
@@ -500,7 +557,7 @@ IopResDbSeedFromRegistry(VOID)
                 /* Only raw lists; skip translated copies */
                 list = (PCM_RESOURCE_LIST)value->Data;
                 if (wcsstr(valueName->Name, L".Translated") == NULL && value->Type == REG_RESOURCE_LIST && IopIsResourceListValid(list, value->DataLength) && list->Count != 0)
-                    IopResDbReserveList(NULL, list, halKey, NULL);
+                    IopResDbReserveList(NULL, NULL, list, halKey, NULL);
 
                 ExFreePoolWithTag(valueName, TAG_IO);
                 ExFreePoolWithTag(value, TAG_IO);

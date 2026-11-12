@@ -725,13 +725,14 @@ IopInitializeArbiters(VOID);
 
 NTSTATUS
 NTAPI
-IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList, OUT PCM_RESOURCE_LIST *ResourceList, _In_opt_ PDEVICE_NODE DeviceNode);
+IopFixupResourceListWithRequirements(IN PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList, OUT PCM_RESOURCE_LIST *ResourceList, _In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant);
 
 NTSTATUS
 NTAPI
 IopDetectResourceConflict(
      IN PCM_RESOURCE_LIST ResourceList,
      IN BOOLEAN Silent,
+     _In_opt_ PVOID Claimant,
      OUT OPTIONAL PCM_PARTIAL_RESOURCE_DESCRIPTOR ConflictingDescriptor
 );
 
@@ -876,7 +877,13 @@ IopUpdateControlKeyWithResources(
     _In_ PDEVICE_NODE DeviceNode);
 
 BOOLEAN
-IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting);
+IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting);
+
+NTSTATUS
+IopResDbReplaceClaim(
+    _In_opt_ PDEVICE_NODE DeviceNode,
+    _In_ PVOID Claimant,
+    _In_ PCM_RESOURCE_LIST ResourceList);
 
 BOOLEAN
 IopResDbConflictsWithChosen(
