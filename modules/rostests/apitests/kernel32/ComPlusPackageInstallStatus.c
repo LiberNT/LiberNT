@@ -13,6 +13,50 @@ typedef BOOL (WINAPI *PFN_SET_COMPLUS_STATUS)(ULONG);
 #define USER_SHARED_DATA_ADDRESS 0x7FFE0000
 #define USER_SHARED_DATA_COMPLUS_PACKAGE 0x2E0
 
+static
+VOID
+TestRestricted(
+    _In_ PFN_SET_COMPLUS_STATUS pSetComPlusPackageInstallStatus,
+    _In_ ULONG Status,
+    _In_ DWORD Flags,
+    _In_ BOOL DisableAdministrators,
+    _In_ PCSTR What)
+{
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+    SID_AND_ATTRIBUTES Disable;
+    PSID Administrators = NULL;
+    HANDLE Token, Restricted;
+    BOOL Ret;
+
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &Token))
+        return;
+    AllocateAndInitializeSid(&NtAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &Administrators);
+    Disable.Sid = Administrators;
+    Disable.Attributes = 0;
+    if (CreateRestrictedToken(Token, Flags, DisableAdministrators ? 1 : 0, DisableAdministrators ? &Disable : NULL, 0, NULL, 0, NULL, &Restricted))
+    {
+        HANDLE Impersonation;
+        if (DuplicateToken(Restricted, SecurityImpersonation, &Impersonation) && SetThreadToken(NULL, Impersonation))
+        {
+            SetLastError(0xdeadbeef);
+            Ret = pSetComPlusPackageInstallStatus(Status);
+            if (DisableAdministrators)
+                ok(!Ret && GetLastError() == ERROR_ACCESS_DENIED, "%s: ret %d error %lu\n", What, Ret, GetLastError());
+            else
+                ok(Ret && GetLastError() == 0xdeadbeef, "%s: ret %d error %lu\n", What, Ret, GetLastError());
+            SetThreadToken(NULL, NULL);
+            CloseHandle(Impersonation);
+        }
+        else
+            ok(0, "%s: impersonation failed %lu\n", What, GetLastError());
+        CloseHandle(Restricted);
+    }
+    else
+        ok(0, "%s: CreateRestrictedToken failed %lu\n", What, GetLastError());
+    FreeSid(Administrators);
+    CloseHandle(Token);
+}
+
 START_TEST(ComPlusPackageInstallStatus)
 {
     HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
@@ -69,4 +113,8 @@ START_TEST(ComPlusPackageInstallStatus)
     Ret = pSetComPlusPackageInstallStatus(Status);
     ok_int(Ret, TRUE);
     ok_long(pGetComPlusPackageInstallStatus(), Shared);
+
+    TestRestricted(pSetComPlusPackageInstallStatus, Status, DISABLE_MAX_PRIVILEGE, FALSE, "no privileges");
+    TestRestricted(pSetComPlusPackageInstallStatus, Status, 0, TRUE, "administrators deny-only");
+    TestRestricted(pSetComPlusPackageInstallStatus, Status, DISABLE_MAX_PRIVILEGE, TRUE, "no privileges, administrators deny-only");
 }

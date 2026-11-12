@@ -2204,16 +2204,27 @@ NtSetSystemInformation(
 
             case SystemComPlusPackage:
             {
+                SECURITY_SUBJECT_CONTEXT Subject;
+                BOOLEAN Administrator;
+
                 if (Length != sizeof(ULONG))
                 {
                     Status = STATUS_INFO_LENGTH_MISMATCH;
                     break;
                 }
 
-                if (!SeSinglePrivilegeCheck(SeTcbPrivilege, PreviousMode))
+                if (PreviousMode != KernelMode)
                 {
-                    Status = STATUS_ACCESS_DENIED;
-                    break;
+                    SeCaptureSubjectContext(&Subject);
+                    SeLockSubjectContext(&Subject);
+                    Administrator = SeTokenIsAdmin(SeQuerySubjectContextToken(&Subject));
+                    SeUnlockSubjectContext(&Subject);
+                    SeReleaseSubjectContext(&Subject);
+                    if (!Administrator)
+                    {
+                        Status = STATUS_ACCESS_DENIED;
+                        break;
+                    }
                 }
 
                 InterlockedExchange((PLONG)&MmWriteableSharedUserData->ComPlusPackage,
