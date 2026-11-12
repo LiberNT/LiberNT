@@ -815,7 +815,6 @@ NtAlpcAcceptConnectPort(
     {
         ObDereferenceObject(ConnectionPort);
         ExFreePoolWithTag(Info, 'IcpA');
-        ServerPort = NULL;
         goto Refuse;
     }
 
