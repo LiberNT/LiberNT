@@ -79,7 +79,7 @@ WriteAt(
     Status = NtWriteFile(File, NULL, NULL, NULL, &IoStatus, (PVOID)Data, Length, &ByteOffset, NULL);
     ok_ntstatus(Status, STATUS_SUCCESS);
     ok_ntstatus(IoStatus.Status, STATUS_SUCCESS);
-    ok(IoStatus.Information == Length, "Wrote %Iu bytes, expected %lu\n", IoStatus.Information, Length);
+    ok(IoStatus.Information == Length, "Wrote %Iu bytes, expected %lu\n", (size_t)IoStatus.Information, Length);
 }
 
 static
@@ -152,7 +152,7 @@ TestVolume(
     ByteOffset.QuadPart = 0;
     Status = NtReadFile(File, NULL, NULL, NULL, &IoStatus, Data, sizeof(Data) - 1, &ByteOffset, NULL);
     ok_ntstatus(Status, STATUS_SUCCESS);
-    ok(IoStatus.Information == 6, "%ls: the file has %Iu bytes, expected 6\n", FileSystem, IoStatus.Information);
+    ok(IoStatus.Information == 6, "%ls: the file has %Iu bytes, expected 6\n", FileSystem, (size_t)IoStatus.Information);
     ok(strcmp(Data, "foobar") == 0, "%ls: the file holds '%s', expected 'foobar'\n", FileSystem, Data);
 
     Disposition.DeleteFile = TRUE;
