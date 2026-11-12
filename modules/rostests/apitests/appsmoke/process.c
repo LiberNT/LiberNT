@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests process start, DLL directory inheritance and termination in an address wait
+ * PURPOSE:     Tests process start, environment and DLL directory inheritance and termination in an address wait
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -230,6 +230,47 @@ START_TEST(child_start)
 
     ok(Failed == 0, "%u of %u children failed to start; first exit code %#lx\n", Failed, Index, FirstCode);
     trace("Slowest of %u children: %lu ms\n", Index, Slowest);
+}
+
+START_TEST(environment)
+{
+    USHORT ProcessMachine = IMAGE_FILE_MACHINE_UNKNOWN, NativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;
+    const WCHAR *Native = NULL;
+    WCHAR Value[64] = L"";
+    DWORD ExitCode, Elapsed, Length;
+    BOOL InTime;
+
+    if (AppSmokeIsRole("child"))
+    {
+        Length = GetEnvironmentVariableW(L"APPSMOKE_INHERITED", Value, ARRAYSIZE(Value));
+        ok(Length == 3 && !wcscmp(Value, L"yes"), "The child got %lu characters of its parent's variable\n", Length);
+        return;
+    }
+
+    ok(IsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine), "IsWow64Process2: %lu\n", GetLastError());
+    if (NativeMachine == IMAGE_FILE_MACHINE_AMD64)
+        Native = L"AMD64";
+    else if (NativeMachine == IMAGE_FILE_MACHINE_ARM64)
+        Native = L"ARM64";
+
+    /* WOW64 Implementation Details: a 32-bit process sees x86, and the native architecture in PROCESSOR_ARCHITEW6432 */
+    if (ProcessMachine == IMAGE_FILE_MACHINE_I386 && Native != NULL)
+    {
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITECTURE", Value, ARRAYSIZE(Value));
+        ok(Length != 0 && !wcscmp(Value, L"x86"), "PROCESSOR_ARCHITECTURE is %ls\n", Length ? Value : L"not set");
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITEW6432", Value, ARRAYSIZE(Value));
+        ok(Length != 0 && !wcscmp(Value, Native), "PROCESSOR_ARCHITEW6432 is %ls\n", Length ? Value : L"not set");
+    }
+    else if (sizeof(void *) == 8)
+    {
+        Length = GetEnvironmentVariableW(L"PROCESSOR_ARCHITEW6432", Value, ARRAYSIZE(Value));
+        ok(Length == 0, "A 64-bit process has PROCESSOR_ARCHITEW6432 %ls\n", Value);
+    }
+
+    ok(SetEnvironmentVariableW(L"APPSMOKE_INHERITED", L"yes"), "SetEnvironmentVariable: %lu\n", GetLastError());
+    InTime = AppSmokeRunSelf("environment", "child", CHILD_BUDGET_MS, &ExitCode, &Elapsed);
+    ok(InTime && !ExitCode, "Child of the environment: exit code %#lx after %lu ms\n", ExitCode, Elapsed);
+    SetEnvironmentVariableW(L"APPSMOKE_INHERITED", NULL);
 }
 
 static DWORD WINAPI BlockedWaiter(void *Context)

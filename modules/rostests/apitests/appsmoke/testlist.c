@@ -8,6 +8,7 @@ extern void func_d3dkmt(void);
 extern void func_dc_from_memory(void);
 extern void func_display_mode(void);
 extern void func_dll_directory(void);
+extern void func_environment(void);
 extern void func_file_dialog(void);
 extern void func_opencl(void);
 extern void func_opengl(void);
@@ -35,6 +36,7 @@ const struct test winetest_testlist[] =
     { "dc_from_memory", func_dc_from_memory },
     { "display_mode", func_display_mode },
     { "dll_directory", func_dll_directory },
+    { "environment", func_environment },
     { "file_dialog", func_file_dialog },
     { "opencl", func_opencl },
     { "opengl", func_opengl },
