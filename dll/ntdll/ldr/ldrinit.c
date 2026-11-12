@@ -1445,12 +1445,17 @@ LdrShutdownThread(VOID)
     LdrpFreeTls();
     RtlLeaveCriticalSection(&LdrpLoaderLock);
 
+    /* Another thread releasing an index clears this array under the PEB lock */
+    RtlAcquirePebLock();
+
     /* Check for expansion slots */
     if (Teb->TlsExpansionSlots)
     {
         /* Free expansion slots */
         RtlFreeHeap(RtlGetProcessHeap(), 0, Teb->TlsExpansionSlots);
+        Teb->TlsExpansionSlots = NULL;
     }
+    RtlReleasePebLock();
 
     RtlProcessFlsData(Teb->FlsData, 2);
     Teb->FlsData = NULL;
