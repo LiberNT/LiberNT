@@ -1,0 +1,371 @@
+{
+  "scope": "Windows 11 24H2 26100.1742 N550JK with pinned vendor drivers and KDNET attached",
+  "privilege": "S-1-5-18 SYSTEM, interactive session 1; verified by whoami",
+  "reference_date": "2026-11-12",
+  "fixtures": {
+    "tray_lifetime": {
+      "binary_sha256": "2366961897cbe7ecf915a80d778ab1c57f0d95a9caf19fb4e7664896b2d4be7d",
+      "same_binary_as_fresh_libernt": true,
+      "named_check_multisets_equal_to_native_libernt_and_host": true,
+      "pass_count": 69,
+      "fail_count": 0,
+      "checks": [
+        {
+          "case": "",
+          "check": "PASS tray.parent_window",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS tray.toolbar_window",
+          "occurrences": 1
+        },
+        {
+          "case": "",
+          "check": "PASS tray.fixture_icon",
+          "occurrences": 1
+        },
+        {
+          "case": "sender_destroys_icon_before_resize",
+          "check": "PASS tray.add",
+          "occurrences": 1
+        },
+        {
+          "case": "sender_destroys_icon_before_resize",
+          "check": "PASS tray.resize_retains_pixels",
+          "occurrences": 1
+        },
+        {
+          "case": "sender_destroys_icon_before_resize",
+          "check": "PASS tray.remove",
+          "occurrences": 1
+        },
+        {
+          "case": "deleting_no_image_preserves_other_slots",
+          "check": "PASS tray.image_add",
+          "occurrences": 1
+        },
+        {
+          "case": "deleting_no_image_preserves_other_slots",
+          "check": "PASS tray.no_image_add",
+          "occurrences": 1
+        },
+        {
+          "case": "deleting_no_image_preserves_other_slots",
+          "check": "PASS tray.no_image_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "deleting_no_image_preserves_other_slots",
+          "check": "PASS tray.other_slot_survives",
+          "occurrences": 1
+        },
+        {
+          "case": "deleting_no_image_preserves_other_slots",
+          "check": "PASS tray.image_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.owner_add",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.shared_add",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.same_slot",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.owner_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.shared_pixels_survive",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_slot_survives_owner_delete",
+          "check": "PASS tray.shared_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.balloon_source1_add",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.balloon_source2_add",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.two_queued",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.queued_source_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.all_queued_source_entries_removed",
+          "occurrences": 1
+        },
+        {
+          "case": "repeated_queued_source_is_purged",
+          "check": "PASS tray.first_source_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_close_keeps_replacement",
+          "check": "PASS tray.reentrant_source_add",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_close_keeps_replacement",
+          "check": "PASS tray.reentrant_replacement_retained",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_close_keeps_replacement",
+          "check": "PASS tray.reentrant_remove",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_close_keeps_replacement",
+          "check": "PASS tray.reentrant_add_succeeds",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_close_keeps_replacement",
+          "check": "PASS tray.reentrant_add_not_deleted_by_outer",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_snapshots_caller_icon",
+          "check": "PASS tray.snapshot_source1_add",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_snapshots_caller_icon",
+          "check": "PASS tray.snapshot_source2_add",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_snapshots_caller_icon",
+          "check": "PASS tray.queued_icon_snapshot_valid",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_modify_uses_new_slot",
+          "check": "PASS tray.modify_owner_add",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_modify_uses_new_slot",
+          "check": "PASS tray.modify_shared_add",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_modify_uses_new_slot",
+          "check": "PASS tray.owner_modify",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_modify_uses_new_slot",
+          "check": "PASS tray.shared_modify_preserves_alias_slot",
+          "occurrences": 1
+        },
+        {
+          "case": "shared_modify_uses_new_slot",
+          "check": "PASS tray.shared_modify_retains_both_pixels",
+          "occurrences": 1
+        },
+        {
+          "case": "resize_failure_keeps_original_list",
+          "check": "PASS tray.resize_failure_source_add",
+          "occurrences": 1
+        },
+        {
+          "case": "resize_failure_keeps_original_list",
+          "check": "PASS tray.resize_failure_preserves_list",
+          "occurrences": 1
+        },
+        {
+          "case": "resize_failure_keeps_original_list",
+          "check": "PASS tray.resize_failure_preserves_pixels",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_balloon_add_leaves_no_row",
+          "check": "PASS tray.failed_balloon_add_status",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_balloon_add_leaves_no_row",
+          "check": "PASS tray.failed_balloon_add_no_row",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_allocation_failure_cleans_snapshot",
+          "check": "PASS tray.queue_failure_source1_add",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_allocation_failure_cleans_snapshot",
+          "check": "PASS tray.queue_failure_source2_add",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_allocation_failure_cleans_snapshot",
+          "check": "PASS tray.queue_failure_status",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_allocation_failure_cleans_snapshot",
+          "check": "PASS tray.queue_failure_no_queued_info",
+          "occurrences": 1
+        },
+        {
+          "case": "queued_balloon_allocation_failure_cleans_snapshot",
+          "check": "PASS tray.queue_failure_preserves_registered_row",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_position_keeps_new_text",
+          "check": "PASS tray.position_source_add",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_position_keeps_new_text",
+          "check": "PASS tray.position_replacement_text_retained",
+          "occurrences": 1
+        },
+        {
+          "case": "reentrant_position_keeps_new_text",
+          "check": "PASS tray.source_allocations_released",
+          "occurrences": 1
+        },
+        {
+          "case": "power_5000_polls_remain_bounded",
+          "check": "PASS power.init",
+          "occurrences": 1
+        },
+        {
+          "case": "power_5000_polls_remain_bounded",
+          "check": "PASS power.single_add",
+          "occurrences": 1
+        },
+        {
+          "case": "power_5000_polls_remain_bounded",
+          "check": "PASS power.bounded_owned_handles",
+          "occurrences": 1
+        },
+        {
+          "case": "power_5000_polls_remain_bounded",
+          "check": "PASS power.shutdown_releases_all",
+          "occurrences": 1
+        },
+        {
+          "case": "power_5000_polls_remain_bounded",
+          "check": "PASS power.single_delete",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_add_is_retried",
+          "check": "PASS power.failed_add_status",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_add_is_retried",
+          "check": "PASS power.failed_add_not_shown",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_add_is_retried",
+          "check": "PASS power.failed_add_retried_as_add",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_add_is_retried",
+          "check": "PASS power.failed_add_releases_all",
+          "occurrences": 1
+        },
+        {
+          "case": "icon_load_failure_does_not_publish_null",
+          "check": "PASS power.load_failure_status",
+          "occurrences": 1
+        },
+        {
+          "case": "icon_load_failure_does_not_publish_null",
+          "check": "PASS power.load_failure_no_notify",
+          "occurrences": 1
+        },
+        {
+          "case": "icon_load_failure_does_not_publish_null",
+          "check": "PASS power.load_failure_not_shown",
+          "occurrences": 1
+        },
+        {
+          "case": "shutdown_during_add",
+          "check": "PASS power.nested_shutdown_visibility",
+          "occurrences": 1
+        },
+        {
+          "case": "shutdown_during_add",
+          "check": "PASS power.nested_shutdown_releases_all",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_outer_add_preserves_nested_success",
+          "check": "PASS power.outer_failure_status",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_outer_add_preserves_nested_success",
+          "check": "PASS power.nested_success_remains_shown",
+          "occurrences": 1
+        },
+        {
+          "case": "failed_outer_add_preserves_nested_success",
+          "check": "PASS power.nested_init_releases_all",
+          "occurrences": 1
+        },
+        {
+          "case": "no_battery_hides_without_loading",
+          "check": "PASS power.no_battery_no_load",
+          "occurrences": 1
+        },
+        {
+          "case": "no_battery_hides_without_loading",
+          "check": "PASS power.no_battery_single_delete",
+          "occurrences": 1
+        },
+        {
+          "case": "no_battery_hides_without_loading",
+          "check": "PASS power.no_battery_releases_all",
+          "occurrences": 1
+        }
+      ],
+      "reported_result": "RESULT failures=0",
+      "original_process_exit_code": null,
+      "exit_code_note": "Original Start-Process wrapper lost the exit code; do not rewrite it from stdout."
+    }
+  },
+  "limits": [
+    "These are LiberNT source fixtures with controlled boundaries, not tests of Windows kernel internals.",
+    "Named checks and occurrence counts are compared per case; thread print order is not a contract.",
+    "Original OS process exit codes are unknown. RESULT failures=0 is retained as output only.",
+    "A separate wrapper probe captured exact exit codes 0 and 7; it does not retroactively supply fixture exit codes.",
+    "Integration on upstream ef127fb4ff017222210e9b8c4321d82b3e3e0c0c remains pending."
+  ]
+}

@@ -27,7 +27,7 @@ typedef struct _PWRSCHEMECONTEXT
 } PWRSCHEMECONTEXT, *PPWRSCHEMECONTEXT;
 
 CString  g_strTooltip;
-static HICON g_hIconBattery = NULL;
+static ULONG g_PowerIconGeneration;
 
 #define HOUR_IN_SECS    3600
 #define MIN_IN_SECS     60
@@ -159,30 +159,37 @@ static BOOL Power_HasBattery(void)
     return (PowerStatus.BatteryFlag & BATTERY_FLAG_NO_BATTERY) == 0;
 }
 
+static HRESULT Power_RemoveIcon(CSysTray *pSysTray)
+{
+    if (!g_bPowerIconShown) return S_OK;
+    ULONG Generation = ++g_PowerIconGeneration;
+    g_bPowerIconShown = FALSE;
+    HRESULT Result = pSysTray->NotifyIcon(NIM_DELETE, ID_ICON_POWER, NULL, NULL);
+    if (FAILED(Result) && Generation == g_PowerIconGeneration)
+        g_bPowerIconShown = TRUE;
+    return Result;
+}
+
 static HRESULT Power_SyncIcon(_In_ CSysTray * pSysTray)
 {
-    BOOL bShow = Power_HasBattery();
-
-    if (!bShow)
-    {
-        if (!g_bPowerIconShown)
-            return S_OK;
+    if (!Power_HasBattery()) return Power_RemoveIcon(pSysTray);
+    HICON Icon = DynamicLoadIcon(g_hInstance);
+    if (!Icon) return E_FAIL;
+    BOOL Add = !g_bPowerIconShown;
+    ULONG Generation = ++g_PowerIconGeneration;
+    g_bPowerIconShown = TRUE;
+    HRESULT Result = pSysTray->NotifyIcon(Add ? NIM_ADD : NIM_MODIFY,
+                                         ID_ICON_POWER, Icon, g_strTooltip);
+    DestroyIcon(Icon);
+    if (FAILED(Result) && Add && Generation == g_PowerIconGeneration)
         g_bPowerIconShown = FALSE;
-        return pSysTray->NotifyIcon(NIM_DELETE, ID_ICON_POWER, NULL, NULL);
-    }
-
-    g_hIconBattery = DynamicLoadIcon(g_hInstance);
-    if (!g_bPowerIconShown)
-    {
-        g_bPowerIconShown = TRUE;
-        return pSysTray->NotifyIcon(NIM_ADD, ID_ICON_POWER, g_hIconBattery, g_strTooltip);
-    }
-    return pSysTray->NotifyIcon(NIM_MODIFY, ID_ICON_POWER, g_hIconBattery, g_strTooltip);
+    return Result;
 }
 
 HRESULT STDMETHODCALLTYPE Power_Init(_In_ CSysTray * pSysTray)
 {
     TRACE("Power_Init\n");
+    ++g_PowerIconGeneration;
     g_bPowerIconShown = FALSE;
     return Power_SyncIcon(pSysTray);
 }
@@ -196,10 +203,7 @@ HRESULT STDMETHODCALLTYPE Power_Update(_In_ CSysTray * pSysTray)
 HRESULT STDMETHODCALLTYPE Power_Shutdown(_In_ CSysTray * pSysTray)
 {
     TRACE("Power_Shutdown\n");
-    if (!g_bPowerIconShown)
-        return S_OK;
-    g_bPowerIconShown = FALSE;
-    return pSysTray->NotifyIcon(NIM_DELETE, ID_ICON_POWER, NULL, NULL);
+    return Power_RemoveIcon(pSysTray);
 }
 
 static void _RunPower()
