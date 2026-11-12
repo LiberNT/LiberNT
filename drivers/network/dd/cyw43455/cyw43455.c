@@ -17,12 +17,10 @@ static NDIS_HANDLE gMiniportDriverHandle = NULL;
 
 static
 NDIS_STATUS
-CywSetMiniportAttributes(
+CywSetRegistrationAttributes(
     _In_ PCYW_ADAPTER Adapter)
 {
     NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES RegAttr;
-    NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES GenAttr;
-    NDIS_STATUS Status;
 
     RtlZeroMemory(&RegAttr, sizeof(RegAttr));
     RegAttr.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES;
@@ -32,14 +30,19 @@ CywSetMiniportAttributes(
     RegAttr.AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_NO_HALT_ON_SUSPEND |
                              NDIS_MINIPORT_ATTRIBUTES_SURPRISE_REMOVE_OK;
     RegAttr.CheckForHangTimeInSeconds = 0;
-    RegAttr.InterfaceType = NdisInterfaceInternal;
+    RegAttr.InterfaceType = (Adapter->BusType == CywBusPcie) ? NdisInterfacePci : NdisInterfaceInternal;
 
-    Status = NdisMSetMiniportAttributes(Adapter->MiniportAdapterHandle,
+    return NdisMSetMiniportAttributes(Adapter->MiniportAdapterHandle,
         (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&RegAttr);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        return Status;
-    }
+}
+
+static
+NDIS_STATUS
+CywSetGeneralAttributes(
+    _In_ PCYW_ADAPTER Adapter)
+{
+    NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES GenAttr;
+    NDIS_STATUS Status;
 
     RtlZeroMemory(&GenAttr, sizeof(GenAttr));
     GenAttr.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES;
@@ -173,7 +176,14 @@ VOID
 CywFreeAdapter(
     _In_ PCYW_ADAPTER Adapter)
 {
-    CywSdioClose(Adapter);
+    if (Adapter->BusType == CywBusPcie)
+    {
+        CywPcieClose(Adapter);
+    }
+    else
+    {
+        CywSdioClose(Adapter);
+    }
     CywFreeDmaBufs(Adapter);
     CywFree(Adapter->ControlBuffer);
     CywFree(Adapter->RxBuffer);
@@ -299,6 +309,20 @@ CywReleaseRxBuffer(
     KeReleaseSpinLock(&Adapter->RxBufLock, OldIrql);
 }
 
+static
+NDIS_STATUS
+CywInitializeFailure(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ NTSTATUS Reason)
+{
+    BOOLEAN Resources = (Reason == STATUS_INSUFFICIENT_RESOURCES || Reason == STATUS_NO_MEMORY);
+
+    NdisWriteErrorLogEntry(NdisMiniportHandle,
+                           Resources ? NDIS_ERROR_CODE_OUT_OF_RESOURCES : NDIS_ERROR_CODE_DRIVER_FAILURE,
+                           1, (ULONG)Reason);
+    return Resources ? NDIS_STATUS_RESOURCES : NDIS_STATUS_FAILURE;
+}
+
 NDIS_STATUS
 NTAPI
 CywMiniportInitializeEx(
@@ -311,7 +335,6 @@ CywMiniportInitializeEx(
     NTSTATUS NtStatus;
 
     UNREFERENCED_PARAMETER(MiniportDriverContext);
-    UNREFERENCED_PARAMETER(MiniportInitParameters);
 
     Adapter = CywAllocate(sizeof(CYW_ADAPTER));
     if (Adapter == NULL)
@@ -372,6 +395,7 @@ CywMiniportInitializeEx(
     KeInitializeEvent(&Adapter->TxDrainEvent, NotificationEvent, TRUE);
     KeInitializeSpinLock(&Adapter->WorkItemLock);
     KeInitializeEvent(&Adapter->WorkItemsDrainedEvent, NotificationEvent, TRUE);
+    KeInitializeEvent(&Adapter->ScanDoneEvent, NotificationEvent, FALSE);
     InterlockedExchange(&Adapter->Paused, 1);
 
     {
@@ -437,21 +461,77 @@ CywMiniportInitializeEx(
         goto Fail;
     }
 
+    if (MiniportInitParameters != NULL && MiniportInitParameters->AllocatedResources != NULL)
+    {
+        PNDIS_RESOURCE_LIST Resources = MiniportInitParameters->AllocatedResources;
+        ULONG MemoryCount = 0;
+        ULONG Index;
+
+        for (Index = 0; Index < Resources->Count; Index++)
+        {
+            if (Resources->PartialDescriptors[Index].Type == CmResourceTypeMemory)
+            {
+                MemoryCount++;
+            }
+        }
+        if (MemoryCount >= 2)
+        {
+            Adapter->BusType = CywBusPcie;
+        }
+    }
+
+    if (Adapter->BusType == CywBusPcie)
+    {
+        Status = CywSetRegistrationAttributes(Adapter);
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            goto Fail;
+        }
+
+        NtStatus = CywPcieOpen(Adapter, MiniportInitParameters->AllocatedResources);
+        if (!NT_SUCCESS(NtStatus))
+        {
+            Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
+            goto Fail;
+        }
+
+        NtStatus = CywPcieBringUp(Adapter);
+        if (!NT_SUCCESS(NtStatus))
+        {
+            Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
+            goto Fail;
+        }
+
+        Status = CywSetGeneralAttributes(Adapter);
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            goto Fail;
+        }
+
+        return NDIS_STATUS_SUCCESS;
+    }
+
     NtStatus = CywSdioOpen(Adapter);
     if (!NT_SUCCESS(NtStatus))
     {
-        Status = NDIS_STATUS_OPEN_FAILED;
+        Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
         goto Fail;
     }
 
     NtStatus = CywChipBringUp(Adapter);
     if (!NT_SUCCESS(NtStatus))
     {
-        Status = NDIS_STATUS_HARD_ERRORS;
+        Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
         goto Fail;
     }
 
-    Status = CywSetMiniportAttributes(Adapter);
+    Status = CywSetRegistrationAttributes(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        goto Fail;
+    }
+
+    Status = CywSetGeneralAttributes(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Fail;
@@ -460,14 +540,14 @@ CywMiniportInitializeEx(
     NtStatus = CywStartBusThread(Adapter);
     if (!NT_SUCCESS(NtStatus))
     {
-        Status = NDIS_STATUS_FAILURE;
+        Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
         goto Fail;
     }
 
     NtStatus = CywEnableCardInterrupt(Adapter);
     if (!NT_SUCCESS(NtStatus))
     {
-        Status = NDIS_STATUS_HARD_ERRORS;
+        Status = CywInitializeFailure(NdisMiniportHandle, NtStatus);
         goto Fail;
     }
 
@@ -524,6 +604,51 @@ CywMiniportHaltEx(
     KeWaitForSingleObject(&Adapter->RxDrainEvent, Executive, KernelMode, FALSE, NULL);
 
     CywFreeAdapter(Adapter);
+}
+
+BOOLEAN
+NTAPI
+CywMiniportCheckForHangEx(
+    _In_ NDIS_HANDLE MiniportAdapterContext)
+{
+    PCYW_ADAPTER Adapter = (PCYW_ADAPTER)MiniportAdapterContext;
+
+    if (Adapter == NULL || InterlockedCompareExchange(&Adapter->Halting, 0, 0) != 0)
+    {
+        return FALSE;
+    }
+    if (Adapter->BusType != CywBusPcie)
+    {
+        return FALSE;
+    }
+    return CywPcieFirmwareFailed(Adapter);
+}
+
+NDIS_STATUS
+NTAPI
+CywMiniportResetEx(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _Out_ PBOOLEAN AddressingReset)
+{
+    PCYW_ADAPTER Adapter = (PCYW_ADAPTER)MiniportAdapterContext;
+    NTSTATUS Status;
+
+    *AddressingReset = TRUE;
+    if (Adapter == NULL || Adapter->BusType != CywBusPcie)
+    {
+        return NDIS_STATUS_NOT_SUPPORTED;
+    }
+    if (InterlockedCompareExchange(&Adapter->Halting, 0, 0) != 0)
+    {
+        return NDIS_STATUS_NOT_ACCEPTED;
+    }
+
+    Status = CywPcieRecover(Adapter);
+    if (Status == STATUS_DEVICE_BUSY)
+    {
+        return NDIS_STATUS_SUCCESS;
+    }
+    return NT_SUCCESS(Status) ? NDIS_STATUS_SUCCESS : NDIS_STATUS_FAILURE;
 }
 
 NDIS_STATUS
@@ -585,6 +710,10 @@ CywMiniportShutdownEx(
     InterlockedExchange(&Adapter->Halting, 1);
     CywStopBusThread(Adapter);
     (VOID)CywDisableCardInterrupt(Adapter);
+    if (Adapter->BusType == CywBusPcie)
+    {
+        CywPcieShutdown(Adapter);
+    }
 }
 
 VOID
@@ -1136,8 +1265,8 @@ DriverEntry(
     Chars.SendNetBufferListsHandler = CywMiniportSendNetBufferLists;
     Chars.ReturnNetBufferListsHandler = CywMiniportReturnNetBufferLists;
     Chars.CancelSendHandler = CywMiniportCancelSend;
-    Chars.CheckForHangHandlerEx = NULL;
-    Chars.ResetHandlerEx = NULL;
+    Chars.CheckForHangHandlerEx = CywMiniportCheckForHangEx;
+    Chars.ResetHandlerEx = CywMiniportResetEx;
     Chars.DevicePnPEventNotifyHandler = CywMiniportDevicePnpEventNotify;
     Chars.ShutdownHandlerEx = CywMiniportShutdownEx;
     Chars.CancelOidRequestHandler = CywMiniportCancelOidRequest;

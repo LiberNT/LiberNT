@@ -10,7 +10,6 @@
 #define NDEBUG
 #include <debug.h>
 
-static
 NTSTATUS
 CywReadFile(
     _In_ PCWSTR Path,
@@ -214,47 +213,62 @@ CywChipRecognize(
 }
 
 static
-NTSTATUS
-CywDownloadNvram(
-    _In_ PCYW_ADAPTER Adapter,
-    _In_ ULONG FirmwareSize)
+BOOLEAN
+CywNvramEntryOverridden(
+    _In_reads_(Length) const UCHAR *Entry,
+    _In_ ULONG Length,
+    _In_opt_z_ PCSTR Extra)
 {
-    NTSTATUS Status;
-    PUCHAR Raw;
+    ULONG Index;
+
+    if (Extra == NULL)
+    {
+        return FALSE;
+    }
+    for (Index = 0; Index < Length && Extra[Index] != ANSI_NULL; Index++)
+    {
+        if (Entry[Index] != (UCHAR)Extra[Index])
+        {
+            return FALSE;
+        }
+        if (Extra[Index] == '=')
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+NTSTATUS
+CywStripNvram(
+    _In_reads_bytes_(RawSize) const UCHAR *Raw,
+    _In_ ULONG RawSize,
+    _In_opt_z_ PCSTR Extra,
+    _Outptr_ PUCHAR *Nvram,
+    _Out_ PULONG Size)
+{
     PUCHAR Stripped;
-    ULONG RawSize;
-    ULONG AllocationSize;
+    ULONG ExtraLength = 0;
+    ULONG EntryStart = 0;
     ULONG OutLen;
-    ULONG Words;
-    ULONG Token;
-    ULONG RamEnd;
-    ULONG NvramAddress;
-    ULONG NvramSize;
     ULONG i;
 
-    if (Adapter == NULL || Adapter->ControlBuffer == NULL ||
-        Adapter->NvramPath == NULL || Adapter->RamSize == 0 ||
-        FirmwareSize == 0)
+    *Nvram = NULL;
+    *Size = 0;
+    if (Extra != NULL)
     {
-        return STATUS_INVALID_PARAMETER;
+        while (ExtraLength < 256 && Extra[ExtraLength] != ANSI_NULL)
+        {
+            ExtraLength++;
+        }
     }
-
-    Status = CywReadFile(Adapter->NvramPath, &Raw, &RawSize);
-    if (!NT_SUCCESS(Status))
+    if (RawSize > MAXULONG - 8 - ExtraLength)
     {
-        return Status;
-    }
-
-    if (RawSize > MAXULONG - 8)
-    {
-        CywFree(Raw);
         return STATUS_INTEGER_OVERFLOW;
     }
-    AllocationSize = RawSize + 8;
-    Stripped = CywAllocate(AllocationSize);
+    Stripped = CywAllocate(RawSize + ExtraLength + 8);
     if (Stripped == NULL)
     {
-        CywFree(Raw);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -277,23 +291,40 @@ CywDownloadNvram(
         }
         if (Raw[i] == '\n')
         {
+            if (OutLen > EntryStart &&
+                CywNvramEntryOverridden(Stripped + EntryStart, OutLen - EntryStart, Extra))
+            {
+                OutLen = EntryStart;
+            }
             if (OutLen > 0 && Stripped[OutLen - 1] != '\0')
             {
                 Stripped[OutLen++] = '\0';
             }
+            EntryStart = OutLen;
             i++;
             continue;
         }
         Stripped[OutLen++] = Raw[i++];
     }
-    if (OutLen == 0)
+    if (OutLen > EntryStart &&
+        CywNvramEntryOverridden(Stripped + EntryStart, OutLen - EntryStart, Extra))
     {
-        Status = STATUS_DEVICE_DATA_ERROR;
-        goto Cleanup;
+        OutLen = EntryStart;
     }
-    if (Stripped[OutLen - 1] != '\0')
+    if (OutLen > 0 && Stripped[OutLen - 1] != '\0')
     {
         Stripped[OutLen++] = '\0';
+    }
+    if (ExtraLength != 0)
+    {
+        RtlCopyMemory(Stripped + OutLen, Extra, ExtraLength);
+        OutLen += ExtraLength;
+        Stripped[OutLen++] = '\0';
+    }
+    if (OutLen == 0)
+    {
+        CywFree(Stripped);
+        return STATUS_DEVICE_DATA_ERROR;
     }
 
     /* The firmware variable table is terminated by an additional NUL. */
@@ -302,6 +333,48 @@ CywDownloadNvram(
     while ((OutLen % 4) != 0)
     {
         Stripped[OutLen++] = '\0';
+    }
+
+    *Nvram = Stripped;
+    *Size = OutLen;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+CywDownloadNvram(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_ ULONG FirmwareSize)
+{
+    NTSTATUS Status;
+    PUCHAR Raw;
+    PUCHAR Stripped;
+    ULONG RawSize;
+    ULONG OutLen;
+    ULONG Words;
+    ULONG Token;
+    ULONG RamEnd;
+    ULONG NvramAddress;
+    ULONG NvramSize;
+
+    if (Adapter == NULL || Adapter->ControlBuffer == NULL ||
+        Adapter->NvramPath == NULL || Adapter->RamSize == 0 ||
+        FirmwareSize == 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = CywReadFile(Adapter->NvramPath, &Raw, &RawSize);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    Status = CywStripNvram(Raw, RawSize, NULL, &Stripped, &OutLen);
+    CywFree(Raw);
+    if (!NT_SUCCESS(Status))
+    {
+        return Status;
     }
 
     Words = OutLen / 4;
@@ -337,14 +410,15 @@ CywDownloadNvram(
 
 Cleanup:
     CywFree(Stripped);
-    CywFree(Raw);
     return Status;
 }
 
 static
 NTSTATUS
-CywDownloadClm(
-    _In_ PCYW_ADAPTER Adapter)
+CywDownloadBlob(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_opt_ PCWSTR Path,
+    _In_z_ PCSTR Iovar)
 {
     NTSTATUS Status;
     PUCHAR Blob;
@@ -353,12 +427,12 @@ CywDownloadClm(
     ULONG HdrSize = FIELD_OFFSET(CYW_DLOAD_DATA, Data);
     ULONG Offset;
 
-    if (Adapter == NULL || Adapter->ClmPath == NULL)
+    if (Path == NULL)
     {
-        return STATUS_INVALID_PARAMETER;
+        return STATUS_SUCCESS;
     }
 
-    Status = CywReadFile(Adapter->ClmPath, &Blob, &BlobSize);
+    Status = CywReadFile(Path, &Blob, &BlobSize);
     if (!NT_SUCCESS(Status))
     {
         if (Status == STATUS_OBJECT_NAME_NOT_FOUND ||
@@ -402,9 +476,11 @@ CywDownloadClm(
         Chunk->Crc = 0;
         RtlCopyMemory(Chunk->Data, Blob + Offset, Len);
 
-        Status = CywFilIovarSet(Adapter, "clmload", Chunk, HdrSize + Len);
+        Status = CywFilIovarSet(Adapter, Iovar, Chunk, HdrSize + Len);
         if (!NT_SUCCESS(Status))
         {
+            DPRINT1("CYW: %s of a %lu byte blob failed at offset %lu (0x%08lx)\n",
+                    Iovar, BlobSize, Offset, Status);
             break;
         }
         Offset += Len;
@@ -412,6 +488,26 @@ CywDownloadClm(
 
     CywFree(Chunk);
     CywFree(Blob);
+    return Status;
+}
+
+static
+NTSTATUS
+CywDownloadClm(
+    _In_ PCYW_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
+    if (Adapter == NULL || (Adapter->ClmPath == NULL && Adapter->BusType == CywBusSdio))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Status = CywDownloadBlob(Adapter, Adapter->ClmPath, "clmload");
+    if (NT_SUCCESS(Status))
+    {
+        Status = CywDownloadBlob(Adapter, Adapter->TxcapPath, "txcapload");
+    }
     return Status;
 }
 
@@ -457,7 +553,6 @@ CywChipDownloadFirmware(
 
 #define CYW_EROM_MAX_DESCRIPTORS 4096
 
-static
 ULONG
 CywEromDescriptorType(
     _In_ ULONG Descriptor)
@@ -471,7 +566,6 @@ CywEromDescriptorType(
     return Type;
 }
 
-static
 NTSTATUS
 CywEromReadDescriptor(
     _In_ PCYW_ADAPTER Adapter,
@@ -497,7 +591,6 @@ CywEromReadDescriptor(
     return Status;
 }
 
-static
 NTSTATUS
 CywEromGetCoreBases(
     _In_ PCYW_ADAPTER Adapter,
@@ -795,7 +888,6 @@ CywChipEnumerateCores(
     return STATUS_SUCCESS;
 }
 
-static
 NTSTATUS
 CywChipDisableCore(
     _In_ PCYW_ADAPTER Adapter,
@@ -868,7 +960,6 @@ CywChipDisableCore(
     return Status;
 }
 
-static
 NTSTATUS
 CywChipResetCore(
     _In_ PCYW_ADAPTER Adapter,
@@ -925,7 +1016,6 @@ CywChipResetCore(
     return Status;
 }
 
-static
 NTSTATUS
 CywChipIsCoreUp(
     _In_ PCYW_ADAPTER Adapter,
@@ -1381,6 +1471,15 @@ CywChipBringUp(
         return Status;
     }
 
+    return CywChipConfigureFirmware(Adapter);
+}
+
+NTSTATUS
+CywChipConfigureFirmware(
+    _In_ PCYW_ADAPTER Adapter)
+{
+    NTSTATUS Status;
+
     Status = CywDownloadClm(Adapter);
     if (!NT_SUCCESS(Status))
     {
@@ -1403,14 +1502,15 @@ CywChipBringUp(
         return Status;
     }
 
+    Status = CywFilIovarSetInt(Adapter, "ampdu_rx", 1);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("CYW: optional ampdu_rx setup failed 0x%08lx\n", Status);
+    }
+    if (Adapter->BusType == CywBusSdio)
     {
         ULONG GlomVal = 0xFFFFFFFF;
 
-        Status = CywFilIovarSetInt(Adapter, "ampdu_rx", 1);
-        if (!NT_SUCCESS(Status))
-        {
-            DPRINT1("CYW: optional ampdu_rx setup failed 0x%08lx\n", Status);
-        }
         Status = CywFilIovarSetInt(Adapter, "bus:txglom", 1);
         if (!NT_SUCCESS(Status))
         {
@@ -1435,22 +1535,38 @@ CywChipBringUp(
         DPRINT1("CYW: radio minimum power consumption mode %lu, left at the firmware default (0x%08lx)\n", Mpc, Status);
     }
 
-    if (Adapter->CpuCoreType == CywCpuCoreArmCr4)
+    if (Adapter->CpuCoreType == CywCpuCoreArmCr4 ||
+        Adapter->CpuCoreType == CywCpuCoreArmCa7)
     {
+        ULONG BwCap = CYW_WLC_BAND_2G;
         ULONG Bw[2];
 
-        Bw[0] = 2; Bw[1] = 0x3;
-        Status = CywFilIovarSet(Adapter, "bw_cap", Bw, sizeof(Bw));
-        if (!NT_SUCCESS(Status))
+        Status = CywFilIovarGet(Adapter, "bw_cap", &BwCap, sizeof(BwCap));
+        if (NT_SUCCESS(Status))
         {
-            DPRINT1("CYW: optional 2.4 GHz bandwidth setup failed 0x%08lx\n", Status);
+            Status = STATUS_NOT_SUPPORTED;
+            if (BwCap & CYW_WLC_BW_40MHZ_BIT)
+            {
+                Bw[0] = CYW_WLC_BAND_2G;
+                Bw[1] = CYW_WLC_BW_CAP_40MHZ;
+                Status = CywFilIovarSet(Adapter, "bw_cap", Bw, sizeof(Bw));
+            }
         }
-        Bw[0] = 1; Bw[1] = 0x7;
-        Status = CywFilIovarSet(Adapter, "bw_cap", Bw, sizeof(Bw));
-        if (!NT_SUCCESS(Status))
+        else
         {
-            DPRINT1("CYW: optional 5 GHz bandwidth setup failed 0x%08lx\n", Status);
+            ULONG MimoBwCap = CYW_WLC_N_BW_20ALL;
+
+            Status = CywFilIovarGet(Adapter, "mimo_bw_cap", &MimoBwCap, sizeof(MimoBwCap));
+            if (NT_SUCCESS(Status))
+            {
+                Status = STATUS_NOT_SUPPORTED;
+                if (MimoBwCap == CYW_WLC_N_BW_40ALL)
+                    Status = CywFilIovarSetInt(Adapter, "mimo_bw_cap", CYW_WLC_N_BW_40ALL);
+            }
         }
+        if (NT_SUCCESS(Status))
+            Status = CywFilIovarSetInt(Adapter, "obss_coex", CYW_OBSS_COEX_AUTO);
+        DPRINT1("CYW: 2.4 GHz 40 MHz setup (bw_cap 0x%lx): 0x%08lx\n", BwCap, Status);
     }
 
     {
@@ -1474,6 +1590,45 @@ CywChipBringUp(
     if (!NT_SUCCESS(Status))
     {
         return Status;
+    }
+
+    {
+        CYW_SCAN_VERSION_LE ScanVersion;
+
+        RtlZeroMemory(&ScanVersion, sizeof(ScanVersion));
+        Adapter->ScanVersion = 1;
+        if (NT_SUCCESS(CywFilIovarGet(Adapter, "scan_ver", &ScanVersion, sizeof(ScanVersion))) &&
+            (ScanVersion.ScanVerMajor == BRCMF_SCAN_PARAMS_VERSION_V2 ||
+             ScanVersion.ScanVerMajor == BRCMF_SCAN_PARAMS_VERSION_V3))
+        {
+            Adapter->ScanVersion = ScanVersion.ScanVerMajor;
+        }
+        DPRINT1("CYW: firmware scan_ver %u.%u major %u, scan parameters v%u\n", ScanVersion.Version, ScanVersion.Length,
+                ScanVersion.ScanVerMajor, Adapter->ScanVersion);
+    }
+
+    {
+        CYW_WLC_VERSION_LE WlcVersion;
+
+        RtlZeroMemory(&WlcVersion, sizeof(WlcVersion));
+        Adapter->JoinV1 = FALSE;
+        if (NT_SUCCESS(CywFilIovarGet(Adapter, "wlc_ver", &WlcVersion, sizeof(WlcVersion))))
+        {
+            Adapter->JoinV1 = (WlcVersion.WlcVerMajor >= 17) ||
+                              (WlcVersion.WlcVerMajor == 16 && WlcVersion.WlcVerMinor >= 1) ||
+                              (WlcVersion.WlcVerMajor == 14 &&
+                               (WlcVersion.WlcVerMinor == 2 || WlcVersion.WlcVerMinor == 4));
+        }
+        DPRINT1("CYW: firmware wlc_ver %u.%u, join parameters v%u\n", WlcVersion.WlcVerMajor,
+                WlcVersion.WlcVerMinor, Adapter->JoinV1 ? 1 : 0);
+    }
+
+    {
+        ULONG SupWpa = 0;
+
+        Adapter->FirmwareSupplicantSupported =
+            NT_SUCCESS(CywFilIovarGet(Adapter, "sup_wpa", &SupWpa, sizeof(SupWpa)));
+        DPRINT1("CYW: firmware supplicant %s\n", Adapter->FirmwareSupplicantSupported ? "available" : "unavailable");
     }
 
     Status = CywFilIovarGet(Adapter, "cur_etheraddr",

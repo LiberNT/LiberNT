@@ -129,6 +129,10 @@ CywSdpcmSendData(
     {
         return STATUS_INVALID_PARAMETER;
     }
+    if (Adapter->BusType == CywBusPcie)
+    {
+        return CywMsgbufSendData(Adapter, Eth, EthLen);
+    }
 
     Frame = Adapter->TxBuffer;
     Total = SDPCM_HEADER_LEN + BCDC_HEADER_LEN + EthLen;
@@ -194,6 +198,10 @@ CywSdpcmSendNb(
     if (Adapter == NULL || Nb == NULL)
     {
         return STATUS_INVALID_PARAMETER;
+    }
+    if (Adapter->BusType == CywBusPcie)
+    {
+        return CywMsgbufSendNb(Adapter, Nb);
     }
 
     Frame = Adapter->TxBuffer;
@@ -341,6 +349,14 @@ CywBcdcXfer(
                      sizeof(CYW_BCDC_DCMD))
     {
         return STATUS_INVALID_PARAMETER;
+    }
+
+    if (Adapter->BusType == CywBusPcie)
+    {
+        KeWaitForSingleObject(&Adapter->CmdLock, Executive, KernelMode, FALSE, NULL);
+        Status = CywMsgbufIoctl(Adapter, Cmd, Set, Data, Length);
+        KeReleaseMutex(&Adapter->CmdLock, FALSE);
+        return Status;
     }
 
     MsgLen = sizeof(CYW_BCDC_DCMD) + Length;
@@ -546,7 +562,7 @@ CywFilIovar(
     }
 
     RtlCopyMemory(Buffer, Name, NameLen);
-    if (Set && Length > 0 && Data != NULL)
+    if (Length > 0 && Data != NULL)
     {
         RtlCopyMemory(Buffer + NameLen, Data, Length);
     }
@@ -597,7 +613,9 @@ NTSTATUS
 CywActivateEvents(
     _In_ PCYW_ADAPTER Adapter)
 {
-    UCHAR Mask[16];
+    CYW_EVENTMSGS_EXT Message;
+    PUCHAR Mask = Message.Mask;
+    NTSTATUS Status;
     static const UCHAR Events[] =
     {
         BRCMF_E_SET_SSID, BRCMF_E_JOIN, BRCMF_E_AUTH, BRCMF_E_DEAUTH,
@@ -608,24 +626,28 @@ CywActivateEvents(
         BRCMF_E_ESCAN_RESULT
     };
     ULONG i;
-    NTSTATUS Status;
 
     if (Adapter == NULL)
     {
         return STATUS_INVALID_PARAMETER;
     }
 
-    Status = CywFilIovarGet(Adapter, "event_msgs", Mask, sizeof(Mask));
-    if (!NT_SUCCESS(Status))
-    {
-        return Status;
-    }
+    RtlZeroMemory(&Message, sizeof(Message));
     for (i = 0; i < sizeof(Events); i++)
     {
         Mask[Events[i] >> 3] |= (UCHAR)(1u << (Events[i] & 7));
     }
 
-    return CywFilIovarSet(Adapter, "event_msgs", Mask, sizeof(Mask));
+    Message.Version = BRCMF_EVENTMSGS_VER;
+    Message.Command = BRCMF_EVENTMSGS_SET_MASK;
+    Message.Length = BRCMF_EVENTING_MASK_LEN;
+    Status = CywFilIovarSet(Adapter, "event_msgs_ext", &Message, sizeof(Message));
+    if (NT_SUCCESS(Status))
+    {
+        return Status;
+    }
+
+    return CywFilIovarSet(Adapter, "event_msgs", Mask, BRCMF_EVENTING_MASK_LEN);
 }
 
 NTSTATUS
@@ -633,12 +655,46 @@ CywQueryRssi(
     _In_ PCYW_ADAPTER Adapter,
     _Out_ PLONG Rssi)
 {
+    CYW_STA_INFO_LE Info;
     CYW_SCB_VAL_LE Scb;
+    BOOLEAN Authorized;
+    LONG Total = 0;
+    LONG Chains = 0;
+    ULONG i;
     NTSTATUS Status;
 
     if (Adapter == NULL || Rssi == NULL)
     {
         return STATUS_INVALID_PARAMETER;
+    }
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    NdisAcquireSpinLock(&Adapter->Lock);
+    RtlCopyMemory(&Info, Adapter->ConnectedBssid, CYW_ADDRESS_LENGTH);
+    Authorized = Adapter->PortAuthorized;
+    NdisReleaseSpinLock(&Adapter->Lock);
+
+    Status = CywFilIovarGet(Adapter, "sta_info", &Info, sizeof(Info));
+    if (NT_SUCCESS(Status) && (Info.Flags & CYW_STA_SCBSTATS))
+    {
+        for (i = 0; i < CYW_ANT_MAX; i++)
+        {
+            if (Info.Rssi[i] != 0 && Info.RxLastPacketRssi[i] != 0)
+            {
+                Total += Info.RxLastPacketRssi[i];
+                Chains++;
+            }
+        }
+        if (Chains != 0)
+        {
+            *Rssi = Total / Chains;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    if (!Authorized)
+    {
+        return NT_SUCCESS(Status) ? STATUS_DEVICE_NOT_READY : Status;
     }
 
     RtlZeroMemory(&Scb, sizeof(Scb));
@@ -785,11 +841,47 @@ CywScanStart(
     }
 
     NdisAcquireSpinLock(&Adapter->Lock);
-    Adapter->BssCount = 0;
+    Adapter->BssResetPending = TRUE;
     Adapter->ScanInProgress = TRUE;
     NdisReleaseSpinLock(&Adapter->Lock);
 
-    Status = CywFilIovarSet(Adapter, "escan", Params, Size);
+    if (Adapter->ScanVersion >= BRCMF_SCAN_PARAMS_VERSION_V2)
+    {
+        ULONG Extra = Size - CYW_ESCAN_PARAMS_FIXED_SIZE;
+        ULONG Size2 = CYW_ESCAN_PARAMS_V2_FIXED_SIZE + Extra;
+        PCYW_ESCAN_PARAMS_V2_LE Params2 = CywAllocate(Size2);
+
+        if (Params2 == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+        else
+        {
+            Params2->Version = Adapter->ScanVersion;
+            Params2->Action = Params->Action;
+            Params2->SyncId = Params->SyncId;
+            Params2->Params.Version = Adapter->ScanVersion;
+            Params2->Params.Length = (USHORT)(CYW_SCAN_PARAMS_V2_FIXED_SIZE + Extra);
+            Params2->Params.Ssid = Params->Params.Ssid;
+            RtlCopyMemory(Params2->Params.Bssid, Params->Params.Bssid, sizeof(Params2->Params.Bssid));
+            Params2->Params.BssType = Params->Params.BssType;
+            Params2->Params.ScanType = Params->Params.ScanType;
+            Params2->Params.NProbes = Params->Params.NProbes;
+            Params2->Params.ActiveTime = Params->Params.ActiveTime;
+            Params2->Params.PassiveTime = Params->Params.PassiveTime;
+            Params2->Params.HomeTime = Params->Params.HomeTime;
+            Params2->Params.ChannelNum = Params->Params.ChannelNum;
+            RtlCopyMemory((PUCHAR)Params2 + CYW_ESCAN_PARAMS_V2_FIXED_SIZE,
+                          (PUCHAR)Params + CYW_ESCAN_PARAMS_FIXED_SIZE, Extra);
+            Status = CywFilIovarSet(Adapter, "escan", Params2, Size2);
+            CywFree(Params2);
+        }
+    }
+    else
+    {
+        Status = CywFilIovarSet(Adapter, "escan", Params, Size);
+    }
+    DPRINT1("CYW: escan v%u with %lu SSIDs started: %lx\n", Adapter->ScanVersion, SsidCount, Status);
 
     CywFree(Params);
 
@@ -797,10 +889,73 @@ CywScanStart(
     {
         NdisAcquireSpinLock(&Adapter->Lock);
         Adapter->ScanInProgress = FALSE;
+        Adapter->BssResetPending = FALSE;
         NdisReleaseSpinLock(&Adapter->Lock);
     }
 
     return Status;
+}
+
+static
+VOID
+CywScanForSsid(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_reads_(SsidLength) const UCHAR *Ssid,
+    _In_ ULONG SsidLength)
+{
+    struct
+    {
+        DOT11_SCAN_REQUEST_V2 Request;
+        DOT11_SSID Ssid;
+    } Scan;
+    LARGE_INTEGER Timeout;
+    BOOLEAN Busy;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RtlZeroMemory(&Scan, sizeof(Scan));
+    Scan.Request.dot11BSSType = dot11_BSS_type_infrastructure;
+    RtlFillMemory(Scan.Request.dot11BSSID, sizeof(Scan.Request.dot11BSSID), 0xff);
+    Scan.Request.dot11ScanType = dot11_scan_type_active;
+    Scan.Request.uNumOfdot11SSIDs = 1;
+    Scan.Request.udot11SSIDsOffset = (ULONG)((PUCHAR)&Scan.Ssid - Scan.Request.ucBuffer);
+    Scan.Ssid.uSSIDLength = SsidLength;
+    RtlCopyMemory(Scan.Ssid.ucSSID, Ssid, SsidLength);
+
+    NdisAcquireSpinLock(&Adapter->Lock);
+    KeClearEvent(&Adapter->ScanDoneEvent);
+    Busy = Adapter->ScanInProgress || Adapter->PendingScanOid != NULL;
+    if (!Busy)
+    {
+        Adapter->InternalScan = TRUE;
+    }
+    NdisReleaseSpinLock(&Adapter->Lock);
+
+    if (!Busy)
+    {
+        Status = CywScanStart(Adapter, &Scan.Request, (ULONG)((PUCHAR)(&Scan.Ssid + 1) - (PUCHAR)&Scan.Request));
+        if (!NT_SUCCESS(Status))
+        {
+            NdisAcquireSpinLock(&Adapter->Lock);
+            Adapter->InternalScan = FALSE;
+            NdisReleaseSpinLock(&Adapter->Lock);
+        }
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Timeout.QuadPart = CYW_ESCAN_TIMEOUT_SLICE * CYW_ESCAN_TIMEOUT_SLICES;
+        if (KeWaitForSingleObject(&Adapter->ScanDoneEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+        {
+            DPRINT1("CYW: scan for '%.*s' did not complete\n", (int)SsidLength, Ssid);
+            NdisAcquireSpinLock(&Adapter->Lock);
+            if (Adapter->InternalScan)
+            {
+                Adapter->InternalScan = FALSE;
+                Adapter->ScanInProgress = FALSE;
+                Adapter->BssResetPending = FALSE;
+            }
+            NdisReleaseSpinLock(&Adapter->Lock);
+        }
+    }
 }
 
 static
@@ -938,6 +1093,7 @@ typedef struct _CYW_CONNECT_SETTINGS
     ULONG MulticastCipher;
     UCHAR SaePassword[CYW_SAE_PASSWORD_MAX];
     ULONG SaePasswordLength;
+    BOOLEAN FirmwareSupplicant;
     USHORT JoinChanspec;
 } CYW_CONNECT_SETTINGS, *PCYW_CONNECT_SETTINGS;
 
@@ -976,6 +1132,7 @@ CywConnect(
     Settings.UnicastCipher = Adapter->UnicastCipher;
     Settings.MulticastCipher = Adapter->MulticastCipher;
     Settings.SaePasswordLength = Adapter->SaePasswordLen;
+    Settings.FirmwareSupplicant = Adapter->FirmwareSupplicant;
     if (Settings.SaePasswordLength <= CYW_SAE_PASSWORD_MAX)
     {
         RtlCopyMemory(Settings.SaePassword, Adapter->SaePassword,
@@ -993,8 +1150,23 @@ CywConnect(
     }
     NdisReleaseSpinLock(&Adapter->Lock);
 
+    if (Settings.SsidLength != 0 && Settings.SsidLength <= DOT11_SSID_MAX_LENGTH && Settings.JoinChanspec == 0)
+    {
+        CywScanForSsid(Adapter, Settings.Ssid, Settings.SsidLength);
+        NdisAcquireSpinLock(&Adapter->Lock);
+        Settings.JoinChanspec = CywSelectJoinChanspecLocked(Adapter, Settings.Ssid, Settings.SsidLength, Settings.Bssid,
+                                                            Settings.HasBssid);
+        NdisReleaseSpinLock(&Adapter->Lock);
+        if (Settings.JoinChanspec == 0)
+        {
+            DPRINT1("CYW: '%.*s' is not in range, not joining\n", (int)Settings.SsidLength, Settings.Ssid);
+            Status = STATUS_NOT_FOUND;
+            goto Exit;
+        }
+    }
+
     Sae = (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE);
-    FirmwareSupplicant = Sae;
+    FirmwareSupplicant = Sae || Settings.FirmwareSupplicant;
     if (Settings.SsidLength == 0 ||
         Settings.SsidLength > DOT11_SSID_MAX_LENGTH ||
         Settings.SaePasswordLength > CYW_SAE_PASSWORD_MAX ||
@@ -1108,7 +1280,15 @@ CywConnect(
         goto Exit;
     }
 
-    if (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_WPA_PSK)
+    if (FirmwareSupplicant)
+    {
+        Status = CywFilIovarSet(Adapter, "wpaie", NULL, 0);
+        if (!NT_SUCCESS(Status))
+        {
+            goto Exit;
+        }
+    }
+    else if (Settings.AuthAlgorithm == DOT11_AUTH_ALGO_WPA_PSK)
     {
         UCHAR Ie[24] =
         {
@@ -1207,8 +1387,56 @@ CywConnect(
         JoinSize += sizeof(USHORT);
     }
 
-    Status = CywFilIovarSet(Adapter, "join", &ExtJoin, JoinSize);
-    if (!NT_SUCCESS(Status))
+    if (Adapter->JoinV1)
+    {
+        CYW_EXT_JOIN_PARAMS_V1_LE ExtJoinV1;
+
+        RtlZeroMemory(&ExtJoinV1, sizeof(ExtJoinV1));
+        ExtJoinV1.Ssid = ExtJoin.Ssid;
+        ExtJoinV1.Scan = ExtJoin.Scan;
+        RtlCopyMemory(ExtJoinV1.Assoc.Bssid, ExtJoin.Assoc.Bssid, CYW_ADDRESS_LENGTH);
+        if (Settings.HasBssid)
+            ExtJoinV1.Assoc.Flags = CYW_ASSOC_HINT_BSSID_PRESENT;
+        JoinSize = FIELD_OFFSET(CYW_EXT_JOIN_PARAMS_V1_LE, Assoc) + FIELD_OFFSET(CYW_ASSOC_PARAMS_V1_LE, ChanspecList);
+        if (JoinChanspec != 0)
+        {
+            ExtJoinV1.Assoc.ChanspecNum = 1;
+            ExtJoinV1.Assoc.ChanspecList[0] = JoinChanspec;
+            JoinSize += sizeof(USHORT);
+        }
+        Status = CywFilIovarSet(Adapter, "join", &ExtJoinV1, JoinSize);
+    }
+    else
+    {
+        Status = CywFilIovarSet(Adapter, "join", &ExtJoin, JoinSize);
+    }
+    if (!NT_SUCCESS(Status) && Adapter->JoinV1)
+    {
+        CYW_JOIN_PARAMS_V1 JoinV1;
+
+        RtlZeroMemory(&JoinV1, sizeof(JoinV1));
+        JoinV1.Ssid.SsidLen = Settings.SsidLength;
+        RtlCopyMemory(JoinV1.Ssid.Ssid, Settings.Ssid, Settings.SsidLength);
+        if (Settings.HasBssid)
+        {
+            RtlCopyMemory(JoinV1.Assoc.Bssid, Settings.Bssid, CYW_ADDRESS_LENGTH);
+            JoinV1.Assoc.Flags = CYW_ASSOC_HINT_BSSID_PRESENT;
+        }
+        else
+        {
+            RtlFillMemory(JoinV1.Assoc.Bssid, CYW_ADDRESS_LENGTH, 0xFF);
+        }
+        JoinSize = sizeof(JoinV1.Ssid);
+        if (JoinChanspec != 0)
+        {
+            JoinV1.Assoc.ChanspecNum = 1;
+            JoinV1.Assoc.ChanspecList[0] = JoinChanspec;
+            JoinSize += FIELD_OFFSET(CYW_ASSOC_PARAMS_V1_LE, ChanspecList) + sizeof(USHORT);
+        }
+        Status = CywFilCmdSet(Adapter, BRCMF_C_SET_SSID, &JoinV1, JoinSize);
+        RtlSecureZeroMemory(&JoinV1, sizeof(JoinV1));
+    }
+    else if (!NT_SUCCESS(Status))
     {
         RtlZeroMemory(&Join, sizeof(Join));
         Join.Ssid.SsidLen = Settings.SsidLength;
@@ -1229,6 +1457,9 @@ CywConnect(
     }
 
 Exit:
+    DPRINT1("CYW: join '%.*s' with auth %lu, ciphers %lu/%lu, chanspec %x: %lx\n",
+            (int)min(Settings.SsidLength, DOT11_SSID_MAX_LENGTH), Settings.Ssid, Settings.AuthAlgorithm,
+            Settings.UnicastCipher, Settings.MulticastCipher, Settings.JoinChanspec, Status);
     RtlSecureZeroMemory(&Settings, sizeof(Settings));
     return Status;
 }
@@ -1309,6 +1540,11 @@ CywAddEscanResult(
     }
 
     NdisAcquireSpinLock(&Adapter->Lock);
+    if (Adapter->BssResetPending)
+    {
+        Adapter->BssCount = 0;
+        Adapter->BssResetPending = FALSE;
+    }
 
     /* Refresh in place when this BSSID was already seen on another channel */
     Entry = NULL;
@@ -1325,10 +1561,26 @@ CywAddEscanResult(
     {
         if (Adapter->BssCount >= CYW_MAX_BSS)
         {
-            NdisReleaseSpinLock(&Adapter->Lock);
-            return;
+            ULONG Weakest = 0;
+
+            for (i = 1; i < Adapter->BssCount; i++)
+            {
+                if (Adapter->Bss[i].Rssi < Adapter->Bss[Weakest].Rssi)
+                {
+                    Weakest = i;
+                }
+            }
+            if ((LONG)Bi->Rssi <= Adapter->Bss[Weakest].Rssi)
+            {
+                NdisReleaseSpinLock(&Adapter->Lock);
+                return;
+            }
+            Entry = &Adapter->Bss[Weakest];
         }
-        Entry = &Adapter->Bss[Adapter->BssCount++];
+        else
+        {
+            Entry = &Adapter->Bss[Adapter->BssCount++];
+        }
         RtlZeroMemory(Entry, sizeof(*Entry));
         NewEntry = TRUE;
     }
@@ -1358,7 +1610,8 @@ CywAddEscanResult(
     Entry->BeaconPeriod = Bi->BeaconPeriod;
 
     /* Keep the real beacon/probe IEs, truncated at an element boundary */
-    if (Bi->Version == CYW_BSS_INFO_VERSION &&
+    if ((Bi->Version == CYW_BSS_INFO_VERSION || Bi->Version == CYW_BSS_INFO_VERSION_112 ||
+         Bi->Version == CYW_BSS_INFO_VERSION_114) &&
         Bi->IeOffset >= sizeof(CYW_BSS_INFO_LE) &&
         Bi->IeLength <= Bi->Length &&
         Bi->IeOffset <= Bi->Length - Bi->IeLength)
@@ -1381,6 +1634,22 @@ CywAddEscanResult(
             Entry->IeLength = Take;
         }
     }
+    if (NewEntry && (Bi->Capability & 0x0010))
+    {
+        ULONG Off;
+        BOOLEAN Rsn = FALSE;
+
+        for (Off = 0; Off + 2 <= Entry->IeLength; Off += 2 + Entry->IeBlob[Off + 1])
+        {
+            if (Entry->IeBlob[Off] == 48)
+                Rsn = TRUE;
+        }
+        if (!Rsn)
+        {
+            DPRINT1("CYW: secured BSS '%.*s' kept %lu IE bytes without RSN: bss_info v%lu, IEs %lu bytes at %u\n",
+                    (int)Entry->SsidLength, Entry->Ssid, Entry->IeLength, Bi->Version, Bi->IeLength, Bi->IeOffset);
+        }
+    }
 
     NdisReleaseSpinLock(&Adapter->Lock);
 }
@@ -1391,11 +1660,29 @@ CywProcessEvent(
     _In_ PUCHAR Frame,
     _In_ ULONG Length)
 {
-    PCYW_BCDC_HEADER Bcdc;
+    ULONG HeaderLen;
+
+    if (Length < BCDC_HEADER_LEN)
+    {
+        return;
+    }
+    HeaderLen = BCDC_HEADER_LEN + ((ULONG)((PCYW_BCDC_HEADER)Frame)->DataOffset << 2);
+    if (Length < HeaderLen)
+    {
+        return;
+    }
+    CywProcessEventFrame(Adapter, Frame + HeaderLen, Length - HeaderLen);
+}
+
+VOID
+CywProcessEventFrame(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_ PUCHAR Frame,
+    _In_ ULONG Length)
+{
     PCYW_ETHER_HEADER Eth;
     PCYW_BCM_ETH_HEADER Bcm;
     PCYW_EVENT_MSG Msg;
-    ULONG HeaderLen;
     ULONG EventType;
     ULONG EventStatus;
     ULONG DataLen;
@@ -1406,20 +1693,13 @@ CywProcessEvent(
         return;
     }
 
-    /* BCDC header, then the 802.3 event frame at the encoded data offset */
-    if (Length < BCDC_HEADER_LEN)
-    {
-        return;
-    }
-    Bcdc = (PCYW_BCDC_HEADER)Frame;
-    HeaderLen = BCDC_HEADER_LEN + ((ULONG)Bcdc->DataOffset << 2);
-    if (Length < HeaderLen + sizeof(CYW_ETHER_HEADER) +
+    if (Length < sizeof(CYW_ETHER_HEADER) +
                  sizeof(CYW_BCM_ETH_HEADER) + sizeof(CYW_EVENT_MSG))
     {
         return;
     }
 
-    Eth = (PCYW_ETHER_HEADER)(Frame + HeaderLen);
+    Eth = (PCYW_ETHER_HEADER)Frame;
     if (RtlUshortByteSwap(Eth->Type) != ETH_P_LINK_CTL)
     {
         return;
@@ -1435,12 +1715,19 @@ CywProcessEvent(
     EventType = RtlUlongByteSwap(Msg->EventType);
     EventStatus = RtlUlongByteSwap(Msg->Status);
 
-    Remaining = Length - HeaderLen - sizeof(CYW_ETHER_HEADER) -
+    Remaining = Length - sizeof(CYW_ETHER_HEADER) -
                 sizeof(CYW_BCM_ETH_HEADER) - sizeof(CYW_EVENT_MSG);
     DataLen = RtlUlongByteSwap(Msg->DataLen);
     if (Remaining > DataLen)
     {
         Remaining = DataLen;
+    }
+
+    if (EventType <= BRCMF_E_DISASSOC_IND || EventType == BRCMF_E_LINK || EventType == BRCMF_E_PSK_SUP)
+    {
+        DPRINT1("CYW: event %lu status %lu reason %lu flags %x from %02x:%02x:%02x:%02x:%02x:%02x\n", EventType,
+                EventStatus, RtlUlongByteSwap(Msg->Reason), RtlUshortByteSwap(Msg->Flags), Msg->Addr[0],
+                Msg->Addr[1], Msg->Addr[2], Msg->Addr[3], Msg->Addr[4], Msg->Addr[5]);
     }
 
     if (EventType == BRCMF_E_ESCAN_RESULT)
@@ -1504,15 +1791,35 @@ CywProcessEvent(
         }
         else
         {
+            BOOLEAN Ours;
+
             NdisAcquireSpinLock(&Adapter->Lock);
             WasUp = Adapter->LinkUp;
+            Ours = Adapter->Associated && RtlEqualMemory(Adapter->ConnectedBssid, Msg->Addr, CYW_ADDRESS_LENGTH);
             CywClearLinkStateLocked(Adapter);
             NdisReleaseSpinLock(&Adapter->Lock);
+            if (Ours && !WasUp)
+            {
+                CywCompletePendingConnect(Adapter, NDIS_STATUS_FAILURE);
+            }
             if (WasUp)
             {
                 CywIndicateDisassociation(Adapter);
                 CywIndicateLinkState(Adapter, FALSE, 0);
             }
+        }
+    }
+    else if (EventType == BRCMF_E_DEAUTH || EventType == BRCMF_E_DEAUTH_IND || EventType == BRCMF_E_DISASSOC_IND)
+    {
+        BOOLEAN Ours;
+
+        NdisAcquireSpinLock(&Adapter->Lock);
+        Ours = Adapter->Associated && !Adapter->LinkUp &&
+               RtlEqualMemory(Adapter->ConnectedBssid, Msg->Addr, CYW_ADDRESS_LENGTH);
+        NdisReleaseSpinLock(&Adapter->Lock);
+        if (Ours)
+        {
+            CywCompletePendingConnect(Adapter, NDIS_STATUS_FAILURE);
         }
     }
     else if (EventType == BRCMF_E_SET_SSID)
@@ -1559,6 +1866,20 @@ CywProcessEvent(
                 CywQueueLinkUpWork(Adapter);
             }
         }
+        else
+        {
+            BOOLEAN Ours;
+
+            NdisAcquireSpinLock(&Adapter->Lock);
+            Ours = Adapter->FirmwareSupplicant && Adapter->Associated && !Adapter->LinkUp;
+            NdisReleaseSpinLock(&Adapter->Lock);
+            DPRINT1("CYW: the firmware handshake ended in state %lu, reason %lu\n", EventStatus,
+                    RtlUlongByteSwap(Msg->Reason));
+            if (Ours)
+            {
+                CywCompletePendingConnect(Adapter, NDIS_STATUS_FAILURE);
+            }
+        }
     }
 }
 
@@ -1568,11 +1889,27 @@ CywRxData(
     _In_ PUCHAR Body,
     _In_ ULONG BodyLen)
 {
-    PCYW_BCDC_HEADER Bcdc;
-    PCYW_ETHER_HEADER EthHdr;
-    PUCHAR Pay;
     ULONG Off;
-    ULONG PayLen;
+
+    if (BodyLen < BCDC_HEADER_LEN)
+    {
+        return NULL;
+    }
+    Off = BCDC_HEADER_LEN + ((ULONG)((PCYW_BCDC_HEADER)Body)->DataOffset << 2);
+    if (Off > BodyLen)
+    {
+        return NULL;
+    }
+    return CywRxEthernet(Adapter, Body + Off, BodyLen - Off);
+}
+
+PNET_BUFFER_LIST
+CywRxEthernet(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_ PUCHAR Pay,
+    _In_ ULONG PayLen)
+{
+    PCYW_ETHER_HEADER EthHdr;
     ULONG FrameLen;
     PUCHAR Frame;
     PCYW_DOT11_HEADER Dot11;
@@ -1591,20 +1928,11 @@ CywRxData(
         return NULL;
     }
 
-    if (BodyLen < BCDC_HEADER_LEN)
+    if (PayLen < sizeof(CYW_ETHER_HEADER))
     {
         return NULL;
     }
 
-    Bcdc = (PCYW_BCDC_HEADER)Body;
-    Off = BCDC_HEADER_LEN + ((ULONG)Bcdc->DataOffset << 2);
-    if (Off + sizeof(CYW_ETHER_HEADER) > BodyLen)
-    {
-        return NULL;
-    }
-
-    Pay = Body + Off;
-    PayLen = BodyLen - Off;
     EthHdr = (PCYW_ETHER_HEADER)Pay;
 
     FrameLen = sizeof(CYW_DOT11_HEADER) + sizeof(CYW_SNAP_HEADER) +
@@ -1760,7 +2088,6 @@ CywReadChipInterrupt(
     return STATUS_SUCCESS;
 }
 
-static
 VOID
 CywRxChainAppend(
     _Inout_ PNET_BUFFER_LIST *Head,
@@ -1784,7 +2111,6 @@ CywRxChainAppend(
     (*Count)++;
 }
 
-static
 VOID
 CywRxChainFlush(
     _In_ PCYW_ADAPTER Adapter,
@@ -1986,7 +2312,7 @@ CywBusThread(
             /* The firmware's next-length byte is a 16-byte-rounded readahead
              * promise.  Reading a different-sized frame with that promise
              * means the FIFO is no longer at the boundary we expected. */
-            if (ReadAhead && ALIGN_UP(FrameLen, 16) != FirstRead)
+            if (ReadAhead && ALIGN_UP_BY(FrameLen, 16) != FirstRead)
             {
                 Adapter->RxBadHdrCount++;
                 NextLen = 0;
@@ -2239,7 +2565,8 @@ CywStartBusThread(
     InterlockedExchange(&Adapter->BusThreadRunning, 1);
 
     Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL,
-                                  CywBusThread, Adapter);
+                                  (Adapter->BusType == CywBusPcie) ? CywPcieThread : CywBusThread,
+                                  Adapter);
     if (!NT_SUCCESS(Status))
     {
         InterlockedExchange(&Adapter->BusThreadRunning, 0);

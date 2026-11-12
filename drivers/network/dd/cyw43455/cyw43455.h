@@ -265,7 +265,9 @@ typedef struct _CYW_DLOAD_DATA
 
 /* brcmf_wsec_pmk_le flags: key material is a cleartext passphrase (SAE) */
 #define CYW_WSEC_PASSPHRASE             0x0001
+#define CYW_WSEC_PMK_LENGTH             32
 #define CYW_SAE_PASSWORD_MAX            128
+#define CYW_WSEC_PASSPHRASE_MAX         256
 
 /* Firmware-assisted join dwell times (brcmfmac defaults) */
 #define CYW_JOIN_ACTIVE_DWELL_MS        320
@@ -286,7 +288,11 @@ typedef struct _CYW_DLOAD_DATA
 #define ETH_P_EAPOL                     0x888E
 
 #define BRCMF_ESCAN_REQ_VERSION         1
+#define BRCMF_SCAN_PARAMS_VERSION_V2    2
+#define BRCMF_SCAN_PARAMS_VERSION_V3    3
 #define CYW_BSS_INFO_VERSION            109
+#define CYW_BSS_INFO_VERSION_112        112
+#define CYW_BSS_INFO_VERSION_114        114
 #define WL_ESCAN_ACTION_START           1
 #define WL_ESCAN_ACTION_CONTINUE        2
 #define WL_ESCAN_ACTION_ABORT           3
@@ -318,6 +324,20 @@ typedef struct _CYW_DLOAD_DATA
 #define BRCMF_E_PSK_SUP                 46
 #define BRCMF_E_IF                      54
 #define BRCMF_E_ESCAN_RESULT            69
+#define BRCMF_E_LAST                    213
+#define BRCMF_EVENTING_MASK_LEN         ((BRCMF_E_LAST + 7) / 8)
+#define BRCMF_EVENTMSGS_VER             1
+#define BRCMF_EVENTMSGS_SET_MASK        3
+
+typedef struct _CYW_EVENTMSGS_EXT
+{
+    UCHAR Version;
+    UCHAR Command;
+    UCHAR Length;
+    UCHAR MaxGetSize;
+    UCHAR Mask[BRCMF_EVENTING_MASK_LEN];
+} CYW_EVENTMSGS_EXT, *PCYW_EVENTMSGS_EXT;
+C_ASSERT(FIELD_OFFSET(CYW_EVENTMSGS_EXT, Mask) == 4);
 
 #define BRCMF_E_STATUS_SUCCESS          0
 #define BRCMF_E_STATUS_PARTIAL          8
@@ -329,7 +349,7 @@ typedef struct _CYW_DLOAD_DATA
 #define BCMILCP_BCM_SUBTYPE_EVENT       1
 #define BCDC_HEADER_LEN                 4
 
-#define CYW_MAX_BSS                     48
+#define CYW_MAX_BSS                     128
 #define CYW_MAX_BSS_IE                  512
 #define CYW_CONTROL_BUFFER_SIZE         8192
 #define CYW_RX_BUFFER_SIZE              262144
@@ -338,6 +358,12 @@ typedef struct _CYW_DLOAD_DATA
 #define CYW_REG_SCRATCH_SIZE            64
 #define CYW_DEFAULT_COUNTRY             "FR"
 #define CYW_5G_PREFER_RSSI              (-75)
+#define CYW_WLC_BAND_2G                 2
+#define CYW_WLC_BW_40MHZ_BIT            0x2
+#define CYW_WLC_BW_CAP_40MHZ            0x3
+#define CYW_WLC_N_BW_20ALL              0
+#define CYW_WLC_N_BW_40ALL              1
+#define CYW_OBSS_COEX_AUTO              ((ULONG)-1)
 #define CYW_CHSPEC_BW_20                0x1000
 #define CYW_CHSPEC_BND_2G               0x0000
 #define CYW_CHSPEC_BND_5G               0xC000
@@ -348,6 +374,7 @@ typedef struct _CYW_DLOAD_DATA
 #define CYW_MAX_FRAME_SIZE              DOT11_MAX_PDU_SIZE
 #define CYW_LINK_SPEED_BPS              54000000ULL
 #define CYW_MAX_LINK_SPEED_BPS          433300000ULL
+#define CYW_CONNECT_TIMEOUT_MS          10000
 
 #pragma pack(push, 1)
 typedef struct _CYW_BCDC_DCMD
@@ -437,6 +464,45 @@ typedef struct _CYW_ESCAN_PARAMS_LE
 
 #define CYW_SCAN_PARAMS_FIXED_SIZE   FIELD_OFFSET(CYW_SCAN_PARAMS_LE, ChannelList)
 #define CYW_ESCAN_PARAMS_FIXED_SIZE  (FIELD_OFFSET(CYW_ESCAN_PARAMS_LE, Params) + CYW_SCAN_PARAMS_FIXED_SIZE)
+
+typedef struct _CYW_SCAN_PARAMS_V2_LE
+{
+    USHORT Version;
+    USHORT Length;
+    CYW_SSID_LE Ssid;
+    UCHAR Bssid[6];
+    CHAR BssType;
+    UCHAR Pad;
+    ULONG ScanType;
+    LONG NProbes;
+    LONG ActiveTime;
+    LONG PassiveTime;
+    LONG HomeTime;
+    LONG ChannelNum;
+    USHORT ChannelList[1];
+} CYW_SCAN_PARAMS_V2_LE, *PCYW_SCAN_PARAMS_V2_LE;
+
+typedef struct _CYW_ESCAN_PARAMS_V2_LE
+{
+    ULONG Version;
+    USHORT Action;
+    USHORT SyncId;
+    CYW_SCAN_PARAMS_V2_LE Params;
+} CYW_ESCAN_PARAMS_V2_LE, *PCYW_ESCAN_PARAMS_V2_LE;
+
+#define CYW_SCAN_PARAMS_V2_FIXED_SIZE   FIELD_OFFSET(CYW_SCAN_PARAMS_V2_LE, ChannelList)
+#define CYW_ESCAN_PARAMS_V2_FIXED_SIZE  (FIELD_OFFSET(CYW_ESCAN_PARAMS_V2_LE, Params) + CYW_SCAN_PARAMS_V2_FIXED_SIZE)
+C_ASSERT(CYW_SCAN_PARAMS_FIXED_SIZE == 64);
+C_ASSERT(CYW_SCAN_PARAMS_V2_FIXED_SIZE == 72);
+C_ASSERT(FIELD_OFFSET(CYW_ESCAN_PARAMS_V2_LE, Params) == 8);
+
+typedef struct _CYW_SCAN_VERSION_LE
+{
+    USHORT Version;
+    USHORT Length;
+    USHORT ScanVerMajor;
+} CYW_SCAN_VERSION_LE, *PCYW_SCAN_VERSION_LE;
+C_ASSERT(sizeof(CYW_SCAN_VERSION_LE) == 6);
 
 typedef struct _CYW_COUNTRY_LE
 {
@@ -550,11 +616,93 @@ typedef struct _CYW_EXT_JOIN_PARAMS_LE
     CYW_ASSOC_PARAMS_LE Assoc;
 } CYW_EXT_JOIN_PARAMS_LE, *PCYW_EXT_JOIN_PARAMS_LE;
 
+typedef struct _CYW_ASSOC_PARAMS_V1_LE
+{
+    USHORT Version;
+    USHORT Flags;
+    UCHAR Bssid[6];
+    USHORT BssidCount;
+    ULONG ChanspecNum;
+    USHORT ChanspecList[1];
+} CYW_ASSOC_PARAMS_V1_LE, *PCYW_ASSOC_PARAMS_V1_LE;
+
+typedef struct _CYW_EXT_JOIN_PARAMS_V1_LE
+{
+    USHORT Version;
+    USHORT Pad;
+    CYW_SSID_LE Ssid;
+    CYW_JOIN_SCAN_PARAMS_LE Scan;
+    CYW_ASSOC_PARAMS_V1_LE Assoc;
+} CYW_EXT_JOIN_PARAMS_V1_LE, *PCYW_EXT_JOIN_PARAMS_V1_LE;
+
+typedef struct _CYW_JOIN_PARAMS_V1
+{
+    CYW_SSID_LE Ssid;
+    CYW_ASSOC_PARAMS_V1_LE Assoc;
+} CYW_JOIN_PARAMS_V1, *PCYW_JOIN_PARAMS_V1;
+
+typedef struct _CYW_WLC_VERSION_LE
+{
+    USHORT Version;
+    USHORT Length;
+    USHORT EpiVerMajor;
+    USHORT EpiVerMinor;
+    USHORT EpiRcNum;
+    USHORT EpiIncrNum;
+    USHORT WlcVerMajor;
+    USHORT WlcVerMinor;
+} CYW_WLC_VERSION_LE, *PCYW_WLC_VERSION_LE;
+
+#define CYW_ASSOC_HINT_BSSID_PRESENT    0x0001
+
 typedef struct _CYW_SCB_VAL_LE
 {
     ULONG Val;
     UCHAR Ea[6];
 } CYW_SCB_VAL_LE, *PCYW_SCB_VAL_LE;
+
+#define CYW_ANT_MAX                     4
+#define CYW_STA_SCBSTATS                0x00004000
+
+typedef struct _CYW_STA_INFO_LE
+{
+    USHORT Version;
+    USHORT Length;
+    USHORT Capability;
+    ULONG Flags;
+    ULONG Idle;
+    UCHAR Ea[6];
+    ULONG RateCount;
+    UCHAR Rates[16];
+    ULONG AssociatedSeconds;
+    ULONG ListenIntervalMs;
+    ULONG TxPackets;
+    ULONG TxFailures;
+    ULONG RxUnicastPackets;
+    ULONG RxMulticastPackets;
+    ULONG TxRate;
+    ULONG RxRate;
+    ULONG RxDecryptSucceeds;
+    ULONG RxDecryptFailures;
+    ULONG TxTotalPackets;
+    ULONG RxTotalPackets;
+    ULONG TxMulticastPackets;
+    ULONG64 TxTotalBytes;
+    ULONG64 RxTotalBytes;
+    ULONG64 TxUnicastBytes;
+    ULONG64 TxMulticastBytes;
+    ULONG64 RxUnicastBytes;
+    ULONG64 RxMulticastBytes;
+    CHAR Rssi[CYW_ANT_MAX];
+    CHAR NoiseFloor[CYW_ANT_MAX];
+    USHORT Aid;
+    USHORT HtCapabilities;
+    USHORT VhtFlags;
+    ULONG TxRetryCount;
+    ULONG TxRetryExhausted;
+    CHAR RxLastPacketRssi[CYW_ANT_MAX];
+    UCHAR Reserved[124];
+} CYW_STA_INFO_LE, *PCYW_STA_INFO_LE;
 
 typedef struct _CYW_CHANNEL_INFO_LE
 {
@@ -567,15 +715,32 @@ typedef struct _CYW_WSEC_PMK_LE
 {
     USHORT KeyLen;
     USHORT Flags;
-    UCHAR Key[CYW_SAE_PASSWORD_MAX];
+    UCHAR Key[CYW_WSEC_PASSPHRASE_MAX];
+    USHORT OptLen;
+    UCHAR OptTlvs[2];
 } CYW_WSEC_PMK_LE, *PCYW_WSEC_PMK_LE;
 
 C_ASSERT(sizeof(CYW_JOIN_SCAN_PARAMS_LE) == 20);
 C_ASSERT(FIELD_OFFSET(CYW_ASSOC_PARAMS_LE, ChanspecNum) == 8);
 C_ASSERT(FIELD_OFFSET(CYW_ASSOC_PARAMS_LE, ChanspecList) == 12);
 C_ASSERT(FIELD_OFFSET(CYW_EXT_JOIN_PARAMS_LE, Assoc) == 56);
+C_ASSERT(FIELD_OFFSET(CYW_ASSOC_PARAMS_V1_LE, Bssid) == 4);
+C_ASSERT(FIELD_OFFSET(CYW_ASSOC_PARAMS_V1_LE, ChanspecNum) == 12);
+C_ASSERT(FIELD_OFFSET(CYW_ASSOC_PARAMS_V1_LE, ChanspecList) == 16);
+C_ASSERT(FIELD_OFFSET(CYW_JOIN_PARAMS_V1, Assoc) == 36);
+C_ASSERT(FIELD_OFFSET(CYW_EXT_JOIN_PARAMS_V1_LE, Ssid) == 4);
+C_ASSERT(FIELD_OFFSET(CYW_EXT_JOIN_PARAMS_V1_LE, Scan) == 40);
+C_ASSERT(FIELD_OFFSET(CYW_EXT_JOIN_PARAMS_V1_LE, Assoc) == 60);
+C_ASSERT(sizeof(CYW_WLC_VERSION_LE) == 16);
 C_ASSERT(sizeof(CYW_SCB_VAL_LE) == 12);
-C_ASSERT(sizeof(CYW_WSEC_PMK_LE) == 132);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, Flags) == 8);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, Ea) == 16);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, TxTotalBytes) == 96);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, Rssi) == 144);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, TxRetryCount) == 160);
+C_ASSERT(FIELD_OFFSET(CYW_STA_INFO_LE, RxLastPacketRssi) == 168);
+C_ASSERT(sizeof(CYW_STA_INFO_LE) == 296);
+C_ASSERT(sizeof(CYW_WSEC_PMK_LE) == 264);
 
 typedef struct _CYW_WSEC_KEY
 {
@@ -637,13 +802,24 @@ typedef enum _CYW_CPU_CORE_TYPE
 {
     CywCpuCoreUnknown = 0,
     CywCpuCoreArmCm3,
-    CywCpuCoreArmCr4
+    CywCpuCoreArmCr4,
+    CywCpuCoreArmCa7
 } CYW_CPU_CORE_TYPE;
+
+typedef enum _CYW_BUS_TYPE
+{
+    CywBusSdio = 0,
+    CywBusPcie
+} CYW_BUS_TYPE;
+
+struct _CYW_PCIE;
 
 typedef struct _CYW_ADAPTER
 {
     NDIS_HANDLE MiniportAdapterHandle;
     PDEVICE_OBJECT Pdo;
+    CYW_BUS_TYPE BusType;
+    struct _CYW_PCIE *Pcie;
     SDBUS_INTERFACE_STANDARD SdBus;
     BOOLEAN SdBusOpened;
     PFILE_OBJECT SdioControlFileObject;
@@ -656,6 +832,7 @@ typedef struct _CYW_ADAPTER
     CYW_CPU_CORE_TYPE CpuCoreType;
     PCWSTR FirmwarePath;
     PCWSTR ClmPath;
+    PCWSTR TxcapPath;
     PCWSTR NvramPath;
     UCHAR F2Watermark;
     BOOLEAN UseExtendedWatermark;
@@ -732,6 +909,11 @@ typedef struct _CYW_ADAPTER
     ULONG ScanSeq;
     ULONG ConnectSeq;
     BOOLEAN ScanInProgress;
+    BOOLEAN BssResetPending;
+    BOOLEAN InternalScan;
+    KEVENT ScanDoneEvent;
+    USHORT ScanVersion;
+    BOOLEAN JoinV1;
     CYW_BSS Bss[CYW_MAX_BSS];
     ULONG BssCount;
 
@@ -753,6 +935,7 @@ typedef struct _CYW_ADAPTER
     BOOLEAN LinkUp;
     BOOLEAN FirmwareSupplicant;
     BOOLEAN FirmwareHandshakeComplete;
+    BOOLEAN FirmwareSupplicantSupported;
     BOOLEAN PortAuthorized;
     PNDIS_OID_REQUEST PendingConnectOid;
 
@@ -777,6 +960,8 @@ DRIVER_INITIALIZE DriverEntry;
 
 MINIPORT_INITIALIZE              CywMiniportInitializeEx;
 MINIPORT_HALT                    CywMiniportHaltEx;
+MINIPORT_CHECK_FOR_HANG          CywMiniportCheckForHangEx;
+MINIPORT_RESET                   CywMiniportResetEx;
 MINIPORT_PAUSE                   CywMiniportPauseEx;
 MINIPORT_RESTART                 CywMiniportRestartEx;
 MINIPORT_SHUTDOWN                CywMiniportShutdownEx;
@@ -810,6 +995,28 @@ NTSTATUS CywRamWrite(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Address, _In_ PUCHAR 
 NTSTATUS CywChipRecognize(_In_ PCYW_ADAPTER Adapter);
 NTSTATUS CywChipDownloadFirmware(_In_ PCYW_ADAPTER Adapter);
 NTSTATUS CywChipBringUp(_In_ PCYW_ADAPTER Adapter);
+NTSTATUS CywChipConfigureFirmware(_In_ PCYW_ADAPTER Adapter);
+NTSTATUS CywReadFile(_In_ PCWSTR Path, _Outptr_ PUCHAR *Buffer, _Out_ PULONG Size);
+NTSTATUS CywStripNvram(_In_reads_bytes_(RawSize) const UCHAR *Raw, _In_ ULONG RawSize, _In_opt_z_ PCSTR Extra, _Outptr_ PUCHAR *Nvram, _Out_ PULONG Size);
+ULONG CywEromDescriptorType(_In_ ULONG Descriptor);
+NTSTATUS CywEromReadDescriptor(_In_ PCYW_ADAPTER Adapter, _Inout_ PULONG EromAddress, _Inout_ PULONG Remaining, _Out_ PULONG Descriptor);
+NTSTATUS CywEromGetCoreBases(_In_ PCYW_ADAPTER Adapter, _Inout_ PULONG EromAddress, _Inout_ PULONG Remaining, _Out_ PULONG RegisterBase, _Out_ PULONG WrapperBase);
+NTSTATUS CywChipDisableCore(_In_ PCYW_ADAPTER Adapter, _In_ ULONG WrapBase, _In_ ULONG Prereset, _In_ ULONG Reset);
+NTSTATUS CywChipResetCore(_In_ PCYW_ADAPTER Adapter, _In_ ULONG WrapBase, _In_ ULONG Prereset, _In_ ULONG Reset, _In_ ULONG Postreset);
+NTSTATUS CywChipIsCoreUp(_In_ PCYW_ADAPTER Adapter, _In_ ULONG WrapBase, _Out_ PBOOLEAN IsUp);
+
+NTSTATUS CywPcieOpen(_In_ PCYW_ADAPTER Adapter, _In_ PNDIS_RESOURCE_LIST Resources);
+VOID CywPcieClose(_In_ PCYW_ADAPTER Adapter);
+VOID CywPcieShutdown(_In_ PCYW_ADAPTER Adapter);
+NTSTATUS CywPcieBringUp(_In_ PCYW_ADAPTER Adapter);
+NTSTATUS CywPcieRecover(_In_ PCYW_ADAPTER Adapter);
+BOOLEAN CywPcieFirmwareFailed(_In_ PCYW_ADAPTER Adapter);
+NTSTATUS CywPcieBackplaneReadl(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Address, _Out_ PULONG Value);
+NTSTATUS CywPcieBackplaneWritel(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Address, _In_ ULONG Value);
+NTSTATUS CywMsgbufIoctl(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Cmd, _In_ BOOLEAN Set, _Inout_updates_bytes_opt_(Length) PVOID Data, _In_ ULONG Length);
+NTSTATUS CywMsgbufSendData(_In_ PCYW_ADAPTER Adapter, _In_reads_bytes_(EthLen) PUCHAR Eth, _In_ ULONG EthLen);
+NTSTATUS CywMsgbufSendNb(_In_ PCYW_ADAPTER Adapter, _In_ PNET_BUFFER Nb);
+KSTART_ROUTINE CywPcieThread;
 
 NTSTATUS CywFilCmdSet(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Cmd, _In_ PVOID Data, _In_ ULONG Length);
 NTSTATUS CywFilCmdGet(_In_ PCYW_ADAPTER Adapter, _In_ ULONG Cmd, _Out_ PVOID Data, _In_ ULONG Length);
@@ -825,11 +1032,15 @@ UCHAR CywDataRateIndexFromUnits(_In_ ULONG RateUnits500Kbps);
 
 NTSTATUS CywScanStart(_In_ PCYW_ADAPTER Adapter, _In_reads_bytes_opt_(RequestLength) PDOT11_SCAN_REQUEST_V2 Request, _In_ ULONG RequestLength);
 VOID CywProcessEvent(_In_ PCYW_ADAPTER Adapter, _In_ PUCHAR Frame, _In_ ULONG Length);
+VOID CywProcessEventFrame(_In_ PCYW_ADAPTER Adapter, _In_ PUCHAR Frame, _In_ ULONG Length);
 NTSTATUS CywSdpcmSendData(_In_ PCYW_ADAPTER Adapter, _In_ PUCHAR Eth, _In_ ULONG EthLen);
 NTSTATUS CywSdpcmSendNb(_In_ PCYW_ADAPTER Adapter, _In_ PNET_BUFFER Nb);
 ULONG CywBuildEthFromNbl(_In_ PNET_BUFFER Nb, _Out_writes_(Capacity) PUCHAR Dest, _In_ ULONG Capacity);
 BOOLEAN CywTxAllowed(_In_ PCYW_ADAPTER Adapter, _In_reads_(EthLen) PUCHAR Eth, _In_ ULONG EthLen);
 PNET_BUFFER_LIST CywRxData(_In_ PCYW_ADAPTER Adapter, _In_ PUCHAR Body, _In_ ULONG BodyLen);
+PNET_BUFFER_LIST CywRxEthernet(_In_ PCYW_ADAPTER Adapter, _In_ PUCHAR Pay, _In_ ULONG PayLen);
+VOID CywRxChainAppend(_Inout_ PNET_BUFFER_LIST *Head, _Inout_ PNET_BUFFER_LIST *Tail, _Inout_ PULONG Count, _In_opt_ PNET_BUFFER_LIST Nbl);
+VOID CywRxChainFlush(_In_ PCYW_ADAPTER Adapter, _Inout_ PNET_BUFFER_LIST *Head, _Inout_ PNET_BUFFER_LIST *Tail, _Inout_ PULONG Count);
 PCYW_RX_BUF CywAcquireRxBuffer(_In_ PCYW_ADAPTER Adapter);
 VOID CywReleaseRxBuffer(_In_ PCYW_ADAPTER Adapter, _In_ PCYW_RX_BUF RxBuffer);
 BOOLEAN CywQueueWorkItem(_In_ PCYW_ADAPTER Adapter, _In_ NDIS_IO_WORKITEM_ROUTINE Routine, _In_opt_ PVOID Context);

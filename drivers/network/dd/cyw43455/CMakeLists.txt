@@ -15,10 +15,12 @@ list(APPEND SOURCE
     chip.c
     fwil.c
     oid.c
+    pcie.c
+    msgbuf.c
     cyw43455.h)
 
 add_library(cyw43455 MODULE ${SOURCE} cyw43455.rc)
-target_link_libraries(cyw43455 sdbuslib)
+target_link_libraries(cyw43455 sdbuslib fdtdrv)
 set_module_type(cyw43455 kernelmodedriver)
 add_importlibs(cyw43455 ndis ntoskrnl hal)
 add_cd_file(TARGET cyw43455 DESTINATION reactos/system32/drivers NO_CAB FOR all)

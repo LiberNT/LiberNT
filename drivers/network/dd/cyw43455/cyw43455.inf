@@ -31,6 +31,8 @@ DefaultDestDir = 12
 %cyw43430.DeviceDesc% = cyw.ndi, SD\VID_02D0&PID_A9A6&FN_2
 %cyw.DeviceDesc% = cyw.ndi, SD\VID_02D0&PID_A9BF&FN_2
 %cyw.DeviceDesc% = cyw.ndi, SD\VID_02D0&PID_4345&FN_2
+%cyw4387.DeviceDesc% = cyw.pcie.ndi, PCI\VEN_14E4&DEV_4433
+%cyw4388.DeviceDesc% = cyw.pcie.ndi, PCI\VEN_14E4&DEV_4434
 
 [cyw.ndi]
 Characteristics = 0x84
@@ -42,6 +44,23 @@ CopyFiles       = cyw.CopyFiles
 
 [cyw.ndi.Services]
 AddService = cyw43455, 2, cyw.Service, cyw.EventLog
+
+[cyw.pcie.ndi]
+Characteristics = 0x84
+AddReg          = cyw.reg
+CopyFiles       = cyw.CopyFiles
+
+[cyw.pcie.ndi.HW]
+AddReg = cyw.pcie.HW.reg
+
+[cyw.pcie.ndi.Services]
+AddService = cyw43455, 2, cyw.Service, cyw.EventLog
+
+[cyw.pcie.HW.reg]
+HKR, "Interrupt Management",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties",, 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MSISupported", 0x00010001, 1
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", "MessageNumberLimit", 0x00010001, 1
 
 [cyw.reg]
 HKR, ,                   *IfType,    0x00010001, 71
@@ -79,5 +98,7 @@ cyw43455.sys = 1
 LiberNT         = "LiberNT Team"
 cyw43430.DeviceDesc = "Broadcom BCM43430 802.11n SDIO WiFi Adapter"
 cyw.DeviceDesc  = "Broadcom CYW43455 802.11ac SDIO WiFi Adapter"
+cyw4387.DeviceDesc = "Broadcom BCM4387 802.11ax PCIe WiFi Adapter"
+cyw4388.DeviceDesc = "Broadcom BCM4388 802.11ax PCIe WiFi Adapter"
 cyw.ServiceDesc = "LiberNT CYW43xx WiFi Driver"
 DiskName        = "LiberNT CYW43xx WiFi Driver Installation Disk"

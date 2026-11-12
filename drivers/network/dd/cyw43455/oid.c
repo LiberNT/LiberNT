@@ -100,6 +100,7 @@ NDIS_OID CywSupportedOids[] =
     OID_DOT11_CONNECT_REQUEST,
     OID_DOT11_DISCONNECT_REQUEST,
     OID_DOT11_RESET_REQUEST,
+    OID_DOT11_PRIVACY_EXEMPTION_LIST,
 };
 
 ULONG CywSupportedOidCount = sizeof(CywSupportedOids) / sizeof(CywSupportedOids[0]);
@@ -415,7 +416,13 @@ CywIndicateLinkQuality(
 
     if (!NT_SUCCESS(CywQueryRssi(Adapter, &Rssi)))
     {
-        return;
+        NdisAcquireSpinLock(&Adapter->Lock);
+        Rssi = Adapter->ConnectedRssi;
+        NdisReleaseSpinLock(&Adapter->Lock);
+        if (Rssi == 0)
+        {
+            return;
+        }
     }
 
     NdisAcquireSpinLock(&Adapter->Lock);
@@ -454,6 +461,8 @@ CywCompletePendingConnect(
         DOT11_ASSOC_STATUS AssocStatus =
             (Status == NDIS_STATUS_SUCCESS) ? DOT11_ASSOC_STATUS_SUCCESS
                                              : DOT11_ASSOC_STATUS_FAILURE;
+
+        DPRINT1("CYW: connect request completed with %lx\n", Status);
 
         CywIndicateAssocComplete(Adapter, AssocStatus);
         CywIndicateConnectComplete(Adapter, AssocStatus);
@@ -576,6 +585,8 @@ CywIndicateScanCompleteInternal(
     DOT11_STATUS_INDICATION Confirm;
     PNDIS_OID_REQUEST Request;
     BOOLEAN WasInProgress;
+    BOOLEAN Internal;
+    ULONG BssCount;
 
     NdisAcquireSpinLock(&Adapter->Lock);
     if (CheckSequence && Adapter->ScanSeq != ExpectedSequence)
@@ -583,8 +594,16 @@ CywIndicateScanCompleteInternal(
         NdisReleaseSpinLock(&Adapter->Lock);
         return FALSE;
     }
+    if (Adapter->BssResetPending && ScanStatus == NDIS_STATUS_SUCCESS)
+    {
+        Adapter->BssCount = 0;
+    }
+    Adapter->BssResetPending = FALSE;
+    BssCount = Adapter->BssCount;
     WasInProgress = Adapter->ScanInProgress;
     Adapter->ScanInProgress = FALSE;
+    Internal = Adapter->InternalScan;
+    Adapter->InternalScan = FALSE;
     Request = Adapter->PendingScanOid;
     Adapter->PendingScanOid = NULL;
     NdisReleaseSpinLock(&Adapter->Lock);
@@ -592,6 +611,13 @@ CywIndicateScanCompleteInternal(
     if (!WasInProgress)
     {
         return FALSE;
+    }
+    DPRINT1("CYW: %sscan complete with status %08lx, %lu networks%s\n", Internal ? "join " : "", ScanStatus, BssCount,
+            CheckSequence ? " (no completion event, timed out)" : "");
+    KeSetEvent(&Adapter->ScanDoneEvent, IO_NO_INCREMENT, FALSE);
+    if (Internal)
+    {
+        return TRUE;
     }
 
     RtlZeroMemory(&Confirm, sizeof(Confirm));
@@ -710,7 +736,7 @@ CywOidScanRequest(
         Request->DATA.SET_INFORMATION.InformationBufferLength;
 
     NdisAcquireSpinLock(&Adapter->Lock);
-    if (Adapter->PendingScanOid != NULL)
+    if (Adapter->PendingScanOid != NULL || Adapter->InternalScan)
     {
         NdisReleaseSpinLock(&Adapter->Lock);
         return NDIS_STATUS_DOT11_MEDIA_IN_USE;
@@ -790,6 +816,8 @@ CywConnectWorker(
         Adapter->ConnectSeq != Seq ||
         InterlockedCompareExchange(&Adapter->Halting, 0, 0) != 0)
     {
+        DPRINT1("CYW: connect attempt %lu dropped (pending %p, current attempt %lu, halting %ld)\n", Seq,
+                Adapter->PendingConnectOid, Adapter->ConnectSeq, Adapter->Halting);
         NdisReleaseSpinLock(&Adapter->Lock);
         KeReleaseMutex(&Adapter->ConnectLock, FALSE);
         CywCompleteWorkItem(Adapter, NdisIoWorkItemHandle);
@@ -810,7 +838,7 @@ CywConnectWorker(
         return;
     }
 
-    Delay.QuadPart = -30000000;
+    Delay.QuadPart = -10000LL * CYW_CONNECT_TIMEOUT_MS;
     KeDelayExecutionThread(KernelMode, FALSE, &Delay);
 
     if (Adapter->ConnectSeq == Seq)
@@ -872,7 +900,10 @@ CywOidConnectRequest(
     Adapter->Associated = FALSE;
     Adapter->LinkUp = FALSE;
     Adapter->FirmwareSupplicant =
-        (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE);
+        (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE) ||
+        (Adapter->AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK &&
+         Adapter->FirmwareSupplicantSupported && Adapter->Pcie != NULL &&
+         Adapter->SaePasswordLen == CYW_WSEC_PMK_LENGTH);
     Adapter->FirmwareHandshakeComplete = FALSE;
     Adapter->PortAuthorized = FALSE;
     Sequence = ++Adapter->ConnectSeq;
@@ -1784,6 +1815,24 @@ CywOidSet(
             }
             Request->DATA.SET_INFORMATION.BytesRead = sizeof(DOT11_BSS_TYPE);
             return NDIS_STATUS_SUCCESS;
+        case OID_DOT11_PRIVACY_EXEMPTION_LIST:
+        {
+            PDOT11_PRIVACY_EXEMPTION_LIST List = (PDOT11_PRIVACY_EXEMPTION_LIST)Buffer;
+            ULONG Needed = FIELD_OFFSET(DOT11_PRIVACY_EXEMPTION_LIST, PrivacyExemptionEntries);
+
+            if (Length < Needed)
+            {
+                return CywOidSetInvalidLength(Request, Needed);
+            }
+            if (List->Header.Type != NDIS_OBJECT_TYPE_DEFAULT ||
+                List->Header.Revision != DOT11_PRIVACY_EXEMPTION_LIST_REVISION_1 ||
+                List->uNumOfEntries > (Length - Needed) / sizeof(DOT11_PRIVACY_EXEMPTION))
+            {
+                return NDIS_STATUS_INVALID_DATA;
+            }
+            Request->DATA.SET_INFORMATION.BytesRead = Needed + List->uNumOfEntries * sizeof(DOT11_PRIVACY_EXEMPTION);
+            return NDIS_STATUS_SUCCESS;
+        }
         case OID_DOT11_RESET_REQUEST:
         {
             PDOT11_RESET_REQUEST Reset;
