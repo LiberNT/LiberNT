@@ -7,7 +7,8 @@
 
 #include <kmt_test.h>
 
-#define LOG_TAIL_BYTES (256 * 1024)
+/* The writer keeps up to two 128 KB reserve steps of zeroes past what it has written */
+#define LOG_TAIL_BYTES (1024 * 1024)
 #define LOG_HEAD_BYTES 4096
 
 static
