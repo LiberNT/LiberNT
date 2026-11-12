@@ -127,6 +127,45 @@ SeclTakeCallerToken(
 }
 
 
+/* The caller's process is opened as the caller and its session read from its own token, never from what the request names */
+static
+BOOL
+SeclOpenCaller(
+    _In_ handle_t hBinding,
+    _In_ DWORD dwProcessId,
+    _Out_ PHANDLE phProcess,
+    _Out_ PDWORD pdwSessionId)
+{
+    HANDLE hClientToken = NULL;
+    DWORD dwLength;
+    DWORD dwError;
+
+    *phProcess = NULL;
+    *pdwSessionId = 0;
+
+    if (RpcImpersonateClient(hBinding) != RPC_S_OK)
+    {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+
+    if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hClientToken) &&
+        GetTokenInformation(hClientToken, TokenSessionId, pdwSessionId, sizeof(*pdwSessionId), &dwLength))
+    {
+        *phProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, dwProcessId);
+    }
+    dwError = GetLastError();
+
+    if (hClientToken != NULL)
+        CloseHandle(hClientToken);
+
+    RpcRevertToSelf();
+
+    SetLastError(dwError);
+    return *phProcess != NULL;
+}
+
+
 VOID
 __stdcall
 SeclCreateProcessWithLogonW(
@@ -162,13 +201,10 @@ SeclCreateProcessWithLogonW(
         TRACE("ProcessId: %lu\n", pRequest->dwProcessId);
     }
 
-    hTargetProcessHandle = OpenProcess(PROCESS_DUP_HANDLE,
-                                       FALSE,
-                                       pRequest->dwProcessId);
-    if (hTargetProcessHandle == NULL)
+    if (!SeclOpenCaller(hBinding, pRequest->dwProcessId, &hTargetProcessHandle, &SessionId))
     {
         dwError = GetLastError();
-        WARN("OpenProcess() failed with Error %lu\n", dwError);
+        WARN("Opening the caller failed with Error %lu\n", dwError);
         goto done;
     }
 
@@ -197,8 +233,7 @@ SeclCreateProcessWithLogonW(
         goto done;
     }
 
-    if (!ProcessIdToSessionId(pRequest->dwProcessId, &SessionId) ||
-        !SetTokenInformation(hToken, TokenSessionId, &SessionId, sizeof(SessionId)))
+    if (!SetTokenInformation(hToken, TokenSessionId, &SessionId, sizeof(SessionId)))
     {
         dwError = GetLastError();
         WARN("Setting the token session failed with Error %lu\n", dwError);
