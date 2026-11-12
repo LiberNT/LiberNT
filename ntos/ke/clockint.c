@@ -841,10 +841,12 @@ KiUpdateRunTime(
     {
         /* Above the dispatcher: this is interrupt service, not thread time */
         Prcb->InterruptTime += Ticks;
+        Prcb->KernelTime += Ticks;
     }
     else if ((Irql == DISPATCH_LEVEL) || Prcb->DpcRoutineActive)
     {
         Prcb->DpcTime += Ticks;
+        Prcb->KernelTime += Ticks;
 
         if (Prcb->DpcRoutineActive)
             KiChargeDpcWatchdog(Prcb, Ticks);
