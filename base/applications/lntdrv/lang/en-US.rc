@@ -97,7 +97,7 @@ BEGIN
     IDS_INSTALL_CANCELLING "Stopping after the current step..."
     IDS_PROGRESS_QUERY "Asking the Microsoft Update Catalog for the package"
     IDS_PROGRESS_DOWNLOAD "Downloading %1 (%2 KB)"
-    IDS_PROGRESS_UNPACK "Unpacking %1"
+    IDS_PROGRESS_UNPACK "Unpacking the package"
     IDS_PROGRESS_VERIFY "Checking the package signature"
     IDS_PROGRESS_CHECK "Checking that the driver fits this device"
     IDS_PROGRESS_INSTALL "Installing: %1"
@@ -185,7 +185,7 @@ BEGIN
     IDS_SCAN_THROTTLED "Searching resumes at %1. The Microsoft Update Catalog is limiting searches from this PC."
     IDS_CATALOG_LINK "<a>Legal notices</a>"
     IDS_CATALOG_NOTICE "Drivers are downloaded from the Microsoft Update Catalog, a service of Microsoft Corporation.\nMicrosoft Update Catalog: Copyright (c) Microsoft Corporation. All rights reserved.\nMicrosoft and Windows are trademarks of the Microsoft group of companies. LiberNT is not affiliated with Microsoft Corporation.\n\nEach driver package belongs to its publisher and is covered by the publisher's own license terms."
-    IDS_PROGRESS_DOWNLOADING "Downloading: %1"
+    IDS_PROGRESS_DOWNLOADING "Downloading"
     IDS_SPEED_KB "%1 KB/s"
     IDS_SPEED_MB "%1 MB/s"
 END

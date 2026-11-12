@@ -97,7 +97,7 @@ BEGIN
     IDS_INSTALL_CANCELLING "Arrêt après l'étape en cours..."
     IDS_PROGRESS_QUERY "Demande du paquet au catalogue Microsoft Update"
     IDS_PROGRESS_DOWNLOAD "Téléchargement de %1 (%2 Ko)"
-    IDS_PROGRESS_UNPACK "Décompression de %1"
+    IDS_PROGRESS_UNPACK "Décompression du paquet"
     IDS_PROGRESS_VERIFY "Vérification de la signature du paquet"
     IDS_PROGRESS_CHECK "Vérification que le pilote convient à ce périphérique"
     IDS_PROGRESS_INSTALL "Installation : %1"
@@ -185,7 +185,7 @@ BEGIN
     IDS_SCAN_THROTTLED "La recherche reprend à %1. Le catalogue Microsoft Update limite les recherches de ce PC."
     IDS_CATALOG_LINK "<a>Mentions légales</a>"
     IDS_CATALOG_NOTICE "Les pilotes sont téléchargés depuis le catalogue Microsoft Update, un service de Microsoft Corporation.\nCatalogue Microsoft Update : Copyright (c) Microsoft Corporation. Tous droits réservés.\nMicrosoft et Windows sont des marques du groupe de sociétés Microsoft. LiberNT n'est pas affilié à Microsoft Corporation.\n\nChaque pilote appartient à son éditeur et est couvert par les conditions de licence de celui-ci."
-    IDS_PROGRESS_DOWNLOADING "Téléchargement : %1"
+    IDS_PROGRESS_DOWNLOADING "Téléchargement"
     IDS_SPEED_KB "%1 Ko/s"
     IDS_SPEED_MB "%1 Mo/s"
 END

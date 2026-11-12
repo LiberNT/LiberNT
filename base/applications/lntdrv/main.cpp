@@ -403,8 +403,8 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     class DownloadProgress : public ProgressCallback
     {
     public:
-        DownloadProgress(const Reporter &reporter, const std::wstring &name)
-            : m_Report(reporter), m_Name(name), m_Last(-2), m_Tick(GetTickCount64()), m_Bytes(0), m_Rate(0)
+        explicit DownloadProgress(const Reporter &reporter)
+            : m_Report(reporter), m_Last(-2), m_Tick(GetTickCount64()), m_Bytes(0), m_Rate(0)
         {
         }
 
@@ -422,14 +422,12 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
             if (step != m_Last)
             {
                 m_Last = step;
-                m_Report.Download(FormatText(IDS_PROGRESS_DOWNLOADING, m_Name), total ? step : -1,
-                                  SpeedText(m_Rate));
+                m_Report.Download(LoadText(IDS_PROGRESS_DOWNLOADING), total ? step : -1, SpeedText(m_Rate));
             }
         }
 
     private:
         const Reporter &m_Report;
-        const std::wstring &m_Name;
         int m_Last;
         ULONGLONG m_Tick;
         ULONGLONG m_Bytes;
@@ -471,7 +469,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     for (size_t i = 0; !error && i < files.size(); i++)
     {
         std::wstring name = SafeFileName(files[i].FileName), path = directory + L"\\" + name;
-        DownloadProgress progress(report, offered);
+        DownloadProgress progress(report);
 
         if (name.empty())
         {
@@ -481,7 +479,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
         error = catalog.Download(files[i], path, &progress);
         if (!error)
         {
-            report(FormatText(IDS_PROGRESS_UNPACK, offered), -1);
+            report(LoadText(IDS_PROGRESS_UNPACK), -1);
             error = ExtractPackage(path, package);
         }
     }

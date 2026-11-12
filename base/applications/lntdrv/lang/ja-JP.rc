@@ -104,7 +104,7 @@ BEGIN
     IDS_INSTALL_CANCELLING "現在の手順の完了後に停止します..."
     IDS_PROGRESS_QUERY "Microsoft Update カタログにパッケージを問い合わせています"
     IDS_PROGRESS_DOWNLOAD "%1 をダウンロードしています (%2 KB)"
-    IDS_PROGRESS_UNPACK "%1 を展開しています"
+    IDS_PROGRESS_UNPACK "パッケージを展開しています"
     IDS_PROGRESS_VERIFY "パッケージの署名を確認しています"
     IDS_PROGRESS_CHECK "ドライバーがこのデバイスに適合するか確認しています"
     IDS_PROGRESS_INSTALL "インストール中: %1"
@@ -192,7 +192,7 @@ BEGIN
     IDS_SCAN_THROTTLED "検索は %1 に再開します。Microsoft Update カタログがこの PC からの検索を制限しています。"
     IDS_CATALOG_LINK "<a>法的情報</a>"
     IDS_CATALOG_NOTICE "ドライバーは Microsoft Corporation のサービスである Microsoft Update カタログからダウンロードされます。\nMicrosoft Update カタログ: Copyright (c) Microsoft Corporation. All rights reserved.\nMicrosoft および Windows は、Microsoft グループ各社の商標です。LiberNT は Microsoft Corporation と提携していません。\n\n各ドライバー パッケージは発行元に帰属し、発行元のライセンス条項が適用されます。"
-    IDS_PROGRESS_DOWNLOADING "ダウンロード中: %1"
+    IDS_PROGRESS_DOWNLOADING "ダウンロードしています"
     IDS_SPEED_KB "%1 KB/秒"
     IDS_SPEED_MB "%1 MB/秒"
 END
