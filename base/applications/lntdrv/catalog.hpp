@@ -82,6 +82,7 @@ public:
     DWORD Download(const CatalogFile &file, const std::wstring &path, ProgressCallback *progress);
     const std::wstring &OtherArchitectures() const;
     const std::wstring &OtherModel() const;
+    unsigned Searches() const;
 
 private:
     class Sink
@@ -92,6 +93,7 @@ private:
     };
 
     bool Cancelled() const;
+    DWORD LockSearches(bool &locked);
     DWORD WaitThrottle(ULONGLONG delay);
     DWORD SendOnce(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink, DWORD &status);
     DWORD Send(LPCWSTR verb, const std::wstring &url, const std::string &body, Sink &sink);
@@ -104,14 +106,19 @@ private:
     std::wstring m_OtherArchitectures;
     std::wstring m_OtherModel;
     ThrottleCallback *m_Throttle;
-    ULONGLONG m_WindowStart;
+    HANDLE m_Lock;
+    unsigned m_Searches;
 };
 
 DWORD ParseResults(const std::string &html, const std::wstring &query, std::vector<CatalogUpdate> &updates,
                    size_t &rows);
+std::wstring EncodeSearchPage(const std::vector<CatalogUpdate> &updates, bool last, ULONGLONG time);
+bool DecodeSearchPage(const std::wstring &text, const std::wstring &query, ULONGLONG now,
+                      std::vector<CatalogUpdate> &updates, bool &last);
 void UseDriverVersion(CatalogUpdate &update);
 ULONGLONG ThrottleDelay(ULONGLONG windowStart, ULONGLONG now);
 ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now);
+ULONGLONG ThrottleJitter(ULONGLONG seed);
 std::wstring NativeArchitecture();
 SystemTarget CurrentSystem();
 bool ArchitectureMatches(const std::wstring &architecture);

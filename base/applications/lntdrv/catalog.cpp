@@ -29,12 +29,17 @@ const size_t WantedMatches = 3;
 const unsigned MaximumPages = 10;
 const unsigned DetailWorkers = 6;
 const WCHAR DetailsKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog";
+const WCHAR SearchesKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog\\Searches";
+const WCHAR ThrottleKey[] = L"SOFTWARE\\LiberNT\\Drivers\\Catalog\\Throttle";
+const WCHAR SearchLock[] = L"Local\\LiberNT.DriverCatalog.Search";
 const unsigned MaximumAttempts = 3;
 const size_t RowsPerPage = 25;
 const ULONGLONG ThrottleWindow = 300 * 1000;
 const ULONGLONG ThrottleMargin = 10 * 1000;
 const ULONGLONG ThrottlePoll = 30 * 1000;
-const ULONGLONG MaximumThrottleWait = 2 * (ThrottleWindow + ThrottleMargin);
+const ULONGLONG ThrottleSpread = 10 * 1000;
+const ULONGLONG SearchLifetime = 24ULL * 60 * 60 * 10000000;
+const size_t SearchFields = 8;
 
 std::string Utf8(const std::wstring &text)
 {
@@ -192,6 +197,94 @@ bool LastPage(const std::string &html)
     return page >= pages;
 }
 
+std::vector<std::wstring> Split(const std::wstring &text, WCHAR separator)
+{
+    std::vector<std::wstring> parts;
+    size_t start = 0;
+
+    for (;;)
+    {
+        size_t end = text.find(separator, start);
+
+        parts.push_back(text.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start));
+        if (end == std::wstring::npos)
+            return parts;
+        start = end + 1;
+    }
+}
+
+ULONGLONG FileTimeNow()
+{
+    FILETIME now;
+    ULARGE_INTEGER value;
+
+    GetSystemTimeAsFileTime(&now);
+    value.LowPart = now.dwLowDateTime;
+    value.HighPart = now.dwHighDateTime;
+    return value.QuadPart;
+}
+
+}
+
+std::wstring EncodeSearchPage(const std::vector<CatalogUpdate> &updates, bool last, ULONGLONG time)
+{
+    std::wstring text = NumberText(time) + (last ? L"\t1\n" : L"\t0\n");
+
+    for (const CatalogUpdate &update : updates)
+    {
+        const std::wstring *fields[] = { &update.Id,          &update.Title,   &update.Products, &update.Classification,
+                                         &update.LastUpdated, &update.Version, &update.Size };
+
+        for (const std::wstring *field : fields)
+        {
+            if (field->find_first_of(L"\t\n") != std::wstring::npos)
+                return std::wstring();
+            text += *field + L"\t";
+        }
+        text += NumberText(update.Bytes) + L"\n";
+    }
+    return text;
+}
+
+bool DecodeSearchPage(const std::wstring &text, const std::wstring &query, ULONGLONG now,
+                      std::vector<CatalogUpdate> &updates, bool &last)
+{
+    std::vector<std::wstring> lines = Split(text, L'\n'), header;
+    ULONGLONG time;
+
+    updates.clear();
+    last = true;
+    if (lines.size() < 2 || !lines.back().empty())
+        return false;
+    header = Split(lines[0], L'\t');
+    if (header.size() != 2 || (header[1] != L"0" && header[1] != L"1"))
+        return false;
+    time = _wcstoui64(header[0].c_str(), NULL, 10);
+    if (!time || now < time || now - time >= SearchLifetime)
+        return false;
+    for (size_t i = 1; i + 1 < lines.size(); i++)
+    {
+        std::vector<std::wstring> fields = Split(lines[i], L'\t');
+        CatalogUpdate update;
+
+        if (fields.size() != SearchFields || fields[0].empty())
+        {
+            updates.clear();
+            return false;
+        }
+        update.Id = fields[0];
+        update.Title = fields[1];
+        update.Products = fields[2];
+        update.Classification = fields[3];
+        update.LastUpdated = fields[4];
+        update.Version = fields[5];
+        update.Size = fields[6];
+        update.Bytes = _wcstoui64(fields[7].c_str(), NULL, 10);
+        update.Query = query;
+        updates.push_back(update);
+    }
+    last = header[1] == L"1";
+    return true;
 }
 
 DWORD ParseResults(const std::string &html, const std::wstring &query, std::vector<CatalogUpdate> &updates,
@@ -366,6 +459,79 @@ void SaveDetails(const CatalogUpdate &update)
     RegCloseKey(key);
 }
 
+bool LoadSearch(const std::wstring &name, const std::wstring &query, std::vector<CatalogUpdate> &updates, bool &last)
+{
+    std::vector<WCHAR> value;
+    DWORD type = 0, size = 0;
+    HKEY key;
+    LONG error;
+    bool loaded = false;
+
+    updates.clear();
+    last = true;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, SearchesKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &key) != ERROR_SUCCESS)
+        return false;
+    error = RegQueryValueExW(key, name.c_str(), NULL, &type, NULL, &size);
+    if (error == ERROR_SUCCESS && type == REG_SZ && size)
+    {
+        value.resize(size / sizeof(WCHAR) + 1, L'\0');
+        error = RegQueryValueExW(key, name.c_str(), NULL, &type, (LPBYTE)value.data(), &size);
+        loaded = error == ERROR_SUCCESS && type == REG_SZ &&
+                 DecodeSearchPage(value.data(), query, FileTimeNow(), updates, last);
+        if (!loaded)
+            RegDeleteValueW(key, name.c_str());
+    }
+    /* TODO: prune expired searches that are never read again */
+    RegCloseKey(key);
+    return loaded;
+}
+
+void SaveSearch(const std::wstring &name, const std::vector<CatalogUpdate> &updates, bool last)
+{
+    std::wstring text = EncodeSearchPage(updates, last, FileTimeNow());
+    HKEY key;
+
+    if (text.empty() ||
+        RegCreateKeyExW(HKEY_CURRENT_USER, SearchesKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
+    {
+        return;
+    }
+    RegSetValueExW(key, name.c_str(), 0, REG_SZ, (const BYTE *)text.c_str(), (DWORD)((text.size() + 1) * sizeof(WCHAR)));
+    RegCloseKey(key);
+}
+
+ULONGLONG NowMilliseconds()
+{
+    return FileTimeNow() / 10000;
+}
+
+ULONGLONG LoadWindowStart()
+{
+    ULONGLONG value = 0;
+    DWORD type = 0, size = sizeof(value);
+    HKEY key;
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, ThrottleKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS)
+        return 0;
+    if (RegQueryValueExW(key, L"WindowStart", NULL, &type, (LPBYTE)&value, &size) != ERROR_SUCCESS ||
+        type != REG_QWORD || size != sizeof(value))
+    {
+        value = 0;
+    }
+    RegCloseKey(key);
+    return value;
+}
+
+void SaveWindowStart(ULONGLONG value)
+{
+    HKEY key;
+
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, ThrottleKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &key, NULL) != ERROR_SUCCESS)
+        return;
+    RegSetValueExW(key, L"WindowStart", 0, REG_QWORD, (const BYTE *)&value, sizeof(value));
+    RegCloseKey(key);
+}
+
 bool Supports(const CatalogUpdate &update, const std::vector<std::wstring> &queries)
 {
     if (update.HardwareIds.empty())
@@ -453,7 +619,15 @@ ULONGLONG ThrottleWindowStart(ULONGLONG windowStart, ULONGLONG now)
     return !windowStart || now - windowStart >= ThrottleWindow ? now : windowStart;
 }
 
-Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_WindowStart(0)
+ULONGLONG ThrottleJitter(ULONGLONG seed)
+{
+    seed ^= seed >> 33;
+    seed *= 0xFF51AFD7ED558CCDULL;
+    seed ^= seed >> 33;
+    return seed % ThrottleSpread;
+}
+
+Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_Lock(NULL), m_Searches(0)
 {
     DWORD timeout = 30000;
 
@@ -464,10 +638,13 @@ Catalog::Catalog() : m_Cancel(NULL), m_Throttle(NULL), m_WindowStart(0)
         InternetSetOptionW(m_Session, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
         InternetSetOptionW(m_Session, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
     }
+    m_Lock = CreateMutexW(NULL, FALSE, SearchLock);
 }
 
 Catalog::~Catalog()
 {
+    if (m_Lock)
+        CloseHandle(m_Lock);
     if (m_Session)
         InternetCloseHandle(m_Session);
 }
@@ -485,6 +662,27 @@ void Catalog::SetThrottleCallback(ThrottleCallback *callback)
 bool Catalog::Cancelled() const
 {
     return m_Cancel && InterlockedCompareExchange(m_Cancel, 0, 0) != 0;
+}
+
+DWORD Catalog::LockSearches(bool &locked)
+{
+    locked = false;
+    if (!m_Lock)
+        return ERROR_SUCCESS;
+    for (;;)
+    {
+        DWORD wait = WaitForSingleObject(m_Lock, 100);
+
+        if (wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED)
+        {
+            locked = true;
+            return ERROR_SUCCESS;
+        }
+        if (wait != WAIT_TIMEOUT)
+            return ERROR_SUCCESS;
+        if (Cancelled())
+            return ERROR_CANCELLED;
+    }
 }
 
 DWORD Catalog::WaitThrottle(ULONGLONG delay)
@@ -638,7 +836,6 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
                        L"&scol=DateComputed&sdir=desc" + (page ? L"&p=" + NumberText(page) : std::wstring());
     std::string html;
     size_t rows = 0;
-    ULONGLONG waited = 0;
     DWORD error;
 
     updates.clear();
@@ -651,25 +848,39 @@ DWORD Catalog::SearchPage(const std::wstring &query, unsigned page, std::vector<
     }
     for (;;)
     {
-        ULONGLONG delay;
+        bool locked;
 
+        error = LockSearches(locked);
+        if (error)
+            return error;
+        if (LoadSearch(key, query, updates, last))
+        {
+            if (locked)
+                ReleaseMutex(m_Lock);
+            m_Pages[key] = std::make_pair(updates, last);
+            return ERROR_SUCCESS;
+        }
         error = Fetch(L"GET", url, std::string(), html);
         if (!error)
             error = ParseResults(html, query, updates, rows);
+        if (!error)
+        {
+            m_Searches++;
+            SaveWindowStart(ThrottleWindowStart(LoadWindowStart(), NowMilliseconds()));
+            last = rows < RowsPerPage || LastPage(html);
+            SaveSearch(key, updates, last);
+        }
+        if (locked)
+            ReleaseMutex(m_Lock);
         if (error != ERROR_LNTDRV_CATALOG_THROTTLED)
             break;
-        delay = ThrottleDelay(m_WindowStart, GetTickCount64());
-        if (waited + delay > MaximumThrottleWait)
-            return error;
-        error = WaitThrottle(delay);
+        error = WaitThrottle(ThrottleDelay(LoadWindowStart(), NowMilliseconds()) +
+                             ThrottleJitter(GetTickCount64() ^ ((ULONGLONG)GetCurrentProcessId() << 32)));
         if (error)
             return error;
-        waited += delay;
     }
     if (error)
         return error;
-    m_WindowStart = ThrottleWindowStart(m_WindowStart, GetTickCount64());
-    last = rows < RowsPerPage || LastPage(html);
     m_Pages[key] = std::make_pair(updates, last);
     return ERROR_SUCCESS;
 }
@@ -869,6 +1080,11 @@ DWORD Catalog::FindUpdates(const std::vector<std::wstring> &queries, std::vector
     for (const std::wstring &other : others)
         m_OtherArchitectures += (m_OtherArchitectures.empty() ? L"" : L", ") + other;
     return ERROR_LNTDRV_OTHER_ARCH;
+}
+
+unsigned Catalog::Searches() const
+{
+    return m_Searches;
 }
 
 const std::wstring &Catalog::OtherArchitectures() const

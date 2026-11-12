@@ -611,6 +611,7 @@ public:
                 break;
             }
         }
+        OutputDebugStringW((L"[LNTDRV] Scan sent " + NumberText(catalog.Searches()) + L" catalog searches\n").c_str());
         PostMessageW(m_hwnd, WM_APP_SCAN_DONE, m_Scan, failure);
     }
 
@@ -1874,6 +1875,7 @@ int RunCommand(int argc, LPWSTR *argv)
                 break;
         }
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));
+        OutputDebugStringW((L"[LNTDRV] Scan sent " + NumberText(catalog.Searches()) + L" catalog searches\n").c_str());
         return StopsCatalogScan(error) ? (int)error : 0;
     }
     if (installAll)
