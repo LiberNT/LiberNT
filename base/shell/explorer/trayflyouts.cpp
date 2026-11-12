@@ -311,6 +311,18 @@ TfyDrawFluent(HDC hdc, const RECT *prc, UINT nId)
                    hIcon, n, n, 0, NULL, DI_NORMAL);
 }
 
+static VOID
+TfyDrawFluentInk(HDC hdc, const RECT *prc, UINT nId, COLORREF crInk)
+{
+    int cx = prc->right - prc->left;
+    int cy = prc->bottom - prc->top;
+    int n = TfyFluentNativeSize(min(cx, cy));
+    HICON hIcon = TfyFluentIcon(nId, n);
+
+    if (hIcon)
+        ShellDrawIconTinted(hdc, prc->left + (cx - n) / 2, prc->top + (cy - n) / 2, hIcon, n, n, crInk);
+}
+
 struct TFYAA
 {
     HDC hdc;
@@ -4078,6 +4090,7 @@ public:
     LPCWSTR m_pszGlyph;
     BOOL m_bFrameStarted;
     int m_nPercent;
+    BOOL m_bEnabled;
     BOOL m_bHover;
     BOOL m_bAnimate;
     SIZE m_size;
@@ -4085,7 +4098,8 @@ public:
     int m_yHidden, m_yNow, m_ySlideFrom;
 
     CTrayOsdWnd() : m_hFont(NULL), m_uIcon(0), m_pszGlyph(NULL), m_bFrameStarted(FALSE),
-                    m_nPercent(0), m_bHover(FALSE), m_bAnimate(TRUE), m_yHidden(0), m_yNow(0), m_ySlideFrom(0)
+                    m_nPercent(0), m_bEnabled(TRUE), m_bHover(FALSE), m_bAnimate(TRUE), m_yHidden(0), m_yNow(0),
+                    m_ySlideFrom(0)
     {
         ZeroMemory(&m_Pal, sizeof(m_Pal));
         ZeroMemory(&m_size, sizeof(m_size));
@@ -4132,7 +4146,7 @@ public:
         StepSlide();
     }
 
-    VOID Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent)
+    VOID Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent, BOOL bEnabled)
     {
         HWND hwndTray = FindWindowW(L"Shell_TrayWnd", NULL);
         HWND hwndAfter = HWND_TOPMOST;
@@ -4142,6 +4156,7 @@ public:
 
         m_uIcon = uIcon;
         m_pszGlyph = pszGlyph;
+        m_bEnabled = bEnabled;
         if (!m_bFrameStarted)
             m_bFrameStarted = ShellFrame::Startup();
         m_nPercent = max(0, min(nPercent, 100));
@@ -4192,6 +4207,9 @@ public:
         HDC hdc = BeginPaint(&ps);
         RECT rc;
         WCHAR szValue[8];
+        COLORREF crInk = m_bEnabled ? m_Pal.PanelText : TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 110);
+        COLORREF crTrack = TfyMix(m_Pal.PanelBg, m_Pal.PanelText, m_bEnabled ? 128 : 60);
+        COLORREF crFill = m_bEnabled ? m_Pal.AccentBg : crInk;
 
         GetClientRect(&rc);
         HDC hdcMem = CreateCompatibleDC(hdc);
@@ -4205,7 +4223,7 @@ public:
         if (m_pszGlyph)
         {
             int cx = m_rcIcon.right - m_rcIcon.left;
-            HICON hGlyph = m_bFrameStarted ? ShellFrame::CreateGlyphIcon(m_pszGlyph, cx, m_Pal.PanelText) : NULL;
+            HICON hGlyph = m_bFrameStarted ? ShellFrame::CreateGlyphIcon(m_pszGlyph, cx, crInk) : NULL;
 
             if (hGlyph)
             {
@@ -4213,31 +4231,35 @@ public:
                 DestroyIcon(hGlyph);
             }
         }
-        else
+        else if (m_bEnabled)
         {
             TfyDrawFluent(hdcMem, &m_rcIcon, m_uIcon);
+        }
+        else
+        {
+            TfyDrawFluentInk(hdcMem, &m_rcIcon, m_uIcon, crInk);
         }
 
         RECT rcFill = m_rcBar;
         rcFill.right = m_rcBar.left + MulDiv(m_nPercent, m_rcBar.right - m_rcBar.left, 100);
         if (m_bFrameStarted)
         {
-            ShellFrame::FillRoundSmooth(hdcMem, m_rcBar, (float)Sc(2), TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 128));
+            ShellFrame::FillRoundSmooth(hdcMem, m_rcBar, (float)Sc(2), crTrack);
             if (rcFill.right > rcFill.left)
-                ShellFrame::FillRoundSmooth(hdcMem, rcFill, (float)Sc(2), m_Pal.AccentBg);
+                ShellFrame::FillRoundSmooth(hdcMem, rcFill, (float)Sc(2), crFill);
         }
         else
         {
-            hbr = CreateSolidBrush(TfyMix(m_Pal.PanelBg, m_Pal.PanelText, 128));
+            hbr = CreateSolidBrush(crTrack);
             FillRect(hdcMem, &m_rcBar, hbr);
             DeleteObject(hbr);
-            hbr = CreateSolidBrush(m_Pal.AccentBg);
+            hbr = CreateSolidBrush(crFill);
             FillRect(hdcMem, &rcFill, hbr);
             DeleteObject(hbr);
         }
 
         SetBkMode(hdcMem, TRANSPARENT);
-        SetTextColor(hdcMem, m_Pal.PanelText);
+        SetTextColor(hdcMem, crInk);
         HGDIOBJ hFontOld = SelectObject(hdcMem, m_hFont);
         StringCchPrintfW(szValue, _countof(szValue), L"%d", m_nPercent);
         DrawTextW(hdcMem, szValue, -1, &m_rcValue, DT_SINGLELINE | DT_VCENTER | DT_RIGHT | DT_NOPREFIX);
@@ -4329,7 +4351,7 @@ void CTrayOsdWnd::OnFinalMessage(HWND hWnd)
 }
 
 static VOID
-TrayOsd_Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent)
+TrayOsd_Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent, BOOL bEnabled)
 {
     if (!g_pTrayOsd)
     {
@@ -4344,7 +4366,7 @@ TrayOsd_Show(UINT uIcon, LPCWSTR pszGlyph, int nPercent)
         g_pTrayOsd = pOsd;
     }
 
-    g_pTrayOsd->Show(uIcon, pszGlyph, nPercent);
+    g_pTrayOsd->Show(uIcon, pszGlyph, nPercent, bEnabled);
 }
 
 #define TFY_TIMER_SHOTHIDE  0x57
@@ -5106,10 +5128,13 @@ VOID TrayScreenshot_Capture(VOID)
 }
 
 #define TFY_WM_BRIGHTNESSCHANGED (WM_APP + 44)
+#define TFY_WM_BRIGHTNESSKEY (WM_APP + 46)
 
 static volatile LONG g_TfyBrightness = -1;
 static volatile LONG g_TfyBrightnessSelfTick;
 static HWND g_hwndTfyBrightnessSink;
+static HANDLE g_hTfyBrightnessEvents[2];
+static DWORD g_cTfyBrightnessEvents;
 
 static HANDLE
 TfyOpenLcd(VOID)
@@ -5177,7 +5202,12 @@ TfyBrightnessSinkProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         while ((hwndQs = FindWindowExW(NULL, hwndQs, L"TrayQuickSettingsFlyout", NULL)) != NULL)
             PostMessageW(hwndQs, TFY_WM_BRIGHTNESSCHANGED, 0, 0);
         if (wParam)
-            TrayOsd_Show(0, L"brightness_high_20_regular", (int)lParam);
+            TrayOsd_Show(0, L"brightness_high_20_regular", (int)lParam, TRUE);
+        return 0;
+    }
+    if (uMsg == TFY_WM_BRIGHTNESSKEY)
+    {
+        TrayOsd_Show(0, L"brightness_high_20_regular", (int)lParam, (BOOL)wParam);
         return 0;
     }
     return DefWindowProcW(hwnd, uMsg, wParam, lParam);
@@ -5186,16 +5216,26 @@ TfyBrightnessSinkProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 static DWORD WINAPI
 TfyBrightnessWatchThread(LPVOID lpParameter)
 {
-    HANDLE hEvent = (HANDLE)lpParameter;
     int nKnown = (int)InterlockedCompareExchange(&g_TfyBrightness, 0, 0);
+
+    UNREFERENCED_PARAMETER(lpParameter);
 
     for (;;)
     {
+        DWORD dwWait = WaitForMultipleObjects(g_cTfyBrightnessEvents, g_hTfyBrightnessEvents, FALSE, INFINITE);
+        BOOL bKnown;
         int nPercent;
         BOOL bShow;
 
-        WaitForSingleObject(hEvent, INFINITE);
-        if (!TfyBrightnessQuery(&nPercent))
+        if (dwWait >= WAIT_OBJECT_0 + g_cTfyBrightnessEvents)
+            return 0;
+        bKnown = TfyBrightnessQuery(&nPercent);
+        if (dwWait == WAIT_OBJECT_0)
+        {
+            PostMessageW(g_hwndTfyBrightnessSink, TFY_WM_BRIGHTNESSKEY, bKnown, bKnown ? nPercent : 100);
+            continue;
+        }
+        if (!bKnown)
             continue;
         InterlockedExchange(&g_TfyBrightness, nPercent);
         bShow = (nPercent != nKnown) &&
@@ -5205,19 +5245,34 @@ TfyBrightnessWatchThread(LPVOID lpParameter)
     }
 }
 
+static VOID
+TfyBrightnessCloseEvents(VOID)
+{
+    while (g_cTfyBrightnessEvents)
+        CloseHandle(g_hTfyBrightnessEvents[--g_cTfyBrightnessEvents]);
+}
+
 VOID TrayBrightness_StartWatch(VOID)
 {
     WNDCLASSEXW wc = { sizeof(wc) };
-    HANDLE hEvent, hThread;
+    HANDLE hKeyEvent, hChangeEvent, hThread;
     int nPercent;
+    DWORD i;
 
-    if (g_hwndTfyBrightnessSink || !TfyBrightnessQuery(&nPercent))
+    if (g_hwndTfyBrightnessSink)
         return;
-    InterlockedExchange(&g_TfyBrightness, nPercent);
+    if (TfyBrightnessQuery(&nPercent))
+        InterlockedExchange(&g_TfyBrightness, nPercent);
 
-    hEvent = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\" RXGK_MONITOR_BRIGHTNESS_EVENT);
-    if (!hEvent)
+    hKeyEvent = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\" RXGK_MONITOR_BRIGHTNESS_KEY_EVENT);
+    if (!hKeyEvent)
         return;
+    g_hTfyBrightnessEvents[g_cTfyBrightnessEvents++] = hKeyEvent;
+    hChangeEvent = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\" RXGK_MONITOR_BRIGHTNESS_EVENT);
+    if (hChangeEvent)
+        g_hTfyBrightnessEvents[g_cTfyBrightnessEvents++] = hChangeEvent;
+    for (i = 0; i < g_cTfyBrightnessEvents; i++)
+        WaitForSingleObject(g_hTfyBrightnessEvents[i], 0);
 
     wc.lpfnWndProc = TfyBrightnessSinkProc;
     wc.hInstance = hExplorerInstance;
@@ -5227,11 +5282,11 @@ VOID TrayBrightness_StartWatch(VOID)
                                               hExplorerInstance, NULL);
     if (!g_hwndTfyBrightnessSink)
     {
-        CloseHandle(hEvent);
+        TfyBrightnessCloseEvents();
         return;
     }
 
-    hThread = CreateThread(NULL, 0, TfyBrightnessWatchThread, hEvent, 0, NULL);
+    hThread = CreateThread(NULL, 0, TfyBrightnessWatchThread, NULL, 0, NULL);
     if (hThread)
         CloseHandle(hThread);
 }
@@ -5260,12 +5315,16 @@ BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
     int nPercent;
     HRESULT hr;
 
+    if (uAppCmd != APPCOMMAND_VOLUME_MUTE && uAppCmd != APPCOMMAND_VOLUME_UP && uAppCmd != APPCOMMAND_VOLUME_DOWN)
+        return FALSE;
+
     if (FAILED(CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_INPROC_SERVER,
                                 IID_PPV_ARG(IMMDeviceEnumerator, &pEnum))) ||
         FAILED(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice)) ||
         FAILED(pDevice->Activate(IID_IAudioEndpointVolume, CLSCTX_INPROC_SERVER, NULL, (void **)&pVolume)))
     {
-        return FALSE;
+        TrayOsd_Show(TfyVolumeIcon(100, FALSE), NULL, 100, FALSE);
+        return TRUE;
     }
 
     switch (uAppCmd)
@@ -5294,7 +5353,11 @@ BOOL TrayVolume_HandleAppCommand(UINT uAppCmd)
     {
         nPercent = (int)(fLevel * 100.0f + 0.5f);
         TrayVolume_SetCachedState(nPercent, bMute);
-        TrayOsd_Show(TfyVolumeIcon(nPercent, bMute), NULL, nPercent);
+        TrayOsd_Show(TfyVolumeIcon(nPercent, bMute), NULL, nPercent, TRUE);
+    }
+    else
+    {
+        TrayOsd_Show(TfyVolumeIcon(100, FALSE), NULL, 100, FALSE);
     }
     return SUCCEEDED(hr);
 }
