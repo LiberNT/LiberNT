@@ -462,7 +462,7 @@ NTSTATUS TCPConnect
         }
 
         /* Allocate the port in the port bitmap */
-        AllocatedPort = TCPAllocatePort(LocalPort);
+        AllocatedPort = TCPAllocatePortForAddress(&Connection->AddressFile->Address, LocalPort);
         /* This should never fail unless all ports are in use */
         if (AllocatedPort == (UINT) -1)
         {
@@ -791,7 +791,7 @@ UINT TCPAllocatePort(const UINT HintPort)
         }
     }
     else
-        return AllocatePortFromRange( &TCPPorts, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST );
+        return AllocatePortFromRangeExcluding(&TCPPorts, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST, &TCPPorts6);
 }
 
 VOID TCPFreePort(const UINT Port)
@@ -807,7 +807,7 @@ UINT TCPAllocatePortForAddress(const IP_ADDRESS *Address, const UINT HintPort)
     if (HintPort)
         return AllocatePort(&TCPPorts6, HintPort) ? HintPort : (UINT)-1;
 
-    return AllocatePortFromRange(&TCPPorts6, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST);
+    return AllocatePortFromRangeExcluding(&TCPPorts6, DYNAMIC_PORT_FIRST, DYNAMIC_PORT_LAST, &TCPPorts);
 }
 
 VOID TCPFreePortForAddress(const IP_ADDRESS *Address, const UINT Port)

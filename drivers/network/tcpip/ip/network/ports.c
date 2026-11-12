@@ -118,3 +118,61 @@ ULONG AllocatePortFromRange( PPORT_SET PortSet, ULONG Lowest, ULONG Highest ) {
 
     return -1;
 }
+
+ULONG AllocatePortFromRangeExcluding( PPORT_SET PortSet, ULONG Lowest, ULONG Highest,
+                                      PPORT_SET ExcludeSet ) {
+    PPORT_SET First, Second;
+    ULONG AllocatedPort, Start, Candidate, ExcludeBit;
+    KIRQL OldIrql;
+
+    ASSERT(PortSet != ExcludeSet);
+
+    if ((Lowest < PortSet->StartingPort) || (Lowest > Highest) ||
+        (Highest >= PortSet->StartingPort + PortSet->PortsToOversee))
+    {
+        return -1;
+    }
+
+    Lowest -= PortSet->StartingPort;
+    Highest -= PortSet->StartingPort;
+
+    First = PortSet < ExcludeSet ? PortSet : ExcludeSet;
+    Second = PortSet < ExcludeSet ? ExcludeSet : PortSet;
+    KeAcquireSpinLock( &First->Lock, &OldIrql );
+    KeAcquireSpinLockAtDpcLevel( &Second->Lock );
+
+    Start = PortSet->NextPort;
+    if (Start < Lowest || Start > Highest) Start = Lowest;
+    AllocatedPort = (ULONG)-1;
+    Candidate = Start;
+    do {
+        Candidate = RtlFindClearBits( &PortSet->ProtoBitmap, 1, Candidate );
+        if (Candidate == (ULONG)-1 || Candidate < Lowest || Candidate > Highest) {
+            if (Start == Lowest) break;
+            Candidate = Lowest;
+            Start = Lowest;
+            continue;
+        }
+        ExcludeBit = Candidate + PortSet->StartingPort - ExcludeSet->StartingPort;
+        if (Candidate + PortSet->StartingPort < ExcludeSet->StartingPort ||
+            ExcludeBit >= ExcludeSet->PortsToOversee ||
+            RtlAreBitsClear( &ExcludeSet->ProtoBitmap, ExcludeBit, 1 )) {
+            AllocatedPort = Candidate;
+            break;
+        }
+        Candidate++;
+    } while (TRUE);
+
+    if( AllocatedPort != (ULONG)-1 ) {
+        RtlSetBit( &PortSet->ProtoBitmap, AllocatedPort );
+        PortSet->NextPort = AllocatedPort + 1;
+        AllocatedPort += PortSet->StartingPort;
+        KeReleaseSpinLockFromDpcLevel( &Second->Lock );
+        KeReleaseSpinLock( &First->Lock, OldIrql );
+        return htons(AllocatedPort);
+    }
+    KeReleaseSpinLockFromDpcLevel( &Second->Lock );
+    KeReleaseSpinLock( &First->Lock, OldIrql );
+
+    return -1;
+}

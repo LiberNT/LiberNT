@@ -14,6 +14,7 @@ extern void func_close(void);
 extern void func_connect_any(void);
 extern void func_connect_select(void);
 extern void func_dualstack(void);
+extern void func_dualstack_mapped(void);
 extern void func_getaddrinfo(void);
 extern void func_gethostname(void);
 extern void func_getnameinfo(void);
@@ -50,6 +51,7 @@ const struct test winetest_testlist[] =
     { "connect_any", func_connect_any },
     { "connect_select", func_connect_select },
     { "dualstack", func_dualstack },
+    { "dualstack_mapped", func_dualstack_mapped },
     { "getaddrinfo", func_getaddrinfo },
     { "gethostname", func_gethostname },
     { "getnameinfo", func_getnameinfo },
