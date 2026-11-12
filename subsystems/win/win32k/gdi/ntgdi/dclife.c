@@ -831,6 +831,13 @@ NtGdiOpenDCW(
         }
     }
 
+    if (!pustrDevice && !gpmdev)
+    {
+        UserEnterExclusive();
+        co_IntGraphicsCheck(TRUE);
+        UserLeave();
+    }
+
     /* Call the internal function */
     hdc = GreOpenDCW(pustrDevice ? &ustrDevice : NULL,
                      pdmAllocated,
