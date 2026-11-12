@@ -3100,13 +3100,13 @@ TestAgxStates(VOID)
         return;
 
     ok_hex(AppleAgxWriteStates(&Init, &Description, &Top), STATUS_SUCCESS);
+    AgxInitBuffers[APPLE_AGX_OBJECT_HWDATA] = Hwdata;
     /* The top state of the first table is state 13: 1400 MHz. */
     ok_int(Top, 1400000);
     ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_TOP_MHZ), 1400);
     ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_DVFS_COUNT), APPLE_AGX_DVFS_STATES - 1);
     ok_int(AgxLong(APPLE_AGX_OBJECT_HWDATA, APPLE_AGX_HWDATA_CHECK_A38), 1);
 
-    AgxInitBuffers[APPLE_AGX_OBJECT_HWDATA] = Hwdata;
     for (Index = 0; Index < APPLE_AGX_DVFS_STATES; ++Index)
     {
         ULONG A = AppleAgxDvfsStates(FALSE)[Index], B = AppleAgxDvfsStates(TRUE)[Index];
