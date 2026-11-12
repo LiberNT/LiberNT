@@ -1424,6 +1424,9 @@ HMETAFILE WINAPI CloseMetaFile( HDC hdc )
     struct metadc *metadc;
     DWORD bytes_written;
     HMETAFILE hmf;
+#ifdef __REACTOS__
+    HANDLE keep = NULL;
+#endif
 
     TRACE( "(%p)\n", hdc );
 
@@ -1442,9 +1445,24 @@ HMETAFILE WINAPI CloseMetaFile( HDC hdc )
         return FALSE;
     }
 
+#ifdef __REACTOS__
+    if (metadc->hFile)
+    {
+        keep = GdiReopenMetaFileForReading( metadc->hFile );
+        metadc->hFile = 0;
+    }
+#endif
+
     /* Now allocate a global handle for the metafile */
     hmf = MF_Create_HMETAFILE( metadc->mh );
     if (hmf) metadc->mh = NULL;  /* So it won't be deleted */
+#ifdef __REACTOS__
+    if (keep)
+    {
+        if (hmf) MF_KeepFile( hmf, keep );
+        else CloseHandle( keep );
+    }
+#endif
     metadc_free( metadc );
     return hmf;
 }

@@ -136,6 +136,60 @@ static POINT *convert_points( UINT count, const POINTS *pts )
  *  Delete a memory-based metafile.
  */
 
+#ifdef __REACTOS__
+typedef struct
+{
+    LIST_ENTRY Entry;
+    HMETAFILE Metafile;
+    HANDLE File;
+} MF_KEPT_FILE;
+
+static LIST_ENTRY MfKeptFiles = { &MfKeptFiles, &MfKeptFiles };
+static CRITICAL_SECTION_DEBUG MfKeptFilesDebug =
+{
+    0, 0, NULL,
+    { &MfKeptFilesDebug.ProcessLocksList, &MfKeptFilesDebug.ProcessLocksList },
+      0, 0, { (DWORD_PTR)(__FILE__ ": MfKeptFilesLock") }
+};
+static CRITICAL_SECTION MfKeptFilesLock = { &MfKeptFilesDebug, -1, 0, 0, 0, 0 };
+
+VOID MF_KeepFile( HMETAFILE hmf, HANDLE file )
+{
+    MF_KEPT_FILE *Kept = HeapAlloc( GetProcessHeap(), 0, sizeof(*Kept) );
+
+    if (!Kept)
+    {
+        CloseHandle( file );
+        return;
+    }
+    Kept->Metafile = hmf;
+    Kept->File = file;
+    EnterCriticalSection( &MfKeptFilesLock );
+    InsertTailList( &MfKeptFiles, &Kept->Entry );
+    LeaveCriticalSection( &MfKeptFilesLock );
+}
+
+static VOID MF_CloseKeptFile( HMETAFILE hmf )
+{
+    PLIST_ENTRY Entry;
+
+    EnterCriticalSection( &MfKeptFilesLock );
+    for (Entry = MfKeptFiles.Flink; Entry != &MfKeptFiles; Entry = Entry->Flink)
+    {
+        MF_KEPT_FILE *Kept = CONTAINING_RECORD( Entry, MF_KEPT_FILE, Entry );
+
+        if (Kept->Metafile == hmf)
+        {
+            RemoveEntryList( &Kept->Entry );
+            CloseHandle( Kept->File );
+            HeapFree( GetProcessHeap(), 0, Kept );
+            break;
+        }
+    }
+    LeaveCriticalSection( &MfKeptFilesLock );
+}
+#endif
+
 BOOL WINAPI DeleteMetaFile( HMETAFILE hmf )
 {
     METAHEADER *mh = free_gdi_handle( hmf );
@@ -144,6 +198,9 @@ BOOL WINAPI DeleteMetaFile( HMETAFILE hmf )
         SetLastError( ERROR_INVALID_HANDLE );
         return FALSE;
     }
+#ifdef __REACTOS__
+    MF_CloseKeptFile( hmf );
+#endif
     return HeapFree( GetProcessHeap(), 0, mh );
 }
 

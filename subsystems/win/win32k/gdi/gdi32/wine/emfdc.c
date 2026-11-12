@@ -2968,6 +2968,9 @@ HENHMETAFILE WINAPI CloseEnhMetaFile( HDC hdc )
     UINT size, palette_size;
     BOOL ret;
     HANDLE mapping = 0;
+#ifdef __REACTOS__
+    HANDLE keep = NULL;
+#endif
 
     if (!(dc_attr = get_dc_ptr( hdc )) || !dc_attr->emf)
     {
@@ -3026,10 +3029,21 @@ HENHMETAFILE WINAPI CloseEnhMetaFile( HDC hdc )
         emf->emh = MapViewOfFile( mapping, FILE_MAP_READ, 0, 0, 0 );
         TRACE( "view = %p\n", emf->emh );
         CloseHandle( mapping );
+#ifdef __REACTOS__
+        keep = GdiReopenMetaFileForReading( emf->file );
+#else
         CloseHandle( emf->file );
+#endif
     }
 
     hmf = EMF_Create_HENHMETAFILE( emf->emh, emf->emh->nBytes, emf->file != 0 );
+#ifdef __REACTOS__
+    if (keep)
+    {
+        if (hmf) EMF_KeepFile( hmf, keep );
+        else CloseHandle( keep );
+    }
+#endif
     emf->emh = NULL;  /* So it won't be deleted */
     DeleteDC( hdc );
     return hmf;
