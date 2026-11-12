@@ -57,14 +57,14 @@ EXTERN_C_START
 
 #define VCHIQ_MSG_CONNECT_SIZE        sizeof(VCHIQ_HEADER)
 
-__inline ULONG VCHIQ_GET_SLOT_ALIGN_SIZE (
+static __inline ULONG VCHIQ_GET_SLOT_ALIGN_SIZE (
     _In_ ULONG Size
     )
 {
     return (Size + SLOT_MSG_SIZE_MASK_ALIGN) & (~SLOT_MSG_SIZE_MASK_ALIGN);
 }
 
-__inline VOID VCHIQ_ENABLE_EVENT_INTERRUPT (
+static __inline VOID VCHIQ_ENABLE_EVENT_INTERRUPT (
     _In_ VCHIQ_REMOTE_EVENT* EventPtr
     )
 {
@@ -72,7 +72,7 @@ __inline VOID VCHIQ_ENABLE_EVENT_INTERRUPT (
     KeMemoryBarrier();
 }
 
-__inline VOID VCHIQ_RESET_EVENT_SIGNAL (
+static __inline VOID VCHIQ_RESET_EVENT_SIGNAL (
     _In_ VCHIQ_REMOTE_EVENT* EventPtr
     )
 {
@@ -86,7 +86,7 @@ __inline VOID VCHIQ_RESET_EVENT_SIGNAL (
     KeMemoryBarrier();
 }
 
-__inline BOOLEAN VCHIQ_IS_EVENT_SIGNAL (
+static __inline BOOLEAN VCHIQ_IS_EVENT_SIGNAL (
     _In_ VCHIQ_REMOTE_EVENT* EventPtr
     )
 {
@@ -97,7 +97,7 @@ __inline BOOLEAN VCHIQ_IS_EVENT_SIGNAL (
     return (EventPtr->Fired == 1);
 }
 
-__inline WCHAR* VCHIQ_MESSAGE_NAME (
+static __inline WCHAR* VCHIQ_MESSAGE_NAME (
     _In_ ULONG MessageId
     )
 {

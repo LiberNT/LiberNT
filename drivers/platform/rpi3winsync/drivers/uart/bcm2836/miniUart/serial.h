@@ -1740,7 +1740,7 @@ do                                                                  \
 // TxN - number of charactes to send.
 //
 //
-__inline 
+static __inline 
 void WRITE_TRANSMIT_FIFO_HOLDING(
     PUCHAR BaseAddress,
     PUCHAR TransmitChars,
