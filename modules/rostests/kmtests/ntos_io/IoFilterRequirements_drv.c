@@ -690,10 +690,20 @@ static VOID NTAPI TestUnload(PDRIVER_OBJECT DriverObject)
 
 NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
+    LARGE_INTEGER Delay;
+
     if (RegistryPath->Length >= sizeof(ServicePath))
         return STATUS_NAME_TOO_LONG;
     RtlCopyMemory(ServicePath, RegistryPath->Buffer, RegistryPath->Length);
     ServicePath[RegistryPath->Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    /* The test holds the entry of a load it started while it sets up a device of the driver */
+    if (Requested(L"HoldEntry"))
+    {
+        Record(L"EntryHeld", 1);
+        Delay.QuadPart = -200LL * 10000;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
 
     DriverObject->DriverUnload = TestUnload;
     DriverObject->DriverExtension->AddDevice = TestAddDevice;

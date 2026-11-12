@@ -833,42 +833,32 @@ IopLoadDriverForDevice(
     Status = IopGetDriverNames(ServiceHandle, &DriverName, &ServiceName);
     if (!NT_SUCCESS(Status)) return Status;
 
+    /* A driver found by its name may still be in its DriverEntry: the lookup waits for any load in progress */
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
+
     Status = IopReferenceDriverObject(&DriverName, DriverObject);
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
     {
-        ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
-        if (ServiceName.Buffer != NULL)
+        /* Until the system root exists only the drivers the loader brought can run */
+        if (!PnPBootDriversInitialized)
         {
-            ExFreePoolWithTag(ServiceName.Buffer, TAG_IO_DRIVER_NAME);
+            Status = STATUS_DRIVER_UNABLE_TO_LOAD;
         }
-
-        return STATUS_SUCCESS;
+        else if (!SafeBootClassAllowed && !IopCheckSafeBootDriver(ServiceHandle, &ServiceName))
+        {
+            Status = STATUS_NOT_SAFE_MODE_DRIVER;
+        }
+        else
+        {
+            Status = IopLoadServiceModule(ServiceHandle, DriverObject);
+        }
     }
 
-    /* Until the system root exists only the drivers the loader brought can run */
-    if (!PnPBootDriversInitialized)
-    {
-        ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
-        if (ServiceName.Buffer != NULL)
-        {
-            ExFreePoolWithTag(ServiceName.Buffer, TAG_IO_DRIVER_NAME);
-        }
+    ExReleaseResourceLite(&IopDriverLoadResource);
+    KeLeaveCriticalRegion();
 
-        return STATUS_DRIVER_UNABLE_TO_LOAD;
-    }
-
-    if (!SafeBootClassAllowed && !IopCheckSafeBootDriver(ServiceHandle, &ServiceName))
-    {
-        ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
-        if (ServiceName.Buffer != NULL)
-        {
-            ExFreePoolWithTag(ServiceName.Buffer, TAG_IO_DRIVER_NAME);
-        }
-
-        return STATUS_NOT_SAFE_MODE_DRIVER;
-    }
-
-    Status = IopLoadServiceModule(ServiceHandle, DriverObject);
+    ASSERT(NT_SUCCESS(Status) || *DriverObject == NULL);
 
     ExFreePoolWithTag(DriverName.Buffer, TAG_IO_DRIVER_NAME);
     if (ServiceName.Buffer != NULL)
@@ -1276,6 +1266,7 @@ NtLoadDriver(
 
     if (!NT_SUCCESS(Status)) return Status;
 
+    KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
 
     /* A caller asking for a driver that is already running is told so */
@@ -1293,6 +1284,7 @@ NtLoadDriver(
     }
 
     ExReleaseResourceLite(&IopDriverLoadResource);
+    KeLeaveCriticalRegion();
 
     ZwClose(ServiceHandle);
 
@@ -1329,11 +1321,13 @@ NtUnloadDriver(
         return STATUS_INVALID_PARAMETER;
     }
 
+    KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&IopDriverLoadResource, TRUE);
 
     Status = IopUnloadDriver(&CapturedName, FALSE);
 
     ExReleaseResourceLite(&IopDriverLoadResource);
+    KeLeaveCriticalRegion();
 
     ReleaseCapturedUnicodeString(&CapturedName, PreviousMode);
 

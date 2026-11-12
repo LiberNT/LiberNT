@@ -38,7 +38,7 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
                                  L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart",
-                                 L"DriverUnloaded" };
+                                 L"DriverUnloaded", L"HoldEntry", L"EntryHeld" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -729,14 +729,25 @@ static BOOL WaitValue(PCWSTR Name, DWORD Timeout)
     return ReadValue(Name, &Value) && Value != 0;
 }
 
-/* A PnP driver is unloaded and loaded again once its devices are gone, the interfaces they registered included */
+static DWORD WINAPI LoadFixtureDriver(PVOID Context)
+{
+    UNICODE_STRING Service = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq");
+
+    *(PNTSTATUS)Context = NtLoadDriver(&Service);
+    return 0;
+}
+
+/* A PnP driver is unloaded and loaded again once its devices are gone, the interfaces they registered included.
+ * A device set up while its driver is still in the DriverEntry of that load waits for the load to finish */
 static VOID CheckDriverReload(DEVINST Bus)
 {
     UNICODE_STRING Service = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq");
+    NTSTATUS Loaded = STATUS_UNSUCCESSFUL;
     WCHAR VetoName[MAX_PATH];
     PNP_VETO_TYPE VetoType;
     BOOLEAN Enabled;
     NTSTATUS Status;
+    HANDLE Thread;
 
     SetRequest(L"FailBus", 0);
     ok_once(CM_Query_And_Remove_SubTreeW(Bus, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
@@ -747,9 +758,19 @@ static VOID CheckDriverReload(DEVINST Bus)
     ok_eq_hex(Status, STATUS_SUCCESS);
     ok(WaitValue(L"DriverUnloaded", 1000), "The fixture driver was not unloaded\n");
 
-    Status = NtLoadDriver(&Service);
-    ok_eq_hex(Status, STATUS_SUCCESS);
-    ok_once(CM_Setup_DevNode(Bus, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    SetRequest(L"HoldEntry", 1);
+    Thread = CreateThread(NULL, 0, LoadFixtureDriver, &Loaded, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Thread != NULL)
+    {
+        ok(WaitValue(L"EntryHeld", 1000), "The fixture driver's entry was not reached\n");
+        ok_once(CM_Setup_DevNode(Bus, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+        ok_once(WaitForSingleObject(Thread, 2000), WAIT_OBJECT_0);
+        CloseHandle(Thread);
+    }
+    SetRequest(L"HoldEntry", 0);
+
+    ok_eq_hex(Loaded, STATUS_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The bus did not start again with its driver loaded again\n");
 }
 
