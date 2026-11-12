@@ -792,11 +792,7 @@ SepCloneToken(
                               NewToken);
 
     /* A copy stands for the same process as the token it was made from */
-    if (NT_SUCCESS(Status))
-    {
-        (*NewToken)->ProcUnique = Token->ProcUnique;
-        (*NewToken)->ModifiedId = Token->ModifiedId;
-    }
+    if (NT_SUCCESS(Status)) (*NewToken)->ProcUnique = Token->ProcUnique;
 
     if (NT_SUCCESS(Status) && KeepModifiedId) (*NewToken)->ModifiedId = Token->ModifiedId;
 
