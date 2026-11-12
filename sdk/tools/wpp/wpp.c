@@ -198,7 +198,7 @@ void pp_del_define(const char *name)
 
 pp_entry_t *pp_add_define(const char *def, const char *text)
 {
-	int len;
+	size_t len;
 	char *cptr;
 	int idx;
 	pp_entry_t *ppp;
