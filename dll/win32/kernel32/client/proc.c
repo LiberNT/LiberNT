@@ -2095,6 +2095,13 @@ BasepIsEmulatedMachine(IN USHORT Machine)
 {
     WCHAR Buffer[MAX_PATH];
     UNICODE_STRING Path;
+    MACHINE_ATTRIBUTES Attributes;
+
+    if (SUCCEEDED(GetMachineTypeAttributes(Machine, &Attributes)) &&
+        (Attributes & UserEnabled) && !(Attributes & Wow64Container))
+    {
+        return TRUE;
+    }
 
     if (Machine != IMAGE_FILE_MACHINE_AMD64) return FALSE;
 
