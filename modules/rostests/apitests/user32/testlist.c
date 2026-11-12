@@ -79,6 +79,7 @@ extern void func_LookupIconIdFromDirectoryEx(void);
 extern void func_MaximizedCaptionClick(void);
 extern void func_MenuUI(void);
 extern void func_MenuItemData(void);
+extern void func_MenuBarBackground(void);
 extern void func_MessageStateAnalyzer(void);
 extern void func_MinimizedPosition(void);
 extern void func_ModernUser32(void);
@@ -217,6 +218,7 @@ const struct test winetest_testlist[] =
     { "MaximizedCaptionClick", func_MaximizedCaptionClick },
     { "MenuUI", func_MenuUI },
     { "MenuItemData", func_MenuItemData },
+    { "MenuBarBackground", func_MenuBarBackground },
     { "MessageStateAnalyzer", func_MessageStateAnalyzer },
     { "MinimizedPosition", func_MinimizedPosition },
     { "ModernUser32", func_ModernUser32 },

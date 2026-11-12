@@ -2767,7 +2767,7 @@ static void FASTCALL MENU_DrawMenuItem(PWND Wnd, PMENU Menu, PWND WndOwner, HDC 
         }
     }
     else
-        FillRect( hdc, &rect, IntGetSysColorBrush(bkgnd) );
+        FillRect( hdc, &rect, Menu->hbrBack ? Menu->hbrBack : IntGetSysColorBrush(bkgnd) );
 
     IntGdiSetBkMode( hdc, TRANSPARENT );
 
@@ -3159,14 +3159,21 @@ IntDrawMenuBarTemp(PWND pWnd, HDC hDC, LPRECT Rect, PMENU pMenu, HFONT Font)
 
   Rect->bottom = Rect->top + pMenu->cyMenu;
 
-  FillRect(hDC, Rect, IntGetSysColorBrush(flat_menu ? COLOR_MENUBAR : COLOR_MENU));
+  if (pMenu->hbrBack)
+  {
+      FillRect(hDC, Rect, pMenu->hbrBack);
+  }
+  else
+  {
+      FillRect(hDC, Rect, IntGetSysColorBrush(flat_menu ? COLOR_MENUBAR : COLOR_MENU));
 
-  NtGdiSelectPen(hDC, NtGdiGetStockObject(DC_PEN));
-  IntSetDCPenColor(hDC, MENU_Themed(pMenu) ?
-                        MENU_MixColor(IntGetSysColor(COLOR_MENUBAR), IntGetSysColor(COLOR_MENUTEXT), 14) :
-                        IntGetSysColor(COLOR_3DFACE));
-  GreMoveTo(hDC, Rect->left, Rect->bottom - 1, NULL);
-  NtGdiLineTo(hDC, Rect->right, Rect->bottom - 1);
+      NtGdiSelectPen(hDC, NtGdiGetStockObject(DC_PEN));
+      IntSetDCPenColor(hDC, MENU_Themed(pMenu) ?
+                            MENU_MixColor(IntGetSysColor(COLOR_MENUBAR), IntGetSysColor(COLOR_MENUTEXT), 14) :
+                            IntGetSysColor(COLOR_3DFACE));
+      GreMoveTo(hDC, Rect->left, Rect->bottom - 1, NULL);
+      NtGdiLineTo(hDC, Rect->right, Rect->bottom - 1);
+  }
 
   if (pMenu->cItems == 0)
   {
