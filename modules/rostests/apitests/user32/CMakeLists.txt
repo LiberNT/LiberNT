@@ -78,6 +78,7 @@ list(APPEND SOURCE
     MaximizedCaptionClick.c
     MenuUI.c
     MenuItemData.c
+    MenuBarBackground.c
     MessageStateAnalyzer.c
     MinimizedPosition.c
     ModernUser32.c
