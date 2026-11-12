@@ -235,6 +235,7 @@ KiArm64IdleDispatchNextThread(_In_ PKPRCB Prcb, _In_ BOOLEAN AdvertiseIdle)
     KiReleasePrcbLock(Prcb);
 
     ASSERT(OldThread != NULL);
+    KiWaitForThreadSwapOut(NewThread);
     KiSwapContext(APC_LEVEL, OldThread);
     if (KeGetCurrentIrql() > DISPATCH_LEVEL) KeLowerIrql(DISPATCH_LEVEL);
     return TRUE;
@@ -546,6 +547,7 @@ KiDispatchInterrupt(VOID)
             KxQueueReadyThread(OldThread, Prcb);
         }
 
+        KiWaitForThreadSwapOut(NewThread);
         KiSwapContext(APC_LEVEL, OldThread);
     }
 }
