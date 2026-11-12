@@ -48,7 +48,7 @@ bind(IN SOCKET s,
         /* Get the Socket Context */
         if ((Socket = WsSockGetSocket(s)))
         {
-            if (name && (namelen >= sizeof(*name)))
+            if (name)
             {
                 /* Make the call */
                 Status = Socket->Provider->Service.lpWSPBind(s,
