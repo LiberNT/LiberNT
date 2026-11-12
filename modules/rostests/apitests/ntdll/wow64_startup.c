@@ -494,13 +494,28 @@ static VOID TestTlsFreeKeepsNativeState(VOID)
 
 static VOID TestEmulatedSystemInfo(VOID)
 {
+    typedef BOOL (WINAPI *QUERY_MACHINES)(HANDLE, USHORT *, USHORT *);
+    QUERY_MACHINES QueryMachines;
     SYSTEM_INFO Info;
+    USHORT ProcessMachine, NativeMachine;
 
     GetSystemInfo(&Info);
     ok_hex(Info.wProcessorArchitecture, PROCESSOR_ARCHITECTURE_INTEL);
     GetNativeSystemInfo(&Info);
     ok_hex(Info.wProcessorArchitecture, PROCESSOR_ARCHITECTURE_AMD64);
-    ok_hex(Info.dwProcessorType, PROCESSOR_INTEL_PENTIUM);
+
+    QueryMachines = (QUERY_MACHINES)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "IsWow64Process2");
+    if (!QueryMachines || !QueryMachines(GetCurrentProcess(), &ProcessMachine, &NativeMachine))
+    {
+        skip("IsWow64Process2 is unavailable\n");
+        return;
+    }
+
+    /* Only the x64 emulated on ARM64 keeps the x86 processor type */
+    if (NativeMachine == IMAGE_FILE_MACHINE_ARM64)
+        ok_hex(Info.dwProcessorType, PROCESSOR_INTEL_PENTIUM);
+    else
+        ok_hex(Info.dwProcessorType, PROCESSOR_AMD_X8664);
 }
 
 #elif defined(_WIN64)
