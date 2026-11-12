@@ -58,7 +58,8 @@ PCHAR SystemPowerStates[] =
     "Sleeping2",
     "Sleeping3",
     "Hibernate",
-    "Shutdown"
+    "Shutdown",
+    "Maximum"
 };
 
 PCHAR DevicePowerStates[] =
@@ -67,8 +68,12 @@ PCHAR DevicePowerStates[] =
     "D0",
     "D1",
     "D2",
-    "D3"
+    "D3",
+    "Maximum"
 };
+
+C_ASSERT(RTL_NUMBER_OF(SystemPowerStates) == PowerSystemMaximum + 1);
+C_ASSERT(RTL_NUMBER_OF(DevicePowerStates) == PowerDeviceMaximum + 1);
 
 ULONG PciBreakOnPdoPowerIrp, PciBreakOnFdoPowerIrp;
 ULONG PciBreakOnPdoPnpIrp, PciBreakOnFdoPnpIrp;
@@ -247,7 +252,7 @@ PciDebugDumpQueryCapabilities(IN PDEVICE_CAPABILITIES DeviceCaps)
 
     /* Dump and convert the power state mappings */
     for (i = PowerSystemWorking; i < PowerSystemMaximum; i++)
-        DbgPrint(" %s", DevicePowerStates[DeviceCaps->DeviceState[i]]);
+        DbgPrint(" %s", DevicePowerStates[min(DeviceCaps->DeviceState[i], PowerDeviceMaximum)]);
 
     /* Finish the dump */
     DbgPrint(" ]\n");
