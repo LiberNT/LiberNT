@@ -110,7 +110,8 @@ KdpReadBootOptions(
         KdPreviouslyEnabled = TRUE;
         KdAutoEnableOnEvent = TRUE;
     }
-    else if (KdpBootOptionPresent(Options, "DEBUG"))
+    else if (KdpBootOptionPresent(Options, "DEBUG") ||
+             KdpBootOptionPresent(Options, "DEBUGPORT"))
     {
         KdPitchDebugger = FALSE;
         KdDebuggerEnabled = TRUE;
