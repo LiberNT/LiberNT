@@ -197,14 +197,12 @@ WmipInitializeGuidObjectType(VOID)
     RtlZeroMemory(&Initializer, sizeof(Initializer));
 
     Initializer.Length = sizeof(Initializer);
-    Initializer.UnnamedObjectsOnly = TRUE;
     Initializer.SecurityRequired = TRUE;
     Initializer.InvalidAttributes = OBJ_OPENLINK;
     Initializer.ValidAccessMask = STANDARD_RIGHTS_ALL | WMIGUID_ALL_ACCESS;
     Initializer.GenericMapping = WmipGenericMapping;
     Initializer.PoolType = NonPagedPoolNx;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(WMIP_GUID_OBJECT);
-    Initializer.CloseProcedure = WmipCloseMethod;
+    Initializer.DefaultNonPagedPoolCharge = 0xA8;
     Initializer.DeleteProcedure = WmipDeleteMethod;
     Initializer.SecurityProcedure = WmipSecurityMethod;
 
@@ -337,24 +335,6 @@ WmipOpenGuidObjectByName(
     if (Buffer != NULL) ExFreePoolWithTag(Buffer, WMIP_TAG);
 
     return Status;
-}
-
-VOID
-NTAPI
-WmipCloseMethod(
-    _In_opt_ PEPROCESS Process,
-    _In_ PVOID Object,
-    _In_ ULONG_PTR ProcessHandleCount,
-    _In_ ULONG_PTR SystemHandleCount)
-{
-    PWMIP_GUID_OBJECT GuidObject = Object;
-
-    UNREFERENCED_PARAMETER(Process);
-    UNREFERENCED_PARAMETER(ProcessHandleCount);
-
-    if (SystemHandleCount > 1) return;
-
-    WmipClearIrpObjectList(GuidObject);
 }
 
 /* Runs when the object itself goes, once nothing points at it any more */

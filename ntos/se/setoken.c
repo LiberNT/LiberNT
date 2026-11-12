@@ -595,7 +595,7 @@ SepAssembleToken(
                             AccessMode,
                             NULL,
                             FIELD_OFFSET(TOKEN, VariablePart) + Fixed,
-                            0,
+                            FIELD_OFFSET(TOKEN, VariablePart) + Fixed,
                             0,
                             (PVOID *)&Token);
     if (!NT_SUCCESS(Status)) return Status;
@@ -880,10 +880,11 @@ SepInitializeTokenImplementation(VOID)
     Extended.Initializer.InvalidAttributes = OBJ_OPENLINK;
     Extended.Initializer.ValidAccessMask = TOKEN_ALL_ACCESS;
     Extended.Initializer.GenericMapping = SepTokenMapping;
+    Extended.Initializer.UnnamedObjectsOnly = TRUE;
     Extended.Initializer.UseDefaultObject = TRUE;
     Extended.Initializer.SecurityRequired = TRUE;
+    Extended.Initializer.ObjectTypeCode = 0x200;
     Extended.Initializer.PoolType = PagedPool;
-    Extended.Initializer.DefaultPagedPoolCharge = sizeof(TOKEN);
     Extended.Initializer.DeleteProcedure = SepDeleteToken;
     Extended.Initializer.SecurityProcedure = SeDefaultObjectMethod;
 

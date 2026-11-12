@@ -27,15 +27,6 @@ WmipClearIrpObjectList(
     _In_ PWMIP_GUID_OBJECT GuidObject);
 
 /* What the object manager calls as a handle, and then an object, goes away */
-_Function_class_(OB_CLOSE_METHOD)
-VOID
-NTAPI
-WmipCloseMethod(
-    _In_opt_ PEPROCESS Process,
-    _In_ PVOID Object,
-    _In_ ULONG_PTR ProcessHandleCount,
-    _In_ ULONG_PTR SystemHandleCount);
-
 _Function_class_(OB_DELETE_METHOD)
 VOID
 NTAPI

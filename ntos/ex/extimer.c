@@ -337,7 +337,7 @@ ExpInitializeTimerImplementation(VOID)
     Initializer.ValidAccessMask = TIMER_ALL_ACCESS;
     Initializer.GenericMapping = ExpTimerMapping;
     Initializer.PoolType = NonPagedPoolNx;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(ETIMER);
+    Initializer.DefaultNonPagedPoolCharge = 0x148;
     Initializer.DeleteProcedure = ExpDeleteTimer;
 
     InitializeListHead(&ExpWakeList);

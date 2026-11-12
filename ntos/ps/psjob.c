@@ -359,6 +359,7 @@ PspInitializeJobStructures(VOID)
     Extended.Initializer.PoolType = NonPagedPoolNx;
     Extended.Initializer.ValidAccessMask = JOB_OBJECT_ALL_ACCESS;
     Extended.Initializer.DefaultNonPagedPoolCharge = sizeof(EJOB);
+    Extended.Initializer.ObjectTypeCode = 0x800;
     Extended.Initializer.SecurityRequired = TRUE;
     Extended.Initializer.CloseProcedure = PspCloseJob;
     Extended.Initializer.DeleteProcedure = PspDeleteJob;

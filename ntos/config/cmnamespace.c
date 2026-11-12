@@ -1138,30 +1138,3 @@ CmpParseKeyEx(
 
     return STATUS_SUCCESS;
 }
-
-NTSTATUS
-NTAPI
-CmpParseKey(
-    _In_ PVOID ParseObject,
-    _In_ PVOID ObjectType,
-    _Inout_ PACCESS_STATE AccessState,
-    _In_ KPROCESSOR_MODE AccessMode,
-    _In_ ULONG Attributes,
-    _Inout_ PUNICODE_STRING CompleteName,
-    _Inout_ PUNICODE_STRING RemainingName,
-    _Inout_opt_ PVOID Context,
-    _In_opt_ PSECURITY_QUALITY_OF_SERVICE SecurityQos,
-    _Out_ PVOID *Object)
-{
-    return CmpParseKeyEx(ParseObject,
-                         ObjectType,
-                         AccessState,
-                         AccessMode,
-                         Attributes,
-                         CompleteName,
-                         RemainingName,
-                         Context,
-                         SecurityQos,
-                         NULL,
-                         Object);
-}

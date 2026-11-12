@@ -268,7 +268,6 @@ ExpInitializeCallbacks(VOID)
     Initializer.GenericMapping = ExpCallbackMapping;
     Initializer.UseDefaultObject = TRUE;
     Initializer.PoolType = NonPagedPoolNx;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(CALLBACK_OBJECT);
     Initializer.DeleteProcedure = ExpDeleteCallback;
 
     if (!NT_SUCCESS(ObCreateObjectType(&Name,

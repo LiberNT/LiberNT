@@ -45,13 +45,16 @@ CmpCreateObjectTypes(VOID)
     Initializer.CaseInsensitive = TRUE;
     Initializer.UseDefaultObject = TRUE;
     Initializer.SecurityRequired = TRUE;
+    Initializer.UseExtendedParameters = TRUE;
+    Initializer.ObjectTypeCode = 0x100;
+    Initializer.DefaultPagedPoolCharge = 0x70;
     Initializer.InvalidAttributes = OBJ_EXCLUSIVE | OBJ_PERMANENT;
     Initializer.GenericMapping = CmpKeyMapping;
     Initializer.ValidAccessMask = KEY_ALL_ACCESS;
     Initializer.PoolType = PagedPool;
     Initializer.DeleteProcedure = CmpDeleteKeyObject;
     Initializer.CloseProcedure = CmpCloseKeyObject;
-    Initializer.ParseProcedure = CmpParseKey;
+    Initializer.ParseProcedureEx = CmpParseKeyEx;
     Initializer.SecurityProcedure = CmpSecurityMethod;
     Initializer.QueryNameProcedure = CmpQueryKeyName;
 

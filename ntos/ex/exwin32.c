@@ -296,6 +296,7 @@ ExpWin32kInit(VOID)
     Initializer.PoolType = NonPagedPoolNx;
     Initializer.MaintainHandleCount = TRUE;
     Initializer.SecurityRequired = TRUE;
+    Initializer.SupportsObjectCallbacks = TRUE;
     Initializer.OpenProcedure = ExpDesktopOpen;
     Initializer.OkayToCloseProcedure = ExpDesktopOkToClose;
     Initializer.CloseProcedure = ExpDesktopClose;

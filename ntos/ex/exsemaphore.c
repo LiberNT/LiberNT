@@ -48,6 +48,7 @@ ExpInitializeSemaphoreImplementation(VOID)
     Initializer.GenericMapping = ExSemaphoreMapping;
     Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KSEMAPHORE);
+    Initializer.ObjectTypeCode = 0x8;
 
     return NT_SUCCESS(ObCreateObjectType(&Name,
                                          &Initializer,
@@ -359,6 +360,7 @@ ExpInitializeMutantImplementation(VOID)
     Initializer.GenericMapping = ExpMutantMapping;
     Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KMUTANT);
+    Initializer.ObjectTypeCode = 0x40;
     Initializer.DeleteProcedure = ExpDeleteMutant;
 
     return NT_SUCCESS(ObCreateObjectType(&Name,

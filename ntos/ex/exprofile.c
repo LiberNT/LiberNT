@@ -84,7 +84,7 @@ ExpInitializeProfileImplementation(VOID)
     Initializer.ValidAccessMask = PROFILE_ALL_ACCESS;
     Initializer.GenericMapping = ExpProfileMapping;
     Initializer.PoolType = NonPagedPoolNx;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(EPROFILE);
+    Initializer.DefaultNonPagedPoolCharge = 0x150;
     Initializer.DeleteProcedure = ExpDeleteProfile;
 
     KeInitializeMutant(&ExpProfileMutex, FALSE);

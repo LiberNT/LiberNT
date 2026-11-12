@@ -203,6 +203,7 @@ IopCreateObjectTypes(VOID)
     Initializer.DeleteProcedure = IopDeleteDevice;
     Initializer.SecurityProcedure = IopGetSetSecurityObject;
     Initializer.UseExtendedParameters = TRUE;
+    Initializer.DefaultNonPagedPoolCharge = sizeof(DEVICE_OBJECT);
 
     Status = IopCreateOneObjectType(L"Device", &Initializer, &IoDeviceObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
@@ -215,6 +216,7 @@ IopCreateObjectTypes(VOID)
     Initializer.CaseInsensitive = TRUE;
     Initializer.UseDefaultObject = TRUE;
     Initializer.DeleteProcedure = IopDeleteDriver;
+    Initializer.DefaultNonPagedPoolCharge = sizeof(DRIVER_OBJECT);
 
     Status = IopCreateOneObjectType(L"Driver", &Initializer, &IoDriverObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
@@ -225,11 +227,11 @@ IopCreateObjectTypes(VOID)
     Initializer.ValidAccessMask = FILE_ALL_ACCESS;
     Initializer.GenericMapping = IopFileMapping;
     Initializer.UseDefaultObject = TRUE;
-    Initializer.UnnamedObjectsOnly = TRUE;
 
     Status = IopCreateOneObjectType(L"Adapter", &Initializer, &IoAdapterObjectType);
     if (!NT_SUCCESS(Status)) return FALSE;
 
+    Initializer.DefaultNonPagedPoolCharge = sizeof(CONTROLLER_OBJECT);
     Status = IopCreateOneObjectType(L"Controller",
                                     &Initializer,
                                     &IoControllerObjectType);
@@ -242,7 +244,8 @@ IopCreateObjectTypes(VOID)
     Initializer.GenericMapping = IopFileMapping;
     Initializer.MaintainHandleCount = TRUE;
     Initializer.CaseInsensitive = TRUE;
-    Initializer.DefaultNonPagedPoolCharge = IO_FILE_OBJECT_NON_PAGED_POOL_CHARGE;
+    Initializer.DefaultNonPagedPoolCharge = sizeof(FILE_OBJECT) + IO_FILE_OBJECT_NON_PAGED_POOL_CHARGE;
+    Initializer.ObjectTypeCode = 0x1;
     Initializer.DefaultPagedPoolCharge = IO_FILE_OBJECT_PAGED_POOL_CHARGE;
     Initializer.ParseProcedure = IopParseFile;
     Initializer.ParseProcedureEx = IopParseFileEx;
@@ -271,6 +274,8 @@ IopCreateObjectTypes(VOID)
     Initializer.ValidAccessMask = IO_COMPLETION_ALL_ACCESS;
     Initializer.GenericMapping = IopCompletionMapping;
     Initializer.CaseInsensitive = TRUE;
+    Initializer.CacheAligned = TRUE;
+    Initializer.DefaultNonPagedPoolCharge = 0x50;
     Initializer.DeleteProcedure = IopDeleteIoCompletion;
     Initializer.CloseProcedure = IopCloseIoCompletion;
 

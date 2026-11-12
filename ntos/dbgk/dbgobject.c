@@ -477,7 +477,6 @@ DbgkInitialize(VOID)
     Initializer.GenericMapping = DbgkpDebugObjectMapping;
     Initializer.SecurityRequired = TRUE;
     Initializer.PoolType = NonPagedPoolNx;
-    Initializer.DefaultNonPagedPoolCharge = sizeof(DEBUG_OBJECT);
     Initializer.CloseProcedure = DbgkpCloseObject;
     Initializer.DeleteProcedure = DbgkpDeleteObject;
     Initializer.SecurityProcedure = SeDefaultObjectMethod;

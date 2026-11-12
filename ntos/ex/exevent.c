@@ -231,6 +231,7 @@ ExpInitializeEventImplementation(VOID)
     Initializer.GenericMapping = ExpEventMapping;
     Initializer.PoolType = NonPagedPoolNx;
     Initializer.DefaultNonPagedPoolCharge = sizeof(KEVENT);
+    Initializer.ObjectTypeCode = 0x10;
 
     if (!NT_SUCCESS(ObCreateObjectType(&Name,
                                        &Initializer,
@@ -805,7 +806,6 @@ ExpInitializeKeyedEventImplementation(VOID)
     Initializer.GenericMapping = ExpKeyedEventMapping;
     Initializer.UseDefaultObject = TRUE;
     Initializer.PoolType = PagedPool;
-    Initializer.DefaultPagedPoolCharge = sizeof(EXP_KEYED_EVENT);
 
     Status = ObCreateObjectType(&Name,
                                 &Initializer,
