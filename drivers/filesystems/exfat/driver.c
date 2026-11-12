@@ -96,6 +96,7 @@ ExFatFsdDispatch(
             Status = ExFatShutdown(DeviceObject, Irp);
             break;
         case IRP_MJ_DEVICE_CONTROL:
+        /* FIXME: a mounted volume does not dismount on query-remove, so its stream file keeps the device open and the removal is refused */
         case IRP_MJ_PNP:
             if (DeviceObject == ExFatGlobalData->DeviceObject)
             {

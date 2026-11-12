@@ -835,6 +835,36 @@ RawUnload(
     }
 }
 
+/* irp-mn-query-remove-device: a file system with handles open on its volume fails the query; the requests go on down */
+static
+NTSTATUS
+RawPnp(
+    _In_opt_ PRAW_VCB Vcb,
+    _In_ PIRP Irp)
+{
+    PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
+
+    PAGED_CODE();
+
+    if (Vcb == NULL)
+    {
+        RawCompleteRequest(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);
+        return STATUS_INVALID_DEVICE_REQUEST;
+    }
+
+    if (StackPtr->MinorFunction == IRP_MN_QUERY_REMOVE_DEVICE && !Vcb->Dismounted && Vcb->OpenCount != 0)
+    {
+        RawCompleteRequest(Irp, STATUS_ACCESS_DENIED, 0);
+        return STATUS_ACCESS_DENIED;
+    }
+
+    if (StackPtr->MinorFunction == IRP_MN_REMOVE_DEVICE || StackPtr->MinorFunction == IRP_MN_SURPRISE_REMOVAL)
+        RawCheckForDismount(Vcb, TRUE);
+
+    IoSkipCurrentIrpStackLocation(Irp);
+    return IoCallDriver(Vcb->TargetDeviceObject, Irp);
+}
+
 NTSTATUS
 NTAPI
 RawDispatch(
@@ -879,6 +909,9 @@ RawDispatch(
 
         case IRP_MJ_SHUTDOWN:
             return RawShutdown(DeviceObject, Irp);
+
+        case IRP_MJ_PNP:
+            return RawPnp(Vcb, Irp);
 
         default:
             RawCompleteRequest(Irp, STATUS_INVALID_DEVICE_REQUEST, 0);

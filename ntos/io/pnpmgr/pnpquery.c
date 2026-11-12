@@ -59,6 +59,38 @@ IopSynchronousCallComplete(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
+/* irp-mn-query-remove-device: a file system mounted on the device gets its removal requests first and passes them down */
+static
+PDEVICE_OBJECT
+PiReferenceMountedFileSystem(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ UCHAR MinorFunction)
+{
+    PDEVICE_OBJECT Device, FileSystem = NULL;
+    KIRQL OldIrql, VpbIrql;
+
+    if (MinorFunction != IRP_MN_QUERY_REMOVE_DEVICE && MinorFunction != IRP_MN_CANCEL_REMOVE_DEVICE &&
+        MinorFunction != IRP_MN_REMOVE_DEVICE && MinorFunction != IRP_MN_SURPRISE_REMOVAL)
+    {
+        return NULL;
+    }
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    for (Device = DeviceObject; Device != NULL && FileSystem == NULL; Device = Device->AttachedDevice)
+    {
+        IoAcquireVpbSpinLock(&VpbIrql);
+        if (Device->Vpb != NULL && (Device->Vpb->Flags & VPB_MOUNTED) && Device->Vpb->DeviceObject != NULL)
+        {
+            FileSystem = Device->Vpb->DeviceObject;
+            ObReferenceObject(FileSystem);
+        }
+        IoReleaseVpbSpinLock(VpbIrql);
+    }
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    return FileSystem;
+}
+
 NTSTATUS
 IopSynchronousCall(
     IN PDEVICE_OBJECT DeviceObject,
@@ -67,6 +99,7 @@ IopSynchronousCall(
 {
     PIO_STACK_LOCATION StackPtr;
     IO_STATUS_BLOCK IoStatusBlock;
+    PDEVICE_OBJECT FileSystem;
     PDEVICE_OBJECT TopDevice;
     KEVENT Event;
     NTSTATUS Status;
@@ -77,7 +110,9 @@ IopSynchronousCall(
     /* Plug and Play requests are dispatched at PASSIVE_LEVEL */
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
-    TopDevice = IoGetAttachedDeviceReference(DeviceObject);
+    FileSystem = PiReferenceMountedFileSystem(DeviceObject, IoStackLocation->MinorFunction);
+    TopDevice = IoGetAttachedDeviceReference(FileSystem != NULL ? FileSystem : DeviceObject);
+    if (FileSystem != NULL) ObDereferenceObject(FileSystem);
 
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
 
