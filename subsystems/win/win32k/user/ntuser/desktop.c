@@ -1012,8 +1012,10 @@ IntResolveDesktop(
 
             // TODO: Check also that we compare wrt. window station WinSta0
             // which is the only one that can be interactive on the system.
-            if (((!bUseDefaultWinSta || bInherit) && RtlEqualLuid(&ProcessLuid, &SystemLuid)) ||
-                 RtlEqualLuid(&ProcessLuid, &WinStaObject->luidUser))
+            /* A process that names the window station got in through its DACL, which is what grants another logon session (CreateProcessWithTokenW) */
+            if (!bUseDefaultWinSta ||
+                (bInherit && RtlEqualLuid(&ProcessLuid, &SystemLuid)) ||
+                RtlEqualLuid(&ProcessLuid, &WinStaObject->luidUser))
             {
                 /* We are interactive on this window station */
                 bAccessAllowed = TRUE;
