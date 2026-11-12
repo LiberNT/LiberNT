@@ -91,7 +91,10 @@ IopStartRamdisk(
     PMEMORY_ALLOCATION_DESCRIPTOR Descriptor;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
-    UNICODE_STRING DeviceName;
+    UNICODE_STRING DeviceName, GuidString, DeviceString, ArcName, LinkName;
+    ANSI_STRING AnsiArcName;
+    WCHAR DeviceBuffer[64];
+    WCHAR LinkBuffer[64];
     RAMDISK_CREATE_INPUT Input;
     ULONG Offset = 0;
     ULONG Length = 0;
@@ -160,23 +163,22 @@ IopStartRamdisk(
 
     Input.Version = sizeof(Input);
     Input.DiskGuid = RAMDISK_BOOTDISK_GUID;
-    Input.DiskType = RAMDISK_MEMORY_MAPPED_DISK;
+    Input.DiskType = RAMDISK_BOOT_DISK;
     Input.Options.Fixed = TRUE;
-    Input.Options.Readonly = TRUE;
     Input.BasePage = Descriptor->BasePage;
     Input.DiskOffset = Offset;
     Input.DiskLength.QuadPart = Length;
 
-    Status = ZwFsControlFile(Handle,
-                             NULL,
-                             NULL,
-                             NULL,
-                             &IoStatusBlock,
-                             FSCTL_CREATE_RAM_DISK,
-                             &Input,
-                             sizeof(Input),
-                             NULL,
-                             0);
+    Status = ZwDeviceIoControlFile(Handle,
+                                   NULL,
+                                   NULL,
+                                   NULL,
+                                   &IoStatusBlock,
+                                   FSCTL_CREATE_RAM_DISK,
+                                   &Input,
+                                   sizeof(Input),
+                                   NULL,
+                                   0);
 
     ZwClose(Handle);
 
@@ -184,6 +186,50 @@ IopStartRamdisk(
     {
         KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
                      RD_FSCTL_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
+
+    Status = RtlStringFromGUID(&Input.DiskGuid, &GuidString);
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_GUID_CONVERT_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
+
+    RtlInitEmptyUnicodeString(&DeviceString,
+                              DeviceBuffer,
+                              sizeof(DeviceBuffer));
+    RtlAppendUnicodeToString(&DeviceString, L"\\Device\\Ramdisk");
+    RtlAppendUnicodeStringToString(&DeviceString, &GuidString);
+    RtlFreeUnicodeString(&GuidString);
+
+    RtlInitAnsiString(&AnsiArcName, LoaderBlock->ArcBootDeviceName);
+    Status = RtlAnsiStringToUnicodeString(&ArcName, &AnsiArcName, TRUE);
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_SYMLINK_CREATE_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
+
+    RtlInitEmptyUnicodeString(&LinkName, LinkBuffer, sizeof(LinkBuffer));
+    RtlAppendUnicodeToString(&LinkName, L"\\ArcName\\");
+    RtlAppendUnicodeStringToString(&LinkName, &ArcName);
+    RtlFreeUnicodeString(&ArcName);
+
+    Status = IoCreateSymbolicLink(&LinkName, &DeviceString);
+    if (Status == STATUS_OBJECT_NAME_COLLISION) Status = STATUS_SUCCESS;
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_SYMLINK_CREATE_FAILED,
                      Status,
                      0,
                      0);
