@@ -107,35 +107,6 @@ AfunixDereferenceConnection(PAFUNIX_CONNECTION Connection)
     ExFreePoolWithTag(Connection, TAG_AFUNIX_CONN);
 }
 
-static BOOLEAN
-AfunixPathEqual(PCCH Left, ULONG LeftLength, PCCH Right, ULONG RightLength)
-{
-    ULONG Index;
-
-    if (LeftLength != RightLength)
-        return FALSE;
-
-    for (Index = 0; Index < LeftLength; Index++)
-    {
-        CHAR a = Left[Index];
-        CHAR b = Right[Index];
-
-        if (a >= 'a' && a <= 'z')
-            a = a - 'a' + 'A';
-        if (b >= 'a' && b <= 'z')
-            b = b - 'a' + 'A';
-        if (a == '/')
-            a = '\\';
-        if (b == '/')
-            b = '\\';
-
-        if (a != b)
-            return FALSE;
-    }
-
-    return TRUE;
-}
-
 static ULONG
 AfunixPathLength(PCCH Path, ULONG Maximum)
 {
@@ -151,7 +122,7 @@ AfunixPathLength(PCCH Path, ULONG Maximum)
 }
 
 static PAFUNIX_ENDPOINT
-AfunixLookupEndpoint(PCCH Path, ULONG PathLength)
+AfunixLookupEndpoint(ULONG VolumeSerialNumber, LARGE_INTEGER FileId)
 {
     PLIST_ENTRY Entry;
     PAFUNIX_ENDPOINT Endpoint;
@@ -161,15 +132,204 @@ AfunixLookupEndpoint(PCCH Path, ULONG PathLength)
          Entry = Entry->Flink)
     {
         Endpoint = CONTAINING_RECORD(Entry, AFUNIX_ENDPOINT, ListEntry);
+        ASSERT(Endpoint->Registered);
 
-        if (Endpoint->Registered &&
-            AfunixPathEqual(Endpoint->Path, Endpoint->PathLength, Path, PathLength))
+        if (Endpoint->VolumeSerialNumber == VolumeSerialNumber &&
+            Endpoint->FileId.QuadPart == FileId.QuadPart)
         {
             return Endpoint;
         }
     }
 
     return NULL;
+}
+
+static NTSTATUS
+AfunixOpenSocketFile(
+    _In_ PCCH Path,
+    _In_ ULONG PathLength,
+    _In_ BOOLEAN Create,
+    _Out_ PHANDLE Handle)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK IoStatus;
+    ANSI_STRING AnsiPath;
+    UNICODE_STRING Relative;
+    UNICODE_STRING Full;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(PathLength != 0 && PathLength <= AFUNIX_PATH_LENGTH);
+
+    *Handle = NULL;
+
+    AnsiPath.Buffer = (PCHAR)Path;
+    AnsiPath.Length = (USHORT)PathLength;
+    AnsiPath.MaximumLength = (USHORT)PathLength;
+
+    Status = RtlAnsiStringToUnicodeString(&Relative, &AnsiPath, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Full.Length = 0;
+    Full.MaximumLength = Relative.Length + 4 * sizeof(WCHAR);
+    Full.Buffer = ExAllocatePoolWithTag(PagedPool, Full.MaximumLength, TAG_AFUNIX_ENDPOINT);
+    if (!Full.Buffer)
+    {
+        RtlFreeUnicodeString(&Relative);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    /* FIXME: a relative sun_path is not resolved against the caller's current directory */
+    RtlAppendUnicodeToString(&Full, L"\\??\\");
+    RtlAppendUnicodeStringToString(&Full, &Relative);
+    RtlFreeUnicodeString(&Relative);
+
+    InitializeObjectAttributes(&Attributes,
+                               &Full,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE | OBJ_FORCE_ACCESS_CHECK,
+                               NULL,
+                               NULL);
+
+    Status = IoCreateFile(Handle,
+                          Create ? (FILE_WRITE_DATA | FILE_WRITE_ATTRIBUTES | FILE_READ_ATTRIBUTES |
+                                    DELETE | SYNCHRONIZE)
+                                 : (FILE_READ_ATTRIBUTES | SYNCHRONIZE),
+                          &Attributes,
+                          &IoStatus,
+                          NULL,
+                          FILE_ATTRIBUTE_NORMAL,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                          Create ? FILE_CREATE : FILE_OPEN,
+                          FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+                          NULL,
+                          0,
+                          CreateFileTypeNone,
+                          NULL,
+                          IO_NO_PARAMETER_CHECKING | IO_FORCE_ACCESS_CHECK);
+
+    ExFreePoolWithTag(Full.Buffer, TAG_AFUNIX_ENDPOINT);
+
+    if (!NT_SUCCESS(Status))
+        *Handle = NULL;
+
+    return Status;
+}
+
+static NTSTATUS
+AfunixQuerySocketFile(
+    _In_ HANDLE Handle,
+    _Out_ PULONG VolumeSerialNumber,
+    _Out_ PLARGE_INTEGER FileId,
+    _Out_ PULONG ReparseTag)
+{
+    union
+    {
+        FILE_FS_VOLUME_INFORMATION Info;
+        UCHAR Buffer[sizeof(FILE_FS_VOLUME_INFORMATION) + MAXIMUM_VOLUME_LABEL_LENGTH];
+    } Volume;
+    FILE_INTERNAL_INFORMATION Internal;
+    FILE_ATTRIBUTE_TAG_INFORMATION Tag;
+    IO_STATUS_BLOCK IoStatus;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    Status = ZwQueryInformationFile(Handle, &IoStatus, &Tag, sizeof(Tag), FileAttributeTagInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwQueryInformationFile(Handle, &IoStatus, &Internal, sizeof(Internal), FileInternalInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ZwQueryVolumeInformationFile(Handle, &IoStatus, &Volume, sizeof(Volume), FileFsVolumeInformation);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW)
+        return Status;
+
+    *VolumeSerialNumber = Volume.Info.VolumeSerialNumber;
+    *FileId = Internal.IndexNumber;
+    *ReparseTag = (Tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? Tag.ReparseTag : 0;
+
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+AfunixCreateSocketFile(PAFUNIX_ENDPOINT Endpoint)
+{
+    FILE_DISPOSITION_INFORMATION Disposition;
+    REPARSE_DATA_BUFFER Reparse;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Handle;
+    ULONG ReparseTag;
+    NTSTATUS Status;
+
+    ASSERT(!Endpoint->Registered);
+
+    Status = AfunixOpenSocketFile(Endpoint->Path, Endpoint->PathLength, TRUE, &Handle);
+    if (Status == STATUS_OBJECT_NAME_COLLISION)
+        return STATUS_ADDRESS_ALREADY_EXISTS;
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Reparse, REPARSE_DATA_BUFFER_HEADER_SIZE);
+    Reparse.ReparseTag = IO_REPARSE_TAG_AF_UNIX;
+
+    Status = ZwFsControlFile(Handle,
+                             NULL,
+                             NULL,
+                             NULL,
+                             &IoStatus,
+                             FSCTL_SET_REPARSE_POINT,
+                             &Reparse,
+                             REPARSE_DATA_BUFFER_HEADER_SIZE,
+                             NULL,
+                             0);
+    if (NT_SUCCESS(Status))
+    {
+        Status = AfunixQuerySocketFile(Handle,
+                                       &Endpoint->VolumeSerialNumber,
+                                       &Endpoint->FileId,
+                                       &ReparseTag);
+        ASSERT(!NT_SUCCESS(Status) || ReparseTag == IO_REPARSE_TAG_AF_UNIX);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        AFUNIX_LOG("socket file for %.*s failed %08lx\n", (int)Endpoint->PathLength, Endpoint->Path, Status);
+        Disposition.DeleteFile = TRUE;
+        ZwSetInformationFile(Handle, &IoStatus, &Disposition, sizeof(Disposition), FileDispositionInformation);
+    }
+
+    ZwClose(Handle);
+
+    return Status;
+}
+
+static NTSTATUS
+AfunixResolveSocketFile(
+    _In_ PCCH Path,
+    _In_ ULONG PathLength,
+    _Out_ PULONG VolumeSerialNumber,
+    _Out_ PLARGE_INTEGER FileId)
+{
+    HANDLE Handle;
+    ULONG ReparseTag;
+    NTSTATUS Status;
+
+    Status = AfunixOpenSocketFile(Path, PathLength, FALSE, &Handle);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        return STATUS_CONNECTION_REFUSED;
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = AfunixQuerySocketFile(Handle, VolumeSerialNumber, FileId, &ReparseTag);
+    ZwClose(Handle);
+
+    if (NT_SUCCESS(Status) && ReparseTag != IO_REPARSE_TAG_AF_UNIX)
+        Status = STATUS_CONNECTION_REFUSED;
+
+    return Status;
 }
 
 static PTA_ADDRESS
@@ -742,8 +902,12 @@ AfunixConnect(PAFUNIX_CONNECTION Connection, PIRP Irp)
     PIRP ListenIrp = NULL;
     CHAR Path[AFUNIX_PATH_LENGTH];
     ULONG PathLength = 0;
+    ULONG VolumeSerialNumber;
+    LARGE_INTEGER FileId;
     KIRQL OldIrql;
     NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
     if (Connection->Connected)
         return STATUS_CONNECTION_ACTIVE;
@@ -760,6 +924,13 @@ AfunixConnect(PAFUNIX_CONNECTION Connection, PIRP Irp)
 
     if (PathLength == 0)
         return STATUS_INVALID_ADDRESS;
+
+    Status = AfunixResolveSocketFile(Path, PathLength, &VolumeSerialNumber, &FileId);
+    if (!NT_SUCCESS(Status))
+    {
+        AFUNIX_LOG("connect to %.*s failed %08lx\n", (int)PathLength, Path, Status);
+        return Status;
+    }
 
     ToServer = AfunixCreatePipe();
     ToClient = AfunixCreatePipe();
@@ -780,7 +951,7 @@ AfunixConnect(PAFUNIX_CONNECTION Connection, PIRP Irp)
 
     KeAcquireSpinLock(&AfunixLock, &OldIrql);
 
-    Server = AfunixLookupEndpoint(Path, PathLength);
+    Server = AfunixLookupEndpoint(VolumeSerialNumber, FileId);
 
     if (!Server || !Server->HasListened)
     {
@@ -790,8 +961,8 @@ AfunixConnect(PAFUNIX_CONNECTION Connection, PIRP Irp)
         AfunixDereferencePipe(ToClient);
         AfunixDereferencePipe(ToClient);
         ExFreePoolWithTag(ConnectRequest, TAG_AFUNIX_REQ);
-        AFUNIX_LOG("connect refused: endpoint %s listening %u\n",
-                   Path, Server ? Server->HasListened : 0);
+        AFUNIX_LOG("connect refused: endpoint %.*s listening %u\n",
+                   (int)PathLength, Path, Server ? Server->HasListened : 0);
         return STATUS_CONNECTION_REFUSED;
     }
 
@@ -1012,88 +1183,6 @@ AfunixTearDownConnection(PAFUNIX_CONNECTION Connection)
 }
 
 
-static VOID
-AfunixCreateMarkerFile(PAFUNIX_ENDPOINT Endpoint)
-{
-    OBJECT_ATTRIBUTES Attributes;
-    IO_STATUS_BLOCK IoStatus;
-    ANSI_STRING AnsiPath;
-    UNICODE_STRING Relative;
-    UNICODE_STRING Full;
-    NTSTATUS Status;
-    USHORT Prefix;
-
-    if (Endpoint->PathLength == 0)
-        return;
-
-    AnsiPath.Buffer = Endpoint->Path;
-    AnsiPath.Length = (USHORT)Endpoint->PathLength;
-    AnsiPath.MaximumLength = (USHORT)Endpoint->PathLength;
-
-    Status = RtlAnsiStringToUnicodeString(&Relative, &AnsiPath, TRUE);
-    if (!NT_SUCCESS(Status))
-        return;
-
-    Prefix = (USHORT)(4 * sizeof(WCHAR));
-    Full.Length = 0;
-    Full.MaximumLength = Relative.Length + Prefix + sizeof(UNICODE_NULL);
-    Full.Buffer = ExAllocatePoolWithTag(PagedPool, Full.MaximumLength, TAG_AFUNIX_ENDPOINT);
-
-    if (!Full.Buffer)
-    {
-        RtlFreeUnicodeString(&Relative);
-        return;
-    }
-
-    RtlAppendUnicodeToString(&Full, L"\\??\\");
-    RtlAppendUnicodeStringToString(&Full, &Relative);
-    RtlFreeUnicodeString(&Relative);
-
-    InitializeObjectAttributes(&Attributes,
-                               &Full,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                               NULL,
-                               NULL);
-
-    Status = ZwCreateFile(&Endpoint->MarkerFile,
-                          GENERIC_WRITE | DELETE | SYNCHRONIZE,
-                          &Attributes,
-                          &IoStatus,
-                          NULL,
-                          FILE_ATTRIBUTE_NORMAL,
-                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                          FILE_OVERWRITE_IF,
-                          FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-                          NULL,
-                          0);
-
-    if (!NT_SUCCESS(Status))
-    {
-        AFUNIX_LOG("marker create failed %wZ status %08lx\n", &Full, Status);
-        Endpoint->MarkerFile = NULL;
-        ExFreePoolWithTag(Full.Buffer, TAG_AFUNIX_ENDPOINT);
-        return;
-    }
-
-    Endpoint->MarkerPath = Full;
-}
-
-static VOID
-AfunixDeleteMarkerFile(PAFUNIX_ENDPOINT Endpoint)
-{
-    if (Endpoint->MarkerFile)
-    {
-        ZwClose(Endpoint->MarkerFile);
-        Endpoint->MarkerFile = NULL;
-    }
-
-    if (Endpoint->MarkerPath.Buffer)
-    {
-        ExFreePoolWithTag(Endpoint->MarkerPath.Buffer, TAG_AFUNIX_ENDPOINT);
-        Endpoint->MarkerPath.Buffer = NULL;
-    }
-}
-
 static NTSTATUS
 AfunixCreateAddress(PAFUNIX_FCB Fcb, PFILE_FULL_EA_INFORMATION EaInfo)
 {
@@ -1125,21 +1214,18 @@ AfunixCreateAddress(PAFUNIX_FCB Fcb, PFILE_FULL_EA_INFORMATION EaInfo)
 
     if (PathLength != 0)
     {
-        KeAcquireSpinLock(&AfunixLock, &OldIrql);
-
-        if (AfunixLookupEndpoint(Path, PathLength))
+        Status = AfunixCreateSocketFile(Endpoint);
+        if (!NT_SUCCESS(Status))
         {
-            KeReleaseSpinLock(&AfunixLock, OldIrql);
             ExFreePoolWithTag(Endpoint, TAG_AFUNIX_ENDPOINT);
-            return STATUS_ADDRESS_ALREADY_EXISTS;
+            return Status;
         }
 
+        KeAcquireSpinLock(&AfunixLock, &OldIrql);
+        ASSERT(!AfunixLookupEndpoint(Endpoint->VolumeSerialNumber, Endpoint->FileId));
         Endpoint->Registered = TRUE;
         InsertTailList(&AfunixEndpointList, &Endpoint->ListEntry);
-
         KeReleaseSpinLock(&AfunixLock, OldIrql);
-
-        AfunixCreateMarkerFile(Endpoint);
     }
 
     Fcb->Type = AfunixFileAddress;
@@ -1252,8 +1338,6 @@ AfunixUnregisterEndpoint(PAFUNIX_ENDPOINT Endpoint)
     }
 
     KeReleaseSpinLock(&AfunixLock, OldIrql);
-
-    AfunixDeleteMarkerFile(Endpoint);
 
     while (!IsListEmpty(&Orphans))
     {
