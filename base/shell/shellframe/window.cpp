@@ -20,6 +20,7 @@ FrameWindow::FrameWindow() :
     m_TrackingLeave(FALSE),
     m_GlassWidth(-1),
     m_GlassTop(-1),
+    m_PaintRect(),
     m_GlassFonts()
 {
 }
@@ -489,6 +490,7 @@ FrameWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             RECT client;
             HDC hdc = BeginPaint(m_hwnd, &ps);
             GetClientRect(m_hwnd, &client);
+            m_PaintRect = ps.rcPaint;
             {
                 Canvas canvas(hdc, client);
                 OnPaint(canvas, client);

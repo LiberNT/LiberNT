@@ -95,12 +95,22 @@ Canvas::Canvas(HDC target, const RECT &bounds) :
 
 Canvas::~Canvas()
 {
-    RECT area = { 0, 0, m_Bounds.right - m_Bounds.left, m_Bounds.bottom - m_Bounds.top };
+    RECT area = m_Bounds, clip;
+    int complexity;
 
     delete m_Graphics;
-    SettleAlpha(m_Dc, area);
-    BitBlt(m_Target, m_Bounds.left, m_Bounds.top, m_Bounds.right - m_Bounds.left, m_Bounds.bottom - m_Bounds.top,
-           m_Dc, 0, 0, SRCCOPY);
+    complexity = GetClipBox(m_Target, &clip);
+    if (complexity == NULLREGION || (complexity > NULLREGION && !IntersectRect(&area, &area, &clip)))
+        SetRectEmpty(&area);
+    if (!IsRectEmpty(&area))
+    {
+        RECT local = area;
+
+        OffsetRect(&local, -m_Bounds.left, -m_Bounds.top);
+        SettleAlpha(m_Dc, local);
+        BitBlt(m_Target, area.left, area.top, area.right - area.left, area.bottom - area.top, m_Dc, local.left,
+               local.top, SRCCOPY);
+    }
     SelectObject(m_Dc, m_OldBitmap);
     DeleteObject(m_Bitmap);
     DeleteDC(m_Dc);

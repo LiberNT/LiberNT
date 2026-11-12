@@ -362,28 +362,54 @@ protected:
     {
         const Palette &c = m_Theme.Colors();
         RECT glass = { 0, 0, GlassWidth(), client.bottom }, caption = { 0, 0, client.right, CaptionHeight() };
+        RECT paint, part, account = AccountRect();
 
-        canvas.Fill(client, c.Window);
-        canvas.Fill(glass, Glass(GlassTone::Clear));
-        canvas.Fill(caption, Glass(GlassTone::Clear));
-        {
-            Gdiplus::GraphicsPath panel(Gdiplus::FillModeAlternate);
-            Gdiplus::SolidBrush fill(Gdiplus::Color(255, GetRValue(c.Window), GetGValue(c.Window), GetBValue(c.Window)));
-            float left = (float)PanelLeft(), top = (float)CaptionHeight(), diameter = (float)(PanelRadius() * 2);
-
-            panel.AddLine(left, (float)client.bottom, left, top + diameter / 2.0f);
-            panel.AddArc(left, top, diameter, diameter, 180.0f, 90.0f);
-            panel.AddLine(left + diameter / 2.0f, top, (float)client.right, top);
-            panel.AddLine((float)client.right, top, (float)client.right, (float)client.bottom);
-            panel.CloseFigure();
-            canvas.Graphics().FillPath(&fill, &panel);
-        }
-        PaintCaption(canvas);
-        PaintAccount(canvas);
-        PaintContent(canvas, client);
+        if (!IntersectRect(&paint, &PaintRect(), &client))
+            return;
+        canvas.Fill(paint, c.Window);
+        if (IntersectRect(&part, &glass, &paint))
+            canvas.Fill(part, Glass(GlassTone::Clear));
+        if (IntersectRect(&part, &caption, &paint))
+            canvas.Fill(part, Glass(GlassTone::Clear));
+        PaintPanel(canvas, client, paint);
+        if (IntersectRect(&part, &caption, &paint))
+            PaintCaption(canvas);
+        if (IntersectRect(&part, &account, &paint))
+            PaintAccount(canvas);
+        PaintContent(canvas, client, paint);
 #if SHELLFRAME_CUSTOM_CAPTION_BUTTONS
         PaintCaptionButtons(canvas, client, c.Window);
 #endif
+    }
+
+    void PaintPanel(Canvas &canvas, const RECT &client, const RECT &paint)
+    {
+        COLORREF color = m_Theme.Colors().Window;
+        Gdiplus::SolidBrush fill(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+        int left = PanelLeft(), top = CaptionHeight(), radius = PanelRadius();
+        RECT corner = { left, top, GlassWidth(), GlassTop() }, part;
+        RECT edges[] = { { GlassWidth(), top, client.right, GlassTop() },
+                         { left, GlassTop(), GlassWidth(), client.bottom } };
+        RECT body = { GlassWidth(), GlassTop(), client.right, client.bottom };
+
+        if (IntersectRect(&part, &body, &paint))
+            canvas.Fill(part, color);
+        for (const RECT &edge : edges)
+        {
+            if (IntersectRect(&part, &edge, &paint))
+                canvas.Graphics().FillRectangle(&fill, Gdiplus::Rect(part.left, part.top, part.right - part.left,
+                                                                     part.bottom - part.top));
+        }
+        if (IntersectRect(&part, &corner, &paint))
+        {
+            Gdiplus::GraphicsPath path(Gdiplus::FillModeAlternate);
+            float x = (float)left, y = (float)top, size = (float)radius;
+
+            path.AddArc(x, y, size * 2.0f, size * 2.0f, 180.0f, 90.0f);
+            path.AddLine(x + size, y, x + size, y + size);
+            path.CloseFigure();
+            canvas.Graphics().FillPath(&fill, &path);
+        }
     }
 
     LRESULT HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam) override
@@ -1018,6 +1044,22 @@ private:
         }
     }
 
+    RECT ViewRect() const
+    {
+        RECT client, view;
+
+        GetClientRect(m_hwnd, &client);
+        SetRect(&view, ContentLeft() - m_Theme.Scale(8), HeaderBottom() - m_Theme.Scale(8), client.right, client.bottom);
+        return view;
+    }
+
+    void InvalidateView()
+    {
+        RECT view = ViewRect();
+
+        Invalidate(&view);
+    }
+
     int MaxScroll()
     {
         RECT client;
@@ -1057,7 +1099,7 @@ private:
             m_Scroll += distance / 3 ? distance / 3 : (distance > 0 ? 1 : -1);
         ClampScroll();
         m_ScrollShown = m_Scroll;
-        Invalidate(NULL);
+        InvalidateView();
         UpdateWindow(m_hwnd);
         if (m_Scroll == m_ScrollTarget)
         {
@@ -1158,20 +1200,26 @@ private:
         return rc;
     }
 
-    void PaintContent(Canvas &canvas, const RECT &client)
+    void PaintContent(Canvas &canvas, const RECT &client, const RECT &paint)
     {
         const Palette &c = m_Theme.Colors();
-        int top = HeaderBottom() - m_Theme.Scale(8);
-        HRGN clip = CreateRectRgn(ContentLeft() - m_Theme.Scale(8), top, client.right, client.bottom);
+        RECT header = HeaderRect(), view = ViewRect(), part;
+        HRGN clip;
 
-        PaintHeader(canvas);
+        if (IntersectRect(&part, &header, &paint))
+            PaintHeader(canvas);
+        if (!IntersectRect(&view, &view, &paint))
+            return;
+        clip = CreateRectRgnIndirect(&view);
         SelectClipRgn(canvas.Dc(), clip);
-        canvas.Graphics().SetClip(Gdiplus::Rect(ContentLeft() - m_Theme.Scale(8), top,
-                                                client.right - ContentLeft() + m_Theme.Scale(8), client.bottom - top));
+        canvas.Graphics().SetClip(Gdiplus::Rect(view.left, view.top, view.right - view.left, view.bottom - view.top));
         for (size_t g = 0; g < m_Groups.size(); g++)
         {
-            RECT title = ScreenBox(m_GroupTitles[g]), box = ScreenBox(m_GroupBoxes[g]);
-            if (box.bottom < top || title.top > client.bottom)
+            RECT title = ScreenBox(m_GroupTitles[g]), box = ScreenBox(m_GroupBoxes[g]), extent;
+
+            UnionRect(&extent, &title, &box);
+            extent.bottom += m_Theme.Scale(28);
+            if (!IntersectRect(&part, &extent, &view))
                 continue;
             if (!m_Groups[g].Title.empty())
                 canvas.Text(m_Groups[g].Title.c_str(), title, m_Theme.Font(TextStyle::BodyStrong), c.Text,
@@ -1190,7 +1238,7 @@ private:
         for (size_t i = 0; i < m_Places.size(); i++)
         {
             RECT box = ScreenBox(m_Places[i].Box);
-            if (box.bottom < top || box.top > client.bottom)
+            if (!IntersectRect(&part, &box, &view))
                 continue;
             PaintRow(canvas, (int)i);
         }
@@ -1320,7 +1368,8 @@ private:
         if (account == m_HotAccount)
             return;
         m_HotAccount = account;
-        Invalidate(NULL);
+        RECT tile = AccountRect();
+        Invalidate(&tile);
     }
 
     void OnMouseMove(int x, int y)
@@ -1784,13 +1833,11 @@ private:
 
     void PositionControls()
     {
-        RECT client, view;
+        RECT view = ViewRect();
         HDWP defer;
 
         if (m_Controls.empty())
             return;
-        GetClientRect(m_hwnd, &client);
-        SetRect(&view, ContentLeft() - m_Theme.Scale(8), HeaderBottom() - m_Theme.Scale(8), client.right, client.bottom);
         defer = BeginDeferWindowPos((int)m_Controls.size());
         for (const RowControl &control : m_Controls)
         {
@@ -1853,7 +1900,7 @@ private:
                 return;
         }
         ClampScroll();
-        Invalidate(NULL);
+        InvalidateView();
         UpdateWindow(m_hwnd);
     }
 
@@ -1874,7 +1921,7 @@ private:
         row.Position = value;
         if (row.Live && row.Change)
             row.Change(value);
-        Invalidate(NULL);
+        InvalidateView();
     }
 
     void ActivateControl(int index, int value)
@@ -1996,7 +2043,7 @@ private:
                 return FALSE;
         }
         ClampScroll();
-        Invalidate(NULL);
+        InvalidateView();
         UpdateWindow(m_hwnd);
         return TRUE;
     }
