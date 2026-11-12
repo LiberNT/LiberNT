@@ -292,11 +292,12 @@ NTSTATUS
 PcieBringUpLink(
     _In_ PFDT_DRIVER_TREE Tree,
     _Inout_ PAPPLE_PCIE Pcie,
-    _Inout_ PAPPLE_PCIE_PORT Port)
+    _Inout_ PAPPLE_PCIE_PORT Port,
+    _In_ BOOLEAN PowerCycle)
 {
     ULONG ResetController, ResetPin, PwrenController = FDT_NO_NODE, PwrenPin = 0, Length;
-    ULONG64 Start;
     BOOLEAN ResetActiveLow, PwrenActiveLow = FALSE, Pwren;
+    ULONG64 ReadyStart;
     const VOID *Compatible;
     NTSTATUS Status;
 
@@ -315,6 +316,15 @@ PcieBringUpLink(
             (!FdtStringListContains(Compatible, Length, "apple,smc-gpio") &&
              !FdtStringListContains(Compatible, Length, "apple,smc-low-gpio")))
             return STATUS_DEVICE_CONFIGURATION_ERROR;
+        if (PowerCycle)
+        {
+            Status = Pcie->SetSmcGpio(Pcie->SmcGpioContext,
+                                      FdtStringListContains(Compatible, Length, "apple,smc-low-gpio"),
+                                      (UCHAR)PwrenPin, PwrenActiveLow);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            PcieSleepMs(PCIE_TPVPERL_MS);
+        }
         Status = Pcie->SetSmcGpio(Pcie->SmcGpioContext,
                                   FdtStringListContains(Compatible, Length, "apple,smc-low-gpio"),
                                   (UCHAR)PwrenPin, !PwrenActiveLow);
@@ -334,14 +344,14 @@ PcieBringUpLink(
     PcieMask(&Port->Registers, PORT_PERST, 0, PORT_PERST_OFF);
     PcieSetResetPin(Pcie, ResetPin, ResetActiveLow, FALSE);
     PcieSleepMs(PCIE_PERST_SETTLE_MS);
-    Start = KeQueryInterruptTime();
+    ReadyStart = KeQueryInterruptTime();
     while (!(PcieRead(&Port->Registers, PORT_STATUS) & PORT_STATUS_READY))
     {
-        if (PcieElapsedMs(Start) >= PCIE_READY_TIMEOUT_MS)
-            return STATUS_IO_TIMEOUT;
+        if (PcieElapsedMs(ReadyStart) >= PCIE_READY_TIMEOUT_MS)
+            break;
         PcieSleepMs(1);
     }
-    return STATUS_SUCCESS;
+    return (PcieRead(&Port->Registers, PORT_STATUS) & PORT_STATUS_READY) ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
 }
 
 NTSTATUS
@@ -465,7 +475,7 @@ ApplePcieStartPort(
     Port->WasUp = (PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP) != 0;
     if (!Port->WasUp)
     {
-        Status = PcieBringUpLink(Tree, Pcie, Port);
+        Status = PcieBringUpLink(Tree, Pcie, Port, FALSE);
         if (!NT_SUCCESS(Status))
             return Status;
     }
@@ -479,7 +489,7 @@ ApplePcieStartPort(
     PcieWrite(&Port->Registers, PORT_MSIADDR_HI, 0);
     for (Index = 0; Index < Pcie->MsiVectors; ++Index)
         PcieWrite(&Port->Registers, PORT_MSIMAP + 4 * Index, Index | PORT_MSIMAP_ENABLE);
-    PcieMask(&Port->Registers, PORT_MSICFG, 0, PORT_MSICFG_EN);
+    PcieWrite(&Port->Registers, PORT_MSICFG, PORT_MSICFG_EN);
 
     for (Index = 0; Index < PORT_RID2SID_MAX && PORT_RID2SID + 4 * (Index + 1) <= Port->Registers.Size; ++Index)
     {
@@ -502,6 +512,24 @@ ApplePcieStartPort(
             PcieSleepMs(1);
         }
         Port->LinkWaitMs = PcieElapsedMs(Start);
+        if (!(PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP))
+        {
+            PcieWrite(&Port->Registers, PORT_LTSSMCTL, 0);
+            PcieMask(&Port->Registers, PORT_PERST, PORT_PERST_OFF, 0);
+            Status = PcieBringUpLink(Tree, Pcie, Port, TRUE);
+            if (NT_SUCCESS(Status))
+            {
+                Start = KeQueryInterruptTime();
+                PcieWrite(&Port->Registers, PORT_LTSSMCTL, PORT_LTSSMCTL_START);
+                while (!(PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP))
+                {
+                    if (PcieElapsedMs(Start) >= PCIE_LINK_TIMEOUT_MS)
+                        break;
+                    PcieSleepMs(1);
+                }
+                Port->LinkWaitMs = PcieElapsedMs(Start);
+            }
+        }
     }
     Port->LinkUp = (PcieRead(&Port->Registers, PORT_LINKSTS) & PORT_LINKSTS_UP) != 0;
     return Port->LinkUp ? STATUS_SUCCESS : STATUS_DEVICE_NOT_CONNECTED;
