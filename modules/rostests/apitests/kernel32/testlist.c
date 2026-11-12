@@ -154,6 +154,7 @@ extern void func_WaitableTimerHighResolution(void);
 extern void func_WaitableTimerApcReset(void);
 extern void func_WaitableTimerCancelAtApc(void);
 extern void func_WaitableTimerCloseAtExpiry(void);
+extern void func_WaitableTimerSignalTime(void);
 extern void func_WaitableTimerThreadExit(void);
 extern void func_SwitchToThreadCost(void);
 extern void func_SuspendThread(void);
@@ -357,6 +358,7 @@ const struct test winetest_testlist[] =
     { "WaitableTimerApcReset",       func_WaitableTimerApcReset },
     { "WaitableTimerCancelAtApc",    func_WaitableTimerCancelAtApc },
     { "WaitableTimerCloseAtExpiry",  func_WaitableTimerCloseAtExpiry },
+    { "WaitableTimerSignalTime",     func_WaitableTimerSignalTime },
     { "WaitableTimerThreadExit",     func_WaitableTimerThreadExit },
     { "SwitchToThreadCost", func_SwitchToThreadCost },
     { "SuspendThread",               func_SuspendThread },

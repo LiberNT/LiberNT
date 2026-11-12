@@ -161,6 +161,7 @@ list(APPEND SOURCE
     WaitableTimerApcReset.c
     WaitableTimerCancelAtApc.c
     WaitableTimerCloseAtExpiry.c
+    WaitableTimerSignalTime.c
     WaitableTimerThreadExit.c
     SwitchToThreadCost.c
     SuspendThread.c

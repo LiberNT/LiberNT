@@ -96,15 +96,17 @@ ExpUnlinkThreadTimer(
 static
 VOID
 ExpQueueTimerApc(
-    _Inout_ PETIMER Timer)
+    _Inout_ PETIMER Timer,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
 {
     ASSERT(Timer->ApcAssociated);
 
     ObReferenceObject(Timer);
 
     if (KeInsertQueueApc(&Timer->TimerApc,
-                         Timer->TimerApc.SystemArgument1,
-                         Timer->TimerApc.SystemArgument2,
+                         SystemArgument1,
+                         SystemArgument2,
                          IO_NO_INCREMENT))
     {
         Timer->ApcQueuedSequence = Timer->SetSequence;
@@ -140,8 +142,6 @@ ExpTimerDpcRoutine(
     ULONG Arming = (ULONG)((ULONG_PTR)DeferredContext & EXP_TIMER_ARMING_MASK);
 
     UNREFERENCED_PARAMETER(Dpc);
-    UNREFERENCED_PARAMETER(SystemArgument1);
-    UNREFERENCED_PARAMETER(SystemArgument2);
 
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
 
@@ -166,7 +166,7 @@ ExpTimerDpcRoutine(
      * The routine runs as an APC in the thread that asked for it. A one-shot
      * timer is done with once the APC has been queued.
      */
-    ExpQueueTimerApc(Timer);
+    ExpQueueTimerApc(Timer, SystemArgument1, SystemArgument2);
 
     KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
 }
@@ -226,23 +226,6 @@ ExpTimerApcRundown(
     _In_ PKAPC Apc)
 {
     ObDereferenceObject(CONTAINING_RECORD(Apc, ETIMER, TimerApc));
-}
-
-VOID
-NTAPI
-ExpQueueTimerApcAfterWait(
-    _Inout_ PETIMER Timer)
-{
-    KIRQL OldIrql;
-
-    KeAcquireSpinLock(&Timer->Lock, &OldIrql);
-
-    if (Timer->ApcAssociated)
-    {
-        ExpQueueTimerApc(Timer);
-    }
-
-    KeReleaseSpinLock(&Timer->Lock, OldIrql);
 }
 
 static
