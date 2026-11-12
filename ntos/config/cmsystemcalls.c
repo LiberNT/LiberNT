@@ -277,14 +277,13 @@ CmpOpenOrCreateKey(
     _In_ ULONG TitleIndex,
     _In_opt_ PUNICODE_STRING Class,
     _In_ ULONG Options,
-    _In_opt_ HANDLE TransactionHandle,
+    _In_opt_ PKTRANSACTION Transaction,
     _Out_opt_ PULONG Disposition,
     _In_ BOOLEAN Create)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     CM_CAPTURED_NAME CapturedClass;
     CM_PARSE_CONTEXT ParseContext;
-    PKTRANSACTION Transaction = NULL;
     HANDLE Local = NULL;
     NTSTATUS Status;
 
@@ -340,24 +339,11 @@ CmpOpenOrCreateKey(
 
     if (!NT_SUCCESS(Status)) return Status;
 
-    if (TransactionHandle != NULL)
+    if (Transaction != NULL)
     {
-        Status = ObReferenceObjectByHandle(TransactionHandle,
-                                           0,
-                                           TmTransactionObjectType,
-                                           PreviousMode,
-                                           (PVOID*)&Transaction,
-                                           NULL);
-        if (!NT_SUCCESS(Status))
-        {
-            CmpReleaseName(&CapturedClass);
-            return Status;
-        }
-
         Status = CmpTransEnlist(Transaction);
         if (!NT_SUCCESS(Status))
         {
-            ObDereferenceObject(Transaction);
             CmpReleaseName(&CapturedClass);
             return Status;
         }
@@ -404,7 +390,6 @@ CmpOpenOrCreateKey(
                                 &ParseContext,
                                 &Local);
 
-    if (Transaction != NULL) ObDereferenceObject(Transaction);
     CmpReleaseName(&CapturedClass);
 
     if (!NT_SUCCESS(Status)) return Status;
@@ -423,6 +408,23 @@ CmpOpenOrCreateKey(
     _SEH2_END;
 
     return Status;
+}
+
+/* A transacted call resolves its transaction before the caller's handle is written */
+static
+NTSTATUS
+CmpReferenceKeyTransaction(
+    _In_ HANDLE TransactionHandle,
+    _Outptr_ PKTRANSACTION *Transaction)
+{
+    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+
+    return ObReferenceObjectByHandle(TransactionHandle,
+                                     0,
+                                     TmTransactionObjectType,
+                                     ExGetPreviousMode(),
+                                     (PVOID*)Transaction,
+                                     NULL);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -461,17 +463,24 @@ NtCreateKeyTransacted(
     _In_ HANDLE TransactionHandle,
     _Out_opt_ PULONG Disposition)
 {
-    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+    PKTRANSACTION Transaction;
+    NTSTATUS Status;
 
-    return CmpOpenOrCreateKey(KeyHandle,
-                              DesiredAccess,
-                              ObjectAttributes,
-                              TitleIndex,
-                              Class,
-                              CreateOptions,
-                              TransactionHandle,
-                              Disposition,
-                              TRUE);
+    Status = CmpReferenceKeyTransaction(TransactionHandle, &Transaction);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = CmpOpenOrCreateKey(KeyHandle,
+                                DesiredAccess,
+                                ObjectAttributes,
+                                TitleIndex,
+                                Class,
+                                CreateOptions,
+                                Transaction,
+                                Disposition,
+                                TRUE);
+
+    ObDereferenceObject(Transaction);
+    return Status;
 }
 
 NTSTATUS
@@ -519,17 +528,24 @@ NtOpenKeyTransacted(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_ HANDLE TransactionHandle)
 {
-    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+    PKTRANSACTION Transaction;
+    NTSTATUS Status;
 
-    return CmpOpenOrCreateKey(KeyHandle,
-                              DesiredAccess,
-                              ObjectAttributes,
-                              0,
-                              NULL,
-                              0,
-                              TransactionHandle,
-                              NULL,
-                              FALSE);
+    Status = CmpReferenceKeyTransaction(TransactionHandle, &Transaction);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = CmpOpenOrCreateKey(KeyHandle,
+                                DesiredAccess,
+                                ObjectAttributes,
+                                0,
+                                NULL,
+                                0,
+                                Transaction,
+                                NULL,
+                                FALSE);
+
+    ObDereferenceObject(Transaction);
+    return Status;
 }
 
 NTSTATUS
@@ -541,17 +557,24 @@ NtOpenKeyTransactedEx(
     _In_ ULONG OpenOptions,
     _In_ HANDLE TransactionHandle)
 {
-    if (TransactionHandle == NULL) return STATUS_INVALID_HANDLE;
+    PKTRANSACTION Transaction;
+    NTSTATUS Status;
 
-    return CmpOpenOrCreateKey(KeyHandle,
-                              DesiredAccess,
-                              ObjectAttributes,
-                              0,
-                              NULL,
-                              OpenOptions,
-                              TransactionHandle,
-                              NULL,
-                              FALSE);
+    Status = CmpReferenceKeyTransaction(TransactionHandle, &Transaction);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = CmpOpenOrCreateKey(KeyHandle,
+                                DesiredAccess,
+                                ObjectAttributes,
+                                0,
+                                NULL,
+                                OpenOptions,
+                                Transaction,
+                                NULL,
+                                FALSE);
+
+    ObDereferenceObject(Transaction);
+    return Status;
 }
 
 NTSTATUS
