@@ -596,7 +596,7 @@ INTSAFE_NAME(LongLongAdd)(
     _In_ LONGLONG Addend,
     _Out_ _Deref_out_range_(==, Augend + Addend) LONGLONG* pResult)
 {
-    LONGLONG Result = Augend + Addend;
+    LONGLONG Result = (LONGLONG)((ULONGLONG)Augend + (ULONGLONG)Addend);
 
     /* The only way the result can overflow, is when the sign of the augend
        and the addend are the same. In that case the result is expected to
@@ -645,7 +645,7 @@ INTSAFE_NAME(LongLongSub)(
     _In_ LONGLONG Subtrahend,
     _Out_ _Deref_out_range_(==, Minuend - Subtrahend) LONGLONG* pResult)
 {
-    LONGLONG Result = Minuend - Subtrahend;
+    LONGLONG Result = (LONGLONG)((ULONGLONG)Minuend - (ULONGLONG)Subtrahend);
 
     /* The only way the result can overflow, is when the sign of the minuend
        and the subtrahend differ. In that case the result is expected to

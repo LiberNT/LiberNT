@@ -144,4 +144,19 @@ START_TEST(RtlIntSafe)
     TEST_ADD(LongLong,  LONGLONG,   longlong,   LONGLONG_MIN,       LONGLONG_MIN,   (LONGLONG)-1,   STATUS_INTEGER_OVERFLOW);
     TEST_ADD(LongLong,  LONGLONG,   longlong,   ULONG_MAX,          1,              0x100000000LL,  STATUS_SUCCESS);
     TEST_ADD(LongLong,  LONGLONG,   longlong,   ULONG_MAX,          ULONG_MAX,      0x1fffffffeLL,  STATUS_SUCCESS);
+
+#define TEST_SUB(_Name, _Type, _Print, _Value1, _Value2, _Expected, _Status)  do \
+    {                                                                       \
+        _Name ## Result = (_Type)0xfedcba9876543210;                        \
+        Status = Rtl ## _Name ## Sub(_Value1, _Value2, & _Name ## Result);  \
+        ok_eq_hex(Status, _Status);                                         \
+        ok_eq_ ## _Print(_Name ## Result, _Expected);                       \
+    } while (0)
+
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   10,                 5,              (LONGLONG)5,        STATUS_SUCCESS);
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   LONGLONG_MIN,       -1,             LONGLONG_MIN + 1,   STATUS_SUCCESS);
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   -1,                 LONGLONG_MAX,   LONGLONG_MIN,       STATUS_SUCCESS);
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   LONGLONG_MIN,       1,              (LONGLONG)-1,       STATUS_INTEGER_OVERFLOW);
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   LONGLONG_MAX,       -1,             (LONGLONG)-1,       STATUS_INTEGER_OVERFLOW);
+    TEST_SUB(LongLong,  LONGLONG,   longlong,   0,                  LONGLONG_MIN,   (LONGLONG)-1,       STATUS_INTEGER_OVERFLOW);
 }
