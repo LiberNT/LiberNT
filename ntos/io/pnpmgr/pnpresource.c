@@ -556,15 +556,11 @@ IopPickOneDescriptor(
         Attempts++;
     }
 
-    /* The resource database records overlaps without refusing them, so the
-     * preferred setting is kept when nothing in the range is free */
-    DPRINT1("PnP: no free setting for a type %u requirement of %wZ, the preferred one is shared\n",
+    DPRINT1("PnP: no free setting for a type %u requirement of %wZ\n",
             Requirement->Type,
             DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
 
-    Status = IopDescribeFromRequirement(Requirement, Descriptor);
-    if (Requirement->Type == CmResourceTypeInterrupt) Descriptor->u.Interrupt.Affinity = LineAffinity;
-    return Status;
+    return STATUS_CONFLICTING_ADDRESSES;
 }
 
 static

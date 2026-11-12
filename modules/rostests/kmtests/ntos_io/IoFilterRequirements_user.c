@@ -836,6 +836,31 @@ static VOID CheckLargeMemory(DEVINST Bus)
     RestartChild(Bus);
 }
 
+/* A setting held by another driver is not given to the child, which is left with a resource conflict */
+static VOID CheckOccupiedMemory(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+    DWORD Value = 0;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child\n");
+        return;
+    }
+    SetRequest(L"OccupiedMemory", 1);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ReadValue(L"OccupiedClaim", &Value) && Value == STATUS_SUCCESS, "The page was not claimed (0x%lx)\n", Value);
+    ok(WaitChildProblem(Bus, CM_PROB_NORMAL_CONFLICT), "The child started on a page another driver holds\n");
+
+    SetRequest(L"OccupiedMemory", 0);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -1095,6 +1120,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckTargetRemoval(Device->DevInst);
         CheckApplicationRemoval(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
+        CheckOccupiedMemory(Device->DevInst);
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);

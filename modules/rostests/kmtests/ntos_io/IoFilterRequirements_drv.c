@@ -16,6 +16,7 @@
 #define TEST_DMA_REQUEST_LINE 21
 #define TEST_LARGE_LENGTH 0x200000000ULL
 #define TEST_LARGE_MINIMUM 0x1000000000ULL
+#define TEST_OCCUPIED_BASE 0x6F0000000ULL
 #define TEST_CONNECTION_ID_LOW 0x5A7E
 #define TEST_CONNECTION_ID_HIGH 0x2
 
@@ -102,14 +103,17 @@ static PWSTR CopyString(const WCHAR *Source, SIZE_T Size)
     return Buffer;
 }
 
-static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma, BOOLEAN WithLargeMemory)
+static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma, BOOLEAN WithLargeMemory,
+                                                       BOOLEAN WithOccupied)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Dma;
     PIO_RESOURCE_DESCRIPTOR Connection;
     PIO_RESOURCE_DESCRIPTOR Large;
+    PIO_RESOURCE_DESCRIPTOR Occupied;
     ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) +
-                 (Count + (WithDma ? 2 : 0) + (WithLargeMemory ? 1 : 0) - 1) * sizeof(IO_RESOURCE_DESCRIPTOR);
+                 (Count + (WithDma ? 2 : 0) + (WithLargeMemory ? 1 : 0) + (WithOccupied ? 1 : 0) - 1) *
+                     sizeof(IO_RESOURCE_DESCRIPTOR);
     ULONG Index;
 
     List = ExAllocatePoolZero(PagedPool, Size, TEST_TAG);
@@ -159,7 +163,40 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN Wit
         Large->u.Memory40.MaximumAddress.QuadPart = TEST_LARGE_MINIMUM * 4 - 1;
         List->List[0].Count++;
     }
+    if (WithOccupied)
+    {
+        Occupied = &List->List[0].Descriptors[List->List[0].Count];
+        Occupied->Type = CmResourceTypeMemory;
+        Occupied->ShareDisposition = CmResourceShareDeviceExclusive;
+        Occupied->Flags = CM_RESOURCE_MEMORY_READ_WRITE;
+        Occupied->u.Memory.Length = PAGE_SIZE;
+        Occupied->u.Memory.Alignment = PAGE_SIZE;
+        Occupied->u.Memory.MinimumAddress.QuadPart = TEST_OCCUPIED_BASE;
+        Occupied->u.Memory.MaximumAddress.QuadPart = TEST_OCCUPIED_BASE + PAGE_SIZE - 1;
+        List->List[0].Count++;
+    }
     return List;
+}
+
+/* The page the child is made to ask for is held by this driver as a legacy claim */
+static VOID ClaimOccupiedPage(PDRIVER_OBJECT DriverObject)
+{
+    CM_RESOURCE_LIST Claim;
+    BOOLEAN Conflict = FALSE;
+
+    RtlZeroMemory(&Claim, sizeof(Claim));
+    Claim.Count = 1;
+    Claim.List[0].InterfaceType = Internal;
+    Claim.List[0].PartialResourceList.Version = 1;
+    Claim.List[0].PartialResourceList.Revision = 1;
+    Claim.List[0].PartialResourceList.Count = 1;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].Type = CmResourceTypeMemory;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].ShareDisposition = CmResourceShareDeviceExclusive;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].Flags = CM_RESOURCE_MEMORY_READ_WRITE;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)TEST_OCCUPIED_BASE;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Length = PAGE_SIZE;
+    Record(L"OccupiedClaim", (ULONG)IoReportResourceUsage(NULL, DriverObject, &Claim, sizeof(Claim), NULL, NULL, 0,
+                                                          FALSE, &Conflict));
 }
 
 /* The large window the child was started with: its length and start in GB */
@@ -253,7 +290,9 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
     if (Current == NULL || Current != Supplied)
         return Complete(Irp, Status);
 
-    Filtered = BuildRequirements(2, TRUE, Requested(L"LargeMemory"));
+    if (Requested(L"OccupiedMemory"))
+        ClaimOccupiedPage(IoGetCurrentIrpStackLocation(Irp)->DeviceObject->DriverObject);
+    Filtered = BuildRequirements(2, TRUE, Requested(L"LargeMemory"), Requested(L"OccupiedMemory"));
     if (Filtered == NULL)
         return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
     ExFreePool(Current);
@@ -574,7 +613,7 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             break;
 
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
-            Requirements = BuildRequirements(1, FALSE, FALSE);
+            Requirements = BuildRequirements(1, FALSE, FALSE, FALSE);
             Status = Requirements ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
             if (Requirements != NULL)
                 Irp->IoStatus.Information = (ULONG_PTR)Requirements;
