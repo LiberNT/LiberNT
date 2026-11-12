@@ -105,8 +105,39 @@ static const GUID InputMouseInterface =
     { 0x378de44c, 0x56ef, 0x11d1, { 0xbc, 0x8c, 0x00, 0xa0, 0xc9, 0x14, 0x05, 0xdd } };
 static const GUID InputInterfaceArrival =
     { 0xCB3A4004, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
+static const GUID InputTargetQueryRemove =
+    { 0xCB3A4006, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
+static const GUID InputTargetRemoveCancelled =
+    { 0xCB3A4007, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
+static const GUID InputTargetRemoveComplete =
+    { 0xCB3A4008, 0x46F0, 0x11D0, { 0xB0, 0x8F, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3F } };
 
 #define INPUT_MAX_DEVICES 16
+
+/* A registration for target device change on an open input device; the raw input thread owns and frees it */
+typedef struct _INPUT_TARGET
+{
+    struct _INPUT_DEVICE_STATE *State;
+    PVOID Notification;
+    KEVENT Closed;
+    volatile LONG Finished;
+    BOOLEAN Keyboard;
+    UNICODE_STRING Path;
+} INPUT_TARGET, *PINPUT_TARGET;
+
+typedef enum _INPUT_REQUEST_KIND
+{
+    InputRequestClose,
+    InputRequestReopen,
+    InputRequestForget
+} INPUT_REQUEST_KIND;
+
+typedef struct _INPUT_REQUEST
+{
+    LIST_ENTRY ListEntry;
+    INPUT_REQUEST_KIND Kind;
+    PINPUT_TARGET Target;
+} INPUT_REQUEST, *PINPUT_REQUEST;
 
 typedef struct _INPUT_DEVICE
 {
@@ -116,6 +147,7 @@ typedef struct _INPUT_DEVICE
     BOOLEAN Keyboard;
     BOOLEAN ReadPending;
     BOOLEAN ReadDone;
+    PINPUT_TARGET Target;
     UNICODE_STRING Path;
     union
     {
@@ -136,6 +168,7 @@ typedef struct _INPUT_DEVICE_STATE
     KEVENT ArrivalEvent;
     FAST_MUTEX ArrivalLock;
     LIST_ENTRY Arrivals;
+    LIST_ENTRY Requests;
     PVOID KeyboardNotification;
     PVOID MouseNotification;
     PINPUT_DEVICE Devices[INPUT_MAX_DEVICES];
@@ -205,6 +238,7 @@ InputDevicesStart(VOID)
     KeInitializeEvent(&State->ArrivalEvent, SynchronizationEvent, FALSE);
     ExInitializeFastMutex(&State->ArrivalLock);
     InitializeListHead(&State->Arrivals);
+    InitializeListHead(&State->Requests);
     gInputDevices = State;
 
     Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange,
@@ -261,6 +295,168 @@ InputDeviceClose(
 
 static
 VOID
+InputQueueRequest(
+    _In_ PINPUT_DEVICE_STATE State,
+    _In_ INPUT_REQUEST_KIND Kind,
+    _In_ PINPUT_TARGET Target)
+{
+    PINPUT_REQUEST Request;
+
+    Request = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Request), USERTAG_DEVICEINFO);
+    if (!Request)
+        return;
+
+    Request->Kind = Kind;
+    Request->Target = Target;
+
+    ExAcquireFastMutex(&State->ArrivalLock);
+    InsertTailList(&State->Requests, &Request->ListEntry);
+    ExReleaseFastMutex(&State->ArrivalLock);
+    KeSetEvent(&State->ArrivalEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* The device is closed before its removal goes on, reopened if the removal is cancelled and forgotten once it is
+ * gone (handling-a-guid-target-device-*-event); the raw input thread, which owns the devices, does the work */
+static
+NTSTATUS
+NTAPI
+InputTargetNotification(
+    _In_ PVOID NotificationStructure,
+    _Inout_opt_ PVOID Context)
+{
+    PTARGET_DEVICE_REMOVAL_NOTIFICATION Notification = NotificationStructure;
+    PINPUT_TARGET Target = Context;
+    LARGE_INTEGER Timeout;
+
+    if (!Target)
+        return STATUS_SUCCESS;
+
+    if (IsEqualGUID(&Notification->Event, &InputTargetQueryRemove))
+    {
+        KeClearEvent(&Target->Closed);
+        InputQueueRequest(Target->State, InputRequestClose, Target);
+        Timeout.QuadPart = -2000LL * 10000;
+        if (KeWaitForSingleObject(&Target->Closed, Executive, KernelMode, FALSE, &Timeout) != STATUS_SUCCESS)
+        {
+            ERR("Input device %wZ was not closed for its removal\n", &Target->Path);
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+    else if (IsEqualGUID(&Notification->Event, &InputTargetRemoveCancelled))
+    {
+        InputQueueRequest(Target->State, InputRequestReopen, Target);
+        InterlockedExchange(&Target->Finished, TRUE);
+    }
+    else if (IsEqualGUID(&Notification->Event, &InputTargetRemoveComplete))
+    {
+        InputQueueRequest(Target->State, InputRequestForget, Target);
+        InterlockedExchange(&Target->Finished, TRUE);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+InputTargetRegister(
+    _In_ PINPUT_DEVICE_STATE State,
+    _In_ PINPUT_DEVICE Device)
+{
+    PINPUT_TARGET Target;
+    NTSTATUS Status;
+
+    Target = ExAllocatePoolZero(NonPagedPool, sizeof(*Target) + Device->Path.Length, USERTAG_DEVICEINFO);
+    if (!Target)
+        return;
+
+    Target->State = State;
+    Target->Keyboard = Device->Keyboard;
+    KeInitializeEvent(&Target->Closed, NotificationEvent, FALSE);
+    Target->Path.Buffer = (PWCH)(Target + 1);
+    Target->Path.Length = Device->Path.Length;
+    Target->Path.MaximumLength = Device->Path.Length;
+    RtlCopyMemory(Target->Path.Buffer, Device->Path.Buffer, Device->Path.Length);
+
+    Status = IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange,
+                                            0,
+                                            Device->FileObject,
+                                            gInputDriverObject,
+                                            InputTargetNotification,
+                                            Target,
+                                            &Target->Notification);
+    if (!NT_SUCCESS(Status))
+    {
+        WARN("Input device %wZ cannot follow its removal: 0x%08lx\n", &Device->Path, Status);
+        ExFreePoolWithTag(Target, USERTAG_DEVICEINFO);
+        return;
+    }
+
+    Device->Target = Target;
+}
+
+/* A registration goes once its last notification has returned */
+static
+VOID
+InputTargetRelease(
+    _In_ PINPUT_TARGET Target,
+    _In_ BOOLEAN Notified)
+{
+    LARGE_INTEGER Delay;
+
+    IoUnregisterPlugPlayNotification(Target->Notification);
+
+    Delay.QuadPart = -10000;
+    while (Notified && !InterlockedCompareExchange(&Target->Finished, TRUE, TRUE))
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+
+    ExFreePoolWithTag(Target, USERTAG_DEVICEINFO);
+}
+
+static
+VOID
+InputDevicesProcessRequests(
+    _In_ PINPUT_DEVICE_STATE State)
+{
+    PINPUT_REQUEST Request;
+    PLIST_ENTRY Entry;
+    ULONG Index;
+
+    for (;;)
+    {
+        ExAcquireFastMutex(&State->ArrivalLock);
+        Entry = IsListEmpty(&State->Requests) ? NULL : RemoveHeadList(&State->Requests);
+        ExReleaseFastMutex(&State->ArrivalLock);
+        if (!Entry)
+            break;
+
+        Request = CONTAINING_RECORD(Entry, INPUT_REQUEST, ListEntry);
+
+        for (Index = 0; Index < INPUT_MAX_DEVICES; Index++)
+        {
+            if (State->Devices[Index] && State->Devices[Index]->Target == Request->Target)
+            {
+                InputDeviceClose(State, Index);
+                break;
+            }
+        }
+
+        if (Request->Kind == InputRequestClose)
+        {
+            KeSetEvent(&Request->Target->Closed, IO_NO_INCREMENT, FALSE);
+        }
+        else
+        {
+            if (Request->Kind == InputRequestReopen)
+                InputQueueArrival(State, &Request->Target->Path, Request->Target->Keyboard);
+            InputTargetRelease(Request->Target, TRUE);
+        }
+
+        ExFreePoolWithTag(Request, USERTAG_DEVICEINFO);
+    }
+}
+
+static
+VOID
 InputDevicesStop(VOID)
 {
     PINPUT_DEVICE_STATE State = gInputDevices;
@@ -275,10 +471,18 @@ InputDevicesStop(VOID)
     if (State->MouseNotification)
         IoUnregisterPlugPlayNotification(State->MouseNotification);
 
+    InputDevicesProcessRequests(State);
+
     for (Index = 0; Index < INPUT_MAX_DEVICES; Index++)
     {
-        if (State->Devices[Index])
-            InputDeviceClose(State, Index);
+        PINPUT_TARGET Target;
+
+        if (!State->Devices[Index])
+            continue;
+        Target = State->Devices[Index]->Target;
+        InputDeviceClose(State, Index);
+        if (Target)
+            InputTargetRelease(Target, FALSE);
     }
 
     while (!IsListEmpty(&State->Arrivals))
@@ -433,6 +637,8 @@ InputDeviceAttach(
         return;
     }
 
+    InputTargetRegister(State, Device);
+
     UserEnterExclusive();
     State->Devices[Free] = Device;
     UserLeave();
@@ -450,6 +656,8 @@ InputDevicesAttachArrivals(
     _In_ PINPUT_DEVICE_STATE State)
 {
     PLIST_ENTRY Entry;
+
+    InputDevicesProcessRequests(State);
 
     for (;;)
     {
