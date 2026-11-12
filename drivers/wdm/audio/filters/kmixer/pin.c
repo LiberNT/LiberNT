@@ -161,113 +161,45 @@ PerformChannelConversion(
     PVOID * Result,
     PULONG ResultLength)
 {
-    ULONG Samples;
-    ULONG NewIndex, OldIndex;
+    ULONG BytesPerSample = BitsPerSample / 8;
+    ULONG Frames, Frame, Channel;
+    ULONGLONG OutLength;
+    PUCHAR BufferOut;
 
-    Samples = BufferLength / (BitsPerSample / 8) / OldChannels;
+    *Result = NULL;
+    *ResultLength = 0;
 
-    if (NewChannels > OldChannels)
+    if ((BitsPerSample != 8 && BitsPerSample != 16 && BitsPerSample != 24 && BitsPerSample != 32) ||
+        OldChannels == 0 || NewChannels == 0)
     {
-        if (BitsPerSample == 8)
-        {
-            PUCHAR BufferOut = ExAllocatePool(NonPagedPool, Samples * NewChannels);
-            if (!BufferOut)
-                return STATUS_INSUFFICIENT_RESOURCES;
-
-            for(NewIndex = 0, OldIndex = 0; OldIndex < Samples * OldChannels; NewIndex += NewChannels, OldIndex += OldChannels)
-            {
-                ULONG SubIndex = 0;
-
-                RtlMoveMemory(&BufferOut[NewIndex], &Buffer[OldIndex], OldChannels * sizeof(UCHAR));
-
-                do
-                {
-                    /* 2 channel stretched to 4 looks like LRLR */
-                     BufferOut[NewIndex+OldChannels + SubIndex] = Buffer[OldIndex + (SubIndex % OldChannels)];
-                }while(SubIndex++ < NewChannels - OldChannels);
-            }
-            *Result = BufferOut;
-            *ResultLength = Samples * NewChannels;
-        }
-        else if (BitsPerSample == 16)
-        {
-            PUSHORT BufferOut = ExAllocatePool(NonPagedPool, Samples * NewChannels);
-            if (!BufferOut)
-                return STATUS_INSUFFICIENT_RESOURCES;
-
-            for(NewIndex = 0, OldIndex = 0; OldIndex < Samples * OldChannels; NewIndex += NewChannels, OldIndex += OldChannels)
-            {
-                ULONG SubIndex = 0;
-
-                RtlMoveMemory(&BufferOut[NewIndex], &Buffer[OldIndex], OldChannels * sizeof(USHORT));
-
-                do
-                {
-                     BufferOut[NewIndex+OldChannels + SubIndex] = Buffer[OldIndex + (SubIndex % OldChannels)];
-                }while(SubIndex++ < NewChannels - OldChannels);
-            }
-            *Result = BufferOut;
-            *ResultLength = Samples * NewChannels;
-        }
-        else if (BitsPerSample == 24)
-        {
-            PUCHAR BufferOut = ExAllocatePool(NonPagedPool, Samples * NewChannels);
-            if (!BufferOut)
-                return STATUS_INSUFFICIENT_RESOURCES;
-
-            for(NewIndex = 0, OldIndex = 0; OldIndex < Samples * OldChannels; NewIndex += NewChannels, OldIndex += OldChannels)
-            {
-                ULONG SubIndex = 0;
-
-                RtlMoveMemory(&BufferOut[NewIndex], &Buffer[OldIndex], OldChannels * 3);
-
-                do
-                {
-                     RtlMoveMemory(&BufferOut[(NewIndex+OldChannels + SubIndex) * 3], &Buffer[(OldIndex + (SubIndex % OldChannels)) * 3], 3);
-                }while(SubIndex++ < NewChannels - OldChannels);
-            }
-            *Result = BufferOut;
-            *ResultLength = Samples * NewChannels;
-        }
-        else if (BitsPerSample == 32)
-        {
-            PULONG BufferOut = ExAllocatePool(NonPagedPool, Samples * NewChannels);
-            if (!BufferOut)
-                return STATUS_INSUFFICIENT_RESOURCES;
-
-            for(NewIndex = 0, OldIndex = 0; OldIndex < Samples * OldChannels; NewIndex += NewChannels, OldIndex += OldChannels)
-            {
-                ULONG SubIndex = 0;
-
-                RtlMoveMemory(&BufferOut[NewIndex], &Buffer[OldIndex], OldChannels * sizeof(ULONG));
-
-                do
-                {
-                     BufferOut[NewIndex+OldChannels + SubIndex] = Buffer[OldIndex + (SubIndex % OldChannels)];
-                }while(SubIndex++ < NewChannels - OldChannels);
-            }
-            *Result = BufferOut;
-            *ResultLength = Samples * NewChannels;
-        }
-
+        return STATUS_NOT_SUPPORTED;
     }
-    else
+
+    Frames = BufferLength / BytesPerSample / OldChannels;
+    OutLength = (ULONGLONG)Frames * NewChannels * BytesPerSample;
+    if (OutLength > MAXULONG)
+        return STATUS_INVALID_BUFFER_SIZE;
+
+    BufferOut = ExAllocatePool(NonPagedPool, (SIZE_T)OutLength);
+    if (!BufferOut)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    /* TODO: mix the dropped channels into the kept ones when reducing the channel count */
+    for (Frame = 0; Frame < Frames; Frame++)
     {
-        PUSHORT BufferOut = ExAllocatePool(NonPagedPool, Samples * NewChannels);
-        if (!BufferOut)
-            return STATUS_INSUFFICIENT_RESOURCES;
+        PUCHAR In = Buffer + (SIZE_T)Frame * OldChannels * BytesPerSample;
+        PUCHAR Out = BufferOut + (SIZE_T)Frame * NewChannels * BytesPerSample;
 
-        for(NewIndex = 0, OldIndex = 0; OldIndex < Samples * OldChannels; NewIndex += NewChannels, OldIndex += OldChannels)
+        for (Channel = 0; Channel < NewChannels; Channel++)
         {
-            /* TODO
-             * mix stream instead of just dumping part of it ;)
-             */
-            RtlMoveMemory(&BufferOut[NewIndex], &Buffer[OldIndex], NewChannels * (BitsPerSample/8));
+            RtlCopyMemory(Out + Channel * BytesPerSample,
+                          In + (Channel % OldChannels) * BytesPerSample,
+                          BytesPerSample);
         }
-
-        *Result = BufferOut;
-        *ResultLength = Samples * NewChannels;
     }
+
+    *Result = BufferOut;
+    *ResultLength = (ULONG)OutLength;
     return STATUS_SUCCESS;
 }
 
