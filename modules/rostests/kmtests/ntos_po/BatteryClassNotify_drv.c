@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     A battery status wait against a miniport whose tag and capacity change
+ * PURPOSE:     A battery status wait against a miniport whose tag and capacity change, and the system battery state
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -13,6 +13,10 @@
 #define TEST_CAPACITY       1000
 #define TEST_END_MS         5000
 #define TEST_SETTLE_MS      200
+#define TEST_FULL_CAPACITY  4000
+#define TEST_ALERT1         400
+#define TEST_ALERT2         200
+#define TEST_ESTIMATED_TIME 3600
 
 typedef struct _STATUS_WAIT
 {
@@ -29,6 +33,8 @@ static KMT_MESSAGE_HANDLER TestMessageHandler;
 static KEVENT NotifyArmed;
 static volatile ULONG CurrentTag;
 static volatile ULONG CurrentCapacity;
+static PDEVICE_OBJECT CompositeDevice;
+static PVOID CompositeClassData;
 
 static
 NTSTATUS
@@ -54,14 +60,38 @@ TestQueryInformation(
     _In_ ULONG BufferLength,
     _Out_ PULONG ReturnedLength)
 {
+    PBATTERY_INFORMATION Information = Buffer;
+
     UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(BatteryTag);
-    UNREFERENCED_PARAMETER(Level);
     UNREFERENCED_PARAMETER(AtRate);
-    UNREFERENCED_PARAMETER(Buffer);
-    UNREFERENCED_PARAMETER(BufferLength);
     *ReturnedLength = 0;
-    return STATUS_NOT_SUPPORTED;
+    if (BatteryTag != CurrentTag)
+        return STATUS_NO_SUCH_DEVICE;
+
+    switch (Level)
+    {
+        case BatteryInformation:
+            if (BufferLength < sizeof(*Information))
+                return STATUS_BUFFER_TOO_SMALL;
+            RtlZeroMemory(Information, sizeof(*Information));
+            Information->Capabilities = BATTERY_SYSTEM_BATTERY;
+            Information->DesignedCapacity = TEST_FULL_CAPACITY;
+            Information->FullChargedCapacity = TEST_FULL_CAPACITY;
+            Information->DefaultAlert1 = TEST_ALERT1;
+            Information->DefaultAlert2 = TEST_ALERT2;
+            *ReturnedLength = sizeof(*Information);
+            return STATUS_SUCCESS;
+
+        case BatteryEstimatedTime:
+            if (BufferLength < sizeof(ULONG))
+                return STATUS_BUFFER_TOO_SMALL;
+            *(PULONG)Buffer = TEST_ESTIMATED_TIME;
+            *ReturnedLength = sizeof(ULONG);
+            return STATUS_SUCCESS;
+
+        default:
+            return STATUS_NOT_SUPPORTED;
+    }
 }
 
 static
@@ -308,6 +338,83 @@ TestUnload(
 
 static
 NTSTATUS
+TestCompositeIrp(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IoStackLocation)
+{
+    ASSERT(DeviceObject == CompositeDevice);
+    if (IoStackLocation->MajorFunction == IRP_MJ_DEVICE_CONTROL)
+        return BatteryClassIoctl(CompositeClassData, Irp);
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+/* The system battery state is the composite battery's tag, information and status */
+static
+VOID
+TestSystemBatteryState(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\CompositeBattery");
+    SYSTEM_BATTERY_STATE State;
+    BATTERY_MINIPORT_INFO Info;
+    NTSTATUS Status;
+
+    Status = IoCreateDevice(TestDriverObject, 0, &Name, FILE_DEVICE_BATTERY, 0, FALSE, &CompositeDevice);
+    if (skip(Status != STATUS_OBJECT_NAME_COLLISION, "A composite battery is present\n"))
+        return;
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    CompositeDevice->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    CurrentTag = TEST_TAG;
+    CurrentCapacity = TEST_CAPACITY;
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.MajorVersion = BATTERY_CLASS_MAJOR_VERSION;
+    Info.MinorVersion = BATTERY_CLASS_MINOR_VERSION;
+    Info.QueryTag = TestQueryTag;
+    Info.QueryInformation = TestQueryInformation;
+    Info.QueryStatus = TestQueryStatus;
+    Info.SetStatusNotify = TestSetStatusNotify;
+    Info.DisableStatusNotify = TestDisableStatusNotify;
+    Status = BatteryClassInitializeDevice(&Info, &CompositeClassData);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        KmtRegisterIrpHandler(IRP_MJ_CREATE, CompositeDevice, TestCompositeIrp);
+        KmtRegisterIrpHandler(IRP_MJ_CLOSE, CompositeDevice, TestCompositeIrp);
+        KmtRegisterIrpHandler(IRP_MJ_DEVICE_CONTROL, CompositeDevice, TestCompositeIrp);
+
+        RtlZeroMemory(&State, sizeof(State));
+        Status = ZwPowerInformation(SystemBatteryState, NULL, 0, &State, sizeof(State));
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ok_eq_int(State.BatteryPresent, TRUE);
+        ok_eq_int(State.AcOnLine, FALSE);
+        ok_eq_int(State.Charging, FALSE);
+        ok_eq_int(State.Discharging, TRUE);
+        ok_eq_ulong(State.MaxCapacity, (ULONG)TEST_FULL_CAPACITY);
+        ok_eq_ulong(State.RemainingCapacity, (ULONG)TEST_CAPACITY);
+        ok_eq_long((LONG)State.Rate, -100L);
+        ok_eq_ulong(State.EstimatedTime, (ULONG)TEST_ESTIMATED_TIME);
+        ok_eq_ulong(State.DefaultAlert1, (ULONG)TEST_ALERT1);
+        ok_eq_ulong(State.DefaultAlert2, (ULONG)TEST_ALERT2);
+
+        KmtUnregisterIrpHandler(IRP_MJ_DEVICE_CONTROL, CompositeDevice, TestCompositeIrp);
+        KmtUnregisterIrpHandler(IRP_MJ_CLOSE, CompositeDevice, TestCompositeIrp);
+        KmtUnregisterIrpHandler(IRP_MJ_CREATE, CompositeDevice, TestCompositeIrp);
+        (VOID)BatteryClassUnload(CompositeClassData);
+    }
+
+    IoDeleteDevice(CompositeDevice);
+    CompositeDevice = NULL;
+}
+
+static
+NTSTATUS
 TestMessageHandler(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ ULONG ControlCode,
@@ -354,5 +461,6 @@ TestMessageHandler(
     }
 
     IoDeleteDevice(Device);
+    TestSystemBatteryState();
     return STATUS_SUCCESS;
 }

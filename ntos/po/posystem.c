@@ -6,6 +6,7 @@
  */
 
 #include <ntoskrnl.h>
+#include <batclass.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -1544,6 +1545,90 @@ PopQueryProcessorInformation(
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+PopBatteryIoControl(
+    _In_ HANDLE Battery,
+    _In_ ULONG IoControlCode,
+    _In_reads_bytes_(InputLength) PVOID Input,
+    _In_ ULONG InputLength,
+    _Out_writes_bytes_(OutputLength) PVOID Output,
+    _In_ ULONG OutputLength)
+{
+    IO_STATUS_BLOCK IoStatus;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = ZwDeviceIoControlFile(Battery, NULL, NULL, NULL, &IoStatus, IoControlCode,
+                                   Input, InputLength, Output, OutputLength);
+    ASSERT(Status != STATUS_PENDING);
+    if (NT_SUCCESS(Status) && IoStatus.Information < OutputLength)
+        Status = STATUS_INFO_LENGTH_MISMATCH;
+    return Status;
+}
+
+static
+VOID
+PopQueryBatteryState(
+    _Inout_ PSYSTEM_BATTERY_STATE State)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\CompositeBattery");
+    OBJECT_ATTRIBUTES Attributes;
+    BATTERY_QUERY_INFORMATION Query;
+    BATTERY_INFORMATION Information;
+    BATTERY_WAIT_STATUS Wait;
+    BATTERY_STATUS BatteryStatus;
+    IO_STATUS_BLOCK IoStatus;
+    ULONG Timeout = 0, Tag = BATTERY_TAG_INVALID, EstimatedTime;
+    HANDLE Battery;
+
+    PAGED_CODE();
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenFile(&Battery, FILE_READ_DATA | SYNCHRONIZE, &Attributes, &IoStatus,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT)))
+    {
+        return;
+    }
+
+    if (NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_TAG, &Timeout, sizeof(Timeout),
+                                       &Tag, sizeof(Tag))) &&
+        Tag != BATTERY_TAG_INVALID)
+    {
+        Query.BatteryTag = Tag;
+        Query.InformationLevel = BatteryInformation;
+        Query.AtRate = 0;
+        RtlZeroMemory(&Wait, sizeof(Wait));
+        Wait.BatteryTag = Tag;
+        if (NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_INFORMATION, &Query, sizeof(Query),
+                                           &Information, sizeof(Information))) &&
+            NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_STATUS, &Wait, sizeof(Wait),
+                                           &BatteryStatus, sizeof(BatteryStatus))))
+        {
+            Query.InformationLevel = BatteryEstimatedTime;
+            if (!NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_INFORMATION, &Query, sizeof(Query),
+                                                &EstimatedTime, sizeof(EstimatedTime))))
+            {
+                EstimatedTime = BATTERY_UNKNOWN_TIME;
+            }
+
+            State->BatteryPresent = TRUE;
+            State->AcOnLine = (BatteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
+            State->Charging = (BatteryStatus.PowerState & BATTERY_CHARGING) != 0;
+            State->Discharging = (BatteryStatus.PowerState & BATTERY_DISCHARGING) != 0;
+            State->MaxCapacity = Information.FullChargedCapacity;
+            State->RemainingCapacity = BatteryStatus.Capacity;
+            State->Rate = (ULONG)BatteryStatus.Rate;
+            State->EstimatedTime = EstimatedTime;
+            State->DefaultAlert1 = Information.DefaultAlert1;
+            State->DefaultAlert2 = Information.DefaultAlert2;
+        }
+    }
+
+    ZwClose(Battery);
+}
+
 NTSTATUS
 NTAPI
 NtPowerInformation(
@@ -1604,9 +1689,9 @@ NtPowerInformation(
                     break;
                 }
 
-                /* TODO: no battery is asked; only which source is in use is reported */
                 RtlZeroMemory(&BatteryState, sizeof(BatteryState));
                 BatteryState.AcOnLine = (BOOLEAN)(PopPowerSource == PoAc);
+                PopQueryBatteryState(&BatteryState);
                 RtlCopyMemory(OutputBuffer, &BatteryState, sizeof(BatteryState));
                 break;
 
