@@ -229,6 +229,7 @@ FreeInitializedSids(VOID)
  * starts depends on the flags.
  */
 PSID
+NTAPI
 SepGetSidFromAce(
     _In_ PACE Ace)
 {

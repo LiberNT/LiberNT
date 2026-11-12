@@ -60,7 +60,7 @@ NTSTATUS RawFileSystemControl(_In_ PVOID Vcb,
                               _In_ PDEVICE_OBJECT Dev,
                               _In_ PIRP Irp);
 NTSTATUS RawShutdown(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIRP Irp);
-VOID RawUnload(_In_ PDRIVER_OBJECT DriverObject);
+VOID NTAPI RawUnload(_In_ PDRIVER_OBJECT DriverObject);
 NTSTATUS RawMountVolume(_In_ PIO_STACK_LOCATION StackPtr);
 NTSTATUS RawUserFsCtrl(_In_ PIO_STACK_LOCATION StackPtr, _In_ PRAW_VCB Vcb);
 NTSTATUS RawQueryFsVolumeInfo(_In_ PRAW_VCB Vcb,
@@ -810,6 +810,7 @@ RawShutdown(
 }
 
 VOID
+NTAPI
 RawUnload(
     _In_ PDRIVER_OBJECT DriverObject)
 {

@@ -9,6 +9,14 @@
 #define NDEBUG
 #include <debug.h>
 
+/* x86 maps these names to the fastcall Exf forms; both are exported there */
+#undef ExInterlockedAddUlong
+#undef ExInterlockedInsertHeadList
+#undef ExInterlockedInsertTailList
+#undef ExInterlockedRemoveHeadList
+#undef ExInterlockedPopEntryList
+#undef ExInterlockedPushEntryList
+
 /* What a checked kernel leaves in the links of an entry it has taken off a list */
 #define EXP_FREED_LIST_POINTER ((PVOID)(ULONG_PTR)0xBADDD0FFBADDD0FFULL)
 

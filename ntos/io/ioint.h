@@ -109,7 +109,7 @@ NTSTATUS IopCreateDefaultDeviceSecurityDescriptor(_In_ DEVICE_TYPE DeviceType,
                                                       PVOID Buffer,
                                                   _Out_opt_ PBOOLEAN DefaultSdPresent,
                                                   _Out_ PSECURITY_DESCRIPTOR *Descriptor);
-VOID IopInitErrorLog(VOID);
+VOID NTAPI IopInitErrorLog(VOID);
 
 #define SIZE_OF_SUBSET_SD (sizeof(SECURITY_DESCRIPTOR) + 0x200)
 
@@ -194,10 +194,10 @@ VOID NTAPI IopCleanupIrp(_In_ PIRP Irp, _In_opt_ PFILE_OBJECT FileObject);
 
 /* iocall.c */
 
-NTSTATUS IopUnloadSafeCompletion(_In_ PDEVICE_OBJECT DeviceObject,
+NTSTATUS NTAPI IopUnloadSafeCompletion(_In_ PDEVICE_OBJECT DeviceObject,
                                  _In_ PIRP Irp,
                                  _In_ PVOID Context);
-NTSTATUS IopSynchronousCompletion(_In_ PDEVICE_OBJECT DeviceObject,
+NTSTATUS NTAPI IopSynchronousCompletion(_In_ PDEVICE_OBJECT DeviceObject,
                                   _In_ PIRP Irp,
                                   _In_ PVOID Context);
 

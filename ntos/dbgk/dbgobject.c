@@ -601,7 +601,7 @@ NtSetInformationDebugObject(
     _Out_opt_ PULONG ReturnLength)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    DEBUG_OBJECT_KILL_PROCESS_ON_EXIT_INFORMATION Told;
+    DEBUG_OBJECT_KILL_PROCESS_ON_EXIT_INFORMATION Told = {0};
     PDEBUG_OBJECT DebugObject;
     NTSTATUS Status;
 
@@ -825,7 +825,7 @@ NtDebugContinue(
     PDEBUG_EVENT DebugEvent = NULL;
     PDEBUG_EVENT Looked;
     PLIST_ENTRY Entry;
-    CLIENT_ID Told;
+    CLIENT_ID Told = {0};
     NTSTATUS Status;
 
     PAGED_CODE();

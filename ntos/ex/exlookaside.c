@@ -439,7 +439,6 @@ ExFlushLookasideListEx(
  * it runs seldom and may take the list locks.
  */
 VOID
-NTAPI
 ExAdjustLookasideDepth(VOID)
 {
     PKPRCB Prcb = KeGetCurrentPrcb();

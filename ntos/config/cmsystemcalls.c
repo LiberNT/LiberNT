@@ -1433,7 +1433,7 @@ NtQueryMultipleValueKey(
     PCM_KEY_VALUE Value;
     PVOID Data;
     NTSTATUS Status;
-    ULONG Available;
+    ULONG Available = 0;
     ULONG Required = 0;
     ULONG Offset = 0;
     ULONG Position;

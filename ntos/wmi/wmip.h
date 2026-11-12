@@ -100,6 +100,7 @@ WmipIsGuidRegistered(
     _In_ LPCGUID Guid);
 
 BOOLEAN
+NTAPI
 WmipIsDataBlockRegistered(
     _In_ LPCGUID Guid);
 
