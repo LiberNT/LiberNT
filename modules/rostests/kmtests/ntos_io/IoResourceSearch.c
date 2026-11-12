@@ -63,14 +63,26 @@ DescribeMemory(
     Requirement->u.Memory.MaximumAddress.QuadPart = (LONGLONG)Maximum;
 }
 
+#define RACE_THREADS 8
+#define RACE_WINDOW 0x720000000ULL
+#define RACE_WINDOW_LENGTH 0x1000000ULL
+
 typedef struct _RACE_ASSIGNMENT
 {
-    PKEVENT Go;
-    ULONGLONG Minimum;
+    volatile LONG *Arrived;
+    LONG Threads;
+    KAFFINITY Affinity;
     ULONGLONG Start;
     NTSTATUS Status;
 } RACE_ASSIGNMENT, *PRACE_ASSIGNMENT;
 
+typedef struct _RACE_STATE
+{
+    volatile LONG Arrived;
+    RACE_ASSIGNMENT Race[RACE_THREADS];
+} RACE_STATE, *PRACE_STATE;
+
+/* One thread per processor; all of them search at the same moment */
 static
 VOID
 NTAPI
@@ -79,55 +91,88 @@ RaceAssign(
 {
     PRACE_ASSIGNMENT Race = Context;
     IO_RESOURCE_DESCRIPTOR Requirement;
+    ULONGLONG Deadline;
 
-    KeWaitForSingleObject(Race->Go, Executive, KernelMode, FALSE, NULL);
-    DescribeMemory(&Requirement, Race->Minimum, Race->Minimum + 0x1FFF, 0x1000, 0x1000);
+    KeSetSystemAffinityThread(Race->Affinity);
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY);
+    DescribeMemory(&Requirement, RACE_WINDOW, RACE_WINDOW + RACE_WINDOW_LENGTH - 1, 0x1000, 0x1000);
+
+    Deadline = KeQueryInterruptTime() + 10 * 1000 * 1000;
+    InterlockedIncrement(Race->Arrived);
+    while (InterlockedCompareExchange(Race->Arrived, 0, 0) < Race->Threads && KeQueryInterruptTime() < Deadline)
+        YieldProcessor();
+
     Race->Status = Assign(&Requirement, &Race->Start);
+    KeRevertToUserAffinityThread();
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
-/* Two assignments asked for at once from a window with room for both never get the same page */
+/* Assignments asked for at once from one window never get the same page; the window has room for many runs of the test */
 static
 VOID
 CheckConcurrentAssignments(VOID)
 {
-    RACE_ASSIGNMENT Race[2];
-    PVOID Threads[2];
+    PRACE_STATE State;
+    PRACE_ASSIGNMENT Race;
+    PVOID Threads[RACE_THREADS];
+    LARGE_INTEGER Timeout;
     HANDLE Handle;
-    KEVENT Go;
-    ULONG Round, Index, Shared = 0, Failed = 0;
+    ULONG Index, Other, Count, Shared = 0, Failed = 0, Created = 0, Joined = 0;
     NTSTATUS Status;
 
-    for (Round = 0; Round < 32; Round++)
+    Count = min((ULONG)KeNumberProcessors, (ULONG)RACE_THREADS);
+    if (skip(Count >= 2, "One processor: nothing runs at once\n")) return;
+
+    State = ExAllocatePoolZero(NonPagedPool, sizeof(*State), 'sRmK');
+    ok(State != NULL, "no memory for the assignments\n");
+    if (State == NULL) return;
+    Race = State->Race;
+
+    for (Index = 0; Index < Count; Index++)
     {
-        KeInitializeEvent(&Go, NotificationEvent, FALSE);
-        for (Index = 0; Index < 2; Index++)
-        {
-            Race[Index].Go = &Go;
-            Race[Index].Minimum = 0x720000000ULL + Round * 0x10000ULL;
-            Race[Index].Start = 0;
-            Race[Index].Status = STATUS_UNSUCCESSFUL;
-            Threads[Index] = NULL;
-            Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, RaceAssign, &Race[Index]);
-            if (!NT_SUCCESS(Status)) continue;
-            ObReferenceObjectByHandle(Handle, SYNCHRONIZE, *PsThreadType, KernelMode, &Threads[Index], NULL);
-            ZwClose(Handle);
-        }
+        Race[Index].Arrived = &State->Arrived;
+        Race[Index].Threads = (LONG)Count;
+        Race[Index].Affinity = AFFINITY_MASK(Index);
+        Race[Index].Status = STATUS_PENDING;
+        Threads[Index] = NULL;
+        Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, RaceAssign, &Race[Index]);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (!NT_SUCCESS(Status)) continue;
+        Created++;
+        Status = ObReferenceObjectByHandle(Handle, SYNCHRONIZE, *PsThreadType, KernelMode, &Threads[Index], NULL);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        ZwClose(Handle);
+    }
 
-        KeSetEvent(&Go, IO_NO_INCREMENT, FALSE);
-        for (Index = 0; Index < 2; Index++)
-        {
-            if (Threads[Index] == NULL) continue;
-            KeWaitForSingleObject(Threads[Index], Executive, KernelMode, FALSE, NULL);
-            ObDereferenceObject(Threads[Index]);
-        }
+    Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Threads[Index] == NULL) continue;
+        Status = KeWaitForSingleObject(Threads[Index], Executive, KernelMode, FALSE, &Timeout);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (Status == STATUS_SUCCESS) Joined++;
+        ObDereferenceObject(Threads[Index]);
+    }
 
-        if (!NT_SUCCESS(Race[0].Status) || !NT_SUCCESS(Race[1].Status)) Failed++;
-        else if (Race[0].Start == Race[1].Start) Shared++;
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Threads[Index] == NULL) continue;
+        if (!NT_SUCCESS(Race[Index].Status))
+        {
+            Failed++;
+            continue;
+        }
+        for (Other = Index + 1; Other < Count; Other++)
+        {
+            if (Threads[Other] != NULL && NT_SUCCESS(Race[Other].Status) && Race[Other].Start == Race[Index].Start) Shared++;
+        }
     }
 
     ok_eq_ulong(Failed, 0UL);
     ok_eq_ulong(Shared, 0UL);
+
+    /* A thread still running owns its slot; the slots stay */
+    if (Joined == Created) ExFreePoolWithTag(State, 'sRmK');
 }
 
 START_TEST(IoResourceSearch)
