@@ -150,6 +150,8 @@ static ULONG STDMETHODCALLTYPE d2d_factory_Release(ID2D1Factory7 *iface)
 
     if (!refcount)
     {
+        if (factory->shared_shader_set)
+            d2d_shader_set_release(factory->shared_shader_set);
         if (factory->device)
             ID3D10Device1_Release(factory->device);
         LIST_FOR_EACH_ENTRY_SAFE(reg, reg2, &factory->effects, struct d2d_effect_registration, entry)
@@ -511,6 +513,29 @@ static HRESULT STDMETHODCALLTYPE d2d_factory_CreateDCRenderTarget(ID2D1Factory7 
     *render_target = &object->ID2D1DCRenderTarget_iface;
 
     return S_OK;
+}
+
+struct d2d_shader_set *d2d_factory_get_shader_set(ID2D1Factory1 *iface, IDXGIDevice *dxgi_device)
+{
+    struct d2d_factory *factory = unsafe_impl_from_ID2D1Factory((ID2D1Factory *)iface);
+    struct d2d_shader_set *set = NULL;
+    IDXGIDevice *shared;
+
+    EnterCriticalSection(&factory->cs);
+    if (factory->device && SUCCEEDED(ID3D10Device1_QueryInterface(factory->device, &IID_IDXGIDevice, (void **)&shared)))
+    {
+        if (shared == dxgi_device)
+        {
+            if (!factory->shared_shader_set)
+                d2d_shader_set_create(&factory->shared_shader_set);
+            if ((set = factory->shared_shader_set))
+                InterlockedIncrement(&set->refcount);
+        }
+        IDXGIDevice_Release(shared);
+    }
+    LeaveCriticalSection(&factory->cs);
+
+    return set;
 }
 
 HRESULT d2d_factory_create_device(ID2D1Factory1 *factory, IDXGIDevice *dxgi_device,
