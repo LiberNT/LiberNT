@@ -1678,6 +1678,7 @@ NtQuerySystemInformation(
 static
 NTSTATUS
 ExpQuerySupportedProcessorArchitectures(
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
     _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
     _In_ ULONG InputBufferLength,
     _Out_writes_bytes_opt_(Length) PVOID SystemInformation,
@@ -1685,7 +1686,9 @@ ExpQuerySupportedProcessorArchitectures(
     _Out_opt_ PULONG ResultLength,
     _In_ KPROCESSOR_MODE PreviousMode)
 {
-    SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[3];
+    SYSTEM_SUPPORTED_PROCESSOR_ARCHITECTURES_INFORMATION Machines[4];
+    const BOOLEAN ReportEmulated = (KI_EMULATED_USER_MACHINE != 0) &&
+                                   (SystemInformationClass == SystemSupportedProcessorArchitectures2);
     USHORT ProcessMachine = 0;
     PEPROCESS Process;
     HANDLE ProcessHandle;
@@ -1727,7 +1730,17 @@ ExpQuerySupportedProcessorArchitectures(
     Machines[Count].UserMode = 1;
     Machines[Count].Native = 1;
     Machines[Count].Process = (ProcessMachine == IMAGE_FILE_MACHINE_NATIVE);
+    if ((KI_EMULATED_USER_MACHINE != 0) && !ReportEmulated && (ProcessMachine == KI_EMULATED_USER_MACHINE))
+        Machines[Count].Process = 1;
     Count++;
+
+    if (ReportEmulated)
+    {
+        Machines[Count].Machine = KI_EMULATED_USER_MACHINE;
+        Machines[Count].UserMode = 1;
+        Machines[Count].Process = (ProcessMachine == KI_EMULATED_USER_MACHINE);
+        Count++;
+    }
 
     if (sizeof(PVOID) == sizeof(ULONGLONG))
     {
@@ -1738,7 +1751,7 @@ ExpQuerySupportedProcessorArchitectures(
         Count++;
     }
 
-    /* TODO: user-mode machines a host emulates natively (x64 on ARM64) are not listed */
+    ASSERT(Count < RTL_NUMBER_OF(Machines));
     Needed = (Count + 1) * sizeof(Machines[0]);
 
     _SEH2_TRY
@@ -1884,7 +1897,8 @@ NtQuerySystemInformationEx(
     {
         case SystemSupportedProcessorArchitectures:
         case SystemSupportedProcessorArchitectures2:
-            return ExpQuerySupportedProcessorArchitectures(InputBuffer,
+            return ExpQuerySupportedProcessorArchitectures(SystemInformationClass,
+                                                           InputBuffer,
                                                            InputBufferLength,
                                                            SystemInformation,
                                                            Length,
