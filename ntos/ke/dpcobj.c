@@ -171,7 +171,6 @@ KiPopDpc(
 
     DpcData->ActiveDpc = Dpc;
     DpcData->DpcQueueDepth--;
-    DpcData->DpcCount++;
 
     /*
      * Clearing DpcData is what lets the DPC be queued again. It is published
@@ -435,6 +434,7 @@ KeInsertQueueDpc(
         Dpc->ProcessorHistory |= AFFINITY_MASK(Processor);
         Dpc->DpcData = DpcData;
         DpcData->DpcQueueDepth++;
+        DpcData->DpcCount++;
 
         /*
          * A high importance DPC is put at the front: everything already queued
@@ -462,11 +462,17 @@ KeInsertQueueDpc(
                 NeedThread = TRUE;
             }
         }
-        else if (!KiIsDpcInterruptRequested(Prcb) &&
-                 KiDpcNeedsInterrupt(Prcb, DpcData, Dpc, (BOOLEAN)(Prcb == CurrentPrcb)))
+        else if (!KiIsDpcInterruptRequested(Prcb))
         {
-            KiSetDpcInterruptRequested(Prcb);
-            NeedInterrupt = TRUE;
+            if (KiDpcNeedsInterrupt(Prcb, DpcData, Dpc, (BOOLEAN)(Prcb == CurrentPrcb)))
+            {
+                KiSetDpcInterruptRequested(Prcb);
+                NeedInterrupt = TRUE;
+            }
+            else
+            {
+                KiSetDpcPresent(Prcb);
+            }
         }
 
         Inserted = TRUE;
@@ -750,7 +756,7 @@ KiRetireDpcList(
 
     DpcData->ActiveDpc = NULL;
     Prcb->DpcRoutineActive = FALSE;
-    KiClearDpcInterruptRequested(Prcb);
+    KiClearDpcRequestState(Prcb);
     KiPrcbDpcTimeCount(Prcb) = 0;
     KiPrcbDpcWatchdogCount(Prcb) = 0;
 
