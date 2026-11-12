@@ -29,8 +29,11 @@ typedef struct _KFLOATING_SAVE
 #define PAUSE_PROCESSOR YieldProcessor();
 
 /* Verified against modern NT/arm64 */
-#define KERNEL_STACK_SIZE                   0x8000
-#define KERNEL_LARGE_STACK_SIZE             0x12000
+#ifndef KERNEL_STACK_SCALE
+#define KERNEL_STACK_SCALE 1
+#endif
+#define KERNEL_STACK_SIZE                   (0x8000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_SIZE             (0x12000 * KERNEL_STACK_SCALE)
 #define KERNEL_LARGE_STACK_COMMIT KERNEL_STACK_SIZE
 
 #define EXCEPTION_READ_FAULT    0

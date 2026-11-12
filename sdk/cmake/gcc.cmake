@@ -243,6 +243,8 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
 else()
     if(OPTIMIZE STREQUAL "0")
         add_compile_options(-O0)
+        # Unoptimized frames are several times larger, so kernel stacks are doubled.
+        add_compile_definitions(KERNEL_STACK_SCALE=2)
     elseif(OPTIMIZE STREQUAL "1")
         add_compile_options(-Os)
         if (CMAKE_C_COMPILER_ID STREQUAL "GNU")

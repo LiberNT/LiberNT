@@ -38,8 +38,11 @@ typedef struct DECLSPEC_ALIGN(16) _KFLOATING_SAVE
 #endif
 
 /* Initial port stack policy; not a Windows RISC-V stack-size contract. */
-#define KERNEL_STACK_SIZE         0xC000
-#define KERNEL_LARGE_STACK_SIZE   0x18000
+#ifndef KERNEL_STACK_SCALE
+#define KERNEL_STACK_SCALE 1
+#endif
+#define KERNEL_STACK_SIZE         (0xC000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_SIZE   (0x18000 * KERNEL_STACK_SCALE)
 #define KERNEL_LARGE_STACK_COMMIT KERNEL_STACK_SIZE
 
 #define EXCEPTION_READ_FAULT    0

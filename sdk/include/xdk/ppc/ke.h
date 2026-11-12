@@ -44,9 +44,12 @@ typedef struct DECLSPEC_ALIGN(8) _KFLOATING_SAVE
 
 /* A trap frame carries the full register bank (0x1F0 bytes) and trap entry
  * leaves a 256-byte cushion below an interrupted kernel stack pointer. */
-#define KERNEL_STACK_SIZE         0x6000
-#define KERNEL_LARGE_STACK_SIZE   0xF000
-#define KERNEL_LARGE_STACK_COMMIT 0x6000
+#ifndef KERNEL_STACK_SCALE
+#define KERNEL_STACK_SCALE 1
+#endif
+#define KERNEL_STACK_SIZE         (0x6000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_SIZE   (0xF000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_COMMIT (0x6000 * KERNEL_STACK_SCALE)
 
 #define EXCEPTION_READ_FAULT    0
 #define EXCEPTION_WRITE_FAULT   1
