@@ -4,6 +4,9 @@
 set(ROSCONFIG_PROFILE_PACKAGES)
 set(ROSCONFIG_PROFILE_CONFIGS
     "NINTENDO_SWITCH_SUPPORT:BOOL=ON"
+    # The system runs from a RAM disk and has no storage driver, so a log file
+    # would not survive the boot it describes; the console's own panel does.
+    "BOOTLOADER_DEBUG_PORT:STRING=SCREEN"
     "RPI_SUPPORT:BOOL=OFF"
     "RPI3_SUPPORT:BOOL=OFF"
     "RPI5_SUPPORT:BOOL=OFF"
