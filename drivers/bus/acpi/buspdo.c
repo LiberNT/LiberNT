@@ -97,7 +97,6 @@ BuspIsPciLinkDevice(
            wcsstr(DeviceData->HardwareIDs, L"PNP0C0F") != NULL;
 }
 
-static
 BOOLEAN
 BuspIsPciRootDevice(
     _In_ PPDO_DEVICE_DATA DeviceData)
@@ -4297,6 +4296,16 @@ Bus_PDO_QueryDeviceRelations(
 
         status = STATUS_SUCCESS;
         Irp->IoStatus.Information = (ULONG_PTR)deviceRelations;
+        break;
+
+    case BusRelations:
+        if (!BuspIsPciRootDevice(DeviceData))
+        {
+            status = Irp->IoStatus.Status;
+            break;
+        }
+
+        status = Bus_QueryChildRelations(DeviceData->ParentFdo->DeviceExtension, DeviceData->Common.Self, Irp);
         break;
 
     default:

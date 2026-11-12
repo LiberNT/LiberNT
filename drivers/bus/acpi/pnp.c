@@ -22,25 +22,29 @@ C_ASSERT(RTL_NUMBER_OF(Bus_ControllerInterfaces) ==
          RTL_NUMBER_OF(((PFDO_DEVICE_DATA)NULL)->ControllerNotificationEntries));
 
 static
-BOOLEAN
-Bus_HasUnreportedPdos(
+VOID
+Bus_InvalidateUnreportedRelations(
     PFDO_DEVICE_DATA FdoData)
 {
     PLIST_ENTRY Entry;
-    BOOLEAN Pending = FALSE;
+    BOOLEAN Root = FALSE;
 
     ExAcquireFastMutex(&FdoData->Mutex);
     for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
     {
-        if (!CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link)->Reported)
-        {
-            Pending = TRUE;
-            break;
-        }
+        PPDO_DEVICE_DATA PdoData = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+
+        if (PdoData->Reported)
+            continue;
+        if (!PdoData->ParentPciRoot)
+            Root = TRUE;
+        else if (((PPDO_DEVICE_DATA)PdoData->ParentPciRoot->DeviceExtension)->Reported)
+            IoInvalidateDeviceRelations(PdoData->ParentPciRoot, BusRelations);
     }
     ExReleaseFastMutex(&FdoData->Mutex);
 
-    return Pending;
+    if (Root)
+        IoInvalidateDeviceRelations(FdoData->UnderlyingPDO, BusRelations);
 }
 
 static
@@ -112,11 +116,8 @@ Bus_ControllerInterfaceChange(
     PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
     PFDO_DEVICE_DATA FdoData = Context;
 
-    if (IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL) &&
-        Bus_HasUnreportedPdos(FdoData))
-    {
-        IoInvalidateDeviceRelations(FdoData->UnderlyingPDO, BusRelations);
-    }
+    if (IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL))
+        Bus_InvalidateUnreportedRelations(FdoData);
 
     return STATUS_SUCCESS;
 }
@@ -169,6 +170,7 @@ Bus_UnregisterControllerNotifications(
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (PAGE, Bus_PnP)
+#pragma alloc_text (PAGE, Bus_QueryChildRelations)
 #pragma alloc_text (PAGE, Bus_PlugInDevice)
 #pragma alloc_text (PAGE, Bus_InitializePdo)
 #pragma alloc_text (PAGE, Bus_DestroyPdo)
@@ -176,6 +178,75 @@ Bus_UnregisterControllerNotifications(
 #pragma alloc_text (PAGE, Bus_StartFdo)
 #pragma alloc_text (PAGE, Bus_SendIrpSynchronously)
 #endif
+
+NTSTATUS
+Bus_QueryChildRelations(
+    _In_ PFDO_DEVICE_DATA FdoData,
+    _In_opt_ PDEVICE_OBJECT ParentPciRoot,
+    _Inout_ PIRP Irp)
+{
+    PDEVICE_RELATIONS OldRelations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
+    PDEVICE_RELATIONS Relations;
+    PLIST_ENTRY Entry;
+    ULONG PrevCount = OldRelations ? OldRelations->Count : 0;
+    ULONG Count = 0;
+
+    PAGED_CODE();
+
+    ASSERT(FdoData->Common.IsFDO);
+    ASSERT(ParentPciRoot == NULL ||
+           ((PPDO_DEVICE_DATA)ParentPciRoot->DeviceExtension)->ParentFdo == FdoData->Common.Self);
+
+    Bus_UpdateReportedPdos(FdoData);
+
+    ExAcquireFastMutex(&FdoData->Mutex);
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+    {
+        PPDO_DEVICE_DATA PdoData = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+
+        if (PdoData->Reported && PdoData->ParentPciRoot == ParentPciRoot)
+            Count++;
+    }
+
+    if (Count == 0 && (OldRelations || ParentPciRoot))
+    {
+        ExReleaseFastMutex(&FdoData->Mutex);
+        return ParentPciRoot ? Irp->IoStatus.Status : STATUS_SUCCESS;
+    }
+
+    Relations = ExAllocatePoolWithTag(PagedPool,
+                                      FIELD_OFFSET(DEVICE_RELATIONS, Objects) +
+                                          max(PrevCount + Count, 1) * sizeof(PDEVICE_OBJECT),
+                                      'IpcA');
+    if (!Relations)
+    {
+        ExReleaseFastMutex(&FdoData->Mutex);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    if (PrevCount)
+        RtlCopyMemory(Relations->Objects, OldRelations->Objects, PrevCount * sizeof(PDEVICE_OBJECT));
+    Relations->Count = PrevCount;
+
+    for (Entry = FdoData->ListOfPDOs.Flink; Entry != &FdoData->ListOfPDOs; Entry = Entry->Flink)
+    {
+        PPDO_DEVICE_DATA PdoData = CONTAINING_RECORD(Entry, PDO_DEVICE_DATA, Link);
+
+        if (!PdoData->Reported || PdoData->ParentPciRoot != ParentPciRoot)
+            continue;
+        ASSERT(Relations->Count < PrevCount + Count);
+        Relations->Objects[Relations->Count++] = PdoData->Common.Self;
+        ObReferenceObject(PdoData->Common.Self);
+    }
+    ExReleaseFastMutex(&FdoData->Mutex);
+
+    ASSERT(Relations->Count == PrevCount + Count);
+    if (OldRelations)
+        ExFreePool(OldRelations);
+    Irp->IoStatus.Information = (ULONG_PTR)Relations;
+
+    return STATUS_SUCCESS;
+}
 
 NTSTATUS
 NTAPI
@@ -230,10 +301,6 @@ Bus_FDO_PnP (
     )
 {
     NTSTATUS            status = STATUS_SUCCESS;
-    ULONG               length, prevcount, numPdosPresent;
-    PLIST_ENTRY         entry;
-    PPDO_DEVICE_DATA    pdoData;
-    PDEVICE_RELATIONS   relations, oldRelations;
 
     PAGED_CODE();
 
@@ -352,92 +419,10 @@ Bus_FDO_PnP (
             break;
         }
 
-        Bus_UpdateReportedPdos(DeviceData);
-
-        //
-        // Build the bus's child list and complete locally.
-        //
-        ExAcquireFastMutex(&DeviceData->Mutex);
-
-        oldRelations = (PDEVICE_RELATIONS)Irp->IoStatus.Information;
-        if (oldRelations)
-        {
-            prevcount = oldRelations->Count;
-        }
-        else
-        {
-            prevcount = 0;
-        }
-
-        // Count PDOs actually present
-        numPdosPresent = 0;
-        for (entry = DeviceData->ListOfPDOs.Flink;
-             entry != &DeviceData->ListOfPDOs;
-             entry = entry->Flink)
-        {
-            pdoData = CONTAINING_RECORD(entry, PDO_DEVICE_DATA, Link);
-            if (pdoData->Reported)
-                numPdosPresent++;
-        }
-
-        // If nothing to add and something already there, just return success with what was there
-        if (oldRelations && DeviceData->NumPDOs == 0)
-        {
-            ExReleaseFastMutex(&DeviceData->Mutex);
-            Irp->IoStatus.Status = STATUS_SUCCESS;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return STATUS_SUCCESS;
-        }
-
-        length = sizeof(DEVICE_RELATIONS) +
-                 (((numPdosPresent + prevcount) - 1) * sizeof(PDEVICE_OBJECT));
-
-        relations = ExAllocatePoolWithTag(PagedPool, length, 'IpcA');
-        if (relations == NULL)
-        {
-            ExReleaseFastMutex(&DeviceData->Mutex);
-            Irp->IoStatus.Status = status = STATUS_INSUFFICIENT_RESOURCES;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return status;
-        }
-
-        // Copy any existing objects
-        if (prevcount)
-        {
-            RtlCopyMemory(relations->Objects,
-                          oldRelations->Objects,
-                          prevcount * sizeof(PDEVICE_OBJECT));
-        }
-
-        relations->Count = prevcount + numPdosPresent;
-
-        // Append our PDOs and reference them
-        for (entry = DeviceData->ListOfPDOs.Flink;
-             entry != &DeviceData->ListOfPDOs;
-             entry = entry->Flink)
-        {
-            pdoData = CONTAINING_RECORD(entry, PDO_DEVICE_DATA, Link);
-            if (!pdoData->Reported)
-                continue;
-            relations->Objects[prevcount] = pdoData->Common.Self;
-            ObReferenceObject(pdoData->Common.Self);
-            prevcount++;
-        }
-
-        DPRINT("\t#PDOs present = %d\n\t#PDOs reported = %d\n",
-               DeviceData->NumPDOs, relations->Count);
-
-        // Replace in IRP and complete locally
-        if (oldRelations)
-        {
-            ExFreePoolWithTag(oldRelations, 0);
-        }
-        Irp->IoStatus.Information = (ULONG_PTR)relations;
-        ExReleaseFastMutex(&DeviceData->Mutex);
-
-        Irp->IoStatus.Status = STATUS_SUCCESS;
+        status = Bus_QueryChildRelations(DeviceData, NULL, Irp);
+        Irp->IoStatus.Status = status;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        return STATUS_SUCCESS;
+        return status;
 
     default:
         //

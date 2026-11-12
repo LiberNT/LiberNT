@@ -8,6 +8,7 @@ list(APPEND SOURCE
     InboxClasses.c
     InterruptAffinityPolicy.c
     InvalidDeviceInfoSet.c
+    LegacyDeviceParent.c
     NewDeviceInstall.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c

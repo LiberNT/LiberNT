@@ -846,10 +846,14 @@ FdoPnpControl(
             }
 
             Status = FdoQueryBusRelations(DeviceObject, Irp, IrpSp);
-            IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
-            Irp->IoStatus.Status = Status;
-            IoCompleteRequest(Irp, IO_NO_INCREMENT);
-            return Status;
+            if (!NT_SUCCESS(Status))
+            {
+                IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+                Irp->IoStatus.Status = Status;
+                IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                return Status;
+            }
+            break;
 
         case IRP_MN_QUERY_REMOVE_DEVICE:
             /* Succeed query - don't change state yet */
