@@ -250,15 +250,9 @@ CmpCmdInit(
                     NULL);
 
     CmpFlusherStarted = TRUE;
+    CmpHoldLazyFlush = TRUE;
 
-    if (SetupBoot)
-    {
-        CmpWasSetupBoot = TRUE;
-        CmpHoldLazyFlush = TRUE;
-        return;
-    }
-
-    CmpHoldLazyFlush = FALSE;
+    if (SetupBoot) CmpWasSetupBoot = TRUE;
 }
 
 VOID

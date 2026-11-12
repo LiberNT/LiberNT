@@ -135,6 +135,7 @@ list(APPEND KMTEST_DRV_SOURCE
     npfs/NpfsVolumeInfo.c
     novp_fsrtl/FsRtlRemoveDotsFromPath.c
     ntos_cc/CcLazyWriter.c
+    ntos_cm/CmBootFlush.c
     ntos_cm/CmCallbacks.c
     ntos_cm/CmKeyKM.c
     ntos_cm/CmSecurity.c
