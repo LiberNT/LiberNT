@@ -12028,7 +12028,12 @@ static VOID CALLBACK tfunc(HWND hwnd, UINT uMsg, UINT_PTR id, DWORD dwTime)
 #endif
 #define TIMER_DURATION_EXPECTED  10000 /* 10 ms */
 #define TIMER_DURATION_ALT       15600 /* 15.6 ms */
+#ifdef __REACTOS__
+/* A virtual machine's host delivers clock interrupts milliseconds late, on Windows 11 too: a median within half a tick of one tick passes */
+#define TIMER_DURATION_TOLERANCE (TIMER_DURATION_ALT / 2)
+#else
 #define TIMER_DURATION_TOLERANCE 1000 /* 1 ms */
+#endif
 
 static int count = 0;
 static ULONGLONG timer_ticks[TIMER_COUNT];
