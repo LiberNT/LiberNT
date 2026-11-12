@@ -96,7 +96,8 @@ HalpAcpiRemapTable(
 static
 VOID
 HalpAcpiValidateChecksum(
-    _In_ PDESCRIPTION_HEADER Header)
+    _In_ PDESCRIPTION_HEADER Header,
+    _In_ ULONG Available)
 {
     HALP_ACPI_CHECK Check;
     HALP_ACPI_VERDICT Verdict;
@@ -106,7 +107,7 @@ HalpAcpiValidateChecksum(
     if ((Header->Signature == FADT_SIGNATURE) && (Header->Revision <= 2))
         return;
 
-    Verdict = HalpAcpiCheckTable((const UCHAR *)Header, Header->Length, &Check);
+    Verdict = HalpAcpiCheckTable((const UCHAR *)Header, Available, &Check);
     if (Verdict == HalpAcpiAccepted)
         return;
 
@@ -255,6 +256,7 @@ HalpAcpiGetTableFromBios(
     PDESCRIPTION_HEADER Header;
     ULONG TableLength;
     ULONG Offset;
+    ULONG Available;
     ULONG EntryCount, CurrentEntry;
 
     /* Should not query the RSDT/XSDT by itself */
@@ -363,7 +365,9 @@ HalpAcpiGetTableFromBios(
     Header = HalpAcpiRemapTable(LoaderBlock, PhysicalAddress, Header, PageCount);
     if (!Header) return NULL;
 
-    HalpAcpiValidateChecksum(Header);
+    Available = (ULONG)(((ULONGLONG)*PageCount << PAGE_SHIFT) -
+                        (PhysicalAddress.QuadPart & (PAGE_SIZE - 1)));
+    HalpAcpiValidateChecksum(Header, Available);
 
     /* Return the table */
     return Header;
