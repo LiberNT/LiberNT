@@ -1014,7 +1014,7 @@ NTSTATUS FileCloseAddress(
       LockObject(AddrFile);
       if (AddrFile->Port)
       {
-          TCPFreePort(AddrFile->Port);
+          TCPFreePortForAddress(&AddrFile->Address, AddrFile->Port);
           AddrFile->Port = 0;
       }
       UnlockObject(AddrFile);

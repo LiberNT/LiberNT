@@ -30,3 +30,5 @@ VOID DeallocatePort( PPORT_SET PortSet, ULONG Port );
 BOOLEAN AllocatePort( PPORT_SET PortSet, ULONG Port );
 ULONG AllocateAnyPort( PPORT_SET PortSet );
 ULONG AllocatePortFromRange( PPORT_SET PortSet, ULONG Lowest, ULONG Highest );
+ULONG AllocatePortFromRangeExcluding( PPORT_SET PortSet, ULONG Lowest, ULONG Highest,
+                                      PPORT_SET ExcludeSet );

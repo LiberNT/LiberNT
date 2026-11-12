@@ -98,7 +98,7 @@ NTSTATUS TCPListen(PCONNECTION_ENDPOINT Connection, UINT Backlog)
             if (NT_SUCCESS(Status))
             {
                 /* Allocate the port in the port bitmap */
-                UINT AllocatedPort = TCPAllocatePort(LocalPort);
+                UINT AllocatedPort = TCPAllocatePortForAddress(&Connection->AddressFile->Address, LocalPort);
                 /* This should never fail unless all ports are in use */
                 if (AllocatedPort == (UINT) -1)
                 {
