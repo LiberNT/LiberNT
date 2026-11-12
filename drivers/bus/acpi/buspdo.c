@@ -1473,7 +1473,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Port.Alignment = Alignment;
                     RequirementDescriptor->u.Port.Length = addr16->Address.AddressLength;
                     RequirementDescriptor->u.Port.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum + addr16->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum;
                 }
                 else
                 {
@@ -1503,7 +1503,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Memory.Alignment = Alignment;
                     RequirementDescriptor->u.Memory.Length = addr16->Address.AddressLength;
                     RequirementDescriptor->u.Memory.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum + addr16->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum;
                 }
 
                 RequirementDescriptor++;
@@ -1547,7 +1547,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Port.Alignment = Alignment;
                     RequirementDescriptor->u.Port.Length = addr32->Address.AddressLength;
                     RequirementDescriptor->u.Port.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum + addr32->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum;
                 }
                 else
                 {
@@ -1577,7 +1577,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Memory.Alignment = Alignment;
                     RequirementDescriptor->u.Memory.Length = addr32->Address.AddressLength;
                     RequirementDescriptor->u.Memory.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum + addr32->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum;
                 }
 
                 RequirementDescriptor++;
@@ -1625,7 +1625,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Port.Alignment = Alignment;
                     RequirementDescriptor->u.Port.Length = BuspGetAddressResourceLength(addr64->Address.AddressLength);
                     RequirementDescriptor->u.Port.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum + addr64->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum;
                 }
                 else
                 {
@@ -1654,7 +1654,7 @@ BuspCreateRequirementsListFromAcpiResources(
 
                     BuspSetMemoryRequirementLength(RequirementDescriptor, addr64->Address.AddressLength, Alignment);
                     RequirementDescriptor->u.Memory.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum + addr64->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum;
                 }
 
                 RequirementDescriptor++;
@@ -1702,7 +1702,7 @@ BuspCreateRequirementsListFromAcpiResources(
                     RequirementDescriptor->u.Port.Alignment = Alignment;
                     RequirementDescriptor->u.Port.Length = BuspGetAddressResourceLength(addrx->Address.AddressLength);
                     RequirementDescriptor->u.Port.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum + addrx->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Port.MaximumAddress.QuadPart = Maximum;
                 }
                 else
                 {
@@ -1731,7 +1731,7 @@ BuspCreateRequirementsListFromAcpiResources(
 
                     BuspSetMemoryRequirementLength(RequirementDescriptor, addrx->Address.AddressLength, Alignment);
                     RequirementDescriptor->u.Memory.MinimumAddress.QuadPart = Minimum;
-                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum + addrx->Address.AddressLength - 1;
+                    RequirementDescriptor->u.Memory.MaximumAddress.QuadPart = Maximum;
                 }
 
                 RequirementDescriptor++;

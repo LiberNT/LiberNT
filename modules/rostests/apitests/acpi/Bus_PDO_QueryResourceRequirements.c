@@ -193,6 +193,17 @@ AcpiGetPossibleResources (
     ok((Desc)->u.Port.MaximumAddress.QuadPart == ExpectedMax, "Desc->u.Port.MaximumAddress = 0x%I64x\n", (Desc)->u.Port.MaximumAddress.QuadPart);   \
     } while (0)
 
+#define expect_mem(Desc, ExpectedOption, ExpectedShare, ExpectedLength, ExpectedAlign, ExpectedMin, ExpectedMax)                                         \
+    do {                                                                                                                                                  \
+    ok((Desc)->Option == ExpectedOption, "Desc->Option = %u\n", (Desc)->Option);                                                                          \
+    ok((Desc)->Type == CmResourceTypeMemory, "Desc->Type = %u\n", (Desc)->Type);                                                                          \
+    ok((Desc)->ShareDisposition == ExpectedShare, "Desc->ShareDisposition = %u\n", (Desc)->ShareDisposition);                                             \
+    ok((Desc)->u.Memory.Length == ExpectedLength, "Desc->u.Memory.Length = %lu\n", (Desc)->u.Memory.Length);                                              \
+    ok((Desc)->u.Memory.Alignment == ExpectedAlign, "Desc->u.Memory.Alignment = %lu\n", (Desc)->u.Memory.Alignment);                                      \
+    ok((Desc)->u.Memory.MinimumAddress.QuadPart == ExpectedMin, "Desc->u.Memory.MinimumAddress = 0x%I64x\n", (Desc)->u.Memory.MinimumAddress.QuadPart);   \
+    ok((Desc)->u.Memory.MaximumAddress.QuadPart == ExpectedMax, "Desc->u.Memory.MaximumAddress = 0x%I64x\n", (Desc)->u.Memory.MaximumAddress.QuadPart);   \
+    } while (0)
+
 START_TEST(Bus_PDO_QueryResourceRequirements)
 {
     NTSTATUS Status;
@@ -513,5 +524,54 @@ START_TEST(Bus_PDO_QueryResourceRequirements)
     }
     ok_int(ReqList->ListSize, GetPoolAllocSize(ReqList));
     ok_int(ReqList->ListSize, (ULONG_PTR)&ReqList2->Descriptors[6] - (ULONG_PTR)ReqList);
+    ExFreePoolWithTag(ReqList, 'RpcA');
+
+    /* Address space descriptors: _MAX is the highest address of the range */
+    AcpiCallExpected = TRUE;
+    Irp.IoStatus.Status = STATUS_WAIT_0 + 17;
+    Irp.IoStatus.Information = 0;
+    DeviceData.AcpiHandle = CorrectHandle;
+    DeviceData.HardwareIDs = L"ACPI0004\0";
+    Resource = ResourcesBuffer;
+    Resource->Type = ACPI_RESOURCE_TYPE_ADDRESS64;
+    Resource->Length = sizeof(*Resource);
+    Resource->Data.Address64.ResourceType = ACPI_MEMORY_RANGE;
+    Resource->Data.Address64.ProducerConsumer = ACPI_CONSUMER;
+    Resource->Data.Address64.Info.Mem.WriteProtect = ACPI_READ_WRITE_MEMORY;
+    Resource->Data.Address64.Info.Mem.Caching = ACPI_NON_CACHEABLE_MEMORY;
+    Resource->Data.Address64.Address.Granularity = 0;
+    Resource->Data.Address64.Address.Minimum = 0x10000000;
+    Resource->Data.Address64.Address.Maximum = 0x3EFEFFFF;
+    Resource->Data.Address64.Address.AddressLength = 0x2EFF0000;
+    Resource->Data.Address64.Address.TranslationOffset = 0;
+    Resource = ACPI_NEXT_RESOURCE(Resource);
+    Resource->Type = ACPI_RESOURCE_TYPE_ADDRESS16;
+    Resource->Length = sizeof(*Resource);
+    Resource->Data.Address16.ResourceType = ACPI_IO_RANGE;
+    Resource->Data.Address16.ProducerConsumer = ACPI_CONSUMER;
+    Resource->Data.Address16.Address.Granularity = 0;
+    Resource->Data.Address16.Address.Minimum = 0x1000;
+    Resource->Data.Address16.Address.Maximum = 0x1FFF;
+    Resource->Data.Address16.Address.AddressLength = 0x1000;
+    Resource->Data.Address16.Address.TranslationOffset = 0;
+    Resource = ACPI_NEXT_RESOURCE(Resource);
+    Resource->Type = ACPI_RESOURCE_TYPE_END_TAG;
+    Resource->Length = END_TAG_LENGTH;
+    Resource++;
+    PossibleBuffer.Pointer = ResourcesBuffer;
+    PossibleBuffer.Length = (ULONG_PTR)Resource - (ULONG_PTR)ResourcesBuffer;
+    Status = Bus_PDO_QueryResourceRequirements(&DeviceData, &Irp);
+    ok(Status == STATUS_SUCCESS, "Status = 0x%lx\n", Status);
+    ReqList = (PVOID)Irp.IoStatus.Information;
+    ok(ReqList != NULL, "ReqList is NULL\n");
+    if (ReqList == NULL)
+    {
+        skip("No ReqList\n");
+        return;
+    }
+    ok(ReqList->AlternativeLists == 1, "AlternativeLists = %lu\n", ReqList->AlternativeLists);
+    ok(ReqList->List[0].Count == 2, "List[0].Count = %lu\n", ReqList->List[0].Count);
+    expect_mem(&ReqList->List[0].Descriptors[0], IO_RESOURCE_PREFERRED, CmResourceShareDeviceExclusive, 0x2EFF0000, 1, 0x10000000, 0x3EFEFFFF);
+    expect_port(&ReqList->List[0].Descriptors[1], IO_RESOURCE_PREFERRED, CmResourceShareDeviceExclusive, 0x1000, 1, 0x1000, 0x1FFF);
     ExFreePoolWithTag(ReqList, 'RpcA');
 }
