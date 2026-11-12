@@ -488,6 +488,24 @@ endfunction()
 # set_module_type(my_driver kernelmodedriver)
 # sign_driver_if_needed(my_driver)
 
+function(add_kernel_ubsan TARGET)
+    if(ENABLE_KERNEL_UBSAN)
+        target_compile_options(${TARGET} PRIVATE
+            "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=shift,integer-divide-by-zero,signed-integer-overflow,bounds,bool,enum,vla-bound,builtin,float-cast-overflow,nonnull-attribute,returns-nonnull-attribute;-fno-autolink>")
+    endif()
+endfunction()
+
+function(add_kernel_module_ubsan MODULE TYPE)
+    get_target_property(_ubsan_libraries ${MODULE} LINK_LIBRARIES)
+    if(TYPE STREQUAL kernel)
+        add_kernel_ubsan(${MODULE})
+        target_link_libraries(${MODULE} kubsan_ntos)
+    elseif("libntoskrnl" IN_LIST _ubsan_libraries)
+        add_kernel_ubsan(${MODULE})
+        target_link_libraries(${MODULE} kubsan)
+    endif()
+endfunction()
+
 function(set_module_type MODULE TYPE)
     cmake_parse_arguments(__module "UNICODE" "IMAGEBASE;KMDF_VERSION;KMDF_MINIMUM_VERSION" "ENTRYPOINT" ${ARGN})
 
@@ -525,6 +543,10 @@ function(set_module_type MODULE TYPE)
     if(TYPE IN_LIST KERNEL_MODULE_TYPES)
         target_compile_definitions(${MODULE} PRIVATE _GCC_SAL_CHECK_RETURN)
         set_target_properties(${MODULE} PROPERTIES RV64X_EXCLUDE ON)
+        # The debugger transports and boot video print the reports, so they stay uninstrumented.
+        if(ENABLE_KERNEL_UBSAN AND NOT MODULE MATCHES "^(kd|bootvid)")
+            cmake_language(EVAL CODE "cmake_language(DEFER CALL add_kernel_module_ubsan [[${MODULE}]] [[${TYPE}]])")
+        endif()
     endif()
 
     # Set entry point

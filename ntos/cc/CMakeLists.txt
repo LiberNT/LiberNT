@@ -14,3 +14,4 @@ target_include_directories(cc_neutral PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_dependencies(cc_neutral bugcodes xdk)
+add_kernel_ubsan(cc_neutral)

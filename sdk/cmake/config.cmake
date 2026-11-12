@@ -351,6 +351,11 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     option(STACK_PROTECTOR "Whether to enable the GCC stack checker while compiling" OFF)
 endif()
 
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    cmake_dependent_option(ENABLE_KERNEL_UBSAN "Whether to report undefined behavior in kernel-mode modules at run time" ON
+                           "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
+endif()
+
 set(USE_DUMMY_PSEH FALSE CACHE BOOL
 "Whether to disable PSEH support.")
 

@@ -114,6 +114,13 @@ add_executable(ntoskrnl
 set_module_type(ntoskrnl kernel)
 target_compile_definitions(ntoskrnl PRIVATE CONFIG_SMP)
 
+# The kernel debugger prints the reports, so it stays uninstrumented.
+if(ENABLE_KERNEL_UBSAN)
+    set(_ntoskrnl_debugger_source ${NTOSKRNL_SOURCE})
+    list(FILTER _ntoskrnl_debugger_source INCLUDE REGEX "/ntos/kd")
+    set_source_files_properties(${_ntoskrnl_debugger_source} PROPERTIES COMPILE_OPTIONS "-fno-sanitize=undefined")
+endif()
+
 if(ARCH STREQUAL "arm64")
     target_link_libraries(ntoskrnl rtl_kernel_context)
 endif()

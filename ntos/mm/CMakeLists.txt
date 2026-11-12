@@ -28,3 +28,4 @@ target_include_directories(nvs_neutral PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_dependencies(nvs_neutral bugcodes xdk)
+add_kernel_ubsan(nvs_neutral)
