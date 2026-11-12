@@ -173,6 +173,7 @@ list(APPEND SOURCE
     SecureBootFlag.c
     TerminateProcess.c
     TerminateThread.c
+    TlsFree.c
     ExitedClientId.c
     ExitedProcessImage.c
     ThreadKernelStack.c

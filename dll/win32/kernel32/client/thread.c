@@ -1392,17 +1392,17 @@ TlsFree(IN DWORD Index)
         {
             /* Use the expansion bitmap */
             TlsBitmap = Peb->TlsExpansionBitmap;
-            Index = TlsIndex;
         }
     }
     else
     {
         /* Use the normal bitmap */
         TlsBitmap = Peb->TlsBitmap;
+        TlsIndex = Index;
     }
 
     /* Check if the index was set */
-    BitSet = RtlAreBitsSet(TlsBitmap, Index, 1);
+    BitSet = RtlAreBitsSet(TlsBitmap, TlsIndex, 1);
     if (BitSet)
     {
         /* Tell the kernel to free the TLS cells */
@@ -1418,7 +1418,7 @@ TlsFree(IN DWORD Index)
         }
 
         /* Clear the bit */
-        RtlClearBits(TlsBitmap, Index, 1);
+        RtlClearBits(TlsBitmap, TlsIndex, 1);
     }
     else
     {

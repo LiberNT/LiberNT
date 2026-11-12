@@ -201,8 +201,67 @@ PspSetThreadName(
 }
 
 /*
- * Clears one storage slot of the thread, which is what a module that owned
- * the slot asks for on its way out.
+ * Clears one storage cell in one thread's block. The code of an emulated
+ * process keeps its cells in the emulated block; the native cells of such a
+ * thread belong to the emulation layer. Called attached to the process.
+ */
+static
+NTSTATUS
+PspZeroTebTlsCell(
+    _In_ PTEB Teb,
+    _In_ BOOLEAN Emulated,
+    _In_ ULONG Index)
+{
+    TEB32 *Teb32;
+    PULONG Cell32;
+    PVOID *Cell;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    PAGED_CODE();
+    ASSERT(Index < TLS_MINIMUM_AVAILABLE + TLS_EXPANSION_SLOTS);
+
+    _SEH2_TRY
+    {
+        if (Emulated && (Teb->WowTebOffset != 0))
+        {
+            Teb32 = (TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset);
+            ProbeForWrite(Teb32, sizeof(TEB32), sizeof(ULONG));
+
+            if (Index < TLS_MINIMUM_AVAILABLE)
+            {
+                Teb32->TlsSlots[Index] = 0;
+            }
+            else if (Teb32->TlsExpansionSlots != 0)
+            {
+                Cell32 = (PULONG)UlongToPtr(Teb32->TlsExpansionSlots) + (Index - TLS_MINIMUM_AVAILABLE);
+                ProbeForWrite(Cell32, sizeof(ULONG), sizeof(ULONG));
+                *Cell32 = 0;
+            }
+        }
+        else if (Index < TLS_MINIMUM_AVAILABLE)
+        {
+            Teb->TlsSlots[Index] = NULL;
+        }
+        else if (Teb->TlsExpansionSlots != NULL)
+        {
+            Cell = Teb->TlsExpansionSlots + (Index - TLS_MINIMUM_AVAILABLE);
+            ProbeForWrite(Cell, sizeof(PVOID), sizeof(ULONG));
+            *Cell = NULL;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
+/*
+ * Clears one storage cell in every thread of the thread's process, which is
+ * what a module that owned the index asks for on its way out: whoever is
+ * given the index next must find it empty in every thread.
  */
 static
 NTSTATUS
@@ -211,29 +270,37 @@ PspZeroThreadTlsCell(
     _In_ ULONG Index)
 {
     PEPROCESS Process = THREAD_TO_PROCESS(Thread);
-    PTEB Teb = Thread->Tcb.Teb;
+    BOOLEAN Emulated = (Process->WoW64Process != NULL);
+    PETHREAD Current;
     KAPC_STATE ApcState;
+    NTSTATUS CellStatus;
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
 
-    if (Index >= TLS_MINIMUM_AVAILABLE) return STATUS_INVALID_PARAMETER;
-    if (Teb == NULL) return STATUS_INVALID_PARAMETER;
+    if (Index >= TLS_MINIMUM_AVAILABLE + TLS_EXPANSION_SLOTS) return STATUS_INVALID_PARAMETER;
+    if (Thread->Tcb.Teb == NULL) return STATUS_INVALID_PARAMETER;
 
     if (!ExAcquireRundownProtection(&Process->RundownProtect))
         return STATUS_PROCESS_IS_TERMINATING;
 
     KeStackAttachProcess(&Process->Pcb, &ApcState);
 
-    _SEH2_TRY
+    for (Current = PsGetNextProcessThread(Process, NULL);
+         Current != NULL;
+         Current = PsGetNextProcessThread(Process, Current))
     {
-        Teb->TlsSlots[Index] = NULL;
+        /* A thread past its rundown is taking its block down */
+        if (!ExAcquireRundownProtection(&Current->RundownProtect)) continue;
+
+        if (Current->Tcb.Teb != NULL)
+        {
+            CellStatus = PspZeroTebTlsCell(Current->Tcb.Teb, Emulated, Index);
+            if (Current == Thread) Status = CellStatus;
+        }
+
+        ExReleaseRundownProtection(&Current->RundownProtect);
     }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        Status = _SEH2_GetExceptionCode();
-    }
-    _SEH2_END;
 
     KeUnstackDetachProcess(&ApcState);
     ExReleaseRundownProtection(&Process->RundownProtect);

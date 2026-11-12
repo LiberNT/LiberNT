@@ -166,6 +166,7 @@ extern void func_SystemFileCacheSize(void);
 extern void func_SecureBootFlag(void);
 extern void func_TerminateProcess(void);
 extern void func_TerminateThread(void);
+extern void func_TlsFree(void);
 extern void func_ExitedClientId(void);
 extern void func_ExitedProcessImage(void);
 extern void func_ThreadKernelStack(void);
@@ -368,6 +369,7 @@ const struct test winetest_testlist[] =
     { "SecureBootFlag",              func_SecureBootFlag },
     { "TerminateProcess",            func_TerminateProcess },
     { "TerminateThread",             func_TerminateThread },
+    { "TlsFree",                     func_TlsFree },
     { "ExitedClientId",              func_ExitedClientId },
     { "ExitedProcessImage",          func_ExitedProcessImage },
     { "ThreadKernelStack",           func_ThreadKernelStack },
