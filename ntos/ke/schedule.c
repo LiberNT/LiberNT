@@ -363,7 +363,7 @@ KiDeferredReadyThread(
     _Inout_ PKTHREAD Thread)
 {
     PKPRCB Prcb;
-    PKTHREAD Current;
+    PKTHREAD Current, Displaced;
     KPRIORITY Priority;
     ULONG Processor;
 
@@ -380,6 +380,23 @@ KiDeferredReadyThread(
     KiAcquirePrcbLock(Prcb);
 
     Current = Prcb->CurrentThread;
+
+    Displaced = Prcb->NextThread;
+    if ((Displaced != NULL) &&
+        (Displaced != Thread) &&
+        (Displaced != Prcb->IdleThread) &&
+        (Priority > (KPRIORITY)Displaced->Priority))
+    {
+        ASSERT(Displaced->State == Standby);
+        ASSERT(Displaced->NextProcessor == Processor);
+
+        Thread->State = Standby;
+        Thread->NextProcessor = Processor;
+        Prcb->NextThread = Thread;
+
+        KiQueueReadyThread(Displaced, Prcb);
+        return;
+    }
 
     /*
      * Displace what is running only when nothing else is already standing by
@@ -819,6 +836,30 @@ KiSetPriorityThread(
         case Standby:
         {
             Thread->Priority = (SCHAR)Priority;
+
+            if (Priority >= OldPriority)
+                break;
+
+            Processor = Thread->NextProcessor;
+            Prcb = KiProcessorBlock[Processor];
+            KiAcquirePrcbLock(Prcb);
+
+            if ((Thread->State == Standby) && (Prcb->NextThread == Thread))
+            {
+                PKTHREAD Better = KiSelectReadyThread(Priority + 1, Prcb);
+
+                if (Better != NULL)
+                {
+                    ASSERT(Better != Thread);
+                    Better->State = Standby;
+                    Better->NextProcessor = Processor;
+                    Prcb->NextThread = Better;
+                    KiQueueReadyThread(Thread, Prcb);
+                    break;
+                }
+            }
+
+            KiReleasePrcbLock(Prcb);
             break;
         }
 
