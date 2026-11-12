@@ -752,8 +752,9 @@ SepAnswerAboutToken(
         {
             PTOKEN_BNO_ISOLATION_INFORMATION Answer = Buffer;
 
-            Room = (ULONG)sizeof(*Answer) + Token->BnoIsolationPrefix.Length +
-                   (ULONG)sizeof(WCHAR);
+            Room = (ULONG)sizeof(*Answer);
+            if (Token->BnoIsolationPrefix.Length != 0)
+                Room += Token->BnoIsolationPrefix.Length + (ULONG)sizeof(WCHAR);
             *Needed = Room;
 
             if (Buffer == NULL || Length < Room) return STATUS_BUFFER_TOO_SMALL;
