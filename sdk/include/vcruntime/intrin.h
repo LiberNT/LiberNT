@@ -102,23 +102,36 @@ void __cdecl _disable(void);
 void __cdecl _enable(void);
 unsigned char _interlockedbittestandreset(__VCRT_INTRIN_LONG32 volatile *, __VCRT_INTRIN_LONG32);
 unsigned char _interlockedbittestandset(__VCRT_INTRIN_LONG32 volatile *, __VCRT_INTRIN_LONG32);
+#if defined(__ROS_LONG64__) && !defined(_MSC_VER)
+#define _lrotl(v, s) __builtin_rotateleft32((unsigned int)(v), (s))
+#define _lrotr(v, s) __builtin_rotateright32((unsigned int)(v), (s))
+#else
 #ifndef _lrotl
 _Check_return_ __VCRT_INTRIN_ULONG32 __cdecl _lrotl(_In_ __VCRT_INTRIN_ULONG32, _In_ int);
 #endif
 #ifndef _lrotr
 _Check_return_ __VCRT_INTRIN_ULONG32 __cdecl _lrotr(_In_ __VCRT_INTRIN_ULONG32, _In_ int);
 #endif
+#endif
 #ifndef _rotl
 _Check_return_ unsigned int __cdecl _rotl(_In_ unsigned int _Value, _In_ int _Shift);
 #endif
 _Check_return_ unsigned short __cdecl _rotl16(_In_ unsigned short _Value, _In_ unsigned char _Shift);
+#if !defined(__ROS_LONG64__) || defined(_MSC_VER)
 _Check_return_ unsigned __int64 __cdecl _rotl64(_In_ unsigned __int64 _Value, _In_ int _Shift);
+#else
+#define _rotl64(v, s) __builtin_rotateleft64((unsigned long long)(v), (s))
+#endif
 _Check_return_ unsigned char __cdecl _rotl8(_In_ unsigned char _Value, _In_ unsigned char _Shift);
 #ifndef _rotr
 _Check_return_ unsigned int __cdecl _rotr(_In_ unsigned int _Value, _In_ int _Shift);
 #endif
 _Check_return_ unsigned short __cdecl _rotr16(_In_ unsigned short _Value, _In_ unsigned char _Shift);
+#if !defined(__ROS_LONG64__) || defined(_MSC_VER)
 _Check_return_ unsigned __int64 __cdecl _rotr64(_In_ unsigned __int64 _Value, _In_ int _Shift);
+#else
+#define _rotr64(v, s) __builtin_rotateright64((unsigned long long)(v), (s))
+#endif
 _Check_return_ unsigned char __cdecl _rotr8(_In_ unsigned char _Value, _In_ unsigned char _Shift);
 
 #if _VCRT_X86_INTRINSICS
