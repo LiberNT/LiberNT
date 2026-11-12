@@ -628,6 +628,7 @@ MiInitializePhase0(
     MiReportBootImages(LoaderBlock);
 }
 
+CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 MmArmInitSystem(

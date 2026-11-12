@@ -479,6 +479,7 @@ PpSetCustomTargetEvent(
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
+CODE_SEG("PAGE")
 NTSTATUS
 NTAPI
 IoRegisterPlugPlayNotification(
@@ -663,6 +664,7 @@ PiUnregisterNotifyEntry(
     return STATUS_SUCCESS;
 }
 
+CODE_SEG("PAGE")
 NTSTATUS
 NTAPI
 IoUnregisterPlugPlayNotification(

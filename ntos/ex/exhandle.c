@@ -6,7 +6,9 @@
  */
 
 #include <ntoskrnl.h>
+#ifdef KDBG
 #include <ntos/kdbg/kdb.h>
+#endif
 #define NDEBUG
 #include <debug.h>
 
@@ -1412,6 +1414,7 @@ ExDupHandleTable(
     return NewTable;
 }
 
+#ifdef KDBG
 /*
  * What the walk the debugger command drives is gathering: either one handle the
  * user named, or every handle of every table.
@@ -1519,5 +1522,6 @@ ExpKdbgExtHandle(
 
     return TRUE;
 }
+#endif
 
 /* EOF */

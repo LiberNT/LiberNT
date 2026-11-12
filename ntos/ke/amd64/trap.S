@@ -961,6 +961,7 @@ KiApcInterruptEoiDone:
  *     PKPRCB Prcb);
  */
 EXTERN KiRetireDpcList:PROC
+EXTERN KiRunStackCallout:PROC
 
 /*
  * VOID

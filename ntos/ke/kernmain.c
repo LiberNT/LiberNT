@@ -337,6 +337,7 @@ KiWatchdogTicks(
     return (ULONG)(((ULONGLONG)Seconds * 10 * 1000 * 1000) / Increment);
 }
 
+CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitSpinLocks(

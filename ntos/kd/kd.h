@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cportlib/cportlib.h>
+
 /* KD ROUTINES ***************************************************************/
 
 struct _KD_DISPATCH_TABLE;
