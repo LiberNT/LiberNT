@@ -27,12 +27,13 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     SAC_DBG(SAC_DBG_ENTRY_EXIT, "Entering.\n");
 
     /* Check if EMS is enabled in the kernel */
-    HeadlessDispatch(HeadlessCmdQueryInformation,
-                     NULL,
-                     0,
-                     &HeadlessInformation,
-                     &InfoSize);
-    if ((HeadlessInformation.PortType != HeadlessUndefinedPortType) &&
+    Status = HeadlessDispatch(HeadlessCmdQueryInformation,
+                              NULL,
+                              0,
+                              &HeadlessInformation,
+                              &InfoSize);
+    if (NT_SUCCESS(Status) &&
+        (HeadlessInformation.PortType != HeadlessUndefinedPortType) &&
         ((HeadlessInformation.PortType != HeadlessSerialPort) ||
          (HeadlessInformation.Serial.TerminalAttached)))
     {
