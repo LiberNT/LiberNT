@@ -940,6 +940,7 @@ ExpQueryCpuSetInformation(
         for (Index = 0; (Index < (ULONG)KeNumberProcessors) && (Written < Count); Index++)
         {
             PSYSTEM_CPU_SET_INFORMATION Record = &Records[Written];
+            PKPRCB Prcb = KiProcessorBlock[Index];
 
             if (!(KeActiveProcessors & AFFINITY_MASK(Index))) continue;
 
