@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <ntddk.h>
+#include <ntifs.h>
 #include <wmistr.h>
 #include <wmilib.h>
 #include <reactos/rddm/rxgkmonitor.h>
@@ -44,6 +44,8 @@ typedef struct _MONITOR_DEVICE_EXTENSION
     BOOLEAN WmiRegistered;
     BOOLEAN BrightnessEvents;
     PMONITOR_BRIGHTNESS Brightness;
+    ACPI_INTERFACE_STANDARD2 AcpiInterface;
+    BOOLEAN AcpiHotkeys;
 } MONITOR_DEVICE_EXTENSION, *PMONITOR_DEVICE_EXTENSION;
 
 extern UNICODE_STRING MonitorRegistryPath;

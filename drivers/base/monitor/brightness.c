@@ -45,8 +45,6 @@ typedef struct _MONITOR_BRIGHTNESS
     UCHAR Dc;
     BOOLEAN OnDc;
     PVOID PowerSourceHandle;
-    ACPI_INTERFACE_STANDARD2 AcpiInterface;
-    BOOLEAN AcpiNotifications;
 } MONITOR_BRIGHTNESS;
 
 typedef struct _MONITOR_HOTKEY_WORK
@@ -60,6 +58,8 @@ static PMONITOR_DEVICE_EXTENSION MonitorLcdOwner;
 static PDEVICE_OBJECT MonitorLcdDevice;
 static PKEVENT MonitorBrightnessEvent;
 static HANDLE MonitorBrightnessEventHandle;
+static PKEVENT MonitorBrightnessKeyEvent;
+static HANDLE MonitorBrightnessKeyEventHandle;
 
 static
 NTSTATUS
@@ -352,15 +352,53 @@ MonitorBrightnessFromAcpi(
 
 static
 VOID
+MonitorBrightnessAllowWait(
+    _In_ HANDLE EventHandle)
+{
+    ULONG DaclBuffer[16];
+    PACL Dacl = (PACL)DaclBuffer;
+    SECURITY_DESCRIPTOR Descriptor;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(sizeof(ACL) + FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(SeExports->SeWorldSid) <=
+           sizeof(DaclBuffer));
+
+    Status = RtlCreateSecurityDescriptor(&Descriptor, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateAcl(Dacl, sizeof(DaclBuffer), ACL_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, SYNCHRONIZE, SeExports->SeWorldSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(&Descriptor, TRUE, Dacl, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = ZwSetSecurityObject(EventHandle, DACL_SECURITY_INFORMATION, &Descriptor);
+    if (!NT_SUCCESS(Status))
+        DPRINT1("Brightness event not opened to the shell: 0x%08lx\n", Status);
+}
+
+static
+VOID
 MonitorBrightnessEnsureEvent(VOID)
 {
     UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\BaseNamedObjects\\" RXGK_MONITOR_BRIGHTNESS_EVENT);
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\BaseNamedObjects\\" RXGK_MONITOR_BRIGHTNESS_KEY_EVENT);
 
     PAGED_CODE();
 
     ExAcquireFastMutex(&MonitorLcdLock);
     if (!MonitorBrightnessEvent)
+    {
         MonitorBrightnessEvent = IoCreateSynchronizationEvent(&Name, &MonitorBrightnessEventHandle);
+        if (MonitorBrightnessEvent)
+            MonitorBrightnessAllowWait(MonitorBrightnessEventHandle);
+    }
+    if (!MonitorBrightnessKeyEvent)
+    {
+        MonitorBrightnessKeyEvent = IoCreateSynchronizationEvent(&KeyName, &MonitorBrightnessKeyEventHandle);
+        if (MonitorBrightnessKeyEvent)
+            MonitorBrightnessAllowWait(MonitorBrightnessKeyEventHandle);
+    }
     ExReleaseFastMutex(&MonitorLcdLock);
 }
 
@@ -400,6 +438,15 @@ MonitorBrightnessChanged(
     if (MonitorBrightnessEvent)
         KeSetEvent(MonitorBrightnessEvent, IO_NO_INCREMENT, FALSE);
     MonitorWmiBrightnessChanged(DeviceExtension, Level);
+}
+
+static
+VOID
+MonitorBrightnessKeyPressed(VOID)
+{
+    MonitorBrightnessEnsureEvent();
+    if (MonitorBrightnessKeyEvent)
+        KeSetEvent(MonitorBrightnessKeyEvent, IO_NO_INCREMENT, FALSE);
 }
 
 static
@@ -472,11 +519,16 @@ MonitorBrightnessHotkey(
     ULONG Index;
 
     PAGED_CODE();
+    ASSERT(NotifyCode >= ACPI_NOTIFY_CYCLE_BRIGHTNESS_HOTKEY && NotifyCode <= ACPI_NOTIFY_ZERO_BRIGHTNESS_HOTKEY);
 
     if (!Brightness)
+    {
+        MonitorBrightnessKeyPressed();
         return;
+    }
 
     KeWaitForSingleObject(&Brightness->Lock, Executive, KernelMode, FALSE, NULL);
+    ASSERT(Brightness->LevelCount != 0);
     Current = Brightness->Current;
     Next = Brightness->Levels[0];
     if (NotifyCode == ACPI_NOTIFY_INC_BRIGHTNESS_HOTKEY || NotifyCode == ACPI_NOTIFY_CYCLE_BRIGHTNESS_HOTKEY)
@@ -513,6 +565,7 @@ MonitorBrightnessHotkey(
 
     if (Next != Current)
         MonitorBrightnessSetCurrent(DeviceExtension, Next);
+    MonitorBrightnessKeyPressed();
 }
 
 static
@@ -562,29 +615,47 @@ MonitorAcpiNotify(
 static
 VOID
 MonitorAcpiHotkeysStart(
-    _In_ PMONITOR_DEVICE_EXTENSION DeviceExtension,
-    _Inout_ PMONITOR_BRIGHTNESS Brightness)
+    _Inout_ PMONITOR_DEVICE_EXTENSION DeviceExtension)
 {
     PAGED_CODE();
+    ASSERT(!DeviceExtension->AcpiHotkeys);
+    ASSERT(DeviceExtension->AcpiInterface.Context == NULL);
 
     if (!NT_SUCCESS(MonitorQueryInterface(DeviceExtension, &MonitorGuidAcpiInterfaceStandard2, 1,
-                                          (PINTERFACE)&Brightness->AcpiInterface, sizeof(Brightness->AcpiInterface))))
+                                          (PINTERFACE)&DeviceExtension->AcpiInterface,
+                                          sizeof(DeviceExtension->AcpiInterface))))
     {
-        RtlZeroMemory(&Brightness->AcpiInterface, sizeof(Brightness->AcpiInterface));
+        RtlZeroMemory(&DeviceExtension->AcpiInterface, sizeof(DeviceExtension->AcpiInterface));
         return;
     }
 
-    if (Brightness->AcpiInterface.RegisterForDeviceNotifications &&
-        NT_SUCCESS(Brightness->AcpiInterface.RegisterForDeviceNotifications(Brightness->AcpiInterface.Context,
-                                                                            MonitorAcpiNotify, DeviceExtension)))
+    if (DeviceExtension->AcpiInterface.RegisterForDeviceNotifications &&
+        NT_SUCCESS(DeviceExtension->AcpiInterface.RegisterForDeviceNotifications(DeviceExtension->AcpiInterface.Context,
+                                                                                 MonitorAcpiNotify, DeviceExtension)))
     {
-        Brightness->AcpiNotifications = TRUE;
+        DeviceExtension->AcpiHotkeys = TRUE;
         return;
     }
 
-    if (Brightness->AcpiInterface.InterfaceDereference)
-        Brightness->AcpiInterface.InterfaceDereference(Brightness->AcpiInterface.Context);
-    RtlZeroMemory(&Brightness->AcpiInterface, sizeof(Brightness->AcpiInterface));
+    if (DeviceExtension->AcpiInterface.InterfaceDereference)
+        DeviceExtension->AcpiInterface.InterfaceDereference(DeviceExtension->AcpiInterface.Context);
+    RtlZeroMemory(&DeviceExtension->AcpiInterface, sizeof(DeviceExtension->AcpiInterface));
+}
+
+static
+VOID
+MonitorAcpiHotkeysStop(
+    _Inout_ PMONITOR_DEVICE_EXTENSION DeviceExtension)
+{
+    PAGED_CODE();
+    ASSERT(!DeviceExtension->AcpiHotkeys || DeviceExtension->AcpiInterface.UnregisterForDeviceNotifications);
+
+    if (DeviceExtension->AcpiHotkeys)
+        DeviceExtension->AcpiInterface.UnregisterForDeviceNotifications(DeviceExtension->AcpiInterface.Context);
+    if (DeviceExtension->AcpiInterface.InterfaceDereference)
+        DeviceExtension->AcpiInterface.InterfaceDereference(DeviceExtension->AcpiInterface.Context);
+    DeviceExtension->AcpiHotkeys = FALSE;
+    RtlZeroMemory(&DeviceExtension->AcpiInterface, sizeof(DeviceExtension->AcpiInterface));
 }
 
 BOOLEAN
@@ -755,7 +826,7 @@ MonitorBrightnessStart(
 
     PAGED_CODE();
 
-    if (DeviceExtension->Brightness)
+    if (DeviceExtension->Brightness || DeviceExtension->AcpiHotkeys)
         return;
     if (!NT_SUCCESS(MonitorQueryDescriptor(DeviceExtension, &Descriptor)))
         return;
@@ -776,8 +847,10 @@ MonitorBrightnessStart(
     if (!MonitorBrightnessFromMiniport(DeviceExtension, Brightness) &&
         !MonitorBrightnessFromAcpi(DeviceExtension, Brightness))
     {
-        DPRINT("MONITOR: the integrated panel has no brightness control\n");
+        DPRINT1("Integrated panel has no brightness control\n");
         ExFreePoolWithTag(Brightness, MONITOR_TAG);
+        MonitorBrightnessEnsureEvent();
+        MonitorAcpiHotkeysStart(DeviceExtension);
         return;
     }
 
@@ -787,7 +860,7 @@ MonitorBrightnessStart(
 
     if (Brightness->Source == MonitorBrightnessKmd)
         (VOID)MonitorAcpiEvalIntegers(DeviceExtension, "_BCL", Values, RTL_NUMBER_OF(Values), &Count);
-    MonitorAcpiHotkeysStart(DeviceExtension, Brightness);
+    MonitorAcpiHotkeysStart(DeviceExtension);
 
     Status = PoRegisterPowerSettingCallback(DeviceExtension->DeviceObject, &MonitorGuidAcDcPowerSource,
                                             MonitorPowerSourceChanged, DeviceExtension, &Brightness->PowerSourceHandle);
@@ -828,15 +901,12 @@ MonitorBrightnessStop(
 
     PAGED_CODE();
 
+    MonitorAcpiHotkeysStop(DeviceExtension);
     if (!Brightness)
         return;
 
     if (Brightness->PowerSourceHandle)
         PoUnregisterPowerSettingCallback(Brightness->PowerSourceHandle);
-    if (Brightness->AcpiNotifications)
-        Brightness->AcpiInterface.UnregisterForDeviceNotifications(Brightness->AcpiInterface.Context);
-    if (Brightness->AcpiInterface.InterfaceDereference)
-        Brightness->AcpiInterface.InterfaceDereference(Brightness->AcpiInterface.Context);
 
     ExAcquireFastMutex(&MonitorLcdLock);
     if (MonitorLcdOwner == DeviceExtension)

@@ -13,6 +13,7 @@
 #define RXGK_MONITOR_EDID_MAX_SIZE (128 * 4)
 
 #define RXGK_MONITOR_BRIGHTNESS_EVENT L"LiberNTMonitorBrightnessChanged"
+#define RXGK_MONITOR_BRIGHTNESS_KEY_EVENT L"LiberNTMonitorBrightnessKey"
 
 typedef struct _RXGK_MONITOR_DESCRIPTOR
 {

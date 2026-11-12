@@ -10,6 +10,7 @@
 #include <hidclass.h>
 #include <hidpi.h>
 #include <ntddvdeo.h>
+#include <reactos/rddm/rxgkmonitor.h>
 
 DBG_DEFAULT_CHANNEL(UserInput);
 
@@ -66,6 +67,8 @@ typedef struct _HIDINPUT_STATE
     BOOLEAN RepeatFired;
     PHIDINPUT_DEVICE RepeatDevice;
     USAGE_AND_PAGE RepeatUsage;
+    PKEVENT BrightnessKeyEvent;
+    HANDLE BrightnessKeyHandle;
     HIDINPUT_DEVICE Devices[HIDINPUT_MAX_DEVICES];
     HIDINPUT_RAW_READER RawReaders[HIDINPUT_MAX_RAW_DEVICES];
 } HIDINPUT_STATE, *PHIDINPUT_STATE;
@@ -525,6 +528,42 @@ HidInputInsertScanCodes(
 
 static
 VOID
+HidInputAllowWait(
+    _In_ HANDLE EventHandle)
+{
+    ULONG DaclBuffer[16];
+    PACL Dacl = (PACL)DaclBuffer;
+    SECURITY_DESCRIPTOR Descriptor;
+    NTSTATUS Status;
+
+    ASSERT(sizeof(ACL) + FIELD_OFFSET(ACCESS_ALLOWED_ACE, SidStart) + RtlLengthSid(SeExports->SeWorldSid) <=
+           sizeof(DaclBuffer));
+
+    Status = RtlCreateSecurityDescriptor(&Descriptor, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateAcl(Dacl, sizeof(DaclBuffer), ACL_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, SYNCHRONIZE, SeExports->SeWorldSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(&Descriptor, TRUE, Dacl, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = ZwSetSecurityObject(EventHandle, DACL_SECURITY_INFORMATION, &Descriptor);
+    if (!NT_SUCCESS(Status))
+        ERR("Brightness key event not opened to the shell: 0x%08lx\n", Status);
+}
+
+static
+VOID
+HidInputBrightnessKeyPressed(VOID)
+{
+    PHIDINPUT_STATE State = gHidInput;
+
+    if (State && State->BrightnessKeyEvent)
+        KeSetEvent(State->BrightnessKeyEvent, IO_NO_INCREMENT, FALSE);
+}
+
+static
+VOID
 HidInputStepBrightness(
     _In_ BOOLEAN Increase)
 {
@@ -542,7 +581,10 @@ HidInputStepBrightness(
     Status = ZwOpenFile(&Handle, SYNCHRONIZE | FILE_READ_DATA | FILE_WRITE_DATA, &ObjectAttributes, &Iosb,
                         FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
     if (!NT_SUCCESS(Status))
+    {
+        HidInputBrightnessKeyPressed();
         return;
+    }
 
     Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &Iosb, IOCTL_VIDEO_QUERY_SUPPORTED_BRIGHTNESS, NULL, 0,
                                    Levels, sizeof(Levels));
@@ -599,6 +641,7 @@ HidInputStepBrightness(
         }
     }
     ZwClose(Handle);
+    HidInputBrightnessKeyPressed();
 }
 
 static
@@ -745,6 +788,7 @@ VOID
 NTAPI
 HidInputStart(VOID)
 {
+    UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\BaseNamedObjects\\" RXGK_MONITOR_BRIGHTNESS_KEY_EVENT);
     PHIDINPUT_STATE State;
     NTSTATUS Status;
 
@@ -758,6 +802,11 @@ HidInputStart(VOID)
     ExInitializeFastMutex(&State->ArrivalLock);
     InitializeListHead(&State->Arrivals);
     InputHoldInitialize(&State->Hold, &State->ArrivalEvent);
+    State->BrightnessKeyEvent = IoCreateSynchronizationEvent(&KeyName, &State->BrightnessKeyHandle);
+    if (State->BrightnessKeyEvent)
+        HidInputAllowWait(State->BrightnessKeyHandle);
+    else
+        ERR("Brightness key event not created\n");
     gHidInput = State;
 
     Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange,
@@ -808,6 +857,8 @@ HidInputStop(VOID)
     }
 
     gHidInput = NULL;
+    if (State->BrightnessKeyEvent)
+        ZwClose(State->BrightnessKeyHandle);
     ExFreePoolWithTag(State, USERTAG_HIDDATA);
 }
 

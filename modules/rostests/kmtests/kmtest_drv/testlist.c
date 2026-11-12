@@ -13,6 +13,7 @@ KMT_TESTFUNC Test_DxgkHotPlugWork;
 KMT_TESTFUNC Test_DxgkChildDescriptor;
 KMT_TESTFUNC Test_DxgkPostDisplayHandoff;
 KMT_TESTFUNC Test_DxgkPresentUserSource;
+KMT_TESTFUNC Test_MonitorBrightnessKey;
 KMT_TESTFUNC Test_DxgkGpuVaAddress;
 KMT_TESTFUNC Test_DxgkGpuVaPageTable;
 KMT_TESTFUNC Test_DxgkGpuVaPte;
@@ -785,6 +786,7 @@ const KMT_TEST TestList[] =
     { "MmSelfMap",                          Test_MmSelfMap },
     { "MmUserLayout",                       Test_MmUserLayout },
     { "MmLoaderBlock",                      Test_MmLoaderBlock },
+    { "MonitorBrightnessKey",               Test_MonitorBrightnessKey },
     { "NdisIfProvider",                     Test_NdisIfProvider },
     { "NdisRwLock",                         Test_NdisRwLock },
     { "NdisProcessorGroup",                 Test_NdisProcessorGroup },
