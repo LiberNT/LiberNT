@@ -2756,6 +2756,25 @@ KiArm64HandleSynchronousException(
                     {
                         USHORT ReturnLength;
 
+                        if (!KdpPromptBuffersAccessible((PCHAR)Context->State.Registers.X[1],
+                                                        (USHORT)Context->State.Registers.X[2],
+                                                        (PCHAR)Context->State.Registers.X[3],
+                                                        (USHORT)Context->State.Registers.X[4],
+                                                        Mode))
+                        {
+                            EXCEPTION_RECORD ExceptionRecord;
+
+                            RtlZeroMemory(&ExceptionRecord, sizeof(ExceptionRecord));
+                            ExceptionRecord.ExceptionCode = STATUS_BREAKPOINT;
+                            ExceptionRecord.ExceptionAddress = (PVOID)(ULONG_PTR)Context->State.Elr;
+                            ExceptionRecord.NumberParameters = 3;
+                            ExceptionRecord.ExceptionInformation[0] = BREAKPOINT_PROMPT;
+                            ExceptionRecord.ExceptionInformation[1] = Context->State.Registers.X[1];
+                            ExceptionRecord.ExceptionInformation[2] = Context->State.Registers.X[2];
+                            KiDispatchException(&ExceptionRecord, Context->ExceptionFramePointer, TrapFrame, Mode, TRUE);
+                            goto HandledExit;
+                        }
+
                         ReturnLength = KdpPrompt(
                             (PCHAR)Context->State.Registers.X[1],
                             (USHORT)Context->State.Registers.X[2],
