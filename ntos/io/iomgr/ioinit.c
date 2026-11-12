@@ -798,6 +798,17 @@ IoInitSystem(
 
     IopInitializeBootDrivers();
 
+    if (LoaderBlock->ArcBootDeviceName != NULL &&
+        !_strnicmp(LoaderBlock->ArcBootDeviceName, "ramdisk(", 8))
+    {
+        Status = IopStartRamdisk(LoaderBlock);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("I/O: the boot ramdisk could not be made (%lx)\n", Status);
+            return FALSE;
+        }
+    }
+
     Status = IopCreateArcNames(LoaderBlock);
     if (!NT_SUCCESS(Status))
     {
