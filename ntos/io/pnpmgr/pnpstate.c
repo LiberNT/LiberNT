@@ -1659,7 +1659,8 @@ PiDevNodeStateMachine(
 
         if (Progress) continue;
 
-        if (Node->Child != NULL)
+        /* Children whose subtrees were walked in parallel are done; the walk goes on with the next sibling */
+        if (Node->Child != NULL && !(PnpEnableParallelEnum && PiProcessChildrenParallel(Node)))
         {
             Node = Node->Child;
             continue;
