@@ -1,7 +1,7 @@
 /*
- * PROJECT:     ReactOS Native WiFi (802.11) stack
+ * PROJECT:     LiberNT Native WiFi (802.11) stack
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Upper-miniport OID request handling
+ * PURPOSE:     OID requests from the protocols above the media-converting filter
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -9,10 +9,6 @@
 
 #define NDEBUG
 #include <debug.h>
-
-#define NWIFI_VENDOR_DESCRIPTION    "ReactOS Native WiFi Virtual Adapter"
-#define NWIFI_VENDOR_DRIVER_VERSION 0x00010000
-#define NWIFI_DRIVER_VERSION        ((6 << 8) | 20)  /* NDIS 6.20 */
 
 /* Standard Ethernet OID set advertised to TCP/IP.  dot11 OIDs are exposed to
  * the WLAN service via the control IOCTL channel, not via this miniport. */
@@ -198,22 +194,6 @@ NwifiQueryInformation(
         case OID_GEN_RECEIVE_BUFFER_SPACE:
             return NwifiQueryUlong(Request, ETH_MAX_FRAME * 64);
 
-        case OID_GEN_VENDOR_ID:
-            return NwifiQueryUlong(Request, 0x00FFFFFF);
-
-        case OID_GEN_VENDOR_DESCRIPTION:
-            return NwifiQueryBuffer(Request, NWIFI_VENDOR_DESCRIPTION,
-                                    sizeof(NWIFI_VENDOR_DESCRIPTION));
-
-        case OID_GEN_VENDOR_DRIVER_VERSION:
-            return NwifiQueryUlong(Request, NWIFI_VENDOR_DRIVER_VERSION);
-
-        case OID_GEN_DRIVER_VERSION:
-        {
-            USHORT Version = NWIFI_DRIVER_VERSION;
-            return NwifiQueryBuffer(Request, &Version, sizeof(Version));
-        }
-
         case OID_GEN_CURRENT_PACKET_FILTER:
         {
             ULONG PacketFilter;
@@ -365,44 +345,44 @@ NwifiSetInformation(
     }
 }
 
-/* ===========================================================================
- *  MiniportOidRequest entry point
- * ===========================================================================
- */
 NDIS_STATUS
 NTAPI
-NwifiMiniportOidRequest(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
+NwifiFilterOidRequest(
+    _In_ NDIS_HANDLE FilterModuleContext,
     _In_ PNDIS_OID_REQUEST OidRequest)
 {
-    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)MiniportAdapterContext;
+    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)FilterModuleContext;
+    NDIS_STATUS Status;
 
     switch (OidRequest->RequestType)
     {
         case NdisRequestQueryInformation:
         case NdisRequestQueryStatistics:
-            return NwifiQueryInformation(Adapter, OidRequest);
+            Status = NwifiQueryInformation(Adapter, OidRequest);
+            break;
 
         case NdisRequestSetInformation:
-            return NwifiSetInformation(Adapter, OidRequest);
-
-        case NdisRequestMethod:
-            /* dot11 method OIDs (scan, connect, key install) go through the
-             * control device (control.c), not this Ethernet edge. */
-            return NDIS_STATUS_NOT_SUPPORTED;
+            Status = NwifiSetInformation(Adapter, OidRequest);
+            break;
 
         default:
-            return NDIS_STATUS_NOT_SUPPORTED;
+            Status = NDIS_STATUS_NOT_SUPPORTED;
+            break;
     }
+
+    if (Status != NDIS_STATUS_NOT_SUPPORTED)
+        return Status;
+
+    return NdisFOidRequest(Adapter->FilterHandle, OidRequest);
 }
 
 VOID
 NTAPI
-NwifiMiniportCancelOidRequest(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
+NwifiFilterCancelOidRequest(
+    _In_ NDIS_HANDLE FilterModuleContext,
     _In_ PVOID RequestId)
 {
-    UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    UNREFERENCED_PARAMETER(RequestId);
-    /* OID requests are serviced synchronously; nothing to cancel. */
+    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)FilterModuleContext;
+
+    NdisFCancelOidRequest(Adapter->FilterHandle, RequestId);
 }

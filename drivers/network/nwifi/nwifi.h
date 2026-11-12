@@ -4,9 +4,8 @@
  * PURPOSE:     Native WiFi intermediate driver shared definitions
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
- * NDIS 6.20 intermediate driver: the protocol edge binds a Native-802.11
- * (dot11) miniport and creates a paired upper virtual 802.3 miniport
- * (NdisIMInitializeDeviceInstanceEx) that translates 802.3 <-> 802.11.
+ * NDIS 6.20 media-converting filter: it attaches to each Native-802.11 (dot11)
+ * miniport and presents it to the protocols above as 802.3, translating frames.
  */
 
 #ifndef _NWIFI_H_
@@ -20,7 +19,7 @@
 #define NWIFI_BSS_LIST_ATTEMPTS 3
 #define NWIFI_BSS_LIST_MAX_BYTES (1024 * 1024)
 
-/* Link speed reported to TCP/IP for the virtual Ethernet adapter until the MSM
+/* Link speed reported to TCP/IP for the Wi-Fi adapter until the MSM
  * learns the real PHY rate.  54 Mbit/s (classic 802.11g) is a safe stand-in. */
 #define NWIFI_DEFAULT_LINK_SPEED    (54ULL * 1000000ULL)
 #define NWIFI_MAX_LINK_SPEED        433300000ULL
@@ -116,11 +115,10 @@ typedef struct _RFC1042_SNAP_HEADER
  */
 typedef struct _NWIFI_GLOBALS
 {
-    NDIS_HANDLE   MiniportDriverHandle;     /* NdisMRegisterMiniportDriver */
-    NDIS_HANDLE   ProtocolHandle;           /* NdisRegisterProtocolDriver  */
+    NDIS_HANDLE   FilterDriverHandle;       /* NdisFRegisterFilterDriver */
     PDRIVER_OBJECT DriverObject;
 
-    /* All bound lower adapters (NWIFI_ADAPTER.Link), guarded by AdapterLock. */
+    /* All attached Wi-Fi adapters (NWIFI_ADAPTER.Link), guarded by AdapterLock. */
     LIST_ENTRY    AdapterList;
     NDIS_SPIN_LOCK AdapterLock;
     volatile LONG NextInterfaceIndex;
@@ -149,25 +147,18 @@ typedef enum _NWIFI_STATE
     NwifiStateHalting
 } NWIFI_STATE;
 
-/* One bound dot11 device: the protocol binding to the lower miniport plus
- * the upper virtual miniport presented to TCP/IP. */
+/* One dot11 miniport this filter is attached to. */
 typedef struct _NWIFI_ADAPTER
 {
     LIST_ENTRY    Link;
     ULONG         InterfaceIndex;
 
-    /* ---- Lower (protocol) edge ---- */
-    NDIS_HANDLE   BindingHandle;            /* NdisOpenAdapterEx result */
-    PNDIS_STRING  LowerDeviceName;          /* copied from bind parameters */
-    NDIS_STRING   LowerDeviceNameStore;
+    NDIS_HANDLE   FilterHandle;
+    BOOLEAN       LowerPrepared;
+    BOOLEAN       Announced;
 
-    /* ---- Upper (virtual miniport) edge ---- */
-    NDIS_HANDLE   MiniportAdapterHandle;    /* set in MiniportInitializeEx */
-    NDIS_STRING   UpperDeviceInstance;      /* IM device instance name */
-    BOOLEAN       MiniportInitialized;
-
-    /* ---- Shared identity / state ---- */
-    UCHAR         MacAddress[IEEE80211_ADDR_LEN];   /* lower MAC == upper MAC */
+    /* ---- Identity / state ---- */
+    UCHAR         MacAddress[IEEE80211_ADDR_LEN];
     GUID          InterfaceGuid;
     GUID          AdapterGuid;
     NWIFI_STATE   State;
@@ -189,14 +180,9 @@ typedef struct _NWIFI_ADAPTER
     NDIS_HANDLE   RxNblPool;                /* NBLs we indicate up */
     NDIS_SPIN_LOCK DataLock;
 
-    /* In-flight accounting so Pause/Halt can drain safely. */
+    /* In-flight accounting so Pause/Detach can drain safely. */
     volatile LONG PendingSends;             /* NBLs sent down, not completed */
     volatile LONG PendingReceives;          /* NBLs indicated up, not returned */
-
-    /* ---- Lower-binding lifecycle completion ---- */
-    NDIS_EVENT    OpenEvent;
-    NDIS_STATUS   OpenStatus;
-    NDIS_EVENT    CloseEvent;
 
     /* ---- Statistics ---- */
     volatile LONG64 TxOk;
@@ -234,20 +220,21 @@ typedef struct _NWIFI_NBL_CONTEXT
 DRIVER_INITIALIZE DriverEntry;
 DRIVER_UNLOAD     NwifiUnload;
 
-/* --- protocol.c : lower edge ---------------------------------------------- */
-PROTOCOL_SET_OPTIONS                    NwifiProtocolSetOptions;
-PROTOCOL_BIND_ADAPTER_EX                NwifiBindAdapterEx;
-PROTOCOL_UNBIND_ADAPTER_EX              NwifiUnbindAdapterEx;
-PROTOCOL_OPEN_ADAPTER_COMPLETE_EX       NwifiOpenAdapterCompleteEx;
-PROTOCOL_CLOSE_ADAPTER_COMPLETE_EX      NwifiCloseAdapterCompleteEx;
-PROTOCOL_OID_REQUEST_COMPLETE           NwifiProtocolOidRequestComplete;
-PROTOCOL_STATUS_EX                      NwifiProtocolStatusEx;
-PROTOCOL_NET_PNP_EVENT                  NwifiProtocolNetPnPEvent;
-PROTOCOL_SEND_NET_BUFFER_LISTS_COMPLETE NwifiProtocolSendNblComplete;
-PROTOCOL_RECEIVE_NET_BUFFER_LISTS       NwifiProtocolReceiveNbl;
-PROTOCOL_UNINSTALL                      NwifiProtocolUninstall;
+/* --- filter.c : filter edge on the dot11 miniport ------------------------ */
+FILTER_SET_OPTIONS                      NwifiFilterSetOptions;
+FILTER_ATTACH                           NwifiFilterAttach;
+FILTER_DETACH                           NwifiFilterDetach;
+FILTER_RESTART                          NwifiFilterRestart;
+FILTER_PAUSE                            NwifiFilterPause;
+FILTER_STATUS                           NwifiFilterStatus;
+FILTER_NET_PNP_EVENT                    NwifiFilterNetPnPEvent;
+FILTER_DEVICE_PNP_EVENT_NOTIFY          NwifiFilterDevicePnPEventNotify;
+FILTER_OID_REQUEST_COMPLETE             NwifiFilterOidRequestComplete;
+FILTER_RECEIVE_NET_BUFFER_LISTS         NwifiFilterReceiveNetBufferLists;
+FILTER_SEND_NET_BUFFER_LISTS_COMPLETE   NwifiFilterSendNetBufferListsComplete;
+FILTER_CANCEL_SEND_NET_BUFFER_LISTS     NwifiFilterCancelSendNetBufferLists;
 
-NDIS_STATUS NwifiProtocolDoRequest(
+NDIS_STATUS NwifiDoRequest(
     _In_ PNWIFI_ADAPTER Adapter,
     _In_ NDIS_REQUEST_TYPE RequestType,
     _In_ NDIS_OID Oid,
@@ -255,7 +242,7 @@ NDIS_STATUS NwifiProtocolDoRequest(
     _In_ ULONG Length,
     _Out_opt_ PULONG BytesProcessed);
 
-NDIS_STATUS NwifiProtocolDoRequestEx(
+NDIS_STATUS NwifiDoRequestEx(
     _In_ PNWIFI_ADAPTER Adapter,
     _In_ NDIS_REQUEST_TYPE RequestType,
     _In_ NDIS_OID Oid,
@@ -264,18 +251,9 @@ NDIS_STATUS NwifiProtocolDoRequestEx(
     _Out_opt_ PULONG BytesProcessed,
     _Out_opt_ PULONG BytesNeeded);
 
-/* --- miniport.c : upper edge ---------------------------------------------- */
-MINIPORT_INITIALIZE              NwifiMiniportInitializeEx;
-MINIPORT_HALT                    NwifiMiniportHaltEx;
-MINIPORT_PAUSE                   NwifiMiniportPauseEx;
-MINIPORT_RESTART                 NwifiMiniportRestartEx;
-MINIPORT_SHUTDOWN                NwifiMiniportShutdownEx;
-MINIPORT_DEVICE_PNP_EVENT_NOTIFY NwifiMiniportDevicePnPEventNotify;
-MINIPORT_CANCEL_SEND             NwifiMiniportCancelSend;
-MINIPORT_RETURN_NET_BUFFER_LISTS NwifiMiniportReturnNetBufferLists;
-
 /* --- datapath.c : 802.3 <-> 802.11 translation ---------------------------- */
-MINIPORT_SEND_NET_BUFFER_LISTS   NwifiMiniportSendNetBufferLists;
+FILTER_SEND_NET_BUFFER_LISTS            NwifiFilterSendNetBufferLists;
+FILTER_RETURN_NET_BUFFER_LISTS          NwifiFilterReturnNetBufferLists;
 
 VOID NwifiReceiveFromLower(
     _In_ PNWIFI_ADAPTER Adapter,
@@ -293,8 +271,8 @@ VOID NwifiIndicateLinkState(
     _In_ BOOLEAN Connected);
 
 /* --- oid.c : OID translation/forwarding ----------------------------------- */
-MINIPORT_OID_REQUEST        NwifiMiniportOidRequest;
-MINIPORT_CANCEL_OID_REQUEST NwifiMiniportCancelOidRequest;
+FILTER_OID_REQUEST          NwifiFilterOidRequest;
+FILTER_CANCEL_OID_REQUEST   NwifiFilterCancelOidRequest;
 
 extern NDIS_OID NwifiSupportedOids[];
 extern ULONG    NwifiSupportedOidCount;
@@ -303,7 +281,7 @@ extern ULONG    NwifiSupportedOidCount;
 PVOID NwifiAllocate(_In_ SIZE_T Size);
 VOID  NwifiFree(_In_ PVOID Buffer);
 
-/* Find a bound adapter by its nwifi-local interface index.  Returns NULL if no
+/* Find an attached adapter by its nwifi-local interface index.  Returns NULL if no
  * such interface is bound.  Caller must hold no locks; runs at <= DISPATCH. */
 PNWIFI_ADAPTER NwifiFindAdapterByIndex(_In_ ULONG InterfaceIndex);
 

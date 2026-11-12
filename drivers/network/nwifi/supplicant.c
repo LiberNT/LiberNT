@@ -318,7 +318,7 @@ NwifiInstallPairwiseKey(
     Value->usKeyLength = (USHORT)EncodedLength;
     RtlCopyMemory(Value->ucKey, EncodedKey, EncodedLength);
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                     OID_DOT11_CIPHER_KEY_MAPPING_KEY,
                                     ByteArray, TotalSize, NULL);
     RtlSecureZeroMemory(ByteArray, TotalSize);
@@ -377,7 +377,7 @@ NwifiInstallGroupKey(
     Value->usKeyLength = (USHORT)EncodedLength;
     RtlCopyMemory(Value->ucKey, EncodedKey, EncodedLength);
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                     OID_DOT11_CIPHER_DEFAULT_KEY,
                                     Value, ValueSize, NULL);
     RtlSecureZeroMemory(Value, ValueSize);
@@ -387,7 +387,7 @@ NwifiInstallGroupKey(
     if (Status == NDIS_STATUS_SUCCESS)
     {
         DefaultKeyId = KeyId;
-        Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+        Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                         OID_DOT11_CIPHER_DEFAULT_KEY_ID,
                                         &DefaultKeyId,
                                         sizeof(DefaultKeyId),
@@ -434,7 +434,7 @@ NwifiInstallIgtk(
     Bip->ulBIPKeyLength = (ULONG)Keys->igtkLen;
     RtlCopyMemory(Bip->ucBIPKey, Keys->igtk, Keys->igtkLen);
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                     OID_DOT11_CIPHER_DEFAULT_KEY,
                                     Value, ValueSize, NULL);
     RtlSecureZeroMemory(Value, ValueSize);
@@ -685,7 +685,7 @@ NwifiSaeSendParams(
     if (Length == 0)
         return NDIS_STATUS_INVALID_LENGTH;
 
-    Status = NwifiProtocolDoRequest(Msm->Adapter,
+    Status = NwifiDoRequest(Msm->Adapter,
                                     NdisRequestSetInformation,
                                     OID_WDI_SET_SAE_AUTH_PARAMS,
                                     Message,
@@ -1050,7 +1050,7 @@ NwifiSupplicantSeedFirmware(
     RtlCopyMemory(Value->ucKey, FirmwareCredential,
                   FirmwareCredentialLength);
 
-    Status = NwifiProtocolDoRequest(Msm->Adapter,
+    Status = NwifiDoRequest(Msm->Adapter,
                                     NdisRequestSetInformation,
                                     OID_DOT11_CIPHER_DEFAULT_KEY,
                                     Value,

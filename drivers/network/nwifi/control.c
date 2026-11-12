@@ -553,7 +553,7 @@ NwifiDispatchDeviceControl(
             List->Header.Revision = DOT11_AUTH_CIPHER_PAIR_LIST_REVISION_1;
             List->Header.Size = sizeof(DOT11_AUTH_CIPHER_PAIR_LIST);
 
-            NdisStatus = NwifiProtocolDoRequest(Adapter, NdisRequestQueryInformation,
+            NdisStatus = NwifiDoRequest(Adapter, NdisRequestQueryInformation,
                                                 OID_DOT11_SUPPORTED_UNICAST_ALGORITHM_PAIR,
                                                 List, ListSize, NULL);
             if (NdisStatus == NDIS_STATUS_BUFFER_OVERFLOW ||
@@ -729,7 +729,7 @@ NwifiCreateControlDevice(VOID)
     Attr.DefaultSDDLString = NULL;
     Attr.DeviceClassGuid = NULL;
 
-    Status = NdisRegisterDeviceEx(gNwifi.MiniportDriverHandle,
+    Status = NdisRegisterDeviceEx(gNwifi.FilterDriverHandle,
                                   &Attr,
                                   &DeviceObject,
                                   &gNwifiControlDeviceHandle);

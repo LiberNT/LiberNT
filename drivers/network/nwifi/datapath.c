@@ -90,7 +90,7 @@ NwifiBuildNbl(
     PNET_BUFFER_LIST Nbl;
     PNWIFI_NBL_CONTEXT Ctx;
 
-    Mdl = NdisAllocateMdl(gNwifi.MiniportDriverHandle, FrameBuffer, FrameLength);
+    Mdl = NdisAllocateMdl(Adapter->FilterHandle, FrameBuffer, FrameLength);
     if (Mdl == NULL)
     {
         return NULL;
@@ -323,13 +323,13 @@ NwifiTranslateTxFrame(
 
 VOID
 NTAPI
-NwifiMiniportSendNetBufferLists(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
+NwifiFilterSendNetBufferLists(
+    _In_ NDIS_HANDLE FilterModuleContext,
     _In_ PNET_BUFFER_LIST NetBufferLists,
     _In_ NDIS_PORT_NUMBER PortNumber,
     _In_ ULONG SendFlags)
 {
-    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)MiniportAdapterContext;
+    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)FilterModuleContext;
     PNET_BUFFER_LIST Nbl = NetBufferLists;
     ULONG DownFlags = 0;
     BOOLEAN Running;
@@ -366,10 +366,10 @@ NwifiMiniportSendNetBufferLists(
                 NwifiTranslateTxFrame(Adapter, NetBuffer, Nbl, Bssid);
             if (DownNbl != NULL)
             {
-                DownNbl->SourceHandle = NULL;   /* protocol-originated send */
+                DownNbl->SourceHandle = Adapter->FilterHandle;
                 InterlockedIncrement(&Adapter->PendingSends);
-                NdisSendNetBufferLists(Adapter->BindingHandle, DownNbl,
-                                       NDIS_DEFAULT_PORT_NUMBER, DownFlags);
+                NdisFSendNetBufferLists(Adapter->FilterHandle, DownNbl,
+                                        NDIS_DEFAULT_PORT_NUMBER, DownFlags);
                 Failed = FALSE;
             }
         }
@@ -384,7 +384,7 @@ NwifiMiniportSendNetBufferLists(
             NET_BUFFER_LIST_STATUS(Nbl) =
                 Running ? NDIS_STATUS_FAILURE : NDIS_STATUS_PAUSED;
             InterlockedIncrement64(&Adapter->TxError);
-            NdisMSendNetBufferListsComplete(Adapter->MiniportAdapterHandle, Nbl,
+            NdisFSendNetBufferListsComplete(Adapter->FilterHandle, Nbl,
                 (SendFlags & NDIS_SEND_FLAGS_DISPATCH_LEVEL)
                     ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
         }
@@ -419,6 +419,7 @@ NwifiSendCompleteFromLower(
             (PDOT11_EXTSTA_SEND_CONTEXT)Nbl->ProtocolReserved[0];
 
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+        ASSERT(Nbl->SourceHandle == Adapter->FilterHandle);
 
         if (Status == NDIS_STATUS_SUCCESS)
         {
@@ -443,7 +444,7 @@ NwifiSendCompleteFromLower(
         if (OriginalNbl != NULL)
         {
             NET_BUFFER_LIST_STATUS(OriginalNbl) = Status;
-            NdisMSendNetBufferListsComplete(Adapter->MiniportAdapterHandle,
+            NdisFSendNetBufferListsComplete(Adapter->FilterHandle,
                                             OriginalNbl, UpFlags);
         }
 
@@ -546,11 +547,11 @@ NwifiInjectL2Frame(
 
     NET_BUFFER_LIST_INFO(Nbl, MediaSpecificInformation) = SendCtx;
     Nbl->ProtocolReserved[0] = SendCtx;
-    Nbl->SourceHandle = NULL;       /* protocol-originated send */
+    Nbl->SourceHandle = Adapter->FilterHandle;
 
     InterlockedIncrement(&Adapter->PendingSends);
-    NdisSendNetBufferLists(Adapter->BindingHandle, Nbl,
-                           NDIS_DEFAULT_PORT_NUMBER, 0);
+    NdisFSendNetBufferLists(Adapter->FilterHandle, Nbl,
+                            NDIS_DEFAULT_PORT_NUMBER, 0);
     return NDIS_STATUS_SUCCESS;
 }
 
@@ -663,7 +664,7 @@ NwifiTranslateRxFrame(
         NwifiFree(Eth);
         return NULL;
     }
-    Nbl->SourceHandle = Adapter->MiniportAdapterHandle;
+    Nbl->SourceHandle = Adapter->FilterHandle;
     return Nbl;
 }
 
@@ -782,14 +783,14 @@ NwifiReceiveFromLower(
 
     if (UpHead != NULL)
     {
-        NdisMIndicateReceiveNetBufferLists(Adapter->MiniportAdapterHandle, UpHead, NDIS_DEFAULT_PORT_NUMBER, UpCount, IndicateFlags);
+        NdisFIndicateReceiveNetBufferLists(Adapter->FilterHandle, UpHead, NDIS_DEFAULT_PORT_NUMBER, UpCount, IndicateFlags);
     }
 
     /* With RESOURCES the lower NBL data is only valid during this call and
      * there is nothing to return. */
     if ((ReceiveFlags & NDIS_RECEIVE_FLAGS_RESOURCES) == 0)
     {
-        NdisReturnNetBufferLists(Adapter->BindingHandle, NetBufferLists, ReturnFlags);
+        NdisFReturnNetBufferLists(Adapter->FilterHandle, NetBufferLists, ReturnFlags);
     }
 }
 
@@ -797,26 +798,40 @@ NwifiReceiveFromLower(
  * MDL and NBL. */
 VOID
 NTAPI
-NwifiMiniportReturnNetBufferLists(
-    _In_ NDIS_HANDLE MiniportAdapterContext,
+NwifiFilterReturnNetBufferLists(
+    _In_ NDIS_HANDLE FilterModuleContext,
     _In_ PNET_BUFFER_LIST NetBufferLists,
     _In_ ULONG ReturnFlags)
 {
-    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)MiniportAdapterContext;
+    PNWIFI_ADAPTER Adapter = (PNWIFI_ADAPTER)FilterModuleContext;
     PNET_BUFFER_LIST Nbl = NetBufferLists;
-
-    UNREFERENCED_PARAMETER(ReturnFlags);
+    PNET_BUFFER_LIST ForeignHead = NULL;
+    PNET_BUFFER_LIST ForeignTail = NULL;
 
     while (Nbl != NULL)
     {
         PNET_BUFFER_LIST NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
 
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
-        NwifiFreeBuiltNbl(Nbl);
-        InterlockedDecrement(&Adapter->PendingReceives);
+        if (Nbl->SourceHandle == Adapter->FilterHandle)
+        {
+            NwifiFreeBuiltNbl(Nbl);
+            InterlockedDecrement(&Adapter->PendingReceives);
+        }
+        else
+        {
+            if (ForeignTail != NULL)
+                NET_BUFFER_LIST_NEXT_NBL(ForeignTail) = Nbl;
+            else
+                ForeignHead = Nbl;
+            ForeignTail = Nbl;
+        }
 
         Nbl = NextNbl;
     }
+
+    if (ForeignHead != NULL)
+        NdisFReturnNetBufferLists(Adapter->FilterHandle, ForeignHead, ReturnFlags);
 }
 
 /* ===========================================================================
@@ -832,7 +847,7 @@ NwifiIndicateLinkState(
     NDIS_STATUS_INDICATION StatusIndication;
     ULONG64 LinkSpeed;
 
-    if (Adapter->MiniportAdapterHandle == NULL)
+    if (Adapter->FilterHandle == NULL)
     {
         return;
     }
@@ -869,10 +884,10 @@ NwifiIndicateLinkState(
     StatusIndication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
     StatusIndication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
     StatusIndication.Header.Size = sizeof(NDIS_STATUS_INDICATION);
-    StatusIndication.SourceHandle = Adapter->MiniportAdapterHandle;
+    StatusIndication.SourceHandle = Adapter->FilterHandle;
     StatusIndication.StatusCode = NDIS_STATUS_LINK_STATE;
     StatusIndication.StatusBuffer = &LinkState;
     StatusIndication.StatusBufferSize = sizeof(LinkState);
 
-    NdisMIndicateStatusEx(Adapter->MiniportAdapterHandle, &StatusIndication);
+    NdisFIndicateStatus(Adapter->FilterHandle, &StatusIndication);
 }

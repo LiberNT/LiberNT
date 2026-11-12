@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Native WiFi (802.11) stack
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     DriverEntry, miniport/protocol registration, IM association
+ * PURPOSE:     DriverEntry and media-converting filter registration
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -11,11 +11,6 @@
 #include <debug.h>
 
 NWIFI_GLOBALS gNwifi = { 0 };
-
-/* Protocol name (must match the INF binding name); built at runtime because
- * the current ReactOS ndis.h lacks NDIS_STRING_CONST. */
-static const WCHAR NwifiProtocolNameBuffer[] = L"Nwifi";
-static NDIS_STRING NwifiProtocolName;
 
 /* ===========================================================================
  *  Pool helpers
@@ -68,87 +63,65 @@ NwifiFindAdapterByIndex(
     return Found;
 }
 
-/* ===========================================================================
- *  Registration helpers
- * ===========================================================================
- */
+static const WCHAR NwifiFilterFriendlyName[] = L"LiberNT Native WiFi Filter";
+static const WCHAR NwifiFilterUniqueName[] = L"{DDB50DEB-F71C-464F-91D6-AC8825F5A2D9}";
+static const WCHAR NwifiFilterServiceName[] = L"Nwifi";
+
 static
-NDIS_STATUS
-NwifiRegisterMiniport(
-    _In_ PDRIVER_OBJECT DriverObject,
-    _In_ PUNICODE_STRING RegistryPath)
+VOID
+NwifiInitString(
+    _Out_ PNDIS_STRING String,
+    _In_z_ PCWSTR Buffer)
 {
-    NDIS_MINIPORT_DRIVER_CHARACTERISTICS Chars;
-
-    RtlZeroMemory(&Chars, sizeof(Chars));
-    Chars.Header.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS;
-    Chars.Header.Revision = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
-    Chars.Header.Size = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2;
-    Chars.MajorNdisVersion = 6;
-    Chars.MinorNdisVersion = 20;
-    Chars.MajorDriverVersion = 1;
-    Chars.MinorDriverVersion = 0;
-    Chars.Flags = NDIS_INTERMEDIATE_DRIVER;
-
-    /* Upper-edge virtual 802.3 miniport entry points. */
-    Chars.InitializeHandlerEx        = NwifiMiniportInitializeEx;
-    Chars.HaltHandlerEx              = NwifiMiniportHaltEx;
-    Chars.UnloadHandler              = NwifiUnload;
-    Chars.PauseHandler               = NwifiMiniportPauseEx;
-    Chars.RestartHandler             = NwifiMiniportRestartEx;
-    Chars.OidRequestHandler          = NwifiMiniportOidRequest;
-    Chars.CancelOidRequestHandler    = NwifiMiniportCancelOidRequest;
-    Chars.SendNetBufferListsHandler  = NwifiMiniportSendNetBufferLists;
-    Chars.ReturnNetBufferListsHandler = NwifiMiniportReturnNetBufferLists;
-    Chars.CancelSendHandler          = NwifiMiniportCancelSend;
-    Chars.DevicePnPEventNotifyHandler = NwifiMiniportDevicePnPEventNotify;
-    Chars.ShutdownHandlerEx          = NwifiMiniportShutdownEx;
-    /* CheckForHang / Reset not needed for a virtual miniport. */
-
-    return NdisMRegisterMiniportDriver(DriverObject,
-                                       RegistryPath,
-                                       NULL,
-                                       &Chars,
-                                       &gNwifi.MiniportDriverHandle);
+    String->Buffer = (PWCH)Buffer;
+    String->Length = (USHORT)(wcslen(Buffer) * sizeof(WCHAR));
+    String->MaximumLength = (USHORT)(String->Length + sizeof(WCHAR));
 }
 
 static
 NDIS_STATUS
-NwifiRegisterProtocol(VOID)
+NwifiRegisterFilter(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PUNICODE_STRING RegistryPath)
 {
-    NDIS_PROTOCOL_DRIVER_CHARACTERISTICS Chars;
-
-    NwifiProtocolName.Buffer = (PWCH)NwifiProtocolNameBuffer;
-    NwifiProtocolName.Length = (USHORT)(wcslen(NwifiProtocolNameBuffer) * sizeof(WCHAR));
-    NwifiProtocolName.MaximumLength =
-        (USHORT)(NwifiProtocolName.Length + sizeof(WCHAR));
+    NDIS_FILTER_DRIVER_CHARACTERISTICS Chars;
 
     RtlZeroMemory(&Chars, sizeof(Chars));
-    Chars.Header.Type = NDIS_OBJECT_TYPE_PROTOCOL_DRIVER_CHARACTERISTICS;
-    Chars.Header.Revision = NDIS_PROTOCOL_DRIVER_CHARACTERISTICS_REVISION_2;
-    Chars.Header.Size = NDIS_SIZEOF_PROTOCOL_DRIVER_CHARACTERISTICS_REVISION_2;
+    Chars.Header.Type = NDIS_OBJECT_TYPE_FILTER_DRIVER_CHARACTERISTICS;
+    Chars.Header.Revision = NDIS_FILTER_CHARACTERISTICS_REVISION_2;
+    Chars.Header.Size = NDIS_SIZEOF_FILTER_DRIVER_CHARACTERISTICS_REVISION_2;
     Chars.MajorNdisVersion = 6;
     Chars.MinorNdisVersion = 20;
     Chars.MajorDriverVersion = 1;
     Chars.MinorDriverVersion = 0;
-    Chars.Name = NwifiProtocolName;
+    Chars.Flags = 0;
+    NwifiInitString(&Chars.FriendlyName, NwifiFilterFriendlyName);
+    NwifiInitString(&Chars.UniqueName, NwifiFilterUniqueName);
+    NwifiInitString(&Chars.ServiceName, NwifiFilterServiceName);
 
-    /* Lower-edge protocol entry points (binds the dot11 miniport). */
-    Chars.SetOptionsHandler                 = NwifiProtocolSetOptions;
-    Chars.BindAdapterHandlerEx              = NwifiBindAdapterEx;
-    Chars.UnbindAdapterHandlerEx           = NwifiUnbindAdapterEx;
-    Chars.OpenAdapterCompleteHandlerEx     = NwifiOpenAdapterCompleteEx;
-    Chars.CloseAdapterCompleteHandlerEx    = NwifiCloseAdapterCompleteEx;
-    Chars.SendNetBufferListsCompleteHandler = NwifiProtocolSendNblComplete;
-    Chars.ReceiveNetBufferListsHandler     = NwifiProtocolReceiveNbl;
-    Chars.OidRequestCompleteHandler        = NwifiProtocolOidRequestComplete;
-    Chars.StatusHandlerEx                  = NwifiProtocolStatusEx;
-    Chars.NetPnPEventHandler               = NwifiProtocolNetPnPEvent;
-    Chars.UninstallHandler                 = NwifiProtocolUninstall;
+    Chars.SetOptionsHandler = NwifiFilterSetOptions;
+    Chars.AttachHandler = NwifiFilterAttach;
+    Chars.DetachHandler = NwifiFilterDetach;
+    Chars.RestartHandler = NwifiFilterRestart;
+    Chars.PauseHandler = NwifiFilterPause;
+    Chars.SendNetBufferListsHandler = NwifiFilterSendNetBufferLists;
+    Chars.SendNetBufferListsCompleteHandler = NwifiFilterSendNetBufferListsComplete;
+    Chars.CancelSendNetBufferListsHandler = NwifiFilterCancelSendNetBufferLists;
+    Chars.ReceiveNetBufferListsHandler = NwifiFilterReceiveNetBufferLists;
+    Chars.ReturnNetBufferListsHandler = NwifiFilterReturnNetBufferLists;
+    Chars.OidRequestHandler = NwifiFilterOidRequest;
+    Chars.OidRequestCompleteHandler = NwifiFilterOidRequestComplete;
+    Chars.CancelOidRequestHandler = NwifiFilterCancelOidRequest;
+    Chars.StatusHandler = NwifiFilterStatus;
+    Chars.NetPnPEventHandler = NwifiFilterNetPnPEvent;
+    Chars.DevicePnPEventNotifyHandler = NwifiFilterDevicePnPEventNotify;
 
-    return NdisRegisterProtocolDriver(NULL,
-                                      &Chars,
-                                      &gNwifi.ProtocolHandle);
+    UNREFERENCED_PARAMETER(RegistryPath);
+
+    return NdisFRegisterFilterDriver(DriverObject,
+                                     (NDIS_HANDLE)DriverObject,
+                                     &Chars,
+                                     &gNwifi.FilterDriverHandle);
 }
 
 /* ===========================================================================
@@ -167,18 +140,10 @@ NwifiUnload(
     /* Remove the control device + drain any pended notification IRPs first. */
     NwifiDeleteControlDevice();
 
-    /* Tear down the protocol first so NDIS unbinds the lower miniports
-     * (driving UnbindAdapterEx -> miniport teardown), then the miniport. */
-    if (gNwifi.ProtocolHandle != NULL)
+    if (gNwifi.FilterDriverHandle != NULL)
     {
-        NdisDeregisterProtocolDriver(gNwifi.ProtocolHandle);
-        gNwifi.ProtocolHandle = NULL;
-    }
-
-    if (gNwifi.MiniportDriverHandle != NULL)
-    {
-        NdisMDeregisterMiniportDriver(gNwifi.MiniportDriverHandle);
-        gNwifi.MiniportDriverHandle = NULL;
+        NdisFDeregisterFilterDriver(gNwifi.FilterDriverHandle);
+        gNwifi.FilterDriverHandle = NULL;
     }
 
     NdisFreeSpinLock(&gNwifi.AdapterLock);
@@ -206,28 +171,15 @@ DriverEntry(
     KeInitializeSpinLock(&gNwifi.NotifyLock);
     gNwifi.NextInterfaceIndex = 0;
 
-    /* Both registrations must exist before NdisIMAssociateMiniport pairs
-     * them, ahead of any bind callback. */
-    Status = NwifiRegisterMiniport(DriverObject, RegistryPath);
+    DriverObject->DriverUnload = NwifiUnload;
+
+    Status = NwifiRegisterFilter(DriverObject, RegistryPath);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        DPRINT1("NWIFI: NdisMRegisterMiniportDriver failed 0x%08X\n", Status);
+        DPRINT1("NWIFI: NdisFRegisterFilterDriver failed 0x%08X\n", Status);
         NdisFreeSpinLock(&gNwifi.AdapterLock);
         return (NTSTATUS)Status;
     }
-
-    Status = NwifiRegisterProtocol();
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        DPRINT1("NWIFI: NdisRegisterProtocolDriver failed 0x%08X\n", Status);
-        NdisMDeregisterMiniportDriver(gNwifi.MiniportDriverHandle);
-        gNwifi.MiniportDriverHandle = NULL;
-        NdisFreeSpinLock(&gNwifi.AdapterLock);
-        return (NTSTATUS)Status;
-    }
-
-    /* Pair the two edges so NDIS treats nwifi as a single IM driver. */
-    NdisIMAssociateMiniport(gNwifi.MiniportDriverHandle, gNwifi.ProtocolHandle);
 
     /* Non-fatal on failure: the data path works without the wlansvc channel. */
     Status = NwifiCreateControlDevice();

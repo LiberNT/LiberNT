@@ -189,20 +189,14 @@ NDIS_STATUS NwifiMsmSetKey(
 NWIFI_LINK_STATUS NwifiMsmLinkStatus(_In_ PNWIFI_MSM Msm);
 
 /* ===========================================================================
- *  Indication entry points (called from protocol.c / datapath.c)
+ *  Indication entry points (called from filter.c / datapath.c)
  * ===========================================================================
  */
 
-/* protocol.c StatusEx: a dot11 status indication arrived from the lower NIC. */
+/* filter.c status: a dot11 status indication arrived from the lower NIC. */
 VOID NwifiMsmIndicateStatus(
     _In_ struct _NWIFI_ADAPTER *Adapter,
     _In_ PNDIS_STATUS_INDICATION StatusIndication);
-
-/* protocol.c OidRequestComplete: an async OID we issued has completed. */
-VOID NwifiMsmOidComplete(
-    _In_ struct _NWIFI_ADAPTER *Adapter,
-    _In_ PNDIS_OID_REQUEST OidRequest,
-    _In_ NDIS_STATUS Status);
 
 /* datapath.c RX: classify an inbound frame; returns TRUE if the MSM consumed it
  * (e.g. an EAPOL-Key frame handed to the supplicant) and it must NOT be

@@ -97,12 +97,12 @@ NwifiMsmQueueWorkItem(
     BOOLEAN Queue = FALSE;
 
     if (Routine == NULL ||
-        gNwifi.MiniportDriverHandle == NULL)
+        gNwifi.FilterDriverHandle == NULL)
     {
         return FALSE;
     }
 
-    WorkItem = NdisAllocateIoWorkItem(gNwifi.MiniportDriverHandle);
+    WorkItem = NdisAllocateIoWorkItem(gNwifi.FilterDriverHandle);
     if (WorkItem == NULL)
     {
         return FALSE;
@@ -309,7 +309,7 @@ NwifiProgramDesiredSsid(
     List.uTotalNumOfEntries = 1;
     List.SSIDs[0] = *Ssid;
 
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   OID_DOT11_DESIRED_SSID_LIST,
                                   &List, sizeof(List), NULL);
 }
@@ -336,7 +336,7 @@ NwifiProgramDesiredBssid(
                   (Bssid != NULL && !NwifiMacIsZero(Bssid)) ? Bssid : Broadcast,
                   IEEE80211_ADDR_LEN);
 
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   OID_DOT11_DESIRED_BSSID_LIST,
                                   &List, sizeof(List),
                                   NULL);
@@ -359,7 +359,7 @@ NwifiProgramAuthAlgorithm(
     List.uTotalNumOfEntries = 1;
     List.AlgorithmIds[0] = Algorithm;
 
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   OID_DOT11_ENABLED_AUTHENTICATION_ALGORITHM,
                                   &List, sizeof(List), NULL);
 }
@@ -382,7 +382,7 @@ NwifiProgramCipherAlgorithm(
     List.uTotalNumOfEntries = 1;
     List.AlgorithmIds[0] = Algorithm;
 
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   Oid, &List, sizeof(List), NULL);
 }
 
@@ -405,7 +405,7 @@ NwifiAuthCipherSupported(
     if (List == NULL)
         return TRUE;
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestQueryInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestQueryInformation,
                                     OID_DOT11_SUPPORTED_UNICAST_ALGORITHM_PAIR,
                                     List, BufferSize, NULL);
     if (Status == NDIS_STATUS_SUCCESS)
@@ -434,7 +434,7 @@ NwifiProgramBssType(
     _In_ DOT11_BSS_TYPE BssType)
 {
     DOT11_BSS_TYPE Value = BssType;
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   OID_DOT11_DESIRED_BSS_TYPE,
                                   &Value, sizeof(Value), NULL);
 }
@@ -508,7 +508,7 @@ NwifiMsmStartScan(
         }
     }
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                     OID_DOT11_SCAN_REQUEST,
                                     Scan, ScanSize, NULL);
     NwifiFree(Scan);
@@ -554,7 +554,7 @@ NwifiAggregateBssList(
             return;
         }
 
-        Status = NwifiProtocolDoRequestEx(Adapter, NdisRequestMethod,
+        Status = NwifiDoRequestEx(Adapter, NdisRequestMethod,
                                           OID_DOT11_ENUM_BSS_LIST,
                                           ByteArray, BufferSize, &Got, &Needed);
         if (Status != NDIS_STATUS_BUFFER_TOO_SHORT)
@@ -801,7 +801,7 @@ NwifiMsmConnect(
         ExemptList.PrivacyExemptionEntries[0].usEtherType = RtlUshortByteSwap(0x888E);
         ExemptList.PrivacyExemptionEntries[0].usExemptionActionType = DOT11_EXEMPT_ON_KEY_MAPPING_KEY_UNAVAILABLE;
         ExemptList.PrivacyExemptionEntries[0].usExemptionPacketType = DOT11_EXEMPT_BOTH;
-        ExemptStatus = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+        ExemptStatus = NwifiDoRequest(Adapter, NdisRequestSetInformation,
             OID_DOT11_PRIVACY_EXEMPTION_LIST, &ExemptList, sizeof(ExemptList), NULL);
         if (ExemptStatus != NDIS_STATUS_SUCCESS)
             DPRINT1("NWIFI: EAPOL privacy exemption set failed 0x%08X\n", ExemptStatus);
@@ -833,7 +833,7 @@ NwifiMsmConnect(
     /* OID_DOT11_CONNECT_REQUEST has no payload; the lower miniport runs
      * scan/join/auth/assoc and reports progress through the
      * NDIS_STATUS_DOT11_* indications. */
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    Status = NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                     OID_DOT11_CONNECT_REQUEST,
                                     NULL, 0, NULL);
     if (Status != NDIS_STATUS_SUCCESS && Status != NDIS_STATUS_PENDING)
@@ -888,7 +888,7 @@ NwifiMsmDisconnectLower(
     NwifiIndicateLinkState(Adapter, FALSE);
     NwifiQueueNotification(Adapter->InterfaceIndex, Code, Status);
 
-    return NwifiProtocolDoRequest(Adapter, NdisRequestSetInformation,
+    return NwifiDoRequest(Adapter, NdisRequestSetInformation,
                                   OID_DOT11_DISCONNECT_REQUEST,
                                   NULL, 0, NULL);
 }
@@ -936,7 +936,7 @@ NwifiMsmLinkUp(
 }
 
 /* ===========================================================================
- *  Status indication consumption (from protocol.c StatusEx)
+ *  Status indication consumption (from filter.c status)
  * ===========================================================================
  */
 VOID
@@ -1235,23 +1235,6 @@ NwifiMsmIndicateStatus(
                    StatusIndication->StatusCode);
             break;
     }
-}
-
-/* ===========================================================================
- *  Async OID completion (from protocol.c OidRequestComplete)
- * ===========================================================================
- */
-VOID
-NwifiMsmOidComplete(
-    _In_ PNWIFI_ADAPTER Adapter,
-    _In_ PNDIS_OID_REQUEST OidRequest,
-    _In_ NDIS_STATUS Status)
-{
-    /* All MSM OID round-trips are currently synchronous
-     * (NwifiProtocolDoRequest), so async completions are informational only. */
-    UNREFERENCED_PARAMETER(Adapter);
-    DPRINT("NWIFI: MSM async OID 0x%p completed 0x%08X\n",
-           OidRequest->RequestId, Status);
 }
 
 /* ===========================================================================
