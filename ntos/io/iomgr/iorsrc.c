@@ -515,6 +515,8 @@ IoReportResourceUsage(
 
     if (DeviceObject != NULL) DeviceNode = IopGetDeviceNode(DeviceObject);
 
+    IopResDbEnsureSeeded();
+
     /* A usage found free is recorded before anyone else can look */
     KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
 
@@ -629,6 +631,8 @@ IoAssignResources(
     UNREFERENCED_PARAMETER(DriverClassName);
 
     if (RequestedResources == NULL) return STATUS_INVALID_PARAMETER;
+
+    IopResDbEnsureSeeded();
 
     /* The settings found free are claimed before anyone else can search */
     KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);

@@ -68,6 +68,9 @@ IopResDbEnsureSeeded(VOID)
     }
     else if (IopResDbSeedState != 2)
     {
+        /* The seeding thread needs the assignment lock to record what it reads */
+        ASSERT(IopResourceAssignmentLock.OwnerThread != KeGetCurrentThread());
+
         /* Another thread is seeding; wait so we never query a partial database */
         KeWaitForSingleObject(&IopResDbSeededEvent, Executive, KernelMode, FALSE, NULL);
     }
