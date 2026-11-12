@@ -204,6 +204,7 @@ KiDeleteCalloutStacks(
 
 typedef struct _KI_USER_CALLOUT
 {
+    PKTRAP_FRAME Frame;
     PVOID *Result;
     PULONG ResultLength;
     NTSTATUS Status;
@@ -217,7 +218,7 @@ KiUserCalloutOnStack(
 {
     PKI_USER_CALLOUT Callout = Parameter;
 
-    Callout->Status = KiCallUserMode(Callout->Result, Callout->ResultLength);
+    Callout->Status = KiArchCallUserMode(Callout->Frame, Callout->Result, Callout->ResultLength);
 }
 
 /*
@@ -228,6 +229,7 @@ KiUserCalloutOnStack(
 NTSTATUS
 NTAPI
 KiCallUserModeWithStack(
+    _In_opt_ PKTRAP_FRAME Frame,
     _Out_ PVOID *Result,
     _Out_ PULONG ResultLength)
 {
@@ -235,8 +237,9 @@ KiCallUserModeWithStack(
     NTSTATUS Status;
 
     if (NT_SUCCESS(MmGrowKernelStackEx(&Callout, KI_USER_CALLOUT_STACK)))
-        return KiCallUserMode(Result, ResultLength);
+        return KiArchCallUserMode(Frame, Result, ResultLength);
 
+    Callout.Frame = Frame;
     Callout.Result = Result;
     Callout.ResultLength = ResultLength;
     Callout.Status = STATUS_STACK_OVERFLOW;

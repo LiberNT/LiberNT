@@ -321,6 +321,7 @@ KeUserModeCallback(
     if (!NT_SUCCESS(Status))
         return Status;
 
+    /* TODO: a callout this stack cannot hold fails instead of going on through KiCallUserModeWithStack */
     CallbackStatus = KiPpcCallUserMode(&CallbackFrame, Result, ResultLength);
     ASSERT(Thread->TrapFrame == OuterFrame);
     if (CallbackStatus == STATUS_CALLBACK_POP_STACK)

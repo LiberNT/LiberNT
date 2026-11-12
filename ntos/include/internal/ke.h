@@ -8,6 +8,10 @@
 #define KI_USER_MODE_CALLBACK_ENTRY KiCallUserMode
 #endif
 
+#ifndef KiArchCallUserMode
+#define KiArchCallUserMode(Frame, Result, ResultLength) ((VOID)(Frame), KiCallUserMode((Result), (ResultLength)))
+#endif
+
 #ifndef KI_DPC_TARGET_PROCESSOR_OFFSET
 #define KI_DPC_TARGET_PROCESSOR_OFFSET MAXIMUM_PROCESSORS
 #endif
@@ -1427,6 +1431,7 @@ KiCallUserMode(
 NTSTATUS
 NTAPI
 KiCallUserModeWithStack(
+    _In_opt_ PKTRAP_FRAME Frame,
     _Out_ PVOID *Result,
     _Out_ PULONG ResultLength);
 

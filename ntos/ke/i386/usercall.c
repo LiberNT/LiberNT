@@ -178,7 +178,7 @@ KeUserModeCallback(IN ULONG RoutineIndex,
         /* Jump to user mode */
         *UserEsp = NewStack;
         KeGetCurrentThread()->CallbackNestingLevel++;
-        CallbackStatus = KiCallUserModeWithStack(Result, ResultLength);
+        CallbackStatus = KiCallUserModeWithStack(NULL, Result, ResultLength);
         KeGetCurrentThread()->CallbackNestingLevel--;
         if (CallbackStatus != STATUS_CALLBACK_POP_STACK)
         {

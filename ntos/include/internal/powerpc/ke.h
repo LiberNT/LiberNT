@@ -275,6 +275,7 @@ BOOLEAN NTAPI KiUserTrap(_In_ PKTRAP_FRAME TrapFrame);
 
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiPpcCallUserMode
+#define KiArchCallUserMode(Frame, Result, ResultLength) KiPpcCallUserMode((Frame), (Result), (ResultLength))
 
 NTSTATUS
 NTAPI
