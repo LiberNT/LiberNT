@@ -889,7 +889,13 @@ PiAttachDeviceDrivers(
                 IopQueueDeviceInstallEvent(&GUID_DEVICE_ENUMERATED, &DeviceNode->InstancePath);
             }
         }
+
+        /* A device that cannot run gets no stack, its filters included */
+        List.Count = 0;
     }
+
+    /* Drivers are added to a bare device only: a failed stack was removed before the device starts over */
+    ASSERT(!NT_SUCCESS(Status) || List.Count == 0 || DeviceNode->PhysicalDeviceObject->AttachedDevice == NULL);
 
     for (Index = 0; NT_SUCCESS(Status) && Index < List.Count; Index++)
     {
@@ -1004,6 +1010,11 @@ PiApplyDeviceSecurity(
     return Status;
 }
 
+static
+VOID
+PiRemoveFailedStack(
+    _In_ PDEVICE_NODE DeviceNode);
+
 VOID
 PiDevNodeAddDrivers(
     _In_ PDEVICE_NODE DeviceNode)
@@ -1043,13 +1054,22 @@ PiDevNodeAddDrivers(
 
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
     {
-        /* Drivers whose device cannot get the security its registry holds stay added, but the device does not start */
+        /* Drivers whose device cannot get the security its registry holds are removed, and the device does not start */
         if (!NT_SUCCESS(Security))
         {
             DPRINT1("PnP: %wZ has a security descriptor that cannot be applied (%lx)\n", &DeviceNode->InstancePath, Security);
             PiSetDevNodeProblem(DeviceNode, CM_PROB_REGISTRY);
+            PiRemoveFailedStack(DeviceNode);
+            return;
         }
         PiSetDevNodeState(DeviceNode, NullDriver ? DeviceNodeInitialized : DeviceNodeDriversAdded);
+        return;
+    }
+
+    /* The drivers a failed AddDevice left attached are removed */
+    if ((DeviceNode->Flags & DNF_HAS_PROBLEM) && (DeviceNode->PhysicalDeviceObject->AttachedDevice != NULL))
+    {
+        PiRemoveFailedStack(DeviceNode);
         return;
     }
 
@@ -1084,6 +1104,34 @@ PiReleaseDeviceResources(
     IopUpdateResourceMapForPnPDevice(DeviceNode);
 }
 
+/* A device that fails once its drivers are added has its stack removed, as a failed start has (IRP_MN_REMOVE_DEVICE) */
+static
+VOID
+PiRemoveFailedStack(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    IO_STACK_LOCATION StackLocation;
+
+    PAGED_CODE();
+    ASSERT(DeviceNode->Flags & DNF_HAS_PROBLEM);
+
+    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+    StackLocation.MajorFunction = IRP_MJ_PNP;
+    StackLocation.MinorFunction = IRP_MN_REMOVE_DEVICE;
+    IopSynchronousCall(DeviceNode->PhysicalDeviceObject, &StackLocation, NULL);
+
+    IopDisableDeviceInterfaces(DeviceNode);
+    PiReleaseDeviceResources(DeviceNode);
+
+    if (DeviceNode->ResourceRequirements != NULL)
+    {
+        ExFreePool(DeviceNode->ResourceRequirements);
+        DeviceNode->ResourceRequirements = NULL;
+    }
+
+    PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
+}
+
 static
 VOID
 PiProcessStartDevice(
@@ -1097,6 +1145,7 @@ PiProcessStartDevice(
     if (!NT_SUCCESS(Status))
     {
         PiSetDevNodeProblem(DeviceNode, CM_PROB_NORMAL_CONFLICT);
+        PiRemoveFailedStack(DeviceNode);
         return;
     }
 
@@ -1114,9 +1163,8 @@ PiProcessStartDevice(
                 &DeviceNode->InstancePath,
                 Status);
 
-        PiReleaseDeviceResources(DeviceNode);
         PiSetDevNodeProblem(DeviceNode, CM_PROB_FAILED_START);
-        PiSetDevNodeState(DeviceNode, DeviceNodeDriversAdded);
+        PiRemoveFailedStack(DeviceNode);
 
         return;
     }
@@ -1677,6 +1725,9 @@ PiRunDeviceAction(
             case PiActionResetDevice:
                 /* A stack waiting for its last close keeps waiting; its close path removes it */
                 if (PiIsPendingCloses(DeviceNode)) break;
+
+                /* Only a device without a stack starts over; a stack is never added twice */
+                if ((DeviceNode->State != DeviceNodeInitialized) && (DeviceNode->State != DeviceNodeRemoved)) break;
 
                 PiClearDevNodeProblem(DeviceNode);
                 PiSetDevNodeState(DeviceNode, DeviceNodeUninitialized);

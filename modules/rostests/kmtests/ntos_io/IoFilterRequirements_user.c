@@ -32,7 +32,7 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"BusRelationsQueried", L"StartDmaV3", L"StartConnection", L"BusStateQueried", L"FailBus",
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
-                                 L"LargeMemory", L"StartLargeMemory", L"NullChild" };
+                                 L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -438,6 +438,84 @@ static VOID CheckDeviceSecurity(DEVINST Bus)
     ok_eq_ulong(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
 }
 
+/* The child's stacks that are still attached: each AddDevice adds one, each remove request takes one away */
+static ULONG LiveStacks(VOID)
+{
+    DWORD Added, Removed;
+
+    if (!ReadValue(L"ChildAddDevices", &Added) || !ReadValue(L"ChildFdoRemoves", &Removed))
+        return MAXULONG;
+    return Added - Removed;
+}
+
+static BOOL WaitChildProblem(DEVINST Bus, ULONG Expected)
+{
+    ULONG Status = 0, Problem = 0;
+    DWORD Start = GetTickCount();
+    DEVINST Child;
+
+    do
+    {
+        if (CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS && CM_Get_DevNode_Status(&Status, &Problem, Child, 0) == CR_SUCCESS &&
+            (Status & DN_HAS_PROBLEM) && Problem == Expected)
+        {
+            return TRUE;
+        }
+        Sleep(10);
+    } while (GetTickCount() - Start < 1000);
+
+    return FALSE;
+}
+
+/* A device that fails once its drivers are added gets its remove request and starts over with one stack only */
+static VOID CheckFailedStack(DEVINST Bus)
+{
+    static const BYTE Broken[] = { 1, 2, 3, 4 };
+    PLUGPLAY_CONTROL_DEVICE_CONTROL_DATA Reset;
+    WCHAR Instance[MAX_DEVICE_ID_LEN];
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+    HKEY Key;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS || CM_Get_Device_IDW(Child, Instance, RTL_NUMBER_OF(Instance), 0) != CR_SUCCESS ||
+        CM_Open_DevNode_Key(Child, KEY_SET_VALUE, 0, RegDisposition_OpenAlways, &Key, CM_REGISTRY_HARDWARE) != CR_SUCCESS)
+    {
+        ok(FALSE, "The child's device parameters cannot be opened\n");
+        return;
+    }
+
+    ok_eq_long(RegSetValueExW(Key, L"Security", 0, REG_BINARY, Broken, sizeof(Broken)), ERROR_SUCCESS);
+    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+                (ULONG)CR_SUCCESS);
+    CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY);
+    ok(WaitChildProblem(Bus, CM_PROB_REGISTRY), "A broken security descriptor did not give the child CM_PROB_REGISTRY\n");
+    ok_eq_ulong(LiveStacks(), 0UL);
+
+    RtlInitUnicodeString(&Reset.DeviceInstance, Instance);
+    NtPlugPlayControl(PlugPlayControlResetDevice, &Reset, sizeof(Reset));
+    ok(WaitChildProblem(Bus, CM_PROB_REGISTRY), "The reset child lost CM_PROB_REGISTRY\n");
+    ok_eq_ulong(LiveStacks(), 0UL);
+
+    RegDeleteValueW(Key, L"Security");
+    RegCloseKey(Key);
+    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+    ok_eq_ulong(LiveStacks(), 1UL);
+
+    SetRequest(L"FailChildStart", 1);
+    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+                (ULONG)CR_SUCCESS);
+    CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY);
+    ok(WaitChildProblem(Bus, CM_PROB_FAILED_START), "The child that failed its start has no CM_PROB_FAILED_START\n");
+    ok_eq_ulong(LiveStacks(), 0UL);
+
+    SetRequest(L"FailChildStart", 0);
+    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start after its failed start\n");
+    ok_eq_ulong(LiveStacks(), 1UL);
+}
+
 static VOID RestartChild(DEVINST Bus)
 {
     WCHAR VetoName[MAX_PATH];
@@ -632,6 +710,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReplug(Device->DevInst);
         CheckRemoveTwice(Device->DevInst);
         CheckDeviceSecurity(Device->DevInst);
+        CheckFailedStack(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);

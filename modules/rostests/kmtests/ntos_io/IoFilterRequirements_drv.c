@@ -47,6 +47,7 @@ static ULONG RelationsQueried;
 static ULONG BusStateQueried;
 static BOOLEAN FailRequested;
 static ULONG ChildFdoRemoves;
+static ULONG ChildAddDevices;
 static ULONG ChildSurprises;
 static PDEVICE_OBJECT MissingChild;
 static ULONG ChildPdoRemoves;
@@ -271,6 +272,8 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
 
         case IRP_MN_START_DEVICE:
             Status = IoForwardIrpSynchronously(Extension->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
+            if (NT_SUCCESS(Status) && Requested(L"FailChildStart"))
+                return Complete(Irp, STATUS_UNSUCCESSFUL);
             Starts = InterlockedIncrement(&Extension->Starts);
             Record(Starts == 1 ? L"StartPrivateMask" : L"RestartPrivateMask",
                    StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
@@ -674,6 +677,8 @@ static NTSTATUS NTAPI TestAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT 
     }
     Fdo->Flags |= DO_POWER_PAGABLE;
     Fdo->Flags &= ~DO_DEVICE_INITIALIZING;
+    if (Extension->Kind == TestChildFdo)
+        Record(L"ChildAddDevices", ++ChildAddDevices);
     return STATUS_SUCCESS;
 }
 
