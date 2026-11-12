@@ -254,15 +254,13 @@ IopDisableDeviceInterfaces(
         if (!Interface->Enabled) continue;
 
         Interface->Enabled = FALSE;
+        Interface->Unannounced++;
         IopDropInterfaceLink(Interface);
+        IopSetInterfaceLinked(Interface, DeviceNode->PhysicalDeviceObject, FALSE);
 
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
-        IopSetInterfaceLinked(Interface, DeviceNode->PhysicalDeviceObject, FALSE);
-
-        PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
-                                      &Interface->ClassGuid,
-                                      &Interface->SymbolicLinkName);
+        IopAnnounceInterface(Interface);
 
         KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
 

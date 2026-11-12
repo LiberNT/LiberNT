@@ -77,6 +77,9 @@ typedef struct _IOP_DEVICE_INTERFACE
     GUID ClassGuid;
     PDEVICE_OBJECT PhysicalDeviceObject;
     BOOLEAN Enabled;
+    BOOLEAN Announced;
+    BOOLEAN Announcing;
+    ULONG Unannounced;
 } IOP_DEVICE_INTERFACE, *PIOP_DEVICE_INTERFACE;
 
 typedef struct _IOP_DEVICE_REFERENCE
@@ -506,6 +509,8 @@ VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
                            _In_ BOOLEAN Linked);
 
 VOID IopDropInterfaceLink(_In_ PIOP_DEVICE_INTERFACE Interface);
+
+VOID IopAnnounceInterface(_In_ PIOP_DEVICE_INTERFACE Interface);
 
 VOID IopSplitInterfaceLink(_In_ PCUNICODE_STRING SymbolicLinkName,
                            _Out_ PUNICODE_STRING LinkObjectName,

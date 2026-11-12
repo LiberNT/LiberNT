@@ -6,6 +6,7 @@
  */
 
 #include <kmt_test.h>
+#include <wdmguid.h>
 
 /* ok_eq_hex evaluates its value twice: a call with an effect goes through this once */
 #define ok_once(call, expected) \
@@ -16,6 +17,49 @@
 static const GUID TestInterface = {0x8f6d2a43, 0x61c4, 0x4bd8, {0x9a, 0x35, 0x2b, 0x9e, 0x0f, 0x5c, 0x7d, 0x11}};
 static const GUID AliasInterface = {0x3b0e6c21, 0x9a47, 0x4f15, {0x8d, 0x2e, 0x6c, 0x1f, 0x0b, 0x7a, 0x9e, 0x52}};
 static const DEVPROPKEY TestProperty = {{0x6a1d3c58, 0x2e4f, 0x4b91, {0x8c, 0x07, 0x5d, 0x3e, 0x9a, 0x41, 0xf2, 0x6b}}, 2};
+static const GUID NotifyInterface = {0x9c4e1b27, 0x5d83, 0x4a6f, {0xb1, 0x2e, 0x7f, 0x05, 0xc9, 0x3a, 0x68, 0xd4}};
+
+typedef struct _NOTIFY_STATE
+{
+    PUNICODE_STRING Link;
+    LONG Depth;
+    LONG MaxDepth;
+    ULONG Count;
+    GUID Events[4];
+    NTSTATUS Changed[3];
+    KEVENT Done;
+} NOTIFY_STATE, *PNOTIFY_STATE;
+
+/* The first arrival disables, enables and disables the interface again from inside the notification */
+static
+NTSTATUS
+NTAPI
+InterfaceNotified(
+    _In_ PVOID NotificationStructure,
+    _Inout_opt_ PVOID Context)
+{
+    PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
+    PNOTIFY_STATE State = Context;
+    LONG Depth;
+
+    if (State == NULL || !RtlEqualUnicodeString(Notification->SymbolicLinkName, State->Link, TRUE)) return STATUS_SUCCESS;
+
+    Depth = InterlockedIncrement(&State->Depth);
+    if (Depth > State->MaxDepth) State->MaxDepth = Depth;
+    if (State->Count < RTL_NUMBER_OF(State->Events)) State->Events[State->Count] = Notification->Event;
+    State->Count++;
+
+    if (State->Count == 1 && IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL))
+    {
+        State->Changed[0] = IoSetDeviceInterfaceState(State->Link, FALSE);
+        State->Changed[1] = IoSetDeviceInterfaceState(State->Link, TRUE);
+        State->Changed[2] = IoSetDeviceInterfaceState(State->Link, FALSE);
+    }
+
+    InterlockedDecrement(&State->Depth);
+    if (State->Count == RTL_NUMBER_OF(State->Events)) KeSetEvent(&State->Done, IO_NO_INCREMENT, FALSE);
+    return STATUS_SUCCESS;
+}
 
 static
 BOOLEAN
@@ -166,6 +210,11 @@ START_TEST(IoInterfaceOrderCheck)
     UNICODE_STRING ReferenceA = RTL_CONSTANT_STRING(L"A");
     UNICODE_STRING ReferenceB = RTL_CONSTANT_STRING(L"B");
     UNICODE_STRING ReferenceC = RTL_CONSTANT_STRING(L"{C}");
+    UNICODE_STRING ReferenceN = RTL_CONSTANT_STRING(L"N");
+    UNICODE_STRING Notified = { 0 };
+    LARGE_INTEGER Timeout;
+    NOTIFY_STATE State;
+    PVOID NotifyEntry = NULL;
     UNICODE_STRING Backslash = RTL_CONSTANT_STRING(L"a\\b");
     UNICODE_STRING Slash = RTL_CONSTANT_STRING(L"a/b");
     UNICODE_STRING Again;
@@ -278,9 +327,40 @@ START_TEST(IoInterfaceOrderCheck)
         if (NT_SUCCESS(Status)) RtlFreeUnicodeString(&Alias);
     }
 
+    /* Each change of an interface is notified, in order, and never inside the notification of another */
+    RtlZeroMemory(&State, sizeof(State));
+    KeInitializeEvent(&State.Done, NotificationEvent, FALSE);
+    State.Link = &Notified;
+    Status = IoRegisterDeviceInterface(Pdo, &NotifyInterface, &ReferenceN, &Notified);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange, 0, (PVOID)&NotifyInterface,
+                                                KmtDriverObject, InterfaceNotified, &State, &NotifyEntry);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        ok_once(IoSetDeviceInterfaceState(&Notified, TRUE), STATUS_SUCCESS);
+        Timeout.QuadPart = -10LL * 1000 * 1000;
+        ok_once(KeWaitForSingleObject(&State.Done, Executive, KernelMode, FALSE, &Timeout), STATUS_SUCCESS);
+        ok_eq_hex(State.Changed[0], STATUS_SUCCESS);
+        ok_eq_hex(State.Changed[1], STATUS_SUCCESS);
+        ok_eq_hex(State.Changed[2], STATUS_SUCCESS);
+        ok_eq_long(State.MaxDepth, 1L);
+        ok_eq_ulong(State.Count, 4UL);
+        ok(IsEqualGUID(&State.Events[0], &GUID_DEVICE_INTERFACE_ARRIVAL) &&
+           IsEqualGUID(&State.Events[1], &GUID_DEVICE_INTERFACE_REMOVAL) &&
+           IsEqualGUID(&State.Events[2], &GUID_DEVICE_INTERFACE_ARRIVAL) &&
+           IsEqualGUID(&State.Events[3], &GUID_DEVICE_INTERFACE_REMOVAL),
+           "the notifications did not come as arrival, removal, arrival, removal\n");
+        IoUnregisterPlugPlayNotification(NotifyEntry);
+    }
+
     RtlFreeUnicodeString(&First);
     RtlFreeUnicodeString(&Second);
     RtlFreeUnicodeString(&Third);
     RtlFreeUnicodeString(&AliasA);
+    RtlFreeUnicodeString(&Notified);
     ObDereferenceObject(Pdo);
 }

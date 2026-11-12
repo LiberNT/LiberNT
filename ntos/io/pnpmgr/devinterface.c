@@ -323,6 +323,46 @@ IopDropInterfaceLink(
     IoDeleteSymbolicLink(&Name);
 }
 
+/* Every change of an interface is announced once, in order, and never inside another announcement of it */
+VOID
+IopAnnounceInterface(
+    _In_ PIOP_DEVICE_INTERFACE Interface)
+{
+    BOOLEAN Arrival;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
+
+    if (Interface->Announcing)
+    {
+        KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+        return;
+    }
+
+    Interface->Announcing = TRUE;
+
+    while (Interface->Unannounced != 0)
+    {
+        Interface->Unannounced--;
+        Interface->Announced = !Interface->Announced;
+        Arrival = Interface->Announced;
+
+        KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+        PiNotifyDeviceInterfaceChange(Arrival ? &GUID_DEVICE_INTERFACE_ARRIVAL : &GUID_DEVICE_INTERFACE_REMOVAL,
+                                      &Interface->ClassGuid,
+                                      &Interface->SymbolicLinkName);
+
+        KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
+    }
+
+    ASSERT(Interface->Announced == Interface->Enabled);
+    Interface->Announcing = FALSE;
+
+    KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+}
+
 VOID
 IopSetInterfaceLinked(
     _In_ PIOP_DEVICE_INTERFACE Interface,
@@ -654,18 +694,17 @@ IoSetDeviceInterfaceState(
     }
 
     Interface->Enabled = Enable;
+    Interface->Unannounced++;
     if (!Enable) IopDropInterfaceLink(Interface);
 
     PhysicalDeviceObject = Interface->PhysicalDeviceObject;
     ObReferenceObject(PhysicalDeviceObject);
 
-    KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
-
     IopSetInterfaceLinked(Interface, PhysicalDeviceObject, Enable);
 
-    PiNotifyDeviceInterfaceChange(Enable ? &GUID_DEVICE_INTERFACE_ARRIVAL : &GUID_DEVICE_INTERFACE_REMOVAL,
-                                  &Interface->ClassGuid,
-                                  SymbolicLinkName);
+    KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+    IopAnnounceInterface(Interface);
 
     ObDereferenceObject(PhysicalDeviceObject);
 
