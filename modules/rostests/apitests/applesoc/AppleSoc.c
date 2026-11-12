@@ -994,6 +994,7 @@ static ULONG SimStalledMicroseconds;
 
 #define READ_REGISTER_ULONG(Address) SimRead(Address)
 #define READ_REGISTER_UCHAR(Address) (*(Address))
+#define WRITE_REGISTER_UCHAR(Address, Value) (*(Address) = (Value))
 #define WRITE_REGISTER_ULONG(Address, Value) SimWrite(Address, Value)
 #define KeStallExecutionProcessor(Microseconds) (SimStalledMicroseconds += (Microseconds))
 #define KeMemoryBarrier() ((void)0)
@@ -1039,6 +1040,8 @@ UatInvalidateAsid(ULONG Asid)
 #include "../../../../sdk/lib/drivers/applertkit/agxinit.c"
 #include "../../../../drivers/directx/appledcp/dcpwire.h"
 #include "../../../../sdk/lib/drivers/applertkit/rtkit.c"
+#include "../../../../sdk/lib/drivers/applertkit/bootargs.c"
+#include "../../../../sdk/lib/drivers/applertkit/pmpptd.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
@@ -5004,6 +5007,86 @@ TestRtkitCrashlog(VOID)
     ok_int(AppleRtkitParseCrashlog(RtkitCrashImage, sizeof(RtkitCrashImage), &Crash), FALSE);
 }
 
+static
+ULONG
+BootArgRecord(
+    _Out_writes_bytes_(16) PUCHAR At,
+    _In_ ULONG Key,
+    _In_ ULONG Length,
+    _In_ UCHAR Fill)
+{
+    RtlCopyMemory(At, &Key, sizeof(Key));
+    RtlCopyMemory(At + 4, &Length, sizeof(Length));
+    memset(At + 8, Fill, Length);
+    return 8 + Length;
+}
+
+static
+VOID
+TestRtkitBootArguments(VOID)
+{
+    const APPLE_RTKIT_BOOT_ARGUMENT Patches[] =
+    {
+        { APPLE_RTKIT_FOURCC('B', 'D', 'I', 'D'), 6 },
+        { APPLE_RTKIT_FOURCC('D', 'V', 'I', 'D'), 0xff },
+        { APPLE_RTKIT_FOURCC('D', 'C', 'A', 'P'), 0x24000 },
+    };
+    UCHAR Block[64];
+    ULONG Size = 0, Patched = 99, Value32;
+    ULONG64 Value64;
+
+    ok_int(APPLE_RTKIT_FOURCC('B', 'D', 'I', 'D'), 0x42444944);
+    memset(Block, 0, sizeof(Block));
+    Size += BootArgRecord(Block + Size, APPLE_RTKIT_FOURCC('B', 'D', 'I', 'D'), 4, 0);
+    Size += BootArgRecord(Block + Size, APPLE_RTKIT_FOURCC('D', 'V', 'I', 'D'), 8, 0xee);
+    Size += BootArgRecord(Block + Size, 123, 3, 9);
+    ok_int(AppleRtkitPatchBootArgumentBlock(Block, Size, Patches, RTL_NUMBER_OF(Patches), &Patched), TRUE);
+    ok_int(Patched, 2);
+    RtlCopyMemory(&Value32, Block + 8, sizeof(Value32));
+    ok_int(Value32, 6);
+    RtlCopyMemory(&Value64, Block + 20, sizeof(Value64));
+    ok(Value64 == 0xff, "DVID became %I64x\n", Value64);
+    ok_int(Block[36], 9);
+    ok_int(Block[38], 9);
+
+    Size = BootArgRecord(Block, APPLE_RTKIT_FOURCC('B', 'D', 'I', 'D'), 4, 0x55);
+    Block[4] = 40;
+    ok_int(AppleRtkitPatchBootArgumentBlock(Block, Size, Patches, RTL_NUMBER_OF(Patches), &Patched), FALSE);
+    ok_int(Block[8], 0x55);
+    Size = BootArgRecord(Block, APPLE_RTKIT_FOURCC('D', 'C', 'A', 'P'), 12, 0x55);
+    ok_int(AppleRtkitPatchBootArgumentBlock(Block, Size, Patches, RTL_NUMBER_OF(Patches), &Patched), FALSE);
+    ok_int(Block[8], 0x55);
+    Size = BootArgRecord(Block, 77, 12, 0x55);
+    ok_int(AppleRtkitPatchBootArgumentBlock(Block, Size + 3, Patches, RTL_NUMBER_OF(Patches), &Patched), FALSE);
+}
+
+static
+VOID
+TestPmpRequests(VOID)
+{
+    UCHAR Message[APPLE_PMP_IOREG_MESSAGE_SIZE];
+    CHAR Property[sizeof("apple,tunable-") + APPLE_PMP_IOREG_NAME_SIZE];
+
+    ok_int(ApplePmpRequestOpcode(0x0010000000000000ULL), APPLE_PMP_GET_IOVA_TABLE);
+    ok(ApplePmpRequestReply(APPLE_PMP_GET_IOVA_TABLE, 0) == 0x0011000000000000ULL, "Wrong table reply\n");
+    ok(ApplePmpRequestReply(APPLE_PMP_MALLOC, 0x10044000ULL) == 0x0013000010044000ULL, "Wrong malloc reply\n");
+    ok(ApplePmpRequestReply(APPLE_PMP_REGISTER_IOREG, (3ULL << 32) | 4) == 0x0033000300000004ULL,
+       "Wrong register reply\n");
+    ok_int(ApplePmpRequestOpcode(0x0012000000004000ULL), APPLE_PMP_MALLOC);
+    ok(!(0x0010000000000000ULL & APPLE_PMP_COMMAND_MARKER), "A request carries the power command marker\n");
+
+    memset(Message, 0, sizeof(Message));
+    RtlCopyMemory(Message, "mc_cmd_ptd_count", 16);
+    ok_int(ApplePmpTunableName(Message, Property, sizeof(Property)), TRUE);
+    ok(!strcmp(Property, "apple,tunable-mc_cmd_ptd_count"), "The property is '%s'\n", Property);
+    memset(Message, 'a', APPLE_PMP_IOREG_NAME_SIZE);
+    ok_int(ApplePmpTunableName(Message, Property, sizeof(Property)), TRUE);
+    ok_int((int)strlen(Property), (int)(sizeof("apple,tunable-") - 1 + APPLE_PMP_IOREG_NAME_SIZE));
+    ok_int(ApplePmpTunableName(Message, Property, 20), FALSE);
+    Message[0] = 0;
+    ok_int(ApplePmpTunableName(Message, Property, sizeof(Property)), FALSE);
+}
+
 static ULONG AgxPbPages[APPLE_AGX_PB_PAGE_LIST_SIZE / sizeof(ULONG)];
 static ULONG64 AgxPbBlocks[APPLE_AGX_PB_BLOCK_LIST_SIZE / sizeof(ULONG64)];
 
@@ -5738,6 +5821,146 @@ AdtPutNode(
     AdtPutU32(Properties);
     AdtPutU32(Children);
     AdtPutName(Name);
+}
+
+#define PTD_BREAK_UPDATE_INDEX  1
+#define PTD_BREAK_RANGES        2
+#define PTD_BREAK_NO_ENTRY      3
+
+static
+VOID
+AdtPutPtdEntry(
+    _Inout_ PUCHAR Entry,
+    _In_ ULONG Id,
+    _In_ ULONG Index,
+    _In_ ULONG Length,
+    _In_z_ PCSTR Name)
+{
+    memset(Entry, 0, 32);
+    memcpy(Entry, &Id, sizeof(Id));
+    memcpy(Entry + 4, &Index, sizeof(Index));
+    memcpy(Entry + 8, &Length, sizeof(Length));
+    memcpy(Entry + 16, Name, strlen(Name));
+}
+
+static
+VOID
+AdtPutPmgrDevice(
+    _Inout_ PUCHAR Record,
+    _In_ UCHAR Flags,
+    _In_ UCHAR Id,
+    _In_z_ PCSTR Name)
+{
+    memset(Record, 0, 48);
+    Record[0] = Flags;
+    Record[3] = Id;
+    memcpy(Record + 32, Name, strlen(Name));
+}
+
+/* The PMP, its nub, the PMGR device list and the I/O ranges of an M3 Pro J516s as macOS reports them. */
+static
+VOID
+AdtBuildPmp(
+    _In_ ULONG Break)
+{
+    const ULONG64 Reg[8] = { 0x140c00000ULL, 0x6c000, 0x140850000ULL, 0x4000, 0x140500000ULL, 0xc0000,
+                             0x1403d0000ULL, 0x4000 };
+    const ULONG64 Ranges[6] = { 0, 0x210000000ULL, 0x190000000ULL, 0x700000000ULL, 0x700000000ULL, 0x380000000ULL };
+    const ULONG64 NoRanges[3] = { 0x700000000ULL, 0x700000000ULL, 0x380000000ULL };
+    const ULONG Cells = 2, UpdateIndex = (Break == PTD_BREAK_UPDATE_INDEX) ? 4 : 3;
+    UCHAR Ptd[5 * 32], Devices[6 * 48];
+
+    AdtPutPtdEntry(Ptd + 0 * 32, 1, 0x0, 1, "NULL");
+    AdtPutPtdEntry(Ptd + 1 * 32, 2, 0x1, 1, "PMP-STATUS");
+    AdtPutPtdEntry(Ptd + 2 * 32, 9, 0x50, 0xc8, "SOC-DEV-PKT");
+    AdtPutPtdEntry(Ptd + 3 * 32, 10, 0x118, 4, (Break == PTD_BREAK_NO_ENTRY) ? "SOC-DEV-PS-REQX" : "SOC-DEV-PS-REQ");
+    AdtPutPtdEntry(Ptd + 4 * 32, 11, 0x11c, 4, "SOC-DEV-PS-ACK");
+    AdtPutPmgrDevice(Devices + 0 * 48, 0x02, 8, "DISP_SYS");
+    AdtPutPmgrDevice(Devices + 1 * 48, 0x00, 0, "DISP_FE");
+    AdtPutPmgrDevice(Devices + 2 * 48, 0x20, 0, "DISP_CPU");
+    AdtPutPmgrDevice(Devices + 3 * 48, 0x22, 17, "ANS");
+    AdtPutPmgrDevice(Devices + 4 * 48, 0xa2, 5, "GFX");
+    AdtPutPmgrDevice(Devices + 5 * 48, 0x02, 9, "DISPEXT0_SYS");
+
+    AdtUsed = 0;
+    AdtPutNode(2, 1, "device-tree");
+    AdtPutProperty("#address-cells", &Cells, sizeof(Cells));
+    AdtPutNode(4, 2, "arm-io");
+    AdtPutProperty("#address-cells", &Cells, sizeof(Cells));
+    AdtPutProperty("#size-cells", &Cells, sizeof(Cells));
+    if (Break == PTD_BREAK_RANGES)
+        AdtPutProperty("ranges", NoRanges, sizeof(NoRanges));
+    else
+        AdtPutProperty("ranges", Ranges, sizeof(Ranges));
+    AdtPutNode(3, 1, "pmp");
+    AdtPutProperty("reg", Reg, sizeof(Reg));
+    AdtPutProperty("ptd-update-reg-index", &UpdateIndex, sizeof(UpdateIndex));
+    AdtPutNode(2, 0, "iop-pmp-nub");
+    AdtPutProperty("ptd-range", Ptd, sizeof(Ptd));
+    AdtPutNode(2, 0, "pmgr");
+    AdtPutProperty("devices", Devices, sizeof(Devices));
+}
+
+static
+VOID
+TestPmpPowerRequests(VOID)
+{
+    FDT_DRIVER_TREE Tree;
+    APPLE_ADT Adt;
+    ULONG64 Table;
+    ULONG Index, Bit, Previous, Writes;
+
+    AdtBuildPmp(0);
+    ok(AdtUsed <= sizeof(AdtImage), "The tree needs %lu bytes\n", AdtUsed);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAdtPmpRequestWord(&Adt, &Table, &Index), STATUS_SUCCESS);
+    ok(Table == 0x3503c0000ULL, "The power table is at %I64x\n", Table);
+    ok_hex(Index, 0x118);
+    ok_hex(AppleAdtPtdRangeIndex(&Adt, "PMP-STATUS", &Index), STATUS_SUCCESS);
+    ok_hex(Index, 0x1);
+    ok_hex(AppleAdtPtdRangeIndex(&Adt, "SOC-DEV-PS-ACK", &Index), STATUS_SUCCESS);
+    ok_hex(Index, 0x11c);
+    ok_hex(AppleAdtPtdRangeIndex(&Adt, "SOC-DEV-PS", &Index), STATUS_NOT_FOUND);
+    ok_hex(Index, 0);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "DISP_SYS", &Bit), STATUS_SUCCESS);
+    ok_int(Bit, 7);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "ANS", &Bit), STATUS_SUCCESS);
+    ok_int(Bit, 16);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "GFX", &Bit), STATUS_SUCCESS);
+    ok_int(Bit, 4);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "DISP_FE", &Bit), STATUS_SUCCESS);
+    ok_hex(Bit, APPLE_PMP_NO_REQUEST_BIT);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "DISP", &Bit), STATUS_NOT_FOUND);
+    ok_hex(Bit, APPLE_PMP_NO_REQUEST_BIT);
+    ok_hex(AppleAdtPmgrPmpBit(&Adt, "DISPEXT0_SYSTEM", &Bit), STATUS_NOT_FOUND);
+
+    AdtBuildPmp(PTD_BREAK_UPDATE_INDEX);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAdtPmpRequestWord(&Adt, &Table, &Index), STATUS_DEVICE_CONFIGURATION_ERROR);
+    AdtBuildPmp(PTD_BREAK_RANGES);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAdtPmpRequestWord(&Adt, &Table, &Index), STATUS_DEVICE_CONFIGURATION_ERROR);
+    AdtBuildPmp(PTD_BREAK_NO_ENTRY);
+    ok(AppleAdtOpen(&Adt, AdtImage, AdtUsed), "The tree was not accepted\n");
+    ok_hex(AppleAdtPmpRequestWord(&Adt, &Table, &Index), STATUS_NOT_FOUND);
+    ok(Table == 0 && Index == 0, "A missing request word gave %I64x word %lu\n", Table, Index);
+
+    ResetSimulation(&Tree);
+    PMGR(0x510) = 0x000403ff;
+    ok_hex(ApplePmgrRaiseMinimumState(&Tree, "ans", APPLE_PMGR_PS_ACTIVE, &Previous), STATUS_SUCCESS);
+    ok_int(Previous, 4);
+    ok_hex(PMGR(0x510), 0x000f00ff);
+    ok_int(SimWriteCount, 1);
+    Writes = SimWriteCount;
+    ok_hex(ApplePmgrRaiseMinimumState(&Tree, "ans", APPLE_PMGR_PS_ACTIVE, &Previous), STATUS_SUCCESS);
+    ok_int(Previous, APPLE_PMGR_PS_ACTIVE);
+    ok_int(SimWriteCount, Writes);
+    ok_hex(ApplePmgrRaiseMinimumState(&Tree, "ans", 4, NULL), STATUS_SUCCESS);
+    ok_hex(PMGR(0x510), 0x000f00ff);
+    ok_hex(ApplePmgrRaiseMinimumState(&Tree, "disp_sys", APPLE_PMGR_PS_ACTIVE, &Previous), STATUS_NOT_FOUND);
+    ok_int(Previous, 0);
+    ok_hex(ApplePmgrRaiseMinimumState(&Tree, "an", APPLE_PMGR_PS_ACTIVE, NULL), STATUS_NOT_FOUND);
+    ok_int(SimMapCount, 0);
 }
 
 static
@@ -6974,6 +7197,9 @@ START_TEST(AppleSoc)
     TestAgxBindings();
     TestDcpNativeMode();
     TestRtkitCrashlog();
+    TestRtkitBootArguments();
+    TestPmpRequests();
+    TestPmpPowerRequests();
     TestSpmi();
     TestAtcphy();
     TestPcie();

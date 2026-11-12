@@ -97,6 +97,32 @@ AppleAdtIsCompatible(
     _In_ ULONG Node,
     _In_z_ PCSTR Compatible);
 
+#define APPLE_PMP_PTD_UPDATE_OFFSET     0x10000
+#define APPLE_PMP_PTD_READ_STRIDE       16
+#define APPLE_PMP_PTD_UPDATE_STRIDE     8
+#define APPLE_PMP_NO_REQUEST_BIT        0xffffffffUL
+
+NTSTATUS
+NTAPI
+AppleAdtPtdRangeIndex(
+    _In_ PAPPLE_ADT Adt,
+    _In_z_ PCSTR Name,
+    _Out_ PULONG Index);
+
+NTSTATUS
+NTAPI
+AppleAdtPmpRequestWord(
+    _In_ PAPPLE_ADT Adt,
+    _Out_ PULONG64 Table,
+    _Out_ PULONG Index);
+
+NTSTATUS
+NTAPI
+AppleAdtPmgrPmpBit(
+    _In_ PAPPLE_ADT Adt,
+    _In_z_ PCSTR Name,
+    _Out_ PULONG Bit);
+
 /* What the graphics driver needs from the machine's tree: the regions, the loaded
  * firmware segments and the operating points of the firmware the boot chain loaded. */
 #define APPLE_AGX_REGIONS           4

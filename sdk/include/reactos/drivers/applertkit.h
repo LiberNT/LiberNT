@@ -99,6 +99,35 @@ typedef struct _APPLE_RTKIT_CRASH
     ULONG64 Stack[APPLE_RTKIT_CRASH_STACK];
 } APPLE_RTKIT_CRASH, *PAPPLE_RTKIT_CRASH;
 
+typedef struct _APPLE_RTKIT_BOOT_ARGUMENT
+{
+    ULONG Key;
+    ULONG64 Value;
+} APPLE_RTKIT_BOOT_ARGUMENT, *PAPPLE_RTKIT_BOOT_ARGUMENT;
+
+#define APPLE_RTKIT_FOURCC(A, B, C, D) \
+    (((ULONG)(UCHAR)(A) << 24) | ((ULONG)(UCHAR)(B) << 16) | ((ULONG)(UCHAR)(C) << 8) | (ULONG)(UCHAR)(D))
+
+BOOLEAN
+NTAPI
+AppleRtkitPatchBootArgumentBlock(
+    _Inout_updates_bytes_(Size) PUCHAR Block,
+    _In_ ULONG Size,
+    _In_reads_(Count) const APPLE_RTKIT_BOOT_ARGUMENT *Patches,
+    _In_ ULONG Count,
+    _Out_opt_ PULONG Patched);
+
+NTSTATUS
+NTAPI
+AppleRtkitPatchBootArguments(
+    _In_ PUCHAR Memory,
+    _In_ ULONG MemorySize,
+    _In_ ULONG OffsetRegister,
+    _In_ ULONG SizeRegister,
+    _In_reads_(Count) const APPLE_RTKIT_BOOT_ARGUMENT *Patches,
+    _In_ ULONG Count,
+    _In_z_ PCSTR Name);
+
 BOOLEAN
 NTAPI
 AppleRtkitParseCrashlog(
