@@ -418,6 +418,16 @@ NTSTATUS UDPSendDatagram(
 		RemotePort = RemoteAddressTa->Address[0].Address[0].sin_port;
 		break;
 
+    case TDI_ADDRESS_TYPE_IP6:
+        if (AddrFile->Family != TDI_ADDRESS_TYPE_IP6)
+            return STATUS_UNSUCCESSFUL;
+        Status = AddrGetAddress((PTRANSPORT_ADDRESS)RemoteAddressTa, &RemoteAddress, &RemotePort);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (!TCPUnmapFromDualStack(&RemoteAddress))
+            return STATUS_INVALID_ADDRESS;
+        break;
+
     default:
 		return STATUS_UNSUCCESSFUL;
     }

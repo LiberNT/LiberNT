@@ -164,7 +164,7 @@ DGCopyDatagram(
                                   (PTRANSPORT_ADDRESS)RTAIPAddress,
                                   ReturnInfo->RemoteAddressLength);
     }
-    else if (AddrFile->Address.Type == IP_ADDRESS_V6)
+    else if (AddrFile->Family == TDI_ADDRESS_TYPE_IP6)
     {
         IP_ADDRESS MappedSource = Info->SrcAddress;
 
