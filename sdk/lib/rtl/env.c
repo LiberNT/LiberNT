@@ -509,14 +509,14 @@ RtlQueryEnvironmentVariable(
         }
     }
 
+    *ReturnLength = 0;
+
     if (Environment == NULL)
     {
         if (SysEnvUsed)
             RtlReleasePebLock();
         return STATUS_VARIABLE_NOT_FOUND;
     }
-
-    *ReturnLength = 0;
 
     wcs = Environment;
     DPRINT("Starting search at :%p\n", wcs);

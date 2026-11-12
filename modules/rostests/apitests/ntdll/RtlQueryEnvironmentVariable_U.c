@@ -13,6 +13,7 @@ START_TEST(RtlQueryEnvironmentVariable_U)
     WCHAR Buffer[32];
     UNICODE_STRING NameString, ValueString;
     NTSTATUS Status;
+    PVOID SavedEnvironment;
 
     /* Query the TestVar environment variable length */
     RtlInitUnicodeString(&NameString, L"TestVar");
@@ -125,4 +126,17 @@ START_TEST(RtlQueryEnvironmentVariable_U)
     ok_eq_ulong(ValueString.MaximumLength, sizeof(Buffer));
     ok_eq_wchar(Buffer[0], 0xABAB);
 
+    /* No environment block at all */
+    RtlAcquirePebLock();
+    SavedEnvironment = NtCurrentPeb()->ProcessParameters->Environment;
+    NtCurrentPeb()->ProcessParameters->Environment = NULL;
+    memset(Buffer, 0xAB, sizeof(Buffer));
+    RtlInitUnicodeString(&NameString, L"Bar");
+    RtlInitEmptyUnicodeString(&ValueString, Buffer, sizeof(Buffer));
+    Status = RtlQueryEnvironmentVariable_U(NULL, &NameString, &ValueString);
+    NtCurrentPeb()->ProcessParameters->Environment = SavedEnvironment;
+    RtlReleasePebLock();
+    ok_ntstatus(Status, STATUS_VARIABLE_NOT_FOUND);
+    ok_eq_ulong(ValueString.Length, 0);
+    ok_eq_wchar(Buffer[0], 0xABAB);
 }
