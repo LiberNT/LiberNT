@@ -7,6 +7,10 @@
 
 #include <kmt_test.h>
 
+/* ok_eq_hex evaluates its value twice: a call with an effect goes through this once */
+#define ok_once(call, expected) \
+    do { NTSTATUS Once_ = (call); ok(Once_ == (expected), #call " = 0x%08lx, expected 0x%08lx\n", Once_, (NTSTATUS)(expected)); } while (0)
+
 #define TOP_PAGE 0xFFFFFFFFFFFFF000ULL
 
 static UNICODE_STRING RegistryPath = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Kmtest");
@@ -69,7 +73,7 @@ START_TEST(IoResourceSearch)
 
     /* The candidates are aligned up from the minimum */
     DescribeMemory(&Requirement, 0x700001001ULL, 0x7000FFFFFULL, 0x1000, 0x1000);
-    ok_eq_hex(Assign(&Requirement, &Start), STATUS_SUCCESS);
+    ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
     ok((Start % 0x1000) == 0 && Start > 0x700001001ULL && Start + 0xFFF <= 0x7000FFFFFULL,
        "the window starts at 0x%I64x, not aligned within the requirement\n", Start);
 

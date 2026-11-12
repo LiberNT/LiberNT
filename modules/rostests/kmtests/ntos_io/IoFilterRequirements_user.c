@@ -14,6 +14,10 @@
 #include <cfgmgr32.h>
 #include <newdev.h>
 
+/* ok_eq_ulong evaluates its value twice: a call with an effect goes through this once */
+#define ok_once(call, expected) \
+    do { ULONG Once_ = (ULONG)(call); ok(Once_ == (ULONG)(expected), #call " = %lu, expected %lu\n", Once_, (ULONG)(expected)); } while (0)
+
 #define TEST_REPORTED_MAGIC 0x4B465251
 #define TEST_DMA_CHANNEL 3
 #define TEST_DMA_REQUEST_LINE 21
@@ -172,7 +176,7 @@ static VOID CheckReenumerate(DEVINST Bus)
     DWORD Queried = 0, Value = 0;
 
     ok(ReadValue(L"BusRelationsQueried", &Queried), "The bus driver was never asked for its children\n");
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
     ok(ReadValue(L"BusRelationsQueried", &Value) && Value > Queried, "Reenumerating the bus did not ask it for its children\n");
 }
 
@@ -227,21 +231,21 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
         return;
 
     SetRequest(L"HideChild", 1);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     ok(ReadValue(L"ChildSurprises", &Value) && Value == 1, "The missing child was not surprise-removed\n");
 
     /* While it waits for its last close, the stack takes no state query, eject or reset, and a stream file of its
      * driver is no close of its own */
     SetRequest(L"EjectMissing", 1);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
     SetRequest(L"EjectMissing", 0);
     RtlInitUnicodeString(&Reset.DeviceInstance, Instance);
     NtPlugPlayControl(PlugPlayControlResetDevice, &Reset, sizeof(Reset));
     ok(DeviceIoControl(File, CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_NEITHER, FILE_ANY_ACCESS), NULL, 0, NULL, 0,
                        &Returned, NULL),
        "The child's driver opened no stream file: %lu\n", GetLastError());
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     ok(ReadValue(L"ChildSurprises", &Value) && Value == 1, "The missing child was surprise-removed again (%lu)\n", Value);
     ok(!ReadValue(L"ChildFdoRemoves", &Value), "The missing child was removed while a handle was open\n");
@@ -259,7 +263,7 @@ static VOID CheckSurpriseRemoval(DEVINST Bus)
     ok(CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS, "The missing child is still in the device tree\n");
 
     SetRequest(L"HideChild", 0);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
     while ((CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
@@ -299,8 +303,8 @@ static VOID CheckReinstall(DEVINST Bus, PCWSTR InfPath)
     if (!Removed)
         return;
 
-    ok_eq_ulong(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     ok(CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS &&
        CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_HARDWAREID, NULL, HardwareIds, &Size, 0) == CR_SUCCESS &&
@@ -336,9 +340,9 @@ static VOID CheckReplug(DEVINST Bus)
         return;
 
     SetRequest(L"HideChild", 1);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
     SetRequest(L"HideChild", 0);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     ok(ChildStarted(Bus, 1000), "The child plugged in again did not start while the old stack was open\n");
     ok(CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS &&
@@ -346,7 +350,7 @@ static VOID CheckReplug(DEVINST Bus)
        "The child plugged in again is %ls, not %ls\n", After, Before);
     ok(!ReadValue(L"ChildFdoRemoves", &Value) || Value == Removes, "The old stack was removed while a handle was open\n");
     ok(ChildInterface(Interface, RTL_NUMBER_OF(Interface)), "The child plugged in again has no present interface\n");
-    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
+    ok_once(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 
     CloseHandle(File);
 
@@ -374,22 +378,22 @@ static VOID CheckRemoveTwice(DEVINST Bus)
     }
 
     ok(ChildInterface(Interface, RTL_NUMBER_OF(Interface)), "The child has no present interface\n");
-    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
+    ok_once(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 
-    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
-                (ULONG)CR_SUCCESS);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
     ok(ReadValue(L"ChildPdoRemoves", &Removes), "The child got no remove request\n");
     /* The PnP manager retires the interface its driver left enabled, link included (Windows 11) */
-    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_FILE_NOT_FOUND);
+    ok_once(OpenInterface(Interface), (ULONG)ERROR_FILE_NOT_FOUND);
     ok(ReadValue(L"ChildPdoQueryRemoves", &Queries), "The child was not asked whether it can be removed\n");
 
     CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK);
     ok(ReadValue(L"ChildPdoRemoves", &Value) && Value == Removes, "The removed child got a second remove request\n");
     ok(ReadValue(L"ChildPdoQueryRemoves", &Value) && Value == Queries, "The removed child was asked again\n");
 
-    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The removed child did not start again\n");
-    ok_eq_ulong(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
+    ok_once(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
 }
 
 /* Sets the child's security property from an SDDL string, restarts the child and opens it for reading */
@@ -410,12 +414,12 @@ static DWORD SecureChild(DEVINST Bus, PCWSTR Sddl)
     {
         return ERROR_INVALID_DATA;
     }
-    ok_eq_ulong(CM_Set_DevNode_Registry_PropertyW(Child, CM_DRP_SECURITY, Descriptor, Size, 0), (ULONG)CR_SUCCESS);
+    ok_once(CM_Set_DevNode_Registry_PropertyW(Child, CM_DRP_SECURITY, Descriptor, Size, 0), (ULONG)CR_SUCCESS);
     LocalFree(Descriptor);
 
-    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
-                (ULONG)CR_SUCCESS);
-    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The secured child did not start again\n");
 
     if (CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_PHYSICAL_DEVICE_OBJECT_NAME, NULL, Path + wcslen(Path), &Length, 0) !=
@@ -434,8 +438,8 @@ static DWORD SecureChild(DEVINST Bus, PCWSTR Sddl)
 /* The security descriptor a device's registry holds covers its stack once its drivers are added (SPDRP_SECURITY) */
 static VOID CheckDeviceSecurity(DEVINST Bus)
 {
-    ok_eq_ulong(SecureChild(Bus, L"D:(D;;FA;;;SY)(A;;FA;;;WD)"), (ULONG)ERROR_ACCESS_DENIED);
-    ok_eq_ulong(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
+    ok_once(SecureChild(Bus, L"D:(D;;FA;;;SY)(A;;FA;;;WD)"), (ULONG)ERROR_ACCESS_DENIED);
+    ok_once(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
 }
 
 /* The child's stacks that are still attached: each AddDevice adds one, each remove request takes one away */
@@ -485,35 +489,35 @@ static VOID CheckFailedStack(DEVINST Bus)
         return;
     }
 
-    ok_eq_long(RegSetValueExW(Key, L"Security", 0, REG_BINARY, Broken, sizeof(Broken)), ERROR_SUCCESS);
-    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
-                (ULONG)CR_SUCCESS);
+    ok_once(RegSetValueExW(Key, L"Security", 0, REG_BINARY, Broken, sizeof(Broken)), ERROR_SUCCESS);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
     CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY);
     ok(WaitChildProblem(Bus, CM_PROB_REGISTRY), "A broken security descriptor did not give the child CM_PROB_REGISTRY\n");
-    ok_eq_ulong(LiveStacks(), 0UL);
+    ok_once(LiveStacks(), 0UL);
 
     RtlInitUnicodeString(&Reset.DeviceInstance, Instance);
     NtPlugPlayControl(PlugPlayControlResetDevice, &Reset, sizeof(Reset));
     ok(WaitChildProblem(Bus, CM_PROB_REGISTRY), "The reset child lost CM_PROB_REGISTRY\n");
-    ok_eq_ulong(LiveStacks(), 0UL);
+    ok_once(LiveStacks(), 0UL);
 
     RegDeleteValueW(Key, L"Security");
     RegCloseKey(Key);
-    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The child did not start again\n");
-    ok_eq_ulong(LiveStacks(), 1UL);
+    ok_once(LiveStacks(), 1UL);
 
     SetRequest(L"FailChildStart", 1);
-    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
-                (ULONG)CR_SUCCESS);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
     CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY);
     ok(WaitChildProblem(Bus, CM_PROB_FAILED_START), "The child that failed its start has no CM_PROB_FAILED_START\n");
-    ok_eq_ulong(LiveStacks(), 0UL);
+    ok_once(LiveStacks(), 0UL);
 
     SetRequest(L"FailChildStart", 0);
-    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The child did not start after its failed start\n");
-    ok_eq_ulong(LiveStacks(), 1UL);
+    ok_once(LiveStacks(), 1UL);
 }
 
 static VOID RestartChild(DEVINST Bus)
@@ -527,9 +531,9 @@ static VOID RestartChild(DEVINST Bus)
         ok(FALSE, "The bus has no child to restart\n");
         return;
     }
-    ok_eq_ulong(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
-                (ULONG)CR_SUCCESS);
-    ok_eq_ulong(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The child did not start again\n");
 }
 
@@ -564,7 +568,7 @@ static VOID CheckEject(DEVINST Bus)
     RegSetValueExW(Key, L"EjectChild", 0, REG_DWORD, (const BYTE *)&Value, sizeof(Value));
     RegCloseKey(Key);
 
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
     while (!ReadValue(L"EjectAfterRemove", &Value) && GetTickCount() - Start < 1000)
@@ -574,11 +578,11 @@ static VOID CheckEject(DEVINST Bus)
     ok(Value == 1, "The child was ejected before it was removed\n");
 
     /* A removal hands user mode nothing to install, so the ejected child stays down */
-    ok_eq_ulong(CMP_WaitNoPendingInstallEvents(1000), (ULONG)WAIT_OBJECT_0);
+    ok_once(CMP_WaitNoPendingInstallEvents(1000), (ULONG)WAIT_OBJECT_0);
 
     if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
         return;
-    ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Child, 0), (ULONG)CR_SUCCESS);
+    ok_once(CM_Get_DevNode_Status(&Status, &Problem, Child, 0), (ULONG)CR_SUCCESS);
     ok(Problem == CM_PROB_HELD_FOR_EJECT, "The ejected child has problem %lu (status 0x%lx)\n", Problem, Status);
 }
 
@@ -595,7 +599,7 @@ static VOID CheckFailed(DEVINST Bus)
         return;
 
     SetRequest(L"FailBus", 1);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
     while ((CM_Get_DevNode_Status(&Status, &Problem, Bus, 0) != CR_SUCCESS || Problem != CM_PROB_FAILED_POST_START) &&
@@ -653,7 +657,7 @@ static VOID CheckNullChild(DEVINST Bus)
     DEVINST Child;
 
     SetRequest(L"NullChild", 1);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
     do
@@ -671,7 +675,7 @@ static VOID CheckNullChild(DEVINST Bus)
     ok(!(Status & DN_STARTED), "%ls was started (status 0x%lx)\n", Instance, Status);
 
     SetRequest(L"NullChild", 0);
-    ok_eq_ulong(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
     if (Instance[0] != UNICODE_NULL)
         RemoveInstance(Instance);
 }

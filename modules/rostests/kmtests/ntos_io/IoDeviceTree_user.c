@@ -11,6 +11,10 @@
 #include <cfgmgr32.h>
 #include <regstr.h>
 
+/* ok_eq_ulong evaluates its value twice: a call with an effect goes through this once */
+#define ok_once(call, expected) \
+    do { ULONG Once_ = (ULONG)(call); ok(Once_ == (ULONG)(expected), #call " = %lu, expected %lu\n", Once_, (ULONG)(expected)); } while (0)
+
 static
 BOOLEAN
 LocateStarted(
@@ -250,8 +254,8 @@ static VOID CheckNullDrivers(VOID)
     DEVINST Device, Root = 0;
     PWSTR List, Id;
 
-    ok_eq_ulong(CMP_WaitNoPendingInstallEvents(5000), (ULONG)WAIT_OBJECT_0);
-    ok_eq_ulong(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
+    ok_once(CMP_WaitNoPendingInstallEvents(5000), (ULONG)WAIT_OBJECT_0);
+    ok_once(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
 
     if (CM_Get_Device_ID_List_SizeW(&Size, NULL, CM_GETIDLIST_FILTER_PRESENT) != CR_SUCCESS || Size == 0) return;
     List = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size * sizeof(WCHAR));
@@ -266,11 +270,11 @@ static VOID CheckNullDrivers(VOID)
             CheckInstallOffered(Id, Device, Root);
             if (!IsNullDriverDevice(Device)) continue;
 
-            ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
+            ok_once(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
             ok(!(Status & (DN_STARTED | DN_HAS_PROBLEM)), "%ls: status 0x%lx, problem %lu\n", Id, Status, Problem);
 
-            ok_eq_ulong(CM_Setup_DevNode(Device, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
-            ok_eq_ulong(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
+            ok_once(CM_Setup_DevNode(Device, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+            ok_once(CM_Get_DevNode_Status(&Status, &Problem, Device, 0), (ULONG)CR_SUCCESS);
             ok(!(Status & (DN_STARTED | DN_HAS_PROBLEM)), "%ls after a setup request: status 0x%lx, problem %lu\n", Id,
                Status, Problem);
             Checked++;

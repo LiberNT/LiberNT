@@ -7,6 +7,10 @@
 
 #include <kmt_test.h>
 
+/* ok_eq_hex evaluates its value twice: a call with an effect goes through this once */
+#define ok_once(call, expected) \
+    do { NTSTATUS Once_ = (call); ok(Once_ == (expected), #call " = 0x%08lx, expected 0x%08lx\n", Once_, (NTSTATUS)(expected)); } while (0)
+
 #define RESULT_KEY L"\\Registry\\Machine\\SOFTWARE\\KmtIoInterfaceOrder"
 
 static const GUID TestInterface = {0x8f6d2a43, 0x61c4, 0x4bd8, {0x9a, 0x35, 0x2b, 0x9e, 0x0f, 0x5c, 0x7d, 0x11}};
@@ -192,25 +196,25 @@ START_TEST(IoInterfaceOrderCheck)
     {
         /* The interface's properties hang from its class, the GUID that ends its device's link */
         Value = 0x5a5a;
-        ok_eq_hex(IoSetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, DEVPROP_TYPE_UINT32, sizeof(Value), &Value),
-                  STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, DEVPROP_TYPE_UINT32, sizeof(Value), &Value),
+                STATUS_SUCCESS);
         Value = 0;
-        ok_eq_hex(IoGetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, sizeof(Value), &Value, &Required, &Type),
-                  STATUS_SUCCESS);
+        ok_once(IoGetDeviceInterfacePropertyData(&First, &TestProperty, 0, 0, sizeof(Value), &Value, &Required, &Type),
+                STATUS_SUCCESS);
         ok_eq_ulong(Value, 0x5a5aUL);
     }
     if (NT_SUCCESS(Status))
     {
         /* A second registration of an instance gives its name and says it existed */
-        ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceA, &Again), STATUS_OBJECT_NAME_EXISTS);
+        ok_once(IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceA, &Again), STATUS_OBJECT_NAME_EXISTS);
         ok(RtlEqualUnicodeString(&Again, &First, TRUE), "registered again as %wZ, expected %wZ\n", &Again, &First);
         RtlFreeUnicodeString(&Again);
     }
 
     /* A reference string is one path component */
-    ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &Backslash, &Again), STATUS_INVALID_DEVICE_REQUEST);
+    ok_once(IoRegisterDeviceInterface(Pdo, &TestInterface, &Backslash, &Again), STATUS_INVALID_DEVICE_REQUEST);
     RtlFreeUnicodeString(&Again);
-    ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &Slash, &Again), STATUS_INVALID_DEVICE_REQUEST);
+    ok_once(IoRegisterDeviceInterface(Pdo, &TestInterface, &Slash, &Again), STATUS_INVALID_DEVICE_REQUEST);
     RtlFreeUnicodeString(&Again);
 
     if (NT_SUCCESS(Status)) Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceB, &Second);
@@ -218,10 +222,10 @@ START_TEST(IoInterfaceOrderCheck)
 
     if (NT_SUCCESS(Status))
     {
-        ok_eq_hex(IoSetDeviceInterfaceState(&Second, TRUE), STATUS_SUCCESS);
-        ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_SUCCESS);
-        ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_OBJECT_NAME_EXISTS);
-        ok_eq_hex(LinkStatus(&First, &ReferenceA, &DeviceName), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Second, TRUE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&First, TRUE), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&First, TRUE), STATUS_OBJECT_NAME_EXISTS);
+        ok_once(LinkStatus(&First, &ReferenceA, &DeviceName), STATUS_SUCCESS);
 
         Status = IoGetDeviceInterfaces(&TestInterface, NULL, 0, &List);
         ok_eq_hex(Status, STATUS_SUCCESS);
@@ -237,22 +241,22 @@ START_TEST(IoInterfaceOrderCheck)
             ExFreePool(List);
         }
 
-        ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
-        ok_eq_hex(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_SUCCESS);
-        ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_OBJECT_NAME_NOT_FOUND);
-        ok_eq_hex(IoSetDeviceInterfaceState(&Second, FALSE), STATUS_SUCCESS);
-        ok_eq_hex(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
+        ok_once(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
+        ok_once(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&First, FALSE), STATUS_OBJECT_NAME_NOT_FOUND);
+        ok_once(IoSetDeviceInterfaceState(&Second, FALSE), STATUS_SUCCESS);
+        ok_once(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
     }
 
     Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceC, &Third);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
-        ok_eq_hex(IoSetDeviceInterfaceState(&Third, TRUE), STATUS_SUCCESS);
-        ok_eq_hex(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_SUCCESS);
+        ok_once(IoSetDeviceInterfaceState(&Third, TRUE), STATUS_SUCCESS);
+        ok_once(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_SUCCESS);
         CheckParametersKey(&Third);
-        ok_eq_hex(IoSetDeviceInterfaceState(&Third, FALSE), STATUS_SUCCESS);
-        ok_eq_hex(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
+        ok_once(IoSetDeviceInterfaceState(&Third, FALSE), STATUS_SUCCESS);
+        ok_once(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
     }
 
     /* Instances of two classes on one device are aliases when their reference strings are the same */
