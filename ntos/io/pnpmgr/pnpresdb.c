@@ -295,6 +295,28 @@ IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_
     return found;
 }
 
+BOOLEAN
+IopResDbConflictsWithChosen(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate,
+    _In_opt_ PDEVICE_NODE CandidateOwner,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount)
+{
+    ULONG Index;
+
+    ASSERT(Candidate != NULL);
+    ASSERT(ChosenCount == 0 || Chosen != NULL);
+
+    for (Index = 0; Index < ChosenCount; Index++)
+    {
+        ASSERT(&Chosen[Index] != Candidate);
+        if (IopResDbConflict(Candidate, CandidateOwner, &Chosen[Index], CandidateOwner))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 /* Check every descriptor in a list against the database. */
 BOOLEAN
 IopResDbCheckList(_In_opt_ PCM_RESOURCE_LIST ResourceList)

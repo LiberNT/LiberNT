@@ -494,6 +494,8 @@ NTSTATUS
 IopPickOneDescriptor(
     _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
     _In_opt_ PDEVICE_NODE DeviceNode,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount,
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     KAFFINITY LineAffinity = 0;
@@ -532,7 +534,8 @@ IopPickOneDescriptor(
 
     while (Attempts < 0x10000)
     {
-        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, NULL))
+        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, NULL) &&
+            !IopResDbConflictsWithChosen(Descriptor, DeviceNode, Chosen, ChosenCount))
         {
             return STATUS_SUCCESS;
         }
@@ -641,6 +644,8 @@ IopFixupResourceListWithRequirements(
             {
                 Status = IopPickOneDescriptor(&List->Descriptors[Choice],
                                               DeviceNode,
+                                              Partial,
+                                              Count,
                                               &Partial[Count]);
             }
 

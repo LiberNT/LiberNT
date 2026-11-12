@@ -63,6 +63,61 @@ DescribeMemory(
     Requirement->u.Memory.MaximumAddress.QuadPart = (LONGLONG)Maximum;
 }
 
+#define LIST_WINDOW 0x730000000ULL
+#define LIST_WINDOW_LENGTH 0x1000000ULL
+
+static
+VOID
+CheckDescriptorsOfOneList(VOID)
+{
+    static const ULONG Lengths[2] = { 0x10000, 0x8000 };
+    PIO_RESOURCE_REQUIREMENTS_LIST List;
+    PCM_RESOURCE_LIST Allocated = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    ULONGLONG Start[2] = { 0, 0 }, Length[2] = { 0, 0 };
+    ULONG Size, Index;
+    NTSTATUS Status;
+
+    Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) + sizeof(IO_RESOURCE_DESCRIPTOR);
+    List = ExAllocatePoolZero(PagedPool, Size, 'sRmK');
+    ok(List != NULL, "no memory for the requirements\n");
+    if (List == NULL) return;
+
+    List->ListSize = Size;
+    List->InterfaceType = Internal;
+    List->AlternativeLists = 1;
+    List->List[0].Version = 1;
+    List->List[0].Revision = 1;
+    List->List[0].Count = 2;
+    for (Index = 0; Index < 2; Index++)
+    {
+        DescribeMemory(&List->List[0].Descriptors[Index], LIST_WINDOW, LIST_WINDOW + LIST_WINDOW_LENGTH - 1,
+                       Lengths[Index], Lengths[Index]);
+    }
+
+    Status = IoAssignResources(&RegistryPath, NULL, KmtDriverObject, NULL, List, &Allocated);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status) && Allocated != NULL)
+    {
+        ok_eq_ulong(Allocated->Count, 1UL);
+        ok_eq_ulong(Allocated->List[0].PartialResourceList.Count, 2UL);
+        Partial = Allocated->List[0].PartialResourceList.PartialDescriptors;
+        for (Index = 0; Index < 2 && Index < Allocated->List[0].PartialResourceList.Count; Index++)
+        {
+            Length[Index] = RtlCmDecodeMemIoResource(&Partial[Index], &Start[Index]);
+            ok(Length[Index] == Lengths[Index], "setting %lu is 0x%I64x bytes long\n", Index, Length[Index]);
+            ok((Start[Index] % Lengths[Index]) == 0 && Start[Index] >= LIST_WINDOW &&
+               Start[Index] + Length[Index] <= LIST_WINDOW + LIST_WINDOW_LENGTH,
+               "setting %lu at 0x%I64x is not aligned within the requirement\n", Index, Start[Index]);
+        }
+        ok(Start[0] + Length[0] <= Start[1] || Start[1] + Length[1] <= Start[0],
+           "the settings 0x%I64x+0x%I64x and 0x%I64x+0x%I64x of one list overlap\n", Start[0], Length[0], Start[1], Length[1]);
+        ExFreePool(Allocated);
+    }
+
+    ExFreePoolWithTag(List, 'sRmK');
+}
+
 #define RACE_THREADS 8
 #define RACE_WINDOW 0x720000000ULL
 #define RACE_WINDOW_LENGTH 0x1000000ULL
@@ -229,5 +284,6 @@ START_TEST(IoResourceSearch)
     Status = Assign(&Requirement, &Start);
     ok(!NT_SUCCESS(Status) || Start >= TOP_PAGE, "the search wrapped around to 0x%I64x\n", Start);
 
+    CheckDescriptorsOfOneList();
     CheckConcurrentAssignments();
 }

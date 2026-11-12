@@ -879,6 +879,13 @@ BOOLEAN
 IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting);
 
 BOOLEAN
+IopResDbConflictsWithChosen(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate,
+    _In_opt_ PDEVICE_NODE CandidateOwner,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount);
+
+BOOLEAN
 IopResDbCheckList(
     _In_opt_ PCM_RESOURCE_LIST ResourceList);
 
