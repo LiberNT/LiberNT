@@ -8887,6 +8887,39 @@ DxgkpIsAnyVidPnSourceExclusivelyOwned(VOID)
     return Owned;
 }
 
+BOOLEAN
+NTAPI
+DxgkVidPnAnySourceExclusivelyOwned(VOID)
+{
+    PLIST_ENTRY Entry;
+    ULONG Index;
+    BOOLEAN Owned = FALSE;
+
+    PAGED_CODE();
+
+    DxgkpEnsureSourceOwnerMutex();
+
+    ExAcquireFastMutex(&g_SourceOwnerMutex);
+    for (Entry = g_SourceOwnerAdapterList.Flink; Entry != &g_SourceOwnerAdapterList && !Owned; Entry = Entry->Flink)
+    {
+        PDXGKP_SOURCE_OWNER_ADAPTER_STATE State = CONTAINING_RECORD(Entry, DXGKP_SOURCE_OWNER_ADAPTER_STATE, Entry);
+
+        for (Index = 0; Index < DXGKP_MAX_SOURCES; Index++)
+        {
+            if (State->Owners[Index].OwnerDevice != NULL &&
+                (State->Owners[Index].OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVE ||
+                 State->Owners[Index].OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVEGDI))
+            {
+                Owned = TRUE;
+                break;
+            }
+        }
+    }
+    ExReleaseFastMutex(&g_SourceOwnerMutex);
+
+    return Owned;
+}
+
 NTSTATUS
 NTAPI
 DxgkCheckVidPnExclusiveOwnership(

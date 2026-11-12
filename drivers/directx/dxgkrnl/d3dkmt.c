@@ -6582,6 +6582,10 @@ DxgkCheckOcclusion(
      * matching Win11 for a shown top-level window. (Was STATUS_NOT_SUPPORTED,
      * which failed the displayext occlusion parity test.)
      */
+    /* TODO: with more than one display output Windows 11 reports a window unoccluded while one output is exclusively owned (gdi32 driver test) */
+    if (DxgkVidPnAnySourceExclusivelyOwned())
+        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
+
     return STATUS_SUCCESS;
 }
 

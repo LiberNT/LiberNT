@@ -4005,6 +4005,10 @@ NTAPI
 DxgkCheckVidPnExclusiveOwnership(
     _In_ CONST D3DKMT_CHECKVIDPNEXCLUSIVEOWNERSHIP *pCheckVidPnExclusiveOwnership);
 
+BOOLEAN
+NTAPI
+DxgkVidPnAnySourceExclusivelyOwned(VOID);
+
 /* ========================================================================
  * Function prototypes — display.c  (WDDM ↔ win32ss display bridge)
  * ====================================================================== */
