@@ -2724,6 +2724,7 @@ PdoQueryResourceRequirements(
     BOOLEAN AllowMsi;
     BOOLEAN AllowMsix;
     UCHAR InterruptPin;
+    UCHAR LegacyLine;
     ULONG MsixMessageCount;
     UCHAR MsiMessageCount;
     ULONG MessageNumberLimit;
@@ -3072,15 +3073,14 @@ PdoQueryResourceRequirements(
     MsixOption = (HasMsix && AllowMsix);
     MsiOption = (HasMsi && AllowMsi);
     LegacyOption = (InterruptResourcesAllowed && InterruptPin != 0);
-#ifdef HAL_PCI_FIRMWARE_ROUTING_AUTHORITATIVE
-    /* Without a route in the firmware interrupt map there is no legacy vector. */
-    if (LegacyOption &&
-        (PciPdoRoutedInterruptLine(DeviceExtension, InterruptPin,
-                                   PciConfig.u.type0.InterruptLine) == 0))
+    LegacyLine = 0;
+    if (LegacyOption)
     {
-        LegacyOption = FALSE;
+        LegacyLine = PciPdoRoutedInterruptLine(DeviceExtension, InterruptPin,
+                                               PciConfig.u.type0.InterruptLine);
+        if (LegacyLine == 0 || LegacyLine == 0xFF)
+            LegacyOption = FALSE;
     }
-#endif
     if (FdoExtension && FdoExtension->OscMasked)
     {
         ULONG Masked = FdoExtension->OscMasked;
@@ -3178,15 +3178,9 @@ PdoQueryResourceRequirements(
             {
                 Dest->ShareDisposition = CmResourceShareShared;
                 Dest->Flags = CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE;
-#ifdef HAL_PCI_FIRMWARE_ROUTING_AUTHORITATIVE
-                Dest->u.Interrupt.MinimumVector =
-                    PciPdoRoutedInterruptLine(DeviceExtension, InterruptPin,
-                                              PciConfig.u.type0.InterruptLine);
-                Dest->u.Interrupt.MaximumVector = Dest->u.Interrupt.MinimumVector;
-#else
-                Dest->u.Interrupt.MinimumVector = 0;
-                Dest->u.Interrupt.MaximumVector = 0xFF;
-#endif
+                ASSERT(LegacyLine != 0 && LegacyLine != 0xFF);
+                Dest->u.Interrupt.MinimumVector = LegacyLine;
+                Dest->u.Interrupt.MaximumVector = LegacyLine;
             }
             else
             {

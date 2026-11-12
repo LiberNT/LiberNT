@@ -205,6 +205,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoEvent.c
     ntos_io/IoInterfaceOrder.c
     ntos_io/IoResourceSearch.c
+    ntos_io/PciLineInterrupt.c
     ntos_io/IoStorageDumpPath.c
     ntos_io/IoFilesystem.c
     ntos_io/IoInterrupt.c
