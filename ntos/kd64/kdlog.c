@@ -568,6 +568,36 @@ static BOOLEAN KdpBootLogResolveGpt(VOID)
     return FALSE;
 }
 
+static VOID KdpBootLogKeepPrevious(_In_ PCUNICODE_STRING FileName)
+{
+    static const WCHAR Previous[] = L"prevboot.log";
+    UCHAR Buffer[FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + 256 * sizeof(WCHAR)];
+    PFILE_RENAME_INFORMATION Rename = (PFILE_RENAME_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    ULONG Directory;
+    HANDLE Handle;
+
+    PAGED_CODE();
+
+    for (Directory = FileName->Length / sizeof(WCHAR); Directory > 0 && FileName->Buffer[Directory - 1] != L'\\'; --Directory);
+    if (Directory == 0 || (Directory + RTL_NUMBER_OF(Previous) - 1) * sizeof(WCHAR) > sizeof(Buffer) - FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName))
+        return;
+
+    InitializeObjectAttributes(&ObjectAttributes, (PUNICODE_STRING)FileName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenFile(&Handle, DELETE | SYNCHRONIZE, &ObjectAttributes, &IoStatus, FILE_SHARE_READ, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT)))
+        return;
+
+    RtlZeroMemory(Rename, FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName));
+    Rename->ReplaceIfExists = TRUE;
+    Rename->FileNameLength = (Directory + RTL_NUMBER_OF(Previous) - 1) * sizeof(WCHAR);
+    RtlCopyMemory(Rename->FileName, FileName->Buffer, Directory * sizeof(WCHAR));
+    RtlCopyMemory(Rename->FileName + Directory, Previous, sizeof(Previous) - sizeof(WCHAR));
+    ZwSetInformationFile(Handle, &IoStatus, Rename, FIELD_OFFSET(FILE_RENAME_INFORMATION, FileName) + Rename->FileNameLength,
+                         FileRenameInformation);
+    ZwClose(Handle);
+}
+
 static NTSTATUS KdpBootLogOpen(VOID)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -587,6 +617,8 @@ static NTSTATUS KdpBootLogOpen(VOID)
     Status = RtlAnsiStringToUnicodeString(&FileName, &AnsiName, TRUE);
     if (!NT_SUCCESS(Status))
         return Status;
+
+    KdpBootLogKeepPrevious(&FileName);
 
     InitializeObjectAttributes(&ObjectAttributes, &FileName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
     Status = ZwCreateFile(&Handle, FILE_READ_DATA | FILE_WRITE_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OVERWRITE_IF, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_SEQUENTIAL_ONLY | FILE_WRITE_THROUGH, NULL, 0);
