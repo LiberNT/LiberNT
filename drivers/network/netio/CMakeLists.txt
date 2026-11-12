@@ -20,6 +20,8 @@ list(APPEND SOURCE
     wfp/layers.c
     fwp_ipsec.c
     iphlp.c
+    wskname.c
+    wsknamedev.c
     ../tdihelpers/tdi.c
     ../tdihelpers/tdiconn.c
     ${CMAKE_CURRENT_BINARY_DIR}/netio_stubs.c

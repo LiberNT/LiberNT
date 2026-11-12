@@ -94,6 +94,7 @@ KMT_TESTFUNC Test_TcpIpTdi;
 KMT_TESTFUNC Test_TcpIpConnect;
 KMT_TESTFUNC Test_TcpIpCancelReceive;
 KMT_TESTFUNC Test_WfpListen;
+KMT_TESTFUNC Test_WskName;
 KMT_TESTFUNC Test_WfpTcp;
 KMT_TESTFUNC Test_WfpUdp;
 KMT_TESTFUNC Test_WfpUser;
@@ -184,6 +185,7 @@ const KMT_TEST TestList[] =
     { "TcpIpConnect",                 Test_TcpIpConnect },
     { "TcpIpCancelReceive",           Test_TcpIpCancelReceive },
     { "WfpListen",                    Test_WfpListen },
+    { "WskName",                      Test_WskName },
     { "WfpTcp",                       Test_WfpTcp },
     { "WfpUdp",                       Test_WfpUdp },
     { "WfpUser",                      Test_WfpUser },

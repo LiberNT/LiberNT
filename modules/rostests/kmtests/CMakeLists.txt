@@ -1,5 +1,7 @@
 
-include_directories(include)
+include_directories(
+    include
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 
 #
 # subdirectories containing special-purpose drivers
@@ -16,6 +18,7 @@ add_subdirectory(ntos_mm)
 add_subdirectory(ntos_po)
 add_subdirectory(ntos_ps)
 add_subdirectory(tcpip)
+add_subdirectory(netio)
 add_subdirectory(wfp)
 
 list(APPEND COMMON_SOURCE
@@ -673,6 +676,7 @@ list(APPEND KMTEST_SOURCE
     ntos_po/PoShutdownTime_user.c
     ntos_po/PoInitiatePowerAction_user.c
     tcpip/TcpIp_user.c
+    netio/wskname/wskname_user.c
     wfp/wfp_listen/wfp_listen_user.c
     wfp/wfp_tcp/wfp_tcp_user.c
     wfp/wfp_udp/wfp_udp_user.c

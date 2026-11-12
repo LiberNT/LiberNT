@@ -1,5 +1,7 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
+include_directories(
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
 add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/dnsrslvr.idl)
 
 list(APPEND SOURCE
@@ -8,6 +10,7 @@ list(APPEND SOURCE
     hostsfile.c
     llmnr.c
     rpcserver.c
+    wskname.c
     precomp.h
     ${CMAKE_CURRENT_BINARY_DIR}/dnsrslvr_s.c)
 
