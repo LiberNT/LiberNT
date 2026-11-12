@@ -200,11 +200,6 @@ PspSetThreadName(
     return STATUS_SUCCESS;
 }
 
-/*
- * Clears one storage cell in one thread's block. The code of an emulated
- * process keeps its cells in the emulated block; the native cells of such a
- * thread belong to the emulation layer. Called attached to the process.
- */
 static
 NTSTATUS
 PspZeroTebTlsCell(
@@ -222,6 +217,7 @@ PspZeroTebTlsCell(
 
     _SEH2_TRY
     {
+        /* An emulated thread's own cells are in its x86 block; the native ones belong to the emulation layer */
         if (Emulated && (Teb->WowTebOffset != 0))
         {
             Teb32 = (TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset);
@@ -259,9 +255,8 @@ PspZeroTebTlsCell(
 }
 
 /*
- * Clears one storage cell in every thread of the thread's process, which is
- * what a module that owned the index asks for on its way out: whoever is
- * given the index next must find it empty in every thread.
+ * Clears one storage slot in every thread of the process, which is what a
+ * module that owned the slot asks for on its way out.
  */
 static
 NTSTATUS
