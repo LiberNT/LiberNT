@@ -7,18 +7,42 @@
 
 #include "precomp.h"
 
-#define SLEEP_SAMPLES 3
+#define SLEEP_SAMPLES 5
 #define SLEEP_INTERVAL_MS 10
-#define SLEEP_LONG_SAMPLES 2
+#define SLEEP_LONG_SAMPLES 3
 #define SLEEP_LONG_INTERVAL_MS 20
+
+static
+double
+ShortestSleep(
+    _In_ DWORD Interval,
+    _In_ ULONG Samples,
+    _In_ double FrequencyMs)
+{
+    LARGE_INTEGER Before, After;
+    double ElapsedMs, Shortest = 0;
+    ULONG Sample;
+
+    for (Sample = 0; Sample < Samples; Sample++)
+    {
+        QueryPerformanceCounter(&Before);
+        Sleep(Interval);
+        QueryPerformanceCounter(&After);
+
+        ElapsedMs = (After.QuadPart - Before.QuadPart) / FrequencyMs;
+        if ((Sample == 0) || (ElapsedMs < Shortest))
+            Shortest = ElapsedMs;
+    }
+
+    return Shortest;
+}
 
 START_TEST(SleepTickRounding)
 {
-    LARGE_INTEGER Frequency, Before, After;
+    LARGE_INTEGER Frequency;
     DWORD Adjustment, Increment;
     BOOL AdjustmentDisabled;
     double TickMs, ElapsedMs;
-    ULONG Sample;
 
     ok(QueryPerformanceFrequency(&Frequency), "QueryPerformanceFrequency failed\n");
     ok(GetSystemTimeAdjustment(&Adjustment, &Increment, &AdjustmentDisabled), "GetSystemTimeAdjustment failed: %lu\n", GetLastError());
@@ -35,23 +59,10 @@ START_TEST(SleepTickRounding)
     /* A wake from a one-millisecond sleep lands on a tick, so each timed sleep starts just after one */
     Sleep(1);
 
-    for (Sample = 0; Sample < SLEEP_SAMPLES; Sample++)
-    {
-        QueryPerformanceCounter(&Before);
-        Sleep(SLEEP_INTERVAL_MS);
-        QueryPerformanceCounter(&After);
+    /* A virtual machine's host delivers some clock interrupts late, so the shortest of several sleeps is the one that shows the rounding */
+    ElapsedMs = ShortestSleep(SLEEP_INTERVAL_MS, SLEEP_SAMPLES, Frequency.QuadPart / 1000.0);
+    ok(ElapsedMs < TickMs * 1.5, "Sleep(%u) took at least %.2f ms with a %.3f ms tick\n", SLEEP_INTERVAL_MS, ElapsedMs, TickMs);
 
-        ElapsedMs = (After.QuadPart - Before.QuadPart) * 1000.0 / Frequency.QuadPart;
-        ok(ElapsedMs < TickMs * 1.5, "Sleep(%u) took %.2f ms with a %.3f ms tick\n", SLEEP_INTERVAL_MS, ElapsedMs, TickMs);
-    }
-
-    for (Sample = 0; Sample < SLEEP_LONG_SAMPLES; Sample++)
-    {
-        QueryPerformanceCounter(&Before);
-        Sleep(SLEEP_LONG_INTERVAL_MS);
-        QueryPerformanceCounter(&After);
-
-        ElapsedMs = (After.QuadPart - Before.QuadPart) * 1000.0 / Frequency.QuadPart;
-        ok(ElapsedMs < TickMs * 2.5, "Sleep(%u) took %.2f ms with a %.3f ms tick\n", SLEEP_LONG_INTERVAL_MS, ElapsedMs, TickMs);
-    }
+    ElapsedMs = ShortestSleep(SLEEP_LONG_INTERVAL_MS, SLEEP_LONG_SAMPLES, Frequency.QuadPart / 1000.0);
+    ok(ElapsedMs < TickMs * 2.5, "Sleep(%u) took at least %.2f ms with a %.3f ms tick\n", SLEEP_LONG_INTERVAL_MS, ElapsedMs, TickMs);
 }
