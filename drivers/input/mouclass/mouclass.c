@@ -1072,8 +1072,12 @@ ClassPnp(
 									&Iosb,
 									0,
 									0);
+				/* FIXME: creates fail until the start completes, so this open of the class's own interface cannot succeed here */
 				if (!NT_SUCCESS(Status))
+				{
 					DeviceExtension->FileHandle = NULL;
+					Status = STATUS_SUCCESS;
+				}
 			}
 			else
 				DeviceExtension->FileHandle = NULL;
