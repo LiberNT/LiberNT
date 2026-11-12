@@ -127,6 +127,15 @@ typedef struct {
     CHAR16    FileName[1]; /* variable-length */
 } EFI_FILE_INFO;
 
+#define EFI_FILE_SYSTEM_VOLUME_LABEL_ID \
+  { \
+    0xDB47D7D3, 0xFE81, 0x11d3, {0x9A, 0x35, 0x00, 0x90, 0x27, 0x3F, 0xC1, 0x4D } \
+  }
+
+typedef struct {
+    CHAR16    VolumeLabel[1]; /* variable-length */
+} EFI_FILE_SYSTEM_VOLUME_LABEL;
+
 typedef
 EFI_STATUS
 (EFIAPI *EFI_FILE_GET_INFO)(

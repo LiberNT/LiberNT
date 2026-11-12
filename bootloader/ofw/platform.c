@@ -845,7 +845,7 @@ FwReadDeviceFile(
 
 BOOLEAN
 FwScanFileVolumes(
-    _In_ PCWSTR Path,
+    _In_opt_ PCWSTR Path,
     _Inout_ PFW_VOLUME_SCAN Scan,
     _Out_ PVOID* Device)
 {
@@ -853,6 +853,50 @@ FwScanFileVolumes(
     Scan->State = FwVolumeScanDone;
     *Device = NULL;
     return FALSE;
+}
+
+BOOLEAN
+FwFileExists(
+    _In_ PVOID Device,
+    _In_ PCWSTR Path)
+{
+    UNREFERENCED_PARAMETER(Device);
+    UNREFERENCED_PARAMETER(Path);
+    return FALSE;
+}
+
+BOOLEAN
+FwIsUsbVolume(
+    _In_ PVOID Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return FALSE;
+}
+
+BOOLEAN
+FwIsBootVolume(
+    _In_ PVOID Device)
+{
+    UNREFERENCED_PARAMETER(Device);
+    return FALSE;
+}
+
+BOOLEAN
+FwGetVolumeLabel(
+    _In_ PVOID Device,
+    _Out_writes_z_(Chars) PWSTR Label,
+    _In_ ULONG Chars)
+{
+    UNREFERENCED_PARAMETER(Device);
+    if (Chars)
+        Label[0] = UNICODE_NULL;
+    return FALSE;
+}
+
+PCWSTR
+FwGetRemovableMediaPath(VOID)
+{
+    return NULL;
 }
 
 BOOLEAN
