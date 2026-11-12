@@ -196,6 +196,17 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
     find_program(FAKEROOT_EXECUTABLE NAMES fakeroot)
     find_program(XXD_EXECUTABLE NAMES xxd)
     find_library(WIM_LIBRARY NAMES wim libwim.so.15)
+    set(_ntfslib_format_4k_reference "")
+    if(NTFSFIX_EXECUTABLE)
+        set(_ntfslib_format_4k_reference "${NTFSFIX_EXECUTABLE}")
+    endif()
+    add_test(
+        NAME ntfslib_linux_format_4k
+        COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/format_4k_smoke.sh"
+            "$<TARGET_FILE:ntfslib_fuse>"
+            ${_ntfslib_format_4k_reference}
+    )
     if(WIM_LIBRARY)
         add_executable(ntfslib_wof_fixture
             tests/wof_fixture.cpp
