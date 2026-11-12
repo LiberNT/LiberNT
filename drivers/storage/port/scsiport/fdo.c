@@ -756,6 +756,86 @@ FdoHandleQueryCompatibleId(
     return STATUS_SUCCESS;
 }
 
+VOID
+SpiAdjustUsageCount(
+    _Inout_ PSCSI_PORT_USAGE_COUNTS Usage,
+    _In_ PIO_STACK_LOCATION Stack)
+{
+    volatile LONG *Counter;
+
+    ASSERT(Stack->MajorFunction == IRP_MJ_PNP && Stack->MinorFunction == IRP_MN_DEVICE_USAGE_NOTIFICATION);
+
+    switch (Stack->Parameters.UsageNotification.Type)
+    {
+        case DeviceUsageTypePaging:
+            Counter = &Usage->PagingFiles;
+            break;
+
+        case DeviceUsageTypeHibernation:
+            Counter = &Usage->HibernationFiles;
+            break;
+
+        case DeviceUsageTypeDumpFile:
+            Counter = &Usage->DumpFiles;
+            break;
+
+        default:
+            return;
+    }
+
+    IoAdjustPagingPathCount(Counter, Stack->Parameters.UsageNotification.InPath);
+    ASSERT(*Counter >= 0);
+}
+
+BOOLEAN
+SpiIsInUsagePath(
+    _In_ PSCSI_PORT_USAGE_COUNTS Usage)
+{
+    return (BOOLEAN)(Usage->PagingFiles != 0 || Usage->HibernationFiles != 0 || Usage->DumpFiles != 0);
+}
+
+NTSTATUS
+SpiSendDeviceUsageNotification(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_USAGE_NOTIFICATION_TYPE Type,
+    _In_ BOOLEAN InPath)
+{
+    PDEVICE_OBJECT TopOfStack;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION Stack;
+    NTSTATUS Status;
+    KEVENT Event;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    TopOfStack = IoGetAttachedDeviceReference(DeviceObject);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, TopOfStack, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(TopOfStack);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MajorFunction = IRP_MJ_PNP;
+    Stack->MinorFunction = IRP_MN_DEVICE_USAGE_NOTIFICATION;
+    Stack->Parameters.UsageNotification.InPath = InPath;
+    Stack->Parameters.UsageNotification.Type = Type;
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+
+    Status = IoCallDriver(TopOfStack, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(TopOfStack);
+    return Status;
+}
+
 NTSTATUS
 FdoDispatchPnp(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -782,6 +862,28 @@ FdoDispatchPnp(
         case IRP_MN_QUERY_DEVICE_RELATIONS:
         {
             return FdoHandleDeviceRelations(portExt, Irp);
+        }
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+        {
+            if (!IoForwardIrpSynchronously(portExt->Common.LowerDevice, Irp))
+            {
+                status = STATUS_UNSUCCESSFUL;
+                break;
+            }
+            status = Irp->IoStatus.Status;
+            if (NT_SUCCESS(status))
+                SpiAdjustUsageCount(&portExt->Usage, ioStack);
+            break;
+        }
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+        {
+            if (SpiIsInUsagePath(&portExt->Usage))
+            {
+                Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
+                Irp->IoStatus.Status = STATUS_SUCCESS;
+            }
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            return IoCallDriver(portExt->Common.LowerDevice, Irp);
         }
         case IRP_MN_QUERY_ID:
         {

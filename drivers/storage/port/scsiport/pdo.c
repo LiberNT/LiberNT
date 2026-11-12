@@ -606,6 +606,28 @@ PdoDispatchPnp(
             status = PdoHandleQueryDeviceText(DeviceObject, Irp);
             break;
         }
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+        {
+            status = SpiSendDeviceUsageNotification(lunExt->Common.LowerDevice,
+                                                    ioStack->Parameters.UsageNotification.Type,
+                                                    ioStack->Parameters.UsageNotification.InPath);
+            if (NT_SUCCESS(status))
+            {
+                SpiAdjustUsageCount(&lunExt->Usage, ioStack);
+                IoInvalidateDeviceState(DeviceObject);
+            }
+            break;
+        }
+        case IRP_MN_QUERY_PNP_DEVICE_STATE:
+        {
+            status = Irp->IoStatus.Status;
+            if (SpiIsInUsagePath(&lunExt->Usage))
+            {
+                Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
+                status = STATUS_SUCCESS;
+            }
+            break;
+        }
         case IRP_MN_QUERY_ID:
         {
             DPRINT("IRP_MN_QUERY_ID IdType %s\n",

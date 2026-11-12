@@ -135,6 +135,13 @@ typedef struct _SCSI_REQUEST_BLOCK_INFO
     SCSI_SG_ADDRESS ScatterGatherList[MAX_SG_LIST];
 } SCSI_REQUEST_BLOCK_INFO, *PSCSI_REQUEST_BLOCK_INFO;
 
+typedef struct _SCSI_PORT_USAGE_COUNTS
+{
+    volatile LONG PagingFiles;
+    volatile LONG HibernationFiles;
+    volatile LONG DumpFiles;
+} SCSI_PORT_USAGE_COUNTS, *PSCSI_PORT_USAGE_COUNTS;
+
 typedef struct _SCSI_PORT_COMMON_EXTENSION
 {
     PDEVICE_OBJECT DeviceObject;
@@ -177,6 +184,7 @@ typedef struct _SCSI_PORT_LUN_EXTENSION
 
     HANDLE RegistryMapKey;
     struct _SCSIPORT_DUMP_CONTEXT *DumpContext;
+    SCSI_PORT_USAGE_COUNTS Usage;
 
     /* More data? */
 
@@ -337,6 +345,7 @@ typedef struct _SCSI_PORT_DEVICE_EXTENSION
     volatile BOOLEAN DumpMode;
     PSCSIPORT_DUMP_CONTEXT DumpContext;
     UINT8 TotalLUCount;
+    SCSI_PORT_USAGE_COUNTS Usage;
 
     // use the pointer alignment here, some miniport drivers rely on this
     // moreover, it has to be the last member
@@ -395,6 +404,21 @@ ScsiPortDeviceControl(
     _In_ PIRP Irp);
 
 VOID SpiFreeDumpContext(_In_opt_ PSCSIPORT_DUMP_CONTEXT DumpContext);
+
+VOID
+SpiAdjustUsageCount(
+    _Inout_ PSCSI_PORT_USAGE_COUNTS Usage,
+    _In_ PIO_STACK_LOCATION Stack);
+
+BOOLEAN
+SpiIsInUsagePath(
+    _In_ PSCSI_PORT_USAGE_COUNTS Usage);
+
+NTSTATUS
+SpiSendDeviceUsageNotification(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_USAGE_NOTIFICATION_TYPE Type,
+    _In_ BOOLEAN InPath);
 
 // scsi.c
 
