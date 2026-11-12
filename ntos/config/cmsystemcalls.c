@@ -80,7 +80,16 @@ CmpCaptureName(
                                 TAG_CM);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    RtlCopyMemory(Buffer, Local.Buffer, Local.Length);
+    _SEH2_TRY
+    {
+        RtlCopyMemory(Buffer, Local.Buffer, Local.Length);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ExFreePoolWithTag(Buffer, TAG_CM);
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
 
     Captured->Name.Buffer = Buffer;
     Captured->Name.Length = Local.Length;

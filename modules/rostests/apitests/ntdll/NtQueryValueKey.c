@@ -109,6 +109,32 @@ START_TEST(NtQueryValueKey)
 
     RtlFreeHeap(RtlGetProcessHeap(), 0, Info);
 
+    /* A name that passes the probe but faults when the kernel copies it */
+    {
+        PVOID Reserved = NULL;
+        SIZE_T ReservedSize = 0x10000;
+        UNICODE_STRING UnreadableName;
+
+        Status = NtAllocateVirtualMemory(NtCurrentProcess(), &Reserved, 0, &ReservedSize, MEM_RESERVE, PAGE_READWRITE);
+        ok_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            UnreadableName.Buffer = Reserved;
+            UnreadableName.Length = 16;
+            UnreadableName.MaximumLength = 16;
+            ResultLength = 0x55555555;
+            Status = NtQueryValueKey(KeyHandle,
+                                     &UnreadableName,
+                                     KeyValuePartialInformation,
+                                     NULL,
+                                     0,
+                                     &ResultLength);
+            ok_hex(Status, STATUS_ACCESS_VIOLATION);
+            ReservedSize = 0;
+            NtFreeVirtualMemory(NtCurrentProcess(), &Reserved, &ReservedSize, MEM_RELEASE);
+        }
+    }
+
 Exit:
     Status = NtClose(KeyHandle);
     ok_hex(Status, STATUS_SUCCESS);
