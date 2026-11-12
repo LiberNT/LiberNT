@@ -920,7 +920,7 @@ NvmeHwStartIo(_In_ PVOID DeviceExtension, _In_ PSCSI_REQUEST_BLOCK Srb)
         if (Srb->Function == SRB_FUNCTION_FLUSH || Srb->Function == SRB_FUNCTION_SHUTDOWN)
         {
             Namespace = NvmeGetNamespace(Device, Srb);
-            if (Namespace != NULL && Device->WriteCacheEnabled)
+            if (Namespace != NULL && Device->VolatileWriteCache)
             {
                 NvmeSubmitFlush(Device, Namespace, Srb);
                 return TRUE;
@@ -1012,7 +1012,7 @@ NvmeHwStartIo(_In_ PVOID DeviceExtension, _In_ PSCSI_REQUEST_BLOCK Srb)
 
         case SCSIOP_SYNCHRONIZE_CACHE:
         case SCSIOP_SYNCHRONIZE_CACHE16:
-            if (!Device->WriteCacheEnabled)
+            if (!Device->VolatileWriteCache)
             {
                 NvmeCompleteSrb(Device, Srb, SRB_STATUS_SUCCESS);
                 return TRUE;
