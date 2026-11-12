@@ -655,4 +655,5 @@ endif()
 
 else()
     add_definitions(-D_WINKD_)
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdwinkd.c)
 endif()
