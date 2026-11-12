@@ -629,7 +629,7 @@ VOID NTAPI KdInitializeBootLog(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
     KdpBootLogThreadStarted = TRUE;
 
-    Priority = HIGH_PRIORITY;
+    Priority = LOW_REALTIME_PRIORITY;
     ZwSetInformationThread(ThreadHandle, ThreadPriority, &Priority, sizeof(Priority));
     ZwClose(ThreadHandle);
 }
