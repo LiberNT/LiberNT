@@ -650,6 +650,8 @@ NpTransceive(IN PDEVICE_OBJECT DeviceObject,
             }
             _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
+                ExFreePoolWithTag(NewIrp->AssociatedIrp.SystemBuffer, NPFS_WRITE_BLOCK_TAG);
+                IoFreeIrp(NewIrp);
                 Status = _SEH2_GetExceptionCode();
                 _SEH2_YIELD(goto Quickie);
             }
