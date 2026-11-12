@@ -372,7 +372,6 @@ UpdateDriverForPlugAndPlayDevicesW(
         //if (!InstallCurrentDriver(&DevInstData))
         if (!InstallCurrentDriver(&DevInstData) && GetLastError() != ERROR_PRIVILEGE_NOT_HELD)
         {
-            TRACE("InstallCurrentDriver() failed with error 0x%x\n", GetLastError());
             continue;
         }
 
@@ -1326,7 +1325,6 @@ InstallCurrentDriver(
         &DevInstData->devInfoData);
     if (!ret)
     {
-        TRACE("SetupDiCallClassInstaller(DIF_SELECTBESTCOMPATDRV) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
 
@@ -1426,7 +1424,6 @@ InstallSelectedDriver(
         &DevInstData->devInfoData);
     if (!ret)
     {
-        TRACE("SetupDiCallClassInstaller(DIF_INSTALLDEVICEFILES) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
 
@@ -1436,7 +1433,6 @@ InstallSelectedDriver(
         &DevInstData->devInfoData);
     if (!ret)
     {
-        TRACE("SetupDiCallClassInstaller(DIF_REGISTER_COINSTALLERS) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
 
@@ -1446,7 +1442,6 @@ InstallSelectedDriver(
         &DevInstData->devInfoData);
     if (!ret)
     {
-        TRACE("SetupDiCallClassInstaller(DIF_INSTALLINTERFACES) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
 
@@ -1456,7 +1451,6 @@ InstallSelectedDriver(
         &DevInstData->devInfoData);
     if (!ret)
     {
-        TRACE("SetupDiCallClassInstaller(DIF_INSTALLDEVICE) failed with error 0x%x\n", GetLastError());
         return FALSE;
     }
 
