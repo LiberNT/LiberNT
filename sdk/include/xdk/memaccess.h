@@ -1,8 +1,16 @@
 $if(0)
 #pragma once
 
+
 #include <intrin.h>
 $endif()
+
+#if defined(__ROS_LONG64__)
+#define _MemAccessLong int
+#else
+#define _MemAccessLong long
+#endif
+
 
 #define KeMemoryBarrierWithoutFence() _ReadWriteBarrier()
 
@@ -22,7 +30,7 @@ $endif()
 #define PF_TEMPORAL_LEVEL_3         2
 #define PF_NON_TEMPORAL_LEVEL_ALL   3
 #define ReadForWriteAccess(p)                (*(p))
-#elif defined(_M_RISCV64)
+#elif defined(_M_RISCV64) || defined(_M_LOONGARCH64)
 #define PreFetchCacheLine(l,a)               __builtin_prefetch((const void *) (a))
 #define PrefetchForWrite(p)                  __builtin_prefetch((const void *) (p), 1)
 #define PF_TEMPORAL_LEVEL_1         0
@@ -134,7 +142,7 @@ WriteRaw16 (
 __forceinline
 long
 ReadRaw (
-    _In_ _Interlocked_operand_ long const volatile *Source)
+    _In_ _Interlocked_operand_ _MemAccessLong const volatile *Source)
 {
     return *(long *)Source;
 }
@@ -142,8 +150,8 @@ ReadRaw (
 __forceinline
 void
 WriteRaw (
-    _Out_ _Interlocked_operand_ long volatile *Destination,
-    _In_ long Value)
+    _Out_ _Interlocked_operand_ _MemAccessLong volatile *Destination,
+    _In_ _MemAccessLong Value)
 {
     *(long *)Destination = Value;
 }
@@ -198,12 +206,6 @@ WriteNoFence16 (
 {
     __iso_volatile_store16(Destination, Value);
 }
-
-#if defined(__ROS_LONG64__)
-#define _MemAccessLong int
-#else
-#define _MemAccessLong long
-#endif
 
 __forceinline
 _MemAccessLong
@@ -283,7 +285,7 @@ WriteRelease16 (
 __forceinline
 long
 ReadAcquire (
-    _In_ _Interlocked_operand_ long const volatile *Source)
+    _In_ _Interlocked_operand_ _MemAccessLong const volatile *Source)
 {
     long Value = __iso_volatile_load32((const volatile int*)Source);
     _AcquireBarrier();
@@ -293,8 +295,8 @@ ReadAcquire (
 __forceinline
 void
 WriteRelease (
-    _Out_ _Interlocked_operand_ long volatile *Destination,
-    _In_ long Value)
+    _Out_ _Interlocked_operand_ _MemAccessLong volatile *Destination,
+    _In_ _MemAccessLong Value)
 {
     _ReleaseBarrier();
     __iso_volatile_store32((volatile int*)Destination, Value);
@@ -462,7 +464,7 @@ unsigned long
 ReadULongAcquire (
     _In_ _Interlocked_operand_ unsigned long const volatile *Source)
 {
-    return (unsigned long)ReadAcquire((long*)Source);
+    return (unsigned long)ReadAcquire((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -470,7 +472,7 @@ unsigned long
 ReadULongNoFence (
     _In_ _Interlocked_operand_ unsigned long const volatile *Source)
 {
-    return (unsigned long)ReadNoFence((long*)Source);
+    return (unsigned long)ReadNoFence((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -478,7 +480,7 @@ unsigned long
 ReadULongRaw (
     _In_ _Interlocked_operand_ unsigned long const volatile *Source)
 {
-    return (unsigned long)ReadRaw((long*)Source);
+    return (unsigned long)ReadRaw((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -487,7 +489,7 @@ WriteULongRelease (
     _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
     _In_ unsigned long Value)
 {
-    WriteRelease((long*)Destination, (long)Value);
+    WriteRelease((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 __forceinline
@@ -496,7 +498,7 @@ WriteULongNoFence (
     _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
     _In_ unsigned long Value)
 {
-    WriteNoFence((long*)Destination, (long)Value);
+    WriteNoFence((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 __forceinline
@@ -505,7 +507,7 @@ WriteULongRaw (
     _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
     _In_ unsigned long Value)
 {
-    WriteRaw((long*)Destination, (long)Value);
+    WriteRaw((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 __forceinline
@@ -632,7 +634,7 @@ void*
 ReadPointerAcquire (
     _In_ _Interlocked_operand_ void* const volatile *Source)
 {
-    return (void*)ReadAcquire((long*)Source);
+    return (void*)ReadAcquire((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -640,7 +642,7 @@ void*
 ReadPointerNoFence (
     _In_ _Interlocked_operand_ void* const volatile *Source)
 {
-    return (void*)ReadNoFence((long*)Source);
+    return (void*)ReadNoFence((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -648,7 +650,7 @@ void*
 ReadPointerRaw (
     _In_ _Interlocked_operand_ void* const volatile *Source)
 {
-    return (void*)ReadRaw((long*)Source);
+    return (void*)ReadRaw((_MemAccessLong*)Source);
 }
 
 __forceinline
@@ -657,7 +659,7 @@ WritePointerRelease (
     _Out_ _Interlocked_operand_ void* volatile *Destination,
     _In_ void* Value)
 {
-    WriteRelease((long*)Destination, (long)Value);
+    WriteRelease((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 __forceinline
@@ -666,7 +668,7 @@ WritePointerNoFence (
     _Out_ _Interlocked_operand_ void* volatile *Destination,
     _In_opt_ void* Value)
 {
-    WriteNoFence((long*)Destination, (long)Value);
+    WriteNoFence((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 __forceinline
@@ -675,7 +677,7 @@ WritePointerRaw (
     _Out_ _Interlocked_operand_ void* volatile *Destination,
     _In_opt_ void* Value)
 {
-    WriteRaw((long*)Destination, (long)Value);
+    WriteRaw((_MemAccessLong*)Destination, (_MemAccessLong)Value);
 }
 
 #define ReadLongPtrAcquire ReadAcquire
