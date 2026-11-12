@@ -3885,7 +3885,10 @@ typedef struct _KPROCESS
             LONG AutoAlignment:1;
             LONG DisableBoost:1;
             LONG DisableQuantum:1;
-            LONG ReservedFlags:29;
+            LONG DeepFreeze:1;
+            LONG TimerVirtualization:1;
+            LONG CheckStackExtents:1;
+            LONG ReservedFlags:26;
         };
         LONG ProcessFlags;
     };
@@ -3906,6 +3909,10 @@ typedef struct _KPROCESS
 #if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
     ULONGLONG CycleTime;
 #endif // ]
+    /* FIXME: the x86 offsets of these Windows 10 members are not known here; this layout is the Vista one */
+    ULONGLONG ContextSwitches;
+    ULONG FreezeCount;
+    ULONG ReadyTime;
 } KPROCESS;
 
 #endif

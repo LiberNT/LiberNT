@@ -332,8 +332,11 @@ ExInitPoolLookasidePointers(VOID)
 
     for (Index = 0; Index < NUMBER_POOL_LOOKASIDE_LISTS; Index++)
     {
-        PGENERAL_LOOKASIDE_POOL Paged = &Prcb->PPPagedLookasideList[Index];
-        PGENERAL_LOOKASIDE_POOL NonPaged = &Prcb->PPNPagedLookasideList[Index];
+        PGENERAL_LOOKASIDE_POOL Paged = KiPrcbPoolLookaside(Prcb, TRUE, Index);
+        PGENERAL_LOOKASIDE_POOL NonPaged = KiPrcbPoolLookaside(Prcb, FALSE, Index);
+
+        if ((Paged == NULL) || (NonPaged == NULL))
+            return;
 
         ExpInitializeLookasideCommon(Paged,
                                      PagedPool,
@@ -458,8 +461,14 @@ ExAdjustLookasideDepth(VOID)
      */
     for (Index = 0; Index < NUMBER_POOL_LOOKASIDE_LISTS; Index++)
     {
-        ExpTuneLookasideDepth(&Prcb->PPPagedLookasideList[Index]);
-        ExpTuneLookasideDepth(&Prcb->PPNPagedLookasideList[Index]);
+        PGENERAL_LOOKASIDE_POOL Paged = KiPrcbPoolLookaside(Prcb, TRUE, Index);
+        PGENERAL_LOOKASIDE_POOL NonPaged = KiPrcbPoolLookaside(Prcb, FALSE, Index);
+
+        if ((Paged == NULL) || (NonPaged == NULL))
+            return;
+
+        ExpTuneLookasideDepth(Paged);
+        ExpTuneLookasideDepth(NonPaged);
     }
 }
 

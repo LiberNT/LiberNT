@@ -92,7 +92,7 @@ ExpSumProcessorCounters(
         Info->CcCopyReadWait += Prcb->CcCopyReadWait;
         Info->CcCopyReadNoWaitMiss += Prcb->CcCopyReadNoWaitMiss;
 
-        Info->ContextSwitches += Prcb->KeContextSwitches;
+        Info->ContextSwitches += KeGetContextSwitches(Prcb);
         Info->SystemCalls += Prcb->KeSystemCalls;
     }
 }
@@ -208,7 +208,7 @@ ExpQueryInterruptInformation(
 
         RtlZeroMemory(&Info[Index], sizeof(Info[Index]));
 
-        Info[Index].ContextSwitches = Prcb->KeContextSwitches;
+        Info[Index].ContextSwitches = KeGetContextSwitches(Prcb);
         Info[Index].DpcCount = Prcb->DpcLastCount;
         Info[Index].DpcRate = Prcb->DpcRequestRate;
         Info[Index].TimeIncrement = KeMaximumIncrement;
@@ -266,7 +266,7 @@ ExpQueryContextSwitchInformation(
 
     for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
     {
-        Info->ContextSwitches += KiProcessorBlock[Index]->KeContextSwitches;
+        Info->ContextSwitches += KeGetContextSwitches(KiProcessorBlock[Index]);
     }
 
     /* TODO: the scheduler does not count how it chose a processor, so the

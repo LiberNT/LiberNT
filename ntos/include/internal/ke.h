@@ -12,6 +12,15 @@
 #define KiArchCallUserMode(Frame, Result, ResultLength) ((VOID)(Frame), KiCallUserMode((Result), (ResultLength)))
 #endif
 
+#ifndef KiPrcbGroup
+#define KiPrcbGroup(Prcb) ((Prcb)->Group)
+#endif
+
+#ifndef KiPrcbPoolLookaside
+#define KiPrcbPoolLookaside(Prcb, Paged, Index) \
+    ((Paged) ? &(Prcb)->PPPagedLookasideList[(Index)] : &(Prcb)->PPNPagedLookasideList[(Index)])
+#endif
+
 #ifndef KI_DPC_TARGET_PROCESSOR_OFFSET
 #define KI_DPC_TARGET_PROCESSOR_OFFSET MAXIMUM_PROCESSORS
 #endif

@@ -252,7 +252,7 @@ KeGetCurrentProcessorNumberEx(
 
     if (ProcNumber != NULL)
     {
-        ProcNumber->Group = Prcb->Group;
+        ProcNumber->Group = KiPrcbGroup(Prcb);
         ProcNumber->Number = (UCHAR)Prcb->Number;
         ProcNumber->Reserved = 0;
     }

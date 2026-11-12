@@ -220,6 +220,12 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 #define KeGetContextSwitches(Prcb)  \
     CONTAINING_RECORD(Prcb, KIPCR, PrcbData)->ContextSwitches
 
+/* TODO: the x86 processor block keeps the Vista layout, which has no Group member; x86 runs one processor group */
+#define KiPrcbGroup(Prcb) ((VOID)(Prcb), (USHORT)0)
+
+/* TODO: the x86 processor block keeps the Vista pointer pairs and no per-processor pool lookaside list is set up behind them */
+#define KiPrcbPoolLookaside(Prcb, Paged, Index) ((VOID)(Prcb), (VOID)(Paged), (VOID)(Index), (PGENERAL_LOOKASIDE_POOL)NULL)
+
 //
 // Macro to get the second level cache size field name which differs between
 // CISC and RISC architectures, as the former has unified I/D cache

@@ -295,7 +295,7 @@ NtQueryInformationThread(
             Basic.ExitStatus = Thread->ExitStatus;
             Basic.TebBaseAddress = Thread->Tcb.Teb;
             Basic.ClientId = Thread->Cid;
-            Basic.AffinityMask = Thread->Tcb.Affinity;
+            Basic.AffinityMask = KiThreadAffinityMask(&Thread->Tcb);
             Basic.Priority = Thread->Tcb.Priority;
             Basic.BasePriority = KeQueryBasePriorityThread(&Thread->Tcb);
 
@@ -515,7 +515,7 @@ NtQueryInformationThread(
              * named two ways.
              */
             RtlZeroMemory(&Affinity, sizeof(Affinity));
-            Affinity.Mask = Thread->Tcb.Affinity;
+            Affinity.Mask = KiThreadAffinityMask(&Thread->Tcb);
 
             Status = PspReturnThreadInformation(ThreadInformation,
                                                 ThreadInformationLength,

@@ -1186,6 +1186,7 @@ PspWriteProcessParameters(
     NTSTATUS Status = STATUS_SUCCESS;
 
     PAGED_CODE();
+    DBG_UNREFERENCED_LOCAL_VARIABLE(Size32);
 
     *Remote = NULL;
     *Remote32 = 0;
@@ -1431,6 +1432,7 @@ NtCreateUserProcess(
     NTSTATUS Status;
 
     PAGED_CODE();
+    DBG_UNREFERENCED_LOCAL_VARIABLE(Wow64InitialTeb);
 
     if (PreviousMode != KernelMode)
     {

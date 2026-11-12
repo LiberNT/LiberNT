@@ -267,6 +267,14 @@ HalGetMessageRoutingInfo(
     RoutingInfo->MessageData = (USHORT)(RoutingInfo->Vector & 0xFF);
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+HalpGetMessageRoutingInfo(
+    _Inout_ PHAL_MESSAGE_ROUTING_INFO RoutingInfo)
+{
+    return HalGetMessageRoutingInfo(RoutingInfo);
+}
 #endif
 
 NTSTATUS

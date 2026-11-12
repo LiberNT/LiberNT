@@ -90,7 +90,9 @@ KdIoReadLine(
     _In_ SIZE_T Size)
 {
     SIZE_T Length = 0;
+#ifdef KDBG
     LONG HistoryIndex = -1;
+#endif
 
     if ((Buffer == NULL) || (Size == 0))
         return 0;

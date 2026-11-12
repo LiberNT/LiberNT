@@ -75,6 +75,13 @@ HalGetMessageRoutingInfo(PHAL_MESSAGE_ROUTING_INFO RoutingInfo)
     return STATUS_NOT_SUPPORTED;
 }
 
+NTSTATUS
+NTAPI
+HalpGetMessageRoutingInfo(PHAL_MESSAGE_ROUTING_INFO RoutingInfo)
+{
+    return HalGetMessageRoutingInfo(RoutingInfo);
+}
+
 ULONG
 NTAPI
 HalGetInterruptVector(INTERFACE_TYPE InterfaceType, ULONG BusNumber, ULONG BusInterruptLevel, ULONG BusInterruptVector, PKIRQL Irql, PKAFFINITY Affinity)
