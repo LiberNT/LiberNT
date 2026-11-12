@@ -4046,7 +4046,7 @@ HalpGetRootInterruptVector(
         /* PPIs are per-CPU, affinity is current processor */
         Affinity = (KAFFINITY)(1ULL << KeGetCurrentProcessorNumber());
     }
-    else if (IntId < 1020)
+    else if (IntId < HalpArm64DeviceIntIdLimit())
     {
         /* SPIs: Shared Peripheral Interrupts */
         /*
