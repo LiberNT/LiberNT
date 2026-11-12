@@ -187,7 +187,7 @@ KiComputeQpcScale(
     KiQpcScaleFrequency = Frequency;
 }
 
-/* Only the clock owner calls this, so it is the one writer of the update lock */
+/* Called under the system time lock, which keeps its caller the one writer of the update lock */
 static
 VOID
 KiPublishSystemTimeWithBaseline(
