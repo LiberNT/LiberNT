@@ -368,7 +368,7 @@ static NTSTATUS KdpWriteStorageVirtual(_In_reads_bytes_(Length) PVOID Buffer, _I
     return STATUS_SUCCESS;
 }
 
-#if defined(_M_AMD64)
+#ifdef _WIN64
 static ULONG_PTR NTAPI KdpCaptureLiveDumpContext(_In_ ULONG_PTR Argument)
 {
     UNREFERENCED_PARAMETER(Argument);
@@ -378,7 +378,7 @@ static ULONG_PTR NTAPI KdpCaptureLiveDumpContext(_In_ ULONG_PTR Argument)
 }
 #endif
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_M_AMD64)
+#if (NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_WIN64)
 static NTSTATUS KdpWriteDumpFileChunk(_In_ HANDLE FileHandle, _In_ HANDLE EventHandle, _In_reads_bytes_(Length) PVOID Buffer, _In_ ULONG Length, _Inout_ PLARGE_INTEGER FileOffset)
 {
     IO_STATUS_BLOCK IoStatus;
@@ -1788,7 +1788,7 @@ NTSTATUS NTAPI KdpWriteCrashDump(VOID)
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
 NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In_ KPROCESSOR_MODE PreviousMode)
 {
-#if defined(_M_AMD64)
+#ifdef _WIN64
     static LONG KdpLiveDumpActive;
     OBJECT_ATTRIBUTES ObjectAttributes;
     FILE_END_OF_FILE_INFORMATION EndOfFile;
