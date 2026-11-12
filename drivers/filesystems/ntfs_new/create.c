@@ -65,6 +65,14 @@ NtfsReturnCreateReparse(
         return Status;
     }
 
+    if (BufferLength < sizeof(*ReparseData) ||
+        ReparseData->ReparseDataLength >
+            BufferLength - sizeof(*ReparseData))
+    {
+        ExFreePoolWithTag(ReparseData, TAG_NTFS);
+        return STATUS_IO_REPARSE_DATA_INVALID;
+    }
+
     /*
      * The common header is layout-compatible with REPARSE_DATA_BUFFER.
      * The I/O manager consumes Reserved as the byte count of the unparsed
