@@ -337,7 +337,7 @@ typedef struct DECLSPEC_ALIGN(64) _XHCI_INPUT_CONTEXT {
 #define XHCI_SLOT_SPEED_SHIFT              20
 #define XHCI_SLOT_MTT_BIT                  (1u << 25)
 #define XHCI_SLOT_HUB_BIT                  (1u << 26)
-#define XHCI_SLOT_LAST_CTX_MASK            (0x1F << 27)
+#define XHCI_SLOT_LAST_CTX_MASK            (0x1Fu << 27)
 #define XHCI_SLOT_ROOT_PORT_MASK           (0xFF << 16)
 #define XHCI_SLOT_TT_SLOT_MASK             0xFFu
 #define XHCI_SLOT_TT_PORT_SHIFT            8
@@ -357,16 +357,16 @@ typedef struct DECLSPEC_ALIGN(64) _XHCI_INPUT_CONTEXT {
 #define XHCI_EPCTX_INTERVAL_SHIFT          16
 #define XHCI_EPCTX_INTERVAL_MASK           (0xFF << XHCI_EPCTX_INTERVAL_SHIFT)
 #define XHCI_EPCTX_ESIT_HI_SHIFT           24
-#define XHCI_EPCTX_ESIT_HI_MASK            (0xFF << XHCI_EPCTX_ESIT_HI_SHIFT)
+#define XHCI_EPCTX_ESIT_HI_MASK            (0xFFu << XHCI_EPCTX_ESIT_HI_SHIFT)
 #define XHCI_EPCTX_ERROR_COUNT_SHIFT       1
 #define XHCI_EPCTX_TYPE_SHIFT              3
 #define XHCI_EPCTX_TYPE_MASK               (0x7 << XHCI_EPCTX_TYPE_SHIFT)
 #define XHCI_EPCTX_MAX_BURST_SHIFT         8
 #define XHCI_EPCTX_MAX_BURST_MASK          (0xFF << XHCI_EPCTX_MAX_BURST_SHIFT)
 #define XHCI_EPCTX_MAX_PACKET_SHIFT        16
-#define XHCI_EPCTX_MAX_PACKET_MASK         (0xFFFF << XHCI_EPCTX_MAX_PACKET_SHIFT)
+#define XHCI_EPCTX_MAX_PACKET_MASK         (0xFFFFu << XHCI_EPCTX_MAX_PACKET_SHIFT)
 #define XHCI_EPCTX_MAX_ESIT_LO_SHIFT       16
-#define XHCI_EPCTX_MAX_ESIT_LO_MASK        (0xFFFF << XHCI_EPCTX_MAX_ESIT_LO_SHIFT)
+#define XHCI_EPCTX_MAX_ESIT_LO_MASK        (0xFFFFu << XHCI_EPCTX_MAX_ESIT_LO_SHIFT)
 #define XHCI_EPCTX_LSA                     0x1ull
 
 #define XHCI_STREAM_CTX_TYPE_MASK          0x7u
