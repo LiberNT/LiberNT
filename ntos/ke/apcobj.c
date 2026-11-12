@@ -410,9 +410,9 @@ KiMoveApcState(
  * one of them may be in progress at a time. A user APC is not run here at all:
  * it is arranged on the outgoing trap frame so that it runs in user mode.
  */
+static
 VOID
-NTAPI
-KiDeliverApc(
+KiDeliverApcList(
     _In_ KPROCESSOR_MODE DeliveryMode,
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
     _In_opt_ PKTRAP_FRAME TrapFrame)
@@ -544,6 +544,26 @@ KiDeliverApc(
                         NormalContext,
                         SystemArgument1,
                         SystemArgument2);
+}
+
+VOID
+NTAPI
+KiDeliverApc(
+    _In_ KPROCESSOR_MODE DeliveryMode,
+    _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_opt_ PKTRAP_FRAME TrapFrame)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    PKTRAP_FRAME OldTrapFrame = Thread->TrapFrame;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
+    /* An APC that reads or writes the thread's registers finds them in the frame being delivered on */
+    if ((DeliveryMode == UserMode) && (TrapFrame != NULL)) Thread->TrapFrame = TrapFrame;
+
+    KiDeliverApcList(DeliveryMode, ExceptionFrame, TrapFrame);
+
+    Thread->TrapFrame = OldTrapFrame;
 }
 
 /*
