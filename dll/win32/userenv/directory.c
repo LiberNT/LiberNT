@@ -74,13 +74,14 @@ CopyProfileDirectoryW(LPCWSTR lpSourcePath,
                       DWORD dwFlags)
 {
     /* FIXME: dwFlags are ignored! */
-    return CopyDirectory(lpDestinationPath, lpSourcePath);
+    return CopyDirectory(lpDestinationPath, lpSourcePath, FALSE);
 }
 
 
 BOOL
 CopyDirectory(LPCWSTR lpDestinationPath,
-              LPCWSTR lpSourcePath)
+              LPCWSTR lpSourcePath,
+              BOOL bKeepExisting)
 {
     WCHAR szFileName[MAX_PATH];
     WCHAR szFullSrcName[MAX_PATH];
@@ -132,7 +133,7 @@ CopyDirectory(LPCWSTR lpDestinationPath,
                     }
                 }
 
-                if (!CopyDirectory(szFullDstName, szFullSrcName))
+                if (!CopyDirectory(szFullDstName, szFullSrcName, bKeepExisting))
                 {
                     DPRINT1("Error: %lu\n", GetLastError());
 
@@ -143,7 +144,8 @@ CopyDirectory(LPCWSTR lpDestinationPath,
             else
             {
                 DPRINT("Copy file: %S -> %S\n", szFullSrcName, szFullDstName);
-                if (!CopyFileW(szFullSrcName, szFullDstName, FALSE))
+                if (!CopyFileW(szFullSrcName, szFullDstName, bKeepExisting) &&
+                    !(bKeepExisting && GetLastError() == ERROR_FILE_EXISTS))
                 {
                     DPRINT1("Error: %lu\n", GetLastError());
 

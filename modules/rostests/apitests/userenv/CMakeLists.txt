@@ -3,6 +3,7 @@ list(APPEND SOURCE
     CreateEnvironmentBlock.c
     GetProfileDirs.c
     LoadUserProfile.c
+    ProfileCreation.c
     testlist.c)
 
 add_executable(userenv_apitest ${SOURCE})

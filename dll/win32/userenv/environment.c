@@ -439,6 +439,7 @@ SetSystemEnvironment(PWSTR* Environment)
     if (Error != ERROR_SUCCESS)
     {
         DPRINT1("RegOpenKeyExW() failed (Error %ld)\n", Error);
+        SetLastError((DWORD)Error);
         return FALSE;
     }
 
@@ -458,6 +459,7 @@ SetSystemEnvironment(PWSTR* Environment)
     {
         DPRINT1("RegQueryInforKey() failed (Error %ld)\n", Error);
         RegCloseKey(hEnvKey);
+        SetLastError((DWORD)Error);
         return FALSE;
     }
 
@@ -593,6 +595,7 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     if (!SetSystemEnvironment(Environment))
     {
         RtlDestroyEnvironment(*Environment);
+        *Environment = NULL;
         return FALSE;
     }
 

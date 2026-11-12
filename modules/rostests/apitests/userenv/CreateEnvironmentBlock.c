@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     CreateEnvironmentBlock for a user whose profile is not loaded, and once it is
+ * PURPOSE:     CreateEnvironmentBlock for a user whose profile is not loaded, once it is, and when it is refused
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -94,11 +94,43 @@ DeleteTestProfile(
     }
 }
 
+/* A block that could not be made is not handed back */
+static
+VOID
+TestRefused(VOID)
+{
+    PVOID Environment = NULL;
+    DWORD Error;
+    BOOL Result;
+
+    if (!ImpersonateAnonymousToken(GetCurrentThread()))
+    {
+        skip("ImpersonateAnonymousToken failed %lu\n", GetLastError());
+        return;
+    }
+
+    SetLastError(0xdeadbeef);
+    Result = CreateEnvironmentBlock(&Environment, NULL, FALSE);
+    Error = GetLastError();
+    ok(RevertToSelf(), "RevertToSelf failed %lu\n", GetLastError());
+
+    if (Result)
+    {
+        DestroyEnvironmentBlock(Environment);
+        return;
+    }
+
+    ok(Environment == NULL, "the refused call left %p behind\n", Environment);
+    ok(Error != 0xdeadbeef && Error != ERROR_SUCCESS, "the refused call set no error\n");
+}
+
 START_TEST(CreateEnvironmentBlock)
 {
     USER_INFO_1 User = {0};
     HANDLE hToken = NULL;
     NET_API_STATUS Status;
+
+    TestRefused();
 
     NetUserDel(NULL, TEST_USER);
     User.usri1_name = TEST_USER;

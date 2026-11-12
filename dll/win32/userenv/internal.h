@@ -30,7 +30,8 @@
 /* directory.c */
 BOOL
 CopyDirectory(LPCWSTR lpDestinationPath,
-              LPCWSTR lpSourcePath);
+              LPCWSTR lpSourcePath,
+              BOOL bKeepExisting);
 
 BOOL
 CreateDirectoryPath(LPCWSTR lpPathName,
