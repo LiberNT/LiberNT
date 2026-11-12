@@ -464,6 +464,16 @@ void convert_32bppARGB_to_32bppPARGB(UINT width, UINT height,
         for (x=0; x<width; x++)
         {
             BYTE alpha=src[3];
+            if (alpha == 255 || alpha == 0)
+            {
+                if (alpha)
+                    memcpy(dst, src, 4);
+                else
+                    memset(dst, 0, 4);
+                dst += 4;
+                src += 4;
+                continue;
+            }
             *dst++ = (*src++ * alpha + 127) / 255;
             *dst++ = (*src++ * alpha + 127) / 255;
             *dst++ = (*src++ * alpha + 127) / 255;

@@ -2505,6 +2505,83 @@ static UINT mask_byte_coverage(BYTE bits)
     return (bits + (bits >> 4)) & 0x0f;
 }
 
+static void apply_pixel_coverage(const BYTE *mask_row, INT mask_stride, ARGB *output, INT x)
+{
+    UINT coverage = 0, alpha;
+    INT sy;
+
+    for (sy = 0; sy < ANTIALIAS_SCALE_Y; sy++)
+        coverage += mask_byte_coverage(mask_row[sy * mask_stride + x]);
+
+    if (!coverage)
+    {
+        output[x] = 0;
+        return;
+    }
+
+    alpha = ((output[x] >> 24) * coverage + ANTIALIAS_SAMPLES / 2) / ANTIALIAS_SAMPLES;
+    output[x] = (output[x] & 0x00ffffff) | (alpha << 24);
+}
+
+/* Each mask byte holds the 8 samples of one pixel row, so one DWORD of a mask
+ * row covers 4 pixels; whole groups that are fully set or clear need no count. */
+static void apply_mask_coverage(const BYTE *mask_row, INT mask_stride, ARGB *output, INT width)
+{
+    INT x = 0;
+
+    C_ASSERT(ANTIALIAS_SCALE_Y == 4);
+    assert(((ULONG_PTR)mask_row & 3) == 0 && (mask_stride & 3) == 0);
+
+    while (x + 4 <= width)
+    {
+        DWORD s0 = *(const DWORD *)(mask_row + x);
+        DWORD s1 = *(const DWORD *)(mask_row + mask_stride + x);
+        DWORD s2 = *(const DWORD *)(mask_row + 2 * mask_stride + x);
+        DWORD s3 = *(const DWORD *)(mask_row + 3 * mask_stride + x);
+        INT i;
+
+        if ((s0 & s1 & s2 & s3) == 0xffffffff)
+        {
+            x += 4;
+            continue;
+        }
+        if (!(s0 | s1 | s2 | s3))
+        {
+            output[x] = output[x + 1] = output[x + 2] = output[x + 3] = 0;
+            x += 4;
+            continue;
+        }
+        for (i = 0; i < 4; i++)
+            apply_pixel_coverage(mask_row, mask_stride, output, x + i);
+        x += 4;
+    }
+    for (; x < width; x++)
+        apply_pixel_coverage(mask_row, mask_stride, output, x);
+}
+
+/* Bounds of the graphics clip in GDI device space; nothing outside them is drawn. */
+static GpStatus get_clip_gdi_bounds(GpGraphics *graphics, GpRectF *bounds)
+{
+    GpRegion *rgn;
+    GpMatrix transform;
+    GpStatus stat;
+    BOOL identity;
+
+    stat = get_graphics_transform(graphics, WineCoordinateSpaceGdiDevice, CoordinateSpaceDevice, &transform);
+    if (stat == Ok)
+        stat = GdipIsMatrixIdentity(&transform, &identity);
+    if (stat == Ok)
+        stat = GdipCloneRegion(graphics->clip, &rgn);
+    if (stat != Ok)
+        return stat;
+    if (!identity)
+        stat = GdipTransformRegion(rgn, &transform);
+    if (stat == Ok)
+        stat = GdipGetRegionBounds(rgn, graphics, bounds);
+    GdipDeleteRegion(rgn);
+    return stat;
+}
+
 static BOOL antialiasing_enabled(const GpGraphics *graphics)
 {
     return graphics->smoothing == SmoothingModeHighQuality ||
@@ -2514,7 +2591,7 @@ static BOOL antialiasing_enabled(const GpGraphics *graphics)
 static GpStatus antialias_fill_path(GpGraphics *graphics, GpBrush *brush, GpPath *path)
 {
     GpPointF *points = NULL;
-    GpRectF device_bounds;
+    GpRectF device_bounds, clip_bounds;
     GpRect fill_area;
     POINT *mask_points = NULL;
     BYTE *types = NULL;
@@ -2532,7 +2609,7 @@ static GpStatus antialias_fill_path(GpGraphics *graphics, GpBrush *brush, GpPath
     REAL min_x, min_y, max_x, max_y;
     SIZE_T pixel_count, mask_size;
     INT mask_width, mask_height, mask_stride;
-    INT i, x, y;
+    INT i, y;
     BOOL transform_acquired = FALSE;
 
     if (!brush_can_fill_pixels(brush))
@@ -2578,6 +2655,13 @@ static GpStatus antialias_fill_path(GpGraphics *graphics, GpBrush *brush, GpPath
     min_y = fmaxf(floorf(min_y), floorf(device_bounds.Y));
     max_x = fminf(ceilf(max_x), ceilf(device_bounds.X + device_bounds.Width));
     max_y = fminf(ceilf(max_y), ceilf(device_bounds.Y + device_bounds.Height));
+    if (get_clip_gdi_bounds(graphics, &clip_bounds) == Ok)
+    {
+        min_x = fmaxf(min_x, floorf(clip_bounds.X));
+        min_y = fmaxf(min_y, floorf(clip_bounds.Y));
+        max_x = fminf(max_x, ceilf(clip_bounds.X + clip_bounds.Width));
+        max_y = fminf(max_y, ceilf(clip_bounds.Y + clip_bounds.Height));
+    }
     if (min_x >= max_x || min_y >= max_y)
     {
         status = Ok;
@@ -2684,29 +2768,8 @@ static GpStatus antialias_fill_path(GpGraphics *graphics, GpBrush *brush, GpPath
         goto done;
 
     for (y = 0; y < fill_area.Height; y++)
-    {
-        const BYTE *mask_row = mask_bits + (SIZE_T)y * ANTIALIAS_SCALE_Y * mask_stride;
-
-        for (x = 0; x < fill_area.Width; x++)
-        {
-            ARGB color = output_bits[x + y * fill_area.Width];
-            UINT coverage = 0, alpha;
-            INT sy;
-
-            for (sy = 0; sy < ANTIALIAS_SCALE_Y; sy++)
-                coverage += mask_byte_coverage(mask_row[sy * mask_stride + x]);
-
-            if (!coverage)
-            {
-                output_bits[x + y * fill_area.Width] = 0;
-                continue;
-            }
-
-            alpha = ((color >> 24) * coverage + ANTIALIAS_SAMPLES / 2) /
-                ANTIALIAS_SAMPLES;
-            output_bits[x + y * fill_area.Width] = (color & 0x00ffffff) | (alpha << 24);
-        }
-    }
+        apply_mask_coverage(mask_bits + (SIZE_T)y * ANTIALIAS_SCALE_Y * mask_stride, mask_stride,
+            output_bits + (SIZE_T)y * fill_area.Width, fill_area.Width);
 
     status = alpha_blend_pixels(graphics, fill_area.X, fill_area.Y,
         (BYTE *)output_bits, fill_area.Width, fill_area.Height,
