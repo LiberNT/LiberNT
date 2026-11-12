@@ -1019,6 +1019,7 @@ Ndis6FindDriverBlock(_In_ PDRIVER_OBJECT DriverObject)
     PNDIS6_DRIVER_BLOCK block = NULL;
     KIRQL oldIrql;
 
+    Ndis6DriverInit();
     KeAcquireSpinLock(&g_Ndis6DriverListLock, &oldIrql);
     for (entry = g_Ndis6DriverList.Flink;
          entry != &g_Ndis6DriverList;

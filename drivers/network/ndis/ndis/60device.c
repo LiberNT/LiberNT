@@ -235,6 +235,7 @@ NdisRegisterDeviceEx(
      * wrong driver object cross-installs a control driver's handlers over an
      * unrelated device (e.g. another driver's \Device\Nwifi), which then faults
      * inside that driver's handler. */
+    Ndis6DriverInit();
     KeAcquireSpinLock(&g_Ndis6DriverListLock, &OldIrql);
     for (PLIST_ENTRY Entry = g_Ndis6DriverList.Flink;
          Entry != &g_Ndis6DriverList;
