@@ -70,10 +70,13 @@ extern "C" {
 #endif
 
 /*** memcopy must be memmove ***/
+/* Unoptimized Clang calls this wrapper inside SEH __try scopes through a memcpy.inline copy that has no unwind data */
+#if !defined(__clang__) || defined(__OPTIMIZE__)
 __INTRIN_INLINE void* __cdecl memcpy(void* dest, const void* source, size_t num)
 {
     return __builtin_memmove(dest, source, num);
 }
+#endif
 
 
 /*** Stack frame juggling ***/
