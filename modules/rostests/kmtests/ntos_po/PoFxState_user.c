@@ -120,6 +120,11 @@ START_TEST(PoFxState)
     TestWithPnpDevice("PoFxState");
 }
 
+START_TEST(PoBatteryState)
+{
+    TestWithPnpDevice("PoBatteryState");
+}
+
 START_TEST(ExWddmPoFx)
 {
     TestWithPnpDevice("ExWddmPoFx");

@@ -342,6 +342,7 @@ list(APPEND KMTEST_DRV_SOURCE
     smclib/SmcLib.c
     ntos_po/PoDisplayState.c
     ntos_po/PoSleepInformation.c
+    ntos_po/PoBatteryState.c
     ntos_po/PoFxState.c
     ntos_po/PoFxState_pnp.c
     ntos_po/PoPowerButton.c
@@ -551,7 +552,7 @@ else()
     target_link_options(kmtest_drv PRIVATE -Wl,--forceinteg)
 endif()
 target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib wdmsec ${PSEH_LIB})
-add_importlibs(kmtest_drv ksecdd ndis smclib ntoskrnl hal)
+add_importlibs(kmtest_drv battc ksecdd ndis smclib ntoskrnl hal)
 if(REACTOS_USE_WDDM)
     add_importlibs(kmtest_drv dxgkrnl dxgmms2)
 endif()

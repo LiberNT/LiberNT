@@ -30,6 +30,7 @@ static volatile LONG StartIrpCompleted;
 static volatile LONG StartCallbacksBefore;
 static volatile LONG StartCallbacksAfter;
 static KMT_PO_FX_START_STATE StartState;
+static PDRIVER_DISPATCH volatile IrpHook;
 
 static VOID StartCallbackSeen(VOID)
 {
@@ -168,6 +169,7 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
     PTEST_PO_FX_EXTENSION Extension;
+    PDRIVER_DISPATCH Hook;
     NTSTATUS Status;
     POWER_STATE Power;
 
@@ -201,6 +203,14 @@ static NTSTATUS NTAPI TestDispatch(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     /* The devices other kernel tests create on the kmtest driver keep its own dispatch */
     if (DeviceObject != TestDevice)
         return PreviousDispatch[Stack->MajorFunction](DeviceObject, Irp);
+
+    Hook = (PDRIVER_DISPATCH)InterlockedCompareExchangePointer((PVOID volatile *)&IrpHook, NULL, NULL);
+    if (Hook != NULL &&
+        (Stack->MajorFunction == IRP_MJ_CREATE || Stack->MajorFunction == IRP_MJ_CLEANUP ||
+         Stack->MajorFunction == IRP_MJ_CLOSE || Stack->MajorFunction == IRP_MJ_DEVICE_CONTROL))
+    {
+        return Hook(DeviceObject, Irp);
+    }
 
     Extension = DeviceObject->DeviceExtension;
     Status = IoAcquireRemoveLock(&Extension->RemoveLock, Irp);
@@ -362,4 +372,9 @@ VOID KmtPoFxReleaseDevice(PDEVICE_OBJECT Fdo)
     PTEST_PO_FX_EXTENSION Extension = Fdo->DeviceExtension;
 
     IoReleaseRemoveLock(&Extension->RemoveLock, Fdo);
+}
+
+VOID KmtPoFxSetIrpHook(PDRIVER_DISPATCH Hook)
+{
+    InterlockedExchangePointer((PVOID volatile *)&IrpHook, (PVOID)Hook);
 }

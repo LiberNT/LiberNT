@@ -26,4 +26,5 @@ VOID KmtPoFxGetStartState(PKMT_PO_FX_START_STATE State);
 VOID KmtPoFxInitializePnp(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT ControlDevice);
 PDEVICE_OBJECT KmtPoFxAcquireDevice(PDEVICE_OBJECT *Pdo);
 VOID KmtPoFxReleaseDevice(PDEVICE_OBJECT Fdo);
+VOID KmtPoFxSetIrpHook(PDRIVER_DISPATCH Hook);
 #endif

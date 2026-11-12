@@ -381,6 +381,7 @@ KMT_TESTFUNC Test_PoPowerButton;
 KMT_TESTFUNC Test_PoSettingSession;
 KMT_TESTFUNC Test_PoSetSystemState;
 KMT_TESTFUNC Test_PoSleepInformation;
+KMT_TESTFUNC Test_PoBatteryState;
 KMT_TESTFUNC Test_PoFxState;
 KMT_TESTFUNC Test_PoPowerLimit;
 KMT_TESTFUNC Test_TmTransactions;
@@ -817,6 +818,7 @@ const KMT_TEST TestList[] =
     { "-PoSettingSession",                  Test_PoSettingSession },
     { "PoSetSystemState",                   Test_PoSetSystemState },
     { "-PoSleepInformation",                Test_PoSleepInformation },
+    { "PoBatteryState",                     Test_PoBatteryState },
     { "PoFxState",                          Test_PoFxState },
     { "PoPowerLimit",                       Test_PoPowerLimit },
     { "TmTransactions",                     Test_TmTransactions },

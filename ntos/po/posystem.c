@@ -6,6 +6,7 @@
  */
 
 #include <ntoskrnl.h>
+#include <initguid.h>
 #include <batclass.h>
 #define NDEBUG
 #include <debug.h>
@@ -1568,28 +1569,35 @@ PopBatteryIoControl(
     return Status;
 }
 
-static
-VOID
-PopQueryBatteryState(
-    _Inout_ PSYSTEM_BATTERY_STATE State)
+typedef struct _POP_BATTERY_SAMPLE
 {
-    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\CompositeBattery");
+    BATTERY_INFORMATION Information;
+    BATTERY_STATUS Status;
+    ULONG EstimatedTime;
+} POP_BATTERY_SAMPLE, *PPOP_BATTERY_SAMPLE;
+
+static
+BOOLEAN
+PopReadBattery(
+    _In_ PUNICODE_STRING Name,
+    _Out_ PPOP_BATTERY_SAMPLE Sample)
+{
     OBJECT_ATTRIBUTES Attributes;
     BATTERY_QUERY_INFORMATION Query;
-    BATTERY_INFORMATION Information;
     BATTERY_WAIT_STATUS Wait;
-    BATTERY_STATUS BatteryStatus;
     IO_STATUS_BLOCK IoStatus;
-    ULONG Timeout = 0, Tag = BATTERY_TAG_INVALID, EstimatedTime;
+    ULONG Timeout = 0, Tag = BATTERY_TAG_INVALID;
+    BOOLEAN Read = FALSE;
     HANDLE Battery;
 
     PAGED_CODE();
 
-    InitializeObjectAttributes(&Attributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    RtlZeroMemory(Sample, sizeof(*Sample));
+    InitializeObjectAttributes(&Attributes, Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
     if (!NT_SUCCESS(ZwOpenFile(&Battery, FILE_READ_DATA | SYNCHRONIZE, &Attributes, &IoStatus,
                                FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT)))
     {
-        return;
+        return FALSE;
     }
 
     if (NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_TAG, &Timeout, sizeof(Timeout),
@@ -1602,31 +1610,84 @@ PopQueryBatteryState(
         RtlZeroMemory(&Wait, sizeof(Wait));
         Wait.BatteryTag = Tag;
         if (NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_INFORMATION, &Query, sizeof(Query),
-                                           &Information, sizeof(Information))) &&
+                                           &Sample->Information, sizeof(Sample->Information))) &&
             NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_STATUS, &Wait, sizeof(Wait),
-                                           &BatteryStatus, sizeof(BatteryStatus))))
+                                           &Sample->Status, sizeof(Sample->Status))))
         {
             Query.InformationLevel = BatteryEstimatedTime;
             if (!NT_SUCCESS(PopBatteryIoControl(Battery, IOCTL_BATTERY_QUERY_INFORMATION, &Query, sizeof(Query),
-                                                &EstimatedTime, sizeof(EstimatedTime))))
+                                                &Sample->EstimatedTime, sizeof(Sample->EstimatedTime))))
             {
-                EstimatedTime = BATTERY_UNKNOWN_TIME;
+                Sample->EstimatedTime = BATTERY_UNKNOWN_TIME;
             }
-
-            State->BatteryPresent = TRUE;
-            State->AcOnLine = (BatteryStatus.PowerState & BATTERY_POWER_ON_LINE) != 0;
-            State->Charging = (BatteryStatus.PowerState & BATTERY_CHARGING) != 0;
-            State->Discharging = (BatteryStatus.PowerState & BATTERY_DISCHARGING) != 0;
-            State->MaxCapacity = Information.FullChargedCapacity;
-            State->RemainingCapacity = BatteryStatus.Capacity;
-            State->Rate = (ULONG)BatteryStatus.Rate;
-            State->EstimatedTime = EstimatedTime;
-            State->DefaultAlert1 = Information.DefaultAlert1;
-            State->DefaultAlert2 = Information.DefaultAlert2;
+            Read = TRUE;
         }
     }
 
     ZwClose(Battery);
+    return Read;
+}
+
+static
+VOID
+PopQueryBatteryState(
+    _Inout_ PSYSTEM_BATTERY_STATE State)
+{
+    POP_BATTERY_SAMPLE Sample;
+    UNICODE_STRING Name;
+    PWSTR Links = NULL;
+    PWSTR Link;
+    ULONG Batteries = 0;
+    ULONG EstimatedTime = BATTERY_UNKNOWN_TIME;
+    LONG Rate = 0;
+    BOOLEAN RateKnown = TRUE;
+    BOOLEAN AcOnLine = FALSE;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IoGetDeviceInterfaces(&GUID_DEVICE_BATTERY, NULL, 0, &Links)))
+        return;
+
+    for (Link = Links; *Link != UNICODE_NULL; Link += wcslen(Link) + 1)
+    {
+        RtlInitUnicodeString(&Name, Link);
+        if (!PopReadBattery(&Name, &Sample) ||
+            !(Sample.Information.Capabilities & BATTERY_SYSTEM_BATTERY))
+        {
+            continue;
+        }
+
+        Batteries++;
+        AcOnLine |= (Sample.Status.PowerState & BATTERY_POWER_ON_LINE) != 0;
+        State->Charging |= (Sample.Status.PowerState & BATTERY_CHARGING) != 0;
+        State->Discharging |= (Sample.Status.PowerState & BATTERY_DISCHARGING) != 0;
+        if (Sample.Information.FullChargedCapacity != BATTERY_UNKNOWN_CAPACITY)
+            State->MaxCapacity += Sample.Information.FullChargedCapacity;
+        if (Sample.Status.Capacity != BATTERY_UNKNOWN_CAPACITY)
+            State->RemainingCapacity += Sample.Status.Capacity;
+        if ((ULONG)Sample.Status.Rate == BATTERY_UNKNOWN_RATE)
+            RateKnown = FALSE;
+        else
+            Rate += Sample.Status.Rate;
+        State->DefaultAlert1 += Sample.Information.DefaultAlert1;
+        State->DefaultAlert2 += Sample.Information.DefaultAlert2;
+        EstimatedTime = Sample.EstimatedTime;
+    }
+
+    ExFreePool(Links);
+    if (Batteries == 0)
+        return;
+
+    State->BatteryPresent = TRUE;
+    State->AcOnLine = AcOnLine;
+    State->Rate = RateKnown ? (ULONG)Rate : BATTERY_UNKNOWN_RATE;
+    if (Batteries > 1)
+    {
+        EstimatedTime = (State->Discharging && RateKnown && Rate < 0)
+                            ? (ULONG)min((ULONGLONG)State->RemainingCapacity * 3600 / (ULONG)-Rate, (ULONGLONG)MAXULONG - 1)
+                            : BATTERY_UNKNOWN_TIME;
+    }
+    State->EstimatedTime = EstimatedTime;
 }
 
 NTSTATUS
