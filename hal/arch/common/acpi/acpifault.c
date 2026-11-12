@@ -78,6 +78,32 @@ HalpAcpiGetFault(
     return TRUE;
 }
 
+ULONG
+NTAPI
+HalpAcpiQueryFaults(
+    _Out_writes_bytes_opt_(Size) PHALP_ACPI_FAULT Buffer,
+    _In_ ULONG Size,
+    _Out_opt_ PULONG Copied)
+{
+    ULONG Total = HalpAcpiFaultTotal;
+    ULONG Index, Count = 0;
+
+    if (Copied != NULL) *Copied = 0;
+    if (Buffer == NULL) return Total;
+
+    Count = Size / sizeof(HALP_ACPI_FAULT);
+    if (Count > HALP_ACPI_FAULT_SLOTS) Count = HALP_ACPI_FAULT_SLOTS;
+    if (Count > Total) Count = Total;
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        Buffer[Index] = HalpAcpiFaults[Index];
+    }
+
+    if (Copied != NULL) *Copied = Count;
+    return Total;
+}
+
 VOID
 HalpAcpiReportFaults(VOID)
 {
