@@ -925,7 +925,8 @@ static
 NTSTATUS
 PiApplyDeviceSecurity(
     _In_ PDEVICE_NODE DeviceNode,
-    _In_ HANDLE InstanceKey)
+    _In_ HANDLE InstanceKey,
+    _In_ BOOLEAN WholeStack)
 {
     UNICODE_STRING ParametersName = RTL_CONSTANT_STRING(L"Device Parameters");
     SECURITY_INFORMATION SecurityInformation = DACL_SECURITY_INFORMATION;
@@ -994,7 +995,15 @@ PiApplyDeviceSecurity(
 
     if (NT_SUCCESS(Status))
     {
-        UpperDevice = IoGetAttachedDeviceReference(DeviceNode->PhysicalDeviceObject);
+        if (WholeStack)
+        {
+            UpperDevice = IoGetAttachedDeviceReference(DeviceNode->PhysicalDeviceObject);
+        }
+        else
+        {
+            UpperDevice = DeviceNode->PhysicalDeviceObject;
+            ObReferenceObject(UpperDevice);
+        }
         Status = IopSetDeviceSecurityDescriptors(UpperDevice,
                                                  DeviceNode->PhysicalDeviceObject,
                                                  &SecurityInformation,
@@ -1040,9 +1049,19 @@ PiDevNodeAddDrivers(
         if (!NT_SUCCESS(Status)) return;
     }
 
+    /* The PDO is secured before any driver sees it, so the device is never open to all while its stack is built */
+    Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey, FALSE);
+    if (!NT_SUCCESS(Security))
+    {
+        DPRINT1("PnP: %wZ has a security descriptor that cannot be applied (%lx)\n", &DeviceNode->InstancePath, Security);
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_REGISTRY);
+        ZwClose(InstanceKey);
+        return;
+    }
+
     Status = PiAttachDeviceDrivers(DeviceNode, InstanceKey, &NullDriver);
     if (NT_SUCCESS(Status) && !(DeviceNode->Flags & DNF_HAS_PROBLEM))
-        Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey);
+        Security = PiApplyDeviceSecurity(DeviceNode, InstanceKey, TRUE);
 
     ZwClose(InstanceKey);
 

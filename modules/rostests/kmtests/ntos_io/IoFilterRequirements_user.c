@@ -38,7 +38,7 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"HideChild", L"ChildSurprises", L"ChildFdoRemoves", L"BusSurprised", L"BusFdoRemoves",
                                  L"ChildPdoRemoves", L"ChildPdoQueryRemoves", L"EjectMissing", L"ChildInterfaceEnabled",
                                  L"LargeMemory", L"StartLargeMemory", L"NullChild", L"ChildAddDevices", L"FailChildStart",
-                                 L"DriverUnloaded", L"HoldEntry", L"EntryHeld" };
+                                 L"DriverUnloaded", L"HoldEntry", L"EntryHeld", L"SlowAddDevice", L"AddDeviceEntered" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -437,6 +437,57 @@ static DWORD SecureChild(DEVINST Bus, PCWSTR Sddl)
     return Error;
 }
 
+static DWORD WINAPI SetUpChild(PVOID Context)
+{
+    return CM_Setup_DevNode((DEVINST)(ULONG_PTR)Context, CM_SETUP_DEVNODE_READY);
+}
+
+/* The registry's security covers the child's PDO before its drivers are added: an open while the stack is built is
+ * refused when the descriptor denies it */
+static VOID CheckEarlySecurity(DEVINST Bus)
+{
+    WCHAR Path[MAX_PATH] = L"\\\\?\\GLOBALROOT";
+    ULONG Length = sizeof(Path) - sizeof(L"\\\\?\\GLOBALROOT");
+    PSECURITY_DESCRIPTOR Descriptor = NULL;
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+    HANDLE Thread, File;
+    DWORD Value, Start;
+    ULONG Size;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        CM_Get_DevNode_Registry_PropertyW(Child, CM_DRP_PHYSICAL_DEVICE_OBJECT_NAME, NULL, Path + wcslen(Path), &Length, 0) !=
+            CR_SUCCESS ||
+        !ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(D;;FA;;;WD)", SDDL_REVISION_1, &Descriptor, &Size))
+    {
+        ok(FALSE, "The child cannot be prepared\n");
+        return;
+    }
+    ok_once(CM_Set_DevNode_Registry_PropertyW(Child, CM_DRP_SECURITY, Descriptor, Size, 0), (ULONG)CR_SUCCESS);
+    LocalFree(Descriptor);
+
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    SetRequest(L"SlowAddDevice", 1);
+    Thread = CreateThread(NULL, 0, SetUpChild, (PVOID)(ULONG_PTR)Child, 0, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Thread != NULL)
+    {
+        Start = GetTickCount();
+        while (!ReadValue(L"AddDeviceEntered", &Value) && GetTickCount() - Start < 1000)
+            Sleep(10);
+        File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        ok(File == INVALID_HANDLE_VALUE, "The child was opened while its stack was built\n");
+        if (File != INVALID_HANDLE_VALUE)
+            CloseHandle(File);
+        ok_once(WaitForSingleObject(Thread, 2000), WAIT_OBJECT_0);
+        CloseHandle(Thread);
+    }
+    SetRequest(L"SlowAddDevice", 0);
+    ok_once(SecureChild(Bus, L"D:(A;;FA;;;WD)"), (ULONG)ERROR_SUCCESS);
+}
+
 /* The security descriptor a device's registry holds covers its stack once its drivers are added (SPDRP_SECURITY) */
 static VOID CheckDeviceSecurity(DEVINST Bus)
 {
@@ -808,6 +859,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReplug(Device->DevInst);
         CheckRemoveTwice(Device->DevInst);
         CheckDeviceSecurity(Device->DevInst);
+        CheckEarlySecurity(Device->DevInst);
         CheckFailedStack(Device->DevInst);
         CheckLargeMemory(Device->DevInst);
         CheckNullChild(Device->DevInst);

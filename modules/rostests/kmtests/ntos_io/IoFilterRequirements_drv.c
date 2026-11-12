@@ -660,7 +660,16 @@ static NTSTATUS NTAPI TestAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT 
 {
     PTEST_EXTENSION Extension;
     PDEVICE_OBJECT Fdo;
+    LARGE_INTEGER Delay;
     NTSTATUS Status;
+
+    /* The test opens the child while its stack is being built */
+    if (Pdo->DriverObject == DriverObject && Requested(L"SlowAddDevice"))
+    {
+        Record(L"AddDeviceEntered", 1);
+        Delay.QuadPart = -200LL * 10000;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
 
     Status = IoCreateDevice(DriverObject, sizeof(TEST_EXTENSION), NULL, FILE_DEVICE_UNKNOWN, 0, FALSE, &Fdo);
     if (!NT_SUCCESS(Status))
