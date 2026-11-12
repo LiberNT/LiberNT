@@ -34,10 +34,11 @@ ScrSetFont(
     /* get pointer to video memory */
     BaseAddress.QuadPart = BITPLANE_BASE;
     Bitplane = (PUCHAR)MmMapIoSpace(BaseAddress, 0xFFFF, MmNonCached);
-
-    LoadFont(Bitplane, FontBitfield);
-
-    MmUnmapIoSpace(Bitplane, 0xFFFF);
+    if (Bitplane)
+    {
+        LoadFont(Bitplane, FontBitfield);
+        MmUnmapIoSpace(Bitplane, 0xFFFF);
+    }
 
     /* close bit plane */
     CloseBitPlane();
