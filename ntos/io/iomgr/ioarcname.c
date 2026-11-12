@@ -275,11 +275,46 @@ IopArcLinkName(
 
 static
 VOID
+IopArcStoreSystemPartition(
+    _In_ PCWSTR PartitionName,
+    _In_ PCSTR LoaderPath)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING LinkName, Target, Path;
+    WCHAR TargetBuffer[64], PathBuffer[64];
+    ANSI_STRING AnsiPath;
+    NTSTATUS Status;
+    HANDLE Link;
+
+    RtlInitUnicodeString(&LinkName, PartitionName);
+    InitializeObjectAttributes(&ObjectAttributes, &LinkName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenSymbolicLinkObject(&Link, SYMBOLIC_LINK_QUERY, &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return;
+
+    RtlInitEmptyUnicodeString(&Target, TargetBuffer, sizeof(TargetBuffer) - sizeof(WCHAR));
+    Status = ZwQuerySymbolicLinkObject(Link, &Target, NULL);
+    ZwClose(Link);
+    if (!NT_SUCCESS(Status)) return;
+    TargetBuffer[Target.Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    RtlInitAnsiString(&AnsiPath, LoaderPath);
+    RtlInitEmptyUnicodeString(&Path, PathBuffer, sizeof(PathBuffer) - sizeof(WCHAR));
+    Status = RtlAnsiStringToUnicodeString(&Path, &AnsiPath, FALSE);
+    if (!NT_SUCCESS(Status)) return;
+    PathBuffer[Path.Length / sizeof(WCHAR)] = UNICODE_NULL;
+
+    IopStoreSystemPartitionInformation(&Target, &Path);
+}
+
+static
+VOID
 IopArcLinkDisk(
     _In_ PARC_DISK_SIGNATURE ArcSignature,
     _In_ ULONG Disk,
-    _In_ PDRIVE_LAYOUT_INFORMATION_EX Layout)
+    _In_ PDRIVE_LAYOUT_INFORMATION_EX Layout,
+    _In_opt_ PCSTR LoaderPath)
 {
+    ANSI_STRING PartitionArcName;
     PPARTITION_INFORMATION_EX Partition;
     CHAR ArcName[256];
     WCHAR DeviceName[64];
@@ -320,6 +355,10 @@ IopArcLinkDisk(
         if (!NT_SUCCESS(Status)) continue;
 
         Status = IopArcLinkName(ArcName, DeviceName);
+
+        RtlInitAnsiString(&PartitionArcName, ArcName);
+        if (LoaderPath != NULL && RtlEqualString(&PartitionArcName, &IoArcHalDeviceName, TRUE))
+            IopArcStoreSystemPartition(DeviceName, LoaderPath);
     }
 }
 
@@ -403,7 +442,7 @@ IopCreateArcNamesDisk(
                 continue;
             }
 
-            IopArcLinkDisk(ArcSignature, Disk, Layout);
+            IopArcLinkDisk(ArcSignature, Disk, Layout, LoaderBlock->NtHalPathName);
 
             if (IopArcNameIsPrefixOf(ArcSignature->ArcName, &IoArcBootDeviceName))
                 *FoundBoot = TRUE;
