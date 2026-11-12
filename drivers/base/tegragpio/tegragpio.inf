@@ -1,0 +1,50 @@
+; PROJECT:     LiberNT Tegra GPIO driver
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     Tegra GPIO driver installation file
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGUID={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%ProviderName%
+CatalogFile=tegragpio.cat
+DriverVer=10/15/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%ManufacturerName%=NvidiaMfg,NTARM64
+
+[NvidiaMfg.NTARM64]
+%TEGRAGPIO.DeviceDesc%=TEGRAGPIO_Inst,FDT\nvidia_tegra210-gpio
+%TEGRAGPIO.DeviceDesc%=TEGRAGPIO_Inst,FDT\nvidia_tegra30-gpio
+
+[TEGRAGPIO_Inst.NT]
+CopyFiles=TEGRAGPIO_CopyFiles.NT
+
+[TEGRAGPIO_CopyFiles.NT]
+tegragpio.sys
+
+[TEGRAGPIO_Inst.NT.Services]
+AddService=tegragpio,0x00000002,TEGRAGPIO_Service_Inst
+
+[TEGRAGPIO_Service_Inst]
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\tegragpio.sys
+LoadOrderGroup=Extended Base
+
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[SourceDisksFiles]
+tegragpio.sys=1
+
+[Strings]
+ProviderName="Ahmed ARIF"
+ManufacturerName="NVIDIA"
+DiskName="Tegra GPIO Driver Disk"
+TEGRAGPIO.DeviceDesc="Tegra GPIO controller"
