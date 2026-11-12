@@ -11881,9 +11881,9 @@ static void test_token_label(void)
     {
         ret = GetTokenInformation(token, TokenLinkedToken, &linked, sizeof(linked), &size);
         error = GetLastError();
-        if (system_token && elevation_type == TokenElevationTypeDefault)
+        if (elevation_type == TokenElevationTypeDefault)
             ok(!ret && error == ERROR_NO_SUCH_LOGON_SESSION,
-               "Unsplit SYSTEM token linked query returned %d, error %lu\n", ret, error);
+               "Unsplit token linked query returned %d, error %lu\n", ret, error);
         else
             ok(ret, "Failed to get linked token, error %lu\n", error);
 #else

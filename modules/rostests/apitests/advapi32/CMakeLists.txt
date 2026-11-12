@@ -49,6 +49,7 @@ list(APPEND SOURCE
     StartServiceCtrlDispatcher.c
     TriggerInfo.c
     TokenBnoIsolation.c
+    TokenLinkedToken.c
     TraceEvents.c
     TraceGuids.c
     UserHiveAccess.c
