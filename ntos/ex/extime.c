@@ -493,6 +493,7 @@ ExRefreshTimeZoneInformation(
 
     UNREFERENCED_PARAMETER(SystemBootTime);
 
+    RtlZeroMemory(&TimeZoneInformation, sizeof(TimeZoneInformation));
     Status = RtlQueryTimeZoneInformation(&TimeZoneInformation);
     if (!NT_SUCCESS(Status))
     {
