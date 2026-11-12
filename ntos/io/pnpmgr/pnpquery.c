@@ -655,6 +655,17 @@ PiQueryRemoveDevice(
             RemoveData->VetoObject = Node->PhysicalDeviceObject;
             break;
         }
+
+        /* A handle its holder did not close keeps the device (irp-mn-query-remove-device: open handles fail the query) */
+        if (PiStackIsOpen(Node->PhysicalDeviceObject))
+        {
+            ObReferenceObject(Node->PhysicalDeviceObject);
+            RemoveData->VetoType = PNP_VetoOutstandingOpen;
+            RemoveData->VetoName = Node->InstancePath;
+            RemoveData->VetoObject = Node->PhysicalDeviceObject;
+            Status = STATUS_PLUGPLAY_QUERY_VETOED;
+            break;
+        }
     }
 
     if (!NT_SUCCESS(Status) && Reached != NULL)

@@ -522,6 +522,8 @@ VOID IopAnnounceInterface(_In_ PIOP_DEVICE_INTERFACE Interface);
 
 VOID IopForgetDeviceInterfaces(_In_ PDEVICE_OBJECT PhysicalDeviceObject);
 
+BOOLEAN PiStackIsOpen(_In_ PDEVICE_OBJECT PhysicalDeviceObject);
+
 VOID IopSplitInterfaceLink(_In_ PCUNICODE_STRING SymbolicLinkName,
                            _Out_ PUNICODE_STRING LinkObjectName,
                            _Out_ PUNICODE_STRING ReferenceString);

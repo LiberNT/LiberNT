@@ -692,6 +692,7 @@ static NTSTATUS NTAPI TestCreateClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 /* A holder of the child registers for target device change on its handle, then refuses the removal or closes the handle */
 #define HOLD_REFUSE 1
 #define HOLD_CLOSE 2
+#define HOLD_OPEN 3
 #define HOLD_REREGISTER 4
 static HANDLE HoldHandle;
 static PFILE_OBJECT HoldFile;
@@ -733,7 +734,7 @@ static NTSTATUS HoldOpen(VOID)
     }
 
     Status = ObReferenceObjectByHandle(HoldHandle, 0, *IoFileObjectType, KernelMode, (PVOID *)&HoldFile, NULL);
-    if (NT_SUCCESS(Status))
+    if (NT_SUCCESS(Status) && HoldMode != HOLD_OPEN)
         Status = IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange, 0, HoldFile, HoldDriver, HoldNotify, NULL,
                                                 &HoldEntry);
     if (!NT_SUCCESS(Status))

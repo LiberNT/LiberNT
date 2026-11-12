@@ -792,6 +792,17 @@ static VOID CheckTargetRemoval(DEVINST Bus)
     ok(ChildStarted(Bus, 0), "The child went although its holder refused\n");
     ok(DeviceIoControl(File, IOCTL_RELEASE_CHILD, NULL, 0, NULL, 0, &Returned, NULL), "Release failed: %lu\n", GetLastError());
 
+    /* A handle nobody closes keeps the child */
+    Mode = 3;
+    VetoType = PNP_VetoTypeUnknown;
+    ok(DeviceIoControl(File, IOCTL_HOLD_CHILD, &Mode, sizeof(Mode), NULL, 0, &Returned, NULL),
+       "The holder did not open the child: %lu\n", GetLastError());
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_REMOVE_VETOED);
+    ok_eq_ulong((ULONG)VetoType, (ULONG)PNP_VetoOutstandingOpen);
+    ok(ChildStarted(Bus, 0), "The child went with a handle still open\n");
+    ok(DeviceIoControl(File, IOCTL_RELEASE_CHILD, NULL, 0, NULL, 0, &Returned, NULL), "Release failed: %lu\n", GetLastError());
+
     Mode = 2;
     ok(DeviceIoControl(File, IOCTL_HOLD_CHILD, &Mode, sizeof(Mode), NULL, 0, &Returned, NULL),
        "The holder did not register on the child: %lu\n", GetLastError());

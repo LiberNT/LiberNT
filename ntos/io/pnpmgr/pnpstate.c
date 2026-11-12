@@ -1432,7 +1432,6 @@ PiSetStackRemovePending(
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 }
 
-static
 BOOLEAN
 PiStackIsOpen(
     _In_ PDEVICE_OBJECT PhysicalDeviceObject)
