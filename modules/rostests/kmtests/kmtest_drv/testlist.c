@@ -87,6 +87,7 @@ KMT_TESTFUNC Test_ExTimerExtra;
 KMT_TESTFUNC Test_ExTimerInvalidAttributes;
 KMT_TESTFUNC Test_ExTimerCombinedAttributes;
 KMT_TESTFUNC Test_ExTimeZone;
+KMT_TESTFUNC Test_ExHeadless;
 KMT_TESTFUNC Test_ExLicenseDif;
 KMT_TESTFUNC Test_IoArbiter;
 KMT_TESTFUNC Test_IoLargeMemoryResource;
@@ -532,6 +533,7 @@ const KMT_TEST TestList[] =
     { "-ExTimerInvalidAttributes",           Test_ExTimerInvalidAttributes },
     { "-ExTimerCombinedAttributes",          Test_ExTimerCombinedAttributes },
     { "ExTimeZone",                         Test_ExTimeZone },
+    { "ExHeadless",                         Test_ExHeadless },
     { "ExLicenseDif",                       Test_ExLicenseDif },
     { "ExResource",                         Test_ExResource },
     { "ExResourceBoost",                    Test_ExResourceBoost },

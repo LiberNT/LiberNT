@@ -170,6 +170,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ex/InbvVirtualFrameBuffer.c
     ntos_ex/ExUuid.c
     ntos_ex/ExWorkItem.c
+    ntos_ex/ExHeadless.c
     ntos_ex/ExLicenseDif.c
     ntos_ex/ExWddm.c
     ntos_fsrtl/FsRtlDissect.c
