@@ -170,6 +170,7 @@ UserCreateWinstaDirectory(VOID)
     ULONG SessionId;
     OBJECT_ATTRIBUTES ObjectAttributes;
     WCHAR wstrWindowStationsDir[MAX_PATH];
+    PSECURITY_DESCRIPTOR DirectorySd;
     PUSER_SESSION Session = UserGetCurrentSession();
 
     if (!Session)
@@ -197,12 +198,17 @@ UserCreateWinstaDirectory(VOID)
             return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    Status = IntCreateWinstaDirectorySecurity(&DirectorySd);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     InitializeObjectAttributes(&ObjectAttributes,
                                &Session->WinStaDirName,
                                OBJ_KERNEL_HANDLE,
                                NULL,
-                               NULL);
+                               DirectorySd);
     Status = ZwCreateDirectoryObject(&Session->WinStaDir, DIRECTORY_CREATE_OBJECT, &ObjectAttributes);
+    IntFreeSecurityBuffer(DirectorySd);
     if (!NT_SUCCESS(Status))
         ERR("Could not create %wZ directory (Status 0x%X)\n", &Session->WinStaDirName, Status);
     else
@@ -288,7 +294,9 @@ IntWinStaObjectParse(
             return STATUS_OBJECT_TYPE_MISMATCH;
         }
 
-        Status = IntCheckParsedObjectAccess(ParseParameters->AccessState,
+        Status = IntCheckParsedObjectAccess(ParseParameters->ParseObject,
+                                            ExWindowStationObjectType,
+                                            ParseParameters->AccessState,
                                             ParseParameters->AccessMode);
         if (!NT_SUCCESS(Status))
             return Status;
@@ -836,6 +844,7 @@ IntCreateWindowStation(
     HWINSTA hWinSta;
     PWINSTATION_OBJECT WindowStation;
     PUSER_SESSION Session = UserGetCurrentSession();
+    BOOLEAN DefaultSecurity;
 
     TRACE("IntCreateWindowStation called\n");
 
@@ -860,6 +869,16 @@ IntCreateWindowStation(
     /*
      * No existing window station found, try to create a new one.
      */
+
+    _SEH2_TRY
+    {
+        DefaultSecurity = (ObjectAttributes->SecurityDescriptor == NULL);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
 
     /* Create the window station object */
     Status = ObCreateObject(AccessMode,
@@ -934,6 +953,13 @@ IntCreateWindowStation(
         /* WindowStation is dereferenced on ObInsertObject() failure */
         SetLastNtError(Status);
         return Status;
+    }
+
+    if (DefaultSecurity && Session && Session->WinStaDir)
+    {
+        Status = IntInheritWinstaSecurity(WindowStation, Session->WinStaDir);
+        if (!NT_SUCCESS(Status))
+            ERR("Failed to give window station '%wZ' its inherited security, Status 0x%08lx\n", ObjectAttributes->ObjectName, Status);
     }
 
     // FIXME! TODO: Add this new window station to a linked list

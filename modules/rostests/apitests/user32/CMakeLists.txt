@@ -132,6 +132,7 @@ list(APPEND SOURCE
     WaitForInputIdle.c
     WindowBand.c
     WindowStationErrors.c
+    WindowStationSecurity.c
     WndProc.c
     wsprintf.c)
 

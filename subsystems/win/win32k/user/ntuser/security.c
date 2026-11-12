@@ -307,22 +307,177 @@ IntAssignDesktopSecurityOnParse(
     return Status;
 }
 
+/* The WindowStations directory as Windows 11 secures it: a window station created in it without a descriptor lets Everyone and restricted code in, and its desktops after it */
+NTSTATUS
+NTAPI
+IntCreateWinstaDirectorySecurity(
+    _Out_ PSECURITY_DESCRIPTOR *DirectorySd)
+{
+    static const struct
+    {
+        UCHAR Flags;
+        ACCESS_MASK Mask;
+    } WorldAces[] =
+    {
+        { CONTAINER_INHERIT_ACE | NO_PROPAGATE_INHERIT_ACE | INHERIT_ONLY_ACE, WINSTA_ACCESS_ALL | STANDARD_RIGHTS_REQUIRED },
+        { OBJECT_INHERIT_ACE | INHERIT_ONLY_ACE, GENERIC_ALL },
+    };
+    SECURITY_DESCRIPTOR AbsSD;
+    PSECURITY_DESCRIPTOR RelSD = NULL;
+    PACL Dacl = NULL;
+    ULONG DaclSize, RelSDSize = 0, Index;
+    NTSTATUS Status;
+
+    *DirectorySd = NULL;
+
+    DaclSize = sizeof(ACL) +
+               3 * (sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeWorldSid)) +
+               3 * (sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeRestrictedSid)) +
+               sizeof(ACCESS_ALLOWED_ACE) + RtlLengthSid(SeExports->SeAliasAdminsSid);
+    Dacl = IntAllocateSecurityBuffer(DaclSize);
+    if (!Dacl)
+        return STATUS_NO_MEMORY;
+
+    Status = RtlCreateAcl(Dacl, DaclSize, ACL_REVISION);
+    for (Index = 0; NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(WorldAces); Index++)
+    {
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, WorldAces[Index].Flags, WorldAces[Index].Mask, SeExports->SeWorldSid);
+        if (NT_SUCCESS(Status))
+            Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, WorldAces[Index].Flags, WorldAces[Index].Mask, SeExports->SeRestrictedSid);
+    }
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, 0, DIRECTORY_QUERY | DIRECTORY_CREATE_OBJECT, SeExports->SeAliasAdminsSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, 0, DIRECTORY_TRAVERSE, SeExports->SeWorldSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlAddAccessAllowedAceEx(Dacl, ACL_REVISION, 0, DIRECTORY_TRAVERSE, SeExports->SeRestrictedSid);
+    if (NT_SUCCESS(Status))
+        Status = RtlCreateSecurityDescriptor(&AbsSD, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetDaclSecurityDescriptor(&AbsSD, TRUE, Dacl, FALSE);
+    if (NT_SUCCESS(Status))
+        Status = RtlSetOwnerSecurityDescriptor(&AbsSD, SeExports->SeAliasAdminsSid, FALSE);
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAbsoluteToSelfRelativeSD(&AbsSD, NULL, &RelSDSize);
+        if (Status == STATUS_BUFFER_TOO_SMALL)
+        {
+            RelSD = IntAllocateSecurityBuffer(RelSDSize);
+            Status = RelSD ? RtlAbsoluteToSelfRelativeSD(&AbsSD, RelSD, &RelSDSize) : STATUS_NO_MEMORY;
+        }
+    }
+
+    IntFreeSecurityBuffer(Dacl);
+    if (!NT_SUCCESS(Status))
+    {
+        if (RelSD)
+            IntFreeSecurityBuffer(RelSD);
+        return Status;
+    }
+
+    *DirectorySd = RelSD;
+    return STATUS_SUCCESS;
+}
+
+/* A window station created without a descriptor inherits from its directory as a container, so its desktops inherit after it */
+NTSTATUS
+NTAPI
+IntInheritWinstaSecurity(
+    _In_ PWINSTATION_OBJECT WinSta,
+    _In_ HANDLE Directory)
+{
+    SECURITY_SUBJECT_CONTEXT Subject;
+    PSECURITY_DESCRIPTOR DirectorySd, NewSd = NULL;
+    BOOLEAN MemoryAllocated;
+    PVOID DirectoryObject;
+    NTSTATUS Status;
+
+    Status = ObReferenceObjectByHandle(Directory, 0, NULL, KernelMode, &DirectoryObject, NULL);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ObGetObjectSecurity(DirectoryObject, &DirectorySd, &MemoryAllocated);
+    if (NT_SUCCESS(Status))
+    {
+        SeCaptureSubjectContext(&Subject);
+        Status = SeAssignSecurity(DirectorySd,
+                                  NULL,
+                                  &NewSd,
+                                  TRUE,
+                                  &Subject,
+                                  &ExWindowStationObjectType->TypeInfo.GenericMapping,
+                                  PagedPool);
+        SeReleaseSubjectContext(&Subject);
+        ObReleaseObjectSecurity(DirectorySd, MemoryAllocated);
+    }
+    ObDereferenceObject(DirectoryObject);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = ObSetSecurityObjectByPointer(WinSta,
+                                          OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                                          NewSd);
+    SeDeassignSecurity(&NewSd);
+    return Status;
+}
+
 /* A parse routine that hands back an object answers for the open's access check, which the object manager leaves to it */
 NTSTATUS
 NTAPI
 IntCheckParsedObjectAccess(
+    _In_ PVOID Object,
+    _In_ POBJECT_TYPE ObjectType,
     _In_ PACCESS_STATE AccessState,
     _In_ KPROCESSOR_MODE AccessMode)
 {
-    /* FIXME: the open is not checked against the object's DACL, since a window station created without a descriptor inherits the WindowStations directory's ACEs instead of its creator's default DACL and would refuse the creator */
-    if (AccessMode != KernelMode &&
-        AccessState->RemainingDesiredAccess == 0 &&
+    PSECURITY_DESCRIPTOR Descriptor;
+    PPRIVILEGE_SET Privileges = NULL;
+    ACCESS_MASK Granted = 0;
+    BOOLEAN MemoryAllocated;
+    BOOLEAN Allowed;
+    NTSTATUS Status;
+
+    if (AccessMode == KernelMode)
+        return STATUS_SUCCESS;
+
+    if (AccessState->RemainingDesiredAccess == 0 &&
         AccessState->PreviouslyGrantedAccess == 0)
     {
         return STATUS_ACCESS_DENIED;
     }
 
-    return STATUS_SUCCESS;
+    Status = ObGetObjectSecurity(Object, &Descriptor, &MemoryAllocated);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    SeLockSubjectContext(&AccessState->SubjectSecurityContext);
+    Allowed = SeAccessCheck(Descriptor,
+                            &AccessState->SubjectSecurityContext,
+                            TRUE,
+                            AccessState->RemainingDesiredAccess,
+                            AccessState->PreviouslyGrantedAccess,
+                            &Privileges,
+                            &ObjectType->TypeInfo.GenericMapping,
+                            AccessMode,
+                            &Granted,
+                            &Status);
+    SeUnlockSubjectContext(&AccessState->SubjectSecurityContext);
+
+    if (Privileges != NULL)
+    {
+        SeAppendPrivileges(AccessState, Privileges);
+        SeFreePrivileges(Privileges);
+    }
+
+    if (Allowed)
+    {
+        AccessState->PreviouslyGrantedAccess |= Granted;
+        AccessState->RemainingDesiredAccess &= ~(Granted | MAXIMUM_ALLOWED);
+        Status = STATUS_SUCCESS;
+    }
+
+    ObReleaseObjectSecurity(Descriptor, MemoryAllocated);
+    return Status;
 }
 
 /**

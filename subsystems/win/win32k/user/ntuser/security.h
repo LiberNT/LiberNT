@@ -93,7 +93,20 @@ IntAssignDesktopSecurityOnParse(
 
 NTSTATUS
 NTAPI
+IntCreateWinstaDirectorySecurity(
+    _Out_ PSECURITY_DESCRIPTOR *DirectorySd);
+
+NTSTATUS
+NTAPI
+IntInheritWinstaSecurity(
+    _In_ PWINSTATION_OBJECT WinSta,
+    _In_ HANDLE Directory);
+
+NTSTATUS
+NTAPI
 IntCheckParsedObjectAccess(
+    _In_ PVOID Object,
+    _In_ POBJECT_TYPE ObjectType,
     _In_ PACCESS_STATE AccessState,
     _In_ KPROCESSOR_MODE AccessMode);
 

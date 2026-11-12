@@ -118,7 +118,7 @@ IntDesktopObjectParse(IN PVOID ParseObject,
                 Status = STATUS_SUCCESS;
             }
 
-            AccessStatus = IntCheckParsedObjectAccess(AccessState, AccessMode);
+            AccessStatus = IntCheckParsedObjectAccess(Desktop, ExDesktopObjectType, AccessState, AccessMode);
             if (!NT_SUCCESS(AccessStatus))
                 return AccessStatus;
 
