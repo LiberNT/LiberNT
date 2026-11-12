@@ -167,6 +167,8 @@ static void KiNoteFreezeEpoch(void) { @NOTE@ }
 static ULONG64 KiQueryFreezeEpoch(void) { @EPOCH@ }
 static BOOLEAN KiIsFreezeActive(void) { @ACTIVE@ }
 static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+static void KiSetFreezeFailure(void) { assert(!"a freeze failed"); }
 static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
 static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) { assert(0); }

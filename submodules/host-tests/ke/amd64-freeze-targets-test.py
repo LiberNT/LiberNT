@@ -88,6 +88,8 @@ static void YieldProcessor(void) {
 typedef struct { int Valid; } KI_FREEZE_WAIT;
 __attribute__((unused)) static BOOLEAN KiHasFreezeFailure(void) { return FALSE; }
 __attribute__((unused)) static BOOLEAN KiFreezeFailureRequiresReturn(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+__attribute__((unused)) static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB Prcb) { (void)Prcb; return FALSE; }
+__attribute__((unused)) static void KiSetFreezeFailure(void) { CHECK(!"a freeze failed"); }
 __attribute__((unused)) static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
 __attribute__((unused)) static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 __attribute__((unused)) static void KiNoteFreezeEpoch(void) {}

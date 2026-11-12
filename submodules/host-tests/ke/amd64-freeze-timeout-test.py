@@ -64,7 +64,7 @@ static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner, KiFreez
 static volatile LONG64 KiFreezeEpoch;
 static ULONG KeNumberProcessors = 2;
 static KAFFINITY KeActiveProcessors = 3;
-static BOOLEAN KiRelaxedTiming, KdEnteredDebugger, Failure, CrashOwner;
+static BOOLEAN KiRelaxedTiming, KdEnteredDebugger, Failure, CrashOwner, TargetCrashOwner;
 static unsigned Mode, Yields, ExitReason;
 static LONG64 Clock;
 static jmp_buf Exit;
@@ -77,7 +77,7 @@ static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return __sync_add_and
 static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 v, LONG64 old) { return __sync_val_compare_and_swap(p, old, v); }
 static BOOLEAN KiHasFreezeFailure(void) { return Failure; }
 static void KiSetFreezeFailure(void) { Failure = TRUE; }
-static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB p) { assert(p == &Cpus[0]); return CrashOwner; }
+static BOOLEAN KiIsBugCheckEntryOwner(PKPRCB p) { return p == &Cpus[0] ? CrashOwner : TargetCrashOwner; }
 static LARGE_INTEGER KeQueryPerformanceCounter(LARGE_INTEGER *freq) {
     LARGE_INTEGER result; freq->QuadPart = 1; result.QuadPart = Clock++;
     if (result.QuadPart == 10) {
@@ -102,7 +102,10 @@ static void KiSaveProcessorState(PKTRAP_FRAME t, PKEXCEPTION_FRAME e) { (void)t;
 static void KiRestoreProcessorState(PKTRAP_FRAME t, PKEXCEPTION_FRAME e) { (void)t; (void)e; assert(0); }
 static BOOLEAN KiProcessorFreezeHandler(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame) { @HANDLER@ }
 static void KiFreezeIfRequested(void) { @DEFERRED@ assert(0); }
-static void KiIpiSend(KAFFINITY targets, int type) { assert(targets == 2 && type == IPI_FREEZE); Cpus[1].IpiFrozen = Mode == 9 ? IPI_FROZEN_STATE_FROZEN : IPI_FROZEN_STATE_SAVING; }
+static void KiIpiSend(KAFFINITY targets, int type) {
+    assert(targets == 2 && type == IPI_FREEZE);
+    if (Mode != 10) Cpus[1].IpiFrozen = Mode == 9 ? IPI_FROZEN_STATE_FROZEN : IPI_FROZEN_STATE_SAVING;
+}
 static void YieldProcessor(void) {
     Yields++;
     assert(Yields < 1000);
@@ -122,7 +125,7 @@ static void KxThawExecution(void) { @THAW@ }
 static void Reset(void) {
     memset(Cpus,0,sizeof(Cpus)); Cpus[0].SetMember=1; Cpus[1].SetMember=2; Cpus[1].Number=1;
     KiFreezeOwner=KiFreezeActiveSetOwner=NULL; KiFreezeEpoch=0; Clock=0; Yields=ExitReason=0;
-    KiRelaxedTiming=KdEnteredDebugger=Failure=CrashOwner=FALSE; Mode=0;
+    KiRelaxedTiming=KdEnteredDebugger=Failure=CrashOwner=TargetCrashOwner=FALSE; Mode=0;
 }
 int main(void) {
     Reset();
@@ -164,6 +167,9 @@ int main(void) {
     Reset(); Mode=8; KiFreezeActiveSetOwner=&Cpus[1]; KiRelaxedTiming=FALSE; Cpus[1].SetMember=0; KeActiveProcessors=1;
     KxFreezeExecution(); assert(!Failure && KiFreezeOwner==&Cpus[0]); KeActiveProcessors=3;
     Reset(); Mode=9; KiFreezeOwner=&Cpus[1]; KxFreezeExecution(); assert(!Failure && KiFreezeOwner==&Cpus[0]);
+    Reset(); Mode=10; TargetCrashOwner=TRUE;
+    if (setjmp(Exit)==0) { KxFreezeExecution(); assert(!"freeze of the stop owner returned"); }
+    assert(ExitReason==2 && Failure && Clock<10 && Cpus[1].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
     return 0;
 }
 '''

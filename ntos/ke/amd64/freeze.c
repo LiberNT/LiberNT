@@ -519,6 +519,15 @@ KxFreezeExecution(
         {
             if (KiFreezeFailureRequiresReturn(CurrentPrcb))
                 return;
+
+            /* The processor that owns the stop never freezes: leave the machine to it now rather than after the watchdog */
+            if (KiIsBugCheckEntryOwner(TargetPrcb))
+            {
+                KiSetFreezeFailure();
+                if (KiFreezeFailureRequiresReturn(CurrentPrcb))
+                    return;
+            }
+
             if (KiFreezeWaitExpired(&Wait) &&
                 TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN &&
                 KiFreezeWaitFailed(CurrentPrcb, &Wait))
