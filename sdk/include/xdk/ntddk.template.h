@@ -130,6 +130,8 @@ $include(arm64/mm.h)
 #elif defined(_M_RISCV64)
 $include(riscv64/ke.h)
 $include(riscv64/mm.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/ke.h)
 #else
 #error Unknown Architecture
 #endif

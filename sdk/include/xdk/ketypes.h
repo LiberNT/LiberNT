@@ -1296,6 +1296,8 @@ $if (_NTDDK_ || _WINNT_)
 
 #if defined(_M_RISCV64)
 $include(riscv64/ketypes.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/ketypes.h)
 #elif defined(_M_PPC)
 $include(ppc/ketypes.h)
 #endif

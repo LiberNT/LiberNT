@@ -2501,6 +2501,8 @@ typedef struct _DISPATCHER_CONTEXT {
 } DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
 #elif defined(_M_RISCV64)
 $include(riscv64/ketypes.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/ketypes.h)
 #else
 #error "undefined processor type"
 #endif

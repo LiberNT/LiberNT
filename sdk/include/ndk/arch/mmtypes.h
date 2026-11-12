@@ -34,6 +34,8 @@ Author:
 #include <arm64/mmtypes.h>
 #elif defined(_M_RISCV64)
 #include <riscv64/mmtypes.h>
+#elif defined(_M_LOONGARCH64)
+#include <loongarch64/mmtypes.h>
 #else
 #error "Unknown processor"
 #endif

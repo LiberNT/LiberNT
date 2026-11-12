@@ -20,6 +20,8 @@ $include(arm/ke.h)
 $include(arm64/ke.h)
 #elif defined(_M_RISCV64)
 $include(riscv64/ke.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/ke.h)
 #else
 #error Unknown Architecture
 #endif
