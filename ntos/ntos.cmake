@@ -475,7 +475,6 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/init.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/probe.c
-    ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/exioport.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/arm64/kdarm64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/atomics.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/boot.c
