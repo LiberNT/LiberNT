@@ -658,14 +658,14 @@ NtSetTimer(
         KeReleaseSpinLockFromDpcLevel(&Thread->ActiveTimerListLock);
     }
 
-    KeReleaseSpinLock(&Timer->Lock, OldIrql);
-
-    ExpSetWakeTimer(Timer, WakeTimer);
-
     KeSetTimerEx(&Timer->KeTimer,
                  SafeDueTime,
                  Period,
                  ((TimerApcRoutine != NULL) || Timer->HighResolution) ? &Timer->TimerDpc : NULL);
+
+    KeReleaseSpinLock(&Timer->Lock, OldIrql);
+
+    ExpSetWakeTimer(Timer, WakeTimer);
 
     ObDereferenceObjectEx(Timer, References + 1);
 
