@@ -398,11 +398,13 @@ IoRegisterDeviceInterface(
     UNICODE_STRING LinkName;
     UNICODE_STRING ValueName;
     PDEVICE_NODE DeviceNode;
+    ULONG Disposition = 0;
     NTSTATUS Status;
     HANDLE ClassKey;
     HANDLE InstanceKey;
     HANDLE ControlKey;
     PWCHAR Buffer;
+    USHORT Index;
 
     PAGED_CODE();
 
@@ -411,6 +413,13 @@ IoRegisterDeviceInterface(
     DeviceNode = IopGetDeviceNode(PhysicalDeviceObject);
     if (DeviceNode == NULL) return STATUS_INVALID_DEVICE_REQUEST;
     if (DeviceNode->InstancePath.Length == 0) return STATUS_INVALID_DEVICE_REQUEST;
+
+    /* A reference string holds no path separator, '/' or '\' (IoRegisterDeviceInterface documentation) */
+    for (Index = 0; ReferenceString != NULL && Index < ReferenceString->Length / sizeof(WCHAR); Index++)
+    {
+        if (ReferenceString->Buffer[Index] == OBJ_NAME_PATH_SEPARATOR || ReferenceString->Buffer[Index] == L'/')
+            return STATUS_INVALID_DEVICE_REQUEST;
+    }
 
     Status = IopBuildInterfaceName(&DeviceNode->InstancePath,
                                    InterfaceClassGuid,
@@ -471,27 +480,30 @@ IoRegisterDeviceInterface(
                                         &ValueName,
                                         KEY_ALL_ACCESS,
                                         REG_OPTION_NON_VOLATILE,
-                                        NULL);
+                                        &Disposition);
         ExFreePoolWithTag(ValueName.Buffer, TAG_IO_NAME);
     }
 
-    if (NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status))
     {
-        RtlInitUnicodeString(&ValueName, L"SymbolicLink");
-
-        /* The registry keeps the link in its user-mode form, \\?\ */
-        LinkName.Buffer[1] = OBJ_NAME_PATH_SEPARATOR;
-        ZwSetValueKey(ControlKey,
-                      &ValueName,
-                      0,
-                      REG_SZ,
-                      LinkName.Buffer,
-                      LinkName.Length + sizeof(WCHAR));
-        LinkName.Buffer[1] = L'?';
-
-        ZwClose(ControlKey);
+        ZwClose(InstanceKey);
+        ExFreePoolWithTag(LinkName.Buffer, TAG_IO_NAME);
+        return Status;
     }
 
+    RtlInitUnicodeString(&ValueName, L"SymbolicLink");
+
+    /* The registry keeps the link in its user-mode form, \\?\ */
+    LinkName.Buffer[1] = OBJ_NAME_PATH_SEPARATOR;
+    ZwSetValueKey(ControlKey,
+                  &ValueName,
+                  0,
+                  REG_SZ,
+                  LinkName.Buffer,
+                  LinkName.Length + sizeof(WCHAR));
+    LinkName.Buffer[1] = L'?';
+
+    ZwClose(ControlKey);
     ZwClose(InstanceKey);
 
     NewInterface = ExAllocatePoolZero(NonPagedPool,
@@ -545,7 +557,8 @@ IoRegisterDeviceInterface(
     SymbolicLinkName->Length = LinkName.Length;
     SymbolicLinkName->MaximumLength = LinkName.Length + sizeof(WCHAR);
 
-    return STATUS_SUCCESS;
+    /* Registrations persist across boots: one the registry already holds is reported (IoRegisterDeviceInterface documentation) */
+    return (Disposition == REG_OPENED_EXISTING_KEY) ? STATUS_OBJECT_NAME_EXISTS : STATUS_SUCCESS;
 }
 
 static

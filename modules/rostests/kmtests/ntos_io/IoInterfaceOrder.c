@@ -162,6 +162,9 @@ START_TEST(IoInterfaceOrderCheck)
     UNICODE_STRING ReferenceA = RTL_CONSTANT_STRING(L"A");
     UNICODE_STRING ReferenceB = RTL_CONSTANT_STRING(L"B");
     UNICODE_STRING ReferenceC = RTL_CONSTANT_STRING(L"{C}");
+    UNICODE_STRING Backslash = RTL_CONSTANT_STRING(L"a\\b");
+    UNICODE_STRING Slash = RTL_CONSTANT_STRING(L"a/b");
+    UNICODE_STRING Again;
     UNICODE_STRING First = { 0 };
     UNICODE_STRING Second = { 0 };
     UNICODE_STRING Third = { 0 };
@@ -196,6 +199,20 @@ START_TEST(IoInterfaceOrderCheck)
                   STATUS_SUCCESS);
         ok_eq_ulong(Value, 0x5a5aUL);
     }
+    if (NT_SUCCESS(Status))
+    {
+        /* A second registration of an instance gives its name and says it existed */
+        ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceA, &Again), STATUS_OBJECT_NAME_EXISTS);
+        ok(RtlEqualUnicodeString(&Again, &First, TRUE), "registered again as %wZ, expected %wZ\n", &Again, &First);
+        RtlFreeUnicodeString(&Again);
+    }
+
+    /* A reference string is one path component */
+    ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &Backslash, &Again), STATUS_INVALID_DEVICE_REQUEST);
+    RtlFreeUnicodeString(&Again);
+    ok_eq_hex(IoRegisterDeviceInterface(Pdo, &TestInterface, &Slash, &Again), STATUS_INVALID_DEVICE_REQUEST);
+    RtlFreeUnicodeString(&Again);
+
     if (NT_SUCCESS(Status)) Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceB, &Second);
     ok_eq_hex(Status, STATUS_SUCCESS);
 
