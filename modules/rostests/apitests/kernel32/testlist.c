@@ -91,6 +91,7 @@ extern void func_KernelBaseRegistry(void);
 extern void func_KernelBaseUrl(void);
 extern void func_KnownDlls(void);
 extern void func_LCMapString(void);
+extern void func_LoadLibraryAlteredSearchPath(void);
 extern void func_LoadLibraryExW(void);
 extern void func_LockFileClose(void);
 extern void func_LockFileEx(void);
@@ -299,6 +300,7 @@ const struct test winetest_testlist[] =
     { "KernelBaseUrl",               func_KernelBaseUrl },
     { "KnownDlls",                   func_KnownDlls },
     { "LCMapString",                 func_LCMapString },
+    { "LoadLibraryAlteredSearchPath", func_LoadLibraryAlteredSearchPath },
     { "LoadLibraryExW",              func_LoadLibraryExW },
     { "LockFileClose",               func_LockFileClose },
     { "LockFileEx",                  func_LockFileEx },

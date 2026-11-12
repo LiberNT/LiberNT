@@ -96,6 +96,7 @@ list(APPEND SOURCE
     KernelBaseUrl.c
     KnownDlls.c
     LCMapString.c
+    LoadLibraryAlteredSearchPath.c
     LoadLibraryExW.c
     LockFileClose.c
     LockFileEx.c
