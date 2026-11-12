@@ -1071,7 +1071,7 @@ ExEnterCriticalRegionAndAcquireResourceExclusive(
 {
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(Resource, TRUE);
-    return NULL;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 PVOID
@@ -1081,7 +1081,7 @@ ExEnterCriticalRegionAndAcquireResourceShared(
 {
     KeEnterCriticalRegion();
     ExAcquireResourceSharedLite(Resource, TRUE);
-    return NULL;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 PVOID
@@ -1091,7 +1091,7 @@ ExEnterCriticalRegionAndAcquireSharedWaitForExclusive(
 {
     KeEnterCriticalRegion();
     ExAcquireSharedWaitForExclusive(Resource, TRUE);
-    return NULL;
+    return KeGetCurrentThread()->Win32Thread;
 }
 
 VOID
