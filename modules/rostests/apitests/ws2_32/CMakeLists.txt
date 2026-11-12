@@ -6,6 +6,7 @@ list(APPEND SOURCE
     MulticastInterface.c
     ReuseDelivery.c
     addresslistsort.c
+    afunix.c
     bind.c
     broadcast.c
     close.c
