@@ -145,6 +145,8 @@ static PKSPIN_LOCK_QUEUE KiAcquireTimerLock(ULONG Hand) {
     return &Bucket;
 }
 static void KiReleaseTimerLock(PKSPIN_LOCK_QUEUE Queue) { CHECK(pthread_mutex_unlock(Queue) == 0); }
+/* The architecture hook a timer insertion calls; the x86 one does nothing */
+#define KiClockTimerInserted(DueTime) ((void)(DueTime))
 static ULONG KiComputeTimerTableIndex(ULONGLONG DueTime) { (void)DueTime; return 0; }
 __attribute__((unused)) static void KxAcquireSpinLock(PKSPIN_LOCK Lock) { while (__atomic_exchange_n(Lock, 1, __ATOMIC_ACQUIRE)) sched_yield(); }
 __attribute__((unused)) static void KxReleaseSpinLock(PKSPIN_LOCK Lock) { __atomic_store_n(Lock, 0, __ATOMIC_RELEASE); }
