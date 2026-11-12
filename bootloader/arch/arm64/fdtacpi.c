@@ -11,8 +11,7 @@
 #include <Fdt.h>
 #include <drivers/acpi/acpi.h>
 #include <reactos/arm64/acpi.h>
-/* TODO: move the FDT reader out of reactos/riscv64 now that ARM64 shares it */
-#include <reactos/riscv64/fdtlib.h>
+#include <libernt/fdtlib.h>
 
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
@@ -79,7 +78,7 @@ C_ASSERT(FIELD_OFFSET(FADT, x_dsdt) == 140);
 
 typedef struct _FDTACPI_PLATFORM
 {
-    RISCV_FDT Fdt;
+    FDT Fdt;
     ULONG Root;
     ULONG Cpus;
     ULONG CpuCount;
@@ -106,7 +105,7 @@ typedef struct _FDTACPI_PLATFORM
 
 typedef BOOLEAN
 (*PFDTACPI_MATCH)(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ const VOID *Context);
 
@@ -150,7 +149,7 @@ static const CHAR *const FdtAcpiNs16550Compatible[] =
 static
 BOOLEAN
 FdtAcpiIsCompatible(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ const CHAR *const *Names)
 {
@@ -158,13 +157,13 @@ FdtAcpiIsCompatible(
     ULONG Length;
     ULONG Index;
 
-    Compatible = RiscvFdtGetProperty(Fdt, Node, "compatible", &Length);
+    Compatible = FdtGetProperty(Fdt, Node, "compatible", &Length);
     if (!Compatible)
         return FALSE;
 
     for (Index = 0; Names[Index]; Index++)
     {
-        if (RiscvFdtStringListContains(Compatible, Length, Names[Index]))
+        if (FdtStringListContains(Compatible, Length, Names[Index]))
             return TRUE;
     }
 
@@ -174,13 +173,13 @@ FdtAcpiIsCompatible(
 static
 BOOLEAN
 FdtAcpiIsEnabled(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node)
 {
     const CHAR *Status;
     ULONG Length;
 
-    Status = RiscvFdtGetProperty(Fdt, Node, "status", &Length);
+    Status = FdtGetProperty(Fdt, Node, "status", &Length);
     if (!Status || Length == 0)
         return TRUE;
 
@@ -190,7 +189,7 @@ FdtAcpiIsEnabled(
 static
 BOOLEAN
 FdtAcpiMatchCompatible(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ const VOID *Context)
 {
@@ -201,14 +200,14 @@ FdtAcpiMatchCompatible(
 static
 BOOLEAN
 FdtAcpiMatchPhandle(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ const VOID *Context)
 {
     ULONG Phandle;
 
-    if (!RiscvFdtReadU32(Fdt, Node, "phandle", &Phandle) &&
-        !RiscvFdtReadU32(Fdt, Node, "linux,phandle", &Phandle))
+    if (!FdtReadU32(Fdt, Node, "phandle", &Phandle) &&
+        !FdtReadU32(Fdt, Node, "linux,phandle", &Phandle))
     {
         return FALSE;
     }
@@ -219,7 +218,7 @@ FdtAcpiMatchPhandle(
 static
 BOOLEAN
 FdtAcpiFindNodeBelow(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node,
     _In_ ULONG Parent,
     _In_ ULONG Depth,
@@ -240,9 +239,9 @@ FdtAcpiFindNodeBelow(
     if (Depth >= FDTACPI_MAX_DEPTH)
         return FALSE;
 
-    for (Child = RiscvFdtFirstChild(Fdt, Node);
-         Child != RISCV_FDT_NO_NODE;
-         Child = RiscvFdtNextSibling(Fdt, Child))
+    for (Child = FdtFirstChild(Fdt, Node);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(Fdt, Child))
     {
         if (FdtAcpiFindNodeBelow(Fdt, Child, Node, Depth + 1, Match, Context, Found, FoundParent))
             return TRUE;
@@ -262,7 +261,7 @@ FdtAcpiFindNode(
 {
     return FdtAcpiFindNodeBelow(&Platform->Fdt,
                                 Platform->Root,
-                                RISCV_FDT_NO_NODE,
+                                FDT_NO_NODE,
                                 0,
                                 Match,
                                 Context,
@@ -283,7 +282,7 @@ FdtAcpiParentMapsOneToOne(
         return TRUE;
 
     /* TODO: translate addresses through a non-empty parent "ranges" */
-    return RiscvFdtGetProperty(&Platform->Fdt, Parent, "ranges", &Length) != NULL && Length == 0;
+    return FdtGetProperty(&Platform->Fdt, Parent, "ranges", &Length) != NULL && Length == 0;
 }
 
 static
@@ -294,17 +293,17 @@ FdtAcpiReadInterruptParent(
     _In_ ULONG Parent,
     _Out_ PULONG Phandle)
 {
-    if (RiscvFdtReadU32(&Platform->Fdt, Node, "interrupt-parent", Phandle))
+    if (FdtReadU32(&Platform->Fdt, Node, "interrupt-parent", Phandle))
         return TRUE;
 
     /* TODO: inherit interrupt-parent from ancestors above the direct parent */
-    if (Parent != RISCV_FDT_NO_NODE &&
-        RiscvFdtReadU32(&Platform->Fdt, Parent, "interrupt-parent", Phandle))
+    if (Parent != FDT_NO_NODE &&
+        FdtReadU32(&Platform->Fdt, Parent, "interrupt-parent", Phandle))
     {
         return TRUE;
     }
 
-    return RiscvFdtReadU32(&Platform->Fdt, Platform->Root, "interrupt-parent", Phandle);
+    return FdtReadU32(&Platform->Fdt, Platform->Root, "interrupt-parent", Phandle);
 }
 
 static
@@ -348,13 +347,13 @@ FdtAcpiLocateGic(
     _Out_ PULONG GicParent)
 {
     ULONG Node = Platform->Root;
-    ULONG Parent = RISCV_FDT_NO_NODE;
+    ULONG Parent = FDT_NO_NODE;
     ULONG Phandle;
     ULONG Hop;
 
     for (Hop = 0; Hop < FDTACPI_MAX_INTERRUPT_HOPS; Hop++)
     {
-        if (!RiscvFdtReadU32(&Platform->Fdt, Node, "interrupt-parent", &Phandle) ||
+        if (!FdtReadU32(&Platform->Fdt, Node, "interrupt-parent", &Phandle) ||
             !FdtAcpiNodeFromPhandle(Platform, Phandle, &Node, &Parent))
         {
             break;
@@ -389,37 +388,37 @@ FdtAcpiDescribeGic(
 
     if (!FdtAcpiLocateGic(Platform, &Parent) ||
         !FdtAcpiParentMapsOneToOne(Platform, Parent) ||
-        !RiscvFdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 0, &Platform->GicdBase, &Size))
+        !FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 0, &Platform->GicdBase, &Size))
     {
         ERR("ARM64: the device tree has no usable GIC\n");
         return FALSE;
     }
 
-    if (!RiscvFdtReadU32(&Platform->Fdt, Platform->Gic, "#interrupt-cells", &Platform->GicInterruptCells))
+    if (!FdtReadU32(&Platform->Fdt, Platform->Gic, "#interrupt-cells", &Platform->GicInterruptCells))
         Platform->GicInterruptCells = 0;
 
     if (Platform->GicVersion == 3)
     {
-        if (!RiscvFdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GicrBase, &Platform->GicrLength))
+        if (!FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GicrBase, &Platform->GicrLength))
             return FALSE;
 
         /* TODO: describe more than the first "#redistributor-regions" entry */
         return TRUE;
     }
 
-    return RiscvFdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GiccBase, &Size);
+    return FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GiccBase, &Size);
 }
 
 static
 BOOLEAN
 FdtAcpiIsCpu(
-    _In_ const RISCV_FDT *Fdt,
+    _In_ const FDT *Fdt,
     _In_ ULONG Node)
 {
     const CHAR *DeviceType;
     ULONG Length;
 
-    DeviceType = RiscvFdtGetProperty(Fdt, Node, "device_type", &Length);
+    DeviceType = FdtGetProperty(Fdt, Node, "device_type", &Length);
     return DeviceType && Length == sizeof("cpu") && !memcmp(DeviceType, "cpu", sizeof("cpu")) &&
            FdtAcpiIsEnabled(Fdt, Node);
 }
@@ -434,8 +433,8 @@ FdtAcpiReadCpuMpidr(
     const VOID *Reg;
     ULONG Length;
 
-    Reg = RiscvFdtGetProperty(&Platform->Fdt, Node, "reg", &Length);
-    if (!Reg || !RiscvFdtReadCells(Reg, Length, 0, Platform->CpuAddressCells, Mpidr))
+    Reg = FdtGetProperty(&Platform->Fdt, Node, "reg", &Length);
+    if (!Reg || !FdtReadCells(Reg, Length, 0, Platform->CpuAddressCells, Mpidr))
         return FALSE;
 
     *Mpidr &= FDTACPI_MPIDR_AFFINITY_MASK;
@@ -451,17 +450,17 @@ FdtAcpiDescribeCpus(
     ULONG Node;
     ULONGLONG Mpidr;
 
-    if (!RiscvFdtFindNode(&Platform->Fdt, "/cpus", &Platform->Cpus, NULL))
+    if (!FdtFindNode(&Platform->Fdt, "/cpus", &Platform->Cpus, NULL))
     {
         ERR("ARM64: the device tree has no /cpus node\n");
         return FALSE;
     }
 
-    RiscvFdtGetCellCounts(&Platform->Fdt, Platform->Cpus, &Platform->CpuAddressCells, &SizeCells);
+    FdtGetCellCounts(&Platform->Fdt, Platform->Cpus, &Platform->CpuAddressCells, &SizeCells);
 
-    for (Node = RiscvFdtFirstChild(&Platform->Fdt, Platform->Cpus);
-         Node != RISCV_FDT_NO_NODE;
-         Node = RiscvFdtNextSibling(&Platform->Fdt, Node))
+    for (Node = FdtFirstChild(&Platform->Fdt, Platform->Cpus);
+         Node != FDT_NO_NODE;
+         Node = FdtNextSibling(&Platform->Fdt, Node))
     {
         if (FdtAcpiIsCpu(&Platform->Fdt, Node) && FdtAcpiReadCpuMpidr(Platform, Node, &Mpidr))
             Platform->CpuCount++;
@@ -486,13 +485,13 @@ FdtAcpiDescribePsci(
     ULONG Length;
     ULONG Node;
 
-    if (!RiscvFdtFindNode(&Platform->Fdt, "/psci", &Node, NULL) ||
+    if (!FdtFindNode(&Platform->Fdt, "/psci", &Node, NULL) ||
         !FdtAcpiIsCompatible(&Platform->Fdt, Node, Compatible))
     {
         return;
     }
 
-    Method = RiscvFdtGetProperty(&Platform->Fdt, Node, "method", &Length);
+    Method = FdtGetProperty(&Platform->Fdt, Node, "method", &Length);
     if (!Method || Length != sizeof("smc"))
         return;
 
@@ -521,9 +520,9 @@ FdtAcpiDecodeGicInterrupt(
     ULONG First = Index * Platform->GicInterruptCells;
 
     if (Platform->GicInterruptCells != 3 ||
-        !RiscvFdtReadCells(Interrupts, Length, First, 1, &Type) ||
-        !RiscvFdtReadCells(Interrupts, Length, First + 1, 1, &Number) ||
-        !RiscvFdtReadCells(Interrupts, Length, First + 2, 1, &Flags))
+        !FdtReadCells(Interrupts, Length, First, 1, &Type) ||
+        !FdtReadCells(Interrupts, Length, First + 1, 1, &Number) ||
+        !FdtReadCells(Interrupts, Length, First + 2, 1, &Flags))
     {
         return FALSE;
     }
@@ -575,11 +574,11 @@ FdtAcpiDescribeTimer(
         return;
     }
 
-    Interrupts = RiscvFdtGetProperty(&Platform->Fdt, Node, "interrupts", &Length);
+    Interrupts = FdtGetProperty(&Platform->Fdt, Node, "interrupts", &Length);
     if (!Interrupts)
         return;
 
-    AlwaysOn = RiscvFdtGetProperty(&Platform->Fdt, Node, "always-on", &AlwaysOnLength) != NULL;
+    AlwaysOn = FdtGetProperty(&Platform->Fdt, Node, "always-on", &AlwaysOnLength) != NULL;
 
     for (Index = 0; Index < FDTACPI_TIMER_COUNT; Index++)
     {
@@ -619,15 +618,15 @@ FdtAcpiDescribeUart(
     ULONG Trigger;
     ULONGLONG Size;
 
-    if (!RiscvFdtFindNode(&Platform->Fdt, "/chosen", &Chosen, NULL))
+    if (!FdtFindNode(&Platform->Fdt, "/chosen", &Chosen, NULL))
         return;
 
-    Path = RiscvFdtGetProperty(&Platform->Fdt, Chosen, "stdout-path", &Length);
+    Path = FdtGetProperty(&Platform->Fdt, Chosen, "stdout-path", &Length);
     if (!Path || Length == 0 || Path[Length - 1] != '\0' ||
-        !RiscvFdtResolvePath(&Platform->Fdt, Path, &Node, &Parent, NULL) ||
-        Parent == RISCV_FDT_NO_NODE || !FdtAcpiIsEnabled(&Platform->Fdt, Node) ||
+        !FdtResolvePath(&Platform->Fdt, Path, &Node, &Parent, NULL) ||
+        Parent == FDT_NO_NODE || !FdtAcpiIsEnabled(&Platform->Fdt, Node) ||
         !FdtAcpiParentMapsOneToOne(Platform, Parent) ||
-        !RiscvFdtReadReg(&Platform->Fdt, Node, Parent, 0, &Platform->UartBase, &Size))
+        !FdtReadReg(&Platform->Fdt, Node, Parent, 0, &Platform->UartBase, &Size))
     {
         return;
     }
@@ -640,8 +639,8 @@ FdtAcpiDescribeUart(
     }
     else if (FdtAcpiIsCompatible(&Platform->Fdt, Node, FdtAcpiNs16550Compatible))
     {
-        RiscvFdtReadU32(&Platform->Fdt, Node, "reg-shift", &RegShift);
-        RiscvFdtReadU32(&Platform->Fdt, Node, "reg-io-width", &IoWidth);
+        FdtReadU32(&Platform->Fdt, Node, "reg-shift", &RegShift);
+        FdtReadU32(&Platform->Fdt, Node, "reg-io-width", &IoWidth);
 
         /* TODO: describe 16550 UARTs with spaced registers once the early UART honors the stride */
         if (RegShift != 0 || IoWidth != 1)
@@ -656,7 +655,7 @@ FdtAcpiDescribeUart(
         return;
     }
 
-    Interrupts = RiscvFdtGetProperty(&Platform->Fdt, Node, "interrupts", &Length);
+    Interrupts = FdtGetProperty(&Platform->Fdt, Node, "interrupts", &Length);
     if (Interrupts && FdtAcpiInterruptsGoToGic(Platform, Node, Parent) &&
         !FdtAcpiDecodeGicInterrupt(Platform, Interrupts, Length, 0, &Platform->UartInterrupt, &Trigger))
     {
@@ -889,9 +888,9 @@ FdtAcpiBuildMadt(
     FdtAcpiFillHeader(&Madt->Header, APIC_SIGNATURE, Length, 5);
     Gicc = (PARM64_ACPI_MADT_GENERIC_INTERRUPT)(Madt + 1);
 
-    for (Node = RiscvFdtFirstChild(&Platform->Fdt, Platform->Cpus);
-         Node != RISCV_FDT_NO_NODE && Index < Platform->CpuCount;
-         Node = RiscvFdtNextSibling(&Platform->Fdt, Node))
+    for (Node = FdtFirstChild(&Platform->Fdt, Platform->Cpus);
+         Node != FDT_NO_NODE && Index < Platform->CpuCount;
+         Node = FdtNextSibling(&Platform->Fdt, Node))
     {
         if (!FdtAcpiIsCpu(&Platform->Fdt, Node) || !FdtAcpiReadCpuMpidr(Platform, Node, &Mpidr))
             continue;
@@ -1125,14 +1124,14 @@ Arm64DescribeDeviceTreePlatform(VOID)
         return;
 
     RtlZeroMemory(&Platform, sizeof(Platform));
-    if (!RiscvFdtOpen(DeviceTree, RISCV_FDT_MAXIMUM_SIZE, &Platform.Fdt))
+    if (!FdtOpen(DeviceTree, FDT_MAXIMUM_SIZE, &Platform.Fdt))
     {
         ERR("ARM64: the firmware device tree is not valid\n");
         return;
     }
 
-    Platform.Root = RiscvFdtRootNode(&Platform.Fdt);
-    if (Platform.Root == RISCV_FDT_NO_NODE ||
+    Platform.Root = FdtRootNode(&Platform.Fdt);
+    if (Platform.Root == FDT_NO_NODE ||
         !FdtAcpiDescribeCpus(&Platform) ||
         !FdtAcpiDescribeGic(&Platform))
     {
