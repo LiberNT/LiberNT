@@ -28,9 +28,23 @@ AtaAcpiEvaluateObject(
     KEVENT Event;
     NTSTATUS Status;
     PDEVICE_OBJECT TopDeviceObject;
+    PVOID SystemBuffer;
+    ULONG SystemBufferLength;
+
+    ASSERT(InputBuffer != NULL && InputBufferLength != 0);
+    ASSERT((OutputBuffer == NULL) == (OutputBufferLength == 0));
 
     /* Get the ACPI bus filter device for this DO */
     TopDeviceObject = IoGetAttachedDeviceReference(DeviceObject);
+
+    SystemBufferLength = max(InputBufferLength, OutputBufferLength);
+    SystemBuffer = ExAllocatePoolUninitialized(NonPagedPool, SystemBufferLength, TAG_PCIIDEX);
+    if (!SystemBuffer)
+    {
+        ObDereferenceObject(TopDeviceObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlCopyMemory(SystemBuffer, InputBuffer, InputBufferLength);
 
     /*
      * We could be called at DISPATCH_LEVEL,
@@ -39,10 +53,11 @@ AtaAcpiEvaluateObject(
     Irp = IoAllocateIrp(TopDeviceObject->StackSize, 0);
     if (!Irp)
     {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Exit;
+        ExFreePoolWithTag(SystemBuffer, TAG_PCIIDEX);
+        ObDereferenceObject(TopDeviceObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
-    Irp->AssociatedIrp.SystemBuffer = InputBuffer;
+    Irp->AssociatedIrp.SystemBuffer = SystemBuffer;
     Irp->UserBuffer = OutputBuffer;
     Irp->Flags |= IRP_BUFFERED_IO | IRP_INPUT_OPERATION;
     Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
@@ -74,7 +89,11 @@ AtaAcpiEvaluateObject(
         Status = Irp->IoStatus.Status;
     }
 
-    RtlCopyMemory(OutputBuffer, InputBuffer, min(Irp->IoStatus.Information, OutputBufferLength));
+    ASSERT(Irp->IoStatus.Information <= SystemBufferLength);
+    if (OutputBuffer)
+        RtlCopyMemory(OutputBuffer, SystemBuffer, min(Irp->IoStatus.Information, OutputBufferLength));
+    IoFreeIrp(Irp);
+    ExFreePoolWithTag(SystemBuffer, TAG_PCIIDEX);
 
     if (OutputBuffer && NT_SUCCESS(Status))
     {
@@ -89,7 +108,6 @@ AtaAcpiEvaluateObject(
         }
     }
 
-Exit:
     ObDereferenceObject(TopDeviceObject);
     return Status;
 }
@@ -256,6 +274,7 @@ AtaAcpiGetTaskFile(
             OutputSize = OutputBuffer->Length;
 
             ExFreePoolWithTag(OutputBuffer, TAG_PCIIDEX);
+            OutputBuffer = NULL;
             continue;
         }
 
@@ -286,7 +305,8 @@ AtaAcpiGetTaskFile(
     return OutputBuffer;
 
 Cleanup:
-    ExFreePoolWithTag(OutputBuffer, TAG_PCIIDEX);
+    if (OutputBuffer)
+        ExFreePoolWithTag(OutputBuffer, TAG_PCIIDEX);
 
     return NULL;
 }
