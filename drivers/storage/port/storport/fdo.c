@@ -1412,6 +1412,9 @@ PortFdoRestartRequestsDpc(
     PIO_STACK_LOCATION Stack;
     PLIST_ENTRY Entry;
     PIRP Irp;
+    ULONGLONG Now;
+    ULONGLONG RetryAt;
+    LARGE_INTEGER DueTime;
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
@@ -1420,21 +1423,39 @@ PortFdoRestartRequestsDpc(
     for (;;)
     {
         Irp = NULL;
+        RetryAt = 0;
         KeAcquireSpinLockAtDpcLevel(&DeviceExtension->RequestHoldLock);
+        Now = KeQueryInterruptTime();
         for (Entry = DeviceExtension->HeldRequests.Flink;
              Entry != &DeviceExtension->HeldRequests;
              Entry = Entry->Flink)
         {
-            if (PortFdoRequestBlockedLocked(DeviceExtension, CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry)))
+            PIRP Held = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+
+            if (PortFdoRequestBlockedLocked(DeviceExtension, Held))
+            {
+                PPDO_DEVICE_EXTENSION Unit = PortFdoRequestUnit(Held);
+
+                if ((Unit != NULL) && (Unit->BusyUntil > Now) && ((RetryAt == 0) || (Unit->BusyUntil < RetryAt)))
+                    RetryAt = Unit->BusyUntil;
                 continue;
+            }
             RemoveEntryList(Entry);
-            Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+            Irp = Held;
             PortFdoCountRequestLocked(DeviceExtension, Irp, 1);
             break;
         }
         KeReleaseSpinLockFromDpcLevel(&DeviceExtension->RequestHoldLock);
         if (Irp == NULL)
+        {
+            /* A unit still busy is looked at again once its busy time is over: nothing else would restart it */
+            if (RetryAt != 0)
+            {
+                DueTime.QuadPart = -(LONGLONG)(RetryAt - Now);
+                KeSetTimer(&DeviceExtension->BusyRetryTimer, DueTime, &DeviceExtension->BusyRetryDpc);
+            }
             break;
+        }
 
         Stack = IoGetCurrentIrpStackLocation(Irp);
         PortSubmitSrb(DeviceExtension, Stack->DeviceObject, Irp, Stack->Parameters.Scsi.Srb);
