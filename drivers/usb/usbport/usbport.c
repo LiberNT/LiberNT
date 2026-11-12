@@ -3280,6 +3280,9 @@ USBPORT_AddDevice(IN PDRIVER_OBJECT DriverObject,
     FdoCommonExtension->LowerPdoDevice = PhysicalDeviceObject;
     FdoCommonExtension->IsPDO = FALSE;
 
+    /* Until the resources name the bus, a controller is taken for a PCI one */
+    FdoExtension->BusInterfaceType = PCIBus;
+
     LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject,
                                               PhysicalDeviceObject);
 

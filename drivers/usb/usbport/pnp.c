@@ -1262,7 +1262,7 @@ USBPORT_StartDevice(IN PDEVICE_OBJECT FdoDevice,
     UsbPortResources->Reserved &= ~USBPORT_RES_DMA_ADDR_MASK;
     UsbPortResources->Reserved |= Use64BitDma ? USBPORT_RES_DMA_ADDR_64BIT
                                               : USBPORT_RES_DMA_ADDR_32BIT;
-    DeviceDescription.InterfaceType = PCIBus;
+    DeviceDescription.InterfaceType = FdoExtension->BusInterfaceType;
     DeviceDescription.DmaSpeed = Compatible;
     DeviceDescription.MaximumLength = MAXULONG;
 
@@ -1864,7 +1864,17 @@ USBPORT_ParseResources(IN PDEVICE_OBJECT FdoDevice,
 
     if (AllocatedResourcesTranslated)
     {
+        PUSBPORT_DEVICE_EXTENSION ResourceFdoExtension = FdoDevice->DeviceExtension;
+
         RtlZeroMemory(UsbPortResources, sizeof(USBPORT_RESOURCES));
+
+        /*
+         * A controller of the platform itself, described by the firmware
+         * instead of a PCI function, needs its own bus named when its DMA
+         * adapter is asked for.
+         */
+        ResourceFdoExtension->BusInterfaceType =
+            AllocatedResourcesTranslated->List[0].InterfaceType;
 
         ResourceList = &AllocatedResourcesTranslated->List[0].PartialResourceList;
 
