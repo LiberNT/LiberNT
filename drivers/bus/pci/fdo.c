@@ -35,10 +35,12 @@ FdoLocateChildDevice(
         CurrentDevice = CONTAINING_RECORD(CurrentEntry, PCI_DEVICE, ListEntry);
 
         /* If both vendor ID and device ID match, it is the same device */
+        /* The debugger's device is kept under substitute IDs, so its slot alone identifies it */
         if ((CurrentDevice->BusNumber == BusNumber) &&
-            (PciConfig->VendorID == CurrentDevice->PciConfig.VendorID) &&
-            (PciConfig->DeviceID == CurrentDevice->PciConfig.DeviceID) &&
-            (SlotNumber.u.AsULONG == CurrentDevice->SlotNumber.u.AsULONG))
+            (SlotNumber.u.AsULONG == CurrentDevice->SlotNumber.u.AsULONG) &&
+            (CurrentDevice->IsDebuggingDevice ||
+             ((PciConfig->VendorID == CurrentDevice->PciConfig.VendorID) &&
+              (PciConfig->DeviceID == CurrentDevice->PciConfig.DeviceID))))
         {
             *Device = CurrentDevice;
             DPRINT("Done\n");

@@ -5480,6 +5480,10 @@ PciPdoDisableDecodes(_Inout_ PPDO_DEVICE_EXTENSION DeviceExtension)
     USHORT Command;
     USHORT DisabledCommand;
 
+    /* The kernel debugger keeps driving its device whatever happens to the device node */
+    if (DeviceExtension->PciDevice->IsDebuggingDevice)
+        return;
+
     if (PciPdoGetBusDataByOffset(DeviceExtension, &Command, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(Command)) != sizeof(Command))
     {
         DPRINT1("PCI PDO: failed to read command register while disabling %u:%02x:%02x.%u\n", PciPdoGetSegment(DeviceExtension), (UCHAR)DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber);
