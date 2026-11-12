@@ -42,6 +42,7 @@
 typedef struct
 {
     LIST_ENTRY ListEntry;
+    BOOL Arrival;
     WCHAR DeviceIds[ANYSIZE_ARRAY];
 } DeviceInstallParams;
 

@@ -557,6 +557,7 @@ ProcessDeviceInstallEvent(
     _In_ PPLUGPLAY_EVENT_BLOCK PnpEvent)
 {
     DeviceInstallParams* Params;
+    RPC_STATUS RpcStatus;
     DWORD len;
     DWORD DeviceIdLength;
     DPRINT("ProcessDeviceInstallEvent(%p)\n", PnpEvent);
@@ -576,6 +577,7 @@ ProcessDeviceInstallEvent(
         Params = HeapAlloc(GetProcessHeap(), 0, len);
         if (Params)
         {
+            Params->Arrival = UuidEqual(&PnpEvent->EventGuid, (UUID*)&GUID_DEVICE_ARRIVAL, &RpcStatus);
             wcscpy(Params->DeviceIds, PnpEvent->InstallDevice.DeviceId);
 
             /* Queue the event (will be dequeued by DeviceInstallThread) */

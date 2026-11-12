@@ -647,17 +647,49 @@ static BOOL FindNullChild(DEVINST Bus, PDEVINST Child, PWSTR Instance, ULONG Len
     return FALSE;
 }
 
-/* A reported child whose staged driver is a null one is installed by user mode and left down without a problem */
+static BOOL DeviceStarted(DEVINST Device, DWORD Timeout)
+{
+    ULONG Status = 0, Problem = 0;
+    DWORD Start = GetTickCount();
+
+    do
+    {
+        if (CM_Get_DevNode_Status(&Status, &Problem, Device, 0) == CR_SUCCESS && (Status & DN_STARTED))
+            return TRUE;
+        Sleep(10);
+    } while (GetTickCount() - Start < Timeout);
+
+    return FALSE;
+}
+
+/* A reported child whose staged driver is a null one is installed by user mode and left down without a problem.
+ * A device removed right after its start while user mode installs that child stays removed: its arrival is
+ * handled once it is gone and does not set it up again */
 static VOID CheckNullChild(DEVINST Bus)
 {
     WCHAR Driver[MAX_PATH], Instance[MAX_DEVICE_ID_LEN] = L"";
+    WCHAR VetoName[MAX_PATH];
     ULONG Status = 0, Problem = 0, Size;
+    PNP_VETO_TYPE VetoType;
     BOOL Configured = FALSE;
+    DEVINST Child, Other;
     DWORD Start;
-    DEVINST Child;
+
+    if (CM_Get_Child(&Other, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child\n");
+        return;
+    }
 
     SetRequest(L"NullChild", 1);
     ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok_once(CM_Query_And_Remove_SubTreeW(Other, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Other, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(DeviceStarted(Other, 1000), "The removed child did not start again\n");
+    ok_once(CM_Query_And_Remove_SubTreeW(Other, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
 
     Start = GetTickCount();
     do
@@ -673,6 +705,12 @@ static VOID CheckNullChild(DEVINST Bus)
     ok(Instance[0] != UNICODE_NULL, "The bus did not report the null driver child\n");
     ok(Configured, "%ls was not installed (status 0x%lx, problem %lu)\n", Instance, Status, Problem);
     ok(!(Status & DN_STARTED), "%ls was started (status 0x%lx)\n", Instance, Status);
+
+    ok_once(CMP_WaitNoPendingInstallEvents(1000), (ULONG)WAIT_OBJECT_0);
+    ok_once(CM_Get_DevNode_Status(&Status, &Problem, Other, 0), (ULONG)CR_SUCCESS);
+    ok(!(Status & DN_STARTED), "The child removed right after its start was started again (status 0x%lx)\n", Status);
+    ok_once(CM_Setup_DevNode(Other, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(DeviceStarted(Other, 1000), "The removed child did not start again\n");
 
     SetRequest(L"NullChild", 0);
     ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
