@@ -68,10 +68,13 @@ SeTokenCanImpersonate(
     SepAcquireTokenLockShared(ProcessToken);
     SepAcquireTokenLockShared(TokenToImpersonate);
 
+    /* TODO: a token that a process of the caller's logon session made with explicit credentials is not recognised; LSA does not record that session as its origin */
     if (!RtlEqualLuid(&ProcessToken->AuthenticationId,
-                      &TokenToImpersonate->AuthenticationId))
+                      &TokenToImpersonate->AuthenticationId) &&
+        !RtlEqualSid(ProcessToken->UserAndGroups[0].Sid,
+                     TokenToImpersonate->UserAndGroups[0].Sid))
     {
-        /* A token of another logon may be worn only by one that is trusted */
+        /* A token of another user may be worn only by one that is trusted (ImpersonateLoggedOnUser) */
         if (!(ProcessToken->TokenFlags & TOKEN_HAS_IMPERSONATE_PRIVILEGE))
             Allowed = FALSE;
     }

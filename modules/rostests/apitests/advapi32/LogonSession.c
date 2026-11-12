@@ -16,14 +16,14 @@
 #define TEST_USER L"LntLogonTest"
 #define TEST_PASSWORD L"Lnt!Logon#2026q"
 
+/* The child runs as another user, so the files go where any user may create one, not next to the test */
 static void GetDataPath(LPWSTR psz, SIZE_T cch, LPCWSTR pszName)
 {
-    LPWSTR p;
+    DWORD cchDir = GetEnvironmentVariableW(L"ProgramData", psz, (DWORD)cch);
 
-    GetModuleFileNameW(NULL, psz, (DWORD)cch);
-    p = wcsrchr(psz, L'\\');
-    if (p)
-        p[1] = UNICODE_NULL;
+    if (cchDir == 0 || cchDir >= cch)
+        psz[0] = UNICODE_NULL;
+    StringCchCatW(psz, cch, L"\\");
     StringCchCatW(psz, cch, pszName);
 }
 
