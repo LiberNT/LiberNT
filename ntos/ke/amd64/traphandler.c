@@ -175,19 +175,19 @@ Exit:
 
 #define MAX_SYSCALL_PARAMS 16
 
-NTSTATUS
+ULONG64
 NtSyscallFailure(void)
 {
     /* This is the failure function */
-    return (NTSTATUS)KeGetCurrentThread()->TrapFrame->Rax;
+    return (ULONG)KeGetCurrentThread()->TrapFrame->Rax;
 }
 
-NTSTATUS
+ULONG64
 KiConvertToGuiThreadFailure(VOID)
 {
     ULONG ServiceNumber = (ULONG)KeGetCurrentThread()->TrapFrame->Rax & SERVICE_NUMBER_MASK;
 
-    return KiGetGuiServiceFailureStatus(ServiceNumber);
+    return (ULONG)KiGetGuiServiceFailureStatus(ServiceNumber);
 }
 
 VOID
