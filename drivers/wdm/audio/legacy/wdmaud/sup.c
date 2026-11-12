@@ -358,7 +358,7 @@ GetSysAudioDevicePnpName(
 
     /* allocate buffer for the device */
     *Device = AllocateItem(NonPagedPool, BytesReturned);
-    if (!Device)
+    if (!*Device)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     /* query sysaudio again for the device path */
