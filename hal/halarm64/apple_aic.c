@@ -57,6 +57,8 @@ static ULONG AppleAicDieCount;
 static ULONG AppleAicDieStride;
 static ULONG AppleAicMaskSetOffset;
 static ULONG AppleAicMaskClrOffset;
+static ULONG AppleAicSwSetOffset;
+static ULONG AppleAicSwClrOffset;
 
 static volatile UCHAR AppleAicPmr[MAXIMUM_PROCESSORS];
 static volatile LONG AppleAicPendingSgi[MAXIMUM_PROCESSORS];
@@ -76,6 +78,7 @@ static UCHAR AppleAicDevicePriority[AIC_MAX_DEVICE_IRQS];
 static volatile LONG AppleAicDeviceEnabled[AIC_MAX_DEVICE_IRQS / 32];
 static volatile LONG AppleAicDeviceDeferred[AIC_MAX_DEVICE_IRQS / 32];
 static volatile LONG AppleAicDeviceDeferredAny;
+static volatile LONG AppleAicDeviceEdge[AIC_MAX_DEVICE_IRQS / 32];
 
 static const UCHAR AppleAicIrqlToPmr[HIGH_LEVEL + 1] =
 {
@@ -165,6 +168,16 @@ AppleAicMaskDevice(
     _In_ BOOLEAN Mask)
 {
     AppleAicWrite(AppleAicWordOffset(Mask ? AppleAicMaskSetOffset : AppleAicMaskClrOffset, Index),
+                  AppleAicBit(Index));
+}
+
+static
+VOID
+AppleAicSetSoftwareInterrupt(
+    _In_ ULONG Index,
+    _In_ BOOLEAN Pending)
+{
+    AppleAicWrite(AppleAicWordOffset(Pending ? AppleAicSwSetOffset : AppleAicSwClrOffset, Index),
                   AppleAicBit(Index));
 }
 
@@ -291,7 +304,13 @@ AppleAicAcknowledgeInterrupt(VOID)
     if (Index >= AIC_MAX_DEVICE_IRQS)
         return AIC_SPURIOUS_INTID;
     if (AppleAicDevicePriority[Index] < Pmr)
+    {
+        if ((ULONG)AppleAicDeviceEdge[Index / 32] & (1u << (Index % 32)))
+            AppleAicSetSoftwareInterrupt(Index, FALSE);
         return AIC_FIRST_DEVICE_INTID + Index;
+    }
+    if ((ULONG)AppleAicDeviceEdge[Index / 32] & (1u << (Index % 32)))
+        AppleAicSetSoftwareInterrupt(Index, TRUE);
     InterlockedOr(&AppleAicDeviceDeferred[Index / 32], (LONG)(1u << (Index % 32)));
     InterlockedExchange(&AppleAicDeviceDeferredAny, 1);
     return AIC_SPURIOUS_INTID;
@@ -397,8 +416,15 @@ AppleAicSetTriggerMode(
     _In_ ULONG IntId,
     _In_ BOOLEAN EdgeTriggered)
 {
-    UNREFERENCED_PARAMETER(IntId);
-    UNREFERENCED_PARAMETER(EdgeTriggered);
+    ULONG Index;
+
+    if (IntId < AIC_FIRST_DEVICE_INTID || IntId >= AIC_FIRST_DEVICE_INTID + AIC_MAX_DEVICE_IRQS)
+        return;
+    Index = IntId - AIC_FIRST_DEVICE_INTID;
+    if (EdgeTriggered)
+        InterlockedOr(&AppleAicDeviceEdge[Index / 32], (LONG)(1u << (Index % 32)));
+    else
+        InterlockedAnd(&AppleAicDeviceEdge[Index / 32], (LONG)~(1u << (Index % 32)));
 }
 
 static
@@ -535,7 +561,9 @@ AppleAicPhase0Initialize(
     }
 
     Words = AppleAicMaxIrq / 32;
-    AppleAicMaskSetOffset = (4 * AppleAicMaxIrq) + (2 * 4 * Words);
+    AppleAicSwSetOffset = 4 * AppleAicMaxIrq;
+    AppleAicSwClrOffset = AppleAicSwSetOffset + (4 * Words);
+    AppleAicMaskSetOffset = AppleAicSwClrOffset + (4 * Words);
     AppleAicMaskClrOffset = AppleAicMaskSetOffset + (4 * Words);
     AppleAicDieStride = (4 * AppleAicMaxIrq) + (5 * 4 * Words);
 
@@ -544,6 +572,8 @@ AppleAicPhase0Initialize(
         for (Word = 0; Word < Words; Word++)
         {
             AppleAicWrite(AppleAicIrqCfgOffset + (Die * AppleAicDieStride) + AppleAicMaskSetOffset + (4 * Word),
+                          0xFFFFFFFF);
+            AppleAicWrite(AppleAicIrqCfgOffset + (Die * AppleAicDieStride) + AppleAicSwClrOffset + (4 * Word),
                           0xFFFFFFFF);
         }
     }
