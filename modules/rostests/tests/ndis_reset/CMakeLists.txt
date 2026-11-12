@@ -1,4 +1,5 @@
 add_executable(ndis_reset ndis_reset.c thread_host.c)
+target_link_libraries(ndis_reset pseh)
 target_include_directories(ndis_reset PRIVATE ${REACTOS_SOURCE_DIR}/drivers/network/ndis/include)
 target_compile_definitions(ndis_reset PRIVATE NDIS_WRAPPER NDIS_MINIPORT_DRIVER)
 if(MSVC)

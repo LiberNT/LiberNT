@@ -219,7 +219,9 @@ static VOID NTAPI TestCancel(NDIS_HANDLE Context, PVOID Id)
     if (Active) CompleteStatus(Active, NDIS_STATUS_REQUEST_ABORTED);
 }
 
-static NDIS_STATUS NTAPI TestFilter(NDIS_HANDLE Context, PNDIS_OID_REQUEST Request)
+static FILTER_OID_REQUEST TestFilter;
+
+static NDIS_STATUS TestFilter(NDIS_HANDLE Context, PNDIS_OID_REQUEST Request)
 {
     Check("oid.filter_context", Context == &Filter);
     Check("oid.filter_irql", TestIrql <= DISPATCH_LEVEL);
@@ -238,7 +240,9 @@ static NDIS_STATUS NTAPI TestFilter(NDIS_HANDLE Context, PNDIS_OID_REQUEST Reque
     return NDIS_STATUS_PENDING;
 }
 
-static VOID NTAPI TestFilterCancel(NDIS_HANDLE Context, PVOID Id)
+static FILTER_CANCEL_OID_REQUEST TestFilterCancel;
+
+static VOID TestFilterCancel(NDIS_HANDLE Context, PVOID Id)
 {
     Check("oid.filter_cancel_context", Context == &Filter);
     Check("oid.cancel_after_upcall_returns", !InFilterCompletion);
@@ -248,7 +252,9 @@ static VOID NTAPI TestFilterCancel(NDIS_HANDLE Context, PVOID Id)
     NdisFOidRequestComplete(&Filter, Id == Requests[1].RequestId ? &Requests[1] : &Requests[0], NDIS_STATUS_REQUEST_ABORTED);
 }
 
-static VOID NTAPI TestFilterComplete(NDIS_HANDLE Context, PNDIS_OID_REQUEST Request, NDIS_STATUS Status)
+static FILTER_OID_REQUEST_COMPLETE TestFilterComplete;
+
+static VOID TestFilterComplete(NDIS_HANDLE Context, PNDIS_OID_REQUEST Request, NDIS_STATUS Status)
 {
     PNDIS_OID_REQUEST Original = Request;
     Check("oid.upcall_context", Context == &Filter);
