@@ -59,7 +59,8 @@ private:
     SHELLNEW_ITEM *m_pLinkItem; // Points to the link handler item in the m_pItems list.
     CComPtr<IUnknown> m_pSite;
     HMENU m_hSubMenu;
-    UINT m_idCmdFirst, m_idCmdFolder, m_idCmdLink;
+    UINT m_idCmdFirst, m_idCmdLast, m_idCmdFolder, m_idCmdLink;
+    BOOL m_bItemsInserted;
     BOOL m_bCustomIconFolder, m_bCustomIconLink;
     HICON m_hIconFolder, m_hIconLink;
     HBITMAP m_hbmFolder, m_hbmLink;
@@ -70,7 +71,8 @@ private:
     BOOL CacheItems();
     BOOL LoadCachedItems();
     BOOL LoadAllItems();
-    UINT InsertShellNewItems(HMENU hMenu, UINT idFirst, UINT idMenu);
+    void InsertFolderItem(HMENU hMenu, UINT idCmd);
+    void InsertShellNewItems(HMENU hMenu, UINT idCmd, UINT Pos);
     SHELLNEW_ITEM *FindItemFromIdOffset(UINT IdOffset);
     HRESULT CreateNewFolder(LPCMINVOKECOMMANDINFO lpici);
     HRESULT CreateNewItem(SHELLNEW_ITEM *pItem, LPCMINVOKECOMMANDINFO lpcmi);

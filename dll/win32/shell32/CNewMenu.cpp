@@ -31,8 +31,10 @@ CNewMenu::CNewMenu() :
     m_pLinkItem(NULL),
     m_pSite(NULL),
     m_idCmdFirst(0),
+    m_idCmdLast(0),
     m_idCmdFolder(-1),
     m_idCmdLink(-1),
+    m_bItemsInserted(FALSE),
     m_bCustomIconFolder(FALSE),
     m_bCustomIconLink(FALSE),
     m_hIconFolder(NULL),
@@ -400,27 +402,16 @@ CreateMenuItemBitmap(HICON hIcon)
     return hbm;
 }
 
-UINT
-CNewMenu::InsertShellNewItems(HMENU hMenu, UINT idCmdFirst, UINT Pos)
+void
+CNewMenu::InsertFolderItem(HMENU hMenu, UINT idCmd)
 {
     MENUITEMINFOW mii;
-    UINT idCmd = idCmdFirst;
     WCHAR wszBuf[256];
 
-    if (m_pItems == NULL)
-    {
-        if (!LoadAllItems())
-            return 0;
-    }
-
-    ZeroMemory(&mii, sizeof(mii));
-    mii.cbSize = sizeof(mii);
-
-    m_idCmdFirst = idCmd;
-
-    /* Insert the new folder action */
     if (!LoadStringW(shell32_hInstance, FCIDM_SHVIEW_NEWFOLDER, wszBuf, _countof(wszBuf)))
         wszBuf[0] = 0;
+    ZeroMemory(&mii, sizeof(mii));
+    mii.cbSize = sizeof(mii);
     mii.fMask = MIIM_ID | MIIM_BITMAP | MIIM_STRING;
     mii.dwTypeData = wszBuf;
     mii.cch = wcslen(mii.dwTypeData);
@@ -428,14 +419,31 @@ CNewMenu::InsertShellNewItems(HMENU hMenu, UINT idCmdFirst, UINT Pos)
     if (!m_hbmFolder)
         m_hbmFolder = CreateMenuItemBitmap(m_hIconFolder);
     mii.hbmpItem = m_hbmFolder;
-    if (InsertMenuItemW(hMenu, Pos++, TRUE, &mii))
-        m_idCmdFolder = idCmd++;
+    if (InsertMenuItemW(hMenu, 0, TRUE, &mii))
+        m_idCmdFolder = idCmd;
+}
+
+void
+CNewMenu::InsertShellNewItems(HMENU hMenu, UINT idCmd, UINT Pos)
+{
+    MENUITEMINFOW mii;
+    WCHAR wszBuf[256];
+
+    if (m_pItems == NULL)
+    {
+        if (!LoadAllItems())
+            return;
+    }
+
+    ZeroMemory(&mii, sizeof(mii));
+    mii.cbSize = sizeof(mii);
 
     /* Insert the new shortcut action */
-    if (m_pLinkItem)
+    if (m_pLinkItem && idCmd <= m_idCmdLast)
     {
         if (!LoadStringW(shell32_hInstance, FCIDM_SHVIEW_NEWLINK, wszBuf, _countof(wszBuf)))
             wszBuf[0] = 0;
+        mii.fMask = MIIM_ID | MIIM_BITMAP | MIIM_STRING;
         mii.dwTypeData = wszBuf;
         mii.cch = wcslen(mii.dwTypeData);
         mii.wID = idCmd;
@@ -456,7 +464,7 @@ CNewMenu::InsertShellNewItems(HMENU hMenu, UINT idCmdFirst, UINT Pos)
     mii.fMask = MIIM_ID | MIIM_BITMAP | MIIM_STRING | MIIM_DATA;
     mii.fType = 0;
 
-    for (SHELLNEW_ITEM *pCurItem = m_pItems; pCurItem; pCurItem = pCurItem->pNext)
+    for (SHELLNEW_ITEM *pCurItem = m_pItems; pCurItem && idCmd <= m_idCmdLast; pCurItem = pCurItem->pNext)
     {
         /* Skip shortcut item */
         if (pCurItem == m_pLinkItem)
@@ -473,8 +481,6 @@ CNewMenu::InsertShellNewItems(HMENU hMenu, UINT idCmdFirst, UINT Pos)
         if (InsertMenuItemW(hMenu, Pos++, TRUE, &mii))
             ++idCmd;
     }
-
-    return idCmd - idCmdFirst;
 }
 
 CNewMenu::SHELLNEW_ITEM *CNewMenu::FindItemFromIdOffset(UINT IdOffset)
@@ -723,7 +729,6 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
                            UINT uFlags)
 {
     MENUITEMINFOW mii;
-    UINT cItems = 0;
     WCHAR wszNew[200];
 
     WCHAR wszPath[MAX_PATH];
@@ -737,12 +742,19 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     if (!LoadStringW(shell32_hInstance, FCIDM_SHVIEW_NEW, wszNew, _countof(wszNew)))
         return E_FAIL;
 
+    if (idCmdLast < idCmdFirst)
+        return E_INVALIDARG;
+
     m_hSubMenu = CreateMenu();
     if (!m_hSubMenu)
         return E_FAIL;
 
-    cItems = InsertShellNewItems(m_hSubMenu, idCmdFirst + 1, 0);
+    /* The file types are inserted when the submenu opens, inside the reserved range */
     m_idCmdFirst = idCmdFirst;
+    m_idCmdLast = min(idCmdLast, idCmdFirst + 0x3F);
+    m_bItemsInserted = FALSE;
+    if (idCmdFirst < m_idCmdLast)
+        InsertFolderItem(m_hSubMenu, idCmdFirst + 1);
 
     ZeroMemory(&mii, sizeof(mii));
     mii.cbSize = sizeof(mii);
@@ -757,7 +769,7 @@ CNewMenu::QueryContextMenu(HMENU hMenu,
     if (!InsertMenuItemW(hMenu, indexMenu, TRUE, &mii))
         return E_FAIL;
 
-    return MAKE_HRESULT(SEVERITY_SUCCESS, 0, max(0x40, cItems + 1));
+    return MAKE_HRESULT(SEVERITY_SUCCESS, 0, m_idCmdLast - idCmdFirst + 1);
 }
 
 HRESULT
@@ -808,6 +820,15 @@ CNewMenu::HandleMenuMsg2(UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT *plRes
 {
     switch (uMsg)
     {
+    case WM_INITMENUPOPUP:
+        if ((HMENU)wParam == m_hSubMenu && !m_bItemsInserted && m_idCmdFolder != (UINT)-1)
+        {
+            m_bItemsInserted = TRUE;
+            InsertShellNewItems(m_hSubMenu, m_idCmdFolder + 1, GetMenuItemCount(m_hSubMenu));
+            if (plResult)
+                *plResult = 0;
+        }
+        break;
     case WM_MEASUREITEM:
         {
             MEASUREITEMSTRUCT* lpmis = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
