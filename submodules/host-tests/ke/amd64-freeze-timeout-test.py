@@ -111,6 +111,8 @@ static void YieldProcessor(void) {
     assert(Yields < 1000);
     if (Mode == 4 && Yields == 25) Cpus[1].IpiFrozen = IPI_FROZEN_STATE_FROZEN;
     if (Mode == 5 && Yields == 3) Failure = TRUE;
+    if (Mode == 11 && Yields == 2) Cpus[0].IpiFrozen = IPI_FROZEN_STATE_TARGET_FREEZE;
+    if (Mode == 11 && Yields == 5) Failure = TRUE;
 }
 static void KiNoteFreezeEpoch(void) { @NOTE@ }
 static ULONG64 KiQueryFreezeEpoch(void) { @EPOCH@ }
@@ -170,6 +172,12 @@ int main(void) {
     Reset(); Mode=10; TargetCrashOwner=TRUE;
     if (setjmp(Exit)==0) { KxFreezeExecution(); assert(!"freeze of the stop owner returned"); }
     assert(ExitReason==2 && Failure && Clock<10 && Cpus[1].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
+    Reset(); Mode=11; KiFreezeOwner=&Cpus[1]; CrashOwner=TRUE;
+    if (setjmp(Exit)==0) KxFreezeExecution();
+    assert(ExitReason==0 && Failure && Clock<10 && KiFreezeOwner==&Cpus[1] && Cpus[0].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
+    Reset(); Mode=11; KiFreezeOwner=&Cpus[1]; CrashOwner=TRUE; KiRelaxedTiming=TRUE;
+    if (setjmp(Exit)==0) KxFreezeExecution();
+    assert(ExitReason==0 && Failure && Yields==5 && KiFreezeOwner==&Cpus[1] && Cpus[0].IpiFrozen==IPI_FROZEN_STATE_TARGET_FREEZE);
     return 0;
 }
 '''
