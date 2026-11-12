@@ -704,13 +704,10 @@ CreateEnvironmentBlock(OUT LPVOID *lpEnvironment,
     if (hToken == NULL)
         return TRUE;
 
+    /* The user's own variables come only with the user's profile loaded (CreateEnvironmentBlock) */
     hKeyUser = GetCurrentUserKey(hToken);
     if (hKeyUser == NULL)
-    {
-        DPRINT1("GetCurrentUserKey() failed\n");
-        RtlDestroyEnvironment(*Environment);
-        return FALSE;
-    }
+        return TRUE;
 
     /* Set 'USERPROFILE' variable */
     Length = ARRAYSIZE(Buffer);
