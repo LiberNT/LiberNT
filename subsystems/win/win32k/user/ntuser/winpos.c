@@ -1432,6 +1432,7 @@ typedef struct _WINPOS_ENTRY
    BOOL bRefreshFrame;
    UINT Flags;
    HWND hwndBand;
+   HWND hwndChainAfter;
    WINDOWPOS WinPos;
    RECTL NewWindowRect;
    RECTL NewClientRect;
@@ -1739,6 +1740,13 @@ WinPosBatchAddRequest(PWINPOS_BATCH Batch, PWND Window, HWND hwndInsertAfter, IN
       {
          Entry->WinPos.hwndInsertAfter = Batch->Entries[i - 1].WinPos.hwnd;
          Entry->bChained = TRUE;
+         /* Windows 11 tells the active window of a moved owner group it goes to the top, and places it after the window before it */
+         if (Entry->Window->head.pti && Entry->Window->head.pti->MessageQueue &&
+             Entry->Window == Entry->Window->head.pti->MessageQueue->spwndActive)
+         {
+            Entry->hwndChainAfter = Entry->WinPos.hwndInsertAfter;
+            Entry->WinPos.hwndInsertAfter = HWND_TOP;
+         }
       }
    }
 }
@@ -2895,6 +2903,10 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
       if (Entry->bSilent)
          Entry->WinPos.flags |= SWP_NOSENDCHANGING;
       co_WinPosDoWinPosChanging(Entry->Window, &Entry->WinPos, &Entry->NewWindowRect, &Entry->NewClientRect);
+      if (Entry->hwndChainAfter && Entry->WinPos.hwndInsertAfter == HWND_TOP)
+         Entry->WinPos.hwndInsertAfter = Entry->hwndChainAfter;
+      else
+         Entry->hwndChainAfter = NULL;
 
       if (!IntIsWindow(Entry->WinPos.hwnd))
       {
@@ -2960,7 +2972,11 @@ co_WinPosBatchRun(PWINPOS_BATCH Batch)
    {
       Entry = &Batch->Entries[i];
       if (Entry->bActive && IntIsWindow(Entry->WinPos.hwnd))
+      {
+         if (Entry->hwndChainAfter)
+            Entry->WinPos.hwndInsertAfter = HWND_TOP;
          co_WinPosBatchChanged(Entry);
+      }
    }
 
    for (i = Batch->Count; i > 0; i--)
