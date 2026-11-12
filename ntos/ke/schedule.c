@@ -221,7 +221,7 @@ ULONG
 KiSelectTargetProcessor(
     _In_ PKTHREAD Thread)
 {
-    KAFFINITY Affinity, IdleSet, QuietSet;
+    KAFFINITY Affinity, IdleSet, QuietSet, IdleSmtSet;
     KAFFINITY IdealMask;
 
     Affinity = KiThreadRunnableSet(Thread);
@@ -250,8 +250,9 @@ KiSelectTargetProcessor(
         if (IdleSet & IdealMask)
             return Thread->IdealProcessor;
 
-        if (IdleSet & KiIdleSMTSummary)
-            return KiFirstSetProcessor(IdleSet & KiIdleSMTSummary);
+        IdleSmtSet = IdleSet & *(volatile KAFFINITY *)&KiIdleSMTSummary;
+        if (IdleSmtSet != 0)
+            return KiFirstSetProcessor(IdleSmtSet);
 
         return KiFirstSetProcessor(IdleSet);
     }
