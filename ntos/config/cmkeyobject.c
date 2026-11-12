@@ -121,6 +121,7 @@ CmpDeleteKeyObject(
 {
     PCM_KEY_BODY KeyBody = Object;
     PCM_KEY_CONTROL_BLOCK Kcb;
+    PCMHIVE CmHive;
 
     if (KeyBody->Type != CM_KEY_BODY_TYPE) return;
 
@@ -136,7 +137,11 @@ CmpDeleteKeyObject(
 
     DelistKeyBodyFromKCB(KeyBody, FALSE);
     KeyBody->KeyControlBlock = NULL;
-    CmpQueueAppHiveClose(CONTAINING_RECORD(Kcb->KeyHive, CMHIVE, Hive));
+
+    /* A hive unloaded under an open key is gone; only its control block is left */
+    CmHive = CmpFindLoadedHive(Kcb->KeyHive);
+    if (CmHive != NULL) CmpQueueAppHiveClose(CmHive);
+
     CmpDereferenceKeyControlBlock(Kcb);
 
     CmpUnlockRegistry();
