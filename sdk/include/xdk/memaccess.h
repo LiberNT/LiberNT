@@ -77,7 +77,7 @@ MemoryBarrier (
 # define _ReleaseBarrier()                    __asm__ __volatile__("lwsync" ::: "memory")
 # define _DataSynchronizationBarrier()        MemoryBarrier()
 # define _InstructionSynchronizationBarrier() __asm__ __volatile__("isync" ::: "memory")
-#elif defined(_LOONGARCH64_) || defined(__loongarch64__)
+#elif defined(_LOONGARCH64_) || defined(__loongarch64__) || defined(__loongarch64)
 /* dbar 0 orders every load and store; ibar 0 orders instruction fetches. */
 # define MemoryBarrier()                      __asm__ __volatile__("dbar 0" ::: "memory")
 # define _AcquireBarrier()                    __asm__ __volatile__("dbar 0" ::: "memory")
