@@ -364,6 +364,15 @@ CmiInheritedSecurityCell(IN PHHIVE Hive, IN HCELL_INDEX ParentCell)
     Owner = Base + Header.Owner;
     Group = Base + Header.Group;
 
+    /* A list that passes nothing down would lock everyone out; the subkey shares its parent's descriptor, as the Windows 11 boot store's keys do */
+    if ((Header.Control & MKHIVE_SE_DACL_PRESENT) && Header.Dacl &&
+        CmiInheritAcl(Base + Header.Dacl, Owner, Group, NULL) == 8)
+    {
+        Parent->ReferenceCount++;
+        HvReleaseCell(Hive, ParentCell);
+        return ParentCell;
+    }
+
     Length = sizeof(SECURITY_DESCRIPTOR_RELATIVE) + CmiSidLength(Owner) + CmiSidLength(Group);
     if ((Header.Control & MKHIVE_SE_DACL_PRESENT) && Header.Dacl)
         Length += CmiInheritAcl(Base + Header.Dacl, Owner, Group, NULL);

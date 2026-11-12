@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    BcdStoreAccess.c
     AddMandatoryAce.c
     ControlServiceEx.c
     CopySid.c

@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_BcdStoreAccess(void);
 extern void func_AddMandatoryAce(void);
 extern void func_ControlServiceEx(void);
 extern void func_CopySid(void);
@@ -58,6 +59,7 @@ extern void func_UserHiveAccess(void);
 
 const struct test winetest_testlist[] =
 {
+    { "BcdStoreAccess", func_BcdStoreAccess },
     { "AddMandatoryAce", func_AddMandatoryAce },
     { "ControlServiceEx", func_ControlServiceEx },
     { "CopySid", func_CopySid },
