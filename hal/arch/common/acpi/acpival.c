@@ -27,8 +27,13 @@ HalpAcpiRead32(
 static
 BOOLEAN
 HalpAcpiNameCharacter(
-    _In_ UCHAR Character)
+    _In_ UCHAR Character,
+    _In_ ULONG Position)
 {
+    /* The Alert Standard Format table is named "ASF!" */
+    if ((Character == '!') && (Position == 3))
+        return TRUE;
+
     return ((Character >= 'A' && Character <= 'Z') ||
             (Character >= '0' && Character <= '9') ||
             (Character == '_'));
@@ -54,7 +59,7 @@ HalpAcpiCheckTable(
     Check->Signature = HalpAcpiRead32(Table);
     for (Index = 0; Index < 4; Index++)
     {
-        if (!HalpAcpiNameCharacter(Table[Index]))
+        if (!HalpAcpiNameCharacter(Table[Index], Index))
             return HalpAcpiBadSignature;
     }
 

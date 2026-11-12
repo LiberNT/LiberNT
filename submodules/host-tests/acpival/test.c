@@ -83,6 +83,17 @@ TestTableHeader(VOID)
     MakeTable(Table, 36, "TESx");
     CHECK(HalpAcpiCheckTable(Table, 36, &Check) == HalpAcpiBadSignature);
 
+    /* The Alert Standard Format table ends its signature with an exclamation mark */
+    MakeTable(Table, 36, "ASF!");
+    CHECK(HalpAcpiCheckTable(Table, 36, &Check) == HalpAcpiAccepted);
+    CHECK(Check.Signature == 0x21465341);
+
+    /* It is accepted in that position only */
+    MakeTable(Table, 36, "A!SF");
+    CHECK(HalpAcpiCheckTable(Table, 36, &Check) == HalpAcpiBadSignature);
+    MakeTable(Table, 36, "!ASF");
+    CHECK(HalpAcpiCheckTable(Table, 36, &Check) == HalpAcpiBadSignature);
+
     /* Declared length below the header size */
     MakeTable(Table, 36, "TEST");
     Table[4] = 20;
