@@ -205,7 +205,9 @@ IopCheckVpbMounted(
 
     if (DeviceObject->Vpb == NULL) return NULL;
 
-    AllowRawMount = (OpenPacket->Options & IO_NO_PARAMETER_CHECKING) == 0;
+    AllowRawMount = (OpenPacket->Options & IO_NO_PARAMETER_CHECKING) == 0 &&
+                    RemainingName->Length == 0 &&
+                    OpenPacket->RelatedFileObject == NULL;
 
     while (TRUE)
     {
@@ -586,6 +588,8 @@ IoRegisterFileSystem(
     }
 
     ExReleaseResourceLite(&IopDatabaseResource);
+
+    DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
     Entry = IopFsRegistrationOps.Flink;
     while (Entry != &IopFsRegistrationOps)

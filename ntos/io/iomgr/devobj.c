@@ -959,10 +959,11 @@ IoAttachDeviceToDeviceStackSafe(
 
     TargetExtension = IoGetDevObjExtension(Top);
 
-    if (TargetExtension->ExtensionFlags & (DOE_UNLOAD_PENDING |
-                                           DOE_DELETE_PENDING |
-                                           DOE_REMOVE_PENDING |
-                                           DOE_REMOVE_PROCESSED))
+    if ((Top->Flags & DO_DEVICE_INITIALIZING) ||
+        (TargetExtension->ExtensionFlags & (DOE_UNLOAD_PENDING |
+                                            DOE_DELETE_PENDING |
+                                            DOE_REMOVE_PENDING |
+                                            DOE_REMOVE_PROCESSED)))
     {
         KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
         *AttachedToDeviceObject = NULL;
