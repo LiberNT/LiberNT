@@ -146,20 +146,36 @@ IopReferenceFromLinkName(
     _Out_ PUNICODE_STRING ReferenceString)
 {
     USHORT Count = SymbolicLinkName->Length / sizeof(WCHAR);
-    USHORT Index;
+    USHORT Index = (USHORT)(sizeof(L"\\??\\") / sizeof(WCHAR) - 1);
 
     RtlInitEmptyUnicodeString(ReferenceString, NULL, 0);
 
-    for (Index = Count; Index != 0; Index--)
-    {
-        if (SymbolicLinkName->Buffer[Index - 1] == L'}') break;
-    }
+    /* A reference string holds no separator, and the instance part has '#' for its separators */
+    while (Index < Count && SymbolicLinkName->Buffer[Index] != OBJ_NAME_PATH_SEPARATOR) Index++;
 
-    if (Index == 0 || Index >= Count || SymbolicLinkName->Buffer[Index] != OBJ_NAME_PATH_SEPARATOR) return;
+    if (Index >= Count) return;
 
     ReferenceString->Buffer = &SymbolicLinkName->Buffer[Index + 1];
     ReferenceString->Length = (USHORT)((Count - Index - 1) * sizeof(WCHAR));
     ReferenceString->MaximumLength = ReferenceString->Length;
+}
+
+/* The instances of one device and class share one link, named without their reference strings */
+static
+VOID
+IopGetInterfaceLinkObjectName(
+    _In_ PCUNICODE_STRING SymbolicLinkName,
+    _Out_ PUNICODE_STRING LinkObjectName)
+{
+    UNICODE_STRING Reference;
+
+    IopReferenceFromLinkName(SymbolicLinkName, &Reference);
+
+    *LinkObjectName = *SymbolicLinkName;
+    if (Reference.Buffer == NULL) return;
+
+    LinkObjectName->Length = (USHORT)((Reference.Buffer - 1 - SymbolicLinkName->Buffer) * sizeof(WCHAR));
+    LinkObjectName->MaximumLength = LinkObjectName->Length;
 }
 
 NTSTATUS
@@ -252,6 +268,49 @@ IopFindInterface(
     }
 
     return NULL;
+}
+
+static
+BOOLEAN
+IopIsInterfaceLinkShared(
+    _In_ PIOP_DEVICE_INTERFACE Interface)
+{
+    PIOP_DEVICE_INTERFACE Other;
+    UNICODE_STRING OtherName;
+    UNICODE_STRING Name;
+    PLIST_ENTRY Entry;
+
+    ASSERT(IopDeviceInterfaceLock.Owner == KeGetCurrentThread());
+
+    IopGetInterfaceLinkObjectName(&Interface->SymbolicLinkName, &Name);
+
+    for (Entry = IopDeviceInterfaceListHead.Flink; Entry != &IopDeviceInterfaceListHead; Entry = Entry->Flink)
+    {
+        Other = CONTAINING_RECORD(Entry, IOP_DEVICE_INTERFACE, ListEntry);
+        if (Other == Interface || !Other->Enabled) continue;
+        if (Other->PhysicalDeviceObject != Interface->PhysicalDeviceObject) continue;
+
+        IopGetInterfaceLinkObjectName(&Other->SymbolicLinkName, &OtherName);
+        if (RtlEqualUnicodeString(&OtherName, &Name, TRUE)) return TRUE;
+    }
+
+    return FALSE;
+}
+
+VOID
+IopDropInterfaceLink(
+    _In_ PIOP_DEVICE_INTERFACE Interface)
+{
+    UNICODE_STRING Name;
+
+    PAGED_CODE();
+    ASSERT(IopDeviceInterfaceLock.Owner == KeGetCurrentThread());
+    ASSERT(!Interface->Enabled);
+
+    if (IopIsInterfaceLinkShared(Interface)) return;
+
+    IopGetInterfaceLinkObjectName(&Interface->SymbolicLinkName, &Name);
+    IoDeleteSymbolicLink(&Name);
 }
 
 VOID
@@ -482,18 +541,20 @@ IoRegisterDeviceInterface(
 static
 NTSTATUS
 IopLinkDeviceInterface(
-    _In_ PIOP_DEVICE_INTERFACE Interface,
-    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
-    _In_ PUNICODE_STRING SymbolicLinkName)
+    _In_ PIOP_DEVICE_INTERFACE Interface)
 {
+    PDEVICE_OBJECT PhysicalDeviceObject = Interface->PhysicalDeviceObject;
     POBJECT_NAME_INFORMATION NameInfo;
-    UNICODE_STRING DeviceName;
+    UNICODE_STRING LinkObjectName;
     ULONG NameLength = 0;
     NTSTATUS Status;
 
     PAGED_CODE();
+    ASSERT(IopDeviceInterfaceLock.Owner == KeGetCurrentThread());
+    ASSERT(!Interface->Enabled);
 
     if (IopGetDeviceNode(PhysicalDeviceObject) == NULL) return STATUS_INVALID_DEVICE_REQUEST;
+    if (IopIsInterfaceLinkShared(Interface)) return STATUS_SUCCESS;
 
     Status = ObQueryNameString(PhysicalDeviceObject,
                                NULL,
@@ -519,21 +580,13 @@ IopLinkDeviceInterface(
         return Status;
     }
 
-    DeviceName = NameInfo->Name;
+    IopGetInterfaceLinkObjectName(&Interface->SymbolicLinkName, &LinkObjectName);
 
-    Status = IoCreateSymbolicLink(SymbolicLinkName, &DeviceName);
+    Status = IoCreateSymbolicLink(&LinkObjectName, &NameInfo->Name);
 
     ExFreePoolWithTag(NameInfo, TAG_IO_NAME);
 
-    if (!NT_SUCCESS(Status)) return Status;
-
-    IopSetInterfaceLinked(Interface, PhysicalDeviceObject, TRUE);
-
-    PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_ARRIVAL,
-                                  &Interface->ClassGuid,
-                                  SymbolicLinkName);
-
-    return STATUS_SUCCESS;
+    return Status;
 }
 
 NTSTATUS
@@ -563,40 +616,33 @@ IoSetDeviceInterfaceState(
         return Enable ? STATUS_OBJECT_NAME_EXISTS : STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    Interface->Enabled = Enable;
-
-    /* Present interfaces are listed in the order they were enabled, as on Windows 11 */
     if (Enable)
     {
+        Status = IopLinkDeviceInterface(Interface);
+        if (!NT_SUCCESS(Status))
+        {
+            KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+            return Status;
+        }
+
+        /* Present interfaces are listed in the order they were enabled, as on Windows 11 */
         RemoveEntryList(&Interface->ListEntry);
         InsertTailList(&IopDeviceInterfaceListHead, &Interface->ListEntry);
     }
+
+    Interface->Enabled = Enable;
+    if (!Enable) IopDropInterfaceLink(Interface);
 
     PhysicalDeviceObject = Interface->PhysicalDeviceObject;
     ObReferenceObject(PhysicalDeviceObject);
 
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
-    if (Enable)
-    {
-        Status = IopLinkDeviceInterface(Interface, PhysicalDeviceObject, SymbolicLinkName);
-        if (!NT_SUCCESS(Status))
-        {
-            KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
-            Interface->Enabled = FALSE;
-            KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
-        }
-    }
-    else
-    {
-        IoDeleteSymbolicLink(SymbolicLinkName);
+    IopSetInterfaceLinked(Interface, PhysicalDeviceObject, Enable);
 
-        IopSetInterfaceLinked(Interface, PhysicalDeviceObject, FALSE);
-
-        PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,
-                                      &Interface->ClassGuid,
-                                      SymbolicLinkName);
-    }
+    PiNotifyDeviceInterfaceChange(Enable ? &GUID_DEVICE_INTERFACE_ARRIVAL : &GUID_DEVICE_INTERFACE_REMOVAL,
+                                  &Interface->ClassGuid,
+                                  SymbolicLinkName);
 
     ObDereferenceObject(PhysicalDeviceObject);
 

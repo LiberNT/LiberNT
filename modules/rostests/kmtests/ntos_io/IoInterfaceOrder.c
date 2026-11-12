@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, and an unchanged state is reported
+ * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, and the instances of a device share the link named without their reference strings
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -89,12 +89,80 @@ ReferenceRootDevice(
     return Found;
 }
 
+/* An interface path is the link to the device followed by the reference string, which reaches the driver as the file name */
+static
+NTSTATUS
+LinkStatus(
+    _In_ PCUNICODE_STRING Interface,
+    _In_ PCUNICODE_STRING Reference,
+    _In_ PCUNICODE_STRING DeviceName)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Suffix;
+    UNICODE_STRING Target;
+    UNICODE_STRING Link;
+    WCHAR Buffer[128];
+    NTSTATUS Status;
+    HANDLE Handle;
+
+    if (Interface->Length <= Reference->Length + sizeof(WCHAR)) return STATUS_OBJECT_NAME_INVALID;
+
+    Link = *Interface;
+    Link.Length = Interface->Length - Reference->Length - sizeof(WCHAR);
+    Suffix.Buffer = &Interface->Buffer[Link.Length / sizeof(WCHAR) + 1];
+    Suffix.Length = Suffix.MaximumLength = Reference->Length;
+    ok(Interface->Buffer[Link.Length / sizeof(WCHAR)] == OBJ_NAME_PATH_SEPARATOR && RtlEqualUnicodeString(&Suffix, Reference, FALSE),
+       "%wZ does not end with its reference string %wZ\n", Interface, Reference);
+
+    InitializeObjectAttributes(&ObjectAttributes, &Link, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenSymbolicLinkObject(&Handle, SYMBOLIC_LINK_QUERY, &ObjectAttributes);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    RtlInitEmptyUnicodeString(&Target, Buffer, sizeof(Buffer));
+    Status = ZwQuerySymbolicLinkObject(Handle, &Target, NULL);
+    ZwClose(Handle);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+        ok(RtlEqualUnicodeString(&Target, DeviceName, TRUE), "%wZ links to %wZ, expected %wZ\n", &Link, &Target, DeviceName);
+
+    return Status;
+}
+
+static
+VOID
+CheckParametersKey(
+    _In_ PUNICODE_STRING Interface)
+{
+    UNICODE_STRING Expected = RTL_CONSTANT_STRING(L"\\#{C}\\Device Parameters");
+    UCHAR Buffer[sizeof(KEY_NAME_INFORMATION) + 512 * sizeof(WCHAR)];
+    PKEY_NAME_INFORMATION Info = (PKEY_NAME_INFORMATION)Buffer;
+    UNICODE_STRING Name;
+    ULONG Length;
+    NTSTATUS Status;
+    HANDLE Key;
+
+    Status = IoOpenDeviceInterfaceRegistryKey(Interface, KEY_READ, &Key);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status)) return;
+
+    Status = ZwQueryKey(Key, KeyNameInformation, Info, sizeof(Buffer), &Length);
+    ZwClose(Key);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status) || Info->NameLength < Expected.Length) return;
+
+    Name.Buffer = &Info->Name[(Info->NameLength - Expected.Length) / sizeof(WCHAR)];
+    Name.Length = Name.MaximumLength = Expected.Length;
+    ok(RtlEqualUnicodeString(&Name, &Expected, TRUE), "the parameters key of %wZ ends with %wZ\n", Interface, &Name);
+}
+
 START_TEST(IoInterfaceOrderCheck)
 {
     UNICODE_STRING ReferenceA = RTL_CONSTANT_STRING(L"A");
     UNICODE_STRING ReferenceB = RTL_CONSTANT_STRING(L"B");
+    UNICODE_STRING ReferenceC = RTL_CONSTANT_STRING(L"{C}");
     UNICODE_STRING First = { 0 };
     UNICODE_STRING Second = { 0 };
+    UNICODE_STRING Third = { 0 };
     UNICODE_STRING Entry;
     UNICODE_STRING DeviceName;
     PDEVICE_OBJECT Pdo;
@@ -118,6 +186,7 @@ START_TEST(IoInterfaceOrderCheck)
         ok_eq_hex(IoSetDeviceInterfaceState(&Second, TRUE), STATUS_SUCCESS);
         ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_SUCCESS);
         ok_eq_hex(IoSetDeviceInterfaceState(&First, TRUE), STATUS_OBJECT_NAME_EXISTS);
+        ok_eq_hex(LinkStatus(&First, &ReferenceA, &DeviceName), STATUS_SUCCESS);
 
         Status = IoGetDeviceInterfaces(&TestInterface, NULL, 0, &List);
         ok_eq_hex(Status, STATUS_SUCCESS);
@@ -134,11 +203,25 @@ START_TEST(IoInterfaceOrderCheck)
         }
 
         ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_SUCCESS);
+        ok_eq_hex(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_SUCCESS);
         ok_eq_hex(IoSetDeviceInterfaceState(&First, FALSE), STATUS_OBJECT_NAME_NOT_FOUND);
         ok_eq_hex(IoSetDeviceInterfaceState(&Second, FALSE), STATUS_SUCCESS);
+        ok_eq_hex(LinkStatus(&Second, &ReferenceB, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
+    }
+
+    Status = IoRegisterDeviceInterface(Pdo, &TestInterface, &ReferenceC, &Third);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        ok_eq_hex(IoSetDeviceInterfaceState(&Third, TRUE), STATUS_SUCCESS);
+        ok_eq_hex(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_SUCCESS);
+        CheckParametersKey(&Third);
+        ok_eq_hex(IoSetDeviceInterfaceState(&Third, FALSE), STATUS_SUCCESS);
+        ok_eq_hex(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
     }
 
     RtlFreeUnicodeString(&First);
     RtlFreeUnicodeString(&Second);
+    RtlFreeUnicodeString(&Third);
     ObDereferenceObject(Pdo);
 }

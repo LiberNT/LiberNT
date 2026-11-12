@@ -254,10 +254,10 @@ IopDisableDeviceInterfaces(
         if (!Interface->Enabled) continue;
 
         Interface->Enabled = FALSE;
+        IopDropInterfaceLink(Interface);
 
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 
-        IoDeleteSymbolicLink(&Interface->SymbolicLinkName);
         IopSetInterfaceLinked(Interface, DeviceNode->PhysicalDeviceObject, FALSE);
 
         PiNotifyDeviceInterfaceChange(&GUID_DEVICE_INTERFACE_REMOVAL,

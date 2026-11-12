@@ -505,6 +505,8 @@ VOID IopSetInterfaceLinked(_In_ PIOP_DEVICE_INTERFACE Interface,
                            _In_ PDEVICE_OBJECT PhysicalDeviceObject,
                            _In_ BOOLEAN Linked);
 
+VOID IopDropInterfaceLink(_In_ PIOP_DEVICE_INTERFACE Interface);
+
 /* devprop.c */
 
 NTSTATUS IopInterfaceLinkToRegistryName(_In_ PUNICODE_STRING SymbolicLinkName,
