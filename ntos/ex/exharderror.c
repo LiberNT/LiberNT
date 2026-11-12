@@ -247,6 +247,12 @@ ExpRaiseHardError(
 
     PAGED_CODE();
 
+    if (ValidResponseOptions > OptionCancelTryContinue)
+    {
+        *Response = ResponseNotHandled;
+        return STATUS_SUCCESS;
+    }
+
     if (ValidResponseOptions == OptionShutdownSystem)
     {
         if (!SeSinglePrivilegeCheck(SeShutdownPrivilege, ExGetPreviousMode()))
