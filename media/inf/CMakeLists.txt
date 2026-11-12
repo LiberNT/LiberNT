@@ -6,6 +6,7 @@ list(APPEND INF_FILES
     bth.inf
     c_firmware.inf
     c_image.inf
+    c_smartcardreader.inf
     c_wpd.inf
     display.inf
     fdc.inf

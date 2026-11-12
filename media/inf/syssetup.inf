@@ -26,7 +26,9 @@ unknown.inf
 usbport.inf
 volume.inf
 audio.inf
+c_firmware.inf
 c_image.inf
+c_smartcardreader.inf
 c_wpd.inf
 
 [Infs.Always]

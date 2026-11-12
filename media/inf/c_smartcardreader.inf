@@ -1,0 +1,23 @@
+[Version]
+Signature = "$WINDOWS NT$"
+LayoutFile = layout.inf
+Class     = SmartCardReader
+ClassGuid = {50dd5230-ba8a-11d1-bf5d-0000f805f530}
+Provider  = %ReactOS%
+DriverVer = 11/12/2026,1.00
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+
+[ClassInstall_AddReg]
+HKR, , , 0, %SmartCardReaderClassName%
+; TODO: append the scfilter upper filter once the smart card filter driver exists
+HKR, , NoInstallClass, 0, 1
+HKR, , IconPath, 0x00010000, "%%SystemRoot%%\System32\setupapi.dll,-25"
+
+[Strings]
+; Non-localizable
+ReactOS = "LiberNT Project"
+
+; Localizable
+SmartCardReaderClassName = "Smart card readers"
