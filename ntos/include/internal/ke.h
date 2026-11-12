@@ -127,6 +127,10 @@ KiSetTimeAdjustment(ULONG Adjustment, BOOLEAN Enabled);
 
 VOID
 NTAPI
+KiQueryTimeAdjustment(_Out_ PULONG Adjustment, _Out_ PBOOLEAN Enabled);
+
+VOID
+NTAPI
 KiSuspendClockTime(VOID);
 
 VOID

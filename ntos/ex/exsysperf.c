@@ -350,14 +350,18 @@ ExpQueryTimeAdjustment(
     _Out_ PSYSTEM_QUERY_TIME_ADJUST_INFORMATION Info,
     _In_ ULONG Length)
 {
+    ULONG Adjustment;
+    BOOLEAN Enabled;
+
     if (Length != sizeof(SYSTEM_QUERY_TIME_ADJUST_INFORMATION))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    Info->TimeAdjustment = KeTimeAdjustment;
+    KiQueryTimeAdjustment(&Adjustment, &Enabled);
+    Info->TimeAdjustment = Adjustment;
     Info->TimeIncrement = KeMaximumIncrement;
-    Info->Enable = (BOOLEAN)(KeTimeAdjustment == KeMaximumIncrement);
+    Info->Enable = !Enabled;
 
     return STATUS_SUCCESS;
 }

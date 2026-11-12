@@ -35,10 +35,13 @@ ULONG KeMaximumIncrement;
 ULONG KeMinimumIncrement;
 ULONG KeTimeIncrement;
 
-/* How much system time each tick is worth. It differs from the clock period
-   while the time is being slewed to match an outside reference. */
+/* How much system time each default clock period is worth. It differs from the
+   period while the time is being slewed to match an outside reference. */
 ULONG KeTimeAdjustment;
 BOOLEAN KiTimeAdjustmentEnabled;
+
+/* What the clock steps since the adjustment was set have not added yet, in parts of a default period */
+static ULONGLONG KiTimeAdjustmentRemainder;
 
 /* Set where the platform's timing cannot be trusted to the usual tolerances,
    which makes the watchdogs and the deadline checks more forgiving. */
@@ -583,6 +586,22 @@ KeQueryInterruptTimePrecise(
 
 /* PUBLIC FUNCTIONS: MOVING THE CLOCKS ****************************************/
 
+/* An adjustment is per default clock period (SetSystemTimeAdjustmentPrecise): a faster clock adds its share, carrying the rest */
+static
+ULONGLONG
+KiAdjustedIncrement(
+    _In_ ULONG Increment)
+{
+    ULONGLONG Scaled;
+
+    if (!KiTimeAdjustmentEnabled || (KeMaximumIncrement == 0))
+        return Increment;
+
+    Scaled = (ULONGLONG)KeTimeAdjustment * Increment + KiTimeAdjustmentRemainder;
+    KiTimeAdjustmentRemainder = Scaled % KeMaximumIncrement;
+    return Scaled / KeMaximumIncrement;
+}
+
 /*
  * Moves both clocks on by one period and answers the new interrupt time. Only
  * the processor that owns the clock passes UpdateSystem, so the system time and
@@ -621,9 +640,7 @@ KiUpdateSharedTime(
      */
     OldIrql = KfRaiseIrql(IPI_LEVEL);
     KxAcquireSpinLock(&KiSystemTimeLock);
-    System.QuadPart = (LONGLONG)(KiGetSystemTime() +
-                                 (KiTimeAdjustmentEnabled ? KeTimeAdjustment
-                                                          : Increment));
+    System.QuadPart = (LONGLONG)(KiGetSystemTime() + KiAdjustedIncrement(Increment));
     KiWriteSystemTime(&KiSystemTimeValue, System);
     KiPublishSystemTimeWithBaseline(Interrupt, System);
     KxReleaseSpinLock(&KiSystemTimeLock);
@@ -1099,11 +1116,34 @@ KiSetTimeAdjustment(
 {
     KIRQL OldIrql;
 
-    OldIrql = KeRaiseIrqlToSynchLevel();
+    ASSERT(!Enabled || (Adjustment != 0));
+
+    OldIrql = KfRaiseIrql(IPI_LEVEL);
+    KxAcquireSpinLock(&KiSystemTimeLock);
 
     KeTimeAdjustment = Enabled ? Adjustment : KeMaximumIncrement;
     KiTimeAdjustmentEnabled = Enabled;
+    KiTimeAdjustmentRemainder = 0;
 
+    KxReleaseSpinLock(&KiSystemTimeLock);
+    KeLowerIrql(OldIrql);
+}
+
+VOID
+NTAPI
+KiQueryTimeAdjustment(
+    _Out_ PULONG Adjustment,
+    _Out_ PBOOLEAN Enabled)
+{
+    KIRQL OldIrql;
+
+    OldIrql = KfRaiseIrql(IPI_LEVEL);
+    KxAcquireSpinLock(&KiSystemTimeLock);
+
+    *Adjustment = KeTimeAdjustment;
+    *Enabled = KiTimeAdjustmentEnabled;
+
+    KxReleaseSpinLock(&KiSystemTimeLock);
     KeLowerIrql(OldIrql);
 }
 

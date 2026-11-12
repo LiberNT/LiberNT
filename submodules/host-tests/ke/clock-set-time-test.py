@@ -70,6 +70,7 @@ static LARGE_INTEGER KeBootTime;
 static ULONGLONG KeBootTimeBias, KiInterruptTimeBias;
 static BOOLEAN KiInterruptTimeFrozen, KiTimeAdjustmentEnabled;
 static ULONG KeTimeAdjustment, KeMaximumIncrement = 156250;
+static ULONGLONG KiTimeAdjustmentRemainder;
 static __thread int OnClockOwner;
 static volatile int Interleave, SetStarted, SetDone, LowHolder;
 static LARGE_INTEGER NewTime = {.QuadPart = 0x01DC000000000000LL}, *SetTime = &NewTime;
@@ -117,6 +118,7 @@ static void KiRemoveEntryTimer(PKTIMER Timer) { (void)Timer; CHECK(0); }
 static ULONG KiComputeTimerTableIndex(ULONGLONG Due) { return (ULONG)(Due % TIMER_TABLE_SIZE); }
 static void KiAcquireDispatcherObject(void *Header) { (void)Header; }
 static void KxInsertTimer(PKTIMER Timer, ULONG Hand) { (void)Timer; (void)Hand; CHECK(0); }
+static ULONGLONG KiAdjustedIncrement(ULONG Increment) { @ADJUSTED@ }
 ULONGLONG KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem) { @TICK@ }
 void KeSetSystemTime(PLARGE_INTEGER NewSystemTime, PLARGE_INTEGER OldSystemTime, BOOLEAN FixInterruptTime, PLARGE_INTEGER HalTime) { @SET@ }
 void KiResumeClockTime(ULONGLONG SleepTime) { @RESUME@ }
@@ -188,7 +190,7 @@ int main(void) {
 }
 '''
 fixture = fixture.replace('@TICK@', body('KiUpdateSharedTime')).replace('@SET@', body('KeSetSystemTime'))
-fixture = fixture.replace('@RESUME@', body('KiResumeClockTime'))
+fixture = fixture.replace('@RESUME@', body('KiResumeClockTime')).replace('@ADJUSTED@', body('KiAdjustedIncrement'))
 with tempfile.TemporaryDirectory(prefix='ke-clock-set-time-') as tmp:
     path = pathlib.Path(tmp)
     (path / 'test.c').write_text(fixture)

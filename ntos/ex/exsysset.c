@@ -206,6 +206,8 @@ ExpSetTimeAdjustment(
     _In_ PSYSTEM_SET_TIME_ADJUST_INFORMATION Information,
     _In_ ULONG Length)
 {
+    SYSTEM_SET_TIME_ADJUST_INFORMATION Captured;
+
     if (Length != sizeof(SYSTEM_SET_TIME_ADJUST_INFORMATION))
     {
         return STATUS_INFO_LENGTH_MISMATCH;
@@ -216,21 +218,18 @@ ExpSetTimeAdjustment(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    /*
-     * Enabling the adjustment puts the clock back on its own step; disabling it
-     * holds the clock at the step the caller named, which is how a caller that
-     * is keeping time from elsewhere pulls the clock along.
-     */
-    if (Information->Enable)
+    Captured = *Information;
+
+    /* Enable carries SetSystemTimeAdjustment's bTimeAdjustmentDisabled: TRUE puts the clock back on its own step */
+    if (Captured.Enable)
     {
-        KeTimeAdjustment = KeMaximumIncrement;
+        KiSetTimeAdjustment(KeMaximumIncrement, FALSE);
         return STATUS_SUCCESS;
     }
 
-    if (Information->TimeAdjustment == 0) return STATUS_INTEGER_DIVIDE_BY_ZERO;
+    if (Captured.TimeAdjustment == 0) return STATUS_INTEGER_DIVIDE_BY_ZERO;
 
-    /* FIXME: the clock never applies the adjustment (KiTimeAdjustmentEnabled stays FALSE) */
-    KeTimeAdjustment = Information->TimeAdjustment;
+    KiSetTimeAdjustment(Captured.TimeAdjustment, TRUE);
 
     return STATUS_SUCCESS;
 }

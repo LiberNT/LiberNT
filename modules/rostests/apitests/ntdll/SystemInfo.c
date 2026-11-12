@@ -265,6 +265,21 @@ Test_TimeAdjustment(void)
     ok_long(GetTimeInfo.TimeAdjustment, GetTimeInfo.TimeIncrement);
     ok_long(GetTimeInfo.Enable, 1);
 
+    /* An adjustment enabled at the clock period's own value still reads as enabled (GetSystemTimeAdjustment) */
+    SetTimeInfo.TimeAdjustment = GetTimeInfo.TimeIncrement;
+    SetTimeInfo.Enable = 0;
+    Status = NtSetSystemInformation(SystemTimeAdjustmentInformation,
+                                    &SetTimeInfo,
+                                    sizeof(SetTimeInfo));
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    Status = NtQuerySystemInformation(SystemTimeAdjustmentInformation,
+                                      &GetTimeInfo,
+                                      sizeof(GetTimeInfo),
+                                      &ReturnLength);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    ok_long(GetTimeInfo.TimeAdjustment, GetTimeInfo.TimeIncrement);
+    ok_long(GetTimeInfo.Enable, 0);
+
     /* Restore original values */
     SetTimeInfo.TimeAdjustment = TimeInfoOrg.TimeAdjustment;
     SetTimeInfo.Enable = TimeInfoOrg.Enable;
