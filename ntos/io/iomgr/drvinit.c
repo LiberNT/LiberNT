@@ -798,6 +798,15 @@ IopInitializeBootDrivers(VOID)
 
         if (BootEntry->LdrEntry == NULL) continue;
 
+        if (!MmVerifyImageIsOkForMpUse(BootEntry->LdrEntry->DllBase))
+        {
+            KeBugCheckEx(UP_DRIVER_ON_MP_SYSTEM,
+                         (ULONG_PTR)BootEntry->LdrEntry->DllBase,
+                         0,
+                         0,
+                         0);
+        }
+
         Status = IopOpenServiceKeyForPath(&BootEntry->RegistryPath,
                                           &ServiceHandle);
         if (!NT_SUCCESS(Status))

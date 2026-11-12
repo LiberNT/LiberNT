@@ -2086,7 +2086,6 @@ MiEnablePagingOfDriver(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     UNREFERENCED_PARAMETER(LdrEntry);
 }
 
-#ifdef CONFIG_SMP
 FORCEINLINE
 BOOLEAN
 MiVerifyImageIsOkForMpUse(
@@ -2114,7 +2113,6 @@ MmVerifyImageIsOkForMpUse(
         return TRUE;
     return MiVerifyImageIsOkForMpUse(NtHeaders);
 }
-#endif
 
 NTSTATUS
 NTAPI

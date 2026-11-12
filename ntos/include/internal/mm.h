@@ -1879,12 +1879,10 @@ MmIsSystemImageImportingModule(
     _In_ PCUNICODE_STRING ModuleName
 );
 
-#ifdef CONFIG_SMP
 BOOLEAN
 NTAPI
 MmVerifyImageIsOkForMpUse(
     _In_ PVOID BaseAddress);
-#endif // CONFIG_SMP
 
 NTSTATUS
 NTAPI
