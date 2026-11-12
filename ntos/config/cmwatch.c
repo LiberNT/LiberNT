@@ -506,8 +506,11 @@ CmpNotifyChangeKey(
                                     TAG_CM);
     if (Completion == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
+    ASSERT((Event == NULL) || Asynchronous);
+
     Completion->RefCount = 1;
     Completion->Event = Event;
+    if (Event != NULL) ObReferenceObject(Event);
     Completion->ApcRoutine = ApcRoutine;
     Completion->ApcContext = ApcContext;
     Completion->IoStatusBlock = IoStatusBlock;
@@ -560,7 +563,7 @@ CmpNotifyChangeKey(
 
     if (!NT_SUCCESS(Status))
     {
-        CmpPostAllOnBlock(Notify, STATUS_NOTIFY_CLEANUP);
+        CmpAbandonCompletion(Completion);
         CmpReleaseCompletion(Completion);
         return Status;
     }

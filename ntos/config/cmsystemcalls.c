@@ -1916,10 +1916,7 @@ NtNotifyChangeMultipleKeys(
 
     CmpUnlockRegistry();
 
-    if (!NT_SUCCESS(Status) && EventObject != NULL)
-    {
-        ObDereferenceObject(EventObject);
-    }
+    if (EventObject != NULL) ObDereferenceObject(EventObject);
 
     if (SlaveBody != NULL) ObDereferenceObject(SlaveBody);
     if (SlaveHandle != NULL) ZwClose(SlaveHandle);
