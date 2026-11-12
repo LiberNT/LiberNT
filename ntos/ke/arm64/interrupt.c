@@ -783,6 +783,24 @@ KiArm64TakeClockOwnerIncrement(
     return Increment;
 }
 
+VOID
+NTAPI
+KiArm64QueryClockTickBaseline(
+    _Out_ PLARGE_INTEGER Counter,
+    _Out_ PULONGLONG Remainder)
+{
+    if (KiArm64ClockOwnerCounter == 0)
+    {
+        *Counter = KeQueryPerformanceCounter(NULL);
+        *Remainder = 0;
+        return;
+    }
+
+    ASSERT(KiArm64ClockOwnerRemainder < KiArm64TimerFrequency);
+    Counter->QuadPart = (LONGLONG)KiArm64ClockOwnerCounter;
+    *Remainder = KiArm64ClockOwnerRemainder;
+}
+
 static
 ULONG
 KiArm64ConsumeIdleTicks(

@@ -1183,6 +1183,7 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 #define KiClockTickSuspended(Prcb) FALSE
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
 #define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #define _KeIsExecutingDpc() ((BOOLEAN)__readfsbyte(FIELD_OFFSET(KIPCR, PrcbData.DpcRoutineActive)))
 

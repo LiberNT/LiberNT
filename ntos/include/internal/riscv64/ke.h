@@ -557,6 +557,7 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 #define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
 #define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #ifdef __cplusplus
 extern "C" {

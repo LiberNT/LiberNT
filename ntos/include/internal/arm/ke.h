@@ -319,5 +319,6 @@ KiClearDpcThreadState(
 #define KiClockTickSuspended(Prcb) FALSE
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
 #define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
 
 #define KiIsUserModeTrap(TrapFrame) ((TrapFrame)->PreviousMode == UserMode)

@@ -825,6 +825,12 @@ KiArm64RefreshProcessorRunTime(
 
 VOID
 NTAPI
+KiArm64QueryClockTickBaseline(
+    _Out_ PLARGE_INTEGER Counter,
+    _Out_ PULONGLONG Remainder);
+
+VOID
+NTAPI
 KiArm64SaveProcessorClock(
     _In_ ULONG ProcessorNumber);
 
@@ -1266,5 +1272,6 @@ KiClearDpcThreadState(
 #define KiClockTickSuspended(Prcb) (!KiArm64ClockTimerState(Prcb)->ClockActive)
 #define KiClockTimerInserted(DueTime) KiArm64ClockTimerInserted(DueTime)
 #define KiRefreshProcessorRunTime(Prcb) KiArm64RefreshProcessorRunTime(Prcb)
+#define KiQueryClockTickBaseline(Counter, Remainder) KiArm64QueryClockTickBaseline(Counter, Remainder)
 
 #define KiIsUserModeTrap(TrapFrame) ((TrapFrame)->PreviousMode == UserMode)

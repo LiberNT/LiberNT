@@ -92,6 +92,7 @@ static ULONGLONG KiInterruptTimeBias;
 static volatile LONG KiTickSnapshotSequence;
 static volatile ULONGLONG KiTickSnapshotTime;
 static volatile LONGLONG KiTickSnapshotCounter;
+static volatile ULONGLONG KiTickSnapshotRemainder;
 static volatile ULONG KiTickSnapshotIncrement;
 
 /* Interrupt time stops moving while the debugger has the machine. */
@@ -443,8 +444,9 @@ KiCounterOffsetInPeriod(
 {
     ULONGLONG SnapshotTime;
     LONGLONG SnapshotCounter;
+    ULONGLONG SnapshotRemainder;
     ULONG SnapshotIncrement;
-    ULONGLONG Elapsed;
+    ULONGLONG Elapsed, Rebase = 0;
     LONG Sequence;
 
     do
@@ -453,6 +455,7 @@ KiCounterOffsetInPeriod(
         KeMemoryBarrier();
         SnapshotTime = KiTickSnapshotTime;
         SnapshotCounter = KiTickSnapshotCounter;
+        SnapshotRemainder = KiTickSnapshotRemainder;
         SnapshotIncrement = KiTickSnapshotIncrement;
         KeMemoryBarrier();
     } while ((Sequence & 1) || (Sequence != KiTickSnapshotSequence));
@@ -461,14 +464,17 @@ KiCounterOffsetInPeriod(
 
     /* The caller's tick has been overtaken since it read the counter, so the clock has moved on as far as the ticks took it */
     if (SnapshotTime != Interrupt)
-        return (SnapshotTime > Interrupt) ? (SnapshotTime - Interrupt) : 0;
+    {
+        if (SnapshotTime < Interrupt) return 0;
+        Rebase = SnapshotTime - Interrupt;
+    }
 
-    if (Counter.QuadPart <= SnapshotCounter) return 0;
+    if (Counter.QuadPart <= SnapshotCounter) return Rebase;
 
-    Elapsed = (ULONGLONG)(Counter.QuadPart - SnapshotCounter) * 10000000ULL /
+    Elapsed = ((ULONGLONG)(Counter.QuadPart - SnapshotCounter) * 10000000ULL + SnapshotRemainder) /
               (ULONGLONG)Frequency.QuadPart;
 
-    return min(Elapsed, (ULONGLONG)SnapshotIncrement);
+    return Rebase + min(Elapsed, (ULONGLONG)SnapshotIncrement);
 }
 
 static
@@ -476,11 +482,15 @@ VOID
 KiWriteInterruptTime(
     _In_ LARGE_INTEGER Interrupt)
 {
-    LARGE_INTEGER Counter = KeQueryPerformanceCounter(NULL);
+    LARGE_INTEGER Counter;
+    ULONGLONG Remainder;
+
+    KiQueryClockTickBaseline(&Counter, &Remainder);
 
     InterlockedIncrement(&KiTickSnapshotSequence);
     KiTickSnapshotTime = (ULONGLONG)Interrupt.QuadPart;
     KiTickSnapshotCounter = Counter.QuadPart;
+    KiTickSnapshotRemainder = Remainder;
     KiTickSnapshotIncrement = KeTimeIncrement;
     InterlockedIncrement(&KiTickSnapshotSequence);
 
