@@ -130,11 +130,8 @@ typedef struct IPADDR_ENTRY {
 
 #define AFD_RECV_CONTROL_SIZE           256
 
-/* XXX This is a hack we should clean up later
- * We do this in order to get some storage for the locked handle table
- * Maybe I'll use some tail item in the irp instead */
-#define AFD_HANDLES(x) ((PAFD_HANDLE)(x)->Exclusive)
-#define SET_AFD_HANDLES(x,y) (((x)->Exclusive) = (ULONG_PTR)(y))
+#define AFD_HANDLES(Irp) ((PAFD_HANDLE)(Irp)->Tail.Overlay.DriverContext[1])
+#define SET_AFD_HANDLES(Irp,y) ((Irp)->Tail.Overlay.DriverContext[1] = (y))
 
 typedef struct _AFD_HANDLE32 {
     ULONG Handle;
@@ -178,6 +175,7 @@ typedef struct _AFD_TDI_HANDLE_DATA32 {
     ULONG TdiConnectionHandle;
 } AFD_TDI_HANDLE_DATA32, *PAFD_TDI_HANDLE_DATA32;
 
+C_ASSERT(FIELD_OFFSET(AFD_POLL_INFO, Handles) == 16);
 C_ASSERT(FIELD_OFFSET(AFD_POLL_INFO32, Handles) == 16);
 C_ASSERT(sizeof(AFD_HANDLE32) == 12);
 C_ASSERT(sizeof(AFD_ACCEPT_DATA32) == 12);

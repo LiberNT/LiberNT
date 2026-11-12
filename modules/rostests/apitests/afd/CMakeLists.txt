@@ -4,6 +4,7 @@ include_directories(
 
 list(APPEND SOURCE
     AfdHelpers.c
+    poll.c
     send.c
     windowsize.c)
 
