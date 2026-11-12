@@ -70,13 +70,15 @@ extern "C" {
 #endif
 
 /*** memcopy must be memmove ***/
-/* Unoptimized Clang calls this wrapper inside SEH __try scopes through a memcpy.inline copy that has no unwind data */
-#if !defined(__clang__) || defined(__OPTIMIZE__)
+/* Unoptimized Clang builds use -fno-builtin-memcpy: a builtin wrapper is called in SEH __try scopes through a memcpy.inline copy without unwind data */
+#if defined(__clang__) && !defined(__OPTIMIZE__)
+extern __inline__ __attribute__((__always_inline__,__gnu_inline__)) void* __cdecl memcpy(void* dest, const void* source, size_t num)
+#else
 __INTRIN_INLINE void* __cdecl memcpy(void* dest, const void* source, size_t num)
+#endif
 {
     return __builtin_memmove(dest, source, num);
 }
-#endif
 
 
 /*** Stack frame juggling ***/

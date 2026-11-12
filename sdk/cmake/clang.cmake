@@ -138,6 +138,7 @@ else()
         add_compile_options(-O0)
         # Unoptimized frames are several times larger, so kernel stacks are doubled.
         add_compile_definitions(KERNEL_STACK_SCALE=2)
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-fno-builtin-memcpy>")
         if(ARCH STREQUAL "i386")
             add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-mllvm -fast-isel=false>")
         endif()
