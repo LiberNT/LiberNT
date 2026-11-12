@@ -131,6 +131,7 @@ list(APPEND SOURCE
     VirtualKey.c
     WaitForInputIdle.c
     WindowBand.c
+    WindowStationErrors.c
     WndProc.c
     wsprintf.c)
 
