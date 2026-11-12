@@ -67,6 +67,14 @@ elseif(${ARCH} STREQUAL "riscv64")
         riscv64/__longjmp_noframe.s
         riscv64/_setjmp.s
     )
+elseif(${ARCH} STREQUAL "loongarch64")
+    list(APPEND VCRT_SETJMP_SOURCES
+        loongarch64/longjmp.c
+    )
+    list(APPEND VCRT_SETJMP_ASM_SOURCES
+        loongarch64/__longjmp_noframe.s
+        loongarch64/_setjmp.s
+    )
 elseif(${ARCH} STREQUAL "ppc")
     list(APPEND VCRT_SETJMP_SOURCES
         ppc/longjmp.c
