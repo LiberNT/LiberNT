@@ -243,7 +243,7 @@ typedef enum _HIDP_REPORT_TYPE {
 #define FACILITY_HID_ERROR_CODE           0x11
 
 #define HIDP_ERROR_CODES(SEV, CODE) \
-  ((NTSTATUS) (((SEV) << 28) | (FACILITY_HID_ERROR_CODE << 16) | (CODE)))
+  ((NTSTATUS) (((ULONG)(SEV) << 28) | (FACILITY_HID_ERROR_CODE << 16) | (CODE)))
 
 #define HIDP_STATUS_SUCCESS                 (HIDP_ERROR_CODES(0x0, 0))
 #define HIDP_STATUS_NULL                    (HIDP_ERROR_CODES(0x8, 1))
