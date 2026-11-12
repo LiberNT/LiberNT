@@ -162,6 +162,8 @@ START_TEST(poll)
     Status = StartPoll(Helper, Event, &IoStatus, &Poll, Base, AFD_EVENT_OOB_RECEIVE, -100000);
     Status = FinishPoll(Event, Status, &IoStatus, 5000);
     ok(Status == STATUS_TIMEOUT, "timed-out poll returned 0x%lx\n", Status);
+    ok(Poll.NumberOfHandles == 0, "timed-out poll reported %lu handles\n", Poll.NumberOfHandles);
+    ok(IoStatus.Information == FIELD_OFFSET(TEST_POLL_INFO, Handles), "timed-out poll information %lu\n", (ULONG)IoStatus.Information);
 
 Cleanup:
     if (Socket != INVALID_SOCKET)
