@@ -231,8 +231,33 @@ static void SetThenCancel(void) {
     CHECK(!TheTimer.ApcAssociated);
     CHECK(Queued == NULL);
 }
+/* What the clock does under the dispatcher lock before it lets go and calls the routine */
+static void Expire(PKDEFERRED_ROUTINE *Routine, PVOID *Context) {
+    CHECK(TheTimer.KeTimer.Header.Inserted);
+    TheTimer.KeTimer.Header.Inserted = FALSE;
+    TheTimer.KeTimer.Header.SignalState = 1;
+    *Routine = TheTimer.KeTimer.Dpc->DeferredRoutine;
+    *Context = TheTimer.KeTimer.Dpc->DeferredContext;
+}
+static void SetAgainBeforeExpiry(void) {
+    LARGE_INTEGER Soon = { .QuadPart = -5000 }, Later = { .QuadPart = -5000000 };
+    PKDEFERRED_ROUTINE Routine;
+    PVOID Context;
+    Scenario = "set again while an expiry is on its way";
+    CreateTimer();
+    CHECK(NtSetTimer(TheHandle, &Soon, FirstRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    Expire(&Routine, &Context);
+    CHECK(NtSetTimer(TheHandle, &Later, SecondRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    /* The first expiry belongs to a setting that is gone: the new routine is not due yet */
+    CHECK(Queued == NULL);
+    Expire(&Routine, &Context);
+    Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    CHECK(Queued == SecondRoutine);
+}
 int main(void) {
     SetThenCancel();
+    SetAgainBeforeExpiry();
     return 0;
 }
 '''

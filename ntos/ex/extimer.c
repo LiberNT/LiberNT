@@ -28,6 +28,9 @@ KSPIN_LOCK ExpWakeListLock;
 
 #define EXP_TIMER_TAG 'emiT'
 
+/* FIXME: only three bits of the setting count fit beside the timer pointer, so an expiry eight settings old passes for the current one */
+#define EXP_TIMER_ARMING_MASK 0x7
+
 /*
  * A timer a driver allocates for itself. It is not an object anybody can name,
  * so the kernel keeps whatever it needs of its own here.
@@ -105,6 +108,16 @@ ExpQueueTimerApc(
     ObDereferenceObject(Timer);
 }
 
+static
+PVOID
+ExpTimerDpcContext(
+    _In_ PETIMER Timer)
+{
+    ASSERT(((ULONG_PTR)Timer & EXP_TIMER_ARMING_MASK) == 0);
+
+    return (PVOID)((ULONG_PTR)Timer | (Timer->SetSequence & EXP_TIMER_ARMING_MASK));
+}
+
 /*
  * Runs when a named timer goes off. The timer only tells the thread that set it,
  * through the routine the thread asked for, and only while that request stands.
@@ -117,13 +130,21 @@ ExpTimerDpcRoutine(
     _In_opt_ PVOID SystemArgument1,
     _In_opt_ PVOID SystemArgument2)
 {
-    PETIMER Timer = DeferredContext;
+    PETIMER Timer = (PETIMER)((ULONG_PTR)DeferredContext & ~(ULONG_PTR)EXP_TIMER_ARMING_MASK);
+    ULONG Arming = (ULONG)((ULONG_PTR)DeferredContext & EXP_TIMER_ARMING_MASK);
 
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
+
+    /* An expiry captured before the timer was set again belongs to the earlier arming */
+    if (Arming != (Timer->SetSequence & EXP_TIMER_ARMING_MASK))
+    {
+        KeReleaseSpinLockFromDpcLevel(&Timer->Lock);
+        return;
+    }
 
     /* A one-shot timer that went off and was not set again needs the fine clock no more */
     if ((Timer->Period == 0) && !Timer->KeTimer.Header.Inserted)
@@ -443,7 +464,7 @@ ExpCreateTimer(
     RtlZeroMemory(Timer, sizeof(ETIMER));
 
     KeInitializeTimerEx(&Timer->KeTimer, TimerType);
-    KeInitializeDpc(&Timer->TimerDpc, ExpTimerDpcRoutine, Timer);
+    KeInitializeDpc(&Timer->TimerDpc, ExpTimerDpcRoutine, ExpTimerDpcContext(Timer));
     KeInitializeSpinLock(&Timer->Lock);
     Timer->HighResolution = HighResolution;
 
@@ -632,8 +653,10 @@ NtSetTimer(
 
     State = KeReadStateTimer(&Timer->KeTimer);
     KeCancelTimer(&Timer->KeTimer);
+    KeRemoveQueueDpc(&Timer->TimerDpc);
 
     Timer->SetSequence++;
+    KeInitializeDpc(&Timer->TimerDpc, ExpTimerDpcRoutine, ExpTimerDpcContext(Timer));
     Timer->Period = Period;
     ExpArmHighResolutionTimer(Timer, TRUE);
 
