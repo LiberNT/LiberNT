@@ -279,6 +279,25 @@ BOOLEAN KmtSkip(INT Condition, PCSTR FileAndLine, PCSTR Format, ...)            
 PVOID KmtAllocateGuarded(SIZE_T SizeRequested);
 VOID KmtFreeGuarded(PVOID Pointer);
 
+#if defined(__GNUC__) || defined(__clang__)
+/* Each value and each expectation is evaluated once; the value keeps its type and the expectation takes the one they compare in */
+#ifdef __cplusplus
+#define KMT_VALUE_TYPE(value)               __typeof__(+(value))
+#define KMT_COMPARED_TYPE(value, expected)  __typeof__(true ? (value) : (expected))
+#else
+#define KMT_VALUE_TYPE(value)               __typeof__(1 ? (value) : (value))
+#define KMT_COMPARED_TYPE(value, expected)  __typeof__(1 ? (value) : (expected))
+#endif
+#ifdef KMT_KERNEL_MODE
+#define ok_irql(irql)                       ({ KIRQL KmtOkIrql__ = KeGetCurrentIrql(), KmtOkExpectedIrql__ = (irql);    \
+                                               ok(KmtOkIrql__ == KmtOkExpectedIrql__, "IRQL is %d, expected %d\n",      \
+                                                  KmtOkIrql__, KmtOkExpectedIrql__); })
+#endif /* defined KMT_KERNEL_MODE */
+#define ok_eq_print(value, expected, spec)  ({ KMT_VALUE_TYPE(value) KmtOkValue__ = (value);                            \
+                                               KMT_COMPARED_TYPE(KmtOkValue__, expected) KmtOkExpected__ = (expected);  \
+                                               ok(KmtOkValue__ == KmtOkExpected__, #value " = " spec ", expected " spec "\n", \
+                                                  KmtOkValue__, KmtOkExpected__); })
+#else
 #ifdef KMT_KERNEL_MODE
 #define ok_irql(irql)                       ok(KeGetCurrentIrql() == irql, "IRQL is %d, expected %d\n", KeGetCurrentIrql(), irql)
 #endif /* defined KMT_KERNEL_MODE */
@@ -289,7 +308,15 @@ VOID KmtFreeGuarded(PVOID Pointer);
  * local first and compare that.
  */
 #define ok_eq_print(value, expected, spec)  ok((value) == (expected), #value " = " spec ", expected " spec "\n", value, expected)
+#endif
+#if defined(__GNUC__) || defined(__clang__)
+#define ok_eq_pointer(value, expected)      ({ const void *KmtOkValue__ = (const void *)(value);                         \
+                                               const void *KmtOkExpected__ = (const void *)(expected);                  \
+                                               ok(KmtOkValue__ == KmtOkExpected__, #value " = %p, expected %p\n",       \
+                                                  KmtOkValue__, KmtOkExpected__); })
+#else
 #define ok_eq_pointer(value, expected)      ok_eq_print(value, expected, "%p")
+#endif
 #define ok_eq_int(value, expected)          ok_eq_print(value, expected, "%d")
 #define ok_eq_uint(value, expected)         ok_eq_print(value, expected, "%u")
 #define ok_eq_long(value, expected)         ok_eq_print(value, expected, "%ld")
@@ -310,15 +337,38 @@ VOID KmtFreeGuarded(PVOID Pointer);
 #define ok_eq_hex(value, expected)          ok_eq_print(value, expected, "0x%08lx")
 #define ok_bool_true(value, desc)           ok((value) == TRUE, desc " FALSE, expected TRUE\n")
 #define ok_bool_false(value, desc)          ok((value) == FALSE, desc " TRUE, expected FALSE\n")
+#if defined(__GNUC__) || defined(__clang__)
+#define ok_eq_bool(value, expected)         ({ KMT_VALUE_TYPE(value) KmtOkValue__ = (value);                            \
+                                               KMT_COMPARED_TYPE(KmtOkValue__, expected) KmtOkExpected__ = (expected);  \
+                                               ok(KmtOkValue__ == KmtOkExpected__, #value " = %s, expected %s\n",       \
+                                                  KmtOkValue__ ? "TRUE" : "FALSE", KmtOkExpected__ ? "TRUE" : "FALSE"); })
+#define ok_eq_str(value, expected)          ({ KMT_VALUE_TYPE(value) KmtOkValue__ = (value);                            \
+                                               KMT_COMPARED_TYPE(KmtOkValue__, expected) KmtOkExpected__ = (expected);  \
+                                               ok(!strcmp(KmtOkValue__, KmtOkExpected__),                               \
+                                                  #value " = \"%s\", expected \"%s\"\n", KmtOkValue__, KmtOkExpected__); })
+#define ok_eq_wstr(value, expected)         ({ KMT_VALUE_TYPE(value) KmtOkValue__ = (value);                            \
+                                               KMT_COMPARED_TYPE(KmtOkValue__, expected) KmtOkExpected__ = (expected);  \
+                                               ok(!wcscmp(KmtOkValue__, KmtOkExpected__),                               \
+                                                  #value " = \"%ls\", expected \"%ls\"\n", KmtOkValue__, KmtOkExpected__); })
+#else
 #define ok_eq_bool(value, expected)         ok((value) == (expected), #value " = %s, expected %s\n",    \
                                                 (value) ? "TRUE" : "FALSE",                             \
                                                 (expected) ? "TRUE" : "FALSE")
 #define ok_eq_str(value, expected)          ok(!strcmp(value, expected), #value " = \"%s\", expected \"%s\"\n", value, expected)
 #define ok_eq_wstr(value, expected)         ok(!wcscmp(value, expected), #value " = \"%ls\", expected \"%ls\"\n", value, expected)
+#endif
 #define ok_eq_tag(value, expected)          ok_eq_print(value, expected, "0x%08lx")
 
 #define ok_eq_hex64(value, expected)        ok_eq_print(value, expected, "%I64x")
+#if defined(__GNUC__) || defined(__clang__)
+#define ok_eq_xmm(value, expected)          ({ __typeof__(value) KmtOkValue__ = (value);                                \
+                                               __typeof__(expected) KmtOkExpected__ = (expected);                       \
+                                               ok(KmtOkValue__.Low == KmtOkExpected__.Low,                              \
+                                                  #value " = %I64x'%08I64x, expected %I64x'%08I64x\n", KmtOkValue__.Low, \
+                                                  KmtOkValue__.High, KmtOkExpected__.Low, KmtOkExpected__.High); })
+#else
 #define ok_eq_xmm(value, expected)          ok((value).Low == (expected).Low, #value " = %I64x'%08I64x, expected %I64x'%08I64x\n", (value).Low, (value).High, (expected).Low, (expected).High)
+#endif
 
 #define KMT_MAKE_CODE(ControlCode)  CTL_CODE(FILE_DEVICE_UNKNOWN,           \
                                              0xC00 + (ControlCode),         \
