@@ -1161,7 +1161,9 @@ WSPBind(SOCKET Handle,
                    SocketAddressLength - sizeof(SocketAddress->sa_family));
 
     if (SocketAddress->sa_family == AF_INET6 &&
-        SocketInfo.AddressInfo == SockaddrAddressInfoWildcard &&
+        (SocketInfo.AddressInfo == SockaddrAddressInfoWildcard ||
+         (SocketAddressLength >= (int)sizeof(SOCKADDR_IN6) &&
+          IN6_IS_ADDR_V4MAPPED(&((const SOCKADDR_IN6 *)SocketAddress)->sin6_addr))) &&
         Socket->HelperData->WSHGetSocketInformation(Socket->HelperContext,
                                                     Handle,
                                                     Socket->TdiAddressHandle,

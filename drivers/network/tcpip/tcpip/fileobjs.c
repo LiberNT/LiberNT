@@ -717,6 +717,8 @@ NTSTATUS FileOpenAddress(
     return Status;
 
   DualStack = (Address->TAAddressCount == 2);
+  if (DualStack && TCPUnmapFromDualStack(&BindAddress))
+      DualStack = FALSE;
 
   /* If it's shared and has a port specified, look for a match */
   if (BindPort != 0)

@@ -356,7 +356,7 @@ LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
                    PCHAR BufferData, ULONG DataSize, PULONG DataUsed)
 {
     struct lib_ip_msg msg;
-    IP_ADDRESS RemoteAddress;
+    IP_ADDRESS RemoteAddress, UnmappedAddress;
     USHORT RemotePort;
     NTSTATUS Status;
 
@@ -365,6 +365,10 @@ LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
         return Status;
 
     if (RemoteAddress.Type != IP_ADDRESS_V6)
+        return STATUS_INVALID_ADDRESS;
+
+    UnmappedAddress = RemoteAddress;
+    if (TCPUnmapFromDualStack(&UnmappedAddress) && !TCPAddressFileAcceptsMapped(AddrFile))
         return STATUS_INVALID_ADDRESS;
 
     if (DataSize > 0xFFFF - 8)

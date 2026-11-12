@@ -27,6 +27,12 @@ PCHAR A2S(
 
 #endif /* DBG */
 
+BOOLEAN TCPUnmapFromDualStack(
+    PIP_ADDRESS Address);
+
+BOOLEAN TCPAddressFileAcceptsMapped(
+    PADDRESS_FILE AddrFile);
+
 VOID IPAddressFree(
     PVOID Object);
 

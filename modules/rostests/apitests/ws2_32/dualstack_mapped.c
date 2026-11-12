@@ -8,6 +8,7 @@
 #include "ws2_32.h"
 
 static const UCHAR MappedLoopback[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 127, 0, 0, 1 };
+static const UCHAR MappedRemote[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 0, 2, 1 };
 
 static SOCKET
 CreateIPv6(
@@ -123,6 +124,87 @@ CheckExchange(
     ok(Readable(Server, 5000), "%s: nothing to receive\n", What);
     ok(recv(Server, Data, sizeof(Data), 0) == 4, "%s: recv failed, error %d\n", What, WSAGetLastError());
     ok(!memcmp(Data, "ping", 4), "%s: wrong data\n", What);
+}
+
+static void
+TestTcpMappedListener(void)
+{
+    SOCKADDR_IN6 Address;
+    SOCKADDR_IN Address4;
+    SOCKET Listener, Client, Server;
+    USHORT Port;
+    int Result;
+
+    Listener = CreateIPv6(SOCK_STREAM, FALSE);
+    if (Listener == INVALID_SOCKET)
+        return;
+
+    InitMapped(&Address, MappedLoopback, 0);
+    Result = BindResult(Listener, (SOCKADDR *)&Address, sizeof(Address));
+    ok(Result == 0, "bind ::ffff:127.0.0.1 failed, error %d\n", Result);
+    if (Result != 0)
+    {
+        closesocket(Listener);
+        return;
+    }
+    CheckMappedName(Listener, FALSE, 0, "listener");
+    Port = LocalPort(Listener);
+    ok(listen(Listener, 4) == 0, "listen failed, error %d\n", WSAGetLastError());
+
+    Client = CreateIPv6(SOCK_STREAM, FALSE);
+    if (Client != INVALID_SOCKET)
+    {
+        InitMapped(&Address, MappedLoopback, Port);
+        ok(connect(Client, (SOCKADDR *)&Address, sizeof(Address)) == 0,
+           "dual-stack connect failed, error %d\n", WSAGetLastError());
+        Server = AcceptWithin(Listener, "dual-stack");
+        ok(Server != INVALID_SOCKET, "accept failed, error %d\n", WSAGetLastError());
+        if (Server != INVALID_SOCKET)
+        {
+            CheckMappedName(Client, FALSE, 0, "dual-stack client local");
+            CheckMappedName(Client, TRUE, Port, "dual-stack client peer");
+            CheckMappedName(Server, FALSE, Port, "accepted local");
+            CheckMappedName(Server, TRUE, LocalPort(Client), "accepted peer");
+            CheckExchange(Client, Server, "dual-stack");
+            closesocket(Server);
+        }
+        closesocket(Client);
+    }
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    ok(Client != INVALID_SOCKET, "IPv4 socket failed, error %d\n", WSAGetLastError());
+    if (Client != INVALID_SOCKET)
+    {
+        ZeroMemory(&Address4, sizeof(Address4));
+        Address4.sin_family = AF_INET;
+        Address4.sin_port = Port;
+        Address4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        ok(connect(Client, (SOCKADDR *)&Address4, sizeof(Address4)) == 0,
+           "IPv4 connect failed, error %d\n", WSAGetLastError());
+        Server = AcceptWithin(Listener, "IPv4");
+        ok(Server != INVALID_SOCKET, "accept failed, error %d\n", WSAGetLastError());
+        if (Server != INVALID_SOCKET)
+        {
+            CheckMappedName(Server, TRUE, LocalPort(Client), "accepted IPv4 peer");
+            CheckExchange(Client, Server, "IPv4");
+            closesocket(Server);
+        }
+        closesocket(Client);
+    }
+
+    Client = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (Client != INVALID_SOCKET)
+    {
+        ZeroMemory(&Address4, sizeof(Address4));
+        Address4.sin_family = AF_INET;
+        Address4.sin_port = Port;
+        Address4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        Result = BindResult(Client, (SOCKADDR *)&Address4, sizeof(Address4));
+        ok(Result == WSAEADDRINUSE, "IPv4 bind on the listener's port gave %d\n", Result);
+        closesocket(Client);
+    }
+
+    closesocket(Listener);
 }
 
 static void
@@ -326,6 +408,94 @@ TestTcpDualStackPorts(void)
     closesocket(Listener);
 }
 
+static void
+TestNonLocalMapped(void)
+{
+    SOCKADDR_IN6 Address;
+    SOCKET Socket;
+    int Result;
+
+    Socket = CreateIPv6(SOCK_STREAM, FALSE);
+    if (Socket == INVALID_SOCKET)
+        return;
+
+    InitMapped(&Address, MappedRemote, 0);
+    Result = BindResult(Socket, (SOCKADDR *)&Address, sizeof(Address));
+    ok(Result == WSAEADDRNOTAVAIL, "bind ::ffff:192.0.2.1 gave %d\n", Result);
+    closesocket(Socket);
+}
+
+static void
+TestUdpMapped(void)
+{
+    SOCKADDR_IN6 Address, From;
+    SOCKADDR_IN Address4;
+    SOCKET Socket, Sender, V6Only;
+    int FromLength = sizeof(From);
+    USHORT Port;
+    char Data;
+    int Result;
+
+    Socket = CreateIPv6(SOCK_DGRAM, FALSE);
+    if (Socket == INVALID_SOCKET)
+        return;
+
+    InitMapped(&Address, MappedLoopback, 0);
+    Result = BindResult(Socket, (SOCKADDR *)&Address, sizeof(Address));
+    ok(Result == 0, "UDP bind ::ffff:127.0.0.1 failed, error %d\n", Result);
+    if (Result != 0)
+    {
+        closesocket(Socket);
+        return;
+    }
+    CheckMappedName(Socket, FALSE, 0, "UDP local");
+    Port = LocalPort(Socket);
+
+    Sender = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    ok(Sender != INVALID_SOCKET, "IPv4 socket failed, error %d\n", WSAGetLastError());
+    if (Sender != INVALID_SOCKET)
+    {
+        ZeroMemory(&Address4, sizeof(Address4));
+        Address4.sin_family = AF_INET;
+        Address4.sin_port = Port;
+        Address4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        ok(sendto(Sender, "x", 1, 0, (SOCKADDR *)&Address4, sizeof(Address4)) == 1,
+           "IPv4 sendto failed, error %d\n", WSAGetLastError());
+
+        if (!Readable(Socket, 2000))
+        {
+            ok(FALSE, "UDP datagram not received\n");
+            closesocket(Sender);
+            closesocket(Socket);
+            return;
+        }
+        ZeroMemory(&From, sizeof(From));
+        ok(recvfrom(Socket, &Data, 1, 0, (SOCKADDR *)&From, &FromLength) == 1,
+           "recvfrom failed, error %d\n", WSAGetLastError());
+        ok(From.sin6_family == AF_INET6, "source family %u\n", From.sin6_family);
+        ok(!memcmp(&From.sin6_addr, MappedLoopback, sizeof(MappedLoopback)), "source is not ::ffff:127.0.0.1\n");
+        ok(From.sin6_port == LocalPort(Sender), "source port %u\n", ntohs(From.sin6_port));
+
+        ok(sendto(Socket, "y", 1, 0, (SOCKADDR *)&From, sizeof(From)) == 1,
+           "mapped sendto failed, error %d\n", WSAGetLastError());
+        if (Readable(Sender, 2000))
+            ok(recv(Sender, &Data, 1, 0) == 1 && Data == 'y', "reply recv failed, error %d\n", WSAGetLastError());
+        else
+            ok(FALSE, "reply not received\n");
+
+        V6Only = CreateIPv6(SOCK_DGRAM, TRUE);
+        if (V6Only != INVALID_SOCKET)
+        {
+            Result = sendto(V6Only, "z", 1, 0, (SOCKADDR *)&From, sizeof(From)) == 1 ? 0 : WSAGetLastError();
+            ok(Result == WSAEADDRNOTAVAIL, "IPv6-only sendto ::ffff:127.0.0.1 gave %d\n", Result);
+            closesocket(V6Only);
+        }
+        closesocket(Sender);
+    }
+
+    closesocket(Socket);
+}
+
 START_TEST(dualstack_mapped)
 {
     WSADATA WsaData;
@@ -344,6 +514,9 @@ START_TEST(dualstack_mapped)
 
     TestTcpV6OnlyMapped();
     TestTcpDualStackPorts();
+    TestTcpMappedListener();
+    TestNonLocalMapped();
+    TestUdpMapped();
 
     WSACleanup();
 }

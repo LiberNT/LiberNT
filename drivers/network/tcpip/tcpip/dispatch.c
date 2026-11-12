@@ -843,6 +843,7 @@ NTSTATUS DispTdiQueryInformation(
         PADDRESS_FILE AddrFile;
         PTA_IP_ADDRESS Address;
         PCONNECTION_ENDPOINT Endpoint = NULL;
+        IP_ADDRESS LocalAddress;
 
 
         if (MmGetMdlByteCount(Irp->MdlAddress) <
@@ -865,7 +866,10 @@ NTSTATUS DispTdiQueryInformation(
                 return STATUS_INVALID_PARAMETER;
             }
 
-            return AddrBuildTransportAddress(&AddrFile->Address, AddrFile->Port,
+            LocalAddress = AddrFile->Address;
+            if (AddrFile->Family == TDI_ADDRESS_TYPE_IP6)
+                TCPMapToDualStack(&LocalAddress);
+            return AddrBuildTransportAddress(&LocalAddress, AddrFile->Port,
                                              (PTRANSPORT_ADDRESS)Address,
                                              MmGetMdlByteCount(Irp->MdlAddress) -
                                              FIELD_OFFSET(TDI_ADDRESS_INFO, Address));
@@ -889,7 +893,10 @@ NTSTATUS DispTdiQueryInformation(
                 return STATUS_SUCCESS;
             }
 
-            return AddrBuildTransportAddress(&Endpoint->AddressFile->Address,
+            LocalAddress = Endpoint->AddressFile->Address;
+            if (Endpoint->AddressFile->Family == TDI_ADDRESS_TYPE_IP6)
+                TCPMapToDualStack(&LocalAddress);
+            return AddrBuildTransportAddress(&LocalAddress,
                                              Endpoint->AddressFile->Port,
                                              (PTRANSPORT_ADDRESS)Address,
                                              MmGetMdlByteCount(Irp->MdlAddress) -
