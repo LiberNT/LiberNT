@@ -7205,6 +7205,19 @@ XHCI_GetCommandTrbType(
 }
 
 static
+BOOLEAN
+XHCI_SlotIsGone(
+    _In_ PXHCI_EXTENSION Extension,
+    _In_ UCHAR SlotId)
+{
+    PXHCI_DEVICE_SLOT Slot = XHCI_GetSlot(Extension, SlotId);
+
+    if (!Slot)
+        return TRUE;
+    return !Slot->InUse || InterlockedCompareExchange(&Slot->DetachPending, 0, 0) != 0;
+}
+
+static
 VOID
 XHCI_FinalizeDisableSlot(
     _In_ PXHCI_EXTENSION Extension,
@@ -11330,6 +11343,12 @@ CheckCompletion:
     else if (CommandContext->CompletionCode == XHCI_COMPLETION_SLOT_NOT_ENABLED && CommandContext->CommandType == XHCI_TRB_TYPE_DISABLE_SLOT)
     {
         /* The slot is already disabled, which is what the caller wanted */
+        Result = MP_STATUS_SUCCESS;
+    }
+    else if (CommandContext->CompletionCode == XHCI_COMPLETION_SLOT_NOT_ENABLED &&
+             XHCI_SlotIsGone(Extension, CommandContext->SlotId))
+    {
+        /* The device was unplugged before the teardown command ran: its slot is already gone */
         Result = MP_STATUS_SUCCESS;
     }
     else
