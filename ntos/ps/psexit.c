@@ -134,6 +134,9 @@ PspDrainUserApcs(
 
     PAGED_CODE();
 
+    /* A timer still set by the thread could queue its APC again while the ring below is walked */
+    ASSERT(IsListEmpty(&Thread->ActiveTimerListHead));
+
     First = KeFlushQueueApc(&Thread->Tcb, UserMode);
     if (First == NULL) return;
 
