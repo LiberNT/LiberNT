@@ -532,6 +532,7 @@ static VOID CheckFailedStack(DEVINST Bus)
     WCHAR Instance[MAX_DEVICE_ID_LEN];
     WCHAR VetoName[MAX_PATH];
     PNP_VETO_TYPE VetoType;
+    DWORD Before, After;
     DEVINST Child;
     HKEY Key;
 
@@ -567,7 +568,17 @@ static VOID CheckFailedStack(DEVINST Bus)
     ok(WaitChildProblem(Bus, CM_PROB_FAILED_START), "The child that failed its start has no CM_PROB_FAILED_START\n");
     ok_once(LiveStacks(), 0UL);
 
+    /* Unplugged after its stack was removed, the child's PDO gets the remove request that lets its bus delete it */
+    Before = After = 0;
+    ReadValue(L"ChildPdoRemoves", &Before);
+    SetRequest(L"HideChild", 1);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+    ok(ReadValue(L"ChildPdoRemoves", &After) && After == Before + 1, "The unplugged child's PDO got %lu remove requests\n",
+       After - Before);
     SetRequest(L"FailChildStart", 0);
+    SetRequest(L"HideChild", 0);
+    ok_once(CM_Reenumerate_DevNode(Bus, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
     ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The child did not start after its failed start\n");
     ok_once(LiveStacks(), 1UL);

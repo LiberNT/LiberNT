@@ -1501,6 +1501,28 @@ PiSendRemoval(
     }
 }
 
+/* A device whose stack was removed while it was present keeps its PDO; once its bus stops reporting it, the PDO gets
+ * the second remove request with which the bus driver deletes it (removing-a-device-in-a-bus-driver) */
+static
+VOID
+PiRemoveGonePdo(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    IO_STACK_LOCATION StackLocation;
+
+    PAGED_CODE();
+
+    ASSERT(DeviceNode->State == DeviceNodeRemoved);
+    ASSERT(DeviceNode->Flags & DNF_DEVICE_GONE);
+    ASSERT(DeviceNode->PhysicalDeviceObject->AttachedDevice == NULL);
+
+    RtlZeroMemory(&StackLocation, sizeof(StackLocation));
+    StackLocation.MajorFunction = IRP_MJ_PNP;
+    StackLocation.MinorFunction = IRP_MN_REMOVE_DEVICE;
+
+    IopSynchronousCall(DeviceNode->PhysicalDeviceObject, &StackLocation, NULL);
+}
+
 /* A node out of the tree lives as long as its device object, whose delete routine frees it */
 static
 VOID
@@ -1568,6 +1590,7 @@ PiProcessRemoval(
     PDEVICE_NODE Child;
     PDEVICE_NODE Next;
     BOOLEAN Gone;
+    BOOLEAN WasRemoved;
 
     PAGED_CODE();
 
@@ -1580,6 +1603,7 @@ PiProcessRemoval(
     }
 
     Gone = ParentRemoved || (DeviceNode->Flags & DNF_DEVICE_GONE);
+    WasRemoved = (DeviceNode->State == DeviceNodeRemoved);
 
     if (!PiIsPendingCloses(DeviceNode) && DeviceNode->State != DeviceNodeRemoved)
     {
@@ -1604,6 +1628,8 @@ PiProcessRemoval(
 
     if (Gone)
     {
+        /* A child of a removed parent is deleted by the parent's bus driver, which gets its own remove request */
+        if (WasRemoved && (DeviceNode->Flags & DNF_DEVICE_GONE)) PiRemoveGonePdo(DeviceNode);
         PiDeleteDevNode(DeviceNode);
     }
 }
@@ -1823,6 +1849,7 @@ PiRunDeviceAction(
                     if (DeviceNode->State == DeviceNodeRemoved && (DeviceNode->Flags & DNF_DEVICE_GONE) &&
                         DeviceNode->Child == NULL)
                     {
+                        PiRemoveGonePdo(DeviceNode);
                         PiDeleteDevNode(DeviceNode);
                     }
                     break;
