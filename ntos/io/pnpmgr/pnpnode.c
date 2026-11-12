@@ -194,8 +194,13 @@ PiInsertDevNode(
 {
     KIRQL OldIrql;
 
+    PAGED_CODE();
     ASSERT(DeviceNode->Parent == NULL);
+    ASSERT(!ExIsResourceAcquiredSharedLite(&IopDeviceTreeResource));
 
+    /* The tree's walkers hold its resource: a node joins the tree only while none of them runs */
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&IopDeviceTreeResource, TRUE);
     KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
 
     DeviceNode->Parent = ParentNode;
@@ -214,6 +219,8 @@ PiInsertDevNode(
     ParentNode->LastChild = DeviceNode;
 
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+    ExReleaseResourceLite(&IopDeviceTreeResource);
+    KeLeaveCriticalRegion();
 }
 
 VOID
