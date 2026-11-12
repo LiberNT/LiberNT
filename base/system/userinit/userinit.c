@@ -749,6 +749,23 @@ ExpandInstallerPath(
 }
 
 static BOOL
+HasInstallationSource(IN LPCWSTR lpInstallerPath)
+{
+    WCHAR Source[MAX_PATH];
+    PWSTR ptr;
+
+    if (FAILED(StringCchCopyW(Source, ARRAYSIZE(Source), lpInstallerPath)))
+        return FALSE;
+    ptr = wcsrchr(Source, L'\\');
+    if (!ptr)
+        return FALSE;
+    *++ptr = UNICODE_NULL;
+    if (FAILED(StringCchCatW(Source, ARRAYSIZE(Source), L"txtsetup.sif")))
+        return FALSE;
+    return GetFileAttributesW(Source) != INVALID_FILE_ATTRIBUTES;
+}
+
+static BOOL
 StartInstaller(IN LPCWSTR lpInstallerName)
 {
     WCHAR Installer[MAX_PATH];
@@ -756,6 +773,11 @@ StartInstaller(IN LPCWSTR lpInstallerName)
 
     if (ExpandInstallerPath(lpInstallerName, Installer, ARRAYSIZE(Installer)))
     {
+        if (!HasInstallationSource(Installer))
+        {
+            WARN("No installation source next to '%s'\n", debugstr_w(Installer));
+            return FALSE;
+        }
         /* We have found the installer */
         if (StartProcess(Installer, NULL))
             return TRUE;
