@@ -481,7 +481,33 @@ typedef struct _SOFTGPU_ROOT_SHADOW
     UCHAR BlueSize;
     UCHAR BluePosition;
     ULONG Rotation;
+    ULONG Channel[3][256];
 } SOFTGPU_ROOT_SHADOW, *PSOFTGPU_ROOT_SHADOW;
+
+static ULONG
+SoftGpuRootScaleChannel(
+    _In_ ULONG Value,
+    _In_ UCHAR Size)
+{
+    if (Size <= 8)
+        return Value >> (8 - Size);
+
+    return (Value << (Size - 8)) | (Value >> (16 - Size));
+}
+
+static VOID
+SoftGpuRootBuildChannels(
+    _Inout_ PSOFTGPU_ROOT_SHADOW Shadow)
+{
+    ULONG Value;
+
+    for (Value = 0; Value < 256; Value++)
+    {
+        Shadow->Channel[0][Value] = SoftGpuRootScaleChannel(Value, Shadow->RedSize) << Shadow->RedPosition;
+        Shadow->Channel[1][Value] = SoftGpuRootScaleChannel(Value, Shadow->GreenSize) << Shadow->GreenPosition;
+        Shadow->Channel[2][Value] = SoftGpuRootScaleChannel(Value, Shadow->BlueSize) << Shadow->BluePosition;
+    }
+}
 
 static BOOLEAN
 SoftGpuVbeColorField(
@@ -742,6 +768,7 @@ SoftGpuVbeColdStart(
         Shadow->GreenPosition = Fields[3];
         Shadow->BlueSize = Fields[4];
         Shadow->BluePosition = Fields[5];
+        SoftGpuRootBuildChannels(Shadow);
         Shadow->ShadowSize = (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL * Height;
         Shadow->Shadow = ExAllocatePoolWithTag(NonPagedPool, Shadow->ShadowSize, SOFTGPU_POOL_TAG);
         Shadow->FrameBufferSize = (SIZE_T)Pitch * Height;
@@ -763,17 +790,6 @@ SoftGpuVbeColdStart(
     DPRINT1("SOFTGPU: no POST framebuffer; set VBE mode 0x%x, %lux%lu at %lu bpp\n",
             BestMode, Width, Height, BestBitsPerPixel);
     return STATUS_SUCCESS;
-}
-
-static ULONG
-SoftGpuRootScaleChannel(
-    _In_ ULONG Value,
-    _In_ UCHAR Size)
-{
-    if (Size <= 8)
-        return Value >> (8 - Size);
-
-    return (Value << (Size - 8)) | (Value >> (16 - Size));
 }
 
 static LONG_PTR
@@ -964,6 +980,7 @@ SoftGpuRootLoaderShadowStart(
     Shadow->GreenPosition = Fields[3];
     Shadow->BlueSize = Fields[4];
     Shadow->BluePosition = Fields[5];
+    SoftGpuRootBuildChannels(Shadow);
     Shadow->ShadowSize = (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL * Height;
     Shadow->Shadow = ExAllocatePoolWithTag(NonPagedPool, Shadow->ShadowSize, SOFTGPU_POOL_TAG);
     Shadow->FrameBufferSize = (SIZE_T)Pitch * Height;
@@ -1310,12 +1327,26 @@ SoftGpuPlatformScanoutWritten(
             continue;
         }
 
+        if (Shadow->BytesPerPixel == sizeof(ULONG))
+        {
+            PULONG Pixels = (PULONG)Destination;
+
+            for (X = FrameLeft; X < FrameRight; X++)
+            {
+                ULONG Pixel = Shadow->Shadow[Index];
+
+                *Pixels++ = Shadow->Channel[0][(Pixel >> 16) & 0xFF] | Shadow->Channel[1][(Pixel >> 8) & 0xFF] |
+                            Shadow->Channel[2][Pixel & 0xFF];
+                Index += Step;
+            }
+            continue;
+        }
+
         for (X = FrameLeft; X < FrameRight; X++)
         {
             ULONG Pixel = Shadow->Shadow[Index];
-            ULONG Value = (SoftGpuRootScaleChannel((Pixel >> 16) & 0xFF, Shadow->RedSize) << Shadow->RedPosition) |
-                          (SoftGpuRootScaleChannel((Pixel >> 8) & 0xFF, Shadow->GreenSize) << Shadow->GreenPosition) |
-                          (SoftGpuRootScaleChannel(Pixel & 0xFF, Shadow->BlueSize) << Shadow->BluePosition);
+            ULONG Value = Shadow->Channel[0][(Pixel >> 16) & 0xFF] | Shadow->Channel[1][(Pixel >> 8) & 0xFF] |
+                          Shadow->Channel[2][Pixel & 0xFF];
 
             for (Byte = 0; Byte < Shadow->BytesPerPixel; Byte++)
                 Destination[Byte] = (UCHAR)(Value >> (Byte * 8));
