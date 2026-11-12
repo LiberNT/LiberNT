@@ -1009,6 +1009,12 @@ NwifiSupplicantSeedFirmware(
     CredentialLength = Sup->PassphraseLen;
     RtlCopyMemory(Credential, Sup->Passphrase, CredentialLength);
     AuthAlgorithm = Msm->Connect.AuthAlgorithm;
+    FirmwareCredentialLength = 0;
+    if (AuthAlgorithm == DOT11_AUTH_ALGO_RSNA_PSK && Sup->Initialised &&
+        RsnaGetPmk(&Sup->Ctx, FirmwareCredential) == RSNA_OK)
+    {
+        FirmwareCredentialLength = RSNA_PMK_LEN;
+    }
     NdisReleaseSpinLock(&Msm->Lock);
 
     if (AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
@@ -1016,7 +1022,7 @@ NwifiSupplicantSeedFirmware(
         RtlCopyMemory(FirmwareCredential, Credential, CredentialLength);
         FirmwareCredentialLength = CredentialLength;
     }
-    else
+    else if (FirmwareCredentialLength == 0)
     {
         RtlSecureZeroMemory(Credential, sizeof(Credential));
         return NDIS_STATUS_NOT_SUPPORTED;

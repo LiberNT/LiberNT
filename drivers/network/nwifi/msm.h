@@ -34,7 +34,7 @@ typedef enum _NWIFI_MSM_STATE
 /* One cached scan result: fixed summary plus the raw beacon/probe IEs (so
  * callers can parse the RSN IE), stored in a fixed tail. */
 #define NWIFI_MAX_BSS_IE        512
-#define NWIFI_MAX_BSS_CACHE     48
+#define NWIFI_MAX_BSS_CACHE     128
 
 typedef struct _NWIFI_BSS_CACHE_ENTRY
 {

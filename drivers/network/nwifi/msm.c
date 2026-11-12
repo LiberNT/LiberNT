@@ -536,27 +536,53 @@ NwifiAggregateBssList(
     _In_ PNWIFI_MSM Msm)
 {
     PNWIFI_ADAPTER Adapter = Msm->Adapter;
-    PDOT11_BYTE_ARRAY ByteArray;
-    ULONG BufferSize = 16 * 1024;       /* generous; typical lists are < 4 KB */
+    PDOT11_BYTE_ARRAY ByteArray = NULL;
+    ULONG BufferSize = 16 * 1024;
+    ULONG Needed = 0;
     ULONG Got = 0;
-    NDIS_STATUS Status;
+    ULONG Attempt;
+    NDIS_STATUS Status = NDIS_STATUS_FAILURE;
     PUCHAR Cursor;
     PUCHAR End;
     ULONG64 Now;
 
-    ByteArray = (PDOT11_BYTE_ARRAY)NwifiAllocate(BufferSize);
+    for (Attempt = 0; Attempt < NWIFI_BSS_LIST_ATTEMPTS; Attempt++)
+    {
+        ByteArray = (PDOT11_BYTE_ARRAY)NwifiAllocate(BufferSize);
+        if (ByteArray == NULL)
+        {
+            return;
+        }
+
+        Status = NwifiProtocolDoRequestEx(Adapter, NdisRequestMethod,
+                                          OID_DOT11_ENUM_BSS_LIST,
+                                          ByteArray, BufferSize, &Got, &Needed);
+        if (Status != NDIS_STATUS_BUFFER_TOO_SHORT)
+        {
+            break;
+        }
+
+        NwifiFree(ByteArray);
+        ByteArray = NULL;
+        if (Needed <= BufferSize || Needed > NWIFI_BSS_LIST_MAX_BYTES)
+        {
+            DPRINT1("NWIFI: ENUM_BSS_LIST wants %u bytes for a %u byte buffer\n",
+                    Needed, BufferSize);
+            return;
+        }
+        BufferSize = Needed;
+    }
+
     if (ByteArray == NULL)
     {
+        DPRINT1("NWIFI: ENUM_BSS_LIST still short of %u bytes\n", Needed);
         return;
     }
 
-    Status = NwifiProtocolDoRequest(Adapter, NdisRequestMethod,
-                                    OID_DOT11_ENUM_BSS_LIST,
-                                    ByteArray, BufferSize, &Got);
     if (Status != NDIS_STATUS_SUCCESS ||
         Got < FIELD_OFFSET(DOT11_BYTE_ARRAY, ucBuffer))
     {
-        DPRINT("NWIFI: ENUM_BSS_LIST failed 0x%08X got %u\n", Status, Got);
+        DPRINT1("NWIFI: ENUM_BSS_LIST failed 0x%08X got %u\n", Status, Got);
         NwifiFree(ByteArray);
         return;
     }
@@ -632,8 +658,12 @@ NwifiAggregateBssList(
                 ULONG Oldest = 0;
                 for (i = 1; i < Msm->BssCount; i++)
                 {
+                    /* One pass stamps every entry alike: the weakest signal breaks the tie */
                     if (Msm->BssCache[i].HostTimestamp <
-                        Msm->BssCache[Oldest].HostTimestamp)
+                        Msm->BssCache[Oldest].HostTimestamp ||
+                        (Msm->BssCache[i].HostTimestamp ==
+                         Msm->BssCache[Oldest].HostTimestamp &&
+                         Msm->BssCache[i].Rssi < Msm->BssCache[Oldest].Rssi))
                         Oldest = i;
                 }
                 Slot = &Msm->BssCache[Oldest];
@@ -690,6 +720,7 @@ NwifiMsmConnect(
     NdisAcquireSpinLock(&Msm->Lock);
     if (Msm->State != NwifiMsmIdle && Msm->State != NwifiMsmScanning)
     {
+        DPRINT1("NWIFI: connect refused, the interface is still in state %u\n", Msm->State);
         NdisReleaseSpinLock(&Msm->Lock);
         return NDIS_STATUS_MEDIA_BUSY;
     }
@@ -779,8 +810,7 @@ NwifiMsmConnect(
             Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
         {
             Status = NwifiSupplicantStart(Msm);
-            if (Status == NDIS_STATUS_SUCCESS &&
-                Params->AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE)
+            if (Status == NDIS_STATUS_SUCCESS)
             {
                 NwifiSupplicantSeedFirmware(Msm);
             }

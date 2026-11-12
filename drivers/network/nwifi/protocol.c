@@ -29,13 +29,14 @@ typedef struct _NWIFI_SYNC_OID_CONTEXT
 /* Synchronous OID round-trip: NdisOidRequest may pend, so wait on an event
  * signalled by the completion callback. */
 NDIS_STATUS
-NwifiProtocolDoRequest(
+NwifiProtocolDoRequestEx(
     _In_ PNWIFI_ADAPTER Adapter,
     _In_ NDIS_REQUEST_TYPE RequestType,
     _In_ NDIS_OID Oid,
     _Inout_ PVOID Buffer,
     _In_ ULONG Length,
-    _Out_opt_ PULONG BytesProcessed)
+    _Out_opt_ PULONG BytesProcessed,
+    _Out_opt_ PULONG BytesNeeded)
 {
     NWIFI_SYNC_OID_CONTEXT Context;
     PNDIS_OID_REQUEST Request = &Context.Request;
@@ -96,7 +97,30 @@ NwifiProtocolDoRequest(
             *BytesProcessed = Request->DATA.QUERY_INFORMATION.BytesWritten;
     }
 
+    if (BytesNeeded != NULL)
+    {
+        if (RequestType == NdisRequestSetInformation)
+            *BytesNeeded = Request->DATA.SET_INFORMATION.BytesNeeded;
+        else if (RequestType == NdisRequestMethod)
+            *BytesNeeded = Request->DATA.METHOD_INFORMATION.BytesNeeded;
+        else
+            *BytesNeeded = Request->DATA.QUERY_INFORMATION.BytesNeeded;
+    }
+
     return Status;
+}
+
+NDIS_STATUS
+NwifiProtocolDoRequest(
+    _In_ PNWIFI_ADAPTER Adapter,
+    _In_ NDIS_REQUEST_TYPE RequestType,
+    _In_ NDIS_OID Oid,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG BytesProcessed)
+{
+    return NwifiProtocolDoRequestEx(Adapter, RequestType, Oid, Buffer, Length,
+                                    BytesProcessed, NULL);
 }
 
 VOID

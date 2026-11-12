@@ -17,6 +17,8 @@
 #include <reactos/nwifi_ioctl.h>
 
 #define NWIFI_TAG  'FIWN'   /* 'NWIF' */
+#define NWIFI_BSS_LIST_ATTEMPTS 3
+#define NWIFI_BSS_LIST_MAX_BYTES (1024 * 1024)
 
 /* Link speed reported to TCP/IP for the virtual Ethernet adapter until the MSM
  * learns the real PHY rate.  54 Mbit/s (classic 802.11g) is a safe stand-in. */
@@ -252,6 +254,15 @@ NDIS_STATUS NwifiProtocolDoRequest(
     _Inout_ PVOID Buffer,
     _In_ ULONG Length,
     _Out_opt_ PULONG BytesProcessed);
+
+NDIS_STATUS NwifiProtocolDoRequestEx(
+    _In_ PNWIFI_ADAPTER Adapter,
+    _In_ NDIS_REQUEST_TYPE RequestType,
+    _In_ NDIS_OID Oid,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG BytesProcessed,
+    _Out_opt_ PULONG BytesNeeded);
 
 /* --- miniport.c : upper edge ---------------------------------------------- */
 MINIPORT_INITIALIZE              NwifiMiniportInitializeEx;
