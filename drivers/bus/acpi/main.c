@@ -722,6 +722,12 @@ ACPIDispatchDeviceControl(
         }
 
         case IOCTL_GET_SYS_BUTTON_CAPS:
+            if (Irp->RequestorMode != KernelMode)
+            {
+                Irp->IoStatus.Information = 0;
+                status = STATUS_SUCCESS;
+                break;
+            }
             if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
             {
                 status = STATUS_BUFFER_TOO_SMALL;
@@ -750,6 +756,12 @@ ACPIDispatchDeviceControl(
                 PACPI_BUTTON_WAIT Wait;
                 NTSTATUS ThreadStatus;
 
+                if (Irp->RequestorMode != KernelMode)
+                {
+                    Irp->IoStatus.Information = 0;
+                    status = STATUS_SUCCESS;
+                    break;
+                }
                 if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(ULONG))
                 {
                     status = STATUS_BUFFER_TOO_SMALL;

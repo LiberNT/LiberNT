@@ -16,6 +16,7 @@ list(APPEND SOURCE
     SetupInstallFile.c
     SetupInstallRegisterDlls.c
     SetupInstallServicesFromInfSectionEx.c
+    SysButtonDevices.c
     UsbInterfaceIds.c
     testlist.c)
 
