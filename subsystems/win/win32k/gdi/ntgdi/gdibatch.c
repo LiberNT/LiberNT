@@ -411,32 +411,51 @@ DxgkEngCompleteRedirectedBltPresent(
     return Status;
 }
 
+C_ASSERT(GDIBATCHBUFSIZE == RTL_FIELD_SIZE(GDI_TEB_BATCH, Buffer));
+
+static
+ULONG
+GdiBatchCommandSize(ULONG Cmd)
+{
+  switch (Cmd)
+  {
+     case GdiBCPatBlt: return sizeof(GDIBSPATBLT);
+     case GdiBCPolyPatBlt: return sizeof(GDIBSPPATBLT);
+     case GdiBCTextOut: return sizeof(GDIBSTEXTOUT);
+     case GdiBCExtTextOut: return sizeof(GDIBSEXTTEXTOUT);
+     case GdiBCSetBrushOrg: return sizeof(GDIBSSETBRHORG);
+     case GdiBCExtSelClipRgn: return sizeof(GDIBSEXTSELCLPRGN);
+     case GdiBCSelObj:
+     case GdiBCDelRgn:
+     case GdiBCDelObj: return sizeof(GDIBSOBJECT);
+     default: return sizeof(GDIBATCHHDR);
+  }
+}
+
 //
 // Process the batch.
 //
 ULONG
 FASTCALL
-GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr)
+GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr, ULONG cjAvailable)
 {
-  ULONG Cmd = 0, Size = 0;
+  ULONG Cmd, Size;
   PDC_ATTR pdcattr = NULL;
+
+  ASSERT(cjAvailable >= sizeof(GDIBATCHHDR));
 
   if (dc)
   {
      pdcattr = dc->pdcattr;
   }
 
-  _SEH2_TRY
+  Cmd = (USHORT)pHdr->Cmd;
+  Size = (USHORT)pHdr->Size; // Return the full size of the structure.
+  if (Size < GdiBatchCommandSize(Cmd) || Size > cjAvailable)
   {
-     Cmd = pHdr->Cmd;
-     Size = pHdr->Size; // Return the full size of the structure.
+     DPRINT1("WARNING! GdiBatch command %lu has invalid size %lu\n", Cmd, Size);
+     return 0;
   }
-  _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-  {
-     DPRINT1("WARNING! GdiBatch Fault!\n");
-     _SEH2_YIELD(return 0;)
-  }
-  _SEH2_END;
 
   switch(Cmd)
   {
@@ -514,6 +533,7 @@ GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr)
         ULONG ulForegroundClr, ulBackgroundClr = 0, ulBrushClr;
         if (!dc) break;
         pgDPB = (PGDIBSPPATBLT) pHdr;
+        if (pgDPB->Count > (Size - FIELD_OFFSET(GDIBSPPATBLT, pRect)) / sizeof(PATRECT)) break;
         /* Convert the ROP3 to a ROP4 */
         dwRop = pgDPB->rop4;
         dwRop = MAKEROP4(dwRop & 0xFF0000, dwRop);
@@ -602,8 +622,18 @@ GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr)
         USHORT jBkMode;
         LONG lBkMode;
         POINTL ptlViewportOrg;
+        ULONG cjData;
         if (!dc) break;
         pgO = (PGDIBSTEXTOUT) pHdr;
+
+        cjData = Size - FIELD_OFFSET(GDIBSTEXTOUT, String);
+        if (pgO->Size > cjData ||
+            pgO->cbCount > (cjData - pgO->Size) / sizeof(WCHAR) ||
+            (pgO->Size != 0 && pgO->Size < pgO->cbCount * sizeof(INT) * ((pgO->Options & ETO_PDY) ? 2 : 1)) ||
+            ((pgO->Options & ETO_PDY) && pgO->cbCount != 0 && pgO->Size == 0))
+        {
+            break;
+        }
 
         // Save current attributes, flags and Set the attribute snapshots
         saveflags = dc->pdcattr->ulDirty_ & (DIRTY_BACKGROUND|DIRTY_LINE|DIRTY_TEXT|DIRTY_FILL|DC_BRUSH_DIRTY|DIRTY_CHARSET);
@@ -663,7 +693,7 @@ GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr)
                         pgO->y,
                         pgO->Options,
                         lprc,
-                        (LPCWSTR)&pgO->String[pgO->Size/sizeof(WCHAR)],
+                        (LPCWSTR)((PUCHAR)pgO + FIELD_OFFSET(GDIBSTEXTOUT, String) + pgO->Size),
                         pgO->cbCount,
                         pgO->Size ? (const INT *)&pgO->Buffer : NULL,
                         pgO->iCS_CP );
@@ -712,6 +742,7 @@ GdiFlushUserBatch(PDC dc, PGDIBATCHHDR pHdr)
         DWORD flags = 0, flXform = 0, saveflags, saveflXform = 0;
         if (!dc) break;
         pgO = (PGDIBSEXTTEXTOUT) pHdr;
+        if (pgO->Count != 0) break;
 
         saveflags = dc->pdcattr->ulDirty_ & (DIRTY_BACKGROUND|DIRTY_TEXT|DIRTY_FILL|DC_BRUSH_DIRTY|DIRTY_CHARSET);
 
@@ -848,8 +879,20 @@ NtGdiFlushUserBatch(VOID)
      */
     if (hDC || GdiBatchCount)
     {
-      PCHAR pHdr = (PCHAR)&pTeb->GdiTebBatch.Buffer[0];
+      ULONG Batch[GDIBATCHBUFSIZE / sizeof(ULONG)];
+      ULONG Offset = 0;
       PDC pDC = NULL;
+
+      _SEH2_TRY
+      {
+          RtlCopyMemory(Batch, pTeb->GdiTebBatch.Buffer, sizeof(Batch));
+      }
+      _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+      {
+          DPRINT1("WARNING! GdiBatch Fault!\n");
+          GdiBatchCount = 0;
+      }
+      _SEH2_END;
 
       if ((GDI_HANDLE_GET_TYPE(hDC) == GDILoObjType_LO_DC_TYPE ||
            GDI_HANDLE_GET_TYPE(hDC) == GDILoObjType_LO_ALTDC_TYPE) &&
@@ -862,13 +905,13 @@ NtGdiFlushUserBatch(VOID)
            IntCompositionBatchBegin(pDC->dclevel.pSurface);
 
        // No need to init anything, just go!
-       for (; GdiBatchCount > 0; GdiBatchCount--)
+       for (; GdiBatchCount > 0 && Offset + sizeof(GDIBATCHHDR) <= sizeof(Batch); GdiBatchCount--)
        {
            ULONG Size;
            // Process Gdi Batch!
-           Size = GdiFlushUserBatch(pDC, (PGDIBATCHHDR) pHdr);
+           Size = GdiFlushUserBatch(pDC, (PGDIBATCHHDR)((PUCHAR)Batch + Offset), sizeof(Batch) - Offset);
            if (!Size) break;
-           pHdr += Size;
+           Offset += Size;
        }
 
        if (pDC)

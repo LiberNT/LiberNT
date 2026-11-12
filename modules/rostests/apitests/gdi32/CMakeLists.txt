@@ -31,6 +31,7 @@ list(APPEND SOURCE
     ExtCreatePen.c
     ExtCreateRegion.c
     ExtTextOut.c
+    GdiBatch.c
     FrameRgn.c
     GdiConvertBitmap.c
     GdiConvertBrush.c
