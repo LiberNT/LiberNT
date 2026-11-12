@@ -218,20 +218,23 @@ PspZeroTebTlsCell(
     _SEH2_TRY
     {
         /* An emulated thread's own cells are in its x86 block; the native ones belong to the emulation layer */
-        if (Emulated && (Teb->WowTebOffset != 0))
+        if (Emulated)
         {
-            Teb32 = (TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset);
-            ProbeForWrite(Teb32, sizeof(TEB32), sizeof(ULONG));
+            if (Teb->WowTebOffset != 0)
+            {
+                Teb32 = (TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset);
+                ProbeForWrite(Teb32, sizeof(TEB32), sizeof(ULONG));
 
-            if (Index < TLS_MINIMUM_AVAILABLE)
-            {
-                Teb32->TlsSlots[Index] = 0;
-            }
-            else if (Teb32->TlsExpansionSlots != 0)
-            {
-                Cell32 = (PULONG)UlongToPtr(Teb32->TlsExpansionSlots) + (Index - TLS_MINIMUM_AVAILABLE);
-                ProbeForWrite(Cell32, sizeof(ULONG), sizeof(ULONG));
-                *Cell32 = 0;
+                if (Index < TLS_MINIMUM_AVAILABLE)
+                {
+                    Teb32->TlsSlots[Index] = 0;
+                }
+                else if (Teb32->TlsExpansionSlots != 0)
+                {
+                    Cell32 = (PULONG)UlongToPtr(Teb32->TlsExpansionSlots) + (Index - TLS_MINIMUM_AVAILABLE);
+                    ProbeForWrite(Cell32, sizeof(ULONG), sizeof(ULONG));
+                    *Cell32 = 0;
+                }
             }
         }
         else if (Index < TLS_MINIMUM_AVAILABLE)
