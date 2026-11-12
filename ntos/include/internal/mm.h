@@ -549,7 +549,9 @@ PFN_NUMBER
 NTAPI
 MmBuildDumpPageBitmap(
     _Inout_ PRTL_BITMAP Bitmap,
-    _In_ BOOLEAN IncludeUserPages);
+    _In_ BOOLEAN IncludeUserPages,
+    _In_ PFN_NUMBER MaximumPages,
+    _Out_opt_ PPFN_NUMBER CandidatePages);
 
 #define MM_HIBERNATE_SKIP 0
 #define MM_HIBERNATE_ZERO 1

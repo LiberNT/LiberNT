@@ -642,30 +642,92 @@ MmMapHibernationFrame(
     return MiArchDebugMapFrame(Frame);
 }
 
+typedef enum _MI_DUMP_CLASS
+{
+    MiDumpPageTable,
+    MiDumpActive,
+    MiDumpListed,
+    MiDumpClassCount
+} MI_DUMP_CLASS;
+
+static
+MI_DUMP_CLASS
+MiDumpFrameClass(
+    _In_ ULONG Frame,
+    _In_ BOOLEAN IncludeUserPages)
+{
+    UCHAR State = MiSystem.Pfn.Pfn[Frame].State;
+
+    if (State != MiPageActive && State != MiPageTransition && State != MiPageModified)
+        return MiDumpClassCount;
+    if (MI_PFN_FLAGS(&MiSystem.Pfn.Pfn[Frame]) & MI_PFN_FLAG_PAGE_TABLE)
+        return MiDumpPageTable;
+    if (!IncludeUserPages && MiPtIsUserFrame(&MiSystem, Frame))
+        return MiDumpClassCount;
+    return (State == MiPageActive) ? MiDumpActive : MiDumpListed;
+}
+
 PFN_NUMBER
 NTAPI
 MmBuildDumpPageBitmap(
     _Inout_ PRTL_BITMAP Bitmap,
-    _In_ BOOLEAN IncludeUserPages)
+    _In_ BOOLEAN IncludeUserPages,
+    _In_ PFN_NUMBER MaximumPages,
+    _Out_opt_ PPFN_NUMBER CandidatePages)
 {
-    PFN_NUMBER Count = 0;
+    PFN_NUMBER Found[MiDumpClassCount] = { 0 };
+    PFN_NUMBER Budget[MiDumpClassCount];
+    PFN_NUMBER Taken[MiDumpClassCount] = { 0 };
+    PFN_NUMBER Preset;
+    PFN_NUMBER Remaining;
+    PFN_NUMBER Selected;
+    PFN_NUMBER Candidates;
+    MI_DUMP_CLASS Class;
+    ULONG Limit;
     ULONG Frame;
 
-    RtlClearAllBits(Bitmap);
+    ASSERT(Bitmap != NULL);
 
-    for (Frame = MiSystem.Pfn.FirstFrame; Frame < MiSystem.Pfn.FrameCount && Frame < Bitmap->SizeOfBitMap; Frame++)
+    Preset = RtlNumberOfSetBits(Bitmap);
+    ASSERT(Preset <= MaximumPages);
+    Remaining = MaximumPages - Preset;
+    Selected = Preset;
+    Candidates = Preset;
+
+    Limit = (ULONG)min((ULONG64)MiSystem.Pfn.FrameCount, (ULONG64)Bitmap->SizeOfBitMap);
+
+    for (Frame = MiSystem.Pfn.FirstFrame; Frame < Limit; Frame++)
     {
-        UCHAR State = MiSystem.Pfn.Pfn[Frame].State;
-
-        if (State == MiPageActive || State == MiPageTransition || State == MiPageModified)
-        {
-            if (!IncludeUserPages && MiPtIsUserFrame(&MiSystem, Frame))
-                continue;
-
-            RtlSetBit(Bitmap, Frame);
-            Count++;
-        }
+        if (RtlCheckBit(Bitmap, Frame))
+            continue;
+        Class = MiDumpFrameClass(Frame, IncludeUserPages);
+        if (Class != MiDumpClassCount)
+            Found[Class]++;
     }
 
-    return Count;
+    for (Class = MiDumpPageTable; Class < MiDumpClassCount; Class++)
+    {
+        Budget[Class] = min(Found[Class], Remaining);
+        Remaining -= Budget[Class];
+        Candidates += Found[Class];
+    }
+
+    for (Frame = MiSystem.Pfn.FirstFrame; Frame < Limit; Frame++)
+    {
+        if (RtlCheckBit(Bitmap, Frame))
+            continue;
+        Class = MiDumpFrameClass(Frame, IncludeUserPages);
+        if (Class == MiDumpClassCount || Taken[Class] >= Budget[Class])
+            continue;
+
+        RtlSetBit(Bitmap, Frame);
+        Taken[Class]++;
+        Selected++;
+    }
+
+    ASSERT(Selected <= MaximumPages);
+
+    if (CandidatePages != NULL)
+        *CandidatePages = Candidates;
+    return Selected;
 }
