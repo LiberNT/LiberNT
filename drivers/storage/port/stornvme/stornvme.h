@@ -51,6 +51,7 @@
 #define NVME_MAX_TRANSFER           (1024 * 1024)
 #define NVME_MAX_PRP_ENTRIES        (NVME_MAX_TRANSFER / PAGE_SIZE)
 #define NVME_MAX_DSM_RANGES         128
+#define NVME_MAX_WRITE_WINDOWS      4
 #define NVME_MIN_BLOCK_SHIFT        9
 #define NVME_MAX_BLOCK_SHIFT        16
 #define NVME_APST_MAX_LATENCY_US    100000
@@ -151,8 +152,9 @@ typedef struct _NVME_DEVICE_EXTENSION
     BOOLEAN WriteProtected;
     BOOLEAN WriteWindowValid;
     BOOLEAN IdentifyCnsLimited;
-    ULONGLONG WriteWindowFirst;
-    ULONGLONG WriteWindowLast;
+    ULONG WriteWindowCount;
+    ULONGLONG WriteWindowFirst[NVME_MAX_WRITE_WINDOWS];
+    ULONGLONG WriteWindowLast[NVME_MAX_WRITE_WINDOWS];
     BOOLEAN MessageInterrupts;
     ULONG MessageCount;
     BOOLEAN InterruptsLive;

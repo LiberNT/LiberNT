@@ -364,7 +364,8 @@ AnsReadWriteWindow(_Inout_ PNVME_DEVICE_EXTENSION Device)
     OBJECT_ATTRIBUTES Attributes;
     PKEY_VALUE_PARTIAL_INFORMATION Value;
     ULONG Length = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 1024 * sizeof(WCHAR);
-    ULONGLONG First, Last;
+    ULONGLONG First[NVME_MAX_WRITE_WINDOWS], Last[NVME_MAX_WRITE_WINDOWS];
+    ULONG Count, Index;
     PCWSTR Text, Cursor;
     HANDLE Key;
 
@@ -384,13 +385,29 @@ AnsReadWriteWindow(_Inout_ PNVME_DEVICE_EXTENSION Device)
         if (*Cursor)
         {
             Cursor += RTL_NUMBER_OF(Option) - 1;
-            if (AnsParseDecimal(&Cursor, &First) && *Cursor++ == L'-' && AnsParseDecimal(&Cursor, &Last) &&
-                (*Cursor == UNICODE_NULL || *Cursor == L' ') && First <= Last)
+            for (Count = 0; Count < NVME_MAX_WRITE_WINDOWS; )
             {
-                Device->WriteWindowFirst = First;
-                Device->WriteWindowLast = Last;
+                if (!AnsParseDecimal(&Cursor, &First[Count]) || *Cursor++ != L'-' ||
+                    !AnsParseDecimal(&Cursor, &Last[Count]) || First[Count] > Last[Count])
+                {
+                    Count = 0;
+                    break;
+                }
+                ++Count;
+                if (*Cursor != L',')
+                    break;
+                ++Cursor;
+            }
+            if (Count != 0 && (*Cursor == UNICODE_NULL || *Cursor == L' '))
+            {
+                for (Index = 0; Index < Count; ++Index)
+                {
+                    Device->WriteWindowFirst[Index] = First[Index];
+                    Device->WriteWindowLast[Index] = Last[Index];
+                    DPRINT1("stornvme: ANS writes are allowed only in blocks %I64u-%I64u\n", First[Index], Last[Index]);
+                }
+                Device->WriteWindowCount = Count;
                 Device->WriteWindowValid = TRUE;
-                DPRINT1("stornvme: ANS writes are allowed only in blocks %I64u-%I64u\n", First, Last);
             }
             else
             {

@@ -411,8 +411,8 @@ NvmeServiceQueuesAtInterrupt(_In_ PNVME_DEVICE_EXTENSION Device)
 
     do
     {
+        Handled |= Device->AdminReady && NvmeQueueHasWork(&Device->AdminQueue);
         Collected = NvmeProcessAdminCompletionsLocked(Device, Batch, NVME_COMPLETION_BATCH);
-        Handled |= Collected != 0;
         for (Index = 0; Index < Collected; Index++)
         {
             if (Batch[Index].SlotType == NVME_SLOT_SRB_LOG)
@@ -426,8 +426,8 @@ NvmeServiceQueuesAtInterrupt(_In_ PNVME_DEVICE_EXTENSION Device)
     {
         do
         {
+            Handled |= Device->IoQueues[Queue].Created && NvmeQueueHasWork(&Device->IoQueues[Queue]);
             Collected = NvmeProcessIoCompletionsLocked(Device, &Device->IoQueues[Queue], Batch, NVME_COMPLETION_BATCH);
-            Handled |= Collected != 0;
             NvmeCompleteIoBatch(Device, &Device->IoQueues[Queue], Batch, Collected);
         } while (Collected == NVME_COMPLETION_BATCH);
     }

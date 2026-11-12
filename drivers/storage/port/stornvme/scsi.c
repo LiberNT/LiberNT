@@ -681,11 +681,19 @@ NvmeWriteInWindow(_In_ PNVME_DEVICE_EXTENSION Device, _In_ PSCSI_REQUEST_BLOCK S
 {
     ULONGLONG Lba;
     ULONG Blocks;
+    ULONG Index;
 
     if (!Device->WriteWindowValid || !NvmeDecodeLba(Srb, &Lba, &Blocks) || Blocks == 0)
         return FALSE;
-    return Lba >= Device->WriteWindowFirst && Lba <= Device->WriteWindowLast &&
-           Blocks - 1 <= Device->WriteWindowLast - Lba;
+    for (Index = 0; Index < Device->WriteWindowCount; ++Index)
+    {
+        if (Lba >= Device->WriteWindowFirst[Index] && Lba <= Device->WriteWindowLast[Index] &&
+            Blocks - 1 <= Device->WriteWindowLast[Index] - Lba)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 static
