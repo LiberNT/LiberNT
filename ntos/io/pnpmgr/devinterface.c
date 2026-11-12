@@ -761,6 +761,8 @@ IoGetDeviceInterfaceAlias(
     _Out_ PUNICODE_STRING AliasSymbolicLinkName)
 {
     PIOP_DEVICE_INTERFACE Interface;
+    UNICODE_STRING Reference;
+    UNICODE_STRING AliasName;
     PDEVICE_NODE DeviceNode;
     NTSTATUS Status;
 
@@ -784,13 +786,24 @@ IoGetDeviceInterfaceAlias(
         return STATUS_INVALID_DEVICE_REQUEST;
     }
 
+    /* The alias is the registered instance of the other class with the same device and reference string */
+    IopReferenceFromLinkName(&Interface->SymbolicLinkName, &Reference);
     Status = IopBuildInterfaceName(&DeviceNode->InstancePath,
                                    AliasInterfaceClassGuid,
-                                   NULL,
+                                   &Reference,
                                    FALSE,
-                                   AliasSymbolicLinkName);
+                                   &AliasName);
+
+    /* TODO: an alias registered in an earlier boot and not again in this one is not found */
+    if (NT_SUCCESS(Status) && IopFindInterface(&AliasName) == NULL)
+    {
+        ExFreePoolWithTag(AliasName.Buffer, TAG_IO_NAME);
+        Status = STATUS_OBJECT_NAME_NOT_FOUND;
+    }
 
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+    if (NT_SUCCESS(Status)) *AliasSymbolicLinkName = AliasName;
 
     return Status;
 }

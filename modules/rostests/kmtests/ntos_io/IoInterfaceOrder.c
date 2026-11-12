@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, and the instances of a device share the link named without their reference strings
+ * PURPOSE:     IoGetDeviceInterfaces lists the present interfaces of a class in the order they were enabled, an unchanged state is reported, the instances of a device share the link named without their reference strings, and an alias keeps the reference string
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -10,6 +10,7 @@
 #define RESULT_KEY L"\\Registry\\Machine\\SOFTWARE\\KmtIoInterfaceOrder"
 
 static const GUID TestInterface = {0x8f6d2a43, 0x61c4, 0x4bd8, {0x9a, 0x35, 0x2b, 0x9e, 0x0f, 0x5c, 0x7d, 0x11}};
+static const GUID AliasInterface = {0x3b0e6c21, 0x9a47, 0x4f15, {0x8d, 0x2e, 0x6c, 0x1f, 0x0b, 0x7a, 0x9e, 0x52}};
 
 static
 BOOLEAN
@@ -163,6 +164,8 @@ START_TEST(IoInterfaceOrderCheck)
     UNICODE_STRING First = { 0 };
     UNICODE_STRING Second = { 0 };
     UNICODE_STRING Third = { 0 };
+    UNICODE_STRING AliasA = { 0 };
+    UNICODE_STRING Alias;
     UNICODE_STRING Entry;
     UNICODE_STRING DeviceName;
     PDEVICE_OBJECT Pdo;
@@ -220,8 +223,28 @@ START_TEST(IoInterfaceOrderCheck)
         ok_eq_hex(LinkStatus(&Third, &ReferenceC, &DeviceName), STATUS_OBJECT_NAME_NOT_FOUND);
     }
 
+    /* Instances of two classes on one device are aliases when their reference strings are the same */
+    Status = IoRegisterDeviceInterface(Pdo, &AliasInterface, &ReferenceA, &AliasA);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status) && First.Buffer != NULL && Second.Buffer != NULL)
+    {
+        Status = IoGetDeviceInterfaceAlias(&First, &AliasInterface, &Alias);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            ok(RtlEqualUnicodeString(&Alias, &AliasA, TRUE), "alias %wZ, expected %wZ\n", &Alias, &AliasA);
+            RtlFreeUnicodeString(&Alias);
+        }
+
+        Status = IoGetDeviceInterfaceAlias(&Second, &AliasInterface, &Alias);
+        ok(Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND,
+           "IoGetDeviceInterfaceAlias for reference string B returned 0x%lx\n", Status);
+        if (NT_SUCCESS(Status)) RtlFreeUnicodeString(&Alias);
+    }
+
     RtlFreeUnicodeString(&First);
     RtlFreeUnicodeString(&Second);
     RtlFreeUnicodeString(&Third);
+    RtlFreeUnicodeString(&AliasA);
     ObDereferenceObject(Pdo);
 }
