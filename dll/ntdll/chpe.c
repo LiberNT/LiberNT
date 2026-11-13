@@ -61,8 +61,16 @@ typedef struct _IMAGE_ARM64EC_METADATA
     ULONG ExtraRfeTableSize;
     ULONG DispatchFptr;
     ULONG AuxiliaryIatCopy;
-    ULONG Helper[9];
+    /* TODO: patch AuxiliaryDelayloadIat when resolving delayed imports */
+    ULONG AuxiliaryDelayloadIat;
+    ULONG AuxiliaryDelayloadIatCopy;
+    ULONG HybridImageInfoBitfield;
+    ULONG Helper[6];
 } IMAGE_ARM64EC_METADATA, *PIMAGE_ARM64EC_METADATA;
+
+C_ASSERT(RTL_SIZEOF_THROUGH_FIELD(IMAGE_ARM64EC_METADATA, AuxiliaryIatCopy) == 0x50);
+C_ASSERT(RTL_SIZEOF_THROUGH_FIELD(IMAGE_ARM64EC_METADATA, HybridImageInfoBitfield) == 0x5C);
+C_ASSERT(sizeof(IMAGE_ARM64EC_METADATA) == 0x74);
 
 typedef struct _IMAGE_ARM64EC_REDIRECTION_ENTRY
 {
@@ -113,6 +121,11 @@ typedef struct _IMAGE_CHPE_RANGE_ENTRY
     } DUMMYUNIONNAME;
     ULONG Length;
 } IMAGE_CHPE_RANGE_ENTRY, *PIMAGE_CHPE_RANGE_ENTRY;
+
+#define CHPE_RANGE_TYPE_ARM64   0UL
+#define CHPE_RANGE_TYPE_ARM64EC 1UL
+#define CHPE_RANGE_TYPE_AMD64   2UL
+#define CHPE_RANGE_TYPE_MASK    3UL
 
 #define CHPE_CONTEXT_AMD64_SIZE  0x1000
 #define CHPE_CONTEXT_AMD64_LENGTH 0x4d0
@@ -639,9 +652,11 @@ ChpepGetArm64EcMetadata(PVOID ImageBase)
 {
     PIMAGE_NT_HEADERS NtHeader;
     PIMAGE_LOAD_CONFIG_DIRECTORY LoadConfig;
-    ULONG ConfigSize, SizeOfImage;
+    ULONG ConfigSize, SizeOfImage, MetadataSize;
     ULONG_PTR ImageStart, ImageEnd, Candidate;
     PIMAGE_ARM64EC_METADATA Metadata;
+    const ULONG MetadataV1Size = RTL_SIZEOF_THROUGH_FIELD(IMAGE_ARM64EC_METADATA, AuxiliaryIatCopy);
+    const ULONG MetadataV2Size = RTL_SIZEOF_THROUGH_FIELD(IMAGE_ARM64EC_METADATA, HybridImageInfoBitfield);
 
     if (!ImageBase)
         return NULL;
@@ -655,7 +670,7 @@ ChpepGetArm64EcMetadata(PVOID ImageBase)
     }
 
     SizeOfImage = NtHeader->OptionalHeader.SizeOfImage;
-    if (SizeOfImage < sizeof(*Metadata))
+    if (SizeOfImage < MetadataV1Size)
         return NULL;
 
     ImageStart = (ULONG_PTR)ImageBase;
@@ -669,11 +684,19 @@ ChpepGetArm64EcMetadata(PVOID ImageBase)
         return NULL;
 
     Candidate = (ULONG_PTR)LoadConfig->CHPEMetadataPointer;
-    if (Candidate < ImageStart || Candidate > ImageEnd - sizeof(*Metadata))
+    if (Candidate < ImageStart || Candidate > ImageEnd - MetadataV1Size)
         return NULL;
 
     Metadata = (PIMAGE_ARM64EC_METADATA)Candidate;
-    if (Metadata->Version != 1 ||
+    if (Metadata->Version == 1)
+        MetadataSize = MetadataV1Size;
+    else if (Metadata->Version == 2)
+        MetadataSize = MetadataV2Size;
+    else
+        return NULL;
+
+    if (SizeOfImage < MetadataSize ||
+        Candidate > ImageEnd - MetadataSize ||
         !Metadata->CodeMap ||
         !Metadata->CodeMapCount ||
         Metadata->CodeMap >= SizeOfImage ||
@@ -1132,7 +1155,7 @@ ChpeRegisterArm64EcImage(PVOID ImageBase)
     Range = (PIMAGE_CHPE_RANGE_ENTRY)((PBYTE)ImageBase + Metadata->CodeMap);
     for (Index = 0; Index < Metadata->CodeMapCount; ++Index)
     {
-        StartRva = Range[Index].StartOffset & ~1UL;
+        StartRva = Range[Index].StartOffset & ~CHPE_RANGE_TYPE_MASK;
         Length = Range[Index].Length;
 
         if (!Length)
@@ -1141,8 +1164,14 @@ ChpeRegisterArm64EcImage(PVOID ImageBase)
         if (StartRva >= SizeOfImage || Length > SizeOfImage - StartRva)
             return FALSE;
 
-        if (!ChpepSetEcCodeRange((ULONG_PTR)ImageBase, StartRva, Length, (Range[Index].StartOffset & 1) != 0, TRUE))
+        if (!ChpepSetEcCodeRange((ULONG_PTR)ImageBase,
+                                 StartRva,
+                                 Length,
+                                 (Range[Index].StartOffset & CHPE_RANGE_TYPE_MASK) == CHPE_RANGE_TYPE_ARM64EC,
+                                 TRUE))
+        {
             return FALSE;
+        }
     }
 
     return TRUE;
@@ -1172,7 +1201,7 @@ ChpepClearImageCodeRanges(PVOID ImageBase)
     Range = (PIMAGE_CHPE_RANGE_ENTRY)((PBYTE)ImageBase + Metadata->CodeMap);
     for (Index = 0; Index < Metadata->CodeMapCount; ++Index)
     {
-        StartRva = Range[Index].StartOffset & ~1UL;
+        StartRva = Range[Index].StartOffset & ~CHPE_RANGE_TYPE_MASK;
         Length = Range[Index].Length;
         if (!Length || StartRva >= SizeOfImage)
             continue;

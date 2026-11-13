@@ -166,7 +166,7 @@ RtlpArm64GetImageFunctionTable(
     }
 
     Metadata = (PRTL_ARM64EC_METADATA)Candidate;
-    if (Metadata->Version != 1 ||
+    if ((Metadata->Version != 1 && Metadata->Version != 2) ||
         Metadata->ExtraRfeTable == 0 ||
         Metadata->ExtraRfeTableSize < sizeof(RUNTIME_FUNCTION) ||
         Metadata->ExtraRfeTableSize % sizeof(RUNTIME_FUNCTION) != 0 ||
