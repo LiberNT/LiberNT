@@ -313,7 +313,10 @@ _FUNCTION_ {
 		    if (!seendigit) break; /* not a valid number */
                     st = 1;
                     if (!suppress) {
-#define _SET_NUMBER_(type) *va_arg(ap, type*) = negative ? -(LONGLONG)cur : cur
+/* The digits accumulate in a 64-bit word so that wide conversions keep all
+ * their precision; a narrower conversion stores the low 32 or 16 bits, which
+ * is what the C conversion specifier asks for. */
+#define _SET_NUMBER_(type) *va_arg(ap, type*) = (type)(negative ? -(LONGLONG)cur : cur)
 			if (I64_prefix) _SET_NUMBER_(LONGLONG);
 			else if (l_prefix) _SET_NUMBER_(LONG);
 			else if (h_prefix == 1) _SET_NUMBER_(short int);

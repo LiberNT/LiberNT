@@ -179,7 +179,7 @@ RtlReadMemoryStream(
     if (!Length)
         return S_OK;
 
-    CopyLength = min(Available, Length);
+    CopyLength = (ULONG)min(Available, Length);
 
     RtlMoveMemory(Buffer, Stream->Current, CopyLength);
 
@@ -213,7 +213,7 @@ RtlReadOutOfProcessMemoryStream(
     if (!Length)
         return S_OK;
 
-    CopyLength = min(Available, Length);
+    CopyLength = (ULONG)min(Available, Length);
 
     Status = NtReadVirtualMemory(Stream->ProcessHandle,
                                  Stream->Current,

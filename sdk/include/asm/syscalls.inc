@@ -392,6 +392,105 @@ Zw\Name:
     .set SyscallId, SyscallId + 1
     .endm
 
+#elif defined(_LOONGARCH64_)
+
+#include <asm/ksloongarch64.h>
+
+#define SYSCALLS_GNU_AS_STUBS
+
+    /*
+     * LoongArch64 system-service convention: $a7 carries the service id, the
+     * arguments travel in $a0-$a5 and the rest on the caller's stack. $r21
+     * holds the KPCR base (the psABI reserves it and no compiler touches it),
+     * and $s0-$s8, $fp, $ra are callee-saved.
+     *
+     * A kernel-mode Zw* call must not execute `syscall`: trap.c has no service
+     * to dispatch for a kernel-mode exception and no user frame to return to.
+     * As in the RISCV64 wrapper, Zw* therefore saves the caller's
+     * PreviousMode, forces KernelMode, calls Nt* directly and restores
+     * PreviousMode afterwards.
+     */
+    .set SyscallId, 0
+
+    .macro STUB_K Name, ArgCount
+    .p2align 2
+    .globl Zw\Name
+Zw\Name:
+.if \ArgCount > 8
+    /*
+     * Copy the caller's stack arguments below this frame so Nt\Name, which
+     * takes them at $sp + 0, sees them where its C prototype expects. The
+     * frame is 16-byte aligned and holds the copied arguments at
+     * $sp + 0..(_nstk * 8), then $ra/$s0/$s1 at $sp + _save_off.
+     */
+    .set _nstk, (\ArgCount - 8)
+    .set _save_off, ((_nstk * 8 + 15) & ~15)
+    .set _frame, (_save_off + 32)
+    addi.d  $sp, $sp, -_frame
+    st.d    $ra, $sp, _save_off + 0
+    st.d    $s0, $sp, _save_off + 8
+    st.d    $s1, $sp, _save_off + 16
+    .set _i, 0
+    .rept _nstk
+    ld.d    $t0, $sp, (_frame + _i * 8)
+    st.d    $t0, $sp, (_i * 8)
+    .set _i, _i + 1
+    .endr
+.else
+    addi.d  $sp, $sp, -32
+    st.d    $ra, $sp, 0
+    st.d    $s0, $sp, 8
+    st.d    $s1, $sp, 16
+.endif
+    ld.d    $s0, $r21, PcPrcbCurrentThread
+    ld.bu   $s1, $s0, ThPreviousMode
+    st.b    $zero, $s0, ThPreviousMode
+    bl      Nt\Name
+    st.b    $s1, $s0, ThPreviousMode
+.if \ArgCount > 8
+    ld.d    $s1, $sp, _save_off + 16
+    ld.d    $s0, $sp, _save_off + 8
+    ld.d    $ra, $sp, _save_off + 0
+    addi.d  $sp, $sp, _frame
+.else
+    ld.d    $s1, $sp, 16
+    ld.d    $s0, $sp, 8
+    ld.d    $ra, $sp, 0
+    addi.d  $sp, $sp, 32
+.endif
+    jr      $ra
+    .set SyscallId, SyscallId + 1
+    .endm
+
+    .macro STUB_WRAP Name, ArgCount
+    .p2align 3
+    .globl Nt\Name
+Nt\Name:
+    /* Emulation hosts patch this slot; Zw stays the raw service. */
+    li.d    $a7, SyscallId
+    syscall 0
+    jr      $ra
+    .quad 0
+    .globl Zw\Name
+Zw\Name:
+    li.d    $a7, SyscallId
+    syscall 0
+    jr      $ra
+    .set SyscallId, SyscallId + 1
+    .endm
+
+    .macro STUB_U Name, ArgCount
+    .p2align 2
+    .globl Nt\Name
+    .globl Zw\Name
+Nt\Name:
+Zw\Name:
+    li.d    $a7, SyscallId
+    syscall 0
+    jr      $ra
+    .set SyscallId, SyscallId + 1
+    .endm
+
 #elif defined(_M_PPC)
 
 #include <asm/ksppc.h>

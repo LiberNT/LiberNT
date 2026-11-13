@@ -14,6 +14,8 @@
 #include "arm64/raise.h"
 #elif defined(_M_RISCV64)
 #include "riscv64/raise.h"
+#elif defined(_M_LOONGARCH64)
+#include "loongarch64/raise.h"
 #elif defined(_M_PPC)
 #include "ppc/raise.h"
 #endif

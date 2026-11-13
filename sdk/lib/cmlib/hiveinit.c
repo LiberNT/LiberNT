@@ -399,7 +399,7 @@ HvpInitializeMemoryHive(
             /* Fix this bin */
             Bin->Signature = HV_HBIN_SIGNATURE;
             Bin->Size = HBLOCK_SIZE;
-            Bin->FileOffset = BlockIndex * HBLOCK_SIZE;
+            Bin->FileOffset = (HCELL_INDEX)(BlockIndex * HBLOCK_SIZE);
             ChunkBase->BootType |= HBOOT_TYPE_SELF_HEAL;
             DPRINT1("Bin at index %lu is corrupt and it has been repaired!\n", (unsigned long)BlockIndex);
         }
