@@ -144,6 +144,17 @@ KubsanFlush(VOID)
 }
 
 static
+KIRQL
+KubsanCurrentIrql(VOID)
+{
+#if defined(_M_IX86)
+    return __readfsbyte(FIELD_OFFSET(KPCR, Irql));
+#else
+    return KeGetCurrentIrql();
+#endif
+}
+
+static
 VOID
 KubsanReport(
     _Inout_ PKUBSAN_LOCATION Location,
@@ -163,7 +174,7 @@ KubsanReport(
         Text[sizeof(Text) - 1] = ANSI_NULL;
     va_end(Arguments);
 
-    if (KubsanCanPrint() && KeGetCurrentIrql() <= DISPATCH_LEVEL && InterlockedCompareExchange(&KubsanBusy, 1, 0) == 0)
+    if (KubsanCanPrint() && KubsanCurrentIrql() <= DISPATCH_LEVEL && InterlockedCompareExchange(&KubsanBusy, 1, 0) == 0)
     {
         KubsanFlush();
         KubsanPrint(Location, Caller, Text);
