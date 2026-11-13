@@ -49,6 +49,7 @@ struct cache_key
     float size;
     unsigned short glyph;
     unsigned short mode;
+    unsigned short aliased;
 };
 
 struct cache_entry
@@ -201,7 +202,8 @@ static HRESULT dwrite_fontface_get_glyph_bitmap(struct dwrite_fontface *fontface
         unsigned int *is_1bpp, struct dwrite_glyphbitmap *bitmap)
 {
     struct cache_key key = { .size = bitmap->emsize, .glyph = bitmap->glyph,
-            .mode = bitmap->gridfit ? DWRITE_MEASURING_MODE_GDI_CLASSIC : DWRITE_MEASURING_MODE_NATURAL };
+            .mode = bitmap->gridfit ? DWRITE_MEASURING_MODE_GDI_CLASSIC : DWRITE_MEASURING_MODE_NATURAL,
+            .aliased = rendering_mode == DWRITE_RENDERING_MODE1_ALIASED };
     struct get_glyph_bitmap_params params;
     const RECT *bbox = &bitmap->bbox;
     unsigned int bitmap_size, _1bpp;
@@ -265,6 +267,7 @@ static int fontface_cache_compare(const void *k, const struct wine_rb_entry *e)
     if (key->size != key2->size) return key->size < key2->size ? -1 : 1;
     if (key->glyph != key2->glyph) return (int)key->glyph - (int)key2->glyph;
     if (key->mode != key2->mode) return (int)key->mode - (int)key2->mode;
+    if (key->aliased != key2->aliased) return (int)key->aliased - (int)key2->aliased;
     return 0;
 }
 
