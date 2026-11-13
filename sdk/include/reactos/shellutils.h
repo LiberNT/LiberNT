@@ -66,7 +66,7 @@ Win32DbgPrint(const char *filename, int line, const char *lpFormat, ...)
 #define DbgPrint(fmt, ...) \
     Win32DbgPrint(__FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #else
-#define DbgPrint(fmt, ...) do { if (0) Win32DbgPrint(__FILE__, __LINE__, fmt, ##__VA_ARGS__); } while (0)
+#define DbgPrint(fmt, ...) (0 ? Win32DbgPrint(__FILE__, __LINE__, fmt, ##__VA_ARGS__) : 0)
 #endif
 
 #ifdef __cplusplus

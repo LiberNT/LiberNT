@@ -17,9 +17,7 @@
 #define NDEBUG
 #include <debug.h>
 
-#if DBG
 DEBUG_CHANNEL(kernel32file);
-#endif
 
 /* FUNCTIONS ****************************************************************/
 

@@ -91,8 +91,6 @@ RtlAssert(
 /* For internal purposes only */
 #define __NOTICE(level, fmt, ...)   DbgPrint(#level ":  %s at %s:%d " fmt, __FUNCTION__, __RELFILE__, __LINE__, ##__VA_ARGS__)
 
-/* Print stuff only on Debug Builds*/
-#if DBG
 
     /* These are always printed */
     #define DPRINT1(fmt, ...) do { \
@@ -130,41 +128,6 @@ RtlAssert(
     #define WARN__(ch, fmt, ...)   DbgPrintEx(ch, DPFLTR_WARNING_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define TRACE__(ch, fmt, ...)  DbgPrintEx(ch, DPFLTR_TRACE_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define INFO__(ch, fmt, ...)   DbgPrintEx(ch, DPFLTR_INFO_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
-
-#else /* not DBG */
-
-    /* On non-debug builds, we never show these */
-    #define UNIMPLEMENTED
-    #define UNIMPLEMENTED_ONCE
-#if defined(_MSC_VER)
-    #define DPRINT1   __noop
-    #define DPRINT    __noop
-
-    #define ERR_(ch, ...)      __noop
-    #define WARN_(ch, ...)     __noop
-    #define TRACE_(ch, ...)    __noop
-    #define INFO_(ch, ...)     __noop
-
-    #define ERR__(ch, ...)     __noop
-    #define WARN__(ch, ...)    __noop
-    #define TRACE__(ch, ...)   __noop
-    #define INFO__(ch, ...)    __noop
-#else
-    #define DPRINT1(...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define DPRINT(...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-
-    #define ERR_(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define WARN_(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define TRACE_(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define INFO_(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-
-    #define ERR__(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define WARN__(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define TRACE__(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-    #define INFO__(ch, ...) do { if(0) { DbgPrint(__VA_ARGS__); } } while(0)
-#endif /* _MSC_VER */
-
-#endif /* not DBG */
 
 /******************************************************************************/
 /*
