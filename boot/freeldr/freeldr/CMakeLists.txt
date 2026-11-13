@@ -33,6 +33,7 @@ list(APPEND FREELDR_ARC_SOURCE
     arch/archwsup.c
     disk/disk.c
     disk/partition.c
+    disk/isoname.c
     disk/ramdisk.c)
     # disk/scsiport.c
     # lib/fs/pxe.c

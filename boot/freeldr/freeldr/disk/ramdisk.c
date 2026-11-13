@@ -1083,47 +1083,6 @@ RamDiskCloseIsoSource(
 
 static
 BOOLEAN
-IsoExtractName(
-    _In_ PDIR_RECORD Record,
-    _Out_writes_(NameBufferSize) PCHAR NameBuffer,
-    _In_ SIZE_T NameBufferSize)
-{
-    SIZE_T Index;
-
-    if (!Record || !NameBuffer || NameBufferSize == 0)
-        return FALSE;
-
-    /* Skip '.' and '..' entries early */
-    if (Record->FileIdLength == 1 && (Record->FileId[0] == 0 || Record->FileId[0] == 1))
-        return FALSE;
-
-    for (Index = 0; Index < Record->FileIdLength && Index < NameBufferSize - 1; ++Index)
-    {
-        CHAR Character = Record->FileId[Index];
-
-        if (Character == ';')
-            break;
-
-        NameBuffer[Index] = Character;
-    }
-
-    NameBuffer[Index] = '\0';
-
-    /* Remove trailing dot, if any (appears on directory records) */
-    while (Index > 0 && NameBuffer[Index - 1] == '.')
-    {
-        NameBuffer[Index - 1] = '\0';
-        --Index;
-    }
-
-    if (Index == 0)
-        return FALSE;
-
-    return TRUE;
-}
-
-static
-BOOLEAN
 FatEnsureDirectoryExists(
     _In_ PFAT32_WRITER Writer,
     _In_ PCSTR Path)

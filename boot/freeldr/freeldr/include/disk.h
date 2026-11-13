@@ -127,6 +127,17 @@ DiskGetPartitionEntry(
 
 
 /*
+ * ISO 9660 entry names (disk/isoname.c)
+ */
+struct _DIR_RECORD;
+
+BOOLEAN
+IsoExtractName(
+    _In_ struct _DIR_RECORD* Record,
+    _Out_writes_(NameBufferSize) PCHAR NameBuffer,
+    _In_ SIZE_T NameBufferSize);
+
+/*
  * SCSI support (disk/scsiport.c)
  */
 ULONG LoadBootDeviceDriver(VOID);
