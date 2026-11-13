@@ -9,7 +9,6 @@
 /* INCLUDES ******************************************************************/
 
 #include <win32k.h>
-#include <reactos/buildno.h>
 #include <reactos/buildstamp.h>
 #include <ndk/inbvfuncs.h>
 DBG_DEFAULT_CHANNEL(UserDesktop);
@@ -356,124 +355,19 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
                        IN BOOLEAN InSafeMode)
 {
     NTSTATUS Status;
-
-    RTL_OSVERSIONINFOEXW VerInfo;
-    UNICODE_STRING CSDVersionString;
-    RTL_QUERY_REGISTRY_TABLE VersionConfigurationTable[] =
-    {
-        {
-            NULL,
-            RTL_QUERY_REGISTRY_DIRECT,
-            L"CSDVersion",
-            &CSDVersionString,
-            REG_NONE, NULL, 0
-        },
-
-        {0}
-    };
-
-    WCHAR VersionBuffer[256];
     PWCHAR EndBuffer;
-    PCSTR Arch, ArchEnd;
-    INT ArchLength;
 
-    VerInfo.dwOSVersionInfoSize = sizeof(VerInfo);
-
-    /*
-     * This call is uniquely used to retrieve the current CSD numbers.
-     * All the rest (major, minor, ...) is either retrieved from the
-     * SharedUserData structure, or from the registry.
-     */
-    RtlGetVersion((PRTL_OSVERSIONINFOW)&VerInfo);
-
-    /*
-     * In kernel-mode, szCSDVersion is not initialized. Initialize it
-     * and query its value from the registry.
-     */
-    RtlZeroMemory(VerInfo.szCSDVersion, sizeof(VerInfo.szCSDVersion));
-    RtlInitEmptyUnicodeString(&CSDVersionString,
-                              VerInfo.szCSDVersion,
-                              sizeof(VerInfo.szCSDVersion));
-    Status = RtlQueryRegistryValues(RTL_REGISTRY_WINDOWS_NT,
-                                    L"",
-                                    VersionConfigurationTable,
-                                    NULL,
-                                    NULL);
+    /* Safe Mode has one line to show it on, the desktop has two */
+    Status = RtlStringCchCopyW(pwszzVersion,
+                               cchDest,
+                               InSafeMode
+                                   ? LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W L"\n"
+                                   : LIBERNT_BUILD_HEADING L"\n" LIBERNT_BUILD_STAMP_W L"\n");
     if (!NT_SUCCESS(Status))
     {
-        /* Indicate nothing is there */
-        CSDVersionString.Length = 0;
-    }
-    /* NULL-terminate the string */
-    CSDVersionString.Buffer[CSDVersionString.Length / sizeof(WCHAR)] = UNICODE_NULL;
-
-    Arch = strchr(KERNEL_VERSION_STR, '-');
-    Arch = Arch ? Arch + 1 : KERNEL_VERSION_STR;
-    ArchEnd = strchr(Arch, '-');
-    ArchLength = ArchEnd ? (INT)(ArchEnd - Arch) : (INT)strlen(Arch);
-
-    EndBuffer = VersionBuffer;
-    if ( /* VerInfo.wServicePackMajor != 0 && */ CSDVersionString.Length)
-    {
-        /* Print the version string */
-        Status = RtlStringCbPrintfExW(VersionBuffer,
-                                      sizeof(VersionBuffer),
-                                      &EndBuffer,
-                                      NULL,
-                                      0,
-                                      L": %wZ",
-                                      &CSDVersionString);
-        if (!NT_SUCCESS(Status))
-        {
-            /* No version, NULL-terminate the string */
-            *EndBuffer = UNICODE_NULL;
-        }
-    }
-    else
-    {
-        /* No version, NULL-terminate the string */
-        *EndBuffer = UNICODE_NULL;
-    }
-
-    if (InSafeMode)
-    {
-        /* String for Safe Mode */
-        Status = RtlStringCchPrintfW(pwszzVersion,
-                                     cchDest,
-                                     LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W
-                                     L" (Target: Windows 11 24H2 %u.%u%s \u00b7 %.*S)\n",
-                                     (VerInfo.dwBuildNumber & 0xFFFF),
-                                     (ULONG)VER_PRODUCTBUILD_QFE,
-                                     VersionBuffer,
-                                     ArchLength,
-                                     Arch);
-    }
-    else
-    {
-        /* Multi-string for Normal Mode */
-        Status = RtlStringCchPrintfW(pwszzVersion,
-                                     cchDest,
-                                     LIBERNT_BUILD_HEADING L"\n"
-                                     LIBERNT_BUILD_STAMP_W L"\n"
-                                     L"Target: Windows 11 24H2 %u.%u%s \u00b7 %.*S\n",
-                                     (VerInfo.dwBuildNumber & 0xFFFF),
-                                     (ULONG)VER_PRODUCTBUILD_QFE,
-                                     VersionBuffer,
-                                     ArchLength,
-                                     Arch);
-    }
-
-    if (!NT_SUCCESS(Status))
-    {
-        /* Fall-back string */
-        Status = RtlStringCchPrintfW(pwszzVersion,
-                                     cchDest,
-                                     LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W L"\n");
-        if (!NT_SUCCESS(Status))
-        {
-            /* General failure, NULL-terminate the string */
-            pwszzVersion[0] = UNICODE_NULL;
-        }
+        /* General failure, NULL-terminate the string */
+        pwszzVersion[0] = UNICODE_NULL;
+        return Status;
     }
 
     /*
