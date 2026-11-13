@@ -5358,9 +5358,9 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
                                                        &DriveExtension->DriveDeviceName);
                 }
 
-                /* If we were asked not to assign a drive letter or if getting
-                 * a name failed, just return saying we're now started */
-                if (DriveExtension->DiskOptions.NoDriveLetter ||
+                /* A boot volume carries the system root, so it is always announced */
+                if ((DriveExtension->DiskOptions.NoDriveLetter &&
+                     DriveExtension->DiskType != RAMDISK_BOOT_DISK) ||
                     DriveExtension->DriveDeviceName.Buffer == NULL)
                 {
                     DriveExtension->State = RamdiskStateStarted;
@@ -5450,7 +5450,8 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
             {
                 PRAMDISK_DRIVE_EXTENSION DriveExtension = (PRAMDISK_DRIVE_EXTENSION)DeviceExtension;
 
-                if (!DriveExtension->DiskOptions.NoDriveLetter &&
+                if ((!DriveExtension->DiskOptions.NoDriveLetter ||
+                     DriveExtension->DiskType == RAMDISK_BOOT_DISK) &&
                     DriveExtension->DriveDeviceName.Buffer != NULL)
                 {
                     NTSTATUS setStatus = IoSetDeviceInterfaceState(&DriveExtension->DriveDeviceName, FALSE);
@@ -5500,7 +5501,8 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
             {
                 PRAMDISK_DRIVE_EXTENSION DriveExtension = (PRAMDISK_DRIVE_EXTENSION)DeviceExtension;
 
-                if (!DriveExtension->DiskOptions.NoDriveLetter &&
+                if ((!DriveExtension->DiskOptions.NoDriveLetter ||
+                     DriveExtension->DiskType == RAMDISK_BOOT_DISK) &&
                     DriveExtension->DriveDeviceName.Buffer != NULL)
                 {
                     NTSTATUS setStatus = IoSetDeviceInterfaceState(&DriveExtension->DriveDeviceName, FALSE);
