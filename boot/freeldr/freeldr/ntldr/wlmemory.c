@@ -14,7 +14,6 @@
 #include <debug.h>
 DBG_DEFAULT_CHANNEL(WINDOWS);
 
-#if DBG
 static const PCSTR MemTypeDesc[] = {
     "ExceptionBlock    ", // ?
     "SystemBlock       ", // ?
@@ -41,7 +40,6 @@ static const PCSTR MemTypeDesc[] = {
     "SpecialMemory     ", // == Bad
     "BBTMemory         " // == Bad
     };
-#endif
 
 static VOID
 WinLdrInsertDescriptor(IN OUT PLOADER_PARAMETER_BLOCK LoaderBlock,

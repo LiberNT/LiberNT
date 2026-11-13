@@ -6,6 +6,7 @@
  */
 
 #include <freeldr.h>
+#include <debug.h>
 #include "ntldropts.h"
 
 enum SAFEBOOT_MODE BootOptionChoice = NO_OPTION;
@@ -159,6 +160,7 @@ AppendBootTimeOptions(PSTR BootOptions, SIZE_T BootOptionsSize)
         return;
     if (StartupProfile)
     {
+        DebugEnable();
         Add[0] = StartupProfiles[StartupProfile].Options;
         Remove[0] = StartupProfiles[StartupProfile].Remove;
         NtLdrUpdateOptions(BootOptions, BootOptionsSize, TRUE, Add, Remove);
@@ -175,6 +177,7 @@ AppendBootTimeOptions(PSTR BootOptions, SIZE_T BootOptionsSize)
         NtLdrAddOptions(BootOptions, BootOptionsSize, TRUE, "BASEVIDEO");
     if (BootFlags & BOOT_DEBUGGING)
     {
+        DebugEnable();
         Add[0] = "DEBUG";
         Remove[0] = "NODEBUG";
         NtLdrUpdateOptions(BootOptions, BootOptionsSize, TRUE, Add, Remove);

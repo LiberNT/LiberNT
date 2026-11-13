@@ -25,8 +25,6 @@
 
 #include <freeldr.h>
 
-#if DBG
-
 #include <cportlib/cportlib.h>
 #include <cportlib/uartinfo.h>
 
@@ -109,15 +107,9 @@ VOID Rs232PortPutByte(UCHAR ByteToSend)
     CpPutByte(&Rs232ComPortInfo, ByteToSend);
 }
 
-#endif /* DBG */
-
 BOOLEAN Rs232PortInUse(PUCHAR Base)
 {
-#if DBG
     return (Rs232ComPort && (Rs232ComPortInfo.Address == Base));
-#else
-    return FALSE;
-#endif
 }
 
 #endif /* !_M_ARM */

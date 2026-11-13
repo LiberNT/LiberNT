@@ -31,8 +31,10 @@ KIPCR KiInitialPcr;
 /* Boot and double-fault/NMI/DPC stack */
 UCHAR DECLSPEC_ALIGN(16) KiP0BootStackData[KERNEL_STACK_SIZE] = {0};
 UCHAR DECLSPEC_ALIGN(16) KiP0DoubleFaultStackData[KERNEL_STACK_SIZE] = {0};
+UCHAR DECLSPEC_ALIGN(16) KiP0NmiStackData[KERNEL_STACK_SIZE] = {0};
 PVOID KiP0BootStack = &KiP0BootStackData[KERNEL_STACK_SIZE];
 PVOID KiP0DoubleFaultStack = &KiP0DoubleFaultStackData[KERNEL_STACK_SIZE];
+PVOID KiP0NmiStack = &KiP0NmiStackData[KERNEL_STACK_SIZE];
 
 ULONGLONG BootCycles, BootCyclesEnd;
 
@@ -348,7 +350,7 @@ KiInitializeP0BootStructures(
                                         KiP0BootStack,
                                         KiP0DoubleFaultStack,
                                         KiP0DoubleFaultStack,
-                                        KiP0DoubleFaultStack);
+                                        KiP0NmiStack);
 }
 
 CODE_SEG("INIT")

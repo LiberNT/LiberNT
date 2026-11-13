@@ -21,7 +21,6 @@
 
 #pragma once
 
-#if DBG
 BOOLEAN
 Rs232PortInitialize(
     _In_ PUCHAR PortAddress,
@@ -30,5 +29,4 @@ Rs232PortInitialize(
 BOOLEAN Rs232PortGetByte(PUCHAR ByteReceived);
 // BOOLEAN Rs232PortPollByte(PUCHAR ByteReceived);
 VOID Rs232PortPutByte(UCHAR ByteToSend);
-#endif
 BOOLEAN Rs232PortInUse(PUCHAR Base);

@@ -14,6 +14,7 @@
 @ cdecl DbgPrint(str)
 @ cdecl DbgPrint2(long long str long str)
 @ cdecl DebugDumpBuffer()
+@ cdecl DebugEnable()
 @ cdecl DebugInit()
 @ cdecl FrLdrBugCheckWithMessage()
 @ stdcall KeBugCheckEx(long long long long long)
