@@ -21,6 +21,17 @@ LARGE_INTEGER MmCriticalSectionTimeout;
 
 static ULONG MiRotatingUniprocessorNumber;
 
+/*
+ * Stacks a thread or a stack-expanding callout gives back are kept for the
+ * next one instead of being torn down: a file system switches to a fresh
+ * stack on every create, so this is on the path of every file open.
+ */
+#define MI_STACK_CACHE_DEPTH 4
+
+static PVOID MiStackCache[2][MI_STACK_CACHE_DEPTH];
+static ULONG MiStackCacheCount[2];
+static KSPIN_LOCK MiStackCacheLock;
+
 PVOID
 NTAPI
 MmCreateKernelStack(
@@ -29,11 +40,24 @@ MmCreateKernelStack(
 {
     ULONG Reserve = (ULONG)((GuiStack ? MmLargeStackSize : KERNEL_STACK_SIZE) >> PAGE_SHIFT);
     ULONG Commit = (ULONG)((GuiStack ? KERNEL_LARGE_STACK_COMMIT : KERNEL_STACK_SIZE) >> PAGE_SHIFT);
+    ULONG Index = GuiStack ? 1 : 0;
     ULONG Attempts = 0;
+    PVOID Cached = NULL;
     NTSTATUS Status;
+    KIRQL OldIrql;
     ULONG64 Top;
 
     UNREFERENCED_PARAMETER(Node);
+
+    KeAcquireSpinLock(&MiStackCacheLock, &OldIrql);
+    if (MiStackCacheCount[Index] != 0)
+    {
+        Cached = MiStackCache[Index][--MiStackCacheCount[Index]];
+    }
+    KeReleaseSpinLock(&MiStackCacheLock, OldIrql);
+
+    if (Cached != NULL)
+        return Cached;
 
     do
     {
@@ -49,6 +73,21 @@ MmDeleteKernelStack(
     _In_ PVOID StackBase,
     _In_ BOOLEAN GuiStack)
 {
+    ULONG Index = GuiStack ? 1 : 0;
+    BOOLEAN Kept = FALSE;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&MiStackCacheLock, &OldIrql);
+    if (MiStackCacheCount[Index] < MI_STACK_CACHE_DEPTH)
+    {
+        MiStackCache[Index][MiStackCacheCount[Index]++] = StackBase;
+        Kept = TRUE;
+    }
+    KeReleaseSpinLock(&MiStackCacheLock, OldIrql);
+
+    if (Kept)
+        return;
+
     MiDeleteKernelStack(&MiSystem, (ULONG64)(ULONG_PTR)StackBase,
                         (ULONG)((GuiStack ? MmLargeStackSize : KERNEL_STACK_SIZE) >> PAGE_SHIFT));
 }
