@@ -42,6 +42,16 @@ HalpAcpiCheckTable(
     _Out_ PHALP_ACPI_CHECK Check);
 
 /*
+ * Bytes a table at Address may occupy inside the range [Base, End). Zero when
+ * the address lies outside the range.
+ */
+ULONG
+HalpAcpiRangeLength(
+    _In_ ULONGLONG Base,
+    _In_ ULONGLONG End,
+    _In_ ULONGLONG Address);
+
+/*
  * Walks the subtable chain that starts at First and ends at Length. Every
  * entry must be two bytes long at least and must fit before Length. Returns
  * the first offending offset and entry type through the optional outputs.

@@ -79,6 +79,21 @@ HalpAcpiCheckTable(
     return HalpAcpiAccepted;
 }
 
+ULONG
+HalpAcpiRangeLength(
+    _In_ ULONGLONG Base,
+    _In_ ULONGLONG End,
+    _In_ ULONGLONG Address)
+{
+    ULONGLONG Remaining;
+
+    if ((Address < Base) || (Address >= End))
+        return 0;
+
+    Remaining = End - Address;
+    return (Remaining > MAXULONG) ? MAXULONG : (ULONG)Remaining;
+}
+
 HALP_ACPI_VERDICT
 HalpAcpiCheckSubtables(
     _In_reads_bytes_(Length) const UCHAR *Table,

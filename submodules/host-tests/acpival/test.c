@@ -114,6 +114,49 @@ TestTableHeader(VOID)
     CHECK(Check.Sum != 0);
 }
 
+static UCHAR BigTable[0x10000];
+
+static
+VOID
+TestTableRange(VOID)
+{
+    UCHAR Table[0x100];
+    HALP_ACPI_CHECK Check;
+    ULONG Available;
+
+    /* The range starts at the table and ends where the firmware says */
+    CHECK(HalpAcpiRangeLength(0x1000, 0x2000, 0x1000) == 0x1000);
+    CHECK(HalpAcpiRangeLength(0x1000, 0x2000, 0x1800) == 0x800);
+    CHECK(HalpAcpiRangeLength(0x1000, 0x2000, 0x2000) == 0);
+    CHECK(HalpAcpiRangeLength(0x1000, 0x2000, 0xFFF) == 0);
+
+    /* A range wider than a 32-bit length is clamped */
+    CHECK(HalpAcpiRangeLength(0, 0x100000000ULL, 0) == MAXULONG);
+    CHECK(HalpAcpiRangeLength(0, 0x100000000ULL, 0x80000000ULL) == 0x80000000);
+
+    /* A table inside its region is accepted */
+    MakeTable(Table, 0x80, "TEST");
+    Available = HalpAcpiRangeLength(0x1000, 0x2000, 0x1000);
+    CHECK(HalpAcpiCheckTable(Table, Available, &Check) == HalpAcpiAccepted);
+
+    /* A header claiming 64 KiB inside a 4 KiB region is too long */
+    MakeTable(Table, 36, "TEST");
+    Table[4] = 0x00;
+    Table[5] = 0x00;
+    Table[6] = 0x01;
+    Table[7] = 0x00;
+    Available = HalpAcpiRangeLength(0x1000, 0x2000, 0x1000);
+    CHECK(Available == 0x1000);
+    CHECK(HalpAcpiCheckTable(Table, Available, &Check) == HalpAcpiBadLength);
+    CHECK(Check.Length == 0x10000);
+
+    /* A sound 64 KiB table passes on its own length and fails on the region */
+    MakeTable(BigTable, sizeof(BigTable), "TEST");
+    CHECK(HalpAcpiCheckTable(BigTable, sizeof(BigTable), &Check) == HalpAcpiAccepted);
+    CHECK(HalpAcpiCheckTable(BigTable, Available, &Check) == HalpAcpiBadLength);
+    CHECK(Check.Length == 0x10000);
+}
+
 static
 VOID
 TestSubtables(VOID)
@@ -232,6 +275,7 @@ int
 main(VOID)
 {
     TestTableHeader();
+    TestTableRange();
     TestSubtables();
     TestFaults();
 
