@@ -22,6 +22,11 @@
 #define _Out_opt_
 #define _In_reads_bytes_(size)
 #define _Out_writes_(size)
+#define _Out_writes_bytes_opt_(size)
+
+#define NTAPI
+
+#define C_ASSERT(expr) _Static_assert(expr, #expr)
 
 #define TRUE 1
 #define FALSE 0

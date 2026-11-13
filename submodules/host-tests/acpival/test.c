@@ -162,11 +162,15 @@ static
 VOID
 TestFaults(VOID)
 {
-    HALP_ACPI_FAULT Fault;
+    HALP_ACPI_FAULT Fault, Faults[HALP_ACPI_FAULT_SLOTS];
+    ULONG Copied = 1, Total;
     unsigned Index;
 
     /* A clean boot reports nothing */
     CHECK(HalpAcpiFaultCount() == 0);
+    Total = HalpAcpiQueryFaults(NULL, 0, &Copied);
+    CHECK(Total == 0);
+    CHECK(Copied == 0);
     Prints = 0;
     HalpAcpiReportFaults();
     CHECK(Prints == 0);
@@ -184,6 +188,20 @@ TestFaults(VOID)
     CHECK(Fault.Offset == 64);
     CHECK(HalpAcpiGetFault(2, &Fault) == FALSE);
 
+    Copied = 0;
+    Total = HalpAcpiQueryFaults(Faults, sizeof(Faults), &Copied);
+    CHECK(Total == 2);
+    CHECK(Copied == 2);
+    CHECK(Faults[0].Signature == 0x54534554);
+    CHECK(Faults[0].Reason == HalpAcpiFaultBadChecksum);
+    CHECK(Faults[1].Offset == 64);
+
+    /* A buffer that holds one whole record copies exactly one */
+    Copied = 0;
+    Total = HalpAcpiQueryFaults(Faults, sizeof(HALP_ACPI_FAULT) + 4, &Copied);
+    CHECK(Total == 2);
+    CHECK(Copied == 1);
+
     Prints = 0;
     HalpAcpiReportFaults();
     CHECK(Prints == 2);
@@ -196,6 +214,13 @@ TestFaults(VOID)
     CHECK(HalpAcpiFaultCount() == 22);
     CHECK(HalpAcpiGetFault(15, &Fault) == TRUE);
     CHECK(HalpAcpiGetFault(16, &Fault) == FALSE);
+
+    Copied = 0;
+    Total = HalpAcpiQueryFaults(Faults, sizeof(Faults), &Copied);
+    CHECK(Total == 22);
+    CHECK(Copied == HALP_ACPI_FAULT_SLOTS);
+    CHECK(Faults[HALP_ACPI_FAULT_SLOTS - 1].Value1 == 13);
+    CHECK(HalpAcpiQueryFaults(Faults, sizeof(Faults), NULL) == 22);
 
     Prints = 0;
     HalpAcpiReportFaults();

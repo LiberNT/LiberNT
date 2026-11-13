@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "kd.h"
 #include <kdterm.h>
+#include <reactos/hal/acpifault.h>
 #include <reactos/buildno.h>
 
 #define KDP_INFO_TEXT_SIZE      0x8000
@@ -468,7 +469,8 @@ KdpInfoBuildAcpi(VOID)
 {
     CHAR Signature[5], OemId[7], OemTableId[9];
     const KDP_INFO_ACPI *Entry;
-    ULONG Length = 0, i;
+    HALP_ACPI_FAULT Faults[HALP_ACPI_FAULT_SLOTS];
+    ULONG Length = 0, Total, Copied, i;
 
     for (i = 0; i < KdpInfoAcpiCount; i++)
     {
@@ -479,6 +481,32 @@ KdpInfoBuildAcpi(VOID)
         KdpInfoAppend(KdpInfoText, sizeof(KdpInfoText), &Length,
                       "%s length=%lu revision=%u oem=%s table=%s oem_revision=%08lx\n",
                       Signature, Entry->Length, Entry->Revision, OemId, OemTableId, Entry->OemRevision);
+    }
+
+    Total = HalpAcpiQueryFaults(NULL, 0, NULL);
+    if (Total == 0)
+    {
+        KdpInfoAppend(KdpInfoText, sizeof(KdpInfoText), &Length, "faults: none\n");
+        KdpInfoLength = Length;
+        return;
+    }
+
+    Copied = 0;
+    HalpAcpiQueryFaults(Faults, sizeof(Faults), &Copied);
+    KdpInfoAppend(KdpInfoText, sizeof(KdpInfoText), &Length,
+                  "faults: total=%lu retained=%lu dropped=%lu\n",
+                  Total, Copied, Total - Copied);
+
+    for (i = 0; i < Copied; i++)
+    {
+        KdpInfoAppend(KdpInfoText, sizeof(KdpInfoText), &Length,
+                      "  %.4s reason=%lu type=%lu offset=%lu value1=%08lx value2=%08lx\n",
+                      (PCSTR)&Faults[i].Signature,
+                      Faults[i].Reason,
+                      Faults[i].Type,
+                      Faults[i].Offset,
+                      Faults[i].Value1,
+                      Faults[i].Value2);
     }
 
     KdpInfoLength = Length;

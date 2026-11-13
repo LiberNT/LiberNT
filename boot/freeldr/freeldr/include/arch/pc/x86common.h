@@ -23,7 +23,7 @@
 #define TEMPDATA16_BASE     HEX(7000)
 #define TEMPCODE16_BASE     HEX(7400)
 #define TEMPCODE_BASE     HEX(200000)
-#define MEMORY_MARGIN      HEX(88000) /* We need this much memory */
+#define MEMORY_MARGIN      HEX(98000) /* We need this much memory; sized for the largest loader image while staying below the EBDA (0x9FC00) */
 
 #define BIOSCALLBUFSEGMENT (BIOSCALLBUFFER/16) /* Buffer to store temporary data for any Int386() call */
 #define BIOSCALLBUFOFFSET   HEX(0000) /* Buffer to store temporary data for any Int386() call */

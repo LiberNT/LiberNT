@@ -7,34 +7,7 @@
 
 #pragma once
 
-/* Records kept; the total count survives an overflow of this window */
-#define HALP_ACPI_FAULT_SLOTS 16
-
-typedef enum _HALP_ACPI_FAULT_REASON
-{
-    HalpAcpiFaultTableMissing = 1,
-    HalpAcpiFaultBadSignature,
-    HalpAcpiFaultBadLength,
-    HalpAcpiFaultBadChecksum,
-    HalpAcpiFaultSubtableLength,
-    HalpAcpiFaultSubtableOverrun,
-    HalpAcpiFaultEntryLength,
-    HalpAcpiFaultDuplicateId,
-    HalpAcpiFaultUnsupportedEntry,
-    HalpAcpiFaultProcessorIgnored,
-    HalpAcpiFaultProcessorOverflow,
-    HalpAcpiFaultUnusableEntry
-} HALP_ACPI_FAULT_REASON;
-
-typedef struct _HALP_ACPI_FAULT
-{
-    ULONG Signature;
-    ULONG Reason;
-    ULONG Type;      /* Subtable type, 0 when the fault is the table itself */
-    ULONG Offset;    /* Byte offset inside the table, 0 when not applicable */
-    ULONG Value1;
-    ULONG Value2;
-} HALP_ACPI_FAULT, *PHALP_ACPI_FAULT;
+#include <reactos/hal/acpifault.h>
 
 VOID
 HalpAcpiRecordFault(
