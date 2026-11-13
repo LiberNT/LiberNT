@@ -42,7 +42,8 @@ static const PCWSTR Values[] = { L"FilterInformationIsList", L"FilterReportedMag
                                  L"DriverUnloaded", L"HoldEntry", L"EntryHeld", L"SlowAddDevice", L"AddDeviceEntered",
                                  L"HoldQueryRemoves", L"HoldCancels", L"HoldCompletes", L"HoldReregistered",
                                  L"NoRequirements", L"NoListFilterSeen", L"NoListStartMask", L"NoListRestartMask",
-                                 L"NoListEmpty" };
+                                 L"NoListEmpty", L"EarlyInterface", L"EarlyArrivals", L"EarlyEnableStatus",
+                                 L"EarlyArrivalInAddDevice", L"EarlyArrivalBeforeStart" };
 
 static BOOL FixtureInf(PWSTR InfPath, DWORD Count)
 {
@@ -400,6 +401,37 @@ static VOID CheckRemoveTwice(DEVINST Bus)
     ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
     ok(ChildStarted(Bus, 1000), "The removed child did not start again\n");
     ok_once(OpenInterface(Interface), (ULONG)ERROR_SUCCESS);
+}
+
+/* An interface its driver enables in AddDevice is announced once IRP_MN_START_DEVICE completes (IoSetDeviceInterfaceState) */
+static VOID CheckEarlyInterface(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DWORD Value = 0, Start;
+    DEVINST Child;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to restart\n");
+        return;
+    }
+
+    SetRequest(L"EarlyInterface", 1);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+
+    Start = GetTickCount();
+    while (!ReadValue(L"EarlyArrivals", &Value) && GetTickCount() - Start < 1000)
+        Sleep(10);
+    ok(Value == 1, "The interface enabled in AddDevice arrived %lu times\n", Value);
+    ok(ReadValue(L"EarlyEnableStatus", &Value) && Value == 0, "Enabling the interface in AddDevice returned 0x%lx\n", Value);
+    ok(!ReadValue(L"EarlyArrivalInAddDevice", &Value), "The interface arrival was announced inside AddDevice\n");
+    ok(!ReadValue(L"EarlyArrivalBeforeStart", &Value), "The interface arrival was announced before the start completed\n");
+
+    SetRequest(L"EarlyInterface", 0);
 }
 
 /* Sets the child's security property from an SDDL string, restarts the child and opens it for reading */
@@ -1158,6 +1190,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckReinstall(Device->DevInst, InfPath);
         CheckReplug(Device->DevInst);
         CheckRemoveTwice(Device->DevInst);
+        CheckEarlyInterface(Device->DevInst);
         CheckDeviceSecurity(Device->DevInst);
         CheckEarlySecurity(Device->DevInst);
         CheckFailedStack(Device->DevInst);

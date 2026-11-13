@@ -1196,7 +1196,7 @@ PiProcessStartDevice(
 
     IopUpdateResourceMapForPnPDevice(DeviceNode);
 
-    PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
+    IopDoDeferredSetInterfaceState(DeviceNode);
 
     /* The PnP manager asks a device for its state right after starting it (PNP_DEVICE_STATE documentation) */
     PiQueueDeviceAction(DeviceNode->PhysicalDeviceObject, PiActionQueryState, NULL, NULL);

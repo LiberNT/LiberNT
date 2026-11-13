@@ -252,6 +252,7 @@ IopDisableDeviceInterfaces(
             continue;
         }
 
+        IopDropPendedInterface(Interface);
         if (!Interface->Enabled) continue;
 
         Interface->Enabled = FALSE;
