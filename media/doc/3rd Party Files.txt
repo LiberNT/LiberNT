@@ -388,6 +388,13 @@ Used Version: 1.2.13
 License: Zlib (https://spdx.org/licenses/Zlib.html)
 URL: http://www.zlib.net
 
+Title: Zstandard
+Path: sdk/lib/3rdparty/zstd
+Used Version: 1.5.7
+License: BSD-3-Clause (https://spdx.org/licenses/BSD-3-Clause.html) OR GPL-2.0-only (https://spdx.org/licenses/GPL-2.0-only.html)
+URL: https://github.com/facebook/zstd
+Modifications: decompressor only (lib/common, lib/decompress); built for kernel mode with zstd_libernt.h, which leaves allocation to the caller's static workspace
+
 Title: chmc and lzxcomp
 Path: sdk/tools/hhpcomp/chmc
 Path: sdk/tools/hhpcomp/lzx_compress
