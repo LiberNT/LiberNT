@@ -155,6 +155,10 @@ add_cd_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/Install LiberNT.lnk"
             TARGET livecd_links
             DESTINATION "${dir_startmenu_programs}"
             FOR preinstall)
+add_livecd_shortcut("Finish Setup"
+    "shell:system\\oobe\\oobe.exe" ICON_INDEX 0
+    DESTINATION "${dir_startmenu_programs}"
+    FOR preinstall)
 
 add_livecd_shortcut("Read Me"
     "shell:windows\\readme.txt"
