@@ -859,6 +859,7 @@ EfiEntry(
 {
     GlobalImageHandle = ImageHandle;
     GlobalSystemTable = SystemTable;
+    SystemTable->BootServices->SetWatchdogTimer(0, 0, 0, NULL);
 
     BlMain();
     return EFI_LOAD_ERROR;
