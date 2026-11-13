@@ -17,7 +17,6 @@
 typedef struct _ELF_API_MSG
 {
     PORT_MESSAGE Header;
-    ULONG Unknown[2]; // FIXME
     IO_ERROR_LOG_MESSAGE IoErrorMessage;
 } ELF_API_MSG, *PELF_API_MSG;
 

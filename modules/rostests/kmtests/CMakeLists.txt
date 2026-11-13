@@ -645,6 +645,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCustomTargetEvent_user.c
     ntos_io/IoDeviceTree_user.c
     ntos_io/IoDriverKey_user.c
+    ntos_io/IoErrorLogEntry_user.c
     ntos_io/IoInterfaceOrder_user.c
     ntos_io/IoMessageRestart_user.c
     ntos_io/IoRemovalPolicy_user.c

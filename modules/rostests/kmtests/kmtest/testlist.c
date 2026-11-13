@@ -38,6 +38,7 @@ KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoCustomTargetEvent;
 KMT_TESTFUNC Test_IoDeviceTree;
 KMT_TESTFUNC Test_IoDriverKey;
+KMT_TESTFUNC Test_IoErrorLogRecord;
 KMT_TESTFUNC Test_IoInterfaceOrder;
 KMT_TESTFUNC Test_IoMessageRestart;
 KMT_TESTFUNC Test_IoRemovalPolicy;
@@ -134,6 +135,7 @@ const KMT_TEST TestList[] =
     { "-IoCustomTargetEvent",         Test_IoCustomTargetEvent },
     { "-IoDeviceTree",                Test_IoDeviceTree },
     { "-IoDriverKey",                 Test_IoDriverKey },
+    { "IoErrorLogRecord",             Test_IoErrorLogRecord },
     { "-IoInterfaceOrder",            Test_IoInterfaceOrder },
     { "-IoMessageRestart",            Test_IoMessageRestart },
     { "-IoRemovalPolicy",             Test_IoRemovalPolicy },
