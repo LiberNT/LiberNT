@@ -979,6 +979,41 @@ HalpHardwareInterruptLevel2(VOID)
 
 /* SYSTEM INTERRUPTS **********************************************************/
 
+VOID
+HalpBuildInterruptRequest(
+    _In_ ULONG Vector,
+    _In_ KIRQL Irql,
+    _In_ KINTERRUPT_MODE InterruptMode,
+    _Out_ PHALP_IRQ_REQUEST Request)
+{
+    ULONG Irq;
+
+    Irq = Vector - PRIMARY_VECTOR_BASE;
+
+    Request->Vector = Vector;
+    Request->Irql = Irql;
+    if (InterruptMode == LevelSensitive)
+        Request->Trigger = HalpIrqTriggerLevel;
+    else if (InterruptMode == Latched)
+        Request->Trigger = HalpIrqTriggerEdge;
+    else
+        Request->Trigger = HalpIrqTriggerUnknown;
+    Request->Polarity = HalpIrqPolarityUnknown;
+    Request->ControllerIndex = (Irq < 8) ? 0 : 1;
+    Request->Msi = FALSE;
+}
+
+VOID
+HalpValidateInterruptRequest(
+    _In_ const HALP_IRQ_REQUEST *Request)
+{
+    ASSERT(Request->Irql <= HIGH_LEVEL);
+    ASSERT(Request->Trigger <= HalpIrqTriggerLevel);
+    ASSERT(Request->Polarity <= HalpIrqPolarityActiveLow);
+    ASSERT(Request->ControllerIndex < 2);
+    ASSERT(Request->Msi == FALSE);
+}
+
 /*
  * @implemented
  */
@@ -991,6 +1026,10 @@ HalEnableSystemInterrupt(IN ULONG Vector,
     ULONG Irq;
     PKPCR Pcr = KeGetPcr();
     PIC_MASK PicMask;
+    HALP_IRQ_REQUEST Request;
+
+    HalpBuildInterruptRequest(Vector, Irql, InterruptMode, &Request);
+    HalpValidateInterruptRequest(&Request);
 
     /* Validate the IRQ */
     Irq = Vector - PRIMARY_VECTOR_BASE;
@@ -1032,6 +1071,10 @@ HalDisableSystemInterrupt(IN ULONG Vector,
 {
     ULONG IrqMask;
     PIC_MASK PicMask;
+    HALP_IRQ_REQUEST Request;
+
+    HalpBuildInterruptRequest(Vector, Irql, HALP_IRQ_MODE_UNKNOWN, &Request);
+    HalpValidateInterruptRequest(&Request);
 
     /* Compute new combined IRQ mask */
     IrqMask = 1 << (Vector - PRIMARY_VECTOR_BASE);

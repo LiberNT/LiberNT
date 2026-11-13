@@ -15,6 +15,7 @@
 
 #include <hal.h>
 #include "apicp.h"
+#include "msip.h"
 #include <smp.h>
 #define NDEBUG
 #include <debug.h>
@@ -1131,6 +1132,54 @@ HalpDisablePassiveLine(
     ExFreePoolWithTag(Interrupt, TAG_HAL);
 }
 
+/* INTERRUPT REQUESTS *********************************************************/
+
+VOID
+HalpBuildInterruptRequest(
+    _In_ ULONG Vector,
+    _In_ KIRQL Irql,
+    _In_ KINTERRUPT_MODE InterruptMode,
+    _Out_ PHALP_IRQ_REQUEST Request)
+{
+    UCHAR Index;
+
+    Index = (Vector < RTL_NUMBER_OF(HalpVectorToIndex)) ? HalpVectorToIndex[Vector] : APIC_FREE_VECTOR;
+
+    Request->Vector = Vector;
+    Request->Irql = Irql;
+    if (InterruptMode == LevelSensitive)
+        Request->Trigger = HalpIrqTriggerLevel;
+    else if (InterruptMode == Latched)
+        Request->Trigger = HalpIrqTriggerEdge;
+    else
+        Request->Trigger = HalpIrqTriggerUnknown;
+    Request->Polarity = HalpIrqPolarityUnknown;
+    Request->ControllerIndex = Index;
+#ifdef _M_AMD64
+    Request->Msi = (Index == APIC_RESERVED_VECTOR) && !HalpSecondaryIsVector(Vector) &&
+                   (HalpMsiVectorToIrql((UCHAR)Vector) != 0);
+#else
+    Request->Msi = FALSE;
+#endif
+}
+
+VOID
+HalpValidateInterruptRequest(
+    _In_ const HALP_IRQ_REQUEST *Request)
+{
+    ASSERT(Request->Irql <= HIGH_LEVEL);
+    ASSERT(Request->Trigger <= HalpIrqTriggerLevel);
+    ASSERT(Request->Polarity <= HalpIrqPolarityActiveLow);
+
+    if (Request->Irql == PASSIVE_LEVEL || Request->Msi)
+        return;
+
+    ASSERT((IrqlToTpr(Request->Irql) & 0xF0) == (Request->Vector & 0xF0));
+
+    if (Request->ControllerIndex != APIC_FREE_VECTOR && Request->ControllerIndex != APIC_RESERVED_VECTOR)
+        ASSERT(Request->ControllerIndex < HalpIoApicMaxIrq);
+}
+
 BOOLEAN
 NTAPI
 HalEnableSystemInterrupt(
@@ -1140,6 +1189,11 @@ HalEnableSystemInterrupt(
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
     UCHAR Index;
+    HALP_IRQ_REQUEST Request;
+
+    HalpBuildInterruptRequest(Vector, Irql, InterruptMode, &Request);
+    HalpValidateInterruptRequest(&Request);
+
     ASSERT(Irql <= HIGH_LEVEL);
 
     if (HalpSecondaryIsVector(Vector))
@@ -1237,6 +1291,11 @@ HalDisableSystemInterrupt(
     PHALP_IOAPIC IoApic;
     UCHAR Index;
     UCHAR Pin;
+    HALP_IRQ_REQUEST Request;
+
+    HalpBuildInterruptRequest(Vector, Irql, HALP_IRQ_MODE_UNKNOWN, &Request);
+    HalpValidateInterruptRequest(&Request);
+
     ASSERT(Irql <= HIGH_LEVEL);
     ASSERT(Vector < RTL_NUMBER_OF(HalpVectorToIndex));
 
