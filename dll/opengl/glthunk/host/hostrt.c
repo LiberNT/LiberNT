@@ -1511,6 +1511,18 @@ vfprintf(FILE *File, const char *Format, va_list Arguments)
 }
 
 int __cdecl
+fprintf(FILE *File, const char *Format, ...)
+{
+    va_list Arguments;
+    int Length;
+
+    va_start(Arguments, Format);
+    Length = HostRtPrint(File, Format, Arguments);
+    va_end(Arguments);
+    return Length;
+}
+
+int __cdecl
 __stdio_common_vsprintf(unsigned __int64 Options, char *Buffer, size_t Count, const char *Format, void *Locale,
                         va_list Arguments)
 {
