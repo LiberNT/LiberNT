@@ -113,6 +113,7 @@ START_TEST(EmulatedProcess)
     HANDLE File, Section;
     NTSTATUS Status;
     BOOL Result;
+    ULONG Index;
 
     if (!IsAmd64Emulated())
     {
@@ -179,5 +180,25 @@ START_TEST(EmulatedProcess)
     WaitForSingleObject(ProcessInfo.hProcess, 5000);
     CloseHandle(ProcessInfo.hThread);
     CloseHandle(ProcessInfo.hProcess);
-    ok(DeleteFileW(Path), "DeleteFileW failed: %lu\n", GetLastError());
+
+    ok(SetEnvironmentVariableW(L"__COMPAT_LAYER", L"WIN7RTM"), "SetEnvironmentVariableW failed: %lu\n", GetLastError());
+    Result = CreateProcessW(Path, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo);
+    ok(Result, "CreateProcessW with a compatibility layer failed: %lu\n", GetLastError());
+    SetEnvironmentVariableW(L"__COMPAT_LAYER", NULL);
+    if (Result)
+    {
+        DWORD ExitCode = 0xDEADBEEF;
+
+        ok_long(WaitForSingleObject(ProcessInfo.hProcess, 30000), WAIT_OBJECT_0);
+        ok(GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode), "GetExitCodeProcess failed: %lu\n", GetLastError());
+        ok_hex(ExitCode, 0);
+        TerminateProcess(ProcessInfo.hProcess, 0);
+        CloseHandle(ProcessInfo.hThread);
+        CloseHandle(ProcessInfo.hProcess);
+    }
+
+    /* Windows 11 keeps the image open for a few seconds after a run with a compatibility layer */
+    for (Index = 0; !(Result = DeleteFileW(Path)) && GetLastError() == ERROR_ACCESS_DENIED && Index < 100; Index++)
+        Sleep(100);
+    ok(Result, "DeleteFileW failed: %lu\n", GetLastError());
 }
