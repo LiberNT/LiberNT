@@ -1,7 +1,7 @@
 #
 # PROJECT:     LiberNT build system
 # LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
-# PURPOSE:     Stamp the build with the branch, commit and time it was made from
+# PURPOSE:     Stamp the build with the branch, commit and date it was made from
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 #
 
@@ -41,7 +41,7 @@ if(GIT_COMMAND AND EXISTS "${SOURCE_DIR}/.git")
     endif()
 endif()
 
-# The time stays as it is until the tree moves, so a build that stamps the same
+# The date stays as it is until the tree moves, so a build that stamps the same
 # branch and commit does not recompile what shows the stamp.
 if(EXISTS "${OUTPUT}")
     file(READ "${OUTPUT}" STAMPED)
@@ -51,13 +51,13 @@ if(EXISTS "${OUTPUT}")
     if(STAMPED MATCHES "LIBERNT_BUILD_COMMIT +\"([^\"]*)\"")
         set(STAMPED_COMMIT "${CMAKE_MATCH_1}")
     endif()
-    if(STAMPED MATCHES "LIBERNT_BUILD_TIME +\"([^\"]*)\"")
-        set(STAMPED_TIME "${CMAKE_MATCH_1}")
+    if(STAMPED MATCHES "LIBERNT_BUILD_DATE +\"([^\"]*)\"")
+        set(STAMPED_DATE "${CMAKE_MATCH_1}")
     endif()
     if(STAMPED MATCHES "LIBERNT_BUILD_ARCH +\"([^\"]*)\"")
         set(STAMPED_ARCH "${CMAKE_MATCH_1}")
     endif()
-    if(STAMPED_TIME AND
+    if(STAMPED_DATE AND
        "${STAMPED_BRANCH}" STREQUAL "${BUILD_BRANCH}" AND
        "${STAMPED_COMMIT}" STREQUAL "${BUILD_COMMIT}" AND
        "${STAMPED_ARCH}" STREQUAL "${BUILD_ARCH}")
@@ -65,8 +65,8 @@ if(EXISTS "${OUTPUT}")
     endif()
 endif()
 
-string(TIMESTAMP BUILD_TIME "%y%m%d-%H%M" UTC)
-set(BUILD_STAMP "${BUILD_BRANCH}.${BUILD_COMMIT}.${BUILD_TIME}")
+string(TIMESTAMP BUILD_DATE "%d.%m.%y" UTC)
+set(BUILD_STAMP "${BUILD_BRANCH}.${BUILD_COMMIT}.${BUILD_DATE}")
 
 string(RANDOM LENGTH 8 ALPHABET "0123456789abcdef" TEMPORARY)
 set(TEMPORARY "${OUTPUT}.${TEMPORARY}")
@@ -77,7 +77,7 @@ file(WRITE "${TEMPORARY}"
 
 #define LIBERNT_BUILD_BRANCH   \"${BUILD_BRANCH}\"
 #define LIBERNT_BUILD_COMMIT   \"${BUILD_COMMIT}\"
-#define LIBERNT_BUILD_TIME     \"${BUILD_TIME}\"
+#define LIBERNT_BUILD_DATE     \"${BUILD_DATE}\"
 #define LIBERNT_BUILD_ARCH     \"${BUILD_ARCH}\"
 #define LIBERNT_BUILD_ARCH_W  L\"${BUILD_ARCH}\"
 #define LIBERNT_BUILD_STAMP    \"${BUILD_STAMP}\"
