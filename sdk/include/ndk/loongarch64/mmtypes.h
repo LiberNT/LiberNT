@@ -38,6 +38,23 @@ extern NTSYSAPI ULONG_PTR MmUserProbeAddress;
 #define MI_LA64_MAT_CC                    1
 #define MI_LA64_MAT_WUC                   2
 
+/* MAT field encoding, [V1-2.1.7]: 0 SUC, 1 CC, 2 WUC, 3 reserved.
+ *
+ * Page-table entry layout, [V1-5.4.5] Figure 8 (common page) and Figure 9
+ * (huge page): V 0, D 1, PLV 3:2, MAT 5:4, H 6, P 7, W 8, PA[PALEN-1:12],
+ * NR 61, NX 62, RPLV 63. Bit 6 is the huge-page flag when the entry sits in
+ * a directory and the G bit when it is a leaf entry; a huge-page entry
+ * carries its G at bit 12 instead. V, D, PLV, MAT and G keep the positions
+ * they have in TLBELO, [V1-7.5.3]; P and W exist only for the walk — they
+ * are never copied into a TLB entry.
+ *
+ * Bits 11:9 and 60:PALEN are undefined in both formats, and "bits not
+ * defined in either of these formats are automatically ignored by the LDDIR
+ * and LDPTE instructions or hardware page walking" [V1-5.4.5], so 11:9 is
+ * the software window. PALEN is 48 on this target (handoff decision G-1),
+ * which is what fixes PFN_BITS at 36; a port that takes another PALEN has to
+ * re-derive PFN_BITS and PFN_MASK from CPUCFG1. */
+
 #define MI_LA64_PTE_VALID                 0x0000000000000001ULL
 #define MI_LA64_PTE_DIRTY                 0x0000000000000002ULL
 #define MI_LA64_PTE_PLV_SHIFT             2
@@ -62,6 +79,13 @@ extern NTSYSAPI ULONG_PTR MmUserProbeAddress;
 #define MI_LA64_PTE_NX                    0x4000000000000000ULL
 #define MI_LA64_PTE_RPLV                  0x8000000000000000ULL
 
+/* PWCL, [V1-7.5.8]: PTbase 4:0, PTwidth 9:5, Dir1_base 14:10, Dir1_width
+ * 19:15, Dir2_base 24:20, Dir2_width 29:25, PTEWidth 31:30 (0 = 64-bit
+ * entries). PWCH, [V1-7.5.9]: Dir3_base 5:0, Dir3_width 11:6, Dir4_base
+ * 17:12, Dir4_width 23:18; 31:24 reserved. "Width 0 means there is no such
+ * level", so a four-level 4 KiB table with PALEN = 48 is PT[20:12],
+ * Dir1[29:21], Dir2[38:30], Dir3[47:39] and no Dir4 — the 0x13E4D52C /
+ * 0x267 pair below, which the loader writes as the same two values. */
 #define MI_LA64_PWCL_PTBASE_SHIFT         0
 #define MI_LA64_PWCL_PTWIDTH_SHIFT        5
 #define MI_LA64_PWCL_DIR1BASE_SHIFT       10
@@ -89,6 +113,12 @@ extern NTSYSAPI ULONG_PTR MmUserProbeAddress;
      (0ULL  << MI_LA64_PWCH_DIR4BASE_SHIFT) | \
      (0ULL  << MI_LA64_PWCH_DIR4WIDTH_SHIFT))
 
+/* DMW0-DMW3, [V1-7.5.18]: PLV0-3 bits 3:0, MAT 5:4, 59:6 reserved, VSEG
+ * 63:60 (the top four bits of the virtual address that the window decodes).
+ * CSR numbers are 0x180-0x183. The three windows this port keeps are
+ * uncached/CC/WC at VSEG 0x8/0x9/0xA; only DMW0 and DMW1 may be used for
+ * instruction fetch, which is why the kernel text and the entry page live in
+ * the CC window. */
 #define MI_LA64_DMW_PLV0                  0x0000000000000001ULL
 #define MI_LA64_DMW_PLV3                  0x0000000000000008ULL
 #define MI_LA64_DMW_MAT_SHIFT             4
@@ -196,6 +226,11 @@ typedef struct _MMPTE
 
 C_ASSERT(PAGE_SIZE == (1 << PAGE_SHIFT));
 C_ASSERT(MM_ALLOCATION_GRANULARITY == (1 << MM_ALLOCATION_GRANULARITY_SHIFT));
+/* The two encodings every level of this port agrees on: the loader writes
+ * them, the mm backend checks them at handoff, and a shifted field here would
+ * silently produce a different walk. */
+C_ASSERT(MI_LA64_PWCL_4LEVEL_4K == 0x13E4D52CULL);
+C_ASSERT(MI_LA64_PWCH_4LEVEL_4K == 0x00000267ULL);
 C_ASSERT(sizeof(HARDWARE_PTE) == sizeof(ULONG64));
 C_ASSERT(sizeof(MMPTE_SOFTWARE) == sizeof(ULONG64));
 C_ASSERT(sizeof(MMPTE_TRANSITION) == sizeof(ULONG64));

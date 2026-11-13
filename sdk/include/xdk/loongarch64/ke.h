@@ -6,6 +6,13 @@
 
 $if (_WDMDDK_)
 
+/* NT's IRQL ladder. None of these numbers is architectural: the ISA knows 13
+ * interrupt lines and their int numbers ([V1-6.1.1]) and orders them by int
+ * number, highest wins ([V1-6.1.2]). The HAL owns the line-to-IRQL
+ * assignment and has to keep it monotonic in int number, so the hardware
+ * order can never contradict an NT IRQL assumption; ke masks the lower lines
+ * through ECFG.LIE on every raise. CLOCK/IPI/POWER/PROFILE/HIGH keep the
+ * AMD64 and ARM64 numbers so shared kernel code sees the same ladder. */
 #define PASSIVE_LEVEL  0
 #define LOW_LEVEL      0
 #define APC_LEVEL      1
@@ -48,6 +55,13 @@ FORCEINLINE VOID YieldProcessor(VOID)
 #endif
 #define PAUSE_PROCESSOR YieldProcessor()
 
+/* There is no architectural cycle counter. The one time source is the
+ * constant-frequency timer of [V1-2.2.10.4]: RDTIME.D returns the 64-bit
+ * StableCounter of the timer named by rj, and id 0 is the timer that TCFG/TVAL
+ * ([V1-7.6.2]/[V1-7.6.3]) program for the tick. NT keeps its TSC name for
+ * this concept, but the unit is constant timer ticks, not core cycles, and
+ * the frequency must come from CPUCFG (or the handoff block), never from a
+ * ratio to the core clock. */
 FORCEINLINE
 ULONG64
 ReadTimeStampCounter(
@@ -122,3 +136,5 @@ KeRestoreFloatingPointState(
 }
 
 $endif (_WDMDDK_)
+
+extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;

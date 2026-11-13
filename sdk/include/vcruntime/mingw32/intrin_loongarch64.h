@@ -78,3 +78,40 @@ static __inline__ unsigned char __la64_bit_test_and_reset64(long long volatile *
 
 #define _interlockedbittestandset64(v, b) __la64_bit_test_and_set64((long long volatile *)(v), (b))
 #define _interlockedbittestandreset64(v, b) __la64_bit_test_and_reset64((long long volatile *)(v), (b))
+
+static __inline__ long long __la64_interlocked_add64(long long volatile *Value, long long Addend)
+{
+    return __atomic_fetch_add((unsigned long long *)Value, (unsigned long long)Addend, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_and64(long long volatile *Value, long long Mask)
+{
+    return __atomic_fetch_and((unsigned long long *)Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_or64(long long volatile *Value, long long Mask)
+{
+    return __atomic_fetch_or((unsigned long long *)Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_xor64(long long volatile *Value, long long Mask)
+{
+    return __atomic_fetch_xor((unsigned long long *)Value, (unsigned long long)Mask, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ unsigned char __la64_interlocked_compare_exchange64(long long volatile *Destination,
+                                                                     long long Exchange,
+                                                                     long long Comparand)
+{
+    long long Expected = Comparand;
+    return __atomic_compare_exchange_n((unsigned long long *)Destination,
+                                       (unsigned long long *)&Expected,
+                                       (unsigned long long)Exchange, 0,
+                                       __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+}
+
+#define _InterlockedAdd64(v, a) __la64_interlocked_add64((long long volatile *)(v), (a))
+#define _InterlockedAnd64(v, m) __la64_interlocked_and64((long long volatile *)(v), (m))
+#define _InterlockedOr64(v, m) __la64_interlocked_or64((long long volatile *)(v), (m))
+#define _InterlockedXor64(v, m) __la64_interlocked_xor64((long long volatile *)(v), (m))
+#define _InterlockedCompareExchange64(d, e, c) __la64_interlocked_compare_exchange64((long long volatile *)(d), (e), (c))

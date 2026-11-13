@@ -7,6 +7,10 @@
 #ifndef _LOONGARCH64_CONTEXT_DEFINED
 #define _LOONGARCH64_CONTEXT_DEFINED
 
+/* Port-private discriminator: no Windows LoongArch64 CONTEXT assignment is
+ * published in any document this tree can cite (the Windows SDK assigns
+ * 0x00100000/0x00200000/0x00400000 to AMD64/ARM/ARM64), so this value is not
+ * claimed to match one. */
 #define CONTEXT_LOONGARCH64          0x01000000L
 #define CONTEXT_CONTROL             (CONTEXT_LOONGARCH64 | 0x00000001L)
 #define CONTEXT_INTEGER             (CONTEXT_LOONGARCH64 | 0x00000002L)
@@ -19,6 +23,13 @@
 #define CONTEXT_EXCEPTION_REQUEST   0x40000000
 #define CONTEXT_EXCEPTION_REPORTING 0x80000000
 
+/* Register roles and widths are the psABI's [ABI]: r1 ra, r2 tp, r3 sp,
+ * r4-r11 a0-a7 (r4 carries the integer return and r5 the second half of it),
+ * r12-r20 t0-t8, r21 reserved and non-allocatable, r22 fp/s9, r23-r31 s0-s8.
+ * GPRs and FPRs are 64 bits each, and Fcsr holds the 32-bit fcsr0
+ * ([V1-3.1.3.3]) rather than a 64-bit register. The 32-byte alignment is this
+ * port's own choice so a LASX block can be appended later; the ABI only
+ * fixes 128-bit alignment of the stack pointer at procedure entry. */
 typedef struct DECLSPEC_ALIGN(32) _CONTEXT
 {
     ULONG ContextFlags;

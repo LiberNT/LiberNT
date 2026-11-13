@@ -50,7 +50,17 @@ typedef struct _KEXCEPTION_FRAME KEXCEPTION_FRAME, *PKEXCEPTION_FRAME;
 typedef struct _KPROCESSOR_STATE KPROCESSOR_STATE, *PKPROCESSOR_STATE;
 typedef struct _KPRCB KPRCB, *PKPRCB;
 typedef struct _KPCR KPCR, *PKPCR;
-/* TODO: fix the LASX save policy once the kernel FPU policy is decided. */
+/* TODO: fix the LASX save policy once the kernel FPU policy is decided.
+ *
+ * Contents of the frame, against the exception state the manual defines:
+ * the 32 GPRs plus ERA (Context.Pc) come from the register file and
+ * CSR.ERA [V1-7.4.7]; BADV is [V1-7.4.8]; and the five mode CSRs are
+ * CRMD [V1-7.4.1], PRMD [V1-7.4.2], EUEN [V1-7.4.3], ECFG [V1-7.4.5] and
+ * ESTAT [V1-7.4.6]. Widths follow [V1-7.2.2]: the GRLEN-wide registers
+ * (GPRs, ERA, BADV) are ULONG64 and the fixed-32-bit ones (CRMD, PRMD, EUEN,
+ * ECFG, ESTAT) are ULONG — a csrrd of a 32-bit CSR only sign-extends, and
+ * every defined bit of these five sits below bit 31, so the narrow field
+ * loses nothing. There are no segment or descriptor registers to save. */
 struct DECLSPEC_ALIGN(16) _KTRAP_FRAME
 {
     CONTEXT Context;
@@ -143,6 +153,12 @@ typedef struct _UCALLOUT_FRAME
 
 C_ASSERT(sizeof(UCALLOUT_FRAME) == 32);
 
+/* TODO: the TLBRENTRY/TLBRBADV/TLBRERA/TLBRSAVE/TLBRELO0/1/TLBREHI/TLBRPRMD
+ * group and MERRENTRY are absent because this port dispatches exceptions
+ * through EENTRY and defines no machine-check path. The manual only fixes the
+ * format of those registers, [V1-7.5.11]-[V1-7.5.17]; whether a crash dump or
+ * KeSaveProcessorState has to carry them is a ke decision this header cannot
+ * make. */
 typedef struct _KSPECIAL_REGISTERS
 {
     ULONG64 Era;
