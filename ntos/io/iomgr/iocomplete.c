@@ -616,11 +616,15 @@ IofCompleteRequest(
     {
         if (Irp->Flags & IRP_SYNCHRONOUS_PAGING_IO)
         {
+            PKEVENT Event = Irp->UserEvent;
+
             if (Irp->UserIosb != NULL) *Irp->UserIosb = Irp->IoStatus;
-            if (Irp->UserEvent != NULL)
-            {
-                KeSetEvent(Irp->UserEvent, PriorityBoost, FALSE);
-            }
+
+            /* The issuer of synchronous paging I/O never sees the packet, and its
+             * memory descriptor list belongs to the issuer */
+            IoFreeIrp(Irp);
+
+            if (Event != NULL) KeSetEvent(Event, PriorityBoost, FALSE);
 
             return;
         }
