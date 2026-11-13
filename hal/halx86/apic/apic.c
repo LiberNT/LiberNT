@@ -32,6 +32,7 @@ ULONG HalpIoApicMaxIrq = APIC_MAX_IRQ;
 BOOLEAN HalpApicHvMsrs;
 
 extern HALP_APIC_INFO_TABLE HalpApicInfoTable;
+extern PPROCESSOR_IDENTITY HalpProcessorIdentity;
 
 typedef struct _HALP_IOAPIC
 {
@@ -1134,6 +1135,40 @@ HalpDisablePassiveLine(
 
 /* INTERRUPT REQUESTS *********************************************************/
 
+static
+KAFFINITY
+HalpCurrentProcessorTarget(VOID)
+{
+    ULONG ApicId = ApicRead(APIC_ID) >> 24;
+    ULONG ProcessorNumber;
+
+    for (ProcessorNumber = 0; ProcessorNumber < HalpApicInfoTable.ProcessorCount; ProcessorNumber++)
+    {
+        if (HalpProcessorIdentity[ProcessorNumber].LapicId == (UCHAR)ApicId)
+            return (KAFFINITY)1 << ProcessorNumber;
+    }
+
+    /* Before HalpInitProcessor parses the tables the boot processor is the only target */
+    return (KAFFINITY)1;
+}
+
+static
+ULONG
+HalpTargetProcessorNumber(
+    _In_ const HALP_IRQ_REQUEST *Request)
+{
+    KAFFINITY TargetSet = Request->TargetSet;
+    ULONG ProcessorNumber;
+
+    for (ProcessorNumber = 0; ProcessorNumber < MAXIMUM_PROCESSORS; ProcessorNumber++)
+    {
+        if (TargetSet & ((KAFFINITY)1 << ProcessorNumber))
+            return ProcessorNumber;
+    }
+
+    return 0;
+}
+
 VOID
 HalpBuildInterruptRequest(
     _In_ ULONG Vector,
@@ -1155,6 +1190,7 @@ HalpBuildInterruptRequest(
         Request->Trigger = HalpIrqTriggerUnknown;
     Request->Polarity = HalpIrqPolarityUnknown;
     Request->ControllerIndex = Index;
+    Request->TargetSet = HalpCurrentProcessorTarget();
 #ifdef _M_AMD64
     Request->Msi = (Index == APIC_RESERVED_VECTOR) && !HalpSecondaryIsVector(Vector) &&
                    (HalpMsiVectorToIrql((UCHAR)Vector) != 0);
@@ -1170,6 +1206,9 @@ HalpValidateInterruptRequest(
     ASSERT(Request->Irql <= HIGH_LEVEL);
     ASSERT(Request->Trigger <= HalpIrqTriggerLevel);
     ASSERT(Request->Polarity <= HalpIrqPolarityActiveLow);
+
+    ASSERT(Request->TargetSet != 0);
+    ASSERT((Request->TargetSet & (Request->TargetSet - 1)) == 0);
 
     if (Request->Irql == PASSIVE_LEVEL || Request->Msi)
         return;
@@ -1189,6 +1228,7 @@ HalEnableSystemInterrupt(
 {
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
     UCHAR Index;
+    UCHAR Destination;
     HALP_IRQ_REQUEST Request;
 
     HalpBuildInterruptRequest(Vector, Irql, InterruptMode, &Request);
@@ -1228,6 +1268,9 @@ HalEnableSystemInterrupt(
         return TRUE;
     }
 
+    /* Destination comes from the request's single target processor */
+    Destination = HalpProcessorIdentity[HalpTargetProcessorNumber(&Request)].LapicId;
+
     /* Read the redirection entry */
     ReDirReg = ApicReadIORedirectionEntry(Index);
 
@@ -1243,7 +1286,7 @@ HalEnableSystemInterrupt(
             DPRINT1("HalEnableSystemInterrupt: repairing RTE[%u] vector 0x%lx routing (was MT %u DM %u dest 0x%x)\n", Index, Vector, ReDirReg.MessageType, ReDirReg.DestinationMode, ReDirReg.Destination);
             ReDirReg.MessageType = APIC_MT_Fixed;
             ReDirReg.DestinationMode = APIC_DM_Physical;
-            ReDirReg.Destination = ApicRead(APIC_ID) >> 24;
+            ReDirReg.Destination = Destination;
             ApicWriteIORedirectionEntry(Index, ReDirReg);
         }
         return TRUE;
@@ -1253,7 +1296,7 @@ HalEnableSystemInterrupt(
     ReDirReg.Vector = Vector;
     ReDirReg.MessageType = APIC_MT_Fixed;
     ReDirReg.DestinationMode = APIC_DM_Physical;
-    ReDirReg.Destination = ApicRead(APIC_ID) >> 24;
+    ReDirReg.Destination = Destination;
     ReDirReg.TriggerMode = (Request.Trigger == HalpIrqTriggerLevel) ? APIC_TGM_Level : APIC_TGM_Edge;
     ReDirReg.Mask = FALSE;
 

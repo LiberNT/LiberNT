@@ -51,6 +51,11 @@ typedef struct _HALP_IRQ_REQUEST
     HALP_IRQ_POLARITY Polarity;
     ULONG ControllerIndex;
     BOOLEAN Msi;
+    /* Destination processors, one bit per processor number (the HAL's KAFFINITY
+     * convention). Single-processor convention: the APIC backend delivers to
+     * exactly one target, so exactly one bit is set and its LAPIC ID is what
+     * gets encoded into the 8-bit physical redirection entry. */
+    KAFFINITY TargetSet;
 } HALP_IRQ_REQUEST, *PHALP_IRQ_REQUEST;
 
 /* Passed where the call carries no interrupt mode (the disable path) */
