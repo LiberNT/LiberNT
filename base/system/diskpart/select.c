@@ -115,7 +115,6 @@ SelectDisk(
 }
 
 
-static
 VOID
 SelectVolumeEntry(
     _In_ PVOLENTRY VolumeEntry)

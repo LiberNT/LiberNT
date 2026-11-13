@@ -764,6 +764,10 @@ san_main(
     _In_ PWSTR *argv);
 
 /* select.c */
+VOID
+SelectVolumeEntry(
+    _In_ PVOLENTRY VolumeEntry);
+
 EXIT_CODE
 SelectDisk(
     INT argc,

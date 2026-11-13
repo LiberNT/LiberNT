@@ -67,7 +67,8 @@ RefreshResizedVolume(
         VolumeEntry = CONTAINING_RECORD(Entry, VOLENTRY, ListEntry);
         if (VolumeEntry->VolumeNumber == ulVolumeNumber)
         {
-            CurrentVolume = VolumeEntry;
+            /* The disk and the partition lists were rebuilt too: take their focus back */
+            SelectVolumeEntry(VolumeEntry);
             break;
         }
     }

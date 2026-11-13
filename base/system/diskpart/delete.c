@@ -152,6 +152,7 @@ DeleteMbrPartition(
         return;
     }
 
+    RefreshVolumeList();
     ConResPuts(StdOut, IDS_DELETE_PARTITION_SUCCESS);
 }
 
@@ -266,6 +267,7 @@ DeleteGptPartition(
         return;
     }
 
+    RefreshVolumeList();
     ConResPuts(StdOut, IDS_DELETE_PARTITION_SUCCESS);
 }
 
