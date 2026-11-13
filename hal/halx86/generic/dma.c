@@ -704,6 +704,7 @@ HalpDmaAllocateMasterAdapter(IN BOOLEAN Dma32BitAddresses)
                   SizeOfBitmap * sizeof(ROS_MAP_REGISTER_ENTRY));
     if (!HalpGrowMapBuffers(MasterAdapter, 0x10000))
     {
+        ExFreePool(MasterAdapter->MapRegisterBase);
         ExFreePool(MasterAdapter);
         return NULL;
     }
