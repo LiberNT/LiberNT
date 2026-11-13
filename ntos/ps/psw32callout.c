@@ -158,6 +158,7 @@ PsConvertToGuiThread(VOID)
     Status = PspW32ThreadCallout(Thread, PsW32ThreadCalloutInitialize);
     if (!NT_SUCCESS(Status)) return Status;
 
+    KiArchSetGuiServiceTable(Thread);
     Thread->Tcb.GuiThread = TRUE;
     return STATUS_SUCCESS;
 }
