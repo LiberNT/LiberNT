@@ -5580,7 +5580,8 @@ RamdiskPnp(IN PDEVICE_OBJECT DeviceObject,
             if (DeviceExtension->Type == RamdiskDrive)
             {
                 Status = RamdiskQueryCapabilities(DeviceObject, Irp);
-                goto ReleaseAndReturn;
+                IoReleaseRemoveLock(&DeviceExtension->RemoveLock, Irp);
+                return Status;
             }
             break;
         }
