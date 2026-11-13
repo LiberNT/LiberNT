@@ -14975,7 +14975,7 @@ XHCI_InterruptService(PVOID MiniPortExtension)
 
     /* If HCE/HSE are set, latch them into PendingUsbSts even when EINT is
      * clear so the DPC can decide whether to ignore or handle them. */
-    UsbSts = XHCI_READ_REGISTER_ULONG(&Extension->OperationalRegisters->UsbSts);
+    UsbSts = Status;
     if (UsbSts & (XHCI_USBSTS_HSE | XHCI_USBSTS_HCE))
     {
         InterlockedOr((volatile LONG *)&Extension->PendingUsbSts,
