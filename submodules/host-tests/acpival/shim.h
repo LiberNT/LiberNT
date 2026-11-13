@@ -33,6 +33,9 @@ typedef void *PVOID;
 typedef const char *PCSTR;
 typedef uint8_t UCHAR, *PUCHAR, BOOLEAN;
 typedef uint32_t ULONG, *PULONG;
+typedef uint64_t ULONGLONG;
+
+#define MAXULONG 0xFFFFFFFF
 
 VOID
 DbgPrint(
