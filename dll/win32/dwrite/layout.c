@@ -172,6 +172,7 @@ struct layout_effective_run
     struct layout_line *line;     /* Line this run belongs to. */
     UINT8 bidi_level;             /* For inline objects level is derived from the first character */
     bool trimming;                /* Run contains trimmed text */
+    bool trailing_whitespace;     /* Run is made of line trailing whitespace */
 
     /* Text run fields */
     const struct layout_run *run; /* nominal run this one is based on */
@@ -1738,10 +1739,19 @@ static float layout_get_line_width(struct layout_line *line)
 
     LIST_FOR_EACH_ENTRY(run, &line->runs, struct layout_effective_run, line_entry)
     {
-        width += run->width;
+        if (!run->trailing_whitespace)
+            width += run->width;
     }
 
     return width;
+}
+
+static float layout_get_rtl_trailing_whitespace_width(const struct dwrite_textlayout *layout)
+{
+    if (layout->format.readingdir != DWRITE_READING_DIRECTION_RIGHT_TO_LEFT)
+        return 0.0f;
+
+    return layout->metrics.widthIncludingTrailingWhitespace - layout->metrics.width;
 }
 
 static inline BOOL should_skip_transform(const DWRITE_MATRIX *m, FLOAT *det)
@@ -1794,6 +1804,7 @@ static void layout_apply_leading_alignment(struct dwrite_textlayout *layout)
     }
 
     layout->metrics.left = is_rtl ? layout->metrics.layoutWidth - layout->metrics.width : 0.0f;
+    layout->metrics.left -= layout_get_rtl_trailing_whitespace_width(layout);
 }
 
 static void layout_apply_trailing_alignment(struct dwrite_textlayout *layout)
@@ -1817,6 +1828,7 @@ static void layout_apply_trailing_alignment(struct dwrite_textlayout *layout)
     }
 
     layout->metrics.left = is_rtl ? 0.0f : layout->metrics.layoutWidth - layout->metrics.width;
+    layout->metrics.left -= layout_get_rtl_trailing_whitespace_width(layout);
 }
 
 static inline float layout_get_centered_shift(const struct dwrite_textlayout *layout, BOOL skiptransform,
@@ -1856,6 +1868,7 @@ static void layout_apply_centered_alignment(struct dwrite_textlayout *layout)
     }
 
     layout->metrics.left = (layout->metrics.layoutWidth - layout->metrics.width) / 2.0f;
+    layout->metrics.left -= layout_get_rtl_trailing_whitespace_width(layout);
 }
 
 static void layout_apply_text_alignment(struct dwrite_textlayout *layout)
@@ -2272,19 +2285,77 @@ static void layout_reorder_runs(struct layout_line *line)
     }
 }
 
+static void layout_line_splitting_params_from_pos(const struct dwrite_textlayout *layout, UINT32 pos,
+        bool trailing_whitespace, struct layout_final_splitting_params *params)
+{
+    layout_splitting_params_from_pos(layout, pos, params);
+    if (trailing_whitespace)
+        params->strikethrough = params->underline = FALSE;
+}
+
+/* Form runs from a range of clusters; this is what will be reported with DrawGlyphRun() */
+static HRESULT layout_add_line_runs(struct dwrite_textlayout *layout, struct layout_line *line, UINT32 first_cluster,
+        UINT32 cluster_count, bool trailing_whitespace, UINT32 *pos)
+{
+    BOOL is_rtl = layout->format.readingdir == DWRITE_READING_DIRECTION_RIGHT_TO_LEFT;
+    struct layout_final_splitting_params params, prev_params;
+    struct layout_effective_run *line_run;
+    const struct layout_run *run;
+    UINT32 start, end;
+    HRESULT hr;
+
+    if (!cluster_count)
+        return S_OK;
+
+    layout_line_splitting_params_from_pos(layout, *pos, trailing_whitespace, &params);
+    prev_params = params;
+    run = layout->clusters[first_cluster].run;
+
+    for (start = first_cluster, end = first_cluster; end <= first_cluster + cluster_count; ++end)
+    {
+        if (end < first_cluster + cluster_count)
+            layout_line_splitting_params_from_pos(layout, *pos, trailing_whitespace, &params);
+
+        if (end == first_cluster + cluster_count || run != layout->clusters[end].run
+                || !is_same_splitting_params(&prev_params, &params))
+        {
+            if (FAILED(hr = layout_add_effective_run(layout, run, start, end - start, line, &prev_params)))
+                return hr;
+
+            line_run = LIST_ENTRY(list_tail(&line->runs), struct layout_effective_run, line_entry);
+            assert(line_run->first_cluster == start);
+            if (trailing_whitespace)
+            {
+                line_run->trailing_whitespace = true;
+                line_run->bidi_level = is_rtl ? 1 : 0;
+            }
+
+            if (end == first_cluster + cluster_count)
+                break;
+
+            run = layout->clusters[end].run;
+            start = end;
+        }
+
+        prev_params = params;
+        *pos += layout->clustermetrics[end].length;
+    }
+
+    return S_OK;
+}
+
 static HRESULT layout_add_line(struct dwrite_textlayout *layout, UINT32 first_cluster,
         UINT32 cluster_count, UINT32 *textpos)
 {
     BOOL is_rtl = layout->format.readingdir == DWRITE_READING_DIRECTION_RIGHT_TO_LEFT;
-    struct layout_final_splitting_params params, prev_params;
     DWRITE_INLINE_OBJECT_METRICS sign_metrics = { 0 };
-    UINT32 count, length, start, end, pos = *textpos;
+    UINT32 count, trailing_count, pos = *textpos;
     struct layout_effective_run *line_run;
     DWRITE_LINE_METRICS1 metrics = { 0 };
     FLOAT descent, trailingspacewidth;
     bool append_trimming_run = false;
     const struct layout_run *run;
-    float width = 0.0f, origin_x;
+    float width = 0.0f, origin_x, trailing_x;
     struct layout_line *line;
     HRESULT hr;
 
@@ -2317,17 +2388,12 @@ static HRESULT layout_add_line(struct dwrite_textlayout *layout, UINT32 first_cl
     for (unsigned int i = first_cluster; i < first_cluster + cluster_count; ++i)
         metrics.length += layout->clustermetrics[i].length;
 
-    /* Ignore trailing whitespaces, up to a newline. */
-    while (cluster_count)
+    /* Trailing whitespace, newline included, is laid out after the content. */
+    trailing_count = 0;
+    while (cluster_count && layout->clustermetrics[first_cluster + cluster_count - 1].isWhitespace)
     {
-        unsigned int cluster = first_cluster + cluster_count - 1;
-
-        if (layout->clustermetrics[cluster].isNewline)
-            break;
-        if (!layout->clustermetrics[cluster].isWhitespace)
-            break;
-
         --cluster_count;
+        ++trailing_count;
     }
 
     /* Does not include trailing space width */
@@ -2375,37 +2441,8 @@ static HRESULT layout_add_line(struct dwrite_textlayout *layout, UINT32 first_cl
         width = trimmed_width + sign_metrics.width;
     }
 
-    layout_splitting_params_from_pos(layout, pos, &params);
-    prev_params = params;
-    run = layout->clusters[first_cluster].run;
-
-    /* Form runs from a range of clusters; this is what will be reported with DrawGlyphRun() */
-    length = 0;
-    for (start = first_cluster, end = first_cluster; end < first_cluster + cluster_count; ++end)
-    {
-        layout_splitting_params_from_pos(layout, pos, &params);
-
-        if (run != layout->clusters[end].run || !is_same_splitting_params(&prev_params, &params))
-        {
-            hr = layout_add_effective_run(layout, run, start, end - start, line, &prev_params);
-            if (FAILED(hr))
-                return hr;
-
-            run = layout->clusters[end].run;
-            start = end;
-        }
-
-        prev_params = params;
-        pos += layout->clustermetrics[end].length;
-        length += layout->clustermetrics[end].length;
-    }
-
-    /* Final run from what's left from cluster range */
-    if (end - start)
-    {
-        if (FAILED(hr = layout_add_effective_run(layout, run, start, end - start, line, &prev_params)))
-            return hr;
-    }
+    if (FAILED(hr = layout_add_line_runs(layout, line, first_cluster, cluster_count, false, &pos)))
+        return hr;
 
     if (append_trimming_run)
     {
@@ -2414,14 +2451,14 @@ static HRESULT layout_add_line(struct dwrite_textlayout *layout, UINT32 first_cl
         if (!(trimming_sign = calloc(1, sizeof(*trimming_sign))))
             return E_OUTOFMEMORY;
 
-        trimming_sign->start_position = layout->clusters[end].position + layout->clusters[end].run->start_position;
-        trimming_sign->length = metrics.length - length;
+        trimming_sign->start_position = pos;
+        trimming_sign->length = metrics.length - (pos - *textpos);
         trimming_sign->object = layout->format.trimmingsign;
         trimming_sign->width = sign_metrics.width;
         trimming_sign->baseline = sign_metrics.baseline;
         trimming_sign->line = line;
 
-        trimming_sign->bidi_level = layout->clusters[end].run->u.regular.run.bidiLevel;
+        trimming_sign->bidi_level = layout->clusters[first_cluster + cluster_count].run->u.regular.run.bidiLevel;
         layout_line_update_bidi(line, trimming_sign->bidi_level);
         trimming_sign->trimming = true;
 
@@ -2447,12 +2484,39 @@ static HRESULT layout_add_line(struct dwrite_textlayout *layout, UINT32 first_cl
         origin_x += line_run->width;
     }
 
+    if (append_trimming_run)
+    {
+        trailingspacewidth = 0.0f;
+    }
+    else
+    {
+        struct list *entry = list_tail(&line->runs);
+
+        if (FAILED(hr = layout_add_line_runs(layout, line, first_cluster + cluster_count, trailing_count, true, &pos)))
+            return hr;
+
+        trailing_x = is_rtl ? layout->metrics.layoutWidth - width : origin_x;
+        while ((entry = entry ? list_next(&line->runs, entry) : list_head(&line->runs)))
+        {
+            line_run = LIST_ENTRY(entry, struct layout_effective_run, line_entry);
+            assert(line_run->trailing_whitespace);
+            if (is_rtl)
+                trailing_x -= line_run->width;
+            line_run->origin.x = line_run->left = trailing_x;
+            if (!line_run->object && line_run->bidi_level & 1)
+                line_run->origin.x += line_run->width;
+            if (!is_rtl)
+                trailing_x += line_run->width;
+        }
+        assert(pos - *textpos == metrics.length);
+    }
+
     /* Look for max baseline and descent for this line */
     run = layout->clusters[first_cluster].run;
     metrics.baseline = run->baseline;
     descent = run->height - run->baseline;
 
-    for (unsigned int cluster = first_cluster + 1; cluster < first_cluster + cluster_count; ++cluster)
+    for (unsigned int cluster = first_cluster + 1; cluster < first_cluster + cluster_count + trailing_count; ++cluster)
     {
         run = layout->clusters[cluster].run;
 
@@ -2526,7 +2590,7 @@ static HRESULT layout_compute_lines(struct dwrite_textlayout *layout)
         {
             if (layout->clustermetrics[end_cluster].isNewline) break;
             width += layout->clustermetrics[end_cluster].width;
-            if (wraps && width > max_width)
+            if (wraps && width > max_width && !layout->clustermetrics[end_cluster].isWhitespace)
             {
                 /* Do not consume cluster that caused overflow, while making sure
                    some clusters are still consumed. */
@@ -2582,6 +2646,12 @@ static HRESULT layout_compute_lines(struct dwrite_textlayout *layout)
             }
         }
 
+        while (end_cluster + 1 < layout->cluster_count && !layout->clustermetrics[end_cluster].isNewline
+                && layout->clustermetrics[end_cluster + 1].isWhitespace)
+        {
+            ++end_cluster;
+        }
+
         cluster_count = end_cluster - start_cluster + 1;
         if (FAILED(hr = layout_add_line(layout, start_cluster, cluster_count, &text_position)))
             break;
@@ -2622,6 +2692,7 @@ static HRESULT layout_compute_effective_runs(struct dwrite_textlayout *layout)
         return hr;
 
     layout->metrics.left = is_rtl ? layout->metrics.layoutWidth - layout->metrics.width : 0.0f;
+    layout->metrics.left -= layout_get_rtl_trailing_whitespace_width(layout);
     layout->metrics.top = 0.0f;
     layout->metrics.maxBidiReorderingDepth = 1; /* FIXME */
 
@@ -4037,6 +4108,7 @@ static HRESULT WINAPI dwritetextlayout_Draw(IDWriteTextLayout4 *iface,
            it can't be reused because it has to start with 0 index for each reported run. */
         glyph_run = regular->run;
         glyph_run.glyphCount = run->glyphcount;
+        glyph_run.bidiLevel = run->bidi_level;
 
         /* fixup glyph data arrays */
         glyph_run.glyphIndices += start_glyph;
@@ -4426,12 +4498,12 @@ static HRESULT WINAPI dwritetextlayout_HitTestTextPosition(IDWriteTextLayout4 *i
         UINT8 level;
 
         run = layout_get_trailing_effective_run(layout);
-        level = run->object ? run->bidi_level : run->run->u.regular.run.bidiLevel;
+        level = run->bidi_level;
 
         metrics->textPosition = position;
         metrics->length = 0;
         /* Empty box following the last run */
-        metrics->left = run->left + run->align_dx + run->width;
+        metrics->left = run->left + run->align_dx + (level & 1 ? 0.0f : run->width);
         metrics->top = layout->metrics.height - line->metrics.height;
         metrics->width = 0.0f;
         metrics->height = line->metrics.height;
@@ -4476,7 +4548,7 @@ static HRESULT WINAPI dwritetextlayout_HitTestTextPosition(IDWriteTextLayout4 *i
 
         metrics->textPosition = position;
         metrics->length = layout->clustermetrics[cluster].length;
-        metrics->bidiLevel = run->run->u.regular.run.bidiLevel;
+        metrics->bidiLevel = run->bidi_level;
 
         metrics->width = layout->clustermetrics[cluster].width;
         metrics->left = run->left + run->align_dx;
