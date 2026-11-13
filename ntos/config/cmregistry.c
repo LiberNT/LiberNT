@@ -392,7 +392,10 @@ VOID
 NTAPI
 CmpEndStarveWriters(VOID)
 {
-    InterlockedDecrement((PLONG)&CmpFlushStarveWriters);
+    LONG Remaining = InterlockedDecrement((PLONG)&CmpFlushStarveWriters);
+
+    ASSERT(Remaining >= 0);
+    UNREFERENCED_PARAMETER(Remaining);
 }
 
 /* Nothing is charged against the quota until its limit has been read */

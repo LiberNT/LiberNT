@@ -713,7 +713,10 @@ CmpFlushHiveToDisk(
     if (!Force && Hive->Hive.DirtyCount == 0) return STATUS_SUCCESS;
 
     CmpLockHiveFlusherExclusive(Hive);
+    /* FIXME: writers take the registry lock exclusively, so they still wait for every hive flush, not only for this hive's */
+    CmpBeginStarveWriters();
     Written = Force ? HvReconcileHive(&Hive->Hive) : HvSyncHive(&Hive->Hive);
+    CmpEndStarveWriters();
     CmpUnlockHiveFlusher(Hive);
 
     if (!Written) return STATUS_REGISTRY_IO_FAILED;

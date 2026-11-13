@@ -13,6 +13,7 @@ add_subdirectory(kernel32)
 add_subdirectory(ndis)
 add_subdirectory(ntfs)
 add_subdirectory(ntos_cc)
+add_subdirectory(ntos_cm)
 add_subdirectory(ntos_io)
 add_subdirectory(ntos_mm)
 add_subdirectory(ntos_po)
@@ -617,6 +618,8 @@ list(APPEND KMTEST_SOURCE
     fltmgr/fltmgr_tx/fltmgr_tx_user.c
     fltmgr/fltmgr_load/fltmgr_user.c
     fltmgr/fltmgr_register/fltmgr_reg_user.c
+
+    ntos_cm/CmFlushReaders_user.c
 
     ntfs/NtfsTxfRecovery_user.c
 
