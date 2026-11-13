@@ -15,6 +15,16 @@ static CPPORT FwDebugPort;
 static BOOLEAN FwDebugPortProbed;
 
 BOOLEAN
+FwArchMemoryUsable(
+    _In_ ULONGLONG Address,
+    _In_ SIZE_T Size)
+{
+    UNREFERENCED_PARAMETER(Address);
+    UNREFERENCED_PARAMETER(Size);
+    return TRUE;
+}
+
+BOOLEAN
 FwArchDebugPutChar(
     _In_ UCHAR Character)
 {

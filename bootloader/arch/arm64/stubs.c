@@ -31,6 +31,28 @@ FwArchDebugPutChar(
     return FALSE;
 }
 
+static
+BOOLEAN
+FwArm64Writable(
+    _In_ ULONG_PTR Address)
+{
+    if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
+        ARM64_AT(S1E2W, Address);
+    else
+        ARM64_AT(S1E1W, Address);
+    ARM64_ISB();
+    return (ARM64_READ_SYSREG(PAR_EL1) & 1) == 0;
+}
+
+BOOLEAN
+FwArchMemoryUsable(
+    _In_ ULONGLONG Address,
+    _In_ SIZE_T Size)
+{
+    ASSERT(Size != 0);
+    return FwArm64Writable((ULONG_PTR)Address) && FwArm64Writable((ULONG_PTR)(Address + Size - 1));
+}
+
 unsigned __int64
 __rdtsc(void)
 {

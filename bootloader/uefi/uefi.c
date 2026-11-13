@@ -9,6 +9,7 @@
 
 #define FW_FILE_NAME_CHARS 260
 #define FW_MAX_USB_DEVICES 64
+#define FW_USABLE_MEMORY_STEP 0x200000
 
 EFI_HANDLE GlobalImageHandle;
 EFI_SYSTEM_TABLE* GlobalSystemTable;
@@ -20,6 +21,7 @@ static EFI_GUID FwFileInfoGuid = EFI_FILE_INFO_ID;
 static EFI_GUID FwBlockIoGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
 static EFI_GUID FwDevicePathGuid = EFI_DEVICE_PATH_PROTOCOL_GUID;
 static EFI_GUID FwVolumeLabelGuid = EFI_FILE_SYSTEM_VOLUME_LABEL_ID;
+static ULONGLONG FwUsableMemoryEnd = MAXULONGLONG;
 
 PVOID
 FwAllocate(
@@ -85,6 +87,12 @@ FwAllocatePages(
         return NULL;
     }
 
+    if (!FwArchMemoryUsable(Address, EFI_PAGES_TO_SIZE(EFI_SIZE_TO_PAGES(Size))))
+    {
+        GlobalSystemTable->BootServices->FreePages(Address, EFI_SIZE_TO_PAGES(Size));
+        return FwAllocatePagesBelow(Size, MAXULONGLONG);
+    }
+
     return (PVOID)(ULONG_PTR)Address;
 }
 
@@ -93,17 +101,41 @@ FwAllocatePagesBelow(
     _In_ SIZE_T Size,
     _In_ ULONGLONG MaxAddress)
 {
-    EFI_PHYSICAL_ADDRESS Address = MaxAddress - 1;
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    UINTN Pages = EFI_SIZE_TO_PAGES(Size);
+    EFI_PHYSICAL_ADDRESS Address;
+    ULONGLONG Limit;
 
-    if (EFI_ERROR(GlobalSystemTable->BootServices->AllocatePages(AllocateMaxAddress,
-                                                                 EfiLoaderData,
-                                                                 EFI_SIZE_TO_PAGES(Size),
-                                                                 &Address)))
-    {
+    if (Pages == 0)
         return NULL;
-    }
 
-    return (PVOID)(ULONG_PTR)Address;
+    for (;;)
+    {
+        Limit = min(MaxAddress, FwUsableMemoryEnd);
+        if (Limit == 0)
+            return NULL;
+
+        Address = Limit - 1;
+        if (EFI_ERROR(BootServices->AllocatePages(AllocateMaxAddress, EfiLoaderData, Pages, &Address)))
+            return NULL;
+
+        ASSERT(Address + EFI_PAGES_TO_SIZE(Pages) <= Limit);
+        if (FwArchMemoryUsable(Address, EFI_PAGES_TO_SIZE(Pages)))
+            return (PVOID)(ULONG_PTR)Address;
+
+        BootServices->FreePages(Address, Pages);
+
+        Limit = Address & ~(ULONGLONG)(FW_USABLE_MEMORY_STEP - 1);
+        while (Limit >= FW_USABLE_MEMORY_STEP && !FwArchMemoryUsable(Limit - EFI_PAGE_SIZE, EFI_PAGE_SIZE))
+            Limit -= FW_USABLE_MEMORY_STEP;
+
+        ASSERT(Limit < FwUsableMemoryEnd);
+        if (Limit >= FwUsableMemoryEnd)
+            return NULL;
+
+        DbgPrint("The firmware does not map the memory it reports from 0x%I64x up; allocating below it\n", Limit);
+        FwUsableMemoryEnd = Limit;
+    }
 }
 
 BOOLEAN

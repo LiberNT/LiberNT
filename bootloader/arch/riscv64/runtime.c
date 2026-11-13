@@ -30,6 +30,16 @@ FwArchDebugPutChar(
     return FALSE;
 }
 
+BOOLEAN
+FwArchMemoryUsable(
+    _In_ ULONGLONG Address,
+    _In_ SIZE_T Size)
+{
+    UNREFERENCED_PARAMETER(Address);
+    UNREFERENCED_PARAMETER(Size);
+    return TRUE;
+}
+
 /* RISC-V has no I/O port space: legacy port probes find no device. */
 UCHAR NTAPI READ_PORT_UCHAR(PUCHAR Port) { UNREFERENCED_PARAMETER(Port); return 0xFF; }
 USHORT NTAPI READ_PORT_USHORT(PUSHORT Port) { UNREFERENCED_PARAMETER(Port); return 0xFFFF; }

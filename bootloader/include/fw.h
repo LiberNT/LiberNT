@@ -200,6 +200,11 @@ BOOLEAN
 FwArchDebugPutChar(
     _In_ UCHAR Character);
 
+BOOLEAN
+FwArchMemoryUsable(
+    _In_ ULONGLONG Address,
+    _In_ SIZE_T Size);
+
 extern VOID (*FwLateDebugPutChar)(UCHAR Character);
 
 PVOID
