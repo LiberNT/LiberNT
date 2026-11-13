@@ -101,6 +101,9 @@ static volatile ULONG KiTickSnapshotIncrement;
 /* Interrupt time stops moving while the debugger has the machine. */
 static BOOLEAN KiInterruptTimeFrozen;
 
+static volatile LONG KiClockStopCount;
+static LONG KiClockStopSeen[MAXIMUM_PROCESSORS];
+
 /* The bucket of the timer table the clock has checked up to. */
 static ULONG KiTimerScanHand;
 
@@ -310,12 +313,22 @@ KiCheckClockWatchdog(
     PKPRCB OwnerPrcb = KiClockOwnerPrcb;
     KAFFINITY Watchers;
     ULONG Number;
+    LONG Stops;
 
     InterlockedExchange(&Prcb->ClockKeepAlive, 0);
 
     if ((Ticks == 0) || (KeMaximumIncrement == 0) || (OwnerPrcb == NULL) ||
         KdEnteredDebugger || KeBugCheckActive || KiInterruptTimeFrozen)
     {
+        return;
+    }
+
+    /* The first tick after the machine was stopped measures the stop, not a silent processor */
+    Stops = ReadAcquire(&KiClockStopCount);
+    ASSERT(Prcb->Number < MAXIMUM_PROCESSORS);
+    if (KiClockStopSeen[Prcb->Number] != Stops)
+    {
+        KiClockStopSeen[Prcb->Number] = Stops;
         return;
     }
 
@@ -1271,6 +1284,7 @@ VOID
 NTAPI
 KiThawInterruptTime(VOID)
 {
+    InterlockedIncrement(&KiClockStopCount);
     KiInterruptTimeFrozen = FALSE;
 }
 
@@ -1305,6 +1319,7 @@ KiResumeClockTime(
     KxReleaseSpinLock(&KiSystemTimeLock);
 
     KiInterruptTimeBias += SleepTime;
+    InterlockedIncrement(&KiClockStopCount);
     KiInterruptTimeFrozen = FALSE;
 }
 
