@@ -29,6 +29,7 @@
 .equ ARM64_EARLY_STATE_SIZE,          0x580
 .equ ARM64_SYNC_CALLER_OFFSET,         0x590
 .equ ARM64_SYNC_ENTRY_FRAME_SIZE,      0x60
+.equ ARM64_VECTOR_KERNEL_STACK_FAULT,  16
 
 .equ ARM64_IRQ_NEON,                  0xE0
 .equ ARM64_IRQ_FPCR,                  0x2E0
@@ -445,7 +446,12 @@ KiArm64SyncVectorCommon:
      */
     cmp x28, #8
     b.lt .Lsave_kernel_sp
+    cmp x28, #ARM64_VECTOR_KERNEL_STACK_FAULT
+    b.eq .Lsave_faulted_sp
     mrs x12, sp_el0
+    b .Lstore_saved_sp
+.Lsave_faulted_sp:
+    ldr x12, [x9, #ARM64_SYNC_ENTRY_FRAME_SIZE]
     b .Lstore_saved_sp
 .Lsave_kernel_sp:
     add x12, x9, #ARM64_SYNC_ENTRY_FRAME_SIZE
@@ -862,6 +868,37 @@ KiArm64PermVectorSyncSp0_Handler:
 KiArm64PermVectorSyncSpx_Handler:
     msr daifset, #0x3
     .seh_nop
+    /* The frame is only built on a stack that takes it: a fault here would be taken again at this same instruction, forever */
+    msr tpidrro_el0, x0
+    .seh_nop
+    sub x0, sp, #ARM64_SYNC_ENTRY_FRAME_SIZE
+    .seh_nop
+    tst x0, #0xF
+    .seh_nop
+    b.ne .Lsync_spx_stack_fault
+    .seh_nop
+    at s1e1w, x0
+    .seh_nop
+    isb
+    .seh_nop
+    mrs x0, par_el1
+    .seh_nop
+    tbnz x0, #0, .Lsync_spx_stack_fault
+    .seh_nop
+    sub x0, sp, #1
+    .seh_nop
+    at s1e1w, x0
+    .seh_nop
+    isb
+    .seh_nop
+    mrs x0, par_el1
+    .seh_nop
+    tbnz x0, #0, .Lsync_spx_stack_fault
+    .seh_nop
+    mrs x0, tpidrro_el0
+    .seh_nop
+    msr tpidrro_el0, xzr
+    .seh_nop
     .seh_pushframe
     stp x0, x1, [sp, #-ARM64_SYNC_ENTRY_FRAME_SIZE]! /* Save original x0, x1 FIRST */
     .seh_stackalloc 48
@@ -888,6 +925,30 @@ KiArm64PermVectorSyncSpx_Handler:
     mov w1, #4                    /* Vector ID in x1, preserving x0 */
     bl KiArm64SyncVectorCommon
     brk #0xf001
+.Lsync_spx_stack_fault:
+    mrs x0, tpidr_el1
+    ldr x0, [x0, #PcPanicStackBase]
+    cbz x0, .Lsync_spx_no_stack
+    add sp, sp, x0
+    sub x0, sp, x0
+    sub sp, sp, x0
+    str x0, [sp, #-16]!
+    mrs x0, tpidrro_el0
+    msr tpidrro_el0, xzr
+    stp x0, x1, [sp, #-ARM64_SYNC_ENTRY_FRAME_SIZE]!
+    stp x9, x10, [sp, #16]
+    stp x11, x28, [sp, #32]
+    stp x29, x30, [sp, #64]
+    add x29, sp, #64
+    ldr x9, [sp, #ARM64_SYNC_ENTRY_FRAME_SIZE]
+    mrs x10, elr_el1
+    stp x9, x10, [sp, #48]
+    mov w1, #ARM64_VECTOR_KERNEL_STACK_FAULT
+    bl KiArm64SyncVectorCommon
+    brk #0xf001
+.Lsync_spx_no_stack:
+    wfe
+    b .Lsync_spx_no_stack
     .seh_endproc
 
 /* Sync handler: SyncLowerA64 (vector 8) - same 96-byte frame as SyncSpx */

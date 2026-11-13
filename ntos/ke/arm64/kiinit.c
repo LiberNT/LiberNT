@@ -270,7 +270,6 @@ PKIPCR KeArm64CurrentPcr;
 PKTHREAD KeArm64CurrentThread;
 KIRQL KeArm64CurrentIrql;
 BOOLEAN KeArm64DpcRoutineActive;
-PVOID KiArm64PanicStack;
 PVOID KiArm64InterruptStack;
 
 static KIPCR KiArm64PcrStub;
@@ -932,7 +931,6 @@ KiInitializePcr(_In_ ULONG ProcessorNumber,
 
     if (SetCurrentPcr)
     {
-        KiArm64PanicStack = PanicStack;
         KiArm64InterruptStack = InterruptStack;
     }
 

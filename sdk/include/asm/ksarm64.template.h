@@ -161,6 +161,7 @@ HEADER("KPCR offsets"),
 OFFSET(PcCurrentPrcb, KIPCR, CurrentPrcb),
 OFFSET(PcCurrentIrql, KIPCR, CurrentIrql),
 OFFSET(PcCurrentThread, KIPCR, Prcb.CurrentThread),
+OFFSET(PcPanicStackBase, KIPCR, Prcb.PanicStackBase),
 
 HEADER("KPRCB offsets"),
 OFFSET(PbNestingLevel, KPRCB, NestingLevel),

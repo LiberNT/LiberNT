@@ -38,7 +38,6 @@
 
 /* Forward declaration for SError handler */
 BOOLEAN NTAPI KiSErrorHandler(_In_ PKTRAP_FRAME TrapFrame);
-extern PVOID KiArm64PanicStack;
 DECLSPEC_NORETURN
 VOID
 KiArm64BugCheckOnPanicStack(
@@ -777,6 +776,8 @@ C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, VfpState.Fpcr) == 0x368);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, VfpState.Fpsr) == 0x36C);
 C_ASSERT(FIELD_OFFSET(ARM64_EARLY_SYNC_CONTEXT, VfpState.V) == 0x370);
 C_ASSERT(sizeof(ARM64_EARLY_SYNC_CONTEXT) == ARM64_EARLY_SYNC_CONTEXT_ALLOC_SIZE);
+
+#define ARM64_VECTOR_KERNEL_STACK_FAULT 16
 
 /* The vector slot, not the faulting address, identifies the interrupted EL. */
 static
@@ -1833,6 +1834,18 @@ KiArm64HandleSynchronousException(
     Context->TrapFramePointer = NULL;
     Context->ExceptionFramePointer = NULL;
 
+    if (Context->State.VectorId == ARM64_VECTOR_KERNEL_STACK_FAULT)
+    {
+        Context->State.VectorId = 4;
+        KiArm64InitializeTrapFrame(Context, &Context->TrapFrame);
+        KeBugCheckWithTf(UNEXPECTED_KERNEL_MODE_TRAP,
+                         EXCEPTION_DOUBLE_FAULT,
+                         (ULONG_PTR)Context->State.Registers.Sp,
+                         (ULONG_PTR)Context->State.FaultAddress,
+                         Esr,
+                         &Context->TrapFrame);
+    }
+
     /*
      * One-shot guard to avoid recursive exception storms - KERNEL MODE ONLY.
      *
@@ -2134,9 +2147,9 @@ KiArm64HandleSynchronousException(
             CurrentThread = PsGetCurrentThread();
             if (CurrentThread == NULL)
             {
-                if (KiArm64PanicStack != NULL)
+                if (KeGetCurrentPrcb()->PanicStackBase != 0)
                 {
-                    KiArm64BugCheckOnPanicStack(KiArm64PanicStack,
+                    KiArm64BugCheckOnPanicStack((PVOID)(ULONG_PTR)KeGetCurrentPrcb()->PanicStackBase,
                                                 KERNEL_SECURITY_CHECK_FAILURE,
                                                 CurrentSp,
                                                 0,
@@ -2155,9 +2168,9 @@ KiArm64HandleSynchronousException(
             if ((PreviousMode == KernelMode) &&
                 (CurrentSp < (ULONG64)StackLimit + 0x800))
             {
-                if (KiArm64PanicStack != NULL)
+                if (KeGetCurrentPrcb()->PanicStackBase != 0)
                 {
-                    KiArm64BugCheckOnPanicStack(KiArm64PanicStack,
+                    KiArm64BugCheckOnPanicStack((PVOID)(ULONG_PTR)KeGetCurrentPrcb()->PanicStackBase,
                                                 KERNEL_STACK_INPAGE_ERROR,
                                                 CurrentSp,
                                                 (ULONG_PTR)StackLimit,

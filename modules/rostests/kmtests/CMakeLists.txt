@@ -273,6 +273,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeDeferredReady.c
     ntos_ke/KeIdleSteal.c
     ntos_ke/KeBadInstructionPointer.c
+    ntos_ke/KeKernelStackOverflow.c
     ntos_ke/KeBugCheckCbKM.c
     ntos_ke/KeBugCheckStop.c
     ntos_ke/KeSystemThreadException.c
