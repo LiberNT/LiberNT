@@ -130,13 +130,23 @@ IopDereferenceVpbAndFree(
 VOID
 NTAPI
 IopReleaseStorageVpb(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PVPB Vpb)
+    IN PDEVICE_OBJECT DeviceObject)
 {
     KIRQL OldIrql;
     BOOLEAN Free = FALSE;
+    PVPB Vpb;
 
     KeAcquireSpinLock(&IopVpbSpinLock, &OldIrql);
+
+    Vpb = DeviceObject->Vpb;
+    if (Vpb == NULL)
+    {
+        KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
+        return;
+    }
+
+    ASSERT(Vpb->Type == IO_TYPE_VPB);
+    ASSERT(Vpb->RealDevice == DeviceObject);
 
     /* A VPB that nothing mounted or opened goes with its device */
     if (Vpb->ReferenceCount == 0)
@@ -152,7 +162,8 @@ IopReleaseStorageVpb(
 
     KeReleaseSpinLock(&IopVpbSpinLock, OldIrql);
 
-    if (Free) ExFreePoolWithTag(Vpb, TAG_VPB);
+    /* A file system that dismounted may have put a VPB of its own in the device, so the tag is not ours to check */
+    if (Free) ExFreePool(Vpb);
 }
 
 BOOLEAN

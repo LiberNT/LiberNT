@@ -318,6 +318,41 @@ TestFileSystemRegistration(VOID)
     IoDeleteDevice(FileSystem);
 }
 
+static
+VOID
+TestSwappedVpb(VOID)
+{
+    PDEVICE_OBJECT Disk;
+    PVPB Old, Swap;
+    NTSTATUS Status;
+
+    Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_DISK, 0, FALSE, &Disk);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    Old = Disk->Vpb;
+    ok(Old != NULL, "A disk device has no VPB\n");
+    Swap = ExAllocatePoolZero(NonPagedPool, sizeof(VPB), 'pwSV');
+    ok(Swap != NULL, "No memory for the swap VPB\n");
+    if (Old == NULL || Swap == NULL)
+    {
+        if (Swap != NULL)
+            ExFreePoolWithTag(Swap, 'pwSV');
+        IoDeleteDevice(Disk);
+        return;
+    }
+
+    Swap->Type = IO_TYPE_VPB;
+    Swap->Size = sizeof(VPB);
+    Swap->RealDevice = Disk;
+    Disk->Vpb = Swap;
+    ExFreePoolWithTag(Old, TEST_VPB_TAG);
+
+    IoDeleteDevice(Disk);
+    ok(TRUE, "Deleting a disk whose file system swapped its VPB stopped the system\n");
+}
+
 START_TEST(IoVpb)
 {
     PDEVICE_OBJECT Lower, Disk, AttachedTo;
@@ -370,4 +405,5 @@ START_TEST(IoVpb)
     TestRawMount();
     TestFileSystemRegistration();
     TestStreamFileClose();
+    TestSwappedVpb();
 }

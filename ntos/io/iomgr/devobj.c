@@ -237,7 +237,7 @@ IopUnloadDevice(
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
     /* Only the storage device owns its VPB; a volume device merely points at the one it was mounted on */
-    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopReleaseStorageVpb(DeviceObject, Vpb);
+    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopReleaseStorageVpb(DeviceObject);
 
     if (DeviceObject->Timer != NULL)
     {
@@ -781,7 +781,7 @@ IoDeleteDevice(
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
     /* Only the storage device owns its VPB; a volume device merely points at the one it was mounted on */
-    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopReleaseStorageVpb(DeviceObject, Vpb);
+    if (Vpb != NULL && DeviceObject->Vpb != NULL) IopReleaseStorageVpb(DeviceObject);
 
     if (DeviceObject->Timer != NULL)
     {
