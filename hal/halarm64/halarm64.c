@@ -7,6 +7,7 @@
  */
 
 #include <ntifs.h>
+#include <wdmguid.h>
 #include <arc/arc.h>
 #include <ndk/kefuncs.h>
 #include <ndk/iofuncs.h>
@@ -5255,15 +5256,70 @@ HalGetAdapter(
  * devices such as the Raspberry Pi 5 on-chip SD host controller. Returns NULL
  * safely when HalGetAdapter fails (DmaHeader is the first ADAPTER_OBJECT field).
  */
+static
+NTSTATUS
+HalpArm64QueryBusInterface(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PBUS_INTERFACE_STANDARD BusInterface)
+{
+    PIO_STACK_LOCATION IrpSp;
+    IO_STATUS_BLOCK IoStatus;
+    PDEVICE_OBJECT Top;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    RtlZeroMemory(BusInterface, sizeof(*BusInterface));
+    Top = IoGetAttachedDeviceReference(PhysicalDeviceObject);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, Top, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(Top);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    IrpSp = IoGetNextIrpStackLocation(Irp);
+    IrpSp->MinorFunction = IRP_MN_QUERY_INTERFACE;
+    IrpSp->Parameters.QueryInterface.InterfaceType = &GUID_BUS_INTERFACE_STANDARD;
+    IrpSp->Parameters.QueryInterface.Size = sizeof(*BusInterface);
+    IrpSp->Parameters.QueryInterface.Version = 1;
+    IrpSp->Parameters.QueryInterface.Interface = (PINTERFACE)BusInterface;
+    IrpSp->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+
+    Status = IoCallDriver(Top, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(Top);
+    return Status;
+}
+
 static PDMA_ADAPTER NTAPI
 HalpArm64GetDmaAdapter(
     _In_ PVOID Context,
     _In_ PDEVICE_DESCRIPTION DeviceDescription,
     _Out_ PULONG NumberOfMapRegisters)
 {
+    BUS_INTERFACE_STANDARD BusInterface;
     PADAPTER_OBJECT AdapterObject;
+    PDMA_ADAPTER DmaAdapter;
 
-    UNREFERENCED_PARAMETER(Context);
+    if (Context != NULL && KeGetCurrentIrql() == PASSIVE_LEVEL &&
+        NT_SUCCESS(HalpArm64QueryBusInterface(Context, &BusInterface)) && BusInterface.GetDmaAdapter != NULL)
+    {
+        DmaAdapter = BusInterface.GetDmaAdapter(BusInterface.Context, DeviceDescription, NumberOfMapRegisters);
+        if (BusInterface.InterfaceDereference != NULL)
+            BusInterface.InterfaceDereference(BusInterface.Context);
+        return DmaAdapter;
+    }
+
     AdapterObject = HalGetAdapter(DeviceDescription, NumberOfMapRegisters);
     return AdapterObject ? &AdapterObject->DmaHeader : NULL;
 }
