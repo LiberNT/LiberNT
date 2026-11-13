@@ -35,9 +35,8 @@ MemmoveCacheSize(
     return Largest;
 }
 
-static
 size_t
-MemmoveComputeThreshold(void)
+MemNtComputeThreshold(void)
 {
     size_t Size = 0;
     int Regs[4];
@@ -71,7 +70,7 @@ MemmoveNonTemporal(
 
     if (Threshold == 0)
     {
-        Threshold = MemmoveComputeThreshold();
+        Threshold = MemNtComputeThreshold();
         MemmoveNtThreshold = Threshold;
     }
     if (Length < Threshold)

@@ -7,6 +7,9 @@
 
 #include <asm.inc>
 
+EXTERN MemsetNonTemporal:PROC
+EXTERN MemsetNtThreshold:QWORD
+
 .code64
 
 PUBLIC memset
@@ -95,6 +98,12 @@ FUNC memset
     ret
 
 .Stosb:
+    cmp r8, qword ptr MemsetNtThreshold[rip]
+    jb .RepStosb
+    pop rdi
+    jmp MemsetNonTemporal
+
+.RepStosb:
     mov r9, rdi
     mov rcx, r8
     cld

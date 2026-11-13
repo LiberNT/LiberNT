@@ -205,6 +205,10 @@ elseif(ARCH STREQUAL "amd64")
     list(APPEND MSVCRT_ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/mem/amd64/memset_asm.s
     )
+    list(APPEND MSVCRT_SOURCE
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/mem/amd64/memset_nt.c
+        ${REACTOS_SOURCE_DIR}/sdk/lib/crt/mem/amd64/memmove_nt.c
+    )
     set(MSVCRT_ARCH_ROUTINES MSVCRT_ARCH_MEMSET)
 endif()
 
