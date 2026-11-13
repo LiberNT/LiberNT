@@ -34,6 +34,17 @@ static PVOID volatile KdpPrintOpenLine;
 /* The line the engine builds for its own output */
 static CHAR KdpDprintfBuffer[KDP_TIMESTAMP_BYTES + KDP_MSG_BUFFER_SIZE];
 
+#define KDP_WRITER_CHUNK_BYTES 256
+#define KDP_WRITER_LOG_BYTES (4 * 1024 * 1024)
+#define KDP_WRITER_POLL_MS 15
+#define KDP_WRITER_IDLE_POLL_MS 100
+#define KDP_WRITER_IDLE_POLLS 64
+
+BOOLEAN KdpPrintDeferred = !DBG;
+static ULONG64 KdpPrintShownPosition;
+static ULONG64 KdpPrintOldestKept;
+static volatile BOOLEAN KdpPrintWriterRunning;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 VOID
@@ -69,6 +80,13 @@ KdpResetPrintLock(VOID)
     KdpPrintSpinLock = 0;
 }
 
+static
+BOOLEAN
+KdpPrintLockNeeded(VOID)
+{
+    return !(KdEnteredDebugger && KdpPortLocked && (KdpPortOwnerPrcb == KeGetCurrentPrcb()));
+}
+
 /*
  * Appends to the circular log. The log is the only record of what was printed
  * that survives into a crash dump, so it is written whether or not anyone is
@@ -82,12 +100,23 @@ KdpAppendToLog(
 {
     KIRQL OldIrql;
     ULONG Offset;
-    ULONG Index;
 
+    ULONG First;
     BOOLEAN Locked;
 
     if ((KdPrintCircularBuffer == NULL) || (KdPrintBufferSize == 0))
         return;
+
+    /*
+     * Inside the debugger this processor is the only one running, and another
+     * processor may have been frozen while holding this lock. Taking it then
+     * would wait for a processor that cannot answer, so it is not taken.
+     */
+    Locked = KdpPrintLockNeeded();
+    if (Locked)
+        KdpAcquireLock(&KdpPrintSpinLock, &OldIrql);
+    else
+        OldIrql = KeGetCurrentIrql();
 
     /* Nothing older than one trip round the buffer can be kept anyway */
     if (Length > KdPrintBufferSize)
@@ -96,31 +125,20 @@ KdpAppendToLog(
         Length = KdPrintBufferSize;
     }
 
-    /*
-     * Inside the debugger this processor is the only one running, and another
-     * processor may have been frozen while holding this lock. Taking it then
-     * would wait for a processor that cannot answer, so it is not taken.
-     */
-    Locked = !(KdpPortLocked && (KdpPortOwnerPrcb == KeGetCurrentPrcb()));
-    if (Locked)
-        KdpAcquireLock(&KdpPrintSpinLock, &OldIrql);
-    else
-        OldIrql = KeGetCurrentIrql();
-
     Offset = (ULONG)(KdPrintWritePointer - KdPrintCircularBuffer);
     if (Offset >= KdPrintBufferSize)
         Offset = 0;
 
-    for (Index = 0; Index < Length; Index++)
+    First = min(Length, KdPrintBufferSize - Offset);
+    RtlCopyMemory(KdPrintCircularBuffer + Offset, String, First);
+    RtlCopyMemory(KdPrintCircularBuffer, String + First, Length - First);
+    Offset += Length;
+    if (Offset >= KdPrintBufferSize)
     {
-        KdPrintCircularBuffer[Offset] = String[Index];
-
-        if (++Offset == KdPrintBufferSize)
-        {
-            Offset = 0;
-            KdPrintRolloverCount++;
-        }
+        Offset -= KdPrintBufferSize;
+        KdPrintRolloverCount++;
     }
+    ASSERT(Offset < KdPrintBufferSize);
 
     KdPrintWritePointer = KdPrintCircularBuffer + Offset;
     KdpPrintTotalWritten += Length;
@@ -285,17 +303,24 @@ KdpCopyPrintBufferFrom(
     ULONG Start;
     ULONG Length;
     ULONG Index;
+    BOOLEAN Locked;
 
     *Lost = 0;
 
     if ((Buffer == NULL) || (BufferSize == 0) || (KdPrintCircularBuffer == NULL))
         return 0;
 
-    KdpAcquireLock(&KdpPrintSpinLock, &OldIrql);
+    Locked = KdpPrintLockNeeded();
+    if (Locked)
+        KdpAcquireLock(&KdpPrintSpinLock, &OldIrql);
+    else
+        OldIrql = KeGetCurrentIrql();
 
     /* The oldest byte still in the buffer, as a stream position */
     Oldest = (KdpPrintTotalWritten > KdPrintBufferSize)
              ? (KdpPrintTotalWritten - KdPrintBufferSize) : 0;
+    if (Oldest < KdpPrintOldestKept)
+        Oldest = KdpPrintOldestKept;
 
     From = *Position;
     if (From < Oldest)
@@ -306,8 +331,9 @@ KdpCopyPrintBufferFrom(
 
     if (From >= KdpPrintTotalWritten)
     {
-        KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
         *Position = KdpPrintTotalWritten;
+        if (Locked)
+            KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
         return 0;
     }
 
@@ -332,7 +358,8 @@ KdpCopyPrintBufferFrom(
 
     *Position = From + Length;
 
-    KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
+    if (Locked)
+        KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
 
     return Length;
 }
@@ -570,6 +597,190 @@ KdpPromptString(
     }
 }
 
+BOOLEAN
+NTAPI
+KdpShowPrintLog(VOID)
+{
+    CHAR Chunk[KDP_WRITER_CHUNK_BYTES];
+    CHAR Notice[96];
+    STRING Output;
+    ULONG64 Position;
+    ULONG64 Lost;
+    ULONG Length;
+    ULONG Line;
+    BOOLEAN BreakIn = FALSE;
+
+    do
+    {
+        KdpPortLock();
+
+        Position = KdpPrintShownPosition;
+        Length = KdpCopyPrintBufferFrom(&Position, Chunk, sizeof(Chunk), &Lost);
+        if (Lost != 0)
+        {
+            RtlStringCbPrintfA(Notice, sizeof(Notice), "\n[%I64u bytes of log output were lost before they could be shown]\n", Lost);
+            Output.Buffer = Notice;
+            Output.Length = (USHORT)strlen(Notice);
+            Output.MaximumLength = Output.Length;
+            BreakIn |= KdpPrintString(&Output);
+        }
+
+        for (Line = 0; (Line < Length) && (Chunk[Line] != '\n'); Line++);
+        if (Line < Length)
+            Length = Line + 1;
+
+        if (Length != 0)
+        {
+            Output.Buffer = Chunk;
+            Output.Length = (USHORT)Length;
+            Output.MaximumLength = Output.Length;
+            BreakIn |= KdpPrintString(&Output);
+        }
+
+        ASSERT(Position >= KdpPrintShownPosition + Lost + Length);
+        KdpPrintShownPosition += Lost + Length;
+
+        KdpPortUnlock();
+    } while (Length != 0);
+
+    return BreakIn;
+}
+
+static
+BOOLEAN
+KdpShowLine(
+    _In_ PSTRING Output)
+{
+    BOOLEAN BreakIn;
+
+    if (!KdpPrintDeferred)
+    {
+        KdpPortLock();
+        BreakIn = KdpPrintString(Output);
+        KdpPortUnlock();
+        return BreakIn;
+    }
+
+    if (KdpPrintWriterRunning && !KdEnteredDebugger)
+        return FALSE;
+
+    return KdpShowPrintLog();
+}
+
+static
+VOID
+KdpGrowPrintLog(VOID)
+{
+    PCHAR Buffer;
+    PCHAR Old;
+    KIRQL OldIrql;
+    ULONG Offset;
+    ULONG Kept;
+
+    PAGED_CODE();
+
+    if (KdPrintBufferSize >= KDP_WRITER_LOG_BYTES)
+        return;
+
+    Buffer = ExAllocatePoolWithTag(NonPagedPool, KDP_WRITER_LOG_BYTES, 'gLdK');
+    if (Buffer == NULL)
+        return;
+
+    KdpAcquireLock(&KdpPrintSpinLock, &OldIrql);
+
+    Old = KdPrintCircularBuffer;
+    Offset = (ULONG)(KdPrintWritePointer - Old);
+    if (Offset >= KdPrintBufferSize)
+        Offset = 0;
+
+    Kept = (ULONG)min(KdpPrintTotalWritten, (ULONG64)KdPrintBufferSize);
+    if (Kept > Offset)
+    {
+        RtlCopyMemory(Buffer, Old + KdPrintBufferSize - (Kept - Offset), Kept - Offset);
+        RtlCopyMemory(Buffer + Kept - Offset, Old, Offset);
+    }
+    else
+    {
+        RtlCopyMemory(Buffer, Old + Offset - Kept, Kept);
+    }
+
+    KdpPrintOldestKept = KdpPrintTotalWritten - Kept;
+    KdPrintCircularBuffer = Buffer;
+    KdPrintWritePointer = Buffer + Kept;
+    KdPrintBufferSize = KDP_WRITER_LOG_BYTES;
+    KdPrintRolloverCount = 0;
+    KdPrintBufferChanges++;
+
+    KdpReleaseLock(&KdpPrintSpinLock, OldIrql);
+
+    KdUpdateDataBlock();
+    if (Old != KdPrintDefaultCircularBuffer)
+        ExFreePoolWithTag(Old, 'gLdK');
+}
+
+static
+VOID
+NTAPI
+KdpPrintWriterThread(
+    _In_ PVOID Context)
+{
+    LARGE_INTEGER Interval;
+    ULONG64 Shown = 0;
+    ULONG Idle = 0;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    while (KdpPrintWriterRunning)
+    {
+        if (KdpShowPrintLog())
+            DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
+
+        KdpPortLock();
+        Idle = (KdpPrintShownPosition == Shown) ? Idle + 1 : 0;
+        Shown = KdpPrintShownPosition;
+        KdpPortUnlock();
+
+        Interval.QuadPart = -10000LL * ((Idle >= KDP_WRITER_IDLE_POLLS) ? KDP_WRITER_IDLE_POLL_MS : KDP_WRITER_POLL_MS);
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    }
+
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+VOID
+NTAPI
+KdStartPrintWriter(VOID)
+{
+    HANDLE ThreadHandle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(!KdpPrintWriterRunning);
+
+    if (!KdpPrintDeferred || !KdDebuggerEnabled || KdPitchDebugger)
+        return;
+
+    KdpGrowPrintLog();
+    KdpPrintWriterRunning = TRUE;
+    Status = PsCreateSystemThread(&ThreadHandle, THREAD_ALL_ACCESS, NULL, NULL, NULL, KdpPrintWriterThread, NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        KdpPrintWriterRunning = FALSE;
+        return;
+    }
+
+    ZwClose(ThreadHandle);
+}
+
+VOID
+NTAPI
+KdStopPrintWriter(VOID)
+{
+    KdpPrintWriterRunning = FALSE;
+    if (KdpPrintDeferred && KdDebuggerEnabled)
+        KdpShowPrintLog();
+}
+
 /*
  * The engine's own way of saying something, used where there is no component
  * and no filter to consult: the message is the debugger talking, not the
@@ -605,9 +816,7 @@ KdpDprintf(
 
     KdpAppendToLog(Output.Buffer, Output.Length);
 
-    KdpPortLock();
-    KdpPrintString(&Output);
-    KdpPortUnlock();
+    KdpShowLine(&Output);
 }
 
 /*
@@ -680,9 +889,7 @@ KdpPrint(
      * what is printed whether or not a host ever answers, so the string is
      * sent and only the status says that nobody is listening.
      */
-    KdpPortLock();
-    BreakIn = KdpPrintString(&Output);
-    KdpPortUnlock();
+    BreakIn = KdpShowLine(&Output);
 
     /* The caller is told so that it can stop where it stands */
     return BreakIn ? STATUS_BREAKPOINT : STATUS_SUCCESS;

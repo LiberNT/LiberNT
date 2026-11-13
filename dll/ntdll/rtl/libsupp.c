@@ -38,6 +38,32 @@ RtlpCheckForActiveDebugger(VOID)
     return NtCurrentPeb()->BeingDebugged;
 }
 
+ULONG
+NTAPI
+DebugPrint(
+    _In_ PSTRING DebugString,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level);
+
+BOOLEAN
+NTAPI
+RtlpDebugPrintWanted(
+    _Out_ PNTSTATUS Status)
+{
+    *Status = STATUS_DEVICE_NOT_CONNECTED;
+    return NtCurrentPeb()->BeingDebugged || (SharedUserData->KdDebuggerEnabled & 1);
+}
+
+NTSTATUS
+NTAPI
+RtlpDebugPrint(
+    _In_ PSTRING DebugString,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level)
+{
+    return DebugPrint(DebugString, ComponentId, Level);
+}
+
 BOOLEAN
 NTAPI
 RtlpSetInDbgPrint(VOID)

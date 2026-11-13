@@ -928,6 +928,7 @@ KeBugCheckWithTf(
     /* Nothing else prints now, so a print this crash interrupted does not get
      * to keep the lock the report needs */
     KdpResetPrintLock();
+    KdStopPrintWriter();
 
     /*
      * The register state, as a context record. A trap frame is the better

@@ -650,6 +650,20 @@ KdpCopyPrintBuffer(
     _In_ ULONG BufferSize,
     _Out_ PULONG RolloverCount);
 
+extern BOOLEAN KdpPrintDeferred;
+
+BOOLEAN
+NTAPI
+KdpShowPrintLog(VOID);
+
+VOID
+NTAPI
+KdStartPrintWriter(VOID);
+
+VOID
+NTAPI
+KdStopPrintWriter(VOID);
+
 ULONG
 NTAPI
 KdpCopyPrintBufferFrom(

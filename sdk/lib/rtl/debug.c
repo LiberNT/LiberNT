@@ -71,6 +71,8 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
         return STATUS_SUCCESS;
     }
 
+    if (!RtlpDebugPrintWanted(&Status)) return Status;
+
     /* For user mode, don't recursively DbgPrint */
     if (RtlpSetInDbgPrint()) return STATUS_SUCCESS;
 
@@ -146,7 +148,7 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
     }
 
     /* Call the Debug Print routine */
-    Status = DebugPrint(&DebugString, ComponentId, Level);
+    Status = RtlpDebugPrint(&DebugString, ComponentId, Level);
 
     /* Check if this was with Control-C */
     if (HandleBreakpoint)

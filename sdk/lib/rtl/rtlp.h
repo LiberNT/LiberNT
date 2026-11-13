@@ -248,6 +248,28 @@ RtlpClearInDbgPrint(
     VOID
 );
 
+BOOLEAN
+NTAPI
+RtlpDebugPrintWanted(
+    _Out_ PNTSTATUS Status
+);
+
+NTSTATUS
+NTAPI
+RtlpDebugPrint(
+    _In_ PSTRING DebugString,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level
+);
+
+ULONG
+NTAPI
+DebugPrint(
+    IN PSTRING DebugString,
+    IN ULONG ComponentId,
+    IN ULONG Level
+);
+
 /* i386/except.S */
 
 #ifdef _M_IX86

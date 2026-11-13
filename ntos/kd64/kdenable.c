@@ -49,6 +49,8 @@ KdEnterDebugger(
 
     KdpPortLock();
     KdEnteredDebugger = TRUE;
+    if (KdpPrintDeferred && KdDebuggerEnabled)
+        KdpShowPrintLog();
 
     return Enable;
 }

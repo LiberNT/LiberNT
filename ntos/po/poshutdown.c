@@ -269,6 +269,7 @@ PopGracefulShutdown(
     DPRINT1("Shutdown: closing the boot log\n");
     KdpLogWatchdogDisable();
     KdShutdownBootLog();
+    KdStopPrintWriter();
 
     DPRINT1("Shutdown: notifying the drivers registered for shutdown\n");
     IoShutdownSystem(0);

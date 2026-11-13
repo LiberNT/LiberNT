@@ -79,6 +79,39 @@ RtlpCheckForActiveDebugger(VOID)
     return FALSE;
 }
 
+ULONG
+NTAPI
+DebugPrint(
+    _In_ PSTRING DebugString,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level);
+
+BOOLEAN
+NTAPI
+RtlpDebugPrintWanted(
+    _Out_ PNTSTATUS Status)
+{
+    *Status = STATUS_SUCCESS;
+    return KdpDebuggerStructuresInitialized || !KdpPrintDeferred;
+}
+
+NTSTATUS
+NTAPI
+RtlpDebugPrint(
+    _In_ PSTRING DebugString,
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level)
+{
+    BOOLEAN Handled;
+    NTSTATUS Status;
+
+    if (!KdpPrintDeferred)
+        return DebugPrint(DebugString, ComponentId, Level);
+
+    Status = KdpPrint(ComponentId, Level, DebugString->Buffer, DebugString->Length, KernelMode, NULL, NULL, &Handled);
+    return (Status == STATUS_DEVICE_NOT_CONNECTED) ? STATUS_SUCCESS : Status;
+}
+
 BOOLEAN
 NTAPI
 RtlpSetInDbgPrint(VOID)

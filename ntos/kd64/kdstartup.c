@@ -122,6 +122,11 @@ KdpReadBootOptions(
         KdDebuggerEnabled = FALSE;
     }
 
+    if (KdpBootOptionPresent(Options, "SYNCLOG"))
+        KdpPrintDeferred = FALSE;
+    else if (KdpBootOptionPresent(Options, "DEFERLOG"))
+        KdpPrintDeferred = TRUE;
+
     /* Stop as soon as the host has symbols for the first module it loads */
     if (KdpBootOptionPresent(Options, "BREAK"))
         KdBreakAfterSymbolLoad = TRUE;

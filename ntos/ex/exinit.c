@@ -1229,6 +1229,7 @@ Phase1InitializationDiscard(
     RtlInitializeRangeListPackage();
     HalReportResourceUsage();
     KdDebuggerInitialize1(LoaderBlock);
+    KdStartPrintWriter();
 
     if (ExpFindLoadOption(LoaderBlock->LoadOptions, "SMPDIAG") != NULL)
     {
