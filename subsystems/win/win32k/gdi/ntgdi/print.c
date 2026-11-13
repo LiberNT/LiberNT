@@ -174,6 +174,9 @@ NtGdiExtEscape(
 
       /* Check if we have a surface */
       psurf = pDC->dclevel.pSurface;
+      /* A display DC that has not drawn since a mode switch still holds the surface of the old mode */
+      if (pDC->dctype == DCTYPE_DIRECT && !(pDC->fs & DC_REDIRECTION))
+         psurf = ppdev->pSurface;
       if (!psurf)
       {
          EngReleaseSemaphore(ppdev->hsemDevLock);
