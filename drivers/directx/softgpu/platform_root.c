@@ -42,6 +42,17 @@ typedef NTSTATUS (NTAPI *PSOFTGPU_X86_BIOS_WRITE_MEMORY)(USHORT, USHORT, PVOID, 
 typedef BOOLEAN (NTAPI *PSOFTGPU_X86_BIOS_CALL)(ULONG, PSOFTGPU_X86_BIOS_REGISTERS);
 typedef FIRMWARE_TYPE (NTAPI *PSOFTGPU_GET_FIRMWARE_TYPE)(VOID);
 typedef NTSTATUS (NTAPI *PSOFTGPU_SET_VIRTUAL_FRAMEBUFFER)(PVOID);
+typedef NTSTATUS (NTAPI *PSOFTGPU_SET_DISPLAY_GEOMETRY)(ULONG, ULONG, ULONG, ULONG);
+
+typedef struct _SOFTGPU_GEOMETRY_NOTICE
+{
+    WORK_QUEUE_ITEM WorkItem;
+    PSOFTGPU_SET_DISPLAY_GEOMETRY SetDisplayGeometry;
+    ULONG Width;
+    ULONG Height;
+    ULONG PixelsPerScanLine;
+    ULONG BitsPerPixel;
+} SOFTGPU_GEOMETRY_NOTICE, *PSOFTGPU_GEOMETRY_NOTICE;
 typedef BOOLEAN (NTAPI *PSOFTGPU_GET_GOP_TRANSFORM)(PLOADER_PARAMETER_FRAMEBUFFER_TRANSFORM);
 typedef BOOLEAN (NTAPI *PSOFTGPU_GET_GOP_FRAMEBUFFER_INFO)(PSOFTGPU_LOADER_FRAMEBUFFER);
 typedef BOOLEAN (NTAPI *PSOFTGPU_HAS_VALID_GOP_FRAMEBUFFER)(VOID);
@@ -137,6 +148,55 @@ SoftGpuReadUshort(
     return (USHORT)(Buffer[Offset] | (Buffer[Offset + 1] << 8));
 }
 
+static
+VOID
+NTAPI
+SoftGpuGeometryWorker(
+    _In_ PVOID Context)
+{
+    PSOFTGPU_GEOMETRY_NOTICE Notice = (PSOFTGPU_GEOMETRY_NOTICE)Context;
+
+    Notice->SetDisplayGeometry(Notice->Width,
+                               Notice->Height,
+                               Notice->PixelsPerScanLine,
+                               Notice->BitsPerPixel);
+    ExFreePoolWithTag(Notice, SOFTGPU_POOL_TAG);
+}
+
+static VOID
+SoftGpuNotifyDisplayGeometry(
+    _In_ const SOFTGPU_DISPLAY_MODE *Mode)
+{
+    PSOFTGPU_SET_DISPLAY_GEOMETRY SetDisplayGeometry;
+    PSOFTGPU_GEOMETRY_NOTICE Notice;
+    ULONG Width = Mode->Width;
+    ULONG Height = Mode->Height;
+    ULONG PixelsPerScanLine = Mode->Pitch / SOFTGPU_DISPLAY_BYTES_PER_PIXEL;
+    ULONG BitsPerPixel = SOFTGPU_DISPLAY_BYTES_PER_PIXEL * 8;
+
+    SetDisplayGeometry = (PSOFTGPU_SET_DISPLAY_GEOMETRY)SoftGpuGetHalRoutine(L"InbvSetDisplayGeometry");
+    if (SetDisplayGeometry == NULL)
+        return;
+
+    if (KeGetCurrentIrql() == PASSIVE_LEVEL)
+    {
+        SetDisplayGeometry(Width, Height, PixelsPerScanLine, BitsPerPixel);
+        return;
+    }
+
+    Notice = ExAllocatePoolWithTag(NonPagedPool, sizeof(*Notice), SOFTGPU_POOL_TAG);
+    if (Notice == NULL)
+        return;
+
+    Notice->SetDisplayGeometry = SetDisplayGeometry;
+    Notice->Width = Width;
+    Notice->Height = Height;
+    Notice->PixelsPerScanLine = PixelsPerScanLine;
+    Notice->BitsPerPixel = BitsPerPixel;
+    ExInitializeWorkItem(&Notice->WorkItem, SoftGpuGeometryWorker, Notice);
+    ExQueueWorkItem(&Notice->WorkItem, DelayedWorkQueue);
+}
+
 static NTSTATUS
 SoftGpuVbeSetMode(
     _Inout_ PSOFTGPU_DEVICE Device,
@@ -159,6 +219,8 @@ SoftGpuVbeSetMode(
     SoftGpuAttachBootScreen(Shadow);
     if (!Success)
         return STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE;
+
+    SoftGpuNotifyDisplayGeometry(Mode);
 
     return STATUS_SUCCESS;
 }

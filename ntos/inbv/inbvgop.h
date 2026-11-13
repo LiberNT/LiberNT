@@ -33,6 +33,10 @@ VOID
 NTAPI
 InbvGopLogoStop(VOID);
 
+VOID
+NTAPI
+InbvGopRefreshDisplay(VOID);
+
 BOOLEAN
 NTAPI
 InbvGopCaptureScreen(VOID);

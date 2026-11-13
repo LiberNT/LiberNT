@@ -673,6 +673,28 @@ InbvSetVirtualFrameBuffer(
 
 NTSTATUS
 NTAPI
+InbvSetDisplayGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG PixelsPerScanLine,
+    _In_ ULONG BitsPerPixel)
+{
+    NTSTATUS Status;
+
+    if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
+
+    Status = VidSetDisplayGeometry(Width, Height, PixelsPerScanLine, BitsPerPixel);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (InbvDisplayState == INBV_DISPLAY_STATE_OWNED)
+        InbvGopRefreshDisplay();
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 NtDisplayString(
     _In_ PUNICODE_STRING DisplayString)
 {
