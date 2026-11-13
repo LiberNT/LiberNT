@@ -18,6 +18,10 @@
 #include MODULE_HEADER
 #endif
 
+/* Display owner's lock, handed over through VidSetDisplayLock (common.c) */
+extern PVID_DISPLAY_LOCK VidpAcquireDisplayLock;
+extern PVID_DISPLAY_LOCK VidpReleaseDisplayLock;
+
 /* Define if FontData has upside-down characters */
 #undef CHAR_GEN_UPSIDE_DOWN
 

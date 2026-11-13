@@ -48,6 +48,25 @@ NTAPI
 VidSetVirtualFrameBuffer(
     _In_opt_ PVOID VirtualFrameBuffer);
 
+typedef
+VOID
+(NTAPI *PVID_DISPLAY_LOCK)(
+    VOID);
+
+VOID
+NTAPI
+VidSetDisplayLock(
+    _In_opt_ PVID_DISPLAY_LOCK Acquire,
+    _In_opt_ PVID_DISPLAY_LOCK Release);
+
+NTSTATUS
+NTAPI
+VidSetDisplayGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG PixelsPerScanLine,
+    _In_ ULONG BitsPerPixel);
+
 VOID
 NTAPI
 VidResetDisplay(

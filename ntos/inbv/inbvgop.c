@@ -96,6 +96,7 @@ typedef struct _INBV_STATUS_LINE
     PULONG Row;
     ULONG Lut[256];
     BOOLEAN Ready;
+    CHAR LastText[128];
 } INBV_STATUS_LINE;
 
 static INBV_LOGO_STATE g_Logo;
@@ -127,7 +128,6 @@ InbvGopStatusFree(
 extern VOID NTAPI InbvAcquireLock(VOID);
 extern VOID NTAPI InbvReleaseLock(VOID);
 
-CODE_SEG("INIT")
 static
 BOOLEAN
 InbvGopQueryInfo(
@@ -536,14 +536,12 @@ InbvGopLogoThread(PVOID Context)
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
-CODE_SEG("INIT")
 static LONG
 InbvGopLogoScale(ULONG Units, ULONG Width)
 {
     return (LONG)((Units * Width + INBV_LOGO_UNITS / 2) / INBV_LOGO_UNITS) * 256;
 }
 
-CODE_SEG("INIT")
 static BOOLEAN
 InbvGopLogoSetup(
     _In_ ULONG ScreenWidth,
@@ -709,7 +707,6 @@ InbvGopLogoSetup(
     return TRUE;
 }
 
-CODE_SEG("INIT")
 static VOID
 InbvGopLogoStart(
     _In_ ULONG ScreenWidth,
@@ -775,6 +772,44 @@ InbvGopLogoStop(VOID)
     g_LogoReady = FALSE;
 }
 
+VOID
+NTAPI
+InbvGopRefreshDisplay(VOID)
+{
+    VID_DISPLAY_INFO DisplayInfo;
+    CHAR LastText[sizeof(g_Status.LastText)];
+
+    if (!InbvQueryDisplayInfo(&DisplayInfo) ||
+        DisplayInfo.PhysicalWidth == 0 ||
+        DisplayInfo.PhysicalHeight == 0)
+    {
+        return;
+    }
+
+    RtlCopyMemory(LastText, g_Status.LastText, sizeof(LastText));
+    LastText[sizeof(LastText) - 1] = 0;
+
+    if (g_LogoReady)
+        InbvGopLogoStop();
+
+    InbvGopLogoResetState();
+    InbvGopStatusFree(g_Status.Coverage, g_Status.Row);
+    RtlZeroMemory(&g_Status, sizeof(g_Status));
+
+    VidSolidColorFill(0, 0,
+                      DisplayInfo.PhysicalWidth - 1,
+                      DisplayInfo.PhysicalHeight - 1,
+                      BV_COLOR_BLACK);
+
+    InbvGopLogoStart(DisplayInfo.PhysicalWidth, DisplayInfo.PhysicalHeight);
+
+    if (LastText[0] != 0 && g_Status.Ready)
+    {
+        RtlCopyMemory(g_Status.LastText, LastText, sizeof(g_Status.LastText));
+        InbvGopDisplayStatus(g_Status.LastText);
+    }
+}
+
 BOOLEAN
 NTAPI
 InbvGopDisplayStatus(
@@ -807,6 +842,8 @@ InbvGopDisplayStatus(
         return TRUE;
     RtlCopyMemory(Line, String + Start, Length);
     Line[Length] = '\0';
+    RtlZeroMemory(g_Status.LastText, sizeof(g_Status.LastText));
+    RtlCopyMemory(g_Status.LastText, Line, min(Length, sizeof(g_Status.LastText) - 1));
 
     InbvAcquireLock();
     if (g_Status.Ready &&

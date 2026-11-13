@@ -36,7 +36,22 @@ const RGBQUAD VidpDefaultPalette[BV_MAX_COLORS] =
     RGB(255, 255, 255), /* White */
 };
 
+/* The display owner's lock, which keeps a geometry change out of a drawing call */
+PVID_DISPLAY_LOCK VidpAcquireDisplayLock = NULL;
+PVID_DISPLAY_LOCK VidpReleaseDisplayLock = NULL;
+
 /* PRIVATE FUNCTIONS **********************************************************/
+
+VOID
+NTAPI
+VidSetDisplayLock(
+    _In_opt_ PVID_DISPLAY_LOCK Acquire,
+    _In_opt_ PVID_DISPLAY_LOCK Release)
+{
+    VidpAcquireDisplayLock = Acquire;
+    VidpReleaseDisplayLock = Release;
+}
+
 
 static VOID
 BitBlt(

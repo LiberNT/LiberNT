@@ -27,6 +27,21 @@ VidSetVirtualFrameBuffer(
     return VirtualFrameBuffer == NULL ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
 }
 
+NTSTATUS
+NTAPI
+VidSetDisplayGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG PixelsPerScanLine,
+    _In_ ULONG BitsPerPixel)
+{
+    UNREFERENCED_PARAMETER(Width);
+    UNREFERENCED_PARAMETER(Height);
+    UNREFERENCED_PARAMETER(PixelsPerScanLine);
+    UNREFERENCED_PARAMETER(BitsPerPixel);
+    return STATUS_NOT_SUPPORTED;
+}
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static BOOLEAN

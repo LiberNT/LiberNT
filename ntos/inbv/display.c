@@ -162,6 +162,7 @@ InbvDriverInitialize(
         if (!VidInitialize(FALSE)) continue;
 
         InbvBootDriverInstalled = TRUE;
+        VidSetDisplayLock(InbvAcquireLock, InbvReleaseLock);
         InbvDisplayState = INBV_DISPLAY_STATE_OWNED;
         InbvDisplayStringEnabled = TRUE;
         return TRUE;
@@ -669,6 +670,28 @@ InbvSetVirtualFrameBuffer(
     if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
 
     return VidSetVirtualFrameBuffer(VirtualFrameBuffer);
+}
+
+NTSTATUS
+NTAPI
+InbvSetDisplayGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG PixelsPerScanLine,
+    _In_ ULONG BitsPerPixel)
+{
+    NTSTATUS Status;
+
+    if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
+
+    Status = VidSetDisplayGeometry(Width, Height, PixelsPerScanLine, BitsPerPixel);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (InbvDisplayState == INBV_DISPLAY_STATE_OWNED)
+        InbvGopRefreshDisplay();
+
+    return Status;
 }
 
 NTSTATUS
