@@ -92,6 +92,14 @@
 // Invalid RDIMAGELENGTH command-line parameter supplied
 //
 #define RD_INVALID_LENGTH 8
+//
+// Unable to build the RAM disk device or ARC name
+//
+#define RD_NAME_BUILD_FAILED     9
+//
+// Unable to enumerate the disk the RAM disk driver created
+//
+#define RD_ENUMERATE_FAILED      10
 
 //
 // Max traversal of reparse points for a single open in IoParseDevice
