@@ -196,7 +196,8 @@ DetailPartition(
     {
         _swprintf(szBuffer, L"%02x", PartEntry->Mbr.PartitionType);
         ConResPrintf(StdOut, IDS_DETAIL_PARTITION_TYPE, szBuffer);
-        ConResPrintf(StdOut, IDS_DETAIL_PARTITION_HIDDEN, "");
+        /* TODO: whether an MBR partition type counts as hidden is not sourced, so the field stays empty */
+        ConResPrintf(StdOut, IDS_DETAIL_PARTITION_HIDDEN, L"");
         LoadStringW(GetModuleHandle(NULL),
                     PartEntry->Mbr.BootIndicator ? IDS_STATUS_YES : IDS_STATUS_NO,
                     szBuffer, ARRAYSIZE(szBuffer));
