@@ -250,18 +250,30 @@ KdbpFindBreakPointAt(
  * Reads from the machine without trusting the address. Used for everything the
  * debugger looks at, because the whole point of looking is not knowing.
  */
+/* The process looked at with proc or thread, when it is not the one whose address space the machine stopped in */
+static
+PEPROCESS
+KdbpMemoryProcess(VOID)
+{
+    if ((KdbCurrentProcess == NULL) || (KdbCurrentProcess == PsGetCurrentProcess()))
+        return NULL;
+
+    return KdbCurrentProcess;
+}
+
 NTSTATUS
 KdbpSafeReadMemory(
     _Out_ PVOID Dest,
     _In_ PVOID Src,
     _In_ ULONG Bytes)
 {
-    return KdpCopyMemoryChunks((ULONG64)(ULONG_PTR)Src,
-                               Dest,
-                               Bytes,
-                               0,
-                               MMDBG_COPY_UNSAFE,
-                               NULL);
+    return KdpCopyProcessMemoryChunks(KdbpMemoryProcess(),
+                                      (ULONG64)(ULONG_PTR)Src,
+                                      Dest,
+                                      Bytes,
+                                      0,
+                                      MMDBG_COPY_UNSAFE,
+                                      NULL);
 }
 
 NTSTATUS
@@ -270,12 +282,13 @@ KdbpSafeWriteMemory(
     _In_ PVOID Src,
     _In_ ULONG Bytes)
 {
-    return KdpCopyMemoryChunks((ULONG64)(ULONG_PTR)Dest,
-                               Src,
-                               Bytes,
-                               0,
-                               MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
-                               NULL);
+    return KdpCopyProcessMemoryChunks(KdbpMemoryProcess(),
+                                      (ULONG64)(ULONG_PTR)Dest,
+                                      Src,
+                                      Bytes,
+                                      0,
+                                      MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
+                                      NULL);
 }
 
 /*

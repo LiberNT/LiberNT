@@ -689,6 +689,16 @@ MmDbgCopyMemory(
     IN ULONG Flags
 );
 
+NTSTATUS
+NTAPI
+MmDbgCopyProcessMemory(
+    _In_opt_ PEPROCESS Process,
+    _In_ ULONG64 Address,
+    _In_ PVOID Buffer,
+    _In_ ULONG Size,
+    _In_ ULONG Flags
+);
+
 //
 // Determines if a given address is a session address
 //

@@ -12,6 +12,7 @@
 #define KDB_TEST_SCRIPT_SIZE 2048
 #define KDB_TEST_OUTPUT_SIZE (64 * 1024)
 #define KDB_TEST_SCREEN_ROWS 24
+#define KDB_TEST_PARENT_MARK "Parent memory 4711"
 
 #if defined(_M_AMD64)
 #define KDB_TEST_FP_REGISTER "xmm5"
@@ -42,6 +43,8 @@ CHAR KdbTestScript[KDB_TEST_SCRIPT_SIZE];
 ULONG_PTR KdbTestScriptLength;
 
 static KEVENT KdbTestWakeEvent;
+static PEPROCESS KdbTestParent;
+static PVOID KdbTestParentMemory;
 static CHAR KdbTestOutput[KDB_TEST_OUTPUT_SIZE];
 
 static
@@ -262,12 +265,60 @@ KdbTestCheckFrames(VOID)
     ok(KdbTestSectionHas("KDBTEST-THREAD", "KdbTestWaitingThread"), "The waiting thread's own routine is not on its stack\n");
 }
 
+/* The parent of the test's process is another user process: its memory is read after proc moves there */
+static
+BOOLEAN
+KdbTestWriteParentMemory(VOID)
+{
+    HANDLE ParentId = PsGetProcessInheritedFromUniqueProcessId(PsGetCurrentProcess());
+    KAPC_STATE ApcState;
+    SIZE_T Size = PAGE_SIZE;
+    NTSTATUS Status;
+
+    if ((ParentId == NULL) || !NT_SUCCESS(PsLookupProcessByProcessId(ParentId, &KdbTestParent)))
+        return FALSE;
+
+    KeStackAttachProcess((PRKPROCESS)KdbTestParent, &ApcState);
+    Status = ZwAllocateVirtualMemory(ZwCurrentProcess(), &KdbTestParentMemory, 0, &Size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (NT_SUCCESS(Status))
+        RtlCopyMemory(KdbTestParentMemory, KDB_TEST_PARENT_MARK, sizeof(KDB_TEST_PARENT_MARK));
+    KeUnstackDetachProcess(&ApcState);
+
+    if (!NT_SUCCESS(Status))
+    {
+        KdbTestParentMemory = NULL;
+        ObDereferenceObject(KdbTestParent);
+        KdbTestParent = NULL;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+VOID
+KdbTestFreeParentMemory(VOID)
+{
+    KAPC_STATE ApcState;
+    SIZE_T Size = 0;
+
+    if (KdbTestParent == NULL)
+        return;
+
+    KeStackAttachProcess((PRKPROCESS)KdbTestParent, &ApcState);
+    ZwFreeVirtualMemory(ZwCurrentProcess(), &KdbTestParentMemory, &Size, MEM_RELEASE);
+    KeUnstackDetachProcess(&ApcState);
+    ObDereferenceObject(KdbTestParent);
+    KdbTestParent = NULL;
+}
+
 START_TEST(KdbCliCommands)
 {
     KDB_TEST_LOG Log;
     LARGE_INTEGER Delay;
     PKTHREAD Waiter;
     CHAR Pci[32] = "";
+    CHAR Proc[160] = "";
     CHAR Expected[96];
     ULONG Device = 0;
     ULONG Function = 0;
@@ -278,6 +329,7 @@ START_TEST(KdbCliCommands)
     PCSTR Section;
     BOOLEAN HaveMsix;
     BOOLEAN HaveLog;
+    BOOLEAN HaveParent;
     NTSTATUS Status;
 
     KeInitializeEvent(&KdbTestWakeEvent, NotificationEvent, FALSE);
@@ -299,6 +351,14 @@ START_TEST(KdbCliCommands)
     if (HaveMsix)
         RtlStringCbPrintfA(Pci, sizeof(Pci), "!pci 0:%lx.%lx\r\n", Device, Function);
 
+    HaveParent = KdbTestWriteParentMemory();
+    if (HaveParent)
+    {
+        RtlStringCbPrintfA(Proc, sizeof(Proc), "proc %lx\r\nda 0x%p\r\nproc %lx\r\n",
+                           (ULONG)(ULONG_PTR)PsGetProcessId(KdbTestParent), KdbTestParentMemory,
+                           (ULONG)(ULONG_PTR)PsGetCurrentProcessId());
+    }
+
     Status = RtlStringCbPrintfA(KdbTestScript,
                                sizeof(KdbTestScript),
                                "echo KDBTEST-NUMBER\r\n"
@@ -311,6 +371,10 @@ START_TEST(KdbCliCommands)
                                "fpregs " KDB_TEST_FP_REGISTER "\r\n"
                                "echo KDBTEST-PCI\r\n"
                                "%s"
+                               "echo KDBTEST-PROC\r\n"
+                               "proc\r\n"
+                               "thread\r\n"
+                               "%s"
                                "echo KDBTEST-THREAD\r\n"
                                "thread *KdbTestWaiterId\r\n"
                                "bt\r\n"
@@ -318,7 +382,8 @@ START_TEST(KdbCliCommands)
                                "echo KDBTEST-HELP\r\n"
                                "help\r\n"
                                "echo KDBTEST-END\r\n",
-                               Pci);
+                               Pci,
+                               Proc);
     ok_eq_hex(Status, STATUS_SUCCESS);
     KdbTestScriptLength = strlen(KdbTestScript);
 
@@ -334,7 +399,10 @@ START_TEST(KdbCliCommands)
     KmtFinishThread(Waiter, NULL);
 
     if (!HaveLog)
+    {
+        KdbTestFreeParentMemory();
         return;
+    }
 
     Length = KdbTestReadLog(&Log, From, FromRollovers);
     ok(Length != 0, "The debugger logged nothing at the stop\n");
@@ -365,6 +433,18 @@ START_TEST(KdbCliCommands)
         ok(KdbTestSectionHas("KDBTEST-PCI", " entries, table bar"), "!pci 0:%lx.%lx did not show the MSI-X table\n",
            Device, Function);
     }
+
+    RtlStringCbPrintfA(Expected, sizeof(Expected), "%6lx  ", (ULONG)(ULONG_PTR)PsGetCurrentProcessId());
+    ok(KdbTestSectionHas("KDBTEST-PROC", Expected), "proc did not list this process as %s\n", Expected);
+    RtlStringCbPrintfA(Expected, sizeof(Expected), "%6lx  state", (ULONG)(ULONG_PTR)PsGetCurrentThreadId());
+    ok(KdbTestSectionHas("KDBTEST-PROC", Expected), "thread did not list this thread as %s\n", Expected);
+    if (!skip(HaveParent, "The test's process has no parent to look at\n"))
+    {
+        ok(!KdbTestSectionHas("KDBTEST-PROC", "There is no process"), "proc refused an identifier it listed\n");
+        ok(KdbTestSectionHas("KDBTEST-PROC", "\"" KDB_TEST_PARENT_MARK "\""),
+           "da did not read the parent's memory after proc moved there\n");
+    }
+    KdbTestFreeParentMemory();
 
     KdbTestCheckFrames();
 
