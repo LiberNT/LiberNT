@@ -522,6 +522,8 @@ BOOLEAN
 NTAPI
 KeInitSystem(VOID)
 {
+    KiInitMachineDependent();
+
     /* Threaded deferred calls need a thread per processor to run on */
     KiStartDpcThreads();
 
