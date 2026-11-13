@@ -62,6 +62,23 @@ endif()
 # Versioning
 include(sdk/include/reactos/version.cmake)
 
+# Build stamp: the branch, commit and time the build was made from. It is
+# written once here so the first compile has it, and again at every build so a
+# tree that moved is stamped with where it moved to.
+set(LIBERNT_BUILDSTAMP_HEADER "${REACTOS_BINARY_DIR}/sdk/include/reactos/buildstamp.h")
+execute_process(COMMAND ${CMAKE_COMMAND}
+    -DSOURCE_DIR=${REACTOS_SOURCE_DIR}
+    -DOUTPUT=${LIBERNT_BUILDSTAMP_HEADER}
+    -P ${REACTOS_SOURCE_DIR}/sdk/cmake/buildstamp.cmake)
+add_custom_target(buildstamp ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DSOURCE_DIR=${REACTOS_SOURCE_DIR}
+        -DOUTPUT=${LIBERNT_BUILDSTAMP_HEADER}
+        -P ${REACTOS_SOURCE_DIR}/sdk/cmake/buildstamp.cmake
+    BYPRODUCTS ${LIBERNT_BUILDSTAMP_HEADER}
+    COMMENT "Stamping the build with its branch, commit and time"
+    VERBATIM)
+
 # Compile options
 include(sdk/cmake/config.cmake)
 

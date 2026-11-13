@@ -10,6 +10,7 @@
 
 #include <win32k.h>
 #include <reactos/buildno.h>
+#include <reactos/buildstamp.h>
 #include <ndk/inbvfuncs.h>
 DBG_DEFAULT_CHANNEL(UserDesktop);
 
@@ -330,6 +331,25 @@ IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
     }
 }
 
+#if DBG
+#define LIBERNT_BUILD_FLAVOUR L"debug"
+#else
+#define LIBERNT_BUILD_FLAVOUR L"release"
+#endif
+
+#if defined(__clang__)
+#define LIBERNT_BUILD_TOOLCHAIN L"clang"
+#elif defined(_MSC_VER)
+#define LIBERNT_BUILD_TOOLCHAIN L"msvc"
+#elif defined(__GNUC__)
+#define LIBERNT_BUILD_TOOLCHAIN L"gcc"
+#else
+#define LIBERNT_BUILD_TOOLCHAIN L"unknown"
+#endif
+
+#define LIBERNT_BUILD_HEADING \
+    L"LiberNT " LIBERNT_BUILD_FLAVOUR L" (" LIBERNT_BUILD_TOOLCHAIN L") build"
+
 static NTSTATUS
 GetSystemVersionString(OUT PWSTR pwszzVersion,
                        IN SIZE_T cchDest,
@@ -338,17 +358,9 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
     NTSTATUS Status;
 
     RTL_OSVERSIONINFOEXW VerInfo;
-    UNICODE_STRING BuildLabString;
     UNICODE_STRING CSDVersionString;
     RTL_QUERY_REGISTRY_TABLE VersionConfigurationTable[] =
     {
-        {
-            NULL,
-            RTL_QUERY_REGISTRY_DIRECT,
-            L"BuildLab",
-            &BuildLabString,
-            REG_NONE, NULL, 0
-        },
         {
             NULL,
             RTL_QUERY_REGISTRY_DIRECT,
@@ -360,10 +372,8 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
         {0}
     };
 
-    WCHAR BuildLabBuffer[256];
     WCHAR VersionBuffer[256];
     PWCHAR EndBuffer;
-    PWCHAR Hash, Revision, Compiler, Scan;
     PCSTR Arch, ArchEnd;
     INT ArchLength;
 
@@ -377,14 +387,9 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
     RtlGetVersion((PRTL_OSVERSIONINFOW)&VerInfo);
 
     /*
-     * - Retrieve the BuildLab string from the registry (set by the kernel).
-     * - In kernel-mode, szCSDVersion is not initialized. Initialize it
-     *   and query its value from the registry.
+     * In kernel-mode, szCSDVersion is not initialized. Initialize it
+     * and query its value from the registry.
      */
-    RtlZeroMemory(BuildLabBuffer, sizeof(BuildLabBuffer));
-    RtlInitEmptyUnicodeString(&BuildLabString,
-                              BuildLabBuffer,
-                              sizeof(BuildLabBuffer));
     RtlZeroMemory(VerInfo.szCSDVersion, sizeof(VerInfo.szCSDVersion));
     RtlInitEmptyUnicodeString(&CSDVersionString,
                               VerInfo.szCSDVersion,
@@ -397,50 +402,10 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
     if (!NT_SUCCESS(Status))
     {
         /* Indicate nothing is there */
-        BuildLabString.Length = 0;
         CSDVersionString.Length = 0;
     }
-    /* NULL-terminate the strings */
-    BuildLabString.Buffer[BuildLabString.Length / sizeof(WCHAR)] = UNICODE_NULL;
+    /* NULL-terminate the string */
     CSDVersionString.Buffer[CSDVersionString.Length / sizeof(WCHAR)] = UNICODE_NULL;
-
-    /* Hide the git commit count and hash, preserving the tag and toolchain. */
-    Hash = NULL;
-    Scan = BuildLabString.Buffer;
-    while ((Scan = wcsstr(Scan, L"-g")) != NULL)
-    {
-        Hash = Scan;
-        Scan += 2;
-    }
-    if (Hash)
-    {
-        Revision = Hash;
-        while (Revision > BuildLabString.Buffer &&
-               Revision[-1] >= L'0' && Revision[-1] <= L'9')
-        {
-            --Revision;
-        }
-        Compiler = Hash + 2 + wcsspn(Hash + 2, L"0123456789abcdefABCDEF");
-        if (Revision > BuildLabString.Buffer && Revision < Hash &&
-            Revision[-1] == L'-' && Compiler > Hash + 2 &&
-            (*Compiler == L'.' || *Compiler == UNICODE_NULL))
-        {
-            --Revision;
-            RtlMoveMemory(Revision, Compiler, (wcslen(Compiler) + 1) * sizeof(WCHAR));
-            BuildLabString.Length = (USHORT)(wcslen(BuildLabString.Buffer) * sizeof(WCHAR));
-        }
-    }
-
-    Scan = BuildLabString.Buffer + wcsspn(BuildLabString.Buffer, L"0123456789");
-    if (Scan > BuildLabString.Buffer && *Scan == L'-')
-    {
-        ++Scan;
-        RtlMoveMemory(BuildLabString.Buffer, Scan, (wcslen(Scan) + 1) * sizeof(WCHAR));
-        BuildLabString.Length = (USHORT)(wcslen(BuildLabString.Buffer) * sizeof(WCHAR));
-    }
-    Scan = wcsrchr(BuildLabString.Buffer, L'_');
-    if (Scan)
-        *Scan = L'-';
 
     Arch = strchr(KERNEL_VERSION_STR, '-');
     Arch = Arch ? Arch + 1 : KERNEL_VERSION_STR;
@@ -475,11 +440,11 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
         /* String for Safe Mode */
         Status = RtlStringCchPrintfW(pwszzVersion,
                                      cchDest,
-                                     L"LiberNT \u00b7 Development Preview (Target: Windows 11 24H2 %u.%u%s) %wZ-%.*S\n",
+                                     LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W
+                                     L" (Target: Windows 11 24H2 %u.%u%s \u00b7 %.*S)\n",
                                      (VerInfo.dwBuildNumber & 0xFFFF),
                                      (ULONG)VER_PRODUCTBUILD_QFE,
                                      VersionBuffer,
-                                     &BuildLabString,
                                      ArchLength,
                                      Arch);
     }
@@ -488,13 +453,12 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
         /* Multi-string for Normal Mode */
         Status = RtlStringCchPrintfW(pwszzVersion,
                                      cchDest,
-                                     L"LiberNT \u00b7 Development Preview\n"
-                                     L"Target: Windows 11 24H2 %u.%u%s\n"
-                                     L"Build %wZ-%.*S\n",
+                                     LIBERNT_BUILD_HEADING L"\n"
+                                     LIBERNT_BUILD_STAMP_W L"\n"
+                                     L"Target: Windows 11 24H2 %u.%u%s \u00b7 %.*S\n",
                                      (VerInfo.dwBuildNumber & 0xFFFF),
                                      (ULONG)VER_PRODUCTBUILD_QFE,
                                      VersionBuffer,
-                                     &BuildLabString,
                                      ArchLength,
                                      Arch);
     }
@@ -504,10 +468,7 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
         /* Fall-back string */
         Status = RtlStringCchPrintfW(pwszzVersion,
                                      cchDest,
-                                     L"LiberNT \u00b7 Development Preview %wZ-%.*S\n",
-                                     &BuildLabString,
-                                     ArchLength,
-                                     Arch);
+                                     LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W L"\n");
         if (!NT_SUCCESS(Status))
         {
             /* General failure, NULL-terminate the string */

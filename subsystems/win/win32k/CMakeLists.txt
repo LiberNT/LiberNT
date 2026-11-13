@@ -267,6 +267,7 @@ add_library(win32k MODULE
     win32k.rc
     ${CMAKE_CURRENT_BINARY_DIR}/win32k.def)
 
+add_dependencies(win32k buildstamp)
 set_module_type(win32k kernelmodedriver)
 if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT USE_DUMMY_PSEH)
     foreach(_win32k_src ${SOURCE} gdi/ntgdi/brush.cpp)
