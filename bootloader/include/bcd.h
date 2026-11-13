@@ -21,6 +21,7 @@ typedef enum _BCD_ELEMENT
     BcdLibraryString_ApplicationPath         = 0x12000002,
     BcdLibraryString_Description             = 0x12000004,
     BcdLibraryObjectList_InheritedObjects    = 0x14000006,
+    BcdLibraryBoolean_DebuggerEnabled        = 0x16000010,
     BcdLibraryInteger_SerialDebuggerPort     = 0x15000013,
     BcdLibraryInteger_SerialDebuggerBaudRate = 0x15000014,
     BcdLibraryString_LoadOptionsString       = 0x12000030,

@@ -20,6 +20,7 @@ static EFI_SERIAL_IO_PROTOCOL* UefiSerialPorts[UEFI_SERIAL_MAX_PORTS];
 static EFI_HANDLE UefiSerialHandles[UEFI_SERIAL_MAX_PORTS];
 static ULONG UefiSerialCount;
 static BOOLEAN UefiSerialProbed;
+static BOOLEAN UefiSerialFirmwareDisabled;
 static BOOLEAN UefiSerialUseConsole;
 static BOOLEAN UefiSerialDirect;
 static BOOLEAN UefiSerialConsoleProbed;
@@ -129,7 +130,7 @@ UefiSerialProbe(VOID)
 
     if (!EFI_ERROR(BootServices->LocateHandleBuffer(ByProtocol, &UefiSerialIoGuid, NULL, &Count, &Handles)))
     {
-        for (i = 0; i < Count && UefiSerialCount < (DBG ? UEFI_SERIAL_MAX_PORTS : 1); i++)
+        for (i = 0; i < Count && UefiSerialCount < (FwDebugEnabled ? UEFI_SERIAL_MAX_PORTS : 1); i++)
         {
             for (j = 0; j < UefiSerialCount && !UefiSerialSamePort(UefiSerialHandles[j], Handles[i]); j++)
             {
@@ -149,7 +150,7 @@ UefiSerialProbe(VOID)
         BootServices->FreePool(Handles);
     }
 
-    for (i = 0; DBG && i < UefiSerialCount; i++)
+    for (i = 0; FwDebugEnabled && i < UefiSerialCount; i++)
     {
         if (UefiSerialPorts[i]->Mode && UefiSerialPorts[i]->Mode->BaudRate == 0)
         {
@@ -291,6 +292,7 @@ UefiSerialMirror(
 VOID
 UefiSerialDisableFirmware(VOID)
 {
+    UefiSerialFirmwareDisabled = TRUE;
     UefiSerialProbed = TRUE;
     UefiSerialCount = 0;
     UefiSerialUseConsole = FALSE;
@@ -302,6 +304,9 @@ FwDebugPrint(
     _In_ PCSTR Text)
 {
     PCSTR Next;
+
+    if (!FwDebugEnabled)
+        return;
 
     if (!UefiSerialProbed && !BootServicesExitedFlag)
         UefiSerialProbe();
@@ -412,6 +417,17 @@ UefiSerialDescribe(
 }
 
 VOID
+FwDebugEnable(VOID)
+{
+    if (FwDebugEnabled)
+        return;
+
+    FwDebugEnabled = TRUE;
+    if (!UefiSerialFirmwareDisabled)
+        UefiSerialProbed = FALSE;
+}
+
+VOID
 FwDebugAnnounce(
     _In_ PCSTR Application,
     _In_ BOOLEAN NewLog)
@@ -419,7 +435,7 @@ FwDebugAnnounce(
     CHAR Line[UEFI_SERIAL_LINE_CHARS], Name[UEFI_SERIAL_LINE_CHARS / 2];
     ULONG Port, Adapters, i;
 
-    if (!DBG || BootServicesExitedFlag)
+    if (!FwDebugEnabled || BootServicesExitedFlag)
         return;
 
     BootLogStart(NewLog);

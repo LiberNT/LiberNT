@@ -280,7 +280,7 @@ UdpLogOpen(VOID)
     UINTN Count, i;
     ULONG j;
 
-    if (!DBG || UdpLogOpened || BootServicesExitedFlag || !UdpLogEnter(&OldTpl))
+    if (!FwDebugEnabled || UdpLogOpened || BootServicesExitedFlag || !UdpLogEnter(&OldTpl))
         return UdpLogAdapterCount;
 
     UdpLogOpened = TRUE;
@@ -389,7 +389,7 @@ UdpLogWrite(
     SIZE_T Length;
     EFI_TPL OldTpl;
 
-    if (!DBG || UdpLogActive || BootServicesExitedFlag)
+    if (!FwDebugEnabled || UdpLogActive || BootServicesExitedFlag)
         return;
 
     UdpLogActive = TRUE;

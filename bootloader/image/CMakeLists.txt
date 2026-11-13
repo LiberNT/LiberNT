@@ -7,7 +7,7 @@
 
 set(BOOTLOADER_TIMEOUT 3 CACHE STRING "Seconds the boot menu waits before starting the default entry")
 option(BOOTLOADER_DISPLAY_MENU "Show the boot menu even with a single entry" ON)
-option(BOOTLOADER_KERNEL_DEBUG "Start the kernel with debug output on serial, screen and log file, and verbose loading; debug builds always keep the serial port" ON)
+option(BOOTLOADER_KERNEL_DEBUG "Start the boot manager, the OS loader and the kernel with debug output on serial, screen and log file, and verbose loading; debug builds always keep the serial port" ${DBG})
 set(BOOTLOADER_LOAD_OPTIONS "KDWATCHDOG=0" CACHE STRING "Extra kernel load options of the default entry")
 # A medium the system cannot write to, such as a RAM disk on a machine with no
 # storage driver, keeps no log file; those boards ask for the screen instead.
@@ -107,9 +107,11 @@ else()
 endif()
 
 if(BOOTLOADER_KERNEL_DEBUG)
+    set(BCD_BOOT_DEBUG 01)
     set(BCD_SOS 01)
     set(BOOTLOADER_DEBUG_LOAD_OPTIONS " DEBUGPORT=${BOOTLOADER_DEBUG_PORT}")
 else()
+    set(BCD_BOOT_DEBUG 00)
     set(BCD_SOS 00)
     set(BOOTLOADER_DEBUG_LOAD_OPTIONS "")
 endif()
@@ -384,6 +386,7 @@ set(BCD_LOADER_DEVICE "${BCD_BOOT_DEVICE}")
 set(BCD_LOADER_PATH "\\Windows\\system32\\${BOOTLOADER_OS_LOADER}")
 set(BCD_LOAD_OPTIONS "${BOOTLOADER_LOAD_OPTIONS}")
 set(BCD_WINPE_ELEMENT "")
+set(BCD_BOOT_DEBUG 00)
 set(BCD_SOS 00)
 set(BCD_DEBUG 00)
 set(BCD_DEFAULT_ENTRY "${BCD_OS_ENTRY}")

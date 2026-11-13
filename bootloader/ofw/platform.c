@@ -110,9 +110,18 @@ FwPrint(
 }
 
 VOID
+FwDebugEnable(VOID)
+{
+    FwDebugEnabled = TRUE;
+}
+
+VOID
 FwDebugPrint(
     _In_ PCSTR Text)
 {
+    if (!FwDebugEnabled)
+        return;
+
     for (; *Text; Text++)
     {
         if (!OfwAvailable)
@@ -139,7 +148,7 @@ FwDebugAnnounce(
 {
     UNREFERENCED_PARAMETER(NewLog);
 
-    if (!DBG)
+    if (!FwDebugEnabled)
         return;
 
     FwDebugPrint("\n");

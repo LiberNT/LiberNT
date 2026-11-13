@@ -210,7 +210,7 @@ BmRemoveEntry(
     ULONG i;
 
     ASSERT(Index >= BmStoreCount && Index < BmCount);
-    if (DBG)
+    if (FwDebugEnabled)
         DbgPrint("Boot manager: %ls is no longer present\n", BmEntries[Index].Description);
 
     if (BmLogos[Index].Pixels)
@@ -315,7 +315,7 @@ BmAddFoundEntry(
 
     BmAppendLocation(Device, Usb, Entry->Description, RTL_NUMBER_OF(Entry->Description));
 
-    if (DBG)
+    if (FwDebugEnabled)
         DbgPrint("Boot manager: found %ls (%ls) as entry %lu\n", Entry->Description, Path, Index + 1);
     return TRUE;
 }
@@ -559,6 +559,12 @@ BmStartSelectedApplication(
     BM_STARTUP Undo;
     BOOLEAN Cancelled;
     ULONG Starts;
+
+    if (Startup->Profile != 0 && !FwDebugEnabled)
+    {
+        FwDebugEnable();
+        FwDebugAnnounce("LiberNT Boot Manager", TRUE);
+    }
 
     if (BmIsUpdateEntry(Entry))
     {
@@ -893,7 +899,7 @@ BmDebugEntries(
 {
     ULONG i;
 
-    if (!DBG)
+    if (!FwDebugEnabled)
         return;
 
     DbgPrint("BCD store %ls: %lu entries, %lu tools, timeout %ld s\n", BmStorePath, BmCount, BmToolCount, Timeout);
@@ -907,6 +913,8 @@ VOID
 BlMain(VOID)
 {
     BM_STARTUP Startup;
+    BCD_OBJECT BootMgr;
+    BOOLEAN Debug;
     PVOID Store;
     ULONG Size, Default = 0, DefaultTool = MAXULONG, i;
     LONG Timeout;
@@ -922,6 +930,13 @@ BlMain(VOID)
     }
     else
     {
+        if (!FwDebugEnabled && BcdOpenObject(BCD_ID_BOOTMGR, &BootMgr) &&
+            BcdGetBoolean(&BootMgr, BcdLibraryBoolean_DebuggerEnabled, &Debug) && Debug)
+        {
+            FwDebugEnable();
+            FwDebugAnnounce("LiberNT Boot Manager", TRUE);
+        }
+
         BmStore = Store;
         BmStoreSize = Size;
         BmGetDescription(BmTitle, RTL_NUMBER_OF(BmTitle));
@@ -961,7 +976,7 @@ BlMain(VOID)
     }
     else if (Timeout == 0 || BmStartDefaultRequested())
     {
-        if (DBG && Timeout != 0)
+        if (FwDebugEnabled && Timeout != 0)
             DbgPrint("Boot manager: started by another boot manager, starting entry %lu\n", Default + 1);
         RtlZeroMemory(&Startup, sizeof(Startup));
         BmStartSelectedApplication(&BmEntries[Default], &Startup);

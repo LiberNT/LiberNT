@@ -135,7 +135,7 @@ VOID
 BootLogStart(
     _In_ BOOLEAN NewLog)
 {
-    if (!DBG || BootLogEnabled)
+    if (!FwDebugEnabled || BootLogEnabled)
         return;
 
     BootLogEnabled = TRUE;

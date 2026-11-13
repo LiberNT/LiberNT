@@ -247,6 +247,41 @@ OslHasDebugPort(
 }
 
 static
+BOOLEAN
+OslDebugRequested(
+    _In_ PCSTR Options)
+{
+    BOOLEAN Requested = FALSE;
+    PCSTR Text = Options, End;
+    SIZE_T Length;
+
+    while (*Text)
+    {
+        while (*Text == ' ' || *Text == '/')
+            Text++;
+
+        for (End = Text; *End && *End != ' '; End++)
+            ;
+
+        Length = End - Text;
+        if (Length == 7 && _strnicmp(Text, "NODEBUG", 7) == 0)
+            return FALSE;
+
+        if ((Length == 5 && _strnicmp(Text, "DEBUG", 5) == 0) ||
+            (Length > 5 && _strnicmp(Text, "DEBUG=", 6) == 0) ||
+            (Length >= RTL_NUMBER_OF(OSL_DEBUG_PORT_OPTION) - 1 &&
+             _strnicmp(Text, OSL_DEBUG_PORT_OPTION, RTL_NUMBER_OF(OSL_DEBUG_PORT_OPTION) - 1) == 0))
+        {
+            Requested = TRUE;
+        }
+
+        Text = End;
+    }
+
+    return Requested;
+}
+
+static
 VOID
 OslLoadNetworkDebugger(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock,
@@ -349,6 +384,11 @@ OslMain(VOID)
     }
 
     AppendBootTimeOptions(Options, sizeof(Options), &OslStartup);
+    if (!FwDebugEnabled && OslDebugRequested(Options))
+    {
+        FwDebugEnable();
+        FwDebugAnnounce("LiberNT OS Loader", FALSE);
+    }
     FwDebugScreen = OslHasDebugPort(Options, "SCREEN");
 
     Length = strlen(SystemRoot);

@@ -39,6 +39,9 @@ extern VOID UefiSerialPutChar(_In_ UCHAR Character);
 static VOID
 EarlyUartDiagPutChar(_In_ UCHAR Character)
 {
+    if (!FwDebugEnabled)
+        return;
+
     if (Character == '\n')
         UefiSerialPutChar('\r');
 

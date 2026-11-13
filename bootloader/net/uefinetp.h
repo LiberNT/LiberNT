@@ -8,10 +8,8 @@
 
 #include <SimpleNetwork.h>
 
-#if DBG
 #undef TRACE
 #define TRACE(Format, ...) DbgPrint(Format, ##__VA_ARGS__)
-#endif
 
 #define UEFI_NETWORK_RETRY_DELAY_US 1000000
 #define UEFI_NETWORK_MAX_WAIT_ATTEMPTS 45

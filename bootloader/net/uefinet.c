@@ -638,7 +638,7 @@ UefiNetReportMissingAdapter(VOID)
     }
 
     FwPrint(L"PCI functions seen by the firmware: %lu\r\n", (ULONG)Count);
-    for (Index = 0; DBG && Index < Count; Index++)
+    for (Index = 0; FwDebugEnabled && Index < Count; Index++)
     {
         if (EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handles[Index], &EfiNetPciIoGuid, (VOID **)&PciIo)) ||
             EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 0, 1, &Id)) ||
@@ -653,7 +653,7 @@ UefiNetReportMissingAdapter(VOID)
                 (Index % 4 == 3 || Index + 1 == Count) ? L"\r\n" : L"   ");
     }
 
-    for (Index = 0; DBG && Index < Count; Index++)
+    for (Index = 0; FwDebugEnabled && Index < Count; Index++)
     {
         if (!EFI_ERROR(GlobalSystemTable->BootServices->HandleProtocol(Handles[Index], &EfiNetPciIoGuid, (VOID **)&PciIo)) &&
             !EFI_ERROR(PciIo->Pci.Read(PciIo, EfiPciIoWidthUint32, 8, 1, &Class)) &&
