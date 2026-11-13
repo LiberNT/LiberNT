@@ -191,8 +191,8 @@ ExpWriteProcessInformation(
     Info->PeakVirtualSize = Process->PeakVirtualSize;
     Info->VirtualSize = Process->VirtualSize;
     Info->PageFaultCount = Vm->PageFaultCount;
-    Info->PeakWorkingSetSize = Vm->PeakWorkingSetSize;
-    Info->WorkingSetSize = Vm->WorkingSetSize;
+    Info->PeakWorkingSetSize = (SIZE_T)Vm->PeakWorkingSetSize << PAGE_SHIFT;
+    Info->WorkingSetSize = (SIZE_T)Vm->WorkingSetSize << PAGE_SHIFT;
     Info->QuotaPeakPagedPoolUsage = 0;
     Info->QuotaPagedPoolUsage = 0;
     Info->QuotaPeakNonPagedPoolUsage = 0;

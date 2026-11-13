@@ -919,9 +919,9 @@ NtQueryInformationProcess(
             Counters.CountersEx.PageFaultCount =
                 Process->Vm.Instance.PageFaultCount;
             Counters.CountersEx.PeakWorkingSetSize =
-                Process->Vm.Instance.PeakWorkingSetSize;
+                (SIZE_T)Process->Vm.Instance.PeakWorkingSetSize << PAGE_SHIFT;
             Counters.CountersEx.WorkingSetSize =
-                Process->Vm.Instance.WorkingSetSize;
+                (SIZE_T)Process->Vm.Instance.WorkingSetSize << PAGE_SHIFT;
             Counters.CountersEx.QuotaPeakPagedPoolUsage =
                 Process->ProcessQuotaPeak[1];
             Counters.CountersEx.QuotaPagedPoolUsage =

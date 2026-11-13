@@ -704,6 +704,55 @@ Test_ProcQueryAlignmentProbe(void)
     }
 }
 
+static
+void
+Test_ProcessVmCounters(void)
+{
+    NTSTATUS Status;
+    VM_COUNTERS VmCounters;
+    ULONG Length = 0;
+    PUCHAR Touched;
+    SIZE_T TouchedSize = 16 * 1024 * 1024;
+    SIZE_T Offset;
+
+    /* Make the working set large enough that a count of pages could never be
+     * mistaken for a count of bytes. */
+    Touched = VirtualAlloc(NULL, TouchedSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!Touched)
+    {
+        skip("VirtualAlloc of %lu bytes failed\n", (ULONG)TouchedSize);
+        return;
+    }
+    for (Offset = 0; Offset < TouchedSize; Offset += 4096)
+        Touched[Offset] = 1;
+
+    RtlZeroMemory(&VmCounters, sizeof(VmCounters));
+    Status = NtQueryInformationProcess(NtCurrentProcess(),
+                                       ProcessVmCounters,
+                                       &VmCounters,
+                                       sizeof(VmCounters),
+                                       &Length);
+    ok_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Length, (ULONG)sizeof(VmCounters));
+
+    /* The counters are byte counts, so the working set must cover what was
+     * just touched; a page count would be 4096 times smaller. */
+    ok(VmCounters.WorkingSetSize >= TouchedSize / 2,
+       "WorkingSetSize %Iu is too small for %Iu touched bytes\n",
+       VmCounters.WorkingSetSize, TouchedSize);
+    ok(VmCounters.WorkingSetSize % 4096 == 0,
+       "WorkingSetSize %Iu is not a whole number of pages\n",
+       VmCounters.WorkingSetSize);
+    ok(VmCounters.PeakWorkingSetSize >= VmCounters.WorkingSetSize,
+       "PeakWorkingSetSize %Iu is below WorkingSetSize %Iu\n",
+       VmCounters.PeakWorkingSetSize, VmCounters.WorkingSetSize);
+    ok(VmCounters.WorkingSetSize <= VmCounters.VirtualSize,
+       "WorkingSetSize %Iu is above VirtualSize %Iu\n",
+       VmCounters.WorkingSetSize, VmCounters.VirtualSize);
+
+    VirtualFree(Touched, 0, MEM_RELEASE);
+}
+
 START_TEST(NtQueryInformationProcess)
 {
     NTSTATUS Status;
@@ -721,4 +770,5 @@ START_TEST(NtQueryInformationProcess)
     Test_ProcessPriorityClassAlignment();
     Test_ProcessWx86Information();
     Test_ProcQueryAlignmentProbe();
+    Test_ProcessVmCounters();
 }
