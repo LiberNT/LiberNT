@@ -86,6 +86,8 @@ typedef struct _IOP_DEVICE_INTERFACE
     ULONG Unannounced;
     ULONG Toggles;
     ULONG LinkedToggle;
+    LIST_ENTRY PendedLinks;
+    BOOLEAN Pended;
 } IOP_DEVICE_INTERFACE, *PIOP_DEVICE_INTERFACE;
 
 typedef struct _IOP_DEVICE_REFERENCE
@@ -521,6 +523,8 @@ VOID IopDropInterfaceLink(_In_ PIOP_DEVICE_INTERFACE Interface);
 VOID IopAnnounceInterface(_In_ PIOP_DEVICE_INTERFACE Interface);
 
 VOID IopForgetDeviceInterfaces(_In_ PDEVICE_OBJECT PhysicalDeviceObject);
+VOID IopDoDeferredSetInterfaceState(_In_ PDEVICE_NODE DeviceNode);
+VOID IopDropPendedInterface(_In_ PIOP_DEVICE_INTERFACE Interface);
 
 BOOLEAN PiStackIsOpen(_In_ PDEVICE_OBJECT PhysicalDeviceObject);
 

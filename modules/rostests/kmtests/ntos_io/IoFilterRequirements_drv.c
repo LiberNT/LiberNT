@@ -40,9 +40,11 @@ typedef struct _TEST_EXTENSION
     BOOLEAN Missing;
     BOOLEAN Null;
     UNICODE_STRING Interface;
+    UNICODE_STRING EarlyInterface;
 } TEST_EXTENSION, *PTEST_EXTENSION;
 
 static const GUID ChildInterfaceGuid = { 0x5e1a6a42, 0x8c3b, 0x4b21, { 0x9c, 0x7e, 0x3f, 0x2d, 0x8a, 0x61, 0xb0, 0xc4 } };
+static const GUID EarlyInterfaceGuid = { 0x7c3e9b14, 0x2f6d, 0x4a8e, { 0xb5, 0x21, 0x6d, 0x0e, 0x9a, 0x3c, 0x47, 0xf1 } };
 
 static WCHAR ServicePath[260];
 static BOOLEAN EjectRequested;
@@ -56,6 +58,10 @@ static PDEVICE_OBJECT MissingChild;
 static ULONG ChildPdoRemoves;
 static ULONG ChildPdoQueryRemoves;
 static ULONG BusFdoRemoves;
+static PVOID EarlyNotifyEntry;
+static volatile LONG EarlyInAddDevice;
+static volatile LONG EarlyStartDone;
+static ULONG EarlyArrivals;
 static const WCHAR ChildDeviceId[] = L"KMTEST\\FILTERREQCHILD";
 static const WCHAR ChildHardwareIds[] = L"KMTEST\\FILTERREQCHILD\0";
 static const WCHAR ChildInstanceId[] = L"0";
@@ -79,6 +85,24 @@ static BOOLEAN Requested(PCWSTR Name)
     Table[0].EntryContext = &Value;
     Table[0].DefaultType = (REG_DWORD << RTL_QUERY_REGISTRY_TYPECHECK_SHIFT) | REG_NONE;
     return NT_SUCCESS(RtlQueryRegistryValues(RTL_REGISTRY_ABSOLUTE, ServicePath, Table, NULL, NULL)) && Value != 0;
+}
+
+/* Where the arrival of the interface the child enables in AddDevice is heard: inside AddDevice, before or after the start */
+static NTSTATUS NTAPI EarlyNotify(PVOID NotificationStructure, PVOID Context)
+{
+    PDEVICE_INTERFACE_CHANGE_NOTIFICATION Notification = NotificationStructure;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (IsEqualGUID(&Notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL))
+    {
+        if (EarlyInAddDevice)
+            Record(L"EarlyArrivalInAddDevice", 1);
+        if (!EarlyStartDone)
+            Record(L"EarlyArrivalBeforeStart", 1);
+        Record(L"EarlyArrivals", ++EarlyArrivals);
+    }
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS Complete(PIRP Irp, NTSTATUS Status)
@@ -349,6 +373,8 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
                 Extension->ReportChange = TRUE;
                 IoInvalidateDeviceState(Extension->Pdo);
             }
+            if (Extension->EarlyInterface.Buffer != NULL)
+                InterlockedExchange(&EarlyStartDone, 1);
             return Complete(Irp, Status);
 
         case IRP_MN_QUERY_PNP_DEVICE_STATE:
@@ -372,6 +398,10 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Status = Pass(Extension, Irp);
             IoDetachDevice(Extension->Lower);
             RtlFreeUnicodeString(&Extension->Interface);
+            RtlFreeUnicodeString(&Extension->EarlyInterface);
+            if (EarlyNotifyEntry != NULL)
+                IoUnregisterPlugPlayNotification(EarlyNotifyEntry);
+            EarlyNotifyEntry = NULL;
             IoDeleteDevice(DeviceObject);
             return Status;
 
@@ -893,6 +923,21 @@ static NTSTATUS NTAPI TestAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT 
     Fdo->Flags &= ~DO_DEVICE_INITIALIZING;
     if (Extension->Kind == TestChildFdo)
         Record(L"ChildAddDevices", ++ChildAddDevices);
+    if (Extension->Kind == TestChildFdo && Requested(L"EarlyInterface"))
+    {
+        InterlockedExchange(&EarlyStartDone, 0);
+        Status = STATUS_SUCCESS;
+        if (EarlyNotifyEntry == NULL)
+            Status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange, 0, (PVOID)&EarlyInterfaceGuid, DriverObject,
+                                                    EarlyNotify, NULL, &EarlyNotifyEntry);
+        if (NT_SUCCESS(Status))
+            Status = IoRegisterDeviceInterface(Pdo, &EarlyInterfaceGuid, NULL, &Extension->EarlyInterface);
+        InterlockedExchange(&EarlyInAddDevice, 1);
+        if (NT_SUCCESS(Status))
+            Status = IoSetDeviceInterfaceState(&Extension->EarlyInterface, TRUE);
+        InterlockedExchange(&EarlyInAddDevice, 0);
+        Record(L"EarlyEnableStatus", (ULONG)Status);
+    }
     return STATUS_SUCCESS;
 }
 

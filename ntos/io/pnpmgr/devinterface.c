@@ -364,6 +364,76 @@ IopAnnounceInterface(
     KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
 }
 
+/* An interface enabled before its device started waits on the device node; a removal of the device drops the wait */
+VOID
+IopDropPendedInterface(
+    _In_ PIOP_DEVICE_INTERFACE Interface)
+{
+    ASSERT(IopDeviceInterfaceLock.Owner == KeGetCurrentThread());
+
+    if (!Interface->Pended) return;
+
+    ASSERT(!Interface->Enabled);
+    RemoveEntryList(&Interface->PendedLinks);
+    Interface->Pended = FALSE;
+}
+
+static
+BOOLEAN
+IopIsDeviceStarting(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    switch (DeviceNode->State)
+    {
+        case DeviceNodeUninitialized:
+        case DeviceNodeInitialized:
+        case DeviceNodeDriversAdded:
+        case DeviceNodeResourcesAssigned:
+        case DeviceNodeStartPending:
+        case DeviceNodeStartCompletion:
+        case DeviceNodeStartPostWork:
+            return TRUE;
+        default:
+            return FALSE;
+    }
+}
+
+static
+NTSTATUS
+IopSetInterfaceState(
+    _In_ PUNICODE_STRING SymbolicLinkName,
+    _In_ BOOLEAN Enable,
+    _In_ BOOLEAN Deferred);
+
+/* Interfaces enabled while the device started are enabled once IRP_MN_START_DEVICE completed, before it counts as started */
+VOID
+IopDoDeferredSetInterfaceState(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PIOP_DEVICE_INTERFACE Interface;
+
+    PAGED_CODE();
+    ASSERT(DeviceNode->State == DeviceNodeStartPostWork);
+
+    for (;;)
+    {
+        KeAcquireGuardedMutex(&IopDeviceInterfaceLock);
+        if (IsListEmpty(&DeviceNode->PendedSetInterfaceState))
+        {
+            PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
+            KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+            return;
+        }
+
+        Interface = CONTAINING_RECORD(DeviceNode->PendedSetInterfaceState.Flink, IOP_DEVICE_INTERFACE, PendedLinks);
+        ASSERT(Interface->Pended && Interface->PhysicalDeviceObject == DeviceNode->PhysicalDeviceObject);
+        IopDropPendedInterface(Interface);
+        KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+
+        IopSetInterfaceState(&Interface->SymbolicLinkName, TRUE, TRUE);
+    }
+}
+
 /* A device that leaves the tree lets go of its interfaces: they stay registered without a device until it comes back */
 VOID
 IopForgetDeviceInterfaces(
@@ -382,6 +452,8 @@ IopForgetDeviceInterfaces(
     {
         Interface = CONTAINING_RECORD(Entry, IOP_DEVICE_INTERFACE, ListEntry);
         if (Interface->PhysicalDeviceObject != PhysicalDeviceObject) continue;
+
+        IopDropPendedInterface(Interface);
 
         /* The removal that comes before a device leaves the tree disabled its interfaces */
         ASSERT(!Interface->Enabled);
@@ -713,11 +785,12 @@ IopLinkDeviceInterface(
     return Status;
 }
 
+static
 NTSTATUS
-NTAPI
-IoSetDeviceInterfaceState(
+IopSetInterfaceState(
     _In_ PUNICODE_STRING SymbolicLinkName,
-    _In_ BOOLEAN Enable)
+    _In_ BOOLEAN Enable,
+    _In_ BOOLEAN Deferred)
 {
     PIOP_DEVICE_INTERFACE Interface;
     PDEVICE_OBJECT PhysicalDeviceObject;
@@ -733,6 +806,27 @@ IoSetDeviceInterfaceState(
     {
         KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
         return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    /* Arrivals wait until IRP_MN_START_DEVICE completes (IoSetDeviceInterfaceState documentation) */
+    if (Interface->Pended)
+    {
+        ASSERT(!Interface->Enabled);
+        if (!Enable) IopDropPendedInterface(Interface);
+        KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+        return Enable ? STATUS_OBJECT_NAME_EXISTS : STATUS_SUCCESS;
+    }
+    if (Enable && !Deferred && !Interface->Enabled && Interface->PhysicalDeviceObject != NULL)
+    {
+        PDEVICE_NODE DeviceNode = IopGetDeviceNode(Interface->PhysicalDeviceObject);
+
+        if (DeviceNode != NULL && IopIsDeviceStarting(DeviceNode))
+        {
+            InsertTailList(&DeviceNode->PendedSetInterfaceState, &Interface->PendedLinks);
+            Interface->Pended = TRUE;
+            KeReleaseGuardedMutex(&IopDeviceInterfaceLock);
+            return STATUS_SUCCESS;
+        }
     }
 
     if (Interface->Enabled == Enable)
@@ -771,6 +865,16 @@ IoSetDeviceInterfaceState(
     ObDereferenceObject(PhysicalDeviceObject);
 
     return Status;
+}
+
+NTSTATUS
+NTAPI
+IoSetDeviceInterfaceState(
+    _In_ PUNICODE_STRING SymbolicLinkName,
+    _In_ BOOLEAN Enable)
+{
+    PAGED_CODE();
+    return IopSetInterfaceState(SymbolicLinkName, Enable, FALSE);
 }
 
 NTSTATUS
