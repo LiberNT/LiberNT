@@ -24,6 +24,7 @@ extern void func_CShellLink(void);
 extern void func_CUserNotification(void);
 extern void func_DragDrop(void);
 extern void func_ExtractIconEx(void);
+extern void func_FileTypeName(void);
 extern void func_FindExecutable(void);
 extern void func_GetDisplayNameOf(void);
 extern void func_GUIDFromString(void);
@@ -120,6 +121,7 @@ const struct test winetest_testlist[] =
     //{ "CUserNotification", func_CUserNotification }, // Test is broken on Win 2003
     { "DragDrop", func_DragDrop },
     { "ExtractIconEx", func_ExtractIconEx },
+    { "FileTypeName", func_FileTypeName },
     { "FindExecutable", func_FindExecutable },
     { "GetDisplayNameOf", func_GetDisplayNameOf },
     { "GUIDFromString", func_GUIDFromString },
