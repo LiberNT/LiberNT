@@ -2064,7 +2064,7 @@ static LONG SYSLINK_GetIdealSize (const SYSLINK_INFO *infoPtr, int cxMaxWidth, S
     HDC hdc;
 
     rc.left = rc.top = rc.bottom = 0;
-    rc.right = cxMaxWidth;
+    rc.right = cxMaxWidth > 0 ? cxMaxWidth : MAXLONG;
 
     hdc = GetDC(infoPtr->Self);
     if (hdc != NULL)

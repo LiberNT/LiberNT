@@ -9,6 +9,7 @@ list(APPEND SOURCE
     PropSheetRecalc.c
     TabControlKeys.c
     StatusBarResize.c
+    SysLinkIdealSize.c
     TaskDialogTitle.c
     testlist.c
     themestate.c
