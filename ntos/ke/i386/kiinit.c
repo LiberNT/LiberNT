@@ -907,3 +907,37 @@ AppCpuInit:
     /* Switch to new kernel stack and start kernel bootstrapping */
     KiSwitchToBootStack(InitialStack & ~3);
 }
+
+/*
+ * A 32-bit Nt stub reads the kernel entry point out of the shared user data,
+ * so the system DLL's own stub addresses have to be published there.
+ */
+CODE_SEG("INIT")
+NTSTATUS
+NTAPI
+KiI386PublishSystemCallStubs(
+    _In_ PVOID DllBase)
+{
+    PVOID Call;
+    PVOID Return;
+
+    PAGED_CODE();
+
+    if (KeFeatureBits & KF_FAST_SYSCALL)
+    {
+        Call = RtlFindExportedRoutineByName(DllBase, "KiFastSystemCall");
+        Return = RtlFindExportedRoutineByName(DllBase, "KiFastSystemCallRet");
+        if ((Call == NULL) || (Return == NULL)) return STATUS_PROCEDURE_NOT_FOUND;
+
+        SharedUserData->SystemCall = (ULONG)(ULONG_PTR)Call;
+        SharedUserData->SystemCallReturn = (ULONG)(ULONG_PTR)Return;
+        return STATUS_SUCCESS;
+    }
+
+    Call = RtlFindExportedRoutineByName(DllBase, "KiIntSystemCall");
+    if (Call == NULL) return STATUS_PROCEDURE_NOT_FOUND;
+
+    SharedUserData->SystemCall = (ULONG)(ULONG_PTR)Call;
+    SharedUserData->SystemCallReturn = 0;
+    return STATUS_SUCCESS;
+}

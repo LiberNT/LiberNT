@@ -760,25 +760,28 @@ PspInitializeSystemDll(VOID)
 
     KeUserPopEntrySListEnd =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListEnd");
+                                     "ExpInterlockedPopEntrySListEnd");
     KeUserPopEntrySListFault =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListFault");
+                                     "ExpInterlockedPopEntrySListFault");
     KeUserPopEntrySListResume =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListResume");
+                                     "ExpInterlockedPopEntrySListResume");
 
     if (PspSystemDllEntryPoint == NULL ||
         KeUserApcDispatcher == NULL ||
         KeUserExceptionDispatcher == NULL ||
         KeUserCallbackDispatcher == NULL ||
         KeRaiseUserExceptionDispatcher == NULL ||
-        PspRtlUserThreadStart == NULL)
+        PspRtlUserThreadStart == NULL ||
+        KeUserPopEntrySListEnd == NULL ||
+        KeUserPopEntrySListFault == NULL ||
+        KeUserPopEntrySListResume == NULL)
     {
         return STATUS_PROCEDURE_NOT_FOUND;
     }
 
-    return STATUS_SUCCESS;
+    return KiArchPublishSystemCallStubs(PspSystemDllBase);
 }
 
 /*
