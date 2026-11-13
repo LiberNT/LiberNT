@@ -279,6 +279,11 @@ MasterFileTable::WriteFileRecordToMFT(_In_ PFileRecord File)
         return STATUS_INVALID_PARAMETER;
     }
 
+    /* Anything this record held, including its security descriptor, is about
+     * to change on disk. */
+    if (File->DiskVolume)
+        File->DiskVolume->InvalidateRecordDescriptor(File->RecordNumber);
+
     Status = File->CommitFixup();
     if (!NT_SUCCESS(Status))
     {

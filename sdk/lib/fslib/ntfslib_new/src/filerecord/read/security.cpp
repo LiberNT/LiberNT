@@ -567,6 +567,9 @@ FileRecord::SetSecurityDescriptor(
     if (!ValidateSecurityDescriptor(Buffer, BufferLength))
         return STATUS_INVALID_PARAMETER;
 
+    /* Whatever this record's descriptor used to be, it is about to change. */
+    DiskVolume->InvalidateRecordDescriptor(RecordNumber);
+
     Status = DiskVolume->AssignSecurityId(Buffer, BufferLength, &SecurityId);
     if (NT_SUCCESS(Status))
     {
@@ -1177,6 +1180,90 @@ Volume::ReadCachedSecurityDescriptor(
     }
     NtfsReleaseMutex(&SecurityCacheMutex);
     return Found;
+}
+
+BOOLEAN
+Volume::ReadCachedRecordDescriptor(
+    _In_ ULONG RecordNumber,
+    _In_opt_ PUCHAR Buffer,
+    _Inout_ PULONG BufferLength,
+    _Out_ NTSTATUS* Status)
+{
+    BOOLEAN Found = FALSE;
+
+    NtfsAcquireMutex(&SecurityCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_SECURITY_CACHE_ENTRIES; Index++)
+    {
+        if (RecordCacheData[Index] && RecordCacheNumber[Index] == RecordNumber)
+        {
+            ULONG Capacity = *BufferLength;
+
+            *BufferLength = RecordCacheLength[Index];
+            if (!Buffer || Capacity < RecordCacheLength[Index])
+            {
+                *Status = STATUS_BUFFER_TOO_SMALL;
+            }
+            else
+            {
+                RtlCopyMemory(Buffer, RecordCacheData[Index], RecordCacheLength[Index]);
+                *Status = STATUS_SUCCESS;
+            }
+            Found = TRUE;
+            break;
+        }
+    }
+    NtfsReleaseMutex(&SecurityCacheMutex);
+    return Found;
+}
+
+void
+Volume::CacheRecordDescriptor(
+    _In_ ULONG RecordNumber,
+    _In_reads_bytes_(Length) const UCHAR* Descriptor,
+    _In_ ULONG Length)
+{
+    PUCHAR Copy = new(PagedPool, TAG_SECURITY) UCHAR[Length];
+    PUCHAR Old;
+    ULONG Slot;
+
+    if (!Copy)
+        return;
+    RtlCopyMemory(Copy, Descriptor, Length);
+    NtfsAcquireMutex(&SecurityCacheMutex);
+    for (Slot = 0; Slot < NTFS_SECURITY_CACHE_ENTRIES; Slot++)
+    {
+        if (RecordCacheData[Slot] && RecordCacheNumber[Slot] == RecordNumber)
+            break;
+    }
+    if (Slot == NTFS_SECURITY_CACHE_ENTRIES)
+        Slot = RecordCacheNext++ % NTFS_SECURITY_CACHE_ENTRIES;
+    Old = RecordCacheData[Slot];
+    RecordCacheNumber[Slot] = RecordNumber;
+    RecordCacheLength[Slot] = Length;
+    RecordCacheData[Slot] = Copy;
+    NtfsReleaseMutex(&SecurityCacheMutex);
+    delete[] Old;
+}
+
+void
+Volume::InvalidateRecordDescriptor(
+    _In_ ULONG RecordNumber)
+{
+    PUCHAR Old = NULL;
+
+    NtfsAcquireMutex(&SecurityCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_SECURITY_CACHE_ENTRIES; Index++)
+    {
+        if (RecordCacheData[Index] && RecordCacheNumber[Index] == RecordNumber)
+        {
+            Old = RecordCacheData[Index];
+            RecordCacheData[Index] = NULL;
+            RecordCacheLength[Index] = 0;
+            break;
+        }
+    }
+    NtfsReleaseMutex(&SecurityCacheMutex);
+    delete[] Old;
 }
 
 void
@@ -2035,11 +2122,24 @@ FileRecord::ReadSecurityDescriptor(
         NULL);
     if (SecurityAttribute)
     {
-        return ReadDirectSecurityDescriptor(
+        NTSTATUS DirectStatus;
+
+        if (DiskVolume->ReadCachedRecordDescriptor(RecordNumber,
+                                                   Buffer,
+                                                   BufferLength,
+                                                   &DirectStatus))
+        {
+            return DirectStatus;
+        }
+
+        DirectStatus = ReadDirectSecurityDescriptor(
             this,
             SecurityAttribute,
             Buffer,
             BufferLength);
+        if (NT_SUCCESS(DirectStatus) && Buffer)
+            DiskVolume->CacheRecordDescriptor(RecordNumber, Buffer, *BufferLength);
+        return DirectStatus;
     }
 
     StandardAttribute = GetAttribute(

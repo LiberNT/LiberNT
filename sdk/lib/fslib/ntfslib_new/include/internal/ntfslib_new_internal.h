@@ -593,6 +593,14 @@ public:
     ULONG SecurityCacheLength[NTFS_SECURITY_CACHE_ENTRIES] = {};
     PUCHAR SecurityCacheData[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG SecurityCacheNext = 0;
+    /* Records that keep their descriptor in an attribute of their own, rather
+     * than behind a SecurityId, reach no cache through $Secure. A directory
+     * answers an access check for every open below it, so re-reading its
+     * descriptor costs one disk read per open. */
+    ULONG RecordCacheNumber[NTFS_SECURITY_CACHE_ENTRIES] = {};
+    ULONG RecordCacheLength[NTFS_SECURITY_CACHE_ENTRIES] = {};
+    PUCHAR RecordCacheData[NTFS_SECURITY_CACHE_ENTRIES] = {};
+    ULONG RecordCacheNext = 0;
 
     ~Volume();
 
@@ -805,6 +813,23 @@ public:
         _In_ ULONG SecurityId,
         _In_reads_bytes_(Length) const UCHAR* Descriptor,
         _In_ ULONG Length);
+
+    BOOLEAN
+    ReadCachedRecordDescriptor(
+        _In_ ULONG RecordNumber,
+        _In_opt_ PUCHAR Buffer,
+        _Inout_ PULONG BufferLength,
+        _Out_ NTSTATUS* Status);
+
+    void
+    CacheRecordDescriptor(
+        _In_ ULONG RecordNumber,
+        _In_reads_bytes_(Length) const UCHAR* Descriptor,
+        _In_ ULONG Length);
+
+    void
+    InvalidateRecordDescriptor(
+        _In_ ULONG RecordNumber);
 
     NTSTATUS
     AssignSecurityId(

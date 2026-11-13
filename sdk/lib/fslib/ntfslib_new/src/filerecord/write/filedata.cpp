@@ -1041,6 +1041,11 @@ FileRecord::ReplaceSecurityDescriptorData(
     _In_reads_bytes_(BufferLength) const UCHAR* Buffer,
     _In_ ULONG BufferLength)
 {
+    /* A descriptor kept out of line changes without the record being
+     * rewritten, so drop any copy of it before the clusters move. */
+    if (DiskVolume)
+        DiskVolume->InvalidateRecordDescriptor(RecordNumber);
+
     PAttribute Attribute;
     PAttribute StandardAttribute;
     PStandardInformationEx Standard;

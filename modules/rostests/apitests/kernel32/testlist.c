@@ -206,8 +206,11 @@ extern void func_WriteFileBadBuffer(void);
 extern void func_WriteFileSeekBack(void);
 extern void func_XState(void);
 
+extern void func_FileSecurityCache(void);
+
 const struct test winetest_testlist[] =
 {
+    { "FileSecurityCache",                  func_FileSecurityCache },
     { "SetFileAllocationInfo", func_SetFileAllocationInfo },
     { "SetStdHandleEx",              func_SetStdHandleEx },
     { "SecureMemoryCache",           func_SecureMemoryCache },
