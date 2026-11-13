@@ -4488,11 +4488,27 @@ static RETURN_CODE for_control_execute_from_FILE(CMD_FOR_CONTROL *for_ctrl, FILE
     WCHAR buffer[MAXSTRING];
     int skip_count = for_ctrl->num_lines_to_skip;
     RETURN_CODE return_code = NO_ERROR;
+#ifdef __REACTOS__
+    char bufferA[MAXSTRING];
+    UINT code_page = GetConsoleOutputCP();
+
+    /* The lines are in the console code page, which chcp sets (Windows 11) */
+    if (!code_page) code_page = GetOEMCP();
+#endif
 
     /* Read line by line until end of file */
+#ifdef __REACTOS__
+    while (!WCMD_is_break(return_code) && fgets(bufferA, ARRAY_SIZE(bufferA), input))
+#else
     while (!WCMD_is_break(return_code) && fgetws(buffer, ARRAY_SIZE(buffer), input))
+#endif
     {
         size_t len;
+
+#ifdef __REACTOS__
+        if (!MultiByteToWideChar(code_page, 0, bufferA, -1, buffer, ARRAY_SIZE(buffer)))
+            buffer[0] = L'\0';
+#endif
 
         if (skip_count)
         {
@@ -4546,7 +4562,11 @@ static RETURN_CODE for_control_execute_fileset(CMD_FOR_CONTROL *for_ctrl, CMD_NO
         args++;
         wsprintfW(temp_cmd, L"CMD.EXE /C %s", args);
         TRACE("Reading output of '%s'\n", wine_dbgstr_w(temp_cmd));
+#ifdef __REACTOS__
+        input = _wpopen(temp_cmd, L"rt");
+#else
         input = _wpopen(temp_cmd, L"rt,ccs=unicode");
+#endif
         if (!input)
         {
             WCMD_print_error();
@@ -4569,7 +4589,11 @@ static RETURN_CODE for_control_execute_fileset(CMD_FOR_CONTROL *for_ctrl, CMD_NO
             if (element[0] == L'"' && match_ending_delim(element)) element++;
             /* Open the file, read line by line and process */
             TRACE("Reading input to parse from '%s'\n", wine_dbgstr_w(element));
+#ifdef __REACTOS__
+            input = _wfopen(element, L"rt");
+#else
             input = _wfopen(element, L"rt,ccs=unicode");
+#endif
             if (!input)
             {
                 WCMD_print_error();
