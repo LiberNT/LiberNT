@@ -113,6 +113,97 @@ FstubDetectPartitionStyle(
     return STATUS_SUCCESS;
 }
 
+/*
+ * Removable media formatted without a partition table (a "super floppy")
+ * reports one partition covering the medium. Windows 7 x64, partitionless FAT32
+ * on a removable USB disk: layout MBR, signature 1, one partition number 1,
+ * offset 0, length = disk size, type 0x04, recognized, not bootable; the same
+ * image on a fixed disk reports four empty entries and gets no volume.
+ */
+static
+BOOLEAN
+FstubIsSuperFloppy(
+    _In_ PFSTUB_DISK Disk,
+    _In_opt_ PDRIVE_LAYOUT_INFORMATION_EX Layout)
+{
+    USHORT BytesPerSector;
+    UCHAR SectorsPerCluster;
+    ULONG i;
+
+    PAGED_CODE();
+
+    if (Disk->MediaType != RemovableMedia) return FALSE;
+
+    if (Layout != NULL)
+    {
+        if (Layout->PartitionStyle == PARTITION_STYLE_GPT) return FALSE;
+
+        for (i = 0; i < Layout->PartitionCount; i++)
+        {
+            if (Layout->PartitionEntry[i].PartitionLength.QuadPart != 0)
+                return FALSE;
+        }
+    }
+
+    if (Disk->BytesPerSector < 512) return FALSE;
+    if (!NT_SUCCESS(FstubReadSector(Disk, 1, 0, Disk->Sector))) return FALSE;
+
+    /* A file system boot sector begins with the jump its format reserves */
+    if (Disk->Sector[0] != 0xEB && Disk->Sector[0] != 0xE9) return FALSE;
+
+    /* exFAT leaves the legacy fields zeroed and names itself instead */
+    if (RtlCompareMemory(Disk->Sector + 3, "EXFAT   ", 8) == 8) return TRUE;
+
+    BytesPerSector = (USHORT)(Disk->Sector[11] | (Disk->Sector[12] << 8));
+    SectorsPerCluster = Disk->Sector[13];
+
+    if (BytesPerSector < 512 || BytesPerSector > 4096 ||
+        (BytesPerSector & (BytesPerSector - 1)) != 0)
+    {
+        return FALSE;
+    }
+
+    if (SectorsPerCluster == 0 || SectorsPerCluster > 128 ||
+        (SectorsPerCluster & (SectorsPerCluster - 1)) != 0)
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+NTSTATUS
+FstubSuperFloppyLayout(
+    _In_ PFSTUB_DISK Disk,
+    _Outptr_ PDRIVE_LAYOUT_INFORMATION_EX *Layout)
+{
+    PDRIVE_LAYOUT_INFORMATION_EX Result = NULL;
+    PPARTITION_INFORMATION_EX Entry;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = FstubAdjustPartitionCount(PARTITION_STYLE_MBR, 1, &Result);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Result->PartitionStyle = PARTITION_STYLE_MBR;
+    Result->PartitionCount = 1;
+    Result->Mbr.Signature = 1;
+
+    Entry = &Result->PartitionEntry[0];
+    RtlZeroMemory(Entry, sizeof(*Entry));
+    Entry->PartitionStyle = PARTITION_STYLE_MBR;
+    Entry->StartingOffset.QuadPart = 0;
+    Entry->PartitionLength = Disk->Length;
+    Entry->PartitionNumber = 1;
+    Entry->Mbr.PartitionType = PARTITION_FAT_16;
+    Entry->Mbr.RecognizedPartition = TRUE;
+
+    *Layout = Result;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 IoReadPartitionTableEx(
@@ -164,6 +255,16 @@ IoReadPartitionTableEx(
                 Layout->PartitionCount = 0;
             }
         }
+    }
+
+    if (NT_SUCCESS(Status) && FstubIsSuperFloppy(Disk, Layout))
+    {
+        if (Layout != NULL)
+        {
+            ExFreePoolWithTag(Layout, TAG_FSTUB);
+            Layout = NULL;
+        }
+        Status = FstubSuperFloppyLayout(Disk, &Layout);
     }
 
     FstubFreeDiskInformation(Disk);

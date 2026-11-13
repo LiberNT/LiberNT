@@ -4,6 +4,7 @@ list(APPEND SOURCE
     PhysicalDriveRaw.c
     StorAdapter.c
     StorDeviceNumber.c
+    SuperFloppy.c
     SystemPartition.c
     VirtioDisk.c)
 
