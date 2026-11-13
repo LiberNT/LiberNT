@@ -50,10 +50,11 @@ static HRESULT SHELL32_AssocGetExtensionDescription(PCWSTR DotExt, PWSTR Buf, UI
     HKEY hKey;
     if (SUCCEEDED(hr = HCR_GetProgIdKeyOfExtension(DotExt, &hKey, TRUE)))
     {
-        DWORD err = RegLoadMUIStringW(hKey, L"FriendlyTypeName", Buf, cchBuf, NULL, 0, NULL);
+        DWORD cb = cchBuf * sizeof(*Buf);
+        DWORD err = RegLoadMUIStringW(hKey, L"FriendlyTypeName", Buf, cb, &cb, 0, NULL);
         if (err && hr == S_OK) // ProgId default value fallback (but not if we only have a .ext key)
         {
-            DWORD cb = cchBuf * sizeof(*Buf);
+            cb = cchBuf * sizeof(*Buf);
             err = RegGetValueW(hKey, NULL, NULL, RRF_RT_REG_SZ, NULL, Buf, &cb);
         }
         RegCloseKey(hKey);
