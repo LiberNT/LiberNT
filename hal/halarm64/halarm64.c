@@ -28,6 +28,7 @@
 #include <debug.h>
 
 #include "gic_internal.h"
+#include "haltime.h"
 
 static
 ULONG
@@ -2717,6 +2718,30 @@ HalpArm64GetDmaAdapter(
     _In_ PDEVICE_DESCRIPTION DeviceDescription,
     _Out_ PULONG NumberOfMapRegisters);
 
+HALP_TIME_CAPABILITIES HalpTimeCapabilities;
+
+static
+VOID
+HalpRecordTimeCapabilities(VOID)
+{
+    HalpTimeCapabilities.Counter.Source = HalpTimeSourceGenericCounter;
+    HalpTimeCapabilities.Counter.Frequency = HalpReadCntfrq();
+    HalpTimeCapabilities.Counter.AvailabilityStage = 2;
+    HalpTimeCapabilities.Counter.CrossCpuComparable = TRUE;
+    HalpTimeCapabilities.Counter.Calibration = HalpTimeCalibrationCntfrq;
+
+    HalpTimeCapabilities.Interrupt.Source = HalpTimeSourceGenericTimerPpi;
+    HalpTimeCapabilities.Interrupt.AvailabilityStage = 2;
+
+    HalpTimeCapabilities.Delay = HalpTimeCapabilities.Counter;
+
+    DPRINT1("HAL: TIME counter=generic/%I64u irq=%lu/%I64u delay=generic/%I64u\n",
+            HalpTimeCapabilities.Counter.Frequency,
+            (ULONG)HalpTimeCapabilities.Interrupt.Source,
+            HalpTimeCapabilities.Interrupt.Frequency,
+            HalpTimeCapabilities.Delay.Frequency);
+}
+
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
@@ -2910,6 +2935,7 @@ HalInitSystem(
     }
 
     KeSetTimeIncrement(156250, 5000);
+    HalpRecordTimeCapabilities();
 
     /*
      * Set up HAL dispatch table callbacks.
