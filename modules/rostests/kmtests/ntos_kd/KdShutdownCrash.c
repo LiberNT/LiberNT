@@ -28,7 +28,7 @@ START_TEST(KdShutdownCrash)
     PDEVICE_OBJECT Device;
     NTSTATUS Status;
 
-    /* Hidden test: the boot then ends in a bug check once the boot log has been closed for the shutdown */
+    /* Hidden test: the boot then ends in a bug check while the shutdown still has the boot log open */
     Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_UNKNOWN, 0, FALSE, &Device);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))

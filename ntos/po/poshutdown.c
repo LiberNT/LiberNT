@@ -266,16 +266,18 @@ PopGracefulShutdown(
 
     /* TODO: the processes still running are not asked to stop first */
 
-    DPRINT1("Shutdown: closing the boot log\n");
     KdpLogWatchdogDisable();
-    KdShutdownBootLog();
-    KdStopPrintWriter();
 
     DPRINT1("Shutdown: notifying the drivers registered for shutdown\n");
     IoShutdownSystem(0);
     DPRINT1("Shutdown: flushing the registry\n");
     PopRecordShutdownTime();
     CmShutdownSystem();
+
+    DPRINT1("Shutdown: closing the boot log\n");
+    KdShutdownBootLog();
+    KdStopPrintWriter();
+
     DPRINT1("Shutdown: flushing the cache\n");
     CcShutdownSystem();
     DPRINT1("Shutdown: stopping the memory manager\n");

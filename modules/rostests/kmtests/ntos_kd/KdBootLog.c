@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The kernel log reaches the file DEBUGPORT=FILE: names, or lastboot.log at the boot volume root
+ * PURPOSE:     The kernel log reaches the file DEBUGPORT=FILE: names, or lastboot.log at the boot volume root, and a shutdown leaves it at its exact length
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -10,6 +10,8 @@
 /* The writer keeps up to two 128 KB reserve steps of zeroes past what it has written */
 #define LOG_TAIL_BYTES (1024 * 1024)
 #define LOG_HEAD_BYTES 4096
+#define LOG_WHOLE_BYTES (8 * 1024 * 1024)
+#define LOG_CLOSED_MARKER "Shutdown: closing the boot log"
 
 static
 NTSTATUS
@@ -247,9 +249,128 @@ LogHeadNuls(
     return Nuls;
 }
 
+static
+NTSTATUS
+GetPreviousLogName(
+    _In_ PCUNICODE_STRING Current,
+    _Out_ PUNICODE_STRING Name)
+{
+    USHORT Index;
+
+    for (Index = Current->Length / sizeof(WCHAR); Index > 0; Index--)
+    {
+        if (Current->Buffer[Index - 1] == L'\\') break;
+    }
+
+    Name->Length = 0;
+    Name->MaximumLength = Index * sizeof(WCHAR) + sizeof(L"prevboot.log");
+    Name->Buffer = ExAllocatePoolWithTag(PagedPool, Name->MaximumLength, 'LBmK');
+    if (Name->Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlCopyMemory(Name->Buffer, Current->Buffer, Index * sizeof(WCHAR));
+    Name->Length = Index * sizeof(WCHAR);
+    return RtlAppendUnicodeToString(Name, L"prevboot.log");
+}
+
+static
+NTSTATUS
+ReadWholeLog(
+    _In_ PUNICODE_STRING Name,
+    _Outptr_result_maybenull_ PUCHAR *Data,
+    _Out_ PULONG Length)
+{
+    FILE_STANDARD_INFORMATION Standard;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    LARGE_INTEGER Offset;
+    PUCHAR Buffer;
+    HANDLE File;
+    NTSTATUS Status;
+
+    *Data = NULL;
+    *Length = 0;
+
+    InitializeObjectAttributes(&ObjectAttributes, Name,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwOpenFile(&File, FILE_READ_DATA | SYNCHRONIZE, &ObjectAttributes, &IoStatus,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ZwQueryInformationFile(File, &IoStatus, &Standard, sizeof(Standard),
+                                    FileStandardInformation);
+    if (NT_SUCCESS(Status) && (Standard.EndOfFile.QuadPart > LOG_WHOLE_BYTES))
+        Status = STATUS_BUFFER_TOO_SMALL;
+    if (NT_SUCCESS(Status) && (Standard.EndOfFile.QuadPart == 0))
+        Status = STATUS_END_OF_FILE;
+    if (!NT_SUCCESS(Status))
+    {
+        ZwClose(File);
+        return Status;
+    }
+
+    Buffer = ExAllocatePoolWithTag(PagedPool, (SIZE_T)Standard.EndOfFile.QuadPart, 'LBmK');
+    if (Buffer == NULL)
+    {
+        ZwClose(File);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Offset.QuadPart = 0;
+    Status = ZwReadFile(File, NULL, NULL, NULL, &IoStatus, Buffer,
+                        (ULONG)Standard.EndOfFile.QuadPart, &Offset, NULL);
+    ZwClose(File);
+    if (NT_SUCCESS(Status) && (IoStatus.Information == 0))
+        Status = STATUS_END_OF_FILE;
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Buffer, 'LBmK');
+        return Status;
+    }
+
+    *Data = Buffer;
+    *Length = (ULONG)IoStatus.Information;
+    return STATUS_SUCCESS;
+}
+
+/* A boot log the shutdown closed keeps none of the reserve the crash writer needs while the system runs */
+static
+VOID
+CheckClosedLog(
+    _In_ PUNICODE_STRING Name)
+{
+    SIZE_T MarkerLength = sizeof(LOG_CLOSED_MARKER) - 1;
+    BOOLEAN Closed = FALSE;
+    ULONG Nuls = 0, Index;
+    PUCHAR Data;
+    ULONG Length;
+    NTSTATUS Status;
+
+    Status = ReadWholeLog(Name, &Data, &Length);
+    if (skip(NT_SUCCESS(Status), "%wZ not read (0x%08lx)\n", Name, Status))
+        return;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (Data[Index] == 0) Nuls++;
+        if (Index + MarkerLength > Length) continue;
+        if (RtlCompareMemory(Data + Index, LOG_CLOSED_MARKER, MarkerLength) == MarkerLength)
+            Closed = TRUE;
+    }
+
+    if (!skip(Closed, "%wZ is not from a boot that closed its log\n", Name))
+    {
+        ok_eq_ulong(Nuls, 0UL);
+        ok(Data[Length - 1] == '\n', "%wZ ends with 0x%02x, not a full line\n", Name,
+           Data[Length - 1]);
+    }
+
+    ExFreePoolWithTag(Data, 'LBmK');
+}
+
 START_TEST(KdBootLog)
 {
-    UNICODE_STRING Name;
+    UNICODE_STRING Name, Previous;
     LARGE_INTEGER Interval;
     CHAR Marker[64];
     NTSTATUS Status, OpenStatus = STATUS_UNSUCCESSFUL;
@@ -284,6 +405,14 @@ START_TEST(KdBootLog)
     ok(Stamped, "%s is not preceded by the time since boot\n", Marker);
     ok(Count == 1, "%s is in %wZ %lu times\n", Marker, &Name, Count);
     ok_eq_ulong(LogHeadNuls(&Name), 0UL);
+
+    Status = GetPreviousLogName(&Name, &Previous);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        CheckClosedLog(&Previous);
+        ExFreePoolWithTag(Previous.Buffer, 'LBmK');
+    }
 
     ExFreePoolWithTag(Name.Buffer, 'LBmK');
 }

@@ -156,7 +156,10 @@ static VOID KdpBootLogTrim(VOID)
     FILE_END_OF_FILE_INFORMATION EndOfFile;
     IO_STATUS_BLOCK IoStatus;
 
+    ASSERT(KdpBootLogHandle != NULL);
+
     InterlockedExchangePointer((PVOID volatile *)&KdpBootLogPublished, NULL);
+    KdpBootLogExtents = NULL;
     EndOfFile.EndOfFile.QuadPart = KdpBootLogWritten;
     ZwSetInformationFile(KdpBootLogHandle, &IoStatus, &EndOfFile, sizeof(EndOfFile), FileEndOfFileInformation);
     KdpBootLogReserveEnd = KdpBootLogWritten;
@@ -214,7 +217,6 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
     ULONG64 Lost;
     ULONG Length;
     BOOLEAN Dirty = FALSE;
-    BOOLEAN Trimmed = FALSE;
 
     UNREFERENCED_PARAMETER(Context);
 
@@ -264,28 +266,15 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
 
         if (KdpBootLogStopping)
         {
-            if (!Trimmed && (KdpBootLogDevice != NULL))
-            {
-                if ((KdpBootLogExtents == NULL) || (KdpBootLogWritten + KDP_BOOT_LOG_RESERVE_SIZE > KdpBootLogReserveEnd))
-                    KdpBootLogExtendReserve();
-
-                if ((KdpBootLogExtents != NULL) && NT_SUCCESS(ZwFlushBuffersFile(KdpBootLogHandle, &IoStatus)))
-                {
-                    KdpBootLogPublish();
-                    KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
-                    PsTerminateSystemThread(STATUS_SUCCESS);
-                }
-            }
-
-            if (!Trimmed)
-            {
-                if (KdpBootLogDevice != NULL)
-                    KdpBootLogTrim();
-                Trimmed = TRUE;
-                Dirty = TRUE;
-            }
+            KdpBootLogTrim();
+            ZwFlushBuffersFile(KdpBootLogHandle, &IoStatus);
+            ZwClose(KdpBootLogHandle);
+            KdpBootLogHandle = NULL;
+            KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
+            PsTerminateSystemThread(STATUS_SUCCESS);
         }
-        else if (KdpBootLogDevice != NULL)
+
+        if (KdpBootLogDevice != NULL)
         {
             if ((KdpBootLogExtents == NULL) || (KdpBootLogWritten + KDP_BOOT_LOG_RESERVE_SIZE > KdpBootLogReserveEnd))
             {
@@ -298,9 +287,7 @@ static VOID NTAPI KdpBootLogThread(_In_ PVOID Context)
         if (Dirty && NT_SUCCESS(ZwFlushBuffersFile(KdpBootLogHandle, &IoStatus)))
             Dirty = FALSE;
 
-        if (Trimmed)
-            KeSetEvent(&KdpBootLogStopped, IO_NO_INCREMENT, FALSE);
-        else if (!Dirty && (KdpBootLogDevice != NULL))
+        if (!Dirty && (KdpBootLogDevice != NULL))
             KdpBootLogPublish();
 
         if (Length == sizeof(KdpBootLogBuffer))
