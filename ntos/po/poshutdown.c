@@ -300,11 +300,15 @@ PopGracefulShutdown(
 
     DPRINT1("Shutdown: handing the machine to the firmware\n");
     if (Action == PowerActionShutdownReset)
+    {
         HalReturnToFirmware(HalRebootRoutine);
-    else if (Action == PowerActionShutdownOff)
-        HalReturnToFirmware(HalPowerDownRoutine);
+    }
     else
-        HalReturnToFirmware(HalHaltRoutine);
+    {
+        /* The devices are off: no other processor may go on driving them, nor wait for this one */
+        KeFreezeExecution(NULL, NULL);
+        HalReturnToFirmware(HalPowerDownRoutine);
+    }
 }
 
 NTSTATUS
