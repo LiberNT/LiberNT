@@ -91,6 +91,7 @@ VOID NTAPI SmpDbgDumpTimers(ULONG StrandMask);
 
 /* HAL reader (exported from hal): live GIC priority/enable/pending/active. */
 VOID NTAPI HalArm64DbgGicState(ULONG IntId, ULONG *Prio, ULONG *Enable, ULONG *Pending, ULONG *Active);
+BOOLEAN NTAPI HalArm64DbgPendInterrupt(ULONG IntId);
 
 #define SMPDBG_TIMER_BEGIN(c, i)  SmpDbgTimerBegin((c), (i))
 #define SMPDBG_TIMER_EOI(c, i)    SmpDbgTimerEoi((c), (i))

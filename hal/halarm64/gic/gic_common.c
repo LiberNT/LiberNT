@@ -972,3 +972,16 @@ HalArm64DbgGicState(
         *Active = (*HalpMmio((ULONG_PTR)HalpGicdBase, GICD_ISACTIVER + RegisterOffset) >> Bit) & 1u;
     }
 }
+
+BOOLEAN
+NTAPI
+HalArm64DbgPendInterrupt(
+    _In_ ULONG IntId)
+{
+    if (HalpArm64InterruptController || IntId < 32 || IntId >= 1020 || HalpGicdBase == 0)
+        return FALSE;
+
+    *HalpMmio((ULONG_PTR)HalpGicdBase, GICD_ISPENDR + (IntId / 32) * sizeof(ULONG)) = 1u << (IntId % 32);
+    ARM64_DSB(SY);
+    return TRUE;
+}

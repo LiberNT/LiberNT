@@ -192,6 +192,13 @@ typedef struct DECLSPEC_CACHEALIGN _KI_ARM64_DISPATCH_DEPTH
 
 static KI_ARM64_DISPATCH_DEPTH KiArm64DispatchDepth[MAXIMUM_PROCESSORS];
 
+#define KI_ARM64_SPI_BASE 32
+#define KI_ARM64_SPI_LIMIT 1020
+#define KI_ARM64_FOREIGN_BATCH 8
+
+static KI_ARM64_DISPATCH_DEPTH KiArm64ForeignDispatchDepth[MAXIMUM_PROCESSORS];
+static KSPIN_LOCK KiArm64ForeignDispatchLock;
+
 static inline
 PKINTERRUPT
 KiArm64LoadInterruptHeadNoFence(
@@ -201,6 +208,74 @@ KiArm64LoadInterruptHeadNoFence(
     PKINTERRUPT *Table = (PKINTERRUPT *)ReadPointerNoFence((PVOID const volatile *)&KiArm64IntTables[Cpu]);
 
     return Table ? (PKINTERRUPT)ReadPointerNoFence((PVOID const volatile *)&Table[IntId]) : NULL;
+}
+
+/* An interrupt controller may deliver an SPI to a processor other than the one it is routed to */
+static
+ULONG
+KiArm64CollectForeignInterrupts(
+    _In_ ULONG IntId,
+    _In_ ULONG Cpu,
+    _In_ ULONG Skip,
+    _Out_writes_to_(KI_ARM64_FOREIGN_BATCH, return) PKINTERRUPT *Batch,
+    _Out_ PBOOLEAN More)
+{
+    PKINTERRUPT Head, Interrupt;
+    ULONG Other, Position = 0, Count = 0;
+
+    ASSERT(IntId >= KI_ARM64_SPI_BASE && IntId < KI_ARM64_SPI_LIMIT);
+    ASSERT(Cpu == KeGetCurrentProcessorNumber());
+    ASSERT(ReadNoFence(&KiArm64ForeignDispatchDepth[Cpu].Value) > 0);
+    ASSERT(KeGetCurrentIrql() < HIGH_LEVEL);
+
+    *More = FALSE;
+    KxAcquireSpinLock(&KiArm64ForeignDispatchLock);
+    for (Other = 0; (Other < (ULONG)KeNumberProcessors) && !*More; Other++)
+    {
+        if (Other == Cpu)
+            continue;
+
+        Head = KiArm64LoadInterruptHeadNoFence(IntId, Other);
+        if (Head == NULL)
+            continue;
+
+        Interrupt = Head;
+        do
+        {
+            ASSERT(Interrupt->Vector == IntId);
+            ASSERT((UCHAR)Interrupt->Number == Other);
+            if (Position++ >= Skip)
+            {
+                if (Count == KI_ARM64_FOREIGN_BATCH)
+                {
+                    *More = TRUE;
+                    break;
+                }
+
+                Batch[Count++] = Interrupt;
+            }
+
+            Interrupt = CONTAINING_RECORD(Interrupt->InterruptListEntry.Flink, KINTERRUPT, InterruptListEntry);
+        } while (Interrupt != Head);
+    }
+    KxReleaseSpinLock(&KiArm64ForeignDispatchLock);
+
+    return Count;
+}
+
+static
+VOID
+KiArm64WaitForForeignDispatch(VOID)
+{
+    ULONG Cpu;
+
+    ASSERT(ReadNoFence(&KiArm64ForeignDispatchDepth[KeGetCurrentProcessorNumber()].Value) == 0);
+
+    for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++)
+    {
+        while (ReadAcquire(&KiArm64ForeignDispatchDepth[Cpu].Value) != 0)
+            YieldProcessor();
+    }
 }
 
 PKINTERRUPT NTAPI KiArm64QueryInterrupt(_In_ ULONG IntId)
@@ -1477,6 +1552,41 @@ KiArm64DispatchChain(_In_ PKINTERRUPT Head)
     }
 }
 
+static
+VOID
+KiArm64DispatchForeignInterrupts(
+    _In_ ULONG IntId,
+    _In_ ULONG Cpu,
+    _Inout_updates_(KI_ARM64_FOREIGN_BATCH) PKINTERRUPT *Batch,
+    _In_ ULONG Count,
+    _In_ BOOLEAN More)
+{
+    ULONG Index, Skip = 0;
+
+    ASSERT(Count != 0 && Count <= KI_ARM64_FOREIGN_BATCH);
+
+    for (;;)
+    {
+        for (Index = 0; Index < Count; Index++)
+        {
+            ASSERT(Batch[Index]->Irql <= KeGetCurrentIrql());
+            if (KiArm64CallInterruptServiceRoutine(Batch[Index]) &&
+                (Batch[Index]->Mode == LevelSensitive))
+            {
+                return;
+            }
+        }
+
+        if (!More)
+            return;
+
+        Skip += Count;
+        _disable();
+        Count = KiArm64CollectForeignInterrupts(IntId, Cpu, Skip, Batch, &More);
+        _enable();
+    }
+}
+
 static BOOLEAN KiSecondaryInterruptServicesEnabled;
 
 NTSTATUS
@@ -1624,6 +1734,10 @@ KiArm64InterruptDispatchEntryInner(_In_ ULONG VectorId, _In_ PKI_ARM64_IRQ_FRAME
     KIRQL OldIrql;
     KIRQL RequestIrql = DISPATCH_LEVEL;
     PKINTERRUPT Head;
+    PKINTERRUPT Foreign[KI_ARM64_FOREIGN_BATCH];
+    ULONG ForeignCount = 0;
+    BOOLEAN ForeignMore = FALSE;
+    BOOLEAN ForeignDispatch = FALSE;
     KTRAP_FRAME LocalTrapFrame;
     PKTRAP_FRAME SavedTrapFrame;
     BOOLEAN Begun;
@@ -1694,10 +1808,21 @@ KiArm64InterruptDispatchEntryInner(_In_ ULONG VectorId, _In_ PKI_ARM64_IRQ_FRAME
     {
         RequestIrql = Head->Irql;
     }
+    else if ((IntId >= KI_ARM64_SPI_BASE) && (IntId < KI_ARM64_SPI_LIMIT) &&
+             (KeGetCurrentIrql() < HIGH_LEVEL))
+    {
+        InterlockedIncrement(&KiArm64ForeignDispatchDepth[Cpu].Value);
+        ForeignDispatch = TRUE;
+        ForeignCount = KiArm64CollectForeignInterrupts(IntId, Cpu, 0, Foreign, &ForeignMore);
+        if (ForeignCount != 0)
+            RequestIrql = Foreign[0]->Irql;
+    }
 
     Begun = HalBeginSystemInterrupt(RequestIrql, IntId, &OldIrql);
     if (!Begun)
     {
+        if (ForeignDispatch)
+            InterlockedDecrement(&KiArm64ForeignDispatchDepth[Cpu].Value);
         InterlockedDecrement(&KiArm64DispatchDepth[Cpu].Value);
         return 0;
     }
@@ -1733,8 +1858,16 @@ KiArm64InterruptDispatchEntryInner(_In_ ULONG VectorId, _In_ PKI_ARM64_IRQ_FRAME
         KiArm64DispatchChain(Head);
         _disable();
     }
+    else if (ForeignCount != 0)
+    {
+        _enable();
+        KiArm64DispatchForeignInterrupts(IntId, Cpu, Foreign, ForeignCount, ForeignMore);
+        _disable();
+    }
 
     KiArm64CurrentInterruptTrapFrame[Cpu] = SavedTrapFrame;
+    if (ForeignDispatch)
+        InterlockedDecrement(&KiArm64ForeignDispatchDepth[Cpu].Value);
     InterlockedDecrement(&KiArm64DispatchDepth[Cpu].Value);
 
     HalEndSystemInterrupt(OldIrql, NULL);
@@ -1783,6 +1916,7 @@ KiArm64SynchronizeInterruptChain(_In_ PKINTERRUPT Interrupt, _In_ BOOLEAN Connec
     ASSERT(ReadAcquire(&KiArm64DispatchDepth[Cpu].Value) == 0);
 
     OldIrql = KfRaiseIrql(HIGH_LEVEL);
+    KxAcquireSpinLock(&KiArm64ForeignDispatchLock);
     Head = Table[Interrupt->Vector];
     if (Connect)
     {
@@ -1801,6 +1935,7 @@ KiArm64SynchronizeInterruptChain(_In_ PKINTERRUPT Interrupt, _In_ BOOLEAN Connec
     }
     Interrupt->Connected = Connect;
     KeMemoryBarrier();
+    KxReleaseSpinLock(&KiArm64ForeignDispatchLock);
     KfLowerIrql(OldIrql);
 }
 
@@ -1908,6 +2043,7 @@ KiArm64ConnectInterrupt(IN PKINTERRUPT Interrupt)
 Done:
     Connected = Interrupt->Connected;
     KeReleaseSpinLock(&KiArm64IntTableLock, OldIrql);
+    if (!Connected) KiArm64WaitForForeignDispatch();
     if (RestoreAffinity) KeRevertToUserAffinityThreadEx(PreviousAffinity);
 
     return Connected;
@@ -1964,6 +2100,7 @@ KeDisconnectInterrupt(IN PKINTERRUPT Interrupt)
 
 Done:
     KeReleaseSpinLock(&KiArm64IntTableLock, OldIrql);
+    if (Connected) KiArm64WaitForForeignDispatch();
     if (RestoreAffinity) KeRevertToUserAffinityThreadEx(PreviousAffinity);
     return Connected;
 }

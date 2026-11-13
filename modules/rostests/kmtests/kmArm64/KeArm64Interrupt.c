@@ -496,6 +496,96 @@ TestIoAffinity(PKMT_DISPATCH_SECONDARY Dispatch, ULONG Vector, KIRQL Irql,
           Mask, Shared, Status, Calls, Outside, BadOwner);
 }
 
+typedef VOID (NTAPI *PKMT_HAL_ROUTE_INTERRUPT)(ULONG);
+typedef BOOLEAN (NTAPI *PKMT_HAL_PEND_INTERRUPT)(ULONG);
+typedef VOID (NTAPI *PKMT_HAL_GIC_STATE)(ULONG, PULONG, PULONG, PULONG, PULONG);
+
+static BOOLEAN NTAPI
+ForeignIsr(PKINTERRUPT Interrupt, PVOID Context)
+{
+    KMT_ISR_CONTEXT *Record = Context;
+    Record->Cpu = KeGetCurrentProcessorNumber();
+    Record->OwnerCpu = (UCHAR)Interrupt->Number;
+    Record->Irql = KeGetCurrentIrql();
+    InterlockedIncrement((volatile LONG *)&Record->Calls);
+    return TRUE;
+}
+
+static BOOLEAN
+WaitForIsrCalls(KMT_ISR_CONTEXT *Record, ULONG Calls)
+{
+    LARGE_INTEGER Frequency;
+    LONGLONG Start = KeQueryPerformanceCounter(&Frequency).QuadPart;
+
+    while ((ULONG)ReadAcquire((volatile LONG *)&Record->Calls) < Calls)
+    {
+        if (KeQueryPerformanceCounter(NULL).QuadPart - Start >= Frequency.QuadPart / 10)
+            return FALSE;
+        YieldProcessor();
+    }
+    return TRUE;
+}
+
+static VOID
+TestForeignDelivery(KIRQL Irql)
+{
+    PKMT_HAL_ROUTE_INTERRUPT Route, Unroute;
+    PKMT_HAL_PEND_INTERRUPT Pend;
+    PKMT_HAL_GIC_STATE GicState;
+    KMT_ISR_CONTEXT Record = {0};
+    KINTERRUPT Interrupt;
+    KAFFINITY PreviousAffinity;
+    ULONG Vector, Priority, Enable, Pending, Active;
+
+    if (skip(KeNumberProcessors >= 2, "Two processors required to deliver an interrupt to the wrong one\n")) return;
+    Route = (PKMT_HAL_ROUTE_INTERRUPT)KmtGetSystemRoutineAddress(L"HalArm64ConnectInterrupt");
+    Unroute = (PKMT_HAL_ROUTE_INTERRUPT)KmtGetSystemRoutineAddress(L"HalArm64DisconnectInterrupt");
+    Pend = (PKMT_HAL_PEND_INTERRUPT)KmtGetSystemRoutineAddress(L"HalArm64DbgPendInterrupt");
+    GicState = (PKMT_HAL_GIC_STATE)KmtGetSystemRoutineAddress(L"HalArm64DbgGicState");
+    if (skip(Route != NULL && Unroute != NULL && Pend != NULL && GicState != NULL,
+             "Interrupt controller test routines unavailable\n")) return;
+
+    PreviousAffinity = KeSetSystemAffinityThreadEx(1);
+    RtlZeroMemory(&Interrupt, sizeof(Interrupt));
+
+    /* The last line of each block of 32, from the top: an even SPI the HAL routes to the lower of two processors */
+    for (Vector = 990; Vector >= 62; Vector -= 32)
+    {
+        GicState(Vector, &Priority, &Enable, &Pending, &Active);
+        if (Enable != 0) continue;
+        KeInitializeInterrupt(&Interrupt, ForeignIsr, &Record, NULL,
+                              Vector, Irql, Irql, Latched, FALSE, 1, FALSE);
+        if (!ConnectInterrupt(&Interrupt)) continue;
+        GicState(Vector, &Priority, &Enable, &Pending, &Active);
+        if (Enable == 1) break;
+        DisconnectInterrupt(&Interrupt);
+    }
+    if (skip(Interrupt.Connected, "No free SPI to test with\n")) goto Cleanup;
+
+    ok_eq_bool(Pend(Vector), TRUE);
+    ok_eq_bool(WaitForIsrCalls(&Record, 1), TRUE);
+    ok_eq_ulong(Record.Calls, 1);
+    ok_eq_ulong(Record.OwnerCpu, 1);
+    trace("FOREIGN_DELIVERY vector=%lu routed_to=1 taken_on=%lu\n", Vector, Record.Cpu);
+
+    Route(Vector);
+    ok_eq_bool(Pend(Vector), TRUE);
+    ok_eq_bool(WaitForIsrCalls(&Record, 2), TRUE);
+    ok_eq_ulong(Record.Calls, 2);
+    ok_eq_ulong(Record.Cpu, 0);
+    ok_eq_ulong(Record.OwnerCpu, 1);
+    ok_eq_uint(Record.Irql, Irql);
+    Unroute(Vector);
+
+    ok_eq_bool(DisconnectInterrupt(&Interrupt), TRUE);
+    ok_eq_bool(Pend(Vector), TRUE);
+    ok_eq_bool(WaitForIsrCalls(&Record, 3), FALSE);
+
+Cleanup:
+    if (Interrupt.Connected) DisconnectInterrupt(&Interrupt);
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+}
+
 START_TEST(KeArm64Interrupt)
 {
     HAL_SECONDARY_INTERRUPT_INFORMATION Information;
@@ -580,4 +670,5 @@ START_TEST(KeArm64Interrupt)
     TestIoAffinity(Dispatch, Vector, Irql, KeQueryActiveProcessors(), FALSE);
     TestIoAffinity(Dispatch, Vector, Irql, 1, TRUE);
     TestIoAffinity(Dispatch, Vector, Irql, KeQueryActiveProcessors(), TRUE);
+    TestForeignDelivery(Irql);
 }
