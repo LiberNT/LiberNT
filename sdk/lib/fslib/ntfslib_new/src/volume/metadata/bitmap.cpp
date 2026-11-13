@@ -176,6 +176,7 @@ SetClusterRunBits(_In_ PVolume DiskVolume,
     NTFS_BITMAP_UNDO StackUndo[4];
     ULONG StackUsed = 0;
     PUCHAR Buffer = NULL;
+    ULONGLONG Changed = 0;
     NTSTATUS Status = STATUS_SUCCESS;
 
     Buffer = AcquireBitmapWorkBuffer(DiskVolume);
@@ -291,10 +292,19 @@ SetClusterRunBits(_In_ PVolume DiskVolume,
             if (!NT_SUCCESS(Status))
                 goto Rollback;
 
+            Changed += ChunkClusterEnd - Cluster;
             Cluster = ChunkClusterEnd;
         }
     }
 
+    if (DiskVolume->FreeClusterCountKnown)
+    {
+        ASSERT(!Allocate || DiskVolume->FreeClusterCount >= Changed);
+        if (Allocate)
+            DiskVolume->FreeClusterCount -= Changed;
+        else
+            DiskVolume->FreeClusterCount += Changed;
+    }
     goto Done;
 
 Rollback:
@@ -487,6 +497,12 @@ Volume::GetFreeClusters(_Out_ PLARGE_INTEGER FreeClusters)
     ULONGLONG ClustersRemaining;
     ULONG ClustersInChunk, BytesToRead;
 
+    if (FreeClusterCountKnown)
+    {
+        FreeClusters->QuadPart = (LONGLONG)FreeClusterCount;
+        return STATUS_SUCCESS;
+    }
+
     // Note: $Bitmap is *always* non-resident on Windows.
 
     // Get file record for $Bitmap and $DATA attribute.
@@ -534,6 +550,8 @@ Volume::GetFreeClusters(_Out_ PLARGE_INTEGER FreeClusters)
         ClustersRemaining -= ClustersInChunk;
     }
 
+    FreeClusterCount = (ULONGLONG)FreeClusters->QuadPart;
+    FreeClusterCountKnown = TRUE;
     Status = STATUS_SUCCESS;
 
 Done:

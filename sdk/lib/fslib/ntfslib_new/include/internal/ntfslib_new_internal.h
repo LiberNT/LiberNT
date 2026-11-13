@@ -557,6 +557,10 @@ public:
     ULONGLONG ReservedClusters = 0;
     BOOLEAN ReservedClustersKnown = FALSE;
 
+    /* Clear bits of $Bitmap, counted once and kept by every allocation and release */
+    ULONGLONG FreeClusterCount = 0;
+    BOOLEAN FreeClusterCountKnown = FALSE;
+
     /* Parsed $Bitmap record, built once: its layout never changes and its
      * data is served through the block cache, so re-parsing it for every
      * cluster allocate/release only burned CPU. */

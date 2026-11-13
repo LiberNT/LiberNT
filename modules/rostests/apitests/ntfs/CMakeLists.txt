@@ -3,6 +3,7 @@ list(APPEND SOURCE
     MissingSecurity.c
     IndexMetadata.c
     FullBaseGrowth.c
+    FreeClusters.c
     testlist.c)
 
 add_executable(ntfs_apitest ${SOURCE})
