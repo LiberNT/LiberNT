@@ -88,7 +88,8 @@ KdpLargestChunk(
  */
 NTSTATUS
 NTAPI
-KdpCopyMemoryChunks(
+KdpCopyProcessMemoryChunks(
+    _In_opt_ PEPROCESS Process,
     _In_ ULONG64 Address,
     _In_ PVOID Buffer,
     _In_ ULONG TotalSize,
@@ -112,10 +113,11 @@ KdpCopyMemoryChunks(
             Chunk >>= 1;
         }
 
-        Status = MmDbgCopyMemory(Address,
-                                 (PVOID)((ULONG_PTR)Buffer + Copied),
-                                 Chunk,
-                                 Flags);
+        Status = MmDbgCopyProcessMemory(Process,
+                                        Address,
+                                        (PVOID)((ULONG_PTR)Buffer + Copied),
+                                        Chunk,
+                                        Flags);
         if (!NT_SUCCESS(Status))
             break;
 
@@ -128,6 +130,19 @@ KdpCopyMemoryChunks(
         *ActualSize = Copied;
 
     return (Copied == TotalSize) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
+}
+
+NTSTATUS
+NTAPI
+KdpCopyMemoryChunks(
+    _In_ ULONG64 Address,
+    _In_ PVOID Buffer,
+    _In_ ULONG TotalSize,
+    _In_ ULONG ChunkSize,
+    _In_ ULONG Flags,
+    _Out_opt_ PULONG ActualSize)
+{
+    return KdpCopyProcessMemoryChunks(NULL, Address, Buffer, TotalSize, ChunkSize, Flags, ActualSize);
 }
 
 /* REQUEST HANDLERS ***********************************************************/

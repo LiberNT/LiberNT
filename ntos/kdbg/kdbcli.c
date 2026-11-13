@@ -1569,7 +1569,7 @@ KdbpCmdProcesses(
 
         Process = CONTAINING_RECORD(Entry, EPROCESS, ActiveProcessLinks);
 
-        KdbpPrint("%s%p  %6Iu  %.15s\n",
+        KdbpPrint("%s%p  %6Ix  %.15s\n",
                   (Process == KdbCurrentProcess) ? "*" : " ",
                   Process,
                   (ULONG_PTR)Process->UniqueProcessId,
@@ -1618,7 +1618,7 @@ KdbpCmdThreads(
 
         Thread = CONTAINING_RECORD(Entry, ETHREAD, ThreadListEntry);
 
-        KdbpPrint("%s%p  %6Iu  state %u\n",
+        KdbpPrint("%s%p  %6Ix  state %u\n",
                   (Thread == KdbCurrentThread) ? "*" : " ",
                   Thread,
                   (ULONG_PTR)Thread->Cid.UniqueThread,
