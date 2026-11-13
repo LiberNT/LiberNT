@@ -30,7 +30,7 @@ HalpEnsureBootProcessorFirst(VOID)
     ULONG BootApicId;
     ULONG i;
 
-    BootApicId = ApicRead(APIC_ID) >> 24;
+    BootApicId = ApicGetId();
     for (i = 0; i < HalpApicInfoTable.ProcessorCount; i++)
     {
         if (HalpProcessorIdentity[i].LapicId == BootApicId)
@@ -96,9 +96,10 @@ HalpInitProcessor(
 VOID
 HalpInitPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    DPRINT1("Using HAL: APIC %s %s\n",
+    DPRINT1("Using HAL: APIC %s %s, local APIC through %s\n",
             (HalpBuildType & PRCB_BUILD_UNIPROCESSOR) ? "UP" : "SMP",
-            (HalpBuildType & PRCB_BUILD_DEBUG) ? "DBG" : "REL");
+            (HalpBuildType & PRCB_BUILD_DEBUG) ? "DBG" : "REL",
+            HalpX2ApicMode ? "registers (x2APIC)" : "the memory window");
 
     HalpPrintApicTables();
 

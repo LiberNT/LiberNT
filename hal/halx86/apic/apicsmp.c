@@ -94,28 +94,38 @@ ApicRequestGlobalInterruptLevel(
     Flags = __readeflags();
     _disable();
 
-    do
+    if (HalpX2ApicMode)
     {
-        IcrStatus.Long0 = ApicRead(APIC_ICR0);
-    } while (IcrStatus.DeliveryStatus);
-
-    /* A shorthand names the destinations itself, so the destination register
-     * is not read and writing it only costs a local APIC access. */
-    if (DestinationShortHand == APIC_DSH_Destination)
-        ApicWrite(APIC_ICR1, Icr.Long1);
-
-    /* Write the low dword last to send the interrupt */
-    ApicWrite(APIC_ICR0, Icr.Long0);
-
-    /* An interrupt is left to the local APIC to deliver: the next sender
-     * waits for the delivery status above. Startup and init hand-offs are
-     * sequenced by the caller, so those are waited for here. */
-    if (MessageType != APIC_MT_Fixed)
+        /* One register, written whole, and no delivery status to wait on. */
+        Icr.Long1 = (ULONG)DestinationProcessor;
+        __writemsr(MSR_X2APIC_ICR, Icr.LongLong);
+    }
+    else
     {
         do
         {
             IcrStatus.Long0 = ApicRead(APIC_ICR0);
         } while (IcrStatus.DeliveryStatus);
+
+        /* A shorthand names the destinations itself, so the destination
+         * register is not read and writing it only costs a local APIC
+         * access. */
+        if (DestinationShortHand == APIC_DSH_Destination)
+            ApicWrite(APIC_ICR1, Icr.Long1);
+
+        /* Write the low dword last to send the interrupt */
+        ApicWrite(APIC_ICR0, Icr.Long0);
+
+        /* An interrupt is left to the local APIC to deliver: the next sender
+         * waits for the delivery status above. Startup and init hand-offs are
+         * sequenced by the caller, so those are waited for here. */
+        if (MessageType != APIC_MT_Fixed)
+        {
+            do
+            {
+                IcrStatus.Long0 = ApicRead(APIC_ICR0);
+            } while (IcrStatus.DeliveryStatus);
+        }
     }
 
     /* Finally, restore the original interrupt state */
@@ -165,10 +175,14 @@ ApicStartApplicationProcessor(
 
     KeStallExecutionProcessor(10000);
 
-    ApicRequestGlobalInterruptLevel(LapicId, 0,
-        APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 0);
+    /* Extended mode has no level de-assert; the assert above is the reset. */
+    if (!HalpX2ApicMode)
+    {
+        ApicRequestGlobalInterruptLevel(LapicId, 0,
+            APIC_MT_INIT, APIC_TGM_Level, APIC_DSH_Destination, 0);
 
-    KeStallExecutionProcessor(200);
+        KeStallExecutionProcessor(200);
+    }
 
     ApicRequestGlobalInterrupt(LapicId, StartupVector,
         APIC_MT_Startup, APIC_TGM_Edge, APIC_DSH_Destination);
@@ -195,6 +209,29 @@ HalpBroadcastIpiSpecifyVector(
 {
     APIC_DSH DestinationShortHand = IncludeSelf ?
         APIC_DSH_AllIncludingSelf : APIC_DSH_AllExcludingSelf;
+
+    /* Extended mode names each processor: the command register carries a
+     * whole identifier there, which is what the mode is for. */
+    if (HalpX2ApicMode)
+    {
+        KAFFINITY Remaining = HalpActiveProcessors;
+        KAFFINITY Self = KeGetCurrentPrcb()->SetMember;
+        ULONG ProcessorIndex;
+
+        if (!IncludeSelf)
+            Remaining &= ~Self;
+        while (Remaining != 0)
+        {
+            NT_VERIFY(BitScanForwardAffinity(&ProcessorIndex, Remaining) != 0);
+            Remaining &= ~AFFINITY_MASK(ProcessorIndex);
+            ApicRequestGlobalInterrupt(HalpProcessorIdentity[ProcessorIndex].LapicId,
+                                       Vector,
+                                       APIC_MT_Fixed,
+                                       APIC_TGM_Edge,
+                                       APIC_DSH_Destination);
+        }
+        return;
+    }
 
     /* Request the interrupt targeted at all processors */
     ApicRequestGlobalInterrupt(0, // Ignored

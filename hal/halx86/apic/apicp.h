@@ -79,6 +79,7 @@ extern ULONG HalpIoApicMaxIrq;
 
 extern UCHAR HalpVectorToIndex[256];
 extern BOOLEAN HalpApicHvMsrs;
+extern BOOLEAN HalpX2ApicMode;
 
 VOID HalpRequestSelfInterrupt(_In_ UCHAR Vector);
 BOOLEAN HalpReadHypervisorFrequency(_In_ ULONG Msr, _Out_ PULONG64 Frequency);
@@ -141,6 +142,12 @@ typedef enum _APIC_REGISTER
 } APIC_REGISTER;
 
 #define MSR_APIC_BASE 0x0000001B
+
+/* In extended mode the registers answer as model specific registers, one per
+ * sixteen bytes of the memory mapped window, starting here. */
+#define MSR_X2APIC_BASE 0x00000800
+#define MSR_X2APIC_ICR  0x00000830
+#define MSR_X2APIC_SELF 0x0000083F
 #define HV_X64_MSR_EOI 0x40000070
 #define HV_X64_MSR_ICR 0x40000071
 #define HV_CPUID_INTERFACE_HV1 0x31237648
@@ -355,6 +362,9 @@ FORCEINLINE
 ULONG
 ApicRead(APIC_REGISTER Register)
 {
+    if (HalpX2ApicMode)
+        return (ULONG)__readmsr(MSR_X2APIC_BASE + ((ULONG)Register >> 4));
+
     return READ_REGISTER_ULONG((PULONG)(APIC_BASE + Register));
 }
 
@@ -362,8 +372,28 @@ FORCEINLINE
 VOID
 ApicWrite(APIC_REGISTER Register, ULONG Value)
 {
+    if (HalpX2ApicMode)
+    {
+        __writemsr(MSR_X2APIC_BASE + ((ULONG)Register >> 4), Value);
+        return;
+    }
+
     WRITE_REGISTER_ULONG((PULONG)(APIC_BASE + Register), Value);
 }
+
+/* Extended mode widens the identifier and stops shifting it into the top byte. */
+FORCEINLINE
+ULONG
+ApicGetId(VOID)
+{
+    ULONG Id = ApicRead(APIC_ID);
+
+    return HalpX2ApicMode ? Id : (Id >> 24);
+}
+
+VOID
+NTAPI
+HalpSendEOI(VOID);
 
 VOID
 NTAPI

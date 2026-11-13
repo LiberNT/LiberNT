@@ -39,6 +39,7 @@ PVOID KiP0NmiStack = &KiP0NmiStackData[KERNEL_STACK_SIZE];
 ULONGLONG BootCycles, BootCyclesEnd;
 
 BOOLEAN KiHvApicMsrs;
+BOOLEAN KiX2ApicMsrs;
 
 void KiInitializeSegments();
 void KiSystemCallEntry64();
@@ -606,6 +607,11 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Initialize the Processor with HAL */
     HalInitializeProcessor(Cpu, KeLoaderBlock);
+
+    /* The HAL has chosen how it reaches the local APIC; the end of an
+     * interrupt has to be written the same way. */
+    if ((__readmsr(X2APIC_BASE_MSR) & X2APIC_EXTENDED) != 0)
+        KiX2ApicMsrs = TRUE;
 
     /* Set processor as active */
     if (Cpu == 0)

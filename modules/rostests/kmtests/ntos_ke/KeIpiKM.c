@@ -85,6 +85,9 @@ static
 VOID
 TestGenericCallDpc(VOID)
 {
+    ULONG Round;
+    ULONG Reached = 0;
+
     DpcCalls = 0;
     DpcSyncObserved = 0;
 
@@ -94,6 +97,19 @@ TestGenericCallDpc(VOID)
     ok_eq_long(DpcSyncObserved, 1L);
 
     KeFlushQueuedDpcs();
+
+    /* A processor that stops ending its interrupts answers the first round
+     * and no other, so run them back to back. */
+    for (Round = 0; Round < 64; Round++)
+    {
+        DpcCalls = 0;
+        DpcSyncObserved = 0;
+        KeGenericCallDpc(GenericDpcRoutine, (PVOID)(ULONG_PTR)0xD00DFEED);
+        if (DpcCalls == (LONG)KeNumberProcessors && DpcSyncObserved == 1L)
+            Reached++;
+        KeFlushQueuedDpcs();
+    }
+    ok_eq_ulong(Reached, 64ul);
 }
 
 START_TEST(KeIpiKM)

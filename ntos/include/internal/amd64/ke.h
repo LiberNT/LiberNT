@@ -92,6 +92,12 @@ extern "C" {
 #define AMD64_TSS 9
 
 #define APIC_EOI_REGISTER 0xFFFFFFFFFFFE00B0ULL
+
+/* The local APIC answers as model specific registers once it is in extended
+ * mode, where the window above reads and writes nothing. */
+#define X2APIC_BASE_MSR 0x0000001B
+#define X2APIC_EOI_MSR  0x0000080B
+#define X2APIC_EXTENDED 0x0000000000000400ULL
 #define HV_X64_MSR_EOI 0x40000070
 #define HV_CPUID_INTERFACE_HV1 0x31237648
 #define HV_ACCESS_INTR_CTRL_REGS 0x00000010
@@ -102,6 +108,7 @@ extern "C" {
 #ifndef __ASM__
 
 extern BOOLEAN KiHvApicMsrs;
+extern BOOLEAN KiX2ApicMsrs;
 extern SIZE_T KeXStateLength;
 extern ULONG KiMxCsrMask;
 
@@ -449,6 +456,12 @@ KiSendEOI(VOID)
     if (KiHvApicMsrs)
     {
         __writemsr(HV_X64_MSR_EOI, 0);
+        return;
+    }
+
+    if (KiX2ApicMsrs)
+    {
+        __writemsr(X2APIC_EOI_MSR, 0);
         return;
     }
 

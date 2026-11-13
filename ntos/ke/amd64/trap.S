@@ -35,6 +35,7 @@ EXTERN KdSetOwedBreakpoints:PROC
 EXTERN KeAcquireSpinLockAtDpcLevel:PROC
 EXTERN KeReleaseSpinLockFromDpcLevel:PROC
 EXTERN KiHvApicMsrs:BYTE
+EXTERN KiX2ApicMsrs:BYTE
 
 
 /* Helper Macros *************************************************************/
@@ -924,8 +925,16 @@ PUBLIC KiApcInterrupt
 
     /* End the interrupt */
     cmp byte ptr KiHvApicMsrs[rip], 0
-    jz KiApcInterruptMmioEoi
+    jz KiApcInterruptCheckX2Apic
     mov ecx, HEX(40000070)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiApcInterruptEoiDone
+KiApcInterruptCheckX2Apic:
+    cmp byte ptr KiX2ApicMsrs[rip], 0
+    jz KiApcInterruptMmioEoi
+    mov ecx, HEX(80B)
     xor eax, eax
     xor edx, edx
     wrmsr
@@ -1072,8 +1081,29 @@ FUNC KiUnexpectedInterrupt
 9:  jmp 9b
 #endif
 #endif
-    /* Return with an EOI: the LAPIC accepted this vector, so leaving without EOI would keep it in-service and mask its whole priority class on this CPU forever (wedges APC/DPC delivery below it) */
-    ExitTrap (TF_SAVE_ALL OR TF_SEND_EOI)
+    /* End it where the volatile registers are still scratch: the LAPIC
+     * accepted this vector, so leaving without an EOI would keep it
+     * in-service and mask its whole priority class on this CPU forever
+     * (wedges APC/DPC delivery below it) */
+    cmp byte ptr KiHvApicMsrs[rip], 0
+    jz KiUnexpectedEoiCheckX2Apic
+    mov ecx, HEX(40000070)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiUnexpectedEoiDone
+KiUnexpectedEoiCheckX2Apic:
+    cmp byte ptr KiX2ApicMsrs[rip], 0
+    jz KiUnexpectedEoiMmio
+    mov ecx, HEX(80B)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiUnexpectedEoiDone
+KiUnexpectedEoiMmio:
+    mov dword ptr [APIC_EOI], 0
+KiUnexpectedEoiDone:
+    ExitTrap (TF_SAVE_ALL)
 ENDFUNC
 
 PUBLIC KiInterruptDispatch
@@ -1141,8 +1171,26 @@ FUNC KiInterruptDispatch
     mov rbx, [rbp + KTRAP_FRAME_Rbx]
     mov rsi, [rbp + KTRAP_FRAME_Rsi]
 
-    /* Return */
-    ExitTrap (TF_SAVE_ALL OR TF_SEND_EOI)
+    /* End it the way this local APIC is reached */
+    cmp byte ptr KiHvApicMsrs[rip], 0
+    jz KiInterruptDispatchEoiCheckX2Apic
+    mov ecx, HEX(40000070)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiInterruptDispatchEoiDone
+KiInterruptDispatchEoiCheckX2Apic:
+    cmp byte ptr KiX2ApicMsrs[rip], 0
+    jz KiInterruptDispatchEoiMmio
+    mov ecx, HEX(80B)
+    xor eax, eax
+    xor edx, edx
+    wrmsr
+    jmp KiInterruptDispatchEoiDone
+KiInterruptDispatchEoiMmio:
+    mov dword ptr [APIC_EOI], 0
+KiInterruptDispatchEoiDone:
+    ExitTrap (TF_SAVE_ALL)
 ENDFUNC
 
 EXTERN KiSystemCallHandler:PROC

@@ -67,6 +67,10 @@ FASTCALL
 HalpProfileInterruptHandler(_In_ PKTRAP_FRAME TrapFrame)
 {
     KeProfileInterruptWithSource(TrapFrame, ProfileTime);
+
+    /* End it here: the trap's own ending writes the memory window, which
+     * extended mode does not answer. */
+    HalpSendEOI();
 }
 
 

@@ -15,10 +15,10 @@
 #include <trapamd64.inc>
 .code
 
-/* The clock handlers send their own EOI. */
+/* The clock and profile handlers send their own EOI. */
 TRAP_ENTRY HalpClockInterrupt, 0
 TRAP_ENTRY HalpClockIpi, 0
-TRAP_ENTRY HalpProfileInterrupt, TF_SEND_EOI
+TRAP_ENTRY HalpProfileInterrupt, 0
 
 PUBLIC ApicSpuriousService
 ApicSpuriousService:
