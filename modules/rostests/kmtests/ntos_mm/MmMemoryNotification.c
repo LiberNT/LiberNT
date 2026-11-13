@@ -42,20 +42,22 @@ QueryCondition(
     _In_ HANDLE Handle,
     _Out_ PLONG State)
 {
-    EVENT_BASIC_INFORMATION Info = {0};
+    PKEVENT Event;
     NTSTATUS Status;
 
     *State = -1;
 
-    Status = ZwQueryEvent(Handle, EventBasicInformation, &Info, sizeof(Info), NULL);
+    Status = ObReferenceObjectByHandle(Handle, EVENT_QUERY_STATE, *ExEventObjectType, KernelMode,
+                                       (PVOID *)&Event, NULL);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
         return FALSE;
 
     /* Every waiter has to see the condition, so it is a notification event */
-    ok_eq_int(Info.EventType, NotificationEvent);
+    ok_eq_int(Event->Header.Type, EventNotificationObject);
 
-    *State = Info.EventState;
+    *State = KeReadStateEvent(Event);
+    ObDereferenceObject(Event);
     return TRUE;
 }
 
