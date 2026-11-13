@@ -13,6 +13,8 @@ if(MSVC)
     endif()
 endif()
 
+add_compile_options(-UNDEBUG)
+
 add_subdirectory(activeds)
 add_subdirectory(advapi32)
 add_subdirectory(advpack)
