@@ -5920,6 +5920,49 @@ static void glyphrunanalysis_get_glyph_origin(const struct dwrite_glyphrunanalys
     bitmap->offset_y = analysis->gridfit ? 0.0f : y - origin->y;
 }
 
+static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis);
+
+static void glyphrunanalysis_trim_bounds(struct dwrite_glyphrunanalysis *analysis)
+{
+    int width = analysis->bounds.right - analysis->bounds.left;
+    int height = analysis->bounds.bottom - analysis->bounds.top;
+    int x, y, left = width, top = height, right = 0, bottom = 0;
+    BYTE *bitmap;
+
+    for (y = 0; y < height; y++)
+    {
+        for (x = 0; x < width; x++)
+        {
+            if (!analysis->bitmap[y * width + x])
+                continue;
+            left = min(left, x);
+            top = min(top, y);
+            right = max(right, x + 1);
+            bottom = max(bottom, y + 1);
+        }
+    }
+
+    if (!left && !top && right == width && bottom == height)
+        return;
+
+    if (right <= left)
+    {
+        free(analysis->bitmap);
+        analysis->bitmap = NULL;
+        SetRectEmpty(&analysis->bounds);
+        return;
+    }
+
+    if (!(bitmap = malloc((right - left) * (bottom - top))))
+        return;
+    for (y = top; y < bottom; y++)
+        memcpy(bitmap + (y - top) * (right - left), analysis->bitmap + y * width + left, right - left);
+    free(analysis->bitmap);
+    analysis->bitmap = bitmap;
+    SetRect(&analysis->bounds, analysis->bounds.left + left, analysis->bounds.top + top,
+            analysis->bounds.left + right, analysis->bounds.top + bottom);
+}
+
 static void glyphrunanalysis_get_texturebounds(struct dwrite_glyphrunanalysis *analysis, RECT *bounds)
 {
     struct dwrite_glyphbitmap glyph_bitmap;
@@ -5959,6 +6002,9 @@ static void glyphrunanalysis_get_texturebounds(struct dwrite_glyphrunanalysis *a
     }
 
     analysis->flags |= RUNANALYSIS_BOUNDS_READY;
+    if (analysis->texture_type == DWRITE_TEXTURE_ALIASED_1x1 && !IsRectEmpty(&analysis->bounds) &&
+            SUCCEEDED(glyphrunanalysis_render(analysis)))
+        glyphrunanalysis_trim_bounds(analysis);
     *bounds = analysis->bounds;
 }
 
@@ -6022,7 +6068,11 @@ static HRESULT glyphrunanalysis_render(struct dwrite_glyphrunanalysis *analysis)
     if (analysis->flags & RUNANALYSIS_USE_TRANSFORM)
         glyph_bitmap.m = &analysis->m;
     if (!(glyph_bitmap.buf = malloc(analysis->max_glyph_bitmap_size)))
+    {
+        free(analysis->bitmap);
+        analysis->bitmap = NULL;
         return E_OUTOFMEMORY;
+    }
 
     bbox = &glyph_bitmap.bbox;
 
