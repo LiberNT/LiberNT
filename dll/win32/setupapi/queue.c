@@ -1449,8 +1449,7 @@ static BOOL do_file_copyW( LPCWSTR source, LPCWSTR target, DWORD style,
         rc = MoveFileExW(TempFile,target,MOVEFILE_REPLACE_EXISTING);
         TRACE("Did copy... rc was %i\n",rc);
 #ifdef __REACTOS__
-        if (!rc && (style & (SP_COPY_IN_USE_NEEDS_REBOOT | SP_COPY_FORCE_IN_USE)) &&
-            (GetLastError() == ERROR_SHARING_VIOLATION || GetLastError() == ERROR_ACCESS_DENIED))
+        if (!rc && (GetLastError() == ERROR_SHARING_VIOLATION || GetLastError() == ERROR_ACCESS_DENIED))
         {
             rc = MoveFileExW(TempFile, target, MOVEFILE_REPLACE_EXISTING | MOVEFILE_DELAY_UNTIL_REBOOT);
             if (rc)

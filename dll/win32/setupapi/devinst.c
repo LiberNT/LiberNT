@@ -6738,6 +6738,27 @@ RestartDevice(
     return SetupDiSetDeviceInstallParamsW(DeviceInfoSet, DeviceInfoData, &InstallParams);
 }
 
+struct InstallQueueContext
+{
+    PVOID DefaultContext;
+    BOOL Delayed;
+};
+
+static UINT CALLBACK
+InstallQueueCallback(
+    IN PVOID Context,
+    IN UINT Notification,
+    IN UINT_PTR Param1,
+    IN UINT_PTR Param2)
+{
+    struct InstallQueueContext *Queue = Context;
+
+    if (Notification == SPFILENOTIFY_FILEOPDELAYED)
+        Queue->Delayed = TRUE;
+
+    return SetupDefaultQueueCallbackW(Queue->DefaultContext, Notification, Param1, Param2);
+}
+
 static BOOL
 HasAssociatedService(
         IN HDEVINFO DeviceInfoSet,
@@ -7280,6 +7301,7 @@ SetupDiInstallDevice(
     GUID ClassGuid;
     LPWSTR lpGuidString = NULL, lpFullGuidString = NULL;
     BOOL RebootRequired = FALSE;
+    struct InstallQueueContext QueueContext;
     DWORD ConfigFlags, ConfigFlagsType;
     HKEY hKey = INVALID_HANDLE_VALUE;
     HKEY hHwKey = INVALID_HANDLE_VALUE;
@@ -7445,14 +7467,21 @@ SetupDiInstallDevice(
         if (!Context)
             goto cleanup;
     }
+    QueueContext.DefaultContext = Context;
+    QueueContext.Delayed = FALSE;
     *pSectionName = '\0';
     Result = SETUPAPI_InstallFromInfSectionWithIncludes(InstallParams.hwndParent,
         SelectedDriver->InfFileDetails->hInf, SectionName,
         DoAction, hKey, SETUPAPI_GetInfSourceDirectory(SourceInfFileDetails, SourceBuffer), SP_COPY_NEWER,
-        SetupDefaultQueueCallbackW, Context,
+        InstallQueueCallback, &QueueContext,
         DeviceInfoSet, DeviceInfoData);
     if (!Result)
         goto cleanup;
+    if (QueueContext.Delayed)
+    {
+        RebootRequired = TRUE;
+        InstallParams.Flags |= DI_NEEDREBOOT;
+    }
     InstallParams.Flags |= DI_NOFILECOPY;
     SetupDiSetDeviceInstallParamsW(DeviceInfoSet, DeviceInfoData, &InstallParams);
 
