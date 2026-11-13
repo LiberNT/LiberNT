@@ -103,7 +103,7 @@ LoadLanguageChoices(
     CHOICE_LIST Layouts = { NULL, 0 };
     WCHAR Klid[KL_NAMELENGTH];
     WCHAR Name[128];
-    DWORD cchKlid, cbName, Index;
+    DWORD cchKlid, cbName, cbLoaded, Index;
     HKEY hLayouts, hLayout;
 
     if (pSetupData->Locales)
@@ -127,7 +127,7 @@ LoadLanguageChoices(
         if (RegOpenKeyExW(hLayouts, Klid, 0, KEY_QUERY_VALUE, &hLayout) != ERROR_SUCCESS)
             continue;
         cbName = sizeof(Name);
-        if (RegLoadMUIStringW(hLayout, L"Layout Display Name", Name, sizeof(Name), NULL, 0, NULL) == ERROR_SUCCESS ||
+        if (RegLoadMUIStringW(hLayout, L"Layout Display Name", Name, sizeof(Name), &cbLoaded, 0, NULL) == ERROR_SUCCESS ||
             RegGetValueW(hLayout, NULL, L"Layout Text", RRF_RT_REG_SZ, NULL, Name, &cbName) == ERROR_SUCCESS)
         {
             AddChoice(&Layouts, Klid, Name);

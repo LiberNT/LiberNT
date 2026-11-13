@@ -3431,6 +3431,7 @@ LSTATUS WINAPI RegLoadMUIStringW(HKEY hKey, LPCWSTR pwszValue, LPWSTR pwszBuffer
     /* Parameter sanity checks. */
     if (!hKey || (!pwszBuffer && cbBuffer) || (cbBuffer % sizeof(WCHAR))
         || ((dwFlags & REG_MUI_STRING_TRUNCATE) && pcbData)
+        || (!(dwFlags & REG_MUI_STRING_TRUNCATE) && !pcbData)
         || (dwFlags & ~REG_MUI_STRING_TRUNCATE))
         return ERROR_INVALID_PARAMETER;
 

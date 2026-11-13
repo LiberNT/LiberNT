@@ -298,11 +298,12 @@ LayoutName(const std::wstring &klid)
     WCHAR text[256];
     std::wstring key = std::wstring(LAYOUTS_KEY) + L"\\" + klid;
     HKEY handle;
+    DWORD size;
     std::wstring name;
 
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key.c_str(), 0, KEY_QUERY_VALUE, &handle) == ERROR_SUCCESS)
     {
-        if (RegLoadMUIStringW(handle, L"Layout Display Name", text, sizeof(text), NULL, 0, NULL) == ERROR_SUCCESS)
+        if (RegLoadMUIStringW(handle, L"Layout Display Name", text, sizeof(text), &size, 0, NULL) == ERROR_SUCCESS)
             name = text;
         RegCloseKey(handle);
     }

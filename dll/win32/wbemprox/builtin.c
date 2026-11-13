@@ -4244,7 +4244,7 @@ static WCHAR *get_timezone_display( const WCHAR *key_name )
     if (!GetSystemDirectoryW( system_dir, ARRAY_SIZE( system_dir ) )) system_dir[0] = 0;
     swprintf( path, ARRAY_SIZE( path ), L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones\\%s", key_name );
     if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key )) return NULL;
-    if (RegLoadMUIStringW( key, L"MUI_Display", buf, sizeof(buf), NULL, 0, system_dir[0] ? system_dir : NULL ))
+    if (RegLoadMUIStringW( key, L"MUI_Display", buf, sizeof(buf), &size, 0, system_dir[0] ? system_dir : NULL ))
     {
         size = sizeof(buf);
         if (RegGetValueW( key, NULL, L"Display", RRF_RT_REG_SZ, NULL, buf, &size )) buf[0] = 0;

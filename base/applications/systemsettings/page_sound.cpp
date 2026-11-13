@@ -332,13 +332,13 @@ SoundSchemes()
         DWORD length = _countof(key);
         HKEY scheme;
         WCHAR display[MAX_PATH] = L"";
-        DWORD size = sizeof(display);
+        DWORD size = sizeof(display), loaded;
 
         if (RegEnumKeyExW(names, i, key, &length, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
             break;
         if (RegOpenKeyExW(names, key, 0, KEY_READ, &scheme) == ERROR_SUCCESS)
         {
-            if (RegLoadMUIStringW(scheme, L"", display, sizeof(display), NULL, 0, NULL) != ERROR_SUCCESS &&
+            if (RegLoadMUIStringW(scheme, L"", display, sizeof(display), &loaded, 0, NULL) != ERROR_SUCCESS &&
                 RegQueryValueExW(scheme, NULL, NULL, NULL, (BYTE *)display, &size) != ERROR_SUCCESS)
                 display[0] = UNICODE_NULL;
             RegCloseKey(scheme);
