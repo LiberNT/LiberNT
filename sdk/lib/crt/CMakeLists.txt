@@ -3,8 +3,15 @@ include_directories(include)
 
 add_definitions(-D_CRTBLD)
 
-if(MSVC AND LTCG)
-    add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL->)
+if(LTCG)
+    # These routines are written for the instructions they emit, and the
+    # archives are pulled into a link after it has generated its code, which
+    # a link time object cannot answer.
+    if(MSVC)
+        add_compile_options($<$<COMPILE_LANGUAGE:C,CXX>:/GL->)
+    else()
+        add_compile_options(-fno-lto)
+    endif()
 endif()
 
 if(MSVC AND ARCH STREQUAL "arm64")

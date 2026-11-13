@@ -161,7 +161,10 @@ endif()
 
 # Link-time code generation
 if(LTCG)
-    add_compile_options(-flto)
+    # Thin is the one that scales: each module keeps its own summary, so a
+    # link reads what it needs instead of the whole program at once.
+    add_compile_options(-flto=thin)
+    add_link_options(-flto=thin)
 endif()
 
 if(ARCH STREQUAL "i386")
