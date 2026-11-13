@@ -1,6 +1,6 @@
 /*
  * PROJECT:     LiberNT HAL
- * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
  * PURPOSE:     TSC tick arithmetic for stall loops
  * COPYRIGHT:   Copyright 2026 LiberNT contributors
  */
