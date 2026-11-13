@@ -31,8 +31,6 @@ VOID UefiSerialPutChar(_In_ UCHAR Character);
 VOID UefiLogPutChar(_In_ UCHAR Character);
 #endif
 
-#if DBG
-
 //#define DEBUG_ALL
 // #define DEBUG_WARN
 // #define DEBUG_ERR
@@ -60,6 +58,8 @@ ULONG ComPortBaudRate = DEFAULT_DEBUG_BAUD_RATE;
 PUCHAR ComPortAddress = NULL;
 
 BOOLEAN DebugStartOfLine = TRUE;
+static BOOLEAN DebugEnabled = DBG;
+static BOOLEAN DebugPortReady = FALSE;
 static BOOLEAN DebugForceScreen = FALSE;
 static BOOLEAN DebugScreenDisabled = FALSE;
 static CHAR DebugLastError[256];
@@ -123,12 +123,15 @@ DebugInit(
 #endif
 
     CommandLine = NULL;
+    if (DebugString && *DebugString)
+        DebugEnabled = TRUE;
+
     if (!DebugString || !*DebugString)
     {
         /* No command-line is provided: during pre-initialization,
          * initialize the debug port with default settings;
          * otherwise just return during main initialization */
-        if (!Initialized)
+        if (!Initialized || (DebugEnabled && !DebugPortReady))
             goto Done;
         return;
     }
@@ -210,6 +213,10 @@ DebugInit(
 
 Done:
     Initialized = TRUE;
+    if (!DebugEnabled)
+        return;
+
+    DebugPortReady = TRUE;
 
 #if defined(UEFIBOOT) && (defined(_M_ARM64) || defined(_M_RISCV64))
     UefiSerialInitialize();
@@ -230,8 +237,21 @@ Done:
 #endif
 }
 
+VOID
+DebugEnable(VOID)
+{
+    if (DebugEnabled && DebugPortReady)
+        return;
+
+    DebugEnabled = TRUE;
+    DebugInit(NULL);
+}
+
 VOID DebugPrintChar(UCHAR Character)
 {
+    if (!DebugEnabled)
+        return;
+
     if (Character == '\n')
         DebugStartOfLine = TRUE;
 
@@ -272,6 +292,9 @@ DbgPrint(const char *Format, ...)
     char* ptr;
     CHAR Buffer[512];
 
+    if (!DebugEnabled)
+        return 0;
+
     va_start(ap, Format);
     Length = _vsnprintf(Buffer, sizeof(Buffer), Format, ap);
     va_end(ap);
@@ -299,6 +322,9 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     va_list ap;
     char Buffer[2096];
     char *ptr = Buffer;
+
+    if (!DebugEnabled)
+        return;
 
     /* Mask out unwanted debug messages */
     if (!(DbgChannels[Mask] & Level) && !(Level & DBG_DEFAULT_LEVELS))
@@ -520,50 +546,6 @@ DbgParseDebugChannels(PCHAR Value)
         str = separator + 1;
     } while (separator != NULL);
 }
-
-#else
-
-#undef DebugInit
-VOID
-DebugInit(
-    _In_ PCSTR DebugString)
-{
-    UNREFERENCED_PARAMETER(DebugString);
-}
-
-ULONG
-DbgPrint(PCCH Format, ...)
-{
-    UNREFERENCED_PARAMETER(Format);
-    return 0;
-}
-
-VOID
-DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...)
-{
-    UNREFERENCED_PARAMETER(Mask);
-    UNREFERENCED_PARAMETER(Level);
-    UNREFERENCED_PARAMETER(File);
-    UNREFERENCED_PARAMETER(Line);
-    UNREFERENCED_PARAMETER(Format);
-}
-
-VOID
-DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length)
-{
-    UNREFERENCED_PARAMETER(Mask);
-    UNREFERENCED_PARAMETER(Buffer);
-    UNREFERENCED_PARAMETER(Length);
-}
-
-#undef DbgParseDebugChannels
-VOID
-DbgParseDebugChannels(PCHAR Value)
-{
-    UNREFERENCED_PARAMETER(Value);
-}
-
-#endif // DBG
 
 ULONG
 MsgBoxPrint(const char *Format, ...)

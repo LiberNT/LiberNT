@@ -38,7 +38,6 @@
 #define DPRINT_HEAP         15  // messages in a bottle
 #define DBG_CHANNELS_COUNT  16
 
-#if DBG
 
     VOID
     DebugInit(
@@ -48,6 +47,7 @@
     VOID    DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...);
     VOID    DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length);
     VOID    DebugDisableScreenPort(VOID);
+    VOID    DebugEnable(VOID);
     PCSTR   DebugGetLastError(VOID);
     VOID    DebugClearLastError(VOID);
     ULONG   DebugGetErrorLines(PCSTR* Lines, ULONG MaxLines);
@@ -74,7 +74,11 @@
 
     #define UNIMPLEMENTED DbgPrint("(%s:%d) WARNING: %s is UNIMPLEMENTED!\n", __FILE__, __LINE__, __FUNCTION__);
 
+#if DBG
     #define BugCheck(fmt, ...)              do { DbgPrint("(%s:%d) Fatal Error in %s: " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); for (;;); } while (0)
+#else
+    #define BugCheck(fmt, ...)              DbgPrint("(%s:%d) Fatal Error in %s: " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#endif
     #define DbgDumpBuffer(mask, buf, len)    DebugDumpBuffer(mask, buf, len)
 
 #ifdef __i386__
@@ -103,33 +107,6 @@ void    MEMORY_READWRITE_BREAKPOINT4(unsigned long addr);
 void    MEMORY_WRITE_BREAKPOINT4(unsigned long addr);
 
 #endif // defined __i386__
-
-#else
-
-    #define DBG_DEFAULT_CHANNEL(ch)
-
-    #define ERR_CH(ch, fmt, ...)
-    #define FIXME_CH(ch, fmt, ...)
-    #define WARN_CH(ch, fmt, ...)
-    #define TRACE_CH(ch, fmt, ...)
-
-    #define ERR(fmt, ...)
-    #define FIXME(fmt, ...)
-    #define WARN(fmt, ...)
-    #define TRACE(fmt, ...)
-
-    #define UNIMPLEMENTED
-
-    #define DebugInit(DebugString)
-    #define BugCheck(fmt, ...)
-    #define DbgDumpBuffer(mask, buf, len)
-    #define DebugDisableScreenPort()
-    #define DebugGetLastError() ""
-    #define DebugClearLastError()
-    #define DebugGetErrorLines(Lines, MaxLines) ((void)(Lines), (void)(MaxLines), 0UL)
-    #define DbgParseDebugChannels(val)
-
-#endif // DBG
 
 #define __STRING2__(x) #x
 #define __STRING__(x) __STRING2__(x)
