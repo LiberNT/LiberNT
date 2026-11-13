@@ -374,6 +374,64 @@ PerformTest(
                         CcUnpinData(Bcb);
                     }
                 }
+                else if (TestId == 9)
+                {
+                    /* Kill lazy writer */
+                    CcSetAdditionalCacheAttributes(TestFileObject, FALSE, TRUE);
+
+                    Offset.QuadPart = VACB_MAPPING_GRANULARITY - 2 * PAGE_SIZE;
+                    KmtStartSeh();
+                    Ret = CcPinRead(TestFileObject, &Offset, PAGE_SIZE, PIN_WAIT, &Bcb, (PVOID *)&Buffer);
+                    KmtEndSeh(STATUS_SUCCESS);
+
+                    if (!skip(Ret == TRUE, "CcPinRead failed\n"))
+                    {
+                        CC_FILE_SIZES Shrunk;
+
+                        Buffer[0] = 0xDADADADA;
+
+                        TestDirtying = TRUE;
+                        CcSetDirtyPinnedData(Bcb, NULL);
+                        TestDirtying = FALSE;
+
+                        TestUnpin = TRUE;
+                        CcUnpinData(Bcb);
+                        TestUnpin = FALSE;
+
+                        ok_bool_false(TestWritten, "Dirty page written before the file was shrunk\n");
+
+                        Shrunk.AllocationSize.QuadPart = VACB_MAPPING_GRANULARITY - 2 * PAGE_SIZE;
+                        Shrunk.FileSize.QuadPart = VACB_MAPPING_GRANULARITY - 2 * PAGE_SIZE;
+                        Shrunk.ValidDataLength.QuadPart = VACB_MAPPING_GRANULARITY - 2 * PAGE_SIZE;
+
+                        TestSizing = TRUE;
+                        KmtStartSeh();
+                        CcSetFileSizes(TestFileObject, &Shrunk);
+                        KmtEndSeh(STATUS_SUCCESS);
+                        TestSizing = FALSE;
+
+                        Fcb->Header.AllocationSize = Shrunk.AllocationSize;
+                        Fcb->Header.FileSize = Shrunk.FileSize;
+                        Fcb->Header.ValidDataLength = Shrunk.ValidDataLength;
+
+                        KmtStartSeh();
+                        CcFlushCache(TestFileObject->SectionObjectPointer, NULL, 0, &IoStatus);
+                        KmtEndSeh(STATUS_SUCCESS);
+
+                        ok_eq_hex(IoStatus.Status, STATUS_SUCCESS);
+                        ok_bool_false(TestWritten, "A page past the new end of file was still written\n");
+
+                        Offset.QuadPart = 0;
+                        KmtStartSeh();
+                        Ret = CcPinRead(TestFileObject, &Offset, PAGE_SIZE, PIN_WAIT, &Bcb, (PVOID *)&Buffer);
+                        KmtEndSeh(STATUS_SUCCESS);
+                        if (!skip(Ret == TRUE, "CcPinRead after the shrink failed\n"))
+                        {
+                            ok_eq_ulong(Buffer[0], 0xBABABABA);
+                            CcUnpinData(Bcb);
+                        }
+                    }
+                }
                 else if (TestId == 7)
                 {
                     Buffer = ExAllocatePool(NonPagedPool, PAGE_SIZE);

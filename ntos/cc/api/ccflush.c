@@ -29,11 +29,18 @@ CcFlushCache(
 
         if (NT_SUCCESS(Status))
         {
+            ULONG64 FileSize = NtMap->Map.FileSize;
             ULONG64 SegmentBytes = (Bytes == (ULONG64)-1)
                                        ? (ULONG64)MI_ATOMIC_READ64(&NtMap->Control->Segment->SizeInBytes) - Offset
                                        : Bytes;
 
-            Status = MiSegmentFlush(NtMap->Control->Segment, Offset, SegmentBytes);
+            if (Offset < FileSize)
+            {
+                if (SegmentBytes > FileSize - Offset)
+                    SegmentBytes = FileSize - Offset;
+
+                Status = MiSegmentFlush(NtMap->Control->Segment, Offset, SegmentBytes);
+            }
         }
 
         CcNtDereferenceMap(NtMap);
