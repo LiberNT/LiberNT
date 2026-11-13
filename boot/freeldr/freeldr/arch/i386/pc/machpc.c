@@ -1862,6 +1862,9 @@ PcPrepareForReactOS(VOID)
     /* Prepare video and turn off the floppy motor */
     PcVideoPrepareForReactOS();
     DiskStopFloppyMotor();
+
+    /* The firmware console cannot be used once the kernel GDT and page tables are active */
+    DebugDisableScreenPort();
 }
 #endif
 
