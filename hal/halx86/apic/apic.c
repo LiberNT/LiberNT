@@ -1203,8 +1203,8 @@ HalEnableSystemInterrupt(
 
     ASSERT((IrqlToTpr(Irql) & 0xF0) == (Vector & 0xF0));
 
-    /* Get the irq for this vector */
-    Index = HalpVectorToIndex[Vector];
+    /* Get the irq this request was built for */
+    Index = (UCHAR)Request.ControllerIndex;
 
     /* Check if its valid */
     if (Index == APIC_FREE_VECTOR)
@@ -1218,8 +1218,10 @@ HalEnableSystemInterrupt(
      * The driver may try to enable the vector again when falling back
      * from MSI to INTx with the same vector — treat that as success
      * (idempotent enable) instead of indexing past HalpVectorToIndex
-     * with the sentinel 0xFE. */
-    if (Index == APIC_RESERVED_VECTOR)
+     * with the sentinel 0xFE. The request already answers the MSI
+     * question; the map sentinel stays as the fallback for the other
+     * reserved vectors (software lines), which have no entry either. */
+    if (Request.Msi || Index == APIC_RESERVED_VECTOR)
     {
         DPRINT("HalEnableSystemInterrupt: Vector=%lu is reserved (MSI/MSI-X)\n",
                 Vector);
@@ -1252,7 +1254,7 @@ HalEnableSystemInterrupt(
     ReDirReg.MessageType = APIC_MT_Fixed;
     ReDirReg.DestinationMode = APIC_DM_Physical;
     ReDirReg.Destination = ApicRead(APIC_ID) >> 24;
-    ReDirReg.TriggerMode = (InterruptMode == LevelSensitive) ? APIC_TGM_Level : APIC_TGM_Edge;
+    ReDirReg.TriggerMode = (Request.Trigger == HalpIrqTriggerLevel) ? APIC_TGM_Level : APIC_TGM_Edge;
     ReDirReg.Mask = FALSE;
 
     /* Pin shape: MADT overrides are authoritative for ISA-sourced GSIs,
