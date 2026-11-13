@@ -2700,7 +2700,9 @@ find_parent:
 #include <ws2tcpip.h>
 #else
 /* inet_pton() is not supported, fallback to software version */
+#ifndef MBEDTLS_TEST_SW_INET_PTON
 #define MBEDTLS_TEST_SW_INET_PTON
+#endif
 #endif
 #elif defined(__sun)
 /* Solaris requires -lsocket -lnsl for inet_pton() */

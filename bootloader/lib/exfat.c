@@ -96,9 +96,9 @@ ExFatMount(
 
     RtlZeroMemory(Volume, sizeof(*Volume));
     Volume->Device = *Device;
-    Volume->BytesPerSector = 1UL << SectorShift;
-    Volume->SectorCount = Device->Length / Volume->BytesPerSector;
-    Volume->CacheBlockSectors = EXFAT_CACHE_BLOCK_SIZE / Volume->BytesPerSector;
+    Volume->BytesPerSector = (ULONG)(1UL << SectorShift);
+    Volume->SectorCount = (ULONG)(Device->Length / Volume->BytesPerSector);
+    Volume->CacheBlockSectors = (ULONG)(EXFAT_CACHE_BLOCK_SIZE / Volume->BytesPerSector);
     Volume->CacheBuffer = FwAllocate(EXFAT_CACHE_BLOCKS * EXFAT_CACHE_BLOCK_SIZE);
 
     for (i = 0; i < EXFAT_CACHE_BLOCKS; i++)

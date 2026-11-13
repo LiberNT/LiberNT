@@ -378,7 +378,7 @@ OslHiberReadRecords(VOID)
         if (Record.DataLength > OSL_HIBER_CHUNK_SIZE)
             return FALSE;
 
-        Padded = ALIGN_UP_BY(Record.DataLength, 8);
+        Padded = (ULONG)ALIGN_UP_BY(Record.DataLength, 8);
         if (!OslHiberFill(sizeof(Record) + Padded))
             return FALSE;
 
