@@ -16,6 +16,10 @@
 #define KiArchSetGuiServiceTable(Thread) ((VOID)(Thread))
 #endif
 
+#ifndef KiArchSetInitialServiceTable
+#define KiArchSetInitialServiceTable(Thread) ((VOID)(Thread))
+#endif
+
 #ifndef KiPrcbGroup
 #define KiPrcbGroup(Prcb) ((Prcb)->Group)
 #endif

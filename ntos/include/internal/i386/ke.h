@@ -217,6 +217,10 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 #define KiArchSetGuiServiceTable(Thread) \
     ((VOID)((Thread)->Tcb.ServiceTable = KeServiceDescriptorTableShadow))
 
+/* Only the 32-bit KTHREAD carries the table the entry path reads */
+#define KiArchSetInitialServiceTable(Thread) \
+    ((VOID)((Thread)->ServiceTable = KeServiceDescriptorTable))
+
 //
 // Macro to get context switches from the PRCB
 // All architectures but x86 have it in the PRCB's KeContextSwitches
