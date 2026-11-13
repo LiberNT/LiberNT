@@ -243,6 +243,80 @@ CheckRootDescriptor(PCWSTR Root)
     DeleteFileW(Path);
 }
 
+/*
+ * Files created side by side inherit one descriptor, which the volume stores
+ * once and names with a security id.  They must read back as the same rights,
+ * and writing one of them must not reach the other.
+ */
+static void
+CheckSharedDescriptors(PCWSTR Base)
+{
+    WCHAR Directory[MAX_PATH];
+    WCHAR First[MAX_PATH];
+    WCHAR Second[MAX_PATH];
+    ULONG FirstMask = 0, FirstCount = 0;
+    ULONG SecondMask = 0, SecondCount = 0;
+    ULONG AfterMask = 0, AfterCount = 0;
+    HANDLE File;
+    ULONG Index;
+
+    if (!GetTempFileNameW(Base, L"ses", 0, Directory))
+    {
+        skip("No temporary name under %ls\n", Base);
+        return;
+    }
+    DeleteFileW(Directory);
+    if (!CreateDirectoryW(Directory, NULL))
+    {
+        skip("CreateDirectoryW failed with %lu\n", GetLastError());
+        return;
+    }
+
+    StringCchCopyW(First, MAX_PATH, Directory);
+    StringCchCatW(First, MAX_PATH, L"\\one.tmp");
+    StringCchCopyW(Second, MAX_PATH, Directory);
+    StringCchCatW(Second, MAX_PATH, L"\\two.tmp");
+    for (Index = 0; Index < 2; Index++)
+    {
+        File = CreateFileW(Index == 0 ? First : Second, GENERIC_WRITE, 0, NULL,
+                           CREATE_ALWAYS, 0, NULL);
+        ok(File != INVALID_HANDLE_VALUE, "CreateFileW failed with %lu\n", GetLastError());
+        if (File != INVALID_HANDLE_VALUE)
+            CloseHandle(File);
+    }
+
+    if (ReadEveryoneAccess(First, &FirstMask, &FirstCount) &&
+        ReadEveryoneAccess(Second, &SecondMask, &SecondCount))
+    {
+        ok(FirstMask == SecondMask && FirstCount == SecondCount,
+           "Two files of one directory read back %08lx over %lu and %08lx over %lu entries\n",
+           FirstMask, FirstCount, SecondMask, SecondCount);
+
+        if (GrantEveryoneRead(First))
+        {
+            ok(ReadEveryoneAccess(First, &AfterMask, &AfterCount),
+               "The first file lost its access list\n");
+            ok((AfterMask & FILE_GENERIC_READ) == FILE_GENERIC_READ,
+               "Everyone was granted %08lx on the first file, expected at least %08lx\n",
+               AfterMask, FILE_GENERIC_READ);
+
+            ok(ReadEveryoneAccess(Second, &AfterMask, &AfterCount),
+               "The second file lost its access list\n");
+            ok(AfterMask == SecondMask && AfterCount == SecondCount,
+               "Writing the first file left the second at %08lx over %lu entries, expected %08lx over %lu\n",
+               AfterMask, AfterCount, SecondMask, SecondCount);
+        }
+        else
+        {
+            skip("The access list cannot be written under %ls\n", Base);
+        }
+    }
+
+    DeleteFileW(First);
+    DeleteFileW(Second);
+    RemoveDirectoryW(Directory);
+}
+
 START_TEST(FileSecurityCache)
 {
     WCHAR Directory[MAX_PATH];
@@ -303,10 +377,12 @@ START_TEST(FileSecurityCache)
     DeleteFileW(Path);
 
     CheckDirectoryDescriptor(Directory);
+    CheckSharedDescriptors(Directory);
     if (FindOtherNtfsVolume(Path, MAX_PATH))
     {
         CheckRootDescriptor(Path);
         CheckDirectoryDescriptor(Path);
+        CheckSharedDescriptors(Path);
     }
     else
         skip("The machine has one NTFS volume, so only its security was checked\n");

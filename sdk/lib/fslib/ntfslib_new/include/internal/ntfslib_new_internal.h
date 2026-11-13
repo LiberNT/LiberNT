@@ -590,6 +590,7 @@ public:
 
     FAST_MUTEX SecurityCacheMutex;
     ULONG SecurityCacheId[NTFS_SECURITY_CACHE_ENTRIES] = {};
+    ULONG SecurityCacheHash[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG SecurityCacheLength[NTFS_SECURITY_CACHE_ENTRIES] = {};
     PUCHAR SecurityCacheData[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG SecurityCacheNext = 0;
@@ -813,7 +814,15 @@ public:
     CacheSecurityDescriptor(
         _In_ ULONG SecurityId,
         _In_reads_bytes_(Length) const UCHAR* Descriptor,
-        _In_ ULONG Length);
+        _In_ ULONG Length,
+        _In_ ULONG Hash);
+
+    BOOLEAN
+    FindCachedSecurityId(
+        _In_reads_bytes_(Length) const UCHAR* Descriptor,
+        _In_ ULONG Length,
+        _In_ ULONG Hash,
+        _Out_ PULONG SecurityId);
 
     BOOLEAN
     ReadCachedRecordDescriptor(

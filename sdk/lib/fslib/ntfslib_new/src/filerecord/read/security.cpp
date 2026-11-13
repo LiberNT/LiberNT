@@ -1316,7 +1316,8 @@ void
 Volume::CacheSecurityDescriptor(
     _In_ ULONG SecurityId,
     _In_reads_bytes_(Length) const UCHAR* Descriptor,
-    _In_ ULONG Length)
+    _In_ ULONG Length,
+    _In_ ULONG Hash)
 {
     PUCHAR Copy = new(PagedPool, TAG_SECURITY) UCHAR[Length];
     PUCHAR Old;
@@ -1335,10 +1336,46 @@ Volume::CacheSecurityDescriptor(
         Slot = SecurityCacheNext++ % NTFS_SECURITY_CACHE_ENTRIES;
     Old = SecurityCacheData[Slot];
     SecurityCacheId[Slot] = SecurityId;
+    SecurityCacheHash[Slot] = Hash;
     SecurityCacheLength[Slot] = Length;
     SecurityCacheData[Slot] = Copy;
     NtfsReleaseMutex(&SecurityCacheMutex);
     delete[] Old;
+}
+
+/*
+ * $Secure never gives a security id a different descriptor, so a descriptor
+ * already seen under an id answers for that descriptor again without walking
+ * the index.
+ */
+BOOLEAN
+Volume::FindCachedSecurityId(
+    _In_reads_bytes_(Length) const UCHAR* Descriptor,
+    _In_ ULONG Length,
+    _In_ ULONG Hash,
+    _Out_ PULONG SecurityId)
+{
+    BOOLEAN Found = FALSE;
+
+    *SecurityId = 0;
+    NtfsAcquireMutex(&SecurityCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_SECURITY_CACHE_ENTRIES; Index++)
+    {
+        if (!SecurityCacheData[Index] ||
+            SecurityCacheId[Index] == 0 ||
+            SecurityCacheHash[Index] != Hash ||
+            SecurityCacheLength[Index] != Length)
+        {
+            continue;
+        }
+        if (RtlCompareMemory(SecurityCacheData[Index], Descriptor, Length) != Length)
+            continue;
+        *SecurityId = SecurityCacheId[Index];
+        Found = TRUE;
+        break;
+    }
+    NtfsReleaseMutex(&SecurityCacheMutex);
+    return Found;
 }
 
 NTSTATUS
@@ -1446,7 +1483,10 @@ Volume::ReadSecurityDescriptorById(
             Target);
     }
     if (NT_SUCCESS(Status))
-        CacheSecurityDescriptor(SecurityId, Target, Required);
+    {
+        CacheSecurityDescriptor(SecurityId, Target, Required,
+                                SecurityDescriptorHash(Target, Required));
+    }
     if (Target != Buffer)
     {
         delete[] Target;
@@ -1985,6 +2025,8 @@ Volume::AssignSecurityId(
     }
 
     Hash = SecurityDescriptorHash(Descriptor, DescriptorLength);
+    if (FindCachedSecurityId(Descriptor, DescriptorLength, Hash, SecurityId))
+        return STATUS_SUCCESS;
     RecordLength = NTFS_SECURITY_DESCRIPTOR_HEADER_SIZE + DescriptorLength;
 
     Status = MFT->GetFileRecord(_Secure, &SecureFile);
@@ -2142,6 +2184,8 @@ Volume::AssignSecurityId(
         *SecurityId = Location.SecurityId;
 
 Done:
+    if (NT_SUCCESS(Status) && *SecurityId != 0)
+        CacheSecurityDescriptor(*SecurityId, Descriptor, DescriptorLength, Hash);
     delete[] reinterpret_cast<PUCHAR>(SdhEntry);
     delete[] reinterpret_cast<PUCHAR>(SiiEntry);
     delete[] Record;
