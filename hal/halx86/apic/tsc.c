@@ -11,6 +11,7 @@
 #include <hal.h>
 #include "tsc.h"
 #include "apicp.h"
+#include "halstall.h"
 #define NDEBUG
 #include <debug.h>
 
@@ -309,7 +310,9 @@ KeStallExecutionProcessor(ULONG MicroSeconds)
     StartTime = __rdtsc();
 
     /* Calculate the ending time */
-    EndTime = StartTime + KeGetPcr()->StallScaleFactor * MicroSeconds;
+    EndTime = HalpComputeStallEndTime(StartTime,
+                                      KeGetPcr()->StallScaleFactor,
+                                      MicroSeconds);
 
     /* Loop until time is elapsed */
     while (__rdtsc() < EndTime);
