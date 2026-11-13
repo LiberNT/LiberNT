@@ -61,6 +61,7 @@ typedef enum _DWM_GPU_RESULT
 } DWM_GPU_RESULT;
 
 BOOL DwmGpuComposeInitialize(LONG Width, LONG Height);
+BOOL DwmGpuComposeResize(LONG Width, LONG Height);
 BOOL DwmGpuComposeIsActive(void);
 
 /* Starts with cached wallpaper. NULL damage requests a full redraw; several

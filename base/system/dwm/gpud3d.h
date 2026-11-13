@@ -19,6 +19,7 @@ BOOL DwmD3dInitialize(LONG Width, LONG Height);
 BOOL DwmD3dIsActive(void);
 const char *DwmD3dRendererName(void);
 void DwmD3dShutdown(void);
+BOOL DwmD3dResize(LONG Width, LONG Height);
 void DwmD3dScene(const DWM_WIN *Windows, ULONG Count, const RECTL *BlurRects,
                  ULONG BlurRectCount, LONG OriginX, LONG OriginY,
                  BOOL RefreshBackdrop, ULONG BlurRadius, const RECT *ShadowMargins);

@@ -4131,7 +4131,7 @@ DwmCreateSurfaces(HDC hdcScreen, LONG W, LONG H)
      * canvas and wallpaper use that output's dimensions; they must stop
      * reading before either CPU bitmap is replaced by a different size. */
     restoreGpu = DwmGpuComposeIsActive();
-    if (restoreGpu)
+    if (restoreGpu && !DwmGpuComposeResize(W, H))
         DwmGpuComposeShutdown();
 
     if (g_hdcComp != NULL)
