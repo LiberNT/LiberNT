@@ -115,3 +115,28 @@ static __inline__ unsigned char __la64_interlocked_compare_exchange64(long long 
 #define _InterlockedOr64(v, m) __la64_interlocked_or64((long long volatile *)(v), (m))
 #define _InterlockedXor64(v, m) __la64_interlocked_xor64((long long volatile *)(v), (m))
 #define _InterlockedCompareExchange64(d, e, c) __la64_interlocked_compare_exchange64((long long volatile *)(d), (e), (c))
+
+static __inline__ long long __la64_interlocked_exchange64(long long volatile *Target, long long Value)
+{
+    return __atomic_exchange_n((unsigned long long *)Target, (unsigned long long)Value, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_exchange_add64(long long volatile *Addend, long long Value)
+{
+    return __atomic_fetch_add((unsigned long long *)Addend, (unsigned long long)Value, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_increment64(long long volatile *Addend)
+{
+    return __atomic_add_fetch((unsigned long long *)Addend, 1ULL, __ATOMIC_SEQ_CST);
+}
+
+static __inline__ long long __la64_interlocked_decrement64(long long volatile *Addend)
+{
+    return __atomic_sub_fetch((unsigned long long *)Addend, 1ULL, __ATOMIC_SEQ_CST);
+}
+
+#define _InterlockedExchange64(t, v) __la64_interlocked_exchange64((long long volatile *)(t), (v))
+#define _InterlockedExchangeAdd64(a, v) __la64_interlocked_exchange_add64((long long volatile *)(a), (v))
+#define _InterlockedIncrement64(a) __la64_interlocked_increment64((long long volatile *)(a))
+#define _InterlockedDecrement64(a) __la64_interlocked_decrement64((long long volatile *)(a))

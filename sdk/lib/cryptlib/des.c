@@ -1341,14 +1341,14 @@ static void cookey(const ulong32 *raw1, ulong32 *keyout)
     for(i=0; i < 16; i++, raw1++)
     {
         raw0 = raw1++;
-        *cook    = (*raw0 & 0x00fc0000L) << 6;
-        *cook   |= (*raw0 & 0x00000fc0L) << 10;
-        *cook   |= (*raw1 & 0x00fc0000L) >> 10;
-        *cook++ |= (*raw1 & 0x00000fc0L) >> 6;
-        *cook    = (*raw0 & 0x0003f000L) << 12;
-        *cook   |= (*raw0 & 0x0000003fL) << 16;
-        *cook   |= (*raw1 & 0x0003f000L) >> 4;
-        *cook++ |= (*raw1 & 0x0000003fL);
+        *cook    = (*raw0 & 0x00fc0000) << 6;
+        *cook   |= (*raw0 & 0x00000fc0) << 10;
+        *cook   |= (*raw1 & 0x00fc0000) >> 10;
+        *cook++ |= (*raw1 & 0x00000fc0) >> 6;
+        *cook    = (*raw0 & 0x0003f000) << 12;
+        *cook   |= (*raw0 & 0x0000003f) << 16;
+        *cook   |= (*raw1 & 0x0003f000) >> 4;
+        *cook++ |= (*raw1 & 0x0000003f);
     }
 
     memcpy(keyout, dough, sizeof dough);

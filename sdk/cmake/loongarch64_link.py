@@ -33,16 +33,51 @@ def classify(arguments):
             libraries.append(argument)
         elif argument.startswith('-L') and len(argument) > 2:
             library_dirs.append(argument)
-        elif argument.startswith('-Wl,--entry='):
-            entry = argument.split('=', 1)[1]
-        elif argument.startswith('-Wl,-e,'):
-            entry = argument.split(',', 2)[2]
-        elif argument.startswith('-Wl,--image-base='):
-            image_base = int(argument.split('=', 1)[1], 0)
-        elif argument.startswith('-Wl,--subsystem,'):
-            subsystem = argument.split(',')[-1]
+        elif argument.startswith('-Wl,'):
+            # CMake emits "-Wl,--image-base,0x9000000000000000" and
+            # "-Wl,-entry,KiSystemStartup"; the value is a separate word.
+            words = argument[4:].split(',')
+            index = 0
+            while index < len(words):
+                word = words[index]
+                name = None
+                value = None
+                for known in ('--image-base', '--entry', '-entry', '-e', '--subsystem'):
+                    if word == known and index + 1 < len(words):
+                        name, value = known, words[index + 1]
+                        index += 1
+                        break
+                    if word.startswith(known + '='):
+                        name, value = known, word.split('=', 1)[1]
+                        break
+                if name == '--image-base':
+                    image_base = int(value, 0)
+                elif name in ('--entry', '-entry', '-e'):
+                    entry = value
+                elif name == '--subsystem':
+                    subsystem = value
+                index += 1
 
     return objects, libraries, library_dirs, entry, image_base, subsystem
+
+
+SUBSYSTEMS = {
+    'native': 1,
+    'windows': 2,
+    'console': 3,
+    'posix': 7,
+    'efi_application': 10,
+    'efi_boot_service_driver': 11,
+    'efi_runtime_driver': 12,
+    'efi_rom': 13,
+}
+
+
+def subsystem_number(text):
+    if not text:
+        return 10
+    name = text.split(':')[0].strip().lower()
+    return SUBSYSTEMS.get(name, 10)
 
 
 def main(argv):
@@ -52,25 +87,26 @@ def main(argv):
 
     linker = os.environ.get('LOONGARCH64_LLD', 'ld.lld')
     elf_image = target + '.elf'
-    command = [linker, '-m', 'elf64loongarch', '-o', elf_image]
+    # --emit-relocs feeds elf2pe's base-relocation directory; a loaded image
+    # cannot be rebased without it. The ELF stays at 0 because PE RVAs and the
+    # entry point are offsets from ImageBase, which elf2pe folds in itself.
+    command = [linker, '-m', 'elf64loongarch', '--emit-relocs', '-o', elf_image]
     if entry:
         command += ['--entry', entry]
-    if image_base is not None:
-        command += ['--image-base', hex(image_base)]
     command += library_dirs + objects + libraries
-    if kind != 'exe':
-        command += ['-shared']
     subprocess.run(command, check=True)
 
+    elf = ElfImage(open(elf_image, 'rb').read())
     image, sections, shift, patched, skipped = build_image(
-        ElfImage(open(elf_image, 'rb').read()),
-        10,
+        elf,
+        subsystem_number(subsystem),
         image_base if image_base is not None else 0,
         kind != 'exe')
     with open(target, 'wb') as output:
         output.write(image)
 
-    print(f'{target}: {len(sections)} sections, entry 0x{shift:x} shift, '
+    print(f'{target}: {len(sections)} sections, image base 0x{image_base or 0:x}, '
+          f'entry rva 0x{elf.entry + shift:x}, '
           f'{patched} fixups, {skipped} other relocations')
     return 0
 

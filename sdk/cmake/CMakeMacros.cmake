@@ -577,6 +577,12 @@ function(set_module_type MODULE TYPE)
         # special case for kernel
         if ((TYPE STREQUAL kernel) AND MSVC AND (ARCH STREQUAL "arm64"))
             set_image_base(${MODULE} 0x140000000)
+        elseif((TYPE STREQUAL kernel) AND (ARCH STREQUAL "loongarch64"))
+            # The LoongArch64 loader enters the kernel through the cached
+            # direct-map window: winldr.c refuses to jump unless
+            # EntryPoint >> 60 == 0x9, and DMW1 is configured with VSEG 0x9
+            # (arc.h LOONGARCH64_LOADER_DIRECT_MAP_BASE, DMW1_VALUE).
+            set_image_base(${MODULE} 0x9000000000000000)
         elseif (TYPE STREQUAL kernel)
             set_image_base(${MODULE} 0x00400000)
         elseif(ARCH STREQUAL "arm64")

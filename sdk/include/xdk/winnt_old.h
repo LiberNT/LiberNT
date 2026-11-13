@@ -1,15 +1,17 @@
 
 #if defined(__ROS_LONG64__)
+/* C long is 64-bit here, but the interlocked intrinsics operate on the
+   32-bit NT LONG; cast to LONG rather than to long. */
 #undef InterlockedExchange
-#define InterlockedExchange(a,b) _InterlockedExchange((long*)a,b)
+#define InterlockedExchange(a,b) _InterlockedExchange((LONG*)a,b)
 #undef InterlockedExchangeAdd
-#define InterlockedExchangeAdd(a,b) _InterlockedExchangeAdd((long*)a,b)
+#define InterlockedExchangeAdd(a,b) _InterlockedExchangeAdd((LONG*)a,b)
 #undef InterlockedCompareExchange
-#define InterlockedCompareExchange(a,b,c) _InterlockedCompareExchange((long*)a,b,c)
+#define InterlockedCompareExchange(a,b,c) _InterlockedCompareExchange((LONG*)a,b,c)
 #undef InterlockedIncrement
-#define InterlockedIncrement(a) _InterlockedIncrement((long*)a)
+#define InterlockedIncrement(a) _InterlockedIncrement((LONG*)a)
 #undef InterlockedDecrement
-#define InterlockedDecrement(a) _InterlockedDecrement((long*)a)
+#define InterlockedDecrement(a) _InterlockedDecrement((LONG*)a)
 #endif
 
 #undef __C89_NAMELESS

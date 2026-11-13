@@ -35,6 +35,18 @@ typedef struct _EXCEPTION_RECORD {
 #else
 #define SPEC_STUB_TEXT __attribute__((section(".stubtxt")))
 #endif
+
+/* RtlRaiseException is NTAPI: stdcall on 32-bit x86, the psABI default
+ * calling convention everywhere else, where the compiler rejects the
+ * annotation. */
+#if defined(_M_IX86) || defined(__i386__)
+#define SPEC_STUB_STDCALL __stdcall
+#define SPEC_STUB_CDECL   __cdecl
+#else
+#define SPEC_STUB_STDCALL
+#define SPEC_STUB_CDECL
+#endif
+
 #define EH_NONCONTINUABLE       0x01
 
 /* __int128 is not supported on x86, so use a custom type */
@@ -45,13 +57,13 @@ typedef struct
 } MyInt128;
 
 void
-__stdcall
+SPEC_STUB_STDCALL
 RtlRaiseException(
     PEXCEPTION_RECORD ExceptionRecord
 );
 
 ULONG
-__cdecl
+SPEC_STUB_CDECL
 DbgPrint(
     const char* Format,
     ...

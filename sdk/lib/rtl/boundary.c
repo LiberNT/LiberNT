@@ -28,7 +28,7 @@ RtlpAddBoundaryEntry(
         return STATUS_INVALID_PARAMETER;
 
     Old = *BoundaryDescriptor;
-    EntrySize = sizeof(OBJECT_BOUNDARY_ENTRY) + ROUND_UP(DataSize, sizeof(ULONG));
+    EntrySize = (ULONG)(sizeof(OBJECT_BOUNDARY_ENTRY) + ROUND_UP(DataSize, sizeof(ULONG)));
     NewSize = Old->TotalSize + EntrySize;
 
     New = RtlpAllocateMemory(NewSize, TAG_BOUNDARY);
@@ -62,7 +62,7 @@ RtlCreateBoundaryDescriptor(
     if (!Name || !Name->Buffer || !Name->Length || (Flags & ~BOUNDARY_DESCRIPTOR_ADD_APPCONTAINER_SID))
         return NULL;
 
-    EntrySize = sizeof(OBJECT_BOUNDARY_ENTRY) + ROUND_UP(Name->Length, sizeof(ULONG));
+    EntrySize = (ULONG)(sizeof(OBJECT_BOUNDARY_ENTRY) + ROUND_UP(Name->Length, sizeof(ULONG)));
     Descriptor = RtlpAllocateMemory(sizeof(OBJECT_BOUNDARY_DESCRIPTOR) + EntrySize, TAG_BOUNDARY);
     if (!Descriptor)
         return NULL;

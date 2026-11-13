@@ -23,7 +23,12 @@
 // Make sure the sizes are correct
 _STATIC_ASSERT(sizeof(float) == 4);
 _STATIC_ASSERT(sizeof(double) == 8);
+/* The Windows ABI makes long double an alias for double. On targets with an
+ * IEEE extended or quad long double (LP64), the helpers here still only use
+ * float and double, and modf.c handles the wider type separately. */
+#if LDBL_MANT_DIG == DBL_MANT_DIG
 _STATIC_ASSERT(sizeof(long double) == 8);
+#endif
 
 _Check_return_ _CRTIMP int __cdecl _isnanf(_In_ float _X);
 double __cdecl __acrt_math_error(int type, const char *name, double arg1, double arg2, double retval);

@@ -482,14 +482,26 @@ function(generate_import_lib _libname _dllname _spec_file __version_arg __dbg_ar
         COMMAND native-spec2def ${__version_arg} ${__dbg_arg} -n=${_dllname} -a=${ARCH2} ${ARGN} --implib -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
 
-    # llvm-dlltool uses short flags: -d (def), -k (kill-at), -l (output-lib), -m (machine)
     set(LIBRARY_PRIVATE_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/${_libname}.dir)
-    add_custom_command(
-        OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
-        COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
-        COMMAND ${CMAKE_DLLTOOL} -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -k -l ${_libname}.a -m ${LLVM_DLLTOOL_MACHINE} -t ${_libname}
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
-        WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    if(ARCH STREQUAL "loongarch64")
+        # llvm-dlltool has no LoongArch64 machine, and LoongArch64 images are
+        # linked as ELF and assembled into a PE32+ file afterwards, so the
+        # import library is an ELF archive of thunks rather than a COFF one.
+        add_custom_command(
+            OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${REACTOS_LA64_PYTHON} ${REACTOS_SOURCE_DIR}/sdk/tools/def2elf/def2elf.py -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -o ${_libname}.a --ar ${CMAKE_AR}
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${REACTOS_SOURCE_DIR}/sdk/tools/def2elf/def2elf.py
+            WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    else()
+        # llvm-dlltool uses short flags: -d (def), -k (kill-at), -l (output-lib), -m (machine)
+        add_custom_command(
+            OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_DLLTOOL} -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -k -l ${_libname}.a -m ${LLVM_DLLTOOL_MACHINE} -t ${_libname}
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
+            WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    endif()
 
     add_custom_target(${_libname}_implib_target DEPENDS ${LIBRARY_PRIVATE_DIR}/${_libname}.a)
 

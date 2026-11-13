@@ -650,7 +650,7 @@ RtlAddAce(IN PACL Acl,
     RtlpAddData(AceList,
                 AceListLength,
                 Ace,
-                (ULONG_PTR)FreeAce - (ULONG_PTR)Ace);
+                (ULONG)((ULONG_PTR)FreeAce - (ULONG_PTR)Ace));
 
     /* Update the header and return */
     Acl->AceCount += NewAceCount;
@@ -780,7 +780,7 @@ RtlQueryInformationAcl(IN PACL Acl,
             if (Ace)
             {
                 /* Return how much space there is in the ACL */
-                SizeInfo->AclBytesInUse = (ULONG_PTR)Ace - (ULONG_PTR)Acl;
+                SizeInfo->AclBytesInUse = (ULONG)((ULONG_PTR)Ace - (ULONG_PTR)Acl);
                 SizeInfo->AclBytesFree = Acl->AclSize - SizeInfo->AclBytesInUse;
             }
             else

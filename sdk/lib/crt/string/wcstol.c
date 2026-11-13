@@ -42,7 +42,8 @@ wcstol(const wchar_t *nptr, wchar_t **endptr, int base)
   long acc;
   int c;
   unsigned long cutoff;
-  int neg = 0, any, cutlim;
+  unsigned long cutlim;
+  int neg = 0, any;
 
   /*
    * Skip white space and pick up leading +/- sign if any.

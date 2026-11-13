@@ -59,7 +59,7 @@ RtlpQuerySecurityDescriptor(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     if (*Owner)
     {
         /* There's an owner, so align the size */
-        *OwnerSize = ROUND_UP(RtlLengthSid(*Owner), sizeof(ULONG));
+        *OwnerSize = (ULONG)ROUND_UP(RtlLengthSid(*Owner), sizeof(ULONG));
     }
     else
     {
@@ -72,7 +72,7 @@ RtlpQuerySecurityDescriptor(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     if (*PrimaryGroup)
     {
         /* There's a group, so align the size */
-        *PrimaryGroupSize = ROUND_UP(RtlLengthSid(*PrimaryGroup), sizeof(ULONG));
+        *PrimaryGroupSize = (ULONG)ROUND_UP(RtlLengthSid(*PrimaryGroup), sizeof(ULONG));
     }
     else
     {
@@ -85,7 +85,7 @@ RtlpQuerySecurityDescriptor(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     if (*Dacl)
     {
         /* There's a DACL, align the size */
-        *DaclSize = ROUND_UP((*Dacl)->AclSize, sizeof(ULONG));
+        *DaclSize = (ULONG)ROUND_UP((*Dacl)->AclSize, sizeof(ULONG));
     }
     else
     {
@@ -98,7 +98,7 @@ RtlpQuerySecurityDescriptor(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     if (*Sacl)
     {
         /* There's a SACL, align the size */
-        *SaclSize = ROUND_UP((*Sacl)->AclSize, sizeof(ULONG));
+        *SaclSize = (ULONG)ROUND_UP((*Sacl)->AclSize, sizeof(ULONG));
     }
     else
     {
@@ -697,7 +697,7 @@ RtlMakeSelfRelativeSD(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     {
         /* Copy it */
         RtlCopyMemory((PVOID)Current, Sacl, SaclLength);
-        RelSd->Sacl = (ULONG_PTR)Current - (ULONG_PTR)RelSd;
+        RelSd->Sacl = (DWORD)((ULONG_PTR)Current - (ULONG_PTR)RelSd);
         Current += SaclLength;
     }
 
@@ -706,7 +706,7 @@ RtlMakeSelfRelativeSD(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     {
         /* Copy it */
         RtlCopyMemory((PVOID)Current, Dacl, DaclLength);
-        RelSd->Dacl = (ULONG_PTR)Current - (ULONG_PTR)RelSd;
+        RelSd->Dacl = (DWORD)((ULONG_PTR)Current - (ULONG_PTR)RelSd);
         Current += DaclLength;
     }
 
@@ -715,7 +715,7 @@ RtlMakeSelfRelativeSD(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     {
         /* Copy it */
         RtlCopyMemory((PVOID)Current, Owner, OwnerLength);
-        RelSd->Owner = (ULONG_PTR)Current - (ULONG_PTR)RelSd;
+        RelSd->Owner = (DWORD)((ULONG_PTR)Current - (ULONG_PTR)RelSd);
         Current += OwnerLength;
     }
 
@@ -724,7 +724,7 @@ RtlMakeSelfRelativeSD(IN PSECURITY_DESCRIPTOR SecurityDescriptor,
     {
         /* Copy it */
         RtlCopyMemory((PVOID)Current, Group, GroupLength);
-        RelSd->Group = (ULONG_PTR)Current - (ULONG_PTR)RelSd;
+        RelSd->Group = (DWORD)((ULONG_PTR)Current - (ULONG_PTR)RelSd);
     }
 
     /* Mark it as relative */

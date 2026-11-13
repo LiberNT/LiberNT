@@ -7,6 +7,8 @@ $if (_WDMDDK_)
 $include(arm64/kelayout.h)
 #elif defined(_M_RISCV64)
 $include(riscv64/kelayout.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/kelayout.h)
 #endif
 
 typedef UCHAR KIRQL, *PKIRQL;

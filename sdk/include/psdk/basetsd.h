@@ -154,22 +154,25 @@ typedef __int64 LONG_PTR, *PLONG_PTR;
 typedef unsigned __int64 ULONG_PTR, *PULONG_PTR;
 
 #if !defined(__midl) && !defined(__WIDL__)
-static inline unsigned long HandleToUlong(const void* h )
-    { return((unsigned long)(ULONG_PTR) h ); }
-static inline long HandleToLong( const void* h )
-    { return((long)(LONG_PTR) h ); }
-static inline void* ULongToHandle( const unsigned long h )
+/* These convert to the 32-bit NT ULONG/LONG. Spell that width out: on an
+ * LP64 target a C long is 64 bits wide, so `unsigned long` would silently
+ * turn them into 64-bit truncation helpers. */
+static inline unsigned int HandleToUlong(const void* h )
+    { return((unsigned int)(ULONG_PTR) h ); }
+static inline int HandleToLong( const void* h )
+    { return((int)(LONG_PTR) h ); }
+static inline void* ULongToHandle( const unsigned int h )
     { return((void*) (UINT_PTR) h ); }
-static inline void* LongToHandle( const long h )
+static inline void* LongToHandle( const int h )
     { return((void*) (INT_PTR) h ); }
-static inline unsigned long PtrToUlong( const void* p)
-    { return((unsigned long)(ULONG_PTR) p ); }
+static inline unsigned int PtrToUlong( const void* p)
+    { return((unsigned int)(ULONG_PTR) p ); }
 static inline unsigned int PtrToUint( const void* p )
     { return((unsigned int)(UINT_PTR) p ); }
 static inline unsigned short PtrToUshort( const void* p )
     { return((unsigned short)(ULONG_PTR) p ); }
-static inline long PtrToLong( const void* p )
-    { return((long)(LONG_PTR) p ); }
+static inline int PtrToLong( const void* p )
+    { return((int)(LONG_PTR) p ); }
 static inline int PtrToInt( const void* p )
     { return((int)(INT_PTR) p ); }
 static inline short PtrToShort( const void* p )

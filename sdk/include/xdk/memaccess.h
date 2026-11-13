@@ -281,7 +281,7 @@ long
 ReadAcquire (
     _In_ _Interlocked_operand_ __NT_LONG32 const volatile *Source)
 {
-    long Value = __iso_volatile_load32((const volatile int*)Source);
+    __NT_LONG32 Value = __iso_volatile_load32((const volatile int*)Source);
     _AcquireBarrier();
     return Value;
 }
@@ -456,32 +456,32 @@ WriteUShortRaw (
 __forceinline
 unsigned long
 ReadULongAcquire (
-    _In_ _Interlocked_operand_ unsigned long const volatile *Source)
+    _In_ _Interlocked_operand_ __NT_ULONG32 const volatile *Source)
 {
-    return (unsigned long)ReadAcquire((__NT_LONG32*)Source);
+    return (__NT_ULONG32)ReadAcquire((__NT_LONG32*)Source);
 }
 
 __forceinline
 unsigned long
 ReadULongNoFence (
-    _In_ _Interlocked_operand_ unsigned long const volatile *Source)
+    _In_ _Interlocked_operand_ __NT_ULONG32 const volatile *Source)
 {
-    return (unsigned long)ReadNoFence((__NT_LONG32*)Source);
+    return (__NT_ULONG32)ReadNoFence((__NT_LONG32*)Source);
 }
 
 __forceinline
 unsigned long
 ReadULongRaw (
-    _In_ _Interlocked_operand_ unsigned long const volatile *Source)
+    _In_ _Interlocked_operand_ __NT_ULONG32 const volatile *Source)
 {
-    return (unsigned long)ReadRaw((__NT_LONG32*)Source);
+    return (__NT_ULONG32)ReadRaw((__NT_LONG32*)Source);
 }
 
 __forceinline
 void
 WriteULongRelease (
-    _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
-    _In_ unsigned long Value)
+    _Out_ _Interlocked_operand_ __NT_ULONG32 volatile *Destination,
+    _In_ __NT_ULONG32 Value)
 {
     WriteRelease((__NT_LONG32*)Destination, (__NT_LONG32)Value);
 }
@@ -489,8 +489,8 @@ WriteULongRelease (
 __forceinline
 void
 WriteULongNoFence (
-    _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
-    _In_ unsigned long Value)
+    _Out_ _Interlocked_operand_ __NT_ULONG32 volatile *Destination,
+    _In_ __NT_ULONG32 Value)
 {
     WriteNoFence((__NT_LONG32*)Destination, (__NT_LONG32)Value);
 }
@@ -498,8 +498,8 @@ WriteULongNoFence (
 __forceinline
 void
 WriteULongRaw (
-    _Out_ _Interlocked_operand_ unsigned long volatile *Destination,
-    _In_ unsigned long Value)
+    _Out_ _Interlocked_operand_ __NT_ULONG32 volatile *Destination,
+    _In_ __NT_ULONG32 Value)
 {
     WriteRaw((__NT_LONG32*)Destination, (__NT_LONG32)Value);
 }

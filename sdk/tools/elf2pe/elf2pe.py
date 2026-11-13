@@ -67,12 +67,28 @@ SCN_MEM_WRITE = 0x80000000
 PE32_PLUS_MAGIC = 0x20B
 OPTIONAL_HEADER_SIZE = 240
 DATA_DIRECTORY_COUNT = 16
+DIRECTORY_IMPORT = 1
 DIRECTORY_BASE_RELOCATION = 5
 SUBSYSTEM_EFI_APPLICATION = 10
+
+# One import address table slot per imported function, and the sections
+# sdk/tools/def2elf leaves in the image for them: the slots themselves and the
+# record that says which DLL each slot belongs to.
+SLOT_SIZE = 8
+IMPORT_SECTION_PREFIX = '.iat$'
+IMPORT_METADATA_SECTION = '.libimports'
+IMPORT_SYMBOL_PREFIX = '__imp_'
 
 
 def align_up(value, alignment):
     return (value + alignment - 1) & ~(alignment - 1)
+
+
+class Symbol:
+    def __init__(self, name, value, section):
+        self.name = name
+        self.value = value
+        self.section = section
 
 
 class ElfImage:
@@ -109,11 +125,14 @@ class ElfImage:
         for _, section in self.named_sections():
             if section[1] != SHT_SYMTAB:
                 continue
+            strings = self.sections[section[6]][4]
             for index in range(section[5] // section[9]):
                 entry = section[4] + index * section[9]
-                _, _, index_section = struct.unpack_from('<IBH', self.data, entry)
-                value = struct.unpack_from('<Q', self.data, entry + 8)[0]
-                symbols.append((value, index_section))
+                name, _, _, index_section, value, _ = struct.unpack_from(
+                    '<IBBHQQ', self.data, entry)
+                start = strings + name
+                symbols.append(Symbol(self.data[start:self.data.index(b'\0', start)].decode(),
+                                      value, index_section))
         return symbols
 
     def file_offset(self, address):
@@ -194,28 +213,163 @@ def collect_relocations(elf):
     return relocations
 
 
-def relocated_value(elf, regions, address, symbol_index, addend, shift, width, relative=False):
+def collect_imports(elf):
+    """Group the image's imported symbols by DLL, in description order.
+
+    sdk/tools/def2elf records one DLL per object in a non-allocatable
+    .libimports section: the library name, one symbol name per import address
+    table slot, then an empty name. The linker concatenates the records of
+    every object it kept, so several archives name their own DLL here.
+    """
+    blob = b''.join(elf.section_data(section) for name, section in elf.named_sections()
+                    if name == IMPORT_METADATA_SECTION)
+    if not blob:
+        return []
+
+    fields = blob.split(b'\0')
+    if fields[-1] == b'':
+        fields.pop()
+    libraries = []
+    library_index = {}
+    index = 0
+    while index < len(fields):
+        library = fields[index].decode()
+        index += 1
+        if library in library_index:
+            names = libraries[library_index[library]][1]
+        else:
+            library_index[library] = len(libraries)
+            names = []
+            libraries.append((library, names))
+        while index < len(fields) and fields[index]:
+            names.append(fields[index].decode())
+            index += 1
+        index += 1
+    return [entry for entry in libraries if entry[1]]
+
+
+def import_slots(elf, imports, shift):
+    """Return [(DLL, [(slot rva, name), ...])], one run of slots per DLL.
+
+    A PE import address table is one contiguous array of pointer sized slots
+    that the loader fills in, so the slots of a DLL have to be an array in the
+    image. def2elf gives each DLL a section of its own for exactly that and
+    the linker keeps a section contiguous, which the check below proves.
+    """
+    symbols = {}
+    for symbol in elf.symbols:
+        if symbol.section not in (SHN_UNDEF, SHN_ABS):
+            symbols[symbol.name] = symbol
+
+    layout = []
+    for library, names in imports:
+        entries = []
+        for name in names:
+            symbol = symbols.get(IMPORT_SYMBOL_PREFIX + name)
+            if symbol is None:
+                raise ValueError(f'{library}: the image has no import address table '
+                                 f'slot for {name}')
+            entries.append((symbol.value + shift, name))
+        entries.sort()
+        first = entries[0][0]
+        for index, (address, name) in enumerate(entries):
+            if address != first + SLOT_SIZE * index:
+                raise ValueError(f'{library}: the import address table slots are not '
+                                 f'one array; {name} is at 0x{address:x} where '
+                                 f'0x{first + SLOT_SIZE * index:x} was expected')
+        layout.append((library, entries))
+    return layout
+
+
+def build_import_directory(imports, address):
+    """Lay out the import directory for `imports` at RVA `address`.
+
+    Returns (section bytes, directory size). The descriptors come first, one
+    per DLL plus a null one, then one import lookup table per descriptor, then
+    the hint/name entries and the library names. The import address table is
+    not part of it: FirstThunk points at the slots the linker placed, which is
+    where the loader writes the resolved addresses.
+    """
+    descriptor_size = 20 * (len(imports) + 1)
+    lookup_offset = align_up(descriptor_size, 8)
+
+    lookup_offsets = []
+    cursor = lookup_offset
+    for _, entries in imports:
+        lookup_offsets.append(cursor)
+        cursor += SLOT_SIZE * (len(entries) + 1)
+    names_offset = align_up(cursor, 8)
+
+    # Hint/name entries are two byte aligned inside the name area, which the
+    # second pass below relies on.
+    positions = []
+    library_positions = []
+    names_size = 0
+    for library, entries in imports:
+        if names_size % 2:
+            names_size += 1
+        library_positions.append(names_size)
+        names_size += len(library.encode()) + 1
+        offsets = []
+        for _, name in entries:
+            if names_size % 2:
+                names_size += 1
+            offsets.append(names_size)
+            names_size += 2 + len(name.encode()) + 1
+        positions.append(offsets)
+
+    blob = bytearray(names_offset + names_size)
+    for index, ((library, entries), lookup, library_position) in enumerate(
+            zip(imports, lookup_offsets, library_positions)):
+        struct.pack_into('<IIIII', blob, 20 * index, address + lookup, 0, 0,
+                         address + names_offset + library_position, entries[0][0])
+        for entry_index, (slot, name) in enumerate(entries):
+            struct.pack_into('<Q', blob, lookup + SLOT_SIZE * entry_index,
+                             address + names_offset + positions[index][entry_index])
+
+    for (library, entries), library_position, offsets in zip(imports, library_positions,
+                                                             positions):
+        start = names_offset + library_position
+        blob[start:start + len(library.encode())] = library.encode()
+        for (_, name), offset in zip(entries, offsets):
+            encoded = name.encode()
+            blob[names_offset + offset:names_offset + offset + len(encoded) + 2] = \
+                struct.pack('<H', 0) + encoded
+    return bytes(blob), descriptor_size
+
+
+def relocated_value(elf, regions, address, symbol_index, addend, shift, width, relative=False,
+                    image_base=0):
     if relative:
         return addend if addend is not None else 0
     if addend is not None:
         if symbol_index >= len(elf.symbols):
             raise ValueError(f'relocation at 0x{address:x} references no symbol')
-        value, index_section = elf.symbols[symbol_index]
-        if index_section == SHN_UNDEF:
-            # TODO: emit an import directory instead of rejecting an undefined symbol.
-            raise ValueError(f'undefined symbol in the relocation at 0x{address:x}')
-        target = value + addend
-        if index_section == SHN_ABS:
+        symbol = elf.symbols[symbol_index]
+        if symbol.section == SHN_UNDEF:
+            # An imported function reaches the image through the import address
+            # table slot its thunk loads (see collect_imports), so anything
+            # still undefined here has no address to point at.
+            raise ValueError(f"undefined symbol '{symbol.name}' in the relocation "
+                             f'at 0x{address:x}')
+        target = symbol.value + addend
+        if symbol.section == SHN_ABS:
             return target
     else:
         target = struct.unpack_from('<Q' if width == 8 else '<I', elf.data,
                                     elf.file_offset(address))[0]
-        if not any(region.contains(target) for region in regions):
-            return target
-    return target + shift if any(region.contains(target) for region in regions) else target
+    if not any(region.contains(target) for region in regions):
+        return target
+    # An in-image pointer names the address it will have once the image is
+    # loaded at its preferred base, which is what a PE loader rebases from.
+    target += image_base + shift
+    if width == 4 and target > 0xFFFFFFFF:
+        raise ValueError(f'relocation at 0x{address:x} cannot hold image base '
+                         f'0x{image_base:x} in 32 bits')
+    return target
 
 
-def patch_relocations(elf, regions, relocations, machine, shift):
+def patch_relocations(elf, regions, relocations, machine, shift, image_base=0):
     table = ABSOLUTE_RELOCATIONS[machine]
     patched = 0
     skipped = 0
@@ -225,14 +379,14 @@ def patch_relocations(elf, regions, relocations, machine, shift):
             continue
         _, width = table[kind]
         value = relocated_value(elf, regions, address, symbol_index, addend, shift, width,
-                                kind in RELATIVE_RELOCATIONS[machine])
+                                kind in RELATIVE_RELOCATIONS[machine], image_base)
         struct.pack_into('<Q' if width == 8 else '<I', elf.data, elf.file_offset(address),
                          value & ((1 << (width * 8)) - 1))
         patched += 1
     return patched, skipped
 
 
-def build_base_relocations(relocations, machine, shift):
+def build_base_relocations(relocations, machine, shift, extra_slots=()):
     table = ABSOLUTE_RELOCATIONS[machine]
     pages = {}
     for address, kind, _, _ in relocations:
@@ -240,6 +394,10 @@ def build_base_relocations(relocations, machine, shift):
             continue
         target = address + shift
         pages.setdefault(target & ~0xFFF, []).append((target & 0xFFF, table[kind][0]))
+    # The imported addresses the loader writes into the import address table are
+    # pointers too, so they need the same DIR64 fixup when the image is rebased.
+    for address in extra_slots:
+        pages.setdefault(address & ~0xFFF, []).append((address & 0xFFF, REL_BASED_DIR64))
 
     blob = bytearray()
     for page in sorted(pages):
@@ -269,13 +427,24 @@ def build_image(elf, subsystem, image_base, dll):
     if not regions:
         raise ValueError('the image has no allocatable section')
 
+    imports = collect_imports(elf)
+    if not imports:
+        # A section holding slots without the record that names their DLL means
+        # the record was stripped away; an image whose import directory is
+        # missing would load and then jump through empty slots.
+        for name, _ in elf.named_sections():
+            if name.startswith(IMPORT_SECTION_PREFIX):
+                raise ValueError(f'{name} holds import address table slots but the '
+                                 f'image has no {IMPORT_METADATA_SECTION} record to name '
+                                 f'their DLL')
     header_size = align_up(0x40 + 4 + 20 + OPTIONAL_HEADER_SIZE +
-                           40 * (len(regions) + 1), FILE_ALIGNMENT)
+                           40 * (len(regions) + 1 + (1 if imports else 0)), FILE_ALIGNMENT)
     first = min(region.start for region in regions)
     shift = align_up(header_size - first, SECTION_ALIGNMENT) if first < header_size else 0
 
     relocations = collect_relocations(elf)
-    patched, skipped = patch_relocations(elf, regions, relocations, machine_name, shift)
+    patched, skipped = patch_relocations(elf, regions, relocations, machine_name, shift,
+                                         image_base)
     regions = collect_regions(elf)
     for region in regions:
         region.start += shift
@@ -293,7 +462,20 @@ def build_image(elf, subsystem, image_base, dll):
                                       region.raw, flags, file_offset))
         file_offset += align_up(len(region.raw), FILE_ALIGNMENT)
 
-    base_relocations = build_base_relocations(relocations, machine_name, shift)
+    import_layout = import_slots(elf, imports, shift)
+    import_directory = (0, 0)
+    if import_layout:
+        address = align_up(sections[-1].address + sections[-1].virtual_size,
+                           SECTION_ALIGNMENT)
+        idata, directory_size = build_import_directory(import_layout, address)
+        sections.append(OutputSection('.idata', address, len(idata), idata,
+                                      SCN_MEM_READ | SCN_CNT_INITIALIZED_DATA,
+                                      file_offset))
+        file_offset += align_up(len(idata), FILE_ALIGNMENT)
+        import_directory = (address, directory_size)
+
+    slots = [slot for _, entries in import_layout for slot, _ in entries]
+    base_relocations = build_base_relocations(relocations, machine_name, shift, slots)
     if base_relocations:
         address = align_up(sections[-1].address + sections[-1].virtual_size, SECTION_ALIGNMENT)
         sections.append(OutputSection('.reloc', address, len(base_relocations), base_relocations,
@@ -330,6 +512,9 @@ def build_image(elf, subsystem, image_base, dll):
     if base_relocations:
         struct.pack_into('<II', header, optional + 112 + 8 * DIRECTORY_BASE_RELOCATION,
                          sections[-1].address, len(base_relocations))
+    if import_directory[1]:
+        struct.pack_into('<II', header, optional + 112 + 8 * DIRECTORY_IMPORT,
+                         *import_directory)
 
     table = optional + OPTIONAL_HEADER_SIZE
     for index, section in enumerate(sections):
@@ -373,6 +558,8 @@ def main(argv):
     for section in sections:
         print(f'  {section.name:<8} rva 0x{section.address:08x} '
               f'size 0x{section.virtual_size:06x} raw 0x{len(section.raw):06x}')
+    for library, names in collect_imports(elf):
+        print(f'  imports {library}: {len(names)} slots')
     return 0
 
 
