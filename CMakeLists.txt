@@ -69,11 +69,13 @@ set(LIBERNT_BUILDSTAMP_HEADER "${REACTOS_BINARY_DIR}/sdk/include/reactos/buildst
 execute_process(COMMAND ${CMAKE_COMMAND}
     -DSOURCE_DIR=${REACTOS_SOURCE_DIR}
     -DOUTPUT=${LIBERNT_BUILDSTAMP_HEADER}
+    -DBUILD_ARCH=${WINARCH}
     -P ${REACTOS_SOURCE_DIR}/sdk/cmake/buildstamp.cmake)
 add_custom_target(buildstamp ALL
     COMMAND ${CMAKE_COMMAND}
         -DSOURCE_DIR=${REACTOS_SOURCE_DIR}
         -DOUTPUT=${LIBERNT_BUILDSTAMP_HEADER}
+        -DBUILD_ARCH=${WINARCH}
         -P ${REACTOS_SOURCE_DIR}/sdk/cmake/buildstamp.cmake
     BYPRODUCTS ${LIBERNT_BUILDSTAMP_HEADER}
     COMMENT "Stamping the build with its branch, commit and time"

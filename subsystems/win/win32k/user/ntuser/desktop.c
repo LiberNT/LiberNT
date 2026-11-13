@@ -347,7 +347,9 @@ IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
 #endif
 
 #define LIBERNT_BUILD_HEADING \
-    L"LiberNT " LIBERNT_BUILD_FLAVOUR L" (" LIBERNT_BUILD_TOOLCHAIN L") build"
+    L"LiberNT " LIBERNT_BUILD_FLAVOUR L" (" LIBERNT_BUILD_TOOLCHAIN L")"
+#define LIBERNT_BUILD_LINE \
+    L"Build " LIBERNT_BUILD_STAMP_W L" " LIBERNT_BUILD_ARCH_W
 
 static NTSTATUS
 GetSystemVersionString(OUT PWSTR pwszzVersion,
@@ -361,8 +363,8 @@ GetSystemVersionString(OUT PWSTR pwszzVersion,
     Status = RtlStringCchCopyW(pwszzVersion,
                                cchDest,
                                InSafeMode
-                                   ? LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_STAMP_W L"\n"
-                                   : LIBERNT_BUILD_HEADING L"\n" LIBERNT_BUILD_STAMP_W L"\n");
+                                   ? LIBERNT_BUILD_HEADING L" " LIBERNT_BUILD_LINE L"\n"
+                                   : LIBERNT_BUILD_HEADING L"\n" LIBERNT_BUILD_LINE L"\n");
     if (!NT_SUCCESS(Status))
     {
         /* General failure, NULL-terminate the string */

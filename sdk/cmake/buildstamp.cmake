@@ -5,8 +5,8 @@
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 #
 
-if(NOT DEFINED SOURCE_DIR OR NOT DEFINED OUTPUT)
-    message(FATAL_ERROR "buildstamp.cmake needs SOURCE_DIR and OUTPUT")
+if(NOT DEFINED SOURCE_DIR OR NOT DEFINED OUTPUT OR NOT DEFINED BUILD_ARCH)
+    message(FATAL_ERROR "buildstamp.cmake needs SOURCE_DIR, OUTPUT and BUILD_ARCH")
 endif()
 
 set(BUILD_BRANCH "no-branch")
@@ -54,9 +54,13 @@ if(EXISTS "${OUTPUT}")
     if(STAMPED MATCHES "LIBERNT_BUILD_TIME +\"([^\"]*)\"")
         set(STAMPED_TIME "${CMAKE_MATCH_1}")
     endif()
+    if(STAMPED MATCHES "LIBERNT_BUILD_ARCH +\"([^\"]*)\"")
+        set(STAMPED_ARCH "${CMAKE_MATCH_1}")
+    endif()
     if(STAMPED_TIME AND
        "${STAMPED_BRANCH}" STREQUAL "${BUILD_BRANCH}" AND
-       "${STAMPED_COMMIT}" STREQUAL "${BUILD_COMMIT}")
+       "${STAMPED_COMMIT}" STREQUAL "${BUILD_COMMIT}" AND
+       "${STAMPED_ARCH}" STREQUAL "${BUILD_ARCH}")
         return()
     endif()
 endif()
@@ -74,6 +78,8 @@ file(WRITE "${TEMPORARY}"
 #define LIBERNT_BUILD_BRANCH   \"${BUILD_BRANCH}\"
 #define LIBERNT_BUILD_COMMIT   \"${BUILD_COMMIT}\"
 #define LIBERNT_BUILD_TIME     \"${BUILD_TIME}\"
+#define LIBERNT_BUILD_ARCH     \"${BUILD_ARCH}\"
+#define LIBERNT_BUILD_ARCH_W  L\"${BUILD_ARCH}\"
 #define LIBERNT_BUILD_STAMP    \"${BUILD_STAMP}\"
 #define LIBERNT_BUILD_STAMP_W L\"${BUILD_STAMP}\"
 
