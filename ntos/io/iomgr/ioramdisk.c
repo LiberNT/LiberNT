@@ -96,6 +96,8 @@ IopStartRamdisk(
     WCHAR DeviceBuffer[64];
     WCHAR LinkBuffer[64];
     RAMDISK_CREATE_INPUT Input;
+    PDEVICE_OBJECT BusDevice;
+    PFILE_OBJECT BusFileObject;
     ULONG Offset = 0;
     ULONG Length = 0;
     NTSTATUS Status;
@@ -159,6 +161,21 @@ IopStartRamdisk(
                      0);
     }
 
+    Status = ObReferenceObjectByHandle(Handle,
+                                       0,
+                                       IoFileObjectType,
+                                       KernelMode,
+                                       (PVOID *)&BusFileObject,
+                                       NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_NO_RAMDISK_DRIVER,
+                     Status,
+                     0,
+                     0);
+    }
+
     RtlZeroMemory(&Input, sizeof(Input));
 
     Input.Version = sizeof(Input);
@@ -186,6 +203,24 @@ IopStartRamdisk(
     {
         KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
                      RD_FSCTL_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
+
+    /* The mount manager learns a volume from its interface arrival, which only the start of the disk runs */
+    Status = IoGetRelatedTargetDevice(BusFileObject, &BusDevice);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IoSynchronousInvalidateDeviceRelations(BusDevice, BusRelations);
+        ObDereferenceObject(BusDevice);
+    }
+
+    ObDereferenceObject(BusFileObject);
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_ENUMERATE_FAILED,
                      Status,
                      0,
                      0);
