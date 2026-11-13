@@ -3826,6 +3826,11 @@ ClassIoComplete(
     // Check SRB status for success of completing request.
     //
 
+    if ((SRB_STATUS(srb->SrbStatus) == SRB_STATUS_SUCCESS) && (fdoData != NULL)) {
+        fdoData->LastReadyMediaChangeCount = fdoExtension->MediaChangeCount;
+        fdoData->LastReadyTime = KeQueryInterruptTime();
+    }
+
     if (SRB_STATUS(srb->SrbStatus) != SRB_STATUS_SUCCESS) {
         LONGLONG retryInterval;
 
@@ -7921,6 +7926,33 @@ ClassDeviceControl(
 
                 fdoExtension = DeviceObject->DeviceExtension;
 
+            }
+
+            //
+            // A device that answered a request a moment ago still holds its
+            // media, so answer from that instead of asking it again: a file
+            // system pings this on every create, and on removable media the
+            // Test Unit Ready below is a full round trip to the device.
+            //
+
+            if ((irpStack->Parameters.DeviceIoControl.OutputBufferLength == 0) &&
+                (fdoExtension->PrivateFdoData != NULL) &&
+                (fdoExtension->PrivateFdoData->LastReadyTime != 0) &&
+                (fdoExtension->PrivateFdoData->LastReadyMediaChangeCount ==
+                 fdoExtension->MediaChangeCount) &&
+                ((KeQueryInterruptTime() - fdoExtension->PrivateFdoData->LastReadyTime) <
+                 CLASS_RECENTLY_READY_INTERVAL)) {
+
+                Irp->IoStatus.Status = STATUS_SUCCESS;
+                Irp->IoStatus.Information = 0;
+
+                FREE_POOL(srb);
+
+                ClassReleaseRemoveLock(DeviceObject, Irp);
+                ClassCompleteRequest(DeviceObject, Irp, IO_NO_INCREMENT);
+
+                status = STATUS_SUCCESS;
+                goto SetStatusAndReturn;
             }
 
             if (irpStack->Parameters.DeviceIoControl.OutputBufferLength) {
