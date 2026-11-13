@@ -43,18 +43,28 @@ CcDirtySlotBits(
 }
 
 static
-VOID
-CcDirtyAccount(
+LONG64
+CcDirtyCount(
     _Inout_ PCC_MAP Map,
     _In_ LONG64 Pages)
 {
+    LONG64 Before = CC_ATOMIC_ADD64(&Map->DirtyPages, Pages);
+
+    CC_ATOMIC_ADD64(&Map->Cache->TotalDirtyPages, Pages);
+    return Before;
+}
+
+static
+VOID
+CcDirtyPublish(
+    _Inout_ PCC_MAP Map,
+    _In_ LONG64 Before,
+    _In_ LONG64 Pages)
+{
     PCC_CACHE Cache = Map->Cache;
-    LONG64 Before;
     LONG64 Now;
     KIRQL OldIrql;
 
-    Before = CC_ATOMIC_ADD64(&Map->DirtyPages, Pages);
-    CC_ATOMIC_ADD64(&Cache->TotalDirtyPages, Pages);
     if ((Before > 0) == (Before + Pages > 0))
         return;
 
@@ -82,6 +92,7 @@ CcDirtyMark(
     ULONG64 End = FileOffset + Length;
     ULONG64 Number;
     LONG64 Added = 0;
+    LONG64 Before;
     NTSTATUS Status;
     KIRQL OldIrql;
 
@@ -101,9 +112,10 @@ CcDirtyMark(
 
         if (Slot == NULL)
         {
+            Before = (Added != 0) ? CcDirtyCount(Map, Added) : 0;
             CC_LOCK_RELEASE(&Map->IndexLock, OldIrql);
             if (Added != 0)
-                CcDirtyAccount(Map, Added);
+                CcDirtyPublish(Map, Before, Added);
             return STATUS_INSUFFICIENT_RESOURCES;
         }
 
@@ -112,10 +124,11 @@ CcDirtyMark(
         Added += CC_POPCOUNT64(Bits);
     }
 
+    Before = (Added != 0) ? CcDirtyCount(Map, Added) : 0;
     CC_LOCK_RELEASE(&Map->IndexLock, OldIrql);
 
     if (Added != 0)
-        CcDirtyAccount(Map, Added);
+        CcDirtyPublish(Map, Before, Added);
 
     return STATUS_SUCCESS;
 }
@@ -127,10 +140,13 @@ CcDirtyTake(
     _In_ ULONG64 Number,
     _In_ ULONG64 Start,
     _In_ ULONG64 End,
-    _In_ ULONG MaximumPages)
+    _In_ ULONG MaximumPages,
+    _Out_opt_ PBOOLEAN SlotPresent)
 {
     PCC_SLOT Slot;
     ULONG64 Bits = 0;
+    LONG64 Taken = 0;
+    LONG64 Before = 0;
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Map->IndexLock, &OldIrql);
@@ -144,9 +160,18 @@ CcDirtyTake(
             Bits &= Bits - 1;
 
         Slot->DirtyMap &= ~Bits;
+        Taken = (LONG64)CC_POPCOUNT64(Bits);
+        if (Taken != 0)
+            Before = CcDirtyCount(Map, -Taken);
     }
 
     CC_LOCK_RELEASE(&Map->IndexLock, OldIrql);
+
+    if (SlotPresent != NULL)
+        *SlotPresent = (Slot != NULL);
+    if (Taken != 0)
+        CcDirtyPublish(Map, Before, -Taken);
+
     return Bits;
 }
 
@@ -159,6 +184,7 @@ CcDirtyRestore(
 {
     PCC_SLOT Slot;
     ULONG64 Restored = 0;
+    LONG64 Before = 0;
     KIRQL OldIrql;
 
     CC_LOCK_ACQUIRE(&Map->IndexLock, &OldIrql);
@@ -167,11 +193,13 @@ CcDirtyRestore(
     {
         Restored = Bits & ~Slot->DirtyMap;
         Slot->DirtyMap |= Restored;
+        if (Restored != 0)
+            Before = CcDirtyCount(Map, (LONG64)CC_POPCOUNT64(Restored));
     }
     CC_LOCK_RELEASE(&Map->IndexLock, OldIrql);
 
     if (Restored != 0)
-        CcDirtyAccount(Map, CC_POPCOUNT64(Restored));
+        CcDirtyPublish(Map, Before, (LONG64)CC_POPCOUNT64(Restored));
 }
 
 static
@@ -199,21 +227,28 @@ CcDirtyFlush(
                                                                               : FileOffset + Length;
     NTSTATUS FirstError = STATUS_SUCCESS;
     ULONG Flushed = 0;
+    ULONG64 Limit;
     ULONG64 Number;
 
     CC_ATOMIC_ADD32(&Map->FlushesInProgress, 1);
 
+    Limit = CcDirtySlotLimit(Map, End);
     for (Number = FileOffset >> CC_VIEW_SHIFT;
-         Number < CcDirtySlotLimit(Map, End) && Flushed < MaximumPages;
+         Number < Limit && Flushed < MaximumPages && CC_ATOMIC_READ64(&Map->DirtyPages) > 0;
          Number++)
     {
-        ULONG64 Bits = CcDirtyTake(Map, Number, FileOffset, End, MaximumPages - Flushed);
+        BOOLEAN Present;
+        ULONG64 Bits = CcDirtyTake(Map, Number, FileOffset, End, MaximumPages - Flushed, &Present);
         ULONG Page = 0;
+
+        if (!Present)
+        {
+            Number |= CC_LEAF_MASK;
+            continue;
+        }
 
         if (Bits == 0)
             continue;
-
-        CcDirtyAccount(Map, -(LONG64)CC_POPCOUNT64(Bits));
 
         while (Page < CC_VIEW_PAGES)
         {
@@ -277,14 +312,19 @@ CcDirtyDiscard(
     ULONG64 End = (Length == (ULONG64)-1 || FileOffset + Length < FileOffset) ? (ULONG64)-1
                                                                               : FileOffset + Length;
     ULONG64 Start = (FileOffset + PAGE_SIZE - 1) & ~((ULONG64)PAGE_SIZE - 1);
-    LONG64 Dropped = 0;
+    ULONG64 Limit = CcDirtySlotLimit(Map, End);
     ULONG64 Number;
 
-    for (Number = Start >> CC_VIEW_SHIFT; Number < CcDirtySlotLimit(Map, End); Number++)
-        Dropped += CC_POPCOUNT64(CcDirtyTake(Map, Number, Start, End, 64));
+    for (Number = Start >> CC_VIEW_SHIFT;
+         Number < Limit && CC_ATOMIC_READ64(&Map->DirtyPages) > 0;
+         Number++)
+    {
+        BOOLEAN Present;
 
-    if (Dropped != 0)
-        CcDirtyAccount(Map, -Dropped);
+        CcDirtyTake(Map, Number, Start, End, 64, &Present);
+        if (!Present)
+            Number |= CC_LEAF_MASK;
+    }
 }
 
 BOOLEAN
@@ -298,6 +338,9 @@ CcDirtyQuery(
     BOOLEAN Dirty = FALSE;
     ULONG64 Number;
     KIRQL OldIrql;
+
+    if (CC_ATOMIC_READ64(&Map->DirtyPages) <= 0)
+        return FALSE;
 
     CC_LOCK_ACQUIRE(&Map->IndexLock, &OldIrql);
 
