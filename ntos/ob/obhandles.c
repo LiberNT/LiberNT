@@ -2465,11 +2465,6 @@ ObDuplicateObject(
         AccessState.PreviouslyGrantedAccess = SourceAccess;
         AccessState.RemainingDesiredAccess = 0;
     }
-    else if ((AccessState.RemainingDesiredAccess & ~SourceAccess) == 0)
-    {
-        AccessState.PreviouslyGrantedAccess = AccessState.RemainingDesiredAccess;
-        AccessState.RemainingDesiredAccess = 0;
-    }
     else if (PreviousMode != KernelMode &&
              ObjectType == IoFileObjectType &&
              (AccessState.RemainingDesiredAccess & ~(SourceAccess | MAXIMUM_ALLOWED)) != 0)
@@ -2481,6 +2476,18 @@ ObDuplicateObject(
             ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
         ObDereferenceObject(Object);
         return STATUS_ACCESS_DENIED;
+    }
+    else
+    {
+        /* A duplicate drops rights the type does not define instead of being refused */
+        AccessState.RemainingDesiredAccess &=
+            (ObjectType->TypeInfo.ValidAccessMask | ACCESS_SYSTEM_SECURITY);
+
+        if ((AccessState.RemainingDesiredAccess & ~SourceAccess) == 0)
+        {
+            AccessState.PreviouslyGrantedAccess = AccessState.RemainingDesiredAccess;
+            AccessState.RemainingDesiredAccess = 0;
+        }
     }
 
     Status = ObpBeginHandleCallbacks(&CallbackState,
