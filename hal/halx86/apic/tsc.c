@@ -9,12 +9,14 @@
 /* INCLUDES ******************************************************************/
 
 #include <hal.h>
+#include "haltime.h"
 #include "tsc.h"
 #include "apicp.h"
 #define NDEBUG
 #include <debug.h>
 
 LARGE_INTEGER HalpCpuClockFrequency = {{INITIAL_STALL_COUNT * 1000000}};
+HALP_TIME_CALIBRATION HalpTscCalibration;
 
 UCHAR TscCalibrationPhase;
 ULONG64 TscCalibrationArray[NUM_SAMPLES];
@@ -196,6 +198,7 @@ HalpInitializeTsc(VOID)
     if (HalpReadHypervisorFrequency(HV_X64_MSR_TSC_FREQUENCY, &Frequency))
     {
         HalpCpuClockFrequency.QuadPart = Frequency;
+        HalpTscCalibration = HalpTimeCalibrationHypervisorMsr;
         DPRINT1("TSC frequency from the hypervisor: %I64u Hz\n", Frequency);
         return;
     }
@@ -207,6 +210,7 @@ HalpInitializeTsc(VOID)
     if (HalpCalibrateTscWithPmTimer(&Frequency))
     {
         HalpCpuClockFrequency.QuadPart = Frequency;
+        HalpTscCalibration = HalpTimeCalibrationPmTimer;
         __writeeflags(Flags);
         return;
     }
@@ -251,6 +255,7 @@ HalpInitializeTsc(VOID)
     /* Calculate an average, using simplified linear regression */
     HalpCpuClockFrequency.QuadPart = DoLinearRegression(NUM_SAMPLES - 1,
                                                         TscCalibrationArray);
+    HalpTscCalibration = HalpTimeCalibrationRtc;
 
     /* Restore flags */
     __writeeflags(Flags);

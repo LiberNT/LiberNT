@@ -13,6 +13,7 @@
 
 #include <hal.h>
 #include "apicp.h"
+#include "haltime.h"
 #include <smp.h>
 #define NDEBUG
 #include <debug.h>
@@ -35,6 +36,7 @@ static LONG HalpClockIpiTickOffset;
 
 BOOLEAN HalpApicTimerClock = FALSE;
 static ULONG64 HalpApicTimerFrequency;
+HALP_TIME_CAPABILITIES HalpTimeCapabilities;
 
 extern LARGE_INTEGER HalpCpuClockFrequency;
 extern BOOLEAN HalIsProfiling;
@@ -201,6 +203,33 @@ RtcSetClockRate(UCHAR ClockRate)
     HalpReleaseCmosSpinLock();
 }
 
+static
+VOID
+HalpRecordTimeCapabilities(
+    _In_ HALP_TIME_SOURCE InterruptSource,
+    _In_ ULONG64 InterruptFrequency,
+    _In_ HALP_TIME_CALIBRATION InterruptCalibration)
+{
+    HalpTimeCapabilities.Counter.Source = HalpTimeSourceTsc;
+    HalpTimeCapabilities.Counter.Frequency = HalpCpuClockFrequency.QuadPart;
+    HalpTimeCapabilities.Counter.AvailabilityStage = 2;
+    HalpTimeCapabilities.Counter.CrossCpuComparable = TRUE;
+    HalpTimeCapabilities.Counter.Calibration = HalpTscCalibration;
+
+    HalpTimeCapabilities.Interrupt.Source = InterruptSource;
+    HalpTimeCapabilities.Interrupt.Frequency = InterruptFrequency;
+    HalpTimeCapabilities.Interrupt.AvailabilityStage = 2;
+    HalpTimeCapabilities.Interrupt.Calibration = InterruptCalibration;
+
+    HalpTimeCapabilities.Delay = HalpTimeCapabilities.Counter;
+
+    DPRINT1("HAL: TIME counter=tsc/%I64u irq=%lu/%I64u delay=tsc/%I64u\n",
+            HalpTimeCapabilities.Counter.Frequency,
+            (ULONG)HalpTimeCapabilities.Interrupt.Source,
+            HalpTimeCapabilities.Interrupt.Frequency,
+            HalpTimeCapabilities.Delay.Frequency);
+}
+
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -226,6 +255,9 @@ HalpInitializeClock(VOID)
         HalpMaximumTimeIncrement = RtcClockRateToPreciseIncrement(RtcMaximumClockRate) / 1000;
         KeSetTimeIncrement(HalpMaximumTimeIncrement, HalpMinimumTimeIncrement);
 
+        HalpRecordTimeCapabilities(HalpTimeSourceApicTimer,
+                                   HalpApicTimerFrequency,
+                                   HalpTimeCalibrationTsc);
         __writeeflags(EFlags);
         DPRINT1("Clock initialized (local APIC timer)\n");
         return;
@@ -265,6 +297,8 @@ HalpInitializeClock(VOID)
     HalpAcquireCmosSpinLock();
     HalpReadCmos(RTC_REGISTER_C);
     HalpReleaseCmosSpinLock();
+
+    HalpRecordTimeCapabilities(HalpTimeSourceRtc, 0, HalpTimeCalibrationNone);
 
     /* Restore interrupt state */
     __writeeflags(EFlags);
