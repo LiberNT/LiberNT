@@ -1,0 +1,4 @@
+#include <windef.h>
+
+SELAWIK RCDATA "../../../../media/fonts/selawk.ttf"
+FREESANS RCDATA "../../../../media/fonts/FreeSans.ttf"
