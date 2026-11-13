@@ -30,6 +30,7 @@ TestIpiGenericCall(VOID)
 {
     ULONG_PTR Result;
     ULONG Round;
+    ULONG Delivered = 0;
 
     for (Round = 0; Round < 4; Round++)
     {
@@ -40,6 +41,22 @@ TestIpiGenericCall(VOID)
         ok_eq_long(IpiCalls, (LONG)KeNumberProcessors);
         ok_eq_ulonglong((ULONGLONG)IpiMask, (ULONGLONG)KeQueryActiveProcessors());
     }
+
+    /* One send following another is the case the local APIC has to be let
+     * finish, so run them with nothing in between. */
+    for (Round = 0; Round < 256; Round++)
+    {
+        IpiCalls = 0;
+        IpiMask = 0;
+        Result = KeIpiGenericCall(IpiBroadcastWorker, (ULONG_PTR)0x1BADD00D);
+        if (Result == (ULONG_PTR)0x77 &&
+            IpiCalls == (LONG)KeNumberProcessors &&
+            (ULONGLONG)IpiMask == (ULONGLONG)KeQueryActiveProcessors())
+        {
+            Delivered++;
+        }
+    }
+    ok_eq_ulong(Delivered, 256ul);
 }
 
 static volatile LONG DpcCalls;

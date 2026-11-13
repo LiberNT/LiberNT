@@ -99,14 +99,24 @@ ApicRequestGlobalInterruptLevel(
         IcrStatus.Long0 = ApicRead(APIC_ICR0);
     } while (IcrStatus.DeliveryStatus);
 
+    /* A shorthand names the destinations itself, so the destination register
+     * is not read and writing it only costs a local APIC access. */
+    if (DestinationShortHand == APIC_DSH_Destination)
+        ApicWrite(APIC_ICR1, Icr.Long1);
+
     /* Write the low dword last to send the interrupt */
-    ApicWrite(APIC_ICR1, Icr.Long1);
     ApicWrite(APIC_ICR0, Icr.Long0);
 
-    do
+    /* An interrupt is left to the local APIC to deliver: the next sender
+     * waits for the delivery status above. Startup and init hand-offs are
+     * sequenced by the caller, so those are waited for here. */
+    if (MessageType != APIC_MT_Fixed)
     {
-        IcrStatus.Long0 = ApicRead(APIC_ICR0);
-    } while (IcrStatus.DeliveryStatus);
+        do
+        {
+            IcrStatus.Long0 = ApicRead(APIC_ICR0);
+        } while (IcrStatus.DeliveryStatus);
+    }
 
     /* Finally, restore the original interrupt state */
     if (Flags & EFLAGS_INTERRUPT_MASK)
