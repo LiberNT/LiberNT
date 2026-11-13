@@ -600,6 +600,7 @@ public:
     ULONG RecordCacheNumber[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG RecordCacheLength[NTFS_SECURITY_CACHE_ENTRIES] = {};
     PUCHAR RecordCacheData[NTFS_SECURITY_CACHE_ENTRIES] = {};
+    ULONGLONG RecordCacheStamp[NTFS_SECURITY_CACHE_ENTRIES] = {};
     ULONG RecordCacheNext = 0;
 
     ~Volume();
@@ -825,11 +826,17 @@ public:
     CacheRecordDescriptor(
         _In_ ULONG RecordNumber,
         _In_reads_bytes_(Length) const UCHAR* Descriptor,
-        _In_ ULONG Length);
+        _In_ ULONG Length,
+        _In_ ULONGLONG Stamp);
 
     void
     InvalidateRecordDescriptor(
         _In_ ULONG RecordNumber);
+
+    void
+    ReviseRecordDescriptor(
+        _In_ ULONG RecordNumber,
+        _In_ ULONGLONG Stamp);
 
     NTSTATUS
     AssignSecurityId(
@@ -883,6 +890,8 @@ public:
     NTSTATUS RefreshFrom(_In_ const FileRecord& Record);
 
     // ./find.cpp
+    ULONGLONG SecurityAttributeStamp();
+
     PAttribute GetAttribute(_In_     AttributeType Type,
                             _In_opt_ PWSTR Name);
     NTSTATUS GetAttributeData(_In_     AttributeType Type,

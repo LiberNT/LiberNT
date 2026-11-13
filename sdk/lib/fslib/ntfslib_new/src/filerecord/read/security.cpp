@@ -1182,6 +1182,26 @@ Volume::ReadCachedSecurityDescriptor(
     return Found;
 }
 
+ULONGLONG
+FileRecord::SecurityAttributeStamp()
+{
+    PAttribute Attribute = GetAttribute(TypeSecurityDescriptor, NULL);
+    ULONGLONG Stamp = 14695981039346656037ULL;
+    const UCHAR* Bytes;
+    ULONG Length;
+
+    if (!Attribute || Attribute->Length == 0)
+        return 0;
+    Bytes = reinterpret_cast<const UCHAR*>(Attribute);
+    Length = Attribute->Length;
+    for (ULONG Index = 0; Index < Length; Index++)
+    {
+        Stamp ^= Bytes[Index];
+        Stamp *= 1099511628211ULL;
+    }
+    return Stamp ? Stamp : 1;
+}
+
 BOOLEAN
 Volume::ReadCachedRecordDescriptor(
     _In_ ULONG RecordNumber,
@@ -1220,7 +1240,8 @@ void
 Volume::CacheRecordDescriptor(
     _In_ ULONG RecordNumber,
     _In_reads_bytes_(Length) const UCHAR* Descriptor,
-    _In_ ULONG Length)
+    _In_ ULONG Length,
+    _In_ ULONGLONG Stamp)
 {
     PUCHAR Copy = new(PagedPool, TAG_SECURITY) UCHAR[Length];
     PUCHAR Old;
@@ -1241,6 +1262,7 @@ Volume::CacheRecordDescriptor(
     RecordCacheNumber[Slot] = RecordNumber;
     RecordCacheLength[Slot] = Length;
     RecordCacheData[Slot] = Copy;
+    RecordCacheStamp[Slot] = Stamp;
     NtfsReleaseMutex(&SecurityCacheMutex);
     delete[] Old;
 }
@@ -1261,6 +1283,30 @@ Volume::InvalidateRecordDescriptor(
             RecordCacheLength[Index] = 0;
             break;
         }
+    }
+    NtfsReleaseMutex(&SecurityCacheMutex);
+    delete[] Old;
+}
+
+void
+Volume::ReviseRecordDescriptor(
+    _In_ ULONG RecordNumber,
+    _In_ ULONGLONG Stamp)
+{
+    PUCHAR Old = NULL;
+
+    NtfsAcquireMutex(&SecurityCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_SECURITY_CACHE_ENTRIES; Index++)
+    {
+        if (!RecordCacheData[Index] || RecordCacheNumber[Index] != RecordNumber)
+            continue;
+        if (Stamp != 0 && RecordCacheStamp[Index] == Stamp)
+            break;
+        Old = RecordCacheData[Index];
+        RecordCacheData[Index] = NULL;
+        RecordCacheLength[Index] = 0;
+        RecordCacheStamp[Index] = 0;
+        break;
     }
     NtfsReleaseMutex(&SecurityCacheMutex);
     delete[] Old;
@@ -2138,7 +2184,12 @@ FileRecord::ReadSecurityDescriptor(
             Buffer,
             BufferLength);
         if (NT_SUCCESS(DirectStatus) && Buffer)
-            DiskVolume->CacheRecordDescriptor(RecordNumber, Buffer, *BufferLength);
+        {
+            DiskVolume->CacheRecordDescriptor(RecordNumber,
+                                              Buffer,
+                                              *BufferLength,
+                                              SecurityAttributeStamp());
+        }
         return DirectStatus;
     }
 
