@@ -4538,14 +4538,6 @@ USBPORT_SubmitMapTransfer(IN PDEVICE_OBJECT FdoDevice)
                                                        USBPORT_MapTransfer,
                                                        Transfer);
 
-        if (Transfer->Endpoint &&
-            (Transfer->Endpoint->EndpointProperties.TransferType == USBPORT_TRANSFER_TYPE_BULK ||
-             TransferBufferLength >= 64))
-        {
-            DPRINT("USBPORT_FlushMapTransfers: AllocateAdapterChannel Status=0x%lx\n",
-                   Status);
-        }
-
         if (!NT_SUCCESS(Status))
         {
             PUSBPORT_DEVICE_HANDLE DeviceHandle = Transfer->Urb->UrbHeader.UsbdDeviceHandle;
