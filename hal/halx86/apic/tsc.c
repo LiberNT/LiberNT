@@ -10,6 +10,7 @@
 
 #include <hal.h>
 #include "haltime.h"
+#include "halstall.h"
 #include "tsc.h"
 #include "apicp.h"
 #define NDEBUG
@@ -321,14 +322,13 @@ VOID
 NTAPI
 KeStallExecutionProcessor(ULONG MicroSeconds)
 {
-    ULONG64 StartTime, EndTime, Ticks;
+    ULONG64 StartTime, EndTime;
 
     /* Get the initial time */
     StartTime = __rdtsc();
 
     /* Calculate the ending time, saturating instead of wrapping */
-    Ticks = (ULONG64)KeGetPcr()->StallScaleFactor * MicroSeconds;
-    EndTime = (StartTime > MAXULONG64 - Ticks) ? MAXULONG64 : StartTime + Ticks;
+    EndTime = HalpComputeStallEndTime(StartTime, KeGetPcr()->StallScaleFactor, MicroSeconds);
 
     /* Loop until time is elapsed */
     while (__rdtsc() < EndTime);
