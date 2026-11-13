@@ -18,6 +18,13 @@
 
 #define MI_AMD64_TLB_WATCHDOG_SECONDS 10
 
+/*
+ * Reading the clock is itself a trap on a virtual machine, far longer than
+ * the acknowledgement being waited for, so the watchdog only looks after it
+ * has let the spin go round this many times.
+ */
+#define MI_AMD64_TLB_WATCHDOG_SAMPLES 1024
+
 typedef struct MI_CACHE_ALIGNED _MI_AMD64_TLB_MESSAGE
 {
     ULONG64 Address;
@@ -54,10 +61,11 @@ MiAmd64TlbWatchdogExpired(MI_AMD64_TLB_WATCHDOG *Watchdog, ULONG64 Remaining,
     if (!MiAmd64TlbWatchdogEnabled())
     {
         Watchdog->Valid = FALSE;
+        Watchdog->Samples = 0;
         return FALSE;
     }
 
-    if (Watchdog->Valid && ++Watchdog->Samples < 1024)
+    if (++Watchdog->Samples < MI_AMD64_TLB_WATCHDOG_SAMPLES)
         return FALSE;
     Watchdog->Samples = 0;
 
