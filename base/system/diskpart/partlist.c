@@ -2053,6 +2053,7 @@ AddVolumeToList(
     WCHAR szPathNames[MAX_PATH + 1];
     WCHAR szVolumeName[MAX_PATH + 1];
     WCHAR szFilesystem[MAX_PATH + 1];
+    WCHAR RootName[MAX_PATH + 1];
 
     DWORD  CharCount            = 0;
     size_t Index                = 0;
@@ -2097,18 +2098,48 @@ AddVolumeToList(
                                NULL,
                                NULL);
 
+    /* The volume device answers the extents, the file system on it only through its root directory */
+    Status = NtOpenFile(&VolumeHandle,
+                        SYNCHRONIZE | FILE_READ_ATTRIBUTES,
+                        &ObjectAttributes,
+                        &Iosb,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT);
+    if (NT_SUCCESS(Status))
+    {
+        GetVolumeExtents(VolumeHandle, VolumeEntry);
+        NtClose(VolumeHandle);
+    }
+    else
+    {
+        DPRINT1("Volume %S not opened (0x%08lx)\n", VolumeEntry->DeviceName, Status);
+    }
+
+    wcscpy(RootName, VolumeEntry->DeviceName);
+    wcscat(RootName, L"\\");
+    RtlInitUnicodeString(&Name, RootName);
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Name,
+                               0,
+                               NULL,
+                               NULL);
+
     Status = NtOpenFile(&VolumeHandle,
                         SYNCHRONIZE,
                         &ObjectAttributes,
                         &Iosb,
-                        0,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                         FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT);
     if (NT_SUCCESS(Status))
     {
         GetVolumeType(VolumeHandle, VolumeEntry);
-        GetVolumeExtents(VolumeHandle, VolumeEntry);
         GetVolumeSize(VolumeHandle, VolumeEntry);
         NtClose(VolumeHandle);
+    }
+    else
+    {
+        DPRINT1("Root directory of %S not opened (0x%08lx)\n", VolumeEntry->DeviceName, Status);
     }
 
     if (GetVolumeInformationW(pszVolumeName,
