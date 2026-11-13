@@ -93,6 +93,7 @@
 @ stdcall HalpConfigurePciRootBridge(ptr)
 @ stdcall HalpAcpiQueryFaults(ptr long ptr)
 @ stdcall -arch=arm64 HalpConfigureDmaAdapter(ptr ptr long)
+@ stdcall -arch=arm64 HalpSetDmaAdapterCoherency(ptr long)
 @ stdcall HalpRegisterPciRouteQuery(ptr)
 @ stdcall HalpSetPciRoutingMap(ptr long)
 @ stdcall HalpRecordPciMaxGsi(ptr)

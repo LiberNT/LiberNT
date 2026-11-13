@@ -3687,6 +3687,51 @@ InterfaceBusTranslateBusAddress(
                                   TranslatedAddress);
 }
 
+static
+NTSTATUS
+PdoQueryParentBusInterface(
+    _In_ PDEVICE_OBJECT ParentDevice,
+    _Out_ PBUS_INTERFACE_STANDARD BusInterface)
+{
+    PIO_STACK_LOCATION IrpSp;
+    IO_STATUS_BLOCK IoStatus;
+    PDEVICE_OBJECT Top;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(BusInterface, sizeof(*BusInterface));
+    Top = IoGetAttachedDeviceReference(ParentDevice);
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, Top, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+    {
+        ObDereferenceObject(Top);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    IrpSp = IoGetNextIrpStackLocation(Irp);
+    IrpSp->MinorFunction = IRP_MN_QUERY_INTERFACE;
+    IrpSp->Parameters.QueryInterface.InterfaceType = &GUID_BUS_INTERFACE_STANDARD;
+    IrpSp->Parameters.QueryInterface.Size = sizeof(*BusInterface);
+    IrpSp->Parameters.QueryInterface.Version = 1;
+    IrpSp->Parameters.QueryInterface.Interface = (PINTERFACE)BusInterface;
+    IrpSp->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+
+    Status = IoCallDriver(Top, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+
+    ObDereferenceObject(Top);
+    return Status;
+}
+
 static GET_DMA_ADAPTER InterfaceBusGetDmaAdapter;
 
 static
@@ -3697,8 +3742,31 @@ InterfaceBusGetDmaAdapter(
     IN PDEVICE_DESCRIPTION DeviceDescription,
     OUT PULONG NumberOfMapRegisters)
 {
+    PDEVICE_OBJECT DeviceObject = Context;
+    PPDO_DEVICE_EXTENSION DeviceExtension;
+    PFDO_DEVICE_EXTENSION FdoExtension;
+    BUS_INTERFACE_STANDARD Parent;
+    PDMA_ADAPTER Adapter;
+
     DPRINT("InterfaceBusGetDmaAdapter(%p %p %p)\n",
            Context, DeviceDescription, NumberOfMapRegisters);
+
+    if (DeviceObject != NULL)
+    {
+        DeviceExtension = DeviceObject->DeviceExtension;
+        ASSERT(!DeviceExtension->Common.IsFDO);
+        FdoExtension = DeviceExtension->Fdo->DeviceExtension;
+        ASSERT(FdoExtension->Common.IsFDO);
+
+        if (NT_SUCCESS(PdoQueryParentBusInterface(FdoExtension->Ldo, &Parent)) && Parent.GetDmaAdapter != NULL)
+        {
+            Adapter = Parent.GetDmaAdapter(Parent.Context, DeviceDescription, NumberOfMapRegisters);
+            if (Parent.InterfaceDereference != NULL)
+                Parent.InterfaceDereference(Parent.Context);
+            return Adapter;
+        }
+    }
+
     return (PDMA_ADAPTER)HalGetAdapter(DeviceDescription, NumberOfMapRegisters);
 }
 

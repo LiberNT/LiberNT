@@ -229,6 +229,14 @@ HalpConfigureDmaAdapter(
     );
 
 NTHALAPI
+BOOLEAN
+NTAPI
+HalpSetDmaAdapterCoherency(
+    _In_ PVOID DmaAdapter,
+    _In_ BOOLEAN Coherent
+    );
+
+NTHALAPI
 ULONG
 NTAPI
 HalGetPciConfigDataByOffset(

@@ -273,6 +273,45 @@ GetParent:
 }
 
 static BOOLEAN
+AcpiGetDmaCoherency(
+    _In_ PPDO_DEVICE_DATA DeviceData,
+    _Out_ PBOOLEAN Coherent)
+{
+    ACPI_HANDLE CurrentHandle;
+    ACPI_HANDLE ParentHandle;
+    unsigned long long Value;
+    ACPI_STATUS Status;
+
+    *Coherent = FALSE;
+    if (!DeviceData || !DeviceData->AcpiHandle)
+        return FALSE;
+
+    CurrentHandle = DeviceData->AcpiHandle;
+    while (CurrentHandle)
+    {
+        Status = acpi_evaluate_integer(CurrentHandle, "_CCA", NULL, &Value);
+        if (ACPI_SUCCESS(Status))
+        {
+            *Coherent = (Value != 0);
+            return TRUE;
+        }
+        if (Status != AE_NOT_FOUND)
+        {
+            DPRINT1("ACPI: inherited _CCA could not be evaluated (Status 0x%08lx)\n", Status);
+            return FALSE;
+        }
+
+        ParentHandle = NULL;
+        Status = AcpiGetParent(CurrentHandle, &ParentHandle);
+        if (ACPI_FAILURE(Status) || !ParentHandle || ParentHandle == CurrentHandle)
+            break;
+        CurrentHandle = ParentHandle;
+    }
+
+    return FALSE;
+}
+
+static BOOLEAN
 NTAPI
 AcpiBusTranslateBusAddress(
     _Inout_opt_ PVOID Context,
@@ -302,6 +341,7 @@ AcpiBusGetDmaAdapter(
     PPDO_DEVICE_DATA DeviceData = AcpiPdoFromContext(Context);
     PDMA_ADAPTER DmaAdapter;
     ULONG WindowCount;
+    BOOLEAN Coherent;
 
     DmaAdapter = (PDMA_ADAPTER)HalGetAdapter(DeviceDescription, NumberOfMapRegisters);
     if (!DmaAdapter)
@@ -315,6 +355,12 @@ AcpiBusGetDmaAdapter(
     }
 
     if (WindowCount && !HalpConfigureDmaAdapter(DmaAdapter, Windows, WindowCount))
+    {
+        DmaAdapter->DmaOperations->PutDmaAdapter(DmaAdapter);
+        return NULL;
+    }
+
+    if (AcpiGetDmaCoherency(DeviceData, &Coherent) && !HalpSetDmaAdapterCoherency(DmaAdapter, Coherent))
     {
         DmaAdapter->DmaOperations->PutDmaAdapter(DmaAdapter);
         return NULL;

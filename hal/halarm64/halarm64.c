@@ -152,6 +152,8 @@ typedef struct _ADAPTER_OBJECT {
     ULONG Signature;
     ULONG DmaWindowCount;
     HAL_ACPI_DMA_WINDOW DmaWindows[HAL_ACPI_MAX_DMA_WINDOWS];
+    BOOLEAN CoherencyKnown;
+    BOOLEAN Coherent;
 } ADAPTER_OBJECT, *PADAPTER_OBJECT;
 
 /*
@@ -3280,6 +3282,34 @@ HalpArm64AllocateDmaMemory(
     return NULL;
 }
 
+static
+BOOLEAN
+HalpArm64DmaCoherent(
+    _In_opt_ PADAPTER_OBJECT AdapterObject)
+{
+    if (AdapterObject && AdapterObject->Signature == HAL_ARM64_DMA_ADAPTER_SIGNATURE && AdapterObject->CoherencyKnown)
+        return AdapterObject->Coherent;
+
+    return HalpArm64DmaCoherency.SystemCoherent;
+}
+
+BOOLEAN
+NTAPI
+HalpSetDmaAdapterCoherency(
+    _In_ PVOID DmaAdapter,
+    _In_ BOOLEAN Coherent)
+{
+    PADAPTER_OBJECT AdapterObject = DmaAdapter;
+
+    if (!AdapterObject || AdapterObject->Signature != HAL_ARM64_DMA_ADAPTER_SIGNATURE)
+        return FALSE;
+
+    AdapterObject->Coherent = Coherent;
+    KeMemoryBarrier();
+    AdapterObject->CoherencyKnown = TRUE;
+    return TRUE;
+}
+
 BOOLEAN
 NTAPI
 HalpConfigureDmaAdapter(
@@ -3391,7 +3421,7 @@ HalAllocateCommonBuffer(
      * remains required for non-coherent systems.
      */
     UNREFERENCED_PARAMETER(CacheEnabled);
-    CacheType = HalpArm64DmaCoherency.SystemCoherent ? MmCached : MmNonCached;
+    CacheType = HalpArm64DmaCoherent(AdapterObject) ? MmCached : MmNonCached;
 
     /* Allocate from a CPU range reachable through this device's DMA window. */
     VirtualAddress = HalpArm64AllocateDmaMemory(AdapterObject, Length, CacheType, &CpuAddress, LogicalAddress);
@@ -3405,7 +3435,7 @@ HalAllocateCommonBuffer(
     RtlZeroMemory(VirtualAddress, Length);
 
     /* For non-coherent systems, clean and invalidate cache */
-    if (CacheType == MmCached && !HalpArm64DmaCoherency.SystemCoherent)
+    if (CacheType == MmCached && !HalpArm64DmaCoherent(AdapterObject))
     {
         HalpArm64CleanInvalidateDcacheRange(VirtualAddress, Length);
         ARM64_DSB(SY);
@@ -4122,7 +4152,7 @@ HalFlushCommonBuffer(
     }
 
     /* Skip cache maintenance on cache-coherent systems */
-    if (HalpArm64DmaCoherency.SystemCoherent)
+    if (HalpArm64DmaCoherent(AdapterObject))
     {
         return;
     }
@@ -4374,8 +4404,7 @@ static ULONG NTAPI
 HalpArm64GetDmaAlignment(
     _In_ PDMA_ADAPTER DmaAdapter)
 {
-    UNREFERENCED_PARAMETER(DmaAdapter);
-    if (HalpArm64DmaCoherency.SystemCoherent)
+    if (HalpArm64DmaCoherent((PADAPTER_OBJECT)DmaAdapter))
         return 1;
     /* ARM64 typically requires cache-line alignment for DMA */
     return HalpArm64GetCacheLineSize();
@@ -6744,7 +6773,7 @@ IoFlushAdapterBuffers(
     }
 
     /* Perform cache maintenance for non-coherent DMA */
-    if (!HalpArm64DmaCoherency.SystemCoherent && Mdl && CurrentVa)
+    if (!HalpArm64DmaCoherent(AdapterObject) && Mdl && CurrentVa)
     {
         /*
          * Ensure DMA writes from the device have committed to memory before
@@ -7073,7 +7102,7 @@ IoMapTransfer(
      * CurrentVa, which may not be mapped in the current address space
      * (e.g. user-mode MDL pages during DPC-level I/O).
      */
-    if (!NeedsBounceBuffer && !HalpArm64DmaCoherency.SystemCoherent && TransferLength > 0)
+    if (!NeedsBounceBuffer && !HalpArm64DmaCoherent(AdapterObject) && TransferLength > 0)
     {
         ULONG_PTR KsegVa = HAL_ARM64_PHYS_MAP_BASE |
                             (PhysicalAddress.QuadPart & HAL_ARM64_PHYS_ADDR_MASK);
