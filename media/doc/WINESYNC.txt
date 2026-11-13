@@ -102,6 +102,7 @@ dll/win32/dbghelp             # Synced to Wine-11.14
 dll/win32/dciman32            # Synced to Wine-11.14
 dll/win32/dispex              # Synced to Wine-11.14
 dll/win32/dwmapi              # Synced to Wine-11.14
+dll/win32/dwrite              # Synced to Wine-11.14 (LiberNT glyph rendering: GDI classic advances rounded from the design units)
 dll/win32/dxva2               # Synced to Wine-11.14
 dll/win32/evr                 # Synced to Wine-11.14
 dll/win32/faultrep            # Synced to Wine-11.14

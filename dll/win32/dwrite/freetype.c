@@ -40,6 +40,7 @@
 #include FT_OUTLINE_H
 #include FT_TRUETYPE_TABLES_H
 #include FT_SIZES_H
+#include FT_ADVANCES_H
 #endif /* HAVE_FT2BUILD_H */
 
 #include "ntstatus.h"
@@ -95,6 +96,7 @@ typedef struct
 #define pFT_Done_FreeType FT_Done_FreeType
 #define pFT_Done_Glyph FT_Done_Glyph
 #define pFT_Done_Size FT_Done_Size
+#define pFT_Get_Advance FT_Get_Advance
 #define pFT_Get_First_Char FT_Get_First_Char
 #define pFT_Get_Glyph FT_Get_Glyph
 #define pFT_Get_Kerning FT_Get_Kerning
@@ -127,6 +129,7 @@ MAKE_FUNCPTR(FT_Done_Face);
 MAKE_FUNCPTR(FT_Done_FreeType);
 MAKE_FUNCPTR(FT_Done_Glyph);
 MAKE_FUNCPTR(FT_Done_Size);
+MAKE_FUNCPTR(FT_Get_Advance);
 MAKE_FUNCPTR(FT_Get_First_Char);
 MAKE_FUNCPTR(FT_Get_Glyph);
 MAKE_FUNCPTR(FT_Get_Kerning);
@@ -204,6 +207,7 @@ static NTSTATUS process_attach(void *args)
     LOAD_FUNCPTR(FT_Done_FreeType)
     LOAD_FUNCPTR(FT_Done_Glyph)
     LOAD_FUNCPTR(FT_Done_Size)
+    LOAD_FUNCPTR(FT_Get_Advance)
     LOAD_FUNCPTR(FT_Get_First_Char)
     LOAD_FUNCPTR(FT_Get_Glyph)
     LOAD_FUNCPTR(FT_Get_Kerning)
@@ -842,6 +846,7 @@ static NTSTATUS get_glyph_advance(void *args)
 {
     struct get_glyph_advance_params *params = args;
     FT_Face face = FaceFromObject(params->object);
+    FT_Fixed units;
     FT_Size size;
 
     *params->advance = 0;
@@ -853,6 +858,9 @@ static NTSTATUS get_glyph_advance(void *args)
     if (!pFT_Load_Glyph(face, params->glyph, params->mode == DWRITE_MEASURING_MODE_NATURAL ? FT_LOAD_NO_HINTING : FT_LOAD_NO_AUTOHINT))
     {
         *params->advance = face->glyph->advance.x >> 6;
+        if (params->mode == DWRITE_MEASURING_MODE_GDI_CLASSIC && FT_IS_SCALABLE(face) && face->units_per_EM &&
+                !pFT_Get_Advance(face, params->glyph, FT_LOAD_NO_SCALE | FT_ADVANCE_FLAG_FAST_ONLY, &units))
+            *params->advance = pFT_MulDiv(units, size->metrics.x_ppem, face->units_per_EM);
         *params->has_contours = freetype_glyph_has_contours(face);
     }
 
