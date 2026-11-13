@@ -14,7 +14,6 @@ typedef struct _ACPI_CACHED_TABLE
 extern LIST_ENTRY HalpAcpiTableCacheList;
 extern PHYSICAL_ADDRESS HalpAcpiRsdpAddress;
 extern PHYSICAL_ADDRESS HalpAcpiRootTablePhysicalAddress;
-extern ULONG HalpInvalidAcpiTable;
 
 /* acpi/halacpi.c */
 extern BOOLEAN HalpProcessedACPIPhase0;
