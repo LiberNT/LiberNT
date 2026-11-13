@@ -17,10 +17,10 @@
 
 /* See debug.h for debug/trace constants */
 ULONG DebugTraceLevel = MIN_TRACE;
-PDRIVER_OBJECT NdisDriverObject;
 
 #endif /* DBG */
 
+PDRIVER_OBJECT NdisDriverObject;
 LONG CancelId;
 
 
