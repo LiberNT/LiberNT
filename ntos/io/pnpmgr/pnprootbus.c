@@ -1116,19 +1116,21 @@ PnpRootPower(
     _In_ PIRP Irp)
 {
     PIO_STACK_LOCATION StackPtr = IoGetCurrentIrpStackLocation(Irp);
+    NTSTATUS Status = Irp->IoStatus.Status;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
     if (StackPtr->MinorFunction == IRP_MN_SET_POWER ||
         StackPtr->MinorFunction == IRP_MN_QUERY_POWER)
     {
-        Irp->IoStatus.Status = STATUS_SUCCESS;
+        Status = STATUS_SUCCESS;
+        Irp->IoStatus.Status = Status;
     }
 
     PoStartNextPowerIrp(Irp);
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    return Irp->IoStatus.Status;
+    return Status;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
