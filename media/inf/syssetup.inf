@@ -217,7 +217,6 @@ RegisterDlls = Wow64RegisterDlls
 11,,wuapi.dll,1
 11,wbem,wbemdisp.dll,1
 11,wbem,wbemprox.dll,1
-11,,shellbtrfs.dll,1
 11,,zipfldr.dll,1
 
 [OleControlDllsCode]
@@ -250,7 +249,6 @@ RegisterDlls = Wow64RegisterDlls
 11,,windowscodecs.dll,1
 11,,wininet.dll,2
 11,,wintrust.dll,1
-11,,shellbtrfs.dll,1
 11,,zipfldr.dll,1
 
 [TypeLibraries]

@@ -975,7 +975,7 @@ FillFileSystems(
     SendMessageW(Combo, CB_RESETCONTENT, 0, 0);
     for (Index = 0; QueryAvailableFileSystemFormat(Index, Name, &Major, &Minor, &Latest); Index++)
     {
-        if (!lstrcmpiW(Name, L"FAT") || !lstrcmpiW(Name, L"BtrFS") || !lstrcmpiW(Name, L"EXT2"))
+        if (!lstrcmpiW(Name, L"FAT") || !lstrcmpiW(Name, L"EXT2"))
             continue;
         Item = (INT)SendMessageW(Combo, CB_ADDSTRING, 0, (LPARAM)Name);
         if (Item >= 0 && ((Select && !lstrcmpiW(Name, Select)) || (!Select && !lstrcmpiW(Name, L"NTFS"))))

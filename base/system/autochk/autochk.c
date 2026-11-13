@@ -29,7 +29,6 @@
 #include <fslib/vfatlib.h>
 #include <fslib/vfatxlib.h>
 #include <fslib/ntfslib.h>
-#include <fslib/btrfslib.h>
 #include <fslib/ext2lib.h>
 #include <fslib/cdfslib.h>
 
@@ -50,7 +49,6 @@ FILESYSTEM_CHKDSK FileSystems[] =
     { L"FAT32", VfatChkdsk },
     { L"FATX" , VfatxChkdsk },
     { L"NTFS", NtfsChkdsk },
-    { L"BTRFS", BtrfsChkdsk },
     { L"EXT2", Ext2Chkdsk },
     { L"EXT3", Ext2Chkdsk },
     { L"EXT4", Ext2Chkdsk },

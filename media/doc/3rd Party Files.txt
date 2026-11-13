@@ -151,14 +151,6 @@ Used Version: git commit 4c4d181
 License: BSD-3-Clause (https://spdx.org/licenses/BSD-3-Clause.html)
 URL: https://github.com/virtio-win/kvm-guest-drivers-windows/tree/master/VirtIO
 
-Title: WinBtrfs
-Path: dll/shellext/shellbtrfs
-Path: drivers/filesystems/btrfs
-Path: sdk/lib/fslib/btrfslib
-Used Version: 1.8.1
-License: LGPL-3.0-or-later (https://spdx.org/licenses/LGPL-3.0-or-later.html)
-URL: https://github.com/maharmstone/btrfs
-
 Title: Microsoft CDFS File System Driver
 Path: drivers/filesystems/cdfs
 Used Version: git commit f73e552
