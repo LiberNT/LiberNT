@@ -675,6 +675,7 @@ ExReinitializeResourceLite(
     return STATUS_SUCCESS;
 }
 
+#if DBG
 /* A file system tearing a volume down deletes the resources it still holds itself */
 static
 __inline
@@ -708,6 +709,7 @@ ExpHeldOnlyByCurrentThread(
 
     return TRUE;
 }
+#endif
 
 NTSTATUS
 NTAPI
