@@ -255,7 +255,7 @@ ExpQueryObjectInformation(
 
         Needed = (ULONG)sizeof(SYSTEM_OBJECTTYPE_INFORMATION) +
                  Type->Name.Length + (ULONG)sizeof(WCHAR);
-        Needed = ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
+        Needed = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
 
         if ((Buffer == NULL) || (Used + Needed > Length))
         {

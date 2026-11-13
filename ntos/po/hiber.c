@@ -311,7 +311,7 @@ static
 NTSTATUS
 PopHiberFlush(VOID)
 {
-    ULONG Padded = ALIGN_UP_BY(PopHiber.StagingUsed, PAGE_SIZE);
+    ULONG Padded = (ULONG)ALIGN_UP_BY(PopHiber.StagingUsed, PAGE_SIZE);
     NTSTATUS Status;
 
     if (Padded == 0)
@@ -1147,7 +1147,8 @@ PopHiberCaptureLoaderBlock(
         }
 
         PopHiber.HalRanges[PopHiber.HalRangeCount].BasePage = Descriptor->BasePage;
-        PopHiber.HalRanges[PopHiber.HalRangeCount].PageCount = Descriptor->PageCount;
+        /* LNT_HIBER_RANGE carries 32-bit page counts in the hiberfil stream */
+        PopHiber.HalRanges[PopHiber.HalRangeCount].PageCount = (ULONG)Descriptor->PageCount;
         PopHiber.HalRangeCount++;
     }
 

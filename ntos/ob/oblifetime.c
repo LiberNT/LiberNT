@@ -1039,8 +1039,8 @@ ObCreateObjectTypeEx(IN PUNICODE_STRING TypeName,
     LocalObjectType->SeTrustConstraintMask = 0;
     if (ObjectTypeInitializer->Length >= sizeof(*ObjectTypeInitializer) + (2 * sizeof(ULONG)))
     {
-        LocalObjectType->SeMandatoryLabelMask = ReadUnalignedU32((const unsigned long*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer)));
-        LocalObjectType->SeTrustConstraintMask = ReadUnalignedU32((const unsigned long*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer) + sizeof(ULONG)));
+        LocalObjectType->SeMandatoryLabelMask = ReadUnalignedU32((const unsigned int*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer)));
+        LocalObjectType->SeTrustConstraintMask = ReadUnalignedU32((const unsigned int*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer) + sizeof(ULONG)));
     }
 
     /* Initialize the type object's security descriptor when policy enables it */

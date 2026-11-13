@@ -686,9 +686,9 @@ SepAnswerAboutToken(
             Room = (ULONG)sizeof(*Answer);
             if (Present)
             {
-                Room = ALIGN_UP_BY(Room, sizeof(PVOID)) + (ULONG)sizeof(*Attribute) +
+                Room = (ULONG)ALIGN_UP_BY(Room, sizeof(PVOID)) + (ULONG)sizeof(*Attribute) +
                        (ULONG)sizeof(SepProcUniqueAttribute);
-                Room = ALIGN_UP_BY(Room, sizeof(ULONG64)) + 2 * (ULONG)sizeof(ULONG64);
+                Room = (ULONG)ALIGN_UP_BY(Room, sizeof(ULONG64)) + 2 * (ULONG)sizeof(ULONG64);
             }
             *Needed = Room;
 

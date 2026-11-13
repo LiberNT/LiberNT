@@ -33,6 +33,8 @@
 #include <internal/arm64/ke.h>
 #elif defined(_M_RISCV64)
 #include <internal/riscv64/ke.h>
+#elif defined(_M_LOONGARCH64) || defined(__loongarch64) || defined(__loongarch64__)
+#include <internal/loongarch64/ke.h>
 #else
 #error "Unknown processor"
 #endif

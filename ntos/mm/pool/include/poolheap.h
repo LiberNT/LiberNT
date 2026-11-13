@@ -88,7 +88,9 @@ FORCEINLINE
 ULONG
 PoolHeapRegionCount(_In_ PPOOL_HEAP Heap)
 {
-    ULONG Count = POOL_LOAD_ACQUIRE32(&Heap->RegionCount);
+    /* RegionCount is a 32-bit NT quantity; the accessor hands the loaded
+     * bits back in a long, so narrow them to the field's own width. */
+    ULONG Count = (ULONG)POOL_LOAD_ACQUIRE32(&Heap->RegionCount);
 
     POOL_ASSERT(Heap->Signature == POOL_HEAP_SIGNATURE);
     POOL_ASSERT(Count != 0 && Count <= POOL_MAX_REGIONS);

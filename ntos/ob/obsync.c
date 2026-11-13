@@ -36,7 +36,7 @@ ObpGetObjectWaitObject(
         return (PVOID)(ULONG_PTR)ReadUnalignedUlongPtr((const ULONG_PTR*)((PUCHAR)Object + WaitObjectInfo - 1));
     }
 
-    WaitObjectFlags = ReadUnalignedU32((const unsigned long*)((PUCHAR)Object + ObjectType->TypeInfo.WaitObjectFlagOffset));
+    WaitObjectFlags = ReadUnalignedU32((const unsigned int*)((PUCHAR)Object + ObjectType->TypeInfo.WaitObjectFlagOffset));
     if ((WaitObjectFlags & ObjectType->TypeInfo.WaitObjectFlagMask) == ObjectType->TypeInfo.WaitObjectFlagMask)
     {
         return (PVOID)(ULONG_PTR)ReadUnalignedUlongPtr((const ULONG_PTR*)((PUCHAR)Object + ObjectType->TypeInfo.WaitObjectPointerOffset));

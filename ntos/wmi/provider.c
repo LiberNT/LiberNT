@@ -496,7 +496,8 @@ WmipCaptureInstanceList(
             return STATUS_INVALID_PARAMETER;
         NamesSize += ALIGN_UP_BY(Name.Length + sizeof(WCHAR), sizeof(WCHAR));
         Offset += sizeof(USHORT) + Name.MaximumLength;
-        Offset = ALIGN_UP_BY(Offset, sizeof(USHORT));
+        /* ALIGN_UP_BY yields ULONG_PTR; registry offsets are 32-bit, bounded by RegInfoLimit */
+        Offset = (ULONG)ALIGN_UP_BY(Offset, sizeof(USHORT));
     }
 
     if (!Set->InstanceCount)
@@ -512,7 +513,7 @@ WmipCaptureInstanceList(
     {
         WmipCaptureCountedString(RegInfoBase, RegInfoLimit, Offset, &Name);
         Offset += sizeof(USHORT) + Name.MaximumLength;
-        Offset = ALIGN_UP_BY(Offset, sizeof(USHORT));
+        Offset = (ULONG)ALIGN_UP_BY(Offset, sizeof(USHORT));
 
         RtlCopyMemory(Strings, Name.Buffer, Name.Length);
         Set->Names[Index].Buffer = (PWCHAR)Strings;
@@ -716,7 +717,7 @@ WmipQueryRegInfo(
                 ExFreePoolWithTag(Buffer, TAG_WMI_BUFFER);
                 if (Needed <= Size || Needed > WMIP_MAX_REQUEST_SIZE)
                     break;
-                Size = ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
+                Size = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
                 continue;
             }
 
@@ -1275,7 +1276,7 @@ WmipInsertStaticNames(
     if ((Set->Flags & WMIREG_FLAG_INSTANCE_LIST) && Count > Set->InstanceCount)
         return STATUS_INVALID_PARAMETER;
 
-    OffsetsOffset = ALIGN_UP_BY(Wnode->WnodeHeader.BufferSize, sizeof(ULONG));
+    OffsetsOffset = (ULONG)ALIGN_UP_BY(Wnode->WnodeHeader.BufferSize, sizeof(ULONG));
     Size = OffsetsOffset + Count * sizeof(ULONG);
     for (Index = 0; Index < Count; Index++)
         Size += ALIGN_UP_BY(sizeof(USHORT) + WmipInstanceNameLength(Set, Index), sizeof(USHORT));
@@ -1340,7 +1341,7 @@ WmipQuerySetAllData(
             ExFreePoolWithTag(Wnode, TAG_WMI_BUFFER);
             if (Needed <= Size || Needed > WMIP_MAX_REQUEST_SIZE)
                 return STATUS_INVALID_PARAMETER;
-            Size = ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
+            Size = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
             continue;
         }
 
@@ -1402,7 +1403,7 @@ WmipQueryAllData(
         SetStatus = WmipQuerySetAllData(List->Sets[Index], &Results[Index]);
         if (NT_SUCCESS(SetStatus))
         {
-            Total = ALIGN_UP_BY(Total, sizeof(ULONGLONG)) + Results[Index]->WnodeHeader.BufferSize;
+            Total = (ULONG)ALIGN_UP_BY(Total, sizeof(ULONGLONG)) + Results[Index]->WnodeHeader.BufferSize;
             Status = STATUS_SUCCESS;
         }
         else if (Status != STATUS_SUCCESS)
@@ -1424,7 +1425,7 @@ WmipQueryAllData(
             {
                 if (!Results[Index])
                     continue;
-                Offset = ALIGN_UP_BY(Offset, sizeof(ULONGLONG));
+                Offset = (ULONG)ALIGN_UP_BY(Offset, sizeof(ULONGLONG));
                 if (Last != MAXULONG)
                     ((PWNODE_HEADER)((PUCHAR)OutBuffer + Last))->Linkage = Offset - Last;
                 RtlCopyMemory((PUCHAR)OutBuffer + Offset, Results[Index], Results[Index]->WnodeHeader.BufferSize);
@@ -1489,7 +1490,7 @@ WmipSendInstanceRequest(
     HeaderSize = WmipInstanceRequestHeaderSize(MinorFunction);
     NameOffset = HeaderSize;
     NameLength = Static ? WmipInstanceNameLength(Set, InstanceIndex) : InstanceName->Length;
-    DataOffset = ALIGN_UP_BY(NameOffset + sizeof(USHORT) + NameLength, sizeof(ULONGLONG));
+    DataOffset = (ULONG)ALIGN_UP_BY(NameOffset + sizeof(USHORT) + NameLength, sizeof(ULONGLONG));
     if (InSize > WMIP_MAX_REQUEST_SIZE || OutCapacity > WMIP_MAX_REQUEST_SIZE)
         return STATUS_INVALID_PARAMETER;
     Size = DataOffset + max(InSize, OutCapacity);
@@ -1571,7 +1572,7 @@ WmipSendInstanceRequest(
                 *NeededOutput = Needed > DataOffset ? Needed - DataOffset : 0;
                 return STATUS_BUFFER_TOO_SMALL;
             }
-            Size = ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
+            Size = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONGLONG));
             continue;
         }
 
@@ -2084,7 +2085,7 @@ WmipNameEventInstance(
     if (Found)
     {
         NameLength = WmipInstanceNameLength(Found, Index);
-        NewSize = ALIGN_UP_BY(HeaderSize + sizeof(USHORT) + NameLength, sizeof(ULONGLONG)) + DataSize;
+        NewSize = (ULONG)(ALIGN_UP_BY(HeaderSize + sizeof(USHORT) + NameLength, sizeof(ULONGLONG)) + DataSize);
         NewWnode = ExAllocatePoolZero(NonPagedPoolNx, NewSize, TAG_WMI_BUFFER);
         if (NewWnode)
         {

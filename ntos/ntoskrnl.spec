@@ -1821,8 +1821,8 @@
 @ stdcall -arch=arm __rt_srsh()
 
 ; HAL dependencies
-@ stdcall -arch=arm64,riscv64,ppc KfLowerIrql(long)
-@ stdcall -arch=arm64,riscv64,ppc KeGetCurrentIrql()
+@ stdcall -arch=arm64,riscv64,ppc,loongarch64 KfLowerIrql(long)
+@ stdcall -arch=arm64,riscv64,ppc,loongarch64 KeGetCurrentIrql()
 @ stdcall -arch=x86_64 KeGetCurrentIrql() KxGetCurrentIrql
 ; ARM64 SMP diagnostics (smpdbg) recorders, called from the HAL
 @ stdcall -arch=arm64 SmpDbgTimerBegin(long long)
@@ -2622,7 +2622,7 @@
 @ stdcall -arch=win64 KeInitializeEnumerationContext(ptr ptr)
 @ stdcall -arch=win64 KeInitializeEnumerationContextFromAffinity(ptr long int64)
 @ stdcall -arch=win64 KeInitializeEnumerationContextFromGroup(ptr ptr)
-@ stdcall -arch=arm64,riscv64 KeInitializeSecondaryInterruptServices()
+@ stdcall -arch=arm64,riscv64,loongarch64 KeInitializeSecondaryInterruptServices()
 @ stub -arch=arm64 KeInitializeTimer2
 @ stdcall KeInitializeTriageDumpDataArray(ptr long)
 @ stdcall -arch=win64 KeInterlockedClearProcessorAffinityEx(ptr long)

@@ -61,7 +61,10 @@ MiCiReadFile(void *Context, uint64_t Offset, void *Buffer, size_t Length)
         ULONG Chunk = (ULONG)min(Length, (size_t)(MI_CI_CHUNK - Adjustment));
         ULONG Transferred;
 
-        File->Status = MiPagingIo(File->File, Offset - Adjustment, ROUND_TO_PAGES(Chunk + Adjustment), File->Bounce,
+        /* The length check above keeps the page-rounded read inside a ULONG:
+         * Chunk never exceeds MI_CI_CHUNK. */
+        File->Status = MiPagingIo(File->File, Offset - Adjustment,
+                                  (ULONG)ROUND_TO_PAGES(Chunk + Adjustment), File->Bounce,
                                   FALSE, &Transferred);
         if (!NT_SUCCESS(File->Status))
             return 0;

@@ -419,7 +419,7 @@ ExpQueryPageFileInformation(
 
     Needed = (ULONG)sizeof(SYSTEM_PAGEFILE_INFORMATION) +
              Name.Length + (ULONG)sizeof(WCHAR);
-    Needed = ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
+    Needed = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
 
     if ((Buffer == NULL) || (Needed > Length))
     {

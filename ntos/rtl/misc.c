@@ -54,7 +54,7 @@ ULONG
 NTAPI
 RtlGetActiveConsoleId(VOID)
 {
-    return ReadAcquire((PLONG)&SharedUserData->ActiveConsoleId);
+    return (ULONG)ReadAcquire((PLONG)&SharedUserData->ActiveConsoleId);
 }
 
 VOID

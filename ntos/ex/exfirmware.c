@@ -662,7 +662,7 @@ ExpEnumerateEntries(
             continue;
         }
 
-        Length = ALIGN_UP_BY(Length, sizeof(ULONG));
+        Length = (ULONG)ALIGN_UP_BY(Length, sizeof(ULONG));
 
         if ((Buffer == NULL) || (Used + Length > *BufferLength))
         {
@@ -676,7 +676,7 @@ ExpEnumerateEntries(
             continue;
         }
 
-        Length = ALIGN_UP_BY(Length, sizeof(ULONG));
+        Length = (ULONG)ALIGN_UP_BY(Length, sizeof(ULONG));
         Current += Length;
         Used += Length;
     }

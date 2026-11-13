@@ -42,10 +42,26 @@
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
 
+/* ExSidQuerySystemInformation reports the emulated machine of the calling
+ * process here. There is no LoongArch64 emulation of a second machine, so
+ * the answer is the WOW64 one the other non-x86 ports give. */
+#define KiEmulationProcessorArchitecture(Process) PROCESSOR_ARCHITECTURE_INTEL
+
+/* The native architecture id KeProcessorArchitecture carries. No Windows SDK
+ * assigns one to LoongArch64; this is a port-private value in the free slot
+ * above PROCESSOR_ARCHITECTURE_RISCV64, like that port's own id. */
+#ifndef PROCESSOR_ARCHITECTURE_LOONGARCH
+#define PROCESSOR_ARCHITECTURE_LOONGARCH 16
+#endif
+
 /* Native assembly entry used by KD to recognize user callback transitions.
  * Like KiCallUserMode on the other ports this is entered from a user-mode
  * callback stub; the LoongArch64 ke port supplies the body. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiLa64CallUserMode
+/* kernmain.c enters a user-mode callback through this name; the LoongArch64
+ * body is the assembly routine in usercall.S. */
+#define KiArchCallUserMode(Frame, Result, ResultLength) \
+    KiLa64CallUserMode((Frame), (Result), (ResultLength))
 
 NTSTATUS
 NTAPI
@@ -465,6 +481,23 @@ KeSetContextReturnRegister(_Inout_ PCONTEXT Context, _In_ ULONG_PTR ReturnValue)
     Context->A0 = ReturnValue;
 }
 
+/* Service arguments past the first two that a user-mode exception carries;
+ * r7/r8 are a3/a4 of the integer argument bank [ABI]. kd64 reads the
+ * component id and level of a DbgPrint-style exception through these. */
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument3(_In_ PCONTEXT Context)
+{
+    return Context->A3;
+}
+
+FORCEINLINE
+ULONG_PTR
+KeGetContextServiceArgument4(_In_ PCONTEXT Context)
+{
+    return Context->A4;
+}
+
 FORCEINLINE
 ULONG_PTR
 KeGetContextStackRegister(_In_ PCONTEXT Context)
@@ -670,7 +703,33 @@ KiClearDpcThreadState(
 #define KiPrcbDpcWatchdogPeriod(Prcb) ((Prcb)->DpcWatchdogPeriodTicks)
 #define KiClockTickSuspended(Prcb) ((Prcb)->Sleeping != FALSE)
 
+/* The crash and debugger paths publish one CONTEXT per processor; pcr.c
+ * points the slot at Prcb->ProcessorState.ContextFrame. */
+extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
+#define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
+/* TODO: this processor block has no type, vendor or context fields, so the debugger data names none */
+#define KI_PRCB_CPU_TYPE_OFFSET 0
+#define KI_PRCB_VENDOR_STRING_OFFSET 0
+#define KI_PRCB_CONTEXT_OFFSET 0
+
+/* The timer queue is a plain ordered list here, so a timer needs no
+ * structure inserted anywhere when it is armed. There is no per-processor
+ * run-time accounting to refresh beyond KiUpdateRunTime. */
+#define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
+#define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+
+/* The clock snapshots the performance counter together with every tick it
+ * writes. The remainder the other ports carry for a scaled counter is zero
+ * here: RDTIME.D counts at a fixed frequency, so the counter is the time. */
+#define KiQueryClockTickBaseline(Counter, Remainder) \
+    (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)
+
 #define KeGetContextSwitches(Prcb) ((Prcb)->KeContextSwitches)
+
+/* clockint.c defines this and clear the generic macro first; the declaration
+ * is what the power and process-query paths call. */
+extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
+NTKERNELAPI VOID NTAPI KeQueryTickCount(_Out_ PLARGE_INTEGER CurrentCount);
 
 /* TODO: the constant timer (RDTIME/TCFG, [V1-7.6]) is the only architectural
  * time source; measure the per-core frequency once the LoongArch64 HAL
@@ -686,6 +745,22 @@ KiClearDpcThreadState(
  * ------------------------------------------------------------------------ */
 
 #define KI_NO_EXCEPTION_FRAME
+
+/* The frame the user-mode exception dispatcher runs on. KiDispatchException
+ * copies this record below the interrupted $sp and enters ntdll with
+ * $a0 = &ExceptionRecord, $a1 = &Context, $ra = 0; the dispatcher owns the
+ * stack from there, so it is 16-byte aligned like every psABI call frame.
+ * There is no separate machine frame: every register of the interrupted
+ * context is in CONTEXT, which is the whole of what the handler restores. */
+typedef struct DECLSPEC_ALIGN(16) _KUSER_EXCEPTION_STACK
+{
+    CONTEXT Context;
+    EXCEPTION_RECORD ExceptionRecord;
+} KUSER_EXCEPTION_STACK, *PKUSER_EXCEPTION_STACK;
+
+C_ASSERT(FIELD_OFFSET(KUSER_EXCEPTION_STACK, Context) == 0);
+C_ASSERT((FIELD_OFFSET(KUSER_EXCEPTION_STACK, ExceptionRecord) & 15) == 0);
+C_ASSERT((sizeof(KUSER_EXCEPTION_STACK) & 15) == 0);
 
 /* Without a 128-bit compare-exchange, user-mode SList pops run under a lock:
  * ntdll has no pop sequence for the fault handler to roll back. */
@@ -755,6 +830,8 @@ VOID NTAPI KeFlushProcessTb(VOID);
 VOID NTAPI KeSweepICache(_In_opt_ PVOID BaseAddress, _In_ SIZE_T FlushSize);
 VOID NTAPI KiIpiSendTbFlush(KAFFINITY Targets, PVOID Address, ULONG Pages);
 VOID NTAPI KiIpiProcessRequests(VOID);
+NTHALAPI NTSTATUS NTAPI HalAllocateAdapterChannel(PADAPTER_OBJECT AdapterObject, PWAIT_CONTEXT_BLOCK Wcb,
+                                                  ULONG NumberOfMapRegisters, PDRIVER_CONTROL ExecutionRoutine);
 VOID NTAPI KiRundownThread(_In_ PKTHREAD Thread);
 DECLSPEC_NORETURN VOID KiExceptionExit(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame);
 DECLSPEC_NORETURN VOID NTAPI KiThreadStartup(VOID);

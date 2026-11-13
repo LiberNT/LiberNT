@@ -277,7 +277,7 @@ ExpQueryProcessInformation(
         Needed = (ULONG)sizeof(SYSTEM_PROCESS_INFORMATION) +
                  ThreadCount * ThreadSize +
                  NameLength + (ULONG)sizeof(WCHAR);
-        Needed = ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
+        Needed = (ULONG)ALIGN_UP_BY(Needed, sizeof(ULONG_PTR));
 
         if ((Buffer == NULL) || (Used + Needed > Length))
         {

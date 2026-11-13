@@ -128,7 +128,8 @@ EtwpIsEnabled(
     if (ReadNoFence(&Provider->Sessions) == 0) return FALSE;
 
     /* A session that named no level takes every level */
-    Wanted = ReadULongNoFence(&Provider->Level);
+    /* The accessor loads exactly 32 bits but is typed as unsigned long (64-bit in LP64) */
+    Wanted = (ULONG)ReadULongNoFence(&Provider->Level);
 
     if (Wanted != 0 && Level != 0 && Level > (UCHAR)Wanted) return FALSE;
 
@@ -568,7 +569,7 @@ EtwpLogEvent(
     if (!NT_SUCCESS(Status)) return Status;
 
     Size = sizeof(EVENT_TRACE_HEADER) + FieldCount * sizeof(MOF_FIELD);
-    LoggerId = ReadULongNoFence(&Provider->LoggerId);
+    LoggerId = (ULONG)ReadULongNoFence(&Provider->LoggerId);
 
     RtlZeroMemory(&Event.Header, sizeof(Event.Header));
 

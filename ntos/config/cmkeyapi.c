@@ -145,7 +145,9 @@ CmpQueryKeyData(
             ULONG ClassOffset;
 
             HeaderSize = FIELD_OFFSET(KEY_NODE_INFORMATION, Name);
-            ClassOffset = ALIGN_UP_BY(HeaderSize + NameSize, sizeof(ULONG));
+            /* NameSize derives from the USHORT name length, so the aligned
+               offset fits the ULONG ClassOffset field of the structure. */
+            ClassOffset = (ULONG)ALIGN_UP_BY(HeaderSize + NameSize, sizeof(ULONG));
             Required = ClassOffset + Node->ClassLength;
             *ResultLength = Required;
 

@@ -166,13 +166,13 @@ KdpSelectDebugMode(
         }
         else if ((_strnicmp(Value, "COM", 3) == 0) && (Value[3] == ':'))
         {
-            ULONG Address = strtoul(Value + 4, NULL, 0);
+            ULONG_PTR Address = strtoul(Value + 4, NULL, 0);
 
             if (Address != 0)
             {
                 KdpDebugMode.Serial = TRUE;
                 SerialPortNumber = 0;
-                SerialPortInfo.Address = UlongToPtr(Address);
+                SerialPortInfo.Address = (PUCHAR)Address;
             }
         }
         else if (_strnicmp(Value, "COM", 3) == 0)
