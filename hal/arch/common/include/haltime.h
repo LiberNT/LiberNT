@@ -39,6 +39,8 @@ typedef struct _HALP_TIME_CAPABILITY
     UCHAR CrossCpuComparable;
     UCHAR SleepResumeAffected;
     HALP_TIME_CALIBRATION Calibration;
+    ULONG64 MinimumInterval;
+    ULONG64 MaximumInterval;
 } HALP_TIME_CAPABILITY;
 
 typedef struct _HALP_TIME_CAPABILITIES

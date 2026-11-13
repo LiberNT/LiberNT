@@ -214,19 +214,40 @@ HalpRecordTimeCapabilities(
     HalpTimeCapabilities.Counter.Frequency = HalpCpuClockFrequency.QuadPart;
     HalpTimeCapabilities.Counter.AvailabilityStage = 2;
     HalpTimeCapabilities.Counter.CrossCpuComparable = TRUE;
+    HalpTimeCapabilities.Counter.SleepResumeAffected = 0;
     HalpTimeCapabilities.Counter.Calibration = HalpTscCalibration;
+    HalpTimeCapabilities.Counter.MinimumInterval = 0;
+    HalpTimeCapabilities.Counter.MaximumInterval = 0;
 
     HalpTimeCapabilities.Interrupt.Source = InterruptSource;
     HalpTimeCapabilities.Interrupt.Frequency = InterruptFrequency;
     HalpTimeCapabilities.Interrupt.AvailabilityStage = 2;
+    HalpTimeCapabilities.Interrupt.CrossCpuComparable = FALSE;
+    HalpTimeCapabilities.Interrupt.SleepResumeAffected = 0;
     HalpTimeCapabilities.Interrupt.Calibration = InterruptCalibration;
+    if (InterruptSource == HalpTimeSourceApicTimer)
+    {
+        HalpTimeCapabilities.Interrupt.MinimumInterval = HalpMinimumTimeIncrement;
+        HalpTimeCapabilities.Interrupt.MaximumInterval = HalpMaximumTimeIncrement;
+        ASSERT(HalpTimeCapabilities.Interrupt.Frequency != 0);
+        ASSERT(HalpTimeCapabilities.Interrupt.MinimumInterval <=
+               HalpTimeCapabilities.Interrupt.MaximumInterval);
+    }
+    else
+    {
+        HalpTimeCapabilities.Interrupt.MinimumInterval = 0;
+        HalpTimeCapabilities.Interrupt.MaximumInterval = 0;
+    }
 
     HalpTimeCapabilities.Delay = HalpTimeCapabilities.Counter;
+    HalpTimeCapabilities.Delay.CrossCpuComparable = FALSE;
 
-    DPRINT1("HAL: TIME counter=tsc/%I64u irq=%lu/%I64u delay=tsc/%I64u\n",
+    DPRINT1("HAL: TIME counter=tsc/%I64u irq=%lu/%I64u interval=%I64u..%I64u delay=tsc/%I64u\n",
             HalpTimeCapabilities.Counter.Frequency,
             (ULONG)HalpTimeCapabilities.Interrupt.Source,
             HalpTimeCapabilities.Interrupt.Frequency,
+            HalpTimeCapabilities.Interrupt.MinimumInterval,
+            HalpTimeCapabilities.Interrupt.MaximumInterval,
             HalpTimeCapabilities.Delay.Frequency);
 }
 
