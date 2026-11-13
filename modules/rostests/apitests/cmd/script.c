@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %* and syntax errors
+ * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %*, syntax errors and FOR /F code pages
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -344,6 +344,36 @@ static void test_exit_codes(void)
     delete_file("bat1.cmd");
 }
 
+/* FOR /F reads a file in the console code page that chcp sets (Windows 11: found under 65001, not under 437) */
+static void test_for_f_code_page(void)
+{
+    UINT input_cp = GetConsoleCP(), output_cp = GetConsoleOutputCP();
+    WCHAR path[MAX_PATH];
+    HANDLE file;
+
+    StringCbPrintfW(path, sizeof(path), L"%hs\\caf\x00e9.txt", s_dir);
+    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "Creating the accented file failed with %lu\n", GetLastError());
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    CloseHandle(file);
+
+    write_file("names.txt", "caf\xc3\xa9.txt\r\n");
+    write_file("forf.cmd",
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "for /f \"usebackq delims=\" %%a in (\"names.txt\") do if exist \"%%a\" (echo UTF8_FOUND) else (echo UTF8_MISSING)\r\n"
+        "chcp 437 >nul\r\n"
+        "for /f \"usebackq delims=\" %%a in (\"names.txt\") do if exist \"%%a\" (echo OEM_FOUND) else (echo OEM_MISSING)\r\n");
+    check_cmd(__LINE__, "cmd /c forf.cmd", NULL, 0, "UTF8_FOUND\r\nOEM_MISSING\r\n", TRUE);
+
+    SetConsoleCP(input_cp);
+    SetConsoleOutputCP(output_cp);
+    delete_file("forf.cmd");
+    delete_file("names.txt");
+    DeleteFileW(path);
+}
+
 START_TEST(script)
 {
     char temp[MAX_PATH];
@@ -357,6 +387,7 @@ START_TEST(script)
     test_all_arguments();
     test_syntax_errors();
     test_exit_codes();
+    test_for_f_code_page();
 
     RemoveDirectoryA(s_dir);
 }
