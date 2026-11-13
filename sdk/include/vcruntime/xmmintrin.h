@@ -938,10 +938,15 @@ __INTRIN_INLINE_SSE float _mm_cvtss_f32(__m128 __a)
     return __a[0];
 }
 
+#ifdef __clang__
 __INTRIN_INLINE_SSE __m128 _mm_shuffle_ps(__m128 __a, __m128 __b, unsigned int __imm8)
 {
     return (__m128)__builtin_ia32_shufps((__v4sf)__a, (__v4sf)__b, (int)__imm8);
 }
+#else
+#define _mm_shuffle_ps(a, b, imm8) \
+    ((__m128)__builtin_ia32_shufps((__v4sf)(__m128)(a), (__v4sf)(__m128)(b), (int)(imm8)))
+#endif
 
 __INTRIN_INLINE_SSE __m128 _mm_unpackhi_ps(__m128 __a, __m128 __b)
 {

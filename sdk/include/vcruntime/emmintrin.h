@@ -1399,10 +1399,8 @@ __INTRIN_INLINE_SSE2 __m128i _mm_xor_si128(__m128i a, __m128i b)
 #elif defined(_M_ARM64) || defined(__aarch64__)
 /* ARM64: no x86 intrinsics available */
 #else
-__INTRIN_INLINE_SSE2 __m128i _mm_slli_si128(__m128i a, const int imm)
-{
-  return (__m128i)__builtin_ia32_pslldqi128(a, imm * 8);
-}
+#define _mm_slli_si128(a, imm) \
+    ((__m128i)__builtin_ia32_pslldqi128((__m128i)(a), (int)(imm) * 8))
 #endif
 
 __INTRIN_INLINE_SSE2 __m128i _mm_slli_epi16(__m128i a, int count)
@@ -1461,10 +1459,8 @@ __INTRIN_INLINE_SSE2 __m128i _mm_sra_epi32(__m128i a, __m128i count)
 #elif defined(_M_ARM64) || defined(__aarch64__)
 /* ARM64: no x86 intrinsics available */
 #else
-__INTRIN_INLINE_SSE2 __m128i _mm_srli_si128(__m128i a, const int imm)
-{
-    return (__m128i)__builtin_ia32_psrldqi128(a, imm * 8);
-}
+#define _mm_srli_si128(a, imm) \
+    ((__m128i)__builtin_ia32_psrldqi128((__m128i)(a), (int)(imm) * 8))
 #endif
 
 __INTRIN_INLINE_SSE2 __m128i _mm_srli_epi16(__m128i a, int count)
