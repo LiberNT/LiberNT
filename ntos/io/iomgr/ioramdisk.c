@@ -204,9 +204,22 @@ IopStartRamdisk(
     RtlInitEmptyUnicodeString(&DeviceString,
                               DeviceBuffer,
                               sizeof(DeviceBuffer));
-    RtlAppendUnicodeToString(&DeviceString, L"\\Device\\Ramdisk");
-    RtlAppendUnicodeStringToString(&DeviceString, &GuidString);
+    Status = RtlAppendUnicodeToString(&DeviceString, L"\\Device\\Ramdisk");
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAppendUnicodeStringToString(&DeviceString, &GuidString);
+    }
+
     RtlFreeUnicodeString(&GuidString);
+
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_NAME_BUILD_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
 
     RtlInitAnsiString(&AnsiArcName, LoaderBlock->ArcBootDeviceName);
     Status = RtlAnsiStringToUnicodeString(&ArcName, &AnsiArcName, TRUE);
@@ -220,9 +233,22 @@ IopStartRamdisk(
     }
 
     RtlInitEmptyUnicodeString(&LinkName, LinkBuffer, sizeof(LinkBuffer));
-    RtlAppendUnicodeToString(&LinkName, L"\\ArcName\\");
-    RtlAppendUnicodeStringToString(&LinkName, &ArcName);
+    Status = RtlAppendUnicodeToString(&LinkName, L"\\ArcName\\");
+    if (NT_SUCCESS(Status))
+    {
+        Status = RtlAppendUnicodeStringToString(&LinkName, &ArcName);
+    }
+
     RtlFreeUnicodeString(&ArcName);
+
+    if (!NT_SUCCESS(Status))
+    {
+        KeBugCheckEx(INACCESSIBLE_BOOT_DEVICE,
+                     RD_NAME_BUILD_FAILED,
+                     Status,
+                     0,
+                     0);
+    }
 
     Status = IoCreateSymbolicLink(&LinkName, &DeviceString);
     if (Status == STATUS_OBJECT_NAME_COLLISION) Status = STATUS_SUCCESS;
