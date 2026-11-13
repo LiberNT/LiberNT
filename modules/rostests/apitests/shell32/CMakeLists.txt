@@ -24,6 +24,7 @@ list(APPEND SOURCE
     Control_RunDLLW.cpp
     DragDrop.cpp
     ExtractIconEx.cpp
+    FileTypeName.cpp
     FindExecutable.cpp
     GetDisplayNameOf.cpp
     GUIDFromString.cpp
