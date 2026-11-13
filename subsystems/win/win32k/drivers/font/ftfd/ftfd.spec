@@ -24,6 +24,7 @@
   @ cdecl FT_Face_CheckTrueTypePatents ()
   @ cdecl FT_Face_SetUnpatentedHinting ()
   @ cdecl FT_FloorFix ()
+  @ cdecl FT_Get_Advance ()
   @ cdecl FT_Get_CMap_Format ()
   @ cdecl FT_Get_CMap_Language_ID ()
   @ cdecl FT_Get_Char_Index ()

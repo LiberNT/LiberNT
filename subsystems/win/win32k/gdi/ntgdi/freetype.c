@@ -23,6 +23,7 @@
 #include FT_TRUETYPE_IDS_H
 #include FT_MODULE_H
 #include FT_LCD_FILTER_H
+#include FT_ADVANCES_H
 #include <freetype/internal/ftcalc.h> // INT_TO_FIXED
 
 #include <gdi/eng/floatobj.h>
@@ -5583,8 +5584,19 @@ static FT_Pos
 IntGetGlyphAdvance64(
     _In_ FT_GlyphSlot Glyph)
 {
+    FT_Face Face = Glyph->face;
+    FT_Fixed Units;
+
     if (Glyph->format != FT_GLYPH_FORMAT_OUTLINE)
         return Glyph->advance.x;
+
+    ASSERT(Face != NULL && Face->glyph == Glyph && Face->size != NULL);
+    if (FT_IS_SCALABLE(Face) && Face->units_per_EM != 0 &&
+        FT_Get_Advance(Face, Glyph->glyph_index, FT_LOAD_NO_SCALE | FT_ADVANCE_FLAG_FAST_ONLY, &Units) == 0)
+    {
+        ASSERT(Units >= 0);
+        return FT_MulDiv(Units, Face->size->metrics.x_ppem, Face->units_per_EM) << 6;
+    }
 
     return ((Glyph->linearHoriAdvance + 0x8000) >> 16) << 6;
 }
