@@ -232,3 +232,8 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(wdf01000 PRIVATE -Wno-missing-braces -Wno-multichar -Wno-unused-but-set-variable)
 endif()
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    # The class operator new takes the driver globals and FxStump's operator delete frees the same pool block
+    target_compile_options(wdf01000 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-new-delete>)
+endif()
