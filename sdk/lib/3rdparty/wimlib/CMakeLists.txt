@@ -92,3 +92,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(wimlib PRIVATE -Wno-pointer-arith -Wno-pointer-sign)
 endif()
 add_dependencies(wimlib psdk)
+if(ARCH STREQUAL "ppc" AND CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    # FIXME: clang's PowerPC backend asserts in lowerPrepareProbedAlloca on this file's allocas at -O0
+    set_source_files_properties(src/update_image.c PROPERTIES COMPILE_OPTIONS "-O1")
+endif()
