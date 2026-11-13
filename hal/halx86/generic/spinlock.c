@@ -99,7 +99,7 @@ KeAcquireQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber)
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
     /* Acquire the lock */
-    KxAcquireSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock); // HACK
+    KxAcquireQueuedSpinLock(&KeGetCurrentPrcb()->LockQueue[LockNumber]);
     return OldIrql;
 }
 
@@ -116,7 +116,7 @@ KeAcquireQueuedSpinLockRaiseToSynch(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber)
     KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
 
     /* Acquire the lock */
-    KxAcquireSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock); // HACK
+    KxAcquireQueuedSpinLock(&KeGetCurrentPrcb()->LockQueue[LockNumber]);
     return OldIrql;
 }
 
@@ -136,7 +136,7 @@ KeAcquireInStackQueuedSpinLock(IN PKSPIN_LOCK SpinLock,
     KeRaiseIrql(DISPATCH_LEVEL, &LockHandle->OldIrql);
 
     /* Acquire the lock */
-    KxAcquireSpinLock(LockHandle->LockQueue.Lock); // HACK
+    KxAcquireQueuedSpinLock(&LockHandle->LockQueue);
 }
 
 /*
@@ -155,7 +155,7 @@ KeAcquireInStackQueuedSpinLockRaiseToSynch(IN PKSPIN_LOCK SpinLock,
     KeRaiseIrql(SYNCH_LEVEL, &LockHandle->OldIrql);
 
     /* Acquire the lock */
-    KxAcquireSpinLock(LockHandle->LockQueue.Lock); // HACK
+    KxAcquireQueuedSpinLock(&LockHandle->LockQueue);
 }
 
 /*
@@ -167,7 +167,7 @@ KeReleaseQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                         IN KIRQL OldIrql)
 {
     /* Release the lock */
-    KxReleaseSpinLock(KeGetCurrentPrcb()->LockQueue[LockNumber].Lock); // HACK
+    KxReleaseQueuedSpinLock(&KeGetCurrentPrcb()->LockQueue[LockNumber]);
 
     /* Lower IRQL back */
     KeLowerIrql(OldIrql);
@@ -181,7 +181,7 @@ FASTCALL
 KeReleaseInStackQueuedSpinLock(IN PKLOCK_QUEUE_HANDLE LockHandle)
 {
     /* Simply lower IRQL back */
-    KxReleaseSpinLock(LockHandle->LockQueue.Lock); // HACK
+    KxReleaseQueuedSpinLock(&LockHandle->LockQueue);
     KeLowerIrql(LockHandle->OldIrql);
 }
 
@@ -194,12 +194,11 @@ FASTCALL
 KeTryToAcquireQueuedSpinLockRaiseToSynch(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                                          IN PKIRQL OldIrql)
 {
-    PKSPIN_LOCK Lock = KeGetCurrentPrcb()->LockQueue[LockNumber].Lock;
-
     /* KM tests demonstrate that this raises IRQL even if locking fails */
     KeRaiseIrql(SYNCH_LEVEL, OldIrql);
-    /* HACK */
-    return KeTryToAcquireSpinLockAtDpcLevel(Lock);
+
+    /* Try to acquire the lock */
+    return KxTryToAcquireQueuedSpinLock(&KeGetCurrentPrcb()->LockQueue[LockNumber]);
 }
 
 /*
@@ -210,12 +209,22 @@ FASTCALL
 KeTryToAcquireQueuedSpinLock(IN KSPIN_LOCK_QUEUE_NUMBER LockNumber,
                              OUT PKIRQL OldIrql)
 {
-    PKSPIN_LOCK Lock = KeGetCurrentPrcb()->LockQueue[LockNumber].Lock;
+    KIRQL PreviousIrql;
+    LOGICAL Acquired;
 
     /* KM tests demonstrate that this raises IRQL even if locking fails */
-    KeRaiseIrql(DISPATCH_LEVEL, OldIrql);
-    /* HACK */
-    return KeTryToAcquireSpinLockAtDpcLevel(Lock);
+    KeRaiseIrql(DISPATCH_LEVEL, &PreviousIrql);
+
+    /* Try to acquire the lock */
+    Acquired = KxTryToAcquireQueuedSpinLock(&KeGetCurrentPrcb()->LockQueue[LockNumber]);
+    if (!Acquired)
+    {
+        KeLowerIrql(PreviousIrql);
+        return FALSE;
+    }
+
+    *OldIrql = PreviousIrql;
+    return TRUE;
 }
 #endif /* !defined(_MINIHAL_) */
 

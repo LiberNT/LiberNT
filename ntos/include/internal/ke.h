@@ -12,6 +12,10 @@
 #define KiArchCallUserMode(Frame, Result, ResultLength) ((VOID)(Frame), KiCallUserMode((Result), (ResultLength)))
 #endif
 
+#ifndef KiArchSetGuiServiceTable
+#define KiArchSetGuiServiceTable(Thread) ((VOID)(Thread))
+#endif
+
 #ifndef KiPrcbGroup
 #define KiPrcbGroup(Prcb) ((Prcb)->Group)
 #endif
