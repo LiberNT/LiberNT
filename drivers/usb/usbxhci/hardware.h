@@ -213,6 +213,7 @@ typedef struct _XHCI_PROTOCOL_CAPABILITY {
 #define XHCI_IMAN_IE               0x2
 #define XHCI_ERDP_BUSY             0x8
 #define XHCI_IMOD_DEFAULT          0x000001F4
+#define XHCI_IMOD_INTERVAL_MASK    0x0000FFFF
 
 #define XHCI_PAGE_SIZE_4K          0x00000001
 

@@ -123,6 +123,8 @@ static BOOLEAN g_XhciNonCoherentDmaOverrideValid;
 static BOOLEAN g_XhciNonCoherentDmaOverride;
 static BOOLEAN g_XhciForce32BitDmaOverrideValid;
 static BOOLEAN g_XhciForce32BitDmaOverride;
+static BOOLEAN g_XhciImodIntervalOverrideValid;
+static ULONG g_XhciImodIntervalOverride;
 static BOOLEAN g_XhciVBoxQuirksOverrideValid;
 static BOOLEAN g_XhciVBoxQuirksOverride;
 static BOOLEAN g_XhciQemuQuirksOverrideValid;
@@ -10822,6 +10824,7 @@ XHCI_ProgramInterrupterState(
 {
     PXHCI_INTERRUPTER_REGISTER_SET Interrupter;
     ULONG Index;
+    ULONG ImodInterval;
 
     if (!Extension || !Extension->RuntimeRegisters)
         return;
@@ -10854,7 +10857,13 @@ XHCI_ProgramInterrupterState(
         Interrupter = &Extension->RuntimeRegisters->Interrupter[Index];
 
         /* Use a conservative default interrupt moderation interval. */
-        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Imod, XHCI_IMOD_DEFAULT);
+        ImodInterval = g_XhciImodIntervalOverrideValid ? g_XhciImodIntervalOverride
+                                                       : XHCI_IMOD_DEFAULT;
+        XHCI_WRITE_REGISTER_ULONG(&Interrupter->Imod, ImodInterval);
+        DPRINT1("usbxhci: intr%lu interrupt moderation %lu ns%s\n",
+                Index,
+                ImodInterval * 250,
+                g_XhciImodIntervalOverrideValid ? " (registry)" : "");
 
         /* Program ERST and ERDP for this interrupter; all share the same ring. */
         XHCI_WRITE_REGISTER_ULONG(&Interrupter->ErstSize, Extension->ErstEntryCount);
@@ -11682,6 +11691,7 @@ static const WCHAR XHCI_REG_TRACE_MASK[] = L"XhciTraceMask";
 static const WCHAR XHCI_REG_STARTUP_HCE_QUIRK[] = L"XhciStartupHceQuirk";
 static const WCHAR XHCI_REG_NON_COHERENT_DMA[] = L"XhciNonCoherentDma";
 static const WCHAR XHCI_REG_FORCE_32BIT_DMA[] = L"XhciForce32BitDma";
+static const WCHAR XHCI_REG_IMOD_INTERVAL[] = L"XhciImodInterval";
 static const WCHAR XHCI_REG_VBOX_QUIRKS[] = L"XhciVBoxQuirks";
 static const WCHAR XHCI_REG_QEMU_QUIRKS[] = L"XhciQemuQuirks";
 static const WCHAR XHCI_REG_LIMIT_U1U2[] = L"XhciLimitU1U2";
@@ -11748,6 +11758,25 @@ XHCI_GetRegistryParameters(
         DPRINT("usbxhci: non-coherent DMA override %s via registry (value=%lu)\n",
                 g_XhciNonCoherentDmaOverride ? "ENABLED" : "DISABLED",
                 ParameterValue);
+    }
+
+    /* Interrupt moderation interval, in 250 ns units; 0 disables moderation */
+    ParameterValue = 0;
+    MpStatus = XhciRegPacket.UsbPortGetMiniportRegistryKeyValue(
+        Extension,
+        TRUE,
+        XHCI_REG_IMOD_INTERVAL,
+        sizeof(XHCI_REG_IMOD_INTERVAL),
+        &ParameterValue,
+        sizeof(ParameterValue));
+
+    if (MpStatus == MP_STATUS_SUCCESS && ParameterValue <= XHCI_IMOD_INTERVAL_MASK)
+    {
+        g_XhciImodIntervalOverrideValid = TRUE;
+        g_XhciImodIntervalOverride = ParameterValue;
+        DPRINT1("usbxhci: interrupt moderation interval %lu (%lu ns) via registry\n",
+                ParameterValue,
+                ParameterValue * 250);
     }
 
     /* Force 32-bit DMA quirk */
