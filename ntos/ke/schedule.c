@@ -536,7 +536,7 @@ KiStealReadyThread(
 {
     ULONG Offset, Index;
     KAFFINITY Self = AFFINITY_MASK(Prcb->Number);
-    ULONG Floor = ~(PRIORITY_MASK(MinimumPriority) - 1);
+    ULONG Floor = (ULONG)~(PRIORITY_MASK(MinimumPriority) - 1);
 
     for (Offset = 1; Offset < (ULONG)KeNumberProcessors; Offset++)
     {

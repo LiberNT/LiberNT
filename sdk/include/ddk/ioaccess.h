@@ -57,6 +57,38 @@ VOID NTAPI WRITE_PORT_ULONG(PULONG Port, ULONG Value);
 
 #define MEMORY_BARRIER() __asm__ __volatile__("fence iorw, iorw" ::: "memory")
 
+#elif defined(_M_LOONGARCH64) || defined(_LOONGARCH64_)
+
+/* LoongArch64 has no x86-style I/O port address space: devices live in
+ * memory-mapped windows, and the separate IOCSR space is reachable only by
+ * the IOCSRRD/IOCSRWR instructions (LoongArch Vol. 1, "IOCSR Access
+ * Instructions"). Port access therefore aliases register access, as it does
+ * on ARM/ARM64.
+ *
+ * The register address is kept pointer-sized with ULONG_PTR: a device window
+ * on LA64 lives above 4 GiB, so narrowing the address to ULONG (32 bits on
+ * this LP64 target) would both truncate it and trip -Wshorten-64-to-32.
+ * The datum keeps the width of the register the caller names -- UCHAR,
+ * USHORT or ULONG are exactly 8, 16 and 32 bits here -- so a 32-bit MMIO
+ * register is never widened to 64 bits. */
+#define READ_REGISTER_UCHAR(r)      (*(volatile UCHAR *)(ULONG_PTR) (r))
+#define READ_REGISTER_USHORT(r)     (*(volatile USHORT *)(ULONG_PTR) (r))
+#define READ_REGISTER_ULONG(r)      (*(volatile ULONG *)(ULONG_PTR) (r))
+#define WRITE_REGISTER_UCHAR(r, v)  (*(volatile UCHAR *)(ULONG_PTR) (r) = (UCHAR) (v))
+#define WRITE_REGISTER_USHORT(r, v) (*(volatile USHORT *)(ULONG_PTR) (r) = (USHORT) (v))
+#define WRITE_REGISTER_ULONG(r, v)  (*(volatile ULONG *)(ULONG_PTR) (r) = (ULONG) (v))
+#define READ_PORT_UCHAR(r)          READ_REGISTER_UCHAR(r)
+#define READ_PORT_USHORT(r)         READ_REGISTER_USHORT(r)
+#define READ_PORT_ULONG(r)          READ_REGISTER_ULONG(r)
+#define WRITE_PORT_UCHAR(p, v)      WRITE_REGISTER_UCHAR(p, (UCHAR) (v))
+#define WRITE_PORT_USHORT(p, v)     WRITE_REGISTER_USHORT(p, (USHORT) (v))
+#define WRITE_PORT_ULONG(p, v)      WRITE_REGISTER_ULONG(p, (ULONG) (v))
+
+/* dbar 0 waits for every earlier load/store to complete and holds every later
+ * one back: a full barrier, mandatory in LoongArch (Vol. 1, "Barrier
+ * Instructions"). */
+#define MEMORY_BARRIER() __asm__ __volatile__("dbar 0" ::: "memory")
+
 #elif defined(_PPC_) || defined(_MIPS_) || defined(_ARM_) || defined(_ARM64_)
 
 #define READ_REGISTER_UCHAR(r)      (*(volatile UCHAR * const)(r))

@@ -199,14 +199,16 @@
 #if defined(RC_INVOKED) || defined(__midl)
 #define HRESULT_FROM_WIN32(x) __HRESULT_FROM_WIN32(x)
 #elif defined(__cplusplus)
-constexpr inline long HRESULT_FROM_WIN32(unsigned long x)
+constexpr inline int HRESULT_FROM_WIN32(unsigned long x)
 {
-    return (long)x > 0 ? (long)((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000) : (long)x;
+    return (int)x > 0 ? (int)((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000) : (int)x;
 }
 #elif defined(__GNUC__)
-static __inline long __ros_hresult_from_win32(unsigned long x)
+/* Return a 32-bit HRESULT without naming the type: winerror.h is included
+ * before HRESULT is defined. int is 32 bits on every supported ABI. */
+static __inline int __ros_hresult_from_win32(unsigned long x)
 {
-    return (long)x > 0 ? (long)((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000) : (long)x;
+    return (int)x > 0 ? (int)((x & 0x0000FFFF) | (FACILITY_WIN32 << 16) | 0x80000000) : (int)x;
 }
 #define HRESULT_FROM_WIN32(x) __builtin_choose_expr(__builtin_constant_p(x), __HRESULT_FROM_WIN32(x), __ros_hresult_from_win32(x))
 #else

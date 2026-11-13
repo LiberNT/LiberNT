@@ -247,6 +247,8 @@ elseif(ARCH STREQUAL "riscv64")
         arch/riscv64/jh7110.c
         arch/riscv64/watchdog.c
         arch/riscv64/winldr.c)
+elseif(ARCH STREQUAL "loongarch64")
+    include(arch/loongarch64/sources.cmake)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND WINLOAD_ASM_SOURCE
         arch/amd64/resume.S
@@ -307,7 +309,14 @@ if(WINLOAD_ASM_SOURCE)
     else()
         bootloader_efi_application(winload EfiEntry)
     endif()
-    target_link_libraries(winload bootwim bootntfs)
+    if(ARCH STREQUAL "loongarch64")
+        # The NTFS environment does not build for this target yet; serve the
+        # NtfsBl* boot device interface from the FAT volume (lib/fatbl.c).
+        target_sources(winload PRIVATE lib/fatbl.c)
+        target_link_libraries(winload bootwim)
+    else()
+        target_link_libraries(winload bootwim bootntfs)
+    endif()
     if(MSVC)
         set_property(TARGET winload PROPERTY C_STANDARD 11)
     endif()

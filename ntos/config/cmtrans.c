@@ -1559,7 +1559,9 @@ CmpTransFormatValue(
             {
                 if (sizeof(PVOID) == 8 || KeyValueInformationClass == KeyValueFullInformationAlign64)
                 {
-                    DataOffset = ALIGN_UP(DataOffset, ULONGLONG);
+                    /* NameLength is a USHORT, so the offset stays well inside
+                       the ULONG DataOffset field of the structure. */
+                    DataOffset = (ULONG)ALIGN_UP(DataOffset, ULONGLONG);
                 }
                 else
                 {

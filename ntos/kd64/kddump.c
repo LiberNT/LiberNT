@@ -556,14 +556,14 @@ static NTSTATUS KdpAllocateCrashDumpCoreResources(VOID)
 
         LastRun = &MmPhysicalMemoryBlock->Run[MmPhysicalMemoryBlock->NumberOfRuns - 1];
         BitmapBits = (ULONG)(LastRun->BasePage + LastRun->PageCount);
-        BitmapBytes = ALIGN_UP_BY(BitmapBits, 32) / 8;
+        BitmapBytes = (ULONG)(ALIGN_UP_BY(BitmapBits, 32) / 8);
 
         KdpCrashDumpState.PageBitmapBuffer = ExAllocatePoolWithTag(NonPagedPool, BitmapBytes, TAG_CRASH_DUMP);
         if (KdpCrashDumpState.PageBitmapBuffer == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
         RtlInitializeBitMap(&KdpCrashDumpState.PageBitmap, KdpCrashDumpState.PageBitmapBuffer, BitmapBits);
 
-        KdpCrashDumpState.SummarySize = ALIGN_UP_BY(FIELD_OFFSET(SUMMARY_DUMP64, Buffer) + BitmapBytes, PAGE_SIZE);
+        KdpCrashDumpState.SummarySize = (ULONG)ALIGN_UP_BY(FIELD_OFFSET(SUMMARY_DUMP64, Buffer) + BitmapBytes, PAGE_SIZE);
         KdpCrashDumpState.Summary = ExAllocatePoolWithTag(NonPagedPool, KdpCrashDumpState.SummarySize, TAG_CRASH_DUMP);
         if (KdpCrashDumpState.Summary == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -959,7 +959,7 @@ static NTSTATUS KdpCopyRawRangeToFile(_In_ HANDLE RawHandle, _Inout_updates_byte
     while (Remaining != 0)
     {
         WriteLength = (ULONG)min(Remaining, (ULONG64)BufferSize);
-        ReadLength = ALIGN_UP_BY(WriteLength, BytesPerSector);
+        ReadLength = (ULONG)ALIGN_UP_BY(WriteLength, BytesPerSector);
         Status = ZwReadFile(RawHandle, NULL, NULL, NULL, &IoStatus, Buffer, ReadLength, &RawOffset, NULL);
         if (!NT_SUCCESS(Status))
             goto Exit;
@@ -1392,7 +1392,7 @@ static NTSTATUS KdpWriteCrashLog(VOID)
         return STATUS_NOT_FOUND;
 
     TransferLimit = min(PAGE_SIZE, KdpCrashDumpState.Storage.MaximumTransferLength);
-    TransferLimit = ALIGN_DOWN_BY(TransferLimit, KdpCrashDumpState.Storage.BytesPerSector);
+    TransferLimit = (ULONG)ALIGN_DOWN_BY(TransferLimit, KdpCrashDumpState.Storage.BytesPerSector);
     if (TransferLimit == 0)
         return STATUS_INVALID_DEVICE_STATE;
 
@@ -1402,7 +1402,7 @@ static NTSTATUS KdpWriteCrashLog(VOID)
     while (Remaining != 0)
     {
         CopyLength = min(Remaining, TransferLimit);
-        TransferLength = ALIGN_UP_BY(CopyLength, KdpCrashDumpState.Storage.BytesPerSector);
+        TransferLength = (ULONG)ALIGN_UP_BY(CopyLength, KdpCrashDumpState.Storage.BytesPerSector);
         RtlZeroMemory(KdpCrashDumpState.CrashLogIoBuffer, TransferLength);
         RtlCopyMemory(KdpCrashDumpState.CrashLogIoBuffer, Source + BufferOffset, CopyLength);
         PhysicalAddress = MmGetPhysicalAddress(KdpCrashDumpState.CrashLogIoBuffer);
@@ -1955,7 +1955,7 @@ NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In
      * user-space ones as well when the caller asked for them */
     LastRun = &MmPhysicalMemoryBlock->Run[MmPhysicalMemoryBlock->NumberOfRuns - 1];
     BitmapBits = (ULONG)(LastRun->BasePage + LastRun->PageCount);
-    BitmapBytes = ALIGN_UP_BY(BitmapBits, 32) / 8;
+    BitmapBytes = (ULONG)(ALIGN_UP_BY(BitmapBits, 32) / 8);
     Operation = "allocating the dump page bitmap";
     BitmapBuffer = ExAllocatePoolWithTag(NonPagedPool, BitmapBytes, TAG_LIVE_DUMP);
     if (!BitmapBuffer)
@@ -1965,7 +1965,7 @@ NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In
     }
     RtlInitializeBitMap(&Bitmap, BitmapBuffer, BitmapBits);
 
-    SummarySize = ALIGN_UP_BY(FIELD_OFFSET(SUMMARY_DUMP64, Buffer) + BitmapBytes, PAGE_SIZE);
+    SummarySize = (ULONG)ALIGN_UP_BY(FIELD_OFFSET(SUMMARY_DUMP64, Buffer) + BitmapBytes, PAGE_SIZE);
     Operation = "allocating the summary dump header";
     Summary = ExAllocatePoolWithTag(NonPagedPool, SummarySize, TAG_LIVE_DUMP);
     if (!Summary)

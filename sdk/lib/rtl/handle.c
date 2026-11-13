@@ -114,7 +114,7 @@ RtlAllocateHandle(
         HandleTable->UnCommittedHandles = (PRTL_HANDLE_TABLE_ENTRY)((ULONG_PTR)ArrayPointer + ArraySize);
 
         /* Calculate the number of entries we can store in the array */
-        NumberOfEntries = ArraySize / HandleTable->SizeOfHandleTableEntry;
+        NumberOfEntries = (ULONG)(ArraySize / HandleTable->SizeOfHandleTableEntry);
 
         /* Loop all entries, except the last one */
         CurrentEntry = HandleTable->FreeHandles;

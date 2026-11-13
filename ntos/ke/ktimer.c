@@ -87,7 +87,7 @@ KiDecodeTolerableDelay(
     if (Code == 0)
         return 0;
 
-    return 1UL << (Code - 1);
+    return 1u << (Code - 1);
 }
 
 /*

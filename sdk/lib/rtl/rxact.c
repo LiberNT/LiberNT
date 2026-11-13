@@ -511,10 +511,10 @@ RtlAddAttributeActionToRXact(
     }
 
     /* Calculate the size of the new action record */
-    ActionSize = ALIGN_UP_BY(ValueName->Length, sizeof(ULONG)) +
+    ActionSize = (ULONG)(ALIGN_UP_BY(ValueName->Length, sizeof(ULONG)) +
                  ALIGN_UP_BY(ValueDataSize, sizeof(ULONG)) +
                  ALIGN_UP_BY(KeyName->Length, sizeof(ULONG)) +
-                 ALIGN_UP_BY(sizeof(RXACT_ACTION), sizeof(ULONG));
+                 ALIGN_UP_BY(sizeof(RXACT_ACTION), sizeof(ULONG)));
 
     /* Calculate the new buffer size we need */
     RequiredSize = ActionSize + Context->Data->CurrentSize;

@@ -89,10 +89,10 @@ typedef ULONG32 ulong32;
        (y)[2] = (unsigned char)(((x)>>8)&255); (y)[3] = (unsigned char)((x)&255); }
 
 #define LOAD32H(x, y)                            \
-     { x = ((unsigned long)((y)[0] & 255)<<24) | \
-           ((unsigned long)((y)[1] & 255)<<16) | \
-           ((unsigned long)((y)[2] & 255)<<8)  | \
-           ((unsigned long)((y)[3] & 255)); }
+     { x = ((ULONG32)((y)[0] & 255)<<24) |       \
+           ((ULONG32)((y)[1] & 255)<<16) |       \
+           ((ULONG32)((y)[2] & 255)<<8)  |       \
+           ((ULONG32)((y)[3] & 255)); }
 
 #if defined(__x86_64__) && !defined(__arm64ec__)
 #define LTC_GNU_AMD64_CODEGEN 1

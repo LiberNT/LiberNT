@@ -98,7 +98,7 @@ extern char **environ;
 
 struct target
 {
-    enum { CPU_i386, CPU_x86_64, CPU_ARM, CPU_ARM64, CPU_ARM64EC, CPU_RISCV64, CPU_POWERPC } cpu;
+    enum { CPU_i386, CPU_x86_64, CPU_ARM, CPU_ARM64, CPU_ARM64EC, CPU_RISCV64, CPU_LOONGARCH64, CPU_POWERPC } cpu;
 
     enum
     {
@@ -145,8 +145,8 @@ static inline char *xstrdup( const char *str )
 
 static inline int strendswith( const char *str, const char *end )
 {
-    int l = strlen( str );
-    int m = strlen( end );
+    size_t l = strlen( str );
+    size_t m = strlen( end );
     return l >= m && !strcmp( str + l - m, end );
 }
 
@@ -248,9 +248,11 @@ static inline struct strarray strarray_frompath( const char *path )
 static inline char *strarray_tostring( struct strarray array, const char *sep )
 {
     char *str;
-    unsigned int i, len = 1 + (array.count - 1) * strlen(sep);
+    unsigned int i;
+    size_t len;
 
     if (!array.count) return xstrdup("");
+    len = 1 + (array.count - 1) * strlen(sep);
     for (i = 0; i < array.count; i++) len += strlen( array.str[i] );
     str = xmalloc( len );
     strcpy( str, array.str[0] );
@@ -292,7 +294,8 @@ static inline int strarray_spawn( struct strarray args )
 {
 #ifdef _WIN32
     strarray_add( &args, NULL );
-    return _spawnvp( _P_WAIT, args.str[0], args.str );
+    /* the CRT returns intptr_t; a process exit status always fits in int */
+    return (int)_spawnvp( _P_WAIT, args.str[0], args.str );
 #else
     pid_t pid, wret;
     int status;
@@ -332,10 +335,10 @@ static inline char *get_dirname( const char *file )
 
 static inline char *replace_extension( const char *name, const char *old_ext, const char *new_ext )
 {
-    int name_len = strlen( name );
+    size_t name_len = strlen( name );
 
     if (strendswith( name, old_ext )) name_len -= strlen( old_ext );
-    return strmake( "%.*s%s", name_len, name, new_ext );
+    return strmake( "%.*s%s", (int)name_len, name, new_ext );
 }
 
 /* build a path with the relative dir from 'from' to 'dest' appended to base */
@@ -382,7 +385,8 @@ extern struct strarray temp_files;
 
 static inline char *make_temp_dir(void)
 {
-    unsigned int value = time(NULL) + getpid();
+    /* a 32-bit pseudo-random seed; only its low bits matter here */
+    unsigned int value = (unsigned int)time(NULL) + (unsigned int)getpid();
     int count;
     char *name;
     const char *tmpdir = NULL;
@@ -470,20 +474,30 @@ static inline void init_signals( void (*cleanup)(int) )
 static inline void *read_file( const char *name, size_t *size )
 {
     struct stat st;
-    int res, fd;
+    size_t file_size, total = 0;
+    int res = 0, fd;
     void *data;
 
     if ((fd = open( name, O_RDONLY | O_BINARY )) == -1) return NULL;
     fstat( fd, &st );
-    data = xmalloc( st.st_size );
-    res = read( fd, data, st.st_size );
+    file_size = st.st_size;
+    data = xmalloc( file_size );
+    /* read() takes a 32-bit byte count, so a file larger than that is read in chunks */
+    while (total < file_size)
+    {
+        size_t chunk = min( file_size - total, (size_t)UINT_MAX );
+
+        res = read( fd, (char *)data + total, (unsigned int)chunk );
+        if (res <= 0) break;
+        total += res;
+    }
     if (res == -1)
     {
         free( data );
         data = NULL;
         *size = 0;
     }
-    else *size = res;
+    else *size = total;
     close( fd );
     return data;
 }
@@ -502,6 +516,8 @@ static inline struct target get_default_target(void)
     target.cpu = CPU_ARM64;
 #elif defined(__riscv) && __riscv_xlen == 64
     target.cpu = CPU_RISCV64;
+#elif defined(__loongarch__) && (__loongarch_grlen == 64)
+    target.cpu = CPU_LOONGARCH64;
 #elif defined(__powerpc__) && !defined(__powerpc64__)
     target.cpu = CPU_POWERPC;
 #else
@@ -540,6 +556,7 @@ static inline unsigned int get_target_ptr_size( struct target target )
         [CPU_ARM64]     = 8,
         [CPU_ARM64EC]   = 8,
         [CPU_RISCV64]   = 8,
+        [CPU_LOONGARCH64] = 8,
         [CPU_POWERPC]   = 4,
     };
     return sizes[target.cpu];
@@ -564,6 +581,7 @@ static inline void set_target_ptr_size( struct target *target, unsigned int size
         if (size == 4) target->cpu = CPU_ARM;
         break;
     case CPU_RISCV64:
+    case CPU_LOONGARCH64:
     case CPU_POWERPC:
         break;
     }
@@ -590,6 +608,7 @@ static inline int get_cpu_from_name( const char *name )
         { "arm64",     CPU_ARM64 },
         { "arm",       CPU_ARM },
         { "riscv64",   CPU_RISCV64 },
+        { "loongarch64", CPU_LOONGARCH64 },
         { "powerpc",   CPU_POWERPC },
         { "ppc",       CPU_POWERPC },
     };
@@ -640,6 +659,7 @@ static inline const char *get_arch_dir( struct target target )
         [CPU_ARM64]   = "aarch64",
         [CPU_ARM64EC] = "aarch64",
         [CPU_RISCV64] = "riscv64",
+        [CPU_LOONGARCH64] = "loongarch64",
         [CPU_POWERPC] = "powerpc",
     };
 
@@ -861,9 +881,19 @@ static inline void align_output( unsigned int align )
 
 static inline void flush_output_buffer( const char *name )
 {
+    size_t pos = 0;
     int fd = open( name, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666 );
 
-    if (fd == -1 || write( fd, output_buffer, output_buffer_pos ) != output_buffer_pos)
+    /* write() takes a 32-bit byte count, so a larger buffer is written in chunks */
+    while (fd != -1 && pos < output_buffer_pos)
+    {
+        size_t chunk = min( output_buffer_pos - pos, (size_t)UINT_MAX );
+        int res = write( fd, output_buffer + pos, (unsigned int)chunk );
+
+        if (res <= 0) break;
+        pos += res;
+    }
+    if (fd == -1 || pos != output_buffer_pos)
     {
         perror( name );
         exit(1);

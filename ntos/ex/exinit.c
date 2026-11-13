@@ -222,7 +222,8 @@ ExpReadLoadOptions(
     Value = ExpFindLoadOption(Options, "BURNMEMORY=");
     if (Value != NULL)
     {
-        ExBurnMemory(LoaderBlock, atol(Value));
+        /* The option is a page count, and ExBurnMemory takes it as a ULONG. */
+        ExBurnMemory(LoaderBlock, (ULONG)atol(Value));
     }
 
     if (ExpFindLoadOption(Options, "REMOTEBOOTCLIENT") != NULL)
@@ -494,7 +495,8 @@ ExpInitNls(
 
         if (Descriptor->MemoryType == LoaderNlsData)
         {
-            Size = Descriptor->PageCount << PAGE_SHIFT;
+            /* The NLS block is a few pages; its byte size is kept in a ULONG. */
+            Size = (ULONG)(Descriptor->PageCount << PAGE_SHIFT);
             break;
         }
     }
@@ -620,11 +622,11 @@ ExpCreateInitialProcessParameters(
     if (CurrentDirectory->Length + 2 * sizeof(WCHAR) > EXP_CURRENT_DIRECTORY_LENGTH)
         return NULL;
 
-    Length = sizeof(RTL_USER_PROCESS_PARAMETERS) +
-             EXP_CURRENT_DIRECTORY_LENGTH +
-             ALIGN_UP_BY(CurrentDirectory->Length + sizeof(WCHAR), sizeof(PVOID)) +
-             2 * ALIGN_UP_BY(ImagePathName->Length + sizeof(WCHAR), sizeof(PVOID)) +
-             3 * ALIGN_UP_BY(sizeof(WCHAR), sizeof(PVOID));
+    Length = (ULONG)(sizeof(RTL_USER_PROCESS_PARAMETERS) +
+                     EXP_CURRENT_DIRECTORY_LENGTH +
+                     ALIGN_UP_BY(CurrentDirectory->Length + sizeof(WCHAR), sizeof(PVOID)) +
+                     2 * ALIGN_UP_BY(ImagePathName->Length + sizeof(WCHAR), sizeof(PVOID)) +
+                     3 * ALIGN_UP_BY(sizeof(WCHAR), sizeof(PVOID)));
 
     Parameters = ExAllocatePoolZero(PagedPool, Length, TAG_INIT);
     if (Parameters == NULL) return NULL;

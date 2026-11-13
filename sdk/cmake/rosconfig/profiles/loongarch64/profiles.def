@@ -1,0 +1,9 @@
+config PROFILE_LOONGARCH64
+    prompt "Target profile"
+    type choice
+    var ROSCONFIG_PROFILE
+    value generic "Generic LoongArch64"
+    default generic
+    depends ARCH=loongarch64
+    help
+      Generic builds the architecture-independent LoongArch64 target.

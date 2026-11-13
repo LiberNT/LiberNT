@@ -155,5 +155,8 @@ endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     set_property(SOURCE bignum.c APPEND PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
-    set_property(SOURCE x509_crt.c APPEND PROPERTY COMPILE_OPTIONS -Wno-uninitialized-const-pointer)
+    # -Wuninitialized-const-pointer only exists in Clang 20 and later.
+    if(CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 20)
+        set_property(SOURCE x509_crt.c APPEND PROPERTY COMPILE_OPTIONS -Wno-uninitialized-const-pointer)
+    endif()
 endif()

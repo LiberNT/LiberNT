@@ -1,0 +1,215 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     LoongArch64 thread context get/set APC
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntoskrnl.h>
+/* The per-processor CPUCFG record and ESTAT decode live with the ke files. */
+#include "../../ke/loongarch64/la64ke.h"
+
+VOID
+NTAPI
+PspGetOrSetContextKernelRoutine(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    PGET_SET_CTX_CONTEXT Request = CONTAINING_RECORD(Apc, GET_SET_CTX_CONTEXT, Apc);
+    PKTHREAD Thread = Apc->SystemArgument2;
+    PKTRAP_FRAME Frame = Thread->TrapFrame;
+    ULONG Ecode;
+
+    PAGED_CODE();
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+    ASSERT(Thread == KeGetCurrentThread());
+
+    /* Nested kernel traps link back to the complete interrupted user bank. */
+    if (Request->Mode == UserMode)
+    {
+        while (Frame && !KiLa64UserTrap(Frame))
+            Frame = Frame->PreviousTrapFrame;
+    }
+    if (!Frame && Thread->Teb)
+        Frame = (PKTRAP_FRAME)Thread->InitialStack - 1;
+
+    if (!Frame)
+    {
+        Request->Status = STATUS_INVALID_DEVICE_STATE;
+        KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);
+        return;
+    }
+
+    /* Accept only this architecture's context layout. */
+    if (!(Request->Context.ContextFlags & CONTEXT_LOONGARCH64) ||
+        (Request->Context.ContextFlags & ~(CONTEXT_ALL | CONTEXT_EXCEPTION_REQUEST |
+                                           CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE |
+                                           CONTEXT_EXCEPTION_ACTIVE)))
+    {
+        Request->Status = STATUS_INVALID_PARAMETER;
+        KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);
+        return;
+    }
+
+    if (Apc->SystemArgument1)
+    {
+        KeContextToTrapFrame(&Request->Context, NULL, Frame,
+                             Request->Context.ContextFlags, Request->Mode);
+    }
+    else
+    {
+        KeTrapFrameToContext(Frame, NULL, &Request->Context);
+        Request->Context.ContextFlags &= ~(CONTEXT_EXCEPTION_REPORTING | CONTEXT_SERVICE_ACTIVE |
+                                           CONTEXT_EXCEPTION_ACTIVE);
+        if (Request->Context.ContextFlags & CONTEXT_EXCEPTION_REQUEST)
+        {
+            Request->Context.ContextFlags |= CONTEXT_EXCEPTION_REPORTING;
+            /* ESTAT.Ecode names why the frame exists: 0xa is a line
+             * interrupt, and the syscall entry (0xb) is the "service active"
+             * state rather than an exception, [V1-7.4.6] Table 21. */
+            Ecode = KiLa64EstatEcode(Frame->Estat);
+            if (KiLa64UserTrap(Frame) && (Ecode == LA64_ECODE_SYS))
+                Request->Context.ContextFlags |= CONTEXT_SERVICE_ACTIVE;
+            else if (Ecode != LA64_ECODE_INT)
+                Request->Context.ContextFlags |= CONTEXT_EXCEPTION_ACTIVE;
+        }
+    }
+
+    KeSetEvent(&Request->Event, IO_NO_INCREMENT, FALSE);
+}
+
+/* TODO: tell a WoW64 thread's 32-bit context apart once this host's WoW64 passes one to NtCreateThread */
+BOOLEAN
+NTAPI
+PsArchGetWow64StartContext(
+    _In_ PCONTEXT Context,
+    _Out_ PULONG Eip,
+    _Out_ PULONG Eax,
+    _Out_ PULONG Ebx,
+    _Out_ PULONG Esp)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    *Eip = *Eax = *Ebx = *Esp = 0;
+    return FALSE;
+}
+
+VOID
+NTAPI
+PsArchInitializeUserThreadContext(
+    _Out_ PCONTEXT Context,
+    _In_ PVOID ThreadStart,
+    _In_ PVOID StartRoutine,
+    _In_opt_ PVOID Argument,
+    _In_ PVOID StackBase)
+{
+    RtlZeroMemory(Context, sizeof(*Context));
+    Context->ContextFlags = CONTEXT_FULL;
+    Context->Pc = (ULONG64)(ULONG_PTR)ThreadStart;
+    Context->A0 = (ULONG64)(ULONG_PTR)StartRoutine;
+    Context->A1 = (ULONG64)(ULONG_PTR)Argument;
+    /* The psABI requires 16-byte stack alignment at a procedure entry. */
+    Context->Sp = (ULONG64)(ULONG_PTR)StackBase & ~15ULL;
+}
+
+NTSTATUS
+NTAPI
+PspArchCopyLiveWow64Context(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SetContext);
+
+    /* TODO: get or set the live x86 state through the emulator backend when it is not in the CPU area */
+    return STATUS_NOT_FOUND;
+}
+
+NTSTATUS
+NTAPI
+PspArchCopyWow64DebugRegisters(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext)
+{
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SetContext);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PspArchCaptureXStateContext(
+    _In_ PCONTEXT Context,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ BOOLEAN SetContext,
+    _Out_ PVOID *XState)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(ContextFlags);
+    UNREFERENCED_PARAMETER(PreviousMode);
+    UNREFERENCED_PARAMETER(SetContext);
+
+    /* TODO: capture the extended processor state (CONTEXT_XSTATE) of the context */
+    *XState = NULL;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PspArchCompleteXStateContext(
+    _In_opt_ PVOID XState,
+    _In_ BOOLEAN CopyOut)
+{
+    UNREFERENCED_PARAMETER(XState);
+    UNREFERENCED_PARAMETER(CopyOut);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+PspArchSetInstrumentationCallback(
+    _In_ PEPROCESS Process,
+    _In_reads_bytes_(Length) PVOID Information,
+    _In_ ULONG Length,
+    _In_ KPROCESSOR_MODE PreviousMode)
+{
+    UNREFERENCED_PARAMETER(Process);
+    UNREFERENCED_PARAMETER(Information);
+    UNREFERENCED_PARAMETER(Length);
+    UNREFERENCED_PARAMETER(PreviousMode);
+
+    return STATUS_INVALID_INFO_CLASS;
+}
+
+BOOLEAN
+NTAPI
+PspArchManagesExecutableWrites(VOID)
+{
+    return FALSE;
+}
+
+VOID
+NTAPI
+PspArchInitializeUserThreadStartup(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    KiInitializeUserApc(ExceptionFrame,
+                        TrapFrame,
+                        PspSystemDllEntryPoint,
+                        NULL,
+                        PspSystemDllBase,
+                        NULL);
+}

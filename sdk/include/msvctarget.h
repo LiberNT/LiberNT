@@ -56,6 +56,13 @@
  #ifndef _M_RISCV64
   #define _M_RISCV64 1
  #endif
+#elif defined(__loongarch__) && (__loongarch_grlen == 64)
+ #ifndef _LOONGARCH64_
+  #define _LOONGARCH64_ 1
+ #endif
+ #ifndef _M_LOONGARCH64
+  #define _M_LOONGARCH64 1
+ #endif
 #elif defined(__ia64__)
  #if !defined(_IA64_)
   #define _IA64_ 1

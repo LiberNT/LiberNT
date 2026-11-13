@@ -67,6 +67,11 @@ elseif(ARCH STREQUAL "riscv64")
         ${NTOS_RTL_SOURCE_DIR}/bitmap64.c
         ${NTOS_RTL_SOURCE_DIR}/byteswap.c
         ${NTOS_RTL_SOURCE_DIR}/mem.c)
+elseif(ARCH STREQUAL "loongarch64")
+    list(APPEND SOURCE
+        ${NTOS_RTL_SOURCE_DIR}/bitmap64.c
+        ${NTOS_RTL_SOURCE_DIR}/byteswap.c
+        ${NTOS_RTL_SOURCE_DIR}/mem.c)
 endif()
 
 add_asm_files(blrtl_asm ${ASM_SOURCE})

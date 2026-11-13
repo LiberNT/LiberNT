@@ -322,7 +322,7 @@ RtlpInitializeHeap(OUT PHEAP Heap,
                                  HEAP_FREE_CHECKING_ENABLED));
 
     /* Initialise the Heap parameters */
-    Heap->VirtualMemoryThreshold = ROUND_UP(Parameters->VirtualMemoryThreshold, sizeof(HEAP_ENTRY)) >> HEAP_ENTRY_SHIFT;
+    Heap->VirtualMemoryThreshold = (ULONG)(ROUND_UP(Parameters->VirtualMemoryThreshold, sizeof(HEAP_ENTRY)) >> HEAP_ENTRY_SHIFT);
     Heap->SegmentReserve = Parameters->SegmentReserve;
     Heap->SegmentCommit = Parameters->SegmentCommit;
     Heap->DeCommitFreeBlockThreshold = Parameters->DeCommitFreeBlockThreshold >> HEAP_ENTRY_SHIFT;
@@ -365,7 +365,7 @@ RtlpInitializeHeap(OUT PHEAP Heap,
     InitializeListHead(&Heap->FreeLists);
     RtlInitializeBitMap(&Heap->FreeHintBitmap,
                         (PULONG)&Heap->FreeHints[FreeHintCount],
-                        FreeHintCount);
+                        (ULONG)FreeHintCount);
     RtlClearAllBits(&Heap->FreeHintBitmap);
     RtlZeroMemory(&Heap->FreeHints[0], sizeof(Heap->FreeHints[0]) * FreeHintCount);
 
@@ -453,7 +453,7 @@ RtlpInsertFreeBlockHelper(PHEAP Heap,
     }
 
     ASSERT(BlockSize >= 2);
-    HintIndex = BlockSize - 1;
+    HintIndex = (ULONG)(BlockSize - 1);
 
     if (Heap->FreeHints[HintIndex] != NULL)
     {
@@ -2208,7 +2208,7 @@ RtlAllocateHeap(IN PVOID HeapPtr,
         else
         {
             /* Get the free entry from the hint */
-            ULONG HintIndex = RtlFindSetBits(&Heap->FreeHintBitmap, 1, Index - 1);
+            ULONG HintIndex = RtlFindSetBits(&Heap->FreeHintBitmap, 1, (ULONG)(Index - 1));
             ASSERT(HintIndex != 0xFFFFFFFF);
             ASSERT((HintIndex >= (Index - 1)) || (HintIndex == 0));
             FreeEntry = CONTAINING_RECORD(Heap->FreeHints[HintIndex],

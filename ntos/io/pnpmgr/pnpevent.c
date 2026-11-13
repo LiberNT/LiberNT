@@ -141,9 +141,9 @@ IopQueueCustomTargetEvent(
     }
 
     /* The notification follows the device IDs; user mode reads it there with its data */
-    Offset = ALIGN_UP_BY(FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, CustomNotification.DeviceIds) +
-                             DeviceIds->Length + 2 * sizeof(WCHAR),
-                         sizeof(ULONGLONG));
+    Offset = (ULONG)ALIGN_UP_BY(FIELD_OFFSET(PLUGPLAY_EVENT_BLOCK, CustomNotification.DeviceIds) +
+                                DeviceIds->Length + 2 * sizeof(WCHAR),
+                                sizeof(ULONGLONG));
 
     Entry = IopAllocatePnpEvent(&Notification->Event,
                                 CustomDeviceEvent,

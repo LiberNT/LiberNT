@@ -195,6 +195,24 @@ typedef struct __JUMP_BUFFER {
     unsigned __int64 Reserved;
 } _JUMP_BUFFER;
 
+#elif defined(_LOONGARCH64_) || defined(__loongarch64__)
+
+/* LoongArch64 LP64D ABI: sp, fp and s0-s8 are nonvolatile, fs0-fs7 are
+ * nonvolatile, and the floating-point control and status register must
+ * survive a longjmp. ra holds the return continuation. */
+#define _JBLEN 22
+#define _JBTYPE unsigned __int64
+
+typedef struct __JUMP_BUFFER {
+    unsigned __int64 Frame;
+    unsigned __int64 Ra;
+    unsigned __int64 Sp;
+    unsigned __int64 Fp;
+    unsigned __int64 S[9];
+    unsigned __int64 Fcsr;
+    unsigned __int64 Fs[8];
+} _JUMP_BUFFER;
+
 #elif defined(_M_PPC)
 
 /* Windows NT PowerPC layout: f14-f31, r1, r2 (TOC), r13 (TEB) and r14-r31

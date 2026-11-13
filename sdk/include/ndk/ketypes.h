@@ -1818,8 +1818,9 @@ C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x38);
 //
 // Kernel Thread (KTHREAD), Win11 26100 arm64 layout (ntkrnlmp.pdb 10.0.26100.8036)
 // sizeof == 0x4A0; members marked [ReactOS] live in Win11 spare slots
-// RISC-V shares these objects; register frames and per-CPU state remain native.
-// VfpState and ARM64 emulation/vector metadata are reserved on RISC-V.
+// RISC-V and LoongArch64 share these objects; register frames and per-CPU state
+// remain native. VfpState and ARM64 emulation/vector metadata are reserved on
+// RISC-V and LoongArch64.
 //
 // Each layout defines the properties the kernel depends on:
 // KTHREAD_DISABLE_BOOST_BIT is the DisableBoost bit of ThreadFlags, and
@@ -3546,8 +3547,10 @@ C_ASSERT(FIELD_OFFSET(KTHREAD, UserTime) == 0x2FC);
 C_ASSERT(FIELD_OFFSET(KTHREAD, SuspendEvent) == 0x300);
 C_ASSERT(FIELD_OFFSET(KTHREAD, ThreadListEntry) == 0x318);
 C_ASSERT(FIELD_OFFSET(KTHREAD, MutantListHead) == 0x328);
+C_ASSERT(FIELD_OFFSET(KTHREAD, DecayBoost) == 0x386);
 C_ASSERT(FIELD_OFFSET(KTHREAD, ReadOperationCount) == 0x3A0);
 C_ASSERT(FIELD_OFFSET(KTHREAD, ApcQueueLock) == 0x440);
+C_ASSERT(FIELD_OFFSET(KTHREAD, ApcStatePointer) == 0x448);
 C_ASSERT(FIELD_OFFSET(KTHREAD, StateSaveArea) == 0x478);
 C_ASSERT(FIELD_OFFSET(KTHREAD, ResourceIndex) == 0x480);
 C_ASSERT(FIELD_OFFSET(KTHREAD, CoreIsolationReasons) == 0x481);

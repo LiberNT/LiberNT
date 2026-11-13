@@ -44,7 +44,9 @@ FORCEINLINE
 ULONG
 PoolTagTrackerCount(_In_ PPOOL_TAG_TRACKER Tracker)
 {
-    return POOL_LOAD_ACQUIRE32(&Tracker->TableCount);
+    /* The counter is a 32-bit NT quantity; the accessor hands the loaded
+     * bits back in a long, so narrow them to the field's own width. */
+    return (ULONG)POOL_LOAD_ACQUIRE32(&Tracker->TableCount);
 }
 
 VOID PoolTagTrackerInitialize(_Out_ PPOOL_TAG_TRACKER Tracker);

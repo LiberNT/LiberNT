@@ -1,15 +1,17 @@
 
 #if defined(__ROS_LONG64__)
+/* C long is 64-bit here, but the interlocked intrinsics operate on the
+   32-bit NT LONG; cast to LONG rather than to long. */
 #undef InterlockedExchange
-#define InterlockedExchange(a,b) _InterlockedExchange((long*)a,b)
+#define InterlockedExchange(a,b) _InterlockedExchange((LONG*)a,b)
 #undef InterlockedExchangeAdd
-#define InterlockedExchangeAdd(a,b) _InterlockedExchangeAdd((long*)a,b)
+#define InterlockedExchangeAdd(a,b) _InterlockedExchangeAdd((LONG*)a,b)
 #undef InterlockedCompareExchange
-#define InterlockedCompareExchange(a,b,c) _InterlockedCompareExchange((long*)a,b,c)
+#define InterlockedCompareExchange(a,b,c) _InterlockedCompareExchange((LONG*)a,b,c)
 #undef InterlockedIncrement
-#define InterlockedIncrement(a) _InterlockedIncrement((long*)a)
+#define InterlockedIncrement(a) _InterlockedIncrement((LONG*)a)
 #undef InterlockedDecrement
-#define InterlockedDecrement(a) _InterlockedDecrement((long*)a)
+#define InterlockedDecrement(a) _InterlockedDecrement((LONG*)a)
 #endif
 
 #undef __C89_NAMELESS
@@ -2502,6 +2504,8 @@ typedef struct _DISPATCHER_CONTEXT {
 } DISPATCHER_CONTEXT, *PDISPATCHER_CONTEXT;
 #elif defined(_M_RISCV64)
 $include(riscv64/ketypes.h)
+#elif defined(_M_LOONGARCH64)
+$include(loongarch64/ketypes.h)
 #else
 #error "undefined processor type"
 #endif
@@ -5330,6 +5334,11 @@ FORCEINLINE struct _TEB * NtCurrentTeb(VOID)
     __asm__("mv %0, tp" : "=r"(Teb));
     return Teb;
 }
+#elif defined(_M_LOONGARCH64)
+FORCEINLINE struct _TEB * NtCurrentTeb(VOID)
+{
+    return (struct _TEB *)__builtin_thread_pointer();
+}
 FORCEINLINE PVOID GetCurrentFiber(VOID)
 {
 #ifdef NONAMELESSUNION
@@ -5373,6 +5382,15 @@ DbgRaiseAssertionFailure(VOID)
 FORCEINLINE VOID YieldProcessor(VOID)
 {
     /* Do not require Zihintpause on the RV64GC baseline. */
+    __asm__ __volatile__("nop" ::: "memory");
+}
+#endif
+#define DbgRaiseAssertionFailure() __debugbreak()
+#elif defined(_M_LOONGARCH64)
+#ifndef _LOONGARCH64_YIELD_PROCESSOR_DEFINED
+#define _LOONGARCH64_YIELD_PROCESSOR_DEFINED
+FORCEINLINE VOID YieldProcessor(VOID)
+{
     __asm__ __volatile__("nop" ::: "memory");
 }
 #endif

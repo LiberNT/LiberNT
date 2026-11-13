@@ -668,7 +668,8 @@ EtwpBuildHeaderBuffer(
     Strings += Logger->LoggerName.Length + sizeof(WCHAR);
     RtlCopyMemory(Strings, Logger->LogFileName.Buffer, Logger->LogFileName.Length);
 
-    Buffer->CurrentOffset = sizeof(*Buffer) + ALIGN_UP_BY(Size, sizeof(ULONG64));
+    /* CurrentOffset is a 32-bit header field; the sum fits, being checked against Logger->BufferSize above */
+    Buffer->CurrentOffset = (ULONG)(sizeof(*Buffer) + ALIGN_UP_BY(Size, sizeof(ULONG64)));
     return STATUS_SUCCESS;
 }
 
@@ -772,7 +773,8 @@ EtwpLoggerThread(
 
     for (;;)
     {
-        FlushTimer = ReadULongNoFence(&Logger->FlushTimer);
+        /* The accessor loads exactly 32 bits but is typed as unsigned long (64-bit in LP64) */
+        FlushTimer = (ULONG)ReadULongNoFence(&Logger->FlushTimer);
         TimeoutPointer = NULL;
         if (FlushTimer)
         {
@@ -1289,7 +1291,7 @@ EtwpQueryLoggerById(
         *Information = Snapshot;
     }
     if (EventsLogged)
-        *EventsLogged = ReadULongNoFence(&Logger->EventsLogged);
+        *EventsLogged = (ULONG)ReadULongNoFence(&Logger->EventsLogged);
 
     EtwpDereferenceLogger(Logger);
     return STATUS_SUCCESS;
@@ -1511,7 +1513,7 @@ EtwpTraceClassicEvent(
     }
     _SEH2_END;
 
-    Reserved = ALIGN_UP_BY(Total, sizeof(ULONG64));
+    Reserved = (ULONG)ALIGN_UP_BY(Total, sizeof(ULONG64));
     if (NT_SUCCESS(Status) && Reserved > MAXUSHORT)
         Status = STATUS_BUFFER_OVERFLOW;
     if (!NT_SUCCESS(Status))

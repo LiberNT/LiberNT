@@ -5,6 +5,7 @@
 #ifndef RC_INVOKED
 
 #include "vcruntime.h"
+#include "ntwidth.h"
 #include "intrin_target.h"
 #include "intrin0.inl.h"
 #include "setjmp.h"
@@ -42,36 +43,43 @@
 #endif
 #endif
 
+#if defined(__ROS_LONG64__) && !defined(_MSC_VER)
+#define _lrotl(v, s) __builtin_rotateleft32((unsigned int)(v), (s))
+#define _lrotr(v, s) __builtin_rotateright32((unsigned int)(v), (s))
+#define _rotl64(v, s) __builtin_rotateleft64((unsigned long long)(v), (s))
+#define _rotr64(v, s) __builtin_rotateright64((unsigned long long)(v), (s))
+#endif
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 void* _AddressOfReturnAddress(void);
-unsigned char _BitScanForward(unsigned long * _Index, unsigned long _Mask);
-unsigned char _BitScanReverse(unsigned long * _Index, unsigned long _Mask);
-long _InterlockedAnd(_Interlocked_operand_ long volatile * _Value, long _Mask);
+unsigned char _BitScanForward(__NT_ULONG32 * _Index, __NT_ULONG32 _Mask);
+unsigned char _BitScanReverse(__NT_ULONG32 * _Index, __NT_ULONG32 _Mask);
+__NT_LONG32 _InterlockedAnd(_Interlocked_operand_ __NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedAnd16(_Interlocked_operand_ short volatile * _Value, short _Mask);
 char _InterlockedAnd8(_Interlocked_operand_ char volatile * _Value, char _Mask);
-long __cdecl _InterlockedCompareExchange(_Interlocked_operand_ long volatile * _Destination, long _Exchange, long _Comparand);
+__NT_LONG32 __cdecl _InterlockedCompareExchange(_Interlocked_operand_ __NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
 short _InterlockedCompareExchange16(_Interlocked_operand_ short volatile * _Destination, short _Exchange, short _Comparand);
 __int64 _InterlockedCompareExchange64(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _Exchange, __int64 _Comparand);
 char _InterlockedCompareExchange8(_Interlocked_operand_ char volatile * _Destination, char _Exchange, char _Comparand);
 void * _InterlockedCompareExchangePointer(_Interlocked_operand_ void * volatile * _Destination, void * _Exchange, void * _Comparand);
-long __cdecl _InterlockedDecrement(_Interlocked_operand_ long volatile * _Addend);
+__NT_LONG32 __cdecl _InterlockedDecrement(_Interlocked_operand_ __NT_LONG32 volatile * _Addend);
 short _InterlockedDecrement16(_Interlocked_operand_ short volatile * _Addend);
-long __cdecl _InterlockedExchange(_Interlocked_operand_ long volatile * _Target, long _Value);
+__NT_LONG32 __cdecl _InterlockedExchange(_Interlocked_operand_ __NT_LONG32 volatile * _Target, __NT_LONG32 _Value);
 short _InterlockedExchange16(_Interlocked_operand_ short volatile * _Target, short _Value);
 char _InterlockedExchange8(_Interlocked_operand_ char volatile * _Target, char _Value);
-long __cdecl _InterlockedExchangeAdd(_Interlocked_operand_ long volatile * _Addend, long _Value);
+__NT_LONG32 __cdecl _InterlockedExchangeAdd(_Interlocked_operand_ __NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
 short _InterlockedExchangeAdd16(_Interlocked_operand_ short volatile * _Addend, short _Value);
 char _InterlockedExchangeAdd8(_Interlocked_operand_ char volatile * _Addend, char _Value);
 void * _InterlockedExchangePointer(_Interlocked_operand_ void * volatile * _Target, void * _Value);
-long __cdecl _InterlockedIncrement(_Interlocked_operand_ long volatile * _Addend);
+__NT_LONG32 __cdecl _InterlockedIncrement(_Interlocked_operand_ __NT_LONG32 volatile * _Addend);
 short _InterlockedIncrement16(_Interlocked_operand_ short volatile * _Addend);
-long _InterlockedOr(_Interlocked_operand_ long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedOr(_Interlocked_operand_ __NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedOr16(_Interlocked_operand_ short volatile * _Value, short _Mask);
 char _InterlockedOr8(_Interlocked_operand_ char volatile * _Value, char _Mask);
-long _InterlockedXor(_Interlocked_operand_ long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedXor(_Interlocked_operand_ __NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedXor16(_Interlocked_operand_ short volatile * _Value, short _Mask);
 char _InterlockedXor8(_Interlocked_operand_ char volatile * _Value, char _Mask);
 void _ReadBarrier(void);
@@ -83,34 +91,38 @@ void __cdecl __debugbreak(void);
 __declspec(noreturn) void __fastfail(unsigned int);
 void __nop(void);
 __int64 __cdecl _abs64(__int64);
-unsigned char _bittest(long const *, long);
-unsigned char _bittestandcomplement(long *, long);
-unsigned char _bittestandreset(long *, long);
-unsigned char _bittestandset(long *, long);
+unsigned char _bittest(__NT_LONG32 const *, __NT_LONG32);
+unsigned char _bittestandcomplement(__NT_LONG32 *, __NT_LONG32);
+unsigned char _bittestandreset(__NT_LONG32 *, __NT_LONG32);
+unsigned char _bittestandset(__NT_LONG32 *, __NT_LONG32);
 _Check_return_ unsigned __int64 __cdecl _byteswap_uint64(_In_ unsigned __int64);
-_Check_return_ unsigned long __cdecl _byteswap_ulong(_In_ unsigned long);
+_Check_return_ __NT_ULONG32 __cdecl _byteswap_ulong(_In_ __NT_ULONG32);
 _Check_return_ unsigned short __cdecl _byteswap_ushort(_In_ unsigned short);
 void __cdecl _disable(void);
 void __cdecl _enable(void);
-unsigned char _interlockedbittestandreset(long volatile *, long);
-unsigned char _interlockedbittestandset(long volatile *, long);
+unsigned char _interlockedbittestandreset(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandset(__NT_LONG32 volatile *, __NT_LONG32);
 #ifndef _lrotl
-_Check_return_ unsigned long __cdecl _lrotl(_In_ unsigned long, _In_ int);
+_Check_return_ __NT_ULONG32 __cdecl _lrotl(_In_ __NT_ULONG32, _In_ int);
 #endif
 #ifndef _lrotr
-_Check_return_ unsigned long __cdecl _lrotr(_In_ unsigned long, _In_ int);
+_Check_return_ __NT_ULONG32 __cdecl _lrotr(_In_ __NT_ULONG32, _In_ int);
 #endif
 #ifndef _rotl
 _Check_return_ unsigned int __cdecl _rotl(_In_ unsigned int _Value, _In_ int _Shift);
 #endif
 _Check_return_ unsigned short __cdecl _rotl16(_In_ unsigned short _Value, _In_ unsigned char _Shift);
+#ifndef _rotl64
 _Check_return_ unsigned __int64 __cdecl _rotl64(_In_ unsigned __int64 _Value, _In_ int _Shift);
+#endif
 _Check_return_ unsigned char __cdecl _rotl8(_In_ unsigned char _Value, _In_ unsigned char _Shift);
 #ifndef _rotr
 _Check_return_ unsigned int __cdecl _rotr(_In_ unsigned int _Value, _In_ int _Shift);
 #endif
 _Check_return_ unsigned short __cdecl _rotr16(_In_ unsigned short _Value, _In_ unsigned char _Shift);
+#ifndef _rotr64
 _Check_return_ unsigned __int64 __cdecl _rotr64(_In_ unsigned __int64 _Value, _In_ int _Shift);
+#endif
 _Check_return_ unsigned char __cdecl _rotr8(_In_ unsigned char _Value, _In_ unsigned char _Shift);
 
 #if _VCRT_X86_INTRINSICS
@@ -122,42 +134,42 @@ unsigned __int64 __emulu(unsigned int, unsigned int);
 unsigned int __getcallerseflags(void);
 void __halt(void);
 unsigned char __inbyte(unsigned short);
-void __inbytestring(unsigned short, unsigned char *, unsigned long);
-unsigned long __indword(unsigned short);
-void __indwordstring(unsigned short, unsigned long *, unsigned long);
+void __inbytestring(unsigned short, unsigned char *, __NT_ULONG32);
+__NT_ULONG32 __indword(unsigned short);
+void __indwordstring(unsigned short, __NT_ULONG32 *, __NT_ULONG32);
 void __int2c(void);
 void __invlpg(void *);
 unsigned short __inword(unsigned short);
-void __inwordstring(unsigned short, unsigned short *, unsigned long);
+void __inwordstring(unsigned short, unsigned short *, __NT_ULONG32);
 void __lidt(void *);
 unsigned __int64 __ll_lshift(unsigned __int64, int);
 __int64 __ll_rshift(__int64, int);
 unsigned int __lzcnt(unsigned int);
 unsigned short __lzcnt16(unsigned short);
 void __movsb(unsigned char *, unsigned char const *, size_t);
-void __movsd(unsigned long *, unsigned long const *, size_t);
+void __movsd(__NT_ULONG32 *, __NT_ULONG32 const *, size_t);
 void __movsw(unsigned short *, unsigned short const *, size_t);
 void __nvreg_restore_fence(void);
 void __nvreg_save_fence(void);
 void __outbyte(unsigned short, unsigned char);
-void __outbytestring(unsigned short, unsigned char *, unsigned long);
-void __outdword(unsigned short, unsigned long);
-void __outdwordstring(unsigned short, unsigned long *, unsigned long);
+void __outbytestring(unsigned short, unsigned char *, __NT_ULONG32);
+void __outdword(unsigned short, __NT_ULONG32);
+void __outdwordstring(unsigned short, __NT_ULONG32 *, __NT_ULONG32);
 void __outword(unsigned short, unsigned short);
-void __outwordstring(unsigned short, unsigned short *, unsigned long);
+void __outwordstring(unsigned short, unsigned short *, __NT_ULONG32);
 unsigned int __popcnt(unsigned int);
 unsigned short __popcnt16(unsigned short);
 unsigned __int64 __rdtsc(void);
 #ifndef __clang__
 unsigned __int64 __rdtscp(unsigned int *);
 #endif
-unsigned __int64 __readmsr(unsigned long);
-unsigned __int64 __readpmc(unsigned long);
-unsigned long __segmentlimit(unsigned long);
+unsigned __int64 __readmsr(__NT_ULONG32);
+unsigned __int64 __readpmc(__NT_ULONG32);
+__NT_ULONG32 __segmentlimit(__NT_ULONG32);
 void __sidt(void *);
 void _sgdt(void *);
 void __stosb(unsigned char *, unsigned char, size_t);
-void __stosd(unsigned long *, unsigned long, size_t);
+void __stosd(__NT_ULONG32 *, __NT_ULONG32, size_t);
 void __stosw(unsigned short *, unsigned short, size_t);
 void __svm_clgi(void);
 void __svm_invlpga(void *, int);
@@ -171,9 +183,9 @@ unsigned __int64 __ull_rshift(unsigned __int64, int);
 void __vmx_off(void);
 void __vmx_vmptrst(unsigned __int64 *);
 void __wbinvd(void);
-void __writemsr(unsigned long, unsigned __int64);
+void __writemsr(__NT_ULONG32, unsigned __int64);
 int __cdecl _inp(unsigned short);
-unsigned long __cdecl _inpd(unsigned short);
+__NT_ULONG32 __cdecl _inpd(unsigned short);
 unsigned short __cdecl _inpw(unsigned short);
 void _m_prefetch(void *);
 #ifndef __clang__
@@ -594,38 +606,38 @@ __m128i _mm_xor_si128(__m128i, __m128i);
 #endif // 0
 
 int __cdecl _outp(unsigned short, int);
-unsigned long __cdecl _outpd(unsigned short, unsigned long);
+__NT_ULONG32 __cdecl _outpd(unsigned short, __NT_ULONG32);
 unsigned short __cdecl _outpw(unsigned short, unsigned short);
 int __cdecl inp(unsigned short);
-unsigned long __cdecl inpd(unsigned short);
+__NT_ULONG32 __cdecl inpd(unsigned short);
 unsigned short __cdecl inpw(unsigned short);
 int __cdecl outp(unsigned short, int);
-unsigned long __cdecl outpd(unsigned short, unsigned long);
+__NT_ULONG32 __cdecl outpd(unsigned short, __NT_ULONG32);
 unsigned short __cdecl outpw(unsigned short, unsigned short);
 
 #endif /* _VCRT_X86_INTRINSICS */
 
 #if _VCRT_I386_INTRINSICS
 
-long _InterlockedAddLargeStatistic(_Interlocked_operand_ __int64 volatile * _Addend, long _Value);
-void __addfsbyte(unsigned long, unsigned char);
-void __addfsdword(unsigned long, unsigned long);
-void __addfsword(unsigned long, unsigned short);
-void __incfsbyte(unsigned long);
-void __incfsdword(unsigned long);
-void __incfsword(unsigned long);
-unsigned long __readcr0(void);
-unsigned long __readcr2(void);
-unsigned long __readcr3(void);
-unsigned long __readcr4(void);
-unsigned long __readcr8(void);
+__NT_LONG32 _InterlockedAddLargeStatistic(_Interlocked_operand_ __int64 volatile * _Addend, __NT_LONG32 _Value);
+void __addfsbyte(__NT_ULONG32, unsigned char);
+void __addfsdword(__NT_ULONG32, __NT_ULONG32);
+void __addfsword(__NT_ULONG32, unsigned short);
+void __incfsbyte(__NT_ULONG32);
+void __incfsdword(__NT_ULONG32);
+void __incfsword(__NT_ULONG32);
+__NT_ULONG32 __readcr0(void);
+__NT_ULONG32 __readcr2(void);
+__NT_ULONG32 __readcr3(void);
+__NT_ULONG32 __readcr4(void);
+__NT_ULONG32 __readcr8(void);
 unsigned int __readdr(unsigned int);
 #ifndef __clang__
 unsigned int __readeflags(void);
 #endif
-unsigned char __readfsbyte(unsigned long);
-unsigned long __readfsdword(unsigned long);
-unsigned short __readfsword(unsigned long);
+unsigned char __readfsbyte(__NT_ULONG32);
+__NT_ULONG32 __readfsdword(__NT_ULONG32);
+unsigned short __readfsword(__NT_ULONG32);
 void __writecr0(unsigned int);
 void __writecr3(unsigned int);
 void __writecr4(unsigned int);
@@ -634,9 +646,9 @@ void __writedr(unsigned int, unsigned int);
 #ifndef __clang__
 void __writeeflags(unsigned int);
 #endif
-void __writefsbyte(unsigned long, unsigned char);
-void __writefsdword(unsigned long, unsigned long);
-void __writefsword(unsigned long, unsigned short);
+void __writefsbyte(__NT_ULONG32, unsigned char);
+void __writefsdword(__NT_ULONG32, __NT_ULONG32);
+void __writefsword(__NT_ULONG32, unsigned short);
 void _m_empty(void);
 void _m_femms(void);
 
@@ -763,19 +775,19 @@ __m64 _mm_sub_si64(__m64, __m64);
 
 #if _VCRT_ARM64_CODEGEN
 
-unsigned char _BitScanForward64(unsigned long * _Index, unsigned __int64 _Mask);
-unsigned char _BitScanReverse64(unsigned long * _Index, unsigned __int64 _Mask);
+unsigned char _BitScanForward64(__NT_ULONG32 * _Index, unsigned __int64 _Mask);
+unsigned char _BitScanReverse64(__NT_ULONG32 * _Index, unsigned __int64 _Mask);
 __int64 __mulh(__int64, __int64);
 unsigned __int64 __umulh(unsigned __int64, unsigned __int64);
-long _InterlockedAdd(_Interlocked_operand_ long volatile * _Addend, long _Value);
+__NT_LONG32 _InterlockedAdd(_Interlocked_operand_ __NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
 __int64 _InterlockedAdd64(_Interlocked_operand_ __int64 volatile * _Addend, __int64 _Value);
 __int64 _InterlockedAdd64_nf(_Interlocked_operand_ __int64 volatile * _Addend, __int64 _Value);
 unsigned char _InterlockedCompareExchange128(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
 unsigned char _InterlockedCompareExchange128_acq(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
 unsigned char _InterlockedCompareExchange128_nf(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
 unsigned char _InterlockedCompareExchange128_rel(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
-long _InterlockedExchangeAdd_nf(_Interlocked_operand_ long volatile * _Addend, long _Value);
-long _InterlockedOr_nf(_Interlocked_operand_ long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedExchangeAdd_nf(_Interlocked_operand_ __NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedOr_nf(_Interlocked_operand_ __NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 void __break(int);
 void __yield(void);
 void __wfi(void);
@@ -785,14 +797,14 @@ void __emit(unsigned __int32);
 unsigned int __sys(int, __int64);
 void __cdecl __prefetch(const void *);
 void __prefetch2(const void *, unsigned char);
-unsigned char __readx18byte(unsigned long);
-unsigned short __readx18word(unsigned long);
-unsigned long __readx18dword(unsigned long);
-unsigned __int64 __readx18qword(unsigned long);
-void __writex18byte(unsigned long, unsigned char);
-void __writex18word(unsigned long, unsigned short);
-void __writex18dword(unsigned long, unsigned long);
-void __writex18qword(unsigned long, unsigned __int64);
+unsigned char __readx18byte(__NT_ULONG32);
+unsigned short __readx18word(__NT_ULONG32);
+__NT_ULONG32 __readx18dword(__NT_ULONG32);
+unsigned __int64 __readx18qword(__NT_ULONG32);
+void __writex18byte(__NT_ULONG32, unsigned char);
+void __writex18word(__NT_ULONG32, unsigned short);
+void __writex18dword(__NT_ULONG32, __NT_ULONG32);
+void __writex18qword(__NT_ULONG32, unsigned __int64);
 unsigned char _interlockedbittestandreset64(__int64 volatile *, __int64);
 unsigned char _interlockedbittestandset64(__int64 volatile *, __int64);
 
@@ -800,35 +812,35 @@ unsigned char _interlockedbittestandset64(__int64 volatile *, __int64);
 
 #if _VCRT_AMD64_INTRINSICS
 
-unsigned char _BitScanForward64(unsigned long * _Index, unsigned __int64 _Mask);
-unsigned char _BitScanReverse64(unsigned long * _Index, unsigned __int64 _Mask);
+unsigned char _BitScanForward64(__NT_ULONG32 * _Index, unsigned __int64 _Mask);
+unsigned char _BitScanReverse64(__NT_ULONG32 * _Index, unsigned __int64 _Mask);
 short _InterlockedAnd16_np(short volatile * _Value, short _Mask);
 __int64 _InterlockedAnd64_np(__int64 volatile * _Value, __int64 _Mask);
 char _InterlockedAnd8_np(char volatile * _Value, char _Mask);
-long _InterlockedAnd_np(long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedAnd_np(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 unsigned char _InterlockedCompareExchange128(_Interlocked_operand_ __int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
 unsigned char _InterlockedCompareExchange128_np(__int64 volatile * _Destination, __int64 _ExchangeHigh, __int64 _ExchangeLow, __int64 * _ComparandResult);
 short _InterlockedCompareExchange16_np(short volatile * _Destination, short _Exchange, short _Comparand);
 __int64 _InterlockedCompareExchange64_np(__int64 volatile * _Destination, __int64 _Exchange, __int64 _Comparand);
 void * _InterlockedCompareExchangePointer_np(void * volatile * _Destination, void * _Exchange, void * _Comparand);
-long _InterlockedCompareExchange_np(long volatile * _Destination, long _Exchange, long _Comparand);
+__NT_LONG32 _InterlockedCompareExchange_np(__NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
 short _InterlockedOr16_np(short volatile * _Value, short _Mask);
 __int64 _InterlockedOr64_np(__int64 volatile * _Value, __int64 _Mask);
 char _InterlockedOr8_np(char volatile * _Value, char _Mask);
-long _InterlockedOr_np(long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedOr_np(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedXor16_np(short volatile * _Value, short _Mask);
 __int64 _InterlockedXor64_np(__int64 volatile * _Value, __int64 _Mask);
 char _InterlockedXor8_np(char volatile * _Value, char _Mask);
-long _InterlockedXor_np(long volatile * _Value, long _Mask);
-void __addgsbyte(unsigned long, unsigned char);
-void __addgsdword(unsigned long, unsigned long);
-void __addgsqword(unsigned long, unsigned __int64);
-void __addgsword(unsigned long, unsigned short);
+__NT_LONG32 _InterlockedXor_np(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+void __addgsbyte(__NT_ULONG32, unsigned char);
+void __addgsdword(__NT_ULONG32, __NT_ULONG32);
+void __addgsqword(__NT_ULONG32, unsigned __int64);
+void __addgsword(__NT_ULONG32, unsigned short);
 void __faststorefence(void);
-void __incgsbyte(unsigned long);
-void __incgsdword(unsigned long);
-void __incgsqword(unsigned long);
-void __incgsword(unsigned long);
+void __incgsbyte(__NT_ULONG32);
+void __incgsdword(__NT_ULONG32);
+void __incgsqword(__NT_ULONG32);
+void __incgsword(__NT_ULONG32);
 unsigned __int64 __lzcnt64(unsigned __int64);
 void __movsq(unsigned long long *, unsigned long long const *, size_t);
 __int64 __mulh(__int64, __int64);
@@ -844,10 +856,10 @@ unsigned __int64 __readdr(unsigned int);
 #ifndef __clang__
 unsigned __int64 __readeflags(void);
 #endif
-unsigned char __readgsbyte(unsigned long);
-unsigned long __readgsdword(unsigned long);
-unsigned __int64 __readgsqword(unsigned long);
-unsigned short __readgsword(unsigned long);
+unsigned char __readgsbyte(__NT_ULONG32);
+__NT_ULONG32 __readgsdword(__NT_ULONG32);
+unsigned __int64 __readgsqword(__NT_ULONG32);
+unsigned short __readgsword(__NT_ULONG32);
 unsigned __int64 __shiftleft128(unsigned __int64 _LowPart, unsigned __int64 _HighPart, unsigned char _Shift);
 unsigned __int64 __shiftright128(unsigned __int64 _LowPart, unsigned __int64 _HighPart, unsigned char _Shift);
 void __stosq(unsigned __int64 *, unsigned __int64, size_t);
@@ -867,10 +879,10 @@ void __writedr(unsigned int, unsigned __int64);
 #ifndef __clang__
 void __writeeflags(unsigned __int64);
 #endif
-void __writegsbyte(unsigned long, unsigned char);
-void __writegsdword(unsigned long, unsigned long);
-void __writegsqword(unsigned long, unsigned __int64);
-void __writegsword(unsigned long, unsigned short);
+void __writegsbyte(__NT_ULONG32, unsigned char);
+void __writegsdword(__NT_ULONG32, __NT_ULONG32);
+void __writegsqword(__NT_ULONG32, unsigned __int64);
+void __writegsword(__NT_ULONG32, unsigned short);
 unsigned char _bittest64(__int64 const *, __int64);
 unsigned char _bittestandcomplement64(__int64 *, __int64);
 unsigned char _bittestandreset64(__int64 *, __int64);
@@ -925,24 +937,24 @@ double _CopyDoubleFromInt64(__int64);
 float _CopyFloatFromInt32(__int32);
 __int32 _CopyInt32FromFloat(float);
 __int64 _CopyInt64FromDouble(double);
-unsigned int _CountLeadingOnes(unsigned long);
+unsigned int _CountLeadingOnes(__NT_ULONG32);
 unsigned int _CountLeadingOnes64(unsigned __int64);
-unsigned int _CountLeadingSigns(long);
+unsigned int _CountLeadingSigns(__NT_LONG32);
 unsigned int _CountLeadingSigns64(__int64);
-unsigned int _CountLeadingZeros(unsigned long);
+unsigned int _CountLeadingZeros(__NT_ULONG32);
 unsigned int _CountLeadingZeros64(unsigned __int64);
-unsigned int _CountOneBits(unsigned long);
+unsigned int _CountOneBits(__NT_ULONG32);
 unsigned int _CountOneBits64(unsigned __int64);
 int _DAddSatInt(int, int);
 int _DSubSatInt(int, int);
-long _InterlockedAdd(_Interlocked_operand_ long volatile * _Addend, long _Value);
+__NT_LONG32 _InterlockedAdd(_Interlocked_operand_ __NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
 __int64 _InterlockedAdd64(_Interlocked_operand_ __int64 volatile * _Addend, __int64 _Value);
 __int64 _InterlockedAdd64_acq(__int64 volatile * _Addend, __int64 _Value);
 __int64 _InterlockedAdd64_nf(__int64 volatile * _Addend, __int64 _Value);
 __int64 _InterlockedAdd64_rel(__int64 volatile * _Addend, __int64 _Value);
-long _InterlockedAdd_acq(long volatile * _Addend, long _Value);
-long _InterlockedAdd_nf(long volatile * _Addend, long _Value);
-long _InterlockedAdd_rel(long volatile * _Addend, long _Value);
+__NT_LONG32 _InterlockedAdd_acq(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedAdd_nf(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedAdd_rel(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
 short _InterlockedAnd16_acq(short volatile * _Value, short _Mask);
 short _InterlockedAnd16_nf(short volatile * _Value, short _Mask);
 short _InterlockedAnd16_rel(short volatile * _Value, short _Mask);
@@ -952,9 +964,9 @@ __int64 _InterlockedAnd64_rel(__int64 volatile * _Value, __int64 _Mask);
 char _InterlockedAnd8_acq(char volatile * _Value, char _Mask);
 char _InterlockedAnd8_nf(char volatile * _Value, char _Mask);
 char _InterlockedAnd8_rel(char volatile * _Value, char _Mask);
-long _InterlockedAnd_acq(long volatile * _Value, long _Mask);
-long _InterlockedAnd_nf(long volatile * _Value, long _Mask);
-long _InterlockedAnd_rel(long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedAnd_acq(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedAnd_nf(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedAnd_rel(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedCompareExchange16_acq(short volatile * _Destination, short _Exchange, short _Comparand);
 short _InterlockedCompareExchange16_nf(short volatile * _Destination, short _Exchange, short _Comparand);
 short _InterlockedCompareExchange16_rel(short volatile * _Destination, short _Exchange, short _Comparand);
@@ -967,18 +979,18 @@ char _InterlockedCompareExchange8_rel(char volatile * _Destination, char _Exchan
 void * _InterlockedCompareExchangePointer_acq(void * volatile * _Destination, void * _Exchange, void * _Comparand);
 void * _InterlockedCompareExchangePointer_nf(void * volatile * _Destination, void * _Exchange, void * _Comparand);
 void * _InterlockedCompareExchangePointer_rel(void * volatile * _Destination, void * _Exchange, void * _Comparand);
-long _InterlockedCompareExchange_acq(long volatile * _Destination, long _Exchange, long _Comparand);
-long _InterlockedCompareExchange_nf(long volatile * _Destination, long _Exchange, long _Comparand);
-long _InterlockedCompareExchange_rel(long volatile * _Destination, long _Exchange, long _Comparand);
+__NT_LONG32 _InterlockedCompareExchange_acq(__NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
+__NT_LONG32 _InterlockedCompareExchange_nf(__NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
+__NT_LONG32 _InterlockedCompareExchange_rel(__NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
 short _InterlockedDecrement16_acq(short volatile * _Addend);
 short _InterlockedDecrement16_nf(short volatile * _Addend);
 short _InterlockedDecrement16_rel(short volatile * _Addend);
 __int64 _InterlockedDecrement64_acq(__int64 volatile * _Addend);
 __int64 _InterlockedDecrement64_nf(__int64 volatile * _Addend);
 __int64 _InterlockedDecrement64_rel(__int64 volatile * _Addend);
-long _InterlockedDecrement_acq(long volatile * _Addend);
-long _InterlockedDecrement_nf(long volatile * _Addend);
-long _InterlockedDecrement_rel(long volatile * _Addend);
+__NT_LONG32 _InterlockedDecrement_acq(__NT_LONG32 volatile * _Addend);
+__NT_LONG32 _InterlockedDecrement_nf(__NT_LONG32 volatile * _Addend);
+__NT_LONG32 _InterlockedDecrement_rel(__NT_LONG32 volatile * _Addend);
 short _InterlockedExchange16_acq(short volatile * _Target, short _Value);
 short _InterlockedExchange16_nf(short volatile * _Target, short _Value);
 __int64 _InterlockedExchange64_acq(__int64 volatile * _Target, __int64 _Value);
@@ -994,22 +1006,22 @@ __int64 _InterlockedExchangeAdd64_rel(__int64 volatile * _Addend, __int64 _Value
 char _InterlockedExchangeAdd8_acq(char volatile * _Addend, char _Value);
 char _InterlockedExchangeAdd8_nf(char volatile * _Addend, char _Value);
 char _InterlockedExchangeAdd8_rel(char volatile * _Addend, char _Value);
-long _InterlockedExchangeAdd_acq(long volatile * _Addend, long _Value);
-long _InterlockedExchangeAdd_nf(long volatile * _Addend, long _Value);
-long _InterlockedExchangeAdd_rel(long volatile * _Addend, long _Value);
+__NT_LONG32 _InterlockedExchangeAdd_acq(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedExchangeAdd_nf(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedExchangeAdd_rel(__NT_LONG32 volatile * _Addend, __NT_LONG32 _Value);
 void * _InterlockedExchangePointer_acq(void * volatile * _Target, void * _Value);
 void * _InterlockedExchangePointer_nf(void * volatile * _Target, void * _Value);
-long _InterlockedExchange_acq(long volatile * _Target, long _Value);
-long _InterlockedExchange_nf(long volatile * _Target, long _Value);
+__NT_LONG32 _InterlockedExchange_acq(__NT_LONG32 volatile * _Target, __NT_LONG32 _Value);
+__NT_LONG32 _InterlockedExchange_nf(__NT_LONG32 volatile * _Target, __NT_LONG32 _Value);
 short _InterlockedIncrement16_acq(short volatile * _Addend);
 short _InterlockedIncrement16_nf(short volatile * _Addend);
 short _InterlockedIncrement16_rel(short volatile * _Addend);
 __int64 _InterlockedIncrement64_acq(__int64 volatile * _Addend);
 __int64 _InterlockedIncrement64_nf(__int64 volatile * _Addend);
 __int64 _InterlockedIncrement64_rel(__int64 volatile * _Addend);
-long _InterlockedIncrement_acq(long volatile * _Addend);
-long _InterlockedIncrement_nf(long volatile * _Addend);
-long _InterlockedIncrement_rel(long volatile * _Addend);
+__NT_LONG32 _InterlockedIncrement_acq(__NT_LONG32 volatile * _Addend);
+__NT_LONG32 _InterlockedIncrement_nf(__NT_LONG32 volatile * _Addend);
+__NT_LONG32 _InterlockedIncrement_rel(__NT_LONG32 volatile * _Addend);
 short _InterlockedOr16_acq(short volatile * _Value, short _Mask);
 short _InterlockedOr16_nf(short volatile * _Value, short _Mask);
 short _InterlockedOr16_rel(short volatile * _Value, short _Mask);
@@ -1019,9 +1031,9 @@ __int64 _InterlockedOr64_rel(__int64 volatile * _Value, __int64 _Mask);
 char _InterlockedOr8_acq(char volatile * _Value, char _Mask);
 char _InterlockedOr8_nf(char volatile * _Value, char _Mask);
 char _InterlockedOr8_rel(char volatile * _Value, char _Mask);
-long _InterlockedOr_acq(long volatile * _Value, long _Mask);
-long _InterlockedOr_nf(long volatile * _Value, long _Mask);
-long _InterlockedOr_rel(long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedOr_acq(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedOr_nf(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedOr_rel(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 short _InterlockedXor16_acq(short volatile * _Value, short _Mask);
 short _InterlockedXor16_nf(short volatile * _Value, short _Mask);
 short _InterlockedXor16_rel(short volatile * _Value, short _Mask);
@@ -1031,9 +1043,9 @@ __int64 _InterlockedXor64_rel(_Interlocked_operand_ __int64 volatile * _Value, _
 char _InterlockedXor8_acq(char volatile * _Value, char _Mask);
 char _InterlockedXor8_nf(char volatile * _Value, char _Mask);
 char _InterlockedXor8_rel(char volatile * _Value, char _Mask);
-long _InterlockedXor_acq(long volatile * _Value, long _Mask);
-long _InterlockedXor_nf(long volatile * _Value, long _Mask);
-long _InterlockedXor_rel(long volatile * _Value, long _Mask);
+__NT_LONG32 _InterlockedXor_acq(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedXor_nf(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
+__NT_LONG32 _InterlockedXor_rel(__NT_LONG32 volatile * _Value, __NT_LONG32 _Mask);
 #if _MSC_FULL_VER >= 170040825
 unsigned int _MoveFromCoprocessor(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 unsigned int _MoveFromCoprocessor2(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
@@ -1045,8 +1057,8 @@ unsigned __int64 _MoveFromCoprocessor64(unsigned int, unsigned int, unsigned int
 void _MoveToCoprocessor(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 void _MoveToCoprocessor2(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 void _MoveToCoprocessor64(unsigned __int64, unsigned int, unsigned int, unsigned int);
-long _MulHigh(long, long);
-unsigned long _MulUnsignedHigh(unsigned long, unsigned long);
+__NT_LONG32 _MulHigh(__NT_LONG32, __NT_LONG32);
+__NT_ULONG32 _MulUnsignedHigh(__NT_ULONG32, __NT_ULONG32);
 int _ReadStatusReg(int);
 int _SubSatInt(int, int);
 void _WriteStatusReg(int, int, int);
@@ -1070,12 +1082,12 @@ void __iso_volatile_store8(volatile __int8 *, __int8);
 void __wfe(void);
 void __wfi(void);
 void __yield(void);
-unsigned char _interlockedbittestandreset_acq(long volatile *, long);
-unsigned char _interlockedbittestandreset_nf(long volatile *, long);
-unsigned char _interlockedbittestandreset_rel(long volatile *, long);
-unsigned char _interlockedbittestandset_acq(long volatile *, long);
-unsigned char _interlockedbittestandset_nf(long volatile *, long);
-unsigned char _interlockedbittestandset_rel(long volatile *, long);
+unsigned char _interlockedbittestandreset_acq(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandreset_nf(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandreset_rel(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandset_acq(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandset_nf(__NT_LONG32 volatile *, __NT_LONG32);
+unsigned char _interlockedbittestandset_rel(__NT_LONG32 volatile *, __NT_LONG32);
 int _isunordered(double, double);
 int _isunorderedf(float, float);
 
@@ -1091,9 +1103,9 @@ unsigned __int64 __getReg(int);
 
 #if defined(_M_CEE_PURE)
 
-long _InterlockedCompareExchange(_Interlocked_operand_ long volatile * _Destination, long _Exchange, long _Comparand);
-long _InterlockedDecrement(_Interlocked_operand_ long volatile * _Addend);
-long _InterlockedIncrement(_Interlocked_operand_ long volatile * _Addend);
+__NT_LONG32 _InterlockedCompareExchange(_Interlocked_operand_ __NT_LONG32 volatile * _Destination, __NT_LONG32 _Exchange, __NT_LONG32 _Comparand);
+__NT_LONG32 _InterlockedDecrement(_Interlocked_operand_ __NT_LONG32 volatile * _Addend);
+__NT_LONG32 _InterlockedIncrement(_Interlocked_operand_ __NT_LONG32 volatile * _Addend);
 
 #endif /* _M_CEE_PURE */
 

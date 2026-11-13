@@ -49,11 +49,17 @@ typedef struct
 #define SIZE(name, struct) {TYPE_CONSTANT, #name, sizeof(struct)}
 #define HEADER(x) {TYPE_HEADER, x, 0}
 
+/* The table must start at the first byte of the .asmdef section: geninc reads
+ * it as a record stream from the section's raw offset. A PE section begins at
+ * a page boundary (elf2pe SECTION_ALIGNMENT, 0x1000), so the ELF link keeps
+ * this section one-page aligned instead of leaving it part-way into a page. */
 #if defined(_MSC_VER)
 #pragma section(".asmdef")
 __declspec(allocate(".asmdef"))
+__declspec(align(4096))
 #elif defined(__GNUC__)
 __attribute__ ((section(".asmdef")))
+__attribute__ ((aligned(4096)))
 #else
 #error Your compiler is not supported.
 #endif
@@ -71,6 +77,8 @@ ASMGENDATA Table[] =
 #include "ksarm64.template.h"
 #elif defined(_M_RISCV64)
 #include "ksriscv64.template.h"
+#elif defined(_M_LOONGARCH64)
+#include "ksloongarch64.template.h"
 #elif defined(_M_PPC)
 #include "ksppc.template.h"
 #endif

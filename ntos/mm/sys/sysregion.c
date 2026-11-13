@@ -451,7 +451,11 @@ MiSystemProtect(
         else
         {
             if (MI_PROT_IS_WRITABLE(Protection))
-                MiPfnExecCleanClear(&System->Pfn, Frame);
+            {
+                /* The PFN database, and the bitmap it tracks, index frames
+                 * with ULONG; the PTE stores the wider frame number. */
+                MiPfnExecCleanClear(&System->Pfn, (ULONG)Frame);
+            }
             MiPtWrite(Space, Va, Slot, TableFrame,
                       MiArchPteMakeLeaf(Frame, Protection, MI_LEAF_GLOBAL | MI_LEAF_DIRTY | CacheFlags));
         }

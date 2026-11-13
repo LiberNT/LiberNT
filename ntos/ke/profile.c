@@ -271,7 +271,7 @@ KeQueryIntervalProfile(
     if (Slot != NULL)
         return *Slot;
 
-    return HalSetProfileInterval(0);
+    return (ULONG)HalSetProfileInterval(0);
 }
 
 /*
@@ -290,7 +290,7 @@ KeSetIntervalProfile(
     if (Slot == NULL)
         return;
 
-    *Slot = HalSetProfileInterval(Interval);
+    *Slot = (ULONG)HalSetProfileInterval(Interval);
 }
 
 /*

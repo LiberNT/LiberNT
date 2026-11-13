@@ -1541,7 +1541,9 @@ NtQueryMultipleValueKey(
             CmpReleaseName(&Captured);
             CmpIsKeyValueSmall(&Length, Value->DataLength);
 
-            Offset = ALIGN_UP_BY(Required, sizeof(ULONGLONG));
+            /* Entry offsets and BufferLength are ULONG ABI fields: the whole
+               buffer accounting is 32-bit on every architecture. */
+            Offset = (ULONG)ALIGN_UP_BY(Required, sizeof(ULONGLONG));
             Required = Offset + Length;
 
             ValueEntries[Index].Type = Value->Type;

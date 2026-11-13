@@ -112,7 +112,9 @@ CmpGetValueListFromCache(
     _Out_ PHCELL_INDEX ValueListToRelease)
 {
     PHHIVE Hive = Kcb->KeyHive;
-    HCELL_INDEX List = Kcb->ValueCache.ValueList;
+    /* Mirrors CACHED_CHILD_LIST.ValueList: either a hive cell index or, when
+       cached, a tagged pointer, so it must stay pointer sized. */
+    ULONG_PTR List = Kcb->ValueCache.ValueList;
 
     *CellData = NULL;
     *IndexIsCached = FALSE;
@@ -120,9 +122,9 @@ CmpGetValueListFromCache(
 
     if (Kcb->ValueCache.Count == 0) return SearchSuccess;
 
-    /* FIXME: a promoted value list cannot be held: CACHED_CHILD_LIST.ValueList
-       is a ULONG, while Windows 11 keeps a pointer there (KCB offset 96, 8
-       bytes, sizeof 312), so the list is read from the hive every time */
+    /* FIXME: no cached form is ever stored here, so the list is read from the
+       hive every time; Windows 11 keeps a tagged pointer in
+       CACHED_CHILD_LIST.ValueList (KCB offset 96, 8 bytes, sizeof 312) */
     if (CMP_IS_CELL_CACHED(List))
     {
         *CellData = CMP_GET_CACHED_DATA(List);
@@ -132,10 +134,11 @@ CmpGetValueListFromCache(
 
     if (List == HCELL_NIL) return SearchFail;
 
-    *CellData = (PCELL_DATA)HvGetCell(Hive, List);
+    /* Past the cached-pointer test, the list is a plain hive cell index. */
+    *CellData = (PCELL_DATA)HvGetCell(Hive, (HCELL_INDEX)List);
     if (*CellData == NULL) return SearchFail;
 
-    *ValueListToRelease = List;
+    *ValueListToRelease = (HCELL_INDEX)List;
     return SearchSuccess;
 }
 
@@ -341,7 +344,9 @@ CmpQueryKeyValueData(
                         ? sizeof(ULONGLONG) : sizeof(ULONG);
 
             HeaderSize = FIELD_OFFSET(KEY_VALUE_FULL_INFORMATION, Name);
-            DataOffset = ALIGN_UP_BY(HeaderSize + NameSize, Align);
+            /* NameSize derives from the USHORT name length, so the aligned
+               offset fits the ULONG DataOffset field of the structure. */
+            DataOffset = (ULONG)ALIGN_UP_BY(HeaderSize + NameSize, Align);
             Required = DataOffset + DataLength;
             *ResultLength = Required;
 

@@ -412,7 +412,7 @@ LdrpCompareResourceNames_U(
     if (CompareName <= USHRT_MAX)
     {
         /* Just compare the 2 IDs */
-        return (CompareName - Entry->Id);
+        return (LONG)(CompareName - Entry->Id);
     }
     else
     {

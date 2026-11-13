@@ -154,7 +154,7 @@ SepWriteChangeablePart(
 {
     ULONG GroupLength = (PrimaryGroup != NULL) ? RtlLengthSid(PrimaryGroup) : 0;
     ULONG DaclLength = (DefaultDacl != NULL) ? DefaultDacl->AclSize : 0;
-    ULONG Room = ALIGN_UP(GroupLength + DaclLength + Spare, ULONG);
+    ULONG Room = (ULONG)ALIGN_UP(GroupLength + DaclLength + Spare, ULONG);
     PUCHAR Where;
 
     if (Room == 0) Room = sizeof(ULONG);

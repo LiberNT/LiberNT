@@ -39,6 +39,10 @@ else()
     add_compile_options(-U_USE_PSEH3)
 endif()
 
+if(ARCH STREQUAL "loongarch64")
+    set(USE_DUMMY_PSEH 1)
+endif()
+
 if(NOT DEFINED USE_DUMMY_PSEH)
     set(USE_DUMMY_PSEH 0)
 endif()
@@ -177,6 +181,11 @@ elseif(ARCH STREQUAL "arm64")
     if(NOT ARM64EC_RUNTIME)
         add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-moutline-atomics>")
     endif()
+elseif(ARCH STREQUAL "loongarch64")
+    add_compile_options(-mabi=lp64d -fno-builtin -fshort-wchar)
+    add_compile_options(-Wshorten-64-to-32 -Werror=shorten-64-to-32)
+    add_compile_options(-Wno-unknown-attributes)
+    add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-fno-builtin-memcpy;-fno-builtin-memmove;-fno-builtin-memset>")
 elseif(ARCH STREQUAL "riscv64")
     add_compile_options(-mabi=lp64 -mcmodel=medany -mno-relax)
     add_compile_options("$<$<NOT:$<COMPILE_LANGUAGE:ASM>>:-fno-builtin-memcpy;-fno-builtin-memmove;-fno-builtin-memset>")
@@ -223,6 +232,8 @@ elseif(ARCH STREQUAL "arm64")
     endif()
 elseif(ARCH STREQUAL "riscv64")
     set(LLVM_DLLTOOL_MACHINE riscv64)
+elseif(ARCH STREQUAL "loongarch64")
+    set(LLVM_DLLTOOL_MACHINE loongarch64)
 elseif(ARCH STREQUAL "ppc")
     set(LLVM_DLLTOOL_MACHINE ppc)
 endif()
@@ -279,6 +290,19 @@ else()
     set(CMAKE_C_CREATE_SHARED_LIBRARY "<CMAKE_C_COMPILER> -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_CXX_CREATE_SHARED_LIBRARY "<CMAKE_CXX_COMPILER> -Wl,--start-group ${CMAKE_CXX_FLAGS} <CMAKE_SHARED_LIBRARY_CXX_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
     set(CMAKE_RC_CREATE_SHARED_LIBRARY "<CMAKE_C_COMPILER> -shared -Wl,--start-group ${CMAKE_C_FLAGS} <CMAKE_SHARED_LIBRARY_C_FLAGS> <LINK_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES> -Wl,--end-group")
+endif()
+
+if(ARCH STREQUAL "loongarch64")
+    find_program(REACTOS_LA64_PYTHON NAMES python3 REQUIRED)
+    set(_reactos_la64_link "${REACTOS_LA64_PYTHON} ${REACTOS_SOURCE_DIR}/sdk/cmake/loongarch64_link.py")
+    set(CMAKE_C_LINK_EXECUTABLE "${_reactos_la64_link} exe <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_CXX_LINK_EXECUTABLE "${_reactos_la64_link} exe <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_C_CREATE_SHARED_LIBRARY "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_CXX_CREATE_SHARED_LIBRARY "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_C_CREATE_SHARED_MODULE "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_CXX_CREATE_SHARED_MODULE "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_RC_CREATE_SHARED_LIBRARY "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
+    set(CMAKE_RC_CREATE_SHARED_MODULE "${_reactos_la64_link} dll <TARGET> <OBJECTS> <LINK_LIBRARIES> <LINK_FLAGS>")
 endif()
 
 set(CMAKE_C_CREATE_SHARED_MODULE ${CMAKE_C_CREATE_SHARED_LIBRARY})
@@ -466,14 +490,26 @@ function(generate_import_lib _libname _dllname _spec_file __version_arg __dbg_ar
         COMMAND native-spec2def ${__version_arg} ${__dbg_arg} -n=${_dllname} -a=${ARCH2} ${ARGN} --implib -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
 
-    # llvm-dlltool uses short flags: -d (def), -k (kill-at), -l (output-lib), -m (machine)
     set(LIBRARY_PRIVATE_DIR ${CMAKE_CURRENT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/${_libname}.dir)
-    add_custom_command(
-        OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
-        COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
-        COMMAND ${CMAKE_DLLTOOL} -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -k -l ${_libname}.a -m ${LLVM_DLLTOOL_MACHINE} -t ${_libname}
-        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
-        WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    if(ARCH STREQUAL "loongarch64")
+        # llvm-dlltool has no LoongArch64 machine, and LoongArch64 images are
+        # linked as ELF and assembled into a PE32+ file afterwards, so the
+        # import library is an ELF archive of thunks rather than a COFF one.
+        add_custom_command(
+            OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${REACTOS_LA64_PYTHON} ${REACTOS_SOURCE_DIR}/sdk/tools/def2elf/def2elf.py -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -o ${_libname}.a --ar ${CMAKE_AR}
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def ${REACTOS_SOURCE_DIR}/sdk/tools/def2elf/def2elf.py
+            WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    else()
+        # llvm-dlltool uses short flags: -d (def), -k (kill-at), -l (output-lib), -m (machine)
+        add_custom_command(
+            OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}.a
+            COMMAND ${CMAKE_DLLTOOL} -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def -k -l ${_libname}.a -m ${LLVM_DLLTOOL_MACHINE} -t ${_libname}
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_implib.def
+            WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    endif()
 
     add_custom_target(${_libname}_implib_target DEPENDS ${LIBRARY_PRIVATE_DIR}/${_libname}.a)
 
@@ -681,6 +717,8 @@ elseif(ARCH STREQUAL "arm64")
     set(_clang_builtins_name libclang_rt.builtins-aarch64.a)
 elseif(ARCH STREQUAL "riscv64")
     set(_clang_builtins_name libclang_rt.builtins-riscv64.a)
+elseif(ARCH STREQUAL "loongarch64")
+    set(_clang_builtins_name libclang_rt.builtins-loongarch64.a)
 elseif(ARCH STREQUAL "ppc")
     set(_clang_builtins_name libclang_rt.builtins-powerpcle.a)
 else()

@@ -22,7 +22,7 @@
 /* TODO(ARM64): Drop these shims once genuine implementations exist. */
 
 int _SEH2_Volatile0 = 0;
-int _SEH2_VolatileExceptionCode = 0;
+unsigned int _SEH2_VolatileExceptionCode = 0;
 
 #if defined(__GNUC__)
 /* Out-of-line linkage symbols; the bodies defer to the compiler builtins the

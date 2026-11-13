@@ -81,7 +81,7 @@ NTAPI
 READ_PORT_USHORT(
   IN PUSHORT Port);
 
-#if !defined(_M_ARM64) && !defined(_M_ARM64EC) && !defined(_M_RISCV64)
+#if !defined(_M_ARM64) && !defined(_M_ARM64EC) && !defined(_M_RISCV64) && !defined(_M_LOONGARCH64)
 NTKERNELAPI
 VOID
 NTAPI
@@ -170,7 +170,7 @@ WRITE_PORT_USHORT(
   IN PUSHORT Port,
   IN USHORT Value);
 
-#if !defined(_M_ARM64) && !defined(_M_ARM64EC) && !defined(_M_RISCV64)
+#if !defined(_M_ARM64) && !defined(_M_ARM64EC) && !defined(_M_RISCV64) && !defined(_M_LOONGARCH64)
 NTKERNELAPI
 VOID
 NTAPI

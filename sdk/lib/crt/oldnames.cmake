@@ -1,3 +1,9 @@
+if(REACTOS_BOOTSTRAP_KERNEL)
+    add_library(oldnames INTERFACE)
+    add_library(ucrtoldnames INTERFACE)
+    return()
+endif()
+
 
 if(NOT MSVC)
     # Use the same trick as with the other import libs. See gcc.cmake --> generate_import_lib function

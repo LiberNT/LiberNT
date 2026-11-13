@@ -6,6 +6,7 @@
  */
 
 #include <ntoskrnl.h>
+#include <ddk/ioaccess.h>
 #define NDEBUG
 #include <debug.h>
 

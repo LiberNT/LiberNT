@@ -326,7 +326,7 @@ FsRtlNotifyUpdateBuffer(
     ULONG Separator = (StreamBytes != 0) ? sizeof(WCHAR) : 0;
     ULONG TotalName = NameBytes + Separator + StreamBytes;
     ULONG Size = FIELD_OFFSET(FILE_NOTIFY_INFORMATION, FileName) + TotalName;
-    ULONG Offset = (*DataLength != 0) ? ALIGN_UP_BY(*DataLength, sizeof(ULONG)) : 0;
+    ULONG Offset = (*DataLength != 0) ? (ULONG)ALIGN_UP_BY(*DataLength, sizeof(ULONG)) : 0;
     PUCHAR Target;
 
     if (Offset + Size > BufferLength) return FALSE;

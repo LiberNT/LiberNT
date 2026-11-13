@@ -114,6 +114,9 @@ function(add_link name path)
 endfunction()
 
 function(add_cd_file)
+    if(REACTOS_BOOTSTRAP_BOOTLOADER)
+        return()
+    endif()
     cmake_parse_arguments(_CD "NO_CAB;OPTIONAL" "DESTINATION;NAME_ON_CD;TARGET" "FILE;FOR" ${ARGN})
     if(NOT (_CD_TARGET OR _CD_FILE))
         message(FATAL_ERROR "You must provide a target or a file to install!")
@@ -184,7 +187,7 @@ function(add_cd_file)
             set_property(GLOBAL APPEND PROPERTY BOOTCD_${_cd_list} "${_CD_ARCH_DESTINATION}/${__file}=${item}")
         endforeach()
         # manage dependency
-        if(_CD_TARGET AND NOT _CD_OPTIONAL)
+        if(_CD_TARGET AND NOT _CD_OPTIONAL AND TARGET bootcd)
             add_dependencies(bootcd ${_CD_TARGET} registry_inf)
         endif()
     endif() #end bootcd
@@ -193,8 +196,10 @@ function(add_cd_file)
     list(FIND _CD_FOR livecd __cd)
     if(NOT __cd EQUAL -1)
         # manage dependency
-        if(_CD_TARGET AND NOT _CD_OPTIONAL)
+        if(_CD_TARGET AND NOT _CD_OPTIONAL AND TARGET bootcd)
             add_dependencies(bootcd ${_CD_TARGET} registry_inf)
+        endif()
+        if(_CD_TARGET AND NOT _CD_OPTIONAL AND TARGET livecd_files)
             add_dependencies(livecd_files ${_CD_TARGET} registry_inf)
         endif()
         foreach(item ${_CD_FILE})
@@ -213,7 +218,7 @@ function(add_cd_file)
     list(FIND _CD_FOR preinstall __cd)
     if(NOT __cd EQUAL -1)
         # manage dependency
-        if(_CD_TARGET AND NOT _CD_OPTIONAL)
+        if(_CD_TARGET AND NOT _CD_OPTIONAL AND TARGET preinstall_partition)
             add_dependencies(preinstall_partition ${_CD_TARGET} registry_inf)
         endif()
         foreach(item ${_CD_FILE})
@@ -238,6 +243,9 @@ function(create_txtsetup_sif)
 endfunction()
 
 function(create_iso_lists)
+    if(REACTOS_BOOTSTRAP_BOOTLOADER)
+        return()
+    endif()
     create_txtsetup_sif()
 
 if(FALSE) ## Disabled until we want a RAMDISK ISO
@@ -650,6 +658,12 @@ function(set_module_type MODULE TYPE)
         # special case for kernel
         if ((TYPE STREQUAL kernel) AND MSVC AND (ARCH STREQUAL "arm64"))
             set_image_base(${MODULE} 0x140000000)
+        elseif((TYPE STREQUAL kernel) AND (ARCH STREQUAL "loongarch64"))
+            # The LoongArch64 loader enters the kernel through the cached
+            # direct-map window: winldr.c refuses to jump unless
+            # EntryPoint >> 60 == 0x9, and DMW1 is configured with VSEG 0x9
+            # (arc.h LOONGARCH64_LOADER_DIRECT_MAP_BASE, DMW1_VALUE).
+            set_image_base(${MODULE} 0x9000000000000000)
         elseif (TYPE STREQUAL kernel)
             set_image_base(${MODULE} 0x00400000)
         elseif(ARCH STREQUAL "arm64")

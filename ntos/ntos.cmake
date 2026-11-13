@@ -547,6 +547,46 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/ps/riscv64/psctx.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/rtlexcpt.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/slist.c)
+elseif(ARCH STREQUAL "loongarch64")
+    list(APPEND ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/ctxswitch.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/entry.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/stack.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/syscall.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/trap.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/usercall.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/usercopy.S
+        ${REACTOS_SOURCE_DIR}/ntos/rtl/loongarch64/capture.S)
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/config/loongarch64/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ex/loongarch64/exinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/kd64/loongarch64/kdsup.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/asmframes.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/cache.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/console.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/context.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/cpu.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/features.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/freeze.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/interrupt.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/ipi.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/irql.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/kiinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/mproc.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/pcr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/spinlock.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/stack.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/stubs.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/syscall.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/thrdini.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/tlb.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/topology.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/trap.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/usercall.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/usercopy.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/loongarch64/xstate.c
+        ${REACTOS_SOURCE_DIR}/ntos/ps/loongarch64/psctx.c
+        ${REACTOS_SOURCE_DIR}/ntos/rtl/loongarch64/slist.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/ctxswitch.S
@@ -614,6 +654,12 @@ endif()
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdb_help.S)
             list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdbregs.c)
+        endif()
+    elseif(ARCH STREQUAL "loongarch64")
+        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/loongarch64/kdserial.c)
+        if(KDBG)
+            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/loongarch64/kdb_help.S)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/loongarch64/loongarch64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/loongarch64/kdbregs.c)
         endif()
     endif()
 

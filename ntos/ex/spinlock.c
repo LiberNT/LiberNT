@@ -37,7 +37,7 @@ ExpAcquireExecutiveSpinLockExclusive(
 
     for (;;)
     {
-        Value = ReadAcquire((PLONG)SpinLock);
+        Value = (LONG)ReadAcquire((PLONG)SpinLock);
         if (Value >= 0 &&
             InterlockedCompareExchange((PLONG)SpinLock, Value | EXP_SPIN_LOCK_EXCLUSIVE, Value) == Value)
         {
@@ -62,7 +62,7 @@ ExpAcquireExecutiveSpinLockShared(
 
     for (;;)
     {
-        Value = ReadAcquire((PLONG)SpinLock);
+        Value = (LONG)ReadAcquire((PLONG)SpinLock);
         if (Value >= 0 &&
             InterlockedCompareExchange((PLONG)SpinLock, Value + 1, Value) == Value)
         {
@@ -136,7 +136,7 @@ ExTryAcquireSpinLockSharedAtDpcLevel(
     LONG Value;
 
     ExpValidateExecutiveSpinLock(SpinLock);
-    Value = ReadAcquire((PLONG)SpinLock);
+    Value = (LONG)ReadAcquire((PLONG)SpinLock);
     while (Value >= 0)
     {
         LONG ActualValue;

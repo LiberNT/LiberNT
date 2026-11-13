@@ -34,7 +34,7 @@ module_onexit(_onexit_t func, _PVFV **start, _PVFV **end)
     if (!start || !*start || !end || !*end)
         return NULL;
 
-    count = *end - *start;
+    count = (int)(*end - *start);
     if (++count <= 0)
         return NULL;
 

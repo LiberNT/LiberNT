@@ -1,4 +1,37 @@
 
+if(REACTOS_BOOTSTRAP_KERNEL)
+    # Kernel-only bring-up: this profile has no user mode, so build exactly the
+    # static libraries ntoskrnl links (see target_link_libraries in
+    # ntos/CMakeLists.txt) and nothing that produces an image or an import
+    # library. The normal build below is unchanged when the option is off.
+    add_subdirectory(cmlib)
+    add_subdirectory(ci)
+    add_subdirectory(apisets)
+    add_subdirectory(cportlib)
+    add_subdirectory(crt)
+    add_subdirectory(cryptlib)
+    # The boot chain (bootlib, bootntfs) links these.
+    add_subdirectory(3rdparty)
+    add_subdirectory(fslib)
+    # sdk/lib/drivers gates driver support libraries; only these two belong to
+    # the kernel's link closure.
+    add_compile_definitions(_GCC_SAL_CHECK_RETURN)
+    add_subdirectory(drivers/arblib)
+    add_subdirectory(drivers/csq)
+    if(STACK_PROTECTOR)
+        add_subdirectory(gcc_ssp)
+    endif()
+    add_subdirectory(ioevent)
+    add_subdirectory(lsalib)
+    add_subdirectory(poguid)
+    add_subdirectory(pseh)
+    add_subdirectory(rtl)
+    add_subdirectory(symz)
+    add_subdirectory(vcruntime)
+    add_subdirectory(wdmguid)
+    return()
+endif()
+
 add_subdirectory(atl)
 add_subdirectory(cmlib)
 add_subdirectory(inflib)

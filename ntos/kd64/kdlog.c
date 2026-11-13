@@ -468,7 +468,7 @@ NTSTATUS NTAPI KdpWriteBootLogAtCrash(_In_opt_ PROS_STORAGE_DUMP_INTERFACE Stora
 
     Position = State->RingPosition;
     Length = KdpCopyPrintBufferFrom(&Position, (PCHAR)KdpBootLogCrashBuffer + Prefix, (ULONG)min(State->ReserveEnd - State->Written, KDP_BOOT_LOG_RESERVE_SIZE), &Lost);
-    Total = ALIGN_UP_BY(Prefix + Length, KdpBootLogSectorSize);
+    Total = (ULONG)ALIGN_UP_BY(Prefix + Length, KdpBootLogSectorSize);
     RtlZeroMemory(KdpBootLogCrashBuffer + Prefix + Length, Total - Prefix - Length);
 
     for (Done = 0; Done < Total; Done += Chunk)
@@ -478,7 +478,7 @@ NTSTATUS NTAPI KdpWriteBootLogAtCrash(_In_opt_ PROS_STORAGE_DUMP_INTERFACE Stora
             return Status;
 
         Chunk = min(Chunk, PAGE_SIZE - BYTE_OFFSET(KdpBootLogCrashBuffer + Done));
-        Chunk = ALIGN_DOWN_BY(min(Chunk, Storage->MaximumTransferLength), KdpBootLogSectorSize);
+        Chunk = (ULONG)ALIGN_DOWN_BY(min(Chunk, Storage->MaximumTransferLength), KdpBootLogSectorSize);
         if (Chunk == 0)
             return STATUS_INVALID_DEVICE_STATE;
 

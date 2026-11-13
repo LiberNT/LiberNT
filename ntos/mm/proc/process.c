@@ -486,8 +486,10 @@ MiCopyVirtualMemory(
                 if (NT_SUCCESS(Status))
                 {
                     PMI_PFN_DATABASE Db = &SourceSpace->System->Pfn;
-                    PUCHAR From = MiPfnMapFrame(Db, SourceMdl->Frames[0]);
-                    PUCHAR To = MiPfnMapFrame(Db, TargetMdl->Frames[0]);
+                    /* The PFN database indexes frames with ULONG (FrameCount
+                     * is ULONG); the MDL keeps them pointer-sized. */
+                    PUCHAR From = MiPfnMapFrame(Db, (ULONG)SourceMdl->Frames[0]);
+                    PUCHAR To = MiPfnMapFrame(Db, (ULONG)TargetMdl->Frames[0]);
 
                     RtlCopyMemory(To + TargetMdl->ByteOffset, From + SourceMdl->ByteOffset, Chunk);
                     MiPfnUnmapFrame(Db, To);

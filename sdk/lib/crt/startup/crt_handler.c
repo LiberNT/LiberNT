@@ -46,7 +46,7 @@ extern void __cdecl _fpreset (void);
 EXCEPTION_DISPOSITION __mingw_SEH_error_handler(struct _EXCEPTION_RECORD *, void *, struct _CONTEXT *, void *);
 
 #define MAX_PDATA_ENTRIES 32
-#if !defined(__aarch64__) && !defined(_M_ARM64) && !defined(_M_RISCV64)
+#if !defined(__aarch64__) && !defined(_M_ARM64) && !defined(_M_RISCV64) && !defined(_M_LOONGARCH64)
 static RUNTIME_FUNCTION emu_pdata[MAX_PDATA_ENTRIES];
 static UNWIND_INFO emu_xdata[MAX_PDATA_ENTRIES];
 #endif
@@ -55,7 +55,7 @@ int
 __mingw_init_ehandler (void)
 {
   static int was_here = 0;
-#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_RISCV64)
+#if defined(__aarch64__) || defined(_M_ARM64) || defined(_M_RISCV64) || defined(_M_LOONGARCH64)
   if (!was_here) was_here = 1;
   return was_here;
 #else
@@ -196,16 +196,16 @@ __mingw_SEH_error_handler (struct _EXCEPTION_RECORD* ExceptionRecord,
 
 LPTOP_LEVEL_EXCEPTION_FILTER __mingw_oldexcpt_handler = NULL;
 
-long CALLBACK
+LONG CALLBACK
 _gnu_exception_handler (EXCEPTION_POINTERS *exception_data);
 
 #define GCC_MAGIC (('G' << 16) | ('C' << 8) | 'C' | (1U << 29))
 
-long CALLBACK
+LONG CALLBACK
 _gnu_exception_handler (EXCEPTION_POINTERS *exception_data)
 {
   void (*old_handler) (int);
-  long action = EXCEPTION_CONTINUE_SEARCH;
+  LONG action = EXCEPTION_CONTINUE_SEARCH;
   int reset_fpu = 0;
 
 #ifdef __SEH__

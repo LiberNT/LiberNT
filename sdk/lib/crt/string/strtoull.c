@@ -8,7 +8,8 @@ strtoull(const char *nptr, char **endptr, int base)
   unsigned long long acc;
   int c;
   unsigned long long cutoff;
-  int neg = 0, any, cutlim;
+  unsigned long long cutlim;
+  int neg = 0, any;
 
   /*
    * See strtol for comments as to the logic used.

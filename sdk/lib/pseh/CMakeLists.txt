@@ -37,7 +37,7 @@ else()
         list(APPEND SOURCE
             i386/pseh3.c
             i386/pseh3_i386.S)
-    elseif(USE_DUMMY_PSEH)
+    elseif(USE_DUMMY_PSEH OR ARCH STREQUAL "loongarch64")
         list(APPEND SOURCE dummy.c)
     elseif(ARCH STREQUAL "i386")
         list(APPEND SOURCE

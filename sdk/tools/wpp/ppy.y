@@ -402,10 +402,10 @@ static void cast_to_sint(cval_t *v)
 	{
 	case cv_sint:	break;
 	case cv_uint:	break;
-	case cv_slong:	v->val.si = v->val.sl;	break;
-	case cv_ulong:	v->val.si = v->val.ul;	break;
-	case cv_sll:	v->val.si = v->val.sll;	break;
-	case cv_ull:	v->val.si = v->val.ull;	break;
+	case cv_slong:	v->val.si = (int) v->val.sl;	break;
+	case cv_ulong:	v->val.si = (int) v->val.ul;	break;
+	case cv_sll:	v->val.si = (int) v->val.sll;	break;
+	case cv_ull:	v->val.si = (int) v->val.ull;	break;
 	}
 	v->type = cv_sint;
 }
@@ -416,10 +416,10 @@ static void cast_to_uint(cval_t *v)
 	{
 	case cv_sint:	break;
 	case cv_uint:	break;
-	case cv_slong:	v->val.ui = v->val.sl;	break;
-	case cv_ulong:	v->val.ui = v->val.ul;	break;
-	case cv_sll:	v->val.ui = v->val.sll;	break;
-	case cv_ull:	v->val.ui = v->val.ull;	break;
+	case cv_slong:	v->val.ui = (unsigned int) v->val.sl;	break;
+	case cv_ulong:	v->val.ui = (unsigned int) v->val.ul;	break;
+	case cv_sll:	v->val.ui = (unsigned int) v->val.sll;	break;
+	case cv_ull:	v->val.ui = (unsigned int) v->val.ull;	break;
 	}
 	v->type = cv_uint;
 }
@@ -590,7 +590,7 @@ static mtext_t *combine_mtext(mtext_t *tail, mtext_t *mtp)
 
 	if(tail->type == exp_concat && mtp->type == exp_text)
 	{
-		int len = strlen(mtp->subst.text);
+		size_t len = strlen(mtp->subst.text);
 		while(len)
 		{
 /* FIXME: should delete space from head of string */
@@ -610,7 +610,7 @@ static mtext_t *combine_mtext(mtext_t *tail, mtext_t *mtp)
 
 	if(tail->type == exp_text && mtp->type == exp_concat)
 	{
-		int len = strlen(tail->subst.text);
+		size_t len = strlen(tail->subst.text);
 		while(len)
 		{
 			if(isspace(tail->subst.text[len-1] & 0xff))
@@ -639,8 +639,8 @@ static mtext_t *combine_mtext(mtext_t *tail, mtext_t *mtp)
 
 static char *merge_text(char *s1, char *s2)
 {
-	int l1 = strlen(s1);
-	int l2 = strlen(s2);
+	size_t l1 = strlen(s1);
+	size_t l2 = strlen(s2);
 	s1 = xrealloc(s1, l1+l2+1);
 	memcpy(s1+l1, s2, l2+1);
 	free(s2);

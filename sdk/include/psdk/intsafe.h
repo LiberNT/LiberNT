@@ -33,7 +33,12 @@
 /* Handle ntintsafe here too */
 #ifdef _NTINTSAFE_H_INCLUDED_
 #ifndef _NTDEF_ /* Guard agains redefinition from ntstatus.h */
+#if defined(__ROS_LONG64__)
+/* The C long is 64-bit here; an NTSTATUS is always a 32-bit NT LONG. */
+typedef _Return_type_success_(return >= 0) int NTSTATUS;
+#else
 typedef _Return_type_success_(return >= 0) long NTSTATUS;
+#endif
 #endif
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000)
@@ -104,7 +109,11 @@ typedef _W64 unsigned long ULONG_PTR, DWORD_PTR, SIZE_T;
 typedef unsigned char BYTE;
 typedef unsigned short WORD;
 typedef unsigned int UINT;
+#if defined(__ROS_LONG64__)
+typedef unsigned int DWORD;
+#else
 typedef unsigned long DWORD;
+#endif
 #endif // _WINNT_
 
 /* Just to be sure! */
@@ -253,6 +262,10 @@ C_ASSERT(sizeof(UINT_PTR) == sizeof(ULONG_PTR));
 #endif
 
 /* Convert unsigned to signed or unsigned */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtautological-constant-out-of-range-compare"
+#endif
 #define DEFINE_SAFE_CONVERT_UTOX(_Name, _TypeFrom, _TypeTo) \
 _Must_inspect_result_ \
 __forceinline \

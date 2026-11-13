@@ -367,7 +367,11 @@ $if(_NTDEF_)
 /* Unsigned Types */
 typedef unsigned char UCHAR, *PUCHAR;
 typedef unsigned short USHORT, *PUSHORT;
-typedef unsigned long ULONG, *PULONG;
+#if defined(__ROS_LONG64__)
+  typedef unsigned int ULONG, *PULONG;
+#else
+  typedef unsigned long ULONG, *PULONG;
+#endif
 
 typedef double DOUBLE;
 $endif(_NTDEF_)

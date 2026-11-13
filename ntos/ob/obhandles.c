@@ -528,7 +528,7 @@ ObpRollbackHandleCount(
     POBJECT_HEADER_HANDLE_INFO HandleInfo;
     POBJECT_HANDLE_COUNT_DATABASE HandleDatabase;
     POBJECT_HANDLE_COUNT_ENTRY HandleEntry = NULL;
-    LONG NewCount;
+    LONG_PTR NewCount;
     ULONG i;
 
     ObpAcquireObjectLock(ObjectHeader);
