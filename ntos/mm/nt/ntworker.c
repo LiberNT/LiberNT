@@ -89,6 +89,7 @@ MiBalanceSetManager(
         }
 
         MmAvailablePages = (PFN_COUNT)MiPfnAvailablePages(&MiSystem.Pfn);
+        MiUpdateMemoryNotification(MmAvailablePages);
         MmQuerySystemCommitCharge(NULL);
     }
 }
@@ -163,6 +164,7 @@ MiWorkerThreadsInitialize(VOID)
     KeInitializeEvent(&MiBalanceEvent, SynchronizationEvent, FALSE);
     KeInitializeEvent(&MiModifiedWriterEvent, SynchronizationEvent, FALSE);
     MiMemoryEventInitialize();
+    MiMemoryNotificationInitialize();
     MiReservePages = MiReservePageCount();
     MI_ATOMIC_WRITE_POINTER(&MiSystem.Pfn.ReserveFloor, (PVOID)MiReserveFloor);
 

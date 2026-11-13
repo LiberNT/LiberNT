@@ -414,6 +414,7 @@ KMT_TESTFUNC Test_RtlGetVersion;
 KMT_TESTFUNC Test_RtlIntSafe;
 KMT_TESTFUNC Test_RtlIsValidOemCharacter;
 KMT_TESTFUNC Test_MmDriverMemory;
+KMT_TESTFUNC Test_MmMemoryNotification;
 KMT_TESTFUNC Test_MmMapReserve;
 KMT_TESTFUNC Test_MmPhysical;
 KMT_TESTFUNC Test_MmPrefetchPages;
@@ -784,6 +785,7 @@ const KMT_TEST TestList[] =
     { "MmWddmRotateValid",                  Test_MmWddmRotateValid },
     { "MmMapReserve",                       Test_MmMapReserve },
     { "MmDriverMemory",                     Test_MmDriverMemory },
+    { "MmMemoryNotification",               Test_MmMemoryNotification },
     { "MmPhysical",                         Test_MmPhysical },
     { "MmPrefetchPages",                    Test_MmPrefetchPages },
     { "MmPrivatePages",                     Test_MmPrivatePages },

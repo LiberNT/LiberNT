@@ -58,6 +58,145 @@ MiKmFree(
 static KEVENT MiMemoryAvailableEvent;
 static BOOLEAN MiMemoryEventReady;
 
+/* Microsoft documents the levels a memory resource notification uses: the low
+ * event signals at about 32 MB of available memory per 4 GB installed, to a
+ * maximum of 64 MB, and the high event at three times that level. */
+#define MI_LOW_MEMORY_SHARE         128
+#define MI_LOW_MEMORY_CAP_BYTES     (64ULL * 1024 * 1024)
+#define MI_HIGH_MEMORY_FACTOR       3
+
+static PKEVENT MiLowMemoryCondition;
+static PKEVENT MiHighMemoryCondition;
+static ULONG64 MiLowMemoryPages;
+static ULONG64 MiHighMemoryPages;
+
+static
+NTSTATUS
+MiCreateConditionSd(
+    _Outptr_ PSECURITY_DESCRIPTOR *SecurityDescriptor)
+{
+    PSECURITY_DESCRIPTOR Sd;
+    NTSTATUS Status;
+    ULONG AclSize;
+    PACL Dacl;
+
+    AclSize = sizeof(ACL) +
+              sizeof(ACE) + RtlLengthSid(SeWorldSid) +
+              sizeof(ACE) + RtlLengthSid(SeAliasAdminsSid) +
+              sizeof(ACE) + RtlLengthSid(SeLocalSystemSid);
+
+    Sd = ExAllocatePoolWithTag(PagedPool, sizeof(SECURITY_DESCRIPTOR) + AclSize, MI_CORE_TAG);
+    if (Sd == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = RtlCreateSecurityDescriptor(Sd, SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        Dacl = (PACL)((PUCHAR)Sd + sizeof(SECURITY_DESCRIPTOR));
+
+        Status = RtlCreateAcl(Dacl, AclSize, ACL_REVISION);
+        if (NT_SUCCESS(Status))
+            Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION,
+                                            EVENT_QUERY_STATE | SYNCHRONIZE | READ_CONTROL,
+                                            SeWorldSid);
+        if (NT_SUCCESS(Status))
+            Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, EVENT_ALL_ACCESS, SeAliasAdminsSid);
+        if (NT_SUCCESS(Status))
+            Status = RtlAddAccessAllowedAce(Dacl, ACL_REVISION, EVENT_ALL_ACCESS, SeLocalSystemSid);
+        if (NT_SUCCESS(Status))
+            Status = RtlSetDaclSecurityDescriptor(Sd, TRUE, Dacl, FALSE);
+    }
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(Sd, MI_CORE_TAG);
+        return Status;
+    }
+
+    *SecurityDescriptor = Sd;
+    return STATUS_SUCCESS;
+}
+
+static
+PKEVENT
+MiCreateConditionEvent(
+    _In_ PCWSTR Path,
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Name;
+    NTSTATUS Status;
+    HANDLE Handle;
+    PVOID Event;
+
+    RtlInitUnicodeString(&Name, Path);
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Name,
+                               OBJ_CASE_INSENSITIVE | OBJ_PERMANENT | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               SecurityDescriptor);
+
+    Status = ZwCreateEvent(&Handle, EVENT_ALL_ACCESS, &ObjectAttributes, NotificationEvent, FALSE);
+    if (!NT_SUCCESS(Status))
+        return NULL;
+
+    Status = ObReferenceObjectByHandle(Handle, 0, ExEventObjectType, KernelMode, &Event, NULL);
+    ZwClose(Handle);
+    if (!NT_SUCCESS(Status))
+        return NULL;
+
+    return (PKEVENT)Event;
+}
+
+VOID
+MiMemoryNotificationInitialize(VOID)
+{
+    PSECURITY_DESCRIPTOR Sd;
+    ULONG64 Pages;
+
+    Pages = (ULONG64)MmNumberOfPhysicalPages / MI_LOW_MEMORY_SHARE;
+    if (Pages > (MI_LOW_MEMORY_CAP_BYTES >> PAGE_SHIFT))
+        Pages = MI_LOW_MEMORY_CAP_BYTES >> PAGE_SHIFT;
+
+    MiLowMemoryPages = Pages;
+    MiHighMemoryPages = Pages * MI_HIGH_MEMORY_FACTOR;
+
+    /* TODO: the LowMemoryThreshold and HighMemoryThreshold values of the
+     * memory management key are not read yet; only the documented defaults
+     * above are used */
+    if (!NT_SUCCESS(MiCreateConditionSd(&Sd)))
+        return;
+
+    MiLowMemoryCondition = MiCreateConditionEvent(L"\\KernelObjects\\LowMemoryCondition", Sd);
+    MiHighMemoryCondition = MiCreateConditionEvent(L"\\KernelObjects\\HighMemoryCondition", Sd);
+    ExFreePoolWithTag(Sd, MI_CORE_TAG);
+}
+
+VOID
+MiUpdateMemoryNotification(
+    _In_ ULONG64 AvailablePages)
+{
+    if (MiLowMemoryCondition == NULL || MiHighMemoryCondition == NULL)
+        return;
+
+    if (AvailablePages <= MiLowMemoryPages)
+    {
+        KeClearEvent(MiHighMemoryCondition);
+        KeSetEvent(MiLowMemoryCondition, 0, FALSE);
+        return;
+    }
+
+    if (AvailablePages >= MiHighMemoryPages)
+    {
+        KeClearEvent(MiLowMemoryCondition);
+        KeSetEvent(MiHighMemoryCondition, 0, FALSE);
+        return;
+    }
+
+    KeClearEvent(MiLowMemoryCondition);
+    KeClearEvent(MiHighMemoryCondition);
+}
+
 
 VOID
 MiMemoryEventInitialize(VOID)
