@@ -1,4 +1,4 @@
-; BTRFS Filesystem driver
+; Btrfs file system driver
 [AddReg]
 HKLM,"SYSTEM\CurrentControlSet\Services\btrfs","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\btrfs","Group",0x00000000,"Boot File System"

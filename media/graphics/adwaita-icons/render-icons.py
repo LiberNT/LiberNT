@@ -328,7 +328,6 @@ TARGETS = (
     ("legacy:legacy/applications-system", "dll/shellext/ntobjshex/resources/", (5,)),
     ("legacy:legacy/network-wired", "dll/shellext/ntobjshex/resources/", (6,)),
     ("mimetypes/text-x-generic", "dll/shellext/ntobjshex/resources/", (8,)),
-    ("places/folder", "dll/shellext/shellbtrfs/", ("subvol",)),
     ("legacy:legacy/ac-adapter", "dll/shellext/stobject/resources/", (1,)),
     ("devices/drive-removable-media", "dll/shellext/stobject/resources/", (2,)),
     ("mimetypes/package-x-generic", "dll/shellext/zipfldr/res/", ("zipfldr",)),

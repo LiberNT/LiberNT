@@ -6224,47 +6224,6 @@ HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 1\CryptDllEncodeObject\1.
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 1\CryptDllEncodeObject\1.3.6.1.4.1.311.2.1.4","FuncName",0x00000000,"WVTAsn1SpcIndirectDataContentEncode"
 HKLM,"SOFTWARE\Microsoft\Cryptography\OID\EncodingType 1\CryptDllEncodeObject\1.3.6.1.4.1.311.2.1.4","Dll",0x00000000,"WINTRUST.DLL"
 
-[shellbtrfs.dll]
-HKCR,"*\shellex\PropertySheetHandlers",,0x00000010
-HKCR,"*\shellex\PropertySheetHandlers\WinBtrfs",,0x00000010
-HKCR,"*\shellex\PropertySheetHandlers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F2}"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F0}",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F0}","",0x00000000,"WinBtrfs shell extension (icon handler)"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F0}\InprocServer32",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F0}\InprocServer32","",0x00000000,"%MODULE%"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F0}\InprocServer32","ThreadingModel",0x00000000,"Apartment"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F1}",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F1}","",0x00000000,"WinBtrfs shell extension (context menu)"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F1}\InprocServer32",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F1}\InprocServer32","",0x00000000,"%MODULE%"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F1}\InprocServer32","ThreadingModel",0x00000000,"Apartment"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F2}",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F2}","",0x00000000,"WinBtrfs shell extension (property sheet)"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F2}\InprocServer32",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F2}\InprocServer32","",0x00000000,"%MODULE%"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F2}\InprocServer32","ThreadingModel",0x00000000,"Apartment"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F3}",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F3}","",0x00000000,"WinBtrfs shell extension (volume property sheet)"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F3}\InprocServer32",,0x00000010
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F3}\InprocServer32","",0x00000000,"%MODULE%"
-HKCR,"CLSID\{2690B74F-F353-422D-BB12-401581EEF8F3}\InprocServer32","ThreadingModel",0x00000000,"Apartment"
-HKCR,"Directory\Background\shellex\ContextMenuHandlers\WinBtrfs",,0x00000010
-HKCR,"Directory\Background\shellex\ContextMenuHandlers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F1}"
-HKCR,"Drive\ShellEx",,0x00000010
-HKCR,"Drive\ShellEx\PropertySheetHandlers",,0x00000010
-HKCR,"Drive\ShellEx\PropertySheetHandlers\WinBtrfs",,0x00000010
-HKCR,"Drive\ShellEx\PropertySheetHandlers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F3}"
-HKCR,"Folder\ShellEx",,0x00000010
-HKCR,"Folder\ShellEx\ContextMenuHandlers",,0x00000010
-HKCR,"Folder\ShellEx\ContextMenuHandlers\WinBtrfs",,0x00000010
-HKCR,"Folder\ShellEx\ContextMenuHandlers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F1}"
-HKCR,"Folder\ShellEx\PropertySheetHandlers",,0x00000010
-HKCR,"Folder\ShellEx\PropertySheetHandlers\WinBtrfs",,0x00000010
-HKCR,"Folder\ShellEx\PropertySheetHandlers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F2}"
-HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\WinBtrfs",,0x00000010
-HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\WinBtrfs","",0x00000000,"{2690B74F-F353-422D-BB12-401581EEF8F0}"
-
 [zipfldr.dll]
 HKCR,".ZFSendToTarget",,0x00000010
 HKCR,".ZFSendToTarget","",0x00000000,"CLSID\{888DCA60-FC0A-11CF-8F0F-00C04FD7D062}"
