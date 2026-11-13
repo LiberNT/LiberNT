@@ -180,6 +180,19 @@ DoLinearRegression(
     return (SumXY + (SumXX/2)) / SumXX;
 }
 
+static
+ULONG64
+HalpGetCounterFrequency(VOID)
+{
+    if (HalpTimeCapabilities.Counter.AvailabilityStage >= 2)
+    {
+        ASSERT(HalpTimeCapabilities.Counter.Frequency == HalpCpuClockFrequency.QuadPart);
+        return HalpTimeCapabilities.Counter.Frequency;
+    }
+
+    return HalpCpuClockFrequency.QuadPart;
+}
+
 VOID
 NTAPI
 HalpInitializeTsc(VOID)
@@ -271,7 +284,7 @@ HalpCalibrateStallExecution(VOID)
 
     HalpInitializeTsc();
 
-    HalpStallScaleFactor = (ULONG)(HalpCpuClockFrequency.QuadPart / 1000000);
+    HalpStallScaleFactor = (ULONG)(HalpGetCounterFrequency() / 1000000);
     KeGetPcr()->StallScaleFactor = HalpStallScaleFactor;
 }
 
@@ -296,7 +309,7 @@ KeQueryPerformanceCounter(
     }
 
     /* Return the current value */
-    Frequency = HalpCpuClockFrequency.QuadPart;
+    Frequency = HalpGetCounterFrequency();
     Tsc = __rdtsc();
     Seconds = Tsc / Frequency;
     Remainder = Tsc % Frequency;
@@ -308,13 +321,14 @@ VOID
 NTAPI
 KeStallExecutionProcessor(ULONG MicroSeconds)
 {
-    ULONG64 StartTime, EndTime;
+    ULONG64 StartTime, EndTime, Ticks;
 
     /* Get the initial time */
     StartTime = __rdtsc();
 
-    /* Calculate the ending time */
-    EndTime = StartTime + KeGetPcr()->StallScaleFactor * MicroSeconds;
+    /* Calculate the ending time, saturating instead of wrapping */
+    Ticks = (ULONG64)KeGetPcr()->StallScaleFactor * MicroSeconds;
+    EndTime = (StartTime > MAXULONG64 - Ticks) ? MAXULONG64 : StartTime + Ticks;
 
     /* Loop until time is elapsed */
     while (__rdtsc() < EndTime);
