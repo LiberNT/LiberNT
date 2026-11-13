@@ -760,20 +760,49 @@ PspInitializeSystemDll(VOID)
 
     KeUserPopEntrySListEnd =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListEnd");
+                                     "ExpInterlockedPopEntrySListEnd");
     KeUserPopEntrySListFault =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListFault");
+                                     "ExpInterlockedPopEntrySListFault");
     KeUserPopEntrySListResume =
         RtlFindExportedRoutineByName(PspSystemDllBase,
-                                     "RtlpInterlockedPopEntrySListResume");
+                                     "ExpInterlockedPopEntrySListResume");
+
+#if defined(_M_IX86)
+    /* A 32-bit stub takes its kernel entry point from the shared user data */
+    if (KeFeatureBits & KF_FAST_SYSCALL)
+    {
+        SharedUserData->SystemCall =
+            (ULONG)(ULONG_PTR)RtlFindExportedRoutineByName(PspSystemDllBase,
+                                                          "KiFastSystemCall");
+        SharedUserData->SystemCallReturn =
+            (ULONG)(ULONG_PTR)RtlFindExportedRoutineByName(PspSystemDllBase,
+                                                          "KiFastSystemCallRet");
+        if ((SharedUserData->SystemCall == 0) ||
+            (SharedUserData->SystemCallReturn == 0))
+        {
+            return STATUS_PROCEDURE_NOT_FOUND;
+        }
+    }
+    else
+    {
+        SharedUserData->SystemCall =
+            (ULONG)(ULONG_PTR)RtlFindExportedRoutineByName(PspSystemDllBase,
+                                                          "KiIntSystemCall");
+        if (SharedUserData->SystemCall == 0)
+            return STATUS_PROCEDURE_NOT_FOUND;
+    }
+#endif
 
     if (PspSystemDllEntryPoint == NULL ||
         KeUserApcDispatcher == NULL ||
         KeUserExceptionDispatcher == NULL ||
         KeUserCallbackDispatcher == NULL ||
         KeRaiseUserExceptionDispatcher == NULL ||
-        PspRtlUserThreadStart == NULL)
+        PspRtlUserThreadStart == NULL ||
+        KeUserPopEntrySListEnd == NULL ||
+        KeUserPopEntrySListFault == NULL ||
+        KeUserPopEntrySListResume == NULL)
     {
         return STATUS_PROCEDURE_NOT_FOUND;
     }

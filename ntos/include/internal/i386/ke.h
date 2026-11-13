@@ -213,6 +213,10 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 #define KeGetExceptionFrame(Thread) \
     NULL
 
+/* The entry path reads the descriptor table out of the thread */
+#define KiArchSetGuiServiceTable(Thread) \
+    ((VOID)((Thread)->Tcb.ServiceTable = KeServiceDescriptorTableShadow))
+
 //
 // Macro to get context switches from the PRCB
 // All architectures but x86 have it in the PRCB's KeContextSwitches

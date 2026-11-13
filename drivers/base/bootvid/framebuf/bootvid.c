@@ -43,6 +43,12 @@ static ULONG FrameBufferRotation;
 static UCHAR BytesPerPixel;
 static PUCHAR BackBuffer = NULL;
 static SIZE_T BackBufferSize;
+static BOOLEAN BackBufferFromVram = FALSE;
+
+static PVOID MappedFrameBufferBase = NULL;
+static PHYSICAL_ADDRESS MappedFrameBufferPhysicalAddress;
+static ULONG MappedFrameBufferSize;
+static ULONG MappedFrameBufferByteOffset;
 
 static RGBQUAD CachedPalette[BV_MAX_COLORS];
 static ULONG NativePalette[BV_MAX_COLORS];
@@ -856,6 +862,10 @@ VidInitialize(
         }
         FrameBufferStart = (ULONG_PTR)FrameBufferBase;
         FrameBufferStart += (TranslatedAddress.QuadPart - FrameBuffer.QuadPart); // BYTE_OFFSET()
+        MappedFrameBufferBase = FrameBufferBase;
+        MappedFrameBufferPhysicalAddress = FrameBuffer;
+        MappedFrameBufferSize = MappedSize;
+        MappedFrameBufferByteOffset = (ULONG)(TranslatedAddress.QuadPart - FrameBuffer.QuadPart);
         VidpInitializeFrameBufferFlush(FrameBuffer, FrameBufferBase, MappedSize);
     }
     else
@@ -906,6 +916,7 @@ VidInitialize(
     {
         /* Backbuffer placed following the framebuffer in the hidden part */
         BackBuffer = (PUCHAR)(FrameBufferStart + FrameBufferSize);
+        BackBufferFromVram = TRUE;
         // BackBuffer = (PUCHAR)(VramAddress + VramSize - BackBufferSize); // Or at the end of VRAM.
     }
 
@@ -1056,6 +1067,144 @@ VidUseCompactFont(VOID)
     VidpCurrentY = 0;
     RtlZeroMemory(BackBuffer, BackBufferSize);
     return TRUE;
+}
+
+NTSTATUS
+NTAPI
+VidSetDisplayGeometry(
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG PixelsPerScanLine,
+    _In_ ULONG BitsPerPixel)
+{
+    ULONG Dpi, Scale, LogicalWidth, LogicalHeight, ScrollWidth;
+    SIZE_T BackBufferHeight, NewBackBufferSize, CompactCellHeight;
+    PUCHAR NewBackBuffer;
+
+    if (BackBuffer == NULL)
+        return STATUS_DEVICE_NOT_READY;
+
+    if ((BitsPerPixel != 32) ||
+        (PixelsPerScanLine < Width) ||
+        (Width < SCREEN_WIDTH) ||
+        (Height < SCREEN_HEIGHT) ||
+        (PixelsPerScanLine > MAXULONG / BytesPerPixel) ||
+        (Height > MAXULONG / (PixelsPerScanLine * BytesPerPixel)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Dpi = VidpFrameBufferInfo.Dpi;
+    if ((Dpi < LOADER_PARAMETER_FRAMEBUFFER_DPI_MIN) || (Dpi > LOADER_PARAMETER_FRAMEBUFFER_DPI_MAX))
+        Dpi = LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
+
+    Scale = (Dpi + LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT / 2) / LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT;
+    Scale = max(min(Scale, min(Width / SCREEN_WIDTH, Height / SCREEN_HEIGHT)), 1);
+
+    LogicalWidth = max(Width / Scale, SCREEN_WIDTH);
+    LogicalHeight = max(Height / Scale, SCREEN_HEIGHT);
+    if (VidpCompactFont)
+    {
+        PixelScale = 1;
+        LogicalWidth = Width;
+        LogicalHeight = Height;
+    }
+    else if ((LogicalWidth * Scale <= Width) && (LogicalHeight * Scale <= Height))
+    {
+        PixelScale = Scale;
+    }
+    else
+    {
+        PixelScale = 0;
+    }
+
+    ScrollWidth = LogicalWidth - (LogicalWidth % VidpCharacterWidth);
+    CompactCellHeight = BootVidCompactFont.Enabled ? BootVidCompactFont.CellHeight
+                                                   : (BOOTCHAR_HEIGHT + 1);
+
+    BackBufferHeight = (SIZE_T)LogicalHeight + VidpCharacterHeight;
+    if ((BackBufferHeight < LogicalHeight) || ((SIZE_T)LogicalWidth > MAXULONG_PTR / BackBufferHeight))
+        return STATUS_INVALID_PARAMETER;
+
+    NewBackBufferSize = (SIZE_T)LogicalWidth * BackBufferHeight;
+    NewBackBufferSize = max(NewBackBufferSize,
+                            (SIZE_T)Width * ((SIZE_T)Height + CompactCellHeight));
+
+    NewBackBuffer = ExAllocatePoolWithTag(NonPagedPool, NewBackBufferSize, TAG_BOOTVID_BACKBUFFER);
+    if (NewBackBuffer == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(NewBackBuffer, NewBackBufferSize);
+
+    if (MappedFrameBufferBase != NULL &&
+        (SIZE_T)Height * PixelsPerScanLine * BytesPerPixel + MappedFrameBufferByteOffset > MappedFrameBufferSize)
+    {
+        PVOID NewBase;
+        ULONG NewMappedSize;
+        BOOLEAN VirtualFrameBuffer = (FrameBufferStart != PhysicalFrameBufferStart);
+
+        if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+        {
+            ExFreePoolWithTag(NewBackBuffer, TAG_BOOTVID_BACKBUFFER);
+            return STATUS_INVALID_DEVICE_STATE;
+        }
+
+        NewMappedSize = ROUND_TO_PAGES(Height * PixelsPerScanLine * BytesPerPixel +
+                                       MappedFrameBufferByteOffset);
+        NewBase = MmMapIoSpace(MappedFrameBufferPhysicalAddress, NewMappedSize, MmWriteCombined);
+        if (NewBase == NULL)
+            NewBase = MmMapIoSpace(MappedFrameBufferPhysicalAddress, NewMappedSize, MmNonCached);
+        if (NewBase == NULL)
+        {
+            ExFreePoolWithTag(NewBackBuffer, TAG_BOOTVID_BACKBUFFER);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        MmUnmapIoSpace(MappedFrameBufferBase, MappedFrameBufferSize);
+        MappedFrameBufferBase = NewBase;
+        MappedFrameBufferSize = NewMappedSize;
+        if (!VirtualFrameBuffer)
+        {
+            FrameBufferStart = (ULONG_PTR)NewBase + MappedFrameBufferByteOffset;
+            PhysicalFrameBufferStart = FrameBufferStart;
+        }
+        VidpInitializeFrameBufferFlush(MappedFrameBufferPhysicalAddress, NewBase, NewMappedSize);
+    }
+
+    ScreenWidth = Width;
+    ScreenHeight = Height;
+    BytesPerScanLine = PixelsPerScanLine * BytesPerPixel;
+    FrameBufferSize = Height * BytesPerScanLine;
+    FrameBufferWidth = Width;
+    FrameBufferHeight = Height;
+
+    VidpDisplayWidth = LogicalWidth;
+    VidpDisplayHeight = LogicalHeight;
+    VidpPhysicalWidth = Width;
+    VidpPhysicalHeight = Height;
+    VidpDisplayDpi = PixelScale ? (Scale * LOADER_PARAMETER_FRAMEBUFFER_DPI_DEFAULT) : Dpi;
+    VidpScrollRegion.Left = 0;
+    VidpScrollRegion.Top = 0;
+    VidpScrollRegion.Right = ScrollWidth - 1;
+    VidpScrollRegion.Bottom = LogicalHeight - 1;
+    VidpCurrentX = 0;
+    VidpCurrentY = 0;
+
+    if (!(BackBufferFromVram))
+        ExFreePoolWithTag(BackBuffer, TAG_BOOTVID_BACKBUFFER);
+    BackBuffer = NewBackBuffer;
+    BackBufferSize = NewBackBufferSize;
+    BackBufferFromVram = FALSE;
+
+    VidpFrameBufferInfo.FrameBufferSize = FrameBufferSize;
+    VidpFrameBufferInfo.HorizontalResolution = Width;
+    VidpFrameBufferInfo.VerticalResolution = Height;
+    VidpFrameBufferInfo.PixelsPerScanLine = PixelsPerScanLine;
+    VidpFrameBufferInfo.Dpi = Dpi;
+
+    InitializePalette();
+    RtlZeroMemory((PVOID)FrameBufferStart, FrameBufferSize);
+    VidSolidColorFill(0, 0, VidpDisplayWidth - 1, VidpDisplayHeight - 1, BV_COLOR_BLACK);
+    return STATUS_SUCCESS;
 }
 
 VOID

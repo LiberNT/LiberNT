@@ -2420,6 +2420,7 @@
 @ stub -arch=win64 HvlUnregisterWheaErrorNotification
 @ stub -arch=win64 HvlUpdatePerformanceStateCountersForLp
 @ stdcall InbvNotifyDisplayOwnershipChange(long)
+@ stdcall InbvSetDisplayGeometry(long long long long)
 @ stdcall InbvSetVirtualFrameBuffer(ptr)
 @ stdcall InbvQueryBootScreen(ptr long ptr ptr)
 @ stdcall InbvDiscardBootScreen()

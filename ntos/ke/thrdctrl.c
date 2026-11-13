@@ -168,6 +168,9 @@ KeInitThread(
     Thread->WaitIrql = PASSIVE_LEVEL;
     Thread->WaitMode = KernelMode;
     Thread->PreviousMode = KernelMode;
+#if !defined(_WIN64)
+    Thread->ServiceTable = KeServiceDescriptorTable;
+#endif
     Thread->SuspendCount = 0;
     Thread->FreezeCount = 0;
     Thread->Saturation = 0;
