@@ -459,7 +459,7 @@ CallNotificationDll(
             :
               [StackPtr]"=&S"(StackPtr), [Success]/*"=rm"*/"=@cce"(Success)
             :
-              [pNotifyHandler]"m"(pNotifyHandler), [Info]/*"m"(Info)*/"r"(&Info)
+              [pNotifyHandler]"r"(pNotifyHandler), [Info]/*"m"(Info)*/"r"(&Info)
             :
               /*"%esp", "%eax",*/ "cc", "memory"
         );
