@@ -221,6 +221,15 @@ KeGetTrapFrameFrameRegister(PKTRAP_FRAME TrapFrame)
 #define KiArchSetInitialServiceTable(Thread) \
     ((VOID)((Thread)->ServiceTable = KeServiceDescriptorTable))
 
+CODE_SEG("INIT")
+NTSTATUS
+NTAPI
+KiI386PublishSystemCallStubs(
+    _In_ PVOID DllBase);
+
+#define KiArchPublishSystemCallStubs(DllBase) \
+    KiI386PublishSystemCallStubs(DllBase)
+
 //
 // Macro to get context switches from the PRCB
 // All architectures but x86 have it in the PRCB's KeContextSwitches

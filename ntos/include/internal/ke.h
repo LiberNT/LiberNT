@@ -20,6 +20,10 @@
 #define KiArchSetInitialServiceTable(Thread) ((VOID)(Thread))
 #endif
 
+#ifndef KiArchPublishSystemCallStubs
+#define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
+#endif
+
 #ifndef KiPrcbGroup
 #define KiPrcbGroup(Prcb) ((Prcb)->Group)
 #endif
@@ -75,7 +79,7 @@ typedef struct _PROCESS_VALUES
 
 typedef struct _DEFERRED_REVERSE_BARRIER
 {
-    ULONG Barrier;
+    volatile ULONG Barrier;
     ULONG TotalProcessors;
 } DEFERRED_REVERSE_BARRIER, *PDEFERRED_REVERSE_BARRIER;
 
