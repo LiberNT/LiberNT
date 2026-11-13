@@ -3115,7 +3115,7 @@ IntGetGlyphLoadFlags(FT_Face face)
     Length = 0;
     if (FT_Load_Sfnt_Table(face, TTAG_prep, 0, NULL, &Length) == 0)
         return FT_LOAD_NO_AUTOHINT;
-    return FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT;
+    return FT_LOAD_NO_HINTING;
 }
 
 FT_Render_Mode FASTCALL
@@ -5754,7 +5754,7 @@ ftGdiGetGlyphOutline(
     right = FLOATOBJ_GetLong(&eTemp) & -64;
 
     //adv = (INT)((ft_face->glyph->metrics.horiAdvance * widthRatio) + 63) >> 6;
-    FLOATOBJ_SetLong(&eTemp, ft_face->glyph->metrics.horiAdvance);
+    FLOATOBJ_SetLong(&eTemp, IntGetGlyphAdvance64(ft_face->glyph));
     FLOATOBJ_Mul(&eTemp, &widthRatio);
     FLOATOBJ_AddLong(&eTemp, 63);
     adv = FLOATOBJ_GetLong(&eTemp) >> 6;
@@ -5869,7 +5869,7 @@ ftGdiGetGlyphOutline(
         top = (top + 63) & -64;
 
         DPRINT("Transformed box: (%d,%d - %d,%d)\n", left, top, right, bottom);
-        vec.x = ft_face->glyph->metrics.horiAdvance;
+        vec.x = IntGetGlyphAdvance64(ft_face->glyph);
         vec.y = 0;
         FT_Vector_Transform(&vec, &transMat);
         if (bEmuBold)
