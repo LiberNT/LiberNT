@@ -161,6 +161,40 @@ MiPageStatus(
     MiPageStatusAt(Space, Vad, VirtualAddress, Slot, TableFrame, Shared, TRUE, Committed, Protection);
 }
 
+typedef struct _MI_PROTECT_FLUSH
+{
+    ULONG64 Start;
+    ULONG64 Count;
+} MI_PROTECT_FLUSH, *PMI_PROTECT_FLUSH;
+
+static
+VOID
+MiProtectFlush(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_PROTECT_FLUSH Flush)
+{
+    if (Flush->Count != 0)
+    {
+        MiTlbInvalidateSpace(Space, Flush->Start, Flush->Count);
+        Flush->Count = 0;
+    }
+}
+
+static
+VOID
+MiProtectFlushAdd(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_PROTECT_FLUSH Flush,
+    _In_ ULONG64 VirtualAddress)
+{
+    MI_ASSERT((VirtualAddress & (PAGE_SIZE - 1)) == 0);
+    if (Flush->Count != 0 && VirtualAddress != Flush->Start + (Flush->Count << PAGE_SHIFT))
+        MiProtectFlush(Space, Flush);
+    if (Flush->Count == 0)
+        Flush->Start = VirtualAddress;
+    Flush->Count++;
+}
+
 static
 NTSTATUS
 MiSetPrivatePageProtectionAt(
@@ -168,7 +202,8 @@ MiSetPrivatePageProtectionAt(
     _In_ ULONG64 VirtualAddress,
     _Inout_ PMI_PTE Slot,
     _In_ ULONG TableFrame,
-    _In_ ULONG Protection);
+    _In_ ULONG Protection,
+    _Inout_opt_ PMI_PROTECT_FLUSH Flush);
 
 NTSTATUS
 MiSetPrivatePageProtection(
@@ -182,7 +217,7 @@ MiSetPrivatePageProtection(
     if (Slot == NULL)
         return STATUS_NO_MEMORY;
 
-    return MiSetPrivatePageProtectionAt(Space, VirtualAddress, Slot, TableFrame, Protection);
+    return MiSetPrivatePageProtectionAt(Space, VirtualAddress, Slot, TableFrame, Protection, NULL);
 }
 
 static
@@ -191,28 +226,38 @@ MiSetPrivateRangeProtection(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 Start,
     _In_ ULONG64 End,
-    _In_ ULONG Protection)
+    _In_ ULONG Protection,
+    _In_ BOOLEAN LockTables)
 {
     NTSTATUS Status = STATUS_SUCCESS;
     ULONG64 Va = Start;
     MI_PTE DemandZero = MiSoftMake(MiSoftDemandZero, Protection, 0);
     BOOLEAN NoClones = Space->CloneRoot.NodeCount == 0;
+    MI_PROTECT_FLUSH Flush = { 0, 0 };
+
+    MI_ASSERT(!LockTables || NoClones);
 
     while (Va < End && NT_SUCCESS(Status))
     {
         ULONG64 TableEnd = MiPtNextTableBoundary(Space, Va);
         ULONG TableFrame;
         PMI_PTE Slot = MiPtEnsure(Space, Va, &TableFrame);
+        KIRQL TableIrql = 0;
         LONG Added = 0;
 
         if (Slot == NULL)
         {
-            MiPtPruneEmpty(Space, Va);
+            MI_ASSERT(Flush.Count == 0);
+            if (!LockTables)
+                MiPtPruneEmpty(Space, Va);
             return STATUS_NO_MEMORY;
         }
 
         if (TableEnd > End)
             TableEnd = End;
+
+        if (LockTables)
+            TableIrql = MiPfnLock(&Space->System->Pfn, TableFrame);
 
         for (; Va < TableEnd && NT_SUCCESS(Status); Va += PAGE_SIZE, Slot++)
         {
@@ -225,11 +270,14 @@ MiSetPrivateRangeProtection(
             }
             else
             {
-                Status = MiSetPrivatePageProtectionAt(Space, Va, Slot, TableFrame, Protection);
+                Status = MiSetPrivatePageProtectionAt(Space, Va, Slot, TableFrame, Protection, &Flush);
             }
         }
+        MiProtectFlush(Space, &Flush);
         if (Added != 0 && !(MI_PFN_FLAGS(&Space->System->Pfn.Pfn[TableFrame]) & MI_PFN_FLAG_PINNED))
             MI_ATOMIC_ADD32(&Space->System->Pfn.Pfn[TableFrame].UsedEntries, Added);
+        if (LockTables)
+            MiPfnUnlock(&Space->System->Pfn, TableFrame, TableIrql);
     }
 
     return Status;
@@ -284,7 +332,8 @@ MiSetPrivatePageProtectionAt(
     _In_ ULONG64 VirtualAddress,
     _Inout_ PMI_PTE Slot,
     _In_ ULONG TableFrame,
-    _In_ ULONG Protection)
+    _In_ ULONG Protection,
+    _Inout_opt_ PMI_PROTECT_FLUSH Flush)
 {
     PMI_SYSTEM System = Space->System;
     MI_PTE Pte;
@@ -322,7 +371,10 @@ MiSetPrivatePageProtectionAt(
         }
 
         MiPtWrite(Space, VirtualAddress, Slot, TableFrame, MiArchPteMakeLeaf(Frame, Protection, Flags));
-        MiTlbInvalidateSpace(Space, VirtualAddress, 1);
+        if (Flush != NULL)
+            MiProtectFlushAdd(Space, Flush, VirtualAddress);
+        else
+            MiTlbInvalidateSpace(Space, VirtualAddress, 1);
         return STATUS_SUCCESS;
     }
 
@@ -951,7 +1003,7 @@ MiAllocateVirtualMemoryBounded(
 
     Vad->CommitCharge += Charged;
     Vad->PteTouched = TRUE;
-    Status = MiSetPrivateRangeProtection(Space, Start, End, Protection);
+    Status = MiSetPrivateRangeProtection(Space, Start, End, Protection, FALSE);
     if (!NT_SUCCESS(Status))
     {
         LONG64 Uncommitted = MiCountUncommittedPrivate(Space, Vad, Start, End);
@@ -1321,6 +1373,90 @@ MiFreeVirtualMemory(
     return STATUS_SUCCESS;
 }
 
+static
+BOOLEAN
+MiProtectPrivateShared(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End,
+    _In_ ULONG NewProtection,
+    _In_ BOOLEAN DenyDynamicCode,
+    _Out_ PULONG OldProtection,
+    _Out_ NTSTATUS *Status)
+{
+    BOOLEAN Handled = FALSE;
+    ULONG Protection = NewProtection;
+    PMI_VAD Vad;
+    ULONG64 Va;
+
+    if (Space->IsSystem || MI_ATOMIC_READ32((volatile LONG *)&Space->CloneRoot.NodeCount) != 0 ||
+        Space->TrackExecutableWrites || MI_PROT_IS_COPY(NewProtection) ||
+        (DenyDynamicCode && MI_PROT_IS_EXECUTE(NewProtection)))
+    {
+        return FALSE;
+    }
+
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, Start);
+    if (Vad == NULL || End > MI_VAD_END(Vad) || Vad->Type != MiVadPrivate || MI_VAD_IS_DIRECT(Vad) ||
+        Space->CloneRoot.NodeCount != 0 || Space->TrackExecutableWrites)
+    {
+        goto Done;
+    }
+
+    for (Va = Start; Va < End;)
+    {
+        ULONG64 TableEnd = MiPtNextTableBoundary(Space, Va);
+        PMI_PTE Slot = MiPtLookup(Space, Va, NULL);
+
+        if (TableEnd > End)
+            TableEnd = End;
+        if (Slot == NULL)
+        {
+            if (!Vad->MemCommit)
+                goto Done;
+            Va = TableEnd;
+            continue;
+        }
+        for (; Va < TableEnd; Va += PAGE_SIZE, Slot++)
+        {
+            MI_PTE Pte = MiArchPteRead(Slot);
+
+            if (Pte == 0 ? !Vad->MemCommit
+                         : (!MiArchPteIsValid(Pte) && MiSoftKind(Pte) == MiSoftDecommitted))
+            {
+                goto Done;
+            }
+        }
+    }
+
+    {
+        BOOLEAN Committed;
+        ULONG Current;
+
+        MiPageStatus(Space, Vad, Start, TRUE, &Committed, &Current);
+        if (!Committed)
+            goto Done;
+        *OldProtection = Current;
+    }
+
+    if (Protection != MI_PROT_NOACCESS &&
+        (!MiProtApplyCache(&Protection, MI_PROT_IS_ACCESSIBLE(Vad->Protection) ? MI_PROT_CACHE(Vad->Protection) : 0) ||
+         !MiProtectionIsValid(Protection)))
+    {
+        goto Done;
+    }
+
+    if (!MI_ATOMIC_READ32(&Vad->PteTouched))
+        MI_ATOMIC_CAS32(&Vad->PteTouched, TRUE, FALSE);
+    *Status = MiSetPrivateRangeProtection(Space, Start, End, Protection, TRUE);
+    Handled = TRUE;
+
+Done:
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+    return Handled;
+}
+
 NTSTATUS
 MiProtectVirtualMemoryEx(
     _Inout_ PMI_ADDRESS_SPACE Space,
@@ -1343,6 +1479,16 @@ MiProtectVirtualMemoryEx(
 
     if (*RegionSize == 0 || End <= Start)
         return STATUS_INVALID_PARAMETER;
+
+    if (MiProtectPrivateShared(Space, Start, End, NewProtection, DenyDynamicCode, OldProtection, &Status))
+    {
+        if (NT_SUCCESS(Status))
+        {
+            *BaseAddress = Start;
+            *RegionSize = End - Start;
+        }
+        return Status;
+    }
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
@@ -1425,7 +1571,7 @@ MiProtectVirtualMemoryEx(
             }
         }
         Vad->PteTouched = TRUE;
-        Status = MiSetPrivateRangeProtection(Space, Start, End, NewProtection);
+        Status = MiSetPrivateRangeProtection(Space, Start, End, NewProtection, FALSE);
     }
 
     if (NT_SUCCESS(Status) && Space->TrackExecutableWrites &&
