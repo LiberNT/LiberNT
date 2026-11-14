@@ -97,6 +97,10 @@ NtfsSubmitDirectIo(
 
     NT_ASSERT(MajorFunction == IRP_MJ_READ || MajorFunction == IRP_MJ_WRITE);
     NT_ASSERT(Irp->MdlAddress && MmGetMdlByteCount(Irp->MdlAddress) >= Length);
+    NT_ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    NT_ASSERT(VolCB->StorageDevice != NULL && VolCB->BytesPerSector != 0);
+    NT_ASSERT(Length != 0 && Length % VolCB->BytesPerSector == 0);
+    NT_ASSERT(DiskOffset % VolCB->BytesPerSector == 0);
 
     IoStack = IoGetNextIrpStackLocation(Irp);
     IoStack->MajorFunction = MajorFunction;
@@ -147,6 +151,9 @@ NtfsLockTransferBuffer(
     PMDL Mdl;
     NTSTATUS Status = STATUS_SUCCESS;
 
+    NT_ASSERT(Operation == IoReadAccess || Operation == IoWriteAccess);
+    NT_ASSERT(Length != 0);
+
     if (Irp->MdlAddress)
         return STATUS_SUCCESS;
     if (!Irp->UserBuffer)
@@ -155,6 +162,7 @@ NtfsLockTransferBuffer(
     Mdl = IoAllocateMdl(Irp->UserBuffer, Length, FALSE, FALSE, Irp);
     if (!Mdl)
         return STATUS_INSUFFICIENT_RESOURCES;
+    NT_ASSERT(Irp->MdlAddress == Mdl);
 
     _SEH2_TRY
     {
@@ -204,6 +212,10 @@ NtfsMapDirectIo(
     ULONGLONG DiskOffset;
     ULONG ExtentCount;
     NTSTATUS Status;
+
+    NT_ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+    NT_ASSERT(Operation == IoReadAccess || Operation == IoWriteAccess);
+    NT_ASSERT(Length != 0);
 
     *Handled = FALSE;
     *MappedOffset = 0;
@@ -289,6 +301,7 @@ NtfsMapDirectIo(
     if (DiskOffset > ~(ULONGLONG)0 - InClusterOffset)
         return STATUS_SUCCESS;
     DiskOffset += InClusterOffset;
+    NT_ASSERT(DiskOffset % VolCB->BytesPerSector == 0);
 
     *Handled = TRUE;
     *MappedOffset = DiskOffset;
