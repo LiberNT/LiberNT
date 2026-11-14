@@ -1238,7 +1238,7 @@ KiArm64TimerIsr(
      * timing race; the per-CPU counters are read via GDB at the stall instead. */
     if (SmpDbgEnabled)
     {
-        KiTimerIsrCallCount++;
+        InterlockedIncrement((volatile LONG *)&KiTimerIsrCallCount);
         SmpDbgTimerTick(Cpu);
         SmpDbgHeartbeat(Cpu);
     }
