@@ -360,10 +360,11 @@ Bus_PlugInDevice (
             return STATUS_SUCCESS;
 
         //check everything but fixed feature devices
-        if (pdoData->AcpiHandle)
-            acpi_bus_get_device(pdoData->AcpiHandle, &CurrentDevice);
-        else
+        if (!pdoData->AcpiHandle ||
+            acpi_bus_get_device(pdoData->AcpiHandle, &CurrentDevice))
+        {
             continue;
+        }
 
         //check if the HID matches
         if (!strcmp(Device->pnp.hardware_id, CurrentDevice->pnp.hardware_id))
