@@ -7,6 +7,7 @@
 
 #include <kmt_test.h>
 
+#if defined(_M_ARM) || defined(_M_ARM64)
 static
 VOID
 NTAPI
@@ -22,6 +23,7 @@ WakeWatcherDpc(
 
     InterlockedExchange((PLONG)DeferredContext, 1);
 }
+#endif
 
 static
 VOID
