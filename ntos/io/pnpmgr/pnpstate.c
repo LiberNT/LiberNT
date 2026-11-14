@@ -1399,13 +1399,14 @@ PiProcessEnumeration(
 
     PiSetDevNodeState(DeviceNode, DeviceNodeEnumeratePending);
 
+    /* A bus invalidating its relations while they are being processed is asked again */
+    PiClearDevNodeFlag(DeviceNode, DNF_REENUMERATE);
     Status = PiIrpQueryDeviceRelations(DeviceNode, BusRelations);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeEnumerateCompletion);
 
     if (NT_SUCCESS(Status)) PiProcessNewChildren(DeviceNode);
 
-    PiClearDevNodeFlag(DeviceNode, DNF_REENUMERATE);
     PiSetDevNodeState(DeviceNode, DeviceNodeStarted);
 }
 
