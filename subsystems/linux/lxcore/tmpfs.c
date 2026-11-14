@@ -2008,19 +2008,8 @@ LxTmpfsRead(
     LxTmpfsStoreDereference(Store);
     if (Offset == NULL)
         KeSetEvent(&File->Lock, IO_NO_INCREMENT, FALSE);
-    if ((Result > 0) && (Inode->Fs->Squash == NULL))
-    {
-        LX_TIMESPEC Now;
-
-        LxTmpfsNow(&Now);
-        if ((Inode->Atime.Seconds <= Inode->Mtime.Seconds) || (Inode->Atime.Seconds <= Inode->Ctime.Seconds) ||
-            (Now.Seconds - Inode->Atime.Seconds >= 86400))
-        {
-            LxTmpfsLockExclusive(Inode->Fs);
-            Inode->Atime = Now;
-            LxTmpfsUnlock(Inode->Fs);
-        }
-    }
+    if (Result > 0)
+        LxTmpfsFileAccessed(File);
     return Result;
 }
 
@@ -2295,6 +2284,26 @@ LxTmpfsFileInode(
     _In_opt_ PLX_FILE File)
 {
     return ((File != NULL) && (File->Ops == &LxTmpfsFileOps)) ? File->Object : NULL;
+}
+
+/* The access time moves when it is not past the last change, or is a day old */
+VOID
+LxTmpfsFileAccessed(
+    _In_ PLX_FILE File)
+{
+    PLX_TMPFS_INODE Inode = LxTmpfsFileInode(File);
+    LX_TIMESPEC Now;
+
+    if ((Inode == NULL) || (Inode->Fs->Squash != NULL))
+        return;
+    LxTmpfsNow(&Now);
+    if ((Inode->Atime.Seconds <= Inode->Mtime.Seconds) || (Inode->Atime.Seconds <= Inode->Ctime.Seconds) ||
+        (Now.Seconds - Inode->Atime.Seconds >= 86400))
+    {
+        LxTmpfsLockExclusive(Inode->Fs);
+        Inode->Atime = Now;
+        LxTmpfsUnlock(Inode->Fs);
+    }
 }
 
 LONG

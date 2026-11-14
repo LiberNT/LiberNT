@@ -3674,6 +3674,9 @@ LX_SYSCALL(LxSysMmap)
             Prot |= LX_PROT_EXEC;
         }
         Result = LxMmMap(Call->Process, Call->Args[0], Call->Args[1], Prot, Flags, Zero ? NULL : File, Call->Args[5]);
+        /* TODO: a write through a shared mapping does not mark the file's modification time */
+        if ((File != NULL) && (Result >= 0))
+            LxTmpfsFileAccessed(File);
     }
     if (File != NULL)
         LxFileDereference(File);
