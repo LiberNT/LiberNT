@@ -77,6 +77,7 @@ typedef struct _LX_INET_SOCKET
     ULONG64 Ino;
     LIST_ENTRY BoundLink;
     USHORT BoundPort;
+    ULONG QueuedAtConnect;
 } LX_INET_SOCKET, *PLX_INET_SOCKET;
 
 typedef struct _LX_INET_WORK
@@ -1130,10 +1131,28 @@ LxInetConnect(
     LxInetLock(Socket);
     if (Socket->Type == LX_SOCK_DGRAM)
     {
+        PLX_INET_OPTION Broadcast = LxInetFindOption(Socket, LX_SOL_SOCKET, LX_SO_BROADCAST);
+
+        /* The wildcard address as a destination means this host */
+        if (Address == 0)
+            Address = 0x0100007F;
+        if ((Address == 0xFFFFFFFF) && ((Broadcast == NULL) || (Broadcast->Value == 0)))
+        {
+            LxInetUnlock(Socket);
+            return -LX_EACCES;
+        }
         if (Socket->State == LX_INET_CREATED)
             Error = LxInetBindAddress(Socket, 0, 0);
         if (Error == 0)
         {
+            AFD_INFO Info;
+
+            /* Datagrams that were already queued stay readable whoever sent them; only later ones are held to the peer */
+            RtlZeroMemory(&Info, sizeof(Info));
+            Info.InformationClass = AFD_INFO_RECEIVE_CONTENT_SIZE;
+            Socket->QueuedAtConnect = 0;
+            if (NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_GET_INFO, &Info, sizeof(Info), &Info, sizeof(Info), NULL)))
+                Socket->QueuedAtConnect = Info.Information.Ulong;
             Socket->PeerAddress = Address;
             Socket->PeerPort = Port;
             Socket->PeerLoopbackV6 = LoopbackV6;
@@ -1533,6 +1552,18 @@ LxInetRecvmsg(
             /* A datagram socket shut for reading still hands out what is queued, then reads as ended */
             Result = (Drained && (Received == -LX_EAGAIN) && !LxInetNonBlocking(File, Flags)) ? 0 : Received;
             break;
+        }
+        if ((Socket->Type == LX_SOCK_DGRAM) && (Socket->QueuedAtConnect != 0) && !(Flags & LX_MSG_PEEK))
+        {
+            Socket->QueuedAtConnect -= min(Socket->QueuedAtConnect, (ULONG)Received);
+        }
+        else if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && !(Flags & LX_MSG_PEEK) &&
+                 ((((PLX_SOCKADDR_IN)&Source)->Address != Socket->PeerAddress) ||
+                  (((PLX_SOCKADDR_IN)&Source)->Port != Socket->PeerPort)))
+        {
+            /* FIXME: a datagram from another sender still makes a connected socket poll readable until it is dropped here */
+            Truncated = FALSE;
+            continue;
         }
         if (Socket->Type == LX_SOCK_DGRAM)
         {
