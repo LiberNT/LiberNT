@@ -257,7 +257,8 @@ FillAppList(
     {
         ZeroMemory(&Item, sizeof(Item));
         Item.mask = LVIF_TEXT | LVIF_PARAM;
-        Item.iItem = (INT)OobeAppCount;
+        /* First, so the row the note below the list talks about is in view without scrolling */
+        Item.iItem = 0;
         Item.pszText = Name;
         Item.lParam = OOBE_DRIVERS_ROW;
         Item.iItem = ListView_InsertItem(hList, &Item);
