@@ -383,6 +383,15 @@ static HRESULT load_mono(LPCWSTR mono_path)
         {
             mono_set_verbose_level(verbose_setting[0] - '0');
         }
+#ifdef __REACTOS__
+        {
+            HMODULE self;
+
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                                    (LPCWSTR)load_mono, &self))
+                ERR("Failed to pin mscoree, error %lu\n", GetLastError());
+        }
+#endif
     }
 
     return S_OK;
