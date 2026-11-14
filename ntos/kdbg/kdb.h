@@ -174,6 +174,10 @@ VOID
 KdbpPrintUnicodeString(
     _In_ PCUNICODE_STRING String);
 
+VOID
+KdbpPrintCountedString(
+    _In_ PCUNICODE_STRING String);
+
 BOOLEAN
 NTAPI
 KdbpGetHexNumber(

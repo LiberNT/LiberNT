@@ -106,10 +106,6 @@ BOOLEAN KdbpCmdDeviceStack(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdIrp(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdFileObject(ULONG Argc, PCHAR Argv[]);
 
-VOID
-KdbpPrintCountedString(
-    _In_ PCUNICODE_STRING String);
-
 /* kdbpci.c */
 
 BOOLEAN

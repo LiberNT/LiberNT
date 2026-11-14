@@ -1416,54 +1416,88 @@ ExDupHandleTable(
 
 #ifdef KDBG
 /*
- * What the walk the debugger command drives is gathering: either one handle the
- * user named, or every handle of every table.
+ * The debugger command reads the tables as it finds them: a stopped machine
+ * may have them paged out or half written, so every read is a guarded one.
  */
-typedef struct _EXP_KDBG_HANDLE_WALK
-{
-    ULONG UniqueProcessId;
-    HANDLE Wanted;
-    ULONG Found;
-} EXP_KDBG_HANDLE_WALK, *PEXP_KDBG_HANDLE_WALK;
+#define EXP_KDBG_MAXIMUM_TABLES 4096
 
 static
 BOOLEAN
-NTAPI
-ExpKdbgPrintHandle(
-    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry,
-    _In_ HANDLE Handle,
-    _In_opt_ PVOID Context)
+ExpKdbgRead(
+    _In_ PVOID Address,
+    _Out_writes_bytes_(Size) PVOID Buffer,
+    _In_ ULONG Size)
 {
-    PEXP_KDBG_HANDLE_WALK Walk = Context;
-    POBJECT_HEADER Header;
-    POBJECT_TYPE Type;
+    return NT_SUCCESS(KdbpSafeReadMemory(Buffer, Address, Size));
+}
 
-    if ((Walk->Wanted != NULL) && (Handle != Walk->Wanted))
+/* The same lookup as ExpLookupEntry, one guarded read per level */
+static
+BOOLEAN
+ExpKdbgReadEntry(
+    _In_ ULONG_PTR Code,
+    _In_ ULONG Index,
+    _Out_ PHANDLE_TABLE_ENTRY Entry)
+{
+    PHANDLE_TABLE_ENTRY LowTable = ExpTableBase(Code);
+    PHANDLE_TABLE_ENTRY *MidTable = ExpTableBase(Code);
+
+    if (ExpTableLevel(Code) == 2)
     {
-        return FALSE;
+        if (!ExpKdbgRead(&((PHANDLE_TABLE_ENTRY **)ExpTableBase(Code))[Index / MAX_MID_INDEX],
+                         &MidTable,
+                         sizeof(MidTable)) ||
+            (MidTable == NULL))
+        {
+            return FALSE;
+        }
+
+        Index %= MAX_MID_INDEX;
     }
 
-    Header = (POBJECT_HEADER)((ULONG_PTR)HandleTableEntry->Object &
-                              ~(ULONG_PTR)OBJ_HANDLE_ATTRIBUTES);
-    if (Header == NULL)
+    if (ExpTableLevel(Code) != 0)
     {
-        return FALSE;
+        if (!ExpKdbgRead(&MidTable[Index / LOW_LEVEL_ENTRIES], &LowTable, sizeof(LowTable)))
+            return FALSE;
+
+        Index %= LOW_LEVEL_ENTRIES;
     }
 
-    Type = ObTypeIndexTable[Header->TypeIndex];
+    return (LowTable != NULL) && ExpKdbgRead(&LowTable[Index], Entry, sizeof(*Entry));
+}
 
-    KdbpPrint("  %p  %-16wZ  access %08lx  ptr %5ld  hnd %5ld  obj %p\n",
-              Handle,
-              (Type != NULL) ? &Type->Name : NULL,
-              HandleTableEntry->GrantedAccess,
-              (LONG)Header->PointerCount,
-              (LONG)Header->HandleCount,
-              &Header->Body);
+static
+VOID
+ExpKdbgPrintHandle(
+    _In_ HANDLE Handle,
+    _In_ const HANDLE_TABLE_ENTRY *Entry)
+{
+    POBJECT_HEADER Address = (POBJECT_HEADER)((ULONG_PTR)Entry->Object & ~(ULONG_PTR)OBJ_HANDLE_ATTRIBUTES);
+    OBJECT_HEADER Header;
+    OBJECT_TYPE Type;
 
-    Walk->Found++;
+    if (!ExpKdbgRead(Address, &Header, sizeof(Header)))
+    {
+        KdbpPrint("  %p  object header %p cannot be read\n", Handle, Address);
+        return;
+    }
 
-    /* One handle was asked for, so the walk stops once it has been shown. */
-    return (BOOLEAN)(Walk->Wanted != NULL);
+    KdbpPrint("  %p  ", Handle);
+    if ((ObTypeIndexTable[Header.TypeIndex] != NULL) &&
+        ExpKdbgRead(ObTypeIndexTable[Header.TypeIndex], &Type, sizeof(Type)))
+    {
+        KdbpPrintCountedString(&Type.Name);
+    }
+    else
+    {
+        KdbpPrint("type %u", Header.TypeIndex);
+    }
+
+    KdbpPrint("  access %08lx  ptr %5ld  hnd %5ld  obj %p\n",
+              Entry->GrantedAccess,
+              (LONG)Header.PointerCount,
+              (LONG)Header.HandleCount,
+              &Address->Body);
 }
 
 /*
@@ -1475,13 +1509,20 @@ ExpKdbgExtHandle(
     ULONG Argc,
     PCHAR Argv[])
 {
-    EXP_KDBG_HANDLE_WALK Walk;
-    PLIST_ENTRY Entry;
+    HANDLE_TABLE_FREE_LIST FreeList;
+    HANDLE_TABLE_ENTRY Entry;
+    HANDLE_TABLE Table;
     PHANDLE_TABLE HandleTable;
+    PLIST_ENTRY Head;
+    PLIST_ENTRY Link;
+    EXHANDLE Handle;
+    HANDLE Wanted = NULL;
     ULONG_PTR Value = 0;
     ULONG Bucket;
-
-    RtlZeroMemory(&Walk, sizeof(Walk));
+    ULONG Tables = 0;
+    ULONG Found = 0;
+    ULONG Index;
+    LONG Count;
 
     if (Argc >= 2)
     {
@@ -1491,33 +1532,66 @@ ExpKdbgExtHandle(
             return TRUE;
         }
 
-        Walk.Wanted = (HANDLE)Value;
+        Wanted = (HANDLE)Value;
     }
 
-    for (Entry = ExpFirstHandleTableEntry(&Bucket);
-         Entry != NULL;
-         Entry = ExpNextHandleTableEntry(&Bucket, Entry))
+    for (Bucket = 0; (Bucket < HANDLE_TABLE_LIST_BUCKETS) && !KdbpIsOutputAborted(); Bucket++)
     {
-        HandleTable = CONTAINING_RECORD(Entry, HANDLE_TABLE, HandleTableList);
+        Head = &ExpHandleTableBuckets[Bucket].ListHead;
 
-        Walk.UniqueProcessId = HandleTable->UniqueProcessId;
-
-        KdbpPrint("Process %lu, handle table %p, %ld handle(s)\n",
-                  HandleTable->UniqueProcessId,
-                  HandleTable,
-                  ExpGetHandleCount(HandleTable));
-
-        ExpWalkHandleTable(HandleTable, ExpKdbgPrintHandle, &Walk, FALSE, FALSE, NULL);
-
-        if ((Walk.Wanted != NULL) && (Walk.Found != 0))
+        for (Link = Head->Flink;
+             (Link != Head) && (Tables < EXP_KDBG_MAXIMUM_TABLES) && !KdbpIsOutputAborted();
+             Link = Table.HandleTableList.Flink, Tables++)
         {
-            break;
+            HandleTable = CONTAINING_RECORD(Link, HANDLE_TABLE, HandleTableList);
+
+            if (!ExpKdbgRead(HandleTable, &Table, sizeof(Table)))
+            {
+                KdbpPrint("The handle table at %p cannot be read\n", HandleTable);
+                break;
+            }
+
+            for (Index = 0, Count = 0; Index < ExpFreeListCount; Index++)
+            {
+                if (ExpKdbgRead(&HandleTable->FreeLists[Index], &FreeList, sizeof(FreeList)))
+                    Count += FreeList.HandleCount;
+            }
+
+            if (Wanted == NULL)
+            {
+                KdbpPrint("Process %lu, handle table %p, %ld handle(s)\n",
+                          Table.UniqueProcessId,
+                          HandleTable,
+                          Count);
+            }
+
+            for (Index = 1; (Index < Table.NextHandleNeedingPool) && !KdbpIsOutputAborted(); Index++)
+            {
+                if (((Index % LOW_LEVEL_ENTRIES) == 0) ||
+                    !ExpKdbgReadEntry(Table.TableCode, Index, &Entry) ||
+                    (Entry.Value == 0))
+                {
+                    continue;
+                }
+
+                Handle.Value = 0;
+                Handle.Index = Index;
+
+                if ((Wanted != NULL) && (Handle.GenericHandleOverlay != Wanted))
+                    continue;
+
+                if (Wanted != NULL)
+                    KdbpPrint("Process %lu, handle table %p\n", Table.UniqueProcessId, HandleTable);
+
+                ExpKdbgPrintHandle(Handle.GenericHandleOverlay, &Entry);
+                Found++;
+            }
         }
     }
 
-    if ((Walk.Wanted != NULL) && (Walk.Found == 0))
+    if ((Wanted != NULL) && (Found == 0))
     {
-        KdbpPrint("Handle %p is not held by any process\n", Walk.Wanted);
+        KdbpPrint("Handle %p is not held by any process\n", Wanted);
     }
 
     return TRUE;
