@@ -416,10 +416,19 @@ LX_SYSCALL(LxSysDup3)
     Process->FdFlags[NewFd] = (Flags & LX_O_CLOEXEC) ? LX_FD_CLOEXEC : 0;
     ExReleaseFastMutex(&Process->Lock);
 
+    if ((Previous != NULL) && Process->RecordLocks)
+        LxRecordLocksClosed(Process, Previous);
     if (Previous != NULL)
         LxFileDereference(Previous);
     return NewFd;
 }
+
+static
+LONG64
+LxRecordLock(
+    _In_ PLX_CALL Call,
+    _In_ PLX_FILE File,
+    _In_ ULONG Command);
 
 LX_SYSCALL(LxSysFcntl)
 {
@@ -469,30 +478,12 @@ LX_SYSCALL(LxSysFcntl)
 
         case LX_F_GETLK:
         case LX_F_OFD_GETLK:
-        {
-            LX_FLOCK Lock;
-
-            Result = LxCopyFromUser(&Lock, Call->Args[2], sizeof(Lock));
-            if (Result == 0)
-            {
-                Lock.Type = LX_F_UNLCK;
-                Result = LxCopyToUser(Call->Args[2], &Lock, sizeof(Lock));
-            }
-            break;
-        }
-
         case LX_F_SETLK:
         case LX_F_SETLKW:
         case LX_F_OFD_SETLK:
         case LX_F_OFD_SETLKW:
-        {
-            LX_FLOCK Lock;
-
-            Result = LxCopyFromUser(&Lock, Call->Args[2], sizeof(Lock));
-            if ((Result == 0) && (Lock.Type != LX_F_RDLCK) && (Lock.Type != LX_F_WRLCK) && (Lock.Type != LX_F_UNLCK))
-                Result = -LX_EINVAL;
+            Result = LxRecordLock(Call, File, (ULONG)Call->Args[1]);
             break;
-        }
 
         case LX_F_SETOWN:
         {
@@ -1987,6 +1978,7 @@ typedef struct _LX_FLOCK_REQUEST
 } LX_FLOCK_REQUEST, *PLX_FLOCK_REQUEST;
 
 static LIST_ENTRY LxFlockHolders;
+static LIST_ENTRY LxRecordLocks;
 static FAST_MUTEX LxFlockLock;
 static LX_POLL_HEAD LxFlockWaiters;
 
@@ -1994,6 +1986,7 @@ VOID
 LxFlockInitialize(VOID)
 {
     InitializeListHead(&LxFlockHolders);
+    InitializeListHead(&LxRecordLocks);
     ExInitializeFastMutex(&LxFlockLock);
     LxPollHeadInit(&LxFlockWaiters);
 }
@@ -2061,12 +2054,399 @@ LxFlockRemove(
     LxPollWake(&LxFlockWaiters, LX_POLLIN);
 }
 
+typedef struct _LX_RECORD_LOCK
+{
+    LIST_ENTRY Link;
+    PLX_INSTANCE Instance;
+    ULONG64 Dev;
+    ULONG64 Ino;
+    PVOID Owner;
+    BOOLEAN Ofd;
+    BOOLEAN Write;
+    ULONG Pid;
+    LONG64 Start;
+    LONG64 End;
+} LX_RECORD_LOCK, *PLX_RECORD_LOCK;
+
+typedef struct _LX_RECORD_REQUEST
+{
+    LX_RECORD_LOCK Want;
+    PLX_RECORD_LOCK New;
+    PLX_RECORD_LOCK Spare;
+    BOOLEAN Acquired;
+} LX_RECORD_REQUEST, *PLX_RECORD_REQUEST;
+
+static
+BOOLEAN
+LxRecordSameFile(
+    _In_ PLX_RECORD_LOCK Lock,
+    _In_ PLX_RECORD_LOCK Want)
+{
+    return (Lock->Instance == Want->Instance) && (Lock->Dev == Want->Dev) && (Lock->Ino == Want->Ino);
+}
+
+static
+PLX_RECORD_LOCK
+LxRecordConflict(
+    _In_ PLX_RECORD_LOCK Want)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = LxRecordLocks.Flink; Entry != &LxRecordLocks; Entry = Entry->Flink)
+    {
+        PLX_RECORD_LOCK Lock = CONTAINING_RECORD(Entry, LX_RECORD_LOCK, Link);
+
+        if (LxRecordSameFile(Lock, Want) && (Lock->Owner != Want->Owner) && (Lock->Write || Want->Write) &&
+            (Lock->Start <= Want->End) && (Lock->End >= Want->Start))
+        {
+            return Lock;
+        }
+    }
+    return NULL;
+}
+
+/* Called with the lock list held: gives the range to its owner alone, as New when one is passed and unlocked otherwise */
+static
+VOID
+LxRecordReplace(
+    _In_ PLX_RECORD_REQUEST Request)
+{
+    PLX_RECORD_LOCK Want = &Request->Want, New = Request->New;
+    PLIST_ENTRY Entry, Next;
+
+    for (Entry = LxRecordLocks.Flink; Entry != &LxRecordLocks; Entry = Next)
+    {
+        PLX_RECORD_LOCK Lock = CONTAINING_RECORD(Entry, LX_RECORD_LOCK, Link);
+
+        Next = Entry->Flink;
+        if (!LxRecordSameFile(Lock, Want) || (Lock->Owner != Want->Owner))
+            continue;
+        if ((New != NULL) && (Lock->Write == Want->Write) &&
+            (((Lock->End != MAXLONG64) && (Lock->End + 1 == Want->Start)) ||
+             ((Want->End != MAXLONG64) && (Want->End + 1 == Lock->Start))))
+        {
+            Want->Start = min(Want->Start, Lock->Start);
+            Want->End = max(Want->End, Lock->End);
+            RemoveEntryList(Entry);
+            LxFree(Lock);
+            continue;
+        }
+        if ((Lock->End < Want->Start) || (Lock->Start > Want->End))
+            continue;
+        if ((New != NULL) && (Lock->Write == Want->Write))
+        {
+            Want->Start = min(Want->Start, Lock->Start);
+            Want->End = max(Want->End, Lock->End);
+            RemoveEntryList(Entry);
+            LxFree(Lock);
+        }
+        else if ((Lock->Start < Want->Start) && (Lock->End > Want->End))
+        {
+            PLX_RECORD_LOCK Tail = Request->Spare;
+
+            ASSERT(Tail != NULL);
+            Request->Spare = NULL;
+            *Tail = *Lock;
+            Tail->Start = Want->End + 1;
+            Lock->End = Want->Start - 1;
+            InsertHeadList(Entry, &Tail->Link);
+        }
+        else if (Lock->Start < Want->Start)
+        {
+            Lock->End = Want->Start - 1;
+        }
+        else if (Lock->End > Want->End)
+        {
+            Lock->Start = Want->End + 1;
+        }
+        else
+        {
+            RemoveEntryList(Entry);
+            LxFree(Lock);
+        }
+    }
+    if (New != NULL)
+    {
+        *New = *Want;
+        InsertTailList(&LxRecordLocks, &New->Link);
+        Request->New = NULL;
+    }
+}
+
+static
+BOOLEAN
+LxRecordTryAcquire(
+    _In_ PVOID Context)
+{
+    PLX_RECORD_REQUEST Request = Context;
+    BOOLEAN Conflict;
+
+    ExAcquireFastMutex(&LxFlockLock);
+    Conflict = (LxRecordConflict(&Request->Want) != NULL);
+    if (!Conflict)
+        LxRecordReplace(Request);
+    ExReleaseFastMutex(&LxFlockLock);
+    Request->Acquired = !Conflict;
+    return !Conflict;
+}
+
+static
+BOOLEAN
+LxRecordOwnerHolds(
+    _In_ PVOID Owner)
+{
+    PLIST_ENTRY Entry;
+
+    for (Entry = LxRecordLocks.Flink; Entry != &LxRecordLocks; Entry = Entry->Flink)
+    {
+        if (CONTAINING_RECORD(Entry, LX_RECORD_LOCK, Link)->Owner == Owner)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Drops the locks an owner holds, on one file when Match names it and on every file otherwise */
+static
+VOID
+LxRecordDrop(
+    _In_ PVOID Owner,
+    _In_opt_ PLX_RECORD_LOCK Match)
+{
+    PLIST_ENTRY Entry, Next;
+    BOOLEAN Dropped = FALSE;
+
+    ExAcquireFastMutex(&LxFlockLock);
+    for (Entry = LxRecordLocks.Flink; Entry != &LxRecordLocks; Entry = Next)
+    {
+        PLX_RECORD_LOCK Lock = CONTAINING_RECORD(Entry, LX_RECORD_LOCK, Link);
+
+        Next = Entry->Flink;
+        if ((Lock->Owner != Owner) || ((Match != NULL) && !LxRecordSameFile(Lock, Match)))
+            continue;
+        RemoveEntryList(Entry);
+        LxFree(Lock);
+        Dropped = TRUE;
+    }
+    ExReleaseFastMutex(&LxFlockLock);
+    if (Dropped)
+        LxPollWake(&LxFlockWaiters, LX_POLLIN);
+}
+
+VOID
+LxRecordLocksClosed(
+    _In_ PLX_PROCESS Process,
+    _In_ PLX_FILE File)
+{
+    LX_RECORD_LOCK Match;
+    LX_STAT Stat;
+
+    if (LxFileStat(File, &Stat) != 0)
+        return;
+    Match.Instance = Process->Instance;
+    Match.Dev = Stat.Dev;
+    Match.Ino = Stat.Ino;
+    LxRecordDrop(Process, &Match);
+    ExAcquireFastMutex(&LxFlockLock);
+    Process->RecordLocks = LxRecordOwnerHolds(Process);
+    ExReleaseFastMutex(&LxFlockLock);
+}
+
+VOID
+LxRecordLocksPurge(
+    _In_ PLX_PROCESS Process)
+{
+    if (Process->RecordLocks)
+        LxRecordDrop(Process, NULL);
+    Process->RecordLocks = FALSE;
+}
+
+static
+LONG64
+LxRecordRange(
+    _In_ PLX_FILE File,
+    _In_ PLX_FLOCK Lock,
+    _In_ LX_STAT *Stat,
+    _Out_ PLONG64 Start,
+    _Out_ PLONG64 End)
+{
+    LONG64 Base;
+
+    switch (Lock->Whence)
+    {
+        case LX_SEEK_SET:
+            Base = 0;
+            break;
+        case LX_SEEK_CUR:
+            Base = File->Position;
+            break;
+        case LX_SEEK_END:
+            Base = (LONG64)Stat->Size;
+            break;
+        default:
+            return -LX_EINVAL;
+    }
+    if ((Lock->Start > 0) && (Base > MAXLONG64 - Lock->Start))
+        return -LX_EOVERFLOW;
+    Base += Lock->Start;
+    if (Lock->Length > 0)
+    {
+        if (Base < 0)
+            return -LX_EINVAL;
+        if (Lock->Length - 1 > MAXLONG64 - Base)
+            return -LX_EOVERFLOW;
+        *Start = Base;
+        *End = Base + Lock->Length - 1;
+    }
+    else if (Lock->Length < 0)
+    {
+        if (Base + Lock->Length < 0)
+            return -LX_EINVAL;
+        *Start = Base + Lock->Length;
+        *End = Base - 1;
+    }
+    else
+    {
+        if (Base < 0)
+            return -LX_EINVAL;
+        *Start = Base;
+        *End = MAXLONG64;
+    }
+    return 0;
+}
+
+static
+LONG64
+LxRecordLock(
+    _In_ PLX_CALL Call,
+    _In_ PLX_FILE File,
+    _In_ ULONG Command)
+{
+    BOOLEAN Ofd = (Command == LX_F_OFD_GETLK) || (Command == LX_F_OFD_SETLK) || (Command == LX_F_OFD_SETLKW);
+    BOOLEAN Query = (Command == LX_F_GETLK) || (Command == LX_F_OFD_GETLK);
+    BOOLEAN Wait = (Command == LX_F_SETLKW) || (Command == LX_F_OFD_SETLKW);
+    PLX_PROCESS Process = Call->Process;
+    LX_RECORD_REQUEST Request;
+    PLX_RECORD_LOCK Want = &Request.Want;
+    LX_FLOCK Lock;
+    LX_STAT Stat;
+    LONG64 Result;
+
+    Result = LxCopyFromUser(&Lock, Call->Args[2], sizeof(Lock));
+    if (Result != 0)
+        return Result;
+    if ((Lock.Type != LX_F_RDLCK) && (Lock.Type != LX_F_WRLCK) &&
+        ((Lock.Type != LX_F_UNLCK) || (Command == LX_F_GETLK)))
+    {
+        return -LX_EINVAL;
+    }
+    if (Ofd && (Lock.Pid != 0))
+        return -LX_EINVAL;
+    if (File->Flags & LX_O_PATH)
+        return -LX_EBADF;
+    Result = LxFileStat(File, &Stat);
+    if (Result != 0)
+        return Result;
+
+    RtlZeroMemory(&Request, sizeof(Request));
+    Result = LxRecordRange(File, &Lock, &Stat, &Want->Start, &Want->End);
+    if (Result != 0)
+        return Result;
+    Want->Instance = Process->Instance;
+    Want->Dev = Stat.Dev;
+    Want->Ino = Stat.Ino;
+    Want->Owner = Ofd ? (PVOID)File : (PVOID)Process;
+    Want->Ofd = Ofd;
+    Want->Write = (Lock.Type == LX_F_WRLCK);
+    Want->Pid = Process->Pid;
+
+    if (Query)
+    {
+        PLX_RECORD_LOCK Held;
+
+        /* F_OFD_GETLK with F_UNLCK asks for any lock on the range, the description's own included */
+        if (Lock.Type == LX_F_UNLCK)
+        {
+            Want->Owner = NULL;
+            Want->Write = TRUE;
+        }
+        ExAcquireFastMutex(&LxFlockLock);
+        Held = LxRecordConflict(Want);
+        if (Held != NULL)
+        {
+            Lock.Type = Held->Write ? LX_F_WRLCK : LX_F_RDLCK;
+            Lock.Whence = LX_SEEK_SET;
+            Lock.Start = Held->Start;
+            Lock.Length = (Held->End == MAXLONG64) ? 0 : (Held->End - Held->Start + 1);
+            Lock.Pid = Held->Ofd ? -1 : (LONG)LxGlobalToNrIn(Process->PidNs, Held->Pid);
+        }
+        else
+        {
+            Lock.Type = LX_F_UNLCK;
+        }
+        ExReleaseFastMutex(&LxFlockLock);
+        return LxCopyToUser(Call->Args[2], &Lock, sizeof(Lock));
+    }
+
+    if (((Lock.Type == LX_F_RDLCK) && ((File->Flags & LX_O_ACCMODE) == LX_O_WRONLY)) ||
+        ((Lock.Type == LX_F_WRLCK) && ((File->Flags & LX_O_ACCMODE) == LX_O_RDONLY)))
+    {
+        return -LX_EBADF;
+    }
+
+    Request.Spare = LxAlloc(sizeof(*Request.Spare));
+    if (Lock.Type != LX_F_UNLCK)
+        Request.New = LxAlloc(sizeof(*Request.New));
+    if ((Request.Spare == NULL) || ((Lock.Type != LX_F_UNLCK) && (Request.New == NULL)))
+    {
+        LxFree(Request.Spare);
+        LxFree(Request.New);
+        return -LX_ENOLCK;
+    }
+
+    if (Lock.Type == LX_F_UNLCK)
+    {
+        ExAcquireFastMutex(&LxFlockLock);
+        LxRecordReplace(&Request);
+        ExReleaseFastMutex(&LxFlockLock);
+        LxPollWake(&LxFlockWaiters, LX_POLLIN);
+        Result = 0;
+    }
+    else
+    {
+        if (Ofd)
+            File->RecordLocked = TRUE;
+        else
+            Process->RecordLocks = TRUE;
+        if (!Wait)
+        {
+            Result = LxRecordTryAcquire(&Request) ? 0 : -LX_EAGAIN;
+        }
+        else
+        {
+            /* TODO: a wait that closes a cycle of waiting owners is not refused with EDEADLK */
+            do
+            {
+                Result = LxWaitHead(&LxFlockWaiters, LxRecordTryAcquire, &Request, NULL);
+            } while ((Result == 0) && !Request.Acquired);
+            if (Result == -LX_EINTR)
+                Result = -LX_ERESTARTSYS;
+        }
+        if (Result == 0)
+            LxPollWake(&LxFlockWaiters, LX_POLLIN);
+    }
+    LxFree(Request.Spare);
+    LxFree(Request.New);
+    return Result;
+}
+
 VOID
 LxFlockRelease(
     _In_ PLX_FILE File)
 {
     if (File->Flocked)
         LxFlockRemove(File);
+    if (File->RecordLocked)
+        LxRecordDrop(File, NULL);
 }
 
 static

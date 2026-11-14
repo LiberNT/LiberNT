@@ -491,6 +491,7 @@ LxProcessDereference(
     LxFree(Process->Environ);
     LxSignalFlushQueued(Process, NULL, 0);
     ASSERT(IsListEmpty(&Process->SignalQueue));
+    LxRecordLocksPurge(Process);
     LxInstanceDereference(Process->Instance);
     LxFree(Process);
 }

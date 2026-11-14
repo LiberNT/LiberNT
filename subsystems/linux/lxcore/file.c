@@ -525,6 +525,8 @@ LxFdClose(
     if (File == NULL)
         return -LX_EBADF;
 
+    if (Process->RecordLocks)
+        LxRecordLocksClosed(Process, File);
     LxFileDereference(File);
     return 0;
 }
@@ -548,6 +550,8 @@ LxFdCloseOnExec(
         }
         ExReleaseFastMutex(&Process->Lock);
 
+        if ((File != NULL) && Process->RecordLocks)
+            LxRecordLocksClosed(Process, File);
         if (File != NULL)
             LxFileDereference(File);
     }
