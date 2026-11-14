@@ -459,6 +459,9 @@ FltpFindNameLocked(
     _Inout_ PLIST_ENTRY Stale)
 {
     PFLTP_NAME_INFORMATION Name;
+
+    ASSERT(KeAreApcsDisabled());
+
     PLIST_ENTRY Link, Next;
 
     if (List == NULL)

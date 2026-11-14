@@ -241,6 +241,8 @@ FltpUnlinkContextLocked(
 {
     PFLTP_OWNER_CTRL Ctrl = Context->Owner;
 
+    ASSERT(KeAreApcsDisabled());
+
     RemoveEntryList(&Context->OwnerLink);
     InitializeListHead(&Context->OwnerLink);
     RemoveEntryList(&Context->ScopeLink);
@@ -266,6 +268,8 @@ FltpFindContextLocked(
 {
     PFLTP_CONTEXT Context;
     PLIST_ENTRY Link;
+
+    ASSERT(KeAreApcsDisabled());
 
     for (Link = OwnerList->Flink; Link != OwnerList; Link = Link->Flink)
     {
@@ -1199,6 +1203,8 @@ FltpFindTransactionContextLocked(
 {
     PFLTP_CONTEXT Context;
     PLIST_ENTRY Link;
+
+    ASSERT(KeAreApcsDisabled());
 
     for (Link = FltGlobals.TransactionContextList.Flink;
          Link != &FltGlobals.TransactionContextList;

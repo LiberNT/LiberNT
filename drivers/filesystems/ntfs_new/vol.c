@@ -888,6 +888,8 @@ NtfsLookupCachedRecordLocked(_In_ PVolumeContextBlock VolCB,
     PLIST_ENTRY Bucket = &VolCB->RecordCacheHash[Hash & (NTFS_RECORD_CACHE_BUCKETS - 1)];
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
     {
         PNtfsCachedRecord Candidate = CONTAINING_RECORD(Entry, NtfsCachedRecord, HashLink);

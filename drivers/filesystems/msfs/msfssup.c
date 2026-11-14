@@ -160,6 +160,9 @@ MsfsTimeout(PKDPC Dpc,
 
     /* Try to get the IRP */
     Irp = IoCsqRemoveIrp(Context->Csq, &Context->CsqContext);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Irp != NULL)
     {
         Irp->IoStatus.Status = STATUS_IO_TIMEOUT;

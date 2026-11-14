@@ -56,6 +56,8 @@ FltpFindTransactionLocked(
     PFLTP_TRANSACTION Record;
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Link = FltGlobals.TransactionList.Flink;
          Link != &FltGlobals.TransactionList;
          Link = Link->Flink)
@@ -77,6 +79,8 @@ FltpFindEnlistmentLocked(
 {
     PFLTP_ENLISTMENT Enlistment;
     PLIST_ENTRY Link;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     for (Link = Record->Enlistments.Flink; Link != &Record->Enlistments; Link = Link->Flink)
     {
