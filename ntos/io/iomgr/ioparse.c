@@ -586,6 +586,73 @@ IopCheckTopDeviceHint(
     return STATUS_SUCCESS;
 }
 
+/* The create IRP is handed to the file system as the open it describes, and is never sent */
+static
+BOOLEAN
+IopQueryOpenFast(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp,
+    _Inout_ POPEN_PACKET OpenPacket,
+    _Out_ PNTSTATUS Status)
+{
+    PFAST_IO_DISPATCH FastIoDispatch = DeviceObject->DriverObject->FastIoDispatch;
+    FILE_NETWORK_OPEN_INFORMATION NetworkInformation;
+
+    PAGED_CODE();
+
+    if (!OpenPacket->QueryOnly ||
+        (OpenPacket->CreateFileType != CreateFileTypeNone) ||
+        (OpenPacket->DriverCreateContext.ExtraCreateParameter != NULL) ||
+        ((OpenPacket->NetworkInformation == NULL) && (OpenPacket->BasicInformation == NULL)) ||
+        (FastIoDispatch == NULL) ||
+        (FastIoDispatch->SizeOfFastIoDispatch <= FIELD_OFFSET(FAST_IO_DISPATCH, FastIoQueryOpen)) ||
+        (FastIoDispatch->FastIoQueryOpen == NULL))
+    {
+        return FALSE;
+    }
+
+    ASSERT(OpenPacket->FileInformation != NULL);
+    ASSERT(Irp->CurrentLocation > 1);
+
+    IoSetNextIrpStackLocation(Irp);
+    ASSERT(IoGetCurrentIrpStackLocation(Irp)->MajorFunction == IRP_MJ_CREATE);
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+
+    if (!FastIoDispatch->FastIoQueryOpen(Irp, &NetworkInformation, DeviceObject) ||
+        (Irp->IoStatus.Status == STATUS_REPARSE))
+    {
+        if (Irp->Tail.Overlay.AuxiliaryBuffer != NULL)
+        {
+            ExFreePool(Irp->Tail.Overlay.AuxiliaryBuffer);
+            Irp->Tail.Overlay.AuxiliaryBuffer = NULL;
+        }
+        Irp->IoStatus.Status = STATUS_SUCCESS;
+        Irp->IoStatus.Information = 0;
+        IoSkipCurrentIrpStackLocation(Irp);
+        return FALSE;
+    }
+
+    *Status = Irp->IoStatus.Status;
+    OpenPacket->Information = Irp->IoStatus.Information;
+    if (!NT_SUCCESS(*Status)) return TRUE;
+
+    if (OpenPacket->NetworkInformation != NULL)
+    {
+        *OpenPacket->NetworkInformation = NetworkInformation;
+    }
+    else
+    {
+        OpenPacket->BasicInformation->CreationTime = NetworkInformation.CreationTime;
+        OpenPacket->BasicInformation->LastAccessTime = NetworkInformation.LastAccessTime;
+        OpenPacket->BasicInformation->LastWriteTime = NetworkInformation.LastWriteTime;
+        OpenPacket->BasicInformation->ChangeTime = NetworkInformation.ChangeTime;
+        OpenPacket->BasicInformation->FileAttributes = NetworkInformation.FileAttributes;
+    }
+
+    return TRUE;
+}
+
 static
 NTSTATUS
 IopSendCreateIrp(
@@ -595,7 +662,8 @@ IopSendCreateIrp(
     _Inout_ PACCESS_STATE AccessState,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_opt_ PSECURITY_QUALITY_OF_SERVICE SecurityQos,
-    _Out_ PIRP *CreatedIrp)
+    _Out_ PIRP *CreatedIrp,
+    _Out_ PBOOLEAN Answered)
 {
     IO_SECURITY_CONTEXT SecurityContext;
     PIO_STACK_LOCATION StackPtr;
@@ -606,6 +674,7 @@ IopSendCreateIrp(
     PAGED_CODE();
 
     *CreatedIrp = NULL;
+    *Answered = FALSE;
 
     RtlZeroMemory(&SecurityContext, sizeof(SecurityContext));
     SecurityContext.SecurityQos = SecurityQos;
@@ -698,6 +767,13 @@ IopSendCreateIrp(
         default:
             IoFreeIrp(Irp);
             return STATUS_INVALID_PARAMETER;
+    }
+
+    if (IopQueryOpenFast(DeviceObject, Irp, OpenPacket, &Status))
+    {
+        *Answered = TRUE;
+        IoFreeIrp(Irp);
+        return Status;
     }
 
     IoSetCompletionRoutine(Irp,
@@ -1031,6 +1107,16 @@ IopDetachLocalFileObjectExtension(
 
     /* A local file object the driver never opened is never closed, so what it holds goes back here */
     if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly) return;
+
+    ASSERT(FileObject == (PFILE_OBJECT)&OpenPacket->LocalFileObject->FileObjectBody);
+    if (FileObject->FileName.Buffer != NULL)
+    {
+        ExFreePool(FileObject->FileName.Buffer);
+        FileObject->FileName.Buffer = NULL;
+        FileObject->FileName.Length = 0;
+        FileObject->FileName.MaximumLength = 0;
+    }
+
     if (!(FileObject->Flags & FO_FILE_OBJECT_HAS_EXTENSION)) return;
 
     TxnParameters = IoGetTransactionParameterBlock(FileObject);
@@ -1068,6 +1154,7 @@ IopParseDeviceEx(
     PFILE_OBJECT FileObject;
     BOOLEAN DeviceOnlyOpen;
     BOOLEAN DirectOpen = FALSE;
+    BOOLEAN Answered;
     NTSTATUS Status;
     PVPB Vpb = NULL;
     PIRP Irp;
@@ -1203,6 +1290,10 @@ IopParseDeviceEx(
                 FileObject->DeviceObject = NULL;
                 ObDereferenceObject(FileObject);
             }
+            else
+            {
+                IopDetachLocalFileObjectExtension(OpenPacket, FileObject);
+            }
             FileObject = NULL;
         }
     }
@@ -1241,7 +1332,24 @@ IopParseDeviceEx(
                               AccessState,
                               AccessMode,
                               SecurityQos,
-                              &Irp);
+                              &Irp,
+                              &Answered);
+    if (Answered)
+    {
+        ASSERT(Irp == NULL);
+        ASSERT(OpenPacket->QueryOnly);
+
+        IopDetachLocalFileObjectExtension(OpenPacket, FileObject);
+        IopDecrementDeviceObjectRef(DeviceObject, FALSE);
+        if (Vpb != NULL) IopDereferenceVpbAndFree(Vpb);
+
+        OpenPacket->FinalStatus = Status;
+        OpenPacket->FileObject = NULL;
+        OpenPacket->ParseCheck = 1;
+        *Object = NULL;
+        return Status;
+    }
+
     if (Irp == NULL)
     {
         if (!OpenPacket->QueryOnly && !OpenPacket->DeleteOnly)
