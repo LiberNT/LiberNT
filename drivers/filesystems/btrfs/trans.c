@@ -496,6 +496,8 @@ BtrfsCommitDpc(
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ExQueueWorkItem(&Vcb->CommitWork, DelayedWorkQueue);
 }
 

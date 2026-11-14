@@ -65,6 +65,8 @@ NpTimerDispatch(IN PKDPC Dpc,
     KIRQL OldIrql;
     PNP_WAIT_QUEUE_ENTRY WaitEntry = Context;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLock(&WaitEntry->WaitQueue->WaitLock, &OldIrql);
 
     Irp = WaitEntry->Irp;

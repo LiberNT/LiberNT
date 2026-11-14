@@ -131,6 +131,8 @@ Ext2FloppyFlushDpc (
 
     Context = (PEXT2_FLPFLUSH_CONTEXT) DeferredContext;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     DEBUG(DL_FLP, ("Ext2FloppyFlushDpc is to be started...\n"));
 
     ExQueueWorkItem(&Context->Item, CriticalWorkQueue);
