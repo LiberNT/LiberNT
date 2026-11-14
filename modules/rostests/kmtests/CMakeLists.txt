@@ -504,16 +504,19 @@ if(ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64")
         kmArm64/KeArm64SpinLock.c
         kmArm64/KeArm64SubNodeSched.c
         kmArm64/KeArm64ThreadProcess.c
-        kmArm64/KeArm64WakePlacement.c
-        rtl/Win11NewKM.c
-        ntos_mm/MmWin11KM.c
-        ntos_mm/MmMdlWin11KM.c
-        ntos_mm/MmPoolWin11KM.c
-        ntos_mm/MmSectionWin11KM.c
-        ntos_mm/MmPteWin11KM.c)
-    set(KMTEST_WIN11_TESTS TRUE)
+        kmArm64/KeArm64WakePlacement.c)
     set(KMTEST_SMP_TESTS TRUE)
 endif()
+
+# Win11 parity tests for MM and RTL: nothing in them is architecture specific
+list(APPEND KMTEST_DRV_SOURCE
+    rtl/Win11NewKM.c
+    ntos_mm/MmWin11KM.c
+    ntos_mm/MmMdlWin11KM.c
+    ntos_mm/MmPoolWin11KM.c
+    ntos_mm/MmSectionWin11KM.c
+    ntos_mm/MmPteWin11KM.c)
+set(KMTEST_WIN11_TESTS TRUE)
 
 if(ARCH_64BIT)
     spec2def(ext-ms-win-ntos-ksr-l1-1-5.dll ntos_ex/ksr.spec ADD_IMPORTLIB)

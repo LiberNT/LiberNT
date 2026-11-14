@@ -289,7 +289,10 @@ TestHalProc(VOID)
     /* Contract: max >= active >= 1 (exact values are VM-config dependent). */
     ok(halMax >= 1, "HalQueryMaximumProcessorCount=%lu should be >=1\n", halMax);
     ok(halMax >= active, "HalMax=%lu should be >= active=%lu\n", halMax, active);
-    ok(HalIsHyperThreadingEnabled() == FALSE, "ARM64 HalIsHyperThreadingEnabled should be FALSE\n");
+    /* SMT is platform and topology dependent, but one active processor can never be SMT */
+    if (active == 1)
+        ok(HalIsHyperThreadingEnabled() == FALSE,
+           "HalIsHyperThreadingEnabled should be FALSE with one active processor\n");
 }
 
 START_TEST(Win11NewKM)
