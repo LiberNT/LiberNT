@@ -1032,6 +1032,7 @@ VOID LxVforkAbandon(_Inout_ PLX_THREAD Thread);
 VOID LxPollHeadInit(_Out_ PLX_POLL_HEAD Head);
 VOID LxFlockInitialize(VOID);
 VOID LxFlockRelease(_In_ PLX_FILE File);
+VOID LxInetInitialize(VOID);
 VOID LxRecordLocksClosed(_In_ PLX_PROCESS Process, _In_ PLX_FILE File);
 VOID LxRecordLocksPurge(_In_ PLX_PROCESS Process);
 VOID LxEventSourceInit(_Out_ PLX_EVENT_SOURCE Source);

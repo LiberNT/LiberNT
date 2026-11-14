@@ -75,6 +75,8 @@ typedef struct _LX_INET_SOCKET
     UCHAR Watching[AFD_MAX_EVENT];
     UCHAR ConnectBuffer[FIELD_OFFSET(AFD_CONNECT_INFO, RemoteAddress) + sizeof(TA_IP_ADDRESS)];
     ULONG64 Ino;
+    LIST_ENTRY BoundLink;
+    USHORT BoundPort;
 } LX_INET_SOCKET, *PLX_INET_SOCKET;
 
 typedef struct _LX_INET_WORK
@@ -91,6 +93,28 @@ typedef struct _LX_INET_SELECT
 } LX_INET_SELECT, *PLX_INET_SELECT;
 
 static volatile LONG64 LxInetInode = 0x400000;
+static LIST_ENTRY LxInetBound;
+static FAST_MUTEX LxInetBoundLock;
+
+VOID
+LxInetInitialize(VOID)
+{
+    InitializeListHead(&LxInetBound);
+    ExInitializeFastMutex(&LxInetBoundLock);
+}
+
+/* Datagram sockets on one port collide when their addresses overlap, unless both asked to share; the stack below sees only equal addresses */
+static
+BOOLEAN
+LxInetClaimPort(
+    _In_ struct _LX_INET_SOCKET *Socket,
+    _In_ ULONG Address,
+    _In_ USHORT Port);
+
+static
+VOID
+LxInetReleasePort(
+    _In_ struct _LX_INET_SOCKET *Socket);
 
 static PLX_INET_OPTION LxInetFindOption(_In_ PLX_INET_SOCKET Socket, _In_ ULONG Level, _In_ ULONG Name);
 static LONG64 LxInetRead(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _Inout_opt_ PLONG64 Offset);
@@ -275,6 +299,7 @@ LxInetCreate(
     }
 
     Socket->RefCount = 1;
+    InitializeListHead(&Socket->BoundLink);
     KeInitializeEvent(&Socket->Lock, SynchronizationEvent, TRUE);
     KeInitializeSpinLock(&Socket->SelectLock);
     LxPollHeadInit(&Socket->Poll);
@@ -878,6 +903,72 @@ LxInetIsFile(
 }
 
 static
+BOOLEAN
+LxInetClaimPort(
+    _In_ PLX_INET_SOCKET Socket,
+    _In_ ULONG Address,
+    _In_ USHORT Port)
+{
+    BOOLEAN Free = TRUE;
+    PLIST_ENTRY Entry;
+
+    if ((Socket->Type != LX_SOCK_DGRAM) || (Port == 0))
+        return TRUE;
+
+    ExAcquireFastMutex(&LxInetBoundLock);
+    ASSERT(IsListEmpty(&Socket->BoundLink));
+    for (Entry = LxInetBound.Flink; Free && (Entry != &LxInetBound); Entry = Entry->Flink)
+    {
+        PLX_INET_SOCKET Other = CONTAINING_RECORD(Entry, LX_INET_SOCKET, BoundLink);
+
+        Free = (Other->BoundPort != Port) || (Other->Protocol != Socket->Protocol) ||
+               ((Other->BoundAddress != Address) && (Other->BoundAddress != 0) && (Address != 0)) ||
+               (Other->ReuseAddress && Socket->ReuseAddress);
+    }
+    if (Free)
+    {
+        Socket->BoundPort = Port;
+        Socket->BoundAddress = Address;
+        InsertTailList(&LxInetBound, &Socket->BoundLink);
+    }
+    ExReleaseFastMutex(&LxInetBoundLock);
+    return Free;
+}
+
+static
+VOID
+LxInetRecordPort(
+    _In_ PLX_INET_SOCKET Socket,
+    _In_ ULONG Address,
+    _In_ USHORT Port)
+{
+    if (Port == 0)
+        return;
+    ExAcquireFastMutex(&LxInetBoundLock);
+    if (IsListEmpty(&Socket->BoundLink))
+    {
+        Socket->BoundPort = Port;
+        Socket->BoundAddress = Address;
+        InsertTailList(&LxInetBound, &Socket->BoundLink);
+    }
+    ExReleaseFastMutex(&LxInetBoundLock);
+}
+
+static
+VOID
+LxInetReleasePort(
+    _In_ PLX_INET_SOCKET Socket)
+{
+    ExAcquireFastMutex(&LxInetBoundLock);
+    if (!IsListEmpty(&Socket->BoundLink))
+    {
+        RemoveEntryList(&Socket->BoundLink);
+        InitializeListHead(&Socket->BoundLink);
+    }
+    ExReleaseFastMutex(&LxInetBoundLock);
+}
+
+static
 LONG
 LxInetBindAddress(
     _In_ PLX_INET_SOCKET Socket,
@@ -888,15 +979,32 @@ LxInetBindAddress(
     PAFD_BIND_DATA Bind = (PAFD_BIND_DATA)Buffer;
     NTSTATUS Status;
 
+    if (!LxInetClaimPort(Socket, Address, Port))
+        return -LX_EADDRINUSE;
     RtlZeroMemory(Buffer, sizeof(Buffer));
     Bind->ShareType = Socket->ReuseAddress ? AFD_SHARE_REUSE : AFD_SHARE_UNIQUE;
     LxInetSetAddress((PTA_IP_ADDRESS)&Bind->Address, Address, Port);
     Status = LxAfdIoctl(Socket, IOCTL_AFD_BIND, Buffer, sizeof(Buffer), Buffer, sizeof(Buffer), NULL);
     if (!NT_SUCCESS(Status))
+    {
+        LxInetReleasePort(Socket);
+        /* A sharing socket refused by an exclusive owner of the address is a busy address to Linux */
+        if ((Status == STATUS_ACCESS_DENIED) && Socket->ReuseAddress)
+            return -LX_EADDRINUSE;
         return -LxInetErrno(Status);
+    }
     Socket->State = LX_INET_BOUND;
     Socket->BoundAddress = Address;
     Socket->BoundIndex = (Address != 0) ? LxNetlinkAddressIndex(Address) : 0;
+    if ((Socket->Type == LX_SOCK_DGRAM) && (Port == 0))
+    {
+        UCHAR Name[FIELD_OFFSET(TDI_ADDRESS_INFO, Address) + sizeof(TA_IP_ADDRESS)];
+        PTA_IP_ADDRESS Local = (PTA_IP_ADDRESS)&((PTDI_ADDRESS_INFO)Name)->Address;
+
+        RtlZeroMemory(Name, sizeof(Name));
+        if (NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_GET_SOCK_NAME, NULL, 0, Name, sizeof(Name), NULL)))
+            LxInetRecordPort(Socket, Address, Local->Address[0].Address[0].sin_port);
+    }
     return 0;
 }
 
@@ -1981,6 +2089,7 @@ LxInetRelease(
 
     if (Socket == NULL)
         return;
+    LxInetReleasePort(Socket);
     KeAcquireSpinLock(&Socket->SelectLock, &OldIrql);
     Socket->Closing = TRUE;
     Handle = Socket->Handle;
