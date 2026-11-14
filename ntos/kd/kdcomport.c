@@ -70,6 +70,9 @@ KdpSerialInit(
             return STATUS_DEVICE_DOES_NOT_EXIST;
         }
 
+        ASSERT(SerialPortInfo.Address != NULL);
+        KdComPortInUse = SerialPortInfo.Address;
+
         DispatchTable->KdpPrintRoutine = KdpSerialPrint;
         InsertTailList(&KdProviders, &DispatchTable->KdProvidersList);
 
