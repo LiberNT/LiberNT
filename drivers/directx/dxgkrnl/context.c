@@ -486,7 +486,7 @@ DxgkMarkAdapterDevicesStoppedLocked(
 {
     PLIST_ENTRY Link;
 
-    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+    ASSERT(Adapter == NULL || Adapter->AdapterMutex.OwnerThread == KeGetCurrentThread());
 
     /* Caller owns AdapterMutex so the terminal transition and the complete
      * device-list snapshot are one admission boundary. */

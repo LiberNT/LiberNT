@@ -61,7 +61,7 @@ DxgkpOutputDuplFindLocked(_In_ PEPROCESS Process, _In_ LUID AdapterLuid, _In_ D3
 {
     PLIST_ENTRY Entry;
 
-    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+    ASSERT(DxgkOutputDuplLock.Owner == KeGetCurrentThread());
 
     for (Entry = DxgkOutputDuplList.Flink; Entry != &DxgkOutputDuplList; Entry = Entry->Flink)
     {
