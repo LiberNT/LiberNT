@@ -184,7 +184,11 @@ HRESULT InitDisplayAttrbuteLib(PCIC_LIBTHREAD pLibThread)
     HRESULT hr = E_OUTOFMEMORY;
 
     ::EnterCriticalSection(&g_csLock);
-    if (pEnumGuid && !g_pPropCache)
+    if (g_pPropCache)
+    {
+        hr = S_OK;
+    }
+    else if (pEnumGuid)
     {
         g_pPropCache = new(cicNoThrow) CDispAttrPropCache();
         if (g_pPropCache)
