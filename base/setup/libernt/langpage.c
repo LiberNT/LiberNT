@@ -105,7 +105,7 @@ SelectLayoutForLocale(
     const SETUP_CHOICE* Locale;
     WCHAR Keyboards[256];
     WCHAR LayoutId[KL_NAMELENGTH];
-    PWSTR Colon, End;
+    PWSTR Entry, Colon, End;
     LCID Lcid;
 
     Locale = GetSelectedChoice(GetDlgItem(hwndDlg, IDC_LANGUAGELIST),
@@ -114,15 +114,23 @@ SelectLayoutForLocale(
     if (!Locale)
         return;
 
+    /* Each "langid:klid" entry is an input profile; only one in the locale's own language is its default */
     Lcid = wcstoul(Locale->Id, NULL, 16);
-    if (GetLocaleInfoW(Lcid, LOCALE_SKEYBOARDSTOINSTALL, Keyboards, ARRAYSIZE(Keyboards)) &&
-        (Colon = wcschr(Keyboards, L':')) != NULL)
+    if (GetLocaleInfoW(Lcid, LOCALE_SKEYBOARDSTOINSTALL, Keyboards, ARRAYSIZE(Keyboards)))
     {
-        End = wcschr(Colon, L';');
-        if (End)
-            *End = UNICODE_NULL;
-        if (SelectChoiceById(hLayouts, pSetupData->Layouts, pSetupData->LayoutCount, Colon + 1))
-            return;
+        for (Entry = Keyboards; Entry && *Entry; Entry = End)
+        {
+            End = wcschr(Entry, L';');
+            if (End)
+                *End++ = UNICODE_NULL;
+            Colon = wcschr(Entry, L':');
+            if (Colon &&
+                (LANGID)wcstoul(Entry, NULL, 16) == LANGIDFROMLCID(Lcid) &&
+                SelectChoiceById(hLayouts, pSetupData->Layouts, pSetupData->LayoutCount, Colon + 1))
+            {
+                return;
+            }
+        }
     }
 
     StringCchPrintfW(LayoutId, ARRAYSIZE(LayoutId), L"%08lX", (ULONG)LANGIDFROMLCID(Lcid));
