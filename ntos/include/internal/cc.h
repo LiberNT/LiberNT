@@ -51,6 +51,13 @@ CcNtQueryDirtyPages(
 
 VOID
 NTAPI
+CcNtQueryCachePages(
+    _Out_ PULONG MappedPages,
+    _Out_ PULONG MaximumPages
+);
+
+VOID
+NTAPI
 CcNtSetDirtyPageThreshold(
     _In_ ULONG DirtyPageThreshold
 );

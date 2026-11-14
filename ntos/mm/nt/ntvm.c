@@ -50,6 +50,18 @@ MmQuerySystemCommitCharge(
     return Committed;
 }
 
+VOID
+NTAPI
+MmQueryPageListCounts(
+    _Out_ PMM_PAGE_LIST_COUNTS Counts)
+{
+    Counts->Zeroed = (PFN_NUMBER)MiPfnListCount(&MiSystem.Pfn, MiPageZeroed);
+    Counts->Free = (PFN_NUMBER)MiPfnListCount(&MiSystem.Pfn, MiPageFree);
+    Counts->Standby = (PFN_NUMBER)MiPfnListCount(&MiSystem.Pfn, MiPageStandby);
+    Counts->Modified = (PFN_NUMBER)MiPfnListCount(&MiSystem.Pfn, MiPageModified);
+    Counts->Bad = (PFN_NUMBER)MiPfnListCount(&MiSystem.Pfn, MiPageBad);
+}
+
 NTSTATUS
 MiReferenceTargetProcess(
     _In_ HANDLE ProcessHandle,

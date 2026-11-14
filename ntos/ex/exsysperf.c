@@ -464,17 +464,21 @@ ExpQueryMemoryListInformation(
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
+    MM_PAGE_LIST_COUNTS Counts;
+
+    MmQueryPageListCounts(&Counts);
+
     RtlZeroMemory(Info, sizeof(*Info));
 
-    Info->ZeroPageCount = MmZeroedPageListHead.Total;
-    Info->FreePageCount = MmFreePageListHead.Total;
-    Info->ModifiedPageCount = MmModifiedPageListHead.Total;
-    Info->ModifiedNoWritePageCount = MmModifiedNoWritePageListHead.Total;
-    Info->BadPageCount = 0;
-    Info->ModifiedPageCountPageFile = MmModifiedPageListHead.Total;
+    Info->ZeroPageCount = Counts.Zeroed;
+    Info->FreePageCount = Counts.Free;
+    Info->ModifiedPageCount = Counts.Modified;
+    Info->ModifiedNoWritePageCount = 0; /* TODO: NVS keeps no separate modified-no-write list */
+    Info->BadPageCount = Counts.Bad;
+    Info->ModifiedPageCountPageFile = Counts.Modified;
 
     /* The standby pages are reported against the one priority that is kept. */
-    Info->PageCountByPriority[0] = MmStandbyPageListHead.Total;
+    Info->PageCountByPriority[0] = Counts.Standby;
 
     return STATUS_SUCCESS;
 }
@@ -490,14 +494,14 @@ ExpQueryFileCacheInformation(
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    ULONG DirtyPages;
-    ULONG Threshold;
+    ULONG MappedPages;
+    ULONG MaximumPages;
     SIZE_T Minimum = 0;
     SIZE_T Maximum;
     ULONG Flags;
 
-    CcNtQueryDirtyPages(&DirtyPages, &Threshold);
-    Maximum = (SIZE_T)Threshold << PAGE_SHIFT;
+    CcNtQueryCachePages(&MappedPages, &MaximumPages);
+    Maximum = (SIZE_T)MaximumPages << PAGE_SHIFT;
 
     KeEnterCriticalRegion();
     ExAcquirePushLockShared(&ExpFileCacheLock);
@@ -512,12 +516,12 @@ ExpQueryFileCacheInformation(
 
     RtlZeroMemory(Info, sizeof(*Info));
 
-    Info->CurrentSize = (SIZE_T)DirtyPages << PAGE_SHIFT;
+    Info->CurrentSize = (SIZE_T)MappedPages << PAGE_SHIFT;
     Info->PeakSize = Info->CurrentSize;
     Info->MinimumWorkingSet = Minimum;
     Info->MaximumWorkingSet = Maximum;
-    Info->CurrentSizeIncludingTransitionInPages = Info->CurrentSize;
-    Info->PeakSizeIncludingTransitionInPages = Info->CurrentSize;
+    Info->CurrentSizeIncludingTransitionInPages = MappedPages;
+    Info->PeakSizeIncludingTransitionInPages = MappedPages;
     Info->Flags = Flags;
 
     /* TODO: the cache manager does not keep a fault count of its own. */

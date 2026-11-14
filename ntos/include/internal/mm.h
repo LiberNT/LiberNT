@@ -1985,6 +1985,20 @@ NTAPI
 MmQuerySystemCommitCharge(
     _Out_opt_ PSIZE_T PeakCommitment);
 
+typedef struct _MM_PAGE_LIST_COUNTS
+{
+    PFN_NUMBER Zeroed;
+    PFN_NUMBER Free;
+    PFN_NUMBER Standby;
+    PFN_NUMBER Modified;
+    PFN_NUMBER Bad;
+} MM_PAGE_LIST_COUNTS, *PMM_PAGE_LIST_COUNTS;
+
+VOID
+NTAPI
+MmQueryPageListCounts(
+    _Out_ PMM_PAGE_LIST_COUNTS Counts);
+
 
 /* session.c *****************************************************************/
 
