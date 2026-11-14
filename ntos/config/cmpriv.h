@@ -100,14 +100,14 @@ extern ULONG CmpDelayCloseIntervalInSeconds;
 extern KTIMER CmpDelayCloseTimer;
 extern KDPC CmpDelayCloseDpc;
 extern WORK_QUEUE_ITEM CmpDelayCloseWorkItem;
-extern BOOLEAN CmpDelayCloseWorkItemActive;
+extern LONG CmpDelayCloseWorkItemActive;
 extern LIST_ENTRY CmpDelayDerefKCBListHead;
 extern KGUARDED_MUTEX CmpDelayDerefKCBLock;
 extern ULONG CmpDelayDerefKCBIntervalInSeconds;
 extern KTIMER CmpDelayDerefKCBTimer;
 extern KDPC CmpDelayDerefKCBDpc;
 extern WORK_QUEUE_ITEM CmpDelayDerefKCBWorkItem;
-extern BOOLEAN CmpDelayDerefKCBWorkItemActive;
+extern LONG CmpDelayDerefKCBWorkItemActive;
 
 VOID NTAPI CmpDelayCloseWorker(_In_ PVOID Parameter);
 VOID NTAPI CmpDelayDerefKCBWorker(_In_ PVOID Parameter);

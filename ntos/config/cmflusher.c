@@ -13,6 +13,7 @@
 
 /* GLOBALS ********************************************************************/
 
+/* FIXME: a stale CmpEnableLazyFlushDpc from an earlier hold clears a hold asserted since; the flag carries no generation to tell them apart. */
 BOOLEAN CmpHoldLazyFlush = TRUE;
 BOOLEAN CmpLazyFlushPending = FALSE;
 ULONG CmpLazyFlushCount = 1;
@@ -29,7 +30,7 @@ KDPC CmpEnableLazyFlushDpc;
 /* PRIVATE DATA ***************************************************************/
 
 static BOOLEAN CmpFlusherStarted = FALSE;
-static BOOLEAN CmpLazyWorkItemActive = FALSE;
+static LONG CmpLazyWorkItemActive = 0;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -146,7 +147,7 @@ CmpLazyFlushWorker(
         Flushed++;
     }
 
-    CmpLazyWorkItemActive = FALSE;
+    InterlockedExchange(&CmpLazyWorkItemActive, 0);
 
     if (Flushed != 0) CmpLazyFlush();
 }
@@ -164,9 +165,8 @@ CmpLazyFlushDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (CmpLazyWorkItemActive) return;
+    if (InterlockedCompareExchange(&CmpLazyWorkItemActive, 1, 0) != 0) return;
 
-    CmpLazyWorkItemActive = TRUE;
     ExQueueWorkItem(&CmpLazyWorkItem, DelayedWorkQueue);
 }
 

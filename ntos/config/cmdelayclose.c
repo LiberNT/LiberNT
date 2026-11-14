@@ -20,7 +20,7 @@ ULONG CmpDelayCloseIntervalInSeconds = CMP_DELAY_CLOSE_SECONDS;
 KTIMER CmpDelayCloseTimer;
 KDPC CmpDelayCloseDpc;
 WORK_QUEUE_ITEM CmpDelayCloseWorkItem;
-BOOLEAN CmpDelayCloseWorkItemActive = FALSE;
+LONG CmpDelayCloseWorkItemActive = 0;
 
 LIST_ENTRY CmpDelayDerefKCBListHead;
 KGUARDED_MUTEX CmpDelayDerefKCBLock;
@@ -29,7 +29,7 @@ ULONG CmpDelayDerefKCBIntervalInSeconds = CMP_DELAY_DEREF_SECONDS;
 KTIMER CmpDelayDerefKCBTimer;
 KDPC CmpDelayDerefKCBDpc;
 WORK_QUEUE_ITEM CmpDelayDerefKCBWorkItem;
-BOOLEAN CmpDelayDerefKCBWorkItemActive = FALSE;
+LONG CmpDelayDerefKCBWorkItemActive = 0;
 
 /* PRIVATE DATA ***************************************************************/
 
@@ -121,7 +121,7 @@ CmpDelayCloseWorker(
     CmpLockRegistry();
     CmpDrainDelayedClose(0);
     CmpUnlockRegistry();
-    CmpDelayCloseWorkItemActive = FALSE;
+    InterlockedExchange(&CmpDelayCloseWorkItemActive, 0);
 
     if (CmpDelayedCloseElements != 0) CmpArmDelayedCloseTimer();
 }
@@ -139,9 +139,8 @@ CmpDelayCloseDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (CmpDelayCloseWorkItemActive) return;
+    if (InterlockedCompareExchange(&CmpDelayCloseWorkItemActive, 1, 0) != 0) return;
 
-    CmpDelayCloseWorkItemActive = TRUE;
     ExQueueWorkItem(&CmpDelayCloseWorkItem, DelayedWorkQueue);
 }
 
@@ -182,8 +181,7 @@ CmpDelayDerefKCBWorker(
     UNREFERENCED_PARAMETER(Parameter);
 
     CmpDrainDelayDerefList();
-    CmpDelayDerefKCBWorkItemActive = FALSE;
-    KeMemoryBarrier();
+    InterlockedExchange(&CmpDelayDerefKCBWorkItemActive, 0);
 
     /* A hand-off that found the worker still active armed no timer of its own */
     KeAcquireGuardedMutex(&CmpDelayDerefKCBLock);
@@ -209,9 +207,8 @@ CmpDelayDerefKCBDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    if (CmpDelayDerefKCBWorkItemActive) return;
+    if (InterlockedCompareExchange(&CmpDelayDerefKCBWorkItemActive, 1, 0) != 0) return;
 
-    CmpDelayDerefKCBWorkItemActive = TRUE;
     ExQueueWorkItem(&CmpDelayDerefKCBWorkItem, DelayedWorkQueue);
 }
 
@@ -302,9 +299,8 @@ CmpAddToDelayedClose(
         return;
     }
 
-    if (!CmpDelayCloseWorkItemActive)
+    if (InterlockedCompareExchange(&CmpDelayCloseWorkItemActive, 1, 0) == 0)
     {
-        CmpDelayCloseWorkItemActive = TRUE;
         ExQueueWorkItem(&CmpDelayCloseWorkItem, DelayedWorkQueue);
     }
 }
