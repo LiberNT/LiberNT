@@ -195,10 +195,10 @@
 @ stdcall -arch=arm64 HalDmaAllocateCrashDumpRegistersEx(ptr long long ptr ptr)
 @ stdcall -arch=arm64 HalDmaFreeCrashDumpRegistersEx(ptr long)
 @ stdcall -arch=arm64 HalEnumerateProcessors(ptr ptr)
-@ stdcall -arch=arm64,riscv64 HalQueryMaximumProcessorCount()
+@ stdcall -arch=arm64,riscv64,x86_64 HalQueryMaximumProcessorCount()
 @ stdcall -arch=arm64 HalRegisterDynamicProcessor(ptr ptr)
 @ stdcall -arch=arm64 HalStartDynamicProcessor(ptr ptr)
-@ stdcall -arch=arm64,riscv64 HalIsHyperThreadingEnabled()
+@ stdcall -arch=arm64,riscv64,x86_64 HalIsHyperThreadingEnabled()
 @ stdcall -arch=arm64 HalBeginSystemInterruptUnspecified(long ptr)
 @ stdcall -arch=arm64 HalRequestClockInterrupt(long)
 @ stdcall -arch=arm64 HalRequestDeferredRecoveryServiceInterrupt()
@@ -239,9 +239,7 @@
 @ stub -arch=x86_64 HalEnumerateProcessors
 @ stub -arch=x86_64 HalHandleMcheck
 @ stub -arch=x86_64 HalInitializeOnResume
-@ stub -arch=x86_64 HalIsHyperThreadingEnabled
 @ stub -arch=x86_64 HalPerformEndOfInterrupt
-@ stub -arch=x86_64 HalQueryMaximumProcessorCount
 @ stub -arch=x86_64 HalRegisterDynamicProcessor
 @ stub -arch=x86_64 HalRegisterErrataCallbacks
 @ stub -arch=x86_64 HalRequestClockInterrupt
