@@ -5872,7 +5872,6 @@ static struct {
 DWORD WINAPI DECLSPEC_HOTPATCH GetDynamicTimeZoneInformation( DYNAMIC_TIME_ZONE_INFORMATION *info )
 {
     HKEY key;
-    DWORD size;
     LARGE_INTEGER now;
 
     if (!set_ntstatus( RtlQueryDynamicTimeZoneInformation( (RTL_DYNAMIC_TIME_ZONE_INFORMATION *)info )))
@@ -5892,9 +5891,9 @@ DWORD WINAPI DECLSPEC_HOTPATCH GetDynamicTimeZoneInformation( DYNAMIC_TIME_ZONE_
         if (!RegOpenKeyExW( tz_key, info->TimeZoneKeyName, 0, KEY_ALL_ACCESS, &key ))
         {
             RegLoadMUIStringW( key, L"MUI_Std", info->StandardName,
-                               sizeof(info->StandardName), &size, 0, system_dir );
+                               sizeof(info->StandardName), NULL, 0, system_dir );
             RegLoadMUIStringW( key, L"MUI_Dlt", info->DaylightName,
-                               sizeof(info->DaylightName), &size, 0, system_dir );
+                               sizeof(info->DaylightName), NULL, 0, system_dir );
             RegCloseKey( key );
         }
         else return TIME_ZONE_ID_INVALID;
@@ -6729,14 +6728,14 @@ BOOL WINAPI DECLSPEC_HOTPATCH GetTimeZoneInformationForYear( USHORT year,
 
     if ((ret = RegOpenKeyExW( tz_key, dynamic->TimeZoneKeyName, 0, KEY_ALL_ACCESS, &key ))) goto done;
     if (RegLoadMUIStringW( key, L"MUI_Std", info->StandardName,
-                           sizeof(info->StandardName), &count, 0, system_dir ))
+                           sizeof(info->StandardName), NULL, 0, system_dir ))
     {
         count = sizeof(info->StandardName);
         if ((ret = RegQueryValueExW( key, L"Std", NULL, NULL, (BYTE *)info->StandardName, &count )))
             goto done;
     }
     if (RegLoadMUIStringW( key, L"MUI_Dlt", info->DaylightName,
-                           sizeof(info->DaylightName), &count, 0, system_dir ))
+                           sizeof(info->DaylightName), NULL, 0, system_dir ))
     {
         count = sizeof(info->DaylightName);
         if ((ret = RegQueryValueExW( key, L"Dlt", NULL, NULL, (BYTE *)info->DaylightName, &count )))
