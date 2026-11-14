@@ -10,6 +10,7 @@
  */
 #include "wshtcpip.h"
 #include <netioapi.h>
+#include <mswsock.h>
 #include <iofuncs.h>
 #include <tcpip_undoc.h>
 #include <stdlib.h>
@@ -1045,9 +1046,21 @@ WSHIoctl(
                                         OutputBufferLength,
                                         NumberOfBytesReturned);
     }
-    else if (IoControlCode == SIO_KEEPALIVE_VALS)
+    else if (IoControlCode == SIO_KEEPALIVE_VALS || IoControlCode == SIO_UDP_CONNRESET)
     {
-        if (!InputBuffer || InputBufferLength != sizeof(struct tcp_keepalive))
+        ULONG ReportReset = 0;
+
+        if (IoControlCode == SIO_UDP_CONNRESET)
+        {
+            /* TODO: the sizes Windows accepts here are not documented; any non-empty buffer is taken as the flag */
+            if (!InputBuffer || InputBufferLength == 0)
+                return WSAEFAULT;
+            memcpy(&ReportReset, InputBuffer, min(InputBufferLength, sizeof(ReportReset)));
+            ReportReset = (ReportReset != 0);
+            InputBuffer = &ReportReset;
+            InputBufferLength = sizeof(ReportReset);
+        }
+        else if (!InputBuffer || InputBufferLength != sizeof(struct tcp_keepalive))
         {
             return WSAEINVAL;
         }
@@ -1059,8 +1072,16 @@ WSHIoctl(
         Info->ID.toi_entity.tei_entity = Context->AddrFileEntityType;
         Info->ID.toi_entity.tei_instance = Context->AddrFileInstance;
         Info->ID.toi_class = INFO_CLASS_PROTOCOL;
-        Info->ID.toi_type = INFO_TYPE_CONNECTION;
-        Info->ID.toi_id = TCP_SOCKET_KEEPALIVEVALS;
+        if (IoControlCode == SIO_UDP_CONNRESET)
+        {
+            Info->ID.toi_type = INFO_TYPE_ADDRESS_OBJECT;
+            Info->ID.toi_id = AO_OPTION_UDP_CONNRESET;
+        }
+        else
+        {
+            Info->ID.toi_type = INFO_TYPE_CONNECTION;
+            Info->ID.toi_id = TCP_SOCKET_KEEPALIVEVALS;
+        }
         Info->BufferSize = InputBufferLength;
         memcpy(Info->Buffer, InputBuffer, InputBufferLength);
 

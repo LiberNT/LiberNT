@@ -661,7 +661,12 @@ SatisfyPacketRecvRequest( PAFD_FCB FCB, PIRP Irp,
         MmUnmapLockedPages(Map[i + 4].BufferAddress, Map[i + 4].Mdl);
     }
 
-    if (!(MsgFlags & (MSG_TRUNC | MSG_CTRUNC)))
+    if (DatagramRecv->Status != STATUS_SUCCESS)
+    {
+        /* This entry reports a datagram the socket sent and nobody took */
+        Status = Irp->IoStatus.Status = DatagramRecv->Status;
+    }
+    else if (!(MsgFlags & (MSG_TRUNC | MSG_CTRUNC)))
     {
         /* We copied the whole datagram */
         Status = Irp->IoStatus.Status = STATUS_SUCCESS;
@@ -965,6 +970,7 @@ PacketSocketRecvProcess(
     UINT ControlLen = 0;
     UINT DGSize;
     PLIST_ENTRY NextIrpEntry, DatagramRecvEntry;
+    BOOLEAN Unreachable = (Irp->IoStatus.Status == STATUS_PORT_UNREACHABLE);
 
     ASSERT(FCB->ReceiveIrp.InFlightRequest == Irp);
     FCB->ReceiveIrp.InFlightRequest = NULL;
@@ -997,7 +1003,7 @@ PacketSocketRecvProcess(
         return STATUS_FILE_CLOSED;
     }
 
-    if (Irp->IoStatus.Status != STATUS_SUCCESS)
+    if (Irp->IoStatus.Status != STATUS_SUCCESS && !Unreachable)
     {
         if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
         SocketStateUnlock(FCB);
@@ -1028,6 +1034,11 @@ PacketSocketRecvProcess(
         (FCB->Recv.Size ? FCB->Recv.Content >= FCB->Recv.Size : !IsListEmpty(&FCB->DatagramList)))
         goto SatisfyRequests;
 
+    /* One queued report is enough to fail the next receive */
+    if (Unreachable && !IsListEmpty(&FCB->DatagramList) &&
+        CONTAINING_RECORD(FCB->DatagramList.Blink, AFD_STORED_DATAGRAM, ListEntry)->Status != STATUS_SUCCESS)
+        goto SatisfyRequests;
+
     DGSize = FIELD_OFFSET(AFD_STORED_DATAGRAM, Buffer) +
              ALIGN_UP_BY(Irp->IoStatus.Information, MAX_NATURAL_ALIGNMENT) + ControlLen;
     DatagramRecv = ExAllocatePoolWithTag(NonPagedPool,
@@ -1035,6 +1046,7 @@ PacketSocketRecvProcess(
                                          TAG_AFD_STORED_DATAGRAM);
 
     if( DatagramRecv ) {
+        DatagramRecv->Status = Irp->IoStatus.Status;
         DatagramRecv->Len = Irp->IoStatus.Information;
         RtlCopyMemory( DatagramRecv->Buffer, FCB->Recv.Window,
                        DatagramRecv->Len );
@@ -1107,14 +1119,15 @@ SatisfyRequests:
     if( !IsListEmpty( &FCB->DatagramList ) && IsListEmpty(&FCB->PendingIrpList[FUNCTION_RECV]) ) {
         AFD_DbgPrint(MID_TRACE,("Signalling\n"));
         FCB->PollState |= AFD_EVENT_RECEIVE;
-        FCB->PollStatus[FD_READ_BIT] = STATUS_SUCCESS;
+        FCB->PollStatus[FD_READ_BIT] =
+            CONTAINING_RECORD(FCB->DatagramList.Flink, AFD_STORED_DATAGRAM, ListEntry)->Status;
         PollReeval( FCB->DeviceExt, FCB->FileObject );
     } else
         FCB->PollState &= ~AFD_EVENT_RECEIVE;
 
     AfdTryApplyPendingReceiveWindow(FCB);
 
-    if (NT_SUCCESS(Irp->IoStatus.Status))
+    if (NT_SUCCESS(Irp->IoStatus.Status) || Unreachable)
         AfdRearmDatagram(FCB);
 
     if (FCB->TdiRundownEvent) AfdSignalTdiRundown(FCB);
@@ -1244,7 +1257,8 @@ AfdPacketSocketReadData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         if (!IsListEmpty(&FCB->DatagramList))
         {
             FCB->PollState |= AFD_EVENT_RECEIVE;
-            FCB->PollStatus[FD_READ_BIT] = STATUS_SUCCESS;
+            FCB->PollStatus[FD_READ_BIT] =
+                CONTAINING_RECORD(FCB->DatagramList.Flink, AFD_STORED_DATAGRAM, ListEntry)->Status;
             PollReeval( FCB->DeviceExt, FCB->FileObject );
         }
         else

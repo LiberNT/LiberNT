@@ -648,6 +648,7 @@ TranslateNtStatusError(NTSTATUS Status)
           return WSAECONNREFUSED;
 
        case STATUS_CONNECTION_RESET:
+       case STATUS_PORT_UNREACHABLE:
           return WSAECONNRESET;
 
        case STATUS_CONNECTION_ABORTED:

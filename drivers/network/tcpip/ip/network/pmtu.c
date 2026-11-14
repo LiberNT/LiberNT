@@ -405,6 +405,11 @@ VOID PmtuReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
 
 VOID ICMPSendFragmentationNeeded(PIP_INTERFACE Interface, PIP_PACKET IPPacket, ULONG Mtu)
 {
+    ICMPSendDestinationUnreachable(Interface, IPPacket, IPPacket->Data, ICMP_CODE_DU_FRAG_DF_SET, Mtu);
+}
+
+VOID ICMPSendDestinationUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket, PVOID Transport, UCHAR Code, ULONG Mtu)
+{
     UINT QuotedSize = IPPacket->HeaderSize + min(8, IPPacket->TotalSize - IPPacket->HeaderSize);
     UINT DataSize = sizeof(ICMP_HEADER) + QuotedSize;
     PNEIGHBOR_CACHE_ENTRY NCE;
@@ -424,11 +429,11 @@ VOID ICMPSendFragmentationNeeded(PIP_INTERFACE Interface, PIP_PACKET IPPacket, U
         return;
     }
     Message[0] = ICMP_TYPE_DEST_UNREACH;
-    Message[1] = ICMP_CODE_DU_FRAG_DF_SET;
+    Message[1] = Code;
     Message[6] = (UCHAR)(Mtu >> 8);
     Message[7] = (UCHAR)Mtu;
     RtlCopyMemory(Message + sizeof(ICMP_HEADER), IPPacket->Header, IPPacket->HeaderSize);
-    RtlCopyMemory(Message + sizeof(ICMP_HEADER) + IPPacket->HeaderSize, IPPacket->Data,
+    RtlCopyMemory(Message + sizeof(ICMP_HEADER) + IPPacket->HeaderSize, Transport,
                   QuotedSize - IPPacket->HeaderSize);
     ((PICMP_HEADER)Message)->Checksum = (USHORT)IPv4Checksum(Message, DataSize, 0);
 

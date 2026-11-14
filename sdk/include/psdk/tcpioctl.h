@@ -114,6 +114,7 @@
 #define AO_OPTION_IP_RECVTOS 41
 #define AO_OPTION_IP_RECVECN 42
 #define AO_OPTION_IP_RECVDSTADDR 43
+#define AO_OPTION_UDP_CONNRESET 44
 
 typedef struct IFEntry
 {

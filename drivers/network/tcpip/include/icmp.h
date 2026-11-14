@@ -90,6 +90,7 @@ VOID PmtuStartup(VOID);
 VOID PmtuReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket);
 VOID PmtuFlushInterface(PIP_INTERFACE Interface);
 VOID ICMPSendFragmentationNeeded(PIP_INTERFACE Interface, PIP_PACKET IPPacket, ULONG Mtu);
+VOID ICMPSendDestinationUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket, PVOID Transport, UCHAR Code, ULONG Mtu);
 VOID PathTouch(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Source, IPv4_RAW_ADDRESS Destination, IPv4_RAW_ADDRESS NextHop);
 VOID PathConfirm(IPv4_RAW_ADDRESS Destination);
 VOID PathUnreachable(PIP_INTERFACE Interface, IPv4_RAW_ADDRESS NextHop);

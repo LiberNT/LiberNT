@@ -239,6 +239,7 @@ typedef struct _AFD_DATA_WINDOW {
 
 typedef struct _AFD_STORED_DATAGRAM {
     LIST_ENTRY ListEntry;
+    NTSTATUS Status;
     UINT Len;
     PTRANSPORT_ADDRESS Address;
     PVOID Control;

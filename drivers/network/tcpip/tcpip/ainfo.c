@@ -85,6 +85,16 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
 
          return TDI_SUCCESS;
 
+      case AO_OPTION_UDP_CONNRESET:
+         if (BufferSize < sizeof(ULONG))
+             return TDI_INVALID_PARAMETER;
+
+         LockObject(AddrFile);
+         AddrFile->NoPortUnreachable = (*(PULONG)Buffer == 0);
+         UnlockObject(AddrFile);
+
+         return TDI_SUCCESS;
+
       case AO_OPTION_UDP_SEND_MSG_SIZE:
          if (BufferSize < sizeof(ULONG))
              return TDI_INVALID_PARAMETER;

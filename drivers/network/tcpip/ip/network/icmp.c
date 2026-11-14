@@ -96,6 +96,10 @@ VOID ICMPReceive(
     {
         PmtuReceive(Interface, IPPacket);
     }
+    else if (ICMPHeader->Type == ICMP_TYPE_DEST_UNREACH && ICMPHeader->Code == ICMP_CODE_DU_PORT_UNREACH)
+    {
+        UDPReceiveUnreachable(Interface, IPPacket);
+    }
 }
 
 VOID ICMPReply(

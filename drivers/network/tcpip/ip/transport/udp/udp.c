@@ -10,6 +10,8 @@
 
 #include "precomp.h"
 
+#include <icmp.h>
+
 BOOLEAN UDPInitialized = FALSE;
 PORT_SET UDPPorts;
 
@@ -754,8 +756,67 @@ VOID UDPReceive(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
   if (Chosen != NULL) {
     UDPDeliverToAddrFile(Chosen, Interface, IPPacket, IPv4Header, UDPHeader, DataSize);
     DereferenceObject(Chosen);
+  } else if (!DeliverToAll && !AddrIsUnspecified(SrcAddress) && !UDPIsBroadcastAddress(SrcAddress) &&
+             ((DN2H(SrcAddress->Address.IPv4Address) & 0xf0000000) != 0xe0000000)) {
+    ICMPSendDestinationUnreachable(Interface, IPPacket, UDPHeader, ICMP_CODE_DU_PORT_UNREACH, 0);
   }
   TI_DbgPrint(MAX_TRACE, ("Leaving.\n"));
+}
+
+VOID UDPReceiveUnreachable(PIP_INTERFACE Interface, PIP_PACKET IPPacket)
+/*
+ * FUNCTION: Reports an ICMP port unreachable message to the socket whose datagram it answers
+ * ARGUMENTS:
+ *     Interface = Interface the message was received on
+ *     IPPacket  = The ICMP message
+ */
+{
+  PUCHAR Icmp = IPPacket->Data;
+  UINT DataSize = IPPacket->TotalSize - IPPacket->HeaderSize;
+  PADDRESS_FILE AddrFile, Chosen = NULL;
+  IP_ADDRESS Local, Remote;
+  PIP_INTERFACE Owner;
+  AF_SEARCH SearchContext;
+  PIPv4_HEADER Quoted;
+  PUDP_HEADER QuotedUdp;
+  ULONG QuotedHeader;
+
+  UNREFERENCED_PARAMETER(Interface);
+
+  if (DataSize < sizeof(ICMP_HEADER) + sizeof(IPv4_HEADER) + sizeof(UDP_HEADER))
+    return;
+
+  Quoted = (PIPv4_HEADER)(Icmp + sizeof(ICMP_HEADER));
+  QuotedHeader = (Quoted->VerIHL & 0x0F) * 4;
+  if ((Quoted->VerIHL >> 4) != 4 || QuotedHeader < sizeof(IPv4_HEADER) ||
+      DataSize < sizeof(ICMP_HEADER) + QuotedHeader + sizeof(UDP_HEADER) || Quoted->Protocol != IPPROTO_UDP)
+    return;
+
+  /* The quoted datagram has to be one this host could have sent */
+  AddrInitIPv4(&Local, Quoted->SrcAddr);
+  AddrInitIPv4(&Remote, Quoted->DstAddr);
+  Owner = AddrLocateInterface(&Local);
+  if (!Owner)
+    return;
+  IPDereferenceInterface(Owner);
+
+  QuotedUdp = (PUDP_HEADER)((PUCHAR)Quoted + QuotedHeader);
+  AddrFile = AddrSearchFirst(&Local, QuotedUdp->SourcePort, IPPROTO_UDP, &SearchContext);
+  while (AddrFile != NULL) {
+    if (Chosen == NULL || (AddrIsUnspecified(&Chosen->Address) && !AddrIsUnspecified(&AddrFile->Address))) {
+      if (Chosen != NULL)
+        DereferenceObject(Chosen);
+      Chosen = AddrFile;
+    } else {
+      DereferenceObject(AddrFile);
+    }
+    AddrFile = AddrSearchNext(&SearchContext);
+  }
+
+  if (Chosen != NULL) {
+    DGDeliverError(Chosen, &Remote, QuotedUdp->DestPort, STATUS_PORT_UNREACHABLE);
+    DereferenceObject(Chosen);
+  }
 }
 
 

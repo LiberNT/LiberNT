@@ -28,6 +28,7 @@ typedef struct _DATAGRAM_QUEUED_DATA
 {
     LIST_ENTRY ListEntry;
     DATAGRAM_INFO Info;
+    NTSTATUS Status;
     ULONG DataSize;
     UCHAR Data[ANYSIZE_ARRAY];
 } DATAGRAM_QUEUED_DATA, *PDATAGRAM_QUEUED_DATA;
@@ -223,6 +224,7 @@ DGQueueDatagram(
         return;
 
     Queued->Info = *Info;
+    Queued->Status = STATUS_SUCCESS;
     Queued->DataSize = DataSize;
     RtlCopyMemory(Queued->Data, Data, DataSize);
     AddrFile->QueuedBytes += DataSize;
@@ -242,6 +244,73 @@ DGFreeQueuedDatagrams(
         AddrFile->QueuedBytes -= Queued->DataSize;
         ExFreePoolWithTag(Queued, DATAGRAM_QUEUE_TAG);
     }
+}
+
+VOID
+DGDeliverError(
+    PADDRESS_FILE AddrFile,
+    PIP_ADDRESS RemoteAddress,
+    USHORT RemotePort,
+    NTSTATUS Status)
+/*
+ * FUNCTION: Reports that a datagram sent from an address file could not be delivered
+ * ARGUMENTS:
+ *     AddrFile      = Address file the datagram was sent from
+ *     RemoteAddress = Address the datagram was sent to
+ *     RemotePort    = Port the datagram was sent to
+ *     Status        = Why it could not be delivered
+ * NOTES:
+ *     The error takes the place of a datagram from that address: it fails
+ *     the next receive request, in order with the datagrams around it.
+ */
+{
+    PDATAGRAM_RECEIVE_REQUEST Current;
+    PDATAGRAM_QUEUED_DATA Queued;
+    DATAGRAM_INFO Info;
+
+    ASSERT(!NT_SUCCESS(Status));
+
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.SrcAddress = *RemoteAddress;
+    Info.SrcPort = RemotePort;
+
+    LockObject(AddrFile);
+
+    if (AddrFile->NoPortUnreachable)
+    {
+        UnlockObject(AddrFile);
+        return;
+    }
+
+    if (!IsListEmpty(&AddrFile->ReceiveQueue))
+    {
+        Current = CONTAINING_RECORD(RemoveHeadList(&AddrFile->ReceiveQueue), DATAGRAM_RECEIVE_REQUEST, ListEntry);
+        DGCopyDatagram(AddrFile, &Info, &Info, 0, Current->Buffer, Current->BufferSize, Current->ReturnInfo);
+
+        ReferenceObject(AddrFile);
+        UnlockObject(AddrFile);
+        Current->Complete(Current->Context, Status, 0);
+        DereferenceObject(AddrFile);
+        return;
+    }
+
+    /* TODO: a client that takes datagrams through its receive handler is not told */
+    /* One undelivered report is enough to fail the next receive */
+    if (!AddrFile->RegisteredReceiveDatagramHandler &&
+        (IsListEmpty(&AddrFile->DatagramQueue) ||
+         NT_SUCCESS(CONTAINING_RECORD(AddrFile->DatagramQueue.Blink, DATAGRAM_QUEUED_DATA, ListEntry)->Status)))
+    {
+        Queued = ExAllocatePoolWithTag(NonPagedPool, FIELD_OFFSET(DATAGRAM_QUEUED_DATA, Data), DATAGRAM_QUEUE_TAG);
+        if (Queued)
+        {
+            Queued->Info = Info;
+            Queued->Status = Status;
+            Queued->DataSize = 0;
+            InsertTailList(&AddrFile->DatagramQueue, &Queued->ListEntry);
+        }
+    }
+
+    UnlockObject(AddrFile);
 }
 
 VOID
@@ -451,7 +520,7 @@ NTSTATUS DGReceiveDatagram(
                                         BufferData, ReceiveLength, ReturnInfo);
         UnlockObject(AddrFile);
 
-        Status = Queued->DataSize > ReceiveLength ? STATUS_BUFFER_OVERFLOW : STATUS_SUCCESS;
+        Status = Queued->DataSize > ReceiveLength ? STATUS_BUFFER_OVERFLOW : Queued->Status;
         ExFreePoolWithTag(Queued, DATAGRAM_QUEUE_TAG);
         return Status;
     }

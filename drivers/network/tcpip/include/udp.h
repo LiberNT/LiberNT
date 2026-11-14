@@ -50,6 +50,10 @@ NTSTATUS UDPSendDatagram(
     ULONG DataSize,
     PULONG DataUsed );
 
+VOID UDPReceiveUnreachable(
+    PIP_INTERFACE Interface,
+    PIP_PACKET IPPacket);
+
 VOID UDPReceive(
     PIP_INTERFACE Interface,
     PIP_PACKET IPPacket);
