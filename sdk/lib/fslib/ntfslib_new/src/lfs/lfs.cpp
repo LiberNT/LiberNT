@@ -302,6 +302,20 @@ LogFileService::InitializeLFS()
         goto Done;
     }
 
+    /* Only a 2.0 log is replayed: an older one is written to only if it says its volume was closed cleanly */
+    {
+        PLfsRestartArea Area = reinterpret_cast<PLfsRestartArea>(
+            reinterpret_cast<PUCHAR>(SelectedPage) + SelectedPage->RestartOffset);
+
+        if (Area->ClientInUseList != 0xffff && !(Area->Flags & LFS_RESTART_AREA_CLEAN))
+        {
+            DPRINT1("Log %ld.%ld was not closed cleanly and cannot be replayed\n",
+                    ClientMajorVersion, ClientMinorVersion);
+            Status = STATUS_VOLUME_DIRTY;
+            goto Done;
+        }
+    }
+
 Done:
     delete LogFile;
     LogFile = NULL;
