@@ -45,6 +45,7 @@ list(APPEND SOURCE
     CreateProcess.c
     DefaultActCtx.c
     DeleteFileCase.c
+    DeleteFileOpenHandle.c
     DeviceIoControl.c
     EmulatedProcess.c
     dosdev.c
