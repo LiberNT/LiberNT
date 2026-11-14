@@ -2322,7 +2322,7 @@ LX_SYSCALL(LxSysSetpgid)
     }
 
     if ((Target->Sid != Process->Sid) || (Target->Sid == Target->Pid))
-        Result = (Target->Sid == Target->Pid) && (Target->Pgid == (ULONG)Pgid) ? 0 : -LX_EPERM;
+        Result = -LX_EPERM;
     else if (((ULONG)Pgid != Target->Pid) && !LxPgrpInSession(Process->Instance, (ULONG)Pgid, Target->Sid))
         Result = -LX_EPERM;
     else
