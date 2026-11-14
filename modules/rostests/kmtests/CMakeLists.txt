@@ -260,6 +260,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_kd/KdShutdownCrash.c
     ntos_kd/KdbThreadApc.c
     ntos_kd/KdChangeOption.c
+    ntos_kd/KdComPortInUse.c
     ntos_kd/KdDebuggerPresent.c
     ntos_kd/KdPrintComponent.c
     ntos_kd/KdPrintStatus.c

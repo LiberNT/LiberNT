@@ -242,6 +242,7 @@ KMT_TESTFUNC Test_KdbContextCommands;
 KMT_TESTFUNC Test_KdbLocks;
 KMT_TESTFUNC Test_KdbThreadApc;
 KMT_TESTFUNC Test_KdChangeOption;
+KMT_TESTFUNC Test_KdComPortInUse;
 KMT_TESTFUNC Test_KdbSystemBreak;
 KMT_TESTFUNC Test_KdShutdownCrash;
 KMT_TESTFUNC Test_KdDebuggerPresent;
@@ -691,6 +692,7 @@ const KMT_TEST TestList[] =
     { "-KdbLocks",                          Test_KdbLocks },
     { "-KdbThreadApc",                      Test_KdbThreadApc },
     { "KdChangeOption",                     Test_KdChangeOption },
+    { "KdComPortInUse",                     Test_KdComPortInUse },
     { "KdDebuggerPresent",                  Test_KdDebuggerPresent },
     { "KdPrintComponent",                   Test_KdPrintComponent },
     { "KdPrintStatus",                      Test_KdPrintStatus },
