@@ -41,9 +41,14 @@ static WCHAR *reg_data_to_wchar(DWORD type, const BYTE *src, DWORD size_bytes)
     {
         case REG_SZ:
         case REG_EXPAND_SZ:
-            buffer = malloc(size_bytes);
-            lstrcpyW(buffer, (WCHAR *)src);
+        {
+            DWORD len = size_bytes / sizeof(WCHAR);
+
+            buffer = malloc((len + 1) * sizeof(WCHAR));
+            memcpy(buffer, src, len * sizeof(WCHAR));
+            buffer[len] = 0;
             break;
+        }
         case REG_NONE:
         case REG_BINARY:
         {

@@ -199,6 +199,13 @@ static void test_query(void)
         "HKEY_CURRENT_USER\\" KEY_BASE "\\subkey3\r\n\r\n"
         "HKEY_CURRENT_USER\\" KEY_BASE "\\subkey4\r\n\r\n";
 
+    const char *test10 = "\r\n"
+        "HKEY_CURRENT_USER\\" KEY_BASE "\r\n"
+        "    Long    REG_SZ    Some long string data\r\n"
+        "    Empty    REG_SZ    \r\n"
+        "    NoNull    REG_SZ    abc\r\n"
+        "    OddSize    REG_EXPAND_SZ    xy\r\n\r\n";
+
     DWORD r, dword = 0x123;
     HKEY hkey, subkey;
     BYTE buf[512];
@@ -301,6 +308,22 @@ static void test_query(void)
     read_reg_output("reg query HKCU\\" KEY_BASE " /s", buf, sizeof(buf), &r);
     ok(r == REG_EXIT_SUCCESS, "got exit code %ld, expected 0\n", r);
     compare_query(buf, test8b, FALSE, 0);
+
+    delete_tree(HKEY_CURRENT_USER, KEY_BASE, 0);
+
+    add_key(HKEY_CURRENT_USER, KEY_BASE, 0, &hkey);
+    add_value(hkey, "Long", REG_SZ, "Some long string data", 22);
+    r = RegSetValueExW(hkey, L"Empty", 0, REG_SZ, (const BYTE *)L"", 0);
+    ok(r == ERROR_SUCCESS, "got %ld\n", r);
+    r = RegSetValueExW(hkey, L"NoNull", 0, REG_SZ, (const BYTE *)L"abc", 3 * sizeof(WCHAR));
+    ok(r == ERROR_SUCCESS, "got %ld\n", r);
+    r = RegSetValueExW(hkey, L"OddSize", 0, REG_EXPAND_SZ, (const BYTE *)L"xyz", 2 * sizeof(WCHAR) + 1);
+    ok(r == ERROR_SUCCESS, "got %ld\n", r);
+    close_key(hkey);
+
+    read_reg_output("reg query HKCU\\" KEY_BASE, buf, sizeof(buf), &r);
+    ok(r == REG_EXIT_SUCCESS, "got exit code %ld, expected 0\n", r);
+    compare_query(buf, test10, FALSE, 0);
 
     delete_tree(HKEY_CURRENT_USER, KEY_BASE, 0);
 }
