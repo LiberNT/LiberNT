@@ -966,7 +966,7 @@ LxSignalDequeue(
     _Out_ PLX_SIGINFO Info)
 {
     PLX_PROCESS Process = Thread->Process;
-    BOOLEAN Directed;
+    BOOLEAN Directed, Taken;
     LONG Signal;
 
     RtlZeroMemory(Info, sizeof(*Info));
@@ -977,26 +977,23 @@ LxSignalDequeue(
         if (!(Mask & Bit))
             continue;
         if ((ULONG64)Thread->Pending & Bit)
-        {
-            if (!((ULONG64)InterlockedAnd64(&Thread->Pending, ~(LONG64)Bit) & Bit))
-                continue;
             Directed = TRUE;
-        }
         else if ((ULONG64)Process->Pending & Bit)
-        {
-            if (!((ULONG64)InterlockedAnd64(&Process->Pending, ~(LONG64)Bit) & Bit))
-                continue;
             Directed = FALSE;
-        }
         else
-        {
             continue;
-        }
 
+        /* A sender decides under this lock whether the signal is already pending, so it is taken under it too */
         ExAcquireFastMutex(&Process->Lock);
-        *Info = Process->PendingInfo[Signal - 1];
-        LxSignalRefill(Process, Thread, Directed, Signal);
+        Taken = ((ULONG64)InterlockedAnd64(Directed ? &Thread->Pending : &Process->Pending, ~(LONG64)Bit) & Bit) != 0;
+        if (Taken)
+        {
+            *Info = Process->PendingInfo[Signal - 1];
+            LxSignalRefill(Process, Thread, Directed, Signal);
+        }
         ExReleaseFastMutex(&Process->Lock);
+        if (!Taken)
+            continue;
         if (Info->Code == LX_SI_TIMER)
             LxPosixTimerDequeued(Process, Info);
         Info->Signo = Signal;
@@ -1091,7 +1088,7 @@ LxSignalCheckPending(
     for (;;)
     {
         ULONG64 Deliverable;
-        BOOLEAN Directed;
+        BOOLEAN Directed, Taken;
         LX_SIGACTION Action;
         LX_SIGINFO Info;
         ULONG64 Bit;
@@ -1121,15 +1118,16 @@ LxSignalCheckPending(
 
         Generation = ReadNoFence(&Process->ContinueGeneration);
         Directed = ((ULONG64)Thread->Pending & Bit) != 0;
-        if (Directed)
-            InterlockedAnd64(&Thread->Pending, ~(LONG64)Bit);
-        else if (!((ULONG64)InterlockedAnd64(&Process->Pending, ~(LONG64)Bit) & Bit))
-            continue;
-
         ExAcquireFastMutex(&Process->Lock);
-        Info = Process->PendingInfo[Signal - 1];
-        LxSignalRefill(Process, Thread, Directed, Signal);
+        Taken = ((ULONG64)InterlockedAnd64(Directed ? &Thread->Pending : &Process->Pending, ~(LONG64)Bit) & Bit) != 0;
+        if (Taken)
+        {
+            Info = Process->PendingInfo[Signal - 1];
+            LxSignalRefill(Process, Thread, Directed, Signal);
+        }
         ExReleaseFastMutex(&Process->Lock);
+        if (!Taken)
+            continue;
         if (Info.Code == LX_SI_TIMER)
             LxPosixTimerDequeued(Process, &Info);
         if ((Thread->Ptrace != NULL) && (Signal != LX_SIGKILL))
