@@ -347,6 +347,8 @@ DCompGetProcessLocked(PPROCESSINFO ProcessInfo)
 {
     DCOMP_PROCESS *Data;
 
+    ASSERT(KeAreApcsDisabled());
+
     if (ProcessInfo == NULL || (ProcessInfo->W32PF_flags & W32PF_TERMINATED))
         return NULL;
     Data = ProcessInfo->CompositionData;
@@ -367,6 +369,8 @@ static DCOMP_CONNECTION *
 DCompFindConnectionLocked(ULONG SessionId)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeAreApcsDisabled());
 
     for (Entry = g_DCompConnections.Flink; Entry != &g_DCompConnections; Entry = Entry->Flink)
     {

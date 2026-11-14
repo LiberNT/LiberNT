@@ -225,6 +225,8 @@ IntVideoPortDeferredRoutine(
     IN PVOID SystemArgument1,
     IN PVOID SystemArgument2)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     PVOID HwDeviceExtension =
         &((PVIDEO_PORT_DEVICE_EXTENSION)DeferredContext)->MiniPortDeviceExtension;
     ((PMINIPORT_DPC_ROUTINE)SystemArgument1)(HwDeviceExtension, SystemArgument2);
