@@ -16,6 +16,12 @@
 /* How much of an error message the caller is given room for */
 #define KDB_ERROR_MESSAGE_MAX   128
 
+/*
+ * How deep parentheses and prefix operators may go. Each level costs a few
+ * frames of the stack the machine stopped on, which is all the debugger has.
+ */
+#define KDB_EXPRESSION_DEPTH_MAX 32
+
 typedef struct _KDB_PARSER
 {
     PCSTR Start;
@@ -23,11 +29,46 @@ typedef struct _KDB_PARSER
     PKDB_KTRAP_FRAME TrapFrame;
     PCSTR Error;
     PCSTR ErrorAt;
+    ULONG Depth;
+
+    /* Checking the text only: registers, memory and symbols are not read */
+    BOOLEAN ParseOnly;
 } KDB_PARSER, *PKDB_PARSER;
+
+typedef struct _KDB_BINARY_OPERATOR
+{
+    PCSTR Text;
+    UCHAR Length;
+    UCHAR Precedence;
+    CHAR Operator;
+} KDB_BINARY_OPERATOR;
+
+/* Longer operators come before the shorter ones they start with */
+static const KDB_BINARY_OPERATOR KdbpBinaryOperators[] =
+{
+    {"||", 2, 1, 'o'},
+    {"&&", 2, 2, 'a'},
+    {"==", 2, 6, 'e'},
+    {"!=", 2, 6, 'n'},
+    {"<=", 2, 7, 'l'},
+    {">=", 2, 7, 'g'},
+    {"<<", 2, 8, 'L'},
+    {">>", 2, 8, 'R'},
+    {"|", 1, 3, '|'},
+    {"^", 1, 4, '^'},
+    {"&", 1, 5, '&'},
+    {"<", 1, 7, '<'},
+    {">", 1, 7, '>'},
+    {"+", 1, 9, '+'},
+    {"-", 1, 9, '-'},
+    {"*", 1, 10, '*'},
+    {"/", 1, 10, '/'},
+    {"%", 1, 10, '%'}
+};
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
-static ULONGLONG KdbpParseOr(_Inout_ PKDB_PARSER Parser);
+static ULONGLONG KdbpParseBinary(_Inout_ PKDB_PARSER Parser, _In_ ULONG MinimumPrecedence);
 
 static
 VOID
@@ -54,8 +95,7 @@ KdbpSkipSpace(
 
 /*
  * Whether the next thing in the expression is this operator, and if it is,
- * steps over it. Longer operators are asked about before shorter ones that
- * start the same way, which the callers below rely on.
+ * steps over it.
  */
 static
 BOOLEAN
@@ -88,6 +128,31 @@ KdbpIsNameChar(
 
     return ((Char == '_') || (Char == '!') || (Char == '@') ||
             (Char == '.') || (Char == '$') || (Char == '?'));
+}
+
+/*
+ * Reads what an address holds for the expression. While only checking the
+ * text nothing is read: the address may not mean anything until later.
+ */
+static
+ULONGLONG
+KdbpReadValue(
+    _Inout_ PKDB_PARSER Parser,
+    _In_ ULONGLONG Address,
+    _In_ ULONG Size)
+{
+    ULONGLONG Value = 0;
+
+    if (Parser->ParseOnly)
+        return 0;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Value, (PVOID)(ULONG_PTR)Address, Size)))
+    {
+        KdbpFail(Parser, "cannot read that address");
+        return 0;
+    }
+
+    return Value;
 }
 
 /*
@@ -155,6 +220,22 @@ KdbpParseNumber(
     return Value;
 }
 
+static
+BOOLEAN
+KdbpIsRegisterName(
+    _In_ PCSTR Name)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < KdbpRegisterCount; Index++)
+    {
+        if (_stricmp(Name, KdbpRegisters[Index].Name) == 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 /*
  * A name: either a register of this processor or a symbol of a loaded image.
  * Registers are looked at first, because a person who writes `sp` means the
@@ -178,13 +259,34 @@ KdbpParseName(
     }
 
     while (KdbpIsNameChar(*Parser->Current) && (Length < sizeof(Name) - 1))
+    {
+        /* `name!=value` compares; it does not name a symbol of an image */
+        if ((Parser->Current[0] == '!') && (Parser->Current[1] == '='))
+            break;
+
         Name[Length++] = *Parser->Current++;
+    }
 
     Name[Length] = ANSI_NULL;
 
     if (Length == 0)
     {
         KdbpFail(Parser, "expected a name");
+        return 0;
+    }
+
+    if (KdbpIsNameChar(*Parser->Current) && (*Parser->Current != '!'))
+    {
+        KdbpFail(Parser, "the name is too long");
+        return 0;
+    }
+
+    if (Parser->ParseOnly)
+    {
+        if (Explicit && !KdbpIsRegisterName(Name))
+            KdbpFail(Parser, "no such register");
+
+        /* A symbol may only be found once its image is loaded */
         return 0;
     }
 
@@ -215,8 +317,16 @@ KdbpParsePrimary(
 
     if (*Parser->Current == '(')
     {
+        if (Parser->Depth >= KDB_EXPRESSION_DEPTH_MAX)
+        {
+            KdbpFail(Parser, "the expression is nested too deeply");
+            return 0;
+        }
+
         Parser->Current++;
-        Value = KdbpParseOr(Parser);
+        Parser->Depth++;
+        Value = KdbpParseBinary(Parser, 1);
+        Parser->Depth--;
 
         if (!KdbpTakeOperator(Parser, ")"))
             KdbpFail(Parser, "expected a closing parenthesis");
@@ -230,289 +340,153 @@ KdbpParsePrimary(
     return KdbpParseName(Parser);
 }
 
+/*
+ * The operators written in front of a value. They are gathered first and
+ * applied from the innermost out, so a long run of them costs no stack.
+ */
 static
 ULONGLONG
 KdbpParseUnary(
     _Inout_ PKDB_PARSER Parser)
 {
-    KdbpSkipSpace(Parser);
+    CHAR Prefixes[KDB_EXPRESSION_DEPTH_MAX];
+    ULONG Count = 0;
+    ULONGLONG Value;
 
-    if (KdbpTakeOperator(Parser, "-"))
-        return (ULONGLONG)(0 - (LONGLONG)KdbpParseUnary(Parser));
-
-    if (KdbpTakeOperator(Parser, "+"))
-        return KdbpParseUnary(Parser);
-
-    if (KdbpTakeOperator(Parser, "~"))
-        return ~KdbpParseUnary(Parser);
-
-    if (KdbpTakeOperator(Parser, "!"))
-        return (KdbpParseUnary(Parser) == 0) ? 1 : 0;
-
-    /* A star reads what the address it is given points at */
-    if (KdbpTakeOperator(Parser, "*"))
+    for (;;)
     {
-        ULONGLONG Address = KdbpParseUnary(Parser);
-        ULONG_PTR Pointed = 0;
+        KdbpSkipSpace(Parser);
 
-        if (!NT_SUCCESS(KdbpSafeReadMemory(&Pointed,
-                                           (PVOID)(ULONG_PTR)Address,
-                                           sizeof(Pointed))))
+        if ((*Parser->Current != '-') && (*Parser->Current != '+') && (*Parser->Current != '~') &&
+            (*Parser->Current != '!') && (*Parser->Current != '*'))
         {
-            KdbpFail(Parser, "cannot read that address");
+            break;
+        }
+
+        if (Count + Parser->Depth >= KDB_EXPRESSION_DEPTH_MAX)
+        {
+            KdbpFail(Parser, "the expression is nested too deeply");
             return 0;
         }
 
-        return (ULONGLONG)Pointed;
+        Prefixes[Count++] = *Parser->Current++;
     }
 
-    return KdbpParsePrimary(Parser);
+    Value = KdbpParsePrimary(Parser);
+
+    while ((Count != 0) && (Parser->Error == NULL))
+    {
+        switch (Prefixes[--Count])
+        {
+            case '-':
+                Value = (ULONGLONG)(0 - (LONGLONG)Value);
+                break;
+            case '~':
+                Value = ~Value;
+                break;
+            case '!':
+                Value = (Value == 0) ? 1 : 0;
+                break;
+            case '*':
+                /* A star reads what the address it is given points at */
+                Value = KdbpReadValue(Parser, Value, sizeof(ULONG_PTR));
+                break;
+            default:
+                break;
+        }
+    }
+
+    return Value;
+}
+
+static
+const KDB_BINARY_OPERATOR *
+KdbpPeekBinaryOperator(
+    _Inout_ PKDB_PARSER Parser)
+{
+    ULONG Index;
+
+    KdbpSkipSpace(Parser);
+
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpBinaryOperators); Index++)
+    {
+        if (strncmp(Parser->Current, KdbpBinaryOperators[Index].Text, KdbpBinaryOperators[Index].Length) == 0)
+            return &KdbpBinaryOperators[Index];
+    }
+
+    return NULL;
 }
 
 static
 ULONGLONG
-KdbpParseMultiplicative(
-    _Inout_ PKDB_PARSER Parser)
+KdbpApplyBinary(
+    _Inout_ PKDB_PARSER Parser,
+    _In_ CHAR Operator,
+    _In_ ULONGLONG Left,
+    _In_ ULONGLONG Right)
+{
+    switch (Operator)
+    {
+        case 'o': return ((Left != 0) || (Right != 0)) ? 1 : 0;
+        case 'a': return ((Left != 0) && (Right != 0)) ? 1 : 0;
+        case '|': return Left | Right;
+        case '^': return Left ^ Right;
+        case '&': return Left & Right;
+        case 'e': return (Left == Right) ? 1 : 0;
+        case 'n': return (Left != Right) ? 1 : 0;
+        case '<': return (Left < Right) ? 1 : 0;
+        case '>': return (Left > Right) ? 1 : 0;
+        case 'l': return (Left <= Right) ? 1 : 0;
+        case 'g': return (Left >= Right) ? 1 : 0;
+        case 'L': return Left << (Right & 63);
+        case 'R': return Left >> (Right & 63);
+        case '+': return Left + Right;
+        case '-': return Left - Right;
+        case '*': return Left * Right;
+        case '/':
+        case '%':
+            if (Right == 0)
+            {
+                /* While only the text is checked every value is zero */
+                if (!Parser->ParseOnly)
+                    KdbpFail(Parser, "division by zero");
+                return 0;
+            }
+            return (Operator == '/') ? (Left / Right) : (Left % Right);
+        default:
+            return 0;
+    }
+}
+
+/*
+ * The binary operators, by precedence climbing: the operators of C, with C's
+ * precedence and left to right. Both sides of && and || are always worked out:
+ * a debugger expression has nothing to make happen.
+ */
+static
+ULONGLONG
+KdbpParseBinary(
+    _Inout_ PKDB_PARSER Parser,
+    _In_ ULONG MinimumPrecedence)
 {
     ULONGLONG Value = KdbpParseUnary(Parser);
 
-    for (;;)
+    while (Parser->Error == NULL)
     {
+        const KDB_BINARY_OPERATOR *Operator = KdbpPeekBinaryOperator(Parser);
         ULONGLONG Right;
 
-        if (KdbpTakeOperator(Parser, "*"))
-        {
-            Value *= KdbpParseUnary(Parser);
-            continue;
-        }
+        if ((Operator == NULL) || (Operator->Precedence < MinimumPrecedence))
+            break;
 
-        if (KdbpTakeOperator(Parser, "/"))
-        {
-            Right = KdbpParseUnary(Parser);
+        Parser->Current += Operator->Length;
 
-            if (Right == 0)
-            {
-                KdbpFail(Parser, "division by zero");
-                return 0;
-            }
+        /* The right-hand side binds only what binds tighter, which keeps the operators left to right */
+        Right = KdbpParseBinary(Parser, Operator->Precedence + 1);
+        if (Parser->Error != NULL)
+            break;
 
-            Value /= Right;
-            continue;
-        }
-
-        if (KdbpTakeOperator(Parser, "%"))
-        {
-            Right = KdbpParseUnary(Parser);
-
-            if (Right == 0)
-            {
-                KdbpFail(Parser, "division by zero");
-                return 0;
-            }
-
-            Value %= Right;
-            continue;
-        }
-
-        return Value;
-    }
-}
-
-static
-ULONGLONG
-KdbpParseAdditive(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseMultiplicative(Parser);
-
-    for (;;)
-    {
-        if (KdbpTakeOperator(Parser, "+"))
-        {
-            Value += KdbpParseMultiplicative(Parser);
-            continue;
-        }
-
-        /* Not the start of `->`, which is not an operator here */
-        if ((Parser->Current[0] == '-') && (Parser->Current[1] != '>') &&
-            KdbpTakeOperator(Parser, "-"))
-        {
-            Value -= KdbpParseMultiplicative(Parser);
-            continue;
-        }
-
-        return Value;
-    }
-}
-
-static
-ULONGLONG
-KdbpParseShift(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseAdditive(Parser);
-
-    for (;;)
-    {
-        if (KdbpTakeOperator(Parser, "<<"))
-        {
-            Value <<= (KdbpParseAdditive(Parser) & 63);
-            continue;
-        }
-
-        if (KdbpTakeOperator(Parser, ">>"))
-        {
-            Value >>= (KdbpParseAdditive(Parser) & 63);
-            continue;
-        }
-
-        return Value;
-    }
-}
-
-static
-ULONGLONG
-KdbpParseRelational(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseShift(Parser);
-
-    for (;;)
-    {
-        if (KdbpTakeOperator(Parser, "<="))
-        {
-            Value = (Value <= KdbpParseShift(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        if (KdbpTakeOperator(Parser, ">="))
-        {
-            Value = (Value >= KdbpParseShift(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        if ((Parser->Current[0] == '<') && (Parser->Current[1] != '<') &&
-            KdbpTakeOperator(Parser, "<"))
-        {
-            Value = (Value < KdbpParseShift(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        if ((Parser->Current[0] == '>') && (Parser->Current[1] != '>') &&
-            KdbpTakeOperator(Parser, ">"))
-        {
-            Value = (Value > KdbpParseShift(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        return Value;
-    }
-}
-
-static
-ULONGLONG
-KdbpParseEquality(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseRelational(Parser);
-
-    for (;;)
-    {
-        if (KdbpTakeOperator(Parser, "=="))
-        {
-            Value = (Value == KdbpParseRelational(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        if (KdbpTakeOperator(Parser, "!="))
-        {
-            Value = (Value != KdbpParseRelational(Parser)) ? 1 : 0;
-            continue;
-        }
-
-        return Value;
-    }
-}
-
-static
-ULONGLONG
-KdbpParseBitAnd(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseEquality(Parser);
-
-    while ((Parser->Current[0] == '&') && (Parser->Current[1] != '&') &&
-           KdbpTakeOperator(Parser, "&"))
-    {
-        Value &= KdbpParseEquality(Parser);
-    }
-
-    return Value;
-}
-
-static
-ULONGLONG
-KdbpParseBitXor(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseBitAnd(Parser);
-
-    while (KdbpTakeOperator(Parser, "^"))
-        Value ^= KdbpParseBitAnd(Parser);
-
-    return Value;
-}
-
-static
-ULONGLONG
-KdbpParseBitOr(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseBitXor(Parser);
-
-    while ((Parser->Current[0] == '|') && (Parser->Current[1] != '|') &&
-           KdbpTakeOperator(Parser, "|"))
-    {
-        Value |= KdbpParseBitXor(Parser);
-    }
-
-    return Value;
-}
-
-static
-ULONGLONG
-KdbpParseAnd(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseBitOr(Parser);
-
-    while (KdbpTakeOperator(Parser, "&&"))
-    {
-        /*
-         * Both sides are worked out whichever way the first one went: the
-         * right-hand side still has to be stepped over to find the end of the
-         * expression, and a debugger expression has nothing to make happen.
-         */
-        ULONGLONG Right = KdbpParseBitOr(Parser);
-
-        Value = ((Value != 0) && (Right != 0)) ? 1 : 0;
-    }
-
-    return Value;
-}
-
-static
-ULONGLONG
-KdbpParseOr(
-    _Inout_ PKDB_PARSER Parser)
-{
-    ULONGLONG Value = KdbpParseAnd(Parser);
-
-    while (KdbpTakeOperator(Parser, "||"))
-    {
-        ULONGLONG Right = KdbpParseAnd(Parser);
-
-        Value = ((Value != 0) || (Right != 0)) ? 1 : 0;
+        Value = KdbpApplyBinary(Parser, Operator->Operator, Value, Right);
     }
 
     return Value;
@@ -552,6 +526,57 @@ KdbpReportError(
     ErrMsg[Index] = ANSI_NULL;
 }
 
+static
+BOOLEAN
+KdbpParseWhole(
+    _Inout_ PKDB_PARSER Parser,
+    _In_ PCSTR Expression,
+    _In_opt_ PKDB_KTRAP_FRAME TrapFrame,
+    _In_ BOOLEAN ParseOnly,
+    _Out_ PULONGLONG Result,
+    _Out_opt_ PLONG ErrOffset,
+    _Out_opt_ PCHAR ErrMsg)
+{
+    ULONGLONG Value;
+
+    *Result = 0;
+
+    if ((Expression == NULL) || (*Expression == ANSI_NULL))
+    {
+        if (ErrOffset != NULL)
+            *ErrOffset = 0;
+        if (ErrMsg != NULL)
+            strcpy(ErrMsg, "the expression is empty");
+
+        return FALSE;
+    }
+
+    Parser->Start = Expression;
+    Parser->Current = Expression;
+    Parser->TrapFrame = TrapFrame;
+    Parser->Error = NULL;
+    Parser->ErrorAt = NULL;
+    Parser->Depth = 0;
+    Parser->ParseOnly = ParseOnly;
+
+    Value = KdbpParseBinary(Parser, 1);
+
+    KdbpSkipSpace(Parser);
+
+    /* Anything left over means the expression was not understood as written */
+    if ((Parser->Error == NULL) && (*Parser->Current != ANSI_NULL))
+        KdbpFail(Parser, "unexpected text after the expression");
+
+    if (Parser->Error != NULL)
+    {
+        KdbpReportError(Parser, ErrOffset, ErrMsg);
+        return FALSE;
+    }
+
+    *Result = Value;
+    return TRUE;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -567,47 +592,14 @@ KdbpRpnEvaluateExpression(
     _Out_opt_ PCHAR ErrMsg)
 {
     KDB_PARSER Parser;
-    ULONGLONG Value;
 
-    *Result = 0;
-
-    if ((Expression == NULL) || (*Expression == ANSI_NULL))
-    {
-        if (ErrOffset != NULL)
-            *ErrOffset = 0;
-        if (ErrMsg != NULL)
-            strcpy(ErrMsg, "the expression is empty");
-
-        return FALSE;
-    }
-
-    Parser.Start = Expression;
-    Parser.Current = Expression;
-    Parser.TrapFrame = TrapFrame;
-    Parser.Error = NULL;
-    Parser.ErrorAt = NULL;
-
-    Value = KdbpParseOr(&Parser);
-
-    KdbpSkipSpace(&Parser);
-
-    /* Anything left over means the expression was not understood as written */
-    if ((Parser.Error == NULL) && (*Parser.Current != ANSI_NULL))
-        KdbpFail(&Parser, "unexpected text after the expression");
-
-    if (Parser.Error != NULL)
-    {
-        KdbpReportError(&Parser, ErrOffset, ErrMsg);
-        return FALSE;
-    }
-
-    *Result = Value;
-    return TRUE;
+    return KdbpParseWhole(&Parser, Expression, TrapFrame, FALSE, Result, ErrOffset, ErrMsg);
 }
 
 /*
  * Checks that an expression can be understood, for a caller that will come
- * back to it later. What comes back is the text itself, validated.
+ * back to it later, at a place whose registers and memory are not known yet.
+ * What comes back is the text itself, validated.
  */
 PVOID
 KdbpRpnParseExpression(
@@ -616,36 +608,10 @@ KdbpRpnParseExpression(
     _Out_opt_ PCHAR ErrMsg)
 {
     KDB_PARSER Parser;
+    ULONGLONG Ignored;
 
-    if ((Expression == NULL) || (*Expression == ANSI_NULL))
-    {
-        if (ErrOffset != NULL)
-            *ErrOffset = 0;
-        if (ErrMsg != NULL)
-            strcpy(ErrMsg, "the expression is empty");
-
+    if (!KdbpParseWhole(&Parser, Expression, NULL, TRUE, &Ignored, ErrOffset, ErrMsg))
         return NULL;
-    }
-
-    Parser.Start = Expression;
-    Parser.Current = Expression;
-    Parser.TrapFrame = NULL;
-    Parser.Error = NULL;
-    Parser.ErrorAt = NULL;
-
-    KdbpParseOr(&Parser);
-    KdbpSkipSpace(&Parser);
-
-    /*
-     * A name that cannot be resolved now may resolve later, once the image it
-     * belongs to is loaded, so that is not treated as an error here.
-     */
-    if ((Parser.Error != NULL) &&
-        (strcmp(Parser.Error, "no such register or symbol") != 0))
-    {
-        KdbpReportError(&Parser, ErrOffset, ErrMsg);
-        return NULL;
-    }
 
     return Expression;
 }
