@@ -43,24 +43,24 @@ WINAPI
 TryAcquireSRWLockShared(PSRWLOCK Lock)
 {
     PRTL_SRWLOCK SRWLock = (PRTL_SRWLOCK)Lock;
-    LONG_PTR CompareValue, NewValue, GotValue;
+    LONG_PTR CompareValue, NewValue;
 
-    do
+    for (;;)
     {
         CompareValue = *(volatile LONG_PTR *)&SRWLock->Ptr;
-        NewValue = ((CompareValue >> RTL_SRWLOCK_BITS) + 1) |
-                   RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        if (CompareValue == 0)
+            NewValue = (RTL_SRWLOCK_ONE << RTL_SRWLOCK_BITS) | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        else if ((CompareValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED))
+            NewValue = CompareValue + (RTL_SRWLOCK_ONE << RTL_SRWLOCK_BITS);
+        else
+            return FALSE;
 
-        CompareValue &= ~RTL_SRWLOCK_MASK | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
-        GotValue = (LONG_PTR)InterlockedCompareExchangePointer(&SRWLock->Ptr,
-                                                               (PVOID)NewValue,
-                                                               (PVOID)CompareValue);
-    } while ((GotValue != CompareValue) &&
-             (((GotValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED)) ||
-              (GotValue == 0)));
-
-    return ((GotValue & RTL_SRWLOCK_MASK) == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED)) ||
-           (GotValue == 0);
+        if ((LONG_PTR)InterlockedCompareExchangePointer(&SRWLock->Ptr, (PVOID)NewValue, (PVOID)CompareValue) ==
+            CompareValue)
+        {
+            return TRUE;
+        }
+    }
 }
 
 #ifdef _M_IX86
