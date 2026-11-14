@@ -1,0 +1,9 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Embed unchanged Fluent icons for tray lifetime regressions
+ * COPYRIGHT:   Copyright 2026 orhunnx <orhuntopcux@gmail.com>
+ */
+
+101 ICON "../../../../dll/shellext/stobject/resources/tray/battery_1.ico"
+102 ICON "../../../../dll/shellext/stobject/resources/tray/battery_4.ico"

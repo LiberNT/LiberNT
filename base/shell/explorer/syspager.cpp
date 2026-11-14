@@ -31,6 +31,19 @@ struct InternalIconData : NOTIFYICONDATA
     INT Kind;
     BOOL bPromoted;
     BOOL bRemoved;
+    volatile LONG References;
+
+    void AddRef() { InterlockedIncrement(&References); }
+    void Release() { if (InterlockedDecrement(&References) == 0) { this->~InternalIconData(); free(this); } }
+};
+
+struct TrayIconPin
+{
+    InternalIconData *Item;
+    explicit TrayIconPin(InternalIconData *Data) : Item(Data) { Item->AddRef(); }
+    ~TrayIconPin() { Item->Release(); }
+    TrayIconPin(const TrayIconPin&) = delete;
+    TrayIconPin& operator=(const TrayIconPin&) = delete;
 };
 
 static VOID
@@ -284,29 +297,49 @@ private:
         WPARAM uIcon;
         UINT uTimeout;
 
-        Info(InternalIconData * source)
+        HICON hSnapshot;
+
+        Info(InternalIconData *source, HICON Icon) : pSource(source), hSnapshot(Icon)
         {
-            pSource = source;
+            pSource->AddRef();
             StringCchCopy(szInfo, _countof(szInfo), source->szInfo);
             StringCchCopy(szInfoTitle, _countof(szInfoTitle), source->szInfoTitle);
             uIcon = source->dwInfoFlags & NIIF_ICON_MASK;
-            if (source->dwInfoFlags == NIIF_USER)
-                uIcon = reinterpret_cast<WPARAM>(source->hIcon);
+            if (uIcon == NIIF_USER)
+                uIcon = reinterpret_cast<WPARAM>(hSnapshot);
             uTimeout = source->uTimeout;
         }
+
+        ~Info()
+        {
+            if (hSnapshot) DestroyIcon(hSnapshot);
+            pSource->Release();
+        }
+
+        static Info *Create(InternalIconData *Source, HICON Icon)
+        {
+            void *Memory = malloc(sizeof(Info));
+            return Memory ? new (Memory) Info(Source, Icon) : NULL;
+        }
+
+        void Destroy() { this->~Info(); free(this); }
+
+        Info(const Info&) = delete;
+        Info& operator=(const Info&) = delete;
     };
 
     HWND m_hwndParent;
 
     CTooltips * m_tooltips;
 
-    CAtlList<Info> m_queue;
+    CSimpleArray<Info*> m_queue;
 
     CNotifyToolbar * m_toolbar;
 
     InternalIconData * m_current;
 
     int m_timer;
+    ULONG m_generation;
 
 public:
     CBalloonQueue();
@@ -315,7 +348,7 @@ public:
     void Deinit();
 
     bool OnTimer(int timerId);
-    void UpdateInfo(InternalIconData * notifyItem);
+    BOOL UpdateInfo(InternalIconData *notifyItem, HICON hBalloonIcon = NULL);
     void RemoveInfo(InternalIconData * notifyItem);
     void CloseCurrent();
 
@@ -355,6 +388,7 @@ public:
     BOOL RemoveButton(IN CONST NOTIFYICONDATA *iconData);
     HRESULT GetIconRect(IN CONST NOTIFYICONIDENTIFIER *Identifier, OUT PRECT IconRect);
     VOID ResizeImagelist();
+    BOOL SnapshotIcon(InternalIconData *Item, HICON Custom, HICON *Icon);
     bool SendNotifyCallback(InternalIconData* notifyItem, UINT uMsg);
     void RefreshToolbarMetrics(BOOL bForceRefresh);
     BOOL IsModern() { return m_bModern; }
@@ -370,6 +404,7 @@ public:
     UINT GetLayoutSignature();
 
 private:
+    VOID RemoveUnusedImage(INT Image);
     BOOL IsItemVisible(InternalIconData *pItem);
     VOID ApplyButtonSize();
     VOID NotifyParentRealign();
@@ -492,16 +527,7 @@ TrayImageListAddIcon(_In_ HIMAGELIST himl, _In_ HICON hIcon)
     return iImage;
 }
 
-static INT
-TrayImageListReplaceIcon(_In_ HIMAGELIST himl, _In_ INT iImage, _In_ HICON hIcon)
-{
-    HICON hCentred = TrayCentreIcon(himl, hIcon);
-    INT iResult = ImageList_ReplaceIcon(himl, iImage, hCentred ? hCentred : hIcon);
 
-    if (hCentred)
-        DestroyIcon(hCentred);
-    return iResult;
-}
 
 static const WCHAR szSysPagerWndClass[] = L"SysPager";
 
@@ -833,7 +859,8 @@ CBalloonQueue::CBalloonQueue() :
     m_tooltips(NULL),
     m_toolbar(NULL),
     m_current(NULL),
-    m_timer(-1)
+    m_timer(-1),
+    m_generation(0)
 {
 }
 
@@ -846,10 +873,14 @@ void CBalloonQueue::Init(HWND hwndParent, CNotifyToolbar * toolbar, CTooltips * 
 
 void CBalloonQueue::Deinit()
 {
-    if (m_timer >= 0)
-    {
-        ::KillTimer(m_hwndParent, m_timer);
-    }
+    ++m_generation;
+    m_current = NULL;
+    if (m_timer >= 0) ::KillTimer(m_hwndParent, m_timer);
+    m_timer = -1;
+    for (INT Index = m_queue.GetSize() - 1; Index >= 0; --Index)
+        m_queue[Index]->Destroy();
+    m_queue.RemoveAll();
+    if (m_tooltips) m_tooltips->TrackDeactivate();
 }
 
 bool CBalloonQueue::OnTimer(int timerId)
@@ -866,52 +897,66 @@ bool CBalloonQueue::OnTimer(int timerId)
     }
     else
     {
-        if (!m_queue.IsEmpty())
+        if (m_queue.GetSize() != 0)
         {
-            Info info = m_queue.RemoveHead();
-            Show(info);
+            Info *InfoItem = m_queue[0];
+            m_queue.RemoveAt(0);
+            Show(*InfoItem);
+            InfoItem->Destroy();
         }
     }
 
     return true;
 }
 
-void CBalloonQueue::UpdateInfo(InternalIconData * notifyItem)
+BOOL CBalloonQueue::UpdateInfo(InternalIconData *notifyItem, HICON hBalloonIcon)
 {
-    if (notifyItem->szInfo[0])
+    if (notifyItem->bRemoved)
+        return FALSE;
+    if (!notifyItem->szInfo[0])
     {
-        Info info(notifyItem);
+        Close(notifyItem, NIN_BALLOONHIDE);
+        return TRUE;
+    }
 
-        // If m_current == notifyItem, we want to replace the previous balloon even if there is a queue.
-        if (m_current != notifyItem && (m_current != NULL || !m_queue.IsEmpty()))
+    HICON Icon;
+    HICON Custom = (notifyItem->dwInfoFlags & NIIF_ICON_MASK) == NIIF_USER ? hBalloonIcon : NULL;
+    if (!m_toolbar->SnapshotIcon(notifyItem, Custom, &Icon))
+        return FALSE;
+    Info *InfoItem = Info::Create(notifyItem, Icon);
+    if (!InfoItem)
+    {
+        if (Icon) DestroyIcon(Icon);
+        return FALSE;
+    }
+    if (m_current != notifyItem && (m_current != NULL || m_queue.GetSize() != 0))
+    {
+        if (!m_queue.Add(InfoItem))
         {
-            m_queue.AddTail(info);
-        }
-        else
-        {
-            Show(info);
+            InfoItem->Destroy();
+            return FALSE;
         }
     }
     else
     {
-        Close(notifyItem, NIN_BALLOONHIDE);
+        Show(*InfoItem);
+        InfoItem->Destroy();
     }
+    return TRUE;
 }
 
-void CBalloonQueue::RemoveInfo(InternalIconData * notifyItem)
+void CBalloonQueue::RemoveInfo(InternalIconData *notifyItem)
 {
-    Close(notifyItem, NIN_BALLOONHIDE);
-
-    for (POSITION next = m_queue.GetHeadPosition(); next;)
+    for (INT Index = m_queue.GetSize() - 1; Index >= 0; --Index)
     {
-        POSITION current = next;
-        Info& info = m_queue.GetNext(next); // Note: This will advance the position
-        if (info.pSource == notifyItem)
+        if (m_queue[Index]->pSource == notifyItem)
         {
-            m_queue.RemoveAt(current);
-            break;
+            Info *InfoItem = m_queue[Index];
+            m_queue.RemoveAt(Index);
+            InfoItem->Destroy();
         }
     }
+    Close(notifyItem, NIN_BALLOONHIDE);
 }
 
 void CBalloonQueue::CloseCurrent()
@@ -944,6 +989,7 @@ void CBalloonQueue::Show(Info& info)
 
     // TODO: NIF_REALTIME, NIIF_NOSOUND, other Vista+ flags
 
+    ULONG Generation = ++m_generation;
     m_current = info.pSource;
     RECT rc;
     TBBUTTON btn;
@@ -961,13 +1007,14 @@ void CBalloonQueue::Show(Info& info)
         ::SendMessageW(::GetParent(m_hwndParent), TNWM_GETICONANCHOR,
                        (WPARAM)m_current->Kind, (LPARAM)&pt);
     }
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     const WORD x = (WORD)pt.x;
     const WORD y = (WORD)pt.y;
 
     if (m_toolbar->IsModern())
     {
         WCHAR szPath[MAX_PATH], szApp[128];
-        HICON hIcon = (info.uIcon > NIIF_ICON_MASK) ? (HICON)info.uIcon : m_current->hIcon;
+        HICON hIcon = info.hSnapshot;
 
         szApp[0] = UNICODE_NULL;
         if (TrayGetIconOwnerPath(m_current->hWnd, szPath, _countof(szPath)) &&
@@ -980,6 +1027,7 @@ void CBalloonQueue::Show(Info& info)
                               info.szInfoTitle, info.szInfo, hIcon);
     }
 
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     if (TrayNotifications_IsHidden())
     {
         Close(m_current, NIN_BALLOONTIMEOUT);
@@ -987,11 +1035,16 @@ void CBalloonQueue::Show(Info& info)
     }
 
     m_tooltips->SetTitle(info.szInfoTitle, info.uIcon);
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     m_tooltips->TrackPosition(x, y);
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     m_tooltips->SetMaxTipWidth(BALLOON_MAXWIDTH);
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     m_tooltips->UpdateTipText(m_hwndParent, reinterpret_cast<LPARAM>(m_toolbar->m_hWnd), info.szInfo);
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     m_tooltips->TrackActivate(m_hwndParent, reinterpret_cast<LPARAM>(m_toolbar->m_hWnd));
 
+    if (Generation != m_generation || info.pSource->bRemoved) return;
     int timeout = info.uTimeout;
     if (timeout < MinTimeout) timeout = MinTimeout;
     if (timeout > MaxTimeout) timeout = MaxTimeout;
@@ -1005,13 +1058,14 @@ void CBalloonQueue::Close(IN OUT InternalIconData * notifyItem, IN UINT uReason)
 {
     TRACE("HideBalloonTip called\n");
 
-    if (m_current == notifyItem)
+    if (notifyItem && m_current == notifyItem)
     {
-        m_toolbar->SendNotifyCallback(m_current, uReason);
-
-        m_current = NULL; // Prevent re-entry (TrackDeactivate will generate a TTN_POP)
-        m_tooltips->TrackDeactivate();
+        TrayIconPin Pin(notifyItem);
+        ++m_generation;
+        m_current = NULL;
         SetTimer(CooldownBetweenBalloons);
+        m_tooltips->TrackDeactivate();
+        m_toolbar->SendNotifyCallback(notifyItem, uReason);
     }
 }
 
@@ -1120,6 +1174,8 @@ HRESULT CNotifyToolbar::GetIconRect(IN CONST NOTIFYICONIDENTIFIER *Identifier, O
 
 BOOL CNotifyToolbar::AddButton(_In_ CONST NOTIFYICONDATA *iconData)
 {
+    if (!m_ImageList) return FALSE;
+    BOOL NewImage = FALSE;
     TBBUTTON tbBtn = { 0 };
     InternalIconData * notifyItem;
     WCHAR text[] = L"";
@@ -1138,8 +1194,12 @@ BOOL CNotifyToolbar::AddButton(_In_ CONST NOTIFYICONDATA *iconData)
         return FALSE;
     }
 
-    notifyItem = new InternalIconData();
+    void *Memory = malloc(sizeof(InternalIconData));
+    notifyItem = Memory ? new (Memory) InternalIconData() : NULL;
+    if (!notifyItem) return FALSE;
     ZeroMemory(notifyItem, sizeof(*notifyItem));
+    notifyItem->References = 1;
+    TrayIconPin Pin(notifyItem);
 
     notifyItem->hWnd = iconData->hWnd;
     notifyItem->uID = iconData->uID;
@@ -1182,9 +1242,15 @@ BOOL CNotifyToolbar::AddButton(_In_ CONST NOTIFYICONDATA *iconData)
             }
             tbBtn.iBitmap = iIcon;
         }
-        else
+        else if (notifyItem->hIcon)
         {
             tbBtn.iBitmap = TrayImageListAddIcon(m_ImageList, notifyItem->hIcon);
+            if (tbBtn.iBitmap < 0)
+            {
+                notifyItem->Release();
+                return FALSE;
+            }
+            NewImage = TRUE;
         }
     }
 
@@ -1209,13 +1275,26 @@ BOOL CNotifyToolbar::AddButton(_In_ CONST NOTIFYICONDATA *iconData)
 
     /* TODO: support VERSION_4 (NIF_GUID, NIF_REALTIME, NIF_SHOWTIP) */
 
-    CToolbar::InsertButton(InsertIndex(notifyItem->Kind), &tbBtn);
+    if (!CToolbar::InsertButton(InsertIndex(notifyItem->Kind), &tbBtn))
+    {
+        if (NewImage) RemoveUnusedImage(tbBtn.iBitmap);
+        notifyItem->Release();
+        return FALSE;
+    }
+    if (notifyItem->bRemoved) return FALSE;
     ApplyButtonSize();
     UpdateVisibility();
 
     if (iconData->uFlags & NIF_INFO)
     {
-        m_BalloonQueue->UpdateInfo(notifyItem);
+        BOOL Result = m_BalloonQueue->UpdateInfo(notifyItem, iconData->hBalloonIcon);
+        if (!Result && !notifyItem->bRemoved)
+        {
+            InternalIconData *Current;
+            if (FindItem(notifyItem->hWnd, notifyItem->uID, &Current) >= 0 && Current == notifyItem)
+                RemoveButton(notifyItem);
+        }
+        return Result && !notifyItem->bRemoved;
     }
 
     return TRUE;
@@ -1248,6 +1327,7 @@ BOOL CNotifyToolbar::SwitchVersion(_In_ CONST NOTIFYICONDATA *iconData)
 
 BOOL CNotifyToolbar::UpdateButton(_In_ CONST NOTIFYICONDATA *iconData)
 {
+    if (!m_ImageList) return FALSE;
     InternalIconData * notifyItem;
     TBBUTTONINFO tbbi = { 0 };
 
@@ -1265,47 +1345,57 @@ BOOL CNotifyToolbar::UpdateButton(_In_ CONST NOTIFYICONDATA *iconData)
         return FALSE;
     }
 
+    if (notifyItem->bRemoved) return FALSE;
+    TrayIconPin Pin(notifyItem);
     TBBUTTON btn;
-    GetButton(index, &btn);
+    if (!GetButton(index, &btn)) return FALSE;
     int oldIconIndex = btn.iBitmap;
 
     tbbi.cbSize = sizeof(tbbi);
     tbbi.dwMask = TBIF_BYINDEX;
 
+    DWORD State = notifyItem->dwState;
     if (iconData->uFlags & NIF_STATE)
-    {
-        notifyItem->dwState &= ~iconData->dwStateMask;
-        notifyItem->dwState |= (iconData->dwState & iconData->dwStateMask);
-    }
-
-    if (iconData->uFlags & NIF_MESSAGE)
-    {
-        notifyItem->uCallbackMessage = iconData->uCallbackMessage;
-    }
-
+        State = (State & ~iconData->dwStateMask) | (iconData->dwState & iconData->dwStateMask);
+    BOOL NewImage = FALSE;
+    BOOL UpdateIdentity = FALSE;
     if (iconData->uFlags & NIF_ICON)
     {
-        BOOL hasSharedIcon = notifyItem->dwState & NIS_SHAREDICON;
-        if (hasSharedIcon)
+        INT Image = -1;
+        if (State & NIS_SHAREDICON)
         {
-            INT iIcon = FindExistingSharedIcon(iconData->hIcon);
-            if (iIcon >= 0)
-            {
-                notifyItem->hIcon = iconData->hIcon;
-                tbbi.dwMask |= TBIF_IMAGE;
-                tbbi.iImage = iIcon;
-            }
-            else
-            {
-                TRACE("Shared icon requested, but HICON not found!!! IGNORING!\n");
-            }
+            Image = FindExistingSharedIcon(iconData->hIcon);
+            UpdateIdentity = Image >= 0;
         }
         else
         {
-            notifyItem->hIcon = iconData->hIcon;
-            tbbi.dwMask |= TBIF_IMAGE;
-            tbbi.iImage = TrayImageListReplaceIcon(m_ImageList, oldIconIndex, notifyItem->hIcon);
+            if (iconData->hIcon)
+            {
+                Image = TrayImageListAddIcon(m_ImageList, iconData->hIcon);
+                if (Image < 0) return FALSE;
+                NewImage = TRUE;
+            }
+            UpdateIdentity = TRUE;
         }
+        if (UpdateIdentity)
+        {
+            tbbi.dwMask |= TBIF_IMAGE;
+            tbbi.iImage = Image;
+        }
+    }
+    if (!SetButtonInfo(index, &tbbi))
+    {
+        if (NewImage) RemoveUnusedImage(tbbi.iImage);
+        return FALSE;
+    }
+    if (notifyItem->bRemoved) return FALSE;
+    notifyItem->dwState = State;
+    if (iconData->uFlags & NIF_MESSAGE)
+        notifyItem->uCallbackMessage = iconData->uCallbackMessage;
+    if (UpdateIdentity)
+    {
+        notifyItem->hIcon = iconData->hIcon;
+        RemoveUnusedImage(oldIconIndex);
     }
 
     if (iconData->uFlags & NIF_TIP)
@@ -1324,12 +1414,12 @@ BOOL CNotifyToolbar::UpdateButton(_In_ CONST NOTIFYICONDATA *iconData)
 
     /* TODO: support VERSION_4 (NIF_GUID, NIF_REALTIME, NIF_SHOWTIP) */
 
-    SetButtonInfo(index, &tbbi);
     UpdateVisibility();
 
     if (iconData->uFlags & NIF_INFO)
     {
-        m_BalloonQueue->UpdateInfo(notifyItem);
+        BOOL Result = m_BalloonQueue->UpdateInfo(notifyItem, iconData->hBalloonIcon);
+        return Result && !notifyItem->bRemoved;
     }
 
     return TRUE;
@@ -1352,34 +1442,13 @@ BOOL CNotifyToolbar::RemoveButton(_In_ CONST NOTIFYICONDATA *iconData)
         return FALSE;
     notifyItem->bRemoved = TRUE;
 
-    if (!(notifyItem->dwState & NIS_SHAREDICON))
+    TBBUTTON Button;
+    if (!GetButton(index, &Button) || !DeleteButton(index))
     {
-        TBBUTTON btn;
-        GetButton(index, &btn);
-        int oldIconIndex = btn.iBitmap;
-        ImageList_Remove(m_ImageList, oldIconIndex);
-
-        // Update other icons!
-        int count = GetButtonCount();
-        for (int i = 0; i < count; i++)
-        {
-            TBBUTTON btn;
-            GetButton(i, &btn);
-
-            if (btn.iBitmap > oldIconIndex)
-            {
-                TBBUTTONINFO tbbi2 = { 0 };
-                tbbi2.cbSize = sizeof(tbbi2);
-                tbbi2.dwMask = TBIF_BYINDEX | TBIF_IMAGE;
-                tbbi2.iImage = btn.iBitmap-1;
-                SetButtonInfo(i, &tbbi2);
-            }
-        }
+        notifyItem->bRemoved = FALSE;
+        return FALSE;
     }
-
-    m_BalloonQueue->RemoveInfo(notifyItem);
-
-    DeleteButton(index);
+    RemoveUnusedImage(Button.iBitmap);
     if (m_iPressed == index)
     {
         m_iPressed = -1;
@@ -1390,7 +1459,8 @@ BOOL CNotifyToolbar::RemoveButton(_In_ CONST NOTIFYICONDATA *iconData)
         m_iPressed--;
     }
 
-    delete notifyItem;
+    m_BalloonQueue->RemoveInfo(notifyItem);
+    notifyItem->Release();
 
     UpdateVisibility();
 
@@ -1586,48 +1656,86 @@ LRESULT CNotifyToolbar::DrawModernItem(NMCUSTOMDRAW *pcd)
     return CDRF_SKIPDEFAULT;
 }
 
+VOID CNotifyToolbar::RemoveUnusedImage(INT Image)
+{
+    if (Image < 0 || !m_ImageList) return;
+    INT Count = GetButtonCount();
+    for (INT Index = 0; Index < Count; ++Index)
+    {
+        TBBUTTON Button;
+        if (!GetButton(Index, &Button) || Button.iBitmap == Image) return;
+    }
+    if (!ImageList_Remove(m_ImageList, Image)) return;
+    for (INT Index = 0; Index < Count; ++Index)
+    {
+        TBBUTTON Button;
+        if (GetButton(Index, &Button) && Button.iBitmap > Image)
+        {
+            TBBUTTONINFO Info = {sizeof(Info), TBIF_BYINDEX | TBIF_IMAGE};
+            Info.iImage = Button.iBitmap - 1;
+            SetButtonInfo(Index, &Info);
+        }
+    }
+}
+
+BOOL CNotifyToolbar::SnapshotIcon(InternalIconData *Item, HICON Custom, HICON *Icon)
+{
+    *Icon = NULL;
+    if (Custom)
+    {
+        *Icon = CopyIcon(Custom);
+        return *Icon != NULL;
+    }
+    INT Index = FindItem(Item->hWnd, Item->uID, NULL);
+    TBBUTTON Button;
+    if (Index < 0 || !GetButton(Index, &Button)) return FALSE;
+    if (Button.iBitmap < 0) return TRUE;
+    *Icon = ImageList_GetIcon(m_ImageList, Button.iBitmap, ILD_NORMAL);
+    return *Icon != NULL;
+}
+
 VOID CNotifyToolbar::ResizeImagelist()
 {
     int cx, cy;
-    HIMAGELIST iml;
-
-    if (!ImageList_GetIconSize(m_ImageList, &cx, &cy))
-        return;
-
-    if (cx == TrayIconRenderSize() && cy == TrayIconRenderSize())
-        return;
-
-    iml = ImageList_Create(TrayIconRenderSize(), TrayIconRenderSize(), ILC_COLOR32 | ILC_MASK, 0, 1000);
-    if (!iml)
-        return;
-
-    ImageList_Destroy(m_ImageList);
-    m_ImageList = iml;
-    SetImageList(m_ImageList);
-
-    int count = GetButtonCount();
-    for (int i = 0; i < count; i++)
+    if (!ImageList_GetIconSize(m_ImageList, &cx, &cy) ||
+        (cx == TrayIconRenderSize() && cy == TrayIconRenderSize())) return;
+    HIMAGELIST ImageList = ImageList_Create(TrayIconRenderSize(), TrayIconRenderSize(),
+                                           ILC_COLOR32 | ILC_MASK, 0, 1000);
+    if (!ImageList) return;
+    INT Count = ImageList_GetImageCount(m_ImageList);
+    for (INT Index = 0; Index < Count; ++Index)
     {
-        InternalIconData * data = GetItemData(i);
-        BOOL hasSharedIcon = data->dwState & NIS_SHAREDICON;
-        INT iIcon = hasSharedIcon ? FindExistingSharedIcon(data->hIcon) : -1;
-        if (iIcon < 0)
-            iIcon = TrayImageListAddIcon(iml, data->hIcon);
-        TBBUTTONINFO tbbi = { sizeof(tbbi), TBIF_BYINDEX | TBIF_IMAGE, 0, iIcon};
-        SetButtonInfo(i, &tbbi);
+        HICON Icon = ImageList_GetIcon(m_ImageList, Index, ILD_NORMAL);
+        INT Added = Icon ? ImageList_AddIcon(ImageList, Icon) : -1;
+        if (Icon) DestroyIcon(Icon);
+        if (Added != Index)
+        {
+            ImageList_Destroy(ImageList);
+            return;
+        }
     }
-
+    HIMAGELIST Previous = m_ImageList;
+    m_ImageList = ImageList;
+    SetImageList(m_ImageList);
+    ImageList_Destroy(Previous);
     ApplyButtonSize();
 }
 
 LRESULT CNotifyToolbar::OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 {
-    if (m_ImageList)
+    HIMAGELIST ImageList = m_ImageList;
+    m_ImageList = NULL;
+    SetImageList(NULL);
+    m_BalloonQueue->Deinit();
+    for (INT Index = GetButtonCount() - 1; Index >= 0; --Index)
     {
-        ImageList_Destroy(m_ImageList);
-        m_ImageList = NULL;
+        InternalIconData *Item = GetItemData(Index);
+        Item->bRemoved = TRUE;
+        DeleteButton(Index);
+        Item->Release();
     }
-    
+    if (ImageList) ImageList_Destroy(ImageList);
+
     return 0;
 }
 
