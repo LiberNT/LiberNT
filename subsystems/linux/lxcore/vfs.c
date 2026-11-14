@@ -1282,56 +1282,107 @@ LxMountFindLocked(
     _In_ PCSTR Path,
     _Out_opt_ PCSTR *Relative)
 {
-    PLX_MOUNT Leading[LX_MOUNT_NESTING];
+    PLX_MOUNT Leading[LX_MOUNT_NESTING], Aliased[LX_MOUNT_NESTING];
     SIZE_T LeadingLength[LX_MOUNT_NESTING];
-    ULONG Count = 0;
+    ULONG Count = 0, AliasCount = 0;
     BOOLEAN Complete = TRUE;
     PLIST_ENTRY Entry;
     PLX_MOUNT Best = NULL;
     SIZE_T BestLength = 0;
 
-    for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
+    /* One pass picks out the few mounts the path can belong to; most differ from it within two characters */
+    for (Entry = Ns->Mnt.Mounts.Flink; Complete && (Entry != &Ns->Mnt.Mounts); Entry = Entry->Flink)
     {
         PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
         BOOLEAN IsRoot = (Mount->Target[0] == '/') && (Mount->Target[1] == '\0');
         SIZE_T Length = 0;
 
-        if (!IsRoot && !LxPathBelow(Path, Mount->Target, &Length))
-            continue;
-        if (Count == LX_MOUNT_NESTING)
+        if (IsRoot ||
+            (((Mount->Target[0] == '\0') ||
+              ((Mount->Target[0] == Path[0]) && ((Mount->Target[1] == '\0') || (Mount->Target[1] == Path[1])))) &&
+             LxPathBelow(Path, Mount->Target, &Length)))
         {
-            Complete = FALSE;
-            break;
+            if (Count == LX_MOUNT_NESTING)
+            {
+                Complete = FALSE;
+            }
+            else
+            {
+                Leading[Count] = Mount;
+                LeadingLength[Count] = Length;
+                Count++;
+            }
         }
-        Leading[Count] = Mount;
-        LeadingLength[Count] = Length;
-        Count++;
+        else if (Mount->Alias != NULL)
+        {
+            if (AliasCount == LX_MOUNT_NESTING)
+                Complete = FALSE;
+            else
+                Aliased[AliasCount++] = Mount;
+        }
     }
 
-    for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
+    if (Complete)
     {
-        PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
-        BOOLEAN IsRoot = (Mount->Target[0] == '/') && (Mount->Target[1] == '\0');
-        SIZE_T Length = 1;
-        BOOLEAN Match;
+        ULONG Lead = 0, Alias = 0;
 
-        if (IsRoot)
-            Match = TRUE;
-        else
-            Match = LxPathBelow(Path, Mount->Target, &Length);
-        if (Match && (Length != 0) && (Length >= BestLength) &&
-            (Complete ? LxMountCoveredAmong(Mount, IsRoot ? 0 : Length, Leading, LeadingLength, Count) :
-                        LxMountCovered(Ns, Mount)))
+        /* The choice follows the order of the mount list: a later mount wins a tie */
+        for (Entry = Ns->Mnt.Mounts.Flink; (Lead < Count) || (Alias < AliasCount); Entry = Entry->Flink)
         {
-            Match = FALSE;
+            PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+            BOOLEAN IsRoot = FALSE, Match = FALSE;
+            SIZE_T Length = 0;
+
+            ASSERT(Entry != &Ns->Mnt.Mounts);
+            if ((Lead < Count) && (Leading[Lead] == Mount))
+            {
+                IsRoot = (Mount->Target[0] == '/') && (Mount->Target[1] == '\0');
+                Length = IsRoot ? 1 : LeadingLength[Lead];
+                Match = !((Length != 0) && (Length >= BestLength) &&
+                          LxMountCoveredAmong(Mount, LeadingLength[Lead], Leading, LeadingLength, Count));
+                Lead++;
+                if (!Match && (Mount->Alias != NULL))
+                    Match = LxPathBelow(Path, Mount->Alias, &Length);
+            }
+            else if ((Alias < AliasCount) && (Aliased[Alias] == Mount))
+            {
+                Match = LxPathBelow(Path, Mount->Alias, &Length);
+                Alias++;
+            }
+            else
+            {
+                continue;
+            }
+            if (Match && ((Best == NULL) || (Length >= BestLength)))
+            {
+                Best = Mount;
+                BestLength = IsRoot ? 0 : Length;
+            }
         }
-        if (!Match && (Mount->Alias != NULL))
-            Match = LxPathBelow(Path, Mount->Alias, &Length);
-
-        if (Match && ((Best == NULL) || (Length >= BestLength)))
+    }
+    else
+    {
+        for (Entry = Ns->Mnt.Mounts.Flink; Entry != &Ns->Mnt.Mounts; Entry = Entry->Flink)
         {
-            Best = Mount;
-            BestLength = IsRoot ? 0 : Length;
+            PLX_MOUNT Mount = CONTAINING_RECORD(Entry, LX_MOUNT, Link);
+            BOOLEAN IsRoot = (Mount->Target[0] == '/') && (Mount->Target[1] == '\0');
+            SIZE_T Length = 1;
+            BOOLEAN Match;
+
+            if (IsRoot)
+                Match = TRUE;
+            else
+                Match = LxPathBelow(Path, Mount->Target, &Length);
+            if (Match && (Length != 0) && (Length >= BestLength) && LxMountCovered(Ns, Mount))
+                Match = FALSE;
+            if (!Match && (Mount->Alias != NULL))
+                Match = LxPathBelow(Path, Mount->Alias, &Length);
+
+            if (Match && ((Best == NULL) || (Length >= BestLength)))
+            {
+                Best = Mount;
+                BestLength = IsRoot ? 0 : Length;
+            }
         }
     }
 
