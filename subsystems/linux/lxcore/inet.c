@@ -1112,6 +1112,8 @@ LxInetAccept(
 
     if (Flags & ~(LX_SOCK_NONBLOCK | LX_SOCK_CLOEXEC))
         return -LX_EINVAL;
+    if (Socket->Type != LX_SOCK_STREAM)
+        return -LX_EOPNOTSUPP;
     if (Socket->State != LX_INET_LISTENING)
         return -LX_EINVAL;
 
@@ -1228,7 +1230,7 @@ LxInetSendmsg(
     LONG64 Result;
 
     if (Socket->ShutWrite)
-        return (Flags & LX_MSG_NOSIGNAL) ? -LX_EPIPE : LxWriteFailed(LX_EPIPE);
+        return ((Flags & LX_MSG_NOSIGNAL) || (Socket->Type != LX_SOCK_STREAM)) ? -LX_EPIPE : LxWriteFailed(LX_EPIPE);
 
     if (Socket->Type == LX_SOCK_DGRAM)
     {
@@ -1309,7 +1311,7 @@ LxInetSendmsg(
     LxFree(Vectors);
     if (Done != 0)
         return (LONG64)Done;
-    if ((Result == -LX_EPIPE) || (Result == -LX_ECONNRESET))
+    if (((Result == -LX_EPIPE) || (Result == -LX_ECONNRESET)) && (Socket->Type == LX_SOCK_STREAM))
         return (Flags & LX_MSG_NOSIGNAL) ? Result : LxWriteFailed((LONG)-Result);
     return Result;
 }
@@ -1375,13 +1377,15 @@ LxInetRecvmsg(
     ULONG64 Total, Done = 0;
     BOOLEAN Truncated = FALSE;
     PUCHAR Bounce;
+    BOOLEAN Drained;
     LONG64 Result;
 
     if (Flags & LX_MSG_OOB)
         return -LX_EINVAL;
     if ((Socket->Type == LX_SOCK_STREAM) && (Socket->State != LX_INET_CONNECTED))
         return -LX_ENOTCONN;
-    if (Socket->ShutRead)
+    Drained = Socket->ShutRead && (Socket->Type == LX_SOCK_DGRAM);
+    if (Socket->ShutRead && !Drained)
         return 0;
 
     Result = LxSocketGatherIov(Header, KernelIov, &Vectors, &Total);
@@ -1402,11 +1406,13 @@ LxInetRecvmsg(
         LONG64 Received;
 
         Received = LxInetTransfer(File, Socket, FALSE, Bounce, Chunk,
-                                  ((Done != 0) && !(Flags & LX_MSG_WAITALL)) ? (Flags | LX_MSG_DONTWAIT) : Flags,
+                                  (Drained || ((Done != 0) && !(Flags & LX_MSG_WAITALL))) ? (Flags | LX_MSG_DONTWAIT) :
+                                                                                           Flags,
                                   (Socket->Type == LX_SOCK_DGRAM) ? &Source : NULL, &Truncated);
         if (Received < 0)
         {
-            Result = Received;
+            /* A datagram socket shut for reading still hands out what is queued, then reads as ended */
+            Result = (Drained && (Received == -LX_EAGAIN) && !LxInetNonBlocking(File, Flags)) ? 0 : Received;
             break;
         }
         if (Socket->Type == LX_SOCK_DGRAM)
@@ -1474,7 +1480,7 @@ LxInetShutdown(
 
     if (How > LX_SHUT_RDWR)
         return -LX_EINVAL;
-    if ((Socket->Type == LX_SOCK_STREAM) && (Socket->State != LX_INET_CONNECTED))
+    if ((Socket->Type == LX_SOCK_STREAM) ? (Socket->State != LX_INET_CONNECTED) : !Socket->PeerValid)
         return -LX_ENOTCONN;
 
     RtlZeroMemory(&Disconnect, sizeof(Disconnect));
@@ -1757,6 +1763,10 @@ LxInetGetsockopt(
             case LX_SO_ACCEPTCONN:
                 Value = (Socket->State == LX_INET_LISTENING);
                 return LxSockoptReturn(Call, &Value, sizeof(Value));
+            case LX_SO_BINDTODEVICE:
+                /* TODO: binding a socket to one interface is not implemented, so no name is ever reported */
+                Value = 0;
+                return LxSockoptReturn(Call, &Value, 0);
             case LX_SO_REUSEADDR:
                 Value = Socket->ReuseAddress;
                 return LxSockoptReturn(Call, &Value, sizeof(Value));

@@ -1235,6 +1235,7 @@ typedef struct _LX_SOCKADDR_IN6
 #define LX_SO_TIMESTAMPNS   35
 #define LX_SO_MARK          36
 #define LX_SO_BINDTOIFINDEX 62
+#define LX_SO_BINDTODEVICE  25
 #define LX_SO_ACCEPTCONN    30
 #define LX_SO_PEERSEC       31
 #define LX_SO_SNDBUFFORCE   32
