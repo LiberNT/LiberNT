@@ -12,6 +12,7 @@
 #include "filesup.h"
 #include <pseh/pseh2.h>
 #include <ndk/umfuncs.h> // Ldr* functions
+#include <ndk/sefuncs.h> // NtSetSecurityObject
 
 #define NDEBUG
 #include <debug.h>
@@ -131,6 +132,76 @@ SetupCreateDirectory(
     return Status;
 }
 
+static NTSTATUS
+SetupClearFileDacl(
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes)
+{
+    SECURITY_DESCRIPTOR SecurityDescriptor;
+    IO_STATUS_BLOCK IoStatusBlock;
+    HANDLE FileHandle;
+    NTSTATUS Status;
+
+    Status = NtOpenFile(&FileHandle,
+                        WRITE_DAC,
+                        ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_NON_DIRECTORY_FILE | FILE_OPEN_FOR_BACKUP_INTENT);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = RtlCreateSecurityDescriptor(&SecurityDescriptor,
+                                         SECURITY_DESCRIPTOR_REVISION);
+    if (NT_SUCCESS(Status))
+    {
+        /* Absent, not empty: an absent list grants access rather than denying it */
+        Status = RtlSetDaclSecurityDescriptor(&SecurityDescriptor, FALSE, NULL, FALSE);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = NtSetSecurityObject(FileHandle,
+                                     DACL_SECURITY_INFORMATION,
+                                     &SecurityDescriptor);
+    }
+
+    NtClose(FileHandle);
+    return Status;
+}
+
+static NTSTATUS
+SetupOpenFileForDelete(
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ACCESS_MASK ExtraAccess,
+    _In_ BOOLEAN ForceDelete,
+    _Out_ PHANDLE FileHandle)
+{
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+    ULONG Attempt;
+
+    for (Attempt = 0; Attempt < 2; ++Attempt)
+    {
+        Status = NtOpenFile(FileHandle,
+                            DELETE | FILE_READ_ATTRIBUTES | ExtraAccess,
+                            ObjectAttributes,
+                            &IoStatusBlock,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            FILE_NON_DIRECTORY_FILE | FILE_OPEN_FOR_BACKUP_INTENT);
+        if (Status != STATUS_ACCESS_DENIED || !ForceDelete || Attempt != 0)
+            return Status;
+
+        /*
+         * An inbox file carries a descriptor that grants full access to the
+         * trusted installer alone, so setup cannot open it for delete at all.
+         * Take the discretionary list off it and attempt the open once more.
+         */
+        if (!NT_SUCCESS(SetupClearFileDacl(ObjectAttributes)))
+            return STATUS_ACCESS_DENIED;
+    }
+
+    return Status;
+}
+
 NTSTATUS
 SetupDeleteFile(
     IN PCWSTR FileName,
@@ -153,13 +224,10 @@ SetupDeleteFile(
                                NULL);
 
 Retry: // We go back there once if RetryOnce == TRUE
-    Status = NtOpenFile(&FileHandle,
-                        DELETE | FILE_READ_ATTRIBUTES |
-                        (RetryOnce ? FILE_WRITE_ATTRIBUTES : 0),
-                        &ObjectAttributes,
-                        &IoStatusBlock,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                        FILE_NON_DIRECTORY_FILE | FILE_OPEN_FOR_BACKUP_INTENT);
+    Status = SetupOpenFileForDelete(&ObjectAttributes,
+                                    RetryOnce ? FILE_WRITE_ATTRIBUTES : 0,
+                                    ForceDelete,
+                                    &FileHandle);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtOpenFile failed with Status 0x%08lx\n", Status);
