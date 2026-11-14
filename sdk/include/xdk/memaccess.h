@@ -12,8 +12,8 @@ $endif()
 #define PF_TEMPORAL_LEVEL_2 _MM_HINT_T1
 #define PF_TEMPORAL_LEVEL_3 _MM_HINT_T2
 #define PF_NON_TEMPORAL_LEVEL_ALL _MM_HINT_NTA
-#define _AcquireBarrier()
-#define _ReleaseBarrier()
+#define _AcquireBarrier()                    _ReadWriteBarrier()
+#define _ReleaseBarrier()                    _ReadWriteBarrier()
 #elif defined(_M_ARM) || _VCRT_ARM64_INTRINSICS
 #define PreFetchCacheLine(l,a)               __prefetch((const void *) (a))
 #define PrefetchForWrite(p)                  __prefetch((const void *) (p))
