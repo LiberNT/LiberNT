@@ -114,6 +114,7 @@ MyAllocatePool(IN SIZE_T PoolSize,
 
 #if _USE_SAC_HEAP_ALLOCATOR_
     GlobalDescriptor = GlobalMemoryList;
+    /* FIXME: MemoryLock is already held here and OldIrql is overwritten; enabling this allocator self-deadlocks */
     KeAcquireSpinLock(&MemoryLock, &OldIrql);
     while (GlobalDescriptor)
     {
