@@ -239,6 +239,16 @@ KiSelectTargetProcessor(
     IdleSet = Affinity & KiIdleSummary;
     if (IdleSet != 0)
     {
+        ULONG Current = KeGetCurrentProcessorNumber();
+        KAFFINITY CurrentMask = AFFINITY_MASK(Current);
+
+        /* An idle processor readying a thread from its own interrupt or DPC runs it next, without waking another */
+        if ((IdleSet & CurrentMask) &&
+            (!(IdleSet & KiHeteroPerformanceSet) || (CurrentMask & KiHeteroPerformanceSet)))
+        {
+            return Current;
+        }
+
         /* A processor in the middle of a DPC is idle only in name: a thread sent there waits for the routine to end */
         QuietSet = IdleSet & ~KiProcessorsRunningDpcs(IdleSet);
         if (QuietSet != 0)
@@ -367,6 +377,7 @@ KiDeferredReadyThread(
     PKTHREAD Current, Displaced;
     KPRIORITY Priority;
     ULONG Processor;
+    BOOLEAN Wake;
 
     ASSERT(Thread->State == DeferredReady);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
@@ -420,13 +431,15 @@ KiDeferredReadyThread(
         Thread->NextProcessor = Processor;
         Prcb->NextThread = Thread;
         KiMarkProcessorBusy(Prcb);
+        Wake = (Current != Prcb->IdleThread) || KiArchIdleProcessorNeedsWake(Prcb);
 
         KiReleasePrcbLock(Prcb);
 
         if (SmpDbgEnabled)
             SmpDbgSchedulerIpi(Processor, Thread, (ULONG)Priority);
 
-        KiRescheduleThread(TRUE, Processor);
+        if (Wake)
+            KiRescheduleThread(TRUE, Processor);
         return;
     }
 

@@ -44,6 +44,8 @@
 /* TCR_EL1.AS is clear, so the implemented process tag is TTBR1[55:48]. */
 #define KI_ARM64_TLBI_ASID_MASK 0x00FF000000000000ULL
 
+#define KI_ARM64_IDLE_POLLING 2
+
 #define ARM64_SYNC_BARRIER() do { __dmb(_ARM64_BARRIER_SY); __isb(_ARM64_BARRIER_SY); } while (0)
 
 #define ARM64_PSTATE_ASYNC_ABORT_MASK 0x100UL
@@ -165,6 +167,18 @@ KeInvalidateTlbEntry(
     ARM64_DSB(ISH);
     ARM64_ISB();
 }
+
+FORCEINLINE
+BOOLEAN
+KiArm64IdleProcessorNeedsWake(
+    _In_ PKPRCB Prcb)
+{
+    /* Pairs with the barrier after the idle loop publishes or retracts its awake state */
+    ARM64_DMB(ISH);
+    return ReadNoFence(&Prcb->Sleeping) != KI_ARM64_IDLE_POLLING;
+}
+
+#define KiArchIdleProcessorNeedsWake(Prcb) KiArm64IdleProcessorNeedsWake(Prcb)
 
 FORCEINLINE
 ULONG64

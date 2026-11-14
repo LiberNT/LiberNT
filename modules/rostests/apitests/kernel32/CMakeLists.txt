@@ -200,6 +200,7 @@ list(APPEND SOURCE
     VolumeMountPoints.c
     WaitFileHandle.c
     WaitForMultipleObjects.c
+    WakeIdleProcessor.c
     WerRegisterFile.c
     WerRegistration.c
     WerReporting.c
