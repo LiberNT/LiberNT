@@ -250,6 +250,9 @@ ApplePdTimerDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!InterlockedCompareExchange(&Device->Running, 1, 1) || InterlockedExchange(&Device->WorkQueued, 1))
         return;
     IoQueueWorkItem(Device->WorkItem, ApplePdWork, DelayedWorkQueue, Device);

@@ -170,6 +170,8 @@ BOOLEAN
 UasQuiescedLocked(
     _In_ PUAS_ADAPTER Adapter)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     return (Adapter->Resetting || Adapter->Stopped) && Adapter->ActiveTasks == 0 && Adapter->DrainingTasks == 0 &&
            Adapter->ManagementTask.State == UasTaskFree;
 }
@@ -180,6 +182,8 @@ UasTasksBusyLocked(
     _In_ PUAS_ADAPTER Adapter)
 {
     ULONG Index;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Index = 0; Index < Adapter->TaskCount; Index++)
     {
@@ -516,6 +520,9 @@ UasQueuePortResetLocked(
     _Out_ PBOOLEAN Queue)
 {
     *Queue = FALSE;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Adapter->PortResetQueued || Adapter->Stopped)
         return;
     Adapter->PortResetQueued = TRUE;
@@ -1206,6 +1213,8 @@ UasCollectActiveLocked(
     _In_ PUAS_ADAPTER Adapter,
     _Out_writes_(UAS_MAX_TASKS + 1) PUAS_TASK *Tasks)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ULONG Index, Count = 0;
 
     for (Index = 0; Index < Adapter->TaskCount; Index++)

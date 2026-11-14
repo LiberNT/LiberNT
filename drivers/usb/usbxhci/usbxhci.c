@@ -2264,6 +2264,8 @@ BOOLEAN
 XHCI_HasActiveTransfersLocked(
     _In_ PXHCI_ENDPOINT Endpoint)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Endpoint)
         return FALSE;
 
@@ -2279,6 +2281,8 @@ XHCI_GetActiveTransferHeadLocked(
     _In_ PXHCI_ENDPOINT Endpoint)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (!Endpoint)
         return NULL;
@@ -2300,6 +2304,8 @@ VOID
 XHCI_UpdateActiveTransferHeadLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Endpoint)
         return;
 
@@ -2313,6 +2319,8 @@ XHCI_IsTransferActiveLocked(
     _In_opt_ PXHCI_TRANSFER Transfer)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (!Endpoint || !Transfer)
         return FALSE;
@@ -2339,6 +2347,8 @@ XHCI_InsertActiveTransferLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint,
     _Inout_ PXHCI_TRANSFER Transfer)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Endpoint || !Transfer)
         return;
 
@@ -2359,6 +2369,8 @@ XHCI_RemoveActiveTransferLocked(
     _Inout_ PXHCI_TRANSFER Transfer)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (!Endpoint || !Transfer)
         return;
@@ -2416,6 +2428,8 @@ VOID
 XHCI_ClearActiveTransfersLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Endpoint)
         return;
 
@@ -2453,6 +2467,8 @@ XHCI_FindActiveTransferByEventLocked(
     PXHCI_TRANSFER RangeMatch = NULL;
 
     UNREFERENCED_PARAMETER(CompletionCode);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (!Endpoint)
         return NULL;
@@ -7669,6 +7685,8 @@ XHCI_TransferPollDpc(
     UNREFERENCED_PARAMETER(SystemArg1);
     UNREFERENCED_PARAMETER(SystemArg2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Extension)
         return;
 
@@ -7780,12 +7798,20 @@ XHCI_CompleteDeferredTransferLocked(
     PXHCI_ENDPOINT Endpoint;
     PUSBPORT_TRANSFER_PARAMETERS TransferParameters;
     ULONG BytesTransferred;
+
     BOOLEAN IsIsochronous;
+
+    ASSERT(Extension != NULL);
+    ASSERT(Transfer != NULL);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     Endpoint = Transfer->Endpoint;
     TransferParameters = Transfer->TransferParameters;
     BytesTransferred = Transfer->BytesTransferred;
     IsIsochronous = Transfer->IsIsochronous;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Endpoint || !TransferParameters)
         return;
 

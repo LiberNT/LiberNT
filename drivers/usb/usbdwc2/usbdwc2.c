@@ -754,6 +754,8 @@ Dwc2RetryTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Extension)
         return;
 
@@ -1929,6 +1931,9 @@ Dwc2ProcessEventsLocked(
     BOOLEAN NotifyRootHub = FALSE;
 
     GlobalInterrupts = (ULONG)InterlockedExchange(&Extension->PendingGlobalInterrupts, 0);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     GlobalInterrupts |= Dwc2ReadRegister(Extension, DWC2_GINTSTS) & Dwc2ReadRegister(Extension, DWC2_GINTMSK);
     Dwc2WriteRegister(Extension, DWC2_GINTSTS, GlobalInterrupts & ~(DWC2_GINT_HCHINT | DWC2_GINT_PRTINT));
     FromSof = !!(GlobalInterrupts & DWC2_GINT_SOF);
