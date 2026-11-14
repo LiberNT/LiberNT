@@ -225,6 +225,7 @@ do_reg_operation(HANDLE KeyHandle,
   ULONG Type;
   ULONG Size;
 
+  /* FIXME: the deletion below is disabled, so every DelReg section is a no-op */
   if (Flags & FLG_ADDREG_DELVAL)  /* deletion */
     {
 #if 0
@@ -1464,6 +1465,64 @@ RegRestoreKeptSettings(
 
     FreeKeptList(List);
     RtlFreeHeap(ProcessHeap, 0, List);
+}
+
+VOID
+RegRemoveObsoleteSettings(
+    _In_ HINF SetupInf,
+    _In_ PCWSTR Section)
+{
+    INFCONTEXT Context;
+    UNICODE_STRING Name;
+    HANDLE RootKey, KeyHandle;
+    WCHAR Root[16];
+    WCHAR Key[MAX_PATH];
+    WCHAR Value[MAX_PATH];
+    NTSTATUS Status;
+    ULONG Removed = 0;
+
+    if (!SpInfFindFirstLine(SetupInf, Section, NULL, &Context))
+        return;
+
+    do
+    {
+        if (!SpInfGetStringField(&Context, 1, Root, ARRAYSIZE(Root), NULL) ||
+            !SpInfGetStringField(&Context, 2, Key, ARRAYSIZE(Key), NULL) ||
+            !(RootKey = GetRootKeyByName(Root, NULL)))
+        {
+            continue;
+        }
+
+        if (SpInfGetFieldCount(&Context) >= 3 &&
+            SpInfGetStringField(&Context, 3, Value, ARRAYSIZE(Value), NULL))
+        {
+            Status = OpenKeptKeyPath(RootKey, Key, KEY_SET_VALUE, &KeyHandle);
+            if (NT_SUCCESS(Status))
+            {
+                RtlInitUnicodeString(&Name, Value);
+                Status = NtDeleteValueKey(KeyHandle, &Name);
+                NtClose(KeyHandle);
+            }
+        }
+        else
+        {
+            Status = OpenKeptKeyPath(RootKey, Key,
+                                     KEY_ENUMERATE_SUB_KEYS | DELETE, &KeyHandle);
+            if (NT_SUCCESS(Status))
+            {
+                DeleteKeptChildren(KeyHandle);
+                Status = NtDeleteKey(KeyHandle);
+                NtClose(KeyHandle);
+            }
+        }
+
+        if (NT_SUCCESS(Status))
+            ++Removed;
+        else if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
+            DPRINT1("%S\\%S is not removed (Status 0x%08lx)\n", Root, Key, Status);
+    } while (SpInfFindNextLine(&Context, &Context));
+
+    DPRINT1("Upgrade removed %lu obsolete registry item(s)\n", Removed);
 }
 
 static

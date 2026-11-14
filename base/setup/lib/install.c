@@ -618,6 +618,118 @@ RemoveEmptyDirectory(
     return Status;
 }
 
+static NTSTATUS
+RemoveDirectoryTree(
+    _In_ PCWSTR Directory,
+    _In_ ULONG Depth)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    UNICODE_STRING Name;
+    HANDLE DirectoryHandle;
+    NTSTATUS Status;
+    BOOLEAN RestartScan = TRUE;
+    PWCHAR Child, Full;
+    union
+    {
+        FILE_DIRECTORY_INFORMATION Info;
+        UCHAR Buffer[sizeof(FILE_DIRECTORY_INFORMATION) + MAX_PATH * sizeof(WCHAR)];
+    } Entry;
+
+    if (Depth >= 16)
+        return STATUS_UNSUCCESSFUL;
+
+    RtlInitUnicodeString(&Name, Directory);
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtOpenFile(&DirectoryHandle,
+                        FILE_LIST_DIRECTORY | SYNCHRONIZE,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                        FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT |
+                        FILE_OPEN_FOR_BACKUP_INTENT);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Child = RtlAllocateHeap(ProcessHeap, 0, 2 * MAX_PATH * sizeof(WCHAR));
+    if (!Child)
+    {
+        NtClose(DirectoryHandle);
+        return STATUS_NO_MEMORY;
+    }
+    Full = Child + MAX_PATH;
+
+    for (;;)
+    {
+        Status = NtQueryDirectoryFile(DirectoryHandle,
+                                      NULL,
+                                      NULL,
+                                      NULL,
+                                      &IoStatusBlock,
+                                      &Entry,
+                                      sizeof(Entry),
+                                      FileDirectoryInformation,
+                                      TRUE,
+                                      NULL,
+                                      RestartScan);
+        if (!NT_SUCCESS(Status))
+            break;
+        RestartScan = FALSE;
+
+        RtlStringCchCopyNW(Child, MAX_PATH,
+                           Entry.Info.FileName,
+                           Entry.Info.FileNameLength / sizeof(WCHAR));
+        if (!wcscmp(Child, L".") || !wcscmp(Child, L".."))
+            continue;
+
+        if (!NT_SUCCESS(CombinePaths(Full, MAX_PATH, 2, Directory, Child)))
+            continue;
+
+        if (Entry.Info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            RemoveDirectoryTree(Full, Depth + 1);
+        else
+            SetupDeleteFile(Full, TRUE);
+    }
+
+    RtlFreeHeap(ProcessHeap, 0, Child);
+    NtClose(DirectoryHandle);
+
+    return RemoveEmptyDirectory(Directory);
+}
+
+static VOID
+RemoveObsoletePaths(
+    _In_ PUSETUP_DATA pSetupData,
+    _In_ PCWSTR SystemRoot)
+{
+    INFCONTEXT Context;
+    WCHAR Relative[MAX_PATH];
+    WCHAR Kind[8];
+    WCHAR Path[MAX_PATH];
+    NTSTATUS Status;
+    BOOLEAN Directory;
+
+    if (!SpInfFindFirstLine(pSetupData->SetupInf, L"Files.Upgrade.Remove", NULL, &Context))
+        return;
+
+    do
+    {
+        if (!SpInfGetStringField(&Context, 1, Relative, ARRAYSIZE(Relative), NULL))
+            continue;
+
+        Directory = (SpInfGetFieldCount(&Context) >= 2 &&
+                     SpInfGetStringField(&Context, 2, Kind, ARRAYSIZE(Kind), NULL) &&
+                     _wcsicmp(Kind, L"dir") == 0);
+
+        if (!NT_SUCCESS(CombinePaths(Path, ARRAYSIZE(Path), 2, SystemRoot, Relative)))
+            continue;
+
+        Status = Directory ? RemoveDirectoryTree(Path, 0) : SetupDeleteFile(Path, TRUE);
+        if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
+            DPRINT1("Upgrade removes '%S' (Status 0x%08lx)\n", Path, Status);
+    } while (SpInfFindNextLine(&Context, &Context));
+}
+
 static VOID
 DropObsoleteFiles(
     _Inout_ PUPGRADE_PLAN Plan,
@@ -752,6 +864,12 @@ PrepareUpgradeFileCopy(
                  Plan->Trees[Plan->SystemTree].Target, UPGRADE_INVENTORY_PATH);
     Status = LoadInventory(Plan->Target, &Old);
     DPRINT1("Upgrade from %lu to %lu inventory entries (Status 0x%08lx)\n", Old.Count, New.Count, Status);
+
+    /*
+     * State a removed component leaves behind: the inventory only names what
+     * this version ships, so nothing in it describes what has to go.
+     */
+    RemoveObsoletePaths(pSetupData, Plan->Trees[Plan->SystemTree].Target);
 
     if (Old.Image && New.Image && _wcsicmp(Old.Image, New.Image) == 0)
         DropObsoleteFiles(Plan, &Old, &New);
