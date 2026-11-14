@@ -56,6 +56,7 @@ PspSendJobMessageLocked(
     _In_ BOOLEAN Quota)
 {
     PAGED_CODE();
+    ASSERT(ExIsResourceAcquiredSharedLite(&Job->JobLock));
 
     UNREFERENCED_PARAMETER(Quota);
 

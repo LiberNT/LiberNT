@@ -867,6 +867,8 @@ PopPerfIdleDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if ((SetPerfLevel == NULL) || (PowerState->PerfStatesCount == 0))
         return;
 

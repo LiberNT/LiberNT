@@ -650,6 +650,9 @@ KiTimerExpiration(
     PKTIMER Timer;
     LIST_ENTRY ExpiredList;
     ULONGLONG InterruptTime;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ULONG Hand, Span, Index, Bucket;
     KIRQL OldIrql;
 

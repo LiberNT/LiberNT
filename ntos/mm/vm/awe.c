@@ -327,6 +327,9 @@ VOID
 MiAweDestroyPagesLocked(PMI_ADDRESS_SPACE Space)
 {
     PMI_VAD_NODE Node;
+
+    ASSERT(Space != NULL);
+
     MiAweAssertAccounting(Space);
     while ((Node = MiVadFirst(&Space->AweRoot)) != NULL)
         MiAweDeletePage(Space, CONTAINING_RECORD(Node, MI_AWE_PAGE, Node));

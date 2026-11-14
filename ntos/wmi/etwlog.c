@@ -227,6 +227,8 @@ EtwpWakeLoggerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeSetEvent(&Logger->WakeEvent, IO_NO_INCREMENT, FALSE);
 }
 

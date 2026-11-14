@@ -552,6 +552,8 @@ KiArm64AllocateAsidIndexLocked(VOID)
 {
     ULONG Offset;
 
+    ASSERT(KiArm64AsidLock != 0);
+
     for (Offset = 0; Offset < KI_ARM64_ASID_MASK; Offset++)
     {
         ULONG Asid = 1 + ((KiArm64NextAsid - 1 + Offset) % KI_ARM64_ASID_MASK);
@@ -573,6 +575,8 @@ KiArm64RollAsidGenerationLocked(VOID)
 {
     ULONG NextGeneration;
     ULONG Processor;
+
+    ASSERT(KiArm64AsidLock != 0);
 
     NextGeneration = KiArm64AsidGeneration + KI_ARM64_ASID_COUNT;
     if ((NextGeneration & KI_ARM64_ASID_GENERATION_MASK) == 0)

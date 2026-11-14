@@ -593,6 +593,8 @@ TmpRollbackDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ExInitializeWorkItem(&Transaction->RollbackWorkItem, TmpRollbackWorker, Transaction);
     ExQueueWorkItem(&Transaction->RollbackWorkItem, DelayedWorkQueue);
 }

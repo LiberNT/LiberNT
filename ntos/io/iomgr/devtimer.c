@@ -55,6 +55,8 @@ IopTimerDispatch(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (IopTimerCount == 0) return;
 
     KeAcquireSpinLock(&IopTimerLock, &OldIrql);

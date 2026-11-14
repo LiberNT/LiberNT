@@ -275,6 +275,8 @@ MiLockRangeLocked(
 {
     ULONG Index = MiLockRangeSearch(Space, VirtualAddress);
 
+    ASSERT(Space != NULL);
+
     if (Index == Space->LockRangeCount)
     {
         *Next = ~0ULL;

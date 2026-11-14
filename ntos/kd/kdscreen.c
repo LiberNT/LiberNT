@@ -387,6 +387,9 @@ KdpScreenDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* One processor draws; one that finds it busy leaves its text to it */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while (InterlockedExchange(&KdpScreenDrawing, 1) == 0)
     {
         Length = KdpScreenTakeQueued(KdpScreenDpcText);

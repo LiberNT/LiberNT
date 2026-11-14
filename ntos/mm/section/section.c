@@ -109,6 +109,8 @@ MiSegmentLinkChunksLocked(
     PMI_CHUNK_INDEX Index;
     ULONG i;
 
+    ASSERT(Segment != NULL);
+
     for (Index = Segment->ChunkIndex; Index != NULL && !Index->Linked; Index = Index->Next)
     {
         for (i = 0; i < Index->PageCount; i++)
@@ -245,6 +247,8 @@ MiSegmentUnlinkChunksLocked(
 {
     PMI_CHUNK_INDEX Index;
     ULONG i;
+
+    ASSERT(Segment != NULL);
 
     for (Index = Segment->ChunkIndex; Index != NULL; Index = Index->Next)
     {
