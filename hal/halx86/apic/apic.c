@@ -578,6 +578,7 @@ ApicInitializeLocalApic(ULONG Cpu)
     /* Enable error LVTR */
     LvtEntry.Vector = APIC_ERROR_VECTOR;
     LvtEntry.MessageType = APIC_MT_Fixed;
+    LvtEntry.TriggerMode = APIC_TGM_Edge;
     ApicWrite(APIC_ERRLVTR, LvtEntry.Long);
 
     /* Set the IRQL from the PCR */
