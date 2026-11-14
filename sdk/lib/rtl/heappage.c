@@ -246,7 +246,7 @@ RtlpDphHeapFromPointer(PDPH_HEAP_ROOT DphHeap)
     return ((PUCHAR)DphHeap) - PAGE_SIZE;
 }
 
-ULONG NTAPI
+SIZE_T NTAPI
 RtlpDphGetBlockSizeFromCorruptedBlock(PVOID Block)
 {
     PDPH_BLOCK_INFORMATION BlockInfo;
@@ -1823,7 +1823,7 @@ RtlpPageHeapAllocate(IN PVOID HeapPtr,
     }
 
     /* Calculate sizes */
-    AccessSize = ROUND_UP(Size + sizeof(DPH_BLOCK_INFORMATION), PAGE_SIZE);
+    AccessSize = (ULONG)ROUND_UP(Size + sizeof(DPH_BLOCK_INFORMATION), PAGE_SIZE);
     AllocateSize = AccessSize + PAGE_SIZE;
 
     // FIXME: Move RtlpDphAllocateNode(DphRoot) to this place

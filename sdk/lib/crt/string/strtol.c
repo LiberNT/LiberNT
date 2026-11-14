@@ -11,7 +11,8 @@ strtol(const char *nptr, char **endptr, int base)
   unsigned long acc;
   int c;
   unsigned long cutoff;
-  int neg = 0, any, cutlim;
+  unsigned long cutlim;
+  int neg = 0, any;
 
   /*
    * Skip white space and pick up leading +/- sign if any.

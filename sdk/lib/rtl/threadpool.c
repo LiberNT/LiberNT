@@ -571,7 +571,12 @@ static BOOL array_reserve(void **elements, unsigned int *capacity, unsigned int 
     if (count <= *capacity)
         return TRUE;
 
-    max_capacity = ~(SIZE_T)0 / size;
+    /* The capacity is an unsigned int; clamp the element-size division to it
+     * instead of letting the SIZE_T quotient wrap. */
+    if (~(SIZE_T)0 / size > MAXUINT)
+        max_capacity = MAXUINT;
+    else
+        max_capacity = (unsigned int)(~(SIZE_T)0 / size);
     if (count > max_capacity)
         return FALSE;
 
@@ -905,7 +910,17 @@ static ULONG queue_get_timeout(struct timer_queue *q)
         if (t->expire != EXPIRE_NEVER)
         {
             ULONGLONG time = queue_current_time();
-            timeout = t->expire < time ? 0 : t->expire - time;
+            ULONGLONG delta;
+            /* A relative wait is a 32-bit millisecond count. A timer further
+             * out than that wakes up at the largest finite value and is
+             * recomputed; INFINITE must never be produced here. */
+            if (t->expire < time)
+                timeout = 0;
+            else
+            {
+                delta = t->expire - time;
+                timeout = (delta >= MAXDWORD ? MAXDWORD - 1 : (ULONG)delta);
+            }
         }
     }
     RtlLeaveCriticalSection(&q->cs);

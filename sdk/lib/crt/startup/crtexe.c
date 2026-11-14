@@ -78,7 +78,7 @@ static _startupinfo startinfo;
 extern LPTOP_LEVEL_EXCEPTION_FILTER __mingw_oldexcpt_handler;
 
 extern void _pei386_runtime_relocator (void);
-long CALLBACK _gnu_exception_handler (EXCEPTION_POINTERS * exception_data);
+LONG CALLBACK _gnu_exception_handler (EXCEPTION_POINTERS * exception_data);
 #ifdef WPRFLAG
 static void duplicate_ppstrings (int ac, wchar_t ***av);
 #else

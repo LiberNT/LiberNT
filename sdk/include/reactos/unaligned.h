@@ -27,8 +27,8 @@ ReadUnalignedU16(const unsigned short* p)
 }
 
 __forceinline
-unsigned long
-ReadUnalignedU32(const unsigned long* p)
+unsigned int
+ReadUnalignedU32(const unsigned int* p)
 {
     return *p;
 }
@@ -49,7 +49,7 @@ WriteUnalignedU16(unsigned short* p, unsigned short val)
 
 __forceinline
 void
-WriteUnalignedU32(unsigned long* p, unsigned long val)
+WriteUnalignedU32(unsigned int* p, unsigned int val)
 {
     *p = val;
 }
@@ -72,14 +72,14 @@ ReadUnalignedU16(const unsigned short* p)
 }
 
 __forceinline
-unsigned long
-ReadUnalignedU32(const unsigned long* p)
+unsigned int
+ReadUnalignedU32(const unsigned int* p)
 {
     unsigned char* p1 = (unsigned char*)p;
-    return (((unsigned long)p1[0] << 0) |
-            ((unsigned long)p1[1] << 8) |
-            ((unsigned long)p1[2] << 16) |
-            ((unsigned long)p1[3] << 24));
+    return (((unsigned int)p1[0] << 0) |
+            ((unsigned int)p1[1] << 8) |
+            ((unsigned int)p1[2] << 16) |
+            ((unsigned int)p1[3] << 24));
 }
 
 __forceinline
@@ -108,7 +108,7 @@ WriteUnalignedU16(unsigned short* p, unsigned short val)
 
 __forceinline
 void
-WriteUnalignedU32(unsigned long* p, unsigned long val)
+WriteUnalignedU32(unsigned int* p, unsigned int val)
 {
     unsigned char* p1 = (unsigned char*)p;
     p1[0] = (unsigned char)(val >> 0);

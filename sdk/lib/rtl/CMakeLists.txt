@@ -181,6 +181,19 @@ elseif(ARCH STREQUAL "riscv64")
         riscv64/dispatch.c
         riscv64/unwind.c
         riscv64/slist.c)
+elseif(ARCH STREQUAL "loongarch64")
+    # LoongArch64 has no 128-bit compare-and-exchange, so the sequenced-list
+    # primitives live in their own lock-bit based implementation.
+    list(REMOVE_ITEM SOURCE slist.c)
+    list(APPEND ASM_SOURCE
+        loongarch64/context_asm.S)
+    list(APPEND SOURCE
+        bitmap64.c
+        byteswap.c
+        dynfntbl.c
+        mem.c
+        loongarch64/dispatch.c
+        loongarch64/slist.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND ASM_SOURCE
         ppc/context_asm.S)
@@ -229,7 +242,7 @@ list(APPEND SOURCE_VISTA
     utf8string.c
     waitaddr.c)
 
-if(ARCH STREQUAL "riscv64")
+if(ARCH STREQUAL "riscv64" OR ARCH STREQUAL "loongarch64")
     list(REMOVE_ITEM SOURCE_VISTA slist.c)
 endif()
 

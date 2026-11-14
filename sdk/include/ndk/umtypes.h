@@ -137,7 +137,7 @@ typedef ULONG LOGICAL, *PLOGICAL;
 #if !defined(_NTSECAPI_H) && !defined(_SUBAUTH_H) && !defined(_NTSECAPI_)
 
 #if !defined(__BCRYPT_H__) && !defined(__WINE_BCRYPT_H)
-typedef _Return_type_success_(return >= 0) long NTSTATUS, *PNTSTATUS;
+typedef _Return_type_success_(return >= 0) LONG NTSTATUS, *PNTSTATUS;
 #endif
 
 typedef struct _UNICODE_STRING

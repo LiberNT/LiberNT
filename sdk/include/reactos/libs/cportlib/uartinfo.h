@@ -42,6 +42,10 @@ static const ULONG BaseArray[] = {0, 0x09000000};
 #elif defined(_M_RISCV64)
 /* RISC-V platforms do not have an architecture-defined legacy COM address. */
 static const ULONG BaseArray[] = {0};
+#elif defined(_LOONGARCH64_)
+/* No legacy COM either; the console line is the first memory-mapped 8250 of
+ * the platform UART block (VIRT_UART_BASE in hal/halloongarch64/platform.c). */
+static const ULONG BaseArray[] = {0, 0x1FE001E0};
 #else
 #error Unknown architecture
 #endif

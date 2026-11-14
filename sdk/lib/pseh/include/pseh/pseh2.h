@@ -53,7 +53,9 @@ extern"C"
 {
 #endif
 extern int _SEH2_Volatile0;
-extern int _SEH2_VolatileExceptionCode;
+/* An exception code is a 32-bit value; the native SEH path maps this to the
+   DWORD-returning GetExceptionCode(). */
+extern unsigned int _SEH2_VolatileExceptionCode;
 #ifdef __cplusplus
 } // extern "C"
 #endif

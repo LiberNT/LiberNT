@@ -209,7 +209,7 @@ RtlIpv4AddressToStringExA(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_PARAMETER;
 
-    Length = End - Buffer;
+    Length = (ULONG)(End - Buffer);
     if (*AddressStringLength > Length)
     {
         Status = RtlStringCchCopyA(AddressString,
@@ -291,7 +291,7 @@ RtlIpv4AddressToStringExW(
     if (!NT_SUCCESS(Status))
         return STATUS_INVALID_PARAMETER;
 
-    Length = End - Buffer;
+    Length = (ULONG)(End - Buffer);
     if (*AddressStringLength > Length)
     {
         Status = RtlStringCchCopyW(AddressString,
@@ -699,7 +699,7 @@ RtlIpv6AddressToStringExW(
             return STATUS_INVALID_PARAMETER;
     }
 
-    Length = S - Buffer;
+    Length = (ULONG)(S - Buffer);
     ASSERT(Buffer[Length] == UNICODE_NULL);
     if (*AddressStringLength > Length)
     {
@@ -846,7 +846,7 @@ static BOOL parse_ipv6_component(const WCHAR **str, int base, ULONG *value)
 {
     WCHAR *terminator;
     if (**str >= ARRAYSIZE(hex_table) || hex_table[**str] == -1) return FALSE;
-    *value = min(wcstoul(*str, &terminator, base), 0x7FFFFFFF);
+    *value = (ULONG)min(wcstoul(*str, &terminator, base), 0x7FFFFFFF);
     if (*terminator == '0') terminator++; /* "0x" but nothing valid after */
     else if (terminator == *str) return FALSE;
     *str = terminator;

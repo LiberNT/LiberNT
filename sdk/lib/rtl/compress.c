@@ -149,13 +149,13 @@ static NTSTATUS lznt1_decompress(UCHAR *dst, ULONG dst_size, UCHAR *src, ULONG s
             if (!ptr) return STATUS_BAD_COMPRESSION_BUFFER;
             if (ptr - workspace > offset)
             {
-                block_size = min((ptr - workspace) - offset, dst_end - dst_cur);
+                block_size = (ULONG)min((ptr - workspace) - offset, dst_end - dst_cur);
                 memcpy(dst_cur, workspace + offset, block_size);
                 dst_cur += block_size;
             }
             else if ((ULONG)(ptr - workspace) < offset)
             {
-                block_size = min(0x1000 - offset, dst_end - dst_cur);
+                block_size = (ULONG)min(0x1000 - offset, dst_end - dst_cur);
                 memset(dst_cur, 0, block_size);
                 dst_cur += block_size;
             }
@@ -165,7 +165,7 @@ static NTSTATUS lznt1_decompress(UCHAR *dst, ULONG dst_size, UCHAR *src, ULONG s
             /* uncompressed chunk */
             if (chunk_size > offset)
             {
-                block_size = min(chunk_size - offset, dst_end - dst_cur);
+                block_size = (ULONG)min(chunk_size - offset, dst_end - dst_cur);
                 memcpy(dst_cur, src_cur + offset, block_size);
                 dst_cur += block_size;
             }
@@ -206,13 +206,13 @@ static NTSTATUS lznt1_decompress(UCHAR *dst, ULONG dst_size, UCHAR *src, ULONG s
         if (chunk_header & 0x8000)
         {
             /* compressed chunk */
-            dst_cur = lznt1_decompress_chunk(dst_cur, dst_end - dst_cur, src_cur, chunk_size);
+            dst_cur = lznt1_decompress_chunk(dst_cur, (ULONG)(dst_end - dst_cur), src_cur, chunk_size);
             if (!dst_cur) return STATUS_BAD_COMPRESSION_BUFFER;
         }
         else
         {
             /* uncompressed chunk */
-            block_size = min(chunk_size, dst_end - dst_cur);
+            block_size = (ULONG)min(chunk_size, dst_end - dst_cur);
             memcpy(dst_cur, src_cur, block_size);
             dst_cur += block_size;
         }
@@ -222,7 +222,7 @@ static NTSTATUS lznt1_decompress(UCHAR *dst, ULONG dst_size, UCHAR *src, ULONG s
 
 out:
     if (final_size)
-        *final_size = dst_cur - dst;
+        *final_size = (ULONG)(dst_cur - dst);
 
     return STATUS_SUCCESS;
 
@@ -248,8 +248,8 @@ lznt1_compress_chunk(const UCHAR *src, ULONG src_size, UCHAR *dst, ULONG dst_siz
             for (displacement_bits = 12; displacement_bits > 4; displacement_bits--)
                 if ((1UL << (displacement_bits - 1)) < pos) break;
             length_bits = 16 - displacement_bits;
-            max_length = min((1UL << length_bits) + 2, src_size - pos);
-            max_displacement = min(pos, 1UL << displacement_bits);
+            max_length = min((1u << length_bits) + 2, src_size - pos);
+            max_displacement = min(pos, 1u << displacement_bits);
 
             best_length = 0;
             best_displacement = 0;
@@ -303,7 +303,7 @@ RtlpCompressBufferLZNT1(UCHAR *src, ULONG src_size, UCHAR *dst, ULONG dst_size,
 
         while (src_cur < src_end)
         {
-            block_size = min(0x1000, src_end - src_cur);
+            block_size = (ULONG)min(0x1000, src_end - src_cur);
             if (dst_cur + sizeof(WORD) > dst_end)
                 return STATUS_BUFFER_TOO_SMALL;
 
@@ -328,7 +328,7 @@ RtlpCompressBufferLZNT1(UCHAR *src, ULONG src_size, UCHAR *dst, ULONG dst_size,
         }
 
         if (final_size)
-            *final_size = dst_cur - dst;
+            *final_size = (ULONG)(dst_cur - dst);
 
         return STATUS_SUCCESS;
 }

@@ -433,7 +433,7 @@ RtlpCollapsePath(PWSTR Path, /* ULONG PathBufferSize, ULONG PathLength, */ ULONG
     /* Return the real path length */
     PathLength = (p - Path);
     // ASSERT(PathLength == wcslen(Path));
-    return (PathLength * sizeof(WCHAR));
+    return (ULONG)(PathLength * sizeof(WCHAR));
 }
 
 /******************************************************************
@@ -880,7 +880,7 @@ RtlGetFullPathName_Ustr(
     {
         case RtlPathTypeUncAbsolute:        /* \\foo   */
         {
-            PrefixCut = RtlpSkipUNCPrefix(FileNameBuffer);
+            PrefixCut = (ULONG)RtlpSkipUNCPrefix(FileNameBuffer);
             break;
         }
 
@@ -986,7 +986,7 @@ RtlGetFullPathName_Ustr(
             PrefixLength = CurDirName->Length;
             if (CurDirName->Buffer[1] != L':')
             {
-                PrefixCut = RtlpSkipUNCPrefix(CurDirName->Buffer);
+                PrefixCut = (ULONG)RtlpSkipUNCPrefix(CurDirName->Buffer);
             }
             else
             {
@@ -1010,7 +1010,7 @@ RtlGetFullPathName_Ustr(
             }
             else
             {
-                PrefixCut = RtlpSkipUNCPrefix(CurDirName->Buffer);
+                PrefixCut = (ULONG)RtlpSkipUNCPrefix(CurDirName->Buffer);
                 PrefixLength = PrefixCut * sizeof(WCHAR);
                 Prefix = CurDirName->Buffer;
             }

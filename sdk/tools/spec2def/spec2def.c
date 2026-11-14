@@ -61,7 +61,8 @@ enum _ARCH
     ARCH_ARM64,
     ARCH_ARM64EC,
     ARCH_RISCV64,
-    ARCH_PPC
+    ARCH_PPC,
+    ARCH_LOONGARCH64
 };
 
 typedef int (*PFNOUTLINE)(FILE *, EXPORT *);
@@ -1870,10 +1871,11 @@ int main(int argc, char *argv[])
     else if (strcasecmp(pszArchString, "arm64ec") == 0) giArch = ARCH_ARM64EC;
     else if (strcasecmp(pszArchString, "riscv64") == 0) giArch = ARCH_RISCV64;
     else if (strcasecmp(pszArchString, "ppc") == 0) giArch = ARCH_PPC;
+    else if (strcasecmp(pszArchString, "loongarch64") == 0) giArch = ARCH_LOONGARCH64;
 
     if ((giArch == ARCH_AMD64) || (giArch == ARCH_IA64) ||
         (giArch == ARCH_ARM64) || (giArch == ARCH_ARM64EC) ||
-        (giArch == ARCH_RISCV64))
+        (giArch == ARCH_RISCV64) || (giArch == ARCH_LOONGARCH64))
     {
         pszArchString2 = "win64";
     }
