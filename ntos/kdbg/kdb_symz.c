@@ -14,7 +14,27 @@
 #define KDB_SYMZ_MAX_SECTIONS 96
 
 static UCHAR KdbpSymzPacked[SYMZ_MAX_BLOCK_SIZE];
-static UCHAR KdbpSymzUnpacked[SYMZ_MAX_BLOCK_SIZE];
+/*
+ * The last block of each kind decoded, kept decoded: the addresses of one
+ * backtrace or one table mostly fall in the same blocks, and decoding one
+ * costs far more than looking a name up in it.
+ */
+typedef enum _KDB_SYMZ_KIND
+{
+    KdbSymzSymbols,
+    KdbSymzLines,
+    KdbSymzFiles,
+    KdbSymzKinds
+} KDB_SYMZ_KIND;
+
+typedef struct _KDB_SYMZ_CACHE
+{
+    PUCHAR Data;
+    SYMZ_BLOCK Block;
+    UCHAR Unpacked[SYMZ_MAX_BLOCK_SIZE];
+} KDB_SYMZ_CACHE;
+
+static KDB_SYMZ_CACHE KdbpSymzCache[KdbSymzKinds];
 static UCHAR KdbpSymzWork[SYMZ_DECODER_WORK_SIZE];
 static LONG KdbpSymzBusy;
 
@@ -70,6 +90,7 @@ KdbpSymzFindTable(
 static
 BOOLEAN
 KdbpSymzLoadBlock(
+    _In_ KDB_SYMZ_KIND Kind,
     _In_ PUCHAR Table,
     _In_ ULONG TableSize,
     _In_ const SYMZ_HEADER *Header,
@@ -109,21 +130,35 @@ KdbpSymzLoadBlock(
     }
 
     if (Block->PackedSize > sizeof(KdbpSymzPacked) ||
-        Block->UnpackedSize > sizeof(KdbpSymzUnpacked) ||
+        Block->UnpackedSize > sizeof(KdbpSymzCache[Kind].Unpacked) ||
         Block->DataOffset > TableSize ||
         Block->PackedSize > TableSize - Block->DataOffset)
     {
         return FALSE;
     }
 
-    return NT_SUCCESS(KdbpSafeReadMemory(KdbpSymzPacked, Table + Block->DataOffset, Block->PackedSize)) &&
-           SymzDecodeBlock(Header,
-                           KdbpSymzPacked,
-                           Block->PackedSize,
-                           KdbpSymzUnpacked,
-                           Block->UnpackedSize,
-                           KdbpSymzWork,
-                           sizeof(KdbpSymzWork));
+    if ((KdbpSymzCache[Kind].Data == Table + Block->DataOffset) &&
+        (RtlCompareMemory(&KdbpSymzCache[Kind].Block, Block, sizeof(*Block)) == sizeof(*Block)))
+    {
+        return TRUE;
+    }
+
+    KdbpSymzCache[Kind].Data = NULL;
+    if (!NT_SUCCESS(KdbpSafeReadMemory(KdbpSymzPacked, Table + Block->DataOffset, Block->PackedSize)) ||
+        !SymzDecodeBlock(Header,
+                         KdbpSymzPacked,
+                         Block->PackedSize,
+                         KdbpSymzCache[Kind].Unpacked,
+                         Block->UnpackedSize,
+                         KdbpSymzWork,
+                         sizeof(KdbpSymzWork)))
+    {
+        return FALSE;
+    }
+
+    KdbpSymzCache[Kind].Data = Table + Block->DataOffset;
+    KdbpSymzCache[Kind].Block = *Block;
+    return TRUE;
 }
 
 BOOLEAN
@@ -166,8 +201,8 @@ KdbpSymzDescribe(
     if (InterlockedCompareExchange(&KdbpSymzBusy, 1, 0) != 0)
         return FALSE;
 
-    if (KdbpSymzLoadBlock(Table, TableSize, &Header, 0, Header.SymbolBlockCount, (ULONG)RelativeAddress, &Block) &&
-        SymzSearchBlock(KdbpSymzUnpacked, Block.UnpackedSize, Block.First, (ULONG)RelativeAddress, &Name, &SymbolRva))
+    if (KdbpSymzLoadBlock(KdbSymzSymbols, Table, TableSize, &Header, 0, Header.SymbolBlockCount, (ULONG)RelativeAddress, &Block) &&
+        SymzSearchBlock(KdbpSymzCache[KdbSymzSymbols].Unpacked, Block.UnpackedSize, Block.First, (ULONG)RelativeAddress, &Name, &SymbolRva))
     {
         RtlStringCbCopyA(FunctionName, FunctionNameLength, Name);
         *SymbolAddress = SymbolRva;
@@ -175,10 +210,10 @@ KdbpSymzDescribe(
     }
 
     if (Found && FileName && FileNameLength != 0 && Line &&
-        KdbpSymzLoadBlock(Table, TableSize, &Header, Header.SymbolBlockCount, Header.LineBlockCount, (ULONG)RelativeAddress, &Block) &&
-        SymzSearchLineBlock(KdbpSymzUnpacked, Block.UnpackedSize, Block.First, (ULONG)RelativeAddress, &File, &LineNumber) &&
-        KdbpSymzLoadBlock(Table, TableSize, &Header, Header.SymbolBlockCount + Header.LineBlockCount, Header.FileBlockCount, File, &Block) &&
-        SymzSearchFileBlock(KdbpSymzUnpacked, Block.UnpackedSize, Block.First, File, &Name))
+        KdbpSymzLoadBlock(KdbSymzLines, Table, TableSize, &Header, Header.SymbolBlockCount, Header.LineBlockCount, (ULONG)RelativeAddress, &Block) &&
+        SymzSearchLineBlock(KdbpSymzCache[KdbSymzLines].Unpacked, Block.UnpackedSize, Block.First, (ULONG)RelativeAddress, &File, &LineNumber) &&
+        KdbpSymzLoadBlock(KdbSymzFiles, Table, TableSize, &Header, Header.SymbolBlockCount + Header.LineBlockCount, Header.FileBlockCount, File, &Block) &&
+        SymzSearchFileBlock(KdbpSymzCache[KdbSymzFiles].Unpacked, Block.UnpackedSize, Block.First, File, &Name))
     {
         RtlStringCbCopyA(FileName, FileNameLength, Name);
         *Line = LineNumber;
@@ -216,13 +251,13 @@ KdbpSymzEnumerate(
         if (!NT_SUCCESS(KdbpSafeReadMemory(&Block,
                                            Table + Header.HeaderSize + Index * sizeof(Block),
                                            sizeof(Block))) ||
-            !KdbpSymzLoadBlock(Table, TableSize, &Header, Index, 1, Block.First, &Block))
+            !KdbpSymzLoadBlock(KdbSymzSymbols, Table, TableSize, &Header, Index, 1, Block.First, &Block))
         {
             Complete = FALSE;
             break;
         }
 
-        Complete = SymzEnumerateBlock(KdbpSymzUnpacked, Block.UnpackedSize, Block.First, Routine, Context);
+        Complete = SymzEnumerateBlock(KdbpSymzCache[KdbSymzSymbols].Unpacked, Block.UnpackedSize, Block.First, Routine, Context);
     }
 
     InterlockedExchange(&KdbpSymzBusy, 0);
