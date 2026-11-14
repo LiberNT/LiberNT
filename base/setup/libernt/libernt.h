@@ -470,6 +470,12 @@ LoadPrintfW(
 /* filesec.c */
 typedef struct _FILESEC_POLICY FILESEC_POLICY, *PFILESEC_POLICY;
 
+typedef struct _FILESEC_ITEM
+{
+    PCWSTR Path;
+    BOOLEAN Directory;
+} FILESEC_ITEM, *PFILESEC_ITEM;
+
 DWORD
 FileSecurityLoadPolicy(
     _Out_ PFILESEC_POLICY *Policy);
@@ -496,6 +502,21 @@ InstallApplyFileSecurity(
     _In_ PCWSTR VolumeRoot,
     _In_ PCWSTR InstallationDirectory,
     _In_ BOOLEAN WholeVolume);
+
+NTSTATUS
+FileSecurityApplyItems(
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ ULONG Count,
+    _In_reads_(Count) const FILESEC_ITEM *Items);
+
+NTSTATUS
+InstallApplyFileSecurityToItems(
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ ULONG Count,
+    _In_reads_(Count) const FILESEC_ITEM *Items);
 
 INT
 SetupMessage(

@@ -816,6 +816,51 @@ QueueInventoryFiles(
     }
 }
 
+NTSTATUS
+NTAPI
+EnumerateUpgradeTargets(
+    _In_ PUSETUP_DATA pSetupData,
+    _In_ PUPGRADE_TARGET_ROUTINE Routine,
+    _In_opt_ PVOID Context)
+{
+    PUPGRADE_PLAN Plan;
+    INVENTORY New;
+    BOOLEAN Directory;
+    NTSTATUS Status;
+    ULONG i;
+
+    ASSERT(Routine != NULL);
+
+    Plan = RtlAllocateHeap(ProcessHeap, 0, sizeof(*Plan));
+    if (!Plan)
+        return STATUS_NO_MEMORY;
+
+    if (!InitUpgradePlan(pSetupData, Plan))
+    {
+        RtlFreeHeap(ProcessHeap, 0, Plan);
+        return STATUS_NOT_FOUND;
+    }
+
+    CombinePaths(Plan->Source, ARRAYSIZE(Plan->Source), 3, pSetupData->SourceRootPath.Buffer,
+                 Plan->Trees[Plan->SystemTree].Media, UPGRADE_INVENTORY_PATH);
+    Status = LoadInventory(Plan->Source, &New);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(ProcessHeap, 0, Plan);
+        return Status;
+    }
+
+    for (i = 0; i < New.Count; i++)
+    {
+        if (MapUpgradeEntry(Plan, New.Entries[i], &Directory))
+            Routine(Context, Plan->Target, Directory);
+    }
+
+    FreeInventory(&New);
+    RtlFreeHeap(ProcessHeap, 0, Plan);
+    return STATUS_SUCCESS;
+}
+
 BOOLEAN
 NTAPI
 PrepareUpgradeFileCopy(

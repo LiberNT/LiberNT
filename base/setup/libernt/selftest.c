@@ -670,6 +670,44 @@ SelfTestReadSddl(
 
 /* Setup gives what it installs the security the preinstalled image gets from boot/bootdata/filesecurity.txt */
 static VOID
+SelfTestSecurityMatches(
+    _In_ PSELFTEST_CONTEXT Context,
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PCWSTR Root,
+    _In_ PCWSTR Path,
+    _In_ BOOLEAN Directory,
+    _In_ PCWSTR Tag)
+{
+    PSECURITY_DESCRIPTOR Expected;
+    WCHAR RulePath[MAX_PATH];
+    PWSTR Actual, Wanted = NULL;
+    PWSTR Cursor;
+
+    StringCchCopyW(RulePath, ARRAYSIZE(RulePath), Path);
+    for (Cursor = RulePath; *Cursor; Cursor++)
+        *Cursor = (*Cursor == L'\\') ? L'/' : towlower(*Cursor);
+
+    Expected = FileSecurityFindDescriptor(Policy, RulePath, Directory);
+    if (Expected)
+    {
+        SetSecurityDescriptorControl(Expected, SE_DACL_AUTO_INHERIT_REQ, 0);
+        ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            Expected, SDDL_REVISION_1,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &Wanted, NULL);
+    }
+    Actual = SelfTestReadSddl(Root, Path);
+    SelfTestCheck(Context,
+                  Wanted && Actual && wcscmp(Wanted, Actual) == 0,
+                  Tag, L"'%s' is %s", *Path ? Path : L"\\",
+                  Actual ? Actual : L"(unreadable)");
+    if (Wanted && (!Actual || wcscmp(Wanted, Actual) != 0))
+        SelfTestLog(Context, L"SETUPTEST INFO security expected %s", Wanted);
+    LocalFree(Wanted);
+    LocalFree(Actual);
+}
+
+static VOID
 SelfTestFileSecurity(
     _In_ PSELFTEST_CONTEXT Context,
     _In_ PCWSTR InstallDevice)
@@ -695,14 +733,11 @@ SelfTestFileSecurity(
         { L"Users\\Default\\NTUSER.DAT", FALSE },
     };
     PFILESEC_POLICY Policy = NULL;
-    PSECURITY_DESCRIPTOR Expected;
-    WCHAR RulePath[MAX_PATH];
     WCHAR Root[MAX_PATH];
-    PWSTR Actual, Wanted, Before;
+    PWSTR Before;
     NTSTATUS Status;
     DWORD Error;
     ULONG Index;
-    PWSTR Cursor;
 
     StringCchCopyW(Root, ARRAYSIZE(Root), InstallDevice);
     for (Index = 1; Index < ARRAYSIZE(Items); Index++)
@@ -727,32 +762,58 @@ SelfTestFileSecurity(
     SelfTestCheck(Context, NT_SUCCESS(Status), L"security.apply", L"status 0x%08lx", Status);
 
     for (Index = 0; Index < ARRAYSIZE(Items); Index++)
+        SelfTestSecurityMatches(Context, Policy, Root, Items[Index].Path, Items[Index].Directory, L"security.match");
+
+    FileSecurityFreePolicy(Policy);
+}
+
+static VOID
+SelfTestUpgradeFileSecurity(
+    _In_ PSELFTEST_CONTEXT Context,
+    _In_ PCWSTR InstallDevice)
+{
+    static const FILESEC_ITEM Listed[] =
     {
-        StringCchCopyW(RulePath, ARRAYSIZE(RulePath), Items[Index].Path);
-        for (Cursor = RulePath; *Cursor; Cursor++)
-            *Cursor = (*Cursor == L'\\') ? L'/' : towlower(*Cursor);
+        { L"Windows", TRUE },
+        { L"Windows\\system32", TRUE },
+        { L"Windows\\system32\\upgraded.dll", FALSE },
+        { L"Windows\\system32\\notshipped.dll", FALSE },
+    };
+    PFILESEC_POLICY Policy = NULL;
+    WCHAR Root[MAX_PATH];
+    PWSTR Before, After;
+    NTSTATUS Status;
+    DWORD Error;
+    ULONG Index;
 
-        Expected = FileSecurityFindDescriptor(Policy, RulePath, Items[Index].Directory);
-        Wanted = NULL;
-        if (Expected)
-        {
-            SetSecurityDescriptorControl(Expected, SE_DACL_AUTO_INHERIT_REQ, 0);
-            ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                Expected, SDDL_REVISION_1,
-                OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
-                &Wanted, NULL);
-        }
-        Actual = SelfTestReadSddl(Root, Items[Index].Path);
-        SelfTestCheck(Context,
-                      Wanted && Actual && wcscmp(Wanted, Actual) == 0,
-                      L"security.match", L"'%s' is %s", *Items[Index].Path ? Items[Index].Path : L"\\",
-                      Actual ? Actual : L"(unreadable)");
-        if (Wanted && (!Actual || wcscmp(Wanted, Actual) != 0))
-            SelfTestLog(Context, L"SETUPTEST INFO security expected %s", Wanted);
-        LocalFree(Wanted);
-        LocalFree(Actual);
-    }
+    StringCchCopyW(Root, ARRAYSIZE(Root), InstallDevice);
+    Status = SelfTestCreateItem(Root, L"Windows\\system32\\upgraded.dll", FALSE);
+    if (!SelfTestCheck(Context, NT_SUCCESS(Status), L"security.upgrade.create", L"upgraded.dll status 0x%08lx", Status))
+        return;
+    Status = SelfTestCreateItem(Root, L"Windows\\system32\\appadded.dll", FALSE);
+    if (!SelfTestCheck(Context, NT_SUCCESS(Status), L"security.upgrade.create", L"appadded.dll status 0x%08lx", Status))
+        return;
 
+    Error = FileSecurityLoadPolicy(&Policy);
+    if (!SelfTestCheck(Context, Error == ERROR_SUCCESS, L"security.upgrade.policy", L"load error %lu", Error))
+        return;
+
+    Before = SelfTestReadSddl(Root, L"Windows\\system32\\appadded.dll");
+
+    StringCchCatW(Root, ARRAYSIZE(Root), L"\\");
+    Status = InstallApplyFileSecurityToItems(Root, L"\\Windows", ARRAYSIZE(Listed), Listed);
+    Root[wcslen(Root) - 1] = UNICODE_NULL;
+    SelfTestCheck(Context, NT_SUCCESS(Status), L"security.upgrade.apply", L"status 0x%08lx", Status);
+
+    for (Index = 0; Index < 3; Index++)
+        SelfTestSecurityMatches(Context, Policy, Root, Listed[Index].Path, Listed[Index].Directory, L"security.upgrade.match");
+
+    After = SelfTestReadSddl(Root, L"Windows\\system32\\appadded.dll");
+    SelfTestCheck(Context, Before && After && wcscmp(Before, After) == 0, L"security.upgrade.keep",
+                  L"'Windows\\system32\\appadded.dll' was %s, is %s",
+                  Before ? Before : L"(unreadable)", After ? After : L"(unreadable)");
+    LocalFree(Before);
+    LocalFree(After);
     FileSecurityFreePolicy(Policy);
 }
 
@@ -1358,6 +1419,7 @@ RunSetupSelfTest(
                            SystemDevice, ARRAYSIZE(SystemDevice)))
     {
         SelfTestFileSecurity(&Context, InstallDevice);
+        SelfTestUpgradeFileSecurity(&Context, InstallDevice);
         SelfTestResize(&Context, InstallDevice);
         SelfTestVolumeIdle(&Context, L"A.resize", InstallDevice);
         SelfTestBoot(&Context, SystemDevice);
