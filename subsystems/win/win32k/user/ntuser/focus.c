@@ -84,6 +84,8 @@ IntSetForegroundThread(PTHREADINFO pti)
 BOOL FASTCALL
 IsFGLocked(VOID)
 {
+    ASSERT(UserIsEntered());
+
     return (gppiLockSFW || guSFWLockCount);
 }
 
