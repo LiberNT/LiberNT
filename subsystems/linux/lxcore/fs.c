@@ -1733,6 +1733,11 @@ LX_SYSCALL(LxSysFsync)
 
     if (File == NULL)
         return -LX_EBADF;
+    if ((File->Type == LX_S_IFIFO) || (File->Type == LX_S_IFSOCK))
+    {
+        LxFileDereference(File);
+        return -LX_EINVAL;
+    }
     if ((File->Handle != NULL) && !File->Directory && !File->NtPipe && ((File->Flags & LX_O_ACCMODE) != LX_O_RDONLY))
         ZwFlushBuffersFile(File->Handle, &Iosb);
     LxFileDereference(File);
