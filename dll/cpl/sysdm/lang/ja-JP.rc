@@ -61,7 +61,6 @@ BEGIN
     PUSHBUTTON "設定", IDC_STAREC, 194, 162, 50, 15
     PUSHBUTTON "システムの設定", IDC_SYSSETTINGS, 6, 192, 80, 15
     PUSHBUTTON "環境変数", IDC_ENVVAR, 88, 192, 80, 15
-    PUSHBUTTON "エラー報告", IDC_ERRORREPORT, 170, 192, 80, 15
 END
 
 IDD_SYSSETTINGS DIALOGEX 0, 0, 221, 106
@@ -73,18 +72,6 @@ BEGIN
     LTEXT "LiberNT はサーバー OS としてビルドされているため、サーバーとしてふるまいます。これを変更するにはこのボックスにチェックしてください。ただしアプリケーションに対してのみ有効です。", IDC_STATIC, 15, 15, 198, 41
     CONTROL "ワークステーションとしてふるまう", IDC_REPORTASWORKSTATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 16, 57, 190, 10
     PUSHBUTTON "OK", IDOK, 166, 83, 50, 14
-END
-
-IDD_ERRORREPORTING DIALOGEX 0, 0, 240, 150
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "診断データ"
-FONT 8, "MS Shell Dlg", 0, 0, 0x1
-BEGIN
-    LTEXT "LiberNT は、必須の診断データ (ビルド、起動の結果と時間、ハードウェアとクラッシュの概要) を常にプロジェクトに送信します。これは無効にできません。", IDC_STATIC, 7, 7, 226, 33
-    AUTOCHECKBOX "オプションの診断データ (システム イベント ログのエラー エントリ) も送信する(&O)", IDC_SENDOPTIONAL, 7, 46, 226, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
-    LTEXT "オプションのデータは、オンにしない限り送信されません。ファイル、ドキュメント、ネットワーク アドレスは含まれません。詳しくは libernt.com/legal をご覧ください。", IDC_OPTIONALINFO, 7, 72, 226, 33
-    DEFPUSHBUTTON "OK", IDOK, 129, 128, 50, 14
-    PUSHBUTTON "キャンセル", IDCANCEL, 183, 128, 50, 14
 END
 
 IDD_HARDWAREPROFILES DIALOGEX 6, 18, 254, 234

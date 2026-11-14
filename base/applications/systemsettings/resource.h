@@ -509,10 +509,6 @@
 #define IDS_CLEAR_RECENT               593
 #define IDS_CLEAR_RECENT_DESC          594
 #define IDS_CLEAR                      595
-#define IDS_DIAGNOSTICS                596
-#define IDS_OPTIONAL_DIAGNOSTICS       597
-#define IDS_OPTIONAL_DIAGNOSTICS_DESC  598
-#define IDS_DIAGNOSTICS_NOTE           599
 #define IDS_BUILD_LAB                  601
 #define IDS_SYSTEM_SOUNDS              606
 #define IDS_UNKNOWN_APP                607

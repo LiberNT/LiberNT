@@ -63,7 +63,6 @@ BEGIN
     PUSHBUTTON "Inställningar", IDC_STAREC, 194, 162, 50, 15
     PUSHBUTTON "System Settings", IDC_SYSSETTINGS, 6, 192, 80, 15
     PUSHBUTTON "Miljövariabler", IDC_ENVVAR, 88, 192, 80, 15
-    PUSHBUTTON "Felrapportering", IDC_ERRORREPORT, 170, 192, 80, 15
 END
 
 IDD_SYSSETTINGS DIALOGEX 0, 0, 221, 106
@@ -75,18 +74,6 @@ BEGIN
     LTEXT "LiberNT is built as a server OS and reports as such. Check this box to change this for applications only.", IDC_STATIC, 15, 15, 183, 41
     CONTROL "Report as Workstation", IDC_REPORTASWORKSTATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 16, 57, 190, 10
     PUSHBUTTON "OK", IDOK, 166, 83, 50, 14
-END
-
-IDD_ERRORREPORTING DIALOGEX 0, 0, 240, 150
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Diagnostic Data"
-FONT 8, "MS Shell Dlg", 0, 0, 0x1
-BEGIN
-    LTEXT "LiberNT always sends required diagnostic data to the project: the build, the boot result and time, the hardware and crash summaries. This cannot be turned off.", IDC_STATIC, 7, 7, 226, 33
-    AUTOCHECKBOX "Also send &optional diagnostic data (error entries of the system event log)", IDC_SENDOPTIONAL, 7, 46, 226, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
-    LTEXT "Optional data is off unless you turn it on. It contains no files, documents or network addresses. See libernt.com/legal.", IDC_OPTIONALINFO, 7, 72, 226, 33
-    DEFPUSHBUTTON "OK", IDOK, 129, 128, 50, 14
-    PUSHBUTTON "Cancel", IDCANCEL, 183, 128, 50, 14
 END
 
 IDD_HARDWAREPROFILES DIALOGEX 6, 18, 254, 234
