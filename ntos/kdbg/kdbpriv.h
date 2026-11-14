@@ -48,6 +48,22 @@ KdbpArchSetHardwareBreakPoint(
     _In_ KDB_ACCESS_TYPE AccessType,
     _In_ BOOLEAN Enable);
 
+/*
+ * Which watch register made the processor stop, or -1 when none did. The
+ * register is told it has been seen, so it does not report the same hit again.
+ */
+LONG
+NTAPI
+KdbpArchHardwareBreakPointHit(
+    _Inout_ PCONTEXT Context);
+
+/* Fills the answer to a stop with the stepping and watch state the debugger set up */
+VOID
+NTAPI
+KdbpArchPrepareContinue(
+    _Inout_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_opt_ PCONTEXT Context);
+
 /* How many of them this architecture has */
 ULONG
 NTAPI
@@ -253,6 +269,32 @@ KdbpReportWalk(
 BOOLEAN
 KdbpSetBreakPointInternal(
     _In_ LONG BreakPointNr);
+
+/* The most a breakpoint's commands may be */
+#define KDB_BREAKPOINT_COMMANDS_MAX 256
+
+BOOLEAN
+KdbpSetBreakPointCommands(
+    _In_ LONG BreakPointNr,
+    _In_opt_ PCSTR Commands);
+
+BOOLEAN
+KdbpSetBreakPointIgnoreCount(
+    _In_ LONG BreakPointNr,
+    _In_ ULONG Count);
+
+BOOLEAN
+KdbpGetBreakPointCounts(
+    _In_ LONG BreakPointNr,
+    _Out_ PULONG HitCount,
+    _Out_ PULONG IgnoreCount,
+    _Out_ PCSTR *Commands);
+
+/* The commands of the breakpoint that stopped the machine, handed over once */
+BOOLEAN
+KdbpTakeStopCommands(
+    _Out_writes_(Length) PCHAR Buffer,
+    _In_ ULONG Length);
 
 BOOLEAN
 KdbpIsSystemAddress(

@@ -50,6 +50,10 @@ static KDB_BREAKPOINT KdbpBreakPoints[KDB_MAXIMUM_BREAKPOINT_COUNT];
  * breakpoints are set with the machine stopped, where nothing may allocate.
  */
 static CHAR KdbpConditionText[KDB_MAXIMUM_BREAKPOINT_COUNT][KDB_CONDITION_LENGTH];
+static CHAR KdbpCommandText[KDB_MAXIMUM_BREAKPOINT_COUNT][KDB_BREAKPOINT_COMMANDS_MAX];
+
+/* The commands of the breakpoint the machine stopped at, kept for the prompt: a one-shot breakpoint is gone by then */
+static CHAR KdbpStopCommands[KDB_BREAKPOINT_COMMANDS_MAX];
 
 /* Which of this architecture's watchpoint registers is taken by which breakpoint */
 static LONG KdbpHardwareOwner[8];
@@ -625,6 +629,122 @@ KdbpDeleteInternalBreakPoints(VOID)
 }
 
 BOOLEAN
+KdbpSetBreakPointCommands(
+    _In_ LONG BreakPointNr,
+    _In_opt_ PCSTR Commands)
+{
+    PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+    SIZE_T Length;
+
+    if (BreakPoint == NULL)
+        return FALSE;
+
+    if ((Commands == NULL) || (*Commands == ANSI_NULL))
+    {
+        BreakPoint->Commands = NULL;
+        return TRUE;
+    }
+
+    Length = strlen(Commands);
+    if (Length >= KDB_BREAKPOINT_COMMANDS_MAX)
+        return FALSE;
+
+    RtlCopyMemory(KdbpCommandText[BreakPointNr], Commands, Length + 1);
+    BreakPoint->Commands = KdbpCommandText[BreakPointNr];
+    return TRUE;
+}
+
+BOOLEAN
+KdbpSetBreakPointIgnoreCount(
+    _In_ LONG BreakPointNr,
+    _In_ ULONG Count)
+{
+    PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+
+    if (BreakPoint == NULL)
+        return FALSE;
+
+    BreakPoint->IgnoreCount = Count;
+    return TRUE;
+}
+
+BOOLEAN
+KdbpGetBreakPointCounts(
+    _In_ LONG BreakPointNr,
+    _Out_ PULONG HitCount,
+    _Out_ PULONG IgnoreCount,
+    _Out_ PCSTR *Commands)
+{
+    PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+
+    if (BreakPoint == NULL)
+        return FALSE;
+
+    *HitCount = BreakPoint->HitCount;
+    *IgnoreCount = BreakPoint->IgnoreCount;
+    *Commands = BreakPoint->Commands;
+    return TRUE;
+}
+
+BOOLEAN
+KdbpTakeStopCommands(
+    _Out_writes_(Length) PCHAR Buffer,
+    _In_ ULONG Length)
+{
+    if ((KdbpStopCommands[0] == ANSI_NULL) || (Length == 0))
+        return FALSE;
+
+    RtlStringCbCopyA(Buffer, Length, KdbpStopCommands);
+    KdbpStopCommands[0] = ANSI_NULL;
+    return TRUE;
+}
+
+/*
+ * Whether a breakpoint that was reached stops the machine this time: it has
+ * to be on, its condition has to hold, and the hits it was told to let pass
+ * have to be used up. Every hit with the condition holding is counted.
+ */
+static
+BOOLEAN
+KdbpBreakPointStops(
+    _Inout_ PKDB_BREAKPOINT BreakPoint)
+{
+    if (!BreakPoint->Enabled || !KdbpCheckBreakPointCondition(BreakPoint))
+        return FALSE;
+
+    BreakPoint->HitCount++;
+
+    if (BreakPoint->IgnoreCount != 0)
+    {
+        BreakPoint->IgnoreCount--;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+/* The machine stops at this breakpoint: what the prompt needs of it is kept before a one-shot one goes */
+static
+VOID
+KdbpTakeBreakPointStop(
+    _In_ LONG BreakPointNr,
+    _Out_ PBOOLEAN Internal)
+{
+    PKDB_BREAKPOINT BreakPoint = &KdbpBreakPoints[BreakPointNr];
+
+    *Internal = BreakPoint->Internal;
+
+    if (BreakPoint->Commands != NULL)
+        RtlStringCbCopyA(KdbpStopCommands, sizeof(KdbpStopCommands), BreakPoint->Commands);
+
+    if (BreakPoint->Type == KdbBreakPointTemporary)
+        KdbpDeleteBreakPoint(BreakPointNr, NULL);
+
+    /* After the deletion, which forgets the number of a breakpoint that is gone */
+    KdbLastBreakPointNr = BreakPointNr;
+}
+
+BOOLEAN
 KdbpEnableBreakPoint(
     _In_ LONG BreakPointNr,
     _Inout_opt_ PKDB_BREAKPOINT BreakPoint)
@@ -1014,21 +1134,6 @@ KdbpStepPastBreakInstruction(
         KeSetContextPc(Context, Pc + KD_BREAKPOINT_SIZE);
 }
 
-static
-BOOLEAN
-KdbpHardwareBreakPointArmed(VOID)
-{
-    ULONG Index;
-
-    for (Index = 0; Index < RTL_NUMBER_OF(KdbpHardwareOwner); Index++)
-    {
-        if (KdbpHardwareOwner[Index] >= 0)
-            return TRUE;
-    }
-
-    return FALSE;
-}
-
 /*
  * Where the machine stopped, and why. Everything the debugger does happens
  * inside this call: when it returns, the machine runs again.
@@ -1053,6 +1158,8 @@ KdbEnterDebuggerException(
     /* Already inside: a fault in the debugger itself is not the debugger's */
     if (KdbActive)
         return kdHandleException;
+
+    KdbpStopCommands[0] = ANSI_NULL;
 
     ExceptionNr = (ExceptionRecord != NULL)
                   ? KdbpExceptionNumber(ExceptionRecord->ExceptionCode) : 3;
@@ -1109,7 +1216,7 @@ KdbEnterDebuggerException(
             /* Back onto the instruction the breakpoint stands in for */
             KeSetContextPc(Context, BreakPoint->Address);
 
-            if (!BreakPoint->Enabled || !KdbpCheckBreakPointCondition(BreakPoint))
+            if (!KdbpBreakPointStops(BreakPoint))
             {
                 /*
                  * Not this time. The instruction goes back, the machine steps
@@ -1124,18 +1231,59 @@ KdbEnterDebuggerException(
                 return kdContinue;
             }
 
-            KdbLastBreakPointNr = BreakPointNr;
-            StoppedAtInternal = BreakPoint->Internal;
+            KdbpTakeBreakPointStop(BreakPointNr, &StoppedAtInternal);
+        }
+    }
 
-            if (BreakPoint->Type == KdbBreakPointTemporary)
-                KdbpDeleteBreakPoint(BreakPointNr, NULL);
+    /* A watch register that fired makes this a breakpoint, not a step */
+    if ((ExceptionRecord != NULL) &&
+        (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_SINGLE_STEP))
+    {
+        LONG Register = KdbpArchHardwareBreakPointHit(Context);
+
+        if ((Register >= 0) &&
+            (Register < (LONG)RTL_NUMBER_OF(KdbpHardwareOwner)) &&
+            (KdbpHardwareOwner[Register] >= 0))
+        {
+            PKDB_BREAKPOINT BreakPoint = &KdbpBreakPoints[KdbpHardwareOwner[Register]];
+
+            if (KdbpBreakPointStops(BreakPoint))
+            {
+                KdbpTakeBreakPointStop(KdbpHardwareOwner[Register], &StoppedAtInternal);
+                BreakPointNr = KdbLastBreakPointNr;
+
+                /* A breakpoint ends whatever stepping was going on */
+                KdbNumSingleSteps = 0;
+                KdbpArchSetSingleStep(Context, FALSE);
+            }
+            else if (BreakPoint->Data.Hw.AccessType == KdbAccessExec)
+            {
+                /* An instruction breakpoint fires before its instruction: it is stepped over with the watch off */
+                KdbpApplyBreakPoint(BreakPoint, FALSE);
+                KdbpStepOverBreakPoint = KdbpHardwareOwner[Register];
+                KdbpArchSetSingleStep(Context, TRUE);
+
+                if (KdbNumSingleSteps == 0)
+                {
+                    KdbCurrentExceptionRecordValid = FALSE;
+                    KdbCurrentTrapFrame = NULL;
+                    return kdContinue;
+                }
+            }
+            else if (!SteppedOverBreakPoint && (KdbNumSingleSteps == 0))
+            {
+                KdbCurrentExceptionRecordValid = FALSE;
+                KdbCurrentTrapFrame = NULL;
+                return kdContinue;
+            }
         }
     }
 
     /* A step the debugger did not take is an exception like any other */
     if ((ExceptionRecord != NULL) &&
         (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_SINGLE_STEP) &&
-        (SteppedOverBreakPoint || (KdbNumSingleSteps != 0) || KdbpHardwareBreakPointArmed()))
+        (BreakPointNr < 0) &&
+        (SteppedOverBreakPoint || (KdbNumSingleSteps != 0)))
     {
         EnteredOnSingleStep = TRUE;
 
@@ -1225,8 +1373,9 @@ KdbEnterDebuggerException(
     {
         PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
 
+        /* A watch on data fires after the access; one on an instruction would fire again at once */
         if ((BreakPoint != NULL) && BreakPoint->Enabled &&
-            (BreakPoint->Type != KdbBreakPointHardware))
+            ((BreakPoint->Type != KdbBreakPointHardware) || (BreakPoint->Data.Hw.AccessType == KdbAccessExec)))
         {
             KdbpApplyBreakPoint(BreakPoint, FALSE);
             KdbpStepOverBreakPoint = BreakPointNr;

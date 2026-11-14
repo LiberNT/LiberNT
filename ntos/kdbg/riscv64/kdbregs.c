@@ -253,4 +253,26 @@ const KDB_STEP_SAMPLE KdbpArchStepSamples[] =
 
 const ULONG KdbpArchStepSampleCount = RTL_NUMBER_OF(KdbpArchStepSamples);
 
+/* There are no watch registers driven here, so none can have fired */
+LONG
+NTAPI
+KdbpArchHardwareBreakPointHit(
+    _Inout_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return -1;
+}
+
+/* The answer to a stop leaves the engine's symbol range as it is: there is nothing else here to keep */
+VOID
+NTAPI
+KdbpArchPrepareContinue(
+    _Inout_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_opt_ PCONTEXT Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    State->u.Continue2.ControlSet.CurrentSymbolStart = 1;
+}
+
 /* EOF */

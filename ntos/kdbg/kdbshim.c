@@ -244,6 +244,9 @@ KdbgReceivePacket(
     State->Processor = (USHORT)KeGetCurrentPrcb()->Number;
     State->ReturnStatus = STATUS_SUCCESS;
 
+    /* The engine applies the control set on the way out; a zeroed one would undo every step and watch */
+    KdbpArchPrepareContinue(State, KdpReportedContext);
+
     /*
      * Having dealt with the stop means the system is to carry on as if it had
      * not happened; anything else leaves the exception to whoever else

@@ -33,6 +33,9 @@ typedef struct _KDB_BREAKPOINT
    PCHAR                  ConditionExpression;
    PVOID                  Condition;
    BOOLEAN                Internal;     /* Set by a step or a run to an address; gone at the next stop */
+   ULONG                  HitCount;     /* Times it was reached with its condition holding */
+   ULONG                  IgnoreCount;  /* Hits still to let pass without stopping */
+   PCHAR                  Commands;     /* What to run when it stops the machine */
    union {
       /* KdbBreakPointSoftware */
       KD_BREAKPOINT_TYPE  SavedInstruction;

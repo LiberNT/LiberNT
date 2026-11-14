@@ -115,6 +115,61 @@ KdbpArchHardwareBreakPointCount(VOID)
 }
 
 /*
+ * A watch register only watches once the processor holds it. The stopped
+ * processor resumes without reloading its own, so it is given them now; the
+ * frozen ones reload theirs from the state they saved when they stopped.
+ */
+/* The watch registers as the debugger set them: a stop's own context does not always hold them */
+static ULONG_PTR KdbpWatchAddress[4];
+static ULONG KdbpWatchControl;
+
+static
+VOID
+KdbpLoadWatchRegisters(
+    _Inout_ PCONTEXT Context)
+{
+    PKPRCB Current = KeGetCurrentPrcb();
+    ULONG Processor;
+
+    /* A stop that came through the debug trap goes back through it, and it reloads them from here */
+    Context->Dr0 = KdbpWatchAddress[0];
+    Context->Dr1 = KdbpWatchAddress[1];
+    Context->Dr2 = KdbpWatchAddress[2];
+    Context->Dr3 = KdbpWatchAddress[3];
+    Context->Dr7 = KdbpWatchControl;
+
+    __writedr(7, 0);
+    __writedr(0, Context->Dr0);
+    __writedr(1, Context->Dr1);
+    __writedr(2, Context->Dr2);
+    __writedr(3, Context->Dr3);
+    __writedr(7, Context->Dr7);
+
+    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Processor];
+
+        if (Prcb == NULL)
+            continue;
+
+        Prcb->ProcessorState.SpecialRegisters.KernelDr0 = Context->Dr0;
+        Prcb->ProcessorState.SpecialRegisters.KernelDr1 = Context->Dr1;
+        Prcb->ProcessorState.SpecialRegisters.KernelDr2 = Context->Dr2;
+        Prcb->ProcessorState.SpecialRegisters.KernelDr3 = Context->Dr3;
+        Prcb->ProcessorState.SpecialRegisters.KernelDr7 = Context->Dr7;
+
+        if (Prcb != Current)
+        {
+            Prcb->ProcessorState.ContextFrame.Dr0 = Context->Dr0;
+            Prcb->ProcessorState.ContextFrame.Dr1 = Context->Dr1;
+            Prcb->ProcessorState.ContextFrame.Dr2 = Context->Dr2;
+            Prcb->ProcessorState.ContextFrame.Dr3 = Context->Dr3;
+            Prcb->ProcessorState.ContextFrame.Dr7 = Context->Dr7;
+        }
+    }
+}
+
+/*
  * One of the four address-watching registers. The register itself holds the
  * address; what is watched for and how wide it is live in the control
  * register, two bits and two bits per breakpoint.
@@ -136,13 +191,13 @@ KdbpArchSetHardwareBreakPoint(
     if (Index >= 4)
         return STATUS_INVALID_PARAMETER;
 
-    Control = Context->Dr7;
+    Control = KdbpWatchControl;
 
     /* Clearing is only ever a matter of the enable bits */
     if (!Enable)
     {
-        Control &= ~(3UL << (Index * 2));
-        Context->Dr7 = Control;
+        KdbpWatchControl = Control & ~(3UL << (Index * 2));
+        KdbpLoadWatchRegisters(Context);
         return STATUS_SUCCESS;
     }
 
@@ -176,21 +231,16 @@ KdbpArchSetHardwareBreakPoint(
     if ((Address & (ULONG_PTR)(Size - 1)) != 0)
         return STATUS_DATATYPE_MISALIGNMENT;
 
-    switch (Index)
-    {
-        case 0: Context->Dr0 = Address; break;
-        case 1: Context->Dr1 = Address; break;
-        case 2: Context->Dr2 = Address; break;
-        case 3: Context->Dr3 = Address; break;
-    }
+    KdbpWatchAddress[Index] = Address;
 
     Control &= ~(0xFUL << (16 + (Index * 4)));
     Control |= (ReadWrite | (Length << 2)) << (16 + (Index * 4));
 
-    /* Watch it on this processor only, which is where the debugger is */
+    /* TODO: a processor frozen while it ran user code keeps its own watch registers */
     Control |= (1UL << (Index * 2));
 
-    Context->Dr7 = Control;
+    KdbpWatchControl = Control;
+    KdbpLoadWatchRegisters(Context);
     return STATUS_SUCCESS;
 }
 
@@ -340,5 +390,45 @@ const KDB_STEP_SAMPLE KdbpArchStepSamples[] =
 };
 
 const ULONG KdbpArchStepSampleCount = RTL_NUMBER_OF(KdbpArchStepSamples);
+
+/*
+ * The status register says which of the four watch registers matched; only
+ * one the control register has switched on counts.
+ */
+LONG
+NTAPI
+KdbpArchHardwareBreakPointHit(
+    _Inout_ PCONTEXT Context)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < 4; Index++)
+    {
+        if (((Context->Dr6 & (1 << Index)) != 0) && ((Context->Dr7 & (3 << (Index * 2))) != 0))
+        {
+            Context->Dr6 &= ~0xF;
+            return (LONG)Index;
+        }
+    }
+
+    return -1;
+}
+
+/*
+ * The engine sets the trace flag of the stopped thread and every processor's
+ * DR7 from the answer to a stop: the answer says what the debugger set up, or
+ * the engine would clear it on the way out.
+ */
+VOID
+NTAPI
+KdbpArchPrepareContinue(
+    _Inout_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_opt_ PCONTEXT Context)
+{
+    State->u.Continue2.ControlSet.TraceFlag = ((Context != NULL) && ((Context->EFlags & EFLAGS_TF) != 0));
+    State->u.Continue2.ControlSet.Dr7 = KdbpWatchControl;
+    State->u.Continue2.ControlSet.CurrentSymbolStart = 1;
+    State->u.Continue2.ControlSet.CurrentSymbolEnd = 1;
+}
 
 /* EOF */
