@@ -16,6 +16,7 @@
 #define KDB_MODULE_NAME_MAX     64
 #define KDB_SYMBOL_NAME_MAX     256
 #define KDB_FILE_NAME_MAX       128
+#define KDB_MAXIMUM_MODULES     4096
 
 typedef struct _KDB_SYM_LOOKUP
 {
@@ -103,21 +104,80 @@ KdbpModuleName(
     _Out_writes_z_(Size) PCHAR Buffer,
     _In_ ULONG Size)
 {
-    ULONG Length = 0;
+    WCHAR Wide[KDB_MODULE_NAME_MAX];
+    ULONG Length;
+    ULONG Index;
+
+    if (Size == 0)
+        return;
 
     Buffer[0] = ANSI_NULL;
 
-    if ((LdrEntry->BaseDllName.Buffer == NULL) || (Size == 0))
-        return;
-
-    while ((Length < (ULONG)(LdrEntry->BaseDllName.Length / sizeof(WCHAR))) &&
-           (Length < Size - 1))
+    Length = min((ULONG)(LdrEntry->BaseDllName.Length / sizeof(WCHAR)), min(Size - 1, (ULONG)RTL_NUMBER_OF(Wide)));
+    if ((LdrEntry->BaseDllName.Buffer == NULL) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(Wide, LdrEntry->BaseDllName.Buffer, Length * sizeof(WCHAR))))
     {
-        Buffer[Length] = (CHAR)LdrEntry->BaseDllName.Buffer[Length];
-        Length++;
+        return;
     }
 
+    for (Index = 0; Index < Length; Index++)
+        Buffer[Index] = ((Wide[Index] >= L' ') && (Wide[Index] < 0x7F)) ? (CHAR)Wide[Index] : '?';
+
     Buffer[Length] = ANSI_NULL;
+}
+
+/*
+ * Whether a module is the one a pattern names: by its file name, by that name
+ * without its extension, or as nt for the kernel, which is the first image of
+ * the list.
+ */
+static
+BOOLEAN
+KdbpModuleMatches(
+    _In_opt_ PCSTR Pattern,
+    _In_ PCSTR ModuleName,
+    _In_ BOOLEAN Kernel)
+{
+    CHAR Stem[KDB_MODULE_NAME_MAX];
+    PCSTR Dot;
+
+    if (KdbpMatchPattern(Pattern, ModuleName))
+        return TRUE;
+
+    if (Kernel && (Pattern != NULL) && (_stricmp(Pattern, "nt") == 0))
+        return TRUE;
+
+    Dot = strrchr(ModuleName, '.');
+    if ((Dot == NULL) || ((SIZE_T)(Dot - ModuleName) >= sizeof(Stem)))
+        return FALSE;
+
+    RtlCopyMemory(Stem, ModuleName, (SIZE_T)(Dot - ModuleName));
+    Stem[Dot - ModuleName] = ANSI_NULL;
+    return KdbpMatchPattern(Pattern, Stem);
+}
+
+/*
+ * The next loaded image, read through a guarded read: a list damaged by
+ * whatever stopped the machine ends the walk rather than the debugger.
+ */
+static
+PLDR_DATA_TABLE_ENTRY
+KdbpNextModule(
+    _In_opt_ PLIST_ENTRY Link,
+    _Inout_ PULONG Count,
+    _Out_ PLDR_DATA_TABLE_ENTRY Snapshot)
+{
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+
+    if ((Link == NULL) || (Link == &PsLoadedModuleList) || (*Count >= KDB_MAXIMUM_MODULES))
+        return NULL;
+
+    LdrEntry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    if (!NT_SUCCESS(KdbpSafeReadMemory(Snapshot, LdrEntry, sizeof(*Snapshot))))
+        return NULL;
+
+    (*Count)++;
+    return LdrEntry;
 }
 
 static
@@ -195,27 +255,20 @@ KdbpSymFindModule(
     _In_opt_ INT Index,
     _Out_ PLDR_DATA_TABLE_ENTRY *pLdrEntry)
 {
-    PLIST_ENTRY Entry;
+    static LDR_DATA_TABLE_ENTRY Snapshot;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    ULONG Count = 0;
     INT Current = 0;
 
     *pLdrEntry = NULL;
 
-    if (PsLoadedModuleList.Flink == NULL)
-        return FALSE;
-
-    for (Entry = PsLoadedModuleList.Flink;
-         Entry != &PsLoadedModuleList;
-         Entry = Entry->Flink)
+    for (LdrEntry = KdbpNextModule(PsLoadedModuleList.Flink, &Count, &Snapshot);
+         LdrEntry != NULL;
+         LdrEntry = KdbpNextModule(Snapshot.InLoadOrderLinks.Flink, &Count, &Snapshot))
     {
-        PLDR_DATA_TABLE_ENTRY LdrEntry;
-
-        LdrEntry = CONTAINING_RECORD(Entry,
-                                     LDR_DATA_TABLE_ENTRY,
-                                     InLoadOrderLinks);
-
         if (Address != NULL)
         {
-            if (KdbpAddressInModule(LdrEntry, Address))
+            if (KdbpAddressInModule(&Snapshot, Address))
             {
                 *pLdrEntry = LdrEntry;
                 return TRUE;
@@ -369,18 +422,17 @@ KdbSymEnumerate(
     _Out_ PULONG MatchCount,
     _Out_ PBOOLEAN Truncated)
 {
-    PLIST_ENTRY Entry;
+    static LDR_DATA_TABLE_ENTRY Snapshot;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
     KDB_SYM_ENUM Enum;
     CHAR ModuleName[KDB_MODULE_NAME_MAX];
+    ULONG Count = 0;
 
     *MatchCount = 0;
     *Truncated = FALSE;
 
     if ((Callback == NULL) || (MaximumMatches == 0))
         return STATUS_INVALID_PARAMETER;
-
-    if (PsLoadedModuleList.Flink == NULL)
-        return STATUS_NOT_FOUND;
 
     Enum.SymbolPattern = SymbolPattern;
     Enum.MaximumMatches = MaximumMatches;
@@ -389,23 +441,17 @@ KdbSymEnumerate(
     Enum.Callback = Callback;
     Enum.CallbackContext = Context;
 
-    for (Entry = PsLoadedModuleList.Flink;
-         Entry != &PsLoadedModuleList;
-         Entry = Entry->Flink)
+    for (LdrEntry = KdbpNextModule(PsLoadedModuleList.Flink, &Count, &Snapshot);
+         LdrEntry != NULL;
+         LdrEntry = KdbpNextModule(Snapshot.InLoadOrderLinks.Flink, &Count, &Snapshot))
     {
-        PLDR_DATA_TABLE_ENTRY LdrEntry;
+        KdbpModuleName(&Snapshot, ModuleName, sizeof(ModuleName));
 
-        LdrEntry = CONTAINING_RECORD(Entry,
-                                     LDR_DATA_TABLE_ENTRY,
-                                     InLoadOrderLinks);
-
-        KdbpModuleName(LdrEntry, ModuleName, sizeof(ModuleName));
-
-        if (!KdbpMatchPattern(ModulePattern, ModuleName))
+        if (!KdbpModuleMatches(ModulePattern, ModuleName, (Count == 1)))
             continue;
 
         Enum.ModuleName = ModuleName;
-        Enum.ImageBase = (ULONG_PTR)LdrEntry->DllBase;
+        Enum.ImageBase = (ULONG_PTR)Snapshot.DllBase;
 
         KdbpSymzEnumerate(LdrEntry, KdbpSymEnumRoutine, &Enum);
 
@@ -429,49 +475,42 @@ KdbpSymLookupName(
     _In_ PCSTR Name,
     _Out_ PULONG_PTR Address)
 {
-    PLIST_ENTRY Entry;
+    static LDR_DATA_TABLE_ENTRY Snapshot;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
     KDB_SYM_LOOKUP Lookup;
     CHAR ModuleName[KDB_MODULE_NAME_MAX];
+    CHAR Wanted[KDB_MODULE_NAME_MAX];
     PCSTR SymbolName = Name;
     PCSTR Separator;
+    ULONG Count = 0;
 
     *Address = 0;
 
     if ((Name == NULL) || (*Name == ANSI_NULL))
         return FALSE;
 
-    if (PsLoadedModuleList.Flink == NULL)
-        return FALSE;
-
     /* `module!symbol` says which image to look in */
     Separator = strchr(Name, '!');
     if (Separator != NULL)
-        SymbolName = Separator + 1;
-
-    for (Entry = PsLoadedModuleList.Flink;
-         Entry != &PsLoadedModuleList;
-         Entry = Entry->Flink)
     {
-        PLDR_DATA_TABLE_ENTRY LdrEntry;
+        SIZE_T Length = (SIZE_T)(Separator - Name);
 
-        LdrEntry = CONTAINING_RECORD(Entry,
-                                     LDR_DATA_TABLE_ENTRY,
-                                     InLoadOrderLinks);
+        if (Length >= sizeof(Wanted))
+            return FALSE;
 
+        RtlCopyMemory(Wanted, Name, Length);
+        Wanted[Length] = ANSI_NULL;
+        SymbolName = Separator + 1;
+    }
+
+    for (LdrEntry = KdbpNextModule(PsLoadedModuleList.Flink, &Count, &Snapshot);
+         LdrEntry != NULL;
+         LdrEntry = KdbpNextModule(Snapshot.InLoadOrderLinks.Flink, &Count, &Snapshot))
+    {
         if (Separator != NULL)
         {
-            CHAR Wanted[KDB_MODULE_NAME_MAX];
-            SIZE_T Length = (SIZE_T)(Separator - Name);
-
-            if (Length >= sizeof(Wanted))
-                return FALSE;
-
-            RtlCopyMemory(Wanted, Name, Length);
-            Wanted[Length] = ANSI_NULL;
-
-            KdbpModuleName(LdrEntry, ModuleName, sizeof(ModuleName));
-
-            if (!KdbpMatchPattern(Wanted, ModuleName))
+            KdbpModuleName(&Snapshot, ModuleName, sizeof(ModuleName));
+            if (!KdbpModuleMatches(Wanted, ModuleName, (Count == 1)))
                 continue;
         }
 
@@ -483,7 +522,7 @@ KdbpSymLookupName(
 
         if (Lookup.Found)
         {
-            *Address = (ULONG_PTR)LdrEntry->DllBase + Lookup.Rva;
+            *Address = (ULONG_PTR)Snapshot.DllBase + Lookup.Rva;
             return TRUE;
         }
     }
