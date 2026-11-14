@@ -870,10 +870,6 @@ USBH_ResetDevice(
   IN BOOLEAN IsKeepDeviceData,
   IN BOOLEAN IsWait);
 
-BOOLEAN
-NTAPI
-USBH_IsBootDeviceDiscoveryActive(VOID);
-
 NTSTATUS
 NTAPI
 DriverEntry(

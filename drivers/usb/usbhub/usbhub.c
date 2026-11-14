@@ -32,34 +32,8 @@
 PWSTR GenericUSBDeviceString = NULL;
 LONG USBH_NextDebugBusNumber = 0;
 LONG USBH_NextHubNumber = 0;
-static LONG USBH_BootDeviceDiscoveryActive = TRUE;
 static LIST_ENTRY USBH_SerialNumberList;
 static FAST_MUTEX USBH_SerialNumberMutex;
-
-BOOLEAN
-NTAPI
-USBH_IsBootDeviceDiscoveryActive(VOID)
-{
-    return InterlockedCompareExchange(&USBH_BootDeviceDiscoveryActive,
-                                      TRUE,
-                                      TRUE) != FALSE;
-}
-
-static
-VOID
-NTAPI
-USBH_DriverReinitialize(
-    IN PDRIVER_OBJECT DriverObject,
-    IN PVOID Context,
-    IN ULONG Count)
-{
-    UNREFERENCED_PARAMETER(DriverObject);
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(Count);
-
-    /* Driver reinitialization runs after the I/O manager resolves the boot volume. */
-    InterlockedExchange(&USBH_BootDeviceDiscoveryActive, FALSE);
-}
 
 NTSYSAPI
 NTSTATUS
@@ -7542,10 +7516,6 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
     ExInitializeFastMutex(&USBH_SerialNumberMutex);
 
     USBH_RegQueryGenericUSBDeviceString(&GenericUSBDeviceString);
-
-    IoRegisterDriverReinitialization(DriverObject,
-                                     USBH_DriverReinitialize,
-                                     NULL);
 
     return STATUS_SUCCESS;
 }

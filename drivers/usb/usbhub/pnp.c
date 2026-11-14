@@ -1821,6 +1821,22 @@ USBH_HubEnumWorker(
 
     InterlockedExchange(&HubExtension->EnumWorkerRerun, 0);
 
+    if ((HubExtension->HubFlags & USBHUB_FDO_FLAG_NOT_ENUMERATED) &&
+        (HubExtension->LowerPDO == HubExtension->RootHubPdo))
+    {
+        LARGE_INTEGER Timeout;
+        NTSTATUS Status;
+
+        /* USBPORT finishes power/chirp before notifying the root hub; a reset before that races its PORTSC writes */
+        Timeout.QuadPart = -10LL * 1000 * 10000;
+        Status = KeWaitForSingleObject(&HubExtension->RootHubNotificationEvent, Executive, KernelMode, FALSE, &Timeout);
+        if (Status != STATUS_SUCCESS)
+        {
+            InterlockedExchange(&HubExtension->EnumWorkerQueued, 0);
+            return;
+        }
+    }
+
     if ((HubExtension->HubFlags & USBHUB_FDO_FLAG_DEVICE_STARTED) &&
         !(HubExtension->HubFlags & USBHUB_FDO_FLAG_DEVICE_STOPPING) &&
         HubExtension->HubDescriptor &&
@@ -1929,64 +1945,16 @@ USBH_FdoQueryBusRelations(IN PUSBHUB_FDO_EXTENSION HubExtension,
         goto RelationsWorker;
     }
 
+    /* Ports are enumerated on a work item that invalidates the relations when done; the I/O manager waits for a late USB boot disk */
     if (HubExtension->HubFlags & USBHUB_FDO_FLAG_NOT_ENUMERATED)
     {
-        BOOLEAN RootHubReady = TRUE;
-
-        if (HubExtension->LowerPDO == HubExtension->RootHubPdo)
-        {
-            LARGE_INTEGER Timeout;
-
-            /* USBPORT finishes power/chirp before notifying the root hub.
-             * Starting a hub reset earlier races that worker's PORTSC writes,
-             * which can disable a port after our reset has enabled it.
-             * A companion's notification waits on the device action that still
-             * has to start its USB2 partner, so this wait cannot be allowed to
-             * hold the PnP thread for long; USBHUB_RootHubCallBack asks for the
-             * relations again, so report none once the short wait is over. */
-            Timeout.QuadPart = -100LL * 10000;
-            Status = KeWaitForSingleObject(&HubExtension->RootHubNotificationEvent, Executive, KernelMode, FALSE, &Timeout);
-            RootHubReady = (Status == STATUS_SUCCESS);
-            Status = STATUS_SUCCESS;
-        }
-
-        /*
-         * The initial BusRelations query is a discovery barrier. Returning an
-         * empty snapshot while enumeration runs on a work item lets the PnP
-         * tree walk complete before a USB boot disk exists, so the I/O manager
-         * cannot create the loader's signature-based ARC link. Enumerate the
-         * initial topology synchronously; no device type or boot-path special
-         * case is required.
-         */
-        if (RootHubReady)
-        {
-            USBH_EnumerateHubPorts(HubExtension);
-        }
+        HubExtension->HubFlags &= ~USBHUB_FDO_FLAG_DO_ENUMERATION;
+        USBH_QueueHubEnumeration(HubExtension);
     }
     else if (HubExtension->HubFlags & USBHUB_FDO_FLAG_DO_ENUMERATION)
     {
-        if (USBH_IsBootDeviceDiscoveryActive())
-        {
-            /*
-             * A boot-device connection can be reported after the hub's first
-             * relations query. Keep these change-driven passes on the PnP
-             * worker until boot-volume discovery is complete, so the global
-             * PnP enumeration barrier also covers debounce, reset and PDO
-             * publication.
-             */
-            DPRINT("USBH_FdoQueryBusRelations: boot discovery enumeration\n");
-            USBH_EnumerateHubPorts(HubExtension);
-        }
-        else
-        {
-            /*
-             * After boot, run the slow debounce/reset/create-device sequence
-             * on a work item. The worker invalidates the bus relations again
-             * once it is done and the snapshot below reports the new PDOs.
-             */
-            HubExtension->HubFlags &= ~USBHUB_FDO_FLAG_DO_ENUMERATION;
-            USBH_QueueHubEnumeration(HubExtension);
-        }
+        HubExtension->HubFlags &= ~USBHUB_FDO_FLAG_DO_ENUMERATION;
+        USBH_QueueHubEnumeration(HubExtension);
     }
 
     /* Return a snapshot of the child PDOs published by the enumeration pass. */
