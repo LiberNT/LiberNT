@@ -39,8 +39,14 @@ FstubEntryArraySectors(
     _In_ ULONG BytesPerSector)
 {
     ULONGLONG Bytes = (ULONGLONG)NumberOfEntries * SizeOfPartitionEntry;
+    ULONGLONG Sectors;
 
-    return (ULONG)((Bytes + BytesPerSector - 1) / BytesPerSector);
+    ASSERT(BytesPerSector != 0);
+
+    Sectors = (Bytes + BytesPerSector - 1) / BytesPerSector;
+    if (Sectors * BytesPerSector > MAXULONG) return 0;
+
+    return (ULONG)Sectors;
 }
 
 /* Whether a header makes sense on a disk of this size */
@@ -437,6 +443,7 @@ FstubWritePartitionTableEFI(
     Sectors = FstubEntryArraySectors(NumberOfEntries,
                                      EFI_PARTITION_ENTRY_SIZE,
                                      Disk->BytesPerSector);
+    if (Sectors == 0) return STATUS_INVALID_PARAMETER;
 
     /* The array must leave room for both headers and the protective record */
     if ((ULONGLONG)Sectors * 2 + 3 > Disk->SectorCount)

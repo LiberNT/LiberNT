@@ -39,6 +39,11 @@ FstubAdjustPartitionCount(
     PAGED_CODE();
 
     if (PartitionCount == 0) return STATUS_INVALID_PARAMETER;
+    if (PartitionCount > (MAXULONG - FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry)) /
+                         sizeof(PARTITION_INFORMATION_EX))
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
 
     Wanted = FstubLayoutSize(PartitionCount);
 
@@ -238,6 +243,11 @@ IoReadPartitionTableEx(
             if (!NT_SUCCESS(Status))
             {
                 Status = FstubReadPartitionTableEFI(Disk, TRUE, &Layout);
+            }
+
+            if (Status == STATUS_DISK_CORRUPT_ERROR)
+            {
+                Status = FstubReadPartitionTableMBR(Disk, FALSE, &Layout);
             }
         }
         else if (Style == PARTITION_STYLE_MBR)

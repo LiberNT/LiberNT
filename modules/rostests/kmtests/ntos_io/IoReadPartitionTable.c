@@ -24,14 +24,106 @@ NTAPI
 IoDeleteDriver(
     _In_ PDRIVER_OBJECT DriverObject);
 
+NTSYSAPI
+ULONG
+NTAPI
+RtlComputeCrc32(
+    _In_ ULONG InitialCrc,
+    _In_ const UCHAR *Buffer,
+    _In_ ULONG Length);
+
 #define TEST_SECTOR_SIZE        512
 #define TEST_DISK_SECTORS       2048
 #define TEST_DISK_SIGNATURE     0x4B54504CUL
 #define TEST_PARTITION_START    63
 #define TEST_PARTITION_SECTORS  1000
 
+#define TEST_GPT_ENTRIES        ((1UL << 28) + 1)
+#define TEST_GPT_ENTRY_SIZE     128
+#define TEST_GPT_USED_ENTRIES   4
+
 static LONG ReadsWithoutOverride;
 static LONG Reads;
+static BOOLEAN ServeGpt;
+
+static const GUID TestBasicDataGuid =
+    { 0xebd0a0a2, 0xb9e5, 0x4433, { 0x87, 0xc0, 0x68, 0xb6, 0xb7, 0x26, 0x99, 0xc7 } };
+
+static
+VOID
+TestGptHeader(
+    _Out_writes_bytes_(TEST_SECTOR_SIZE) PUCHAR Sector,
+    _In_ ULONGLONG MyLba,
+    _In_ ULONGLONG AlternateLba,
+    _In_ ULONGLONG EntryLba,
+    _In_ ULONG ArrayCrc)
+{
+    RtlCopyMemory(Sector, "EFI PART", 8);
+    *(PULONG)&Sector[8] = 0x00010000;
+    *(PULONG)&Sector[12] = 92;
+    *(PULONGLONG)&Sector[24] = MyLba;
+    *(PULONGLONG)&Sector[32] = AlternateLba;
+    *(PULONGLONG)&Sector[40] = 34;
+    *(PULONGLONG)&Sector[48] = TEST_DISK_SECTORS - 34;
+    *(PULONGLONG)&Sector[72] = EntryLba;
+    *(PULONG)&Sector[80] = TEST_GPT_ENTRIES;
+    *(PULONG)&Sector[84] = TEST_GPT_ENTRY_SIZE;
+    *(PULONG)&Sector[88] = ArrayCrc;
+    *(PULONG)&Sector[16] = RtlComputeCrc32(0, Sector, 92);
+}
+
+static
+VOID
+TestGptArray(
+    _Out_writes_bytes_(TEST_SECTOR_SIZE) PUCHAR Sector)
+{
+    ULONG i;
+
+    for (i = 0; i < TEST_GPT_USED_ENTRIES; i++)
+    {
+        PUCHAR Entry = Sector + i * TEST_GPT_ENTRY_SIZE;
+
+        RtlCopyMemory(Entry, &TestBasicDataGuid, sizeof(GUID));
+        Entry[16] = (UCHAR)(i + 1);
+        *(PULONGLONG)&Entry[32] = 64 + i * 64;
+        *(PULONGLONG)&Entry[40] = 64 + i * 64 + 63;
+    }
+}
+
+static
+VOID
+TestGptSector(
+    _In_ ULONGLONG Lba,
+    _Out_writes_bytes_(TEST_SECTOR_SIZE) PUCHAR Sector)
+{
+    UCHAR Array[TEST_SECTOR_SIZE];
+    ULONG ArrayCrc;
+
+    RtlZeroMemory(Array, sizeof(Array));
+    TestGptArray(Array);
+    ArrayCrc = RtlComputeCrc32(0, Array, (ULONG)((ULONGLONG)TEST_GPT_ENTRIES * TEST_GPT_ENTRY_SIZE));
+
+    if (Lba == 0)
+    {
+        Sector[0x1BE + 4] = PARTITION_GPT;
+        *(PULONG)&Sector[0x1BE + 8] = 1;
+        *(PULONG)&Sector[0x1BE + 12] = TEST_DISK_SECTORS - 1;
+        Sector[510] = 0x55;
+        Sector[511] = 0xAA;
+    }
+    else if (Lba == 1)
+    {
+        TestGptHeader(Sector, 1, TEST_DISK_SECTORS - 1, 2, ArrayCrc);
+    }
+    else if (Lba == 2 || Lba == TEST_DISK_SECTORS - 2)
+    {
+        RtlCopyMemory(Sector, Array, sizeof(Array));
+    }
+    else if (Lba == TEST_DISK_SECTORS - 1)
+    {
+        TestGptHeader(Sector, TEST_DISK_SECTORS - 1, 1, TEST_DISK_SECTORS - 2, ArrayCrc);
+    }
+}
 
 static
 NTSTATUS
@@ -105,7 +197,17 @@ TestRead(
     if (Buffer == NULL) return TestComplete(Irp, STATUS_INSUFFICIENT_RESOURCES, 0);
 
     RtlZeroMemory(Buffer, Length);
-    if (Stack->Parameters.Read.ByteOffset.QuadPart == 0 && Length >= TEST_SECTOR_SIZE)
+    if (ServeGpt)
+    {
+        ULONG Offset;
+
+        for (Offset = 0; Offset + TEST_SECTOR_SIZE <= Length; Offset += TEST_SECTOR_SIZE)
+        {
+            TestGptSector((ULONGLONG)(Stack->Parameters.Read.ByteOffset.QuadPart + Offset) / TEST_SECTOR_SIZE,
+                          Buffer + Offset);
+        }
+    }
+    else if (Stack->Parameters.Read.ByteOffset.QuadPart == 0 && Length >= TEST_SECTOR_SIZE)
     {
         *(PULONG)&Buffer[0x1B8] = TEST_DISK_SIGNATURE;
         Buffer[0x1BE + 4] = PARTITION_IFS;
@@ -178,6 +280,30 @@ START_TEST(IoReadPartitionTable)
             ExFreePool(Layout);
         }
 
+        IoDeleteDevice(Disk);
+    }
+
+    Layout = NULL;
+    Disk = NULL;
+    Status = IoCreateDevice(DriverObject, 0, NULL, FILE_DEVICE_DISK, 0, FALSE, &Disk);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Disk->Flags |= DO_DIRECT_IO;
+        Disk->Flags &= ~DO_DEVICE_INITIALIZING;
+        ServeGpt = TRUE;
+
+        /* A table whose entry count makes its size wrap is read as the protective record it sits behind */
+        Status = IoReadPartitionTableEx(Disk, &Layout);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (Layout != NULL)
+        {
+            ok_eq_ulong((ULONG)Layout->PartitionStyle, (ULONG)PARTITION_STYLE_MBR);
+            ok_eq_ulong(Layout->PartitionCount, 4UL);
+            ExFreePool(Layout);
+        }
+
+        ServeGpt = FALSE;
         IoDeleteDevice(Disk);
     }
 
