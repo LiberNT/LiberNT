@@ -769,7 +769,8 @@ AfdConnectedSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     if (TotalBytesCopied < SendLength)
         FCB->EventSelectDisabled &= ~AFD_EVENT_SEND;
 
-    if (Immediate || TotalBytesCopied == SendLength)
+    /* An urgent send that may wait completes with the transport's send, which follows what it looped back */
+    if (Immediate || (TotalBytesCopied == SendLength && !(SendReq->TdiFlags & TDI_SEND_EXPEDITED)))
     {
         /* The user buffer is no longer needed. Waiting for the TDI send
          * here can deadlock an event loop whose peer has not begun reading. */

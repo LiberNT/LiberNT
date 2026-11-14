@@ -711,6 +711,18 @@ NTSTATUS TCPReceiveData
     return Status;
 }
 
+/* Runs on the stack's thread, behind the input that was queued when the send was */
+static
+void
+TCPSendTakenIn(void *Context)
+{
+    PTDI_BUCKET Bucket = Context;
+    PCONNECTION_ENDPOINT Connection = Bucket->AssociatedEndpoint;
+
+    CompleteBucket(Connection, Bucket, FALSE);
+    DereferenceObject(Connection);
+}
+
 NTSTATUS TCPSendData
 ( PCONNECTION_ENDPOINT Connection,
   PCHAR BufferData,
@@ -740,6 +752,37 @@ NTSTATUS TCPSendData
                                           FALSE));
 
     TI_DbgPrint(DEBUG_TCP,("[IP, TCPSendData] Send: %x, %d\n", Status, SendLength));
+
+    /* Urgent data is for its receiver to act on at once. A segment that looped back to this host is queued
+     * behind this call, so the send completes behind it: after the stack took the segment in and after the
+     * receive it satisfied was completed. */
+    if (Status == STATUS_SUCCESS && (Flags & TDI_SEND_EXPEDITED))
+    {
+        Bucket = ExAllocateFromNPagedLookasideList(&TdiBucketLookasideList);
+        if (Bucket)
+        {
+            Bucket->Request.RequestNotifyObject = Complete;
+            Bucket->Request.RequestContext = Context;
+            Bucket->AssociatedEndpoint = Connection;
+            Bucket->Status = STATUS_SUCCESS;
+            Bucket->Information = *BytesSent;
+
+            ReferenceObject(Connection);
+            if (tcpip_callback(TCPSendTakenIn, Bucket) == ERR_OK)
+            {
+                Status = STATUS_PENDING;
+            }
+            else
+            {
+                DereferenceObject(Connection);
+                ExFreeToNPagedLookasideList(&TdiBucketLookasideList, Bucket);
+            }
+        }
+
+        TI_DbgPrint(DEBUG_TCP, ("[IP, TCPSendData] Leaving. Status = %x\n", Status));
+        DereferenceObject(Connection);
+        return Status;
+    }
 
     /* Keep this request around ... there was no data yet */
     if (Status == STATUS_PENDING)
