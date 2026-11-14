@@ -1322,8 +1322,7 @@ IopParseDeviceEx(
     {
         IopCheckBackupRestorePrivilege(AccessState,
                                        &OpenPacket->CreateOptions,
-                                       AccessMode,
-                                       OpenPacket->Disposition);
+                                       AccessMode);
     }
 
     Status = IopSendCreateIrp(TargetDevice,
