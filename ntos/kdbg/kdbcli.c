@@ -128,6 +128,17 @@ KdbpIsOutputAborted(VOID)
     return KdbpOutputAborted;
 }
 
+/* A network debugger already has the whole log, and its keys cannot satisfy a prompt that waits locally */
+static
+BOOLEAN
+KdbpPagerCanWaitForKey(VOID)
+{
+    if (KdpDebugMode.Net)
+        return FALSE;
+
+    return (KdTermSerial || KdpDebugMode.Screen);
+}
+
 /*
  * Shows a block of text, stopping when the screen is full so that what has
  * already gone past can be read. The person reading may give up on the rest.
@@ -156,7 +167,8 @@ KdbpPager(
         KdbpLinesPrinted++;
 
         /* Only worth pausing while somebody is there to press a key */
-        if (!KdbActive || KdbpInitFileRunning || (KdbpLinesPrinted + 1 < Rows))
+        if (!KdbActive || KdbpInitFileRunning || !KdbpPagerCanWaitForKey() ||
+            (KdbpLinesPrinted + 1 < Rows))
             continue;
 
         KdpScreenHoldOutput(FALSE);
