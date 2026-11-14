@@ -81,6 +81,7 @@ typedef struct _LX_INET_SOCKET
     LIST_ENTRY BoundLink;
     USHORT BoundPort;
     ULONG QueuedAtConnect;
+    ULONG SourceAddress;
     BOOLEAN PortLocked;
     LIST_ENTRY Carried;
     ULONG CarriedBytes;
@@ -1321,6 +1322,18 @@ LxInetConnectComplete(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
+/* Nothing but this host is reachable from a loopback source address */
+static
+BOOLEAN
+LxInetOffHost(
+    _In_ ULONG Source,
+    _In_ ULONG Destination)
+{
+    /* TODO: broadcast and multicast destinations are let through unchecked */
+    return ((Source & 0xFF) == 127) && ((Destination & 0xFF) != 127) && ((Destination & 0xF0) != 0xE0) &&
+           (Destination != 0xFFFFFFFF) && (LxNetlinkAddressIndex(Destination) == 0);
+}
+
 LONG64
 LxInetConnect(
     _In_ PLX_CALL Call,
@@ -1328,7 +1341,7 @@ LxInetConnect(
 {
     PLX_INET_SOCKET Socket = File->Object;
     PAFD_CONNECT_INFO Connect = (PAFD_CONNECT_INFO)Socket->ConnectBuffer;
-    ULONG Address;
+    ULONG Address, Source;
     USHORT Port, Family = 0;
     BOOLEAN LoopbackV6;
     KIRQL OldIrql;
@@ -1345,6 +1358,7 @@ LxInetConnect(
         if (Error == 0)
         {
             Socket->PeerValid = FALSE;
+            Socket->SourceAddress = 0;
         }
         LxInetUnlock(Socket);
         return Error;
@@ -1367,11 +1381,20 @@ LxInetConnect(
             LxInetUnlock(Socket);
             return -LX_EACCES;
         }
+        Source = (Socket->BoundAddress != 0) ? Socket->BoundAddress : Socket->SourceAddress;
+        if (LxInetOffHost(Source, Address))
+        {
+            LxInetUnlock(Socket);
+            return -LX_EINVAL;
+        }
         if (Socket->State == LX_INET_CREATED)
             Error = LxInetBindAddress(Socket, Socket->BoundAddress, 0);
         if (Error == 0)
         {
             AFD_INFO Info;
+
+            if (Source == 0)
+                Socket->SourceAddress = LxNetlinkSourceAddress(Address);
 
             /* Datagrams that were already queued stay readable whoever sent them; only later ones are held to the peer */
             RtlZeroMemory(&Info, sizeof(Info));
@@ -1572,7 +1595,7 @@ LxInetName(
     }
     /* A connected datagram socket left on the wildcard address reports the address its datagrams to the peer leave from */
     if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Address->Address[0].Address[0].in_addr == 0))
-        Address->Address[0].Address[0].in_addr = LxNetlinkSourceAddress(Socket->PeerAddress);
+        Address->Address[0].Address[0].in_addr = Socket->SourceAddress;
     return LxInetCopyAddressOut(Socket,
                                 Address->Address[0].Address[0].in_addr,
                                 Address->Address[0].Address[0].sin_port,
@@ -1621,6 +1644,8 @@ LxInetSendmsg(
         {
             return -LX_EDESTADDRREQ;
         }
+        if (LxInetOffHost(Socket->BoundAddress, Address))
+            return -LX_EINVAL;
         if (Socket->State == LX_INET_CREATED)
         {
             LONG Error;
