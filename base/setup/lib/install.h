@@ -32,6 +32,19 @@ PrepareUpgradeFileCopy(
     _Inout_ PUSETUP_DATA pSetupData,
     _In_opt_ PFILE_COPY_STATUS_ROUTINE StatusRoutine);
 
+typedef VOID
+(NTAPI *PUPGRADE_TARGET_ROUTINE)(
+    _In_opt_ PVOID Context,
+    _In_ PCWSTR Target,
+    _In_ BOOLEAN Directory);
+
+NTSTATUS
+NTAPI
+EnumerateUpgradeTargets(
+    _In_ PUSETUP_DATA pSetupData,
+    _In_ PUPGRADE_TARGET_ROUTINE Routine,
+    _In_opt_ PVOID Context);
+
 BOOLEAN
 NTAPI
 DoFileCopy(

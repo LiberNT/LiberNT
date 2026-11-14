@@ -546,6 +546,23 @@ FileSecWalkDirectory(
     HeapFree(GetProcessHeap(), 0, Buffer);
 }
 
+static PCWSTR
+FileSecSystemDirectory(
+    _In_ PCWSTR InstallationDirectory)
+{
+    PCWSTR SystemDirectory = InstallationDirectory;
+
+    while (*SystemDirectory == L'\\' || *SystemDirectory == L'/')
+        SystemDirectory++;
+    if (*SystemDirectory == UNICODE_NULL || wcspbrk(SystemDirectory, L"\\/"))
+    {
+        /* TODO: a system directory below the volume root keeps the security it inherits */
+        DPRINT1("No file security rules for system directory '%S'\n", InstallationDirectory);
+        return NULL;
+    }
+    return SystemDirectory;
+}
+
 NTSTATUS
 FileSecurityApply(
     _In_ PFILESEC_POLICY Policy,
@@ -557,16 +574,10 @@ FileSecurityApply(
     UNICODE_STRING RootU;
     HANDLE Root;
     NTSTATUS Status;
-    PCWSTR SystemDirectory = InstallationDirectory;
+    PCWSTR SystemDirectory = FileSecSystemDirectory(InstallationDirectory);
 
-    while (*SystemDirectory == L'\\' || *SystemDirectory == L'/')
-        SystemDirectory++;
-    if (*SystemDirectory == UNICODE_NULL || wcspbrk(SystemDirectory, L"\\/"))
-    {
-        /* TODO: a system directory below the volume root keeps the security it inherits */
-        DPRINT1("No file security rules for system directory '%S'\n", InstallationDirectory);
+    if (!SystemDirectory)
         return STATUS_SUCCESS;
-    }
 
     Walk = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Walk));
     if (!Walk)
@@ -601,35 +612,177 @@ FileSecurityApply(
     return Status;
 }
 
+static NTSTATUS
+FileSecApplyItem(
+    _Inout_ PFILESEC_WALK Walk,
+    _In_ HANDLE Root,
+    _In_ const FILESEC_ITEM *Item)
+{
+    SIZE_T SystemLength = wcslen(Walk->SystemDirectory);
+    PCWSTR Path = Item->Path;
+    UNICODE_STRING NameU;
+    HANDLE Handle;
+    NTSTATUS Status;
+    SIZE_T Index = 0;
+
+    while (*Path == L'\\')
+        Path++;
+    if (*Path == UNICODE_NULL)
+        return STATUS_SUCCESS;
+
+    Walk->Length = 0;
+    if (_wcsnicmp(Path, Walk->SystemDirectory, SystemLength) == 0 &&
+        (Path[SystemLength] == L'\\' || Path[SystemLength] == UNICODE_NULL))
+    {
+        /* The rules name the system directory as the image does */
+        StringCchCopyW(Walk->Path, ARRAYSIZE(Walk->Path), L"windows");
+        Walk->Length = wcslen(Walk->Path);
+        Index = SystemLength;
+    }
+    for (; Path[Index] && Walk->Length + 1 < ARRAYSIZE(Walk->Path); Index++)
+        Walk->Path[Walk->Length++] = (Path[Index] == L'\\') ? L'/' : towlower(Path[Index]);
+    Walk->Path[Walk->Length] = UNICODE_NULL;
+    if (Path[Index] != UNICODE_NULL)
+        return STATUS_NAME_TOO_LONG;
+
+    RtlInitUnicodeString(&NameU, Path);
+    Status = FileSecOpen(&Handle, Root, &NameU, FALSE);
+    if (Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        return STATUS_SUCCESS;
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("Opening '%S' failed (Status 0x%08lx)\n", Walk->Path, Status);
+        return Status;
+    }
+
+    Status = FileSecApplyToHandle(Walk, Handle, Item->Directory);
+    NtClose(Handle);
+    return Status;
+}
+
 NTSTATUS
-InstallApplyFileSecurity(
+FileSecurityApplyItems(
+    _In_ PFILESEC_POLICY Policy,
     _In_ PCWSTR VolumeRoot,
     _In_ PCWSTR InstallationDirectory,
-    _In_ BOOLEAN WholeVolume)
+    _In_ ULONG Count,
+    _In_reads_(Count) const FILESEC_ITEM *Items)
 {
-    BOOLEAN Restore = FALSE, Backup = FALSE, Owner = FALSE;
-    PFILESEC_POLICY Policy;
+    PFILESEC_WALK Walk;
+    UNICODE_STRING RootU;
+    HANDLE Root;
     NTSTATUS Status;
+    PCWSTR SystemDirectory = FileSecSystemDirectory(InstallationDirectory);
+    ULONG Index;
+
+    ASSERT(Count == 0 || Items != NULL);
+    if (!SystemDirectory)
+        return STATUS_SUCCESS;
+
+    Walk = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Walk));
+    if (!Walk)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Walk->Policy = Policy;
+    Walk->SystemDirectory = SystemDirectory;
+
+    RtlInitUnicodeString(&RootU, VolumeRoot);
+    Status = FileSecOpen(&Root, NULL, &RootU, FALSE);
+    if (!NT_SUCCESS(Status))
+    {
+        HeapFree(GetProcessHeap(), 0, Walk);
+        return Status;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+        FileSecRecordFailure(Walk, FileSecApplyItem(Walk, Root, &Items[Index]));
+    NtClose(Root);
+
+    DPRINT1("File security applied to %lu of %lu listed items under %S (Status 0x%08lx)\n",
+            Walk->Applied, Count, VolumeRoot, Walk->Status);
+    Status = Walk->Status;
+    HeapFree(GetProcessHeap(), 0, Walk);
+    return Status;
+}
+
+typedef struct _FILESEC_PRIVILEGES
+{
+    BOOLEAN Restore;
+    BOOLEAN Backup;
+    BOOLEAN Owner;
+} FILESEC_PRIVILEGES, *PFILESEC_PRIVILEGES;
+
+static NTSTATUS
+FileSecBeginInstall(
+    _Out_ PFILESEC_POLICY *Policy,
+    _Out_ PFILESEC_PRIVILEGES Saved)
+{
     DWORD Error;
 
-    Error = FileSecurityLoadPolicy(&Policy);
+    RtlZeroMemory(Saved, sizeof(*Saved));
+    Error = FileSecurityLoadPolicy(Policy);
     if (Error != ERROR_SUCCESS)
     {
         DPRINT1("Loading the file security policy failed (error %lu)\n", Error);
         return STATUS_INVALID_IMAGE_FORMAT;
     }
 
-    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Restore);
-    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Backup);
-    RtlAdjustPrivilege(SE_TAKE_OWNERSHIP_PRIVILEGE, TRUE, FALSE, &Owner);
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, TRUE, FALSE, &Saved->Restore);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, TRUE, FALSE, &Saved->Backup);
+    RtlAdjustPrivilege(SE_TAKE_OWNERSHIP_PRIVILEGE, TRUE, FALSE, &Saved->Owner);
+    return STATUS_SUCCESS;
+}
+
+static VOID
+FileSecEndInstall(
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PFILESEC_PRIVILEGES Saved)
+{
+    BOOLEAN Ignored;
+
+    RtlAdjustPrivilege(SE_TAKE_OWNERSHIP_PRIVILEGE, Saved->Owner, FALSE, &Ignored);
+    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, Saved->Backup, FALSE, &Ignored);
+    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, Saved->Restore, FALSE, &Ignored);
+    FileSecurityFreePolicy(Policy);
+}
+
+NTSTATUS
+InstallApplyFileSecurity(
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ BOOLEAN WholeVolume)
+{
+    FILESEC_PRIVILEGES Saved;
+    PFILESEC_POLICY Policy;
+    NTSTATUS Status;
+
+    Status = FileSecBeginInstall(&Policy, &Saved);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     Status = FileSecurityApply(Policy, VolumeRoot, InstallationDirectory, WholeVolume);
 
-    RtlAdjustPrivilege(SE_TAKE_OWNERSHIP_PRIVILEGE, Owner, FALSE, &Owner);
-    RtlAdjustPrivilege(SE_BACKUP_PRIVILEGE, Backup, FALSE, &Backup);
-    RtlAdjustPrivilege(SE_RESTORE_PRIVILEGE, Restore, FALSE, &Restore);
+    FileSecEndInstall(Policy, &Saved);
+    return Status;
+}
 
-    FileSecurityFreePolicy(Policy);
+NTSTATUS
+InstallApplyFileSecurityToItems(
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ ULONG Count,
+    _In_reads_(Count) const FILESEC_ITEM *Items)
+{
+    FILESEC_PRIVILEGES Saved;
+    PFILESEC_POLICY Policy;
+    NTSTATUS Status;
+
+    Status = FileSecBeginInstall(&Policy, &Saved);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = FileSecurityApplyItems(Policy, VolumeRoot, InstallationDirectory, Count, Items);
+
+    FileSecEndInstall(Policy, &Saved);
     return Status;
 }
 
