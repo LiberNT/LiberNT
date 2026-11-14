@@ -93,7 +93,7 @@ NdisQueueIoWorkItem(
 
    IoQueueWorkItem(Wrapper->IoWorkItem,
                    NdisIoWorkItemThunk,
-                   DelayedWorkQueue,
+                   CriticalWorkQueue,
                    Wrapper);
 }
 

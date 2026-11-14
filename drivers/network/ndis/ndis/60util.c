@@ -33,11 +33,6 @@
 #define NDIS6_RWLOCK_TAG    'lWNn'  /* "nNWl" */
 #define NDIS6_MAX_PORT_NUMBER 0x00ffffff
 
-#define NDIS6_RESET_IDLE       0
-#define NDIS6_RESET_QUEUED     1
-#define NDIS6_RESET_PENDING    2
-#define NDIS6_RESET_COMPLETING 3
-
 /* ============================================================================
  *  NDIS 6 timer object
  *
@@ -676,120 +671,6 @@ Ndis6FreePorts(
         KeReleaseSpinLock(&Ext->PortListLock, OldIrql);
         ExFreePoolWithTag(Entry, NDIS6_PORT_TAG);
     }
-}
-
-/* ============================================================================
- *  Miniport-requested reset
- * ============================================================================ */
-
-VOID
-Ndis6ResetMiniportComplete(
-    _In_ PLOGICAL_ADAPTER Adapter,
-    _In_ NDIS_STATUS Status,
-    _In_ BOOLEAN AddressingReset)
-{
-    PNDIS6_ADAPTER_EXT Ext;
-
-    if (Adapter == NULL || !Adapter->IsNdis6 ||
-        (Ext = NDIS6_EXT(Adapter)) == NULL)
-    {
-        return;
-    }
-
-    if (InterlockedCompareExchange(&Ext->ResetState,
-                                   NDIS6_RESET_COMPLETING,
-                                   NDIS6_RESET_PENDING) != NDIS6_RESET_PENDING)
-    {
-        return;
-    }
-
-    MiniResetComplete(Adapter, Status, AddressingReset);
-    ExReleaseRundownProtection(&Ext->LifecycleRundown);
-
-    if (InterlockedCompareExchange(&Ext->ResetWorkerActive, 0, 0) == 0)
-    {
-        InterlockedCompareExchange(&Ext->ResetState,
-                                   NDIS6_RESET_IDLE,
-                                   NDIS6_RESET_COMPLETING);
-    }
-}
-
-static VOID NTAPI
-Ndis6ResetWorker(
-    _In_ PVOID Context)
-{
-    PLOGICAL_ADAPTER Adapter = (PLOGICAL_ADAPTER)Context;
-    PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Adapter);
-    NDIS_STATUS Status;
-    BOOLEAN AddressingReset = FALSE;
-    KIRQL OldIrql;
-
-    InterlockedExchange(&Ext->ResetWorkerActive, 1);
-    InterlockedExchange(&Ext->ResetState, NDIS6_RESET_PENDING);
-
-    KeAcquireSpinLock(&Adapter->NdisMiniportBlock.Lock, &OldIrql);
-    Adapter->NdisMiniportBlock.ResetStatus = NDIS_STATUS_PENDING;
-    KeReleaseSpinLock(&Adapter->NdisMiniportBlock.Lock, OldIrql);
-
-    NdisMIndicateStatus(Adapter, NDIS_STATUS_RESET_START, NULL, 0);
-    NdisMIndicateStatusComplete(Adapter);
-
-    Status = Ndis6CallResetHandlerEx(Adapter, &AddressingReset);
-    if (Status != NDIS_STATUS_PENDING)
-        Ndis6ResetMiniportComplete(Adapter, Status, AddressingReset);
-
-    InterlockedExchange(&Ext->ResetWorkerActive, 0);
-    InterlockedCompareExchange(&Ext->ResetState,
-                               NDIS6_RESET_IDLE,
-                               NDIS6_RESET_COMPLETING);
-    ExReleaseRundownProtection(&Ext->LifecycleRundown);
-}
-
-NDIS_STATUS
-Ndis6QueueMiniportReset(
-    _In_ PLOGICAL_ADAPTER Adapter)
-{
-    PNDIS6_ADAPTER_EXT Ext;
-
-    if (Adapter == NULL || !Adapter->IsNdis6 ||
-        (Ext = NDIS6_EXT(Adapter)) == NULL ||
-        Ext->DriverBlock == NULL ||
-        Ext->DriverBlock->Characteristics.ResetHandlerEx == NULL)
-    {
-        return NDIS_STATUS_NOT_SUPPORTED;
-    }
-
-    /* The first reference owns the worker; the second owns the reset until
-     * its synchronous or asynchronous completion path runs. */
-    if (!ExAcquireRundownProtection(&Ext->LifecycleRundown))
-        return NDIS_STATUS_CLOSING;
-
-    if (!ExAcquireRundownProtection(&Ext->LifecycleRundown))
-    {
-        ExReleaseRundownProtection(&Ext->LifecycleRundown);
-        return NDIS_STATUS_CLOSING;
-    }
-
-    if (InterlockedCompareExchange(&Ext->ResetState,
-                                   NDIS6_RESET_QUEUED,
-                                   NDIS6_RESET_IDLE) != NDIS6_RESET_IDLE)
-    {
-        ExReleaseRundownProtection(&Ext->LifecycleRundown);
-        ExReleaseRundownProtection(&Ext->LifecycleRundown);
-        return NDIS_STATUS_RESET_IN_PROGRESS;
-    }
-
-    ExInitializeWorkItem(&Ext->ResetWorkItem, Ndis6ResetWorker, Adapter);
-    ExQueueWorkItem(&Ext->ResetWorkItem, DelayedWorkQueue);
-    return NDIS_STATUS_PENDING;
-}
-
-VOID
-NTAPI
-NdisMResetMiniport(
-    _In_ NDIS_HANDLE NdisMiniportHandle)
-{
-    Ndis6QueueMiniportReset((PLOGICAL_ADAPTER)NdisMiniportHandle);
 }
 
 /* ============================================================================

@@ -69,6 +69,7 @@ set(NDIS6_SOURCE
     ndis/60thunk_rx.c
     ndis/60filter.c
     ndis/60util.c
+    ndis/60reset.c
     ndis/60ifprov.c
     ndis/60processor.c
     include/ndis6_internal.h
