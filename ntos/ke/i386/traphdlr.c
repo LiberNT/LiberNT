@@ -1254,8 +1254,13 @@ KiCheckForSListFault(PKTRAP_FRAME TrapFrame)
         both fields to make sure we catch any concurrent modification of the
         S-List-header.
     */
+    /* TODO: the system DLL exports no RtlpInterlockedPopEntrySListFault/End/
+     * Resume, so KeUserPopEntrySListFault stays NULL and the user-mode half of
+     * this recovery never runs. Until it does, a NULL label must not be
+     * compared against, or every fault at address zero answers to it. */
     if ((TrapFrame->Eip == (ULONG_PTR)ExpInterlockedPopEntrySListFault) ||
-        (TrapFrame->Eip == (ULONG_PTR)KeUserPopEntrySListFault))
+        ((KeUserPopEntrySListFault != NULL) &&
+         (TrapFrame->Eip == (ULONG_PTR)KeUserPopEntrySListFault)))
     {
         ULARGE_INTEGER SListHeader;
         PVOID ResumeAddress;
