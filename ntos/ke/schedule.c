@@ -376,6 +376,8 @@ KiDeferredReadyThread(
 
     Processor = KiSelectTargetProcessor(Thread);
     ASSERT(Processor < MAXIMUM_PROCESSORS);
+    if ((Processor != Thread->NextProcessor) && KiDeferReadyWhileLeavingProcessor(Thread))
+        return;
     Prcb = KiProcessorBlock[Processor];
 
     KiAcquirePrcbLock(Prcb);
@@ -569,6 +571,8 @@ KiStealReadyThread(
                 if ((KiThreadAffinityMask(Thread) & Self) == 0)
                     continue;
                 if (!KiCanStealToProcessor(Thread, Prcb->Number))
+                    continue;
+                if (KiThreadLeavingProcessor(Thread))
                     continue;
 
                 if (RemoveEntryList(&Thread->WaitListEntry))
@@ -1389,7 +1393,8 @@ KiBalanceReadyQueues(
 
         if ((Thread->State != Ready) ||
             ((KiThreadAffinityMask(Thread) & Target->SetMember) == 0) ||
-            !KiCanStealToProcessor(Thread, Target->Number))
+            !KiCanStealToProcessor(Thread, Target->Number) ||
+            KiThreadLeavingProcessor(Thread))
         {
             KiReleasePrcbLock(Source);
             continue;

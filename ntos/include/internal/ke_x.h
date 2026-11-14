@@ -1949,27 +1949,84 @@ KiCompleteThreadSwitch(
     _In_ PKTHREAD OldThread,
     _In_ PKTHREAD NewThread)
 {
+    PKPRCB Prcb = KeGetCurrentPrcb();
     BOOLEAN ReadyTransition, ReapThread;
 
     NewThread->Running = TRUE;
     KeMemoryBarrier();
 
     KiAcquireThreadLock(OldThread);
+    KiAcquirePrcbLock(Prcb);
+    ASSERT(OldThread->NextProcessor == Prcb->Number);
     ReadyTransition = OldThread->ReadyTransition;
-    OldThread->ReadyTransition = FALSE;
+    if (ReadyTransition)
+        OldThread->ReadyTransition = FALSE;
     ReapThread = (OldThread->State == Terminated);
     ASSERT(!ReadyTransition || (OldThread->State == DeferredReady));
     ASSERT(!ReadyTransition || !ReapThread);
     KeMemoryBarrier();
     OldThread->Running = FALSE;
+    KiReleasePrcbLock(Prcb);
     KiReleaseThreadLock(OldThread);
 
     if (ReadyTransition)
+    {
         KiDeferredReadyThread(OldThread);
+        if (Prcb->NextThread != NULL)
+            KiRequestDispatchInterrupt(Prcb);
+    }
     else if (ReapThread)
         KiQueueThreadForReaping(OldThread);
 }
 #endif
+
+/* Another processor must not take a thread that has not finished leaving its last processor. */
+FORCEINLINE
+BOOLEAN
+KiThreadLeavingProcessor(
+    _In_ PKTHREAD Thread)
+{
+#if KI_THREAD_HANDOFF_USES_RUNNING
+    return *(volatile BOOLEAN *)&Thread->Running;
+#else
+    UNREFERENCED_PARAMETER(Thread);
+    return FALSE;
+#endif
+}
+
+FORCEINLINE
+BOOLEAN
+KiDeferReadyWhileLeavingProcessor(
+    _Inout_ PKTHREAD Thread)
+{
+#if KI_THREAD_HANDOFF_USES_RUNNING
+    PKPRCB Prcb;
+    BOOLEAN Leaving;
+
+    ASSERT(Thread->State == DeferredReady);
+    if (!*(volatile BOOLEAN *)&Thread->Running)
+    {
+        KeMemoryBarrier();
+        return FALSE;
+    }
+
+    /* The processor it is leaving owns the handoff; callers may hold the thread lock but never a PRCB lock. */
+    ASSERT(Thread->NextProcessor < (ULONG)KeNumberProcessors);
+    Prcb = KiProcessorBlock[Thread->NextProcessor];
+    KiAcquirePrcbLock(Prcb);
+    Leaving = Thread->Running;
+    if (Leaving)
+    {
+        ASSERT(!Thread->ReadyTransition);
+        Thread->ReadyTransition = TRUE;
+    }
+    KiReleasePrcbLock(Prcb);
+    return Leaving;
+#else
+    UNREFERENCED_PARAMETER(Thread);
+    return FALSE;
+#endif
+}
 
 //
 // This routine queues a thread that is ready on the PRCB's ready lists.
