@@ -526,6 +526,19 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("OS loader: handing over, boot device %s, hal device %s",
+             LoaderBlock->ArcBootDeviceName ? LoaderBlock->ArcBootDeviceName : "(none)",
+             LoaderBlock->ArcHalDeviceName ? LoaderBlock->ArcHalDeviceName : "(none)");
+    OslTrace("OS loader: nt path %s, options %s",
+             LoaderBlock->NtBootPathName ? LoaderBlock->NtBootPathName : "(none)",
+             LoaderBlock->LoadOptions ? LoaderBlock->LoadOptions : "(none)");
+    OslTrace("OS loader: entry %p, loader block %p, arc disks %p, registry %lu bytes at %p",
+             Kernel->EntryPoint,
+             PaToVa(LoaderBlock),
+             LoaderBlock->ArcDiskInformation,
+             LoaderBlock->RegistryLength,
+             LoaderBlock->RegistryBase);
+
     OslArchStartKernel(Kernel->EntryPoint, PaToVa(LoaderBlock));
 }
 

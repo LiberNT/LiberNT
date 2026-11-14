@@ -333,6 +333,7 @@ UefiLeaveBootServices(VOID)
 {
     UINTN MapKey;
     BOOLEAN MayAllocate = TRUE;
+    EFI_STATUS Status;
     ULONG Retry;
 
     UdpLogClose();
@@ -340,17 +341,33 @@ UefiLeaveBootServices(VOID)
     for (Retry = 0; Retry < UEFI_MAP_RETRIES; Retry++)
     {
         if (!UefiReadMemoryMap(MayAllocate, &MapKey, &UefiExitMapSize, &UefiExitDescriptorSize))
+        {
+            OslTrace("UEFI: the memory map could not be read on try %lu", Retry);
             break;
+        }
 
         MayAllocate = FALSE;
 
-        if (!EFI_ERROR(GlobalSystemTable->BootServices->ExitBootServices(GlobalImageHandle, MapKey)))
+        Status = GlobalSystemTable->BootServices->ExitBootServices(GlobalImageHandle, MapKey);
+        if (!EFI_ERROR(Status))
         {
             BootServicesExitedFlag = TRUE;
             return;
         }
+
+        OslTrace("UEFI: ExitBootServices refused try %lu with %p, map key %p, map %lu bytes of %lu each",
+                 Retry,
+                 (PVOID)Status,
+                 (PVOID)MapKey,
+                 (ULONG)UefiExitMapSize,
+                 (ULONG)UefiExitDescriptorSize);
     }
 
+    /* The logs are closed by now; the firmware console still works because boot services were not left */
+    OslTrace("UEFI: the firmware would not leave boot services after %lu tries; halting",
+             (ULONG)UEFI_MAP_RETRIES);
+    FwPrint(L"The firmware would not leave boot services after %u tries.\r\n",
+            (ULONG)UEFI_MAP_RETRIES);
     FwHalt();
 }
 

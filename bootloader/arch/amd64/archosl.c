@@ -406,16 +406,31 @@ OslArchPrepareHandoff(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     WinLdrSetupMachineDependent(LoaderBlock);
+    OslTrace("OS loader: machine-dependent state built, amd64 %s",
+             Amd64Ready ? "ready" : "NOT ready");
 
     if (!Amd64Ready || !WinLdrSetupMemoryLayout(LoaderBlock))
+    {
+        OslTrace("OS loader: the kernel memory layout could not be built");
         return FALSE;
+    }
 
+    OslTrace("OS loader: kernel memory layout built, its pml4 at %p, firmware cr3 still %p",
+             Amd64Pml4, (PVOID)__readcr3());
+
+    OslTrace("OS loader: leaving the firmware boot services");
     FwExitBootServices();
+    OslTrace("OS loader: firmware boot services exited");
+
     Amd64SaveFirmwareIdentity();
     WinLdrSetProcessorContext(OSL_NT_VERSION);
+    OslTrace("OS loader: processor context set, cr3 %p cr4 %p",
+             (PVOID)__readcr3(), (PVOID)__readcr4());
+
     Amd64UseFirmwareIdentity(TRUE);
     FwSetVirtualAddressMap();
     Amd64UseFirmwareIdentity(FALSE);
+    OslTrace("OS loader: firmware runtime moved to its virtual addresses");
     return TRUE;
 }
 
