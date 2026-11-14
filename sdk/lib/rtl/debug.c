@@ -63,6 +63,8 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
     INT Printed = 0;
     EXCEPTION_RECORD ExceptionRecord;
 
+    if (!RtlpDebugPrintWanted(&Status)) return Status;
+
     /* Check if we should print it or not */
     if ((ComponentId != MAXULONG) &&
         (NtQueryDebugFilterState(ComponentId, Level)) != (NTSTATUS)TRUE)
@@ -70,8 +72,6 @@ vDbgPrintExWithPrefixInternal(IN PCCH Prefix,
         /* This message is masked */
         return STATUS_SUCCESS;
     }
-
-    if (!RtlpDebugPrintWanted(&Status)) return Status;
 
     /* For user mode, don't recursively DbgPrint */
     if (RtlpSetInDbgPrint()) return STATUS_SUCCESS;

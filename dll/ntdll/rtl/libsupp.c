@@ -50,7 +50,7 @@ NTAPI
 RtlpDebugPrintWanted(
     _Out_ PNTSTATUS Status)
 {
-    *Status = STATUS_DEVICE_NOT_CONNECTED;
+    *Status = STATUS_SUCCESS;
     return NtCurrentPeb()->BeingDebugged || (SharedUserData->KdDebuggerEnabled & 1);
 }
 

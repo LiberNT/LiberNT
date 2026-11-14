@@ -57,6 +57,7 @@ list(APPEND SOURCE
     ApiSetMap.c
     AppendOnlyWrite.c
     BootLog.c
+    DbgPrintEx.c
     DllLoadNotification.c
     DbgCommandString.c
     DpcBehaviorRegistry.c
