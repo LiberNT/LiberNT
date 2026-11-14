@@ -710,6 +710,9 @@ CmpFlushHiveToDisk(
     if (CmpNoWrite) return STATUS_SUCCESS;
     if (Hive->Hive.HiveFlags & HIVE_VOLATILE) return STATUS_SUCCESS;
     if (!Force && (Hive->Hive.HiveFlags & HIVE_NOLAZYFLUSH)) return STATUS_SUCCESS;
+
+    /* Writers hold the registry lock exclusively, so a flush must hold it to see a stable dirty vector */
+    ASSERT(CmpTestRegistryLock());
     if (!Force && Hive->Hive.DirtyCount == 0) return STATUS_SUCCESS;
 
     CmpLockHiveFlusherExclusive(Hive);
