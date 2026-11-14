@@ -87,3 +87,29 @@ License: Unsplash License (https://unsplash.com/license), shown on the photo
          photos to replicate a similar or competing service.
 Processing: Lanczos resampling to 1920 x 1248; progressive JPEG quality 82
             with Huffman optimization and metadata stripped
+
+Pexels asset record
+-------------------
+
+File: Fog Ridge.jpg
+Source: pexels.com, local file name "pexels-raulling-34169628.jpg"
+        (photo id 34169628, contributor slug "raulling")
+Author: Recorded from the file name only. The photo page
+        https://www.pexels.com/photo/34169628/ answered 403 to this machine on
+        2026-11-13, so the contributor's display name and the photo title are
+        not verified.
+Retrieved: 2026-11-13, original 7000 x 4667 JPEG, 4,742,546 bytes
+License: Pexels License (https://www.pexels.com/license/), reviewed 2026-11-13.
+         It grants free use of the photo for personal and commercial purposes,
+         with no attribution required and no permission needed, and it allows
+         modification. It does not permit selling or distributing the photo on
+         a standalone basis, nor redistributing it on another stock photo or
+         wallpaper platform. The Pexels API terms additionally bar making
+         Pexels content available as a wallpaper application.
+Clearance note: shipping this file as one of several desktop backgrounds in an
+         operating system image is use of the photo, not standalone
+         redistribution on a stock or wallpaper platform. The wallpaper
+         application clause has not been tested against an OS that bundles
+         wallpapers, so a public release should confirm it.
+Processing: Lanczos resampling to 1920 x 1280; progressive JPEG quality 82
+            with Huffman optimization and metadata stripped

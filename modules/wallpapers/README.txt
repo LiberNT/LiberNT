@@ -26,6 +26,7 @@ terms, current clearance status, and required provenance record.
 | Sea Bridge.png          | Restricted*  | Unrecorded      | magnific.com (Freepik)  |
 | Sunlit Meadow.jpg        | Unrecorded   | Unrecorded      | User supplied          |
 | Misty Forest.jpg        | Unsplash     | Daniil Silantev | unsplash.com            |
+| Fog Ridge.jpg           | Pexels       | raulling        | pexels.com              |
 |-------------------------|--------------|-----------------|-------------------------|
 
 * The exact content type and account tier are not recorded. These images must
@@ -41,6 +42,12 @@ have not been supplied; the provenance record is in LICENSE.txt.
 night" by Daniil Silantev, free to use under the Unsplash License. It was
 resampled from 4297 x 2792 to 1920 x 1248 using the same JPEG settings as the
 other wallpapers. Its provenance record is in LICENSE.txt.
+
+"Fog Ridge.jpg" is the Pexels photo of fog drifting across a conifer ridge by
+the contributor "raulling", free to use under the Pexels License. It was
+resampled from 7000 x 4667 to 1920 x 1280 using the same JPEG settings as the
+other wallpapers. Its size is 324,085 bytes, down from 4,742,546 bytes. Its
+provenance record is in LICENSE.txt.
 
 "Sea Bridge" is the default wallpaper. Changing it means updating
 HKCU Control Panel\Desktop\Wallpaper in boot/bootdata/hivedef.inf.
