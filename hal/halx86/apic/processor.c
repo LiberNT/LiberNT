@@ -8,13 +8,31 @@
 /* INCLUDES ******************************************************************/
 
 #include <hal.h>
+#include <smp.h>
 #define NDEBUG
 #include <debug.h>
 
 KAFFINITY HalpActiveProcessors;
 KAFFINITY HalpDefaultInterruptAffinity;
 
+extern HALP_APIC_INFO_TABLE HalpApicInfoTable;
+
 /* PRIVATE FUNCTIONS *********************************************************/
+
+ULONG
+NTAPI
+HalQueryMaximumProcessorCount(VOID)
+{
+    ULONG Count = HalpApicInfoTable.ProcessorCount;
+    return (Count != 0) ? Count : 1;
+}
+
+BOOLEAN
+NTAPI
+HalIsHyperThreadingEnabled(VOID)
+{
+    return (KeGetCurrentPrcb()->LogicalProcessorsPerCore > 1);
+}
 
 VOID
 NTAPI
