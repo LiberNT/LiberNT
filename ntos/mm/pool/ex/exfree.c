@@ -80,3 +80,18 @@ ExFreePool2(
     UNREFERENCED_PARAMETER(ExtendedParametersCount);
     ExFreePoolWithTag(P, Tag);
 }
+
+VOID
+NTAPI
+ExTrimPoolHeaps(VOID)
+{
+    ULONG Index;
+
+    PAGED_CODE();
+
+    for (Index = 0; Index < EX_POOL_HEAP_COUNT; Index++)
+    {
+        if (ExpPoolState.Heap[Index] != NULL)
+            PoolHeapTrim(ExpPoolState.Heap[Index]);
+    }
+}

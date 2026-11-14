@@ -232,6 +232,10 @@ C_ASSERT(MAX_FAST_REFS + 1 == MEMORY_ALLOCATION_ALIGNMENT);
 #define ExpChangePushlock(x, y, z)  InterlockedCompareExchangePointer((PVOID*)(x), (PVOID)(y), (PVOID)(z))
 #define ExpSetRundown(x, y)         InterlockedExchangePointer(&(x)->Ptr, (PVOID)(y))
 
+VOID
+NTAPI
+ExTrimPoolHeaps(VOID);
+
 NTSTATUS
 NTAPI
 ExGetPoolTagInfo(

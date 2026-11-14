@@ -10,6 +10,7 @@
 #include <mm/nt/mint.h>
 
 #define MI_ZERO_PAGE_BATCH 64
+#define MI_POOL_TRIM_PASSES 10
 
 static KEVENT MiBalanceEvent;
 static KEVENT MiModifiedWriterEvent;
@@ -71,6 +72,7 @@ MiBalanceSetManager(
     _In_ PVOID Context)
 {
     LARGE_INTEGER Period;
+    ULONG Idle = 0;
 
     UNREFERENCED_PARAMETER(Context);
 
@@ -86,6 +88,13 @@ MiBalanceSetManager(
         {
             KeSetEvent(&MiModifiedWriterEvent, 0, FALSE);
             MiSignalMemoryAvailable();
+            Idle = 0;
+            ExTrimPoolHeaps();
+        }
+        else if (++Idle >= MI_POOL_TRIM_PASSES)
+        {
+            Idle = 0;
+            ExTrimPoolHeaps();
         }
 
         MmAvailablePages = (PFN_COUNT)MiPfnAvailablePages(&MiSystem.Pfn);
