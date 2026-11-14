@@ -75,7 +75,7 @@ typedef struct _PROCESS_VALUES
 
 typedef struct _DEFERRED_REVERSE_BARRIER
 {
-    ULONG Barrier;
+    volatile ULONG Barrier;
     ULONG TotalProcessors;
 } DEFERRED_REVERSE_BARRIER, *PDEFERRED_REVERSE_BARRIER;
 
