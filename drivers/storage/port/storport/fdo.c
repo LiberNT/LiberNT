@@ -1149,6 +1149,8 @@ PortFdoReleaseHardware(
     PMAPPED_ADDRESS Mapping;
 
     KeCancelTimer(&DeviceExtension->MiniportTimer);
+    /* The cancel does not wait for a timer DPC already running on another processor */
+    KeFlushQueuedDpcs();
 
     while ((Mapping = DeviceExtension->MappedAddressList) != NULL)
     {
@@ -1312,6 +1314,8 @@ PortFdoRequestBlockedLocked(
     PSCSI_REQUEST_BLOCK Srb = IoGetCurrentIrpStackLocation(Irp)->Parameters.Scsi.Srb;
     PPDO_DEVICE_EXTENSION PdoExtension = PortFdoRequestUnit(Irp);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     if (DeviceExtension->HoldRequests || DeviceExtension->BusyCompletions > 0)
         return TRUE;
     if ((PdoExtension != NULL) &&
@@ -1396,6 +1400,8 @@ PortFdoBusChangeDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     IoInvalidateDeviceRelations(DeviceExtension->PhysicalDevice, BusRelations);
 }
 
@@ -1420,6 +1426,8 @@ PortFdoRestartRequestsDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     for (;;)
     {
         Irp = NULL;
@@ -1760,6 +1768,8 @@ PortFdoBusyRetryDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     KeInsertQueueDpc(&DeviceExtension->RequestRestartDpc, NULL, NULL);
 }
 
