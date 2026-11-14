@@ -508,6 +508,8 @@ SerialWriteTimeout(
 	ULONGLONG Now;
 	KIRQL Irql;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	InitializeListHead(&CompletedList);
 	KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
 	if (DeviceExtension->CurrentWriteIrp && DeviceExtension->WriteDeadline)

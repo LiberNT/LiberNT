@@ -303,6 +303,8 @@ SerialReceiveByte(
 	DeviceExtension = (PSERIAL_DEVICE_EXTENSION)pDeviceExtension;
 	ComPortBase = ULongToPtr(DeviceExtension->BaseAddress);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	KeAcquireSpinLock(&DeviceExtension->InputBufferLock, &Irql);
 	Limit = DeviceExtension->InputBuffer.Length * 4;
 	if (GetNumberOfElementsInCircularBuffer(&DeviceExtension->InputBuffer) * 5 >= Limit)
@@ -446,6 +448,8 @@ SerialSendByte(
 
 	DeviceExtension = (PSERIAL_DEVICE_EXTENSION)pDeviceExtension;
 	ComPortBase = ULongToPtr(DeviceExtension->BaseAddress);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	InitializeListHead(&CompletedList);
 
 	KeAcquireSpinLock(&DeviceExtension->OutputBufferLock, &Irql);
@@ -500,6 +504,8 @@ SerialCompleteWait(
 {
 	SERIAL_WAIT_CONTEXT Context;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	Context.DeviceExtension = (PSERIAL_DEVICE_EXTENSION)pDeviceExtension;
 	Context.Force = FALSE;
 	SerialSynchronize(Context.DeviceExtension, SerialTakeWaitSync, &Context);

@@ -266,6 +266,8 @@ KiDpcThreadWakeRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     KeSetEvent(&Prcb->DpcEvent, 0, FALSE);
 }
 
@@ -294,6 +296,8 @@ KiFlushDpcBarrierRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    /* Queued on the threaded queue too, where it runs in the DPC thread */
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
     KeSetEvent((PKEVENT)DeferredContext, 0, FALSE);
 }
 
