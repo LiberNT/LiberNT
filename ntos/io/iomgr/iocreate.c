@@ -16,8 +16,7 @@ BOOLEAN
 IopCheckBackupRestorePrivilege(
     _In_ PACCESS_STATE AccessState,
     _Inout_ PULONG CreateOptions,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ ULONG Disposition)
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
     ACCESS_MASK Backup = 0;
     ACCESS_MASK Restore = 0;
@@ -40,8 +39,7 @@ IopCheckBackupRestorePrivilege(
         Granted = TRUE;
     }
 
-    if (Disposition != FILE_OPEN &&
-        SeSinglePrivilegeCheck(SeRestorePrivilege, PreviousMode))
+    if (SeSinglePrivilegeCheck(SeRestorePrivilege, PreviousMode))
     {
         AccessState->PreviouslyGrantedAccess |=
             AccessState->RemainingDesiredAccess & Restore;

@@ -120,6 +120,7 @@ list(APPEND SOURCE
     NtProtectVirtualMemory.c
     NtOpenMaximumAllowed.c
     ObTraverse.c
+    NtOpenFileBackupIntent.c
     NtQueryAttributesFile.c
     NtQueryInformationFile.c
     NtQueryDirectoryFile.c

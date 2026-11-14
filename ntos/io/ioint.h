@@ -260,8 +260,7 @@ NTSTATUS IopCreateFile(_Out_ PHANDLE FileHandle,
                        _In_opt_ PIO_DRIVER_CREATE_CONTEXT DriverContext);
 BOOLEAN IopCheckBackupRestorePrivilege(_In_ PACCESS_STATE AccessState,
                                        _Inout_ PULONG CreateOptions,
-                                       _In_ KPROCESSOR_MODE PreviousMode,
-                                       _In_ ULONG Disposition);
+                                       _In_ KPROCESSOR_MODE PreviousMode);
 NTSTATUS IopOpenLinkOrRenameTarget(_Out_ PHANDLE Handle,
                                    _In_ PIRP Irp,
                                    _In_ PFILE_RENAME_INFORMATION RenameInfo,
