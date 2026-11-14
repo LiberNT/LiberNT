@@ -112,6 +112,7 @@ IntCompositionReleaseFrameSurfaces(VOID)
 {
     while (g_DwmFrameSurfaceRefCount != 0)
     {
+        ASSERT(UserIsEnteredExclusive());
         PSURFACE Surface = g_DwmFrameSurfaceRefs[--g_DwmFrameSurfaceRefCount];
 
         g_DwmFrameSurfaceRefs[g_DwmFrameSurfaceRefCount] = NULL;
@@ -1454,6 +1455,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
         r->FrontSection = pFrontSectionNew;
         r->FrontView = pFrontViewNew;
         r->FrontViewSize = cbFrontViewNew;
+        ASSERT(UserIsEnteredExclusive());
         r->Generation = ++g_FrontGeneration;
         r->FrontGlobalShare = FrontGlobalShareNew;
         r->BaseGeneration = FrontGlobalShareNew != 0 ? r->Generation : 0;
@@ -1470,6 +1472,7 @@ IntCompositionEnsureSurface(_In_ PWND Wnd, _Inout_ PWND_REDIRECT r)
     r->BackSection = pBackSectionNew;
     r->BackView = pBackViewNew;
     r->BackViewSize = cbBackViewNew;
+    ASSERT(UserIsEnteredExclusive());
     r->BackGeneration = ++g_FrontGeneration;
     r->BackGlobalShare = BackGlobalShareNew;
     r->BackDirtyRect.left = r->BackDirtyRect.top = 0;
@@ -4242,6 +4245,7 @@ IntCompositionIssueGdiUpdate(
         return STATUS_DEVICE_BUSY;
     }
 
+    ASSERT(UserIsEnteredExclusive());
     if (++g_GdiUpdateSequence == 0)
         ++g_GdiUpdateSequence;
     Entry->Redirect.GdiIssuedUpdateId = g_GdiUpdateSequence;

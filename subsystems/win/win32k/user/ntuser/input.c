@@ -1221,6 +1221,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
         pai->pti1 = ptiFrom;
         pai->pti2 = ptiTo;
         gpai = pai;
+        ASSERT(UserIsEnteredExclusive());
         paiCount++;
         TRACE("Attach Allocated! ptiFrom 0x%p  ptiTo 0x%p paiCount %d\n",ptiFrom,ptiTo,paiCount);
 
@@ -1304,6 +1305,7 @@ UserAttachThreadInput(PTHREADINFO ptiFrom, PTHREADINFO ptiTo, BOOL fAttach)
               /* Remove it from the list */
               *ppai = (*ppai)->paiNext;
               ExFreePoolWithTag(pai, USERTAG_ATTACHINFO);
+              ASSERT(UserIsEnteredExclusive());
               paiCount--;
               Hit = TRUE;
               break;

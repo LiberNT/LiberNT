@@ -20,6 +20,7 @@ IntAddMouseMoveHistory(LONG x, LONG y, DWORD Time, ULONG_PTR ExtraInfo)
     gMouseHistoryOfMoves[gcMouseHistoryOfMoves].y = y;
     gMouseHistoryOfMoves[gcMouseHistoryOfMoves].time = Time;
     gMouseHistoryOfMoves[gcMouseHistoryOfMoves].dwExtraInfo = ExtraInfo;
+    ASSERT(UserIsEnteredExclusive());
     if (++gcMouseHistoryOfMoves == ARRAYSIZE(gMouseHistoryOfMoves))
        gcMouseHistoryOfMoves = 0;
 }

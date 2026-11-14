@@ -326,6 +326,7 @@ PointerCommitFrame(
             gTouchIdUsed[Slot->PointerId - POINTER_FIRST_TOUCH_ID] = FALSE;
             Slot->Active = FALSE;
             if (gTouchContacts)
+                ASSERT(UserIsEnteredExclusive());
                 gTouchContacts--;
             if (!gTouchContacts)
                 gTouchPrimaryClaimed = FALSE;
@@ -414,6 +415,7 @@ PointerProcessTouchFrame(
         pwnd = IntTopLevelWindowFromPoint(Free->Pt.x, Free->Pt.y);
         Free->hwndTopLevel = pwnd ? UserHMGetHandle(pwnd) : NULL;
         gTouchPrimaryClaimed = TRUE;
+        ASSERT(UserIsEnteredExclusive());
         gTouchContacts++;
 
         Route = PointerTouchRoute(Free->PointerId);

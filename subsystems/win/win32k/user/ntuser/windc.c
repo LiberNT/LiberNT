@@ -116,6 +116,7 @@ DceAllocDCE(PWND Window OPTIONAL, DCE_TYPE Type)
       ExFreePoolWithTag(pDce, USERTAG_DCE);
       return NULL;
   }
+  ASSERT(UserIsEnteredExclusive());
   DCECount++;
   TRACE("Alloc DCE's! %d\n",DCECount);
   pDce->hwndCurrent = (Window ? UserHMGetHandle(Window) : NULL);
@@ -784,6 +785,7 @@ DceFreeDCE(PDCE pdce, BOOLEAN Force)
 
   ExFreePoolWithTag(pdce, USERTAG_DCE);
 
+  ASSERT(UserIsEnteredExclusive());
   DCECount--;
   TRACE("Freed DCE's! %d \n", DCECount);
 }

@@ -2382,6 +2382,7 @@ IntQueuePendingArrowClass(PCLS Class)
         gapclsPendingArrow = NewArray;
         gcclsPendingArrow = NewCount;
     }
+    ASSERT(UserIsEnteredExclusive());
     gapclsPendingArrow[gnclsPendingArrow++] = Class;
 }
 

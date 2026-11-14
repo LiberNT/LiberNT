@@ -1016,6 +1016,7 @@ UserRegisterPowerSettingNotification(
         }
     }
 
+    ASSERT(UserIsEnteredExclusive());
     if (++gPowerNotifyCookie == 0)
         gPowerNotifyCookie = 1;
 
