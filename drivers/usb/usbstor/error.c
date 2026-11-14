@@ -135,6 +135,10 @@ USBSTOR_ResetDeviceWorkItemRoutine(
     {
         // first perform a mass storage reset step 1 in 5.3.4 USB Mass Storage Bulk Only Specification
         Status = USBSTOR_ResetDevice(FDODeviceExtension->LowerDeviceObject, FDODeviceExtension);
+        /* A disconnected device cannot be recovered, and every further attempt
+         * only sends another request the hub answers the same way. */
+        if (Status == STATUS_DEVICE_NOT_CONNECTED)
+            break;
         if (NT_SUCCESS(Status))
         {
             // step 2 reset bulk in pipe section 5.3.4
@@ -151,7 +155,8 @@ USBSTOR_ResetDeviceWorkItemRoutine(
         }
     }
 
-    if (NT_SUCCESS(Status) || !SingleInterface)
+    if (NT_SUCCESS(Status) || !SingleInterface ||
+        Status == STATUS_DEVICE_NOT_CONNECTED)
     {
         if (NT_SUCCESS(Status) && SingleInterface)
             InterlockedExchange(&FDODeviceExtension->BotResetPending, 1);

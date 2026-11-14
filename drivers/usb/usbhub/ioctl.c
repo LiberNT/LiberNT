@@ -438,7 +438,7 @@ USBH_PdoIoctlSubmitUrb(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
          * an external hub or any ancestor has disappeared, forwarding a
          * child teardown URB can wait forever because no device can complete
          * it. */
-        DPRINT1("USBH_PdoIoctlSubmitUrb: failing URB 0x%02X for removed device or hub chain\n", Urb->UrbHeader.Function);
+        DPRINT_IOCTL("USBH_PdoIoctlSubmitUrb: failing URB 0x%02X for removed device or hub chain\n", Urb->UrbHeader.Function);
         Urb->UrbHeader.Status = USBD_STATUS_DEVICE_GONE;
         USBH_CompleteIrp(Irp, STATUS_DEVICE_NOT_CONNECTED);
         Status = STATUS_DEVICE_NOT_CONNECTED;

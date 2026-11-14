@@ -416,9 +416,16 @@ NTAPI
 USBH_CompleteIrp(IN PIRP Irp,
                  IN NTSTATUS CompleteStatus)
 {
+    /*
+     * A disconnected device and a cancelled request are ordinary outcomes once
+     * a device goes away, and a caller that keeps retrying would otherwise
+     * turn this into a line per request.
+     */
     if (!NT_SUCCESS(CompleteStatus) &&
         CompleteStatus != STATUS_NOT_SUPPORTED &&
-        CompleteStatus != STATUS_NOT_IMPLEMENTED)
+        CompleteStatus != STATUS_NOT_IMPLEMENTED &&
+        CompleteStatus != STATUS_DEVICE_NOT_CONNECTED &&
+        CompleteStatus != STATUS_CANCELLED)
     {
         DPRINT1("USBH_CompleteIrp: Irp - %p, CompleteStatus - %X\n",
                 Irp,

@@ -85,7 +85,8 @@ USBSTOR_QueueAddIrp(
     Queued = FDODeviceExtension->IrpPendingCount != 0 ||
              (FDODeviceExtension->Flags & (USBSTOR_FDO_FLAGS_IRP_LIST_FREEZE |
                                            USBSTOR_FDO_FLAGS_DEVICE_RESETTING |
-                                           USBSTOR_FDO_FLAGS_RESET_REQUIRED)) != 0;
+                                           USBSTOR_FDO_FLAGS_RESET_REQUIRED |
+                                           USBSTOR_FDO_FLAGS_DEVICE_GONE)) != 0;
     if (Queued)
     {
         InsertTailList(&FDODeviceExtension->IrpListHead, &Irp->Tail.Overlay.ListEntry);
@@ -194,8 +195,13 @@ USBSTOR_QueueEndReset(
     {
         /* A failed class reset or clear-stall leaves the BOT transport out
          * of sync. Complete waiting requests without sending another CBW;
-         * a later request must retry recovery before using the bulk pipes. */
-        FDODeviceExtension->Flags |= USBSTOR_FDO_FLAGS_RESET_REQUIRED;
+         * a later request must retry recovery before using the bulk pipes.
+         * A device that reported itself disconnected never recovers, so note
+         * that instead and stop asking it. */
+        if (Status == STATUS_DEVICE_NOT_CONNECTED)
+            FDODeviceExtension->Flags |= USBSTOR_FDO_FLAGS_DEVICE_GONE;
+        else
+            FDODeviceExtension->Flags |= USBSTOR_FDO_FLAGS_RESET_REQUIRED;
         while (!IsListEmpty(&FDODeviceExtension->IrpListHead))
         {
             Entry = RemoveHeadList(&FDODeviceExtension->IrpListHead);
@@ -231,12 +237,14 @@ USBSTOR_QueueNextRequest(
     IN PDEVICE_OBJECT DeviceObject)
 {
     PFDO_DEVICE_EXTENSION FDODeviceExtension = DeviceObject->DeviceExtension;
+    LIST_ENTRY FailedIrps;
     PIRP Irp;
     PSCSI_REQUEST_BLOCK Request;
     PLIST_ENTRY Entry;
     KIRQL OldLevel;
 
     ASSERT(FDODeviceExtension->Common.IsFDO);
+    InitializeListHead(&FailedIrps);
     IoAcquireCancelSpinLock(&OldLevel);
     KeAcquireSpinLockAtDpcLevel(&FDODeviceExtension->IrpListLock);
 
@@ -247,6 +255,43 @@ USBSTOR_QueueNextRequest(
     {
         KeReleaseSpinLockFromDpcLevel(&FDODeviceExtension->IrpListLock);
         IoReleaseCancelSpinLock(OldLevel);
+        return;
+    }
+
+    /*
+     * Recovery on a disconnected device only produces another request the hub
+     * answers the same way, and each round frees the queue for the next one.
+     * Fail what is waiting instead and leave the device alone until PnP
+     * reports the removal.
+     */
+    if (FDODeviceExtension->Flags & USBSTOR_FDO_FLAGS_DEVICE_GONE)
+    {
+        while (!IsListEmpty(&FDODeviceExtension->IrpListHead))
+        {
+            Entry = RemoveHeadList(&FDODeviceExtension->IrpListHead);
+            Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+            IoSetCancelRoutine(Irp, NULL);
+            InsertTailList(&FailedIrps, Entry);
+            ASSERT(FDODeviceExtension->IrpPendingCount != 0);
+            FDODeviceExtension->IrpPendingCount--;
+        }
+        if (FDODeviceExtension->IrpPendingCount == 0)
+            KeSetEvent(&FDODeviceExtension->NoPendingRequests, IO_NO_INCREMENT, FALSE);
+        KeReleaseSpinLockFromDpcLevel(&FDODeviceExtension->IrpListLock);
+        IoReleaseCancelSpinLock(OldLevel);
+
+        while (!IsListEmpty(&FailedIrps))
+        {
+            Entry = RemoveHeadList(&FailedIrps);
+            Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+            Request = IoGetCurrentIrpStackLocation(Irp)->Parameters.Scsi.Srb;
+            Request->SrbStatus = SRB_STATUS_NO_DEVICE;
+            Request->InternalStatus = STATUS_DEVICE_NOT_CONNECTED;
+            Request->DataTransferLength = 0;
+            Irp->IoStatus.Status = STATUS_DEVICE_NOT_CONNECTED;
+            Irp->IoStatus.Information = 0;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        }
         return;
     }
 
