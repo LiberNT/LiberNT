@@ -179,6 +179,10 @@ struct
     { L"FI<<<<<<<<",            L"FILE",                        FALSE,  FALSE,  TRUE },
     { L"<<<<<<<<<.<",           L".",                           FALSE,  FALSE,  TRUE },
     { L"F<",                    L"FILE.TXT",                    FALSE,  FALSE,  FALSE },
+    { L"<<",                    L"A.A",                         FALSE,  FALSE,  TRUE },
+    { L"<.<",                   L"A.A",                         FALSE,  FALSE,  TRUE },
+    { L">",                     L".",                           FALSE,  FALSE,  TRUE },
+    { L">",                     L"..",                          FALSE,  FALSE,  FALSE },
 };
 
 static VOID FsRtlIsNameInExpressionTest()
