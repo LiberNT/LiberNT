@@ -1167,6 +1167,7 @@ VOID LxUnixDiagFree(_In_opt_ PLX_UNIX_DIAG Entries, _In_ ULONG Count);
 BOOLEAN LxNetlinkIsFile(_In_ PLX_FILE File);
 LONG64 LxNetDeviceIoctl(_In_ PLX_PROCESS Process, _In_ ULONG Request, _In_ ULONG64 Argument);
 ULONG LxNetlinkAddressIndex(_In_ ULONG Address);
+ULONG LxNetlinkSourceAddress(_In_ ULONG Destination);
 BOOLEAN LxInetIsFile(_In_ PLX_FILE File);
 LONG64 LxInetBind(_In_ PLX_CALL Call, _In_ PLX_FILE File);
 LONG64 LxInetListen(_In_ PLX_CALL Call, _In_ PLX_FILE File);

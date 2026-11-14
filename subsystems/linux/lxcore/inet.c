@@ -1316,6 +1316,9 @@ LxInetName(
         if (!NT_SUCCESS(Status))
             RtlZeroMemory(Buffer, sizeof(Buffer));
     }
+    /* A connected datagram socket left on the wildcard address reports the address its datagrams to the peer leave from */
+    if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Address->Address[0].Address[0].in_addr == 0))
+        Address->Address[0].Address[0].in_addr = LxNetlinkSourceAddress(Socket->PeerAddress);
     return LxInetCopyAddressOut(Socket,
                                 Address->Address[0].Address[0].in_addr,
                                 Address->Address[0].Address[0].sin_port,

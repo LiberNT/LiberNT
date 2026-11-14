@@ -1683,6 +1683,40 @@ LxNetlinkAddressIndex(
     return Result;
 }
 
+/* The local address a datagram to Destination leaves from: its own for a local one, else the one sharing its subnet, else the first */
+ULONG
+LxNetlinkSourceAddress(
+    _In_ ULONG Destination)
+{
+    PLX_NL_STATE State;
+    ULONG Index, Result = 0;
+
+    if ((Destination & 0xFF) == 127)
+        return 0x0100007F;
+    State = LxAllocPaged(sizeof(*State));
+    if (State == NULL)
+        return 0;
+    LxNlSnapshot(State, NULL);
+    for (Index = 0; Index < State->AddressCount; Index++)
+    {
+        ULONG Address = State->Addresses[Index].Address, Mask = State->Addresses[Index].Mask;
+
+        if ((Address & 0xFF) == 127)
+            continue;
+        if (Address == Destination)
+        {
+            Result = Address;
+            break;
+        }
+        if ((Mask != 0) && ((Address & Mask) == (Destination & Mask)))
+            Result = Address;
+        else if (Result == 0)
+            Result = Address;
+    }
+    LxFreePaged(State);
+    return Result;
+}
+
 LONG64
 LxNetlinkSocket(
     _In_ PLX_PROCESS Process,
