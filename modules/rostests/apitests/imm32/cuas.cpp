@@ -128,6 +128,34 @@ static void check_messages_(int line, const char *pszExpected)
     ok_(__FILE__, line)(!strcmp(s_szMessages, pszExpected), "messages \"%s\", expected \"%s\"\n", s_szMessages, pszExpected);
 }
 
+static DWORD WINAPI SecondThread(LPVOID pParam)
+{
+    ITfThreadMgr *pThreadMgr = NULL;
+    ITfDocumentMgr *pFocus = NULL;
+    HWND hwnd;
+
+    CoInitialize(NULL);
+    hwnd = CreateWindowW(L"MsctfCuasTest", L"cuas", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, 300, 100, NULL, NULL,
+                         GetModuleHandleW(NULL), NULL);
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+    Pump();
+
+    ok_hr(CoCreateInstance(CLSID_TF_ThreadMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfThreadMgr, (void **)&pThreadMgr), S_OK);
+    if (pThreadMgr)
+    {
+        ok_hr(pThreadMgr->GetFocus(&pFocus), S_OK);
+        ok(pFocus != NULL, "no focused document manager\n");
+        if (pFocus)
+            pFocus->Release();
+        pThreadMgr->Release();
+    }
+
+    DestroyWindow(hwnd);
+    CoUninitialize();
+    return 0;
+}
+
 START_TEST(cuas)
 {
     WNDCLASSW wc = { 0 };
@@ -136,6 +164,7 @@ START_TEST(cuas)
     HWND hwnd;
     HIMC hIMC;
     WCHAR sz[64];
+    HANDLE hThread;
     HRESULT hr;
 
     CoInitialize(NULL);
@@ -257,6 +286,14 @@ START_TEST(cuas)
 
     ok(GetKeyboardLayout(0) == (HKL)(ULONG_PTR)0x04110411, "layout %p\n", GetKeyboardLayout(0));
     ok_long(ImmGetProperty(GetKeyboardLayout(0), IGP_PROPERTY), 0x001D000A);
+
+    hThread = CreateThread(NULL, 0, SecondThread, NULL, 0, NULL);
+    ok(hThread != NULL, "CreateThread failed, error %lu\n", GetLastError());
+    if (hThread)
+    {
+        ok_long(WaitForSingleObject(hThread, 30000), WAIT_OBJECT_0);
+        CloseHandle(hThread);
+    }
 
 done:
     DestroyWindow(hwnd);
