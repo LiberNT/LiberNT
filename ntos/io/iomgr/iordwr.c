@@ -1935,7 +1935,20 @@ IopQueryDirectoryFile(
 
     Irp->UserBuffer = FileInformation;
 
-    if (Length != 0)
+    if (Request.DeviceObject->Flags & DO_BUFFERED_IO)
+    {
+        Irp->AssociatedIrp.SystemBuffer = ExAllocatePoolWithQuotaTag(NonPagedPool |
+                                                                         POOL_QUOTA_FAIL_INSTEAD_OF_RAISE,
+                                                                     Length,
+                                                                     TAG_IOBUF);
+        if (Irp->AssociatedIrp.SystemBuffer == NULL)
+        {
+            IopAbortRequest(&Request);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        Irp->Flags = IRP_BUFFERED_IO | IRP_DEALLOCATE_BUFFER | IRP_INPUT_OPERATION | IRP_DEFER_IO_COMPLETION;
+    }
+    else if (Request.DeviceObject->Flags & DO_DIRECT_IO)
     {
         Mdl = IoAllocateMdl(FileInformation, Length, FALSE, TRUE, Irp);
         if (Mdl == NULL)
@@ -1947,6 +1960,24 @@ IopQueryDirectoryFile(
         _SEH2_TRY
         {
             MmProbeAndLockPages(Mdl, Request.PreviousMode, IoWriteAccess);
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+
+        if (!NT_SUCCESS(Status))
+        {
+            IopAbortRequest(&Request);
+            return Status;
+        }
+    }
+    else if (Request.PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWrite(FileInformation, Length, sizeof(ULONG));
         }
         _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
         {
