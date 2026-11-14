@@ -637,7 +637,14 @@ BOOLEAN
 NTAPI
 KeIsExecutingDpc(VOID)
 {
-    return KeGetCurrentPrcb()->DpcRoutineActive;
+    BOOLEAN Enabled, Active;
+
+    /* A thread that changed processor between finding its processor block and reading it would see another's DPC */
+    Enabled = KeDisableInterrupts();
+    Active = KeGetCurrentPrcb()->DpcRoutineActive;
+    KeRestoreInterrupts(Enabled);
+
+    return Active;
 }
 
 /*
