@@ -15,9 +15,11 @@
 #define RTL_SRWLOCK_OWNED_BIT       0
 #define RTL_SRWLOCK_CONTENDED_BIT   1
 #define RTL_SRWLOCK_SHARED_BIT      2
+#define RTL_SRWLOCK_TURN_BIT        3
 #define RTL_SRWLOCK_OWNED           (_ONE << RTL_SRWLOCK_OWNED_BIT)
 #define RTL_SRWLOCK_CONTENDED       (_ONE << RTL_SRWLOCK_CONTENDED_BIT)
 #define RTL_SRWLOCK_SHARED          (_ONE << RTL_SRWLOCK_SHARED_BIT)
+#define RTL_SRWLOCK_TURN            (_ONE << RTL_SRWLOCK_TURN_BIT)
 #define RTL_SRWLOCK_BITS            4
 #define RTL_SRWLOCK_SHARED_ONE      (_ONE << RTL_SRWLOCK_BITS)
 
@@ -46,9 +48,25 @@ static RTLP_SRWLOCK_BUCKET RtlpSrwLockBuckets[RTLP_SRWLOCK_BUCKET_COUNT];
 #define RTLP_SRWLOCK_BACKOFF_SLOTS  32
 #define RTLP_SRWLOCK_BACKOFF_MAX    13
 
+#define RTLP_SRWLOCK_TURN_LEVELS    11
+#define RTLP_SRWLOCK_TURN_CLAIM     4
+#define RTLP_SRWLOCK_TURN_HELD      3
+#define RTLP_SRWLOCK_TURN_UNSEEN    2
+#define RTLP_SRWLOCK_TURN_GAP       256
+#define RTLP_SRWLOCK_TURN_COOL      8
+#define RTLP_SRWLOCK_TURN_CREDIT    8
+
 typedef struct DECLSPEC_ALIGN(128) _RTLP_SRWLOCK_BACKOFF
 {
     volatile LONG Level;
+    volatile LONG TurnLevel;
+    volatile LONG TurnClaim;
+    volatile LONG TurnLook;
+    volatile LONG TurnCredit;
+    volatile LONG TurnCool;
+    volatile ULONG TurnSeed;
+    PRTL_SRWLOCK volatile SampleLock;
+    volatile LONG_PTR SampleValue;
 } RTLP_SRWLOCK_BACKOFF, *PRTLP_SRWLOCK_BACKOFF;
 
 static RTLP_SRWLOCK_BACKOFF RtlpSrwBackoffSlots[RTLP_SRWLOCK_BACKOFF_SLOTS];
@@ -136,6 +154,119 @@ RtlpSrwBackoffSettle(
     Slot = RtlpSrwBackoffSlot();
     if (Slot->Level > 0)
         Slot->Level = Slot->Level - 1;
+}
+
+static
+VOID
+RtlpSrwTurnSpin(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
+    _In_ ULONG Window)
+{
+    ULONG Seed = Slot->TurnSeed * 1664525u + 1013904223u + (ULONG)(ULONG_PTR)NtCurrentTeb()->ClientId.UniqueThread;
+    ULONG Pause = Window / 2 + (Seed >> 8) % (Window / 2);
+    ULONG Index;
+
+    Slot->TurnSeed = Seed;
+    if (RtlpSrwSpinLimit() == 0)
+        return;
+    /* FIXME: windows are counted in YieldProcessor calls and were sized on ARM64; x86 PAUSE takes many times longer. */
+    for (Index = 0; Index < Pause; Index++)
+        YieldProcessor();
+}
+
+static
+ULONG
+RtlpSrwTurnWindow(
+    _In_ PRTLP_SRWLOCK_BACKOFF Slot)
+{
+    LONG Level = Slot->TurnLevel;
+
+    ASSERT(Level >= 0 && Level <= RTLP_SRWLOCK_TURN_LEVELS);
+    return 64u << Level;
+}
+
+static
+VOID
+RtlpSrwTurnAdjust(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
+    _In_ LONG Delta)
+{
+    LONG Level = Slot->TurnLevel + Delta;
+
+    Slot->TurnLevel = max(0, min(Level, RTLP_SRWLOCK_TURN_LEVELS));
+}
+
+static
+VOID
+RtlpSrwTurnLook(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
+    _In_ LONG_PTR Value)
+{
+    LONG Cool = Slot->TurnCool;
+
+    if (Cool > 0)
+    {
+        Slot->TurnCool = Cool - 1;
+        Slot->TurnClaim = FALSE;
+        return;
+    }
+    RtlpSrwTurnAdjust(Slot, (Value & RTL_SRWLOCK_OWNED) ? RTLP_SRWLOCK_TURN_HELD : -1);
+    Slot->TurnClaim = Slot->TurnLevel >= RTLP_SRWLOCK_TURN_CLAIM;
+}
+
+static
+VOID
+RtlpSrwTurnChanged(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot)
+{
+    LONG Credit = Slot->TurnCredit;
+
+    if (Credit >= 2)
+    {
+        Slot->TurnCredit = Credit - 2;
+        return;
+    }
+    Slot->TurnCredit = 0;
+    RtlpSrwTurnAdjust(Slot, -1);
+}
+
+static
+VOID
+RtlpSrwTurnJoined(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
+    _In_ PRTL_SRWLOCK SRWLock,
+    _In_ LONG_PTR NewValue)
+{
+    if (Slot->TurnLevel == 0)
+        return;
+    if (Slot->SampleLock == SRWLock)
+        RtlpSrwTurnChanged(Slot);
+    Slot->SampleLock = SRWLock;
+    Slot->SampleValue = NewValue;
+}
+
+static
+VOID
+RtlpSrwTurnLeft(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
+    _In_ PRTL_SRWLOCK SRWLock,
+    _In_ LONG_PTR Value)
+{
+    LONG Credit;
+
+    if (Slot->SampleLock != SRWLock)
+        return;
+    if (Value != Slot->SampleValue)
+    {
+        RtlpSrwTurnChanged(Slot);
+    }
+    else
+    {
+        Credit = Slot->TurnCredit;
+        if (Credit < RTLP_SRWLOCK_TURN_CREDIT)
+            Slot->TurnCredit = Credit + 1;
+    }
+    Slot->SampleLock = NULL;
 }
 
 static
@@ -305,25 +436,64 @@ RtlInitializeSRWLock(OUT PRTL_SRWLOCK SRWLock)
 static
 DECLSPEC_NOINLINE
 VOID
-RtlpSrwAcquireSharedSlow(
+RtlpSrwTurnClaimed(
+    _Inout_ PRTLP_SRWLOCK_BACKOFF Slot,
     _Inout_ PRTL_SRWLOCK SRWLock)
 {
+    LONG_PTR Value, Previous;
+    ULONG Index;
+
+    Slot->TurnClaim = FALSE;
+    if (RtlpSrwSpinLimit() != 0)
+    {
+        for (Index = 0; Index < RTLP_SRWLOCK_TURN_GAP; Index++)
+            YieldProcessor();
+    }
+
+    Value = RtlpSrwRead(SRWLock);
+    ASSERT((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) == (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED));
+    ASSERT((Value >> RTL_SRWLOCK_BITS) != 0);
+    if (!(Value & RTL_SRWLOCK_TURN))
+        return;
+
+    if ((Value >> RTL_SRWLOCK_BITS) == 1)
+    {
+        RtlpSrwTurnAdjust(Slot, -RTLP_SRWLOCK_TURN_UNSEEN);
+    }
+    else
+    {
+        Slot->TurnLevel = 0;
+        Slot->TurnCool = RTLP_SRWLOCK_TURN_COOL;
+    }
+
+    while (Value & RTL_SRWLOCK_TURN)
+    {
+        Previous = RtlpSrwCompareExchange(SRWLock, Value & ~RTL_SRWLOCK_TURN, Value);
+        if (Previous == Value)
+            break;
+        Value = Previous;
+    }
+}
+
+static
+DECLSPEC_NOINLINE
+VOID
+RtlpSrwAcquireSharedSlow(
+    _Inout_ PRTL_SRWLOCK SRWLock,
+    _In_ BOOLEAN Raced)
+{
+    PRTLP_SRWLOCK_BACKOFF Slot = RtlpSrwBackoffSlot();
     ULONG Limit = RtlpSrwSpinLimit();
     ULONG Spun = 0, Spins = 0, Failures = 0;
-    LONG_PTR Value = RtlpSrwRead(SRWLock), NewValue, Previous;
+    BOOLEAN Look = Raced || Slot->TurnLook;
+    BOOLEAN Yielded = FALSE;
+    LONG_PTR Value, NewValue;
 
+    Slot->TurnLook = FALSE;
     for (;;)
     {
-        if (!(Value & RTL_SRWLOCK_OWNED))
-        {
-            ASSERT((Value & ~RTL_SRWLOCK_CONTENDED) == 0);
-            NewValue = (Value & RTL_SRWLOCK_CONTENDED) | RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
-        }
-        else if ((Value & RTL_SRWLOCK_SHARED) && !(Value & RTL_SRWLOCK_CONTENDED))
-        {
-            NewValue = Value + RTL_SRWLOCK_SHARED_ONE;
-        }
-        else
+        Value = RtlpSrwRead(SRWLock);
+        if (RtlpSrwMustWait(Value, FALSE))
         {
             if (Spun < Limit)
             {
@@ -334,18 +504,52 @@ RtlpSrwAcquireSharedSlow(
                 RtlpSrwWait(SRWLock, FALSE);
                 Spun = Spins = 0;
             }
-            Value = RtlpSrwRead(SRWLock);
             continue;
         }
 
-        Previous = RtlpSrwCompareExchange(SRWLock, NewValue, Value);
-        if (Previous == Value)
+        if ((Value & RTL_SRWLOCK_TURN) && !Yielded)
         {
-            RtlpSrwBackoffSettle(Failures);
+            Yielded = TRUE;
+            RtlpSrwCompareExchange(SRWLock, Value & ~RTL_SRWLOCK_TURN, Value);
+            RtlpSrwTurnSpin(Slot, RtlpSrwTurnWindow(Slot));
+            Look = TRUE;
+            continue;
+        }
+
+        if (Look)
+        {
+            Look = FALSE;
+            RtlpSrwTurnLook(Slot, Value);
+        }
+
+        if (!(Value & RTL_SRWLOCK_OWNED))
+        {
+            ASSERT((Value & ~RTL_SRWLOCK_CONTENDED) == 0);
+            NewValue = (Value & RTL_SRWLOCK_CONTENDED) | RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
+        }
+        else
+        {
+            NewValue = Value + RTL_SRWLOCK_SHARED_ONE;
+        }
+
+        if (Slot->TurnClaim && !(Value & RTL_SRWLOCK_CONTENDED))
+        {
+            if (RtlpSrwCompareExchange(SRWLock, NewValue | RTL_SRWLOCK_TURN, Value) != Value)
+                continue;
+            RtlpSrwTurnClaimed(Slot, SRWLock);
             return;
         }
-        RtlpSrwCasBackoff(&Failures);
-        Value = RtlpSrwRead(SRWLock);
+
+        if (RtlpSrwCompareExchange(SRWLock, NewValue, Value) == Value)
+        {
+            if (Value & RTL_SRWLOCK_OWNED)
+                RtlpSrwTurnJoined(Slot, SRWLock, NewValue);
+            return;
+        }
+
+        RtlpSrwTurnSpin(Slot, 64u << min(Failures, 4u));
+        Failures++;
+        Look = TRUE;
     }
 }
 
@@ -353,48 +557,53 @@ static
 DECLSPEC_NOINLINE
 VOID
 RtlpSrwReleaseSharedSlow(
-    _Inout_ PRTL_SRWLOCK SRWLock)
+    _Inout_ PRTL_SRWLOCK SRWLock,
+    _In_ BOOLEAN Raced)
 {
+    PRTLP_SRWLOCK_BACKOFF Slot = RtlpSrwBackoffSlot();
     LONG_PTR Value = RtlpSrwRead(SRWLock);
-    LONG_PTR Previous;
-    ULONG Failures = 0;
+    LONG_PTR First = Value, NewValue, Previous;
 
-    if ((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) != (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED) ||
-        (Value >> RTL_SRWLOCK_BITS) == 0)
-    {
-        RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
-    }
-
-    /* A zero count with SHARED|OWNED still set is retired by whoever reached zero, unless a reader rejoins first. */
     for (;;)
     {
-        Previous = RtlpSrwCompareExchange(SRWLock, Value - RTL_SRWLOCK_SHARED_ONE, Value);
-        if (Previous == Value)
-            break;
-        RtlpSrwCasBackoff(&Failures);
-        Value = Previous;
         if ((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) != (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED) ||
             (Value >> RTL_SRWLOCK_BITS) == 0)
         {
             RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
         }
-    }
-    RtlpSrwBackoffSettle(Failures);
-    Value -= RTL_SRWLOCK_SHARED_ONE;
-    ASSERT((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) == (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED));
 
-    while ((Value >> RTL_SRWLOCK_BITS) == 0 &&
-           (Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) == (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED))
-    {
-        if (Value & RTL_SRWLOCK_CONTENDED)
-        {
-            RtlpSrwReleaseContended(SRWLock, RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED);
-            return;
-        }
-        Previous = RtlpSrwCompareExchange(SRWLock, 0, Value);
+        if ((Value >> RTL_SRWLOCK_BITS) == 1 && !(Value & RTL_SRWLOCK_CONTENDED))
+            NewValue = 0;
+        else
+            NewValue = (Value - RTL_SRWLOCK_SHARED_ONE) & ~RTL_SRWLOCK_TURN;
+
+        Previous = RtlpSrwCompareExchange(SRWLock, NewValue, Value);
         if (Previous == Value)
-            return;
+            break;
         Value = Previous;
+    }
+
+    if (Value & RTL_SRWLOCK_CONTENDED)
+    {
+        if ((NewValue >> RTL_SRWLOCK_BITS) == 0)
+        {
+            ASSERT(NewValue == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED | RTL_SRWLOCK_CONTENDED));
+            RtlpSrwReleaseContended(SRWLock, RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED);
+        }
+        return;
+    }
+
+    /* The word is not read from here on: with this count gone the owner may free the lock. */
+    RtlpSrwTurnLeft(Slot, SRWLock, First);
+    if (Value & RTL_SRWLOCK_TURN)
+    {
+        RtlpSrwTurnSpin(Slot, RtlpSrwTurnWindow(Slot));
+        Slot->TurnLook = TRUE;
+        Slot->TurnClaim = Slot->TurnLevel >= RTLP_SRWLOCK_TURN_CLAIM;
+    }
+    else if (Raced)
+    {
+        RtlpSrwTurnLook(Slot, NewValue);
     }
 }
 
@@ -470,23 +679,32 @@ NTAPI
 RtlAcquireSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
 {
     LONG_PTR Value = RtlpSrwRead(SRWLock);
-    LONG_PTR NewValue;
+    PRTLP_SRWLOCK_BACKOFF Slot;
+    BOOLEAN Raced = FALSE;
 
     if (Value == 0)
     {
         Value = RtlpSrwCompareExchange(SRWLock, RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED, 0);
         if (Value == 0)
             return;
+        Raced = TRUE;
     }
-    if (!(Value & RTL_SRWLOCK_OWNED))
-        NewValue = (Value & RTL_SRWLOCK_CONTENDED) | RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED;
-    else if ((Value & (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_CONTENDED)) == RTL_SRWLOCK_SHARED)
-        NewValue = Value + RTL_SRWLOCK_SHARED_ONE;
-    else
-        NewValue = 0;
+    else if ((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_CONTENDED | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_TURN)) ==
+             (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED))
+    {
+        Slot = RtlpSrwBackoffSlot();
+        if (!Slot->TurnClaim)
+        {
+            if (RtlpSrwCompareExchange(SRWLock, Value + RTL_SRWLOCK_SHARED_ONE, Value) == Value)
+            {
+                RtlpSrwTurnJoined(Slot, SRWLock, Value + RTL_SRWLOCK_SHARED_ONE);
+                return;
+            }
+            Raced = TRUE;
+        }
+    }
 
-    if (NewValue == 0 || RtlpSrwCompareExchange(SRWLock, NewValue, Value) != Value)
-        RtlpSrwAcquireSharedSlow(SRWLock);
+    RtlpSrwAcquireSharedSlow(SRWLock, Raced);
 }
 
 VOID
@@ -494,12 +712,27 @@ NTAPI
 RtlReleaseSRWLockShared(IN OUT PRTL_SRWLOCK SRWLock)
 {
     LONG_PTR Value = RtlpSrwRead(SRWLock);
+    BOOLEAN Raced = FALSE;
 
-    if (Value != (RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED) ||
-        RtlpSrwCompareExchange(SRWLock, 0, RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED) != Value)
+    if (Value == (RTL_SRWLOCK_SHARED_ONE | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED))
     {
-        RtlpSrwReleaseSharedSlow(SRWLock);
+        if (RtlpSrwCompareExchange(SRWLock, 0, Value) == Value)
+            return;
+        Raced = TRUE;
     }
+    else if ((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_CONTENDED | RTL_SRWLOCK_SHARED | RTL_SRWLOCK_TURN)) ==
+             (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED) &&
+             (Value >> RTL_SRWLOCK_BITS) > 1)
+    {
+        if (RtlpSrwCompareExchange(SRWLock, Value - RTL_SRWLOCK_SHARED_ONE, Value) == Value)
+        {
+            RtlpSrwTurnLeft(RtlpSrwBackoffSlot(), SRWLock, Value);
+            return;
+        }
+        Raced = TRUE;
+    }
+
+    RtlpSrwReleaseSharedSlow(SRWLock, Raced);
 }
 
 VOID

@@ -12,6 +12,9 @@
 #define QUEUED_READERS 6
 #define JOIN_TIMEOUT_MS 5000
 #define QUEUE_SETTLE_MS 32
+#define TURN_READERS 4
+#define TURN_ITERATIONS 300000
+#define TURN_WRITES 256
 
 typedef struct _SRW_STRESS_CONTEXT
 {
@@ -235,6 +238,171 @@ TestTryAcquireEncoding(VOID)
     ok(Lock.Ptr == NULL, "Lock not idle after mixed shared release: %p\n", Lock.Ptr);
 }
 
+typedef struct _SRW_TURN_CONTEXT
+{
+    RTL_SRWLOCK Lock;
+    HANDLE Start;
+    HANDLE Held;
+    HANDLE Release;
+    volatile LONG Failures;
+    volatile LONG Reads;
+    LONG Value;
+    LONG Mirror;
+    ULONG Writes;
+} SRW_TURN_CONTEXT, *PSRW_TURN_CONTEXT;
+
+static
+DWORD
+WINAPI
+TurnReader(
+    _In_ LPVOID Parameter)
+{
+    PSRW_TURN_CONTEXT Context = Parameter;
+    LONG Torn = 0;
+    ULONG Index;
+
+    if (WaitForSingleObject(Context->Start, JOIN_TIMEOUT_MS) != WAIT_OBJECT_0)
+    {
+        InterlockedIncrement(&Context->Failures);
+        return 0;
+    }
+    for (Index = 0; Index < TURN_ITERATIONS; Index++)
+    {
+        RtlAcquireSRWLockShared(&Context->Lock);
+        if (Context->Mirror != ~Context->Value)
+            Torn++;
+        RtlReleaseSRWLockShared(&Context->Lock);
+    }
+    InterlockedExchangeAdd(&Context->Failures, Torn);
+    InterlockedExchangeAdd(&Context->Reads, TURN_ITERATIONS);
+    return 0;
+}
+
+static
+DWORD
+WINAPI
+TurnWriter(
+    _In_ LPVOID Parameter)
+{
+    PSRW_TURN_CONTEXT Context = Parameter;
+    ULONG Index;
+
+    if (WaitForSingleObject(Context->Start, JOIN_TIMEOUT_MS) != WAIT_OBJECT_0)
+    {
+        InterlockedIncrement(&Context->Failures);
+        return 0;
+    }
+    for (Index = 0; Index < Context->Writes; Index++)
+    {
+        RtlAcquireSRWLockExclusive(&Context->Lock);
+        Context->Value++;
+        Context->Mirror = ~Context->Value;
+        RtlReleaseSRWLockExclusive(&Context->Lock);
+    }
+    return 0;
+}
+
+static
+DWORD
+WINAPI
+TurnHolder(
+    _In_ LPVOID Parameter)
+{
+    PSRW_TURN_CONTEXT Context = Parameter;
+
+    RtlAcquireSRWLockShared(&Context->Lock);
+    SetEvent(Context->Held);
+    if (WaitForSingleObject(Context->Release, JOIN_TIMEOUT_MS) != WAIT_OBJECT_0)
+        InterlockedIncrement(&Context->Failures);
+    RtlReleaseSRWLockShared(&Context->Lock);
+    return 0;
+}
+
+static
+VOID
+TestSharedTurns(
+    _In_ BOOLEAN WithHolder,
+    _In_ ULONG Writes)
+{
+    SRW_TURN_CONTEXT Context;
+    HANDLE Threads[TURN_READERS + 1];
+    HANDLE Holder = NULL;
+    ULONG Count = 0, Index;
+    DWORD WaitStatus;
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    RtlInitializeSRWLock(&Context.Lock);
+    Context.Mirror = ~Context.Value;
+    Context.Writes = Writes;
+    Context.Start = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Context.Held = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Context.Release = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Context.Start && Context.Held && Context.Release, "CreateEventW failed with %lu\n", GetLastError());
+    if (!Context.Start || !Context.Held || !Context.Release)
+        goto Cleanup;
+
+    if (WithHolder)
+    {
+        Holder = CreateThread(NULL, 0, TurnHolder, &Context, 0, NULL);
+        ok(Holder != NULL, "CreateThread failed with %lu\n", GetLastError());
+        if (Holder == NULL)
+            goto Cleanup;
+        WaitStatus = WaitForSingleObject(Context.Held, JOIN_TIMEOUT_MS);
+        ok(WaitStatus == WAIT_OBJECT_0, "Shared owner did not acquire the lock: %lu\n", WaitStatus);
+    }
+
+    for (Index = 0; Index < TURN_READERS; Index++)
+    {
+        Threads[Count] = CreateThread(NULL, 0, TurnReader, &Context, 0, NULL);
+        ok(Threads[Count] != NULL, "CreateThread failed with %lu\n", GetLastError());
+        if (Threads[Count] != NULL)
+            Count++;
+    }
+    if (Writes != 0)
+    {
+        Threads[Count] = CreateThread(NULL, 0, TurnWriter, &Context, 0, NULL);
+        ok(Threads[Count] != NULL, "CreateThread failed with %lu\n", GetLastError());
+        if (Threads[Count] != NULL)
+            Count++;
+    }
+
+    SetEvent(Context.Start);
+    WaitStatus = Count ? WaitForMultipleObjects(Count, Threads, TRUE, JOIN_TIMEOUT_MS) : WAIT_FAILED;
+    ok(WaitStatus == WAIT_OBJECT_0, "Readers did not finish (owner=%u, writes=%lu, wait=%lu)\n", WithHolder, Writes, WaitStatus);
+    ok(Context.Reads == TURN_READERS * TURN_ITERATIONS, "Readers completed %ld of %d acquisitions\n", Context.Reads, TURN_READERS * TURN_ITERATIONS);
+    ok(Context.Value == (LONG)Writes, "Writer completed %ld of %lu updates\n", Context.Value, Writes);
+    ok(Context.Failures == 0, "A reader saw a half-written value or a wait failed, %ld times\n", Context.Failures);
+
+    if (Holder != NULL)
+    {
+        ok(Context.Lock.Ptr != NULL, "Lock idle while a shared owner remains\n");
+        SetEvent(Context.Release);
+        WaitStatus = WaitForSingleObject(Holder, JOIN_TIMEOUT_MS);
+        ok(WaitStatus == WAIT_OBJECT_0, "Shared owner did not leave: %lu\n", WaitStatus);
+    }
+    ok(Context.Lock.Ptr == NULL, "Lock word not idle after the readers left: %p\n", Context.Lock.Ptr);
+
+Cleanup:
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (WaitForSingleObject(Threads[Index], 0) != WAIT_OBJECT_0)
+            TerminateThread(Threads[Index], 0);
+        CloseHandle(Threads[Index]);
+    }
+    if (Holder != NULL)
+    {
+        if (WaitForSingleObject(Holder, 0) != WAIT_OBJECT_0)
+            TerminateThread(Holder, 0);
+        CloseHandle(Holder);
+    }
+    if (Context.Start)
+        CloseHandle(Context.Start);
+    if (Context.Held)
+        CloseHandle(Context.Held);
+    if (Context.Release)
+        CloseHandle(Context.Release);
+}
+
 typedef struct _SRW_PRIORITY_CONTEXT
 {
     RTL_SRWLOCK Lock;
@@ -389,5 +557,8 @@ START_TEST(RtlSRWLock)
     TestTryAcquireEncoding();
     TestQueuedSharedChain();
     TestStress();
+    TestSharedTurns(FALSE, 0);
+    TestSharedTurns(TRUE, 0);
+    TestSharedTurns(FALSE, TURN_WRITES);
     TestPriorityProgress();
 }
