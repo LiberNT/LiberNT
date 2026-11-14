@@ -674,7 +674,8 @@ Components:
         if (OobeApps[Index].Selected)
             InstallOobeApp(&OobeApps[Index], &Context->Progress);
     }
-    InstallMissingDrivers(&Context->Progress);
+    if (OobeInstallDrivers)
+        InstallMissingDrivers(&Context->Progress);
     if (SUCCEEDED(hrCom))
         CoUninitialize();
 

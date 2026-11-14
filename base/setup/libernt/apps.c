@@ -32,6 +32,9 @@
 
 POOBE_APP OobeApps;
 ULONG OobeAppCount;
+BOOL OobeInstallDrivers = TRUE;
+
+#define OOBE_DRIVERS_ROW ((LPARAM)-1)
 
 static PCWSTR
 GetArchitectureName(VOID)
@@ -249,6 +252,18 @@ FillAppList(
                              (PWSTR)GetUrlHost(OobeApps[Index].Url, Text, ARRAYSIZE(Text)));
         ListView_SetCheckState(hList, Item.iItem, OobeApps[Index].Selected);
     }
+
+    if (LoadStringW(GetModuleHandleW(NULL), IDS_APPS_DRIVERS, Name, ARRAYSIZE(Name)))
+    {
+        ZeroMemory(&Item, sizeof(Item));
+        Item.mask = LVIF_TEXT | LVIF_PARAM;
+        Item.iItem = (INT)OobeAppCount;
+        Item.pszText = Name;
+        Item.lParam = OOBE_DRIVERS_ROW;
+        Item.iItem = ListView_InsertItem(hList, &Item);
+        ListView_SetItemText(hList, Item.iItem, 1, (PWSTR)L"www.catalog.update.microsoft.com");
+        ListView_SetCheckState(hList, Item.iItem, OobeInstallDrivers);
+    }
 }
 
 static ULONG
@@ -302,9 +317,15 @@ AppsPageProc(
     switch (uMsg)
     {
         case WM_INITDIALOG:
+        {
+            WCHAR Note[256];
+
             FillAppList(hList);
             ShowAppSpace(hwndDlg);
+            if (LoadStringW(GetModuleHandleW(NULL), IDS_APPS_DRIVERS_NOTE, Note, ARRAYSIZE(Note)))
+                SetDlgItemTextW(hwndDlg, IDC_APPDRIVERS, Note);
             return FALSE;
+        }
 
         case WM_NOTIFY:
             if (((LPNMHDR)lParam)->idFrom == IDC_APPLIST && ((LPNMHDR)lParam)->code == LVN_ITEMCHANGED)
@@ -312,11 +333,6 @@ AppsPageProc(
             break;
 
         case SPN_SETACTIVE:
-            if (OobeAppCount == 0)
-            {
-                SetupFramePressNext(hwndDlg);
-                return TRUE;
-            }
             ShowAppSpace(hwndDlg);
             SetFocus(hList);
             return TRUE;
@@ -343,7 +359,11 @@ AppsPageProc(
                 ZeroMemory(&Item, sizeof(Item));
                 Item.mask = LVIF_PARAM;
                 Item.iItem = iItem;
-                if (ListView_GetItem(hList, &Item) && (ULONG)Item.lParam < OobeAppCount)
+                if (!ListView_GetItem(hList, &Item))
+                    continue;
+                if (Item.lParam == OOBE_DRIVERS_ROW)
+                    OobeInstallDrivers = ListView_GetCheckState(hList, iItem);
+                else if ((ULONG)Item.lParam < OobeAppCount)
                     OobeApps[Item.lParam].Selected = ListView_GetCheckState(hList, iItem);
             }
             SetWindowLongPtrW(hwndDlg, DWLP_MSGRESULT, 0);
