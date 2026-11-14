@@ -31,6 +31,7 @@
 #define LX_TCP_INFO_ADVMSS      84
 
 #define LX_INET_CHUNK       65536
+#define LX_INET_GATE_HELD   0x80000000
 #define LX_INET_BUFFER      212992
 #define LX_INET_OPTIONS     24
 #define LX_INET_EVENTS      (AFD_EVENT_RECEIVE | AFD_EVENT_OOB_RECEIVE | AFD_EVENT_SEND | AFD_EVENT_DISCONNECT | \
@@ -48,6 +49,7 @@ typedef struct _LX_INET_SOCKET
 {
     volatile LONG RefCount;
     KEVENT Lock;
+    KEVENT ReceiveGate;
     HANDLE Handle;
     PFILE_OBJECT FileObject;
     PDEVICE_OBJECT DeviceObject;
@@ -122,6 +124,7 @@ static LONG64 LxInetRead(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 L
 static LONG64 LxInetWrite(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _Inout_opt_ PLONG64 Offset);
 static LONG64 LxInetIoctl(_In_ PLX_FILE File, _In_ ULONG Request, _In_ ULONG64 Argument);
 static ULONG LxInetPoll(_In_ PLX_FILE File, _In_opt_ PLX_POLL_ENTRY Entry);
+static VOID LxInetDropStrangers(_In_ PLX_FILE File, _In_ PLX_INET_SOCKET Socket);
 static LONG LxInetStat(_In_ PLX_FILE File, _Out_ PLX_STAT Stat);
 static VOID LxInetRelease(_In_ PLX_FILE File);
 
@@ -302,6 +305,7 @@ LxInetCreate(
     Socket->RefCount = 1;
     InitializeListHead(&Socket->BoundLink);
     KeInitializeEvent(&Socket->Lock, SynchronizationEvent, TRUE);
+    KeInitializeEvent(&Socket->ReceiveGate, SynchronizationEvent, TRUE);
     KeInitializeSpinLock(&Socket->SelectLock);
     LxPollHeadInit(&Socket->Poll);
     Socket->Family = Family;
@@ -818,7 +822,11 @@ LxInetTransfer(
             Info.TdiFlags = TDI_RECEIVE_NORMAL | ((Flags & LX_MSG_PEEK) ? TDI_RECEIVE_PEEK : 0);
             Info.Address = Address;
             Info.AddressLength = &AddressLength;
+            if (!(Flags & LX_INET_GATE_HELD))
+                KeWaitForSingleObject(&Socket->ReceiveGate, Executive, KernelMode, FALSE, NULL);
             Status = LxAfdIoctl(Socket, IOCTL_AFD_RECV_DATAGRAM, &Info, sizeof(Info), NULL, 0, &Information);
+            if (!(Flags & LX_INET_GATE_HELD))
+                KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
             if ((Status == STATUS_BUFFER_OVERFLOW) && (Truncated != NULL))
             {
                 *Truncated = TRUE;
@@ -1515,6 +1523,7 @@ LxInetRecvmsg(
     BOOLEAN Drained;
     LONG64 Result;
 
+    Flags &= ~LX_INET_GATE_HELD;
     if (Flags & LX_MSG_OOB)
         return -LX_EINVAL;
     if ((Socket->Type == LX_SOCK_STREAM) && (Socket->State != LX_INET_CONNECTED))
@@ -1557,11 +1566,12 @@ LxInetRecvmsg(
         {
             Socket->QueuedAtConnect -= min(Socket->QueuedAtConnect, (ULONG)Received);
         }
-        else if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && !(Flags & LX_MSG_PEEK) &&
+        else if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Socket->QueuedAtConnect == 0) &&
                  ((((PLX_SOCKADDR_IN)&Source)->Address != Socket->PeerAddress) ||
                   (((PLX_SOCKADDR_IN)&Source)->Port != Socket->PeerPort)))
         {
-            /* FIXME: a datagram from another sender still makes a connected socket poll readable until it is dropped here */
+            if (Flags & LX_MSG_PEEK)
+                LxInetDropStrangers(File, Socket);
             Truncated = FALSE;
             continue;
         }
@@ -2067,6 +2077,39 @@ LxInetIoctl(
     return -LX_ENOTTY;
 }
 
+/* A connected datagram socket must not look readable for a datagram its reads would drop */
+static
+VOID
+LxInetDropStrangers(
+    _In_ PLX_FILE File,
+    _In_ PLX_INET_SOCKET Socket)
+{
+    ULONG Flags = LX_MSG_DONTWAIT | LX_INET_GATE_HELD;
+    TA_IP_ADDRESS Source;
+    BOOLEAN Truncated;
+    UCHAR Byte;
+
+    ASSERT(Socket->Type == LX_SOCK_DGRAM);
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    KeWaitForSingleObject(&Socket->ReceiveGate, Executive, KernelMode, FALSE, NULL);
+    for (;;)
+    {
+        RtlZeroMemory(&Source, sizeof(Source));
+        if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags | LX_MSG_PEEK, &Source, &Truncated) < 0)
+            break;
+        if (!Socket->PeerValid || (Socket->QueuedAtConnect != 0) ||
+            ((((PLX_SOCKADDR_IN)&Source)->Address == Socket->PeerAddress) &&
+             (((PLX_SOCKADDR_IN)&Source)->Port == Socket->PeerPort)))
+        {
+            break;
+        }
+        if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags, &Source, &Truncated) < 0)
+            break;
+    }
+    KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
+}
+
 static
 ULONG
 LxInetPoll(
@@ -2099,6 +2142,12 @@ LxInetPoll(
 
     Current = LxInetCurrentEvents(Socket);
     Mask = LxInetMapEvents(Socket, Current);
+    if ((Mask & LX_POLLIN) && (Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Socket->QueuedAtConnect == 0))
+    {
+        LxInetDropStrangers(File, Socket);
+        Current = LxInetCurrentEvents(Socket);
+        Mask = LxInetMapEvents(Socket, Current);
+    }
     if (Socket->State == LX_INET_LISTENING)
         Mask &= LX_POLLIN | LX_POLLRDNORM | LX_POLLERR;
     if (Socket->ShutRead)
