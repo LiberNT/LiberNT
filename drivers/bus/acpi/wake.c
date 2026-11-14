@@ -204,6 +204,8 @@ BOOLEAN
 AcpiWakeAllowedLocked(
     _In_ PACPI_WAKE_CONTEXT Context)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     return AcpiWakeTargetState == PowerSystemWorking ||
            (Context->Irp != NULL && Context->WakeState >= AcpiWakeTargetState);
 }
@@ -213,6 +215,8 @@ VOID
 AcpiWakeQueueWorkLocked(
     _Inout_ PACPI_WAKE_CONTEXT Context)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Context->WorkQueued)
         return;
 
@@ -277,6 +281,8 @@ AcpiWakeTakeIrpLocked(
     _Inout_ PACPI_WAKE_CONTEXT Context)
 {
     PIRP Irp = Context->Irp;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Irp == NULL || IoSetCancelRoutine(Irp, NULL) == NULL)
         return NULL;

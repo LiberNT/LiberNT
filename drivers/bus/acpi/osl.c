@@ -561,6 +561,9 @@ OslExecDpcRoutine(PKDPC Dpc, PVOID Context, PVOID Arg1, PVOID Arg2)
      */
     SListEntry = InterlockedFlushSList(&OslExecPendingList);
     ReversedList = NULL;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while (SListEntry != NULL)
     {
         NextEntry = SListEntry->Next;

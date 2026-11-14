@@ -1259,6 +1259,9 @@ KspBusDpcRoutine(
     PBUS_ENUM_DEVICE_EXTENSION BusDeviceExtension = (PBUS_ENUM_DEVICE_EXTENSION)DeferredContext;
 
     /* queue the item */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ExQueueWorkItem(&BusDeviceExtension->WorkItem, DelayedWorkQueue);
 }
 

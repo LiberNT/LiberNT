@@ -235,6 +235,9 @@ IServiceGroupDpc(
     CServiceGroup * This = (CServiceGroup*)DeferredContext;
 
     // acquire service group list lock
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&This->m_Lock);
 
     // grab first entry

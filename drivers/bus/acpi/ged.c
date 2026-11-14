@@ -86,6 +86,8 @@ GedDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     ExQueueWorkItem(&Event->WorkItem, CriticalWorkQueue);
 }
 

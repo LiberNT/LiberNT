@@ -413,6 +413,9 @@ MonitorBrightnessApplyLocked(
     NTSTATUS Status;
 
     *Changed = FALSE;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     if (Level == Brightness->Current)
         return STATUS_SUCCESS;
 

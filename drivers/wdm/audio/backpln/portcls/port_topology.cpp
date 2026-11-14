@@ -164,6 +164,9 @@ PortTopologyEventDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(Port != NULL);
+
     PcGenerateEventList(Port->m_SubDeviceDescriptor,
                         Port->m_EventDpcHasSet ? &Port->m_EventDpcSet : NULL,
                         Port->m_EventDpcId,

@@ -315,6 +315,8 @@ static PACPI_THERMAL_REQUEST_ENTRY AcpiThermalFindRequestLocked(PPDO_DEVICE_DATA
     PACPI_THERMAL_REQUEST_ENTRY Entry;
     PLIST_ENTRY Link;
 
+    ASSERT(ThermalData != NULL);
+
     for (Link = ThermalData->ThermalRequestList.Flink; Link != &ThermalData->ThermalRequestList; Link = Link->Flink)
     {
         Entry = CONTAINING_RECORD(Link, ACPI_THERMAL_REQUEST_ENTRY, Link);

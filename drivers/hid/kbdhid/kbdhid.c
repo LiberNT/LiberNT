@@ -140,6 +140,8 @@ KbdHid_RepeatDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&DeviceExtension->InputLock);
     Usage = DeviceExtension->RepeatUsage;
     if (Usage.Usage && !DeviceExtension->StopReadReport &&

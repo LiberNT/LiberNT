@@ -489,6 +489,8 @@ SdBusCommandCompletionDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeSetEvent(&FdoExtension->CommandEvent, IO_DISK_INCREMENT, FALSE);
 }
 
@@ -521,6 +523,8 @@ SdBusCardDetectDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (FdoExtension == NULL)
     {

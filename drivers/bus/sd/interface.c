@@ -17,6 +17,8 @@ SdBusHasInterruptCallbackLocked(
     PLIST_ENTRY Entry;
     PPDO_EXTENSION PdoExtension;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = FdoExtension->ChildPdoList.Flink;
          Entry != &FdoExtension->ChildPdoList;
          Entry = Entry->Flink)
@@ -37,6 +39,8 @@ static VOID
 SdBusUpdateCardInterruptLocked(
     _In_ PFDO_EXTENSION FdoExtension)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (SdBusHasInterruptCallbackLocked(FdoExtension) &&
         InterlockedCompareExchange(&FdoExtension->PendingSdioAcks, 0, 0) == 0)
     {

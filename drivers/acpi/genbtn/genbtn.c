@@ -340,6 +340,9 @@ GenBtnDpc(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     Events = (ULONG)InterlockedExchange(&Extension->DpcEvents, 0);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Events)
         GenBtnReport(Extension, Events);
 }

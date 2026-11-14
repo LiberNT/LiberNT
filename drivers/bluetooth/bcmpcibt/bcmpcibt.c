@@ -420,6 +420,9 @@ BcmBtPollDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     BcmBtService((PBCMBT_DEVICE)Context);
 }
 

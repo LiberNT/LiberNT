@@ -126,6 +126,9 @@ InPortDpcForIsr(
     /* Copy raw data */
     OldIrql = KeAcquireInterruptSpinLock(DeviceExtension->InterruptObject);
     RawData = DeviceExtension->RawData;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeReleaseInterruptSpinLock(DeviceExtension->InterruptObject, OldIrql);
 
     /* Fill out fields */

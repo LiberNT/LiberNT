@@ -70,6 +70,9 @@ TimerDpcRoutine(IN PKDPC Dpc,
     PSAC_DEVICE_EXTENSION SacExtension;
 
     /* Update our counter */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     _InterlockedExchangeAdd(&TimerDpcCount, 1);
 
     /* Set defaults and loop for new characters */

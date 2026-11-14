@@ -711,6 +711,8 @@ SerialWriteTimeout(
 
     extension = SerialGetDeviceExtension(WdfTimerGetParentObject(Timer));
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     TraceEvents(TRACE_LEVEL_INFORMATION, DBG_WRITE, "++SerialWriteTimeout(%p)\r\n",
                      extension);
 
