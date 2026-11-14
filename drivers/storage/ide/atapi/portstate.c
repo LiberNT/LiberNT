@@ -219,7 +219,7 @@ AtaPortOnRequestComplete(
     {
         PATA_DEVICE_REQUEST Request;
 
-        CommandsCompleted &= ~(1 << Slot);
+        CommandsCompleted &= ~(1UL << Slot);
 
         Request = PortData->Slots[Slot];
         ASSERT_REQUEST(Request);
@@ -477,7 +477,7 @@ AtaPortGetNextEvent(
 
         /* Complete failed request */
         Request = PortData->Worker.FailedRequest;
-        if (Request && !(PortData->Worker.PausedSlotsBitmap & (1 << Request->Slot)))
+        if (Request && !(PortData->Worker.PausedSlotsBitmap & (1UL << Request->Slot)))
         {
             AtaReqStartCompletionDpc(Request);
         }
@@ -486,7 +486,7 @@ AtaPortGetNextEvent(
         /* Requeue saved commands */
         for (i = 0; i < MAX_SLOTS; ++i)
         {
-            if (!(PortData->Worker.PausedSlotsBitmap & (1 << i)))
+            if (!(PortData->Worker.PausedSlotsBitmap & (1UL << i)))
               continue;
 
             Request = PortData->Slots[i];
@@ -919,7 +919,7 @@ AtaPortTimeout(
     ERR("CH %lu: Slot %lu (%08lx) timed out %lx (%lus) %u '%s'\n",
         PortData->PortNumber,
         Slot,
-        1 << Slot,
+        1UL << Slot,
         Request->Flags,
         Request->TimeOut,
         DevExt->Device.AtaScsiAddress.TargetId,

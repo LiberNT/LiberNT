@@ -64,7 +64,7 @@ AtaAhciEnableInterrupts(
     /* Clear port interrupts */
     AHCI_PORT_WRITE(ChanData->IoBase, PxSataError, 0xFFFFFFFF);
     AHCI_PORT_WRITE(ChanData->IoBase, PxInterruptStatus, 0xFFFFFFFF);
-    AHCI_HBA_WRITE(ChanData->Controller->IoBase, HbaInterruptStatus, 1 << ChanData->Channel);
+    AHCI_HBA_WRITE(ChanData->Controller->IoBase, HbaInterruptStatus, 1UL << ChanData->Channel);
 
     AHCI_PORT_WRITE(ChanData->IoBase, PxInterruptEnable, Enable ? AHCI_PORT_INTERRUPT_MASK : 0);
 }
@@ -607,7 +607,7 @@ Done:
     /* Clear port interrupts */
     AHCI_PORT_WRITE(ChanData->IoBase, PxSataError, 0xFFFFFFFF);
     AHCI_PORT_WRITE(ChanData->IoBase, PxInterruptStatus, 0xFFFFFFFF);
-    AHCI_HBA_WRITE(ChanData->Controller->IoBase, HbaInterruptStatus, 1 << ChanData->Channel);
+    AHCI_HBA_WRITE(ChanData->Controller->IoBase, HbaInterruptStatus, 1UL << ChanData->Channel);
 
     return SrbStatus;
 }
@@ -1466,9 +1466,9 @@ AtaAhciHandleFatalError(
         /* We have exactly one slot is outstanding */
         SlotsBitmap = ChanData->ActiveSlotsBitmap;
     }
-    else if (ChanData->ActiveSlotsBitmap & (1 << CurrentCommandSlot))
+    else if (ChanData->ActiveSlotsBitmap & (1UL << CurrentCommandSlot))
     {
-        SlotsBitmap = 1 << CurrentCommandSlot;
+        SlotsBitmap = 1UL << CurrentCommandSlot;
     }
     else
     {
@@ -1478,7 +1478,7 @@ AtaAhciHandleFatalError(
             ERR("CH %lu: Invalid slot received from the HBA %08lX --> %08lX\n",
                 ChanData->Channel,
                 ChanData->ActiveSlotsBitmap,
-                1 << CurrentCommandSlot);
+                1UL << CurrentCommandSlot);
         }
         else
         {

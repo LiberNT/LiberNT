@@ -724,7 +724,7 @@ PciIdeXFdoQueryBusRelations(
         PdoExt = CONTAINING_RECORD(ListEntry, PDO_DEVICE_EXTENSION, ListEntry);
         Channel = PdoExt->Channel;
 
-        ChannelBitmap |= 1 << Channel;
+        ChannelBitmap |= 1UL << Channel;
 
         ChannelState = PciIdeXGetChannelState(Controller, Channel);
         if (ChannelState == ChannelDisabled)
@@ -747,7 +747,7 @@ PciIdeXFdoQueryBusRelations(
         PPDO_DEVICE_EXTENSION PdoExt;
         IDE_CHANNEL_STATE ChannelState;
 
-        if (!(ChannelBitmap & (1 << i)))
+        if (!(ChannelBitmap & (1UL << i)))
             continue;
 
         ChannelState = PciIdeXGetChannelState(Controller, i);

@@ -457,8 +457,8 @@ AtaDeviceCompleteFailedRequest(
 
     OldIrql = KeAcquireInterruptSpinLock(PortData->InterruptObject);
 
-    ASSERT(PortData->Worker.PausedSlotsBitmap & (1 << Request->Slot));
-    PortData->Worker.PausedSlotsBitmap &= ~(1 << Request->Slot);
+    ASSERT(PortData->Worker.PausedSlotsBitmap & (1UL << Request->Slot));
+    PortData->Worker.PausedSlotsBitmap &= ~(1UL << Request->Slot);
 
     KeReleaseInterruptSpinLock(PortData->InterruptObject, OldIrql);
 }
@@ -507,10 +507,10 @@ AtaDeviceNcqRecovery(
     }
 
     /* Find the failed queued command */
-    if (!(PortData->Worker.PausedSlotsBitmap & (1 << LogPage->NcqTag)))
+    if (!(PortData->Worker.PausedSlotsBitmap & (1UL << LogPage->NcqTag)))
     {
         ERR("Failed command %08lx not found in %08lx\n",
-             1 << LogPage->NcqTag, PortData->Worker.PausedSlotsBitmap);
+             1UL << LogPage->NcqTag, PortData->Worker.PausedSlotsBitmap);
         goto Failure;
     }
 
