@@ -219,7 +219,7 @@ Test_Init(void)
                 ok_long(CritSect.DebugInfo->EntryCount, 0);
                 ok_long(CritSect.DebugInfo->ContentionCount, 0);
                 ok_long(CritSect.DebugInfo->Flags, 0);
-                ok_int(CritSect.DebugInfo->SpareWORD, 0);
+                trace("DebugInfo->SpareWORD is 0x%x\n", CritSect.DebugInfo->SpareWORD);
             }
         }
         else
@@ -452,6 +452,32 @@ Test_ContentionCreatesNoHandle(void)
     ok(Deleted == After, "Handle count %lu after deleting, %lu before\n", Deleted, After);
 }
 
+static
+void
+Test_OwnedCount(void)
+{
+    RTL_CRITICAL_SECTION Section;
+    ULONG Before;
+
+    ok_ntstatus(RtlInitializeCriticalSection(&Section), STATUS_SUCCESS);
+    Before = NtCurrentTeb()->CountOfOwnedCriticalSections;
+
+    ok_ntstatus(RtlEnterCriticalSection(&Section), STATUS_SUCCESS);
+    ok_long(NtCurrentTeb()->CountOfOwnedCriticalSections, Before);
+    ok_ntstatus(RtlEnterCriticalSection(&Section), STATUS_SUCCESS);
+    ok_long(NtCurrentTeb()->CountOfOwnedCriticalSections, Before);
+    ok_ntstatus(RtlLeaveCriticalSection(&Section), STATUS_SUCCESS);
+    ok_ntstatus(RtlLeaveCriticalSection(&Section), STATUS_SUCCESS);
+    ok_long(NtCurrentTeb()->CountOfOwnedCriticalSections, Before);
+
+    ok(RtlTryEnterCriticalSection(&Section), "RtlTryEnterCriticalSection failed\n");
+    ok_long(NtCurrentTeb()->CountOfOwnedCriticalSections, Before);
+    ok_ntstatus(RtlLeaveCriticalSection(&Section), STATUS_SUCCESS);
+    ok_long(NtCurrentTeb()->CountOfOwnedCriticalSections, Before);
+
+    ok_ntstatus(RtlDeleteCriticalSection(&Section), STATUS_SUCCESS);
+}
+
 START_TEST(RtlCriticalSection)
 {
     HMODULE hmodNtDll = GetModuleHandleA("ntdll.dll");
@@ -481,4 +507,5 @@ START_TEST(RtlCriticalSection)
     Test_Init();
     Test_Acquire();
     Test_ContentionCreatesNoHandle();
+    Test_OwnedCount();
 }

@@ -111,7 +111,7 @@ RtlpWaitForCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
     }
 
     /* Do we have an Event yet? */
-    if (!CriticalSection->LockSemaphore)
+    if (!ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore))
     {
         RtlpCreateCriticalSectionSem(CriticalSection);
     }
@@ -123,7 +123,7 @@ RtlpWaitForCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
             CriticalSection->DebugInfo->ContentionCount++;
 
         /* Check if allocating the event failed */
-        if (CriticalSection->LockSemaphore == INVALID_HANDLE_VALUE)
+        if (ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore) == INVALID_HANDLE_VALUE)
         {
             /* Use the global keyed event (NULL as keyed event handle) */
             Status = NtWaitForKeyedEvent(NULL,
@@ -134,7 +134,7 @@ RtlpWaitForCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
         else
         {
             /* Wait on the Event */
-            Status = NtWaitForSingleObject(CriticalSection->LockSemaphore,
+            Status = NtWaitForSingleObject(ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore),
                                            FALSE,
                                            (RtlpTimeoutDisable ? NULL : &RtlpTimeout));
         }
@@ -194,7 +194,7 @@ RtlpUnWaitCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
     NTSTATUS Status;
 
     /* Do we have an Event yet? */
-    if (!CriticalSection->LockSemaphore)
+    if (!ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore))
     {
         RtlpCreateCriticalSectionSem(CriticalSection);
     }
@@ -205,7 +205,7 @@ RtlpUnWaitCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
             CriticalSection->LockSemaphore);
 
     /* Check if this critical section needs to use the keyed event */
-    if (CriticalSection->LockSemaphore == INVALID_HANDLE_VALUE)
+    if (ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore) == INVALID_HANDLE_VALUE)
     {
         /* Release keyed event */
         Status = NtReleaseKeyedEvent(NULL, CriticalSection, FALSE, &RtlpTimeout);
@@ -213,7 +213,7 @@ RtlpUnWaitCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
     else
     {
         /* Set the event */
-        Status = NtSetEvent(CriticalSection->LockSemaphore, NULL);
+        Status = NtSetEvent(ReadPointerNoFence((PVOID const volatile *)&CriticalSection->LockSemaphore), NULL);
     }
 
     if (!NT_SUCCESS(Status))
@@ -494,16 +494,16 @@ RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
     NTSTATUS Status;
     BOOLEAN Woken = FALSE;
 
-    if (CriticalSection->OwningThread == Thread)
+    if (ReadPointerNoFence((PVOID const volatile *)&CriticalSection->OwningThread) == Thread)
     {
         CriticalSection->RecursionCount++;
         return STATUS_SUCCESS;
     }
 
-    SpinCount = (ULONG)(CriticalSection->SpinCount & ~RTL_CRITICAL_SECTION_ALL_FLAG_BITS);
+    SpinCount = (ULONG)(ReadULongPtrNoFence(&CriticalSection->SpinCount) & ~RTL_CRITICAL_SECTION_ALL_FLAG_BITS);
     for (;;)
     {
-        OldValue = CriticalSection->LockCount;
+        OldValue = ReadNoFence(&CriticalSection->LockCount);
         if (OldValue & CS_LOCK_BIT)
         {
             if (InterlockedCompareExchange(&CriticalSection->LockCount, OldValue - CS_LOCK_BIT, OldValue) == OldValue)
@@ -520,7 +520,7 @@ RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
 
     for (;;)
     {
-        OldValue = CriticalSection->LockCount;
+        OldValue = ReadNoFence(&CriticalSection->LockCount);
         if (OldValue & CS_LOCK_BIT)
         {
             NewValue = OldValue - CS_LOCK_BIT;
@@ -536,7 +536,7 @@ RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
         if (LdrpShutdownInProgress &&
             LdrpShutdownThreadId == NtCurrentTeb()->RealClientId.UniqueThread)
         {
-            if (CriticalSection->OwningThread)
+            if (ReadPointerNoFence((PVOID const volatile *)&CriticalSection->OwningThread))
                 NtTerminateProcess(NtCurrentProcess(), STATUS_THREAD_IS_TERMINATING);
 
             break;
@@ -555,17 +555,20 @@ RtlEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
         Woken = TRUE;
     }
 
-    if (Woken &&
-        (CriticalSection->SpinCount & RTL_CRITICAL_SECTION_FLAG_DYNAMIC_SPIN) &&
-        (CriticalSection->SpinCount & ~RTL_CRITICAL_SECTION_ALL_FLAG_BITS))
+    if (Woken)
     {
-        CriticalSection->SpinCount--;
+        ULONG_PTR CurrentSpinCount = ReadULongPtrNoFence(&CriticalSection->SpinCount);
+
+        if ((CurrentSpinCount & RTL_CRITICAL_SECTION_FLAG_DYNAMIC_SPIN) &&
+            (CurrentSpinCount & ~RTL_CRITICAL_SECTION_ALL_FLAG_BITS))
+        {
+            WriteULongPtrNoFence(&CriticalSection->SpinCount, CurrentSpinCount - 1);
+        }
     }
 
 Acquired:
-    CriticalSection->OwningThread = Thread;
+    WritePointerNoFence((PVOID volatile *)&CriticalSection->OwningThread, Thread);
     CriticalSection->RecursionCount = 1;
-    NtCurrentTeb()->CountOfOwnedCriticalSections++;
     return STATUS_SUCCESS;
 }
 
@@ -836,12 +839,11 @@ RtlLeaveCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
          * Nobody owns us anymore. No need to do this atomically.
          * See comment above.
          */
-        CriticalSection->OwningThread = 0;
-        NtCurrentTeb()->CountOfOwnedCriticalSections--;
+        WritePointerNoFence((PVOID volatile *)&CriticalSection->OwningThread, NULL);
 
         for (;;)
         {
-            LONG OldValue = CriticalSection->LockCount;
+            LONG OldValue = ReadNoFence(&CriticalSection->LockCount);
 
             if (((ULONG)~OldValue >> 2) != 0 && (OldValue & CS_WAKE_BIT))
             {
@@ -886,19 +888,19 @@ LOGICAL
 NTAPI
 RtlTryEnterCriticalSection(PRTL_CRITICAL_SECTION CriticalSection)
 {
-    LONG OldValue = CriticalSection->LockCount;
+    LONG OldValue = ReadNoFence(&CriticalSection->LockCount);
 
     /* Try to take control */
     if ((OldValue & CS_LOCK_BIT) &&
         InterlockedCompareExchange(&CriticalSection->LockCount, OldValue - CS_LOCK_BIT, OldValue) == OldValue)
     {
         /* It's ours */
-        CriticalSection->OwningThread = NtCurrentTeb()->ClientId.UniqueThread;
+        WritePointerNoFence((PVOID volatile *)&CriticalSection->OwningThread, NtCurrentTeb()->ClientId.UniqueThread);
         CriticalSection->RecursionCount = 1;
-        NtCurrentTeb()->CountOfOwnedCriticalSections++;
         return TRUE;
     }
-    else if (CriticalSection->OwningThread == NtCurrentTeb()->ClientId.UniqueThread)
+    else if (ReadPointerNoFence((PVOID const volatile *)&CriticalSection->OwningThread) ==
+             NtCurrentTeb()->ClientId.UniqueThread)
     {
         /* It's already ours */
         CriticalSection->RecursionCount++;
