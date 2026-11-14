@@ -2518,7 +2518,8 @@ LX_SYSCALL(LxSysRtSigaction)
         Process->SigAction[Signal - 1] = New;
     ExReleaseFastMutex(&Process->Lock);
 
-    if ((Call->Args[1] != 0) && (New.Handler == LX_SIG_IGN))
+    if ((Call->Args[1] != 0) &&
+        ((New.Handler == LX_SIG_IGN) || ((New.Handler == LX_SIG_DFL) && LxSignalIgnoredByDefault(Signal))))
     {
         ULONG64 Bit = 1ULL << (Signal - 1);
         PLIST_ENTRY Entry;
