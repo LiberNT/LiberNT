@@ -4,6 +4,7 @@ list(APPEND SOURCE
     IndexMetadata.c
     FullBaseGrowth.c
     FreeClusters.c
+    ConcurrentIo.c
     testlist.c)
 
 add_executable(ntfs_apitest ${SOURCE})

@@ -65,7 +65,7 @@ typedef struct _NTFS_SYNC_READ_CONTEXT
 static
 NTSTATUS
 NTAPI
-NtfsDirectReadCompletion(
+NtfsDirectIoCompletion(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ PIRP Irp,
     _In_ PVOID Context)
@@ -79,11 +79,11 @@ NtfsDirectReadCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
-static
 NTSTATUS
-NtfsSubmitDirectRead(
+NtfsSubmitDirectIo(
     _In_ PVolumeContextBlock VolCB,
     _Inout_ PIRP Irp,
+    _In_ UCHAR MajorFunction,
     _In_ ULONGLONG DiskOffset,
     _In_ ULONG Length)
 {
@@ -96,7 +96,7 @@ NtfsSubmitDirectRead(
     ReadContext.IoStatus.Information = 0;
 
     IoStack = IoGetNextIrpStackLocation(Irp);
-    IoStack->MajorFunction = IRP_MJ_READ;
+    IoStack->MajorFunction = MajorFunction;
     IoStack->MinorFunction = 0;
     IoStack->Flags = SL_OVERRIDE_VERIFY_VOLUME;
     IoStack->Control = 0;
@@ -104,7 +104,7 @@ NtfsSubmitDirectRead(
     IoStack->Parameters.Read.Length = Length;
     IoStack->Parameters.Read.ByteOffset.QuadPart = DiskOffset;
     IoSetCompletionRoutine(Irp,
-                           NtfsDirectReadCompletion,
+                           NtfsDirectIoCompletion,
                            &ReadContext,
                            TRUE,
                            TRUE,
@@ -125,11 +125,11 @@ NtfsSubmitDirectRead(
     return ReadContext.IoStatus.Status;
 }
 
-static
 NTSTATUS
-NtfsLockReadBuffer(
+NtfsLockTransferBuffer(
     _Inout_ PIRP Irp,
-    _In_ ULONG Length)
+    _In_ ULONG Length,
+    _In_ LOCK_OPERATION Operation)
 {
     PMDL Mdl;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -145,7 +145,7 @@ NtfsLockReadBuffer(
 
     _SEH2_TRY
     {
-        MmProbeAndLockPages(Mdl, Irp->RequestorMode, IoWriteAccess);
+        MmProbeAndLockPages(Mdl, Irp->RequestorMode, Operation);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -163,14 +163,21 @@ NtfsLockReadBuffer(
     return Status;
 }
 
-static
+/*
+ * Work out which volume offset backs this read. The caller holds the volume
+ * metadata lock for this, and releases it before the transfer: the file's own
+ * resource is held shared for the whole request, so the mapping cannot move
+ * under the transfer, and a volume-wide lock must not span a device round trip.
+ */
 NTSTATUS
-NtfsTryDirectRead(
+NtfsMapDirectIo(
     _In_ PVolumeContextBlock VolCB,
     _In_ PFileContextBlock FileCB,
     _Inout_ PIRP Irp,
     _In_ ULONGLONG FileOffset,
     _In_ ULONG Length,
+    _In_ LOCK_OPERATION Operation,
+    _Out_ PULONGLONG MappedOffset,
     _Out_ PBOOLEAN Handled)
 {
     PAttribute Attribute;
@@ -186,10 +193,11 @@ NtfsTryDirectRead(
     NTSTATUS Status;
 
     *Handled = FALSE;
+    *MappedOffset = 0;
     if (!Irp->MdlAddress &&
         !Irp->AssociatedIrp.SystemBuffer)
     {
-        Status = NtfsLockReadBuffer(Irp, Length);
+        Status = NtfsLockTransferBuffer(Irp, Length, Operation);
         if (!NT_SUCCESS(Status))
         {
             *Handled = TRUE;
@@ -270,13 +278,8 @@ NtfsTryDirectRead(
     DiskOffset += InClusterOffset;
 
     *Handled = TRUE;
-    /* Small file writes may still be in the library's block cache. Paging
-     * and unbuffered reads bypass it, so commit only the overlapping blocks
-     * before sending this IRP directly to the storage device. */
-    Status = NtfsDiskFlushRangeKm(VolCB->StorageDevice, DiskOffset, Length);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    return NtfsSubmitDirectRead(VolCB, Irp, DiskOffset, Length);
+    *MappedOffset = DiskOffset;
+    return STATUS_SUCCESS;
 }
 
 #define NTFS_POSTED_READ ((PVOID)(ULONG_PTR)0x4E524450)
@@ -324,7 +327,7 @@ NtfsPostAsyncRead(
     FileCB = NtfsGetFileContext(IrpSp->FileObject);
     if (!FileCB || FileCB->IsVolumeOpen || !FileCB->FileRec)
         return FALSE;
-    if (!NT_SUCCESS(NtfsLockReadBuffer(Irp, IrpSp->Parameters.Read.Length)))
+    if (!NT_SUCCESS(NtfsLockTransferBuffer(Irp, IrpSp->Parameters.Read.Length, IoWriteAccess)))
         return FALSE;
 
     WorkItem = IoAllocateWorkItem(VolumeDeviceObject);
@@ -369,6 +372,7 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     BOOLEAN ResourceAcquired = FALSE;
     BOOLEAN PagingIo = FALSE;
     BOOLEAN DirectRead;
+    ULONGLONG DirectOffset = 0;
 
     IrpSp = IoGetCurrentIrpStackLocation(Irp);
     FileObject = IrpSp->FileObject;
@@ -466,15 +470,34 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             NtfsReleaseMetadata(VolCB);
             goto Complete;
         }
-        Status = NtfsTryDirectRead(VolCB,
-                                   FileCB,
-                                   Irp,
-                                   (ULONGLONG)ReadOffset.QuadPart,
-                                   RequestedLength,
-                                   &DirectRead);
+        Status = NtfsMapDirectIo(VolCB,
+                                 FileCB,
+                                 Irp,
+                                 (ULONGLONG)ReadOffset.QuadPart,
+                                 RequestedLength,
+                                 IoWriteAccess,
+                                 &DirectOffset,
+                                 &DirectRead);
         NtfsReleaseMetadata(VolCB);
         if (DirectRead)
         {
+            if (NT_SUCCESS(Status))
+            {
+                /* Small file writes may still be in the library's block cache.
+                 * Paging and unbuffered reads bypass it, so commit only the
+                 * overlapping blocks before sending this IRP to the device. */
+                Status = NtfsDiskFlushRangeKm(VolCB->StorageDevice,
+                                              DirectOffset,
+                                              RequestedLength);
+                if (NT_SUCCESS(Status))
+                {
+                    Status = NtfsSubmitDirectIo(VolCB,
+                                                Irp,
+                                                IRP_MJ_READ,
+                                                DirectOffset,
+                                                RequestedLength);
+                }
+            }
             if (NT_SUCCESS(Status))
             {
                 if (Irp->IoStatus.Information <= OriginalLength)

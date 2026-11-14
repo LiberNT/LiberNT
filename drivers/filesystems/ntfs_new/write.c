@@ -529,6 +529,70 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
 
     /*
+     * An aligned transfer inside the stream's initialised data changes nothing
+     * but the clusters it covers, so it can go to the device on its own once
+     * the mapping is known. Doing that outside the volume metadata lock is
+     * what keeps the rest of the volume usable while a slow device works: the
+     * lock otherwise spans the whole round trip and every other caller waits.
+     */
+    if (Length != 0 &&
+        RequestedType == TypeData &&
+        (PagingIo ||
+         BooleanFlagOn(Irp->Flags, IRP_NOCACHE) ||
+         BooleanFlagOn(FileObj->Flags, FO_NO_INTERMEDIATE_BUFFERING)))
+    {
+        ULONGLONG DirectOffset = 0;
+        BOOLEAN DirectWrite = FALSE;
+
+        NtfsAcquireMetadata(VolCB);
+        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+        if (NT_SUCCESS(Status))
+        {
+            Status = NtfsMapDirectIo(VolCB,
+                                     FileCB,
+                                     Irp,
+                                     (ULONGLONG)ByteOffset.QuadPart,
+                                     Length,
+                                     IoReadAccess,
+                                     &DirectOffset,
+                                     &DirectWrite);
+        }
+        NtfsReleaseMetadata(VolCB);
+
+        if (DirectWrite)
+        {
+            if (NT_SUCCESS(Status))
+            {
+                /* A small write to these blocks may still be held in the
+                 * library's block cache, where it would later land on top of
+                 * this one. Commit the overlapping blocks first. */
+                Status = NtfsDiskFlushRangeKm(VolCB->StorageDevice,
+                                              DirectOffset,
+                                              Length);
+                if (NT_SUCCESS(Status))
+                {
+                    Status = NtfsSubmitDirectIo(VolCB,
+                                                Irp,
+                                                IRP_MJ_WRITE,
+                                                DirectOffset,
+                                                Length);
+                }
+            }
+            if (NT_SUCCESS(Status))
+            {
+                FileObj->Flags |= FO_FILE_MODIFIED;
+                if (!PagingIo && BooleanFlagOn(FileObj->Flags, FO_SYNCHRONOUS_IO))
+                    FileObj->CurrentByteOffset.QuadPart = ByteOffset.QuadPart + Length;
+            }
+            else
+            {
+                Irp->IoStatus.Information = 0;
+            }
+            goto Complete;
+        }
+    }
+
+    /*
      * A paging write hands us the section's own pages. Passing them straight
      * through means the storage stack probes and locks pages that Mm has
      * already locked for this transfer, so copy through pool memory instead.

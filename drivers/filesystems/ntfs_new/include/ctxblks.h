@@ -590,6 +590,34 @@ VOID
 NtfsCancelShrink(_In_ PVolumeContextBlock VolCB,
                  _In_ PFILE_OBJECT FileObject);
 
+/*
+ * Work out which volume offset backs a range of a stream, and transfer it.
+ * The mapping needs the volume metadata lock; the transfer must not hold it,
+ * so the two are separate calls. The caller keeps the file's own resource for
+ * the whole request, which is what stops the mapping moving in between.
+ */
+NTSTATUS
+NtfsMapDirectIo(_In_ PVolumeContextBlock VolCB,
+                _In_ PFileContextBlock FileCB,
+                _Inout_ PIRP Irp,
+                _In_ ULONGLONG FileOffset,
+                _In_ ULONG Length,
+                _In_ LOCK_OPERATION Operation,
+                _Out_ PULONGLONG MappedOffset,
+                _Out_ PBOOLEAN Handled);
+
+NTSTATUS
+NtfsSubmitDirectIo(_In_ PVolumeContextBlock VolCB,
+                   _Inout_ PIRP Irp,
+                   _In_ UCHAR MajorFunction,
+                   _In_ ULONGLONG DiskOffset,
+                   _In_ ULONG Length);
+
+NTSTATUS
+NtfsLockTransferBuffer(_Inout_ PIRP Irp,
+                       _In_ ULONG Length,
+                       _In_ LOCK_OPERATION Operation);
+
 NTSTATUS
 NtfsRefreshDirectoryRecord(_In_ PVolumeContextBlock VolCB,
                             _In_ PFileContextBlock FileCB);
