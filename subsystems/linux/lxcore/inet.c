@@ -919,6 +919,7 @@ LxInetTransfer(
             Info.BufferArray = &Buf;
             Info.BufferCount = 1;
             Info.AfdFlags = AFD_IMMEDIATE;
+            Info.TdiFlags = (Flags & LX_MSG_OOB) ? TDI_SEND_EXPEDITED : 0;
             Status = LxAfdIoctl(Socket, IOCTL_AFD_SEND, &Info, sizeof(Info), NULL, 0, &Information);
         }
         else if (Socket->Type == LX_SOCK_DGRAM)
@@ -972,7 +973,8 @@ LxInetTransfer(
             Info.BufferArray = &Buf;
             Info.BufferCount = 1;
             Info.AfdFlags = AFD_IMMEDIATE;
-            Info.TdiFlags = TDI_RECEIVE_NORMAL | ((Flags & LX_MSG_PEEK) ? TDI_RECEIVE_PEEK : 0);
+            Info.TdiFlags = ((Flags & LX_MSG_OOB) ? TDI_RECEIVE_EXPEDITED : TDI_RECEIVE_NORMAL) |
+                            ((Flags & LX_MSG_PEEK) ? TDI_RECEIVE_PEEK : 0);
             Status = LxAfdIoctl(Socket, IOCTL_AFD_RECV, &Info, sizeof(Info), NULL, 0, &Information);
             if ((Status == STATUS_GRACEFUL_DISCONNECT) || (Status == STATUS_END_OF_FILE))
             {
@@ -1797,8 +1799,11 @@ LxInetRecvmsg(
     LONG64 Result;
 
     Flags &= ~LX_INET_GATE_HELD;
-    if (Flags & LX_MSG_OOB)
+    if ((Flags & LX_MSG_OOB) && (Socket->Type != LX_SOCK_STREAM))
         return -LX_EINVAL;
+    /* Urgent data is either there or the call fails; it is never waited for */
+    if (Flags & LX_MSG_OOB)
+        Flags |= LX_MSG_DONTWAIT;
     if ((Socket->Type == LX_SOCK_STREAM) && (Socket->State != LX_INET_CONNECTED))
         return -LX_ENOTCONN;
     if ((Socket->Type == LX_SOCK_DGRAM) && (Socket->Error != 0))
@@ -1896,11 +1901,11 @@ LxInetRecvmsg(
     LxFreePaged(Bounce);
     LxFree(Vectors);
 
-    Header->Flags = Truncated ? LX_MSG_TRUNC : 0;
+    Header->Flags = (Truncated ? LX_MSG_TRUNC : 0) | (Flags & LX_MSG_OOB);
     if ((Done == 0) && (Result != 0))
     {
         Header->ControlLength = 0;
-        return Result;
+        return ((Flags & LX_MSG_OOB) && (Result == -LX_EAGAIN)) ? -LX_EINVAL : Result;
     }
     Result = LxInetDeliverPktinfo(Socket, Header);
     if (Result != 0)
@@ -2356,10 +2361,22 @@ LxInetIoctl(
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_SIOCATMARK:
-            /* TODO: urgent data is not received, so a stream is never at the mark */
+        {
+            UCHAR Byte;
+
             if (Socket->Type != LX_SOCK_STREAM)
                 return -LX_ENOTTY;
+            /* FIXME: AFD keeps urgent data apart from the stream, so the mark is only seen once nothing else is queued */
+            if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), LX_MSG_OOB | LX_MSG_PEEK | LX_MSG_DONTWAIT,
+                               NULL, NULL) > 0)
+            {
+                RtlZeroMemory(&Info, sizeof(Info));
+                Info.InformationClass = AFD_INFO_RECEIVE_CONTENT_SIZE;
+                Value = NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_GET_INFO, &Info, sizeof(Info), &Info, sizeof(Info), NULL)) &&
+                        (Info.Information.Ulong == 0);
+            }
             return LxCopyToUser(Argument, &Value, sizeof(Value));
+        }
 
         case LX_FIONBIO:
         {
