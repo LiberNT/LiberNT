@@ -492,14 +492,14 @@ PVOID UserGetObjectNoErr(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type 
 
    ASSERT(ht);
 
-   UserDomainLockShared(DLT_HANDLEMANAGER);
+   BOOLEAN bDom0 = UserDomainLockShared(DLT_HANDLEMANAGER);
    entry = handle_to_entry(ht, handle );
    if (entry && entry->type == type &&
        !((entry->flags & HANDLEENTRY_INDESTROY) && UserIsEnteredShared()))
    {
       ptr = entry->ptr;
    }
-   UserDomainUnlockShared(DLT_HANDLEMANAGER);
+   UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom0);
    return ptr;
 }
 
@@ -518,11 +518,11 @@ PVOID UserGetObject(PUSER_HANDLE_TABLE ht, HANDLE handle, HANDLE_TYPE type )
       PUSER_HANDLE_ENTRY entry;
       PPROCESSINFO ppiOwner = NULL;
 
-      UserDomainLockShared(DLT_HANDLEMANAGER);
+      BOOLEAN bDom1 = UserDomainLockShared(DLT_HANDLEMANAGER);
       entry = handle_to_entry(ht, handle);
       if (entry && entry->pti)
          ppiOwner = entry->pti->ppi;
-      UserDomainUnlockShared(DLT_HANDLEMANAGER);
+      UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom1);
 
       if (!IntIsJobHandleAccessible(handle, ppiOwner))
          ptr = NULL;
@@ -542,11 +542,11 @@ HANDLE get_user_full_handle(PUSER_HANDLE_TABLE ht,  HANDLE handle )
 
    if ((ULONG_PTR)handle >> 16)
       return handle;
-   UserDomainLockShared(DLT_HANDLEMANAGER);
+   BOOLEAN bDom2 = UserDomainLockShared(DLT_HANDLEMANAGER);
    entry = handle_to_entry(ht, handle );
    if (entry)
       handle = entry_to_handle( ht, entry );
-   UserDomainUnlockShared(DLT_HANDLEMANAGER);
+   UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom2);
    return handle;
 }
 
@@ -558,14 +558,14 @@ void *get_user_object_handle(PUSER_HANDLE_TABLE ht,  HANDLE* handle, HANDLE_TYPE
 
    PVOID ptr = NULL;
 
-   UserDomainLockShared(DLT_HANDLEMANAGER);
+   BOOLEAN bDom3 = UserDomainLockShared(DLT_HANDLEMANAGER);
    entry = handle_to_entry(ht, *handle );
    if (entry && entry->type == type)
    {
       *handle = entry_to_handle( ht, entry );
       ptr = entry->ptr;
    }
-   UserDomainUnlockShared(DLT_HANDLEMANAGER);
+   UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom3);
    return ptr;
 }
 
@@ -667,7 +667,7 @@ UserSetProcMarkObjectOwner(
     if (!ppi || !ppiOld || ppi == ppiOld)
         return;
 
-    UserDomainLockExclusive(DLT_HANDLEMANAGER);
+    BOOLEAN bDom4 = UserDomainLockExclusive(DLT_HANDLEMANAGER);
     entry = handle_to_entry(gHandleTable, ObjHead->h);
     if (entry && entry->ptr == Object && entry->pi == ppiOld)
     {
@@ -682,7 +682,7 @@ UserSetProcMarkObjectOwner(
         ppiOld->UserHandleCount--;
         IntDereferenceProcessInfo(ppiOld);
     }
-    UserDomainUnlockExclusive(DLT_HANDLEMANAGER);
+    UserDomainUnlockExclusive(DLT_HANDLEMANAGER, bDom4);
 }
 
 BOOL
@@ -735,7 +735,7 @@ UserDereferenceObject(PVOID Object)
             }
         }
 
-        UserDomainLockExclusive(DLT_HANDLEMANAGER);
+        BOOLEAN bDom5 = UserDomainLockExclusive(DLT_HANDLEMANAGER);
         entry = handle_to_entry(gHandleTable, ObjHead->h);
 
         ASSERT(entry != NULL);
@@ -748,7 +748,7 @@ UserDereferenceObject(PVOID Object)
 
         /* We can now get rid of everything */
         free_user_entry(gHandleTable, entry );
-        UserDomainUnlockExclusive(DLT_HANDLEMANAGER);
+        UserDomainUnlockExclusive(DLT_HANDLEMANAGER, bDom5);
 
 #if 0
         /* Call the object destructor */
@@ -791,11 +791,11 @@ UserObjectInDestroy(HANDLE h)
 
   BOOL Ret = TRUE;
 
-  UserDomainLockShared(DLT_HANDLEMANAGER);
+  BOOLEAN bDom6 = UserDomainLockShared(DLT_HANDLEMANAGER);
   entry = handle_to_entry( gHandleTable, h );
   if (entry)
      Ret = (entry->flags & HANDLEENTRY_INDESTROY) != 0;
-  UserDomainUnlockShared(DLT_HANDLEMANAGER);
+  UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom6);
   if (!entry)
      SetLastNtError( STATUS_INVALID_HANDLE );
   return Ret;
@@ -808,11 +808,11 @@ UserObjectMarkedDestroy(HANDLE h)
   PUSER_HANDLE_ENTRY entry;
   BOOL Ret = TRUE;
 
-  UserDomainLockShared(DLT_HANDLEMANAGER);
+  BOOLEAN bDom7 = UserDomainLockShared(DLT_HANDLEMANAGER);
   entry = handle_to_entry( gHandleTable, h );
   if (entry)
      Ret = (entry->flags & (HANDLEENTRY_DESTROY | HANDLEENTRY_INDESTROY)) != 0;
-  UserDomainUnlockShared(DLT_HANDLEMANAGER);
+  UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom7);
   return Ret;
 }
 
@@ -939,7 +939,7 @@ NtUserValidateHandleSecure(
    BOOL Ret = FALSE;
 
    UserEnterShared();
-   UserDomainLockShared(DLT_HANDLEMANAGER);
+   BOOLEAN bDom8 = UserDomainLockShared(DLT_HANDLEMANAGER);
 
    if (!(entry = handle_to_entry(gHandleTable, handle )))
    {
@@ -976,7 +976,7 @@ NtUserValidateHandleSecure(
    else Ret = IntIsJobHandleAccessible(handle, ppi);
 
 Exit:
-   UserDomainUnlockShared(DLT_HANDLEMANAGER);
+   UserDomainUnlockShared(DLT_HANDLEMANAGER, bDom8);
    UserLeave();
    return Ret;
 }

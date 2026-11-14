@@ -92,10 +92,10 @@ BOOL FASTCALL UserIsEnteredShared(VOID);
 VOID FASTCALL UserEnterCo(VOID);
 VOID FASTCALL UserLeaveCo(VOID);
 VOID FASTCALL UserInitDomainLocks(VOID);
-VOID FASTCALL UserDomainLockExclusive(USER_DOMAIN_LOCK_TYPE Type);
-VOID FASTCALL UserDomainUnlockExclusive(USER_DOMAIN_LOCK_TYPE Type);
-VOID FASTCALL UserDomainLockShared(USER_DOMAIN_LOCK_TYPE Type);
-VOID FASTCALL UserDomainUnlockShared(USER_DOMAIN_LOCK_TYPE Type);
+BOOLEAN FASTCALL UserDomainLockExclusive(USER_DOMAIN_LOCK_TYPE Type);
+VOID FASTCALL UserDomainUnlockExclusive(USER_DOMAIN_LOCK_TYPE Type, BOOLEAN Entered);
+BOOLEAN FASTCALL UserDomainLockShared(USER_DOMAIN_LOCK_TYPE Type);
+VOID FASTCALL UserDomainUnlockShared(USER_DOMAIN_LOCK_TYPE Type, BOOLEAN Acquired);
 DWORD FASTCALL UserGetLanguageToggle(_In_ LPCWSTR pszType, _In_ DWORD dwDefaultValue);
 
 _Success_(return != FALSE)

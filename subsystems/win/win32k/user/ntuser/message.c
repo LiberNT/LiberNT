@@ -2442,11 +2442,11 @@ IntGetQueueStatus(DWORD Changes)
        Low  word, types of messages that have been added to the queue and that
                   are still in the queue
      */
-    UserDomainLockExclusive(DLT_QUEUE);
+    BOOLEAN bDom0 = UserDomainLockExclusive(DLT_QUEUE);
     Result = MAKELONG(pti->pcti->fsChangeBits & Changes, pti->pcti->fsWakeBits & Changes);
 
     pti->pcti->fsChangeBits &= ~Changes;
-    UserDomainUnlockExclusive(DLT_QUEUE);
+    UserDomainUnlockExclusive(DLT_QUEUE, bDom0);
 
     return Result;
 }

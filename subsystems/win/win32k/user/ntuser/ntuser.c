@@ -502,7 +502,7 @@ VOID FASTCALL UserEnterShared(VOID)
     }
     KeEnterCriticalRegion();
     ExfAcquirePushLockShared(&gUserCrit.Lock);
-    gUserCrit.HandoffPending = 0;
+    InterlockedExchange(&gUserCrit.HandoffPending, 0);
     pti->cSharedCrit = 1;
 }
 
@@ -537,7 +537,7 @@ VOID FASTCALL UserEnterExclusive(VOID)
         UserCritWaitHandoff(Thread);
     KeEnterCriticalRegion();
     ExfAcquirePushLockExclusive(&gUserCrit.Lock);
-    gUserCrit.HandoffPending = 0;
+    InterlockedExchange(&gUserCrit.HandoffPending, 0);
     gUserCrit.OwnerExclusive = Thread;
     gUserCrit.RecursionExclusive = 1;
 }
@@ -621,29 +621,31 @@ VOID FASTCALL UserInitDomainLocks(VOID)
     }
 }
 
-VOID FASTCALL UserDomainLockExclusive(USER_DOMAIN_LOCK_TYPE Type)
+BOOLEAN FASTCALL UserDomainLockExclusive(USER_DOMAIN_LOCK_TYPE Type)
 {
     PUSER_DOMAIN_LOCK pLock = &gUserDomainLocks[Type];
     PKTHREAD Thread = KeGetCurrentThread();
 
     if (UserIsEnteredExclusive())
-        return;
+        return FALSE;
     if (pLock->OwnerExclusive == Thread)
     {
         pLock->RecursionExclusive++;
-        return;
+        return TRUE;
     }
     ExfAcquirePushLockExclusive(&pLock->Lock);
     pLock->OwnerExclusive = Thread;
     pLock->RecursionExclusive = 1;
+    return TRUE;
 }
 
-VOID FASTCALL UserDomainUnlockExclusive(USER_DOMAIN_LOCK_TYPE Type)
+VOID FASTCALL UserDomainUnlockExclusive(USER_DOMAIN_LOCK_TYPE Type, BOOLEAN Entered)
 {
     PUSER_DOMAIN_LOCK pLock = &gUserDomainLocks[Type];
 
-    if (UserIsEnteredExclusive())
+    if (!Entered)
         return;
+
     ASSERT(pLock->OwnerExclusive == KeGetCurrentThread());
     if (--pLock->RecursionExclusive)
         return;
@@ -651,25 +653,25 @@ VOID FASTCALL UserDomainUnlockExclusive(USER_DOMAIN_LOCK_TYPE Type)
     ExfReleasePushLockExclusive(&pLock->Lock);
 }
 
-VOID FASTCALL UserDomainLockShared(USER_DOMAIN_LOCK_TYPE Type)
+BOOLEAN FASTCALL UserDomainLockShared(USER_DOMAIN_LOCK_TYPE Type)
 {
     PUSER_DOMAIN_LOCK pLock = &gUserDomainLocks[Type];
 
     if (UserIsEnteredExclusive())
-        return;
+        return FALSE;
     if (pLock->OwnerExclusive == KeGetCurrentThread())
-        return;
+        return FALSE;
     ExfAcquirePushLockShared(&pLock->Lock);
+    return TRUE;
 }
 
-VOID FASTCALL UserDomainUnlockShared(USER_DOMAIN_LOCK_TYPE Type)
+VOID FASTCALL UserDomainUnlockShared(USER_DOMAIN_LOCK_TYPE Type, BOOLEAN Acquired)
 {
     PUSER_DOMAIN_LOCK pLock = &gUserDomainLocks[Type];
 
-    if (UserIsEnteredExclusive())
+    if (!Acquired)
         return;
-    if (pLock->OwnerExclusive == KeGetCurrentThread())
-        return;
+
     ExfReleasePushLockShared(&pLock->Lock);
 }
 

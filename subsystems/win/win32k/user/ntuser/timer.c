@@ -538,11 +538,11 @@ ProcessTimers(BOOL Exclusive)
                 // Set thread message queue for this timer.
                 if (pTmr->pti)
                 {  // Wakeup thread
-                   UserDomainLockExclusive(DLT_QUEUE);
+                   BOOLEAN bDom0 = UserDomainLockExclusive(DLT_QUEUE);
                    pTmr->pti->cTimersReady++;
                    ASSERT(pTmr->pti->pEventQueueServer != NULL);
                    MsqWakeQueue(pTmr->pti, QS_TIMER, TRUE);
-                   UserDomainUnlockExclusive(DLT_QUEUE);
+                   UserDomainUnlockExclusive(DLT_QUEUE, bDom0);
                 }
              }
           }

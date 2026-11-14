@@ -326,9 +326,9 @@ co_HOOK_CallLowLevelChain(PHOOK Hook, INT Code, WPARAM wParam, LPARAM lParam)
 
     UserRefObjectCo(Hook, &Ref);
     pti->sphkCurrent = Hook;
-    UserDomainLockExclusive(DLT_HOOK);
+    BOOLEAN bDom0 = UserDomainLockExclusive(DLT_HOOK);
     Hook->phkNext = IntGetNextHook(Hook);
-    UserDomainUnlockExclusive(DLT_HOOK);
+    UserDomainUnlockExclusive(DLT_HOOK, bDom0);
     if (ClientInfo)
     {
        _SEH2_TRY
@@ -365,9 +365,9 @@ co_HOOK_CallLowLevelChain(PHOOK Hook, INT Code, WPARAM wParam, LPARAM lParam)
        _SEH2_END;
     }
     pti->sphkCurrent = SaveHook;
-    UserDomainLockExclusive(DLT_HOOK);
+    BOOLEAN bDom1 = UserDomainLockExclusive(DLT_HOOK);
     Hook->phkNext = NULL;
-    UserDomainUnlockExclusive(DLT_HOOK);
+    UserDomainUnlockExclusive(DLT_HOOK, bDom1);
     UserDerefObjectCo(Hook);
     return Result;
 }
@@ -1253,9 +1253,9 @@ co_HOOK_CallHooks( INT HookId,
 
        /* Load it for the next call. */
        pti->sphkCurrent = Hook;
-       UserDomainLockExclusive(DLT_HOOK);
+       BOOLEAN bDom2 = UserDomainLockExclusive(DLT_HOOK);
        Hook->phkNext = IntGetNextHook(Hook);
-       UserDomainUnlockExclusive(DLT_HOOK);
+       UserDomainUnlockExclusive(DLT_HOOK, bDom2);
        if (ClientInfo)
        {
           _SEH2_TRY
@@ -1291,9 +1291,9 @@ co_HOOK_CallHooks( INT HookId,
           _SEH2_END;
        }
        pti->sphkCurrent = SaveHook;
-       UserDomainLockExclusive(DLT_HOOK);
+       BOOLEAN bDom3 = UserDomainLockExclusive(DLT_HOOK);
        Hook->phkNext = NULL;
-       UserDomainUnlockExclusive(DLT_HOOK);
+       UserDomainUnlockExclusive(DLT_HOOK, bDom3);
        UserDerefObjectCo(Hook);
        IntDereferenceThreadInfo(pti);
        ObDereferenceObject(pti->pEThread);
@@ -1492,9 +1492,9 @@ NtUserCallNextHookEx( int Code,
     /* Now in List run down. */
     if (ClientInfo && NextObj)
     {
-       UserDomainLockExclusive(DLT_HOOK);
+       BOOLEAN bDom4 = UserDomainLockExclusive(DLT_HOOK);
        NextObj->phkNext = IntGetNextHook(NextObj);
-       UserDomainUnlockExclusive(DLT_HOOK);
+       UserDomainUnlockExclusive(DLT_HOOK, bDom4);
        lResult = co_UserCallNextHookEx( NextObj, Code, wParam, lParam, NextObj->Ansi);
     }
 
