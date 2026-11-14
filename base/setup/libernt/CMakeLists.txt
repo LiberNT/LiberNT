@@ -14,6 +14,7 @@ list(APPEND SOURCE
     alongside.c
     diskinfo.c
     diskpage.c
+    filesec.c
     frame.c
     hostops.c
     hostpage.c
@@ -28,7 +29,8 @@ list(APPEND SOURCE
 file(GLOB libernt_rc_deps res/*.*)
 list(APPEND libernt_rc_deps
     ${REACTOS_SOURCE_DIR}/base/system/userinit/res/rosbitmap.bmp
-    ${REACTOS_SOURCE_DIR}/base/system/userinit/res/rosbitmap_mask.bmp)
+    ${REACTOS_SOURCE_DIR}/base/system/userinit/res/rosbitmap_mask.bmp
+    ${REACTOS_SOURCE_DIR}/boot/bootdata/filesecurity.txt)
 add_rc_deps(libernt.rc ${libernt_rc_deps})
 add_executable(libernt ${SOURCE} libernt.rc)
 

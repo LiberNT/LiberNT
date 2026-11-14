@@ -14,6 +14,9 @@
 #define IDB_LOGO            102
 #define IDB_LOGOMASK        103
 
+/* Data */
+#define IDR_FILESECURITY    120
+
 /* Icons */
 #define IDI_MAIN            3000
 
