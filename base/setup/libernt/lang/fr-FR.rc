@@ -100,8 +100,8 @@ STYLE DS_SHELLFONT | DS_CONTROL | WS_CHILD
 FONT 8, "MS Shell Dlg"
 BEGIN
     EDITTEXT IDC_READY_SUMMARY, 0, 0, 290, 90, ES_MULTILINE | ES_READONLY | WS_VSCROLL | NOT WS_TABSTOP
-    LTEXT "LiberNT est en cours de développement. Utilisez-le pour l'évaluation et les tests, pas comme système d'exploitation principal. Il peut corrompre vos données ou endommager votre matériel.", IDC_READY_WARNING, 0, 97, 290, 28
-    AUTOCHECKBOX "J'ai &compris, et j'ai sauvegardé les données que je veux conserver.", IDC_CONFIRM_INSTALL, 0, 132, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
+    LTEXT "LiberNT est en cours de développement. Utilisez-le pour l'évaluation et les tests, pas comme système d'exploitation principal. Il peut corrompre vos données ou endommager votre matériel.", IDC_READY_WARNING, 0, 97, 290, 32
+    AUTOCHECKBOX "J'ai &compris, et j'ai sauvegardé les données que je veux conserver.", IDC_CONFIRM_INSTALL, 0, 136, 290, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
 END
 
 IDD_PROCESSPAGE DIALOGEX 0, 0, 290, 160
