@@ -136,6 +136,34 @@ TestBoundaryDescriptors(void)
 }
 
 static void
+TestEmptyLabelBoundary(void)
+{
+    static SID_IDENTIFIER_AUTHORITY MandatoryAuthority = {SECURITY_MANDATORY_LABEL_AUTHORITY};
+    struct
+    {
+        OBJECT_BOUNDARY_DESCRIPTOR Header;
+        OBJECT_BOUNDARY_ENTRY Entry;
+        ULONG Sid[FIELD_OFFSET(SID, SubAuthority) / sizeof(ULONG)];
+    } Boundary;
+    OBJECT_ATTRIBUTES Attributes;
+    HANDLE Namespace = NULL;
+    NTSTATUS Status;
+
+    RtlZeroMemory(&Boundary, sizeof(Boundary));
+    Boundary.Header.Version = OBJECT_BOUNDARY_DESCRIPTOR_VERSION;
+    Boundary.Header.Items = 1;
+    Boundary.Header.TotalSize = sizeof(Boundary);
+    Boundary.Entry.EntryType = OBNS_IL;
+    Boundary.Entry.EntrySize = sizeof(Boundary.Entry) + sizeof(Boundary.Sid);
+    RtlInitializeSid((PSID)Boundary.Sid, &MandatoryAuthority, 0);
+
+    InitializeObjectAttributes(&Attributes, NULL, 0, NULL, NULL);
+    Status = NtCreatePrivateNamespace(&Namespace, MAXIMUM_ALLOWED, &Attributes, &Boundary);
+    ok(Status == STATUS_SUCCESS, "integrity label without a sub-authority: 0x%lx\n", Status);
+    if (NT_SUCCESS(Status)) NtClose(Namespace);
+}
+
+static void
 TestNamespaceLifetime(void)
 {
     HANDLE Boundary, LookupBoundary, Namespace, Second, Opened, Event, Raw;
@@ -451,6 +479,7 @@ START_TEST(PrivateNamespace)
     if (SbxIsChild(Arguments, Count, "isolated")) ExitProcess(RunIsolatedChild());
 
     TestBoundaryDescriptors();
+    TestEmptyLabelBoundary();
     TestNamespaceLifetime();
     TestBoundaryEnforcement(TRUE);
     TestBoundaryEnforcement(FALSE);
