@@ -367,6 +367,7 @@ START_TEST(Bus_PDO_QueryResourceRequirements)
     ok(ReqList->List[0].Revision == 1, "List[0].Revision = %u\n", ReqList->List[0].Revision);
     ok(ReqList->List[0].Count == 1, "List[0].Count = %lu\n", ReqList->List[0].Count);
     expect_port(&ReqList->List[0].Descriptors[0], IO_RESOURCE_PREFERRED, CmResourceShareDriverExclusive, 8, 8, 0x3F8, 0x3FF);
+    ok_int(ReqList->List[0].Descriptors[0].Flags, CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_16_BIT_DECODE);
     ok_int(ReqList->ListSize, GetPoolAllocSize(ReqList));
     ok_int(ReqList->ListSize, (ULONG_PTR)&ReqList->List[0].Descriptors[1] - (ULONG_PTR)ReqList);
     ExFreePoolWithTag(ReqList, 'RpcA');
@@ -574,4 +575,51 @@ START_TEST(Bus_PDO_QueryResourceRequirements)
     expect_mem(&ReqList->List[0].Descriptors[0], IO_RESOURCE_PREFERRED, CmResourceShareDeviceExclusive, 0x2EFF0000, 1, 0x10000000, 0x3EFEFFFF);
     expect_port(&ReqList->List[0].Descriptors[1], IO_RESOURCE_PREFERRED, CmResourceShareDeviceExclusive, 0x1000, 1, 0x1000, 0x1FFF);
     ExFreePoolWithTag(ReqList, 'RpcA');
+
+    /* A PCI root bus forwards the ports its IO and FixedIO descriptors name, as the window of a bridge */
+    RtlZeroMemory(&DeviceData, sizeof(DeviceData));
+    AcpiCallExpected = TRUE;
+    Irp.IoStatus.Status = STATUS_WAIT_0 + 17;
+    Irp.IoStatus.Information = 0;
+    DeviceData.AcpiHandle = CorrectHandle;
+    DeviceData.HardwareIDs = L"PNP0A08\0";
+    Resource = ResourcesBuffer;
+    Resource->Type = ACPI_RESOURCE_TYPE_IO;
+    Resource->Length = sizeof(*Resource);
+    Resource->Data.Io.IoDecode = ACPI_DECODE_16;
+    Resource->Data.Io.Alignment = 1;
+    Resource->Data.Io.AddressLength = 8;
+    Resource->Data.Io.Minimum = 0x70;
+    Resource->Data.Io.Maximum = 0x70;
+    Resource = ACPI_NEXT_RESOURCE(Resource);
+    Resource->Type = ACPI_RESOURCE_TYPE_FIXED_IO;
+    Resource->Length = sizeof(*Resource);
+    Resource->Data.FixedIo.Address = 0x80;
+    Resource->Data.FixedIo.AddressLength = 0x10;
+    Resource = ACPI_NEXT_RESOURCE(Resource);
+    Resource->Type = ACPI_RESOURCE_TYPE_END_TAG;
+    Resource->Length = END_TAG_LENGTH;
+    Resource++;
+    CurrentBuffer.Pointer = ResourcesBuffer;
+    CurrentBuffer.Length = (ULONG_PTR)Resource - (ULONG_PTR)ResourcesBuffer;
+    Status = Bus_PDO_QueryResourceRequirements(&DeviceData, &Irp);
+    ok(Status == STATUS_SUCCESS, "Status = 0x%lx\n", Status);
+    ReqList = (PVOID)Irp.IoStatus.Information;
+    ok(ReqList != NULL, "ReqList is NULL\n");
+    if (ReqList == NULL)
+    {
+        skip("No ReqList\n");
+        return;
+    }
+    ok(ReqList->InterfaceType == PCIBus, "InterfaceType = %u\n", ReqList->InterfaceType);
+    ok(ReqList->AlternativeLists == 1, "AlternativeLists = %lu\n", ReqList->AlternativeLists);
+    ok(ReqList->List[0].Count == 3, "List[0].Count = %lu\n", ReqList->List[0].Count);
+    expect_port(&ReqList->List[0].Descriptors[0], 0, CmResourceShareDriverExclusive, 8, 1, 0x70, 0x77);
+    ok_int(ReqList->List[0].Descriptors[0].Flags, CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_16_BIT_DECODE | CM_RESOURCE_PORT_WINDOW_DECODE);
+    expect_port(&ReqList->List[0].Descriptors[1], 0, CmResourceShareDriverExclusive, 0x10, 1, 0x80, 0x8F);
+    ok_int(ReqList->List[0].Descriptors[1].Flags, CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_WINDOW_DECODE);
+    ok(ReqList->List[0].Descriptors[2].Type == CmResourceTypeBusNumber, "Desc->Type = %u\n", ReqList->List[0].Descriptors[2].Type);
+    ExFreePoolWithTag(ReqList, 'RpcA');
+    CurrentBuffer.Pointer = NULL;
+    CurrentBuffer.Length = 0;
 }

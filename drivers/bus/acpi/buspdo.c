@@ -1414,6 +1414,8 @@ BuspCreateRequirementsListFromAcpiResources(
                 RequirementDescriptor->u.Port.Length = io->AddressLength;
                 RequirementDescriptor->u.Port.MinimumAddress.QuadPart = io->Minimum;
                 RequirementDescriptor->u.Port.MaximumAddress.QuadPart = io->Maximum + io->AddressLength - 1;
+                if (IsPciRoot)
+                    RequirementDescriptor->Flags |= CM_RESOURCE_PORT_WINDOW_DECODE;
                 RequirementDescriptor++;
                 break;
             }
@@ -1430,6 +1432,8 @@ BuspCreateRequirementsListFromAcpiResources(
                 RequirementDescriptor->u.Port.Length = io->AddressLength;
                 RequirementDescriptor->u.Port.MinimumAddress.QuadPart = io->Address;
                 RequirementDescriptor->u.Port.MaximumAddress.QuadPart = io->Address + io->AddressLength - 1;
+                if (IsPciRoot)
+                    RequirementDescriptor->Flags |= CM_RESOURCE_PORT_WINDOW_DECODE;
                 RequirementDescriptor++;
                 break;
             }
