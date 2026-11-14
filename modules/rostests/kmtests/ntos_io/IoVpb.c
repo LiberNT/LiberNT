@@ -18,6 +18,10 @@
 static LONG TestCloseVpbReferences;
 static PVPB TestWatchedVpb;
 static PDEVICE_OBJECT TestCloseDevice;
+static PDEVICE_OBJECT TestVerifyTarget;
+static PDEVICE_OBJECT TestVerifyParameter;
+static PVPB TestVerifyVpb;
+static ULONG TestVerifyMinor;
 
 static
 NTSTATUS
@@ -47,6 +51,14 @@ TestDiskIrp(
     {
         TestCloseDevice = DeviceObject;
         InterlockedExchange(&TestCloseVpbReferences, (LONG)TestWatchedVpb->ReferenceCount);
+    }
+    if (IoStackLocation->MajorFunction == IRP_MJ_FILE_SYSTEM_CONTROL)
+    {
+        TestVerifyTarget = DeviceObject;
+        TestVerifyMinor = IoStackLocation->MinorFunction;
+        TestVerifyParameter = IoStackLocation->Parameters.VerifyVolume.DeviceObject;
+        TestVerifyVpb = IoStackLocation->Parameters.VerifyVolume.Vpb;
+        return TestDiskComplete(Irp, STATUS_SUCCESS, 0);
     }
     if (IoStackLocation->MajorFunction == IRP_MJ_READ)
     {
@@ -318,6 +330,67 @@ TestFileSystemRegistration(VOID)
     IoDeleteDevice(FileSystem);
 }
 
+/* A verify names the file system's volume device, the one a file system finds its volume control block in */
+static
+VOID
+TestVerifyVolume(VOID)
+{
+    PDEVICE_OBJECT Disk, Volume;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+    PVPB Vpb;
+
+    Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_DISK, 0, FALSE, &Disk);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+    Status = IoCreateDevice(KmtDriverObject, 0, NULL, FILE_DEVICE_DISK_FILE_SYSTEM, 0, FALSE, &Volume);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteDevice(Disk);
+        return;
+    }
+    Volume->StackSize = Disk->StackSize + 1;
+    TestDisk = Disk;
+    TestVolume = Volume;
+    TestSavedDispatch[IRP_MJ_FILE_SYSTEM_CONTROL] = KmtDriverObject->MajorFunction[IRP_MJ_FILE_SYSTEM_CONTROL];
+    InterlockedExchangePointer((PVOID *)&KmtDriverObject->MajorFunction[IRP_MJ_FILE_SYSTEM_CONTROL], (PVOID)TestDiskDispatch);
+    Disk->Flags &= ~DO_DEVICE_INITIALIZING;
+    Volume->Flags &= ~DO_DEVICE_INITIALIZING;
+
+    Vpb = Disk->Vpb;
+    IoAcquireVpbSpinLock(&OldIrql);
+    Vpb->DeviceObject = Volume;
+    Vpb->Flags |= VPB_MOUNTED;
+    IoReleaseVpbSpinLock(OldIrql);
+    Disk->Flags |= DO_VERIFY_VOLUME;
+
+    TestVerifyTarget = NULL;
+    TestVerifyParameter = NULL;
+    TestVerifyVpb = NULL;
+    TestVerifyMinor = MAXULONG;
+    Status = IoVerifyVolume(Disk, FALSE);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_pointer(TestVerifyTarget, Volume);
+    ok_eq_hex(TestVerifyMinor, (ULONG)IRP_MN_VERIFY_VOLUME);
+    ok_eq_pointer(TestVerifyParameter, Volume);
+    ok_eq_pointer(TestVerifyVpb, Vpb);
+    ok_eq_ulong(Vpb->ReferenceCount, 0UL);
+
+    Disk->Flags &= ~DO_VERIFY_VOLUME;
+    IoAcquireVpbSpinLock(&OldIrql);
+    Vpb->Flags &= ~VPB_MOUNTED;
+    Vpb->DeviceObject = NULL;
+    IoReleaseVpbSpinLock(OldIrql);
+    InterlockedExchangePointer((PVOID *)&KmtDriverObject->MajorFunction[IRP_MJ_FILE_SYSTEM_CONTROL],
+                               (PVOID)TestSavedDispatch[IRP_MJ_FILE_SYSTEM_CONTROL]);
+    IoDeleteDevice(Volume);
+    IoDeleteDevice(Disk);
+    TestVolume = NULL;
+    TestDisk = NULL;
+}
+
 static
 VOID
 TestSwappedVpb(VOID)
@@ -405,5 +478,6 @@ START_TEST(IoVpb)
     TestRawMount();
     TestFileSystemRegistration();
     TestStreamFileClose();
+    TestVerifyVolume();
     TestSwappedVpb();
 }
