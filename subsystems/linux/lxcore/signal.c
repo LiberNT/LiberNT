@@ -1055,6 +1055,22 @@ LxSignalTakeAction(
 }
 
 VOID
+LxSignalRestoreWaitMask(
+    _In_ PLX_THREAD Thread)
+{
+    ULONG64 Blocked;
+
+    if (!Thread->Suspended)
+        return;
+    Blocked = Thread->SigMask;
+    Thread->SigMask = Thread->SuspendMask;
+    Thread->Suspended = FALSE;
+    InterlockedExchange(&Thread->SharedWake, 1);
+    if (Thread->SigMask & ~Blocked)
+        LxSignalRetarget(Thread->Process, Thread, Thread->SigMask & ~Blocked);
+}
+
+VOID
 LxSignalCheckPending(
     _In_ PLX_THREAD Thread,
     _Inout_ PKTRAP_FRAME TrapFrame,
@@ -1161,15 +1177,7 @@ LxSignalCheckPending(
     if (Restart != 0)
         LxArchRestartSyscall(TrapFrame, Thread->RestartArgument);
 
-    if (Thread->Suspended)
-    {
-        Blocked = Thread->SigMask;
-        Thread->SigMask = Thread->SuspendMask;
-        Thread->Suspended = FALSE;
-        InterlockedExchange(&Thread->SharedWake, 1);
-        if (Thread->SigMask & ~Blocked)
-            LxSignalRetarget(Process, Thread, Thread->SigMask & ~Blocked);
-    }
+    LxSignalRestoreWaitMask(Thread);
 }
 
 VOID

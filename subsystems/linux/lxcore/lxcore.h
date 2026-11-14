@@ -1644,6 +1644,7 @@ NTSTATUS LxIpcCreateSection(_In_ ULONG64 Size, _Out_ PVOID *Section);
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
 LONG LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);
 VOID LxSignalFlushQueued(_In_ PLX_PROCESS Process, _In_opt_ PLX_THREAD Thread, _In_ LONG Signal);
+VOID LxSignalRestoreWaitMask(_In_ PLX_THREAD Thread);
 VOID LxSignalCheckPending(_In_ PLX_THREAD Thread, _Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame);
 VOID LxSeccompInherit(_Inout_ PLX_THREAD Thread, _In_ PLX_THREAD Parent);
 VOID LxSeccompRelease(_Inout_ PLX_THREAD Thread);

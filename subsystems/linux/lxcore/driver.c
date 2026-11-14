@@ -76,6 +76,9 @@ LxPicoSystemCall(
         Call.Thread->RestartArgument = Call.Args[0];
         Result = -LX_EINTR;
     }
+    /* A call that waited under a temporary signal mask takes a signal that mask let through only when it was interrupted */
+    if (Call.Thread->Suspended && (Result != -LX_EINTR))
+        LxSignalRestoreWaitMask(Call.Thread);
     if (Result != LX_SYSCALL_NO_RESULT)
         LxArchSetSyscallResult(TrapFrame, Raw);
     if ((Call.Thread->PtraceWork & LX_PTW_SYSCALL) && !Call.Thread->VforkExited)
