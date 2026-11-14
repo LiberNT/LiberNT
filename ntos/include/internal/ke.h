@@ -786,6 +786,13 @@ KiUpdateRunTime(
 );
 
 VOID
+NTAPI
+KiUpdateIdleRunTime(
+    PKTRAP_FRAME TrapFrame,
+    ULONG Ticks
+);
+
+VOID
 FASTCALL
 KiUpdateClockTime(
     _In_ PKPRCB Prcb,

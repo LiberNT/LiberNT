@@ -870,18 +870,18 @@ KiUpdateClockTime(
  * Charges one clock period to whatever this processor was doing when the
  * interrupt arrived, and ends the running thread's turn if it is over.
  */
+static
 VOID
-NTAPI
-KiUpdateRunTime(
+KiChargeRunTime(
+    _Inout_ PKPRCB Prcb,
     _In_opt_ PKTRAP_FRAME TrapFrame,
     _In_ KIRQL Irql,
     _In_ ULONG Ticks)
 {
-    PKPRCB Prcb = KeGetCurrentPrcb();
     PKTHREAD Thread = Prcb->CurrentThread;
     PKPROCESS Process;
 
-    KiCheckClockWatchdog(Prcb, Ticks);
+    ASSERT(Prcb == KeGetCurrentPrcb());
 
     if (Thread == NULL)
         return;
@@ -954,6 +954,35 @@ KiUpdateRunTime(
 
     if (SmpDbgEnabled)
         SmpDbgQuantumRequest(Prcb->Number);
+}
+
+VOID
+NTAPI
+KiUpdateRunTime(
+    _In_opt_ PKTRAP_FRAME TrapFrame,
+    _In_ KIRQL Irql,
+    _In_ ULONG Ticks)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+
+    KiCheckClockWatchdog(Prcb, Ticks);
+    KiChargeRunTime(Prcb, TrapFrame, Irql, Ticks);
+}
+
+/* A processor watches no other one while its clock is stopped for idle, so the periods it slept through are not counted against them */
+VOID
+NTAPI
+KiUpdateIdleRunTime(
+    _In_opt_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Ticks)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(Prcb->CurrentThread == Prcb->IdleThread);
+
+    InterlockedExchange(&Prcb->ClockKeepAlive, 0);
+    KiChargeRunTime(Prcb, TrapFrame, DISPATCH_LEVEL, Ticks);
 }
 
 VOID

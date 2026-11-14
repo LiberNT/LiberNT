@@ -1102,7 +1102,7 @@ KiArm64ClockResumeFromIdle(
         KiUpdateClockTime(Prcb, KiArm64TakeClockOwnerIncrement(KiArm64ReadCounter()));
     }
     if (Ticks != 0)
-        KiUpdateRunTime(&TrapFrame, DISPATCH_LEVEL, Ticks);
+        KiUpdateIdleRunTime(&TrapFrame, Ticks);
     else
         Prcb->InterruptCount++;
     KiArm64ArmPeriodicClock(TimerState, KiArm64ReadCounter(), TRUE);

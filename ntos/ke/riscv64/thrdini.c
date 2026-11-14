@@ -318,7 +318,7 @@ KiRiscvCreditIdleTicks(_In_ ULONG Ticks)
     KTRAP_FRAME TrapFrame;
 
     TrapFrame.Sstatus = RISCV_SSTATUS_SPP;
-    KiUpdateRunTime(&TrapFrame, DISPATCH_LEVEL, Ticks);
+    KiUpdateIdleRunTime(&TrapFrame, Ticks);
 }
 
 DECLSPEC_NORETURN
