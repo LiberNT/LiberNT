@@ -370,9 +370,10 @@ IntRemoveCursorFromList(
             /* Remove it from the list */
             (*ppcur) = pcur->pcurNext;
 
+            pcur->CURSORF_flags &= ~CURSORF_LINKED;
+
             /* Dereference it */
             UserDereferenceObject(pcur);
-            pcur->CURSORF_flags &= ~CURSORF_LINKED;
             return;
         }
     }
