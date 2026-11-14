@@ -86,6 +86,10 @@ USBPORT_FreePoolWithTagDbg(
 #define USBPORT_DMA_DIRECTION_FROM_DEVICE 1
 #define USBPORT_DMA_DIRECTION_TO_DEVICE   2
 
+/* USB 2.0 9.2.6.4: a control request with a data stage completes within
+ * 5 s, so a device silent past that is out of specification. */
+#define USBPORT_CONTROL_TRANSFER_TIMEOUT 5000
+
 #define USB_PORT_TAG 'pbsu'
 /* Highest URB function code we recognize (Win8+ stream/chained MDL included). */
 #define URB_FUNCTION_MAX 0x38

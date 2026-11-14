@@ -4806,8 +4806,11 @@ USBPORT_AllocateTransfer(IN PDEVICE_OBJECT FdoDevice,
     Transfer->Endpoint = PipeHandle->Endpoint;
     Transfer->FdoDevice = FdoDevice;
     Transfer->Event = Event;
-    if (Event && !Irp && Urb->UrbHeader.Function == URB_FUNCTION_CONTROL_TRANSFER)
-        Transfer->TimeOut = 5000;
+    if ((Urb->UrbControlTransfer.TransferFlags & USBD_DEFAULT_PIPE_TRANSFER) ||
+        Urb->UrbHeader.Function == URB_FUNCTION_CONTROL_TRANSFER)
+    {
+        Transfer->TimeOut = USBPORT_CONTROL_TRANSFER_TIMEOUT;
+    }
     Transfer->PortTransferLength = PortTransferLength;
     Transfer->FullTransferLength = FullTransferLength;
     Transfer->IsoBlockPtr = NULL;
