@@ -66,6 +66,8 @@ DxgkpFindHandleLocked(
     PLIST_ENTRY Head = DxgkpHandleHashHead(Handle);
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Entry = Head->Flink; Entry != Head; Entry = Entry->Flink)
     {
         PDXGKRNL_HANDLE_ENTRY HandleEntry = CONTAINING_RECORD(Entry, DXGKRNL_HANDLE_ENTRY, HashEntry);
@@ -81,6 +83,8 @@ static VOID
 DxgkpUnlinkHandleLocked(
     _Inout_ PDXGKRNL_HANDLE_ENTRY Entry)
 {
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     RemoveEntryList(&Entry->ListEntry);
     InitializeListHead(&Entry->ListEntry);
     RemoveEntryList(&Entry->HashEntry);
@@ -93,6 +97,8 @@ DxgkpAllocateHandleLocked(
 {
     ULONG Generation;
     D3DKMT_HANDLE Handle = 0;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     do
     {

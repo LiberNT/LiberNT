@@ -8,12 +8,16 @@
 
 static VOID DxgkpTrackedWorkAdjustInFlightLocked(_In_ PDXGK_TRACKED_WORK_CORE Core, _In_ LONG Delta)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Core->Callbacks.AdjustInFlight != NULL)
         Core->Callbacks.AdjustInFlight(Core->CallbackContext, Delta);
 }
 
 static VOID DxgkpTrackedWorkCompleteLocked(_In_ PDXGK_TRACKED_WORK_CORE Core)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Core->DeviceWorkOwned && Core->Callbacks.CompleteDeviceWork != NULL)
         Core->Callbacks.CompleteDeviceWork(Core->CallbackContext);
 }

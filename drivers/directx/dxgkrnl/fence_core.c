@@ -320,6 +320,8 @@ VOID
 DxgkPeriodicInterruptCoreEnableLocked(
     _Inout_ PDXGK_PERIODIC_INTERRUPT_CORE Core)
 {
+    ASSERT(Core != NULL);
+
     RtlZeroMemory(Core->Entries, sizeof(Core->Entries));
     Core->DpcActive = FALSE;
     Core->OverflowCount = 0;
@@ -332,6 +334,8 @@ VOID
 DxgkPeriodicInterruptCoreDisableLocked(
     _Inout_ PDXGK_PERIODIC_INTERRUPT_CORE Core)
 {
+    ASSERT(Core != NULL);
+
     InterlockedExchange(
         &Core->State,
         DxgkPeriodicInterruptDisabled);
@@ -345,6 +349,8 @@ DxgkpPeriodicInterruptCoreOverflowLocked(
     _Out_ PBOOLEAN QueueDpc,
     _In_ NTSTATUS Status)
 {
+    ASSERT(Core != NULL);
+
     if (Core->OverflowCount != (ULONGLONG)-1)
         ++Core->OverflowCount;
     InterlockedExchange(
@@ -375,6 +381,10 @@ DxgkPeriodicInterruptCoreEnqueueLocked(
     {
         return STATUS_INVALID_PARAMETER;
     }
+
+    ASSERT(Core->State >= DxgkPeriodicInterruptDisabled &&
+           Core->State <= DxgkPeriodicInterruptOverflowed);
+
     *QueueDpc = FALSE;
     State = InterlockedCompareExchange(
         &Core->State,
@@ -454,6 +464,10 @@ DxgkPeriodicInterruptCoreDequeueLocked(
 
     if (Core == NULL || Entry == NULL)
         return FALSE;
+
+    ASSERT(Core->State >= DxgkPeriodicInterruptDisabled &&
+           Core->State <= DxgkPeriodicInterruptOverflowed);
+
     RtlZeroMemory(Entry, sizeof(*Entry));
     if (InterlockedCompareExchange(
             &Core->State,

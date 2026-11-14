@@ -8,6 +8,8 @@
 
 BOOLEAN DxgkSubmitReservationCoreTryAcquireLocked(_Inout_ volatile LONG *ActiveReservations, _In_ BOOLEAN Stopping, _Out_ PBOOLEAN ClearDrainedEvent)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (ActiveReservations == NULL || ClearDrainedEvent == NULL)
         return FALSE;
     *ClearDrainedEvent = FALSE;
@@ -23,6 +25,8 @@ BOOLEAN DxgkSubmitReservationCoreReleaseLocked(_Inout_ volatile LONG *ActiveRese
     if (ActiveReservations == NULL || SetDrainedEvent == NULL)
         return FALSE;
     *SetDrainedEvent = FALSE;
+    ASSERT(*ActiveReservations >= 0);
+
     if (*ActiveReservations <= 0)
         return FALSE;
     (*ActiveReservations)--;
@@ -32,6 +36,8 @@ BOOLEAN DxgkSubmitReservationCoreReleaseLocked(_Inout_ volatile LONG *ActiveRese
 
 BOOLEAN DxgkSubmitReservationCoreIsDrainedLocked(_In_ volatile const LONG *ActiveReservations)
 {
+    ASSERT(ActiveReservations != NULL);
+
     return ActiveReservations != NULL && *ActiveReservations == 0;
 }
 
@@ -45,6 +51,8 @@ BOOLEAN DxgkSubmissionAccountingTryPrechargeLocked(_Inout_ PDXGK_SUBMISSION_ACCO
 {
     LONG CurrentDevice;
     LONG CurrentProcess;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Accounting == NULL || DeviceCount == NULL || ProcessCount == NULL || DeviceLimit <= 0 || ProcessLimit <= 0)
         return FALSE;
@@ -66,6 +74,9 @@ BOOLEAN DxgkSubmissionAccountingCommitLocked(_Inout_ PDXGK_SUBMISSION_ACCOUNTING
 
     if (Accounting == NULL || DeviceCount == NULL || ProcessCount == NULL)
         return FALSE;
+    ASSERT(Accounting->State >= DxgkSubmissionUnaccounted &&
+           Accounting->State <= DxgkSubmissionCommitted);
+
     PreviousState = InterlockedCompareExchange(&Accounting->State, DxgkSubmissionCommitted, DxgkSubmissionPrecharged);
     if (PreviousState == DxgkSubmissionPrecharged)
         return TRUE;

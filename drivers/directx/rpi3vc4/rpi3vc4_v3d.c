@@ -785,6 +785,8 @@ Rpi3Vc4ReserveOverflowSlotLocked(
     ULONG Slot;
     ULONG Mask;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Slot = 0;
          Slot < RPI3VC4_V3D_BIN_OVERFLOW_SIZE /
                     RPI3VC4_V3D_BIN_OVERFLOW_SLOT_SIZE;
@@ -812,6 +814,8 @@ Rpi3Vc4StartRenderLocked(
     _In_ ULONG SubmitIndex)
 {
     PRPI3VC4_V3D_SUBMIT Submit;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Context->V3dRecovering || Context->V3dRenderActive ||
         SubmitIndex != Context->V3dSubmitHead ||
@@ -868,6 +872,8 @@ Rpi3Vc4StartBinLocked(
 {
     PRPI3VC4_V3D_SUBMIT Submit;
     ULONG SubmitIndex;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Context->V3dRecovering || Context->V3dBinActive)
         return;
@@ -930,6 +936,8 @@ Rpi3Vc4StartPipelinesLocked(
 {
     PRPI3VC4_V3D_SUBMIT Head;
     BOOLEAN RetryStart;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Context->V3dRecovering)
         return;
@@ -1289,6 +1297,9 @@ Rpi3Vc4ProcessDpcLocked(
     BOOLEAN Captured = FALSE;
     NTSTATUS CaptureStatus;
 
+    ASSERT(Device != NULL);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Device == NULL)
         return;
     Context = (PRPI3VC4_CONTEXT)Device->PlatformContext;
@@ -1548,6 +1559,9 @@ Rpi3Vc4V3dPollDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Context != NULL && Context->Device != NULL)
         Rpi3Vc4Dpc(Context->Device);
 }

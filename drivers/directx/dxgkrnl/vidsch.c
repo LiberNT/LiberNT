@@ -303,6 +303,8 @@ static PVIDSCH_DMA_PACKET
 VidSchpFirstActivePacketLocked(
     _In_ PVIDSCH_ENGINE Engine)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (IsListEmpty(&Engine->ActivePacketList))
         return NULL;
 
@@ -2388,6 +2390,8 @@ VidSchpTdrDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* Intentionally empty: adapter.c owns the single TDR watchdog. */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 }
 
 static VOID

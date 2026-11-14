@@ -2123,6 +2123,9 @@ Rpi3Vc4CommitOverlayLocked(
 
     Context = (PRPI3VC4_CONTEXT)Device->PlatformContext;
     Status = Rpi3Vc4CommitDisplayList(Device);
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     if (!NT_SUCCESS(Status))
         return Status;
     if (!Rpi3Vc4WaitForDisplayList(Context,

@@ -10,6 +10,8 @@ static PDXGMMS2_CONTEXT_STREAM_CONTEXT Dxgmms2ContextStreamFindLocked(_In_ PDXGM
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = Manager->ContextListHead.Flink; Entry != &Manager->ContextListHead; Entry = Entry->Flink)
     {
         PDXGMMS2_CONTEXT_STREAM_CONTEXT Context = CONTAINING_RECORD(Entry, DXGMMS2_CONTEXT_STREAM_CONTEXT, ManagerEntry);
@@ -24,6 +26,8 @@ static PDXGMMS2_CONTEXT_ENTRY Dxgmms2ContextStreamFindEntryLocked(_In_ PDXGMMS2_
 {
     ULONGLONG Offset;
     ULONG Index;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Sequence <= Context->LastCompletedSequence || Sequence > Context->LastAdmittedSequence)
         return NULL;
@@ -47,6 +51,8 @@ static ULONGLONG Dxgmms2ContextStreamNextNonzero64(_Inout_ ULONGLONG *Value)
 static DXGMMS2_CONTEXT_STREAM_HANDLE Dxgmms2ContextStreamNextHandleLocked(_Inout_ PDXGMMS2_CONTEXT_STREAM_MANAGER Manager)
 {
     DXGMMS2_CONTEXT_STREAM_HANDLE ContextHandle;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     do
     {
@@ -170,6 +176,8 @@ static VOID Dxgmms2ContextStreamCancelTransactionLocked(_Inout_ PDXGMMS2_CONTEXT
 {
     ULONG MemberIndex;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Transaction->Claimed && !CancelClaimed)
         return;
     Transaction->CancelRequested = TRUE;
@@ -185,6 +193,8 @@ static VOID Dxgmms2ContextStreamCancelTransactionLocked(_Inout_ PDXGMMS2_CONTEXT
 
 static VOID Dxgmms2ContextStreamCancelContextLocked(_Inout_ PDXGMMS2_CONTEXT_STREAM_MANAGER Manager, _Inout_ PDXGMMS2_CONTEXT_STREAM_CONTEXT Context, _In_ ULONG Flags, _In_ ULONG Reason)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     CONST BOOLEAN CancelClaimed = ((Flags & DXGMMS2_CONTEXT_CANCEL_TDR) != 0);
     ULONG Offset;
 
@@ -221,6 +231,8 @@ static VOID Dxgmms2ContextStreamNormalizeAllLocked(_Inout_ PDXGMMS2_CONTEXT_STRE
 {
     PLIST_ENTRY ListEntry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (ListEntry = Manager->ContextListHead.Flink; ListEntry != &Manager->ContextListHead; ListEntry = ListEntry->Flink)
     {
         PDXGMMS2_CONTEXT_STREAM_CONTEXT Context = CONTAINING_RECORD(ListEntry, DXGMMS2_CONTEXT_STREAM_CONTEXT, ManagerEntry);
@@ -232,6 +244,8 @@ static VOID Dxgmms2ContextStreamNormalizeAllLocked(_Inout_ PDXGMMS2_CONTEXT_STRE
 static VOID Dxgmms2ContextStreamCancelAllLocked(_Inout_ PDXGMMS2_CONTEXT_STREAM_MANAGER Manager, _In_ ULONG Flags, _In_ ULONG Reason)
 {
     PLIST_ENTRY ListEntry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (ListEntry = Manager->ContextListHead.Flink; ListEntry != &Manager->ContextListHead; ListEntry = ListEntry->Flink)
     {
@@ -743,6 +757,8 @@ NTSTATUS Dxgmms2ContextStreamResolveWait(_Inout_ PDXGMMS2_CONTEXT_STREAM_MANAGER
 static BOOLEAN Dxgmms2ContextStreamSignalReadyLocked(_In_ PDXGMMS2_CONTEXT_TRANSACTION Transaction)
 {
     ULONG MemberIndex;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Transaction->Claimed || Transaction->CancelRequested)
         return FALSE;

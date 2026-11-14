@@ -81,6 +81,8 @@ K1xRetireLocked(
     _Inout_ PK1XDPU_CONTEXT Context,
     _In_opt_ PK1X_FLIP Flip)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Flip)
         return;
     InsertTailList(&Context->RetiredFlips, &Flip->Entry);
@@ -95,6 +97,8 @@ static VOID
 K1xLatchLocked(_Inout_ PK1XDPU_CONTEXT Context)
 {
     ULONG Raw;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (!Context->CommitPending ||
         (K1xRead(Context->Dpu, K1X_DPU_CTL2_COMMIT) & K1X_DPU_CTL2_COMMIT_READY))
@@ -135,6 +139,8 @@ K1xApplyLocked(_Inout_ PK1XDPU_CONTEXT Context)
     PK1X_FLIP Flip;
     RECT Destination;
     ULONG Value;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Context->CommitPending)
         return;
@@ -254,6 +260,9 @@ K1xPlanesDpc(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     Bits = (ULONG)InterlockedExchange(&Context->InterruptBits, 0);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&Context->Lock);
     if (Bits & K1X_DPU_INT_VSYNC)
         KeSetEvent(&Context->VsyncEvent, IO_NO_INCREMENT, FALSE);
@@ -266,6 +275,8 @@ static VOID
 K1xSetInterruptMaskLocked(_Inout_ PK1XDPU_CONTEXT Context)
 {
     ULONG Mask = K1X_DPU_INT_COMMIT_TAKEN;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Context->VsyncWaiters)
         Mask |= K1X_DPU_INT_VSYNC;

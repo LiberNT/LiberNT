@@ -876,6 +876,9 @@ DxgkpTdrDdiDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Adapter != NULL && InterlockedCompareExchange(&Adapter->TdrDdiTimerArmed, 1, 1) != 0)
         DxgkpBugCheckTdrFailure(Adapter, STATUS_IO_TIMEOUT);
 }
@@ -1468,6 +1471,8 @@ DxgkpTdrDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Adapter == NULL || InterlockedCompareExchange(&Adapter->TdrTimerActive, 0, 0) == 0)
         return;
@@ -3534,6 +3539,8 @@ DxgkpStampTrackedDmaReferencesLocked(
 {
     UINT RefIndex;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Entry->NodeOrdinal >= DXGK_MAX_TRACKED_NODES ||
         Entry->AllocationReferenceList == NULL)
     {
@@ -4874,6 +4881,8 @@ DxgkpAdapterDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Adapter == NULL)
         return;
     if (!DxgkpAcquireVidSchCallback(Adapter))
@@ -4935,6 +4944,8 @@ DxgkpNotifyDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Adapter == NULL)
         return;
@@ -9162,6 +9173,8 @@ DxgkpFindPhysicalMemoryObjectLocked(
 {
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Link = DxgkpPhysicalMemoryList.Flink;
          Link != &DxgkpPhysicalMemoryList;
          Link = Link->Flink)
@@ -9183,6 +9196,8 @@ DxgkpFindAdapterMemoryObjectLocked(
     _In_ HANDLE Handle)
 {
     PLIST_ENTRY ObjectLink;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     for (ObjectLink = DxgkpPhysicalMemoryList.Flink;
          ObjectLink != &DxgkpPhysicalMemoryList;
@@ -9217,6 +9232,8 @@ DxgkpAdapterMemoryObjectHasAdlLocked(
 {
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Link = AdapterObject->PhysicalObject->AdlList.Flink;
          Link != &AdapterObject->PhysicalObject->AdlList;
          Link = Link->Flink)
@@ -9239,6 +9256,9 @@ DxgkpDetachAdapterMemoryObjectAdlsLocked(
     PLIST_ENTRY Link;
 
     Link = AdapterObject->PhysicalObject->AdlList.Flink;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     while (Link != &AdapterObject->PhysicalObject->AdlList)
     {
         PLIST_ENTRY Next = Link->Flink;
@@ -9370,6 +9390,8 @@ static VOID
 DxgkpDetachPhysicalMemoryObjectLocked(
     _In_ PDXGKP_PHYSICAL_MEMORY_OBJECT Object)
 {
+    ASSERT(Object != NULL);
+
     RemoveEntryList(&Object->ListEntry);
 }
 
