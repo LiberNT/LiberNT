@@ -148,6 +148,7 @@ NdisFreeTimerObject(
     /* Cancel any pending fire and flush queued DPCs. */
     KeCancelTimer(&t->Timer);
     KeRemoveQueueDpc(&t->Dpc);
+    KeFlushQueuedDpcs();
 
     t->Magic = 0;
     ExFreePoolWithTag(t, NDIS6_TIMER_TAG);
