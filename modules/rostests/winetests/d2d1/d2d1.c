@@ -25,6 +25,7 @@
 #include "d2d1_3.h"
 #include "d2d1effectauthor.h"
 #include "d3d11.h"
+#include "dxgi1_2.h"
 #include "wincrypt.h"
 #include "wine/test.h"
 #include "initguid.h"
@@ -5558,6 +5559,7 @@ static void test_shared_bitmap(BOOL d3d11)
     D2D1_SIZE_U size = {4, 4};
     IWICBitmapLock *wic_lock;
     IDXGISurface1 *surface3;
+    IDXGISurface2 *surface4;
     ID2D1Bitmap1 *bitmap3;
     ID2D1Device *device;
     WICRect wic_rect;
@@ -5753,6 +5755,14 @@ static void test_shared_bitmap(BOOL d3d11)
             ID2D1Bitmap_Release(bitmap2);
             IDXGISurface1_Release(surface3);
         }
+
+        hr = IDXGISurface_QueryInterface(surface2, &IID_IDXGISurface2, (void **)&surface4);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        hr = ID2D1RenderTarget_CreateSharedBitmap(rt2, &IID_IDXGISurface2, surface4, &bitmap_desc, &bitmap2);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        if (SUCCEEDED(hr))
+            ID2D1Bitmap_Release(bitmap2);
+        IDXGISurface2_Release(surface4);
 
         for (i = 0; i < ARRAY_SIZE(bitmap_format_tests); ++i)
         {

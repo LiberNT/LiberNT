@@ -612,7 +612,8 @@ HRESULT d2d_bitmap_create_shared(struct d2d_device_context *context, REFIID iid,
         return hr;
     }
 
-    if (IsEqualGUID(iid, &IID_IDXGISurface) || IsEqualGUID(iid, &IID_IDXGISurface1))
+    if (IsEqualGUID(iid, &IID_IDXGISurface) || IsEqualGUID(iid, &IID_IDXGISurface1)
+            || IsEqualGUID(iid, &IID_IDXGISurface2))
     {
         DXGI_SURFACE_DESC surface_desc;
         IDXGISurface *surface = data;
