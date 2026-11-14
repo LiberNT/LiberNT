@@ -417,6 +417,8 @@ KeTryToAcquireGuardedMutex(
 
 /* PUBLIC FUNCTIONS: FAST MUTEXES *********************************************/
 
+#define KI_FAST_MUTEX_SPIN_COUNT 1024
+
 /*
  * The contended acquisition of a fast mutex. Unlike a guarded mutex this waits
  * on an ordinary event, which is what makes a fast mutex usable from code that
@@ -433,6 +435,18 @@ KiAcquireFastMutex(
     ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
 
     FastMutex->Contention++;
+
+    if (KeNumberProcessors > 1)
+    {
+        ULONG Spin;
+
+        for (Spin = KI_FAST_MUTEX_SPIN_COUNT; Spin != 0; Spin--)
+        {
+            YieldProcessor();
+            if (ReadNoFence(&FastMutex->Count) & FM_LOCK_BIT)
+                break;
+        }
+    }
 
     for (;;)
     {
