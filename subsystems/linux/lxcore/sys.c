@@ -1335,6 +1335,73 @@ LxSchedInherit(
     }
 }
 
+static
+BOOLEAN
+LxSchedCapable(
+    _In_ PLX_CALL Call,
+    _In_ PLX_PROCESS Target)
+{
+    PLX_NS TargetNs = LxUserNsOf(Target);
+    BOOLEAN Capable = LxNsCapable(Call->Process, TargetNs, LX_CAP_SYS_NICE);
+
+    LxNsDereference(TargetNs);
+    return Capable;
+}
+
+static
+BOOLEAN
+LxSchedSameOwner(
+    _In_ PLX_CALL Call,
+    _In_ PLX_THREAD Thread)
+{
+    PLX_CRED Own = Call->Thread->Cred;
+
+    return (Own->Uid[1] == Thread->Cred->Uid[1]) || (Own->Uid[1] == Thread->Cred->Uid[0]);
+}
+
+static
+BOOLEAN
+LxSchedNiceAllowed(
+    _In_ PLX_PROCESS Target,
+    _In_ LONG Nice)
+{
+    return (ULONG64)(20 - Nice) <= Target->Limits[LX_RLIMIT_NICE].Cur;
+}
+
+static
+LONG
+LxSchedPermit(
+    _In_ PLX_CALL Call,
+    _In_ PLX_THREAD Thread,
+    _In_ const LX_SCHED_ATTR *New)
+{
+    PLX_PROCESS Target = Thread->Process;
+    const LX_SCHED_ATTR *Old = &Thread->Sched;
+
+    if (LxSchedCapable(Call, Target))
+        return 0;
+    if (!LxSchedSameOwner(Call, Thread))
+        return -LX_EPERM;
+    if (New->Policy == LX_SCHED_DEADLINE)
+        return -LX_EPERM;
+    if ((New->Policy == LX_SCHED_FIFO) || (New->Policy == LX_SCHED_RR))
+    {
+        ULONG64 Limit = Target->Limits[LX_RLIMIT_RTPRIO].Cur;
+
+        if ((New->Policy != Old->Policy) && (Limit == 0))
+            return -LX_EPERM;
+        if ((New->Priority > Old->Priority) && (New->Priority > Limit))
+            return -LX_EPERM;
+    }
+    if ((Old->Policy == LX_SCHED_IDLE) && (New->Policy != LX_SCHED_IDLE) && !LxSchedNiceAllowed(Target, Old->Nice))
+        return -LX_EPERM;
+    if ((New->Nice < Old->Nice) && !LxSchedNiceAllowed(Target, New->Nice))
+        return -LX_EPERM;
+    if ((Old->Flags & LX_SCHED_FLAG_RESET_ON_FORK) && !(New->Flags & LX_SCHED_FLAG_RESET_ON_FORK))
+        return -LX_EPERM;
+    return 0;
+}
+
 LX_SYSCALL(LxSysSchedSetattr)
 {
     LX_SCHED_ATTR Attr, New;
@@ -1416,8 +1483,10 @@ LX_SYSCALL(LxSysSchedSetattr)
     if (Result == 0)
     {
         New.Flags = (New.Flags & ~(ULONG64)LX_SCHED_FLAG_RESET_ON_FORK) | (Attr.Flags & LX_SCHED_FLAG_RESET_ON_FORK);
-        Thread->Sched = New;
+        Result = LxSchedPermit(Call, Thread, &New);
     }
+    if (Result == 0)
+        Thread->Sched = New;
     LxSchedRelease(Owner);
     return Result;
 }
@@ -1472,8 +1541,10 @@ LX_SYSCALL(LxSysSchedSetscheduler)
             Attr.Flags |= LX_SCHED_FLAG_RESET_ON_FORK;
         else
             Attr.Flags &= ~(ULONG64)LX_SCHED_FLAG_RESET_ON_FORK;
-        Thread->Sched = Attr;
+        Result = LxSchedPermit(Call, Thread, &Attr);
     }
+    if (Result == 0)
+        Thread->Sched = Attr;
     LxSchedRelease(Owner);
     return Result;
 }
@@ -1497,6 +1568,8 @@ LX_SYSCALL(LxSysSchedSetparam)
     Attr = Thread->Sched;
     Attr.Priority = (ULONG)Priority;
     Result = (Priority < 0) ? -LX_EINVAL : LxSchedValidate(&Attr);
+    if (Result == 0)
+        Result = LxSchedPermit(Call, Thread, &Attr);
     if (Result == 0)
         Thread->Sched.Priority = Attr.Priority;
     LxSchedRelease(Owner);
@@ -1547,15 +1620,28 @@ LX_SYSCALL(LxSysSetpriority)
         return -LX_EINVAL;
     if (Which != LX_PRIO_PROCESS)
     {
-        Call->Thread->Sched.Nice = Nice;
-        return 0;
+        /* FIXME: a process group or a user is treated as the calling thread alone */
+        Thread = Call->Thread;
+        Owner = NULL;
     }
-    Result = LxSchedTarget(Call, (LONG)Call->Args[1], &Thread, &Owner);
-    if (Result != 0)
-        return Result;
-    Thread->Sched.Nice = Nice;
+    else
+    {
+        Result = LxSchedTarget(Call, (LONG)Call->Args[1], &Thread, &Owner);
+        if (Result != 0)
+            return Result;
+    }
+    Result = 0;
+    if (!LxSchedCapable(Call, Thread->Process))
+    {
+        if (!LxSchedSameOwner(Call, Thread))
+            Result = -LX_EPERM;
+        else if ((Nice < Thread->Sched.Nice) && !LxSchedNiceAllowed(Thread->Process, Nice))
+            Result = -LX_EACCES;
+    }
+    if (Result == 0)
+        Thread->Sched.Nice = Nice;
     LxSchedRelease(Owner);
-    return 0;
+    return Result;
 }
 
 static
@@ -1566,9 +1652,32 @@ LxSchedPriorityLimit(
 {
     if ((Policy == 1) || (Policy == 2))
         return Maximum ? 99 : 1;
-    if ((Policy == 0) || (Policy == 3) || (Policy == 5) || (Policy == 6))
+    if ((Policy == 0) || (Policy == 3) || (Policy == 5) || (Policy == 6) || (Policy == LX_SCHED_EXT))
         return 0;
     return -LX_EINVAL;
+}
+
+LX_SYSCALL(LxSysSchedRrGetInterval)
+{
+    LX_TIMESPEC Interval = { 0, 0 };
+    PLX_PROCESS Owner;
+    PLX_THREAD Thread;
+    LONG64 Result;
+
+    Result = LxSchedTarget(Call, (LONG)Call->Args[0], &Thread, &Owner);
+    if (Result != 0)
+        return Result;
+    if (Thread->Sched.Policy == LX_SCHED_RR)
+    {
+        Interval.Nanoseconds = 100000000;
+    }
+    else if (Thread->Sched.Policy != LX_SCHED_FIFO)
+    {
+        /* FIXME: a thread of a normal policy reports one clock tick, not the slice the NT scheduler gives it */
+        Interval.Nanoseconds = (LONG64)KeQueryTimeIncrement() * 100;
+    }
+    LxSchedRelease(Owner);
+    return LxCopyToUser(Call->Args[1], &Interval, sizeof(Interval));
 }
 
 LX_SYSCALL(LxSysSchedGetPriorityMax)

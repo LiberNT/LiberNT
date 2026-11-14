@@ -997,6 +997,8 @@ typedef struct _LX_ROBUST_LIST_HEAD
 #define LX_RLIMIT_CORE      4
 #define LX_RLIMIT_NOFILE    7
 #define LX_RLIMIT_MEMLOCK   8
+#define LX_RLIMIT_NICE      13
+#define LX_RLIMIT_RTPRIO    14
 #define LX_RLIM_INFINITY    (~0ULL)
 
 typedef struct _LX_TIMESPEC

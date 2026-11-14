@@ -127,6 +127,7 @@ static LX_SYSCALL_ENTRY LxGenericSyscalls[] =
     LX_ENTRY(124, LxSysSchedYield, "sched_yield"),
     LX_ENTRY(125, LxSysSchedGetPriorityMax, "sched_get_priority_max"),
     LX_ENTRY(126, LxSysSchedGetPriorityMin, "sched_get_priority_min"),
+    LX_ENTRY(127, LxSysSchedRrGetInterval, "sched_rr_get_interval"),
     LX_ENTRY(129, LxSysKill, "kill"),
     LX_ENTRY(130, LxSysTkill, "tkill"),
     LX_ENTRY(131, LxSysTgkill, "tgkill"),

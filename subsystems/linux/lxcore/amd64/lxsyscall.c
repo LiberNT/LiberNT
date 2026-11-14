@@ -461,6 +461,7 @@ static LX_SYSCALL_ENTRY LxAmd64Syscalls[] =
     LX_ENTRY(145, LxSysSchedGetscheduler, "sched_getscheduler"),
     LX_ENTRY(146, LxSysSchedGetPriorityMax, "sched_get_priority_max"),
     LX_ENTRY(147, LxSysSchedGetPriorityMin, "sched_get_priority_min"),
+    LX_ENTRY(148, LxSysSchedRrGetInterval, "sched_rr_get_interval"),
     LX_ENTRY(149, LxSysMlock, "mlock"),
     LX_ENTRY(150, LxSysMunlock, "munlock"),
     LX_ENTRY(151, LxSysMlockall, "mlockall"),
