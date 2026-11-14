@@ -11,6 +11,7 @@
 SKIPLIST GlobalJobList;
 
 // Local Variables
+/* FIXME: IDs are handed out atomically, but the reserve-then-insert window and GlobalJobList itself stay unserialised; localspl has no critical section. */
 static DWORD _dwLastJobID;
 
 // Local Constants
@@ -72,21 +73,21 @@ _EqualStrings(PCWSTR pwszA, PCWSTR pwszB)
 static BOOL
 _GetNextJobID(PDWORD dwJobID)
 {
-    ++_dwLastJobID;
+    DWORD dwNextID = (DWORD)InterlockedIncrement((volatile LONG *)&_dwLastJobID);
 
-    while (LookupElementSkiplist(&GlobalJobList, &_dwLastJobID, NULL))
+    while (LookupElementSkiplist(&GlobalJobList, &dwNextID, NULL))
     {
         // This ID is already taken. Try the next one.
-        ++_dwLastJobID;
+        dwNextID = (DWORD)InterlockedIncrement((volatile LONG *)&_dwLastJobID);
     }
 
-    if (!IS_VALID_JOB_ID(_dwLastJobID))
+    if (!IS_VALID_JOB_ID(dwNextID))
     {
-        ERR("Job ID %lu isn't valid!\n", _dwLastJobID);
+        ERR("Job ID %lu isn't valid!\n", dwNextID);
         return FALSE;
     }
 
-    *dwJobID = _dwLastJobID;
+    *dwJobID = dwNextID;
     return TRUE;
 }
 

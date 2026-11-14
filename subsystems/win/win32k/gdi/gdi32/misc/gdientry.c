@@ -1478,7 +1478,7 @@ DdCreateDirectDrawObject(LPDDRAWI_DIRECTDRAW_GBL pDirectDrawGlobal,
         if (ghDirectDraw)
         {
             /* Increase count and set success */
-            gcDirectDraw++;
+            InterlockedIncrement((volatile LONG *)&gcDirectDraw);
             Return = TRUE;
         }
 
@@ -1848,7 +1848,7 @@ DdDeleteDirectDrawObject(LPDDRAWI_DIRECTDRAW_GBL pDirectDrawGlobal)
         Return = TRUE;
 
         /* Make sure this is the last instance */
-        if (!(--gcDirectDraw))
+        if (InterlockedDecrement((volatile LONG *)&gcDirectDraw) == 0)
         {
             /* Delete the object */
             Return = NtGdiDdDeleteDirectDrawObject(ghDirectDraw);

@@ -19,6 +19,7 @@ typedef struct _FORM_INFO_LIST
 } FORM_INFO_LIST, *PFORM_INFO_LIST;
 
 LIST_ENTRY FormList;
+/* FIXME: indices are handed out atomically, but the form list itself stays unserialised; localspl has no critical section. */
 static DWORD _dwLastForm;
 
 // Local Constants
@@ -276,7 +277,7 @@ InitializeFormList(VOID)
             pfil->Size          = BuiltInForms[ i ].Size;
             pfil->ImageableArea = BuiltInForms[ i ].ImageableArea;
             pfil->Sig           = FORMINFOSIG;
-            pfil->Index         = _dwLastForm++;
+            pfil->Index         = (DWORD)InterlockedIncrement((volatile LONG *)&_dwLastForm) - 1;
             pfil->pKeyword      = NULL;
             pfil->StringType    = STRING_NONE;
             pfil->pMuiDll       = NULL;
@@ -463,7 +464,7 @@ LocalAddForm(HANDLE hPrinter, DWORD Level, PBYTE pForm)
     }
 
     pfil->Sig           = FORMINFOSIG;
-    pfil->Index         = _dwLastForm++;
+    pfil->Index         = (DWORD)InterlockedIncrement((volatile LONG *)&_dwLastForm) - 1;
     pfil->pName         = wcscpy( (PWSTR)(pfil+1), pfi1w->pName );
     pfil->Flags         = pfi1w->Flags;
     pfil->Size          = pfi1w->Size;
