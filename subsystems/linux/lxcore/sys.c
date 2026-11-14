@@ -139,6 +139,87 @@ LxQueryRealtime(
     LxNtTimeToTimespec(Now.QuadPart, Timespec);
 }
 
+#define LX_CPUCLOCK_PROF        0
+#define LX_CPUCLOCK_VIRT        1
+#define LX_CPUCLOCK_SCHED       2
+#define LX_CPUCLOCK_FD          3
+#define LX_CPUCLOCK_WHICH_MASK  3
+#define LX_CPUCLOCK_PERTHREAD   4
+
+LONG
+LxQueryCpuClock(
+    _In_opt_ PLX_PROCESS Viewer,
+    _In_ LONG Clock,
+    _Out_ PLX_TIMESPEC Timespec)
+{
+    ULONG Which = (ULONG)Clock & LX_CPUCLOCK_WHICH_MASK;
+    LONG Id = ~(Clock >> 3);
+    LONG64 User = 0, Kernel = 0, Time;
+
+    ASSERT(Clock < 0);
+    if ((Which == LX_CPUCLOCK_FD) || (Id < 0) || (Viewer == NULL))
+        return -LX_EINVAL;
+
+    if (Clock & LX_CPUCLOCK_PERTHREAD)
+    {
+        PETHREAD EThread = NULL;
+
+        if (Id == 0)
+        {
+            EThread = PsGetCurrentThread();
+            ObReferenceObject(EThread);
+        }
+        else
+        {
+            PLX_PROCESS Owner;
+            PLX_THREAD Thread = LxThreadLookupNr(Viewer, (ULONG)Id, &Owner);
+            BOOLEAN Sibling;
+
+            if (Thread == NULL)
+                return -LX_EINVAL;
+            Sibling = (Owner == Viewer);
+            if (Sibling)
+            {
+                ExAcquireFastMutex(&Owner->Lock);
+                EThread = Thread->EThread;
+                if (EThread != NULL)
+                    ObReferenceObject(EThread);
+                ExReleaseFastMutex(&Owner->Lock);
+            }
+            LxProcessDereference(Owner);
+            if (!Sibling)
+                return -LX_EINVAL;
+        }
+        if (EThread != NULL)
+        {
+            ULONG UserTicks = 0;
+            ULONG KernelTicks = KeQueryRuntimeThread(&EThread->Tcb, &UserTicks);
+
+            User = (LONG64)UserTicks * KeQueryTimeIncrement();
+            Kernel = (LONG64)KernelTicks * KeQueryTimeIncrement();
+            ObDereferenceObject(EThread);
+        }
+    }
+    else
+    {
+        PLX_PROCESS Target = (Id == 0) ? Viewer : LxProcessLookupNr(Viewer, (ULONG)Id);
+        LX_USAGE Usage;
+
+        if (Target == NULL)
+            return -LX_EINVAL;
+        LxProcessUsage(Target, NULL, &Usage);
+        User = Usage.UserTime;
+        Kernel = Usage.KernelTime;
+        if (Id != 0)
+            LxProcessDereference(Target);
+    }
+
+    Time = (Which == LX_CPUCLOCK_VIRT) ? User : (User + Kernel);
+    Timespec->Seconds = Time / 10000000;
+    Timespec->Nanoseconds = (Time % 10000000) * 100;
+    return 0;
+}
+
 LONG
 LxQueryClock(
     _In_ ULONG Clock,
@@ -148,6 +229,7 @@ LxQueryClock(
     {
         case LX_CLOCK_REALTIME:
         case LX_CLOCK_REALTIME_COARSE:
+        case LX_CLOCK_REALTIME_ALARM:
         case LX_CLOCK_TAI:
             LxQueryRealtime(Timespec);
             return 0;
@@ -156,6 +238,7 @@ LxQueryClock(
         case LX_CLOCK_MONOTONIC_RAW:
         case LX_CLOCK_MONOTONIC_COARSE:
         case LX_CLOCK_BOOTTIME:
+        case LX_CLOCK_BOOTTIME_ALARM:
             LxQueryMonotonic(Timespec);
             return 0;
 
@@ -670,11 +753,24 @@ LX_SYSCALL(LxSysClockGettime)
 LX_SYSCALL(LxSysClockGetres)
 {
     LX_TIMESPEC Resolution = { 0, 1 };
+    LONG Clock = (LONG)Call->Args[0];
 
-    if ((Call->Args[0] > LX_CLOCK_BOOTTIME) && (Call->Args[0] != LX_CLOCK_TAI))
+    if (Clock < 0)
+    {
+        LX_TIMESPEC Probe;
+        LONG Error = LxQueryCpuClock(Call->Process, Clock, &Probe);
+
+        if (Error != 0)
+            return Error;
+        if ((Clock & LX_CPUCLOCK_WHICH_MASK) != LX_CPUCLOCK_SCHED)
+            Resolution.Nanoseconds = (LONG64)KeQueryTimeIncrement() * 100;
+    }
+    else if (!LxClockKnown((ULONG64)Clock))
+    {
         return -LX_EINVAL;
-    if ((Call->Args[0] == LX_CLOCK_REALTIME) || (Call->Args[0] == LX_CLOCK_REALTIME_COARSE) ||
-        (Call->Args[0] == LX_CLOCK_TAI))
+    }
+    if ((Clock == LX_CLOCK_REALTIME) || (Clock == LX_CLOCK_REALTIME_COARSE) || (Clock == LX_CLOCK_REALTIME_ALARM) ||
+        (Clock == LX_CLOCK_TAI))
         Resolution.Nanoseconds = 100;
     if (Call->Args[1] == 0)
         return 0;

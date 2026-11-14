@@ -785,9 +785,12 @@ LxQueryClockIn(
     _In_ ULONG Clock,
     _Out_ PLX_TIMESPEC Timespec)
 {
-    LONG Error = LxQueryClock(Clock, Timespec);
+    LONG Error;
     LONG64 Offset;
 
+    if ((LONG)Clock < 0)
+        return LxQueryCpuClock(Process, (LONG)Clock, Timespec);
+    Error = LxQueryClock(Clock, Timespec);
     if (Error != 0)
         return Error;
     Offset = LxTimeNsOffset(Process, Clock);

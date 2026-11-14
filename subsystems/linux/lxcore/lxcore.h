@@ -1207,6 +1207,7 @@ VOID LxNsInstanceShutdown(_In_ PLX_INSTANCE Instance);
 PCSTR LxNsName(_In_ LX_NS_KIND Kind);
 LONG64 LxTimeNsOffset(_In_opt_ PLX_PROCESS Process, _In_ ULONG Clock);
 LONG LxQueryClockIn(_In_opt_ PLX_PROCESS Process, _In_ ULONG Clock, _Out_ PLX_TIMESPEC Timespec);
+LONG LxQueryCpuClock(_In_opt_ PLX_PROCESS Viewer, _In_ LONG Clock, _Out_ PLX_TIMESPEC Timespec);
 LONG LxNsInheritProcess(_Inout_ PLX_PROCESS Child, _In_ PLX_PROCESS Parent, _In_ ULONG64 Flags);
 VOID LxNsAttachRoot(_Inout_ PLX_PROCESS Process, _In_ PLX_INSTANCE Instance);
 VOID LxNsReleaseProcess(_Inout_ PLX_PROCESS Process);
