@@ -21,6 +21,8 @@
 #define RTLP_LFH_USAGE_LIMIT 0x10
 #define RTLP_LFH_USAGE_MAX 0xFFDE
 #define RTLP_LFH_NO_SLOT 0xFFFFFFFF
+#define RTLP_LFH_AFFINITY_SLOTS 16
+#define RTLP_LFH_AFFINITY_CONTENTION 64
 
 typedef struct _RTLP_LFH_USER_BLOCK
 {
@@ -51,10 +53,17 @@ typedef struct _RTLP_LFH_BUCKET
 {
     LIST_ENTRY UserBlocks;
     ULONG BlockCount;
+    volatile LONG Contention;
     PRTLP_LFH_USER_BLOCK volatile Active;
     PRTLP_LFH_USER_BLOCK volatile PartialList;
     PRTLP_LFH_USER_BLOCK Spare;
+    PRTLP_LFH_USER_BLOCK volatile *volatile Affinity;
 } RTLP_LFH_BUCKET, *PRTLP_LFH_BUCKET;
+
+C_ASSERT((RTLP_LFH_AFFINITY_SLOTS & (RTLP_LFH_AFFINITY_SLOTS - 1)) == 0);
+C_ASSERT(RTLP_LFH_AFFINITY_SLOTS <= MAXUSHORT);
+
+static volatile LONG RtlpLfhNextAffinitySlot;
 
 typedef struct _RTLP_LFH_HEAP
 {
@@ -64,6 +73,9 @@ typedef struct _RTLP_LFH_HEAP
     SIZE_T CommittedSize;
     RTLP_LFH_BUCKET Buckets[HEAP_LFH_BUCKETS];
 } RTLP_LFH_HEAP, *PRTLP_LFH_HEAP;
+
+C_ASSERT(sizeof(RTLP_LFH_HEAP) <= RTLP_LFH_RESERVE);
+C_ASSERT(HEAP_LFH_MAX_BLOCK + HEAP_ENTRY_SIZE <= 0xFFFF);
 
 static
 SIZE_T
@@ -268,6 +280,8 @@ RtlpLfhUsageDataSize(PHEAP Heap, ULONG Flags, PRTL_HEAP_PARAMETERS Parameters)
         return 0;
     if (Flags & (HEAP_NO_SERIALIZE | HEAP_TAIL_CHECKING_ENABLED | HEAP_FREE_CHECKING_ENABLED))
         return 0;
+    if (!(Flags & HEAP_GROWABLE))
+        return 0;
     if ((Flags & HEAP_CREATE_ALIGN_16) && sizeof(HEAP_ENTRY) < 16)
         return 0;
     if (RtlpHeapIsSpecial(Flags))
@@ -382,10 +396,9 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
     if (Count < RTLP_LFH_MIN_SLOTS)
         Count = RTLP_LFH_MIN_SLOTS;
     Bytes = Header + Count * SlotSize + HEAP_ENTRY_SIZE;
-    if (Bytes <= HEAP_LFH_MAX_BLOCK)
-        Bytes = HEAP_LFH_MAX_BLOCK + HEAP_ENTRY_SIZE;
 
-    Block = RtlAllocateHeap(Heap, 0, Bytes);
+    /* The refill holds the heap lock; HEAP_NO_SERIALIZE keeps the block itself out of the front end. */
+    Block = RtlAllocateHeap(Heap, HEAP_NO_SERIALIZE, Bytes);
     if (!Block)
         return NULL;
 
@@ -414,20 +427,23 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
 
 static
 PVOID
-RtlpLfhPopSlot(PRTLP_LFH_USER_BLOCK Block, SIZE_T Size, ULONG Flags)
+RtlpLfhPopSlot(PRTLP_LFH_USER_BLOCK Block, SIZE_T Size, ULONG Flags, PULONG Collisions)
 {
     PHEAP_ENTRY Entry;
     LONGLONG Old, New;
     ULONG Head;
 
-    do
+    for (;;)
     {
         Old = RtlpLfhReadFreeState(Block);
         Head = (ULONG)Old;
         if (Head == RTLP_LFH_NO_SLOT)
             return NULL;
         New = RtlpLfhNextFreeState(Old, *(volatile ULONG *)(RtlpLfhSlotEntry(Block, Head) + 1));
-    } while (InterlockedCompareExchange64(&Block->FreeState, New, Old) != Old);
+        if (InterlockedCompareExchange64(&Block->FreeState, New, Old) == Old)
+            break;
+        (*Collisions)++;
+    }
 
     Entry = RtlpLfhSlotEntry(Block, Head);
     Entry->Flags = HEAP_ENTRY_BUSY | (UCHAR)((Flags & HEAP_SETTABLE_USER_FLAGS) >> 4);
@@ -472,13 +488,63 @@ RtlpLfhTakePartial(PRTLP_LFH_BUCKET BucketData)
 }
 
 static
+PRTLP_LFH_USER_BLOCK volatile *
+RtlpLfhActiveSlot(PRTLP_LFH_BUCKET BucketData)
+{
+    PRTLP_LFH_USER_BLOCK volatile *Affinity;
+    PTEB Teb;
+    ULONG Slot;
+
+    Affinity = ReadPointerAcquire((PVOID const volatile *)&BucketData->Affinity);
+    if (!Affinity)
+        return &BucketData->Active;
+
+    Teb = NtCurrentTeb();
+    Slot = Teb->LowFragHeapDataSlot;
+    if (Slot == 0 || Slot > RTLP_LFH_AFFINITY_SLOTS)
+    {
+        Slot = ((ULONG)InterlockedIncrement(&RtlpLfhNextAffinitySlot) & (RTLP_LFH_AFFINITY_SLOTS - 1)) + 1;
+        Teb->LowFragHeapDataSlot = (USHORT)Slot;
+    }
+
+    ASSERT(Slot >= 1 && Slot <= RTLP_LFH_AFFINITY_SLOTS);
+    return &Affinity[Slot - 1];
+}
+
+static
+VOID
+RtlpLfhEnableAffinity(PHEAP Heap, PRTLP_LFH_BUCKET BucketData)
+{
+    PRTLP_LFH_USER_BLOCK volatile *Affinity;
+
+    RtlEnterHeapLock(Heap->LockVariable, TRUE);
+    if (!BucketData->Affinity)
+    {
+        Affinity = RtlAllocateHeap(Heap, HEAP_NO_SERIALIZE | HEAP_ZERO_MEMORY,
+                                   RTLP_LFH_AFFINITY_SLOTS * sizeof(PRTLP_LFH_USER_BLOCK));
+        if (Affinity)
+        {
+            Affinity[0] = BucketData->Active;
+            InterlockedExchangePointer((PVOID volatile *)&BucketData->Affinity, (PVOID)Affinity);
+        }
+    }
+    RtlLeaveHeapLock(Heap->LockVariable);
+}
+
+static
 BOOLEAN
-RtlpLfhRefill(PHEAP Heap, PRTLP_LFH_BUCKET BucketData, ULONG Bucket, SIZE_T SlotSize, PRTLP_LFH_USER_BLOCK Empty)
+RtlpLfhRefill(PHEAP Heap, PRTLP_LFH_BUCKET BucketData, ULONG Bucket, SIZE_T SlotSize,
+              PRTLP_LFH_USER_BLOCK Empty, PRTLP_LFH_USER_BLOCK volatile *Slot)
 {
     PRTLP_LFH_USER_BLOCK Block;
 
     RtlEnterHeapLock(Heap->LockVariable, TRUE);
-    Block = BucketData->Active;
+    if (Slot == &BucketData->Active && BucketData->Affinity)
+    {
+        RtlLeaveHeapLock(Heap->LockVariable);
+        return TRUE;
+    }
+    Block = *Slot;
     if (Block == Empty)
     {
         Block = RtlpLfhTakePartial(BucketData);
@@ -494,7 +560,7 @@ RtlpLfhRefill(PHEAP Heap, PRTLP_LFH_BUCKET BucketData, ULONG Bucket, SIZE_T Slot
         }
 
         if (Block)
-            InterlockedExchangePointer((PVOID *)&BucketData->Active, Block);
+            InterlockedExchangePointer((PVOID volatile *)Slot, Block);
     }
     RtlLeaveHeapLock(Heap->LockVariable);
     return Block != NULL;
@@ -506,6 +572,8 @@ RtlpLfhAllocate(PHEAP Heap, ULONG Flags, SIZE_T Size)
     PRTLP_LFH_HEAP Lfh;
     PRTLP_LFH_BUCKET BucketData;
     PRTLP_LFH_USER_BLOCK Block;
+    PRTLP_LFH_USER_BLOCK volatile *Slot;
+    ULONG Collisions = 0;
     ULONG Bucket;
     SIZE_T SlotSize;
     PVOID Ptr;
@@ -537,14 +605,22 @@ RtlpLfhAllocate(PHEAP Heap, ULONG Flags, SIZE_T Size)
 
     SlotSize = RtlpLfhSlotSize(Size);
     BucketData = &Lfh->Buckets[Bucket];
+    Slot = RtlpLfhActiveSlot(BucketData);
 
     for (;;)
     {
-        Block = ReadPointerAcquire((PVOID const volatile *)&BucketData->Active);
-        if (Block && (Ptr = RtlpLfhPopSlot(Block, Size, Flags)))
+        Block = ReadPointerAcquire((PVOID const volatile *)Slot);
+        if (Block && (Ptr = RtlpLfhPopSlot(Block, Size, Flags, &Collisions)))
             break;
-        if (!RtlpLfhRefill(Heap, BucketData, Bucket, SlotSize, Block))
+        if (!RtlpLfhRefill(Heap, BucketData, Bucket, SlotSize, Block, Slot))
             return NULL;
+        Slot = RtlpLfhActiveSlot(BucketData);
+    }
+
+    if (Collisions != 0 && !BucketData->Affinity &&
+        InterlockedAdd(&BucketData->Contention, (LONG)Collisions) >= RTLP_LFH_AFFINITY_CONTENTION)
+    {
+        RtlpLfhEnableAffinity(Heap, BucketData);
     }
 
     if (Flags & HEAP_ZERO_MEMORY)
