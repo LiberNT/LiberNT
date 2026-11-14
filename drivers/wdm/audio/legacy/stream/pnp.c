@@ -79,6 +79,8 @@ StreamClassInterruptDpc(
 {
     //TODO
     //read/write data
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 }
 
 

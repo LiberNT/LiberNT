@@ -110,6 +110,8 @@ RhFindConnectionLocked(
 {
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Link = RhConnectionList.Flink; Link != &RhConnectionList; Link = Link->Flink)
     {
         PRH_CONNECTION_ENTRY Entry = CONTAINING_RECORD(Link, RH_CONNECTION_ENTRY, ListEntry);

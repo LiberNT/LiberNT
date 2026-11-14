@@ -75,6 +75,8 @@ JhWdtRelock(_In_ PJH7110WDT_EXTENSION Extension)
 static VOID
 JhWdtHaltLocked(_In_ PJH7110WDT_EXTENSION Extension)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     Extension->Armed = FALSE;
     JhWdtUnlock(Extension);
     JhWdtWrite(Extension, JH_WDT_CONTROL, JhWdtRead(Extension, JH_WDT_CONTROL) & ~JH_WDT_CONTROL_ENABLE);
@@ -103,6 +105,8 @@ JhWdtDisarm(_In_ PJH7110WDT_EXTENSION Extension)
 static VOID
 JhWdtFeedLocked(_In_ PJH7110WDT_EXTENSION Extension)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     JhWdtUnlock(Extension);
     JhWdtWrite(Extension, JH_WDT_INTCLR, JH_WDT_INTCLR_CLEAR);
     JhWdtWrite(Extension, JH_WDT_LOAD, (ULONG)(JH_WDT_TIMEOUT_SECONDS * JH_WDT_HZ / 2));
@@ -117,6 +121,8 @@ JhWdtPing(_In_ PKDPC Dpc, _In_opt_ PVOID Context, _In_opt_ PVOID Argument1, _In_
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     KeAcquireSpinLockAtDpcLevel(&Extension->Lock);
     if (Extension->Armed)

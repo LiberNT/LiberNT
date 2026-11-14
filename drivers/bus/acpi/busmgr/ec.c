@@ -264,6 +264,8 @@ acpi_ec_query_retry_dpc(PKDPC Dpc, PVOID DeferredContext,
 	UNREFERENCED_PARAMETER(SystemArgument1);
 	UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
 	if (InterlockedCompareExchange(&ec->query_stopping, 0, 0) != 0)
 		return;
 

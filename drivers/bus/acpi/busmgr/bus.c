@@ -586,6 +586,8 @@ acpi_bus_generate_event_dpc(PKDPC Dpc,
                             PVOID SystemArgument1,
                             PVOID SystemArgument2)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
 	for (;;)
 	{
 		LONG Next = -1;

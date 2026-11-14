@@ -88,6 +88,8 @@ K1WdtPing(_In_ PKDPC Dpc, _In_opt_ PVOID Context, _In_opt_ PVOID Argument1, _In_
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&Extension->Lock);
     if (Extension->Armed)
     {

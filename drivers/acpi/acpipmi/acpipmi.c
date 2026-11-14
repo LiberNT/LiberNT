@@ -178,6 +178,8 @@ AcpiPmiTakePendingEventLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Index < PmiEventMax; Index++)
     {
         if (FileContext->PendingEventMask & (1UL << Index))

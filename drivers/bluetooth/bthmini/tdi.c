@@ -190,6 +190,8 @@ BthTdiRadioIndexLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Dev && Index < BTHTDI_MAX_RADIOS; Index++)
     {
         if (BthTdiRadios[Index] == Dev)
@@ -205,6 +207,8 @@ BthTdiRadioByAddressLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Index < BTHTDI_MAX_RADIOS; Index++)
     {
         if (BthTdiRadios[Index] && BthTdiRadios[Index]->Address == Address)
@@ -219,6 +223,8 @@ BthTdiRadioForRemoteLocked(
     _In_ BTH_ADDR Address)
 {
     ULONG Index;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Index = 0; Index < BTHTDI_MAX_KEYED; Index++)
     {
@@ -306,6 +312,8 @@ BthTdiParkLocked(
     _In_ PLIST_ENTRY List,
     _Inout_ PIRP Irp)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     InsertTailList(List, &Irp->Tail.Overlay.ListEntry);
     IoSetCancelRoutine(Irp, BthTdiCancel);
     if (Irp->Cancel && IoSetCancelRoutine(Irp, NULL))
@@ -322,6 +330,8 @@ PIRP
 BthTdiTakeLocked(
     _In_ PLIST_ENTRY List)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while (!IsListEmpty(List))
     {
         PIRP Irp = CONTAINING_RECORD(RemoveHeadList(List), IRP, Tail.Overlay.ListEntry);
@@ -1663,6 +1673,8 @@ BthTdiRouteLocked(
     PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
     PBTHTDI_ADDRESS Address = Connection->Address;
     PBTHMINI_DEVICE Dev;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (BthTdiRadioIndexLocked(Connection->Dev) >= 0)
         return Connection->Dev;

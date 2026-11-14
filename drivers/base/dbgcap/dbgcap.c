@@ -261,6 +261,8 @@ DbgCapDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeSetEvent(&DbgCap.DataEvent, IO_NO_INCREMENT, FALSE);
 }
 

@@ -484,6 +484,8 @@ SerialCompleteWait(
 
     extension = SerialGetDeviceExtension(WdfDpcGetParentObject(Dpc));
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     TraceEvents(TRACE_LEVEL_INFORMATION, DBG_IOCTLS,
                 "++SerialCompleteWait(%p)\r\n",
                 extension);
