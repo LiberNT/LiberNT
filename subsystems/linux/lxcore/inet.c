@@ -50,6 +50,7 @@ typedef struct _LX_INET_SOCKET
     volatile LONG RefCount;
     KEVENT Lock;
     KEVENT ReceiveGate;
+    EX_RUNDOWN_REF EndpointRundown;
     HANDLE Handle;
     PFILE_OBJECT FileObject;
     PDEVICE_OBJECT DeviceObject;
@@ -80,7 +81,18 @@ typedef struct _LX_INET_SOCKET
     LIST_ENTRY BoundLink;
     USHORT BoundPort;
     ULONG QueuedAtConnect;
+    BOOLEAN PortLocked;
+    LIST_ENTRY Carried;
+    ULONG CarriedBytes;
 } LX_INET_SOCKET, *PLX_INET_SOCKET;
+
+typedef struct _LX_INET_CARRIED
+{
+    LIST_ENTRY Link;
+    TA_IP_ADDRESS Source;
+    ULONG Length;
+    UCHAR Data[ANYSIZE_ARRAY];
+} LX_INET_CARRIED, *PLX_INET_CARRIED;
 
 typedef struct _LX_INET_WORK
 {
@@ -211,10 +223,36 @@ LxInetErrno(
     }
 }
 
+/* Holds the socket's NT endpoint in place; fails only once the socket is closing */
+static
+BOOLEAN
+LxInetEndpointEnter(
+    _In_ PLX_INET_SOCKET Socket)
+{
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    while (!ExAcquireRundownProtection(&Socket->EndpointRundown))
+    {
+        if (Socket->Closing)
+            return FALSE;
+        LxInetLock(Socket);
+        LxInetUnlock(Socket);
+    }
+    return TRUE;
+}
+
+static
+VOID
+LxInetEndpointLeave(
+    _In_ PLX_INET_SOCKET Socket)
+{
+    ExReleaseRundownProtection(&Socket->EndpointRundown);
+}
+
 static
 NTSTATUS
-LxAfdIoctl(
-    _In_ PLX_INET_SOCKET Socket,
+LxAfdIoctlHandle(
+    _In_ HANDLE Handle,
     _In_ ULONG Code,
     _In_opt_ PVOID Input,
     _In_ ULONG InputLength,
@@ -226,11 +264,35 @@ LxAfdIoctl(
     NTSTATUS Status;
 
     Iosb.Information = 0;
-    Status = ZwDeviceIoControlFile(Socket->Handle, NULL, NULL, NULL, &Iosb, Code, Input, InputLength, Output, OutputLength);
+    Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &Iosb, Code, Input, InputLength, Output, OutputLength);
     if (Status == STATUS_PENDING)
         Status = Iosb.Status;
     if (Information != NULL)
         *Information = Iosb.Information;
+    return Status;
+}
+
+static
+NTSTATUS
+LxAfdIoctl(
+    _In_ PLX_INET_SOCKET Socket,
+    _In_ ULONG Code,
+    _In_opt_ PVOID Input,
+    _In_ ULONG InputLength,
+    _Out_opt_ PVOID Output,
+    _In_ ULONG OutputLength,
+    _Out_opt_ PULONG_PTR Information)
+{
+    NTSTATUS Status;
+
+    if (!LxInetEndpointEnter(Socket))
+    {
+        if (Information != NULL)
+            *Information = 0;
+        return STATUS_FILE_CLOSED;
+    }
+    Status = LxAfdIoctlHandle(Socket->Handle, Code, Input, InputLength, Output, OutputLength, Information);
+    LxInetEndpointLeave(Socket);
     return Status;
 }
 
@@ -285,6 +347,43 @@ LxAfdCreate(
 }
 
 static
+NTSTATUS
+LxAfdOpenEndpoint(
+    _In_ ULONG Type,
+    _Out_ PHANDLE Handle,
+    _Out_ PFILE_OBJECT *FileObject)
+{
+    AFD_INFO Info;
+    NTSTATUS Status;
+
+    *Handle = NULL;
+    *FileObject = NULL;
+    Status = LxAfdCreate(Type, Handle);
+    if (!NT_SUCCESS(Status))
+    {
+        *Handle = NULL;
+        return Status;
+    }
+    Status = ObReferenceObjectByHandle(*Handle, 0, *IoFileObjectType, KernelMode, (PVOID*)FileObject, NULL);
+    if (NT_SUCCESS(Status))
+    {
+        RtlZeroMemory(&Info, sizeof(Info));
+        Info.InformationClass = AFD_INFO_BLOCKING_MODE;
+        Info.Information.Boolean = TRUE;
+        Status = LxAfdIoctlHandle(*Handle, IOCTL_AFD_SET_INFO, &Info, sizeof(Info), NULL, 0, NULL);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        if (*FileObject != NULL)
+            ObDereferenceObject(*FileObject);
+        ZwClose(*Handle);
+        *Handle = NULL;
+        *FileObject = NULL;
+    }
+    return Status;
+}
+
+static
 PLX_INET_SOCKET
 LxInetCreate(
     _In_ ULONG Family,
@@ -293,7 +392,6 @@ LxInetCreate(
     _Out_ PLONG Error)
 {
     PLX_INET_SOCKET Socket = LxAlloc(sizeof(*Socket));
-    AFD_INFO Info;
     NTSTATUS Status;
 
     if (Socket == NULL)
@@ -304,8 +402,10 @@ LxInetCreate(
 
     Socket->RefCount = 1;
     InitializeListHead(&Socket->BoundLink);
+    InitializeListHead(&Socket->Carried);
     KeInitializeEvent(&Socket->Lock, SynchronizationEvent, TRUE);
     KeInitializeEvent(&Socket->ReceiveGate, SynchronizationEvent, TRUE);
+    ExInitializeRundownProtection(&Socket->EndpointRundown);
     KeInitializeSpinLock(&Socket->SelectLock);
     LxPollHeadInit(&Socket->Poll);
     Socket->Family = Family;
@@ -313,25 +413,12 @@ LxInetCreate(
     Socket->Protocol = Protocol;
     Socket->Ino = (ULONG64)InterlockedIncrement64(&LxInetInode);
 
-    Status = LxAfdCreate(Type, &Socket->Handle);
+    Status = LxAfdOpenEndpoint(Type, &Socket->Handle, &Socket->FileObject);
     if (NT_SUCCESS(Status))
-    {
-        Status = ObReferenceObjectByHandle(Socket->Handle, 0, *IoFileObjectType, KernelMode,
-                                           (PVOID*)&Socket->FileObject, NULL);
-    }
-    if (NT_SUCCESS(Status))
-    {
         Socket->DeviceObject = IoGetRelatedDeviceObject(Socket->FileObject);
-        RtlZeroMemory(&Info, sizeof(Info));
-        Info.InformationClass = AFD_INFO_BLOCKING_MODE;
-        Info.Information.Boolean = TRUE;
-        Status = LxAfdIoctl(Socket, IOCTL_AFD_SET_INFO, &Info, sizeof(Info), NULL, 0, NULL);
-    }
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("Linux socket cannot open an AFD endpoint: 0x%08lx\n", Status);
-        if (Socket->Handle != NULL)
-            ZwClose(Socket->Handle);
         LxInetDereference(Socket);
         *Error = (Status == STATUS_OBJECT_NAME_NOT_FOUND) ? -LX_EAFNOSUPPORT : -LxInetErrno(Status);
         return NULL;
@@ -698,6 +785,11 @@ LxInetArmWith(
     Select = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Select), LX_TAG);
     if (Select == NULL)
         return;
+    if (!LxInetEndpointEnter(Socket))
+    {
+        ExFreePoolWithTag(Select, LX_TAG);
+        return;
+    }
     Select->Socket = Socket;
     Select->Mask = Wanted;
     Select->Info.Timeout.QuadPart = -36000000000LL;
@@ -708,12 +800,14 @@ LxInetArmWith(
     Irp = LxInetBuildIrp(Socket, IOCTL_AFD_SELECT, &Select->Info, sizeof(Select->Info), LxInetSelectComplete, Select);
     if (Irp == NULL)
     {
+        LxInetEndpointLeave(Socket);
         ExFreePoolWithTag(Select, LX_TAG);
         return;
     }
     LxInetWatch(Socket, Wanted, TRUE);
     LxInetReference(Socket);
     IoCallDriver(Socket->DeviceObject, Irp);
+    LxInetEndpointLeave(Socket);
 }
 
 static
@@ -824,7 +918,27 @@ LxInetTransfer(
             Info.AddressLength = &AddressLength;
             if (!(Flags & LX_INET_GATE_HELD))
                 KeWaitForSingleObject(&Socket->ReceiveGate, Executive, KernelMode, FALSE, NULL);
-            Status = LxAfdIoctl(Socket, IOCTL_AFD_RECV_DATAGRAM, &Info, sizeof(Info), NULL, 0, &Information);
+            if (!IsListEmpty(&Socket->Carried))
+            {
+                PLX_INET_CARRIED Item = CONTAINING_RECORD(Socket->Carried.Flink, LX_INET_CARRIED, Link);
+
+                Information = min(Item->Length, Length);
+                RtlCopyMemory(Buffer, Item->Data, Information);
+                if (Address != NULL)
+                    *Address = Item->Source;
+                Status = (Item->Length > Length) ? STATUS_BUFFER_OVERFLOW : STATUS_SUCCESS;
+                if (!(Flags & LX_MSG_PEEK))
+                {
+                    ASSERT(Socket->CarriedBytes >= Item->Length);
+                    Socket->CarriedBytes -= Item->Length;
+                    RemoveEntryList(&Item->Link);
+                    LxFreePaged(Item);
+                }
+            }
+            else
+            {
+                Status = LxAfdIoctl(Socket, IOCTL_AFD_RECV_DATAGRAM, &Info, sizeof(Info), NULL, 0, &Information);
+            }
             if (!(Flags & LX_INET_GATE_HELD))
                 KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
             if ((Status == STATUS_BUFFER_OVERFLOW) && (Truncated != NULL))
@@ -986,6 +1100,7 @@ LxInetBindAddress(
 {
     UCHAR Buffer[FIELD_OFFSET(AFD_BIND_DATA, Address) + sizeof(TA_IP_ADDRESS)];
     PAFD_BIND_DATA Bind = (PAFD_BIND_DATA)Buffer;
+    ULONG Previous = Socket->BoundAddress;
     NTSTATUS Status;
 
     if (!LxInetClaimPort(Socket, Address, Port))
@@ -997,6 +1112,7 @@ LxInetBindAddress(
     if (!NT_SUCCESS(Status))
     {
         LxInetReleasePort(Socket);
+        Socket->BoundAddress = Previous;
         /* A sharing socket refused by an exclusive owner of the address is a busy address to Linux */
         if ((Status == STATUS_ACCESS_DENIED) && Socket->ReuseAddress)
             return -LX_EADDRINUSE;
@@ -1033,8 +1149,104 @@ LxInetBind(
         return Error;
     LxInetLock(Socket);
     Error = (Socket->State != LX_INET_CREATED) ? -LX_EINVAL : LxInetBindAddress(Socket, Address, Port);
+    if ((Error == 0) && (Port != 0))
+        Socket->PortLocked = TRUE;
     LxInetUnlock(Socket);
     return Error;
+}
+
+/* Moves the datagrams a read would still deliver off the endpoint, so that they outlive it */
+static
+VOID
+LxInetCarryQueued(
+    _In_ PLX_FILE File,
+    _In_ PLX_INET_SOCKET Socket)
+{
+    PUCHAR Bounce = LxAllocPaged(65536);
+    TA_IP_ADDRESS Source;
+    PLX_INET_CARRIED Item;
+    BOOLEAN Truncated;
+    LIST_ENTRY Taken;
+    LONG64 Received;
+
+    if (Bounce == NULL)
+        return;
+    InitializeListHead(&Taken);
+    KeWaitForSingleObject(&Socket->ReceiveGate, Executive, KernelMode, FALSE, NULL);
+    for (;;)
+    {
+        RtlZeroMemory(&Source, sizeof(Source));
+        Received = LxInetTransfer(File, Socket, FALSE, Bounce, 65536, LX_MSG_DONTWAIT | LX_INET_GATE_HELD, &Source,
+                                  &Truncated);
+        if (Received < 0)
+            break;
+        if (Socket->QueuedAtConnect != 0)
+        {
+            Socket->QueuedAtConnect -= min(Socket->QueuedAtConnect, (ULONG)Received);
+        }
+        else if (Socket->PeerValid && ((((PLX_SOCKADDR_IN)&Source)->Address != Socket->PeerAddress) ||
+                                       (((PLX_SOCKADDR_IN)&Source)->Port != Socket->PeerPort)))
+        {
+            continue;
+        }
+        Item = LxAllocPaged(FIELD_OFFSET(LX_INET_CARRIED, Data) + (SIZE_T)Received);
+        if (Item == NULL)
+            break;
+        Item->Source = Source;
+        Item->Length = (ULONG)Received;
+        RtlCopyMemory(Item->Data, Bounce, (SIZE_T)Received);
+        InsertTailList(&Taken, &Item->Link);
+    }
+    ASSERT(IsListEmpty(&Socket->Carried));
+    while (!IsListEmpty(&Taken))
+    {
+        Item = CONTAINING_RECORD(RemoveHeadList(&Taken), LX_INET_CARRIED, Link);
+        InsertTailList(&Socket->Carried, &Item->Link);
+        Socket->CarriedBytes += Item->Length;
+    }
+    KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
+    LxFreePaged(Bounce);
+}
+
+/* Returns a datagram socket whose port nobody asked for to the unbound state, on a fresh endpoint */
+static
+LONG
+LxInetReleaseBinding(
+    _In_ PLX_FILE File,
+    _In_ PLX_INET_SOCKET Socket)
+{
+    PFILE_OBJECT FileObject, OldFileObject;
+    HANDLE Handle, OldHandle;
+    NTSTATUS Status;
+    KIRQL OldIrql;
+
+    ASSERT(Socket->Type == LX_SOCK_DGRAM);
+    ASSERT(Socket->State == LX_INET_BOUND);
+    ASSERT(!Socket->PortLocked);
+    ASSERT(!Socket->Closing);
+
+    Status = LxAfdOpenEndpoint(Socket->Type, &Handle, &FileObject);
+    if (!NT_SUCCESS(Status))
+        return -LxInetErrno(Status);
+    LxInetCarryQueued(File, Socket);
+
+    ExWaitForRundownProtectionRelease(&Socket->EndpointRundown);
+    KeAcquireSpinLock(&Socket->SelectLock, &OldIrql);
+    OldHandle = Socket->Handle;
+    OldFileObject = Socket->FileObject;
+    Socket->Handle = Handle;
+    Socket->FileObject = FileObject;
+    Socket->DeviceObject = IoGetRelatedDeviceObject(FileObject);
+    KeReleaseSpinLock(&Socket->SelectLock, OldIrql);
+    ExReInitializeRundownProtection(&Socket->EndpointRundown);
+
+    ZwClose(OldHandle);
+    ObDereferenceObject(OldFileObject);
+    LxInetReleasePort(Socket);
+    Socket->State = LX_INET_CREATED;
+    Socket->QueuedAtConnect = 0;
+    LxInetArm(Socket);
+    return 0;
 }
 
 LONG64
@@ -1128,8 +1340,14 @@ LxInetConnect(
         LxCopyFromUser(&Family, Call->Args[1], sizeof(Family));
     if ((Family == LX_AF_UNSPEC) && (Socket->Type == LX_SOCK_DGRAM))
     {
-        Socket->PeerValid = FALSE;
-        return 0;
+        LxInetLock(Socket);
+        Error = ((Socket->State == LX_INET_BOUND) && !Socket->PortLocked) ? LxInetReleaseBinding(File, Socket) : 0;
+        if (Error == 0)
+        {
+            Socket->PeerValid = FALSE;
+        }
+        LxInetUnlock(Socket);
+        return Error;
     }
 
     Error = LxInetParseAddress(Socket, Call->Args[1], (ULONG)Call->Args[2], TRUE, &Address, &Port, &LoopbackV6);
@@ -1150,7 +1368,7 @@ LxInetConnect(
             return -LX_EACCES;
         }
         if (Socket->State == LX_INET_CREATED)
-            Error = LxInetBindAddress(Socket, 0, 0);
+            Error = LxInetBindAddress(Socket, Socket->BoundAddress, 0);
         if (Error == 0)
         {
             AFD_INFO Info;
@@ -1161,6 +1379,7 @@ LxInetConnect(
             Socket->QueuedAtConnect = 0;
             if (NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_GET_INFO, &Info, sizeof(Info), &Info, sizeof(Info), NULL)))
                 Socket->QueuedAtConnect = Info.Information.Ulong;
+            Socket->QueuedAtConnect += Socket->CarriedBytes;
             Socket->PeerAddress = Address;
             Socket->PeerPort = Port;
             Socket->PeerLoopbackV6 = LoopbackV6;
@@ -1346,6 +1565,11 @@ LxInetName(
         if (!NT_SUCCESS(Status))
             RtlZeroMemory(Buffer, sizeof(Buffer));
     }
+    else if (Socket->Type == LX_SOCK_DGRAM)
+    {
+        /* The address a bind named outlives the port a disconnect released */
+        Address->Address[0].Address[0].in_addr = Socket->BoundAddress;
+    }
     /* A connected datagram socket left on the wildcard address reports the address its datagrams to the peer leave from */
     if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Address->Address[0].Address[0].in_addr == 0))
         Address->Address[0].Address[0].in_addr = LxNetlinkSourceAddress(Socket->PeerAddress);
@@ -1402,7 +1626,7 @@ LxInetSendmsg(
             LONG Error;
 
             LxInetLock(Socket);
-            Error = (Socket->State == LX_INET_CREATED) ? LxInetBindAddress(Socket, 0, 0) : 0;
+            Error = (Socket->State == LX_INET_CREATED) ? LxInetBindAddress(Socket, Socket->BoundAddress, 0) : 0;
             LxInetUnlock(Socket);
             if (Error != 0)
                 return Error;
@@ -1532,8 +1756,11 @@ LxInetRecvmsg(
     if (Socket->ShutRead && !Drained)
         return 0;
     /* TODO: a blocking read on a datagram socket that was never bound fails instead of waiting */
-    if ((Socket->Type == LX_SOCK_DGRAM) && (Socket->State == LX_INET_CREATED) && LxInetNonBlocking(File, Flags))
+    if ((Socket->Type == LX_SOCK_DGRAM) && (Socket->State == LX_INET_CREATED) && IsListEmpty(&Socket->Carried) &&
+        LxInetNonBlocking(File, Flags))
+    {
         return -LX_EAGAIN;
+    }
 
     Result = LxSocketGatherIov(Header, KernelIov, &Vectors, &Total);
     if (Result != 0)
@@ -2050,6 +2277,7 @@ LxInetIoctl(
             Info.InformationClass = AFD_INFO_RECEIVE_CONTENT_SIZE;
             if (NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_GET_INFO, &Info, sizeof(Info), &Info, sizeof(Info), NULL)))
                 Value = (LONG)Info.Information.Ulong;
+            Value += (LONG)Socket->CarriedBytes;
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
         case LX_TIOCOUTQ:
@@ -2148,6 +2376,8 @@ LxInetPoll(
         Current = LxInetCurrentEvents(Socket);
         Mask = LxInetMapEvents(Socket, Current);
     }
+    if (!IsListEmpty(&Socket->Carried))
+        Mask |= LX_POLLIN | LX_POLLRDNORM;
     if (Socket->State == LX_INET_LISTENING)
         Mask &= LX_POLLIN | LX_POLLRDNORM | LX_POLLERR;
     if (Socket->ShutRead)
@@ -2191,7 +2421,13 @@ LxInetRelease(
     Socket->Closing = TRUE;
     Handle = Socket->Handle;
     KeReleaseSpinLock(&Socket->SelectLock, OldIrql);
+    ExWaitForRundownProtectionRelease(&Socket->EndpointRundown);
     ZwClose(Handle);
+    KeWaitForSingleObject(&Socket->ReceiveGate, Executive, KernelMode, FALSE, NULL);
+    while (!IsListEmpty(&Socket->Carried))
+        LxFreePaged(CONTAINING_RECORD(RemoveHeadList(&Socket->Carried), LX_INET_CARRIED, Link));
+    Socket->CarriedBytes = 0;
+    KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
     LxInetDereference(Socket);
 }
 
