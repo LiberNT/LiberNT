@@ -920,7 +920,15 @@ LxInetTransfer(
             Info.BufferCount = 1;
             Info.AfdFlags = AFD_IMMEDIATE;
             Info.TdiFlags = (Flags & LX_MSG_OOB) ? TDI_SEND_EXPEDITED : 0;
-            Status = LxAfdIoctl(Socket, IOCTL_AFD_SEND, &Info, sizeof(Info), NULL, 0, &Information);
+            /* Urgent data sent to a socket of this host is at its receiver when the send returns: the request waits
+               for the transport, which completes it behind what it looped back. Room is asked for first, so the
+               wait is not for the peer to read. */
+            if (Flags & LX_MSG_OOB)
+                Info.AfdFlags = AFD_OVERLAPPED;
+            if ((Flags & LX_MSG_OOB) && !(LxInetCurrentEvents(Socket) & AFD_EVENT_SEND))
+                Status = STATUS_CANT_WAIT;
+            else
+                Status = LxAfdIoctl(Socket, IOCTL_AFD_SEND, &Info, sizeof(Info), NULL, 0, &Information);
         }
         else if (Socket->Type == LX_SOCK_DGRAM)
         {
