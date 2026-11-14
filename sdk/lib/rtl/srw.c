@@ -94,6 +94,17 @@ RtlpSrwCompareExchange(
 }
 
 static
+LONG_PTR
+RtlpSrwOr(
+    _Inout_ PRTL_SRWLOCK SRWLock,
+    _In_ LONG_PTR Bits)
+{
+    if (sizeof(SRWLock->Ptr) == sizeof(LONG64))
+        return (LONG_PTR)InterlockedOr64((LONG64 volatile *)&SRWLock->Ptr, Bits);
+    return (LONG_PTR)InterlockedOr((LONG volatile *)&SRWLock->Ptr, (LONG)Bits);
+}
+
+static
 ULONG
 RtlpSrwSpinLimit(VOID)
 {
@@ -385,7 +396,7 @@ RtlpSrwReleaseContended(
     LONG_PTR Previous;
 
     RtlpSrwLockBucket(Bucket);
-    if (RtlpSrwRead(SRWLock) != (Owned | RTL_SRWLOCK_CONTENDED))
+    if (Owned != 0 && RtlpSrwRead(SRWLock) != (Owned | RTL_SRWLOCK_CONTENDED))
     {
         /* Only an ownerless retiring shared word can be released by more than one thread. */
         ASSERT(Owned == (RTL_SRWLOCK_SHARED | RTL_SRWLOCK_OWNED));
@@ -411,8 +422,16 @@ RtlpSrwReleaseContended(
         WakeTail = &Waiter->NextWake;
     }
 
-    Previous = (LONG_PTR)InterlockedExchangePointer(&SRWLock->Ptr, (PVOID)(Remaining ? RTL_SRWLOCK_CONTENDED : 0));
-    ASSERT(Previous == (Owned | RTL_SRWLOCK_CONTENDED));
+    if (Owned != 0)
+    {
+        Previous = (LONG_PTR)InterlockedExchangePointer(&SRWLock->Ptr, (PVOID)(Remaining ? RTL_SRWLOCK_CONTENDED : 0));
+        ASSERT(Previous == (Owned | RTL_SRWLOCK_CONTENDED));
+    }
+    else if (Remaining)
+    {
+        /* An exclusive owner has already cleared the word; the waiters left behind keep the lock alive */
+        RtlpSrwOr(SRWLock, RTL_SRWLOCK_CONTENDED);
+    }
     RtlpSrwUnlockBucket(Bucket);
 
     while (Wake != NULL)
@@ -650,28 +669,19 @@ static
 DECLSPEC_NOINLINE
 VOID
 RtlpSrwReleaseExclusiveSlow(
-    _Inout_ PRTL_SRWLOCK SRWLock)
+    _Inout_ PRTL_SRWLOCK SRWLock,
+    _In_ LONG_PTR Value)
 {
-    LONG_PTR Value = RtlpSrwRead(SRWLock);
-    LONG_PTR Previous;
-
-    for (;;)
+    if (Value == (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_CONTENDED))
     {
-        if ((Value & (RTL_SRWLOCK_OWNED | RTL_SRWLOCK_SHARED)) != RTL_SRWLOCK_OWNED)
-            RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
-        ASSERT((Value & ~(RTL_SRWLOCK_OWNED | RTL_SRWLOCK_CONTENDED)) == 0);
-
-        if (Value & RTL_SRWLOCK_CONTENDED)
-        {
-            RtlpSrwReleaseContended(SRWLock, RTL_SRWLOCK_OWNED);
-            return;
-        }
-
-        Previous = RtlpSrwCompareExchange(SRWLock, 0, Value);
-        if (Previous == Value)
-            return;
-        Value = Previous;
+        RtlpSrwReleaseContended(SRWLock, 0);
+        return;
     }
+
+    /* The caller did not own the lock exclusively: give back the word the release took */
+    if (Value != 0)
+        RtlpSrwCompareExchange(SRWLock, Value, 0);
+    RtlRaiseStatus(STATUS_RESOURCE_NOT_OWNED);
 }
 
 VOID
@@ -739,16 +749,8 @@ VOID
 NTAPI
 RtlAcquireSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock)
 {
-    LONG_PTR Value = RtlpSrwRead(SRWLock);
-
-    if (Value == 0)
-    {
-        Value = RtlpSrwCompareExchange(SRWLock, RTL_SRWLOCK_OWNED, 0);
-        if (Value == 0)
-            return;
-    }
-    if ((Value & RTL_SRWLOCK_OWNED) ||
-        RtlpSrwCompareExchange(SRWLock, Value | RTL_SRWLOCK_OWNED, Value) != Value)
+    if ((RtlpSrwRead(SRWLock) & RTL_SRWLOCK_OWNED) ||
+        (RtlpSrwOr(SRWLock, RTL_SRWLOCK_OWNED) & RTL_SRWLOCK_OWNED))
     {
         RtlpSrwAcquireExclusiveSlow(SRWLock);
     }
@@ -758,8 +760,10 @@ VOID
 NTAPI
 RtlReleaseSRWLockExclusive(IN OUT PRTL_SRWLOCK SRWLock)
 {
-    if (RtlpSrwCompareExchange(SRWLock, 0, RTL_SRWLOCK_OWNED) != RTL_SRWLOCK_OWNED)
-        RtlpSrwReleaseExclusiveSlow(SRWLock);
+    LONG_PTR Value = (LONG_PTR)InterlockedExchangePointer(&SRWLock->Ptr, NULL);
+
+    if (Value != RTL_SRWLOCK_OWNED)
+        RtlpSrwReleaseExclusiveSlow(SRWLock, Value);
 }
 
 BOOLEAN
