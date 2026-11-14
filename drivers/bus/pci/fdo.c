@@ -928,6 +928,9 @@ FdoPnpControl(
             Status = STATUS_SUCCESS;
             break;
 
+        case IRP_MN_QUERY_INTERFACE:
+        case IRP_MN_QUERY_RESOURCES:
+        case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
         case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
             Status = Irp->IoStatus.Status;
             break;

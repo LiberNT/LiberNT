@@ -429,6 +429,7 @@ KMT_TESTFUNC Test_IoAcpiIoctl;
 KMT_TESTFUNC Test_IoErrorLogEntry;
 KMT_TESTFUNC Test_IoPciPdoPnp;
 KMT_TESTFUNC Test_IoRamdiskPnp;
+KMT_TESTFUNC Test_IoPciBusFdo;
 KMT_TESTFUNC Test_IoPciD3Cold;
 KMT_TESTFUNC Test_IoPciDeviceReset;
 KMT_TESTFUNC Test_IoPciExpressInterfaces;
@@ -659,6 +660,7 @@ const KMT_TEST TestList[] =
     { "IoErrorLogEntry",                    Test_IoErrorLogEntry },
     { "IoPciPdoPnp",                        Test_IoPciPdoPnp },
     { "IoRamdiskPnp",                       Test_IoRamdiskPnp },
+    { "IoPciBusFdo",                        Test_IoPciBusFdo },
     { "IoPciD3Cold",                        Test_IoPciD3Cold },
     { "IoPciDeviceReset",                   Test_IoPciDeviceReset },
     { "IoPciExpressInterfaces",             Test_IoPciExpressInterfaces },

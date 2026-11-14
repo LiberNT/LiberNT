@@ -231,6 +231,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoAcpiCmosRegion.c
     ntos_io/IoI8042Sync.c
     ntos_io/IoErrorLogEntry.c
+    ntos_io/IoPciBusFdo.c
     ntos_io/IoPciD3Cold.c
     ntos_io/IoPciDeviceReset.c
     ntos_io/IoPciExpressInterfaces.c
