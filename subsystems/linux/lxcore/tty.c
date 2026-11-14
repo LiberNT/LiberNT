@@ -1163,17 +1163,19 @@ LxTtyPgrpInSession(
 {
     PLIST_ENTRY Entry;
     LONG Result = -LX_ESRCH;
+    BOOLEAN Group = FALSE;
 
+    /* Linux takes the session from a member of the group, or failing one from the process that has this ID */
     ExAcquireFastMutex(&LxProcessListLock);
-    for (Entry = LxProcessList.Flink; Entry != &LxProcessList; Entry = Entry->Flink)
+    for (Entry = LxProcessList.Flink; !Group && (Entry != &LxProcessList); Entry = Entry->Flink)
     {
         PLX_PROCESS Process = CONTAINING_RECORD(Entry, LX_PROCESS, GlobalLink);
 
-        if ((Process->Instance == Instance) && (Process->Pgid == Pgid))
-        {
+        if (Process->Instance != Instance)
+            continue;
+        Group = (Process->Pgid == Pgid);
+        if (Group || (Process->Pid == Pgid))
             Result = (Process->Sid == Sid) ? 0 : -LX_EPERM;
-            break;
-        }
     }
     ExReleaseFastMutex(&LxProcessListLock);
     return Result;
