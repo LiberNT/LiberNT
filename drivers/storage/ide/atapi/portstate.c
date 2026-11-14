@@ -503,7 +503,7 @@ AtaPortGetNextEvent(
 
     KeReleaseInterruptSpinLock(PortData->InterruptObject, OldIrql);
 
-    *Action = 1 << EventIndex;
+    *Action = Success ? (1UL << EventIndex) : 0;
     return Success;
 }
 
