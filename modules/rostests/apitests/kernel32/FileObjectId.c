@@ -112,7 +112,7 @@ TestCreateOrGet(VOID)
     memset(&First, 0xcc, sizeof(First));
     Status = Fsctl(File, FSCTL_CREATE_OR_GET_OBJECT_ID, NULL, 0, &First, sizeof(First), &Information);
     ok(Status == STATUS_SUCCESS, "FSCTL_CREATE_OR_GET_OBJECT_ID returned 0x%lx\n", Status);
-    ok(Information == sizeof(First), "FSCTL_CREATE_OR_GET_OBJECT_ID returned %Iu bytes\n", Information);
+    ok(Information == sizeof(First), "FSCTL_CREATE_OR_GET_OBJECT_ID returned %Iu bytes\n", (size_t)Information);
     ok(memcmp(First.ObjectId, ZeroGuid, sizeof(ZeroGuid)) != 0, "The new object identifier is zero\n");
     ok(!memcmp(First.BirthObjectId, First.ObjectId, sizeof(First.ObjectId)), "BirthObjectId differs from ObjectId\n");
     ok(!memcmp(First.DomainId, ZeroGuid, sizeof(ZeroGuid)), "DomainId is not zero\n");
@@ -130,7 +130,7 @@ TestCreateOrGet(VOID)
     memset(&Queried, 0, sizeof(Queried));
     Status = Fsctl(File, FSCTL_GET_OBJECT_ID, NULL, 0, &Queried, sizeof(Queried) + 8, &Information);
     ok(Status == STATUS_SUCCESS, "FSCTL_GET_OBJECT_ID returned 0x%lx\n", Status);
-    ok(Information == sizeof(Queried), "FSCTL_GET_OBJECT_ID returned %Iu bytes\n", Information);
+    ok(Information == sizeof(Queried), "FSCTL_GET_OBJECT_ID returned %Iu bytes\n", (size_t)Information);
     ok(!memcmp(&Queried, &First, sizeof(First)), "FSCTL_GET_OBJECT_ID differs from the created identifier\n");
 
     Status = Fsctl(File, FSCTL_DELETE_OBJECT_ID, NULL, 0, NULL, 0, NULL);

@@ -35,14 +35,14 @@ START_TEST(ProcessWorkingSetSize)
     Min = Max = 0;
     Success = GetProcessWorkingSetSize(Child.hProcess, &Min, &Max);
     ok(Success, "GetProcessWorkingSetSize(child) failed, error %lu\n", GetLastError());
-    ok(Min == NewMin, "Child minimum %Iu, expected %Iu\n", Min, NewMin);
-    ok(Max == NewMax, "Child maximum %Iu, expected %Iu\n", Max, NewMax);
+    ok(Min == NewMin, "Child minimum %Iu, expected %Iu\n", (size_t)Min, (size_t)NewMin);
+    ok(Max == NewMax, "Child maximum %Iu, expected %Iu\n", (size_t)Max, (size_t)NewMax);
 
     Min = Max = 0;
     Success = GetProcessWorkingSetSize(GetCurrentProcess(), &Min, &Max);
     ok(Success, "GetProcessWorkingSetSize(self) failed, error %lu\n", GetLastError());
-    ok(Min == OwnMin, "Own minimum changed to %Iu from %Iu\n", Min, OwnMin);
-    ok(Max == OwnMax, "Own maximum changed to %Iu from %Iu\n", Max, OwnMax);
+    ok(Min == OwnMin, "Own minimum changed to %Iu from %Iu\n", (size_t)Min, (size_t)OwnMin);
+    ok(Max == OwnMax, "Own maximum changed to %Iu from %Iu\n", (size_t)Max, (size_t)OwnMax);
 
     Success = EmptyWorkingSet(Child.hProcess);
     ok(Success, "EmptyWorkingSet(child) failed, error %lu\n", GetLastError());

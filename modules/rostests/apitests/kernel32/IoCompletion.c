@@ -581,21 +581,21 @@ TestPortReadOutlivesThread(BOOL Cancel)
     Overlapped = NULL;
     SetLastError(0xdeadbeef);
     Success = GetQueuedCompletionStatus(Port, &Bytes, &Key, &Overlapped, 5000);
-    ok(Key == 0x4321, "Got key %#Ix\n", Key);
+    ok(Key == 0x4321, "Got key %#Ix\n", (size_t)Key);
     ok(Overlapped == &Context.Overlapped, "Got overlapped %p instead of %p\n", Overlapped, &Context.Overlapped);
     if (Cancel)
     {
         ok(!Success && GetLastError() == ERROR_OPERATION_ABORTED,
            "GetQueuedCompletionStatus returned %d with %lu\n", Success, GetLastError());
         ok(Bytes == 0, "Got %lu bytes\n", Bytes);
-        ok((NTSTATUS)Context.Overlapped.Internal == STATUS_CANCELLED, "Internal is %#Ix\n", Context.Overlapped.Internal);
+        ok((NTSTATUS)Context.Overlapped.Internal == STATUS_CANCELLED, "Internal is %#Ix\n", (size_t)Context.Overlapped.Internal);
     }
     else
     {
         ok(Success, "GetQueuedCompletionStatus failed with %lu\n", GetLastError());
         ok(Bytes == 3, "Got %lu bytes\n", Bytes);
-        ok(Context.Overlapped.Internal == STATUS_SUCCESS, "Internal is %#Ix\n", Context.Overlapped.Internal);
-        ok(Context.Overlapped.InternalHigh == 3, "InternalHigh is %Iu\n", Context.Overlapped.InternalHigh);
+        ok(Context.Overlapped.Internal == STATUS_SUCCESS, "Internal is %#Ix\n", (size_t)Context.Overlapped.Internal);
+        ok(Context.Overlapped.InternalHigh == 3, "InternalHigh is %Iu\n", (size_t)Context.Overlapped.InternalHigh);
         ok(!memcmp(Context.Buffer, "abc", 3), "The read returned the wrong data\n");
     }
 
