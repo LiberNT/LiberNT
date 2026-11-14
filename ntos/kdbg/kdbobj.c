@@ -343,8 +343,11 @@ KdbpCmdDeviceStack(
     PVOID Address;
     ULONG Index;
 
-    if (!KdbpAddressArgument(Argc, Argv, NULL, &Address))
+    if (!KdbpAddressArgument(Argc, Argv, NULL, &Address) ||
+        !KdbpRead(Address, &Device, sizeof(Device), "device object"))
+    {
         return TRUE;
+    }
 
     Current = Address;
     for (Index = 0; Index < 32; Index++)

@@ -43,10 +43,17 @@ volatile PCHAR KdbInitFileBuffer = NULL;
 #define KDB_CALLBACK_MAX        8
 #define KDB_DEFAULT_SCREEN_ROWS 24
 #define KDB_DUMP_BYTES_PER_LINE 16
-#define KDB_LOG_CHUNK           512
 #define KDB_MAXIMUM_FLOATING_REGISTER 16
 #define KDB_MAXIMUM_THREADS     65536
 #define KDB_MAXIMUM_COMMAND_DEPTH 16
+
+/* The most one command shows or goes over, so that a typo in a count does not run for hours */
+#define KDB_MAXIMUM_DUMP_BYTES  0x100000
+#define KDB_MAXIMUM_INSTRUCTIONS 0x10000
+#define KDB_DEFAULT_TEXT_LENGTH 256
+#define KDB_TEXT_PER_LINE       48
+#define KDB_DEFAULT_LOG_BYTES   4096
+#define KDB_MAXIMUM_LOG_BYTES   (32 * 1024)
 
 typedef BOOLEAN (*PKDB_COMMAND_ROUTINE)(ULONG Argc, PCHAR Argv[]);
 
@@ -211,6 +218,18 @@ KdbpCaptureOutput(
     KdbpPager((PCHAR)String, Length);
 }
 
+/* A block of text that is already in the log, such as the log itself: paged, not logged again */
+VOID
+KdbpPrintBlock(
+    _In_reads_(Length) PCHAR Buffer,
+    _In_ ULONG Length)
+{
+    if (KdbpSelfTestCapture(Buffer, Length))
+        return;
+
+    KdbpPager(Buffer, Length);
+}
+
 VOID
 KdbpPrint(
     _In_ PSTR Format,
@@ -241,24 +260,13 @@ VOID
 KdbpPrintUnicodeString(
     _In_ PCUNICODE_STRING String)
 {
-    USHORT Index;
-
     if ((String == NULL) || (String->Buffer == NULL) || (String->Length == 0))
     {
         KdbPuts("(null)");
         return;
     }
 
-    for (Index = 0; Index < String->Length / sizeof(WCHAR); Index++)
-    {
-        WCHAR Char = String->Buffer[Index];
-        CHAR Text[2];
-
-        Text[0] = ((Char >= ' ') && (Char < 0x7F)) ? (CHAR)Char : '.';
-        Text[1] = ANSI_NULL;
-
-        KdbPuts(Text);
-    }
+    KdbpPrintCountedString(String);
 }
 
 /* PUBLIC FUNCTIONS: PARSING **************************************************/
@@ -430,6 +438,70 @@ KdbpCmdHandle(
     return TRUE;
 }
 
+/*
+ * Steps the thread that stopped the machine, whatever frame, record or thread
+ * the commands since have been looking at: that is the only one that runs.
+ */
+static
+BOOLEAN
+KdbpStartStepping(
+    _In_ ULONG Count)
+{
+    if (KdbCurrentTrapFrame == NULL)
+    {
+        KdbPuts("There is no stopped thread to step\n");
+        return TRUE;
+    }
+
+    if (!NT_SUCCESS(KdbpArchSetSingleStep(KdbCurrentTrapFrame, TRUE)))
+    {
+        KdbPuts("Stepping is not supported on this processor\n");
+        return TRUE;
+    }
+
+    KdbNumSingleSteps = Count;
+    KdbSingleStepOver = FALSE;
+
+    KdbpSetContinueType(kdContinue);
+    KdbpLeaveLoop = TRUE;
+    return TRUE;
+}
+
+/*
+ * Lets the machine run until it reaches an address, through a breakpoint that
+ * goes at the next stop, wherever that is. A breakpoint already there does
+ * the same job.
+ */
+static
+BOOLEAN
+KdbpRunTo(
+    _In_ ULONG_PTR Address)
+{
+    LONG Number = -1;
+    NTSTATUS Status;
+
+    Status = KdbpInsertBreakPoint(Address,
+                                  KdbBreakPointTemporary,
+                                  0,
+                                  KdbAccessExec,
+                                  NULL,
+                                  KdbpIsSystemAddress(Address),
+                                  &Number);
+    if (NT_SUCCESS(Status))
+    {
+        KdbpSetBreakPointInternal(Number);
+    }
+    else if (Status != STATUS_OBJECT_NAME_COLLISION)
+    {
+        KdbpPrint("A breakpoint cannot be set at %p (0x%08lx)\n", (PVOID)Address, Status);
+        return TRUE;
+    }
+
+    KdbpSetContinueType(kdContinue);
+    KdbpLeaveLoop = TRUE;
+    return TRUE;
+}
+
 static
 BOOLEAN
 KdbpCmdStep(
@@ -441,21 +513,13 @@ KdbpCmdStep(
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Count))
         return TRUE;
 
-    if (Count == 0)
-        Count = 1;
-
-    if (!NT_SUCCESS(KdbpArchSetSingleStep(KdbpContext(), TRUE)))
+    if (Count > MAXULONG)
     {
-        KdbPuts("Stepping is not supported on this processor\n");
+        KdbpPrint("A step count is at most 0x%lx\n", MAXULONG);
         return TRUE;
     }
 
-    KdbNumSingleSteps = (ULONG)Count;
-    KdbSingleStepOver = FALSE;
-
-    KdbpSetContinueType(kdContinue);
-    KdbpLeaveLoop = TRUE;
-    return TRUE;
+    return KdbpStartStepping((Count == 0) ? 1 : (ULONG)Count);
 }
 
 /*
@@ -470,41 +534,26 @@ KdbpCmdNext(
 {
     ULONG_PTR Pc;
     LONG Length;
-    NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(Argc);
     UNREFERENCED_PARAMETER(Argv);
 
-    if (KdbpContext() == NULL)
+    if (KdbCurrentTrapFrame == NULL)
+    {
+        KdbPuts("There is no stopped thread to step\n");
         return TRUE;
+    }
 
-    Pc = (ULONG_PTR)KeGetContextPc(KdbpContext());
+    /* Only a call comes back to the next instruction: anything else is stepped */
+    Pc = (ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame);
+    if (!KdbpArchIsStepOverInstruction(Pc))
+        return KdbpStartStepping(1);
+
     Length = KdbpGetInstLength(Pc);
-
     if (Length <= 0)
-    {
-        /* Nothing can be said about the instruction, so step into it */
-        return KdbpCmdStep(1, Argv);
-    }
+        return KdbpStartStepping(1);
 
-    Status = KdbpInsertBreakPoint(Pc + (ULONG_PTR)Length,
-                                  KdbBreakPointTemporary,
-                                  0,
-                                  KdbAccessExec,
-                                  NULL,
-                                  TRUE,
-                                  NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        KdbpPrint("Cannot set a breakpoint after this instruction (%08lx)\n",
-                  Status);
-        return TRUE;
-    }
-
-    KdbSingleStepOver = TRUE;
-    KdbpSetContinueType(kdContinue);
-    KdbpLeaveLoop = TRUE;
-    return TRUE;
+    return KdbpRunTo(Pc + (ULONG_PTR)Length);
 }
 
 static
@@ -595,13 +644,73 @@ KdbpCmdBreakPointList(
 }
 
 static
+VOID
+KdbpReportBreakPointStatus(
+    _In_ NTSTATUS Status,
+    _In_ ULONG_PTR Address)
+{
+    switch (Status)
+    {
+        case STATUS_OBJECT_NAME_COLLISION:
+            KdbpPrint("There is already a breakpoint at %p\n", (PVOID)Address);
+            break;
+        case STATUS_INSUFFICIENT_RESOURCES:
+            KdbPuts("Every breakpoint, or every register that watches memory, is in use\n");
+            break;
+        case STATUS_DATATYPE_MISALIGNMENT:
+            KdbpPrint("%p is not aligned to the width watched\n", (PVOID)Address);
+            break;
+        case STATUS_NOT_SUPPORTED:
+            KdbPuts("This processor has no registers that watch memory\n");
+            break;
+        default:
+            KdbpPrint("The breakpoint was not set at %p (0x%08lx)\n", (PVOID)Address, Status);
+            break;
+    }
+}
+
+/* What comes after if, checked now so that a mistake is shown where it is */
+static
+BOOLEAN
+KdbpGetCondition(
+    _In_ ULONG First,
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _Out_writes_(Length) PCHAR Condition,
+    _In_ ULONG Length)
+{
+    CHAR ErrorMessage[128];
+    LONG ErrorOffset = 0;
+
+    if (First >= Argc)
+    {
+        KdbPuts("A condition is needed after if\n");
+        return FALSE;
+    }
+
+    if (!KdbpJoinWords(First, Argc, Argv, Condition, Length))
+    {
+        KdbpPrint("A condition has at most %lu characters\n", Length - 1);
+        return FALSE;
+    }
+
+    if (KdbpRpnParseExpression(Condition, &ErrorOffset, ErrorMessage) == NULL)
+    {
+        KdbpPrint("%s at offset %ld of the condition\n", ErrorMessage, ErrorOffset);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
 BOOLEAN
 KdbpCmdBreakPointSet(
     ULONG Argc,
     PCHAR Argv[])
 {
+    static CHAR Condition[128];
     ULONG_PTR Address = 0;
-    PCHAR Condition = NULL;
     LONG Number = -1;
     NTSTATUS Status;
 
@@ -614,20 +723,31 @@ KdbpCmdBreakPointSet(
     if (!KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
+    Condition[0] = ANSI_NULL;
+
     /* `bp <address> if <expression>` only stops when the condition holds */
-    if ((Argc > 3) && (_stricmp(Argv[2], "if") == 0))
-        Condition = Argv[3];
+    if (Argc > 2)
+    {
+        if (_stricmp(Argv[2], "if") != 0)
+        {
+            KdbpPrint("%s is not if: bp <address> [if <condition>]\n", Argv[2]);
+            return TRUE;
+        }
+
+        if (!KdbpGetCondition(3, Argc, Argv, Condition, sizeof(Condition)))
+            return TRUE;
+    }
 
     Status = KdbpInsertBreakPoint(Address,
                                   KdbBreakPointSoftware,
                                   0,
                                   KdbAccessExec,
-                                  Condition,
-                                  TRUE,
+                                  (Condition[0] != ANSI_NULL) ? Condition : NULL,
+                                  KdbpIsSystemAddress(Address),
                                   &Number);
     if (!NT_SUCCESS(Status))
     {
-        KdbpPrint("The breakpoint was not set (%08lx)\n", Status);
+        KdbpReportBreakPointStatus(Status, Address);
         return TRUE;
     }
 
@@ -673,6 +793,24 @@ KdbpCmdBreakPointMemory(
     if ((Argc > 3) && !KdbpGetAddressExpression(Argv[3], &Size))
         return TRUE;
 
+    if (Argc > 4)
+    {
+        KdbpPrint("%s is more than bpm takes\n", Argv[4]);
+        return TRUE;
+    }
+
+    if ((Size != 1) && (Size != 2) && (Size != 4) && (Size != 8))
+    {
+        KdbpPrint("A watched range is 1, 2, 4 or 8 bytes, not 0x%Ix\n", Size);
+        return TRUE;
+    }
+
+    if ((AccessType != KdbAccessExec) && ((Address & (Size - 1)) != 0))
+    {
+        KdbpPrint("%p is not aligned to the %Iu bytes watched\n", (PVOID)Address, Size);
+        return TRUE;
+    }
+
     Status = KdbpInsertBreakPoint(Address,
                                   KdbBreakPointHardware,
                                   (UCHAR)Size,
@@ -682,7 +820,7 @@ KdbpCmdBreakPointMemory(
                                   &Number);
     if (!NT_SUCCESS(Status))
     {
-        KdbpPrint("The breakpoint was not set (%08lx)\n", Status);
+        KdbpReportBreakPointStatus(Status, Address);
         return TRUE;
     }
 
@@ -848,35 +986,39 @@ KdbpCmdRegister(
     ULONG Argc,
     PCHAR Argv[])
 {
+    static CHAR Expression[KDB_COMMAND_MAX];
     PKDB_KTRAP_FRAME Context = KdbpContext();
     ULONGLONG Value = 0;
     ULONG Size = 0;
 
     if (Context == NULL)
+    {
+        KdbPuts("There are no registers to show\n");
         return TRUE;
+    }
 
     if (Argc < 2)
         return KdbpCmdRegisters(Argc, Argv);
+
+    if (!NT_SUCCESS(KdbpGetRegisterValue(Context, Argv[1], &Value, &Size)))
+    {
+        KdbpPrint("There is no register called %s\n", Argv[1]);
+        return TRUE;
+    }
 
     /* `r <name> <expression>` changes it; `r <name>` only reads it */
     if (Argc >= 3)
     {
         ULONG_PTR New = 0;
 
-        if (!KdbpGetAddressExpression(Argv[2], &New))
-            return TRUE;
-
-        if (!NT_SUCCESS(KdbpSetRegisterValue(Context, Argv[1], (ULONGLONG)New)))
+        if (!KdbpJoinWords(2, Argc, Argv, Expression, sizeof(Expression)) ||
+            !KdbpGetAddressExpression(Expression, &New))
         {
-            KdbpPrint("There is no register called %s\n", Argv[1]);
             return TRUE;
         }
-    }
 
-    if (!NT_SUCCESS(KdbpGetRegisterValue(Context, Argv[1], &Value, &Size)))
-    {
-        KdbpPrint("There is no register called %s\n", Argv[1]);
-        return TRUE;
+        KdbpSetRegisterValue(Context, Argv[1], (ULONGLONG)New);
+        KdbpGetRegisterValue(Context, Argv[1], &Value, &Size);
     }
 
     KdbpPrint("%s = %016I64x\n", Argv[1], Value);
@@ -1107,6 +1249,7 @@ KdbpThreadContext(
     _In_ PETHREAD Thread,
     _Out_ PKDB_KTRAP_FRAME Buffer)
 {
+    PVOID KernelStack = NULL;
     ULONG Processor;
 
     if (Thread == KdbOriginalThread)
@@ -1120,7 +1263,70 @@ KdbpThreadContext(
             return &Prcb->ProcessorState.ContextFrame;
     }
 
-    return KdbpKdbTrapFrameFromKernelStack(Thread->Tcb.KernelStack, Buffer) ? Buffer : NULL;
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&KernelStack, &Thread->Tcb.KernelStack, sizeof(KernelStack))))
+        return NULL;
+
+    return KdbpKdbTrapFrameFromKernelStack(KernelStack, Buffer) ? Buffer : NULL;
+}
+
+typedef struct _KDB_BACKTRACE_WALK
+{
+    ULONG_PTR Limit;
+    BOOLEAN Verbose;
+    ULONG Count;
+    CHAR ImageName[16];
+} KDB_BACKTRACE_WALK, *PKDB_BACKTRACE_WALK;
+
+static
+BOOLEAN
+NTAPI
+KdbpBackTraceThread(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    static KDB_KTRAP_FRAME ThreadContext;
+    PKDB_BACKTRACE_WALK Walk = Context;
+    PETHREAD Thread = CONTAINING_RECORD(Link, ETHREAD, ThreadListEntry);
+    PKDB_KTRAP_FRAME Frame;
+    CLIENT_ID Cid;
+
+    RtlZeroMemory(&Cid, sizeof(Cid));
+    KdbpSafeReadMemory(&Cid, &Thread->Cid, sizeof(Cid));
+
+    KdbpPrint("Thread %p (%Ix.%Ix) of %s\n",
+              Thread,
+              (ULONG_PTR)Cid.UniqueProcess,
+              (ULONG_PTR)Cid.UniqueThread,
+              Walk->ImageName);
+
+    Frame = KdbpThreadContext(Thread, &ThreadContext);
+    if (Frame == NULL)
+        KdbPuts("  its registers cannot be found\n");
+    else
+        KdbpBackTrace(Frame, Walk->Limit, Walk->Verbose);
+
+    return (++Walk->Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
+}
+
+static
+BOOLEAN
+NTAPI
+KdbpBackTraceProcess(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PKDB_BACKTRACE_WALK Walk = Context;
+    PEPROCESS Process = CONTAINING_RECORD(Link, EPROCESS, ActiveProcessLinks);
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
+
+    RtlZeroMemory(Walk->ImageName, sizeof(Walk->ImageName));
+    KdbpSafeReadMemory(Walk->ImageName, Process->ImageFileName, sizeof(Process->ImageFileName));
+
+    Result = KdbpWalkList(&Process->ThreadListHead, KDB_MAXIMUM_LIST_WALK, KdbpBackTraceThread, Walk, NULL, &Broken);
+    KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
+
+    return (Walk->Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
 }
 
 static
@@ -1129,36 +1335,16 @@ KdbpBackTraceAll(
     _In_ ULONG_PTR Limit,
     _In_ BOOLEAN Verbose)
 {
-    static KDB_KTRAP_FRAME ThreadContext;
-    PLIST_ENTRY ProcessEntry;
-    PLIST_ENTRY ThreadEntry;
-    ULONG Count = 0;
+    KDB_BACKTRACE_WALK Walk;
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
 
-    for (ProcessEntry = PsActiveProcessHead.Flink;
-         (ProcessEntry != &PsActiveProcessHead) && (Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
-         ProcessEntry = ProcessEntry->Flink)
-    {
-        PEPROCESS Process = CONTAINING_RECORD(ProcessEntry, EPROCESS, ActiveProcessLinks);
+    RtlZeroMemory(&Walk, sizeof(Walk));
+    Walk.Limit = Limit;
+    Walk.Verbose = Verbose;
 
-        for (ThreadEntry = Process->ThreadListHead.Flink;
-             (ThreadEntry != &Process->ThreadListHead) && (Count < KDB_MAXIMUM_THREADS) && !KdbpIsOutputAborted();
-             ThreadEntry = ThreadEntry->Flink, Count++)
-        {
-            PETHREAD Thread = CONTAINING_RECORD(ThreadEntry, ETHREAD, ThreadListEntry);
-            PKDB_KTRAP_FRAME Context = KdbpThreadContext(Thread, &ThreadContext);
-
-            KdbpPrint("Thread %p (%Ix.%Ix) of %.15s\n",
-                      Thread,
-                      (ULONG_PTR)Thread->Cid.UniqueProcess,
-                      (ULONG_PTR)Thread->Cid.UniqueThread,
-                      Process->ImageFileName);
-
-            if (Context == NULL)
-                KdbPuts("  its registers cannot be found\n");
-            else
-                KdbpBackTrace(Context, Limit, Verbose);
-        }
-    }
+    Result = KdbpWalkList(&PsActiveProcessHead, KDB_MAXIMUM_LIST_WALK, KdbpBackTraceProcess, &Walk, NULL, &Broken);
+    KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
 }
 
 static
@@ -1205,8 +1391,7 @@ BOOLEAN
 KdbpDumpMemory(
     _In_ ULONG Argc,
     _In_ PCHAR Argv[],
-    _In_ ULONG Width,
-    _In_ BOOLEAN AsText)
+    _In_ ULONG Width)
 {
     ULONG_PTR Address = KdbpLastDumpAddress;
     ULONG_PTR Count = 8;
@@ -1221,44 +1406,9 @@ KdbpDumpMemory(
     if (Count == 0)
         Count = 1;
 
-    if (AsText)
+    if (Count > KDB_MAXIMUM_DUMP_BYTES / Width)
     {
-        ULONG Column = 0;
-
-        for (Index = 0; Index < Count; Index++)
-        {
-            UCHAR Byte = 0;
-            CHAR Text[2];
-
-            if (Column == 0)
-                KdbpPrint("%p  ", (PVOID)(Address + Index));
-
-            if (!NT_SUCCESS(KdbpSafeReadMemory(&Byte,
-                                               (PVOID)(Address + Index),
-                                               sizeof(Byte))))
-            {
-                KdbPuts("??\n");
-                break;
-            }
-
-            Text[0] = ((Byte >= ' ') && (Byte < 0x7F)) ? (CHAR)Byte : '.';
-            Text[1] = ANSI_NULL;
-            KdbPuts(Text);
-
-            if (++Column == KDB_DUMP_BYTES_PER_LINE * 2)
-            {
-                KdbPuts("\n");
-                Column = 0;
-            }
-
-            if (KdbpIsOutputAborted())
-                break;
-        }
-
-        if (Column != 0)
-            KdbPuts("\n");
-
-        KdbpLastDumpAddress = Address + Count;
+        KdbpPrint("A dump shows at most 0x%lx bytes\n", KDB_MAXIMUM_DUMP_BYTES);
         return TRUE;
     }
 
@@ -1301,32 +1451,95 @@ KdbpDumpMemory(
 
 static BOOLEAN KdbpCmdDumpBytes(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 1, FALSE);
+    return KdbpDumpMemory(Argc, Argv, 1);
 }
 
 static BOOLEAN KdbpCmdDumpWords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 2, FALSE);
+    return KdbpDumpMemory(Argc, Argv, 2);
 }
 
 static BOOLEAN KdbpCmdDumpDwords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 4, FALSE);
+    return KdbpDumpMemory(Argc, Argv, 4);
 }
 
 static BOOLEAN KdbpCmdDumpQwords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 8, FALSE);
+    return KdbpDumpMemory(Argc, Argv, 8);
 }
 
-static BOOLEAN KdbpCmdDumpText(ULONG Argc, PCHAR Argv[])
+/*
+ * A string of bytes, the way it would be read: up to its terminating zero or
+ * the count, whichever comes first, in quotes, with what cannot be printed
+ * shown as dots.
+ */
+static
+BOOLEAN
+KdbpCmdDumpText(
+    ULONG Argc,
+    PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 1, TRUE);
+    ULONG_PTR Address = KdbpLastDumpAddress;
+    ULONG_PTR Count = KDB_DEFAULT_TEXT_LENGTH;
+    ULONG_PTR Index;
+    ULONG Column = 0;
+    BOOLEAN Ended = FALSE;
+
+    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Address))
+        return TRUE;
+
+    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+        return TRUE;
+
+    if ((Count == 0) || (Count > KDB_MAXIMUM_DUMP_BYTES))
+    {
+        KdbpPrint("A string is from 1 to 0x%lx bytes\n", KDB_MAXIMUM_DUMP_BYTES);
+        return TRUE;
+    }
+
+    KdbpPrint("%p  \"", (PVOID)Address);
+
+    for (Index = 0; (Index < Count) && !KdbpIsOutputAborted(); Index++)
+    {
+        UCHAR Byte = 0;
+        CHAR Text[2];
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Byte, (PVOID)(Address + Index), sizeof(Byte))))
+        {
+            KdbPuts("\" ??\n");
+            KdbpLastDumpAddress = Address + Index;
+            return TRUE;
+        }
+
+        if (Byte == 0)
+        {
+            Ended = TRUE;
+            break;
+        }
+
+        /* A long string goes on over lines of their own */
+        if ((Column == KDB_TEXT_PER_LINE) && (Index + 1 < Count))
+        {
+            KdbpPrint("\"\n%p  \"", (PVOID)(Address + Index));
+            Column = 0;
+        }
+
+        Text[0] = ((Byte >= ' ') && (Byte < 0x7F)) ? (CHAR)Byte : '.';
+        Text[1] = ANSI_NULL;
+        KdbPuts(Text);
+        Column++;
+    }
+
+    KdbPuts("\"\n");
+
+    KdbpLastDumpAddress = Address + Index + (Ended ? 1 : 0);
+    return TRUE;
 }
 
 static BOOLEAN KdbpCmdDumpPointers(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, sizeof(ULONG_PTR), FALSE);
+    return KdbpDumpMemory(Argc, Argv, sizeof(ULONG_PTR));
 }
 
 /*
@@ -1405,6 +1618,12 @@ KdbpCmdDisassemble(
 
     if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
         return TRUE;
+
+    if (Count > KDB_MAXIMUM_INSTRUCTIONS)
+    {
+        KdbpPrint("At most 0x%lx instructions are shown at once\n", KDB_MAXIMUM_INSTRUCTIONS);
+        return TRUE;
+    }
 
     if ((Address == 0) && (KdbpContext() != NULL))
         Address = (ULONG_PTR)KeGetContextPc(KdbpContext());
@@ -1548,11 +1767,42 @@ KdbpUseThreadContext(
 
 static
 BOOLEAN
+NTAPI
+KdbpPrintProcessLink(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PEPROCESS Process = CONTAINING_RECORD(Link, EPROCESS, ActiveProcessLinks);
+    CHAR Name[sizeof(Process->ImageFileName) + 1];
+    HANDLE Id = NULL;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    RtlZeroMemory(Name, sizeof(Name));
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Id, &Process->UniqueProcessId, sizeof(Id))) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(Name, Process->ImageFileName, sizeof(Process->ImageFileName))))
+    {
+        KdbpPrint(" %p  cannot be read\n", Process);
+        return !KdbpIsOutputAborted();
+    }
+
+    KdbpPrint("%s%p  %6Ix  %s\n",
+              (Process == KdbCurrentProcess) ? "*" : " ",
+              Process,
+              (ULONG_PTR)Id,
+              Name);
+
+    return !KdbpIsOutputAborted();
+}
+
+static
+BOOLEAN
 KdbpCmdProcesses(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PLIST_ENTRY Entry;
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
 
     if (Argc > 1)
     {
@@ -1573,25 +1823,38 @@ KdbpCmdProcesses(
         return TRUE;
     }
 
-    for (Entry = PsActiveProcessHead.Flink;
-         Entry != &PsActiveProcessHead;
-         Entry = Entry->Flink)
+    Result = KdbpWalkList(&PsActiveProcessHead, KDB_MAXIMUM_LIST_WALK, KdbpPrintProcessLink, NULL, NULL, &Broken);
+    KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
+    return TRUE;
+}
+
+static
+BOOLEAN
+NTAPI
+KdbpPrintThreadLink(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PETHREAD Thread = CONTAINING_RECORD(Link, ETHREAD, ThreadListEntry);
+    HANDLE Id = NULL;
+    UCHAR State = 0;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Id, &Thread->Cid.UniqueThread, sizeof(Id))) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&State, (PVOID)&Thread->Tcb.State, sizeof(State))))
     {
-        PEPROCESS Process;
-
-        Process = CONTAINING_RECORD(Entry, EPROCESS, ActiveProcessLinks);
-
-        KdbpPrint("%s%p  %6Ix  %.15s\n",
-                  (Process == KdbCurrentProcess) ? "*" : " ",
-                  Process,
-                  (ULONG_PTR)Process->UniqueProcessId,
-                  Process->ImageFileName);
-
-        if (KdbpIsOutputAborted())
-            break;
+        KdbpPrint(" %p  cannot be read\n", Thread);
+        return !KdbpIsOutputAborted();
     }
 
-    return TRUE;
+    KdbpPrint("%s%p  %6Ix  state %u\n",
+              (Thread == KdbCurrentThread) ? "*" : " ",
+              Thread,
+              (ULONG_PTR)Id,
+              State);
+
+    return !KdbpIsOutputAborted();
 }
 
 static
@@ -1600,7 +1863,8 @@ KdbpCmdThreads(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PLIST_ENTRY Entry;
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
     PEPROCESS Process = KdbCurrentProcess;
 
     if (Argc > 1)
@@ -1620,26 +1884,13 @@ KdbpCmdThreads(
     }
 
     if (Process == NULL)
-        return TRUE;
-
-    for (Entry = Process->ThreadListHead.Flink;
-         Entry != &Process->ThreadListHead;
-         Entry = Entry->Flink)
     {
-        PETHREAD Thread;
-
-        Thread = CONTAINING_RECORD(Entry, ETHREAD, ThreadListEntry);
-
-        KdbpPrint("%s%p  %6Ix  state %u\n",
-                  (Thread == KdbCurrentThread) ? "*" : " ",
-                  Thread,
-                  (ULONG_PTR)Thread->Cid.UniqueThread,
-                  Thread->Tcb.State);
-
-        if (KdbpIsOutputAborted())
-            break;
+        KdbPuts("No process is being looked at\n");
+        return TRUE;
     }
 
+    Result = KdbpWalkList(&Process->ThreadListHead, KDB_MAXIMUM_LIST_WALK, KdbpPrintThreadLink, NULL, NULL, &Broken);
+    KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
     return TRUE;
 }
 
@@ -1766,11 +2017,16 @@ KdbpCmdApc(
     if (Thread == NULL)
         return TRUE;
 
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&ApcStateIndex, &Thread->Tcb.ApcStateIndex, sizeof(ApcStateIndex))))
+    {
+        KdbpPrint("Thread %p cannot be read\n", Thread);
+        return TRUE;
+    }
+
     KdbpPrintApcQueue("Kernel", &Thread->Tcb.ApcState.ApcListHead[KernelMode]);
     KdbpPrintApcQueue("User", &Thread->Tcb.ApcState.ApcListHead[UserMode]);
 
-    if (NT_SUCCESS(KdbpSafeReadMemory(&ApcStateIndex, &Thread->Tcb.ApcStateIndex, sizeof(ApcStateIndex))) &&
-        (ApcStateIndex != 0))
+    if (ApcStateIndex != 0)
     {
         KdbpPrintApcQueue("Saved kernel", &Thread->Tcb.SavedApcState.ApcListHead[KernelMode]);
         KdbpPrintApcQueue("Saved user", &Thread->Tcb.SavedApcState.ApcListHead[UserMode]);
@@ -1945,9 +2201,18 @@ KdbpCmdProcessor(
     }
     else
     {
+        PEPROCESS Process = NULL;
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Process, &Prcb->CurrentThread->ApcState.Process, sizeof(Process))) ||
+            (Process == NULL))
+        {
+            KdbpPrint("The thread processor %Iu runs, %p, cannot be read\n", Number, Prcb->CurrentThread);
+            return TRUE;
+        }
+
         KdbpViewContext = &Prcb->ProcessorState.ContextFrame;
         KdbCurrentThread = (PETHREAD)Prcb->CurrentThread;
-        KdbCurrentProcess = (PEPROCESS)Prcb->CurrentThread->ApcState.Process;
+        KdbCurrentProcess = Process;
     }
 
     KdbpPrint("Processor %Iu\n", Number);
@@ -2125,6 +2390,7 @@ KdbpCmdEvaluate(
     ULONG Argc,
     PCHAR Argv[])
 {
+    static CHAR Expression[KDB_COMMAND_MAX];
     ULONG_PTR Value = 0;
 
     if (Argc < 2)
@@ -2133,8 +2399,12 @@ KdbpCmdEvaluate(
         return TRUE;
     }
 
-    if (!KdbpGetAddressExpression(Argv[1], &Value))
+    /* The expression is the rest of the line, spaces and all */
+    if (!KdbpJoinWords(1, Argc, Argv, Expression, sizeof(Expression)) ||
+        !KdbpGetAddressExpression(Expression, &Value))
+    {
         return TRUE;
+    }
 
     KdbpPrint("%Iu (0x%Ix) ", Value, Value);
     KdbSymPrintAddress((PVOID)Value, KdbpContext());
@@ -2153,13 +2423,20 @@ KdbpCmdLog(
     ULONG Argc,
     PCHAR Argv[])
 {
-    static CHAR Chunk[KDB_LOG_CHUNK];
+    static CHAR Tail[KDB_MAXIMUM_LOG_BYTES];
+    ULONG_PTR Wanted = KDB_DEFAULT_LOG_BYTES;
     ULONG Length;
 
-    UNREFERENCED_PARAMETER(Argc);
-    UNREFERENCED_PARAMETER(Argv);
+    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Wanted))
+        return TRUE;
 
-    Length = KdpCopyPrintBufferTail(Chunk, sizeof(Chunk));
+    if ((Wanted == 0) || (Wanted > sizeof(Tail)))
+    {
+        KdbpPrint("dmesg shows from 1 to 0x%lx bytes of the end of the log\n", (ULONG)sizeof(Tail));
+        return TRUE;
+    }
+
+    Length = KdpCopyPrintBufferTail(Tail, (ULONG)Wanted);
 
     if (Length == 0)
     {
@@ -2167,7 +2444,7 @@ KdbpCmdLog(
         return TRUE;
     }
 
-    KdbpPager(Chunk, Length);
+    KdbpPrintBlock(Tail, Length);
     KdbPuts("\n");
 
     return TRUE;
@@ -2197,6 +2474,12 @@ KdbpCmdFilter(
         !KdbpGetHexNumber(Argv[2], &Level))
     {
         KdbPuts("The component and the level are numbers\n");
+        return TRUE;
+    }
+
+    if ((_stricmp(Argv[3], "on") != 0) && (_stricmp(Argv[3], "off") != 0))
+    {
+        KdbpPrint("%s is not on or off\n", Argv[3]);
         return TRUE;
     }
 
@@ -2273,6 +2556,12 @@ KdbpCmdCondition(
     else if (!KdbpGetHexNumber(Argv[1], &Number))
     {
         KdbPuts("The exception is given by number\n");
+        return TRUE;
+    }
+
+    if ((_stricmp(Argv[2], "first") != 0) && (_stricmp(Argv[2], "last") != 0))
+    {
+        KdbpPrint("%s is not first or last\n", Argv[2]);
         return TRUE;
     }
 
@@ -2354,7 +2643,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"dd", "dd <address> [count]", "Shows memory as double words", KdbpCmdDumpDwords},
     {"dq", "dq <address> [count]", "Shows memory as quad words", KdbpCmdDumpQwords},
     {"dp", "dp <address> [count]", "Shows memory as pointers", KdbpCmdDumpPointers},
-    {"da", "da <address> [count]", "Shows memory as text", KdbpCmdDumpText},
+    {"da", "da <address> [count]", "Shows memory as a string, up to its end", KdbpCmdDumpText},
     {"du", "du <address> [count]", "Shows memory as a wide string", KdbpCmdDumpUnicode},
     {"dds", "dds <address> [count]", "Shows double words with the symbols they point at", KdbpCmdDumpDwordSymbols},
     {"dqs", "dqs <address> [count]", "Shows quad words with the symbols they point at", KdbpCmdDumpQwordSymbols},
@@ -2402,7 +2691,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"!pci", "!pci [bus [device [function]]|bus:device.function]", "Lists the PCI functions, or shows one in detail", KdbpCmdPci},
     {"!devtree", "!devtree", "Lists the Plug and Play device tree", KdbpCmdDeviceTree},
     {"!devnode", "!devnode [address]", "Shows a device node and its resources, or the root one", KdbpCmdDeviceNode},
-    {"dmesg", "dmesg", "Shows what the system has printed", KdbpCmdLog},
+    {"dmesg", "dmesg [bytes]", "Shows the end of what the system has printed", KdbpCmdLog},
     {"dt", "dt [[module!]type [address]]", "Shows the layout of a kernel type, or one at an address", KdbpCmdDisplayType},
     {"version", "version", "Shows the versions of the system and of the debugger", KdbpCmdVersion},
     {"echo", "echo [text]", "Prints a line of text", KdbpCmdEcho},
@@ -2472,18 +2761,27 @@ static
 ULONG
 KdbpSplitCommand(
     _Inout_ PCHAR Command,
-    _Out_writes_(KDB_ARGUMENT_MAX) PCHAR *Argv)
+    _Out_writes_(KDB_ARGUMENT_MAX) PCHAR *Argv,
+    _Out_ PBOOLEAN TooMany)
 {
     ULONG Argc = 0;
     PCHAR Current = Command;
 
-    while ((*Current != ANSI_NULL) && (Argc < KDB_ARGUMENT_MAX))
+    *TooMany = FALSE;
+
+    for (;;)
     {
         while ((*Current == ' ') || (*Current == '\t'))
             Current++;
 
         if (*Current == ANSI_NULL)
             break;
+
+        if (Argc == KDB_ARGUMENT_MAX)
+        {
+            *TooMany = TRUE;
+            break;
+        }
 
         Argv[Argc++] = Current;
 
@@ -2542,6 +2840,31 @@ KdbpCheckCommandTable(VOID)
     return Failures;
 }
 
+PCSTR
+KdbpGetCommandName(
+    _In_ ULONG Index)
+{
+    if (Index >= RTL_NUMBER_OF(KdbpCommands) - 1)
+        return NULL;
+
+    return KdbpCommands[Index].Name;
+}
+
+/* Takes back a command's request for the machine to run, for a caller that only wanted to see it made */
+VOID
+KdbpClearResume(VOID)
+{
+    KdbpLeaveLoop = FALSE;
+    KdbpSetContinueType(kdHandleException);
+}
+
+VOID
+KdbpResetView(VOID)
+{
+    KdbpViewContext = NULL;
+    KdbpFrameSelected = FALSE;
+}
+
 static
 BOOLEAN
 KdbpRunCommand(
@@ -2550,6 +2873,7 @@ KdbpRunCommand(
     _Inout_updates_(KDB_COMMAND_MAX) PCHAR Expanded)
 {
     PCHAR Argv[KDB_ARGUMENT_MAX];
+    BOOLEAN TooMany;
     ULONG Argc;
     ULONG Index;
 
@@ -2559,9 +2883,15 @@ KdbpRunCommand(
     strncpy(Buffer, Command, KDB_COMMAND_MAX - 1);
     Buffer[KDB_COMMAND_MAX - 1] = ANSI_NULL;
 
-    Argc = KdbpSplitCommand(Buffer, Argv);
+    Argc = KdbpSplitCommand(Buffer, Argv, &TooMany);
     if (Argc == 0)
         return FALSE;
+
+    if (TooMany)
+    {
+        KdbpPrint("A command line holds at most %u words\n", KDB_ARGUMENT_MAX);
+        return FALSE;
+    }
 
     if (KdbpExpandAlias(Argc, Argv, Expanded, KDB_COMMAND_MAX))
         return (Expanded[0] != ANSI_NULL) && KdbpCliInterpretCommand(Expanded);

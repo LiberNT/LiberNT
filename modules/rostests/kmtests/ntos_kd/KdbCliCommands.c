@@ -381,6 +381,8 @@ START_TEST(KdbCliCommands)
                                "cpu current\r\n"
                                "echo KDBTEST-HELP\r\n"
                                "help\r\n"
+                               "echo KDBTEST-SELFTEST\r\n"
+                               "selftest\r\n"
                                "echo KDBTEST-END\r\n",
                                Pci,
                                Proc);
@@ -447,6 +449,11 @@ START_TEST(KdbCliCommands)
     KdbTestFreeParentMemory();
 
     KdbTestCheckFrames();
+
+    /* The debugger's own checks drive every command; only the summary has no time after it */
+    ok(KdbTestSectionHas("KDBTEST-SELFTEST", " checks, 0 failed\n"), "selftest reported failures\n");
+    ok(!KdbTestSectionHas("KDBTEST-SELFTEST", "selftest: FAIL"), "selftest reported a failed check\n");
+    ok(KdbTestSectionHas("KDBTEST-SELFTEST", "selftest: hazard: "), "selftest did not run to its last group\n");
 
     Section = KdbTestSection("KDBTEST-HELP", &Length);
     if (Section != NULL)

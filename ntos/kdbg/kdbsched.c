@@ -11,7 +11,6 @@
 #define NDEBUG
 #include <debug.h>
 
-#define KDB_MAXIMUM_LIST_WALK 4096
 #define KDB_MAXIMUM_INTERRUPT_CHAIN 64
 
 /* PRIVATE FUNCTIONS **********************************************************/
@@ -203,15 +202,35 @@ KdbpCmdPrcb(
     return TRUE;
 }
 
+static
+BOOLEAN
+NTAPI
+KdbpPrintReadyThread(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PKTHREAD Thread = CONTAINING_RECORD(Link, KTHREAD, WaitListEntry);
+    CLIENT_ID Cid;
+
+    UNREFERENCED_PARAMETER(Context);
+
+    if (NT_SUCCESS(KdbpSafeReadMemory(&Cid, &CONTAINING_RECORD(Thread, ETHREAD, Tcb)->Cid, sizeof(Cid))))
+        KdbpPrint("    thread %p (%p.%p)\n", Thread, Cid.UniqueProcess, Cid.UniqueThread);
+    else
+        KdbpPrint("    thread %p cannot be read\n", Thread);
+
+    return !KdbpIsOutputAborted();
+}
+
 BOOLEAN
 KdbpCmdReady(
     ULONG Argc,
     PCHAR Argv[])
 {
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
     PLIST_ENTRY Head;
-    PLIST_ENTRY Entry;
     ULONG Number;
-    ULONG Count;
     LONG Priority;
     PKPRCB Prcb = KdbpProcessorArgument(Argc, Argv, &Number);
 
@@ -227,18 +246,8 @@ KdbpCmdReady(
             continue;
 
         KdbpPrint("  priority %ld:\n", Priority);
-
-        for (Entry = Head->Flink, Count = 0;
-             (Entry != Head) && (Count < KDB_MAXIMUM_LIST_WALK);
-             Entry = Entry->Flink, Count++)
-        {
-            PKTHREAD Thread = CONTAINING_RECORD(Entry, KTHREAD, WaitListEntry);
-
-            KdbpPrint("    thread %p (%p.%p)\n",
-                      Thread,
-                      CONTAINING_RECORD(Thread, ETHREAD, Tcb)->Cid.UniqueProcess,
-                      CONTAINING_RECORD(Thread, ETHREAD, Tcb)->Cid.UniqueThread);
-        }
+        Result = KdbpWalkList(Head, KDB_MAXIMUM_LIST_WALK, KdbpPrintReadyThread, NULL, NULL, &Broken);
+        KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
     }
 
     return TRUE;
@@ -292,13 +301,28 @@ KdbpCmdDpc(
     return TRUE;
 }
 
+static
+BOOLEAN
+NTAPI
+KdbpPrintTimerLink(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PULONG Count = Context;
+
+    KdbpPrintTimer(CONTAINING_RECORD(Link, KTIMER, TimerListEntry));
+    (*Count)++;
+
+    return (*Count < KDB_MAXIMUM_LIST_WALK) && !KdbpIsOutputAborted();
+}
+
 BOOLEAN
 KdbpCmdTimer(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PLIST_ENTRY Head;
-    PLIST_ENTRY Entry;
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
     ULONG Bucket;
     ULONG Count = 0;
     PVOID Address;
@@ -311,16 +335,15 @@ KdbpCmdTimer(
         return TRUE;
     }
 
-    for (Bucket = 0; (Bucket < TIMER_TABLE_SIZE) && !KdbpIsOutputAborted(); Bucket++)
+    for (Bucket = 0; (Bucket < TIMER_TABLE_SIZE) && (Count < KDB_MAXIMUM_LIST_WALK) && !KdbpIsOutputAborted(); Bucket++)
     {
-        Head = &KiTimerTableListHead[Bucket].Entry;
-
-        for (Entry = Head->Flink;
-             (Entry != Head) && (Count < KDB_MAXIMUM_LIST_WALK) && !KdbpIsOutputAborted();
-             Entry = Entry->Flink, Count++)
-        {
-            KdbpPrintTimer(CONTAINING_RECORD(Entry, KTIMER, TimerListEntry));
-        }
+        Result = KdbpWalkList(&KiTimerTableListHead[Bucket].Entry,
+                              KDB_MAXIMUM_LIST_WALK - Count,
+                              KdbpPrintTimerLink,
+                              &Count,
+                              NULL,
+                              &Broken);
+        KdbpReportWalk(Result, Broken, KDB_MAXIMUM_LIST_WALK);
     }
 
     KdbpPrint("%lu timers queued\n", Count);

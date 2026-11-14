@@ -173,24 +173,41 @@ KdbpApplySoftwareBreakPoint(
     _In_ BOOLEAN Enable)
 {
     KD_BREAKPOINT_TYPE Instruction = KD_BREAKPOINT_VALUE;
+    PEPROCESS Process = BreakPoint->Global ? NULL : BreakPoint->Process;
     NTSTATUS Status;
+
+    /* A breakpoint of a process is written in that process, wherever the machine stopped */
+    if (Process == PsGetCurrentProcess())
+        Process = NULL;
 
     if (Enable)
     {
-        Status = KdbpSafeReadMemory(&BreakPoint->Data.SavedInstruction,
-                                    (PVOID)BreakPoint->Address,
-                                    sizeof(KD_BREAKPOINT_TYPE));
+        Status = KdpCopyProcessMemoryChunks(Process,
+                                            (ULONG64)BreakPoint->Address,
+                                            &BreakPoint->Data.SavedInstruction,
+                                            sizeof(KD_BREAKPOINT_TYPE),
+                                            0,
+                                            MMDBG_COPY_UNSAFE,
+                                            NULL);
         if (!NT_SUCCESS(Status))
             return Status;
 
-        return KdbpSafeWriteMemory((PVOID)BreakPoint->Address,
-                                   &Instruction,
-                                   sizeof(KD_BREAKPOINT_TYPE));
+        return KdpCopyProcessMemoryChunks(Process,
+                                          (ULONG64)BreakPoint->Address,
+                                          &Instruction,
+                                          sizeof(KD_BREAKPOINT_TYPE),
+                                          0,
+                                          MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
+                                          NULL);
     }
 
-    return KdbpSafeWriteMemory((PVOID)BreakPoint->Address,
-                               &BreakPoint->Data.SavedInstruction,
-                               sizeof(KD_BREAKPOINT_TYPE));
+    return KdpCopyProcessMemoryChunks(Process,
+                                      (ULONG64)BreakPoint->Address,
+                                      &BreakPoint->Data.SavedInstruction,
+                                      sizeof(KD_BREAKPOINT_TYPE),
+                                      0,
+                                      MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
+                                      NULL);
 }
 
 static
@@ -267,9 +284,34 @@ KdbpSafeReadMemory(
     _In_ PVOID Src,
     _In_ ULONG Bytes)
 {
+    PUCHAR Destination = Dest;
+    PUCHAR Source = Src;
+
+    /*
+     * The copy below walks the page tables and maps the frame for every eight
+     * bytes. System memory wider than one access is copied a page at a time
+     * instead, once the page is known to be there; one access of a device
+     * register still goes through the copy at its own width.
+     */
+    while ((Bytes > sizeof(ULONG64)) &&
+           KdbpIsSystemAddress((ULONG_PTR)Source) &&
+           ((ULONG_PTR)Source + Bytes > (ULONG_PTR)Source) &&
+           MmIsAddressValid(Source))
+    {
+        ULONG Piece = min(Bytes, PAGE_SIZE - (ULONG)BYTE_OFFSET(Source));
+
+        RtlCopyMemory(Destination, Source, Piece);
+        Destination += Piece;
+        Source += Piece;
+        Bytes -= Piece;
+    }
+
+    if (Bytes == 0)
+        return STATUS_SUCCESS;
+
     return KdpCopyProcessMemoryChunks(KdbpMemoryProcess(),
-                                      (ULONG64)(ULONG_PTR)Src,
-                                      Dest,
+                                      (ULONG64)(ULONG_PTR)Source,
+                                      Destination,
                                       Bytes,
                                       0,
                                       MMDBG_COPY_UNSAFE,
@@ -441,8 +483,8 @@ KdbpInsertBreakPoint(
 
     BreakPoint->Type = Type;
     BreakPoint->Address = Address;
-    BreakPoint->Global = Global;
-    BreakPoint->Process = Global ? NULL : KdbCurrentProcess;
+    BreakPoint->Global = Global || (KdbCurrentProcess == NULL);
+    BreakPoint->Process = BreakPoint->Global ? NULL : KdbCurrentProcess;
     BreakPoint->Enabled = TRUE;
 
     if (Type == KdbBreakPointHardware)
@@ -492,6 +534,10 @@ KdbpInsertBreakPoint(
     if (Register >= 0)
         KdbpHardwareOwner[Register] = Index;
 
+    /* The process has to outlive the breakpoint that writes into it */
+    if (BreakPoint->Process != NULL)
+        ObReferenceObject(BreakPoint->Process);
+
     if (BreakPointNr != NULL)
         *BreakPointNr = Index;
 
@@ -527,6 +573,10 @@ KdbpDeleteBreakPoint(
             KdbpHardwareOwner[Register] = -1;
     }
 
+    /* The machine is stopped: the last reference may only be dropped by a deferred delete */
+    if (BreakPoint->Process != NULL)
+        ObDereferenceObjectDeferDelete(BreakPoint->Process);
+
     RtlZeroMemory(BreakPoint, sizeof(*BreakPoint));
     BreakPoint->Type = KdbBreakPointNone;
 
@@ -534,6 +584,44 @@ KdbpDeleteBreakPoint(
         KdbLastBreakPointNr = -1;
 
     return TRUE;
+}
+
+/*
+ * Marks a breakpoint as one a step or a run to an address set for itself. It
+ * goes at the next stop, whatever the machine stops for.
+ */
+BOOLEAN
+KdbpSetBreakPointInternal(
+    _In_ LONG BreakPointNr)
+{
+    PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+
+    if (BreakPoint == NULL)
+        return FALSE;
+
+    BreakPoint->Internal = TRUE;
+    return TRUE;
+}
+
+/* A breakpoint on such an address belongs to every process; any other one to the process it was set in */
+BOOLEAN
+KdbpIsSystemAddress(
+    _In_ ULONG_PTR Address)
+{
+    return (Address >= (ULONG_PTR)MmSystemRangeStart);
+}
+
+static
+VOID
+KdbpDeleteInternalBreakPoints(VOID)
+{
+    LONG Index;
+
+    for (Index = 0; Index < KDB_MAXIMUM_BREAKPOINT_COUNT; Index++)
+    {
+        if ((KdbpBreakPoints[Index].Type != KdbBreakPointNone) && KdbpBreakPoints[Index].Internal)
+            KdbpDeleteBreakPoint(Index, NULL);
+    }
 }
 
 BOOLEAN
@@ -649,41 +737,151 @@ KdbpSetEnterCondition(
  * The thread or the process with a given identifier, without trusting the
  * tables: a debugger is often looking at a system whose tables are wrong.
  */
+/*
+ * Walks a list the way the debugger reads anything, through guarded reads. A
+ * link that cannot be read ends the walk, and so does a list longer than
+ * Maximum, which is what a list that has lost its head looks like. Each entry
+ * is handed over as the address of its link.
+ */
+KDB_WALK_RESULT
+KdbpWalkList(
+    _In_ PLIST_ENTRY Head,
+    _In_ ULONG Maximum,
+    _In_ PKDB_WALK_ROUTINE Routine,
+    _In_opt_ PVOID Context,
+    _Out_opt_ PULONG Count,
+    _Out_opt_ PLIST_ENTRY *Broken)
+{
+    KDB_WALK_RESULT Result = KdbWalkComplete;
+    LIST_ENTRY Link;
+    PLIST_ENTRY Current;
+    ULONG Visited = 0;
+
+    if (Broken != NULL)
+        *Broken = NULL;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Link, Head, sizeof(Link))))
+    {
+        Result = KdbWalkUnreadable;
+        if (Broken != NULL)
+            *Broken = Head;
+    }
+
+    for (Current = Link.Flink; (Result == KdbWalkComplete) && (Current != Head); Current = Link.Flink)
+    {
+        if (Visited >= Maximum)
+        {
+            Result = KdbWalkTooLong;
+            break;
+        }
+
+        if (!NT_SUCCESS(KdbpSafeReadMemory(&Link, Current, sizeof(Link))))
+        {
+            Result = KdbWalkUnreadable;
+            if (Broken != NULL)
+                *Broken = Current;
+            break;
+        }
+
+        Visited++;
+        if (!Routine(Current, Context))
+            Result = KdbWalkStopped;
+    }
+
+    if (Count != NULL)
+        *Count = Visited;
+
+    return Result;
+}
+
+/* Says why a walk ended early, if it did */
+VOID
+KdbpReportWalk(
+    _In_ KDB_WALK_RESULT Result,
+    _In_opt_ PLIST_ENTRY Broken,
+    _In_ ULONG Maximum)
+{
+    if (Result == KdbWalkUnreadable)
+        KdbpPrint("The list cannot be read at %p\n", Broken);
+    else if (Result == KdbWalkTooLong)
+        KdbpPrint("The list goes on past %lu entries without coming back to its head\n", Maximum);
+}
+
+typedef struct _KDB_FIND_CONTEXT
+{
+    PVOID Id;
+    PEPROCESS Process;
+    PETHREAD Thread;
+} KDB_FIND_CONTEXT, *PKDB_FIND_CONTEXT;
+
+static
+BOOLEAN
+NTAPI
+KdbpFindThreadInList(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PKDB_FIND_CONTEXT Find = Context;
+    PETHREAD Thread = CONTAINING_RECORD(Link, ETHREAD, ThreadListEntry);
+    HANDLE Id = NULL;
+
+    if (NT_SUCCESS(KdbpSafeReadMemory(&Id, &Thread->Cid.UniqueThread, sizeof(Id))) && (Id == Find->Id))
+    {
+        Find->Thread = Thread;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+BOOLEAN
+NTAPI
+KdbpFindThreadInProcess(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PEPROCESS Process = CONTAINING_RECORD(Link, EPROCESS, ActiveProcessLinks);
+
+    KdbpWalkList(&Process->ThreadListHead, KDB_MAXIMUM_LIST_WALK, KdbpFindThreadInList, Context, NULL, NULL);
+    return (((PKDB_FIND_CONTEXT)Context)->Thread == NULL);
+}
+
+/*
+ * The thread or the process with a given identifier, without trusting the
+ * tables: a debugger is often looking at a system whose tables are wrong.
+ */
 BOOLEAN
 KdbpFindThreadById(
     _In_ PVOID ThreadId,
     _Out_ PETHREAD *Thread)
 {
-    PLIST_ENTRY ProcessEntry;
+    KDB_FIND_CONTEXT Find = {ThreadId, NULL, NULL};
 
-    *Thread = NULL;
+    KdbpWalkList(&PsActiveProcessHead, KDB_MAXIMUM_LIST_WALK, KdbpFindThreadInProcess, &Find, NULL, NULL);
 
-    for (ProcessEntry = PsActiveProcessHead.Flink;
-         ProcessEntry != &PsActiveProcessHead;
-         ProcessEntry = ProcessEntry->Flink)
+    *Thread = Find.Thread;
+    return (Find.Thread != NULL);
+}
+
+static
+BOOLEAN
+NTAPI
+KdbpFindProcessInList(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    PKDB_FIND_CONTEXT Find = Context;
+    PEPROCESS Process = CONTAINING_RECORD(Link, EPROCESS, ActiveProcessLinks);
+    HANDLE Id = NULL;
+
+    if (NT_SUCCESS(KdbpSafeReadMemory(&Id, &Process->UniqueProcessId, sizeof(Id))) && (Id == Find->Id))
     {
-        PEPROCESS Process;
-        PLIST_ENTRY ThreadEntry;
-
-        Process = CONTAINING_RECORD(ProcessEntry, EPROCESS, ActiveProcessLinks);
-
-        for (ThreadEntry = Process->ThreadListHead.Flink;
-             ThreadEntry != &Process->ThreadListHead;
-             ThreadEntry = ThreadEntry->Flink)
-        {
-            PETHREAD Candidate;
-
-            Candidate = CONTAINING_RECORD(ThreadEntry, ETHREAD, ThreadListEntry);
-
-            if (Candidate->Cid.UniqueThread == ThreadId)
-            {
-                *Thread = Candidate;
-                return TRUE;
-            }
-        }
+        Find->Process = Process;
+        return FALSE;
     }
 
-    return FALSE;
+    return TRUE;
 }
 
 BOOLEAN
@@ -691,26 +889,12 @@ KdbpFindProcessById(
     _In_ PVOID ProcessId,
     _Out_ PEPROCESS *Process)
 {
-    PLIST_ENTRY Entry;
+    KDB_FIND_CONTEXT Find = {ProcessId, NULL, NULL};
 
-    *Process = NULL;
+    KdbpWalkList(&PsActiveProcessHead, KDB_MAXIMUM_LIST_WALK, KdbpFindProcessInList, &Find, NULL, NULL);
 
-    for (Entry = PsActiveProcessHead.Flink;
-         Entry != &PsActiveProcessHead;
-         Entry = Entry->Flink)
-    {
-        PEPROCESS Candidate;
-
-        Candidate = CONTAINING_RECORD(Entry, EPROCESS, ActiveProcessLinks);
-
-        if (Candidate->UniqueProcessId == ProcessId)
-        {
-            *Process = Candidate;
-            return TRUE;
-        }
-    }
-
-    return FALSE;
+    *Process = Find.Process;
+    return (Find.Process != NULL);
 }
 
 /*
@@ -737,6 +921,7 @@ KdbpAttachToThread(
     _In_ PVOID ThreadId)
 {
     PETHREAD Thread = NULL;
+    PEPROCESS Process = NULL;
 
     if (!KdbpFindThreadById(ThreadId, &Thread))
         return FALSE;
@@ -749,8 +934,14 @@ KdbpAttachToThread(
         return TRUE;
     }
 
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Process, &Thread->Tcb.ApcState.Process, sizeof(Process))) ||
+        (Process == NULL))
+    {
+        return FALSE;
+    }
+
     KdbCurrentThread = Thread;
-    KdbCurrentProcess = (PEPROCESS)Thread->Tcb.ApcState.Process;
+    KdbCurrentProcess = Process;
 
     return TRUE;
 }
@@ -760,19 +951,24 @@ KdbpAttachToProcess(
     _In_ PVOID ProcessId)
 {
     PEPROCESS Process = NULL;
-    PLIST_ENTRY Entry;
+    LIST_ENTRY Threads;
+    HANDLE ThreadId = NULL;
 
     if (!KdbpFindProcessById(ProcessId, &Process))
         return FALSE;
 
-    Entry = Process->ThreadListHead.Flink;
-    if (Entry == &Process->ThreadListHead)
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Threads, &Process->ThreadListHead, sizeof(Threads))) ||
+        (Threads.Flink == &Process->ThreadListHead) ||
+        !NT_SUCCESS(KdbpSafeReadMemory(&ThreadId,
+                                       &CONTAINING_RECORD(Threads.Flink, ETHREAD, ThreadListEntry)->Cid.UniqueThread,
+                                       sizeof(ThreadId))))
+    {
         return FALSE;
+    }
 
     KdbCurrentProcess = Process;
 
-    return KdbpAttachToThread(
-        CONTAINING_RECORD(Entry, ETHREAD, ThreadListEntry)->Cid.UniqueThread);
+    return KdbpAttachToThread(ThreadId);
 }
 
 /*
@@ -848,6 +1044,7 @@ KdbEnterDebuggerException(
     LONG ExceptionNr;
     LONG BreakPointNr = -1;
     BOOLEAN EnteredOnSingleStep = FALSE;
+    BOOLEAN StoppedAtInternal = FALSE;
     BOOLEAN SteppedOverBreakPoint;
     BOOLEAN DisplayAcquired;
 
@@ -928,6 +1125,7 @@ KdbEnterDebuggerException(
             }
 
             KdbLastBreakPointNr = BreakPointNr;
+            StoppedAtInternal = BreakPoint->Internal;
 
             if (BreakPoint->Type == KdbBreakPointTemporary)
                 KdbpDeleteBreakPoint(BreakPointNr, NULL);
@@ -992,6 +1190,16 @@ KdbEnterDebuggerException(
             return kdHandleException;
         }
     }
+
+    /* A step's own breakpoints mean nothing once the machine has stopped, wherever that was */
+    if (StoppedAtInternal)
+    {
+        BreakPointNr = -1;
+        KdbLastBreakPointNr = -1;
+        EnteredOnSingleStep = TRUE;
+    }
+
+    KdbpDeleteInternalBreakPoints();
 
     /* From here the machine belongs to whoever is at the prompt */
     KdbActive = TRUE;

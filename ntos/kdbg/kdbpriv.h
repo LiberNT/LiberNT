@@ -75,6 +75,24 @@ KdbpArchContextFromKernelStack(
     _In_ PVOID KernelStack,
     _Out_ PCONTEXT Context);
 
+/* Whether stepping over the instruction at Address runs to the one after it, as over a call */
+BOOLEAN
+NTAPI
+KdbpArchIsStepOverInstruction(
+    _In_ ULONG_PTR Address);
+
+/* An instruction the self-test asks the architecture about, and the answer it should give */
+typedef struct _KDB_STEP_SAMPLE
+{
+    UCHAR Bytes[8];
+    UCHAR Length;
+    BOOLEAN StepOver;
+    PCSTR Name;
+} KDB_STEP_SAMPLE;
+
+extern const KDB_STEP_SAMPLE KdbpArchStepSamples[];
+extern const ULONG KdbpArchStepSampleCount;
+
 /* kdbanalyze.c */
 
 BOOLEAN
@@ -120,6 +138,14 @@ BOOLEAN KdbpCmdDeviceNode(ULONG Argc, PCHAR Argv[]);
 
 /* kdbscript.c */
 
+BOOLEAN
+KdbpJoinWords(
+    _In_ ULONG First,
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _Out_writes_(Length) PCHAR Buffer,
+    _In_ ULONG Length);
+
 VOID KdbpTranscriptAppend(_In_reads_(Length) PCCH String, _In_ ULONG Length);
 VOID KdbpTranscriptCommand(_In_ PCSTR Command);
 BOOLEAN KdbpExpandAlias(_In_ ULONG Argc, _In_ PCHAR Argv[], _Out_writes_(Length) PCHAR Buffer, _In_ ULONG Length);
@@ -130,6 +156,9 @@ BOOLEAN KdbpCmdUnalias(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdTranscript(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdScript(ULONG Argc, PCHAR Argv[]);
 BOOLEAN KdbpCmdRepeat(ULONG Argc, PCHAR Argv[]);
+
+/* kdbtest.c */
+
 BOOLEAN KdbpCmdSelfTest(ULONG Argc, PCHAR Argv[]);
 
 /* kdbtypes.c */
@@ -176,7 +205,58 @@ KdbpIsCommandName(
 ULONG
 KdbpCheckCommandTable(VOID);
 
+PCSTR
+KdbpGetCommandName(
+    _In_ ULONG Index);
+
+VOID
+KdbpClearResume(VOID);
+
+VOID
+KdbpResetView(VOID);
+
+VOID
+KdbpPrintBlock(
+    _In_reads_(Length) PCHAR Buffer,
+    _In_ ULONG Length);
+
 /* kdbcore.c */
+
+/* The most entries a walk of a system list visits before it calls the list broken */
+#define KDB_MAXIMUM_LIST_WALK 4096
+
+typedef enum _KDB_WALK_RESULT
+{
+    KdbWalkComplete,
+    KdbWalkStopped,
+    KdbWalkUnreadable,
+    KdbWalkTooLong
+} KDB_WALK_RESULT;
+
+typedef BOOLEAN (NTAPI *PKDB_WALK_ROUTINE)(_In_ PLIST_ENTRY Link, _In_opt_ PVOID Context);
+
+KDB_WALK_RESULT
+KdbpWalkList(
+    _In_ PLIST_ENTRY Head,
+    _In_ ULONG Maximum,
+    _In_ PKDB_WALK_ROUTINE Routine,
+    _In_opt_ PVOID Context,
+    _Out_opt_ PULONG Count,
+    _Out_opt_ PLIST_ENTRY *Broken);
+
+VOID
+KdbpReportWalk(
+    _In_ KDB_WALK_RESULT Result,
+    _In_opt_ PLIST_ENTRY Broken,
+    _In_ ULONG Maximum);
+
+BOOLEAN
+KdbpSetBreakPointInternal(
+    _In_ LONG BreakPointNr);
+
+BOOLEAN
+KdbpIsSystemAddress(
+    _In_ ULONG_PTR Address);
 
 BOOLEAN
 KdbpCheckBreakPointCondition(

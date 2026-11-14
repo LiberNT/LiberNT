@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Kernel
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Commands that run other commands, the transcript, and the debugger's own checks
+ * PURPOSE:     Commands that run other commands, and the transcript
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -35,7 +35,7 @@ static ULONG KdbpTranscriptLength;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
-static
+/* Puts words back together with one space between them, for a command that takes the rest of its line */
 BOOLEAN
 KdbpJoinWords(
     _In_ ULONG First,
@@ -221,11 +221,19 @@ KdbpCmdAlias(
 
     if (Argc == 1)
     {
+        BOOLEAN Any = FALSE;
+
         for (Index = 0; Index < KDB_MAXIMUM_ALIASES; Index++)
         {
             if (KdbpAliases[Index].Name[0] != ANSI_NULL)
+            {
                 KdbpPrint("%s = %s\n", KdbpAliases[Index].Name, KdbpAliases[Index].Command);
+                Any = TRUE;
+            }
         }
+
+        if (!Any)
+            KdbPuts("No aliases are set\n");
 
         return TRUE;
     }
@@ -346,9 +354,9 @@ KdbpCmdTranscript(
         First = min(KdbpTranscriptLength, KDB_TRANSCRIPT_SIZE - Start);
 
         if (First != 0)
-            KdbpPager(&KdbpTranscript[Start], First);
+            KdbpPrintBlock(&KdbpTranscript[Start], First);
         if (KdbpTranscriptLength > First)
-            KdbpPager(KdbpTranscript, KdbpTranscriptLength - First);
+            KdbpPrintBlock(KdbpTranscript, KdbpTranscriptLength - First);
 
         KdbpTranscriptEnabled = Enabled;
     }
@@ -457,76 +465,6 @@ KdbpCmdRepeat(
         if (KdbpCliInterpretCommand(Run))
             break;
     }
-
-    return TRUE;
-}
-
-BOOLEAN
-KdbpCmdSelfTest(
-    ULONG Argc,
-    PCHAR Argv[])
-{
-    static const ULONG Sentinel = 0x4B444254;
-    CHAR ErrorMessage[128];
-    ULONGLONG Result = 0;
-    LONG ErrorOffset = 0;
-    ULONG_PTR Number = 0;
-    ULONG ReadBack = 0;
-    ULONG Failures;
-    ULONG Index;
-
-    UNREFERENCED_PARAMETER(Argc);
-    UNREFERENCED_PARAMETER(Argv);
-
-    Failures = KdbpCheckCommandTable();
-
-    if (!NT_SUCCESS(KdbpSafeReadMemory(&ReadBack, (PVOID)&Sentinel, sizeof(ReadBack))) ||
-        (ReadBack != Sentinel))
-    {
-        KdbPuts("selftest: a guarded read of readable memory failed\n");
-        Failures++;
-    }
-
-    if (NT_SUCCESS(KdbpSafeReadMemory(&ReadBack, (PVOID)(ULONG_PTR)1, sizeof(ReadBack))))
-    {
-        KdbPuts("selftest: a guarded read of address 1 succeeded\n");
-        Failures++;
-    }
-
-    if (!KdbpGetHexNumber("1234", &Number) || (Number != 0x1234) ||
-        !KdbpGetHexNumber("0xfeed", &Number) || (Number != 0xFEED) ||
-        KdbpGetHexNumber("1234x", &Number) ||
-        KdbpGetHexNumber("", &Number) ||
-        KdbpGetHexNumber("1000000000000000000", &Number))
-    {
-        KdbPuts("selftest: the hexadecimal parser accepted or refused the wrong numbers\n");
-        Failures++;
-    }
-
-    if (!KdbpRpnEvaluateExpression("1+2*3", KdbCurrentTrapFrame, &Result, &ErrorOffset, ErrorMessage) ||
-        (Result != 7) ||
-        KdbpRpnEvaluateExpression("0x10000000000000000", KdbCurrentTrapFrame, &Result, &ErrorOffset, ErrorMessage))
-    {
-        KdbPuts("selftest: the expression evaluator got 1+2*3 or a number too large wrong\n");
-        Failures++;
-    }
-
-    for (Index = 0; Index < KdbpFloatingRegisterCount; Index++)
-    {
-        if ((KdbpFloatingRegisters[Index].Size == 0) ||
-            (KdbpFloatingRegisters[Index].Size > 16) ||
-            ((ULONG)KdbpFloatingRegisters[Index].Offset + KdbpFloatingRegisters[Index].Size > sizeof(CONTEXT)))
-        {
-            KdbpPrint("selftest: the floating-point register %s is outside the context\n",
-                      KdbpFloatingRegisters[Index].Name);
-            Failures++;
-        }
-    }
-
-    if (Failures == 0)
-        KdbPuts("selftest: guarded reads, parsers, command and register tables are right\n");
-    else
-        KdbpPrint("selftest: %lu checks failed\n", Failures);
 
     return TRUE;
 }

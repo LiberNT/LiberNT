@@ -208,4 +208,49 @@ KdbpArchContextFromKernelStack(
     return TRUE;
 }
 
+/*
+ * Whether stepping over the instruction at Address means running to the one
+ * after it: a jump that links ra or t0, which is how a call is made here.
+ */
+BOOLEAN
+NTAPI
+KdbpArchIsStepOverInstruction(
+    _In_ ULONG_PTR Address)
+{
+    USHORT Low;
+    ULONG Instruction;
+    ULONG Link;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Low, (PVOID)Address, sizeof(Low))))
+        return FALSE;
+
+    /* C.JALR: the one compressed call of RV64 */
+    if ((Low & 3) != 3)
+        return ((Low & 0xF07F) == 0x9002) && (((Low >> 7) & 0x1F) != 0);
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Instruction, (PVOID)Address, sizeof(Instruction))))
+        return FALSE;
+
+    Link = (Instruction >> 7) & 0x1F;
+    if (((Instruction & 0x7F) == 0x6F) || (((Instruction & 0x7F) == 0x67) && (((Instruction >> 12) & 7) == 0)))
+        return (Link == 1) || (Link == 5);
+
+    return FALSE;
+}
+
+/* What the self-test asks the classification above about */
+const KDB_STEP_SAMPLE KdbpArchStepSamples[] =
+{
+    {{0xEF, 0x00, 0x00, 0x00}, 4, TRUE, "jal ra"},
+    {{0xE7, 0x80, 0x02, 0x00}, 4, TRUE, "jalr ra, t0"},
+    {{0x82, 0x92}, 2, TRUE, "c.jalr t0"},
+    {{0x6F, 0x00, 0x00, 0x00}, 4, FALSE, "j"},
+    {{0x67, 0x80, 0x00, 0x00}, 4, FALSE, "ret"},
+    {{0x82, 0x80}, 2, FALSE, "c.jr ra"},
+    {{0x02, 0x90}, 2, FALSE, "c.ebreak"},
+    {{0x13, 0x00, 0x00, 0x00}, 4, FALSE, "nop"}
+};
+
+const ULONG KdbpArchStepSampleCount = RTL_NUMBER_OF(KdbpArchStepSamples);
+
 /* EOF */

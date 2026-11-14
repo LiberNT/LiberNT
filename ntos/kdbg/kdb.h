@@ -32,6 +32,7 @@ typedef struct _KDB_BREAKPOINT
    PEPROCESS              Process;      /* Owning process */
    PCHAR                  ConditionExpression;
    PVOID                  Condition;
+   BOOLEAN                Internal;     /* Set by a step or a run to an address; gone at the next stop */
    union {
       /* KdbBreakPointSoftware */
       KD_BREAKPOINT_TYPE  SavedInstruction;
@@ -150,6 +151,11 @@ KdbpIsOutputAborted(VOID);
 
 VOID
 KdbpCaptureOutput(IN PCCH String, IN USHORT Length);
+
+BOOLEAN
+KdbpSelfTestCapture(
+    _In_reads_(Length) PCCH String,
+    _In_ ULONG Length);
 
 VOID
 KdbpCommandHistoryAppend(

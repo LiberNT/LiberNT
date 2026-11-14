@@ -235,4 +235,38 @@ KdbpArchContextFromKernelStack(
     return TRUE;
 }
 
+/*
+ * Whether stepping over the instruction at Address means running to the one
+ * after it: a branch with link, which is how a call is made here.
+ */
+BOOLEAN
+NTAPI
+KdbpArchIsStepOverInstruction(
+    _In_ ULONG_PTR Address)
+{
+    ULONG Instruction;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Instruction, (PVOID)Address, sizeof(Instruction))))
+        return FALSE;
+
+    /* BL, BLR, and BLRAA, BLRAAZ, BLRAB, BLRABZ */
+    return ((Instruction & 0xFC000000) == 0x94000000) ||
+           ((Instruction & 0xFFFFFC1F) == 0xD63F0000) ||
+           ((Instruction & 0xFEFFF800) == 0xD63F0800);
+}
+
+/* What the self-test asks the classification above about */
+const KDB_STEP_SAMPLE KdbpArchStepSamples[] =
+{
+    {{0x00, 0x00, 0x00, 0x94}, 4, TRUE, "bl"},
+    {{0x00, 0x00, 0x3F, 0xD6}, 4, TRUE, "blr x0"},
+    {{0x3F, 0x08, 0x3F, 0xD6}, 4, TRUE, "blraaz x1"},
+    {{0x00, 0x00, 0x00, 0x14}, 4, FALSE, "b"},
+    {{0x00, 0x00, 0x1F, 0xD6}, 4, FALSE, "br x0"},
+    {{0xC0, 0x03, 0x5F, 0xD6}, 4, FALSE, "ret"},
+    {{0x1F, 0x20, 0x03, 0xD5}, 4, FALSE, "nop"}
+};
+
+const ULONG KdbpArchStepSampleCount = RTL_NUMBER_OF(KdbpArchStepSamples);
+
 /* EOF */

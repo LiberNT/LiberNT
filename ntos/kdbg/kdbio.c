@@ -32,6 +32,9 @@ KdbPutsN(
     if ((String == NULL) || (Length == 0))
         return;
 
+    if (KdbpSelfTestCapture(String, Length))
+        return;
+
     Output.Buffer = (PCHAR)String;
     Output.Length = Length;
     Output.MaximumLength = Length;

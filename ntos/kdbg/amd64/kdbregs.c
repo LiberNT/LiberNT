@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "../kdb.h"
 #include "../kdbpriv.h"
+#include <Zydis/Zydis.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -302,5 +303,61 @@ KdbpArchContextFromKernelStack(
     Context->Rbp = Frame.Rbp;
     return TRUE;
 }
+
+/*
+ * Whether stepping over the instruction at Address means running to the one
+ * after it: a call, or a repeated string instruction, which goes round in
+ * place until it is done.
+ */
+BOOLEAN
+NTAPI
+KdbpArchIsStepOverInstruction(
+    _In_ ULONG_PTR Address)
+{
+    UCHAR Code[ZYDIS_MAX_INSTRUCTION_LENGTH];
+    ZydisDecodedInstruction Instruction;
+    ZydisDecoder Decoder;
+    ULONG Length;
+
+    for (Length = 0; Length < sizeof(Code); Length++)
+    {
+        if ((Address + Length < Address) ||
+            !NT_SUCCESS(KdbpSafeReadMemory(&Code[Length], (PVOID)(Address + Length), sizeof(Code[Length]))))
+        {
+            break;
+        }
+    }
+
+    if (!ZYAN_SUCCESS(ZydisDecoderInit(&Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64)) ||
+        !ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(&Decoder, NULL, Code, Length, &Instruction)))
+    {
+        return FALSE;
+    }
+
+    if (Instruction.meta.category == ZYDIS_CATEGORY_CALL)
+        return TRUE;
+
+    return (Instruction.meta.category == ZYDIS_CATEGORY_STRINGOP) &&
+           ((Instruction.attributes & (ZYDIS_ATTRIB_HAS_REP | ZYDIS_ATTRIB_HAS_REPE | ZYDIS_ATTRIB_HAS_REPNE)) != 0);
+}
+
+/* What the self-test asks the classification above about */
+const KDB_STEP_SAMPLE KdbpArchStepSamples[] =
+{
+    {{0xE8, 0x00, 0x00, 0x00, 0x00}, 5, TRUE, "call rel32"},
+    {{0xFF, 0xD0}, 2, TRUE, "call rax"},
+    {{0x41, 0xFF, 0xD3}, 3, TRUE, "call r11"},
+    {{0xFF, 0x15, 0x00, 0x00, 0x00, 0x00}, 6, TRUE, "call [rip]"},
+    {{0xF3, 0xA4}, 2, TRUE, "rep movsb"},
+    {{0xF3, 0x48, 0xAB}, 3, TRUE, "rep stosq"},
+    {{0xEB, 0xFE}, 2, FALSE, "jmp short"},
+    {{0xC3}, 1, FALSE, "ret"},
+    {{0x75, 0x00}, 2, FALSE, "jne"},
+    {{0xFF, 0xE0}, 2, FALSE, "jmp rax"},
+    {{0xA4}, 1, FALSE, "movsb"},
+    {{0x90}, 1, FALSE, "nop"}
+};
+
+const ULONG KdbpArchStepSampleCount = RTL_NUMBER_OF(KdbpArchStepSamples);
 
 /* EOF */
