@@ -15,7 +15,7 @@
 
 /* FIXME: a stale CmpEnableLazyFlushDpc from an earlier hold clears a hold asserted since; the flag carries no generation to tell them apart. */
 BOOLEAN CmpHoldLazyFlush = TRUE;
-BOOLEAN CmpLazyFlushPending = FALSE;
+LONG CmpLazyFlushPending = 0;
 ULONG CmpLazyFlushCount = 1;
 ULONG CmpLazyFlushHiveCount = CMP_LAZY_FLUSH_HIVES;
 ULONG CmpLazyFlushIntervalInSeconds = CMP_LAZY_FLUSH_SECONDS;
@@ -137,7 +137,7 @@ CmpLazyFlushWorker(
 
     UNREFERENCED_PARAMETER(Parameter);
 
-    CmpLazyFlushPending = FALSE;
+    InterlockedExchange(&CmpLazyFlushPending, 0);
 
     CmpFlushSelfHealQueue();
 
@@ -165,6 +165,8 @@ CmpLazyFlushDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     if (InterlockedCompareExchange(&CmpLazyWorkItemActive, 1, 0) != 0) return;
 
     ExQueueWorkItem(&CmpLazyWorkItem, DelayedWorkQueue);
@@ -184,6 +186,8 @@ CmpEnableLazyFlushDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     CmpHoldLazyFlush = FALSE;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 }
 
 /*
@@ -198,9 +202,7 @@ CmpLazyFlush(VOID)
 
     if (!CmpFlusherStarted) return;
     if (CmpNoWrite || CmpHoldLazyFlush) return;
-    if (CmpLazyFlushPending) return;
-
-    CmpLazyFlushPending = TRUE;
+    if (InterlockedCompareExchange(&CmpLazyFlushPending, 1, 0) != 0) return;
 
     Due.QuadPart = Int32x32To64(CmpLazyFlushIntervalInSeconds, -10000000);
     KeSetTimer(&CmpLazyFlushTimer, Due, &CmpLazyFlushDpc);

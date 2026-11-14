@@ -322,7 +322,7 @@ NTSTATUS NTAPI CmpReplaceHiveFile(_In_ PCMHIVE Hive,
 CODE_SEG("INIT") VOID NTAPI CmpLoadHiveThread(_In_ PVOID StartContext);
 
 /* cmflusher.c */
-extern BOOLEAN CmpLazyFlushPending;
+extern LONG CmpLazyFlushPending;
 extern ULONG CmpLazyFlushCount;
 extern KTIMER CmpLazyFlushTimer;
 extern KDPC CmpLazyFlushDpc;
