@@ -1254,12 +1254,8 @@ ClasspIsIdleRequestSupported(
     PIRP Irp
     )
 {
-#ifndef __REACTOS__
     IO_PRIORITY_HINT ioPriority = IoGetIoPriorityHint(Irp);
     return ((ioPriority <= IoPriorityLow) && (FdoData->IdlePrioritySupported == TRUE));
-#else
-    return (FdoData->IdlePrioritySupported == TRUE);
-#endif
 }
 
 FORCEINLINE
