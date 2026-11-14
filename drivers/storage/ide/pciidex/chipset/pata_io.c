@@ -1199,9 +1199,9 @@ PataPollingTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    OldIrql = KeAcquireInterruptSpinLock(ChanData->InterruptObject);
-
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    OldIrql = KeAcquireInterruptSpinLock(ChanData->InterruptObject);
 
     if (!(ChanData->ActiveSlotsBitmap & (1 << PATA_CHANNEL_SLOT)) ||
         (ChanData->CommandFlags & CMD_FLAG_AWAIT_INTERRUPT))

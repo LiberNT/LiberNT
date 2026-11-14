@@ -310,15 +310,15 @@ AtaReqCompleteRequest(
         KeAcquireSpinLockAtDpcLevel(&PortData->QueueLock);
 
         /* Stop the timer tied to the completed slot */
-        PortData->ActiveTimersBitmap &= ~(1 << Request->Slot);
+        PortData->ActiveTimersBitmap &= ~(1UL << Request->Slot);
 
         /* Release exclusive access to the port queue */
         if (Request->Flags & REQUEST_EXCLUSIVE_ACCESS_FLAGS)
             PortData->QueueFlags &= ~PORT_QUEUE_FLAG_EXCLUSIVE_MODE;
 
         /* Release the slot */
-        ASSERT(!(PortData->FreeSlotsBitmap & (1 << Request->Slot)));
-        PortData->FreeSlotsBitmap |= (1 << Request->Slot);
+        ASSERT(!(PortData->FreeSlotsBitmap & (1UL << Request->Slot)));
+        PortData->FreeSlotsBitmap |= (1UL << Request->Slot);
 #if DBG
         PortData->Slots[Request->Slot] = NULL;
 #endif
@@ -499,12 +499,12 @@ AtaReqStartIo(
 
     OldIrql = KeAcquireInterruptSpinLock(PortData->InterruptObject);
 
-    ASSERT(!(PortData->ActiveSlotsBitmap & (1 << Request->Slot)));
+    ASSERT(!(PortData->ActiveSlotsBitmap & (1UL << Request->Slot)));
 
     if ((PortData->InterruptFlags & PORT_INT_FLAG_IS_IO_ACTIVE) ||
         (Request->Flags & REQUEST_FLAG_INTERNAL))
     {
-        PortData->ActiveSlotsBitmap |= 1 << Request->Slot;
+        PortData->ActiveSlotsBitmap |= 1UL << Request->Slot;
 
         if (!PortData->StartIo(PortData->ChannelContext, Request))
         {
@@ -877,7 +877,7 @@ AtaReqDispatchRequest(
     Success = AtaReqAllocateSlot(Device, PortData, Request);
     if (Success)
     {
-        PortData->ActiveTimersBitmap |= 1 << Request->Slot;
+        PortData->ActiveTimersBitmap |= 1UL << Request->Slot;
     }
     else
     {
@@ -1199,14 +1199,14 @@ AtaReqAllocateRequestFromTag(
 {
     PATA_DEVICE_REQUEST Request;
 
-    ASSERT(Device->FreeRequestsBitmap & (1 << Tag));
+    ASSERT(Device->FreeRequestsBitmap & (1UL << Tag));
 
-    Device->FreeRequestsBitmap &= ~(1 << Tag);
+    Device->FreeRequestsBitmap &= ~(1UL << Tag);
 
     Request = &Device->Requests[Tag];
     ASSERT_REQUEST(Request);
 
-    Request->Tag = 1 << Tag;
+    Request->Tag = 1UL << Tag;
 
     return Request;
 }
@@ -1791,7 +1791,7 @@ AtaPortIoTimer(
     ActiveTimersBitmap = PortData->ActiveTimersBitmap;
     while (_BitScanForward(&Slot, ActiveTimersBitmap) != 0)
     {
-        ActiveTimersBitmap &= ~(1 << Slot);
+        ActiveTimersBitmap &= ~(1UL << Slot);
 
         /* Decrease the timeout counter */
         if ((PortData->TimerCount[Slot] > 0) && (--PortData->TimerCount[Slot] == 0))
@@ -1799,7 +1799,7 @@ AtaPortIoTimer(
             KIRQL OldIrql = KeAcquireInterruptSpinLock(PortData->InterruptObject);
 
             /* Handle timeout of an active command */
-            if (PortData->ActiveSlotsBitmap & (1 << Slot))
+            if (PortData->ActiveSlotsBitmap & (1UL << Slot))
                 AtaPortTimeout(PortData, Slot);
 
             KeReleaseInterruptSpinLock(PortData->InterruptObject, OldIrql);

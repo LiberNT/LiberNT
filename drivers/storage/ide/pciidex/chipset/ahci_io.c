@@ -156,7 +156,7 @@ AtaAhciStartIo(
     PULONG IoBase = ChanData->IoBase;
     ULONG IssueSlot;
 
-    IssueSlot = 1 << Request->Slot;
+    IssueSlot = 1UL << Request->Slot;
 
     ChanData->ActiveSlotsBitmap |= IssueSlot;
 
@@ -335,7 +335,7 @@ AtaAhciPortCompleteCommands(
         PATA_DEVICE_REQUEST Request;
         UCHAR SrbStatus;
 
-        CommandsCompleted &= ~(1 << Slot);
+        CommandsCompleted &= ~(1UL << Slot);
 
         Request = ChanData->Slots[Slot];
         ASSERT(Request);
@@ -445,11 +445,11 @@ AtaAhciPollingTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     OldIrql = KeAcquireInterruptSpinLock(ChanData->Controller->InterruptObject);
 
     ActiveSlots = ChanData->ActiveSlotsBitmap;
-
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (ActiveSlots != 0)
     {
@@ -489,7 +489,7 @@ AtaAhciHbaIsr(
     PortInterruptBitmap = InterruptStatus & Controller->ChannelBitmap;
     while (_BitScanForward(&Port, PortInterruptBitmap) != 0)
     {
-        PortInterruptBitmap &= ~(1 << Port);
+        PortInterruptBitmap &= ~(1UL << Port);
 
         AtaAhciPortHandleInterrupt(Controller->Channels[Port]);
     }
