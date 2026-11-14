@@ -322,9 +322,7 @@ BOOL HCR_GetClassNameW(REFIID riid, LPWSTR szDest, DWORD len)
  	szDest[0] = 0;
 	if (HCR_RegOpenClassIDKey(riid, &hkey))
 	{
-          DWORD cbMui;
-
-          if (!RegLoadMUIStringW(hkey, L"LocalizedString", szDest, buflen, &cbMui, 0, NULL) ||
+          if (!RegLoadMUIStringW(hkey, L"LocalizedString", szDest, buflen, NULL, 0, NULL) ||
               !RegQueryValueExW(hkey, L"", 0, NULL, (LPBYTE)szDest, &buflen))
           {
 	    ret = TRUE;
