@@ -52,6 +52,12 @@ volatile PCHAR KdbInitFileBuffer = NULL;
 #define KDB_MAXIMUM_INSTRUCTIONS 0x10000
 #define KDB_DEFAULT_TEXT_LENGTH 256
 #define KDB_TEXT_PER_LINE       48
+
+/* As long as a breakpoint's condition may be; the breakpoint keeps a copy of it */
+#define KDB_CONDITION_MAX       128
+
+/* How many commands may be run at every stop */
+#define KDB_DISPLAY_MAX         8
 #define KDB_DEFAULT_LOG_BYTES   4096
 #define KDB_MAXIMUM_LOG_BYTES   (32 * 1024)
 
@@ -93,6 +99,10 @@ static PKDB_KTRAP_FRAME KdbpViewContext;
 static CONTEXT KdbpRecordContext;
 static CONTEXT KdbpFrameContext;
 static BOOLEAN KdbpFrameSelected;
+
+/* What a p with a count still has to step, and what runs at every stop */
+static ULONG KdbpPendingStepOvers;
+static CHAR KdbpDisplays[KDB_DISPLAY_MAX][KDB_BREAKPOINT_COMMANDS_MAX];
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -405,6 +415,7 @@ KdbRegisterCliCallback(
 /* COMMANDS *******************************************************************/
 
 static BOOLEAN KdbpCmdHelp(ULONG Argc, PCHAR Argv[]);
+static BOOLEAN KdbpRunTo(_In_ ULONG_PTR Address, _In_opt_ PCHAR Condition);
 
 static
 BOOLEAN
@@ -412,8 +423,22 @@ KdbpCmdContinue(
     ULONG Argc,
     PCHAR Argv[])
 {
-    UNREFERENCED_PARAMETER(Argc);
-    UNREFERENCED_PARAMETER(Argv);
+    ULONG_PTR Address;
+
+    /* `g <address>` runs to that address and stops there, or wherever the machine stops first */
+    if (Argc > 1)
+    {
+        if (Argc > 2)
+        {
+            KdbpPrint("%s is more than %s takes\n", Argv[2], Argv[0]);
+            return TRUE;
+        }
+
+        if (!KdbpGetAddressExpression(Argv[1], &Address))
+            return TRUE;
+
+        return KdbpRunTo(Address, NULL);
+    }
 
     KdbpSetContinueType(kdContinue);
     KdbpLeaveLoop = TRUE;
@@ -475,7 +500,8 @@ KdbpStartStepping(
 static
 BOOLEAN
 KdbpRunTo(
-    _In_ ULONG_PTR Address)
+    _In_ ULONG_PTR Address,
+    _In_opt_ PCHAR Condition)
 {
     LONG Number = -1;
     NTSTATUS Status;
@@ -484,7 +510,7 @@ KdbpRunTo(
                                   KdbBreakPointTemporary,
                                   0,
                                   KdbAccessExec,
-                                  NULL,
+                                  Condition,
                                   KdbpIsSystemAddress(Address),
                                   &Number);
     if (NT_SUCCESS(Status))
@@ -526,17 +552,13 @@ KdbpCmdStep(
  * Runs to just after the current instruction, which steps over a call rather
  * than into it.
  */
+/* Runs over the instruction the stopped thread is at: to the next one after a call, one step otherwise */
 static
 BOOLEAN
-KdbpCmdNext(
-    ULONG Argc,
-    PCHAR Argv[])
+KdbpStepOver(VOID)
 {
     ULONG_PTR Pc;
     LONG Length;
-
-    UNREFERENCED_PARAMETER(Argc);
-    UNREFERENCED_PARAMETER(Argv);
 
     if (KdbCurrentTrapFrame == NULL)
     {
@@ -553,7 +575,34 @@ KdbpCmdNext(
     if (Length <= 0)
         return KdbpStartStepping(1);
 
-    return KdbpRunTo(Pc + (ULONG_PTR)Length);
+    return KdbpRunTo(Pc + (ULONG_PTR)Length, NULL);
+}
+
+static
+BOOLEAN
+KdbpCmdNext(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG_PTR Count = 1;
+
+    if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Count))
+        return TRUE;
+
+    if (Count > MAXULONG)
+    {
+        KdbpPrint("A step count is at most 0x%lx\n", MAXULONG);
+        return TRUE;
+    }
+
+    /* The rest of the count is stepped at each stop that is the end of a step */
+    KdbpPendingStepOvers = (Count == 0) ? 0 : (ULONG)Count - 1;
+    KdbpStepOver();
+
+    if (!KdbpLeaveLoop)
+        KdbpPendingStepOvers = 0;
+
+    return TRUE;
 }
 
 static
@@ -593,6 +642,9 @@ KdbpCmdBreakPointList(
         BOOLEAN Global = FALSE;
         PEPROCESS Process = NULL;
         PCHAR Condition = NULL;
+        PCSTR Commands = NULL;
+        ULONG Hits = 0;
+        ULONG Ignore = 0;
 
         if (KdbpGetBreakPointInfo((ULONG)Index,
                                   &Address,
@@ -603,7 +655,8 @@ KdbpCmdBreakPointList(
                                   &Enabled,
                                   &Global,
                                   &Process,
-                                  &Condition))
+                                  &Condition) &&
+            KdbpGetBreakPointCounts(Index, &Hits, &Ignore, &Commands))
         {
             Any = TRUE;
 
@@ -628,8 +681,16 @@ KdbpCmdBreakPointList(
             if (!Global)
                 KdbpPrint(" in process %p", Process);
 
+            KdbpPrint(" hits %lu", Hits);
+
+            if (Ignore != 0)
+                KdbpPrint(" ignore %lu", Ignore);
+
             if (Condition != NULL)
                 KdbpPrint(" if %s", Condition);
+
+            if (Commands != NULL)
+                KdbpPrint(" do \"%s\"", Commands);
 
             KdbPuts("\n");
         }
@@ -703,43 +764,93 @@ KdbpGetCondition(
     return TRUE;
 }
 
+/*
+ * What follows the address of bp, or the size of bpm: `if <condition>` and
+ * `do <commands>`, in that order, either one or both. Commands that hold a
+ * semicolon are written in quotes, or the line would end there.
+ */
+static
+BOOLEAN
+KdbpGetBreakPointOptions(
+    _In_ ULONG First,
+    _In_ ULONG Argc,
+    _In_ PCHAR Argv[],
+    _Out_writes_(KDB_CONDITION_MAX) PCHAR Condition,
+    _Out_writes_(KDB_BREAKPOINT_COMMANDS_MAX) PCHAR Commands)
+{
+    ULONG Do;
+
+    Condition[0] = ANSI_NULL;
+    Commands[0] = ANSI_NULL;
+
+    for (Do = First; (Do < Argc) && (_stricmp(Argv[Do], "do") != 0); Do++)
+        NOTHING;
+
+    if (First < Do)
+    {
+        if (_stricmp(Argv[First], "if") != 0)
+        {
+            KdbpPrint("%s is not if or do\n", Argv[First]);
+            return FALSE;
+        }
+
+        if (!KdbpGetCondition(First + 1, Do, Argv, Condition, KDB_CONDITION_MAX))
+            return FALSE;
+    }
+
+    if (Do < Argc)
+    {
+        if (Do + 1 >= Argc)
+        {
+            KdbPuts("Commands are needed after do\n");
+            return FALSE;
+        }
+
+        if (!KdbpJoinWords(Do + 1, Argc, Argv, Commands, KDB_BREAKPOINT_COMMANDS_MAX))
+        {
+            KdbpPrint("The commands of a breakpoint have at most %u characters\n", KDB_BREAKPOINT_COMMANDS_MAX - 1);
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
 static
 BOOLEAN
 KdbpCmdBreakPointSet(
     ULONG Argc,
     PCHAR Argv[])
 {
-    static CHAR Condition[128];
+    static CHAR Condition[KDB_CONDITION_MAX];
+    static CHAR Commands[KDB_BREAKPOINT_COMMANDS_MAX];
+    KDB_BREAKPOINT_TYPE Type = KdbBreakPointSoftware;
     ULONG_PTR Address = 0;
+    ULONG First = 1;
     LONG Number = -1;
     NTSTATUS Status;
 
-    if (Argc < 2)
+    /* `bp /1` goes once it has stopped the machine */
+    if ((Argc > 1) && (strcmp(Argv[1], "/1") == 0))
+    {
+        Type = KdbBreakPointTemporary;
+        First = 2;
+    }
+
+    if (Argc <= First)
     {
         KdbPuts("An address is needed\n");
         return TRUE;
     }
 
-    if (!KdbpGetAddressExpression(Argv[1], &Address))
-        return TRUE;
-
-    Condition[0] = ANSI_NULL;
-
-    /* `bp <address> if <expression>` only stops when the condition holds */
-    if (Argc > 2)
+    if (!KdbpGetAddressExpression(Argv[First], &Address) ||
+        !KdbpGetBreakPointOptions(First + 1, Argc, Argv, Condition, Commands))
     {
-        if (_stricmp(Argv[2], "if") != 0)
-        {
-            KdbpPrint("%s is not if: bp <address> [if <condition>]\n", Argv[2]);
-            return TRUE;
-        }
-
-        if (!KdbpGetCondition(3, Argc, Argv, Condition, sizeof(Condition)))
-            return TRUE;
+        return TRUE;
     }
 
     Status = KdbpInsertBreakPoint(Address,
-                                  KdbBreakPointSoftware,
+                                  Type,
                                   0,
                                   KdbAccessExec,
                                   (Condition[0] != ANSI_NULL) ? Condition : NULL,
@@ -751,6 +862,7 @@ KdbpCmdBreakPointSet(
         return TRUE;
     }
 
+    KdbpSetBreakPointCommands(Number, Commands);
     KdbpPrint("Breakpoint %ld at %p\n", Number, (PVOID)Address);
     return TRUE;
 }
@@ -761,9 +873,12 @@ KdbpCmdBreakPointMemory(
     ULONG Argc,
     PCHAR Argv[])
 {
+    static CHAR Condition[KDB_CONDITION_MAX];
+    static CHAR Commands[KDB_BREAKPOINT_COMMANDS_MAX];
     ULONG_PTR Address = 0;
     ULONG_PTR Size = sizeof(ULONG_PTR);
     KDB_ACCESS_TYPE AccessType = KdbAccessReadWrite;
+    ULONG Options = 3;
     LONG Number = -1;
     NTSTATUS Status;
 
@@ -790,14 +905,16 @@ KdbpCmdBreakPointMemory(
     if (!KdbpGetAddressExpression(Argv[2], &Address))
         return TRUE;
 
-    if ((Argc > 3) && !KdbpGetAddressExpression(Argv[3], &Size))
-        return TRUE;
-
-    if (Argc > 4)
+    if ((Argc > 3) && (_stricmp(Argv[3], "if") != 0) && (_stricmp(Argv[3], "do") != 0))
     {
-        KdbpPrint("%s is more than bpm takes\n", Argv[4]);
-        return TRUE;
+        if (!KdbpGetAddressExpression(Argv[3], &Size))
+            return TRUE;
+
+        Options = 4;
     }
+
+    if (!KdbpGetBreakPointOptions(Options, Argc, Argv, Condition, Commands))
+        return TRUE;
 
     if ((Size != 1) && (Size != 2) && (Size != 4) && (Size != 8))
     {
@@ -815,7 +932,7 @@ KdbpCmdBreakPointMemory(
                                   KdbBreakPointHardware,
                                   (UCHAR)Size,
                                   AccessType,
-                                  NULL,
+                                  (Condition[0] != ANSI_NULL) ? Condition : NULL,
                                   TRUE,
                                   &Number);
     if (!NT_SUCCESS(Status))
@@ -824,6 +941,7 @@ KdbpCmdBreakPointMemory(
         return TRUE;
     }
 
+    KdbpSetBreakPointCommands(Number, Commands);
     KdbpPrint("Breakpoint %ld watching %p\n", Number, (PVOID)Address);
     return TRUE;
 }
@@ -1386,16 +1504,74 @@ KdbpCmdBackTrace(
  * Shows memory. The letter after the command says how wide each value is, and
  * `a` asks for the bytes to be shown as text.
  */
+/* What a dump shows besides the values, and where it reads them */
+#define KDB_DUMP_TEXT       0x1
+#define KDB_DUMP_PHYSICAL   0x2
+
+static
+NTSTATUS
+KdbpReadDumpValue(
+    _In_ ULONG_PTR Address,
+    _Out_writes_bytes_(Width) PVOID Value,
+    _In_ ULONG Width,
+    _In_ ULONG Flags)
+{
+    if (Flags & KDB_DUMP_PHYSICAL)
+    {
+        /* TODO: device memory is read cached, as the host debugger's physical reads are */
+        return KdpCopyMemoryChunks((ULONG64)Address,
+                                   Value,
+                                   Width,
+                                   0,
+                                   MMDBG_COPY_UNSAFE | MMDBG_COPY_PHYSICAL | MMDBG_COPY_CACHED,
+                                   NULL);
+    }
+
+    return KdbpSafeReadMemory(Value, (PVOID)Address, Width);
+}
+
+/* The bytes of a line again, as text, after the values */
+static
+VOID
+KdbpPrintDumpText(
+    _In_reads_(Length) const UCHAR *Bytes,
+    _In_ ULONG Length,
+    _In_ ULONG Values,
+    _In_ ULONG Width)
+{
+    CHAR Text[KDB_DUMP_BYTES_PER_LINE + 1];
+    ULONG Index;
+
+    /* A short last line is padded so its text lines up with the others */
+    for (Index = Values; Index < KDB_DUMP_BYTES_PER_LINE / Width; Index++)
+        KdbpPrint("%*s", (int)(Width * 2 + 1), "");
+
+    for (Index = 0; Index < Length; Index++)
+        Text[Index] = ((Bytes[Index] >= ' ') && (Bytes[Index] < 0x7F)) ? (CHAR)Bytes[Index] : '.';
+
+    Text[Length] = ANSI_NULL;
+    KdbpPrint(" %s", Text);
+}
+
 static
 BOOLEAN
 KdbpDumpMemory(
     _In_ ULONG Argc,
     _In_ PCHAR Argv[],
-    _In_ ULONG Width)
+    _In_ ULONG Width,
+    _In_ ULONG Flags)
 {
+    UCHAR Line[KDB_DUMP_BYTES_PER_LINE];
     ULONG_PTR Address = KdbpLastDumpAddress;
-    ULONG_PTR Count = 8;
+    ULONG_PTR Count = (Flags & KDB_DUMP_TEXT) ? (KDB_DUMP_BYTES_PER_LINE * 8 / Width) : 8;
     ULONG_PTR Index;
+    ULONG InLine = 0;
+
+    if ((Flags & KDB_DUMP_PHYSICAL) && (Argc < 2))
+    {
+        KdbPuts("A physical address is needed\n");
+        return TRUE;
+    }
 
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
@@ -1420,16 +1596,24 @@ KdbpDumpMemory(
         if ((Index % (KDB_DUMP_BYTES_PER_LINE / Width)) == 0)
         {
             if (Index != 0)
+            {
+                if (Flags & KDB_DUMP_TEXT)
+                    KdbpPrintDumpText(Line, InLine * Width, InLine, Width);
                 KdbPuts("\n");
+            }
 
             KdbpPrint("%p  ", (PVOID)At);
+            InLine = 0;
         }
 
-        if (!NT_SUCCESS(KdbpSafeReadMemory(&Value, (PVOID)At, Width)))
+        if (!NT_SUCCESS(KdbpReadDumpValue(At, &Value, Width, Flags)))
         {
             KdbPuts(" ????");
             break;
         }
+
+        RtlCopyMemory(&Line[InLine * Width], &Value, Width);
+        InLine++;
 
         switch (Width)
         {
@@ -1443,30 +1627,40 @@ KdbpDumpMemory(
             break;
     }
 
+    if ((Flags & KDB_DUMP_TEXT) && (InLine != 0))
+        KdbpPrintDumpText(Line, InLine * Width, InLine, Width);
+
     KdbPuts("\n");
 
-    KdbpLastDumpAddress = Address + (Count * Width);
+    if (!(Flags & KDB_DUMP_PHYSICAL))
+        KdbpLastDumpAddress = Address + (Count * Width);
+
     return TRUE;
 }
 
 static BOOLEAN KdbpCmdDumpBytes(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 1);
+    return KdbpDumpMemory(Argc, Argv, 1, KDB_DUMP_TEXT);
 }
 
 static BOOLEAN KdbpCmdDumpWords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 2);
+    return KdbpDumpMemory(Argc, Argv, 2, 0);
 }
 
 static BOOLEAN KdbpCmdDumpDwords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 4);
+    return KdbpDumpMemory(Argc, Argv, 4, 0);
+}
+
+static BOOLEAN KdbpCmdDumpDwordsText(ULONG Argc, PCHAR Argv[])
+{
+    return KdbpDumpMemory(Argc, Argv, 4, KDB_DUMP_TEXT);
 }
 
 static BOOLEAN KdbpCmdDumpQwords(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, 8);
+    return KdbpDumpMemory(Argc, Argv, 8, 0);
 }
 
 /*
@@ -1539,7 +1733,7 @@ KdbpCmdDumpText(
 
 static BOOLEAN KdbpCmdDumpPointers(ULONG Argc, PCHAR Argv[])
 {
-    return KdbpDumpMemory(Argc, Argv, sizeof(ULONG_PTR));
+    return KdbpDumpMemory(Argc, Argv, sizeof(ULONG_PTR), 0);
 }
 
 /*
@@ -2406,6 +2600,7 @@ KdbpCmdEvaluate(
         return TRUE;
     }
 
+    KdbpSetLastExpressionValue(Value);
     KdbpPrint("%Iu (0x%Ix) ", Value, Value);
     KdbSymPrintAddress((PVOID)Value, KdbpContext());
     KdbPuts("\n");
@@ -2611,22 +2806,376 @@ KdbpCmdKdFiles(
     return TRUE;
 }
 
+/*
+ * Runs the stopped thread until the function it is in returns, by a
+ * breakpoint on the return address that only holds once the stack is back
+ * above where the function's own frame is: a deeper call of the same function
+ * returning there first does not count.
+ */
+static
+BOOLEAN
+KdbpCmdGoUp(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static CONTEXT Caller;
+    static CHAR Condition[64];
+
+    UNREFERENCED_PARAMETER(Argc);
+    UNREFERENCED_PARAMETER(Argv);
+
+    if (KdbCurrentTrapFrame == NULL)
+    {
+        KdbPuts("There is no stopped thread to run\n");
+        return TRUE;
+    }
+
+    Caller = *KdbCurrentTrapFrame;
+    if (!KiUnwindFrame(&Caller, FALSE))
+    {
+        KdbPuts("Where this function returns to cannot be found\n");
+        return TRUE;
+    }
+
+    RtlStringCbPrintfA(Condition, sizeof(Condition), "sp >= 0x%Ix", (ULONG_PTR)KeGetContextStackRegister(&Caller));
+    return KdbpRunTo((ULONG_PTR)KeGetContextPc(&Caller), Condition);
+}
+
+static
+BOOLEAN
+KdbpCmdIgnore(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG_PTR Number;
+    ULONG_PTR Count;
+
+    if (Argc != 3)
+    {
+        KdbPuts("A breakpoint number and how many hits to let pass are needed\n");
+        return TRUE;
+    }
+
+    if (!KdbpGetHexNumber(Argv[1], &Number) || (Number > MAXLONG))
+    {
+        KdbpPrint("%s is not a breakpoint number\n", Argv[1]);
+        return TRUE;
+    }
+
+    if (!KdbpGetAddressExpression(Argv[2], &Count))
+        return TRUE;
+
+    if (Count > MAXULONG)
+    {
+        KdbpPrint("At most 0x%lx hits are let pass\n", MAXULONG);
+        return TRUE;
+    }
+
+    if (!KdbpSetBreakPointIgnoreCount((LONG)Number, (ULONG)Count))
+        KdbpPrint("There is no breakpoint %s\n", Argv[1]);
+    else
+        KdbpPrint("Breakpoint %Ix lets the next %Iu hits pass\n", Number, Count);
+
+    return TRUE;
+}
+
+/* `display <command>` runs the command at every stop; `display` alone lists them */
+static
+BOOLEAN
+KdbpCmdDisplay(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    BOOLEAN Any = FALSE;
+    ULONG Index;
+
+    if (Argc < 2)
+    {
+        for (Index = 0; Index < KDB_DISPLAY_MAX; Index++)
+        {
+            if (KdbpDisplays[Index][0] != ANSI_NULL)
+            {
+                KdbpPrint("%lu: %s\n", Index + 1, KdbpDisplays[Index]);
+                Any = TRUE;
+            }
+        }
+
+        if (!Any)
+            KdbPuts("Nothing is run at every stop\n");
+
+        return TRUE;
+    }
+
+    for (Index = 0; (Index < KDB_DISPLAY_MAX) && (KdbpDisplays[Index][0] != ANSI_NULL); Index++)
+        NOTHING;
+
+    if (Index == KDB_DISPLAY_MAX)
+    {
+        KdbpPrint("All %u commands run at every stop are in use\n", KDB_DISPLAY_MAX);
+        return TRUE;
+    }
+
+    if (!KdbpJoinWords(1, Argc, Argv, KdbpDisplays[Index], sizeof(KdbpDisplays[Index])))
+    {
+        KdbpPrint("A command run at every stop has at most %u characters\n", KDB_BREAKPOINT_COMMANDS_MAX - 1);
+        return TRUE;
+    }
+
+    KdbpPrint("%lu: %s\n", Index + 1, KdbpDisplays[Index]);
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpCmdUndisplay(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    ULONG_PTR Number;
+
+    if (Argc != 2)
+    {
+        KdbPuts("The number of a command run at every stop, or *, is needed\n");
+        return TRUE;
+    }
+
+    if (strcmp(Argv[1], "*") == 0)
+    {
+        RtlZeroMemory(KdbpDisplays, sizeof(KdbpDisplays));
+        KdbPuts("Nothing is run at every stop\n");
+        return TRUE;
+    }
+
+    if (!KdbpGetHexNumber(Argv[1], &Number) || (Number == 0) || (Number > KDB_DISPLAY_MAX) ||
+        (KdbpDisplays[Number - 1][0] == ANSI_NULL))
+    {
+        KdbpPrint("%s is not the number of a command run at every stop\n", Argv[1]);
+        return TRUE;
+    }
+
+    KdbpDisplays[Number - 1][0] = ANSI_NULL;
+    KdbpPrint("%Iu is no longer run at every stop\n", Number);
+    return TRUE;
+}
+
+/* One value written every way a person may want to read it */
+static
+BOOLEAN
+KdbpCmdFormats(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static CHAR Expression[KDB_COMMAND_MAX];
+    CHAR Binary[64 + 8 + 1];
+    CHAR Text[sizeof(ULONG64) + 1];
+    ULONG_PTR Value = 0;
+    ULONG64 Wide;
+    ULONG Position = 0;
+    LONG Bit;
+    ULONG Index;
+
+    if (Argc < 2)
+    {
+        KdbPuts("An expression is needed\n");
+        return TRUE;
+    }
+
+    if (!KdbpJoinWords(1, Argc, Argv, Expression, sizeof(Expression)) ||
+        !KdbpGetAddressExpression(Expression, &Value))
+    {
+        return TRUE;
+    }
+
+    Wide = (ULONG64)Value;
+    KdbpSetLastExpressionValue(Wide);
+
+    for (Bit = 63; Bit >= 0; Bit--)
+    {
+        Binary[Position++] = (Wide & (1ULL << Bit)) ? '1' : '0';
+        if (((Bit % 8) == 0) && (Bit != 0))
+            Binary[Position++] = ' ';
+    }
+    Binary[Position] = ANSI_NULL;
+
+    /* The bytes as text, the most significant first, as the number reads */
+    for (Index = 0; Index < sizeof(ULONG64); Index++)
+    {
+        UCHAR Byte = (UCHAR)(Wide >> ((sizeof(ULONG64) - 1 - Index) * 8));
+
+        Text[Index] = ((Byte >= ' ') && (Byte < 0x7F)) ? (CHAR)Byte : '.';
+    }
+    Text[sizeof(ULONG64)] = ANSI_NULL;
+
+    KdbpPrint("Hex:     0x%I64x\n", Wide);
+    KdbpPrint("Decimal: %I64u (signed %I64d)\n", Wide, (LONG64)Wide);
+    KdbpPrint("Octal:   0%I64o\n", Wide);
+    KdbpPrint("Binary:  %s\n", Binary);
+    KdbpPrint("Chars:   %s\n", Text);
+    KdbpPrint("Symbol:  ");
+    if (!KdbSymPrintAddress((PVOID)Value, NULL))
+        KdbPuts("none");
+    KdbPuts("\n");
+
+    return TRUE;
+}
+
+typedef struct _KDB_LIST_WALK
+{
+    PCHAR Command;
+    BOOLEAN Resumed;
+} KDB_LIST_WALK, *PKDB_LIST_WALK;
+
+static
+BOOLEAN
+NTAPI
+KdbpListEntry(
+    _In_ PLIST_ENTRY Link,
+    _In_opt_ PVOID Context)
+{
+    static CHAR Command[KDB_COMMAND_MAX];
+    PKDB_LIST_WALK Walk = Context;
+
+    KdbpPrint("%p\n", Link);
+
+    if (Walk->Command[0] != ANSI_NULL)
+    {
+        KdbpSetListEntryValue((ULONG_PTR)Link);
+        RtlStringCbCopyA(Command, sizeof(Command), Walk->Command);
+
+        if (KdbpCliInterpretCommand(Command))
+        {
+            Walk->Resumed = TRUE;
+            return FALSE;
+        }
+    }
+
+    return !KdbpIsOutputAborted();
+}
+
+/*
+ * `!list <head> [count] [command]` walks a list of LIST_ENTRY links from its
+ * head, showing each link and running the command for it with $entry
+ * standing for the link.
+ */
+static
+BOOLEAN
+KdbpCmdList(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    static CHAR Command[KDB_COMMAND_MAX];
+    KDB_LIST_WALK Walk;
+    KDB_WALK_RESULT Result;
+    PLIST_ENTRY Broken;
+    ULONG_PTR Head;
+    ULONG_PTR Maximum = KDB_MAXIMUM_LIST_WALK;
+    ULONG Count = 0;
+
+    if (Argc < 2)
+    {
+        KdbPuts("The address of the head of a list is needed\n");
+        return TRUE;
+    }
+
+    if (!KdbpGetAddressExpression(Argv[1], &Head))
+        return TRUE;
+
+    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Maximum))
+        return TRUE;
+
+    if ((Maximum == 0) || (Maximum > KDB_MAXIMUM_LIST_WALK))
+    {
+        KdbpPrint("A list walk shows from 1 to %u entries\n", KDB_MAXIMUM_LIST_WALK);
+        return TRUE;
+    }
+
+    Command[0] = ANSI_NULL;
+    if ((Argc > 3) && !KdbpJoinWords(3, Argc, Argv, Command, sizeof(Command)))
+    {
+        KdbPuts("The command is too long\n");
+        return TRUE;
+    }
+
+    Walk.Command = Command;
+    Walk.Resumed = FALSE;
+
+    Result = KdbpWalkList((PLIST_ENTRY)Head, (ULONG)Maximum, KdbpListEntry, &Walk, &Count, &Broken);
+    if (Walk.Resumed)
+        return TRUE;
+
+    if ((Result == KdbWalkTooLong) && (Maximum < KDB_MAXIMUM_LIST_WALK))
+        KdbpPrint("%lu entries shown, and there are more\n", Count);
+    else
+        KdbpReportWalk(Result, Broken, (ULONG)Maximum);
+
+    KdbpPrint("%lu entries\n", Count);
+    return TRUE;
+}
+
+/* Where an address of the address space the machine stopped in is in physical memory */
+static
+BOOLEAN
+KdbpCmdVirtualToPhysical(
+    ULONG Argc,
+    PCHAR Argv[])
+{
+    PHYSICAL_ADDRESS Physical;
+    ULONG_PTR Address;
+
+    if (Argc < 2)
+    {
+        KdbPuts("An address is needed\n");
+        return TRUE;
+    }
+
+    if (!KdbpGetAddressExpression(Argv[1], &Address))
+        return TRUE;
+
+    /* TODO: a user address of a process looked at with proc is translated in the address space of the stop */
+    Physical = MmGetPhysicalAddress((PVOID)Address);
+    if (Physical.QuadPart == 0)
+        KdbpPrint("%p is not mapped\n", (PVOID)Address);
+    else
+        KdbpPrint("%p is physical 0x%I64x\n", (PVOID)Address, Physical.QuadPart);
+
+    return TRUE;
+}
+
+static BOOLEAN KdbpCmdDumpPhysicalBytes(ULONG Argc, PCHAR Argv[])
+{
+    return KdbpDumpMemory(Argc, Argv, 1, KDB_DUMP_PHYSICAL | KDB_DUMP_TEXT);
+}
+
+static BOOLEAN KdbpCmdDumpPhysicalDwords(ULONG Argc, PCHAR Argv[])
+{
+    return KdbpDumpMemory(Argc, Argv, 4, KDB_DUMP_PHYSICAL);
+}
+
+static BOOLEAN KdbpCmdDumpPhysicalQwords(ULONG Argc, PCHAR Argv[])
+{
+    return KdbpDumpMemory(Argc, Argv, 8, KDB_DUMP_PHYSICAL);
+}
+
 /* THE COMMANDS ***************************************************************/
 
 static const KDB_COMMAND KdbpCommands[] =
 {
     {"help", "help", "Lists what can be typed here", KdbpCmdHelp},
     {"?", "? <expression>", "Works out what an expression comes to", KdbpCmdEvaluate},
-    {"cont", "cont", "Lets the machine go on", KdbpCmdContinue},
-    {"g", "g", "Lets the machine go on", KdbpCmdContinue},
+    {"cont", "cont [address]", "Lets the machine go on, or run to an address", KdbpCmdContinue},
+    {"g", "g [address]", "Lets the machine go on, or run to an address", KdbpCmdContinue},
+    {"gu", "gu", "Runs until the function the thread is in returns", KdbpCmdGoUp},
     {"handle", "handle", "Goes on and leaves the exception unhandled", KdbpCmdHandle},
     {"step", "step [count]", "Runs one instruction", KdbpCmdStep},
     {"t", "t [count]", "Runs one instruction", KdbpCmdStep},
-    {"next", "next", "Runs one instruction, over a call", KdbpCmdNext},
-    {"p", "p", "Runs one instruction, over a call", KdbpCmdNext},
+    {"next", "next [count]", "Runs one instruction, over a call", KdbpCmdNext},
+    {"p", "p [count]", "Runs one instruction, over a call", KdbpCmdNext},
     {"bl", "bl", "Lists the breakpoints", KdbpCmdBreakPointList},
-    {"bp", "bp <address> [if <expr>]", "Stops when an address is reached", KdbpCmdBreakPointSet},
-    {"bpm", "bpm <r|w|rw|x> <addr> [size]", "Stops when an address is used", KdbpCmdBreakPointMemory},
+    {"bp", "bp [/1] <address> [if <expr>] [do \"<commands>\"]", "Stops when an address is reached", KdbpCmdBreakPointSet},
+    {"bpm", "bpm <r|w|rw|x> <addr> [size] [if <expr>] [do \"<commands>\"]", "Stops when an address is used", KdbpCmdBreakPointMemory},
+    {"ignore", "ignore <number> <count>", "Lets a breakpoint's next hits pass", KdbpCmdIgnore},
+    {"display", "display [command]", "Runs a command at every stop, or lists them", KdbpCmdDisplay},
+    {"undisplay", "undisplay <number|*>", "Stops running a command at every stop", KdbpCmdUndisplay},
     {"bc", "bc <number|*>", "Gives up a breakpoint", KdbpCmdBreakPointClear},
     {"bd", "bd <number|*>", "Leaves a breakpoint in place but off", KdbpCmdBreakPointDisable},
     {"be", "be <number|*>", "Turns a breakpoint back on", KdbpCmdBreakPointEnable},
@@ -2641,6 +3190,7 @@ static const KDB_COMMAND KdbpCommands[] =
     {"db", "db <address> [count]", "Shows memory as bytes", KdbpCmdDumpBytes},
     {"dw", "dw <address> [count]", "Shows memory as words", KdbpCmdDumpWords},
     {"dd", "dd <address> [count]", "Shows memory as double words", KdbpCmdDumpDwords},
+    {"dc", "dc <address> [count]", "Shows memory as double words and text", KdbpCmdDumpDwordsText},
     {"dq", "dq <address> [count]", "Shows memory as quad words", KdbpCmdDumpQwords},
     {"dp", "dp <address> [count]", "Shows memory as pointers", KdbpCmdDumpPointers},
     {"da", "da <address> [count]", "Shows memory as a string, up to its end", KdbpCmdDumpText},
@@ -2649,6 +3199,12 @@ static const KDB_COMMAND KdbpCommands[] =
     {"dqs", "dqs <address> [count]", "Shows quad words with the symbols they point at", KdbpCmdDumpQwordSymbols},
     {"dps", "dps <address> [count]", "Shows pointers with the symbols they point at", KdbpCmdDumpPointerSymbols},
     {"ln", "ln <address>", "Names the symbol nearest an address", KdbpCmdNearestSymbol},
+    {".formats", ".formats <expression>", "Shows a value as hex, decimal, octal, binary and text", KdbpCmdFormats},
+    {"!list", "!list <head> [count] [command]", "Walks a list, running a command for each $entry", KdbpCmdList},
+    {"!vtop", "!vtop <address>", "Says where an address is in physical memory", KdbpCmdVirtualToPhysical},
+    {"!db", "!db <physical address> [count]", "Shows physical memory as bytes", KdbpCmdDumpPhysicalBytes},
+    {"!dd", "!dd <physical address> [count]", "Shows physical memory as double words", KdbpCmdDumpPhysicalDwords},
+    {"!dq", "!dq <physical address> [count]", "Shows physical memory as quad words", KdbpCmdDumpPhysicalQwords},
     {"search", "search <address> <length> <byte>...", "Looks for bytes in memory", KdbpCmdSearchMemory},
     {"compare", "compare <address> <address> <length>", "Compares two ranges of memory", KdbpCmdCompareMemory},
     {"fill", "fill <address> <length> <byte>...", "Fills memory with bytes", KdbpCmdFillMemory},
@@ -2659,7 +3215,9 @@ static const KDB_COMMAND KdbpCommands[] =
     {"eq", "eq <address> <value>...", "Changes quad words", KdbpCmdEditQwords},
     {"u", "u [address] [count]", "Shows the instructions at an address", KdbpCmdDisassemble},
     {"mod", "mod", "Lists the loaded images", KdbpCmdModules},
+    {"lm", "lm", "Lists the loaded images", KdbpCmdModules},
     {"sym", "sym [module] <pattern>", "Looks for symbols", KdbpCmdSymbols},
+    {"x", "x [module] <pattern>", "Looks for symbols", KdbpCmdSymbols},
     {"proc", "proc [id]", "Lists the processes, or looks at one", KdbpCmdProcesses},
     {"thread", "thread [id]", "Lists the threads, or looks at one", KdbpCmdThreads},
     {"!thread", "!thread [address]", "Shows a thread in detail", KdbpCmdThreadDetail},
@@ -2757,6 +3315,10 @@ KdbpCmdHelp(
  * Splits a command line into its words. The line is written through, so the
  * words point into it.
  */
+/*
+ * Splits a command into its words, in place. A word in double quotes may hold
+ * spaces; the quotes themselves are dropped.
+ */
 static
 ULONG
 KdbpSplitCommand(
@@ -2771,6 +3333,9 @@ KdbpSplitCommand(
 
     for (;;)
     {
+        PCHAR Write;
+        BOOLEAN Quoted = FALSE;
+
         while ((*Current == ' ') || (*Current == '\t'))
             Current++;
 
@@ -2784,15 +3349,46 @@ KdbpSplitCommand(
         }
 
         Argv[Argc++] = Current;
+        Write = Current;
 
-        while ((*Current != ANSI_NULL) && (*Current != ' ') && (*Current != '\t'))
-            Current++;
+        while ((*Current != ANSI_NULL) && (Quoted || ((*Current != ' ') && (*Current != '\t'))))
+        {
+            if (*Current == '"')
+            {
+                Quoted = !Quoted;
+                Current++;
+                continue;
+            }
+
+            *Write++ = *Current++;
+        }
 
         if (*Current != ANSI_NULL)
-            *Current++ = ANSI_NULL;
+            Current++;
+
+        *Write = ANSI_NULL;
     }
 
     return Argc;
+}
+
+/* Where the statement starting at Statement ends: at a semicolon outside quotes, or with the line */
+static
+PCHAR
+KdbpStatementEnd(
+    _In_ PCHAR Statement)
+{
+    BOOLEAN Quoted = FALSE;
+
+    for (; *Statement != ANSI_NULL; Statement++)
+    {
+        if (*Statement == '"')
+            Quoted = !Quoted;
+        else if ((*Statement == ';') && !Quoted)
+            break;
+    }
+
+    return Statement;
 }
 
 BOOLEAN
@@ -2855,6 +3451,7 @@ VOID
 KdbpClearResume(VOID)
 {
     KdbpLeaveLoop = FALSE;
+    KdbpPendingStepOvers = 0;
     KdbpSetContinueType(kdHandleException);
 }
 
@@ -2867,9 +3464,8 @@ KdbpResetView(VOID)
 
 static
 BOOLEAN
-KdbpRunCommand(
-    _In_ PCHAR Command,
-    _Inout_updates_(KDB_COMMAND_MAX) PCHAR Buffer,
+KdbpRunStatement(
+    _Inout_ PCHAR Statement,
     _Inout_updates_(KDB_COMMAND_MAX) PCHAR Expanded)
 {
     PCHAR Argv[KDB_ARGUMENT_MAX];
@@ -2879,11 +3475,10 @@ KdbpRunCommand(
 
     KdbpLeaveLoop = FALSE;
 
-    /* The line is taken apart in a copy, since the words point into it */
-    strncpy(Buffer, Command, KDB_COMMAND_MAX - 1);
-    Buffer[KDB_COMMAND_MAX - 1] = ANSI_NULL;
+    /* The statement as it was written, for the components that read their own commands */
+    RtlStringCbCopyA(Expanded, KDB_COMMAND_MAX, Statement);
 
-    Argc = KdbpSplitCommand(Buffer, Argv, &TooMany);
+    Argc = KdbpSplitCommand(Statement, Argv, &TooMany);
     if (Argc == 0)
         return FALSE;
 
@@ -2918,7 +3513,7 @@ KdbpRunCommand(
         if (!MmIsAddressValid((PVOID)Routine))
             continue;
 
-        if (Routine(Command, Argc, Argv))
+        if (Routine(Expanded, Argc, Argv))
             return KdbpLeaveLoop;
     }
 
@@ -2926,6 +3521,39 @@ KdbpRunCommand(
               "Type help for what can.\n", Argv[0]);
 
     return FALSE;
+}
+
+/* Runs the statements of a line one after the other, until one lets the machine run */
+static
+BOOLEAN
+KdbpRunCommand(
+    _In_ PCHAR Command,
+    _Inout_updates_(KDB_COMMAND_MAX) PCHAR Buffer,
+    _Inout_updates_(KDB_COMMAND_MAX) PCHAR Expanded)
+{
+    PCHAR Statement;
+
+    KdbpLeaveLoop = FALSE;
+
+    /* The line is taken apart in a copy, since the words point into it */
+    strncpy(Buffer, Command, KDB_COMMAND_MAX - 1);
+    Buffer[KDB_COMMAND_MAX - 1] = ANSI_NULL;
+
+    for (Statement = Buffer;;)
+    {
+        PCHAR End = KdbpStatementEnd(Statement);
+        BOOLEAN Last = (*End == ANSI_NULL);
+
+        *End = ANSI_NULL;
+
+        if (KdbpRunStatement(Statement, Expanded))
+            return TRUE;
+
+        if (Last)
+            return FALSE;
+
+        Statement = End + 1;
+    }
 }
 
 /*
@@ -3102,6 +3730,30 @@ KdbpPersistSessionLog(VOID)
         (VOID)KdpWriteBootLogAtCrash(NULL, NULL);
 }
 
+/* Runs what is to be run at every stop. Returns TRUE when one of them let the machine run */
+static
+BOOLEAN
+KdbpRunDisplays(VOID)
+{
+    static CHAR Command[KDB_BREAKPOINT_COMMANDS_MAX];
+    ULONG Index;
+
+    for (Index = 0; Index < KDB_DISPLAY_MAX; Index++)
+    {
+        if (KdbpDisplays[Index][0] == ANSI_NULL)
+            continue;
+
+        RtlStringCbCopyA(Command, sizeof(Command), KdbpDisplays[Index]);
+        KdbpPagerReset();
+        KdbpPrint("kdb:> %s\n", Command);
+
+        if (KdbpCliInterpretCommand(Command))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
 /*
  * Where a person sits while the machine is stopped. Returns once a command
  * has asked for the machine to run again.
@@ -3118,6 +3770,34 @@ KdbpCliMainLoop(
     KdbpPagerReset();
     KdbpReportStop(EnteredOnSingleStep);
     KdbpPersistSessionLog();
+
+    /* A p with a count goes on by itself as long as each stop is the end of its step */
+    if (KdbpPendingStepOvers != 0)
+    {
+        if (EnteredOnSingleStep)
+        {
+            KdbpPendingStepOvers--;
+            KdbpLeaveLoop = FALSE;
+            KdbpStepOver();
+            if (KdbpLeaveLoop)
+                return;
+        }
+
+        KdbpPendingStepOvers = 0;
+    }
+
+    /* The commands of the breakpoint the machine stopped at, then those of every stop */
+    KdbpLeaveLoop = FALSE;
+    if (KdbpTakeStopCommands(Command, sizeof(Command)))
+    {
+        KdbpPagerReset();
+        KdbpPrint("kdb:> %s\n", Command);
+        if (KdbpCliInterpretCommand(Command))
+            return;
+    }
+
+    if (KdbpRunDisplays())
+        return;
 
     /* Whatever the machine was told to do at the first stop is done here */
     KdbpLeaveLoop = FALSE;

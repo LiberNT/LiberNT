@@ -66,9 +66,14 @@ static const KDB_BINARY_OPERATOR KdbpBinaryOperators[] =
     {"%", 1, 10, '%'}
 };
 
+/* What $exp and $entry stand for: the last value ? showed, and the entry a list walk is at */
+static ULONGLONG KdbpLastExpressionValue;
+static ULONGLONG KdbpListEntryValue;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static ULONGLONG KdbpParseBinary(_Inout_ PKDB_PARSER Parser, _In_ ULONG MinimumPrecedence);
+static ULONGLONG KdbpParsePrimary(_Inout_ PKDB_PARSER Parser);
 
 static
 VOID
@@ -220,6 +225,151 @@ KdbpParseNumber(
     return Value;
 }
 
+/*
+ * The names that stand for something of the stop rather than a register:
+ * where it is, which thread and process it is in, and what was last worked
+ * out. Returns FALSE for a name that is none of them.
+ */
+static
+BOOLEAN
+KdbpPseudoRegister(
+    _Inout_ PKDB_PARSER Parser,
+    _In_ PCSTR Name,
+    _Out_ PULONGLONG Value)
+{
+    static CONTEXT Caller;
+    PVOID Pointer = NULL;
+
+    *Value = 0;
+
+    if ((_stricmp(Name, "$ip") != 0) && (_stricmp(Name, "$pc") != 0) && (_stricmp(Name, "$sp") != 0) &&
+        (_stricmp(Name, "$fp") != 0) && (_stricmp(Name, "$ra") != 0) && (_stricmp(Name, "$thread") != 0) &&
+        (_stricmp(Name, "$proc") != 0) && (_stricmp(Name, "$teb") != 0) && (_stricmp(Name, "$peb") != 0) &&
+        (_stricmp(Name, "$tid") != 0) && (_stricmp(Name, "$pid") != 0) && (_stricmp(Name, "$prcb") != 0) &&
+        (_stricmp(Name, "$cpu") != 0) && (_stricmp(Name, "$exp") != 0) && (_stricmp(Name, "$entry") != 0))
+    {
+        return FALSE;
+    }
+
+    if (Parser->ParseOnly)
+        return TRUE;
+
+    if (_stricmp(Name, "$exp") == 0)
+    {
+        *Value = KdbpLastExpressionValue;
+        return TRUE;
+    }
+
+    if (_stricmp(Name, "$entry") == 0)
+    {
+        *Value = KdbpListEntryValue;
+        return TRUE;
+    }
+
+    if (_stricmp(Name, "$cpu") == 0)
+    {
+        *Value = KeGetCurrentProcessorNumber();
+        return TRUE;
+    }
+
+    if (_stricmp(Name, "$prcb") == 0)
+    {
+        *Value = (ULONG_PTR)KeGetCurrentPrcb();
+        return TRUE;
+    }
+
+    if ((_stricmp(Name, "$thread") == 0) || (_stricmp(Name, "$proc") == 0))
+    {
+        *Value = (_stricmp(Name, "$thread") == 0) ? (ULONG_PTR)KdbCurrentThread : (ULONG_PTR)KdbCurrentProcess;
+        return TRUE;
+    }
+
+    if ((_stricmp(Name, "$tid") == 0) || (_stricmp(Name, "$teb") == 0))
+    {
+        if ((KdbCurrentThread == NULL) ||
+            !NT_SUCCESS(KdbpSafeReadMemory(&Pointer,
+                                           (_stricmp(Name, "$tid") == 0) ? (PVOID)&KdbCurrentThread->Cid.UniqueThread
+                                                                         : (PVOID)&KdbCurrentThread->Tcb.Teb,
+                                           sizeof(Pointer))))
+        {
+            KdbpFail(Parser, "the thread looked at cannot be read");
+            return TRUE;
+        }
+
+        *Value = (ULONG_PTR)Pointer;
+        return TRUE;
+    }
+
+    if ((_stricmp(Name, "$pid") == 0) || (_stricmp(Name, "$peb") == 0))
+    {
+        if ((KdbCurrentProcess == NULL) ||
+            !NT_SUCCESS(KdbpSafeReadMemory(&Pointer,
+                                           (_stricmp(Name, "$pid") == 0) ? (PVOID)&KdbCurrentProcess->UniqueProcessId
+                                                                         : (PVOID)&KdbCurrentProcess->Peb,
+                                           sizeof(Pointer))))
+        {
+            KdbpFail(Parser, "the process looked at cannot be read");
+            return TRUE;
+        }
+
+        *Value = (ULONG_PTR)Pointer;
+        return TRUE;
+    }
+
+    if (Parser->TrapFrame == NULL)
+    {
+        KdbpFail(Parser, "there are no registers here");
+        return TRUE;
+    }
+
+    if ((_stricmp(Name, "$ip") == 0) || (_stricmp(Name, "$pc") == 0))
+    {
+        *Value = (ULONG_PTR)KeGetContextPc(Parser->TrapFrame);
+    }
+    else if (_stricmp(Name, "$sp") == 0)
+    {
+        *Value = (ULONG_PTR)KeGetContextStackRegister(Parser->TrapFrame);
+    }
+    else if (_stricmp(Name, "$fp") == 0)
+    {
+        *Value = (ULONG_PTR)KeGetContextFrameRegister(Parser->TrapFrame);
+    }
+    else
+    {
+        /* Where the function the registers are in returns to */
+        Caller = *Parser->TrapFrame;
+        if (!KiUnwindFrame(&Caller, FALSE))
+        {
+            KdbpFail(Parser, "the return address cannot be found");
+            return TRUE;
+        }
+
+        *Value = (ULONG_PTR)KeGetContextPc(&Caller);
+    }
+
+    return TRUE;
+}
+
+/* The functions that read memory of a given width: poi reads a pointer */
+static
+ULONG
+KdbpReadFunctionSize(
+    _In_ PCSTR Name)
+{
+    if (_stricmp(Name, "poi") == 0)
+        return sizeof(ULONG_PTR);
+    if (_stricmp(Name, "by") == 0)
+        return sizeof(UCHAR);
+    if (_stricmp(Name, "wo") == 0)
+        return sizeof(USHORT);
+    if (_stricmp(Name, "dwo") == 0)
+        return sizeof(ULONG);
+    if (_stricmp(Name, "qwo") == 0)
+        return sizeof(ULONG64);
+
+    return 0;
+}
+
 static
 BOOLEAN
 KdbpIsRegisterName(
@@ -279,6 +429,29 @@ KdbpParseName(
     {
         KdbpFail(Parser, "the name is too long");
         return 0;
+    }
+
+    /* poi(address) and its narrower kin read memory */
+    if (!Explicit && (KdbpReadFunctionSize(Name) != 0))
+    {
+        ULONG Size = KdbpReadFunctionSize(Name);
+
+        KdbpSkipSpace(Parser);
+        if (*Parser->Current != '(')
+        {
+            KdbpFail(Parser, "expected ( after the name of a function");
+            return 0;
+        }
+
+        return KdbpReadValue(Parser, KdbpParsePrimary(Parser), Size);
+    }
+
+    if (!Explicit && (Name[0] == '$'))
+    {
+        if (!KdbpPseudoRegister(Parser, Name, &Value))
+            KdbpFail(Parser, "no such pseudo-register");
+
+        return Value;
     }
 
     if (Parser->ParseOnly)
@@ -614,6 +787,22 @@ KdbpRpnParseExpression(
         return NULL;
 
     return Expression;
+}
+
+/* Remembers what ? showed last, for $exp */
+VOID
+KdbpSetLastExpressionValue(
+    _In_ ULONGLONG Value)
+{
+    KdbpLastExpressionValue = Value;
+}
+
+/* The entry a list walk is at, for $entry */
+VOID
+KdbpSetListEntryValue(
+    _In_ ULONGLONG Value)
+{
+    KdbpListEntryValue = Value;
 }
 
 BOOLEAN

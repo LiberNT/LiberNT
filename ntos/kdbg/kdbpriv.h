@@ -198,6 +198,16 @@ KdbpPrintInterruptChain(
     _In_ PKINTERRUPT Head,
     _In_ BOOLEAN ShowInvalid);
 
+/* kdbexpr.c */
+
+VOID
+KdbpSetLastExpressionValue(
+    _In_ ULONGLONG Value);
+
+VOID
+KdbpSetListEntryValue(
+    _In_ ULONGLONG Value);
+
 /* kdbsymbols.c */
 
 BOOLEAN

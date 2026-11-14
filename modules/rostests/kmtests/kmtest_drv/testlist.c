@@ -236,6 +236,7 @@ KMT_TESTFUNC Test_KdbSchedulerCommands;
 KMT_TESTFUNC Test_KdbDeviceCommands;
 KMT_TESTFUNC Test_KdbCliCommands;
 KMT_TESTFUNC Test_KdbObjectCommands;
+KMT_TESTFUNC Test_KdbRunControl;
 KMT_TESTFUNC Test_KdbMemoryCommands;
 KMT_TESTFUNC Test_KdbContextCommands;
 KMT_TESTFUNC Test_KdbLocks;
@@ -684,6 +685,7 @@ const KMT_TEST TestList[] =
     { "-KdbDeviceCommands",                 Test_KdbDeviceCommands },
     { "-KdbCliCommands",                    Test_KdbCliCommands },
     { "-KdbObjectCommands",                 Test_KdbObjectCommands },
+    { "-KdbRunControl",                     Test_KdbRunControl },
     { "-KdbMemoryCommands",                 Test_KdbMemoryCommands },
     { "-KdbContextCommands",                Test_KdbContextCommands },
     { "-KdbLocks",                          Test_KdbLocks },

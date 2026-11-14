@@ -566,7 +566,7 @@ KdbpTestBreakPoints(VOID)
     }
 
     KdbpTestFormat(Line, "bp 0x%p kdbtest_zz", Target);
-    KdbpTestCommand(Line, "is not if", "Breakpoint ");
+    KdbpTestCommand(Line, "is not if or do", "Breakpoint ");
     KdbpTestFormat(Line, "bp 0x%p if", Target);
     KdbpTestCommand(Line, "condition is needed", "Breakpoint ");
     KdbpTestRestore();
@@ -882,6 +882,211 @@ KdbpTestWalks(VOID)
     KdbpTestCommand("!ready", "Ready queues", "The list");
 }
 
+/* Line separators, quoted words, the memory functions and the names of the stop */
+static
+VOID
+KdbpTestLanguage(VOID)
+{
+    CHAR Line[KDB_TEST_LINE_MAX];
+    PCSTR Output;
+    static CONTEXT Caller;
+
+    Output = KdbpTestRun("echo KDBTEST-1; kdbtest_no_such_command; echo KDBTEST-3", NULL);
+    KdbpTestCheck((strstr(Output, "KDBTEST-1\n") != NULL) && (strstr(Output, "KDBTEST-3\n") != NULL),
+                  "; runs each statement of a line, past one that fails");
+    KdbpTestCommand("echo \"KDBTEST-A  ;  B\" C", "KDBTEST-A  ;  B C\n", NULL);
+    KdbpTestCommand("echo KDBTEST-\"Q R\"", "KDBTEST-Q R\n", NULL);
+
+    KdbpTestPrepareMemory();
+    KdbpTestFormat(Line, "poi(0x%p)", &KdbpTestPointers[0]);
+    KdbpTestExpression(Line, TRUE, (ULONGLONG)(ULONG_PTR)KdbpTestPointers[0]);
+    KdbpTestFormat(Line, "by(0x%p)", KdbpTestBytes);
+    KdbpTestExpression(Line, TRUE, 0x10);
+    KdbpTestFormat(Line, "wo(0x%p)", KdbpTestBytes);
+    KdbpTestExpression(Line, TRUE, 0x1110);
+    KdbpTestFormat(Line, "dwo(0x%p) + 1", KdbpTestBytes);
+    KdbpTestExpression(Line, TRUE, 0x5AA51111);
+    KdbpTestFormat(Line, "qwo(0x%p)", KdbpTestBytes);
+    KdbpTestExpression(Line, TRUE, 0x171615145AA51110ULL);
+    KdbpTestFormat(Line, "by(by(0x%p) - 0x10 + 0x%p)", KdbpTestBytes, KdbpTestBytes);
+    KdbpTestExpression(Line, TRUE, 0x10);
+    KdbpTestExpression("poi 1", FALSE, 0);
+    KdbpTestExpression("poi(1)", FALSE, 0);
+    KdbpTestExpression("poi(", FALSE, 0);
+
+    if (KdbCurrentTrapFrame != NULL)
+    {
+        KdbpTestExpression("$ip == pc", TRUE, 1);
+        KdbpTestExpression("$pc == $ip", TRUE, 1);
+        KdbpTestExpression("$sp == sp", TRUE, 1);
+        Caller = *KdbCurrentTrapFrame;
+        if (KiUnwindFrame(&Caller, FALSE))
+            KdbpTestExpression("$ra", TRUE, (ULONGLONG)KeGetContextPc(&Caller));
+    }
+
+    KdbpTestExpression("$thread", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentThread);
+    KdbpTestExpression("$proc", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentProcess);
+    KdbpTestExpression("$cpu", TRUE, KeGetCurrentProcessorNumber());
+    KdbpTestExpression("$prcb", TRUE, (ULONGLONG)(ULONG_PTR)KeGetCurrentPrcb());
+    if (KdbCurrentThread != NULL)
+        KdbpTestExpression("$tid", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentThread->Cid.UniqueThread);
+    if (KdbCurrentProcess != NULL)
+        KdbpTestExpression("$pid", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentProcess->UniqueProcessId);
+    KdbpTestExpression("$kdbtest_zz", FALSE, 0);
+    KdbpTestRun("? 0x1234", NULL);
+    KdbpTestExpression("$exp + 1", TRUE, 0x1235);
+
+    /* A condition may use registers and memory that only mean something where it fires */
+    KdbpTestFormat(Line, "bp 0x%p if poi($sp) != 0 && by(pc) == 0xcc && $tid != 0", &KdbpTestBytes[60]);
+    KdbpTestCommand(Line, "Breakpoint", "offset");
+    KdbpTestRestore();
+
+    KdbpTestCommand(".formats 0x41424344", "Decimal: 1094861636", NULL);
+    KdbpTestCommand(".formats 0x41424344", "Chars:   ....ABCD", NULL);
+    KdbpTestCommand(".formats 5", "00000101", NULL);
+}
+
+/* db and dc show the bytes again as text; physical memory reads the same bytes */
+static
+VOID
+KdbpTestMoreMemory(VOID)
+{
+    CHAR Line[KDB_TEST_LINE_MAX];
+    PHYSICAL_ADDRESS Physical;
+    PCSTR Output;
+    ULONG Index;
+
+    KdbpTestPrepareMemory();
+    KdbpTestFormat(Line, "db 0x%p 8", &KdbpTestBytes[32]);
+    KdbpTestCommand(Line, " LiberNT.\n", NULL);
+    KdbpTestFormat(Line, "dc 0x%p 1", KdbpTestBytes);
+    KdbpTestCommand(Line, "5aa51110", NULL);
+    KdbpTestFormat(Line, "dc 0x%p 1", &KdbpTestBytes[32]);
+    KdbpTestCommand(Line, " Libe\n", NULL);
+
+    KdbpTestFormat(Line, "!vtop 0x%p", KdbpTestBytes);
+    KdbpTestCommand(Line, "is physical 0x", NULL);
+    Physical = MmGetPhysicalAddress(KdbpTestBytes);
+    if (Physical.QuadPart != 0)
+    {
+        KdbpTestFormat(Line, "!db 0x%I64x 4", Physical.QuadPart);
+        KdbpTestCommand(Line, "10 11 a5 5a", NULL);
+        KdbpTestFormat(Line, "!dd 0x%I64x 1", Physical.QuadPart);
+        KdbpTestCommand(Line, "5aa51110", NULL);
+    }
+    KdbpTestCommand("!dd", "physical address is needed", NULL);
+
+    KdbpTestBuildList();
+    KdbpTestFormat(Line, "!list 0x%p", &KdbpTestListHead);
+    KdbpTestCommand(Line, "3 entries\n", NULL);
+    KdbpTestFormat(Line, "!list 0x%p 16 ? $entry", &KdbpTestListHead);
+    Output = KdbpTestRun(Line, NULL);
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpTestListItems); Index++)
+    {
+        CHAR Expected[40];
+
+        RtlStringCbPrintfA(Expected, sizeof(Expected), "(0x%Ix)", (ULONG_PTR)&KdbpTestListItems[Index]);
+        KdbpTestCheck(strstr(Output, Expected) != NULL, "!list ran ? $entry for entry %lu", Index);
+    }
+    KdbpTestFormat(Line, "!list 0x%p 2", &KdbpTestListHead);
+    KdbpTestCommand(Line, "2 entries shown, and there are more", NULL);
+    KdbpTestListItems[1].Flink = (PLIST_ENTRY)(ULONG_PTR)1;
+    KdbpTestFormat(Line, "!list 0x%p", &KdbpTestListHead);
+    KdbpTestCommand(Line, "cannot be read at 0000000000000001", NULL);
+    KdbpTestBuildList();
+}
+
+/* bp /1, if, do, ignore and hit counts; display; g, gu and p with a count */
+static
+VOID
+KdbpTestControl(VOID)
+{
+    CHAR Line[KDB_TEST_LINE_MAX];
+    PUCHAR Target = &KdbpTestBytes[60 - (60 % sizeof(KD_BREAKPOINT_TYPE))];
+    static CONTEXT Caller;
+    ULONG_PTR Address = 0;
+    PCHAR Condition = NULL;
+    BOOLEAN Resumed = FALSE;
+    PCSTR Output;
+    LONG Number;
+    ULONG Display;
+
+    KdbpTestPrepareMemory();
+
+    KdbpTestFormat(Line, "bp /1 0x%p", Target);
+    KdbpTestCommand(Line, "Breakpoint", NULL);
+    KdbpTestCommand("bl", " once ", NULL);
+    KdbpTestRestore();
+
+    KdbpTestFormat(Line, "bp 0x%p if 1 == 1 do \"echo X; echo Y\"", Target);
+    KdbpTestCommand(Line, "Breakpoint", NULL);
+    KdbpTestCommand("bl", "if 1 == 1 do \"echo X; echo Y\"", NULL);
+    KdbpTestCommand("bl", " hits 0", NULL);
+    Number = KdbpTestNewBreakPoint();
+    KdbpTestFormat(Line, "ignore %lx 3", Number);
+    KdbpTestCommand(Line, "lets the next 3 hits pass", NULL);
+    KdbpTestCommand("bl", " ignore 3", NULL);
+    KdbpTestCommand("ignore 0x7f 1", "no breakpoint", NULL);
+    KdbpTestCommand("ignore kdbtest_zz 1", "not a breakpoint number", NULL);
+    KdbpTestRestore();
+
+    KdbpTestFormat(Line, "bp 0x%p do", Target);
+    KdbpTestCommand(Line, "Commands are needed", "Breakpoint ");
+    KdbpTestFormat(Line, "bp 0x%p kdbtest_zz", Target);
+    KdbpTestCommand(Line, "is not if or do", "Breakpoint ");
+    KdbpTestRestore();
+
+    if (KdbpArchHardwareBreakPointCount() != 0)
+    {
+        KdbpTestFormat(Line, "bpm w 0x%p 4 if 1 do \"echo W\"", &KdbpTestBytes[8]);
+        KdbpTestCommand(Line, "watching", NULL);
+        KdbpTestCommand("bl", "if 1 do \"echo W\"", NULL);
+        KdbpTestRestore();
+    }
+
+    Output = KdbpTestRun("display echo KDBTEST-D", NULL);
+    Display = strtoul(Output, NULL, 10);
+    KdbpTestCheck(Display != 0, "display took a command");
+    KdbpTestCommand("display", "echo KDBTEST-D", NULL);
+    KdbpTestFormat(Line, "undisplay %lx", Display);
+    KdbpTestCommand(Line, "no longer run", NULL);
+    KdbpTestCommand(Line, "is not the number", NULL);
+    KdbpTestCommand("undisplay", "is needed", NULL);
+
+    if (KdbCurrentTrapFrame == NULL)
+        return;
+
+    /* g <address> runs to it; a mistyped address lets nothing run */
+    KdbpTestFormat(Line, "g 0x%p", Target);
+    KdbpTestRun(Line, &Resumed);
+    Number = KdbpTestNewBreakPoint();
+    KdbpTestCheck(Resumed && (Number >= 0) &&
+                  KdbpGetBreakPointInfo((ULONG)Number, &Address, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL) &&
+                  (Address == (ULONG_PTR)Target),
+                  "g <address> runs to the address");
+    KdbpTestRestore();
+    KdbpTestCommand("g kdbtest_zz", "no such", NULL);
+    KdbpTestCommand("g 1 2", "more than", NULL);
+
+    /* gu runs to where this function returns, once the stack is back above it */
+    Caller = *KdbCurrentTrapFrame;
+    if (KiUnwindFrame(&Caller, FALSE))
+    {
+        KdbpTestRun("gu", &Resumed);
+        Number = KdbpTestNewBreakPoint();
+        KdbpTestCheck(Resumed && (Number >= 0) &&
+                      KdbpGetBreakPointInfo((ULONG)Number, &Address, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &Condition) &&
+                      (Address == (ULONG_PTR)KeGetContextPc(&Caller)) &&
+                      (Condition != NULL) && (strstr(Condition, "sp >= ") != NULL),
+                      "gu runs to the return address with the stack above this frame");
+        KdbpTestRestore();
+    }
+
+    KdbpTestRun("p 3", &Resumed);
+    KdbpTestCheck(Resumed || (KdbNumSingleSteps == 0), "p 3 took its first step");
+    KdbpTestRestore();
+}
+
 /*
  * Every command, given nothing, garbage, too much or numbers that fit
  * nothing, says something and lets the machine stay where it is.
@@ -892,8 +1097,8 @@ KdbpTestEveryCommand(VOID)
 {
     static const PCSTR Skipped[] =
     {
-        "cont", "g", "handle", "step", "t", "next", "p", "bugcheck", "reboot",
-        "!kdpull", "!kdreload", "selftest"
+        "cont", "g", "gu", "handle", "step", "t", "next", "p", "bugcheck", "reboot",
+        "!kdpull", "!kdreload", "selftest", "display"
     };
     static const PCSTR Arguments[] =
     {
@@ -969,6 +1174,9 @@ static const KDB_TEST_GROUP KdbpTestGroups[] =
     {"step", "stepping", KdbpTestStepping},
     {"regs", "registers", KdbpTestRegisters},
     {"walk", "walks of lists that may be damaged", KdbpTestWalks},
+    {"lang", "statements, quotes, memory functions and pseudo-registers", KdbpTestLanguage},
+    {"view", "text columns, physical memory and list walks", KdbpTestMoreMemory},
+    {"ctl", "breakpoint options, display, g, gu and p counts", KdbpTestControl},
     {"script", "aliases, repeat, scripts and the transcript", KdbpTestScripts},
     {"dis", "the disassembler", KdbpTestDisassembler},
     {"cmd", "every command with bad arguments", KdbpTestEveryCommand},
