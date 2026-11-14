@@ -130,6 +130,7 @@ Directory::FindNextFile(_In_  PFileRecord File,
     PAttribute BitmapAttribute = NULL;
     PIndexRootEx IndexRoot;
     PUCHAR IndexBufferData = NULL;
+    PNtfsLookupSlot Slot = NULL;
     ULONG IndexRecordSize;
     ULONGLONG BitmapLength;
     ULONGLONG ChildVCN;
@@ -206,22 +207,13 @@ Directory::FindNextFile(_In_  PFileRecord File,
     if (BitmapLength == 0)
         return STATUS_FILE_CORRUPT_ERROR;
 
-    if (!DiskVolume->IndexWorkBuffer ||
-        DiskVolume->IndexWorkBufferSize < IndexRecordSize)
-    {
-        delete[] DiskVolume->IndexWorkBuffer;
-        DiskVolume->IndexWorkBuffer =
-            new(PagedPool, TAG_NTFS) UCHAR[IndexRecordSize];
-        DiskVolume->IndexWorkBufferSize =
-            DiskVolume->IndexWorkBuffer ? IndexRecordSize : 0;
-        DiskVolume->IndexWorkBufferValid = FALSE;
-    }
-    IndexBufferData = DiskVolume->IndexWorkBuffer;
-    if (!IndexBufferData)
+    Slot = DiskVolume->AcquireLookupSlot(DirectoryReference, IndexRecordSize);
+    if (!Slot)
     {
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
+    IndexBufferData = Slot->Buffer;
 
     while (Descend)
     {
@@ -274,10 +266,12 @@ Directory::FindNextFile(_In_  PFileRecord File,
             goto Done;
         }
 
-        if (!DiskVolume->IndexWorkBufferValid ||
-            DiskVolume->IndexWorkFileReference != DirectoryReference ||
-            DiskVolume->IndexWorkVCN != ChildVCN)
+        if (!Slot->Valid ||
+            Slot->Generation != DiskVolume->IndexEditGeneration ||
+            Slot->FileReference != DirectoryReference ||
+            Slot->VCN != ChildVCN)
         {
+            Slot->Valid = FALSE;
             BitmapByte = IndexRecordNumber >> 3;
             BitmapMask = (UCHAR)(1 << (IndexRecordNumber & 7));
             Status = File->CopyData(BitmapAttribute,
@@ -318,9 +312,10 @@ Directory::FindNextFile(_In_  PFileRecord File,
                 goto Done;
             }
 
-            DiskVolume->IndexWorkFileReference = DirectoryReference;
-            DiskVolume->IndexWorkVCN = ChildVCN;
-            DiskVolume->IndexWorkBufferValid = TRUE;
+            Slot->FileReference = DirectoryReference;
+            Slot->VCN = ChildVCN;
+            Slot->Generation = DiskVolume->IndexEditGeneration;
+            Slot->Valid = TRUE;
         }
 
         NodeBuffer = (PIndexBuffer)IndexBufferData;
@@ -339,6 +334,7 @@ Directory::FindNextFile(_In_  PFileRecord File,
     }
 
 Done:
-    /* Volume-owned scratch. */
+    if (Slot)
+        DiskVolume->ReleaseLookupSlot(Slot);
     return Status;
 }

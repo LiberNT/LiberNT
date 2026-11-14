@@ -32,6 +32,7 @@ NPAGED_LOOKASIDE_LIST IrpContextLookasideList;
 NPAGED_LOOKASIDE_LIST FcbLookasideList;
 NPAGED_LOOKASIDE_LIST AttrCtxtLookasideList;
 PDRIVER_OBJECT NtfsDriverObject;
+ULONG NtfsMaxCachedRecords = NTFS_MAX_CACHED_RECORDS;
 static PDRIVER_DISPATCH NtfsFsdDispatchTable[IRP_MJ_MAXIMUM_FUNCTION + 1];
 /* FUNCTIONS ****************************************************************/
 static
@@ -60,6 +61,19 @@ DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
     ULONG Index;
     NtfsDriverObject = DriverObject;
     UNREFERENCED_PARAMETER(RegistryPath);
+    switch (MmQuerySystemSize())
+    {
+        case MmSmallSystem:
+            NtfsMaxCachedRecords = NTFS_MAX_CACHED_RECORDS;
+            break;
+        case MmMediumSystem:
+            NtfsMaxCachedRecords = 4 * NTFS_MAX_CACHED_RECORDS;
+            break;
+        case MmLargeSystem:
+        default:
+            NtfsMaxCachedRecords = 16 * NTFS_MAX_CACHED_RECORDS;
+            break;
+    }
     RtlInitUnicodeString(&UnicodeString, L"\\Ntfs");
     Status = IoCreateDevice(DriverObject,
                             0,
@@ -910,8 +924,20 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
         if (FirstCleanup)
         {
+            BOOLEAN Exclusive = (FileCB->CreateOptions & FILE_DELETE_ON_CLOSE) != 0;
+            BOOLEAN Acquired = FALSE;
+            BOOLEAN Locked = FALSE;
+
             KeEnterCriticalRegion();
-            NtfsAcquireMetadata(VolCB);
+            if (Exclusive)
+            {
+                NtfsAcquireMetadata(VolCB);
+            }
+            else
+            {
+                Acquired = NtfsAcquireMetadataSharedUnlessHeld(VolCB);
+                Locked = NtfsLockOpenLinks(VolCB);
+            }
             if (FileCB->CreateOptions & FILE_DELETE_ON_CLOSE)
             {
                 if (FileCB->NativeCcb.Lcb &&
@@ -946,7 +972,16 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                              !NtfsIsLinkDetached(FileCB->NativeCcb.Lcb) &&
                              (FileCB->NativeCcb.Lcb->CleanupCount == 0 || FileCB->PosixDelete);
             }
-            NtfsReleaseMetadata(VolCB);
+            if (Exclusive)
+            {
+                NtfsReleaseMetadata(VolCB);
+            }
+            else
+            {
+                NtfsUnlockOpenLinks(VolCB, Locked);
+                if (Acquired)
+                    NtfsReleaseMetadataShared(VolCB);
+            }
             KeLeaveCriticalRegion();
         }
 

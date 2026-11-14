@@ -688,4 +688,7 @@ Directory::~Directory()
     IndexAllocationLength = 0;
     delete EnumerationState;
     EnumerationState = NULL;
+    delete[] EnumerationBuffer;
+    EnumerationBuffer = NULL;
+    EnumerationBufferSize = 0;
 }

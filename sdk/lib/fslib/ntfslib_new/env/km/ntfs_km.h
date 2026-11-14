@@ -40,6 +40,17 @@ NtfsDiskFlushRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
                     _In_ ULONGLONG Offset,
                     _In_ ULONG Length);
 
+/* Whole cache blocks only; End drops every block in the range, held changes included. */
+NTSTATUS
+NtfsDiskBeginDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                           _In_ ULONGLONG Offset,
+                           _In_ ULONG Length);
+
+VOID
+NtfsDiskEndDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                         _In_ ULONGLONG Offset,
+                         _In_ ULONG Length);
+
 NTSTATUS
 NtfsDiskReadKm(_In_ PDEVICE_OBJECT DeviceObject,
                _In_ ULONG SectorBytes,

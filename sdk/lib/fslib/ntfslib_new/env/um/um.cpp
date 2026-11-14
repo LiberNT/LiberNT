@@ -130,6 +130,18 @@ NtfsReleaseMutex(_Inout_ PVOID Mutex)
 }
 
 void*
+NtfsReadPointerAcquire(_In_ void* const volatile* Source)
+{
+    return ReadPointerAcquire(Source);
+}
+
+void
+NtfsWritePointerRelease(_Out_ void* volatile* Destination, _In_opt_ void* Value)
+{
+    WritePointerRelease(Destination, Value);
+}
+
+void*
 NtfsAllocatePoolWithTag(POOL_TYPE PoolType, size_t Size, ULONG Tag)
 {
     UNREFERENCED_PARAMETER(PoolType);

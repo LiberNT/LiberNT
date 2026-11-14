@@ -120,6 +120,7 @@ list(APPEND SOURCE
     NtProtectVirtualMemory.c
     NtOpenMaximumAllowed.c
     ObTraverse.c
+    NtQueryAttributesFile.c
     NtQueryInformationFile.c
     NtQueryDirectoryFile.c
     NtQueryInformationProcess.c
@@ -152,6 +153,7 @@ list(APPEND SOURCE
     NtUnloadDriver.c
     NtWnfState.c
     NtWriteFile.c
+    NtWriteFileNonCached.c
     NtdllDefWindowProc.c
     probelib.c
     RtlAllocateHeap.c

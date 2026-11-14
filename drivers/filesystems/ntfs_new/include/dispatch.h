@@ -1,5 +1,6 @@
 /* Set in read.c; gates cache-manager and section participation. */
 extern const BOOLEAN NtfsCachedReadsEnabled;
+extern ULONG NtfsMaxCachedRecords;
 
 struct _FCB;
 
@@ -143,6 +144,12 @@ BOOLEAN NTAPI
 NtfsFastIoDetachDevice(
     _In_ PDEVICE_OBJECT SourceDevice,
     _In_ PDEVICE_OBJECT TargetDevice);
+
+BOOLEAN
+NtfsQueryOpen(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _Out_ PFILE_NETWORK_OPEN_INFORMATION NetworkInformation);
 
 BOOLEAN NTAPI
 NtfsFastIoQueryOpen(

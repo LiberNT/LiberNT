@@ -502,6 +502,7 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
     ExInitializeFastMutex(&VolCB->VolumeStateMutex);
     ExInitializeFastMutex(&VolCB->StreamListMutex);
     ExInitializeFastMutex(&VolCB->MissingNameMutex);
+    ExInitializeFastMutex(&VolCB->OpenLinkMutex);
     InitializeListHead(&VolCB->MissingNameList);
     for (Index = 0; Index < NTFS_MISSING_NAME_BUCKETS; Index++)
         InitializeListHead(&VolCB->MissingNameHash[Index]);
@@ -907,7 +908,7 @@ NtfsTrimRecordCache(_In_ PVolumeContextBlock VolCB)
 {
     PLIST_ENTRY Entry = VolCB->RecordCacheList.Blink;
 
-    while (VolCB->RecordCacheCount > NTFS_MAX_CACHED_RECORDS &&
+    while (VolCB->RecordCacheCount > NtfsMaxCachedRecords &&
            Entry != &VolCB->RecordCacheList)
     {
         PNtfsCachedRecord Candidate = CONTAINING_RECORD(Entry, NtfsCachedRecord, Link);

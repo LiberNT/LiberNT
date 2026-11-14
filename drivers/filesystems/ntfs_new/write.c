@@ -364,6 +364,157 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
     return Handled;
 }
 
+static
+BOOLEAN
+NtfsTryDirectWrite(_In_ PVolumeContextBlock VolCB,
+                   _In_ PFileContextBlock FileCB,
+                   _Inout_ PIRP Irp,
+                   _In_ LONGLONG FileOffset,
+                   _In_ ULONG Length,
+                   _Out_ PNTSTATUS Status)
+{
+    PAttribute Attribute;
+    NtfsRetrievalExtent Extent;
+    ULONGLONG ReturnedStartingVcn;
+    ULONGLONG StartingVcn;
+    ULONGLONG ClusterSize;
+    ULONGLONG Available;
+    ULONGLONG DiskOffset;
+    PVOID Buffer;
+    ULONG ExtentCount;
+    NTSTATUS QueryStatus;
+    NTSTATUS TimestampStatus;
+
+    ASSERT(!BooleanFlagOn(Irp->Flags, IRP_PAGING_IO));
+    ASSERT(ExIsResourceAcquiredExclusiveLite(NtfsGetMainResource(FileCB)));
+
+    *Status = STATUS_SUCCESS;
+    if (Length == 0 ||
+        FileOffset < 0 ||
+        (ULONGLONG)FileOffset > ~(ULONGLONG)0 - Length ||
+        FileOffset + Length > NtfsGetCommonFcbHeader(FileCB)->ValidDataLength.QuadPart ||
+        FileCB->RequestedType != TypeData ||
+        !FileCB->FileRec ||
+        !VolCB->StorageDevice ||
+        !VolCB->BytesPerSector)
+    {
+        return FALSE;
+    }
+    if (Irp->MdlAddress)
+    {
+        if (Irp->MdlAddress->Next ||
+            MmGetMdlByteCount(Irp->MdlAddress) < Length)
+        {
+            return FALSE;
+        }
+        Buffer = MmGetMdlVirtualAddress(Irp->MdlAddress);
+    }
+    else
+    {
+        if (Irp->AssociatedIrp.SystemBuffer || !Irp->UserBuffer)
+            return FALSE;
+        Buffer = Irp->UserBuffer;
+    }
+    if (((ULONG_PTR)Buffer & VolCB->StorageDevice->AlignmentRequirement) != 0 ||
+        Length % VolCB->BytesPerSector != 0 ||
+        (ULONGLONG)FileOffset % VolCB->BytesPerSector != 0)
+    {
+        return FALSE;
+    }
+
+    ClusterSize = (ULONGLONG)VolCB->BytesPerSector *
+                  NtfsVolumeGetSectorsPerCluster(VolCB->DiskVolume);
+    if (!ClusterSize)
+        return FALSE;
+
+    NtfsAcquireMetadata(VolCB);
+    if (!NT_SUCCESS(NtfsRefreshDirectoryRecord(VolCB, FileCB)))
+        goto Fallback;
+
+    Attribute = NtfsFileRecordGetAttribute(FileCB->FileRec,
+                                           TypeData,
+                                           FileCB->RequestedStream);
+    if (!Attribute ||
+        !Attribute->IsNonResident ||
+        (Attribute->Flags & (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED | ATTR_SPARSE)) ||
+        (ULONGLONG)FileOffset + Length > Attribute->NonResident.InitalizedDataSize ||
+        NtfsFileRecordGetAttribute(FileCB->FileRec, TypeReparsePoint, NULL))
+    {
+        goto Fallback;
+    }
+
+    StartingVcn = (ULONGLONG)FileOffset / ClusterSize;
+    ExtentCount = 1;
+    QueryStatus = NtfsFileRecordQueryRetrievalPointers(FileCB->FileRec,
+                                                       TypeData,
+                                                       FileCB->RequestedStream,
+                                                       StartingVcn,
+                                                       &ReturnedStartingVcn,
+                                                       &Extent,
+                                                       &ExtentCount);
+    if ((!NT_SUCCESS(QueryStatus) && QueryStatus != STATUS_BUFFER_OVERFLOW) ||
+        ExtentCount != 1 ||
+        ReturnedStartingVcn > StartingVcn ||
+        Extent.NextVcn <= StartingVcn ||
+        Extent.Lcn < 0 ||
+        Extent.NextVcn - StartingVcn > ~(ULONGLONG)0 / ClusterSize)
+    {
+        goto Fallback;
+    }
+
+    Available = (Extent.NextVcn - StartingVcn) * ClusterSize;
+    if (Available < (ULONGLONG)FileOffset % ClusterSize ||
+        Available - (ULONGLONG)FileOffset % ClusterSize < Length)
+    {
+        goto Fallback;
+    }
+
+    if ((ULONGLONG)Extent.Lcn > ~(ULONGLONG)0 - (StartingVcn - ReturnedStartingVcn))
+        goto Fallback;
+    DiskOffset = (ULONGLONG)Extent.Lcn + (StartingVcn - ReturnedStartingVcn);
+    if (DiskOffset > (~(ULONGLONG)0 - ClusterSize) / ClusterSize)
+        goto Fallback;
+    DiskOffset = DiskOffset * ClusterSize + (ULONGLONG)FileOffset % ClusterSize;
+
+    if (!NT_SUCCESS(NtfsDiskBeginDirectWriteKm(VolCB->StorageDevice, DiskOffset, Length)))
+        goto Fallback;
+    NtfsReleaseMetadata(VolCB);
+
+    if (!Irp->MdlAddress &&
+        !NT_SUCCESS(NtfsLockTransferBuffer(Irp, Length, IoReadAccess)))
+    {
+        return FALSE;
+    }
+
+    *Status = NtfsSubmitDirectIo(VolCB, Irp, IRP_MJ_WRITE, DiskOffset, Length);
+
+    NtfsAcquireMetadata(VolCB);
+    NtfsDiskEndDirectWriteKm(VolCB->StorageDevice, DiskOffset, Length);
+    if (NT_SUCCESS(*Status))
+    {
+        TimestampStatus = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+        if (NT_SUCCESS(TimestampStatus))
+        {
+            TimestampStatus = NtfsFileRecordUpdateAutomaticTimestamps(
+                FileCB->FileRec,
+                NTFS_BASIC_INFO_LAST_WRITE_TIME | NTFS_BASIC_INFO_CHANGE_TIME);
+        }
+        if (NT_SUCCESS(TimestampStatus) &&
+            (!FileCB->RequestedStream ||
+             (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY)))
+        {
+            InterlockedIncrement(&VolCB->DirGeneration);
+        }
+        *Status = TimestampStatus;
+    }
+    NtfsReleaseMetadata(VolCB);
+    return TRUE;
+
+Fallback:
+    NtfsReleaseMetadata(VolCB);
+    return FALSE;
+}
+
 _Function_class_(IRP_MJ_WRITE)
 _Function_class_(DRIVER_DISPATCH)
 NTSTATUS
@@ -526,6 +677,12 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             Status = FlushStatus.Status;
             goto Complete;
         }
+    }
+
+    if (!PagingIo &&
+        NtfsTryDirectWrite(VolCB, FileCB, Irp, ByteOffset.QuadPart, Length, &Status))
+    {
+        goto WriteDone;
     }
 
     /*
@@ -696,6 +853,7 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     NtfsReleaseMetadata(VolCB);
 
+WriteDone:
     if (NT_SUCCESS(Status))
     {
         if (!PagingIo)

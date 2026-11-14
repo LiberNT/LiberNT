@@ -49,6 +49,18 @@ NtfsReleaseMutex(PFAST_MUTEX Mutex)
     ExReleaseFastMutex(Mutex);
 }
 
+void*
+NtfsReadPointerAcquire(void* const volatile* Source)
+{
+    return ReadPointerAcquire(Source);
+}
+
+void
+NtfsWritePointerRelease(void* volatile* Destination, void* Value)
+{
+    WritePointerRelease(Destination, Value);
+}
+
 unsigned long long
 NtfsQueryTicks(void)
 {
@@ -1333,6 +1345,31 @@ NtfsDiskFlushRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
     if (!DeviceObject || Offset > ~(ULONGLONG)0 - Length)
         return STATUS_INVALID_PARAMETER;
     return NtfsCacheFlushRange(DeviceObject, Offset, Length);
+}
+
+extern "C"
+NTSTATUS
+NtfsDiskBeginDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                           _In_ ULONGLONG Offset,
+                           _In_ ULONG Length)
+{
+    if (!DeviceObject || !Length || Offset > ~(ULONGLONG)0 - Length)
+        return STATUS_INVALID_PARAMETER;
+    if (((Offset | Length) & (NTFS_CACHE_BLOCK_SIZE - 1)) != 0)
+        return STATUS_NOT_SUPPORTED;
+    return NtfsCacheFlushRange(DeviceObject, Offset, Length);
+}
+
+extern "C"
+VOID
+NtfsDiskEndDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
+                         _In_ ULONGLONG Offset,
+                         _In_ ULONG Length)
+{
+    NT_ASSERT(DeviceObject != NULL);
+    NT_ASSERT(Length != 0);
+    NT_ASSERT(((Offset | Length) & (NTFS_CACHE_BLOCK_SIZE - 1)) == 0);
+    NtfsCacheInvalidateRange(DeviceObject, Offset, Length);
 }
 
 extern "C"

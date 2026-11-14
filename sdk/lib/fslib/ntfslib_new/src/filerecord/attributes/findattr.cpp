@@ -131,6 +131,12 @@ FileRecord::GetAttribute(_In_     AttributeType Type,
     return FindAttributeFromList(Type, Name);
 }
 
+BOOLEAN
+FileRecord::HasAttributeList()
+{
+    return FindAttributeInRecord(TypeAttributeList, NULL, NULL) != NULL;
+}
+
 PAttribute
 FileRecord::FindAttributeInRecord(_In_ AttributeType Type,
                                   _In_opt_ PWSTR Name,
@@ -343,17 +349,31 @@ NTSTATUS
 FileRecord::LoadAttributeList()
 {
     PAttribute ListAttribute;
+    PUCHAR ListData = NULL;
+    ULONG ListLength = 0;
+    NTSTATUS Status;
 
-    if (AttributeListData)
+    if (NtfsReadPointerAcquire((void* const volatile*)&AttributeListData))
         return STATUS_SUCCESS;
 
     ListAttribute = FindAttributeInRecord(TypeAttributeList, NULL, NULL);
     if (!ListAttribute)
         return STATUS_NOT_FOUND;
 
-    return ReadAttributeAlloc(ListAttribute,
-                              &AttributeListData,
-                              &AttributeListLength);
+    Status = ReadAttributeAlloc(ListAttribute, &ListData, &ListLength);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    NtfsAcquireMutex(&DiskVolume->LazyCacheMutex);
+    if (!AttributeListData)
+    {
+        AttributeListLength = ListLength;
+        NtfsWritePointerRelease((void* volatile*)&AttributeListData, ListData);
+        ListData = NULL;
+    }
+    NtfsReleaseMutex(&DiskVolume->LazyCacheMutex);
+    delete[] ListData;
+    return STATUS_SUCCESS;
 }
 
 FileRecord*
@@ -365,7 +385,10 @@ FileRecord::GetExtentRecord(_In_ ULONGLONG FileReference)
     USHORT SequenceNumber = (USHORT)(FileReference >> 48);
     NTSTATUS Status;
 
-    for (Entry = ExtentCache; Entry; Entry = Entry->Next)
+    for (Entry = (PFileRecordExtentCacheEntry)NtfsReadPointerAcquire(
+             (void* const volatile*)&ExtentCache);
+         Entry;
+         Entry = Entry->Next)
     {
         if (Entry->FileReference == FileReference)
             return Entry->Record;
@@ -397,9 +420,22 @@ FileRecord::GetExtentRecord(_In_ ULONGLONG FileReference)
 
     Entry->FileReference = FileReference;
     Entry->Record = Record;
-    Entry->Next = ExtentCache;
+
+    NtfsAcquireMutex(&DiskVolume->LazyCacheMutex);
+    for (PFileRecordExtentCacheEntry Other = ExtentCache; Other; Other = Other->Next)
+    {
+        if (Other->FileReference == FileReference)
+        {
+            NtfsReleaseMutex(&DiskVolume->LazyCacheMutex);
+            delete Record;
+            delete Entry;
+            return Other->Record;
+        }
+    }
     Record->BaseRecordOwner = this;
-    ExtentCache = Entry;
+    Entry->Next = ExtentCache;
+    NtfsWritePointerRelease((void* volatile*)&ExtentCache, Entry);
+    NtfsReleaseMutex(&DiskVolume->LazyCacheMutex);
     return Record;
 }
 
@@ -841,7 +877,10 @@ FileRecord::GetCachedDataRuns(_In_ PAttribute Attribute)
 {
     PDataRunCacheEntry Entry;
 
-    for (Entry = DataRunCache; Entry; Entry = Entry->Next)
+    for (Entry = (PDataRunCacheEntry)NtfsReadPointerAcquire(
+             (void* const volatile*)&DataRunCache);
+         Entry;
+         Entry = Entry->Next)
     {
         if (Entry->Attribute == Attribute)
             return Entry->Runs;
@@ -859,8 +898,20 @@ FileRecord::GetCachedDataRuns(_In_ PAttribute Attribute)
     }
 
     Entry->Attribute = Attribute;
+    NtfsAcquireMutex(&DiskVolume->LazyCacheMutex);
+    for (PDataRunCacheEntry Other = DataRunCache; Other; Other = Other->Next)
+    {
+        if (Other->Attribute == Attribute)
+        {
+            NtfsReleaseMutex(&DiskVolume->LazyCacheMutex);
+            FreeDataRun(Entry->Runs);
+            delete Entry;
+            return Other->Runs;
+        }
+    }
     Entry->Next = DataRunCache;
-    DataRunCache = Entry;
+    NtfsWritePointerRelease((void* volatile*)&DataRunCache, Entry);
+    NtfsReleaseMutex(&DiskVolume->LazyCacheMutex);
     return Entry->Runs;
 }
 

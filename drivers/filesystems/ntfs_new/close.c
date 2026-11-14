@@ -59,9 +59,9 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
              * in create. They are only torn down when it is really freed. */
 
             KeEnterCriticalRegion();
-            NtfsAcquireMetadata(VolCB);
             if (FileCB->FileDir)
             {
+                NtfsAcquireMetadata(VolCB);
                 PVolumeContextBlock Vol =
                     (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
                 PNtfsDirectory Doomed = FileCB->FileDir;
@@ -79,9 +79,13 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
                 if (Doomed)
                     NtfsDirectoryDestroy(Doomed);
+                NtfsRemoveOpenLink(VolCB, FileCB);
+                NtfsReleaseMetadata(VolCB);
             }
-            NtfsRemoveOpenLink(VolCB, FileCB);
-            NtfsReleaseMetadata(VolCB);
+            else
+            {
+                NtfsRemoveOpenLink(VolCB, FileCB);
+            }
             KeLeaveCriticalRegion();
 
             /* A cached record outlives this handle and is freed by the cache. */

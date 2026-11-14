@@ -101,6 +101,7 @@ extern void func_NtProtectVirtualMemory(void);
 extern void func_NtOpenMaximumAllowed(void);
 extern void func_ObTraverse(void);
 extern void func_DbgPrintEx(void);
+extern void func_NtQueryAttributesFile(void);
 extern void func_NtQueryInformationFile(void);
 extern void func_NtQueryDirectoryFile(void);
 extern void func_NtQueryInformationProcess(void);
@@ -135,6 +136,7 @@ extern void func_NtTerminateThread(void);
 extern void func_NtUnloadDriver(void);
 extern void func_NtWnfState(void);
 extern void func_NtWriteFile(void);
+extern void func_NtWriteFileNonCached(void);
 extern void func_NtdllDefWindowProc(void);
 extern void func_RtlAllocateHeap(void);
 extern void func_RtlCreateTagHeap(void);
@@ -338,6 +340,7 @@ const struct test winetest_testlist[] =
     { "NtOpenMaximumAllowed",           func_NtOpenMaximumAllowed },
     { "ObTraverse",                     func_ObTraverse },
     { "DbgPrintEx",                     func_DbgPrintEx },
+    { "NtQueryAttributesFile",          func_NtQueryAttributesFile },
     { "NtQueryInformationFile",         func_NtQueryInformationFile },
     { "NtQueryDirectoryFile",           func_NtQueryDirectoryFile },
     { "NtQueryInformationProcess",      func_NtQueryInformationProcess },
@@ -372,6 +375,7 @@ const struct test winetest_testlist[] =
     { "NtUnloadDriver",                 func_NtUnloadDriver },
     { "NtWnfState",                     func_NtWnfState },
     { "NtWriteFile",                    func_NtWriteFile },
+    { "NtWriteFileNonCached",           func_NtWriteFileNonCached },
     { "NtdllDefWindowProc",             func_NtdllDefWindowProc },
     { "RtlAllocateHeap",                func_RtlAllocateHeap },
     { "RtlCreateTagHeap", func_RtlCreateTagHeap },

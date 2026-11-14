@@ -95,14 +95,27 @@ NtfsSubmitDirectIo(
     ReadContext.IoStatus.Status = STATUS_PENDING;
     ReadContext.IoStatus.Information = 0;
 
+    NT_ASSERT(MajorFunction == IRP_MJ_READ || MajorFunction == IRP_MJ_WRITE);
+    NT_ASSERT(Irp->MdlAddress && MmGetMdlByteCount(Irp->MdlAddress) >= Length);
+
     IoStack = IoGetNextIrpStackLocation(Irp);
     IoStack->MajorFunction = MajorFunction;
     IoStack->MinorFunction = 0;
     IoStack->Flags = SL_OVERRIDE_VERIFY_VOLUME;
     IoStack->Control = 0;
     IoStack->FileObject = NULL;
-    IoStack->Parameters.Read.Length = Length;
-    IoStack->Parameters.Read.ByteOffset.QuadPart = DiskOffset;
+    if (MajorFunction == IRP_MJ_WRITE)
+    {
+        IoStack->Parameters.Write.Length = Length;
+        IoStack->Parameters.Write.Key = 0;
+        IoStack->Parameters.Write.ByteOffset.QuadPart = DiskOffset;
+    }
+    else
+    {
+        IoStack->Parameters.Read.Length = Length;
+        IoStack->Parameters.Read.Key = 0;
+        IoStack->Parameters.Read.ByteOffset.QuadPart = DiskOffset;
+    }
     IoSetCompletionRoutine(Irp,
                            NtfsDirectIoCompletion,
                            &ReadContext,
@@ -481,6 +494,9 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         NtfsReleaseMetadata(VolCB);
         if (DirectRead)
         {
+            /* The stream resource held shared excludes every path that frees or moves this stream's clusters. */
+            ASSERT(ExIsResourceAcquiredSharedLite(PagingIo ? NtfsGetPagingIoResource(FileCB)
+                                                           : NtfsGetMainResource(FileCB)));
             if (NT_SUCCESS(Status))
             {
                 /* Small file writes may still be in the library's block cache.

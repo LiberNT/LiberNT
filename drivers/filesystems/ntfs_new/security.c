@@ -65,16 +65,20 @@ NtfsBuildDefaultSecurityDescriptor(
     return Status;
 }
 
+static
 NTSTATUS
-NtfsReadRecordSecurityDescriptor(
+NtfsReadRecordSecurityDescriptorEx(
     _In_ PNtfsFileRecord File,
+    _In_ BOOLEAN CachedOnly,
     _Outptr_ PSECURITY_DESCRIPTOR *Descriptor)
 {
+    NTSTATUS (*Read)(PNtfsFileRecord, PUCHAR, PULONG) =
+        CachedOnly ? NtfsFileRecordReadCachedSecurityDescriptor : NtfsFileRecordReadSecurityDescriptor;
     ULONG Length = 0;
     NTSTATUS Status;
 
     *Descriptor = NULL;
-    Status = NtfsFileRecordReadSecurityDescriptor(File, NULL, &Length);
+    Status = Read(File, NULL, &Length);
     /* Windows 11 applies O:BAG:SYD:(A;;FA;;;SY)(A;;FA;;;BA) to a record whose descriptor cannot be found. */
     if (Status == STATUS_NOT_FOUND)
         return NtfsBuildDefaultSecurityDescriptor(Descriptor);
@@ -84,7 +88,7 @@ NtfsReadRecordSecurityDescriptor(
     *Descriptor = ExAllocatePoolWithTag(PagedPool, Length, TAG_NTFS);
     if (!*Descriptor)
         return STATUS_INSUFFICIENT_RESOURCES;
-    Status = NtfsFileRecordReadSecurityDescriptor(File, (PUCHAR)*Descriptor, &Length);
+    Status = Read(File, (PUCHAR)*Descriptor, &Length);
     if (!NT_SUCCESS(Status))
     {
         ExFreePoolWithTag(*Descriptor, TAG_NTFS);
@@ -94,12 +98,22 @@ NtfsReadRecordSecurityDescriptor(
 }
 
 NTSTATUS
-NtfsCheckRecordAccess(
+NtfsReadRecordSecurityDescriptor(
+    _In_ PNtfsFileRecord File,
+    _Outptr_ PSECURITY_DESCRIPTOR *Descriptor)
+{
+    return NtfsReadRecordSecurityDescriptorEx(File, FALSE, Descriptor);
+}
+
+static
+NTSTATUS
+NtfsCheckRecordAccessEx(
     _In_ PNtfsFileRecord File,
     _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
     _In_ ACCESS_MASK DesiredAccess,
     _In_ ACCESS_MASK PreviouslyGrantedAccess,
     _In_ KPROCESSOR_MODE AccessMode,
+    _In_ BOOLEAN CachedOnly,
     _Out_ PACCESS_MASK GrantedAccess,
     _Out_ PPRIVILEGE_SET* Privileges)
 {
@@ -120,7 +134,7 @@ NtfsCheckRecordAccess(
         return STATUS_SUCCESS;
     }
 
-    Status = NtfsReadRecordSecurityDescriptor(File, &Descriptor);
+    Status = NtfsReadRecordSecurityDescriptorEx(File, CachedOnly, &Descriptor);
     if (!NT_SUCCESS(Status))
         return Status;
     SeAccessCheck(Descriptor,
@@ -135,6 +149,34 @@ NtfsCheckRecordAccess(
                   &Status);
     ExFreePoolWithTag(Descriptor, TAG_NTFS);
     return Status;
+}
+
+NTSTATUS
+NtfsCheckRecordAccess(
+    _In_ PNtfsFileRecord File,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ACCESS_MASK PreviouslyGrantedAccess,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PPRIVILEGE_SET* Privileges)
+{
+    return NtfsCheckRecordAccessEx(File, SubjectContext, DesiredAccess, PreviouslyGrantedAccess,
+                                   AccessMode, FALSE, GrantedAccess, Privileges);
+}
+
+NTSTATUS
+NtfsCheckCachedRecordAccess(
+    _In_ PNtfsFileRecord File,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ACCESS_MASK PreviouslyGrantedAccess,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PPRIVILEGE_SET* Privileges)
+{
+    return NtfsCheckRecordAccessEx(File, SubjectContext, DesiredAccess, PreviouslyGrantedAccess,
+                                   AccessMode, TRUE, GrantedAccess, Privileges);
 }
 
 static NTSTATUS
