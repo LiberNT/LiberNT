@@ -359,6 +359,9 @@ PortMiniportTimerDpc(
     TimerRoutine = NULL;
 
     OldIrql = PortAcquireTimerLock(DeviceExtension);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (DeviceExtension->MiniportTimerArmed)
     {
         DeviceExtension->MiniportTimerArmed = FALSE;
@@ -547,6 +550,8 @@ PortRequestCompletionDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while ((Entry = ExInterlockedRemoveHeadList(&DeviceExtension->CompletionListHead,
                                                 &DeviceExtension->CompletionLock)) != NULL)
     {
@@ -582,6 +587,9 @@ PortMiniportTimerRequestDpc(
      * request fields synchronized at that IRQL, but apply each request from
      * this DPC after dropping the lock.
      */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (;;)
     {
         OldIrql = PortAcquireTimerLock(DeviceExtension);
@@ -1603,6 +1611,8 @@ PortMiniportTimerExDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (MiniportTimer && MiniportTimer->Callback)
         MiniportTimer->Callback(MiniportTimer->HwDeviceExtension, MiniportTimer->CallbackContext);

@@ -655,6 +655,8 @@ LsiResetBusLocked(
     PLSI_SLOT Slot = &Device->Slots[Device->SlotCount - 1];
     ULONG Elapsed;
 
+    ASSERT(Device != NULL);
+
     if (Device->Operational &&
         Slot->Type == LSI_SLOT_FREE &&
         (LsiReadRegister(Device, MPI_DOORBELL_OFFSET) & MPI_IOC_STATE_MASK) == MPI_IOC_STATE_OPERATIONAL)

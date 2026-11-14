@@ -98,6 +98,9 @@ NvmeAdminSubmitLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     ULONG NextTail;
     ULONG Slot;
 
+    ASSERT(Device != NULL);
+    ASSERT(Command != NULL);
+
     if (!Device->AdminReady)
         return MAXULONG;
 
@@ -146,6 +149,8 @@ NvmeProcessAdminCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     PNVME_QUEUE Queue = &Device->AdminQueue;
     BOOLEAN Handled = FALSE;
     ULONG Collected = 0;
+
+    ASSERT(Device != NULL);
 
     if (!Device->AdminReady)
         return 0;

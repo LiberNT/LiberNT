@@ -161,6 +161,9 @@ NvmeProcessIoCompletionsLocked(_In_ PNVME_DEVICE_EXTENSION Device,
     BOOLEAN Handled = FALSE;
     ULONG Collected = 0;
 
+    ASSERT(Device != NULL);
+    ASSERT(Queue != NULL);
+
     if (!Queue->Created)
         return 0;
 
