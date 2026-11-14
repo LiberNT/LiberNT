@@ -2628,7 +2628,8 @@ PinCaptureProcess(
             }
             else
             {
-                /* resume work on this irp */
+                /* resume work on this irp; the loop is entered holding the list lock */
+                KeAcquireSpinLock(&PinContext->IrpListLock, &OldLevel);
                 continue;
             }
         }
