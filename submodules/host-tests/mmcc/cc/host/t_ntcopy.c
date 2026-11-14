@@ -28,6 +28,20 @@ NtCopyReadStatus(PFILE_OBJECT File, PLARGE_INTEGER Offset, ULONG Length, BOOLEAN
     return Status;
 }
 
+VOID
+CcFlushCache(PSECTION_OBJECT_POINTERS Pointers, PLARGE_INTEGER Offset, ULONG Length, PIO_STATUS_BLOCK IoStatus)
+{
+    PCC_NT_MAP NtMap = Pointers->SharedCacheMap;
+    NTSTATUS Status = CcDirtyFlush(&NtMap->Map, Offset ? (ULONG64)Offset->QuadPart : 0,
+                                   Offset ? Length : (ULONG64)-1, ~0u, NULL);
+
+    if (IoStatus != NULL)
+    {
+        IoStatus->Status = Status;
+        IoStatus->Information = 0;
+    }
+}
+
 void
 TestNtCopy(void)
 {
@@ -40,6 +54,7 @@ TestNtCopy(void)
     IO_STATUS_BLOCK IoStatus;
     UCHAR Buffer[10];
     BOOLEAN Result = 0xFF;
+    LONG64 Writes;
     const ULONG64 FileSize = 2 * CC_VIEW_SIZE;
 
     CHECK(NT_SUCCESS(CcCacheInitialize(&Cache, CC_MIN_VIEWS, 1024)));
@@ -111,6 +126,19 @@ TestNtCopy(void)
     CHECK(CcCopyWrite(&File, &Offset, 0, FALSE, NULL));
     CHECK(Backing.PrefetchCalls == 4 && Backing.Resident[4] == 0);
     CHECK(NT_SUCCESS(CcDirtyFlush(&Map.Map, 0, FileSize, ~0u, NULL)));
+
+    File.Flags = FO_WRITE_THROUGH;
+    Offset.QuadPart = PAGE_SIZE * 5;
+    memset(Buffer, 0x5A, sizeof(Buffer));
+    Writes = Backing.DiskWrites;
+    CHECK(!CcCopyWrite(&File, &Offset, sizeof(Buffer), FALSE, Buffer));
+    CHECK(Backing.PrefetchCalls == 4 && Backing.Dirty[5] == 0 && Backing.DiskWrites == Writes);
+    CHECK(CcCopyWrite(&File, &Offset, sizeof(Buffer), TRUE, Buffer));
+    CHECK(Backing.DiskWrites == Writes + 1 && Backing.Dirty[5] == 0);
+    CHECK(memcmp(Backing.Disk + Offset.QuadPart, Buffer, sizeof(Buffer)) == 0);
+    CHECK(CcCopyWrite(&File, &Offset, 0, FALSE, NULL));
+    CHECK(Backing.DiskWrites == Writes + 1 && Map.ReferenceCount == 1);
+    File.Flags = 0;
 
     CHECK(CcMapUninitialize(&Map.Map));
     CcCacheUninitialize(&Cache);

@@ -15,7 +15,8 @@ CcNtBcbCreated(
 {
     PCC_NT_BCB NtBcb = (PCC_NT_BCB)Bcb;
 
-    ExInitializeResourceLite(&NtBcb->Engine.Resource);
+    if (Bcb->Pinned)
+        ExInitializeResourceLite(&NtBcb->Engine.Resource);
     NtBcb->Public.NodeTypeCode = 0x2FD;
     NtBcb->Public.NodeByteSize = 0;
 }
@@ -24,7 +25,8 @@ VOID
 CcNtBcbDeleting(
     _Inout_ PCC_BCB Bcb)
 {
-    ExDeleteResourceLite(&Bcb->Resource);
+    if (Bcb->Pinned)
+        ExDeleteResourceLite(&Bcb->Resource);
 }
 
 static

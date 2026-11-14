@@ -111,20 +111,21 @@ CcMmFlush(
     _In_ ULONG Length)
 {
     PCC_NT_MAP NtMap = Context;
+    PMI_SEGMENT Segment = NtMap->Control->Segment;
+    ULONG64 Start = Offset;
+    ULONG Total = Length;
+
+    CC_ASSERT(Segment->Kind == MiSegmentDataFile);
 
     while (Length != 0)
     {
         CC_VIEW_RANGE Range;
-        ULONG64 Address;
-        ULONG64 Size;
         NTSTATUS Status = CcViewAcquire(&NtMap->Map, Offset, Length, &Range);
 
         if (!NT_SUCCESS(Status))
             return Status;
 
-        Address = (ULONG64)(ULONG_PTR)Range.Address;
-        Size = Range.Length;
-        Status = MiFlushVirtualMemory(&NtMap->Control->Segment->System->SystemSpace, &Address, &Size, FALSE);
+        Status = MiSetRangeModified(&Segment->System->SystemSpace, (ULONG64)(ULONG_PTR)Range.Address, Range.Length);
         Offset += Range.Length;
         Length -= Range.Length;
         CcViewRelease(&Range);
@@ -133,7 +134,7 @@ CcMmFlush(
             return Status;
     }
 
-    return STATUS_SUCCESS;
+    return MiSegmentFlush(Segment, Start, Total);
 }
 
 static

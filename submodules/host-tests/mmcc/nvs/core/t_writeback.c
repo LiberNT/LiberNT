@@ -33,7 +33,7 @@ WriteFrames(PVOID Context, ULONG64 Offset, ULONG Length, const ULONG *Frames, UL
 
     CHECK(MiHostIrql == 0);
     CHECK(Call < RTL_NUMBER_OF(File->Offset));
-    CHECK(PageCount > 0 && PageCount <= MI_MAX_FILE_WRITE_PAGES);
+    CHECK(PageCount > 0 && PageCount <= MI_MAX_FILE_FLUSH_PAGES);
     CHECK(Length > (PageCount - 1) * PAGE_SIZE && Length <= PageCount * PAGE_SIZE);
     CHECK(Offset + Length <= File->File.Size);
     if (File->ExtendOnWrite != 0)
@@ -453,7 +453,7 @@ TestWriteback(void)
     WRITEBACK_FILE File = { .World = &World };
     MI_FILE_OPS Ops = { .Read = TestFileOps.Read, .Write = TestFileOps.Write, .WriteFrames = WriteFrames };
     PMI_SEGMENT Segment;
-    ULONG Pages = MI_MAX_FILE_WRITE_PAGES + 3;
+    ULONG Pages = MI_MAX_FILE_FLUSH_PAGES + 3;
     ULONG64 Size = (Pages - 1) * PAGE_SIZE + 317;
     ULONG64 i;
     ULONG Calls;
@@ -465,7 +465,7 @@ TestWriteback(void)
     WritebackPastUnwritablePages();
     WritebackConcurrentRedirty(FALSE);
     WritebackConcurrentRedirty(TRUE);
-    WorldCreate(&World, 512, 1, 100000);
+    WorldCreate(&World, 1024, 1, 100000);
     FileCreate(&File.File, Size);
     CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, Size, MI_PROT_READWRITE,
                                      &Ops, &File, NULL, 0, &Segment)));
@@ -474,9 +474,9 @@ TestWriteback(void)
     memset(File.File.Data, 0xCC, Size);
     CHECK(NT_SUCCESS(MiSegmentFlush(Segment, 0, Size)));
     CHECK(File.Calls == 2);
-    CHECK(File.Offset[0] == 0 && File.Pages[0] == MI_MAX_FILE_WRITE_PAGES);
-    CHECK(File.Length[0] == MI_MAX_FILE_WRITE_PAGES * PAGE_SIZE);
-    CHECK(File.Offset[1] == MI_MAX_FILE_WRITE_PAGES * PAGE_SIZE && File.Pages[1] == 3);
+    CHECK(File.Offset[0] == 0 && File.Pages[0] == MI_MAX_FILE_FLUSH_PAGES);
+    CHECK(File.Length[0] == MI_MAX_FILE_FLUSH_PAGES * PAGE_SIZE);
+    CHECK(File.Offset[1] == MI_MAX_FILE_FLUSH_PAGES * PAGE_SIZE && File.Pages[1] == 3);
     CHECK(File.Length[1] == 2 * PAGE_SIZE + 317);
     CHECK(File.Noncontiguous);
     CHECK(Segment->PagesWritten == Pages);
@@ -524,11 +524,21 @@ TestWriteback(void)
     CHECK(File.Offset[Calls + 1] == 0);
 
     Calls = File.Calls;
+    File.Redirty = FALSE;
+    CHECK(NT_SUCCESS(MiSegmentMarkDirty(Segment, 16 * PAGE_SIZE, 1)));
+    CHECK(NT_SUCCESS(MiSegmentMarkDirty(Segment, (16 + MI_MAX_FILE_WRITE_PAGES - 1) * PAGE_SIZE, 1)));
+    CHECK(NT_SUCCESS(MiSegmentMarkDirty(Segment, (16 + MI_MAX_FILE_WRITE_PAGES + 40) * PAGE_SIZE, 1)));
+    CHECK(NT_SUCCESS(MiSegmentFlush(Segment, 16 * PAGE_SIZE, (MI_MAX_FILE_WRITE_PAGES + 41) * PAGE_SIZE)));
+    CHECK(File.Calls == Calls + 2);
+    CHECK(File.Offset[Calls] == 16 * PAGE_SIZE && File.Pages[Calls] == MI_MAX_FILE_WRITE_PAGES);
+    CHECK(File.Offset[Calls + 1] == (16 + MI_MAX_FILE_WRITE_PAGES + 40) * PAGE_SIZE && File.Pages[Calls + 1] == 1);
+
+    Calls = File.Calls;
     CHECK(NT_SUCCESS(MiSegmentMarkDirty(Segment, PAGE_SIZE, 2 * PAGE_SIZE)));
     Segment->FileOps.Write = NULL;
     CHECK(MiSegmentDereferenceAndClose(Segment));
     CHECK(File.Calls == Calls + 1 && File.Pages[Calls] == 2);
-    WorldExpectClean(&World, 512);
+    WorldExpectClean(&World, 1024);
     FileDestroy(&File.File);
     WorldDestroy(&World);
 }

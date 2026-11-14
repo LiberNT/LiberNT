@@ -2659,7 +2659,7 @@ MiSegmentFlush(
     ULONG64 First = Offset >> PAGE_SHIFT;
     ULONG64 Last;
     ULONG64 Page;
-    ULONG Limit = Segment->FileOps.WriteFrames != NULL ? MI_MAX_FILE_WRITE_PAGES : 1;
+    ULONG Limit = Segment->FileOps.WriteFrames != NULL ? MI_MAX_FILE_FLUSH_PAGES : 1;
 
     if (Segment->Kind != MiSegmentDataFile || Length == 0)
         return STATUS_SUCCESS;
@@ -2676,7 +2676,7 @@ MiSegmentFlush(
 
     for (Page = First; Page < Last;)
     {
-        ULONG Frames[MI_MAX_FILE_WRITE_PAGES];
+        ULONG Frames[MI_MAX_FILE_FLUSH_PAGES];
         ULONG Count = 0;
         ULONG Bytes = 0;
         ULONG64 RunPage = Page;
@@ -2710,7 +2710,8 @@ MiSegmentFlush(
                 Page >= BridgeEnd)
             {
                 ULONG64 Next;
-                ULONG64 End = (Last < RunPage + Limit) ? Last : RunPage + Limit;
+                ULONG64 Bridge = RunPage + ((Limit < MI_MAX_FILE_WRITE_PAGES) ? Limit : MI_MAX_FILE_WRITE_PAGES);
+                ULONG64 End = (Last < Bridge) ? Last : Bridge;
 
                 if (Count == 0)
                     break;
