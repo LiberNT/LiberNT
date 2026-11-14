@@ -441,6 +441,33 @@ NtfsCheckFileAccess(
 
 static
 NTSTATUS
+NtfsCheckCachedFileAccess(
+    _In_ PNtfsFileRecord File,
+    _In_ PACCESS_STATE AccessState,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ACCESS_MASK PreviouslyGrantedAccess,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PACCESS_MASK GrantedAccess)
+{
+    PPRIVILEGE_SET Privileges = NULL;
+    NTSTATUS Status;
+
+    Status = NtfsCheckCachedRecordAccess(File,
+                                         &AccessState->SubjectSecurityContext,
+                                         DesiredAccess,
+                                         PreviouslyGrantedAccess,
+                                         AccessMode,
+                                         GrantedAccess,
+                                         &Privileges);
+    if (NT_SUCCESS(Status) && Privileges)
+        Status = SeAppendPrivileges(AccessState, Privileges);
+    if (Privileges)
+        SeFreePrivileges(Privileges);
+    return Status;
+}
+
+static
+NTSTATUS
 NtfsCheckTraverseAccess(
     _In_ PNtfsMasterFileTable Mft,
     _In_ PUNICODE_STRING Name,
@@ -552,7 +579,8 @@ NtfsCheckOpenAccess(
     _Inout_ PIO_SECURITY_CONTEXT SecurityContext,
     _In_ ULONG Disposition,
     _In_ BOOLEAN CreateStream,
-    _In_ KPROCESSOR_MODE AccessMode)
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ BOOLEAN CachedOnly)
 {
     PACCESS_STATE AccessState = SecurityContext->AccessState;
     PNtfsFileRecord Parent = NULL;
@@ -579,6 +607,24 @@ NtfsCheckOpenAccess(
     if (DesiredAccess & MAXIMUM_ALLOWED)
         ParentAccess |= DELETE | FILE_READ_ATTRIBUTES;
     ParentAccess &= ~PreviouslyGrantedAccess;
+    if (CachedOnly)
+    {
+        ASSERT(!(DesiredAccess & MAXIMUM_ALLOWED));
+        Status = NtfsCheckCachedFileAccess(File, AccessState,
+                                           (DesiredAccess | ExtraAccess) & ~PreviouslyGrantedAccess,
+                                           PreviouslyGrantedAccess,
+                                           AccessMode, &GrantedAccess);
+        goto Granted;
+    }
+    if (ParentAccess && !(DesiredAccess & MAXIMUM_ALLOWED))
+    {
+        Status = NtfsCheckFileAccess(File, AccessState,
+                                     (DesiredAccess | ExtraAccess) & ~PreviouslyGrantedAccess,
+                                     PreviouslyGrantedAccess,
+                                     AccessMode, &GrantedAccess);
+        if (NT_SUCCESS(Status))
+            goto Granted;
+    }
     if (ParentAccess && (AccessMode != KernelMode) &&
         NtfsSplitParentName(Name, &ParentLength, &LeafName, &LeafLength))
     {
@@ -613,6 +659,7 @@ NtfsCheckOpenAccess(
                                  (DesiredAccess | ExtraAccess) & ~PreviouslyGrantedAccess,
                                  PreviouslyGrantedAccess,
                                  AccessMode, &GrantedAccess);
+Granted:
     if (NT_SUCCESS(Status))
     {
         if (!(DesiredAccess & MAXIMUM_ALLOWED))
@@ -790,7 +837,8 @@ NtfsOpenNamedDataStream(
                                  SecurityContext,
                                  StreamExisted ? Disposition : FILE_CREATE,
                                  !StreamExisted,
-                                 AccessMode);
+                                 AccessMode,
+                                 FALSE);
     if (!NT_SUCCESS(Status))
         goto Done;
     if (!StreamExisted || Overwrite)
@@ -955,6 +1003,8 @@ NtfsTakeCachedLookupParent(
     USHORT NameLength;
 
     *File = NULL;
+    if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
+        return FALSE;
     if (VolCB->CachedLookupParent &&
         VolCB->CachedLookupParentGeneration != VolCB->DirGeneration)
     {
@@ -1021,6 +1071,8 @@ NtfsLookupInCachedParent(
     if (VolCB->CachedLookupParent &&
         VolCB->CachedLookupParentGeneration != VolCB->DirGeneration)
     {
+        if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
+            return FALSE;
         NtfsFileRecordDestroy(VolCB->CachedLookupParent);
         VolCB->CachedLookupParent = NULL;
         VolCB->CachedLookupParentPathLength = 0;
@@ -1069,7 +1121,8 @@ NtfsRememberLookupParent(
     ULONG RemainingNameLength;
     NTSTATUS Status;
 
-    if (!NtfsSplitParentName(Name,
+    if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource) ||
+        !NtfsSplitParentName(Name,
                              &ParentLength,
                              &LeafName,
                              &LeafLength) ||
@@ -1363,6 +1416,107 @@ NtfsReferenceNameParent(
     return Status;
 }
 
+static
+PStreamContextBlock
+NtfsFindStreamContext(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ ULONGLONG FileReference,
+    _In_ AttributeType RequestedType,
+    _In_ PCWSTR RequestedStream)
+{
+    PStreamContextBlock StreamCB;
+    UNICODE_STRING StreamName;
+    PLIST_ENTRY Bucket;
+    PLIST_ENTRY Entry;
+
+    RtlInitUnicodeString(&StreamName, RequestedStream);
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    Bucket = NtfsStreamHashBucket(VolCB, FileReference);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+        if (StreamCB->FileReference == FileReference &&
+            StreamCB->RequestedType == RequestedType &&
+            RtlEqualUnicodeString(&StreamCB->RequestedStream, &StreamName, TRUE))
+        {
+            StreamCB->ReferenceCount++;
+            ExReleaseFastMutex(&VolCB->StreamListMutex);
+            return StreamCB;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    return NULL;
+}
+
+static
+NTSTATUS
+NtfsReferenceParentByLink(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ PUNICODE_STRING Name,
+    _Out_ PStreamContextBlock* ParentStream,
+    _Out_ PUNICODE_STRING LeafName)
+{
+    PNtfsMasterFileTable Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
+    PNtfsFileRecord Parent = NULL;
+    ULONGLONG ParentReference = 0;
+    ULONGLONG Candidate;
+    UNICODE_STRING LinkName;
+    USHORT ParentLength;
+    USHORT LeafLength;
+    USHORT Index;
+    ULONG Context = 0;
+    ULONG Matches = 0;
+    NTSTATUS Status;
+
+    *ParentStream = NULL;
+    RtlZeroMemory(LeafName, sizeof(*LeafName));
+    if (!NtfsSplitParentName(Name, &ParentLength, &LeafName->Buffer, &LeafLength))
+        return STATUS_OBJECT_PATH_INVALID;
+    for (Index = 0; Index < LeafLength; Index++)
+    {
+        if (LeafName->Buffer[Index] == L':')
+            break;
+    }
+    if (Index == 0)
+        return STATUS_OBJECT_NAME_INVALID;
+    LeafName->Length = LeafName->MaximumLength = Index * sizeof(WCHAR);
+
+    for (;;)
+    {
+        Status = NtfsMasterFileTableEnumerateLinks(Mft, File, &Context, &Candidate, &LinkName);
+        if (Status == STATUS_NO_MORE_ENTRIES)
+            break;
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (RtlEqualUnicodeString(&LinkName, LeafName, TRUE) &&
+            (Matches == 0 || Candidate != ParentReference))
+        {
+            ParentReference = Candidate;
+            Matches++;
+        }
+    }
+    if (Matches != 1)
+        return STATUS_NOT_FOUND;
+
+    *ParentStream = NtfsFindStreamContext(VolCB, ParentReference, TypeIndexAllocation, L"$I30");
+    if (*ParentStream)
+        return STATUS_SUCCESS;
+
+    Status = NtfsMasterFileTableGetFileRecordByReference(Mft, ParentReference, &Parent);
+    if (NT_SUCCESS(Status) && !(NtfsFileRecordGetHeader(Parent)->Flags & FR_IS_DIRECTORY))
+        Status = STATUS_NOT_A_DIRECTORY;
+    if (NT_SUCCESS(Status))
+    {
+        *ParentStream = NtfsReferenceStreamContext(VolCB, Parent, TypeIndexAllocation, L"$I30");
+        if (!*ParentStream)
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+    }
+    if (Parent)
+        NtfsFileRecordDestroy(Parent);
+    return Status;
+}
+
 VOID
 NtfsCaptureTunnelName(
     _In_ PVolumeContextBlock VolCB,
@@ -1488,6 +1642,36 @@ NtfsLookupChildLink(_In_ PVolumeContextBlock VolCB,
     return NULL;
 }
 
+static
+BOOLEAN
+NtfsIsLinkDeletePending(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ PUNICODE_STRING Name)
+{
+    PStreamContextBlock ParentStream;
+    PNTFS_NATIVE_LCB Lcb = NULL;
+    UNICODE_STRING LeafName;
+    UNICODE_STRING LinkName;
+    BOOLEAN Pending = FALSE;
+
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    if (!NT_SUCCESS(NtfsReferenceNameParent(VolCB, Name, &ParentStream, &LeafName)))
+        return FALSE;
+    if (NT_SUCCESS(NtfsMasterFileTableGetLinkName(NtfsVolumeGetMft(VolCB->DiskVolume), File,
+                                                  ParentStream->FileReference, &LeafName, &LinkName)))
+    {
+        Lcb = NtfsLookupChildLink(VolCB, ParentStream, NtfsFileRecordGetReference(File), &LinkName);
+    }
+    if (Lcb)
+    {
+        Pending = CONTAINING_RECORD(CONTAINING_RECORD(Lcb->CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry),
+                                    FileContextBlock, NativeCcb)->DeletePending;
+    }
+    NtfsDereferenceStreamContext(VolCB, ParentStream);
+    return Pending;
+}
+
 NTSTATUS
 NtfsFindOpenLink(_In_ PVolumeContextBlock VolCB,
                  _In_ PFileContextBlock FileCB,
@@ -1526,12 +1710,17 @@ NtfsRegisterOpenLink(
     PNTFS_NATIVE_CCB Ccb = &FileCB->NativeCcb;
     UNICODE_STRING LeafName;
     UNICODE_STRING LinkName;
+    BOOLEAN LinksLocked = FALSE;
     NTSTATUS Status;
 
     if (!(FileCB->CreateOptions & FILE_OPEN_BY_FILE_ID) &&
         FileCB->FileName.Length > sizeof(WCHAR))
     {
-        Status = NtfsReferenceNameParent(VolCB, &FileCB->FileName, &ParentStream, &LeafName);
+        Status = STATUS_NOT_FOUND;
+        if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
+            Status = NtfsReferenceParentByLink(VolCB, FileCB->FileRec, &FileCB->FileName, &ParentStream, &LeafName);
+        if (!NT_SUCCESS(Status))
+            Status = NtfsReferenceNameParent(VolCB, &FileCB->FileName, &ParentStream, &LeafName);
         if (!NT_SUCCESS(Status))
             return Status;
         Status = NtfsMasterFileTableGetLinkName(NtfsVolumeGetMft(VolCB->DiskVolume),
@@ -1539,6 +1728,7 @@ NtfsRegisterOpenLink(
                                                &LeafName, &LinkName);
         if (!NT_SUCCESS(Status))
             goto Failure;
+        LinksLocked = NtfsLockOpenLinks(VolCB);
         Lcb = NtfsLookupChildLink(VolCB, ParentStream, FileCB->StreamCB->FileReference, &LinkName);
         if (Lcb &&
             CONTAINING_RECORD(CONTAINING_RECORD(Lcb->CcbList.Flink, NTFS_NATIVE_CCB, LcbEntry),
@@ -1549,10 +1739,11 @@ NtfsRegisterOpenLink(
         }
         if (Lcb)
         {
-            NtfsDereferenceStreamContext(VolCB, ParentStream);
-            ParentStream = NULL;
             if (Lcb->CleanupCount == MAXULONG)
-                return STATUS_INSUFFICIENT_RESOURCES;
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                goto Failure;
+            }
         }
         else
         {
@@ -1576,17 +1767,26 @@ NtfsRegisterOpenLink(
             InitializeListHead(&Lcb->CcbList);
             InsertTailList(&ParentStream->NativeScb.ChildLcbList, &Lcb->ParentEntry);
             InsertTailList(NtfsLinkHashBucket(VolCB, Lcb->ParentScb, &Lcb->FileName), &LinkEntry->HashEntry);
+            ParentStream = NULL;
         }
         InsertTailList(&Lcb->CcbList, &Ccb->LcbEntry);
         Lcb->CleanupCount++;
+    }
+    else
+    {
+        LinksLocked = NtfsLockOpenLinks(VolCB);
     }
     Ccb->Lcb = Lcb;
     Ccb->FileName = FileCB->FileName;
     Ccb->FileObject = FileObject;
     InsertTailList(&FileCB->StreamCB->NativeScb.CcbList, &Ccb->StreamEntry);
+    NtfsUnlockOpenLinks(VolCB, LinksLocked);
+    if (ParentStream)
+        NtfsDereferenceStreamContext(VolCB, ParentStream);
     return STATUS_SUCCESS;
 
 Failure:
+    NtfsUnlockOpenLinks(VolCB, LinksLocked);
     if (ParentStream)
         NtfsDereferenceStreamContext(VolCB, ParentStream);
     return Status;
@@ -1620,9 +1820,12 @@ NtfsRemoveOpenLink(_In_ PVolumeContextBlock VolCB,
 {
     PNTFS_NATIVE_CCB Ccb = &FileCB->NativeCcb;
     PNTFS_NATIVE_LCB Lcb;
+    BOOLEAN Acquired;
+    BOOLEAN Locked;
 
     KeEnterCriticalRegion();
-    NtfsAcquireMetadata(VolCB);
+    Acquired = NtfsAcquireMetadataSharedUnlessHeld(VolCB);
+    Locked = NtfsLockOpenLinks(VolCB);
     if (Ccb->StreamEntry.Flink)
     {
         RemoveEntryList(&Ccb->StreamEntry);
@@ -1655,7 +1858,9 @@ NtfsRemoveOpenLink(_In_ PVolumeContextBlock VolCB,
         Ccb->Lcb = NULL;
         Ccb->FileObject = NULL;
     }
-    NtfsReleaseMetadata(VolCB);
+    NtfsUnlockOpenLinks(VolCB, Locked);
+    if (Acquired)
+        NtfsReleaseMetadataShared(VolCB);
     KeLeaveCriticalRegion();
 }
 
@@ -1939,6 +2144,45 @@ Complete:
 }
 
 static
+BOOLEAN
+NtfsCanOpenShared(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp,
+    _In_ UINT8 Disposition,
+    _In_ BOOLEAN OpenTargetDirectory,
+    _In_ PNTFS_TXF_OPEN TxfOpen)
+{
+    const ACCESS_MASK ReadAccess = FILE_READ_DATA | FILE_READ_EA | FILE_EXECUTE |
+                                   FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE;
+    PIO_SECURITY_CONTEXT SecurityContext = IrpSp->Parameters.Create.SecurityContext;
+    PACCESS_STATE AccessState = SecurityContext->AccessState;
+    PUNICODE_STRING Name = &IrpSp->FileObject->FileName;
+    KPROCESSOR_MODE AccessMode = (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode;
+    USHORT Index;
+
+    if (Disposition != FILE_OPEN || OpenTargetDirectory || TxfOpen->Txf ||
+        (IrpSp->Parameters.Create.Options & (FILE_OPEN_BY_FILE_ID | FILE_DELETE_ON_CLOSE | FILE_OPEN_REPARSE_POINT)) ||
+        (SecurityContext->DesiredAccess & ~ReadAccess) ||
+        (AccessState && (AccessState->PreviouslyGrantedAccess & ~ReadAccess)) ||
+        ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource))
+    {
+        return FALSE;
+    }
+    if (AccessMode != KernelMode &&
+        (!AccessState || !(AccessState->Flags & TOKEN_HAS_TRAVERSE_PRIVILEGE)))
+    {
+        return FALSE;
+    }
+    for (Index = 0; Index < Name->Length / sizeof(WCHAR); Index++)
+    {
+        if (Name->Buffer[Index] == L':')
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static
 NTSTATUS
 NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                  _Inout_ PIRP Irp,
@@ -1979,6 +2223,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     BOOLEAN NamedDataStream = FALSE;
     BOOLEAN StreamExisted = TRUE;
     BOOLEAN StreamCreated = FALSE;
+    BOOLEAN SharedOpen = FALSE;
 
     if (VolumeDeviceObject == NtfsDiskFileSystemDeviceObject)
     {
@@ -2012,12 +2257,12 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
     if (IrpSp->Parameters.Create.Options & FILE_OPEN_BY_FILE_ID)
         Status = NtfsResolveFileIdName(VolCB, FileObject);
-    else
+    else if (FileObject->RelatedFileObject)
     {
         USHORT RelativeNameLength = FileObject->FileName.Length;
 
         KeEnterCriticalRegion();
-        NtfsAcquireMetadata(VolCB);
+        NtfsAcquireCreateMetadata(VolCB, !ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
         Status = NtfsNormalizeRelatedName(FileObject);
         if (NT_SUCCESS(Status) && FileObject->RelatedFileObject)
         {
@@ -2031,6 +2276,10 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
         NtfsReleaseMetadata(VolCB);
         KeLeaveCriticalRegion();
+    }
+    else
+    {
+        Status = STATUS_SUCCESS;
     }
     if (!NT_SUCCESS(Status))
         return NtfsCompleteCreate(Irp, Status, 0);
@@ -2049,6 +2298,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         Status = NtfsTxfPrepareCreate(VolumeDeviceObject, Irp, TxfOpen);
     if (!NT_SUCCESS(Status))
         return NtfsCompleteCreate(Irp, Status, 0);
+    SharedOpen = NtfsCanOpenShared(VolCB, Irp, IrpSp, Disposition, OpenTargetDirectory, TxfOpen);
 
     ExAcquireFastMutex(&VolCB->VolumeStateMutex);
     if (VolCB->Dismounting || VolCB->Dismounted)
@@ -2090,7 +2340,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             return NtfsCompleteCreate(Irp, STATUS_OBJECT_NAME_INVALID, 0);
     }
     KeEnterCriticalRegion();
-    NtfsAcquireMetadata(VolCB);
+    NtfsAcquireCreateMetadata(VolCB, SharedOpen);
     if (!(CreateOptions & FILE_OPEN_BY_FILE_ID))
     {
         Status = NtfsCheckTraverseAccess(Mft, &FileObject->FileName,
@@ -2445,9 +2695,14 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     break;
                 }
             }
+            if (IsDirectory && RootName)
+                Status = STATUS_ACCESS_DENIED;
+            else if (NtfsIsLinkDeletePending(VolCB, CurrentFile, &FileObject->FileName))
+                Status = STATUS_DELETE_PENDING;
+            else
+                Status = STATUS_OBJECT_NAME_COLLISION;
             NtfsReleaseMetadata(VolCB);
             KeLeaveCriticalRegion();
-            Status = IsDirectory && RootName ? STATUS_ACCESS_DENIED : STATUS_OBJECT_NAME_COLLISION;
             return NtfsCompleteFailedCreate(VolumeDeviceObject, Irp, NULL, CurrentFile, CachedRecord, Status);
         }
         if (IsDirectory &&
@@ -2834,7 +3089,9 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
 
     KeEnterCriticalRegion();
-    NtfsAcquireMetadata(VolCB);
+    NtfsAcquireCreateMetadata(VolCB, SharedOpen);
+    if (ResolvedGeneration != VolCB->DirGeneration)
+        NtfsUpgradeCreateMetadata(VolCB, &SharedOpen);
     FileCB->CachedRecord = CachedRecord;
     FileCB->FileRec = CurrentFile;
     FileCB->AutomaticTimestampMask = NTFS_AUTOMATIC_TIMESTAMP_FIELDS;
@@ -2862,6 +3119,12 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         {
             Status = STATUS_OBJECT_NAME_NOT_FOUND;
         }
+        else if (Status == STATUS_NOT_FOUND ||
+                 Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+                 Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        {
+            Status = NtfsTranslateNotFoundStatus(Mft, &FileCB->FileName);
+        }
         if (ResolvedFile)
             NtfsFileRecordDestroy(ResolvedFile);
         if (!NT_SUCCESS(Status))
@@ -2887,6 +3150,10 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 (NtfsFileRecordGetHeader(IdentityRecord)->Flags & FR_IS_DIRECTORY))
             {
                 Status = STATUS_FILE_CORRUPT_ERROR;
+            }
+            else if (Status == STATUS_NOT_FOUND)
+            {
+                Status = STATUS_OBJECT_NAME_NOT_FOUND;
             }
             if (IdentityRecord)
                 NtfsFileRecordDestroy(IdentityRecord);
@@ -2926,7 +3193,8 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                      OpenTargetDirectory ? FILE_OPEN :
                                          (NamedDataStream && !StreamExisted ? FILE_CREATE : Disposition),
                                      NamedDataStream && !StreamExisted,
-                                     (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode);
+                                     (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode,
+                                     FALSE);
         if (!NT_SUCCESS(Status))
         {
             NtfsReleaseMetadata(VolCB);
@@ -3116,7 +3384,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
 
     KeEnterCriticalRegion();
-    NtfsAcquireMetadata(VolCB);
+    NtfsAcquireCreateMetadata(VolCB, SharedOpen);
     if (FileCB->DeletePending || FileCB->StreamCB->DeletePending ||
         FileCB->StreamCB->Deleted)
     {
@@ -3158,7 +3426,9 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         USHORT PathChars;
 
         KeEnterCriticalRegion();
-        NtfsAcquireMetadata(VolCB);
+        NtfsAcquireCreateMetadata(VolCB, SharedOpen);
+        if (ResolvedGeneration != VolCB->DirGeneration)
+            NtfsUpgradeCreateMetadata(VolCB, &SharedOpen);
         DirectoryMetadataAcquired = TRUE;
         PathChars = (USHORT)(FileCB->FileName.Length / sizeof(WCHAR));
         ExAcquireFastMutex(&VolCB->DirCacheMutex);
@@ -3226,6 +3496,8 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             else if (NT_SUCCESS(Status))
             {
                 FileCB->FileDirDirect = TRUE;
+                FileCB->DirRecordGeneration = VolCB->DirGeneration;
+                FileCB->DirRecordCurrent = TRUE;
             }
         }
         if (!NT_SUCCESS(Status))
@@ -3460,6 +3732,256 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_DISK_INCREMENT);
     return STATUS_SUCCESS;
+}
+
+static
+BOOLEAN
+NtfsQueryOpenAnswerable(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ ULONG Options)
+{
+    ULONGLONG FileReference = NtfsFileRecordGetReference(File);
+    BOOLEAN IsDirectory = !!(NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY);
+    BOOLEAN Settled = TRUE;
+    PLIST_ENTRY Bucket;
+    PLIST_ENTRY Entry;
+
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+
+    if (NtfsFileRecordGetHeader(File)->BaseFileRecord != 0)
+        return FALSE;
+    switch (NtfsFileRecordGetNumber(File))
+    {
+        case _LogFile:
+        case _Bitmap:
+        case _Boot:
+        case _BadClus:
+            return FALSE;
+    }
+    if (NtfsFileRecordGetAttribute(File, TypeReparsePoint, NULL))
+        return FALSE;
+    if ((Options & FILE_DIRECTORY_FILE) && !IsDirectory)
+        return FALSE;
+    if ((Options & FILE_NON_DIRECTORY_FILE) && IsDirectory)
+        return FALSE;
+
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    Bucket = NtfsStreamHashBucket(VolCB, FileReference);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PStreamContextBlock Stream = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+        if (Stream->FileReference == FileReference &&
+            (ReadAcquire(&Stream->UncleanCount) != 0 || Stream->SizePending ||
+             Stream->DeletePending || Stream->Deleted || Stream->Unlinked))
+        {
+            Settled = FALSE;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    return Settled;
+}
+
+/* Anything but a plain, settled FILE_OPEN of a stream-less name goes back to the create IRP */
+static
+BOOLEAN
+NtfsQueryOpenFromRecord(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PNtfsFileRecord File,
+    _In_ PFILE_OBJECT FileObject,
+    _In_ ULONG Options,
+    _Inout_ PIO_SECURITY_CONTEXT SecurityContext,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _In_ BOOLEAN CachedOnly,
+    _Out_ PFILE_NETWORK_OPEN_INFORMATION NetworkInformation)
+{
+    NtfsFileBasicInformation Information;
+    PAttribute DataAttribute;
+
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+    ASSERT(CachedOnly || ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+
+    if (CachedOnly && NtfsFileRecordHasAttributeList(File))
+        return FALSE;
+    if (!NtfsQueryOpenAnswerable(VolCB, File, Options) ||
+        !NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Information)))
+    {
+        return FALSE;
+    }
+
+    if (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY)
+        DataAttribute = NtfsFileRecordGetAttribute(File, TypeIndexAllocation, (PWSTR)L"$I30");
+    else
+        DataAttribute = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+
+    NetworkInformation->CreationTime.QuadPart = Information.CreationTime;
+    NetworkInformation->LastAccessTime.QuadPart = Information.LastAccessTime;
+    NetworkInformation->LastWriteTime.QuadPart = Information.LastWriteTime;
+    NetworkInformation->ChangeTime.QuadPart = Information.ChangeTime;
+    NetworkInformation->FileAttributes = Information.FileAttributes;
+    if (DataAttribute && DataAttribute->IsNonResident)
+    {
+        NetworkInformation->EndOfFile.QuadPart = DataAttribute->NonResident.DataSize;
+        NetworkInformation->AllocationSize.QuadPart = NtfsAttributeGetPhysicalAllocationSize(DataAttribute);
+    }
+    else
+    {
+        NetworkInformation->EndOfFile.QuadPart = DataAttribute ? DataAttribute->Resident.DataLength : 0;
+        NetworkInformation->AllocationSize.QuadPart = 0;
+    }
+
+    return NT_SUCCESS(NtfsCheckOpenAccess(NtfsVolumeGetMft(VolCB->DiskVolume), File, &FileObject->FileName,
+                                          SecurityContext, FILE_OPEN, FALSE, AccessMode, CachedOnly));
+}
+
+BOOLEAN
+NtfsQueryOpen(
+    _In_ PDEVICE_OBJECT VolumeDeviceObject,
+    _Inout_ PIRP Irp,
+    _Out_ PFILE_NETWORK_OPEN_INFORMATION NetworkInformation)
+{
+    PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
+    PFILE_OBJECT FileObject = IrpSp->FileObject;
+    PIO_SECURITY_CONTEXT SecurityContext = IrpSp->Parameters.Create.SecurityContext;
+    ULONG Options = IrpSp->Parameters.Create.Options;
+    PNtfsCachedRecord CachedRecord = NULL;
+    PNtfsFileRecord CurrentFile = NULL;
+    PVolumeContextBlock VolCB;
+    PNtfsMasterFileTable Mft;
+    KPROCESSOR_MODE AccessMode;
+    ULONG RemainingNameLength = 0;
+    USHORT NameLength;
+    BOOLEAN Answered = FALSE;
+    BOOLEAN Usable;
+    NTSTATUS Status;
+    USHORT Index;
+
+    if (VolumeDeviceObject == NtfsDiskFileSystemDeviceObject)
+        return FALSE;
+
+    ASSERT(IrpSp->MajorFunction == IRP_MJ_CREATE);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    NtfsBindVolumeDisk((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension);
+
+    if (!FileObject || FileObject->RelatedFileObject || !FileObject->FileName.Buffer ||
+        FileObject->FileName.Length < 2 * sizeof(WCHAR) ||
+        (FileObject->FileName.Length & (sizeof(WCHAR) - 1)) != 0)
+    {
+        return FALSE;
+    }
+    if (((Options >> 24) & 0xFF) != FILE_OPEN ||
+        (Options & (FILE_OPEN_BY_FILE_ID | FILE_DELETE_ON_CLOSE)) ||
+        (IrpSp->Flags & (SL_OPEN_TARGET_DIRECTORY | SL_OPEN_PAGING_FILE)) ||
+        !SecurityContext ||
+        (SecurityContext->DesiredAccess & ~(FILE_READ_ATTRIBUTES | SYNCHRONIZE)) ||
+        IoGetTransactionParameterBlock(FileObject))
+    {
+        return FALSE;
+    }
+
+    NameLength = FileObject->FileName.Length / sizeof(WCHAR);
+    if (FileObject->FileName.Buffer[0] != L'\\' || FileObject->FileName.Buffer[NameLength - 1] == L'\\')
+        return FALSE;
+    for (Index = 0; Index < NameLength; Index++)
+    {
+        if (FileObject->FileName.Buffer[Index] == L':')
+            return FALSE;
+    }
+    if (!NT_SUCCESS(NtfsValidateCreateName(&FileObject->FileName, FALSE)))
+        return FALSE;
+
+    VolCB = (PVolumeContextBlock)VolumeDeviceObject->DeviceExtension;
+    if (ReadAcquire(&VolCB->TxfRecoveryPending) || ReadAcquire(&VolCB->TxfActiveCount) != 0)
+        return FALSE;
+    ExAcquireFastMutex(&VolCB->VolumeStateMutex);
+    Usable = !VolCB->Dismounting && !VolCB->Dismounted && !VolCB->VolumeLockOwner;
+    ExReleaseFastMutex(&VolCB->VolumeStateMutex);
+    if (!Usable)
+        return FALSE;
+
+    AccessMode = (IrpSp->Flags & SL_FORCE_ACCESS_CHECK) ? UserMode : Irp->RequestorMode;
+    Mft = NtfsVolumeGetMft(VolCB->DiskVolume);
+
+    KeEnterCriticalRegion();
+    if ((!SecurityContext->AccessState || AccessMode == KernelMode ||
+         (SecurityContext->AccessState->Flags & TOKEN_HAS_TRAVERSE_PRIVILEGE)) &&
+        !ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource))
+    {
+        NtfsAcquireMetadataShared(VolCB);
+        if (!NtfsIsNameKnownMissing(VolCB, FileObject->FileName.Buffer, NameLength))
+        {
+            CachedRecord = NtfsAcquireCachedRecord(VolCB, FileObject->FileName.Buffer, NameLength);
+            if (CachedRecord)
+            {
+                Answered = NtfsQueryOpenFromRecord(VolCB, CachedRecord->Record, FileObject, Options,
+                                                   SecurityContext, AccessMode, TRUE, NetworkInformation);
+                NtfsReleaseCachedRecord(VolCB, CachedRecord);
+                CachedRecord = NULL;
+            }
+        }
+        NtfsReleaseMetadataShared(VolCB);
+        if (Answered)
+        {
+            KeLeaveCriticalRegion();
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            Irp->IoStatus.Information = FILE_OPENED;
+            return TRUE;
+        }
+    }
+
+    NtfsAcquireMetadata(VolCB);
+    Status = NtfsCheckTraverseAccess(Mft, &FileObject->FileName, 0, 0, FALSE,
+                                     SecurityContext->AccessState, AccessMode);
+    if (NT_SUCCESS(Status) && !NtfsIsNameKnownMissing(VolCB, FileObject->FileName.Buffer, NameLength))
+    {
+        CachedRecord = NtfsAcquireCachedRecord(VolCB, FileObject->FileName.Buffer, NameLength);
+        if (CachedRecord)
+        {
+            CurrentFile = CachedRecord->Record;
+        }
+        else
+        {
+            Status = NtfsMasterFileTableGetFileRecordFromQueryEx(Mft, FileObject->FileName.Buffer, NameLength,
+                                                                TRUE, &RemainingNameLength, &CurrentFile);
+            if (!NT_SUCCESS(Status) || RemainingNameLength != 0)
+            {
+                if (CurrentFile)
+                    NtfsFileRecordDestroy(CurrentFile);
+                CurrentFile = NULL;
+            }
+            else if (!(NtfsFileRecordGetHeader(CurrentFile)->Flags & FR_IS_DIRECTORY))
+            {
+                CachedRecord = NtfsCacheRecord(VolCB, FileObject->FileName.Buffer, NameLength, CurrentFile);
+                if (CachedRecord && CachedRecord->Record != CurrentFile)
+                {
+                    NtfsFileRecordDestroy(CurrentFile);
+                    CurrentFile = CachedRecord->Record;
+                }
+            }
+        }
+
+        if (CurrentFile)
+        {
+            Answered = NtfsQueryOpenFromRecord(VolCB, CurrentFile, FileObject, Options, SecurityContext,
+                                               AccessMode, FALSE, NetworkInformation);
+        }
+
+        if (CachedRecord)
+            NtfsReleaseCachedRecord(VolCB, CachedRecord);
+        else if (CurrentFile)
+            NtfsFileRecordDestroy(CurrentFile);
+    }
+    NtfsReleaseMetadata(VolCB);
+    KeLeaveCriticalRegion();
+
+    if (!Answered)
+        return FALSE;
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = FILE_OPENED;
+    return TRUE;
 }
 
 NTSTATUS

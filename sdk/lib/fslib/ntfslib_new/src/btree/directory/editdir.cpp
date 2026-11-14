@@ -1974,7 +1974,7 @@ Directory::PushDownResidentRoot(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexWorkBufferValid = FALSE;
+    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
@@ -2110,7 +2110,7 @@ Directory::AddIndexEntry(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexWorkBufferValid = FALSE;
+    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
@@ -3482,7 +3482,7 @@ Directory::RemoveIndexEntry(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexWorkBufferValid = FALSE;
+    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(

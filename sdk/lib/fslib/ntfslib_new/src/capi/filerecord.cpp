@@ -391,6 +391,26 @@ NtfsFileRecordReadSecurityDescriptor(
 }
 
 NTSTATUS
+NtfsFileRecordReadCachedSecurityDescriptor(
+    _In_ PNtfsFileRecord Fr,
+    _In_opt_ PUCHAR Buffer,
+    _Inout_ PULONG BufferLength)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->ReadCachedSecurityDescriptor(
+        Buffer,
+        BufferLength);
+}
+
+BOOLEAN
+NtfsFileRecordHasAttributeList(
+    _In_ PNtfsFileRecord Fr)
+{
+    return Fr && reinterpret_cast<PFileRecord>(Fr)->HasAttributeList();
+}
+
+NTSTATUS
 NtfsFileRecordSetSecurityDescriptor(
     _In_ PNtfsFileRecord Fr,
     _In_reads_bytes_(BufferLength) const UCHAR* Buffer,

@@ -536,6 +536,17 @@ NtfsFileRecordReadSecurityDescriptor(
     _In_opt_ PUCHAR Buffer,
     _Inout_ PULONG BufferLength);
 
+/* Same as NtfsFileRecordReadSecurityDescriptor without disk access: STATUS_RETRY when the descriptor is not cached. */
+NTSTATUS
+NtfsFileRecordReadCachedSecurityDescriptor(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_opt_ PUCHAR Buffer,
+    _Inout_ PULONG BufferLength);
+
+BOOLEAN
+NtfsFileRecordHasAttributeList(
+    _In_ NtfsFileRecord *FileRecord);
+
 /*
  * Replaces the file's security with a validated self-relative descriptor
  * stored in the legacy per-file $SECURITY_DESCRIPTOR attribute and

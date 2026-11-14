@@ -238,11 +238,82 @@ Volume::~Volume()
     }
     delete[] IndexWorkBuffer;
     IndexWorkBuffer = NULL;
+    for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
+    {
+        ASSERT(!LookupSlots[Index].Busy);
+        delete[] LookupSlots[Index].Buffer;
+        LookupSlots[Index].Buffer = NULL;
+    }
 
     delete MFT;
     delete LFS;
     delete[] AttrDefCache;
     delete[] UpcaseTable;
+}
+
+PNtfsLookupSlot
+Volume::AcquireLookupSlot(_In_ ULONGLONG DirectoryReference,
+                          _In_ ULONG BufferSize)
+{
+    PNtfsLookupSlot Slot = NULL;
+
+    NtfsAcquireMutex(&LazyCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
+    {
+        PNtfsLookupSlot Candidate = &LookupSlots[Index];
+
+        if (Candidate->Busy)
+            continue;
+        if (!Slot)
+            Slot = Candidate;
+        if (Candidate->Valid && Candidate->FileReference == DirectoryReference)
+        {
+            Slot = Candidate;
+            break;
+        }
+    }
+    if (Slot)
+        Slot->Busy = TRUE;
+    NtfsReleaseMutex(&LazyCacheMutex);
+
+    if (!Slot)
+    {
+        Slot = new(PagedPool, TAG_NTFS) NtfsLookupSlot();
+        if (!Slot)
+            return NULL;
+        RtlZeroMemory(Slot, sizeof(*Slot));
+        Slot->Private = TRUE;
+        Slot->Busy = TRUE;
+    }
+
+    if (!Slot->Buffer || Slot->BufferSize < BufferSize)
+    {
+        delete[] Slot->Buffer;
+        Slot->Buffer = new(PagedPool, TAG_NTFS) UCHAR[BufferSize];
+        Slot->BufferSize = Slot->Buffer ? BufferSize : 0;
+        Slot->Valid = FALSE;
+    }
+    if (!Slot->Buffer)
+    {
+        ReleaseLookupSlot(Slot);
+        return NULL;
+    }
+    return Slot;
+}
+
+void
+Volume::ReleaseLookupSlot(_In_ PNtfsLookupSlot Slot)
+{
+    ASSERT(Slot->Busy);
+    if (Slot->Private)
+    {
+        delete[] Slot->Buffer;
+        delete Slot;
+        return;
+    }
+    NtfsAcquireMutex(&LazyCacheMutex);
+    Slot->Busy = FALSE;
+    NtfsReleaseMutex(&LazyCacheMutex);
 }
 
 static
@@ -272,6 +343,7 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
 {
     NtfsInitializeMutex(&RecordPoolMutex);
     NtfsInitializeMutex(&SecurityCacheMutex);
+    NtfsInitializeMutex(&LazyCacheMutex);
 
     BootSector* PartitionBootSector;
     PVolumeInformationEx VolumeInfo;

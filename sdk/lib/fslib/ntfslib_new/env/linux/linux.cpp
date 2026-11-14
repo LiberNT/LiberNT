@@ -145,6 +145,18 @@ NtfsReleaseMutex(_Inout_ PFAST_MUTEX Mutex)
     ExReleaseFastMutex(Mutex);
 }
 
+extern "C" void*
+NtfsReadPointerAcquire(_In_ void* const volatile* Source)
+{
+    return __atomic_load_n(Source, __ATOMIC_ACQUIRE);
+}
+
+extern "C" void
+NtfsWritePointerRelease(_Out_ void* volatile* Destination, _In_opt_ void* Value)
+{
+    __atomic_store_n(Destination, Value, __ATOMIC_RELEASE);
+}
+
 extern "C" NTSTATUS
 NtfsQuerySystemTime(_Out_ PULONGLONG NtfsTime)
 {

@@ -92,6 +92,18 @@ NtfsReleaseMutex(_Inout_ PFAST_MUTEX Mutex)
     UNREFERENCED_PARAMETER(Mutex);
 }
 
+void*
+NtfsReadPointerAcquire(_In_ void* const volatile* Source)
+{
+    return *Source;
+}
+
+void
+NtfsWritePointerRelease(_Out_ void* volatile* Destination, _In_opt_ void* Value)
+{
+    *Destination = Value;
+}
+
 NTSTATUS
 NtfsQuerySystemTime(_Out_ PULONGLONG NtfsTime)
 {

@@ -53,7 +53,7 @@
                            FileCB->RequestedStream && FileCB->RequestedStream[0];
 
      if ((NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY) && !NamedStream)
-         return NULL;
+         return NtfsFileRecordGetAttribute(FileCB->FileRec, TypeIndexAllocation, (PWSTR)L"$I30");
      return NtfsFileRecordGetAttribute(FileCB->FileRec,
                                        FileCB->RequestedType,
                                        FileCB->RequestedStream);
@@ -3738,7 +3738,9 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     PVolumeContextBlock VolCB;
     PFileContextBlock FileCB;
     PVOID SystemBuffer;
+    PVOID UserBuffer = NULL;
     ULONG BufferLength;
+    BOOLEAN MetadataShared;
 
     IrpSp = IoGetCurrentIrpStackLocation(Irp);
     FileCB = NtfsGetFileContext(IrpSp->FileObject);
@@ -3753,6 +3755,22 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         Irp->IoStatus.Status = Status;
         IoCompleteRequest(Irp, IO_DISK_INCREMENT);
         return Status;
+    }
+
+    /* A caller's own buffer is filled here and copied out once, where a fault cannot strand a lock */
+    if (IrpSp->MinorFunction == IRP_MN_QUERY_DIRECTORY && !Irp->MdlAddress &&
+        !Irp->AssociatedIrp.SystemBuffer && Irp->RequestorMode != KernelMode)
+    {
+        UserBuffer = SystemBuffer;
+        SystemBuffer = ExAllocatePoolWithTag(PagedPool, BufferLength, TAG_NTFS);
+        if (!SystemBuffer)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+            Irp->IoStatus.Information = 0;
+            Irp->IoStatus.Status = Status;
+            IoCompleteRequest(Irp, IO_DISK_INCREMENT);
+            return Status;
+        }
     }
 
     if (IrpSp->MinorFunction == IRP_MN_QUERY_DIRECTORY)
@@ -3775,8 +3793,19 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
         KeEnterCriticalRegion();
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
-        /* Enumeration shares the volume index buffer with file lookups. */
-        NtfsAcquireMetadata(VolCB);
+        MetadataShared = FileCB->DirRecordCurrent && !FileCB->Txf &&
+                         !ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource);
+        if (MetadataShared)
+        {
+            NtfsAcquireMetadataShared(VolCB);
+            if (FileCB->DirRecordGeneration != VolCB->DirGeneration)
+            {
+                NtfsReleaseMetadataShared(VolCB);
+                MetadataShared = FALSE;
+            }
+        }
+        if (!MetadataShared)
+            NtfsAcquireMetadata(VolCB);
 
         FileInformationRequest = IrpSp->Parameters.QueryDirectory.FileInformationClass;
 
@@ -3788,7 +3817,13 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             case FileIdFullDirectoryInformation:
             case FileDirectoryInformation:
             case FileFullDirectoryInformation:
-                Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+                Status = STATUS_SUCCESS;
+                if (!MetadataShared)
+                {
+                    Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+                    FileCB->DirRecordCurrent = NT_SUCCESS(Status);
+                    FileCB->DirRecordGeneration = VolCB->DirGeneration;
+                }
                 if (NT_SUCCESS(Status) && FileCB->FileDirDirect)
                 {
                     Status = NtfsDirectoryLoadForEnumeration(FileCB->FileDir,
@@ -3832,7 +3867,10 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
 
 DirectoryDone:
-        NtfsReleaseMetadata(VolCB);
+        if (MetadataShared)
+            NtfsReleaseMetadataShared(VolCB);
+        else
+            NtfsReleaseMetadata(VolCB);
         ExReleaseResourceLite(NtfsGetMainResource(FileCB));
         KeLeaveCriticalRegion();
     }
@@ -3893,6 +3931,24 @@ Complete:
     else
     {
         Irp->IoStatus.Information = 0;
+    }
+
+    if (UserBuffer)
+    {
+        if (Irp->IoStatus.Information != 0)
+        {
+            _SEH2_TRY
+            {
+                RtlCopyMemory(UserBuffer, SystemBuffer, Irp->IoStatus.Information);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            {
+                Status = _SEH2_GetExceptionCode();
+                Irp->IoStatus.Information = 0;
+            }
+            _SEH2_END;
+        }
+        ExFreePoolWithTag(SystemBuffer, TAG_NTFS);
     }
 
     Irp->IoStatus.Status = Status;

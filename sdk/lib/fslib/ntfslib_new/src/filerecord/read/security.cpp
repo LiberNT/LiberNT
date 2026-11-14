@@ -2200,9 +2200,8 @@ FileRecord::ReadSecurityDescriptor(
     _Inout_ PULONG BufferLength)
 {
     PAttribute SecurityAttribute;
-    PAttribute StandardAttribute;
-    PUCHAR StandardData;
     ULONG SecurityId;
+    NTSTATUS Status;
 
     if (!BufferLength)
         return STATUS_INVALID_PARAMETER;
@@ -2237,6 +2236,24 @@ FileRecord::ReadSecurityDescriptor(
         return DirectStatus;
     }
 
+    Status = GetSecurityId(&SecurityId);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    return DiskVolume->ReadSecurityDescriptorById(
+        SecurityId,
+        Buffer,
+        BufferLength);
+}
+
+NTSTATUS
+FileRecord::GetSecurityId(
+    _Out_ PULONG SecurityId)
+{
+    PAttribute StandardAttribute;
+    PUCHAR StandardData;
+
+    *SecurityId = 0;
     StandardAttribute = GetAttribute(
         TypeStandardInformation,
         NULL);
@@ -2263,14 +2280,44 @@ FileRecord::ReadSecurityDescriptor(
 
     StandardData = reinterpret_cast<PUCHAR>(
         GetResidentDataPointer(StandardAttribute));
-    SecurityId = ReadUnalignedU32(
+    *SecurityId = ReadUnalignedU32(
         StandardData +
         FIELD_OFFSET(StandardInformationEx, SecurityId));
-    if (SecurityId == 0)
-        return STATUS_NOT_FOUND;
+    return *SecurityId ? STATUS_SUCCESS : STATUS_NOT_FOUND;
+}
 
-    return DiskVolume->ReadSecurityDescriptorById(
-        SecurityId,
-        Buffer,
-        BufferLength);
+NTSTATUS
+FileRecord::ReadCachedSecurityDescriptor(
+    _In_opt_ PUCHAR Buffer,
+    _Inout_ PULONG BufferLength)
+{
+    ULONG SecurityId;
+    NTSTATUS Status;
+
+    if (!BufferLength)
+        return STATUS_INVALID_PARAMETER;
+
+    if (GetAttribute(TypeSecurityDescriptor, NULL))
+    {
+        if (DiskVolume->ReadCachedRecordDescriptor(RecordNumber,
+                                                   Buffer,
+                                                   BufferLength,
+                                                   &Status))
+        {
+            return Status;
+        }
+        return STATUS_RETRY;
+    }
+
+    Status = GetSecurityId(&SecurityId);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (DiskVolume->ReadCachedSecurityDescriptor(SecurityId,
+                                                 Buffer,
+                                                 BufferLength,
+                                                 &Status))
+    {
+        return Status;
+    }
+    return STATUS_RETRY;
 }

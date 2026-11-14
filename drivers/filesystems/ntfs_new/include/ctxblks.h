@@ -44,6 +44,8 @@ typedef struct _VolumeContextBlock
     LIST_ENTRY StreamList;
     LIST_ENTRY StreamHash[256];
     LIST_ENTRY LinkHash[256];
+    /* Open links change under the exclusive metadata lock, or under the shared one while this is held */
+    FAST_MUTEX OpenLinkMutex;
     PNOTIFY_SYNC NotifySync;
     LIST_ENTRY NotifyList;
     TUNNEL Tunnel;
@@ -408,6 +410,8 @@ typedef struct _FCB
     /* NTFS does not store dot entries; expose them before the real index. */
     UCHAR DirDotIndex;
     BOOLEAN DirRealScanStarted;
+    BOOLEAN DirRecordCurrent;
+    LONG DirRecordGeneration;
 
     /* The search pattern belongs to the handle: it is supplied once and
      * every later query without a name reuses it. */
@@ -471,6 +475,16 @@ NtfsGetPagingIoResource(_In_ PFileContextBlock FileCB)
 
 NTSTATUS
 NtfsCheckRecordAccess(
+    _In_ PNtfsFileRecord File,
+    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ ACCESS_MASK PreviouslyGrantedAccess,
+    _In_ KPROCESSOR_MODE AccessMode,
+    _Out_ PACCESS_MASK GrantedAccess,
+    _Out_ PPRIVILEGE_SET* Privileges);
+
+NTSTATUS
+NtfsCheckCachedRecordAccess(
     _In_ PNtfsFileRecord File,
     _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
     _In_ ACCESS_MASK DesiredAccess,
@@ -650,13 +664,96 @@ NtfsAcquireMetadata(_In_ PVolumeContextBlock VolCB)
 
 static inline
 VOID
+NtfsReleaseMetadataShared(_In_ PVolumeContextBlock VolCB);
+
+static inline
+VOID
 NtfsReleaseMetadata(_In_ PVolumeContextBlock VolCB)
 {
-    BOOLEAN Last = ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) == 1;
+    BOOLEAN Last;
 
+    if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
+    {
+        NtfsReleaseMetadataShared(VolCB);
+        return;
+    }
+
+    Last = ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) == 1;
     ExReleaseResourceLite(&VolCB->MetadataResource);
     if (Last)
         ExfReleasePushLockExclusive(&VolCB->MetadataGate);
+}
+
+static inline
+VOID
+NtfsAcquireMetadataShared(_In_ PVolumeContextBlock VolCB)
+{
+    ASSERT(!ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+    ExfAcquirePushLockShared(&VolCB->MetadataGate);
+    ExAcquireResourceSharedLite(&VolCB->MetadataResource, TRUE);
+}
+
+static inline
+VOID
+NtfsReleaseMetadataShared(_In_ PVolumeContextBlock VolCB)
+{
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) == 1);
+    ASSERT(!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    ExReleaseResourceLite(&VolCB->MetadataResource);
+    ExfReleasePushLockShared(&VolCB->MetadataGate);
+}
+
+static inline
+VOID
+NtfsAcquireCreateMetadata(_In_ PVolumeContextBlock VolCB,
+                          _In_ BOOLEAN Shared)
+{
+    if (Shared)
+        NtfsAcquireMetadataShared(VolCB);
+    else
+        NtfsAcquireMetadata(VolCB);
+}
+
+static inline
+VOID
+NtfsUpgradeCreateMetadata(_In_ PVolumeContextBlock VolCB,
+                          _Inout_ PBOOLEAN Shared)
+{
+    if (!*Shared)
+        return;
+    NtfsReleaseMetadataShared(VolCB);
+    NtfsAcquireMetadata(VolCB);
+    *Shared = FALSE;
+}
+
+static inline
+BOOLEAN
+NtfsAcquireMetadataSharedUnlessHeld(_In_ PVolumeContextBlock VolCB)
+{
+    if (ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource))
+        return FALSE;
+    NtfsAcquireMetadataShared(VolCB);
+    return TRUE;
+}
+
+static inline
+BOOLEAN
+NtfsLockOpenLinks(_In_ PVolumeContextBlock VolCB)
+{
+    if (ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
+        return FALSE;
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+    ExAcquireFastMutex(&VolCB->OpenLinkMutex);
+    return TRUE;
+}
+
+static inline
+VOID
+NtfsUnlockOpenLinks(_In_ PVolumeContextBlock VolCB,
+                    _In_ BOOLEAN Locked)
+{
+    if (Locked)
+        ExReleaseFastMutex(&VolCB->OpenLinkMutex);
 }
 
 typedef struct _NTFS_TXF_OPEN

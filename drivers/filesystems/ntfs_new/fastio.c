@@ -257,10 +257,7 @@ NtfsFastIoQueryOpen(
     _Out_ PFILE_NETWORK_OPEN_INFORMATION NetworkInformation,
     _In_ PDEVICE_OBJECT DeviceObject)
 {
-    DBG_UNREFERENCED_PARAMETER(Irp);
-    DBG_UNREFERENCED_PARAMETER(NetworkInformation);
-    DBG_UNREFERENCED_PARAMETER(DeviceObject);
-    return FALSE;
+    return NtfsQueryOpen(DeviceObject, Irp, NetworkInformation);
 }
 
 BOOLEAN

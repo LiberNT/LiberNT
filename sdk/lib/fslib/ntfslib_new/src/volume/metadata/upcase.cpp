@@ -18,7 +18,11 @@ Volume::LoadUpcaseTable()
     NTSTATUS Status;
     PFileRecord UpCaseFile;
     PAttribute UpCaseData;
+    PWSTR Table = NULL;
     ULONG UpCaseDataLength;
+
+    if (NtfsReadPointerAcquire((void* const volatile*)&UpcaseTable))
+        return STATUS_SUCCESS;
 
     // Get $UpCase file
     Status = MFT->GetFileAttributeFromFileRecordNumber(TypeData,
@@ -31,22 +35,27 @@ Volume::LoadUpcaseTable()
 
     // Get $DATA attribute contents from $UpCase
     Status = UpCaseFile->ReadAttributeAlloc(UpCaseData,
-                                            (PUCHAR*)&UpcaseTable,
+                                            (PUCHAR*)&Table,
                                             &UpCaseDataLength);
 
     if (NT_SUCCESS(Status) &&
         (UpCaseDataLength % sizeof(WCHAR)) == 0)
     {
-        UpcaseTableLength = UpCaseDataLength / sizeof(WCHAR);
+        NtfsAcquireMutex(&LazyCacheMutex);
+        if (!UpcaseTable)
+        {
+            UpcaseTableLength = UpCaseDataLength / sizeof(WCHAR);
+            NtfsWritePointerRelease((void* volatile*)&UpcaseTable, Table);
+            Table = NULL;
+        }
+        NtfsReleaseMutex(&LazyCacheMutex);
     }
-    else
+    else if (NT_SUCCESS(Status))
     {
-        delete[] UpcaseTable;
-        UpcaseTable = NULL;
-        if (NT_SUCCESS(Status))
-            Status = STATUS_FILE_CORRUPT_ERROR;
+        Status = STATUS_FILE_CORRUPT_ERROR;
     }
 
+    delete[] Table;
     delete UpCaseFile;
     return Status;
 }
@@ -57,7 +66,7 @@ Volume::UpcaseWideString(_Inout_ PWSTR WideString,
 {
     NTSTATUS Status;
 
-    if (!UpcaseTable)
+    if (!NtfsReadPointerAcquire((void* const volatile*)&UpcaseTable))
     {
         Status = LoadUpcaseTable();
         if (!NT_SUCCESS(Status))
@@ -93,7 +102,7 @@ Volume::CompareFileNames(_In_  PUNICODE_STRING Left,
         return STATUS_INVALID_PARAMETER;
     }
 
-    if (!UpcaseTable)
+    if (!NtfsReadPointerAcquire((void* const volatile*)&UpcaseTable))
     {
         Status = LoadUpcaseTable();
         if (!NT_SUCCESS(Status))

@@ -132,6 +132,13 @@ NtfsAcquireMutex(_Inout_ PFAST_MUTEX Mutex);
 void
 NtfsReleaseMutex(_Inout_ PFAST_MUTEX Mutex);
 
+void*
+NtfsReadPointerAcquire(_In_ void* const volatile* Source);
+
+void
+NtfsWritePointerRelease(_Out_ void* volatile* Destination,
+                        _In_opt_ void* Value);
+
 BOOLEAN
 NtfsIsNameInExpression(_In_     PUNICODE_STRING Expression,
                        _In_     PUNICODE_STRING Name,
@@ -527,6 +534,20 @@ NtfsFlushVolumeContext(_In_opt_ void* Context);
 
 #ifdef __cplusplus
 
+#define NTFS_LOOKUP_SLOTS 8
+
+typedef struct _NtfsLookupSlot
+{
+    PUCHAR Buffer;
+    ULONG BufferSize;
+    ULONG Generation;
+    ULONGLONG FileReference;
+    ULONGLONG VCN;
+    BOOLEAN Valid;
+    BOOLEAN Busy;
+    BOOLEAN Private;
+} NtfsLookupSlot, *PNtfsLookupSlot;
+
 typedef class Volume
 {
 public:
@@ -576,9 +597,16 @@ public:
      * name resolution was a fifth of the lookup. Descents never nest. */
     PUCHAR IndexWorkBuffer = NULL;
     ULONG IndexWorkBufferSize = 0;
-    ULONGLONG IndexWorkFileReference = 0;
-    ULONGLONG IndexWorkVCN = 0;
-    BOOLEAN IndexWorkBufferValid = FALSE;
+
+    ULONG IndexEditGeneration = 0;
+    NtfsLookupSlot LookupSlots[NTFS_LOOKUP_SLOTS] = {};
+
+    PNtfsLookupSlot
+    AcquireLookupSlot(_In_ ULONGLONG DirectoryReference,
+                      _In_ ULONG BufferSize);
+
+    void
+    ReleaseLookupSlot(_In_ PNtfsLookupSlot Slot);
 
     /* Free list of record-sized buffers. Every parsed record allocated and
      * freed 1 KB of pool; recycling them needs its own lock because records
@@ -587,6 +615,8 @@ public:
     PUCHAR RecordPoolHead = NULL;
     ULONG RecordPoolCount = 0;
     ULONG RecordPoolBufferSize = 0;
+
+    FAST_MUTEX LazyCacheMutex;
 
     FAST_MUTEX SecurityCacheMutex;
     ULONG SecurityCacheId[NTFS_SECURITY_CACHE_ENTRIES] = {};
@@ -711,7 +741,7 @@ public:
     PWSTR
     GetUpcaseTable()
     {
-        return UpcaseTable;
+        return (PWSTR)NtfsReadPointerAcquire((void* const volatile*)&UpcaseTable);
     }
 
     /**
@@ -963,6 +993,15 @@ public:
     NTSTATUS ReadSecurityDescriptor(
         _In_opt_ PUCHAR Buffer,
         _Inout_ PULONG BufferLength);
+
+    NTSTATUS ReadCachedSecurityDescriptor(
+        _In_opt_ PUCHAR Buffer,
+        _Inout_ PULONG BufferLength);
+
+    NTSTATUS GetSecurityId(
+        _Out_ PULONG SecurityId);
+
+    BOOLEAN HasAttributeList();
 
     NTSTATUS
     GetBasicInformation(
@@ -1631,6 +1670,8 @@ private:
     ULONG EnumerationDepth = 0;
     LONG EnumerationLoadedDepth = -1;
     ULONGLONG EnumerationLoadedVCN = ~(ULONGLONG)0;
+    PUCHAR EnumerationBuffer = NULL;
+    ULONG EnumerationBufferSize = 0;
     BOOLEAN DirectEnumeration = FALSE;
 
     // ./editdir.cpp
