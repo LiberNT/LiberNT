@@ -577,6 +577,15 @@ LxThreadFree(
 {
     PLX_PROCESS Process = Thread->Process;
 
+    if (!IsListEmpty(&Thread->Link))
+    {
+        ASSERT(Thread->EThread == NULL);
+        ExAcquireFastMutex(&Process->Lock);
+        RemoveEntryList(&Thread->Link);
+        InitializeListHead(&Thread->Link);
+        ExReleaseFastMutex(&Process->Lock);
+    }
+
     LxPtraceRelease(Thread);
     if (Thread->SignalRetry != NULL)
         ExDeleteTimer(Thread->SignalRetry, TRUE, TRUE, NULL);

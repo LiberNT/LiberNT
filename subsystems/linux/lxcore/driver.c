@@ -251,7 +251,7 @@ LxPicoThreadStart(
     LxArchSetThreadPointer(TrapFrame, Thread->Tls);
     if (Thread->SetChildTid != 0)
         LxCopyToUser(Thread->SetChildTid, &Thread->Tid, sizeof(Thread->Tid));
-    if (Thread->JobctlStop || (Thread->Ptrace != NULL))
+    if (Thread->JobctlStop || (Thread->Ptrace != NULL) || LxSignalPending(Thread))
         LxSignalCheckPending(Thread, TrapFrame, ExceptionFrame);
     LxArchApplySpeculation(Thread, TrapFrame);
 }

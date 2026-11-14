@@ -42,6 +42,21 @@ LxSignalStopsByDefault(
 }
 
 VOID
+LxThreadPublish(
+    _In_ PLX_THREAD Thread)
+{
+    PLX_PROCESS Process = Thread->Process;
+
+    ASSERT(Thread->EThread == NULL);
+    ASSERT(Thread->Tid != 0);
+
+    ExAcquireFastMutex(&Process->Lock);
+    ASSERT(IsListEmpty(&Thread->Link));
+    InsertTailList(&Process->Threads, &Thread->Link);
+    ExReleaseFastMutex(&Process->Lock);
+}
+
+VOID
 LxThreadAttach(
     _In_ PLX_THREAD Thread)
 {
@@ -52,7 +67,8 @@ LxThreadAttach(
     Thread->NtTid = HandleToUlong(PsGetCurrentThreadId());
 
     ExAcquireFastMutex(&Process->Lock);
-    InsertTailList(&Process->Threads, &Thread->Link);
+    if (IsListEmpty(&Thread->Link))
+        InsertTailList(&Process->Threads, &Thread->Link);
     InterlockedExchange(&Thread->SharedWake, 1);
     if (Process->GroupStopCount != 0)
     {
@@ -235,7 +251,7 @@ LxSignalWake(
 
         if (Tid == 0)
             InterlockedExchange(&Thread->SharedWake, 1);
-        if ((Thread->EThread == Current) || ((Tid != 0) && (Thread->Tid != Tid)))
+        if ((Thread->EThread == NULL) || (Thread->EThread == Current) || ((Tid != 0) && (Thread->Tid != Tid)))
             continue;
         Base = PsPicoGetThreadContext(Thread->EThread);
         Apcs[Count] = NULL;
