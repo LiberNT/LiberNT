@@ -4833,8 +4833,10 @@ typedef struct _LX_POSIX_TIMER
     ULONG64 Value;
     LONG64 IntervalNs;
     LONG64 DueNs;
-    volatile LONG Overrun;
     LONG LastOverrun;
+    LONG64 FiredNs;
+    BOOLEAN SignalPending;
+    BOOLEAN Deleted;
 } LX_POSIX_TIMER, *PLX_POSIX_TIMER;
 
 typedef struct _LX_SIGEVENT
@@ -4848,16 +4850,121 @@ typedef struct _LX_SIGEVENT
 
 C_ASSERT(sizeof(LX_SIGEVENT) == 64);
 
+/* Reading a CPU-time clock takes the process lock, so no caller may hold it */
 static
 LONG64
-LxClockNow(
+LxPosixClockNow(
+    _In_ PLX_PROCESS Process,
     _In_ ULONG Clock)
 {
     LX_TIMESPEC Now;
+    LONG Error;
 
-    if (LxQueryClock(Clock, &Now) != 0)
+    if ((LONG)Clock < 0)
+        Error = LxQueryCpuClock(Process, (LONG)Clock, &Now);
+    else
+        Error = LxQueryClock(Clock, &Now);
+    if (Error != 0)
         return 0;
     return Now.Seconds * 1000000000LL + Now.Nanoseconds;
+}
+
+/* Called with the process lock held. A CPU-time clock, and a timer whose signal is still pending, are looked at again no sooner than a clock tick */
+static
+VOID
+LxPosixTimerArm(
+    _In_ PLX_POSIX_TIMER Timer,
+    _In_ LONG64 Now)
+{
+    LONG64 Tick = (LONG64)KeQueryTimeIncrement() * 100;
+    LONG64 Relative;
+
+    if ((Timer->DueNs == 0) || (Timer->DueNs == MAXLONG64))
+        return;
+    Relative = Timer->DueNs - Now;
+    if ((((LONG)Timer->Clock < 0) || Timer->SignalPending) && (Relative < Tick))
+        Relative = Tick;
+    if (Relative < 100)
+        Relative = 100;
+    ExSetTimer(Timer->Timer, -((Relative + 99) / 100), 0, NULL);
+}
+
+static
+BOOLEAN
+LxPosixTimerSignalWaits(
+    _In_ PLX_POSIX_TIMER Timer)
+{
+    PLX_PROCESS Process = Timer->Process;
+    ULONG64 Pending = (ULONG64)Process->Pending;
+    PLIST_ENTRY Entry;
+
+    for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
+        Pending |= (ULONG64)CONTAINING_RECORD(Entry, LX_THREAD, Link)->Pending;
+    return (Pending & (1ULL << (Timer->Signal - 1))) != 0;
+}
+
+static
+VOID
+LxPosixTimerFire(
+    _In_ PLX_POSIX_TIMER Timer)
+{
+    PLX_PROCESS Process = Timer->Process;
+    PLX_THREAD Thread = NULL;
+    PLX_PROCESS Owner = NULL;
+    BOOLEAN Send = FALSE;
+    LX_SIGINFO Info;
+    LONG64 Now, Fired;
+
+    Now = LxPosixClockNow(Process, Timer->Clock);
+    ExAcquireFastMutex(&Process->Lock);
+    if (Timer->Deleted || (Timer->DueNs == 0) || (Timer->DueNs == MAXLONG64))
+    {
+        ExReleaseFastMutex(&Process->Lock);
+        return;
+    }
+    if (Now < Timer->DueNs)
+    {
+        LxPosixTimerArm(Timer, Now);
+        ExReleaseFastMutex(&Process->Lock);
+        return;
+    }
+
+    Fired = Timer->DueNs;
+    if (Timer->IntervalNs != 0)
+    {
+        LONG64 Missed = (Now - Fired) / Timer->IntervalNs;
+
+        Timer->DueNs = ((Missed + 1) > (MAXLONG64 - Fired) / Timer->IntervalNs) ? MAXLONG64 :
+                                                                                  Fired + (Missed + 1) * Timer->IntervalNs;
+    }
+    else
+    {
+        Timer->DueNs = 0;
+    }
+    /* FIXME: two timers sharing a signal that is not a real-time one merge into a single pending instance */
+    if ((Timer->Notify != LX_SIGEV_NONE) && !(Timer->SignalPending && LxPosixTimerSignalWaits(Timer)))
+    {
+        Timer->SignalPending = TRUE;
+        Timer->FiredNs = Fired;
+        Send = TRUE;
+    }
+    LxPosixTimerArm(Timer, Now);
+    ExReleaseFastMutex(&Process->Lock);
+
+    if (!Send)
+        return;
+    RtlZeroMemory(&Info, sizeof(Info));
+    Info.Code = LX_SI_TIMER;
+    RtlCopyMemory(&Info.Raw[0], &Timer->Id, sizeof(LONG));
+    RtlCopyMemory(&Info.Raw[8], &Timer->Value, sizeof(ULONG64));
+    if (Timer->Notify & LX_SIGEV_THREAD_ID)
+        Thread = LxThreadLookupReferenced(Process->Instance, Timer->Tid, &Owner);
+    if ((Thread != NULL) && (Owner == Process))
+        LxSignalSend(Process, Thread, Timer->Signal, &Info);
+    else
+        LxSignalSend(Process, NULL, Timer->Signal, &Info);
+    if (Owner != NULL)
+        LxProcessDereference(Owner);
 }
 
 static
@@ -4868,28 +4975,12 @@ LxPosixTimerWork(
 {
     PLX_POSIX_TIMER Timer = Context;
     PLX_PROCESS Process = Timer->Process;
-    PLX_THREAD Thread = NULL;
-    PLX_PROCESS Owner = NULL;
-    LX_SIGINFO Info;
 
-    InterlockedExchange(&Timer->WorkQueued, 0);
-    if (!Process->Exited && (Timer->Notify != LX_SIGEV_NONE))
+    do
     {
-        RtlZeroMemory(&Info, sizeof(Info));
-        Info.Code = LX_SI_TIMER;
-        Timer->LastOverrun = InterlockedExchange(&Timer->Overrun, 0);
-        RtlCopyMemory(&Info.Raw[0], &Timer->Id, sizeof(LONG));
-        RtlCopyMemory(&Info.Raw[4], &Timer->LastOverrun, sizeof(LONG));
-        RtlCopyMemory(&Info.Raw[8], &Timer->Value, sizeof(ULONG64));
-        if (Timer->Notify & LX_SIGEV_THREAD_ID)
-            Thread = LxThreadLookupReferenced(Process->Instance, Timer->Tid, &Owner);
-        if ((Thread != NULL) && (Owner == Process))
-            LxSignalSend(Process, Thread, Timer->Signal, &Info);
-        else
-            LxSignalSend(Process, NULL, Timer->Signal, &Info);
-        if (Owner != NULL)
-            LxProcessDereference(Owner);
-    }
+        if (!Process->Exited)
+            LxPosixTimerFire(Timer);
+    } while (InterlockedDecrement(&Timer->WorkQueued) != 0);
     LxProcessDereference(Process);
 }
 
@@ -4904,19 +4995,55 @@ LxPosixTimerExpired(
 
     UNREFERENCED_PARAMETER(ExTimer);
 
-    if (Timer->IntervalNs != 0)
-        Timer->DueNs += Timer->IntervalNs;
-    else
-        Timer->DueNs = 0;
-    if (InterlockedExchange(&Timer->WorkQueued, 1) == 0)
+    if (InterlockedIncrement(&Timer->WorkQueued) == 1)
     {
         InterlockedIncrement(&Timer->Process->RefCount);
         ExQueueWorkItem(&Timer->Work, DelayedWorkQueue);
     }
-    else
+}
+
+static
+PLX_POSIX_TIMER
+LxPosixTimerFind(
+    _In_ PLX_PROCESS Process,
+    _In_ LONG Id);
+
+VOID
+LxPosixTimerDequeued(
+    _In_ PLX_PROCESS Process,
+    _Inout_ PLX_SIGINFO Info)
+{
+    PLX_POSIX_TIMER Timer;
+    LONG Id, Overrun = 0;
+    ULONG Clock = LX_CLOCK_MONOTONIC;
+    LONG64 Now;
+
+    ASSERT(Info->Code == LX_SI_TIMER);
+    RtlCopyMemory(&Id, &Info->Raw[0], sizeof(Id));
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, Id);
+    if (Timer != NULL)
+        Clock = Timer->Clock;
+    ExReleaseFastMutex(&Process->Lock);
+    if (Timer == NULL)
+        return;
+
+    Now = LxPosixClockNow(Process, Clock);
+    ExAcquireFastMutex(&Process->Lock);
+    Timer = LxPosixTimerFind(Process, Id);
+    if ((Timer != NULL) && Timer->SignalPending)
     {
-        InterlockedIncrement(&Timer->Overrun);
+        if (Timer->IntervalNs != 0)
+        {
+            LONG64 Count = (Now - Timer->FiredNs) / Timer->IntervalNs;
+
+            Overrun = (Count < 0) ? 0 : ((Count > MAXLONG) ? MAXLONG : (LONG)Count);
+        }
+        Timer->LastOverrun = Overrun;
+        Timer->SignalPending = FALSE;
     }
+    ExReleaseFastMutex(&Process->Lock);
+    RtlCopyMemory(&Info->Raw[4], &Overrun, sizeof(Overrun));
 }
 
 VOID
@@ -4930,10 +5057,19 @@ LxPosixTimersRelease(
         ExCancelTimer(CONTAINING_RECORD(Entry, LX_POSIX_TIMER, Link)->Timer, NULL);
     if (!Free || IsListEmpty(&Process->Timers))
         return;
-    while (!IsListEmpty(&Process->Timers))
+    for (;;)
     {
-        PLX_POSIX_TIMER Timer = CONTAINING_RECORD(RemoveHeadList(&Process->Timers), LX_POSIX_TIMER, Link);
+        PLX_POSIX_TIMER Timer = NULL;
 
+        ExAcquireFastMutex(&Process->Lock);
+        if (!IsListEmpty(&Process->Timers))
+        {
+            Timer = CONTAINING_RECORD(RemoveHeadList(&Process->Timers), LX_POSIX_TIMER, Link);
+            Timer->Deleted = TRUE;
+        }
+        ExReleaseFastMutex(&Process->Lock);
+        if (Timer == NULL)
+            break;
         ExDeleteTimer(Timer->Timer, TRUE, TRUE, NULL);
 
         while (Timer->WorkQueued)
@@ -4974,8 +5110,42 @@ LX_SYSCALL(LxSysTimerCreate)
     LX_TIMESPEC Probe;
     LONG64 Result;
 
-    if (LxQueryClock((Clock == 8) ? LX_CLOCK_REALTIME : ((Clock == 9) ? LX_CLOCK_BOOTTIME : Clock), &Probe) != 0)
-        return -LX_EINVAL;
+    switch ((LONG)Clock)
+    {
+        case LX_CLOCK_REALTIME:
+        case LX_CLOCK_MONOTONIC:
+        case LX_CLOCK_BOOTTIME:
+        case LX_CLOCK_TAI:
+            break;
+
+        case LX_CLOCK_REALTIME_ALARM:
+        case LX_CLOCK_BOOTTIME_ALARM:
+            if (!LxCapable(Process, LX_CAP_WAKE_ALARM))
+                return -LX_EPERM;
+            Clock = (Clock == LX_CLOCK_REALTIME_ALARM) ? LX_CLOCK_REALTIME : LX_CLOCK_BOOTTIME;
+            break;
+
+        case LX_CLOCK_PROCESS_CPUTIME_ID:
+            Clock = (~0UL << 3) | LX_CPUCLOCK_SCHED;
+            break;
+
+        case LX_CLOCK_THREAD_CPUTIME_ID:
+            Clock = (~(ULONG)LxTidNr(Process, Call->Thread) << 3) | LX_CPUCLOCK_PERTHREAD | LX_CPUCLOCK_SCHED;
+            break;
+
+        case LX_CLOCK_MONOTONIC_RAW:
+        case LX_CLOCK_REALTIME_COARSE:
+        case LX_CLOCK_MONOTONIC_COARSE:
+            return -LX_EOPNOTSUPP;
+
+        default:
+            if (((LONG)Clock >= 0) || (LxQueryCpuClock(Process, (LONG)Clock, &Probe) != 0))
+                return -LX_EINVAL;
+            /* The timer runs in a worker, so a clock naming the calling thread is bound to that thread here */
+            if ((Clock & LX_CPUCLOCK_PERTHREAD) && (~((LONG)Clock >> 3) == 0))
+                Clock = (~(ULONG)LxTidNr(Process, Call->Thread) << 3) | (Clock & 7);
+            break;
+    }
     RtlZeroMemory(&Event, sizeof(Event));
     if (Call->Args[1] != 0)
     {
@@ -5007,7 +5177,7 @@ LX_SYSCALL(LxSysTimerCreate)
     }
     ExInitializeWorkItem(&Timer->Work, LxPosixTimerWork, Timer);
     Timer->Process = Process;
-    Timer->Clock = (Clock == 8) ? LX_CLOCK_REALTIME : ((Clock == 9) ? LX_CLOCK_BOOTTIME : Clock);
+    Timer->Clock = Clock;
     Timer->Signal = Event.Signal;
     Timer->Notify = (ULONG)Event.Notify;
     Timer->Tid = LxNrToGlobal(Process, (ULONG)Event.ThreadId);
@@ -5028,14 +5198,17 @@ static
 VOID
 LxPosixTimerCurrent(
     _In_ PLX_POSIX_TIMER Timer,
+    _In_ LONG64 Now,
     _Out_ PLX_ITIMERSPEC Value)
 {
     LONG64 Remaining = 0;
 
     if (Timer->DueNs != 0)
     {
-        Remaining = Timer->DueNs - LxClockNow(Timer->Clock);
-        if (Remaining <= 0)
+        Remaining = Timer->DueNs - Now;
+        if ((Remaining <= 0) && (Timer->IntervalNs != 0))
+            Remaining = Timer->IntervalNs - ((Now - Timer->DueNs) % Timer->IntervalNs);
+        else if (Remaining <= 0)
             Remaining = 1;
     }
     Value->Value.Seconds = Remaining / 1000000000LL;
@@ -5066,26 +5239,22 @@ LX_SYSCALL(LxSysTimerSettime)
     if (Timer == NULL)
         return -LX_EINVAL;
 
-    LxPosixTimerCurrent(Timer, &Old);
     ExCancelTimer(Timer->Timer, NULL);
     Due = LxTimespecToNs(&New.Value);
     Interval = LxTimespecToNs(&New.Interval);
-    Now = LxClockNow(Timer->Clock);
+    Now = LxPosixClockNow(Process, Timer->Clock);
+    ExAcquireFastMutex(&Process->Lock);
+    LxPosixTimerCurrent(Timer, Now, &Old);
     Timer->IntervalNs = (Due != 0) ? Interval : 0;
     if (Due == 0)
         Timer->DueNs = 0;
     else if (Call->Args[1] & LX_TFD_TIMER_ABSTIME)
-        Timer->DueNs = max(Due - LxTimeNsOffset(Process, Timer->Clock), 1);
+        Timer->DueNs = max(Due - (((LONG)Timer->Clock < 0) ? 0 : LxTimeNsOffset(Process, Timer->Clock)), 1);
     else
         Timer->DueNs = (Due >= MAXLONG64 - Now) ? MAXLONG64 : Now + Due;
-    if ((Timer->DueNs != 0) && (Timer->DueNs != MAXLONG64))
-    {
-        LONG64 Relative = Timer->DueNs - Now;
-
-        if (Relative < 100)
-            Relative = 100;
-        ExSetTimer(Timer->Timer, -((Relative + 99) / 100), (Interval != 0) ? max(1, Interval / 100) : 0, NULL);
-    }
+    Timer->SignalPending = FALSE;
+    LxPosixTimerArm(Timer, Now);
+    ExReleaseFastMutex(&Process->Lock);
 
     if (Call->Args[3] != 0)
         return LxCopyToUser(Call->Args[3], &Old, sizeof(Old));
@@ -5103,7 +5272,7 @@ LX_SYSCALL(LxSysTimerGettime)
     ExReleaseFastMutex(&Process->Lock);
     if (Timer == NULL)
         return -LX_EINVAL;
-    LxPosixTimerCurrent(Timer, &Value);
+    LxPosixTimerCurrent(Timer, LxPosixClockNow(Process, Timer->Clock), &Value);
     return LxCopyToUser(Call->Args[1], &Value, sizeof(Value));
 }
 
@@ -5126,7 +5295,10 @@ LX_SYSCALL(LxSysTimerDelete)
     ExAcquireFastMutex(&Process->Lock);
     Timer = LxPosixTimerFind(Process, (LONG)Call->Args[0]);
     if (Timer != NULL)
+    {
         RemoveEntryList(&Timer->Link);
+        Timer->Deleted = TRUE;
+    }
     ExReleaseFastMutex(&Process->Lock);
     if (Timer == NULL)
         return -LX_EINVAL;

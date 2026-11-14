@@ -991,6 +991,8 @@ LxSignalDequeue(
         *Info = Process->PendingInfo[Signal - 1];
         LxSignalRefill(Process, Thread, Directed, Signal);
         ExReleaseFastMutex(&Process->Lock);
+        if (Info->Code == LX_SI_TIMER)
+            LxPosixTimerDequeued(Process, Info);
         Info->Signo = Signal;
         return (ULONG64)Signal;
     }
@@ -1106,6 +1108,8 @@ LxSignalCheckPending(
         Info = Process->PendingInfo[Signal - 1];
         LxSignalRefill(Process, Thread, Directed, Signal);
         ExReleaseFastMutex(&Process->Lock);
+        if (Info.Code == LX_SI_TIMER)
+            LxPosixTimerDequeued(Process, &Info);
         if ((Thread->Ptrace != NULL) && (Signal != LX_SIGKILL))
         {
             Info.Signo = Signal;

@@ -1564,6 +1564,7 @@ VOID LxProcessExited(_In_ PLX_PROCESS Process, _In_ NTSTATUS ExitStatus);
 VOID LxProcessThreadExited(_In_ PLX_PROCESS Process, _In_ ULONG Tid);
 VOID LxItimerRelease(_In_ PLX_PROCESS Process);
 VOID LxPosixTimersRelease(_In_ PLX_PROCESS Process, _In_ BOOLEAN Free);
+VOID LxPosixTimerDequeued(_In_ PLX_PROCESS Process, _Inout_ PLX_SIGINFO Info);
 VOID LxProcessRegister(_In_ PLX_PROCESS Process);
 VOID LxProcessUnregister(_In_ PLX_PROCESS Process);
 VOID LxProcessCloseFiles(_In_ PLX_PROCESS Process);
