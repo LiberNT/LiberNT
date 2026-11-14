@@ -1065,6 +1065,8 @@ USBPORT_SoftInterruptDpc(IN PRKDPC Dpc,
     PDEVICE_OBJECT FdoDevice;
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     DPRINT_INT("USBPORT_SoftInterruptDpc: ...\n");
 
     FdoDevice = DeferredContext;
@@ -1259,6 +1261,8 @@ USBPORT_WorkerRequestDpc(IN PRKDPC Dpc,
     PDEVICE_OBJECT FdoDevice;
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     DPRINT("USBPORT_WorkerRequestDpc: ...\n");
 
     FdoDevice = DeferredContext;
@@ -1486,6 +1490,8 @@ USBPORT_TransferFlushDpc(IN PRKDPC Dpc,
 {
     PDEVICE_OBJECT FdoDevice;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     DPRINT_CORE("USBPORT_TransferFlushDpc: ...\n");
     FdoDevice = DeferredContext;
     USBPORT_FlushDoneTransfers(FdoDevice);
@@ -1784,6 +1790,8 @@ USBPORT_IsrDpc(IN PRKDPC Dpc,
     PUSBPORT_REGISTRATION_PACKET Packet;
     BOOLEAN InterruptEnable;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     DPRINT_INT("USBPORT_IsrDpc: DeferredContext - %p, SystemArgument2 - %p\n",
                DeferredContext,
                SystemArgument2);
@@ -2881,6 +2889,8 @@ USBPORT_TimerDpc(IN PRKDPC Dpc,
     KIRQL OldIrql;
     KIRQL TimerOldIrql;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     USBPORT_TIMER_TRACE("USBPORT_TimerDpc: Dpc - %p, DeferredContext - %p\n",
                         Dpc,
                         DeferredContext);
@@ -3451,6 +3461,7 @@ USBPORT_MiniportCompleteTransfer(IN PVOID MiniPortExtension,
 
     if (IsListEmpty(&ParentTransfer->SplitTransfersList))
     {
+        KeReleaseSpinLock(&ParentTransfer->TransferSpinLock, OldIrql);
         goto Exit;
     }
 
@@ -3490,6 +3501,8 @@ USBPORT_AsyncTimerDpc(IN PRKDPC Dpc,
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
     PUSBPORT_ASYNC_CALLBACK_DATA AsyncCallbackData;
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     DPRINT("USBPORT_AsyncTimerDpc: ...\n");
 
     AsyncCallbackData = DeferredContext;
@@ -4605,6 +4618,8 @@ USBPORT_MapTransferDpc(IN PRKDPC Dpc,
     PDEVICE_OBJECT FdoDevice = DeferredContext;
 
     FdoExtension = FdoDevice->DeviceExtension;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     InterlockedExchange(&FdoExtension->MapTransferCallbackState,
                         USBPORT_MAP_CALLBACK_NONE);
     USBPORT_SubmitMapTransfer(FdoDevice);
