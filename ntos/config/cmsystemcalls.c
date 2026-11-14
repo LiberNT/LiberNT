@@ -2600,7 +2600,9 @@ NtInitializeRegistry(
     }
 
     CmSetLazyFlushState(TRUE);
+    CmpLockRegistry();
     CmpDoFlushAll(TRUE);
+    CmpUnlockRegistry();
     return Status;
 }
 

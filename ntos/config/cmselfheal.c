@@ -108,8 +108,10 @@ CmpFlushSelfHealQueue(VOID)
 
         if (Entry->Hive != NULL)
         {
+            CmpLockRegistry();
             Entry->Hive->Hive.HiveFlags &= ~HIVE_HAS_BEEN_REPLACED;
             CmpFlushHiveToDisk(Entry->Hive, TRUE);
+            CmpUnlockRegistry();
         }
 
         ExFreePool(Entry);
