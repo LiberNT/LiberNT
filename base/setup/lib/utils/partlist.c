@@ -2173,6 +2173,10 @@ AddDiskToList(
     /* Keep looping while the drive layout buffer is too small */
     for (;;)
     {
+        /* A disk with neither MBR nor GPT has no layout: it is set up below like an empty table */
+        if (DiskEntry->DiskStyle == PARTITION_STYLE_RAW)
+            break;
+
         DPRINT1("Buffer size: %lu\n", LayoutBufferSize);
         Status = NtDeviceIoControlFile(FileHandle,
                                        NULL,
