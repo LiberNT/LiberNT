@@ -11,8 +11,23 @@
 #define NDEBUG
 #include <debug.h>
 
-/* Spin loops count yields, and drivers size them on Windows 11, where a yield with nothing to run takes about 1 us */
-#define KI_EMPTY_YIELD_STALL_US 1
+/* Spin loops count yields, and drivers size them on Windows 11, where a yield with nothing to run takes about 830 ns */
+#define KI_EMPTY_YIELD_STALL_NS 700
+
+static
+VOID
+KiStallEmptyYield(VOID)
+{
+    LARGE_INTEGER Frequency;
+    LARGE_INTEGER Start;
+    ULONGLONG Ticks;
+
+    Start = KeQueryPerformanceCounter(&Frequency);
+    ASSERT(Frequency.QuadPart > 0);
+    Ticks = ((ULONGLONG)Frequency.QuadPart * KI_EMPTY_YIELD_STALL_NS + 999999999ULL) / 1000000000ULL;
+    while ((ULONGLONG)(KeQueryPerformanceCounter(NULL).QuadPart - Start.QuadPart) < Ticks)
+        YieldProcessor();
+}
 
 /* GLOBALS ********************************************************************/
 
@@ -670,7 +685,7 @@ KiYieldDelayExecution(VOID)
     KiExitDispatcher(OldIrql);
 
     if (!Yielded)
-        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
+        KiStallEmptyYield();
 }
 
 /*
@@ -1453,7 +1468,7 @@ NtYieldExecution(VOID)
     if (Prcb->ReadySummary == 0)
     {
         KeLowerIrql(OldIrql);
-        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
+        KiStallEmptyYield();
         return Status;
     }
 
@@ -1490,7 +1505,7 @@ NtYieldExecution(VOID)
     KiExitDispatcher(OldIrql);
 
     if (Status == STATUS_NO_YIELD_PERFORMED)
-        KeStallExecutionProcessor(KI_EMPTY_YIELD_STALL_US);
+        KiStallEmptyYield();
 
     return Status;
 }
