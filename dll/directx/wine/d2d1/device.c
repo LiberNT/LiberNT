@@ -24,6 +24,7 @@
 WINE_DEFAULT_DEBUG_CHANNEL(d2d);
 
 static void d2d_glyph_atlas_destroy(struct d2d_glyph_atlas *atlas);
+static void d2d_device_context_release_mask_ring(struct d2d_device_context *context);
 
 #define INITIAL_CLIP_STACK_SIZE 4
 
@@ -458,10 +459,7 @@ static ULONG STDMETHODCALLTYPE d2d_device_context_inner_Release(IUnknown *iface)
         }
         free(context->layer_stack.stack);
         d2d_coverage_cleanup(&context->coverage);
-        if (context->mask_srv)
-            ID3D11ShaderResourceView_Release(context->mask_srv);
-        if (context->mask_texture)
-            ID3D11Texture2D_Release(context->mask_texture);
+        d2d_device_context_release_mask_ring(context);
         IDWriteRenderingParams_Release(context->default_text_rendering_params);
         if (context->text_rendering_params)
             IDWriteRenderingParams_Release(context->text_rendering_params);
@@ -1305,11 +1303,30 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawGeometry(ID2D1DeviceContext
     d2d_device_context_draw_geometry(context, geometry_impl, brush_impl, stroke_width);
 }
 
+static void d2d_device_context_release_mask_ring(struct d2d_device_context *context)
+{
+    unsigned int i;
+
+    for (i = 0; i < D2D_MASK_RING; ++i)
+    {
+        if (context->mask_ring_srv[i])
+            ID3D11ShaderResourceView_Release(context->mask_ring_srv[i]);
+        if (context->mask_ring_texture[i])
+            ID3D11Texture2D_Release(context->mask_ring_texture[i]);
+        context->mask_ring_srv[i] = NULL;
+        context->mask_ring_texture[i] = NULL;
+    }
+    context->mask_srv = NULL;
+    context->mask_texture = NULL;
+    context->mask_width = context->mask_height = 0;
+}
+
 static BOOL d2d_device_context_ensure_mask_texture(struct d2d_device_context *context, UINT width, UINT height)
 {
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
     D3D11_TEXTURE2D_DESC desc;
     HRESULT hr;
+    unsigned int i;
 
     if (context->mask_texture && context->mask_width >= width && context->mask_height >= height)
         return TRUE;
@@ -1319,13 +1336,7 @@ static BOOL d2d_device_context_ensure_mask_texture(struct d2d_device_context *co
     width = (width + 63) & ~63u;
     height = (height + 63) & ~63u;
 
-    if (context->mask_srv)
-        ID3D11ShaderResourceView_Release(context->mask_srv);
-    if (context->mask_texture)
-        ID3D11Texture2D_Release(context->mask_texture);
-    context->mask_srv = NULL;
-    context->mask_texture = NULL;
-    context->mask_width = context->mask_height = 0;
+    d2d_device_context_release_mask_ring(context);
 
     memset(&desc, 0, sizeof(desc));
     desc.Width = width;
@@ -1337,25 +1348,33 @@ static BOOL d2d_device_context_ensure_mask_texture(struct d2d_device_context *co
     desc.Usage = D3D11_USAGE_DYNAMIC;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
     desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    if (FAILED(hr = ID3D11Device1_CreateTexture2D(context->d3d_device, &desc, NULL, &context->mask_texture)))
-    {
-        WARN("Failed to create coverage mask texture, hr %#lx.\n", hr);
-        return FALSE;
-    }
 
     memset(&srv_desc, 0, sizeof(srv_desc));
     srv_desc.Format = desc.Format;
     srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     srv_desc.Texture2D.MipLevels = 1;
-    if (FAILED(hr = ID3D11Device1_CreateShaderResourceView(context->d3d_device,
-            (ID3D11Resource *)context->mask_texture, &srv_desc, &context->mask_srv)))
+
+    for (i = 0; i < D2D_MASK_RING; ++i)
     {
-        WARN("Failed to create coverage mask view, hr %#lx.\n", hr);
-        ID3D11Texture2D_Release(context->mask_texture);
-        context->mask_texture = NULL;
-        return FALSE;
+        if (FAILED(hr = ID3D11Device1_CreateTexture2D(context->d3d_device, &desc, NULL,
+                &context->mask_ring_texture[i])))
+        {
+            WARN("Failed to create coverage mask texture, hr %#lx.\n", hr);
+            d2d_device_context_release_mask_ring(context);
+            return FALSE;
+        }
+        if (FAILED(hr = ID3D11Device1_CreateShaderResourceView(context->d3d_device,
+                (ID3D11Resource *)context->mask_ring_texture[i], &srv_desc, &context->mask_ring_srv[i])))
+        {
+            WARN("Failed to create coverage mask view, hr %#lx.\n", hr);
+            d2d_device_context_release_mask_ring(context);
+            return FALSE;
+        }
     }
 
+    context->mask_ring_pos = 0;
+    context->mask_texture = context->mask_ring_texture[0];
+    context->mask_srv = context->mask_ring_srv[0];
     context->mask_width = width;
     context->mask_height = height;
     return TRUE;
@@ -1371,6 +1390,10 @@ static BOOL d2d_device_context_upload_coverage(struct d2d_device_context *contex
 
     if (!d2d_device_context_ensure_mask_texture(context, width, height))
         return FALSE;
+
+    context->mask_ring_pos = (context->mask_ring_pos + 1) % D2D_MASK_RING;
+    context->mask_texture = context->mask_ring_texture[context->mask_ring_pos];
+    context->mask_srv = context->mask_ring_srv[context->mask_ring_pos];
 
     if (context->cs)
         EnterCriticalSection(context->cs);
@@ -5425,6 +5448,7 @@ static HRESULT d2d_device_context_init(struct d2d_device_context *render_target,
     D3D11_BUFFER_DESC buffer_desc;
     struct d2d_factory *factory;
     ID3D10Blob *precompiled;
+    struct d2d_shader_set *shader_set;
     unsigned int i;
     HRESULT hr;
 
@@ -5473,28 +5497,56 @@ static HRESULT d2d_device_context_init(struct d2d_device_context *render_target,
         goto err;
     }
 
+    shader_set = device->shader_set;
+    EnterCriticalSection(&shader_set->cs);
     for (i = 0; i < ARRAY_SIZE(shape_info); ++i)
     {
         const struct shape_info *si = &shape_info[i];
 
-        assert(device->precompiled_shape_vs[i]);
-        precompiled = device->precompiled_shape_vs[i];
-        if (FAILED(hr = ID3D11Device1_CreateInputLayout(render_target->d3d_device, si->il_desc, si->il_element_count,
-                ID3D10Blob_GetBufferPointer(precompiled), ID3D10Blob_GetBufferSize(precompiled),
-                &render_target->shape_resources[si->shape_type].il)))
+        if (!shader_set->vs[i])
         {
-            WARN("Failed to create input layout for shape type %#x, hr %#lx.\n", si->shape_type, hr);
-            goto err;
+            assert(shader_set->precompiled_shape_vs[i]);
+            precompiled = shader_set->precompiled_shape_vs[i];
+            if (FAILED(hr = ID3D11Device1_CreateInputLayout(render_target->d3d_device, si->il_desc,
+                    si->il_element_count, ID3D10Blob_GetBufferPointer(precompiled),
+                    ID3D10Blob_GetBufferSize(precompiled), &shader_set->il[i])))
+            {
+                WARN("Failed to create input layout for shape type %#x, hr %#lx.\n", si->shape_type, hr);
+                LeaveCriticalSection(&shader_set->cs);
+                goto err;
+            }
+
+            if (FAILED(hr = ID3D11Device1_CreateVertexShader(render_target->d3d_device,
+                    ID3D10Blob_GetBufferPointer(precompiled), ID3D10Blob_GetBufferSize(precompiled),
+                    NULL, &shader_set->vs[i])))
+            {
+                WARN("Failed to create vertex shader for shape type %#x, hr %#lx.\n", si->shape_type, hr);
+                ID3D11InputLayout_Release(shader_set->il[i]);
+                shader_set->il[i] = NULL;
+                LeaveCriticalSection(&shader_set->cs);
+                goto err;
+            }
         }
 
-        if (FAILED(hr = ID3D11Device1_CreateVertexShader(render_target->d3d_device,
+        ID3D11InputLayout_AddRef(render_target->shape_resources[si->shape_type].il = shader_set->il[i]);
+        ID3D11VertexShader_AddRef(render_target->shape_resources[si->shape_type].vs = shader_set->vs[i]);
+    }
+
+    if (!shader_set->ps)
+    {
+        assert(shader_set->precompiled_shape_ps);
+        precompiled = shader_set->precompiled_shape_ps;
+        if (FAILED(hr = ID3D11Device1_CreatePixelShader(render_target->d3d_device,
                 ID3D10Blob_GetBufferPointer(precompiled), ID3D10Blob_GetBufferSize(precompiled),
-                NULL, &render_target->shape_resources[si->shape_type].vs)))
+                NULL, &shader_set->ps)))
         {
-            WARN("Failed to create vertex shader for shape type %#x, hr %#lx.\n", si->shape_type, hr);
+            WARN("Failed to create pixel shader, hr %#lx.\n", hr);
+            LeaveCriticalSection(&shader_set->cs);
             goto err;
         }
     }
+    ID3D11PixelShader_AddRef(render_target->ps = shader_set->ps);
+    LeaveCriticalSection(&shader_set->cs);
 
     buffer_desc.ByteWidth = sizeof(struct d2d_vs_cb);
     buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
@@ -5506,16 +5558,6 @@ static HRESULT d2d_device_context_init(struct d2d_device_context *render_target,
             &render_target->vs_cb)))
     {
         WARN("Failed to create constant buffer, hr %#lx.\n", hr);
-        goto err;
-    }
-
-    assert(device->precompiled_shape_ps);
-    precompiled = device->precompiled_shape_ps;
-    if (FAILED(hr = ID3D11Device1_CreatePixelShader(render_target->d3d_device,
-            ID3D10Blob_GetBufferPointer(precompiled), ID3D10Blob_GetBufferSize(precompiled),
-            NULL, &render_target->ps)))
-    {
-        WARN("Failed to create pixel shader, hr %#lx.\n", hr);
         goto err;
     }
 
@@ -5760,13 +5802,8 @@ static ULONG WINAPI d2d_device_Release(ID2D1Device6 *iface)
         IDXGIDevice_Release(device->dxgi_device);
         ID2D1Factory1_Release(device->factory);
         d2d_device_indexed_objects_clear(&device->shaders);
-        for (unsigned int i = 0; i < D2D_SHAPE_TYPE_COUNT; ++i)
-        {
-            if (device->precompiled_shape_vs[i])
-                ID3D10Blob_Release(device->precompiled_shape_vs[i]);
-        }
-        if (device->precompiled_shape_ps)
-            ID3D10Blob_Release(device->precompiled_shape_ps);
+        if (device->shader_set)
+            d2d_shader_set_release(device->shader_set);
         free(device);
     }
 
@@ -5991,19 +6028,17 @@ struct d2d_device *unsafe_impl_from_ID2D1Device(ID2D1Device1 *iface)
     return CONTAINING_RECORD(iface, struct d2d_device, ID2D1Device6_iface);
 }
 
-HRESULT d2d_device_init(struct d2d_device *device, ID2D1Factory1 *factory, IDXGIDevice *dxgi_device,
-    bool allow_get_dxgi_device)
+HRESULT d2d_shader_set_create(struct d2d_shader_set **out)
 {
-    HRESULT hr;
+    struct d2d_shader_set *set;
     ID3D10Blob *compiled;
+    HRESULT hr;
 
-    device->ID2D1Device6_iface.lpVtbl = &d2d_device_vtbl;
-    device->refcount = 1;
-    device->factory = factory;
-    ID2D1Factory1_AddRef(device->factory);
-    device->dxgi_device = dxgi_device;
-    IDXGIDevice_AddRef(device->dxgi_device);
-    device->allow_get_dxgi_device = allow_get_dxgi_device;
+    if (!(set = calloc(1, sizeof(*set))))
+        return E_OUTOFMEMORY;
+
+    set->refcount = 1;
+    InitializeCriticalSection(&set->cs);
 
     for (unsigned int i = 0; i < ARRAY_SIZE(shape_info); ++i)
     {
@@ -6013,18 +6048,63 @@ HRESULT d2d_device_init(struct d2d_device *device, ID2D1Factory1 *factory, IDXGI
                 "main", "vs_4_0", 0, 0, &compiled, NULL)))
         {
             WARN("Failed to compile shader for shape type %#x, hr %#lx.\n", si->shape_type, hr);
+            d2d_shader_set_release(set);
             return hr;
         }
-        device->precompiled_shape_vs[i] = compiled;
+        set->precompiled_shape_vs[i] = compiled;
     }
 
     if (FAILED(hr = D3DCompile(shape_ps_code, sizeof(shape_ps_code) - 1, "ps", NULL, NULL,
             "main", "ps_4_0", 0, 0, &compiled, NULL)))
     {
         WARN("Failed to compile the pixel shader, hr %#lx.\n", hr);
+        d2d_shader_set_release(set);
         return hr;
     }
-    device->precompiled_shape_ps = compiled;
+    set->precompiled_shape_ps = compiled;
+
+    *out = set;
+    return S_OK;
+}
+
+void d2d_shader_set_release(struct d2d_shader_set *set)
+{
+    if (InterlockedDecrement(&set->refcount))
+        return;
+
+    for (unsigned int i = 0; i < D2D_SHAPE_TYPE_COUNT; ++i)
+    {
+        if (set->vs[i])
+            ID3D11VertexShader_Release(set->vs[i]);
+        if (set->il[i])
+            ID3D11InputLayout_Release(set->il[i]);
+        if (set->precompiled_shape_vs[i])
+            ID3D10Blob_Release(set->precompiled_shape_vs[i]);
+    }
+    if (set->ps)
+        ID3D11PixelShader_Release(set->ps);
+    if (set->precompiled_shape_ps)
+        ID3D10Blob_Release(set->precompiled_shape_ps);
+    DeleteCriticalSection(&set->cs);
+    free(set);
+}
+
+HRESULT d2d_device_init(struct d2d_device *device, ID2D1Factory1 *factory, IDXGIDevice *dxgi_device,
+    bool allow_get_dxgi_device)
+{
+    HRESULT hr;
+
+    device->ID2D1Device6_iface.lpVtbl = &d2d_device_vtbl;
+    device->refcount = 1;
+    device->factory = factory;
+    ID2D1Factory1_AddRef(device->factory);
+    device->dxgi_device = dxgi_device;
+    IDXGIDevice_AddRef(device->dxgi_device);
+    device->allow_get_dxgi_device = allow_get_dxgi_device;
+
+    if (!(device->shader_set = d2d_factory_get_shader_set(factory, dxgi_device))
+            && FAILED(hr = d2d_shader_set_create(&device->shader_set)))
+        return hr;
 
     return S_OK;
 }

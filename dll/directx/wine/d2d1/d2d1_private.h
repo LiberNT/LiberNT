@@ -283,6 +283,8 @@ struct d2d_stream
     UINT size, pos, bind;
 };
 
+#define D2D_MASK_RING 64
+
 struct d2d_device_context
 {
     ID2D1DeviceContext6 ID2D1DeviceContext6_iface;
@@ -352,6 +354,9 @@ struct d2d_device_context
     struct d2d_coverage coverage;
     ID3D11Texture2D *mask_texture;
     ID3D11ShaderResourceView *mask_srv;
+    ID3D11Texture2D *mask_ring_texture[D2D_MASK_RING];
+    ID3D11ShaderResourceView *mask_ring_srv[D2D_MASK_RING];
+    unsigned int mask_ring_pos;
     UINT mask_width, mask_height;
     BOOL mask_active;
     BOOL ps_clip_on;
@@ -806,6 +811,21 @@ HRESULT d2d_geometry_realization_init(struct d2d_geometry_realization *realizati
         ID2D1Factory *factory, ID2D1Geometry *geometry);
 struct d2d_geometry_realization *unsafe_impl_from_ID2D1GeometryRealization(ID2D1GeometryRealization *iface);
 
+struct d2d_shader_set
+{
+    LONG refcount;
+    CRITICAL_SECTION cs;
+    ID3D10Blob *precompiled_shape_vs[D2D_SHAPE_TYPE_COUNT];
+    ID3D10Blob *precompiled_shape_ps;
+    ID3D11InputLayout *il[D2D_SHAPE_TYPE_COUNT];
+    ID3D11VertexShader *vs[D2D_SHAPE_TYPE_COUNT];
+    ID3D11PixelShader *ps;
+};
+
+HRESULT d2d_shader_set_create(struct d2d_shader_set **set);
+void d2d_shader_set_release(struct d2d_shader_set *set);
+struct d2d_shader_set *d2d_factory_get_shader_set(ID2D1Factory1 *factory, IDXGIDevice *dxgi_device);
+
 struct d2d_device
 {
     ID2D1Device6 ID2D1Device6_iface;
@@ -814,8 +834,7 @@ struct d2d_device
     IDXGIDevice *dxgi_device;
     bool allow_get_dxgi_device;
 
-    ID3D10Blob *precompiled_shape_vs[D2D_SHAPE_TYPE_COUNT];
-    ID3D10Blob *precompiled_shape_ps;
+    struct d2d_shader_set *shader_set;
 
     struct d2d_indexed_objects shaders;
 };
@@ -892,6 +911,7 @@ struct d2d_factory
     LONG refcount;
 
     ID3D10Device1 *device;
+    struct d2d_shader_set *shared_shader_set;
 
     float dpi_x;
     float dpi_y;

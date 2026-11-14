@@ -161,10 +161,13 @@ struct wined3d_cs_present
     enum wined3d_cs_op opcode;
     HWND dst_window_override;
     struct wined3d_swapchain *swapchain;
-    RECT src_rect;
-    RECT dst_rect;
+    unsigned int rect_count;
     unsigned int swap_interval;
     uint32_t flags;
+    BOOL has_scroll;
+    RECT scroll_rect;
+    POINT scroll_offset;
+    RECT rects[1];
 };
 
 struct wined3d_cs_clear
@@ -721,7 +724,9 @@ static void wined3d_cs_exec_present(struct wined3d_cs *cs, const void *data)
                     &src_rect, WINED3D_BLT_ALPHA_TEST, NULL, WINED3D_TEXF_POINT);
     }
 
-    swapchain->swapchain_ops->swapchain_present(swapchain, &op->src_rect, &op->dst_rect, op->swap_interval, op->flags);
+    swapchain->swapchain_ops->swapchain_present(swapchain, op->rects, &op->rects[op->rect_count],
+            op->rect_count, op->has_scroll ? &op->scroll_rect : NULL, &op->scroll_offset,
+            op->swap_interval, op->flags);
 
     /* Discard buffers if the swap effect allows it. */
     back_buffer = swapchain->back_buffers[desc->backbuffer_count - 1];
@@ -765,22 +770,35 @@ static void wined3d_cs_exec_present(struct wined3d_cs *cs, const void *data)
 }
 
 void wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *swapchain,
-        const RECT *src_rect, const RECT *dst_rect, HWND dst_window_override,
-        unsigned int swap_interval, uint32_t flags)
+        const RECT *src_rects, const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect,
+        const POINT *scroll_offset, HWND dst_window_override, unsigned int swap_interval, uint32_t flags)
 {
     struct wined3d_cs_present *op;
     unsigned int i;
 
     wined3d_not_from_cs(cs);
 
-    op = wined3d_device_context_require_space(&cs->c, sizeof(*op), WINED3D_CS_QUEUE_DEFAULT);
+    op = wined3d_device_context_require_space(&cs->c,
+            FIELD_OFFSET(struct wined3d_cs_present, rects[2 * rect_count]), WINED3D_CS_QUEUE_DEFAULT);
     op->opcode = WINED3D_CS_OP_PRESENT;
     op->dst_window_override = dst_window_override;
     op->swapchain = swapchain;
-    op->src_rect = *src_rect;
-    op->dst_rect = *dst_rect;
+    op->rect_count = rect_count;
+    memcpy(op->rects, src_rects, sizeof(*src_rects) * rect_count);
+    memcpy(&op->rects[rect_count], dst_rects, sizeof(*dst_rects) * rect_count);
     op->swap_interval = swap_interval;
     op->flags = flags;
+    op->has_scroll = !!scroll_rect;
+    if (scroll_rect)
+    {
+        op->scroll_rect = *scroll_rect;
+        op->scroll_offset = *scroll_offset;
+    }
+    else
+    {
+        SetRectEmpty(&op->scroll_rect);
+        op->scroll_offset.x = op->scroll_offset.y = 0;
+    }
 
     wined3d_resource_reference(&swapchain->front_buffer->resource);
     for (i = 0; i < swapchain->state.desc.backbuffer_count; ++i)
