@@ -924,6 +924,59 @@ SoftGpuRootMaskField(
     return Mask == 0 && Bits <= 16;
 }
 
+static ULONGLONG
+SoftGpuRootPhysicalBytes(VOID)
+{
+    static ULONGLONG Cached = 0;
+    PPHYSICAL_MEMORY_RANGE Ranges;
+    ULONGLONG Bytes = 0;
+    ULONG Index;
+
+    if (Cached != 0)
+        return Cached;
+
+    Ranges = MmGetPhysicalMemoryRanges();
+    if (Ranges == NULL)
+        return 0;
+    for (Index = 0; Ranges[Index].NumberOfBytes.QuadPart != 0; Index++)
+        Bytes += (ULONGLONG)Ranges[Index].NumberOfBytes.QuadPart;
+    ExFreePool(Ranges);
+
+    Cached = Bytes;
+    return Bytes;
+}
+
+/* The slab is contiguous physical memory held for the adapter's lifetime, so the
+ * composition surfaces above the scanout minimum are capped at a thirty-second of
+ * the machine rather than taken unconditionally. */
+static ULONG
+SoftGpuRootWorkingSurfaceCount(
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    ULONGLONG Budget;
+    ULONG Count = SOFTGPU_ROOT_WORKING_SURFACE_COUNT;
+
+    Budget = SoftGpuRootPhysicalBytes() / 32;
+    if (Budget == 0)
+        return Count;
+
+    while (Count > SOFTGPU_2D_WORKING_SURFACE_COUNT)
+    {
+        SIZE_T SlabSize = 0;
+
+        if (!NT_SUCCESS(SoftGpu2dComputeAllocationSlabSize(Width, Height, Count,
+                                                           MAXULONG_PTR, &SlabSize)))
+            return SOFTGPU_2D_WORKING_SURFACE_COUNT;
+        if ((ULONGLONG)SlabSize <= Budget)
+            break;
+
+        Count = max(Count / 2, SOFTGPU_2D_WORKING_SURFACE_COUNT);
+    }
+
+    return Count;
+}
+
 static NTSTATUS
 SoftGpuRootLoaderShadowStart(
     _Inout_ PSOFTGPU_DEVICE Device,
@@ -1141,7 +1194,8 @@ SoftGpuPlatformQueryStart(
         Status = SoftGpu2dComputeAllocationSlabSize(
                      Config->Modes[Index].Width,
                      Config->Modes[Index].Height,
-                     SOFTGPU_ROOT_WORKING_SURFACE_COUNT,
+                     SoftGpuRootWorkingSurfaceCount(Config->Modes[Index].Width,
+                                                    Config->Modes[Index].Height),
                      MAXULONG_PTR,
                      &WorkingSetSize);
         if (!NT_SUCCESS(Status))
@@ -1160,7 +1214,7 @@ SoftGpuPlatformQueryStart(
     Status = SoftGpu2dComputeAllocationSlabSize(
                  Config->Width,
                  Config->Height,
-                 SOFTGPU_ROOT_WORKING_SURFACE_COUNT,
+                 SoftGpuRootWorkingSurfaceCount(Config->Width, Config->Height),
                  MAXULONG_PTR,
                  &WorkingSetSize);
     if (!NT_SUCCESS(Status))
