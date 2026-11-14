@@ -993,10 +993,12 @@ typedef struct _LX_ROBUST_LIST_HEAD
     ULONG64 ListOpPending;
 } LX_ROBUST_LIST_HEAD, *PLX_ROBUST_LIST_HEAD;
 
+#define LX_RLIMIT_DATA      2
 #define LX_RLIMIT_STACK     3
 #define LX_RLIMIT_CORE      4
 #define LX_RLIMIT_NOFILE    7
 #define LX_RLIMIT_MEMLOCK   8
+#define LX_RLIMIT_AS        9
 #define LX_RLIMIT_SIGPENDING 11
 #define LX_RLIMIT_NICE      13
 #define LX_RLIMIT_RTPRIO    14

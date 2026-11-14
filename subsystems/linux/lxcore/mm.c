@@ -3055,6 +3055,28 @@ LxMmMapHugeSection(
     return (Error != 0) ? Error : (LONG64)Base;
 }
 
+/* Called with the address space locked */
+static
+BOOLEAN
+LxMmWithinAddressLimit(
+    _In_ PLX_PROCESS Caller,
+    _In_ PLX_PROCESS Process,
+    _In_ ULONG64 Extra)
+{
+    ULONG64 Limit = Caller->Limits[LX_RLIMIT_AS].Cur, Total = 0;
+    PLIST_ENTRY Entry;
+
+    if (Limit == LX_RLIM_INFINITY)
+        return TRUE;
+    for (Entry = Process->Vmas.Flink; Entry != &Process->Vmas; Entry = Entry->Flink)
+    {
+        PLX_VMA Vma = CONTAINING_RECORD(Entry, LX_VMA, Link);
+
+        Total += Vma->End - Vma->Start;
+    }
+    return (Extra <= Limit) && (Total <= Limit - Extra);
+}
+
 LONG64
 LxMmMap(
     _In_ PLX_PROCESS Process,
@@ -3092,7 +3114,8 @@ LxMmMap(
         return -LX_EINVAL;
 
     LxMmLock(Process);
-    if (Process->VmaCount > LxMaxMapCount)
+    /* FIXME: a fixed mapping that replaces existing ones is charged in full against RLIMIT_AS */
+    if ((Process->VmaCount > LxMaxMapCount) || !LxMmWithinAddressLimit(Caller, Process, Length))
     {
         LxMmUnlock(Process);
         return -LX_ENOMEM;
@@ -5081,6 +5104,8 @@ LX_SYSCALL(LxSysBrk)
     if (NewCommitted > Process->BrkCommitted)
     {
         if (LxVmaOverlaps(Process, Process->BrkCommitted, NewCommitted) ||
+            (NewCommitted - Process->BrkBase > Call->Process->Limits[LX_RLIMIT_DATA].Cur) ||
+            !LxMmWithinAddressLimit(Call->Process, Process, NewCommitted - Process->BrkCommitted) ||
             ((Process->MmLockDefault != 0) &&
              !LxMmLockAllowed(Call->Process, Process, NewCommitted - Process->BrkCommitted)) ||
             (LxVmaInsert(Process, Process->BrkCommitted, NewCommitted, LX_PROT_READ | LX_PROT_WRITE,
