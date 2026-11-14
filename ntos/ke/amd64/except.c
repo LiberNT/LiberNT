@@ -420,6 +420,16 @@ KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
 {
     CONTEXT Context;
 
+    if (PreviousMode == KernelMode && ExceptionRecord->ExceptionCode != STATUS_BREAKPOINT)
+    {
+        KiAmd64BootReadout(BootReadoutException,
+                           ExceptionRecord->ExceptionCode,
+                           (ULONG64)ExceptionRecord->ExceptionAddress,
+                           ExceptionRecord->ExceptionInformation[0],
+                           ExceptionRecord->ExceptionInformation[1],
+                           TrapFrame->Rsp);
+    }
+
     /* Increase number of Exception Dispatches */
     KeGetCurrentPrcb()->KeExceptionDispatchCount++;
 
@@ -628,6 +638,13 @@ DECLSPEC_NORETURN
 KiSystemFatalException(IN ULONG ExceptionCode,
                        IN PKTRAP_FRAME TrapFrame)
 {
+    KiAmd64BootReadout(BootReadoutFatalTrap,
+                       ExceptionCode,
+                       TrapFrame->Rip,
+                       TrapFrame->Rsp,
+                       __readcr2(),
+                       TrapFrame->ErrorCode);
+
     /* Bugcheck the system */
     KeBugCheckWithTf(UNEXPECTED_KERNEL_MODE_TRAP,
                      ExceptionCode,
@@ -889,6 +906,13 @@ KiMcheckAbortHandler(
     ULONG64 Status, Address, Misc, ReportedStatus = 0;
     ULONG Bank, BankCount, ReportedBank = 0;
     BOOLEAN Found = FALSE;
+
+    KiAmd64BootReadout(BootReadoutMachineCheck,
+                       __readmsr(MSR_MCG_STATUS),
+                       TrapFrame->Rip,
+                       TrapFrame->Rsp,
+                       __readmsr(MSR_MCG_CAP),
+                       0);
 
     BankCount = (ULONG)(__readmsr(MSR_MCG_CAP) & 0xFF);
     DbgPrint("Machine check on processor %lu, global status 0x%I64x\n",

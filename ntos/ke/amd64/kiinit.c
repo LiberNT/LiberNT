@@ -521,6 +521,213 @@ KiInitModuleList(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
 }
 
+#define KI_BOOT_MARK_COLUMNS 8
+#define KI_BOOT_MARK_ROWS    4
+#define KI_BOOT_MARK_WIDTH   40
+#define KI_BOOT_MARK_HEIGHT  20
+#define KI_BOOT_MARK_GAP     6
+#define KI_BOOT_MARK_BELOW   112
+#define KI_BOOT_HEX_SCALE    4
+#define KI_BOOT_HEX_PITCH    (4 * KI_BOOT_HEX_SCALE)
+#define KI_BOOT_HEX_LINE     (7 * KI_BOOT_HEX_SCALE)
+#define KI_BOOT_HEX_LINES    5
+#define KI_BOOT_HEX_SLOT     (KI_BOOT_HEX_LINES * KI_BOOT_HEX_LINE + 12)
+#define KI_BOOT_HEX_SLOTS    4
+#define KI_BOOT_CPUID_MCA    0x00004000
+
+C_ASSERT(BootMarkMaximum <= KI_BOOT_MARK_COLUMNS * KI_BOOT_MARK_ROWS);
+
+static volatile ULONG* KiBootMarkPixels;
+static ULONG KiBootMarkPitch, KiBootMarkLeft, KiBootMarkTop;
+static ULONG KiBootHexLeft, KiBootHexSlot, KiBootHexSlots;
+
+static
+BOOLEAN
+KiAmd64BootMarkWanted(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    static const CHAR Option[] = "DEBUGPORT=SCREEN";
+    PCHAR Options = LoaderBlock->LoadOptions;
+
+    if (Options == NULL)
+        return FALSE;
+
+    for (; *Options != ANSI_NULL; Options++)
+    {
+        if (_strnicmp(Options, Option, sizeof(Option) - 1) == 0)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+BOOLEAN
+KiAmd64BootMarkMapped(
+    _In_ ULONG_PTR First,
+    _In_ ULONG_PTR Last)
+{
+    ULONG_PTR Address;
+
+    for (Address = First & ~(ULONG_PTR)(PAGE_SIZE - 1); Address <= Last; Address += PAGE_SIZE)
+    {
+        if (!MiAddressToPxe((PVOID)Address)->u.Hard.Valid ||
+            !MiAddressToPpe((PVOID)Address)->u.Hard.Valid)
+        {
+            return FALSE;
+        }
+
+        if (MiAddressToPpe((PVOID)Address)->u.Hard.LargePage)
+            continue;
+
+        if (!MiAddressToPde((PVOID)Address)->u.Hard.Valid)
+            return FALSE;
+
+        if (MiAddressToPde((PVOID)Address)->u.Hard.LargePage)
+            continue;
+
+        if (!MiAddressToPte((PVOID)Address)->u.Hard.Valid)
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
+VOID
+KiAmd64BootHexLine(
+    _In_ ULONG Slot,
+    _In_ ULONG Line,
+    _In_ ULONG64 Value,
+    _In_ ULONG Colour)
+{
+    static const USHORT Glyphs[16] = { 0x7B6F, 0x2C97, 0x73E7, 0x73CF, 0x5BC9, 0x79CF, 0x79EF, 0x7249, 0x7BEF, 0x7BCF, 0x7BED, 0x6BAE, 0x7927, 0x6B6E, 0x79E7, 0x79E4 };
+    volatile ULONG* Pixels = KiBootMarkPixels;
+    ULONG Top = 8 + Slot * KI_BOOT_HEX_SLOT + Line * KI_BOOT_HEX_LINE;
+    ULONG Digit, Row, Col, Left, Bits;
+    BOOLEAN On;
+
+    for (Digit = 0; Digit < 16; Digit++)
+    {
+        Bits = Glyphs[(Value >> ((15 - Digit) * 4)) & 0xF];
+        Left = KiBootHexLeft + Digit * KI_BOOT_HEX_PITCH;
+        for (Row = 0; Row < KI_BOOT_HEX_LINE; Row++)
+        {
+            for (Col = 0; Col < KI_BOOT_HEX_PITCH; Col++)
+            {
+                On = Row < 5 * KI_BOOT_HEX_SCALE && Col < 3 * KI_BOOT_HEX_SCALE &&
+                     ((Bits >> (14 - ((Row / KI_BOOT_HEX_SCALE) * 3 + Col / KI_BOOT_HEX_SCALE))) & 1);
+                Pixels[(Top + Row) * KiBootMarkPitch + Left + Col] = On ? Colour : 0;
+            }
+        }
+    }
+}
+
+VOID
+NTAPI
+KiAmd64BootReadout(
+    _In_ ULONG Source,
+    _In_ ULONG64 Code,
+    _In_ ULONG64 A,
+    _In_ ULONG64 B,
+    _In_ ULONG64 C,
+    _In_ ULONG64 D)
+{
+    ULONG Slot;
+
+    if (KiBootMarkPixels == NULL || KiBootHexSlot >= KiBootHexSlots)
+        return;
+
+    Slot = KiBootHexSlot++;
+    KiAmd64BootHexLine(Slot, 0, ((ULONG64)Source << 60) | (Code & 0x0FFFFFFFFFFFFFFFULL), 0x00FFFF00);
+    KiAmd64BootHexLine(Slot, 1, A, 0x00FFFFFF);
+    KiAmd64BootHexLine(Slot, 2, B, 0x00FFFFFF);
+    KiAmd64BootHexLine(Slot, 3, C, 0x00FFFFFF);
+    KiAmd64BootHexLine(Slot, 4, D, 0x00FFFFFF);
+}
+
+VOID
+NTAPI
+KiAmd64BootMarkStop(VOID)
+{
+    KiBootMarkPixels = NULL;
+}
+
+static
+VOID
+KiAmd64BootMarkStart(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    PLOADER_PARAMETER_EXTENSION Extension = LoaderBlock->Extension;
+    ULONG GridWidth = KI_BOOT_MARK_COLUMNS * (KI_BOOT_MARK_WIDTH + KI_BOOT_MARK_GAP);
+    ULONG GridHeight = KI_BOOT_MARK_ROWS * (KI_BOOT_MARK_HEIGHT + KI_BOOT_MARK_GAP);
+    ULONG Width, Height, Pitch;
+    ULONG_PTR Base;
+    int CpuInfo[4];
+
+    if (Extension == NULL ||
+        Extension->GopFramebuffer.FrameBufferBase.QuadPart == 0 ||
+        Extension->GopFramebuffer.PixelFormat != 32 ||
+        !KiAmd64BootMarkWanted(LoaderBlock))
+    {
+        return;
+    }
+
+    Width = Extension->GopFramebuffer.HorizontalResolution;
+    Height = Extension->GopFramebuffer.VerticalResolution;
+    Pitch = Extension->GopFramebuffer.PixelsPerScanLine;
+    if (Pitch < Width ||
+        Width < max(GridWidth, 16 * KI_BOOT_HEX_PITCH + 8) ||
+        Height < GridHeight + KI_BOOT_MARK_BELOW + 8 + KI_BOOT_HEX_SLOT ||
+        (ULONG64)Pitch * Height * sizeof(ULONG) > Extension->GopFramebuffer.FrameBufferSize)
+    {
+        return;
+    }
+
+    /* The loader leaves this view only when it drew its own marks; any other loader leaves none */
+    Base = (ULONG_PTR)(KSEG0_BASE + Extension->GopFramebuffer.FrameBufferBase.QuadPart);
+    if (!KiAmd64BootMarkMapped(Base, Base + (ULONG_PTR)Pitch * Height * sizeof(ULONG) - 1))
+        return;
+
+    KiBootMarkPitch = Pitch;
+    KiBootMarkLeft = Width - GridWidth;
+    KiBootMarkTop = Height - KI_BOOT_MARK_BELOW - GridHeight;
+    KiBootHexLeft = Width - 16 * KI_BOOT_HEX_PITCH - 8;
+    KiBootHexSlots = min((KiBootMarkTop - 8) / KI_BOOT_HEX_SLOT, KI_BOOT_HEX_SLOTS);
+    KiBootMarkPixels = (volatile ULONG*)Base;
+
+    __cpuid(CpuInfo, 1);
+    KiAmd64BootReadout(BootReadoutProcessorState,
+                       __readcr4(),
+                       __readcr0(),
+                       __readmsr(MSR_EFER),
+                       (CpuInfo[3] & KI_BOOT_CPUID_MCA) ? __readmsr(MSR_MCG_STATUS) : 0,
+                       (CpuInfo[3] & KI_BOOT_CPUID_MCA) ? __readmsr(MSR_MCG_CAP) : 0);
+}
+
+VOID
+NTAPI
+KiAmd64BootMark(
+    _In_ ULONG Mark)
+{
+    static const ULONG Colours[KI_BOOT_MARK_ROWS] =
+        { 0x00FFFFFF, 0x0000FFFF, 0x00FF00FF, 0x00FF8000 };
+    volatile ULONG* Pixels = KiBootMarkPixels;
+    ULONG Row, Col, Left, Top;
+
+    if (Pixels == NULL || Mark >= BootMarkMaximum)
+        return;
+
+    Left = KiBootMarkLeft + (Mark % KI_BOOT_MARK_COLUMNS) * (KI_BOOT_MARK_WIDTH + KI_BOOT_MARK_GAP);
+    Top = KiBootMarkTop + (Mark / KI_BOOT_MARK_COLUMNS) * (KI_BOOT_MARK_HEIGHT + KI_BOOT_MARK_GAP);
+
+    for (Row = 0; Row < KI_BOOT_MARK_HEIGHT; Row++)
+    {
+        for (Col = 0; Col < KI_BOOT_MARK_WIDTH; Col++)
+            Pixels[(Top + Row) * KiBootMarkPitch + Left + Col] = Colours[Mark / KI_BOOT_MARK_COLUMNS];
+    }
+}
+
 CODE_SEG("INIT")
 DECLSPEC_NORETURN
 VOID
@@ -550,6 +757,8 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
         /* Prepare LoaderBlock, PCR, TSS with the P0 boot data */
         KiInitializeP0BootStructures(LoaderBlock);
+        KiAmd64BootMarkStart(LoaderBlock);
+        KiAmd64BootMark(BootMarkBootStructures);
     }
     else
     {
@@ -575,6 +784,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Initialize the CPU features */
     KiInitializeCpu(Pcr);
+    KiAmd64BootMark(BootMarkProcessor);
 
     /* Initial setup for the boot CPU */
     if (Cpu == 0)
@@ -586,12 +796,15 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
         /* Initialize the module list (ntos, hal, kdcom) */
         KiInitModuleList(LoaderBlock);
+        KiAmd64BootMark(BootMarkModuleList);
 
         /* Setup the IDT */
         KeInitExceptions();
+        KiAmd64BootMark(BootMarkExceptions);
 
         /* Initialize the kernel VA layout */
         MiInitializeKernelVaLayout(LoaderBlock);
+        KiAmd64BootMark(BootMarkVaLayout);
     }
 
     KiCpuId(&CpuInfo, 1);
@@ -606,7 +819,9 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
 
     /* Initialize the Processor with HAL */
+    KiAmd64BootMark(BootMarkHalProcessorEntry);
     HalInitializeProcessor(Cpu, KeLoaderBlock);
+    KiAmd64BootMark(BootMarkHalProcessor);
 
     /* The HAL has chosen how it reaches the local APIC; the end of an
      * interrupt has to be written the same way. */
@@ -624,6 +839,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     {
         /* Initialize debugging system */
         KdInitSystem(0, KeLoaderBlock);
+        KiAmd64BootMark(BootMarkDebugger);
 
         /* Check for break-in */
         if (KdPollBreakIn()) DbgBreakPointWithStatus(DBG_STATUS_CONTROL_C);
@@ -637,9 +853,11 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Machine specific kernel initialization */
     if (Cpu == 0) KiInitializeKernelMachineDependent(&Pcr->Prcb, LoaderBlock);
+    KiAmd64BootMark(BootMarkMachineDependent);
 
     /* Initialize extended state management */
     KiInitializeXStateConfiguration(Cpu);
+    KiAmd64BootMark(BootMarkExtendedState);
 
     /* Calculate the initial stack pointer */
     InitialStack = ALIGN_DOWN_BY(LoaderBlock->KernelStack - KeXStateLength, 64);

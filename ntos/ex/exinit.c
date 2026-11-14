@@ -963,6 +963,7 @@ ExpInitializeExecutive(
     {
         KeBugCheck(PHASE0_INITIALIZATION_FAILED);
     }
+    KiArchBootMark(BootMarkNls);
     ExpInitializeSystemRoot(LoaderBlock);
     ExpInitializeImageNumbers(LoaderBlock);
 
@@ -985,7 +986,9 @@ ExpInitializeExecutive(
     ExpTickCountMultiplier = ExComputeTickCountMultiplier(KeMaximumIncrement);
     SharedUserData->TickCountMultiplier = ExpTickCountMultiplier;
 
+    KiArchBootMark(BootMarkHal);
     ExArchPostHalInitSystemPhase0();
+    KiArchBootMark(BootMarkPostHal);
 
     /*
      * The locks, handle tables and resources everything else reaches for come
@@ -1001,10 +1004,12 @@ ExpInitializeExecutive(
         KeBugCheck(PHASE0_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkEarlyMemory);
     ExpInitLookasideLists();
     ExInitPoolLookasidePointers();
 
     KdInitSystem(0, LoaderBlock);
+    KiArchBootMark(BootMarkPoolLists);
 
     if (!MmInitSystem(0, LoaderBlock))
     {
@@ -1012,6 +1017,7 @@ ExpInitializeExecutive(
     }
 
     /* TODO: the images the loader brought are not announced to the debugger, nor checked for multiprocessor use */
+    KiArchBootMark(BootMarkMemory);
     KiInitializeBugCheck();
 
     /* What the registry holds for the kernel is read from the hive the loader left in memory */
@@ -1025,26 +1031,31 @@ ExpInitializeExecutive(
         KeBugCheck(OBJECT_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkObjects);
     if (!ExInitSystem())
     {
         KeBugCheck(PHASE0_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkExecutive);
     if (!SeInitSystem())
     {
         KeBugCheck(SECURITY_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkSecurity);
     if (!PsInitSystem(LoaderBlock))
     {
         KeBugCheck(PROCESS_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkProcesses);
     if (!PoInitSystem(0))
     {
         KeBugCheck(PHASE0_INITIALIZATION_FAILED);
     }
 
+    KiArchBootMark(BootMarkPower);
     HeadlessInit(LoaderBlock);
     XIPInit(LoaderBlock);
 

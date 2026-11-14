@@ -401,10 +401,45 @@ Amd64UseFirmwareIdentity(
     __writecr3(__readcr3());
 }
 
+#define AMD64_HANDOFF_MARKS         4
+#define AMD64_HANDOFF_MARK_ROWS     24
+#define AMD64_HANDOFF_MARK_COLUMNS  160
+
+static
+VOID
+Amd64HandoffMark(
+    _In_ ULONG64 FrameBuffer,
+    _In_ ULONG Pitch,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG Mark)
+{
+    static const ULONG Colours[AMD64_HANDOFF_MARKS] =
+        { 0x00FF0000, 0x0000FF00, 0x000000FF, 0x00FFFF00 };
+    volatile ULONG* Pixels = (volatile ULONG*)(ULONG_PTR)FrameBuffer;
+    ULONG Row, Col, Left, Top;
+
+    if (FrameBuffer == 0 || Mark >= AMD64_HANDOFF_MARKS)
+        return;
+
+    Left = Width - AMD64_HANDOFF_MARK_COLUMNS;
+    Top = Height - (AMD64_HANDOFF_MARKS - Mark) * AMD64_HANDOFF_MARK_ROWS;
+
+    for (Row = 0; Row < AMD64_HANDOFF_MARK_ROWS; Row++)
+    {
+        for (Col = 0; Col < AMD64_HANDOFF_MARK_COLUMNS; Col++)
+            Pixels[(Top + Row) * Pitch + Left + Col] = Colours[Mark];
+    }
+}
+
 BOOLEAN
 OslArchPrepareHandoff(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    PLOADER_PARAMETER_EXTENSION Extension = VaToPa(LoaderBlock->Extension);
+    ULONG64 FbPhysical = 0, FbVirtual = 0;
+    ULONG FbPitch = 0, FbWidth = 0, FbHeight = 0;
+
     WinLdrSetupMachineDependent(LoaderBlock);
     OslTrace("OS loader: machine-dependent state built, amd64 %s",
              Amd64Ready ? "ready" : "NOT ready");
@@ -418,18 +453,48 @@ OslArchPrepareHandoff(
     OslTrace("OS loader: kernel memory layout built, its pml4 at %p, firmware cr3 still %p",
              Amd64Pml4, (PVOID)__readcr3());
 
+    /* A screen debug boot loses every log at this point, so the steps left are marked on the framebuffer, which the kernel goes on doing through the view made here */
+    if (FwDebugScreen &&
+        Extension != NULL &&
+        Extension->GopFramebuffer.FrameBufferBase.QuadPart != 0 &&
+        Extension->GopFramebuffer.PixelFormat == 32 &&
+        Extension->GopFramebuffer.PixelsPerScanLine >= Extension->GopFramebuffer.HorizontalResolution &&
+        Extension->GopFramebuffer.HorizontalResolution >= AMD64_HANDOFF_MARK_COLUMNS &&
+        Extension->GopFramebuffer.VerticalResolution >= AMD64_HANDOFF_MARKS * AMD64_HANDOFF_MARK_ROWS &&
+        (ULONG64)Extension->GopFramebuffer.PixelsPerScanLine * Extension->GopFramebuffer.VerticalResolution *
+        sizeof(ULONG) <= Extension->GopFramebuffer.FrameBufferSize &&
+        OslArchMapFirmwareRuntime(Extension->GopFramebuffer.FrameBufferBase.QuadPart,
+                                  (Extension->GopFramebuffer.FrameBufferSize + MM_PAGE_SIZE - 1) / MM_PAGE_SIZE,
+                                  TRUE,
+                                  FALSE,
+                                  &FbVirtual))
+    {
+        FbPhysical = Extension->GopFramebuffer.FrameBufferBase.QuadPart;
+        FbPitch = Extension->GopFramebuffer.PixelsPerScanLine;
+        FbWidth = Extension->GopFramebuffer.HorizontalResolution;
+        FbHeight = Extension->GopFramebuffer.VerticalResolution;
+    }
+    else
+    {
+        FbVirtual = 0;
+    }
+
     OslTrace("OS loader: leaving the firmware boot services");
+    Amd64HandoffMark(FbPhysical, FbPitch, FbWidth, FbHeight, 0);
     FwExitBootServices();
+    Amd64HandoffMark(FbPhysical, FbPitch, FbWidth, FbHeight, 1);
     OslTrace("OS loader: firmware boot services exited");
 
     Amd64SaveFirmwareIdentity();
     WinLdrSetProcessorContext(OSL_NT_VERSION);
+    Amd64HandoffMark(FbVirtual, FbPitch, FbWidth, FbHeight, 2);
     OslTrace("OS loader: processor context set, cr3 %p cr4 %p",
              (PVOID)__readcr3(), (PVOID)__readcr4());
 
     Amd64UseFirmwareIdentity(TRUE);
     FwSetVirtualAddressMap();
     Amd64UseFirmwareIdentity(FALSE);
+    Amd64HandoffMark(FbVirtual, FbPitch, FbWidth, FbHeight, 3);
     OslTrace("OS loader: firmware runtime moved to its virtual addresses");
     return TRUE;
 }

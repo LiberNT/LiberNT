@@ -872,6 +872,13 @@ KeBugCheckWithTf(
     PCONTEXT ContextPointer = NULL;
     PCONTEXT ExceptionContext = NULL;
 
+    KiArchBootReadout(BootReadoutBugCheck,
+                      BugCheckCode,
+                      BugCheckParameter1,
+                      BugCheckParameter2,
+                      BugCheckParameter3,
+                      BugCheckParameter4);
+
     /* Nothing on this processor may interrupt what follows */
     KfRaiseIrql(HIGH_LEVEL);
 

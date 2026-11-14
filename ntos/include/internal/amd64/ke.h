@@ -815,6 +815,30 @@ KiClearDpcThreadState(
 } // extern "C"
 #endif
 
+#ifndef __ASM__
+VOID
+NTAPI
+KiAmd64BootMark(
+    _In_ ULONG Mark);
+
+VOID
+NTAPI
+KiAmd64BootMarkStop(VOID);
+
+VOID
+NTAPI
+KiAmd64BootReadout(
+    _In_ ULONG Source,
+    _In_ ULONG64 Code,
+    _In_ ULONG64 A,
+    _In_ ULONG64 B,
+    _In_ ULONG64 C,
+    _In_ ULONG64 D);
+
+#define KiArchBootMark(Mark) KiAmd64BootMark(Mark)
+#define KiArchBootReadout(Source, Code, A, B, C, D) KiAmd64BootReadout(Source, Code, A, B, C, D)
+#endif
+
 #endif /* __NTOSKRNL_INCLUDE_INTERNAL_AMD64_KE_H */
 
 /* EOF */

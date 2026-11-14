@@ -24,6 +24,57 @@
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif
 
+typedef enum _KI_BOOT_MARK
+{
+    BootMarkBootStructures,
+    BootMarkProcessor,
+    BootMarkModuleList,
+    BootMarkExceptions,
+    BootMarkVaLayout,
+    BootMarkHalProcessorEntry,
+    BootMarkHalProcessor,
+    BootMarkDebugger,
+    BootMarkMachineDependent,
+    BootMarkExtendedState,
+    BootMarkBootStack,
+    BootMarkPrcbLocks,
+    BootMarkApcLevel,
+    BootMarkExecutiveEntry,
+    BootMarkNls,
+    BootMarkHal,
+    BootMarkPostHal,
+    BootMarkEarlyMemory,
+    BootMarkPoolLists,
+    BootMarkMemory,
+    BootMarkObjects,
+    BootMarkExecutive,
+    BootMarkSecurity,
+    BootMarkProcesses,
+    BootMarkPower,
+    BootMarkExecutiveDone,
+    BootMarkCpuFrequency,
+    BootMarkIdleLoop,
+    BootMarkMaximum
+} KI_BOOT_MARK;
+
+typedef enum _KI_BOOT_READOUT
+{
+    BootReadoutProcessorState,
+    BootReadoutException,
+    BootReadoutFatalTrap,
+    BootReadoutMachineCheck,
+    BootReadoutBugCheck
+} KI_BOOT_READOUT;
+
+#ifndef KiArchBootMark
+/* TODO: the boot marks of a DEBUGPORT=SCREEN boot are drawn on amd64 only */
+#define KiArchBootMark(Mark) ((VOID)(Mark))
+#endif
+
+#ifndef KiArchBootReadout
+#define KiArchBootReadout(Source, Code, A, B, C, D) ((VOID)(Source))
+#endif
+
 #ifndef KiPrcbGroup
 #define KiPrcbGroup(Prcb) ((Prcb)->Group)
 #endif

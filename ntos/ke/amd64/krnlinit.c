@@ -156,6 +156,8 @@ KiSystemStartupBootStack(VOID)
     PKPROCESS Process = Thread->ApcState.Process;
     PVOID KernelStack = (PVOID)KeLoaderBlock->KernelStack;
 
+    KiAmd64BootMark(BootMarkBootStack);
+
     /* Set Node Data */
     Prcb->ParentNode = KeNodeBlock[0];
     Prcb->ParentNode->ProcessorMask |= Prcb->SetMember;
@@ -178,9 +180,11 @@ KiSystemStartupBootStack(VOID)
     Prcb->IdleThread = Thread;
 
     ExInitPoolLookasidePointers();
+    KiAmd64BootMark(BootMarkPrcbLocks);
 
     /* Lower to APC_LEVEL */
     KeLowerIrql(APC_LEVEL);
+    KiAmd64BootMark(BootMarkApcLevel);
 
     /* Check if this is the boot cpu */
     if (Prcb->Number == 0)
@@ -196,6 +200,7 @@ KiSystemStartupBootStack(VOID)
 
     /* Calculate the CPU frequency */
     KiCalculateCpuFrequency(Prcb);
+    KiAmd64BootMark(BootMarkCpuFrequency);
 
     /* Raise to Dispatch */
     KfRaiseIrql(DISPATCH_LEVEL);
@@ -229,6 +234,9 @@ KiSystemStartupBootStack(VOID)
 
     /* Set the right wait IRQL */
     Thread->WaitIrql = DISPATCH_LEVEL;
+
+    KiAmd64BootMark(BootMarkIdleLoop);
+    KiAmd64BootMarkStop();
 
     /* Jump into the idle loop */
     KiIdleLoop();
@@ -312,7 +320,9 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     KiInitializeHandBuiltThread(InitThread, InitProcess, IdleStack);
 
     /* Initialize the Kernel Executive */
+    KiAmd64BootMark(BootMarkExecutiveEntry);
     ExpInitializeExecutive(0, LoaderBlock);
+    KiAmd64BootMark(BootMarkExecutiveDone);
 
     /* Calculate the time reciprocal */
     KiTimeIncrementReciprocal =
