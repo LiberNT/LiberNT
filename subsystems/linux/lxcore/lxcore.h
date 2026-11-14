@@ -782,6 +782,7 @@ struct _LX_THREAD
     ULONG64 RobustList;
     LONG64 Restart;
     ULONG64 RestartArgument;
+    LONG64 SleepDeadline;
     PLX_NS NsOverride[LxNsCount];
     PLX_FS_STATE Fs;
     struct _LX_THREAD *Vfork;

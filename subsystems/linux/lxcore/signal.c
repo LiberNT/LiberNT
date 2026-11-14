@@ -1061,6 +1061,7 @@ LxSignalCheckPending(
         if ((Restart == -LX_ERESTARTNOINTR) || ((Restart == -LX_ERESTARTSYS) && (Action.Flags & LX_SA_RESTART)))
             LxArchRestartSyscall(TrapFrame, Thread->RestartArgument);
         Blocked = Thread->SigMask;
+        Thread->SleepDeadline = 0;
         if (!LxSignalDeliver(Thread, TrapFrame, ExceptionFrame, Signal, &Info, &Action))
             LxProcessExitGroup(Process, LX_SIGSEGV);
         if (Shared && ((ULONG64)Process->Pending & ~Thread->SigMask))

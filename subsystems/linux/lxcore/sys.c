@@ -340,6 +340,44 @@ LxClockKnown(
 
 static
 LONG64
+LxSleepInterval(
+    _In_ PLX_CALL Call,
+    _In_ LONG64 Interval100ns,
+    _In_ ULONG64 RemainPointer)
+{
+    PLX_THREAD Thread = Call->Thread;
+    LONG64 Now = (LONG64)KeQueryInterruptTime();
+    LONG64 Deadline = Thread->SleepDeadline;
+    LONG64 Result;
+
+    Thread->SleepDeadline = 0;
+    if (Deadline == 0)
+        Deadline = (Interval100ns > MAXLONG64 - Now) ? MAXLONG64 : (Now + Interval100ns);
+
+    Result = LxSleep(Deadline - Now);
+    if (Result == -LX_EINTR)
+    {
+        LONG64 Left = Deadline - (LONG64)KeQueryInterruptTime();
+
+        if (Left <= 0)
+            return 0;
+        if (RemainPointer != 0)
+        {
+            LX_TIMESPEC Remaining;
+
+            Remaining.Seconds = Left / 10000000;
+            Remaining.Nanoseconds = (Left % 10000000) * 100;
+            LxCopyToUser(RemainPointer, &Remaining, sizeof(Remaining));
+        }
+        /* A sleep no handler interrupts starts again and waits only for what is left of it */
+        Thread->SleepDeadline = Deadline;
+        return -LX_ERESTARTNOHAND;
+    }
+    return Result;
+}
+
+static
+LONG64
 LxAdjtimex(
     _In_ ULONG64 Pointer)
 {
@@ -822,22 +860,43 @@ LX_SYSCALL(LxSysNanosleep)
     if ((Request.Seconds < 0) || (Request.Nanoseconds < 0) || (Request.Nanoseconds >= 1000000000))
         return -LX_EINVAL;
 
-    Result = LxSleep(LxTimespecTo100ns(&Request));
-    if ((Result != 0) && (Call->Args[1] != 0))
-    {
-        LX_TIMESPEC Remaining = { 0, 0 };
-
-        LxCopyToUser(Call->Args[1], &Remaining, sizeof(Remaining));
-    }
-    return Result;
+    return LxSleepInterval(Call, LxTimespecTo100ns(&Request), Call->Args[1]);
 }
 
 LX_SYSCALL(LxSysClockNanosleep)
 {
     LX_TIMESPEC Request, Now;
-    LONG64 Result = LxCopyFromUser(&Request, Call->Args[2], sizeof(Request));
-    LONG64 Interval;
+    LONG Clock = (LONG)Call->Args[0];
+    LONG64 Result, Interval;
 
+    switch (Clock)
+    {
+        case LX_CLOCK_REALTIME:
+        case LX_CLOCK_MONOTONIC:
+        case LX_CLOCK_BOOTTIME:
+        case LX_CLOCK_TAI:
+        /* FIXME: a sleep against the process CPU-time clock waits in real time */
+        case LX_CLOCK_PROCESS_CPUTIME_ID:
+            break;
+
+        case LX_CLOCK_REALTIME_ALARM:
+        case LX_CLOCK_BOOTTIME_ALARM:
+            if (!LxCapable(Call->Process, LX_CAP_WAKE_ALARM))
+                return -LX_EPERM;
+            break;
+
+        case LX_CLOCK_THREAD_CPUTIME_ID:
+        case LX_CLOCK_MONOTONIC_RAW:
+        case LX_CLOCK_REALTIME_COARSE:
+        case LX_CLOCK_MONOTONIC_COARSE:
+            return -LX_EOPNOTSUPP;
+
+        default:
+            /* TODO: sleeping against the CPU-time clock of another process or thread is refused */
+            return (Clock < 0) ? -LX_EOPNOTSUPP : -LX_EINVAL;
+    }
+
+    Result = LxCopyFromUser(&Request, Call->Args[2], sizeof(Request));
     if (Result != 0)
         return Result;
     if ((Request.Seconds < 0) || (Request.Nanoseconds < 0) || (Request.Nanoseconds >= 1000000000))
@@ -846,14 +905,16 @@ LX_SYSCALL(LxSysClockNanosleep)
     Interval = LxTimespecTo100ns(&Request);
     if (Call->Args[1] & LX_TIMER_ABSTIME)
     {
-        LONG Error = LxQueryClockIn(Call->Process, (ULONG)Call->Args[0], &Now);
+        LONG Error = LxQueryClockIn(Call->Process, (ULONG)Clock, &Now);
 
         if (Error != 0)
             return Error;
         Interval -= Now.Seconds * 10000000 + Now.Nanoseconds / 100;
+        Result = LxSleep(Interval);
+        return (Result == -LX_EINTR) ? -LX_ERESTARTNOHAND : Result;
     }
 
-    return LxSleep(Interval);
+    return LxSleepInterval(Call, Interval, Call->Args[3]);
 }
 
 LX_SYSCALL(LxSysTimes)
