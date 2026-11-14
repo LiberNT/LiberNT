@@ -326,8 +326,10 @@ PointerCommitFrame(
             gTouchIdUsed[Slot->PointerId - POINTER_FIRST_TOUCH_ID] = FALSE;
             Slot->Active = FALSE;
             if (gTouchContacts)
+            {
                 ASSERT(UserIsEnteredExclusive());
                 gTouchContacts--;
+            }
             if (!gTouchContacts)
                 gTouchPrimaryClaimed = FALSE;
         }
