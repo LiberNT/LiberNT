@@ -153,6 +153,8 @@ VOID NTAPI NeighborTimeoutDpcFn(PKDPC Dpc,
                                 PVOID SystemArgument1,
                                 PVOID SystemArgument2)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     NBFastTimeout();
     NteDadTimeout();
     RdiscTimeout();

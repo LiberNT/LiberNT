@@ -139,6 +139,8 @@ WfpFindSessionLocked(
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpSessions.Flink; Entry != &WfpSessions; Entry = Entry->Flink)
     {
         if (Entry == (PLIST_ENTRY)Handle)
@@ -171,6 +173,8 @@ WfpFindProviderLocked(
     PWFP_PROVIDER Provider;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpProviders.Flink; Entry != &WfpProviders; Entry = Entry->Flink)
     {
         Provider = CONTAINING_RECORD(Entry, WFP_PROVIDER, Link);
@@ -190,6 +194,8 @@ WfpFindSubLayerLocked(
     PWFP_SUBLAYER SubLayer;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpSubLayers.Flink; Entry != &WfpSubLayers; Entry = Entry->Flink)
     {
         SubLayer = CONTAINING_RECORD(Entry, WFP_SUBLAYER, Link);
@@ -208,6 +214,8 @@ WfpFindCalloutByKeyLocked(
 {
     PWFP_CALLOUT Callout;
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Entry = WfpCallouts.Flink; Entry != &WfpCallouts; Entry = Entry->Flink)
     {
@@ -243,6 +251,8 @@ BOOLEAN
 WfpReleaseCalloutLocked(
     _In_ PWFP_CALLOUT Callout)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (--Callout->References != 0)
     {
         return FALSE;
@@ -645,6 +655,8 @@ WfpSubLayerInUseLocked(
 {
     PWFP_FILTER Filter;
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Entry = WfpFilters.Flink; Entry != &WfpFilters; Entry = Entry->Flink)
     {
@@ -1426,6 +1438,8 @@ WfpInsertFilterLocked(
     PWFP_FILTER Other;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpFilters.Flink; Entry != &WfpFilters; Entry = Entry->Flink)
     {
         Other = CONTAINING_RECORD(Entry, WFP_FILTER, Link);
@@ -1670,6 +1684,8 @@ WfpFindFilterLocked(
 {
     PWFP_FILTER Filter;
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Entry = WfpFilters.Flink; Entry != &WfpFilters; Entry = Entry->Flink)
     {

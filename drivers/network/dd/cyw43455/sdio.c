@@ -869,6 +869,8 @@ CywBackplaneSetWindowLocked(
     ULONG Window = Address & SBSDIO_SBWINDOW_MASK;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     if (Window == Adapter->CurrentBackplaneWindow)
     {
         return STATUS_SUCCESS;

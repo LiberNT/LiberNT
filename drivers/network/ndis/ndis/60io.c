@@ -766,6 +766,8 @@ Ndis6DpcWrapper(
 
     UNREFERENCED_PARAMETER(Dpc);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Ext == NULL)
         return;
 

@@ -1154,6 +1154,8 @@ LibICMP6TimeoutDpc(PKDPC Dpc, PVOID ContextArg, PVOID SystemArgument1, PVOID Sys
 {
     PICMP6_ECHO_CONTEXT Context = ContextArg;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (InterlockedCompareExchange(&Context->Finished, 2, 0) == 0)
         LibICMP6Complete(Context, STATUS_TIMEOUT, IP_REQ_TIMED_OUT);
 }

@@ -86,6 +86,8 @@ DisconnectTimeoutDpc(PKDPC Dpc,
 {
     PCONNECTION_ENDPOINT Connection = (PCONNECTION_ENDPOINT)DeferredContext;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     IoQueueWorkItem(Connection->DisconnectWorkItem, DisconnectWorker, DelayedWorkQueue, Connection);
 }
 

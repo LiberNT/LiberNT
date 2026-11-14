@@ -777,6 +777,8 @@ E1000TxCompletionDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (TxQueue != NULL)
     {
         E1000ProcessTxCompletions(TxQueue);

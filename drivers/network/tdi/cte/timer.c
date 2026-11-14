@@ -38,6 +38,9 @@ InternalDpcRoutine(PKDPC Dpc,
     PCTE_TIMER Timer = (PCTE_TIMER)Context;
 
     /* Call our registered callback */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     Timer->Callback((struct _CTE_DELAYED_EVENT *)Timer, Timer->Context);
 }
 

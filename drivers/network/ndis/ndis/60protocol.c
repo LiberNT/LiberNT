@@ -408,6 +408,8 @@ static VOID
 Ndis6BindProtocolToAllAdaptersLocked(
     _In_ PNDIS6_PROTOCOL_DRIVER_BLOCK Block)
 {
+    ASSERT(Block != NULL);
+
     extern LIST_ENTRY AdapterListHead;
     extern KSPIN_LOCK AdapterListLock;
     PLIST_ENTRY entry;

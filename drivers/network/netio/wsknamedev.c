@@ -48,6 +48,8 @@ WskNameTakeWaiterLocked(VOID)
     PLIST_ENTRY Entry;
     PIRP Irp;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while (!IsListEmpty(&WskNameWaiters))
     {
         Entry = RemoveHeadList(&WskNameWaiters);
@@ -66,6 +68,8 @@ WskNameNextUndispatchedLocked(VOID)
     PLIST_ENTRY Entry;
     PWSKNAME_PENDING Pending;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WskNamePending.Flink; Entry != &WskNamePending; Entry = Entry->Flink)
     {
         Pending = CONTAINING_RECORD(Entry, WSKNAME_PENDING, Link);
@@ -82,6 +86,8 @@ WskNameHandOutLocked(
     _Inout_ PIRP Irp)
 {
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     Pending->Dispatched = TRUE;
     Pending->Server = Stack->FileObject;

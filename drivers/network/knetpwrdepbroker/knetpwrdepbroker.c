@@ -45,6 +45,8 @@ NpdBrokerTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&Broker->Lock);
     Broker->Acquired = FALSE;
     KeReleaseSpinLockFromDpcLevel(&Broker->Lock);

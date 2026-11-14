@@ -36,6 +36,8 @@ WfpFindFlowByIdLocked(
     PWFP_FLOW Flow;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpFlows.Flink; Entry != &WfpFlows; Entry = Entry->Flink)
     {
         Flow = CONTAINING_RECORD(Entry, WFP_FLOW, Link);
@@ -57,6 +59,8 @@ WfpFindContextLocked(
     PWFP_FLOW_CONTEXT FlowContext;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = Flow->Contexts.Flink; Entry != &Flow->Contexts; Entry = Entry->Flink)
     {
         FlowContext = CONTAINING_RECORD(Entry, WFP_FLOW_CONTEXT, Link);
@@ -75,6 +79,8 @@ WfpFindFlowContextLocked(
     _In_ PWFP_CALLOUT Callout)
 {
     PWFP_FLOW Flow;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (FlowId == 0)
     {
@@ -281,6 +287,8 @@ WfpFindFlowLocked(
 {
     PWFP_FLOW Flow;
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Entry = WfpFlows.Flink; Entry != &WfpFlows; Entry = Entry->Flink)
     {

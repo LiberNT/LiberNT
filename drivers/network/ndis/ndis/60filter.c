@@ -367,6 +367,8 @@ Ndis6FilterChainFindLocked(
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = FirstEntry;
          Entry != &Ext->FilterModuleList;
          Entry = WalkDown ? Entry->Flink : Entry->Blink)
@@ -2536,6 +2538,8 @@ Ndis6FilterOidFindCancelTargetLocked(
     PNDIS6_FILTER_OID_FRAME Frame;
     PNDIS6_FILTER_OID_FRAME SourceFrame = NULL;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (SourceModule == NULL)
     {
         Frame = Context->Top;
@@ -2575,6 +2579,8 @@ Ndis6FilterOidFindChildFrameLocked(
     _In_ PNDIS6_FILTER_OID_FRAME Parent)
 {
     PNDIS6_FILTER_OID_FRAME Frame;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Frame = Context->Top;
          Frame != NULL;
@@ -2755,6 +2761,9 @@ Ndis6FilterOidFrameForwardedRequestMatchesLocked(
     PNDIS6_FILTER_OID_FRAME TargetFrame;
 
     TargetFrame = Ndis6FilterOidFindChildFrameLocked(Context, SourceFrame);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (TargetFrame != NULL)
         return TargetFrame->RequestId == RequestId;
 

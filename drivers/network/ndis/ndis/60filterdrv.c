@@ -703,6 +703,8 @@ Ndis6AttachFilterModuleLocked(
     BOOLEAN AttachSucceeded = FALSE;
     KIRQL OldIrql;
 
+    ASSERT(Adapter != NULL);
+
     if (Ext == NULL || Block == NULL)
         return NDIS_STATUS_INVALID_PARAMETER;
 

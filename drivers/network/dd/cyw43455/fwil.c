@@ -972,6 +972,10 @@ CywSelectJoinChanspecLocked(
     LONG BestRssi = 0;
     BOOLEAN BestIs5G = FALSE;
 
+    ASSERT(Adapter != NULL);
+    ASSERT(Ssid != NULL);
+    ASSERT(!HasBssid || (Bssid != NULL));
+
     if (SsidLength == 0)
     {
         return 0;
@@ -1468,6 +1472,8 @@ static VOID
 CywClearLinkStateLocked(
     _Inout_ PCYW_ADAPTER Adapter)
 {
+    ASSERT(Adapter != NULL);
+
     Adapter->Associated = FALSE;
     Adapter->LinkUp = FALSE;
     Adapter->FirmwareHandshakeComplete = FALSE;
