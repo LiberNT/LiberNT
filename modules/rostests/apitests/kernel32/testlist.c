@@ -30,6 +30,7 @@ extern void func_ConsoleInputSignal(void);
 extern void func_ConsoleRequestStress(void);
 extern void func_ConsoleDbcsCells(void);
 extern void func_ConsoleProcessInheritance(void);
+extern void func_ConsoleReadSharedInput(void);
 extern void func_ConsoleVirtualTerminal(void);
 extern void func_CopyContext(void);
 extern void func_CpuSetsApi(void);
@@ -242,6 +243,7 @@ const struct test winetest_testlist[] =
     { "ConsoleRequestStress",        func_ConsoleRequestStress },
     { "ConsoleDbcsCells",            func_ConsoleDbcsCells },
     { "ConsoleProcessInheritance",   func_ConsoleProcessInheritance },
+    { "ConsoleReadSharedInput",      func_ConsoleReadSharedInput },
     { "ConsoleVirtualTerminal",      func_ConsoleVirtualTerminal },
     { "CopyContext",                 func_CopyContext },
     { "CpuSetsApi",                  func_CpuSetsApi },

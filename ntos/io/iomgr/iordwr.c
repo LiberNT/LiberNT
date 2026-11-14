@@ -1315,6 +1315,55 @@ NtUnlockFile(
     return IopIssueRequest(&Request, IopOtherTransfer);
 }
 
+static
+BOOLEAN
+IopTryFastDeviceControl(
+    _In_ PIOP_REQUEST Request,
+    _In_opt_ PIO_APC_ROUTINE ApcRoutine,
+    _In_opt_ PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _In_opt_ PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength,
+    _In_ ULONG IoControlCode,
+    _Out_ PIO_STATUS_BLOCK IoStatus)
+{
+    PFILE_OBJECT FileObject = Request->FileObject;
+    PFAST_IO_DISPATCH FastIo;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Request->DeviceObject != NULL);
+    ASSERT(!Request->SynchIo || Request->Locked);
+
+    /* TODO: a request with an APC routine, or on a file bound to a completion port, always gets a packet */
+    if (ApcRoutine != NULL || FileObject->CompletionContext != NULL) return FALSE;
+
+    FastIo = Request->DeviceObject->DriverObject->FastIoDispatch;
+    if (FastIo == NULL ||
+        FastIo->SizeOfFastIoDispatch < RTL_SIZEOF_THROUGH_FIELD(FAST_IO_DISPATCH, FastIoDeviceControl) ||
+        FastIo->FastIoDeviceControl == NULL)
+    {
+        return FALSE;
+    }
+
+    if (!FastIo->FastIoDeviceControl(FileObject,
+                                     TRUE,
+                                     InputBuffer,
+                                     InputBufferLength,
+                                     OutputBuffer,
+                                     OutputBufferLength,
+                                     IoControlCode,
+                                     IoStatus,
+                                     Request->DeviceObject))
+    {
+        return FALSE;
+    }
+
+    ASSERT(IoStatus->Status != STATUS_PENDING);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    return TRUE;
+}
+
 NTSTATUS
 IopDeviceFsIoControl(
     _In_ HANDLE DeviceHandle,
@@ -1330,6 +1379,7 @@ IopDeviceFsIoControl(
     _In_ BOOLEAN IsDevIoCtl)
 {
     ACCESS_MASK DesiredAccess;
+    IO_STATUS_BLOCK FastIoStatus;
     IOP_REQUEST Request;
     NTSTATUS Status;
     ULONG Method;
@@ -1356,6 +1406,28 @@ IopDeviceFsIoControl(
     if (!NT_SUCCESS(Status)) return Status;
 
     Irp = Request.Irp;
+
+    if (IsDevIoCtl &&
+        IopTryFastDeviceControl(&Request,
+                                UserApcRoutine,
+                                InputBuffer,
+                                InputBufferLength,
+                                OutputBuffer,
+                                OutputBufferLength,
+                                IoControlCode,
+                                &FastIoStatus))
+    {
+        /* An error given straight back leaves the caller's status block and event alone, as a failed packet does */
+        if (NT_ERROR(FastIoStatus.Status))
+        {
+            IopAbortRequest(&Request);
+            return FastIoStatus.Status;
+        }
+
+        /* TODO: the file's own event is not signalled when the fast routine finishes a request on a file opened for asynchronous I/O */
+        return IopFinishFastIo(&Request, &FastIoStatus, Irp->UserIosb, IopOtherTransfer);
+    }
+
     Irp->Flags = IRP_DEFER_IO_COMPLETION;
 
     Request.StackPtr->Parameters.DeviceIoControl.IoControlCode = IoControlCode;
