@@ -137,7 +137,9 @@ static LONG64 LxInetRead(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 L
 static LONG64 LxInetWrite(_In_ PLX_FILE File, _In_ ULONG64 Buffer, _In_ ULONG64 Length, _Inout_opt_ PLONG64 Offset);
 static LONG64 LxInetIoctl(_In_ PLX_FILE File, _In_ ULONG Request, _In_ ULONG64 Argument);
 static ULONG LxInetPoll(_In_ PLX_FILE File, _In_opt_ PLX_POLL_ENTRY Entry);
-static VOID LxInetDropStrangers(_In_ PLX_FILE File, _In_ PLX_INET_SOCKET Socket);
+static BOOLEAN LxInetFromPeer(_In_ PLX_INET_SOCKET Socket, _In_ PTA_IP_ADDRESS Source);
+static BOOLEAN LxInetSiftQueue(_In_ PLX_FILE File, _In_ PLX_INET_SOCKET Socket);
+static LONG LxInetTakeError(_In_ PLX_FILE File, _In_ PLX_INET_SOCKET Socket);
 static LONG LxInetStat(_In_ PLX_FILE File, _Out_ PLX_STAT Stat);
 static VOID LxInetRelease(_In_ PLX_FILE File);
 
@@ -615,12 +617,14 @@ LxInetMapEvents(
 
 static
 ULONG
-LxInetCurrentEvents(
-    _In_ PLX_INET_SOCKET Socket)
+LxInetQueryEvents(
+    _In_ PLX_INET_SOCKET Socket,
+    _Out_ PNTSTATUS ReadStatus)
 {
     AFD_POLL_INFO Info;
     ULONG_PTR Information;
 
+    *ReadStatus = STATUS_SUCCESS;
     RtlZeroMemory(&Info, sizeof(Info));
     Info.Timeout.QuadPart = 0;
     Info.HandleCount = 1;
@@ -628,7 +632,19 @@ LxInetCurrentEvents(
     Info.Handles[0].Events = LX_INET_EVENTS;
     if (!NT_SUCCESS(LxAfdIoctl(Socket, IOCTL_AFD_SELECT, &Info, sizeof(Info), &Info, sizeof(Info), &Information)))
         return 0;
+    if (Info.Handles[0].Events & AFD_EVENT_RECEIVE)
+        *ReadStatus = Info.Handles[0].Status;
     return Info.Handles[0].Events & LX_INET_EVENTS;
+}
+
+static
+ULONG
+LxInetCurrentEvents(
+    _In_ PLX_INET_SOCKET Socket)
+{
+    NTSTATUS ReadStatus;
+
+    return LxInetQueryEvents(Socket, &ReadStatus);
 }
 
 static VOID NTAPI LxInetSelectWork(_In_ PVOID Context);
@@ -1179,6 +1195,8 @@ LxInetCarryQueued(
         RtlZeroMemory(&Source, sizeof(Source));
         Received = LxInetTransfer(File, Socket, FALSE, Bounce, 65536, LX_MSG_DONTWAIT | LX_INET_GATE_HELD, &Source,
                                   &Truncated);
+        if (Received == -LX_ECONNREFUSED)
+            continue;
         if (Received < 0)
             break;
         if (Socket->QueuedAtConnect != 0)
@@ -1617,6 +1635,12 @@ LxInetSendmsg(
     PUCHAR Bounce;
     LONG64 Result;
 
+    if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid)
+    {
+        Result = LxInetTakeError(File, Socket);
+        if (Result != 0)
+            return -Result;
+    }
     if (Socket->ShutWrite)
         return ((Flags & LX_MSG_NOSIGNAL) || (Socket->Type != LX_SOCK_STREAM)) ? -LX_EPIPE : LxWriteFailed(LX_EPIPE);
 
@@ -1777,6 +1801,12 @@ LxInetRecvmsg(
         return -LX_EINVAL;
     if ((Socket->Type == LX_SOCK_STREAM) && (Socket->State != LX_INET_CONNECTED))
         return -LX_ENOTCONN;
+    if ((Socket->Type == LX_SOCK_DGRAM) && (Socket->Error != 0))
+    {
+        Result = InterlockedExchange(&Socket->Error, 0);
+        if (Result != 0)
+            return -Result;
+    }
     Drained = Socket->ShutRead && (Socket->Type == LX_SOCK_DGRAM);
     if (Socket->ShutRead && !Drained)
         return 0;
@@ -1808,6 +1838,23 @@ LxInetRecvmsg(
                                   (Drained || ((Done != 0) && !(Flags & LX_MSG_WAITALL))) ? (Flags | LX_MSG_DONTWAIT) :
                                                                                            Flags,
                                   (Socket->Type == LX_SOCK_DGRAM) ? &Source : NULL, &Truncated);
+        if ((Received == -LX_ECONNREFUSED) && (Socket->Type == LX_SOCK_DGRAM))
+        {
+            LONG Error;
+
+            /* A report that a datagram this socket sent reached no listener: only a connected socket hears of it */
+            if (Flags & LX_MSG_PEEK)
+                LxInetSiftQueue(File, Socket);
+            else if (Socket->PeerValid && LxInetFromPeer(Socket, &Source))
+                InterlockedExchange(&Socket->Error, LX_ECONNREFUSED);
+            Error = InterlockedExchange(&Socket->Error, 0);
+            if (Error != 0)
+            {
+                Result = -Error;
+                break;
+            }
+            continue;
+        }
         if (Received < 0)
         {
             /* A datagram socket shut for reading still hands out what is queued, then reads as ended */
@@ -1823,7 +1870,7 @@ LxInetRecvmsg(
                   (((PLX_SOCKADDR_IN)&Source)->Port != Socket->PeerPort)))
         {
             if (Flags & LX_MSG_PEEK)
-                LxInetDropStrangers(File, Socket);
+                LxInetSiftQueue(File, Socket);
             Truncated = FALSE;
             continue;
         }
@@ -2170,7 +2217,7 @@ LxInetGetsockopt(
                 Value = (LONG)Socket->Protocol;
                 return LxSockoptReturn(Call, &Value, sizeof(Value));
             case LX_SO_ERROR:
-                Value = InterlockedExchange(&Socket->Error, 0);
+                Value = LxInetTakeError(File, Socket);
                 return LxSockoptReturn(Call, &Value, sizeof(Value));
             case LX_SO_ACCEPTCONN:
                 Value = (Socket->State == LX_INET_LISTENING);
@@ -2330,16 +2377,30 @@ LxInetIoctl(
     return -LX_ENOTTY;
 }
 
-/* A connected datagram socket must not look readable for a datagram its reads would drop */
 static
-VOID
-LxInetDropStrangers(
+BOOLEAN
+LxInetFromPeer(
+    _In_ PLX_INET_SOCKET Socket,
+    _In_ PTA_IP_ADDRESS Source)
+{
+    return (((PLX_SOCKADDR_IN)Source)->Address == Socket->PeerAddress) &&
+           (((PLX_SOCKADDR_IN)Source)->Port == Socket->PeerPort);
+}
+
+/* Takes off the head of a datagram socket's queue what a read would never deliver: datagrams a connected socket
+   got from another sender, and reports that a datagram it sent reached no listener, which become its pending error
+   when they come from its peer. Returns whether anything was taken. */
+static
+BOOLEAN
+LxInetSiftQueue(
     _In_ PLX_FILE File,
     _In_ PLX_INET_SOCKET Socket)
 {
     ULONG Flags = LX_MSG_DONTWAIT | LX_INET_GATE_HELD;
+    BOOLEAN Taken = FALSE;
     TA_IP_ADDRESS Source;
     BOOLEAN Truncated;
+    LONG64 Result;
     UCHAR Byte;
 
     ASSERT(Socket->Type == LX_SOCK_DGRAM);
@@ -2349,18 +2410,37 @@ LxInetDropStrangers(
     for (;;)
     {
         RtlZeroMemory(&Source, sizeof(Source));
-        if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags | LX_MSG_PEEK, &Source, &Truncated) < 0)
-            break;
-        if (!Socket->PeerValid || (Socket->QueuedAtConnect != 0) ||
-            ((((PLX_SOCKADDR_IN)&Source)->Address == Socket->PeerAddress) &&
-             (((PLX_SOCKADDR_IN)&Source)->Port == Socket->PeerPort)))
+        Result = LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags | LX_MSG_PEEK, &Source, &Truncated);
+        if (Result == -LX_ECONNREFUSED)
         {
-            break;
+            if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags, &Source, &Truncated) != -LX_ECONNREFUSED)
+                break;
+            if (Socket->PeerValid && LxInetFromPeer(Socket, &Source))
+                InterlockedExchange(&Socket->Error, LX_ECONNREFUSED);
+            Taken = TRUE;
+            continue;
         }
+        if ((Result < 0) || !Socket->PeerValid || (Socket->QueuedAtConnect != 0) || LxInetFromPeer(Socket, &Source))
+            break;
         if (LxInetTransfer(File, Socket, FALSE, &Byte, sizeof(Byte), Flags, &Source, &Truncated) < 0)
             break;
+        Taken = TRUE;
     }
     KeSetEvent(&Socket->ReceiveGate, IO_NO_INCREMENT, FALSE);
+    return Taken;
+}
+
+/* The error a connected datagram socket owes its next call, once */
+static
+LONG
+LxInetTakeError(
+    _In_ PLX_FILE File,
+    _In_ PLX_INET_SOCKET Socket)
+{
+    /* TODO: this looks at the queue on every send of a connected datagram socket; AFD has no cheaper way to ask */
+    if ((Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid)
+        LxInetSiftQueue(File, Socket);
+    return InterlockedExchange(&Socket->Error, 0);
 }
 
 static
@@ -2371,6 +2451,7 @@ LxInetPoll(
 {
     PLX_INET_SOCKET Socket = File->Object;
     ULONG Mask, Current;
+    NTSTATUS ReadStatus;
 
     if (Entry != NULL)
         LxPollAdd(&Socket->Poll, Entry);
@@ -2393,11 +2474,12 @@ LxInetPoll(
             return 0;
     }
 
-    Current = LxInetCurrentEvents(Socket);
+    Current = LxInetQueryEvents(Socket, &ReadStatus);
     Mask = LxInetMapEvents(Socket, Current);
-    if ((Mask & LX_POLLIN) && (Socket->Type == LX_SOCK_DGRAM) && Socket->PeerValid && (Socket->QueuedAtConnect == 0))
+    if ((Mask & LX_POLLIN) && (Socket->Type == LX_SOCK_DGRAM) &&
+        ((Socket->PeerValid && (Socket->QueuedAtConnect == 0)) || (ReadStatus == STATUS_PORT_UNREACHABLE)) &&
+        LxInetSiftQueue(File, Socket))
     {
-        LxInetDropStrangers(File, Socket);
         Current = LxInetCurrentEvents(Socket);
         Mask = LxInetMapEvents(Socket, Current);
     }
