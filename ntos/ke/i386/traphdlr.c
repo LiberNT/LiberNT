@@ -1254,8 +1254,15 @@ KiCheckForSListFault(PKTRAP_FRAME TrapFrame)
         both fields to make sure we catch any concurrent modification of the
         S-List-header.
     */
+    /* TODO: ntos/ps/psstartup.c looks these labels up as
+     * RtlpInterlockedPopEntrySList*, while the system DLL exports them as
+     * ExpInterlockedPopEntrySList*, so KeUserPopEntrySListFault stays NULL and
+     * the user-mode half of this recovery never runs. Whatever that lookup
+     * ends up doing, a NULL label must not be compared against, or every fault
+     * at address zero answers to it. */
     if ((TrapFrame->Eip == (ULONG_PTR)ExpInterlockedPopEntrySListFault) ||
-        (TrapFrame->Eip == (ULONG_PTR)KeUserPopEntrySListFault))
+        ((KeUserPopEntrySListFault != NULL) &&
+         (TrapFrame->Eip == (ULONG_PTR)KeUserPopEntrySListFault)))
     {
         ULARGE_INTEGER SListHeader;
         PVOID ResumeAddress;
