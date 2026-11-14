@@ -27,6 +27,23 @@ ULONG ExPushLockSpinCount = 0;
 
 static
 PEX_PUSH_LOCK_WAIT_BLOCK
+ExpReadBlockLink(
+    _In_ PEX_PUSH_LOCK_WAIT_BLOCK const volatile *Link)
+{
+    return (PEX_PUSH_LOCK_WAIT_BLOCK)ReadPointerNoFence((PVOID const volatile *)Link);
+}
+
+static
+VOID
+ExpWriteBlockLink(
+    _Out_ PEX_PUSH_LOCK_WAIT_BLOCK volatile *Link,
+    _In_opt_ PEX_PUSH_LOCK_WAIT_BLOCK Block)
+{
+    WritePointerNoFence((PVOID volatile *)Link, Block);
+}
+
+static
+PEX_PUSH_LOCK_WAIT_BLOCK
 ExpPushLockChain(
     _In_ EX_PUSH_LOCK Value)
 {
@@ -71,7 +88,7 @@ ExpSleepOnWaitBlock(
         return STATUS_SUCCESS;
     }
 
-    if (WaitBlock->Flags & EXP_PUSH_LOCK_FLAGS_EVENT)
+    if (ReadNoFence(&WaitBlock->Flags) & EXP_PUSH_LOCK_FLAGS_EVENT)
     {
         return KeWaitForSingleObject(&WaitBlock->WakeEvent,
                                      WrPushLock,
@@ -94,7 +111,7 @@ ExpWakeWaitBlock(
         return;
     }
 
-    if (WaitBlock->Flags & EXP_PUSH_LOCK_FLAGS_EVENT)
+    if (ReadNoFence(&WaitBlock->Flags) & EXP_PUSH_LOCK_FLAGS_EVENT)
     {
         KeSetEventBoostPriority(&WaitBlock->WakeEvent, NULL);
     }
@@ -117,17 +134,19 @@ ExpFindWaitBlockChainTail(
     PEX_PUSH_LOCK_WAIT_BLOCK Block = Head;
     PEX_PUSH_LOCK_WAIT_BLOCK Tail;
 
-    while (Block->Last == NULL)
+    while (ExpReadBlockLink(&Block->Last) == NULL)
     {
-        Block->Next->Previous = Block;
-        Block = Block->Next;
+        PEX_PUSH_LOCK_WAIT_BLOCK Next = ExpReadBlockLink(&Block->Next);
+
+        ExpWriteBlockLink(&Next->Previous, Block);
+        Block = Next;
     }
 
-    Tail = Block->Last;
+    Tail = ExpReadBlockLink(&Block->Last);
     ASSERT(Tail != NULL);
-    ASSERT(Tail->Last == Tail);
-    ASSERT(Tail->Next == NULL);
-    Head->Last = Tail;
+    ASSERT(ExpReadBlockLink(&Tail->Last) == Tail);
+    ASSERT(ExpReadBlockLink(&Tail->Next) == NULL);
+    ExpWriteBlockLink(&Head->Last, Tail);
     return Tail;
 }
 
@@ -147,7 +166,7 @@ ExpReleaseWaitChain(
 
     for (;;)
     {
-        OldValue.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
+        OldValue.Value = (ULONG_PTR)ReadPointerAcquire(&PushLock->Ptr);
 
         ASSERT(OldValue.Waking);
 
@@ -180,26 +199,26 @@ ExpReleaseWaitChain(
         Tail = ExpFindWaitBlockChainTail(Head);
 
         Wake = Tail;
-        if (!(Tail->Flags & EX_PUSH_LOCK_FLAGS_EXCLUSIVE))
+        if (!(ReadNoFence(&Tail->Flags) & EX_PUSH_LOCK_FLAGS_EXCLUSIVE))
         {
-            while ((Wake->Previous != NULL) &&
-                   !(Wake->Previous->Flags & EX_PUSH_LOCK_FLAGS_EXCLUSIVE))
+            while ((ExpReadBlockLink(&Wake->Previous) != NULL) &&
+                   !(ReadNoFence(&ExpReadBlockLink(&Wake->Previous)->Flags) & EX_PUSH_LOCK_FLAGS_EXCLUSIVE))
             {
-                Wake = Wake->Previous;
+                Wake = ExpReadBlockLink(&Wake->Previous);
             }
         }
 
-        Previous = Wake->Previous;
+        Previous = ExpReadBlockLink(&Wake->Previous);
         if (Previous == NULL)
         {
             NewValue.Value = 0;
         }
         else
         {
-            ASSERT(Previous->Next == Wake);
-            Previous->Next = NULL;
-            Previous->Last = Previous;
-            Head->Last = Previous;
+            ASSERT(ExpReadBlockLink(&Previous->Next) == Wake);
+            ExpWriteBlockLink(&Previous->Next, NULL);
+            ExpWriteBlockLink(&Previous->Last, Previous);
+            ExpWriteBlockLink(&Head->Last, Previous);
             NewValue.Value = (ULONG_PTR)Head | EX_PUSH_LOCK_WAITING;
         }
 
@@ -208,9 +227,9 @@ ExpReleaseWaitChain(
         {
             if (Previous != NULL)
             {
-                Previous->Next = Wake;
-                Previous->Last = NULL;
-                Head->Last = Tail;
+                ExpWriteBlockLink(&Previous->Next, Wake);
+                ExpWriteBlockLink(&Previous->Last, NULL);
+                ExpWriteBlockLink(&Head->Last, Tail);
             }
 
             continue;
@@ -282,14 +301,31 @@ ExpLinkWaitBlock(
 }
 
 static
-VOID
-ExpSpinOnPushLock(VOID)
+BOOLEAN
+ExpPushLockAvailable(
+    _In_ EX_PUSH_LOCK Value,
+    _In_ BOOLEAN Shared)
 {
+    if (!Value.Locked)
+        return !Shared || !Value.Waiting;
+    return Shared && !Value.Waiting && (Value.Shared != 0);
+}
+
+static
+VOID
+ExpSpinOnPushLock(
+    _In_ PEX_PUSH_LOCK PushLock,
+    _In_ BOOLEAN Shared)
+{
+    EX_PUSH_LOCK Value;
     ULONG Spin = ExPushLockSpinCount;
 
     while (Spin-- != 0)
     {
         YieldProcessor();
+        Value.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
+        if (ExpPushLockAvailable(Value, Shared) || (Shared && Value.Waiting))
+            return;
     }
 }
 
@@ -319,6 +355,7 @@ ExfAcquirePushLockExclusive(
 {
     EX_PUSH_LOCK_WAIT_BLOCK WaitBlock;
     EX_PUSH_LOCK OldValue, NewValue;
+    BOOLEAN Spun = FALSE;
 
     ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
@@ -338,7 +375,12 @@ ExfAcquirePushLockExclusive(
             continue;
         }
 
-        ExpSpinOnPushLock();
+        if (!Spun)
+        {
+            Spun = TRUE;
+            ExpSpinOnPushLock(PushLock, FALSE);
+            continue;
+        }
 
         ExpPrepareWaitBlock(&WaitBlock, EX_PUSH_LOCK_FLAGS_EXCLUSIVE);
         if (!ExpLinkWaitBlock(PushLock, &WaitBlock, OldValue, TRUE))
@@ -349,6 +391,7 @@ ExfAcquirePushLockExclusive(
         ASSERT(OldValue.Locked);
 
         ExpSleepOnWaitBlock(&WaitBlock, NULL);
+        Spun = FALSE;
     }
 }
 
@@ -359,6 +402,7 @@ ExfAcquirePushLockShared(
 {
     EX_PUSH_LOCK_WAIT_BLOCK WaitBlock;
     EX_PUSH_LOCK OldValue, NewValue;
+    BOOLEAN Spun = FALSE;
 
     ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
@@ -397,7 +441,12 @@ ExfAcquirePushLockShared(
             }
         }
 
-        ExpSpinOnPushLock();
+        if (!Spun)
+        {
+            Spun = TRUE;
+            ExpSpinOnPushLock(PushLock, TRUE);
+            continue;
+        }
 
         ExpPrepareWaitBlock(&WaitBlock, 0);
         if (!ExpLinkWaitBlock(PushLock, &WaitBlock, OldValue, TRUE))
@@ -413,6 +462,7 @@ ExfAcquirePushLockShared(
         }
 
         ExpSleepOnWaitBlock(&WaitBlock, NULL);
+        Spun = FALSE;
     }
 }
 
@@ -513,7 +563,7 @@ ExfReleasePushLockShared(
 
     for (;;)
     {
-        OldValue.Value = (ULONG_PTR)ReadPointerNoFence(&PushLock->Ptr);
+        OldValue.Value = (ULONG_PTR)ReadPointerAcquire(&PushLock->Ptr);
 
         ASSERT(OldValue.Locked);
 
@@ -550,7 +600,7 @@ ExfReleasePushLockShared(
         Head = ExpPushLockChain(OldValue);
         Tail = ExpFindWaitBlockChainTail(Head);
 
-        ASSERT(Tail->ShareCount > 0);
+        ASSERT(ReadNoFence(&Tail->ShareCount) > 0);
 
         if (InterlockedDecrement(&Tail->ShareCount) > 0)
         {
