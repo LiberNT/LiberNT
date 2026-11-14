@@ -2006,6 +2006,12 @@ LxInetIoctl(
         case LX_TIOCOUTQ:
             return LxCopyToUser(Argument, &Value, sizeof(Value));
 
+        case LX_SIOCATMARK:
+            /* TODO: urgent data is not received, so a stream is never at the mark */
+            if (Socket->Type != LX_SOCK_STREAM)
+                return -LX_ENOTTY;
+            return LxCopyToUser(Argument, &Value, sizeof(Value));
+
         case LX_FIONBIO:
         {
             LONG64 Result = LxCopyFromUser(&Value, Argument, sizeof(Value));

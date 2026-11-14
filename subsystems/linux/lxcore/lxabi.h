@@ -371,6 +371,7 @@ typedef struct _LX_SCHED_ATTR
 #define LX_TIOCGWINSZ       0x5413
 #define LX_TIOCSWINSZ       0x5414
 #define LX_FIONREAD         0x541B
+#define LX_SIOCATMARK       0x8905
 #define LX_TIOCNOTTY        0x5422
 #define LX_TIOCGSID         0x5429
 #define LX_TIOCGPTN         0x80045430
