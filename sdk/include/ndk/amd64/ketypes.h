@@ -787,7 +787,7 @@ typedef struct _KPRCB
     UCHAR PrcbPad2[12];
 #endif
     UINT64 TargetSet;
-    ULONG IpiFrozen;
+    volatile ULONG IpiFrozen;
     UCHAR PrcbPad3[116];
     REQUEST_MAILBOX RequestMailbox[64];
     UINT64 SenderSummary;

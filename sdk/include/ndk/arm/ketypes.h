@@ -835,8 +835,8 @@ typedef struct _KPRCB
     UCHAR _PADDING4_[0x8];
     struct _REQUEST_MAILBOX* Mailbox;
     LONG TargetCount;
-    ULONG IpiFrozen;
-    ULONG RequestSummary;
+    volatile ULONG IpiFrozen;
+    volatile ULONG RequestSummary;
     KDPC_DATA DpcData[2];
     PVOID DpcStack;
     PVOID SpBase;
@@ -851,7 +851,7 @@ typedef struct _KPRCB
 #if (NTDDI_VERSION >= NTDDI_WIN8)
     union
     {
-        LONG DpcRequestSummary;
+        volatile LONG DpcRequestSummary;
         SHORT DpcRequestSlot[2];
         struct
         {
