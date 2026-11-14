@@ -283,6 +283,7 @@ struct _LX_FILE
     BOOLEAN DirRestart;
     BOOLEAN DirEnd;
     LONG64 DirOffset;
+    LONG64 DirSkip;
     ULONG64 Ino;
     BOOLEAN PollOnly;
     KSPIN_LOCK EpollLock;
