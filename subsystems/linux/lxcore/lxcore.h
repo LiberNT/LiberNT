@@ -690,6 +690,7 @@ struct _LX_PROCESS
     ULONG64 Auxv[LX_AUXV_WORDS];
     LONG64 ExitTime;
     PLX_ITIMER RealTimer;
+    PVOID CpuTimer[2];
     ULONG Trace;
     LIST_ENTRY Timers;
     LONG NextTimerId;
