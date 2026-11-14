@@ -263,6 +263,11 @@ VOID
 RegRestoreKeptSettings(
     _In_opt_ PVOID KeptSettings);
 
+VOID
+RegRemoveObsoleteSettings(
+    _In_ HINF SetupInf,
+    _In_ PCWSTR Section);
+
 NTSTATUS
 NTAPI
 MountTargetRegistry(

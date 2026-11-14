@@ -1228,6 +1228,13 @@ DoUpdate:
         }
 
         KeptSettings = RegSaveKeptSettings(pSetupData->SetupInf, L"HiveInfs.Upgrade.Keep");
+
+        /*
+         * State of a component this version no longer has: the installed copy
+         * keeps its service registration and its own keys otherwise, because
+         * an upgrade only replaces what the new inventory still lists.
+         */
+        RegRemoveObsoleteSettings(pSetupData->SetupInf, L"HiveInfs.Upgrade.Remove");
     }
 
     do

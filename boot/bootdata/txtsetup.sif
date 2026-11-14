@@ -571,6 +571,19 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon","DefaultUserName"
 HKCU,"Control Panel\International"
 HKCU,"Keyboard Layout\Preload"
 
+; Registry state of a component this version no longer ships, removed from a
+; copy upgraded in place: a whole key, or one value when a value name is given.
+[HiveInfs.Upgrade.Remove]
+HKLM,"SYSTEM\CurrentControlSet\Services\DiagData"
+HKLM,"SOFTWARE\LiberNT\DiagnosticData"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection","AllowTelemetry"
+
+; Files and directories of such a component, named relative to the system root.
+; A second field of "dir" removes a directory and everything under it.
+[Files.Upgrade.Remove]
+system32\diagdata.exe
+DiagnosticData,dir
+
 [Strings]
 cdname      = "LiberNT Installation Media"
 productname = "LiberNT"

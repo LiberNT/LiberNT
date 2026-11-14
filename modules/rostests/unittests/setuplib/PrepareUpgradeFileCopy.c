@@ -54,7 +54,11 @@ static const PCSTR TestSif =
     "\r\n"
     "[SystemTrees.Preserve]\r\n"
     "\"Windows\\keep.ini\" = 1\r\n"
-    "\"Windows\\fresh.ini\" = 1\r\n";
+    "\"Windows\\fresh.ini\" = 1\r\n"
+    "\r\n"
+    "[Files.Upgrade.Remove]\r\n"
+    "removed.dll\r\n"
+    "RemovedState,dir\r\n";
 
 static const PCSTR NewInventory =
     "; LiberNT new\n"
@@ -361,6 +365,10 @@ BuildTestTrees(
     ok(WriteTestFile(L"dst\\Windows\\keep.ini", "user"), "keep.ini not written\n");
     ok(WriteTestFile(L"dst\\Windows\\obsolete.dll", "old"), "obsolete.dll not written\n");
     ok(WriteTestFile(L"dst\\Windows\\user.txt", "user"), "user.txt not written\n");
+    /* Neither inventory names these: only [Files.Upgrade.Remove] can reach them */
+    ok(WriteTestFile(L"dst\\Windows\\removed.dll", "old"), "removed.dll not written\n");
+    ok(WriteTestFile(L"dst\\Windows\\RemovedState\\spool\\report.json", "old"),
+       "report.json not written\n");
     ok(WriteTestFile(L"dst\\Windows\\system32\\config\\system", "hive"), "hive not written\n");
     ok(CreateTestDirectory(L"dst\\Windows\\olddir"), "olddir not created\n");
     ok(WriteTestFile(L"dst\\Windows\\olddir2\\gone.txt", "old"), "gone.txt not written\n");
@@ -439,6 +447,10 @@ START_TEST(PrepareUpgradeFileCopy)
     ok(Attributes != INVALID_FILE_ATTRIBUTES && (Attributes & FILE_ATTRIBUTE_DIRECTORY), "obsolete directory with data removed\n");
     Attributes = GetTestAttributes(L"dst\\Windows\\emptydir");
     ok(Attributes != INVALID_FILE_ATTRIBUTES && (Attributes & FILE_ATTRIBUTE_DIRECTORY), "listed directory not created\n");
+    ok(GetTestAttributes(L"dst\\Windows\\removed.dll") == INVALID_FILE_ATTRIBUTES,
+       "a file of a removed component was kept\n");
+    ok(GetTestAttributes(L"dst\\Windows\\RemovedState") == INVALID_FILE_ATTRIBUTES,
+       "the directory of a removed component was kept\n");
 
     BuildTestTrees(NULL);
     if (RunUpgradePlan())
@@ -447,6 +459,8 @@ START_TEST(PrepareUpgradeFileCopy)
         ok(TestFileStartsWith(L"dst\\Windows\\obsolete.dll", "old"), "unlisted file dropped without an old inventory\n");
         ok(TestFileStartsWith(L"dst\\Windows\\servicing\\LiberNT.files", "; LiberNT new"),
            "inventory not written without an old inventory\n");
+        ok(GetTestAttributes(L"dst\\Windows\\removed.dll") == INVALID_FILE_ATTRIBUTES,
+           "a file of a removed component was kept without an old inventory\n");
     }
 
     BuildTestTrees(OtherImageInventory);
@@ -457,6 +471,8 @@ START_TEST(PrepareUpgradeFileCopy)
         ok(GetTestAttributes(L"dst\\Windows\\olddir") != INVALID_FILE_ATTRIBUTES, "directory of another image dropped\n");
         ok(TestFileStartsWith(L"dst\\Windows\\servicing\\LiberNT.files", "; LiberNT new"),
            "inventory not written from another image\n");
+        ok(GetTestAttributes(L"dst\\Windows\\RemovedState") == INVALID_FILE_ATTRIBUTES,
+           "the directory of a removed component was kept from another image\n");
     }
 
     DeleteTree(TestRoot);
