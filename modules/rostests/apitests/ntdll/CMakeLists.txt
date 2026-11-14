@@ -131,6 +131,7 @@ list(APPEND SOURCE
     NtQuerySection.c
     NtQuerySystemEnvironmentValue.c
     NtQuerySystemInformation.c
+    NtQuerySystemMemoryInformation.c
     NtQueryValueKey.c
     NtQueryVolumeInformationFile.c
     VolumeDeviceOpen.c

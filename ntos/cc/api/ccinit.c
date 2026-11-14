@@ -426,6 +426,22 @@ CcNtQueryDirtyPages(
 
 VOID
 NTAPI
+CcNtQueryCachePages(
+    _Out_ PULONG MappedPages,
+    _Out_ PULONG MaximumPages)
+{
+    LONG64 Attached = CC_ATOMIC_READ64(&CcNtCache.AttachedViews);
+
+    if (Attached < 0)
+        Attached = 0;
+    /* FIXME: the pages an attached view covers, not the resident ones the cache
+     * has no per-view count of */
+    *MappedPages = (ULONG)((ULONG64)Attached * CC_VIEW_PAGES);
+    *MaximumPages = CcNtCache.ViewCount * CC_VIEW_PAGES;
+}
+
+VOID
+NTAPI
 CcNtSetDirtyPageThreshold(
     _In_ ULONG DirtyPageThreshold)
 {

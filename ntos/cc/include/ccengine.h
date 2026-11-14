@@ -76,6 +76,7 @@ typedef struct _CC_CACHE
     VOID (*BcbCreated)(_Inout_ struct _CC_BCB *Bcb);
     VOID (*BcbDeleting)(_Inout_ struct _CC_BCB *Bcb);
 
+    volatile LONG64 AttachedViews;
     volatile LONG64 ViewHits;
     volatile LONG64 ViewMisses;
     volatile LONG64 ViewReclaims;
