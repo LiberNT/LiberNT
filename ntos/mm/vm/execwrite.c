@@ -156,6 +156,8 @@ MiSetUserExecuteDataLocked(
     PMI_VAD_NODE Node;
     BOOLEAN Changed = FALSE;
 
+    ASSERT(Space != NULL);
+
     if (Space->ExecuteData && !Enable)
     {
         for (Node = MiVadFirst(&Space->VadRoot); Node != NULL; Node = MiVadNext(Node))

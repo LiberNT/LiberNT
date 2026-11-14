@@ -283,6 +283,8 @@ MiSystemDecommitLocked(
     ULONG Freed = 0;
     ULONG i;
 
+    ASSERT(System != NULL);
+
     for (i = 0; i < Count; i++)
     {
         ULONG64 Va = VirtualAddress + (ULONG64)i * PAGE_SIZE;

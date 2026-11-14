@@ -1362,6 +1362,8 @@ MiPfnRetireLocked(
 {
     PMI_PFN Entry = &Db->Pfn[Frame];
 
+    ASSERT(Db != NULL);
+
     if (MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_DELETED)
     {
         MiPfnFreeLocked(Db, Frame, OldIrql);

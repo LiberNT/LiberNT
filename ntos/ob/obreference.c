@@ -223,6 +223,9 @@ ObFastReferenceObjectLocked(
     PVOID Object = ExGetObjectFastReference(*FastRef);
 
     /* The caller serialises against replacement, so one plain reference does */
+
+    ASSERT(FastRef != NULL);
+
     if (Object != NULL) ObpAdjustPointerCount(Object, 1);
 
     return Object;

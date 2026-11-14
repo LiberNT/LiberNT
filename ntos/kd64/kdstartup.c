@@ -409,6 +409,9 @@ KdpTimeSlipDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* One slip at a time: a second timer tick while one is pending is dropped */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (InterlockedCompareExchange(&KdpTimeSlipPending, 1, 0) != 0)
         return;
 

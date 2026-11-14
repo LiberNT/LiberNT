@@ -255,6 +255,8 @@ CmpAssignSecurityDescriptorLocked(
     NTSTATUS Status;
     ULONG Length;
 
+    ASSERT(KeAreApcsDisabled());
+
     if (Kcb->ParentKcb != NULL)
     {
         Status = CmpGetKeySecurityDescriptor(Kcb->ParentKcb, &Parent);

@@ -361,6 +361,8 @@ PopFxIdleTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!ExAcquireRundownProtection(&FxHandle->Rundown))
         return;
     if (InterlockedCompareExchange(&FxHandle->IdleWorkQueued, 1, 0) != 0)

@@ -83,6 +83,8 @@ IopDeliverWaitCompletion(PKDPC Dpc, PVOID Context, PVOID Argument1, PVOID Argume
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     /* Do not nest two dispatcher-object locks: the target may itself be used
      * by another association. Delivery owns its own reference and storage. */
     OldIrql = KeRaiseIrqlToSynchLevel();

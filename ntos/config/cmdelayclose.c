@@ -139,6 +139,8 @@ CmpDelayCloseDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (InterlockedCompareExchange(&CmpDelayCloseWorkItemActive, 1, 0) != 0) return;
 
     ExQueueWorkItem(&CmpDelayCloseWorkItem, DelayedWorkQueue);
@@ -206,6 +208,8 @@ CmpDelayDerefKCBDpcRoutine(
     UNREFERENCED_PARAMETER(DeferredContext);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (InterlockedCompareExchange(&CmpDelayDerefKCBWorkItemActive, 1, 0) != 0) return;
 

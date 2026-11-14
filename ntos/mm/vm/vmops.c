@@ -54,6 +54,9 @@ MiPageStatusLocked(
     _Out_ PBOOLEAN Committed,
     _Out_ PULONG Protection)
 {
+    ASSERT(Space != NULL);
+    ASSERT(Vad != NULL);
+
     if (Vad->Type == MiVadAwe)
     {
         *Committed = FALSE;
@@ -1600,6 +1603,10 @@ MiWorkingSetPageLocked(
     PMI_PTE Slot;
     MI_PTE Pte;
 
+    ASSERT(Space != NULL);
+    ASSERT(Vad != NULL);
+    ASSERT(Information != NULL);
+
     RtlZeroMemory(Information, sizeof(*Information));
 
     Information->Shared = (BOOLEAN)!(Vad->Type == MiVadPrivate || (Vad->Type == MiVadLarge && Vad->Segment == NULL) ||
@@ -1794,6 +1801,9 @@ MiUnmapFramesUserLocked(
     _Inout_ PMI_VAD Vad)
 {
     ULONG64 Va;
+
+    ASSERT(Space != NULL);
+    ASSERT(Vad != NULL);
 
     for (Va = MI_VAD_START(Vad); Va < MI_VAD_END(Vad); Va += PAGE_SIZE)
     {

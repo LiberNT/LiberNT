@@ -146,6 +146,8 @@ ExpTimerDpcRoutine(
 
     UNREFERENCED_PARAMETER(Dpc);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
 
     /* An expiry captured before the timer was set again, or while a one-shot setting is still armed, is an earlier arming's */
@@ -966,6 +968,8 @@ ExpExTimerDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     KeAcquireSpinLockAtDpcLevel(&Timer->Lock);
 

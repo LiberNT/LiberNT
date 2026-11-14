@@ -44,6 +44,8 @@ static PPOP_THERMAL_TARGET PopThermalFindTargetLocked(PDEVICE_OBJECT DeviceObjec
     PPOP_THERMAL_TARGET Target;
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     for (Link = PopThermalTargetList.Flink; Link != &PopThermalTargetList; Link = Link->Flink)
     {
         Target = CONTAINING_RECORD(Link, POP_THERMAL_TARGET, Link);
@@ -134,6 +136,8 @@ static VOID PopThermalComputeTargetStateLocked(PPOP_THERMAL_TARGET Target, PUCHA
     PPOP_THERMAL_REQUEST Request;
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     *PassiveThrottle = 100;
     *ActiveEngaged = FALSE;
     for (Link = Target->RequestList.Flink; Link != &Target->RequestList; Link = Link->Flink)
@@ -150,6 +154,8 @@ static BOOLEAN PopThermalBeginApplyLocked(PPOP_THERMAL_TARGET Target)
 {
     UCHAR PassiveThrottle;
     BOOLEAN ActiveEngaged;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     if (Target->ApplyInProgress)
         return FALSE;
