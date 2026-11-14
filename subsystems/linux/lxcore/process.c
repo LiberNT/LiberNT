@@ -329,6 +329,7 @@ LxProcessCreate(
     InitializeListHead(&Process->Children);
     InitializeListHead(&Process->Tracees);
     InitializeListHead(&Process->Threads);
+    InitializeListHead(&Process->SignalQueue);
     InitializeListHead(&Process->Timers);
     InitializeListHead(&Process->Vmas);
     InitializeListHead(&Process->Guards);
@@ -488,6 +489,8 @@ LxProcessDereference(
     LxFree(Process->ExePath);
     LxFree(Process->Cmdline);
     LxFree(Process->Environ);
+    LxSignalFlushQueued(Process, NULL, 0);
+    ASSERT(IsListEmpty(&Process->SignalQueue));
     LxInstanceDereference(Process->Instance);
     LxFree(Process);
 }
@@ -577,6 +580,7 @@ LxThreadFree(
 {
     PLX_PROCESS Process = Thread->Process;
 
+    LxSignalFlushQueued(Process, Thread, 0);
     if (!IsListEmpty(&Thread->Link))
     {
         ASSERT(Thread->EThread == NULL);

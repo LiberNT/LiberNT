@@ -2528,6 +2528,7 @@ LX_SYSCALL(LxSysRtSigaction)
         for (Entry = Process->Threads.Flink; Entry != &Process->Threads; Entry = Entry->Flink)
             InterlockedAnd64(&CONTAINING_RECORD(Entry, LX_THREAD, Link)->Pending, ~(LONG64)Bit);
         ExReleaseFastMutex(&Process->Lock);
+        LxSignalFlushQueued(Process, NULL, Signal);
     }
 
     if (Call->Args[2] != 0)

@@ -638,6 +638,8 @@ struct _LX_PROCESS
     LIST_ENTRY Threads;
     volatile LONG64 Pending;
     LX_SIGINFO PendingInfo[LX_NSIG];
+    LIST_ENTRY SignalQueue;
+    ULONG SignalQueued;
     ULONG64 SigTrampoline;
     LONG WaitStatus;
     BOOLEAN WaitStatusValid;
@@ -1635,7 +1637,8 @@ BOOLEAN LxGpuHostIoctl(_In_ PFILE_OBJECT FileObject, _Inout_ PIRP Irp, _In_ PIO_
 NTSTATUS LxIpcCreateSection(_In_ ULONG64 Size, _Out_ PVOID *Section);
 
 LONG LxSignalFromException(_In_ NTSTATUS ExceptionCode, _Out_ PLONG Code);
-VOID LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);
+LONG LxSignalSend(_In_ PLX_PROCESS Target, _In_opt_ PLX_THREAD TargetThread, _In_ LONG Signal, _In_opt_ PLX_SIGINFO Info);
+VOID LxSignalFlushQueued(_In_ PLX_PROCESS Process, _In_opt_ PLX_THREAD Thread, _In_ LONG Signal);
 VOID LxSignalCheckPending(_In_ PLX_THREAD Thread, _Inout_ PKTRAP_FRAME TrapFrame, _Inout_opt_ PKEXCEPTION_FRAME ExceptionFrame);
 VOID LxSeccompInherit(_Inout_ PLX_THREAD Thread, _In_ PLX_THREAD Parent);
 VOID LxSeccompRelease(_Inout_ PLX_THREAD Thread);
