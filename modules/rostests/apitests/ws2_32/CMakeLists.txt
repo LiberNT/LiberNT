@@ -3,6 +3,7 @@ list(APPEND SOURCE
     BufferedRecv.c
     BusyLoopback.c
     CloseCompletion.c
+    GetAddrInfoEx.c
     MulticastInterface.c
     ReuseDelivery.c
     addresslistsort.c
