@@ -19,6 +19,10 @@
 #define HEAP_LFH_OVERHEAD 8
 #define HEAP_LFH_MAX_BLOCK 0x4000
 #define HEAP_LFH_BUCKETS ((HEAP_LFH_MAX_BLOCK >> HEAP_ENTRY_SHIFT) + 1)
+/* Usage counters cover 16-byte size classes so that they fit the heap header page where entries are 8 bytes */
+#define HEAP_LFH_USAGE_SHIFT 4
+#define HEAP_LFH_USAGE_SLOTS ((HEAP_LFH_MAX_BLOCK >> HEAP_LFH_USAGE_SHIFT) + 1)
+#define HEAP_FREE_HINT_COUNT 0x80
 
 #define HEAP_ENTRY_SIZE ((ULONG)sizeof(HEAP_ENTRY))
 #ifdef _WIN64

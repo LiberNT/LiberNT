@@ -11,6 +11,7 @@
 #define LFH_TEST_SLOTS 256
 #define LFH_TEST_ROUNDS 20000
 #define LFH_TEST_MAX_SIZE 1000
+#define LFH_LARGE_BLOCKS 24
 
 static HANDLE TestHeap;
 static PVOID volatile Slots[LFH_TEST_SLOTS];
@@ -296,6 +297,54 @@ TestChurnCommit(VOID)
 
 static
 VOID
+TestLargestSizeClasses(VOID)
+{
+    static const SIZE_T Sizes[] = { 0x3FF8, 0x3FF0 };
+    ULONG Compatibility = 2, Information = 0, Index, Block, Offset, Bad = 0;
+    PUCHAR Blocks[RTL_NUMBER_OF(Sizes)][LFH_LARGE_BLOCKS];
+    HANDLE Heap;
+
+    Heap = HeapCreate(0, 0, 0);
+    ok(Heap != NULL, "HeapCreate failed: %lu\n", GetLastError());
+    if (!Heap) return;
+    ok(HeapSetInformation(Heap, HeapCompatibilityInformation, &Compatibility, sizeof(Compatibility)),
+       "HeapSetInformation failed: %lu\n", GetLastError());
+
+    for (Block = 0; Block < LFH_LARGE_BLOCKS; Block++)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(Sizes); Index++)
+        {
+            Blocks[Index][Block] = HeapAlloc(Heap, 0, Sizes[Index]);
+            ok(Blocks[Index][Block] != NULL, "HeapAlloc(%Iu) %lu failed\n", (size_t)Sizes[Index], Block);
+            if (!Blocks[Index][Block]) continue;
+            ok(HeapSize(Heap, 0, Blocks[Index][Block]) >= Sizes[Index], "HeapSize of a %Iu-byte block is %Iu\n",
+               (size_t)Sizes[Index], (size_t)HeapSize(Heap, 0, Blocks[Index][Block]));
+            FillMemory(Blocks[Index][Block], Sizes[Index], (UCHAR)(Index * 0x40 + Block));
+        }
+    }
+
+    ok(HeapQueryInformation(Heap, HeapCompatibilityInformation, &Information, sizeof(Information), NULL),
+       "HeapQueryInformation failed: %lu\n", GetLastError());
+    ok(Information == 2, "HeapCompatibilityInformation is %lu\n", Information);
+    ok(HeapValidate(Heap, 0, NULL), "HeapValidate failed with the largest size classes allocated\n");
+
+    for (Block = 0; Block < LFH_LARGE_BLOCKS; Block++)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(Sizes); Index++)
+        {
+            if (!Blocks[Index][Block]) continue;
+            for (Offset = 0; Offset < Sizes[Index]; Offset++)
+                Bad += (Blocks[Index][Block][Offset] != (UCHAR)(Index * 0x40 + Block));
+            ok(HeapFree(Heap, 0, Blocks[Index][Block]), "HeapFree failed: %lu\n", GetLastError());
+        }
+    }
+    ok(Bad == 0, "%lu bytes of the largest size classes changed\n", Bad);
+    ok(HeapValidate(Heap, 0, NULL), "HeapValidate failed after the largest size classes were freed\n");
+    ok(HeapDestroy(Heap), "HeapDestroy failed: %lu\n", GetLastError());
+}
+
+static
+VOID
 TestRefillCost(VOID)
 {
     double Small = BestReallocationCost(16384), Large = BestReallocationCost(262144);
@@ -355,4 +404,5 @@ START_TEST(HeapLowFragmentation)
 
     TestRefillCost();
     TestChurnCommit();
+    TestLargestSizeClasses();
 }

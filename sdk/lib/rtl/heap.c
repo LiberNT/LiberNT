@@ -32,6 +32,10 @@
 #define HEAP_INITIAL_COMMIT_ALIGN (0x400 * sizeof(PVOID))
 #define HEAP_MAX_GROW_SIZE 0xFD0000
 
+C_ASSERT(FIELD_OFFSET(HEAP, FreeHints[HEAP_FREE_HINT_COUNT]) +
+         (ROUND_UP(HEAP_FREE_HINT_COUNT, RTL_BITS_OF(ULONG)) / RTL_BITS_OF(ULONG)) * sizeof(ULONG) +
+         sizeof(HEAP_LOCK) + HEAP_LFH_USAGE_SLOTS * sizeof(USHORT) + 2 * HEAP_ENTRY_SIZE <= PAGE_SIZE);
+
 /* Bitmaps stuff */
 
 /* How many least significant bits are clear */
@@ -267,7 +271,7 @@ RtlpInitializeHeap(OUT PHEAP Heap,
     ASSERT(!(Flags & HEAP_NO_SERIALIZE) || (Lock == NULL));  /* HEAP_NO_SERIALIZE => no lock */
 
     /* Make sure we're not doing stupid things */
-    FreeHintCount = 0x80;
+    FreeHintCount = HEAP_FREE_HINT_COUNT;
     /* Start out with the size of a plain Heap header + our hints of free entries + the bitmap */
     HeaderSize = FIELD_OFFSET(HEAP, FreeHints[FreeHintCount])
                  + (ROUND_UP(FreeHintCount, RTL_BITS_OF(ULONG)) / RTL_BITS_OF(ULONG)) * sizeof(ULONG);
