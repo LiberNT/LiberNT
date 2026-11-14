@@ -125,6 +125,10 @@ USBSTOR_ResetDeviceWorkItemRoutine(
     DPRINT("USBSTOR_ResetDeviceWorkItemRoutine\n");
 
     FDODeviceExtension = FdoDevice->DeviceExtension;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(FDODeviceExtension->Common.IsFDO);
+    ASSERT(FDODeviceExtension->Flags & USBSTOR_FDO_FLAGS_DEVICE_RESETTING);
+    ASSERT(!(FDODeviceExtension->Flags & USBSTOR_FDO_FLAGS_DEVICE_GONE));
     SingleInterface = (FDODeviceExtension->ConfigurationDescriptor &&
                        FDODeviceExtension->ConfigurationDescriptor->bNumInterfaces == 1);
 

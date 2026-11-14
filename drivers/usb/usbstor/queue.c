@@ -186,6 +186,8 @@ USBSTOR_QueueEndReset(
     IoAcquireCancelSpinLock(&OldLevel);
     KeAcquireSpinLockAtDpcLevel(&FDODeviceExtension->IrpListLock);
     ASSERT(FDODeviceExtension->ActiveSrb == NULL);
+    ASSERT(FDODeviceExtension->Flags & USBSTOR_FDO_FLAGS_DEVICE_RESETTING);
+    ASSERT(!(FDODeviceExtension->Flags & USBSTOR_FDO_FLAGS_DEVICE_GONE));
     FDODeviceExtension->Flags &= ~USBSTOR_FDO_FLAGS_DEVICE_RESETTING;
     if (NT_SUCCESS(Status))
     {
@@ -285,6 +287,7 @@ USBSTOR_QueueNextRequest(
             Entry = RemoveHeadList(&FailedIrps);
             Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
             Request = IoGetCurrentIrpStackLocation(Irp)->Parameters.Scsi.Srb;
+            ASSERT(Request != NULL);
             Request->SrbStatus = SRB_STATUS_NO_DEVICE;
             Request->InternalStatus = STATUS_DEVICE_NOT_CONNECTED;
             Request->DataTransferLength = 0;
