@@ -2646,6 +2646,7 @@ NtMapViewOfSection(
     PEPROCESS Process;
     ULONG Protection;
     NTSTATUS Status;
+    BOOLEAN RundownAcquired = FALSE;
 
     PAGED_CODE();
 
@@ -2756,7 +2757,8 @@ NtMapViewOfSection(
     {
         Status = STATUS_INVALID_PARAMETER_5;
     }
-    else if (Process != PsGetCurrentProcess() && !ExAcquireRundownProtection(&Process->RundownProtect))
+    else if (Process != PsGetCurrentProcess() &&
+             !(RundownAcquired = ExAcquireRundownProtection(&Process->RundownProtect)))
     {
         Status = STATUS_PROCESS_IS_TERMINATING;
     }
@@ -2764,7 +2766,7 @@ NtMapViewOfSection(
     {
         Status = MmMapViewOfSection(Section, Process, &SafeBase, ZeroBits, CommitSize, &SafeOffset, &SafeSize,
                                     InheritDisposition, AllocationType, Protect);
-        if (Process != PsGetCurrentProcess())
+        if (RundownAcquired)
             ExReleaseRundownProtection(&Process->RundownProtect);
         if (NT_SUCCESS(Status) && Section->Control->Image &&
             Section->Control->ImageInformation.ImageContainsCode &&
