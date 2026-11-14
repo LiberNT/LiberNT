@@ -217,6 +217,19 @@ CmpWriteNumberAsString(
     CmpWriteStringValue(KeyHandle, ValueName, &Text);
 }
 
+static
+VOID
+CmpWriteDwordValue(
+    _In_ HANDLE KeyHandle,
+    _In_ PCWSTR ValueName,
+    _In_ ULONG Value)
+{
+    UNICODE_STRING Name;
+
+    RtlInitUnicodeString(&Name, ValueName);
+    ZwSetValueKey(KeyHandle, &Name, 0, REG_DWORD, &Value, sizeof(Value));
+}
+
 /* The hive owns every string it holds, because it outlives this routine */
 static
 VOID
@@ -853,12 +866,11 @@ CmpSetSystemValues(
  * What the system says about itself: the version the rest of the world reads
  * out of the software hive.
  */
+static
 VOID
-NTAPI
-CmpSetVersionData(VOID)
+CmpWriteVersionData(
+    _In_ PCUNICODE_STRING VersionPath)
 {
-    UNICODE_STRING VersionPath = RTL_CONSTANT_STRING(
-        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
     UNICODE_STRING KernelType = RTL_CONSTANT_STRING(CMP_KERNEL_TYPE);
     UNICODE_STRING BuildLab;
     UNICODE_STRING Minor;
@@ -869,7 +881,7 @@ CmpSetVersionData(VOID)
     HANDLE KeyHandle;
     NTSTATUS Status;
 
-    Status = CmpCreateStartupKey(&VersionPath,
+    Status = CmpCreateStartupKey(VersionPath,
                                  REG_OPTION_NON_VOLATILE,
                                  &KeyHandle);
     if (!NT_SUCCESS(Status)) return;
@@ -892,6 +904,8 @@ CmpSetVersionData(VOID)
 
     CmpWriteNumberAsString(KeyHandle, L"CurrentBuildNumber", NtBuildNumber);
     CmpWriteNumberAsString(KeyHandle, L"CurrentBuild", NtBuildNumber);
+    CmpWriteDwordValue(KeyHandle, L"CurrentMajorVersionNumber", NtMajorVersion);
+    CmpWriteDwordValue(KeyHandle, L"CurrentMinorVersionNumber", NtMinorVersion);
     CmpWriteStringValue(KeyHandle, L"CurrentType", &KernelType);
 
     RtlInitAnsiString(&Narrow, NtBuildLab);
@@ -910,6 +924,21 @@ CmpSetVersionData(VOID)
     CmpWriteStringValue(KeyHandle, L"SystemRoot", &NtSystemRoot);
 
     ZwClose(KeyHandle);
+}
+
+VOID
+NTAPI
+CmpSetVersionData(VOID)
+{
+    UNICODE_STRING VersionPath = RTL_CONSTANT_STRING(
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+    UNICODE_STRING Wow64VersionPath = RTL_CONSTANT_STRING(
+        L"\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows NT\\CurrentVersion");
+
+    CmpWriteVersionData(&VersionPath);
+
+    /* 32-bit programs read their own view of this key, which is not shared */
+    if (sizeof(PVOID) == sizeof(ULONGLONG)) CmpWriteVersionData(&Wow64VersionPath);
 }
 
 static
