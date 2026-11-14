@@ -39,6 +39,7 @@ WINAPI
 DeleteFileW(IN LPCWSTR lpFileName)
 {
     FILE_DISPOSITION_INFORMATION FileDispInfo;
+    FILE_DISPOSITION_INFO_EX FileDispInfoEx;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     UNICODE_STRING NtPathU;
@@ -214,12 +215,22 @@ DeleteFileW(IN LPCWSTR lpFileName)
     RtlFreeHeap(RtlGetProcessHeap(), 0, PathBuffer);
 
     /* Ask for the file to be deleted */
-    FileDispInfo.DeleteFile = TRUE;
+    FileDispInfoEx.Flags = FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
     Status = NtSetInformationFile(FileHandle,
                                   &IoStatusBlock,
-                                  &FileDispInfo,
-                                  sizeof(FILE_DISPOSITION_INFORMATION),
-                                  FileDispositionInformation);
+                                  &FileDispInfoEx,
+                                  sizeof(FileDispInfoEx),
+                                  FileDispositionInformationEx);
+    /* File systems without POSIX delete semantics, such as FAT, reject the extended class. */
+    if (!NT_SUCCESS(Status))
+    {
+        FileDispInfo.DeleteFile = TRUE;
+        Status = NtSetInformationFile(FileHandle,
+                                      &IoStatusBlock,
+                                      &FileDispInfo,
+                                      sizeof(FILE_DISPOSITION_INFORMATION),
+                                      FileDispositionInformation);
+    }
     NtClose(FileHandle);
     if (!NT_SUCCESS(Status))
     {
