@@ -366,7 +366,7 @@ AtaAhciCreateChannelData(
     {
         ULONG CmdStatus;
 
-        if (!(Controller->ChannelBitmap & (1 << i)))
+        if (!(Controller->ChannelBitmap & (1UL << i)))
             continue;
 
         Controller->Channels[i] = ChanData;
