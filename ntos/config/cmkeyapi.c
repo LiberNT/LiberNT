@@ -955,6 +955,11 @@ CmFlushKey(
     if (!NT_SUCCESS(Status)) return Status;
 
     if (CmpNoWrite) return STATUS_SUCCESS;
+
+    ASSERT(CmiVolatileHive != NULL);
+    if (Kcb->KeyHive == &CmiVolatileHive->Hive)
+        return CmpDoFlushAll(TRUE) ? STATUS_SUCCESS : STATUS_REGISTRY_IO_FAILED;
+
     if (Kcb->KeyHive->HiveFlags & HIVE_VOLATILE) return STATUS_SUCCESS;
 
     CmHive = CONTAINING_RECORD(Kcb->KeyHive, CMHIVE, Hive);

@@ -438,6 +438,114 @@ TestNewHiveRootSecurity(VOID)
     DeleteNewHiveFiles(&FileAttributes, &LogAttributes);
 }
 
+static
+ULONGLONG
+HiveFilesSize(
+    _In_ PCWSTR Base)
+{
+    static const PCWSTR Suffixes[] = { L"", L".LOG", L".LOG1", L".LOG2" };
+    FILE_NETWORK_OPEN_INFORMATION Information;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    UNICODE_STRING Name;
+    WCHAR Buffer[96];
+    ULONGLONG Total = 0;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Suffixes); Index++)
+    {
+        RtlInitEmptyUnicodeString(&Name, Buffer, sizeof(Buffer));
+        RtlAppendUnicodeToString(&Name, Base);
+        RtlAppendUnicodeToString(&Name, Suffixes[Index]);
+        InitializeObjectAttributes(&ObjectAttributes, &Name,
+                                   OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                                   NULL, NULL);
+        if (NT_SUCCESS(ZwQueryFullAttributesFile(&ObjectAttributes, &Information)))
+            Total += Information.EndOfFile.QuadPart;
+    }
+
+    return Total;
+}
+
+/* Flushing a key of the master hive writes every hive below it, as setup does
+ * with HKEY_LOCAL_MACHINE before it records that it finished */
+static
+VOID
+TestMachineRootFlush(VOID)
+{
+    static const WCHAR FileBase[] = L"\\SystemRoot\\KmtMachineFlush.hiv";
+    static UNICODE_STRING FileName =
+        RTL_CONSTANT_STRING(L"\\SystemRoot\\KmtMachineFlush.hiv");
+    static UNICODE_STRING LogName =
+        RTL_CONSTANT_STRING(L"\\SystemRoot\\KmtMachineFlush.hiv.LOG1");
+    static UNICODE_STRING MountName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\KmtMachineFlush");
+    static UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Data");
+    OBJECT_ATTRIBUTES MountAttributes, FileAttributes, LogAttributes;
+    ULONGLONG Before, After;
+    HANDLE Root, Machine;
+    NTSTATUS Status;
+    PVOID Data;
+
+    Data = ExAllocatePoolZero(PagedPool, 256 * 1024, 'FMmC');
+    ok(Data != NULL, "No memory for the value\n");
+    if (Data == NULL) return;
+
+    InitializeObjectAttributes(&MountAttributes, &MountName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    InitializeObjectAttributes(&FileAttributes, &FileName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+    InitializeObjectAttributes(&LogAttributes, &LogName,
+                               OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE,
+                               NULL, NULL);
+
+    if (!NT_SUCCESS(WriteHiveFile(&FileName)))
+    {
+        ExFreePoolWithTag(Data, 'FMmC');
+        return;
+    }
+
+    Status = ZwLoadKey(&MountAttributes, &FileAttributes);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        DeleteNewHiveFiles(&FileAttributes, &LogAttributes);
+        ExFreePoolWithTag(Data, 'FMmC');
+        return;
+    }
+
+    Status = OpenKey(&Root, NULL, MountName.Buffer);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ZwFlushKey(Root);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        Status = ZwSetValueKey(Root, &ValueName, 0, REG_BINARY, Data, 256 * 1024);
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        Before = HiveFilesSize(FileBase);
+
+        Status = OpenKey(&Machine, NULL, L"\\Registry\\Machine");
+        ok_eq_hex(Status, STATUS_SUCCESS);
+        if (NT_SUCCESS(Status))
+        {
+            Status = ZwFlushKey(Machine);
+            ok_eq_hex(Status, STATUS_SUCCESS);
+            ZwClose(Machine);
+        }
+
+        After = HiveFilesSize(FileBase);
+        ok(After >= Before + 256 * 1024,
+           "The hive files grew from %I64u to %I64u bytes\n", Before, After);
+        ZwClose(Root);
+    }
+
+    Status = ZwUnloadKey(&MountAttributes);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    DeleteNewHiveFiles(&FileAttributes, &LogAttributes);
+    ExFreePoolWithTag(Data, 'FMmC');
+}
+
 START_TEST(CmKeyKM)
 {
     UNICODE_STRING Name, ValueName;
@@ -477,4 +585,5 @@ START_TEST(CmKeyKM)
     TestFreedSecurityCell();
     TestVolatileSecurityAcrossReload();
     TestNewHiveRootSecurity();
+    TestMachineRootFlush();
 }
