@@ -208,6 +208,32 @@ TestDirty(void)
     CHECK(memcmp(File.Disk + MB - 100, Data, 2 * MB) == 0);
     CHECK(File.Disk[MB - 101] == FilePattern(MB - 101));
 
+    {
+        LONG64 Calls;
+
+        Move.BaseOffset = 8 * MB;
+        CHECK(CcCopyRange(&Map, 8 * MB, MB + CC_VIEW_SIZE, TRUE, MoveFromBuffer, &Move, NULL) == STATUS_SUCCESS);
+        Calls = Cache.FlushCalls;
+        CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, ~0u, &Flushed) == STATUS_SUCCESS);
+        CHECK(Flushed == (MB + CC_VIEW_SIZE) >> PAGE_SHIFT && Cache.FlushCalls == Calls + 2);
+        CHECK(Map.DirtyPages == 0 && memcmp(File.Disk + 8 * MB, Data, MB + CC_VIEW_SIZE) == 0);
+
+        CHECK(CcCopyRange(&Map, 8 * MB + CC_VIEW_SIZE - PAGE_SIZE, 2 * PAGE_SIZE, TRUE, MoveFromBuffer, &Move, NULL) ==
+              STATUS_SUCCESS);
+        CHECK(CcCopyRange(&Map, 8 * MB + 2 * CC_VIEW_SIZE + PAGE_SIZE, PAGE_SIZE, TRUE, MoveFromBuffer, &Move, NULL) ==
+              STATUS_SUCCESS);
+        Calls = Cache.FlushCalls;
+        CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, ~0u, &Flushed) == STATUS_SUCCESS);
+        CHECK(Flushed == 3 && Cache.FlushCalls == Calls + 2 && Map.DirtyPages == 0);
+
+        CHECK(CcCopyRange(&Map, 8 * MB, MB, TRUE, MoveFromBuffer, &Move, NULL) == STATUS_SUCCESS);
+        File.FlushFailuresLeft = 1;
+        CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, ~0u, &Flushed) == STATUS_UNEXPECTED_IO_ERROR);
+        CHECK(Flushed == 0 && Map.DirtyPages == (LONG64)(MB >> PAGE_SHIFT));
+        CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, ~0u, &Flushed) == STATUS_SUCCESS);
+        CHECK(Flushed == (MB >> PAGE_SHIFT) && Map.DirtyPages == 0);
+    }
+
     Move.BaseOffset = 4 * MB;
     CHECK(CcCopyRange(&Map, 4 * MB, MB, TRUE, MoveFromBuffer, &Move, NULL) == STATUS_SUCCESS);
     CcDirtyDiscard(&Map, 4 * MB + 10, (ULONG64)-1);
@@ -242,8 +268,9 @@ TestBcb(void)
     CHECK(CcBcbAcquire(&Map, 4096, 512, FALSE, FALSE, &First, &Created) == STATUS_SUCCESS && Created);
     CHECK(CcBcbMakeResident(First, FALSE) == STATUS_SUCCESS);
     CHECK(*(PUCHAR)CcBcbAddress(First, 4100) == FilePattern(4100));
-    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, FALSE, &Second, &Created) == STATUS_SUCCESS && !Created);
-    CHECK(Second == First && First->ReferenceCount == 2);
+    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, FALSE, &Second, &Created) == STATUS_SUCCESS && Created);
+    CHECK(Second != First && First->ReferenceCount == 1 && Second->ReferenceCount == 1);
+    CcBcbDereference(Second);
     CHECK(CcBcbAcquire(&Map, 4200, 100, TRUE, FALSE, &Pinned, &Created) == STATUS_SUCCESS && Created);
     CHECK(Pinned != First);
     CcBcbPin(Pinned);
@@ -254,8 +281,8 @@ TestBcb(void)
     CcBcbUnpin(Second);
     CcBcbDereference(Second);
     CHECK(Pinned->PinCount == 1 && Pinned->ReferenceCount == 1);
-    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, TRUE, &Second, &Created) == STATUS_SUCCESS && Second == First);
-    CcBcbDereference(Second);
+    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, TRUE, &Second, &Created) == STATUS_CANT_WAIT);
+    CcBcbReference(First);
     Second = First;
 
     CHECK(CcBcbAcquire(&Map, CC_VIEW_SIZE - 3000, 9000, FALSE, FALSE, &Spanning, &Created) == STATUS_SUCCESS);
@@ -291,6 +318,37 @@ TestBcb(void)
     CHECK(!CcBcbCompleteFlush(&Map, 0, (ULONG64)-1, CcBcbBeginFlush(&Map)));
     CHECK(CcBcbAcquire(&Map, 4200, 100, TRUE, TRUE, &Second, &Created) == STATUS_CANT_WAIT);
     CHECK(!CcBcbDirtyLsns(&Map, &Oldest, &Newest, &Count));
+
+    CHECK(CcBcbAcquire(&Map, 3 * PAGE_SIZE + 64, 32, TRUE, FALSE, &First, &Created) == STATUS_SUCCESS && Created);
+    CHECK(CcBcbAcquire(&Map, 9 * PAGE_SIZE + 64, 32, TRUE, FALSE, &Second, &Created) == STATUS_SUCCESS && Created);
+    CHECK(CcBcbMakeResident(First, FALSE) == STATUS_SUCCESS && CcBcbMakeResident(Second, FALSE) == STATUS_SUCCESS);
+    CcBcbPin(First);
+    CcBcbPin(Second);
+    CHECK(CcBcbSetDirty(First, 0) == STATUS_SUCCESS && CcBcbSetDirty(Second, 0) == STATUS_SUCCESS);
+    CcBcbUnpin(First);
+    CcBcbDereference(First);
+    CcBcbUnpin(Second);
+    CcBcbDereference(Second);
+    Generation = CcBcbBeginFlush(&Map);
+    CHECK(CcDirtyFlush(&Map, 9 * PAGE_SIZE, PAGE_SIZE, 1, &Count) == STATUS_SUCCESS && Count == 1);
+    CcBcbRetireWritten(&Map, Generation);
+    CHECK(CcBcbAcquire(&Map, 9 * PAGE_SIZE + 64, 32, TRUE, TRUE, &Second, &Created) == STATUS_CANT_WAIT);
+    CHECK(CcBcbAcquire(&Map, 3 * PAGE_SIZE + 64, 32, TRUE, TRUE, &First, &Created) == STATUS_SUCCESS);
+    CHECK(First->Dirty && Map.DirtyPages == 1);
+
+    Generation = CcBcbBeginFlush(&Map);
+    CcBcbPin(First);
+    CHECK(CcBcbSetDirty(First, 0) == STATUS_SUCCESS);
+    CcBcbUnpin(First);
+    CcBcbDereference(First);
+    CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, 1, &Count) == STATUS_SUCCESS && Count == 1);
+    CcBcbRetireWritten(&Map, Generation);
+    CHECK(CcBcbAcquire(&Map, 3 * PAGE_SIZE + 64, 32, TRUE, TRUE, &First, &Created) == STATUS_SUCCESS);
+    CHECK(First->Dirty && Map.DirtyPages == 0);
+    CcBcbDereference(First);
+    CcBcbRetireWritten(&Map, CcBcbBeginFlush(&Map));
+    CHECK(CcBcbAcquire(&Map, 3 * PAGE_SIZE + 64, 32, TRUE, TRUE, &First, &Created) == STATUS_CANT_WAIT);
+    CHECK(IsListEmpty(&Map.BcbList));
 
     CHECK(CcMapUninitialize(&Map));
     CHECK(File.MappedViews == 0 && File.Errors == 0);

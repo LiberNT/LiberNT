@@ -24,6 +24,14 @@
 #define MAP_WAIT 1
 #define UNINITIALIZE_CACHE_MAPS 1
 #define FO_RANDOM_ACCESS 0x800
+#define FO_WRITE_THROUGH 0x00000010
+#define BooleanFlagOn(F, SF) ((BOOLEAN)(((F) & (SF)) != 0))
+#ifndef APC_LEVEL
+#define APC_LEVEL 1
+#endif
+#ifndef MM_HOST_TEST
+#define KeGetCurrentIrql() 0
+#endif
 #define STATUS_ACCESS_VIOLATION ((NTSTATUS)0xC0000005)
 #define STATUS_INVALID_USER_BUFFER ((NTSTATUS)0xC00000E8)
 #define KernelMode 0
@@ -124,3 +132,4 @@ VOID CcSetDirtyPinnedData(PVOID Bcb, PLARGE_INTEGER Lsn);
 BOOLEAN CcCopyRead(PFILE_OBJECT File, PLARGE_INTEGER Offset, ULONG Length, BOOLEAN Wait, PVOID Buffer,
                    PIO_STATUS_BLOCK IoStatus);
 BOOLEAN CcCopyWrite(PFILE_OBJECT File, PLARGE_INTEGER Offset, ULONG Length, BOOLEAN Wait, PVOID Buffer);
+VOID CcFlushCache(PSECTION_OBJECT_POINTERS Pointers, PLARGE_INTEGER Offset, ULONG Length, PIO_STATUS_BLOCK IoStatus);

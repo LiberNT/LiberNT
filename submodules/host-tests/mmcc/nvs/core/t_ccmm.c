@@ -1457,6 +1457,53 @@ CcmmPurgeCached(ULONG Flags, BOOLEAN Partial)
 
 static
 void
+CcmmPurgePartialPage(void)
+{
+    TEST_WORLD World;
+    CCMM_FILE File;
+    CC_CACHE Cache;
+    FILE_OBJECT Object = { .References = 1, .FsContext = &File };
+    MI_CONTROL_AREA Control;
+    PCC_NT_MAP NtMap = calloc(1, sizeof(*NtMap));
+    SECTION_OBJECT_POINTERS Pointers = { .DataSectionObject = &Control, .SharedCacheMap = NtMap };
+    LARGE_INTEGER Offset = { .QuadPart = PAGE_SIZE + 512 };
+    UCHAR Data[2 * PAGE_SIZE];
+    CCMM_MOVE Move = { &World, 0, Data, 0, FALSE };
+
+    WorldCreate(&World, 256, 1, 10000);
+    World.System.UnusedSegmentLimit = 4;
+    WorldAttach(&World, 0, NULL);
+    CHECK(NT_SUCCESS(CcCacheInitialize(&Cache, CC_MIN_VIEWS, 1024)));
+    CcmmFileCreate(&File, &World, &Cache, sizeof(Data));
+    CHECK(CcMapUninitialize(&File.Map));
+    Control.Segment = File.Segment;
+    NtMap->Control = &Control;
+    NtMap->FileObject = &Object;
+    NtMap->ReferenceCount = 1;
+    CcMapInitialize(&NtMap->Map, &Cache, &CcNtBackingOps, NtMap, sizeof(Data), sizeof(Data), sizeof(Data));
+    NtMap->Map.Ops.MakeViewResident = CcmmNtMakeViewResident;
+
+    CHECK(NT_SUCCESS(CcCopyRange(&NtMap->Map, 0, sizeof(Data), FALSE, CcmmMove, &Move, NULL)));
+    CHECK(memcmp(Data, File.File.Data, sizeof(Data)) == 0);
+    memset(File.File.Data + Offset.QuadPart, 0x5C, 512);
+    CHECK(CcPurgeCacheSection(&Pointers, &Offset, 512, 0));
+    memset(Data, 0, sizeof(Data));
+    CHECK(NT_SUCCESS(CcCopyRange(&NtMap->Map, 0, sizeof(Data), FALSE, CcmmMove, &Move, NULL)));
+    CHECK(memcmp(Data, File.File.Data, sizeof(Data)) == 0);
+    CHECK(File.File.Writes == 0);
+
+    CcNtDestroyMap(NtMap);
+    CHECK(Object.References == 0);
+    MiSegmentPurgeUnused(&World.System, ~0u);
+    CHECK(File.Released == 1);
+    CcCacheUninitialize(&Cache);
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File.File);
+    WorldDestroy(&World);
+}
+
+static
+void
 CcmmPurgeWithoutCache(void)
 {
     TEST_WORLD World;
@@ -1519,6 +1566,7 @@ TestCcOnMm(void)
     CcmmNtCloseReclaim(FALSE);
     CcmmNtCloseReclaim(TRUE);
     CcmmPurgeWithoutCache();
+    CcmmPurgePartialPage();
     CcmmPurgeCached(UNINITIALIZE_CACHE_MAPS, FALSE);
     CcmmPurgeCached(UNINITIALIZE_CACHE_MAPS, TRUE);
     CcmmPurgeCached(0, FALSE);

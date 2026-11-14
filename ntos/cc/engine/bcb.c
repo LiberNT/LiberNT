@@ -19,6 +19,10 @@ CcBcbFind(
 {
     PLIST_ENTRY Entry;
 
+    /* Mapped views are never shared, so only pinned ranges are looked up. */
+    if (!Pinned)
+        return NULL;
+
     for (Entry = Map->BcbList.Flink; Entry != &Map->BcbList; Entry = Entry->Flink)
     {
         PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
@@ -31,7 +35,7 @@ CcBcbFind(
         CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
         CC_ASSERT(Bcb->PinCount == 0 || Bcb->Pinned);
 
-        if (Bcb->Pinned == Pinned && Bcb->FileOffset <= FileOffset &&
+        if (Bcb->Pinned && Bcb->FileOffset <= FileOffset &&
             Bcb->BeyondLastByte >= FileOffset + Length)
         {
             return Bcb;
@@ -295,7 +299,10 @@ CcBcbSetDirty(
     _In_ ULONG64 Lsn)
 {
     PCC_MAP Map = Bcb->Map;
+    NTSTATUS Status;
     KIRQL OldIrql;
+
+    Status = CcDirtyMark(Map, Bcb->FileOffset, Bcb->Length);
 
     CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
     CC_ASSERT(Bcb->ReferenceCount > 0);
@@ -311,7 +318,7 @@ CcBcbSetDirty(
     }
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
 
-    return CcDirtyMark(Map, Bcb->FileOffset, Bcb->Length);
+    return Status;
 }
 
 ULONG64
@@ -381,6 +388,62 @@ CcBcbCompleteFlush(
     }
 
     return StillDirty;
+}
+
+VOID
+CcBcbRetireWritten(
+    _Inout_ PCC_MAP Map,
+    _In_ ULONG64 Generation)
+{
+    LIST_ENTRY Retired;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY Next;
+    KIRQL OldIrql;
+
+    InitializeListHead(&Retired);
+    CC_LOCK_ACQUIRE(&Map->BcbLock, &OldIrql);
+
+    for (Entry = Map->BcbList.Flink; Entry != &Map->BcbList; Entry = Next)
+    {
+        PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
+
+        Next = Entry->Flink;
+        CC_ASSERT(Bcb->Map == Map && Bcb->ReferenceCount >= 0);
+        CC_ASSERT(Bcb->ReferenceCount != 0 || Bcb->Dirty);
+        CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
+        if (!Bcb->Dirty || Bcb->PinCount != 0 || Bcb->DirtyGeneration > Generation)
+            continue;
+
+        if (CC_ATOMIC_READ32(&Map->FlushesInProgress) != 0)
+            break;
+
+        if (CcDirtyQuery(Map, Bcb->FileOffset, Bcb->Length))
+            continue;
+
+        /* A flush that took these pages after the first check may still be writing them. */
+        if (CC_ATOMIC_READ32(&Map->FlushesInProgress) != 0)
+            break;
+
+        CC_ASSERT(Bcb->Pinned);
+        Bcb->Dirty = FALSE;
+        Bcb->OldestLsn = 0;
+        Bcb->NewestLsn = 0;
+
+        if (Bcb->ReferenceCount == 0)
+        {
+            RemoveEntryList(Entry);
+            InsertTailList(&Retired, Entry);
+        }
+    }
+
+    CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
+
+    while (!IsListEmpty(&Retired))
+    {
+        Entry = Retired.Flink;
+        RemoveEntryList(Entry);
+        CcBcbDestroy(CONTAINING_RECORD(Entry, CC_BCB, Link));
+    }
 }
 
 BOOLEAN

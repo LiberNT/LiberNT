@@ -237,6 +237,7 @@ NTSTATUS CcBcbMakeResident(_Inout_ PCC_BCB Bcb, _In_ BOOLEAN SkipRead);
 NTSTATUS CcBcbSetDirty(_Inout_ PCC_BCB Bcb, _In_ ULONG64 Lsn);
 ULONG64 CcBcbBeginFlush(_Inout_ PCC_MAP Map);
 BOOLEAN CcBcbCompleteFlush(_Inout_ PCC_MAP Map, _In_ ULONG64 Start, _In_ ULONG64 End, _In_ ULONG64 Generation);
+VOID CcBcbRetireWritten(_Inout_ PCC_MAP Map, _In_ ULONG64 Generation);
 BOOLEAN CcBcbRangeBusy(_Inout_ PCC_MAP Map, _In_ ULONG64 Start, _In_ ULONG64 End);
 BOOLEAN CcBcbDirtyLsns(_Inout_ PCC_MAP Map, _Out_ PULONG64 OldestLsn, _Out_ PULONG64 NewestLsn,
                        _Out_ PULONG DirtyBcbs);

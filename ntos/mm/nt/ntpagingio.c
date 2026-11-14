@@ -198,21 +198,45 @@ MiPagingIoFrames(
 
     *Transferred = 0;
     /* PE section data can start at a sector-aligned, non-page-aligned offset. */
-    if (PageCount == 0 || PageCount > (Write ? MI_MAX_FILE_WRITE_PAGES : MI_MAX_FILE_IO_PAGES) || Frames == NULL ||
+    if (PageCount == 0 || PageCount > (Write ? MI_MAX_FILE_FLUSH_PAGES : MI_MAX_FILE_IO_PAGES) || Frames == NULL ||
         (Offset & (Write ? PAGE_SIZE - 1 : (1u << MI_SECTOR_SHIFT) - 1)) != 0)
         return STATUS_INVALID_PARAMETER;
 
+    if (PageCount > MI_MAX_FILE_WRITE_PAGES)
+    {
+        ASSERT(Write);
+        Mdl = ExAllocatePoolWithTag(NonPagedPoolNx, MmSizeOfMdl(NULL, (SIZE_T)PageCount * PAGE_SIZE), 'wPmM');
+        if (Mdl == NULL)
+        {
+            ULONG Done = 0;
+
+            for (i = 0; i < PageCount; i += Done / PAGE_SIZE)
+            {
+                ULONG Chunk = min(PageCount - i, (ULONG)MI_MAX_FILE_WRITE_PAGES);
+
+                Status = MiPagingIoFrames(FileObject, Offset + (ULONG64)i * PAGE_SIZE, &Frames[i], Chunk, TRUE, &Done);
+                if (!NT_SUCCESS(Status))
+                    return Status;
+                *Transferred += Done;
+                if (Done < Chunk * PAGE_SIZE)
+                    break;
+            }
+            return STATUS_SUCCESS;
+        }
+    }
+
     MmInitializeMdl(Mdl, NULL, PageCount * PAGE_SIZE);
     Pages = MmGetMdlPfnArray(Mdl);
-    ASSERT(Pages == Storage.Pages);
+    ASSERT(Mdl != &Storage.Mdl || Pages == Storage.Pages);
     for (i = 0; i < PageCount; i++)
         Pages[i] = Frames[i];
     Mdl->MdlFlags = MDL_PAGES_LOCKED | (Write ? 0 : MDL_IO_PAGE_READ);
     ASSERT(Mdl->ByteOffset == 0 && Mdl->ByteCount == PageCount * PAGE_SIZE);
-    ASSERT(MmGetMdlPfnArray(Mdl) == Storage.Pages);
 
     Status = MiSubmitPagingMdl(FileObject, Mdl, Offset, Write, Transferred);
     if (Mdl->MdlFlags & MDL_MAPPED_TO_SYSTEM_VA)
         MmUnmapLockedPages(Mdl->MappedSystemVa, Mdl);
+    if (Mdl != &Storage.Mdl)
+        ExFreePoolWithTag(Mdl, 'wPmM');
     return Status;
 }

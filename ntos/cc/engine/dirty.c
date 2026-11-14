@@ -214,6 +214,64 @@ CcDirtySlotLimit(
     return (Wanted < Limit) ? Wanted : Limit;
 }
 
+#define CC_FLUSH_BATCH_VIEWS 4
+
+typedef struct _CC_FLUSH_BATCH
+{
+    ULONG Count;
+    ULONG Pages;
+    ULONG64 End;
+    ULONG64 Number[CC_FLUSH_BATCH_VIEWS];
+    ULONG64 Bits[CC_FLUSH_BATCH_VIEWS];
+    CC_VIEW_RANGE Range[CC_FLUSH_BATCH_VIEWS];
+} CC_FLUSH_BATCH, *PCC_FLUSH_BATCH;
+
+static
+VOID
+CcDirtyFlushBatch(
+    _Inout_ PCC_MAP Map,
+    _Inout_ PCC_FLUSH_BATCH Batch,
+    _Inout_ PULONG Flushed,
+    _Inout_ NTSTATUS *FirstError)
+{
+    PCC_CACHE Cache = Map->Cache;
+    ULONG64 Start;
+    NTSTATUS Status;
+    ULONG i;
+
+    if (Batch->Count == 0)
+        return;
+
+    CC_ASSERT(Batch->Count <= CC_FLUSH_BATCH_VIEWS);
+    Start = Batch->Range[0].FileOffset;
+    CC_ASSERT(Batch->End > Start && Batch->End - Start <= (ULONG64)CC_FLUSH_BATCH_VIEWS * CC_VIEW_SIZE);
+    CC_ASSERT(Batch->End - Start == (ULONG64)Batch->Pages << PAGE_SHIFT);
+
+    Status = Map->Ops.Flush(Map->Context, Start, (ULONG)(Batch->End - Start));
+    for (i = Batch->Count; i-- > 0;)
+    {
+        CC_RESOURCE_RELEASE(&Batch->Range[i].View->IoResource);
+        CcViewRelease(&Batch->Range[i]);
+    }
+    CC_ATOMIC_ADD64(&Cache->FlushCalls, 1);
+
+    if (!NT_SUCCESS(Status))
+    {
+        for (i = 0; i < Batch->Count; i++)
+            CcDirtyRestore(Map, Batch->Number[i], Batch->Bits[i]);
+        if (NT_SUCCESS(*FirstError))
+            *FirstError = Status;
+    }
+    else
+    {
+        *Flushed += Batch->Pages;
+        CC_ATOMIC_ADD64(&Cache->PagesFlushed, Batch->Pages);
+    }
+
+    Batch->Count = 0;
+    Batch->Pages = 0;
+}
+
 NTSTATUS
 CcDirtyFlush(
     _Inout_ PCC_MAP Map,
@@ -226,19 +284,24 @@ CcDirtyFlush(
     ULONG64 End = (Length == (ULONG64)-1 || FileOffset + Length < FileOffset) ? (ULONG64)-1
                                                                               : FileOffset + Length;
     NTSTATUS FirstError = STATUS_SUCCESS;
+    CC_FLUSH_BATCH Batch;
     ULONG Flushed = 0;
     ULONG64 Limit;
     ULONG64 Number;
+
+    Batch.Count = 0;
+    Batch.Pages = 0;
+    Batch.End = 0;
 
     CC_ATOMIC_ADD32(&Map->FlushesInProgress, 1);
 
     Limit = CcDirtySlotLimit(Map, End);
     for (Number = FileOffset >> CC_VIEW_SHIFT;
-         Number < Limit && Flushed < MaximumPages && CC_ATOMIC_READ64(&Map->DirtyPages) > 0;
+         Number < Limit && Flushed + Batch.Pages < MaximumPages && CC_ATOMIC_READ64(&Map->DirtyPages) > 0;
          Number++)
     {
         BOOLEAN Present;
-        ULONG64 Bits = CcDirtyTake(Map, Number, FileOffset, End, MaximumPages - Flushed, &Present);
+        ULONG64 Bits = CcDirtyTake(Map, Number, FileOffset, End, MaximumPages - Flushed - Batch.Pages, &Present);
         ULONG Page = 0;
 
         if (!Present)
@@ -254,6 +317,8 @@ CcDirtyFlush(
         {
             ULONG First;
             ULONG64 RunBits;
+            ULONG64 RunOffset;
+            ULONG RunLength;
             CC_VIEW_RANGE Range;
             NTSTATUS Status;
 
@@ -268,32 +333,44 @@ CcDirtyFlush(
                 Page++;
 
             RunBits = CcDirtyBits(First, Page - 1);
-            Status = CcViewAcquire(Map,
-                                   (Number << CC_VIEW_SHIFT) + ((ULONG64)First << PAGE_SHIFT),
-                                   (Page - First) << PAGE_SHIFT,
-                                   &Range);
-            if (NT_SUCCESS(Status))
+            RunOffset = (Number << CC_VIEW_SHIFT) + ((ULONG64)First << PAGE_SHIFT);
+            RunLength = (Page - First) << PAGE_SHIFT;
+
+            if (Batch.Count != 0 && (RunOffset != Batch.End || Batch.Count == CC_FLUSH_BATCH_VIEWS))
+                CcDirtyFlushBatch(Map, &Batch, &Flushed, &FirstError);
+
+            Status = CcViewAcquire(Map, RunOffset, RunLength, &Range);
+            if (!NT_SUCCESS(Status) && Batch.Count != 0)
             {
-                CC_RESOURCE_ACQUIRE_EXCLUSIVE(&Range.View->IoResource);
-                Status = Map->Ops.Flush(Map->Context, Range.FileOffset, Range.Length);
-                CC_RESOURCE_RELEASE(&Range.View->IoResource);
-                CcViewRelease(&Range);
+                CcDirtyFlushBatch(Map, &Batch, &Flushed, &FirstError);
+                Status = CcViewAcquire(Map, RunOffset, RunLength, &Range);
             }
-            CC_ATOMIC_ADD64(&Cache->FlushCalls, 1);
 
             if (!NT_SUCCESS(Status))
             {
+                CC_ATOMIC_ADD64(&Cache->FlushCalls, 1);
                 CcDirtyRestore(Map, Number, RunBits);
                 if (NT_SUCCESS(FirstError))
                     FirstError = Status;
+                continue;
             }
-            else
-            {
-                Flushed += Page - First;
-                CC_ATOMIC_ADD64(&Cache->PagesFlushed, Page - First);
-            }
+
+            CC_ASSERT(Range.FileOffset == RunOffset && Range.Length == RunLength);
+            CC_RESOURCE_ACQUIRE_EXCLUSIVE(&Range.View->IoResource);
+            Batch.Number[Batch.Count] = Number;
+            Batch.Bits[Batch.Count] = RunBits;
+            Batch.Range[Batch.Count] = Range;
+            Batch.Count++;
+            Batch.Pages += Page - First;
+            Batch.End = RunOffset + RunLength;
+
+            if (Page < CC_VIEW_PAGES)
+                CcDirtyFlushBatch(Map, &Batch, &Flushed, &FirstError);
         }
     }
+
+    CcDirtyFlushBatch(Map, &Batch, &Flushed, &FirstError);
+    CC_ASSERT(Batch.Count == 0);
 
     CC_ATOMIC_ADD32(&Map->FlushesInProgress, -1);
 

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "ntfileshim.h"
+#include <stdlib.h>
 
 typedef ULONG_PTR PFN_NUMBER, *PPFN_NUMBER;
 typedef struct _MDL
@@ -48,6 +49,29 @@ static inline void MmInitializeMdl(PMDL Mdl, PVOID Base, ULONG Length)
     Mdl->ByteOffset = Offset;
     Mdl->ByteCount = Length;
 }
+
+#ifndef NonPagedPoolNx
+#define NonPagedPoolNx 512
+#endif
+
+extern BOOLEAN MiHostFailPagingMdlAllocation;
+
+static inline SIZE_T MmSizeOfMdl(PVOID Base, SIZE_T Length)
+{
+    ULONG Offset = (ULONG)((ULONG_PTR)Base & (PAGE_SIZE - 1));
+
+    return sizeof(MDL) + sizeof(PFN_NUMBER) * ((Offset + Length + PAGE_SIZE - 1) / PAGE_SIZE);
+}
+
+static inline PVOID MiHostPagingAllocate(SIZE_T Size)
+{
+    return MiHostFailPagingMdlAllocation ? NULL : calloc(1, Size);
+}
+
+#undef ExAllocatePoolWithTag
+#undef ExFreePoolWithTag
+#define ExAllocatePoolWithTag(Type, Bytes, Tag) MiHostPagingAllocate(Bytes)
+#define ExFreePoolWithTag(Pointer, Tag) free(Pointer)
 
 VOID KeInitializeEvent(KEVENT *Event, ULONG Type, BOOLEAN State);
 NTSTATUS KeWaitForSingleObject(PVOID Object, ULONG Reason, ULONG Mode, BOOLEAN Alertable, PLARGE_INTEGER Timeout);

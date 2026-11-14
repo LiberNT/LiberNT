@@ -514,6 +514,7 @@ typedef struct _MI_FILE_OPS
 
 #define MI_MAX_FILE_IO_PAGES 16
 #define MI_MAX_FILE_WRITE_PAGES 64
+#define MI_MAX_FILE_FLUSH_PAGES 256
 
 typedef struct _MI_SEGMENT_LAYOUT
 {

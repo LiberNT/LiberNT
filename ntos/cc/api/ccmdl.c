@@ -205,6 +205,7 @@ CcMdlWriteComplete2(
 {
     PCC_NT_MAP NtMap = CcNtReferenceFileMap(FileObject);
     ULONG64 Offset = (ULONG64)FileOffset->QuadPart;
+    IO_STATUS_BLOCK FlushStatus;
     PMDL Mdl;
 
     for (Mdl = MdlChain; Mdl != NULL && NtMap != NULL; Mdl = Mdl->Next)
@@ -217,6 +218,16 @@ CcMdlWriteComplete2(
 
     if (NtMap != NULL)
         CcNtDereferenceMap(NtMap);
+
+    if (NtMap != NULL && BooleanFlagOn(FileObject->Flags, FO_WRITE_THROUGH) &&
+        Offset > (ULONG64)FileOffset->QuadPart)
+    {
+        ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+        CcFlushCache(FileObject->SectionObjectPointer, FileOffset,
+                     (ULONG)(Offset - (ULONG64)FileOffset->QuadPart), &FlushStatus);
+        if (!NT_SUCCESS(FlushStatus.Status))
+            ExRaiseStatus(FlushStatus.Status);
+    }
 }
 
 VOID

@@ -80,6 +80,15 @@ CcPurgeCacheSection(
     ULONG64 Bytes = (FileOffset != NULL && Length != 0) ? Length : 0;
     BOOLEAN Purged = TRUE;
 
+    if (Bytes != 0)
+    {
+        ULONG64 End = ROUND_UP(Offset + Bytes, (ULONG64)PAGE_SIZE);
+
+        Offset &= ~(ULONG64)(PAGE_SIZE - 1);
+        Bytes = End - Offset;
+        CC_ASSERT(Bytes != 0 && (Bytes & (PAGE_SIZE - 1)) == 0);
+    }
+
     if (NtMap != NULL)
     {
         ULONG64 End = (Bytes == 0) ? (ULONG64)-1 : Offset + Bytes;
