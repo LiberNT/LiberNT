@@ -57,3 +57,43 @@ static inline void MiPfnFreePage(int *p,ULONG x) { (void)p;(void)x; }
 static inline ULONG MiBalanceMemory(MI_SYSTEM *s,MI_PROCESS_MANAGER *m) { (void)s;(void)m;return 0; }
 static inline void MiWakeBalanceSetManager(void) {}
 static inline void KeWaitForSingleObject(KEVENT *e,int r,int m,int a,LARGE_INTEGER *t) { (void)e;(void)r;(void)m;(void)a;(void)t; }
+#include <wchar.h>
+typedef KEVENT *PKEVENT;
+typedef void *HANDLE;
+typedef const wchar_t *PCWSTR;
+typedef struct { unsigned short Length, MaximumLength; const wchar_t *Buffer; } UNICODE_STRING;
+typedef struct { ULONG Attributes; UNICODE_STRING *ObjectName; PVOID SecurityDescriptor; } OBJECT_ATTRIBUTES;
+typedef struct { UCHAR Revision; } SECURITY_DESCRIPTOR, *PSECURITY_DESCRIPTOR;
+typedef struct { UCHAR AclRevision; } ACL, *PACL;
+typedef struct { UCHAR AceType; } ACE;
+#define _Outptr_
+#define PagedPool 1
+#define PAGE_SHIFT 12
+#define ACL_REVISION 2
+#define SECURITY_DESCRIPTOR_REVISION 1
+#define EVENT_QUERY_STATE 0x0001
+#define SYNCHRONIZE 0x00100000
+#define READ_CONTROL 0x00020000
+#define EVENT_ALL_ACCESS 0x001F0003
+#define OBJ_CASE_INSENSITIVE 0x00000040
+#define OBJ_PERMANENT 0x00000010
+#define OBJ_KERNEL_HANDLE 0x00000200
+#define STATUS_INSUFFICIENT_RESOURCES ((NTSTATUS)0xC000009A)
+#define STATUS_NOT_IMPLEMENTED ((NTSTATUS)0xC0000002)
+#define SeWorldSid ((PVOID)0)
+#define SeAliasAdminsSid ((PVOID)0)
+#define SeLocalSystemSid ((PVOID)0)
+#define ExEventObjectType ((PVOID)0)
+#define InitializeObjectAttributes(o,n,a,r,s) ((o)->Attributes=(a),(o)->ObjectName=(n),(o)->SecurityDescriptor=(s),(void)(r))
+static ULONG64 MmNumberOfPhysicalPages;
+static inline ULONG RtlLengthSid(PVOID Sid) { (void)Sid;return 0; }
+static inline NTSTATUS RtlCreateSecurityDescriptor(PSECURITY_DESCRIPTOR Sd,ULONG r) { (void)Sd;(void)r;return STATUS_NOT_IMPLEMENTED; }
+static inline NTSTATUS RtlCreateAcl(PACL Acl,ULONG n,ULONG r) { (void)Acl;(void)n;(void)r;return STATUS_NOT_IMPLEMENTED; }
+static inline NTSTATUS RtlAddAccessAllowedAce(PACL Acl,ULONG r,ULONG m,PVOID Sid) { (void)Acl;(void)r;(void)m;(void)Sid;return STATUS_NOT_IMPLEMENTED; }
+static inline NTSTATUS RtlSetDaclSecurityDescriptor(PSECURITY_DESCRIPTOR Sd,BOOLEAN p,PACL Acl,BOOLEAN d) { (void)Sd;(void)p;(void)Acl;(void)d;return STATUS_NOT_IMPLEMENTED; }
+static inline void RtlInitUnicodeString(UNICODE_STRING *u,PCWSTR s) { u->Buffer=s;u->Length=u->MaximumLength=0; }
+static inline NTSTATUS ZwCreateEvent(HANDLE *h,ULONG a,OBJECT_ATTRIBUTES *o,int t,BOOLEAN s) { (void)a;(void)o;(void)t;(void)s;*h=0;return STATUS_NOT_IMPLEMENTED; }
+static inline NTSTATUS ObReferenceObjectByHandle(HANDLE h,ULONG a,PVOID t,int m,PVOID *o,PVOID i) { (void)h;(void)a;(void)t;(void)m;(void)i;*o=0;return STATUS_NOT_IMPLEMENTED; }
+static inline NTSTATUS ZwClose(HANDLE h) { (void)h;return STATUS_SUCCESS; }
+static inline void KeClearEvent(KEVENT *e) { (void)e; }
+static inline LONG KeSetEvent(KEVENT *e,LONG i,BOOLEAN w) { (void)e;(void)i;(void)w;return 0; }

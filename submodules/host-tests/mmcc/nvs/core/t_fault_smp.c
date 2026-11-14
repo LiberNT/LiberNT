@@ -211,6 +211,136 @@ FaultParallelTables(void)
     WorldDestroy(&World);
 }
 
+#define PROTECT_PAGES 16
+#define PROTECT_ROUNDS 1500
+
+typedef struct _PROTECT_WORKER
+{
+    TEST_WORLD *World;
+    PMI_ADDRESS_SPACE Space;
+    ULONG64 Own;
+    ULONG64 Common;
+    ULONG Index;
+    ULONG64 LastValue;
+    volatile LONG *Ready;
+    volatile LONG *Go;
+} PROTECT_WORKER;
+
+static
+void *
+ProtectWorker(void *Argument)
+{
+    PROTECT_WORKER *Worker = Argument;
+    ULONG Previous = MI_PROT_READWRITE;
+    ULONG Round;
+
+    MiHostCpu = Worker->Index;
+    MachineCpu = Worker->Index;
+    MI_ATOMIC_ADD32(Worker->Ready, 1);
+    while (!MI_ATOMIC_READ32(Worker->Go))
+        sched_yield();
+
+    for (Round = 0; Round < PROTECT_ROUNDS; Round++)
+    {
+        ULONG Protection = (Round & 1) ? MI_PROT_READONLY : MI_PROT_READWRITE;
+        ULONG64 Va = Worker->Own, Size = PROTECT_PAGES * PAGE_SIZE;
+        ULONG64 Common = Worker->Common, CommonSize = PROTECT_PAGES * PAGE_SIZE;
+        ULONG64 Page = Worker->Own + (Round % PROTECT_PAGES) * PAGE_SIZE + Worker->Index * sizeof(ULONG64);
+        ULONG Old = 0;
+        NTSTATUS Status;
+
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(Worker->Space, &Va, &Size, Protection, &Old)));
+        CHECK(Old == Previous && Va == Worker->Own && Size == PROTECT_PAGES * PAGE_SIZE);
+        Previous = Protection;
+
+        if (Protection == MI_PROT_READWRITE)
+        {
+            ULONG64 Value = 0x9E000000ULL + Worker->Index * 0x100000ULL + Round;
+
+            CHECK(NT_SUCCESS(MiFault(Worker->Space, Page, MiFaultWrite, TRUE)));
+            CHECK(NT_SUCCESS(UserWrite64(Worker->World, Worker->Index, Page, Value)));
+            CHECK(UserRead64(Worker->World, Worker->Index, Page, &Status) == Value && NT_SUCCESS(Status));
+            Worker->LastValue = Value;
+        }
+        else
+        {
+            CHECK(MiFault(Worker->Space, Page, MiFaultWrite, TRUE) == STATUS_ACCESS_VIOLATION);
+            CHECK(NT_SUCCESS(MiFault(Worker->Space, Page, MiFaultRead, TRUE)));
+        }
+
+        {
+            static const ULONG Cycle[3] = { MI_PROT_READWRITE, MI_PROT_NOACCESS, MI_PROT_READONLY };
+            ULONG64 Target = Worker->Common + ((Round * 7 + Worker->Index) % PROTECT_PAGES) * PAGE_SIZE;
+
+            CHECK(NT_SUCCESS(MiProtectVirtualMemory(Worker->Space, &Common, &CommonSize,
+                                                    Cycle[(Round + Worker->Index) % 3], &Old)));
+            CHECK(Old == MI_PROT_READONLY || Old == MI_PROT_READWRITE || Old == MI_PROT_NOACCESS);
+            Status = MiFault(Worker->Space, Target, (Round & 2) ? MiFaultWrite : MiFaultRead, TRUE);
+            CHECK(NT_SUCCESS(Status) || Status == STATUS_ACCESS_VIOLATION);
+        }
+
+        if ((Round & 63) == 0)
+        {
+            MI_MEMORY_INFORMATION Info;
+
+            CHECK(NT_SUCCESS(MiQueryVirtualMemory(Worker->Space, Worker->Own, &Info)));
+            CHECK(Info.State == MI_MEM_COMMIT && Info.Protect == Protection);
+        }
+    }
+
+    CHECK(MiHostIrql == 0);
+    return NULL;
+}
+
+static
+void
+FaultProtectConcurrent(void)
+{
+    static TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    PROTECT_WORKER Workers[FAULT_WORKERS];
+    pthread_t Threads[FAULT_WORKERS];
+    volatile LONG Ready = 0, Go = 0;
+    ULONG64 Base = USER_BASE, Size = (FAULT_WORKERS + 1) * PROTECT_PAGES * PAGE_SIZE;
+    ULONG64 Va;
+    NTSTATUS Status;
+    ULONG i;
+
+    WorldCreate(&World, 1024, FAULT_WORKERS, 1000000);
+    ProcessCreate(&World, &Space);
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    for (Va = Base; Va < Base + Size; Va += PAGE_SIZE)
+        CHECK(NT_SUCCESS(MiFault(&Space, Va, MiFaultWrite, TRUE)));
+
+    for (i = 0; i < FAULT_WORKERS; i++)
+        WorldAttach(&World, i, &Space);
+    for (i = 0; i < FAULT_WORKERS; i++)
+    {
+        Workers[i] = (PROTECT_WORKER){ &World, &Space, Base + (i + 1) * PROTECT_PAGES * PAGE_SIZE, Base, i, 0,
+                                       &Ready, &Go };
+        MI_ASSERT(pthread_create(&Threads[i], NULL, ProtectWorker, &Workers[i]) == 0);
+    }
+    while (MI_ATOMIC_READ32(&Ready) != FAULT_WORKERS)
+        sched_yield();
+    MI_ATOMIC_ADD32(&Go, 1);
+    for (i = 0; i < FAULT_WORKERS; i++)
+        MI_ASSERT(pthread_join(Threads[i], NULL) == 0);
+
+    for (i = 0; i < FAULT_WORKERS; i++)
+    {
+        ULONG64 Page = Workers[i].Own + ((PROTECT_ROUNDS - 2) % PROTECT_PAGES) * PAGE_SIZE + i * sizeof(ULONG64);
+
+        CHECK(UserRead64(&World, 0, Page, &Status) == Workers[i].LastValue && NT_SUCCESS(Status));
+    }
+    CHECK(MiPtCheck(&Space) == 0);
+    CHECK(WorldCheck(&World) == 0);
+    for (i = 0; i < FAULT_WORKERS; i++)
+        WorldAttach(&World, i, NULL);
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 1024);
+    WorldDestroy(&World);
+}
+
 void
 TestFaultSmp(void)
 {
@@ -219,4 +349,5 @@ TestFaultSmp(void)
     for (Mode = 0; Mode < 6; Mode++)
         FaultSharedPte(Mode);
     FaultParallelTables();
+    FaultProtectConcurrent();
 }
