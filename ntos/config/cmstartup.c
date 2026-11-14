@@ -999,8 +999,6 @@ CmpInitializeHiveList(VOID)
         return;
     }
 
-    CmpHiveListLoaded = TRUE;
-
     for (i = 0; i < CM_NUMBER_OF_MACHINE_HIVES; i++)
     {
         Entry = &CmpMachineHiveList[i];
@@ -1055,6 +1053,10 @@ CmpInitializeHiveList(VOID)
         CmpAddToHiveFileList(Hive);
         CmpNotifyMachineHiveLoaded(&HiveName, Hive);
     }
+
+    /* Published only once every hive is in place, so the unlocked fast path above cannot see a half-built list */
+    KeMemoryBarrier();
+    CmpHiveListLoaded = TRUE;
 
     ExReleasePushLockExclusive(&CmpLoadHiveLock);
 
