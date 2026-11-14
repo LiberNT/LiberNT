@@ -242,6 +242,8 @@ USBSTOR_RequestTimeoutDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLock(&FDODeviceExtension->RequestTimerLock, &OldIrql);
     Irp = FDODeviceExtension->RequestTimerIrp;
     if (!Irp)

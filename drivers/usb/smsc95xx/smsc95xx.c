@@ -256,6 +256,8 @@ VOID
 SmscAcquireRundownLocked(
     _Inout_ PSMSC_ADAPTER Adapter)
 {
+    ASSERT(Adapter != NULL);
+
     if (InterlockedIncrement(&Adapter->PendingIoCount) == 1)
     {
         KeClearEvent(&Adapter->RemoveEvent);
@@ -2132,6 +2134,8 @@ NDIS_STATUS
 SmscStoppedSendStatusLocked(
     _In_ PSMSC_ADAPTER Adapter)
 {
+    ASSERT(Adapter != NULL);
+
     if (Adapter->Halting)
     {
         return NDIS_STATUS_FAILURE;
@@ -2156,6 +2160,9 @@ SmscDetachActiveSendLocked(
     PNET_BUFFER_LIST Nbl;
 
     Nbl = Adapter->TxActiveNbl;
+
+    ASSERT(Adapter != NULL);
+
     if (!Nbl)
     {
         return NULL;
@@ -2284,6 +2291,9 @@ SmscRxResubmitDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Arg1);
     UNREFERENCED_PARAMETER(Arg2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     (VOID)SmscStartBulkRead((PSMSC_ADAPTER)Context);
     SmscReleaseRundown((PSMSC_ADAPTER)Context);
 }
@@ -2300,6 +2310,9 @@ SmscInterruptResubmitDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Arg1);
     UNREFERENCED_PARAMETER(Arg2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     (VOID)SmscStartInterruptRead((PSMSC_ADAPTER)Context);
     SmscReleaseRundown((PSMSC_ADAPTER)Context);
 }

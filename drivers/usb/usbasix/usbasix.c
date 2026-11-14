@@ -1293,6 +1293,9 @@ AsixRxResubmitDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Arg1);
     UNREFERENCED_PARAMETER(Arg2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     (VOID)AsixStartBulkRead((PASIX_ADAPTER)Context);
 }
 
@@ -1308,6 +1311,9 @@ AsixInterruptResubmitDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(Arg1);
     UNREFERENCED_PARAMETER(Arg2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     (VOID)AsixStartInterruptRead((PASIX_ADAPTER)Context);
 }
 

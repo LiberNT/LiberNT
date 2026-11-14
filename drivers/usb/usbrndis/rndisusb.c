@@ -1632,6 +1632,8 @@ RndisRxResubmitDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Adapter->Halting)
     {
         /* Reset RX budget for fresh polling burst */
@@ -1660,6 +1662,8 @@ RndisRxBackoffDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     DPRINT("RX backoff timer expired, resuming RX\n");
 
@@ -1696,6 +1700,9 @@ RndisRxDelayDpc(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* Clear the coalescing flag */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     InterlockedExchange(&Adapter->RxDelayScheduled, 0);
 
     /* Resubmit RX after delay, but only if not already submitted */
@@ -1738,6 +1745,8 @@ RndisInterruptResubmitDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Adapter->Halting)
     {
         RndisUsbSubmitInterruptRead(Adapter);
@@ -1767,6 +1776,9 @@ RndisInterruptDelayDpc(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* Clear the coalescing flag */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     InterlockedExchange(&Adapter->InterruptDelayScheduled, 0);
 
     /* Resubmit interrupt read after delay */
@@ -1801,6 +1813,8 @@ RndisTxResubmitDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     InterlockedExchange(&Adapter->TxHot.TxResubmitScheduled, 0);
 

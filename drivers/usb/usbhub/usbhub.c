@@ -541,6 +541,8 @@ USBH_UrbTimeoutDPC(IN PKDPC Dpc,
     KIRQL OldIrql;
     BOOL IsCompleted;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     DPRINT("USBH_TimeoutDPC ... \n");
 
     HubTimeoutContext = DeferredContext;

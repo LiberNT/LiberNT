@@ -58,6 +58,8 @@ USBPORT_HcWakeDpc(IN PRKDPC Dpc,
                   IN PVOID SystemArgument1,
                   IN PVOID SystemArgument2)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     DPRINT("USBPORT_HcWakeDpc: ... \n");
     USBPORT_CompletePdoWaitWake((PDEVICE_OBJECT)DeferredContext);
 }
