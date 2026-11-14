@@ -27,6 +27,7 @@ HANDLE ProcessHeap;
 SETUPDATA SetupData;
 
 PPARTENTRY InstallPartition = NULL;
+static BOOLEAN InstallVolumeFormatted = FALSE;
 #define InstallVolume (InstallPartition->Volume)
 
 PPARTENTRY SystemPartition = NULL;
@@ -217,6 +218,8 @@ FsVolCallback(
             FmtInfo->QuickFormat = VolCreate->QuickFormat;
             FmtInfo->ClusterSize = VolCreate->ClusterSize;
             FmtInfo->Callback = FormatCallback;
+            if (InstallPartition && FmtInfo->Volume == InstallVolume)
+                InstallVolumeFormatted = TRUE;
 
             SendMessageW(UiContext.hWndProgress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
             SendMessageW(UiContext.hWndProgress, PBM_SETPOS, 0, 0);
@@ -542,6 +545,16 @@ ConfigureInstalledSystem(
     SecureZeroMemory(Settings, cchSettings * sizeof(WCHAR));
     HeapFree(ProcessHeap, 0, Settings);
     SecureZeroMemory(pSetupData->Password, sizeof(pSetupData->Password));
+
+    /* TODO: an upgrade keeps the security of the files it replaces; files it adds inherit theirs */
+    if (Error == ERROR_SUCCESS && !pSetupData->bUpgrade)
+    {
+        Status = InstallApplyFileSecurity(pSetupData->USetupData.DestinationRootPath.Buffer,
+                                          pSetupData->USetupData.InstallationDirectory,
+                                          InstallVolumeFormatted);
+        if (!NT_SUCCESS(Status))
+            Error = RtlNtStatusToDosError(Status);
+    }
 
     return Error;
 }
