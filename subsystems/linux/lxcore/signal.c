@@ -101,6 +101,12 @@ LxThreadDetach(
     if (!Last && (InterlockedExchange(&Thread->SharedWake, 0) != 0))
         LxSignalRetarget(Process, NULL, ~0ULL);
 
+    /* The retry timer queues an APC to the NT thread, so it must be gone before that thread is let go */
+    if (Thread->SignalRetry != NULL)
+    {
+        ExDeleteTimer(Thread->SignalRetry, TRUE, TRUE, NULL);
+        Thread->SignalRetry = NULL;
+    }
     ObDereferenceObject(Thread->EThread);
     Thread->EThread = NULL;
     return Last;
