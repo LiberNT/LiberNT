@@ -3402,14 +3402,15 @@ RQueryServiceConfigW(
         }
         else
         {
-            *lpStr = 0;
+            lpStr[0] = 0;
+            lpStr[1] = 0;
         }
 
         lpServiceConfig->lpDependencies = (LPWSTR)((ULONG_PTR)lpStr - (ULONG_PTR)lpServiceConfig);
         if (lpDependencies != NULL)
             lpStr += dwDependenciesLength;
         else
-            lpStr += (wcslen(lpStr) + 1);
+            lpStr += 2;
 
         /* Append the service start name */
         if (lpServiceStartName != NULL)
@@ -4484,14 +4485,15 @@ RQueryServiceConfigA(
         }
         else
         {
-            *lpStr = 0;
+            lpStr[0] = 0;
+            lpStr[1] = 0;
         }
 
         lpServiceConfig->lpDependencies = (LPSTR)((ULONG_PTR)lpStr - (ULONG_PTR)lpServiceConfig);
         if (lpDependencies)
             lpStr += dwDependenciesLength;
         else
-            lpStr += (strlen(lpStr) + 1);
+            lpStr += 2;
 
         if (lpServiceStartName)
         {

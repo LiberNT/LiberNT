@@ -2956,6 +2956,7 @@ static void test_EventLog(void)
     DWORD size;
     BOOL ret;
     QUERY_SERVICE_CONFIGA *config;
+    QUERY_SERVICE_CONFIGW *configW;
     SERVICE_STATUS_PROCESS status;
 
     scm_handle = OpenSCManagerA(NULL, NULL, GENERIC_READ);
@@ -2984,6 +2985,7 @@ static void test_EventLog(void)
     ok(!strcmpi(config->lpLoadOrderGroup, "Event Log"), "got %s\n", config->lpLoadOrderGroup);
     ok(config->dwTagId == 0, "Expected 0, got %ld\n", config->dwTagId);
     ok(!config->lpDependencies[0], "lpDependencies is not empty\n");
+    ok(!config->lpDependencies[1], "lpDependencies is not double-null terminated\n");
     ok(!strcmp(config->lpServiceStartName, "LocalSystem") /* XP */ ||
        !strcmp(config->lpServiceStartName, "NT AUTHORITY\\LocalService"),
        "got %s\n", config->lpServiceStartName);
@@ -2992,6 +2994,18 @@ static void test_EventLog(void)
        !strcmp(config->lpDisplayName, "Windows Event Log") /* Vista+ */, "got %s\n", config->lpDisplayName);
 
     free(config);
+
+    SetLastError(0xdeadbeef);
+    ret = QueryServiceConfigW(svc_handle, NULL, 0, &size);
+    ok(!ret, "QueryServiceConfigW should fail\n");
+    ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "got %lu\n", GetLastError());
+
+    configW = malloc(size);
+    ret = QueryServiceConfigW(svc_handle, configW, size, &size);
+    ok(ret, "QueryServiceConfigW error %lu\n", GetLastError());
+    ok(!configW->lpDependencies[0], "lpDependencies is not empty\n");
+    ok(!configW->lpDependencies[1], "lpDependencies is not double-null terminated\n");
+    free(configW);
 
     memset(&status, 0, sizeof(status));
     size = sizeof(status);
