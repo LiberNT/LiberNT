@@ -132,6 +132,7 @@ ExpKdbgExtPoolUsed(
     if (Argc > 1)
         PoolKdbgParseTag(Argv[Argc - 1], &Tag, &Mask);
 
+    KdbpPrint("Tag   np: allocations/frees bytes  pg: allocations/frees bytes\n");
     MiDumpPoolConsumers(TRUE, Tag, Mask, 0);
     return TRUE;
 }
