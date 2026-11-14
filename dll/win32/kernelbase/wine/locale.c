@@ -1436,6 +1436,7 @@ static int get_locale_info( const NLS_LOCALE_DATA *locale, LCID lcid, LCTYPE typ
         return locale_return_strarray( locale->sduration, 0, type, buffer, len );
 
     case LOCALE_SKEYBOARDSTOINSTALL:
+        /* FIXME: media/nls/locale.nls names 0409:00000409 for every locale, not each one's default input profile */
         return locale_return_string( locale->skeyboardstoinstall, type, buffer, len );
 
     case LOCALE_SSHORTESTDAYNAME1:
