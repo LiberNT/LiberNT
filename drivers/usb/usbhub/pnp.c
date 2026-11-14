@@ -1931,22 +1931,23 @@ USBH_FdoQueryBusRelations(IN PUSBHUB_FDO_EXTENSION HubExtension,
 
     if (HubExtension->HubFlags & USBHUB_FDO_FLAG_NOT_ENUMERATED)
     {
+        BOOLEAN RootHubReady = TRUE;
+
         if (HubExtension->LowerPDO == HubExtension->RootHubPdo)
         {
             LARGE_INTEGER Timeout;
 
             /* USBPORT finishes power/chirp before notifying the root hub.
              * Starting a hub reset earlier races that worker's PORTSC writes,
-             * which can disable a port after our reset has enabled it. */
-            Timeout.QuadPart = -10LL * 1000 * 10000;
+             * which can disable a port after our reset has enabled it.
+             * A companion's notification waits on the device action that still
+             * has to start its USB2 partner, so this wait cannot be allowed to
+             * hold the PnP thread for long; USBHUB_RootHubCallBack asks for the
+             * relations again, so report none once the short wait is over. */
+            Timeout.QuadPart = -100LL * 10000;
             Status = KeWaitForSingleObject(&HubExtension->RootHubNotificationEvent, Executive, KernelMode, FALSE, &Timeout);
-            if (Status != STATUS_SUCCESS)
-            {
-                DPRINT1("USBH_FdoQueryBusRelations: root hub initialization did not complete (0x%08lx)\n", Status);
-                if (Status == STATUS_TIMEOUT)
-                    Status = STATUS_IO_TIMEOUT;
-                goto RelationsWorker;
-            }
+            RootHubReady = (Status == STATUS_SUCCESS);
+            Status = STATUS_SUCCESS;
         }
 
         /*
@@ -1957,7 +1958,10 @@ USBH_FdoQueryBusRelations(IN PUSBHUB_FDO_EXTENSION HubExtension,
          * initial topology synchronously; no device type or boot-path special
          * case is required.
          */
-        USBH_EnumerateHubPorts(HubExtension);
+        if (RootHubReady)
+        {
+            USBH_EnumerateHubPorts(HubExtension);
+        }
     }
     else if (HubExtension->HubFlags & USBHUB_FDO_FLAG_DO_ENUMERATION)
     {
