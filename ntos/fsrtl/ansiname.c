@@ -14,6 +14,8 @@
 #define FSRTL_DBCS_TAG 'dRsF'
 
 #define FSRTL_STACK_STATES 64
+#define FSRTL_STATE_ACTIVE 1
+#define FSRTL_STATE_BOUNDED 2
 
 #define FSRTL_FAT_NAME_BYTES 8
 #define FSRTL_FAT_EXTENSION_BYTES 3
@@ -96,12 +98,12 @@ FsRtlpCloseDbcsStates(
 
         if (Character == '*')
         {
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
         }
         else if (Character == ANSI_DOS_STAR)
         {
             /* DOS_STAR may always stop here, matching nothing more */
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
         }
         else if (Character == ANSI_DOS_QM)
         {
@@ -112,13 +114,13 @@ FsRtlpCloseDbcsStates(
 
                 while ((j < Length) && (Run->Expression[j] == ANSI_DOS_QM)) j++;
 
-                Run->Current[j] = TRUE;
+                Run->Current[j] |= FSRTL_STATE_ACTIVE;
             }
         }
         else if ((Character == ANSI_DOS_DOT) &&
                  (NamePosition == Run->NameLength))
         {
-            Run->Current[i + 1] = TRUE;
+            Run->Current[i + 1] |= FSRTL_STATE_ACTIVE;
         }
 
         i += Size;
@@ -134,7 +136,7 @@ FsRtlpSweepDbcsExpression(
     ULONG Position = 0;
 
     RtlZeroMemory(Run->Current, States);
-    Run->Current[0] = TRUE;
+    Run->Current[0] = FSRTL_STATE_ACTIVE;
 
     for (;;)
     {
@@ -166,32 +168,45 @@ FsRtlpSweepDbcsExpression(
 
             if ((Size == 1) && (Character == '*'))
             {
-                Run->Next[i] = TRUE;
+                Run->Next[i] |= FSRTL_STATE_ACTIVE;
             }
             else if ((Size == 1) && (Character == '?'))
             {
-                Run->Next[i + 1] = TRUE;
+                Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
             }
             else if ((Size == 1) && (Character == ANSI_DOS_QM))
             {
-                if (Run->Name[Position] != '.') Run->Next[i + 1] = TRUE;
+                if (Run->Name[Position] != '.')
+                {
+                    Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
+                }
+                else
+                {
+                    ULONG j = i;
+
+                    /* A run of DOS_QM that ends the expression takes the period with it */
+                    while ((j < Run->ExpressionLength) && (Run->Expression[j] == ANSI_DOS_QM)) j++;
+                    if (j == Run->ExpressionLength) Run->Next[j] |= FSRTL_STATE_ACTIVE;
+                }
             }
             else if ((Size == 1) && (Character == ANSI_DOS_DOT))
             {
-                if (Run->Name[Position] == '.') Run->Next[i + 1] = TRUE;
+                if (Run->Name[Position] == '.') Run->Next[i + 1] |= FSRTL_STATE_ACTIVE;
             }
             else if ((Size == 1) && (Character == ANSI_DOS_STAR))
             {
-                /* It takes characters up to and including the name's final period, never past it */
-                if ((Run->LastDot < 0) || (Position <= (ULONG)Run->LastDot))
-                    Run->Next[i] = TRUE;
+                /* It takes characters up to and including the name's final period, and past it only when it started there */
+                if (Run->Current[i] & FSRTL_STATE_ACTIVE)
+                {
+                    Run->Next[i] |= ((LONG)Position == Run->LastDot) ? FSRTL_STATE_BOUNDED : FSRTL_STATE_ACTIVE;
+                }
             }
             else if ((Size == NameSize) &&
                      (RtlCompareMemory(&Run->Expression[i],
                                        &Run->Name[Position],
                                        Size) == Size))
             {
-                Run->Next[i + Size] = TRUE;
+                Run->Next[i + Size] |= FSRTL_STATE_ACTIVE;
             }
 
             i += Size;
