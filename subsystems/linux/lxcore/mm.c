@@ -2173,7 +2173,19 @@ LxMmPopulate(
         if (Information.State == MEM_COMMIT)
         {
             if (!LxNtAllows(Information.Protect, Access))
-                return -LX_EFAULT;
+            {
+                /* FIXME: only the first write through a mapping moves the file's times; Linux moves them for each page */
+                if ((Access != LX_PROT_WRITE) || !(Vma->Flags & LX_MAP_SHARED) || !(Vma->Prot & LX_PROT_WRITE) ||
+                    (LxTmpfsFileInode(Vma->File) == NULL) ||
+                    !NT_SUCCESS(LxVmProtect(max(RegionStart, Vma->Start), RegionEnd - max(RegionStart, Vma->Start),
+                                            LxProtToNt(Vma->Prot))))
+                {
+                    return -LX_EFAULT;
+                }
+                LxTmpfsFileModified(Vma->File);
+                Populated++;
+                continue;
+            }
             Cursor = min(RegionEnd, End);
             continue;
         }
@@ -2587,6 +2599,9 @@ LxMmMapView(
     *GrowBase = 0;
     if ((Prot & LX_PROT_WRITE) && !Writable)
         return -LX_EACCES;
+    /* A file whose times lxcore keeps is mapped without write access at first; the first write faults and moves them */
+    if ((Prot & LX_PROT_WRITE) && (LxTmpfsFileInode(File) != NULL))
+        Protect = LxProtToNt((Prot & ~LX_PROT_WRITE) | LX_PROT_READ);
 
     if (File != NULL)
     {
@@ -3674,7 +3689,6 @@ LX_SYSCALL(LxSysMmap)
             Prot |= LX_PROT_EXEC;
         }
         Result = LxMmMap(Call->Process, Call->Args[0], Call->Args[1], Prot, Flags, Zero ? NULL : File, Call->Args[5]);
-        /* TODO: a write through a shared mapping does not mark the file's modification time */
         if ((File != NULL) && (Result >= 0))
             LxTmpfsFileAccessed(File);
     }

@@ -1380,6 +1380,7 @@ LONG LxTmpfsOpenFile(_In_ PLX_TMPFS_INODE Inode, _In_ ULONG Flags, _Out_ PLX_FIL
 LONG LxTmpfsCreateAnonymous(_In_ ULONG Mode, _In_ ULONG Uid, _In_ ULONG Gid, _Out_ PLX_FILE *File);
 PLX_TMPFS_INODE LxTmpfsFileInode(_In_opt_ PLX_FILE File);
 VOID LxTmpfsFileAccessed(_In_ PLX_FILE File);
+VOID LxTmpfsFileModified(_In_ PLX_FILE File);
 NTSTATUS LxTmpfsMapSection(_In_ PLX_TMPFS_INODE Inode, _In_ BOOLEAN Shared, _Out_ PHANDLE Section, _Out_opt_ PULONG64 Size);
 LONG64 LxTmpfsReadKernel(_In_ PLX_TMPFS_INODE Inode, _Out_writes_bytes_(Length) PVOID Buffer, _In_ ULONG Length,
                          _In_ ULONG64 Offset);

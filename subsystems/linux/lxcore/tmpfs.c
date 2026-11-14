@@ -2286,6 +2286,21 @@ LxTmpfsFileInode(
     return ((File != NULL) && (File->Ops == &LxTmpfsFileOps)) ? File->Object : NULL;
 }
 
+VOID
+LxTmpfsFileModified(
+    _In_ PLX_FILE File)
+{
+    PLX_TMPFS_INODE Inode = LxTmpfsFileInode(File);
+    LX_TIMESPEC Now;
+
+    if ((Inode == NULL) || (Inode->Fs->Squash != NULL))
+        return;
+    LxTmpfsNow(&Now);
+    LxTmpfsLockExclusive(Inode->Fs);
+    Inode->Mtime = Inode->Ctime = Now;
+    LxTmpfsUnlock(Inode->Fs);
+}
+
 /* The access time moves when it is not past the last change, or is a day old */
 VOID
 LxTmpfsFileAccessed(
