@@ -445,11 +445,11 @@ AtaAhciPollingTimerDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     OldIrql = KeAcquireInterruptSpinLock(ChanData->Controller->InterruptObject);
 
     ActiveSlots = ChanData->ActiveSlotsBitmap;
-
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (ActiveSlots != 0)
     {
