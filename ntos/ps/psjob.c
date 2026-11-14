@@ -468,6 +468,7 @@ PspTerminateJobObject(
 
     UNREFERENCED_PARAMETER(AccessMode);
 
+    /* FIXME: Terminating is written here and cleared below but never read, so concurrent NtTerminateJobObject calls are not serialised by it */
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&Job->JobLock, TRUE);
     Job->Terminating = TRUE;
