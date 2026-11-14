@@ -16,10 +16,15 @@ BOOLEAN DxgkVidMmWorkerDrainCoreTryAdmitLocked(_Inout_ volatile LONG *ActiveWork
     *ResetDrainedEvent = *ActiveWorkers == 0;
     (*ActiveWorkers)++;
     return TRUE;
+
+    ASSERT(*ActiveWorkers > 0);
+
 }
 
 BOOLEAN DxgkVidMmWorkerDrainCoreRetireLocked(_Inout_ volatile LONG *ActiveWorkers, _Out_ PBOOLEAN SetDrainedEvent)
 {
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     if (ActiveWorkers == NULL || SetDrainedEvent == NULL)
         return FALSE;
     *SetDrainedEvent = FALSE;
@@ -32,5 +37,7 @@ BOOLEAN DxgkVidMmWorkerDrainCoreRetireLocked(_Inout_ volatile LONG *ActiveWorker
 
 BOOLEAN DxgkVidMmWorkerDrainCoreIsDrainedLocked(_In_ volatile const LONG *ActiveWorkers)
 {
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     return ActiveWorkers != NULL && *ActiveWorkers == 0;
 }

@@ -473,6 +473,9 @@ HdgfxIsSupportedVidPnLocked(
     NTSTATUS Status;
 
     Status = HdgfxCollectPaths(Topology, hTopology, &Paths);
+
+    ASSERT(IsSupportedVidPn != NULL);
+
     if (!NT_SUCCESS(Status) || Paths.Count == 0)
     {
         IsSupportedVidPn->IsVidPnSupported = NT_SUCCESS(Status);
@@ -787,6 +790,9 @@ HdgfxEnumCofuncModalityLocked(
     _In_ CONST DXGK_VIDPNTOPOLOGY_INTERFACE *Topology,
     _In_ D3DKMDT_HVIDPNTOPOLOGY hTopology)
 {
+    ASSERT(EnumCofuncModality != NULL);
+    ASSERT(Topology != NULL);
+
     CONST D3DKMDT_VIDPN_PRESENT_PATH *Path = NULL;
     CONST D3DKMDT_VIDPN_PRESENT_PATH *NextPath;
     HDGFX_PATH_SET Paths;
@@ -1046,6 +1052,8 @@ HdgfxSetTimingsFromVidPnLocked(
     ULONG Index;
     ULONG Other;
     NTSTATUS Status;
+
+    ASSERT(Scanout != NULL);
 
     Status = HdgfxValidateFunctionalVidPn(Adapter, Scanout, SetTimings->hFunctionalVidPn, &Paths,
                                           &SourceMode);

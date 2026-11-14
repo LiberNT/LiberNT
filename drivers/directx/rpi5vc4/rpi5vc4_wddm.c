@@ -31,6 +31,8 @@ Rpi5Vc4AllocateOverflowChunkLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Index < RPI5VC4_V3D_OVERFLOW_CHUNK_COUNT; Index++)
     {
         ULONG Bit = 1u << Index;
@@ -53,6 +55,8 @@ Rpi5Vc4ReleaseOverflowChunksLocked(
     _Inout_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension,
     _Inout_ PRPI5VC4_PENDING_SUBMIT Entry)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     DeviceExtension->V3dOverflowChunkMap &= ~Entry->OverflowChunkMask;
     Entry->OverflowChunkMask = 0;
 }
@@ -106,6 +110,8 @@ Rpi5Vc4AppendSubmitLocked(
     _In_ ULONG Node,
     _In_ PRPI5VC4_PENDING_SUBMIT Entry)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     Entry->Next = NULL;
     if (DeviceExtension->NodeQueue[Node].Tail != NULL)
         DeviceExtension->NodeQueue[Node].Tail->Next = Entry;
@@ -121,6 +127,8 @@ Rpi5Vc4RemoveSubmitLocked(
     _In_ ULONG Node)
 {
     PRPI5VC4_PENDING_SUBMIT Entry = DeviceExtension->NodeQueue[Node].Head;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     Rpi5Vc4ReleaseOverflowChunksLocked(DeviceExtension, Entry);
     DeviceExtension->NodeQueue[Node].Head = Entry->Next;
@@ -139,6 +147,8 @@ Rpi5Vc4ClearPendingLocked(
 {
     ULONG Node;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Node = 0; Node < RPI5VC4_GPU_NODE_COUNT; ++Node)
     {
         while (DeviceExtension->NodeQueue[Node].Head != NULL)
@@ -151,6 +161,8 @@ Rpi5Vc4GpuJobActiveLocked(
     _In_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension)
 {
     ULONG Node;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Node = 0; Node < RPI5VC4_GPU_NODE_COUNT; ++Node)
     {
@@ -173,6 +185,8 @@ Rpi5Vc4SelectAddressSpaceLocked(
     _In_opt_ PRPI5VC4_PROCESS Process)
 {
     PHYSICAL_ADDRESS PageTablePhysical;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (DeviceExtension->V3dActiveProcess == Process)
         return TRUE;
@@ -221,6 +235,8 @@ Rpi5Vc4OldestQueuedProcessLocked(
     PRPI5VC4_PENDING_SUBMIT Oldest = NULL;
     ULONG Node;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Node = 0; Node < RPI5VC4_GPU_NODE_COUNT; ++Node)
     {
         PRPI5VC4_PENDING_SUBMIT Head;
@@ -258,6 +274,8 @@ Rpi5Vc4ProcessHasQueuedHeadLocked(
 {
     ULONG Node;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Node = 0; Node < RPI5VC4_GPU_NODE_COUNT; ++Node)
     {
         PRPI5VC4_PENDING_SUBMIT Head;
@@ -285,6 +303,9 @@ Rpi5Vc4PreferredProcessLocked(
     /* Now is sampled once at the top of the pass, so a switch made later in
      * that same pass is stamped after it. Treat that as the slice having
      * just started rather than letting the subtraction wrap. */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if ((Now < Switched ||
          (Now - Switched) < RPI5VC4_ADDRESS_SPACE_SLICE_100NS) &&
         Rpi5Vc4ProcessHasQueuedHeadLocked(DeviceExtension, Active))
@@ -302,6 +323,8 @@ Rpi5Vc4KickBinLocked(
 {
     ULONG Qma = Entry->Qma;
     ULONG Qms = Entry->Qms;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Qms == 0)
     {
@@ -337,6 +360,8 @@ Rpi5Vc4UpdateBinCompletionLocked(
     _Inout_ PRPI5VC4_PENDING_SUBMIT Entry,
     _Inout_ PBOOLEAN BinComplete)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (*BinComplete)
     {
         Entry->BinCompletionSeen = TRUE;
@@ -372,6 +397,8 @@ static PRPI5VC4_PENDING_SUBMIT
 Rpi5Vc4ActiveBinnerLocked(
     _In_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     PRPI5VC4_PENDING_SUBMIT Head =
         DeviceExtension->NodeQueue[RPI5VC4_NODE_3D].Head;
 
@@ -395,6 +422,8 @@ Rpi5Vc4ServiceBinOomLocked(
     _In_ ULONGLONG Now,
     _Out_opt_ PRPI5VC4_PENDING_SUBMIT *ServicedEntry)
 {
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     PRPI5VC4_PENDING_SUBMIT Binner =
         Rpi5Vc4ActiveBinnerLocked(DeviceExtension);
     ULONG GpuVa;
@@ -452,6 +481,8 @@ Rpi5Vc4ProcessPendingLocked(
     ULONG Rescans = 0;
     BOOLEAN RetiredThisPass;
     BOOLEAN AddressSpaceWaitThisPass;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
 #define Queue(n) (&DeviceExtension->NodeQueue[(n)])
 
@@ -921,6 +952,8 @@ Rpi5Vc4FenceDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (DeviceExtension == NULL)
         return;
 
@@ -1053,6 +1086,8 @@ Rpi5Vc4V3dPollDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (DeviceExtension == NULL)
         return;
@@ -1248,6 +1283,9 @@ Rpi5Vc4HpdDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     /* Stop polling once a display is adopted, the device is stopping, or gone. */
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (DeviceExtension == NULL || DeviceExtension->StopAccepting ||
         !DeviceExtension->Headless || DeviceExtension->HpdWorkItem == NULL)
         return;
@@ -1276,6 +1314,8 @@ Rpi5Vc4VsyncDpcRoutine(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (DeviceExtension == NULL || DeviceExtension->StopAccepting || !DeviceExtension->VsyncEnabled)
         return;

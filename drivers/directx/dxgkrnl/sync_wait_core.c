@@ -16,6 +16,8 @@ DxgkpSyncWaitConditionSatisfiedLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Index < Request->TargetCount; ++Index)
     {
         BOOLEAN Reached = (UINT64)*Request->Targets[Index].FenceValue >= Request->Targets[Index].TargetValue;
@@ -60,6 +62,8 @@ DxgkpSyncWaitCollectSatisfiedLocked(
     _Inout_ PLIST_ENTRY CompletionList)
 {
     PLIST_ENTRY Entry = Registry->RequestList.Flink;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     while (Entry != &Registry->RequestList)
     {

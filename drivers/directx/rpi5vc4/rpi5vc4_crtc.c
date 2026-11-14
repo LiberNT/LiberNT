@@ -872,6 +872,9 @@ Rpi5CrtcWaitForVBlankLocked(
     _In_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension)
 {
     PVOID Base;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     ULONG Control, VControl;
     ULONG ElapsedUs;
 

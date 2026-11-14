@@ -559,6 +559,8 @@ Rpi5Vc4FlipDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (DeviceExtension == NULL || DeviceExtension->StopAccepting ||
         DeviceExtension->FlipWorkItem == NULL)
     {

@@ -10,6 +10,8 @@ static NTSTATUS DxgkpDeviceWorkQueryTerminalLocked(_In_ PDXGK_DEVICE_WORK_LEDGER
 {
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (Ledger->Terminal.Destroying != NULL && InterlockedCompareExchange(Ledger->Terminal.Destroying, 0, 0) != 0)
         return NT_SUCCESS(Ledger->Terminal.TerminalStatus) ? STATUS_DEVICE_REMOVED : Ledger->Terminal.TerminalStatus;
     if (Ledger->Terminal.ExecutionState != NULL && InterlockedCompareExchange(Ledger->Terminal.ExecutionState, 0, 0) != Ledger->Terminal.ActiveExecutionState)

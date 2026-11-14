@@ -560,6 +560,8 @@ PowerVrCompletionDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     KeAcquireSpinLockAtDpcLevel(&Adapter->FenceLock);
     Fence = Adapter->SubmittedFence;
     Adapter->CompletedFence = Fence;

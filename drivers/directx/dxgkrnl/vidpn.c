@@ -332,6 +332,9 @@ DxgkpFindSourceOwnerAdapterLocked(
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(Adapter != NULL);
+    ASSERT(g_SourceOwnerMutex.Owner == KeGetCurrentThread());
+
     for (Entry = g_SourceOwnerAdapterList.Flink; Entry != &g_SourceOwnerAdapterList; Entry = Entry->Flink)
     {
         PDXGKP_SOURCE_OWNER_ADAPTER_STATE State = CONTAINING_RECORD(Entry, DXGKP_SOURCE_OWNER_ADAPTER_STATE, Entry);
@@ -349,6 +352,8 @@ DxgkpFindCompositorSourceOwnerLocked(
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     for (Entry = g_CompositorSourceOwnerList.Flink;
          Entry != &g_CompositorSourceOwnerList;
@@ -2357,6 +2362,9 @@ DxgkpHotPlugSnapshotCurrentLocked(
     ULONG ConnectedCount = 0;
 
     *MatchingChild = NULL;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0) != ExpectedGeneration)
         return FALSE;
     if (!NT_SUCCESS(DxgkHotPlugWorkCoreValidateEnumerationLocked(&Adapter->ChildEnumerationEpoch, &Adapter->ChildRelationsEnumerated, Snapshot->ChildEnumerationEpoch)))
@@ -5517,6 +5525,8 @@ DxgkpMonitorChildLocked(
 {
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = Adapter->ChildListHead.Flink;
          Entry != &Adapter->ChildListHead;
          Entry = Entry->Flink)
@@ -5953,6 +5963,8 @@ DxgkpDestroySharedPrimaryAllocationLocked(
 {
     PDXGKVMM_RESOURCE Resource = NULL;
 
+    ASSERT(Adapter != NULL);
+
     if (Adapter->SharedPrimaryAllocationHandle != NULL)
     {
         /*
@@ -6009,6 +6021,8 @@ DxgkpDestroyShadowAllocationLocked(
 {
     PDXGKVMM_RESOURCE Resource = NULL;
 
+    ASSERT(Adapter != NULL);
+
     if (AllocationHandle != NULL && ResourceHandle == 0)
         DxgkVidMmDestroyAllocation(Adapter, AllocationHandle);
     if (ResourceHandle != 0 &&
@@ -6024,6 +6038,8 @@ VOID
 DxgkpDestroyRetiredShadowLocked(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
+    ASSERT(Adapter != NULL);
+
     if (Adapter->RetiredShadowAllocationHandle == NULL && Adapter->RetiredShadowResourceHandle == 0)
         return;
     DxgkpDestroyShadowAllocationLocked(Adapter, Adapter->RetiredShadowAllocationHandle, Adapter->RetiredShadowResourceHandle);
@@ -6037,6 +6053,8 @@ DxgkpRetireSharedShadowLocked(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     BOOLEAN AllocationFb;
+
+    ASSERT(Adapter != NULL);
 
     if (Adapter->SharedShadowAllocationHandle == NULL && Adapter->SharedShadowResourceHandle == 0)
         return;
@@ -6073,6 +6091,8 @@ DxgkpDestroySharedPrimaryLocked(
     if (Adapter == NULL)
         return;
 
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
 
     DxgkpDestroySharedPrimaryAllocationLocked(Adapter);
@@ -6106,6 +6126,9 @@ DxgkpExchangeSharedPrimaryLocked(
 {
     DXGKP_SHARED_PRIMARY_SLOT Current;
 
+    ASSERT(Adapter != NULL);
+    ASSERT(Slot != NULL);
+
     Current.ResourceHandle = Adapter->SharedPrimaryResourceHandle;
     Current.GlobalShareHandle = Adapter->SharedPrimaryGlobalShareHandle;
     Current.AllocationHandle = Adapter->SharedPrimaryAllocationHandle;
@@ -6131,6 +6154,8 @@ DxgkpDestroyParkedSharedPrimaryLocked(
     _Inout_ PDXGKP_SHARED_PRIMARY_SLOT Slot,
     _In_ BOOLEAN DestroyShadow)
 {
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     DxgkpExchangeSharedPrimaryLocked(Adapter, Slot);
     if (DestroyShadow)
         DxgkpDestroySharedPrimaryLocked(Adapter);
@@ -6517,6 +6542,9 @@ DxgkpEnsureSharedShadowSurfaceLocked(
     BOOLEAN StartTimer = FALSE;
     NTSTATUS Status;
 
+    ASSERT(Adapter != NULL);
+    ASSERT(Adapter->SharedPrimaryMutex.OwnerThread == KeGetCurrentThread());
+
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
 
@@ -6748,6 +6776,8 @@ DxgkpEnsureSharedPrimaryLocked(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
 
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     /*
      * An invalid source is a pure query failure.  Reject it before touching
      * the adapter-owned primary/shadow pair: CDD may still have the current
@@ -6812,6 +6842,8 @@ DxgkpEnsureSharedPrimarySizeLocked(
     BOOLEAN StartTimer = FALSE;
     BOOLEAN PreserveShadow = KeepShadow;
     NTSTATUS Status;
+
+    ASSERT(Adapter != NULL);
 
     if (Adapter->SharedPrimaryAllocationHandle != NULL &&
         Adapter->SharedPrimaryWidth == Width &&
@@ -8000,6 +8032,9 @@ DxgkpEnsureDisplayModeCacheLocked(
     PDXGKP_VIDPN_SOURCE_MODESET Sources;
     PDXGKP_VIDPN_TARGET_MODESET Targets;
     D3DKMDT_VIDPN_SOURCE_MODE *SourceModes = NULL;
+
+    ASSERT(Adapter != NULL);
+
     CONST D3DKMDT_VIDPN_SOURCE_MODE *PinnedSource = NULL;
     CONST D3DKMDT_VIDPN_TARGET_MODE *PinnedTarget = NULL;
     LONG64 Generation = InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0);

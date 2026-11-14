@@ -827,6 +827,8 @@ DcpCommandLocked(
     ULONG64 Deadline;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     if (OutputSize)
         *OutputSize = 0;
     if (!Dcp->ServiceFound || !Dcp->CommandTx || !Dcp->CommandRx ||

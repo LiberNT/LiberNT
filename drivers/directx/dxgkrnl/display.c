@@ -1476,6 +1476,8 @@ DxgkpAdvancedColorFindLocked(
 {
     ULONG Index;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Index = 0; Index < Adapter->AdvancedColorCount; Index++)
     {
         if (Adapter->AdvancedColor[Index].TargetId == TargetId)
@@ -1491,6 +1493,8 @@ DxgkpAdvancedColorRecordLocked(
     _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
 {
     LONG Index = DxgkpAdvancedColorFindLocked(Adapter, TargetId);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Index < 0 && Adapter->AdvancedColorCount < DXGKP_ADVANCED_COLOR_TARGETS)
     {
@@ -3180,6 +3184,8 @@ DxgkpDisplayCommitVidPnWhileSharedPrimaryLocked(
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
     DxgkpBeginSharedSurfaceMutationLocked(Adapter);
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
     hVidPn = (D3DKMDT_HVIDPN)Adapter->VidPn;
     if (!DxgkVidPnReference(hVidPn))
@@ -3759,6 +3765,8 @@ DxgkpPresentTimerDpc(
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     if (Adapter == NULL || InterlockedCompareExchange(&Adapter->SharedSurfaceAvailable, 0, 0) == 0 || !Adapter->PresentTimerActive || Adapter->FunctionalDeviceObject == NULL)
         return;

@@ -486,6 +486,8 @@ DxgkMarkAdapterDevicesStoppedLocked(
 {
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
     /* Caller owns AdapterMutex so the terminal transition and the complete
      * device-list snapshot are one admission boundary. */
     if (Adapter == NULL)
@@ -719,6 +721,8 @@ DxgkpFindProcessRecordLocked(
     _In_ PEPROCESS Process)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
 
     for (Entry = DxgkProcessListHead.Flink;
          Entry != &DxgkProcessListHead;

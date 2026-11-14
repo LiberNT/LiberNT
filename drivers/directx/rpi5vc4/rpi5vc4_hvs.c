@@ -498,6 +498,8 @@ VOID
 Rpi5HvsInstallScanoutLocked(
     _In_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension)
 {
+    ASSERT(DeviceExtension != NULL);
+
     if (DeviceExtension->Headless)
         return;
 
@@ -651,6 +653,8 @@ BOOLEAN
 Rpi5HvsMoveCursorLocked(
     _In_ PRPI5VC4_DEVICE_EXTENSION DeviceExtension)
 {
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     if (DeviceExtension->Headless)
         return TRUE;
 
@@ -918,6 +922,8 @@ Rpi5HvsInstallCursorLocked(
 {
     RPI5VC4_HVS_PLANE Planes[RPI5VC4_MMIO_FLIP_PLANES];
     ULONG Count = DeviceExtension->HvsPlaneCount;
+
+    ASSERT(DeviceExtension != NULL);
 
     if (DeviceExtension->HvsOverlayActive && Count != 0 && Count <= RTL_NUMBER_OF(Planes))
     {
