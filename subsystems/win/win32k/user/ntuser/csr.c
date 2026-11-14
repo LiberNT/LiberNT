@@ -204,6 +204,7 @@ DWORD UserSystemThreadProc(BOOL bRemoteProcess)
 {
     PUSER_SESSION Session = UserGetCurrentSession();
     DWORD Type;
+    BOOLEAN bExclusive = UserIsEnteredExclusive();
 
     if (!Session || !Session->PendingSystemThreads)
     {
@@ -236,7 +237,10 @@ DWORD UserSystemThreadProc(BOOL bRemoteProcess)
         default: ERR("Wrong type: %x\n", Type);
     }
 
-    UserEnterShared();
+    if (bExclusive)
+        UserEnterExclusive();
+    else
+        UserEnterShared();
 
     return 0;
 }
