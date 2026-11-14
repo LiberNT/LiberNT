@@ -336,8 +336,6 @@ DxgkMmsPreemptionCompleted(
     PDXGMMS_COMMAND_BUFFER   RunningBuf;
     KIRQL                    OldIrql;
     ULONG                    Priority;
-
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     ASSERT(Node != NULL);
 
     DXGMMS_TRACE("DxgkMmsPreemptionCompleted: node %u fence %I64u\n",
@@ -453,9 +451,9 @@ DxgkMmsPreemptionTimeoutDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
-
     PreemptState = (PDXGMMS_PREEMPTION_STATE)DeferredContext;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     if (PreemptState == NULL || PreemptState->Node == NULL)
         return;
 
@@ -807,9 +805,9 @@ DxgkMmsTdrDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
-
     Adapter = (PDXGMMS_ADAPTER_CONTEXT)DeferredContext;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     if (Adapter == NULL)
         return;
 

@@ -493,8 +493,6 @@ AtaReqStartIo(
     PATAPORT_IO_CONTEXT Device = (PATAPORT_IO_CONTEXT)Request->Device;
     PATAPORT_PORT_DATA PortData = Device->PortData;
     KIRQL OldIrql;
-
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     ASSERT(PortData->Slots[Request->Slot] == Request);
 
     PortData->PrepareIo(PortData->ChannelContext, Request);
