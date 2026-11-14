@@ -789,21 +789,24 @@ KiSetPriorityThread(
     _In_ KPRIORITY Priority)
 {
     PKPRCB Prcb;
-    KPRIORITY OldPriority;
-    PKTHREAD Current;
+    KPRIORITY OldPriority, QueuedPriority;
+    PKTHREAD Current, Better;
     ULONG Processor;
+    UCHAR State;
 
     ASSERT((Priority >= 0) && (Priority <= HIGH_PRIORITY));
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
     Priority = KiApplyPriorityFloor(Thread, Priority);
-    OldPriority = Thread->Priority;
-    if (OldPriority == Priority)
-        return;
 
-    switch (Thread->State)
+    for (;;)
     {
-        case Ready:
+        if (Thread->Priority == (SCHAR)Priority)
+            return;
+
+        State = Thread->State;
+
+        if (State == Ready)
         {
             /*
              * A queued thread has to change queue, and the summary bit of the
@@ -811,14 +814,15 @@ KiSetPriorityThread(
              */
             Prcb = KiAcquireReadyThreadPrcb(Thread);
             if (Prcb == NULL)
-            {
-                Thread->Priority = (SCHAR)Priority;
-                break;
-            }
+                continue;
 
-            KiAssertReadyQueue(Prcb, OldPriority);
+            /* The queue it is on now, read under the lock that owns it */
+            QueuedPriority = Thread->Priority;
+
+            KiAssertReadyQueue(Prcb, QueuedPriority);
             if (RemoveEntryList(&Thread->WaitListEntry))
-                Prcb->ReadySummary ^= PRIORITY_MASK(OldPriority);
+                Prcb->ReadySummary ^= PRIORITY_MASK(QueuedPriority);
+            KiAssertReadyQueue(Prcb, QueuedPriority);
 
             Thread->Priority = (SCHAR)Priority;
             Thread->Preempted = FALSE;
@@ -827,80 +831,78 @@ KiSetPriorityThread(
 
             /* Placed again on the way out of the dispatcher, where it can displace the running thread */
             KiInsertDeferredReadyList(Thread);
-            break;
+            return;
         }
 
-        case Standby:
+        if ((State == Standby) || (State == Running))
         {
-            Thread->Priority = (SCHAR)Priority;
-
-            if (Priority >= OldPriority)
-                break;
-
             Processor = Thread->NextProcessor;
             Prcb = KiProcessorBlock[Processor];
             KiAcquirePrcbLock(Prcb);
 
-            if ((Thread->State == Standby) && (Prcb->NextThread == Thread))
+            /*
+             * The priority indexes the queue the thread is placed on, so it may
+             * only be written under the lock of the processor that owns it. A
+             * thread that moved on since its state was read is looked at again.
+             */
+            if ((Thread->State != State) || (Thread->NextProcessor != Processor))
             {
-                PKTHREAD Better = KiSelectReadyThread(Priority + 1, Prcb);
-
-                if (Better != NULL)
-                {
-                    ASSERT(Better != Thread);
-                    Better->State = Standby;
-                    Better->NextProcessor = Processor;
-                    Prcb->NextThread = Better;
-                    KiQueueReadyThread(Thread, Prcb);
-                    break;
-                }
+                KiReleasePrcbLock(Prcb);
+                continue;
             }
 
-            KiReleasePrcbLock(Prcb);
-            break;
-        }
-
-        case Running:
-        {
+            OldPriority = Thread->Priority;
             Thread->Priority = (SCHAR)Priority;
 
             /*
-             * Lowering a running thread can make a queued one the better
-             * choice; let that processor pick again.
+             * Lowering a thread that holds a processor can make a queued one
+             * the better choice; let that processor pick again.
              */
-            if (Priority >= OldPriority)
-                break;
-
-            Processor = Thread->NextProcessor;
-            Prcb = KiProcessorBlock[Processor];
-            KiAcquirePrcbLock(Prcb);
-
-            Current = Prcb->CurrentThread;
-            if ((Current == Thread) && (Prcb->NextThread == NULL))
+            if (Priority < OldPriority)
             {
-                PKTHREAD Better = KiSelectReadyThread(Priority + 1, Prcb);
-
-                if (Better != NULL)
+                if (State == Standby)
                 {
-                    Better->State = Standby;
-                    Better->NextProcessor = Processor;
-                    Prcb->NextThread = Better;
-                    Thread->Preempted = TRUE;
-                    KiReleasePrcbLock(Prcb);
-                    KiRescheduleThread(TRUE, Processor);
-                    break;
+                    if (Prcb->NextThread == Thread)
+                    {
+                        Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        if (Better != NULL)
+                        {
+                            ASSERT(Better != Thread);
+                            Better->State = Standby;
+                            Better->NextProcessor = Processor;
+                            Prcb->NextThread = Better;
+                            KiQueueReadyThread(Thread, Prcb);
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    Current = Prcb->CurrentThread;
+                    if ((Current == Thread) && (Prcb->NextThread == NULL))
+                    {
+                        Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        if (Better != NULL)
+                        {
+                            Better->State = Standby;
+                            Better->NextProcessor = Processor;
+                            Prcb->NextThread = Better;
+                            Thread->Preempted = TRUE;
+                            KiReleasePrcbLock(Prcb);
+                            KiRescheduleThread(TRUE, Processor);
+                            return;
+                        }
+                    }
                 }
             }
 
             KiReleasePrcbLock(Prcb);
-            break;
+            return;
         }
 
-        default:
-        {
-            Thread->Priority = (SCHAR)Priority;
-            break;
-        }
+        /* FIXME: a waiting thread readied concurrently can be queued at the old priority between this read and the write */
+        Thread->Priority = (SCHAR)Priority;
+        return;
     }
 }
 
