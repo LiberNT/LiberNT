@@ -61,7 +61,6 @@ BEGIN
     PUSHBUTTON "Para&mètres", IDC_STAREC, 194, 162, 50, 15
     PUSHBUTTON "Paramètres &système", IDC_SYSSETTINGS, 6, 192, 75, 15
     PUSHBUTTON "&Variables d'environnement", IDC_ENVVAR, 83, 192, 95, 15
-    PUSHBUTTON "&Rapport d'erreurs", IDC_ERRORREPORT, 180, 192, 70, 15
 END
 
 IDD_SYSSETTINGS DIALOGEX 0, 0, 221, 106
@@ -73,18 +72,6 @@ BEGIN
     LTEXT "LiberNT est construit comme un OS serveur et se présente comme tel. Cochez cette case pour changer ce comportement pour les applications.", IDC_STATIC, 15, 15, 183, 41
     CONTROL "Se présenter comme une station de travail", IDC_REPORTASWORKSTATION, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 16, 57, 190, 10
     PUSHBUTTON "OK", IDOK, 166, 83, 50, 14
-END
-
-IDD_ERRORREPORTING DIALOGEX 0, 0, 240, 150
-STYLE DS_SHELLFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Données de diagnostic"
-FONT 8, "MS Shell Dlg", 0, 0, 0x1
-BEGIN
-    LTEXT "LiberNT envoie toujours au projet des données de diagnostic obligatoires : la version, le résultat et la durée du démarrage, le matériel et les résumés des plantages. Cela ne peut pas être désactivé.", IDC_STATIC, 7, 7, 226, 33
-    AUTOCHECKBOX "Envoyer aussi les données de diagnostic &facultatives (entrées d'erreur du journal système)", IDC_SENDOPTIONAL, 7, 46, 226, 20, BS_MULTILINE | BS_TOP | WS_TABSTOP
-    LTEXT "Les données facultatives restent désactivées tant que vous ne les activez pas. Elles ne contiennent ni fichiers, ni documents, ni adresses réseau. Voir libernt.com/legal.", IDC_OPTIONALINFO, 7, 72, 226, 33
-    DEFPUSHBUTTON "OK", IDOK, 129, 128, 50, 14
-    PUSHBUTTON "Annuler", IDCANCEL, 183, 128, 50, 14
 END
 
 IDD_HARDWAREPROFILES DIALOGEX 6, 18, 254, 234

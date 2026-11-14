@@ -1,4 +1,0 @@
-; Diagnostic data channel of this build
-[AddReg]
-HKLM,"SOFTWARE\LiberNT\DiagnosticData","Channel",0x00000000,"@DIAGDATA_CHANNEL@"
-@DIAGDATA_OPTIONAL_DEFAULT@

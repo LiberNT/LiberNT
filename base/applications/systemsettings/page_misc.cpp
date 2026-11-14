@@ -15,7 +15,6 @@
 
 #define WINDOWS_NT_KEY L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
 #define ADVANCED_KEY L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"
-#define DATA_COLLECTION_KEY L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection"
 #define UPDATE_KEY L"SOFTWARE\\LiberNT\\Update"
 #define UPDATE_REQUEST L"\\$LiberNT.~BT\\upgrade.ini"
 #define UPDATE_INVENTORY L"\\servicing\\LiberNT.files"
@@ -552,10 +551,6 @@ BuildAccessibility(PageBuilder &page)
 void
 BuildPrivacy(PageBuilder &page)
 {
-    SettingsHost *host = page.Host;
-    DWORD level = ReadDword(HKEY_LOCAL_MACHINE, DATA_COLLECTION_KEY, L"AllowTelemetry", 1);
-    bool admin = IsAdmin();
-
     page.Group(Str(IDS_ACTIVITY));
     page.Toggle(Str(IDS_TRACK_DOCS), Str(IDS_TRACK_DOCS_DESC), L"history_20_regular",
                 ReadDword(HKEY_CURRENT_USER, ADVANCED_KEY, L"Start_TrackDocs", 1) != 0,
@@ -568,16 +563,6 @@ BuildPrivacy(PageBuilder &page)
                 });
     page.Button(Str(IDS_CLEAR_RECENT), Str(IDS_CLEAR_RECENT_DESC), L"delete_20_regular", Str(IDS_CLEAR),
                 [](int) { SHAddToRecentDocs(SHARD_PIDL, NULL); });
-
-    page.Group(Str(IDS_DIAGNOSTICS));
-    page.Toggle(Str(IDS_OPTIONAL_DIAGNOSTICS), Str(IDS_OPTIONAL_DIAGNOSTICS_DESC), L"shield_checkmark_20_regular",
-                level >= 3,
-                [host](int on)
-                {
-                    if (!WriteDword(HKEY_LOCAL_MACHINE, DATA_COLLECTION_KEY, L"AllowTelemetry", on ? 3 : 1))
-                        ShowError(host->Window(), ERROR_ACCESS_DENIED);
-                }).Enabled = admin && level != 0;
-    page.Text(Str(IDS_DIAGNOSTICS_NOTE));
 }
 
 static std::wstring
