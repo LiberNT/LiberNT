@@ -96,7 +96,7 @@ ScrResetScreen(
 
 static PDEVICE_EXTENSION ResetDisplayParametersDeviceExtension = NULL;
 static HANDLE InbvThreadHandle = NULL;
-static BOOLEAN InbvMonitoring = FALSE;
+static volatile BOOLEAN InbvMonitoring = FALSE;
 
 /*
  * Reinitialize the display to base VGA mode.
