@@ -193,6 +193,7 @@ extern void func_UEFIFirmware(void);
 extern void func_VolumeMountPoints(void);
 extern void func_WaitFileHandle(void);
 extern void func_WaitForMultipleObjects(void);
+extern void func_WakeIdleProcessor(void);
 extern void func_WerRegisterFile(void);
 extern void func_WerRegistration(void);
 extern void func_WerCrashReport(void);
@@ -403,6 +404,7 @@ const struct test winetest_testlist[] =
     { "VolumeMountPoints",           func_VolumeMountPoints },
     { "WaitFileHandle",              func_WaitFileHandle },
     { "WaitForMultipleObjects",      func_WaitForMultipleObjects },
+    { "WakeIdleProcessor",           func_WakeIdleProcessor },
     { "WerRegisterFile",             func_WerRegisterFile },
     { "WerRegistration",             func_WerRegistration },
     { "WerCrashReport",              func_WerCrashReport },

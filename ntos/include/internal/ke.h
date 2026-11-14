@@ -20,6 +20,10 @@
 #define KiArchSetInitialServiceTable(Thread) ((VOID)(Thread))
 #endif
 
+#ifndef KiArchIdleProcessorNeedsWake
+#define KiArchIdleProcessorNeedsWake(Prcb) ((VOID)(Prcb), TRUE)
+#endif
+
 #ifndef KiArchPublishSystemCallStubs
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif

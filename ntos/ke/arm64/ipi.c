@@ -109,6 +109,13 @@ KiIpiSend(
         if (Prcb != NULL)
         {
             InterlockedOr((PLONG)&Prcb->RequestSummary, (LONG)IpiRequest);
+            if (IpiRequest == IPI_DPC)
+            {
+                /* Pairs with the barrier after the idle loop publishes or retracts its polling state */
+                ARM64_DMB(ISH);
+                if (ReadNoFence(&Prcb->Sleeping) == KI_ARM64_IDLE_POLLING)
+                    TargetSet &= ~AFFINITY_MASK(Index);
+            }
         }
     }
 
