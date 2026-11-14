@@ -2235,6 +2235,9 @@ NtfsGenerateShortName(
      UINT32 RevisionNumber;             // Offset 0x28, Size 4
  } *PLfsRestartArea;
 
+ /* LfsRestartArea.Flags: the volume was closed cleanly */
+ #define LFS_RESTART_AREA_CLEAN 0x0002
+
  /* Note: Client Version is stored in MajorVersion and MinorVersion
   * for the various versions of RestartArea/
   *

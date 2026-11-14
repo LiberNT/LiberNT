@@ -577,6 +577,15 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
                 "${NTFSFIX_EXECUTABLE}"
         )
         add_test(
+            NAME ntfslib_linux_dirty_log_readonly
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/dirty_log_readonly_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFSINFO_EXECUTABLE}"
+                "${NTFSCP_EXECUTABLE}"
+        )
+        add_test(
             NAME ntfslib_linux_legacy_record
             COMMAND /bin/sh
                 "${CMAKE_CURRENT_LIST_DIR}/tests/legacy_record_smoke.sh"

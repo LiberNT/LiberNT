@@ -325,10 +325,25 @@ VolumeIsHibernated(_In_ PVolume DiskVolume)
     UCHAR Signature[4];
     ULONG Remaining = sizeof(Signature);
     BOOLEAN Hibernated = FALSE;
+    NTSTATUS Status;
 
-    if (!NT_SUCCESS(DiskVolume->MFT->GetFileRecordFromQuery(Name, &File)))
+    Status = DiskVolume->MFT->GetFileRecordFromQuery(Name, &File);
+    if (Status == STATUS_NOT_FOUND || Status == STATUS_OBJECT_NAME_NOT_FOUND ||
+        Status == STATUS_NO_MORE_FILES)
+    {
         return FALSE;
-    if (NT_SUCCESS(File->CopyData(TypeData, NULL, Signature, &Remaining)) && Remaining == 0)
+    }
+
+    /* A volume whose hibernation file cannot be checked is not proven safe to write */
+    if (!NT_SUCCESS(Status))
+        return TRUE;
+
+    Status = File->CopyData(TypeData, NULL, Signature, &Remaining);
+    if (!NT_SUCCESS(Status))
+    {
+        Hibernated = TRUE;
+    }
+    else if (Remaining == 0)
     {
         Hibernated = (Signature[0] == 'h' && Signature[1] == 'i' && Signature[2] == 'b' && Signature[3] == 'r') ||
                      (Signature[0] == 'H' && Signature[1] == 'I' && Signature[2] == 'B' && Signature[3] == 'R');
