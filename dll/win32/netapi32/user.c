@@ -2745,6 +2745,11 @@ AllocateEnumContext(
         return ApiStatus;
 
     /* Initialize the fields */
+    EnumContext->ServerHandle = NULL;
+    EnumContext->BuiltinDomainHandle = NULL;
+    EnumContext->AccountDomainHandle = NULL;
+    EnumContext->BuiltinDomainSid = NULL;
+    EnumContext->AccountDomainSid = NULL;
     EnumContext->EnumerationContext = 0;
     EnumContext->Buffer = NULL;
     EnumContext->Count = 0;
