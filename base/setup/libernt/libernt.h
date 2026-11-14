@@ -467,6 +467,36 @@ LoadPrintfW(
     _In_ UINT uID,
     ...);
 
+/* filesec.c */
+typedef struct _FILESEC_POLICY FILESEC_POLICY, *PFILESEC_POLICY;
+
+DWORD
+FileSecurityLoadPolicy(
+    _Out_ PFILESEC_POLICY *Policy);
+
+VOID
+FileSecurityFreePolicy(
+    _In_opt_ PFILESEC_POLICY Policy);
+
+PSECURITY_DESCRIPTOR
+FileSecurityFindDescriptor(
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PCWSTR Path,
+    _In_ BOOLEAN Directory);
+
+NTSTATUS
+FileSecurityApply(
+    _In_ PFILESEC_POLICY Policy,
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ BOOLEAN WholeVolume);
+
+NTSTATUS
+InstallApplyFileSecurity(
+    _In_ PCWSTR VolumeRoot,
+    _In_ PCWSTR InstallationDirectory,
+    _In_ BOOLEAN WholeVolume);
+
 INT
 SetupMessage(
     _In_opt_ HWND hwndOwner,
