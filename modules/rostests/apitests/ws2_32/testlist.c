@@ -5,6 +5,7 @@
 extern void func_BufferedRecv(void);
 extern void func_BusyLoopback(void);
 extern void func_CloseCompletion(void);
+extern void func_GetAddrInfoEx(void);
 extern void func_MulticastInterface(void);
 extern void func_ReuseDelivery(void);
 extern void func_addresslistsort(void);
@@ -43,6 +44,7 @@ const struct test winetest_testlist[] =
     { "BufferedRecv", func_BufferedRecv },
     { "BusyLoopback", func_BusyLoopback },
     { "CloseCompletion", func_CloseCompletion },
+    { "GetAddrInfoEx", func_GetAddrInfoEx },
     { "MulticastInterface", func_MulticastInterface },
     { "ReuseDelivery", func_ReuseDelivery },
     { "addresslistsort", func_addresslistsort },

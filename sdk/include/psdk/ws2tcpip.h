@@ -158,6 +158,22 @@ GetAddrInfoExW(
 #define GetAddrInfoEx GetAddrInfoExA
 #endif
 
+#if (_WIN32_WINNT >= 0x0602)
+
+WINSOCK_API_LINKAGE
+INT
+WSAAPI
+GetAddrInfoExCancel(
+  _In_ LPHANDLE lpHandle);
+
+WINSOCK_API_LINKAGE
+INT
+WSAAPI
+GetAddrInfoExOverlappedResult(
+  _In_ LPOVERLAPPED lpOverlapped);
+
+#endif
+
 #if INCL_WINSOCK_API_TYPEDEFS
 
 typedef INT
