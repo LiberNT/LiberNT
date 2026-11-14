@@ -13,6 +13,8 @@
 LIST_ENTRY LxProcessList;
 FAST_MUTEX LxProcessListLock;
 
+static VOID LxStringInitialize(VOID);
+
 VOID
 LxProcessInitialize(VOID)
 {
@@ -26,6 +28,7 @@ LxProcessInitialize(VOID)
     LxMqInitialize();
     LxWinInitialize();
     LxDrmInitialize();
+    LxStringInitialize();
 }
 
 PVOID
@@ -35,12 +38,82 @@ LxAlloc(
     return ExAllocatePoolZero(NonPagedPoolNx, Size, LX_TAG);
 }
 
+/* Every path call builds and drops a dozen short strings and a few path-sized buffers. They are recycled from two
+   lists of fixed blocks cut out of one region, so that LxFree tells them from pool blocks by their address. */
+#define LX_STRING_SMALL         256
+#define LX_STRING_SMALL_COUNT   2048
+#define LX_STRING_LARGE         LX_PATH_MAX
+#define LX_STRING_LARGE_COUNT   96
+
+static PUCHAR LxStringRegion, LxStringLargeStart, LxStringRegionEnd;
+static SLIST_HEADER LxStringSmallFree, LxStringLargeFree;
+
+static
+VOID
+LxStringInitialize(VOID)
+{
+    SIZE_T SmallBytes = (SIZE_T)LX_STRING_SMALL * LX_STRING_SMALL_COUNT;
+    SIZE_T LargeBytes = (SIZE_T)LX_STRING_LARGE * LX_STRING_LARGE_COUNT;
+    PUCHAR Block;
+
+    C_ASSERT((LX_STRING_SMALL % MEMORY_ALLOCATION_ALIGNMENT) == 0);
+    C_ASSERT((LX_STRING_LARGE % MEMORY_ALLOCATION_ALIGNMENT) == 0);
+
+    ExInitializeSListHead(&LxStringSmallFree);
+    ExInitializeSListHead(&LxStringLargeFree);
+    LxStringRegion = ExAllocatePoolZero(NonPagedPoolNx, SmallBytes + LargeBytes, LX_TAG);
+    if (LxStringRegion == NULL)
+        return;
+    ASSERT(((ULONG_PTR)LxStringRegion % MEMORY_ALLOCATION_ALIGNMENT) == 0);
+    LxStringLargeStart = LxStringRegion + SmallBytes;
+    LxStringRegionEnd = LxStringLargeStart + LargeBytes;
+    for (Block = LxStringRegion; Block < LxStringLargeStart; Block += LX_STRING_SMALL)
+        InterlockedPushEntrySList(&LxStringSmallFree, (PSLIST_ENTRY)Block);
+    for (Block = LxStringLargeStart; Block < LxStringRegionEnd; Block += LX_STRING_LARGE)
+        InterlockedPushEntrySList(&LxStringLargeFree, (PSLIST_ENTRY)Block);
+}
+
+/* For strings and string buffers only: freed with LxFree, never handed to anything that frees pool */
+PVOID
+LxAllocString(
+    _In_ SIZE_T Size)
+{
+    PSLIST_ENTRY Block = NULL;
+
+    if (Size <= LX_STRING_SMALL)
+        Block = InterlockedPopEntrySList(&LxStringSmallFree);
+    else if (Size <= LX_STRING_LARGE)
+        Block = InterlockedPopEntrySList(&LxStringLargeFree);
+    if (Block == NULL)
+        return LxAlloc(Size);
+    ASSERT(((PUCHAR)Block >= LxStringRegion) && ((PUCHAR)Block < LxStringRegionEnd));
+    RtlZeroMemory(Block, Size);
+    return Block;
+}
+
 VOID
 LxFree(
     _In_opt_ PVOID Buffer)
 {
-    if (Buffer != NULL)
-        ExFreePoolWithTag(Buffer, LX_TAG);
+    PUCHAR Block = Buffer;
+
+    if (Buffer == NULL)
+        return;
+    if ((Block >= LxStringRegion) && (Block < LxStringRegionEnd))
+    {
+        if (Block < LxStringLargeStart)
+        {
+            ASSERT(((SIZE_T)(Block - LxStringRegion) % LX_STRING_SMALL) == 0);
+            InterlockedPushEntrySList(&LxStringSmallFree, (PSLIST_ENTRY)Block);
+        }
+        else
+        {
+            ASSERT(((SIZE_T)(Block - LxStringLargeStart) % LX_STRING_LARGE) == 0);
+            InterlockedPushEntrySList(&LxStringLargeFree, (PSLIST_ENTRY)Block);
+        }
+        return;
+    }
+    ExFreePoolWithTag(Buffer, LX_TAG);
 }
 
 PSTR
@@ -48,7 +121,7 @@ LxStrDup(
     _In_ PCSTR String)
 {
     SIZE_T Length = strlen(String) + 1;
-    PSTR Copy = LxAlloc(Length);
+    PSTR Copy = LxAllocString(Length);
 
     if (Copy != NULL)
         RtlCopyMemory(Copy, String, Length);
@@ -257,7 +330,7 @@ LxCopyStringFromUser(
     if (Result != 0)
         return Result;
 
-    Buffer = LxAlloc(Index + 1);
+    Buffer = LxAllocString(Index + 1);
     if (Buffer == NULL)
         return -LX_ENOMEM;
     Result = LxCopyFromUser(Buffer, Source, Index);

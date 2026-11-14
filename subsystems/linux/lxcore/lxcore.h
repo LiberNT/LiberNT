@@ -966,6 +966,7 @@ NTSTATUS LxHugeCopyPage(_In_ PVOID From, _In_ PVOID To);
 LONG64 LxHugeStoreRead(_In_ PLX_HUGE_STORE Store, _In_ ULONG64 Offset, _In_ ULONG64 Buffer, _In_ ULONG64 Length);
 PLX_FILE LxHugeFileCreate(_In_ PCSTR Path);
 PVOID LxAlloc(_In_ SIZE_T Size);
+PVOID LxAllocString(_In_ SIZE_T Size);
 VOID LxFree(_In_opt_ PVOID Buffer);
 PVOID LxAllocPaged(_In_ SIZE_T Size);
 VOID LxFreePaged(_In_opt_ PVOID Buffer);

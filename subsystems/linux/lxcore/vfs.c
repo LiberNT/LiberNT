@@ -197,7 +197,7 @@ LxPathJoin(
 
     if (BaseLength + 1 + NameLength >= LX_PATH_MAX)
         return NULL;
-    Result = LxAlloc(BaseLength + NameLength + 2);
+    Result = LxAllocString(BaseLength + NameLength + 2);
     if (Result == NULL)
         return NULL;
     RtlCopyMemory(Result, Base, BaseLength);
@@ -3211,7 +3211,7 @@ LxLookupWalk(
         return -LX_ENOMEM;
     }
 
-    Normalized = LxAlloc(LX_PATH_MAX);
+    Normalized = LxAllocString(LX_PATH_MAX);
     if ((Normalized != NULL) && (Flags & (LX_LOOKUP_BENEATH | LX_LOOKUP_IN_ROOT)))
     {
         Root = LxStrDup(Current);
@@ -3823,7 +3823,7 @@ LxLookupCacheKey(
     }
     if (Joined == NULL)
         return NULL;
-    Key = LxAlloc(LX_PATH_MAX);
+    Key = LxAllocString(LX_PATH_MAX);
     if ((Key != NULL) && (LxPathNormalize(Joined, Key) != 0))
     {
         LxFree(Key);
@@ -3862,7 +3862,7 @@ LxLookupSearchKey(
     for (Index = 0; (Index < Cred->GroupCount) && (Index < RTL_NUMBER_OF(Cred->Groups)); Index++)
         Values[Count++] = Cred->Groups[Index];
     Size = (Count * 17) + DirLength + PathLength + 3;
-    Key = LxAlloc(Size);
+    Key = LxAllocString(Size);
     if (Key == NULL)
         return NULL;
     Used = 0;
