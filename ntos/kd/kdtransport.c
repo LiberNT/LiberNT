@@ -27,11 +27,13 @@
 #define KDP_FILE_IO_POLL_US         10
 #define KDP_FILE_IO_SERIAL_SECONDS  1
 #define KDP_FILE_IO_NET_SECONDS     4
+#define KDP_FILE_IO_PROBE_MS        100
 #define KDP_FILE_IO_MAXIMUM_SKIPPED (4 * PACKET_MAX_SIZE)
 
 static ULONG KdpFileIoPacketId = INITIAL_PACKET_ID;
 static ULONG KdpFileIoApiNumber;
 static BOOLEAN KdpFileIoHostAbsent;
+static BOOLEAN KdpFileIoHostUnknown = TRUE;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
@@ -68,14 +70,19 @@ KdpFileIoPut(
 static
 BOOLEAN
 KdpFileIoGetByte(
-    _Out_ PUCHAR Byte)
+    _Out_ PUCHAR Byte,
+    _In_ BOOLEAN FirstReplyByte)
 {
     LARGE_INTEGER Frequency;
     LONGLONG Deadline;
     BOOLEAN Net = KdpFileIoNetAttached();
 
     Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
-    Deadline += Frequency.QuadPart * (Net ? KDP_FILE_IO_NET_SECONDS : KDP_FILE_IO_SERIAL_SECONDS);
+    /* A serial host answers within a few packet times; one never heard from is not waited for a whole second */
+    if (FirstReplyByte && !Net && KdpFileIoHostUnknown)
+        Deadline += (Frequency.QuadPart * KDP_FILE_IO_PROBE_MS) / 1000;
+    else
+        Deadline += Frequency.QuadPart * (Net ? KDP_FILE_IO_NET_SECONDS : KDP_FILE_IO_SERIAL_SECONDS);
 
     for (;;)
     {
@@ -162,7 +169,7 @@ KdpFileIoFindLeader(
 
     while (*Skipped < KDP_FILE_IO_MAXIMUM_SKIPPED)
     {
-        if (!KdpFileIoGetByte(&Byte))
+        if (!KdpFileIoGetByte(&Byte, (BOOLEAN)(*Skipped == 0)))
             return FALSE;
 
         (*Skipped)++;
@@ -214,7 +221,7 @@ KdpReceiveFileIoPacket(
     {
         for (Index = 1; Index < sizeof(Packet) - FIELD_OFFSET(KD_PACKET, PacketType); Index++)
         {
-            if (!KdpFileIoGetByte(&Fields[Index]))
+            if (!KdpFileIoGetByte(&Fields[Index], FALSE))
                 return KdPacketTimedOut;
         }
 
@@ -231,7 +238,7 @@ KdpReceiveFileIoPacket(
         Copied = 0;
         for (Index = 0; Index < Packet.ByteCount; Index++)
         {
-            if (!KdpFileIoGetByte(&Byte))
+            if (!KdpFileIoGetByte(&Byte, FALSE))
                 return KdPacketTimedOut;
 
             Checksum += Byte;
@@ -241,7 +248,7 @@ KdpReceiveFileIoPacket(
                 MessageData->Buffer[Copied++] = (CHAR)Byte;
         }
 
-        if (!KdpFileIoGetByte(&Byte))
+        if (!KdpFileIoGetByte(&Byte, FALSE))
             return KdPacketTimedOut;
 
         Skipped += Packet.ByteCount + 1;
@@ -258,6 +265,7 @@ KdpReceiveFileIoPacket(
         if (DataLength != NULL)
             *DataLength = Packet.ByteCount - sizeof(DBGKD_FILE_IO);
 
+        KdpFileIoHostUnknown = FALSE;
         return KdPacketReceived;
     }
 
@@ -271,6 +279,7 @@ VOID
 KdpResetFileIoHost(VOID)
 {
     KdpFileIoHostAbsent = FALSE;
+    KdpFileIoHostUnknown = FALSE;
     KdpContext.KdpControlCPending = FALSE;
 }
 
