@@ -299,6 +299,8 @@ NtfsTxfResolveLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
     PLIST_ENTRY Entry;
 
     *Match = NULL;
+
+    ASSERT(Txf != NULL);
     for (Entry = Txf->Changes.Blink; Entry != &Txf->Changes; Entry = Entry->Blink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
@@ -379,6 +381,8 @@ NtfsTxfIsReservedLocked(_In_ PVolumeContextBlock VolCB,
                         _In_opt_ PNTFS_TXF_TRANSACTION Exclude,
                         _In_ PCUNICODE_STRING Name)
 {
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
     PLIST_ENTRY TxEntry, Entry;
 
     for (TxEntry = VolCB->TxfTransactions.Flink; TxEntry != &VolCB->TxfTransactions; TxEntry = TxEntry->Flink)
@@ -418,6 +422,8 @@ NtfsTxfIsLockedLocked(_In_ PVolumeContextBlock VolCB,
                       _In_ ULONGLONG FileReference,
                       _In_ BOOLEAN Readers)
 {
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
     PLIST_ENTRY TxEntry, Entry;
 
     FileReference &= NTFS_TXF_RECORD_MASK;
@@ -454,6 +460,8 @@ NtfsTxfHasLockLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
 {
     PLIST_ENTRY Entry;
 
+
+    ASSERT(Txf != NULL);
     for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
@@ -475,6 +483,8 @@ NtfsTxfFindPhysicalLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
 {
     PLIST_ENTRY Entry;
 
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
     for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
@@ -1249,7 +1259,7 @@ NtfsTxfEnsureStaging(_In_ PVolumeContextBlock VolCB)
     NTFS_TXF_STAGING_WORK Work;
     NTSTATUS Status = STATUS_SUCCESS;
 
-    if (VolCB->TxfStagingReady)
+    if (ReadBooleanAcquire(&VolCB->TxfStagingReady))
         return STATUS_SUCCESS;
 
     KeEnterCriticalRegion();
@@ -1264,7 +1274,10 @@ NtfsTxfEnsureStaging(_In_ PVolumeContextBlock VolCB)
         KeWaitForSingleObject(&Work.Done, Executive, KernelMode, FALSE, NULL);
         Status = Work.Status;
         if (NT_SUCCESS(Status))
-            VolCB->TxfStagingReady = TRUE;
+        {
+            /* Published after the staging work, so the unlocked fast path above cannot see it early */
+            WriteBooleanRelease(&VolCB->TxfStagingReady, TRUE);
+        }
     }
     ExfReleasePushLockExclusive(&VolCB->TxfStagingLock);
     KeLeaveCriticalRegion();
@@ -2822,6 +2835,8 @@ NtfsTxfHasChildrenLocked(_In_ PNTFS_TXF_TRANSACTION Txf,
 {
     PLIST_ENTRY Entry;
 
+
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
     for (Entry = Txf->Changes.Flink; Entry != &Txf->Changes; Entry = Entry->Flink)
     {
         PNTFS_TXF_CHANGE Change = CONTAINING_RECORD(Entry, NTFS_TXF_CHANGE, Link);
