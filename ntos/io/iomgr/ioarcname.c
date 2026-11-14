@@ -573,17 +573,35 @@ IopCreateArcNames(
                           LoaderBlock->ArcHalDeviceName);
     }
 
+    DPRINT1("I/O: the loader named boot device %Z, hal device %Z, remote boot %u\n",
+            &IoArcBootDeviceName,
+            &IoArcHalDeviceName,
+            IoRemoteBootClient);
+
     /* TODO: ARC names for ramdisk and network boot devices */
+    if (LoaderBlock->ArcBootDeviceName != NULL &&
+        _strnicmp(LoaderBlock->ArcBootDeviceName, "ramdisk(", 8) == 0)
+    {
+        DPRINT1("I/O: the boot device is a RAM disk, for which no ARC name is built here\n");
+    }
 
     for (Attempt = 0; ; Attempt++)
     {
         Status = IopCreateArcNamesDisk(LoaderBlock, FALSE, &FoundBoot);
         if (!NT_SUCCESS(Status)) return Status;
 
+        DPRINT1("I/O: attempt %lu, the disks %s the boot device\n",
+                Attempt,
+                FoundBoot ? "answered to" : "did not answer to");
+
         if (!FoundBoot)
         {
             Status = IopCreateArcNamesCd(LoaderBlock, FALSE, &FoundBoot);
             if (!NT_SUCCESS(Status)) return Status;
+
+            DPRINT1("I/O: attempt %lu, the CD drives %s the boot device\n",
+                    Attempt,
+                    FoundBoot ? "answered to" : "did not answer to");
         }
 
         if (FoundBoot ||
