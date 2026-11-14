@@ -119,6 +119,7 @@ extern void func_VolumeDeviceOpen(void);
 extern void func_NtRaiseException(void);
 extern void func_NtReadFile(void);
 extern void func_NtReadFileAsync(void);
+extern void func_NtReadFileLockWait(void);
 extern void func_NtSaveKey(void);
 extern void func_NtSetDefaultLocale(void);
 extern void func_NtSetInformationFile(void);
@@ -354,6 +355,7 @@ const struct test winetest_testlist[] =
     { "NtRaiseException",               func_NtRaiseException },
     { "NtReadFile",                     func_NtReadFile },
     { "NtReadFileAsync",                func_NtReadFileAsync },
+    { "NtReadFileLockWait",             func_NtReadFileLockWait },
     { "NtSaveKey",                      func_NtSaveKey},
     { "NtSetDefaultLocale",             func_NtSetDefaultLocale },
     { "NtSetInformationFile",           func_NtSetInformationFile },

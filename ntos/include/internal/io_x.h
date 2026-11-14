@@ -23,10 +23,13 @@ IopLockFileObject(
     }
     else
     {
-        return IopAcquireFileObjectLock(FileObject,
-                                        WaitMode,
-                                        BooleanFlagOn(FileObject->Flags, FO_ALERTABLE_IO),
-                                        &LockFailed);
+        NTSTATUS Status = IopAcquireFileObjectLock(FileObject,
+                                                   WaitMode,
+                                                   BooleanFlagOn(FileObject->Flags, FO_ALERTABLE_IO),
+                                                   &LockFailed);
+
+        ASSERT((Status == STATUS_SUCCESS) == !LockFailed);
+        return Status;
     }
 }
 

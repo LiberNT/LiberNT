@@ -137,6 +137,7 @@ list(APPEND SOURCE
     VolumeDeviceOpen.c
     NtRaiseException.c
     NtReadFile.c
+    NtReadFileLockWait.c
     NtSaveKey.c
     NtSetDefaultLocale.c
     NtSetInformationFile.c

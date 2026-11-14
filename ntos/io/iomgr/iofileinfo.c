@@ -851,7 +851,7 @@ NtQueryInformationFile(
         (FileObject->Flags & FO_SYNCHRONOUS_IO))
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             ObDereferenceObject(FileObject);
             return Status;
@@ -930,7 +930,7 @@ NtQueryInformationFile(
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             ObDereferenceObject(FileObject);
             return Status;
@@ -1330,7 +1330,7 @@ NtSetInformationFile(
         }
 
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (NT_SUCCESS(Status))
+        if (Status == STATUS_SUCCESS)
         {
             FileObject->CurrentByteOffset = Offset;
             IopUnlockFileObject(FileObject);
@@ -1354,7 +1354,7 @@ NtSetInformationFile(
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             ExFreePoolWithTag(Buffer, TAG_IOBUF);
             ObDereferenceObject(FileObject);
@@ -1635,7 +1635,7 @@ NtQueryVolumeInformationFile(
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             ObDereferenceObject(FileObject);
             return Status;
@@ -1792,7 +1792,7 @@ NtSetVolumeInformationFile(
     if (FileObject->Flags & FO_SYNCHRONOUS_IO)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             ObDereferenceObject(FileObject);
             return Status;

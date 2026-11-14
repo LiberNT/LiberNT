@@ -138,7 +138,7 @@ IopBeginRequest(
     if (Request->SynchIo && RequireLock)
     {
         Status = IopLockFileObject(FileObject, PreviousMode);
-        if (!NT_SUCCESS(Status))
+        if (Status != STATUS_SUCCESS)
         {
             if (Request->EventObject != NULL)
             {
@@ -571,7 +571,7 @@ NtReadFile(
                              IoStatusBlock,
                              IRP_MJ_READ,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -771,7 +771,7 @@ NtWriteFile(
                                  TRUE);
     }
 
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -988,7 +988,7 @@ IopScatterGather(
                              IoStatusBlock,
                              Write ? IRP_MJ_WRITE : IRP_MJ_READ,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1138,7 +1138,7 @@ NtFlushBuffersFile(
                                          NULL,
                                          IoStatusBlock,
                                          IRP_MJ_FLUSH_BUFFERS);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Request.Irp->Flags = IRP_SYNCHRONOUS_API | IRP_DEFER_IO_COMPLETION;
 
@@ -1174,7 +1174,7 @@ NtFlushBuffersFileEx(
                                          NULL,
                                          IoStatusBlock,
                                          IRP_MJ_FLUSH_BUFFERS);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Request.Irp->Flags = IRP_SYNCHRONOUS_API | IRP_DEFER_IO_COMPLETION;
     Request.StackPtr->Flags = (UCHAR)Flags;
@@ -1210,7 +1210,7 @@ NtLockFile(
                                          Event,
                                          IoStatusBlock,
                                          IRP_MJ_LOCK_CONTROL);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1279,7 +1279,7 @@ NtUnlockFile(
                                          NULL,
                                          IoStatusBlock,
                                          IRP_MJ_LOCK_CONTROL);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     if (Request.PreviousMode != KernelMode)
     {
@@ -1350,7 +1350,7 @@ IopDeviceFsIoControl(
                              IsDevIoCtl ? IRP_MJ_DEVICE_CONTROL
                                         : IRP_MJ_FILE_SYSTEM_CONTROL,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, UserApcRoutine, UserApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1661,7 +1661,7 @@ IopNotifyChangeDirectory(
                              IoStatusBlock,
                              IRP_MJ_DIRECTORY_CONTROL,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1811,7 +1811,7 @@ IopQueryDirectoryFile(
                              IoStatusBlock,
                              IRP_MJ_DIRECTORY_CONTROL,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Status = IopSetAsyncParameters(&Request, ApcRoutine, ApcContext);
     if (!NT_SUCCESS(Status)) return Status;
@@ -1984,7 +1984,7 @@ NtQueryEaFile(
                              IoStatusBlock,
                              IRP_MJ_QUERY_EA,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Irp = Request.Irp;
 
@@ -2079,7 +2079,7 @@ NtSetEaFile(
                              IoStatusBlock,
                              IRP_MJ_SET_EA,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Irp = Request.Irp;
     Irp->Flags = IRP_BUFFERED_IO | IRP_SYNCHRONOUS_API;
@@ -2144,7 +2144,7 @@ NtQueryQuotaInformationFile(
                              IoStatusBlock,
                              IRP_MJ_QUERY_QUOTA,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Irp = Request.Irp;
     Irp->Flags = IRP_BUFFERED_IO | IRP_SYNCHRONOUS_API;
@@ -2212,7 +2212,7 @@ NtSetQuotaInformationFile(
                              IoStatusBlock,
                              IRP_MJ_SET_QUOTA,
                              TRUE);
-    if (!NT_SUCCESS(Status)) return Status;
+    if (Status != STATUS_SUCCESS) return Status;
 
     Irp = Request.Irp;
     Irp->Flags = IRP_BUFFERED_IO | IRP_SYNCHRONOUS_API;
