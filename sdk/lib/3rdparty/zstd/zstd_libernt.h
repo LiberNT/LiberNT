@@ -12,3 +12,13 @@
 #define ZSTD_calloc(n, s) ((void)(n), (void)(s), (void *)0)
 #define ZSTD_free(p) ((void)(p))
 #define XXH_NO_STDLIB
+
+#if defined(_MSC_VER) && !defined(__clang__)
+/* XXH_NO_STDLIB keeps out <stdlib.h>, where MSVC declares the rotates and byte swaps */
+#include <intrin.h>
+#endif
+
+#if defined(_MSC_VER) && !defined(__clang__) && defined(__aarch64__)
+/* The build defines __aarch64__ for MSVC too, which would select a GNU asm prefetch */
+#define NO_PREFETCH
+#endif
