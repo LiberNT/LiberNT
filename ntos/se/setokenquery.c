@@ -1153,7 +1153,7 @@ SepCaptureTokenInformationPointers(
             return STATUS_SUCCESS;
     }
 
-    if (SidField != NULL && *SidField != NULL)
+    if (SidField != NULL)
     {
         Status = SepCaptureSid(*SidField, PreviousMode, PagedPool, FALSE, CapturedSid);
         if (!NT_SUCCESS(Status)) return Status;
@@ -1278,7 +1278,7 @@ NtSetInformationToken(
             Status = STATUS_INVALID_OWNER;
 
             /* Only somebody the token already speaks for may own what it makes */
-            for (i = 0; i < Token->UserAndGroupCount; i++)
+            for (i = 0; Named != NULL && i < Token->UserAndGroupCount; i++)
             {
                 if (Token->UserAndGroups[i].Sid == NULL) continue;
                 if (!RtlEqualSid(Token->UserAndGroups[i].Sid, Named)) continue;
@@ -1416,6 +1416,8 @@ NtSetInformationToken(
         case TokenIntegrityLevel:
         {
             PTOKEN_MANDATORY_LABEL Label = Given;
+            PSID Current;
+            UCHAR Count;
             ULONG Asked;
 
             if (Label->Label.Sid == NULL || !RtlValidSid(Label->Label.Sid))
@@ -1430,8 +1432,9 @@ NtSetInformationToken(
                 break;
             }
 
-            Asked = *RtlSubAuthoritySid(Label->Label.Sid,
-                                        *RtlSubAuthorityCountSid(Label->Label.Sid) - 1);
+            Count = *RtlSubAuthorityCountSid(Label->Label.Sid);
+            Asked = (Count != 0) ? *RtlSubAuthoritySid(Label->Label.Sid, Count - 1) :
+                                   SECURITY_MANDATORY_UNTRUSTED_RID;
 
             /* Nobody may make itself more trusted than it already is */
             if (Asked > SepGetTokenIntegrityRid(Token))
@@ -1440,16 +1443,21 @@ NtSetInformationToken(
                 break;
             }
 
-            Asked = RtlLengthSid(Token->UserAndGroups[Token->IntegrityLevelIndex].Sid);
+            Current = Token->UserAndGroups[Token->IntegrityLevelIndex].Sid;
+            if (Count == 0 && *RtlSubAuthorityCountSid(Current) != 0)
+            {
+                *RtlSubAuthoritySid(Current, *RtlSubAuthorityCountSid(Current) - 1) = Asked;
+                break;
+            }
+
+            Asked = RtlLengthSid(Current);
             if (Asked != RtlLengthSid(Label->Label.Sid))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            RtlCopyMemory(Token->UserAndGroups[Token->IntegrityLevelIndex].Sid,
-                          Label->Label.Sid,
-                          Asked);
+            RtlCopyMemory(Current, Label->Label.Sid, Asked);
             break;
         }
 
