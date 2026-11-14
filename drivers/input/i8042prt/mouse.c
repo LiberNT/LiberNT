@@ -272,6 +272,8 @@ i8042MouDpcRoutine(
 	UNREFERENCED_PARAMETER(SystemArgument1);
 	UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	__analysis_assume(DeferredContext != NULL);
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
@@ -362,6 +364,8 @@ i8042DpcRoutineMouseTimeout(
 	UNREFERENCED_PARAMETER(SystemArgument1);
 	UNREFERENCED_PARAMETER(SystemArgument2);
 
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 	__analysis_assume(DeferredContext != NULL);
 	DeviceExtension = DeferredContext;
 	PortDeviceExtension = DeviceExtension->Common.PortDeviceExtension;
