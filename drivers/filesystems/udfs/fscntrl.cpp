@@ -2498,11 +2498,11 @@ UDFInvalidateVolumes(
         return RC;
     }
 
-    //  We only needed the pointer, not a reference.
-    ObDereferenceObject( FileToMarkBad );
-
     //  Grab the DeviceObject from the FileObject.
     DeviceToMarkBad = FileToMarkBad->DeviceObject;
+
+    //  We only needed the pointer, not a reference.
+    ObDereferenceObject( FileToMarkBad );
 
     //  Create a new Vpb for this device so that any new opens will mount
     //  a new volume.
