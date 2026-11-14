@@ -2404,6 +2404,8 @@ SpiMiniportTimerDpc(IN struct _KDPC *Dpc,
 {
     PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     DPRINT("Miniport timer DPC\n");
 
     DeviceExtension = ((PDEVICE_OBJECT)DeviceObject)->DeviceExtension;

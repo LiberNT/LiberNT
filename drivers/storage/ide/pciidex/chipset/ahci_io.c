@@ -448,6 +448,9 @@ AtaAhciPollingTimerDpc(
     OldIrql = KeAcquireInterruptSpinLock(ChanData->Controller->InterruptObject);
 
     ActiveSlots = ChanData->ActiveSlotsBitmap;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (ActiveSlots != 0)
     {
         ULONG PortIS = AHCI_PORT_READ(ChanData->IoBase, PxInterruptStatus);

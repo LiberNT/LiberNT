@@ -148,6 +148,8 @@ NvmeArmAerLocked(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
 
+    ASSERT(Device != NULL);
+
     if (Device->Transport && !Device->Transport->AsyncEvents)
         return;
 
@@ -164,6 +166,8 @@ VOID
 NvmeKickSmartLocked(_In_ PNVME_DEVICE_EXTENSION Device)
 {
     NVME_COMMAND Command;
+
+    ASSERT(Device != NULL);
 
     if (Device->Transport && !Device->Transport->AsyncEvents)
         return;
@@ -183,6 +187,8 @@ NvmeKickSmartLocked(_In_ PNVME_DEVICE_EXTENSION Device)
 VOID
 NvmeHandleAerLocked(_In_ PNVME_DEVICE_EXTENSION Device, _In_ ULONG Dw0, _In_ USHORT Status)
 {
+    ASSERT(Device != NULL);
+
     Device->AerOutstanding = FALSE;
     if (Status != 0)
         return;
@@ -213,6 +219,8 @@ VOID
 NvmeHandleSmartLocked(_In_ PNVME_DEVICE_EXTENSION Device, _In_ USHORT Status)
 {
     UCHAR PreviousWarning = Device->CriticalWarning;
+
+    ASSERT(Device != NULL);
 
     Device->SmartInFlight = FALSE;
     if (Status != 0)

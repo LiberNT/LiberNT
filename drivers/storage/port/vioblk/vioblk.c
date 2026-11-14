@@ -23,6 +23,8 @@ VblkStopLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
 {
     ULONG Index;
 
+    ASSERT(Device != NULL);
+
     VblkStopDevice(Device);
     for (Index = 0; Index < Device->QueueSize; Index++)
     {
@@ -40,6 +42,8 @@ static
 BOOLEAN
 VblkRestartLocked(_In_ PVBLK_DEVICE_EXTENSION Device)
 {
+    ASSERT(Device != NULL);
+
     VblkStopLocked(Device);
     if (VblkStartDevice(Device))
         return TRUE;

@@ -363,6 +363,8 @@ AtaStorageNotificationlDpc(
 
     ChanExt = CONTAINING_RECORD(PortData, ATAPORT_CHANNEL_EXTENSION, PortData);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (i = 0; i < ATA_MAX_DEVICE; ++i)
     {
         PATAPORT_DEVICE_EXTENSION DevExt;
