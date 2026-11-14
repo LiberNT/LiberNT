@@ -256,6 +256,8 @@ CywPcieSelectWindowLocked(
     ULONG Readback;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
     if (Pcie->Window == Base)
     {
         return STATUS_SUCCESS;

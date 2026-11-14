@@ -46,6 +46,8 @@ Ndis6FindIfEntryLocked(
 {
     PLIST_ENTRY Link;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Link = Ndis6IfEntries.Flink; Link != &Ndis6IfEntries; Link = Link->Flink)
     {
         PNDIS6_IF_ENTRY Entry = CONTAINING_RECORD(Link, NDIS6_IF_ENTRY, Link);
@@ -113,6 +115,8 @@ Ndis6LuidIndexAllocatedLocked(
     _In_ UINT32 NetLuidIndex)
 {
     PLIST_ENTRY Link;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Link = Ndis6LuidIndices.Flink; Link != &Ndis6LuidIndices; Link = Link->Flink)
     {

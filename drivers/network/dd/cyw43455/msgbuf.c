@@ -731,6 +731,8 @@ CywMsgbufTxLocked(
     NDIS_PHYSICAL_ADDRESS Physical;
     ULONG PktId;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (EthLen < 14 || EthLen > CYW_DATA_BUFFER_SIZE)
     {
         return STATUS_INVALID_PARAMETER;

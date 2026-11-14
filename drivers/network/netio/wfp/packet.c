@@ -56,6 +56,8 @@ WfpFindPacketLocked(
     PWFP_PACKET Packet;
     PLIST_ENTRY Entry;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     for (Entry = WfpPackets.Flink; Entry != &WfpPackets; Entry = Entry->Flink)
     {
         Packet = CONTAINING_RECORD(Entry, WFP_PACKET, Link);
@@ -263,6 +265,8 @@ WfpFindInjectionLocked(
     _In_ HANDLE Handle)
 {
     PLIST_ENTRY Entry;
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     for (Entry = WfpInjections.Flink; Entry != &WfpInjections; Entry = Entry->Flink)
     {

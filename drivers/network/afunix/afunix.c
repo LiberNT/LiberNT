@@ -513,6 +513,8 @@ AfunixPipeProcessLocked(PAFUNIX_PIPE Pipe, PLIST_ENTRY Completions)
     PUCHAR Buffer;
     ULONG Transferred;
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     while (!IsListEmpty(&Pipe->SendQueue) && Pipe->Count < Pipe->Size)
     {
         Entry = Pipe->SendQueue.Flink;

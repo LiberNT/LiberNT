@@ -983,6 +983,8 @@ K1xEmacInterruptDpc(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
     if (!Adapter || !Adapter->DatapathReady)
         return;
 

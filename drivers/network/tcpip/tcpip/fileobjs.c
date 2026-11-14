@@ -328,6 +328,8 @@ static BOOLEAN AddrPortInUseLocked(
     PLIST_ENTRY Entry;
     PADDRESS_FILE Current;
 
+    ASSERT(AddrFile != NULL);
+
     for (Entry = AddressFileListHead.Flink;
          Entry != &AddressFileListHead;
          Entry = Entry->Flink)
@@ -347,6 +349,8 @@ static BOOLEAN AddrTcpPortInUseLocked(
 {
     PLIST_ENTRY Entry;
     PADDRESS_FILE Current;
+
+    ASSERT(AddrFile != NULL);
 
     for (Entry = AddressFileListHead.Flink;
          Entry != &AddressFileListHead;
