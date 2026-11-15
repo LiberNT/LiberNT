@@ -156,6 +156,45 @@ static DWORD WINAPI SecondThread(LPVOID pParam)
     return 0;
 }
 
+static DWORD WINAPI AppFirstThread(LPVOID pParam)
+{
+    ITfThreadMgrEx *pThreadMgr = NULL;
+    ITfDocumentMgr *pFocus = NULL;
+    TfClientId tid = 0;
+    DWORD dwFlags = 0xdead;
+    HWND hwnd;
+
+    CoInitialize(NULL);
+    ok_hr(CoCreateInstance(CLSID_TF_ThreadMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfThreadMgrEx,
+                           (void **)&pThreadMgr), S_OK);
+    if (!pThreadMgr)
+    {
+        CoUninitialize();
+        return 0;
+    }
+    ok_hr(pThreadMgr->ActivateEx(&tid, 0), S_OK);
+
+    hwnd = CreateWindowW(L"MsctfCuasTest", L"cuas", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, 300, 100, NULL, NULL,
+                         GetModuleHandleW(NULL), NULL);
+    SetForegroundWindow(hwnd);
+    SetFocus(hwnd);
+    Pump();
+
+    ok_hr(pThreadMgr->GetFocus(&pFocus), S_OK);
+    ok(pFocus != NULL, "no focused document manager after the application activated first\n");
+    if (pFocus)
+        pFocus->Release();
+
+    DestroyWindow(hwnd);
+    Pump();
+    ok_hr(pThreadMgr->Deactivate(), S_OK);
+    pThreadMgr->GetActiveFlags(&dwFlags);
+    ok(dwFlags == 0, "thread manager flags 0x%lx after the application deactivated\n", dwFlags);
+    pThreadMgr->Release();
+    CoUninitialize();
+    return 0;
+}
+
 START_TEST(cuas)
 {
     WNDCLASSW wc = { 0 };
@@ -288,6 +327,14 @@ START_TEST(cuas)
     ok_long(ImmGetProperty(GetKeyboardLayout(0), IGP_PROPERTY), 0x001D000A);
 
     hThread = CreateThread(NULL, 0, SecondThread, NULL, 0, NULL);
+    ok(hThread != NULL, "CreateThread failed, error %lu\n", GetLastError());
+    if (hThread)
+    {
+        ok_long(WaitForSingleObject(hThread, 30000), WAIT_OBJECT_0);
+        CloseHandle(hThread);
+    }
+
+    hThread = CreateThread(NULL, 0, AppFirstThread, NULL, 0, NULL);
     ok(hThread != NULL, "CreateThread failed, error %lu\n", GetLastError());
     if (hThread)
     {
