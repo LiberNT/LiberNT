@@ -10,6 +10,7 @@ list(APPEND SOURCE
     FindOIDInfo.c
     GeneralizedTime.c
     RevocationTimeout.c
+    RootProgram.c
     testlist.c)
 
 add_executable(crypt32_apitest ${SOURCE})

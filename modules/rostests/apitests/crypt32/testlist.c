@@ -12,6 +12,7 @@ extern void func_CryptProtectMemory(void);
 extern void func_FindOIDInfo(void);
 extern void func_GeneralizedTime(void);
 extern void func_RevocationTimeout(void);
+extern void func_RootProgram(void);
 
 const struct test winetest_testlist[] =
 {
@@ -25,6 +26,7 @@ const struct test winetest_testlist[] =
     { "FindOIDInfo", func_FindOIDInfo },
     { "GeneralizedTime", func_GeneralizedTime },
     { "RevocationTimeout", func_RevocationTimeout },
+    { "RootProgram", func_RootProgram },
 
     { 0, 0 }
 };
