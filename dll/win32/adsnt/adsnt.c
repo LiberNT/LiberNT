@@ -22,6 +22,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(adsnt);
 
 /* The WinNT Namespace Object class Windows 11 registers for the WinNT provider */
 static const CLSID CLSID_WinNTNamespaceObject = {0x250e91a0, 0x0367, 0x11cf, {0xab, 0xc4, 0x02, 0x60, 0x8c, 0x9e, 0x75, 0x53}};
+/* The WinNT Provider Object class Windows 11 registers under the WinNT ProgID */
+static const CLSID CLSID_WinNTProviderObject = {0x8b20cd60, 0x0f29, 0x11cf, {0xab, 0xc4, 0x02, 0x60, 0x8c, 0x9e, 0x75, 0x53}};
 static const GUID LIBID_ActiveDsTypeLibrary = {0x97d25db0, 0x0363, 0x11cf, {0xab, 0xc4, 0x02, 0x60, 0x8c, 0x9e, 0x75, 0x53}};
 
 static const WCHAR WinNTPrefix[] = L"WinNT://";
@@ -47,6 +49,12 @@ typedef struct
     IADsOpenDSObject IADsOpenDSObject_iface;
     LONG ref;
 } NAMESPACE;
+
+typedef struct
+{
+    IParseDisplayName IParseDisplayName_iface;
+    LONG ref;
+} PROVIDER;
 
 static HRESULT get_type_info(REFIID iid, ITypeInfo **info)
 {
@@ -625,6 +633,71 @@ static const IADsOpenDSObjectVtbl NamespaceVtbl =
     namespace_OpenDSObject
 };
 
+static inline PROVIDER *impl_from_IParseDisplayName(IParseDisplayName *iface)
+{
+    return CONTAINING_RECORD(iface, PROVIDER, IParseDisplayName_iface);
+}
+
+static HRESULT WINAPI provider_QueryInterface(IParseDisplayName *iface, REFIID riid, void **obj)
+{
+    *obj = NULL;
+    if (IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_IParseDisplayName))
+    {
+        *obj = iface;
+        IParseDisplayName_AddRef(iface);
+        return S_OK;
+    }
+
+    /* TODO: IADs and IADsContainer on the provider object */
+    FIXME("unsupported interface %s\n", debugstr_guid(riid));
+    return E_NOINTERFACE;
+}
+
+static ULONG WINAPI provider_AddRef(IParseDisplayName *iface)
+{
+    return InterlockedIncrement(&impl_from_IParseDisplayName(iface)->ref);
+}
+
+static ULONG WINAPI provider_Release(IParseDisplayName *iface)
+{
+    PROVIDER *provider = impl_from_IParseDisplayName(iface);
+    LONG ref = InterlockedDecrement(&provider->ref);
+
+    if (!ref)
+        HeapFree(GetProcessHeap(), 0, provider);
+    return ref;
+}
+
+static HRESULT WINAPI provider_ParseDisplayName(IParseDisplayName *iface, IBindCtx *ctx, LPOLESTR name, ULONG *eaten,
+                                                IMoniker **moniker)
+{
+    IDispatch *disp;
+    HRESULT hr;
+
+    TRACE("%p %s %p %p\n", ctx, debugstr_w(name), eaten, moniker);
+
+    if (!name || !eaten || !moniker)
+        return E_POINTER;
+    *eaten = 0;
+    *moniker = NULL;
+    hr = open_object(name, &disp);
+    if (FAILED(hr))
+        return hr;
+    hr = CreatePointerMoniker((IUnknown *)disp, moniker);
+    IDispatch_Release(disp);
+    if (SUCCEEDED(hr))
+        *eaten = lstrlenW(name);
+    return hr;
+}
+
+static const IParseDisplayNameVtbl ProviderVtbl =
+{
+    provider_QueryInterface,
+    provider_AddRef,
+    provider_Release,
+    provider_ParseDisplayName
+};
+
 static HRESULT WINAPI factory_QueryInterface(IClassFactory *iface, REFIID riid, void **obj)
 {
     *obj = NULL;
@@ -682,12 +755,45 @@ static const IClassFactoryVtbl FactoryVtbl =
 
 static IClassFactory NamespaceFactory = { &FactoryVtbl };
 
+static HRESULT WINAPI provider_factory_CreateInstance(IClassFactory *iface, IUnknown *outer, REFIID riid, void **obj)
+{
+    PROVIDER *provider;
+    HRESULT hr;
+
+    *obj = NULL;
+    if (outer)
+        return CLASS_E_NOAGGREGATION;
+
+    provider = HeapAlloc(GetProcessHeap(), 0, sizeof(*provider));
+    if (!provider)
+        return E_OUTOFMEMORY;
+    provider->IParseDisplayName_iface.lpVtbl = &ProviderVtbl;
+    provider->ref = 1;
+
+    hr = IParseDisplayName_QueryInterface(&provider->IParseDisplayName_iface, riid, obj);
+    IParseDisplayName_Release(&provider->IParseDisplayName_iface);
+    return hr;
+}
+
+static const IClassFactoryVtbl ProviderFactoryVtbl =
+{
+    factory_QueryInterface,
+    factory_AddRef,
+    factory_Release,
+    provider_factory_CreateInstance,
+    factory_LockServer
+};
+
+static IClassFactory ProviderFactory = { &ProviderFactoryVtbl };
+
 HRESULT WINAPI DllGetClassObject(REFCLSID clsid, REFIID riid, void **obj)
 {
     TRACE("%s %s %p\n", debugstr_guid(clsid), debugstr_guid(riid), obj);
 
     if (IsEqualGUID(clsid, &CLSID_WinNTNamespaceObject))
         return IClassFactory_QueryInterface(&NamespaceFactory, riid, obj);
+    if (IsEqualGUID(clsid, &CLSID_WinNTProviderObject))
+        return IClassFactory_QueryInterface(&ProviderFactory, riid, obj);
 
     *obj = NULL;
     return CLASS_E_CLASSNOTAVAILABLE;

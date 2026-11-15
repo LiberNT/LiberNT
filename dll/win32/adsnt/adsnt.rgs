@@ -7,10 +7,19 @@ HKCR
             InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
             ProgID = s 'WinNTNamespace'
         }
+        ForceRemove '{8B20CD60-0F29-11CF-ABC4-02608C9E7553}' = s 'WinNT Provider Object'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
+            ProgID = s 'WinNT'
+        }
     }
     ForceRemove WinNTNamespace
     {
         Clsid = s '{250E91A0-0367-11CF-ABC4-02608C9E7553}'
+    }
+    ForceRemove WinNT
+    {
+        Clsid = s '{8B20CD60-0F29-11CF-ABC4-02608C9E7553}'
     }
 }
 HKLM

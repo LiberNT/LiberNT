@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     WinNTGroup.c
+    WinNTMoniker.c
     testlist.c)
 
 add_executable(adsnt_apitest ${SOURCE})
