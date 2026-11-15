@@ -452,6 +452,18 @@ PiQueryAndSaveIds(
 
     PiQueryBusInformation(DeviceNode);
 
+    if (DeviceNode->BootResources == NULL)
+    {
+        PCM_RESOURCE_LIST BootResources;
+
+        /* TODO: publish the boot configuration as LogConf\BootConfig under the instance key */
+        if (NT_SUCCESS(PiIrpQueryResources(DeviceNode, &BootResources)) && BootResources != NULL)
+        {
+            DeviceNode->BootResources = BootResources;
+            PiSetDevNodeFlag(DeviceNode, DNF_HAS_BOOT_CONFIG);
+        }
+    }
+
     /* The capability query came before the bus was known */
     if (HaveCapabilities) PiUpdateRemovalPolicy(DeviceNode, (BOOLEAN)Capabilities.Removable);
 
