@@ -2429,6 +2429,9 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
          */
         if (Adapter->MiniportContext != NULL &&
             Adapter->MiniportContext->IsDisplayOnlyDriver &&
+            DxgkVidPnCoreDisplayOnlyTakesLargestSource(
+                VidPn->TargetModeSets[ActiveTargetIndex] != NULL ?
+                    VidPn->TargetModeSets[ActiveTargetIndex]->NumModes : 0) &&
             VidPn->SourceModeSets[ActiveSourceId] != NULL &&
             VidPn->SourceModeSets[ActiveSourceId]->NumModes > 0)
         {

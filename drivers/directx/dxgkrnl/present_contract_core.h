@@ -98,6 +98,15 @@ DxgkVidPnCoreSeededPathCount(
     return 1;
 }
 
+/* A display-only miniport that enumerates target modes keeps the pinned one; with a single target mode its source modes carry the desktop size */
+FORCEINLINE
+BOOLEAN
+DxgkVidPnCoreDisplayOnlyTakesLargestSource(
+    _In_ SIZE_T TargetModeCount)
+{
+    return TargetModeCount <= 1;
+}
+
 /* WDK: DxgkDdiSetVidPnSourceAddress switches the mode and performs MMIO flips; any other flip is the DMA buffer DxgkDdiPresent built */
 FORCEINLINE
 BOOLEAN

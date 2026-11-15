@@ -652,6 +652,15 @@ TestSeededPathCount(VOID)
     ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 8, 0), 0UL);
 }
 
+static VOID
+TestDisplayOnlyDesktopMode(VOID)
+{
+    ok_eq_bool(DxgkVidPnCoreDisplayOnlyTakesLargestSource(0), TRUE);
+    ok_eq_bool(DxgkVidPnCoreDisplayOnlyTakesLargestSource(1), TRUE);
+    ok_eq_bool(DxgkVidPnCoreDisplayOnlyTakesLargestSource(2), FALSE);
+    ok_eq_bool(DxgkVidPnCoreDisplayOnlyTakesLargestSource(28), FALSE);
+}
+
 START_TEST(DxgkPresentQueue)
 {
     PVOID DeviceA = (PVOID)(ULONG_PTR)0x1000;
@@ -667,6 +676,7 @@ START_TEST(DxgkPresentQueue)
 
     TestVBlankWaitResult();
     TestSeededPathCount();
+    TestDisplayOnlyDesktopMode();
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 1200)
     DxgkPresentQueueTestRefreshTargets();
