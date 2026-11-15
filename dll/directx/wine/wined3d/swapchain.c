@@ -889,6 +889,7 @@ static void swapchain_gl_present(struct wined3d_swapchain *swapchain, const RECT
     if (
 #ifdef __REACTOS__
             (swapchain->composition && pixel_format->swap_method != WGL_SWAP_COPY_ARB) ||
+            (scroll_rect && pixel_format->swap_method != WGL_SWAP_COPY_ARB) ||
 #endif
             context_gl->dc == wined3d_device_gl(swapchain->device)->backup_dc
             || (pixel_format->swap_method != WGL_SWAP_COPY_ARB
