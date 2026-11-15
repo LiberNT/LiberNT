@@ -4,6 +4,7 @@ list(APPEND SOURCE
     devclass.c
     DeviceDescription.c
     DeviceExtension.c
+    DriverFeatureScore.c
     DevicePdoName.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c

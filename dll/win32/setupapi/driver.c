@@ -278,6 +278,28 @@ IsManufacturerCompatible(
     return FALSE;
 }
 
+static DWORD
+GetInfFeatureScore(
+    IN HINF hInf,
+    IN PCWSTR Section)
+{
+    INFCONTEXT Context;
+    WCHAR Text[16];
+    PWSTR End;
+    ULONG FeatureScore;
+
+    /* The directive is a single hexadecimal byte, written without a 0x prefix */
+    if (SetupFindFirstLineW(hInf, Section, L"FeatureScore", &Context) &&
+        SetupGetStringFieldW(&Context, 1, Text, ARRAY_SIZE(Text), NULL) &&
+        Text[0] != UNICODE_NULL)
+    {
+        FeatureScore = wcstoul(Text, &End, 16);
+        if (*End == UNICODE_NULL && FeatureScore <= 0xFF)
+            return FeatureScore;
+    }
+    return 0xFF;
+}
+
 static BOOL
 AddKnownDriverToList(
     IN PLIST_ENTRY DriverListHead,
@@ -348,6 +370,19 @@ AddKnownDriverToList(
     }
     else
         driverInfo->MatchingId = NULL;
+
+    if (DriverType == SPDIT_COMPATDRIVER)
+    {
+        WCHAR ActualSection[LINE_LEN];
+
+        if (!SetupDiGetActualSectionToInstallW(InfFileDetails->hInf, SectionName, ActualSection,
+                                               ARRAY_SIZE(ActualSection), NULL, NULL))
+        {
+            lstrcpynW(ActualSection, SectionName, ARRAY_SIZE(ActualSection));
+        }
+        /* TODO: the signature score, the top byte of a Windows driver rank, is not computed */
+        Rank |= GetInfFeatureScore(InfFileDetails->hInf, ActualSection) << 16;
+    }
 
     TRACE("Adding driver '%s' [%s/%s] (Rank 0x%lx)\n",
         debugstr_w(driverInfo->Details.DrvDescription), debugstr_w(InfFile),
@@ -2685,16 +2720,7 @@ DriverDatabaseGetFeatureScore(
     IN HINF hInf,
     IN PCWSTR Section)
 {
-    INFCONTEXT Context;
-    INT FeatureScore;
-
-    if (SetupFindFirstLineW(hInf, Section, L"FeatureScore", &Context) &&
-        SetupGetIntField(&Context, 1, &FeatureScore) &&
-        FeatureScore >= 0 && FeatureScore <= 0xFF)
-    {
-        return FeatureScore;
-    }
-    return 0xFF;
+    return GetInfFeatureScore(hInf, Section);
 }
 
 static VOID

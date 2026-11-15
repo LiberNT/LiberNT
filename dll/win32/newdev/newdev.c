@@ -474,6 +474,51 @@ GetDeviceIdRank(
     return MAXDWORD;
 }
 
+static DWORD
+GetInstalledFeatureScore(
+    IN HKEY hKey)
+{
+    WCHAR InfPath[MAX_PATH], Section[2 * LINE_LEN], Extension[LINE_LEN], Text[16];
+    DWORD Size, Type, Score = 0xFF;
+    INFCONTEXT Context;
+    PWSTR End;
+    HINF hInf;
+
+    Size = sizeof(InfPath) - sizeof(WCHAR);
+    if (RegQueryValueExW(hKey, REGSTR_VAL_INFPATH, NULL, &Type, (LPBYTE)InfPath, &Size) != ERROR_SUCCESS || Type != REG_SZ)
+        return Score;
+    InfPath[Size / sizeof(WCHAR)] = UNICODE_NULL;
+
+    Size = sizeof(WCHAR) * (LINE_LEN - 1);
+    if (RegQueryValueExW(hKey, REGSTR_VAL_INFSECTION, NULL, &Type, (LPBYTE)Section, &Size) != ERROR_SUCCESS || Type != REG_SZ)
+        return Score;
+    Section[Size / sizeof(WCHAR)] = UNICODE_NULL;
+
+    Size = sizeof(Extension) - sizeof(WCHAR);
+    if (RegQueryValueExW(hKey, REGSTR_VAL_INFSECTIONEXT, NULL, &Type, (LPBYTE)Extension, &Size) == ERROR_SUCCESS && Type == REG_SZ)
+    {
+        Extension[Size / sizeof(WCHAR)] = UNICODE_NULL;
+        wcscat(Section, Extension);
+    }
+
+    hInf = SetupOpenInfFileW(InfPath, NULL, INF_STYLE_WIN4, NULL);
+    if (hInf == INVALID_HANDLE_VALUE)
+        return Score;
+
+    /* The directive is a single hexadecimal byte, written without a 0x prefix */
+    if (SetupFindFirstLineW(hInf, Section, L"FeatureScore", &Context) &&
+        SetupGetStringFieldW(&Context, 1, Text, ARRAYSIZE(Text), NULL) &&
+        Text[0] != UNICODE_NULL)
+    {
+        Size = wcstoul(Text, &End, 16);
+        if (*End == UNICODE_NULL && Size <= 0xFF)
+            Score = Size;
+    }
+
+    SetupCloseInfFile(hInf);
+    return Score;
+}
+
 static BOOL
 IsSelectedDriverBetter(
     IN PDEVINSTDATA DevInstData)
@@ -523,6 +568,9 @@ IsSelectedDriverBetter(
     InstalledRank = GetDeviceIdRank(HardwareIds, MatchingId, 0);
     if (InstalledRank == MAXDWORD)
         InstalledRank = GetDeviceIdRank(CompatibleIds, MatchingId, 0x2000);
+    /* FIXME: the installed rank ignores whether the INF named the ID as a compatible one */
+    if (InstalledRank != MAXDWORD)
+        InstalledRank |= GetInstalledFeatureScore(hKey) << 16;
 
     Size = sizeof(InstalledDate);
     if (RegQueryValueExW(hKey, L"DriverDateData", NULL, &Type, (LPBYTE)&InstalledDate, &Size) != ERROR_SUCCESS ||
