@@ -49,7 +49,6 @@ static const MI_ARCH_DESCRIPTOR MiArchDescriptor =
     0xC0800000ULL,
     FALSE,
     FALSE,
-    MI_I386_DIRECT_PAGES
 };
 
 const MI_ARCH_DESCRIPTOR *

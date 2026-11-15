@@ -25,8 +25,6 @@
 #include <internal/powerpc/mm.h>
 #elif defined(_M_MIPS)
 #include <internal/mips/mm.h>
-#elif defined(_M_ARM)
-#include <internal/arm/mm.h>
 #elif defined(_M_AMD64)
 #include <internal/amd64/mm.h>
 #elif defined(_M_ARM64) || defined(__aarch64__)

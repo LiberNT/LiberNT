@@ -1,12 +1,7 @@
 /*
- * PROJECT:     ReactOS Kernel
- * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Architecture specific source file to hold multiprocessor functions
  * COPYRIGHT:   Copyright 2023 Justin Miller <justin.miller@reactos.org>
  *              Copyright 2023 Victor Perevertkin <victor.perevertkin@reactos.org>
  */
-
-/* INCLUDES *****************************************************************/
 
 #include <ntoskrnl.h>
 
@@ -29,9 +24,6 @@ typedef struct _AP_SETUP_STACK
 {
     PVOID ReturnAddr;
     PVOID KxLoaderBlock;
-} AP_SETUP_STACK, *PAP_SETUP_STACK; // Note: expected layout only for 32-bit x86
-
-/* FUNCTIONS *****************************************************************/
 
 CODE_SEG("INIT")
 VOID
@@ -48,15 +40,11 @@ KeStartAllProcessors(VOID)
      * the number of detected processors on the system. */
     MaximumProcessors = KeMaximumProcessors;
 
-    /* Limit the number of processors we can start at run-time */
     if (KeNumprocSpecified)
         MaximumProcessors = min(MaximumProcessors, KeNumprocSpecified);
 
-    /* Limit also the number of processors we can start during boot-time */
     if (KeBootprocSpecified)
         MaximumProcessors = min(MaximumProcessors, KeBootprocSpecified);
-
-    // TODO: Support processor nodes
 
     /* Start ProcessorCount at 1 because we already have the boot CPU */
     for (ProcessorCount = 1; ProcessorCount < MaximumProcessors; ++ProcessorCount)
@@ -64,7 +52,6 @@ KeStartAllProcessors(VOID)
         KernelStack = NULL;
         DPCStack = NULL;
 
-        // Allocate structures for a new CPU.
         APInfo = ExAllocatePoolZero(NonPagedPool, sizeof(*APInfo), TAG_KERNEL);
         if (!APInfo)
             break;
@@ -78,7 +65,6 @@ KeStartAllProcessors(VOID)
         if (!DPCStack)
             break;
 
-        // Initalize a new PCR for the specific AP
         KiInitializePcr(ProcessorCount,
                         &APInfo->Pcr,
                         &APInfo->Idt[0],
@@ -87,7 +73,6 @@ KeStartAllProcessors(VOID)
                         (PKTHREAD)&APInfo->Thread,
                         DPCStack);
 
-        // Prepare descriptor tables
         KDESCRIPTOR bspGdt, bspIdt;
         __sgdt(&bspGdt.Limit);
         __sidt(&bspIdt.Limit);
@@ -99,7 +84,6 @@ KeStartAllProcessors(VOID)
         KiSetGdtDescriptorBase(KiGetGdtEntry(&APInfo->Gdt, KGDT_NMI_TSS), (ULONG_PTR)&APInfo->TssNMI);
 
         KiSetGdtDescriptorBase(KiGetGdtEntry(&APInfo->Gdt, KGDT_TSS), (ULONG_PTR)&APInfo->Tss);
-        // Clear TSS Busy flag (aka set the type to "TSS (Available)")
         KiGetGdtEntry(&APInfo->Gdt, KGDT_TSS)->HighWord.Bits.Type = I386_TSS;
 
         APInfo->TssDoubleFault.Esp0 = (ULONG_PTR)&APInfo->NMIStackData;
@@ -108,7 +92,6 @@ KeStartAllProcessors(VOID)
         APInfo->TssNMI.Esp0 = (ULONG_PTR)&APInfo->NMIStackData;
         APInfo->TssNMI.Esp = (ULONG_PTR)&APInfo->NMIStackData;
 
-        // Fill the processor state
         PKPROCESSOR_STATE ProcessorState = &APInfo->Pcr.Prcb->ProcessorState;
         RtlZeroMemory(ProcessorState, sizeof(*ProcessorState));
 
@@ -138,19 +121,16 @@ KeStartAllProcessors(VOID)
         ApStack->KxLoaderBlock = KeLoaderBlock;
         ApStack->ReturnAddr = NULL;
 
-        // Update the LOADER_PARAMETER_BLOCK structure for the new processor
         KeLoaderBlock->KernelStack = (ULONG_PTR)KernelStack;
         KeLoaderBlock->Prcb = (ULONG_PTR)&APInfo->Pcr.Prcb;
         KeLoaderBlock->Thread = (ULONG_PTR)&APInfo->Pcr.Prcb->IdleThread;
 
-        // Start the CPU
         DPRINT("Attempting to Start a CPU with number: %lu\n", ProcessorCount);
         if (!HalStartNextProcessor(KeLoaderBlock, ProcessorState))
         {
             break;
         }
 
-        // And wait for it to start
         while (KeLoaderBlock->Prcb != 0)
         {
             //TODO: Add a time out so we don't wait forever
@@ -159,7 +139,6 @@ KeStartAllProcessors(VOID)
         }
     }
 
-    // The last CPU didn't start - clean the data
     ProcessorCount--;
 
     if (APInfo)

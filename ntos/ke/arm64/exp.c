@@ -17,13 +17,6 @@
 #include <kdbg/kdb.h>
 #endif
 
-/*
- * The AMD64 port already carries the full exception-dispatch machinery.
- * For ARM64 we reuse the same high-level policy so that assertions and
- * bugchecks behave identically.  The only architecture-specific details are
- * the register names (PC instead of RIP, 4-byte breakpoints) and the fact
- * that WOW64 exception dispatch is not wired yet.
- */
 
 #if defined(_MSC_VER) && !defined(__clang__)
 static VOID KiArm64DbgPrintBacktraceImpl(_In_ PCONTEXT Ctx)
@@ -117,7 +110,6 @@ KiChpeContinueToEmulation(
     TrapFrame->Lr = (ULONG64)KeUserEmulationDispatcher;
 }
 
-static
 BOOLEAN
 KiDispatchExceptionToUser(
     _In_ PKTRAP_FRAME TrapFrame,
@@ -392,273 +384,17 @@ KiDispatchExceptionToUser(
     return TRUE;
 }
 
-#if defined(_MSC_VER) && !defined(__clang__)
-static
-#else
-static __attribute__((unused))
-#endif
 VOID
-KiPageInDirectory(
-    _In_ PVOID ImageBase,
-    _In_ USHORT Directory)
 {
-    volatile CHAR *Pointer;
-    ULONG Size;
-
-    Pointer = RtlImageDirectoryEntryToData(ImageBase, TRUE, Directory, &Size);
-    if (!Pointer) return;
-
-    while ((LONG)Size > 0)
-    {
-        (void)*Pointer;
-        Pointer += PAGE_SIZE;
-        Size -= PAGE_SIZE;
-    }
 }
 
-static
-VOID
-KiPrepareUserDebugData(VOID)
 {
-    /*
-     * ARM64: Skip pre-paging of user-mode debug/exception directories.
-     *
-     * On ARM64 with Clang/mingw, PSEH2 uses label-based pseudo-SEH that
-     * cannot catch hardware exceptions (page faults). KiPageInDirectory
-     * reads user-mode pages to force them in, but if a page fault occurs
-     * on an unmapped user page, the _SEH2_EXCEPT handler won't catch it,
-     * causing a last-chance exception crash in KiDispatchException.
-     *
-     * This is only an optimization - the .pdata (exception) and .debug
-     * directories will be demand-paged when the unwinder/debugger
-     * actually accesses them.
-     */
-    return;
-}
-
-VOID
-NTAPI
-KiDispatchException(_In_ PEXCEPTION_RECORD ExceptionRecord,
-                    _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
-                    _Inout_ PKTRAP_FRAME TrapFrame,
-                    _In_ KPROCESSOR_MODE PreviousMode,
-                    _In_ BOOLEAN FirstChance)
-{
-    CONTEXT Context;
-    BOOLEAN Handled = FALSE;
-
-    ASSERT(ExceptionRecord != NULL);
-    ASSERT(TrapFrame != NULL);
-
-    /* Match the behaviour of other architectures for accounting. */
-    KeGetCurrentPrcb()->KeExceptionDispatchCount++;
-
-    RtlZeroMemory(&Context, sizeof(Context));
-    Context.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
-
-    KeTrapFrameToContext(TrapFrame, ExceptionFrame, &Context);
-    if (TrapFrame->ContextFromKFramesUnwound)
-    {
-        Context.ContextFlags |= CONTEXT_UNWOUND_TO_CALL;
-    }
-
-    switch (ExceptionRecord->ExceptionCode)
-    {
-        case STATUS_BREAKPOINT:
-            /* ELR already points at the BRK instruction on ARM64. */
-            break;
-
-        case KI_EXCEPTION_ACCESS_VIOLATION:
-            ExceptionRecord->ExceptionCode = STATUS_ACCESS_VIOLATION;
-            break;
-    }
-
-    if (PreviousMode == KernelMode)
-    {
-        if (FirstChance)
-        {
-            if (KiDebugRoutine(TrapFrame,
-                               ExceptionFrame,
-                               ExceptionRecord,
-                               &Context,
-                               PreviousMode,
-                               FALSE))
-            {
-                Handled = TRUE;
-                goto HandledExit;
-            }
-
-            if (RtlDispatchException(ExceptionRecord, &Context))
-            {
-                Handled = TRUE;
-                goto HandledExit;
-            }
-        }
-
-        if (KiDebugRoutine(TrapFrame,
-                           ExceptionFrame,
-                           ExceptionRecord,
-                           &Context,
-                           PreviousMode,
-                           TRUE))
-        {
-            Handled = TRUE;
-            goto HandledExit;
-        }
-
 #ifdef KDBG
-        if (!KdDebuggerEnabled || KdDebuggerNotPresent)
-        {
-            EXCEPTION_RECORD64 Rec64;
-            ULONG i;
 
-            RtlZeroMemory(&Rec64, sizeof(Rec64));
-            Rec64.ExceptionCode = ExceptionRecord->ExceptionCode;
-            Rec64.ExceptionFlags = ExceptionRecord->ExceptionFlags;
-            Rec64.ExceptionAddress = (ULONG64)(ULONG_PTR)ExceptionRecord->ExceptionAddress;
-            Rec64.NumberParameters = ExceptionRecord->NumberParameters;
-            if (Rec64.NumberParameters > EXCEPTION_MAXIMUM_PARAMETERS)
-                Rec64.NumberParameters = EXCEPTION_MAXIMUM_PARAMETERS;
-            for (i = 0; i < Rec64.NumberParameters; i++)
-            {
-                Rec64.ExceptionInformation[i] = (ULONG64)ExceptionRecord->ExceptionInformation[i];
-            }
 
-            if (KdbEnterDebuggerException(&Rec64,
-                                          PreviousMode,
-                                          &Context,
-                                          FALSE) == kdContinue)
-            {
-                Handled = TRUE;
-                goto HandledExit;
-            }
-        }
-#endif
 
-        if ((ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) &&
-            KeBugCheckActive)
-        {
-            HalHaltSystem();
-        }
 
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-    else
     {
-        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
-        {
-            return;
-        }
-
-        if (FirstChance)
-        {
-            if ((!(PsGetCurrentProcess()->DebugPort) &&
-                 !(KdIgnoreUmExceptions)) ||
-                 (KdIsThisAKdTrap(ExceptionRecord, &Context, PreviousMode)))
-            {
-                KiPrepareUserDebugData();
-                if (KiDebugRoutine(TrapFrame,
-                                   ExceptionFrame,
-                                   ExceptionRecord,
-                                   &Context,
-                                   PreviousMode,
-                                   FALSE))
-                {
-                    Handled = TRUE;
-                    goto HandledExit;
-                }
-            }
-
-            if ((ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT) &&
-                (ExceptionRecord->NumberParameters == 1) &&
-                !(ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE) &&
-                ((ULONG_PTR)ExceptionRecord->ExceptionAddress == (ULONG_PTR)TrapFrame->Pc))
-            {
-                TrapFrame->Pc += 4;
-                if (DbgkForwardException(ExceptionRecord, TRUE, FALSE))
-                {
-                    return;
-                }
-            }
-            else if (DbgkForwardException(ExceptionRecord, TRUE, FALSE))
-            {
-                return;
-            }
-
-            if (KiDispatchExceptionToUser(TrapFrame, &Context, ExceptionRecord))
-            {
-                return;
-            }
-
-            DPRINT1("[arm64][EXC] KiDispatchException: first-chance user dispatch not handled Code=0x%08lx PC=%p LR=%p\n",
-                    ExceptionRecord->ExceptionCode,
-                    (PVOID)(ULONG_PTR)Context.Pc,
-                    (PVOID)(ULONG_PTR)Context.Lr);
-        }
-
-        DPRINT1("[arm64][EXC] second chance %.16s Code=0x%08lx Addr=%p Info=%Ix,%Ix PC=%p LR=%p SP=%p FP=%p\n",
-                PsGetCurrentProcess()->ImageFileName,
-                ExceptionRecord->ExceptionCode,
-                ExceptionRecord->ExceptionAddress,
-                ExceptionRecord->ExceptionInformation[0],
-                ExceptionRecord->ExceptionInformation[1],
-                (PVOID)(ULONG_PTR)Context.Pc,
-                (PVOID)(ULONG_PTR)Context.Lr,
-                (PVOID)(ULONG_PTR)Context.Sp,
-                (PVOID)(ULONG_PTR)Context.Fp);
-
-        if (DbgkForwardException(ExceptionRecord, TRUE, TRUE))
-        {
-            return;
-        }
-
-        if (DbgkForwardException(ExceptionRecord, FALSE, TRUE))
-        {
-            return;
-        }
-
-        /* 3rd strike, kill the process */
-        DPRINT1("Kill %.16s, ExceptionCode: %lx, ExceptionAddress: %p, BaseAddress: %p\n",
-                PsGetCurrentProcess()->ImageFileName,
-                ExceptionRecord->ExceptionCode,
-                ExceptionRecord->ExceptionAddress,
-                PsGetCurrentProcess()->SectionBaseAddress);
-        DPRINT1("[arm64][EXC] KILL PC=%p LR=%p FP=%p SP=%p Far=%p\n",
-                (PVOID)(ULONG_PTR)Context.Pc,
-                (PVOID)(ULONG_PTR)Context.Lr,
-                (PVOID)(ULONG_PTR)Context.Fp,
-                (PVOID)(ULONG_PTR)Context.Sp,
-                ExceptionRecord->NumberParameters >= 2 ?
-                    (PVOID)ExceptionRecord->ExceptionInformation[1] : NULL);
-
-        ZwTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);
-
-        /* ZwTerminateProcess should never return for self-termination.
-         * If we get here, the process could not be killed -- bugcheck.
-         * NOTE: Do NOT insert KDBG/debugger fallback between ZwTerminateProcess
-         * and KeBugCheckEx. KdbEnterDebuggerException can return kdHandleException
-         * for user-mode exceptions without entering the CLI, which would cause
-         * KiDispatchException to return to user mode and re-execute the faulting
-         * instruction in an infinite loop. This matches x86/amd64 behavior. */
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-
-HandledExit:
-    if (Handled)
-    {
-        KeContextToTrapFrame(&Context,
-                             ExceptionFrame,
-                             TrapFrame,
-                             Context.ContextFlags,
-                             PreviousMode);
     }
 }
 

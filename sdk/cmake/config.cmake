@@ -290,10 +290,6 @@ set(RDPSERVER_DIR "" CACHE PATH
 set(RDPSERVER_CONFIG_DIR "" CACHE PATH
     "Directory with a private rdpserver.ini and its TLS certificate/key for the RDP console server")
 
-cmake_dependent_option(ENABLE_ROSV
-                       "Whether to build the ROSV VMX hypervisor driver and its user-mode tools." OFF
-                       "ARCH STREQUAL amd64" OFF)
-
 cmake_dependent_option(FREELDR_HTTP_BOOT
                        "Whether to build the FreeLdr UEFI HTTP boot path." OFF
                        "LATTEPANDAMU_SUPPORT OR RPI_SUPPORT" OFF)

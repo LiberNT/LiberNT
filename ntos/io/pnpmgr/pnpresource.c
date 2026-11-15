@@ -599,7 +599,6 @@ IopPickOneDescriptor(
     }
 
     Status = IopDescribeFromRequirement(Requirement, Descriptor);
-    if (!NT_SUCCESS(Status)) return Status;
 
     if (Requirement->Type == CmResourceTypeInterrupt)
     {
@@ -640,10 +639,6 @@ IopPickOneDescriptor(
 
         Attempts++;
     }
-
-    DPRINT1("PnP: no free setting for a type %u requirement of %wZ\n",
-            Requirement->Type,
-            DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
 
     return STATUS_CONFLICTING_ADDRESSES;
 }

@@ -1,57 +1,37 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            ntoskrnl/kd64/i386/kdx86.c
- * PURPOSE:         KD support routines for x86
- * PROGRAMMERS:     Alex Ionescu (alex.ionescu@reactos.org)
- *                  Stefan Ginsberg (stefan.ginsberg@reactos.org)
  */
-
-/* INCLUDES *****************************************************************/
 
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
 
-/* FUNCTIONS *****************************************************************/
-
 VOID
 NTAPI
-KdpGetStateChange(IN PDBGKD_MANIPULATE_STATE64 State,
-                  IN PCONTEXT Context)
 {
     PKPRCB Prcb;
     ULONG i;
 
-    /* Check for success */
     if (NT_SUCCESS(State->u.Continue2.ContinueStatus))
     {
-        /* Check if we're tracing */
         if (State->u.Continue2.ControlSet.TraceFlag)
         {
-            /* Enable TF */
             Context->EFlags |= EFLAGS_TF;
         }
         else
         {
-            /* Remove it */
             Context->EFlags &= ~EFLAGS_TF;
         }
 
-        /* Loop all processors */
         for (i = 0; i < KeNumberProcessors; i++)
         {
-            /* Get the PRCB and update DR7 and DR6 */
             Prcb = KiProcessorBlock[i];
             Prcb->ProcessorState.SpecialRegisters.KernelDr7 =
                 State->u.Continue2.ControlSet.Dr7;
             Prcb->ProcessorState.SpecialRegisters.KernelDr6 = 0;
         }
 
-        /* Check if we have new symbol information */
         if (State->u.Continue2.ControlSet.CurrentSymbolStart != 1)
         {
-            /* Update it */
             KdpCurrentSymbolStart =
                 State->u.Continue2.ControlSet.CurrentSymbolStart;
             KdpCurrentSymbolEnd= State->u.Continue2.ControlSet.CurrentSymbolEnd;
@@ -61,8 +41,6 @@ KdpGetStateChange(IN PDBGKD_MANIPULATE_STATE64 State,
 
 VOID
 NTAPI
-KdpSetContextState(IN PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
-                   IN PCONTEXT Context)
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
 
@@ -72,16 +50,13 @@ KdpSetContextState(IN PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
     WaitStateChange->ControlReport.Dr7 = Prcb->ProcessorState.SpecialRegisters.
                                          KernelDr7;
 
-    /* Copy i386 specific segments */
     WaitStateChange->ControlReport.SegCs = (USHORT)Context->SegCs;
     WaitStateChange->ControlReport.SegDs = (USHORT)Context->SegDs;
     WaitStateChange->ControlReport.SegEs = (USHORT)Context->SegEs;
     WaitStateChange->ControlReport.SegFs = (USHORT)Context->SegFs;
 
-    /* Copy EFlags */
     WaitStateChange->ControlReport.EFlags = Context->EFlags;
 
-    /* Set Report Flags */
     WaitStateChange->ControlReport.ReportFlags = REPORT_INCLUDES_SEGS;
     if (WaitStateChange->ControlReport.SegCs == KGDT_R0_CODE)
     {
@@ -95,7 +70,6 @@ KdpSysReadMsr(
     _In_ ULONG Msr,
     _Out_ PULONGLONG MsrValue)
 {
-    /* Use SEH to protect from invalid MSRs */
     _SEH2_TRY
     {
         *MsrValue = __readmsr(Msr);
@@ -115,7 +89,6 @@ KdpSysWriteMsr(
     _In_ ULONG Msr,
     _In_ PULONGLONG MsrValue)
 {
-    /* Use SEH to protect from invalid MSRs */
     _SEH2_TRY
     {
         __writemsr(Msr, *MsrValue);
@@ -140,7 +113,6 @@ KdpSysReadBusData(
     _In_ ULONG Length,
     _Out_ PULONG ActualLength)
 {
-    /* Just forward to HAL */
     *ActualLength = HalGetBusDataByOffset(BusDataType,
                                           BusNumber,
                                           SlotNumber,
@@ -148,7 +120,6 @@ KdpSysReadBusData(
                                           Offset,
                                           Length);
 
-    /* Return status */
     return (*ActualLength != 0 ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
 }
 
@@ -163,7 +134,6 @@ KdpSysWriteBusData(
     _In_ ULONG Length,
     _Out_ PULONG ActualLength)
 {
-    /* Just forward to HAL */
     *ActualLength = HalSetBusDataByOffset(BusDataType,
                                           BusNumber,
                                           SlotNumber,
@@ -171,7 +141,6 @@ KdpSysWriteBusData(
                                           Offset,
                                           Length);
 
-    /* Return status */
     return (*ActualLength != 0 ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
 }
 
@@ -187,20 +156,16 @@ KdpSysReadControlSpace(
     PVOID ControlStart;
     ULONG RealLength;
 
-    /* Make sure that this is a valid request */
     if ((BaseAddress < sizeof(KPROCESSOR_STATE)) &&
         (Processor < KeNumberProcessors))
     {
-        /* Get the actual length */
         RealLength = sizeof(KPROCESSOR_STATE) - (ULONG_PTR)BaseAddress;
         if (RealLength < Length) Length = RealLength;
 
-        /* Set the proper address */
         ControlStart = (PVOID)((ULONG_PTR)BaseAddress +
                                (ULONG_PTR)&KiProcessorBlock[Processor]->
                                            ProcessorState);
 
-        /* Read the control state safely */
         return KdpCopyMemoryChunks((ULONG_PTR)Buffer,
                                    ControlStart,
                                    Length,
@@ -210,7 +175,6 @@ KdpSysReadControlSpace(
     }
     else
     {
-        /* Invalid request */
         *ActualLength = 0;
         return STATUS_UNSUCCESSFUL;
     }
@@ -227,16 +191,13 @@ KdpSysWriteControlSpace(
 {
     PVOID ControlStart;
 
-    /* Make sure that this is a valid request */
     if (((BaseAddress + Length) <= sizeof(KPROCESSOR_STATE)) &&
         (Processor < KeNumberProcessors))
     {
-        /* Set the proper address */
         ControlStart = (PVOID)((ULONG_PTR)BaseAddress +
                                (ULONG_PTR)&KiProcessorBlock[Processor]->
                                            ProcessorState);
 
-        /* Write the control state safely */
         return KdpCopyMemoryChunks((ULONG_PTR)Buffer,
                                    ControlStart,
                                    Length,
@@ -246,7 +207,6 @@ KdpSysWriteControlSpace(
     }
     else
     {
-        /* Invalid request */
         *ActualLength = 0;
         return STATUS_UNSUCCESSFUL;
     }
@@ -265,20 +225,16 @@ KdpSysReadIoSpace(
 {
     NTSTATUS Status;
 
-    /* Verify parameters */
     if ((InterfaceType != Isa) || (BusNumber != 0) || (AddressSpace != 1))
     {
-        /* Fail, we don't support this */
         *ActualDataSize = 0;
         return STATUS_UNSUCCESSFUL;
     }
 
-    /* Check the size */
     switch (DataSize)
     {
         case sizeof(UCHAR):
         {
-            /* Read 1 byte */
             *(PUCHAR)DataValue =
                 READ_PORT_UCHAR((PUCHAR)(ULONG_PTR)IoAddress);
             *ActualDataSize = sizeof(UCHAR);
@@ -288,16 +244,13 @@ KdpSysReadIoSpace(
 
         case sizeof(USHORT):
         {
-            /* Make sure the address is aligned */
             if ((IoAddress & (sizeof(USHORT) - 1)) != 0)
             {
-                /* It isn't, bail out */
                 *ActualDataSize = 0;
                 Status = STATUS_DATATYPE_MISALIGNMENT;
                 break;
             }
 
-            /* Read 2 bytes */
             *(PUSHORT)DataValue =
                 READ_PORT_USHORT((PUSHORT)(ULONG_PTR)IoAddress);
             *ActualDataSize = sizeof(USHORT);
@@ -307,16 +260,13 @@ KdpSysReadIoSpace(
 
         case sizeof(ULONG):
         {
-            /* Make sure the address is aligned */
             if ((IoAddress & (sizeof(ULONG) - 1)) != 0)
             {
-                /* It isn't, bail out */
                 *ActualDataSize = 0;
                 Status = STATUS_DATATYPE_MISALIGNMENT;
                 break;
             }
 
-            /* Read 4 bytes */
             *(PULONG)DataValue =
                 READ_PORT_ULONG((PULONG)(ULONG_PTR)IoAddress);
             *ActualDataSize = sizeof(ULONG);
@@ -325,12 +275,10 @@ KdpSysReadIoSpace(
         }
 
         default:
-            /* Invalid size, fail */
             *ActualDataSize = 0;
             Status = STATUS_INVALID_PARAMETER;
     }
 
-    /* Return status */
     return Status;
 }
 
@@ -347,20 +295,16 @@ KdpSysWriteIoSpace(
 {
     NTSTATUS Status;
 
-    /* Verify parameters */
     if ((InterfaceType != Isa) || (BusNumber != 0) || (AddressSpace != 1))
     {
-        /* Fail, we don't support this */
         *ActualDataSize = 0;
         return STATUS_UNSUCCESSFUL;
     }
 
-    /* Check the size */
     switch (DataSize)
     {
         case sizeof(UCHAR):
         {
-            /* Write 1 byte */
             WRITE_PORT_UCHAR((PUCHAR)(ULONG_PTR)IoAddress,
                              *(PUCHAR)DataValue);
             *ActualDataSize = sizeof(UCHAR);
@@ -370,16 +314,13 @@ KdpSysWriteIoSpace(
 
         case sizeof(USHORT):
         {
-            /* Make sure the address is aligned */
             if ((IoAddress & (sizeof(USHORT) - 1)) != 0)
             {
-                /* It isn't, bail out */
                 *ActualDataSize = 0;
                 Status = STATUS_DATATYPE_MISALIGNMENT;
                 break;
             }
 
-            /* Write 2 bytes */
             WRITE_PORT_USHORT((PUSHORT)(ULONG_PTR)IoAddress,
                              *(PUSHORT)DataValue);
             *ActualDataSize = sizeof(USHORT);
@@ -389,16 +330,13 @@ KdpSysWriteIoSpace(
 
         case sizeof(ULONG):
         {
-            /* Make sure the address is aligned */
             if ((IoAddress & (sizeof(ULONG) - 1)) != 0)
             {
-                /* It isn't, bail out */
                 *ActualDataSize = 0;
                 Status = STATUS_DATATYPE_MISALIGNMENT;
                 break;
             }
 
-            /* Write 4 bytes */
             WRITE_PORT_ULONG((PULONG)(ULONG_PTR)IoAddress,
                              *(PULONG)DataValue);
             *ActualDataSize = sizeof(ULONG);
@@ -407,20 +345,16 @@ KdpSysWriteIoSpace(
         }
 
         default:
-            /* Invalid size, fail */
             *ActualDataSize = 0;
             Status = STATUS_INVALID_PARAMETER;
     }
 
-    /* Return status */
     return Status;
 }
 
 NTSTATUS
 NTAPI
-KdpSysCheckLowMemory(IN ULONG Flags)
 {
-    /* Stubbed as we don't support PAE */
     return STATUS_UNSUCCESSFUL;
 }
 
@@ -430,7 +364,6 @@ KdpAllowDisable(VOID)
 {
     ULONG i;
 
-    /* Loop every processor */
     for (i = 0; i < KeNumberProcessors; i++)
     {
         PKPROCESSOR_STATE ProcessorState = &KiProcessorBlock[i]->ProcessorState;

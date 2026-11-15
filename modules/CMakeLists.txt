@@ -29,10 +29,6 @@ endif()
 
 add_subdirectory(wallpapers)
 
-if(ENABLE_ROSV)
-    add_subdirectory(rosv)
-endif()
-
 add_subdirectory(n64emu)
 add_subdirectory(fexbench)
 add_subdirectory(rostests/tests/emulation)

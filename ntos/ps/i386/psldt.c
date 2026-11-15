@@ -1,22 +1,12 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            ntoskrnl/ps/i386/psldt.c
- * PURPOSE:         LDT support for x86
- * PROGRAMMERS:     Stefan Ginsberg (stefan.ginsberg@reactos.org)
  */
-
-/* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
 
-/* FUNCTIONS *****************************************************************/
-
 VOID
 NTAPI
-PspDeleteLdt(PEPROCESS Process)
 {
     /* FIXME - LdtInformation must be null as long as we don't implement VDMs */
     ASSERT(Process->LdtInformation == NULL);
@@ -24,58 +14,44 @@ PspDeleteLdt(PEPROCESS Process)
 
 VOID
 NTAPI
-PspDeleteVdmObjects(PEPROCESS Process)
 {
-    /* If there are no VDM objects, just exit */
     if (Process->VdmObjects == NULL)
         return;
 
     /* FIXME: Need to do more than just freeing the main VdmObjects member! */
     UNIMPLEMENTED;
 
-    /* Free VDM objects */
     ExFreePoolWithTag(Process->VdmObjects, TAG_KERNEL);
     Process->VdmObjects = NULL;
 }
 
 NTSTATUS
 NTAPI
-PspQueryDescriptorThread(IN PETHREAD Thread,
-                         IN PVOID ThreadInformation,
-                         IN ULONG ThreadInformationLength,
-                         OUT PULONG ReturnLength OPTIONAL)
 {
     DESCRIPTOR_TABLE_ENTRY DescriptorEntry;
     LDT_ENTRY Descriptor;
     NTSTATUS Status;
     PAGED_CODE();
 
-    /* Verify the size */
     if (ThreadInformationLength != sizeof(DESCRIPTOR_TABLE_ENTRY))
     {
-        /* Fail */
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
-    /* Enter SEH for the copy */
     _SEH2_TRY
     {
-        /* Get the descriptor */
         RtlCopyMemory(&DescriptorEntry,
                       ThreadInformation,
                       sizeof(DESCRIPTOR_TABLE_ENTRY));
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* Return the exception code */
         _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
 
-    /* Check if this is a GDT selector */
     if (!(DescriptorEntry.Selector & 0x4))
     {
-        /* Get the GDT entry */
         Status = Ke386GetGdtEntryThread(&Thread->Tcb,
                                         DescriptorEntry.Selector & 0xFFFFFFF8,
                                         (PKGDTENTRY)&Descriptor);
@@ -99,7 +75,6 @@ PspQueryDescriptorThread(IN PETHREAD Thread,
         Descriptor = *(PLDT_ENTRY)(LdtBase + Offset);
     }
 
-    /* Enter SEH for the copy */
     _SEH2_TRY
     {
         /* Copy the entry to caller */
@@ -111,11 +86,9 @@ PspQueryDescriptorThread(IN PETHREAD Thread,
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        /* Return the exception code */
         _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
 
-    /* Return status to caller */
     return STATUS_SUCCESS;
 }

@@ -23,7 +23,6 @@ ULONG MmConsumedPoolPercentage;
 ULONG MmProtectFreedNonPagedPool;
 ULONG MmSpecialPoolTag;
 MM_PAGED_POOL_INFO MmPagedPoolInfo;
-BOOLEAN ExpArm64PoolBootstrapMode;
 
 BOOLEAN
 NTAPI

@@ -1,16 +1,10 @@
 /*
- * PROJECT:     ReactOS Kernel
- * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Internal header for the Security Manager
  * COPYRIGHT:   Copyright Eric Kohl
  *              Copyright 2022-2023 George Bișoc <george.bisoc@reactos.org>
  */
 
 #pragma once
 
-//
-// Internal ACE type structures
-//
 typedef struct _KNOWN_ACE
 {
     ACE_HEADER Header;
@@ -26,18 +20,6 @@ typedef struct _KNOWN_OBJECT_ACE
     ULONG SidStart;
 } KNOWN_OBJECT_ACE, *PKNOWN_OBJECT_ACE;
 
-typedef struct _KNOWN_COMPOUND_ACE
-{
-    ACE_HEADER Header;
-    ACCESS_MASK Mask;
-    USHORT CompoundAceType;
-    USHORT Reserved;
-    ULONG SidStart;
-} KNOWN_COMPOUND_ACE, *PKNOWN_COMPOUND_ACE;
-
-//
-// Access Check Rights
-//
 typedef struct _ACCESS_CHECK_RIGHTS
 {
     ACCESS_MASK RemainingAccessRights;
@@ -45,9 +27,6 @@ typedef struct _ACCESS_CHECK_RIGHTS
     ACCESS_MASK DeniedAccessRights;
 } ACCESS_CHECK_RIGHTS, *PACCESS_CHECK_RIGHTS;
 
-//
-// Internal object type list structure
-//
 typedef struct _OBJECT_TYPE_LIST_INTERNAL
 {
     GUID ObjectTypeGuid;
@@ -55,124 +34,8 @@ typedef struct _OBJECT_TYPE_LIST_INTERNAL
     ACCESS_CHECK_RIGHTS ObjectAccessRights;
 } OBJECT_TYPE_LIST_INTERNAL, *POBJECT_TYPE_LIST_INTERNAL;
 
-typedef enum _ACCESS_CHECK_RIGHT_TYPE
-{
-    AccessCheckMaximum,
-    AccessCheckRegular
-} ACCESS_CHECK_RIGHT_TYPE;
-
-//
-// Token Audit Policy Information structure
-//
-typedef struct _TOKEN_AUDIT_POLICY_INFORMATION
-{
-    ULONG PolicyCount;
-    struct
-    {
-        ULONG Category;
-        UCHAR Value;
-    } Policies[1];
-} TOKEN_AUDIT_POLICY_INFORMATION, *PTOKEN_AUDIT_POLICY_INFORMATION;
-
-//
-// Token creation method defines (for debugging purposes)
-//
-#define TOKEN_CREATE_METHOD    0xCUL
-#define TOKEN_DUPLICATE_METHOD 0xDUL
-#define TOKEN_FILTER_METHOD    0xFUL
-
-//
-// Security descriptor internal helpers
-//
-FORCEINLINE
-PSID
-SepGetGroupFromDescriptor(
-    _Inout_ PSECURITY_DESCRIPTOR _Descriptor)
-{
-    PISECURITY_DESCRIPTOR Descriptor = (PISECURITY_DESCRIPTOR)_Descriptor;
-    PISECURITY_DESCRIPTOR_RELATIVE SdRel;
-
-    if (Descriptor->Control & SE_SELF_RELATIVE)
-    {
-        SdRel = (PISECURITY_DESCRIPTOR_RELATIVE)Descriptor;
-        if (!SdRel->Group) return NULL;
-        return (PSID)((ULONG_PTR)Descriptor + SdRel->Group);
-    }
-    else
-    {
-        return Descriptor->Group;
-    }
-}
-
-FORCEINLINE
-PSID
-SepGetOwnerFromDescriptor(
-    _Inout_ PSECURITY_DESCRIPTOR _Descriptor)
-{
-    PISECURITY_DESCRIPTOR Descriptor = (PISECURITY_DESCRIPTOR)_Descriptor;
-    PISECURITY_DESCRIPTOR_RELATIVE SdRel;
-
-    if (Descriptor->Control & SE_SELF_RELATIVE)
-    {
-        SdRel = (PISECURITY_DESCRIPTOR_RELATIVE)Descriptor;
-        if (!SdRel->Owner) return NULL;
-        return (PSID)((ULONG_PTR)Descriptor + SdRel->Owner);
-    }
-    else
-    {
-        return Descriptor->Owner;
-    }
-}
-
-FORCEINLINE
-PACL
-SepGetDaclFromDescriptor(
-    _Inout_ PSECURITY_DESCRIPTOR _Descriptor)
-{
-    PISECURITY_DESCRIPTOR Descriptor = (PISECURITY_DESCRIPTOR)_Descriptor;
-    PISECURITY_DESCRIPTOR_RELATIVE SdRel;
-
-    if (!(Descriptor->Control & SE_DACL_PRESENT)) return NULL;
-
-    if (Descriptor->Control & SE_SELF_RELATIVE)
-    {
-        SdRel = (PISECURITY_DESCRIPTOR_RELATIVE)Descriptor;
-        if (!SdRel->Dacl) return NULL;
-        return (PACL)((ULONG_PTR)Descriptor + SdRel->Dacl);
-    }
-    else
-    {
-        return Descriptor->Dacl;
-    }
-}
-
-FORCEINLINE
-PACL
-SepGetSaclFromDescriptor(
-    _Inout_ PSECURITY_DESCRIPTOR _Descriptor)
-{
-    PISECURITY_DESCRIPTOR Descriptor = (PISECURITY_DESCRIPTOR)_Descriptor;
-    PISECURITY_DESCRIPTOR_RELATIVE SdRel;
-
-    if (!(Descriptor->Control & SE_SACL_PRESENT)) return NULL;
-
-    if (Descriptor->Control & SE_SELF_RELATIVE)
-    {
-        SdRel = (PISECURITY_DESCRIPTOR_RELATIVE)Descriptor;
-        if (!SdRel->Sacl) return NULL;
-        return (PACL)((ULONG_PTR)Descriptor + SdRel->Sacl);
-    }
-    else
-    {
-        return Descriptor->Sacl;
-    }
-}
-
 #ifndef RTL_H
 
-//
-// SID Authorities
-//
 extern SID_IDENTIFIER_AUTHORITY SeNullSidAuthority;
 extern SID_IDENTIFIER_AUTHORITY SeMandatoryLabelAuthority;
 extern SID_IDENTIFIER_AUTHORITY SeAppPackageAuthority;
@@ -181,9 +44,6 @@ extern SID_IDENTIFIER_AUTHORITY SeLocalSidAuthority;
 extern SID_IDENTIFIER_AUTHORITY SeCreatorSidAuthority;
 extern SID_IDENTIFIER_AUTHORITY SeNtSidAuthority;
 
-//
-// SIDs
-//
 extern PSID SeNullSid;
 extern PSID SeWorldSid;
 extern PSID SeLocalSid;
@@ -231,9 +91,6 @@ extern PSID SeNetworkServiceSid;
 extern LUID SeSystemAuthenticationId;
 extern LUID SeAnonymousAuthenticationId;
 
-//
-// Privileges
-//
 extern const LUID SeCreateTokenPrivilege;
 extern const LUID SeAssignPrimaryTokenPrivilege;
 extern const LUID SeLockMemoryPrivilege;
@@ -270,35 +127,21 @@ extern const LUID SeTimeZonePrivilege;
 extern const LUID SeCreateSymbolicLinkPrivilege;
 extern const LUID SeDelegateSessionUserImpersonatePrivilege;
 
-//
-// DACLs
-//
 extern PACL SePublicDefaultUnrestrictedDacl;
 extern PACL SePublicOpenDacl;
 extern PACL SePublicOpenUnrestrictedDacl;
 extern PACL SeSystemAnonymousLogonDacl;
 
-//
-// SDs
-//
 extern PSECURITY_DESCRIPTOR SePublicDefaultSd;
 extern PSECURITY_DESCRIPTOR SePublicDefaultUnrestrictedSd;
 extern PSECURITY_DESCRIPTOR SePublicOpenSd;
 extern PSECURITY_DESCRIPTOR SePublicOpenUnrestrictedSd;
 extern PSECURITY_DESCRIPTOR SeSystemDefaultSd;
 
-//
-// Anonymous Logon Tokens
-//
 extern PTOKEN SeAnonymousLogonToken;
-extern PTOKEN SeAnonymousLogonTokenNoEveryone;
-
 
 
 #if DBG
-//
-// Security Debug Utility Functions
-//
 VOID
 SepDumpSdDebugInfo(
     _In_opt_ PISECURITY_DESCRIPTOR SecurityDescriptor);
@@ -318,139 +161,44 @@ SepDumpAccessAndStatusList(
     _In_ BOOLEAN IsResultList,
     _In_ POBJECT_TYPE_LIST_INTERNAL ObjectTypeList,
     _In_ ULONG ObjectTypeListLength);
-#endif // DBG
 
-//
-// Token Functions
-//
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-SepInitializeTokenImplementation(VOID);
 
-CODE_SEG("INIT")
-PTOKEN
-NTAPI
-SepCreateSystemProcessToken(VOID);
 
-CODE_SEG("INIT")
-PTOKEN
-NTAPI
-SepCreateSystemAnonymousLogonToken(VOID);
 
-CODE_SEG("INIT")
-PTOKEN
-NTAPI
-SepCreateSystemAnonymousLogonTokenNoEveryone(VOID);
 
 
 
 
 BOOLEAN
 NTAPI
-SepTokenIsOwner(
-    _In_ PACCESS_TOKEN _Token,
     _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
-    _In_ BOOLEAN TokenLocked);
-
-
-
-
-
-
-
 
 
 
 
 BOOLEAN
 NTAPI
-SeTokenCanImpersonate(
-    _In_ PTOKEN ProcessToken,
-    _In_ PTOKEN TokenToImpersonate,
-    _In_ SECURITY_IMPERSONATION_LEVEL ImpersonationLevel);
 
 VOID
 NTAPI
-SeGetTokenControlInformation(
-    _In_ PACCESS_TOKEN _Token,
-    _Out_ PTOKEN_CONTROL TokenControl);
 
 VOID
 NTAPI
-SeDeassignPrimaryToken(
-    _Inout_ PEPROCESS Process);
+
+NTAPI
+
+NTAPI
+
+NTAPI
 
 NTSTATUS
 NTAPI
-SeSubProcessToken(
-    _In_ PTOKEN Parent,
-    _Out_ PTOKEN *Token,
-    _In_ BOOLEAN InUse,
-    _In_ ULONG SessionId);
-
-NTSTATUS
-NTAPI
-SeIsTokenChild(
-    _In_ PTOKEN Token,
-    _Out_ PBOOLEAN IsChild);
-
-NTSTATUS
-NTAPI
-SeIsTokenSibling(
-    _In_ PTOKEN Token,
-    _Out_ PBOOLEAN IsSibling);
-
-NTSTATUS
-NTAPI
-SeExchangePrimaryToken(
-    _In_ PEPROCESS Process,
-    _In_ PACCESS_TOKEN NewAccessToken,
-    _Out_ PACCESS_TOKEN* OldAccessToken);
-
-NTSTATUS
-NTAPI
-SeCopyClientToken(
-    _In_ PACCESS_TOKEN Token,
-    _In_ SECURITY_IMPERSONATION_LEVEL Level,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PACCESS_TOKEN* NewToken);
-
-NTSTATUS
-NTAPI
-SepCopyImpersonationToken(
-    _In_ PACCESS_TOKEN Token,
-    _In_ BOOLEAN EffectiveOnly,
-    _In_ SECURITY_IMPERSONATION_LEVEL Level,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PACCESS_TOKEN* NewToken);
-
-NTSTATUS
-NTAPI
-SepCopyPrimaryToken(
-    _In_ PACCESS_TOKEN Token,
-    _Out_ PACCESS_TOKEN* NewToken);
-
-ULONG
-NTAPI
-SepQueryTokenFlags(
-    _In_ PACCESS_TOKEN Token);
 
 VOID
 NTAPI
-SepSetTokenFlags(
-    _In_ PACCESS_TOKEN Token,
-    _In_ ULONG Flags);
 
-BOOLEAN
 NTAPI
-SeTokenIsInert(
-    _In_ PTOKEN Token);
 
-
-//
-// Security Manager (SeMgr) functions
-//
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
@@ -491,32 +239,11 @@ SeSetSecurityAccessMask(
     _In_ SECURITY_INFORMATION SecurityInformation,
     _Out_ PACCESS_MASK DesiredAccess);
 
-//
-// Privilege functions
-//
-CODE_SEG("INIT")
 VOID
-NTAPI
-SepInitPrivileges(VOID);
-
-BOOLEAN
-NTAPI
-SepPrivilegeCheck(
-    _In_ PTOKEN Token,
-    _In_ PLUID_AND_ATTRIBUTES Privileges,
-    _In_ ULONG PrivilegeCount,
-    _In_ ULONG PrivilegeControl,
     _In_ KPROCESSOR_MODE PreviousMode);
 
 NTSTATUS
 NTAPI
-SePrivilegePolicyCheck(
-    _Inout_ PACCESS_MASK DesiredAccess,
-    _Inout_ PACCESS_MASK GrantedAccess,
-    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
-    _In_ PTOKEN Token,
-    _Out_opt_ PPRIVILEGE_SET *OutPrivilegeSet,
-    _In_ KPROCESSOR_MODE PreviousMode);
 
 BOOLEAN
 NTAPI
@@ -534,16 +261,6 @@ SeCheckPrivilegedObject(
 
 NTSTATUS
 NTAPI
-SeCaptureLuidAndAttributesArray(
-    _In_ PLUID_AND_ATTRIBUTES Src,
-    _In_ ULONG PrivilegeCount,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ PLUID_AND_ATTRIBUTES AllocatedMem,
-    _In_ ULONG AllocatedLength,
-    _In_ POOL_TYPE PoolType,
-    _In_ BOOLEAN CaptureIfKernel,
-    _Out_ PLUID_AND_ATTRIBUTES* Dest,
-    _Inout_ PULONG Length);
 
 VOID
 NTAPI
@@ -552,87 +269,29 @@ SeReleaseLuidAndAttributesArray(
     _In_ KPROCESSOR_MODE PreviousMode,
     _In_ BOOLEAN CaptureIfKernel);
 
-//
-// SID functions
-//
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SepInitSecurityIDs(VOID);
 
 NTSTATUS
 NTAPI
-SepCaptureSid(
-    _In_ PSID InputSid,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ POOL_TYPE PoolType,
     _In_ BOOLEAN CaptureIfKernel,
-    _Out_ PSID *CapturedSid);
 
 VOID
 NTAPI
-SepReleaseSid(
-    _In_ PSID CapturedSid,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ BOOLEAN CaptureIfKernel);
 
-BOOLEAN
 NTAPI
-SepSidInToken(
-    _In_ PACCESS_TOKEN _Token,
-    _In_ PSID Sid);
 
-#define SEP_SID_SET_GROUPS       0
-#define SEP_SID_SET_RESTRICTED   1
-#define SEP_SID_SET_CAPABILITIES 2
-
-#define SEP_LOWBOX_LPAC 0x1
-
-typedef struct _SEP_LOWBOX_INFO
-{
-    ULONG Flags;
-    ULONG LowBoxNumber;
-    ULONG SessionId;
-    PSID PackageSid;
-    ULONG CapabilityCount;
-    PSID_AND_ATTRIBUTES Capabilities;
-    ULONG HandleCount;
-    PVOID *Handles;
-} SEP_LOWBOX_INFO, *PSEP_LOWBOX_INFO;
-
-BOOLEAN
 NTAPI
-SepSidInTokenEx(
-    _In_ PACCESS_TOKEN _Token,
-    _In_ PSID PrincipalSelfSid,
-    _In_ PSID _Sid,
-    _In_ BOOLEAN Deny,
-    _In_ ULONG SidSet);
 
-ULONG
 NTAPI
-SepGetTokenIntegrityRid(
-    _In_ PACCESS_TOKEN Token);
-
-VOID
-NTAPI
-SepMarkLessPrivilegedAppContainer(
-    _In_ PACCESS_TOKEN Token);
-
-
-
 
 NTSTATUS
 NTAPI
-SeSetObjectMandatoryLabel(
-    _In_ PVOID Object,
-    _In_ ULONG Rid,
-    _In_ ULONG Policy);
-
-PSID
-NTAPI
-SepGetSidFromAce(
-    _In_ PACE Ace);
 
 NTSTATUS
 NTAPI
@@ -654,288 +313,84 @@ SeReleaseSidAndAttributesArray(
     _In_ KPROCESSOR_MODE AccessMode,
     _In_ BOOLEAN CaptureIfKernel);
 
-//
-// ACL functions
-//
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
-SepInitSystemDacls(VOID);
-
-extern ERESOURCE SepSubjectContextLock;
 
 VOID
-SepAcquireTokenLockShared(
-    _Inout_ PTOKEN Token);
 
-VOID
-SepAcquireTokenLockExclusive(
-    _Inout_ PTOKEN Token);
 
-VOID
-SepReleaseTokenLock(
-    _Inout_ PTOKEN Token);
-
-VOID
-SepNoteTokenPrivilegeFlags(
-    _Inout_ PTOKEN Token);
-
-VOID
-SepDropTokenPrivilege(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Index);
-
-VOID
-SepDropTokenGroup(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Index);
 
 NTSTATUS
-SepGrowChangeablePart(
-    _Inout_ PTOKEN Token,
-    _In_ ULONG Needed);
+
+NTAPI
+
+NTAPI
+
+NTSTATUS
+
+NTAPI
+
+NTAPI
+
+NTSTATUS
+
+NTSTATUS
+NTAPI
 
 VOID
 NTAPI
-SepDeleteToken(
-    _In_ PVOID ObjectBody);
+
+NTSTATUS
+
+NTSTATUS
+NTAPI
+
+NTSTATUS
+NTAPI
+
+NTSTATUS
+NTAPI
+
+CODE_SEG("INIT")
+NTAPI
+
+NTAPI
+
+NTAPI
+
+NTAPI
+
+
+
+NTAPI
+
+NTSTATUS
+
+NTAPI
+
+NTAPI
 
 VOID
 NTAPI
-SeAssignPrimaryToken(
+
+VOID
+NTAPI
+
+VOID
+NTAPI
+
+VOID
+NTAPI
     _In_ PEPROCESS Process,
-    _In_ PTOKEN Token);
-
-NTSTATUS
-SepAccessCheckByType(
-    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
-    _In_opt_ PSID PrincipalSelfSid,
-    _In_opt_ HANDLE ClientToken,
-    _In_opt_ PTOKEN EffectiveToken,
-    _In_ ACCESS_MASK DesiredAccess,
-    _In_opt_ POBJECT_TYPE_LIST ObjectTypeList,
-    _In_ ULONG ObjectTypeListLength,
-    _In_ PGENERIC_MAPPING GenericMapping,
-    _Out_opt_ PPRIVILEGE_SET PrivilegeSet,
-    _Inout_opt_ PULONG PrivilegeSetLength,
-    _Out_ PACCESS_MASK GrantedAccess,
-    _Out_ PNTSTATUS AccessStatus,
-    _In_ BOOLEAN ResultList,
-    _In_ BOOLEAN ReturnPrivilegeSet);
-
-VOID
-NTAPI
-SeCloseObjectAuditAlarm(
-    _In_ PVOID Object,
-    _In_ HANDLE Handle,
-    _In_ BOOLEAN GenerateOnClose);
-
-VOID
-NTAPI
-SePrivilegeObjectAuditAlarm(
-    _In_ HANDLE Handle,
-    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
-    _In_ ACCESS_MASK DesiredAccess,
-    _In_ PPRIVILEGE_SET Privileges,
-    _In_ BOOLEAN AccessGranted,
-    _In_ KPROCESSOR_MODE CurrentMode);
 
 NTSTATUS
 NTAPI
-SepCreateImpersonationTokenDacl(
-    _In_ PTOKEN Token,
-    _In_ PTOKEN PrimaryToken,
-    _Out_ PACL* Dacl);
 
-NTSTATUS
 NTAPI
-SepCaptureAcl(
-    _In_ PACL InputAcl,
-    _In_ KPROCESSOR_MODE AccessMode,
-    _In_ POOL_TYPE PoolType,
-    _In_ BOOLEAN CaptureIfKernel,
-    _Out_ PACL *CapturedAcl);
 
-VOID
-NTAPI
-SepReleaseAcl(
-    _In_ PACL CapturedAcl,
-    _In_ KPROCESSOR_MODE AccessMode,
-    _In_ BOOLEAN CaptureIfKernel);
-
-NTSTATUS
-SepPropagateAcl(
-    _Out_writes_bytes_opt_(AclLength) PACL AclDest,
-    _Inout_ PULONG AclLength,
-    _In_reads_bytes_(AclSource->AclSize) PACL AclSource,
-    _In_ PSID Owner,
-    _In_ PSID Group,
-    _In_ BOOLEAN IsInherited,
-    _In_ BOOLEAN MarkInherited,
-    _In_ BOOLEAN IsDirectoryObject,
-    _In_opt_ GUID *ObjectType,
-    _In_ PGENERIC_MAPPING GenericMapping);
-
-NTSTATUS
-SepSelectAcl(
-    _In_opt_ PACL ExplicitAcl,
-    _In_ BOOLEAN ExplicitPresent,
-    _In_ BOOLEAN ExplicitDefaulted,
-    _In_opt_ PACL ParentAcl,
-    _In_opt_ PACL DefaultAcl,
-    _Out_ PULONG AclLength,
-    _In_ PSID Owner,
-    _In_ PSID Group,
-    _Out_ PBOOLEAN AclPresent,
-    _Out_ PBOOLEAN IsInherited,
-    _In_ BOOLEAN IsDirectoryObject,
-    _In_opt_ GUID *ObjectType,
-    _In_ PGENERIC_MAPPING GenericMapping,
-    _Out_ PACL *SelectedAcl);
-
-//
-// SD functions
-//
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-SepInitSystemSds(VOID);
-
-NTSTATUS
-NTAPI
-SeSetWorldSecurityDescriptor(
-    _In_ SECURITY_INFORMATION SecurityInformation,
-    _In_ PISECURITY_DESCRIPTOR SecurityDescriptor,
-    _In_ PULONG BufferLength);
-
-NTSTATUS
-NTAPI
-SeComputeQuotaInformationSize(
-    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
-    _Out_ PULONG QuotaInfoSize);
-
-//
-// Security Reference Monitor (SeRm) functions
-//
-CODE_SEG("INIT")
-BOOLEAN
-NTAPI
-SepRmInitializeSessions(VOID);
 
 BOOLEAN
-NTAPI
-SeRmInitPhase1(VOID);
-
-NTSTATUS
-NTAPI
-SepRmInsertLogonSessionIntoToken(
-    _Inout_ PTOKEN Token);
-
-NTSTATUS
-NTAPI
-SepRmRemoveLogonSessionFromToken(
-    _Inout_ PTOKEN Token);
-
-NTSTATUS
-SepRmReferenceLogonSession(
-    _Inout_ PLUID LogonLuid);
-
-NTSTATUS
-SepRmDereferenceLogonSession(
-    _Inout_ PLUID LogonLuid);
-
-NTSTATUS
-NTAPI
-SepRegQueryHelper(
-    _In_ PCWSTR KeyName,
-    _In_ PCWSTR ValueName,
-    _In_ ULONG ValueType,
-    _In_ ULONG DataLength,
-    _Out_ PVOID ValueData);
-
-NTSTATUS
-NTAPI
-SeGetLogonIdDeviceMap(
-    _In_ PLUID LogonId,
-    _Out_ PDEVICE_MAP *DeviceMap);
-
-//
-// Audit functions
-//
-NTSTATUS
-NTAPI
-SeInitializeProcessAuditName(
-    _In_ PFILE_OBJECT FileObject,
-    _In_ BOOLEAN DoAudit,
-    _Out_ POBJECT_NAME_INFORMATION *AuditInfo);
-
-BOOLEAN
-NTAPI
-SeDetailedAuditingWithToken(
-    _In_opt_ PTOKEN Token);
-
-VOID
-NTAPI
-SeAuditProcessExit(
-    _In_ PEPROCESS Process);
-
-VOID
-NTAPI
-SeAuditProcessCreation(
-    _In_ PEPROCESS Process);
-
-VOID
-NTAPI
-SePrivilegedServiceAuditAlarm(
-    _In_opt_ PUNICODE_STRING ServiceName,
-    _In_ PSECURITY_SUBJECT_CONTEXT SubjectContext,
-    _In_ PPRIVILEGE_SET PrivilegeSet,
-    _In_ BOOLEAN AccessGranted);
-
-//
-// Subject functions
-//
-VOID
-NTAPI
-SeCaptureSubjectContextEx(
-    _In_opt_ PETHREAD Thread,
-    _In_ PEPROCESS Process,
-    _Out_ PSECURITY_SUBJECT_CONTEXT SubjectContext);
-
-//
-// Security Quality of Service (SQoS) functions
-//
-NTSTATUS
-NTAPI
-SepCaptureSecurityQualityOfService(
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
-    _In_ KPROCESSOR_MODE AccessMode,
-    _In_ POOL_TYPE PoolType,
-    _In_ BOOLEAN CaptureIfKernel,
-    _Out_ PSECURITY_QUALITY_OF_SERVICE *CapturedSecurityQualityOfService,
-    _Out_ PBOOLEAN Present);
-
-VOID
-NTAPI
-SepReleaseSecurityQualityOfService(
-    _In_opt_ PSECURITY_QUALITY_OF_SERVICE CapturedSecurityQualityOfService,
-    _In_ KPROCESSOR_MODE AccessMode,
-    _In_ BOOLEAN CaptureIfKernel);
-
-//
-// Object type list functions
-//
-PGUID
-SepGetObjectTypeGuidFromAce(
-    _In_ PACE Ace,
-    _In_ BOOLEAN IsAceDenied);
-
-BOOLEAN
-SepObjectTypeGuidInList(
-    _In_reads_(ObjectTypeListLength) POBJECT_TYPE_LIST_INTERNAL ObjectTypeList,
-    _In_ ULONG ObjectTypeListLength,
-    _In_ PGUID ObjectTypeGuid,
-    _Out_ PULONG ObjectIndex);
 
 NTSTATUS
 SeCaptureObjectTypeList(
@@ -944,43 +399,9 @@ SeCaptureObjectTypeList(
     _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ POBJECT_TYPE_LIST_INTERNAL *CapturedObjectTypeList);
 
-VOID
-SeReleaseObjectTypeList(
-    _In_  _Post_invalid_ POBJECT_TYPE_LIST_INTERNAL CapturedObjectTypeList,
-    _In_ KPROCESSOR_MODE PreviousMode);
-
-//
-// Access state functions
-//
-NTSTATUS
-NTAPI
-SeCreateAccessStateEx(
-    _In_opt_ PETHREAD Thread,
-    _In_ PEPROCESS Process,
-    _Inout_ PACCESS_STATE AccessState,
-    _In_ PAUX_ACCESS_DATA AuxData,
-    _In_ ACCESS_MASK Access,
-    _In_opt_ PGENERIC_MAPPING GenericMapping);
 
 NTSTATUS
-NTAPI
-SeConvertStringSecurityDescriptorToSecurityDescriptor(
-    _In_ PCWSTR StringSecurityDescriptor,
-    _In_ ULONG StringSecurityDescriptorRevision,
-    _Outptr_ PSECURITY_DESCRIPTOR *SecurityDescriptor,
-    _Out_opt_ PULONG SecurityDescriptorSize);
 
-//
-// Access check functions
-//
-BOOLEAN
-NTAPI
-SeFastTraverseCheck(
-    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
-    _In_ PACCESS_STATE AccessState,
-    _In_ ACCESS_MASK DesiredAccess,
-    _In_ KPROCESSOR_MODE AccessMode);
 
-#endif
 
-/* EOF */
+

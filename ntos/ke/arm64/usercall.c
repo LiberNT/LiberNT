@@ -632,7 +632,6 @@ KiUserModeCallout(
 VOID
 KiSetupUserCalloutFrame(
     _Out_ PUCALLOUT_FRAME UserCalloutFrame,
-    _In_ PKTRAP_FRAME TrapFrame,
     _In_ ULONG ApiNumber,
     _In_ PVOID Buffer,
     _In_ ULONG BufferLength)
@@ -644,159 +643,17 @@ KiSetupUserCalloutFrame(
     UserCalloutFrame->Lr = TrapFrame->Lr;
     UserCalloutFrame->MachineFrame.Pc = TrapFrame->Pc;
     UserCalloutFrame->MachineFrame.Sp = TrapFrame->Sp;
+
 }
 
-NTSTATUS
-NTAPI
-KeUserModeCallback(
-    _In_ ULONG RoutineIndex,
-    _In_ PVOID Argument,
-    _In_ ULONG ArgumentLength,
-    _Out_ PVOID *Result,
-    _Out_ PULONG ResultLength)
-{
-    ULONG_PTR OldStack;
-    PUCHAR UserArguments;
-    PUCALLOUT_FRAME CalloutFrame;
-    PULONG_PTR UserStackPointer;
-    NTSTATUS CallbackStatus;
-    PTEB Teb;
-    ULONG GdiBatchCount = 0;
-    ULONG_PTR Page;
-
-    ASSERT(KeGetCurrentThread()->ApcState.KernelApcInProgress == FALSE);
-    ASSERT(KeGetPreviousMode() == UserMode);
-
-    if (KeGetCurrentThread()->CallbackNestingLevel >= KI_MAX_USER_CALLBACK_NESTING)
-        return STATUS_STACK_OVERFLOW;
-
-    UserStackPointer = KiGetUserModeStackAddress();
-    OldStack = *UserStackPointer;
-
-    _SEH2_TRY
-    {
-        CalloutFrame = (PUCALLOUT_FRAME)ALIGN_DOWN_POINTER_BY(OldStack -
-                                                              sizeof(UCALLOUT_FRAME) -
-                                                              ArgumentLength -
-                                                              16,
-                                                              16);
-        UserArguments = (PUCHAR)(CalloutFrame + 1);
-
-        for (Page = PAGE_ROUND_DOWN(OldStack); Page > (ULONG_PTR)CalloutFrame;)
-        {
-            Page -= PAGE_SIZE;
-            ProbeForWrite((PVOID)Page, sizeof(CHAR), sizeof(CHAR));
-        }
-
-        ProbeForWrite(CalloutFrame,
-                      sizeof(*CalloutFrame) + ArgumentLength,
-                      sizeof(PVOID));
-
-        RtlCopyMemory(UserArguments, Argument, ArgumentLength);
-
-        KiSetupUserCalloutFrame(CalloutFrame,
-                                KeGetCurrentThread()->TrapFrame,
-                                RoutineIndex,
-                                UserArguments,
-                                ArgumentLength);
-
-        Teb = KeGetCurrentThread()->Teb;
-
-        /*
-         * ARM64 ntdll currently uses the generic C callback dispatcher, which
-         * receives its arguments in x0-x2. The stack UCALLOUT_FRAME is still
-         * kept for NtCallbackReturn and debugger/unwind state, but unlike
-         * amd64 there is no assembly dispatcher reading arguments from it.
-         */
-        KeGetCurrentThread()->TrapFrame->X0 = RoutineIndex;
-        KeGetCurrentThread()->TrapFrame->X1 = (ULONG_PTR)UserArguments;
-        KeGetCurrentThread()->TrapFrame->X2 = ArgumentLength;
-        KeGetCurrentThread()->TrapFrame->X18 = (ULONG_PTR)Teb;
-
-        *UserStackPointer = (ULONG_PTR)CalloutFrame;
-        KeGetCurrentThread()->CallbackNestingLevel++;
-        CallbackStatus = KiCallUserModeWithStack(NULL, Result, ResultLength);
-        KeGetCurrentThread()->CallbackNestingLevel--;
-        if (CallbackStatus == STATUS_CALLBACK_POP_STACK)
-        {
-            OldStack = *UserStackPointer;
-        }
-
-        GdiBatchCount = Teb->GdiBatchCount;
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-
-    if (GdiBatchCount)
-    {
-        *UserStackPointer -= 256;
-        KeGdiFlushUserBatch();
-    }
-
-    *UserStackPointer = OldStack;
-    return CallbackStatus;
-}
-
-NTSTATUS
-NTAPI
-NtCallbackReturn(
-    _In_ PVOID Result,
-    _In_ ULONG ResultLength,
     _In_ NTSTATUS CallbackStatus)
 {
-    PKTHREAD CurrentThread;
-    PKCALLOUT_FRAME CalloutFrame;
-    PKTRAP_FRAME CallbackTrapFrame, TrapFrame;
-    PKARM64_VFP_STATE CallbackVfpState, TrapVfpState;
-    PKIPCR Pcr;
-
-    CurrentThread = KeGetCurrentThread();
-    CalloutFrame = CurrentThread->CallbackStack;
-    if (CalloutFrame == NULL)
-    {
-        return STATUS_NO_CALLBACK_ACTIVE;
-    }
-
-    *((PVOID*)CalloutFrame->OutputBuffer) = Result;
-    *((ULONG*)CalloutFrame->OutputLength) = ResultLength;
-
-    CallbackTrapFrame = CurrentThread->TrapFrame;
-
-    _disable();
-
-    Pcr = (PKIPCR)KeGetPcr();
-
-    TrapFrame = (PKTRAP_FRAME)CalloutFrame->TrapFrame;
 
     if (CallbackStatus == STATUS_CALLBACK_POP_STACK)
     {
-        ULONG64 TrapFrameLink = TrapFrame->TrapFrame;
 
-        TrapVfpState = TrapFrame->VfpState;
-        CallbackVfpState = CallbackTrapFrame->VfpState;
-        *TrapFrame = *CallbackTrapFrame;
-        if ((TrapVfpState != NULL) && (CallbackVfpState != NULL))
         {
-            TrapVfpState->Fpcr = CallbackVfpState->Fpcr;
-            TrapVfpState->Fpsr = CallbackVfpState->Fpsr;
         }
-        TrapFrame->VfpState = TrapVfpState;
-        TrapFrame->TrapFrame = TrapFrameLink;
     }
 
-    if (Pcr != NULL)
-    {
-        Pcr->Prcb.SpBase = (PVOID)CalloutFrame->CalloutInitialStack;
-    }
-
-    CurrentThread->InitialStack = (PVOID)CalloutFrame->CalloutInitialStack;
-    CurrentThread->TrapFrame = TrapFrame;
-    CurrentThread->CallbackStack = (PVOID)CalloutFrame->CalloutCallbackStack;
-
-    _enable();
-
-    KiCallbackReturn(CalloutFrame, CallbackStatus);
 }

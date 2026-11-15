@@ -1,13 +1,5 @@
 /*
- * FILE:            ntoskrnl/ke/i386/trap.s
- * COPYRIGHT:       See COPYING in the top level directory
- * PURPOSE:         System Traps, Entrypoints and Exitpoints
- * PROGRAMMER:      Alex Ionescu (alex@relsoft.net)
- *                  Timo Kreuzer (timo.kreuzer@reactos.org)
- * NOTE:            See asmmacro.S for the shared entry/exit code.
  */
-
-/* INCLUDES ******************************************************************/
 
 #include <asm.inc>
 #include <ks386.inc>
@@ -22,20 +14,14 @@ idt _KiUnexpectedInterrupt\Vector, INT_32_DPL0
 ENDM
 
 MACRO(GENERATE_INT_HANDLER, Vector)
-//.func KiUnexpectedInterrupt&Vector
 #ifdef _USE_ML
 _KiUnexpectedInterrupt&Vector:
 #else
 _KiUnexpectedInterrupt\Vector:
 #endif
-    /* This is a push instruction with 8bit operand. Since the instruction
-       sign extends the value to 32 bits, we need to offset it */
     push (Vector - 128)
     jmp _KiEndUnexpectedRange@0
-//.endfunc
-ENDM
 
-/* GLOBALS *******************************************************************/
 
 .data
 ASSUME CS:nothing
@@ -44,38 +30,9 @@ ASSUME CS:nothing
 
 PUBLIC _KiIdt
 _KiIdt:
-/* This is the Software Interrupt Table that we handle in this file:        */
-idt _KiTrap00,         INT_32_DPL0  /* INT 00: Divide Error (#DE)           */
-idt _KiTrap01,         INT_32_DPL0  /* INT 01: Debug Exception (#DB)        */
-idt _KiTrap02,         INT_32_DPL0  /* INT 02: NMI Interrupt                */
-idt _KiTrap03,         INT_32_DPL3  /* INT 03: Breakpoint Exception (#BP)   */
-idt _KiTrap04,         INT_32_DPL3  /* INT 04: Overflow Exception (#OF)     */
-idt _KiTrap05,         INT_32_DPL0  /* INT 05: BOUND Range Exceeded (#BR)   */
-idt _KiTrap06,         INT_32_DPL0  /* INT 06: Invalid Opcode Code (#UD)    */
-idt _KiTrap07,         INT_32_DPL0  /* INT 07: Device Not Available (#NM)   */
-idt _KiTrap08,         INT_32_DPL0  /* INT 08: Double Fault Exception (#DF) */
-idt _KiTrap09,         INT_32_DPL0  /* INT 09: RESERVED                     */
-idt _KiTrap0A,         INT_32_DPL0  /* INT 0A: Invalid TSS Exception (#TS)  */
-idt _KiTrap0B,         INT_32_DPL0  /* INT 0B: Segment Not Present (#NP)    */
-idt _KiTrap0C,         INT_32_DPL0  /* INT 0C: Stack Fault Exception (#SS)  */
-idt _KiTrap0D,         INT_32_DPL0  /* INT 0D: General Protection (#GP)     */
-idt _KiTrap0E,         INT_32_DPL0  /* INT 0E: Page-Fault Exception (#PF)   */
-idt _KiTrap0F,         INT_32_DPL0  /* INT 0F: RESERVED                     */
-idt _KiTrap10,         INT_32_DPL0  /* INT 10: x87 FPU Error (#MF)          */
-idt _KiTrap11,         INT_32_DPL0  /* INT 11: Align Check Exception (#AC)  */
-idt _KiTrap0F,         INT_32_DPL0  /* INT 12: Machine Check Exception (#MC)*/
-idt _KiTrap0F,         INT_32_DPL0  /* INT 13: SIMD FPU Exception (#XF)     */
 REPEAT 21
-idt _KiTrap0F,         INT_32_DPL0  /* INT 14-28: UNDEFINED INTERRUPTS      */
 ENDR
 idt _KiRaiseSecurityCheckFailure, INT_32_DPL3
-                                    /* INT 29: Handler for __fastfail       */
-idt _KiGetTickCount,   INT_32_DPL3  /* INT 2A: Get Tick Count Handler       */
-idt _KiCallbackReturn, INT_32_DPL3  /* INT 2B: User-Mode Callback Return    */
-idt _KiRaiseAssertion, INT_32_DPL3  /* INT 2C: Debug Assertion Handler      */
-idt _KiDebugService,   INT_32_DPL3  /* INT 2D: Debug Service Handler        */
-idt _KiSystemService,  INT_32_DPL3  /* INT 2E: System Call Service Handler  */
-idt _KiTrap0F,         INT_32_DPL0  /* INT 2F: RESERVED                     */
 i = HEX(30)
 REPEAT 208
     GENERATE_IDT_STUB %i
@@ -92,7 +49,6 @@ PUBLIC _KiUnexpectedEntrySize
 _KiUnexpectedEntrySize:
     .long _KiUnexpectedInterrupt49 - _KiUnexpectedInterrupt48
 
-/******************************************************************************/
 .code
 
 PUBLIC _KiStartUnexpectedRange@0
@@ -178,9 +134,6 @@ _KiEndUnexpectedRange@0:
     add dword ptr[esp], 128
     jmp _KiUnexpectedInterruptTail
 
-
-/* EXIT CODE *****************************************************************/
-
 KiTrapExitStub KiSystemCallReturn,        (KI_RESTORE_EAX OR KI_RESTORE_EFLAGS OR KI_EXIT_JMP)
 KiTrapExitStub KiSystemCallSysExitReturn, (KI_RESTORE_EAX OR KI_RESTORE_FS OR KI_RESTORE_EFLAGS OR KI_EXIT_SYSCALL)
 KiTrapExitStub KiSystemCallTrapReturn,    (KI_RESTORE_EAX OR KI_RESTORE_FS OR KI_EXIT_IRET)
@@ -195,50 +148,20 @@ EXTERN _PsConvertToGuiThread@0:PROC
 PUBLIC _KiConvertToGuiThread@0
 _KiConvertToGuiThread@0:
 
-    /*
-     * Converting to a GUI thread safely updates ESP in-place as well as the
-     * current Thread->TrapFrame and EBP when KeSwitchKernelStack is called.
-     *
-     * However, PsConvertToGuiThread "helpfully" restores EBP to the original
-     * caller's value, since it is considered a nonvolatile register. As such,
-     * as soon as we're back after the conversion and we try to store the result
-     * which will probably be in some stack variable (EBP-based), we'll crash as
-     * we are touching the de-allocated non-expanded stack.
-     *
-     * Thus we need a way to update our EBP before EBP is touched, and the only
-     * way to guarantee this is to do the call itself in assembly, use the EAX
-     * register to store the result, fixup EBP, and then let the C code continue
-     * on its merry way.
-     *
-     */
-
-    /* Save ebx */
     push ebx
 
-    /* Calculate the stack frame offset in ebx */
     mov ebx, ebp
     sub ebx, esp
 
-    /* Call the worker function */
     call _PsConvertToGuiThread@0
 
-    /* Adjust ebp to the new stack */
     mov ebp, esp
     add ebp, ebx
 
-    /* Restore ebx */
     pop ebx
 
-    /* return to the caller */
     ret
 
-/*
-NTSTATUS
-NTAPI
-KiSystemCallTrampoline(IN PVOID Handler,
-                       IN PVOID Arguments,
-                       IN ULONG StackBytes);
-*/
 PUBLIC _KiSystemCallTrampoline@12
 _KiSystemCallTrampoline@12:
     push ebp
@@ -246,14 +169,10 @@ _KiSystemCallTrampoline@12:
     push esi
     push edi
 
-    /* Get handler */
     mov eax, [ebp + 8]
-    /* Get arguments */
     mov esi, [ebp + 12]
-    /* Get stack bytes */
     mov ecx, [ebp + 16]
 
-    /* Copy args to the stack */
     sub esp, ecx
     mov edi, esp
     shr ecx, 2

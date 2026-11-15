@@ -1534,8 +1534,6 @@ PopQueryProcessorInformation(
 
         Processor.Number = Prcb->Number;
         Processor.MaxMhz = Prcb->MHz;
-        /* FIXME: no performance states are tracked; the frequency measured at boot stands for the current one */
-        Processor.CurrentMhz = Prcb->MHz;
         Processor.MhzLimit = (ULONG)(((ULONGLONG)Prcb->MHz *
                                       min(Prcb->PowerState.ProcessorMaxThrottle, Prcb->PowerState.ThermalThrottleLimit)) / 100);
         Processor.MaxIdleState = Prcb->PowerState.IdleHandlersCount;

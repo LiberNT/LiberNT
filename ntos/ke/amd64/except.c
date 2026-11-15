@@ -1,13 +1,5 @@
 /*
- * PROJECT:         ReactOS Kernel
- * LICENSE:         GPL - See COPYING in the top level directory
- * FILE:            ntoskrnl/ke/amd64/except.c
- * PURPOSE:         Exception Dispatching for amd64
- * PROGRAMMER:      Timo Kreuzer (timo.kreuzer@reactos.org)
- *                  Alex Ionescu (alex.ionescu@reactos.org)
  */
-
-/* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
 #define NDEBUG
@@ -15,11 +7,8 @@
 
 extern KI_INTERRUPT_DISPATCH_ENTRY KiUnexpectedRange[256];
 
-/* GLOBALS *******************************************************************/
-
 KIDT_INIT KiInterruptInitTable[] =
 {
-  /* Id,   Dpl,  IST,  ServiceRoutine */
     {0x00, 0x00, 0x00, KiDivideErrorFault},
     {0x01, 0x00, 0x00, KiDebugTrapOrFault},
     {0x02, 0x00, 0x03, KiNmiInterrupt},
@@ -51,9 +40,6 @@ KIDT_INIT KiInterruptInitTable[] =
 KIDTENTRY64 KiIdt[256];
 KDESCRIPTOR KiIdtDescriptor = {{0}, sizeof(KiIdt) - 1, KiIdt};
 
-
-/* FUNCTIONS *****************************************************************/
-
 CODE_SEG("INIT")
 VOID
 NTAPI
@@ -61,7 +47,6 @@ KeInitExceptions(VOID)
 {
     int i, j;
 
-    /* Initialize the Idt */
     for (j = i = 0; i < 256; i++)
     {
         ULONG64 Offset;
@@ -138,12 +123,8 @@ KiPageFaultIrqlBugCheck(
                      TrapFrame);
 }
 
-static
 BOOLEAN
 KiDispatchExceptionToUser(
-    IN PKTRAP_FRAME TrapFrame,
-    IN PCONTEXT Context,
-    IN PEXCEPTION_RECORD ExceptionRecord)
 {
     EXCEPTION_RECORD LocalExceptRecord;
     ULONG64 UserRsp;
@@ -155,10 +136,8 @@ KiDispatchExceptionToUser(
     ULONG XStateLength = 0;
     BOOLEAN Success = TRUE;
 
-    /* Make sure we have a valid SS */
     if (TrapFrame->SegSs != (KGDT64_R3_DATA | RPL_MASK))
     {
-        /* Raise an access violation instead */
         LocalExceptRecord.ExceptionCode = STATUS_ACCESS_VIOLATION;
         LocalExceptRecord.ExceptionFlags = 0;
         LocalExceptRecord.NumberParameters = 0;
@@ -173,13 +152,10 @@ KiDispatchExceptionToUser(
         XStateLength = KiGetUserXStateLength(Layout, Features);
     }
 
-    /* Get new stack pointer and align it to 16 bytes */
     UserRsp = (Context->Rsp - sizeof(KUSER_EXCEPTION_STACK) - XStateLength) & ~63;
 
-    /* Get pointer to the usermode context, exception record and machine frame */
     UserStack = (PKUSER_EXCEPTION_STACK)UserRsp;
 
-    /* Enable interrupts */
     _enable();
 
     if (XStateLength)
@@ -201,14 +177,11 @@ KiDispatchExceptionToUser(
         }
     }
 
-    /* Set up the user-stack */
     _SEH2_TRY
     {
-        /* Probe the user stack frame and zero it out */
         ProbeForWrite(UserStack, sizeof(*UserStack) + XStateLength, TYPE_ALIGNMENT(KUSER_EXCEPTION_STACK));
         RtlZeroMemory(UserStack, sizeof(*UserStack));
 
-        /* Copy Context and ExceptionFrame */
         UserStack->Context = *Context;
         UserStack->ExceptionRecord = *ExceptionRecord;
 
@@ -225,7 +198,6 @@ KiDispatchExceptionToUser(
             UserStack->Context.ContextFlags |= CONTEXT_XSTATE;
         }
 
-        /* Setup the machine frame */
         UserStack->MachineFrame.Rip = Context->Rip;
         UserStack->MachineFrame.SegCs = Context->SegCs;
         UserStack->MachineFrame.EFlags = Context->EFlags;
@@ -235,8 +207,6 @@ KiDispatchExceptionToUser(
     _SEH2_EXCEPT((LocalExceptRecord = *_SEH2_GetExceptionInformation()->ExceptionRecord),
                  EXCEPTION_EXECUTE_HANDLER)
     {
-        // FIXME: handle stack overflow
-
         Success = FALSE;
     }
     _SEH2_END;
@@ -244,18 +214,14 @@ KiDispatchExceptionToUser(
     if (XState)
         ExFreePoolWithTag(XState, TAG_KE_XSTATE);
 
-    /* Nothing we can do here */
     if (!Success)
         return FALSE;
 
-    /* Now set the two params for the user-mode dispatcher */
     TrapFrame->Rcx = (ULONG64)&UserStack->ExceptionRecord;
     TrapFrame->Rdx = (ULONG64)&UserStack->Context;
 
-    /* Set new Stack Pointer */
     TrapFrame->Rsp = UserRsp;
 
-    /* Force correct segments */
     TrapFrame->SegCs = KGDT64_R3_CODE | RPL_MASK;
     TrapFrame->SegDs = KGDT64_R3_DATA | RPL_MASK;
     TrapFrame->SegEs = KGDT64_R3_DATA | RPL_MASK;
@@ -263,110 +229,26 @@ KiDispatchExceptionToUser(
     TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
     TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
 
-    /* The dispatcher runs without the alignment checking the faulting code may have asked for */
     TrapFrame->EFlags &= ~EFLAGS_ALIGN_CHECK;
 
-    /* Set RIP to the User-mode Dispatcher */
     TrapFrame->Rip = (ULONG64)KeUserExceptionDispatcher;
     KiInstrumentTrapFrame(TrapFrame);
 
-    /* Exit to usermode */
     return TRUE;
 }
 
-static
-VOID
-KiPageInDirectory(PVOID ImageBase, USHORT Directory)
 {
-    volatile CHAR *Pointer;
-    ULONG Size;
 
-   /* Get a pointer to the debug directory */
-    Pointer = RtlImageDirectoryEntryToData(ImageBase, 1, Directory, &Size);
-    if (!Pointer) return;
 
-    /* Loop all pages */
-    while ((LONG)Size > 0)
-    {
-        /* Touch it, to page it in */
-        (void)*Pointer;
-        Pointer += PAGE_SIZE;
-        Size -= PAGE_SIZE;
-    }
+
 }
 
-VOID
-KiPrepareUserDebugData(void)
-{
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
-    PPEB_LDR_DATA PebLdr;
-    PLIST_ENTRY ListEntry;
-    PTEB Teb;
-
-    /* Get the Teb for this process */
-    Teb = KeGetCurrentThread()->Teb;
-    if (!Teb) return;
-
-    /* Enable interrupts */
-    _enable();
-
-    _SEH2_TRY
-    {
-        /* Get a pointer to the loader data */
-        PebLdr = Teb->ProcessEnvironmentBlock->Ldr;
-        if (!PebLdr) _SEH2_LEAVE;
-
-        /* Now loop all entries in the module list */
-        for (ListEntry = PebLdr->InLoadOrderModuleList.Flink;
-             ListEntry != &PebLdr->InLoadOrderModuleList;
-             ListEntry = ListEntry->Flink)
-        {
-            /* Get the loader entry */
-            LdrEntry = CONTAINING_RECORD(ListEntry,
-                                         LDR_DATA_TABLE_ENTRY,
-                                         InLoadOrderLinks);
-
-            KiPageInDirectory((PVOID)LdrEntry->DllBase,
-                              IMAGE_DIRECTORY_ENTRY_DEBUG);
-
-            KiPageInDirectory((PVOID)LdrEntry->DllBase,
-                              IMAGE_DIRECTORY_ENTRY_EXCEPTION);
-        }
-
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-    }
-    _SEH2_END;
-}
-
-static
-BOOLEAN
-KiForwardExceptionToDebugPort(
     _Inout_ PEXCEPTION_RECORD ExceptionRecord,
-    _In_ PKTRAP_FRAME TrapFrame,
-    _In_ BOOLEAN SecondChance)
 {
-    NTSTATUS ExceptionCode = ExceptionRecord->ExceptionCode;
-    BOOLEAN Handled;
 
-    if (TrapFrame->SegCs == (KGDT64_R3_CMCODE | RPL_MASK))
-    {
-        if (ExceptionCode == STATUS_BREAKPOINT)
-            ExceptionRecord->ExceptionCode = STATUS_WX86_BREAKPOINT;
-        else if (ExceptionCode == STATUS_SINGLE_STEP)
-            ExceptionRecord->ExceptionCode = STATUS_WX86_SINGLE_STEP;
-    }
-
-    Handled = DbgkForwardException(ExceptionRecord, TRUE, SecondChance);
-    ExceptionRecord->ExceptionCode = ExceptionCode;
-    return Handled;
 }
 
-/* What is left of a kernel fault no handler took, for the log before the debugger or the bugcheck */
-static
 VOID
-KiDumpUnhandledKernelFault(
     _In_ PKTRAP_FRAME TrapFrame)
 {
     UCHAR Instructions[8] = { 0 };
@@ -378,7 +260,6 @@ KiDumpUnhandledKernelFault(
         RtlCopyMemory(Instructions, (PVOID)TrapFrame->Rip, sizeof(Instructions));
     }
 
-    /* Rbx, Rsi and Rdi are not in the trap frame, only in the exception frame */
     DPRINT1("KiDispatchException: unhandled kernel exception at RIP=%p\n"
             "  Instruction bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n"
             "  ErrorCode=%p EFlags=%lx Cs=%x process %s\n"
@@ -410,203 +291,8 @@ KiDumpUnhandledKernelFault(
     }
 }
 
-VOID
-NTAPI
-KiDispatchException(IN PEXCEPTION_RECORD ExceptionRecord,
-                    IN PKEXCEPTION_FRAME ExceptionFrame,
-                    IN PKTRAP_FRAME TrapFrame,
-                    IN KPROCESSOR_MODE PreviousMode,
-                    IN BOOLEAN FirstChance)
-{
-    CONTEXT Context;
-
-    if (PreviousMode == KernelMode && ExceptionRecord->ExceptionCode != STATUS_BREAKPOINT)
-    {
-        KiAmd64BootReadout(BootReadoutException,
-                           ExceptionRecord->ExceptionCode,
-                           (ULONG64)ExceptionRecord->ExceptionAddress,
-                           ExceptionRecord->ExceptionInformation[0],
-                           ExceptionRecord->ExceptionInformation[1],
-                           TrapFrame->Rsp);
-    }
-
-    /* Increase number of Exception Dispatches */
-    KeGetCurrentPrcb()->KeExceptionDispatchCount++;
-
-    /* Zero out the context to avoid leaking kernel stack memor to user mode */
-    RtlZeroMemory(&Context, sizeof(Context));
-
-    /* Set the context flags */
-    Context.ContextFlags = CONTEXT_ALL;
-
-    /* Get the Context from the trap and exception frame */
-    KeTrapFrameToContext(TrapFrame, ExceptionFrame, &Context);
-
-    /* Look at our exception code */
-    switch (ExceptionRecord->ExceptionCode)
-    {
-        /* Breakpoint */
-        case STATUS_BREAKPOINT:
-
-            /* Decrement RIP by one */
-            Context.Rip--;
-            break;
-
-        /* Internal exception */
-        case KI_EXCEPTION_ACCESS_VIOLATION:
-
-            /* Set correct code */
-            ExceptionRecord->ExceptionCode = STATUS_ACCESS_VIOLATION;
-            if (PreviousMode == UserMode)
-            {
-                /* FIXME: Handle no execute */
-            }
-            break;
-    }
-
-    /* Handle kernel-mode first, it's simpler */
-    if (PreviousMode == KernelMode)
-    {
-        /* Check if this is a first-chance exception */
-        if (FirstChance)
-        {
-            /* Break into the debugger for the first time */
-            if (KiDebugRoutine(TrapFrame,
-                               ExceptionFrame,
-                               ExceptionRecord,
-                               &Context,
-                               PreviousMode,
-                               FALSE))
-            {
-                /* Exception was handled */
-                goto Handled;
-            }
-
-            /* If the Debugger couldn't handle it, dispatch the exception */
-            if (RtlDispatchException(ExceptionRecord, &Context)) goto Handled;
-        }
-
-        KiDumpUnhandledKernelFault(TrapFrame);
-
-        /* This is a second-chance exception, only for the debugger */
-        if (KiDebugRoutine(TrapFrame,
-                           ExceptionFrame,
-                           ExceptionRecord,
-                           &Context,
-                           PreviousMode,
-                           TRUE))
-        {
-            /* Exception was handled */
-            goto Handled;
-        }
-
-        /* Third strike; you're out */
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-    else
-    {
-        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
-        {
-            return;
-        }
-
-        /* User mode exception, was it first-chance? */
-        if (FirstChance && ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN)
-        {
-            /*
-             * Break into the kernel debugger unless a user mode debugger
-             * is present or user mode exceptions are ignored, except if this
-             * is a debug service which we must always pass to KD
-             */
-            if ((!(PsGetCurrentProcess()->DebugPort) &&
-                 !(KdIgnoreUmExceptions)) ||
-                 (KdIsThisAKdTrap(ExceptionRecord, &Context, PreviousMode)))
-            {
-                ULONG64 Rip = Context.Rip;
-
-                /* Make sure the debugger can access debug directories */
-                KiPrepareUserDebugData();
-
-                /* Call the kernel debugger */
-                if (KiDebugRoutine(TrapFrame,
-                                   ExceptionFrame,
-                                   ExceptionRecord,
-                                   &Context,
-                                   PreviousMode,
-                                   FALSE))
-                {
-                    /* Exception was handled */
-                    goto Handled;
-                }
-
-                /* The debugger did not take it, drop its changes */
-                Context.Rip = Rip;
-            }
-
-            /* User mode sees a breakpoint with its code as only parameter */
-            if (ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT)
-            {
-                ExceptionRecord->NumberParameters = 1;
-            }
-
-            /* Forward exception to user mode debugger */
-            if (KiForwardExceptionToDebugPort(ExceptionRecord, TrapFrame, FALSE)) return;
-
-            /* Forward exception to user mode */
-            if (KiDispatchExceptionToUser(TrapFrame, &Context, ExceptionRecord))
-            {
-                /* Success, the exception will be handled by KiUserExceptionDispatcher */
-                return;
-            }
-
-            /* Failed to dispatch, fall through for second chance handling */
-        }
-
-        /* Try second chance */
-        if (KiForwardExceptionToDebugPort(ExceptionRecord, TrapFrame, TRUE))
-        {
-            /* Handled, get out */
-            return;
-        }
-        else if (ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN &&
-                 DbgkForwardException(ExceptionRecord, FALSE, TRUE))
-        {
-            /* Handled, get out */
-            return;
-        }
-
-        /* 3rd strike, kill the process */
-        DPRINT1("Kill %.16s, ExceptionCode: %lx, ExceptionAddress: %p, BaseAddress: %p\n",
-                PsGetCurrentProcess()->ImageFileName,
-                ExceptionRecord->ExceptionCode,
-                ExceptionRecord->ExceptionAddress,
-                PsGetCurrentProcess()->SectionBaseAddress);
-
-        ZwTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-
-Handled:
-    /* Convert the context back into Trap/Exception Frames */
-    KeContextToTrapFrame(&Context,
-                         ExceptionFrame,
-                         TrapFrame,
-                         Context.ContextFlags,
-                         PreviousMode);
-    return;
-}
-
 NTSTATUS
 NTAPI
-KeRaiseUserException(IN NTSTATUS ExceptionCode)
 {
     PKTHREAD Thread = KeGetCurrentThread();
     PTEB Teb = Thread->Teb;
@@ -632,11 +318,8 @@ KeRaiseUserException(IN NTSTATUS ExceptionCode)
     return ExceptionCode;
 }
 
-
 VOID
 DECLSPEC_NORETURN
-KiSystemFatalException(IN ULONG ExceptionCode,
-                       IN PKTRAP_FRAME TrapFrame)
 {
     KiAmd64BootReadout(BootReadoutFatalTrap,
                        ExceptionCode,
@@ -645,7 +328,6 @@ KiSystemFatalException(IN ULONG ExceptionCode,
                        __readcr2(),
                        TrapFrame->ErrorCode);
 
-    /* Bugcheck the system */
     KeBugCheckWithTf(UNEXPECTED_KERNEL_MODE_TRAP,
                      ExceptionCode,
                      0,
@@ -657,7 +339,6 @@ KiSystemFatalException(IN ULONG ExceptionCode,
 NTSTATUS
 NTAPI
 KiNpxNotAvailableFaultHandler(
-    IN PKTRAP_FRAME TrapFrame)
 {
     UNIMPLEMENTED;
     KeBugCheckWithTf(TRAP_CAUSE_UNKNOWN, 13, 0, 0, 1, TrapFrame);
@@ -666,16 +347,13 @@ KiNpxNotAvailableFaultHandler(
 
 static
 BOOLEAN
-KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
 {
     ULONG i;
 
-    /* Handle prefixes */
     for (i = 0; i < 15; i++)
     {
         if (!Wow64)
         {
-            /* Check for REX prefix */
             if ((Ip[0] >= 0x40) && (Ip[0] <= 0x4F))
             {
                 Ip++;
@@ -685,18 +363,6 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
 
         switch (Ip[0])
         {
-            /* Check prefixes */
-            case 0x26: // ES
-            case 0x2E: // CS / null
-            case 0x36: // SS
-            case 0x3E: // DS
-            case 0x64: // FS
-            case 0x65: // GS
-            case 0x66: // OP
-            case 0x67: // ADDR
-            case 0xF0: // LOCK
-            case 0xF2: // REP
-            case 0xF3: // REP INS/OUTS
                 Ip++;
                 continue;
         }
@@ -706,54 +372,22 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
 
     if (i == 15)
     {
-        /* Too many prefixes. Should only happen, when the code was concurrently modified. */
-         return FALSE;
     }
 
     switch (Ip[0])
     {
-        case 0xF4: // HLT
-        case 0xFA: // CLI
-        case 0xFB: // STI
-        case 0x6C: // INSB
-        case 0x6D: // INSD
-        case 0x6E: // OUTSB
-        case 0x6F: // OUTSD
-        case 0xE4: // IN AL, imm8
-        case 0xE5: // IN EAX, imm8
-        case 0xE6: // OUT imm8, AL
-        case 0xE7: // OUT imm8, EAX
-        case 0xEC: // IN AL, DX
-        case 0xED: // IN EAX, DX
-        case 0xEE: // OUT DX, AL
-        case 0xEF: // OUT DX, EAX
             return TRUE;
 
         case 0x0F:
         {
             switch (Ip[1])
             {
-                case 0x06: // CLTS
-                case 0x07: // SYSRET
-                case 0x08: // INVD
-                case 0x09: // WBINVD
-                case 0x20: // MOV CR, XXX
-                case 0x21: // MOV DR, XXX
-                case 0x22: // MOV XXX, CR
-                case 0x23: // MOV YYY, DR
-                case 0x30: // WRMSR
-                case 0x32: // RDMSR
-                case 0x33: // RDPMC
-                case 0x35: // SYSEXIT
                     return TRUE;
 
                 case 0x00:
                 {
-                    /* Check MODRM Reg field */
                     switch ((Ip[2] >> 3) & 0x7)
                     {
-                        case 2: // LLDT
-                        case 3: // LTR
                             return TRUE;
                     }
                     break;
@@ -763,7 +397,6 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
                 {
                     switch (Ip[2])
                     {
-                        case 0xF8: // SWAPGS
                             return TRUE;
                     }
 
@@ -772,13 +405,8 @@ KiIsPrivilegedInstruction(PUCHAR Ip, BOOLEAN Wow64)
                         break;
                     }
 
-                    /* Check MODRM Reg field */
                     switch ((Ip[2] >> 3) & 0x7)
                     {
-                        case 2: // LGDT
-                        case 3: // LIDT
-                        case 6: // LMSW
-                        case 7: // INVLPG / SWAPGS / RDTSCP
                             return TRUE;
                     }
                     break;
@@ -801,15 +429,12 @@ KiGeneralProtectionFaultUserMode(
     PUCHAR InstructionPointer;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
-    /* We need to decode the instruction at RIP */
     InstructionPointer = (PUCHAR)TrapFrame->Rip;
 
     _SEH2_TRY
     {
-        /* Probe the instruction address */
         ProbeForRead(InstructionPointer, 64, 1);
 
-        /* Check if it's a privileged instruction */
         if (KiIsPrivilegedInstruction(InstructionPointer, Wow64))
         {
             Status = STATUS_PRIVILEGED_INSTRUCTION;
@@ -858,39 +483,28 @@ KiInvalidOpcodeFaultHandler(
 NTSTATUS
 NTAPI
 KiGeneralProtectionFaultHandler(
-    IN PKTRAP_FRAME TrapFrame)
 {
     PUCHAR Instructions;
 
-    /* Check for user-mode GPF */
     if (TrapFrame->SegCs & 3)
     {
         return KiGeneralProtectionFaultUserMode(TrapFrame);
     }
 
-    /* Check for lazy segment load */
     if (TrapFrame->SegDs != (KGDT64_R3_DATA | RPL_MASK))
     {
-        /* Fix it */
         TrapFrame->SegDs = (KGDT64_R3_DATA | RPL_MASK);
         return STATUS_SUCCESS;
     }
     else if (TrapFrame->SegEs != (KGDT64_R3_DATA | RPL_MASK))
     {
-        /* Fix it */
         TrapFrame->SegEs = (KGDT64_R3_DATA | RPL_MASK);
         return STATUS_SUCCESS;
     }
 
-    /* Get Instruction Pointer */
     Instructions = (PUCHAR)TrapFrame->Rip;
 
-    /* Check for RDMSR/WRMSR */
-    if ((Instructions[0] == 0xF) &&            // 2-byte opcode
-        ((Instructions[1] == 0x30) ||        // RDMSR
-         (Instructions[1] == 0x32)))         // WRMSR
     {
-        /* Unknown CPU MSR, so raise an access violation */
         return STATUS_ACCESS_VIOLATION;
     }
 
@@ -901,7 +515,6 @@ DECLSPEC_NORETURN
 VOID
 NTAPI
 KiMcheckAbortHandler(
-    IN PKTRAP_FRAME TrapFrame)
 {
     ULONG64 Status, Address, Misc, ReportedStatus = 0;
     ULONG Bank, BankCount, ReportedBank = 0;
@@ -949,7 +562,6 @@ KiMcheckAbortHandler(
 NTSTATUS
 NTAPI
 KiFloatingErrorHandler(
-    IN PKTRAP_FRAME TrapFrame)
 {
     XSAVE_FORMAT Area;
     USHORT Error;
@@ -982,55 +594,43 @@ KiFloatingErrorHandler(
 NTSTATUS
 NTAPI
 KiXmmExceptionHandler(
-    IN PKTRAP_FRAME TrapFrame)
 {
-    /* #XM must have at least one unmasked status bit. Keep a defined generic
-     * floating-point exception for release builds if hardware or a restored
-     * trap frame violates that invariant; ASSERT below is compiled out there. */
     ULONG ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
 
     if ((TrapFrame->MxCsr & _MM_EXCEPT_INVALID) &&
         !(TrapFrame->MxCsr & _MM_MASK_INVALID))
     {
-        /* Invalid operation */
         ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
     }
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_DENORM) &&
              !(TrapFrame->MxCsr & _MM_MASK_DENORM))
     {
-        /* Denormalized operand. Yes, this is what Windows returns. */
         ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
     }
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_DIV_ZERO) &&
              !(TrapFrame->MxCsr & _MM_MASK_DIV_ZERO))
     {
-        /* Divide by zero */
         ExceptionCode = STATUS_FLOAT_DIVIDE_BY_ZERO;
     }
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_OVERFLOW) &&
              !(TrapFrame->MxCsr & _MM_MASK_OVERFLOW))
     {
-        /* Overflow */
         ExceptionCode = STATUS_FLOAT_OVERFLOW;
     }
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_UNDERFLOW) &&
              !(TrapFrame->MxCsr & _MM_MASK_UNDERFLOW))
     {
-        /* Underflow */
         ExceptionCode = STATUS_FLOAT_UNDERFLOW;
     }
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_INEXACT) &&
              !(TrapFrame->MxCsr & _MM_MASK_INEXACT))
     {
-        /* Precision */
         ExceptionCode = STATUS_FLOAT_INEXACT_RESULT;
     }
     else
     {
-        /* Should not happen */
         ASSERT(FALSE);
     }
-    
     return ExceptionCode;
 }
 

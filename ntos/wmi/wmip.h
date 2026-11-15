@@ -24,7 +24,6 @@ typedef struct _WMIP_GUID_OBJECT
 } WMIP_GUID_OBJECT, *PWMIP_GUID_OBJECT;
 
 extern EX_PUSH_LOCK WmipNotificationLock;
-extern LIST_ENTRY WmipNotificationList;
 
 
 _Function_class_(DRIVER_INITIALIZE)
@@ -37,8 +36,6 @@ WmipDriverEntry(
 
 NTSTATUS
 NTAPI
-WmipInitializeGuidObjectType(
-    VOID);
 
 NTSTATUS
 NTAPI
@@ -58,21 +55,12 @@ WmipOpenGuidObjectByName(
     _Out_ PHANDLE OutGuidObjectHandle,
     _Outptr_ PVOID *OutGuidObject);
 
-VOID
 NTAPI
-WmipCaptureSMBiosFromLoader(
-    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
 NTSTATUS
 NTAPI
-WmipQueryRawSMBiosTables(
-    _Inout_ ULONG *InOutBufferSize,
-    _Out_opt_ PVOID OutBuffer);
 
-VOID
 NTAPI
-WmipInitializeProviders(
-    VOID);
 
 VOID
 NTAPI
@@ -86,23 +74,12 @@ WmipGuidObjectDeleted(
 
 VOID
 NTAPI
-WmipSetEventConsumer(
-    _In_ PWMIP_GUID_OBJECT GuidObject,
-    _In_ BOOLEAN Consumer);
-
-PWNODE_HEADER
-NTAPI
-WmipNameEventInstance(
-    _In_ PWNODE_HEADER Wnode);
 
 BOOLEAN
 WmipIsGuidRegistered(
     _In_ LPCGUID Guid);
 
-BOOLEAN
 NTAPI
-WmipIsDataBlockRegistered(
-    _In_ LPCGUID Guid);
 
 NTSTATUS
 NTAPI
@@ -119,47 +96,16 @@ WmipQuerySingleInstance(
     _Inout_ PULONG InOutBufferSize,
     _Out_opt_ PVOID OutBuffer);
 
-NTSTATUS
 NTAPI
-WmipSetInstance(
-    _In_ LPCGUID Guid,
-    _In_ PCUNICODE_STRING InstanceName,
-    _In_ BOOLEAN SingleItem,
-    _In_ ULONG DataItemId,
-    _In_ ULONG Version,
-    _In_ ULONG ValueBufferSize,
-    _In_reads_bytes_(ValueBufferSize) PVOID ValueBuffer);
+
+NTAPI
 
 NTSTATUS
 NTAPI
-WmipExecuteMethod(
-    _In_ LPCGUID Guid,
-    _In_ PCUNICODE_STRING InstanceName,
-    _In_ ULONG MethodId,
-    _In_ ULONG InBufferSize,
-    _Inout_ PULONG OutBufferSize,
-    _Inout_ PUCHAR InOutBuffer);
 
-NTSTATUS
 NTAPI
-WmipDeviceObjectToInstanceName(
-    _In_ LPCGUID Guid,
-    _In_ PDEVICE_OBJECT DeviceObject,
-    _Out_ PUNICODE_STRING InstanceName);
 
 NTSTATUS
-NTAPI
-WmipAllocateInstanceIds(
-    _In_ LPCGUID Guid,
-    _In_ ULONG InstanceCount,
-    _Out_ PULONG FirstInstanceId);
-
-NTSTATUS
-NTAPI
-EtwpInitializeRegistrations(VOID);
-
-NTSTATUS
-EtwpRegisterGuid(
     _In_reads_bytes_opt_(InBufferLen) PVOID InBuffer,
     _In_ ULONG InBufferLen,
     _Out_writes_bytes_opt_(OutBufferLen) PVOID OutBuffer,
@@ -168,7 +114,6 @@ EtwpRegisterGuid(
     _In_ KPROCESSOR_MODE PreviousMode);
 
 NTSTATUS
-EtwpEnumTraceGuidList(
     _In_reads_bytes_opt_(InBufferLen) PVOID InBuffer,
     _In_ ULONG InBufferLen,
     _Out_writes_bytes_opt_(OutBufferLen) PVOID OutBuffer,
@@ -177,7 +122,6 @@ EtwpEnumTraceGuidList(
     _In_ KPROCESSOR_MODE PreviousMode);
 
 NTSTATUS
-EtwpGetTraceGuidInfo(
     _In_reads_bytes_opt_(InBufferLen) PVOID InBuffer,
     _In_ ULONG InBufferLen,
     _Out_writes_bytes_opt_(OutBufferLen) PVOID OutBuffer,
@@ -186,34 +130,3 @@ EtwpGetTraceGuidInfo(
     _In_ KPROCESSOR_MODE PreviousMode);
 
 NTSTATUS
-EtwpTraceClassicEvent(
-    _In_opt_ HANDLE TraceHandle,
-    _In_ ULONG FieldSize,
-    _In_ PVOID Fields,
-    _In_ KPROCESSOR_MODE PreviousMode);
-
-TRACEHANDLE
-EtwpTraceHandleFromLoggerId(
-    _In_ ULONG LoggerId);
-
-ULONG
-EtwpLoggerIdFromTraceHandle(
-    _In_ TRACEHANDLE TraceHandle);
-
-struct _WMI_LOGGER_INFORMATION;
-
-NTSTATUS
-EtwpQueryLoggerById(
-    _In_ ULONG LoggerId,
-    _Out_opt_ struct _WMI_LOGGER_INFORMATION *Information,
-    _Out_opt_ PULONG EventsLogged);
-
-NTSTATUS
-EtwpFindLoggerByName(
-    _In_ PCUNICODE_STRING LoggerName,
-    _Out_ PULONG LoggerId);
-
-ULONG
-EtwpEnumerateLoggers(
-    _Out_writes_to_(Count, return) PULONG LoggerIds,
-    _In_ ULONG Count);

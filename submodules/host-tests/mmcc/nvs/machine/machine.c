@@ -542,12 +542,10 @@ MachineTranslate(PMACHINE Machine, ULONG Cpu, ULONG64 VirtualAddress, MACHINE_AC
                     return FALSE;
                 Updated = HW_SET_DIRTY(Updated);
             }
-#if defined(MACHINE_AMD64)
             Updated = HW_SET_DIRTY(Updated);
 #endif
         }
 
-#if defined(MACHINE_AMD64)
         Updated = HW_SET_ACCESSED(Updated);
 #endif
 

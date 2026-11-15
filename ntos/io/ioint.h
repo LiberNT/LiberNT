@@ -147,8 +147,6 @@ extern ANSI_STRING IoArcHalDeviceName;
 extern PCHAR IoLoaderArcBootDeviceName;
 extern ULONG IoPageReadIrpAllocationFailure;
 extern ULONG IoPageReadNonPagefileIrpAllocationFailure;
-extern PWSTR ArcTypes[];
-extern PWSTR IoDeviceInfoNames[];
 
 /* devobj.c */
 

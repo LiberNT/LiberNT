@@ -265,7 +265,6 @@ extern PVOID KiArm64P0BootStackLimit;
 KINTERRUPT KxUnexpectedInterrupt;
 ULONG KeNumberProcessIds;
 ULONG KeNumberTbEntries;
-ULONG ProcessCount;
 PKIPCR KeArm64CurrentPcr;
 PKTHREAD KeArm64CurrentThread;
 KIRQL KeArm64CurrentIrql;

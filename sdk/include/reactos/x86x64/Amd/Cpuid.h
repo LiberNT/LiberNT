@@ -375,13 +375,9 @@ typedef union {
     ///
     UINT32    LM             : 1;
     ///
-    /// [Bit 30] 3DNow! instructions.
     ///
-    UINT32    ThreeDNow      : 1;
     ///
-    /// [Bit 31] AMD Extensions to 3DNow! instructions.
     ///
-    UINT32    ThreeDNowExt   : 1;
   } Bits;
   ///
   /// All bit fields as a 32-bit value

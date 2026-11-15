@@ -1244,7 +1244,6 @@ Phase1InitializationDiscard(
     }
 
     /* What the HAL holds for itself is on record before any driver asks for resources */
-    RtlInitializeRangeListPackage();
     HalReportResourceUsage();
     KdDebuggerInitialize1(LoaderBlock);
     KdStartPrintWriter();

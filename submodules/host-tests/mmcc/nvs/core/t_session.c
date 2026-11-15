@@ -25,7 +25,6 @@ SessionProcessInitialize(PEPROCESS Process, PMI_PROCESS Native)
     Process->References = 1;
     Process->AddressSpaceInitialized = 2;
     Process->Vm.VmWorkingSetList = Native;
-    Native->Space.RootFrame = MiPfnAllocatePage(&MiSessionTestSystem->Pfn, 0);
     CHECK(Native->Space.RootFrame != MI_FRAME_INVALID && Native->Space.RootFrame != 0);
 }
 

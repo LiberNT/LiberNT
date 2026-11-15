@@ -1000,55 +1000,19 @@ PspSetJobUiRestrictions(
 /* SYSTEM CALLS ***************************************************************/
 
 NTSTATUS
-NTAPI
-NtCreateJobObject(
-    _Out_ PHANDLE JobHandle,
-    _In_ ACCESS_MASK DesiredAccess,
-    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    PEPROCESS Current = PsGetCurrentProcess();
-    HANDLE Handle;
-    NTSTATUS Status;
-    PEJOB Job;
 
-    PAGED_CODE();
 
-    if (PreviousMode != KernelMode)
     {
-        _SEH2_TRY
-        {
-            ProbeForWriteHandle(JobHandle);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
     }
 
-    Status = ObCreateObject(PreviousMode,
-                            PsJobType,
-                            ObjectAttributes,
-                            PreviousMode,
-                            NULL,
-                            sizeof(EJOB),
-                            0,
-                            0,
-                            (PVOID*)&Job);
-    if (!NT_SUCCESS(Status)) return Status;
 
-    RtlZeroMemory(Job, sizeof(EJOB));
 
-    InitializeListHead(&Job->ProcessListHead);
     InitializeListHead(&Job->JobLinks);
-    InitializeListHead(&Job->SiblingJobLinks);
     InitializeListHead(&Job->ChildJobListHead);
     InitializeListHead(&Job->IteratorListHead);
-    ExInitializePushLock(&Job->MemoryLimitsLock);
     KeInitializeEvent(&Job->Event, NotificationEvent, FALSE);
     Job->SchedulingClass = PSP_JOB_SCHEDULING_CLASS_DEFAULT;
-    Job->SessionId = MmGetSessionId(Current);
 
     Status = ExInitializeResourceLite(&Job->JobLock);
     if (!NT_SUCCESS(Status))
@@ -1063,27 +1027,8 @@ NtCreateJobObject(
     ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 
-    Status = ObInsertObject(Job, NULL, DesiredAccess, 0, NULL, &Handle);
-    if (!NT_SUCCESS(Status)) return Status;
 
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            *JobHandle = Handle;
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        *JobHandle = Handle;
-    }
 
-    return Status;
 }
 
 NTSTATUS
@@ -1094,51 +1039,11 @@ NtOpenJobObject(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    HANDLE Handle;
     NTSTATUS Status;
 
     PAGED_CODE();
 
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForWriteHandle(JobHandle);
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
 
-    Status = ObOpenObjectByName(ObjectAttributes,
-                                PsJobType,
-                                PreviousMode,
-                                NULL,
-                                DesiredAccess,
-                                NULL,
-                                &Handle);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            *JobHandle = Handle;
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        *JobHandle = Handle;
-    }
-
-    return Status;
 }
 
 NTSTATUS

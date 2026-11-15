@@ -121,7 +121,6 @@ the selected target.
 | Code generation | CPU instruction set, tuning, LTO and stack protector (GCC and Clang only). |
 | Build options | ccache, separate debug symbol files and MSVC analysis. |
 | Boot options | UEFI HTTP boot for the boards that support it. |
-| System | Target NT version, ALPC, ISA Plug and Play and the ROSV hypervisor. |
 | Graphics | Display driver model, Mesa Gallium and LLVMpipe/Lavapipe. |
 | Compatibility layers | WoW64, FEX ARM64EC and validation of their build outputs. |
 | Desktop and applications | Early Winlogon background, wallpapers and rosapps. |
@@ -240,7 +239,6 @@ Visibility follows the build path that actually consumes each setting:
 | Runtime checks and static analysis | MSVC only; runtime checks are additionally limited to Debug. |
 | UEFI HTTP boot | LattePanda Mu and Raspberry Pi profiles. |
 | ISA Plug and Play | i386, except the Xbox profile. |
-| ROSV hypervisor | AMD64 builds only. |
 | LLVMpipe and Lavapipe | Clang AMD64 or ARM64 builds with the Mesa Gallium driver enabled. |
 | FEX ARM64EC runtime | ARM64 builds only. |
 | WoW64 subsystem | AMD64 and ARM64 builds. |

@@ -48,7 +48,6 @@ typedef enum _KI_RISCV_STARTUP_PHASE
 
 volatile ULONG KiRiscvStartupPhase;
 volatile ULONG KiRiscvStartupFailure;
-ULONG ProcessCount;
 
 C_ASSERT(sizeof(KPROCESS) <= PAGE_SIZE);
 C_ASSERT(sizeof(KTHREAD) <= PAGE_SIZE);

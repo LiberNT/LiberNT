@@ -16,20 +16,11 @@
 
 extern ULONG NtGlobalFlag;
 
-POBJECT_TYPE ObpTypeObjectType = NULL;
 KEVENT ObpDefaultObject;
-KGUARDED_MUTEX ObpDeviceMapLock;
 
-GENERAL_LOOKASIDE ObpNameBufferLookasideList, ObpCreateInfoLookasideList;
 
-WORK_QUEUE_ITEM ObpReaperWorkItem;
 volatile PVOID ObpReaperList;
 
-ULONG ObpObjectsCreated, ObpObjectsWithName, ObpObjectsWithPoolQuota;
-ULONG ObpObjectsWithHandleDB, ObpObjectsWithCreatorInfo;
-POBJECT_TYPE ObTypeIndexTable[256];
-UCHAR ObHeaderCookie;
-UCHAR ObpInfoMaskToOffset[256];
 
 /* The reaper takes the whole list at once and leaves this behind, so a pusher
  * can tell a draining reaper from an empty list. */
@@ -840,273 +831,68 @@ ObpInitializeObjectTypeSecurity(
 }
 
 
-NTSTATUS
-NTAPI
-ObCreateObjectTypeEx(IN PUNICODE_STRING TypeName,
-                     IN POBJECT_TYPE_INITIALIZER ObjectTypeInitializer,
-                     IN PSECURITY_DESCRIPTOR SecurityDescriptor OPTIONAL,
-                     IN LONG_PTR WaitObjectInfo OPTIONAL,
-                     OUT POBJECT_TYPE *ObjectType)
 {
-    POBJECT_HEADER Header;
-    POBJECT_TYPE LocalObjectType;
-    ULONG HeaderSize;
-    NTSTATUS Status;
-    OBP_LOOKUP_CONTEXT Context;
-    PWCHAR p;
-    ULONG i;
-    UNICODE_STRING ObjectName;
-    ANSI_STRING AnsiName;
-    POBJECT_HEADER_CREATOR_INFO CreatorInfo;
 
-    /* Verify parameters */
-    if (!(TypeName) ||
-        !(TypeName->Length) ||
-        (TypeName->Length % sizeof(WCHAR)) ||
-        !(ObjectTypeInitializer) ||
-        (ObjectTypeInitializer->Length < sizeof(*ObjectTypeInitializer)) ||
-        (ObjectTypeInitializer->ObjectTypeFlags & 0xFC00) ||
-        (ObjectTypeInitializer->InvalidAttributes & ~OBJ_VALID_KERNEL_ATTRIBUTES) ||
-        (ObjectTypeInitializer->MaintainHandleCount &&
-         (!(ObjectTypeInitializer->OpenProcedure) &&
-          !ObjectTypeInitializer->CloseProcedure)) ||
-        ((!ObjectTypeInitializer->UseDefaultObject) &&
-         ((ObjectTypeInitializer->PoolType != NonPagedPool) &&
-          (ObjectTypeInitializer->PoolType != NonPagedPoolNx)) &&
-         !(WaitObjectInfo & 1)))
+
     {
-        /* Fail */
-        return STATUS_INVALID_PARAMETER;
     }
 
-    /* Make sure the name doesn't have a separator */
-    p = TypeName->Buffer;
-    i = TypeName->Length / sizeof(WCHAR);
-    while (i--)
+
+
+
     {
-        /* Check for one and fail */
-        if (*p++ == OBJ_NAME_PATH_SEPARATOR) return STATUS_OBJECT_NAME_INVALID;
     }
 
-    /* Setup a lookup context */
-    ObpInitializeLookupContext(&Context);
 
-    /* Check if we've already created the directory of types */
-    if (ObpTypeDirectoryObject)
     {
-        /* Lock the lookup context */
-        ObpAcquireLookupContextLock(&Context, ObpTypeDirectoryObject);
-
-        /* Do the lookup */
-        if (ObpLookupEntryDirectory(ObpTypeDirectoryObject,
-                                    TypeName,
-                                    OBJ_CASE_INSENSITIVE,
-                                    FALSE,
-                                    &Context))
-        {
-            /* We have already created it, so fail */
-            ObpReleaseLookupContext(&Context);
-            return STATUS_OBJECT_NAME_COLLISION;
-        }
     }
 
-    /* Now make a copy of the object name */
-    ObjectName.Buffer = ExAllocatePoolWithTag(PagedPool,
-                                              TypeName->MaximumLength,
-                                              OB_NAME_TAG);
-    if (!ObjectName.Buffer)
-    {
-        /* Out of memory, fail */
-        ObpReleaseLookupContext(&Context);
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
 
-    /* Set the length and copy the name */
-    ObjectName.MaximumLength = TypeName->MaximumLength;
-    RtlCopyUnicodeString(&ObjectName, TypeName);
 
-    /* Allocate the Object */
-    Status = ObpAllocateObject(NULL,
-                               &ObjectName,
-                               ObpTypeObjectType,
-                               sizeof(OBJECT_TYPE),
-                               KernelMode,
-                               &Header);
-    if (!NT_SUCCESS(Status))
-    {
-        /* Free the name and fail */
-        ObpReleaseLookupContext(&Context);
-        ExFreePool(ObjectName.Buffer);
-        return Status;
-    }
 
-    /* Setup the flags and name */
-    LocalObjectType = (POBJECT_TYPE)&Header->Body;
-    LocalObjectType->Name = ObjectName;
-    Header->Flags |= OB_FLAG_KERNEL_MODE | OB_FLAG_PERMANENT;
-
-    /* Clear accounting data */
-    LocalObjectType->TotalNumberOfObjects =
-    LocalObjectType->TotalNumberOfHandles =
-    LocalObjectType->HighWaterNumberOfObjects =
-    LocalObjectType->HighWaterNumberOfHandles = 0;
-
-    /* Check if this is the first Object Type */
-    if (!ObpTypeObjectType)
-    {
-        /* It is, so set this as the type object */
-        ObpTypeObjectType = LocalObjectType;
-
-        /* Set the hard-coded key and object count */
-        LocalObjectType->TotalNumberOfObjects = 1;
-        LocalObjectType->Key = TAG_OBJECT_TYPE;
     }
     else
     {
-        /* Convert the tag to ASCII */
-        Status = RtlUnicodeStringToAnsiString(&AnsiName, TypeName, TRUE);
-        if (NT_SUCCESS(Status))
-        {
-            /* For every missing character, use a space */
-            for (i = 3; i >= AnsiName.Length; i--) AnsiName.Buffer[i] = ' ';
-
-            /* Set the key and free the converted name */
-            LocalObjectType->Key = *(PULONG)AnsiName.Buffer;
-            RtlFreeAnsiString(&AnsiName);
-        }
-        else
-        {
-            /* Just copy the characters */
-            LocalObjectType->Key = *(PULONG)TypeName->Buffer;
-        }
     }
 
-    /* Set up the type information */
-    LocalObjectType->TypeInfo = *ObjectTypeInitializer;
-    LocalObjectType->TypeInfo.PoolType = ObjectTypeInitializer->PoolType;
 
-    /* Check if we have to maintain a type list */
-    if (NtGlobalFlag & FLG_MAINTAIN_OBJECT_TYPELIST)
     {
-        /* Enable support */
-        LocalObjectType->TypeInfo.MaintainTypeList = TRUE;
     }
 
-    /* Calculate how much space our header'll take up */
-    HeaderSize = sizeof(OBJECT_HEADER) +
-                 sizeof(OBJECT_HEADER_NAME_INFO) +
-                 (ObjectTypeInitializer->MaintainHandleCount ?
-                  sizeof(OBJECT_HEADER_HANDLE_INFO) : 0);
 
-    /* Check the pool type */
-    if ((ObjectTypeInitializer->PoolType & OBP_BASE_POOL_TYPE_MASK) == NonPagedPool)
     {
-        /* Update the NonPaged Pool charge */
-        LocalObjectType->TypeInfo.DefaultNonPagedPoolCharge += HeaderSize;
+    }
+    {
+    }
+
+    {
+    }
+
+    {
+
     }
     else
     {
-        /* Update the Paged Pool charge */
-        LocalObjectType->TypeInfo.DefaultPagedPoolCharge += HeaderSize;
     }
 
-    /* All objects types need a security procedure */
-    if (!ObjectTypeInitializer->SecurityProcedure)
-    {
-        LocalObjectType->TypeInfo.SecurityProcedure = SeDefaultObjectMethod;
-    }
 
-    /* Select the Wait Object */
-    if (LocalObjectType->TypeInfo.UseDefaultObject)
-    {
-        /* Add the SYNCHRONIZE access mask since it's waitable */
-        LocalObjectType->TypeInfo.ValidAccessMask |= SYNCHRONIZE;
-
-        /* Use the "Default Object", a simple event */
-        LocalObjectType->DefaultObject = &ObpDefaultObject;
-    }
-    else
-    {
-        /* Use the caller-supplied wait object encoding, if present */
-        LocalObjectType->DefaultObject = (PVOID)WaitObjectInfo;
-    }
-
-    /* Initialize Object Type components */
-    ExInitializePushLock(&LocalObjectType->TypeLock);
-    InitializeListHead(&LocalObjectType->TypeList);
-    InitializeListHead(&LocalObjectType->CallbackList);
-    LocalObjectType->SeMandatoryLabelMask = 0;
-    LocalObjectType->SeTrustConstraintMask = 0;
-    if (ObjectTypeInitializer->Length >= sizeof(*ObjectTypeInitializer) + (2 * sizeof(ULONG)))
-    {
-        LocalObjectType->SeMandatoryLabelMask = ReadUnalignedU32((const unsigned long*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer)));
-        LocalObjectType->SeTrustConstraintMask = ReadUnalignedU32((const unsigned long*)((PUCHAR)ObjectTypeInitializer + sizeof(*ObjectTypeInitializer) + sizeof(ULONG)));
-    }
-
-    /* Initialize the type object's security descriptor when policy enables it */
     if (ObpObjectSecurityMode)
     {
-        Status = ObpInitializeObjectTypeSecurity(LocalObjectType, SecurityDescriptor);
         if (!NT_SUCCESS(Status))
         {
             ObpReleaseLookupContext(&Context);
-            ObDereferenceObject(LocalObjectType);
             return Status;
         }
     }
 
-    /* Lock the object type */
-    ObpEnterObjectTypeMutex(ObpTypeObjectType);
 
-    /* Get creator info and insert it into the type list */
-    CreatorInfo = OBJECT_HEADER_TO_CREATOR_INFO(Header);
-    if (CreatorInfo)
     {
-        InsertTailList(&ObpTypeObjectType->TypeList,
-                       &CreatorInfo->TypeList);
-
-        /* CORE-8423: Avoid inserting this a second time if someone creates a
-         * handle to the object type (bug in Windows 2003) */
-        Header->Flags &= ~OB_FLAG_CREATE_INFO;
-    }
-
-    /* Set the index and the entry into the object type array */
-    ASSERT(ObpTypeObjectType->TotalNumberOfObjects < RTL_NUMBER_OF(ObTypeIndexTable));
-    LocalObjectType->Index = (UCHAR)ObpTypeObjectType->TotalNumberOfObjects;
-
-    ASSERT(LocalObjectType->Index != 0);
-
-    /* Publish this type at its native one-based index */
-    ObTypeIndexTable[LocalObjectType->Index] = LocalObjectType;
-
-    /* The first type header could only be encoded after index publication */
-    if (LocalObjectType == ObpTypeObjectType) ObpEncodeObjectTypeIndex(Header, ObpTypeObjectType);
-
-    /* Release the object type */
-    ObpLeaveObjectTypeMutex(ObpTypeObjectType);
-
-    /* Check if we're actually creating the directory object itself */
-    if (!(ObpTypeDirectoryObject) ||
-        (ObpInsertEntryDirectory(ObpTypeDirectoryObject, &Context, Header)))
-    {
-        /* Check if the type directory exists */
-        if (ObpTypeDirectoryObject)
         {
-            /* Reference it */
-            ObReferenceObject(ObpTypeDirectoryObject);
         }
 
-        /* Cleanup the lookup context */
-        ObpReleaseLookupContext(&Context);
-
-        /* Return the object type and success */
-        *ObjectType = LocalObjectType;
-        return STATUS_SUCCESS;
     }
 
-    /* If we got here, then we failed */
     ObpReleaseLookupContext(&Context);
-    return STATUS_INSUFFICIENT_RESOURCES;
 }
 
 /* QUERYING *******************************************************************/

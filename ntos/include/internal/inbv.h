@@ -1,19 +1,10 @@
 /*
- * PROJECT:     ReactOS Kernel
- * LICENSE:     BSD - See COPYING.ARM in the top level directory
- * PURPOSE:     Boot Video Driver support header
- * COPYRIGHT:   Copyright 2007 Alex Ionescu (alex.ionescu@reactos.org)
  *              Copyright 2019-2022 Hermès Bélusca-Maïto
  */
 
 #pragma once
-
-/* Native definitions from BOOTVID (Boot Video Driver) */
 #include "bootvid/bootvid.h"
 
-//
-// Driver Initialization
-//
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
@@ -24,111 +15,51 @@ InbvDriverInitialize(
 
 extern BOOLEAN InbvBootDriverInstalled;
 
-INBV_DISPLAY_STATE
+BOOLEAN
 NTAPI
-InbvGetDisplayState(VOID);
+
+VOID
+NTAPI
+
+VOID
+NTAPI
 
 BOOLEAN
 NTAPI
-InbvDisplayNeedsDriverReset(VOID);
 
-VOID
 NTAPI
-InbvReserveDisplaySnapshot(VOID);
 
-VOID
 NTAPI
-InbvSaveDisplaySnapshot(VOID);
 
-VOID
 NTAPI
-InbvRestoreDisplaySnapshot(VOID);
-
-BOOLEAN
-NTAPI
-InbvQueryDisplayInfo(_Out_ PVID_DISPLAY_INFO DisplayInfo);
-
-VOID
-NTAPI
-InbvUseCompactFont(VOID);
-
-VOID
-NTAPI
-InbvAcquireLock(VOID);
-
-VOID
-NTAPI
-InbvReleaseLock(VOID);
 
 PUCHAR
 NTAPI
 InbvGetResourceAddress(
-    _In_ ULONG ResourceNumber
-);
 
 BOOLEAN
 NTAPI
-InbvGetGopFrameBufferInfo(
-    _Out_ PLOADER_PARAMETER_FRAMEBUFFER FrameBufferInfo
-);
 
 BOOLEAN
 NTAPI
-InbvGetGopFrameBufferTransform(
-    _Out_ PLOADER_PARAMETER_FRAMEBUFFER_TRANSFORM Transform
-);
 
-BOOLEAN
 NTAPI
-InbvHasValidGopFrameBuffer(VOID);
 
-CODE_SEG("INIT")
-BOOLEAN
 NTAPI
-InbvQueryBgrtInfo(
-    _Out_opt_ PLOADER_PARAMETER_BGRT BgrtInfo
-);
-
-//
-// Display Functions
-//
-VOID
-NTAPI
-InbvBitBlt(
-    _In_ PUCHAR Buffer,
-    _In_ ULONG X,
-    _In_ ULONG Y
-);
 
 VOID
 NTAPI
-InbvBufferToScreenBlt(
-    _In_reads_bytes_(Height * Stride) PUCHAR Buffer,
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_ ULONG Width,
-    _In_ ULONG Height,
-    _In_ ULONG Stride
-);
 
 VOID
 NTAPI
-InbvScreenToBufferBlt(
-    _Out_writes_bytes_all_(Height * Stride) PUCHAR Buffer,
-    _In_ ULONG X,
-    _In_ ULONG Y,
-    _In_ ULONG Width,
-    _In_ ULONG Height,
-    _In_ ULONG Stride
-);
+
+VOID
+NTAPI
 
 VOID
 NTAPI
 InbvIndicateProgress(VOID);
 
-//
-// Headless Terminal Support Functions
-//
 VOID
 NTAPI
 InbvPortEnableFifo(
@@ -137,20 +68,9 @@ InbvPortEnableFifo(
 
 BOOLEAN
 NTAPI
-InbvPortPollOnly(
-    _In_ ULONG PortId);
-
-BOOLEAN
-NTAPI
 InbvPortGetByte(
     _In_ ULONG PortId,
     _Out_ PUCHAR Byte);
-
-VOID
-NTAPI
-InbvPortPutByte(
-    _In_ ULONG PortId,
-    _In_ UCHAR Byte);
 
 BOOLEAN
 NTAPI

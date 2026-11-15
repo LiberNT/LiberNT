@@ -20,59 +20,6 @@ CONFIGURATION_INFORMATION IopConfigurationInformation =
 
 INTERFACE_TYPE PnpDefaultInterfaceType = InterfaceTypeUndefined;
 
-PWSTR ArcTypes[] =
-{
-    L"System",
-    L"CentralProcessor",
-    L"FloatingPointProcessor",
-    L"PrimaryIcache",
-    L"PrimaryDcache",
-    L"SecondaryIcache",
-    L"SecondaryDcache",
-    L"SecondaryCache",
-    L"EisaAdapter",
-    L"TcAdapter",
-    L"ScsiAdapter",
-    L"DtiAdapter",
-    L"MultifunctionAdapter",
-    L"DiskController",
-    L"TapeController",
-    L"CdRomController",
-    L"WormController",
-    L"SerialController",
-    L"NetworkController",
-    L"DisplayController",
-    L"ParallelController",
-    L"PointerController",
-    L"KeyboardController",
-    L"AudioController",
-    L"OtherController",
-    L"DiskPeripheral",
-    L"FloppyDiskPeripheral",
-    L"TapePeripheral",
-    L"ModemPeripheral",
-    L"MonitorPeripheral",
-    L"PrinterPeripheral",
-    L"PointerPeripheral",
-    L"KeyboardPeripheral",
-    L"TerminalPeripheral",
-    L"OtherPeripheral",
-    L"LinePeripheral",
-    L"NetworkPeripheral",
-    L"SystemMemory",
-    L"DockingInformation",
-    L"RealModeIrqRoutingTable",
-    L"RealModePCIEnumeration",
-    L"Undefined"
-};
-
-PWSTR IoDeviceInfoNames[] =
-{
-    L"Identifier",
-    L"Configuration Data",
-    L"Component Information"
-};
-
 /* PRIVATE DATA ***************************************************************/
 
 static const UNICODE_STRING IopResourceMapKeyName = RTL_CONSTANT_STRING(

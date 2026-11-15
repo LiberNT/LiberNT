@@ -574,7 +574,6 @@ LdrFindEntryForAddress(
     _Out_ PLDR_DATA_TABLE_ENTRY *Module)
 {
     PLIST_ENTRY ListHead, NextEntry;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
     PIMAGE_NT_HEADERS NtHeader;
     PPEB_LDR_DATA Ldr = NtCurrentPeb()->Ldr;
     ULONG_PTR DllBase, DllEnd;
@@ -607,32 +606,12 @@ LdrFindEntryForAddress(
         }
     }
 
-    /* Loop the module list */
-    ListHead = &Ldr->InMemoryOrderModuleList;
-    NextEntry = ListHead->Flink;
-    while (NextEntry != ListHead)
     {
-        /* Get the entry and NT Headers */
-        LdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
-        NtHeader = RtlImageNtHeader(LdrEntry->DllBase);
-        if (NtHeader)
         {
-            /* Get the Image Base */
             DllBase = (ULONG_PTR)LdrEntry->DllBase;
             DllEnd = DllBase + NtHeader->OptionalHeader.SizeOfImage;
 
-            /* Check if they match */
-            if (((ULONG_PTR)Address >= DllBase) &&
-                ((ULONG_PTR)Address < DllEnd))
-            {
-                /* Return it */
-                *Module = LdrEntry;
-                return STATUS_SUCCESS;
-            }
 
-            /* Next Entry */
-            NextEntry = NextEntry->Flink;
-        }
     }
 
     /* Nothing found */

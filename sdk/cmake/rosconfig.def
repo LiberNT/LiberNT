@@ -341,14 +341,6 @@ config ENABLE_RTW8852BS
       Build the rtw8852bs Native 802.11 miniport for the Realtek RTL8852BS
       SDIO Wi-Fi chip, with its firmware.
 
-config ENABLE_ROSV
-    prompt "ROSV hypervisor (VMX)"
-    type bool
-    default n
-    depends ARCH=amd64
-    help
-      Build the ROSV VMX hypervisor driver and its user-mode tools.
-
 config RDPSERVER_DIR
     prompt "RDP console server build directory"
     type string

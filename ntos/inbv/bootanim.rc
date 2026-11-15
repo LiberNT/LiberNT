@@ -16,4 +16,3 @@ IDB_LOGO_DEFAULT    BITMAP "inbv/resources/logo.bmp"
 
 /* ReactOS additions */
 IDB_COPYRIGHT       BITMAP "inbv/resources/copyright.bmp"
-IDB_REACTOS_GOP_LOGO BITMAP "inbv/resources/reactos_logo.bmp"

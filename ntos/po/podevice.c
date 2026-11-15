@@ -74,9 +74,6 @@ PopGetDope(
     RtlZeroMemory(Made, sizeof(*Made));
     Made->DeviceObject = DeviceObject;
     Made->State = PowerDeviceD0;
-    InitializeListHead(&Made->IdleList);
-    InitializeListHead(&Made->NotifySourceList);
-    InitializeListHead(&Made->NotifyTargetList);
     InitializeListHead(&Made->Volume);
 
     KeAcquireSpinLock(&PopDopeGlobalLock, &OldIrql);
