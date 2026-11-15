@@ -461,6 +461,7 @@ static HRESULT find_account(PCWSTR name, PCWSTR cls, OBJECT_TYPE *type)
     USER_INFO_0 *user = NULL;
     NET_API_STATUS status;
 
+    *type = ObjectGroup;
     /* TODO: services, printers and the other WinNT classes */
     if (cls[0] && !want_group && !want_user)
         return E_ADS_UNKNOWN_OBJECT;
