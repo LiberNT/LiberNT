@@ -53,8 +53,6 @@ elseif(ARCH STREQUAL "riscv64")
         set(_mesa_compiler_launcher
             -DCMAKE_C_COMPILER_LAUNCHER:FILEPATH=${RV64X_COMPILER_LAUNCHER}
             -DCMAKE_CXX_COMPILER_LAUNCHER:FILEPATH=${RV64X_COMPILER_LAUNCHER})
-    else()
-        set(_mesa_compiler_launcher -DCMAKE_C_COMPILER_LAUNCHER:FILEPATH= -DCMAKE_CXX_COMPILER_LAUNCHER:FILEPATH=)
     endif()
     set(_mesa_features -DMESA_IMAGINATION:BOOL=ON -DMESA_ZINK:BOOL=ON)
     set(_mesa_support_targets pvrkmt)
@@ -101,6 +99,9 @@ if(NOT _mesa_python_status EQUAL 0)
 endif()
 include("${REACTOS_SOURCE_DIR}/sdk/cmake/nested-build.cmake")
 include(ExternalProject)
+if(NOT _mesa_compiler_launcher)
+    set(_mesa_compiler_launcher ${REACTOS_NESTED_COMPILER_LAUNCHER})
+endif()
 
 set(MESA_WORK_DIR "${CMAKE_CURRENT_BINARY_DIR}/mesa-source")
 set(MESA_BINARY_DIR "${MESA_WORK_DIR}/cmake-build")
@@ -208,8 +209,7 @@ ExternalProject_Add(mesa_gallium_build
         ${_mesa_compiler_launcher}
         ${_mesa_features}
     BUILD_COMMAND ${MESA_NINJA} -C <BINARY_DIR> -t recompact
-        COMMAND ${CMAKE_COMMAND} -E env CCACHE_DISABLE=1 SCCACHE_DISABLE=1
-        ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${_mesa_build_targets}
+        COMMAND ${REACTOS_NESTED_BUILD} <BINARY_DIR> --target ${_mesa_build_targets}
     BUILD_ALWAYS TRUE
     INSTALL_COMMAND ""
     BUILD_BYPRODUCTS ${_mesa_build_byproducts}

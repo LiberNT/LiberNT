@@ -93,7 +93,8 @@ set(_fex_sdk_cmake_args
     -DREACTOS_SDK_BUILD_DIR:PATH=${REACTOS_BINARY_DIR}
     -DREACTOS_SDK_CXX_RUNTIME:PATH=${REACTOS_LIBCXX_ROOT}
     -DREACTOS:BOOL=ON
-    -DREACTOS_SDK:BOOL=ON)
+    -DREACTOS_SDK:BOOL=ON
+    ${REACTOS_NESTED_COMPILER_LAUNCHER})
 
 function(fex_discard_stale_build _name _binary_dir)
     set(_cache "${_binary_dir}/CMakeCache.txt")

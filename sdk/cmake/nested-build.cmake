@@ -10,3 +10,14 @@ set(REACTOS_NESTED_BUILD
     "${_nested_build_python}"
     "${CMAKE_CURRENT_LIST_DIR}/build-with-parallel.py"
     "${CMAKE_COMMAND}" --build)
+
+# A third-party CMake build compiles through ccache when the tree does.
+if(ENABLE_CCACHE)
+    set(REACTOS_NESTED_COMPILER_LAUNCHER
+        -DCMAKE_C_COMPILER_LAUNCHER:STRING=ccache
+        -DCMAKE_CXX_COMPILER_LAUNCHER:STRING=ccache)
+else()
+    set(REACTOS_NESTED_COMPILER_LAUNCHER
+        -DCMAKE_C_COMPILER_LAUNCHER:STRING=
+        -DCMAKE_CXX_COMPILER_LAUNCHER:STRING=)
+endif()
