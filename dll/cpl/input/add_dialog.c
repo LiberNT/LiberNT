@@ -59,14 +59,37 @@ GetDefaultLayoutForLocale(DWORD dwLocaleId)
 
 
 static VOID
+FillLayoutCombo(HWND hwndLayoutCombo, LOCALE_LIST_NODE *pLocale)
+{
+    LAYOUT_LIST_NODE *pCurrentLayout;
+    DWORD dwDefaultLayoutId = pLocale ? GetDefaultLayoutForLocale(pLocale->dwId) : 0;
+    INT iItemIndex;
+
+    ComboBox_ResetContent(hwndLayoutCombo);
+    for (pCurrentLayout = LayoutList_GetFirst();
+         pCurrentLayout != NULL;
+         pCurrentLayout = pCurrentLayout->pNext)
+    {
+        if (pCurrentLayout->bTip && (!pLocale || pCurrentLayout->wTipLangId != LOWORD(pLocale->dwId)))
+            continue;
+
+        iItemIndex = ComboBox_AddString(hwndLayoutCombo, pCurrentLayout->pszName);
+        ComboBox_SetItemData(hwndLayoutCombo, iItemIndex, pCurrentLayout);
+        if (!pCurrentLayout->bTip && pCurrentLayout->dwKLID == dwDefaultLayoutId)
+            ComboBox_SetCurSel(hwndLayoutCombo, iItemIndex);
+    }
+
+    if (ComboBox_GetCurSel(hwndLayoutCombo) == CB_ERR)
+        ComboBox_SetCurSel(hwndLayoutCombo, 0);
+}
+
+static VOID
 OnInitAddDialog(HWND hwndDlg)
 {
     HWND hwndLocaleCombo = GetDlgItem(hwndDlg, IDC_INPUT_LANG_COMBO);
     HWND hwndLayoutCombo = GetDlgItem(hwndDlg, IDC_KEYBOARD_LO_COMBO);
-    LOCALE_LIST_NODE *pCurrentLocale;
-    LAYOUT_LIST_NODE *pCurrentLayout;
+    LOCALE_LIST_NODE *pCurrentLocale, *pDefaultLocale = NULL;
     DWORD dwDefaultLocaleId;
-    DWORD dwDefaultLayoutId;
     INT iItemIndex;
 
     dwDefaultLocaleId = GetSystemDefaultLCID();
@@ -81,26 +104,11 @@ OnInitAddDialog(HWND hwndDlg)
         if (pCurrentLocale->dwId == dwDefaultLocaleId)
         {
             ComboBox_SetCurSel(hwndLocaleCombo, iItemIndex);
+            pDefaultLocale = pCurrentLocale;
         }
     }
 
-    dwDefaultLayoutId = GetDefaultLayoutForLocale(dwDefaultLocaleId);
-
-    for (pCurrentLayout = LayoutList_GetFirst();
-         pCurrentLayout != NULL;
-         pCurrentLayout = pCurrentLayout->pNext)
-    {
-        iItemIndex = ComboBox_AddString(hwndLayoutCombo, pCurrentLayout->pszName);
-        ComboBox_SetItemData(hwndLayoutCombo, iItemIndex, pCurrentLayout);
-
-        if (pCurrentLayout->dwKLID == dwDefaultLayoutId)
-        {
-            ComboBox_SetCurSel(hwndLayoutCombo, iItemIndex);
-        }
-    }
-
-    if (dwDefaultLayoutId == 0)
-        ComboBox_SetCurSel(hwndLayoutCombo, 0);
+    FillLayoutCombo(hwndLayoutCombo, pDefaultLocale);
 }
 
 
@@ -144,28 +152,7 @@ OnCommandAddDialog(HWND hwndDlg, WPARAM wParam)
                 pCurrentLocale = (LOCALE_LIST_NODE*)ComboBox_GetItemData(hwndLocaleCombo,
                                                                          ComboBox_GetCurSel(hwndLocaleCombo));
                 if (pCurrentLocale != NULL)
-                {
-                    DWORD dwLayoutId;
-                    INT iIndex;
-                    INT iCount;
-
-                    dwLayoutId = GetDefaultLayoutForLocale(pCurrentLocale->dwId);
-
-                    iCount = ComboBox_GetCount(hwndLayoutCombo);
-
-                    for (iIndex = 0; iIndex < iCount; iIndex++)
-                    {
-                        LAYOUT_LIST_NODE *pCurrentLayout;
-
-                        pCurrentLayout = (LAYOUT_LIST_NODE*)ComboBox_GetItemData(hwndLayoutCombo, iIndex);
-
-                        if (pCurrentLayout != NULL && pCurrentLayout->dwKLID == dwLayoutId)
-                        {
-                            ComboBox_SetCurSel(hwndLayoutCombo, iIndex);
-                            break;
-                        }
-                    }
-                }
+                    FillLayoutCombo(hwndLayoutCombo, pCurrentLocale);
             }
         }
         break;

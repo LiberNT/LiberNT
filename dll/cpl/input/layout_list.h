@@ -9,6 +9,10 @@ typedef struct _LAYOUT_LIST_NODE
     LPWSTR pszName;         /* The layout text */
     LPWSTR pszFile;         /* The layout file */
     LPWSTR pszImeFile;      /* The IME file */
+    BOOL bTip;
+    LANGID wTipLangId;
+    CLSID clsidTip;
+    GUID guidTipProfile;
 
     struct _LAYOUT_LIST_NODE *pPrev;
     struct _LAYOUT_LIST_NODE *pNext;
@@ -25,3 +29,6 @@ LayoutList_GetByHkl(HKL hkl);
 
 LAYOUT_LIST_NODE*
 LayoutList_GetFirst(VOID);
+
+LAYOUT_LIST_NODE*
+LayoutList_GetTip(LANGID wLangId, const CLSID *pclsid, const GUID *pguidProfile);

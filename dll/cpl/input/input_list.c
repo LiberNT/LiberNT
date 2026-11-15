@@ -375,6 +375,38 @@ InputList_AddInputMethodToUserRegistry(
 }
 
 
+static VOID
+InputList_ProcessTips(VOID)
+{
+    INPUT_LIST_NODE *pCurrent, *pNext;
+    WCHAR szClsid[39], szProfile[39], szEntry[MAX_PATH];
+
+    for (pCurrent = _InputList; pCurrent != NULL; pCurrent = pNext)
+    {
+        LAYOUT_LIST_NODE *pLayout = pCurrent->pLayout;
+
+        pNext = pCurrent->pNext;
+        if (!pLayout->bTip ||
+            !(pCurrent->wFlags & (INPUT_LIST_NODE_FLAG_ADDED | INPUT_LIST_NODE_FLAG_DELETED)))
+        {
+            continue;
+        }
+
+        StringFromGUID2(&pLayout->clsidTip, szClsid, ARRAYSIZE(szClsid));
+        StringFromGUID2(&pLayout->guidTipProfile, szProfile, ARRAYSIZE(szProfile));
+        StringCchPrintfW(szEntry, ARRAYSIZE(szEntry), L"%04X:%s%s", pLayout->wTipLangId, szClsid, szProfile);
+        if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED)
+        {
+            InstallLayoutOrTip(szEntry, ILOT_UNINSTALL);
+            InputList_RemoveNode(pCurrent);
+        }
+        else
+        {
+            InstallLayoutOrTip(szEntry, 0);
+        }
+    }
+}
+
 /*
  * Writes any changes in input methods to the registry
  */
@@ -414,6 +446,9 @@ InputList_Process(VOID)
     /* Process DELETED and EDITED entries */
     for (pCurrent = _InputList; pCurrent != NULL; pCurrent = pCurrent->pNext)
     {
+        if (pCurrent->pLayout->bTip)
+            continue;
+
         if ((pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED) ||
             (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_EDITED))
         {
@@ -433,7 +468,7 @@ InputList_Process(VOID)
     /* Add the DEFAULT entry and set font substitutes */
     for (pCurrent = _InputList; pCurrent != NULL; pCurrent = pCurrent->pNext)
     {
-        if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED)
+        if ((pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED) || pCurrent->pLayout->bTip)
             continue;
 
         if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DEFAULT)
@@ -458,11 +493,15 @@ InputList_Process(VOID)
             continue;
         if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DEFAULT)
             continue;
+        if (pCurrent->pLayout->bTip)
+            continue;
 
         InputList_AddInputMethodToUserRegistry(hPreloadKey, hSubstKey, dwNumber, pCurrent);
 
         ++dwNumber;
     }
+
+    InputList_ProcessTips();
 
     /* Remove ADDED and EDITED flags */
     for (pCurrent = _InputList; pCurrent != NULL; pCurrent = pCurrent->pNext)
@@ -571,7 +610,7 @@ InputList_FindNextDefault(INPUT_LIST_NODE *pNode)
 
     for (pCurrent = pNode->pNext; pCurrent; pCurrent = pCurrent->pNext)
     {
-        if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED)
+        if ((pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED) || pCurrent->pLayout->bTip)
             continue;
 
         return pCurrent;
@@ -579,7 +618,7 @@ InputList_FindNextDefault(INPUT_LIST_NODE *pNode)
 
     for (pCurrent = pNode->pPrev; pCurrent; pCurrent = pCurrent->pPrev)
     {
-        if (pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED)
+        if ((pCurrent->wFlags & INPUT_LIST_NODE_FLAG_DELETED) || pCurrent->pLayout->bTip)
             continue;
 
         return pCurrent;
@@ -655,6 +694,41 @@ Retry:
     return ret;
 }
 
+static VOID
+InputList_CreateTips(VOID)
+{
+    LAYOUTORTIPPROFILE aProfiles[64];
+    WCHAR szIndicator[MAX_STR_LEN];
+    UINT cProfiles, i;
+
+    cProfiles = EnumEnabledLayoutOrTip(NULL, NULL, NULL, aProfiles, ARRAYSIZE(aProfiles));
+    for (i = 0; i < cProfiles && i < ARRAYSIZE(aProfiles); ++i)
+    {
+        LOCALE_LIST_NODE *pLocale;
+        LAYOUT_LIST_NODE *pLayout;
+        INPUT_LIST_NODE *pInput;
+
+        if (aProfiles[i].dwProfileType != LOTP_INPUTPROCESSOR)
+            continue;
+        pLocale = LocaleList_GetByHkl(UlongToHandle(aProfiles[i].langid));
+        pLayout = LayoutList_GetTip(aProfiles[i].langid, &aProfiles[i].clsid, &aProfiles[i].guidProfile);
+        if (!pLocale || !pLayout)
+            continue;
+
+        pInput = InputList_AppendNode();
+        if (!pInput)
+            continue;
+        pInput->pLocale = pLocale;
+        pInput->pLayout = pLayout;
+        if (GetLocaleInfoW(aProfiles[i].langid, LOCALE_SABBREVLANGNAME | LOCALE_NOUSEROVERRIDE, szIndicator,
+                           ARRAYSIZE(szIndicator)) && szIndicator[0])
+        {
+            szIndicator[wcslen(szIndicator) - 1] = 0;
+            pInput->pszIndicator = _wcsdup(szIndicator);
+        }
+    }
+}
+
 VOID
 InputList_Create(VOID)
 {
@@ -710,6 +784,7 @@ InputList_Create(VOID)
     }
 
     free(pLayoutList);
+    InputList_CreateTips();
 }
 
 static INT InputList_Compare(INPUT_LIST_NODE *pNode1, INPUT_LIST_NODE *pNode2)

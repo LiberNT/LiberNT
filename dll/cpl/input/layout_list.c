@@ -167,6 +167,83 @@ LayoutList_ReadLayout(HKEY hLayoutKey, LPCWSTR szKLID, LPCWSTR szSystemDirectory
     return FALSE;
 }
 
+static VOID
+LayoutList_ReadTips(VOID)
+{
+    ITfInputProcessorProfiles *pProfiles;
+    WCHAR szClsid[39], szLang[16], szKey[MAX_PATH];
+    LANGID alangid[64];
+    UINT clangid = 0, i;
+    HMODULE hMsctf;
+    HKEY hTips, hProfiles;
+    DWORD dwTip, dwLang, cch;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\CTF\\TIP", 0, KEY_READ, &hTips) != ERROR_SUCCESS)
+        return;
+    for (dwTip = 0; clangid < ARRAYSIZE(alangid); ++dwTip)
+    {
+        cch = ARRAYSIZE(szClsid);
+        if (RegEnumKeyExW(hTips, dwTip, szClsid, &cch, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+        StringCchPrintfW(szKey, ARRAYSIZE(szKey), L"%s\\LanguageProfile", szClsid);
+        if (RegOpenKeyExW(hTips, szKey, 0, KEY_READ, &hProfiles) != ERROR_SUCCESS)
+            continue;
+        for (dwLang = 0; clangid < ARRAYSIZE(alangid); ++dwLang)
+        {
+            LANGID wLangId;
+
+            cch = ARRAYSIZE(szLang);
+            if (RegEnumKeyExW(hProfiles, dwLang, szLang, &cch, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+                break;
+            wLangId = LOWORD(wcstoul(szLang, NULL, 16));
+            for (i = 0; i < clangid && alangid[i] != wLangId; ++i)
+                ;
+            if (wLangId && i == clangid)
+                alangid[clangid++] = wLangId;
+        }
+        RegCloseKey(hProfiles);
+    }
+    RegCloseKey(hTips);
+
+    pProfiles = CreateProfiles(&hMsctf);
+    if (!pProfiles)
+        return;
+    for (i = 0; i < clangid; ++i)
+    {
+        IEnumTfLanguageProfiles *pEnum = NULL;
+        TF_LANGUAGEPROFILE profile;
+        ULONG cFetched;
+
+        if (FAILED(ITfInputProcessorProfiles_EnumLanguageProfiles(pProfiles, alangid[i], &pEnum)) || !pEnum)
+            continue;
+        while (IEnumTfLanguageProfiles_Next(pEnum, 1, &profile, &cFetched) == S_OK && cFetched)
+        {
+            LAYOUT_LIST_NODE *pNode;
+            BSTR bstrName = NULL;
+
+            if (!IsEqualGUID(&profile.catid, &GUID_TFCAT_TIP_KEYBOARD) ||
+                LayoutList_GetTip(profile.langid, &profile.clsid, &profile.guidProfile) ||
+                FAILED(ITfInputProcessorProfiles_GetLanguageProfileDescription(pProfiles, &profile.clsid,
+                                                                               profile.langid,
+                                                                               &profile.guidProfile, &bstrName)) ||
+                !bstrName)
+            {
+                continue;
+            }
+            pNode = LayoutList_AppendNode(0, 0, L"", bstrName, NULL);
+            SysFreeString(bstrName);
+            if (!pNode)
+                continue;
+            pNode->bTip = TRUE;
+            pNode->wTipLangId = profile.langid;
+            pNode->clsidTip = profile.clsid;
+            pNode->guidTipProfile = profile.guidProfile;
+        }
+        IEnumTfLanguageProfiles_Release(pEnum);
+    }
+    ReleaseProfiles(pProfiles, hMsctf);
+}
+
 VOID
 LayoutList_Create(VOID)
 {
@@ -200,6 +277,7 @@ LayoutList_Create(VOID)
     }
 
     RegCloseKey(hKey);
+    LayoutList_ReadTips();
 }
 
 
@@ -249,4 +327,20 @@ LAYOUT_LIST_NODE*
 LayoutList_GetFirst(VOID)
 {
     return _LayoutList;
+}
+
+LAYOUT_LIST_NODE*
+LayoutList_GetTip(LANGID wLangId, const CLSID *pclsid, const GUID *pguidProfile)
+{
+    LAYOUT_LIST_NODE *pCurrent;
+
+    for (pCurrent = _LayoutList; pCurrent != NULL; pCurrent = pCurrent->pNext)
+    {
+        if (pCurrent->bTip && pCurrent->wTipLangId == wLangId && IsEqualCLSID(&pCurrent->clsidTip, pclsid) &&
+            IsEqualGUID(&pCurrent->guidTipProfile, pguidProfile))
+        {
+            return pCurrent;
+        }
+    }
+    return NULL;
 }

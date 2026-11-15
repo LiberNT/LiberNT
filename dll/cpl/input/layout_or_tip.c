@@ -7,36 +7,11 @@
 
 #include "input.h"
 
-#define COBJMACROS
-#include <objbase.h>
-#include <msctf.h>
-
 #define LOT_DEFAULT                     0x00000001
 #define LOT_DISABLED                    0x00000002
 
-#define LOTP_INPUTPROCESSOR             1
-#define LOTP_KEYBOARDLAYOUT             2
-
-#define ILOT_UNINSTALL                  0x00000001
-#define ILOT_DEFPROFILE                 0x00000002
-#define ILOT_NOAPPLYTOCURRENTSESSION    0x00000020
-#define ILOT_CLEANINSTALL               0x00000040
-#define ILOT_DISABLED                   0x00000080
-
 #define SDLOT_NOAPPLYTOCURRENTSESSION   0x00000001
 #define SDLOT_APPLYTOCURRENTTHREAD      0x00000002
-
-typedef struct tagLAYOUTORTIPPROFILE
-{
-    DWORD dwProfileType;
-    LANGID langid;
-    CLSID clsid;
-    GUID guidProfile;
-    GUID catid;
-    DWORD dwSubstituteLayout;
-    DWORD dwFlags;
-    WCHAR szId[MAX_PATH];
-} LAYOUTORTIPPROFILE;
 
 typedef struct
 {
@@ -197,7 +172,7 @@ EntryPreloadKlid(_In_ const LAYOUT_OR_TIP *pEntry)
     return pEntry->fTip ? pEntry->langid : pEntry->dwKlid;
 }
 
-static ITfInputProcessorProfiles *
+ITfInputProcessorProfiles *
 CreateProfiles(_Out_ HMODULE *phMsctf)
 {
     FN_TF_CreateInputProcessorProfiles fnCreate;
@@ -217,7 +192,7 @@ CreateProfiles(_Out_ HMODULE *phMsctf)
     return pProfiles;
 }
 
-static void
+VOID
 ReleaseProfiles(_In_opt_ ITfInputProcessorProfiles *pProfiles, _In_opt_ HMODULE hMsctf)
 {
     if (pProfiles)

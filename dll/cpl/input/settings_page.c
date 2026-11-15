@@ -114,7 +114,7 @@ static VOID InitDefaultLangComboBox(HWND hwndCombo)
 
     for (pNode = InputList_GetFirst(); pNode != NULL; pNode = pNode->pNext)
     {
-        if (pNode->wFlags & INPUT_LIST_NODE_FLAG_DELETED)
+        if ((pNode->wFlags & INPUT_LIST_NODE_FLAG_DELETED) || pNode->pLayout->bTip)
             continue;
 
         StringCchPrintfW(szText, _countof(szText), L"%s - %s",
@@ -146,7 +146,7 @@ SetControlsState(HWND hwndDlg)
     bIsLeaf = (hSelected && TreeView_GetItem(hwndList, &item) && HIWORD(item.lParam));
 
     bCanRemove = (bIsLeaf && (s_nAliveLeafCount > 1)) || (s_nRootCount > 1);
-    bCanProp = bIsLeaf;
+    bCanProp = bIsLeaf && !((INPUT_LIST_NODE *)item.lParam)->pLayout->bTip;
 
     EnableWindow(GetDlgItem(hwndDlg, IDC_REMOVE_BUTTON), bCanRemove);
     EnableWindow(GetDlgItem(hwndDlg, IDC_PROP_BUTTON), bCanProp);
