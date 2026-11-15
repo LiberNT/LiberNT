@@ -26,7 +26,6 @@ static BOOL d2d_coverage_reset(struct d2d_coverage *coverage, int width, int hei
     const int tile_rows = (height + D2D_COVERAGE_TILE - 1) >> D2D_COVERAGE_TILE_SHIFT;
     size_t accum_count = (size_t)(width + 2) * height;
     size_t flags_count = (size_t)tile_cols * tile_rows;
-    size_t old_accum = coverage->accum_size, old_flags = coverage->flags_size;
     int height_i;
 
     if (!d2d_array_reserve((void **)&coverage->accum, &coverage->accum_size, accum_count, sizeof(float)))
@@ -39,8 +38,6 @@ static BOOL d2d_coverage_reset(struct d2d_coverage *coverage, int width, int hei
      * current draw instead of to the largest one ever seen. */
     memset(coverage->accum, 0, accum_count * sizeof(float));
     memset(coverage->flags, 0, flags_count);
-    (void)old_accum;
-    (void)old_flags;
 
     if (!d2d_array_reserve((void **)&coverage->rowflags, &coverage->rowflags_size,
             (size_t)tile_cols * height, sizeof(BYTE)))
