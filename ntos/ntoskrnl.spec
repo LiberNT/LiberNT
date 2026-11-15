@@ -1942,7 +1942,7 @@
 @ stdcall RtlCreateUserThread(ptr ptr long long long long ptr ptr ptr ptr)
 @ stdcall -arch=win64 RtlCultureNameToLCID()
 @ stdcall RtlDowncaseUnicodeChar(long)
-@ stdcall -arch=win64 RtlDuplicateUnicodeString()
+@ stdcall RtlDuplicateUnicodeString(long ptr ptr)
 @ stdcall -arch=win64 RtlFindExportedRoutineByName()
 @ stdcall -arch=win64 RtlFindNextForwardRunSet()
 @ stdcall -arch=win64 RtlFirstFreeAce()
