@@ -117,6 +117,54 @@ static void mark_cert_imported( HKEY import_key, const CERT_CONTEXT *cert )
     RegSetValueExW( import_key, hash_str, 0, REG_DWORD, (BYTE *)&value, sizeof(value) );
 }
 
+#ifdef __REACTOS__
+/* Root program properties ride along with an AuthRoot certificate's blob. */
+static void apply_authroot_properties( const CERT_CONTEXT *cert )
+{
+    static const DWORD ids[] = { CERT_NOT_BEFORE_FILETIME_PROP_ID, CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID };
+    static const WCHAR prefix[] = L"Software\\Microsoft\\SystemCertificates\\AuthRoot\\Certificates\\";
+    WCHAR hash_str[20 * 2 + 1], path[ARRAY_SIZE(prefix) + 20 * 2];
+    BYTE sha1_hash[20], *blob;
+    DWORD size = 0, offset = 0, i;
+    HKEY key;
+
+    get_cert_context_hash( cert, sha1_hash, hash_str );
+    lstrcpyW( path, prefix );
+    lstrcatW( path, hash_str );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &key ))
+        return;
+    blob = NULL;
+    if (!RegQueryValueExW( key, L"Blob", NULL, NULL, NULL, &size ) && size && (blob = CryptMemAlloc( size )) &&
+        RegQueryValueExW( key, L"Blob", NULL, NULL, blob, &size ))
+    {
+        CryptMemFree( blob );
+        blob = NULL;
+    }
+    RegCloseKey( key );
+    if (!blob)
+        return;
+    while (size - offset >= 3 * sizeof(DWORD))
+    {
+        DWORD id = *(const DWORD *)(blob + offset);
+        DWORD length = *(const DWORD *)(blob + offset + 2 * sizeof(DWORD));
+        CRYPT_DATA_BLOB data;
+
+        offset += 3 * sizeof(DWORD);
+        if (length > size - offset)
+            break;
+        data.cbData = length;
+        data.pbData = blob + offset;
+        for (i = 0; i < ARRAY_SIZE(ids); i++)
+        {
+            if (id == ids[i] && !CertSetCertificateContextProperty( cert, id, 0, &data ))
+                ERR( "Failed to set property %lu.\n", id );
+        }
+        offset += length;
+    }
+    CryptMemFree( blob );
+}
+
+#endif
 static void check_and_store_certs( HCERTSTORE cached, HKEY key, HKEY import_key )
 {
     DWORD root_count = 0;
@@ -716,6 +764,9 @@ static void sync_trusted_roots_from_known_locations( HKEY key, HCERTSTORE cached
         }
 
         CertAddEncodedCertificateToStore( cached, X509_ASN_ENCODING, params.buffer, needed, CERT_STORE_ADD_ALWAYS, &cert );
+#ifdef __REACTOS__
+        apply_authroot_properties( cert );
+#endif
         is_new = 1;
         if (!CertSetCertificateContextProperty( cert, CERT_FIRST_USER_PROP_ID, 0, &exists_blob ))
             ERR("Failed to set property.\n");

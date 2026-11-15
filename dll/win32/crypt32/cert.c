@@ -791,6 +791,10 @@ static BOOL CertContext_SetProperty(cert_t *cert, DWORD dwPropId,
         case CERT_CROSS_CERT_DIST_POINTS_PROP_ID:
         case CERT_OCSP_RESPONSE_PROP_ID:
         case CERT_RENEWAL_PROP_ID:
+#ifdef __REACTOS__
+        case CERT_NOT_BEFORE_FILETIME_PROP_ID:
+        case CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID:
+#endif
         {
             if (pvData)
             {

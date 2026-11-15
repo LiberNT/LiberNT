@@ -2950,6 +2950,74 @@ static void dump_chain_para(const CERT_CHAIN_PARA *pChainPara)
     }
 }
 
+#ifdef __REACTOS__
+/* Microsoft Trusted Root Program NotBefore: a root distrusts what it issued
+ * after CERT_NOT_BEFORE_FILETIME_PROP_ID, for the usages listed in
+ * CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID, or entirely when that list is absent. */
+static void CRYPT_CheckRootNotBefore(PCERT_CHAIN_CONTEXT chain,
+ const CERT_CHAIN_PARA *pChainPara)
+{
+    PCERT_SIMPLE_CHAIN simple;
+    PCERT_CHAIN_ELEMENT rootElement;
+    PCCERT_CONTEXT endCert;
+    CERT_ENHKEY_USAGE *usage;
+    BYTE *encoded;
+    FILETIME cutOff;
+    DWORD size = sizeof(cutOff), usageSize, i, j;
+    BOOL affected = FALSE;
+
+    if (!chain->cChain)
+        return;
+    simple = chain->rgpChain[chain->cChain - 1];
+    if (!simple->cElement ||
+     (simple->TrustStatus.dwErrorStatus & CERT_TRUST_IS_PARTIAL_CHAIN))
+        return;
+    rootElement = simple->rgpElement[simple->cElement - 1];
+    endCert = chain->rgpChain[0]->rgpElement[0]->pCertContext;
+    if (!CertGetCertificateContextProperty(rootElement->pCertContext,
+     CERT_NOT_BEFORE_FILETIME_PROP_ID, &cutOff, &size) || size != sizeof(cutOff))
+        return;
+    if (CompareFileTime(&endCert->pCertInfo->NotBefore, &cutOff) <= 0)
+        return;
+
+    size = 0;
+    if (!CertGetCertificateContextProperty(rootElement->pCertContext,
+     CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID, NULL, &size))
+    {
+        /* FIXME: the trust bit Windows reports for a whole-root cut-off is not confirmed by a Windows 11 run */
+        rootElement->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_UNTRUSTED_ROOT;
+        simple->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_UNTRUSTED_ROOT;
+        chain->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_UNTRUSTED_ROOT;
+        return;
+    }
+    if (pChainPara->cbSize < sizeof(CERT_CHAIN_PARA_NO_EXTRA_FIELDS) ||
+     !pChainPara->RequestedUsage.Usage.cUsageIdentifier)
+        return;
+    if (!(encoded = CryptMemAlloc(size)))
+        return;
+    if (CertGetCertificateContextProperty(rootElement->pCertContext,
+     CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID, encoded, &size) &&
+     CryptDecodeObjectEx(X509_ASN_ENCODING, X509_ENHANCED_KEY_USAGE, encoded,
+     size, CRYPT_DECODE_ALLOC_FLAG, NULL, &usage, &usageSize))
+    {
+        const CERT_ENHKEY_USAGE *requested = &pChainPara->RequestedUsage.Usage;
+
+        for (i = 0; !affected && i < requested->cUsageIdentifier; i++)
+            for (j = 0; !affected && j < usage->cUsageIdentifier; j++)
+                affected = !strcmp(requested->rgpszUsageIdentifier[i],
+                 usage->rgpszUsageIdentifier[j]);
+        LocalFree(usage);
+    }
+    CryptMemFree(encoded);
+    if (affected)
+    {
+        /* FIXME: the trust bit Windows reports for a usage cut-off is not confirmed by a Windows 11 run */
+        rootElement->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_NOT_VALID_FOR_USAGE;
+        chain->TrustStatus.dwErrorStatus |= CERT_TRUST_IS_NOT_VALID_FOR_USAGE;
+    }
+}
+#endif
+
 BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
  PCCERT_CONTEXT pCertContext, LPFILETIME pTime, HCERTSTORE hAdditionalStore,
  PCERT_CHAIN_PARA pChainPara, DWORD dwFlags, LPVOID pvReserved,
@@ -3008,6 +3076,9 @@ BOOL WINAPI CertGetCertificateChain(HCERTCHAINENGINE hChainEngine,
         CRYPT_VerifyChainRevocation(engine, pChain, pTime, hAdditionalStore,
          pChainPara, dwFlags);
         CRYPT_CheckUsages(pChain, pChainPara);
+#ifdef __REACTOS__
+        CRYPT_CheckRootNotBefore(pChain, pChainPara);
+#endif
         TRACE_(chain)("error status: %08lx\n",
          pChain->TrustStatus.dwErrorStatus);
         if (ppChainContext)
