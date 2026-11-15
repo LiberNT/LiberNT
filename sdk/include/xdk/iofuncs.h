@@ -1314,6 +1314,20 @@ IoAllocateErrorLogEntry(
   _In_ PVOID IoObject,
   _In_ UCHAR EntrySize);
 
+#if (NTDDI_VERSION >= NTDDI_WINTHRESHOLD)
+#define DEVICE_WITH_IRP_EXTENSION ((PDEVICE_OBJECT) -1)
+
+_Must_inspect_result_
+_IRQL_requires_max_(DISPATCH_LEVEL)
+NTKERNELAPI
+PIRP
+NTAPI
+IoAllocateIrpEx(
+  _In_ PDEVICE_OBJECT DeviceObject,
+  _In_ CCHAR StackSize,
+  _In_ BOOLEAN ChargeQuota);
+#endif
+
 _Must_inspect_result_
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTKERNELAPI

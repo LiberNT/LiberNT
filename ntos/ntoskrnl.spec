@@ -2429,7 +2429,7 @@
 @ stub -arch=win64 IoAcquireKsrPersistentMemoryEx
 @ stub -arch=win64 IoAddBugcheckTriageThread
 @ stub -arch=win64 IoAdjustStackSizeForRedirection
-@ stub -arch=win64 IoAllocateIrpEx
+@ stdcall IoAllocateIrpEx(ptr long long)
 @ stub -arch=win64 IoAllocateMiniCompletionPacket
 @ stub -arch=win64 IoAllocateSfioStreamIdentifier
 @ stub -arch=win64 IoApplyPriorityInfoThread

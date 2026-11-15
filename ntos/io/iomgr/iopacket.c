@@ -131,7 +131,7 @@ IoInitializeIrp(
     _In_ CCHAR StackSize)
 {
     ASSERT(Irp != NULL);
-    ASSERT(StackSize > 0);
+    ASSERT(StackSize >= 0);
 
     RtlZeroMemory(Irp, PacketSize);
 
@@ -156,7 +156,7 @@ IoAllocateIrp(
     USHORT PacketSize;
     PIRP Irp;
 
-    if (StackSize <= 0) return NULL;
+    if (StackSize < 0) return NULL;
 
     if (StackSize <= IOP_FIXED_STACK_SIZE && !ChargeQuota)
     {
@@ -200,6 +200,27 @@ IoAllocateIrp(
     IoInitializeIrp(Irp, PacketSize, StackSize);
     Irp->AllocationFlags = AllocationFlags;
 
+    return Irp;
+}
+
+PIRP
+NTAPI
+IoAllocateIrpEx(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ CCHAR StackSize,
+    _In_ BOOLEAN ChargeQuota)
+{
+    PIRP Irp = IoAllocateIrp(StackSize, ChargeQuota);
+
+    if (Irp == NULL || DeviceObject != DEVICE_WITH_IRP_EXTENSION) return Irp;
+
+    if (IopGetIrpExtension(Irp, TRUE) == NULL)
+    {
+        IoFreeIrp(Irp);
+        return NULL;
+    }
+
+    ASSERT(Irp->Tail.Overlay.IrpExtension != NULL);
     return Irp;
 }
 
