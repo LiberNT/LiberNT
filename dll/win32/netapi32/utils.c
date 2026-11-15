@@ -72,6 +72,34 @@ done:
 }
 
 
+/* Whether a name is the one of the server's account domain */
+BOOL
+IsAccountDomainName(IN PUNICODE_STRING ServerName,
+                    IN PCUNICODE_STRING DomainName)
+{
+    PPOLICY_ACCOUNT_DOMAIN_INFO AccountDomainInfo = NULL;
+    LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+    LSA_HANDLE PolicyHandle = NULL;
+    BOOL Match = FALSE;
+
+    memset(&ObjectAttributes, 0, sizeof(LSA_OBJECT_ATTRIBUTES));
+
+    if (!NT_SUCCESS(LsaOpenPolicy(ServerName, &ObjectAttributes, POLICY_VIEW_LOCAL_INFORMATION, &PolicyHandle)))
+        return FALSE;
+
+    if (NT_SUCCESS(LsaQueryInformationPolicy(PolicyHandle,
+                                             PolicyAccountDomainInformation,
+                                             (PVOID *)&AccountDomainInfo)))
+    {
+        Match = RtlEqualUnicodeString((PCUNICODE_STRING)&AccountDomainInfo->DomainName, DomainName, TRUE);
+        LsaFreeMemory(AccountDomainInfo);
+    }
+
+    LsaClose(PolicyHandle);
+    return Match;
+}
+
+
 NTSTATUS
 GetBuiltinDomainSid(OUT PSID *BuiltinDomainSid)
 {

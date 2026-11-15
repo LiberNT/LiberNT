@@ -52,6 +52,10 @@ GetAccountDomainSid(IN PUNICODE_STRING ServerName,
 NTSTATUS
 GetBuiltinDomainSid(OUT PSID *BuiltinDomainSid);
 
+BOOL
+IsAccountDomainName(IN PUNICODE_STRING ServerName,
+                    IN PCUNICODE_STRING DomainName);
+
 NTSTATUS
 OpenAccountDomain(IN SAM_HANDLE ServerHandle,
                   IN PUNICODE_STRING ServerName,

@@ -3593,6 +3593,8 @@ NetUserGetLocalGroups(LPCWSTR servername,
 {
     UNICODE_STRING ServerName;
     UNICODE_STRING UserName;
+    UNICODE_STRING DomainName;
+    LPCWSTR Separator;
     SAM_HANDLE ServerHandle = NULL;
     SAM_HANDLE BuiltinDomainHandle = NULL;
     SAM_HANDLE AccountDomainHandle = NULL;
@@ -3634,6 +3636,21 @@ NetUserGetLocalGroups(LPCWSTR servername,
         RtlInitUnicodeString(&ServerName, servername);
 
     RtlInitUnicodeString(&UserName, username);
+
+    /* "DomainName\UserName" names a user of that domain (NetUserGetLocalGroups documentation) */
+    Separator = (username != NULL) ? wcschr(username, L'\\') : NULL;
+    if (Separator != NULL)
+    {
+        DomainName.Buffer = (PWSTR)username;
+        DomainName.Length = (USHORT)((Separator - username) * sizeof(WCHAR));
+        DomainName.MaximumLength = DomainName.Length;
+
+        /* TODO: users of other domains than the server's account domain */
+        if (!IsAccountDomainName((servername != NULL) ? &ServerName : NULL, &DomainName))
+            return NERR_UserNotFound;
+
+        RtlInitUnicodeString(&UserName, Separator + 1);
+    }
 
     /* Connect to the SAM Server */
     Status = SamConnect((servername != NULL) ? &ServerName : NULL,
