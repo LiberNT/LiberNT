@@ -105,6 +105,22 @@ CmpX86ReadBrandString(
     return Length != 0;
 }
 
+/* Windows 11 names the architecture of a 64-bit kernel after the processor's vendor: Intel64 or AMD64 */
+static
+PCSTR
+CmpX86ArchitectureName(
+    _In_ PKPRCB Prcb)
+{
+    C_ASSERT(sizeof(Prcb->VendorString) >= sizeof("GenuineIntel") - 1);
+
+    if (sizeof(PVOID) == sizeof(ULONG))
+        return "x86";
+    if (RtlEqualMemory(Prcb->VendorString, "GenuineIntel", sizeof("GenuineIntel") - 1))
+        return "Intel64";
+    /* TODO: Windows 11's name for a 64-bit processor of a vendor other than Intel and AMD is not measured; AMD64 is the fallback */
+    return "AMD64";
+}
+
 static
 VOID
 CmpX86BuildIdentifier(
@@ -114,7 +130,8 @@ CmpX86BuildIdentifier(
 {
     RtlStringCbPrintfA(Buffer,
                        Size,
-                       "x86 Family %u Model %u Stepping %u",
+                       "%s Family %u Model %u Stepping %u",
+                       CmpX86ArchitectureName(Prcb),
                        (ULONG)(UCHAR)Prcb->CpuType,
                        (ULONG)((Prcb->CpuStep >> 8) & 0xFF),
                        (ULONG)(Prcb->CpuStep & 0xFF));

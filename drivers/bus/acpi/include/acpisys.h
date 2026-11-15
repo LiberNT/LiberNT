@@ -4,9 +4,15 @@
  * PURPOSE: ACPI bus driver definitions
  */
 
-extern UNICODE_STRING ProcessorHardwareIds;
-extern LPWSTR ProcessorIdString;
 extern LPWSTR ProcessorNameString;
+
+NTSTATUS
+AcpiProcessorIdsInitialize(VOID);
+
+NTSTATUS
+AcpiProcessorQueryId(
+    _In_ BUS_QUERY_ID_TYPE IdType,
+    _Out_ PWSTR *Ids);
 
 typedef enum _DEVICE_PNP_STATE {
 

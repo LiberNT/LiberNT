@@ -19,6 +19,7 @@ list(APPEND SOURCE
     ParentIdPrefix.c
     PciBridgeWindows.c
     PciDeviceIds.c
+    ProcessorDeviceIds.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
     SetupDiOpenDeviceInterface.c

@@ -216,6 +216,7 @@ list(APPEND ACPI_SOURCE
     thermal.c
     wake.c
     buspdo.c
+    procids.c
     main.c)
 
 # Note: acpi.sys no longer exports functions.

@@ -3671,6 +3671,26 @@ Bus_PDO_QueryDeviceId(
 
     stack = IoGetCurrentIrpStackLocation(Irp);
 
+    if (stack->Parameters.QueryId.IdType == BusQueryDeviceID ||
+        stack->Parameters.QueryId.IdType == BusQueryHardwareIDs)
+    {
+        if (DeviceData->AcpiHandle)
+            acpi_bus_get_device(DeviceData->AcpiHandle, &Device);
+
+        if (Device != NULL && BuspIsProcessorDevice(Device))
+        {
+            status = AcpiProcessorQueryId(stack->Parameters.QueryId.IdType, &buffer);
+            if (status != STATUS_NOT_FOUND)
+            {
+                if (NT_SUCCESS(status))
+                    Irp->IoStatus.Information = (ULONG_PTR)buffer;
+                return status;
+            }
+            status = STATUS_SUCCESS;
+        }
+        Device = NULL;
+    }
+
     switch (stack->Parameters.QueryId.IdType) {
 
     case BusQueryDeviceID:
@@ -3679,12 +3699,7 @@ Bus_PDO_QueryDeviceId(
         if (DeviceData->AcpiHandle)
             acpi_bus_get_device(DeviceData->AcpiHandle, &Device);
 
-        if (Device && BuspIsProcessorDevice(Device) && ProcessorIdString != NULL)
-        {
-            length = (ULONG)wcslen(ProcessorIdString);
-            wcscpy(temp, ProcessorIdString);
-        }
-        else if (Device && Device->pnp.hardware_id)
+        if (Device && Device->pnp.hardware_id)
         {
             length = (ULONG)swprintf(temp,
                                      RTL_NUMBER_OF(temp),
@@ -3759,31 +3774,23 @@ Bus_PDO_QueryDeviceId(
             DPRINT("Device name: %s\n", Device->pnp.device_name);
             DPRINT("Hardware ID: %s\n", Device->pnp.hardware_id);
 
-            if (BuspIsProcessorDevice(Device) && ProcessorHardwareIds.Buffer != NULL)
-            {
-                length = ProcessorHardwareIds.Length / sizeof(WCHAR);
-                src = ProcessorHardwareIds.Buffer;
-            }
-            else
-            {
-                length += BuspFormatVendorDeviceId(&temp[length],
-                                                   RTL_NUMBER_OF(temp) - length,
-                                                   Device->pnp.hardware_id);
-                length += (ULONG)swprintf(&temp[length],
-                                          RTL_NUMBER_OF(temp) - length,
-                                          L"ACPI\\%hs",
-                                          Device->pnp.hardware_id);
-                temp[length++] = UNICODE_NULL;
+            length += BuspFormatVendorDeviceId(&temp[length],
+                                               RTL_NUMBER_OF(temp) - length,
+                                               Device->pnp.hardware_id);
+            length += (ULONG)swprintf(&temp[length],
+                                      RTL_NUMBER_OF(temp) - length,
+                                      L"ACPI\\%hs",
+                                      Device->pnp.hardware_id);
+            temp[length++] = UNICODE_NULL;
 
-                length += (ULONG)swprintf(&temp[length],
-                                          RTL_NUMBER_OF(temp) - length,
-                                          L"*%hs",
-                                          Device->pnp.hardware_id);
-                temp[length++] = UNICODE_NULL;
-                temp[length++] = UNICODE_NULL;
-                src = temp;
-                NT_ASSERT(length * sizeof(WCHAR) <= sizeof(temp));
-            }
+            length += (ULONG)swprintf(&temp[length],
+                                      RTL_NUMBER_OF(temp) - length,
+                                      L"*%hs",
+                                      Device->pnp.hardware_id);
+            temp[length++] = UNICODE_NULL;
+            temp[length++] = UNICODE_NULL;
+            src = temp;
+            NT_ASSERT(length * sizeof(WCHAR) <= sizeof(temp));
 
             buffer = ExAllocatePoolWithTag(PagedPool, length * sizeof(WCHAR), 'IpcA');
             if (!buffer) { status = STATUS_INSUFFICIENT_RESOURCES; break; }
