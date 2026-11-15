@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     String placement and buffer sizes of QueryServiceConfigW
+ * PURPOSE:     String placement and buffer sizes of QueryServiceConfigW and QueryServiceConfigA
  * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
@@ -27,6 +27,52 @@ static void CheckString(PCSTR Name, PBYTE Base, PCWSTR Actual, PCWSTR Expected, 
     ok((PBYTE)Actual - Base == (LONG_PTR)*Offset, "%s: offset %ld, expected %lu\n", Name, (LONG)((PBYTE)Actual - Base), *Offset);
     ok(memcmp(Actual, Expected, Bytes) == 0, "%s: '%ls', expected '%ls'\n", Name, Actual, Expected);
     *Offset += Bytes;
+}
+
+static void TestReadOnlyTail(SC_HANDLE hService, PCWSTR ServiceName, BOOL Wide)
+{
+    const ULONG Slack = 64;
+    PBYTE Pages, Buffer;
+    DWORD Needed, Old, Writable, i;
+    BOOL ret;
+
+    Needed = 0;
+    ret = Wide ? QueryServiceConfigW(hService, NULL, 0, &Needed) : QueryServiceConfigA(hService, NULL, 0, &Needed);
+    ok(!ret && Needed != 0, "%ls: size query %d needed %lu\n", ServiceName, ret, Needed);
+    if (ret || !Needed)
+        return;
+
+    Pages = VirtualAlloc(NULL, 3 * PAGE_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ok(Pages != NULL, "VirtualAlloc failed, error %lu\n", GetLastError());
+    if (!Pages)
+        return;
+    ok(VirtualProtect(Pages + 2 * PAGE_SIZE, PAGE_SIZE, PAGE_READONLY, &Old), "VirtualProtect failed\n");
+
+    Writable = CONFIG_ALIGN(Needed + Slack);
+    Buffer = Pages + 2 * PAGE_SIZE - Writable;
+    memset(Buffer, 0xcc, Writable);
+    SetLastError(0xdeadbeef);
+    if (Wide)
+        ret = QueryServiceConfigW(hService, (LPQUERY_SERVICE_CONFIGW)Buffer, 8192, &Needed);
+    else
+        ret = QueryServiceConfigA(hService, (LPQUERY_SERVICE_CONFIGA)Buffer, 8192, &Needed);
+    ok(ret, "%ls %c: 8192 bytes ending in a read-only page failed, error %lu\n", ServiceName, Wide ? 'W' : 'A',
+       GetLastError());
+    if (ret)
+    {
+        PBYTE Path = Wide ? (PBYTE)((LPQUERY_SERVICE_CONFIGW)Buffer)->lpBinaryPathName :
+                            (PBYTE)((LPQUERY_SERVICE_CONFIGA)Buffer)->lpBinaryPathName;
+        PBYTE Display = Wide ? (PBYTE)((LPQUERY_SERVICE_CONFIGW)Buffer)->lpDisplayName :
+                               (PBYTE)((LPQUERY_SERVICE_CONFIGA)Buffer)->lpDisplayName;
+        ok(Path >= Buffer && Path < Buffer + Needed, "%ls %c: path at %p, buffer %p needed %lu\n", ServiceName,
+           Wide ? 'W' : 'A', Path, Buffer, Needed);
+        ok(Display >= Buffer && Display < Buffer + Needed, "%ls %c: display name at %p, buffer %p needed %lu\n",
+           ServiceName, Wide ? 'W' : 'A', Display, Buffer, Needed);
+    }
+    for (i = Needed; i < Writable && Buffer[i] == 0xcc; i++);
+    ok(i == Writable, "%ls %c: byte %lu past the %lu needed was written\n", ServiceName, Wide ? 'W' : 'A', i, Needed);
+
+    VirtualFree(Pages, 0, MEM_RELEASE);
 }
 
 static void TestShape(SC_HANDLE hScm, PCWSTR ServiceName, PCWSTR DisplayName, PCWSTR Path, PCWSTR Group,
@@ -71,6 +117,9 @@ static void TestShape(SC_HANDLE hScm, PCWSTR ServiceName, PCWSTR DisplayName, PC
                     (ULONG)((wcslen(DisplayName) + 1) * sizeof(WCHAR)), &Offset);
         ok(Size >= Offset, "%ls: needed %lu, layout ends at %lu\n", ServiceName, Size, Offset);
     }
+
+    TestReadOnlyTail(hService, ServiceName, TRUE);
+    TestReadOnlyTail(hService, ServiceName, FALSE);
 
     DeleteService(hService);
     CloseServiceHandle(hService);
