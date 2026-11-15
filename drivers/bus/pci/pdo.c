@@ -2281,6 +2281,14 @@ PdoQueryCapabilities(
     DeviceCapabilities->Address = ((DeviceNumber << 16) & 0xFFFF0000) + (FunctionNumber & 0xFFFF);
     DeviceCapabilities->UINumber = MAXULONG; /* FIXME */
 
+    /* Windows 11 records 0xC0 (raw device OK, surprise removal OK) for a host bridge and nothing for other functions */
+    if (Device->PciConfig.BaseClass == PCI_CLASS_BRIDGE_DEV &&
+        Device->PciConfig.SubClass == PCI_SUBCLASS_BR_HOST)
+    {
+        DeviceCapabilities->RawDeviceOK = TRUE;
+        DeviceCapabilities->SurpriseRemovalOK = TRUE;
+    }
+
     /*
      * A PCI PDO always maps S0 to D0. Keep the sleep-state mapping
      * conservative until the root bridge supplies platform-specific data.
