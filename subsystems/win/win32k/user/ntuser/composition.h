@@ -116,6 +116,7 @@ NTSTATUS IntCompositionDwmAttach(_In_ PVOID pUser);
 
 /* Called under USER before the exiting process loses its GDI state. */
 VOID IntCompositionCleanupProcess(_In_ PEPROCESS Process);
+VOID IntCompositionUnload(VOID);
 
 /* User-mode dwm.exe frame pull (ONEPARAM_ROUTINE_DWMGETFRAME): fills the
  * dwm-provided buffer with the Z-ordered compositable windows + their backing

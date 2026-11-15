@@ -1109,6 +1109,7 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     // TODO: Do more cleanup!
 
     FreeFontSupport();
+    IntCompositionUnload();
     if (gpDisplaySession)
     {
         ResetCsrApiPort(gpDisplaySession);

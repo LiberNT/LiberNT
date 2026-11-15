@@ -261,8 +261,8 @@ static BOOL            g_DwmPointerComposed = FALSE;
 static BOOL            g_DwmScreenMirror = FALSE;
 static volatile LONG   g_ScreenReadRequest = 0;
 static volatile LONG   g_ScreenReadServed = 0;
-static volatile LONG   g_ScreenReadEventReady = 0;
-static KEVENT          g_ScreenReadEvent;
+/* Waited on with a timeout, so its wait list is touched outside the session: nonpaged pool, not session data */
+static PKEVENT         g_ScreenReadEvent = NULL;
 /* The attached compositor process: every DWM entry point is rejected for
  * anyone else (frame metadata + window surfaces are session-global state). */
 static PEPROCESS       g_DwmProcess = NULL;
@@ -543,7 +543,7 @@ IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
     PDC pdc;
     BOOL Screen;
 
-    if (!g_DwmScreenMirror || hDC == NULL || ExGetPreviousMode() != UserMode ||
+    if (!g_DwmScreenMirror || g_ScreenReadEvent == NULL || hDC == NULL || ExGetPreviousMode() != UserMode ||
         UserIsEntered() || IntCompositionIsAttachedProcess())
     {
         return;
@@ -562,13 +562,13 @@ IntCompositionPrepareScreenRead(_In_opt_ HDC hDC)
     Timeout.QuadPart = -100 * 10000LL;
     for (Attempt = 0; Attempt < 3; ++Attempt)
     {
-        KeClearEvent(&g_ScreenReadEvent);
+        KeClearEvent(g_ScreenReadEvent);
         if ((LONG)(g_ScreenReadServed - Target) >= 0)
         {
             s_MirroredFrame = g_DwmFramePresented;
             return;
         }
-        if (KeWaitForSingleObject(&g_ScreenReadEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
+        if (KeWaitForSingleObject(g_ScreenReadEvent, Executive, KernelMode, FALSE, &Timeout) == STATUS_TIMEOUT)
             return;
     }
 }
@@ -3122,7 +3122,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     if (Input.ScreenReadServed != 0)
     {
         InterlockedExchange(&g_ScreenReadServed, (LONG)Input.ScreenReadServed);
-        KeSetEvent(&g_ScreenReadEvent, IO_NO_INCREMENT, FALSE);
+        ASSERT(g_ScreenReadEvent != NULL);
+        KeSetEvent(g_ScreenReadEvent, IO_NO_INCREMENT, FALSE);
     }
     if (g_ScreenReadRequest != g_ScreenReadServed)
         Frame.ScreenReadRequest = (ULONG)g_ScreenReadRequest;
@@ -3867,6 +3868,15 @@ DxgkEngRefreshComposition(VOID)
 }
 
 VOID
+IntCompositionUnload(VOID)
+{
+    PKEVENT ScreenReadEvent = InterlockedExchangePointer((PVOID *)&g_ScreenReadEvent, NULL);
+
+    if (ScreenReadEvent != NULL)
+        ExFreePoolWithTag(ScreenReadEvent, 'rSwD');
+}
+
+VOID
 IntCompositionCleanupProcess(_In_ PEPROCESS Process)
 {
     PWND Desktop;
@@ -3943,8 +3953,16 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
     NTSTATUS Status = STATUS_SUCCESS;
     NTSTATUS RegisterStatus;
 
-    if (InterlockedCompareExchange(&g_ScreenReadEventReady, 1, 0) == 0)
-        KeInitializeEvent(&g_ScreenReadEvent, NotificationEvent, FALSE);
+    if (g_ScreenReadEvent == NULL)
+    {
+        PKEVENT ScreenReadEvent = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*ScreenReadEvent), 'rSwD');
+
+        if (ScreenReadEvent == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        KeInitializeEvent(ScreenReadEvent, NotificationEvent, FALSE);
+        if (InterlockedCompareExchangePointer((PVOID *)&g_ScreenReadEvent, ScreenReadEvent, NULL) != NULL)
+            ExFreePoolWithTag(ScreenReadEvent, 'rSwD');
+    }
 
     _SEH2_TRY
     {
