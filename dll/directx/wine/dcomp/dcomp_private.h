@@ -83,6 +83,57 @@ struct IDCompositionVisual
     const IDCompositionVisualVtbl *lpVtbl;
 };
 
+typedef struct IDCompositionRectangleClipVtbl
+{
+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDCompositionRectangleClip *, REFIID, void **);
+    ULONG (STDMETHODCALLTYPE *AddRef)(IDCompositionRectangleClip *);
+    ULONG (STDMETHODCALLTYPE *Release)(IDCompositionRectangleClip *);
+    HRESULT (STDMETHODCALLTYPE *SetLeftAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetLeft)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetTopAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetTop)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetRightAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetRight)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetBottomAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetBottom)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetTopLeftRadiusXAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetTopLeftRadiusX)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetTopLeftRadiusYAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetTopLeftRadiusY)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetTopRightRadiusXAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetTopRightRadiusX)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetTopRightRadiusYAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetTopRightRadiusY)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetBottomLeftRadiusXAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetBottomLeftRadiusX)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetBottomLeftRadiusYAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetBottomLeftRadiusY)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetBottomRightRadiusXAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetBottomRightRadiusX)(IDCompositionRectangleClip *, float);
+    HRESULT (STDMETHODCALLTYPE *SetBottomRightRadiusYAnimation)(IDCompositionRectangleClip *, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetBottomRightRadiusY)(IDCompositionRectangleClip *, float);
+} IDCompositionRectangleClipVtbl;
+
+struct IDCompositionRectangleClip
+{
+    const IDCompositionRectangleClipVtbl *lpVtbl;
+};
+
+typedef struct IDCompositionMatrixTransformVtbl
+{
+    HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDCompositionMatrixTransform *, REFIID, void **);
+    ULONG (STDMETHODCALLTYPE *AddRef)(IDCompositionMatrixTransform *);
+    ULONG (STDMETHODCALLTYPE *Release)(IDCompositionMatrixTransform *);
+    HRESULT (STDMETHODCALLTYPE *SetMatrix)(IDCompositionMatrixTransform *, const void *);
+    HRESULT (STDMETHODCALLTYPE *SetMatrixElementAnimation)(IDCompositionMatrixTransform *, int, int, IDCompositionAnimation *);
+    HRESULT (STDMETHODCALLTYPE *SetMatrixElement)(IDCompositionMatrixTransform *, int, int, float);
+} IDCompositionMatrixTransformVtbl;
+
+struct IDCompositionMatrixTransform
+{
+    const IDCompositionMatrixTransformVtbl *lpVtbl;
+};
+
 typedef struct IDCompositionTargetVtbl
 {
     HRESULT (STDMETHODCALLTYPE *QueryInterface)(IDCompositionTarget *, REFIID, void **);
