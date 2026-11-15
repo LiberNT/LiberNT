@@ -207,6 +207,17 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
             "$<TARGET_FILE:ntfslib_fuse>"
             ${_ntfslib_format_4k_reference}
     )
+    add_test(
+        NAME ntfslib_linux_index_record_full
+        COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/index_record_full_smoke.sh"
+            "$<TARGET_FILE:ntfslib_fuse>"
+            "$<TARGET_FILE:ntfslib_format_image>"
+    )
+    set_tests_properties(
+        ntfslib_linux_index_record_full
+        PROPERTIES TIMEOUT 600
+    )
     if(WIM_LIBRARY)
         add_executable(ntfslib_wof_fixture
             tests/wof_fixture.cpp

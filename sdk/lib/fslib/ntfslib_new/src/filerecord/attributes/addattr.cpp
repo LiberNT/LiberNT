@@ -1612,6 +1612,7 @@ FileRecord::CreateInitialAttributeList(_In_opt_ PAttribute GrowingData)
     PAttribute EaCandidate = NULL;
     PAttribute EaInformationCandidate = NULL;
     PAttribute FallbackCandidate = NULL;
+    PAttribute IndexCandidate = NULL;
     PAttribute ListAttribute = NULL;
     PAttribute MovedAttributes[2] = {};
     PFileRecord Extension = NULL;
@@ -1734,6 +1735,15 @@ FileRecord::CreateInitialAttributeList(_In_opt_ PAttribute GrowingData)
         {
             DataCandidate = Attribute;
         }
+        else if (Attribute->IsNonResident &&
+                 Attribute->AttributeType == TypeIndexAllocation &&
+                 Attribute->Flags == 0 &&
+                 Attribute->NonResident.FirstVCN == 0 &&
+                 (!IndexCandidate ||
+                  Attribute->Length > IndexCandidate->Length))
+        {
+            IndexCandidate = Attribute;
+        }
         else if (!Attribute->IsNonResident &&
                  Attribute->AttributeType ==
                     TypeEAInformation &&
@@ -1804,6 +1814,13 @@ FileRecord::CreateInitialAttributeList(_In_opt_ PAttribute GrowingData)
     {
         Candidates[CandidateCount++] =
             DataCandidate;
+    }
+    if (CandidateCount == 0 &&
+        BaseFull &&
+        IndexCandidate)
+    {
+        Candidates[CandidateCount++] =
+            IndexCandidate;
     }
     if (CandidateCount == 0 &&
         BaseFull)

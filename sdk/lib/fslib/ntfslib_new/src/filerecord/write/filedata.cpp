@@ -2903,6 +2903,8 @@ RestoreResident:
                         STATUS_BUFFER_TOO_SMALL;
                 }
             }
+            if (AttributeOwner != this)
+                ClearDataRunCache();
             if (NT_SUCCESS(Status))
             {
                 *Length = RequestedLength;
