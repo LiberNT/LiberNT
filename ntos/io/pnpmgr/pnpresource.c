@@ -561,7 +561,7 @@ IopPickBootSetting(
                 Candidate = *Descriptor;
                 Candidate.u.Generic.Start.QuadPart = (LONGLONG)Start;
 
-                if (!IopResDbCheckDescriptor(&Candidate, DeviceNode, Claimant, NULL) &&
+                if (!IopResDbCheckBootDescriptor(&Candidate, DeviceNode, Claimant) &&
                     !IopResDbConflictsWithChosen(&Candidate, DeviceNode, Chosen, ChosenCount))
                 {
                     *Descriptor = Candidate;

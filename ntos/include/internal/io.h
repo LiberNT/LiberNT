@@ -886,6 +886,8 @@ IopUpdateControlKeyWithResources(
 
 BOOLEAN
 IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting);
+BOOLEAN
+IopResDbCheckBootDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant);
 
 NTSTATUS
 IopResDbReplaceClaim(

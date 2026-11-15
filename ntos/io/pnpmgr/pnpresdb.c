@@ -38,6 +38,7 @@ typedef struct _PI_RES_BUCKET
 KMUTEX IopResourceAssignmentLock;
 
 static PI_RES_BUCKET IopResBuckets[PiResClassMax];
+static UCHAR IopResDbHalReport;
 static BOOLEAN IopResDbReady = FALSE;
 static volatile LONG IopResDbSeedState = 0;
 static KEVENT IopResDbSeededEvent;
@@ -275,8 +276,10 @@ IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST Resourc
 }
 
 /* Check one candidate descriptor against the database; returns the conflicting entry. */
+static
 BOOLEAN
-IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
+IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant,
+              _In_ BOOLEAN IgnoreHalReport, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
 {
     PI_RES_CLASS cls;
     PLIST_ENTRY le;
@@ -306,6 +309,8 @@ IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_
             continue;
         if (Claimant != NULL && entry->Claimant == Claimant)
             continue;
+        if (IgnoreHalReport && entry->Claimant == &IopResDbHalReport)
+            continue;
         if (IopResDbConflict(Candidate, CandidateOwner, &entry->Desc, entry->Owner))
         {
             if (Conflicting)
@@ -316,6 +321,19 @@ IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_
     }
     KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
     return found;
+}
+
+BOOLEAN
+IopResDbCheckDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
+{
+    return IopResDbCheck(Candidate, CandidateOwner, Claimant, FALSE, Conflicting);
+}
+
+/* Windows 11 gives a device the boot configuration its firmware describes even where the HAL reports the same range */
+BOOLEAN
+IopResDbCheckBootDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant)
+{
+    return IopResDbCheck(Candidate, CandidateOwner, Claimant, TRUE, NULL);
 }
 
 BOOLEAN
@@ -560,7 +578,7 @@ IopResDbSeedFromRegistry(VOID)
                 /* Only raw lists; skip translated copies */
                 list = (PCM_RESOURCE_LIST)value->Data;
                 if (wcsstr(valueName->Name, L".Translated") == NULL && value->Type == REG_RESOURCE_LIST && IopIsResourceListValid(list, value->DataLength) && list->Count != 0)
-                    IopResDbReserveList(NULL, NULL, list, halKey, NULL);
+                    IopResDbReserveList(NULL, halKey ? &IopResDbHalReport : NULL, list, halKey, NULL);
 
                 ExFreePoolWithTag(valueName, TAG_IO);
                 ExFreePoolWithTag(value, TAG_IO);
