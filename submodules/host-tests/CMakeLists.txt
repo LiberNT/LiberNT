@@ -22,6 +22,7 @@ option(HOST_TEST_NDIS "Build native NDIS WDI tests" ON)
 option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
 option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
 option(HOST_TEST_USB "Build native USB host controller tests" ON)
+option(HOST_TEST_STORPORT "Build native Storport tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
@@ -33,6 +34,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_USB)
     add_subdirectory(usb)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_STORPORT)
+    add_subdirectory(storport)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_NDIS)

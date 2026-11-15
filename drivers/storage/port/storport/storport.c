@@ -360,7 +360,8 @@ PortMiniportTimerDpc(
 
     OldIrql = PortAcquireTimerLock(DeviceExtension);
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(OldIrql == DISPATCH_LEVEL);
+    ASSERT(KeGetCurrentIrql() == max((KIRQL)DISPATCH_LEVEL, (KIRQL)DeviceExtension->InterruptIrql));
 
     if (DeviceExtension->MiniportTimerArmed)
     {
