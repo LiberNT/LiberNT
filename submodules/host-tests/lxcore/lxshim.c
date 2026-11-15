@@ -282,6 +282,16 @@ LxTmpfsFileInode(PLX_FILE File)
     return NULL;
 }
 
+VOID
+LxTmpfsFileAccessed(PLX_FILE File)
+{
+}
+
+VOID
+LxTmpfsFileModified(PLX_FILE File)
+{
+}
+
 ULONG64
 LxTmpfsInodeSize(PLX_TMPFS_INODE Inode)
 {

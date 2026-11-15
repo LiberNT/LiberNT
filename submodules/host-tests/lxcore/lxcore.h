@@ -510,6 +510,8 @@ ULONG LxMmReleaseKeyedViews(_In_ PVOID Key, _In_opt_ VOID (*Visit)(_In_ PVOID Co
 ULONG64 LxTmpfsInodeSize(_In_ PLX_TMPFS_INODE Inode);
 LONG LxTmpfsInodeRemoveRange(_In_ PLX_TMPFS_INODE Inode, _In_ ULONG64 Start, _In_ ULONG64 End);
 PLX_TMPFS_INODE LxTmpfsFileInode(_In_opt_ PLX_FILE File);
+VOID LxTmpfsFileAccessed(_In_ PLX_FILE File);
+VOID LxTmpfsFileModified(_In_ PLX_FILE File);
 NTSTATUS LxFillRandom(_Out_writes_bytes_(Length) PUCHAR Buffer, _In_ ULONG Length);
 VOID LxArchMmapRndBits(_Out_ PULONG Minimum, _Out_ PULONG Maximum);
 ULONG64 LxArchStackRndMask(VOID);
