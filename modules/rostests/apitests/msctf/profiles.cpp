@@ -9,6 +9,7 @@
 
 static const CLSID CLSID_TestTip = {0x6b3a3f10, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
 static const GUID GUID_TestProfile = {0x6b3a3f11, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
+static const GUID GUID_TestProfile2 = {0x6b3a3f12, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
 static const WCHAR s_szTipKey[] = L"SOFTWARE\\Microsoft\\CTF\\TIP\\{6B3A3F10-51D2-4C1E-9A37-1F528C0E4D71}";
 static const WCHAR s_szProfileKey[] =
     L"SOFTWARE\\Microsoft\\CTF\\TIP\\{6B3A3F10-51D2-4C1E-9A37-1F528C0E4D71}\\LanguageProfile\\0x00000411\\"
@@ -68,6 +69,34 @@ static void Cleanup(ITfInputProcessorProfiles *pProfiles)
 {
     pProfiles->Unregister(CLSID_TestTip);
     RegDeleteTreeW(HKEY_CURRENT_USER, s_szTipKey);
+}
+
+static void TestEnumOneByOne(ITfInputProcessorProfiles *pProfiles)
+{
+    IEnumTfLanguageProfiles *pEnum = NULL;
+    TF_LANGUAGEPROFILE profile;
+    ULONG cFetched, cFirst = 0, cSecond = 0, cOther = 0;
+    HRESULT hr;
+
+    hr = pProfiles->AddLanguageProfile(CLSID_TestTip, 0x0411, GUID_TestProfile2, L"Test 2", 6, NULL, 0, 0);
+    ok_hr(hr, S_OK);
+    hr = pProfiles->EnumLanguageProfiles(0x0411, &pEnum);
+    ok_hr(hr, S_OK);
+    if (FAILED(hr) || !pEnum)
+        return;
+    while (pEnum->Next(1, &profile, &cFetched) == S_OK && cFetched == 1)
+    {
+        if (IsEqualGUID(profile.guidProfile, GUID_TestProfile))
+            ok(IsEqualCLSID(profile.clsid, CLSID_TestTip) && cFirst++ == 0, "the first test profile is wrong\n");
+        else if (IsEqualGUID(profile.guidProfile, GUID_TestProfile2))
+            ok(IsEqualCLSID(profile.clsid, CLSID_TestTip) && cSecond++ == 0, "the second test profile is wrong\n");
+        else if (IsEqualCLSID(profile.clsid, CLSID_TestTip))
+            ++cOther;
+    }
+    pEnum->Release();
+    ok_long(cFirst, 1);
+    ok_long(cSecond, 1);
+    ok_long(cOther, 0);
 }
 
 class CLanguageSink : public ITfLanguageProfileNotifySink
@@ -207,6 +236,7 @@ START_TEST(profiles)
     hr = pProfiles->AddLanguageProfile(CLSID_TestTip, 0x0411, GUID_TestProfile, L"Test", 4, NULL, 0, 0);
     ok_hr(hr, S_OK);
     check_enabled(pProfiles, TRUE, ENABLE_ABSENT, ENABLE_NOKEY);
+    TestEnumOneByOne(pProfiles);
 
     hr = pProfiles->EnableLanguageProfile(CLSID_TestTip, 0x0411, GUID_TestProfile, TRUE);
     ok_hr(hr, S_OK);
