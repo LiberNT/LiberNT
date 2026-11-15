@@ -832,6 +832,29 @@ PiIsDeviceConfigured(
     return Configured;
 }
 
+#if DBG
+static
+BOOLEAN
+PiStackHoldsListedDriver(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _In_ const PI_DRIVER_LIST *List)
+{
+    PDEVICE_OBJECT Device;
+    BOOLEAN Found = FALSE;
+    KIRQL OldIrql;
+    ULONG Index;
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    for (Device = PhysicalDeviceObject->AttachedDevice; Device != NULL && !Found; Device = Device->AttachedDevice)
+    {
+        for (Index = 0; Index < List->Count && !Found; Index++)
+            Found = (Device->DriverObject == List->Drivers[Index]);
+    }
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+    return Found;
+}
+#endif
+
 static
 NTSTATUS
 PiAttachDeviceDrivers(
@@ -894,8 +917,8 @@ PiAttachDeviceDrivers(
         List.Count = 0;
     }
 
-    /* Drivers are added to a bare device only: a failed stack was removed before the device starts over */
-    ASSERT(!NT_SUCCESS(Status) || List.Count == 0 || DeviceNode->PhysicalDeviceObject->AttachedDevice == NULL);
+    /* A bus filter may already hold a PDO filter here; a failed stack of the device's own drivers was removed */
+    ASSERT(!NT_SUCCESS(Status) || !PiStackHoldsListedDriver(DeviceNode->PhysicalDeviceObject, &List));
 
     for (Index = 0; NT_SUCCESS(Status) && Index < List.Count; Index++)
     {
