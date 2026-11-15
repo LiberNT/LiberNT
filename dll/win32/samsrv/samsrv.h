@@ -383,6 +383,10 @@ SampCreateUserSD(IN PSID UserSid,
 BOOL
 SampInitializeSAM(VOID);
 
+VOID
+SampSetupAddMissingBuiltinAliases(
+    IN HANDLE hServerKey);
+
 
 /* user.c */
 

@@ -891,6 +891,50 @@ SampGetAccountDomainInfo(PPOLICY_ACCOUNT_DOMAIN_INFO *AccountDomainInfo)
 }
 
 
+/* A database created before client editions got the performance aliases is given them, as Windows 11 clients have both */
+VOID
+SampSetupAddMissingBuiltinAliases(
+    IN HANDLE hServerKey)
+{
+    static const struct
+    {
+        ULONG RelativeId;
+        UINT NameId;
+        UINT CommentId;
+    } Aliases[] =
+    {
+        { DOMAIN_ALIAS_RID_MONITORING_USERS, IDS_ALIAS_MONITORING_USERS_NAME, IDS_ALIAS_MONITORING_USERS_COMMENT },
+        { DOMAIN_ALIAS_RID_LOGGING_USERS, IDS_ALIAS_LOGGING_USERS_NAME, IDS_ALIAS_LOGGING_USERS_COMMENT },
+    };
+    HINSTANCE hInstance = GetModuleHandleW(L"samsrv.dll");
+    HANDLE hBuiltinDomainKey = NULL;
+    HANDLE hAliasKey = NULL;
+    WCHAR szKeyName[32];
+    WCHAR szComment[256];
+    WCHAR szName[80];
+    ULONG Index;
+
+    if (!NT_SUCCESS(SampRegOpenKey(hServerKey, L"Domains\\Builtin", KEY_ALL_ACCESS, &hBuiltinDomainKey)))
+        return;
+
+    for (Index = 0; Index < ARRAYSIZE(Aliases); Index++)
+    {
+        _swprintf(szKeyName, L"Aliases\\%08lX", Aliases[Index].RelativeId);
+        if (NT_SUCCESS(SampRegOpenKey(hBuiltinDomainKey, szKeyName, KEY_READ, &hAliasKey)))
+        {
+            SampRegCloseKey(&hAliasKey);
+            continue;
+        }
+
+        SampLoadString(hInstance, Aliases[Index].NameId, szName, ARRAYSIZE(szName));
+        SampLoadString(hInstance, Aliases[Index].CommentId, szComment, ARRAYSIZE(szComment));
+        SampSetupCreateAliasAccount(hBuiltinDomainKey, szName, szComment, Aliases[Index].RelativeId);
+    }
+
+    SampRegCloseKey(&hBuiltinDomainKey);
+}
+
+
 BOOL
 SampInitializeSAM(VOID)
 {
