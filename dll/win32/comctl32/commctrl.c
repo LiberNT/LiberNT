@@ -169,9 +169,17 @@ static void unregister_classes(void)
 
         wcscpy(versioned_class, L"6.0.2600.2982!");
         wcscat(versioned_class, classes[i].nameW);
+#ifdef __REACTOS__
+        UnregisterClassW(versioned_class, COMCTL32_hModule);
+#else
         UnregisterClassW(versioned_class, NULL);
+#endif
+#else
+#ifdef __REACTOS__
+        UnregisterClassW(classes[i].nameW, COMCTL32_hModule);
 #else
         UnregisterClassW(classes[i].nameW, NULL);
+#endif
 #endif
     }
 }
