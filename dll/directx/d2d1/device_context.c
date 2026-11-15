@@ -297,7 +297,8 @@ static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateSharedBitmap(ID2D1Devi
     if (desc)
     {
         memcpy(&bitmap_desc, desc, sizeof(*desc));
-        if (IsEqualIID(iid, &IID_IDXGISurface) || IsEqualIID(iid, &IID_IDXGISurface1))
+        if (IsEqualIID(iid, &IID_IDXGISurface) || IsEqualIID(iid, &IID_IDXGISurface1)
+                || IsEqualIID(iid, &IID_IDXGISurface2))
             bitmap_desc.bitmapOptions = d2d_get_bitmap_options_for_surface(data);
         else
             bitmap_desc.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;

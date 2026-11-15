@@ -1379,6 +1379,42 @@ static IDXGISwapChain *create_swapchain(IDXGIDevice *device, HWND window, BOOL w
     return swapchain;
 }
 
+static IDXGISurface *create_surface(IDXGIDevice *dxgi_device, unsigned int width,
+        unsigned int height, unsigned int bind_flags, unsigned int misc_flags, DXGI_FORMAT format)
+{
+    D3D10_TEXTURE2D_DESC texture_desc;
+    ID3D10Texture2D *texture;
+    ID3D10Device *d3d_device;
+    IDXGISurface *surface;
+    HRESULT hr;
+
+    texture_desc.Width = width;
+    texture_desc.Height = height;
+    texture_desc.MipLevels = 1;
+    texture_desc.ArraySize = 1;
+    texture_desc.Format = format;
+    texture_desc.SampleDesc.Count = 1;
+    texture_desc.SampleDesc.Quality = 0;
+    texture_desc.Usage = D3D10_USAGE_DEFAULT;
+    texture_desc.BindFlags = bind_flags;
+    texture_desc.CPUAccessFlags = 0;
+    texture_desc.MiscFlags = misc_flags;
+
+    hr = IDXGIDevice_QueryInterface(dxgi_device, &IID_ID3D10Device, (void **)&d3d_device);
+    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+
+    hr = ID3D10Device_CreateTexture2D(d3d_device, &texture_desc, NULL, &texture);
+    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+
+    hr = ID3D10Texture2D_QueryInterface(texture, &IID_IDXGISurface, (void **)&surface);
+    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+
+    ID3D10Device_Release(d3d_device);
+    ID3D10Texture2D_Release(texture);
+
+    return surface;
+}
+
 static IDXGISwapChain *create_d3d10_swapchain(ID3D10Device1 *device, HWND window, BOOL windowed)
 {
     IDXGISwapChain *swapchain;
@@ -5560,6 +5596,8 @@ static void test_shared_bitmap(BOOL d3d11)
     IWICBitmapLock *wic_lock;
     IDXGISurface1 *surface3;
     IDXGISurface2 *surface4;
+    IDXGISurface *surface5;
+    IDXGIDevice *device3;
     ID2D1Bitmap1 *bitmap3;
     ID2D1Device *device;
     WICRect wic_rect;
@@ -5763,6 +5801,24 @@ static void test_shared_bitmap(BOOL d3d11)
         if (SUCCEEDED(hr))
             ID2D1Bitmap_Release(bitmap2);
         IDXGISurface2_Release(surface4);
+
+        hr = IDXGISurface_GetDevice(surface2, &IID_IDXGIDevice, (void **)&device3);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        surface5 = create_surface(device3, 4, 4, D3D10_BIND_RENDER_TARGET | D3D10_BIND_SHADER_RESOURCE,
+                0, DXGI_FORMAT_B8G8R8A8_UNORM);
+        IDXGIDevice_Release(device3);
+        hr = ID2D1RenderTarget_CreateSharedBitmap(rt2, &IID_IDXGISurface, surface5, &bitmap_desc, &bitmap2);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        check_bitmap_surface(bitmap2, TRUE, D2D1_BITMAP_OPTIONS_TARGET);
+        ID2D1Bitmap_Release(bitmap2);
+        hr = IDXGISurface_QueryInterface(surface5, &IID_IDXGISurface2, (void **)&surface4);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        hr = ID2D1RenderTarget_CreateSharedBitmap(rt2, &IID_IDXGISurface2, surface4, &bitmap_desc, &bitmap2);
+        ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
+        check_bitmap_surface(bitmap2, TRUE, D2D1_BITMAP_OPTIONS_TARGET);
+        ID2D1Bitmap_Release(bitmap2);
+        IDXGISurface2_Release(surface4);
+        IDXGISurface_Release(surface5);
 
         for (i = 0; i < ARRAY_SIZE(bitmap_format_tests); ++i)
         {
@@ -7187,42 +7243,6 @@ static void test_hwnd_target_gdi_interop(BOOL d3d11)
 
     DestroyWindow(hwnd_rt_desc.hwnd);
     release_test_context(&ctx);
-}
-
-static IDXGISurface *create_surface(IDXGIDevice *dxgi_device, unsigned int width,
-        unsigned int height, unsigned int bind_flags, unsigned int misc_flags, DXGI_FORMAT format)
-{
-    D3D10_TEXTURE2D_DESC texture_desc;
-    ID3D10Texture2D *texture;
-    ID3D10Device *d3d_device;
-    IDXGISurface *surface;
-    HRESULT hr;
-
-    texture_desc.Width = width;
-    texture_desc.Height = height;
-    texture_desc.MipLevels = 1;
-    texture_desc.ArraySize = 1;
-    texture_desc.Format = format;
-    texture_desc.SampleDesc.Count = 1;
-    texture_desc.SampleDesc.Quality = 0;
-    texture_desc.Usage = D3D10_USAGE_DEFAULT;
-    texture_desc.BindFlags = bind_flags;
-    texture_desc.CPUAccessFlags = 0;
-    texture_desc.MiscFlags = misc_flags;
-
-    hr = IDXGIDevice_QueryInterface(dxgi_device, &IID_ID3D10Device, (void **)&d3d_device);
-    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
-
-    hr = ID3D10Device_CreateTexture2D(d3d_device, &texture_desc, NULL, &texture);
-    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
-
-    hr = ID3D10Texture2D_QueryInterface(texture, &IID_IDXGISurface, (void **)&surface);
-    ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
-
-    ID3D10Device_Release(d3d_device);
-    ID3D10Texture2D_Release(texture);
-
-    return surface;
 }
 
 static void test_dxgi_surface_target_gdi_interop(BOOL d3d11)
