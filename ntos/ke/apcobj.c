@@ -267,6 +267,7 @@ KeInsertQueueApc(
 {
     KLOCK_QUEUE_HANDLE ApcLock;
     PKTHREAD Thread = Apc->Thread;
+    KPROCESSOR_MODE ApcMode = Apc->ApcMode;
     BOOLEAN Inserted = FALSE;
 
     ASSERT_APC(Apc);
@@ -286,6 +287,17 @@ KeInsertQueueApc(
 
     /* Whatever the insertion readied is dispatched on the way out */
     KiExitDispatcher(ApcLock.OldIrql);
+
+    /* A kernel APC for the calling thread at PASSIVE_LEVEL runs before this returns, not when the interrupt it asked for arrives */
+    if (Inserted &&
+        (Thread == KeGetCurrentThread()) &&
+        (ApcLock.OldIrql == PASSIVE_LEVEL) &&
+        (ApcMode == KernelMode) &&
+        (Thread->SpecialApcDisable == 0) &&
+        Thread->ApcState.KernelApcPending)
+    {
+        KiCheckForKernelApcDelivery();
+    }
 
     return Inserted;
 }

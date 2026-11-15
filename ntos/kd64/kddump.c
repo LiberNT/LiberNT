@@ -248,6 +248,9 @@ static NTSTATUS KdpSendDeviceIoControl(_In_ PDEVICE_OBJECT DeviceObject, _In_ UL
     PIRP Irp;
     NTSTATUS Status;
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(!KeAreAllApcsDisabled());
+
     KeInitializeEvent(&Event, NotificationEvent, FALSE);
     Irp = IoBuildDeviceIoControlRequest(ControlCode, DeviceObject, InputBuffer, InputLength, OutputBuffer, OutputLength, FALSE, &Event, &IoStatus);
     if (Irp == NULL)
@@ -259,6 +262,7 @@ static NTSTATUS KdpSendDeviceIoControl(_In_ PDEVICE_OBJECT DeviceObject, _In_ UL
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
         Status = IoStatus.Status;
     }
+    ASSERT(NT_ERROR(Status) || KeReadStateEvent(&Event) != 0);
 
     return Status;
 }

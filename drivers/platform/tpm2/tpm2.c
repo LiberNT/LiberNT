@@ -303,6 +303,7 @@ Tpm2SendIoctlSynchronously(
         KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
         Status = IoStatus.Status;
     }
+    ASSERT(NT_ERROR(Status) || KeReadStateEvent(&Event) != 0);
     *Information = IoStatus.Information;
     return Status;
 }
