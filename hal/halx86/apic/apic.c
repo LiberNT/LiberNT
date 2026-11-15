@@ -598,7 +598,7 @@ HalpAllocateSystemInterrupt(
     IOAPIC_REDIRECTION_REGISTER ReDirReg;
 
     ASSERT(Irq < HalpIoApicMaxIrq);
-    ASSERT(HalpVectorToIndex[Vector] == APIC_FREE_VECTOR);
+    ASSERT(HalpVectorToIndex[Vector] == APIC_FREE_VECTOR || HalpVectorToIndex[Vector] == APIC_RESERVED_VECTOR);
 
     /* Setup a redirection entry. Use fixed physical delivery: lowest-priority logical delivery can land the vector on a CPU whose IDT was never patched by KeConnectInterrupt, where it would be swallowed by KiUnexpectedInterrupt. */
     ReDirReg.Vector = Vector;
@@ -685,8 +685,14 @@ HalpGetRootInterruptVector(
 
         if (Vector == 0)
         {
-            DPRINT1("HalpGetRootInterruptVector: spillover vector window exhausted for GSI %lu\n", BusInterruptLevel);
-            goto Reject;
+            KAFFINITY PoolAffinity;
+
+            /* The window is full: the line keeps a vector of the pool message interrupts are served from */
+            if (!HalpAllocateMsiVector(CLOCK_LEVEL - 1, &Vector, OutIrql, &PoolAffinity))
+            {
+                DPRINT1("HalpGetRootInterruptVector: no vector left for GSI %lu\n", BusInterruptLevel);
+                goto Reject;
+            }
         }
 
         Vector = HalpAllocateSystemInterrupt((UCHAR)BusInterruptLevel, Vector);
