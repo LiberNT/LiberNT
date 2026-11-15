@@ -132,6 +132,7 @@ RtlIdentifyDevice(
                                                           sizeof(Revision));
             return Revision >= RTL_REVISION_8139_CPLUS ? RtlFamily8139 : RtlFamilyNone;
 
+        case 0x8125:
         case 0x8136:
         case 0x8161:
         case 0x8167:
@@ -156,11 +157,27 @@ RtlGetHardwareContextSize(
 
 static
 VOID
+RtlDisableInterrupts(
+    _In_ PRTL_ADAPTER Adapter)
+{
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+    {
+        RtlWrite32(Adapter, RTL_REG_IMR_8125, 0);
+        RtlWrite32(Adapter, RTL_REG_ISR_8125, 0xFFFFFFFF);
+        return;
+    }
+
+    RtlWrite16(Adapter, RTL_REG_IMR, 0);
+    RtlWrite16(Adapter, RTL_REG_ISR, 0xFFFF);
+}
+
+static
+VOID
 RtlUpdateLink(
     _In_ PRTL_ADAPTER Adapter)
 {
     PKDNET_SHARED_DATA KdNet = Adapter->KdNet;
-    UCHAR Status;
+    USHORT Status;
 
     if (Adapter->Family == RtlFamily8139)
     {
@@ -177,14 +194,17 @@ RtlUpdateLink(
         return;
     }
 
-    Status = RtlRead8(Adapter, RTL_REG_PHYSTATUS_8169);
+    Status = (Adapter->ChipFlags & RTL_CHIP_8125) ? RtlRead16(Adapter, RTL_REG_PHYSTATUS_8169)
+                                                  : RtlRead8(Adapter, RTL_REG_PHYSTATUS_8169);
     if (!(Status & RTL_PHYSTATUS_LINK))
     {
         *KdNet->LinkState = 0;
         return;
     }
 
-    if (Status & RTL_PHYSTATUS_10M)
+    if (Status & RTL_PHYSTATUS_2500M)
+        KdNet->LinkSpeed = 2500;
+    else if (Status & RTL_PHYSTATUS_10M)
         KdNet->LinkSpeed = 10;
     else if (Status & RTL_PHYSTATUS_100M)
         KdNet->LinkSpeed = 100;
@@ -221,6 +241,13 @@ typedef struct _RTL_CHIP
 
 static const RTL_CHIP RtlChips[] =
 {
+    { 0x7CF, 0x609, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x641, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x681, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x688, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x689, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x68A, RTL_CHIP_GATED | RTL_CHIP_8125 },
+    { 0x7CF, 0x708, RTL_CHIP_GATED | RTL_CHIP_8125 },
     { 0x7CF, 0x54B, RTL_CHIP_MULTI | RTL_CHIP_EXTENDED | RTL_CHIP_GATED },
     { 0x7CF, 0x54A, RTL_CHIP_MULTI | RTL_CHIP_EXTENDED | RTL_CHIP_GATED },
     { 0x7CF, 0x502, RTL_CHIP_MULTI | RTL_CHIP_EXTENDED | RTL_CHIP_GATED },
@@ -390,6 +417,93 @@ RtlWritePhy(
 
 static
 VOID
+RtlModifyController(
+    _In_ PRTL_ADAPTER Adapter,
+    _In_ ULONG Register,
+    _In_ USHORT Clear,
+    _In_ USHORT Set)
+{
+    RtlWriteController(Adapter, Register, (USHORT)((RtlReadController(Adapter, Register) & ~Clear) | Set));
+}
+
+typedef struct _RTL_CONTROLLER_UPDATE
+{
+    USHORT Register;
+    USHORT Clear;
+    USHORT Set;
+} RTL_CONTROLLER_UPDATE;
+
+static const RTL_CONTROLLER_UPDATE Rtl8125Setup[] =
+{
+    { 0xD40A, 0x0010, 0x0000 },
+    { 0xC140, 0xFFFF, 0xFFFF },
+    { 0xC142, 0xFFFF, 0xFFFF },
+    { 0xD3E2, 0x0FFF, 0x03A9 },
+    { 0xD3E4, 0x00FF, 0x0000 },
+    { 0xE860, 0x0000, 0x0080 },
+    { RTL_OCP_DESCRIPTOR_8125, 0x0001, 0x0000 },
+    { 0xC0B4, 0x0000, 0x000C },
+    { 0xEB6A, 0x00FF, 0x0033 },
+    { 0xEB50, 0x03E0, 0x0040 },
+    { 0xE056, 0x00F0, 0x0000 },
+    { 0xE040, 0x1000, 0x0000 },
+    { 0xEA1C, 0x0003, 0x0001 },
+    { 0xE0C0, 0x4F0F, 0x4403 },
+    { 0xE052, 0x0080, 0x0068 },
+    { 0xD430, 0x0FFF, 0x047F },
+    { 0xEA1C, 0x0004, 0x0000 }
+};
+
+static
+VOID
+RtlLeaveOutOfBand8125(
+    _In_ PRTL_ADAPTER Adapter)
+{
+    RtlWriteController(Adapter, RTL_OCP_REALWOW_8125, 0x00FF);
+    RtlWrite32(Adapter, RTL_REG_MISC, RtlRead32(Adapter, RTL_REG_MISC) | RTL_MISC_RECEIVE_GATE);
+    RtlStall(2000);
+    RtlWaitMcu(Adapter, RTL_MCU_EMPTY);
+    RtlWrite8(Adapter, RTL_REG_CR, RtlRead8(Adapter, RTL_REG_CR) & ~(RTL_CR_TE | RTL_CR_RE));
+    RtlStall(1000);
+    RtlWrite8(Adapter, RTL_REG_MCU, RtlRead8(Adapter, RTL_REG_MCU) & ~RTL_MCU_OUT_OF_BAND);
+    RtlModifyController(Adapter, RTL_OCP_LINK_LIST, RTL_OCP_LINK_LIST_HOLD, 0);
+    RtlWaitMcu(Adapter, RTL_MCU_LINK_LIST_READY);
+    RtlWriteController(Adapter, 0xC0AA, 0x07D0);
+    RtlWriteController(Adapter, 0xC0A6, 0x0150);
+    RtlWriteController(Adapter, 0xC01E, 0x5555);
+    RtlWaitMcu(Adapter, RTL_MCU_LINK_LIST_READY);
+}
+
+static
+VOID
+RtlStart8125(
+    _In_ PRTL_ADAPTER Adapter)
+{
+    ULONG i;
+
+    RtlWrite16(Adapter, RTL_REG_0382_8125, 0x221B);
+    RtlWrite32(Adapter, RTL_REG_RSS_8125, 0);
+    RtlWrite16(Adapter, RTL_REG_QUEUES_8125, 0);
+    for (i = 0; i < RTL_NUMBER_OF(Rtl8125Setup); i++)
+        RtlModifyController(Adapter, Rtl8125Setup[i].Register, Rtl8125Setup[i].Clear, Rtl8125Setup[i].Set);
+
+    RtlModifyController(Adapter, RTL_OCP_TX_FIFO_8125, 0x0700,
+                        Adapter->ChipId == RTL_ID_8125B ? 0x0200 : 0x0300);
+    RtlModifyController(Adapter, RTL_OCP_TX_QUEUES_8125, 0x0C30,
+                        Adapter->ChipId == RTL_ID_8125B ? 0x0000 : 0x0020);
+    RtlModifyController(Adapter, RTL_OCP_TCAM_8125, 0, 0x0001);
+    RtlStall(1);
+    RtlModifyController(Adapter, RTL_OCP_TCAM_8125, 0x0001, 0);
+    RtlWrite16(Adapter, RTL_REG_TCAM_8125, RtlRead16(Adapter, RTL_REG_TCAM_8125) & ~0x0030);
+    RtlWriteController(Adapter, 0xE098, 0xC302);
+    for (i = 0; i < 1000 && (RtlReadController(Adapter, RTL_OCP_BUSY_8125) & RTL_OCP_BUSY_BIT_8125); i++)
+        RtlStall(10);
+
+    RtlWrite32(Adapter, RTL_REG_MISC, RtlRead32(Adapter, RTL_REG_MISC) & ~RTL_MISC_RECEIVE_GATE);
+}
+
+static
+VOID
 RtlLeaveOutOfBand(
     _In_ PRTL_ADAPTER Adapter)
 {
@@ -494,7 +608,12 @@ RtlSetAddress(
     if (RtlValidAddress(Address))
         return;
 
-    if (Extended && !Early)
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+    {
+        for (i = 0; i < MAC_ADDRESS_SIZE; i++)
+            Address[i] = RtlRead8(Adapter, RTL_REG_MAC_BACKUP_8125 + i);
+    }
+    else if (Extended && !Early)
     {
         Low = RtlReadExtended(Adapter, RTL_ERI_ADDRESS);
         High = RtlReadExtended(Adapter, RTL_ERI_ADDRESS + 4);
@@ -583,8 +702,15 @@ RtlInitializeController(
     if (Adapter->Family == RtlFamily8169)
     {
         RtlIdentifyChip(Adapter);
-        if (Adapter->ChipFlags & RTL_CHIP_GATED)
+        if (Adapter->ChipFlags & RTL_CHIP_8125)
+        {
+            RtlWrite32(Adapter, RTL_REG_IMR_8125, 0);
+            RtlLeaveOutOfBand8125(Adapter);
+        }
+        else if (Adapter->ChipFlags & RTL_CHIP_GATED)
+        {
             RtlLeaveOutOfBand(Adapter);
+        }
     }
 
     RtlWrite8(Adapter, RTL_REG_CR, RTL_CR_RST);
@@ -598,11 +724,18 @@ RtlInitializeController(
     if (i == 1000)
         return STATUS_IO_TIMEOUT;
 
-    RtlWrite16(Adapter, RTL_REG_IMR, 0);
-    RtlWrite16(Adapter, RTL_REG_ISR, 0xFFFF);
+    RtlDisableInterrupts(Adapter);
 
     Configuration = RTL_RCR_MXDMA;
-    if (Adapter->Family == RtlFamily8169)
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+    {
+        Configuration |= RTL_RCR_FETCH_8125;
+        if (Adapter->ChipId != RTL_ID_8125A)
+            Configuration |= RTL_RCR_PAUSE_SLOT_8125;
+
+        RtlWrite32(Adapter, RTL_REG_RCR, Configuration);
+    }
+    else if (Adapter->Family == RtlFamily8169)
     {
         if (Adapter->ChipFlags & RTL_CHIP_THRESHOLD)
             Configuration |= RTL_RCR_RXFTH;
@@ -648,7 +781,11 @@ RtlInitializeController(
     RtlWrite16(Adapter, RTL_REG_CPCR, Command);
 
     RtlWrite16(Adapter, RTL_REG_RMS, RTL_RECEIVE_SIZE);
-    if (Adapter->Family == RtlFamily8169)
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+    {
+        RtlStart8125(Adapter);
+    }
+    else if (Adapter->Family == RtlFamily8169)
     {
         RtlWrite8(Adapter, RTL_REG_MTPS,
                   (Adapter->ChipFlags & RTL_CHIP_EXTENDED) ? RTL_MTPS_EARLY : RTL_MTPS_DEFAULT);
@@ -674,7 +811,8 @@ RtlInitializeController(
     else
     {
         RtlWrite32(Adapter, RTL_REG_TCR,
-                   RTL_TCR_DEFAULT | ((Adapter->ChipFlags & RTL_CHIP_EXTENDED) ? RTL_TCR_AUTO_FIFO : 0));
+                   RTL_TCR_DEFAULT |
+                   ((Adapter->ChipFlags & (RTL_CHIP_EXTENDED | RTL_CHIP_8125)) ? RTL_TCR_AUTO_FIFO : 0));
         RtlWrite32(Adapter, RTL_REG_RCR, Configuration | RTL_RCR_AB | RTL_RCR_APM);
     }
 
@@ -682,8 +820,9 @@ RtlInitializeController(
     RtlWrite32(Adapter, RTL_REG_MAR0 + 4, 0);
 
     RtlWrite8(Adapter, RTL_REG_9346CR, RTL_9346CR_LOCK);
-    RtlWrite16(Adapter, RTL_REG_IMR, 0);
-    RtlWrite16(Adapter, RTL_REG_ISR, 0xFFFF);
+    RtlDisableInterrupts(Adapter);
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+        RtlWrite8(Adapter, RTL_REG_PMCH, RtlRead8(Adapter, RTL_REG_PMCH) | RTL_PMCH_PHY_POWER);
     if (Adapter->Family == RtlFamily8169)
         RtlWakePhy(Adapter);
 
@@ -722,7 +861,7 @@ RtlShutdownController(
     }
 
     RtlWrite8(Adapter, RTL_REG_CR, 0);
-    RtlWrite16(Adapter, RTL_REG_IMR, 0);
+    RtlDisableInterrupts(Adapter);
     *Adapter->KdNet->LinkState = 0;
 }
 
@@ -829,9 +968,12 @@ RtlSendTxPacket(
     KeMemoryBarrier();
     Adapter->TxRing[Index].Flags = Flags;
     KeMemoryBarrier();
-    RtlWrite8(Adapter,
-              Adapter->Family == RtlFamily8139 ? RTL_REG_TPPOLL_8139 : RTL_REG_TPPOLL_8169,
-              RTL_TPPOLL_NPQ);
+    if (Adapter->ChipFlags & RTL_CHIP_8125)
+        RtlWrite16(Adapter, RTL_REG_TPPOLL_8125, RTL_TPPOLL_8125_NPQ);
+    else
+        RtlWrite8(Adapter,
+                  Adapter->Family == RtlFamily8139 ? RTL_REG_TPPOLL_8139 : RTL_REG_TPPOLL_8169,
+                  RTL_TPPOLL_NPQ);
 
     if (Handle & TRANSMIT_ASYNC)
         return STATUS_SUCCESS;

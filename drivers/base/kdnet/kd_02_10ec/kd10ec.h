@@ -16,7 +16,9 @@
 #define RTL_REG_TNPDS           0x20
 #define RTL_REG_CR              0x37
 #define RTL_REG_TPPOLL_8169     0x38
+#define RTL_REG_IMR_8125        0x38
 #define RTL_REG_IMR             0x3C
+#define RTL_REG_ISR_8125        0x3C
 #define RTL_REG_ISR             0x3E
 #define RTL_REG_TCR             0x40
 #define RTL_REG_RCR             0x44
@@ -24,9 +26,11 @@
 #define RTL_REG_MSR_8139        0x58
 #define RTL_REG_BMCR_8139       0x62
 #define RTL_REG_PHYAR           0x60
+#define RTL_REG_PMCH            0x6F
 #define RTL_REG_PHYSTATUS_8169  0x6C
 #define RTL_REG_ERIDR           0x70
 #define RTL_REG_ERIAR           0x74
+#define RTL_REG_TPPOLL_8125     0x90
 #define RTL_REG_OCPDR           0xB0
 #define RTL_REG_GPHY_OCP        0xB8
 #define RTL_REG_MCU             0xD3
@@ -36,12 +40,18 @@
 #define RTL_REG_RDSAR           0xE4
 #define RTL_REG_MTPS            0xEC
 #define RTL_REG_MISC            0xF0
+#define RTL_REG_0382_8125       0x382
+#define RTL_REG_TCAM_8125       0x1880
+#define RTL_REG_MAC_BACKUP_8125 0x19E0
+#define RTL_REG_RSS_8125        0x4500
+#define RTL_REG_QUEUES_8125     0x4800
 
 #define RTL_CR_TE               0x04
 #define RTL_CR_RE               0x08
 #define RTL_CR_RST              0x10
 
 #define RTL_TPPOLL_NPQ          0x40
+#define RTL_TPPOLL_8125_NPQ     0x0001
 
 #define RTL_TCR_DEFAULT         0x03000700
 #define RTL_TCR_AUTO_FIFO       0x00000080
@@ -57,6 +67,8 @@
 #define RTL_RCR_RX128           0x00008000
 #define RTL_RCR_RXFTH           0x0000E000
 #define RTL_RCR_FILTER          0x0000003F
+#define RTL_RCR_PAUSE_SLOT_8125 0x00000800
+#define RTL_RCR_FETCH_8125      0x40000000
 
 #define RTL_9346CR_UNLOCK       0xC0
 #define RTL_9346CR_LOCK         0x00
@@ -103,10 +115,13 @@
 #define RTL_CHIP_EXTENDED       0x04
 #define RTL_CHIP_GATED          0x08
 #define RTL_CHIP_NO_PHY         0x10
+#define RTL_CHIP_8125           0x20
 
 #define RTL_ID_8168EVL_MASK     0x07C8
 #define RTL_ID_8168EVL          0x02C8
 #define RTL_ID_8168G            0x04C0
+#define RTL_ID_8125A            0x0609
+#define RTL_ID_8125B            0x0641
 
 #define RTL_MSR_LINKB           0x04
 #define RTL_MSR_SPEED_10        0x08
@@ -116,6 +131,16 @@
 #define RTL_PHYSTATUS_LINK      0x02
 #define RTL_PHYSTATUS_10M       0x04
 #define RTL_PHYSTATUS_100M      0x08
+#define RTL_PHYSTATUS_2500M     0x0400
+#define RTL_PMCH_PHY_POWER      0xC0
+
+#define RTL_OCP_DESCRIPTOR_8125 0xEB58
+#define RTL_OCP_TCAM_8125       0xEB54
+#define RTL_OCP_TX_FIFO_8125    0xE614
+#define RTL_OCP_TX_QUEUES_8125  0xE63E
+#define RTL_OCP_REALWOW_8125    0xC0BC
+#define RTL_OCP_BUSY_8125       0xE00E
+#define RTL_OCP_BUSY_BIT_8125   0x2000
 
 #define RTL_CPCR_TXEN           0x0001
 #define RTL_CPCR_RXEN           0x0002
