@@ -100,6 +100,15 @@ WINBASEAPI
 _Success_(return == ERROR_SUCCESS)
 LONG
 WINAPI
+GetPackageId(
+    _In_ HANDLE hProcess,
+    _Inout_ UINT32* bufferLength,
+    _Out_writes_bytes_opt_(*bufferLength) BYTE* buffer);
+
+WINBASEAPI
+_Success_(return == ERROR_SUCCESS)
+LONG
+WINAPI
 GetCurrentPackageFullName(
     _Inout_ UINT32* packageFullNameLength,
     _Out_writes_opt_(*packageFullNameLength) PWSTR packageFullName);

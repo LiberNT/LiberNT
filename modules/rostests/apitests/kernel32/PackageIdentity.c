@@ -12,6 +12,7 @@ typedef LONG (WINAPI *PFN_CURRENT_STRING)(UINT32 *, PWSTR);
 typedef LONG (WINAPI *PFN_CURRENT_ID)(UINT32 *, BYTE *);
 typedef LONG (WINAPI *PFN_CURRENT_INFO)(const UINT32, UINT32 *, BYTE *, UINT32 *);
 typedef LONG (WINAPI *PFN_PROCESS_STRING)(HANDLE, UINT32 *, PWSTR);
+typedef LONG (WINAPI *PFN_PROCESS_ID)(HANDLE, UINT32 *, BYTE *);
 typedef HMODULE (WINAPI *PFN_LOADPACKAGEDLIBRARY)(LPCWSTR, DWORD);
 
 static
@@ -181,6 +182,57 @@ CheckProcessString(
 
 static
 VOID
+CheckProcessPackageId(
+    _In_ HMODULE Module,
+    _In_ PCSTR ModuleName)
+{
+    PFN_PROCESS_ID Function;
+    BYTE Buffer[64];
+    UINT32 Length;
+    HANDLE Process;
+    LONG Result;
+
+    Function = (PFN_PROCESS_ID)GetProcAddress(Module, "GetPackageId");
+    ok(Function != NULL, "%s does not export GetPackageId\n", ModuleName);
+    if (!Function)
+        return;
+
+    Length = 0;
+    SetLastError(0x33333333);
+    Result = Function(GetCurrentProcess(), &Length, NULL);
+    ok(Result == APPMODEL_ERROR_NO_PACKAGE, "%s: GetPackageId(self) returned %ld\n", ModuleName, Result);
+    ok(Length == 0, "%s: GetPackageId length %u\n", ModuleName, Length);
+    ok(GetLastError() == 0x33333333, "%s: GetPackageId last error %lu\n", ModuleName, GetLastError());
+
+    Result = Function(GetCurrentProcess(), NULL, NULL);
+    ok(Result == ERROR_INVALID_PARAMETER, "%s: GetPackageId(NULL length) returned %ld\n", ModuleName, Result);
+
+    Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentProcessId());
+    ok(Process != NULL, "OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION) failed with %lu\n", GetLastError());
+    if (Process)
+    {
+        memset(Buffer, 0x5a, sizeof(Buffer));
+        Length = sizeof(Buffer);
+        Result = Function(Process, &Length, Buffer);
+        ok(Result == APPMODEL_ERROR_NO_PACKAGE, "%s: GetPackageId(limited handle) returned %ld\n", ModuleName, Result);
+        ok(Length == sizeof(Buffer), "%s: GetPackageId length %u\n", ModuleName, Length);
+        ok(Buffer[0] == 0x5a && Buffer[sizeof(Buffer) - 1] == 0x5a, "%s: GetPackageId wrote the buffer\n", ModuleName);
+        CloseHandle(Process);
+    }
+
+    Process = OpenProcess(SYNCHRONIZE, FALSE, GetCurrentProcessId());
+    ok(Process != NULL, "OpenProcess(SYNCHRONIZE) failed with %lu\n", GetLastError());
+    if (Process)
+    {
+        Length = sizeof(Buffer);
+        Result = Function(Process, &Length, Buffer);
+        ok(Result == ERROR_ACCESS_DENIED, "%s: GetPackageId(SYNCHRONIZE handle) returned %ld\n", ModuleName, Result);
+        CloseHandle(Process);
+    }
+}
+
+static
+VOID
 CheckLoadPackagedLibrary(
     _In_ HMODULE Module,
     _In_ PCSTR ModuleName)
@@ -212,6 +264,7 @@ CheckModule(
     CheckCurrentPackageInfo(Module, ModuleName);
     CheckProcessString(Module, ModuleName, "GetPackageFamilyName");
     CheckProcessString(Module, ModuleName, "GetPackageFullName");
+    CheckProcessPackageId(Module, ModuleName);
     CheckLoadPackagedLibrary(Module, ModuleName);
 }
 

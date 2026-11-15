@@ -1725,6 +1725,19 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFullName( HANDLE process, UINT32 *
 }
 
 
+#ifdef __REACTOS__
+/***********************************************************************
+ *         GetPackageId   (kernelbase.@)
+ */
+LONG WINAPI GetPackageId( HANDLE process, UINT32 *length, BYTE *buffer )
+{
+    TRACE( "(%p %p %p)\n", process, length, buffer );
+
+    if (!process || !length) return ERROR_INVALID_PARAMETER;
+    return get_package_identity( process );
+}
+
+#endif
 /***********************************************************************
  *         GetPackageFamilyName   (kernelbase.@)
  */
