@@ -29,6 +29,13 @@ static VOID XHCI_ReleaseSpinLock(_Inout_ PKSPIN_LOCK SpinLock, _In_ KIRQL OldIrq
         KeReleaseSpinLock(SpinLock, OldIrql);
 }
 
+static inline BOOLEAN XHCI_IsLockIrql(VOID)
+{
+    KIRQL Irql = KeGetCurrentIrql();
+
+    return Irql == DISPATCH_LEVEL || Irql == HIGH_LEVEL;
+}
+
 #undef KeAcquireSpinLock
 #undef KeReleaseSpinLock
 #define KeAcquireSpinLock XHCI_AcquireSpinLock
@@ -2264,7 +2271,7 @@ BOOLEAN
 XHCI_HasActiveTransfersLocked(
     _In_ PXHCI_ENDPOINT Endpoint)
 {
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint)
         return FALSE;
@@ -2282,7 +2289,7 @@ XHCI_GetActiveTransferHeadLocked(
 {
     PLIST_ENTRY Entry;
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint)
         return NULL;
@@ -2304,7 +2311,7 @@ VOID
 XHCI_UpdateActiveTransferHeadLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint)
 {
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint)
         return;
@@ -2320,7 +2327,7 @@ XHCI_IsTransferActiveLocked(
 {
     PLIST_ENTRY Entry;
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint || !Transfer)
         return FALSE;
@@ -2347,7 +2354,7 @@ XHCI_InsertActiveTransferLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint,
     _Inout_ PXHCI_TRANSFER Transfer)
 {
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint || !Transfer)
         return;
@@ -2370,7 +2377,7 @@ XHCI_RemoveActiveTransferLocked(
 {
     PLIST_ENTRY Entry;
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint || !Transfer)
         return;
@@ -2428,7 +2435,7 @@ VOID
 XHCI_ClearActiveTransfersLocked(
     _Inout_ PXHCI_ENDPOINT Endpoint)
 {
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint)
         return;
@@ -2468,7 +2475,7 @@ XHCI_FindActiveTransferByEventLocked(
 
     UNREFERENCED_PARAMETER(CompletionCode);
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint)
         return NULL;
@@ -7803,14 +7810,14 @@ XHCI_CompleteDeferredTransferLocked(
 
     ASSERT(Extension != NULL);
     ASSERT(Transfer != NULL);
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     Endpoint = Transfer->Endpoint;
     TransferParameters = Transfer->TransferParameters;
     BytesTransferred = Transfer->BytesTransferred;
     IsIsochronous = Transfer->IsIsochronous;
 
-    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(XHCI_IsLockIrql());
 
     if (!Endpoint || !TransferParameters)
         return;
