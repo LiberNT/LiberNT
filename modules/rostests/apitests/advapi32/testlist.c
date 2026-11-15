@@ -30,6 +30,7 @@ extern void func_LookupAccountSid(void);
 extern void func_MachineGuid(void);
 extern void func_OpenTrace(void);
 extern void func_PrivilegeNames(void);
+extern void func_QueryServiceConfig(void);
 extern void func_QueryServiceConfig2(void);
 extern void func_RegCreateKeyEx(void);
 extern void func_RegCreateKeyTransacted(void);
@@ -93,6 +94,7 @@ const struct test winetest_testlist[] =
     { "MachineGuid", func_MachineGuid },
     { "OpenTrace", func_OpenTrace },
     { "PrivilegeNames", func_PrivilegeNames },
+    { "QueryServiceConfig", func_QueryServiceConfig },
     { "QueryServiceConfig2", func_QueryServiceConfig2 },
     { "RegCreateKeyEx", func_RegCreateKeyEx },
     { "RegCreateKeyTransacted", func_RegCreateKeyTransacted },

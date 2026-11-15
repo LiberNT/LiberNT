@@ -3327,28 +3327,32 @@ RQueryServiceConfigW(
                         &lpDependencies,
                         &dwDependenciesLength);
 
-    dwRequiredSize = sizeof(QUERY_SERVICE_CONFIGW);
+    dwRequiredSize = ALIGN_UP_BY(sizeof(QUERY_SERVICE_CONFIGW), sizeof(PVOID));
 
     if (lpImagePath != NULL)
         dwRequiredSize += (DWORD)((wcslen(lpImagePath) + 1) * sizeof(WCHAR));
     else
         dwRequiredSize += 2 * sizeof(WCHAR);
 
+    dwRequiredSize = ALIGN_UP_BY(dwRequiredSize, sizeof(PVOID));
     if ((lpService->lpGroup != NULL) && (lpService->lpGroup->lpGroupName != NULL))
         dwRequiredSize += (DWORD)((wcslen(lpService->lpGroup->lpGroupName) + 1) * sizeof(WCHAR));
     else
         dwRequiredSize += 2 * sizeof(WCHAR);
 
+    dwRequiredSize = ALIGN_UP_BY(dwRequiredSize, sizeof(PVOID));
     if (lpDependencies != NULL)
         dwRequiredSize += dwDependenciesLength * sizeof(WCHAR);
     else
         dwRequiredSize += 2 * sizeof(WCHAR);
 
+    dwRequiredSize = ALIGN_UP_BY(dwRequiredSize, sizeof(PVOID));
     if (lpServiceStartName != NULL)
         dwRequiredSize += (DWORD)((wcslen(lpServiceStartName) + 1) * sizeof(WCHAR));
     else
         dwRequiredSize += 2 * sizeof(WCHAR);
 
+    dwRequiredSize = ALIGN_UP_BY(dwRequiredSize, sizeof(PVOID));
     if (lpService->lpDisplayName != NULL)
         dwRequiredSize += (DWORD)((wcslen(lpService->lpDisplayName) + 1) * sizeof(WCHAR));
     else
@@ -3365,7 +3369,8 @@ RQueryServiceConfigW(
         lpServiceConfig->dwErrorControl = lpService->dwErrorControl;
         lpServiceConfig->dwTagId = lpService->dwTag;
 
-        lpStr = (LPWSTR)(lpServiceConfig + 1);
+        ASSERT(((ULONG_PTR)lpServiceConfig & (sizeof(PVOID) - 1)) == 0);
+        lpStr = (LPWSTR)ALIGN_UP_POINTER_BY(lpServiceConfig + 1, sizeof(PVOID));
 
         /* Append the image path */
         if (lpImagePath != NULL)
@@ -3378,7 +3383,7 @@ RQueryServiceConfigW(
         }
 
         lpServiceConfig->lpBinaryPathName = (LPWSTR)((ULONG_PTR)lpStr - (ULONG_PTR)lpServiceConfig);
-        lpStr += (wcslen(lpStr) + 1);
+        lpStr = (LPWSTR)ALIGN_UP_POINTER_BY(lpStr + wcslen(lpStr) + 1, sizeof(PVOID));
 
         /* Append the group name */
         if ((lpService->lpGroup != NULL) && (lpService->lpGroup->lpGroupName != NULL))
@@ -3391,7 +3396,7 @@ RQueryServiceConfigW(
         }
 
         lpServiceConfig->lpLoadOrderGroup = (LPWSTR)((ULONG_PTR)lpStr - (ULONG_PTR)lpServiceConfig);
-        lpStr += (wcslen(lpStr) + 1);
+        lpStr = (LPWSTR)ALIGN_UP_POINTER_BY(lpStr + wcslen(lpStr) + 1, sizeof(PVOID));
 
         /* Append Dependencies */
         if (lpDependencies != NULL)
@@ -3411,6 +3416,7 @@ RQueryServiceConfigW(
             lpStr += dwDependenciesLength;
         else
             lpStr += 2;
+        lpStr = (LPWSTR)ALIGN_UP_POINTER_BY(lpStr, sizeof(PVOID));
 
         /* Append the service start name */
         if (lpServiceStartName != NULL)
@@ -3423,7 +3429,7 @@ RQueryServiceConfigW(
         }
 
         lpServiceConfig->lpServiceStartName = (LPWSTR)((ULONG_PTR)lpStr - (ULONG_PTR)lpServiceConfig);
-        lpStr += (wcslen(lpStr) + 1);
+        lpStr = (LPWSTR)ALIGN_UP_POINTER_BY(lpStr + wcslen(lpStr) + 1, sizeof(PVOID));
 
         /* Append the display name */
         if (lpService->lpDisplayName != NULL)
