@@ -35,7 +35,6 @@ sdk/include/psdk/wldp.h         # Synced to Wine-11.13-83-ge8781e7c8d0 (LiberNT 
 The following libraries are shared with Wine.
 
 dll/directx/wine/amstream       # Synced to Wine-11.14
-dll/directx/wine/d2d1           # Synced to Wine-11.14
 dll/directx/wine/d3d8           # Synced to Wine-11.14
 dll/directx/wine/d3d9           # Synced to Wine-11.14
 dll/directx/wine/d3dcompiler_43 # Synced to Wine-11.14

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Henri Verbeet for CodeWeavers
+ * Copyright 2014 Henri Verbeet for CodeWeavers, 2026 Earzu Chan
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public

@@ -7,7 +7,6 @@ endif()
 
 add_subdirectory(amstream)
 add_subdirectory(colorcnv)
-add_subdirectory(d2d1)
 add_subdirectory(d3d8)
 add_subdirectory(d3d9)
 add_subdirectory(d3d10)

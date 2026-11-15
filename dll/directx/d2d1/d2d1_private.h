@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Henri Verbeet for CodeWeavers
+ * Copyright 2014 Henri Verbeet for CodeWeavers, 2026 Earzu Chan
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,11 +16,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#define WINE_FILEDESCRIPTION_STR "Wine Direct2D"
-#define WINE_FILENAME_STR "d2d1.dll"
-#define WINE_FILEVERSION 6,2,9200,16765
-#define WINE_FILEVERSION_STR "6.2.9200.16765"
-#define WINE_PRODUCTVERSION 6,2,9200,16765
-#define WINE_PRODUCTVERSION_STR "6.2.9200.16765"
+#ifndef LIBERNT_D2D1_PRIVATE_H
+#define LIBERNT_D2D1_PRIVATE_H
 
-#include "wine/wine_common_ver.rc"
+#include "d2d1_common.h"
+#include "d2d1_geometry.h"
+#include "d2d1_device.h"
+#include "d2d1_resources.h"
+#include "d2d1_effect.h"
+#include "d2d1_factory.h"
+#include "d2d1_command_list.h"
+
+#endif

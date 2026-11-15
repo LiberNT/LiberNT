@@ -45,9 +45,15 @@
 #endif /* WINE_OLESELFREGISTER */
 
 /* Credit the Wine team */
+#ifndef REACTOS_STR_COMPANY_NAME
 #define REACTOS_STR_COMPANY_NAME "ReactOS Project/Wine Team\0"
+#endif
+#ifndef REACTOS_STR_LEGAL_COPYRIGHT
 #define REACTOS_STR_LEGAL_COPYRIGHT "(C) 1996-" COPYRIGHT_YEAR " ReactOS Project, 1993-" COPYRIGHT_YEAR " the Wine project authors\0"
+#endif
+#ifndef REACTOS_STR_ORIGINAL_COPYRIGHT
 #define REACTOS_STR_ORIGINAL_COPYRIGHT "(C) 1993-" COPYRIGHT_YEAR " the Wine project authors"
+#endif
 
 #define REACTOS_VERSION_DLL
 
