@@ -165,11 +165,6 @@ SffdiskTransferWindow(
 
     if (WindowOffset != 0 || WindowLength != MasterLength)
     {
-        if (MasterVa == NULL)
-        {
-            return STATUS_INVALID_USER_BUFFER;
-        }
-
         PartialMdl = IoAllocateMdl((PUCHAR)MasterVa + WindowOffset,
                                    WindowLength,
                                    FALSE,
