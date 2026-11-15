@@ -1102,6 +1102,7 @@ ImeWndProc_common(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, BOOL unicod
 
         case WM_DESTROY:
             User32DestroyImeUIWindow(pimeui);
+            IMM_FN(CtfImmLastEnabledWndDestroy)(FALSE);
             return 0;
 
         case WM_NCDESTROY:
