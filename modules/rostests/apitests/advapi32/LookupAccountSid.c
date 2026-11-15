@@ -197,6 +197,32 @@ TestLocalSystemUse(VOID)
     }
 }
 
+/* Windows 11 client editions have the performance aliases of the builtin domain too */
+static VOID
+TestBuiltinAlias(PCWSTR SidString)
+{
+    WCHAR Name[256], Domain[256];
+    DWORD cchName = ARRAYSIZE(Name), cchDomain = ARRAYSIZE(Domain);
+    SID_NAME_USE Use = SidTypeUnknown;
+    PSID Sid = NULL;
+    BOOL Ret;
+
+    ok(ConvertStringSidToSidW(SidString, &Sid), "%s: ConvertStringSidToSidW failed: %lu\n",
+       wine_dbgstr_w(SidString), GetLastError());
+    if (!Sid)
+        return;
+
+    Ret = LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
+    ok(Ret, "%s: lookup failed with error %lu\n", wine_dbgstr_w(SidString), GetLastError());
+    if (Ret)
+    {
+        ok(Name[0] != UNICODE_NULL, "%s: no name\n", wine_dbgstr_w(SidString));
+        ok(!wcscmp(Domain, L"BUILTIN"), "%s: domain is %s\n", wine_dbgstr_w(SidString), wine_dbgstr_w(Domain));
+        ok(Use == SidTypeAlias, "%s: use is %d\n", wine_dbgstr_w(SidString), Use);
+    }
+    LocalFree(Sid);
+}
+
 START_TEST(LookupAccountSid)
 {
     ULONG i;
@@ -207,4 +233,6 @@ START_TEST(LookupAccountSid)
         TestUnmappedSid(UnmappedSids[i]);
     TestLookupAccountSidLocal();
     TestLocalSystemUse();
+    TestBuiltinAlias(L"S-1-5-32-558");
+    TestBuiltinAlias(L"S-1-5-32-559");
 }

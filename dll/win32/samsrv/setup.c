@@ -1089,26 +1089,24 @@ SampInitializeSAM(VOID)
                                 szComment,
                                 DOMAIN_ALIAS_RID_NETWORK_CONFIGURATION_OPS);
 
-    if (SampProductType != NtProductWinNt)
-    {
-        /* Create the Performance Monitor Users alias (Server only) */
-        SampLoadString(hInstance, IDS_ALIAS_MONITORING_USERS_NAME, szName, 80);
-        SampLoadString(hInstance, IDS_ALIAS_MONITORING_USERS_COMMENT, szComment, 256);
+    /* Windows 11 client editions have both performance aliases as well */
+    SampLoadString(hInstance, IDS_ALIAS_MONITORING_USERS_NAME, szName, 80);
+    SampLoadString(hInstance, IDS_ALIAS_MONITORING_USERS_COMMENT, szComment, 256);
 
-        SampSetupCreateAliasAccount(hBuiltinDomainKey,
-                                    szName,
-                                    szComment,
-                                    DOMAIN_ALIAS_RID_MONITORING_USERS);
+    SampSetupCreateAliasAccount(hBuiltinDomainKey,
+                                szName,
+                                szComment,
+                                DOMAIN_ALIAS_RID_MONITORING_USERS);
 
-        /* Create the Performance Log Users alias (Server only) */
-        SampLoadString(hInstance, IDS_ALIAS_LOGGING_USERS_NAME, szName, 80);
-        SampLoadString(hInstance, IDS_ALIAS_LOGGING_USERS_COMMENT, szComment, 256);
+    SampLoadString(hInstance, IDS_ALIAS_LOGGING_USERS_NAME, szName, 80);
+    SampLoadString(hInstance, IDS_ALIAS_LOGGING_USERS_COMMENT, szComment, 256);
 
-        SampSetupCreateAliasAccount(hBuiltinDomainKey,
-                                    szName,
-                                    szComment,
-                                    DOMAIN_ALIAS_RID_LOGGING_USERS);
-    }
+    SampSetupCreateAliasAccount(hBuiltinDomainKey,
+                                szName,
+                                szComment,
+                                DOMAIN_ALIAS_RID_LOGGING_USERS);
+
+    /* TODO: the other builtin aliases of Windows 11 clients (RIDs 562, 568, 569, 573, 578-581, 583) */
 
     /* Add the Administrator user to the Administrators alias */
     pSid = AppendRidToSid(AccountDomainInfo->DomainSid,
