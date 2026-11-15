@@ -126,6 +126,9 @@ struct console
     unsigned int           history_index;       /* number of used entries in history array */
     unsigned int           history_mode;        /* mode of history (non zero means remove doubled strings */
     unsigned int           edition_mode;        /* index to edition mode flavors */
+#ifdef __REACTOS__
+    BOOL                   insert_mode;         /* insert mode, kept apart from the reported mode */
+#endif
     unsigned int           input_cp;            /* console input codepage */
     unsigned int           output_cp;           /* console output codepage */
     HWND                   win;                 /* window handle if backend supports it */

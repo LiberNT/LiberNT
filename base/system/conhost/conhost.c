@@ -1913,9 +1913,13 @@ static NTSTATUS process_console_input( struct console *console )
             }
         }
 
+#ifdef __REACTOS__
+        ctx->insert_mode = console->insert_mode ^ ctx->insert_key;
+#else
         ctx->insert_mode = ((console->mode & (ENABLE_INSERT_MODE | ENABLE_EXTENDED_FLAGS)) ==
                             (ENABLE_INSERT_MODE | ENABLE_EXTENDED_FLAGS))
             ^ ctx->insert_key;
+#endif
 
         if (func) func( console );
         else if (ir.Event.KeyEvent.uChar.UnicodeChar)
@@ -4016,6 +4020,10 @@ static NTSTATUS console_input_ioctl( struct console *console, unsigned int code,
 #ifdef __REACTOS__
         if (console->mode & ENABLE_EXTENDED_FLAGS)
             set_window_quick_edit( console, (console->mode & ENABLE_QUICK_EDIT_MODE) != 0 );
+        if (console->mode & (ENABLE_INSERT_MODE | ENABLE_EXTENDED_FLAGS))
+            console->insert_mode = (console->mode & ENABLE_INSERT_MODE) != 0;
+        if (console->mode & ENABLE_INSERT_MODE)
+            console->mode |= ENABLE_EXTENDED_FLAGS;
 #endif
         return STATUS_SUCCESS;
 
@@ -4472,6 +4480,9 @@ int __cdecl wmain(int argc, WCHAR *argv[])
                    ENABLE_ECHO_INPUT | ENABLE_MOUSE_INPUT | ENABLE_INSERT_MODE |
                    ENABLE_QUICK_EDIT_MODE | ENABLE_EXTENDED_FLAGS | ENABLE_AUTO_POSITION;
     console.input_cp = console.output_cp = GetOEMCP();
+#ifdef __REACTOS__
+    console.insert_mode = TRUE;
+#endif
     console.history_size = 50;
     if (!(console.history = calloc( console.history_size, sizeof(*console.history) ))) return 1;
 #ifdef __REACTOS__

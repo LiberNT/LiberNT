@@ -2374,6 +2374,9 @@ static void apply_config( struct console *console, const struct console_config *
         console->mode |= ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS;
     else
         console->mode &= ~ENABLE_INSERT_MODE;
+#ifdef __REACTOS__
+    console->insert_mode = config->insert_mode != 0;
+#endif
 
     console->active->cursor_size = config->cursor_size;
     console->active->cursor_visible = config->cursor_visible;
@@ -2418,8 +2421,12 @@ static void current_config( struct console *console, struct console_config *conf
     config->history_size = console->history_size;
 #endif
 
+#ifdef __REACTOS__
+    config->insert_mode = console->insert_mode;
+#else
     config->insert_mode = (console->mode & (ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS)) ==
         (ENABLE_INSERT_MODE|ENABLE_EXTENDED_FLAGS);
+#endif
 
     config->cursor_size = console->active->cursor_size;
     config->cursor_visible = console->active->cursor_visible;
