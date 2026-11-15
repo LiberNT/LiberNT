@@ -3965,6 +3965,10 @@ DxgkpPointerBridgeSupported(
     if (Adapter == NULL || Adapter->MiniportContext == NULL)
         return FALSE;
 
+    /* The pointer DDIs address a source of the committed VidPN; a detached desktop has none, so it keeps the software cursor */
+    if (!*(volatile BOOLEAN *)&Adapter->VidPnCommitted || *(volatile BOOLEAN *)&Adapter->HeadlessDesktop)
+        return FALSE;
+
     if (Adapter->PointerCapsQueried)
         return Adapter->PointerHwSupported;
 
