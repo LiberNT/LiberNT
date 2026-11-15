@@ -1425,6 +1425,7 @@ PiProcessEnumeration(
     /* A bus invalidating its relations while they are being processed is asked again */
     PiClearDevNodeFlag(DeviceNode, DNF_REENUMERATE);
     Status = PiIrpQueryDeviceRelations(DeviceNode, BusRelations);
+    Status = PnpSwDeviceAddChildren(DeviceNode, Status);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeEnumerateCompletion);
 
@@ -1501,6 +1502,8 @@ PiSendRemoval(
     IopSynchronousCall(DeviceNode->PhysicalDeviceObject,
                        &StackLocation,
                        NULL);
+
+    if (!Surprise) PnpSwDeviceParentRemoved(DeviceNode->PhysicalDeviceObject);
 
     IopDisableDeviceInterfaces(DeviceNode);
     PiReleaseDeviceResources(DeviceNode);

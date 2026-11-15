@@ -7276,6 +7276,141 @@ InstallDeviceSoftware(
         RegCloseKey(DriverKey);
 }
 
+static BOOL
+RemoveDeviceComponents(
+    IN HKEY DeviceKey)
+{
+    WCHAR Name[MAX_DEVICE_ID_LEN];
+    HKEY DevicesKey;
+    DWORD Index = 0, Size;
+    BOOL Removed = FALSE;
+
+    if (RegOpenKeyExW(DeviceKey, L"Devices", 0, KEY_READ | KEY_WRITE, &DevicesKey) != ERROR_SUCCESS)
+        return FALSE;
+
+    for (;;)
+    {
+        Size = ARRAYSIZE(Name);
+        if (RegEnumKeyExW(DevicesKey, Index, Name, &Size, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
+            break;
+
+        /* An extension package's component carries its ExtensionId and outlives the base driver */
+        if (strchrW(Name, L'#') || RegDeleteTreeW(DevicesKey, Name) != ERROR_SUCCESS)
+        {
+            Index++;
+            continue;
+        }
+
+        Removed = TRUE;
+    }
+
+    RegCloseKey(DevicesKey);
+    return Removed;
+}
+
+static BOOL
+AddDeviceComponent(
+    IN HINF hInf,
+    IN HKEY DevicesKey,
+    IN PCWSTR Name,
+    IN PCWSTR InstallSection)
+{
+    static const WCHAR CompatibleIds[] = L"SWC\\Generic\0";
+    WCHAR Id[MAX_DEVICE_ID_LEN], Description[MAX_INF_STRING_LENGTH];
+    INFCONTEXT Context;
+    PWSTR HardwareIds, Out;
+    DWORD Field, Count, Size;
+    HKEY ComponentKey;
+    LONG rc;
+
+    if (!SetupFindFirstLineW(hInf, InstallSection, L"ComponentIDs", &Context))
+    {
+        WARN("AddComponent %s: [%s] has no ComponentIDs\n", debugstr_w(Name), debugstr_w(InstallSection));
+        return FALSE;
+    }
+
+    Count = SetupGetFieldCount(&Context);
+    HardwareIds = MyMalloc((Count * (MAX_DEVICE_ID_LEN + 4) + 1) * sizeof(WCHAR));
+    if (!HardwareIds)
+        return FALSE;
+
+    Out = HardwareIds;
+    for (Field = 1; Field <= Count; Field++)
+    {
+        if (!SetupGetStringFieldW(&Context, Field, Id, ARRAYSIZE(Id), NULL) || !Id[0])
+            continue;
+        Out += sprintfW(Out, L"SWC\\%s", Id) + 1;
+    }
+    *Out++ = UNICODE_NULL;
+
+    if (Out == HardwareIds + 1)
+    {
+        MyFree(HardwareIds);
+        return FALSE;
+    }
+
+    rc = RegCreateKeyExW(DevicesKey, Name, 0, NULL, 0, KEY_WRITE, NULL, &ComponentKey, NULL);
+    if (rc == ERROR_SUCCESS)
+    {
+        rc = RegSetValueExW(ComponentKey, L"HardwareIds", 0, REG_MULTI_SZ, (const BYTE *)HardwareIds,
+                            (DWORD)((Out - HardwareIds) * sizeof(WCHAR)));
+        if (rc == ERROR_SUCCESS)
+            rc = RegSetValueExW(ComponentKey, L"CompatibleIds", 0, REG_MULTI_SZ, (const BYTE *)CompatibleIds,
+                                sizeof(CompatibleIds));
+        RegDeleteValueW(ComponentKey, L"Description");
+        if (rc == ERROR_SUCCESS &&
+            SetupFindFirstLineW(hInf, InstallSection, L"Description", &Context) &&
+            SetupGetStringFieldW(&Context, 1, Description, ARRAYSIZE(Description), &Size) &&
+            Description[0])
+        {
+            rc = RegSetValueExW(ComponentKey, L"Description", 0, REG_SZ, (const BYTE *)Description,
+                                Size * sizeof(WCHAR));
+        }
+        RegCloseKey(ComponentKey);
+    }
+
+    MyFree(HardwareIds);
+    return rc == ERROR_SUCCESS;
+}
+
+/* Each AddComponent becomes a child software device, recorded under Devices of the parent's instance key as Windows 11 does */
+static BOOL
+InstallDeviceComponents(
+    IN HINF hInf,
+    IN PCWSTR SectionName,
+    IN HKEY DeviceKey)
+{
+    WCHAR Name[MAX_DEVICE_ID_LEN], InstallSection[LINE_LEN];
+    INFCONTEXT Context;
+    HKEY DevicesKey;
+    BOOL Changed;
+
+    Changed = RemoveDeviceComponents(DeviceKey);
+
+    if (!SetupFindFirstLineW(hInf, SectionName, L"AddComponent", &Context))
+        return Changed;
+
+    if (RegCreateKeyExW(DeviceKey, L"Devices", 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &DevicesKey, NULL) != ERROR_SUCCESS)
+        return Changed;
+
+    do
+    {
+        if (!SetupGetStringFieldW(&Context, 1, Name, ARRAYSIZE(Name), NULL) ||
+            !SetupGetStringFieldW(&Context, 3, InstallSection, ARRAYSIZE(InstallSection), NULL) ||
+            !Name[0] || strchrW(Name, L'\\') || strchrW(Name, L'#'))
+        {
+            WARN("AddComponent line without a valid name and install section in [%s]\n", debugstr_w(SectionName));
+            continue;
+        }
+
+        if (AddDeviceComponent(hInf, DevicesKey, Name, InstallSection))
+            Changed = TRUE;
+    } while (SetupFindNextMatchLineW(&Context, L"AddComponent", &Context));
+
+    RegCloseKey(DevicesKey);
+    return Changed;
+}
+
 /***********************************************************************
  *		SetupDiInstallDevice (SETUPAPI.@)
  */
@@ -7311,6 +7446,7 @@ SetupDiInstallDevice(
     PVOID Context = NULL;
     WCHAR SourceBuffer[MAX_PATH];
     BOOL PreviouslyInstalled = FALSE;
+    BOOL ComponentsChanged = FALSE;
     BOOL ret = FALSE; /* Return value */
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData);
@@ -7390,7 +7526,7 @@ SetupDiInstallDevice(
         SelectedDriver->InfFileDetails->hInf,
         SelectedDriver->Details.SectionName,
         SectionName, MAX_PATH, &SectionNameLength, NULL);
-    if (!Result || SectionNameLength > MAX_PATH - strlenW(DotServices))
+    if (!Result || SectionNameLength > MAX_PATH - (ARRAYSIZE(L".Components") - 1))
         goto cleanup;
     pSectionName = &SectionName[strlenW(SectionName)];
 
@@ -7597,6 +7733,8 @@ SetupDiInstallDevice(
 
     strcpyW(pSectionName, L".Filters");
     SETUPAPI_InstallFilters(SelectedDriver->InfFileDetails->hInf, SectionName, hKey);
+    strcpyW(pSectionName, L".Components");
+    ComponentsChanged = InstallDeviceComponents(SelectedDriver->InfFileDetails->hInf, SectionName, hKey);
     *pSectionName = UNICODE_NULL;
 
     /* Write information to enum key */
@@ -7652,6 +7790,9 @@ SetupDiInstallDevice(
     {
         ret = TRUE;
     }
+
+    if (ret && ComponentsChanged)
+        CM_Reenumerate_DevNode_Ex(((struct DeviceInfo *)DeviceInfoData->Reserved)->dnDevInst, 0, set->hMachine);
 
     if (ret)
     {

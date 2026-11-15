@@ -193,6 +193,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpregutil.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpresource.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnprootbus.c
+    ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpswdevice.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstart.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpdrvdb.c
     ${REACTOS_SOURCE_DIR}/ntos/io/pnpmgr/pnpstate.c

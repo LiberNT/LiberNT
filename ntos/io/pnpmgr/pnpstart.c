@@ -103,6 +103,7 @@ PiInitPhase0(VOID)
 
     PpInitializeDeviceReferenceTable();
     PnpRootInitializeDevExtension();
+    PnpSwDeviceInitialize();
 
     Status = PnpRootDriverEntry(NULL, NULL);
     if (!NT_SUCCESS(Status))
@@ -110,6 +111,9 @@ PiInitPhase0(VOID)
         DPRINT1("PnP: the root bus driver did not come up (%lx)\n", Status);
         return;
     }
+
+    Status = PnpSwDeviceDriverEntry(NULL, NULL);
+    if (!NT_SUCCESS(Status)) DPRINT1("PnP: the software device bus did not come up (%lx)\n", Status);
 
     Status = PnpRootCreateDeviceObject(&RootDevice);
     if (!NT_SUCCESS(Status))

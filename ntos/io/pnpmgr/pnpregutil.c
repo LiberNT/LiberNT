@@ -545,7 +545,16 @@ IopGetParentIdPrefix(
     _In_ PDEVICE_NODE DeviceNode,
     _Out_ PUNICODE_STRING Prefix)
 {
-    PDEVICE_NODE Parent = DeviceNode->Parent;
+    PAGED_CODE();
+
+    return PiGetChildIdPrefix(DeviceNode->Parent, Prefix);
+}
+
+NTSTATUS
+PiGetChildIdPrefix(
+    _In_opt_ PDEVICE_NODE Parent,
+    _Out_ PUNICODE_STRING Prefix)
+{
     UNICODE_STRING Upcased;
     ULONG Digest;
     PWCHAR Buffer;

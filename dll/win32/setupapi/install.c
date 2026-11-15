@@ -1425,9 +1425,142 @@ cleanup:
     return ret;
 }
 
+#define MAX_COPYINF_DEPTH 8
+
+struct copied_infs
+{
+    WCHAR **paths;
+    unsigned int count;
+};
+
+static BOOL copy_oem_inf( PCWSTR SourceInfFileName, PCWSTR OEMSourceMediaLocation, DWORD OEMSourceMediaType,
+                          DWORD CopyStyle, PWSTR DestinationInfFileName, DWORD DestinationInfFileNameSize,
+                          PDWORD RequiredSize, PWSTR *DestinationInfFileNameComponent );
+
+static WCHAR *get_package_dir( PCWSTR inf_path )
+{
+    WCHAR *dir, *slash;
+    DWORD len;
+
+    if (!(len = GetFullPathNameW( inf_path, 0, NULL, NULL ))) return NULL;
+    if (!(dir = MyMalloc( len * sizeof(WCHAR) ))) return NULL;
+    if (!GetFullPathNameW( inf_path, len, dir, NULL ) || !(slash = strrchrW( dir, '\\' )))
+    {
+        MyFree( dir );
+        return NULL;
+    }
+    *slash = 0;
+    return dir;
+}
+
+static BOOL remember_copied_inf( struct copied_infs *copied, PCWSTR path )
+{
+    WCHAR **paths, *copy;
+    unsigned int i;
+
+    for (i = 0; i < copied->count; i++)
+        if (!strcmpiW( copied->paths[i], path )) return FALSE;
+
+    if (!(copy = MyMalloc( (strlenW( path ) + 1) * sizeof(WCHAR) ))) return FALSE;
+    strcpyW( copy, path );
+    paths = copied->paths ? MyRealloc( copied->paths, (copied->count + 1) * sizeof(*paths) )
+                          : MyMalloc( sizeof(*paths) );
+    if (!paths)
+    {
+        MyFree( copy );
+        return FALSE;
+    }
+    paths[copied->count++] = copy;
+    copied->paths = paths;
+    return TRUE;
+}
+
+static void forget_copied_infs( struct copied_infs *copied )
+{
+    while (copied->count) MyFree( copied->paths[--copied->count] );
+    MyFree( copied->paths );
+    copied->paths = NULL;
+}
+
+static void copy_package_infs( HINF hinf, PCWSTR dir, unsigned int depth, struct copied_infs *copied );
+
+/* A CopyINF names an INF in the directory of the referring INF or in a subdirectory of it */
+static void copy_package_inf( PCWSTR dir, PCWSTR name, unsigned int depth, struct copied_infs *copied )
+{
+    WCHAR path[MAX_PATH], full[MAX_PATH], *child_dir;
+    HINF hinf;
+
+    if (!name[0] || name[0] == '\\' || name[0] == '/' || strchrW( name, ':' ) || strstrW( name, L".." ) ||
+        strlenW( dir ) + 1 + strlenW( name ) >= ARRAY_SIZE(path))
+    {
+        WARN( "CopyINF %s is not inside the package\n", debugstr_w(name) );
+        return;
+    }
+    strcpyW( path, dir );
+    strcatW( path, L"\\" );
+    strcatW( path, name );
+    if (!GetFullPathNameW( path, ARRAY_SIZE(full), full, NULL ) || !remember_copied_inf( copied, full ))
+        return;
+
+    hinf = SetupOpenInfFileW( full, NULL, INF_STYLE_WIN4, NULL );
+    if (hinf == INVALID_HANDLE_VALUE)
+    {
+        WARN( "CopyINF %s cannot be opened (%lu)\n", debugstr_w(full), GetLastError() );
+        return;
+    }
+
+    /* A package already in the driver store is left as it is, its own CopyINF entries included */
+    if (copy_oem_inf( full, NULL, SPOST_NONE, SP_COPY_NOOVERWRITE, NULL, 0, NULL, NULL ))
+    {
+        if ((child_dir = get_package_dir( full )))
+        {
+            copy_package_infs( hinf, child_dir, depth + 1, copied );
+            MyFree( child_dir );
+        }
+    }
+    else if (GetLastError() != ERROR_FILE_EXISTS)
+    {
+        WARN( "CopyINF %s was not imported (%lu)\n", debugstr_w(full), GetLastError() );
+    }
+
+    SetupCloseInfFile( hinf );
+}
+
+static void copy_package_infs( HINF hinf, PCWSTR dir, unsigned int depth, struct copied_infs *copied )
+{
+    WCHAR section[MAX_INF_SECTION_NAME_LENGTH + 1], name[MAX_PATH];
+    INFCONTEXT context;
+    DWORD field;
+    UINT index;
+
+    if (depth > MAX_COPYINF_DEPTH)
+    {
+        WARN( "CopyINF chain deeper than %u in %s\n", MAX_COPYINF_DEPTH, debugstr_w(dir) );
+        return;
+    }
+
+    for (index = 0; SetupEnumInfSectionsW( hinf, index, section, ARRAY_SIZE(section), NULL ); index++)
+    {
+        if (!SetupFindFirstLineW( hinf, section, CopyINF, &context )) continue;
+        do
+        {
+            for (field = 1; SetupGetStringFieldW( &context, field, name, ARRAY_SIZE(name), NULL ); field++)
+                copy_package_inf( dir, name, depth, copied );
+        } while (SetupFindNextMatchLineW( &context, CopyINF, &context ));
+    }
+}
+
 static BOOL copy_inf_callback( HINF hinf, PCWSTR field, void *arg )
 {
-    FIXME( "should do copy inf %s\n", debugstr_w(field) );
+    struct copied_infs copied = { NULL, 0 };
+    WCHAR *dir = PARSER_get_src_root( hinf );
+
+    if (dir)
+    {
+        copy_package_inf( dir, field, 1, &copied );
+        forget_copied_infs( &copied );
+        HeapFree( GetProcessHeap(), 0, dir );
+    }
     return TRUE;
 }
 
@@ -2759,10 +2892,7 @@ static int compare_files( HANDLE file1, HANDLE file2 )
     return 0;
 }
 
-/***********************************************************************
- *		SetupCopyOEMInfW  (SETUPAPI.@)
- */
-BOOL WINAPI SetupCopyOEMInfW(
+static BOOL copy_oem_inf(
         IN PCWSTR SourceInfFileName,
         IN PCWSTR OEMSourceMediaLocation,
         IN DWORD OEMSourceMediaType,
@@ -3074,5 +3204,52 @@ cleanup:
 
     TRACE("Returning %d\n", ret);
     if (ret) SetLastError(ERROR_SUCCESS);
+    return ret;
+}
+
+/***********************************************************************
+ *		SetupCopyOEMInfW  (SETUPAPI.@)
+ */
+BOOL WINAPI SetupCopyOEMInfW(
+        IN PCWSTR SourceInfFileName,
+        IN PCWSTR OEMSourceMediaLocation,
+        IN DWORD OEMSourceMediaType,
+        IN DWORD CopyStyle,
+        OUT PWSTR DestinationInfFileName OPTIONAL,
+        IN DWORD DestinationInfFileNameSize,
+        OUT PDWORD RequiredSize OPTIONAL,
+        OUT PWSTR* DestinationInfFileNameComponent OPTIONAL)
+{
+    struct copied_infs copied = { NULL, 0 };
+    HINF hinf = INVALID_HANDLE_VALUE;
+    WCHAR *dir = NULL;
+    DWORD error;
+    BOOL ret;
+
+    /* The INF is read first: SP_COPY_DELETESOURCE removes it */
+    if (SourceInfFileName &&
+        (strchrW(SourceInfFileName, '\\') || strchrW(SourceInfFileName, '/') ||
+         GetFileAttributesW(SourceInfFileName) != INVALID_FILE_ATTRIBUTES) &&
+        (dir = get_package_dir(SourceInfFileName)))
+    {
+        hinf = SetupOpenInfFileW(SourceInfFileName, NULL, INF_STYLE_WIN4, NULL);
+    }
+
+    ret = copy_oem_inf(SourceInfFileName, OEMSourceMediaLocation, OEMSourceMediaType, CopyStyle,
+                       DestinationInfFileName, DestinationInfFileNameSize, RequiredSize,
+                       DestinationInfFileNameComponent);
+    error = GetLastError();
+
+    /* CopyINF directives are processed, recursively, when the package enters the driver store (CopyINF directive documentation) */
+    if (hinf != INVALID_HANDLE_VALUE && (ret || error == ERROR_FILE_EXISTS))
+    {
+        copy_package_infs(hinf, dir, 1, &copied);
+        forget_copied_infs(&copied);
+    }
+
+    if (hinf != INVALID_HANDLE_VALUE)
+        SetupCloseInfFile(hinf);
+    MyFree(dir);
+    SetLastError(error);
     return ret;
 }

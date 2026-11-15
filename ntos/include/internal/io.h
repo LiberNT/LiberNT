@@ -1471,6 +1471,27 @@ PnpRootCreateInstance(
 VOID
 PnpRootInitializeDevExtension(VOID);
 
+//
+// PnP software devices
+//
+VOID
+PnpSwDeviceInitialize(VOID);
+
+NTSTATUS
+NTAPI
+PnpSwDeviceDriverEntry(
+    _In_opt_ PDRIVER_OBJECT DriverObject,
+    _In_opt_ PUNICODE_STRING RegistryPath);
+
+NTSTATUS
+PnpSwDeviceAddChildren(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ NTSTATUS QueryStatus);
+
+VOID
+PnpSwDeviceParentRemoved(
+    _In_ PDEVICE_OBJECT Parent);
+
 VOID
 NTAPI
 IopBootDriverStatusUpdate(

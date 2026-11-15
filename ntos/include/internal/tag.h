@@ -97,6 +97,7 @@
 #define TAG_IO_DEVNODE          'donD'
 #define TAG_PNP_NOTIFY          'NPnP'
 #define TAG_PNP_ROOT            'RPnP'
+#define TAG_PNP_SWDEVICE        'SPnP'
 #define TAG_PNP_GUIDS           'GPnP'
 #define TAG_IO_RESOURCE         'CRSR'
 #define TAG_IO_TIMER            'MTOI'
