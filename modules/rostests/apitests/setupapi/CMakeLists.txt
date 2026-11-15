@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    AcpiDeviceCapabilities.c
     ClassInstallParams.c
     devclass.c
     DeviceClassName.c

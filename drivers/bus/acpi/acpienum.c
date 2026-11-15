@@ -617,6 +617,7 @@ ACPIEnumerateDevices(PFDO_DEVICE_DATA DeviceExtension)
     {
         if (Device->status.present && Device->status.enabled &&
             Device->flags.hardware_id &&
+            _stricmp(Device->pnp.hardware_id, ACPI_PCI_LINK_HID) != 0 &&
             (!DebuggerDevice || Device->handle != DebuggerDevice))
         {
             if (BuspShouldEnumerateDevice(Device, &ProcessorUids))

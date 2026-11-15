@@ -2,6 +2,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_AcpiDeviceCapabilities(void);
 extern void func_ClassInstallParams(void);
 extern void func_devclass(void);
 extern void func_DeviceClassName(void);
@@ -31,6 +32,7 @@ extern void func_UsbInterfaceIds(void);
 
 const struct test winetest_testlist[] =
 {
+    { "AcpiDeviceCapabilities", func_AcpiDeviceCapabilities },
     { "ClassInstallParams", func_ClassInstallParams },
     { "devclass", func_devclass },
     { "DeviceClassName", func_DeviceClassName },

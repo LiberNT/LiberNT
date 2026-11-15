@@ -3487,6 +3487,29 @@ Bus_PDO_PnP (
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return status;
 }
+/* Windows 11 starts these raw: acpi.sys itself drives containers, the RTC, the EC, fans, buttons, the lid and thermal zones */
+static
+BOOLEAN
+AcpiIsRawDeviceId(
+    _In_ PCSTR HardwareId)
+{
+    static const PCSTR RawIds[] =
+    {
+        "PNP0A05", "PNP0A06", "PNP0B00", "ACPI0010", "PNP0C09",
+        ACPI_FAN_HID, "PNP0C0C", ACPI_BUTTON_HID_LID, "PNP0C0E", ACPI_THERMAL_HID,
+        ACPI_BUTTON_HID_POWERF, ACPI_BUTTON_HID_SLEEPF,
+    };
+    ULONG Index;
+
+    ASSERT(HardwareId != NULL);
+    for (Index = 0; Index < RTL_NUMBER_OF(RawIds); Index++)
+    {
+        if (!_stricmp(HardwareId, RawIds[Index]))
+            return TRUE;
+    }
+    return FALSE;
+}
+
 
 NTSTATUS
 Bus_PDO_QueryDeviceCaps(
@@ -3571,18 +3594,10 @@ Bus_PDO_QueryDeviceCaps(
         deviceCapabilities->DockDevice = TRUE;
     DPRINT("DockDevice: %u\n", deviceCapabilities->DockDevice);
 
-    if (!device ||
-        (device->flags.hardware_id &&
-         (strstr(device->pnp.hardware_id, ACPI_BUTTON_HID_LID) ||
-          strstr(device->pnp.hardware_id, ACPI_THERMAL_HID) ||
-          strstr(device->pnp.hardware_id, ACPI_FAN_HID) ||
-          strstr(device->pnp.hardware_id, ACPI_PROCESSOR_HID))))
-    {
-        /* Allow ACPI to control lid, thermal zone, fan, processor, or fixed feature button */
+    if (!device || (device->flags.hardware_id && AcpiIsRawDeviceId(device->pnp.hardware_id)))
         deviceCapabilities->RawDeviceOK = TRUE;
-    }
 
-    deviceCapabilities->SilentInstall = FALSE;
+    deviceCapabilities->SilentInstall = TRUE;
     deviceCapabilities->UINumber = (ULONG)-1;
 
     return STATUS_SUCCESS;
