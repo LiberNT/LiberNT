@@ -189,7 +189,7 @@ NTSTATUS Ext4ReadFileData(_In_ PEXT4_FCB Fcb, _In_ ULONGLONG Offset, _Out_writes
 /* write.c */
 NTSTATUS Ext4WriteFileData(_In_ PEXT4_FCB Fcb, _In_ ULONGLONG Offset, _In_reads_bytes_(Length) const UCHAR *Buffer, _In_ ULONG Length, _In_ ULONGLONG FileSize);
 NTSTATUS Ext4SetFileSize(_In_ PEXT4_FCB Fcb, _In_opt_ PFILE_OBJECT FileObject, _In_ ULONGLONG Size);
-NTSTATUS Ext4AllocateRange(_In_ PEXT4_FCB Fcb, _In_ ULONGLONG Offset, _In_ ULONGLONG Length);
+NTSTATUS Ext4AllocateRange(_In_ PEXT4_FCB Fcb, _In_ ULONGLONG Offset, _In_ ULONGLONG Length, _In_ ULONGLONG FileSize);
 
 /* fileinfo.c */
 NTSTATUS Ext4MarkDeletePending(_In_ PEXT4_FCB Fcb, _In_ PEXT4_CCB Ccb, _In_ PFILE_OBJECT FileObject, _In_ BOOLEAN Delete);

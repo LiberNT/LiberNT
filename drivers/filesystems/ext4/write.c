@@ -26,13 +26,15 @@ Ext4WriteBuffer(
 }
 
 /* Maps the blocks from FirstBlock on, allocating the missing ones, in one transaction. Stops when the run table is
- * full; *Done tells how many blocks it covered. */
+ * full; *Done tells how many blocks it covered. The same transaction raises the size in the inode to cover them,
+ * up to FileSize, so that a crash never leaves blocks past the end of the file. */
 static
 NTSTATUS
 Ext4MapForWrite(
     _In_ PEXT4_FCB Fcb,
     _In_ ULONGLONG FirstBlock,
     _In_ ULONG Blocks,
+    _In_ ULONGLONG FileSize,
     _Out_writes_(EXT4_MAX_RUNS) PEXT4_RUN Runs,
     _Out_ PULONG RunCount,
     _Out_ PULONG Done)
@@ -40,6 +42,7 @@ Ext4MapForWrite(
     PEXT4_VCB Vcb = Fcb->Vcb;
     BOOLEAN Allocated = FALSE;
     ULONG Count = 0, Covered = 0;
+    ULONGLONG Reached = 0;
     int Error;
 
     *RunCount = 0;
@@ -83,13 +86,20 @@ Ext4MapForWrite(
     }
 
     /* The blocks mapped so far stay with the file even when a later one could not be had */
-    Error = E4End(&Vcb->Core, (Covered != 0) ? EOK : Error);
+    if (Covered != 0)
+    {
+        Reached = min(FileSize, (FirstBlock + Covered) * Vcb->BlockSize);
+        Error = Allocated ? E4GrowSize(&Vcb->Core, Fcb->Inode, Reached) : EOK;
+    }
+    Error = E4End(&Vcb->Core, Error);
     {
         NTSTATUS Status = Ext4Status(Vcb, Error);
 
         Ext4UnlockCore(Vcb);
         if (!NT_SUCCESS(Status)) return Status;
     }
+    ASSERT(Covered != 0);
+    if (Allocated && Reached > Fcb->Attr.Size) Fcb->Attr.Size = Reached;
 
     if (Allocated) Ext4MarkCoreDirty(Vcb);
     *RunCount = Count;
@@ -162,7 +172,7 @@ Ext4WriteFileData(
         ULONG Blocks = (ULONG)(((ULONGLONG)Length + InBlock + BlockSize - 1) / BlockSize);
         ULONG RunCount, Done, Index;
 
-        Status = Ext4MapForWrite(Fcb, Offset / BlockSize, Blocks, Runs, &RunCount, &Done);
+        Status = Ext4MapForWrite(Fcb, Offset / BlockSize, Blocks, FileSize, Runs, &RunCount, &Done);
         if (!NT_SUCCESS(Status)) break;
 
         for (Index = 0; Index < RunCount && NT_SUCCESS(Status) && Length != 0; Index++)
@@ -210,7 +220,8 @@ NTSTATUS
 Ext4AllocateRange(
     _In_ PEXT4_FCB Fcb,
     _In_ ULONGLONG Offset,
-    _In_ ULONGLONG Length)
+    _In_ ULONGLONG Length,
+    _In_ ULONGLONG FileSize)
 {
     PEXT4_VCB Vcb = Fcb->Vcb;
     ULONG BlockSize = Vcb->BlockSize;
@@ -228,7 +239,7 @@ Ext4AllocateRange(
     {
         ULONG RunCount, Done;
 
-        Status = Ext4MapForWrite(Fcb, Block, (ULONG)min(End - Block, 0x10000ULL), Runs, &RunCount, &Done);
+        Status = Ext4MapForWrite(Fcb, Block, (ULONG)min(End - Block, 0x10000ULL), FileSize, Runs, &RunCount, &Done);
         if (!NT_SUCCESS(Status)) break;
         ASSERT(Done != 0);
         Block += Done;
@@ -445,6 +456,7 @@ Ext4NonCachedWrite(
             *Extended = TRUE;
         }
     }
+    if (!NT_SUCCESS(Status) && Fcb->Attr.Size > OldSize) (VOID)Ext4StoreSize(Fcb, OldSize);
     ExReleaseResourceLite(&Fcb->PagingIoResource);
 
     if (*Extended && FileObject->SectionObjectPointer->SharedCacheMap != NULL)
@@ -516,11 +528,12 @@ Ext4CachedWrite(
     /* The blocks are taken once the pages hold the data: a page read in between finds a hole and so zeros, never
      * what a new block happens to hold. A full volume is still reported to the writer.
      * FIXME: a crash before the pages are written leaves the new blocks with their old content inside the file. */
-    if (NT_SUCCESS(Status)) Status = Ext4AllocateRange(Fcb, Offset, Length);
+    if (NT_SUCCESS(Status)) Status = Ext4AllocateRange(Fcb, Offset, Length, (ULONGLONG)Fcb->Header.FileSize.QuadPart);
     if (NT_SUCCESS(Status) && *Extended) Status = Ext4StoreSize(Fcb, Offset + Length);
 
     if (!NT_SUCCESS(Status) && *Extended)
     {
+        if (Fcb->Attr.Size > OldSize) (VOID)Ext4StoreSize(Fcb, OldSize);
         ExAcquireResourceExclusiveLite(&Fcb->PagingIoResource, TRUE);
         Ext4SetHeaderSizes(Fcb, OldSize);
         ExReleaseResourceLite(&Fcb->PagingIoResource);

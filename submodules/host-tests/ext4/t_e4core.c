@@ -179,7 +179,16 @@ static int FileWrite(uint32_t ino, uint64_t off, const void *buf, uint32_t len)
         uint64_t blk = off / bs, phys;
         uint32_t in = (uint32_t)(off % bs), mapped, chunk;
         bool fresh;
+        /* as the driver does: the blocks and the size that covers them in one transaction */
+        r = E4Begin(&V);
+        if (r != EOK) return r;
         r = E4Map(&V, ino, blk, (len + in + bs - 1) / bs, true, &phys, &mapped, &fresh);
+        if (r == EOK && fresh)
+        {
+            uint64_t reach = (blk + mapped) * (uint64_t)bs;
+            r = E4GrowSize(&V, ino, reach < end ? reach : end);
+        }
+        r = E4End(&V, r);
         if (r != EOK) return r;
         chunk = mapped * bs - in;
         if (chunk > len) chunk = len;

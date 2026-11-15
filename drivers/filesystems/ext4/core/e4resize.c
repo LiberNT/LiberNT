@@ -1465,6 +1465,7 @@ E4Resize(
     if ((Result == EOK) && Journaled)
     {
         Result = jbd_journal_stop(&Volume->Journal);
+        E4StageStop(Volume);
         if (Result != EOK)
             Volume->JournalFs.dirty = false;
         jbd_put_fs(&Volume->JournalFs);
@@ -1518,6 +1519,7 @@ E4Resize(
             Volume->Fs.jbd_fs = &Volume->JournalFs;
             Volume->Fs.jbd_journal = &Volume->Journal;
             Volume->Journaled = true;
+            E4StageStart(Volume);
         }
         else
         {

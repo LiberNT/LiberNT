@@ -96,6 +96,8 @@ typedef struct _E4_STATFS
     char Label[17];
 } E4_STATFS;
 
+#define E4_STAGE_RUNS   16
+
 typedef struct _E4_VOLUME
 {
     /* The caller fills Device.bdif, Device.part_offset and Device.part_size, and Now, before E4Mount */
@@ -114,6 +116,25 @@ typedef struct _E4_VOLUME
     bool ReadOnly;
     bool WasValid;
     bool Failed;
+
+    /* Journal blocks waiting to be written together: see e4stage.c */
+    struct ext4_blockdev_iface *StageRaw;
+    struct ext4_blockdev_iface StageInterface;
+    struct
+    {
+        uint64_t Start;
+        uint64_t Count;
+    } StageRuns[E4_STAGE_RUNS];
+    uint32_t StageRunCount;
+    uint8_t *StageOut;
+    uint8_t *StageData;
+    uint64_t *StageBlock;
+    uint16_t *StageOrder;
+    uint8_t *StageCommit;
+    uint32_t StageCapacity;
+    uint32_t StageCount;
+    uint64_t StageFreeEvents;
+    bool StageSettle;
 } E4_VOLUME;
 
 /* Return false to stop the enumeration; Offset is the position of the entry after this one */
@@ -151,6 +172,9 @@ int E4Release(E4_VOLUME *Volume, uint32_t Inode);
 int E4Map(E4_VOLUME *Volume, uint32_t Inode, uint64_t Block, uint32_t Count, bool Allocate, uint64_t *Physical,
           uint32_t *Mapped, bool *Fresh);
 int E4SetSize(E4_VOLUME *Volume, uint32_t Inode, uint64_t Size);
+
+/* Raises the size of a file to Size if it is smaller: for the transaction that gives the file the blocks up to there */
+int E4GrowSize(E4_VOLUME *Volume, uint32_t Inode, uint64_t Size);
 int E4ReadLink(E4_VOLUME *Volume, uint32_t Inode, char *Buffer, uint32_t Size, uint32_t *Length);
 int E4WriteLink(E4_VOLUME *Volume, uint32_t Inode, const char *Target, uint32_t Length);
 

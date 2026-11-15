@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     core/e4core.c
     core/e4resize.c
+    core/e4stage.c
     close.c
     create.c
     device.c

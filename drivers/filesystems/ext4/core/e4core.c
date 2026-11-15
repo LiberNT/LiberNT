@@ -254,12 +254,22 @@ E4End(
         Result = jbd_journal_commit_trans(&Volume->Journal, Volume->Fs.curr_trans);
         if (Result != EOK)
             Volume->Failed = true;
+        else
+            E4StageCommit(Volume);
     }
     else
     {
         jbd_journal_free_trans(&Volume->Journal, Volume->Fs.curr_trans, true);
     }
     Volume->Fs.curr_trans = NULL;
+
+    /* The caller is about to write file data into blocks this operation gave it */
+    if (Volume->StageSettle)
+    {
+        Volume->StageSettle = false;
+        if (Result == EOK)
+            Result = E4StageSettleFreed(Volume);
+    }
     return Result;
 }
 
@@ -277,6 +287,10 @@ E4Mount(
     Volume->Journaled = false;
     Volume->Failed = false;
     Volume->TransDepth = 0;
+    Volume->StageData = NULL;
+    Volume->StageCount = 0;
+    Volume->StageRunCount = 0;
+    Volume->StageSettle = false;
 
     Result = ext4_block_init(&Volume->Device);
     if (Result != EOK)
@@ -377,6 +391,8 @@ E4Mount(
 
     ext4_block_cache_write_back(&Volume->Device, 1);
     Volume->Mounted = true;
+    if (Volume->Journaled)
+        E4StageStart(Volume);
     return EOK;
 }
 
@@ -391,7 +407,9 @@ E4Sync(
         return EOK;
     ext4_assert(Volume->TransDepth == 0);
 
-    Result = ext4_block_cache_flush(&Volume->Device);
+    Result = E4StageFlush(Volume);
+    if (Result == EOK)
+        Result = ext4_block_cache_flush(&Volume->Device);
     if (Volume->Journaled)
         jbd_journal_purge_cp_trans(&Volume->Journal, true, false);
     E4Now(Volume, &Now);
@@ -416,11 +434,14 @@ E4Unmount(
 
     if (!Volume->ReadOnly)
     {
-        Result = ext4_block_cache_flush(&Volume->Device);
+        Result = E4StageFlush(Volume);
+        if (Result == EOK)
+            Result = ext4_block_cache_flush(&Volume->Device);
         if (Volume->Journaled)
         {
             int Stop = jbd_journal_stop(&Volume->Journal);
 
+            E4StageStop(Volume);
             if (Stop != EOK)
                 Volume->JournalFs.dirty = false;
             jbd_put_fs(&Volume->JournalFs);
@@ -1429,6 +1450,36 @@ E4SetSize(
 }
 
 int
+E4GrowSize(
+    E4_VOLUME *Volume,
+    uint32_t Inode,
+    uint64_t Size)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    struct ext4_inode_ref Ref;
+    int Result;
+
+    Result = E4Begin(Volume);
+    if (Result != EOK)
+        return Result;
+    Result = E4Get(Volume, Inode, &Ref);
+    if (Result != EOK)
+        return E4End(Volume, Result);
+    if (!ext4_inode_is_type(Sb, Ref.inode, EXT4_INODE_MODE_FILE))
+    {
+        ext4_fs_put_inode_ref(&Ref);
+        return E4End(Volume, EINVAL);
+    }
+    if (ext4_inode_get_size(Sb, Ref.inode) < Size)
+    {
+        ext4_inode_set_size(Ref.inode, Size);
+        Ref.dirty = true;
+    }
+    Result = ext4_fs_put_inode_ref(&Ref);
+    return E4End(Volume, Result);
+}
+
+int
 E4Release(
     E4_VOLUME *Volume,
     uint32_t Inode)
@@ -1513,6 +1564,8 @@ E4Map(
         if ((Result == EOK) && (Start == 0) && Allocate)
         {
             Result = ext4_extent_get_blocks(&Ref, (ext4_lblk_t)Block, Count, &Start, true, &Run);
+            if (Result == EOK)
+                Volume->StageSettle = true;
             if ((Result == EOK) && (Fresh != NULL))
                 *Fresh = true;
         }
@@ -1535,7 +1588,9 @@ E4Map(
             }
             if (Result != EOK)
                 Start = 0;
-            else if (Fresh != NULL)
+            else
+                Volume->StageSettle = true;
+            if ((Result == EOK) && (Fresh != NULL))
                 *Fresh = true;
         }
         Run = 1;

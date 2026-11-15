@@ -9,7 +9,7 @@ set(EXT4_CORE_DIR ${REACTOS_HOST_SOURCE_ROOT}/drivers/filesystems/ext4/core)
 file(GLOB LWEXT4_SOURCE ${LWEXT4_DIR}/src/*.c)
 list(REMOVE_ITEM LWEXT4_SOURCE ${LWEXT4_DIR}/src/ext4.c ${LWEXT4_DIR}/src/ext4_mbr.c)
 
-add_executable(ext4_core t_e4core.c ${EXT4_CORE_DIR}/e4core.c ${EXT4_CORE_DIR}/e4resize.c ${LWEXT4_SOURCE})
+add_executable(ext4_core t_e4core.c ${EXT4_CORE_DIR}/e4core.c ${EXT4_CORE_DIR}/e4resize.c ${EXT4_CORE_DIR}/e4stage.c ${LWEXT4_SOURCE})
 target_include_directories(ext4_core PRIVATE ${LWEXT4_DIR}/include ${EXT4_CORE_DIR})
 target_compile_definitions(ext4_core PRIVATE
     CONFIG_USE_DEFAULT_CFG=1 CONFIG_HAVE_PORT_DEBUG=1 CONFIG_HAVE_OWN_ERRNO=1 CONFIG_UNALIGNED_ACCESS=1)
