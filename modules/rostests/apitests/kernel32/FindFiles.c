@@ -533,6 +533,85 @@ static void Test_FindFirstFileExW(void)
     SetCurrentDirectoryW(CurrentDirectory);
 }
 
+static void Test_FindNextFileFullBuffer(void)
+{
+    static const ULONG NameLengths[] = { 17, 81, 101, 173 };
+    const ULONG FileCount = 300;
+    WCHAR Root[MAX_PATH], Directory[MAX_PATH], Path[MAX_PATH], Name[256];
+    WIN32_FIND_DATAW fd;
+    ULONG Index, File, Created, Found, Missing, CreateError;
+    HANDLE h;
+
+    if (!GetTempPathW(_countof(Root), Root) ||
+        FAILED(StringCchCatW(Root, _countof(Root), L"FindNextFileFullBuffer")))
+    {
+        skip("No temporary directory\n");
+        return;
+    }
+    CreateDirectoryW(Root, NULL);
+
+    for (Index = 0; Index < _countof(NameLengths); Index++)
+    {
+        ULONG Length = NameLengths[Index];
+
+        StringCchPrintfW(Directory, _countof(Directory), L"%s\\%lu", Root, Length);
+        if (!CreateDirectoryW(Directory, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+        {
+            skip("Cannot create %S: %lu\n", Directory, GetLastError());
+            continue;
+        }
+        Created = 0;
+        CreateError = ERROR_SUCCESS;
+        for (File = 0; File < FileCount; File++)
+        {
+            StringCchPrintfW(Name, _countof(Name), L"%0*lu", (int)Length, File);
+            StringCchPrintfW(Path, _countof(Path), L"%s\\%s", Directory, Name);
+            h = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (h != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(h);
+                Created++;
+            }
+            else if (CreateError == ERROR_SUCCESS)
+            {
+                CreateError = GetLastError();
+            }
+        }
+        ok(Created == FileCount, "Name length %lu: created %lu of %lu files, first error %lu\n", Length, Created,
+           FileCount, CreateError);
+
+        /* Entries of these lengths fill FindNextFile's buffer up to its last
+         * byte; such a final entry is complete and must be returned. */
+        Found = 0;
+        StringCchPrintfW(Path, _countof(Path), L"%s\\*", Directory);
+        h = FindFirstFileW(Path, &fd);
+        ok(h != INVALID_HANDLE_VALUE, "FindFirstFileW(%S) failed: %lu\n", Path, GetLastError());
+        if (h != INVALID_HANDLE_VALUE)
+        {
+            do
+            {
+                if (wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L".."))
+                    Found++;
+            } while (FindNextFileW(h, &fd));
+            ok_long(GetLastError(), ERROR_NO_MORE_FILES);
+            FindClose(h);
+        }
+        ok(Found == Created, "Name length %lu: FindNextFileW returned %lu of %lu files\n", Length, Found, Created);
+
+        Missing = 0;
+        for (File = 0; File < FileCount; File++)
+        {
+            StringCchPrintfW(Name, _countof(Name), L"%0*lu", (int)Length, File);
+            StringCchPrintfW(Path, _countof(Path), L"%s\\%s", Directory, Name);
+            if (!DeleteFileW(Path))
+                Missing++;
+        }
+        ok(Missing == FileCount - Created, "Name length %lu: %lu files could not be deleted\n", Length, Missing);
+        RemoveDirectoryW(Directory);
+    }
+    RemoveDirectoryW(Root);
+}
+
 static int init(void)
 {
     LPSTR p;
@@ -581,4 +660,5 @@ START_TEST(FindFiles)
     Test_FindFirstFileW();
     Test_FindFirstFileExA();
     Test_FindFirstFileExW();
+    Test_FindNextFileFullBuffer();
 }

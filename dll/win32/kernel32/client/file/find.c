@@ -461,7 +461,7 @@ FindNextFileW(IN HANDLE hFindFile,
                 /* Be paranoid and make sure that the next entry is completely there */
                 if (BufferEnd < (ULONG_PTR)NextDirInfo.DirInfo ||
                     BufferEnd < (ULONG_PTR)&NextDirInfo.FullDirInfo->FileNameLength + sizeof(NextDirInfo.FullDirInfo->FileNameLength) ||
-                    BufferEnd <= (ULONG_PTR)((ULONG_PTR)pFileName + NextDirInfo.FullDirInfo->FileNameLength))
+                    BufferEnd < (ULONG_PTR)((ULONG_PTR)pFileName + NextDirInfo.FullDirInfo->FileNameLength))
                 {
                     FindFileData->NextDirInfo.DirInfo = NULL;
                 }
