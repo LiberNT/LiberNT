@@ -180,7 +180,7 @@ static HRESULT WINAPI object_QueryInterface(IADsGroup *iface, REFIID riid, void 
     }
 
     /* TODO: IADsUser, IADsContainer and the computer's interfaces */
-    TRACE("unsupported interface %s\n", debugstr_guid(riid));
+    FIXME("unsupported interface %s\n", debugstr_guid(riid));
     return E_NOINTERFACE;
 }
 
@@ -551,6 +551,7 @@ static HRESULT WINAPI namespace_QueryInterface(IADsOpenDSObject *iface, REFIID r
     }
 
     /* TODO: IADs, IADsContainer and IParseDisplayName on the namespace */
+    FIXME("unsupported interface %s\n", debugstr_guid(riid));
     return E_NOINTERFACE;
 }
 
