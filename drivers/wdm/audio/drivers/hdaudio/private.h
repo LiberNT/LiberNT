@@ -24,7 +24,7 @@
 
 PVOID
 __cdecl
-operator new(size_t Size, POOL_TYPE PoolType, ULONG Tag);
+operator new(size_t Size, POOL_TYPE PoolType, ULONG Tag) noexcept;
 
 typedef struct
 {

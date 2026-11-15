@@ -13,7 +13,7 @@
 
 PVOID
 __cdecl
-operator new(size_t Size, POOL_TYPE PoolType, ULONG Tag)
+operator new(size_t Size, POOL_TYPE PoolType, ULONG Tag) noexcept
 {
     PVOID P = ExAllocatePoolWithTag(PoolType, Size, Tag);
     if (P)
