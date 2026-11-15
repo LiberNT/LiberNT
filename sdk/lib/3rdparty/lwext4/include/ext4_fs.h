@@ -67,6 +67,9 @@ struct ext4_fs {
 	struct jbd_fs *jbd_fs;
 	struct jbd_journal *jbd_journal;
 	struct jbd_trans *curr_trans;
+
+	/* Counts the calls that freed blocks */
+	uint64_t free_events;
 };
 
 struct ext4_block_group_ref {

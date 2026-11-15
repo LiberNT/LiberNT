@@ -150,6 +150,7 @@ ext4_balloc_verify_bitmap_csum(struct ext4_sblock *sb,
 
 int ext4_balloc_free_block(struct ext4_inode_ref *inode_ref, ext4_fsblk_t baddr)
 {
+	inode_ref->fs->free_events++;
 	struct ext4_fs *fs = inode_ref->fs;
 	struct ext4_sblock *sb = &fs->sb;
 
@@ -232,6 +233,7 @@ int ext4_balloc_free_block(struct ext4_inode_ref *inode_ref, ext4_fsblk_t baddr)
 int ext4_balloc_free_blocks(struct ext4_inode_ref *inode_ref,
 			    ext4_fsblk_t first, uint32_t count)
 {
+	inode_ref->fs->free_events++;
 	int rc = EOK;
 	uint32_t blk_cnt = count;
 	ext4_fsblk_t start_block = first;
@@ -584,6 +586,89 @@ success:
 
 	*fblock = alloc;
 	return r;
+}
+
+int ext4_balloc_alloc_blocks(struct ext4_inode_ref *inode_ref,
+			     ext4_fsblk_t goal, uint32_t max,
+			     ext4_fsblk_t *fblock, uint32_t *count)
+{
+	struct ext4_fs *fs = inode_ref->fs;
+	struct ext4_sblock *sb = &fs->sb;
+	struct ext4_block_group_ref bg_ref;
+	struct ext4_block b;
+	uint32_t taken = 0;
+	int r;
+
+	*count = 0;
+	r = ext4_balloc_alloc_block(inode_ref, goal, fblock);
+	if (r != EOK)
+		return r;
+
+	*count = 1;
+	if (max <= 1)
+		return EOK;
+
+	/* The run grows over the free blocks that follow in the same group */
+	uint32_t bg_id = ext4_balloc_get_bgid_of_block(sb, *fblock);
+	uint32_t idx = ext4_fs_addr_to_idx_bg(sb, *fblock) + 1;
+	uint32_t end = ext4_blocks_in_group_cnt(sb, bg_id);
+
+	if (idx >= end)
+		return EOK;
+
+	r = ext4_fs_get_block_group_ref(fs, bg_id, &bg_ref);
+	if (r != EOK)
+		return r;
+
+	r = ext4_trans_block_get(fs->bdev, &b,
+			ext4_bg_get_block_bitmap(bg_ref.block_group, sb));
+	if (r != EOK) {
+		ext4_fs_put_block_group_ref(&bg_ref);
+		return r;
+	}
+
+	while ((taken < max - 1) && (idx < end) &&
+	       ext4_bmap_is_bit_clr(b.data, idx)) {
+		ext4_bmap_bit_set(b.data, idx);
+		idx++;
+		taken++;
+	}
+
+	if (taken != 0) {
+		ext4_balloc_set_bitmap_csum(sb, bg_ref.block_group, b.data);
+		ext4_trans_set_block_dirty(b.buf);
+	}
+
+	r = ext4_block_set(fs->bdev, &b);
+	if (r != EOK) {
+		ext4_fs_put_block_group_ref(&bg_ref);
+		return r;
+	}
+
+	if (taken != 0) {
+		uint32_t block_size = ext4_sb_get_block_size(sb);
+		uint64_t ino_blocks;
+		uint32_t bg_free;
+
+		ext4_assert(ext4_sb_get_free_blocks_cnt(sb) >= taken);
+		ext4_sb_set_free_blocks_cnt(sb,
+				ext4_sb_get_free_blocks_cnt(sb) - taken);
+
+		ino_blocks = ext4_inode_get_blocks_count(sb, inode_ref->inode);
+		ino_blocks += (uint64_t)taken *
+			      (block_size / EXT4_INODE_BLOCK_SIZE);
+		ext4_inode_set_blocks_count(sb, inode_ref->inode, ino_blocks);
+		inode_ref->dirty = true;
+
+		bg_free = ext4_bg_get_free_blocks_count(bg_ref.block_group, sb);
+		ext4_assert(bg_free >= taken);
+		ext4_bg_set_free_blocks_count(bg_ref.block_group, sb,
+					      bg_free - taken);
+		bg_ref.dirty = true;
+		*count += taken;
+	}
+
+	return ext4_fs_put_block_group_ref(&bg_ref);
 }
 
 int ext4_balloc_try_alloc_block(struct ext4_inode_ref *inode_ref,

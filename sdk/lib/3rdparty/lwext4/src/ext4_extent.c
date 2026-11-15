@@ -500,9 +500,21 @@ static ext4_fsblk_t ext4_new_meta_blocks(struct ext4_inode_ref *inode_ref,
 {
 	ext4_fsblk_t block = 0;
 
+	if (count) {
+		uint32_t max = *count;
+
+		if (max > EXT_INIT_MAX_LEN)
+			max = EXT_INIT_MAX_LEN;
+		*errp = ext4_balloc_alloc_blocks(inode_ref, goal, max, &block,
+						 count);
+		if ((*errp != EOK) && (*count != 0)) {
+			ext4_balloc_free_blocks(inode_ref, block, *count);
+			block = 0;
+		}
+		return block;
+	}
+
 	*errp = ext4_allocate_single_block(inode_ref, goal, &block);
-	if (count)
-		*count = 1;
 	return block;
 }
 
@@ -2050,8 +2062,12 @@ static int ext4_ext_split_extent_at(struct ext4_inode_ref *inode_ref,
 out:
 	return err;
 restore_extent_len:
-	ex->block_count = to_le16(ee_len);
-	err = ext4_ext_dirty(inode_ref, *ppath + depth);
+	/* The error of the insertion is the result, and a failed insertion
+	 * may have dropped the path */
+	if (*ppath != NULL) {
+		ex->block_count = to_le16(ee_len);
+		ext4_ext_dirty(inode_ref, *ppath + depth);
+	}
 	return err;
 }
 
@@ -2250,7 +2266,11 @@ int ext4_extent_get_blocks(struct ext4_inode_ref *inode_ref, ext4_lblk_t iblock,
 
 	/* find next allocated block so that we know how many
 	 * blocks we can allocate without ovelapping next extent */
-	next = ext4_ext_next_allocated_block(path);
+	if (ex && to_le32(ex->first_block) > iblock)
+		next = to_le32(ex->first_block);
+	else
+		next = ext4_ext_next_allocated_block(path);
+	ext4_assert(next > iblock);
 	allocated = next - iblock;
 	if (allocated > max_blocks)
 		allocated = max_blocks;

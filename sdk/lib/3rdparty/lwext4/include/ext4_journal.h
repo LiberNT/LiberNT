@@ -85,6 +85,7 @@ struct jbd_trans {
 	uint32_t data_csum;
 	int written_cnt;
 	int error;
+	bool in_cp_queue;
 
 	struct jbd_journal *journal;
 
@@ -107,6 +108,7 @@ struct jbd_journal {
 	RB_HEAD(jbd_block, jbd_block_rec) block_rec_root;
 
 	struct jbd_fs *jbd_fs;
+	uint32_t defer_sb;
 };
 
 int jbd_get_fs(struct ext4_fs *fs,

@@ -101,6 +101,17 @@ int ext4_balloc_alloc_block(struct ext4_inode_ref *inode_ref,
 			    ext4_fsblk_t goal,
 			    ext4_fsblk_t *baddr);
 
+/**@brief Allocate a run of contiguous blocks.
+ * @param inode_ref inode the blocks are charged to
+ * @param goal      block the search starts at
+ * @param max       longest run wanted
+ * @param fblock    first block of the run
+ * @param count     blocks in the run, at least one on success
+ * @return standard error code */
+int ext4_balloc_alloc_blocks(struct ext4_inode_ref *inode_ref,
+			     ext4_fsblk_t goal, uint32_t max,
+			     ext4_fsblk_t *fblock, uint32_t *count);
+
 /**@brief   Try allocate selected block.
  * @param   inode_ref inode reference
  * @param   baddr block address to allocate

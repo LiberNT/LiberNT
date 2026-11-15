@@ -17,6 +17,9 @@ Features
   that is given up when the volume shrinks, without changing the shape of the tree.
 - `ext4_dir_set_dx_csum()`, `ext4_xattr_set_block_checksum()` and `ext4_sb_set_csum()` are exported.
 - `CONFIG_HAVE_PORT_DEBUG` routes `ext4_dbg` and `ext4_assert` to `ext4_port_dbg` and `ext4_port_assert_fail`.
+- `ext4_balloc_alloc_blocks()` allocates a run of contiguous blocks, and `ext4_extent_get_blocks()` maps a hole
+  with one run instead of one block per call.
+- `struct ext4_fs` counts the calls that freed blocks (`free_events`), for a caller that delays the journal.
 
 Fixes
 - Owner and group ids are read and written as 32-bit values (the high halves were dropped).
@@ -34,3 +37,14 @@ Fixes
 - The number of block groups and the size of the last one were computed without the first data block, which is
   block 1 on a volume with 1024-byte blocks.
 - `ext4_balloc_alloc_block()` started its search in the group of a goal that lies past the end of the volume.
+- `ext4_extent_get_blocks()` sized a new extent up to the extent after the one the search stopped at, even when
+  that one already lay past the requested block; with runs longer than one block the new extent overlapped it.
+- `jbd_journal_stop()` reset the transaction sequence to zero, so every session numbered its transactions from one
+  and a later recovery ran on into the records an earlier session had left in the log. The sequence now carries on.
+- A checkpoint wrote, for every transaction, its own copy of each block from the journal to the block's place, and
+  the journal superblock after each transaction. A copy that a later committed transaction supersedes is no longer
+  written, and the journal superblock is written once per checkpoint.
+- A full journal checkpoints every transaction instead of one, which cost a checkpoint for each later commit.
+- Recovery asserted on a failed allocation of a revoke entry and trusted the entry count of a revoke block; both
+  are now reported as errors.
+- A failed insertion while splitting an unwritten extent returned success and could dereference a dropped path.
