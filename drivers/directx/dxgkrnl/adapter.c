@@ -217,6 +217,183 @@ DxgkpReleaseAdapterResources(
     }
 }
 
+static volatile LONG DxgkpSessionStarted;
+
+static
+ULONG
+DxgkpMiniportServiceStartType(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    UCHAR Buffer[FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Information = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"Start");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    ULONG StartType = SERVICE_BOOT_START;
+    ULONG Length;
+    HANDLE Key;
+
+    PAGED_CODE();
+
+    if (Adapter->MiniportContext == NULL || Adapter->MiniportContext->RegistryPath.Buffer == NULL)
+        return StartType;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Adapter->MiniportContext->RegistryPath,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&Key, KEY_QUERY_VALUE, &ObjectAttributes)))
+        return StartType;
+
+    if (NT_SUCCESS(ZwQueryValueKey(Key, &ValueName, KeyValuePartialInformation, Information, sizeof(Buffer), &Length)) &&
+        Information->Type == REG_DWORD && Information->DataLength == sizeof(ULONG))
+    {
+        StartType = *(PULONG)Information->Data;
+    }
+
+    ZwClose(Key);
+    return StartType;
+}
+
+static
+VOID
+DxgkpFreeDeferredResources(
+    _In_opt_ PCM_RESOURCE_LIST Resources,
+    _In_opt_ PCM_RESOURCE_LIST TranslatedResources)
+{
+    if (Resources != NULL)
+        ExFreePoolWithTag(Resources, TAG_DXGK_RESOURCES);
+    if (TranslatedResources != NULL)
+        ExFreePoolWithTag(TranslatedResources, TAG_DXGK_RESOURCES);
+}
+
+static
+BOOLEAN
+DxgkpDeferAdapterStart(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_opt_ PCM_RESOURCE_LIST AllocatedResources,
+    _In_opt_ PCM_RESOURCE_LIST TranslatedResources)
+{
+    PCM_RESOURCE_LIST Resources, Translated;
+    BOOLEAN Deferred = FALSE;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if (!DxgkStartCoreDefersToSession(Adapter->IsBasicDisplayFallback,
+                                      DxgkpMiniportServiceStartType(Adapter),
+                                      InterlockedCompareExchange(&DxgkpSessionStarted, 0, 0) != 0))
+    {
+        return FALSE;
+    }
+
+    Resources = DxgkpCloneResourceList(AllocatedResources);
+    Translated = DxgkpCloneResourceList(TranslatedResources);
+    if ((AllocatedResources != NULL && Resources == NULL) || (TranslatedResources != NULL && Translated == NULL))
+    {
+        DxgkpFreeDeferredResources(Resources, Translated);
+        return FALSE;
+    }
+
+    KeAcquireSpinLock(&DxgkAdapterGlobalListLock, &OldIrql);
+    if (DxgkpSessionStarted == 0)
+    {
+        ASSERT(!Adapter->StartDeferred);
+        ASSERT(Adapter->DeferredResources == NULL && Adapter->DeferredTranslatedResources == NULL);
+        Adapter->DeferredResources = Resources;
+        Adapter->DeferredTranslatedResources = Translated;
+        Adapter->StartDeferred = TRUE;
+        Deferred = TRUE;
+    }
+    KeReleaseSpinLock(&DxgkAdapterGlobalListLock, OldIrql);
+
+    if (!Deferred)
+        DxgkpFreeDeferredResources(Resources, Translated);
+    else
+        DXGKRNL_INFO("DxgkpDeferAdapterStart: adapter %p starts when the first session is created\n", Adapter);
+    return Deferred;
+}
+
+static
+VOID
+DxgkpDropDeferredStart(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PCM_RESOURCE_LIST Resources, Translated;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&DxgkAdapterGlobalListLock, &OldIrql);
+    Resources = Adapter->DeferredResources;
+    Translated = Adapter->DeferredTranslatedResources;
+    Adapter->DeferredResources = NULL;
+    Adapter->DeferredTranslatedResources = NULL;
+    Adapter->StartDeferred = FALSE;
+    KeReleaseSpinLock(&DxgkAdapterGlobalListLock, OldIrql);
+
+    DxgkpFreeDeferredResources(Resources, Translated);
+}
+
+VOID
+DxgkStartDeferredAdapters(VOID)
+{
+    PCM_RESOURCE_LIST Resources, Translated;
+    PDEVICE_OBJECT DeviceObject;
+    PDXGKRNL_ADAPTER Adapter;
+    PLIST_ENTRY Entry;
+    NTSTATUS Status;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    for (;;)
+    {
+        Adapter = NULL;
+        Resources = Translated = NULL;
+        DeviceObject = NULL;
+
+        KeAcquireSpinLock(&DxgkAdapterGlobalListLock, &OldIrql);
+        InterlockedExchange(&DxgkpSessionStarted, 1);
+        for (Entry = DxgkAdapterGlobalListHead.Flink; Entry != &DxgkAdapterGlobalListHead; Entry = Entry->Flink)
+        {
+            PDXGKRNL_ADAPTER Candidate = CONTAINING_RECORD(Entry, DXGKRNL_ADAPTER, GlobalAdapterListEntry);
+
+            if (Candidate->StartDeferred && Candidate->FunctionalDeviceObject != NULL)
+            {
+                Adapter = Candidate;
+                DeviceObject = Candidate->FunctionalDeviceObject;
+                ObReferenceObject(DeviceObject);
+                Resources = Candidate->DeferredResources;
+                Translated = Candidate->DeferredTranslatedResources;
+                Candidate->DeferredResources = NULL;
+                Candidate->DeferredTranslatedResources = NULL;
+                Candidate->StartDeferred = FALSE;
+                break;
+            }
+        }
+        KeReleaseSpinLock(&DxgkAdapterGlobalListLock, OldIrql);
+
+        if (Adapter == NULL)
+            break;
+
+        /* FIXME: a PnP stop is not serialized with a deferred start in progress */
+        if (InterlockedCompareExchange(&Adapter->RemoveRundownStarted, 0, 0) == 0 &&
+            ExAcquireRundownProtection(&Adapter->RemoveRundownRef))
+        {
+            Status = DxgkAdapterStart(Adapter, Resources, Translated);
+            if (!NT_SUCCESS(Status))
+            {
+                DXGKRNL_ERR("DxgkStartDeferredAdapters: adapter %p did not start (0x%08lX)\n", Adapter, Status);
+                if (InterlockedCompareExchange(&Adapter->MiniportStartFailed, 0, 0) != 0)
+                    IoInvalidateDeviceState(Adapter->PhysicalDeviceObject);
+            }
+            ExReleaseRundownProtection(&Adapter->RemoveRundownRef);
+        }
+
+        DxgkpFreeDeferredResources(Resources, Translated);
+        ObDereferenceObject(DeviceObject);
+    }
+}
+
 static NTSTATUS
 DxgkpCaptureAdapterResources(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -16373,10 +16550,15 @@ DxgkpMiniportPnpDispatch(
             if (NT_SUCCESS(Status))
             {
                 LowerStart100ns = DxgkpTraceNow100ns();
-                Status = DxgkAdapterStart(
-                             Adapter,
-                             Stack->Parameters.StartDevice.AllocatedResources,
-                             Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+                if (!DxgkpDeferAdapterStart(Adapter,
+                                            Stack->Parameters.StartDevice.AllocatedResources,
+                                            Stack->Parameters.StartDevice.AllocatedResourcesTranslated))
+                {
+                    Status = DxgkAdapterStart(
+                                 Adapter,
+                                 Stack->Parameters.StartDevice.AllocatedResources,
+                                 Stack->Parameters.StartDevice.AllocatedResourcesTranslated);
+                }
                 AdapterStartUs = DxgkpTraceElapsedUs(LowerStart100ns);
                 if (!NT_SUCCESS(Status) &&
                     InterlockedCompareExchange(&Adapter->MiniportStartFailed, 0, 0) != 0 &&
@@ -16537,6 +16719,7 @@ DxgkpMiniportPnpDispatch(
 
         case IRP_MN_STOP_DEVICE:
         {
+            DxgkpDropDeferredStart(Adapter);
             Status = DxgkAdapterStop(Adapter);
             if (!NT_SUCCESS(Status))
             {
@@ -16550,6 +16733,8 @@ DxgkpMiniportPnpDispatch(
         case IRP_MN_REMOVE_DEVICE:
         {
             PDEVICE_OBJECT LowerDevice = Adapter->LowerDeviceObject;
+
+            DxgkpDropDeferredStart(Adapter);
 
             if (LowerDevice != NULL)
                 ObReferenceObject(LowerDevice);

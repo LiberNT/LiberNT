@@ -84,6 +84,23 @@ DxgkPresentCoreEvaluateScanoutRetirement(
     return STATUS_SUCCESS;
 }
 
+#define DXGK_START_CORE_SERVICE_DEMAND_START 3U
+
+/* Windows starts a display adapter when the first session is created, after the registry hives are loaded */
+FORCEINLINE
+BOOLEAN
+DxgkStartCoreDefersToSession(
+    _In_ BOOLEAN BasicDisplay,
+    _In_ ULONG ServiceStartType,
+    _In_ BOOLEAN SessionStarted)
+{
+    if (BasicDisplay || SessionStarted)
+        return FALSE;
+
+    /* FIXME: boot-start and system-start miniports are still started while their device is enumerated */
+    return ServiceStartType >= DXGK_START_CORE_SERVICE_DEMAND_START;
+}
+
 /* A display-only miniport starts before its children are known: its first output carries the desktop, the others get a path when a monitor is reported on them */
 FORCEINLINE
 ULONG

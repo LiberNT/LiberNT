@@ -14838,6 +14838,8 @@ DxgkpDispatchBufferedIoctlWorker(
 
             if (!KmtRequest->Internal || KmtRequest->RequestorMode != KernelMode)
                 return STATUS_ACCESS_DENIED;
+
+            DxgkStartDeferredAdapters();
             if (InputLength < DXGKRNL_INTERFACE_EXCHANGE_IN_LEGACY_SIZE ||
                 SystemBuffer == NULL)
                 return STATUS_BUFFER_TOO_SMALL;

@@ -787,6 +787,9 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               BasicDisplayUiSuppressed;
     BOOLEAN                     IsBasicDisplayFallback;
     volatile LONG               MiniportStartFailed;
+    BOOLEAN                     StartDeferred;
+    PCM_RESOURCE_LIST           DeferredResources;
+    PCM_RESOURCE_LIST           DeferredTranslatedResources;
 
     /* Serializes concurrent PnP and boot-display handover stop requests. */
     KEVENT                      AdapterStopCompletedEvent;
@@ -2336,6 +2339,9 @@ typedef struct _DXGKRNL_SYNC_OBJECT
  */
 extern KSPIN_LOCK   DxgkAdapterGlobalListLock;
 extern LIST_ENTRY   DxgkAdapterGlobalListHead;
+
+VOID
+DxgkStartDeferredAdapters(VOID);
 
 /*
  * GDxgControlDeviceObject

@@ -641,6 +641,19 @@ TestVBlankWaitResult(VOID)
 }
 
 static VOID
+TestAdapterStartDeferral(VOID)
+{
+    ok_eq_ulong(DXGK_START_CORE_SERVICE_DEMAND_START, 3UL);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 3, FALSE), TRUE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 4, FALSE), TRUE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 3, TRUE), FALSE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(TRUE, 3, FALSE), FALSE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 0, FALSE), FALSE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 1, FALSE), FALSE);
+    ok_eq_bool(DxgkStartCoreDefersToSession(FALSE, 2, FALSE), FALSE);
+}
+
+static VOID
 TestSeededPathCount(VOID)
 {
     ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 1, 1), 1UL);
@@ -687,6 +700,7 @@ START_TEST(DxgkPresentQueue)
     ULONG Index;
 
     TestVBlankWaitResult();
+    TestAdapterStartDeferral();
     TestSeededPathCount();
     TestDisplayOnlyDesktopMode();
     TestSourceFormatRank();
