@@ -326,6 +326,14 @@ IopCompleteRequest(
 
     Status = Irp->IoStatus.Status;
 
+    if (!NT_ERROR(Status))
+    {
+        if (Irp->Flags & IRP_READ_OPERATION)
+            IopUpdateTransferCount(IopReadTransfer, (ULONG)Irp->IoStatus.Information);
+        else if (Irp->Flags & IRP_WRITE_OPERATION)
+            IopUpdateTransferCount(IopWriteTransfer, (ULONG)Irp->IoStatus.Information);
+    }
+
     if (FileObject != NULL) FileObject->FinalStatus = Status;
 
     if (Deliver && Irp->UserIosb != NULL)

@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 trap, interrupt and system call entry stubs
+ * COPYRIGHT:   Copyright Alex Ionescu <alex@relsoft.net>
+ *              Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <asm.inc>
@@ -14,14 +20,17 @@ idt _KiUnexpectedInterrupt\Vector, INT_32_DPL0
 ENDM
 
 MACRO(GENERATE_INT_HANDLER, Vector)
+
 #ifdef _USE_ML
 _KiUnexpectedInterrupt&Vector:
 #else
 _KiUnexpectedInterrupt\Vector:
 #endif
+
     push (Vector - 128)
     jmp _KiEndUnexpectedRange@0
 
+ENDM
 
 .data
 ASSUME CS:nothing
@@ -30,9 +39,38 @@ ASSUME CS:nothing
 
 PUBLIC _KiIdt
 _KiIdt:
+
+idt _KiTrap00,         INT_32_DPL0
+idt _KiTrap01,         INT_32_DPL0
+idt _KiTrap02,         INT_32_DPL0
+idt _KiTrap03,         INT_32_DPL3
+idt _KiTrap04,         INT_32_DPL3
+idt _KiTrap05,         INT_32_DPL0
+idt _KiTrap06,         INT_32_DPL0
+idt _KiTrap07,         INT_32_DPL0
+idt _KiTrap08,         INT_32_DPL0
+idt _KiTrap09,         INT_32_DPL0
+idt _KiTrap0A,         INT_32_DPL0
+idt _KiTrap0B,         INT_32_DPL0
+idt _KiTrap0C,         INT_32_DPL0
+idt _KiTrap0D,         INT_32_DPL0
+idt _KiTrap0E,         INT_32_DPL0
+idt _KiTrap0F,         INT_32_DPL0
+idt _KiTrap10,         INT_32_DPL0
+idt _KiTrap11,         INT_32_DPL0
+idt _KiTrap0F,         INT_32_DPL0
+idt _KiTrap0F,         INT_32_DPL0
 REPEAT 21
+idt _KiTrap0F,         INT_32_DPL0
 ENDR
 idt _KiRaiseSecurityCheckFailure, INT_32_DPL3
+
+idt _KiGetTickCount,   INT_32_DPL3
+idt _KiCallbackReturn, INT_32_DPL3
+idt _KiRaiseAssertion, INT_32_DPL3
+idt _KiDebugService,   INT_32_DPL3
+idt _KiSystemService,  INT_32_DPL3
+idt _KiTrap0F,         INT_32_DPL0
 i = HEX(30)
 REPEAT 208
     GENERATE_IDT_STUB %i
@@ -170,7 +208,9 @@ _KiSystemCallTrampoline@12:
     push edi
 
     mov eax, [ebp + 8]
+
     mov esi, [ebp + 12]
+
     mov ecx, [ebp + 16]
 
     sub esp, ecx

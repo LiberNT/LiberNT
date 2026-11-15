@@ -1531,6 +1531,11 @@ PopQueryProcessorInformation(
     for (Index = 0; Index < Count; Index++)
     {
         PKPRCB Prcb = KiProcessorBlock[Index];
+        KAFFINITY OldAffinity;
+
+        OldAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Index);
+        Processor.CurrentMhz = KiQueryEffectiveProcessorMhz(Index);
+        KeRevertToUserAffinityThreadEx(OldAffinity);
 
         Processor.Number = Prcb->Number;
         Processor.MaxMhz = Prcb->MHz;

@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Kernel debugger protocol internals
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #pragma once
@@ -9,9 +14,14 @@
 
 #define KD_BREAKPOINT_MAX   32
 
+#define KD_HIGHEST_USER_BREAKPOINT_ADDRESS  (PVOID)0x60000000
+
 #define KD_BREAKPOINT_ACTIVE    0x01
+
 #define KD_BREAKPOINT_PENDING   0x02
+
 #define KD_BREAKPOINT_SUSPENDED 0x04
+
 #define KD_BREAKPOINT_EXPIRED   0x08
 
 typedef struct _BREAKPOINT_ENTRY
@@ -33,160 +43,581 @@ BOOLEAN
     IN BOOLEAN SecondChance
 );
 
+extern CHAR KdpBootLogPath[128];
 
+struct _ROS_STORAGE_DUMP_INTERFACE;
 
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
+NTSTATUS NTAPI KdpWriteLiveKernelDump(_In_ PSYSDBG_LIVEDUMP_CONTROL Control, _In_ KPROCESSOR_MODE PreviousMode);
+#endif
 
+#define KD_FILE_REQUEST_PULL    1
 
+#define KD_FILE_REQUEST_RELOAD  2
 
+extern BOOLEAN KdpPrintDeferred;
 
+extern DBGKD_GET_VERSION64 KdVersionBlock;
 
+extern KDDEBUGGER_DATA64 KdDebuggerDataBlock;
+
+extern LIST_ENTRY KdpDebuggerDataListHead;
+
+extern KSPIN_LOCK KdpDataSpinLock;
+
+extern LARGE_INTEGER KdPerformanceCounterRate;
+
+extern LARGE_INTEGER KdTimerStart;
+
+extern ULONG KdDisableCount;
+
+extern KD_CONTEXT KdpContext;
+
+extern PKDEBUG_ROUTINE KiDebugRoutine;
+
+extern BOOLEAN KdBreakAfterSymbolLoad;
+
+extern BOOLEAN KdPitchDebugger;
+
+extern BOOLEAN KdAutoEnableOnEvent;
+
+extern BOOLEAN KdBlockEnable;
+
+extern BOOLEAN KdIgnoreUmExceptions;
+
+extern BOOLEAN KdPreviouslyEnabled;
+
+extern BOOLEAN KdpDebuggerStructuresInitialized;
+
+extern BOOLEAN KdEnteredDebugger;
+
+extern KDPC KdpTimeSlipDpc;
+
+extern KTIMER KdpTimeSlipTimer;
+
+extern WORK_QUEUE_ITEM KdpTimeSlipWorkItem;
+
+extern LONG KdpTimeSlipPending;
+
+extern PKEVENT KdpTimeSlipEvent;
+
+extern KSPIN_LOCK KdpTimeSlipEventLock;
+
+extern BOOLEAN KdpPortLocked;
+
+extern BOOLEAN KdpControlCPressed;
+
+extern BOOLEAN KdpContextSent;
+
+extern KSPIN_LOCK KdpDebuggerLock;
+
+extern volatile PKPRCB KdpPortOwnerPrcb;
+
+extern LARGE_INTEGER KdTimerStop, KdTimerStart, KdTimerDifference;
+
+#if defined(_M_ARM64)
+ULONGLONG
 NTAPI
+KdpQueryDebugTimestamp(VOID);
+#else
+#define KdpQueryDebugTimestamp() KeQueryInterruptTime()
+#endif
+
+extern CHAR KdpMessageBuffer[KDP_MSG_BUFFER_SIZE];
+
+extern CHAR KdpPathBuffer[KDP_MSG_BUFFER_SIZE];
+
+extern CHAR KdPrintDefaultCircularBuffer[KD_DEFAULT_LOG_BUFFER_SIZE];
+
+extern PCHAR KdPrintWritePointer;
+
+extern ULONG KdPrintRolloverCount;
+
+extern PCHAR KdPrintCircularBuffer;
+
+extern ULONG KdPrintBufferSize;
+
+extern ULONG KdPrintBufferChanges;
+
+extern KSPIN_LOCK KdpPrintSpinLock;
+
+extern BREAKPOINT_ENTRY KdpBreakpointTable[KD_BREAKPOINT_MAX];
+
+extern KD_BREAKPOINT_TYPE KdpBreakpointInstruction;
+
+extern BOOLEAN KdpOweBreakpoint;
+
+extern BOOLEAN BreakpointsSuspended;
+
+extern ULONG KdpNumInternalBreakpoints;
+
+extern ULONG_PTR KdpCurrentSymbolStart, KdpCurrentSymbolEnd;
+
+extern ULONG TraceDataBuffer[40];
+
+extern ULONG TraceDataBufferPosition;
+
+#define MAX_KD_COMPONENT_TABLE_ENTRIES  (DPFLTR_ENDOFTABLE_ID + 1)
+
+extern ULONG KdComponentTableSize;
+
+extern PULONG KdComponentTable[MAX_KD_COMPONENT_TABLE_ENTRIES];
+
+extern ULONG Kd_WIN2000_Mask;
+
+extern ULONG Kd_DEFAULT_Mask;
 
 VOID
 NTAPI
+KdSystemRootAvailable(VOID);
 
 BOOLEAN
 NTAPI
+KdDisplayTransportKey(
+    _In_ BOOLEAN DarkPalette);
 
 BOOLEAN
 NTAPI
+KdBugCheckDebuggerRequested(VOID);
 
 VOID
 NTAPI
+KdEnableBugCheckDebugger(VOID);
 
 BOOLEAN
 NTAPI
-
-
-
-
-
-
-
-
-
-
+KdScreenIsBootLog(VOID);
 
 BOOLEAN
 NTAPI
-
-NTAPI
-
-VOID
-NTAPI
+KdShowShutdownLog(VOID);
 
 VOID
-NTAPI
-
-VOID
-NTAPI
-
-NTAPI
-
-BOOLEAN
-NTAPI
-
-VOID
-NTAPI
-
-VOID
-NTAPI
-
-BOOLEAN
-NTAPI
-
-BOOLEAN
-NTAPI
-
-VOID
-NTAPI
+KdpResetFileIoHost(VOID);
 
 NTSTATUS
 NTAPI
+KdpAllowDisable(VOID);
+
+VOID
+NTAPI
+KdpGetStateChange(
+    _In_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_ PCONTEXT Context);
+
+VOID
+NTAPI
+KdpSetContextState(
+    _In_ PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
+    _In_ PCONTEXT Context);
 
 NTSTATUS
 NTAPI
+KdpSysCheckLowMemory(
+    _In_ ULONG Flags);
 
 NTSTATUS
 NTAPI
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ PKTRAP_FRAME TrapFrame,
+KdpSysReadMsr(
+    _In_ ULONG Msr,
+    _Out_ PULONGLONG MsrValue);
+
+NTSTATUS
+NTAPI
+KdpSysWriteMsr(
+    _In_ ULONG Msr,
+    _In_ PULONGLONG MsrValue);
 
 VOID
 NTAPI
-
-BOOLEAN
-NTAPI
-
-NTAPI
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ PKTRAP_FRAME TrapFrame,
-
-NTAPI
-
-
-NTAPI
-
-VOID
-NTAPI
-
-VOID
-
-VOID
-NTAPI
-
-VOID
-NTAPI
-
-VOID
-NTAPI
-
-VOID
-NTAPI
-
-NTAPI
+KdSetOwedBreakpoints(VOID);
 
 ULONG
 NTAPI
-
-NTAPI
-
-BOOLEAN
-NTAPI
+KdpAddBreakpoint(
+    _In_ PVOID Address);
 
 BOOLEAN
 NTAPI
+KdpDeleteBreakpoint(
+    _In_ ULONG BpEntry);
 
+BOOLEAN
 NTAPI
-
-NTAPI
+KdpDeleteBreakpointRange(
+    _In_ PVOID Base,
+    _In_ PVOID Limit);
 
 VOID
 NTAPI
-
-NTAPI
-
-NTAPI
-
-NTAPI
+KdpRestoreAllBreakpoints(VOID);
 
 VOID
 NTAPI
+KdpSuspendAllBreakPoints(VOID);
 
 VOID
 NTAPI
+KdpSuspendBreakPoint(
+    _In_ ULONG BpEntry);
 
+NTSTATUS
+NTAPI
+KdDisableDebuggerWithLock(
+    _In_ BOOLEAN NeedLock);
+
+NTSTATUS
+NTAPI
+KdEnableDebuggerWithLock(
+    _In_ BOOLEAN NeedLock);
+
+BOOLEAN
+NTAPI
+KdEnterDebugger(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame);
 
 VOID
 NTAPI
+KdExitDebugger(
+    _In_ BOOLEAN Enable);
 
+KCONTINUE_STATUS
 NTAPI
+KdReportProcessorChange(VOID);
 
+VOID
 NTAPI
+KdpReportCommandStringStateChange(
+    _In_ PSTRING NameString,
+    _In_ PSTRING CommandString,
+    _Inout_ PCONTEXT Context);
 
+BOOLEAN
 NTAPI
+KdpReportExceptionStateChange(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PCONTEXT Context,
+    _In_ BOOLEAN SecondChanceException);
 
+VOID
 NTAPI
+KdpReportLoadSymbolsStateChange(
+    _In_ PSTRING PathName,
+    _In_ PKD_SYMBOLS_INFO SymbolInfo,
+    _In_ BOOLEAN Unload,
+    _Inout_ PCONTEXT Context);
+
+BOOLEAN
+NTAPI
+KdIsThisAKdTrap(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PCONTEXT Context,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+BOOLEAN
+NTAPI
+KdpStub(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PCONTEXT ContextRecord,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ BOOLEAN SecondChanceException);
+
+BOOLEAN
+NTAPI
+KdpTrap(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PCONTEXT ContextRecord,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ BOOLEAN SecondChanceException);
+
+VOID
+NTAPI
+KdInitializeFileService(VOID);
+
+NTSTATUS
+NTAPI
+KdPullRemoteFile(
+    _In_ PUNICODE_STRING FileName);
+
+NTSTATUS
+NTAPI
+KdQueueFileRequest(
+    _In_ ULONG Kind,
+    _In_z_ PCSTR Name);
+
+NTSTATUS
+NTAPI
+KdpCopyMemoryChunks(
+    _In_ ULONG64 Address,
+    _In_ PVOID Buffer,
+    _In_ ULONG TotalSize,
+    _In_ ULONG ChunkSize,
+    _In_ ULONG Flags,
+    _Out_opt_ PULONG ActualSize);
+
+NTSTATUS
+NTAPI
+KdpCopyProcessMemoryChunks(
+    _In_opt_ PEPROCESS Process,
+    _In_ ULONG64 Address,
+    _In_ PVOID Buffer,
+    _In_ ULONG TotalSize,
+    _In_ ULONG ChunkSize,
+    _In_ ULONG Flags,
+    _Out_opt_ PULONG ActualSize);
+
+VOID
+NTAPI
+KdpMoveMemory(
+    _In_ PVOID Destination,
+    _In_ PVOID Source,
+    _In_ SIZE_T Length);
+
+VOID
+NTAPI
+KdpZeroMemory(
+    _In_ PVOID Destination,
+    _In_ SIZE_T Length);
+
+VOID
+NTAPI
+KdLogDbgPrint(
+    _In_ PSTRING String);
+
+VOID
+NTAPI
+KdStartPrintWriter(VOID);
+
+VOID
+NTAPI
+KdStopPrintWriter(VOID);
+
+VOID
+NTAPI
+KdpCommandString(
+    _In_ PSTRING NameString,
+    _In_ PSTRING CommandString,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PCONTEXT ContextRecord,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame);
+
+VOID
+__cdecl
+KdpDprintf(
+    _In_ PCSTR Format,
+    ...);
+
+BOOLEAN
+NTAPI
+KdpPrintString(
+    _In_ PSTRING Output);
+
+VOID
+NTAPI
+KdpResetPrintLock(VOID);
+
+BOOLEAN
+NTAPI
+KdpShowPrintLog(VOID);
+
+VOID
+NTAPI
+KdpSymbol(
+    _In_ PSTRING DllPath,
+    _In_ PKD_SYMBOLS_INFO SymbolInfo,
+    _In_ BOOLEAN Unload,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PCONTEXT ContextRecord,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame);
+
+BOOLEAN
+NTAPI
+KdpPollBreakInWithPortLock(VOID);
+
+VOID
+NTAPI
+KdpPortLock(VOID);
+
+VOID
+NTAPI
+KdpPortUnlock(VOID);
+
+VOID
+NTAPI
+KdpSysGetVersion(
+    _Out_ PDBGKD_GET_VERSION64 Version);
+
+BOOLEAN
+NTAPI
+KdInitSystem(
+    _In_ ULONG BootPhase,
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+KdUpdateDataBlock(VOID);
+
+VOID
+NTAPI
+KdUpdateTimeSlipEvent(
+    _In_opt_ PKEVENT Event);
+
+VOID
+NTAPI
+KdpTimeSlipDpcRoutine(
+    _In_ PKDPC Dpc,
+    _In_ PVOID DeferredContext,
+    _In_ PVOID SystemArgument1,
+    _In_ PVOID SystemArgument2);
+
+VOID
+NTAPI
+KdpTimeSlipWork(
+    _In_ PVOID Context);
+
+VOID
+NTAPI
+KdInitializeBootLog(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+ULONG
+NTAPI
+KdQueryTransportKey(
+    _Out_writes_z_(Size) PCHAR Buffer,
+    _In_ ULONG Size);
+
+ULONG
+NTAPI
+KdQueryTransportStatus(
+    _Out_writes_z_(Size) PCHAR Buffer,
+    _In_ ULONG Size);
+
+VOID
+NTAPI
+KdShutdownBootLog(VOID);
+
+ULONG
+NTAPI
+KdpCopyPrintBuffer(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ ULONG BufferSize,
+    _Out_ PULONG RolloverCount);
+
+ULONG
+NTAPI
+KdpCopyPrintBufferFrom(
+    _Inout_ PULONG64 Position,
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ ULONG BufferSize,
+    _Out_ PULONG64 Lost);
+
+ULONG
+NTAPI
+KdpCopyPrintBufferTail(
+    _Out_writes_bytes_(BufferSize) PCHAR Buffer,
+    _In_ ULONG BufferSize);
+
+BOOLEAN
+NTAPI
+KdpInitializeBootPageFileCrashDump(
+    _In_ PCUNICODE_STRING BootDeviceName);
+
+BOOLEAN
+NTAPI
+KdpInitializeCrashDump(
+    _In_ HANDLE DumpFileHandle);
+
+BOOLEAN
+NTAPI
+KdpInitializeCrashDumpCore(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+BOOLEAN
+NTAPI
+KdpInitializeDedicatedCrashDump(
+    _In_ PFILE_OBJECT BootFileObject);
+
+VOID
+NTAPI
+KdpLogWatchdogCheck(
+    _In_ ULONGLONG CurrentInterruptTime);
+
+VOID
+NTAPI
+KdpLogWatchdogDisable(VOID);
+
+VOID
+NTAPI
+KdpLogWatchdogInitialize(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+KdpLogWatchdogNotePrint(VOID);
+
+VOID
+NTAPI
+KdpLogWatchdogResume(VOID);
+
+VOID
+NTAPI
+KdpLogWatchdogSuspend(VOID);
+
+NTSTATUS
+NTAPI
+KdpPrint(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Out_ PBOOLEAN Handled);
+
+VOID
+NTAPI
+KdpPrintToCallbacks(
+    _In_ ULONG ComponentId,
+    _In_ ULONG Level,
+    _In_reads_bytes_(Length) PCHAR String,
+    _In_ USHORT Length,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+USHORT
+NTAPI
+KdpPrompt(
+    _In_reads_bytes_(PromptLength) PCHAR PromptString,
+    _In_ USHORT PromptLength,
+    _Out_writes_bytes_(MaximumResponseLength) PCHAR ResponseString,
+    _In_ USHORT MaximumResponseLength,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame);
+
+BOOLEAN
+NTAPI
+KdpPromptBuffersAccessible(
+    _In_reads_bytes_(PromptLength) PCHAR PromptString,
+    _In_ USHORT PromptLength,
+    _In_ PCHAR ResponseString,
+    _In_ USHORT MaximumResponseLength,
+    _In_ KPROCESSOR_MODE PreviousMode);
+
+VOID
+NTAPI
+KdpPublishCrashDumpArtifacts(VOID);
+
+BOOLEAN
+NTAPI
+KdpReleaseCrashDumpFile(VOID);
 
 NTSTATUS
 NTAPI
@@ -221,6 +652,26 @@ KdpSysReadIoSpace(
 
 NTSTATUS
 NTAPI
+KdpSysWriteBusData(
+    _In_ BUS_DATA_TYPE BusDataType,
+    _In_ ULONG BusNumber,
+    _In_ ULONG SlotNumber,
+    _In_ ULONG Offset,
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ActualLength);
+
+NTSTATUS
+NTAPI
+KdpSysWriteControlSpace(
+    _In_ ULONG Processor,
+    _In_ ULONG64 BaseAddress,
+    _In_reads_bytes_(Length) PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_ PULONG ActualLength);
+
+NTSTATUS
+NTAPI
 KdpSysWriteIoSpace(
     _In_ INTERFACE_TYPE InterfaceType,
     _In_ ULONG BusNumber,
@@ -232,8 +683,13 @@ KdpSysWriteIoSpace(
 
 NTSTATUS
 NTAPI
+KdpWriteBootLogAtCrash(
+    _In_opt_ struct _ROS_STORAGE_DUMP_INTERFACE *Storage,
+    _In_opt_ PFILE_OBJECT DumpFileObject);
 
+NTSTATUS
 NTAPI
+KdpWriteCrashDump(VOID);
 
 FORCEINLINE
 BOOLEAN

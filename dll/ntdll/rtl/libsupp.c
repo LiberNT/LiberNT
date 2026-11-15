@@ -882,9 +882,27 @@ RtlPcToFileHeader(IN PVOID PcValue,
     if (Shared)
         RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
 
+    if (LdrpFindImageByAddress(PcValue, &Module))
+    {
+        if (Module != NULL)
             ImageBase = Module->DllBase;
+    }
+    else
+    {
+        ModuleListHead = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
+        for (Entry = ModuleListHead->Flink; Entry != ModuleListHead; Entry = Entry->Flink)
+        {
+            Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+
+            if ((ULONG_PTR)PcValue >= (ULONG_PTR)Module->DllBase &&
+                    (ULONG_PTR)PcValue < (ULONG_PTR)Module->DllBase + Module->SizeOfImage)
+            {
+                ImageBase = Module->DllBase;
+                break;
+            }
         }
     }
+
     if (Shared)
         RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
 

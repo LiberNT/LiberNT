@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 user APC delivery frames and user-mode callbacks
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -9,6 +15,13 @@ extern PGDI_BATCHFLUSH_ROUTINE KeGdiFlushUserBatch;
 
 VOID
 NTAPI
+KiInitializeUserApc(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKNORMAL_ROUTINE NormalRoutine,
+    _In_ PVOID NormalContext,
+    _In_ PVOID SystemArgument1,
+    _In_ PVOID SystemArgument2)
 {
     CONTEXT Context = { 0 };
     ULONG_PTR Stack, AlignedEsp;
@@ -69,6 +82,12 @@ NTAPI
 
 NTSTATUS
 NTAPI
+KeUserModeCallback(
+    _In_ ULONG RoutineIndex,
+    _In_ PVOID Argument,
+    _In_ ULONG ArgumentLength,
+    _Out_ PVOID *Result,
+    _Out_ PULONG ResultLength)
 {
     ULONG_PTR NewStack, OldStack;
     PULONG UserEsp;
@@ -137,6 +156,8 @@ NTAPI
 
 NTSTATUS
 FASTCALL
+KiUserModeCallout(
+    PKCALLOUT_FRAME CalloutFrame)
 {
     PKTHREAD CurrentThread;
     PKTRAP_FRAME TrapFrame, CallbackTrapFrame;
@@ -149,6 +170,7 @@ FASTCALL
     CurrentThread = KeGetCurrentThread();
 
 #if DBG
+
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
     {
         /* We're not, bugcheck */

@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 memory type range register setup
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
 
 #include <ntoskrnl.h>
 #define NDEBUG

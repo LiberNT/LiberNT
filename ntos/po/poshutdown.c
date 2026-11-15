@@ -14,6 +14,12 @@
 LIST_ENTRY PopShutdownQueue;
 KGUARDED_MUTEX PopShutdownListMutex;
 BOOLEAN PopShutdownListAvailable = FALSE;
+typedef struct _POP_SHUTDOWN_WAIT_ENTRY
+{
+    struct _POP_SHUTDOWN_WAIT_ENTRY *NextEntry;
+    PETHREAD Thread;
+} POP_SHUTDOWN_WAIT_ENTRY, *PPOP_SHUTDOWN_WAIT_ENTRY;
+
 PPOP_SHUTDOWN_WAIT_ENTRY PopShutdownThreadList = NULL;
 ULONG PopShutdownPowerOffPolicy = 0;
 KEVENT PopShutdownEvent;

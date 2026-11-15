@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 kernel entry from the loader: PCR, GDT, IDT, TSS, MSRs, features and processor startup
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -93,12 +99,14 @@ KiInitializePcr(
 
     Pcr->TssBase = TssBase;
 
+    Pcr->Prcb.RspBase = Pcr->TssBase->Rsp0;
 
     Pcr->Prcb.DpcStack = DpcStack;
 
     Pcr->Prcb.MultiThreadProcessorSet = Pcr->Prcb.SetMember;
     Pcr->Prcb.MultiThreadSetMaster = &Pcr->Prcb;
 
+    /* Drop any breakpoints the boot loader left armed */
     Pcr->Prcb.ProcessorState.SpecialRegisters.KernelDr6 = 0;
     Pcr->Prcb.ProcessorState.SpecialRegisters.KernelDr7 = 0;
 
@@ -111,6 +119,8 @@ KiInitializePcr(
 
 VOID
 NTAPI
+KiInitializeCpu(
+    PKIPCR Pcr)
 {
     ULONG64 Pat;
     ULONG64 FeatureBits;
@@ -146,6 +156,7 @@ NTAPI
 
     __writecr0(__readcr0() | CR0_NE);
 
+    /* CR0.AM lets user mode opt into alignment checking */
     __writecr0(__readcr0() | CR0_AM);
 
     if (FeatureBits & KF_XSTATE)
@@ -297,6 +308,8 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializeKernelMachineDependent(
+    _In_ PKPRCB Prcb,
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG64 FeatureBits = KeFeatureBits;
     ULONG HvPrivileges, HvRecommendations;
@@ -323,13 +336,17 @@ KiInitializeKernelMachineDependent(
     SharedUserData->ProcessorFeatures[PF_3DNOW_INSTRUCTIONS_AVAILABLE] =
         (FeatureBits & KF_3DNOW) ? TRUE : FALSE;
     SharedUserData->ProcessorFeatures[PF_RDTSC_INSTRUCTION_AVAILABLE] = TRUE;
+    SharedUserData->ProcessorFeatures[PF_PAE_ENABLED] = TRUE;
     SharedUserData->ProcessorFeatures[PF_XMMI64_INSTRUCTIONS_AVAILABLE] =
         ((FeatureBits & KF_FXSR) && (FeatureBits & KF_XMMI64)) ? TRUE : FALSE;
+    SharedUserData->ProcessorFeatures[PF_SSE_DAZ_MODE_AVAILABLE] = FALSE;
     SharedUserData->ProcessorFeatures[PF_NX_ENABLED] = TRUE;
     SharedUserData->ProcessorFeatures[PF_SSE3_INSTRUCTIONS_AVAILABLE] =
         (FeatureBits & KF_SSE3) ? TRUE : FALSE;
     SharedUserData->ProcessorFeatures[PF_COMPARE_EXCHANGE128] =
         (FeatureBits & KF_CMPXCHG16B) ? TRUE : FALSE;
+    SharedUserData->ProcessorFeatures[PF_COMPARE64_EXCHANGE128] = FALSE;
+    SharedUserData->ProcessorFeatures[PF_CHANNELS_ENABLED] = FALSE;
     SharedUserData->ProcessorFeatures[PF_XSAVE_ENABLED] =
         (FeatureBits & KF_XSTATE) ? TRUE : FALSE;
     SharedUserData->ProcessorFeatures[PF_SECOND_LEVEL_ADDRESS_TRANSLATION] =
@@ -343,6 +360,7 @@ KiInitializeKernelMachineDependent(
         (FeatureBits & KF_RDRAND) ? TRUE : FALSE;
     SharedUserData->ProcessorFeatures[PF_RDTSCP_INSTRUCTION_AVAILABLE] =
         (FeatureBits & KF_RDTSCP) ? TRUE : FALSE;
+    SharedUserData->ProcessorFeatures[PF_RDPID_INSTRUCTION_AVAILABLE] = FALSE;
     SharedUserData->ProcessorFeatures[PF_SSSE3_INSTRUCTIONS_AVAILABLE] =
         (FeatureBits & KF_SSSE3) ? TRUE : FALSE;
     SharedUserData->ProcessorFeatures[PF_SSE4_1_INSTRUCTIONS_AVAILABLE] =
@@ -381,6 +399,7 @@ KiInitializeKernelMachineDependent(
     }
 
 #if DBG
+
     KiReportCpuFeatures(Prcb);
 #endif
 }
@@ -388,6 +407,8 @@ KiInitializeKernelMachineDependent(
 static LDR_DATA_TABLE_ENTRY LdrCoreEntries[3];
 
 void
+KiInitModuleList(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PLDR_DATA_TABLE_ENTRY LdrEntry;
     PLIST_ENTRY Entry;
@@ -572,6 +593,7 @@ KiAmd64BootMarkStart(
         return;
     }
 
+    /* The loader maps this view only when it drew its own marks */
     Base = (ULONG_PTR)(KSEG0_BASE + Extension->GopFramebuffer.FrameBufferBase.QuadPart);
     if (!KiAmd64BootMarkMapped(Base, Base + (ULONG_PTR)Pitch * Height * sizeof(ULONG) - 1))
         return;
@@ -650,6 +672,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
 
+    /* Publish the PRCB before counting it: every index below KeNumberProcessors must be valid */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
     KeMemoryBarrier();
     if ((CCHAR)(Cpu + 1) > KeNumberProcessors)
@@ -691,6 +714,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     HalInitializeProcessor(Cpu, KeLoaderBlock);
     KiAmd64BootMark(BootMarkHalProcessor);
 
+    /* End interrupts the same way the HAL reaches the local APIC */
     if ((__readmsr(X2APIC_BASE_MSR) & X2APIC_EXTENDED) != 0)
         KiX2ApicMsrs = TRUE;
 

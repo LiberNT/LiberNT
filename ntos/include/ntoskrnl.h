@@ -1,9 +1,15 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Precompiled header of the kernel
+ * COPYRIGHT:   Copyright Alex Ionescu <alex@relsoft.net>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #ifndef _NTOSKRNL_PCH
 #define _NTOSKRNL_PCH
 
+/* The amd64 WDK headers declare these as intrinsics the kernel exports itself */
 #ifdef _M_AMD64
 #define IoAllocateAdapterChannel _IoAllocateAdapterChannel
 #define KeGetCurrentThread _KeGetCurrentThread
@@ -21,6 +27,7 @@
 #include <diskguid.h>
 #include <arc/arc.h>
 #include <mountmgr.h>
+
 #undef NTHALAPI
 #define NTHALAPI __declspec(dllimport)
 #include <ndk/asm.h>
@@ -67,7 +74,17 @@
 #include <windbgkd.h>
 #include <wdbgexts.h>
 #include <kddll.h>
+
+/* The built-in debugger exports the KD transport entry points under its own names */
 #ifdef KDBG
+#define KdD0Transition   KdbgD0Transition
+#define KdD3Transition   KdbgD3Transition
+#define KdSave           KdbgSave
+#define KdRestore        KdbgRestore
+#define KdSendPacket     KdbgSendPacket
+#define KdReceivePacket  KdbgReceivePacket
+#undef _KDDLL_
+#include <kddll.h>
 #endif
 
 #include <umpnpmgr/sysguid.h>
@@ -76,8 +93,10 @@
 #define ExRaiseStatus RtlRaiseStatus
 
 #ifndef Add2Ptr
+#define Add2Ptr(P, I) ((PVOID)((PUCHAR)(P) + (I)))
 #endif
 #ifndef PtrOffset
+#define PtrOffset(B, O) ((ULONG)((ULONG_PTR)(O) - (ULONG_PTR)(B)))
 #endif
 
 #define MAX_WIN32_PATH 260

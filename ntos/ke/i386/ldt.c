@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 local descriptor table entries for user processes
+ * COPYRIGHT:   Copyright David Welch <welch@cwcom.net>
+ *              Copyright Stefan Ginsberg <stefan.ginsberg@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -10,6 +16,10 @@ static KSPIN_LOCK GdtLock;
 
 NTSTATUS
 NTAPI
+Ke386GetGdtEntryThread(
+    _In_ PKTHREAD Thread,
+    _In_ ULONG Offset,
+    _In_ PKGDTENTRY Descriptor)
 {
     if (Offset >= (KGDT_NUMBER * sizeof(KGDTENTRY)))
     {
@@ -43,6 +53,9 @@ NTAPI
 }
 
 VOID
+KeSetBaseGdtSelector(
+    ULONG Entry,
+    PVOID Base)
 {
    KIRQL oldIrql;
    PUSHORT Gdt;
@@ -74,6 +87,10 @@ VOID
 }
 
 VOID
+KeSetGdtSelector(
+    ULONG Entry,
+    ULONG Value1,
+    ULONG Value2)
 {
    KIRQL oldIrql;
    PULONG Gdt;
@@ -104,6 +121,7 @@ VOID
 BOOLEAN PspIsDescriptorValid(PLDT_ENTRY ldt_entry)
 {
   ULONG Base, SegLimit;
+
   if(!ldt_entry->HighWord.Bits.Type &&
      !ldt_entry->HighWord.Bits.Dpl)
        return TRUE;
@@ -137,6 +155,7 @@ BOOLEAN PspIsDescriptorValid(PLDT_ENTRY ldt_entry)
     DPRINT1("WARNING: Windows would mark this descriptor invalid!\n");
   }
 
+  return ( TRUE);
 }
 
 NTSTATUS NTAPI

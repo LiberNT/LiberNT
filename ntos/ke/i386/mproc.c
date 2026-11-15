@@ -1,6 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 multiprocessor startup helpers
  * COPYRIGHT:   Copyright 2023 Justin Miller <justin.miller@reactos.org>
  *              Copyright 2023 Victor Perevertkin <victor.perevertkin@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -24,6 +28,7 @@ typedef struct _AP_SETUP_STACK
 {
     PVOID ReturnAddr;
     PVOID KxLoaderBlock;
+} AP_SETUP_STACK, *PAP_SETUP_STACK;
 
 CODE_SEG("INIT")
 VOID
@@ -47,6 +52,7 @@ KeStartAllProcessors(VOID)
         MaximumProcessors = min(MaximumProcessors, KeBootprocSpecified);
 
     /* Start ProcessorCount at 1 because we already have the boot CPU */
+    // TODO: Support processor nodes
     for (ProcessorCount = 1; ProcessorCount < MaximumProcessors; ++ProcessorCount)
     {
         KernelStack = NULL;
@@ -84,6 +90,7 @@ KeStartAllProcessors(VOID)
         KiSetGdtDescriptorBase(KiGetGdtEntry(&APInfo->Gdt, KGDT_NMI_TSS), (ULONG_PTR)&APInfo->TssNMI);
 
         KiSetGdtDescriptorBase(KiGetGdtEntry(&APInfo->Gdt, KGDT_TSS), (ULONG_PTR)&APInfo->Tss);
+
         KiGetGdtEntry(&APInfo->Gdt, KGDT_TSS)->HighWord.Bits.Type = I386_TSS;
 
         APInfo->TssDoubleFault.Esp0 = (ULONG_PTR)&APInfo->NMIStackData;

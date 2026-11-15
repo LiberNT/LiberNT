@@ -1,4 +1,8 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     System version, product type, console and feature queries
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -203,38 +207,106 @@ RtlCheckTokenMembership(
 
 NTSTATUS
 NTAPI
+RtlGetVersion(
+    _Inout_ PRTL_OSVERSIONINFOW VersionInformation)
 {
+    ULONG Major = NtMajorVersion;
+    ULONG Minor = NtMinorVersion;
+    ULONG Build = NtBuildNumber & 0xFFFF;
+    PRTL_OSVERSIONINFOEXW Extended;
 
     PAGED_CODE();
 
+    PspGetLegacyXpdmVersion(_ReturnAddress(), &Major, &Minor, &Build);
 
+    VersionInformation->dwMajorVersion = Major;
+    VersionInformation->dwMinorVersion = Minor;
+    VersionInformation->dwBuildNumber = Build;
+    VersionInformation->dwPlatformId = VER_PLATFORM_WIN32_NT;
 
+    if (VersionInformation->dwOSVersionInfoSize != sizeof(RTL_OSVERSIONINFOEXW))
+        return STATUS_SUCCESS;
 
+    Extended = (PRTL_OSVERSIONINFOEXW)VersionInformation;
+    Extended->wServicePackMajor = (USHORT)((CmNtCSDVersion >> 8) & 0xFF);
+    Extended->wServicePackMinor = (USHORT)(CmNtCSDVersion & 0xFF);
+    Extended->wSuiteMask = (USHORT)SharedUserData->SuiteMask;
+    Extended->wProductType = SharedUserData->NtProductType;
+    Extended->wReserved = 0;
     return STATUS_SUCCESS;
 }
 
 BOOLEAN
 NTAPI
+RtlGetNtProductType(
+    _Out_ PNT_PRODUCT_TYPE ProductType)
 {
+    static const UNICODE_STRING KeyName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\ProductOptions");
+    static const UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"ProductType");
+    static const struct
     {
+        UNICODE_STRING Name;
+        NT_PRODUCT_TYPE Type;
+    } Products[] =
     {
+        { RTL_CONSTANT_STRING(L"WinNT"), NtProductWinNt },
+        { RTL_CONSTANT_STRING(L"LanmanNT"), NtProductLanManNt },
+        { RTL_CONSTANT_STRING(L"ServerNT"), NtProductServer },
+    };
+    ULONG Buffer[(FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 32 * sizeof(WCHAR)) / sizeof(ULONG)];
+    PKEY_VALUE_PARTIAL_INFORMATION Info = (PKEY_VALUE_PARTIAL_INFORMATION)Buffer;
+    OBJECT_ATTRIBUTES Attributes;
+    UNICODE_STRING Product;
+    ULONG Length, Index;
+    NTSTATUS Status;
+    HANDLE Key;
 
+    PAGED_CODE();
 
+    *ProductType = NtProductWinNt;
 
+    InitializeObjectAttributes(&Attributes, (PUNICODE_STRING)&KeyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = ZwOpenKey(&Key, KEY_QUERY_VALUE, &Attributes);
+    if (NT_SUCCESS(Status))
     {
+        Status = ZwQueryValueKey(Key, (PUNICODE_STRING)&ValueName, KeyValuePartialInformation, Info, sizeof(Buffer), &Length);
+        ZwClose(Key);
     }
 
+    if (!NT_SUCCESS(Status) || Info->Type != REG_SZ)
     {
+        DPRINT1("The product type could not be read (0x%lx), WinNT is assumed\n", Status);
+        return FALSE;
     }
 
+    Product.Buffer = (PWCH)Info->Data;
+    Product.Length = (USHORT)Info->DataLength;
+    Product.MaximumLength = Product.Length;
+    while (Product.Length >= sizeof(WCHAR) && Product.Buffer[Product.Length / sizeof(WCHAR) - 1] == UNICODE_NULL)
+        Product.Length -= sizeof(WCHAR);
 
+    for (Index = 0; Index < RTL_NUMBER_OF(Products); Index++)
     {
+        if (RtlEqualUnicodeString(&Product, &Products[Index].Name, TRUE))
+        {
+            *ProductType = Products[Index].Type;
+            return TRUE;
+        }
     }
 
+    DPRINT1("The product type %wZ is unknown, WinNT is assumed\n", &Product);
+    return FALSE;
 }
 
 VOID
+NTAPI
+AVrfInternalHeapFreeNotification(
+    _In_ PVOID AllocationBase,
+    _In_ SIZE_T AllocationSize)
 {
+    UNREFERENCED_PARAMETER(AllocationBase);
+    UNREFERENCED_PARAMETER(AllocationSize);
 }
 
 /*

@@ -632,6 +632,7 @@ KiUserModeCallout(
 VOID
 KiSetupUserCalloutFrame(
     _Out_ PUCALLOUT_FRAME UserCalloutFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame,
     _In_ ULONG ApiNumber,
     _In_ PVOID Buffer,
     _In_ ULONG BufferLength)
@@ -644,16 +645,46 @@ KiSetupUserCalloutFrame(
     UserCalloutFrame->MachineFrame.Pc = TrapFrame->Pc;
     UserCalloutFrame->MachineFrame.Sp = TrapFrame->Sp;
 
+    /*
+     * ARM64 ntdll currently uses the generic C callback dispatcher, which
+     * receives its arguments in x0-x2. The stack UCALLOUT_FRAME is still
+     * kept for NtCallbackReturn and debugger/unwind state, but unlike
+     * amd64 there is no assembly dispatcher reading arguments from it.
+     */
+    TrapFrame->X0 = ApiNumber;
+    TrapFrame->X1 = (ULONG_PTR)Buffer;
+    TrapFrame->X2 = BufferLength;
+    TrapFrame->X18 = (ULONG_PTR)KeGetCurrentThread()->Teb;
 }
 
+VOID
+KiLeaveCallout(
+    _Inout_ PKTHREAD Thread,
+    _In_ PKCALLOUT_FRAME CalloutFrame,
+    _Inout_ PKTRAP_FRAME CallerFrame,
     _In_ NTSTATUS CallbackStatus)
 {
+    PKTRAP_FRAME CallbackFrame = Thread->TrapFrame;
 
+    /* A callback that faulted in user mode hands back its own frame, but each frame keeps its own VFP area and link */
     if (CallbackStatus == STATUS_CALLBACK_POP_STACK)
     {
+        ULONG64 TrapFrameLink = CallerFrame->TrapFrame;
+        PKARM64_VFP_STATE CallerVfpState = CallerFrame->VfpState;
+        PKARM64_VFP_STATE CallbackVfpState = CallbackFrame->VfpState;
 
+        *CallerFrame = *CallbackFrame;
+        if ((CallerVfpState != NULL) && (CallbackVfpState != NULL))
         {
+            CallerVfpState->Fpcr = CallbackVfpState->Fpcr;
+            CallerVfpState->Fpsr = CallbackVfpState->Fpsr;
         }
+        CallerFrame->VfpState = CallerVfpState;
+        CallerFrame->TrapFrame = TrapFrameLink;
     }
 
+    ((PKIPCR)KeGetPcr())->Prcb.SpBase = (PVOID)CalloutFrame->CalloutInitialStack;
+    Thread->InitialStack = (PVOID)CalloutFrame->CalloutInitialStack;
+    Thread->CallbackStack = (PVOID)CalloutFrame->CalloutCallbackStack;
 }
+

@@ -238,6 +238,7 @@ InbvGopComputeWordmarkRect(
     if (!Rect)
         return FALSE;
 
+    Header = (PBITMAPINFOHEADER)InbvGetResourceAddress(IDB_GOP_LOGO);
     if (!InbvGopValidateWordmarkHeader(Header))
         return FALSE;
 
@@ -1176,6 +1177,7 @@ InbvGopDrawWordmark(
     ULONG RedShift = 0, GreenShift = 0, BlueShift = 0;
     ULONG RedMax = 0, GreenMax = 0, BlueMax = 0;
 
+    Bitmap = InbvGetResourceAddress(IDB_GOP_LOGO);
     Header = (PBITMAPINFOHEADER)Bitmap;
     if (!InbvGopValidateWordmarkHeader(Header))
         return FALSE;

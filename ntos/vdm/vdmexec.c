@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Virtual DOS machine execution and context swaps
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -9,6 +14,8 @@ ULONG VdmBopCount;
 
 NTSTATUS
 NTAPI
+VdmpGetVdmTib(
+    _Out_ PVDM_TIB *VdmTib)
 {
     PVDM_TIB Tib;
     PAGED_CODE();
@@ -26,6 +33,10 @@ NTAPI
 
 VOID
 NTAPI
+VdmSwapContext(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PCONTEXT OutContext,
+    _In_ PCONTEXT InContext)
 {
     ULONG EFlags, OldEFlags;
 
@@ -191,6 +202,9 @@ VdmpStartExecution(VOID)
 
 VOID
 NTAPI
+VdmEndExecution(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PVDM_TIB VdmTib)
 {
     KIRQL OldIrql;
     CONTEXT Context;
@@ -236,6 +250,8 @@ NTAPI
 
 BOOLEAN
 NTAPI
+VdmDispatchBop(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PUCHAR Eip;
     PVDM_TIB VdmTib;

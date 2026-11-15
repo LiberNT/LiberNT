@@ -1,4 +1,13 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Virtual DOS machine internals
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#pragma once
+
 #define TRAMPOLINE_BASE                                 0x10000
 #define TRAMPOLINE_TIB                                  0x12000
 #define TRAMPOLINE_TEB                                  0x13000
@@ -39,6 +48,7 @@ typedef struct _VdmEventInfo
     union
     {
         ULONG BopNumber;
+
         LONG ErrorStatus;
         ULONG IntAckInfo;
     };
@@ -47,16 +57,19 @@ typedef struct _VdmEventInfo
 typedef struct _Vdm_Printer_Info
 {
     PUCHAR prt_state;
+
 } VDM_PRINTER_INFO, *PVDM_PRINTER_INFO;
 
 typedef struct _VdmTraceInfo
 {
     UCHAR Flags;
+
 } VDMTRACEINFO, *PVDMTRACEINFO;
 
 typedef struct _tagFAMILY_TABLE
 {
     INT numHookedAPIs;
+
 } FAMILY_TABLE, *PFAMILY_TABLE;
 
 typedef struct _Vdm_Tib
@@ -79,11 +92,13 @@ typedef struct _Vdm_Tib
 
 typedef struct _VDM_PROCESS_OBJECTS
 {
+    PVOID VdmIoListHead;
     KAPC QueuedIntApc;
     KAPC QueuedIntUserApc;
     FAST_MUTEX DelayIntFastMutex;
     KSPIN_LOCK DelayIntSpinLock;
     LIST_ENTRY DelayIntListHead;
+    PVOID pIcaUserData;
     PETHREAD MainThread;
     PVDM_TIB VdmTib;
     UCHAR PrinterState;
@@ -103,3 +118,4 @@ typedef struct _VDM_PROCESS_OBJECTS
 
 NTSTATUS
 NTAPI
+VdmpStartExecution(VOID);

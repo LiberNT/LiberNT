@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 assembly macros for spin locks, trap entry and trap exit
+ * COPYRIGHT:   Copyright Alex Ionescu <alex@relsoft.net>
+ *              Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #define INT_32_DPL0                 HEX(08E00)
@@ -79,6 +85,7 @@ MACRO(KiEnterTrap, Flags)
     mov [esp + KTRAP_FRAME_EAX], eax
 
     if (NOT (Flags AND KI_NONVOLATILES_ONLY))
+
         mov [esp + KTRAP_FRAME_ECX], ecx
         mov [esp + KTRAP_FRAME_EDX], edx
     endif
@@ -137,6 +144,7 @@ set_sane_segs:
 #else
 .Lset_sane_segs\@:
 #endif
+
     mov ax, KGDT_R3_DATA OR RPL_MASK
     mov ds, ax
     mov es, ax
@@ -151,6 +159,7 @@ set_sane_segs:
 
         add edx, 8
     else
+
         mov ax, KGDT_R0_PCR
         mov fs, ax
     endif
@@ -159,6 +168,7 @@ set_sane_segs:
     mov [esp + KTRAP_FRAME_EXCEPTION_LIST], eax
 
 #if DBG
+
     mov eax, [esp + KTRAP_FRAME_EIP]
     mov [esp + KTRAP_FRAME_DEBUGEIP], eax
     mov [esp + KTRAP_FRAME_DEBUGEBP], ebp
@@ -195,9 +205,11 @@ ENDM
 
 MACRO(KiCallHandler, Handler)
 #if DBG
+
     /* Use a call to get the return address for back traces */
     call Handler
 #else
+
     jmp Handler
 #endif
     nop
@@ -213,6 +225,7 @@ MACRO(TRAP_ENTRY, Trap, Flags)
     PUBLIC _\Trap
     .PROC _\Trap
 #endif
+
         /* Generate proper debugging symbols */
         FPO 0, 0, 0, 0, 1, FRAME_TRAP
 
@@ -238,6 +251,7 @@ MACRO(TASK_ENTRY, Trap, Flags)
     PUBLIC _\Trap
     .PROC _\Trap
 #endif
+
         /* Generate proper debugging symbols */
         FPO 0, 0, 0, 0, 0, FRAME_TSS
 
@@ -248,6 +262,7 @@ MACRO(TASK_ENTRY, Trap, Flags)
 #endif
 
         if (Flags AND KI_NMI)
+
             iretd
 #ifdef _USE_ML
             jmp _&Trap
@@ -376,6 +391,7 @@ not_nested_int:
 #else
 .Lnot_nested_int\@:
 #endif
+
             push dword ptr [esp + 8]
 
         endif

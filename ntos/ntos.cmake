@@ -23,6 +23,8 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
 endif()
 
 if(ARCH STREQUAL "arm64")
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
 endif()
 
 list(APPEND SOURCE
@@ -307,8 +309,10 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/rtl/avltree.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/rbtree.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/guid.c
+    ${REACTOS_SOURCE_DIR}/ntos/rtl/rtlsupp.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/locale.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/misc.c
+    ${REACTOS_SOURCE_DIR}/ntos/rtl/prefetch.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/security.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/system.c
     ${REACTOS_SOURCE_DIR}/ntos/rtl/time.c
@@ -379,6 +383,7 @@ if(ARCH STREQUAL "i386")
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/exinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/i386/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/interlck.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/abios.c
@@ -399,28 +404,36 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/v86vdm.c
         ${REACTOS_SOURCE_DIR}/ntos/ps/i386/psctx.c
         ${REACTOS_SOURCE_DIR}/ntos/ps/i386/psldt.c
+        ${REACTOS_SOURCE_DIR}/ntos/rtl/i386/framewalk.c
         ${REACTOS_SOURCE_DIR}/ntos/vdm/vdmmain.c
         ${REACTOS_SOURCE_DIR}/ntos/vdm/vdmexec.c)
     # x86 debuggers read control space as the processor state at an offset: kd64/i386/kdx86.c
     list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdcontrolspace.c)
+    # i386 prefetches in rtl/i386/prefetch.S, patched in at boot when the processor has SSE
+    list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/rtl/prefetch.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/boot.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/ctxswitch.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/trap.S
+        ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/usercall_asm.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/amd64/exinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/amd64/kdx64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/except.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/interrupt.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/ipi.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/irql.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/krnlinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/stackwalk.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/thrdini.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/amd64/psarchctx.c
@@ -461,6 +474,8 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/hypervisor.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/exceptinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/exp.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/floatstubs.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/interrupt.c
@@ -471,6 +486,7 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/smpdbg.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/stubs.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/thrdini.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/topology.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/trapc.c

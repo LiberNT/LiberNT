@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 trap, interrupt and system call entry and exit
+ * COPYRIGHT:   Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <asm.inc>
@@ -52,6 +57,7 @@ MACRO(DispatchExceptionFlags, Status, Flags, Number, P1, P2, P3)
 ENDM
 
 MACRO(Fatal, BugcheckCode)
+
     mov ecx, BugcheckCode
     mov rdx, rbp
     call KiSystemFatalException
@@ -62,7 +68,10 @@ ENDM
 ALIGN 8
 
 MACRO(UnexpectedVectorStub, Vector)
+
     nop
+
+/* The 8-bit push immediate is sign extended, so the vector is stored offset by -128 */
 #ifdef _USE_ML
 PUBLIC KxUnexpectedInterrupt&Vector
 KxUnexpectedInterrupt&Vector:
@@ -88,7 +97,10 @@ ALIGN 16
 PUBLIC KiInterruptDispatchTemplate
 KiInterruptDispatchTemplate:
 
+    /* The call pushes the address of the object's DispatchCode, then jumps to its DispatchAddress */
+    call qword ptr KiInterruptDispatchTemplate[rip - KINTERRUPT_DispatchCode + KINTERRUPT_DispatchAddress]
 
+/* In: rbp = trap frame, eax = exception code, edx = parameter count, r9-r11 = parameters */
 FUNC InternalDispatchException
 
     sub rsp, EXCEPTION_RECORD_LENGTH + KEXCEPTION_FRAME_LENGTH
@@ -151,6 +163,10 @@ InternalDispatchExceptionAddress:
     mov [rsp + KEXCEPTION_FRAME_Rbp], rax
     mov qword ptr [rsp + KEXCEPTION_FRAME_Return], 0
 
+    mov rdx, rsp
+    mov r8, rbp
+    mov r9b, [r8 + KTRAP_FRAME_PreviousMode]
+    mov byte ptr [rsp + KEXCEPTION_FRAME_P5], 1
     call KiDispatchException
 
     mov rbx, [rsp + KEXCEPTION_FRAME_Rbx]
@@ -177,6 +193,7 @@ ENDFUNC
 
 PUBLIC KiDivideErrorFault
 FUNC KiDivideErrorFault
+
     EnterTrap TF_SAVE_ALL
 
     test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
@@ -185,6 +202,7 @@ FUNC KiDivideErrorFault
     sti
 
 KiDivideErrorDispatch:
+
     DispatchException STATUS_INTEGER_DIVIDE_BY_ZERO, 0, 0, 0, 0
 
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
@@ -192,6 +210,7 @@ ENDFUNC
 
 PUBLIC KiDebugTrapOrFault
 FUNC KiDebugTrapOrFault
+
     EnterTrap (TF_SAVE_ALL OR TF_DEBUG)
 
     test word ptr [rbp + KTRAP_FRAME_SegCs], 3
@@ -211,6 +230,7 @@ ENDFUNC
 EXTERN KiNmiInterruptHandler:PROC
 
 FUNC KiNmiInterruptWithEf
+
     GENERATE_EXCEPTION_FRAME
 
     lea rcx, [rsp + KEXCEPTION_FRAME_LENGTH]
@@ -224,6 +244,7 @@ ENDFUNC
 
 PUBLIC KiNmiInterrupt
 FUNC KiNmiInterrupt
+
     EnterTrap TF_SAVE_ALL
 
     call KiNmiInterruptWithEf
@@ -233,6 +254,7 @@ ENDFUNC
 
 PUBLIC KiBreakpointTrap
 FUNC KiBreakpointTrap
+
     EnterTrap TF_SAVE_ALL
 
     test word ptr [rbp + KTRAP_FRAME_SegCs], 3
@@ -241,6 +263,7 @@ FUNC KiBreakpointTrap
     sti
 
 KiBreakpointTrapKMode:
+
     DispatchException STATUS_BREAKPOINT, 1, BREAKPOINT_BREAK, 0, 0
 
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
@@ -248,6 +271,7 @@ ENDFUNC
 
 PUBLIC KiOverflowTrap
 FUNC KiOverflowTrap
+
     EnterTrap TF_SAVE_ALL
 
     test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
@@ -256,6 +280,7 @@ FUNC KiOverflowTrap
     sti
 
 KiOverflowDispatch:
+
     DispatchException STATUS_INTEGER_OVERFLOW, 3, 0, 0, 0
 
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
@@ -263,6 +288,7 @@ ENDFUNC
 
 PUBLIC KiBoundFault
 FUNC KiBoundFault
+
     EnterTrap TF_SAVE_ALL
 
     test word ptr [rbp + KTRAP_FRAME_SegCs], 3
@@ -271,6 +297,7 @@ FUNC KiBoundFault
     Fatal EXCEPTION_BOUND_CHECK
 
 KiBoundFaultUserMode:
+
     sti
 
     DispatchException STATUS_ARRAY_BOUNDS_EXCEEDED, 0, 0, 0, 0
@@ -280,6 +307,7 @@ ENDFUNC
 
 PUBLIC KiInvalidOpcodeFault
 FUNC KiInvalidOpcodeFault
+
     EnterTrap TF_SAVE_ALL
 
     test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
@@ -288,6 +316,7 @@ FUNC KiInvalidOpcodeFault
     sti
 
 KiInvalidOpcodeDispatch:
+
     test word ptr [rbp + KTRAP_FRAME_SegCs], 3
     jz KiInvalidOpcodeKernel
 
@@ -301,11 +330,13 @@ KiInvalidOpcodeKernel:
     DispatchException STATUS_ILLEGAL_INSTRUCTION, 0, 0, 0, 0
 
 KiInvalidOpcodeExit:
+
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 PUBLIC KiNpxNotAvailableFault
 FUNC KiNpxNotAvailableFault
+
     EnterTrap TF_SAVE_ALL
 
     mov rcx, rbp
@@ -319,19 +350,23 @@ FUNC KiNpxNotAvailableFault
     sti
 
 KiNpxNotAvailableDispatch:
+
     DispatchException eax, 3, 0, 0, 0
 
 KiNpxNotAvailableFaultExit:
+
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 PUBLIC KiDoubleFaultAbort
 FUNC KiDoubleFaultAbort
 
+    /* VirtualBox can deliver this without pushing an error code, so realign the stack */
     and rsp, HEX(FFFFFFFFFFFFFFF0)
 
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
+    Fatal 8
 #ifdef _USE_ML
     jmp $
 #else
@@ -341,6 +376,7 @@ ENDFUNC
 
 PUBLIC KiNpxSegmentOverrunAbort
 FUNC KiNpxSegmentOverrunAbort
+
     EnterTrap TF_SAVE_ALL
 
     Fatal EXCEPTION_NPX_OVERRUN
@@ -354,6 +390,7 @@ ENDFUNC
 
 PUBLIC KiInvalidTssFault
 FUNC KiInvalidTssFault
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     Fatal EXCEPTION_INVALID_TSS
@@ -366,6 +403,7 @@ ENDFUNC
 
 PUBLIC KiSegmentNotPresentFault
 FUNC KiSegmentNotPresentFault
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     Fatal EXCEPTION_SEGMENT_NOT_PRESENT
@@ -378,6 +416,7 @@ ENDFUNC
 
 PUBLIC KiStackFault
 FUNC KiStackFault
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     test word ptr [rbp + KTRAP_FRAME_SegCs], 3
@@ -427,6 +466,7 @@ KiGpfKernelFault:
 ENDFUNC
 
 FUNC KiGeneralProtectionFaultTrap
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     test dword ptr [rbp + KTRAP_FRAME_EFlags], EFLAGS_IF_MASK
@@ -434,6 +474,7 @@ FUNC KiGeneralProtectionFaultTrap
     sti
 
 KiGpfHandler:
+
     mov rcx, rbp
     call KiGeneralProtectionFaultHandler
 
@@ -451,6 +492,7 @@ DispatchAccessViolation:
     DispatchException eax, 2, 0, -1, 0
 
 KiGpfExit:
+
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
@@ -468,6 +510,7 @@ ENDFUNC
 
 PUBLIC KiPageFault
 FUNC KiPageFault
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     /* Link this frame so nested faults can recover the previous active trap */
@@ -513,7 +556,11 @@ IntsDisabled:
     push rax
     sub rsp, HEX(28)
 
+    mov ecx, [rbp + KTRAP_FRAME_ErrorCode]
+
+    mov r8b, [rbp + KTRAP_FRAME_SegCs]
     and r8b, 1
+    mov r9, rbp
     call MmAccessFault
 
     add rsp, HEX(28)
@@ -536,6 +583,7 @@ IntsDisabled:
 PageFaultSuccess:
 
     call KdSetOwedBreakpoints
+
     jmp PageFaultReturn
 
 PageFaultError:
@@ -545,6 +593,7 @@ PageFaultError:
     mov rdx, [rbp + KTRAP_FRAME_TrapFrame]
     mov [rcx + ThTrapFrame], rdx
 
+    /* ExceptionInformation[0] is the read, write or execute flag */
     mov r9d, [rbp + KTRAP_FRAME_ErrorCode]
     shr r9d, 1
     and r9d, 9
@@ -560,18 +609,26 @@ PageFaultError:
     je SpecialCode
 
 InPageException:
+
+    mov r11d, eax
+    mov eax, STATUS_IN_PAGE_ERROR
+    mov edx, 3
     xor r8d, r8d  // ExceptionFlags
     call InternalDispatchException
     jmp PageFaultReturn
 
 AccessViolation:
+
     mov eax, KI_EXCEPTION_ACCESS_VIOLATION
 
 SpecialCode:
+
+    mov edx, 2
     xor r8d, r8d // ExceptionFlags
     call InternalDispatchException
 
 PageFaultReturn:
+
     cli
 
     /* Restore the previous active trap frame */
@@ -597,9 +654,11 @@ ENDFUNC
 
 PUBLIC KiRaiseSecurityCheckFailure
 FUNC KiRaiseSecurityCheckFailure
+
     EnterTrap TF_SAVE_ALL
 
     /* Point the trap frame at the INT 29 instruction. */
+    /* INT 29h is two bytes; RIP is moved back onto it */
     sub qword ptr [rbp + KTRAP_FRAME_Rip], 2
 
     /* Kernel fast-fail is fatal and must preserve the original trap frame. */
@@ -627,6 +686,7 @@ ENDFUNC
 
 PUBLIC KiFloatingErrorFault
 FUNC KiFloatingErrorFault
+
     EnterTrap TF_SAVE_ALL
 
     mov rcx, rbp
@@ -644,6 +704,7 @@ ENDFUNC
 
 PUBLIC KiAlignmentFault
 FUNC KiAlignmentFault
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL)
 
     /* Only user mode can take an alignment check */
@@ -657,6 +718,7 @@ FUNC KiAlignmentFault
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 
 KiAlignmentFaultFatal:
+
     Fatal EXCEPTION_ALIGNMENT_CHECK
 #ifdef _USE_ML
     jmp $
@@ -667,6 +729,7 @@ ENDFUNC
 
 PUBLIC KiMcheckAbort
 FUNC KiMcheckAbort
+
     EnterTrap TF_SAVE_ALL
 
     mov rcx, rbp
@@ -682,6 +745,7 @@ ENDFUNC
 
 PUBLIC KiXmmException
 FUNC KiXmmException
+
     EnterTrap TF_SAVE_ALL
 
     mov rcx, rbp
@@ -695,17 +759,21 @@ FUNC KiXmmException
     sti
 
 KiXmmDispatch:
+
     mov r10d, [rbp + KTRAP_FRAME_MxCsr]
     DispatchException eax, 2, 0, r10, 0
 
 KiXmmExit:
+
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
 ENDFUNC
 
 PUBLIC KiRaiseAssertion
 FUNC KiRaiseAssertion
+
     EnterTrap (TF_SAVE_ALL)
 
+    /* INT 2Ch is two bytes, unlike INT 3; RIP is moved back onto it */
     sub qword ptr [rbp + KTRAP_FRAME_Rip], 2
 
     test byte ptr [rbp + KTRAP_FRAME_SegCs], 1
@@ -721,6 +789,7 @@ ENDFUNC
 
 PUBLIC KiDebugServiceTrap
 FUNC KiDebugServiceTrap
+
     EnterTrap TF_SAVE_ALL
 
     inc qword ptr [rbp + KTRAP_FRAME_Rip]
@@ -744,6 +813,7 @@ KiDebugServiceDispatch:
     sti
 
 KiDebugServiceKMode:
+
     DispatchException STATUS_BREAKPOINT, 3, [rbp+KTRAP_FRAME_Rax], [rbp+KTRAP_FRAME_Rcx], [rbp+KTRAP_FRAME_Rdx]
 
     ExitTrap (TF_SAVE_ALL OR TF_CHECKUSERAPC)
@@ -751,6 +821,7 @@ ENDFUNC
 
 PUBLIC KiApcInterrupt
 .PROC KiApcInterrupt
+
     EnterTrap (TF_SAVE_ALL OR TF_IRQL)
 
     mov rax, APC_LEVEL
@@ -777,7 +848,10 @@ KiApcInterruptEoiDone:
 
     sti
 
+    mov cl, [rbp + KTRAP_FRAME_SegCs]
     and cl, 1
+    mov rdx, 0
+    mov r8, rbp
     call KiDeliverApc
 
     cli
@@ -791,6 +865,7 @@ KiApcInterruptEoiDone:
 EXTERN KiRetireDpcList:PROC
 EXTERN KiRunStackCallout:PROC
 
+/* KiRetireDpcListInDpcStack(PKPRCB rcx, PVOID DpcStack rdx) */
 PUBLIC KiRetireDpcListInDpcStack
 .PROC KiRetireDpcListInDpcStack
     push rbp
@@ -838,15 +913,18 @@ PUBLIC KiCallOnKernelStack
 
 PUBLIC KiDpcInterrupt
 .PROC KiDpcInterrupt
+
     EnterTrap (TF_SAVE_ALL OR TF_IRQL)
 
     call KiDpcInterruptHandler
 
+    /* The handler already sent the EOI */
     ExitTrap (TF_SAVE_ALL OR TF_IRQL)
 .ENDP
 
 PUBLIC KiIpiInterrupt
 .PROC KiIpiInterrupt
+
     EnterTrap (TF_SAVE_ALL OR TF_IRQL)
 
     /* Service the hardware IPI */
@@ -893,6 +971,7 @@ ENDFUNC
 
 PUBLIC KiInterruptDispatch
 FUNC KiInterruptDispatch
+
     EnterTrap (TF_HAS_ERROR_CODE OR TF_SAVE_ALL OR TF_IRQL)
 
     inc dword ptr gs:[PcInterruptCount];
@@ -902,11 +981,13 @@ FUNC KiInterruptDispatch
 
     mov rbx, [rbp + KTRAP_FRAME_ErrorCode]
 
+    /* Back from the pushed return address to the object: DispatchCode offset plus the 6-byte call */
     sub rbx, KINTERRUPT_DispatchCode + 6
 
     lea rsi, [rbx + KINTERRUPT_InterruptListEntry]
 
 .DoDispatchInterrupt:
+
     movzx rax, byte ptr [rbx + KINTERRUPT_SynchronizeIrql]
     mov cr8, rax
 
@@ -934,6 +1015,7 @@ FUNC KiInterruptDispatch
     jmp .DoDispatchInterrupt
 
 .Done:
+
     mov rbx, [rbp + KTRAP_FRAME_Rbx]
     mov rsi, [rbp + KTRAP_FRAME_Rsi]
 
@@ -961,8 +1043,10 @@ ENDFUNC
 
 EXTERN KiSystemCallHandler:PROC
 
+/* 64-bit SYSCALL: rax = service number, rcx = user RIP, r11 = user RFLAGS, r10/rdx/r8/r9 = parameters 1-4 */
 PUBLIC KiSystemCallEntry64
 .PROC KiSystemCallEntry64
+
     .PUSHFRAME
     .ALLOCSTACK (KTRAP_FRAME_LENGTH + MAX_SYSCALL_PARAM_SIZE - MachineFrameLength)
     .SAVEREG rbp, MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_Rbp
@@ -1015,6 +1099,7 @@ SystemServiceSegmentsLoaded:
     jnz KiPicoSystemCallEntry
 
 #if DBG
+
     mov rax, cr8
     test eax, eax
     jz KiSystemCall64Again
@@ -1085,6 +1170,7 @@ GLOBAL_LABEL KiSystemServiceExit
     mov r10, [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_R10]
 
 NoUserApcPending:
+
     cli
 
     ldmxcsr [rsp + MAX_SYSCALL_PARAM_SIZE + KTRAP_FRAME_MxCsr]
@@ -1218,6 +1304,7 @@ KiPicoSystemCallEntry:
 
 .ENDP
 
+/* DECLSPEC_NORETURN KiExceptionExit(PKTRAP_FRAME rcx, PKEXCEPTION_FRAME rdx) */
 PUBLIC KiExceptionExit
 KiExceptionExit:
 

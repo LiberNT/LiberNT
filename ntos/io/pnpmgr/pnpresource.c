@@ -579,6 +579,62 @@ IopPickBootSetting(
 }
 
 static
+VOID
+IopReportNoSetting(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _In_opt_ PDEVICE_NODE DeviceNode)
+{
+    DPRINT1("PnP: no free setting for a type %u requirement of %wZ\n",
+            Requirement->Type,
+            DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
+}
+
+/* A bridge window the processor cannot address holds no device on this system */
+static
+BOOLEAN
+IopWindowBeyondReach(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement)
+{
+    ULONGLONG Alignment, Minimum, Maximum;
+
+    switch (Requirement->Type)
+    {
+        case CmResourceTypeMemory:
+            Minimum = (ULONGLONG)Requirement->u.Memory.MinimumAddress.QuadPart;
+            break;
+
+        case CmResourceTypeMemoryLarge:
+            if (RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum) == 0)
+                return FALSE;
+            break;
+
+        default:
+            return FALSE;
+    }
+
+    return (BOOLEAN)((Requirement->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) &&
+                     (Minimum >= MmGetPhysicalAddressLimit()));
+}
+
+static
+BOOLEAN
+IopChoicesBeyondReach(
+    _In_ PIO_RESOURCE_LIST List,
+    _In_ ULONG First,
+    _In_ ULONG End)
+{
+    ULONG Index;
+
+    for (Index = First; Index < End; Index++)
+    {
+        if (!IopWindowBeyondReach(&List->Descriptors[Index]))
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
+static
 NTSTATUS
 IopPickOneDescriptor(
     _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
@@ -599,6 +655,11 @@ IopPickOneDescriptor(
     }
 
     Status = IopDescribeFromRequirement(Requirement, Descriptor);
+    if (!NT_SUCCESS(Status))
+    {
+        IopReportNoSetting(Requirement, DeviceNode);
+        return Status;
+    }
 
     if (Requirement->Type == CmResourceTypeInterrupt)
     {
@@ -640,6 +701,7 @@ IopPickOneDescriptor(
         Attempts++;
     }
 
+    IopReportNoSetting(Requirement, DeviceNode);
     return STATUS_CONFLICTING_ADDRESSES;
 }
 
@@ -726,6 +788,8 @@ IopFixupResourceListWithRequirements(
             }
 
             if (List->Descriptors[Index].Type == CmResourceTypeConfigData) continue;
+
+            if (IopChoicesBeyondReach(List, Index, Next)) continue;
 
             Status = STATUS_CONFLICTING_ADDRESSES;
             for (Choice = Index; Choice < Next && !NT_SUCCESS(Status); Choice++)

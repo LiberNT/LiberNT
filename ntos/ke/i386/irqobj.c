@@ -1,10 +1,33 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 interrupt objects: initialize, connect to an IDT vector, disconnect, synchronize
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
 
+typedef enum _CONNECT_TYPE
+{
+    NoConnect,
+    NormalConnect,
+    ChainConnect,
+    UnknownConnect
+} CONNECT_TYPE, *PCONNECT_TYPE;
+
+typedef struct _DISPATCH_INFO
+{
+    CONNECT_TYPE Type;
+    PKINTERRUPT Interrupt;
+    PKINTERRUPT_ROUTINE NoDispatch;
+    PKINTERRUPT_ROUTINE InterruptDispatch;
+    PKINTERRUPT_ROUTINE FloatingDispatch;
+    PKINTERRUPT_ROUTINE ChainedDispatch;
+    PKINTERRUPT_ROUTINE *FlatDispatch;
+} DISPATCH_INFO, *PDISPATCH_INFO;
 
 ULONG KiISRTimeout = 55;
 USHORT KiISROverflow = 30000;
@@ -12,6 +35,9 @@ extern ULONG NTAPI KiChainedDispatch2ndLvl(VOID);
 
 VOID
 NTAPI
+KiGetVectorDispatch(
+    _In_ ULONG Vector,
+    _In_ PDISPATCH_INFO Dispatch)
 {
     PKINTERRUPT_ROUTINE Handler;
     PVOID Current;
@@ -30,6 +56,7 @@ NTAPI
                                    KiUnexpectedEntrySize);
 
     Dispatch->InterruptDispatch = (PVOID)KiInterruptDispatch;
+    Dispatch->FloatingDispatch = NULL;
     Dispatch->ChainedDispatch = (PVOID)KiChainedDispatch;
     Dispatch->FlatDispatch = NULL;
 
@@ -64,6 +91,9 @@ NTAPI
 
 VOID
 NTAPI
+KiConnectVectorToInterrupt(
+    _In_ PKINTERRUPT Interrupt,
+    _In_ CONNECT_TYPE Type)
 {
     DISPATCH_INFO Dispatch;
     PKINTERRUPT_ROUTINE Handler;
@@ -93,6 +123,10 @@ NTAPI
 FORCEINLINE
 DECLSPEC_NORETURN
 VOID
+KiExitInterrupt(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ KIRQL OldIrql,
+    _In_ BOOLEAN Spurious)
 {
     if (!Spurious)
     {
@@ -113,6 +147,8 @@ KiUnexpectedInterrupt(VOID)
 
 VOID
 FASTCALL
+KiUnexpectedInterruptTailHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KIRQL OldIrql;
 
@@ -135,11 +171,15 @@ FASTCALL
 typedef
 VOID
 (FASTCALL *PKI_INTERRUPT_DISPATCH)(
+    _In_ PKTRAP_FRAME TrapFrame,
     IN PKINTERRUPT Interrupt
 );
 
 VOID
 FASTCALL
+KiInterruptDispatch(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKINTERRUPT Interrupt)
 {
     KIRQL OldIrql;
 
@@ -165,6 +205,9 @@ FASTCALL
 
 VOID
 FASTCALL
+KiChainedDispatch(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKINTERRUPT Interrupt)
 {
     KIRQL OldIrql, OldInterruptIrql = 0;
     BOOLEAN Handled;
@@ -177,6 +220,7 @@ FASTCALL
                                 &OldIrql))
     {
         ListHead = &Interrupt->InterruptListEntry;
+        NextEntry = ListHead;
         while (TRUE)
         {
             if (Interrupt->SynchronizeIrql > Interrupt->Irql)
@@ -221,6 +265,9 @@ FASTCALL
 
 VOID
 FASTCALL
+KiInterruptTemplateHandler(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKINTERRUPT Interrupt)
 {
     KiEnterInterruptTrap(TrapFrame);
 
@@ -229,6 +276,18 @@ FASTCALL
 
 VOID
 NTAPI
+KeInitializeInterrupt(
+    _In_ PKINTERRUPT Interrupt,
+    _In_ PKSERVICE_ROUTINE ServiceRoutine,
+    _In_ PVOID ServiceContext,
+    _In_ PKSPIN_LOCK SpinLock,
+    _In_ ULONG Vector,
+    _In_ KIRQL Irql,
+    _In_ KIRQL SynchronizeIrql,
+    _In_ KINTERRUPT_MODE InterruptMode,
+    _In_ BOOLEAN ShareVector,
+    _In_ CHAR ProcessorNumber,
+    _In_ BOOLEAN FloatingSave)
 {
     ULONG i;
     PULONG DispatchCode = &Interrupt->DispatchCode[0], Patch = DispatchCode;
@@ -274,6 +333,8 @@ NTAPI
 
 BOOLEAN
 NTAPI
+KeConnectInterrupt(
+    _In_ PKINTERRUPT Interrupt)
 {
     BOOLEAN Connected, Error, Status;
     KIRQL Irql, OldIrql;
@@ -352,6 +413,8 @@ NTAPI
 
 BOOLEAN
 NTAPI
+KeDisconnectInterrupt(
+    _In_ PKINTERRUPT Interrupt)
 {
     KIRQL OldIrql, Irql;
     ULONG Vector;
@@ -416,6 +479,10 @@ NTAPI
 
 BOOLEAN
 NTAPI
+KeSynchronizeExecution(
+    _Inout_ PKINTERRUPT Interrupt,
+    _In_ PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
+    _In_opt_ PVOID SynchronizeContext)
 {
     BOOLEAN Success;
     KIRQL OldIrql;

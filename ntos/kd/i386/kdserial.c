@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     x86 kernel debugger serial port input and output
+ * COPYRIGHT:   Copyright Alex Ionescu
+ *              Copyright Hervé Poussineau
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -19,6 +25,8 @@ KdPortIsComPortNumberValid(
 BOOLEAN
 NTAPI
 KdPortInitializeEx(
+    _In_ PCPPORT PortInformation,
+    _In_ ULONG ComPortNumber)
 {
     NTSTATUS Status;
 
@@ -50,6 +58,7 @@ KdPortInitializeEx(
 
         HalDisplayString(Buffer);
 #endif
+
         return TRUE;
     }
 }
@@ -57,6 +66,8 @@ KdPortInitializeEx(
 BOOLEAN
 NTAPI
 KdPortGetByteEx(
+    _In_ PCPPORT PortInformation,
+    _Out_ PUCHAR ByteReceived)
 {
     return (CpGetByte(PortInformation, ByteReceived, FALSE, FALSE) == CP_GET_SUCCESS);
 }
@@ -64,6 +75,8 @@ KdPortGetByteEx(
 VOID
 NTAPI
 KdPortPutByteEx(
+    _In_ PCPPORT PortInformation,
+    _In_ UCHAR ByteToSend)
 {
     CpPutByte(PortInformation, ByteToSend);
 }
@@ -71,6 +84,9 @@ KdPortPutByteEx(
 VOID
 NTAPI
 KdPortPutBufferEx(
+    _In_ PCPPORT PortInformation,
+    _In_ PCCH Buffer,
+    _In_ ULONG Length)
 {
     ULONG Index;
 

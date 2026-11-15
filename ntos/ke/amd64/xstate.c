@@ -1,5 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under MIT (https://spdx.org/licenses/MIT)
+ * PURPOSE:     amd64 extended processor state: XSAVE layout, user state save and restore, MXCSR mask
  * COPYRIGHT:   Copyright 2025 Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -8,6 +13,7 @@
 #define NDEBUG
 #include <debug.h>
 
+/* Intel SDM XSAVE state components the Windows SDK does not define */
 #define XSTATE_PKRU                         9
 #define XSTATE_HDC                          13
 #define XSTATE_UINTR                        14
@@ -47,6 +53,7 @@ KiGetXStateConfiguration(
     SupportedUserMask = (ULONG64)ExtStateMain.Edx << 32 |
                         (ULONG64)ExtStateMain.Eax.Uint32;
 
+    /* FIXME: large features stay off until kernel stacks can grow for them */
     SupportedUserMask &= ~XSTATE_MASK_LARGE_FEATURES;
 
     SupportedUserMask &= XSTATE_MASK_ALLOWED;
@@ -77,6 +84,7 @@ KiGetXStateConfiguration(
     XStateConfig->Features[XSTATE_LEGACY_SSE].Size = FIELD_SIZE(XSAVE_FORMAT, XmmRegisters);
     XStateConfig->AllFeatures[XSTATE_LEGACY_SSE] = FIELD_SIZE(XSAVE_FORMAT, XmmRegisters);
 
+    /* Components after the legacy area start past the XSAVE header */
     NextUserOffset = NextSupervisorOffset = sizeof(XSAVE_AREA);
 
     for (ULONG Component = 2; Component < MAXIMUM_XSTATE_FEATURES; Component++)
@@ -94,6 +102,7 @@ KiGetXStateConfiguration(
 
         if ((ComponentBit & SupportedComponentMask) == 0)
         {
+            /* Matches a Windows quirk in how supervisor components are counted */
             if ((ComponentBit & XSTATE_MASK_SUPERVISOR) == 0)
             {
                 XStateConfig->Features[Component].Offset = ExtStateComponent.Offset;
@@ -216,6 +225,7 @@ KiInitializeXStateConfiguration(
               CPUID_EXTENDED_STATE,
               CPUID_EXTENDED_STATE_MAIN_LEAF);
 
+    /* VirtualBox reports the size of every supported component in CPUID 0xD EBX, not only the XCR0 ones */
     if (!SharedUserData->XState.CompactionEnabled &&
         ExtStateMain.Ebx > SharedUserData->XState.Size)
     {

@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 kernel debugger target: context, control space, MSRs and I/O space
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright Stefan Ginsberg <stefan.ginsberg@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -7,6 +13,9 @@
 
 VOID
 NTAPI
+KdpGetStateChange(
+    _In_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_ PCONTEXT Context)
 {
     PKPRCB Prcb;
     ULONG i;
@@ -41,6 +50,9 @@ NTAPI
 
 VOID
 NTAPI
+KdpSetContextState(
+    _In_ PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
+    _In_ PCONTEXT Context)
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
 
@@ -275,6 +287,7 @@ KdpSysReadIoSpace(
         }
 
         default:
+
             *ActualDataSize = 0;
             Status = STATUS_INVALID_PARAMETER;
     }
@@ -345,6 +358,7 @@ KdpSysWriteIoSpace(
         }
 
         default:
+
             *ActualDataSize = 0;
             Status = STATUS_INVALID_PARAMETER;
     }
@@ -354,6 +368,8 @@ KdpSysWriteIoSpace(
 
 NTSTATUS
 NTAPI
+KdpSysCheckLowMemory(
+    _In_ ULONG Flags)
 {
     return STATUS_UNSUCCESSFUL;
 }

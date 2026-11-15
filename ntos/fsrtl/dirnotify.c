@@ -15,6 +15,43 @@
 
 #define FSRTL_NOTIFY_INLINE_WATCHERS 16
 
+#define WATCH_TREE         0x01
+#define NOTIFY_IMMEDIATELY 0x02
+#define CLEANUP_IN_PROCESS 0x04
+#define WATCH_ROOT         0x10
+#define DELETE_IN_PROCESS  0x20
+
+typedef struct _REAL_NOTIFY_SYNC
+{
+    FAST_MUTEX FastMutex;
+    ULONG_PTR OwningThread;
+    ULONG OwnerCount;
+} REAL_NOTIFY_SYNC, *PREAL_NOTIFY_SYNC;
+
+typedef struct _NOTIFY_CHANGE
+{
+    PREAL_NOTIFY_SYNC NotifySync;
+    PVOID FsContext;
+    PVOID StreamID;
+    PCHECK_FOR_TRAVERSE_ACCESS TraverseCallback;
+    PSECURITY_SUBJECT_CONTEXT SubjectContext;
+    PSTRING FullDirectoryName;
+    LIST_ENTRY NotifyList;
+    LIST_ENTRY NotifyIrps;
+    PFILTER_REPORT_CHANGE FilterCallback;
+    USHORT Flags;
+    UCHAR CharacterSize;
+    ULONG CompletionFilter;
+    PVOID AllocatedBuffer;
+    PVOID Buffer;
+    ULONG BufferLength;
+    ULONG ThisBufferLength;
+    ULONG DataLength;
+    ULONG LastEntry;
+    ULONG ReferenceCount;
+    PEPROCESS OwningProcess;
+} NOTIFY_CHANGE, *PNOTIFY_CHANGE;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static

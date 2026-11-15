@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 user-mode callback entry, return and stack switch
+ * COPYRIGHT:   Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ksamd64.inc>
@@ -11,6 +16,7 @@ EXTERN KiUserModeCallout:PROC
 
 .code64
 
+/* NTSTATUS KiCallUserMode(PVOID *OutputBuffer rcx, PULONG OutputLength rdx) */
 PUBLIC KiCallUserMode
 .PROC KiCallUserMode
 
@@ -28,11 +34,13 @@ PUBLIC KiCallUserMode
 
 .ENDP
 
+ /* KiUserCallbackExit(PKTRAP_FRAME rcx): back to user mode with only rsp and rip restored, the rest zeroed */
  PUBLIC KiUserCallbackExit
 KiUserCallbackExit:
 
     mov rsp, rcx
 
+    /* Zero the nonvolatiles for KiUserCallbackDispatcher before any pending user APC runs */
     xor rbx, rbx
     xor rdi, rdi
     xor rsi, rsi

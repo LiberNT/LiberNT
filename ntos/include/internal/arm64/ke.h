@@ -180,6 +180,44 @@ KiArm64IdleProcessorNeedsWake(
 
 #define KiArchIdleProcessorNeedsWake(Prcb) KiArm64IdleProcessorNeedsWake(Prcb)
 
+/* ELR already points at the BRK instruction */
+#define KI_BREAKPOINT_PC_ADJUST 0
+#define KI_EXCEPTION_CONTEXT_FLAGS (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS)
+#define KI_CALLOUT_STACK_RESERVE 16
+
+VOID
+KiArm64FinishExceptionContext(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PCONTEXT Context);
+#define KiArchFinishExceptionContext(TrapFrame, Context) KiArm64FinishExceptionContext(TrapFrame, Context)
+
+BOOLEAN
+KiArm64LastChanceKernelDebugger(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PCONTEXT Context);
+#define KiArchLastChanceKernelDebugger(ExceptionRecord, Context) KiArm64LastChanceKernelDebugger(ExceptionRecord, Context)
+
+VOID
+KiArm64PrepareUserBreakpoint(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PKTRAP_FRAME TrapFrame);
+#define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiArm64PrepareUserBreakpoint(ExceptionRecord, TrapFrame)
+
+VOID
+KiSetupUserCalloutFrame(
+    _Out_ PUCALLOUT_FRAME UserCalloutFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG ApiNumber,
+    _In_ PVOID Buffer,
+    _In_ ULONG BufferLength);
+
+VOID
+KiLeaveCallout(
+    _Inout_ PKTHREAD Thread,
+    _In_ PKCALLOUT_FRAME CalloutFrame,
+    _Inout_ PKTRAP_FRAME CallerFrame,
+    _In_ NTSTATUS CallbackStatus);
+
 FORCEINLINE
 ULONG64
 KiArm64CurrentTlbAsid(VOID)

@@ -1,4 +1,11 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 exception dispatch and conversion between CONTEXT records and trap frames
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright Gregor Anich
+ *              Copyright Skywing <skywing@valhallalegends.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -24,6 +31,8 @@ KeInitExceptions(VOID)
 
 ULONG
 FASTCALL
+KiUpdateDr7(
+    _In_ ULONG Dr7)
 {
     /* Check if debugging is enabled */
     if (KeGetCurrentThread()->Header.ActiveDR7 &&
@@ -37,6 +46,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiRecordDr7(
+    _Out_ PULONG Dr7Ptr,
+    _Out_ PULONG DrMask)
 {
     ULONG NewMask, Mask;
     UCHAR Result;
@@ -95,6 +107,8 @@ FASTCALL
 
 ULONG
 NTAPI
+KiEspFromTrapFrame(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     if (KiUserTrap(TrapFrame) ||
         (TrapFrame->EFlags & EFLAGS_V86_MASK))
@@ -116,6 +130,9 @@ NTAPI
 
 VOID
 NTAPI
+KiEspToTrapFrame(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Esp)
 {
     KIRQL OldIrql;
     ULONG Previous;
@@ -159,6 +176,8 @@ NTAPI
 
 ULONG
 NTAPI
+KiSsFromTrapFrame(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     if (TrapFrame->EFlags & EFLAGS_V86_MASK)
     {
@@ -176,6 +195,9 @@ NTAPI
 
 VOID
 NTAPI
+KiSsToTrapFrame(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Ss)
 {
     Ss &= 0xFFFF;
 
@@ -191,14 +213,22 @@ NTAPI
 
 USHORT
 NTAPI
+KiTagWordFnsaveToFxsave(
+    USHORT TagWord)
 {
     INT FxTagWord = ~TagWord;
 
+    FxTagWord = (FxTagWord | (FxTagWord >> 1)) & 0x5555;
+    FxTagWord = (FxTagWord | (FxTagWord >> 1)) & 0x3333;
+    FxTagWord = (FxTagWord | (FxTagWord >> 2)) & 0x0f0f;
+    FxTagWord = (FxTagWord | (FxTagWord >> 4)) & 0x00ff;
     return FxTagWord;
 }
 
 VOID
 NTAPI
+Ki386AdjustEsp0(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     ULONG_PTR Stack;
@@ -225,6 +255,12 @@ NTAPI
 
 VOID
 NTAPI
+KeContextToTrapFrame(
+    _In_ PCONTEXT Context,
+    _Inout_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
     PFX_SAVE_AREA FxSaveArea;
     ULONG i;
@@ -426,6 +462,10 @@ NTAPI
 
 VOID
 NTAPI
+KeTrapFrameToContext(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PCONTEXT Context)
 {
     PFX_SAVE_AREA FxSaveArea;
     struct _AlignHack
@@ -571,6 +611,8 @@ NTAPI
 
 BOOLEAN
 FASTCALL
+KeInvalidAccessAllowed(
+    _In_opt_ PVOID TrapInformation)
 {
     ULONG Eip;
     PKTRAP_FRAME TrapFrame = TrapInformation;
@@ -601,6 +643,12 @@ FASTCALL
 
 VOID
 NTAPI
+KiDispatchException(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ BOOLEAN FirstChance)
 {
     CONTEXT Context;
     EXCEPTION_RECORD LocalExceptRecord;
@@ -823,6 +871,7 @@ DispatchToUser:
     }
 
 Handled:
+
     KeContextToTrapFrame(&Context,
                          ExceptionFrame,
                          TrapFrame,
@@ -834,6 +883,15 @@ Handled:
 DECLSPEC_NORETURN
 VOID
 NTAPI
+KiDispatchExceptionFromTrapFrame(
+    _In_ NTSTATUS Code,
+    _In_ ULONG Flags,
+    _In_ ULONG_PTR Address,
+    _In_ ULONG ParameterCount,
+    _In_ ULONG_PTR Parameter1,
+    _In_ ULONG_PTR Parameter2,
+    _In_ ULONG_PTR Parameter3,
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     EXCEPTION_RECORD ExceptionRecord;
 
@@ -862,6 +920,9 @@ NTAPI
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiSystemFatalException(
+    _In_ ULONG ExceptionCode,
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     /* Bugcheck the system */
     KeBugCheckWithTf(UNEXPECTED_KERNEL_MODE_TRAP,
@@ -874,6 +935,8 @@ FASTCALL
 
 NTSTATUS
 NTAPI
+KeRaiseUserException(
+    _In_ NTSTATUS ExceptionCode)
 {
     ULONG OldEip;
     PTEB Teb = KeGetCurrentThread()->Teb;

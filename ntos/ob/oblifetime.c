@@ -16,11 +16,24 @@
 
 extern ULONG NtGlobalFlag;
 
+POBJECT_TYPE ObTypeIndexTable[256];
+POBJECT_TYPE ObpTypeObjectType;
+UCHAR ObHeaderCookie;
+UCHAR ObpInfoMaskToOffset[256];
 KEVENT ObpDefaultObject;
 
+GENERAL_LOOKASIDE ObpCreateInfoLookasideList;
+GENERAL_LOOKASIDE ObpNameBufferLookasideList;
+KGUARDED_MUTEX ObpDeviceMapLock;
 
 volatile PVOID ObpReaperList;
+WORK_QUEUE_ITEM ObpReaperWorkItem;
 
+ULONG ObpObjectsCreated;
+ULONG ObpObjectsWithName;
+ULONG ObpObjectsWithPoolQuota;
+ULONG ObpObjectsWithHandleDB;
+ULONG ObpObjectsWithCreatorInfo;
 
 /* The reaper takes the whole list at once and leaves this behind, so a pusher
  * can tell a draining reaper from an empty list. */
@@ -831,68 +844,248 @@ ObpInitializeObjectTypeSecurity(
 }
 
 
+static
+BOOLEAN
+ObpIsValidTypeInitializer(
+    _In_ PCUNICODE_STRING TypeName,
+    _In_ POBJECT_TYPE_INITIALIZER Initializer,
+    _In_ LONG_PTR WaitObjectInfo)
 {
+    BOOLEAN NonPaged;
 
+    if (TypeName == NULL || TypeName->Length == 0 || (TypeName->Length & (sizeof(WCHAR) - 1)) != 0)
+        return FALSE;
 
+    if (Initializer == NULL || Initializer->Length < sizeof(*Initializer))
+        return FALSE;
+
+    if ((Initializer->ObjectTypeFlags & 0xFC00) != 0 ||
+        (Initializer->InvalidAttributes & ~OBJ_VALID_KERNEL_ATTRIBUTES) != 0)
     {
+        return FALSE;
     }
 
+    if (Initializer->MaintainHandleCount && Initializer->OpenProcedure == NULL && Initializer->CloseProcedure == NULL)
+        return FALSE;
 
+    NonPaged = (BOOLEAN)(Initializer->PoolType == NonPagedPool || Initializer->PoolType == NonPagedPoolNx);
+    return (BOOLEAN)(Initializer->UseDefaultObject || NonPaged || (WaitObjectInfo & 1) != 0);
+}
 
+static
+BOOLEAN
+ObpTypeNameHasSeparator(
+    _In_ PCUNICODE_STRING TypeName)
+{
+    USHORT Index;
 
+    for (Index = 0; Index < TypeName->Length / sizeof(WCHAR); Index++)
     {
+        if (TypeName->Buffer[Index] == OBJ_NAME_PATH_SEPARATOR)
+            return TRUE;
     }
 
+    return FALSE;
+}
 
+static
+ULONG
+ObpTypeKeyFromName(
+    _In_ PCUNICODE_STRING TypeName)
+{
+    CHAR Key[sizeof(ULONG)];
+    ULONG Index, Count = TypeName->Length / sizeof(WCHAR);
+    WCHAR Char;
+
+    for (Index = 0; Index < sizeof(Key); Index++)
     {
+        Char = (Index < Count) ? TypeName->Buffer[Index] : L' ';
+        Key[Index] = (Char < 0x80) ? (CHAR)Char : '?';
     }
 
+    return ReadUnalignedU32((const unsigned long *)Key);
+}
 
+static
+VOID
+ObpCompleteTypeInfo(
+    _Inout_ POBJECT_TYPE Type,
+    _In_ POBJECT_TYPE_INITIALIZER Initializer,
+    _In_ LONG_PTR WaitObjectInfo)
+{
+    PUCHAR Tail = (PUCHAR)Initializer + sizeof(*Initializer);
+    ULONG HeaderCharge;
 
+    Type->TypeInfo = *Initializer;
 
+    if (NtGlobalFlag & FLG_MAINTAIN_OBJECT_TYPELIST)
+        Type->TypeInfo.MaintainTypeList = TRUE;
+
+    HeaderCharge = sizeof(OBJECT_HEADER) + sizeof(OBJECT_HEADER_NAME_INFO);
+    if (Initializer->MaintainHandleCount)
+        HeaderCharge += sizeof(OBJECT_HEADER_HANDLE_INFO);
+
+    if ((Initializer->PoolType & OBP_BASE_POOL_TYPE_MASK) == NonPagedPool)
+        Type->TypeInfo.DefaultNonPagedPoolCharge += HeaderCharge;
+    else
+        Type->TypeInfo.DefaultPagedPoolCharge += HeaderCharge;
+
+    if (Type->TypeInfo.SecurityProcedure == NULL)
+        Type->TypeInfo.SecurityProcedure = SeDefaultObjectMethod;
+
+    if (Type->TypeInfo.UseDefaultObject)
+    {
+        Type->TypeInfo.ValidAccessMask |= SYNCHRONIZE;
+        Type->DefaultObject = &ObpDefaultObject;
     }
     else
     {
+        Type->DefaultObject = (PVOID)WaitObjectInfo;
     }
 
+    ExInitializePushLock(&Type->TypeLock);
+    InitializeListHead(&Type->TypeList);
+    InitializeListHead(&Type->CallbackList);
 
+    Type->SeMandatoryLabelMask = 0;
+    Type->SeTrustConstraintMask = 0;
+    if (Initializer->Length >= sizeof(*Initializer) + 2 * sizeof(ULONG))
     {
+        Type->SeMandatoryLabelMask = ReadUnalignedU32((const unsigned long *)Tail);
+        Type->SeTrustConstraintMask = ReadUnalignedU32((const unsigned long *)(Tail + sizeof(ULONG)));
+    }
+}
+
+static
+VOID
+ObpPublishObjectType(
+    _In_ POBJECT_TYPE Type,
+    _In_ POBJECT_HEADER Header)
+{
+    POBJECT_HEADER_CREATOR_INFO CreatorInfo;
+
+    ObpEnterObjectTypeMutex(ObpTypeObjectType);
+
+    /* The type's own handle must not insert it into the type list a second time */
+    CreatorInfo = OBJECT_HEADER_TO_CREATOR_INFO(Header);
+    if (CreatorInfo != NULL)
+    {
+        InsertTailList(&ObpTypeObjectType->TypeList, &CreatorInfo->TypeList);
+        Header->Flags &= ~OB_FLAG_CREATE_INFO;
     }
 
+    ASSERT(ObpTypeObjectType->TotalNumberOfObjects < RTL_NUMBER_OF(ObTypeIndexTable));
+    Type->Index = (UCHAR)ObpTypeObjectType->TotalNumberOfObjects;
+    ASSERT(Type->Index != 0);
+    ASSERT(ObTypeIndexTable[Type->Index] == NULL);
+    ObTypeIndexTable[Type->Index] = Type;
 
+    if (Type == ObpTypeObjectType)
+        ObpEncodeObjectTypeIndex(Header, ObpTypeObjectType);
+
+    ObpLeaveObjectTypeMutex(ObpTypeObjectType);
+}
+
+NTSTATUS
+NTAPI
+ObCreateObjectTypeEx(
+    _In_ PUNICODE_STRING TypeName,
+    _In_ POBJECT_TYPE_INITIALIZER ObjectTypeInitializer,
+    _In_opt_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_opt_ LONG_PTR WaitObjectInfo,
+    _Out_ POBJECT_TYPE *ObjectType)
+{
+    OBP_LOOKUP_CONTEXT Context;
+    UNICODE_STRING Name;
+    POBJECT_HEADER Header;
+    POBJECT_TYPE Type;
+    NTSTATUS Status;
+
+    if (!ObpIsValidTypeInitializer(TypeName, ObjectTypeInitializer, WaitObjectInfo))
+        return STATUS_INVALID_PARAMETER;
+
+    if (ObpTypeNameHasSeparator(TypeName))
+        return STATUS_OBJECT_NAME_INVALID;
+
+    ObpInitializeLookupContext(&Context);
+
+    if (ObpTypeDirectoryObject != NULL)
     {
+        ObpAcquireLookupContextLock(&Context, ObpTypeDirectoryObject);
+        if (ObpLookupEntryDirectory(ObpTypeDirectoryObject, TypeName, OBJ_CASE_INSENSITIVE, FALSE, &Context))
+        {
+            ObpReleaseLookupContext(&Context);
+            return STATUS_OBJECT_NAME_COLLISION;
+        }
     }
+
+    Name.Length = 0;
+    Name.MaximumLength = TypeName->Length + sizeof(UNICODE_NULL);
+    Name.Buffer = ExAllocatePoolWithTag(PagedPool, Name.MaximumLength, OB_NAME_TAG);
+    if (Name.Buffer == NULL)
     {
+        ObpReleaseLookupContext(&Context);
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    RtlCopyUnicodeString(&Name, TypeName);
+
+    Status = ObpAllocateObject(NULL, &Name, ObpTypeObjectType, sizeof(OBJECT_TYPE), KernelMode, &Header);
+    if (!NT_SUCCESS(Status))
     {
+        ObpReleaseLookupContext(&Context);
+        ExFreePoolWithTag(Name.Buffer, OB_NAME_TAG);
+        return Status;
     }
 
-    {
+    Type = (POBJECT_TYPE)&Header->Body;
+    Type->Name = Name;
+    Type->TotalNumberOfObjects = 0;
+    Type->TotalNumberOfHandles = 0;
+    Type->HighWaterNumberOfObjects = 0;
+    Type->HighWaterNumberOfHandles = 0;
+    Header->Flags |= OB_FLAG_KERNEL_MODE | OB_FLAG_PERMANENT;
 
+    if (ObpTypeObjectType == NULL)
+    {
+        ObpTypeObjectType = Type;
+        Type->TotalNumberOfObjects = 1;
+        Type->Key = TAG_OBJECT_TYPE;
     }
     else
     {
+        Type->Key = ObpTypeKeyFromName(TypeName);
     }
 
+    ObpCompleteTypeInfo(Type, ObjectTypeInitializer, WaitObjectInfo);
 
     if (ObpObjectSecurityMode)
     {
+        Status = ObpInitializeObjectTypeSecurity(Type, SecurityDescriptor);
         if (!NT_SUCCESS(Status))
         {
             ObpReleaseLookupContext(&Context);
+            ObDereferenceObject(Type);
             return Status;
         }
     }
 
+    ObpPublishObjectType(Type, Header);
 
+    if (ObpTypeDirectoryObject != NULL)
     {
+        if (!ObpInsertEntryDirectory(ObpTypeDirectoryObject, &Context, Header))
         {
+            ObpReleaseLookupContext(&Context);
+            return STATUS_INSUFFICIENT_RESOURCES;
         }
 
+        ObReferenceObject(ObpTypeDirectoryObject);
     }
 
     ObpReleaseLookupContext(&Context);
+    *ObjectType = Type;
+    return STATUS_SUCCESS;
 }
 
 /* QUERYING *******************************************************************/

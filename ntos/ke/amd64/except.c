@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 IDT setup, user exception frames, trap fixups and raise services
+ * COPYRIGHT:   Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -125,6 +131,9 @@ KiPageFaultIrqlBugCheck(
 
 BOOLEAN
 KiDispatchExceptionToUser(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PCONTEXT Context,
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
 {
     EXCEPTION_RECORD LocalExceptRecord;
     ULONG64 UserRsp;
@@ -229,6 +238,7 @@ KiDispatchExceptionToUser(
     TrapFrame->SegGs = KGDT64_R3_DATA | RPL_MASK;
     TrapFrame->SegSs = KGDT64_R3_DATA | RPL_MASK;
 
+    /* The dispatcher runs without the alignment checking the faulting code asked for */
     TrapFrame->EFlags &= ~EFLAGS_ALIGN_CHECK;
 
     TrapFrame->Rip = (ULONG64)KeUserExceptionDispatcher;
@@ -237,18 +247,37 @@ KiDispatchExceptionToUser(
     return TRUE;
 }
 
+NTSTATUS
+KiAmd64DebugPortExceptionCode(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ NTSTATUS ExceptionCode)
 {
+    /* The debugger of a 32-bit process expects its breakpoints and single steps as WoW64 ones */
+    if (TrapFrame->SegCs != (KGDT64_R3_CMCODE | RPL_MASK))
+        return ExceptionCode;
 
+    if (ExceptionCode == STATUS_BREAKPOINT)
+        return STATUS_WX86_BREAKPOINT;
 
+    if (ExceptionCode == STATUS_SINGLE_STEP)
+        return STATUS_WX86_SINGLE_STEP;
 
-}
-
-    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
-{
-
+    return ExceptionCode;
 }
 
 VOID
+KiAmd64PrepareUserBreakpoint(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    UNREFERENCED_PARAMETER(TrapFrame);
+
+    /* User mode sees a breakpoint with its code as the only parameter */
+    ExceptionRecord->NumberParameters = 1;
+}
+
+VOID
+KiAmd64ReportUnhandledKernelFault(
     _In_ PKTRAP_FRAME TrapFrame)
 {
     UCHAR Instructions[8] = { 0 };
@@ -260,6 +289,7 @@ VOID
         RtlCopyMemory(Instructions, (PVOID)TrapFrame->Rip, sizeof(Instructions));
     }
 
+    /* Rbx, Rsi and Rdi live only in the exception frame, not the trap frame */
     DPRINT1("KiDispatchException: unhandled kernel exception at RIP=%p\n"
             "  Instruction bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n"
             "  ErrorCode=%p EFlags=%lx Cs=%x process %s\n"
@@ -293,6 +323,8 @@ VOID
 
 NTSTATUS
 NTAPI
+KeRaiseUserException(
+    _In_ NTSTATUS ExceptionCode)
 {
     PKTHREAD Thread = KeGetCurrentThread();
     PTEB Teb = Thread->Teb;
@@ -320,6 +352,9 @@ NTAPI
 
 VOID
 DECLSPEC_NORETURN
+KiSystemFatalException(
+    _In_ ULONG ExceptionCode,
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiAmd64BootReadout(BootReadoutFatalTrap,
                        ExceptionCode,
@@ -339,6 +374,7 @@ DECLSPEC_NORETURN
 NTSTATUS
 NTAPI
 KiNpxNotAvailableFaultHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     UNIMPLEMENTED;
     KeBugCheckWithTf(TRAP_CAUSE_UNKNOWN, 13, 0, 0, 1, TrapFrame);
@@ -347,6 +383,9 @@ KiNpxNotAvailableFaultHandler(
 
 static
 BOOLEAN
+KiIsPrivilegedInstruction(
+    PUCHAR Ip,
+    BOOLEAN Wow64)
 {
     ULONG i;
 
@@ -363,6 +402,17 @@ BOOLEAN
 
         switch (Ip[0])
         {
+            case 0x26:
+            case 0x2E:
+            case 0x36:
+            case 0x3E:
+            case 0x64:
+            case 0x65:
+            case 0x66:
+            case 0x67:
+            case 0xF0:
+            case 0xF2:
+            case 0xF3:
                 Ip++;
                 continue;
         }
@@ -370,24 +420,55 @@ BOOLEAN
         break;
     }
 
+    /* Fifteen prefixes only happen when the code was modified under the fault */
     if (i == 15)
     {
+        return FALSE;
     }
 
     switch (Ip[0])
     {
+        case 0xF4:
+        case 0xFA:
+        case 0xFB:
+        case 0x6C:
+        case 0x6D:
+        case 0x6E:
+        case 0x6F:
+        case 0xE4:
+        case 0xE5:
+        case 0xE6:
+        case 0xE7:
+        case 0xEC:
+        case 0xED:
+        case 0xEE:
+        case 0xEF:
             return TRUE;
 
         case 0x0F:
         {
             switch (Ip[1])
             {
+                case 0x06:
+                case 0x07:
+                case 0x08:
+                case 0x09:
+                case 0x20:
+                case 0x21:
+                case 0x22:
+                case 0x23:
+                case 0x30:
+                case 0x32:
+                case 0x33:
+                case 0x35:
                     return TRUE;
 
                 case 0x00:
                 {
                     switch ((Ip[2] >> 3) & 0x7)
                     {
+                        case 2:
+                        case 3:
                             return TRUE;
                     }
                     break;
@@ -397,6 +478,7 @@ BOOLEAN
                 {
                     switch (Ip[2])
                     {
+                        case 0xF8:
                             return TRUE;
                     }
 
@@ -407,6 +489,10 @@ BOOLEAN
 
                     switch ((Ip[2] >> 3) & 0x7)
                     {
+                        case 2:
+                        case 3:
+                        case 6:
+                        case 7:
                             return TRUE;
                     }
                     break;
@@ -483,6 +569,7 @@ KiInvalidOpcodeFaultHandler(
 NTSTATUS
 NTAPI
 KiGeneralProtectionFaultHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PUCHAR Instructions;
 
@@ -504,6 +591,9 @@ KiGeneralProtectionFaultHandler(
 
     Instructions = (PUCHAR)TrapFrame->Rip;
 
+    if ((Instructions[0] == 0xF) &&
+        ((Instructions[1] == 0x30) ||
+         (Instructions[1] == 0x32)))
     {
         return STATUS_ACCESS_VIOLATION;
     }
@@ -515,6 +605,7 @@ DECLSPEC_NORETURN
 VOID
 NTAPI
 KiMcheckAbortHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     ULONG64 Status, Address, Misc, ReportedStatus = 0;
     ULONG Bank, BankCount, ReportedBank = 0;
@@ -562,6 +653,7 @@ KiMcheckAbortHandler(
 NTSTATUS
 NTAPI
 KiFloatingErrorHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     XSAVE_FORMAT Area;
     USHORT Error;
@@ -594,7 +686,9 @@ KiFloatingErrorHandler(
 NTSTATUS
 NTAPI
 KiXmmExceptionHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
+    /* #XM needs an unmasked status bit; release builds still report a defined code if one is missing */
     ULONG ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
 
     if ((TrapFrame->MxCsr & _MM_EXCEPT_INVALID) &&
@@ -602,6 +696,7 @@ KiXmmExceptionHandler(
     {
         ExceptionCode = STATUS_FLOAT_INVALID_OPERATION;
     }
+    /* A denormal operand reports an invalid operation, as Windows does */
     else if ((TrapFrame->MxCsr & _MM_EXCEPT_DENORM) &&
              !(TrapFrame->MxCsr & _MM_MASK_DENORM))
     {
@@ -631,6 +726,7 @@ KiXmmExceptionHandler(
     {
         ASSERT(FALSE);
     }
+
     return ExceptionCode;
 }
 

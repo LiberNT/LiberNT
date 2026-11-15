@@ -1,15 +1,24 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Dispatcher, scheduler, timer and lock inline helpers
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
 
 #ifndef KI_ARCH_THREAD_HANDOFF_USES_RUNNING
 #define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 0
 #endif
+
 #define KI_THREAD_HANDOFF_USES_RUNNING \
     ((NTDDI_VERSION >= NTDDI_WIN7) && KI_ARCH_THREAD_HANDOFF_USES_RUNNING)
 
+#ifndef _KeGetPreviousMode
 FORCEINLINE
 KPROCESSOR_MODE
 KeGetPreviousMode(VOID)
 {
+
     return KeGetCurrentThread()->PreviousMode;
 }
 #endif
@@ -162,44 +171,84 @@ KiDecrementThreadQuantum(
 
 FORCEINLINE
 VOID
+KiEnterGuardedRegionThread(
+    _In_ PKTHREAD Thread)
 {
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(Thread->SpecialApcDisable <= 0 && Thread->SpecialApcDisable != (SHORT)MINSHORT);
 
+    Thread->SpecialApcDisable--;
+    _ReadWriteBarrier();
 }
 
 FORCEINLINE
 VOID
+KiLeaveGuardedRegionThread(
+    _In_ PKTHREAD Thread)
 {
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(Thread->SpecialApcDisable < 0);
 
+    _ReadWriteBarrier();
+    if (++Thread->SpecialApcDisable == 0 && !IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode]))
+        KiCheckForKernelApcDelivery();
 }
 
 FORCEINLINE
 VOID
+KiEnterCriticalRegionThread(
+    _In_ PKTHREAD Thread)
 {
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(Thread->KernelApcDisable <= 0 && Thread->KernelApcDisable != (SHORT)MINSHORT);
 
+    Thread->KernelApcDisable--;
+    _ReadWriteBarrier();
 }
 
 FORCEINLINE
 VOID
+KiLeaveCriticalRegionThread(
+    _In_ PKTHREAD Thread)
 {
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(Thread->KernelApcDisable < 0);
 
+    _ReadWriteBarrier();
+    if (++Thread->KernelApcDisable == 0 && Thread->SpecialApcDisable == 0 &&
+        !IsListEmpty(&Thread->ApcState.ApcListHead[KernelMode]))
+    {
+        KiCheckForKernelApcDelivery();
+    }
 }
 
+#define KeEnterGuardedRegionThread(Thread) KiEnterGuardedRegionThread(Thread)
 
+#define KeLeaveGuardedRegionThread(Thread) KiLeaveGuardedRegionThread(Thread)
 
+#define KeEnterGuardedRegion() KiEnterGuardedRegionThread(KeGetCurrentThread())
 
+#define KeLeaveGuardedRegion() KiLeaveGuardedRegionThread(KeGetCurrentThread())
 
+#define KeEnterCriticalRegion() KiEnterCriticalRegionThread(KeGetCurrentThread())
 
+#define KeLeaveCriticalRegion() KiLeaveCriticalRegionThread(KeGetCurrentThread())
 
 FORCEINLINE
 VOID
 KiAcquireDispatcherObject(IN DISPATCHER_HEADER* Object)
 {
+
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
     while (InterlockedOr(&Object->Lock, KOBJECT_LOCK_BIT) & KOBJECT_LOCK_BIT)
     {
+
         do
         {
+
             YieldProcessor();
         } while (Object->Lock & KOBJECT_LOCK_BIT);
     }
@@ -209,6 +258,7 @@ FORCEINLINE
 VOID
 KiReleaseDispatcherObject(IN DISPATCHER_HEADER* Object)
 {
+
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
     InterlockedAnd(&Object->Lock, ~KOBJECT_LOCK_BIT);
@@ -221,6 +271,7 @@ KiAcquireWaitLock(IN PKPRCB Prcb)
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
 #if defined(_M_IX86)
+
     while (InterlockedExchange((PLONG)&Prcb->PrcbLock, 1) != 0)
     {
         while (*(volatile LONG*)&Prcb->PrcbLock != 0) YieldProcessor();
@@ -249,6 +300,7 @@ FORCEINLINE
 KIRQL
 KiAcquireDispatcherLock(VOID)
 {
+
     return KeAcquireQueuedSpinLockRaiseToSynch(LockQueueDispatcherLock);
 }
 
@@ -256,6 +308,7 @@ FORCEINLINE
 VOID
 KiReleaseDispatcherLock(IN KIRQL OldIrql)
 {
+
     KeReleaseQueuedSpinLockFromDpcLevel(&KeGetCurrentPrcb()->
                                         LockQueue[LockQueueDispatcherLock]);
 
@@ -266,6 +319,7 @@ FORCEINLINE
 VOID
 KiAcquireDispatcherLockAtSynchLevel(VOID)
 {
+
     ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
     KeAcquireQueuedSpinLockAtDpcLevel(&KeGetCurrentPrcb()->
                                       LockQueue[LockQueueDispatcherLock]);
@@ -275,6 +329,7 @@ FORCEINLINE
 VOID
 KiReleaseDispatcherLockFromSynchLevel(VOID)
 {
+
     KeReleaseQueuedSpinLockFromDpcLevel(&KeGetCurrentPrcb()->
                                         LockQueue[LockQueueDispatcherLock]);
 }
@@ -295,8 +350,10 @@ VOID
 KiRescheduleThread(IN BOOLEAN NewThread,
                    IN ULONG Cpu)
 {
+
     if ((NewThread) && !(KeGetCurrentPrcb()->Number == Cpu))
     {
+
         KiIpiSend(AFFINITY_MASK(Cpu), IPI_DPC);
     }
 }
@@ -311,40 +368,66 @@ KiSetThreadSwapBusy(IN PKTHREAD Thread)
 
 FORCEINLINE
 VOID
+KiAcquireFlagLock(
+    _Inout_ volatile KSPIN_LOCK *Lock)
 {
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
+    while (InterlockedExchange((PLONG)Lock, 1) != 0)
     {
+        while (*Lock != 0)
             YieldProcessor();
     }
 }
 
 FORCEINLINE
 VOID
+KiReleaseFlagLock(
+    _Inout_ volatile KSPIN_LOCK *Lock)
 {
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(*Lock != 0);
 
+    InterlockedAnd((PLONG)Lock, 0);
 }
 
 FORCEINLINE
 VOID
+KiAcquirePrcbLock(
+    _Inout_ PKPRCB Prcb)
 {
+    KiAcquireFlagLock(&Prcb->PrcbLock);
 }
 
 FORCEINLINE
 VOID
+KiReleasePrcbLock(
+    _Inout_ PKPRCB Prcb)
 {
-
+    KiReleaseFlagLock(&Prcb->PrcbLock);
 }
 
 FORCEINLINE
+VOID
+KiAcquireThreadLock(
+    _Inout_ PKTHREAD Thread)
 {
+    KiAcquireFlagLock(&Thread->ThreadLock);
+}
+
+FORCEINLINE
+VOID
+KiReleaseThreadLock(
+    _Inout_ PKTHREAD Thread)
+{
+    KiReleaseFlagLock(&Thread->ThreadLock);
 }
 
 FORCEINLINE
 VOID
 KiCheckDeferredReadyList(IN PKPRCB Prcb)
 {
+
     if (Prcb->DeferredReadyListHead.Next) KiProcessDeferredReadyList(Prcb);
 }
 
@@ -353,14 +436,18 @@ VOID
 KiRequestApcInterrupt(IN BOOLEAN NeedApc,
                       IN UCHAR Processor)
 {
+
     if (NeedApc)
     {
+
         if (KeGetCurrentPrcb()->Number != Processor)
         {
+
             KiIpiSend(AFFINITY_MASK(Processor), IPI_APC);
         }
         else
         {
+
             HalRequestSoftwareInterrupt(APC_LEVEL);
         }
     }
@@ -397,6 +484,7 @@ VOID
 KiAcquireApcLockRaiseToSynch(IN PKTHREAD Thread,
                  IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeAcquireInStackQueuedSpinLockRaiseToSynch(&Thread->ApcQueueLock, Handle);
 }
 
@@ -405,6 +493,7 @@ VOID
 KiAcquireApcLockAtSynchLevel(IN PKTHREAD Thread,
                            IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
     KeAcquireInStackQueuedSpinLockAtDpcLevel(&Thread->ApcQueueLock, Handle);
 }
@@ -413,6 +502,7 @@ FORCEINLINE
 VOID
 KiReleaseApcLock(IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeReleaseInStackQueuedSpinLock(Handle);
 }
 
@@ -420,6 +510,7 @@ FORCEINLINE
 VOID
 KiReleaseApcLockFromSynchLevel(IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeReleaseInStackQueuedSpinLockFromDpcLevel(Handle);
 }
 
@@ -428,6 +519,7 @@ VOID
 KiAcquireProcessLockRaiseToSynch(IN PKPROCESS Process,
                      IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeAcquireInStackQueuedSpinLockRaiseToSynch(&Process->ProcessLock, Handle);
 }
 
@@ -435,6 +527,7 @@ FORCEINLINE
 VOID
 KiReleaseProcessLock(IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeReleaseInStackQueuedSpinLock(Handle);
 }
 
@@ -442,6 +535,7 @@ FORCEINLINE
 VOID
 KiReleaseProcessLockFromSynchLevel(IN PKLOCK_QUEUE_HANDLE Handle)
 {
+
     KeReleaseInStackQueuedSpinLockFromDpcLevel(Handle);
 }
 
@@ -450,12 +544,15 @@ VOID
 KiAcquireDeviceQueueLock(IN PKDEVICE_QUEUE DeviceQueue,
                          IN PKLOCK_QUEUE_HANDLE DeviceLock)
 {
+
     if (KiIsDpcThreadActive(KeGetCurrentPrcb()))
     {
+
         KeAcquireInStackQueuedSpinLock(&DeviceQueue->Lock, DeviceLock);
     }
     else
     {
+
         ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
         KeAcquireInStackQueuedSpinLockAtDpcLevel(&DeviceQueue->Lock,
                                                  DeviceLock);
@@ -466,21 +563,63 @@ FORCEINLINE
 VOID
 KiReleaseDeviceQueueLock(IN PKLOCK_QUEUE_HANDLE DeviceLock)
 {
+
     if (KiIsDpcThreadActive(KeGetCurrentPrcb()))
     {
+
         KeReleaseInStackQueuedSpinLock(DeviceLock);
     }
     else
     {
+
         ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
         KeReleaseInStackQueuedSpinLockFromDpcLevel(DeviceLock);
     }
 }
 
+FORCEINLINE
+VOID
+KiSatisfyMutantWait(
+    _Inout_ PKMUTANT Mutant,
+    _Inout_ PKTHREAD Thread)
+{
+    if (--Mutant->Header.SignalState != 0)
+        return;
+
+    Mutant->OwnerThread = Thread;
+    Thread->KernelApcDisable -= Mutant->ApcDisable;
+    if (Mutant->Abandoned)
+    {
+        Mutant->Abandoned = FALSE;
+        Thread->WaitStatus = STATUS_ABANDONED;
+    }
+
+    InsertHeadList(Thread->MutantListHead.Blink, &Mutant->MutantListEntry);
 }
 
+FORCEINLINE
+VOID
+KiSatisfyNonMutantWait(
+    _Inout_ PVOID Object)
+{
+    PDISPATCHER_HEADER Header = Object;
+
+    if ((Header->Type & TIMER_OR_EVENT_TYPE) == EventSynchronizationObject)
+        Header->SignalState = 0;
+    else if ((Header->Type & KOBJECT_TYPE_MASK) == SemaphoreObject)
+        Header->SignalState--;
 }
 
+FORCEINLINE
+VOID
+KiSatisfyObjectWait(
+    _Inout_ PVOID Object,
+    _Inout_ PKTHREAD Thread)
+{
+    if ((((PDISPATCHER_HEADER)Object)->Type & KOBJECT_TYPE_MASK) == MutantObject)
+        KiSatisfyMutantWait(Object, Thread);
+    else
+        KiSatisfyNonMutantWait(Object);
 }
 
 FORCEINLINE
@@ -489,6 +628,7 @@ KiRecalculateDueTime(IN PLARGE_INTEGER OriginalDueTime,
                      IN PLARGE_INTEGER DueTime,
                      IN OUT PLARGE_INTEGER NewDueTime)
 {
+
     if (OriginalDueTime->QuadPart >= 0) return OriginalDueTime;
 
     NewDueTime->QuadPart = (LONGLONG)((ULONGLONG)KiQueryInterruptTimePrecise(NULL, FALSE) -
@@ -498,7 +638,12 @@ KiRecalculateDueTime(IN PLARGE_INTEGER OriginalDueTime,
 
 FORCEINLINE
 BOOLEAN
+KiCheckThreadStackSwap(
+    _In_ PKTHREAD Thread,
+    _In_ KPROCESSOR_MODE WaitMode)
 {
+    return (BOOLEAN)(WaitMode != KernelMode && Thread->EnableStackSwap &&
+                     Thread->Priority >= LOW_REALTIME_PRIORITY + 9);
 }
 
 #define KiAddThreadToWaitList(Thread, Swappable)                            \
@@ -516,16 +661,39 @@ BOOLEAN
 
 FORCEINLINE
 NTSTATUS
+KiCheckAlertability(
+    _Inout_ PKTHREAD Thread,
+    _In_ BOOLEAN Alertable,
+    _In_ KPROCESSOR_MODE WaitMode)
 {
     NTSTATUS Status = STATUS_WAIT_0;
 
+    ASSERT(WaitMode == KernelMode || WaitMode == UserMode);
+
+    if (!Alertable && WaitMode == KernelMode)
+        return STATUS_WAIT_0;
+
     KiAcquireThreadLock(Thread);
 
+    if (!Alertable)
     {
+        if (Thread->ApcState.UserApcPending)
             Status = STATUS_USER_APC;
     }
+    else if (Thread->Alerted[(UCHAR)WaitMode])
     {
+        Thread->Alerted[(UCHAR)WaitMode] = FALSE;
+        Status = STATUS_ALERTED;
+    }
+    else if (WaitMode == UserMode && !IsListEmpty(&Thread->ApcState.ApcListHead[UserMode]))
+    {
+        Thread->ApcState.UserApcPending = TRUE;
         Status = STATUS_USER_APC;
+    }
+    else if (Thread->Alerted[KernelMode])
+    {
+        Thread->Alerted[KernelMode] = FALSE;
+        Status = STATUS_ALERTED;
     }
 
     KiReleaseThreadLock(Thread);
@@ -541,31 +709,62 @@ KiComputeTimerTableIndex(IN ULONGLONG DueTime)
 
 FORCEINLINE
 VOID
+KiUnlinkTimerFromTable(
+    _Inout_ PKTIMER Timer,
+    _Inout_ PKTIMER_TABLE_ENTRY TableEntry)
 {
+    BOOLEAN WasFirst = (BOOLEAN)(TableEntry->Entry.Flink == &Timer->TimerListEntry);
 
     ASSERT(Timer->TimerListEntry.Flink->Blink == &Timer->TimerListEntry);
     ASSERT(Timer->TimerListEntry.Blink->Flink == &Timer->TimerListEntry);
+
     if (RemoveEntryList(&Timer->TimerListEntry))
     {
+        TableEntry->Time.HighPart = 0xFFFFFFFF;
     }
+    else if (WasFirst)
     {
         TableEntry->Time.QuadPart =
             CONTAINING_RECORD(TableEntry->Entry.Flink, KTIMER, TimerListEntry)->DueTime.QuadPart;
     }
 
+    Timer->TimerListEntry.Flink = NULL;
+    Timer->TimerListEntry.Blink = NULL;
 }
 
 FORCEINLINE
 VOID
+KiRemoveEntryTimer(
+    _Inout_ PKTIMER Timer)
+{
+    ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
+
+    ASSERT(Hand < TIMER_TABLE_SIZE);
+    ASSERT(Timer->Header.Hand == (UCHAR)Hand);
+    ASSERT(Timer->TimerListEntry.Flink != NULL && Timer->TimerListEntry.Blink != NULL);
+
+    KiUnlinkTimerFromTable(Timer, &KiTimerTableListHead[Hand]);
+}
+
+FORCEINLINE
+VOID
+KxInsertTimer(
+    _Inout_ PKTIMER Timer,
+    _In_ ULONG Hand)
 {
     PKSPIN_LOCK_QUEUE LockQueue;
+
     ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
 
     LockQueue = KiAcquireTimerLock(Hand);
+    if (Timer->Header.Inserted && KiInsertTimerTable(Timer, Hand))
     {
+        KiCompleteTimer(Timer, LockQueue);
         return;
     }
 
+    KiReleaseTimerLock(LockQueue);
+    KiReleaseDispatcherObject(&Timer->Header);
 }
 
 FORCEINLINE
@@ -594,21 +793,51 @@ KxInsertThreadWaitTimer(IN PKTIMER Timer,
 }
 
 FORCEINLINE
+BOOLEAN
+KiDueTimeToDeadline(
+    _In_ LARGE_INTEGER DueTime,
+    _Out_ PBOOLEAN Absolute,
+    _Out_ PULONGLONG Deadline)
 {
+    LARGE_INTEGER Now;
 
+    /* A non-negative due time is an absolute system time, a negative one an interval */
+    *Absolute = (BOOLEAN)(DueTime.HighPart >= 0);
+    if (*Absolute)
     {
+        KeQuerySystemTimePrecise(&Now);
+        DueTime.QuadPart = Now.QuadPart - DueTime.QuadPart;
+        if (DueTime.HighPart >= 0)
+            return FALSE;
     }
 
+    *Deadline = (ULONGLONG)KiQueryInterruptTimePrecise(NULL, FALSE) - (ULONGLONG)DueTime.QuadPart;
+    return TRUE;
 }
 
 FORCEINLINE
 BOOLEAN
+KiComputeDueTime(
+    _Inout_ PKTIMER Timer,
+    _In_ LARGE_INTEGER DueTime,
+    _Out_ PULONG Hand)
 {
+    ULONGLONG Deadline = 0;
+    BOOLEAN Absolute;
 
+    if (!KiDueTimeToDeadline(DueTime, &Absolute, &Deadline))
     {
         Timer->Header.Absolute = TRUE;
+        Timer->Header.SignalState = TRUE;
+        Timer->Header.Hand = 0;
+        Timer->DueTime.QuadPart = 0;
+        *Hand = 0;
+        return FALSE;
     }
 
+    Timer->Header.Absolute = Absolute;
+    Timer->DueTime.QuadPart = Deadline;
+    *Hand = KiComputeTimerTableIndex(Deadline);
     Timer->Header.Hand = (UCHAR)*Hand;
     Timer->TimerListEntry.Flink = NULL;
     Timer->TimerListEntry.Blink = NULL;
@@ -618,13 +847,21 @@ BOOLEAN
 
 FORCEINLINE
 BOOLEAN
+KxRemoveTreeTimer(
+    _Inout_ PKTIMER Timer)
 {
     ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
+    PKSPIN_LOCK_QUEUE LockQueue = KiAcquireTimerLock(Hand);
+    BOOLEAN Removed = Timer->Header.Inserted;
 
+    if (Removed)
     {
         ASSERT(Timer->Header.Hand == (UCHAR)Hand);
         ASSERT((Timer->TimerListEntry.Flink == NULL) == (Timer->TimerListEntry.Blink == NULL));
+
+        Timer->Header.Inserted = FALSE;
         if (Timer->TimerListEntry.Flink != NULL)
+            KiUnlinkTimerFromTable(Timer, &KiTimerTableListHead[Hand]);
     }
 
     KiReleaseTimerLock(LockQueue);
@@ -648,13 +885,30 @@ KiRoundToDefaultTimerResolution(IN ULONGLONG DueTime)
 
 FORCEINLINE
 VOID
+KxSetTimerForThreadWait(
+    _Inout_ PKTIMER Timer,
+    _In_ LARGE_INTEGER Interval,
+    _In_ KPROCESSOR_MODE WaitMode,
+    _Out_ PULONG Hand)
 {
+    ULONGLONG Deadline = 0;
+    BOOLEAN Absolute;
 
+    if (!KiDueTimeToDeadline(Interval, &Absolute, &Deadline))
     {
         Timer->Header.Absolute = TRUE;
+        Timer->DueTime.QuadPart = 0;
+        Timer->Header.Hand = 0;
+        *Hand = 0;
+        return;
     }
 
+    if (WaitMode == UserMode && !((PEPROCESS)KeGetCurrentThread()->ApcState.Process)->SetTimerResolution)
+        Deadline = KiRoundToDefaultTimerResolution(Deadline);
 
+    Timer->Header.Absolute = Absolute;
+    Timer->DueTime.QuadPart = Deadline;
+    *Hand = KiComputeTimerTableIndex(Deadline);
     Timer->Header.Hand = (UCHAR)*Hand;
 }
 
@@ -752,16 +1006,21 @@ KxCommitThreadWait(IN PKTHREAD Thread,
 #define KxChainTimerOnly()                                                  \
     Thread->WaitBlockCount = 1;                                             \
     Thread->TimerActive = FALSE
+
 #define KxChainNextBlock(Array, Index)                                      \
     NOTHING
+
 #define KxChainLastBlock(Array, Count)                                      \
     Thread->WaitBlockCount = (UCHAR)(Count);                                \
     Thread->TimerActive = FALSE
+
 #define KxChainTimerToArray(Array)                                          \
     Thread->TimerActive = TRUE
+
 #define KxChainSingleWithTimer()                                            \
     Thread->WaitBlockCount = 1;                                             \
     Thread->TimerActive = TRUE
+
 #define KxChainSingleOnly()                                                 \
     Thread->WaitBlockCount = 1;                                             \
     Thread->TimerActive = FALSE
@@ -772,14 +1031,25 @@ KxCommitThreadWait(IN PKTHREAD Thread,
 
 FORCEINLINE
 VOID
+KxUnwaitThread(
+    _Inout_ DISPATCHER_HEADER *Object,
+    _In_ KPRIORITY Increment)
 {
+    PLIST_ENTRY WaitList = &Object->WaitListHead;
     PKWAIT_BLOCK WaitBlock;
 
+    ASSERT(!IsListEmpty(WaitList));
 
     do
     {
+        WaitBlock = CONTAINING_RECORD(WaitList->Flink, KWAIT_BLOCK, WaitListEntry);
         if (WaitBlock->WaitType == WaitDpc)
             IopSignalWaitCompletionPacket(WaitBlock);
+        else
+            KiUnwaitThread(WaitBlock->Thread,
+                           (WaitBlock->WaitType == WaitAny) ? WaitBlock->WaitKey : STATUS_KERNEL_APC,
+                           Increment);
+    } while (!IsListEmpty(WaitList));
 }
 
 FORCEINLINE
@@ -798,6 +1068,7 @@ FORCEINLINE
 VOID
 KiWaitForThreadSwapOut(IN PKTHREAD Thread)
 {
+#if KI_THREAD_HANDOFF_USES_RUNNING
     while (*(volatile BOOLEAN *)&Thread->Running)
     {
         YieldProcessor();
@@ -809,6 +1080,7 @@ KiWaitForThreadSwapOut(IN PKTHREAD Thread)
 }
 
 #if KI_THREAD_HANDOFF_USES_RUNNING
+
 FORCEINLINE
 VOID
 KiCompleteThreadSwitch(
@@ -906,11 +1178,53 @@ KiAssertReadyQueue(IN PKPRCB Prcb,
     ASSERT(Prcb->DispatcherReadyListHead[Priority].Blink->Flink == &Prcb->DispatcherReadyListHead[Priority]);
 }
 
+FORCEINLINE
+VOID
+KiReadyQueueInsert(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Thread,
+    _In_ KPRIORITY Priority,
+    _In_ BOOLEAN AtHead)
+{
+    PLIST_ENTRY Queue = &Prcb->DispatcherReadyListHead[Priority];
+
+    ASSERT(Priority >= 0 && Priority <= HIGH_PRIORITY);
+    KiAssertReadyQueue(Prcb, Priority);
+
+    if (AtHead)
+        InsertHeadList(Queue, &Thread->WaitListEntry);
+    else
+        InsertTailList(Queue, &Thread->WaitListEntry);
+
+    Prcb->ReadySummary |= PRIORITY_MASK(Priority);
+    KiAssertReadyQueue(Prcb, Priority);
+}
+
+FORCEINLINE
+VOID
+KiReadyQueueRemove(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Thread,
+    _In_ KPRIORITY Priority)
+{
+    ASSERT(Thread->WaitListEntry.Flink->Blink == &Thread->WaitListEntry);
+    ASSERT(Thread->WaitListEntry.Blink->Flink == &Thread->WaitListEntry);
+
+    if (RemoveEntryList(&Thread->WaitListEntry))
+        Prcb->ReadySummary &= ~PRIORITY_MASK(Priority);
+
+    KiAssertReadyQueue(Prcb, Priority);
+}
+
 _Requires_lock_held_(Prcb->PrcbLock)
 _Releases_lock_(Prcb->PrcbLock)
 FORCEINLINE
 VOID
+KxQueueReadyThread(
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PKPRCB Prcb)
 {
+    BOOLEAN AtHead;
 
     ASSERT(Prcb == KeGetCurrentPrcb());
     ASSERT(Prcb->PrcbLock != 0);
@@ -924,16 +1238,31 @@ VOID
     ASSERT(Thread->State == Running);
     ASSERT(Thread->NextProcessor == Prcb->Number);
 
+    if (!(KiThreadAffinityMask(Thread) & Prcb->SetMember) || KiShouldVacateProcessor(Thread, Prcb))
     {
         Thread->State = DeferredReady;
         KiReleasePrcbLock(Prcb);
         KiDeferredReadyThread(Thread);
+        return;
     }
+
+    /* A thread that lost the processor to preemption goes back to the front of its queue */
+    AtHead = Thread->Preempted;
+    Thread->Preempted = FALSE;
+    Thread->State = Ready;
+    Thread->WaitTime = KeTickCount.LowPart;
+    KiReadyQueueInsert(Prcb, Thread, Thread->Priority, AtHead);
+
+    KiReleasePrcbLock(Prcb);
 }
 
 FORCEINLINE
 PKTHREAD
+KiSelectReadyThread(
+    _In_ KPRIORITY Priority,
+    _Inout_ PKPRCB Prcb)
 {
+    ULONG Above, Highest;
     PKTHREAD Thread;
 
     if (Priority > HIGH_PRIORITY)
@@ -941,17 +1270,30 @@ PKTHREAD
 
     for (;;)
     {
+        Above = Prcb->ReadySummary >> Priority;
+        if (Above == 0)
+            return NULL;
 
+        BitScanReverse(&Highest, Above);
+        Highest += Priority;
 
+        ASSERT(!IsListEmpty(&Prcb->DispatcherReadyListHead[Highest]));
+        Thread = CONTAINING_RECORD(Prcb->DispatcherReadyListHead[Highest].Flink, KTHREAD, WaitListEntry);
 
         ASSERT(Thread != Prcb->IdleThread);
         ASSERT(Thread->State == Ready && !Thread->ProcessReadyQueue);
+        ASSERT((KPRIORITY)Highest == Thread->Priority);
         ASSERT(Thread->NextProcessor == Prcb->Number);
 
+        KiReadyQueueRemove(Prcb, Thread, (KPRIORITY)Highest);
 
+        if (KiThreadAffinityMask(Thread) & AFFINITY_MASK(Prcb->Number))
         {
+            ASSERT(Thread->BasePriority == 0 || Thread->Priority != 0);
+            return Thread;
         }
 
+        KiInsertDeferredReadyList(Thread);
     }
 }
 
@@ -1024,18 +1366,30 @@ KiApplyPriorityFloor(IN PKTHREAD Thread,
 
 FORCEINLINE
 SCHAR
+KiComputeNewPriority(
+    _Inout_ PKTHREAD Thread,
+    _In_ SCHAR Adjustment)
 {
+    LONG Priority = (SCHAR)KiGetUnflooredPriority(Thread);
 
+    ASSERT(Thread->PriorityDecrement >= 0 && Thread->PriorityDecrement <= Priority);
+    ASSERT(Priority < LOW_REALTIME_PRIORITY || Thread->PriorityDecrement == 0);
 
+    /* Only the variable range decays toward the base priority */
     if (Priority < LOW_REALTIME_PRIORITY)
     {
+        Priority = max(Priority - Thread->PriorityDecrement - Adjustment, (LONG)Thread->BasePriority);
         Thread->PriorityDecrement = 0;
     }
 
+    ASSERT(Thread->BasePriority == 0 || Priority != 0);
+    return (SCHAR)Priority;
 }
 
 FORCEINLINE
 VOID
+_KeInitializeGuardedMutex(
+    _Out_ PKGUARDED_MUTEX GuardedMutex)
 {
     GuardedMutex->Count = GM_LOCK_BIT;
     GuardedMutex->Owner = NULL;
@@ -1044,8 +1398,20 @@ VOID
 }
 
 FORCEINLINE
+BOOLEAN
+KiGuardedMutexUnsafeContext(
+    _In_ PKTHREAD Thread)
 {
+    return (BOOLEAN)(KeGetCurrentIrql() == APC_LEVEL || Thread->SpecialApcDisable < 0 ||
+                     Thread->Teb == NULL || Thread->Teb >= (PTEB)MM_SYSTEM_RANGE_START);
+}
 
+FORCEINLINE
+VOID
+KiTakeGuardedMutex(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex,
+    _In_ PKTHREAD Thread)
+{
     ASSERT(GuardedMutex->Owner != Thread);
 
     if (!InterlockedBitTestAndReset(&GuardedMutex->Count, GM_LOCK_BIT_V))
@@ -1058,29 +1424,67 @@ FORCEINLINE
 
 FORCEINLINE
 VOID
+KiGiveGuardedMutex(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
 {
+    LONG Before, Expected;
 
     GuardedMutex->Owner = NULL;
 
+    Before = InterlockedExchangeAdd(&GuardedMutex->Count, GM_LOCK_BIT);
+    ASSERT((Before & GM_LOCK_BIT) == 0);
 
+    /* Waiters are counted below the lock bit; wake one unless one is already on its way */
+    if (Before == 0 || (Before & GM_LOCK_WAITER_WOKEN))
+        return;
 
+    Expected = Before + GM_LOCK_BIT;
+    if (InterlockedCompareExchange(&GuardedMutex->Count, Expected + GM_LOCK_WAITER_WOKEN - GM_LOCK_WAITER_INC,
+                                   Expected) == Expected)
+    {
+        KeSignalGateBoostPriority(&GuardedMutex->Gate);
     }
 }
 
 FORCEINLINE
 VOID
+_KeAcquireGuardedMutexUnsafe(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
 {
     PKTHREAD Thread = KeGetCurrentThread();
 
+    ASSERT(KiGuardedMutexUnsafeContext(Thread));
+    KiTakeGuardedMutex(GuardedMutex, Thread);
+}
 
+FORCEINLINE
+VOID
+_KeReleaseGuardedMutexUnsafe(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
+{
+    ASSERT(KiGuardedMutexUnsafeContext(KeGetCurrentThread()));
+    ASSERT(GuardedMutex->Owner == KeGetCurrentThread());
+    KiGiveGuardedMutex(GuardedMutex);
+}
 
+FORCEINLINE
+VOID
+_KeAcquireGuardedMutex(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
 
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
+    KiEnterGuardedRegionThread(Thread);
+    KiTakeGuardedMutex(GuardedMutex, Thread);
     GuardedMutex->SpecialApcDisable = Thread->SpecialApcDisable;
 }
 
 FORCEINLINE
 VOID
+_KeReleaseGuardedMutex(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
 {
     PKTHREAD Thread = KeGetCurrentThread();
 
@@ -1088,16 +1492,22 @@ VOID
     ASSERT(GuardedMutex->Owner == Thread);
     ASSERT(Thread->SpecialApcDisable == GuardedMutex->SpecialApcDisable);
 
+    KiGiveGuardedMutex(GuardedMutex);
+    KiLeaveGuardedRegionThread(Thread);
 }
 
 FORCEINLINE
 BOOLEAN
+_KeTryToAcquireGuardedMutex(
+    _Inout_ PKGUARDED_MUTEX GuardedMutex)
 {
     PKTHREAD Thread = KeGetCurrentThread();
 
+    KiEnterGuardedRegionThread(Thread);
 
     if (!InterlockedBitTestAndReset(&GuardedMutex->Count, GM_LOCK_BIT_V))
     {
+        KiLeaveGuardedRegionThread(Thread);
         YieldProcessor();
         return FALSE;
     }

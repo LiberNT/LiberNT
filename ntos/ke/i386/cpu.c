@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 processor identification, features, cache geometry, control state and power hooks
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -66,6 +71,8 @@ typedef union _CPU_SIGNATURE
 
 static __inline
 UCHAR
+getCx86(
+    UCHAR reg)
 {
     WRITE_PORT_UCHAR((PUCHAR)(ULONG_PTR)0x22, reg);
     return READ_PORT_UCHAR((PUCHAR)(ULONG_PTR)0x23);
@@ -73,6 +80,9 @@ UCHAR
 
 static __inline
 void
+setCx86(
+    UCHAR reg,
+    UCHAR data)
 {
     WRITE_PORT_UCHAR((PUCHAR)(ULONG_PTR)0x22, reg);
     WRITE_PORT_UCHAR((PUCHAR)(ULONG_PTR)0x23, data);
@@ -396,6 +406,7 @@ KiReportCpuFeatures(VOID)
 
     DbgPrint("\n");
 }
+#endif
 
 CODE_SEG("INIT")
 VOID
@@ -647,6 +658,7 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializeTSS2(IN PKTSS Tss,
+                 _In_opt_ PKGDTENTRY TssEntry)
 {
     PUCHAR p;
 
@@ -676,6 +688,8 @@ KiInitializeTSS2(IN PKTSS Tss,
 
 VOID
 NTAPI
+KiInitializeTSS(
+    _In_ PKTSS Tss)
 {
     Tss->IoMapBase = KiComputeIopmOffset(IO_ACCESS_MAP_NONE);
 
@@ -689,6 +703,8 @@ CODE_SEG("INIT")
 VOID
 FASTCALL
 Ki386InitializeTss(IN PKTSS Tss,
+                   _In_ PKIDTENTRY Idt,
+                   _In_ PKGDTENTRY Gdt)
 {
     PKGDTENTRY TssEntry, TaskGateEntry;
 
@@ -788,6 +804,8 @@ KeFlushCurrentTb(VOID)
 
 VOID
 NTAPI
+KiRestoreProcessorControlState(
+    PKPROCESSOR_STATE ProcessorState)
 {
     PKGDTENTRY TssEntry;
 
@@ -816,6 +834,8 @@ NTAPI
 
 VOID
 NTAPI
+KiSaveProcessorControlState(
+    _Out_ PKPROCESSOR_STATE ProcessorState)
 {
     ProcessorState->SpecialRegisters.Cr0 = __readcr0();
     ProcessorState->SpecialRegisters.Cr2 = __readcr2();
@@ -1005,6 +1025,9 @@ KeInvalidateRangeAllCaches(
 
 VOID
 NTAPI
+KiSaveProcessorState(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKEXCEPTION_FRAME ExceptionFrame)
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
 
@@ -1064,6 +1087,8 @@ KiIsNpxErrataPresent(VOID)
 
 VOID
 NTAPI
+KiFlushNPXState(
+    _In_ PFLOATING_SAVE_AREA SaveArea)
 {
     ULONG EFlags, Cr0;
     PKTHREAD Thread, NpxThread;
@@ -1275,6 +1300,11 @@ KeGetRecommendedSharedDataAlignment(VOID)
 
 VOID
 NTAPI
+KiFlushTargetEntireTb(
+    _In_ PKIPI_CONTEXT PacketContext,
+    _In_ PVOID Ignored1,
+    _In_ PVOID Ignored2,
+    _In_ PVOID Ignored3)
 {
     KiIpiSignalPacketDone(PacketContext);
 
@@ -1283,6 +1313,9 @@ NTAPI
 
 VOID
 NTAPI
+KeFlushEntireTb(
+    _In_ BOOLEAN Invalid,
+    _In_ BOOLEAN AllProcessors)
 {
     KIRQL OldIrql;
     KAFFINITY TargetAffinity;
@@ -1311,12 +1344,16 @@ NTAPI
 
 VOID
 NTAPI
+KeSetDmaIoCoherency(
+    _In_ ULONG Coherency)
 {
     KiDmaIoCoherency = Coherency;
 }
 
 VOID
 __cdecl
+KeSaveStateForHibernate(
+    _In_ PKPROCESSOR_STATE State)
 {
     RtlCaptureContext(&State->ContextFrame);
 

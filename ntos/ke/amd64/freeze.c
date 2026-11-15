@@ -1,5 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under MIT (https://spdx.org/licenses/MIT)
+ * PURPOSE:     amd64 processor freeze and thaw for the kernel debugger, with bounded waits
  * COPYRIGHT:   Copyright 2023-2024 Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -218,6 +223,7 @@ KiFreezeWaitForThaw(
  * frame here: the published context is the caller's own register state. */
 VOID
 NTAPI
+KiFreezeIfRequested(VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     BOOLEAN Enable;
@@ -373,6 +379,7 @@ KiFreezeTargetSet(
 
 VOID
 NTAPI
+KxFreezeExecution(VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     BOOLEAN ReacquireActiveSet = FALSE;
@@ -440,6 +447,7 @@ NTAPI
         if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
             continue;
 
+        /* Only the active processor may change another processor's IpiFrozen */
         ASSERT(TargetPrcb->IpiFrozen == IPI_FROZEN_STATE_RUNNING);
 
         RtlZeroMemory(&TargetPrcb->ProcessorState.ContextFrame, sizeof(TargetPrcb->ProcessorState.ContextFrame));
@@ -501,6 +509,7 @@ NTAPI
 
 VOID
 NTAPI
+KxThawExecution(VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     KI_FREEZE_WAIT Wait = {0};

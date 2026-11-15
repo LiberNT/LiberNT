@@ -46,6 +46,10 @@ extern void func_LdrQueryProcessModuleInformation(void);
 extern void func_load_notifications(void);
 extern void func_memmove(void);
 extern void func_memset(void);
+extern void func_Breakpoint(void);
+extern void func_ExceptionLoaderList(void);
+extern void func_FastFail(void);
+extern void func_IoCounters(void);
 extern void func_MemoryAccounting(void);
 extern void func_NtAcceptConnectPort(void);
 extern void func_NtAccessCheck(void);
@@ -83,6 +87,7 @@ extern void func_NtDeleteKey(void);
 extern void func_NtDuplicateObject(void);
 extern void func_NtDuplicateToken(void);
 extern void func_NtFilterToken(void);
+extern void func_NtFlushInstructionCache(void);
 extern void func_NtFreeVirtualMemory(void);
 extern void func_NtImpersonateAnonymousToken(void);
 extern void func_NtLoadUnloadKey(void);
@@ -97,6 +102,7 @@ extern void func_NtOpenKey(void);
 extern void func_NtOpenKeyEx(void);
 extern void func_NtOpenProcessToken(void);
 extern void func_NtOpenThreadToken(void);
+extern void func_NtPowerInformation(void);
 extern void func_NtProtectVirtualMemory(void);
 extern void func_NtOpenMaximumAllowed(void);
 extern void func_ObTraverse(void);
@@ -288,6 +294,10 @@ const struct test winetest_testlist[] =
     { "memmove",                        func_memmove },
     { "memset",                         func_memset },
     { "ApiSetMap",                      func_ApiSetMap },
+    { "Breakpoint",                     func_Breakpoint },
+    { "ExceptionLoaderList",            func_ExceptionLoaderList },
+    { "FastFail",                       func_FastFail },
+    { "IoCounters",                     func_IoCounters },
     { "MemoryAccounting",               func_MemoryAccounting },
     { "NtAcceptConnectPort",            func_NtAcceptConnectPort },
     { "NtAccessCheck",                  func_NtAccessCheck },
@@ -325,6 +335,7 @@ const struct test winetest_testlist[] =
     { "NtDuplicateObject",              func_NtDuplicateObject },
     { "NtDuplicateToken",               func_NtDuplicateToken },
     { "NtFilterToken",                  func_NtFilterToken },
+    { "NtFlushInstructionCache",        func_NtFlushInstructionCache },
     { "NtFreeVirtualMemory",            func_NtFreeVirtualMemory },
     { "NtImpersonateAnonymousToken",    func_NtImpersonateAnonymousToken },
     { "NtLoadUnloadKey",                func_NtLoadUnloadKey },
@@ -339,6 +350,7 @@ const struct test winetest_testlist[] =
     { "NtOpenKey",                      func_NtOpenKey },
     { "NtOpenProcessToken",             func_NtOpenProcessToken },
     { "NtOpenThreadToken",              func_NtOpenThreadToken },
+    { "NtPowerInformation",             func_NtPowerInformation },
     { "NtProtectVirtualMemory",         func_NtProtectVirtualMemory },
     { "NtOpenMaximumAllowed",           func_NtOpenMaximumAllowed },
     { "ObTraverse",                     func_ObTraverse },

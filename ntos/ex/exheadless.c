@@ -11,6 +11,37 @@
 
 /* GLOBALS ********************************************************************/
 
+typedef struct _EXP_HEADLESS_LOG_ENTRY
+{
+    SYSTEM_TIMEOFDAY_INFORMATION TimeOfEntry;
+    PWCHAR String;
+} HEADLESS_LOG_ENTRY, *PHEADLESS_LOG_ENTRY;
+
+typedef struct _EXP_HEADLESS_TERMINAL
+{
+    KSPIN_LOCK SpinLock;
+    PHEADLESS_LOG_ENTRY LogEntries;
+    PUCHAR TmpBuffer;
+    PUCHAR InputBuffer;
+    PHEADLESS_CMD_SET_BLUE_SCREEN_DATA BlueScreenData;
+    BOOLEAN TerminalEnabled;
+    BOOLEAN InBugCheck;
+    BOOLEAN NewLogEntryAdded;
+    BOOLEAN UsedBiosSettings;
+    BOOLEAN IsMMIODevice;
+    BOOLEAN IsLastCharCR;
+    UCHAR TerminalPortNumber;
+    UCHAR TerminalType;
+    ULONG TerminalBaudRate;
+    ULONG TerminalPort;
+    PUCHAR TerminalPortAddress;
+    SIZE_T InputBufferIndex;
+    USHORT LogEntryLast;
+    USHORT LogEntryStart;
+    GUID SystemGUID;
+} HEADLESS_GLOBALS, *PHEADLESS_GLOBALS;
+
+static PHEADLESS_GLOBALS HeadlessGlobals;
 
 /* PRIVATE DATA ***************************************************************/
 

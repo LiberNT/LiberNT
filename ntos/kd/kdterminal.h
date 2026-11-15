@@ -1,5 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Kernel debugger terminal declarations
  * COPYRIGHT:   Copyright 2023 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #pragma once
@@ -12,6 +16,7 @@
 #define KEYSC_PAGEUP    0x0049
 #define KEYSC_PAGEDOWN  0x0051
 #define KEYSC_HOME      0x0047
+#define KEYSC_ARROWUP   0x0048
 
 typedef struct _SIZE
 {
@@ -26,17 +31,33 @@ typedef enum _KDB_OUTPUT_SETTINGS
 } KDB_OUTPUT_SETTINGS;
 
 extern ULONG KdbDebugState;
+
 extern SIZE KdTermSize;
+
 extern BOOLEAN KdTermConnected;
+
 extern BOOLEAN KdTermSerial;
+
 extern BOOLEAN KdTermReportsSize;
+
 extern BOOLEAN KdTermCrashMode;
 
 BOOLEAN
+KdpArchKeyboardControllerPresent(VOID);
 
+VOID
+KdbpSendCommandSerial(
+    _In_ PCSTR Command);
+
+CHAR
+KdbpTryGetCharSerial(
+    _In_ ULONG Retry);
 
 VOID
 KdpFlushTerminalInput(VOID);
+
+BOOLEAN
+KdpInitTerminal(VOID);
 
 CHAR
 KdpReadTermKey(
@@ -45,6 +66,9 @@ KdpReadTermKey(
 BOOLEAN
 KdpTerminalPollBreakIn(VOID);
 
+BOOLEAN
+KdpUpdateTerminalSize(
+    _Out_ PSIZE TermSize);
 
 CHAR
 KdbpTryGetCharKeyboard(
@@ -54,7 +78,17 @@ KdbpTryGetCharKeyboard(
 BOOLEAN
 KdpKeyboardChordHeld(VOID);
 
+CHAR
+KdpScanCodeToChar(
+    _In_ UCHAR ScanCode,
+    _In_ BOOLEAN Shift);
 
 BOOLEAN
 KdpUsbKeyboardChordHeld(VOID);
 
+VOID
+KdpUsbKeyboardInitialize(VOID);
+
+CHAR
+KdpUsbKeyboardTryGetChar(
+    _Out_ PULONG ScanCode);

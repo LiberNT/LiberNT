@@ -14,6 +14,7 @@
 
 #define FSRTL_RESOURCE_TAG 'rRsF'
 #define FSRTL_LOCK_TAG 'lRsF'
+#define FSRTL_MAX_RESOURCES 16
 
 PERESOURCE FsRtlPagingIoResources = NULL;
 ULONG FsRtlPagingIoResourceSelector = 0;

@@ -9,6 +9,13 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _PROCESS_VALUES
+{
+    LARGE_INTEGER TotalKernelTime;
+    LARGE_INTEGER TotalUserTime;
+    IO_COUNTERS IoInfo;
+} PROCESS_VALUES, *PPROCESS_VALUES;
+
 /* GLOBALS ********************************************************************/
 
 /* Every process in the system, so that the balance manager and the swapper

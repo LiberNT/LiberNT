@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 kernel entry from the loader: PCR, GDT, IDT, TSS, features and processor startup
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -28,6 +33,8 @@ DECLSPEC_NORETURN
 DECLSPEC_NOINLINE
 VOID
 NTAPI
+KiParkUninitializedProcessor(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     _disable();
     KeMemoryBarrier();
@@ -101,6 +108,7 @@ KiInitMachineDependent(VOID)
             CpuCount = KeNumberProcessors;
             KeIpiGenericCall(Ki386EnableXMMIExceptions, (ULONG_PTR)&CpuCount);
 
+            *(PCHAR)RtlPrefetchMemoryNonTemporal = 0x90;
             /* FIXME: Implement and enable XMM Page Zeroing for Mm */
         }
     }
@@ -236,6 +244,12 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializePcr(IN ULONG ProcessorNumber,
+                _In_ PKIPCR Pcr,
+                _In_ PKIDTENTRY Idt,
+                _In_ PKGDTENTRY Gdt,
+                _In_ PKTSS Tss,
+                _In_ PKTHREAD IdleThread,
+                _In_ PVOID DpcStack)
 {
     Pcr->NtTib.ExceptionList = EXCEPTION_CHAIN_END;
     Pcr->NtTib.StackBase = 0;
@@ -332,7 +346,9 @@ KiVerifyCpuFeatures(PKPRCB Prcb)
     }
 
     ULONG Cr0 = __readcr0();
+
     Cr0 &= ~(CR0_EM | CR0_MP);
+
     Cr0 |= CR0_NE;
 
     __writecr0(Cr0);
@@ -351,6 +367,11 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiInitializeKernel(IN PKPROCESS InitProcess,
+                   _In_ PKTHREAD InitThread,
+                   _In_ PVOID IdleStack,
+                   _In_ PKPRCB Prcb,
+                   _In_ CCHAR Number,
+                   _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     ULONG PageDirectory[2];
     PVOID DpcStack;
@@ -388,6 +409,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     KiSaveProcessorControlState(&Prcb->ProcessorState);
 
 #if DBG
+
     if (Number == 0)
         KiReportCpuFeatures();
 #endif
@@ -468,6 +490,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
         (KeFeatureBits & KF_RDTSC) ? TRUE: FALSE;
     SharedUserData->ProcessorFeatures[PF_RDRAND_INSTRUCTION_AVAILABLE] =
         (KeFeatureBits & KF_RDRAND) ? TRUE : FALSE;
+
     // Note: On x86 we lack support for saving/restoring SSE state
     SharedUserData->ProcessorFeatures[PF_SSE3_INSTRUCTIONS_AVAILABLE] =
         (KeFeatureBits & KF_SSE3) ? TRUE : FALSE;
@@ -524,6 +547,9 @@ CODE_SEG("INIT")
 VOID
 FASTCALL
 KiGetMachineBootPointers(IN PKGDTENTRY *Gdt,
+                         _In_ PKIDTENTRY *Idt,
+                         _In_ PKIPCR *Pcr,
+                         _In_ PKTSS *Tss)
 {
     KDESCRIPTOR GdtDescriptor, IdtDescriptor;
     KGDTENTRY TssSelector, PcrSelector;
@@ -670,6 +696,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     RtlCopyMemory(&Idt[8], &DoubleFaultEntry, sizeof(KIDTENTRY));
 
 AppCpuInit:
+
     //TODO: We don't setup IPIs yet so freeze other processors here.
     if (Cpu)
     {

@@ -46,6 +46,22 @@ _Thread_local ULONG MachineCpu;
 #define HW_TABLE_WRITE_OK(p) (((p) & (1ULL << 1)) != 0)
 #define HW_SPLIT_ROOTS     0
 #define HW_BREAK_SENSITIVE 0ULL
+#elif defined(MACHINE_I386)
+#define HW_VALID(p)        (((p) & 1) != 0)
+#define HW_IS_TABLE(p, l)  ((l) != 0 && ((p) & (1u << 7)) == 0)
+#define HW_IS_LEAF(p, l)   ((l) == 0 || ((p) & (1u << 7)) != 0)
+#define HW_FRAME(p)        (((ULONG64)(p) & 0xFFFFF000ULL) >> 12)
+#define HW_USER(p)         (((p) & (1u << 2)) != 0)
+#define HW_WRITE_OK(p)     (((p) & (1u << 1)) != 0)
+#define HW_EXEC_OK(p, u)   ((void)(p), (void)(u), 1)
+#define HW_ACCESSED(p)     (((p) & (1u << 5)) != 0)
+#define HW_SET_ACCESSED(p) ((p) | (1u << 5))
+#define HW_CAN_AUTO_DIRTY(p) 0
+#define HW_SET_DIRTY(p)    ((p) | (1u << 6))
+#define HW_TABLE_USER_OK(p) (((p) & (1u << 2)) != 0)
+#define HW_TABLE_WRITE_OK(p) (((p) & (1u << 1)) != 0)
+#define HW_SPLIT_ROOTS     0
+#define HW_BREAK_SENSITIVE 0ULL
 #else
 #error "select a machine personality"
 #endif
@@ -542,10 +558,12 @@ MachineTranslate(PMACHINE Machine, ULONG Cpu, ULONG64 VirtualAddress, MACHINE_AC
                     return FALSE;
                 Updated = HW_SET_DIRTY(Updated);
             }
+#if defined(MACHINE_AMD64) || defined(MACHINE_I386)
             Updated = HW_SET_DIRTY(Updated);
 #endif
         }
 
+#if defined(MACHINE_AMD64) || defined(MACHINE_I386)
         Updated = HW_SET_ACCESSED(Updated);
 #endif
 

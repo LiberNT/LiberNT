@@ -18,6 +18,8 @@
 #define MI_ARCH_PAGE_SHIFT      12
 #define MI_ARCH_LARGE_LEVEL     1
 
+#define MI_I386_SESSION_TOP_ENTRIES 16
+
 #define MI_ARCH_L0_SHIFT       12
 #define MI_ARCH_L0_BITS        10
 #define MI_ARCH_L1_SHIFT       22

@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Boot logo and progress bar layout
+ * COPYRIGHT:   Copyright 2020 Dmitry Borisov <di.sean@protonmail.com>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #pragma once
@@ -28,8 +33,11 @@ typedef struct tagBITMAPINFOHEADER
 
 #define VID_SHUTDOWN_LOGO_LEFT    225
 
+#define VID_SHUTDOWN_LOGO_TOP     114
 
+#define VID_SHUTDOWN_MSG_LEFT     213
 
+#define VID_SHUTDOWN_MSG_TOP      354
 
 CODE_SEG("INIT")
 VOID

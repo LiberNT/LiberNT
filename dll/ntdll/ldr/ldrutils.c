@@ -2060,6 +2060,7 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     /* Insert into other lists */
     InsertTailList(&PebData->InLoadOrderModuleList, &LdrEntry->InLoadOrderLinks);
     InsertTailList(&PebData->InMemoryOrderModuleList, &LdrEntry->InMemoryOrderLinks);
+    LdrpInsertImageRange(LdrEntry);
 
     RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
 
@@ -2071,6 +2072,7 @@ NTAPI
 LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
     RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
+    LdrpRemoveImageRange(LdrEntry);
     RemoveEntryList(&LdrEntry->InLoadOrderLinks);
     RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
     RemoveEntryList(&LdrEntry->HashLinks);

@@ -1,3 +1,10 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Kernel-wide name redirections and the internal header list
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
 #pragma once
 
 #include <section_attribs.h>
@@ -25,14 +32,35 @@
 
 #define ExEnterCriticalRegionAndAcquireFastMutexUnsafe _ExEnterCriticalRegionAndAcquireFastMutexUnsafe
 #define ExReleaseFastMutexUnsafeAndLeaveCriticalRegion _ExReleaseFastMutexUnsafeAndLeaveCriticalRegion
+#define ExAcquireFastMutex          _ExAcquireFastMutex
+#define ExReleaseFastMutex          _ExReleaseFastMutex
+#define ExAcquireFastMutexUnsafe    _ExAcquireFastMutexUnsafe
+#define ExReleaseFastMutexUnsafe    _ExReleaseFastMutexUnsafe
+#define ExTryToAcquireFastMutex     _ExTryToAcquireFastMutex
+#define KeInitializeGuardedMutex    _KeInitializeGuardedMutex
+#define KeAcquireGuardedMutex       _KeAcquireGuardedMutex
+#define KeReleaseGuardedMutex       _KeReleaseGuardedMutex
 #define KeAcquireGuardedMutexUnsafe _KeAcquireGuardedMutexUnsafe
 #define KeReleaseGuardedMutexUnsafe _KeReleaseGuardedMutexUnsafe
+#define KeTryToAcquireGuardedMutex  _KeTryToAcquireGuardedMutex
 
+#define ThreadsProcess     Tcb.Process
+#define DeadThread         ThreadInserted
+#define ExceptionPort      ExceptionPortData
+#define JobStatus          Flags2
 #define ForwardClusterOnly CacheManagerActive
 #define AddressSpaceOwner  Spare
 
+#define KPROCESS_DTB0(Process) ((Process)->DirectoryTableBase)
+#define KPROCESS_DTB1(Process) ((Process)->Unused0)
 
+/* The quantum is a cycle deadline where the cycle counter charges thread time */
+#if defined(_M_AMD64) || defined(_M_RISCV64)
+#define KI_CYCLE_QUANTUM
+#endif
 
+#if !defined(_M_ARM64) && !defined(KI_CYCLE_QUANTUM)
+#define Quantum ResourceIndex
 #endif
 
 #include "tag.h"

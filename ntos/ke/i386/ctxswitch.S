@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 context switch, thread startup and idle wait
+ * COPYRIGHT:   Copyright Alex Ionescu <alex@relsoft.net>
+ *              Copyright Gregor Anich (FPU Code)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <asm.inc>
@@ -16,12 +22,14 @@ EXTERN _KeI386FxsrPresent:DWORD
 
 PUBLIC @KiSwapContextInternal@0
 @KiSwapContextInternal@0:
+
     sub esp, 2 * 4
     mov ecx, esp
     jmp @KiSwapContextEntry@8
 
 PUBLIC @KiSwapContext@8
 @KiSwapContext@8:
+
     sub esp, 4 * 4
 
     mov [esp+12], ebx
@@ -43,8 +51,10 @@ PUBLIC @KiSwapContext@8
 
 PUBLIC @KiSwitchThreads@8
 @KiSwitchThreads@8:
+
     mov esp, edx
 #if DBG
+
     /* Restore the frame pointer early to get sensible backtraces */
     mov ebp, [esp+12]
 #endif
@@ -55,6 +65,7 @@ PUBLIC @KiSwitchThreads@8
 
 PUBLIC @KiRetireDpcListInDpcStack@8
 @KiRetireDpcListInDpcStack@8:
+
     mov eax, esp
     mov esp, edx
     push eax
@@ -76,6 +87,7 @@ PUBLIC @KiCallOnKernelStack@8
 
 PUBLIC _Ki386EnableCurrentLargePage@8
 _Ki386EnableCurrentLargePage@8:
+
     mov eax, [esp + 4]
 
     mov ecx, [esp + 8]
@@ -93,6 +105,7 @@ _Ki386EnableCurrentLargePage@8:
     jmp eax
 
 _Ki386LargePageIdentityLabel:
+
     mov eax, cr0
     and eax, NOT CR0_PG
     mov cr0, eax
@@ -114,6 +127,7 @@ _Ki386LargePageIdentityLabel:
     jmp eax
 
 VirtualSpace:
+
     mov cr3, edx
 
     popfd

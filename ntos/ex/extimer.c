@@ -9,6 +9,24 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _ETIMER
+{
+    KTIMER KeTimer;
+    KAPC TimerApc;
+    KDPC TimerDpc;
+    LIST_ENTRY ActiveTimerListEntry;
+    KSPIN_LOCK Lock;
+    LONG Period;
+    BOOLEAN ApcAssociated;
+    BOOLEAN WakeTimer;
+    LIST_ENTRY WakeTimerListEntry;
+    ULONG SetSequence;
+    ULONG ApcQueuedSequence;
+    ULONGLONG ApcQueuedDueTime;
+    BOOLEAN HighResolution;
+    KI_HIGH_RESOLUTION_DEADLINE HighResolutionDeadline;
+} ETIMER, *PETIMER;
+
 /* GLOBALS ********************************************************************/
 
 POBJECT_TYPE ExTimerObjectType = NULL;

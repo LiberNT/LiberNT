@@ -72,10 +72,14 @@ list(APPEND SOURCE
     LdrGetDllHandleByName.c
     LdrLoadDll.c
     LdrQueryProcessModuleInformation.c
+    Breakpoint.c
+    ExceptionLoaderList.c
+    FastFail.c
     load_notifications.c
     locale.c
     memmove.c
     memset.c
+    IoCounters.c
     MemoryAccounting.c
     NtAcceptConnectPort.c
     NtAccessCheck.c
@@ -98,6 +102,7 @@ list(APPEND SOURCE
     NtDuplicateObject.c
     NtDuplicateToken.c
     NtFilterToken.c
+    NtFlushInstructionCache.c
     NtFreeVirtualMemory.c
     NtGetCurrentProcessorNumberEx.c
     NtImpersonateAnonymousToken.c
@@ -117,6 +122,7 @@ list(APPEND SOURCE
     NtOpenKeyEx.c
     NtOpenProcessToken.c
     NtOpenThreadToken.c
+    NtPowerInformation.c
     NtProtectVirtualMemory.c
     NtOpenMaximumAllowed.c
     ObTraverse.c

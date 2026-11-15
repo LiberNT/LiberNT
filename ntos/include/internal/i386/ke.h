@@ -21,6 +21,26 @@
 #define X86_FEATURE_XSAVE       0x04000000
 #define X86_FEATURE_RDRAND      0x40000000
 
+#define X86_FEATURE_VME         0x00000002
+#define X86_FEATURE_PSE         0x00000008
+#define X86_FEATURE_TSC         0x00000010
+#define X86_FEATURE_PAE         0x00000040
+#define X86_FEATURE_CX8         0x00000100
+#define X86_FEATURE_APIC        0x00000200
+#define X86_FEATURE_SYSCALL     0x00000800
+#define X86_FEATURE_MTRR        0x00001000
+#define X86_FEATURE_PGE         0x00002000
+#define X86_FEATURE_CMOV        0x00008000
+#define X86_FEATURE_PAT         0x00010000
+#define X86_FEATURE_DS          0x00200000
+#define X86_FEATURE_MMX         0x00800000
+#define X86_FEATURE_FXSR        0x01000000
+#define X86_FEATURE_SSE         0x02000000
+#define X86_FEATURE_SSE2        0x04000000
+#define X86_FEATURE_HT          0x10000000
+
+#define X86_FEATURE_NX          0x00100000
+
 FORCEINLINE
 ULONG_PTR
 KeGetContextPc(PCONTEXT Context)
@@ -301,6 +321,9 @@ KeInvalidateTlbEntry(IN PVOID Address)
 
 FORCEINLINE
 VOID
+KeSweepICache(
+    _In_opt_ PVOID BaseAddress,
+    _In_ SIZE_T FlushSize)
 {
     UNREFERENCED_PARAMETER(BaseAddress);
     UNREFERENCED_PARAMETER(FlushSize);
@@ -866,8 +889,10 @@ extern PCONTEXT KiProcessorContext[MAXIMUM_PROCESSORS];
 #define KiPrcbContext(Prcb) (KiProcessorContext[(Prcb)->Number])
 #define KI_PRCB_CPU_TYPE_OFFSET FIELD_OFFSET(KPRCB, CpuType)
 #define KI_PRCB_VENDOR_STRING_OFFSET FIELD_OFFSET(KPRCB, VendorString)
+
 #define KI_PRCB_CONTEXT_OFFSET 0
 #define KiClockTickSuspended(Prcb) FALSE
 #define KiClockTimerInserted(DueTime) ((VOID)(DueTime))
 #define KiRefreshProcessorRunTime(Prcb) ((VOID)(Prcb))
+#define KiQueryEffectiveProcessorMhz(Number) (KiProcessorBlock[(Number)]->MHz)
 #define KiQueryClockTickBaseline(Counter, Remainder) (*(Counter) = KeQueryPerformanceCounter(NULL), *(Remainder) = 0)

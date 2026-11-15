@@ -1,5 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under MIT (https://spdx.org/licenses/MIT)
+ * PURPOSE:     riscv64 processor freeze and thaw for the kernel debugger
  * COPYRIGHT:   Copyright 2023-2024 Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -27,6 +32,13 @@ KiProcessorFreezeHandler(
         return FALSE;
     }
 
+    /* This processor is inside the KD port critical section without owning
+     * the freeze (KdpPrint / KdPollBreakIn take KdpDebuggerLock without
+     * freezing).  Freezing it here leaves the port lock held by a frozen
+     * CPU: the freeze owner then fails its try-lock in KdEnterDebugger
+     * ("Port lock was not acquired!") and both CPUs drive the transport.
+     * Leave the request pending; the lock release path completes it
+     * through KiFreezeIfRequested a few microseconds later. */
     /* This processor is inside the KD port critical section without owning
      * the freeze (KdpPrint / KdPollBreakIn take KdpDebuggerLock without
      * freezing).  Freezing it here leaves the port lock held by a frozen
@@ -94,6 +106,7 @@ KiFreezeWaitForThaw(
  * frame here: the published context is the caller's own register state. */
 VOID
 NTAPI
+KiFreezeIfRequested(VOID)
 {
     BOOLEAN Enable = KeDisableInterrupts();
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
@@ -123,6 +136,7 @@ NTAPI
 
 VOID
 NTAPI
+KxFreezeExecution(VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     ULONG Stalls = 0;
@@ -198,6 +212,7 @@ NTAPI
 
 VOID
 NTAPI
+KxThawExecution(VOID)
 {
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     ASSERT(CurrentPrcb->IpiFrozen & IPI_FROZEN_FLAG_ACTIVE);

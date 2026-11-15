@@ -490,6 +490,7 @@ IopFinishFastIo(
     NTSTATUS Status = IoStatus->Status;
 
     IopUpdateOperationCount(TransferType);
+    IopUpdateTransferCount(TransferType, (ULONG)IoStatus->Information);
 
     _SEH2_TRY
     {

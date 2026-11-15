@@ -10,6 +10,9 @@
 #include "mmharness.h"
 #include "ntsessionshim.h"
 
+extern PVOID MmSessionBase;
+extern SIZE_T MmSessionSize;
+
 PMI_SYSTEM MiSessionTestSystem;
 _Thread_local PEPROCESS MiSessionTestCurrent;
 volatile LONG MiSessionTestAllocations;
@@ -25,6 +28,7 @@ SessionProcessInitialize(PEPROCESS Process, PMI_PROCESS Native)
     Process->References = 1;
     Process->AddressSpaceInitialized = 2;
     Process->Vm.VmWorkingSetList = Native;
+    CHECK(NT_SUCCESS(MiAddressSpaceCreate(MiSessionTestSystem, &Native->Space)));
     CHECK(Native->Space.RootFrame != MI_FRAME_INVALID && Native->Space.RootFrame != 0);
 }
 
@@ -287,6 +291,33 @@ SessionMultipleMembers(void)
     MiSessionTestCurrent = NULL;
 }
 
+static void
+SessionSpaceRange(void)
+{
+    PMI_SYSTEM System = MiSessionTestSystem;
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    ULONG64 Span = 1ULL << Arch->Level[Arch->PagingLevels - 1].Shift;
+    MI_ADDRESS_SPACE Session, Process;
+
+    CHECK(Arch->SessionTopLevelEntries != 0);
+    CHECK(NT_SUCCESS(MiSystemReserveSessionRange(System)));
+    CHECK(System->SessionEnd > System->SessionStart);
+    if (System->SessionEnd <= System->SessionStart)
+        return;
+    CHECK((System->SessionStart & (Span - 1)) == 0);
+    CHECK(System->SessionEnd - System->SessionStart + 1 == Span * Arch->SessionTopLevelEntries);
+    CHECK(System->SessionStart >= Arch->SystemAddressStart && System->SessionEnd <= Arch->SystemAddressEnd);
+    MmSessionBase = (PVOID)(ULONG_PTR)System->SessionStart;
+    MmSessionSize = (SIZE_T)(System->SessionEnd - System->SessionStart + 1);
+
+    CHECK(NT_SUCCESS(MiSessionSpaceCreate(System, &Session)));
+    CHECK(NT_SUCCESS(MiAddressSpaceCreate(System, &Process)));
+    MiSessionSpaceLink(&Session, &Process, TRUE);
+    MiSessionSpaceLink(&Session, &Process, FALSE);
+    MiAddressSpaceDestroy(&Process);
+    MiSessionSpaceDestroy(&Session);
+}
+
 void
 TestSession(void)
 {
@@ -294,6 +325,7 @@ TestSession(void)
 
     WorldCreate(&World, 256, 1, 1024);
     MiSessionTestSystem = &World.System;
+    SessionSpaceRange();
     SessionMultipleMembers();
     SessionCreateRace();
     SessionLifecycle();

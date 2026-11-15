@@ -10,6 +10,13 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _KPROFILE_SOURCE_OBJECT
+{
+    KPROFILE_SOURCE Source;
+    ULONG ReferenceCount;
+    LIST_ENTRY ListEntry;
+} KPROFILE_SOURCE_OBJECT, *PKPROFILE_SOURCE_OBJECT;
+
 /* GLOBALS ********************************************************************/
 
 /* Profiles that watch the whole system rather than one process. */

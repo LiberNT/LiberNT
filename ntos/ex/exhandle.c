@@ -12,6 +12,35 @@
 #define NDEBUG
 #include <debug.h>
 
+#define HANDLE_TAG_BITS 2
+#define HANDLE_LOW_BITS (PAGE_SHIFT - (sizeof(PVOID) == 8 ? 4 : 3))
+#define HANDLE_HIGH_BITS (PAGE_SHIFT - (sizeof(PVOID) == 8 ? 3 : 2))
+#define HANDLE_INDEX_BITS (HANDLE_LOW_BITS + 2 * HANDLE_HIGH_BITS)
+#define KERNEL_FLAG_BITS (sizeof(ULONG_PTR) * 8 - HANDLE_INDEX_BITS - HANDLE_TAG_BITS)
+
+typedef union _EXHANDLE
+{
+    struct
+    {
+        ULONG_PTR TagBits : HANDLE_TAG_BITS;
+        ULONG_PTR Index : HANDLE_INDEX_BITS;
+        ULONG_PTR KernelFlag : KERNEL_FLAG_BITS;
+    };
+    struct
+    {
+        ULONG_PTR TagBits2 : HANDLE_TAG_BITS;
+        ULONG_PTR LowIndex : HANDLE_LOW_BITS;
+        ULONG_PTR MidIndex : HANDLE_HIGH_BITS;
+        ULONG_PTR HighIndex : HANDLE_HIGH_BITS;
+        ULONG_PTR KernelFlag2 : KERNEL_FLAG_BITS;
+    };
+    HANDLE GenericHandleOverlay;
+    ULONG_PTR Value;
+    ULONG AsULONG;
+} EXHANDLE, *PEXHANDLE;
+
+#define HANDLE_TABLE_LIST_BUCKETS 16
+
 /* GLOBALS ********************************************************************/
 
 ULONG ExpFreeListCount = 1;

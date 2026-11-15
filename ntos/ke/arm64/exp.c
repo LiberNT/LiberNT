@@ -385,16 +385,53 @@ KiDispatchExceptionToUser(
 }
 
 VOID
+KiArm64FinishExceptionContext(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _Inout_ PCONTEXT Context)
 {
+    if (TrapFrame->ContextFromKFramesUnwound)
+        Context->ContextFlags |= CONTEXT_UNWOUND_TO_CALL;
 }
 
+BOOLEAN
+KiArm64LastChanceKernelDebugger(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PCONTEXT Context)
 {
 #ifdef KDBG
+    EXCEPTION_RECORD64 Record;
+    ULONG Index;
 
+    if (KdDebuggerEnabled && !KdDebuggerNotPresent)
+        return FALSE;
 
+    RtlZeroMemory(&Record, sizeof(Record));
+    Record.ExceptionCode = ExceptionRecord->ExceptionCode;
+    Record.ExceptionFlags = ExceptionRecord->ExceptionFlags;
+    Record.ExceptionAddress = (ULONG64)(ULONG_PTR)ExceptionRecord->ExceptionAddress;
+    Record.NumberParameters = min(ExceptionRecord->NumberParameters, EXCEPTION_MAXIMUM_PARAMETERS);
+    for (Index = 0; Index < Record.NumberParameters; Index++)
+        Record.ExceptionInformation[Index] = (ULONG64)ExceptionRecord->ExceptionInformation[Index];
 
+    return (BOOLEAN)(KdbEnterDebuggerException(&Record, KernelMode, Context, FALSE) == kdContinue);
+#else
+    UNREFERENCED_PARAMETER(ExceptionRecord);
+    UNREFERENCED_PARAMETER(Context);
+    return FALSE;
+#endif
+}
 
+VOID
+KiArm64PrepareUserBreakpoint(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    /* A user debugger resumes after a BRK it was shown, as it does after an x86 int3 */
+    if ((ExceptionRecord->NumberParameters == 1) &&
+        !(ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE) &&
+        ((ULONG_PTR)ExceptionRecord->ExceptionAddress == (ULONG_PTR)TrapFrame->Pc))
     {
+        TrapFrame->Pc += 4;
     }
 }
 

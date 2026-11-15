@@ -11,6 +11,34 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _KNMI_HANDLER_CALLBACK
+{
+    struct _KNMI_HANDLER_CALLBACK* Next;
+    PNMI_CALLBACK Callback;
+    PVOID Context;
+    PVOID Handle;
+} KNMI_HANDLER_CALLBACK, *PKNMI_HANDLER_CALLBACK;
+
+extern PKNMI_HANDLER_CALLBACK KiNmiCallbackListHead;
+
+extern KSPIN_LOCK KiNmiCallbackListLock;
+
+static
+VOID
+KiAcquireNmiListLock(
+    _Out_ PKIRQL OldIrql)
+{
+    KeAcquireSpinLock(&KiNmiCallbackListLock, OldIrql);
+}
+
+static
+VOID
+KiReleaseNmiListLock(
+    _In_ KIRQL OldIrql)
+{
+    KeReleaseSpinLock(&KiNmiCallbackListLock, OldIrql);
+}
+
 /* GLOBALS ********************************************************************/
 
 /* What the system stopped for: the code and its four parameters, in the order

@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 process LDT services
+ * COPYRIGHT:   Copyright Stefan Ginsberg <stefan.ginsberg@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -7,6 +12,8 @@
 
 VOID
 NTAPI
+PspDeleteLdt(
+    PEPROCESS Process)
 {
     /* FIXME - LdtInformation must be null as long as we don't implement VDMs */
     ASSERT(Process->LdtInformation == NULL);
@@ -14,6 +21,8 @@ NTAPI
 
 VOID
 NTAPI
+PspDeleteVdmObjects(
+    PEPROCESS Process)
 {
     if (Process->VdmObjects == NULL)
         return;
@@ -27,6 +36,11 @@ NTAPI
 
 NTSTATUS
 NTAPI
+PspQueryDescriptorThread(
+    _In_ PETHREAD Thread,
+    _In_ PVOID ThreadInformation,
+    _In_ ULONG ThreadInformationLength,
+    _Out_opt_ PULONG ReturnLength)
 {
     DESCRIPTOR_TABLE_ENTRY DescriptorEntry;
     LDT_ENTRY Descriptor;

@@ -574,9 +574,11 @@ LdrFindEntryForAddress(
     _Out_ PLDR_DATA_TABLE_ENTRY *Module)
 {
     PLIST_ENTRY ListHead, NextEntry;
+    PLDR_DATA_TABLE_ENTRY LdrEntry, Found = NULL;
     PIMAGE_NT_HEADERS NtHeader;
     PPEB_LDR_DATA Ldr = NtCurrentPeb()->Ldr;
     ULONG_PTR DllBase, DllEnd;
+    BOOLEAN Shared;
 
     DPRINT("LdrFindEntryForAddress(Address %p)\n", Address);
 
@@ -606,12 +608,36 @@ LdrFindEntryForAddress(
         }
     }
 
+    Shared = !LdrpOwnsLoaderLock();
+    if (Shared)
+        RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
+
+    if (!LdrpFindImageByAddress(Address, &Found))
     {
+        /* Loop the module list */
+        ListHead = &Ldr->InMemoryOrderModuleList;
+        for (NextEntry = ListHead->Flink; (NextEntry != ListHead) && (Found == NULL); NextEntry = NextEntry->Flink)
         {
+            /* Get the entry and NT Headers */
+            LdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InMemoryOrderLinks);
+            NtHeader = RtlImageNtHeader(LdrEntry->DllBase);
+            if (NtHeader == NULL)
+                continue;
+
             DllBase = (ULONG_PTR)LdrEntry->DllBase;
             DllEnd = DllBase + NtHeader->OptionalHeader.SizeOfImage;
+            if (((ULONG_PTR)Address >= DllBase) && ((ULONG_PTR)Address < DllEnd))
+                Found = LdrEntry;
+        }
+    }
 
+    if (Shared)
+        RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
 
+    if (Found != NULL)
+    {
+        *Module = Found;
+        return STATUS_SUCCESS;
     }
 
     /* Nothing found */
@@ -1721,6 +1747,7 @@ LdrUnloadDll(
 
         /* Remove it from the list */
         RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
+        LdrpRemoveImageRange(CurrentEntry);
         RemoveEntryList(&CurrentEntry->InLoadOrderLinks);
         LdrpLoadedDllHandleCache = NULL;
         LdrpGetModuleHandleCache = NULL;

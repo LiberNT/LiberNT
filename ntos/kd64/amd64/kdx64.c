@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 kernel debugger target: context, control space, MSRs and I/O space
+ * COPYRIGHT:   Copyright Timo Kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -47,6 +52,9 @@ KdpRestoreLegacyFloatingState(
 
 VOID
 NTAPI
+KdpGetStateChange(
+    _In_ PDBGKD_MANIPULATE_STATE64 State,
+    _In_ PCONTEXT Context)
 {
     PKPRCB Prcb;
     ULONG i;
@@ -83,6 +91,9 @@ NTAPI
 
 VOID
 NTAPI
+KdpSetContextState(
+    _In_ PDBGKD_ANY_WAIT_STATE_CHANGE WaitStateChange,
+    _In_ PCONTEXT Context)
 {
     KdpCaptureLegacyFloatingState(Context);
 
@@ -224,18 +235,22 @@ KdpSysReadIoSpace(
     switch (DataSize)
     {
         case sizeof(UCHAR):
+
             *(PUCHAR)DataValue = READ_PORT_UCHAR((PUCHAR)IoAddress);
             break;
 
         case sizeof(USHORT):
+
             *(PUSHORT)DataValue = READ_PORT_USHORT((PUSHORT)IoAddress);
             break;
 
         case sizeof(ULONG):
+
             *(PULONG)DataValue = READ_PORT_ULONG((PULONG)IoAddress);
             break;
 
         default:
+
             *ActualDataSize = 0;
             return STATUS_INVALID_PARAMETER;
     }
@@ -271,18 +286,22 @@ KdpSysWriteIoSpace(
     switch (DataSize)
     {
         case sizeof(UCHAR):
+
             WRITE_PORT_UCHAR((PUCHAR)IoAddress, *(PUCHAR)DataValue);
             break;
 
         case sizeof(USHORT):
+
             WRITE_PORT_USHORT((PUSHORT)IoAddress, *(PUSHORT)DataValue);
             break;
 
         case sizeof(ULONG):
+
             WRITE_PORT_ULONG((PULONG)IoAddress, *(PULONG)DataValue);
             break;
 
         default:
+
             *ActualDataSize = 0;
             return STATUS_INVALID_PARAMETER;
     }
@@ -294,6 +313,8 @@ KdpSysWriteIoSpace(
 
 NTSTATUS
 NTAPI
+KdpSysCheckLowMemory(
+    _In_ ULONG Flags)
 {
     UNREFERENCED_PARAMETER(Flags);
 
@@ -311,6 +332,7 @@ KdpAllowDisable(VOID)
     {
         PKPROCESSOR_STATE ProcessorState = &KiProcessorBlock[i]->ProcessorState;
 
+        /* Active processor breakpoints need a debugger, so it cannot be disabled */
         if (ProcessorState->SpecialRegisters.KernelDr7 & 0xFF)
             return STATUS_ACCESS_DENIED;
     }

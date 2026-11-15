@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 initial thread frames and the second half of a context switch
+ * COPYRIGHT:   Copyright Alex Ionescu <alex@relsoft.net>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -54,12 +59,14 @@ typedef struct _KKINIT_FRAME
 VOID
 FASTCALL
 KiSwitchThreads(
+    _In_ PKTHREAD OldThread,
     IN PKTHREAD NewThread
 );
 
 VOID
 FASTCALL
 KiRetireDpcListInDpcStack(
+    _In_ PKPRCB Prcb,
     IN PVOID DpcStack
 );
 
@@ -89,6 +96,12 @@ KiThreadStartup(VOID)
 
 VOID
 NTAPI
+KiInitializeContextThread(
+    _In_ PKTHREAD Thread,
+    _In_ PKSYSTEM_ROUTINE SystemRoutine,
+    _In_ PKSTART_ROUTINE StartRoutine,
+    _In_ PVOID StartContext,
+    _In_ PCONTEXT ContextPointer)
 {
     PFX_SAVE_AREA FxSaveArea;
     PKI_FXSAVE_HEADER FxSaveFormat;
@@ -286,6 +299,7 @@ KiIdleLoop(VOID)
         else
         {
             KiReleasePrcbLock(Prcb);
+
             Prcb->PowerState.IdleFunction(&Prcb->PowerState);
         }
     }
@@ -293,6 +307,9 @@ KiIdleLoop(VOID)
 
 BOOLEAN
 FASTCALL
+KiSwapContextExit(
+    _In_ PKTHREAD OldThread,
+    _In_ PKSWITCHFRAME SwitchFrame)
 {
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
     PKPROCESS OldProcess, NewProcess;
@@ -363,6 +380,9 @@ FASTCALL
 
 VOID
 FASTCALL
+KiSwapContextEntry(
+    _In_ PKSWITCHFRAME SwitchFrame,
+    _In_ ULONG_PTR OldThreadAndApcFlag)
 {
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
     PKTHREAD OldThread, NewThread;

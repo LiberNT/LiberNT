@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under the BSD license in COPYING.ARM
+ * PURPOSE:     i386 extended state save and restore around context switches
+ * COPYRIGHT:   Copyright ReactOS Portable Systems Group
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -7,6 +13,9 @@
 
 VOID
 NTAPI
+KiSwapProcess(
+    _In_ PKPROCESS NewProcess,
+    _In_ PKPROCESS OldProcess)
 {
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
     LONG SetMember;

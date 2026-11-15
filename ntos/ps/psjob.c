@@ -999,19 +999,81 @@ PspSetJobUiRestrictions(
 
 /* SYSTEM CALLS ***************************************************************/
 
+static
 NTSTATUS
+PspProbeHandleOutput(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ PHANDLE HandleOutput)
 {
+    if (PreviousMode == KernelMode)
+        return STATUS_SUCCESS;
 
-
+    _SEH2_TRY
     {
+        ProbeForWriteHandle(HandleOutput);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PspStoreHandleOutput(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PHANDLE HandleOutput,
+    _In_ HANDLE Handle,
+    _In_ NTSTATUS SuccessStatus)
+{
+    NTSTATUS Status = SuccessStatus;
+
+    if (PreviousMode == KernelMode)
+    {
+        *HandleOutput = Handle;
+        return Status;
     }
 
+    _SEH2_TRY
+    {
+        *HandleOutput = Handle;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
 
+    return Status;
+}
 
+static
+NTSTATUS
+PspCreateJob(
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _Out_ PEJOB *NewJob)
+{
+    NTSTATUS Status;
+    PEJOB Job;
+
+    Status = ObCreateObject(PreviousMode, PsJobType, ObjectAttributes, PreviousMode, NULL,
+                            sizeof(*Job), 0, 0, (PVOID *)&Job);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(Job, sizeof(*Job));
     InitializeListHead(&Job->JobLinks);
+    InitializeListHead(&Job->ProcessListHead);
     InitializeListHead(&Job->ChildJobListHead);
+    InitializeListHead(&Job->SiblingJobLinks);
     InitializeListHead(&Job->IteratorListHead);
     KeInitializeEvent(&Job->Event, NotificationEvent, FALSE);
+    ExInitializePushLock(&Job->MemoryLimitsLock);
+    Job->SessionId = MmGetSessionId(PsGetCurrentProcess());
     Job->SchedulingClass = PSP_JOB_SCHEDULING_CLASS_DEFAULT;
 
     Status = ExInitializeResourceLite(&Job->JobLock);
@@ -1027,8 +1089,31 @@ NTSTATUS
     ExReleaseResourceLite(&PspJobListLock);
     KeLeaveCriticalRegion();
 
+    *NewJob = Job;
+    return STATUS_SUCCESS;
+}
 
+NTSTATUS
+NTAPI
+NtCreateJobObject(
+    _Out_ PHANDLE JobHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    HANDLE Handle = NULL;
+    PEJOB Job = NULL;
+    NTSTATUS Status;
 
+    PAGED_CODE();
+
+    Status = PspProbeHandleOutput(PreviousMode, JobHandle);
+    if (NT_SUCCESS(Status))
+        Status = PspCreateJob(PreviousMode, ObjectAttributes, &Job);
+    if (NT_SUCCESS(Status))
+        Status = ObInsertObject(Job, NULL, DesiredAccess, 0, NULL, &Handle);
+
+    return NT_SUCCESS(Status) ? PspStoreHandleOutput(PreviousMode, JobHandle, Handle, Status) : Status;
 }
 
 NTSTATUS
@@ -1039,11 +1124,16 @@ NtOpenJobObject(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    HANDLE Handle = NULL;
     NTSTATUS Status;
 
     PAGED_CODE();
 
+    Status = PspProbeHandleOutput(PreviousMode, JobHandle);
+    if (NT_SUCCESS(Status))
+        Status = ObOpenObjectByName(ObjectAttributes, PsJobType, PreviousMode, NULL, DesiredAccess, NULL, &Handle);
 
+    return NT_SUCCESS(Status) ? PspStoreHandleOutput(PreviousMode, JobHandle, Handle, Status) : Status;
 }
 
 NTSTATUS

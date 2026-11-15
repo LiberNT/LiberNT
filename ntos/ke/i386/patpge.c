@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 page attribute table and global page enabling
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
 
 #include <ntoskrnl.h>
 #define NDEBUG
@@ -57,6 +63,10 @@ Ki386EnableTargetLargePage(IN ULONG_PTR Context)
 
 PVOID
 NTAPI
+Ki386AllocateContiguousMemory(
+    PLARGE_IDENTITY_MAP IdentityMap,
+    ULONG PagesCount,
+    BOOLEAN InLower4Gb)
 {
     PHYSICAL_ADDRESS AddressMask;
     PVOID Result;
@@ -80,6 +90,10 @@ NTAPI
 
 PHYSICAL_ADDRESS
 NTAPI
+Ki386BuildIdentityBuffer(
+    PLARGE_IDENTITY_MAP IdentityMap,
+    PVOID StartPtr,
+    ULONG Length)
 {
     // TODO: Check whether all pages are below 4GB boundary
     return MmGetPhysicalAddress(StartPtr);
@@ -87,6 +101,10 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ki386IdentityMapMakeValid(
+    PLARGE_IDENTITY_MAP IdentityMap,
+    PHARDWARE_PTE Pde,
+    PHARDWARE_PTE *PageTable)
 {
     ULONG NewPage;
 
@@ -111,6 +129,10 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ki386MapAddress(
+    PLARGE_IDENTITY_MAP IdentityMap,
+    ULONG_PTR VirtualPtr,
+    PHYSICAL_ADDRESS PhysicalPtr)
 {
     PHARDWARE_PTE Pde, Pte;
     PHARDWARE_PTE PageTable;
@@ -134,6 +156,8 @@ NTAPI
 
 VOID
 NTAPI
+Ki386ConvertPte(
+    PHARDWARE_PTE Pte)
 {
     PVOID VirtualPtr;
     PHYSICAL_ADDRESS PhysicalPtr;
@@ -146,6 +170,10 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ki386CreateIdentityMap(
+    PLARGE_IDENTITY_MAP IdentityMap,
+    PVOID StartPtr,
+    ULONG PagesCount)
 {
     ULONG_PTR Ptr;
     ULONG PteIndex;
@@ -188,6 +216,8 @@ NTAPI
 
 VOID
 NTAPI
+Ki386FreeIdentityMap(
+    PLARGE_IDENTITY_MAP IdentityMap)
 {
     ULONG Page;
 

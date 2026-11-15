@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under the BSD license in COPYING.ARM
+ * PURPOSE:     i386 trap and interrupt handlers called from the entry stubs
+ * COPYRIGHT:   Copyright ReactOS Portable Systems Group
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -15,10 +21,33 @@ VOID FASTCALL Ke386LoadFpuState(IN PFX_SAVE_AREA SaveArea);
 
 UCHAR KiTrapPrefixTable[] =
 {
+    0xF2,
+    0xF3,
+    0x67,
+    0xF0,
+    0x66,
+    0x2E,
+    0x3E,
+    0x26,
+    0x64,
+    0x65,
+    0x36,
 };
 
 UCHAR KiTrapIoTable[] =
 {
+    0xE4,
+    0xE5,
+    0xEC,
+    0xED,
+    0x6C,
+    0x6D,
+    0xE6,
+    0xE7,
+    0xEE,
+    0xEF,
+    0x6E,
+    0x6F,
 };
 
 PFAST_SYSTEM_CALL_EXIT KiFastCallExitHandler;
@@ -32,6 +61,8 @@ BOOLEAN StopChecking = FALSE;
 
 FORCEINLINE
 BOOLEAN
+KiVdmTrap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     return ((TrapFrame->EFlags & EFLAGS_V86_MASK) ||
             ((KiUserTrap(TrapFrame)) && (PsGetCurrentProcess()->VdmObjects)));
@@ -39,18 +70,25 @@ BOOLEAN
 
 FORCEINLINE
 BOOLEAN
+KiV86Trap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     return ((TrapFrame->EFlags & EFLAGS_V86_MASK) != 0);
 }
 
 FORCEINLINE
 BOOLEAN
+KiIsFrameEdited(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     return ((TrapFrame->SegCs & FRAME_EDITED) == 0);
 }
 
 FORCEINLINE
 VOID
+KiCommonExit(
+    _In_ PKTRAP_FRAME TrapFrame,
+    BOOLEAN SkipPreviousMode)
 {
     _disable();
 
@@ -76,6 +114,8 @@ VOID
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiEoiHelper(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiCommonExit(TrapFrame, TRUE);
 
@@ -93,6 +133,9 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiServiceExit(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ NTSTATUS Status)
 {
     ASSERT((TrapFrame->EFlags & EFLAGS_V86_MASK) == 0);
     ASSERT(!KiIsFrameEdited(TrapFrame));
@@ -122,6 +165,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiServiceExit2(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiCommonExit(TrapFrame, FALSE);
 
@@ -141,6 +186,11 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiDebugHandler(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Parameter1,
+    _In_ ULONG Parameter2,
+    _In_ ULONG Parameter3)
 {
     ASSERT(KiVdmTrap(TrapFrame) == FALSE);
 
@@ -159,6 +209,10 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiNpxHandler(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PKTHREAD Thread,
+    _In_ PFX_SAVE_AREA SaveArea)
 {
     ULONG Cr0, Mask, Error, ErrorOffset, DataOffset;
 
@@ -170,6 +224,7 @@ FASTCALL
 
         if ((PVOID)TrapFrame->Eip == FrRestore)
         {
+            TrapFrame->Eip += 3;
             KiEoiHelper(TrapFrame);
         }
     }
@@ -287,6 +342,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap00Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -302,6 +359,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap01Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -413,6 +472,8 @@ KiTrap02Handler(VOID)
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap03Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -422,6 +483,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap04Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -437,6 +500,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap05Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -454,6 +519,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap06Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PUCHAR Instruction;
     ULONG i;
@@ -515,6 +582,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap07Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread, NpxThread;
     PFX_SAVE_AREA SaveArea, NpxSaveArea;
@@ -620,6 +689,8 @@ KiTrap08Handler(VOID)
     TssGdt->HighWord.Bits.Dpl = 0;
     TssGdt->HighWord.Bits.Pres = 1;
 
+    TssGdt->HighWord.Bits.Type = I386_TSS;
+
     /* Bugcheck the system */
     KeBugCheckWithTf(UNEXPECTED_KERNEL_MODE_TRAP,
                      EXCEPTION_DOUBLE_FAULT,
@@ -632,6 +703,8 @@ KiTrap08Handler(VOID)
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap09Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -642,6 +715,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0AHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -653,6 +728,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0BHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -664,6 +741,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0CHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -677,6 +756,8 @@ DECLSPEC_NORETURN VOID FASTCALL KiTrap0EHandler(IN PKTRAP_FRAME);
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0DHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     ULONG i, j, Iopl;
     BOOLEAN Privileged = FALSE;
@@ -753,12 +834,32 @@ FASTCALL
                     Instructions[i + 1],
                     Instructions[i + 2],
                     Instructions[i + 3]);
+            if (Instruction == 0xF4)
             {
                 Privileged = TRUE;
             }
             else if (Instruction == 0x0F)
             {
+                if (((Instructions[i + 1] == 0x00) &&
+                     (((Instructions[i + 2] & 0x38) == 0x10) ||
+                      ((Instructions[i + 2] & 0x38) == 0x18))) ||
+                    ((Instructions[i + 1] == 0x01) &&
                      (((Instructions[i + 2] >> 6) != 3) || ((Instructions[i + 2] & 0x38) == 0x30)) &&
+                     (((Instructions[i + 2] & 0x38) == 0x10) ||
+                      ((Instructions[i + 2] & 0x38) == 0x18) ||
+                      ((Instructions[i + 2] & 0x38) == 0x30))) ||
+                    (Instructions[i + 1] == 0x08) ||
+                    (Instructions[i + 1] == 0x09) ||
+                    (Instructions[i + 1] == 0x35) ||
+                    (Instructions[i + 1] == 0x21) ||
+                    (Instructions[i + 1] == 0x06) ||
+                    (Instructions[i + 1] == 0x20) ||
+                    (Instructions[i + 1] == 0x22) ||
+                    (Instructions[i + 1] == 0x23) ||
+                    (Instructions[i + 1] == 0x30) ||
+                    (Instructions[i + 1] == 0x32) ||
+                    (Instructions[i + 1] == 0x33))
+
                 {
                     Privileged = TRUE;
                 }
@@ -768,6 +869,7 @@ FASTCALL
                 Iopl = (TrapFrame->EFlags & EFLAGS_IOPL) >> 12;
                 if ((TrapFrame->SegCs & RPL_MASK) > Iopl)
                 {
+                    if ((Instruction == 0xFA) || (Instruction == 0xFB))
                     {
                         Privileged = TRUE;
                     }
@@ -806,6 +908,14 @@ FASTCALL
         UNIMPLEMENTED_FATAL();
     }
 
+    /*
+     * NOTE2: Another scenario is the IRET during a V8086 restore (BIOS Call)
+     * which will cause a GPF since the trap frame is a total mess (on purpose)
+     * as built in KiEnterV86Mode.
+     *
+     * The idea is to scan for IRET, scan for the known EIP address, validate CS
+     * and then manually issue a jump to the V8086 return EIP.
+     */
     /*
      * NOTE: The ASM trap exit code would restore segment registers by doing
      * a POP <SEG>, which could cause an invalid segment if someone had messed
@@ -851,6 +961,9 @@ FASTCALL
         }
     }
 
+    if ((Instructions[0] == 0xF) &&
+        ((Instructions[1] == 0x32) ||
+         (Instructions[1] == 0x30)))
     {
         KiDispatchException0Args(STATUS_ACCESS_VIOLATION,
                                  TrapFrame->Eip,
@@ -875,7 +988,15 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiCheckForSListFault(
+    PKTRAP_FRAME TrapFrame)
 {
+    /* TODO: ntos/ps/psstartup.c looks these labels up as
+     * RtlpInterlockedPopEntrySList*, while the system DLL exports them as
+     * ExpInterlockedPopEntrySList*, so KeUserPopEntrySListFault stays NULL and
+     * the user-mode half of this recovery never runs. Whatever that lookup
+     * ends up doing, a NULL label must not be compared against, or every fault
+     * at address zero answers to it. */
     /* Explanation: An S-List fault can occur due to a race condition between 2
        threads simultaneously trying to pop an element from the S-List. After
        thread 1 has read the pointer to the top element on the S-List it is
@@ -970,6 +1091,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0EHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     ULONG_PTR Cr2;
@@ -1015,6 +1138,7 @@ FASTCALL
     {
         /* Check whether the kernel debugger has owed breakpoints to be inserted */
         KdSetOwedBreakpoints();
+
         KiEoiHelper(TrapFrame);
     }
 
@@ -1072,6 +1196,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap0FHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1083,6 +1209,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap10Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     PFX_SAVE_AREA SaveArea;
@@ -1105,6 +1233,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap11Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1115,6 +1245,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiTrap13Handler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     PFX_SAVE_AREA SaveArea;
@@ -1181,6 +1313,8 @@ FASTCALL
 
 VOID
 FASTCALL
+KiRaiseSecurityCheckFailureHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1220,6 +1354,8 @@ FASTCALL
 
 VOID
 FASTCALL
+KiGetTickCountHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1231,6 +1367,8 @@ FASTCALL
 
 VOID
 FASTCALL
+KiCallbackReturnHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     NTSTATUS Status;
@@ -1252,6 +1390,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiRaiseAssertionHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1265,6 +1405,8 @@ FASTCALL
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiDebugServiceHandler(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KiEnterTrap(TrapFrame);
 
@@ -1275,6 +1417,9 @@ FASTCALL
 
 FORCEINLINE
 VOID
+KiDbgPreServiceHook(
+    ULONG SystemCallNumber,
+    PULONG_PTR Arguments)
 {
 #if DBG && !defined(_WINKD_)
     if (SystemCallNumber >= 0x1000 && KeWin32PreServiceHook)
@@ -1284,6 +1429,9 @@ VOID
 
 FORCEINLINE
 ULONG_PTR
+KiDbgPostServiceHook(
+    ULONG SystemCallNumber,
+    ULONG_PTR Result)
 {
 #if DBG && !defined(_WINKD_)
     if (SystemCallNumber >= 0x1000 && KeWin32PostServiceHook)
@@ -1295,6 +1443,9 @@ ULONG_PTR
 DECLSPEC_NORETURN
 VOID
 FASTCALL
+KiSystemServiceHandler(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PVOID Arguments)
 {
     PKTHREAD Thread;
     PKSERVICE_TABLE_DESCRIPTOR DescriptorTable;
@@ -1407,6 +1558,8 @@ ExitCall:
 
 VOID
 FASTCALL
+KiCheckForSListAddress(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     UNIMPLEMENTED;
 }

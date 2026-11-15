@@ -1,4 +1,11 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under the BSD license in COPYING.ARM
+ * PURPOSE:     i386 virtual-8086 trap emulation for the VDM
+ * COPYRIGHT:   Copyright ReactOS Portable Systems Group
+ *              Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -34,6 +41,9 @@ KiVdmUnhandledOpcode(INV);
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodePUSHF(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ULONG Esp, V86EFlags, TrapEFlags;
 
@@ -41,12 +51,14 @@ FASTCALL
     V86EFlags &= ~EFLAGS_INTERRUPT_MASK;
 
     TrapEFlags = TrapFrame->EFlags;
+
     if(KeI386VirtualIntExtensions)
     {
         TrapEFlags &= ~EFLAGS_INTERRUPT_MASK;
         if(TrapEFlags & EFLAGS_VIF)
             TrapEFlags |= EFLAGS_INTERRUPT_MASK;
     }
+
     TrapEFlags &= (EFLAGS_ALIGN_CHECK | EFLAGS_NESTED_TASK | EFLAGS_INTERRUPT_MASK);
 
     V86EFlags |= TrapEFlags;
@@ -73,6 +85,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodePOPF(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ULONG Esp, V86EFlags, EFlags, TrapEFlags;
 
@@ -105,6 +120,7 @@ FASTCALL
         if(V86EFlags & EFLAGS_INTERRUPT_MASK)
         {
             V86EFlags |= EFLAGS_VIF;
+
             V86EFlags &= ~EFLAGS_INTERRUPT_MASK;
         }
     }
@@ -126,6 +142,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodeINTnn(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ULONG Esp, V86EFlags, TrapEFlags, Eip, Interrupt;
 
@@ -197,6 +216,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodeIRET(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ULONG Esp, V86EFlags, EFlags, TrapEFlags, Eip;
 
@@ -258,6 +280,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodeCLI(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ASSERT(KeI386VirtualIntExtensions == FALSE);
 
@@ -270,6 +295,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodeSTI(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ASSERT(KeI386VirtualIntExtensions == FALSE);
 
@@ -282,6 +310,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmHandleOpcode(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     ULONG Eip;
 
@@ -339,6 +370,9 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+KiVdmOpcodePrefix(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Flags)
 {
     Flags++;
 
@@ -347,6 +381,8 @@ FASTCALL
 
 BOOLEAN
 FASTCALL
+Ki386HandleOpcodeV86(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     TrapFrame->Eip &= 0xFFFF;
     TrapFrame->HardwareEsp &= 0xFFFF;
@@ -356,6 +392,8 @@ FASTCALL
 
 ULONG_PTR
 FASTCALL
+KiExitV86Mode(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKPCR Pcr = KeGetPcr();
     ULONG_PTR StackFrameUnaligned;
@@ -388,6 +426,8 @@ FASTCALL
 
 VOID
 FASTCALL
+KiEnterV86Mode(
+    _In_ ULONG_PTR StackFrameUnaligned)
 {
     PKTHREAD Thread;
     PKV8086_STACK_FRAME StackFrame = (PKV8086_STACK_FRAME)(ROUND_UP(StackFrameUnaligned - 4, 16) + 4);
@@ -467,6 +507,9 @@ Ke386SetIOPL(VOID)
 
 NTSTATUS
 NTAPI
+Ke386CallBios(
+    _In_ ULONG Int,
+    _Out_ PCONTEXT Context)
 {
     PUCHAR Trampoline = (PUCHAR)TRAMPOLINE_BASE;
     PTEB VdmTeb = (PTEB)TRAMPOLINE_TEB;
@@ -540,6 +583,9 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ke386IoSetAccessProcess(
+    _In_ PKPROCESS Process,
+    _In_ ULONG MapNumber)
 {
     USHORT MapOffset;
     PKPRCB Prcb;
@@ -562,6 +608,9 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ke386SetIoAccessMap(
+    _In_ ULONG MapNumber,
+    _In_ PKIO_ACCESS_MAP IopmBuffer)
 {
     PKPROCESS CurrentProcess;
     PKPRCB Prcb;
@@ -582,6 +631,9 @@ NTAPI
 
 BOOLEAN
 NTAPI
+Ke386QueryIoAccessMap(
+    _In_ ULONG MapNumber,
+    _In_ PKIO_ACCESS_MAP IopmBuffer)
 {
     ULONG i;
     PVOID Map;

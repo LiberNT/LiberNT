@@ -219,6 +219,19 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 VOID NTAPI
 LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 
+VOID
+LdrpInsertImageRange(
+    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+
+VOID
+LdrpRemoveImageRange(
+    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+
+BOOLEAN
+LdrpFindImageByAddress(
+    _In_ PVOID Address,
+    _Out_ PLDR_DATA_TABLE_ENTRY *Entry);
+
 FORCEINLINE
 BOOLEAN
 LdrpOwnsLoaderLock(VOID)

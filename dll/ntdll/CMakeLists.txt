@@ -42,6 +42,7 @@ list(APPEND SOURCE
     ldr/ldrcfg.c
     ldr/ldremul.c
     ldr/ldrguard.c
+    ldr/ldrimgidx.c
     ldr/ldrinit.c
     ldr/ldrmui.c
     ldr/ldrpe.c

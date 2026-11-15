@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Virtual DOS machine services: control calls, initialization and the BIOS area
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright Aleksey Bragin <aleksey@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -66,6 +72,8 @@ KeI386VdmInitialize(VOID)
 
 NTSTATUS
 NTAPI
+VdmpInitialize(
+    PVOID ControlData)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING PhysMemName = RTL_CONSTANT_STRING(L"\\Device\\PhysicalMemory");
@@ -138,6 +146,9 @@ NTAPI
 
 NTSTATUS
 NTAPI
+NtVdmControl(
+    _In_ ULONG ControlCode,
+    _In_ PVOID ControlData)
 {
     NTSTATUS Status;
     PAGED_CODE();

@@ -10,6 +10,15 @@
 #define NDEBUG
 #include <debug.h>
 
+#define MAX_TIMER_DPCS                      16
+
+typedef struct _DPC_QUEUE_ENTRY
+{
+    PKDPC Dpc;
+    PKDEFERRED_ROUTINE Routine;
+    PVOID Context;
+} DPC_QUEUE_ENTRY, *PDPC_QUEUE_ENTRY;
+
 /* GLOBALS ********************************************************************/
 
 /*

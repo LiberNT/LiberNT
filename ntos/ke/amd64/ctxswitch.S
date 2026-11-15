@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     amd64 thread startup and context switch
+ * COPYRIGHT:   Copyright Timo kreuzer <timo.kreuzer@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ksamd64.inc>
@@ -8,11 +13,15 @@ EXTERN KiSwapContextResume:PROC
 
 .code64
 
+/* KiThreadStartup(StartRoutine rcx, StartContext rdx, P3 r8, P4 r9, SystemRoutine): first code of every thread */
 PUBLIC KiThreadStartup
 .PROC KiThreadStartup
+
+    /* The KSTART_FRAME is already on the stack; this describes it as if a prolog had built it */
     .allocstack (5 * 8)
     .endprolog
 
+    /* No nonvolatile register leaks into a new thread, whatever old code expects to find there */
     xor rbx, rbx
     xor rsi, rsi
     xor rdi, rdi
@@ -29,6 +38,10 @@ PUBLIC KiThreadStartup
 
     sti
 
+    mov rcx, [rsp + SfP1Home]
+    mov rdx, [rsp + SfP2Home]
+    mov r8, [rsp + SfP3Home]
+    call qword ptr [rsp + SfP4Home]
 
     add rsp, 5 * 8
     ret
@@ -72,6 +85,7 @@ PUBLIC KiUserThreadStartupExit
     ret
 .ENDP
 
+/* KiSwapContextInternal: cl = wait IRQL of the old thread, rdx = old thread, r8 = new thread; returns its wait status */
 .PROC KiSwapContextInternal
 
     push rbp
@@ -151,11 +165,13 @@ PUBLIC KiUserThreadStartupExit
 
 .ENDP
 
+/* BOOLEAN KiSwapContext(KIRQL WaitIrql cl, PKTHREAD OldThread rdx) */
 PUBLIC KiSwapContext
 .PROC KiSwapContext
 
     GENERATE_EXCEPTION_FRAME
 
+    mov r8, gs:[PcCurrentThread]
     call KiSwapContextInternal
 
     RESTORE_EXCEPTION_STATE

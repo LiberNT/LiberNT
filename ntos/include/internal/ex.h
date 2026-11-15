@@ -1,3 +1,10 @@
+/*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Executive internals
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
 #pragma once
 
 #ifdef __cplusplus
@@ -6,57 +13,103 @@ extern "C"
 #endif
 
 extern RTL_TIME_ZONE_INFORMATION ExpTimeZoneInfo;
+
 extern LARGE_INTEGER ExpTimeZoneBias;
+
 extern ULONG ExpTimeZoneId;
 
+extern ULONG ExpTickCountMultiplier;
 
 extern ULONG ExpLastTimeZoneBias;
+
 extern BOOLEAN ExpRealTimeIsUniversal;
+
 extern FAST_MUTEX ExpEnvironmentLock;
+
 extern ERESOURCE ExpFirmwareTableResource;
+
 extern ERESOURCE ExpTimeRefreshLock;
+
 extern LIST_ENTRY ExpFirmwareTableProviderListHead;
+
 extern FIRMWARE_TYPE ExpFirmwareType;
+
 extern SYSTEM_BOOT_ENVIRONMENT_INFORMATION ExpBootEnvironmentInformation;
+
 extern ULONG ExpResourceTimeoutCount;
+
 extern LIST_ENTRY ExpSystemResourcesList;
+
 extern KSPIN_LOCK ExpResourceSpinLock;
+
 extern ULONG ExpAnsiCodePageDataOffset, ExpOemCodePageDataOffset;
+
 extern ULONG ExpUnicodeCaseTableDataOffset;
+
 extern PVOID ExpNlsSectionPointer;
+
 extern EX_WORK_QUEUE ExWorkerQueue[MaximumWorkQueue];
+
 extern ULONG NtGlobalFlag;
+
 extern UNICODE_STRING NtSystemRoot;
+
 extern ULONG ExpInitializationPhase;
+
 extern ULONG ExpAltTimeZoneBias;
+
 extern LIST_ENTRY ExSystemLookasideListHead;
+
 extern PCALLBACK_OBJECT PowerStateCallback;
+
 extern PCALLBACK_OBJECT SetSystemTimeCallback;
+
 extern LIST_ENTRY ExPoolLookasideListHead;
+
 extern LIST_ENTRY ExpNonPagedLookasideListHead;
+
 extern LIST_ENTRY ExpPagedLookasideListHead;
+
 extern KSPIN_LOCK ExpNonPagedLookasideListLock;
+
 extern KSPIN_LOCK ExpPagedLookasideListLock;
+
 extern ULONG ExCriticalWorkerThreads;
+
 extern ULONG ExDelayedWorkerThreads;
 
 extern PVOID ExpDefaultErrorPort;
+
 extern PEPROCESS ExpDefaultErrorPortProcess;
+
 extern BOOLEAN ExReadyForErrors;
 
 extern ULONG NtMajorVersion;
+
 extern ULONG NtMinorVersion;
+
 extern ULONG NtBuildNumber;
+
 extern ULONG CmNtSpBuildNumber;
+
 extern ULONG CmNtCSDVersion;
+
 extern ULONG CmNtCSDReleaseType;
+
 extern WCHAR CmSuiteBuffer[128];
+
 extern ULONG CmSuiteBufferLength;
+
 extern ULONG CmSuiteBufferType;
+
 extern ULONG CmTsAppCompat;
+
 extern ULONG ExSuiteMask;
+
 extern UNICODE_STRING CmVersionString;
+
 extern UNICODE_STRING CmCSDVersionString;
+
 extern CHAR NtBuildLab[];
 
 typedef enum _WINKD_WORKER_STATE
@@ -67,13 +120,18 @@ typedef enum _WINKD_WORKER_STATE
 } WINKD_WORKER_STATE;
 
 extern WORK_QUEUE_ITEM ExpDebuggerWorkItem;
+
 extern WINKD_WORKER_STATE ExpDebuggerWork;
+
 extern PEPROCESS ExpDebuggerProcessAttach;
+
 extern PEPROCESS ExpDebuggerProcessKill;
 
+extern ULONG_PTR ExpDebuggerPageIn;
 
 #define SIG_ACPI 0x41435049
 
+#define SIG_RSMB 0x52534D42
 
 typedef struct
 {
@@ -97,26 +155,37 @@ typedef struct _HARDERROR_USER_PARAMETERS
 C_ASSERT(MAX_FAST_REFS + 1 == MEMORY_ALLOCATION_ALIGNMENT);
 
 #define ExAcquireRundownProtection          _ExAcquireRundownProtection
+
 #define ExReleaseRundownProtection          _ExReleaseRundownProtection
+
 #define ExInitializeRundownProtection       _ExInitializeRundownProtection
+
 #define ExWaitForRundownProtectionRelease   _ExWaitForRundownProtectionRelease
+
 #define ExRundownCompleted                  _ExRundownCompleted
 
+#define ExGetPreviousMode                   KeGetPreviousMode
 
 #define EXHANDLE_TABLE_ENTRY_LOCK_BIT    1
 
 #define LOW_LEVEL_ENTRIES   (PAGE_SIZE / sizeof(HANDLE_TABLE_ENTRY))
+
 #define MID_LEVEL_ENTRIES   (PAGE_SIZE / sizeof(PHANDLE_TABLE_ENTRY))
+
 #define HIGH_LEVEL_ENTRIES  (16777216 / (LOW_LEVEL_ENTRIES * MID_LEVEL_ENTRIES))
+
 #define HANDLE_TABLE_ENTRY_INFO_SIZE \
     (LOW_LEVEL_ENTRIES * (sizeof(HANDLE_TABLE_ENTRY_INFO) + sizeof(ULONG)))
 
 #define MAX_MID_INDEX       (MID_LEVEL_ENTRIES * LOW_LEVEL_ENTRIES)
+
 #define MAX_HIGH_INDEX      (MID_LEVEL_ENTRIES * MID_LEVEL_ENTRIES * LOW_LEVEL_ENTRIES)
 
 #define ExpChangeRundown(x, y, z)   (ULONG_PTR)InterlockedCompareExchangePointer(&(x)->Ptr, (PVOID)(y), (PVOID)(z))
 
+#define ExpChangePushlock(x, y, z)  InterlockedCompareExchangePointer((PVOID*)(x), (PVOID)(y), (PVOID)(z))
 
+#define ExpSetRundown(x, y)         InterlockedExchangePointer(&(x)->Ptr, (PVOID)(y))
 
 typedef struct _UUID_CACHED_VALUES_STRUCT
 {
@@ -128,7 +197,9 @@ typedef struct _UUID_CACHED_VALUES_STRUCT
         {
             UCHAR ClockSeqHiAndReserved;
             UCHAR ClockSeqLow;
+            UCHAR NodeId[6 ];
         };
+        UCHAR GuidInit[8];
     };
 } UUID_CACHED_VALUES_STRUCT, *PUUID_CACHED_VALUES_STRUCT;
 
@@ -141,182 +212,540 @@ typedef struct _EX_RESERVE_OBJECT
 } EX_RESERVE_OBJECT, *PEX_RESERVE_OBJECT;
 
 extern POBJECT_TYPE ExUserApcReserveObjectType;
+
 extern POBJECT_TYPE ExIoCompletionReserveObjectType;
 
+typedef NTSTATUS
+(NTAPI *PEXP_SHARE_DEVICE_ADDRESS_SPACE)(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG ReturnedAsid);
 
-NTAPI
+typedef struct _EXP_DEVICE_ADDRESS_SPACE_PROVIDER
+{
+    PEXP_SHARE_DEVICE_ADDRESS_SPACE ShareAddressSpace;
+} EXP_DEVICE_ADDRESS_SPACE_PROVIDER, *PEXP_DEVICE_ADDRESS_SPACE_PROVIDER;
 
+typedef NTSTATUS
+(NTAPI *PEXP_MANAGE_MEMORY_PARTITION)(
+    _In_opt_ PVOID ProviderContext,
+    _In_opt_ HANDLE SourceHandle,
+    _In_ ULONG PartitionInformationClass,
+    _Inout_updates_bytes_opt_(PartitionInformationLength) PVOID PartitionInformation,
+    _In_ ULONG PartitionInformationLength);
+
+typedef BOOLEAN
+(NTAPI *PEX_SWEEP_HANDLE_CALLBACK)(
+    PHANDLE_TABLE_ENTRY HandleTableEntry,
+    HANDLE Handle,
+    PVOID Context
+);
+
+typedef BOOLEAN
+(NTAPI *PEX_DUPLICATE_HANDLE_CALLBACK)(
+    IN PEPROCESS Process,
+    IN PHANDLE_TABLE HandleTable,
+    IN PHANDLE_TABLE_ENTRY HandleTableEntry,
+    IN PHANDLE_TABLE_ENTRY NewEntry
+);
+
+typedef BOOLEAN
+(NTAPI *PEX_CHANGE_HANDLE_CALLBACK)(
+    PHANDLE_TABLE_ENTRY HandleTableEntry,
+    ULONG_PTR Context
+);
+
+#define ExInitializePushLock _ExInitializePushLock
+
+#define InterlockedDecrementUL(Addend) \
+   (ULONG)InterlockedDecrement((PLONG)(Addend))
+
+#define InterlockedIncrementUL(Addend) \
+   (ULONG)InterlockedIncrement((PLONG)(Addend))
+
+#define InterlockedCompareExchangeSizeT(Destination, Exchange, Comperand) \
+   (SIZE_T)InterlockedCompareExchangePointer((PVOID*)(Destination), (PVOID)(SIZE_T)(Exchange), (PVOID)(SIZE_T)(Comperand))
+
+#ifdef __cplusplus
+}
+#endif
+
+extern PKWIN32_GLOBALATOMTABLE_CALLOUT ExpGlobalAtomTableCallout;
+
+PEX_CALLBACK_ROUTINE_BLOCK
 NTAPI
+ExAllocateCallBack(
+    _In_ PEX_CALLBACK_FUNCTION Function,
+    _In_ PVOID Context);
+
+BOOLEAN
+NTAPI
+ExCompareExchangeCallBack(
+    _Inout_ PEX_CALLBACK CallBack,
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK NewBlock,
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK OldBlock);
 
 VOID
 NTAPI
+ExDereferenceCallBackBlock(
+    _Inout_ PEX_CALLBACK CallBack,
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK CallbackRoutineBlock);
 
 VOID
 NTAPI
+ExFreeCallBack(
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK CallbackRoutineBlock);
 
+PVOID
 NTAPI
+ExGetCallBackBlockContext(
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK CallbackRoutineBlock);
 
+PEX_CALLBACK_FUNCTION
 NTAPI
+ExGetCallBackBlockRoutine(
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK CallbackRoutineBlock);
 
 VOID
 NTAPI
+ExInitializeCallBack(
+    _Inout_ PEX_CALLBACK Callback);
 
+PEX_CALLBACK_ROUTINE_BLOCK
 NTAPI
+ExReferenceCallBackBlock(
+    _Inout_ PEX_CALLBACK CallBack);
 
 VOID
 NTAPI
+ExWaitForCallBacks(
+    _In_ PEX_CALLBACK_ROUTINE_BLOCK CallbackRoutineBlock);
 
 CODE_SEG("INIT")
+BOOLEAN
 NTAPI
+ExpInitializeCallbackObjects(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
 ExpInitializeCallbacks(VOID);
 
+VOID
 NTAPI
+ExpDebuggerWorker(
+    _In_ PVOID Context);
 
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
+ExpInitializeEventImplementation(VOID);
 
 CODE_SEG("INIT")
 BOOLEAN
 NTAPI
+ExpInitializeKeyedEventImplementation(VOID);
 
 CODE_SEG("INIT")
 VOID
 NTAPI
-
-NTAPI
-
-NTAPI
-
-
-
-NTAPI
-
-
-NTAPI
-
-NTAPI
-
-NTAPI
-
-NTAPI
-
-NTAPI
-
-NTAPI
-
-CODE_SEG("INIT")
-NTAPI
+ExpInitializeSecureBoot(VOID);
 
 BOOLEAN
 NTAPI
+ExChangeHandle(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ HANDLE Handle,
+    _In_ PEX_CHANGE_HANDLE_CALLBACK ChangeRoutine,
+    _In_ ULONG_PTR Context);
 
+HANDLE
 NTAPI
+ExCreateHandle(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry);
 
-CODE_SEG("INIT")
-VOID
+PHANDLE_TABLE
 NTAPI
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-
-
-VOID
-NTAPI
-
-NTAPI
-
-VOID
-NTAPI
+ExCreateHandleTable(
+    _In_opt_ PEPROCESS Process,
+    _In_ BOOLEAN InsertInList);
 
 BOOLEAN
 NTAPI
-
-
-VOID
-
-NTAPI
-
-NTAPI
+ExDestroyHandle(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ HANDLE Handle,
+    _In_opt_ PHANDLE_TABLE_ENTRY HandleTableEntry);
 
 VOID
 NTAPI
+ExDestroyHandleTable(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_opt_ PVOID DestroyHandleProcedure);
 
+PHANDLE_TABLE
+NTAPI
+ExDupHandleTable(
+    _In_ PEPROCESS Process,
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PEX_DUPLICATE_HANDLE_CALLBACK DupHandleProcedure,
+    _In_ ULONG_PTR Mask);
+
+PULONG
+NTAPI
+ExGetHandleCachedReferenceCount(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ HANDLE Handle,
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry);
+
+PHANDLE_TABLE_ENTRY
+NTAPI
+ExMapHandleToPointer(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ HANDLE Handle);
+
+VOID
+NTAPI
+ExSweepHandleTable(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PEX_SWEEP_HANDLE_CALLBACK EnumHandleProcedure,
+    _In_ PVOID Context);
+
+VOID
+NTAPI
+ExUnlockHandleTableEntry(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry);
+
+PLIST_ENTRY
+NTAPI
+ExpFirstHandleTableEntry(
+    _Out_ PULONG Bucket);
+
+LONG
+NTAPI
+ExpGetHandleCount(
+    _In_ PHANDLE_TABLE HandleTable);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeHandleTables(VOID);
+
+BOOLEAN
+NTAPI
+ExpLockHandleTableEntry(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry);
+
+PLIST_ENTRY
+NTAPI
+ExpNextHandleTableEntry(
+    _Inout_ PULONG Bucket,
+    _In_ PLIST_ENTRY Entry);
+
+LONG
+NTAPI
+ExSystemExceptionFilter(VOID);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+HeadlessInit(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeExecutive(
+    _In_ ULONG Cpu,
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+VOID
+NTAPI
+Phase1Initialization(
+    _In_ PVOID Context);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExInitPoolLookasidePointers(VOID);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExInitializeSystemLookasideList(
+    _In_ PGENERAL_LOOKASIDE List,
+    _In_ POOL_TYPE Type,
+    _In_ ULONG Size,
+    _In_ ULONG Tag,
+    _In_ USHORT MaximumDepth,
+    _In_ PLIST_ENTRY ListHead);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitLookasideLists(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpInitializeProfileImplementation(VOID);
+
+VOID
+FASTCALL
+ExBlockPushLock(
+    _In_ PEX_PUSH_LOCK PushLock,
+    _In_ PVOID WaitBlock);
+
+VOID
+FASTCALL
+ExWaitForUnblockPushLock(
+    _In_ PEX_PUSH_LOCK PushLock,
+    _In_ PVOID WaitBlock);
+
+VOID
+FASTCALL
+ExfUnblockPushLock(
+    _In_ PEX_PUSH_LOCK PushLock,
+    _In_ PVOID CurrentWaitBlock);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializePushLocks(VOID);
+
+BOOLEAN
+NTAPI
+ExTryToAcquireResourceExclusiveLite(
+    _In_ PERESOURCE Resource);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpResourceInitialization(VOID);
+
+BOOLEAN
+FASTCALL
+ExfAcquireRundownProtection(
+    _Inout_ PEX_RUNDOWN_REF RunRef);
+
+BOOLEAN
+FASTCALL
+ExfAcquireRundownProtectionEx(
+    _Inout_ PEX_RUNDOWN_REF RunRef,
+    _In_ ULONG Count);
 
 VOID
 FASTCALL
 ExfInitializeRundownProtection(
+    _Out_ PEX_RUNDOWN_REF RunRef);
 
 VOID
 FASTCALL
 ExfReInitializeRundownProtection(
+    _Out_ PEX_RUNDOWN_REF RunRef);
 
 VOID
 FASTCALL
 ExfReleaseRundownProtection(
+    _Inout_ PEX_RUNDOWN_REF RunRef);
 
 VOID
 FASTCALL
 ExfReleaseRundownProtectionEx(
+    _Inout_ PEX_RUNDOWN_REF RunRef,
+    _In_ ULONG Count);
 
 VOID
 FASTCALL
 ExfRundownCompleted(
+    _Out_ PEX_RUNDOWN_REF RunRef);
 
 VOID
 FASTCALL
 ExfWaitForRundownProtectionRelease(
+    _Inout_ PEX_RUNDOWN_REF RunRef);
 
-
-
-
-
-
+CODE_SEG("INIT")
+BOOLEAN
 NTAPI
+ExpInitializeMutantImplementation(VOID);
 
+CODE_SEG("INIT")
+BOOLEAN
 NTAPI
+ExpInitializeSemaphoreImplementation(VOID);
 
 VOID
 NTAPI
+ExShutdownSystem(VOID);
 
+NTSTATUS
 NTAPI
-
-NTAPI
+ExLockUserBuffer(
+    PVOID BaseAddress,
+    ULONG Length,
+    KPROCESSOR_MODE AccessMode,
+    LOCK_OPERATION Operation,
+    PVOID *MappedSystemVa,
+    PMDL *OutMdl);
 
 VOID
 NTAPI
+ExUnlockUserBuffer(
+    PMDL Mdl);
 
+NTSTATUS
 NTAPI
-
-NTAPI
+ExpGetRawSMBiosTable(
+    _Out_opt_ PVOID Buffer,
+    _Out_ ULONG *OutSize,
+    _In_ ULONG BufferSize);
 
 BOOLEAN
 NTAPI
+ExAcquireTimeRefreshLock(
+    _In_ BOOLEAN Wait);
 
+ULONG
 NTAPI
-
-NTAPI
-
-NTAPI
+ExComputeTickCountMultiplier(
+    _In_ ULONG TimeIncrement);
 
 BOOLEAN
 NTAPI
+ExRefreshTimeZoneInformation(
+    _In_ PLARGE_INTEGER SystemBootTime);
 
 VOID
 NTAPI
+ExReleaseProcessTimerResolution(
+    _Inout_ PEPROCESS Process);
 
+VOID
 NTAPI
+ExReleaseTimeRefreshLock(VOID);
 
+VOID
 NTAPI
+ExUpdateSystemTimeFromCmos(
+    _In_ BOOLEAN UpdateInterruptTime,
+    _In_ ULONG MaxSepInSeconds);
 
-
+VOID
 NTAPI
+ExpSetHighResolutionClock(
+    _In_ ULONG Resolution);
 
+NTSTATUS
+ExpSetTimeZoneInformation(
+    _In_ PRTL_TIME_ZONE_INFORMATION TimeZoneInformation);
+
+VOID
+NTAPI
+ExTimerRundown(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpInitializeTimerImplementation(VOID);
+
+VOID
+NTAPI
+ExAllocateLocallyUniqueId(
+    _Out_ LUID *LocallyUniqueId);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExLuidInitialization(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpUuidInitialization(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpWin32kInit(VOID);
+
+VOID
+NTAPI
+ExSwapinWorkerThreads(
+    _In_ BOOLEAN AllowSwap);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExpInitializeWorkerThreads(VOID);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+XIPInit(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+NTSTATUS
+NTAPI
+ExpCreateMemoryPartition(
+    _In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ PEXP_MANAGE_MEMORY_PARTITION ManagePartition,
+    _In_opt_ PVOID ProviderContext,
+    _Out_ PHANDLE PartitionHandle);
+
+BOOLEAN
+NTAPI
+ExpInitializePartitionImplementation(VOID);
+
+CODE_SEG("INIT")
+BOOLEAN
+NTAPI
+ExpInitializeReserveObjectTypes(VOID);
+
+NTSTATUS
+NTAPI
+ExpRegisterDeviceAddressSpaceProvider(
+    _In_ const EXP_DEVICE_ADDRESS_SPACE_PROVIDER *Provider);
+
+VOID
+NTAPI
+ExTrimPoolHeaps(VOID);
+
+NTSTATUS
+NTAPI
+ExGetPoolTagInfo(
+    _In_ PSYSTEM_POOLTAG_INFORMATION SystemInformation,
+    _In_ ULONG SystemInformationLength,
+    _Inout_opt_ PULONG ReturnLength);
+
+VOID
+NTAPI
+EtwpShutdownLoggers(VOID);
+
+NTSTATUS
+NTAPI
+WmipQueryRawSMBiosTables(
+    _Inout_ ULONG *InOutBufferSize,
+    _Out_opt_ PVOID OutBuffer);
+
+NTSTATUS
+NTAPI
+ExGetSystemFirmwareTable(
+    _In_ ULONG FirmwareTableProviderSignature,
+    _In_ ULONG FirmwareTableID,
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID FirmwareTableBuffer,
+    _In_ ULONG BufferLength,
+    _Out_opt_ PULONG ReturnLength);
+
+NTSTATUS
+NTAPI
+ExpEnumerateAcpiTables(
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID Buffer,
+    _In_ ULONG BufferLength,
+    _Out_ PULONG ReturnLength);
 
 FORCEINLINE
 VOID
@@ -746,6 +1175,7 @@ ExpReleaseFastMutexState(IN OUT PFAST_MUTEX FastMutex)
         }
     }
 #else
+
     if (InterlockedIncrement(&FastMutex->Count) <= 0)
     {
         KeSetEventBoostPriority(&FastMutex->Event, NULL);
@@ -766,8 +1196,10 @@ _ExAcquireFastMutexUnsafe(IN PFAST_MUTEX FastMutex)
     ASSERT(FastMutex->Owner != Thread);
 
 #if (NTDDI_VERSION >= NTDDI_VISTA)
+
     if (!InterlockedBitTestAndReset(&FastMutex->Count, FM_LOCK_BIT_V))
 #else
+
     if (InterlockedDecrement(&FastMutex->Count))
 #endif
     {
@@ -802,8 +1234,10 @@ _ExAcquireFastMutex(IN PFAST_MUTEX FastMutex)
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
 #if (NTDDI_VERSION >= NTDDI_VISTA)
+
     if (!InterlockedBitTestAndReset(&FastMutex->Count, FM_LOCK_BIT_V))
 #else
+
     if (InterlockedDecrement(&FastMutex->Count))
 #endif
     {

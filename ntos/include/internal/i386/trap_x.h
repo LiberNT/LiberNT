@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later),
+ *              with portions under the BSD license in COPYING.ARM
+ * PURPOSE:     i386 inline helpers for trap entry, exit and debug register checks
+ * COPYRIGHT:   Copyright ReactOS Portable Systems Group
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #pragma once
@@ -9,6 +15,8 @@
 
 FORCEINLINE
 BOOLEAN
+KiUserTrap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     return !!(TrapFrame->SegCs & MODE_MASK);
 }
@@ -16,6 +24,8 @@ BOOLEAN
 // Debug Macros
 FORCEINLINE
 VOID
+KiDumpTrapFrame(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     DbgPrint("DbgEbp: %x\n", TrapFrame->DbgEbp);
     DbgPrint("DbgEip: %x\n", TrapFrame->DbgEip);
@@ -60,6 +70,8 @@ VOID
 #if DBG
 FORCEINLINE
 VOID
+KiFillTrapFrameDebug(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     /* Set the debug information */
     TrapFrame->DbgArgPointer = TrapFrame->Edx;
@@ -86,6 +98,9 @@ extern BOOLEAN StopChecking;
 
 FORCEINLINE
 VOID
+KiExitTrapDebugChecks(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ BOOLEAN SkipPreviousMode)
 {
     if (StopChecking) return;
     StopChecking = TRUE;
@@ -130,6 +145,7 @@ VOID
 
     /* FIXME: KDBG messes around with these improperly */
 #if !defined(KDBG)
+
     if (KiUserTrap(TrapFrame))
     {
         /* Check for active debugging */
@@ -164,6 +180,9 @@ VOID
 
 FORCEINLINE
 VOID
+KiExitSystemCallDebugChecks(
+    _In_ ULONG SystemCall,
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     KIRQL OldIrql;
 
@@ -214,6 +233,7 @@ extern PFAST_SYSTEM_CALL_EXIT KiFastCallExitHandler;
 FORCEINLINE
 VOID
 KiHandleDebugRegistersOnTrapEntry(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
 
@@ -256,6 +276,8 @@ KiHandleDebugRegistersOnTrapExit(
 FORCEINLINE
 DECLSPEC_NORETURN
 VOID
+KiExitV86Trap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread;
     KIRQL OldIrql;
@@ -289,6 +311,8 @@ VOID
 
 FORCEINLINE
 VOID
+KiEnterV86Trap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PVOID ExceptionList;
 
@@ -307,6 +331,8 @@ VOID
 
 FORCEINLINE
 VOID
+KiEnterInterruptTrap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PVOID ExceptionList;
 
@@ -336,6 +362,8 @@ VOID
 
 FORCEINLINE
 VOID
+KiEnterTrap(
+    _In_ PKTRAP_FRAME TrapFrame)
 {
     PVOID ExceptionList;
 

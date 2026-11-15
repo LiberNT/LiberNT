@@ -1,4 +1,9 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     i386 thread context get and set for the process manager
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
@@ -7,6 +12,10 @@
 
 VOID
 NTAPI
+PspGetContext(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PVOID NonVolatileContext,
+    _Inout_ PCONTEXT Context)
 {
     PAGED_CODE();
 
@@ -15,6 +24,11 @@ NTAPI
 
 VOID
 NTAPI
+PspSetContext(
+    _Out_ PKTRAP_FRAME TrapFrame,
+    _Out_ PVOID NonVolatileContext,
+    _In_ PCONTEXT Context,
+    _In_ KPROCESSOR_MODE Mode)
 {
     PAGED_CODE();
 
@@ -23,6 +37,12 @@ NTAPI
 
 VOID
 NTAPI
+PspGetOrSetContextKernelRoutine(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE* NormalRoutine,
+    _Inout_ PVOID* NormalContext,
+    _Inout_ PVOID* SystemArgument1,
+    _Inout_ PVOID* SystemArgument2)
 {
     PGET_SET_CTX_CONTEXT GetSetContext;
     PKEVENT Event;

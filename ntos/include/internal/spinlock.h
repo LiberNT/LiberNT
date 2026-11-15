@@ -1,4 +1,10 @@
 /*
+ * PROJECT:     LiberNT Kernel
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Spin lock and queued spin lock primitives shared with the HAL
+ * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
 
 FORCEINLINE
 ULONG_PTR
@@ -16,13 +22,25 @@ KxStoreReleasePointer(
 {
     WritePointerRelease(Address, Value);
 }
+
+FORCEINLINE
+KSPIN_LOCK
+KxSpinLockOwnerValue(VOID)
+{
+    return (KSPIN_LOCK)KeGetCurrentThread() | 1;
+}
+
 _Acquires_nonreentrant_lock_(SpinLock)
 FORCEINLINE
 VOID
 KxAcquireSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock)
 {
 #if DBG
+    if (*SpinLock == KxSpinLockOwnerValue())
     {
+        KeBugCheckEx(SPIN_LOCK_ALREADY_OWNED, (ULONG_PTR)SpinLock, (ULONG_PTR)_ReturnAddress(),
+                     (ULONG_PTR)KeGetCurrentThread(), (ULONG_PTR)KeGetCurrentIrql());
     }
 #endif
 
@@ -30,12 +48,14 @@ KxAcquireSpinLock(
     while (InterlockedBitTestAndSet((PLONG)SpinLock, 0))
     {
         while (*(volatile KSPIN_LOCK *)SpinLock & 1)
+            YieldProcessor();
     }
 #endif
 
     KeMemoryBarrierWithoutFence();
 
 #if DBG
+    *SpinLock = KxSpinLockOwnerValue();
 #endif
 }
 
@@ -43,14 +63,17 @@ _Releases_nonreentrant_lock_(SpinLock)
 FORCEINLINE
 VOID
 KxReleaseSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock)
 {
 #if DBG
+    if (*SpinLock != KxSpinLockOwnerValue())
         KeBugCheckEx(SPIN_LOCK_NOT_OWNED, (ULONG_PTR)SpinLock, 0, 0, 0);
 #endif
 
 #if defined(CONFIG_SMP) || DBG
     WriteULongPtrRelease((PULONG_PTR)SpinLock, 0);
 #else
+    UNREFERENCED_PARAMETER(SpinLock);
 #endif
 
     KeMemoryBarrierWithoutFence();

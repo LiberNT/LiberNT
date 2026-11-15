@@ -16,11 +16,16 @@
 #define MM_HIGHEST_VAD_ADDRESS \
     (PVOID)((ULONG_PTR)MM_HIGHEST_USER_ADDRESS - (16 * PAGE_SIZE))
 
+#define MI_MAX_ZERO_BITS                        21
 
 #define MI_IS_WRITE_ACCESS(FaultCode)        BooleanFlagOn(FaultCode, 0x00000002)
+
 #define MI_IS_INSTRUCTION_FETCH(FaultCode)   BooleanFlagOn(FaultCode, 0x00000010)
+
 #ifndef _X86PAE_
+#define PD_COUNT 1
 #else
+#define PD_COUNT (1 << 2)
 #endif
 
 C_ASSERT(PD_COUNT == 1);

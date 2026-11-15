@@ -11,6 +11,12 @@
 #define NDEBUG
 #include <debug.h>
 
+typedef struct _DEFERRED_REVERSE_BARRIER
+{
+    volatile ULONG Barrier;
+    ULONG TotalProcessors;
+} DEFERRED_REVERSE_BARRIER, *PDEFERRED_REVERSE_BARRIER;
+
 /* GLOBALS ********************************************************************/
 
 /* Whether a DPC marked threaded is actually run in a thread. Turning this off

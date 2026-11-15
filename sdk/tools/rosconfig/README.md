@@ -121,6 +121,7 @@ the selected target.
 | Code generation | CPU instruction set, tuning, LTO and stack protector (GCC and Clang only). |
 | Build options | ccache, separate debug symbol files and MSVC analysis. |
 | Boot options | UEFI HTTP boot for the boards that support it. |
+| System | Target NT version, ALPC and ISA Plug and Play. |
 | Graphics | Display driver model, Mesa Gallium and LLVMpipe/Lavapipe. |
 | Compatibility layers | WoW64, FEX ARM64EC and validation of their build outputs. |
 | Desktop and applications | Early Winlogon background, wallpapers and rosapps. |

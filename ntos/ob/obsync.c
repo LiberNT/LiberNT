@@ -10,6 +10,18 @@
 #define NDEBUG
 #include <debug.h>
 
+/* A wait object pointer below the kernel half is an offset into the object body */
+FORCEINLINE
+BOOLEAN
+IsPointerOffset(
+    _In_ PVOID Pointer)
+{
+    if (sizeof(PVOID) == 8)
+        return (BOOLEAN)(((ULONGLONG)(ULONG_PTR)Pointer & 0xFFFFFF0000000000ULL) == 0);
+
+    return (BOOLEAN)((LONG_PTR)Pointer >= 0);
+}
+
 /* WAIT OBJECT RESOLUTION *****************************************************/
 
 PVOID
