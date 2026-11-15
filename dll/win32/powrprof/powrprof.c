@@ -2039,6 +2039,24 @@ DWORD WINAPI PowerRemovePowerSetting(const GUID *PowerSettingSubKeyGuid, const G
     return Error;
 }
 
+DWORD WINAPI PowerReadACDefaultIndex(HKEY RootPowerKey, const GUID *SchemePersonalityGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD AcDefaultIndex)
+{
+    TRACE("(%p,%s,%s,%s,%p)\n", RootPowerKey, debugstr_guid(SchemePersonalityGuid), debugstr_guid(SubGroupOfPowerSettingsGuid), debugstr_guid(PowerSettingGuid), AcDefaultIndex);
+
+    if (!SchemePersonalityGuid || !PowerSettingGuid || !AcDefaultIndex)
+        return ERROR_INVALID_PARAMETER;
+    return POWRPROF_GetSettingDefaults(SchemePersonalityGuid, SubGroupOfPowerSettingsGuid, PowerSettingGuid, TRUE, AcDefaultIndex);
+}
+
+DWORD WINAPI PowerReadDCDefaultIndex(HKEY RootPowerKey, const GUID *SchemePersonalityGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD DcDefaultIndex)
+{
+    TRACE("(%p,%s,%s,%s,%p)\n", RootPowerKey, debugstr_guid(SchemePersonalityGuid), debugstr_guid(SubGroupOfPowerSettingsGuid), debugstr_guid(PowerSettingGuid), DcDefaultIndex);
+
+    if (!SchemePersonalityGuid || !PowerSettingGuid || !DcDefaultIndex)
+        return ERROR_INVALID_PARAMETER;
+    return POWRPROF_GetSettingDefaults(SchemePersonalityGuid, SubGroupOfPowerSettingsGuid, PowerSettingGuid, FALSE, DcDefaultIndex);
+}
+
 DWORD WINAPI PowerWriteACDefaultIndex(HKEY RootSystemPowerKey, const GUID *SchemePersonalityGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, DWORD DefaultAcIndex)
 {
     WCHAR SubKey[64];

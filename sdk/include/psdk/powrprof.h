@@ -175,7 +175,9 @@ DWORD   WINAPI PowerEnumerate(HKEY, const GUID *, const GUID *, POWER_DATA_ACCES
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 DWORD   WINAPI PowerReadFriendlyName(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_writes_bytes_opt_(*BufferSize) PUCHAR, _Inout_ LPDWORD BufferSize);
 DWORD   WINAPI PowerReadDescription(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_writes_bytes_opt_(*BufferSize) PUCHAR, _Inout_ LPDWORD BufferSize);
+DWORD   WINAPI PowerReadACDefaultIndex(_In_opt_ HKEY, _In_ const GUID *, _In_opt_ const GUID *, _In_ const GUID *, _Out_ LPDWORD);
 DWORD   WINAPI PowerReadACValueIndex(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_ LPDWORD);
+DWORD   WINAPI PowerReadDCDefaultIndex(_In_opt_ HKEY, _In_ const GUID *, _In_opt_ const GUID *, _In_ const GUID *, _Out_ LPDWORD);
 DWORD   WINAPI PowerReadDCValueIndex(_In_opt_ HKEY, _In_opt_ const GUID *, _In_opt_ const GUID *, _In_opt_ const GUID *, _Out_ LPDWORD);
 #endif
 DWORD   WINAPI PowerRegisterSuspendResumeNotification(DWORD, HANDLE, PHPOWERNOTIFY);

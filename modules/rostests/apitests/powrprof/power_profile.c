@@ -451,10 +451,30 @@ static void test_legacy_policy_contract(void)
     LocalFree(active);
 }
 
+static void test_default_index(void)
+{
+    DWORD ac = 0xdeadbeef, dc = 0xdeadbeef;
+    DWORD ret;
+
+    ret = PowerReadACDefaultIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_epp, NULL);
+    ok(ret == ERROR_INVALID_PARAMETER, "AC default without output returned %lu\n", ret);
+    ret = PowerReadDCDefaultIndex(NULL, NULL, &processor_subgroup, &processor_epp, &dc);
+    ok(ret == ERROR_INVALID_PARAMETER, "DC default without personality returned %lu\n", ret);
+
+    ret = PowerReadACDefaultIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_epp, &ac);
+    ok(ret == ERROR_SUCCESS, "AC default returned %lu\n", ret);
+    ok(ac == balanced_expected.ac_epp, "AC default EPP is %lu, expected %lu\n", ac, balanced_expected.ac_epp);
+    ret = PowerReadDCDefaultIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_epp, &dc);
+    ok(ret == ERROR_SUCCESS, "DC default returned %lu\n", ret);
+    ok(dc == balanced_expected.dc_epp, "DC default EPP is %lu, expected %lu\n", dc, balanced_expected.dc_epp);
+}
+
 START_TEST(power_profile)
 {
     GUID *original = NULL;
     DWORD ret;
+
+    test_default_index();
 
     ret = PowerGetActiveScheme(NULL, &original);
     ok(ret == ERROR_SUCCESS, "PowerGetActiveScheme returned %lu\n", ret);
