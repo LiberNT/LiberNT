@@ -17,6 +17,32 @@
 
 #define SEED_COUNT 128
 
+/* With MAX_PREFERRED_LENGTH and no resume handle, every account comes back in one call */
+static VOID
+TestAllUsersAtOnce(VOID)
+{
+    DWORD Read = 0, Total = 0, Index, Resume;
+    USER_INFO_1 *Users = NULL;
+    NET_API_STATUS Status;
+
+    Status = NetUserEnum(NULL, 1, FILTER_NORMAL_ACCOUNT, (LPBYTE *)&Users, MAX_PREFERRED_LENGTH, &Read, &Total, NULL);
+    ok(Status == NERR_Success, "NetUserEnum returned %lu\n", Status);
+    ok(Read != 0 && Read == Total, "NetUserEnum read %lu of %lu users\n", Read, Total);
+    for (Index = 0; Users != NULL && Index < Read; Index++)
+        ok(Users[Index].usri1_name != NULL && Users[Index].usri1_name[0], "User %lu has no name\n", Index);
+    if (Users != NULL)
+        NetApiBufferFree(Users);
+
+    /* A resume handle no enumeration of this process gave out yields nothing */
+    Users = NULL;
+    Read = 0xDEADBEEF;
+    Resume = 0x7FFF0001;
+    Status = NetUserEnum(NULL, 1, FILTER_NORMAL_ACCOUNT, (LPBYTE *)&Users, MAX_PREFERRED_LENGTH, &Read, &Total, &Resume);
+    ok(Read == 0, "NetUserEnum with a stale resume handle returned %lu, read %lu\n", Status, Read);
+    if (Users != NULL)
+        NetApiBufferFree(Users);
+}
+
 START_TEST(NetUserEnum)
 {
     PVOID Seeds[SEED_COUNT];
@@ -65,4 +91,6 @@ START_TEST(NetUserEnum)
         NetApiBufferFree(Buffer);
     if (Valid)
         HeapFree(Heap, 0, Victim);
+
+    TestAllUsersAtOnce();
 }
