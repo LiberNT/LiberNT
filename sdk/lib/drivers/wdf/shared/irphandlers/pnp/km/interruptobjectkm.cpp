@@ -89,7 +89,7 @@ FxInterrupt::QueueDpcForIsr(
     // Using this function is optional,
     // but the caller better have registered a handler
     //
-    ASSERT(m_EvtInterruptDpc != NULL);
+    ASSERT(m_EvtInterruptDpc != NULL || m_EvtInterruptWorkItem != NULL);
 
     queued = KeInsertQueueDpc(&m_Dpc, this, NULL);
 
