@@ -955,7 +955,7 @@ RETURN_CODE WCMD_directory(WCHAR *args)
     if (argN && argN[0] != '/') {
 
       WINE_TRACE("Found parm '%s'\n", wine_dbgstr_w(thisArg));
-      if (thisArg[1] == ':' && thisArg[2] == '\\') {
+      if ((thisArg[1] == ':' && thisArg[2] == '\\') || (thisArg[0] == '\\' && thisArg[1] == '\\')) {
         lstrcpyW(fullname, thisArg);
       } else if (thisArg[1] == ':' && thisArg[2] != '\\') {
         WCHAR envvar[4];
@@ -1055,7 +1055,8 @@ RETURN_CODE WCMD_directory(WCHAR *args)
          drive[2] = L'\\';
          drive[3] = L'\0';
          trailerReqd = TRUE;
-         if (!WCMD_print_volume_information(drive)) {
+         /* FIXME: the volume header of a path of two backslashes is not printed */
+         if ((drive[0] != L'\\' || drive[1] != L'\\') && !WCMD_print_volume_information(drive)) {
            return_code = ERROR_INVALID_PARAMETER;
            goto exit;
          }

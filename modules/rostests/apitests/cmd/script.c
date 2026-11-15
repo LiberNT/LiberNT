@@ -390,6 +390,17 @@ static void test_for_f_code_page(void)
     DeleteFileW(path);
 }
 
+/* DIR takes a path that starts with two backslashes as it is, not as a path on the current drive */
+static void test_dir_double_backslash(void)
+{
+    char cmdline[2 * MAX_PATH];
+
+    write_file("unc.txt", "x");
+    StringCbPrintfA(cmdline, sizeof(cmdline), "cmd /c \"dir /b \\\\?\\%s\\unc.txt\"", s_dir);
+    check_cmd(__LINE__, cmdline, NULL, 0, "unc.txt\r\n", TRUE);
+    delete_file("unc.txt");
+}
+
 START_TEST(script)
 {
     char temp[MAX_PATH];
@@ -405,6 +416,7 @@ START_TEST(script)
     test_exit_codes();
     test_if_redirections();
     test_for_f_code_page();
+    test_dir_double_backslash();
 
     RemoveDirectoryA(s_dir);
 }
