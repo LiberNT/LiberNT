@@ -570,6 +570,12 @@ SaveBootSector(
     return Status;
 }
 
+static
+NTSTATUS
+InstallMbrBootCode(
+    IN PCWSTR SrcPath,
+    IN HANDLE DstPath,
+    IN HANDLE DiskHandle);
 
 static
 NTSTATUS
@@ -614,10 +620,14 @@ InstallBootCodeToDisk(
         DPRINT1("Unable to lock the volume before installing boot code. Status 0x%08x.\n", LockStatus);
     }
 
-    Status = NtFsControlFile(PartitionHandle, NULL, NULL, NULL, &IoStatusBlock, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0);
-    if (!NT_SUCCESS(Status))
+    /* The whole disk has no file system to dismount, and RAW fails I/O on the handle that dismounted it */
+    if (InstallBootCode != InstallMbrBootCode)
     {
-        DPRINT1("Unable to dismount the volume before installing boot code. Status 0x%08x.\n", Status);
+        Status = NtFsControlFile(PartitionHandle, NULL, NULL, NULL, &IoStatusBlock, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Unable to dismount the volume before installing boot code. Status 0x%08x.\n", Status);
+        }
     }
 
     /* Install the bootcode (MBR, VBR) */
