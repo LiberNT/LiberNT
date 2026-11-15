@@ -186,6 +186,142 @@ Ext4DismountVolume(
     return STATUS_SUCCESS;
 }
 
+/* The volume takes the size its partition has now, or the smaller one asked for */
+static
+NTSTATUS
+Ext4ExtendVolume(
+    _In_ PEXT4_VCB Vcb,
+    _In_ LONGLONG Sectors)
+{
+    GET_LENGTH_INFORMATION LengthInfo;
+    uint64_t Reached = 0;
+    ULONGLONG Blocks;
+    NTSTATUS Status;
+
+    if (!Vcb->Writable) return STATUS_MEDIA_WRITE_PROTECTED;
+    if (Sectors <= 0) return STATUS_INVALID_PARAMETER;
+
+    Status = Ext4DeviceControl(Vcb->TargetDeviceObject, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &LengthInfo, sizeof(LengthInfo), FALSE);
+    if (!NT_SUCCESS(Status)) return Status;
+    if ((ULONGLONG)Sectors * Vcb->DeviceSectorSize > (ULONGLONG)LengthInfo.Length.QuadPart) return STATUS_INVALID_PARAMETER;
+    Blocks = (ULONGLONG)Sectors * Vcb->DeviceSectorSize / Vcb->BlockSize;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&Vcb->Resource, TRUE);
+    Ext4LockCore(Vcb);
+    Vcb->PartitionLength = (ULONGLONG)LengthInfo.Length.QuadPart;
+    Vcb->DeviceInterface.ph_bcnt = Vcb->PartitionLength / Vcb->DeviceSectorSize;
+    Vcb->Core.Device.part_size = Vcb->PartitionLength;
+    ext4_block_set_lb_size(&Vcb->Core.Device, Vcb->BlockSize);
+    Status = Ext4Status(Vcb, E4Resize(&Vcb->Core, Blocks, &Reached));
+    Ext4UnlockCore(Vcb);
+    ExReleaseResourceLite(&Vcb->Resource);
+    KeLeaveCriticalRegion();
+
+    if (NT_SUCCESS(Status))
+    {
+        if (Vcb->VolumeFcb != NULL)
+        {
+            Vcb->VolumeFcb->Header.AllocationSize.QuadPart = (LONGLONG)Vcb->PartitionLength;
+            Vcb->VolumeFcb->Header.FileSize.QuadPart = (LONGLONG)Vcb->PartitionLength;
+            Vcb->VolumeFcb->Header.ValidDataLength.QuadPart = (LONGLONG)Vcb->PartitionLength;
+        }
+        Status = Ext4FlushDevice(Vcb->TargetDeviceObject);
+    }
+    return Status;
+}
+
+/* Shrinking moves blocks and renumbers inodes, so it runs with nothing open but the handle that asks for it.
+ * Prepare checks that the size can be reached and remembers it; Commit does the work. */
+static
+NTSTATUS
+Ext4ShrinkVolume(
+    _In_ PEXT4_VCB Vcb,
+    _In_ PFILE_OBJECT FileObject,
+    _In_ const SHRINK_VOLUME_INFORMATION *Shrink)
+{
+    PEXT4_FCB Fcb = FileObject->FsContext;
+    E4_RESIZE_INFO Info;
+    uint64_t Reached = 0;
+    ULONGLONG Blocks;
+    NTSTATUS Status;
+    ULONG Bucket;
+
+    if (Fcb == NULL || !Fcb->Volume) return STATUS_INVALID_PARAMETER;
+    if (!Vcb->Writable) return STATUS_MEDIA_WRITE_PROTECTED;
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceExclusiveLite(&Vcb->Resource, TRUE);
+
+    switch (Shrink->ShrinkRequestType)
+    {
+        case ShrinkPrepare:
+            if (Shrink->NewNumberOfSectors <= 0)
+            {
+                Status = STATUS_INVALID_PARAMETER;
+                break;
+            }
+            Blocks = (ULONGLONG)Shrink->NewNumberOfSectors * Vcb->DeviceSectorSize / Vcb->BlockSize;
+            Ext4LockCore(Vcb);
+            Status = Ext4Status(Vcb, E4ResizeQuery(&Vcb->Core, &Info));
+            Ext4UnlockCore(Vcb);
+            if (!NT_SUCCESS(Status)) break;
+            if (Blocks >= Info.Blocks)
+                Status = STATUS_INVALID_PARAMETER;
+            else if (Blocks < Info.MinimumBlocks)
+                Status = STATUS_DISK_FULL;
+            else
+                Vcb->ShrinkBlocks = Blocks;
+            break;
+
+        case ShrinkCommit:
+            if (Vcb->ShrinkBlocks == 0)
+                Status = STATUS_INVALID_PARAMETER;
+            else if (Vcb->OpenHandles > 1)
+                Status = STATUS_ACCESS_DENIED;
+            else
+                Status = Ext4PurgeVolume(Vcb, FALSE);
+            if (!NT_SUCCESS(Status)) break;
+
+            Ext4LockCore(Vcb);
+            Status = Ext4Status(Vcb, E4Resize(&Vcb->Core, Vcb->ShrinkBlocks, &Reached));
+            Ext4UnlockCore(Vcb);
+            Vcb->ShrinkBlocks = 0;
+
+            /* A file block that is still waiting to be closed may carry an inode number that now means another
+             * file, or none: it leaves the table, and a later open builds a new one */
+            for (Bucket = 0; Bucket < EXT4_FCB_BUCKETS; Bucket++)
+            {
+                while (!IsListEmpty(&Vcb->FcbTable[Bucket]))
+                {
+                    PEXT4_FCB Stale = CONTAINING_RECORD(RemoveHeadList(&Vcb->FcbTable[Bucket]), EXT4_FCB, TableLinks);
+
+                    ASSERT(Stale->OpenHandles == 0);
+                    InitializeListHead(&Stale->TableLinks);
+                    Stale->Orphaned = FALSE;
+                    Stale->TimesDirty = FALSE;
+                    if (Vcb->RootFcb == Stale) Vcb->RootFcb = NULL;
+                }
+            }
+            break;
+
+        case ShrinkAbort:
+            Vcb->ShrinkBlocks = 0;
+            Status = STATUS_SUCCESS;
+            break;
+
+        default:
+            Status = STATUS_INVALID_PARAMETER;
+            break;
+    }
+
+    ExReleaseResourceLite(&Vcb->Resource);
+    KeLeaveCriticalRegion();
+
+    if (NT_SUCCESS(Status) && Shrink->ShrinkRequestType == ShrinkCommit) Status = Ext4FlushDevice(Vcb->TargetDeviceObject);
+    return Status;
+}
+
 static
 NTSTATUS
 Ext4UserFsRequest(
@@ -225,6 +361,20 @@ Ext4UserFsRequest(
             KeLeaveCriticalRegion();
             return Status;
         }
+        case FSCTL_EXTEND_VOLUME:
+            if (Vcb->Dismounted) return STATUS_VOLUME_DISMOUNTED;
+            if (!Fcb->Volume) return STATUS_INVALID_PARAMETER;
+            if (Irp->AssociatedIrp.SystemBuffer == NULL || Stack->Parameters.FileSystemControl.InputBufferLength < sizeof(LONGLONG))
+                return STATUS_BUFFER_TOO_SMALL;
+            return Ext4ExtendVolume(Vcb, *(PLONGLONG)Irp->AssociatedIrp.SystemBuffer);
+        case FSCTL_SHRINK_VOLUME:
+            if (Vcb->Dismounted) return STATUS_VOLUME_DISMOUNTED;
+            if (Irp->AssociatedIrp.SystemBuffer == NULL ||
+                Stack->Parameters.FileSystemControl.InputBufferLength < sizeof(SHRINK_VOLUME_INFORMATION))
+            {
+                return STATUS_BUFFER_TOO_SMALL;
+            }
+            return Ext4ShrinkVolume(Vcb, FileObject, Irp->AssociatedIrp.SystemBuffer);
         case FSCTL_MARK_VOLUME_DIRTY:
             return Vcb->Writable ? STATUS_SUCCESS : STATUS_MEDIA_WRITE_PROTECTED;
         case FSCTL_SET_SPARSE:

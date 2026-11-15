@@ -161,4 +161,18 @@ int E4XattrSet(E4_VOLUME *Volume, uint32_t Inode, const char *Name, uint32_t Nam
 int E4XattrRemove(E4_VOLUME *Volume, uint32_t Inode, const char *Name, uint32_t NameLength);
 int E4XattrList(E4_VOLUME *Volume, uint32_t Inode, char *Buffer, uint32_t Size, uint32_t *Length);
 
+typedef struct _E4_RESIZE_INFO
+{
+    uint64_t Blocks;
+    /* The smallest size a shrink can reach and what the volume would then have free */
+    uint64_t MinimumBlocks;
+    uint32_t BlocksPerGroup;
+    uint32_t BlockSize;
+} E4_RESIZE_INFO;
+
+/* Blocks is rounded down to what the layout allows; the size reached comes back in *Reached. The caller holds
+ * the volume with no file open on it when it shrinks; growing needs no such care. */
+int E4ResizeQuery(E4_VOLUME *Volume, E4_RESIZE_INFO *Info);
+int E4Resize(E4_VOLUME *Volume, uint64_t Blocks, uint64_t *Reached);
+
 #endif

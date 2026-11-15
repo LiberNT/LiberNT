@@ -74,6 +74,7 @@ static void NowCb(E4_VOLUME *v, E4_TIME *t)
 }
 
 static E4_VOLUME V;
+static uint64_t ShrinkTo;
 
 static int MountImage(const char *path, int ro)
 {
@@ -94,6 +95,8 @@ static int MountImage(const char *path, int ro)
 static int UnmountImage(void)
 {
     int r = E4Unmount(&V);
+    if (ShrinkTo != 0 && ftruncate(DevFd, (off_t)ShrinkTo) != 0) r = EIO;
+    ShrinkTo = 0;
     fsync(DevFd);
     close(DevFd);
     DevFd = -1;
@@ -651,6 +654,58 @@ int main(int argc, char **argv)
             E4_STATFS s; E4StatFs(&V, &s);
             printf("bs %u blocks %llu free %llu avail %llu inodes %u free %u label '%s'\n", s.BlockSize, (unsigned long long)s.Blocks,
                    (unsigned long long)s.FreeBlocks, (unsigned long long)s.AvailableBlocks, s.Inodes, s.FreeInodes, s.Label);
+        }
+        else if (!strcmp(c, "resizeinfo"))
+        {
+            E4_RESIZE_INFO ri; r = E4ResizeQuery(&V, &ri);
+            if (r == EOK) printf("blocks %llu minimum %llu bpg %u bs %u\n", (unsigned long long)ri.Blocks, (unsigned long long)ri.MinimumBlocks, ri.BlocksPerGroup, ri.BlockSize);
+        }
+        else if (!strcmp(c, "resize") && n >= 1)
+        {
+            /* "min" shrinks as far as the query allows; the image file is grown first when the size asks for it */
+            uint64_t want, reached = 0; E4_RESIZE_INFO ri; struct stat st;
+            r = E4ResizeQuery(&V, &ri);
+            want = !strcmp(A(0), "min") ? ri.MinimumBlocks : strtoull(A(0), NULL, 0);
+            fstat(DevFd, &st);
+            if (r == EOK && want * V.BlockSize > (uint64_t)st.st_size)
+            {
+                if (ftruncate(DevFd, (off_t)(want * V.BlockSize)) != 0) r = EIO;
+                DevIf.ph_bcnt = want * V.BlockSize / 512;
+                V.Device.part_size = want * V.BlockSize;
+                ext4_block_set_lb_size(&V.Device, V.BlockSize);
+            }
+            if (r == EOK) r = E4Resize(&V, want, &reached);
+            if (r == EOK) printf("resized to %llu blocks\n", (unsigned long long)reached);
+            if (r == EOK && reached * V.BlockSize < (uint64_t)st.st_size && getenv("E4_TRUNCATE")) ShrinkTo = reached * V.BlockSize;
+        }
+        else if (!strcmp(c, "verify"))
+        {
+            /* compare the volume with the manifest a stress run left: path type size sum mode uid gid [target] */
+            FILE *f = fopen("e4manifest.txt", "r"); char line[1024]; int bad = 0, cnt = 0;
+            if (!f) r = ENOENT;
+            while (f && fgets(line, sizeof(line), f))
+            {
+                char path[512], target[256] = ""; char type; unsigned size, sum, mode, uid, gid; uint32_t ino; E4_ATTR a;
+                if (sscanf(line, "%511s %c %u %u %o %u %u %255s", path, &type, &size, &sum, &mode, &uid, &gid, target) < 7) continue;
+                cnt++;
+                if (Resolve(path, &ino, NULL, NULL) != EOK || E4GetAttr(&V, ino, &a) != EOK) { fprintf(stderr, "VERIFY missing %s\n", path); bad++; continue; }
+                if ((a.Mode & 07777) != mode || a.Uid != uid || a.Gid != gid) { fprintf(stderr, "VERIFY attr %s\n", path); bad++; }
+                if (type == 'f')
+                {
+                    uint8_t *buf = malloc(size + 1); uint32_t k, got = 0;
+                    if (a.Size != size || FileRead(ino, 0, buf, size) != EOK) { fprintf(stderr, "VERIFY read %s\n", path); bad++; }
+                    else { for (k = 0; k < size; k++) got = got * 31 + buf[k]; if (got != sum) { fprintf(stderr, "VERIFY data %s\n", path); bad++; } }
+                    free(buf);
+                }
+                else if (type == 'l')
+                {
+                    char buf[4096]; uint32_t len = 0;
+                    if (E4ReadLink(&V, ino, buf, sizeof(buf), &len) != EOK || len != strlen(target) || memcmp(buf, target, len)) { fprintf(stderr, "VERIFY link %s\n", path); bad++; }
+                }
+            }
+            if (f) fclose(f);
+            printf("verified %d entries, %d bad\n", cnt, bad);
+            if (bad) rc = 1;
         }
         else if (!strcmp(c, "stress") && n >= 2)
         {

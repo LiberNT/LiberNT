@@ -21,6 +21,8 @@ typedef struct _VOLRESIZE_INFO
     ULONG DiskNumber;
     ULONG PartitionNumber;
     BOOLEAN Raw;
+    /* The file system moves its own data out of the way when it shrinks */
+    BOOLEAN SelfRelocating;
 } VOLRESIZE_INFO, *PVOLRESIZE_INFO;
 
 typedef BOOLEAN

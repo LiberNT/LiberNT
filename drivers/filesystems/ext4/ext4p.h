@@ -66,6 +66,8 @@ typedef struct _EXT4_VCB
     ULONG DeviceSectorSize;
     ULONG BlockSize;
     ULONGLONG PartitionLength;
+    /* The size a shrink was prepared for, in blocks; 0 when none is */
+    ULONGLONG ShrinkBlocks;
     PNOTIFY_SYNC NotifySync;
     LIST_ENTRY DirNotifyList;
     KTIMER FlushTimer;

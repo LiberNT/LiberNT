@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     core/e4core.c
+    core/e4resize.c
     close.c
     create.c
     device.c

@@ -104,6 +104,9 @@ extend_main(
     bRaw = CurrentVolume->pszFilesystem == NULL ||
            CurrentVolume->pszFilesystem[0] == UNICODE_NULL ||
            _wcsicmp(CurrentVolume->pszFilesystem, L"RAW") == 0;
+    /* An ext volume is extended the same way: the partition first, then the file system in it */
+    if (!bNtfs && !bRaw && CurrentVolume->pszFilesystem != NULL && _wcsnicmp(CurrentVolume->pszFilesystem, L"ext", 3) == 0)
+        bNtfs = TRUE;
     if (!bNtfs && !bRaw)
     {
         ConResPuts(StdOut, IDS_EXTEND_FS_NOT_SUPPORTED);

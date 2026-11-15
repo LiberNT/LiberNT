@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT volume resize library
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Shrink and extend basic NTFS volumes through the documented FSCTLs
+ * PURPOSE:     Shrink and extend basic NTFS and ext volumes through the documented FSCTLs
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -26,6 +26,7 @@
 
 #define VR_RESERVE_BYTES        (50ULL * 1024 * 1024)
 #define VR_RAW_MINIMUM_BYTES    (1024ULL * 1024)
+#define VR_EXT_STEP_BYTES       (32ULL * 1024 * 1024)
 #define VR_MOVE_CHUNK           65536
 #define VR_EXTENT_BATCH         128
 #define VR_DIRECTORY_BUFFER     16384
@@ -819,6 +820,54 @@ VrIsRawVolume(
 }
 
 static
+BOOLEAN
+VrIsExtVolume(
+    _In_ HANDLE Volume)
+{
+    UCHAR Buffer[sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + 32 * sizeof(WCHAR)];
+    PFILE_FS_ATTRIBUTE_INFORMATION Attribute = (PFILE_FS_ATTRIBUTE_INFORMATION)Buffer;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    Status = NtQueryVolumeInformationFile(Volume, &Iosb, Buffer, sizeof(Buffer),
+                                          FileFsAttributeInformation);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+    return Attribute->FileSystemNameLength == 4 * sizeof(WCHAR) &&
+           _wcsnicmp(Attribute->FileSystemName, L"ext", 3) == 0;
+}
+
+/* An ext volume says whether it can shrink to a size when a shrink to that size is prepared: the smallest size it
+ * accepts is narrowed down between none and the size it has */
+static
+ULONGLONG
+VrExtMinimumSectors(
+    _In_ HANDLE Volume,
+    _In_ ULONGLONG Sectors,
+    _In_ ULONGLONG Step)
+{
+    SHRINK_VOLUME_INFORMATION Shrink;
+    ULONGLONG Low = 0, High = Sectors;
+
+    RtlZeroMemory(&Shrink, sizeof(Shrink));
+    while (High - Low > Step)
+    {
+        ULONGLONG Middle = Low + (High - Low) / 2;
+
+        Shrink.ShrinkRequestType = ShrinkPrepare;
+        Shrink.NewNumberOfSectors = (LONGLONG)Middle;
+        if (NT_SUCCESS(VrFsctl(Volume, FSCTL_SHRINK_VOLUME, &Shrink, sizeof(Shrink), NULL, 0)))
+            High = Middle;
+        else
+            Low = Middle;
+    }
+    Shrink.ShrinkRequestType = ShrinkAbort;
+    Shrink.NewNumberOfSectors = 0;
+    VrFsctl(Volume, FSCTL_SHRINK_VOLUME, &Shrink, sizeof(Shrink), NULL, 0);
+    return High;
+}
+
+static
 NTSTATUS
 VrQueryVolume(
     _In_ PCUNICODE_STRING VolumePath,
@@ -860,6 +909,31 @@ VrQueryVolume(
     {
         DISK_GEOMETRY Geometry;
 
+        if (VrIsExtVolume(Volume))
+        {
+            FILE_FS_FULL_SIZE_INFORMATION Size;
+            IO_STATUS_BLOCK Iosb;
+            ULONGLONG Minimum;
+
+            Status = NtQueryVolumeInformationFile(Volume, &Iosb, &Size, sizeof(Size), FileFsFullSizeInformation);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            if (Size.BytesPerSector == 0 || Size.SectorsPerAllocationUnit == 0)
+                return STATUS_NOT_SUPPORTED;
+            Info->BytesPerSector = Size.BytesPerSector;
+            Info->BytesPerCluster = Size.BytesPerSector * Size.SectorsPerAllocationUnit;
+            Info->TotalClusters = (ULONGLONG)Size.TotalAllocationUnits.QuadPart;
+            Info->FreeClusters = (ULONGLONG)Size.ActualAvailableAllocationUnits.QuadPart;
+            Info->PartitionBytes = (ULONGLONG)Length.Length.QuadPart;
+            Info->VolumeBytes = Info->TotalClusters * Info->BytesPerCluster;
+            Info->DiskNumber = Number.DeviceNumber;
+            Info->PartitionNumber = Partition.PartitionNumber;
+            Info->SelfRelocating = TRUE;
+            Minimum = VrExtMinimumSectors(Volume, Info->VolumeBytes / Info->BytesPerSector,
+                                          VR_EXT_STEP_BYTES / Info->BytesPerSector) * Info->BytesPerSector;
+            Info->MaxReclaimableBytes = Info->PartitionBytes > Minimum ? Info->PartitionBytes - Minimum : 0;
+            return STATUS_SUCCESS;
+        }
         if (!VrIsRawVolume(Volume))
             return STATUS_NOT_SUPPORTED;
         Status = VrIoctl(Volume, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &Geometry, sizeof(Geometry));
@@ -1073,6 +1147,25 @@ VolResizeShrink(
         DPRINT1("Preparing the shrink to %I64u sectors failed (Status 0x%08lx)\n", NewSectors, Status);
         goto Done;
     }
+    if (Info.SelfRelocating)
+    {
+        /* The file system empties the part it gives up when the shrink is committed */
+        Shrink.ShrinkRequestType = ShrinkCommit;
+        Shrink.NewNumberOfSectors = 0;
+        Status = VrFsctl(Volume, FSCTL_SHRINK_VOLUME, &Shrink, sizeof(Shrink), NULL, 0);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Shrinking the file system failed (Status 0x%08lx)\n", Status);
+            goto Abort;
+        }
+        if (Progress)
+            Progress(ProgressContext, 100);
+        Status = VrGrowPartition(&Info, (LONGLONG)(NewSectors * Info.BytesPerSector) -
+                                        (LONGLONG)Info.PartitionBytes);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("Shrinking the partition failed (Status 0x%08lx)\n", Status);
+        goto Done;
+    }
     Context.Boundary = (NewSectors - 1) / (Info.BytesPerCluster / Info.BytesPerSector);
 
     Status = VrOpenRoot(VolumePath, &Root);
@@ -1187,6 +1280,14 @@ VolResizeExtend(
         NTFS_VOLUME_DATA_BUFFER Ntfs;
 
         Status = VrFsctl(Volume, FSCTL_GET_NTFS_VOLUME_DATA, NULL, 0, &Ntfs, sizeof(Ntfs));
+        if (!NT_SUCCESS(Status) && VrIsExtVolume(Volume))
+        {
+            DISK_GEOMETRY Geometry;
+
+            Status = VrIoctl(Volume, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &Geometry, sizeof(Geometry));
+            Ntfs.BytesPerSector = NT_SUCCESS(Status) && Geometry.BytesPerSector ? Geometry.BytesPerSector : 512;
+            Status = STATUS_SUCCESS;
+        }
         if (NT_SUCCESS(Status))
             Status = VrIoctl(Volume, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &Length, sizeof(Length));
         if (NT_SUCCESS(Status))

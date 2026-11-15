@@ -22,4 +22,16 @@ cd "$DIR" || exit 2
 truncate -s 128M image && mkfs.ext4 -q -F $ARGS image 2> /dev/null || exit 2
 E4_NAME="$LAYOUT" "$TOOL" image stress 7 1500 150 || exit 1
 e2fsck -fn image > /dev/null 2>&1 || exit 1
+# The volume grows into a partial last group, then shrinks as far as it can; the files must stay what they were.
+# A volume without extents only grows.
+BLOCKS=$(dumpe2fs -h image 2> /dev/null | sed -n 's/^Block count: *//p')
+"$TOOL" image resize $((BLOCKS * 3 + 5000)) -- verify > /dev/null || exit 1
+e2fsck -fn image > /dev/null 2>&1 || exit 1
+case "$LAYOUT" in
+    ext2|ext3) ;;
+    *)
+        "$TOOL" image resize min -- verify > /dev/null || exit 1
+        e2fsck -fn image > /dev/null 2>&1 || exit 1
+        ;;
+esac
 exit 0

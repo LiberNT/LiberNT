@@ -6,13 +6,13 @@
  */
 
 #include "e4core.h"
+#include "e4priv.h"
 
 #include <string.h>
 
 #define E4_TRUNCATE_STEP    (16ULL * 1024 * 1024)
 #define E4_FAST_LINK_MAX    (sizeof(((struct ext4_inode *)0)->blocks))
 
-static
 void
 E4Now(
     E4_VOLUME *Volume,
@@ -24,7 +24,6 @@ E4Now(
         Volume->Now(Volume, Time);
 }
 
-static
 int
 E4Get(
     E4_VOLUME *Volume,
@@ -194,7 +193,6 @@ E4GetDevice(
     }
 }
 
-static
 int
 E4CountFree(
     E4_VOLUME *Volume)
