@@ -2094,7 +2094,7 @@ std::wstring GroupKey(const DeviceInfo &device)
     return device.HardwareIds.empty() ? device.InstanceId : device.HardwareIds.front();
 }
 
-std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo> &devices, bool searchable)
+std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo> &devices, bool searchable, bool generic)
 {
     std::vector<std::vector<DeviceInfo>> groups;
 
@@ -2105,8 +2105,11 @@ std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo>
             return _wcsicmp(GroupKey(other.front()).c_str(), key.c_str()) == 0;
         });
 
-        if (!NeedsDriver(device) || (searchable && CatalogQueries(device).empty()))
+        if (!(generic ? WantsCatalogDriver(device) : NeedsDriver(device)) ||
+            (searchable && CatalogQueries(device).empty()))
+        {
             continue;
+        }
         if (group == groups.end())
             groups.push_back(std::vector<DeviceInfo>(1, device));
         else
@@ -2219,7 +2222,7 @@ int RunCommand(int argc, LPWSTR *argv)
         };
         Catalog catalog;
         PrintThrottle throttle;
-        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, false);
+        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, false, false);
         std::vector<SearchPlan> plans;
         ScanSink sink(groups);
         size_t missing = 0;
@@ -2263,7 +2266,7 @@ int RunCommand(int argc, LPWSTR *argv)
                 BOOL reboot = FALSE;
                 DWORD error = plan.Error;
 
-                if (!FindDevice(group.front().InstanceId, target) || !NeedsDriver(target))
+                if (!FindDevice(group.front().InstanceId, target) || !WantsCatalogDriver(target))
                 {
                     Print(FormatText(IDS_CLI_ALREADY, GroupName(group)));
                     return true;
@@ -2319,7 +2322,7 @@ int RunCommand(int argc, LPWSTR *argv)
         };
         Catalog catalog;
         PrintThrottle throttle;
-        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true);
+        std::vector<std::vector<DeviceInfo>> groups = MissingGroups(devices, true, true);
         std::vector<SearchPlan> plans;
         InstallSink sink(groups);
         size_t missing = 0;
@@ -2327,7 +2330,7 @@ int RunCommand(int argc, LPWSTR *argv)
         catalog.SetThrottleCallback(&throttle);
         for (const std::vector<DeviceInfo> &group : groups)
         {
-            missing += group.size();
+            missing += std::count_if(group.begin(), group.end(), NeedsDriver);
             plans.push_back(DevicePlan(group.front()));
         }
         Print(FormatText(IDS_CLI_MISSING_TOTAL, NumberText(missing)));

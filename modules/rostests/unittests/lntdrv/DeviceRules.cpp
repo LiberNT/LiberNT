@@ -79,6 +79,34 @@ static void CheckCatalogSource()
     ok(CatalogEntryInUse(first, history) == NULL, "failed install: catalog entry\n");
 }
 
+static void CheckCatalogTarget()
+{
+    DeviceInfo gpu = Device(L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2\\5&975E6B9D&0&00",
+                            { L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2", L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002",
+                              L"PCI\\VEN_1002&DEV_15D8&CC_030000", L"PCI\\VEN_1002&DEV_15D8&CC_0300" },
+                            { L"PCI\\VEN_1002&DEV_15D8&REV_C2", L"PCI\\VEN_1002&DEV_15D8", L"PCI\\VEN_1002&CC_030000",
+                              L"PCI\\VEN_1002&CC_0300", L"PCI\\VEN_1002", L"PCI\\CC_030000", L"PCI\\CC_0300" });
+    DeviceInfo root = Device(L"ROOT\\DISPLAY\\0000", { L"ROOT\\BASICDISPLAY" }, { L"PCI\\CC_0300" });
+
+    ok(WantsCatalogDriver(gpu), "GPU without a driver: not a catalog target\n");
+    gpu.Inf = L"basicdisplay.inf";
+    gpu.Service = L"BasicDisplay";
+    gpu.MatchingId = L"PCI\\CC_0300";
+    ok(!NeedsDriver(gpu), "GPU on the class-code driver: needs a driver\n");
+    ok(GenericDriver(gpu), "GPU on the class-code driver: not generic\n");
+    ok(WantsCatalogDriver(gpu), "GPU on the class-code driver: not a catalog target\n");
+    gpu.Inf = L"oem7.inf";
+    gpu.Service = L"amdkmdag";
+    gpu.MatchingId = L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2";
+    ok(!WantsCatalogDriver(gpu), "GPU on its vendor driver: catalog target\n");
+    gpu.MatchingId = L"PCI\\VEN_1002&DEV_15D8";
+    ok(WantsCatalogDriver(gpu), "GPU on a compatible-ID vendor driver: not a catalog target\n");
+    root.Inf = L"basicdisplay.inf";
+    root.Service = L"BasicDisplay";
+    root.MatchingId = L"PCI\\CC_0300";
+    ok(!WantsCatalogDriver(root), "root-enumerated device on a generic driver: catalog target\n");
+}
+
 static void CheckInfClass(const char *klass, const char *guid, bool function)
 {
     WCHAR directory[MAX_PATH], path[MAX_PATH];
@@ -158,4 +186,5 @@ START_TEST(DeviceRules)
     CheckVersion(L"65535.0.0.0", L"1.0.0.0", DriverOrder::Older);
     CheckVersion(L"1.65535.0.0", L"2.0.0.0", DriverOrder::Newer);
     CheckCatalogSource();
+    CheckCatalogTarget();
 }

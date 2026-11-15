@@ -547,6 +547,11 @@ bool NeedsDriver(const DeviceInfo &device)
            device.Problem == CM_PROB_REINSTALL || (!HasDriver(device) && !CatalogQueries(device).empty());
 }
 
+bool WantsCatalogDriver(const DeviceInfo &device)
+{
+    return NeedsDriver(device) || (GenericDriver(device) && !CatalogQueries(device).empty());
+}
+
 std::wstring DeviceStatus(const DeviceInfo &device)
 {
     if (NeedsDriver(device))
