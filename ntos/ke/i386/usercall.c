@@ -11,8 +11,6 @@
 #define NDEBUG
 #include <debug.h>
 
-extern PGDI_BATCHFLUSH_ROUTINE KeGdiFlushUserBatch;
-
 VOID
 NTAPI
 KiInitializeUserApc(
@@ -80,78 +78,17 @@ KiInitializeUserApc(
     _SEH2_END;
 }
 
-NTSTATUS
-NTAPI
-KeUserModeCallback(
-    _In_ ULONG RoutineIndex,
-    _In_ PVOID Argument,
-    _In_ ULONG ArgumentLength,
-    _Out_ PVOID *Result,
-    _Out_ PULONG ResultLength)
+static
+VOID
+KiCopyFloatingControl(
+    _Out_ PFX_SAVE_AREA To,
+    _In_ PFX_SAVE_AREA From)
 {
-    ULONG_PTR NewStack, OldStack;
-    PULONG UserEsp;
-    NTSTATUS CallbackStatus;
-    PEXCEPTION_REGISTRATION_RECORD ExceptionList;
-    PTEB Teb;
-    ULONG GdiBatchCount = 0;
-    ASSERT(KeGetCurrentThread()->ApcState.KernelApcInProgress == FALSE);
-    ASSERT(KeGetPreviousMode() == UserMode);
-
-    if (KeGetCurrentThread()->CallbackNestingLevel >= KI_MAX_USER_CALLBACK_NESTING)
-        return STATUS_STACK_OVERFLOW;
-
-    UserEsp = KiGetUserModeStackAddress();
-    OldStack = *UserEsp;
-
-    _SEH2_TRY
-    {
-        NewStack = (OldStack - ArgumentLength) & ~3;
-
-        ProbeForWrite((PVOID)(NewStack - 6 * sizeof(ULONG_PTR)),
-                      ArgumentLength + 6 * sizeof(ULONG_PTR),
-                      sizeof(CHAR));
-
-        RtlCopyMemory((PVOID)NewStack, Argument, ArgumentLength);
-
-        NewStack -= 24;
-        *(PULONG)NewStack = 0;
-        *(PULONG)(NewStack + 4) = RoutineIndex;
-        *(PULONG)(NewStack + 8) = (NewStack + 24);
-        *(PULONG)(NewStack + 12) = ArgumentLength;
-
-        Teb = KeGetCurrentThread()->Teb;
-        ExceptionList = Teb->NtTib.ExceptionList;
-
-        *UserEsp = NewStack;
-        KeGetCurrentThread()->CallbackNestingLevel++;
-        CallbackStatus = KiCallUserModeWithStack(NULL, Result, ResultLength);
-        KeGetCurrentThread()->CallbackNestingLevel--;
-        if (CallbackStatus != STATUS_CALLBACK_POP_STACK)
-        {
-            Teb->NtTib.ExceptionList = ExceptionList;
-        }
-        else
-        {
-            OldStack = *UserEsp;
-        }
-
-        GdiBatchCount = Teb->GdiBatchCount;
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return _SEH2_GetExceptionCode());
-    }
-    _SEH2_END;
-
-    if (GdiBatchCount)
-    {
-          *UserEsp -= 256;
-          KeGdiFlushUserBatch();
-    }
-
-    *UserEsp = OldStack;
-    return CallbackStatus;
+    To->U.FnArea.ControlWord = From->U.FnArea.ControlWord;
+    To->U.FnArea.StatusWord = From->U.FnArea.StatusWord;
+    To->U.FnArea.TagWord = From->U.FnArea.TagWord;
+    To->U.FnArea.DataSelector = From->U.FnArea.DataSelector;
+    To->Cr0NpxState = From->Cr0NpxState;
 }
 
 NTSTATUS
@@ -222,11 +159,7 @@ KiUserModeCallout(
 
     _disable();
 
-    FxSaveArea->U.FnArea.ControlWord = OldFxSaveArea->U.FnArea.ControlWord;
-    FxSaveArea->U.FnArea.StatusWord = OldFxSaveArea->U.FnArea.StatusWord;
-    FxSaveArea->U.FnArea.TagWord = OldFxSaveArea->U.FnArea.TagWord;
-    FxSaveArea->U.FnArea.DataSelector = OldFxSaveArea->U.FnArea.DataSelector;
-    FxSaveArea->Cr0NpxState = OldFxSaveArea->Cr0NpxState;
+    KiCopyFloatingControl(FxSaveArea, OldFxSaveArea);
 
     CurrentThread->InitialStack = (PVOID)InitialStack;
 
@@ -256,94 +189,59 @@ KiUserModeCallout(
     KiServiceExit(CallbackTrapFrame, 0);
 }
 
-NTSTATUS
-NTAPI
-NtCallbackReturn(
-    _In_ PVOID Result,
-    _In_ ULONG ResultLength,
+VOID
+KiSetupUserCalloutFrame(
+    _Out_ KI_USER_CALLOUT_FRAME *UserCalloutFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG ApiNumber,
+    _In_ PVOID Buffer,
+    _In_ ULONG BufferLength)
+{
+    UNREFERENCED_PARAMETER(TrapFrame);
+
+    UserCalloutFrame->ReturnAddress = 0;
+    UserCalloutFrame->ApiNumber = ApiNumber;
+    UserCalloutFrame->Buffer = Buffer;
+    UserCalloutFrame->Length = BufferLength;
+}
+
+VOID
+KiLeaveCallout(
+    _Inout_ PKTHREAD Thread,
+    _In_ PKCALLOUT_FRAME CalloutFrame,
+    _Inout_ PKTRAP_FRAME CallerFrame,
     _In_ NTSTATUS CallbackStatus)
 {
-    PKTHREAD CurrentThread;
-    PKCALLOUT_FRAME CalloutFrame;
-    PKTRAP_FRAME CallbackTrapFrame, TrapFrame;
-    PFX_SAVE_AREA FxSaveArea, CbFxSaveArea;
+    PKTRAP_FRAME CallbackFrame = Thread->TrapFrame;
+    PKPCR Pcr = KeGetPcr();
     ULONG Size;
-    PKPCR Pcr;
-    PKTSS Tss;
 
-    CurrentThread = KeGetCurrentThread();
-    CalloutFrame = CurrentThread->CallbackStack;
-    if (CalloutFrame == NULL)
-    {
-        return STATUS_NO_CALLBACK_ACTIVE;
-    }
+    Pcr->NtTib.ExceptionList = CallbackFrame->ExceptionList;
 
-    CallbackTrapFrame = CurrentThread->TrapFrame;
+    /* The caller goes on with the floating-point control state the callback left */
+    KiCopyFloatingControl((PFX_SAVE_AREA)(CalloutFrame->InitialStack - sizeof(FX_SAVE_AREA)),
+                          (PFX_SAVE_AREA)((ULONG_PTR)Thread->InitialStack - sizeof(FX_SAVE_AREA)));
 
-    Pcr = KeGetPcr();
-    Pcr->NtTib.ExceptionList = CallbackTrapFrame->ExceptionList;
-
-    *((PVOID*)CalloutFrame->Result) = Result;
-    *((ULONG*)CalloutFrame->ResultLength) = ResultLength;
-
-    _disable();
-
-    CbFxSaveArea = (PVOID)((ULONG)CurrentThread->InitialStack - sizeof(FX_SAVE_AREA));
-    FxSaveArea = (PVOID)(CalloutFrame->InitialStack - sizeof(FX_SAVE_AREA));
-
-    FxSaveArea->U.FnArea.ControlWord = CbFxSaveArea->U.FnArea.ControlWord;
-    FxSaveArea->U.FnArea.StatusWord = CbFxSaveArea->U.FnArea.StatusWord;
-    FxSaveArea->U.FnArea.TagWord = CbFxSaveArea->U.FnArea.TagWord;
-    FxSaveArea->U.FnArea.DataSelector = CbFxSaveArea->U.FnArea.DataSelector;
-    FxSaveArea->Cr0NpxState = CbFxSaveArea->Cr0NpxState;
-
-    TrapFrame = (PKTRAP_FRAME)CalloutFrame->TrapFrame;
-
+    /* A callback that faulted in user mode hands back its own frame; only a V86 frame carries the V86 segments */
     if (CallbackStatus == STATUS_CALLBACK_POP_STACK)
     {
-        if (CallbackTrapFrame->EFlags & EFLAGS_V86_MASK)
-        {
-            Size = sizeof(KTRAP_FRAME) - FIELD_OFFSET(KTRAP_FRAME, SegFs);
-        }
-        else
-        {
-            Size = FIELD_OFFSET(KTRAP_FRAME, V86Es) - FIELD_OFFSET(KTRAP_FRAME, SegFs);
-        }
-
-        RtlCopyMemory(&TrapFrame->SegFs, &CallbackTrapFrame->SegFs, Size);
+        Size = (CallbackFrame->EFlags & EFLAGS_V86_MASK) ? sizeof(KTRAP_FRAME) - FIELD_OFFSET(KTRAP_FRAME, SegFs)
+                                                        : FIELD_OFFSET(KTRAP_FRAME, V86Es) - FIELD_OFFSET(KTRAP_FRAME, SegFs);
+        RtlCopyMemory(&CallerFrame->SegFs, &CallbackFrame->SegFs, Size);
     }
 
-    TrapFrame->Dr7 = 0;
-
-    /* Check if debugging was active */
-    if (CurrentThread->Header.ActiveDR7)
+    CallerFrame->Dr7 = 0;
+    if (Thread->Header.ActiveDR7)
     {
-        /* Copy debug registers data from it */
-        TrapFrame->Dr0 = CallbackTrapFrame->Dr0;
-        TrapFrame->Dr1 = CallbackTrapFrame->Dr1;
-        TrapFrame->Dr2 = CallbackTrapFrame->Dr2;
-        TrapFrame->Dr3 = CallbackTrapFrame->Dr3;
-        TrapFrame->Dr6 = CallbackTrapFrame->Dr6;
-        TrapFrame->Dr7 = CallbackTrapFrame->Dr7;
+        CallerFrame->Dr0 = CallbackFrame->Dr0;
+        CallerFrame->Dr1 = CallbackFrame->Dr1;
+        CallerFrame->Dr2 = CallbackFrame->Dr2;
+        CallerFrame->Dr3 = CallbackFrame->Dr3;
+        CallerFrame->Dr6 = CallbackFrame->Dr6;
+        CallerFrame->Dr7 = CallbackFrame->Dr7;
     }
 
-    Tss = Pcr->TSS;
-
-    if (TrapFrame->EFlags & EFLAGS_V86_MASK)
-    {
-        Tss->Esp0 = (ULONG_PTR)(TrapFrame + 1);
-    }
-    else
-    {
-        Tss->Esp0 = (ULONG_PTR)&TrapFrame->V86Es;
-    }
-
-    CurrentThread->InitialStack = (PVOID)CalloutFrame->InitialStack;
-
-    CurrentThread->TrapFrame = TrapFrame;
-    CurrentThread->CallbackStack = (PVOID)CalloutFrame->CallbackStack;
-
-    _enable();
-
-    KiCallbackReturn(&CalloutFrame->Edi, CallbackStatus);
+    Pcr->TSS->Esp0 = (CallerFrame->EFlags & EFLAGS_V86_MASK) ? (ULONG_PTR)(CallerFrame + 1) : (ULONG_PTR)&CallerFrame->V86Es;
+    Thread->InitialStack = (PVOID)CalloutFrame->InitialStack;
+    Thread->CallbackStack = (PVOID)CalloutFrame->CallbackStack;
 }

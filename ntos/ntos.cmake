@@ -390,6 +390,7 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/exp.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/ipi.c

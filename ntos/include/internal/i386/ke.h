@@ -178,6 +178,25 @@ KiI386PublishSystemCallStubs(
 /* int3 traps with EIP past the one-byte instruction */
 #define KI_BREAKPOINT_PC_ADJUST 1
 
+/* KiUserCallbackDispatcher keeps its SEH registration in the last two words */
+typedef struct _KI_USER_CALLOUT_FRAME32
+{
+    ULONG ReturnAddress;
+    ULONG ApiNumber;
+    PVOID Buffer;
+    ULONG Length;
+    ULONG ExceptionRegistration[2];
+} KI_USER_CALLOUT_FRAME32;
+C_ASSERT(sizeof(KI_USER_CALLOUT_FRAME32) == 24);
+
+#define KI_USER_CALLOUT_FRAME KI_USER_CALLOUT_FRAME32
+#define KI_CALLOUT_RESULT(Frame) ((Frame)->Result)
+#define KI_CALLOUT_RESULT_LENGTH(Frame) ((Frame)->ResultLength)
+#define KI_CALLOUT_RETURN_STACK(Frame) (&(Frame)->Edi)
+#define KiArchCalloutSaveUserState(Thread) ((ULONG_PTR)((PTEB)(Thread)->Teb)->NtTib.ExceptionList)
+#define KiArchCalloutRestoreUserState(Thread, State) \
+    ((VOID)(((PTEB)(Thread)->Teb)->NtTib.ExceptionList = (PEXCEPTION_REGISTRATION_RECORD)(State)))
+
 ULONG
 KiI386ExceptionContextFlags(
     _In_ KPROCESSOR_MODE PreviousMode);

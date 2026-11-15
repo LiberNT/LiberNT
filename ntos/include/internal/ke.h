@@ -61,6 +61,21 @@
 #define KI_CALLOUT_STACK_RESERVE 0
 #endif
 
+#ifndef KI_USER_CALLOUT_FRAME
+#define KI_USER_CALLOUT_FRAME UCALLOUT_FRAME
+#endif
+
+#ifndef KI_CALLOUT_RESULT
+#define KI_CALLOUT_RESULT(Frame) ((Frame)->OutputBuffer)
+#define KI_CALLOUT_RESULT_LENGTH(Frame) ((Frame)->OutputLength)
+#define KI_CALLOUT_RETURN_STACK(Frame) (Frame)
+#endif
+
+#ifndef KiArchCalloutSaveUserState
+#define KiArchCalloutSaveUserState(Thread) ((VOID)(Thread), (ULONG_PTR)0)
+#define KiArchCalloutRestoreUserState(Thread, State) ((VOID)(Thread), (VOID)(State))
+#endif
+
 #ifndef KiArchLastChanceKernelDebugger
 #define KiArchLastChanceKernelDebugger(ExceptionRecord, Context) ((VOID)(ExceptionRecord), (VOID)(Context), FALSE)
 #endif
@@ -542,6 +557,21 @@ KiDispatchExceptionToUser(
 
 VOID
 KiPrepareUserDebugData(VOID);
+
+VOID
+KiSetupUserCalloutFrame(
+    _Out_ KI_USER_CALLOUT_FRAME *UserCalloutFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG ApiNumber,
+    _In_ PVOID Buffer,
+    _In_ ULONG BufferLength);
+
+VOID
+KiLeaveCallout(
+    _Inout_ PKTHREAD Thread,
+    _In_ PKCALLOUT_FRAME CalloutFrame,
+    _Inout_ PKTRAP_FRAME CallerFrame,
+    _In_ NTSTATUS CallbackStatus);
 
 DECLSPEC_NORETURN
 VOID

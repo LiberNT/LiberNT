@@ -621,18 +621,3 @@ KiAmd64PrepareUserBreakpoint(
     _Inout_ PEXCEPTION_RECORD ExceptionRecord,
     _Inout_ PKTRAP_FRAME TrapFrame);
 #define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiAmd64PrepareUserBreakpoint(ExceptionRecord, TrapFrame)
-
-VOID
-KiSetupUserCalloutFrame(
-    _Out_ PUCALLOUT_FRAME UserCalloutFrame,
-    _Inout_ PKTRAP_FRAME TrapFrame,
-    _In_ ULONG ApiNumber,
-    _In_ PVOID Buffer,
-    _In_ ULONG BufferLength);
-
-VOID
-KiLeaveCallout(
-    _Inout_ PKTHREAD Thread,
-    _In_ PKCALLOUT_FRAME CalloutFrame,
-    _Inout_ PKTRAP_FRAME CallerFrame,
-    _In_ NTSTATUS CallbackStatus);

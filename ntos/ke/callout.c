@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Kernel
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Calls from kernel mode into user mode and their return, shared by the 64-bit architectures
+ * PURPOSE:     Calls from kernel mode into user mode and their return, shared by the architectures
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -10,7 +10,7 @@
 #define KI_GDI_BATCH_FLUSH_SPACE 256
 
 static
-PUCALLOUT_FRAME
+KI_USER_CALLOUT_FRAME *
 KiPushCalloutFrame(
     _Inout_ PKTHREAD Thread,
     _In_ ULONG_PTR UserStack,
@@ -18,16 +18,16 @@ KiPushCalloutFrame(
     _In_reads_bytes_(Length) PVOID Arguments,
     _In_ ULONG Length)
 {
-    PUCALLOUT_FRAME Frame;
+    KI_USER_CALLOUT_FRAME *Frame;
     ULONG_PTR Page;
 
-    Frame = (PUCALLOUT_FRAME)ALIGN_DOWN_POINTER_BY(UserStack - KI_CALLOUT_STACK_RESERVE - Length - sizeof(UCALLOUT_FRAME), 16);
+    Frame = (KI_USER_CALLOUT_FRAME *)ALIGN_DOWN_POINTER_BY(UserStack - KI_CALLOUT_STACK_RESERVE - Length - sizeof(*Frame), 16);
 
     /* The user stack grows only through its guard page, so it is touched from the top down */
     for (Page = (ULONG_PTR)PAGE_ALIGN(UserStack - 1); Page > (ULONG_PTR)Frame; Page -= PAGE_SIZE)
         ProbeForWrite((PVOID)Page, sizeof(UCHAR), sizeof(UCHAR));
 
-    ProbeForWrite(Frame, sizeof(UCALLOUT_FRAME) + Length, sizeof(PVOID));
+    ProbeForWrite(Frame, sizeof(*Frame) + Length, sizeof(PVOID));
     RtlCopyMemory(Frame + 1, Arguments, Length);
 
     KiSetupUserCalloutFrame(Frame, Thread->TrapFrame, RoutineIndex, Frame + 1, Length);
@@ -46,6 +46,7 @@ KeUserModeCallback(
     PKTHREAD Thread = KeGetCurrentThread();
     PULONG_PTR UserStack;
     ULONG_PTR SavedStack;
+    ULONG_PTR UserState;
     NTSTATUS Status;
     ULONG BatchCount = 0;
 
@@ -62,6 +63,7 @@ KeUserModeCallback(
     _SEH2_TRY
     {
         *UserStack = (ULONG_PTR)KiPushCalloutFrame(Thread, SavedStack, RoutineIndex, Argument, ArgumentLength);
+        UserState = KiArchCalloutSaveUserState(Thread);
 
         Thread->CallbackNestingLevel++;
         Status = KiCallUserModeWithStack(NULL, Result, ResultLength);
@@ -70,6 +72,8 @@ KeUserModeCallback(
         /* A callback that faulted in user mode leaves its own stack position behind */
         if (Status == STATUS_CALLBACK_POP_STACK)
             SavedStack = *UserStack;
+        else
+            KiArchCalloutRestoreUserState(Thread, UserState);
 
         BatchCount = ((PTEB)Thread->Teb)->GdiBatchCount;
     }
@@ -105,8 +109,8 @@ NtCallbackReturn(
     if (CalloutFrame == NULL)
         return STATUS_NO_CALLBACK_ACTIVE;
 
-    *(PVOID *)CalloutFrame->OutputBuffer = Result;
-    *(PULONG)CalloutFrame->OutputLength = ResultLength;
+    *(PVOID *)KI_CALLOUT_RESULT(CalloutFrame) = Result;
+    *(PULONG)KI_CALLOUT_RESULT_LENGTH(CalloutFrame) = ResultLength;
 
     CallerFrame = (PKTRAP_FRAME)CalloutFrame->TrapFrame;
 
@@ -116,5 +120,5 @@ NtCallbackReturn(
     Thread->TrapFrame = CallerFrame;
     _enable();
 
-    KiCallbackReturn(CalloutFrame, CallbackStatus);
+    KiCallbackReturn(KI_CALLOUT_RETURN_STACK(CalloutFrame), CallbackStatus);
 }
