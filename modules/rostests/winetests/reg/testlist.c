@@ -9,6 +9,7 @@ extern void func_delete(void);
 extern void func_export(void);
 extern void func_import(void);
 extern void func_query(void);
+extern void func_queryfind(void);
 
 const struct test winetest_testlist[] =
 {
@@ -18,5 +19,6 @@ const struct test winetest_testlist[] =
     { "export", func_export },
     { "import", func_import },
     { "query", func_query },
+    { "queryfind", func_queryfind },
     { 0, 0 }
 };

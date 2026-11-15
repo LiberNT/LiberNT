@@ -110,7 +110,7 @@ For help on a specific operation, type:\n\
     STRING_DELETE_SUBKEY, "Are you sure you want to delete the registry key '%1'?"
     STRING_INVALID_STRING, "reg: The option [/d] must be followed by a valid string\n"
     STRING_VALUEALL_FAILED, "reg: Unable to delete all registry values in '%1'\n"
-    STRING_MATCHES_FOUND, "Search complete. Number of matches found: %1!d!\n"
+    STRING_MATCHES_FOUND, "End of search: %1!d! match(es) found.\n"
     STRING_INVALID_SYNTAX, "reg: Invalid syntax. "
     STRING_INVALID_OPTION, "reg: Invalid option [%1]. "
     STRING_REG_HELP, "Type ""REG /?"" for help.\n"

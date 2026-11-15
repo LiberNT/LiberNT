@@ -32,6 +32,8 @@ static const WCHAR *reg_type_to_wchar(DWORD type)
     return NULL;
 }
 
+static const WCHAR *multi_separator = L"\\0";
+
 static WCHAR *reg_data_to_wchar(DWORD type, const BYTE *src, DWORD size_bytes)
 {
     WCHAR *buffer = NULL;
@@ -93,7 +95,7 @@ static WCHAR *reg_data_to_wchar(DWORD type, const BYTE *src, DWORD size_bytes)
             const int two_wchars = 2 * sizeof(WCHAR);
             DWORD tmp_size;
             const WCHAR *tmp = (const WCHAR *)src;
-            int len, destindex;
+            int len, destindex, sep_len = lstrlenW(multi_separator);
 
             if (size_bytes <= two_wchars)
             {
@@ -103,17 +105,17 @@ static WCHAR *reg_data_to_wchar(DWORD type, const BYTE *src, DWORD size_bytes)
             }
 
             tmp_size = size_bytes - two_wchars; /* exclude both null terminators */
-            buffer = malloc(tmp_size * 2 + sizeof(WCHAR));
             len = tmp_size / sizeof(WCHAR);
+            buffer = malloc((len * (sep_len + 1) + 1) * sizeof(WCHAR));
 
-            for (i = 0, destindex = 0; i < len; i++, destindex++)
+            for (i = 0, destindex = 0; i < len; i++)
             {
                 if (tmp[i])
-                    buffer[destindex] = tmp[i];
+                    buffer[destindex++] = tmp[i];
                 else
                 {
-                    buffer[destindex++] = '\\';
-                    buffer[destindex] = '0';
+                    memcpy(&buffer[destindex], multi_separator, sep_len * sizeof(WCHAR));
+                    destindex += sep_len;
                 }
             }
             buffer[destindex] = 0;
@@ -323,6 +325,217 @@ static int query_all(HKEY hkey, WCHAR *path, BOOL recurse, BOOL recursing)
     return 0;
 }
 
+struct find_spec
+{
+    const WCHAR *pattern;
+    const WCHAR *value_name;
+    BOOL keys, names, data;
+    BOOL match_case, exact;
+    BOOL have_type;
+    DWORD type;
+    unsigned int matches;
+    BOOL after_key_line;
+};
+
+static BOOL find_type(const WCHAR *name, DWORD *type)
+{
+    unsigned int i;
+
+    for (i = 0; name && i < ARRAY_SIZE(type_rels); i++)
+    {
+        if (!lstrcmpiW(type_rels[i].name, name))
+        {
+            *type = type_rels[i].type;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static BOOL find_text(const struct find_spec *spec, const WCHAR *text)
+{
+    size_t pattern_len, text_len, i;
+
+    /* TODO: only the default pattern * is treated as a wildcard; other wildcard forms are matched literally */
+    if (!lstrcmpW(spec->pattern, L"*"))
+        return TRUE;
+
+    if (spec->exact)
+        return spec->match_case ? !wcscmp(text, spec->pattern) : !wcsicmp(text, spec->pattern);
+
+    if (spec->match_case)
+        return wcsstr(text, spec->pattern) != NULL;
+
+    pattern_len = wcslen(spec->pattern);
+    text_len = wcslen(text);
+    for (i = 0; i + pattern_len <= text_len; i++)
+    {
+        if (!wcsnicmp(text + i, spec->pattern, pattern_len))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL find_data(const struct find_spec *spec, DWORD type, const BYTE *data, DWORD size)
+{
+    WCHAR number[16], *text, *end;
+    DWORD value, i;
+    BOOL found;
+
+    if (type == REG_DWORD && size == sizeof(DWORD))
+    {
+        value = *(const DWORD *)data;
+        if (spec->exact)
+        {
+            if (!lstrcmpW(spec->pattern, L"*"))
+                return TRUE;
+            return wcstoul(spec->pattern, &end, 0) == value && !*end && end != spec->pattern;
+        }
+        swprintf(number, ARRAY_SIZE(number), L"%u", value);
+        return find_text(spec, number);
+    }
+
+    if (type == REG_SZ || type == REG_EXPAND_SZ || type == REG_MULTI_SZ)
+    {
+        /* FIXME: an exact match on a multi-string compares the whole displayed list; Windows 11 is only measured not to match a single element */
+        text = reg_data_to_wchar(type, data, size);
+    }
+    else
+    {
+        /* FIXME: an exact match on a QWORD or binary value compares its hexadecimal bytes; Windows 11 is only measured for substrings */
+        text = malloc((size * 2 + 1) * sizeof(WCHAR));
+        if (!text)
+            return FALSE;
+        for (i = 0; i < size; i++)
+            swprintf(text + i * 2, 3, L"%02X", data[i]);
+        text[size * 2] = 0;
+    }
+
+    found = text && find_text(spec, text);
+    free(text);
+    return found;
+}
+
+static void find_key(HKEY hkey, WCHAR *path, BOOL recurse, struct find_spec *spec)
+{
+    DWORD max_value_len = 256, value_len, max_data_bytes = 2048, data_size;
+    DWORD subkey_len, i, type, path_len;
+    WCHAR *value_name, *subkey_name, *subkey_path, *grown_name;
+    BOOL printed = FALSE, match;
+    BYTE *data, *grown_data;
+    LONG rc;
+    HKEY subkey;
+
+    value_name = malloc(max_value_len * sizeof(WCHAR));
+    data = malloc(max_data_bytes);
+
+    i = 0;
+    while (value_name && data && (spec->names || spec->data))
+    {
+        value_len = max_value_len;
+        data_size = max_data_bytes;
+        rc = RegEnumValueW(hkey, i, value_name, &value_len, NULL, &type, data, &data_size);
+        if (rc == ERROR_MORE_DATA)
+        {
+            if (data_size > max_data_bytes)
+            {
+                if (!(grown_data = realloc(data, data_size)))
+                    break;
+                data = grown_data;
+                max_data_bytes = data_size;
+            }
+            else
+            {
+                if (!(grown_name = realloc(value_name, max_value_len * 2 * sizeof(WCHAR))))
+                    break;
+                value_name = grown_name;
+                max_value_len *= 2;
+            }
+            continue;
+        }
+        if (rc != ERROR_SUCCESS)
+            break;
+        i++;
+
+        if ((spec->have_type && type != spec->type) ||
+            (spec->value_name && wcsicmp(value_name, spec->value_name)))
+        {
+            continue;
+        }
+
+        match = (spec->names && find_text(spec, value_name)) || (spec->data && find_data(spec, type, data, data_size));
+        if (!match)
+            continue;
+
+        if (!printed)
+        {
+            if (spec->after_key_line)
+                output_string(newlineW);
+            output_string(L"%1\n", path);
+            printed = TRUE;
+        }
+        output_value(value_name, type, data, data_size);
+        spec->matches++;
+    }
+
+    free(data);
+    free(value_name);
+
+    if (printed)
+    {
+        output_string(newlineW);
+        spec->after_key_line = FALSE;
+    }
+
+    subkey_name = malloc(MAX_SUBKEY_LEN * sizeof(WCHAR));
+    path_len = lstrlenW(path);
+
+    for (i = 0; subkey_name; i++)
+    {
+        subkey_len = MAX_SUBKEY_LEN;
+        rc = RegEnumKeyExW(hkey, i, subkey_name, &subkey_len, NULL, NULL, NULL, NULL);
+        if (rc != ERROR_SUCCESS)
+            break;
+
+        subkey_path = build_subkey_path(path, path_len, subkey_name, subkey_len);
+        if (!subkey_path)
+            break;
+        if (spec->keys && !spec->have_type && find_text(spec, subkey_name))
+        {
+            output_string(L"%1\n", subkey_path);
+            spec->after_key_line = TRUE;
+            spec->matches++;
+        }
+
+        if (recurse && !RegOpenKeyExW(hkey, subkey_name, 0, KEY_READ|sam, &subkey))
+        {
+            find_key(subkey, subkey_path, recurse, spec);
+            RegCloseKey(subkey);
+        }
+        free(subkey_path);
+    }
+
+    free(subkey_name);
+}
+
+static int run_find(HKEY root, WCHAR *path, WCHAR *key_name, BOOL recurse, struct find_spec *spec)
+{
+    HKEY hkey;
+
+    if (RegOpenKeyExW(root, path, 0, KEY_READ|sam, &hkey))
+    {
+        output_message(STRING_KEY_NONEXIST);
+        return 1;
+    }
+
+    output_string(newlineW);
+    find_key(hkey, key_name, recurse, spec);
+    RegCloseKey(hkey);
+
+    output_message(STRING_MATCHES_FOUND, spec->matches);
+    return spec->matches ? 0 : 1;
+}
+
 static int run_query(HKEY root, WCHAR *path, WCHAR *key_name, WCHAR *value_name,
                      BOOL value_empty, BOOL recurse)
 {
@@ -355,8 +568,12 @@ int reg_query(int argc, WCHAR *argvW[])
 {
     HKEY root;
     WCHAR *path, *key_name, *value_name = NULL;
-    BOOL value_empty = FALSE, recurse = FALSE;
+    BOOL value_empty = FALSE, recurse = FALSE, value_scope = FALSE, find = FALSE;
+    BOOL scope_keys = FALSE, scope_data = FALSE, find_switches = FALSE;
+    struct find_spec spec;
     int i;
+
+    memset(&spec, 0, sizeof(spec));
 
     if (!parse_registry_key(argvW[2], &root, &path))
         return 1;
@@ -388,14 +605,53 @@ int reg_query(int argc, WCHAR *argvW[])
             sam |= KEY_WOW64_64KEY;
             continue;
         }
+        else if (!lstrcmpiW(str, L"se"))
+        {
+            if (!argvW[i + 1] || !argvW[i + 1][0]) goto invalid;
+            multi_separator = argvW[++i];
+            continue;
+        }
         else if (!str[0] || str[1])
             goto invalid;
 
         switch (towlower(*str))
         {
         case 'v':
-            if (value_name || !(value_name = argvW[++i]))
+            if (value_name || value_scope)
                 goto invalid;
+            if (argvW[i + 1] && argvW[i + 1][0] != '/' && argvW[i + 1][0] != '-')
+                value_name = argvW[++i];
+            else
+                value_scope = TRUE;
+            break;
+        case 'f':
+            if (find) goto invalid;
+            find = TRUE;
+            if (argvW[i + 1] && argvW[i + 1][0] != '/' && argvW[i + 1][0] != '-')
+                spec.pattern = argvW[++i];
+            else
+                spec.pattern = L"*";
+            break;
+        case 'k':
+            if (scope_keys) goto invalid;
+            scope_keys = find_switches = TRUE;
+            break;
+        case 'd':
+            if (scope_data) goto invalid;
+            scope_data = find_switches = TRUE;
+            break;
+        case 'c':
+            if (spec.match_case) goto invalid;
+            spec.match_case = find_switches = TRUE;
+            break;
+        case 'e':
+            if (spec.exact) goto invalid;
+            spec.exact = find_switches = TRUE;
+            break;
+        case 't':
+            if (spec.have_type || !find_type(argvW[i + 1], &spec.type)) goto invalid;
+            spec.have_type = find_switches = TRUE;
+            i++;
             break;
         case 's':
             if (recurse) goto invalid;
@@ -409,10 +665,28 @@ int reg_query(int argc, WCHAR *argvW[])
     if (value_name && value_empty)
         goto invalid;
 
+    /* TODO: /t, /k, /d, /c and /e are only implemented with /f; on their own they are refused */
+    if ((find_switches || value_scope) && !find)
+        goto invalid;
+
     if (sam == (KEY_WOW64_32KEY|KEY_WOW64_64KEY))
         goto invalid;
 
     key_name = get_long_key(root, path);
+
+    if (find)
+    {
+        spec.value_name = value_empty ? L"" : value_name;
+        spec.keys = scope_keys;
+        spec.data = scope_data;
+        spec.names = value_scope;
+        if (!scope_keys && !scope_data && !value_scope)
+        {
+            spec.keys = !spec.value_name;
+            spec.names = spec.data = TRUE;
+        }
+        return run_find(root, path, key_name, recurse, &spec);
+    }
 
     return run_query(root, path, key_name, value_name, value_empty, recurse);
 
