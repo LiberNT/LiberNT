@@ -15,6 +15,103 @@
 
 /* FUNCTIONS ******************************************************************/
 
+static
+NTSTATUS
+PortAcquireLuEntry(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ ULONG Bus,
+    _In_ ULONG Target,
+    _In_ ULONG Lun,
+    _Out_ PPORT_LU_ENTRY *LuEntry)
+{
+    ULONG Size = FdoExtension->Miniport.PortConfig.SpecificLuExtensionSize;
+    PPORT_LU_ENTRY Entry;
+    LONG Previous;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    *LuEntry = NULL;
+    if (Size == 0)
+        return STATUS_SUCCESS;
+
+    for (Entry = ReadPointerAcquire((PVOID volatile *)&FdoExtension->LuEntries);
+         Entry != NULL;
+         Entry = Entry->Next)
+    {
+        if (Entry->Bus == Bus && Entry->Target == Target && Entry->Lun == Lun)
+        {
+            ASSERT(ReadAcquire(&Entry->Present) == 0);
+            ASSERT(Entry->ExtensionSize == Size);
+            RtlZeroMemory(Entry->Extension, Entry->ExtensionSize);
+            Previous = InterlockedExchange(&Entry->Present, 1);
+            ASSERT(Previous == 0);
+            *LuEntry = Entry;
+            return STATUS_SUCCESS;
+        }
+    }
+
+    Entry = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Entry), TAG_LU_EXTENSION);
+    if (Entry == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Entry->Extension = ExAllocatePoolZero(NonPagedPoolNx, Size, TAG_LU_EXTENSION);
+    if (Entry->Extension == NULL)
+    {
+        ExFreePoolWithTag(Entry, TAG_LU_EXTENSION);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    Entry->Bus = Bus;
+    Entry->Target = Target;
+    Entry->Lun = Lun;
+    Entry->ExtensionSize = Size;
+    Entry->Present = 1;
+    Entry->Next = FdoExtension->LuEntries;
+    InterlockedExchangePointer((PVOID volatile *)&FdoExtension->LuEntries, Entry);
+    *LuEntry = Entry;
+    return STATUS_SUCCESS;
+}
+
+
+PVOID
+PortFindLuExtension(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ ULONG Bus,
+    _In_ ULONG Target,
+    _In_ ULONG Lun)
+{
+    PPORT_LU_ENTRY Entry;
+
+    for (Entry = ReadPointerAcquire((PVOID volatile *)&FdoExtension->LuEntries);
+         Entry != NULL;
+         Entry = Entry->Next)
+    {
+        if (Entry->Bus == Bus && Entry->Target == Target && Entry->Lun == Lun)
+            return ReadAcquire(&Entry->Present) != 0 ? Entry->Extension : NULL;
+    }
+    return NULL;
+}
+
+
+VOID
+PortFreeLuEntries(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension)
+{
+    PPORT_LU_ENTRY Entry, Next;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(FdoExtension->PdoCount == 0);
+
+    Entry = InterlockedExchangePointer((PVOID volatile *)&FdoExtension->LuEntries, NULL);
+    while (Entry != NULL)
+    {
+        Next = Entry->Next;
+        ASSERT(ReadAcquire(&Entry->Present) == 0);
+        ExFreePoolWithTag(Entry->Extension, TAG_LU_EXTENSION);
+        ExFreePoolWithTag(Entry, TAG_LU_EXTENSION);
+        Entry = Next;
+    }
+}
+
+
 NTSTATUS
 PortCreatePdo(
     _In_ PFDO_DEVICE_EXTENSION FdoDeviceExtension,
@@ -64,6 +161,13 @@ PortCreatePdo(
     DeviceExtension->Lun = Lun;
     DeviceExtension->QueueDepth = 1;
 
+    Status = PortAcquireLuEntry(FdoDeviceExtension, Bus, Target, Lun, &DeviceExtension->LuEntry);
+    if (!NT_SUCCESS(Status))
+    {
+        IoDeleteDevice(Pdo);
+        return Status;
+    }
+
     /* Add the PDO to the PDO list*/
     KeAcquireInStackQueuedSpinLock(&FdoDeviceExtension->PdoListLock,
                                    &LockHandle);
@@ -107,6 +211,15 @@ PortDeletePdo(
 
     PortFreeDumpContext(PdoExtension->DumpContext);
     PdoExtension->DumpContext = NULL;
+
+    if (PdoExtension->LuEntry != NULL)
+    {
+        LONG Previous = InterlockedExchange(&PdoExtension->LuEntry->Present, 0);
+
+        ASSERT(Previous == 1);
+        UNREFERENCED_PARAMETER(Previous);
+        PdoExtension->LuEntry = NULL;
+    }
 
     // FIXME: More uninitialization
 

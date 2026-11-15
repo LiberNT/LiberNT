@@ -2796,7 +2796,7 @@ StorPortGetDeviceBase(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 PVOID
@@ -2807,9 +2807,16 @@ StorPortGetLogicalUnit(
     _In_ UCHAR TargetId,
     _In_ UCHAR Lun)
 {
-    DPRINT1("StorPortGetLogicalUnit()\n");
-    UNIMPLEMENTED;
-    return NULL;
+    PMINIPORT_DEVICE_EXTENSION MiniportExtension;
+
+    DPRINT("StorPortGetLogicalUnit(%p %u %u %u)\n", HwDeviceExtension, PathId, TargetId, Lun);
+
+    if (HwDeviceExtension == NULL)
+        return NULL;
+    MiniportExtension = CONTAINING_RECORD(HwDeviceExtension, MINIPORT_DEVICE_EXTENSION, HwDeviceExtension);
+    ASSERT(MiniportExtension->Miniport != NULL);
+    ASSERT(MiniportExtension->Miniport->DeviceExtension != NULL);
+    return PortFindLuExtension(MiniportExtension->Miniport->DeviceExtension, PathId, TargetId, Lun);
 }
 
 

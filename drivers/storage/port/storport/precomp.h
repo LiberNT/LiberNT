@@ -42,6 +42,7 @@
 #define TAG_DUMP_CONTEXT    'CptS'
 #define TAG_DMA_BUFFER      'DBtS'
 #define TAG_RESET_REQUEST   'RRtS'
+#define TAG_LU_EXTENSION    'ULtS'
 
 typedef enum
 {
@@ -114,6 +115,20 @@ typedef struct _PORT_USAGE_COUNTS
     volatile LONG HibernationFiles;
     volatile LONG DumpFiles;
 } PORT_USAGE_COUNTS, *PPORT_USAGE_COUNTS;
+
+/* Per-logical-unit miniport storage. Entries are published once and kept
+ * until the adapter is removed, so StorPortGetLogicalUnit can walk them at
+ * DIRQL without a lock; Present says whether the unit currently exists. */
+typedef struct _PORT_LU_ENTRY
+{
+    struct _PORT_LU_ENTRY *Next;
+    ULONG Bus;
+    ULONG Target;
+    ULONG Lun;
+    volatile LONG Present;
+    ULONG ExtensionSize;
+    PVOID Extension;
+} PORT_LU_ENTRY, *PPORT_LU_ENTRY;
 
 typedef struct _FDO_DEVICE_EXTENSION
 {
@@ -199,6 +214,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     KSPIN_LOCK PdoListLock;
     LIST_ENTRY PdoListHead;
     ULONG PdoCount;
+    PPORT_LU_ENTRY volatile LuEntries;
     BOOLEAN BusScanned;
     volatile BOOLEAN BusRescanPending;
     volatile BOOLEAN DumpMode;
@@ -283,6 +299,7 @@ typedef struct _PDO_DEVICE_EXTENSION
     ULONG QueueDepth;
     BOOLEAN DeviceClaimed;
     PINQUIRYDATA InquiryBuffer;
+    PPORT_LU_ENTRY LuEntry;
     CHAR SerialNumber[252]; /* Cached SCSI VPD page 0x80, NUL terminated. */
     CHAR ModelNumber[STOR_MODEL_NUMBER_LENGTH + 1];
     CHAR FirmwareRevision[STOR_FIRMWARE_REVISION_LENGTH + 1];
@@ -671,6 +688,17 @@ PortCreatePdo(
 NTSTATUS
 PortDeletePdo(
     _In_ PPDO_DEVICE_EXTENSION PdoExtension);
+
+VOID
+PortFreeLuEntries(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension);
+
+PVOID
+PortFindLuExtension(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ ULONG Bus,
+    _In_ ULONG Target,
+    _In_ ULONG Lun);
 
 NTSTATUS
 PortSubmitSrb(

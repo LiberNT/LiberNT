@@ -2395,6 +2395,7 @@ PortFdoRemoveDevice(
     ASSERT(ExQueryDepthSList(&DeviceExtension->CompleteRequestsPending) == 0);
     ExFreePoolWithTag(DeviceExtension->CompleteRequestsPool, TAG_RESET_REQUEST);
     IoFreeWorkItem(DeviceExtension->ResetWorkItem);
+    PortFreeLuEntries(DeviceExtension);
     IoDeleteDevice(DeviceExtension->Device);
     return Status;
 }
