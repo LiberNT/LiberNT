@@ -36,8 +36,12 @@ add_dependencies(glthunk_host psdk xdk)
 set(_glthunk_mesa "${CMAKE_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-source/cmake-build")
 set(_glthunk_sdk "${CMAKE_BINARY_DIR}/dll/opengl/mesa_gallium/mesa-source/reactos-sdk-lib")
 set(_glthunk_mesa_libraries)
-foreach(_library mesa_assert_report gallium nir compiler mesa_util mesa_util_simd blake3 mesa_util_c11 glsl glcpp
-        mesa vtn wsgdi glapi_bridge glapi galliumvl_stub xmlconfig softpipe zink vulkan_util mesa_assert_report)
+set(_glthunk_mesa_assert)
+if(MESA_GALLIUM_ASSERTIONS)
+    set(_glthunk_mesa_assert mesa_assert_report)
+endif()
+foreach(_library ${_glthunk_mesa_assert} gallium nir compiler mesa_util mesa_util_simd blake3 mesa_util_c11 glsl glcpp
+        mesa vtn wsgdi glapi_bridge glapi galliumvl_stub xmlconfig softpipe zink vulkan_util ${_glthunk_mesa_assert})
     list(APPEND _glthunk_mesa_libraries "${_glthunk_mesa}/lib${_library}.a")
 endforeach()
 
