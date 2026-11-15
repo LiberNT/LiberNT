@@ -594,7 +594,13 @@ NotifyUserProcessForShutdown(PCSR_PROCESS CsrProcess,
     }
 #endif
 
-    /* Kill the process unless we abort shutdown */
+    if (QueryResult == QUERY_RESULT_ABORT &&
+        WaitForSingleObject(CsrProcess->ProcessHandle, ShutdownSettings->WaitToKillAppTimeout) == WAIT_OBJECT_0)
+    {
+        QueryResult = QUERY_RESULT_CONTINUE;
+    }
+
+    /* FIXME: a process that refuses the end of the session and stays alive cancels the shutdown; Windows 11 asks the user whether to end it */
     Result = (QueryResult == QUERY_RESULT_ABORT) ? CsrShutdownCancelled : CsrShutdownCsrProcess;
 
 Cleanup:
