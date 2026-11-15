@@ -937,6 +937,44 @@ static VOID CheckOccupiedMemory(DEVINST Bus)
     ok(ChildStarted(Bus, 1000), "The child did not start again\n");
 }
 
+/* A device starts on the setting its boot configuration names when its requirements allow it, and on another when that one is held */
+static VOID CheckBootSetting(DEVINST Bus)
+{
+    WCHAR VetoName[MAX_PATH];
+    PNP_VETO_TYPE VetoType;
+    DEVINST Child;
+    DWORD Value = 0;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child\n");
+        return;
+    }
+    SetRequest(L"BootSetting", 1);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start with a boot configuration\n");
+    ok(ReadValue(L"StartBootPage", &Value) && Value == 0x21 + 1,
+       "The child started on page %lu of its range, not on its boot page\n", Value);
+
+    SetRequest(L"BootSettingTaken", 1);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start beside a held boot page\n");
+    Value = 0;
+    ok(ReadValue(L"StartBootPage", &Value) && Value == 0x100,
+       "The child started on page %lu of its range, not on the highest free one\n", Value);
+
+    SetRequest(L"BootSettingTaken", 0);
+    SetRequest(L"BootSetting", 0);
+    ok_once(CM_Query_And_Remove_SubTreeW(Child, &VetoType, VetoName, RTL_NUMBER_OF(VetoName), CM_REMOVE_UI_NOT_OK),
+            (ULONG)CR_SUCCESS);
+    ok_once(CM_Setup_DevNode(Child, CM_SETUP_DEVNODE_READY), (ULONG)CR_SUCCESS);
+    ok(ChildStarted(Bus, 1000), "The child did not start again\n");
+}
+
 /* The bus driver asks for its child's eject at the next enumeration; the wait only bounds a lost eject */
 static VOID CheckEject(DEVINST Bus)
 {
@@ -1199,6 +1237,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckLargeMemory(Device->DevInst);
         CheckNoRequirements(Device->DevInst);
         CheckOccupiedMemory(Device->DevInst);
+        CheckBootSetting(Device->DevInst);
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);

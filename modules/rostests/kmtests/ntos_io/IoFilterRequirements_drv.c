@@ -17,6 +17,9 @@
 #define TEST_LARGE_LENGTH 0x200000000ULL
 #define TEST_LARGE_MINIMUM 0x1000000000ULL
 #define TEST_OCCUPIED_BASE 0x6F0000000ULL
+#define TEST_BOOT_WINDOW 0x6E0000000ULL
+#define TEST_BOOT_WINDOW_LENGTH 0x100000
+#define TEST_BOOT_PAGE 0x21
 #define TEST_CONNECTION_ID_LOW 0x5A7E
 #define TEST_CONNECTION_ID_HIGH 0x2
 
@@ -128,15 +131,17 @@ static PWSTR CopyString(const WCHAR *Source, SIZE_T Size)
 }
 
 static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN WithDma, BOOLEAN WithLargeMemory,
-                                                       BOOLEAN WithOccupied)
+                                                       BOOLEAN WithOccupied, BOOLEAN WithBoot)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Dma;
     PIO_RESOURCE_DESCRIPTOR Connection;
     PIO_RESOURCE_DESCRIPTOR Large;
     PIO_RESOURCE_DESCRIPTOR Occupied;
+    PIO_RESOURCE_DESCRIPTOR BootRange;
     ULONG Size = sizeof(IO_RESOURCE_REQUIREMENTS_LIST) +
-                 (Count + (WithDma ? 2 : 0) + (WithLargeMemory ? 1 : 0) + (WithOccupied ? 1 : 0) - 1) *
+                 (Count + (WithDma ? 2 : 0) + (WithLargeMemory ? 1 : 0) + (WithOccupied ? 1 : 0) +
+                  (WithBoot ? 1 : 0) - 1) *
                      sizeof(IO_RESOURCE_DESCRIPTOR);
     ULONG Index;
 
@@ -199,11 +204,64 @@ static PIO_RESOURCE_REQUIREMENTS_LIST BuildRequirements(ULONG Count, BOOLEAN Wit
         Occupied->u.Memory.MaximumAddress.QuadPart = TEST_OCCUPIED_BASE + PAGE_SIZE - 1;
         List->List[0].Count++;
     }
+    if (WithBoot)
+    {
+        BootRange = &List->List[0].Descriptors[List->List[0].Count];
+        BootRange->Type = CmResourceTypeMemory;
+        BootRange->ShareDisposition = CmResourceShareDeviceExclusive;
+        BootRange->Flags = CM_RESOURCE_MEMORY_READ_WRITE;
+        BootRange->u.Memory.Length = PAGE_SIZE;
+        BootRange->u.Memory.Alignment = PAGE_SIZE;
+        BootRange->u.Memory.MinimumAddress.QuadPart = TEST_BOOT_WINDOW;
+        BootRange->u.Memory.MaximumAddress.QuadPart = TEST_BOOT_WINDOW + TEST_BOOT_WINDOW_LENGTH - 1;
+        List->List[0].Count++;
+    }
     return List;
 }
 
+/* A page of memory at an address, as a resource list from paged pool */
+static PCM_RESOURCE_LIST BuildPage(ULONGLONG Base)
+{
+    PCM_RESOURCE_LIST List = ExAllocatePoolZero(PagedPool, sizeof(*List), TEST_TAG);
+
+    if (List == NULL)
+        return NULL;
+    List->Count = 1;
+    List->List[0].InterfaceType = Internal;
+    List->List[0].PartialResourceList.Version = 1;
+    List->List[0].PartialResourceList.Revision = 1;
+    List->List[0].PartialResourceList.Count = 1;
+    List->List[0].PartialResourceList.PartialDescriptors[0].Type = CmResourceTypeMemory;
+    List->List[0].PartialResourceList.PartialDescriptors[0].ShareDisposition = CmResourceShareDeviceExclusive;
+    List->List[0].PartialResourceList.PartialDescriptors[0].Flags = CM_RESOURCE_MEMORY_READ_WRITE;
+    List->List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)Base;
+    List->List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Length = PAGE_SIZE;
+    return List;
+}
+
+/* The page of the boot window the child was started with, counted from one; zero when it has none */
+static ULONG StartedBootPage(PCM_RESOURCE_LIST Resources)
+{
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+    ULONGLONG Start;
+    ULONG Index;
+
+    if (Resources == NULL || Resources->Count == 0)
+        return 0;
+    for (Index = 0; Index < Resources->List[0].PartialResourceList.Count; Index++)
+    {
+        Descriptor = &Resources->List[0].PartialResourceList.PartialDescriptors[Index];
+        if (Descriptor->Type != CmResourceTypeMemory)
+            continue;
+        Start = (ULONGLONG)Descriptor->u.Memory.Start.QuadPart;
+        if (Start >= TEST_BOOT_WINDOW && Start < TEST_BOOT_WINDOW + TEST_BOOT_WINDOW_LENGTH)
+            return (ULONG)((Start - TEST_BOOT_WINDOW) >> PAGE_SHIFT) + 1;
+    }
+    return 0;
+}
+
 /* The page the child is made to ask for is held by this driver as a legacy claim */
-static VOID ClaimOccupiedPage(PDRIVER_OBJECT DriverObject)
+static VOID ClaimOccupiedPage(PDRIVER_OBJECT DriverObject, ULONGLONG Base)
 {
     CM_RESOURCE_LIST Claim;
     BOOLEAN Conflict = FALSE;
@@ -217,7 +275,7 @@ static VOID ClaimOccupiedPage(PDRIVER_OBJECT DriverObject)
     Claim.List[0].PartialResourceList.PartialDescriptors[0].Type = CmResourceTypeMemory;
     Claim.List[0].PartialResourceList.PartialDescriptors[0].ShareDisposition = CmResourceShareDeviceExclusive;
     Claim.List[0].PartialResourceList.PartialDescriptors[0].Flags = CM_RESOURCE_MEMORY_READ_WRITE;
-    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)TEST_OCCUPIED_BASE;
+    Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Start.QuadPart = (LONGLONG)Base;
     Claim.List[0].PartialResourceList.PartialDescriptors[0].u.Memory.Length = PAGE_SIZE;
     Record(L"OccupiedClaim", (ULONG)IoReportResourceUsage(NULL, DriverObject, &Claim, sizeof(Claim), NULL, NULL, 0,
                                                           FALSE, &Conflict));
@@ -310,7 +368,7 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
         Status = IoForwardIrpSynchronously(Extension->Lower, Irp) ? Irp->IoStatus.Status : STATUS_UNSUCCESSFUL;
         if (Irp->IoStatus.Information != 0 || Requested(L"NoListEmpty"))
             return Complete(Irp, Status);
-        Filtered = BuildRequirements(2, FALSE, FALSE, FALSE);
+        Filtered = BuildRequirements(2, FALSE, FALSE, FALSE, FALSE);
         if (Filtered == NULL)
             return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
         Irp->IoStatus.Information = (ULONG_PTR)Filtered;
@@ -328,8 +386,14 @@ static NTSTATUS ChildFdoFilter(PTEST_EXTENSION Extension, PIRP Irp)
         return Complete(Irp, Status);
 
     if (Requested(L"OccupiedMemory"))
-        ClaimOccupiedPage(IoGetCurrentIrpStackLocation(Irp)->DeviceObject->DriverObject);
-    Filtered = BuildRequirements(2, TRUE, Requested(L"LargeMemory"), Requested(L"OccupiedMemory"));
+        ClaimOccupiedPage(IoGetCurrentIrpStackLocation(Irp)->DeviceObject->DriverObject, TEST_OCCUPIED_BASE);
+    if (Requested(L"BootSettingTaken"))
+    {
+        ClaimOccupiedPage(IoGetCurrentIrpStackLocation(Irp)->DeviceObject->DriverObject,
+                          TEST_BOOT_WINDOW + TEST_BOOT_PAGE * PAGE_SIZE);
+    }
+    Filtered = BuildRequirements(2, TRUE, Requested(L"LargeMemory"), Requested(L"OccupiedMemory"),
+                                 Requested(L"BootSetting"));
     if (Filtered == NULL)
         return Complete(Irp, STATUS_INSUFFICIENT_RESOURCES);
     ExFreePool(Current);
@@ -359,6 +423,7 @@ static NTSTATUS ChildFdoPnp(PDEVICE_OBJECT DeviceObject, PTEST_EXTENSION Extensi
             Record(L"StartDmaV3", StartedDmaV3(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartConnection", StartedConnection(Stack->Parameters.StartDevice.AllocatedResources));
             Record(L"StartLargeMemory", StartedLargeMemory(Stack->Parameters.StartDevice.AllocatedResources));
+            Record(L"StartBootPage", StartedBootPage(Stack->Parameters.StartDevice.AllocatedResources));
             if (Requested(L"NoRequirements"))
                 Record(Starts == 1 ? L"NoListStartMask" : L"NoListRestartMask",
                        StartedPrivateMask(Stack->Parameters.StartDevice.AllocatedResources));
@@ -658,13 +723,20 @@ static NTSTATUS ChildPdoPnp(PDEVICE_OBJECT DeviceObject, PIRP Irp)
             Irp->IoStatus.Information = (ULONG_PTR)Relations;
             break;
 
+        case IRP_MN_QUERY_RESOURCES:
+            if (Extension->Null || !Requested(L"BootSetting"))
+                break;
+            Irp->IoStatus.Information = (ULONG_PTR)BuildPage(TEST_BOOT_WINDOW + TEST_BOOT_PAGE * PAGE_SIZE);
+            Status = Irp->IoStatus.Information ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
+            break;
+
         case IRP_MN_QUERY_RESOURCE_REQUIREMENTS:
             if (Requested(L"NoRequirements"))
             {
                 Status = STATUS_SUCCESS;
                 break;
             }
-            Requirements = BuildRequirements(1, FALSE, FALSE, FALSE);
+            Requirements = BuildRequirements(1, FALSE, FALSE, FALSE, FALSE);
             Status = Requirements ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
             if (Requirements != NULL)
                 Irp->IoStatus.Information = (ULONG_PTR)Requirements;

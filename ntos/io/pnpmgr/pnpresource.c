@@ -9,6 +9,7 @@
 #include "../ioint.h"
 #include "../pnpio.h"
 #include <reactos/hal/msi.h>
+#include <reactos/drivers/cmreslist.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -509,6 +510,74 @@ IopAllocateMessageInterrupt(
     return STATUS_SUCCESS;
 }
 
+/* The setting the firmware left a device with comes before any the search would pick, when the requirement allows it and nobody holds it */
+static
+BOOLEAN
+IopPickBootSetting(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PVOID Claimant,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount,
+    _Inout_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
+{
+    PCM_RESOURCE_LIST Boot = DeviceNode->BootResources;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
+    CM_PARTIAL_RESOURCE_DESCRIPTOR Candidate;
+    PCM_FULL_RESOURCE_DESCRIPTOR Full;
+    ULONGLONG Alignment;
+    ULONGLONG Start;
+    ULONG ListIndex;
+    ULONG Index;
+
+    PAGED_CODE();
+    ASSERT(Descriptor->Type == Requirement->Type);
+
+    /* TODO: a boot interrupt, DMA channel, bus number or window of 4 GB and more is not tried before the search */
+    if (Boot == NULL ||
+        Requirement->u.Generic.Length == 0 ||
+        (Requirement->Type != CmResourceTypePort && Requirement->Type != CmResourceTypeMemory))
+    {
+        return FALSE;
+    }
+
+    Alignment = Requirement->u.Generic.Alignment ? Requirement->u.Generic.Alignment : 1;
+
+    Full = &Boot->List[0];
+    for (ListIndex = 0; ListIndex < Boot->Count; ListIndex++)
+    {
+        Partial = &Full->PartialResourceList.PartialDescriptors[0];
+        for (Index = 0; Index < Full->PartialResourceList.Count; Index++)
+        {
+            Start = (ULONGLONG)Partial->u.Generic.Start.QuadPart;
+            if (Partial->Type == Requirement->Type &&
+                Partial->u.Generic.Length == Requirement->u.Generic.Length &&
+                Start >= (ULONGLONG)Requirement->u.Generic.MinimumAddress.QuadPart &&
+                (Start % Alignment) == 0 &&
+                IopRangeFits(Start,
+                             Requirement->u.Generic.Length,
+                             (ULONGLONG)Requirement->u.Generic.MaximumAddress.QuadPart))
+            {
+                Candidate = *Descriptor;
+                Candidate.u.Generic.Start.QuadPart = (LONGLONG)Start;
+
+                if (!IopResDbCheckDescriptor(&Candidate, DeviceNode, Claimant, NULL) &&
+                    !IopResDbConflictsWithChosen(&Candidate, DeviceNode, Chosen, ChosenCount))
+                {
+                    *Descriptor = Candidate;
+                    return TRUE;
+                }
+            }
+
+            Partial = CmiGetNextPartialDescriptor(Partial);
+        }
+
+        Full = CmiGetNextResourceDescriptor(Full);
+    }
+
+    return FALSE;
+}
+
 static
 NTSTATUS
 IopPickOneDescriptor(
@@ -549,6 +618,12 @@ IopPickOneDescriptor(
     if (Requirement->Type == CmResourceTypeDevicePrivate ||
         Requirement->Type == CmResourceTypeConfigData ||
         Requirement->Type == CmResourceTypeDeviceSpecific)
+    {
+        return STATUS_SUCCESS;
+    }
+
+    if (DeviceNode != NULL &&
+        IopPickBootSetting(Requirement, DeviceNode, Claimant, Chosen, ChosenCount, Descriptor))
     {
         return STATUS_SUCCESS;
     }
