@@ -15,6 +15,7 @@ list(APPEND SOURCE
     InvalidDeviceInfoSet.c
     LegacyDeviceParent.c
     NewDeviceInstall.c
+    ParentIdPrefix.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
     SetupDiOpenDeviceInterface.c

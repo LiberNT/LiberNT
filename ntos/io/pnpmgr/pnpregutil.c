@@ -609,21 +609,80 @@ IopGetParentIdPrefix(
     return PiGetChildIdPrefix(DeviceNode->Parent, Prefix);
 }
 
-NTSTATUS
-PiGetChildIdPrefix(
-    _In_opt_ PDEVICE_NODE Parent,
-    _Out_ PUNICODE_STRING Prefix)
+#define PI_ID_PREFIX_CHARS 32
+
+static
+HANDLE
+PiOpenParentInstanceKey(
+    _In_ PDEVICE_NODE Parent)
 {
-    UNICODE_STRING Upcased;
-    ULONG Digest;
-    PWCHAR Buffer;
-    NTSTATUS Status;
+    static CONST UNICODE_STRING EnumRootU = RTL_CONSTANT_STRING(ENUM_ROOT);
+    HANDLE EnumKey, InstanceKey;
 
     PAGED_CODE();
 
-    RtlInitEmptyUnicodeString(Prefix, NULL, 0);
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&EnumKey, NULL, (PUNICODE_STRING)&EnumRootU, KEY_READ)))
+        return NULL;
 
-    if (Parent == NULL || Parent->InstancePath.Length == 0) return STATUS_NOT_FOUND;
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&InstanceKey, EnumKey, &Parent->InstancePath,
+                                         KEY_QUERY_VALUE | KEY_SET_VALUE)))
+    {
+        InstanceKey = NULL;
+    }
+
+    ZwClose(EnumKey);
+    return InstanceKey;
+}
+
+static
+BOOLEAN
+PiReadStoredIdPrefix(
+    _In_ HANDLE InstanceKey,
+    _Inout_ PUNICODE_STRING Prefix)
+{
+    PKEY_VALUE_FULL_INFORMATION Information;
+    PCWSTR Data;
+    ULONG Chars, Index;
+    BOOLEAN Valid;
+
+    PAGED_CODE();
+    ASSERT(Prefix->Buffer != NULL);
+    ASSERT(Prefix->Length == 0);
+
+    if (!NT_SUCCESS(IopGetRegistryValue(InstanceKey, L"ParentIdPrefix", &Information)))
+        return FALSE;
+
+    Data = (PCWSTR)((PUCHAR)Information + Information->DataOffset);
+    Chars = Information->DataLength / sizeof(WCHAR);
+    Valid = Information->Type == REG_SZ && (Information->DataLength % sizeof(WCHAR)) == 0;
+    while (Valid && Chars > 0 && Data[Chars - 1] == UNICODE_NULL)
+        Chars--;
+    Valid = Valid && Chars > 0 && Chars * sizeof(WCHAR) <= Prefix->MaximumLength;
+    for (Index = 0; Valid && Index < Chars; Index++)
+        Valid = Data[Index] != UNICODE_NULL && Data[Index] != L'\\';
+
+    if (Valid)
+    {
+        RtlCopyMemory(Prefix->Buffer, Data, Chars * sizeof(WCHAR));
+        Prefix->Length = (USHORT)(Chars * sizeof(WCHAR));
+    }
+
+    ExFreePool(Information);
+    return Valid;
+}
+
+static
+NTSTATUS
+PiComputeIdPrefix(
+    _In_ PDEVICE_NODE Parent,
+    _Inout_ PUNICODE_STRING Prefix)
+{
+    UNICODE_STRING Upcased;
+    ULONG Digest;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Prefix->Length == 0);
 
     Status = RtlUpcaseUnicodeString(&Upcased, &Parent->InstancePath, TRUE);
     if (!NT_SUCCESS(Status)) return Status;
@@ -632,13 +691,59 @@ PiGetChildIdPrefix(
     Digest = RtlComputeCrc32(0, (PUCHAR)Upcased.Buffer, Upcased.Length);
     RtlFreeUnicodeString(&Upcased);
 
-    Buffer = ExAllocatePoolZero(PagedPool, 32 * sizeof(WCHAR), TAG_IO);
+    return RtlUnicodeStringPrintf(Prefix, L"%lx&%lx&0", Parent->Level, Digest);
+}
+
+NTSTATUS
+PiGetChildIdPrefix(
+    _In_opt_ PDEVICE_NODE Parent,
+    _Out_ PUNICODE_STRING Prefix)
+{
+    static CONST UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"ParentIdPrefix");
+    HANDLE InstanceKey;
+    PWCHAR Buffer;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    RtlInitEmptyUnicodeString(Prefix, NULL, 0);
+
+    if (Parent == NULL || Parent->InstancePath.Length == 0) return STATUS_NOT_FOUND;
+    ASSERT((Parent->InstancePath.Length % sizeof(WCHAR)) == 0);
+
+    Buffer = ExAllocatePoolZero(PagedPool, PI_ID_PREFIX_CHARS * sizeof(WCHAR), TAG_IO);
     if (Buffer == NULL) return STATUS_INSUFFICIENT_RESOURCES;
 
-    RtlInitEmptyUnicodeString(Prefix, Buffer, 32 * sizeof(WCHAR));
+    /* One character stays zero so the buffer is always a terminated REG_SZ */
+    RtlInitEmptyUnicodeString(Prefix, Buffer, (PI_ID_PREFIX_CHARS - 1) * sizeof(WCHAR));
 
-    /* TODO: the prefix is not recorded as the parent's ParentIdPrefix value */
-    return RtlUnicodeStringPrintf(Prefix, L"%lx&%lx&0", Parent->Level + 1, Digest);
+    InstanceKey = PiOpenParentInstanceKey(Parent);
+
+    if (InstanceKey != NULL && PiReadStoredIdPrefix(InstanceKey, Prefix))
+    {
+        ZwClose(InstanceKey);
+        ASSERT(Prefix->Length != 0 && Prefix->Length <= Prefix->MaximumLength);
+        return STATUS_SUCCESS;
+    }
+
+    Status = PiComputeIdPrefix(Parent, Prefix);
+    if (NT_SUCCESS(Status) && InstanceKey != NULL)
+    {
+        ASSERT(Prefix->Length < PI_ID_PREFIX_CHARS * sizeof(WCHAR));
+        ASSERT(Buffer[Prefix->Length / sizeof(WCHAR)] == UNICODE_NULL);
+        ZwSetValueKey(InstanceKey, (PUNICODE_STRING)&ValueName, 0, REG_SZ, Buffer,
+                      Prefix->Length + sizeof(WCHAR));
+    }
+
+    if (InstanceKey != NULL) ZwClose(InstanceKey);
+
+    if (!NT_SUCCESS(Status))
+    {
+        ExFreePool(Buffer);
+        RtlInitEmptyUnicodeString(Prefix, NULL, 0);
+    }
+
+    return Status;
 }
 
 NTSTATUS
