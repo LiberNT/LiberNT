@@ -3497,6 +3497,14 @@ DxgkpPresentSourceRects(
         Status = STATUS_UNSUCCESSFUL;
         goto Cleanup;
     }
+    if (!SharedSurface.VidPnCommitted)
+    {
+        /* A shared primary belongs to a source in a VidPN path; a detached desktop has none, so its shadow is the desktop. */
+        ASSERT(SharedSurface.HeadlessDesktop);
+        Status = STATUS_SUCCESS;
+        goto Cleanup;
+    }
+    ASSERT(!SharedSurface.HeadlessDesktop);
 
     if (Count > DXGK_DIRTY_RECT_SLOTS)
     {

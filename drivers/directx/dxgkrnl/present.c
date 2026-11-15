@@ -2302,6 +2302,12 @@ DxgkpCaptureDesktop(
     Generation = DxgkVidPnGetCompositorGeneration(Adapter, SharedSurface.VidPnSourceId);
     if (Generation == 0)
         goto Cleanup;
+    if (SharedSurface.HeadlessDesktop)
+    {
+        ASSERT(!SharedSurface.VidPnCommitted);
+        Capture->Flags = DXGK_DESKTOP_CAPTURE_NEEDS_COMPOSITOR;
+        goto Cleanup;
+    }
     if (SharedSurface.PrimaryAllocation == NULL ||
         SharedSurface.PrimaryWidth < Capture->Width ||
         SharedSurface.PrimaryHeight < Capture->Height ||
@@ -3971,15 +3977,6 @@ DxgkpExecuteFullPresentMeasured(
     Status = DxgkpWaitForPresentWrites(Entry, FALSE);
     if (!NT_SUCCESS(Status))
         goto PresentCleanup;
-    if (Entry->SharedSurface.HeadlessDesktop &&
-        Entry->CompositorGeneration != 0 && Entry->DestinationIsSharedPrimary)
-    {
-        /* The detached desktop is also read by CDD's capture context. Drain
-         * the previous copy/read before this context overwrites that primary. */
-        Status = DxgkVidMmWaitForTrackedSubmissions(Entry->DestinationAllocation, FALSE);
-        if (!NT_SUCCESS(Status))
-            goto PresentCleanup;
-    }
     /*
      * A miniport that implements DxgkDdiPresent copies on the GPU; only a
      * display-only miniport, which has no present DDI at all, needs the port
@@ -6149,43 +6146,15 @@ DxgkpPrepareDetachedDesktopPresent(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _Inout_ PDXGKRNL_PRESENT_ENTRY Entry)
 {
-    NTSTATUS Status;
-    BOOLEAN Program;
+    UNREFERENCED_PARAMETER(Adapter);
 
     if (Entry->Type != DxgkPresentTypeFlip ||
         !Entry->SharedSurface.HeadlessDesktop)
         return STATUS_SUCCESS;
 
-    /* There is no CRTC/vblank on a detached desktop. A registered compositor
-     * still publishes real pixels for screen reads: copy its finished buffer
-     * into the desktop primary using normal GPU DMA instead of admitting an
-     * MMIO flip which can never scan out. Keep this conversion at admission,
-     * before later commands can enter the submitting context's stream. */
-    if (Entry->CompositorGeneration == 0)
-        return STATUS_GRAPHICS_PRESENT_OCCLUDED;
-    if (!Entry->SharedSurface.RundownHeld ||
-        Entry->SharedSurface.PrimaryHandle == NULL ||
-        Entry->hDestination != 0 || Entry->DestinationAllocation != NULL)
-        return STATUS_INVALID_PARAMETER;
-    Status = DxgkVidPnAcquireScanoutLease(Adapter, Entry->Device,
-                 Entry->VidPnSourceId, Entry->Window,
-                 Entry->CompositorGeneration, &Program);
-    if (Program)
-        DxgkVidPnReleaseScanoutLease();
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if (Program)
-        return STATUS_INVALID_DEVICE_STATE;
-    Status = DxgkVidMmReferenceAllocation(Entry->SharedSurface.PrimaryHandle,
-                 Adapter, NULL, &Entry->DestinationAllocation);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    Entry->hDestination = (D3DKMT_HANDLE)(ULONG_PTR)Entry->SharedSurface.PrimaryHandle;
-    Entry->DestinationIsSharedPrimary = TRUE;
-    Entry->Type = DxgkPresentTypeBlt;
-    Entry->FlipInterval = D3DDDI_FLIPINTERVAL_IMMEDIATE;
-    Entry->SourceGpuOnly = TRUE;
-    return STATUS_SUCCESS;
+    /* A detached desktop has no VidPN path: no flip scans out and its shared primary is outside the miniport contract. */
+    ASSERT(!Entry->SharedSurface.VidPnCommitted);
+    return STATUS_GRAPHICS_PRESENT_OCCLUDED;
 }
 
 static NTSTATUS
