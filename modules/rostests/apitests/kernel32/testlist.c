@@ -45,6 +45,7 @@ extern void func_DeleteFileOpenHandle(void);
 extern void func_DeviceIoControl(void);
 extern void func_EmulatedProcess(void);
 extern void func_dosdev(void);
+extern void func_DateTimeFormatFlags(void);
 extern void func_EnumDateTimeFormats(void);
 extern void func_EnumSystemCodePages(void);
 extern void func_FindActCtxSectionStringW(void);
@@ -262,6 +263,7 @@ const struct test winetest_testlist[] =
     { "DeviceIoControl",             func_DeviceIoControl },
     { "EmulatedProcess",             func_EmulatedProcess },
     { "dosdev",                      func_dosdev },
+    { "DateTimeFormatFlags",         func_DateTimeFormatFlags },
     { "EnumDateTimeFormats",         func_EnumDateTimeFormats },
     { "EnumSystemCodePages",         func_EnumSystemCodePages },
     { "FindActCtxSectionStringW",    func_FindActCtxSectionStringW },
