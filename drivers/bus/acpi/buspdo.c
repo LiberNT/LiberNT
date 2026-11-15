@@ -3581,7 +3581,8 @@ Bus_PDO_QueryDeviceCaps(
     {
        AcpiWakeQueryCapabilities(device, deviceCapabilities);
        deviceCapabilities->LockSupported = device->flags.lockable;
-       deviceCapabilities->EjectSupported = device->flags.ejectable;
+       /* Windows 11 offers no processor for ejection, even one with _EJ0 */
+       deviceCapabilities->EjectSupported = device->flags.ejectable && !BuspIsProcessorDevice(device);
        deviceCapabilities->HardwareDisabled = !device->status.enabled && !device->status.functional;
        deviceCapabilities->Removable = device->flags.removable;
        deviceCapabilities->SurpriseRemovalOK = device->flags.surprise_removal_ok;

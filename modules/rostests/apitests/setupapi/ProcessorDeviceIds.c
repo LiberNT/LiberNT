@@ -118,7 +118,7 @@ START_TEST(ProcessorDeviceIds)
     WCHAR Id[MAX_DEVICE_ID_LEN], Hardware[1024], Compatible[512], ExpectedHw[1024], ExpectedCompat[32], Friendly[256];
     SP_DEVINFO_DATA Data;
     WCHAR *Cut;
-    ULONG Size, Type, Used, Checked = 0;
+    ULONG Size, Type, Used, Caps, Checked = 0;
     HDEVINFO Set;
     DWORD Index;
 
@@ -187,6 +187,12 @@ START_TEST(ProcessorDeviceIds)
         ok(CM_Get_DevNode_Registry_PropertyW(Data.DevInst, CM_DRP_COMPATIBLEIDS, &Type, Compatible, &Size, 0) == CR_SUCCESS,
            "%ls: no compatible IDs\n", Id);
         CheckList(Id, L"compatible ID", Compatible, ExpectedCompat);
+
+        Caps = 0;
+        Size = sizeof(Caps);
+        ok(CM_Get_DevNode_Registry_PropertyW(Data.DevInst, CM_DRP_CAPABILITIES, &Type, &Caps, &Size, 0) == CR_SUCCESS,
+           "%ls: no capabilities\n", Id);
+        ok(!(Caps & (CM_DEVCAP_EJECTSUPPORTED | CM_DEVCAP_REMOVABLE)), "%ls: capabilities 0x%lx offer removal\n", Id, Caps);
 
         ZeroMemory(Friendly, sizeof(Friendly));
         Size = sizeof(Friendly) - sizeof(WCHAR);
