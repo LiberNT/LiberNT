@@ -16,6 +16,8 @@ static const WCHAR QueryIds[] = L"ROOT\\KMTESTREMOVECHILD\0";
 static const WCHAR FailIds[] = L"ROOT\\KMTESTREMOVECHILDFAIL\0";
 static const WCHAR QueryKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestRemoveChild\\Query";
 static const WCHAR FailKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestRemoveChild\\Fail";
+static const WCHAR NestedIds[] = L"ROOT\\KMTESTREMOVECHILDNESTED\0";
+static const WCHAR NestedKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestRemoveChild\\Nested";
 
 static DWORD ReadValue(PCWSTR KeyName, PCWSTR Name)
 {
@@ -78,11 +80,22 @@ static VOID CheckChild(PCWSTR KeyName)
        ReadValue(KeyName, L"ChildIrpsAfterDelete"), ReadValue(KeyName, L"ChildLateMinor"));
 }
 
+static VOID CheckGrandchild(PCWSTR KeyName)
+{
+    ok_eq_ulong(ReadValue(KeyName, L"GrandchildOpen"), 0UL);
+    ok_eq_ulong(ReadValue(KeyName, L"GrandchildStarts"), 1UL);
+    ok_eq_ulong(ReadValue(KeyName, L"GrandchildSurprises"), 1UL);
+    ok_eq_ulong(ReadValue(KeyName, L"GrandchildRemoves"), 1UL);
+    ok(ReadValue(KeyName, L"GrandchildIrpsAfterDelete") == MAXDWORD, "The deleted grandchild got %lu PnP IRPs\n",
+       ReadValue(KeyName, L"GrandchildIrpsAfterDelete"));
+}
+
 START_TEST(IoRemoveChild)
 {
     HDEVINFO Devices;
     SP_DEVINFO_DATA QueryDevice = { sizeof(QueryDevice) }, FailDevice = { sizeof(FailDevice) };
-    BOOL QueryRegistered = FALSE, FailRegistered = FALSE, Success;
+    SP_DEVINFO_DATA NestedDevice = { sizeof(NestedDevice) };
+    BOOL QueryRegistered = FALSE, FailRegistered = FALSE, NestedRegistered = FALSE, Success;
     WCHAR InfPath[MAX_PATH];
     PWSTR Filename;
     DWORD Length;
@@ -101,6 +114,7 @@ START_TEST(IoRemoveChild)
 
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, QueryKey);
     RegDeleteKeyW(HKEY_LOCAL_MACHINE, FailKey);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, NestedKey);
 
     Devices = SetupDiCreateDeviceInfoList(&TestClass, NULL);
     ok(Devices != INVALID_HANDLE_VALUE, "SetupDiCreateDeviceInfoList failed: %lu\n", GetLastError());
@@ -120,6 +134,15 @@ START_TEST(IoRemoveChild)
         CheckChild(FailKey);
     }
 
+    trace("Grandparent failed while the grandchild's last close is pending\n");
+    NestedRegistered = AddDevnode(Devices, &NestedDevice, NestedIds, sizeof(NestedIds), InfPath);
+    if (NestedRegistered)
+    {
+        ok(WaitValue(NestedKey, L"ParentRemoved", 1), "The failed grandparent was not removed\n");
+        CheckChild(NestedKey);
+        CheckGrandchild(NestedKey);
+    }
+
     trace("Parent removed by query-remove\n");
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, &QueryDevice);
     ok(Success, "Removing the parent failed: %lu\n", GetLastError());
@@ -128,6 +151,11 @@ START_TEST(IoRemoveChild)
     CheckChild(QueryKey);
 
 Cleanup:
+    if (NestedRegistered)
+    {
+        Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, &NestedDevice);
+        ok(Success, "Removing the nested devnode failed: %lu\n", GetLastError());
+    }
     if (FailRegistered)
     {
         Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, &FailDevice);

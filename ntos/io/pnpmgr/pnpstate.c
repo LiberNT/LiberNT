@@ -1606,26 +1606,43 @@ PiIsPendingCloses(
 }
 
 /* A surprise-removed device gets its remove request once its children are gone and nothing holds its stack open;
- * one that is gone then leaves the tree, and its parent may be next */
+ * one that is gone then leaves the tree */
+static
+BOOLEAN
+PiCloseRemovedNode(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    BOOLEAN Delete;
+
+    PAGED_CODE();
+    ASSERT(PiIsPendingCloses(DeviceNode));
+
+    if (DeviceNode->Child != NULL || PiStackIsOpen(DeviceNode->PhysicalDeviceObject)) return FALSE;
+
+    Delete = (DeviceNode->State == DeviceNodeDeletePendingCloses);
+
+    PiSendRemoval(DeviceNode, FALSE);
+    ASSERT(DeviceNode->State == DeviceNodeRemoved);
+
+    if (Delete) PiDeleteDevNode(DeviceNode);
+
+    return TRUE;
+}
+
+/* Once a device is closed, its parent may be next */
 static
 VOID
 PiCloseRemovedDevice(
     _In_ PDEVICE_NODE DeviceNode)
 {
     PDEVICE_NODE Parent;
-    BOOLEAN Delete;
 
     PAGED_CODE();
 
     while (DeviceNode != NULL && PiIsPendingCloses(DeviceNode))
     {
-        if (DeviceNode->Child != NULL || PiStackIsOpen(DeviceNode->PhysicalDeviceObject)) return;
-
-        Delete = (DeviceNode->State == DeviceNodeDeletePendingCloses);
         Parent = DeviceNode->Parent;
-
-        PiSendRemoval(DeviceNode, FALSE);
-        if (Delete) PiDeleteDevNode(DeviceNode);
+        if (!PiCloseRemovedNode(DeviceNode)) return;
 
         DeviceNode = Parent;
     }
@@ -1648,10 +1665,12 @@ PiProcessRemoval(
     Child = DeviceNode->Child;
     while (Child != NULL)
     {
+        ASSERT(Child->Parent == DeviceNode);
         Next = Child->Sibling;
         PiProcessRemoval(Child, Surprise, TRUE);
         Child = Next;
     }
+    ASSERT(DeviceNode->State != DeviceNodeDeleted);
 
     Gone = ParentRemoved || (DeviceNode->Flags & DNF_DEVICE_GONE);
     WasRemoved = (DeviceNode->State == DeviceNodeRemoved);
@@ -1673,7 +1692,12 @@ PiProcessRemoval(
     if (PiIsPendingCloses(DeviceNode))
     {
         if (Gone) PiSetDevNodeState(DeviceNode, DeviceNodeDeletePendingCloses);
-        PiCloseRemovedDevice(DeviceNode);
+
+        /* The parent's own removal is still walking its children and closes the parent after them */
+        if (ParentRemoved)
+            PiCloseRemovedNode(DeviceNode);
+        else
+            PiCloseRemovedDevice(DeviceNode);
         return;
     }
 
