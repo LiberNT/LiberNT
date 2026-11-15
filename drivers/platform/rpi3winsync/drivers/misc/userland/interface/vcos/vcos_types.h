@@ -139,7 +139,9 @@ typedef enum
 #if defined(NDEBUG)
 
 #ifdef __GNUC__
-# define VCOS_INLINE_DECL extern __inline__
+# ifndef VCOS_INLINE_DECL
+#  define VCOS_INLINE_DECL extern __inline__
+# endif
 # define VCOS_INLINE_IMPL static __inline__
 #else
 #ifndef _VCOS_INLINE
