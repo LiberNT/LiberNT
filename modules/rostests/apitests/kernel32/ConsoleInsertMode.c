@@ -9,6 +9,7 @@
 #include <winuser.h>
 
 #define COOKED_MODE (ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT)
+#define TEST_TITLE L"LiberNT ConsoleInsertMode test"
 
 static HANDLE Input;
 
@@ -78,9 +79,69 @@ static void SetAndCheckMode(DWORD Set, DWORD Expected, PCSTR Step)
     ok(Mode == Expected, "%s: mode 0x%lx, expected 0x%lx\n", Step, Mode, Expected);
 }
 
+static DWORD RunChild(DWORD InsertMode)
+{
+    PROCESS_INFORMATION ProcessInfo;
+    STARTUPINFOW StartupInfo = { sizeof(StartupInfo) };
+    WCHAR Application[MAX_PATH], CommandLine[MAX_PATH + 32];
+    DWORD ExitCode = 0xffffffff;
+    HKEY Key;
+    LSTATUS Status;
+
+    Status = RegCreateKeyExW(HKEY_CURRENT_USER, L"Console\\" TEST_TITLE, 0, NULL, 0, KEY_SET_VALUE, NULL, &Key, NULL);
+    ok(Status == ERROR_SUCCESS, "RegCreateKeyExW failed with %ld\n", Status);
+    if (Status != ERROR_SUCCESS)
+        return ExitCode;
+    Status = RegSetValueExW(Key, L"InsertMode", 0, REG_DWORD, (const BYTE *)&InsertMode, sizeof(InsertMode));
+    ok(Status == ERROR_SUCCESS, "RegSetValueExW failed with %ld\n", Status);
+    RegCloseKey(Key);
+
+    GetModuleFileNameW(NULL, Application, ARRAYSIZE(Application));
+    StringCchPrintfW(CommandLine, ARRAYSIZE(CommandLine), L"\"%s\" ConsoleInsertMode child", Application);
+    StartupInfo.lpTitle = TEST_TITLE;
+    StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+    StartupInfo.wShowWindow = SW_SHOWMINNOACTIVE;
+    if (CreateProcessW(Application, CommandLine, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL,
+                       &StartupInfo, &ProcessInfo))
+    {
+        ok(WaitForSingleObject(ProcessInfo.hProcess, 10000) == WAIT_OBJECT_0, "the child did not exit\n");
+        GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
+        CloseHandle(ProcessInfo.hThread);
+        CloseHandle(ProcessInfo.hProcess);
+    }
+    else
+    {
+        ok(0, "CreateProcessW failed with error %lu\n", GetLastError());
+    }
+
+    RegDeleteKeyW(HKEY_CURRENT_USER, L"Console\\" TEST_TITLE);
+    return ExitCode;
+}
+
+static void TestRegistry(void)
+{
+    DWORD Mode;
+
+    Mode = RunChild(0);
+    trace("InsertMode 0: mode 0x%lx\n", Mode);
+    ok(Mode != 0xffffffff && !(Mode & ENABLE_INSERT_MODE), "InsertMode 0: mode 0x%lx\n", Mode);
+    Mode = RunChild(1);
+    trace("InsertMode 1: mode 0x%lx\n", Mode);
+    ok(Mode != 0xffffffff && (Mode & ENABLE_INSERT_MODE), "InsertMode 1: mode 0x%lx\n", Mode);
+}
+
 START_TEST(ConsoleInsertMode)
 {
     DWORD Mode;
+    char **Arguments;
+
+    if (winetest_get_mainargs(&Arguments) >= 3 && !strcmp(Arguments[2], "child"))
+    {
+        HANDLE ChildInput = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                        NULL, OPEN_EXISTING, 0, NULL);
+
+        ExitProcess(GetConsoleMode(ChildInput, &Mode) ? Mode : 0xffffffff);
+    }
 
     Input = CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
                         OPEN_EXISTING, 0, NULL);
@@ -107,4 +168,6 @@ START_TEST(ConsoleInsertMode)
 
     SetConsoleMode(Input, Mode | ENABLE_EXTENDED_FLAGS);
     CloseHandle(Input);
+
+    TestRegistry();
 }
