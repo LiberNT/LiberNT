@@ -114,13 +114,6 @@ NewDevSetFailedInstall(
 
     if (Set)
     {
-        PWSTR pszUnknownGuid = L"{4D36E97E-E325-11CE-BFC1-08002BE10318}";
-        SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
-                                          DevInfoData,
-                                          SPDRP_CLASSGUID,
-                                          (PBYTE)pszUnknownGuid,
-                                          (wcslen(pszUnknownGuid) + 1) * sizeof(WCHAR));
-
         /* Set device problem code CM_PROB_FAILED_INSTALL */
         CM_Set_DevNode_Problem(DevInfoData->DevInst,
                                CM_PROB_FAILED_INSTALL,

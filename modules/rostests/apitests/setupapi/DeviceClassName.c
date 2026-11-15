@@ -38,7 +38,7 @@ CheckDevice(HDEVINFO Set, SP_DEVINFO_DATA *Data, ULONG *Checked)
 {
     WCHAR Id[MAX_DEVICE_ID_LEN], Path[MAX_PATH], Expected[MAX_CLASS_NAME_LEN], Name[MAX_CLASS_NAME_LEN];
     DEVPROPTYPE PropType;
-    ULONG Size, RegType;
+    ULONG Size, RegType, Status, Problem;
     CONFIGRET Cr;
     HKEY InstanceKey;
     LONG Error;
@@ -53,6 +53,13 @@ CheckDevice(HDEVINFO Set, SP_DEVINFO_DATA *Data, ULONG *Checked)
 
     Error = RegQueryValueExW(InstanceKey, L"Class", NULL, NULL, NULL, NULL);
     ok(Error == ERROR_FILE_NOT_FOUND, "%ls: instance key holds a Class value (error %ld)\n", Id, Error);
+
+    if (CM_Get_DevNode_Status(&Status, &Problem, Data->DevInst, 0) == CR_SUCCESS && (Status & DN_HAS_PROBLEM) &&
+        Problem == CM_PROB_FAILED_INSTALL)
+    {
+        Error = RegQueryValueExW(InstanceKey, L"ClassGUID", NULL, NULL, NULL, NULL);
+        ok(Error == ERROR_FILE_NOT_FOUND, "%ls: a device with no driver has a ClassGUID (error %ld)\n", Id, Error);
+    }
 
     HasClass = ReadClassKeyName(InstanceKey, Expected, sizeof(Expected));
     RegCloseKey(InstanceKey);
