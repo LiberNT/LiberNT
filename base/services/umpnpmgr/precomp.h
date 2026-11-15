@@ -25,6 +25,7 @@
 #include <cmfuncs.h>
 #include <rtlfuncs.h>
 #include <setypes.h>
+#include <sddl.h>
 #include <umpnpmgr/sysguid.h>
 #include <wdmguid.h>
 #include <cfgmgr32.h>

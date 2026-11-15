@@ -223,6 +223,7 @@ ServiceMain(DWORD argc, LPTSTR *argv)
 static DWORD
 InitializePnPManager(VOID)
 {
+    SECURITY_ATTRIBUTES NoPendingInstallsAttributes = { sizeof(NoPendingInstallsAttributes), NULL, FALSE };
     BOOLEAN OldValue;
     DWORD dwError;
 
@@ -239,10 +240,22 @@ InitializePnPManager(VOID)
         return dwError;
     }
 
-    hNoPendingInstalls = CreateEventW(NULL,
+    /* Any process may wait for the installations to finish (CMP_WaitNoPendingInstallEvents); only the service sets the event */
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:(A;;GA;;;SY)(A;;0x00100000;;;WD)",
+                                                              SDDL_REVISION_1,
+                                                              &NoPendingInstallsAttributes.lpSecurityDescriptor,
+                                                              NULL))
+    {
+        dwError = GetLastError();
+        DPRINT1("Could not build the Pending-Install Event security! (Error %lu)\n", dwError);
+        return dwError;
+    }
+
+    hNoPendingInstalls = CreateEventW(&NoPendingInstallsAttributes,
                                       TRUE,
                                       FALSE,
                                       L"Global\\PnP_No_Pending_Install_Events");
+    LocalFree(NoPendingInstallsAttributes.lpSecurityDescriptor);
     if (hNoPendingInstalls == NULL)
     {
         dwError = GetLastError();
