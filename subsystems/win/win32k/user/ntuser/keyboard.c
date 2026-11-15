@@ -934,7 +934,6 @@ IntLanguageToggle(
     PWND pWnd;
     PTHREADINFO pti;
     PKL pkl;
-    WPARAM wParam = 0;
 
     if (!pFocusQueue)
     {
@@ -955,10 +954,7 @@ IntLanguageToggle(
     else if (nKeyState == INPUTLANGCHANGE_BACKWARD)
         pkl = IntGetNextKL(pkl, FALSE, bSameLang);
 
-    if (gSystemFS & pkl->dwFontSigs)
-        wParam |= INPUTLANGCHANGE_SYSCHARSET;
-
-    UserPostMessage(UserHMGetHandle(pWnd), WM_INPUTLANGCHANGEREQUEST, wParam, (LPARAM)pkl->hkl);
+    IntSetForegroundKeyboardLayout(pkl->hkl);
 }
 
 /* Check Language Toggle by [Left Alt]+Shift or Ctrl+Shift */

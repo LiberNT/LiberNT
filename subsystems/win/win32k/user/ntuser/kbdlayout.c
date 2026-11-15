@@ -784,6 +784,12 @@ co_UserActivateKeyboardLayout(
 }
 
 VOID FASTCALL
+IntSetForegroundKeyboardLayout(_In_ HKL hKL)
+{
+    ghklForeground = hKL;
+}
+
+VOID FASTCALL
 co_IntSyncForegroundKeyboardLayout(_Inout_ PTHREADINFO pti)
 {
     PTHREADINFO ptiPrev;
