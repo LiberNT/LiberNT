@@ -963,54 +963,6 @@ IopApplyDriverDatabaseInterfaces(
 }
 
 
-/*
- * The class of a device is written next to the class GUID, as the name the
- * class key carries, which is what a caller asking for the class property
- * reads back.
- */
-static
-VOID
-IopSetDriverDatabaseClassName(
-    _In_ HANDLE InstanceKey,
-    _In_ PCUNICODE_STRING ClassGuidString)
-{
-    static CONST UNICODE_STRING ClassRootU =
-        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
-    PKEY_VALUE_FULL_INFORMATION Information;
-    HANDLE ClassRoot, ClassKey;
-    UNICODE_STRING Name;
-
-    PAGED_CODE();
-
-    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&ClassRoot, NULL, (PUNICODE_STRING)&ClassRootU, KEY_READ)))
-        return;
-
-    Name = *ClassGuidString;
-    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&ClassKey, ClassRoot, &Name, KEY_READ)))
-    {
-        ZwClose(ClassRoot);
-        return;
-    }
-
-    ZwClose(ClassRoot);
-
-    if (NT_SUCCESS(IopGetRegistryValue(ClassKey, L"Class", &Information)))
-    {
-        if (Information->Type == REG_SZ && Information->DataLength > sizeof(WCHAR))
-        {
-            IopSetDriverDatabaseValue(InstanceKey,
-                                      L"Class",
-                                      REG_SZ,
-                                      (PUCHAR)Information + Information->DataOffset,
-                                      Information->DataLength);
-        }
-
-        ExFreePool(Information);
-    }
-
-    ZwClose(ClassKey);
-}
-
 static
 BOOLEAN
 IopApplyDriverDatabaseMatch(
@@ -1076,7 +1028,6 @@ IopApplyDriverDatabaseMatch(
 
     IopSetDriverDatabaseValue(InstanceKey, L"ClassGUID", REG_SZ, GuidString.Buffer,
                               GuidString.Length + sizeof(UNICODE_NULL));
-    IopSetDriverDatabaseClassName(InstanceKey, &GuidString);
     RtlFreeUnicodeString(&GuidString);
     IopSetDriverDatabaseString(InstanceKey, L"Service", Config->Service);
     if (Config->Description[0])

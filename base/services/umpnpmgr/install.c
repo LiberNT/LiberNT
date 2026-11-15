@@ -174,7 +174,7 @@ GetDeviceInstallState(PCWSTR DeviceInstance)
     }
 
     if (RegQueryValueExW(DeviceKey,
-                         L"Class",
+                         L"ClassGUID",
                          NULL,
                          NULL,
                          NULL,

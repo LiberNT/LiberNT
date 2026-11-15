@@ -1256,9 +1256,31 @@ static LSTATUS query_driver_property( HKEY hkey, const struct property_desc *des
 }
 #endif
 
+#ifdef __REACTOS__
+/* Windows keeps no class name in an instance key: it is the Class value of the class key ClassGUID names */
+static LSTATUS query_device_class_name( HKEY hkey, struct property *prop )
+{
+    WCHAR guid[40], path[ARRAY_SIZE(L"System\\CurrentControlSet\\Control\\Class\\") + ARRAY_SIZE(guid)];
+    DWORD size = sizeof(guid), type;
+    LSTATUS err;
+    HKEY class_key;
+
+    if (RegQueryValueExW( hkey, L"ClassGUID", NULL, &type, (BYTE *)guid, &size ) || type != REG_SZ || size < 2 * sizeof(WCHAR))
+        return ERROR_NOT_FOUND;
+    guid[min( size / sizeof(WCHAR), ARRAY_SIZE(guid) - 1 )] = 0;
+    swprintf( path, ARRAY_SIZE(path), L"System\\CurrentControlSet\\Control\\Class\\%s", guid );
+    if (RegOpenKeyExW( HKEY_LOCAL_MACHINE, path, 0, KEY_QUERY_VALUE, &class_key )) return ERROR_NOT_FOUND;
+    err = query_named_property( class_key, L"Class", DEVPROP_TYPE_STRING, prop );
+    RegCloseKey( class_key );
+    return err;
+}
+#endif
+
 static LSTATUS query_device_property( HKEY hkey, const struct device *dev, struct property *prop )
 {
 #ifdef __REACTOS__
+    if (!memcmp( &DEVPKEY_Device_Class, &prop->key, sizeof(prop->key) ))
+        return query_device_class_name( hkey, prop );
     if (!memcmp( &DEVPKEY_Device_Parent, &prop->key, sizeof(prop->key) ))
         return query_device_parent( dev, prop );
     if (!memcmp( &DEVPKEY_Device_Children, &prop->key, sizeof(prop->key) ) ||

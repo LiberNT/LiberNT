@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     ClassInstallParams.c
     devclass.c
+    DeviceClassName.c
     DeviceDescription.c
     DeviceExtension.c
     DriverFeatureScore.c

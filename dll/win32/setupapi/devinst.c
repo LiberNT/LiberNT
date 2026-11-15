@@ -1888,16 +1888,10 @@ BOOL WINAPI SetupDiCreateDeviceInfoW(
         if (!IsEqualGUID(ClassGuid, &GUID_NULL))
         {
             WCHAR ClassGuidString[39];
-            WCHAR ClassName[MAX_CLASS_NAME_LEN];
 
             SETUPDI_GuidToString(ClassGuid, ClassGuidString);
             SetupDiSetDeviceRegistryPropertyW(set, &ClassData, SPDRP_CLASSGUID, (const BYTE *)ClassGuidString,
                                               sizeof(ClassGuidString));
-            if (SetupDiClassNameFromGuidW(ClassGuid, ClassName, ARRAYSIZE(ClassName), NULL))
-            {
-                SetupDiSetDeviceRegistryPropertyW(set, &ClassData, SPDRP_CLASS, (const BYTE *)ClassName,
-                                                  (strlenW(ClassName) + 1) * sizeof(WCHAR));
-            }
         }
 
         if (DeviceDescription)
@@ -4699,6 +4693,27 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyA(
 /***********************************************************************
  *		SetupDiGetDeviceRegistryPropertyW (SETUPAPI.@)
  */
+/* Windows keeps no class name in an instance key: it is the Class value of the class key ClassGUID names */
+static HKEY SETUPDI_OpenDeviceClassKey(HKEY hRoot, HKEY hInstanceKey)
+{
+    WCHAR szGuid[40];
+    WCHAR szPath[ARRAYSIZE(REGSTR_PATH_CLASS_NT) + 1 + ARRAYSIZE(szGuid)];
+    DWORD dwSize = sizeof(szGuid);
+    DWORD dwType;
+    HKEY hClassKey = NULL;
+
+    if (RegQueryValueExW(hInstanceKey, REGSTR_VAL_CLASSGUID, NULL, &dwType, (LPBYTE)szGuid, &dwSize) == ERROR_SUCCESS &&
+        dwType == REG_SZ && dwSize >= 2 * sizeof(WCHAR))
+    {
+        szGuid[min(dwSize / sizeof(WCHAR), ARRAYSIZE(szGuid) - 1)] = UNICODE_NULL;
+        snprintfW(szPath, ARRAYSIZE(szPath), L"%s\\%s", REGSTR_PATH_CLASS_NT, szGuid);
+        if (RegOpenKeyExW(hRoot, szPath, 0, KEY_QUERY_VALUE, &hClassKey) != ERROR_SUCCESS)
+            hClassKey = NULL;
+    }
+    RegCloseKey(hInstanceKey);
+    return hClassKey;
+}
+
 BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
         HDEVINFO  DeviceInfoSet,
         PSP_DEVINFO_DATA  DeviceInfoData,
@@ -4788,9 +4803,19 @@ BOOL WINAPI SetupDiGetDeviceRegistryPropertyW(
         hKey = SETUPDI_OpenDevKey(set->HKLM, devInfo, KEY_QUERY_VALUE);
         if (hKey == INVALID_HANDLE_VALUE)
             return FALSE;
-        lError = RegQueryValueExW(hKey, PropertyMap[Property].nameW,
-                 NULL, PropertyRegDataType, PropertyBuffer, &size);
-        RegCloseKey(hKey);
+        if (Property == SPDRP_CLASS)
+            hKey = SETUPDI_OpenDeviceClassKey(set->HKLM, hKey);
+        if (hKey != NULL)
+        {
+            lError = RegQueryValueExW(hKey, PropertyMap[Property].nameW,
+                     NULL, PropertyRegDataType, PropertyBuffer, &size);
+            RegCloseKey(hKey);
+        }
+        else
+        {
+            size = 0;
+            lError = ERROR_FILE_NOT_FOUND;
+        }
 
         if (RequiredSize)
             *RequiredSize = size;
@@ -4914,7 +4939,7 @@ BOOL WINAPI IntSetupDiSetDeviceRegistryPropertyAW(
     deviceInfo = (struct DeviceInfo *)DeviceInfoData->Reserved;
 
 #ifdef __REACTOS__
-    if (SETUPDI_GetReadOnlyRegistryPropertyError(Property) != ERROR_SUCCESS)
+    if (SETUPDI_GetReadOnlyRegistryPropertyError(Property) != ERROR_SUCCESS || Property == SPDRP_CLASS)
     {
         SetLastError(ERROR_INVALID_REG_PROPERTY);
         return FALSE;
@@ -7890,9 +7915,7 @@ SetupDiInstallDevice(
     TRACE("ClassGUID       : '%s'\n", debugstr_w(lpFullGuidString));
     TRACE("DeviceDesc      : '%s'\n", debugstr_w(SelectedDriver->Info.Description));
     TRACE("Mfg             : '%s'\n", debugstr_w(SelectedDriver->Info.MfgName));
-    rc = RegSetValueExW(hKey, REGSTR_VAL_CLASS, 0, REG_SZ, (const BYTE *)ClassName, (strlenW(ClassName) + 1) * sizeof(WCHAR));
-    if (rc == ERROR_SUCCESS)
-        rc = RegSetValueExW(hKey, REGSTR_VAL_CLASSGUID, 0, REG_SZ, (const BYTE *)lpFullGuidString, (strlenW(lpFullGuidString) + 1) * sizeof(WCHAR));
+    rc = RegSetValueExW(hKey, REGSTR_VAL_CLASSGUID, 0, REG_SZ, (const BYTE *)lpFullGuidString, (strlenW(lpFullGuidString) + 1) * sizeof(WCHAR));
     if (rc == ERROR_SUCCESS)
         rc = RegSetValueExW(hKey, REGSTR_VAL_DEVDESC, 0, REG_SZ, (const BYTE *)SelectedDriver->Info.Description, (strlenW(SelectedDriver->Info.Description) + 1) * sizeof(WCHAR));
     if (rc == ERROR_SUCCESS)

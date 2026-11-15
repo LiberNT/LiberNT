@@ -603,9 +603,9 @@ IopReadRegistryProperty(
         if (!NT_SUCCESS(Status)) return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    Status = IopGetRegistryValue(ValueKey,
-                                 (PWSTR)Property->ValueName,
-                                 &Information);
+    Status = Property->DriverKey ?
+             IopGetRegistryValue(ValueKey, (PWSTR)Property->ValueName, &Information) :
+             PiGetDeviceInstanceValue(ValueKey, Property->ValueName, &Information);
     ZwClose(ValueKey);
 
     if (!NT_SUCCESS(Status))

@@ -467,6 +467,65 @@ PnpDeviceObjectToDeviceInstance(
 }
 
 NTSTATUS
+PiGetDeviceInstanceValue(
+    _In_ HANDLE InstanceKey,
+    _In_ PCWSTR ValueName,
+    _Outptr_ PKEY_VALUE_FULL_INFORMATION *Information)
+{
+    static CONST UNICODE_STRING ClassRootName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+    PKEY_VALUE_FULL_INFORMATION GuidInformation;
+    UNICODE_STRING ClassRootU = ClassRootName;
+    UNICODE_STRING GuidString;
+    HANDLE ClassRoot;
+    HANDLE ClassKey;
+    NTSTATUS Status;
+    PWCHAR Guid;
+    ULONG Count;
+
+    PAGED_CODE();
+    ASSERT(InstanceKey != NULL);
+    ASSERT(ValueName != NULL);
+    ASSERT(Information != NULL);
+
+    *Information = NULL;
+    if (_wcsicmp(ValueName, L"Class") != 0)
+        return IopGetRegistryValue(InstanceKey, (PWSTR)ValueName, Information);
+
+    /* Windows keeps no class name in an instance key: it is the Class value of the class key ClassGUID names */
+    Status = IopGetRegistryValue(InstanceKey, L"ClassGUID", &GuidInformation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Guid = (PWCHAR)((PUCHAR)GuidInformation + GuidInformation->DataOffset);
+    for (Count = 0; Count < GuidInformation->DataLength / sizeof(WCHAR) && Guid[Count] != UNICODE_NULL; Count++);
+    if (GuidInformation->Type != REG_SZ || Count == 0 || Count > MAXUSHORT / sizeof(WCHAR))
+    {
+        ExFreePool(GuidInformation);
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+    }
+
+    GuidString.Buffer = Guid;
+    GuidString.Length = (USHORT)(Count * sizeof(WCHAR));
+    GuidString.MaximumLength = GuidString.Length;
+    ASSERT(GuidString.Length <= GuidInformation->DataLength);
+
+    Status = IopOpenRegistryKeyEx(&ClassRoot, NULL, &ClassRootU, KEY_READ);
+    if (NT_SUCCESS(Status))
+    {
+        Status = IopOpenRegistryKeyEx(&ClassKey, ClassRoot, &GuidString, KEY_READ);
+        ZwClose(ClassRoot);
+    }
+    ExFreePool(GuidInformation);
+    if (!NT_SUCCESS(Status))
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+
+    Status = IopGetRegistryValue(ClassKey, L"Class", Information);
+    ZwClose(ClassKey);
+    return Status;
+}
+
+NTSTATUS
 PiGetDeviceRegistryProperty(
     _In_ PDEVICE_OBJECT DeviceObject,
     _In_ ULONG ValueType,
@@ -503,7 +562,7 @@ PiGetDeviceRegistryProperty(
         InstanceKey = SubKey;
     }
 
-    Status = IopGetRegistryValue(InstanceKey, (PWSTR)ValueName, &Information);
+    Status = PiGetDeviceInstanceValue(InstanceKey, ValueName, &Information);
     ZwClose(InstanceKey);
 
     if (!NT_SUCCESS(Status)) return Status;
@@ -632,6 +691,10 @@ IopSetDeviceInstanceData(
                       &Value,
                       sizeof(Value));
     }
+
+    /* Windows keeps no class name in an instance key; earlier LiberNT builds wrote one there */
+    RtlInitUnicodeString(&ValueName, L"Class");
+    ZwDeleteValueKey(InstanceKey, &ValueName);
 
     /* A device seen for the first time starts with no configuration flags; one seen before keeps its own */
     RtlInitUnicodeString(&ValueName, L"ConfigFlags");

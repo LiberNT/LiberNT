@@ -114,14 +114,6 @@ NewDevSetFailedInstall(
 
     if (Set)
     {
-        /* Set the 'Unknown' device class */
-        PWSTR pszUnknown = L"Unknown";
-        SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
-                                          DevInfoData,
-                                          SPDRP_CLASS,
-                                          (PBYTE)pszUnknown,
-                                          (wcslen(pszUnknown) + 1) * sizeof(WCHAR));
-
         PWSTR pszUnknownGuid = L"{4D36E97E-E325-11CE-BFC1-08002BE10318}";
         SetupDiSetDeviceRegistryPropertyW(DeviceInfoSet,
                                           DevInfoData,

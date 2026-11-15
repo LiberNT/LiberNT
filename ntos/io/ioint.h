@@ -491,6 +491,9 @@ NTSTATUS NTAPI IopInvalidDeviceRequest(_In_ PDEVICE_OBJECT DeviceObject, _In_ PI
 NTSTATUS IopGetParentIdPrefix(_In_ PDEVICE_NODE DeviceNode, _Out_ PUNICODE_STRING Prefix);
 NTSTATUS PiGetChildIdPrefix(_In_opt_ PDEVICE_NODE Parent, _Out_ PUNICODE_STRING Prefix);
 NTSTATUS IopSetDeviceInstanceData(_In_ HANDLE InstanceKey, _In_ PDEVICE_NODE DeviceNode);
+NTSTATUS PiGetDeviceInstanceValue(_In_ HANDLE InstanceKey,
+                                  _In_ PCWSTR ValueName,
+                                  _Outptr_ PKEY_VALUE_FULL_INFORMATION *Information);
 NTSTATUS PiGetDeviceRegistryProperty(_In_ PDEVICE_OBJECT DeviceObject,
                                      _In_ ULONG ValueType,
                                      _In_ PCWSTR ValueName,

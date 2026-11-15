@@ -4,6 +4,7 @@
 
 extern void func_ClassInstallParams(void);
 extern void func_devclass(void);
+extern void func_DeviceClassName(void);
 extern void func_DeviceDescription(void);
 extern void func_DeviceExtension(void);
 extern void func_DriverFeatureScore(void);
@@ -31,6 +32,7 @@ const struct test winetest_testlist[] =
 {
     { "ClassInstallParams", func_ClassInstallParams },
     { "devclass", func_devclass },
+    { "DeviceClassName", func_DeviceClassName },
     { "DeviceDescription", func_DeviceDescription },
     { "DeviceExtension", func_DeviceExtension },
     { "DriverFeatureScore", func_DriverFeatureScore },
