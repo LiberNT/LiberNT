@@ -99,6 +99,60 @@ static void TestEnumOneByOne(ITfInputProcessorProfiles *pProfiles)
     ok_long(cOther, 0);
 }
 
+static BOOL IsLayoutLoaded(HKL hkl)
+{
+    HKL ahkl[64];
+    int c = GetKeyboardLayoutList(_countof(ahkl), ahkl), i;
+
+    for (i = 0; i < c; i++)
+    {
+        if (ahkl[i] == hkl)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static void TestLanguageList(ITfInputProcessorProfiles *pProfiles)
+{
+    HKL hklGerman = (HKL)(ULONG_PTR)0x04070407, hklUs = (HKL)(ULONG_PTR)0x04090409;
+    BOOL fGerman = IsLayoutLoaded(hklGerman), fUs = IsLayoutLoaded(hklUs);
+    HKL hklIntl, ahkl[64];
+    LANGID expected[64], *langids = NULL;
+    ULONG count = 0, cExpected = 0, i;
+    int c, j;
+    HRESULT hr;
+
+    LoadKeyboardLayoutW(L"00000407", KLF_NOTELLSHELL);
+    LoadKeyboardLayoutW(L"00000409", KLF_NOTELLSHELL);
+    hklIntl = LoadKeyboardLayoutW(L"00020409", KLF_NOTELLSHELL);
+
+    c = GetKeyboardLayoutList(_countof(ahkl), ahkl);
+    for (j = 0; j < c; j++)
+    {
+        for (i = 0; i < cExpected && expected[i] != LOWORD(HandleToUlong(ahkl[j])); i++)
+            ;
+        if (i == cExpected)
+            expected[cExpected++] = LOWORD(HandleToUlong(ahkl[j]));
+    }
+
+    hr = pProfiles->GetLanguageList(&langids, &count);
+    ok_hr(hr, S_OK);
+    ok(count == cExpected, "GetLanguageList returned %lu languages, expected %lu\n", count, cExpected);
+    for (i = 0; i < count && i < cExpected; i++)
+        ok(langids[i] == expected[i], "language %lu is %04x, expected %04x\n", i, langids[i], expected[i]);
+    for (i = 0; i < count && langids[i] != 0x0407; i++)
+        ;
+    ok(i < count, "0407 is missing\n");
+    CoTaskMemFree(langids);
+
+    if (hklIntl)
+        UnloadKeyboardLayout(hklIntl);
+    if (!fGerman)
+        UnloadKeyboardLayout(hklGerman);
+    if (!fUs)
+        UnloadKeyboardLayout(hklUs);
+}
+
 class CLanguageSink : public ITfLanguageProfileNotifySink
 {
 public:
@@ -268,6 +322,7 @@ START_TEST(profiles)
     check_enabled(pProfiles, FALSE, ENABLE_ABSENT, 0);
 
     Cleanup(pProfiles);
+    TestLanguageList(pProfiles);
     TestChangeLanguage(pProfiles);
     pProfiles->Release();
     CoUninitialize();
