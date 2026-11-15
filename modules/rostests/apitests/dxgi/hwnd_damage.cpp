@@ -61,7 +61,7 @@ static void Pump(DWORD Milliseconds)
     }
 }
 
-static BOOL WaitForScreenColor(HDC Screen, POINT Origin, LONG X, LONG Y, COLORREF Expected)
+static BOOL WaitForScreenColor(HDC Screen, POINT Origin, LONG X, LONG Y, COLORREF Expected, DWORD Timeout = 2000)
 {
     DWORD Start = GetTickCount();
     COLORREF Actual;
@@ -71,7 +71,7 @@ static BOOL WaitForScreenColor(HDC Screen, POINT Origin, LONG X, LONG Y, COLORRE
         if (ScreenColorNear(Screen, Origin, X, Y, Expected, &Actual))
             return TRUE;
         Pump(10);
-    } while (GetTickCount() - Start < 2000);
+    } while (GetTickCount() - Start < Timeout);
     return FALSE;
 }
 
@@ -431,6 +431,72 @@ static void TestScroll(IDXGIFactory2 *Factory, ID3D11Device *Device, ID3D11Devic
     DestroyWindow(Window);
 }
 
+#define MANY_RECTS 600000
+
+/* A present with more dirty rectangles than a command buffer holds still updates exactly those rectangles. */
+static void TestManyRects(IDXGIFactory2 *Factory, ID3D11Device *Device, ID3D11DeviceContext *Context, HDC Screen)
+{
+    static const RECT Area = {32, 24, 96, 72};
+    POINT Origin = {400, 400};
+    HWND Window = CreateTestWindow(Origin);
+    IDXGISwapChain1 *Chain = Window ? CreateChain(Factory, Device, Window, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL) : NULL;
+    ID3D11Texture2D *Buffer = NULL;
+    RECT *Rects;
+    COLORREF Actual;
+    HRESULT Hr;
+
+    if (!Chain)
+    {
+        if (Window) DestroyWindow(Window);
+        return;
+    }
+
+    Rects = static_cast<RECT *>(HeapAlloc(GetProcessHeap(), 0, MANY_RECTS * sizeof(*Rects)));
+    ok(Rects != NULL, "Failed to allocate the dirty rectangles\n");
+    Hr = Chain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&Buffer));
+    ok(Hr == S_OK && Buffer, "GetBuffer: %#lx\n", Hr);
+    if (Rects && Buffer)
+    {
+        RECT Full = {0, 0, WIDTH, HEIGHT};
+        DXGI_PRESENT_PARAMETERS Params = {1, &Full, NULL, NULL};
+        LONG Width = Area.right - Area.left, Height = Area.bottom - Area.top;
+
+        FillBuffer(Context, Buffer, NULL, Frames[0].Pixel);
+        Hr = Chain->Present1(0, 0, &Params);
+        ok(Hr == S_OK, "Initial Present1: %#lx\n", Hr);
+        ok(WaitForScreenColor(Screen, Origin, 64, 44, Frames[0].Screen), "Initial frame never reached the screen\n");
+
+        for (UINT i = 0; i < MANY_RECTS; ++i)
+        {
+            LONG X = Area.left + static_cast<LONG>(i % (Width * Height)) % Width;
+            LONG Y = Area.top + static_cast<LONG>(i % (Width * Height)) / Width;
+            SetRect(&Rects[i], X, Y, X + 1, Y + 1);
+        }
+        FillBuffer(Context, Buffer, &Area, Frames[1].Pixel);
+        Params.DirtyRectsCount = MANY_RECTS;
+        Params.pDirtyRects = Rects;
+        Hr = Chain->Present1(0, 0, &Params);
+        ok(Hr == S_OK, "Present1 with %u dirty rects: %#lx\n", MANY_RECTS, Hr);
+        if (SUCCEEDED(Hr))
+        {
+            ok(WaitForScreenColor(Screen, Origin, 64, 48, Frames[1].Screen, 20000), "Dirty area never reached the screen\n");
+            ok(ScreenColorNear(Screen, Origin, Area.left, Area.top, Frames[1].Screen, &Actual),
+               "Dirty corner shows %06lx, expected %06lx\n", Actual, Frames[1].Screen);
+            ok(ScreenColorNear(Screen, Origin, Area.right - 1, Area.bottom - 1, Frames[1].Screen, &Actual),
+               "Dirty corner shows %06lx, expected %06lx\n", Actual, Frames[1].Screen);
+            ok(ScreenColorNear(Screen, Origin, 8, 8, Frames[0].Screen, &Actual),
+               "Undamaged pixel shows %06lx, expected %06lx\n", Actual, Frames[0].Screen);
+            ok(ScreenColorNear(Screen, Origin, 120, 88, Frames[0].Screen, &Actual),
+               "Undamaged pixel shows %06lx, expected %06lx\n", Actual, Frames[0].Screen);
+        }
+    }
+
+    if (Buffer) Buffer->Release();
+    if (Rects) HeapFree(GetProcessHeap(), 0, Rects);
+    Chain->Release();
+    DestroyWindow(Window);
+}
+
 /* Discard effects refuse dirty rectangles, even one covering the whole buffer; bitblt SEQUENTIAL takes them. */
 static void TestOtherEffects(IDXGIFactory2 *Factory, ID3D11Device *Device, ID3D11DeviceContext *Context)
 {
@@ -490,6 +556,7 @@ START_TEST(hwnd_damage)
         TestMultipleRects(Factory, Device, Context, Screen, FALSE);
         TestMultipleRects(Factory, Device, Context, Screen, TRUE);
         TestScroll(Factory, Device, Context, Screen);
+        TestManyRects(Factory, Device, Context, Screen);
         TestOtherEffects(Factory, Device, Context);
     }
     if (Screen) ReleaseDC(NULL, Screen);

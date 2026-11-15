@@ -3759,7 +3759,7 @@ void wined3d_cs_emit_decode(struct wined3d_decoder *decoder, struct wined3d_deco
 void wined3d_device_context_emit_clear_uav(struct wined3d_device_context *context,
         struct wined3d_unordered_access_view *view, const struct wined3d_uvec4 *clear_value, bool fp);
 void wined3d_cs_emit_preload_resource(struct wined3d_cs *cs, struct wined3d_resource *resource);
-void wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *swapchain, const RECT *src_rects,
+HRESULT wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *swapchain, const RECT *src_rects,
         const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect, const POINT *scroll_offset,
         HWND dst_window_override, unsigned int swap_interval, uint32_t flags);
 void wined3d_cs_emit_set_color_key(struct wined3d_cs *cs, struct wined3d_texture *texture,
