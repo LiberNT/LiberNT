@@ -2117,38 +2117,6 @@ PNP_GetDepth(
 }
 
 
-/* Windows keeps no class name in an instance key: it is the Class value of the class key ClassGUID names */
-static
-LONG
-OpenDeviceClassKey(
-    _In_ HKEY hInstanceKey,
-    _Out_ PHKEY phClassKey)
-{
-    WCHAR szGuid[40];
-    WCHAR szPath[ARRAYSIZE(L"System\\CurrentControlSet\\Control\\Class\\") + ARRAYSIZE(szGuid)];
-    DWORD dwSize = sizeof(szGuid);
-    DWORD dwType;
-
-    *phClassKey = NULL;
-    if (RegQueryValueExW(hInstanceKey, L"ClassGUID", NULL, &dwType, (LPBYTE)szGuid, &dwSize) != ERROR_SUCCESS ||
-        dwType != REG_SZ || dwSize < 2 * sizeof(WCHAR))
-    {
-        return ERROR_FILE_NOT_FOUND;
-    }
-
-    szGuid[min(dwSize / sizeof(WCHAR), ARRAYSIZE(szGuid) - 1)] = UNICODE_NULL;
-    _snwprintf(szPath, ARRAYSIZE(szPath) - 1, L"System\\CurrentControlSet\\Control\\Class\\%s", szGuid);
-    szPath[ARRAYSIZE(szPath) - 1] = UNICODE_NULL;
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, szPath, 0, KEY_QUERY_VALUE, phClassKey) != ERROR_SUCCESS)
-    {
-        *phClassKey = NULL;
-        return ERROR_FILE_NOT_FOUND;
-    }
-
-    return ERROR_SUCCESS;
-}
-
-
 /* Function 13 */
 DWORD
 WINAPI
@@ -2217,6 +2185,7 @@ PNP_GetDeviceRegProp(
             lpValueName = L"Service";
             break;
 
+        /* TODO: derive CM_DRP_CLASS from ClassGUID and the class key; instance keys hold no Class value */
         case CM_DRP_CLASS:
             lpValueName = L"Class";
             break;
@@ -2373,24 +2342,12 @@ PNP_GetDeviceRegProp(
             goto done;
         }
 
-        if (ulProperty == CM_DRP_CLASS)
-        {
-            HKEY hClassKey;
-
-            lError = OpenDeviceClassKey(hKey, &hClassKey);
-            RegCloseKey(hKey);
-            hKey = hClassKey;
-        }
-
-        if (lError == ERROR_SUCCESS)
-        {
-            lError = RegQueryValueExW(hKey,
-                                      lpValueName,
-                                      NULL,
-                                      pulRegDataType,
-                                      Buffer,
-                                      pulLength);
-        }
+        lError = RegQueryValueExW(hKey,
+                                  lpValueName,
+                                  NULL,
+                                  pulRegDataType,
+                                  Buffer,
+                                  pulLength);
         if (lError != ERROR_SUCCESS)
         {
             if (lError == ERROR_MORE_DATA)
