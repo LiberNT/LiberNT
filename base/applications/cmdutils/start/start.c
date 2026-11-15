@@ -139,6 +139,7 @@ static void usage(void)
  *   'a\b'   == 'a\b'
  *   'a\\b'  == 'a\\b'
  */
+#ifndef __REACTOS__
 static WCHAR *build_command_line( WCHAR **wargv )
 {
     int len;
@@ -194,6 +195,55 @@ static WCHAR *build_command_line( WCHAR **wargv )
     *p = 0;
     return ret;
 }
+#endif
+
+#ifdef __REACTOS__
+static const WCHAR *skip_command_line_args( const WCHAR *line, int count )
+{
+    const WCHAR *p = line;
+    int arg;
+
+    for (arg = 0; arg < count && *p; arg++)
+    {
+        BOOL quoted = FALSE;
+
+        while (*p == ' ' || *p == '\t') p++;
+        if (arg == 0)
+        {
+            if (*p == '"')
+            {
+                for (p++; *p && *p != '"'; p++);
+                if (*p) p++;
+            }
+            while (*p && *p != ' ' && *p != '\t') p++;
+            continue;
+        }
+        while (*p && (quoted || (*p != ' ' && *p != '\t')))
+        {
+            if (*p == '\\')
+            {
+                const WCHAR *q = p;
+
+                while (*q == '\\') q++;
+                p = (*q == '"' && ((q - p) & 1)) ? q + 1 : q;
+                continue;
+            }
+            if (*p == '"')
+            {
+                if (quoted && p[1] == '"')
+                {
+                    p += 2;
+                    continue;
+                }
+                quoted = !quoted;
+            }
+            p++;
+        }
+    }
+    while (*p == ' ' || *p == '\t') p++;
+    return p;
+}
+#endif
 
 static WCHAR *get_parent_dir(const WCHAR* path)
 {
@@ -544,7 +594,12 @@ static void parse_command_line( int argc, WCHAR *argv[] )
     }
     else file = argv[i++];
 
+#ifdef __REACTOS__
+    /* The program gets the rest of start's own command line as typed, like the start built into cmd on Windows. */
+    opts.sei.lpParameters = wcsdup( skip_command_line_args( GetCommandLineW(), i ) );
+#else
     opts.sei.lpParameters = build_command_line( &argv[i] );
+#endif
 
     if ((unix_mode || progid_open) && file[0] == '/')
     {

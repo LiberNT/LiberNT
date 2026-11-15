@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %*, syntax errors, IF redirections and FOR /F code pages
+ * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %*, syntax errors, IF redirections, FOR /F code pages and start arguments
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -401,9 +401,66 @@ static void test_dir_double_backslash(void)
     delete_file("unc.txt");
 }
 
+static void write_own_command_line(void)
+{
+    char line[1024];
+    int length;
+    HANDLE file;
+    DWORD written;
+
+    length = WideCharToMultiByte(CP_ACP, 0, GetCommandLineW(), -1, line, sizeof(line), NULL, NULL);
+    if (length <= 0)
+        return;
+    file = CreateFileA("cmdline.txt", GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    WriteFile(file, line, length - 1, &written, NULL);
+    CloseHandle(file);
+}
+
+static void test_start_passes_arguments_verbatim(void)
+{
+    static const char arguments[] = "/S /v\"/qn REBOOT=R\"";
+    char self[MAX_PATH], script[2 * MAX_PATH], path[MAX_PATH], line[1024];
+    const char *tail;
+    HANDLE file;
+    DWORD got = 0;
+
+    GetModuleFileNameA(NULL, self, sizeof(self));
+    StringCbPrintfA(script, sizeof(script), "@echo off\r\nstart \"\" /wait \"%s\" script cmdline %s\r\n", self, arguments);
+    write_file("startargs.cmd", script);
+    check_cmd(__LINE__, "cmd /c startargs.cmd", NULL, 0, "", TRUE);
+    delete_file("startargs.cmd");
+
+    StringCbPrintfA(path, sizeof(path), "%s\\cmdline.txt", s_dir);
+    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(file != INVALID_HANDLE_VALUE, "The program started by start did not run, error %lu\n", GetLastError());
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    ReadFile(file, line, sizeof(line) - 1, &got, NULL);
+    line[got] = 0;
+    CloseHandle(file);
+    DeleteFileA(path);
+
+    tail = strstr(line, " script cmdline ");
+    ok(tail != NULL, "Unexpected command line '%s'\n", line);
+    if (tail)
+        ok(!strcmp(tail + strlen(" script cmdline "), arguments), "start passed '%s', expected '%s'\n",
+           tail + strlen(" script cmdline "), arguments);
+}
+
 START_TEST(script)
 {
     char temp[MAX_PATH];
+    char **argv;
+    int argc;
+
+    argc = winetest_get_mainargs(&argv);
+    if (argc >= 3 && !strcmp(argv[2], "cmdline"))
+    {
+        write_own_command_line();
+        return;
+    }
 
     GetTempPathA(sizeof(temp), temp);
     StringCbPrintfA(s_dir, sizeof(s_dir), "%scmd_script_test", temp);
@@ -417,6 +474,7 @@ START_TEST(script)
     test_if_redirections();
     test_for_f_code_page();
     test_dir_double_backslash();
+    test_start_passes_arguments_verbatim();
 
     RemoveDirectoryA(s_dir);
 }
