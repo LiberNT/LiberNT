@@ -79,6 +79,8 @@ jobs:
         echo "CCACHE_DIR=${{github.workspace}}/ccache" >> $GITHUB_ENV
         echo "CCACHE_MAXSIZE=2G" >> $GITHUB_ENV
         echo "CCACHE_SLOPPINESS=time_macros" >> $GITHUB_ENV
+        # The statistics printed after the build are this run's alone
+        CCACHE_DIR=${{github.workspace}}/ccache ccache -z
 
     - name: Configure
       id: configure
@@ -111,16 +113,17 @@ jobs:
       if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
       run: ccache -s
 
+    # A cancelled build holds a partial cache: saving it would make it the newest and prune the full one
     - name: Save ccache
       id: ccache_save
-      if: ${{ always() && steps.ccache_restore.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' }}
       uses: actions/cache/save@v5
       with:
         path: ccache
         key: ${{ steps.ccache_restore.outputs.cache-primary-key }}
 
     - name: Prune older ccache entries
-      if: ${{ always() && steps.ccache_save.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.ccache_save.outcome == 'success' }}
       continue-on-error: true
       env:
         GH_TOKEN: ${{ github.token }}
