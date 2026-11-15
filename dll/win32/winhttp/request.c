@@ -243,7 +243,11 @@ static DWORD chunked_fill_buffer( struct data_stream *stream, struct request *re
                 chunked_stream->buf.pos = 0;
                 ret = netconn_recv( request->netconn, chunked_stream->buf.buf, sizeof(chunked_stream->buf.buf), 0,
                                     &read_bytes );
+#ifdef __REACTOS__
+                if (ret == ERROR_SUCCESS && read_bytes)
+#else
                 if (ret == ERROR_SUCCESS)
+#endif
                     chunked_stream->buf.size += read_bytes;
                 else
                     chunked_stream->state = CHUNKED_STREAM_STATE_ERROR;
@@ -444,6 +448,20 @@ static DWORD gzip_fill_buffer( struct data_stream *stream, struct request *reque
             TRACE( "end of data\n" );
             gzip_stream->end_of_data = TRUE;
             inflateEnd( zstream );
+#ifdef __REACTOS__
+            if (gzip_stream->parent != &request->netconn_stream.data_stream)
+            {
+                while (!gzip_stream->parent->vtbl->end_of_data( gzip_stream->parent, request ))
+                {
+                    gzip_stream->buf.pos = gzip_stream->buf.size = 0;
+                    if (gzip_stream->parent->vtbl->fill_buffer( gzip_stream->parent, request, &gzip_stream->buf ))
+                        break;
+                }
+                gzip_stream->buf.pos = gzip_stream->buf.size = 0;
+                if (((struct chunked_stream *)gzip_stream->parent)->state == CHUNKED_STREAM_STATE_ERROR)
+                    ret = ERROR_WINHTTP_INVALID_SERVER_RESPONSE;
+            }
+#endif
         }
         else if (zres != Z_OK)
         {
