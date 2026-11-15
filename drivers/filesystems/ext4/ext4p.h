@@ -11,7 +11,13 @@
 #include <ntdddisk.h>
 #include <mountdev.h>
 #include <pseh/pseh2.h>
+
+/* The 32-bit wdm.h defines SLIST_ENTRY as a macro, and so does lwext4's queue.h for its own lists */
+#pragma push_macro("SLIST_ENTRY")
+#undef SLIST_ENTRY
 #include "core/e4core.h"
+#undef SLIST_ENTRY
+#pragma pop_macro("SLIST_ENTRY")
 
 #define NDEBUG
 #include <debug.h>
