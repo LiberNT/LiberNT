@@ -337,6 +337,67 @@ AcpiPrtBuildForHandle(
     return AE_OK;
 }
 
+#define ACPI_PRT_MAX_BRIDGE_DEPTH 32
+
+static
+VOID
+AcpiPrtBuildForBridges(
+    _In_ ACPI_HANDLE Parent,
+    _In_ ULONG Segment,
+    _In_ UCHAR Bus,
+    _In_ ULONG Depth)
+{
+    ACPI_HANDLE Child = NULL;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Parent != NULL);
+
+    if (Depth >= ACPI_PRT_MAX_BRIDGE_DEPTH)
+        return;
+
+    while (ACPI_SUCCESS(AcpiGetNextObject(ACPI_TYPE_DEVICE, Parent, Child, &Child)))
+    {
+        ACPI_OBJECT Result;
+        ACPI_BUFFER Buffer = { sizeof(Result), &Result };
+        ACPI_PCI_ID PciId;
+        UINT64 Value;
+        UCHAR SecondaryBus;
+
+        if (ACPI_FAILURE(AcpiEvaluateObjectTyped(Child, METHOD_NAME__ADR, NULL, &Buffer, ACPI_TYPE_INTEGER)))
+            continue;
+
+        PciId.Segment = (UINT16)Segment;
+        PciId.Bus = Bus;
+        PciId.Device = (UINT16)((Result.Integer.Value >> 16) & 0xFFFF);
+        PciId.Function = (UINT16)(Result.Integer.Value & 0xFFFF);
+        if (PciId.Device >= PCI_MAX_DEVICES || PciId.Function >= PCI_MAX_FUNCTION)
+            continue;
+
+        if (ACPI_FAILURE(AcpiOsReadPciConfiguration(&PciId, FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID), &Value, 16)) ||
+            Value == PCI_INVALID_VENDORID)
+        {
+            continue;
+        }
+        if (ACPI_FAILURE(AcpiOsReadPciConfiguration(&PciId, FIELD_OFFSET(PCI_COMMON_CONFIG, HeaderType), &Value, 8)))
+            continue;
+        Value &= ~PCI_MULTIFUNCTION;
+        if (Value != PCI_BRIDGE_TYPE && Value != PCI_CARDBUS_BRIDGE_TYPE)
+            continue;
+        if (ACPI_FAILURE(AcpiOsReadPciConfiguration(&PciId, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.SecondaryBus), &Value, 8)))
+            continue;
+
+        SecondaryBus = (UCHAR)Value;
+        if (SecondaryBus <= Bus)
+        {
+            /* TODO: bridges the firmware left unnumbered get no _PRT once the PCI driver numbers them */
+            continue;
+        }
+
+        (VOID)AcpiPrtBuildForHandle(Child, Segment, SecondaryBus);
+        AcpiPrtBuildForBridges(Child, Segment, SecondaryBus, Depth + 1);
+    }
+}
+
 static
 BOOLEAN
 NTAPI
@@ -415,6 +476,7 @@ AcpiEnumRootBridgeCallback(
     }
 
     AcpiPrtBuildForHandle(ObjHandle, Segment, (UCHAR)Bus);
+    AcpiPrtBuildForBridges(ObjHandle, Segment, (UCHAR)Bus, 0);
     return AE_OK;
 }
 

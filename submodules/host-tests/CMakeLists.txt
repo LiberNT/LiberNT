@@ -46,6 +46,7 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_ACPI)
     add_subdirectory(acpival)
+    add_subdirectory(acpirouting)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_HALTIME)
