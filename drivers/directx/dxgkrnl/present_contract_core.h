@@ -107,6 +107,23 @@ DxgkVidPnCoreDisplayOnlyTakesLargestSource(
     return TargetModeCount <= 1;
 }
 
+#define DXGK_VIDPN_CORE_FORMAT_A8R8G8B8 21U
+#define DXGK_VIDPN_CORE_FORMAT_X8R8G8B8 22U
+
+/* The desktop is composed as B8G8R8A8: a source mode in that layout is pinned before one of the same size in another */
+FORCEINLINE
+ULONG
+DxgkVidPnCoreSourceFormatRank(
+    _In_ ULONG PixelFormat)
+{
+    if (PixelFormat == DXGK_VIDPN_CORE_FORMAT_A8R8G8B8)
+        return 0;
+    if (PixelFormat == DXGK_VIDPN_CORE_FORMAT_X8R8G8B8)
+        return 1;
+
+    return 2;
+}
+
 /* WDK: DxgkDdiSetVidPnSourceAddress switches the mode and performs MMIO flips; any other flip is the DMA buffer DxgkDdiPresent built */
 FORCEINLINE
 BOOLEAN

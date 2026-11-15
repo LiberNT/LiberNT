@@ -2564,6 +2564,10 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             BOOLEAN FoundSource = FALSE;
             SIZE_T BestSourceIndex = (SIZE_T)-1;
             ULONGLONG BestSourceScore = ~0ULL;
+            ULONG PinnedFormatRank = MAXULONG;
+
+            C_ASSERT(DXGK_VIDPN_CORE_FORMAT_A8R8G8B8 == D3DDDIFMT_A8R8G8B8);
+            C_ASSERT(DXGK_VIDPN_CORE_FORMAT_X8R8G8B8 == D3DDDIFMT_X8R8G8B8);
             for (i = 0; i < SrcSet->NumModes; i++)
             {
                 if (!PreferClosestPostSourceMode &&
@@ -2572,14 +2576,22 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
                     (UINT)SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cx == DesiredWidth &&
                     (UINT)SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cy == DesiredHeight)
                 {
-                    SrcSet->PinnedModeId = SrcSet->Modes[i].Id;
-                    SourceWidth = SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cx;
-                    SourceHeight = SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cy;
-                    FoundSource = TRUE;
-                    DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: pinned source mode id=%u "
-                                  "(%ux%u)\n", SrcSet->PinnedModeId,
-                                  SourceWidth, SourceHeight);
-                    break;
+                    ULONG FormatRank = DxgkVidPnCoreSourceFormatRank((ULONG)SrcSet->Modes[i].Format.Graphics.PixelFormat);
+
+                    if (FormatRank < PinnedFormatRank)
+                    {
+                        PinnedFormatRank = FormatRank;
+                        SrcSet->PinnedModeId = SrcSet->Modes[i].Id;
+                        SourceWidth = SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cx;
+                        SourceHeight = SrcSet->Modes[i].Format.Graphics.PrimSurfSize.cy;
+                        FoundSource = TRUE;
+                        DXGKRNL_TRACE("DxgkpCommitVidPnToMiniport: pinned source mode id=%u "
+                                      "(%ux%u)\n", SrcSet->PinnedModeId,
+                                      SourceWidth, SourceHeight);
+                    }
+                    if (FormatRank == 0)
+                        break;
+                    continue;
                 }
 
                 if (Adapter->PostDisplayWidth > 0 && Adapter->PostDisplayHeight > 0)
