@@ -421,6 +421,20 @@ SETUPAPI_RecordDriverDatabasePackage(
     IN PCWSTR InfName,
     IN PCWSTR OemPath OPTIONAL);
 
+BOOL
+SETUPAPI_GetInfCatalogFile(
+    IN HINF hInf,
+    OUT PWSTR CatalogFileName OPTIONAL,
+    IN DWORD CatalogFileNameSize);
+
+BOOL
+SETUPAPI_IsSystemInfDirectory(
+    IN PCWSTR Directory);
+
+DWORD
+SETUPAPI_GetCatalogSignerScore(
+    IN PCWSTR CatalogPath);
+
 VOID
 SETUPAPI_DeleteDriverDatabasePackage(
     IN PCWSTR PublishedName);

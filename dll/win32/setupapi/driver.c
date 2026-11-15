@@ -2875,8 +2875,17 @@ SETUPAPI_RecordDriverDatabasePackage(
         DriverDatabaseSetString(Package, L"Provider", Provider);
     if (OemPath)
     {
+        WCHAR Catalog[MAX_PATH], CatalogPath[2 * MAX_PATH];
+        DWORD SignerScore = SIGNERSCORE_UNSIGNED;
+
         DriverDatabaseSetString(Package, L"InfName", InfName);
         DriverDatabaseSetString(Package, L"OemPath", OemPath);
+        if (SETUPAPI_GetInfCatalogFile(hInf, Catalog, ARRAY_SIZE(Catalog)))
+        {
+            swprintf(CatalogPath, ARRAY_SIZE(CatalogPath), L"%s\\%s", OemPath, Catalog);
+            SignerScore = SETUPAPI_GetCatalogSignerScore(CatalogPath);
+        }
+        DriverDatabaseSetDword(Package, L"SignerScore", SignerScore);
     }
     else
     {

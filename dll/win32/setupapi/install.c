@@ -3235,6 +3235,15 @@ BOOL WINAPI SetupCopyOEMInfW(
         hinf = SetupOpenInfFileW(SourceInfFileName, NULL, INF_STYLE_WIN4, NULL);
     }
 
+    if (hinf != INVALID_HANDLE_VALUE && !SETUPAPI_IsSystemInfDirectory(dir) &&
+        !SETUPAPI_GetInfCatalogFile(hinf, NULL, 0))
+    {
+        SetupCloseInfFile(hinf);
+        MyFree(dir);
+        SetLastError(ERROR_NO_CATALOG_FOR_OEM_INF);
+        return FALSE;
+    }
+
     ret = copy_oem_inf(SourceInfFileName, OEMSourceMediaLocation, OEMSourceMediaType, CopyStyle,
                        DestinationInfFileName, DestinationInfFileNameSize, RequiredSize,
                        DestinationInfFileNameComponent);

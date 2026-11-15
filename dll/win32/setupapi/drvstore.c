@@ -539,6 +539,159 @@ StageCatalogFiles(
     } while (SetupFindNextLine(&Context, &Context));
 }
 
+/* The catalog an INF names for this platform: CatalogFile.NT<platform>, then CatalogFile.NT, then CatalogFile */
+BOOL
+SETUPAPI_GetInfCatalogFile(
+    IN HINF hInf,
+    OUT PWSTR CatalogFileName OPTIONAL,
+    IN DWORD CatalogFileNameSize)
+{
+    WCHAR Key[LINE_LEN], Name[MAX_PATH];
+    SYSTEM_INFO SystemInfo;
+    INFCONTEXT Context;
+    PCWSTR Platform;
+    PCWSTR Suffixes[3];
+    DWORD Index;
+
+    GetNativeSystemInfo(&SystemInfo);
+    switch (SystemInfo.wProcessorArchitecture)
+    {
+        case PROCESSOR_ARCHITECTURE_AMD64:
+            Platform = L".NTamd64";
+            break;
+        case PROCESSOR_ARCHITECTURE_INTEL:
+            Platform = L".NTx86";
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM64:
+            Platform = L".NTarm64";
+            break;
+        case PROCESSOR_ARCHITECTURE_ARM:
+            Platform = L".NTarm";
+            break;
+        default:
+            /* TODO: the INF decoration of a catalog for RISC-V64 is not documented; only .NT and the plain key are used */
+            Platform = NULL;
+            break;
+    }
+
+    Suffixes[0] = Platform;
+    Suffixes[1] = L".NT";
+    Suffixes[2] = L"";
+    for (Index = 0; Index < ARRAY_SIZE(Suffixes); Index++)
+    {
+        if (Suffixes[Index] == NULL)
+            continue;
+        swprintf(Key, ARRAY_SIZE(Key), L"%s%s", CatalogFile, Suffixes[Index]);
+        if (SetupFindFirstLineW(hInf, VersionSection, Key, &Context) &&
+            SetupGetStringFieldW(&Context, 1, Name, ARRAY_SIZE(Name), NULL) && Name[0])
+        {
+            if (CatalogFileName && lstrlenW(Name) >= (int)CatalogFileNameSize)
+                return FALSE;
+            if (CatalogFileName)
+                lstrcpyW(CatalogFileName, Name);
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+/* An INF in %windir%\INF or in the driver store is not a third-party source */
+BOOL
+SETUPAPI_IsSystemInfDirectory(
+    IN PCWSTR Directory)
+{
+    WCHAR Windows[MAX_PATH], Path[MAX_PATH + 32];
+    UINT Length;
+
+    Length = GetWindowsDirectoryW(Windows, ARRAY_SIZE(Windows));
+    if (Length == 0 || Length >= ARRAY_SIZE(Windows))
+        return FALSE;
+
+    swprintf(Path, ARRAY_SIZE(Path), L"%s\\INF", Windows);
+    if (!lstrcmpiW(Directory, Path))
+        return TRUE;
+    swprintf(Path, ARRAY_SIZE(Path), L"%s\\System32\\DriverStore\\", Windows);
+    return !_wcsnicmp(Directory, Path, lstrlenW(Path));
+}
+
+static BOOL
+CertificateHasWhqlUsage(
+    IN PCCERT_CONTEXT Certificate)
+{
+    CERT_ENHKEY_USAGE *Usage;
+    DWORD Size = 0, Index;
+    BOOL Found = FALSE;
+
+    if (!CertGetEnhancedKeyUsage(Certificate, 0, NULL, &Size) || Size == 0)
+        return FALSE;
+    Usage = MyMalloc(Size);
+    if (!Usage)
+        return FALSE;
+    if (CertGetEnhancedKeyUsage(Certificate, 0, Usage, &Size))
+    {
+        for (Index = 0; Index < Usage->cUsageIdentifier && !Found; Index++)
+            Found = !strcmp(Usage->rgpszUsageIdentifier[Index], szOID_WHQL_CRYPTO);
+    }
+    MyFree(Usage);
+    return Found;
+}
+
+/* The signer score Windows 11 records for a third-party package: 0x0D000004 for a catalog a Microsoft hardware publisher signed */
+DWORD
+SETUPAPI_GetCatalogSignerScore(
+    IN PCWSTR CatalogPath)
+{
+    GUID Action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_FILE_INFO File;
+    WINTRUST_DATA Data;
+    CRYPT_PROVIDER_DATA *Provider;
+    CRYPT_PROVIDER_SGNR *Signer;
+    CERT_CHAIN_POLICY_PARA Policy;
+    CERT_CHAIN_POLICY_STATUS Result;
+    DWORD Score = SIGNERSCORE_UNSIGNED;
+
+    ZeroMemory(&File, sizeof(File));
+    File.cbStruct = sizeof(File);
+    File.pcwszFilePath = CatalogPath;
+    ZeroMemory(&Data, sizeof(Data));
+    Data.cbStruct = sizeof(Data);
+    Data.dwUIChoice = WTD_UI_NONE;
+    Data.fdwRevocationChecks = WTD_REVOKE_NONE;
+    Data.dwUnionChoice = WTD_CHOICE_FILE;
+    Data.pFile = &File;
+    Data.dwStateAction = WTD_STATEACTION_VERIFY;
+    Data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL | WTD_REVOCATION_CHECK_NONE;
+
+    /* FIXME: Windows 11 refuses a package whose catalog does not verify; such a package is staged as unsigned */
+    if (WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &Action, &Data) == ERROR_SUCCESS)
+    {
+        Provider = WTHelperProvDataFromStateData(Data.hWVTStateData);
+        Signer = Provider ? WTHelperGetProvSignerFromChain(Provider, 0, FALSE, 0) : NULL;
+        ZeroMemory(&Policy, sizeof(Policy));
+        Policy.cbSize = sizeof(Policy);
+        ZeroMemory(&Result, sizeof(Result));
+        Result.cbSize = sizeof(Result);
+        if (Signer && Signer->pChainContext && Signer->pChainContext->cChain &&
+            Signer->pChainContext->rgpChain[0]->cElement &&
+            CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_MICROSOFT_ROOT, Signer->pChainContext, &Policy, &Result) &&
+            Result.dwError == ERROR_SUCCESS &&
+            CertificateHasWhqlUsage(Signer->pChainContext->rgpChain[0]->rgpElement[0]->pCertContext))
+        {
+            Score = SIGNERSCORE_UNCLASSIFIED;
+        }
+        else
+        {
+            /* TODO: the score Windows 11 records for a catalog signed outside the Microsoft hardware program is not measured */
+            Score = SIGNERSCORE_AUTHENTICODE;
+        }
+    }
+
+    Data.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &Action, &Data);
+    return Score;
+}
+
 BOOL
 SETUPAPI_GetDriverPackageId(
     IN PCWSTR InfFileName,
