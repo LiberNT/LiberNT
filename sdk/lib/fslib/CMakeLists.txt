@@ -1,6 +1,5 @@
 
 add_subdirectory(cdfslib)
-add_subdirectory(ext2lib)
 add_subdirectory(ntfslib)
 add_subdirectory(ntfslib_new)
 add_subdirectory(vfatlib)

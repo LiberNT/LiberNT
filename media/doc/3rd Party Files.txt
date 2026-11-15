@@ -157,13 +157,11 @@ Used Version: git commit f73e552
 License: MS-PL (https://spdx.org/licenses/MS-PL.html)
 URL: https://github.com/microsoft/Windows-driver-samples/tree/master/filesys/cdfs
 
-Title: Ext2Fsd
-Path: drivers/filesystems/ext2
-Path: sdk/lib/fslib/ext2lib
-Used Version: 0.69
-License: GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later.html)
-URL: https://web.archive.org/web/20210516213924/http://www.ext2fsd.com
-URL: https://sourceforge.net/projects/ext2fsd
+Title: lwext4
+Path: sdk/lib/3rdparty/lwext4
+Used Version: git commit 58bcf89 with the LiberNT changes listed in sdk/lib/3rdparty/lwext4/LIBERNT.md
+License: BSD-3-Clause (https://spdx.org/licenses/BSD-3-Clause.html), GPL-2.0-or-later for src/ext4_extent.c and src/ext4_xattr.c (https://spdx.org/licenses/GPL-2.0-or-later.html)
+URL: https://github.com/gkostka/lwext4
 
 Title: NFSv4.1 Client for Windows
 Path: base/services/nfsd

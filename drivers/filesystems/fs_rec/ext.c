@@ -97,7 +97,7 @@ FsRecExtFsControl(IN PDEVICE_OBJECT DeviceObject,
 
             /* Load the file system */
             Status = FsRecLoadFileSystem(DeviceObject,
-                                         L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\Ext2fs");
+                                         L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\ext4");
             break;
 
         default:

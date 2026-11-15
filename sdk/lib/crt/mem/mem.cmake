@@ -58,7 +58,7 @@ endif()
 #    ${LIBCNTPR_MEM_SOURCE}
 #)
 
-# Needed by ext2fs. Should use RtlCompareMemory instead?
+# Needed by the file system drivers. Should use RtlCompareMemory instead?
 if(ARCH STREQUAL "riscv64")
     add_library(memcmp string/riscv64/rvmemcmp.c)
 else()

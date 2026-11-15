@@ -595,7 +595,7 @@ FsGetVolumeSize(
     if (!_wcsicmp(ServiceName, L"ntfs"))
         pFsGetVolumeSize = NtfsGetVolumeSize;
     else
-    if (!_wcsicmp(ServiceName, L"ext2fs"))
+    if (!_wcsicmp(ServiceName, L"ext4"))
         pFsGetVolumeSize = ExtGetVolumeSize;
     else
 #endif

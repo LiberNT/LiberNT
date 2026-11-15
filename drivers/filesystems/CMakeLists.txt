@@ -2,7 +2,7 @@
 add_subdirectory(btrfs)
 add_subdirectory(cdfs)
 add_subdirectory(exfat)
-add_subdirectory(ext2)
+add_subdirectory(ext4)
 add_subdirectory(fastfat)
 add_subdirectory(fs_rec)
 add_subdirectory(msfs)

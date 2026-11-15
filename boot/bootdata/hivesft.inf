@@ -5938,7 +5938,6 @@ HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones\Yukon Standard Tim
 HKLM,"SOFTWARE\ReactOS\ReactOS\CurrentVersion\IFS","FAT",0x00000000,"ufat.dll"
 HKLM,"SOFTWARE\ReactOS\ReactOS\CurrentVersion\IFS","FAT32",0x00000000,"ufat.dll"
 HKLM,"SOFTWARE\ReactOS\ReactOS\CurrentVersion\IFS","FATX",0x00000000,"ufatx.dll"
-HKLM,"SOFTWARE\ReactOS\ReactOS\CurrentVersion\IFS","EXT2",0x00000000,"uext2.dll"
 HKLM,"SOFTWARE\ReactOS\ReactOS\CurrentVersion\IFS","NTFS",0x00000000,"untfs.dll"
 
 ; Global Winlogon settings

@@ -1,0 +1,7 @@
+; ext4 file system driver
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\ext4","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\ext4","Group",0x00000000,"Boot File System"
+HKLM,"SYSTEM\CurrentControlSet\Services\ext4","ImagePath",0x00020000,"system32\drivers\ext4.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\ext4","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\ext4","Type",0x00010001,0x00000002
