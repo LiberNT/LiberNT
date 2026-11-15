@@ -269,6 +269,7 @@ static HRESULT swapchain_present_rects(struct wined3d_swapchain *swapchain, cons
 {
     const struct wined3d_swapchain_desc *desc = &swapchain->state.desc;
     RECT s, d;
+    HRESULT hr;
 
     if (flags)
         FIXME("Ignoring flags %#x.\n", flags);
@@ -301,12 +302,12 @@ static HRESULT swapchain_present_rects(struct wined3d_swapchain *swapchain, cons
         dst_rects = &d;
     }
 
-    wined3d_cs_emit_present(swapchain->device->cs, swapchain, src_rects,
+    hr = wined3d_cs_emit_present(swapchain->device->cs, swapchain, src_rects,
             dst_rects, rect_count, scroll_rect, scroll_offset, dst_window_override, swap_interval, flags);
 
     wined3d_mutex_unlock();
 
-    return WINED3D_OK;
+    return hr;
 }
 
 HRESULT CDECL wined3d_swapchain_present(struct wined3d_swapchain *swapchain,

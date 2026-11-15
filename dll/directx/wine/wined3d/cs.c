@@ -167,6 +167,7 @@ struct wined3d_cs_present
     BOOL has_scroll;
     RECT scroll_rect;
     POINT scroll_offset;
+    RECT *heap_rects;
     RECT rects[1];
 };
 
@@ -673,6 +674,7 @@ static void wined3d_cs_exec_present(struct wined3d_cs *cs, const void *data)
     const struct wined3d_cs_present *op = data;
     const struct wined3d_swapchain_desc *desc;
     struct wined3d_swapchain *swapchain;
+    const RECT *rects;
     LONGLONG elapsed_time;
     LARGE_INTEGER time;
 
@@ -724,9 +726,11 @@ static void wined3d_cs_exec_present(struct wined3d_cs *cs, const void *data)
                     &src_rect, WINED3D_BLT_ALPHA_TEST, NULL, WINED3D_TEXF_POINT);
     }
 
-    swapchain->swapchain_ops->swapchain_present(swapchain, op->rects, &op->rects[op->rect_count],
+    rects = op->heap_rects ? op->heap_rects : op->rects;
+    swapchain->swapchain_ops->swapchain_present(swapchain, rects, &rects[op->rect_count],
             op->rect_count, op->has_scroll ? &op->scroll_rect : NULL, &op->scroll_offset,
             op->swap_interval, op->flags);
+    free(op->heap_rects);
 
     /* Discard buffers if the swap effect allows it. */
     back_buffer = swapchain->back_buffers[desc->backbuffer_count - 1];
@@ -769,23 +773,36 @@ static void wined3d_cs_exec_present(struct wined3d_cs *cs, const void *data)
     ReleaseSemaphore(swapchain->frame_latency_semaphore, 1, NULL);
 }
 
-void wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *swapchain,
+HRESULT wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *swapchain,
         const RECT *src_rects, const RECT *dst_rects, unsigned int rect_count, const RECT *scroll_rect,
         const POINT *scroll_offset, HWND dst_window_override, unsigned int swap_interval, uint32_t flags)
 {
     struct wined3d_cs_present *op;
+    RECT *heap_rects = NULL;
     unsigned int i;
 
     wined3d_not_from_cs(cs);
 
-    op = wined3d_device_context_require_space(&cs->c,
-            FIELD_OFFSET(struct wined3d_cs_present, rects[2 * rect_count]), WINED3D_CS_QUEUE_DEFAULT);
+    if (rect_count > 1)
+    {
+        if (!(heap_rects = calloc(rect_count, 2 * sizeof(*heap_rects))))
+            return E_OUTOFMEMORY;
+        memcpy(heap_rects, src_rects, sizeof(*src_rects) * rect_count);
+        memcpy(&heap_rects[rect_count], dst_rects, sizeof(*dst_rects) * rect_count);
+    }
+
+    op = wined3d_device_context_require_space(&cs->c, heap_rects ? sizeof(*op)
+            : FIELD_OFFSET(struct wined3d_cs_present, rects[2 * rect_count]), WINED3D_CS_QUEUE_DEFAULT);
     op->opcode = WINED3D_CS_OP_PRESENT;
     op->dst_window_override = dst_window_override;
     op->swapchain = swapchain;
     op->rect_count = rect_count;
-    memcpy(op->rects, src_rects, sizeof(*src_rects) * rect_count);
-    memcpy(&op->rects[rect_count], dst_rects, sizeof(*dst_rects) * rect_count);
+    op->heap_rects = heap_rects;
+    if (!heap_rects)
+    {
+        memcpy(op->rects, src_rects, sizeof(*src_rects) * rect_count);
+        memcpy(&op->rects[rect_count], dst_rects, sizeof(*dst_rects) * rect_count);
+    }
     op->swap_interval = swap_interval;
     op->flags = flags;
     op->has_scroll = !!scroll_rect;
@@ -814,6 +831,8 @@ void wined3d_cs_emit_present(struct wined3d_cs *cs, struct wined3d_swapchain *sw
          * get ahead of the worker thread. */
         WaitForSingleObject(swapchain->frame_latency_semaphore, INFINITE);
     }
+
+    return S_OK;
 }
 
 static void wined3d_cs_exec_clear(struct wined3d_cs *cs, const void *data)
