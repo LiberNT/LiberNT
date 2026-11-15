@@ -18,6 +18,7 @@ list(APPEND SOURCE
     MessageWaitingIndicator.c
     TermsrvAppInstallMode.c
     ConsoleAlias.c
+    ConsoleCharInput.c
     ApiSetCoreSynch.c
     ApplicationRecovery.c
     ApplicationRestart.c

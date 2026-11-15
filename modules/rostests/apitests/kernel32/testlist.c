@@ -23,6 +23,7 @@ extern void func_CallbackCallingConventions(void);
 extern void func_CallbackMayRunLong(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
+extern void func_ConsoleCharInput(void);
 extern void func_ConsoleCommandHistory(void);
 extern void func_ConsoleCP(void);
 extern void func_ConsoleFontInfo(void);
@@ -238,6 +239,7 @@ const struct test winetest_testlist[] =
     { "CallbackMayRunLong",          func_CallbackMayRunLong },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
+    { "ConsoleCharInput",            func_ConsoleCharInput },
     { "ConsoleCommandHistory",     func_ConsoleCommandHistory },
     { "ConsoleCP",                   func_ConsoleCP },
     { "ConsoleFontInfo",           func_ConsoleFontInfo },
