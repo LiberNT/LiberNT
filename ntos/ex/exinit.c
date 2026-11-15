@@ -1220,6 +1220,13 @@ Phase1InitializationDiscard(
         KeBugCheck(CONFIG_INITIALIZATION_FAILED);
     }
 
+    ExRefreshTimeZoneInformation(&BootTime);
+
+    if (!ExpRealTimeIsUniversal)
+    {
+        ExUpdateSystemTimeFromCmos(FALSE, 0);
+    }
+
     if (!FsRtlInitSystem())
     {
         KeBugCheck(FILE_INITIALIZATION_FAILED);
@@ -1253,13 +1260,6 @@ Phase1InitializationDiscard(
     if (!IoInitSystem(LoaderBlock))
     {
         KeBugCheck(IO1_INITIALIZATION_FAILED);
-    }
-
-    ExRefreshTimeZoneInformation(&BootTime);
-
-    if (!ExpRealTimeIsUniversal)
-    {
-        ExUpdateSystemTimeFromCmos(FALSE, 0);
     }
 
     if (!PoInitSystem(2))
