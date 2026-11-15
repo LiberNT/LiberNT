@@ -13,6 +13,8 @@
 #include <debug.h>
 
 #define LX_MAGIC_NTFS       0x5346544EULL
+#define LX_MAGIC_EXT        0x0000EF53ULL
+#define LX_MAGIC_BTRFS      0x9123683EULL
 #define LX_MAGIC_PROC       0x00009FA0ULL
 #define LX_MAGIC_SYSFS      0x62656572ULL
 #define LX_MAGIC_TMPFS      0x01021994ULL
@@ -1434,6 +1436,89 @@ LxMountInheritNamespaces(
     }
 }
 
+/* Mounts a volume of the host by its drive: the source is "X:" or "X:\\directory", with either slash */
+static
+LONG
+LxInstanceMountDrive(
+    _In_ PLX_NS Ns,
+    _In_ PCSTR Target,
+    _In_ PCSTR Source,
+    _In_ PCSTR FsType,
+    _In_ ULONG Flags,
+    _Out_ PLX_MOUNT *Mount)
+{
+    static const WCHAR Prefix[] = L"\\??\\";
+    UCHAR Buffer[sizeof(FILE_FS_ATTRIBUTE_INFORMATION) + 32 * sizeof(WCHAR)];
+    PFILE_FS_ATTRIBUTE_INFORMATION Attribute = (PFILE_FS_ATTRIBUTE_INFORMATION)Buffer;
+    ULONG SourceLength = (ULONG)strlen(Source);
+    ULONG64 Magic = LX_MAGIC_NTFS;
+    UNICODE_STRING NtRoot, Open;
+    IO_STATUS_BLOCK Iosb;
+    ULONG Needed = 0, Written = 0, Index;
+    HANDLE Handle;
+    NTSTATUS Status;
+    LONG Error;
+
+    if ((SourceLength < 2) || (Source[1] != ':') ||
+        !(((Source[0] >= 'A') && (Source[0] <= 'Z')) || ((Source[0] >= 'a') && (Source[0] <= 'z'))))
+    {
+        return -LX_ENODEV;
+    }
+    while ((SourceLength > 2) && ((Source[SourceLength - 1] == '/') || (Source[SourceLength - 1] == '\\')))
+        SourceLength--;
+
+    Status = RtlUTF8ToUnicodeN(NULL, 0, &Needed, Source, SourceLength);
+    if (!NT_SUCCESS(Status) && (Status != STATUS_SOME_NOT_MAPPED))
+        return -LX_EINVAL;
+    if (sizeof(Prefix) + Needed > MAXUSHORT)
+        return -LX_ENAMETOOLONG;
+
+    NtRoot.MaximumLength = (USHORT)(sizeof(Prefix) + Needed);
+    NtRoot.Buffer = LxAllocPaged(NtRoot.MaximumLength);
+    if (NtRoot.Buffer == NULL)
+        return -LX_ENOMEM;
+    RtlCopyMemory(NtRoot.Buffer, Prefix, sizeof(Prefix) - sizeof(WCHAR));
+    Status = RtlUTF8ToUnicodeN((PWCHAR)((PUCHAR)NtRoot.Buffer + sizeof(Prefix) - sizeof(WCHAR)), Needed, &Written, Source,
+                               SourceLength);
+    if (!NT_SUCCESS(Status) && (Status != STATUS_SOME_NOT_MAPPED))
+    {
+        LxFreePaged(NtRoot.Buffer);
+        return -LX_EINVAL;
+    }
+    NtRoot.Length = (USHORT)(sizeof(Prefix) - sizeof(WCHAR) + Written);
+    for (Index = 0; Index < NtRoot.Length / sizeof(WCHAR); Index++)
+    {
+        if (NtRoot.Buffer[Index] == L'/')
+            NtRoot.Buffer[Index] = L'\\';
+    }
+
+    /* A bare drive names the device; its root directory takes a separator */
+    Open = NtRoot;
+    if (SourceLength == 2)
+        Open.Length += sizeof(WCHAR);
+    NtRoot.Buffer[NtRoot.Length / sizeof(WCHAR)] = L'\\';
+    Error = LxNtOpenHandle(&Open, FILE_READ_ATTRIBUTES, FILE_OPEN, FILE_DIRECTORY_FILE, 0, &Handle);
+    if (Error != 0)
+    {
+        LxFreePaged(NtRoot.Buffer);
+        return (Error == -LX_ENOENT) ? -LX_ENODEV : Error;
+    }
+
+    Status = ZwQueryVolumeInformationFile(Handle, &Iosb, Attribute, sizeof(Buffer), FileFsAttributeInformation);
+    ZwClose(Handle);
+    if (NT_SUCCESS(Status) && (Attribute->FileSystemNameLength >= 3 * sizeof(WCHAR)))
+    {
+        if (_wcsnicmp(Attribute->FileSystemName, L"ext", 3) == 0)
+            Magic = LX_MAGIC_EXT;
+        else if ((Attribute->FileSystemNameLength >= 5 * sizeof(WCHAR)) && (_wcsnicmp(Attribute->FileSystemName, L"btrfs", 5) == 0))
+            Magic = LX_MAGIC_BTRFS;
+    }
+
+    Error = LxInstanceMountNt(Ns, Target, Source, FsType, Flags, &NtRoot, Magic, Mount);
+    LxFreePaged(NtRoot.Buffer);
+    return Error;
+}
+
 LONG
 LxMountAdd(
     _In_ PLX_PROCESS Process,
@@ -1493,6 +1578,9 @@ LxMountAdd(
         Error = LxInstanceMountSynthetic(Ns, Target, Source, "mqueue", Flags, LxFsMqueue, LX_MAGIC_MQUEUE, &Mount);
     else if (strcmp(FsType, "squashfs") == 0)
         Error = LxInstanceSquashfs(Process, Ns, Target, Source, Flags, &Mount);
+    else if ((strcmp(FsType, "drvfs") == 0) || (strcmp(FsType, "ext4") == 0) || (strcmp(FsType, "ext3") == 0) ||
+             (strcmp(FsType, "ext2") == 0) || (strcmp(FsType, "btrfs") == 0) || (strcmp(FsType, "ntfs") == 0))
+        Error = LxInstanceMountDrive(Ns, Target, Source, FsType, Flags, &Mount);
     else
         return -LX_ENODEV;
     if (Error == 0)
