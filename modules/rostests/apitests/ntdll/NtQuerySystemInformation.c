@@ -89,6 +89,65 @@ TestHandleCount(VOID)
     RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
 }
 
+static VOID
+TestShortModuleBuffer(VOID)
+{
+    struct
+    {
+        RTL_PROCESS_MODULES Modules;
+        RTL_PROCESS_MODULE_INFORMATION Second;
+        UCHAR Guard[16];
+    } Short;
+    PRTL_PROCESS_MODULES Full;
+    ULONG Length = 0, FullLength = 0, Index;
+    NTSTATUS Status;
+
+    RtlFillMemory(&Short, sizeof(Short), 0xCC);
+    Status = NtQuerySystemInformation(SystemModuleInformation, &Short, FIELD_OFFSET(RTL_PROCESS_MODULES, Modules), &Length);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok(Short.Modules.NumberOfModules != 0xCCCCCCCC, "Module count not written on a header-only buffer\n");
+    ok(Short.Modules.Modules[0].ImageSize == 0xCCCCCCCC, "A module was written past a header-only buffer\n");
+
+    RtlFillMemory(&Short, sizeof(Short), 0xCC);
+    Status = NtQuerySystemInformation(SystemModuleInformation, &Short, FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) +
+                                      2 * sizeof(RTL_PROCESS_MODULE_INFORMATION), &Length);
+    ok_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok(Short.Modules.NumberOfModules != 0xCCCCCCCC && Short.Modules.NumberOfModules > 2,
+       "Module count %lu on a two-module buffer\n", Short.Modules.NumberOfModules);
+    ok(Short.Modules.Modules[0].ImageSize != 0xCCCCCCCC && (UCHAR)Short.Modules.Modules[0].FullPathName[0] != 0xCC,
+       "First module not written on a two-module buffer\n");
+    ok(Short.Second.ImageSize != 0xCCCCCCCC && (UCHAR)Short.Second.FullPathName[0] != 0xCC,
+       "Second module not written on a two-module buffer\n");
+    for (Index = 0; Index < sizeof(Short.Guard); Index++)
+    {
+        if (Short.Guard[Index] != 0xCC)
+            break;
+    }
+    ok(Index == sizeof(Short.Guard), "Guard byte %lu written past a two-module buffer\n", Index);
+    ok(Length == FIELD_OFFSET(RTL_PROCESS_MODULES, Modules) +
+                 Short.Modules.NumberOfModules * sizeof(RTL_PROCESS_MODULE_INFORMATION),
+       "Length %lu for %lu modules\n", Length, Short.Modules.NumberOfModules);
+    trace("Short module buffer: count %lu, length %lu, first %s, second %s\n", Short.Modules.NumberOfModules, Length,
+          Short.Modules.Modules[0].FullPathName, Short.Second.FullPathName);
+
+    Full = RtlAllocateHeap(RtlGetProcessHeap(), 0, Length + 4096);
+    if (!Full)
+    {
+        skip("Could not allocate module information\n");
+        return;
+    }
+    Status = NtQuerySystemInformation(SystemModuleInformation, Full, Length + 4096, &FullLength);
+    ok_hex(Status, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status) && Full->NumberOfModules >= 2)
+    {
+        ok(strcmp((PCSTR)Full->Modules[0].FullPathName, (PCSTR)Short.Modules.Modules[0].FullPathName) == 0,
+           "First module differs: %s\n", Full->Modules[0].FullPathName);
+        ok(strcmp((PCSTR)Full->Modules[1].FullPathName, (PCSTR)Short.Second.FullPathName) == 0,
+           "Second module differs: %s\n", Full->Modules[1].FullPathName);
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Full);
+}
+
 START_TEST(NtQuerySystemInformation)
 {
     NTSTATUS Status;
@@ -117,6 +176,7 @@ START_TEST(NtQuerySystemInformation)
 
     TestProcessImageName();
     TestHandleCount();
+    TestShortModuleBuffer();
 
     /* Both loaded-image lists must be initialized even when no user images
      * have been registered with the kernel's module list. */

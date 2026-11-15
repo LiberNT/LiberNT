@@ -326,6 +326,7 @@ ExpQueryModuleInformationWorker(
     PLIST_ENTRY Entry;
     PLDR_DATA_TABLE_ENTRY Module;
     ULONG Count = 0;
+    ULONG Fit;
     ULONG Needed;
     ULONG Index = 0;
     ANSI_STRING Ansi;
@@ -346,17 +347,23 @@ ExpQueryModuleInformationWorker(
 
     *ReturnLength = Needed;
 
-    if ((Modules == NULL) || (Length < Needed))
+    if ((Modules == NULL) || (Length < FIELD_OFFSET(RTL_PROCESS_MODULES, Modules)))
     {
         ExReleaseResourceLite(&PsLoadedModuleResource);
         KeLeaveCriticalRegion();
         return STATUS_INFO_LENGTH_MISMATCH;
     }
 
+    /* A buffer too small for every module still gets the count and the modules that fit */
+    Fit = min(Count,
+              (Length - FIELD_OFFSET(RTL_PROCESS_MODULES, Modules)) /
+                  (ULONG)sizeof(RTL_PROCESS_MODULE_INFORMATION));
+    if (Fit != Count) Status = STATUS_INFO_LENGTH_MISMATCH;
+
     Modules->NumberOfModules = Count;
 
     for (Entry = PsLoadedModuleList.Flink;
-         Entry != &PsLoadedModuleList;
+         Entry != &PsLoadedModuleList && Index < Fit;
          Entry = Entry->Flink, Index++)
     {
         PRTL_PROCESS_MODULE_INFORMATION Info = &Modules->Modules[Index];
