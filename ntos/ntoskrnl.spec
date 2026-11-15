@@ -3467,11 +3467,11 @@
 @ stub -arch=win64 _strset_s
 @ stub -arch=win64 _strtoui64
 @ stub -arch=win64 _ultoa_s
-@ stub -arch=win64 _ultow_s
+@ cdecl _ultow_s()
 @ cdecl _vsnprintf_s()
 @ cdecl _vsnwprintf_s()
-@ stub -arch=win64 _wcslwr_s
-@ stub -arch=win64 _wcsnset_s
+@ cdecl _wcslwr_s()
+@ cdecl _wcsnset_s()
 @ stub -arch=win64 _wcsset_s
 @ stub -arch=win64 _wmakepath_s
 @ cdecl _wsplitpath_s()

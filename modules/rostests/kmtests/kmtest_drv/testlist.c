@@ -331,6 +331,7 @@ KMT_TESTFUNC Test_KeSystemThreadException;
 KMT_TESTFUNC Test_KeUnhandledException;
 KMT_TESTFUNC Test_KePcr;
 KMT_TESTFUNC Test_RtlImageKM;
+KMT_TESTFUNC Test_CrtSecureKM;
 KMT_TESTFUNC Test_RtlQueryRegistryKM;
 KMT_TESTFUNC Test_RtlRandomKM;
 KMT_TESTFUNC Test_ZwSystemInfoKM;
@@ -892,6 +893,7 @@ const KMT_TEST TestList[] =
     { "RtlTableElementKM",                  Test_RtlTableElementKM },
     { "RtlGuidKM",                          Test_RtlGuidKM },
     { "RtlImageKM",                         Test_RtlImageKM },
+    { "CrtSecureKM",                        Test_CrtSecureKM },
     { "RtlQueryRegistryKM",                 Test_RtlQueryRegistryKM },
     { "RtlRandomKM",                        Test_RtlRandomKM },
     { "ZwDuplicateKM",                      Test_ZwDuplicateKM },

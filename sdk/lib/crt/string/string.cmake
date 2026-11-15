@@ -1,5 +1,6 @@
 
 list(APPEND LIBCNTPR_STRING_SOURCE
+    string/secure_nt.c
     string/string_s.c
     string/_splitpath.c
     string/_stricmp_nt.c

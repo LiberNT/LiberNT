@@ -399,6 +399,7 @@ list(APPEND KMTEST_DRV_SOURCE
     rtl/RtlTableElementKM.c
     rtl/RtlGuidKM.c
     rtl/RtlImageKM.c
+    rtl/CrtSecureKM.c
     rtl/RtlQueryRegistryKM.c
     rtl/RtlHashTableKM.c
     rtl/RtlTimeKM.c
