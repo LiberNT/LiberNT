@@ -24,7 +24,6 @@
 #define NDEBUG
 #include <debug.h>
 
-SIZE_T RtlpAllocDeallocQueryBufferSize = PAGE_SIZE;
 PTEB LdrpTopLevelDllBeingLoadedTeb = NULL;
 PVOID MmHighestUserAddress = (PVOID)MI_HIGHEST_USER_ADDRESS;
 

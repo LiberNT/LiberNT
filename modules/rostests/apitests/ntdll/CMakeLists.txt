@@ -227,6 +227,7 @@ list(APPEND SOURCE
     RtlpApplyLengthFunction.c
     RtlpEnsureBufferSize.c
     RtlQueryEnvironmentVariable.c
+    RtlQueryRegistryValues.c
     RtlQueryEnvironmentVariable_U.c
     RtlQueryTimeZoneInfo.c
     RtlReAllocateHeap.c

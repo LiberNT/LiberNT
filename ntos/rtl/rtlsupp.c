@@ -29,7 +29,6 @@ RtlpImageNtHeaderEx(
 IMAGE_RESOURCE_DIRECTORY *find_entry_by_name(IMAGE_RESOURCE_DIRECTORY *dir, LPCWSTR name, void *root, int want_dir);
 IMAGE_RESOURCE_DIRECTORY *find_first_entry(IMAGE_RESOURCE_DIRECTORY *dir, void *root, int want_dir);
 
-SIZE_T RtlpAllocDeallocQueryBufferSize = 128;
 
 /* MODE AND MEMORY ***********************************************************/
 

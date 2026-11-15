@@ -86,6 +86,7 @@ list(APPEND SOURCE
     propvar.c
     random.c
     rangelist.c
+    regquery.c
     registry.c
     res.c
     resource.c
