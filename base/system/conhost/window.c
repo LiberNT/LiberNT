@@ -217,7 +217,11 @@ static void load_registry_key( HKEY key, struct console_config *config )
         config->history_mode = val;
 
     count = sizeof(val);
+#ifdef __REACTOS__
+    if (!RegQueryValueExW( key, L"InsertMode", 0, &type, (BYTE *)&val, &count ))
+#else
     if (!RegQueryValueExW( key, L"wszInsertMode", 0, &type, (BYTE *)&val, &count ))
+#endif
         config->insert_mode = val;
 
     count = sizeof(val);
