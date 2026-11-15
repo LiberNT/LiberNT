@@ -30,6 +30,7 @@ list(APPEND SOURCE
     WindowsVersionValues.c
     OpenTrace.c
     PrivilegeNames.c
+    QueryServiceConfig.c
     QueryServiceConfig2.c
     RegCreateKeyEx.c
     RegCreateKeyTransacted.c
