@@ -8955,6 +8955,23 @@ DxgkVidPnAnySourceExclusivelyOwned(VOID)
     return Owned;
 }
 
+/* A detached desktop has no path to scan its source out, so presenting to it is occluded as a flip is (DxgkpPrepareDetachedDesktopPresent) */
+static BOOLEAN
+DxgkpDesktopDetached(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    BOOLEAN Detached;
+
+    PAGED_CODE();
+
+    (VOID)KeWaitForSingleObject(&Adapter->VidPnMutex, Executive, KernelMode, FALSE, NULL);
+    ASSERT(!Adapter->HeadlessDesktop || !Adapter->VidPnCommitted);
+    Detached = Adapter->HeadlessDesktop;
+    KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
+
+    return Detached;
+}
+
 NTSTATUS
 NTAPI
 DxgkCheckVidPnExclusiveOwnership(
@@ -8991,6 +9008,9 @@ DxgkCheckVidPnExclusiveOwnership(
     if (State != NULL && State->Owners[pCheckVidPnExclusiveOwnership->VidPnSourceId].OwnerDevice != NULL && (State->Owners[pCheckVidPnExclusiveOwnership->VidPnSourceId].OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVE || State->Owners[pCheckVidPnExclusiveOwnership->VidPnSourceId].OwnerType == D3DKMT_VIDPNSOURCEOWNER_EXCLUSIVEGDI))
         Status = STATUS_GRAPHICS_PRESENT_OCCLUDED;
     ExReleaseFastMutex(&g_SourceOwnerMutex);
+
+    if (Status == STATUS_SUCCESS && DxgkpDesktopDetached(Adapter))
+        Status = STATUS_GRAPHICS_PRESENT_OCCLUDED;
 
 Cleanup:
     DxgkDereferenceAdapter(Adapter);
