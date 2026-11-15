@@ -1487,12 +1487,15 @@ STDMETHODIMP CEnumTfLanguageProfiles::Next(
             DWORD cName = _countof(m_szwCurrentClsid);
             CLSID clsid;
 
-            error = RegEnumKeyExW(m_tipkey, m_tip_index, m_szwCurrentClsid, &cName, NULL, NULL,
-                                  NULL, NULL);
-            if (error != ERROR_SUCCESS && error != ERROR_MORE_DATA)
-                break;
+            if (!m_langkey)
+            {
+                error = RegEnumKeyExW(m_tipkey, m_tip_index, m_szwCurrentClsid, &cName, NULL, NULL,
+                                      NULL, NULL);
+                if (error != ERROR_SUCCESS && error != ERROR_MORE_DATA)
+                    break;
 
-            ++m_tip_index;
+                ++m_tip_index;
+            }
 
             hr = CLSIDFromString(m_szwCurrentClsid, &clsid);
             if (FAILED(hr))
