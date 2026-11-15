@@ -3438,7 +3438,7 @@ XHCI_FindSlotByTopology(
     for (SlotIndex = 1; SlotIndex <= Extension->MaxSlots && SlotIndex <= XHCI_MAX_SLOTS; SlotIndex++)
     {
         PXHCI_DEVICE_SLOT Slot = &Extension->DeviceSlots[SlotIndex];
-        if (!Slot->InUse)
+        if (!Slot->InUse || Slot->UsbDeviceAddress != 0)
             continue;
 
         if (Slot->RouteString == RouteString && Slot->RootPortNumber == RootPort)

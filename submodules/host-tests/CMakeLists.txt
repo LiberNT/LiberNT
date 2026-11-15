@@ -21,6 +21,7 @@ option(HOST_TEST_HALTIME "Build native HAL time arithmetic tests" ON)
 option(HOST_TEST_NDIS "Build native NDIS WDI tests" ON)
 option(HOST_TEST_DHCPCSVC "Build native DHCP client tests" ON)
 option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
+option(HOST_TEST_USB "Build native USB host controller tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
@@ -28,6 +29,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_EXT4)
     add_subdirectory(ext4)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_USB)
+    add_subdirectory(usb)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_NDIS)
