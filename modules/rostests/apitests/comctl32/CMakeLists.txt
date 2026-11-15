@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     ../include/msgtrace.c
     button.c
+    ClassModule.c
     EditImeContext.c
     imagelist.c
     ListViewGroups.c

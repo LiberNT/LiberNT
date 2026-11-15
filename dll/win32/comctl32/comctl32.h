@@ -53,6 +53,17 @@
 #include "vssym32.h"
 
 extern HMODULE COMCTL32_hModule;
+#ifdef __REACTOS__
+static inline ATOM COMCTL32_RegisterClassW(const WNDCLASSW *pWndClass)
+{
+    WNDCLASSW wndClass = *pWndClass;
+
+    if (!wndClass.hInstance)
+        wndClass.hInstance = COMCTL32_hModule;
+    return (RegisterClassW)(&wndClass);
+}
+#define RegisterClassW(pWndClass) COMCTL32_RegisterClassW(pWndClass)
+#endif
 extern HBRUSH  COMCTL32_hPattern55AABrush;
 
 /* Property sheet / Wizard */
