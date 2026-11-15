@@ -182,7 +182,7 @@ KiArm64IdleProcessorNeedsWake(
 
 /* ELR already points at the BRK instruction */
 #define KI_BREAKPOINT_PC_ADJUST 0
-#define KI_EXCEPTION_CONTEXT_FLAGS (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS)
+#define KiArchExceptionContextFlags(PreviousMode) ((VOID)(PreviousMode), (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS))
 #define KI_CALLOUT_STACK_RESERVE 16
 
 VOID

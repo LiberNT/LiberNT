@@ -33,8 +33,16 @@
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif
 
-#ifndef KI_EXCEPTION_CONTEXT_FLAGS
-#define KI_EXCEPTION_CONTEXT_FLAGS CONTEXT_ALL
+#ifndef KiArchExceptionContextFlags
+#define KiArchExceptionContextFlags(PreviousMode) ((VOID)(PreviousMode), CONTEXT_ALL)
+#endif
+
+#ifndef KiArchBeginUserExceptionDispatch
+#define KiArchBeginUserExceptionDispatch(TrapFrame) ((VOID)(TrapFrame))
+#endif
+
+#ifndef KiArchPrepareUserBreakpoint
+#define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) ((VOID)(ExceptionRecord), (VOID)(TrapFrame))
 #endif
 
 #ifndef KiArchFinishExceptionContext

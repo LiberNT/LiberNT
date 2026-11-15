@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Kernel
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     i386 exception dispatch and conversion between CONTEXT records and trap frames
+ * PURPOSE:     i386 user exception frames and conversion between CONTEXT records and trap frames
  * COPYRIGHT:   Copyright Alex Ionescu <alex.ionescu@reactos.org>
  *              Copyright Gregor Anich
  *              Copyright Skywing <skywing@valhallalegends.com>
@@ -641,243 +641,100 @@ KeInvalidAccessAllowed(
     return (TrapFrame->Eip == Eip) ? TRUE : FALSE;
 }
 
-VOID
-NTAPI
-KiDispatchException(
-    _In_ PEXCEPTION_RECORD ExceptionRecord,
-    _In_ PKEXCEPTION_FRAME ExceptionFrame,
-    _In_ PKTRAP_FRAME TrapFrame,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ BOOLEAN FirstChance)
+ULONG
+KiI386ExceptionContextFlags(
+    _In_ KPROCESSOR_MODE PreviousMode)
 {
-    CONTEXT Context;
-    EXCEPTION_RECORD LocalExceptRecord;
+    ULONG Flags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
 
-    KeGetCurrentPrcb()->KeExceptionDispatchCount++;
-
-    Context.ContextFlags = CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS;
-
-    /* Check if User Mode or if the kernel debugger is enabled */
-    if ((PreviousMode == UserMode) || (KeGetPcr()->KdVersionBlock))
+    if ((PreviousMode == UserMode) || (KeGetPcr()->KdVersionBlock != NULL))
     {
-        Context.ContextFlags |= CONTEXT_FLOATING_POINT;
-
+        Flags |= CONTEXT_FLOATING_POINT;
         if (KeI386FxsrPresent)
-        {
-            Context.ContextFlags |= CONTEXT_EXTENDED_REGISTERS;
-        }
+            Flags |= CONTEXT_EXTENDED_REGISTERS;
     }
 
-    KeTrapFrameToContext(TrapFrame, ExceptionFrame, &Context);
+    return Flags;
+}
 
-    switch (ExceptionRecord->ExceptionCode)
+/* KiUserExceptionDispatcher starts with the record and context addresses on top of its stack */
+static
+VOID
+KiPushUserExceptionFrame(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ PCONTEXT Context,
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
+{
+    const ULONG ContextSize = ALIGN_UP_BY(sizeof(CONTEXT) + sizeof(CONTEXT_EX), sizeof(ULONG));
+    ULONG_PTR ContextAt, RecordAt, ArgumentsAt;
+    PCONTEXT_EX ContextEx;
+    ULONG RecordSize;
+
+    ASSERT(ExceptionRecord->NumberParameters <= EXCEPTION_MAXIMUM_PARAMETERS);
+
+    if ((TrapFrame->HardwareSegSs != (KGDT_R3_DATA | RPL_MASK)) || (TrapFrame->EFlags & EFLAGS_V86_MASK))
+        ExRaiseStatus(STATUS_ACCESS_VIOLATION);
+
+    ContextAt = ALIGN_DOWN_BY(Context->Esp, sizeof(ULONG)) - ContextSize;
+    ProbeForWrite((PVOID)ContextAt, ContextSize, sizeof(ULONG));
+    RtlCopyMemory((PVOID)ContextAt, Context, sizeof(CONTEXT));
+
+    ContextEx = (PCONTEXT_EX)(ContextAt + sizeof(CONTEXT));
+    RtlZeroMemory(ContextEx, sizeof(*ContextEx));
+    ContextEx->All.Offset = -(LONG)sizeof(CONTEXT);
+    ContextEx->All.Length = sizeof(CONTEXT) + sizeof(CONTEXT_EX);
+    ContextEx->Legacy.Offset = -(LONG)sizeof(CONTEXT);
+    ContextEx->Legacy.Length = sizeof(CONTEXT);
+    ContextEx->XState.Offset = sizeof(CONTEXT_EX);
+
+    RecordSize = ALIGN_UP_BY(FIELD_OFFSET(EXCEPTION_RECORD, ExceptionInformation[ExceptionRecord->NumberParameters]), sizeof(ULONG));
+    RecordAt = ContextAt - RecordSize;
+    ArgumentsAt = RecordAt - 2 * sizeof(ULONG_PTR);
+    ProbeForWrite((PVOID)ArgumentsAt, RecordSize + 2 * sizeof(ULONG_PTR), sizeof(ULONG));
+    RtlCopyMemory((PVOID)RecordAt, ExceptionRecord, RecordSize);
+    ((PULONG_PTR)ArgumentsAt)[0] = RecordAt;
+    ((PULONG_PTR)ArgumentsAt)[1] = ContextAt;
+
+    KiSsToTrapFrame(TrapFrame, KGDT_R3_DATA);
+    KiEspToTrapFrame(TrapFrame, ArgumentsAt);
+    TrapFrame->SegCs = Ke386SanitizeSeg(KGDT_R3_CODE, UserMode);
+    TrapFrame->SegDs = Ke386SanitizeSeg(KGDT_R3_DATA, UserMode);
+    TrapFrame->SegEs = Ke386SanitizeSeg(KGDT_R3_DATA, UserMode);
+    TrapFrame->SegFs = Ke386SanitizeSeg(KGDT_R3_TEB, UserMode);
+    TrapFrame->SegGs = 0;
+    TrapFrame->Eip = (ULONG)KeUserExceptionDispatcher;
+}
+
+BOOLEAN
+KiDispatchExceptionToUser(
+    _In_ PKTRAP_FRAME TrapFrame,
+    _In_ PCONTEXT Context,
+    _In_ PEXCEPTION_RECORD ExceptionRecord)
+{
+    EXCEPTION_RECORD Fault;
+    ULONG Attempt;
+
+    /* A user stack that runs out is reported once, as a stack overflow at the address that faulted */
+    for (Attempt = 0; Attempt < 2; Attempt++)
     {
-        case STATUS_BREAKPOINT:
+        _SEH2_TRY
+        {
+            KiPushUserExceptionFrame(TrapFrame, Context, ExceptionRecord);
+            _SEH2_YIELD(return TRUE);
+        }
+        _SEH2_EXCEPT((RtlCopyMemory(&Fault, _SEH2_GetExceptionInformation()->ExceptionRecord, sizeof(Fault)), EXCEPTION_EXECUTE_HANDLER))
+        {
+        }
+        _SEH2_END;
 
-            Context.Eip--;
+        if ((NTSTATUS)Fault.ExceptionCode != STATUS_STACK_OVERFLOW)
             break;
 
-        case KI_EXCEPTION_ACCESS_VIOLATION:
-
-            ExceptionRecord->ExceptionCode = STATUS_ACCESS_VIOLATION;
-            if (PreviousMode == UserMode)
-            {
-                /* FIXME: Handle no execute */
-            }
-            break;
+        Fault.ExceptionAddress = ExceptionRecord->ExceptionAddress;
+        RtlCopyMemory(ExceptionRecord, &Fault, sizeof(*ExceptionRecord));
     }
 
-    ASSERT(!((PreviousMode == KernelMode) &&
-             (Context.EFlags & EFLAGS_V86_MASK)));
-
-    if (PreviousMode == KernelMode)
-    {
-        if (FirstChance != FALSE)
-        {
-            /* Break into the debugger for the first time */
-            if (KiDebugRoutine(TrapFrame,
-                               ExceptionFrame,
-                               ExceptionRecord,
-                               &Context,
-                               PreviousMode,
-                               FALSE))
-            {
-                goto Handled;
-            }
-
-            /* If the Debugger couldn't handle it, dispatch the exception */
-            if (RtlDispatchException(ExceptionRecord, &Context)) goto Handled;
-        }
-
-        /* This is a second-chance exception, only for the debugger */
-        if (KiDebugRoutine(TrapFrame,
-                           ExceptionFrame,
-                           ExceptionRecord,
-                           &Context,
-                           PreviousMode,
-                           TRUE))
-        {
-            goto Handled;
-        }
-
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-    else
-    {
-        if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
-        {
-            return;
-        }
-
-        TrapFrame->PreviousPreviousMode |= KI_EXCEPTION_ACTIVE_FRAME;
-
-        if (FirstChance && ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN)
-        {
-            /*
-             * Break into the kernel debugger unless a user mode debugger
-             * is present or user mode exceptions are ignored, except if this
-             * is a debug service which we must always pass to KD
-             */
-            if ((!(PsGetCurrentProcess()->DebugPort) &&
-                 !(KdIgnoreUmExceptions)) ||
-                 (KdIsThisAKdTrap(ExceptionRecord,
-                                  &Context,
-                                  PreviousMode)))
-            {
-                /* Call the kernel debugger */
-                if (KiDebugRoutine(TrapFrame,
-                                   ExceptionFrame,
-                                   ExceptionRecord,
-                                   &Context,
-                                   PreviousMode,
-                                   FALSE))
-                {
-                    goto Handled;
-                }
-            }
-
-            /* Forward exception to user mode debugger */
-            if (DbgkForwardException(ExceptionRecord, TRUE, FALSE)) return;
-
-DispatchToUser:
-            _SEH2_TRY
-            {
-                ULONG Size;
-                ULONG_PTR Stack, NewStack;
-                PCONTEXT_EX ContextEx;
-
-                if ((TrapFrame->HardwareSegSs != (KGDT_R3_DATA | RPL_MASK)) ||
-                    (TrapFrame->EFlags & EFLAGS_V86_MASK))
-                {
-                    LocalExceptRecord.ExceptionCode = STATUS_ACCESS_VIOLATION;
-                    LocalExceptRecord.ExceptionFlags = 0;
-                    LocalExceptRecord.NumberParameters = 0;
-                    RtlRaiseException(&LocalExceptRecord);
-                }
-
-                Size = (sizeof(CONTEXT) + sizeof(CONTEXT_EX) + 3) & ~3;
-                Stack = (Context.Esp & ~3) - Size;
-
-                ProbeForWrite((PVOID)Stack, Size, sizeof(ULONG));
-                RtlCopyMemory((PVOID)Stack, &Context, sizeof(CONTEXT));
-
-                ContextEx = (PCONTEXT_EX)(Stack + sizeof(CONTEXT));
-                RtlZeroMemory(ContextEx, sizeof(*ContextEx));
-                ContextEx->Legacy.Offset = -(LONG)sizeof(CONTEXT);
-                ContextEx->Legacy.Length = sizeof(CONTEXT);
-                ContextEx->XState.Offset = sizeof(CONTEXT_EX);
-                ContextEx->All.Offset = -(LONG)sizeof(CONTEXT);
-                ContextEx->All.Length = sizeof(CONTEXT) + sizeof(CONTEXT_EX);
-
-                Size = (sizeof(EXCEPTION_RECORD) -
-                       (EXCEPTION_MAXIMUM_PARAMETERS -
-                        ExceptionRecord->NumberParameters) *
-                       sizeof(ULONG) + 3) & ~3;
-                NewStack = Stack - Size;
-
-                ProbeForWrite((PVOID)(NewStack - 2 * sizeof(ULONG_PTR)),
-                              Size +  2 * sizeof(ULONG_PTR),
-                              sizeof(ULONG));
-                RtlCopyMemory((PVOID)NewStack, ExceptionRecord, Size);
-
-                *(PULONG_PTR)(NewStack - 1 * sizeof(ULONG_PTR)) = Stack;
-                *(PULONG_PTR)(NewStack - 2 * sizeof(ULONG_PTR)) = NewStack;
-
-                KiSsToTrapFrame(TrapFrame, KGDT_R3_DATA);
-                KiEspToTrapFrame(TrapFrame, NewStack - 2 * sizeof(ULONG_PTR));
-
-                TrapFrame->SegCs = Ke386SanitizeSeg(KGDT_R3_CODE, PreviousMode);
-                TrapFrame->SegDs = Ke386SanitizeSeg(KGDT_R3_DATA, PreviousMode);
-                TrapFrame->SegEs = Ke386SanitizeSeg(KGDT_R3_DATA, PreviousMode);
-                TrapFrame->SegFs = Ke386SanitizeSeg(KGDT_R3_TEB,  PreviousMode);
-                TrapFrame->SegGs = 0;
-
-                TrapFrame->Eip = (ULONG)KeUserExceptionDispatcher;
-
-                _SEH2_YIELD(return);
-            }
-            _SEH2_EXCEPT((RtlCopyMemory(&LocalExceptRecord, _SEH2_GetExceptionInformation()->ExceptionRecord, sizeof(EXCEPTION_RECORD)), EXCEPTION_EXECUTE_HANDLER))
-            {
-                if ((NTSTATUS)LocalExceptRecord.ExceptionCode ==
-                    STATUS_STACK_OVERFLOW)
-                {
-                    LocalExceptRecord.ExceptionAddress =
-                        ExceptionRecord->ExceptionAddress;
-                    RtlCopyMemory(ExceptionRecord,
-                                  (PVOID)&LocalExceptRecord,
-                                  sizeof(EXCEPTION_RECORD));
-
-                    _SEH2_YIELD(goto DispatchToUser);
-                }
-            }
-            _SEH2_END;
-
-            DPRINT("First chance exception in %.16s, ExceptionCode: %lx, ExceptionAddress: %p, P0: %lx, P1: %lx\n",
-                   PsGetCurrentProcess()->ImageFileName,
-                   ExceptionRecord->ExceptionCode,
-                   ExceptionRecord->ExceptionAddress,
-                   ExceptionRecord->ExceptionInformation[0],
-                   ExceptionRecord->ExceptionInformation[1]);
-        }
-
-        if (DbgkForwardException(ExceptionRecord, TRUE, TRUE))
-        {
-            return;
-        }
-        else if (ExceptionRecord->ExceptionCode != STATUS_STACK_BUFFER_OVERRUN &&
-                 DbgkForwardException(ExceptionRecord, FALSE, TRUE))
-        {
-            return;
-        }
-
-        DPRINT1("Kill %.16s, ExceptionCode: %lx, ExceptionAddress: %p, BaseAddress: %p, P0: %lx, P1: %lx\n",
-                PsGetCurrentProcess()->ImageFileName,
-                ExceptionRecord->ExceptionCode,
-                ExceptionRecord->ExceptionAddress,
-                PsGetCurrentProcess()->SectionBaseAddress,
-                ExceptionRecord->ExceptionInformation[0],
-                ExceptionRecord->ExceptionInformation[1]);
-
-        ZwTerminateProcess(NtCurrentProcess(), ExceptionRecord->ExceptionCode);
-        KeBugCheckEx(KMODE_EXCEPTION_NOT_HANDLED,
-                     ExceptionRecord->ExceptionCode,
-                     (ULONG_PTR)ExceptionRecord->ExceptionAddress,
-                     (ULONG_PTR)TrapFrame,
-                     0);
-    }
-
-Handled:
-
-    KeContextToTrapFrame(&Context,
-                         ExceptionFrame,
-                         TrapFrame,
-                         Context.ContextFlags,
-                         PreviousMode);
-    return;
+    return FALSE;
 }
 
 DECLSPEC_NORETURN

@@ -175,6 +175,17 @@ NTAPI
 KiI386PublishSystemCallStubs(
     _In_ PVOID DllBase);
 
+/* int3 traps with EIP past the one-byte instruction */
+#define KI_BREAKPOINT_PC_ADJUST 1
+
+ULONG
+KiI386ExceptionContextFlags(
+    _In_ KPROCESSOR_MODE PreviousMode);
+#define KiArchExceptionContextFlags(PreviousMode) KiI386ExceptionContextFlags(PreviousMode)
+
+/* The frame is marked so the trap exit path treats it as an exception frame */
+#define KiArchBeginUserExceptionDispatch(TrapFrame) ((VOID)((TrapFrame)->PreviousPreviousMode |= KI_EXCEPTION_ACTIVE_FRAME))
+
 #define KiArchPublishSystemCallStubs(DllBase) \
     KiI386PublishSystemCallStubs(DllBase)
 

@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Kernel
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Exception dispatch shared by the 64-bit architectures
+ * PURPOSE:     Exception dispatch shared by the architectures
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -88,11 +88,12 @@ VOID
 KiCaptureExceptionContext(
     _In_ PKTRAP_FRAME TrapFrame,
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PCONTEXT Context)
 {
     /* Zeroed so no kernel stack contents can reach user mode */
     RtlZeroMemory(Context, sizeof(*Context));
-    Context->ContextFlags = KI_EXCEPTION_CONTEXT_FLAGS;
+    Context->ContextFlags = KiArchExceptionContextFlags(PreviousMode);
     KeTrapFrameToContext(TrapFrame, ExceptionFrame, Context);
     KiArchFinishExceptionContext(TrapFrame, Context);
 }
@@ -176,19 +177,20 @@ KiOfferUserExceptionFirstChance(
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_ PCONTEXT Context,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _Out_ PBOOLEAN Resumed)
 {
     *Resumed = FALSE;
 
     /* Kernel debugger first unless a user debugger is attached or user exceptions are ignored; debug services always go to it */
     if ((!PsGetCurrentProcess()->DebugPort && !KdIgnoreUmExceptions) ||
-        KdIsThisAKdTrap(ExceptionRecord, Context, UserMode))
+        KdIsThisAKdTrap(ExceptionRecord, Context, PreviousMode))
     {
         ULONG_PTR Pc = KeGetContextPc(Context);
 
         KiPrepareUserDebugData();
 
-        if (KiDebugRoutine(TrapFrame, ExceptionFrame, ExceptionRecord, Context, UserMode, FALSE))
+        if (KiDebugRoutine(TrapFrame, ExceptionFrame, ExceptionRecord, Context, PreviousMode, FALSE))
             return TRUE;
 
         /* The debugger did not take it, so its changes are dropped */
@@ -214,6 +216,7 @@ KiDispatchUserException(
     _In_opt_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame,
     _Inout_ PCONTEXT Context,
+    _In_ KPROCESSOR_MODE PreviousMode,
     _In_ BOOLEAN FirstChance,
     _Out_ PBOOLEAN Handled)
 {
@@ -225,10 +228,12 @@ KiDispatchUserException(
     if (PspPicoDispatchException(ExceptionRecord, ExceptionFrame, TrapFrame))
         return;
 
+    KiArchBeginUserExceptionDispatch(TrapFrame);
+
     /* A fast fail never reaches user-mode handlers */
     if (FirstChance && !FastFail)
     {
-        *Handled = KiOfferUserExceptionFirstChance(ExceptionRecord, ExceptionFrame, TrapFrame, Context, &Resumed);
+        *Handled = KiOfferUserExceptionFirstChance(ExceptionRecord, ExceptionFrame, TrapFrame, Context, PreviousMode, &Resumed);
         if (*Handled || Resumed)
             return;
     }
@@ -283,13 +288,13 @@ KiDispatchException(
 
     KeGetCurrentPrcb()->KeExceptionDispatchCount++;
 
-    KiCaptureExceptionContext(TrapFrame, ExceptionFrame, &Context);
+    KiCaptureExceptionContext(TrapFrame, ExceptionFrame, PreviousMode, &Context);
     KiNormalizeException(ExceptionRecord, &Context);
 
     if (PreviousMode == KernelMode)
         Handled = KiDispatchKernelException(ExceptionRecord, ExceptionFrame, TrapFrame, &Context, FirstChance);
     else
-        KiDispatchUserException(ExceptionRecord, ExceptionFrame, TrapFrame, &Context, FirstChance, &Handled);
+        KiDispatchUserException(ExceptionRecord, ExceptionFrame, TrapFrame, &Context, PreviousMode, FirstChance, &Handled);
 
     /* A debugger or handler that took the exception may have changed the context */
     if (Handled)
