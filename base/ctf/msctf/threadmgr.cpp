@@ -9,6 +9,7 @@
 
 #include "precomp.h"
 #include "sinksnapshot.h"
+#include <cictf.h>
 
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(msctf);
@@ -60,6 +61,7 @@ protected:
 
 class CThreadMgr
     : public ITfThreadMgrEx
+    , public ITfThreadMgr_P
     , public ITfSource
     , public ITfKeystrokeMgr
     , public ITfMessagePump
@@ -77,6 +79,13 @@ public:
 
     static HRESULT CreateInstance(IUnknown *pUnkOuter, CThreadMgr **ppOut);
     void OnDocumentMgrDestruction(ITfDocumentMgr *mgr);
+
+    // ** ITfThreadMgr_P methods **
+    STDMETHODIMP GetAssociated(HWND hwnd, ITfDocumentMgr **ppDocMgr) override;
+    STDMETHODIMP SetSysHookSink(ITfSysHookSink *pSysHookSink) override;
+    STDMETHODIMP RequestPostponedLock(ITfContext *pContext) override;
+    STDMETHODIMP IsKeystrokeFeedEnabled(int *pfEnabled) override;
+    STDMETHODIMP CallImm32HotkeyHandler(UINT vKey, LPARAM lParam, HRESULT *phrResult) override;
     void CleanupContextSinks(TfClientId tid);
 
     // ** IUnknown methods **
@@ -567,6 +576,8 @@ STDMETHODIMP CThreadMgr::QueryInterface(REFIID iid, LPVOID *ppvObject)
     IUnknown *pUnk = NULL;
     if (iid == IID_IUnknown || iid == IID_ITfThreadMgr || iid == IID_ITfThreadMgrEx)
         pUnk = static_cast<ITfThreadMgrEx *>(this);
+    else if (iid == IID_ITfThreadMgr_P)
+        pUnk = static_cast<ITfThreadMgr_P *>(this);
     else if (iid == IID_ITfSource)
         pUnk = static_cast<ITfSource *>(this);
     else if (iid == IID_ITfKeystrokeMgr)
@@ -809,6 +820,50 @@ STDMETHODIMP CThreadMgr::AssociateFocus(
 
     this->SetupWindowsHook();
     return S_OK;
+}
+
+STDMETHODIMP CThreadMgr::GetAssociated(_In_ HWND hwnd, _Out_ ITfDocumentMgr **ppDocMgr)
+{
+    struct list *cursor;
+
+    TRACE("(%p) %p %p\n", this, hwnd, ppDocMgr);
+
+    if (!ppDocMgr)
+        return E_INVALIDARG;
+
+    *ppDocMgr = NULL;
+    LIST_FOR_EACH(cursor, &m_AssociatedFocusWindows)
+    {
+        AssociatedWindow *wnd = LIST_ENTRY(cursor, AssociatedWindow, entry);
+        if (wnd->hwnd == hwnd && wnd->docmgr)
+        {
+            wnd->docmgr->AddRef();
+            *ppDocMgr = wnd->docmgr;
+            return S_OK;
+        }
+    }
+    return S_FALSE;
+}
+
+/* TODO: SetSysHookSink, RequestPostponedLock, IsKeystrokeFeedEnabled and CallImm32HotkeyHandler of ITfThreadMgr_P */
+STDMETHODIMP CThreadMgr::SetSysHookSink(_In_ ITfSysHookSink *pSysHookSink)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CThreadMgr::RequestPostponedLock(_In_ ITfContext *pContext)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CThreadMgr::IsKeystrokeFeedEnabled(_Out_ int *pfEnabled)
+{
+    return E_NOTIMPL;
+}
+
+STDMETHODIMP CThreadMgr::CallImm32HotkeyHandler(_In_ UINT vKey, _In_ LPARAM lParam, _Out_ HRESULT *phrResult)
+{
+    return E_NOTIMPL;
 }
 
 STDMETHODIMP CThreadMgr::IsThreadFocus(_Out_ BOOL *pfThreadFocus)
@@ -2003,7 +2058,7 @@ HRESULT ThreadMgr_Constructor(IUnknown *pUnkOuter, IUnknown **ppOut)
 EXTERN_C
 void ThreadMgr_OnDocumentMgrDestruction(ITfThreadMgr *iface, ITfDocumentMgr *mgr)
 {
-    CThreadMgr *This = static_cast<CThreadMgr *>(iface);
+    CThreadMgr *This = static_cast<CThreadMgr *>(static_cast<ITfThreadMgrEx *>(iface));
     This->OnDocumentMgrDestruction(mgr);
 }
 
