@@ -232,6 +232,48 @@ START_TEST(child_start)
     trace("Slowest of %u children: %lu ms\n", Index, Slowest);
 }
 
+static volatile LONG StartedParameter;
+
+static DWORD WINAPI ReportParameter(void *Context)
+{
+    InterlockedExchange(&StartedParameter, (LONG)(ULONG_PTR)Context);
+    return (DWORD)(ULONG_PTR)Context + 1;
+}
+
+static void CheckThreadStart(HANDLE Thread, LONG Parameter)
+{
+    DWORD ExitCode = 0;
+
+    ok(Thread != NULL, "The thread was not created, error %lu\n", GetLastError());
+    if (!Thread)
+        return;
+    ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "The thread did not finish\n");
+    ok(GetExitCodeThread(Thread, &ExitCode), "GetExitCodeThread failed with %lu\n", GetLastError());
+    ok(ExitCode == (DWORD)Parameter + 1, "Exit code %lu, expected %lu\n", ExitCode, (DWORD)Parameter + 1);
+    ok(StartedParameter == Parameter, "The routine got %ld, expected %ld\n", StartedParameter, Parameter);
+    CloseHandle(Thread);
+}
+
+START_TEST(thread_start)
+{
+    DWORD ExitCode, Elapsed;
+    BOOL InTime;
+
+    if (AppSmokeIsRole("child"))
+    {
+        InterlockedExchange(&StartedParameter, 0);
+        CheckThreadStart(CreateThread(NULL, 0, ReportParameter, (void *)0x1234, 0, NULL), 0x1234);
+        InterlockedExchange(&StartedParameter, 0);
+        CheckThreadStart(CreateRemoteThread(GetCurrentProcess(), NULL, 0, ReportParameter, (void *)0x5678, 0, NULL),
+                         0x5678);
+        return;
+    }
+
+    InTime = AppSmokeRunSelf("thread_start", "child", CHILD_BUDGET_MS, &ExitCode, &Elapsed);
+    ok(InTime, "The child did not finish in time\n");
+    ok(ExitCode == 0, "The child exited with %#lx\n", ExitCode);
+}
+
 START_TEST(environment)
 {
     USHORT ProcessMachine = IMAGE_FILE_MACHINE_UNKNOWN, NativeMachine = IMAGE_FILE_MACHINE_UNKNOWN;

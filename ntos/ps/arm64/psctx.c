@@ -371,7 +371,9 @@ PspGetOrSetContextKernelRoutine(
     KeSetEvent(&GetSetContext->Event, IO_NO_INCREMENT, FALSE);
 }
 
-/* TODO: tell a WoW64 thread's 32-bit context apart once this host's WoW64 passes one to NtCreateThread */
+C_ASSERT(FIELD_OFFSET(CONTEXT, ContextFlags) == FIELD_OFFSET(WOW64_CONTEXT, ContextFlags));
+C_ASSERT(FIELD_OFFSET(WOW64_CONTEXT, SegSs) < sizeof(CONTEXT));
+
 BOOLEAN
 NTAPI
 PsArchGetWow64StartContext(
@@ -381,10 +383,20 @@ PsArchGetWow64StartContext(
     _Out_ PULONG Ebx,
     _Out_ PULONG Esp)
 {
-    UNREFERENCED_PARAMETER(Context);
+    PWOW64_CONTEXT Wow64Context = (PWOW64_CONTEXT)Context;
 
     *Eip = *Eax = *Ebx = *Esp = 0;
-    return FALSE;
+    if ((Context->ContextFlags & CONTEXT_ARM64) ||
+        !(Wow64Context->ContextFlags & WOW64_CONTEXT_i386))
+    {
+        return FALSE;
+    }
+
+    *Eip = Wow64Context->Eip;
+    *Eax = Wow64Context->Eax;
+    *Ebx = Wow64Context->Ebx;
+    *Esp = Wow64Context->Esp;
+    return TRUE;
 }
 
 VOID

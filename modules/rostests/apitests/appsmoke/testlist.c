@@ -24,6 +24,7 @@ extern void func_sockets(void);
 extern void func_suite(void);
 extern void func_swap_chain(void);
 extern void func_task_dialog(void);
+extern void func_thread_start(void);
 extern void func_window_dc(void);
 extern void func_yield_fairness(void);
 
@@ -52,6 +53,7 @@ const struct test winetest_testlist[] =
     { "suite", func_suite },
     { "swap_chain", func_swap_chain },
     { "task_dialog", func_task_dialog },
+    { "thread_start", func_thread_start },
     { "window_dc", func_window_dc },
     { "yield_fairness", func_yield_fairness },
     { 0, 0 }
