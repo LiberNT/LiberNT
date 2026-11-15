@@ -1717,11 +1717,28 @@ static unsigned int edit_line_char_width( WCHAR ch )
     return console_char_width( ch );
 }
 
-/* FIXME: a wide character that does not fit at the end of a row is padded to the next row, which the offsets ignore */
 static unsigned int edit_line_string_width( const WCHAR *str, unsigned int len)
 {
     unsigned int i, offset = 0;
     for (i = 0; i < len; i++) offset += edit_line_char_width( str[i] );
+    return offset;
+}
+
+static unsigned int edit_line_advance( struct console *console, unsigned int offset, WCHAR ch )
+{
+    struct screen_buffer *screen_buffer = console->active;
+    unsigned int width = edit_line_char_width( ch );
+
+    if (ch >= ' ' && width == 2 && screen_buffer->width >= 2 && (screen_buffer->mode & ENABLE_WRAP_AT_EOL_OUTPUT) &&
+        (console->edit_line.home_x + offset) % screen_buffer->width == screen_buffer->width - 1)
+        offset++;
+    return offset + width;
+}
+
+static unsigned int edit_line_offset( struct console *console, unsigned int len )
+{
+    unsigned int i, offset = 0;
+    for (i = 0; i < len; i++) offset = edit_line_advance( console, offset, console->edit_line.buf[i] );
     return offset;
 }
 #else
@@ -1749,7 +1766,11 @@ static void update_read_output( struct console *console, BOOL newline )
 
         hide_tty_cursor( screen_buffer->console );
 
+#ifdef __REACTOS__
+        offset = edit_line_offset( console, ctx->update_begin );
+#else
         offset = edit_line_string_width( ctx->buf, ctx->update_begin );
+#endif
         screen_buffer->cursor_x = (ctx->home_x + offset) % screen_buffer->width;
         screen_buffer->cursor_y = ctx->home_y + (ctx->home_x + offset) / screen_buffer->width;
         for (j = ctx->update_begin; j <= ctx->update_end; j++)
@@ -1766,7 +1787,7 @@ static void update_read_output( struct console *console, BOOL newline )
             {
                 write_char( screen_buffer, ctx->buf[j], &update_rect, &ctx->home_y );
 #ifdef __REACTOS__
-                offset += edit_line_char_width( ctx->buf[j] );
+                offset = edit_line_advance( console, offset, ctx->buf[j] );
 #else
                 offset++;
 #endif
@@ -1787,7 +1808,11 @@ static void update_read_output( struct console *console, BOOL newline )
 
     if (newline)
     {
+#ifdef __REACTOS__
+        offset = edit_line_offset( console, ctx->len );
+#else
         offset = edit_line_string_width( ctx->buf, ctx->len );
+#endif
         screen_buffer->cursor_x = 0;
         screen_buffer->cursor_y = ctx->home_y + (ctx->home_x + offset) / screen_buffer->width;
 #ifdef __REACTOS__
@@ -1798,7 +1823,11 @@ static void update_read_output( struct console *console, BOOL newline )
     }
     else
     {
+#ifdef __REACTOS__
+        offset = edit_line_offset( console, ctx->cursor );
+#else
         offset = edit_line_string_width( ctx->buf, ctx->cursor );
+#endif
         screen_buffer->cursor_y = ctx->home_y + (ctx->home_x + offset) / screen_buffer->width;
         if (screen_buffer->cursor_y < screen_buffer->height)
         {
@@ -2034,7 +2063,8 @@ static NTSTATUS read_console( struct console *console, unsigned int ioctl, size_
         ctx->buf[initial_len] = 0;
         ctx->len = initial_len;
 #ifdef __REACTOS__
-        ctx->end_offset = edit_line_string_width( initial, initial_len );
+        /* FIXME: home_x above ignores the padding of a wide character in the initial characters */
+        ctx->end_offset = edit_line_offset( console, initial_len );
 #else
         ctx->end_offset = initial_len;
 #endif
