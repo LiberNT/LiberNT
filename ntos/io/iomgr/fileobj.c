@@ -597,6 +597,28 @@ IopGetSetSecurityObject(
 
     FileObject = ObjectBody;
 
+    /* An open of the device itself, not of a name inside it, carries the device's security */
+    if ((FileObject->FileName.Length == 0 && FileObject->RelatedFileObject == NULL) ||
+        (FileObject->Flags & FO_DIRECT_DEVICE_OPEN))
+    {
+        ASSERT(FileObject->DeviceObject != NULL);
+
+        if (OperationCode == QuerySecurityDescriptor)
+        {
+            return IopQueryDeviceSecurityDescriptor(FileObject->DeviceObject,
+                                                    SecurityInformation,
+                                                    SecurityDescriptor,
+                                                    BufferLength);
+        }
+
+        return IopSetDeviceSecurityDescriptor(FileObject->DeviceObject,
+                                              SecurityInformation,
+                                              SecurityDescriptor,
+                                              BufferLength,
+                                              PoolType,
+                                              GenericMapping);
+    }
+
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL) return STATUS_INVALID_DEVICE_REQUEST;
 
