@@ -91,6 +91,8 @@ static const struct
 
 static const WCHAR s_szUserProfileKey[] = L"Control Panel\\International\\User Profile";
 static const WCHAR s_szPreloadKey[] = L"Keyboard Layout\\Preload";
+static const WCHAR s_szUserTipKey[] = L"Software\\Microsoft\\CTF\\TIP";
+static const WCHAR s_szSortOrderKey[] = L"Software\\Microsoft\\CTF\\SortOrder\\AssemblyItem";
 
 static BOOL
 ParseGuid(_In_ LPCWSTR psz, _Out_ GUID *pGuid)
@@ -478,6 +480,100 @@ IsTipRegistered(_In_ ITfInputProcessorProfiles *pProfiles, _In_ const LAYOUT_OR_
     return bFound;
 }
 
+static void
+ClearUserEnable(_In_ const LAYOUT_OR_TIP *pEntry)
+{
+    WCHAR szClsid[39], szProfile[39], aszKey[4][MAX_PATH];
+    INT i;
+
+    StringFromGUID2(&pEntry->clsid, szClsid, _countof(szClsid));
+    StringFromGUID2(&pEntry->guidProfile, szProfile, _countof(szProfile));
+    StringCchPrintfW(aszKey[0], MAX_PATH, L"%s\\%s", s_szUserTipKey, szClsid);
+    StringCchPrintfW(aszKey[1], MAX_PATH, L"%s\\LanguageProfile", aszKey[0]);
+    StringCchPrintfW(aszKey[2], MAX_PATH, L"%s\\0x%08x", aszKey[1], pEntry->langid);
+    StringCchPrintfW(aszKey[3], MAX_PATH, L"%s\\%s", aszKey[2], szProfile);
+    for (i = _countof(aszKey) - 1; i >= 0; --i)
+    {
+        if (RegDeleteKeyW(HKEY_CURRENT_USER, aszKey[i]) != ERROR_SUCCESS)
+            break;
+    }
+}
+
+static void
+UpdateSortOrder(_In_ ITfInputProcessorProfiles *pProfiles, _In_ const LAYOUT_OR_TIP *pEntry)
+{
+    LAYOUT_OR_TIP aItems[64];
+    DWORD adwLayout[64];
+    WCHAR szKey[MAX_PATH], szCatid[39], szName[16], szGuid[39];
+    UINT cItems = 0, i;
+    BOOL bFound = FALSE;
+    HKEY hKey, hItem;
+
+    StringFromGUID2(&GUID_TFCAT_TIP_KEYBOARD, szCatid, _countof(szCatid));
+    StringCchPrintfW(szKey, _countof(szKey), L"%s\\0x%08x\\%s", s_szSortOrderKey, pEntry->langid, szCatid);
+
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, szKey, 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        for (i = 0; cItems < _countof(aItems) - 1; ++i)
+        {
+            LAYOUT_OR_TIP item = { 0 };
+            DWORD cb, dwLayout = 0;
+
+            StringCchPrintfW(szName, _countof(szName), L"%08u", i);
+            if (RegOpenKeyExW(hKey, szName, 0, KEY_QUERY_VALUE, &hItem) != ERROR_SUCCESS)
+                break;
+            item.langid = pEntry->langid;
+            item.fTip = TRUE;
+            cb = sizeof(szGuid);
+            if (RegQueryValueExW(hItem, L"CLSID", NULL, NULL, (LPBYTE)szGuid, &cb) != ERROR_SUCCESS ||
+                FAILED(CLSIDFromString(szGuid, &item.clsid)))
+            {
+                RegCloseKey(hItem);
+                continue;
+            }
+            cb = sizeof(szGuid);
+            if (RegQueryValueExW(hItem, L"Profile", NULL, NULL, (LPBYTE)szGuid, &cb) != ERROR_SUCCESS ||
+                FAILED(CLSIDFromString(szGuid, &item.guidProfile)))
+            {
+                RegCloseKey(hItem);
+                continue;
+            }
+            cb = sizeof(dwLayout);
+            RegQueryValueExW(hItem, L"KeyboardLayout", NULL, NULL, (LPBYTE)&dwLayout, &cb);
+            RegCloseKey(hItem);
+            if (!IsTipRegistered(pProfiles, &item))
+                continue;
+            if (IsEqualCLSID(&item.clsid, &pEntry->clsid) && IsEqualGUID(&item.guidProfile, &pEntry->guidProfile))
+                bFound = TRUE;
+            aItems[cItems] = item;
+            adwLayout[cItems++] = dwLayout;
+        }
+        RegCloseKey(hKey);
+    }
+    if (!bFound)
+    {
+        aItems[cItems] = *pEntry;
+        adwLayout[cItems++] = 0;
+    }
+
+    RegDeleteTreeW(HKEY_CURRENT_USER, szKey);
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, szKey, 0, NULL, 0, KEY_CREATE_SUB_KEY, NULL, &hKey, NULL) != ERROR_SUCCESS)
+        return;
+    for (i = 0; i < cItems; ++i)
+    {
+        StringCchPrintfW(szName, _countof(szName), L"%08u", i);
+        if (RegCreateKeyExW(hKey, szName, 0, NULL, 0, KEY_SET_VALUE, NULL, &hItem, NULL) != ERROR_SUCCESS)
+            continue;
+        StringFromGUID2(&aItems[i].clsid, szGuid, _countof(szGuid));
+        RegSetValueExW(hItem, L"CLSID", 0, REG_SZ, (const BYTE *)szGuid, sizeof(szGuid));
+        RegSetValueExW(hItem, L"KeyboardLayout", 0, REG_DWORD, (const BYTE *)&adwLayout[i], sizeof(DWORD));
+        StringFromGUID2(&aItems[i].guidProfile, szGuid, _countof(szGuid));
+        RegSetValueExW(hItem, L"Profile", 0, REG_SZ, (const BYTE *)szGuid, sizeof(szGuid));
+        RegCloseKey(hItem);
+    }
+    RegCloseKey(hKey);
+}
+
 static BOOL
 InstallEntry(_In_opt_ ITfInputProcessorProfiles *pProfiles, _In_ HKEY hUserProfile, _Inout_ PRELOAD_LIST *pPreload,
              _In_ const LAYOUT_OR_TIP *pEntry, _In_ DWORD dwFlags, _In_ BOOL bDefault)
@@ -494,9 +590,16 @@ InstallEntry(_In_opt_ ITfInputProcessorProfiles *pProfiles, _In_ HKEY hUserProfi
             return FALSE;
         if (!IsTipRegistered(pProfiles, pEntry))
             return TRUE;
-        if (FAILED(ITfInputProcessorProfiles_EnableLanguageProfile(pProfiles, &pEntry->clsid, pEntry->langid,
-                                                                    &pEntry->guidProfile, bEnable)))
+        if (bEnable)
+        {
+            ClearUserEnable(pEntry);
+            UpdateSortOrder(pProfiles, pEntry);
+        }
+        else if (FAILED(ITfInputProcessorProfiles_EnableLanguageProfile(pProfiles, &pEntry->clsid, pEntry->langid,
+                                                                         &pEntry->guidProfile, FALSE)))
+        {
             return FALSE;
+        }
         if (bEnable && bDefault)
         {
             ITfInputProcessorProfiles_SetDefaultLanguageProfile(pProfiles, pEntry->langid, &pEntry->clsid,
@@ -541,6 +644,7 @@ InstallEntry(_In_opt_ ITfInputProcessorProfiles *pProfiles, _In_ HKEY hUserProfi
         GetLanguageSubKey(hUserProfile, pEntry->langid, szSubKey, _countof(szSubKey));
     if (RegCreateKeyExW(hUserProfile, szSubKey, 0, NULL, 0, KEY_SET_VALUE, NULL, &hLang, NULL) != ERROR_SUCCESS)
         return FALSE;
+    /* TODO: Windows 11 also writes the ShowAutoCorrection, ShowTextPrediction, ShowCasing and ShowShiftLock values */
     AddLanguage(hUserProfile, szSubKey);
 
     if (dwFlags & ILOT_DISABLED)
