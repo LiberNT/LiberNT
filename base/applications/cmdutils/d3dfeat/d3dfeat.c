@@ -655,7 +655,7 @@ Done:
     FeatPrint("D3DFEAT_D3D11_SHARED_NT adapter=%lu create=0x%08lx share=0x%08lx legacy=0x%08lx open=0x%08lx "
               "pixel=0x%08lx result=%s\n",
               AdapterIndex, CreateResult, ShareResult, LegacyResult, OpenResult, Pixel,
-              (SUCCEEDED(CreateResult) && SUCCEEDED(ShareResult) && LegacyResult == DXGI_ERROR_INVALID_CALL &&
+              (SUCCEEDED(CreateResult) && SUCCEEDED(ShareResult) && LegacyResult == E_INVALIDARG &&
                SUCCEEDED(OpenResult) && Pixel == 0xff0000ff) ? "pass" : "fail");
     if (Staging != NULL) ID3D11Texture2D_Release(Staging);
     if (Opened != NULL) ID3D11Texture2D_Release(Opened);
