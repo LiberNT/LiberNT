@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %*, syntax errors and FOR /F code pages
+ * PURPOSE:     Test cmd.exe batch scripts: echo-on display, %*, syntax errors, IF redirections and FOR /F code pages
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -344,6 +344,22 @@ static void test_exit_codes(void)
     delete_file("bat1.cmd");
 }
 
+static void test_if_redirections(void)
+{
+    write_file("ifredir.cmd",
+        "@echo off\r\n"
+        "if not exist nothere echo a>ifa.txt 2>&1\r\n"
+        "if not exist nothere (\r\n"
+        "    echo y\r\n"
+        "    echo b>ifb.txt 2>&1\r\n"
+        ")\r\n"
+        "echo after\r\n");
+    check_cmd(__LINE__, "cmd /c ifredir.cmd", NULL, 0, "y\r\nafter\r\n", TRUE);
+    check_file(__LINE__, "ifa.txt", "a\r\n");
+    check_file(__LINE__, "ifb.txt", "b\r\n");
+    delete_file("ifredir.cmd");
+}
+
 /* FOR /F reads a file in the console code page that chcp sets (Windows 11: found under 65001, not under 437) */
 static void test_for_f_code_page(void)
 {
@@ -387,6 +403,7 @@ START_TEST(script)
     test_all_arguments();
     test_syntax_errors();
     test_exit_codes();
+    test_if_redirections();
     test_for_f_code_page();
 
     RemoveDirectoryA(s_dir);
