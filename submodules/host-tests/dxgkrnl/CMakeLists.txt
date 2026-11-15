@@ -11,4 +11,6 @@ if(Python3_Interpreter_FOUND)
         --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
     add_test(NAME dxgkrnl.primary_placement COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dxgkrnl-primary-placement-test.py
         --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+    add_test(NAME dxgkrnl.vidpn_targets COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dxgkrnl-vidpn-targets-test.py
+        --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
 endif()

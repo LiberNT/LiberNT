@@ -18,7 +18,8 @@
  * Multi-monitor support
  * ---------------------
  * The VidPN object supports up to DXGKP_MAX_SOURCES VidPN sources (display
- * outputs) and DXGKP_MAX_TARGETS targets (physical connectors).  Each
+ * outputs) and one target per video-output child the miniport declares, plus
+ * DXGKP_RUNTIME_TARGET_SLOTS targets reported at run time.  Each
  * source has its own source mode set and each target has its own target
  * mode set and monitor source mode set.  The topology maps sources to
  * targets via paths; one source can drive multiple targets (clone mode).
@@ -44,8 +45,9 @@
 /* Maximum VidPN sources (display heads). */
 #define DXGKP_MAX_SOURCES   16
 
-/* Maximum VidPN targets (physical connectors). */
-#define DXGKP_MAX_TARGETS   16
+/* Target slots a VidPN keeps beyond the declared children for targets the
+ * miniport reports at run time (MST, tiled). */
+#define DXGKP_RUNTIME_TARGET_SLOTS 16
 
 /* Maximum paths in the topology. */
 #define DXGKP_MAX_PATHS     16
@@ -215,7 +217,7 @@ NTSTATUS NTAPI DxgkpSetVidPnSourceOwnerWithFlagsAndAccessMode(_In_ D3DKMT_SETVID
  *   - Per-target mode sets
  *   - Per-target monitor source mode sets
  *
- * Supports up to DXGKP_MAX_SOURCES sources, DXGKP_MAX_TARGETS targets,
+ * Supports up to DXGKP_MAX_SOURCES sources, TargetCapacity targets,
  * and DXGKP_MAX_PATHS paths for multi-monitor configurations.
  *
  * The DXGKP_VIDPN pointer is cast to D3DKMDT_HVIDPN for handle passing.
@@ -282,11 +284,12 @@ typedef struct _DXGKP_VIDPN
      * NULL if source i does not have a mode set yet. */
     PDXGKP_VIDPN_SOURCE_MODESET     SourceModeSets[DXGKP_MAX_SOURCES];
 
-    /* ---- Per-target mode sets ---- */
-    PDXGKP_VIDPN_TARGET_MODESET     TargetModeSets[DXGKP_MAX_TARGETS];
-
-    /* ---- Per-target monitor source mode sets ---- */
-    PDXGKP_MONITOR_SOURCE_MODESET   MonitorModeSets[DXGKP_MAX_TARGETS];
+    /* ---- Per-target mode sets and monitor source mode sets ---- */
+    /* TargetCapacity entries each, stored after the VidPN in its allocation;
+     * entries [0..NumTargets-1] are the slots in use. */
+    ULONG                           TargetCapacity;
+    PDXGKP_VIDPN_TARGET_MODESET    *TargetModeSets;
+    PDXGKP_MONITOR_SOURCE_MODESET  *MonitorModeSets;
 
     /* ---- Per-source multisampling method sets ---- */
     /* Recorded by pfnAssignMultisamplingMethodSet.  For source i, entries
