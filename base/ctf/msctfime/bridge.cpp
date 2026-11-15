@@ -290,10 +290,8 @@ CicBridge::ActivateIMMX(
     _Inout_ ITfThreadMgrEx *pThreadMgr)
 {
     HRESULT hr = pThreadMgr->ActivateEx(&m_cliendId, 0);
-    if (hr != S_OK)
+    if (FAILED(hr))
     {
-        if (SUCCEEDED(hr))
-            pThreadMgr->Deactivate();
         m_cliendId = 0;
         return E_FAIL;
     }
@@ -625,6 +623,21 @@ void CicBridge::SetAssociate(
 {
     if (!hWnd || !pThreadMgr || !::IsWindow(hWnd))
         return;
+
+    ITfThreadMgr_P *pThreadMgr_P = NULL;
+    if (SUCCEEDED(pThreadMgr->QueryInterface(IID_ITfThreadMgr_P, (void **)&pThreadMgr_P)))
+    {
+        ITfDocumentMgr *pAssociated = NULL;
+        HRESULT hr = pThreadMgr_P->GetAssociated(hWnd, &pAssociated);
+        pThreadMgr_P->Release();
+        if (hr == S_OK && pAssociated)
+        {
+            BOOL bOwn = IsOwnDim(pAssociated);
+            pAssociated->Release();
+            if (!bOwn)
+                return;
+        }
+    }
 
     ITfDocumentMgr *pPrev = NULL;
     if (SUCCEEDED(pThreadMgr->AssociateFocus(hWnd, pDocMgr, &pPrev)) && pPrev)
