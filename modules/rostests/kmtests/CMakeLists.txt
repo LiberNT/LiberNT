@@ -127,6 +127,7 @@ list(APPEND KMTEST_DRV_SOURCE
     hal/HalDmaAlignment.c
     hal/HalRealTimeClock.c
     hal/HalSystemInfo.c
+    hdaudbus/HdAudBusInterface.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
     ndis/NdisProcessorGroup.c

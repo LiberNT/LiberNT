@@ -507,6 +507,13 @@ Bus_CreatePdo(
 
     WdfDeviceSetPowerCapabilities(hChild, &powerCaps);
 
+    WDF_QUERY_INTERFACE_CONFIG_INIT(&qiConfig, NULL, &GUID_BUS_INTERFACE_STANDARD, NULL);
+    qiConfig.SendQueryToParentStack = TRUE;
+    status = WdfDeviceAddQueryInterface(hChild, &qiConfig);
+    if (!NT_SUCCESS(status)) {
+        return status;
+    }
+
     if (Desc->CodecIds.IsDSP) {
         ADSP_BUS_INTERFACE busInterface = ADSP_BusInterface(pdoData);
         WDF_QUERY_INTERFACE_CONFIG_INIT(&qiConfig,
