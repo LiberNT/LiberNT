@@ -1841,6 +1841,18 @@ IoGetDriverDirectory(
   _In_ DRIVER_DIRECTORY_TYPE DirectoryType,
   _In_ ULONG Flags,
   _Out_ PHANDLE DriverDirectoryHandle);
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+_Must_inspect_result_
+NTKERNELAPI
+NTSTATUS
+NTAPI
+IoGetDeviceDirectory(
+  _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+  _In_ DEVICE_DIRECTORY_TYPE DirectoryType,
+  _In_ ULONG Flags,
+  _In_ PVOID Reserved,
+  _Out_ PHANDLE DeviceDirectoryHandle);
 #endif
 
 #if (NTDDI_VERSION >= NTDDI_WIN8)

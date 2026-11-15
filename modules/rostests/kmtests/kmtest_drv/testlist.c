@@ -175,6 +175,7 @@ KMT_TESTFUNC Test_HalRealTimeClock;
 KMT_TESTFUNC Test_HalSystemInfo;
 KMT_TESTFUNC Test_IoContainerId;
 KMT_TESTFUNC Test_IoDriverKeyOpen;
+KMT_TESTFUNC Test_IoDriverState;
 KMT_TESTFUNC Test_IoDriverSection;
 KMT_TESTFUNC Test_IoGetRequestorProcess;
 KMT_TESTFUNC Test_IoCreateDeviceSecure;
@@ -597,6 +598,7 @@ const KMT_TEST TestList[] =
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },
     { "-IoDriverKeyOpen",                   Test_IoDriverKeyOpen },
+    { "IoDriverState",                      Test_IoDriverState },
     { "IoDriverSection",                    Test_IoDriverSection },
     { "IoGetRequestorProcess",              Test_IoGetRequestorProcess },
     { "IoCreateDeviceSecure",               Test_IoCreateDeviceSecure },

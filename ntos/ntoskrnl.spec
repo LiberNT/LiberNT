@@ -2468,7 +2468,7 @@
 @ stub -arch=win64 IoGetBootDiskInformationLite
 @ stub -arch=win64 IoGetContainerInformation
 @ stub -arch=win64 IoGetCopyInformationExtension
-@ stub -arch=win64 IoGetDeviceDirectory
+@ stdcall IoGetDeviceDirectory(ptr long long ptr ptr)
 @ stdcall IoGetDeviceInterfacePropertyData(ptr ptr long long long ptr ptr ptr)
 @ stdcall IoGetDeviceNumaNode(ptr ptr)
 @ stdcall IoGetDriverDirectory(ptr long long ptr)

@@ -2293,6 +2293,10 @@ typedef enum _DRIVER_DIRECTORY_TYPE {
   DriverDirectoryData,
   DriverDirectorySharedData
 } DRIVER_DIRECTORY_TYPE, *PDRIVER_DIRECTORY_TYPE;
+
+typedef enum _DEVICE_DIRECTORY_TYPE {
+  DeviceDirectoryData = 0,
+} DEVICE_DIRECTORY_TYPE, *PDEVICE_DIRECTORY_TYPE;
 #endif
 
 #define DRVO_UNLOAD_INVOKED               0x00000001
