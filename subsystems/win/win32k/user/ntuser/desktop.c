@@ -1439,8 +1439,10 @@ VOID NTAPI DesktopThreadMain(VOID)
     BOOL Ret;
     MSG Msg;
     PUSER_SESSION Session = UserGetCurrentSession();
+    PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
 
-    Session->DesktopThread = PsGetCurrentThreadWin32Thread();
+    ASSERT(pti->pEventQueueServer != NULL);
+    WritePointerRelease((PVOID volatile *)&Session->DesktopThread, pti);
 
     UserEnterExclusive();
 
@@ -1452,12 +1454,12 @@ VOID NTAPI DesktopThreadMain(VOID)
 
     while (TRUE)
     {
-        Ret = co_IntGetPeekMessage(&Msg, 0, 0, 0, PM_REMOVE, TRUE);
-        if (Ret)
+        while ((Ret = co_IntGetPeekMessage(&Msg, 0, 0, 0, PM_REMOVE | PM_NOYIELD, FALSE)) != FALSE)
         {
             IntDispatchMessage(&Msg);
         }
         co_UserProcessDisplayConfigurationUpdate();
+        (VOID)co_MsqWaitForNewMessages(pti, NULL, 0, 0);
     }
 
     UserLeave();

@@ -1025,42 +1025,24 @@ leave:
 }
 
 static volatile LONG gUserDisplayConfigurationPending;
-static volatile LONG gUserDisplayConfigurationQueued;
-static WORK_QUEUE_ITEM gUserDisplayConfigurationWorkItem;
-
-static
-VOID
-NTAPI
-UserpDisplayConfigurationWorker(
-    _In_ PVOID Context)
-{
-    MSG Msg;
-
-    UNREFERENCED_PARAMETER(Context);
-
-    InterlockedExchange(&gUserDisplayConfigurationQueued, 0);
-    UserEnterExclusive();
-    if (gpDisplaySession && gpDisplaySession->DesktopThread != NULL)
-    {
-        RtlZeroMemory(&Msg, sizeof(Msg));
-        Msg.message = WM_NULL;
-        MsqPostMessage(gpDisplaySession->DesktopThread, &Msg, FALSE, QS_POSTMESSAGE, 0, 0);
-    }
-    UserLeave();
-}
 
 VOID
 NTAPI
 UserQueueDisplayConfigurationUpdate(VOID)
 {
+    PUSER_SESSION Session;
+    PTHREADINFO DesktopThread;
+
     InterlockedExchange(&gUserDisplayConfigurationPending, 1);
-    if (InterlockedExchange(&gUserDisplayConfigurationQueued, 1) == 0)
-    {
-        ExInitializeWorkItem(&gUserDisplayConfigurationWorkItem,
-                             UserpDisplayConfigurationWorker,
-                             NULL);
-        ExQueueWorkItem(&gUserDisplayConfigurationWorkItem, DelayedWorkQueue);
-    }
+
+    /* The display driver reports from any thread, and the user lock may be held by one that waits for that driver */
+    Session = ReadPointerAcquire((PVOID volatile *)&gpDisplaySession);
+    if (Session == NULL)
+        return;
+
+    DesktopThread = ReadPointerAcquire((PVOID volatile *)&Session->DesktopThread);
+    if (DesktopThread != NULL)
+        KeSetEvent(DesktopThread->pEventQueueServer, IO_NO_INCREMENT, FALSE);
 }
 
 VOID
