@@ -414,7 +414,7 @@ MonitorBrightnessApplyLocked(
 
     *Changed = FALSE;
 
-    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+    ASSERT(KeAreApcsDisabled());
 
     if (Level == Brightness->Current)
         return STATUS_SUCCESS;
