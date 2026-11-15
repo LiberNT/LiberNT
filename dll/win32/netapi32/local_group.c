@@ -639,6 +639,7 @@ NetLocalGroupAddMembers(
     }
 
     /* Add new members to the alias */
+    /* FIXME: members added before a failing one stay added, where Windows adds none */
     for (i = 0; i < totalentries; i++)
     {
         Status = SamAddMemberToAlias(AliasHandle,

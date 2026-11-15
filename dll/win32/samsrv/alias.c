@@ -35,6 +35,23 @@ SampOpenAliasObject(IN PSAM_DB_OBJECT DomainObject,
 }
 
 
+static
+BOOLEAN
+SampIsAliasMember(IN PSAM_DB_OBJECT AliasObject,
+                  IN LPCWSTR MemberIdString)
+{
+    HANDLE MembersKeyHandle = NULL;
+    BOOLEAN Member;
+
+    if (!NT_SUCCESS(SampRegOpenKey(AliasObject->KeyHandle, L"Members", KEY_QUERY_VALUE, &MembersKeyHandle)))
+        return FALSE;
+
+    Member = NT_SUCCESS(SampRegQueryValue(MembersKeyHandle, MemberIdString, NULL, NULL, NULL));
+    SampRegCloseKey(&MembersKeyHandle);
+    return Member;
+}
+
+
 NTSTATUS
 SampAddMemberToAlias(IN PSAM_DB_OBJECT AliasObject,
                      IN PRPC_SID MemberId)
@@ -50,6 +67,13 @@ SampAddMemberToAlias(IN PSAM_DB_OBJECT AliasObject,
 
     ConvertSidToStringSidW(MemberId, &MemberIdString);
     TRACE("Member SID: %S\n", MemberIdString);
+
+    /* A member is not added twice (NetLocalGroupAddMembers documents ERROR_MEMBER_IN_ALIAS) */
+    if (MemberIdString != NULL && SampIsAliasMember(AliasObject, MemberIdString))
+    {
+        LocalFree(MemberIdString);
+        return STATUS_MEMBER_IN_ALIAS;
+    }
 
     MemberIdLength = RtlLengthSid(MemberId);
 
