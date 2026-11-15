@@ -1,0 +1,23 @@
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = Extension
+ClassGuid   = {e2f84ce7-8efa-411c-aa69-97454ca4cb57}
+Provider    = %LiberNT%
+DriverVer   = 11/15/2026,1.00
+PnpLockdown = 1
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+
+[ClassInstall_AddReg]
+HKR, , , 0, %ExtensionClassName%
+HKR, , NoInstallClass, 0, 1
+HKR, , NoDisplayClass, 0, 1
+HKR, , IconPath, 0x00010000, "%%SystemRoot%%\System32\setupapi.dll,-70"
+
+[Strings]
+; Non-localizable
+LiberNT = "LiberNT Project"
+
+; Localizable
+ExtensionClassName = "Extensions"

@@ -1,0 +1,43 @@
+[Version]
+Signature   = "$WINDOWS NT$"
+LayoutFile  = layout.inf
+Class       = SoftwareComponent
+ClassGuid   = {5c4c3332-344d-483c-8739-259e934c9cc8}
+Provider    = %LiberNT%
+DriverVer   = 11/15/2026,1.00
+PnpLockdown = 1
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+
+; TODO: [ClassInstall32.Configuration] naming each component after the description its parent's driver gave it
+[ClassInstall_AddReg]
+HKR, , , 0, %SoftwareComponentClassName%
+HKR, , NoInstallClass, 0, 1
+HKR, , SilentInstall, 0, 1
+HKR, , IconPath, 0x00010000, "%%SystemRoot%%\System32\setupapi.dll,-70"
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+; A component no package claims runs without a driver
+[GenericMfg]
+%SoftwareComponent.DeviceDesc% = SoftwareComponent_Inst, SWC\Generic
+
+[SoftwareComponent_Inst.NT]
+
+; TODO: AddProperty of DEVPKEY_Device_GenericDriverInstalled once INF AddProperty is supported
+[SoftwareComponent_Inst.NT.Services]
+AddService = , 0x00000002
+
+[Strings]
+; Non-localizable
+LiberNT = "LiberNT Project"
+
+; Localizable
+SoftwareComponentClassName = "Software components"
+GenericMfg = "(Standard software components)"
+SoftwareComponent.DeviceDesc = "Generic software component"

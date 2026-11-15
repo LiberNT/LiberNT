@@ -4,9 +4,11 @@ list(APPEND INF_FILES
     battery.inf
     bda.inf
     bth.inf
+    c_extension.inf
     c_firmware.inf
     c_image.inf
     c_smartcardreader.inf
+    c_swcomponent.inf
     c_wpd.inf
     display.inf
     fdc.inf
