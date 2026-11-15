@@ -1771,6 +1771,13 @@ static void record_key_input( struct console *console, BOOL down, WPARAM wparam,
 static void record_char_input( struct console *console, WCHAR ch, LPARAM lparam )
 {
     INPUT_RECORD ir;
+#ifdef __REACTOS__
+    ir.EventType = KEY_EVENT;
+    ir.Event.KeyEvent.bKeyDown          = TRUE;
+    ir.Event.KeyEvent.wRepeatCount      = 1;
+    ir.Event.KeyEvent.wVirtualKeyCode   = 0;
+    ir.Event.KeyEvent.wVirtualScanCode  = 0;
+#else
     SHORT sh = VkKeyScanW( ch );
 
     if (sh == ~0) return;
@@ -1779,6 +1786,7 @@ static void record_char_input( struct console *console, WCHAR ch, LPARAM lparam 
     ir.Event.KeyEvent.wRepeatCount      = 0;
     ir.Event.KeyEvent.wVirtualKeyCode   = LOBYTE(sh);
     ir.Event.KeyEvent.wVirtualScanCode  = MapVirtualKeyW( LOBYTE(sh), 0 );
+#endif
     ir.Event.KeyEvent.uChar.UnicodeChar = ch;
     ir.Event.KeyEvent.dwControlKeyState = 0;
     if (lparam & (1u << 24)) ir.Event.KeyEvent.dwControlKeyState |= ENHANCED_KEY;
