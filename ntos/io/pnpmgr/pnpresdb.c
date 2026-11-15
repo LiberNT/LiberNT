@@ -116,6 +116,27 @@ IopResDbLast(_In_ UINT64 Start, _In_ UINT64 Length)
     return (Length - 1 > MAXULONGLONG - Start) ? MAXULONGLONG : Start + (Length - 1);
 }
 
+/* A window holds a range inside it that belongs to its owner or to a device below it; a nested bridge's window may equal its parent's */
+static
+BOOLEAN
+IopResDbWindowHolds(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Window,
+    _In_ USHORT WindowFlag,
+    _In_ UINT64 WindowStart,
+    _In_ UINT64 WindowLast,
+    _In_opt_ PDEVICE_NODE WindowOwner,
+    _In_ UINT64 Start,
+    _In_ UINT64 Last,
+    _In_opt_ PDEVICE_NODE Owner)
+{
+    ASSERT(WindowStart <= WindowLast);
+    ASSERT(Start <= Last);
+
+    if (!(Window->Flags & WindowFlag) || WindowStart > Start || WindowLast < Last)
+        return FALSE;
+    return WindowOwner == NULL || Owner == NULL || IopResDbIsAncestorOrSelf(WindowOwner, Owner);
+}
+
 static
 BOOLEAN
 IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE aOwner, _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR b, _In_opt_ PDEVICE_NODE bOwner)
@@ -143,15 +164,8 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
             bLast = IopResDbLast(bStart, bLength);
             if (aStart > bLast || bStart > aLast)
                 return FALSE;
-            if ((a->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && aStart <= bStart && aLast >= bLast)
-            {
-                return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(aOwner, bOwner) : FALSE;
-            }
-            if ((b->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) && bStart <= aStart && bLast >= aLast)
-            {
-                return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(bOwner, aOwner) : FALSE;
-            }
-            return TRUE;
+            return !IopResDbWindowHolds(a, CM_RESOURCE_MEMORY_WINDOW_DECODE, aStart, aLast, aOwner, bStart, bLast, bOwner) &&
+                   !IopResDbWindowHolds(b, CM_RESOURCE_MEMORY_WINDOW_DECODE, bStart, bLast, bOwner, aStart, aLast, aOwner);
         }
         case CmResourceTypePort:
         {
@@ -163,15 +177,8 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
             bLast = IopResDbLast(bStart, b->u.Port.Length);
             if (aStart > bLast || bStart > aLast)
                 return FALSE;
-            if ((a->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && aStart <= bStart && aLast >= bLast)
-            {
-                return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(aOwner, bOwner) : FALSE;
-            }
-            if ((b->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && bStart <= aStart && bLast >= aLast)
-            {
-                return aOwner && bOwner ? !IopResDbIsAncestorOrSelf(bOwner, aOwner) : FALSE;
-            }
-            return TRUE;
+            return !IopResDbWindowHolds(a, CM_RESOURCE_PORT_WINDOW_DECODE, aStart, aLast, aOwner, bStart, bLast, bOwner) &&
+                   !IopResDbWindowHolds(b, CM_RESOURCE_PORT_WINDOW_DECODE, bStart, bLast, bOwner, aStart, aLast, aOwner);
         }
         case CmResourceTypeInterrupt:
             /* A message interrupt holds a vector the HAL handed out, not an interrupt line */

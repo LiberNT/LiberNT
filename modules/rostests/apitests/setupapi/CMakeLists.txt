@@ -17,6 +17,7 @@ list(APPEND SOURCE
     LegacyDeviceParent.c
     NewDeviceInstall.c
     ParentIdPrefix.c
+    PciBridgeWindows.c
     PciDeviceIds.c
     SetupCommitFileQueue.c
     SetupDiInstallClassExA.c
