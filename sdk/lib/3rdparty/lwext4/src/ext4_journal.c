@@ -907,7 +907,8 @@ static void jbd_replay_block_tags(struct jbd_fs *jbd_fs,
 		return;
 
 	/* We need special treatment for ext4 superblock. */
-	if (tag_info->block) {
+	if (tag_info->block != EXT4_SUPERBLOCK_OFFSET /
+				jbd_get32(&jbd_fs->sb, blocksize)) {
 		r = ext4_block_get_noread(fs->bdev, &ext4_block, tag_info->block);
 		if (r != EOK) {
 			jbd_block_set(jbd_fs, &journal_block);
@@ -930,7 +931,8 @@ static void jbd_replay_block_tags(struct jbd_fs *jbd_fs,
 		state = ext4_get16(&fs->sb, state);
 
 		memcpy(&fs->sb,
-			journal_block.data + EXT4_SUPERBLOCK_OFFSET,
+			journal_block.data + EXT4_SUPERBLOCK_OFFSET %
+				jbd_get32(&jbd_fs->sb, blocksize),
 			EXT4_SUPERBLOCK_SIZE);
 
 		/* Mark system as mounted */
@@ -1468,18 +1470,6 @@ int jbd_journal_stop(struct jbd_journal *journal)
 			 DBG_WARN "There are still block records "
 			 	  "in this journal session!\n");
 
-	features_incompatible =
-		ext4_get32(&jbd_fs->inode_ref.fs->sb,
-			   features_incompatible);
-	features_incompatible &= ~EXT4_FINCOM_RECOVER;
-	ext4_set32(&jbd_fs->inode_ref.fs->sb,
-			features_incompatible,
-			features_incompatible);
-	r = ext4_sb_write(jbd_fs->bdev,
-			&jbd_fs->inode_ref.fs->sb);
-	if (r != EOK)
-		return r;
-
 	/* The next session numbers its transactions from here on. Starting
 	 * every session from zero gives the records an earlier session left
 	 * in the log the numbers a later recovery expects, and that recovery
@@ -1487,7 +1477,22 @@ int jbd_journal_stop(struct jbd_journal *journal)
 	journal->start = 0;
 	journal->trans_id = journal->alloc_trans_id;
 	jbd_journal_write_sb(journal);
-	return jbd_write_sb(journal->jbd_fs);
+	r = jbd_write_sb(journal->jbd_fs);
+	if (r != EOK)
+		return r;
+
+	/* The journal is marked empty before the file system stops asking
+	 * for a recovery: the other order leaves, between the two writes, a
+	 * journal with data that nothing asks to replay. */
+	features_incompatible =
+		ext4_get32(&jbd_fs->inode_ref.fs->sb,
+			   features_incompatible);
+	features_incompatible &= ~EXT4_FINCOM_RECOVER;
+	ext4_set32(&jbd_fs->inode_ref.fs->sb,
+			features_incompatible,
+			features_incompatible);
+	return ext4_sb_write(jbd_fs->bdev,
+			&jbd_fs->inode_ref.fs->sb);
 }
 
 /**@brief  Allocate a block in the journal.

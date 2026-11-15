@@ -48,3 +48,7 @@ Fixes
 - Recovery asserted on a failed allocation of a revoke entry and trusted the entry count of a revoke block; both
   are now reported as errors.
 - A failed insertion while splitting an unwritten extent returned success and could dereference a dropped path.
+- Recovery took block 0 for the block of the superblock; with 1024-byte blocks that is block 1.
+- The block cache no longer rejects block 0, which holds the superblock when blocks are larger than 1024 bytes
+  and has to go through the journal with the orphan list.
+- `jbd_journal_stop()` cleared the recovery flag of the file system before it marked the journal empty.
