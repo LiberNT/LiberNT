@@ -36,6 +36,7 @@ list(APPEND SOURCE
     ConsoleInputSignal.c
     ConsoleRequestStress.c
     ConsoleDbcsCells.c
+    ConsoleEchoWide.c
     ConsoleProcessInheritance.c
     ConsoleReadSharedInput.c
     ConsoleVirtualTerminal.c
