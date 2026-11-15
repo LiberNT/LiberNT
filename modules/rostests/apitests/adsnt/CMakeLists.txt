@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    WinNTComputer.c
     WinNTGroup.c
     WinNTMoniker.c
     testlist.c)

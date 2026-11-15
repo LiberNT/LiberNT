@@ -16,6 +16,7 @@
 #include <adserr.h>
 #include <lm.h>
 #include <sddl.h>
+#include <strsafe.h>
 #include <wine/debug.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(adsnt);
@@ -38,6 +39,7 @@ typedef enum
 typedef struct
 {
     IADsGroup IADsGroup_iface;
+    IADsContainer IADsContainer_iface;
     LONG ref;
     OBJECT_TYPE type;
     WCHAR name[UNLEN + 1];
@@ -95,14 +97,26 @@ static HRESULT parse_path(PCWSTR path, WCHAR *container, WCHAR *name, WCHAR *cls
 
     rest = path + ARRAYSIZE(WinNTPrefix) - 1;
     slash = wcschr(rest, '/');
-    len = slash ? (SIZE_T)(slash - rest) : wcslen(rest);
+    comma = slash ? NULL : wcschr(rest, ',');
+    len = slash ? (SIZE_T)(slash - rest) : comma ? (SIZE_T)(comma - rest) : wcslen(rest);
     if (!len || len > MAX_COMPUTERNAME_LENGTH)
         return E_ADS_BAD_PATHNAME;
     memcpy(container, rest, len * sizeof(WCHAR));
     container[len] = 0;
 
     if (!slash)
+    {
+        if (comma)
+        {
+            if (wcslen(comma + 1) >= cls_size)
+                return E_ADS_BAD_PATHNAME;
+            lstrcpyW(cls, comma + 1);
+        }
+        /* TODO: a domain or another computer */
+        if (!is_local_container(container))
+            return HRESULT_FROM_WIN32(ERROR_BAD_NETPATH);
         return S_OK;
+    }
 
     last = wcsrchr(slash, '/') + 1;
     comma = wcschr(last, ',');
@@ -178,8 +192,14 @@ static HRESULT WINAPI object_QueryInterface(IADsGroup *iface, REFIID riid, void 
         IADsGroup_AddRef(iface);
         return S_OK;
     }
+    if (object->type == ObjectComputer && IsEqualGUID(riid, &IID_IADsContainer))
+    {
+        *obj = &object->IADsContainer_iface;
+        IADsGroup_AddRef(iface);
+        return S_OK;
+    }
 
-    /* TODO: IADsUser, IADsContainer and the computer's interfaces */
+    /* TODO: IADsUser, IADsComputer, IADsComputerOperations and IADsPropertyList */
     FIXME("unsupported interface %s\n", debugstr_guid(riid));
     return E_NOINTERFACE;
 }
@@ -462,6 +482,180 @@ static const IADsGroupVtbl ObjectVtbl =
     group_Remove
 };
 
+static HRESULT open_object(PCWSTR path, IDispatch **disp);
+
+static inline ADS_OBJECT *impl_from_IADsContainer(IADsContainer *iface)
+{
+    return CONTAINING_RECORD(iface, ADS_OBJECT, IADsContainer_iface);
+}
+
+static HRESULT WINAPI container_QueryInterface(IADsContainer *iface, REFIID riid, void **obj)
+{
+    return IADsGroup_QueryInterface(&impl_from_IADsContainer(iface)->IADsGroup_iface, riid, obj);
+}
+
+static ULONG WINAPI container_AddRef(IADsContainer *iface)
+{
+    return IADsGroup_AddRef(&impl_from_IADsContainer(iface)->IADsGroup_iface);
+}
+
+static ULONG WINAPI container_Release(IADsContainer *iface)
+{
+    return IADsGroup_Release(&impl_from_IADsContainer(iface)->IADsGroup_iface);
+}
+
+static HRESULT WINAPI container_GetTypeInfoCount(IADsContainer *iface, UINT *count)
+{
+    *count = 1;
+    return S_OK;
+}
+
+static HRESULT WINAPI container_GetTypeInfo(IADsContainer *iface, UINT index, LCID lcid, ITypeInfo **info)
+{
+    if (index)
+        return DISP_E_BADINDEX;
+    return get_type_info(&IID_IADsContainer, info);
+}
+
+static HRESULT WINAPI container_GetIDsOfNames(IADsContainer *iface, REFIID riid, LPOLESTR *names, UINT count,
+                                              LCID lcid, DISPID *ids)
+{
+    ITypeInfo *info;
+    HRESULT hr;
+
+    hr = container_GetTypeInfo(iface, 0, lcid, &info);
+    if (FAILED(hr))
+        return hr;
+    hr = ITypeInfo_GetIDsOfNames(info, names, count, ids);
+    ITypeInfo_Release(info);
+    return hr;
+}
+
+static HRESULT WINAPI container_Invoke(IADsContainer *iface, DISPID id, REFIID riid, LCID lcid, WORD flags,
+                                       DISPPARAMS *params, VARIANT *result, EXCEPINFO *excep, UINT *arg)
+{
+    ITypeInfo *info;
+    HRESULT hr;
+
+    hr = container_GetTypeInfo(iface, 0, lcid, &info);
+    if (FAILED(hr))
+        return hr;
+    hr = ITypeInfo_Invoke(info, iface, id, flags, params, result, excep, arg);
+    ITypeInfo_Release(info);
+    return hr;
+}
+
+static HRESULT WINAPI container_get_Count(IADsContainer *iface, LONG *count)
+{
+    /* TODO: enumerate the computer's users and groups */
+    FIXME("%p\n", count);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_get__NewEnum(IADsContainer *iface, IUnknown **enumerator)
+{
+    /* TODO: enumerate the computer's users and groups */
+    FIXME("%p\n", enumerator);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_get_Filter(IADsContainer *iface, VARIANT *filter)
+{
+    /* TODO: the class filter used by enumeration */
+    FIXME("%p\n", filter);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_put_Filter(IADsContainer *iface, VARIANT filter)
+{
+    /* TODO: the class filter used by enumeration */
+    FIXME("%s\n", debugstr_variant(&filter));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_get_Hints(IADsContainer *iface, VARIANT *hints)
+{
+    FIXME("%p\n", hints);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_put_Hints(IADsContainer *iface, VARIANT hints)
+{
+    FIXME("%s\n", debugstr_variant(&hints));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_GetObject(IADsContainer *iface, BSTR cls, BSTR relative, IDispatch **disp)
+{
+    ADS_OBJECT *object = impl_from_IADsContainer(iface);
+    WCHAR path[ARRAYSIZE(WinNTPrefix) + MAX_COMPUTERNAME_LENGTH + UNLEN + 64];
+    HRESULT hr;
+
+    TRACE("%s %s %p\n", debugstr_w(cls), debugstr_w(relative), disp);
+
+    if (!disp)
+        return E_POINTER;
+    *disp = NULL;
+    if (!relative || !relative[0])
+        return E_ADS_BAD_PATHNAME;
+    if (cls && cls[0])
+        hr = StringCchPrintfW(path, ARRAYSIZE(path), L"%s%s/%s,%s", WinNTPrefix, object->name, relative, cls);
+    else
+        hr = StringCchPrintfW(path, ARRAYSIZE(path), L"%s%s/%s", WinNTPrefix, object->name, relative);
+    if (FAILED(hr))
+        return E_ADS_BAD_PATHNAME;
+    return open_object(path, disp);
+}
+
+static HRESULT WINAPI container_Create(IADsContainer *iface, BSTR cls, BSTR relative, IDispatch **disp)
+{
+    /* TODO: create a local user or group */
+    FIXME("%s %s %p\n", debugstr_w(cls), debugstr_w(relative), disp);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_Delete(IADsContainer *iface, BSTR cls, BSTR relative)
+{
+    /* TODO: delete a local user or group */
+    FIXME("%s %s\n", debugstr_w(cls), debugstr_w(relative));
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_CopyHere(IADsContainer *iface, BSTR source, BSTR name, IDispatch **disp)
+{
+    FIXME("%s %s %p\n", debugstr_w(source), debugstr_w(name), disp);
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI container_MoveHere(IADsContainer *iface, BSTR source, BSTR name, IDispatch **disp)
+{
+    /* TODO: rename a local user or group */
+    FIXME("%s %s %p\n", debugstr_w(source), debugstr_w(name), disp);
+    return E_NOTIMPL;
+}
+
+static const IADsContainerVtbl ContainerVtbl =
+{
+    container_QueryInterface,
+    container_AddRef,
+    container_Release,
+    container_GetTypeInfoCount,
+    container_GetTypeInfo,
+    container_GetIDsOfNames,
+    container_Invoke,
+    container_get_Count,
+    container_get__NewEnum,
+    container_get_Filter,
+    container_put_Filter,
+    container_get_Hints,
+    container_put_Hints,
+    container_GetObject,
+    container_Create,
+    container_Delete,
+    container_CopyHere,
+    container_MoveHere
+};
+
 static HRESULT find_account(PCWSTR name, PCWSTR cls, OBJECT_TYPE *type)
 {
     BOOL want_group = !lstrcmpiW(cls, L"group"), want_user = !lstrcmpiW(cls, L"user");
@@ -525,6 +719,7 @@ static HRESULT open_object(PCWSTR path, IDispatch **disp)
     if (!object)
         return E_OUTOFMEMORY;
     object->IADsGroup_iface.lpVtbl = &ObjectVtbl;
+    object->IADsContainer_iface.lpVtbl = &ContainerVtbl;
     object->ref = 1;
     object->type = type;
     lstrcpyW(object->container, container);
