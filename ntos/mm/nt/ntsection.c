@@ -2446,7 +2446,8 @@ static
 BOOLEAN
 MiCloseUnusedControlArea(
     _In_ PSECTION_OBJECT_POINTERS Pointers,
-    _In_ BOOLEAN Image)
+    _In_ BOOLEAN Image,
+    _In_ BOOLEAN DelayClose)
 {
     PMI_RWLOCK ControlLock = MiControlLockFor(Pointers);
     PMI_CONTROL_AREA Control;
@@ -2462,6 +2463,9 @@ MiCloseUnusedControlArea(
     if (Control == NULL)
         return TRUE;
 
+    if (DelayClose)
+        MiSegmentCloseWhenUnused(Control->Segment);
+
     return MiSegmentDereferenceAndClose(Control->Segment);
 }
 
@@ -2471,7 +2475,7 @@ MmFlushImageSection(
     _In_ PSECTION_OBJECT_POINTERS SectionObjectPointer,
     _In_ MMFLUSH_TYPE FlushType)
 {
-    if (!MiCloseUnusedControlArea(SectionObjectPointer, TRUE))
+    if (!MiCloseUnusedControlArea(SectionObjectPointer, TRUE, FALSE))
         return FALSE;
 
     if (FlushType == MmFlushForDelete)
@@ -2489,10 +2493,8 @@ MmForceSectionClosed(
     BOOLEAN ImageClosed;
     BOOLEAN DataClosed;
 
-    UNREFERENCED_PARAMETER(DelayClose);
-
-    ImageClosed = MiCloseUnusedControlArea(SectionObjectPointer, TRUE);
-    DataClosed = MiCloseUnusedControlArea(SectionObjectPointer, FALSE);
+    ImageClosed = MiCloseUnusedControlArea(SectionObjectPointer, TRUE, DelayClose);
+    DataClosed = MiCloseUnusedControlArea(SectionObjectPointer, FALSE, DelayClose);
     return (BOOLEAN)(ImageClosed && DataClosed);
 }
 

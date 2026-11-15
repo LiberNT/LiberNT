@@ -971,8 +971,8 @@ MiSegmentRelease(
     }
 
     MI_ASSERT(Segment->State == MI_SEGMENT_ACTIVE);
-    if (AllowCache && System->UnusedSegmentLimit != 0 && Segment->Kind != MiSegmentPageFileBacked &&
-        Segment->FileOps.Release != NULL)
+    if (AllowCache && !Segment->CloseWhenUnused && System->UnusedSegmentLimit != 0 &&
+        Segment->Kind != MiSegmentPageFileBacked && Segment->FileOps.Release != NULL)
     {
         Segment->State = MI_SEGMENT_UNUSED;
         InsertTailList(&System->UnusedSegmentList, &Segment->UnusedLink);
@@ -1012,6 +1012,20 @@ MiSegmentDereferenceAndClose(
     _Inout_ PMI_SEGMENT Segment)
 {
     return MiSegmentRelease(Segment, FALSE, NULL);
+}
+
+VOID
+MiSegmentCloseWhenUnused(
+    _Inout_ PMI_SEGMENT Segment)
+{
+    PMI_SYSTEM System = Segment->System;
+    KIRQL OldIrql;
+
+    MI_SPIN_ACQUIRE(&System->SegmentListLock, &OldIrql);
+    MI_ASSERT(Segment->State == MI_SEGMENT_ACTIVE);
+    MI_ASSERT(MI_ATOMIC_READ32(&Segment->ReferenceCount) > 0);
+    Segment->CloseWhenUnused = TRUE;
+    MI_SPIN_RELEASE(&System->SegmentListLock, OldIrql);
 }
 
 ULONG

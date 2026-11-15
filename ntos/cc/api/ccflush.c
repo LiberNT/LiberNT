@@ -120,5 +120,8 @@ CcPurgeCacheSection(
         }
     }
 
+    if (Purged && FileOffset == NULL && !MmFlushImageSection(SectionObjectPointer, MmFlushForWrite))
+        Purged = FALSE;
+
     return Purged;
 }

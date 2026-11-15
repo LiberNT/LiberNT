@@ -1193,6 +1193,73 @@ SectionUnusedCache(void)
 
 static
 void
+SectionCloseWhenUnused(void)
+{
+    static MI_FILE_OPS OwnedOps = { .Read = OwnedRead, .Write = OwnedWrite, .Release = OwnedRelease };
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE A;
+    OWNED_FILE Owned[3];
+    PMI_SEGMENT Segment[3];
+    ULONG64 Base;
+    NTSTATUS Status;
+    ULONG i;
+
+    memset(Owned, 0, sizeof(Owned));
+    WorldCreate(&World, 512, 1, 1000);
+    World.System.UnusedSegmentLimit = 8;
+    SpaceCreate(&World, 0, &A);
+
+    for (i = 0; i < 3; i++)
+    {
+        FileCreate(&Owned[i].File, 8 * 4096);
+        CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, 8 * 4096, MI_PROT_READWRITE, &OwnedOps,
+                                         &Owned[i], NULL, 0, &Segment[i])));
+        CHECK(!Segment[i]->CloseWhenUnused);
+    }
+
+    Base = 0;
+    CHECK(NT_SUCCESS(Map(&A, Segment[0], &Base, 0, 0, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base + 0x3000, 0xDE1A7ED)));
+    MiSegmentDereference(Segment[0]);
+
+    CHECK(MiSegmentTryReference(Segment[0]));
+    MiSegmentCloseWhenUnused(Segment[0]);
+    CHECK(Segment[0]->CloseWhenUnused);
+    CHECK(!MiSegmentDereferenceAndClose(Segment[0]));
+    CHECK(Owned[0].Released == 0 && Segment[0]->State == MI_SEGMENT_ACTIVE);
+    CHECK(UserRead64(&World, 0, Base + 0x3000, &Status) == 0xDE1A7ED);
+
+    CHECK(NT_SUCCESS(MiUnmapView(&A, Base)));
+    CHECK(Owned[0].Released == 1 && Owned[0].ReadsAfterRelease == 0);
+    CHECK(World.System.UnusedSegmentCount == 0);
+    CHECK(*(ULONG64 *)(Owned[0].File.Data + 0x3000) == 0xDE1A7ED);
+
+    Base = 0;
+    CHECK(NT_SUCCESS(Map(&A, Segment[1], &Base, 0, 0, MI_PROT_READWRITE)));
+    MiSegmentDereference(Segment[1]);
+    CHECK(NT_SUCCESS(MiUnmapView(&A, Base)));
+    CHECK(Owned[1].Released == 0 && Segment[1]->State == MI_SEGMENT_UNUSED);
+    CHECK(World.System.UnusedSegmentCount == 1);
+
+    CHECK(MiSegmentTryReference(Segment[1]));
+    MiSegmentCloseWhenUnused(Segment[1]);
+    CHECK(MiSegmentDereferenceAndClose(Segment[1]));
+    CHECK(Owned[1].Released == 1 && World.System.UnusedSegmentCount == 0);
+
+    MiSegmentCloseWhenUnused(Segment[2]);
+    MiSegmentDereference(Segment[2]);
+    CHECK(Owned[2].Released == 1 && World.System.UnusedSegmentCount == 0);
+    CHECK(IsListEmpty(&World.System.SegmentList));
+
+    SpaceDestroy(&World, 0, &A);
+    WorldExpectClean(&World, 512);
+    for (i = 0; i < 3; i++)
+        FileDestroy(&Owned[i].File);
+    WorldDestroy(&World);
+}
+
+static
+void
 SectionViewProtection(void)
 {
     TEST_WORLD World;
@@ -2112,6 +2179,7 @@ TestSection(void)
     SectionSystemSpaceView();
     SectionViewOutlivesOwner();
     SectionUnusedCache();
+    SectionCloseWhenUnused();
     SectionViewProtection();
     SectionClusterRead();
     SectionPlaceholderView();

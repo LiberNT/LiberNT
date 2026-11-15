@@ -564,6 +564,7 @@ typedef struct _MI_SEGMENT
     ULONG ActiveWriters;
     UCHAR Kind;
     BOOLEAN Reserved;
+    BOOLEAN CloseWhenUnused;
     ULONG Protection;
     volatile LONG64 SizeInBytes;
     volatile LONG64 PageCount;
@@ -639,6 +640,7 @@ VOID MiTlbBatchAdd(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress,
 VOID MiTlbBatchAddClone(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _In_ ULONG Frame,
                         _Inout_ struct _MI_CLONE_PAGE *Page);
 BOOLEAN MiSegmentDereferenceAndClose(_Inout_ PMI_SEGMENT Segment);
+VOID MiSegmentCloseWhenUnused(_Inout_ PMI_SEGMENT Segment);
 ULONG MiSegmentPurgeUnused(_Inout_ PMI_SYSTEM System, _In_ ULONG MaximumCount);
 ULONG MiSegmentTrimUnused(_Inout_ PMI_SYSTEM System);
 VOID MiSegmentDereference(_Inout_ PMI_SEGMENT Segment);

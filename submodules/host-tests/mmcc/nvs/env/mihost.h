@@ -216,6 +216,7 @@ VOID MiHostWindowRelease(PVOID Window, ULONG Slot);
 #define MI_WINDOW_SLOT(w, p)            MiHostWindowSlot((w), (p))
 #define MI_WINDOW_RELEASE(w, s)         MiHostWindowRelease((w), (s))
 #define MI_ASSERT(e)                    do { if (!(e)) { fprintf(stderr, "MI_ASSERT %s:%d %s\n", __FILE__, __LINE__, #e); abort(); } } while (0)
+#define ASSERT(e)                       MI_ASSERT(e)
 #define MI_FAULT_READ_AHEAD()           MiHostReadClusterSize
 
 static inline void MiHostAcquireShared(PMI_RWLOCK Lock)
