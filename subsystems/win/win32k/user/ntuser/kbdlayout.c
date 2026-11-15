@@ -20,6 +20,8 @@
 DBG_DEFAULT_CHANNEL(UserKbdLayout);
 
 PKL gspklBaseLayout = NULL; /* FIXME: Please move this to pWinSta->spklList */
+static HKL ghklForeground = NULL;
+static PTHREADINFO gptiSyncingLayout = NULL;
 PKBDFILE gpkfList = NULL;
 DWORD gSystemFS = 0;
 UINT gSystemCPCharSet = 0;
@@ -722,6 +724,9 @@ co_UserActivateKeyboardLayout(
         ClientInfo->hKL = pKL->hkl;
     }
 
+    if (pti->MessageQueue && pti->MessageQueue == gpqForeground && !(pti->TIF_flags & TIF_CSRSSTHREAD))
+        ghklForeground = pKL->hkl;
+
     /* Send shell message if necessary */
     if (gptiForeground && (gptiForeground->ppi == pti->ppi) && ISITHOOKED(WH_SHELL))
     {
@@ -776,6 +781,32 @@ co_UserActivateKeyboardLayout(
 
     IntDereferenceThreadInfo(pti);
     return hOldKL;
+}
+
+VOID FASTCALL
+co_IntSyncForegroundKeyboardLayout(_Inout_ PTHREADINFO pti)
+{
+    PTHREADINFO ptiPrev;
+    PKL pKL;
+
+    ASSERT(pti == PsGetCurrentThreadWin32Thread());
+
+    if (!ghklForeground || !pti->MessageQueue || pti->MessageQueue != gpqForeground || !pti->KeyboardLayout ||
+        pti->KeyboardLayout->hkl == ghklForeground || gptiSyncingLayout == pti ||
+        (pti->TIF_flags & (TIF_CSRSSTHREAD | TIF_SYSTEMTHREAD | TIF_INCLEANUP)))
+    {
+        return;
+    }
+
+    pKL = IntHKLtoPKL(pti, ghklForeground);
+    if (!pKL || (pKL->dwKL_Flags & KL_UNLOAD))
+        return;
+
+    ptiPrev = gptiSyncingLayout;
+    gptiSyncingLayout = pti;
+    co_UserActivateKeyboardLayout(pKL, 0, NULL);
+    gptiSyncingLayout = ptiPrev;
+    ASSERT(pti->KeyboardLayout == pKL || pti->MessageQueue != gpqForeground);
 }
 
 HKL APIENTRY
