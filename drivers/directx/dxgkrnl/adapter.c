@@ -3995,7 +3995,7 @@ DxgkpProgramTrackedScanout(
     PrimaryAddress = DxgkVidMmGetAllocationPrimaryAddress(Allocation);
     Status = DxgkpProgramSharedPrimaryScanout(Adapter, Allocation, Entry->RefreshVidPnSourceId, (D3DKMT_HANDLE)(ULONG_PTR)AllocationHandle, Entry->RefreshPresentId, Entry->FlipInterval,
                  Entry->CddPresent ? NULL : Entry->Device,
-                 Entry->ScanoutWindow, Entry->CompositorGeneration);
+                 Entry->ScanoutWindow, Entry->CompositorGeneration, !SharedPrimaryRefresh);
     if (!NT_SUCCESS(Status))
     {
         DXGKRNL_WARN("DxgkpProgramTrackedScanout: SetVidPnSourceAddress failed 0x%08lX fence=%u alloc=%p seg=%u addr=0x%I64x\n", Status, Entry->SubmissionFenceId, AllocationHandle, Allocation->SegmentId, PrimaryAddress.QuadPart);

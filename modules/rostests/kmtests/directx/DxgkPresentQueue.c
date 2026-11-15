@@ -442,6 +442,19 @@ DxgkPresentQueueTestContract(VOID)
     ok_bool_false(RetirePolicy.HoldSharedSurfaceRundown,
                   "ordinary destination holds no shared-surface rundown");
 
+    ok_bool_true(DxgkPresentCoreRetiredFlipProgramsSource(TRUE, FALSE, 0x1200),
+                 "a retired flip of an MMIO vsync-flip miniport programs its source");
+    ok_bool_true(DxgkPresentCoreRetiredFlipProgramsSource(FALSE, TRUE, 0x1200),
+                 "a retired flip of an MMIO immediate-flip miniport programs its source");
+    ok_bool_false(DxgkPresentCoreRetiredFlipProgramsSource(FALSE, FALSE, 0x1200),
+                  "a WDDM 1.2 miniport without MMIO flips flipped in its DMA buffer");
+    ok_bool_false(DxgkPresentCoreRetiredFlipProgramsSource(FALSE, FALSE, 0x1300),
+                  "a WDDM 1.3 miniport without MMIO flips flipped in its DMA buffer");
+    ok_bool_false(DxgkPresentCoreRetiredFlipProgramsSource(FALSE, FALSE, 0),
+                  "a miniport that reports no WDDM version flipped in its DMA buffer");
+    ok_bool_true(DxgkPresentCoreRetiredFlipProgramsSource(FALSE, FALSE, 0x2000),
+                 "a WDDM 2 miniport without MMIO flips is still flipped at retirement");
+
     Status = DxgkPresentCoreEvaluateScanoutRetirement(
                  TRUE, FALSE, FALSE, FALSE, FALSE, &RetirePolicy);
     ok_eq_hex(Status, STATUS_INVALID_PARAMETER);

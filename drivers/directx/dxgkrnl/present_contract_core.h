@@ -10,6 +10,7 @@
 #include <windef.h>
 
 #define DXGK_PRESENT_CORE_MAX_SUBRECTS 64U
+#define DXGK_PRESENT_CORE_WDDM_2_0 0x2000U
 
 typedef struct _DXGK_PRESENT_SCANOUT_RETIRE_POLICY
 {
@@ -81,6 +82,21 @@ DxgkPresentCoreEvaluateScanoutRetirement(
     }
 
     return STATUS_SUCCESS;
+}
+
+/* WDK: DxgkDdiSetVidPnSourceAddress switches the mode and performs MMIO flips; any other flip is the DMA buffer DxgkDdiPresent built */
+FORCEINLINE
+BOOLEAN
+DxgkPresentCoreRetiredFlipProgramsSource(
+    _In_ BOOLEAN FlipOnVSyncMmIo,
+    _In_ BOOLEAN FlipImmediateMmIo,
+    _In_ ULONG DriverWddmVersion)
+{
+    if (FlipOnVSyncMmIo || FlipImmediateMmIo)
+        return TRUE;
+
+    /* FIXME: a WDDM 2 miniport without an MMIO flip cap still gets its flip from DxgkDdiSetVidPnSourceAddress at retirement; WDDM gives it no flip at all */
+    return DriverWddmVersion >= DXGK_PRESENT_CORE_WDDM_2_0;
 }
 
 FORCEINLINE

@@ -537,7 +537,8 @@ DxgkpProgramSharedPrimaryScanout(
     _In_ D3DDDI_FLIPINTERVAL_TYPE FlipInterval,
     _In_opt_ PDXGKRNL_DEVICE Device,
     _In_ ULONG_PTR Window,
-    _In_ ULONG64 CompositorGeneration);
+    _In_ ULONG64 CompositorGeneration,
+    _In_ BOOLEAN RetiredFlip);
 
 NTSTATUS
 DxgkpPresentDisplayOnlyToSharedPrimary(
