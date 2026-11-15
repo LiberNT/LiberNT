@@ -1,0 +1,49 @@
+; Packages that need a function driver which only starts their device
+; include these sections: each DDInstall.* section of theirs carries
+; Include=umpass.inf and Needs=UmPass.* for the same suffix.
+
+[Version]
+Signature  = "$WINDOWS NT$"
+LayoutFile = layout.inf
+Class      = System
+ClassGuid  = {4d36e97d-e325-11ce-bfc1-08002be10318}
+Provider   = %LiberNT%
+DriverVer  = 11/15/2026,1.00
+PnpLockdown = 1
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%GenericMfg% = GenericMfg
+
+[GenericMfg]
+%UmPass.DeviceDesc% = UmPass, UMB\GenericUmPass, GenericUmPass
+
+[UmPass]
+
+[UmPass.HW]
+
+[UmPass.CoInstallers]
+
+[UmPass.Interfaces]
+
+[UmPass.Services]
+AddService = UmPass, 0x00000002, UmPass_Service
+
+[UmPass_Service]
+DisplayName    = %UmPass.ServiceDesc%
+ServiceType    = 1
+StartType      = 3
+ErrorControl   = 1
+ServiceBinary  = %12%\umpass.sys
+LoadOrderGroup = Extended Base
+
+[Strings]
+; Non-localizable
+LiberNT = "LiberNT Project"
+
+; Localizable
+GenericMfg = "(Standard system devices)"
+UmPass.DeviceDesc = "Generic UMPass device"
+UmPass.ServiceDesc = "UMPass Driver"

@@ -29,6 +29,7 @@ list(APPEND INF_FILES
     nettcpip.inf
     scsi.inf
     shortcuts.inf
+    umpass.inf
     unknown.inf
     usb.inf
     usbaudio.inf

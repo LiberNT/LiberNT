@@ -22,6 +22,7 @@ add_subdirectory(monitor)
 if(NOT ARCH STREQUAL "arm")
 endif()
 add_subdirectory(null)
+add_subdirectory(umpass)
 add_subdirectory(werkernel)
 add_subdirectory(wpprecorder)
 
