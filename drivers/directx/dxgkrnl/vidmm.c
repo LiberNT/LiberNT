@@ -770,6 +770,23 @@ DxgkpVidMmPrimarySegmentsCpuVisible(
     return TRUE;
 }
 
+/* A primary goes where the miniport prefers; only without a preference must all its write segments be CPU-accessible (D3DDDI_ALLOCATIONINFO) */
+static BOOLEAN
+DxgkpVidMmPrimaryPlacementValid(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ const DXGK_ALLOCATIONINFO *AllocInfo)
+{
+    if (AllocInfo->Flags.PermanentSysMem || AllocInfo->Flags.Cached ||
+        AllocInfo->Flags.Protected || AllocInfo->Flags.ExistingSysMem ||
+        AllocInfo->Flags.ExistingKernelSysMem)
+    {
+        return FALSE;
+    }
+
+    return AllocInfo->PreferredSegment.Value != 0 ||
+           DxgkpVidMmPrimarySegmentsCpuVisible(Adapter, AllocInfo->SupportedWriteSegmentSet);
+}
+
 static PLIST_ENTRY
 DxgkpVidMmAllocationHashHead(
     _In_ D3DKMT_HANDLE Handle)
@@ -6311,14 +6328,7 @@ DxgkpVidMmCreateAllocationTracked(
         /* D3DDDI_ALLOCATIONINFO.Primary makes the allocation implicitly
          * CPU-accessible. The miniport still owns its layout and placement,
          * but must not return storage incompatible with a primary. */
-        if (AllocInfo->Flags.PermanentSysMem || AllocInfo->Flags.Cached ||
-            AllocInfo->Flags.Protected || AllocInfo->Flags.ExistingSysMem ||
-            AllocInfo->Flags.ExistingKernelSysMem)
-        {
-            Status = STATUS_INVALID_PARAMETER;
-            goto FailMiniportAllocation;
-        }
-        if (!DxgkpVidMmPrimarySegmentsCpuVisible(Adapter, AllocInfo->SupportedWriteSegmentSet))
+        if (!DxgkpVidMmPrimaryPlacementValid(Adapter, AllocInfo))
         {
             Status = STATUS_INVALID_PARAMETER;
             goto FailMiniportAllocation;
