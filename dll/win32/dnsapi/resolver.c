@@ -16,6 +16,8 @@
 #define NDEBUG
 #include <debug.h>
 
+#include "resolver_core.h"
+
 #define DNS_PORT 53
 #define LLMNR_PORT 5355
 #define LLMNR_RESEND 420
@@ -31,9 +33,17 @@ typedef struct _RESOLVER_SERVER
 {
     SOCKADDR_INET Address;
     ULONG Adapter;
+    ULONG Rank;
     BOOL Sent;
+    BOOL Answered;
     BOOL Failed;
 } RESOLVER_SERVER, *PRESOLVER_SERVER;
+
+typedef struct _RESOLVER_PRIORITY
+{
+    SOCKADDR_INET Address;
+    LONG Priority;
+} RESOLVER_PRIORITY, *PRESOLVER_PRIORITY;
 
 typedef struct _RESOLVER_ADAPTER
 {
@@ -63,6 +73,10 @@ typedef struct _RESOLVER_REPLY
 } RESOLVER_REPLY, *PRESOLVER_REPLY;
 
 static LONG ResolverWinsockStarted;
+static RTL_SRWLOCK ResolverPriorityLock = RTL_SRWLOCK_INIT;
+static RESOLVER_PRIORITY ResolverPriorities[DNS_MAX_SERVERS];
+static ULONG ResolverPriorityCount;
+static ULONGLONG ResolverPriorityReset;
 
 static
 VOID
@@ -655,6 +669,115 @@ ResolverSameAddress(const SOCKADDR_INET *A, const SOCKADDR_INET *B)
 }
 
 static
+ULONG
+ResolverPriorityTimeLimit(VOID)
+{
+    DWORD Limit = DNS_RESOLVER_CORE_PRIORITY_TIME_LIMIT, Value, Size = sizeof(Value), Type;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Dnscache\\Parameters",
+                      0, KEY_READ, &Key) != ERROR_SUCCESS)
+        return Limit;
+    if (RegQueryValueExW(Key, L"ServerPriorityTimeLimit", NULL, &Type, (PBYTE)&Value, &Size) == ERROR_SUCCESS &&
+        Type == REG_DWORD && Size == sizeof(Value))
+    {
+        Limit = Value;
+    }
+    RegCloseKey(Key);
+    return Limit;
+}
+
+static
+LONG
+ResolverFindPriority(const SOCKADDR_INET *Address)
+{
+    ULONG i;
+
+    for (i = 0; i < ResolverPriorityCount; i++)
+    {
+        if (ResolverSameAddress(&ResolverPriorities[i].Address, Address))
+            return (LONG)i;
+    }
+    return -1;
+}
+
+static
+VOID
+ResolverSetPriority(const SOCKADDR_INET *Address, BOOL Answered)
+{
+    LONG Priority = DnsResolverCorePriorityAfter(Answered != FALSE), Slot;
+
+    RtlAcquireSRWLockExclusive(&ResolverPriorityLock);
+    Slot = ResolverFindPriority(Address);
+    if (Priority == DNS_RESOLVER_CORE_PRIORITY_DEFAULT)
+    {
+        if (Slot >= 0)
+            ResolverPriorities[Slot] = ResolverPriorities[--ResolverPriorityCount];
+    }
+    else
+    {
+        if (Slot < 0 && ResolverPriorityCount < ARRAYSIZE(ResolverPriorities))
+        {
+            Slot = (LONG)ResolverPriorityCount++;
+            ResolverPriorities[Slot].Address = *Address;
+        }
+        if (Slot >= 0)
+            ResolverPriorities[Slot].Priority = Priority;
+    }
+    ASSERT(ResolverPriorityCount <= ARRAYSIZE(ResolverPriorities));
+    RtlReleaseSRWLockExclusive(&ResolverPriorityLock);
+}
+
+static
+VOID
+ResolverRankServers(PRESOLVER_CONFIG Config)
+{
+    ULONG TimeLimit = ResolverPriorityTimeLimit();
+    ULONGLONG Now = GetTickCount64();
+    LONG Priorities[DNS_MAX_SERVERS];
+    ULONG i, j;
+
+    RtlAcquireSRWLockExclusive(&ResolverPriorityLock);
+    if (DnsResolverCorePrioritiesExpired(Now, ResolverPriorityReset, TimeLimit))
+    {
+        ResolverPriorityCount = 0;
+        ResolverPriorityReset = Now;
+    }
+    for (i = 0; i < Config->ServerCount; i++)
+    {
+        LONG Slot = ResolverFindPriority(&Config->Servers[i].Address);
+
+        Priorities[i] = Slot >= 0 ? ResolverPriorities[Slot].Priority : DNS_RESOLVER_CORE_PRIORITY_DEFAULT;
+    }
+    RtlReleaseSRWLockExclusive(&ResolverPriorityLock);
+
+    for (i = 0; i < Config->AdapterCount; i++)
+    {
+        PRESOLVER_ADAPTER Adapter = &Config->Adapters[i];
+
+        ASSERT(Adapter->FirstServer + Adapter->ServerCount <= Config->ServerCount);
+        for (j = 0; j < Adapter->ServerCount; j++)
+        {
+            Config->Servers[Adapter->FirstServer + j].Rank =
+                DnsResolverCoreServerRank(&Priorities[Adapter->FirstServer], Adapter->ServerCount, j);
+        }
+    }
+}
+
+static
+VOID
+ResolverReduceSilentServers(PRESOLVER_CONFIG Config)
+{
+    ULONG i;
+
+    for (i = 0; i < Config->ServerCount; i++)
+    {
+        if (Config->Servers[i].Sent && !Config->Servers[i].Answered && !Config->Servers[i].Failed)
+            ResolverSetPriority(&Config->Servers[i].Address, FALSE);
+    }
+}
+
+static
 BOOL
 ResolverTcpQuery(const SOCKADDR_INET *Server, const UCHAR *Query, INT QueryLength, WORD Id, PCWSTR Name, WORD Type,
                  PRESOLVER_REPLY Reply)
@@ -708,13 +831,10 @@ ResolverSendRound(PRESOLVER_CONFIG Config, SOCKET Sockets[2], const UCHAR *Query
         PRESOLVER_SERVER Server = &Config->Servers[i];
         PRESOLVER_ADAPTER Adapter = &Config->Adapters[Server->Adapter];
         SOCKET Socket = Sockets[Server->Address.si_family == AF_INET6];
-        BOOL First = (i == Adapter->FirstServer);
 
         if (Adapter->Negative || Server->Failed || Socket == INVALID_SOCKET)
             continue;
-        if (Round == 0 && (Server->Adapter != 0 || !First))
-            continue;
-        if (Round == 1 && (!First || Server->Sent))
+        if (!DnsResolverCoreAttemptAsksServer(Round, Server->Adapter, Server->Rank, Adapter->ServerCount))
             continue;
         sendto(Socket, (PCHAR)Query, QueryLength, 0, (const SOCKADDR *)&Server->Address,
                ResolverSockaddrLength(&Server->Address));
@@ -781,7 +901,6 @@ static
 DNS_STATUS
 ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options, PDNS_RECORDW *Result)
 {
-    static const DWORD Timeouts[] = {1000, 1000, 2000, 4000};
     UCHAR Query[512], Packet[DNS_UDP_SIZE + 256];
     SOCKET Sockets[2];
     DNS_STATUS Negative = ERROR_SUCCESS, Failure = ERROR_TIMEOUT;
@@ -794,8 +913,10 @@ ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options
     for (i = 0; i < Config->ServerCount; i++)
     {
         Config->Servers[i].Sent = FALSE;
+        Config->Servers[i].Answered = FALSE;
         Config->Servers[i].Failed = FALSE;
     }
+    ResolverRankServers(Config);
 
     Id = (WORD)(GetTickCount() ^ (GetCurrentThreadId() << 5) ^ (ULONG_PTR)Name);
     QueryLength = ResolverBuildQuery(Name, Type, Id, !(Options & DNS_QUERY_NO_RECURSION), Query, sizeof(Query));
@@ -805,12 +926,12 @@ ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options
     Sockets[0] = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     Sockets[1] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 
-    for (Round = 0; Round < ARRAYSIZE(Timeouts); Round++)
+    for (Round = 0; Round < DNS_RESOLVER_CORE_ATTEMPTS; Round++)
     {
         DWORD Deadline;
 
         ResolverSendRound(Config, Sockets, Query, QueryLength, Round);
-        Deadline = GetTickCount() + Timeouts[Round];
+        Deadline = GetTickCount() + DnsResolverCoreAttemptTimeout(Round);
 
         for (;;)
         {
@@ -847,6 +968,11 @@ ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options
                     continue;
 
                 ResolverParseReply(Packet, Received, Id, Name, Type, &Reply);
+                if (Reply.Final && !Config->Servers[Server].Answered)
+                {
+                    Config->Servers[Server].Answered = TRUE;
+                    ResolverSetPriority(&Config->Servers[Server].Address, TRUE);
+                }
                 if (Reply.Final && (Packet[2] & 0x02))
                 {
                     DnsIntFreeRecordList((PDNS_RECORD)Reply.Records);
@@ -877,6 +1003,7 @@ ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options
                 }
                 else if (Reply.Status != ERROR_SUCCESS)
                 {
+                    /* TODO: an error answer changes the server's priority on Windows; here it only moves this query on */
                     Failure = Reply.Status;
                     Config->Servers[Server].Failed = TRUE;
                     if (!ResolverFailOver(Config, Sockets, Query, QueryLength))
@@ -888,6 +1015,7 @@ ResolverQueryName(PRESOLVER_CONFIG Config, PCWSTR Name, WORD Type, DWORD Options
                 }
             }
         }
+        ResolverReduceSilentServers(Config);
     }
 
     closesocket(Sockets[0]);

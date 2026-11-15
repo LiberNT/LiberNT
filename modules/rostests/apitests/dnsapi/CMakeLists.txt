@@ -1,9 +1,11 @@
 
 list(APPEND SOURCE
     DnsQuery.c
+    ResolverCore.c
     testlist.c)
 
 add_executable(dnsapi_apitest ${SOURCE})
+target_include_directories(dnsapi_apitest PRIVATE ${REACTOS_SOURCE_DIR}/dll/win32/dnsapi)
 target_link_libraries(dnsapi_apitest wine)
 set_module_type(dnsapi_apitest win32cui)
 add_importlibs(dnsapi_apitest ws2_32 dnsapi iphlpapi msvcrt kernel32 ntdll)
