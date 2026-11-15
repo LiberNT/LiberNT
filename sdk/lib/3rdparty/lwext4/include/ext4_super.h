@@ -141,6 +141,10 @@ static inline bool ext4_sb_feature_incom(struct ext4_sblock *s, uint32_t v)
  * @return  crc32c state to continue from*/
 uint32_t ext4_sb_csum_seed(struct ext4_sblock *s);
 
+/**@brief   Set the checksum of a superblock that is about to be written.
+ * @param   s superblock descriptor*/
+void ext4_sb_set_csum(struct ext4_sblock *s);
+
 /**@brief   Support check of read only flag.
  * @param   s superblock descriptor
  * @param   v flag to check

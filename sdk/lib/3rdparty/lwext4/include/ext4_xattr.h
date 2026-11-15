@@ -98,6 +98,14 @@ int ext4_xattr_set(struct ext4_inode_ref *inode_ref, uint8_t name_index,
 		   const char *name, size_t name_len, const void *value,
 		   size_t value_len);
 
+struct ext4_xattr_header;
+
+/**@brief Set the checksum of an attribute block, which is seeded with the
+ *        number of the block.*/
+void ext4_xattr_set_block_checksum(struct ext4_inode_ref *inode_ref,
+				   ext4_fsblk_t blocknr,
+				   struct ext4_xattr_header *header);
+
 #ifdef __cplusplus
 }
 #endif

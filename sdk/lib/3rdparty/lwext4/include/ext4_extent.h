@@ -64,6 +64,34 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
 			     ext4_lblk_t to);
 
 
+/**@brief What ext4_extent_relocate needs from its caller. */
+struct ext4_extent_relocator {
+	/**@brief Blocks at or past this one must move.*/
+	ext4_fsblk_t limit;
+	/**@brief Recompute the checksum of every tree block: the inode number
+	 *        the checksums are seeded with has changed.*/
+	bool recsum;
+	/**@brief Hands out count contiguous blocks, or fails with ENOSPC.*/
+	int (*alloc)(void *ctx, uint32_t count, ext4_fsblk_t *start);
+	/**@brief Takes back blocks the tree no longer uses.*/
+	void (*release)(void *ctx, ext4_fsblk_t start, uint32_t count);
+	/**@brief Copies the content of mapped blocks.*/
+	int (*copy)(void *ctx, ext4_fsblk_t from, ext4_fsblk_t to,
+		    uint32_t count);
+	/**@brief Told about a mapped run no contiguous space was found for.*/
+	int (*defer)(void *ctx, ext4_lblk_t lblk, uint32_t count,
+		     bool unwritten);
+	void *ctx;
+};
+
+/**@brief Move the blocks of an extent tree, and the blocks it maps, that
+ *        lie at or past a limit.
+ * @param inode_ref I-node whose tree is walked
+ * @param r         The limit and the caller's allocator
+ * @return Error code*/
+int ext4_extent_relocate(struct ext4_inode_ref *inode_ref,
+			 struct ext4_extent_relocator *r);
+
 #ifdef __cplusplus
 }
 #endif

@@ -311,8 +311,8 @@ static bool ext4_dir_dx_csum_verify(struct ext4_inode_ref *inode_ref,
 }
 
 
-static void ext4_dir_set_dx_csum(struct ext4_inode_ref *inode_ref,
-				 struct ext4_dir_en *dirent)
+void ext4_dir_set_dx_csum(struct ext4_inode_ref *inode_ref,
+			  struct ext4_dir_en *dirent)
 {
 	int coff, limit, count;
 	struct ext4_sblock *sb = &inode_ref->fs->sb;

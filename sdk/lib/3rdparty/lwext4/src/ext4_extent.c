@@ -1886,6 +1886,118 @@ out:
 	return ret;
 }
 
+/*
+ * Moves every block of the tree, and every block the tree maps, that lies at
+ * or past r->limit to a block the relocator hands out. A mapped run is moved
+ * in one piece or handed to r->defer; the shape of the tree never changes.
+ */
+static int ext4_ext_relocate_node(struct ext4_inode_ref *inode_ref,
+				  struct ext4_extent_header *eh,
+				  struct ext4_extent_relocator *r, bool *dirty)
+{
+	struct ext4_blockdev *bdev = inode_ref->fs->bdev;
+	uint32_t block_size = ext4_sb_get_block_size(&inode_ref->fs->sb);
+	uint16_t i, n = to_le16(eh->entries_count);
+	int rc;
+
+	if (to_le16(eh->magic) != EXT4_EXTENT_MAGIC ||
+	    n > to_le16(eh->max_entries_count))
+		return EIO;
+
+	if (to_le16(eh->depth) == 0) {
+		struct ext4_extent *ex = EXT_FIRST_EXTENT(eh);
+		for (i = 0; i < n; i++, ex++) {
+			ext4_fsblk_t start = ext4_ext_pblock(ex), fresh = 0;
+			uint32_t len = ext4_ext_get_actual_len(ex);
+			bool unwritten = ext4_ext_is_unwritten(ex);
+
+			if (start + len <= r->limit)
+				continue;
+
+			rc = r->alloc(r->ctx, len, &fresh);
+			if (rc == ENOSPC) {
+				rc = r->defer(r->ctx, to_le32(ex->first_block),
+					      len, unwritten);
+				if (rc != EOK)
+					return rc;
+				continue;
+			}
+			if (rc != EOK)
+				return rc;
+
+			if (!unwritten) {
+				rc = r->copy(r->ctx, start, fresh, len);
+				if (rc != EOK) {
+					r->release(r->ctx, fresh, len);
+					return rc;
+				}
+			}
+			ext4_ext_store_pblock(ex, fresh);
+			r->release(r->ctx, start, len);
+			*dirty = true;
+		}
+		return EOK;
+	}
+
+	struct ext4_extent_index *ix = EXT_FIRST_INDEX(eh);
+	for (i = 0; i < n; i++, ix++) {
+		ext4_fsblk_t child = ext4_idx_pblock(ix), fresh = 0;
+		struct ext4_block bh = EXT4_BLOCK_ZERO();
+		struct ext4_block nb = EXT4_BLOCK_ZERO();
+		bool child_dirty = r->recsum;
+
+		rc = ext4_trans_block_get(bdev, &bh, child);
+		if (rc != EOK)
+			return rc;
+
+		rc = ext4_ext_relocate_node(inode_ref, ext_block_hdr(&bh), r,
+					    &child_dirty);
+		if (rc == EOK && child >= r->limit) {
+			rc = r->alloc(r->ctx, 1, &fresh);
+			if (rc == EOK)
+				rc = ext4_trans_block_get_noread(bdev, &nb,
+								 fresh);
+			if (rc == EOK) {
+				memcpy(nb.data, bh.data, block_size);
+				ext4_extent_block_csum_set(inode_ref,
+							   ext_block_hdr(&nb));
+				ext4_trans_set_block_dirty(nb.buf);
+				rc = ext4_block_set(bdev, &nb);
+			}
+			ext4_block_set(bdev, &bh);
+			if (rc != EOK)
+				return rc;
+
+			ext4_idx_store_pblock(ix, fresh);
+			r->release(r->ctx, child, 1);
+			*dirty = true;
+			continue;
+		}
+
+		if (rc == EOK && child_dirty) {
+			ext4_extent_block_csum_set(inode_ref,
+						   ext_block_hdr(&bh));
+			ext4_trans_set_block_dirty(bh.buf);
+		}
+		ext4_block_set(bdev, &bh);
+		if (rc != EOK)
+			return rc;
+	}
+	return EOK;
+}
+
+int ext4_extent_relocate(struct ext4_inode_ref *inode_ref,
+			 struct ext4_extent_relocator *r)
+{
+	bool dirty = false;
+	int rc = ext4_ext_relocate_node(
+	    inode_ref, ext_inode_hdr(inode_ref->inode), r, &dirty);
+	if (dirty)
+		inode_ref->dirty = true;
+
+	return rc;
+}
+
 static int ext4_ext_split_extent_at(struct ext4_inode_ref *inode_ref,
 				    struct ext4_extent_path **ppath,
 				    ext4_lblk_t split, uint32_t split_flag)

@@ -101,6 +101,12 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
 int ext4_dir_dx_reset_parent_inode(struct ext4_inode_ref *dir,
                                    uint32_t parent_inode);
 
+/**@brief Set the checksum of an index block of a directory.
+ * @param inode_ref Directory i-node
+ * @param dirent    Start of the block*/
+void ext4_dir_set_dx_csum(struct ext4_inode_ref *inode_ref,
+			  struct ext4_dir_en *dirent);
+
 #ifdef __cplusplus
 }
 #endif

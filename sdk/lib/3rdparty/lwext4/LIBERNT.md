@@ -13,6 +13,9 @@ Features
 - Feature bits for `orphan_file`, `orphan_present` and the other bits `mke2fs` 1.47 can set.
 - `ext4_fs_peek_block_group_ref()` reads a group descriptor without initializing the group.
 - `ext4_fs_set_inode_data_block_index()` is exported for files that do not use extents.
+- `ext4_extent_relocate()` moves the blocks of an extent tree, and the blocks it maps, out of the part of a volume
+  that is given up when the volume shrinks, without changing the shape of the tree.
+- `ext4_dir_set_dx_csum()`, `ext4_xattr_set_block_checksum()` and `ext4_sb_set_csum()` are exported.
 - `CONFIG_HAVE_PORT_DEBUG` routes `ext4_dbg` and `ext4_assert` to `ext4_port_dbg` and `ext4_port_assert_fail`.
 
 Fixes
@@ -28,3 +31,6 @@ Fixes
   a missing attribute, and checksummed a copied attribute block under the old block number.
 - The in-inode attribute validator measured value offsets from the header instead of the first entry.
 - `jbd_journal_flush_trans()` read a transaction and its buffer records after the write that frees them.
+- The number of block groups and the size of the last one were computed without the first data block, which is
+  block 1 on a volume with 1024-byte blocks.
+- `ext4_balloc_alloc_block()` started its search in the group of a goal that lies past the end of the volume.

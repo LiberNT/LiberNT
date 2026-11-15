@@ -359,6 +359,11 @@ int ext4_balloc_alloc_block(struct ext4_inode_ref *inode_ref,
 	int r;
 	struct ext4_sblock *sb = &inode_ref->fs->sb;
 
+	/* A goal outside the file system is no goal: the search starts at the
+	 * first block */
+	if (goal >= ext4_sb_get_blocks_cnt(sb))
+		goal = ext4_get32(sb, first_data_block);
+
 	/* Load block group number for goal and relative index */
 	uint32_t bg_id = ext4_balloc_get_bgid_of_block(sb, goal);
 	uint32_t idx_in_bg = ext4_fs_addr_to_idx_bg(sb, goal);

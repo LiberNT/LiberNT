@@ -50,7 +50,10 @@
 
 uint32_t ext4_block_group_cnt(struct ext4_sblock *s)
 {
-	uint64_t blocks_count = ext4_sb_get_blocks_cnt(s);
+	/* The groups start at the first data block, which is block 1 when
+	 * the block size is 1024 */
+	uint64_t blocks_count = ext4_sb_get_blocks_cnt(s) -
+				ext4_get32(s, first_data_block);
 	uint32_t blocks_per_group = ext4_get32(s, blocks_per_group);
 
 	uint32_t block_groups_count = (uint32_t)(blocks_count / blocks_per_group);
@@ -65,12 +68,14 @@ uint32_t ext4_blocks_in_group_cnt(struct ext4_sblock *s, uint32_t bgid)
 {
 	uint32_t block_group_count = ext4_block_group_cnt(s);
 	uint32_t blocks_per_group = ext4_get32(s, blocks_per_group);
-	uint64_t total_blocks = ext4_sb_get_blocks_cnt(s);
+	uint64_t total_blocks = ext4_sb_get_blocks_cnt(s) -
+				ext4_get32(s, first_data_block);
 
 	if (bgid < block_group_count - 1)
 		return blocks_per_group;
 
-	return (uint32_t)(total_blocks - ((block_group_count - 1) * blocks_per_group));
+	return (uint32_t)(total_blocks -
+			  ((uint64_t)(block_group_count - 1) * blocks_per_group));
 }
 
 uint32_t ext4_inodes_in_group_cnt(struct ext4_sblock *s, uint32_t bgid)
@@ -107,7 +112,7 @@ static bool ext4_sb_verify_csum(struct ext4_sblock *s)
 	return s->checksum == to_le32(ext4_sb_csum(s));
 }
 
-static void ext4_sb_set_csum(struct ext4_sblock *s)
+void ext4_sb_set_csum(struct ext4_sblock *s)
 {
 	if (!ext4_sb_feature_ro_com(s, EXT4_FRO_COM_METADATA_CSUM))
 		return;
