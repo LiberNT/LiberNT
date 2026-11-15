@@ -7276,9 +7276,11 @@ InstallDeviceSoftware(
         RegCloseKey(DriverKey);
 }
 
+/* Without a prefix, the components of the base driver; with one, those of the extension it names */
 static BOOL
 RemoveDeviceComponents(
-    IN HKEY DeviceKey)
+    IN HKEY DeviceKey,
+    IN PCWSTR Prefix OPTIONAL)
 {
     WCHAR Name[MAX_DEVICE_ID_LEN];
     HKEY DevicesKey;
@@ -7295,7 +7297,8 @@ RemoveDeviceComponents(
             break;
 
         /* An extension package's component carries its ExtensionId and outlives the base driver */
-        if (strchrW(Name, L'#') || RegDeleteTreeW(DevicesKey, Name) != ERROR_SUCCESS)
+        if ((Prefix ? strncmpiW(Name, Prefix, strlenW(Prefix)) != 0 : strchrW(Name, L'#') != NULL) ||
+            RegDeleteTreeW(DevicesKey, Name) != ERROR_SUCCESS)
         {
             Index++;
             continue;
@@ -7378,14 +7381,15 @@ static BOOL
 InstallDeviceComponents(
     IN HINF hInf,
     IN PCWSTR SectionName,
-    IN HKEY DeviceKey)
+    IN HKEY DeviceKey,
+    IN PCWSTR Prefix OPTIONAL)
 {
-    WCHAR Name[MAX_DEVICE_ID_LEN], InstallSection[LINE_LEN];
+    WCHAR Name[MAX_DEVICE_ID_LEN], KeyName[MAX_DEVICE_ID_LEN], InstallSection[LINE_LEN];
     INFCONTEXT Context;
     HKEY DevicesKey;
     BOOL Changed;
 
-    Changed = RemoveDeviceComponents(DeviceKey);
+    Changed = RemoveDeviceComponents(DeviceKey, Prefix);
 
     if (!SetupFindFirstLineW(hInf, SectionName, L"AddComponent", &Context))
         return Changed;
@@ -7403,12 +7407,152 @@ InstallDeviceComponents(
             continue;
         }
 
-        if (AddDeviceComponent(hInf, DevicesKey, Name, InstallSection))
+        if (Prefix && strlenW(Prefix) + strlenW(Name) >= ARRAYSIZE(KeyName))
+            continue;
+        strcpyW(KeyName, Prefix ? Prefix : L"");
+        strcatW(KeyName, Name);
+
+        if (AddDeviceComponent(hInf, DevicesKey, KeyName, InstallSection))
             Changed = TRUE;
     } while (SetupFindNextMatchLineW(&Context, L"AddComponent", &Context));
 
     RegCloseKey(DevicesKey);
     return Changed;
+}
+
+static LPWSTR
+GetDeviceIdList(
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData,
+    IN DWORD Property)
+{
+    DWORD Size = 0;
+    LPWSTR List;
+
+    if (SetupDiGetDeviceRegistryPropertyW(DeviceInfoSet, DeviceInfoData, Property, NULL, NULL, 0, &Size) ||
+        GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+    {
+        return NULL;
+    }
+
+    List = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Size + 2 * sizeof(WCHAR));
+    if (List && !SetupDiGetDeviceRegistryPropertyW(DeviceInfoSet, DeviceInfoData, Property, NULL, (PBYTE)List, Size, NULL))
+    {
+        HeapFree(GetProcessHeap(), 0, List);
+        List = NULL;
+    }
+    return List;
+}
+
+/* Windows 11 names an extension's component "{extensionid}#<name>" under Devices of the parent */
+static VOID
+FormatExtensionPrefix(
+    IN const GUID *ExtensionId,
+    OUT PWSTR Prefix)
+{
+    sprintfW(Prefix, L"{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}#",
+             ExtensionId->Data1, ExtensionId->Data2, ExtensionId->Data3,
+             ExtensionId->Data4[0], ExtensionId->Data4[1], ExtensionId->Data4[2], ExtensionId->Data4[3],
+             ExtensionId->Data4[4], ExtensionId->Data4[5], ExtensionId->Data4[6], ExtensionId->Data4[7]);
+}
+
+/* Extension INFs apply over the base driver once it is installed (Using an Extension INF File) */
+static BOOL
+ApplyDeviceExtension(
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData,
+    IN const struct DeviceExtension *Extension,
+    IN DWORD DoAction,
+    IN struct InstallQueueContext *QueueContext,
+    IN HKEY DeviceKey,
+    OUT BOOL *ComponentsChanged)
+{
+    struct DeviceInfoSet *set = (struct DeviceInfoSet *)DeviceInfoSet;
+    struct InfFileDetails *Details;
+    WCHAR SectionName[MAX_PATH], SourceBuffer[MAX_PATH], Prefix[MAX_GUID_STRING_LEN + 1];
+    PWSTR pSectionName;
+    DWORD SectionNameLength = 0;
+    HKEY DriverKey, HardwareKey;
+    BOOL Result = FALSE;
+
+    Details = CreateInfFileDetails(Extension->InfPath);
+    if (!Details)
+        return FALSE;
+
+    if (!SetupDiGetActualSectionToInstallW(Details->hInf, Extension->Section, SectionName, MAX_PATH, &SectionNameLength, NULL) ||
+        SectionNameLength > MAX_PATH - (ARRAYSIZE(L".Components") - 1))
+    {
+        DereferenceInfFile(Details);
+        return FALSE;
+    }
+    pSectionName = &SectionName[strlenW(SectionName)];
+
+    DriverKey = SETUPDI_OpenDrvKey(set->HKLM, (struct DeviceInfo *)DeviceInfoData->Reserved, KEY_READ | KEY_WRITE);
+    if (DriverKey != INVALID_HANDLE_VALUE)
+    {
+        Result = SETUPAPI_InstallFromInfSectionWithIncludes(NULL, Details->hInf, SectionName, DoAction, DriverKey,
+                                                            SETUPAPI_GetInfSourceDirectory(Details, SourceBuffer),
+                                                            SP_COPY_NEWER, InstallQueueCallback, QueueContext,
+                                                            DeviceInfoSet, DeviceInfoData);
+        RegCloseKey(DriverKey);
+    }
+
+    if (Result)
+    {
+        strcpyW(pSectionName, DotServices);
+        if (!SetupInstallServicesFromInfSectionExW(Details->hInf, SectionName, 0, DeviceInfoSet, DeviceInfoData, NULL, NULL) &&
+            GetLastError() != ERROR_SECTION_NOT_FOUND)
+        {
+            WARN("Extension %s: [%s] failed %lu\n", debugstr_w(Extension->InfPath), debugstr_w(SectionName), GetLastError());
+        }
+
+        strcpyW(pSectionName, DotHW);
+        if ((DoAction & SPINST_REGISTRY) &&
+            RegCreateKeyExW(DeviceKey, L"Device Parameters", 0, NULL, REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WRITE,
+                            NULL, &HardwareKey, NULL) == ERROR_SUCCESS)
+        {
+            Result = SETUPAPI_InstallHardwareSection(Details->hInf, SectionName, HardwareKey, DeviceKey);
+            RegCloseKey(HardwareKey);
+        }
+
+        strcpyW(pSectionName, L".Filters");
+        SETUPAPI_InstallFilters(Details->hInf, SectionName, DeviceKey);
+
+        strcpyW(pSectionName, L".Components");
+        FormatExtensionPrefix(&Extension->ExtensionId, Prefix);
+        if (InstallDeviceComponents(Details->hInf, SectionName, DeviceKey, Prefix))
+            *ComponentsChanged = TRUE;
+    }
+
+    if (!Result)
+        WARN("Extension %s on [%s] failed %lu\n", debugstr_w(Extension->InfPath), debugstr_w(Extension->Section), GetLastError());
+
+    DereferenceInfFile(Details);
+    return Result;
+}
+
+static VOID
+InstallExtensionSoftware(
+    IN HDEVINFO DeviceInfoSet,
+    IN PSP_DEVINFO_DATA DeviceInfoData,
+    IN const struct DeviceExtension *Extension)
+{
+    struct InfFileDetails *Details;
+    WCHAR SectionName[MAX_PATH];
+    DWORD SectionNameLength = 0;
+
+    Details = CreateInfFileDetails(Extension->InfPath);
+    if (!Details)
+        return;
+
+    if (SetupDiGetActualSectionToInstallW(Details->hInf, Extension->Section, SectionName, MAX_PATH, &SectionNameLength, NULL) &&
+        SectionNameLength <= MAX_PATH - (ARRAYSIZE(L".Software") - 1))
+    {
+        strcatW(SectionName, DotSoftware);
+        InstallDeviceSoftware(Details->hInf, SectionName, DeviceInfoSet, DeviceInfoData);
+    }
+
+    DereferenceInfFile(Details);
 }
 
 /***********************************************************************
@@ -7447,6 +7591,9 @@ SetupDiInstallDevice(
     WCHAR SourceBuffer[MAX_PATH];
     BOOL PreviouslyInstalled = FALSE;
     BOOL ComponentsChanged = FALSE;
+    struct DeviceExtension *Extensions = NULL;
+    DWORD ExtensionCount = 0, ExtensionIndex;
+    LPWSTR HardwareIds = NULL, CompatibleIds = NULL;
     BOOL ret = FALSE; /* Return value */
 
     TRACE("%s(%p %p)\n", __FUNCTION__, DeviceInfoSet, DeviceInfoData);
@@ -7734,7 +7881,7 @@ SetupDiInstallDevice(
     strcpyW(pSectionName, L".Filters");
     SETUPAPI_InstallFilters(SelectedDriver->InfFileDetails->hInf, SectionName, hKey);
     strcpyW(pSectionName, L".Components");
-    ComponentsChanged = InstallDeviceComponents(SelectedDriver->InfFileDetails->hInf, SectionName, hKey);
+    ComponentsChanged = InstallDeviceComponents(SelectedDriver->InfFileDetails->hInf, SectionName, hKey, NULL);
     *pSectionName = UNICODE_NULL;
 
     /* Write information to enum key */
@@ -7754,6 +7901,25 @@ SetupDiInstallDevice(
     {
        SetLastError(rc);
        goto cleanup;
+    }
+
+    /* TODO: the extensions a device had are not recorded, so the components of one that no longer applies stay */
+    HardwareIds = GetDeviceIdList(DeviceInfoSet, DeviceInfoData, SPDRP_HARDWAREID);
+    CompatibleIds = GetDeviceIdList(DeviceInfoSet, DeviceInfoData, SPDRP_COMPATIBLEIDS);
+    if ((HardwareIds || CompatibleIds) &&
+        SETUPAPI_FindDeviceExtensions(HardwareIds, CompatibleIds, &Extensions, &ExtensionCount))
+    {
+        for (ExtensionIndex = 0; ExtensionIndex < ExtensionCount; ExtensionIndex++)
+        {
+            ApplyDeviceExtension(DeviceInfoSet, DeviceInfoData, &Extensions[ExtensionIndex], DoAction, &QueueContext,
+                                 hKey, &ComponentsChanged);
+        }
+    }
+    if (QueueContext.Delayed)
+    {
+        RebootRequired = TRUE;
+        InstallParams.Flags |= DI_NEEDREBOOT;
+        SetupDiSetDeviceInstallParamsW(DeviceInfoSet, DeviceInfoData, &InstallParams);
     }
 
     SETUPAPI_RecordInstalledDriverPackage(SelectedDriver->InfFileDetails);
@@ -7798,10 +7964,15 @@ SetupDiInstallDevice(
     {
         strcpyW(pSectionName, DotSoftware);
         InstallDeviceSoftware(SelectedDriver->InfFileDetails->hInf, SectionName, DeviceInfoSet, DeviceInfoData);
+        for (ExtensionIndex = 0; ExtensionIndex < ExtensionCount; ExtensionIndex++)
+            InstallExtensionSoftware(DeviceInfoSet, DeviceInfoData, &Extensions[ExtensionIndex]);
     }
 
 cleanup:
     /* End of installation */
+    HeapFree(GetProcessHeap(), 0, Extensions);
+    HeapFree(GetProcessHeap(), 0, HardwareIds);
+    HeapFree(GetProcessHeap(), 0, CompatibleIds);
     if (hHwKey != INVALID_HANDLE_VALUE)
         RegCloseKey(hHwKey);
     if (hKey != INVALID_HANDLE_VALUE)

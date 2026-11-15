@@ -516,4 +516,16 @@ BOOL SETUPAPI_InstallFromInfSectionWithIncludes(HWND owner, HINF hinf, PCWSTR se
 
 BOOL SETUPAPI_InstallHardwareSection(HINF hinf, PCWSTR section, HKEY hardware_key, HKEY device_key);
 
+struct DeviceExtension
+{
+    GUID ExtensionId;
+    WCHAR InfPath[MAX_PATH];
+    WCHAR Section[LINE_LEN];
+    FILETIME DriverDate;
+    DWORDLONG DriverVersion;
+};
+
+BOOL SETUPAPI_FindDeviceExtensions(PCWSTR HardwareIds, PCWSTR CompatibleIds,
+                                   struct DeviceExtension **Extensions, DWORD *Count);
+
 #endif /* __SETUPAPI_PRIVATE_H */
