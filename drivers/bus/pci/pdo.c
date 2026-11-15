@@ -4268,6 +4268,7 @@ InterfacePciDevicePresent(
                 PciDevice->PciConfig.DeviceID == DeviceID)
             {
                 if (!(Flags & PCI_USE_SUBSYSTEM_IDS) ||
+                    /* TODO: a bridge's subsystem is its capability 0Dh value, as in pciids.c */
                     (PciDevice->PciConfig.u.type0.SubVendorID == SubVendorID &&
                      PciDevice->PciConfig.u.type0.SubSystemID == SubSystemID))
                 {
@@ -4318,6 +4319,7 @@ CheckPciDevice(
     }
 
     if ((Parameters->Flags & PCI_USE_SUBSYSTEM_IDS) &&
+        /* TODO: a bridge's subsystem is its capability 0Dh value, as in pciids.c */
         (PciConfig->u.type0.SubVendorID != Parameters->SubVendorID ||
          PciConfig->u.type0.SubSystemID != Parameters->SubSystemID))
     {

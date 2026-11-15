@@ -9,6 +9,7 @@ list(APPEND SOURCE
     hookhal.c
     intrconn.c
     pci.c
+    pciids.c
     pdo.c
     pci.h)
 

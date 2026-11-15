@@ -20,6 +20,7 @@ extern void func_InvalidDeviceInfoSet(void);
 extern void func_LegacyDeviceParent(void);
 extern void func_NewDeviceInstall(void);
 extern void func_ParentIdPrefix(void);
+extern void func_PciDeviceIds(void);
 extern void func_SetupInstallServicesFromInfSectionEx(void);
 extern void func_SoftwareComponent(void);
 extern void func_SetupCommitFileQueue(void);
@@ -50,6 +51,7 @@ const struct test winetest_testlist[] =
     { "LegacyDeviceParent", func_LegacyDeviceParent },
     { "NewDeviceInstall", func_NewDeviceInstall },
     { "ParentIdPrefix", func_ParentIdPrefix },
+    { "PciDeviceIds", func_PciDeviceIds },
     { "SetupInstallServicesFromInfSectionEx", func_SetupInstallServicesFromInfSectionEx},
     { "SoftwareComponent", func_SoftwareComponent },
     { "SetupCommitFileQueue", func_SetupCommitFileQueue },
