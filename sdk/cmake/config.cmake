@@ -262,7 +262,7 @@ cmake_dependent_option(FFMPEG_FROM_SOURCE
                        "ENABLE_FFMPEG" OFF)
 
 cmake_dependent_option(ENABLE_DXILCONV
-                       "Build dxilconv.dll, the DXBC to DXIL converter of the Direct3D 12 runtime, from the dxc feed" OFF
+                       "Build dxilconv.dll, the DXBC to DXIL converter of the Direct3D 12 runtime, from the dxc feed" ON
                        "ARCH STREQUAL i386 OR ARCH STREQUAL amd64 OR ARCH STREQUAL arm64;CMAKE_C_COMPILER_ID STREQUAL Clang;NOT MSVC" OFF)
 
 set(_wow64_default OFF)
