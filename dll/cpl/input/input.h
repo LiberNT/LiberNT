@@ -17,6 +17,9 @@
 #include <strsafe.h>
 #include <cpl.h>
 #include <imm32_undoc.h>
+#define COBJMACROS
+#include <objbase.h>
+#include <msctf.h>
 
 #include "resource.h"
 
@@ -85,5 +88,44 @@ DWORDfromString(const WCHAR *pszString)
 }
 
 VOID GetSystemLibraryPath(LPWSTR pszPath, INT cchPath, LPCWSTR pszFileName);
+
+/* layout_or_tip.c */
+#define LOTP_INPUTPROCESSOR             1
+#define LOTP_KEYBOARDLAYOUT             2
+
+#define ILOT_UNINSTALL                  0x00000001
+#define ILOT_DEFPROFILE                 0x00000002
+#define ILOT_NOAPPLYTOCURRENTSESSION    0x00000020
+#define ILOT_CLEANINSTALL               0x00000040
+#define ILOT_DISABLED                   0x00000080
+
+typedef struct tagLAYOUTORTIPPROFILE
+{
+    DWORD dwProfileType;
+    LANGID langid;
+    CLSID clsid;
+    GUID guidProfile;
+    GUID catid;
+    DWORD dwSubstituteLayout;
+    DWORD dwFlags;
+    WCHAR szId[MAX_PATH];
+} LAYOUTORTIPPROFILE;
+
+ITfInputProcessorProfiles *
+CreateProfiles(_Out_ HMODULE *phMsctf);
+
+VOID
+ReleaseProfiles(_In_opt_ ITfInputProcessorProfiles *pProfiles, _In_opt_ HMODULE hMsctf);
+
+BOOL WINAPI
+InstallLayoutOrTip(_In_ LPCWSTR psz, _In_ DWORD dwFlags);
+
+UINT WINAPI
+EnumEnabledLayoutOrTip(
+    _In_opt_ LPCWSTR pszUserReg,
+    _In_opt_ LPCWSTR pszSystemReg,
+    _In_opt_ LPCWSTR pszSoftwareReg,
+    _Out_writes_opt_(uBufLength) LAYOUTORTIPPROFILE *pLayoutOrTipProfile,
+    _In_ UINT uBufLength);
 
 #endif /* _INPUT_H */
