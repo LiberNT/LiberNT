@@ -1144,6 +1144,7 @@ Phase1InitializationDiscard(
     }
 
     KeStartAllProcessors();
+    KeMaximumProcessors = KeNumberProcessors;
 
     if (!HalAllProcessorsStarted())
     {

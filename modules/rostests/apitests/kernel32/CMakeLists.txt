@@ -130,6 +130,7 @@ list(APPEND SOURCE
     lstrcpynW.c
     lstrlen.c
     Mailslot.c
+    MaximumProcessorCount.c
     MuiResources.c
     MultiByteToWideChar.c
     NamedPipeClientComputerName.c
