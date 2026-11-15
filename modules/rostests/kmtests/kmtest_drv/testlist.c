@@ -254,6 +254,7 @@ KMT_TESTFUNC Test_KdPrintStatus;
 KMT_TESTFUNC Test_KdSystemDebugControl;
 KMT_TESTFUNC Test_KdUsbNetRules;
 KMT_TESTFUNC Test_KsecBcrypt;
+KMT_TESTFUNC Test_KsecBcryptKeyPair;
 KMT_TESTFUNC Test_KeWddmExports;
 KMT_TESTFUNC Test_KeApc;
 KMT_TESTFUNC Test_KeApcInject;
@@ -709,6 +710,7 @@ const KMT_TEST TestList[] =
     { "KdSystemDebugControl",               Test_KdSystemDebugControl },
     { "KdUsbNetRules",                      Test_KdUsbNetRules },
     { "KsecBcrypt",                         Test_KsecBcrypt },
+    { "KsecBcryptKeyPair",                  Test_KsecBcryptKeyPair },
     { "KeWddmExports",                      Test_KeWddmExports },
     { "KeApc",                              Test_KeApc },
     { "KeApcInject",                        Test_KeApcInject },

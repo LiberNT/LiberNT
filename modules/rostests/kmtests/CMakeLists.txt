@@ -271,6 +271,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_kd/KdSystemDebugControl.c
     ntos_kd/KdUsbNetRules.c
     ksecdd/KsecBcrypt.c
+    ksecdd/KsecBcryptKeyPair.c
     ntos_ke/KeDpcWatchdog.c
     ntos_ke/KeWddmExports.c
     ntos_ke/KeAffinityKM.c

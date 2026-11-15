@@ -26,11 +26,15 @@
 #define KSEC_MAGIC_ALGORITHM     0x30474c41
 #define KSEC_MAGIC_HASH          0x48534148
 #define KSEC_MAGIC_KEY           0x3059454b
+#define KSEC_MAGIC_SECRET        0x52434553
 
 #define KSEC_OBJECT_EXTERNAL     0x00000001
 #define KSEC_HASH_HMAC           0x00000002
 #define KSEC_HASH_REUSABLE       0x00000004
 #define KSEC_KEY_PRIVATE         0x00000008
+#define KSEC_KEY_PENDING         0x00000010
+
+#define KSEC_P256_BYTES          32
 
 #define KSEC_AES_BLOCK_SIZE      16
 
@@ -50,7 +54,8 @@ typedef enum _KSEC_BCRYPT_ALGORITHM_ID
     KsecAlgRsaSign,
     KsecAlgEcdsaP256,
     KsecAlgPbkdf2,
-    KsecAlgSp800108
+    KsecAlgSp800108,
+    KsecAlgEcdhP256
 } KSEC_BCRYPT_ALGORITHM_ID;
 
 typedef enum _KSEC_BCRYPT_CHAIN_MODE
@@ -124,6 +129,13 @@ typedef struct _KSEC_BCRYPT_KEY
         } Ecc;
     } Data;
 } KSEC_BCRYPT_KEY;
+
+typedef struct _KSEC_BCRYPT_SECRET
+{
+    KSEC_BCRYPT_OBJECT Header;
+    ULONG Length;
+    UCHAR Value[KSEC_P256_BYTES];
+} KSEC_BCRYPT_SECRET;
 
 typedef struct _KSEC_BCRYPT_ALLOCATION
 {
@@ -425,6 +437,7 @@ KsecAlgorithmName(
         case KsecAlgEcdsaP256: return BCRYPT_ECDSA_P256_ALGORITHM;
         case KsecAlgPbkdf2: return BCRYPT_PBKDF2_ALGORITHM;
         case KsecAlgSp800108: return KsecSp800108Algorithm;
+        case KsecAlgEcdhP256: return BCRYPT_ECDH_P256_ALGORITHM;
         default: return NULL;
     }
 }
@@ -435,7 +448,7 @@ KsecAlgorithmIdFromName(
 {
     KSEC_BCRYPT_ALGORITHM_ID Id;
 
-    for (Id = KsecAlgSha256; Id <= KsecAlgSp800108; ++Id)
+    for (Id = KsecAlgSha256; Id <= KsecAlgEcdhP256; ++Id)
     {
         if (KsecEqualWideString(Name, KsecAlgorithmName(Id)))
             return Id;
@@ -524,6 +537,8 @@ static const KSEC_BCRYPT_ALGORITHM KsecPseudoRsaSign =
     {{KSEC_MAGIC_ALGORITHM, 0}, KsecAlgRsaSign, KsecChainCbc};
 static const KSEC_BCRYPT_ALGORITHM KsecPseudoEcdsaP256 =
     {{KSEC_MAGIC_ALGORITHM, 0}, KsecAlgEcdsaP256, KsecChainCbc};
+static const KSEC_BCRYPT_ALGORITHM KsecPseudoEcdhP256 =
+    {{KSEC_MAGIC_ALGORITHM, 0}, KsecAlgEcdhP256, KsecChainCbc};
 static const KSEC_BCRYPT_ALGORITHM KsecPseudoPbkdf2 =
     {{KSEC_MAGIC_ALGORITHM, 0}, KsecAlgPbkdf2, KsecChainCbc};
 static const KSEC_BCRYPT_ALGORITHM KsecPseudoSp800108 =
@@ -548,6 +563,7 @@ KsecGetPseudoAlgorithm(
         case (ULONG_PTR)BCRYPT_RSA_ALG_HANDLE: return &KsecPseudoRsa;
         case (ULONG_PTR)BCRYPT_RSA_SIGN_ALG_HANDLE: return &KsecPseudoRsaSign;
         case (ULONG_PTR)BCRYPT_ECDSA_P256_ALG_HANDLE: return &KsecPseudoEcdsaP256;
+        case (ULONG_PTR)BCRYPT_ECDH_P256_ALG_HANDLE: return &KsecPseudoEcdhP256;
         case (ULONG_PTR)BCRYPT_PBKDF2_ALG_HANDLE: return &KsecPseudoPbkdf2;
         case (ULONG_PTR)BCRYPT_SP800108_CTR_HMAC_ALG_HANDLE: return &KsecPseudoSp800108;
         default: return NULL;
@@ -581,12 +597,21 @@ KsecGetHash(
 }
 
 static KSEC_BCRYPT_KEY *
-KsecGetKey(
+KsecGetAnyKey(
     _In_opt_ BCRYPT_KEY_HANDLE Handle)
 {
     KSEC_BCRYPT_KEY *Key = Handle;
 
     return Key != NULL && Key->Header.Magic == KSEC_MAGIC_KEY ? Key : NULL;
+}
+
+static KSEC_BCRYPT_KEY *
+KsecGetKey(
+    _In_opt_ BCRYPT_KEY_HANDLE Handle)
+{
+    KSEC_BCRYPT_KEY *Key = KsecGetAnyKey(Handle);
+
+    return Key != NULL && !(Key->Header.Flags & KSEC_KEY_PENDING) ? Key : NULL;
 }
 
 static PVOID
@@ -935,7 +960,7 @@ KsecDestroyKeyObject(
         if (Key->Data.Rsa.Key != NULL)
             SymCryptRsakeyFree(Key->Data.Rsa.Key);
     }
-    else if (Key->Id == KsecAlgEcdsaP256)
+    else if (Key->Id == KsecAlgEcdsaP256 || Key->Id == KsecAlgEcdhP256)
     {
         if (Key->Data.Ecc.Key != NULL)
             SymCryptEckeyFree(Key->Data.Ecc.Key);
@@ -1527,35 +1552,20 @@ KsecImportRsaKey(
 }
 
 static NTSTATUS
-KsecImportEcdsaP256Key(
-    _In_reads_bytes_(InputSize) PUCHAR Input,
-    _In_ ULONG InputSize,
-    _Out_ BCRYPT_KEY_HANDLE *KeyHandle)
+KsecAllocateEccP256Key(
+    _In_ KSEC_BCRYPT_ALGORITHM_ID Id,
+    _Out_ KSEC_BCRYPT_KEY **Result)
 {
-    BCRYPT_ECCKEY_BLOB *Blob = (BCRYPT_ECCKEY_BLOB *)Input;
     KSEC_BCRYPT_KEY *Key;
-    PUCHAR PublicKey;
-    PUCHAR PrivateKey = NULL;
-    ULONG RequiredSize;
-    SYMCRYPT_ERROR Error;
 
-    if (InputSize < sizeof(*Blob) || Blob->cbKey != 32)
-        return STATUS_INVALID_PARAMETER;
-    if (Blob->dwMagic != BCRYPT_ECDSA_PUBLIC_P256_MAGIC &&
-        Blob->dwMagic != BCRYPT_ECDSA_PRIVATE_P256_MAGIC)
-        return STATUS_NOT_SUPPORTED;
+    ASSERT(Id == KsecAlgEcdsaP256 || Id == KsecAlgEcdhP256);
 
-    RequiredSize = sizeof(*Blob) + Blob->cbKey * 2;
-    if (Blob->dwMagic == BCRYPT_ECDSA_PRIVATE_P256_MAGIC)
-        RequiredSize += Blob->cbKey;
-    if (InputSize != RequiredSize)
-        return STATUS_INVALID_PARAMETER;
-
+    *Result = NULL;
     Key = KsecBcryptAllocate(sizeof(*Key));
     if (Key == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
     Key->Header.Magic = KSEC_MAGIC_KEY;
-    Key->Id = KsecAlgEcdsaP256;
+    Key->Id = Id;
     Key->BitLength = 256;
     ExInitializeFastMutex(&Key->Lock);
 
@@ -1568,8 +1578,44 @@ KsecImportEcdsaP256Key(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    *Result = Key;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+KsecImportEccP256Key(
+    _In_ KSEC_BCRYPT_ALGORITHM_ID Id,
+    _In_reads_bytes_(InputSize) PUCHAR Input,
+    _In_ ULONG InputSize,
+    _Out_ BCRYPT_KEY_HANDLE *KeyHandle)
+{
+    BCRYPT_ECCKEY_BLOB *Blob = (BCRYPT_ECCKEY_BLOB *)Input;
+    ULONG PublicMagic = Id == KsecAlgEcdhP256 ? BCRYPT_ECDH_PUBLIC_P256_MAGIC : BCRYPT_ECDSA_PUBLIC_P256_MAGIC;
+    ULONG PrivateMagic = Id == KsecAlgEcdhP256 ? BCRYPT_ECDH_PRIVATE_P256_MAGIC : BCRYPT_ECDSA_PRIVATE_P256_MAGIC;
+    KSEC_BCRYPT_KEY *Key;
+    PUCHAR PublicKey;
+    PUCHAR PrivateKey = NULL;
+    ULONG RequiredSize;
+    SYMCRYPT_ERROR Error;
+    NTSTATUS Status;
+
+    if (InputSize < sizeof(*Blob) || Blob->cbKey != KSEC_P256_BYTES)
+        return STATUS_INVALID_PARAMETER;
+    if (Blob->dwMagic != PublicMagic && Blob->dwMagic != PrivateMagic)
+        return STATUS_NOT_SUPPORTED;
+
+    RequiredSize = sizeof(*Blob) + Blob->cbKey * 2;
+    if (Blob->dwMagic == PrivateMagic)
+        RequiredSize += Blob->cbKey;
+    if (InputSize != RequiredSize)
+        return STATUS_INVALID_PARAMETER;
+
+    Status = KsecAllocateEccP256Key(Id, &Key);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
     PublicKey = (PUCHAR)(Blob + 1);
-    if (Blob->dwMagic == BCRYPT_ECDSA_PRIVATE_P256_MAGIC)
+    if (Blob->dwMagic == PrivateMagic)
     {
         Key->Header.Flags |= KSEC_KEY_PRIVATE;
         PrivateKey = PublicKey + Blob->cbKey * 2;
@@ -1582,7 +1628,7 @@ KsecImportEcdsaP256Key(
                                    SYMCRYPT_ECPOINT_FORMAT_XY,
                                    SYMCRYPT_FLAG_KEY_NO_FIPS |
                                    SYMCRYPT_FLAG_KEY_MINIMAL_VALIDATION |
-                                   SYMCRYPT_FLAG_ECKEY_ECDSA,
+                                   (Id == KsecAlgEcdhP256 ? SYMCRYPT_FLAG_ECKEY_ECDH : SYMCRYPT_FLAG_ECKEY_ECDSA),
                                    Key->Data.Ecc.Key);
     if (Error != SYMCRYPT_NO_ERROR)
     {
@@ -1623,15 +1669,483 @@ BCryptImportKeyPair(
             return STATUS_NOT_SUPPORTED;
         return KsecImportRsaKey(Algorithm, Input, InputSize, KeyHandle);
     }
-    if (Algorithm->Id == KsecAlgEcdsaP256)
+    if (Algorithm->Id == KsecAlgEcdsaP256 || Algorithm->Id == KsecAlgEcdhP256)
     {
         if (!KsecEqualWideString(BlobType, BCRYPT_ECCPUBLIC_BLOB) &&
             !KsecEqualWideString(BlobType, BCRYPT_ECCPRIVATE_BLOB) &&
             !KsecEqualWideString(BlobType, BCRYPT_PUBLIC_KEY_BLOB))
             return STATUS_NOT_SUPPORTED;
-        return KsecImportEcdsaP256Key(Input, InputSize, KeyHandle);
+        return KsecImportEccP256Key(Algorithm->Id, Input, InputSize, KeyHandle);
     }
     return STATUS_NOT_SUPPORTED;
+}
+
+NTSTATUS
+WINAPI
+BCryptGenerateKeyPair(
+    BCRYPT_ALG_HANDLE AlgorithmHandle,
+    BCRYPT_KEY_HANDLE *KeyHandle,
+    ULONG Length,
+    ULONG Flags)
+{
+    KSEC_BCRYPT_ALGORITHM *Algorithm = KsecGetAlgorithm(AlgorithmHandle);
+    KSEC_BCRYPT_KEY *Key;
+    NTSTATUS Status;
+
+    if (Algorithm == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (KeyHandle == NULL || Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    if (Algorithm->Id == KsecAlgEcdsaP256 || Algorithm->Id == KsecAlgEcdhP256)
+    {
+        if (Length != 0 && Length != 256)
+            return STATUS_INVALID_PARAMETER;
+        Status = KsecAllocateEccP256Key(Algorithm->Id, &Key);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    else if (Algorithm->Id == KsecAlgRsa || Algorithm->Id == KsecAlgRsaSign)
+    {
+        if (Length < 512 || Length > 16384 || (Length % 64) != 0)
+            return STATUS_INVALID_PARAMETER;
+        Key = KsecBcryptAllocate(sizeof(*Key));
+        if (Key == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Key->Header.Magic = KSEC_MAGIC_KEY;
+        Key->Id = Algorithm->Id;
+        Key->BitLength = Length;
+        ExInitializeFastMutex(&Key->Lock);
+    }
+    else
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+
+    Key->Header.Flags |= KSEC_KEY_PRIVATE | KSEC_KEY_PENDING;
+    *KeyHandle = Key;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+WINAPI
+BCryptFinalizeKeyPair(
+    BCRYPT_KEY_HANDLE KeyHandle,
+    ULONG Flags)
+{
+    KSEC_BCRYPT_KEY *Key = KsecGetAnyKey(KeyHandle);
+    SYMCRYPT_RSA_PARAMS Parameters;
+    SYMCRYPT_ERROR Error;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (Key == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+
+    ExAcquireFastMutex(&Key->Lock);
+    if (!(Key->Header.Flags & KSEC_KEY_PENDING))
+    {
+        Status = STATUS_INVALID_HANDLE;
+    }
+    else if (Key->Id == KsecAlgEcdsaP256 || Key->Id == KsecAlgEcdhP256)
+    {
+        ASSERT(Key->Data.Ecc.Key != NULL);
+        Error = SymCryptEckeySetRandom(SYMCRYPT_FLAG_KEY_NO_FIPS |
+                                       (Key->Id == KsecAlgEcdhP256 ? SYMCRYPT_FLAG_ECKEY_ECDH : SYMCRYPT_FLAG_ECKEY_ECDSA),
+                                       Key->Data.Ecc.Key);
+        if (Error != SYMCRYPT_NO_ERROR)
+            Status = STATUS_INTERNAL_ERROR;
+    }
+    else
+    {
+        ASSERT(Key->Id == KsecAlgRsa || Key->Id == KsecAlgRsaSign);
+        ASSERT(Key->Data.Rsa.Key == NULL);
+        Parameters.version = 1;
+        Parameters.nBitsOfModulus = Key->BitLength;
+        Parameters.nPrimes = 2;
+        Parameters.nPubExp = 1;
+        Key->Data.Rsa.Key = SymCryptRsakeyAllocate(&Parameters, 0);
+        if (Key->Data.Rsa.Key == NULL)
+        {
+            Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+        else
+        {
+            Error = SymCryptRsakeyGenerate(Key->Data.Rsa.Key,
+                                           NULL,
+                                           0,
+                                           SYMCRYPT_FLAG_KEY_NO_FIPS | SYMCRYPT_FLAG_RSAKEY_SIGN |
+                                           (Key->Id == KsecAlgRsa ? SYMCRYPT_FLAG_RSAKEY_ENCRYPT : 0));
+            if (Error != SYMCRYPT_NO_ERROR)
+            {
+                SymCryptRsakeyFree(Key->Data.Rsa.Key);
+                Key->Data.Rsa.Key = NULL;
+                Status = STATUS_INTERNAL_ERROR;
+            }
+        }
+    }
+    if (NT_SUCCESS(Status))
+        Key->Header.Flags &= ~KSEC_KEY_PENDING;
+    ExReleaseFastMutex(&Key->Lock);
+    return Status;
+}
+
+static NTSTATUS
+KsecExportEccP256Key(
+    _In_ KSEC_BCRYPT_KEY *Key,
+    _In_ BOOLEAN Private,
+    _Out_writes_bytes_to_opt_(OutputSize, *ResultSize) PUCHAR Output,
+    _In_ ULONG OutputSize,
+    _Out_ PULONG ResultSize)
+{
+    BCRYPT_ECCKEY_BLOB *Blob = (BCRYPT_ECCKEY_BLOB *)Output;
+    ULONG Size = sizeof(*Blob) + KSEC_P256_BYTES * (Private ? 3 : 2);
+    PUCHAR Point;
+    SYMCRYPT_ERROR Error;
+
+    if (Private && !(Key->Header.Flags & KSEC_KEY_PRIVATE))
+        return STATUS_INVALID_PARAMETER;
+    *ResultSize = Size;
+    if (Output == NULL)
+        return STATUS_SUCCESS;
+    if (OutputSize < Size)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    if (Key->Id == KsecAlgEcdhP256)
+        Blob->dwMagic = Private ? BCRYPT_ECDH_PRIVATE_P256_MAGIC : BCRYPT_ECDH_PUBLIC_P256_MAGIC;
+    else
+        Blob->dwMagic = Private ? BCRYPT_ECDSA_PRIVATE_P256_MAGIC : BCRYPT_ECDSA_PUBLIC_P256_MAGIC;
+    Blob->cbKey = KSEC_P256_BYTES;
+    Point = (PUCHAR)(Blob + 1);
+
+    Error = SymCryptEckeyGetValue(Key->Data.Ecc.Key,
+                                   Private ? Point + KSEC_P256_BYTES * 2 : NULL,
+                                   Private ? KSEC_P256_BYTES : 0,
+                                   Point,
+                                   KSEC_P256_BYTES * 2,
+                                   SYMCRYPT_NUMBER_FORMAT_MSB_FIRST,
+                                   SYMCRYPT_ECPOINT_FORMAT_XY,
+                                   0);
+    return Error == SYMCRYPT_NO_ERROR ? STATUS_SUCCESS : STATUS_INTERNAL_ERROR;
+}
+
+static NTSTATUS
+KsecExportRsaPublicKey(
+    _In_ KSEC_BCRYPT_KEY *Key,
+    _Out_writes_bytes_to_opt_(OutputSize, *ResultSize) PUCHAR Output,
+    _In_ ULONG OutputSize,
+    _Out_ PULONG ResultSize)
+{
+    BCRYPT_RSAKEY_BLOB *Blob = (BCRYPT_RSAKEY_BLOB *)Output;
+    ULONG Modulus = (Key->BitLength + 7) / 8, ExponentBytes = 0, Size, Index;
+    UINT64 Exponent = 0;
+    PUCHAR Cursor;
+    SYMCRYPT_ERROR Error;
+
+    ASSERT(Key->Data.Rsa.Key != NULL);
+    Error = SymCryptRsakeyGetValue(Key->Data.Rsa.Key, NULL, 0, &Exponent, 1, NULL, NULL, 0,
+                                   SYMCRYPT_NUMBER_FORMAT_MSB_FIRST, 0);
+    if (Error != SYMCRYPT_NO_ERROR || Exponent == 0)
+        return STATUS_INTERNAL_ERROR;
+    for (Index = 0; Index < sizeof(Exponent); Index++)
+    {
+        if ((Exponent >> (Index * 8)) != 0)
+            ExponentBytes = Index + 1;
+    }
+
+    Size = sizeof(*Blob) + ExponentBytes + Modulus;
+    *ResultSize = Size;
+    if (Output == NULL)
+        return STATUS_SUCCESS;
+    if (OutputSize < Size)
+        return STATUS_BUFFER_TOO_SMALL;
+
+    Blob->Magic = BCRYPT_RSAPUBLIC_MAGIC;
+    Blob->BitLength = Key->BitLength;
+    Blob->cbPublicExp = ExponentBytes;
+    Blob->cbModulus = Modulus;
+    Blob->cbPrime1 = 0;
+    Blob->cbPrime2 = 0;
+    Cursor = (PUCHAR)(Blob + 1);
+    for (Index = 0; Index < ExponentBytes; Index++)
+        Cursor[Index] = (UCHAR)(Exponent >> ((ExponentBytes - 1 - Index) * 8));
+    Error = SymCryptRsakeyGetValue(Key->Data.Rsa.Key, Cursor + ExponentBytes, Modulus, NULL, 0, NULL, NULL, 0,
+                                   SYMCRYPT_NUMBER_FORMAT_MSB_FIRST, 0);
+    return Error == SYMCRYPT_NO_ERROR ? STATUS_SUCCESS : STATUS_INTERNAL_ERROR;
+}
+
+NTSTATUS
+WINAPI
+BCryptExportKey(
+    BCRYPT_KEY_HANDLE KeyHandle,
+    BCRYPT_KEY_HANDLE ExportKeyHandle,
+    LPCWSTR BlobType,
+    PUCHAR Output,
+    ULONG OutputSize,
+    ULONG *ResultSize,
+    ULONG Flags)
+{
+    KSEC_BCRYPT_KEY *Key = KsecGetKey(KeyHandle);
+    NTSTATUS Status;
+
+    if (Key == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (BlobType == NULL || ResultSize == NULL || Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+    /* TODO: exporting a key wrapped with another key is not implemented */
+    if (ExportKeyHandle != NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    ExAcquireFastMutex(&Key->Lock);
+    if (Key->Id == KsecAlgEcdsaP256 || Key->Id == KsecAlgEcdhP256)
+    {
+        if (KsecEqualWideString(BlobType, BCRYPT_ECCPUBLIC_BLOB) || KsecEqualWideString(BlobType, BCRYPT_PUBLIC_KEY_BLOB))
+            Status = KsecExportEccP256Key(Key, FALSE, Output, OutputSize, ResultSize);
+        else if (KsecEqualWideString(BlobType, BCRYPT_ECCPRIVATE_BLOB) ||
+                 KsecEqualWideString(BlobType, BCRYPT_PRIVATE_KEY_BLOB))
+            Status = KsecExportEccP256Key(Key, TRUE, Output, OutputSize, ResultSize);
+        else
+            Status = STATUS_NOT_SUPPORTED;
+    }
+    else if (Key->Id == KsecAlgRsa || Key->Id == KsecAlgRsaSign)
+    {
+        /* TODO: RSA private and full private blobs are not exported */
+        if (KsecEqualWideString(BlobType, BCRYPT_RSAPUBLIC_BLOB) || KsecEqualWideString(BlobType, BCRYPT_PUBLIC_KEY_BLOB))
+            Status = KsecExportRsaPublicKey(Key, Output, OutputSize, ResultSize);
+        else
+            Status = STATUS_NOT_SUPPORTED;
+    }
+    else
+    {
+        /* TODO: symmetric key blobs are not exported */
+        Status = STATUS_NOT_SUPPORTED;
+    }
+    ExReleaseFastMutex(&Key->Lock);
+    return Status;
+}
+
+static KSEC_BCRYPT_SECRET *
+KsecGetSecret(
+    _In_opt_ BCRYPT_SECRET_HANDLE Handle)
+{
+    KSEC_BCRYPT_SECRET *Secret = Handle;
+
+    return Secret != NULL && Secret->Header.Magic == KSEC_MAGIC_SECRET ? Secret : NULL;
+}
+
+NTSTATUS
+WINAPI
+BCryptSecretAgreement(
+    BCRYPT_KEY_HANDLE PrivateKeyHandle,
+    BCRYPT_KEY_HANDLE PublicKeyHandle,
+    BCRYPT_SECRET_HANDLE *SecretHandle,
+    ULONG Flags)
+{
+    KSEC_BCRYPT_KEY *PrivateKey = KsecGetKey(PrivateKeyHandle);
+    KSEC_BCRYPT_KEY *PublicKey = KsecGetKey(PublicKeyHandle);
+    KSEC_BCRYPT_SECRET *Secret;
+    SYMCRYPT_ERROR Error;
+
+    if (PrivateKey == NULL || PublicKey == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (SecretHandle == NULL || Flags != 0)
+        return STATUS_INVALID_PARAMETER;
+    if (PrivateKey->Id != KsecAlgEcdhP256 || PublicKey->Id != KsecAlgEcdhP256)
+        return STATUS_NOT_SUPPORTED;
+    if (!(PrivateKey->Header.Flags & KSEC_KEY_PRIVATE))
+        return STATUS_INVALID_PARAMETER;
+
+    Secret = KsecBcryptAllocate(sizeof(*Secret));
+    if (Secret == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Secret->Header.Magic = KSEC_MAGIC_SECRET;
+    Secret->Length = KSEC_P256_BYTES;
+
+    Error = SymCryptEcDhSecretAgreement(PrivateKey->Data.Ecc.Key,
+                                        PublicKey->Data.Ecc.Key,
+                                        SYMCRYPT_NUMBER_FORMAT_MSB_FIRST,
+                                        0,
+                                        Secret->Value,
+                                        Secret->Length);
+    if (Error != SYMCRYPT_NO_ERROR)
+    {
+        KsecDestroyObject(&Secret->Header, sizeof(*Secret));
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    *SecretHandle = Secret;
+    return STATUS_SUCCESS;
+}
+
+static PCSYMCRYPT_HASH
+KsecKdfHashFromBuffer(
+    _In_ const BCryptBuffer *Buffer)
+{
+    PCWSTR Name = Buffer->pvBuffer;
+    ULONG Size = Buffer->cbBuffer;
+
+    if (KsecEqualWideBuffer(Name, Size, BCRYPT_SHA1_ALGORITHM))
+        return SymCryptSha1Algorithm;
+    if (KsecEqualWideBuffer(Name, Size, BCRYPT_SHA256_ALGORITHM))
+        return SymCryptSha256Algorithm;
+    if (KsecEqualWideBuffer(Name, Size, BCRYPT_SHA384_ALGORITHM))
+        return SymCryptSha384Algorithm;
+    if (KsecEqualWideBuffer(Name, Size, BCRYPT_SHA512_ALGORITHM))
+        return SymCryptSha512Algorithm;
+    return NULL;
+}
+
+NTSTATUS
+WINAPI
+BCryptDeriveKey(
+    BCRYPT_SECRET_HANDLE SecretHandle,
+    LPCWSTR Kdf,
+    BCryptBufferDesc *Parameters,
+    PUCHAR Output,
+    ULONG OutputSize,
+    ULONG *ResultSize,
+    ULONG Flags)
+{
+    KSEC_BCRYPT_SECRET *Secret = KsecGetSecret(SecretHandle);
+    const BCryptBuffer *Prepend = NULL, *Append = NULL, *HmacKey = NULL;
+    PCSYMCRYPT_HASH HashAlgorithm = SymCryptSha1Algorithm;
+    UCHAR Digest[SYMCRYPT_SHA512_RESULT_SIZE];
+    SYMCRYPT_HMAC_EXPANDED_KEY *MacKey = NULL;
+    SYMCRYPT_HMAC_STATE *MacState = NULL;
+    SYMCRYPT_HASH_STATE *HashState = NULL;
+    BOOLEAN Hmac;
+    ULONG Index, DigestSize;
+    SYMCRYPT_ERROR Error;
+
+    if (Secret == NULL)
+        return STATUS_INVALID_HANDLE;
+    if (Kdf == NULL || ResultSize == NULL || (Flags & ~KDF_USE_SECRET_AS_HMAC_KEY_FLAG) != 0)
+        return STATUS_INVALID_PARAMETER;
+    ASSERT(Secret->Length == KSEC_P256_BYTES);
+
+    if (KsecEqualWideString(Kdf, BCRYPT_KDF_RAW_SECRET))
+    {
+        if (Parameters != NULL && Parameters->cBuffers != 0)
+            return STATUS_INVALID_PARAMETER;
+        *ResultSize = Secret->Length;
+        if (Output == NULL)
+            return STATUS_SUCCESS;
+        if (OutputSize < Secret->Length)
+            return STATUS_BUFFER_TOO_SMALL;
+        for (Index = 0; Index < Secret->Length; Index++)
+            Output[Index] = Secret->Value[Secret->Length - 1 - Index];
+        return STATUS_SUCCESS;
+    }
+
+    if (KsecEqualWideString(Kdf, BCRYPT_KDF_HASH))
+        Hmac = FALSE;
+    else if (KsecEqualWideString(Kdf, BCRYPT_KDF_HMAC))
+        Hmac = TRUE;
+    else
+        return STATUS_NOT_SUPPORTED;
+
+    for (Index = 0; Parameters != NULL && Index < Parameters->cBuffers; Index++)
+    {
+        const BCryptBuffer *Buffer = &Parameters->pBuffers[Index];
+
+        if (Buffer->cbBuffer != 0 && Buffer->pvBuffer == NULL)
+            return STATUS_INVALID_PARAMETER;
+        switch (Buffer->BufferType)
+        {
+            case KDF_HASH_ALGORITHM:
+                HashAlgorithm = KsecKdfHashFromBuffer(Buffer);
+                if (HashAlgorithm == NULL)
+                    return STATUS_NOT_SUPPORTED;
+                break;
+            case KDF_SECRET_PREPEND:
+                Prepend = Buffer;
+                break;
+            case KDF_SECRET_APPEND:
+                Append = Buffer;
+                break;
+            case KDF_HMAC_KEY:
+                HmacKey = Buffer;
+                break;
+            default:
+                return STATUS_INVALID_PARAMETER;
+        }
+    }
+
+    DigestSize = (ULONG)SymCryptHashResultSize(HashAlgorithm);
+    ASSERT(DigestSize <= sizeof(Digest));
+    *ResultSize = DigestSize;
+    if (Output == NULL)
+        return STATUS_SUCCESS;
+    if (Hmac && HmacKey == NULL && !(Flags & KDF_USE_SECRET_AS_HMAC_KEY_FLAG))
+        return STATUS_INVALID_PARAMETER;
+
+    if (Hmac)
+    {
+        MacKey = KsecBcryptAllocate(sizeof(*MacKey));
+        MacState = KsecBcryptAllocate(sizeof(*MacState));
+        if (MacKey == NULL || MacState == NULL)
+        {
+            KsecBcryptFree(MacKey);
+            KsecBcryptFree(MacState);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        if (Flags & KDF_USE_SECRET_AS_HMAC_KEY_FLAG)
+            Error = SymCryptHmacExpandKey(HashAlgorithm, MacKey, Secret->Value, Secret->Length);
+        else
+            Error = SymCryptHmacExpandKey(HashAlgorithm, MacKey, HmacKey->pvBuffer, HmacKey->cbBuffer);
+        if (Error == SYMCRYPT_NO_ERROR)
+        {
+            SymCryptHmacInit(MacState, MacKey);
+            if (Prepend != NULL)
+                SymCryptHmacAppend(MacState, Prepend->pvBuffer, Prepend->cbBuffer);
+            SymCryptHmacAppend(MacState, Secret->Value, Secret->Length);
+            if (Append != NULL)
+                SymCryptHmacAppend(MacState, Append->pvBuffer, Append->cbBuffer);
+            SymCryptHmacResult(MacState, Digest);
+        }
+        RtlSecureZeroMemory(MacKey, sizeof(*MacKey));
+        RtlSecureZeroMemory(MacState, sizeof(*MacState));
+        KsecBcryptFree(MacKey);
+        KsecBcryptFree(MacState);
+        if (Error != SYMCRYPT_NO_ERROR)
+            return STATUS_INVALID_PARAMETER;
+    }
+    else
+    {
+        HashState = KsecBcryptAllocate(sizeof(*HashState));
+        if (HashState == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        SymCryptHashInit(HashAlgorithm, HashState);
+        if (Prepend != NULL)
+            SymCryptHashAppend(HashAlgorithm, HashState, Prepend->pvBuffer, Prepend->cbBuffer);
+        SymCryptHashAppend(HashAlgorithm, HashState, Secret->Value, Secret->Length);
+        if (Append != NULL)
+            SymCryptHashAppend(HashAlgorithm, HashState, Append->pvBuffer, Append->cbBuffer);
+        SymCryptHashResult(HashAlgorithm, HashState, Digest, DigestSize);
+        RtlSecureZeroMemory(HashState, sizeof(*HashState));
+        KsecBcryptFree(HashState);
+    }
+
+    if (OutputSize < DigestSize)
+        DigestSize = OutputSize;
+    RtlCopyMemory(Output, Digest, DigestSize);
+    RtlSecureZeroMemory(Digest, sizeof(Digest));
+    *ResultSize = DigestSize;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+WINAPI
+BCryptDestroySecret(
+    BCRYPT_SECRET_HANDLE SecretHandle)
+{
+    KSEC_BCRYPT_SECRET *Secret = KsecGetSecret(SecretHandle);
+
+    if (Secret == NULL)
+        return STATUS_INVALID_HANDLE;
+    KsecDestroyObject(&Secret->Header, sizeof(*Secret));
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -1749,7 +2263,7 @@ WINAPI
 BCryptDestroyKey(
     BCRYPT_KEY_HANDLE Handle)
 {
-    KSEC_BCRYPT_KEY *Key = KsecGetKey(Handle);
+    KSEC_BCRYPT_KEY *Key = KsecGetAnyKey(Handle);
 
     if (Key == NULL)
         return STATUS_INVALID_HANDLE;
