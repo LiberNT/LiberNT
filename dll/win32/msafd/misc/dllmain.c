@@ -654,6 +654,9 @@ TranslateNtStatusError(NTSTATUS Status)
        case STATUS_CONNECTION_ABORTED:
           return WSAECONNABORTED;
 
+       case STATUS_CONNECTION_ACTIVE:
+          return WSAEISCONN;
+
        case STATUS_NETWORK_UNREACHABLE:
           return WSAENETUNREACH;
 
@@ -2521,6 +2524,12 @@ Leave:
                 return SOCKET_ERROR;
             }
         }
+    }
+
+    if (Status == STATUS_ADDRESS_ALREADY_ASSOCIATED)
+    {
+        if (lpErrno) *lpErrno = WSAEALREADY;
+        return SOCKET_ERROR;
     }
 
     return MsafdReturnWithErrno(Status, lpErrno, 0, NULL);

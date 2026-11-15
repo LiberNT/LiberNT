@@ -710,11 +710,12 @@ AfdStreamSocketConnect(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     switch(FCB->SharedData.State)
     {
     case SOCKET_STATE_CONNECTED:
-        Status = STATUS_SUCCESS;
+        Status = STATUS_CONNECTION_ACTIVE;
         break;
 
     case SOCKET_STATE_CONNECTING:
-        return LeaveIrpUntilLater( FCB, Irp, FUNCTION_CONNECT );
+        Status = STATUS_ADDRESS_ALREADY_ASSOCIATED;
+        break;
 
     case SOCKET_STATE_CREATED:
         if (FCB->LocalAddress)
