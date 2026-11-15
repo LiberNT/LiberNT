@@ -4,6 +4,7 @@ PROJECT(ApiTests)
 include_directories(include)
 
 add_subdirectory(acpi)
+add_subdirectory(adsnt)
 add_subdirectory(advapi32)
 add_subdirectory(advpack)
 add_subdirectory(afd)

@@ -96,6 +96,7 @@ RegisterDlls = Wow64RegisterDlls
 
 [OleControlDlls]
 11,,activeds.dll,1
+11,,adsnt.dll,1
 11,,atl.dll,1
 11,,actxprxy.dll,1
 11,,acppage.dll,1

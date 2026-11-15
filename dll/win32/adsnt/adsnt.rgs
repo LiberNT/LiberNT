@@ -1,0 +1,31 @@
+HKCR
+{
+    NoRemove CLSID
+    {
+        ForceRemove '{250E91A0-0367-11CF-ABC4-02608C9E7553}' = s 'WinNT Namespace Object'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
+            ProgID = s 'WinNTNamespace'
+        }
+    }
+    ForceRemove WinNTNamespace
+    {
+        Clsid = s '{250E91A0-0367-11CF-ABC4-02608C9E7553}'
+    }
+}
+HKLM
+{
+    NoRemove Software
+    {
+        NoRemove Microsoft
+        {
+            NoRemove ADs
+            {
+                NoRemove Providers
+                {
+                    ForceRemove WinNT = s 'WinNTNamespace'
+                }
+            }
+        }
+    }
+}
