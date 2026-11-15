@@ -224,7 +224,8 @@ RemoveTree(
                                     L"linkA.txt", L"sym.txt", L"symA.txt", L"attr.txt", L"data.txt",
                                     L"hard.txt", L"again.txt", L"target.txt", L"fresh.txt", L"tree\\inner.txt",
                                     L"full\\a.txt", L"full\\b.txt", L"full\\c.txt", L"outside.txt",
-                                    L"Norm.txt", L"norm2.txt", L"Renamed.txt", L"norm3.txt", L"streams.txt" };
+                                    L"Norm.txt", L"norm2.txt", L"Renamed.txt", L"norm3.txt", L"streams.txt",
+                                    L"image.dll", L"replacement.dll" };
     static const PCWSTR Dirs[] = { L"sub", L"subA", L"newdir", L"newdirA", L"tree", L"full" };
     WCHAR Path[MAX_PATH];
     CHAR PathA[MAX_PATH];
@@ -994,6 +995,75 @@ TestTransactedDirectoryRemoval(
 
 static
 VOID
+TestTransactedDeleteOfMappedImage(
+    _In_ PTX_DIR Dir)
+{
+    WCHAR System[MAX_PATH], Image[MAX_PATH], Fresh[MAX_PATH], Replacement[MAX_PATH];
+    CHAR Scratch[MAX_PATH];
+    HANDLE Transaction, File, Mapping, Writer;
+    PVOID View;
+
+    PathOf(Dir, L"image.dll", Image, Scratch);
+    PathOf(Dir, L"fresh.txt", Fresh, Scratch);
+    PathOf(Dir, L"replacement.dll", Replacement, Scratch);
+    if (!GetSystemDirectoryW(System, MAX_PATH) || FAILED(StringCchCatW(System, MAX_PATH, L"\\version.dll")) ||
+        !CopyFileW(System, Image, FALSE) || !CopyFileW(System, Replacement, FALSE))
+    {
+        skip("could not copy an image to map (%lu)\n", GetLastError());
+        return;
+    }
+
+    File = CreateFileW(Image, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                       OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "CreateFile(%S) failed with %lu\n", Image, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Mapping = CreateFileMappingW(File, NULL, PAGE_READONLY | SEC_IMAGE, 0, 0, NULL);
+    ok(Mapping != NULL, "CreateFileMapping(SEC_IMAGE) failed with %lu\n", GetLastError());
+    CloseHandle(File);
+    if (!Mapping)
+        return;
+    View = MapViewOfFile(Mapping, FILE_MAP_READ, 0, 0, 0);
+    ok(View != NULL, "MapViewOfFile failed with %lu\n", GetLastError());
+
+    SetLastError(0xdeadbeef);
+    ok(!DeleteFileW(Image), "DeleteFileW deleted a mapped image\n");
+    ok(GetLastError() == ERROR_ACCESS_DENIED, "DeleteFileW of a mapped image: error %lu\n", GetLastError());
+
+    /* The transaction is told at once, and what it did besides still commits */
+    Transaction = NewTransaction();
+    if (Transaction != INVALID_HANDLE_VALUE)
+    {
+        Writer = pCreateFileTransactedW(Fresh, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL, Transaction, NULL, NULL);
+        ok(Writer != INVALID_HANDLE_VALUE, "CreateFileTransactedW failed with %lu\n", GetLastError());
+        if (Writer != INVALID_HANDLE_VALUE)
+        {
+            ok(WriteThrough(Writer, "kept"), "transacted write failed with %lu\n", GetLastError());
+            CloseHandle(Writer);
+        }
+        SetLastError(0xdeadbeef);
+        ok(!pDeleteFileTransactedW(Image, Transaction), "DeleteFileTransactedW deleted a mapped image\n");
+        ok(GetLastError() == ERROR_ACCESS_DENIED, "DeleteFileTransactedW of a mapped image: error %lu\n", GetLastError());
+        SetLastError(0xdeadbeef);
+        ok(!pMoveFileTransactedW(Replacement, Image, NULL, NULL, MOVEFILE_REPLACE_EXISTING, Transaction),
+           "MoveFileTransactedW replaced a mapped image\n");
+        ok(GetLastError() == ERROR_ACCESS_DENIED, "MoveFileTransactedW over a mapped image: error %lu\n", GetLastError());
+        ok(pCommitTransaction(Transaction), "CommitTransaction failed with %lu\n", GetLastError());
+        CloseHandle(Transaction);
+        ok(ReadsBack(Fresh, "kept"), "the commit lost the file created beside the refused delete\n");
+        ok(Exists(Image) && Exists(Replacement), "the refused delete or replacement was applied at commit\n");
+    }
+
+    if (View)
+        UnmapViewOfFile(View);
+    CloseHandle(Mapping);
+    ok(DeleteFileW(Image), "DeleteFileW after unmapping failed with %lu\n", GetLastError());
+    DeleteFileW(Replacement);
+    DeleteFileW(Fresh);
+}
+
+static
+VOID
 CheckNormalizedName(
     _In_ HANDLE File,
     _In_ PCWSTR Directory,
@@ -1446,6 +1516,7 @@ TestVolume(
         TestSupportedVolume(Dir);
         TestSupportedVolumeData(Dir);
         TestTransactedDirectoryRemoval(Dir);
+        TestTransactedDeleteOfMappedImage(Dir);
         TestTransactedNormalizedName(Dir);
         TestTransactedNamedStreams(Dir);
     }

@@ -2155,6 +2155,40 @@ NtfsTxfStreamHasWriters(_In_ PVolumeContextBlock VolCB,
     return Writers;
 }
 
+/* A file mapped as an image, or as data by a user, cannot be deleted; a transaction learns it when it asks, not at commit */
+static
+BOOLEAN
+NtfsTxfSectionKeepsFile(_In_ PVolumeContextBlock VolCB,
+                        _In_ ULONGLONG FileReference)
+{
+    PLIST_ENTRY Bucket = NtfsStreamHashBucket(VolCB, FileReference);
+    PStreamContextBlock DataStream = NULL;
+    PLIST_ENTRY Entry;
+    BOOLEAN Kept;
+
+    ExAcquireFastMutex(&VolCB->StreamListMutex);
+    for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
+    {
+        PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
+
+        if ((StreamCB->FileReference & NTFS_TXF_RECORD_MASK) == (FileReference & NTFS_TXF_RECORD_MASK) &&
+            StreamCB->RequestedType == TypeData && !StreamCB->RequestedStream.Length)
+        {
+            DataStream = StreamCB;
+            DataStream->ReferenceCount++;
+            break;
+        }
+    }
+    ExReleaseFastMutex(&VolCB->StreamListMutex);
+    if (!DataStream)
+        return FALSE;
+
+    Kept = !MmFlushImageSection(&DataStream->SectionObjectPointers, MmFlushForDelete) ||
+           !MmCanFileBeTruncated(&DataStream->SectionObjectPointers, NULL);
+    NtfsDereferenceStreamContext(VolCB, DataStream);
+    return Kept;
+}
+
 /* CREATE *********************************************************************/
 
 VOID
@@ -2949,6 +2983,7 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
     NtfsFileBasicInformation Basic;
     PNTFS_TXF_CHANGE Change;
     UNICODE_STRING Name, Stream;
+    ULONGLONG Committed;
     NTSTATUS Status;
     BOOLEAN Ending;
 
@@ -2996,6 +3031,9 @@ NtfsTxfSetDisposition(_In_ PVolumeContextBlock VolCB,
     if (!NT_SUCCESS(Status))
         return Status;
     if ((Basic.FileAttributes & FILE_ATTRIBUTE_READONLY) && !(Flags & FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE))
+        return STATUS_CANNOT_DELETE;
+    Committed = NtfsTxfCommittedReference(FileCB);
+    if (Committed && NtfsTxfSectionKeepsFile(VolCB, Committed))
         return STATUS_CANNOT_DELETE;
     return NtfsTxfRecordDelete(VolCB, FileCB);
 }
@@ -3082,6 +3120,8 @@ NtfsTxfRename(_In_ PVolumeContextBlock VolCB,
             ExReleaseFastMutex(&VolCB->TxfMutex);
             if (Locked)
                 Status = STATUS_SHARING_VIOLATION;
+            else if (TargetIdentity && NtfsTxfSectionKeepsFile(VolCB, TargetIdentity))
+                Status = STATUS_ACCESS_DENIED;
             else
                 Status = NtfsTxfRecord(Txf, NtfsTxfDeleted, &NewName, NULL, NULL,
                                        Staged ? 0 : Target.FileReference, TargetIdentity, FALSE, NULL);
