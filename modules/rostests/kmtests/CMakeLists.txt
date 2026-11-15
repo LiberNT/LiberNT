@@ -238,6 +238,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoPciDeviceReset.c
     ntos_io/IoPciExpressInterfaces.c
     ntos_io/IoPciEnumeration.c
+    ntos_io/IoPciBridgeWindow.c
     ntos_io/IoPciRom.c
     ntos_io/IoStackLimits.c
     ntos_io/IoVpb.c

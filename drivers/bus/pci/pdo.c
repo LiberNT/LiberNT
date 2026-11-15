@@ -2636,27 +2636,32 @@ PciPdoSetMemoryRequirement(
         return;
     }
 
+    /* The length picks the encoding; an alignment finer than its unit is rounded up, which only tightens it */
     Descriptor->Type = CmResourceTypeMemoryLarge;
-    if (Length <= CM_RESOURCE_MEMORY_LARGE_40_MAXLEN &&
-        (Length & 0xFF) == 0 && (Alignment & 0xFF) == 0)
+    if (Length <= CM_RESOURCE_MEMORY_LARGE_40_MAXLEN && (Length & 0xFF) == 0)
     {
+        Alignment = (Alignment + 0xFF) & ~0xFFULL;
         Descriptor->Flags |= CM_RESOURCE_MEMORY_LARGE_40;
         Descriptor->u.Memory40.Length40 = (ULONG)(Length >> 8);
         Descriptor->u.Memory40.Alignment40 = (ULONG)(Alignment >> 8);
         Descriptor->u.Memory40.MinimumAddress.QuadPart = Minimum;
         Descriptor->u.Memory40.MaximumAddress.QuadPart = Maximum;
+        ASSERT(((ULONGLONG)Descriptor->u.Memory40.Length40 << 8) == Length);
     }
-    else if (Length <= CM_RESOURCE_MEMORY_LARGE_48_MAXLEN &&
-             (Length & 0xFFFF) == 0 && (Alignment & 0xFFFF) == 0)
+    else if (Length <= CM_RESOURCE_MEMORY_LARGE_48_MAXLEN && (Length & 0xFFFF) == 0)
     {
+        Alignment = (Alignment + 0xFFFF) & ~0xFFFFULL;
         Descriptor->Flags |= CM_RESOURCE_MEMORY_LARGE_48;
         Descriptor->u.Memory48.Length48 = (ULONG)(Length >> 16);
         Descriptor->u.Memory48.Alignment48 = (ULONG)(Alignment >> 16);
         Descriptor->u.Memory48.MinimumAddress.QuadPart = Minimum;
         Descriptor->u.Memory48.MaximumAddress.QuadPart = Maximum;
+        ASSERT(((ULONGLONG)Descriptor->u.Memory48.Length48 << 16) == Length);
     }
     else
     {
+        ASSERT((Length & 0xFFFFFFFFULL) == 0);
+        Alignment = (Alignment + 0xFFFFFFFFULL) & ~0xFFFFFFFFULL;
         Descriptor->Flags |= CM_RESOURCE_MEMORY_LARGE_64;
         Descriptor->u.Memory64.Length64 = (ULONG)(Length >> 32);
         Descriptor->u.Memory64.Alignment64 = (ULONG)(Alignment >> 32);
