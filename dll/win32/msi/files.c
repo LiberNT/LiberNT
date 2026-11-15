@@ -556,13 +556,10 @@ WCHAR *msi_resolve_file_source( MSIPACKAGE *package, MSIFILE *file )
     if (file->IsCompressed) return NULL;
 
     p = msi_resolve_source_folder( package, file->Component->Directory, NULL );
-    path = msi_build_directory_name( 2, p, file->ShortName );
-
-    if (file->LongName && msi_get_file_attributes( package, path ) == INVALID_FILE_ATTRIBUTES)
-    {
-        free( path );
+    if (file->LongName && !(package->WordCount & msidbSumInfoSourceTypeSFN))
         path = msi_build_directory_name( 2, p, file->LongName );
-    }
+    else
+        path = msi_build_directory_name( 2, p, file->ShortName );
     free( p );
     TRACE("file %s source resolves to %s\n", debugstr_w(file->File), debugstr_w(path));
     return path;
