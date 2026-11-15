@@ -400,12 +400,15 @@ MmMapLockedPagesSpecifyCache(
     if (BYTE_OFFSET(BaseAddress) != 0)
         ExRaiseStatus(STATUS_INVALID_ADDRESS);
 
-    Base = (ULONG64)(ULONG_PTR)BaseAddress;
-    Status = MiMapFramesUser(MiSpaceOfProcess(PsGetCurrentProcess()), (const MI_FRAME_NUMBER *)Pages, Count,
-                             Protection,
-                             (Cache == MiCacheNone) ? MI_LEAF_NOCACHE
-                                 : ((Cache == MiCacheWriteCombined) ? MI_LEAF_WRITECOMBINE : 0),
-                             TRUE, &Base);
+    do
+    {
+        Base = (ULONG64)(ULONG_PTR)BaseAddress;
+        Status = MiMapFramesUser(MiSpaceOfProcess(PsGetCurrentProcess()), (const MI_FRAME_NUMBER *)Pages, Count,
+                                 Protection,
+                                 (Cache == MiCacheNone) ? MI_LEAF_NOCACHE
+                                     : ((Cache == MiCacheWriteCombined) ? MI_LEAF_WRITECOMBINE : 0),
+                                 TRUE, &Base);
+    } while (Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &Attempts)));
     if (!NT_SUCCESS(Status))
         ExRaiseStatus(Status);
 

@@ -1,0 +1,145 @@
+/*
+ * PROJECT:     LiberNT host-native tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     User-mode MDL mapping under a transient page shortage
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <assert.h>
+#include <setjmp.h>
+#include <stdint.h>
+#include <string.h>
+
+typedef uint32_t ULONG;
+typedef uint64_t ULONG64;
+typedef uintptr_t ULONG_PTR, PFN_NUMBER, MI_FRAME_NUMBER;
+typedef PFN_NUMBER *PPFN_NUMBER;
+typedef int32_t NTSTATUS;
+typedef void *PVOID;
+typedef int KPROCESSOR_MODE, MEMORY_CACHING_TYPE, MI_CACHE_TYPE;
+typedef struct
+{
+    ULONG ByteCount, ByteOffset, MdlFlags;
+    PVOID MappedSystemVa;
+    PFN_NUMBER Pages[4];
+} MDL, *PMDL;
+
+#define _In_
+#define _In_opt_
+#define NTAPI
+#define TRUE 1
+#define FALSE 0
+#define KernelMode 0
+#define UserMode 1
+#define MmCached 1
+#define MmMaximumCacheType 6
+#define MdlMappingNoWrite 0x80000000
+#define MI_PROT_READONLY 1
+#define MI_PROT_READWRITE 2
+#define MI_LEAF_NOCACHE 8
+#define MI_LEAF_WRITECOMBINE 16
+#define MiCacheNone 1
+#define MiCacheWriteCombined 2
+#define MDL_MAPPED_TO_SYSTEM_VA 0x1
+#define MDL_PAGES_LOCKED 0x2
+#define MDL_SOURCE_IS_NONPAGED_POOL 0x4
+#define MDL_PARTIAL 0x10
+#define MDL_PARTIAL_HAS_BEEN_MAPPED 0x20
+#define MDL_IO_SPACE 0x800
+#define MDL_MAPPING_CAN_FAIL 0x2000
+#define NO_MORE_SYSTEM_PTES 0x3F
+#define STATUS_SUCCESS ((NTSTATUS)0)
+#define STATUS_NO_MEMORY ((NTSTATUS)0xC0000017)
+#define STATUS_INVALID_ADDRESS ((NTSTATUS)0xC0000141)
+#define NT_SUCCESS(Status) ((Status) >= 0)
+#define BYTE_OFFSET(Va) ((ULONG)((ULONG_PTR)(Va) & 0xFFF))
+#define ASSERT assert
+
+static int MiSystem, UserSpace, Shortage, MapCalls, WaitCalls;
+static NTSTATUS Raised;
+static jmp_buf RaiseTarget;
+
+static PPFN_NUMBER MmGetMdlPfnArray(PMDL Mdl) { return Mdl->Pages; }
+static ULONG MiMdlPages(PMDL Mdl) { return (Mdl->ByteOffset + Mdl->ByteCount + 0xFFF) >> 12; }
+static MI_CACHE_TYPE MiCacheTypeFromNt(MEMORY_CACHING_TYPE Type) { return Type; }
+static PVOID PsGetCurrentProcess(void) { return &UserSpace; }
+static PVOID MiSpaceOfProcess(PVOID Process) { return Process; }
+static void KeBugCheckEx(ULONG Code, ULONG_PTR A, ULONG_PTR B, ULONG_PTR C, ULONG_PTR D)
+{
+    (void)Code; (void)A; (void)B; (void)C; (void)D;
+    assert(!"bugcheck");
+}
+static void ExRaiseStatus(NTSTATUS Status)
+{
+    Raised = Status;
+    longjmp(RaiseTarget, 1);
+}
+static NTSTATUS MiMapFrames(PVOID Space, const MI_FRAME_NUMBER *Frames, ULONG Count, MI_CACHE_TYPE Cache, ULONG Protection,
+                            ULONG64 *Base)
+{
+    (void)Space; (void)Frames; (void)Count; (void)Cache; (void)Protection;
+    *Base = 0xFFFF800000000000ULL;
+    return STATUS_SUCCESS;
+}
+static NTSTATUS MiMapFramesUser(PVOID Space, const MI_FRAME_NUMBER *Frames, ULONG Count, ULONG Protection, ULONG LeafFlags,
+                                int AnyAddress, ULONG64 *Base)
+{
+    (void)Frames; (void)Count; (void)Protection; (void)LeafFlags; (void)AnyAddress;
+    assert(Space == &UserSpace);
+    MapCalls++;
+    if (Shortage > 0)
+    {
+        Shortage--;
+        return STATUS_NO_MEMORY;
+    }
+    *Base = 0x10000000ULL;
+    return STATUS_SUCCESS;
+}
+static NTSTATUS MiWaitForMemory(NTSTATUS Status, ULONG *Attempts)
+{
+    WaitCalls++;
+    if (Status != STATUS_NO_MEMORY)
+        return STATUS_SUCCESS;
+    return ++*Attempts > 64 ? STATUS_NO_MEMORY : STATUS_SUCCESS;
+}
+
+@NTMDL_FUNCTION@
+
+static PVOID
+MapUser(PMDL Mdl)
+{
+    PVOID Va;
+
+    Raised = STATUS_SUCCESS;
+    if (setjmp(RaiseTarget))
+        return NULL;
+    Va = MmMapLockedPagesSpecifyCache(Mdl, UserMode, MmCached, NULL, FALSE, 0);
+    return Va;
+}
+
+int
+main(void)
+{
+    MDL Mdl;
+    PVOID Va;
+
+    memset(&Mdl, 0, sizeof(Mdl));
+    Mdl.ByteCount = 2 * 4096;
+    Mdl.ByteOffset = 0x10;
+    Mdl.MdlFlags = MDL_PAGES_LOCKED;
+    Mdl.Pages[0] = 7;
+    Mdl.Pages[1] = 8;
+
+    Shortage = 2;
+    Va = MapUser(&Mdl);
+    if (Va != (PVOID)(ULONG_PTR)(0x10000000ULL + 0x10) || Raised != STATUS_SUCCESS || MapCalls != 3 || WaitCalls != 2)
+        return 1;
+
+    Shortage = 1000;
+    MapCalls = WaitCalls = 0;
+    Va = MapUser(&Mdl);
+    if (Va != NULL || Raised != STATUS_NO_MEMORY || MapCalls != 65 || WaitCalls != 65)
+        return 2;
+
+    return 0;
+}
