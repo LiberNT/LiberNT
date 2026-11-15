@@ -21,3 +21,10 @@ foreach(LAYOUT default nojournal nocsum ext3 ext2 bs1k)
              COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/stress.sh $<TARGET_FILE:ext4_core> ${LAYOUT})
     set_tests_properties(ext4.core.${LAYOUT} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endforeach()
+
+# A power cut at many points of the same run: recovery must leave a volume e2fsck accepts
+foreach(LAYOUT default bs1k smalljournal)
+    add_test(NAME ext4.powercut.${LAYOUT}
+             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/powercut.sh $<TARGET_FILE:ext4_core> ${LAYOUT})
+    set_tests_properties(ext4.powercut.${LAYOUT} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+endforeach()

@@ -261,6 +261,8 @@ Ext4ApplyEaList(
     }
 
     /* The mode attribute is how a file becomes a symbolic link, a device node, a fifo or a socket */
+    /* FIXME: a link gets its target with the write that follows, in another transaction; a crash between the two
+     * leaves an empty link */
     if (Error == EOK && NewType != 0)
         Error = E4SetType(&Vcb->Core, Ccb->ParentInode, Ccb->Name, Ccb->NameLength, Fcb->Inode, NewType | (Attr.Mode & 07777));
     if (Error == EOK && Mask != 0) Error = E4SetAttr(&Vcb->Core, Fcb->Inode, Mask, &Attr);

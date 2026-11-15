@@ -11,6 +11,10 @@
 #include <string.h>
 
 #define E4_TRUNCATE_STEP    (16ULL * 1024 * 1024)
+
+static int E4JournalSuper(E4_VOLUME *Volume);
+static bool E4OrphansAreReleasable(E4_VOLUME *Volume);
+static int E4OrphanCleanup(E4_VOLUME *Volume);
 #define E4_FAST_LINK_MAX    (sizeof(((struct ext4_inode *)0)->blocks))
 
 void
@@ -342,8 +346,11 @@ E4Mount(
         }
     }
 
-    /* TODO: orphan inodes left by a crash are not released; such a volume is mounted read-only */
-    if ((ext4_get32(Sb, last_orphan) != 0) || ext4_sb_feature_ro_com(Sb, EXT4_FRO_COM_ORPHAN_PRESENT))
+    /* TODO: the orphan file a crash of another system leaves behind is not read; such a volume is mounted
+     * read-only */
+    if (ext4_sb_feature_ro_com(Sb, EXT4_FRO_COM_ORPHAN_PRESENT))
+        Volume->Fs.read_only = true;
+    else if ((ext4_get32(Sb, last_orphan) != 0) && !E4OrphansAreReleasable(Volume))
         Volume->Fs.read_only = true;
 
     Volume->ReadOnly = Volume->Fs.read_only;
@@ -393,6 +400,16 @@ E4Mount(
     Volume->Mounted = true;
     if (Volume->Journaled)
         E4StageStart(Volume);
+
+    if (!Volume->ReadOnly && (ext4_get32(Sb, last_orphan) != 0))
+    {
+        Result = E4OrphanCleanup(Volume);
+        if (Result != EOK)
+        {
+            E4Unmount(Volume);
+            return Result;
+        }
+    }
     return EOK;
 }
 
@@ -497,6 +514,7 @@ E4SetLabel(
     uint32_t Length)
 {
     struct ext4_sblock *Sb = &Volume->Fs.sb;
+    int Result;
 
     if (!Volume->Mounted)
         return ENXIO;
@@ -506,7 +524,15 @@ E4SetLabel(
         return EINVAL;
     memset(Sb->volume_name, 0, sizeof(Sb->volume_name));
     memcpy(Sb->volume_name, Label, Length);
-    return ext4_sb_write(&Volume->Device, Sb);
+
+    /* The journal may hold older copies of the superblock: the newest one has to be the one with the label */
+    Result = E4Begin(Volume);
+    if (Result != EOK)
+        return Result;
+    Result = E4End(Volume, E4JournalSuper(Volume));
+    if (Result != EOK)
+        return Result;
+    return E4Sync(Volume);
 }
 
 int
@@ -1078,6 +1104,142 @@ E4Link(
     return E4End(Volume, Result);
 }
 
+/* Puts the superblock in the running transaction: for the fields that must change together with other blocks */
+static
+int
+E4JournalSuper(
+    E4_VOLUME *Volume)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    struct ext4_block Block;
+    int Result;
+
+    ext4_assert(Volume->TransDepth != 0);
+    if (!Volume->Journaled)
+        return EOK;
+
+    Result = ext4_trans_block_get(&Volume->Device, &Block, EXT4_SUPERBLOCK_OFFSET / Volume->BlockSize);
+    if (Result != EOK)
+        return Result;
+    ext4_sb_set_csum(Sb);
+    memcpy(Block.data + EXT4_SUPERBLOCK_OFFSET % Volume->BlockSize, Sb, EXT4_SUPERBLOCK_SIZE);
+    ext4_trans_set_block_dirty(Block.buf);
+    return ext4_block_set(&Volume->Device, &Block);
+}
+
+/* An inode without a name is on the orphan list until its blocks and the inode itself are released: the
+ * superblock names the first one, and each one names the next where it will later store its deletion time.
+ * Whoever mounts the volume after a crash releases the inodes it finds there. */
+static
+int
+E4OrphanAdd(
+    E4_VOLUME *Volume,
+    struct ext4_inode_ref *Ref)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+
+    ext4_assert(ext4_inode_get_links_cnt(Ref->inode) == 0);
+    ext4_assert(ext4_get32(Sb, last_orphan) != Ref->index);
+    ext4_inode_set_del_time(Ref->inode, ext4_get32(Sb, last_orphan));
+    ext4_set32(Sb, last_orphan, Ref->index);
+    Ref->dirty = true;
+    return E4JournalSuper(Volume);
+}
+
+static
+int
+E4OrphanRemove(
+    E4_VOLUME *Volume,
+    struct ext4_inode_ref *Ref)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    uint32_t Count = ext4_get32(Sb, inodes_count);
+    uint32_t Next = ext4_inode_get_del_time(Ref->inode);
+    uint32_t Cursor = ext4_get32(Sb, last_orphan);
+    uint32_t Guard;
+
+    if (Cursor == Ref->index)
+    {
+        ext4_set32(Sb, last_orphan, Next);
+        return E4JournalSuper(Volume);
+    }
+
+    /* An inode that is not on the list lost its last name before the list was kept */
+    for (Guard = 0; (Cursor != 0) && (Cursor <= Count) && (Guard < Count); Guard++)
+    {
+        struct ext4_inode_ref Previous;
+        uint32_t Following;
+        int Result = ext4_fs_get_inode_ref(&Volume->Fs, Cursor, &Previous);
+
+        if (Result != EOK)
+            return Result;
+        Following = ext4_inode_get_del_time(Previous.inode);
+        if (Following == Ref->index)
+        {
+            ext4_inode_set_del_time(Previous.inode, Next);
+            Previous.dirty = true;
+            return ext4_fs_put_inode_ref(&Previous);
+        }
+        Result = ext4_fs_put_inode_ref(&Previous);
+        if (Result != EOK)
+            return Result;
+        Cursor = Following;
+    }
+    return EOK;
+}
+
+/* True when every inode on the orphan list is one this driver can release: an inode without a name */
+static
+bool
+E4OrphansAreReleasable(
+    E4_VOLUME *Volume)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    uint32_t Count = ext4_get32(Sb, inodes_count);
+    uint32_t Cursor = ext4_get32(Sb, last_orphan);
+    uint32_t Guard;
+
+    for (Guard = 0; Cursor != 0; Guard++)
+    {
+        struct ext4_inode_ref Ref;
+        uint16_t Links;
+
+        if ((Cursor > Count) || (Cursor < EXT4_GOOD_OLD_FIRST_INO) || (Guard == Count))
+            return false;
+        if (ext4_fs_get_inode_ref(&Volume->Fs, Cursor, &Ref) != EOK)
+            return false;
+        Links = ext4_inode_get_links_cnt(Ref.inode);
+        Cursor = ext4_inode_get_del_time(Ref.inode);
+        ext4_fs_put_inode_ref(&Ref);
+        /* TODO: an inode with names is a truncation that a crash interrupted; the volume is mounted read-only */
+        if (Links != 0)
+            return false;
+    }
+    return true;
+}
+
+static
+int
+E4OrphanCleanup(
+    E4_VOLUME *Volume)
+{
+    struct ext4_sblock *Sb = &Volume->Fs.sb;
+    uint32_t Count = ext4_get32(Sb, inodes_count);
+    uint32_t Guard;
+
+    for (Guard = 0; (ext4_get32(Sb, last_orphan) != 0) && (Guard <= Count); Guard++)
+    {
+        uint32_t Inode = ext4_get32(Sb, last_orphan);
+        int Result = E4Release(Volume, Inode);
+
+        if (Result != EOK)
+            return Result;
+        if (ext4_get32(Sb, last_orphan) == Inode)
+            return EIO;
+    }
+    return EOK;
+}
+
 /* Takes the name out of the directory and drops the link it stood for */
 static
 int
@@ -1120,7 +1282,7 @@ E4DropEntry(
     E4Touch(Volume, Child, E4_SET_CHANGE);
     E4Touch(Volume, Parent, E4_SET_MODIFY | E4_SET_CHANGE);
     *LastLink = (ext4_inode_get_links_cnt(Child->inode) == 0);
-    return EOK;
+    return *LastLink ? E4OrphanAdd(Volume, Child) : EOK;
 }
 
 int
@@ -1509,6 +1671,12 @@ E4Release(
     if (Result != EOK)
         return E4End(Volume, Result);
 
+    Result = E4OrphanRemove(Volume, &Ref);
+    if (Result != EOK)
+    {
+        ext4_fs_put_inode_ref(&Ref);
+        return E4End(Volume, Result);
+    }
     E4Now(Volume, &Now);
     ext4_inode_set_del_time(Ref.inode, (uint32_t)Now.Seconds);
     Result = ext4_fs_free_inode(&Ref);
