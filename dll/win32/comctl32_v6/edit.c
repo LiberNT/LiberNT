@@ -5116,6 +5116,9 @@ static LRESULT CALLBACK EDIT_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
         GetCaretPos(&pt);
         EDIT_UpdateImmCompositionWindow(es, pt.x, pt.y);
         EDIT_UpdateImmCompositionFont(es);
+#ifdef __REACTOS__
+        result = DefWindowProcW(hwnd, msg, wParam, lParam);
+#endif
         break;
 
     case WM_IME_COMPOSITION:
