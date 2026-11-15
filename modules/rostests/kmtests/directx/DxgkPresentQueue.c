@@ -640,6 +640,18 @@ TestVBlankWaitResult(VOID)
     ok_eq_hex(DxgkPresentVBlankWaitResult(FALSE), STATUS_TIMEOUT);
 }
 
+static VOID
+TestSeededPathCount(VOID)
+{
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 1, 1), 1UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 8, 8), 1UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 2, 8), 1UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(FALSE, 1, 1), 0UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(FALSE, 8, 8), 0UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 0, 8), 0UL);
+    ok_eq_ulong(DxgkVidPnCoreSeededPathCount(TRUE, 8, 0), 0UL);
+}
+
 START_TEST(DxgkPresentQueue)
 {
     PVOID DeviceA = (PVOID)(ULONG_PTR)0x1000;
@@ -654,6 +666,7 @@ START_TEST(DxgkPresentQueue)
     ULONG Index;
 
     TestVBlankWaitResult();
+    TestSeededPathCount();
 
 #if (REACTOS_WDDM_TARGET_LEVEL >= 1200)
     DxgkPresentQueueTestRefreshTargets();

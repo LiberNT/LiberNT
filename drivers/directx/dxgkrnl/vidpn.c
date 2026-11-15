@@ -1855,11 +1855,12 @@ DxgkVidPnCreateForAdapter(
     ModePairCount = (NumSources < NumTargets) ? NumSources : NumTargets;
     if (ModePairCount > DXGKP_MAX_PATHS)
         ModePairCount = DXGKP_MAX_PATHS;
-    PathCount = SeedDefaultTopology ? ModePairCount : 0;
+    PathCount = DxgkVidPnCoreSeededPathCount(SeedDefaultTopology, NumSources, NumTargets);
+    ASSERT(PathCount <= ModePairCount);
 
     for (i = 0; i < ModePairCount; i++)
     {
-        if (SeedDefaultTopology)
+        if (i < PathCount)
             DxgkpPopulateDefaultPath(&VidPn->Paths[i], i, i);
         DxgkpPopulateDefaultModes(
             VidPn->SourceModeSets[i],

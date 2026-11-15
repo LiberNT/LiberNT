@@ -84,6 +84,20 @@ DxgkPresentCoreEvaluateScanoutRetirement(
     return STATUS_SUCCESS;
 }
 
+/* A display-only miniport starts before its children are known: its first output carries the desktop, the others get a path when a monitor is reported on them */
+FORCEINLINE
+ULONG
+DxgkVidPnCoreSeededPathCount(
+    _In_ BOOLEAN SeedDefaultTopology,
+    _In_ ULONG SourceCount,
+    _In_ ULONG TargetCount)
+{
+    if (!SeedDefaultTopology || SourceCount == 0 || TargetCount == 0)
+        return 0;
+
+    return 1;
+}
+
 /* WDK: DxgkDdiSetVidPnSourceAddress switches the mode and performs MMIO flips; any other flip is the DMA buffer DxgkDdiPresent built */
 FORCEINLINE
 BOOLEAN
