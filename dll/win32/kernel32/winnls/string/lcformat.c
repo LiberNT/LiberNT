@@ -815,6 +815,7 @@ static INT NLS_GetDateTimeFormatW(LCID lcid, DWORD dwFlags, DWORD dwKind,
         break;
 
       case 'm':
+        /* FIXME: dropped minute, second and marker fields remove separators differently from Windows 11 when the format quotes text */
         if (dwFlags & TIME_NOMINUTESORSECONDS)
         {
           cchWritten = lastFormatPos; /* Skip */
