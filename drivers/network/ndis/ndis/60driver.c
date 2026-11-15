@@ -1475,7 +1475,8 @@ Ndis6DispatchPnp(
             /* The bus stack owns the first pass. The miniport may then adjust
              * message-interrupt requirements while the adapter is halted. */
             Status = Ndis6ForwardPnpIrpAndWait(LowerDevice, Irp);
-            if (!NT_SUCCESS(Status))
+            /* A bus that leaves the request alone completes it with the STATUS_NOT_SUPPORTED it arrived with */
+            if (!NT_SUCCESS(Status) && Status != STATUS_NOT_SUPPORTED)
                 return Ndis6CompleteIrpPreserveInformation(Irp, Status);
 
             LowerInformation = Irp->IoStatus.Information;
@@ -1491,6 +1492,15 @@ Ndis6DispatchPnp(
                      * when the optional miniport filter declines the request. */
                     Irp->IoStatus.Information = LowerInformation;
                     DbgPrint("NDIS6: FilterResourceRequirements declined 0x%08lx\n", (ULONG)NdisStatus);
+                }
+                else
+                {
+                    if (Irp->IoStatus.Information == 0)
+                    {
+                        Irp->IoStatus.Information =
+                            (ULONG_PTR)Stack->Parameters.FilterResourceRequirements.IoResourceRequirementList;
+                    }
+                    Status = STATUS_SUCCESS;
                 }
             }
 

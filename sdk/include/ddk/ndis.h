@@ -8450,6 +8450,137 @@ NTAPI
 NdisMDeregisterScatterGatherDma(
   _In_ NDIS_HANDLE NdisMiniportDmaHandle);
 
+NDIS_STATUS
+NDISAPI
+NTAPI
+NdisMAllocateSharedMemoryAsyncEx(
+  _In_ NDIS_HANDLE MiniportDmaHandle,
+  _In_ ULONG Length,
+  _In_ BOOLEAN Cached,
+  _In_ PVOID Context);
+
+typedef enum _NDIS_MSIX_TABLE_CONFIG {
+  NdisMSIXTableConfigSetTableEntry,
+  NdisMSIXTableConfigMaskTableEntry,
+  NdisMSIXTableConfigUnmaskTableEntry,
+  NdisMSIXTableConfigMax
+} NDIS_MSIX_TABLE_OPERATION, *PNDIS_MSIX_TABLE_OPERATION;
+
+#define NDIS_MSIX_CONFIG_PARAMETERS_REVISION_1 1
+
+typedef struct _NDIS_MSIX_CONFIG_PARAMETERS {
+  NDIS_OBJECT_HEADER        Header;
+  NDIS_MSIX_TABLE_OPERATION ConfigOperation;
+  ULONG                     TableEntry;
+  ULONG                     MessageNumber;
+} NDIS_MSIX_CONFIG_PARAMETERS, *PNDIS_MSIX_CONFIG_PARAMETERS;
+
+#define NDIS_SIZEOF_MSIX_CONFIG_PARAMETERS_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_MSIX_CONFIG_PARAMETERS, MessageNumber)
+
+NDIS_STATUS
+NDISAPI
+NTAPI
+NdisMConfigMSIXTableEntry(
+  _In_ NDIS_HANDLE NdisMiniportHandle,
+  _In_ PNDIS_MSIX_CONFIG_PARAMETERS MSIXConfigParameters);
+
+DECLARE_HANDLE(NDIS_POLL_HANDLE);
+
+#define NDIS_ANY_NUMBER_OF_NBLS 0xFFFFFFFF
+
+typedef struct _NDIS_POLL_TRANSMIT_DATA {
+  ULONG           MaxNblsToComplete;
+  ULONG           Reserved1[3];
+  NET_BUFFER_LIST *CompletedNblChain;
+  ULONG           NumberOfCompletedNbls;
+  ULONG           NumberOfRemainingNbls;
+  ULONG           SendCompleteFlags;
+  ULONG           Reserved2;
+  PVOID           Reserved3[4];
+} NDIS_POLL_TRANSMIT_DATA;
+
+typedef struct _NDIS_POLL_RECEIVE_DATA {
+  ULONG           MaxNblsToIndicate;
+  ULONG           Reserved1[3];
+  NET_BUFFER_LIST *IndicatedNblChain;
+  ULONG           NumberOfIndicatedNbls;
+  ULONG           NumberOfRemainingNbls;
+  ULONG           Flags;
+  ULONG           Reserved2;
+  PVOID           Reserved3[4];
+} NDIS_POLL_RECEIVE_DATA;
+
+typedef struct _NDIS_POLL_DATA {
+  NDIS_OBJECT_HEADER      Header;
+  NDIS_POLL_TRANSMIT_DATA Transmit;
+  NDIS_POLL_RECEIVE_DATA  Receive;
+} NDIS_POLL_DATA;
+
+#define NDIS_POLL_DATA_REVISION_1 1
+#define NDIS_SIZEOF_NDIS_POLL_DATA_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_POLL_DATA, Receive)
+
+typedef VOID
+(NTAPI NDIS_POLL)(
+  _In_ PVOID Context,
+  _Inout_ NDIS_POLL_DATA *PollData);
+typedef NDIS_POLL *NDIS_POLL_HANDLER;
+
+typedef struct _NDIS_POLL_NOTIFICATION {
+  NDIS_OBJECT_HEADER Header;
+  BOOLEAN            Enabled;
+} NDIS_POLL_NOTIFICATION;
+
+#define NDIS_POLL_NOTIFICATION_REVISION_1 1
+#define NDIS_SIZEOF_NDIS_POLL_NOTIFICATION_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_POLL_NOTIFICATION, Enabled)
+
+typedef VOID
+(NTAPI NDIS_SET_POLL_NOTIFICATION)(
+  _In_ PVOID Context,
+  _Inout_ NDIS_POLL_NOTIFICATION *Notification);
+typedef NDIS_SET_POLL_NOTIFICATION *NDIS_SET_POLL_NOTIFICATION_HANDLER;
+
+typedef struct _NDIS_POLL_CHARACTERISTICS {
+  NDIS_OBJECT_HEADER                 Header;
+  NDIS_SET_POLL_NOTIFICATION_HANDLER SetPollNotificationHandler;
+  NDIS_POLL_HANDLER                  PollHandler;
+} NDIS_POLL_CHARACTERISTICS;
+
+#define NDIS_POLL_CHARACTERISTICS_REVISION_1 1
+#define NDIS_SIZEOF_NDIS_POLL_CHARACTERISTICS_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_POLL_CHARACTERISTICS, PollHandler)
+
+NDIS_STATUS
+NDISAPI
+NTAPI
+NdisRegisterPoll(
+  _In_ NDIS_HANDLE NdisHandle,
+  _In_opt_ PVOID Context,
+  _In_ const NDIS_POLL_CHARACTERISTICS *Characteristics,
+  _Out_ NDIS_POLL_HANDLE *PollHandle);
+
+VOID
+NDISAPI
+NTAPI
+NdisDeregisterPoll(
+  _In_ NDIS_POLL_HANDLE PollHandle);
+
+VOID
+NDISAPI
+NTAPI
+NdisSetPollAffinity(
+  _In_ NDIS_POLL_HANDLE PollHandle,
+  _In_ const PROCESSOR_NUMBER *PollAffinity);
+
+VOID
+NDISAPI
+NTAPI
+NdisRequestPoll(
+  _In_ NDIS_POLL_HANDLE PollHandle,
+  _Reserved_ PVOID Reserved);
+
 typedef struct _NDIS_MINIPORT_DRIVER_CHARACTERISTICS {
   NDIS_OBJECT_HEADER                       Header;
   UCHAR                                    MajorNdisVersion;

@@ -1570,6 +1570,76 @@ PciPdoEnableMsi(
     return STATUS_SUCCESS;
 }
 
+typedef struct _PCI_MSIX_ROUTE
+{
+    ULONG AddressLow;
+    ULONG AddressHigh;
+    ULONG Data;
+} PCI_MSIX_ROUTE, *PPCI_MSIX_ROUTE;
+
+static
+VOID
+PciPdoFreeMsixConfig(
+    _Inout_ PPCI_DEVICE Device)
+{
+    PVOID Table = InterlockedExchangePointer(&Device->MsixConfigTable, NULL);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (Table != NULL)
+        MmUnmapIoSpace(Table, Device->MsixTableSize * sizeof(PCI_MSIX_TABLE_ENTRY));
+    if (Device->MsixRoutes != NULL)
+        ExFreePoolWithTag(Device->MsixRoutes, TAG_PCI);
+    if (Device->MsixEntryMessages != NULL)
+        ExFreePoolWithTag(Device->MsixEntryMessages, TAG_PCI);
+    Device->MsixRoutes = NULL;
+    Device->MsixEntryMessages = NULL;
+    Device->MsixRouteCount = 0;
+}
+
+static
+VOID
+PciPdoRecordMsixRoutes(
+    _Inout_ PPCI_DEVICE Device,
+    _In_reads_(Count) PPCI_MSIX_TABLE_ENTRY Table,
+    _In_ ULONG Count)
+{
+    PPCI_MSIX_ROUTE Routes;
+    PULONG Messages;
+    ULONG i;
+
+    ASSERT(Device->MsixRoutes == NULL && Device->MsixEntryMessages == NULL && Device->MsixConfigTable == NULL);
+    ASSERT(Count != 0);
+
+    if (Device->MsixTableSize == 0 || Count > Device->MsixTableSize)
+        return;
+
+    Routes = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(*Routes), TAG_PCI);
+    Messages = ExAllocatePoolWithTag(NonPagedPool, Device->MsixTableSize * sizeof(*Messages), TAG_PCI);
+    if (Routes == NULL || Messages == NULL)
+    {
+        if (Routes != NULL)
+            ExFreePoolWithTag(Routes, TAG_PCI);
+        if (Messages != NULL)
+            ExFreePoolWithTag(Messages, TAG_PCI);
+        return;
+    }
+
+    /* TODO: Windows also points the table entries past the last message at message 0; here they stay masked */
+    RtlZeroMemory(Messages, Device->MsixTableSize * sizeof(*Messages));
+    for (i = 0; i < Count; i++)
+    {
+        Routes[i].AddressLow = READ_REGISTER_ULONG(&Table[i].MessageAddressLow);
+        Routes[i].AddressHigh = READ_REGISTER_ULONG(&Table[i].MessageAddressHigh);
+        Routes[i].Data = READ_REGISTER_ULONG(&Table[i].MessageData);
+        Messages[i] = i;
+    }
+
+    Device->MsixRoutes = Routes;
+    Device->MsixEntryMessages = Messages;
+    Device->MsixRouteCount = Count;
+}
+
 static
 NTSTATUS
 PciPdoEnableMsix(
@@ -1595,6 +1665,8 @@ PciPdoEnableMsix(
 
     if (!PciPdoGetMsixTableAddress(DeviceExtension, &TableAddress))
         return STATUS_INVALID_DEVICE_STATE;
+
+    PciPdoFreeMsixConfig(Device);
 
     ProgramCount = MessageCount;
     if (Device->MsixTableSize != 0 && ProgramCount > Device->MsixTableSize)
@@ -1758,6 +1830,7 @@ PciPdoEnableMsix(
     }
 
     Device->MsixControl = ReadControl;
+    PciPdoRecordMsixRoutes(Device, TableMapping, ProgramCount);
     Status = STATUS_SUCCESS;
 
 CleanupMapping:
@@ -1782,6 +1855,178 @@ CleanupDecode:
     }
 
     return Status;
+}
+
+static
+PPCI_DEVICE
+PciMsixConfigDevice(
+    _In_ PVOID Context)
+{
+    PDEVICE_OBJECT DeviceObject = Context;
+    PPDO_DEVICE_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+
+    ASSERT(DeviceExtension->PciDevice != NULL);
+    return DeviceExtension->PciDevice;
+}
+
+static
+PPCI_MSIX_TABLE_ENTRY
+PciMsixConfigEntry(
+    _In_ PVOID Context,
+    _In_ ULONG TableEntry)
+{
+    PPCI_DEVICE Device = PciMsixConfigDevice(Context);
+    PPCI_MSIX_TABLE_ENTRY Table = Device->MsixConfigTable;
+
+    if (Table == NULL || TableEntry >= Device->MsixTableSize)
+        return NULL;
+
+    return &Table[TableEntry];
+}
+
+static
+NTSTATUS
+NTAPI
+PciMsixSetTableEntry(
+    _In_ PVOID Context,
+    _In_ ULONG TableEntry,
+    _In_ ULONG MessageNumber)
+{
+    PPCI_DEVICE Device = PciMsixConfigDevice(Context);
+    PPCI_MSIX_TABLE_ENTRY Entry = PciMsixConfigEntry(Context, TableEntry);
+    PPCI_MSIX_ROUTE Route;
+    ULONG Control;
+
+    if (Entry == NULL || MessageNumber >= Device->MsixRouteCount)
+        return STATUS_INVALID_PARAMETER;
+
+    Route = (PPCI_MSIX_ROUTE)Device->MsixRoutes + MessageNumber;
+    Control = READ_REGISTER_ULONG(&Entry->VectorControl);
+    WRITE_REGISTER_ULONG(&Entry->VectorControl, Control | PCI_MSIX_VECTOR_CONTROL_MASK);
+    WRITE_REGISTER_ULONG(&Entry->MessageAddressLow, Route->AddressLow);
+    WRITE_REGISTER_ULONG(&Entry->MessageAddressHigh, Route->AddressHigh);
+    WRITE_REGISTER_ULONG(&Entry->MessageData, Route->Data);
+    WRITE_REGISTER_ULONG(&Entry->VectorControl, Control);
+    Device->MsixEntryMessages[TableEntry] = MessageNumber;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+PciMsixMaskTableEntry(
+    _In_ PVOID Context,
+    _In_ ULONG TableEntry)
+{
+    PPCI_MSIX_TABLE_ENTRY Entry = PciMsixConfigEntry(Context, TableEntry);
+
+    if (Entry == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    WRITE_REGISTER_ULONG(&Entry->VectorControl,
+                         READ_REGISTER_ULONG(&Entry->VectorControl) | PCI_MSIX_VECTOR_CONTROL_MASK);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+PciMsixUnmaskTableEntry(
+    _In_ PVOID Context,
+    _In_ ULONG TableEntry)
+{
+    PPCI_MSIX_TABLE_ENTRY Entry = PciMsixConfigEntry(Context, TableEntry);
+
+    if (Entry == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    WRITE_REGISTER_ULONG(&Entry->VectorControl,
+                         READ_REGISTER_ULONG(&Entry->VectorControl) & ~PCI_MSIX_VECTOR_CONTROL_MASK);
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+PciMsixGetTableEntry(
+    _In_ PVOID Context,
+    _In_ ULONG TableEntry,
+    _Out_ PULONG MessageNumber,
+    _Out_ PBOOLEAN Masked)
+{
+    PPCI_DEVICE Device = PciMsixConfigDevice(Context);
+    PPCI_MSIX_TABLE_ENTRY Entry = PciMsixConfigEntry(Context, TableEntry);
+
+    if (Entry == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    *MessageNumber = Device->MsixEntryMessages[TableEntry];
+    *Masked = (READ_REGISTER_ULONG(&Entry->VectorControl) & PCI_MSIX_VECTOR_CONTROL_MASK) != 0;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+NTAPI
+PciMsixGetTableSize(
+    _In_ PVOID Context,
+    _Out_ PULONG TableSize)
+{
+    PPCI_DEVICE Device = PciMsixConfigDevice(Context);
+
+    if (Device->MsixConfigTable == NULL)
+        return STATUS_INVALID_PARAMETER;
+
+    *TableSize = Device->MsixTableSize;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+PciPdoGetMsixConfigInterface(
+    _In_ PPDO_DEVICE_EXTENSION DeviceExtension,
+    _Out_writes_bytes_(Size) PPCI_MSIX_TABLE_CONFIG_INTERFACE Interface,
+    _In_ USHORT Size)
+{
+    PPCI_DEVICE Device = DeviceExtension->PciDevice;
+    PHYSICAL_ADDRESS TableAddress;
+    PVOID Table;
+
+    PAGED_CODE();
+    ASSERT(Size >= PCI_MSIX_TABLE_CONFIG_MINIMUM_SIZE);
+
+    if (Device->MsixRoutes == NULL || Device->MsixRouteCount == 0)
+        return STATUS_NOT_SUPPORTED;
+
+    if (Device->MsixConfigTable == NULL)
+    {
+        if (!PciPdoGetMsixTableAddress(DeviceExtension, &TableAddress))
+            return STATUS_INVALID_DEVICE_STATE;
+
+        Table = MmMapIoSpace(TableAddress, Device->MsixTableSize * sizeof(PCI_MSIX_TABLE_ENTRY), MmNonCached);
+        if (Table == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+
+        if (InterlockedCompareExchangePointer(&Device->MsixConfigTable, Table, NULL) != NULL)
+            MmUnmapIoSpace(Table, Device->MsixTableSize * sizeof(PCI_MSIX_TABLE_ENTRY));
+    }
+
+    Interface->Version = PCI_MSIX_TABLE_CONFIG_INTERFACE_VERSION;
+    Interface->SetTableEntry = PciMsixSetTableEntry;
+    Interface->MaskTableEntry = PciMsixMaskTableEntry;
+    Interface->UnmaskTableEntry = PciMsixUnmaskTableEntry;
+    if (Size >= sizeof(PCI_MSIX_TABLE_CONFIG_INTERFACE))
+    {
+        Interface->GetTableEntry = PciMsixGetTableEntry;
+        Interface->GetTableSize = PciMsixGetTableSize;
+        Interface->Size = sizeof(PCI_MSIX_TABLE_CONFIG_INTERFACE);
+    }
+    else
+    {
+        Interface->Size = PCI_MSIX_TABLE_CONFIG_MINIMUM_SIZE;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 /*** PRIVATE *****************************************************************/
@@ -4684,6 +4929,25 @@ PdoQueryInterface(
         }
     }
     else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
+                              &GUID_MSIX_TABLE_CONFIG_INTERFACE, sizeof(GUID)) == sizeof(GUID))
+    {
+        if (IrpSp->Parameters.QueryInterface.Version != PCI_MSIX_TABLE_CONFIG_INTERFACE_VERSION)
+        {
+            Status = STATUS_NOT_SUPPORTED;
+        }
+        else if (IrpSp->Parameters.QueryInterface.Size < PCI_MSIX_TABLE_CONFIG_MINIMUM_SIZE)
+        {
+            Status = STATUS_BUFFER_TOO_SMALL;
+        }
+        else
+        {
+            Status = PciPdoGetMsixConfigInterface(
+                         (PPDO_DEVICE_EXTENSION)DeviceObject->DeviceExtension,
+                         (PPCI_MSIX_TABLE_CONFIG_INTERFACE)IrpSp->Parameters.QueryInterface.Interface,
+                         IrpSp->Parameters.QueryInterface.Size);
+        }
+    }
+    else if (RtlCompareMemory(IrpSp->Parameters.QueryInterface.InterfaceType,
                               &GUID_AGP_TARGET_BUS_INTERFACE_STANDARD, sizeof(GUID)) == sizeof(GUID))
     {
         DPRINT("GUID_AGP_TARGET_BUS_INTERFACE_STANDARD requested\n");
@@ -5407,6 +5671,8 @@ PdoStartDevice(
     }
 
     /* A function left signalling messages from a previous start would never raise the line interrupt it now has */
+    if (!UsingMsix)
+        PciPdoFreeMsixConfig(DeviceExtension->PciDevice);
     if (!UsingMsix && DeviceExtension->PciDevice->MsixCapability != 0)
         PciPdoClearConfigBit(DeviceExtension, DeviceExtension->PciDevice->MsixCapability + PCI_MSIX_FLAGS, PCI_MSIX_FLAGS_ENABLE);
     if (!UsingMsi && DeviceExtension->PciDevice->MsiCapability != 0)
@@ -5700,6 +5966,7 @@ PdoDelete(
         IoFreeWorkItem(DeviceExtension->D3ColdWorkItem);
     if (Device->SavedMsixTable != NULL)
         ExFreePoolWithTag(Device->SavedMsixTable, TAG_PCI);
+    PciPdoFreeMsixConfig(Device);
     ExFreePoolWithTag(Device, TAG_PCI);
     IoDeleteDevice(DeviceExtension->Common.DeviceObject);
 }
@@ -5824,6 +6091,7 @@ PdoPnpControl(
         case IRP_MN_SURPRISE_REMOVAL:
             DeviceExtension->Started = FALSE;
             PciPdoDisableDecodes(DeviceExtension);
+            PciPdoFreeMsixConfig(DeviceExtension->PciDevice);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             Status = STATUS_SUCCESS;
             break;
@@ -5832,6 +6100,7 @@ PdoPnpControl(
             DeviceExtension->Started = FALSE;
             PdoCompleteWaitWake(DeviceExtension, STATUS_NO_SUCH_DEVICE);
             PciPdoDisableDecodes(DeviceExtension);
+            PciPdoFreeMsixConfig(DeviceExtension->PciDevice);
             PciPdoReleaseMessageRoutes(DeviceExtension);
             IoReleaseRemoveLockAndWait(&DeviceExtension->RemoveLock, Irp);
             PdoPowerDownForRemove(DeviceObject, DeviceExtension);

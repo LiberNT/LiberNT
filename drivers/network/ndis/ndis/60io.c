@@ -261,6 +261,7 @@ NdisMRegisterScatterGatherDma(
      * DMA adapter produces a SGL. */
     Ext->SgDescription      = *DmaDescription;
     Ext->SgDescriptionValid = TRUE;
+    ExInitializeRundownProtection(&Ext->SharedMemoryRundown);
 
     /* The DMA handle the driver gets back is just the adapter extension. */
     *NdisMiniportDmaHandle = (NDIS_HANDLE)Ext;
@@ -275,7 +276,101 @@ NdisMDeregisterScatterGatherDma(
     PNDIS6_ADAPTER_EXT Ext = (PNDIS6_ADAPTER_EXT)NdisMiniportDmaHandle;
     if (Ext == NULL)
         return;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (Ext->SgDescriptionValid)
+        ExWaitForRundownProtectionRelease(&Ext->SharedMemoryRundown);
     Ndis6IoFreeDmaAdapter(Ext);
+}
+
+typedef struct _NDIS6_SHARED_MEMORY_REQUEST
+{
+    PNDIS6_ADAPTER_EXT Ext;
+    PIO_WORKITEM WorkItem;
+    ULONG Length;
+    BOOLEAN Cached;
+    PVOID Context;
+} NDIS6_SHARED_MEMORY_REQUEST, *PNDIS6_SHARED_MEMORY_REQUEST;
+
+VOID
+NTAPI
+Ndis6MAllocateSharedMemory(
+    _In_  NDIS_HANDLE                MiniportAdapterHandle,
+    _In_  ULONG                      Length,
+    _In_  BOOLEAN                    Cached,
+    _Out_ PVOID*                     VirtualAddress,
+    _Out_ PNDIS_PHYSICAL_ADDRESS     PhysicalAddress);
+
+static
+VOID
+NTAPI
+Ndis6SharedMemoryWorker(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_opt_ PVOID Context)
+{
+    PNDIS6_SHARED_MEMORY_REQUEST Request = Context;
+    PNDIS6_ADAPTER_EXT Ext = Request->Ext;
+    NDIS_PHYSICAL_ADDRESS PhysicalAddress;
+    PVOID VirtualAddress = NULL;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Ext->SgDescription.SharedMemAllocateCompleteHandler != NULL);
+
+    PhysicalAddress.QuadPart = 0;
+    Ndis6MAllocateSharedMemory((NDIS_HANDLE)Ext->Adapter, Request->Length, Request->Cached,
+                               &VirtualAddress, &PhysicalAddress);
+    Ext->SgDescription.SharedMemAllocateCompleteHandler(Ext->MiniportAdapterContext, VirtualAddress,
+                                                        &PhysicalAddress, Request->Length, Request->Context);
+
+    IoFreeWorkItem(Request->WorkItem);
+    ExFreePoolWithTag(Request, 'mSNn');
+    ExReleaseRundownProtection(&Ext->SharedMemoryRundown);
+}
+
+NDIS_STATUS
+NTAPI
+NdisMAllocateSharedMemoryAsyncEx(
+    _In_ NDIS_HANDLE MiniportDmaHandle,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Cached,
+    _In_ PVOID Context)
+{
+    PNDIS6_ADAPTER_EXT Ext = (PNDIS6_ADAPTER_EXT)MiniportDmaHandle;
+    PNDIS6_SHARED_MEMORY_REQUEST Request;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    if (Ext == NULL || !Ext->SgDescriptionValid || Length == 0 ||
+        Ext->SgDescription.SharedMemAllocateCompleteHandler == NULL || Ext->Adapter == NULL)
+    {
+        return NDIS_STATUS_FAILURE;
+    }
+
+    if (!ExAcquireRundownProtection(&Ext->SharedMemoryRundown))
+        return NDIS_STATUS_FAILURE;
+
+    Request = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*Request), 'mSNn');
+    if (Request == NULL)
+    {
+        ExReleaseRundownProtection(&Ext->SharedMemoryRundown);
+        return NDIS_STATUS_FAILURE;
+    }
+
+    Request->WorkItem = IoAllocateWorkItem(Ext->Adapter->NdisMiniportBlock.DeviceObject);
+    if (Request->WorkItem == NULL)
+    {
+        ExFreePoolWithTag(Request, 'mSNn');
+        ExReleaseRundownProtection(&Ext->SharedMemoryRundown);
+        return NDIS_STATUS_FAILURE;
+    }
+
+    Request->Ext = Ext;
+    Request->Length = Length;
+    Request->Cached = Cached;
+    Request->Context = Context;
+    IoQueueWorkItem(Request->WorkItem, Ndis6SharedMemoryWorker, DelayedWorkQueue, Request);
+    return NDIS_STATUS_PENDING;
 }
 
 /* ============================================================================
@@ -356,6 +451,117 @@ Ndis6IoReleaseBusInterface(
     if (Ext->BusInterface.InterfaceDereference)
         Ext->BusInterface.InterfaceDereference(Ext->BusInterface.Context);
     RtlZeroMemory(&Ext->BusInterface, sizeof(Ext->BusInterface));
+}
+
+static
+VOID
+Ndis6IoQueryMsixInterface(
+    _Inout_ PNDIS6_ADAPTER_EXT Ext)
+{
+    PCI_MSIX_TABLE_CONFIG_INTERFACE Interface;
+    IO_STATUS_BLOCK IoStatus;
+    PIO_STACK_LOCATION Stack;
+    NTSTATUS Status;
+    KEVENT Event;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(!Ext->MsixInterfaceValid);
+
+    if (Ext->PhysicalDeviceObject == NULL)
+        return;
+
+    RtlZeroMemory(&Interface, sizeof(Interface));
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildSynchronousFsdRequest(IRP_MJ_PNP, Ext->PhysicalDeviceObject, NULL, 0, NULL, &Event, &IoStatus);
+    if (Irp == NULL)
+        return;
+
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MajorFunction = IRP_MJ_PNP;
+    Stack->MinorFunction = IRP_MN_QUERY_INTERFACE;
+    Stack->Parameters.QueryInterface.InterfaceType = &GUID_MSIX_TABLE_CONFIG_INTERFACE;
+    Stack->Parameters.QueryInterface.Size = sizeof(Interface);
+    Stack->Parameters.QueryInterface.Version = PCI_MSIX_TABLE_CONFIG_INTERFACE_VERSION;
+    Stack->Parameters.QueryInterface.Interface = (PINTERFACE)&Interface;
+    Stack->Parameters.QueryInterface.InterfaceSpecificData = NULL;
+
+    Status = IoCallDriver(Ext->PhysicalDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    if (!NT_SUCCESS(Status))
+        return;
+
+    if (Interface.SetTableEntry == NULL || Interface.MaskTableEntry == NULL || Interface.UnmaskTableEntry == NULL)
+    {
+        if (Interface.InterfaceDereference != NULL)
+            Interface.InterfaceDereference(Interface.Context);
+        return;
+    }
+
+    Ext->MsixInterface = Interface;
+    Ext->MsixInterfaceValid = TRUE;
+}
+
+static
+VOID
+Ndis6IoReleaseMsixInterface(
+    _Inout_ PNDIS6_ADAPTER_EXT Ext)
+{
+    if (!Ext->MsixInterfaceValid)
+        return;
+
+    Ext->MsixInterfaceValid = FALSE;
+    if (Ext->MsixInterface.InterfaceDereference != NULL)
+        Ext->MsixInterface.InterfaceDereference(Ext->MsixInterface.Context);
+    RtlZeroMemory(&Ext->MsixInterface, sizeof(Ext->MsixInterface));
+}
+
+NDIS_STATUS
+NTAPI
+NdisMConfigMSIXTableEntry(
+    _In_ NDIS_HANDLE NdisMiniportHandle,
+    _In_ PNDIS_MSIX_CONFIG_PARAMETERS MSIXConfigParameters)
+{
+    PNDIS6_ADAPTER_EXT Ext = Ndis6IoExtFromHandle(NdisMiniportHandle);
+    NTSTATUS Status;
+
+    if (Ext == NULL || MSIXConfigParameters == NULL ||
+        MSIXConfigParameters->Header.Revision != NDIS_MSIX_CONFIG_PARAMETERS_REVISION_1 ||
+        MSIXConfigParameters->Header.Size < NDIS_SIZEOF_MSIX_CONFIG_PARAMETERS_REVISION_1)
+    {
+        return NDIS_STATUS_INVALID_PARAMETER;
+    }
+
+    if (!Ext->MsixInterfaceValid)
+        return NDIS_STATUS_NOT_SUPPORTED;
+
+    switch (MSIXConfigParameters->ConfigOperation)
+    {
+        case NdisMSIXTableConfigSetTableEntry:
+            ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+            Status = Ext->MsixInterface.SetTableEntry(Ext->MsixInterface.Context,
+                                                      MSIXConfigParameters->TableEntry,
+                                                      MSIXConfigParameters->MessageNumber);
+            break;
+
+        case NdisMSIXTableConfigMaskTableEntry:
+            Status = Ext->MsixInterface.MaskTableEntry(Ext->MsixInterface.Context, MSIXConfigParameters->TableEntry);
+            break;
+
+        case NdisMSIXTableConfigUnmaskTableEntry:
+            Status = Ext->MsixInterface.UnmaskTableEntry(Ext->MsixInterface.Context, MSIXConfigParameters->TableEntry);
+            break;
+
+        default:
+            return NDIS_STATUS_INVALID_PARAMETER;
+    }
+
+    return (NDIS_STATUS)Status;
 }
 
 ULONG
@@ -967,6 +1173,8 @@ NdisMRegisterInterruptEx(
                 MiniportInterruptCharacteristics->InterruptType    = NDIS_CONNECT_MESSAGE_BASED;
                 MiniportInterruptCharacteristics->MessageInfoTable = Ext->MsiTable;
 
+                Ndis6IoQueryMsixInterface(Ext);
+
                 DbgPrint("NDIS6: connected %lu MSI vectors (wrote back InterruptType=MSG MessageInfoTable=%p)\n",
                          Ext->MsiTable->MessageCount, Ext->MsiTable);
             }
@@ -1068,6 +1276,7 @@ Ndis6DisconnectInterrupt(
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     Ndis6StopInterruptRundown(Ext);
+    Ndis6IoReleaseMsixInterface(Ext);
 
     if (Ext->MsiConnected && Ext->MsiTable != NULL)
     {

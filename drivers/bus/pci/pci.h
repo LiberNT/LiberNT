@@ -73,6 +73,10 @@ typedef struct _PCI_DEVICE
     USHORT SavedMsixControl;
     ULONG SavedMsixEntries;
     PVOID SavedMsixTable;
+    ULONG MsixRouteCount;
+    PVOID MsixRoutes;
+    PULONG MsixEntryMessages;
+    PVOID MsixConfigTable;
     BOOLEAN SleepStateSaved;
     BOOLEAN Reported;
     UCHAR BarSizeValid;

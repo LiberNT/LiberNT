@@ -7,3 +7,8 @@ add_executable(ndis_rnr t_rnr.c)
 target_include_directories(ndis_rnr PRIVATE ${REACTOS_HOST_SOURCE_ROOT}/drivers/network/ndis/include)
 target_compile_options(ndis_rnr PRIVATE -Wall -Wextra)
 add_test(NAME ndis.rnr COMMAND ndis_rnr)
+
+add_executable(ndis_poll t_poll.c)
+target_include_directories(ndis_poll PRIVATE ${REACTOS_HOST_SOURCE_ROOT}/drivers/network/ndis/include)
+target_compile_options(ndis_poll PRIVATE -Wall -Wextra)
+add_test(NAME ndis.poll COMMAND ndis_poll)

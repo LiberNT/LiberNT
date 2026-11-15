@@ -282,6 +282,10 @@ typedef struct _NDIS6_ADAPTER_EXT
     BUS_INTERFACE_STANDARD          BusInterface;
     BOOLEAN                         BusInterfaceValid;
 
+    PCI_MSIX_TABLE_CONFIG_INTERFACE MsixInterface;
+    BOOLEAN                         MsixInterfaceValid;
+    EX_RUNDOWN_REF                  SharedMemoryRundown;
+
     /* NDIS-owned, zero-normalized offload descriptors. */
     PVOID                           OffloadHwPtr;
     PVOID                           OffloadDefaultPtr;
