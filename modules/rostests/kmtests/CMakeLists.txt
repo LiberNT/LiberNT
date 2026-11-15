@@ -123,6 +123,7 @@ list(APPEND KMTEST_DRV_SOURCE
     directx/Dxgmms2VidMm.c
     example/Example.c
     example/KernelType.c
+    hal/AcpiPciLinkRouting.c
     hal/HalBusData.c
     hal/HalDmaAlignment.c
     hal/HalRealTimeClock.c

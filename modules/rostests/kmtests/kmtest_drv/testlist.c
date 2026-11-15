@@ -164,6 +164,7 @@ KMT_TESTFUNC Test_FsRtlQueryFileLock;
 KMT_TESTFUNC Test_FsRtlRemoveDotsFromPath;
 KMT_TESTFUNC Test_FsRtlTunnel;
 #if defined(_M_IX86) || defined(_M_AMD64)
+KMT_TESTFUNC Test_AcpiPciLinkRouting;
 KMT_TESTFUNC Test_HalBusData;
 KMT_TESTFUNC Test_HalMessageState;
 KMT_TESTFUNC Test_HalPortIo;
@@ -583,6 +584,7 @@ const KMT_TEST TestList[] =
     { "FsRtlRemoveDotsFromPath",            Test_FsRtlRemoveDotsFromPath },
     { "FsRtlTunnel",                        Test_FsRtlTunnel },
 #if defined(_M_IX86) || defined(_M_AMD64)
+    { "AcpiPciLinkRouting",                 Test_AcpiPciLinkRouting },
     { "HalBusData",                         Test_HalBusData },
     { "-HalMessageState",                   Test_HalMessageState },
     { "HalPortIo",                          Test_HalPortIo },

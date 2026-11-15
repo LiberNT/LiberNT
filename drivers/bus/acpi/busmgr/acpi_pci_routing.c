@@ -480,6 +480,140 @@ AcpiEnumRootBridgeCallback(
     return AE_OK;
 }
 
+#define ACPI_PRT_MAX_LINK_REFERENCES 256
+
+typedef struct _PRT_LINK_REFERENCES
+{
+    ACPI_HANDLE Handles[ACPI_PRT_MAX_LINK_REFERENCES];
+    ULONG Count;
+    BOOLEAN Incomplete;
+} PRT_LINK_REFERENCES, *PPRT_LINK_REFERENCES;
+
+static
+BOOLEAN
+AcpiPrtLinkReferenced(
+    _In_ const PRT_LINK_REFERENCES *References,
+    _In_ ACPI_HANDLE Link)
+{
+    ULONG Index;
+
+    ASSERT(References->Count <= RTL_NUMBER_OF(References->Handles));
+    for (Index = 0; Index < References->Count; Index++)
+    {
+        if (References->Handles[Index] == Link)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+ACPI_STATUS
+AcpiPrtCollectLinksCallback(
+    ACPI_HANDLE ObjHandle,
+    UINT32 NestingLevel,
+    void *Context,
+    void **ReturnValue)
+{
+    PPRT_LINK_REFERENCES References = Context;
+    ACPI_BUFFER Buffer = { ACPI_ALLOCATE_BUFFER, NULL };
+    ACPI_HANDLE PrtHandle;
+    ACPI_HANDLE LinkHandle;
+    ACPI_STATUS Status;
+
+    UNREFERENCED_PARAMETER(NestingLevel);
+    UNREFERENCED_PARAMETER(ReturnValue);
+
+    ASSERT(References != NULL);
+    ASSERT(References->Count <= RTL_NUMBER_OF(References->Handles));
+    if (ACPI_FAILURE(AcpiGetHandle(ObjHandle, METHOD_NAME__PRT, &PrtHandle)))
+        return AE_OK;
+
+    Status = BuspGetIrqRoutingTable(ObjHandle, &Buffer);
+    if (ACPI_FAILURE(Status) || Buffer.Pointer == NULL)
+    {
+        DPRINT1("ACPI: _PRT of %p unreadable (0x%X), interrupt links stay enabled\n", ObjHandle, Status);
+        References->Incomplete = TRUE;
+        return AE_OK;
+    }
+
+    for (ACPI_PCI_ROUTING_TABLE *Route = (ACPI_PCI_ROUTING_TABLE *)Buffer.Pointer;
+         Route && Route->Length;
+         Route = (ACPI_PCI_ROUTING_TABLE *)((PUCHAR)Route + Route->Length))
+    {
+        ASSERT((PUCHAR)Route + Route->Length <= (PUCHAR)Buffer.Pointer + Buffer.Length);
+        if (!Route->Source[0])
+            continue;
+        if (ACPI_FAILURE(AcpiGetHandle(ObjHandle, Route->Source, &LinkHandle)))
+        {
+            References->Incomplete = TRUE;
+            continue;
+        }
+        if (AcpiPrtLinkReferenced(References, LinkHandle))
+            continue;
+        if (References->Count == RTL_NUMBER_OF(References->Handles))
+        {
+            References->Incomplete = TRUE;
+            continue;
+        }
+        ASSERT(LinkHandle != NULL);
+        References->Handles[References->Count++] = LinkHandle;
+    }
+
+    ACPI_FREE(Buffer.Pointer);
+    return AE_OK;
+}
+
+static
+ACPI_STATUS
+AcpiPrtDisableLinkCallback(
+    ACPI_HANDLE ObjHandle,
+    UINT32 NestingLevel,
+    void *Context,
+    void **ReturnValue)
+{
+    PPRT_LINK_REFERENCES References = Context;
+    ACPI_HANDLE DisHandle;
+    ACPI_STATUS Status;
+
+    UNREFERENCED_PARAMETER(NestingLevel);
+    UNREFERENCED_PARAMETER(ReturnValue);
+
+    ASSERT(References != NULL);
+    ASSERT(!References->Incomplete);
+    if (AcpiPrtLinkReferenced(References, ObjHandle) ||
+        ACPI_FAILURE(AcpiGetHandle(ObjHandle, METHOD_NAME__DIS, &DisHandle)))
+    {
+        return AE_OK;
+    }
+
+    Status = AcpiEvaluateObject(ObjHandle, METHOD_NAME__DIS, NULL, NULL);
+    if (ACPI_FAILURE(Status))
+        DPRINT1("ACPI: _DIS of unused PCI interrupt link %p failed (0x%X)\n", ObjHandle, Status);
+    return AE_OK;
+}
+
+/* Windows 11 disables every PCI interrupt link that no _PRT names once the APIC model is selected */
+static
+VOID
+AcpiPrtDisableUnusedLinks(VOID)
+{
+    PPRT_LINK_REFERENCES References;
+
+    PAGED_CODE();
+
+    References = ExAllocatePoolWithTag(PagedPool, sizeof(*References), ACPI_PRT_POOL_TAG);
+    if (References == NULL)
+        return;
+    RtlZeroMemory(References, sizeof(*References));
+
+    (void)AcpiWalkNamespace(ACPI_TYPE_DEVICE, ACPI_ROOT_OBJECT, ACPI_UINT32_MAX,
+                            AcpiPrtCollectLinksCallback, NULL, References, NULL);
+    if (!References->Incomplete)
+        (void)AcpiGetDevices("PNP0C0F", AcpiPrtDisableLinkCallback, References, NULL);
+
+    ExFreePoolWithTag(References, ACPI_PRT_POOL_TAG);
+}
+
 int
 acpi_pci_link_init(VOID)
 {
@@ -487,6 +621,7 @@ acpi_pci_link_init(VOID)
 
     (void)AcpiGetDevices("PNP0A03", AcpiEnumRootBridgeCallback, NULL, NULL);
     (void)AcpiGetDevices("PNP0A08", AcpiEnumRootBridgeCallback, NULL, NULL);
+    AcpiPrtDisableUnusedLinks();
 
     HalpRegisterPciRouteQuery(HalPciRouteProvider);
     DPRINT("ACPI: PCI routing provider registered (%lu entries available)\n",
