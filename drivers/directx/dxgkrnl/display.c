@@ -115,6 +115,8 @@ static ULONG g_DisplayDeviceNumber = 0;
 static BOOLEAN g_DisplayInitialModePending;
 static PVOID g_DisplayWin32kPhysDisp;
 static PVIDEO_WIN32K_CALLOUT g_DisplayWin32kCallout;
+static PEPROCESS g_DisplayWin32kProcess;
+static KSPIN_LOCK g_DisplayWin32kProcessLock;
 static volatile LONG g_PresentShadowTraceCount = 0;
 static volatile LONG g_PresentDirtyTraceCount = 0;
 static volatile LONG g_ScanoutCopyCount = 0;
@@ -240,16 +242,35 @@ DxgkpDisplayRefreshWin32k(VOID)
 {
     VIDEO_WIN32K_CALLBACKS_PARAMS Params;
     PVIDEO_WIN32K_CALLOUT Callout;
+    PEPROCESS Process;
+    KAPC_STATE ApcState;
+    BOOLEAN Attach;
+    KIRQL OldIrql;
 
     PAGED_CODE();
 
-    Callout = (PVIDEO_WIN32K_CALLOUT)InterlockedCompareExchangePointer((PVOID *)&g_DisplayWin32kCallout, NULL, NULL);
+    KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
+    Callout = g_DisplayWin32kCallout;
+    Process = g_DisplayWin32kProcess;
+    if (Callout != NULL && Process != NULL)
+        ObReferenceObject(Process);
+    KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
     if (Callout == NULL)
         return;
+    ASSERT(Process != NULL);
+
     RtlZeroMemory(&Params, sizeof(Params));
     Params.CalloutType = VideoDxgkMonitorEventCallout;
     Params.PhysDisp = g_DisplayWin32kPhysDisp;
+
+    /* The callout is session-space code: it is only mapped in a process of the session that registered it */
+    Attach = (Process != PsGetCurrentProcess());
+    if (Attach)
+        KeStackAttachProcess((PRKPROCESS)Process, &ApcState);
     Callout(&Params);
+    if (Attach)
+        KeUnstackDetachProcess(&ApcState);
+    ObDereferenceObject(Process);
 }
 
 VOID
@@ -4136,8 +4157,19 @@ DxgkpDisplayDispatch(
                 Callbacks->DualviewFlags = 0;
                 if (Irp->RequestorMode == KernelMode && Callbacks->Callout != NULL)
                 {
+                    PEPROCESS Process = IoGetCurrentProcess();
+                    PEPROCESS Previous;
+                    KIRQL OldIrql;
+
+                    ObReferenceObject(Process);
+                    KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
                     g_DisplayWin32kPhysDisp = Callbacks->PhysDisp;
+                    Previous = g_DisplayWin32kProcess;
+                    g_DisplayWin32kProcess = Process;
                     InterlockedExchangePointer((PVOID *)&g_DisplayWin32kCallout, (PVOID)Callbacks->Callout);
+                    KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
+                    if (Previous != NULL)
+                        ObDereferenceObject(Previous);
                 }
                 BytesReturned = sizeof(VIDEO_WIN32K_CALLBACKS);
                 Status = STATUS_SUCCESS;
