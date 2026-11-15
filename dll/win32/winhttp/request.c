@@ -2975,12 +2975,22 @@ static DWORD read_line( struct request *request, char *buffer, DWORD *len )
     return ERROR_SUCCESS;
 }
 
+#ifdef __REACTOS__
+#define MAX_REPLY_LEN   0x10000
+#else
 #define MAX_REPLY_LEN   1460
+#endif
 #define INITIAL_HEADER_BUFFER_LEN  512
 
+#ifdef __REACTOS__
+static DWORD read_reply_lines( struct request *request, char *buffer )
+#else
 static DWORD read_reply( struct request *request )
+#endif
 {
+#ifndef __REACTOS__
     char buffer[MAX_REPLY_LEN];
+#endif
     DWORD ret, buflen, len, offset, crlf_len = 2; /* lstrlenW(crlf) */
     const char *status_text, *ptr;
     WCHAR *versionW, *status_textW, *raw_headers;
@@ -3095,6 +3105,19 @@ static DWORD read_reply( struct request *request )
     TRACE("raw headers: %s\n", debugstr_w(raw_headers));
     return ret;
 }
+
+#ifdef __REACTOS__
+static DWORD read_reply( struct request *request )
+{
+    char *buffer;
+    DWORD ret;
+
+    if (!(buffer = malloc( MAX_REPLY_LEN ))) return ERROR_OUTOFMEMORY;
+    ret = read_reply_lines( request, buffer );
+    free( buffer );
+    return ret;
+}
+#endif
 
 static void record_cookies( struct request *request )
 {
