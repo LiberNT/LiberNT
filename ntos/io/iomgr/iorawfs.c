@@ -27,6 +27,7 @@ typedef struct _RAW_VCB
     LARGE_INTEGER VolumeSize;
     ULONG BytesPerSector;
     BOOLEAN Dismounted;
+    PVPB SpareVpb;
 } RAW_VCB, *PRAW_VCB;
 
 static PDRIVER_OBJECT RawFsDriverObject = NULL;
@@ -222,6 +223,12 @@ RawCheckForDismount(
 
     Vpb = Vcb->Vpb;
 
+    if (Vcb->Dismounted)
+    {
+        IoReleaseVpbSpinLock(OldIrql);
+        return TRUE;
+    }
+
     if (!Force && Vcb->OpenCount != 0)
     {
         IoReleaseVpbSpinLock(OldIrql);
@@ -234,7 +241,22 @@ RawCheckForDismount(
         return FALSE;
     }
 
-    if (Vpb != NULL)
+    if (Vpb != NULL && Vpb->ReferenceCount != 0 && Vpb->RealDevice->Vpb == Vpb && Vcb->SpareVpb != NULL)
+    {
+        PVPB NewVpb = Vcb->SpareVpb;
+
+        /* File objects still name this VPB: the device gets a fresh one to mount on, this one keeps reaching us */
+        Vcb->SpareVpb = NULL;
+        RtlZeroMemory(NewVpb, sizeof(VPB));
+        NewVpb->Type = IO_TYPE_VPB;
+        NewVpb->Size = sizeof(VPB);
+        NewVpb->RealDevice = Vpb->RealDevice;
+        NewVpb->Flags = Vpb->Flags & VPB_REMOVE_PENDING;
+        Vpb->RealDevice->Vpb = NewVpb;
+        Vpb->Flags &= ~VPB_MOUNTED;
+        ASSERT(Vpb->DeviceObject != NULL);
+    }
+    else if (Vpb != NULL)
     {
         Vpb->Flags &= ~VPB_MOUNTED;
         Vpb->DeviceObject = NULL;
@@ -245,6 +267,34 @@ RawCheckForDismount(
     IoReleaseVpbSpinLock(OldIrql);
 
     return TRUE;
+}
+
+static
+VOID
+RawReleaseDismountedVolume(
+    _In_ PRAW_VCB Vcb)
+{
+    PVPB Vpb, Spare;
+    BOOLEAN FreeVpb = FALSE;
+    KIRQL OldIrql;
+
+    ASSERT(Vcb->Dismounted && Vcb->OpenCount == 0);
+
+    IoAcquireVpbSpinLock(&OldIrql);
+    Vpb = Vcb->Vpb;
+    if (Vpb != NULL && Vpb->ReferenceCount == 0 && Vpb->RealDevice->Vpb != Vpb)
+    {
+        Vcb->Vpb = NULL;
+        FreeVpb = TRUE;
+    }
+    Spare = Vcb->SpareVpb;
+    Vcb->SpareVpb = NULL;
+    IoReleaseVpbSpinLock(OldIrql);
+
+    if (FreeVpb)
+        ExFreePoolWithTag(Vpb, TAG_VPB);
+    if (Spare != NULL)
+        ExFreePoolWithTag(Spare, TAG_VPB);
 }
 
 NTSTATUS
@@ -320,7 +370,13 @@ RawClose(
 
     if (Vcb != NULL && Vcb->OpenCount != 0) Vcb->OpenCount--;
 
-    if (Vcb != NULL && Vcb->OpenCount == 0) RawCheckForDismount(Vcb, FALSE);
+    if (Vcb != NULL && Vcb->OpenCount == 0)
+    {
+        if (!Vcb->Dismounted)
+            RawCheckForDismount(Vcb, FALSE);
+        if (Vcb->Dismounted)
+            RawReleaseDismountedVolume(Vcb);
+    }
 
     RawCompleteRequest(Irp, STATUS_SUCCESS, 0);
 
@@ -707,6 +763,13 @@ RawMountVolume(
     {
         IoDeleteDevice(VolumeDeviceObject);
         return Status;
+    }
+
+    Vcb->SpareVpb = ExAllocatePoolZero(NonPagedPool, sizeof(VPB), TAG_VPB);
+    if (Vcb->SpareVpb == NULL)
+    {
+        IoDeleteDevice(VolumeDeviceObject);
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     StackPtr->Parameters.MountVolume.Vpb->DeviceObject = VolumeDeviceObject;
