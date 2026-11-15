@@ -117,6 +117,7 @@ list(APPEND SOURCE
     SetScrollInfo.c
     SetScrollRange.c
     SetWindowPlacement.c
+    SharedInputLanguage.c
     SetWindowPosOwnerTree.c
     SetWindowPosZOrder.c
     WindowDisplayAffinity.c
