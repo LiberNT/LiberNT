@@ -5460,8 +5460,15 @@ failed:
 
 static HRESULT read_text_value(IXmlReader *reader, WCHAR **value)
 {
+    static WCHAR empty[] = L"";
     HRESULT hr;
     XmlNodeType type;
+
+    if (IXmlReader_IsEmptyElement(reader))
+    {
+        *value = empty;
+        return S_OK;
+    }
 
     while (IXmlReader_Read(reader, &type) == S_OK)
     {
@@ -5471,6 +5478,10 @@ static HRESULT read_text_value(IXmlReader *reader, WCHAR **value)
             hr = IXmlReader_GetValue(reader, (const WCHAR **)value, NULL);
             if (hr != S_OK) return hr;
             TRACE("%s\n", debugstr_w(*value));
+            return S_OK;
+
+        case XmlNodeType_EndElement:
+            *value = empty;
             return S_OK;
 
         case XmlNodeType_Whitespace:
