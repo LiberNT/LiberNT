@@ -114,7 +114,8 @@ CFunctionGroupNode::AddNode(ULONG NodeId)
         DPRINT1("HDAUDIO: Warning failed to get caps for NodeId %x Status %x\n", NodeId, Status);
         return STATUS_UNSUCCESSFUL;
     }
-    ASSERT(WidgetCaps != 0);
+    if (WidgetCaps == 0)
+        DPRINT1("HDAUDIO: NodeId %x reports no widget capabilities\n", NodeId);
     // extract node type
     UCHAR NodeType = (WidgetCaps >> 20) & 0xF;
     PrintNodeInfo(NodeType, NodeId);
