@@ -15,6 +15,7 @@ extern void func_prnfldr(void);
 extern void func_shdocvw(void);
 extern void func_shell32(void);
 extern void func_windows_storage(void);
+extern void func_wuapi(void);
 extern void func_zipfldr(void);
 
 const struct test winetest_testlist[] =
@@ -32,6 +33,7 @@ const struct test winetest_testlist[] =
     { "shdocvw", func_shdocvw },
     { "shell32", func_shell32 },
     { "windows_storage", func_windows_storage },
+    { "wuapi", func_wuapi },
     { "zipfldr", func_zipfldr },
 
     { 0, 0 }

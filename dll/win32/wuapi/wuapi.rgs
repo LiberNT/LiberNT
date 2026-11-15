@@ -216,6 +216,14 @@ HKCR
             Version = s '2.0'
             VersionIndependentProgId = s 'Microsoft.Update.AutoUpdate'
         }
+        '{D2E0FE7F-D23E-48E1-93C0-6FA8CC346474}' = s 'UpdateInstaller Class'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
+            ProgId = s 'Microsoft.Update.Installer.1'
+            TypeLib = s '{B596CC9F-56E5-419E-A622-E01BB457431E}'
+            Version = s '2.0'
+            VersionIndependentProgId = s 'Microsoft.Update.Installer'
+        }
         '{4CB43D7F-7EEE-4906-8698-60DA1C38F2FE}' = s 'UpdateSession Class'
         {
             InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
@@ -241,6 +249,15 @@ HKCR
     {
         CLSID = s '{BFE18E9C-6D87-4450-B37C-E02F0B373803}'
         CurVer = s 'Microsoft.Update.AutoUpdate.1'
+    }
+    'Microsoft.Update.Installer.1' = s 'UpdateInstaller Class'
+    {
+        CLSID = s '{D2E0FE7F-D23E-48E1-93C0-6FA8CC346474}'
+    }
+    'Microsoft.Update.Installer' = s 'UpdateInstaller Class'
+    {
+        CLSID = s '{D2E0FE7F-D23E-48E1-93C0-6FA8CC346474}'
+        CurVer = s 'Microsoft.Update.Installer.1'
     }
     'Microsoft.Update.Session.1' = s 'UpdateSession Class'
     {
