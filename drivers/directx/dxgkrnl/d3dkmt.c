@@ -34,6 +34,7 @@
 #include "present.h"
 #include "pnp.h"
 #include <reactos/rddm/rxgkadvcolor.h>
+#include <reactos/rddm/rxgktarget.h>
 #include <reactos/rddm/rxgkmonitor.h>
 #include "caps_core.h"
 #include "paging_core.h"
@@ -6221,12 +6222,14 @@ DxgkpEscapeCaptured(
         }
     }
 
-    /* The advanced colour state of an output is dxgkrnl's own; it never
-     * reaches the miniport. */
-    if ((UINT)pEscape->Type == RXGK_ESCAPE_ADVANCED_COLOR)
+    /* The advanced colour state and the target of an output are dxgkrnl's
+     * own; they never reach the miniport. */
+    if ((UINT)pEscape->Type == RXGK_ESCAPE_ADVANCED_COLOR ||
+        (UINT)pEscape->Type == RXGK_ESCAPE_TARGET_INFO)
     {
-        Status = DxgkAdvancedColorEscape(Adapter, pEscape->pPrivateDriverData,
-                                         pEscape->PrivateDriverDataSize);
+        Status = ((UINT)pEscape->Type == RXGK_ESCAPE_ADVANCED_COLOR) ?
+            DxgkAdvancedColorEscape(Adapter, pEscape->pPrivateDriverData, pEscape->PrivateDriverDataSize) :
+            DxgkTargetInfoEscape(Adapter, pEscape->pPrivateDriverData, pEscape->PrivateDriverDataSize);
         goto Cleanup;
     }
 

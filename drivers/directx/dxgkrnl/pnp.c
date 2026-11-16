@@ -2056,6 +2056,12 @@ DxgkpChildPdoQueryId(
     return STATUS_SUCCESS;
 }
 
+/* The adapter and target a monitor hangs off, as Windows 11 publishes them on the monitor device. */
+static const DEVPROPKEY DxgkpMonitorGpuLuidKey =
+    { { 0xca085853, 0x16ce, 0x48aa, { 0xb1, 0x14, 0xde, 0x9c, 0x72, 0x33, 0x42, 0x23 } }, 1 };
+static const DEVPROPKEY DxgkpMonitorOutputIdKey =
+    { { 0xca085853, 0x16ce, 0x48aa, { 0xb1, 0x14, 0xde, 0x9c, 0x72, 0x33, 0x42, 0x23 } }, 2 };
+
 static VOID
 DxgkpChildPublishMonitor(
     _In_ PDEVICE_OBJECT Pdo,
@@ -2065,6 +2071,7 @@ DxgkpChildPublishMonitor(
     PDXGK_CHILD_PDO_OBJECT Object = (PDXGK_CHILD_PDO_OBJECT)Pdo->DeviceExtension;
     UCHAR Edid[128 * (1 + DXGKP_EDID_MAX_EXTENSIONS)];
     ULONG EdidLength;
+    ULONG OutputId;
     HANDLE Key;
     NTSTATUS Status;
 
@@ -2072,6 +2079,18 @@ DxgkpChildPublishMonitor(
 
     if (ChildExt->Descriptor.ChildDeviceType != TypeVideoOutput)
         return;
+
+    ASSERT(ChildExt->ParentAdapter != NULL);
+    OutputId = ChildExt->Descriptor.ChildUid;
+    Status = IoSetDevicePropertyData(Pdo, &DxgkpMonitorGpuLuidKey, LOCALE_NEUTRAL, 0, DEVPROP_TYPE_INT64,
+                                     sizeof(ChildExt->ParentAdapter->AdapterLuid),
+                                     &ChildExt->ParentAdapter->AdapterLuid);
+    if (NT_SUCCESS(Status))
+        Status = IoSetDevicePropertyData(Pdo, &DxgkpMonitorOutputIdKey, LOCALE_NEUTRAL, 0, DEVPROP_TYPE_UINT32,
+                                         sizeof(OutputId), &OutputId);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_WARN("DxgkpChildPublishMonitor: monitor properties for ChildUid %lu: 0x%08lX\n",
+                     ChildExt->Descriptor.ChildUid, Status);
 
     Status = IoOpenDeviceRegistryKey(Pdo, PLUGPLAY_REGKEY_DEVICE, KEY_SET_VALUE, &Key);
     if (NT_SUCCESS(Status))

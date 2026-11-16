@@ -8,6 +8,7 @@
 #include <winbase.h>
 #include <d3dkmthk.h>
 #include <reactos/rddm/rxgkadvcolor.h>
+#include <reactos/rddm/rxgktarget.h>
 #include "wine/debug.h"
 
 #ifndef NT_SUCCESS
@@ -240,24 +241,54 @@ typedef struct _DISPLAYCONFIG_LOCAL_PATH
     WCHAR AdapterDeviceId[128];
     LUID AdapterId;
     UINT32 SourceId;
+    UINT32 TargetId;
+    DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY OutputTechnology;
+    UINT32 ConnectorInstance;
+    UINT32 TargetFlags;
+    BYTE Edid[128];
     DEVMODEW Mode;
 } DISPLAYCONFIG_LOCAL_PATH;
 
 static BOOL
 DisplayConfigResolveAdapter(
-    const WCHAR *GdiDeviceName,
-    LUID *AdapterId,
-    UINT32 *SourceId)
+    DISPLAYCONFIG_LOCAL_PATH *Path)
 {
     D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open;
     D3DKMT_CLOSEADAPTER Close;
+    D3DKMT_ESCAPE Escape;
+    RXGK_TARGET_INFO_PACKET Target;
 
     memset(&Open, 0, sizeof(Open));
-    lstrcpynW(Open.DeviceName, GdiDeviceName, ARRAY_SIZE(Open.DeviceName));
+    lstrcpynW(Open.DeviceName, Path->GdiDeviceName, ARRAY_SIZE(Open.DeviceName));
     if (!NT_SUCCESS(D3DKMTOpenAdapterFromGdiDisplayName(&Open)))
         return FALSE;
-    *AdapterId = Open.AdapterLuid;
-    *SourceId = Open.VidPnSourceId;
+    Path->AdapterId = Open.AdapterLuid;
+    Path->SourceId = Open.VidPnSourceId;
+
+    memset(&Target, 0, sizeof(Target));
+    Target.Size = sizeof(Target);
+    Target.Version = RXGK_TARGET_INFO_VERSION_1;
+    Target.VidPnSourceId = Open.VidPnSourceId;
+    memset(&Escape, 0, sizeof(Escape));
+    Escape.hAdapter = Open.hAdapter;
+    Escape.Type = (D3DKMT_ESCAPETYPE)RXGK_ESCAPE_TARGET_INFO;
+    Escape.pPrivateDriverData = &Target;
+    Escape.PrivateDriverDataSize = sizeof(Target);
+    if (NT_SUCCESS(D3DKMTEscape(&Escape)))
+    {
+        Path->TargetId = Target.VidPnTargetId;
+        Path->OutputTechnology = (DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY)Target.OutputTechnology;
+        Path->ConnectorInstance = Target.ConnectorInstance;
+        Path->TargetFlags = Target.Flags;
+        memcpy(Path->Edid, Target.Edid, sizeof(Path->Edid));
+    }
+    else
+    {
+        /* FIXME: an adapter without a committed topology reports its source id as the target id */
+        Path->TargetId = Open.VidPnSourceId;
+        Path->OutputTechnology = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER;
+    }
+
     Close.hAdapter = Open.hAdapter;
     D3DKMTCloseAdapter(&Close);
     return TRUE;
@@ -292,7 +323,7 @@ DisplayConfigCollectPaths(
         Path->Mode.dmSize = sizeof(Path->Mode);
         if (!EnumDisplaySettingsW(Device.DeviceName, ENUM_CURRENT_SETTINGS, &Path->Mode))
             continue;
-        if (!DisplayConfigResolveAdapter(Device.DeviceName, &Path->AdapterId, &Path->SourceId))
+        if (!DisplayConfigResolveAdapter(Path))
             return -1;
         Count++;
     }
@@ -424,7 +455,7 @@ QueryDisplayConfig(
         }
         Path->sourceInfo.statusFlags = DISPLAYCONFIG_SOURCE_IN_USE;
         Path->targetInfo.adapterId = Local->AdapterId;
-        Path->targetInfo.id = Local->SourceId;
+        Path->targetInfo.id = Local->TargetId;
         if (flags & QDC_VIRTUAL_MODE_AWARE)
         {
             Path->targetInfo.targetModeInfoIdx = Index * ModesPerPath + 1;
@@ -434,7 +465,7 @@ QueryDisplayConfig(
         {
             Path->targetInfo.modeInfoIdx = Index * ModesPerPath + 1;
         }
-        Path->targetInfo.outputTechnology = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER;
+        Path->targetInfo.outputTechnology = Local->OutputTechnology;
         Path->targetInfo.rotation = DISPLAYCONFIG_ROTATION_IDENTITY;
         Path->targetInfo.scaling = DISPLAYCONFIG_SCALING_IDENTITY;
         Path->targetInfo.refreshRate.Numerator = Refresh;
@@ -459,7 +490,7 @@ QueryDisplayConfig(
 
         memset(TargetMode, 0, sizeof(*TargetMode));
         TargetMode->infoType = DISPLAYCONFIG_MODE_INFO_TYPE_TARGET;
-        TargetMode->id = Local->SourceId;
+        TargetMode->id = Local->TargetId;
         TargetMode->adapterId = Local->AdapterId;
         DisplayConfigFillSignal(&Local->Mode, &TargetMode->targetMode.targetVideoSignalInfo);
         if (flags & QDC_DATABASE_CURRENT)
@@ -474,7 +505,7 @@ QueryDisplayConfig(
 
             memset(DesktopMode, 0, sizeof(*DesktopMode));
             DesktopMode->infoType = DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE;
-            DesktopMode->id = Local->SourceId;
+            DesktopMode->id = Local->TargetId;
             DesktopMode->adapterId = Local->AdapterId;
             DesktopMode->desktopImageInfo.PathSourceSize.x = Local->Mode.dmPelsWidth;
             DesktopMode->desktopImageInfo.PathSourceSize.y = Local->Mode.dmPelsHeight;
@@ -524,6 +555,36 @@ DisplayConfigAdvancedColor(
     return Status;
 }
 
+/* The display name descriptor (tag 0xFC) of a base EDID block, without its
+ * line feed and padding. */
+static BOOL
+DisplayConfigEdidName(
+    const BYTE *Edid,
+    WCHAR *Name,
+    UINT32 Capacity)
+{
+    UINT32 Descriptor;
+    UINT32 Length;
+
+    for (Descriptor = 0; Descriptor < 4; Descriptor++)
+    {
+        const BYTE *Block = &Edid[54 + Descriptor * 18];
+
+        if (Block[0] != 0 || Block[1] != 0 || Block[3] != 0xFC)
+            continue;
+        for (Length = 0; Length < 13 && Length + 1 < Capacity && Block[5 + Length] != 0 &&
+             Block[5 + Length] != 0x0A; Length++)
+        {
+            Name[Length] = Block[5 + Length];
+        }
+        while (Length != 0 && Name[Length - 1] == L' ')
+            Length--;
+        Name[Length] = 0;
+        return Length != 0;
+    }
+    return FALSE;
+}
+
 static LONG
 DisplayConfigStatusToError(
     NTSTATUS Status)
@@ -552,6 +613,7 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
 {
     DISPLAYCONFIG_LOCAL_PATH Paths[DISPLAYCONFIG_MAX_PATHS];
     const DISPLAYCONFIG_LOCAL_PATH *Local = NULL;
+    BOOL AdapterFound = FALSE;
     UINT32 ExpectedSize;
     int Count;
     int Index;
@@ -596,14 +658,27 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
         return ERROR_GEN_FAILURE;
     for (Index = 0; Index < Count; Index++)
     {
-        if (Paths[Index].AdapterId.LowPart == packet->adapterId.LowPart &&
-            Paths[Index].AdapterId.HighPart == packet->adapterId.HighPart &&
-            (packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME ||
-             Paths[Index].SourceId == packet->id))
+        UINT32 Id = (packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME ||
+                     packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_DPI_SCALE) ?
+            Paths[Index].SourceId : Paths[Index].TargetId;
+
+        if (Paths[Index].AdapterId.LowPart != packet->adapterId.LowPart ||
+            Paths[Index].AdapterId.HighPart != packet->adapterId.HighPart)
+        {
+            continue;
+        }
+        AdapterFound = TRUE;
+        if (packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_ADAPTER_NAME || Id == packet->id)
         {
             Local = &Paths[Index];
             break;
         }
+    }
+    if (Local == NULL && AdapterFound &&
+        (packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME ||
+         packet->type == DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_BASE_TYPE))
+    {
+        return ERROR_INVALID_PARAMETER;
     }
     if (Local == NULL)
         return ERROR_GEN_FAILURE;
@@ -633,14 +708,25 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
             DISPLAY_DEVICEW Monitor;
 
             memset(&Name->flags, 0, (char *)(Name + 1) - (char *)&Name->flags);
-            Name->outputTechnology = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER;
+            Name->outputTechnology = Local->OutputTechnology;
+            Name->connectorInstance = Local->ConnectorInstance;
+            if (!(Local->TargetFlags & RXGK_TARGET_INFO_CONNECTED))
+                Name->flags.friendlyNameForced = 1;
+            else if (Local->TargetFlags & RXGK_TARGET_INFO_EDID)
+            {
+                Name->edidManufactureId = (UINT16)(Local->Edid[8] | (Local->Edid[9] << 8));
+                Name->edidProductCodeId = (UINT16)(Local->Edid[10] | (Local->Edid[11] << 8));
+                Name->flags.edidIdsValid = 1;
+                if (DisplayConfigEdidName(Local->Edid, Name->monitorFriendlyDeviceName,
+                                          ARRAY_SIZE(Name->monitorFriendlyDeviceName)))
+                {
+                    Name->flags.friendlyNameFromEdid = 1;
+                }
+            }
             memset(&Monitor, 0, sizeof(Monitor));
             Monitor.cb = sizeof(Monitor);
-            if (EnumDisplayDevicesW(Local->GdiDeviceName, 0, &Monitor, 0))
-            {
-                lstrcpynW(Name->monitorFriendlyDeviceName, Monitor.DeviceString, ARRAY_SIZE(Name->monitorFriendlyDeviceName));
+            if (EnumDisplayDevicesW(Local->GdiDeviceName, 0, &Monitor, EDD_GET_DEVICE_INTERFACE_NAME))
                 lstrcpynW(Name->monitorDevicePath, Monitor.DeviceID, ARRAY_SIZE(Name->monitorDevicePath));
-            }
             return ERROR_SUCCESS;
         }
         case DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_PREFERRED_MODE:
@@ -663,7 +749,7 @@ LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *packet)
         {
             DISPLAYCONFIG_TARGET_BASE_TYPE *Base = (DISPLAYCONFIG_TARGET_BASE_TYPE *)packet;
 
-            Base->baseOutputTechnology = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_OTHER;
+            Base->baseOutputTechnology = Local->OutputTechnology;
             return ERROR_SUCCESS;
         }
         case DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO:
@@ -759,7 +845,7 @@ LONG WINAPI DisplayConfigSetDeviceInfo( DISPLAYCONFIG_DEVICE_INFO_HEADER *packet
             {
                 if (Paths[Index].AdapterId.LowPart == packet->adapterId.LowPart &&
                     Paths[Index].AdapterId.HighPart == packet->adapterId.HighPart &&
-                    Paths[Index].SourceId == packet->id)
+                    Paths[Index].TargetId == packet->id)
                 {
                     Local = &Paths[Index];
                     break;

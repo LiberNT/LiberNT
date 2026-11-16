@@ -21,6 +21,15 @@ NTAPI
 EngpUpdateMonitorDevices(
     _In_ PGRAPHICS_DEVICE pGraphicsDevice);
 
+/* Copies monitor iMonitor of a graphics device and references its PDO;
+ * the caller dereferences pMonitor->pdo. */
+BOOLEAN
+NTAPI
+EngpReferenceMonitorDevice(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ ULONG iMonitor,
+    _Out_ PVIDEO_MONITOR_DEVICE pMonitor);
+
 PGRAPHICS_DEVICE
 NTAPI
 EngpFindGraphicsDevice(
