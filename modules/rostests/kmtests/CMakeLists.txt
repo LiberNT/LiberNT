@@ -377,6 +377,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ps/PsTls.c
     ntos_kse/Kse.c
     ntos_ps/PsProperty.c
+    ntos_ps/PsProtection.c
     ntos_ps/PsModern.c
     ntos_ps/PsWddm.c
     ntos_ps/PsProcessInfo.c

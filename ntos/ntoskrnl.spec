@@ -2910,7 +2910,7 @@
 @ stdcall PsGetProcessCommonJob(ptr ptr)
 @ stdcall PsGetProcessDxgProcess(ptr)
 @ stdcall PsGetProcessMachine(ptr)
-@ stub -arch=win64 PsGetProcessProtection
+@ stdcall PsGetProcessProtection(ptr)
 @ stdcall PsGetProcessSequenceNumber(ptr)
 @ stdcall PsGetProcessServerSilo(ptr)
 @ stub -arch=win64 PsGetProcessSignatureLevel

@@ -315,6 +315,9 @@ PspBuildSystemProcess(VOID)
     Process->Pcb.QuantumReset = 6;
     Process->PriorityClass = PROCESS_PRIORITY_CLASS_NORMAL;
     Process->SystemProcess = TRUE;
+    Process->Protection.Type = PsProtectedTypeProtected;
+    Process->Protection.Signer = PsProtectedSignerWinSystem;
+    ASSERT(Process->Protection.Level == 0x72);
     Process->Machine = IMAGE_FILE_MACHINE_NATIVE;
     Process->DefaultHardErrorProcessing = SEM_FAILCRITICALERRORS;
     RtlCopyMemory(Process->ImageFileName, "System", sizeof("System"));

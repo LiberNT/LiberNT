@@ -98,6 +98,7 @@ KMT_TESTFUNC Test_IoLargeMemoryResource;
 KMT_TESTFUNC Test_IoCancelKM;
 KMT_TESTFUNC Test_IoCloseIrqlKM;
 KMT_TESTFUNC Test_PsProcessInfo;
+KMT_TESTFUNC Test_PsProtection;
 KMT_TESTFUNC Test_PsEnergy;
 KMT_TESTFUNC Test_PsTls;
 KMT_TESTFUNC Test_KeDpcWatchdog;
@@ -888,6 +889,7 @@ const KMT_TEST TestList[] =
     { "RtlIntSafeKM",                       Test_RtlIntSafe },
     { "RtlIsValidOemCharacter",             Test_RtlIsValidOemCharacter },
     { "PsProcessInfo",                      Test_PsProcessInfo },
+    { "PsProtection",                       Test_PsProtection },
     { "PsNotifyKM",                         Test_PsNotifyKM },
     { "PsGetVersion",                       Test_PsGetVersion },
     { "PsSystemThread",                     Test_PsSystemThread },

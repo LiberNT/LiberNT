@@ -268,6 +268,15 @@ PsIsProtectedProcess(
     return (Process->Protection.Type != PsProtectedTypeNone);
 }
 
+PS_PROTECTION
+NTAPI
+PsGetProcessProtection(
+    _In_ PEPROCESS Process)
+{
+    ASSERT(Process != NULL);
+    return Process->Protection;
+}
+
 LOGICAL
 NTAPI
 PsIsProtectedProcessLight(
