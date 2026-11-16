@@ -543,6 +543,9 @@ bool GenericDriver(const DeviceInfo &device)
 
 bool NeedsDriver(const DeviceInfo &device)
 {
+    /* No driver loads for the kernel debugger's device while this boot lasts */
+    if (device.Problem == CM_PROB_USED_BY_DEBUGGER)
+        return false;
     return device.Problem == CM_PROB_FAILED_INSTALL || device.Problem == CM_PROB_NOT_CONFIGURED ||
            device.Problem == CM_PROB_REINSTALL || (!HasDriver(device) && !CatalogQueries(device).empty());
 }

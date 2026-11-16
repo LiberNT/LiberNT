@@ -7,6 +7,8 @@
 
 #include <apitest.h>
 
+#include <cfg.h>
+
 #include "devices.hpp"
 
 #include <initializer_list>
@@ -176,6 +178,21 @@ START_TEST(DeviceRules)
         CheckQueries(inbox,
                      { L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4&REV_00", L"PCI\\VEN_1AF4&DEV_1000&SUBSYS_00011AF4",
                        L"PCI\\VEN_1AF4&DEV_1000&CC_020000", L"PCI\\VEN_1AF4&DEV_1000&CC_0200" },
+                     false);
+    }
+    {
+        DeviceInfo debugger = Device(L"PCI\\VEN_8086&DEV_10D3&SUBSYS_00008086&REV_00\\3&A5C7842&0&08",
+                                     { L"PCI\\VEN_8086&DEV_10D3&SUBSYS_00008086&REV_00", L"PCI\\VEN_8086&DEV_10D3&SUBSYS_00008086",
+                                       L"PCI\\VEN_8086&DEV_10D3&CC_020000", L"PCI\\VEN_8086&DEV_10D3&CC_0200" },
+                                     { L"PCI\\VEN_8086&DEV_10D3&REV_00", L"PCI\\VEN_8086&DEV_10D3", L"PCI\\VEN_8086&CC_020000",
+                                       L"PCI\\VEN_8086&CC_0200", L"PCI\\VEN_8086", L"PCI\\CC_020000", L"PCI\\CC_0200" });
+
+        debugger.Problem = CM_PROB_USED_BY_DEBUGGER;
+        CheckQueries(debugger,
+                     { L"PCI\\VEN_8086&DEV_10D3&SUBSYS_00008086&REV_00", L"PCI\\VEN_8086&DEV_10D3&SUBSYS_00008086",
+                       L"PCI\\VEN_8086&DEV_10D3&CC_020000", L"PCI\\VEN_8086&DEV_10D3&CC_0200",
+                       L"PCI\\VEN_8086&DEV_10D3&REV_00", L"PCI\\VEN_8086&DEV_10D3", L"PCI\\VEN_8086&CC_020000",
+                       L"PCI\\VEN_8086&CC_0200" },
                      false);
     }
 
