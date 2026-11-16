@@ -736,8 +736,7 @@ struct PerformancePage : Page
             StringCchCopyW(rst[rn].value, 64,
                            gpu->driverDate[0] ? gpu->driverDate : L"Unavailable");
             rst[rn++].label = L"Driver date:";
-            StringCchCopyW(rst[rn].value, 64,
-                           gpu->directX[0] ? gpu->directX : L"Unavailable");
+            StringCchCopyW(rst[rn].value, 64, gpu->directX);
             rst[rn++].label = L"DirectX version:";
             StringCchCopyW(rst[rn].value, 64,
                            gpu->location[0] ? gpu->location : L"Unavailable");
