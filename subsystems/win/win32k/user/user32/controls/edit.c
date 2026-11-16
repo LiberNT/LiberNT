@@ -1879,10 +1879,7 @@ static void EDIT_ImmSetCompositionWindow(EDITSTATE *es, POINT pt)
     HWND hwnd = es->hwndSelf;
     HIMC hIMC = ImmGetContext(hwnd);
     if (!hIMC)
-    {
-        ERR("!hIMC\n");
         return;
-    }
 
     CompForm.ptCurrentPos = pt;
     if (es->style & ES_MULTILINE)
@@ -1910,7 +1907,6 @@ static void EDIT_SetCaretPos(EDITSTATE *es, INT pos,
 {
 	LRESULT res = EDIT_EM_PosFromChar(es, pos, after_wrap);
 #ifdef __REACTOS__
-    HKL hKL = GetKeyboardLayout(0);
     POINT pt = { (short)LOWORD(res), (short)HIWORD(res) };
     HWND hwnd = es->hwndSelf;
 
@@ -1921,9 +1917,7 @@ static void EDIT_SetCaretPos(EDITSTATE *es, INT pos,
     SetCaretPos(pt.x, pt.y);
     if ((EDITSTATE *)GetWindowLongPtrW(hwnd, 0) != es) return;
 
-    /* Cicero/TSF layouts manage their UI through the text service. */
-    if (IS_IME_HKL(hKL))
-        EDIT_ImmSetCompositionWindow(es, pt);
+    EDIT_ImmSetCompositionWindow(es, pt);
 #else
 	TRACE("%d - %dx%d\n", pos, (short)LOWORD(res), (short)HIWORD(res));
 	SetCaretPos((short)LOWORD(res), (short)HIWORD(res));
@@ -4174,15 +4168,17 @@ static void EDIT_WM_SetFont(EDITSTATE *es, HFONT font, BOOL redraw)
 		ShowCaret(es->hwndSelf);
 	}
 #ifdef __REACTOS__
-    if (IS_IME_HKL(GetKeyboardLayout(0)))
     {
         LOGFONTW lf;
         HIMC hIMC = ImmGetContext(es->hwndSelf);
-        if (font == NULL)
-            font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-        GetObjectW(font, sizeof(lf), &lf);
-        ImmSetCompositionFontW(hIMC, &lf);
-        ImmReleaseContext(es->hwndSelf, hIMC);
+        if (hIMC)
+        {
+            if (font == NULL)
+                font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            GetObjectW(font, sizeof(lf), &lf);
+            ImmSetCompositionFontW(hIMC, &lf);
+            ImmReleaseContext(es->hwndSelf, hIMC);
+        }
     }
 #endif
 }
