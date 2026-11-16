@@ -457,7 +457,6 @@ EngMapModule(
 
     pFileView->cjView = 0;
 
-    /* FIXME: Use system space because ARM3 doesn't support executable sections yet */
     Status = MmMapViewInSystemSpace(pFileView->pSection,
                                     &pFileView->pvKView,
                                     &pFileView->cjView);
@@ -480,7 +479,6 @@ EngFreeModule(
     PFILEVIEW pFileView = (PFILEVIEW)h;
     NTSTATUS Status;
 
-    /* FIXME: Use system space because ARM3 doesn't support executable sections yet */
     Status = MmUnmapViewInSystemSpace(pFileView->pvKView);
     if (!NT_SUCCESS(Status))
     {

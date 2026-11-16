@@ -370,14 +370,6 @@ MmArmAccessFault(
     _In_ KPROCESSOR_MODE Mode,
     _In_ PVOID TrapInformation);
 
-/*
- * MmAccessFault: The dispatch function that routes page faults to the
- * appropriate handler (MmArmAccessFault for ARM3 allocations, or
- * MmNotPresentFaultSectionView for ROS section views like VACB buffers).
- *
- * ARM64 MUST call this instead of MmArmAccessFault to properly handle
- * kernel section views created by the ReactOS memory manager.
- */
 NTSTATUS
 NTAPI
 MmAccessFault(

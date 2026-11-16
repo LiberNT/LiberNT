@@ -58,7 +58,7 @@ MiArm64ProbeForWrite(
 /*
  * Match the Win11 ARM64 MAIR layout visible to kernel debuggers:
  * slot 0 and 4 are Normal WB, slot 1 is Device-nGnRnE, and slots 2/3
- * are Normal NC. Keep ordinary ARM3 mappings on slot 4 so existing PTEs
+ * are Normal NC. Normal NVS mappings use slot 4 so their PTEs
  * stay Normal WB.
  */
 #define PTE_ENABLE_CACHE        ARM64_PTE_CACHE_WB
@@ -95,8 +95,7 @@ MiArm64ProbeForWrite(
  * kernel addresses (0xFFFF...) are translated via TTBR1_EL1. The NT Memory
  * Manager's self-map is built into TTBR1's hierarchy at L0 index 493.
  *
- * L0[493] points back to the active TTBR1 root and L0[494] is hyperspace,
- * matching the Windows ARM64 contract expected by boot loaders and ARM3.
+ * L0[493] points back to the active TTBR1 root and L0[494] is hyperspace.
  */
 #define PXE_SELFMAP_INDEX   493
 

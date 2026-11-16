@@ -1,7 +1,7 @@
 # Memory-manager development
 
 Use only the `mm/` (NT Virtual Memory Subsystem, formerly `nvs/`) and `cc/` implementations. The user retired the old
-ARM3 `mm/`, `vmm_backup/`, `cc_backup/`, pool backing bridge, and legacy debugger
+`mm/`, `vmm_backup/`, `cc_backup/`, pool backing bridge, and legacy debugger
 extension from this worktree on 2026-09-20.
 
 Do not seek, read, restore, or use the retired implementations as references,

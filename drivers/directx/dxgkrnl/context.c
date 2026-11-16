@@ -3202,7 +3202,7 @@ DxgkProcessCleanup(
      * Tear down any lingering user-mode GPU mappings before the process VAD
      * tree is destroyed. User-mode runtimes do not always unlock everything
      * before exit, and MmMapLockedPagesSpecifyCache(UserMode) uses dedicated
-     * VADs that ARM3 expects to be gone by this point.
+     * VADs for those mappings.
      */
     DxgkAdapterProcessCleanup(Process);
     DxgkVidMmProcessCleanup(Process);
