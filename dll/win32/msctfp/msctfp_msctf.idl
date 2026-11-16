@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT Text Services Framework proxies
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Proxies and stubs of the interfaces of msctf.idl
+ * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
+ */
+
+#pragma makedep proxy
+#pragma makedep register
+
+#include "msctf.idl"
+
+[
+    threading(both),
+    uuid(b5f8fb3b-393f-4f7c-84cb-504924c2705a)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }
