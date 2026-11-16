@@ -830,23 +830,33 @@ typedef struct _PPC_LOADER_BLOCK
 #endif
 } PPC_LOADER_BLOCK, *PPPC_LOADER_BLOCK;
 
+#define ARM_LOADER_BLOCK_VERSION          1
+#define ARM_LOADER_KSEG0_BASE             0x80000000UL
+#define ARM_LOADER_KSEG0_SIZE             0x3C000000UL
+#define ARM_LOADER_DEVICE_WINDOW_BASE     0xBC000000UL
+#define ARM_LOADER_DEVICE_WINDOW_SIZE     0x04000000UL
+
+#define ARM_EARLY_UART_NONE               0
+#define ARM_EARLY_UART_PL011              1
+
 typedef struct _ARM_LOADER_BLOCK
 {
 #ifdef _ARM_
-    ULONG InterruptStack;
-    ULONG FirstLevelDcacheSize;
-    ULONG FirstLevelDcacheFillSize;
-    ULONG FirstLevelIcacheSize;
-    ULONG FirstLevelIcacheFillSize;
-    ULONG GpBase;
-    ULONG PanicStack;
+    ULONG Version;
+    ULONG Size;
+    ULONGLONG Kseg0PhysicalBase;
+    ULONGLONG PageTableRoot;
     ULONG PcrPage;
-    ULONG PdrPage;
-    ULONG SecondLevelDcacheSize;
-    ULONG SecondLevelDcacheFillSize;
-    ULONG SecondLevelIcacheSize;
-    ULONG SecondLevelIcacheFillSize;
-    ULONG PcrPage2;
+    ULONG InterruptStack;
+    ULONG PanicStack;
+    ULONG DpcStack;
+    ULONGLONG SharedUserDataPage;
+    ULONGLONG EarlyUartPhysical;
+    ULONG EarlyUartAddress;
+    ULONG EarlyUartInterface;
+    ULONGLONG DeviceTree;
+    ULONG DeviceTreeSize;
+    ULONG DeviceWindowUsed;
 #else
     ULONG PlaceHolder;
 #endif

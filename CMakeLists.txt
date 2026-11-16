@@ -312,11 +312,10 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         add_definitions(-D_AMD64_ -D__x86_64__ -D_WIN64)
         set(ARCH_64BIT TRUE)
     elseif(ARCH STREQUAL "arm")
-        # _M_ARM is already defined by toolchain
-        add_definitions(-D_ARM_ -D__arm__ -DWIN32)
-        if(SARCH STREQUAL "omap3-zoom2")
-            add_definitions(-D_ZOOM2_)
+        if(NOT (MSVC AND CMAKE_C_COMPILER_ID STREQUAL "Clang"))
+            add_compile_definitions(_M_ARM=7 _M_ARMT=7 _M_THUMB=7)
         endif()
+        add_definitions(-D_ARM_ -D__arm__ -DWIN32)
     elseif(ARCH STREQUAL "riscv64")
         # Clang defines _M_RISCV64 with the Microsoft-compatible value (100).
         add_compile_definitions(_RISCV64_ _WIN64)

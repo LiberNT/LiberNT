@@ -29,7 +29,7 @@ void __cdecl longjmp(
         exceptionRecord.ExceptionInformation[0] = (ULONG_PTR)jumpBuffer;
 
         RtlUnwind((PVOID)jumpBuffer->Frame,
-                  (PVOID)jumpBuffer->Rip,
+                  (PVOID)jumpBuffer->Pc,
                   &exceptionRecord,
                   (PVOID)(ULONG_PTR)_Value);
     }
