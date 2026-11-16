@@ -10585,7 +10585,19 @@ static LRESULT LISTVIEW_KeyDown(LISTVIEW_INFO *infoPtr, INT nVirtualKey, LONG lK
     if ((infoPtr->nItemCount > 0) && (infoPtr->nFocusedItem != -1))
     {
         if (!notify(infoPtr, NM_RETURN)) return 0;
+#ifdef __REACTOS__
+        {
+            HWND hwnd = infoPtr->hwndSelf;
+            LVHITTESTINFO htInfo;
+
+            ZeroMemory(&htInfo, sizeof(htInfo));
+            htInfo.iItem = infoPtr->nFocusedItem;
+            notify_itemactivate(infoPtr, &htInfo);
+            if (!IsWindow(hwnd)) return 0;
+        }
+#else
         if (!notify(infoPtr, LVN_ITEMACTIVATE)) return 0;
+#endif
     }
     break;
 
