@@ -2249,7 +2249,24 @@ static HRESULT SS_ItemOut( SCRIPT_STRING_ANALYSIS ssa,
         }
     }
     if (analysis->glyphs[iItem].fallbackFont)
+    {
+#ifdef __REACTOS__
+        TEXTMETRICW tmBase, tmFallback;
+        BOOL fBase = GetTextMetricsW(analysis->hdc, &tmBase);
+#endif
         oldFont = SelectObject(analysis->hdc, analysis->glyphs[iItem].fallbackFont);
+#ifdef __REACTOS__
+        if (fBase && GetTextMetricsW(analysis->hdc, &tmFallback))
+        {
+            UINT uAlign = GetTextAlign(analysis->hdc) & (TA_TOP | TA_BASELINE | TA_BOTTOM);
+
+            if (uAlign == TA_TOP)
+                iY += tmBase.tmAscent - tmFallback.tmAscent;
+            else if (uAlign == TA_BOTTOM)
+                iY += tmFallback.tmDescent - tmBase.tmDescent;
+        }
+#endif
+    }
 
     if (cStart >= 0 && analysis->pItem[iItem+1].iCharPos > cStart && analysis->pItem[iItem].iCharPos <= cStart)
         runStart = cStart - analysis->pItem[iItem].iCharPos;
