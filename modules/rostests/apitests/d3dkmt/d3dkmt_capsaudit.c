@@ -230,6 +230,30 @@ static void Test_ReportedVersionIsNotAhead(D3DKMT_HANDLE hAdapter)
     }
 }
 
+static void Test_ReportedVersionIsNotBehind(D3DKMT_HANDLE hAdapter)
+{
+    D3DKMT_DRIVERVERSION Version = (D3DKMT_DRIVERVERSION)0;
+    D3DKMT_QUERY_GPUMMU_CAPS MmuQuery;
+    NTSTATUS Status;
+
+    Status = QueryCap(hAdapter, KMTQAITYPE_DRIVERVERSION, &Version, sizeof(Version));
+    if (!NT_SUCCESS(Status))
+    {
+        trace("driver version query unavailable (0x%08lX)\n", (long)Status);
+        return;
+    }
+    memset(&MmuQuery, 0, sizeof(MmuQuery));
+    Status = QueryCap(hAdapter, KMTQAITYPE_QUERY_GPUMMU_CAPS, &MmuQuery, sizeof(MmuQuery));
+    if (!NT_SUCCESS(Status) || MmuQuery.Caps.VirtualAddressBitCount == 0)
+    {
+        trace("no GPU virtual addressing (0x%08lX), version %u\n", (long)Status, (unsigned)Version);
+        return;
+    }
+    ok(Version >= KMT_DRIVERVERSION_WDDM_2_0,
+       "an adapter with %u-bit GPU virtual addressing reports WDDM version %u\n",
+       (unsigned)MmuQuery.Caps.VirtualAddressBitCount, (unsigned)Version);
+}
+
 START_TEST(capsaudit)
 {
     D3DKMT_HANDLE hAdapter;
@@ -253,6 +277,7 @@ START_TEST(capsaudit)
     Test_GpuMmuCapIsSelfConsistent(hAdapter);
     Test_MultiPlaneOverlayAbsentAndRefused(hAdapter);
     Test_ReportedVersionIsNotAhead(hAdapter);
+    Test_ReportedVersionIsNotBehind(hAdapter);
 
     CloseAdapter(hAdapter);
 }

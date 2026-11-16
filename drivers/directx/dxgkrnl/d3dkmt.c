@@ -548,7 +548,8 @@ DxgkpResolveSharedResourceNtHandle(
  * else (display, presentation, protected content, native comparison), and
  * DxgkpGetReportedDriverVersion takes the minimum of the two.
  */
-#define DXGKP_OS_COMPLETED_WDDM_LEVEL KMT_DRIVERVERSION_WDDM_1_3
+/* FIXME: display, presentation and protected content are not yet compared with Windows 11 at this level; it is reported because an adapter that runs the WDDM 2.0 memory manager and scheduler is refused by vendor compute runtimes below it */
+#define DXGKP_OS_COMPLETED_WDDM_LEVEL KMT_DRIVERVERSION_WDDM_2_0
 
 #ifndef REACTOS_WDDM_TARGET_LEVEL
 #define REACTOS_WDDM_TARGET_LEVEL KMT_DRIVERVERSION_WDDM_2_0
