@@ -3780,6 +3780,10 @@ NTSTATUS
 DxgkVidPnQueueHotPlugRebuild(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+NTSTATUS
+DxgkVidPnQueueConnectionChangeDrain(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 VOID
 DxgkVidPnRefreshConnectedChildEdids(
     _In_ PDXGKRNL_ADAPTER Adapter);
@@ -3788,10 +3792,6 @@ VOID
 DxgkVidPnQueryFirmwareTiming(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DKMDT_HVIDPN hVidPn);
-NTSTATUS
-DxgkVidPnQueueConnectionChangeDrain(
-    _In_ PDXGKRNL_ADAPTER Adapter);
-
 
 /* adapter.c: IRP_MN_QUERY_INTERFACE offered to DxgkDdiQueryInterface. */
 NTSTATUS

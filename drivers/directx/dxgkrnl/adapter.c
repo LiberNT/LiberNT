@@ -14590,10 +14590,10 @@ DxgkAdapterStart(
      * memory working set. Capture the potential connectors now, before the
      * paging context and desktop allocate persistent GPU resources. */
     Status = DxgkPnpCacheInitialChildRelations(Adapter);
-    DxgkpEnablePeriodicInterruptHandoff(Adapter);
-    DxgkEndKmdExclusive(Adapter, TRUE);
     if (NT_SUCCESS(Status))
         Status = DxgkPnpEnableHotPlugDetection(Adapter);
+    DxgkpEnablePeriodicInterruptHandoff(Adapter);
+    DxgkEndKmdExclusive(Adapter, TRUE);
     DxgkUnblockInterruptCallbacks(Adapter);
     DxgkReleaseLevel3Transition(Adapter);
     if (!NT_SUCCESS(Status))
@@ -15176,10 +15176,10 @@ DxgkAdapterStart(
      * was still starting. */
     if (InterlockedExchange(&Adapter->LinkRetrainPending, 0) != 0)
         (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
-    return Status;
-
     if (InterlockedCompareExchange(&Adapter->ConnectorChangePending, 0, 0) != 0)
         (VOID)DxgkVidPnQueueConnectionChangeDrain(Adapter);
+    return Status;
+
 StartRollback:
     /* Runtime power management is brought up before the last few start steps,
      * so a rollback has to retire it; otherwise PoFx keeps a registration
@@ -15222,9 +15222,9 @@ DxgkpStopMiniportForTeardown(
         return STATUS_DELETE_PENDING;
     }
 
+    DxgkPnpDisableHotPlugDetection(Adapter);
     Status = Adapter->MiniportContext->InitData.s.DxgkDdiStopDevice(Adapter->MiniportDeviceContext);
     if (NT_SUCCESS(Status))
-    DxgkPnpDisableHotPlugDetection(Adapter);
     {
         Adapter->MiniportDeviceStopped = TRUE;
         InterlockedExchange(&Adapter->TdrOwnershipUncertain, 0);
@@ -17823,6 +17823,7 @@ DxgkpAddDeviceRegistered(
     Adapter->VidMmDestroyWorkerCount = 0;
     Adapter->VidMmDestroyQueuesBlocked = 1;
     Adapter->HotPlugGeneration = 0;
+    Adapter->HotPlugRebuiltGeneration = 0;
     Adapter->HotPlugWorkActive = 0;
     Adapter->ChildEnumerationEpoch = 0;
     Adapter->ChildRelationsEnumerated = 0;
@@ -17831,7 +17832,6 @@ DxgkpAddDeviceRegistered(
     KeInitializeEvent(&Adapter->SubmitDmaReservationsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->PresentQueueCallsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->PresentStopEvent, NotificationEvent, TRUE);
-    Adapter->HotPlugRebuiltGeneration = 0;
     KeInitializeEvent(&Adapter->VidMmBackingsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->VidMmDestroyWorkersDrainedEvent, NotificationEvent, TRUE);
 
