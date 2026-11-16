@@ -60,6 +60,7 @@ extern int MiSystem;
 
 ULONG64 KeQueryInterruptTime(VOID);
 KIRQL KeGetCurrentIrql(VOID);
+#define PAGED_CODE() POOL_ASSERT(KeGetCurrentIrql() <= APC_LEVEL)
 _Noreturn VOID KeBugCheckEx(ULONG Code, ULONG_PTR A, ULONG_PTR B, ULONG_PTR C, ULONG_PTR D);
 _Noreturn VOID ExRaiseStatus(NTSTATUS Status);
 BOOLEAN MmUseSpecialPool(SIZE_T Size, ULONG Tag);

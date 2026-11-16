@@ -318,6 +318,26 @@ SessionSpaceRange(void)
     MiSessionSpaceDestroy(&Session);
 }
 
+static void
+SessionSpaceRelease(PMI_SYSTEM System)
+{
+    PMI_VAD_ROOT Tree = &System->SystemSpace.VadRoot;
+    PMI_VAD_NODE Node = MiVadFind(Tree, System->SessionStart >> PAGE_SHIFT);
+    PMI_VAD Vad;
+
+    CHECK(Node != NULL);
+    if (Node == NULL)
+        return;
+    Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
+    CHECK(Vad->Type == MiVadSystem);
+    CHECK(Node->StartingVpn == System->SessionStart >> PAGE_SHIFT);
+    CHECK(Node->EndingVpn == System->SessionEnd >> PAGE_SHIFT);
+    MiVadRemove(Tree, Node);
+    MI_FREE(Vad);
+    System->SessionStart = 0;
+    System->SessionEnd = 0;
+}
+
 void
 TestSession(void)
 {
@@ -331,6 +351,7 @@ TestSession(void)
     SessionLifecycle();
     SessionAttachRundown();
     SessionMoveProcess();
+    SessionSpaceRelease(&World.System);
     MiSessionTestSystem = NULL;
     WorldDestroy(&World);
 }
