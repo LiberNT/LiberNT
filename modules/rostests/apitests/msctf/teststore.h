@@ -70,6 +70,7 @@ public:
     DWORD m_dwDynamicFlags;
     BOOL m_fAcceptComposition;
     BOOL m_fOwnerSink;
+    ITfCompositionView *m_pLastUpdated;
     DWORD m_lastSetTextFlags;
     DWORD m_pendingLock;
     ULONG m_cLockRequests;

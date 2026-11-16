@@ -434,6 +434,170 @@ static void TestAfterPop(void)
     Fixture_Done(&fixture);
 }
 
+#define EDIT_PROPERTY 0x1
+#define EDIT_OTHER_CLIENT 0x2
+#define EDIT_NO_COMPOSITION 0x4
+#define EDIT_REFUSE 0x8
+
+struct EDIT_CASE
+{
+    LONG lStart, lEnd;
+    LPCWSTR pszText;
+    DWORD dwFlags;
+    HRESULT hrExpected;
+    const char *pszLog;
+    LPCWSTR pszResult;
+    LONG lCompStart, lCompEnd;
+    BOOL fUpdatedOwn;
+};
+
+static const EDIT_CASE EditCases[] =
+{
+    { 2, 4, L"abc", 0, S_OK, "update,edited", L"01abc456789", 2, 5, TRUE },
+    { 3, 3, L"x", 0, S_OK, "update,edited", L"012x3456789", 2, 5, TRUE },
+    { 8, 9, L"y", 0, TF_E_RANGE_NOT_COVERED, "edited", L"0123456789", 2, 4, FALSE },
+    { 2, 4, NULL, EDIT_PROPERTY, S_OK, "edited", L"0123456789", 2, 4, FALSE },
+    { 2, 4, L"", 0, S_OK, "update,edited", L"01456789", 2, 2, TRUE },
+    { 4, 4, L"z", 0, S_OK, "update,edited", L"0123z456789", 2, 5, TRUE },
+    { 1, 2, L"w", 0, TF_E_RANGE_NOT_COVERED, "edited", L"0123456789", 2, 4, FALSE },
+    { 1, 3, L"v", 0, TF_E_RANGE_NOT_COVERED, "edited", L"0123456789", 2, 4, FALSE },
+    { 8, 9, L"y", EDIT_OTHER_CLIENT, S_OK, "start,update,end,edited", L"01234567y9", 2, 4, FALSE },
+    { 3, 3, L"x", EDIT_OTHER_CLIENT, S_OK, "start,update,end,edited", L"012x3456789", 2, 5, FALSE },
+    { 8, 9, L"y", EDIT_NO_COMPOSITION, S_OK, "start,update,end,edited", L"01234567y9", -1, -1, FALSE },
+    { 8, 9, L"y", EDIT_NO_COMPOSITION | EDIT_REFUSE, TF_E_COMPOSITION_REJECTED, "start-refused,edited", L"0123456789", -1, -1, FALSE },
+    { 8, 9, L"y", EDIT_OTHER_CLIENT | EDIT_REFUSE, TF_E_COMPOSITION_REJECTED, "start-refused,terminated,end,start-refused,edited",
+      L"0123456789", -1, -1, FALSE },
+};
+
+struct EDIT_TEST
+{
+    COMPOSITION_TEST *pTest;
+    const EDIT_CASE *pCase;
+    HRESULT hr;
+    LONG lCompStart, lCompEnd;
+};
+
+static void EditSession(TfEditCookie ec, void *pv)
+{
+    EDIT_TEST *pEdit = (EDIT_TEST *)pv;
+    TSF_FIXTURE *pFixture = pEdit->pTest->pFixture;
+    ITfRange *pRange = Range_New(pFixture, ec, pEdit->pCase->lStart, pEdit->pCase->lEnd);
+    ITfProperty *pProperty;
+    VARIANT var;
+
+    if (pEdit->pCase->dwFlags & EDIT_PROPERTY)
+    {
+        pEdit->hr = pFixture->pContext->GetProperty(GUID_PROP_ATTRIBUTE, &pProperty);
+        if (SUCCEEDED(pEdit->hr))
+        {
+            V_VT(&var) = VT_I4;
+            V_I4(&var) = 1;
+            pEdit->hr = pProperty->SetValue(ec, pRange, &var);
+            pProperty->Release();
+        }
+    }
+    else
+    {
+        pEdit->hr = pRange->SetText(ec, 0, pEdit->pCase->pszText, lstrlenW(pEdit->pCase->pszText));
+    }
+    Log_Add("edited");
+    pRange->Release();
+    pRange = NULL;
+    if (pEdit->pTest->pComposition)
+        pEdit->pTest->pComposition->GetRange(&pRange);
+    if (pRange)
+    {
+        Range_GetExtent(ec, pRange, &pEdit->lCompStart, &pEdit->lCompEnd);
+        pRange->Release();
+    }
+}
+
+static HRESULT RunSyncAs(TSF_FIXTURE *pFixture, EDIT_FN pfn, void *pContext)
+{
+    GUID guid = {0x6b3a3f9f, 0x51d2, 0x4c1e, {0x9a, 0x37, 0x1f, 0x52, 0x8c, 0x0e, 0x4d, 0x71}};
+    TfClientId tidOther = TF_CLIENTID_NULL;
+    ITfClientId *pClientId = NULL;
+    HRESULT hrSession = E_FAIL;
+
+    pFixture->pThreadMgr->QueryInterface(IID_ITfClientId, (void **)&pClientId);
+    if (pClientId)
+    {
+        pClientId->GetClientId(guid, &tidOther);
+        pClientId->Release();
+    }
+    CTestEditSession *pSession = new CTestEditSession(pfn, pContext);
+    ok_hr(pFixture->pContext->RequestEditSession(tidOther, pSession, TF_ES_SYNC | TF_ES_READWRITE, &hrSession), S_OK);
+    pSession->Release();
+    return hrSession;
+}
+
+static void TestUpdateOnEdit(void)
+{
+    TSF_FIXTURE fixture;
+    COMPOSITION_TEST test;
+    EDIT_TEST edit;
+    const EDIT_CASE *pCase;
+    ITfCompositionView *pView = NULL;
+    HRESULT hr;
+
+    for (UINT i = 0; i < _countof(EditCases); ++i)
+    {
+        pCase = &EditCases[i];
+        if (!Fixture_Init(&fixture, L"0123456789"))
+        {
+            Fixture_Done(&fixture);
+            return;
+        }
+        ZeroMemory(&test, sizeof(test));
+        test.pFixture = &fixture;
+        test.pSink = new CTestCompositionSink();
+        if (!(pCase->dwFlags & EDIT_NO_COMPOSITION))
+        {
+            Fixture_RunSync(&fixture, StartSession, &test, TF_ES_SYNC | TF_ES_READWRITE);
+            ok(test.pComposition != NULL, "case %u: no composition\n", i);
+            if (!test.pComposition)
+            {
+                test.pSink->Release();
+                Fixture_Done(&fixture);
+                continue;
+            }
+            test.pComposition->QueryInterface(IID_ITfCompositionView, (void **)&pView);
+        }
+        fixture.pStore->m_fAcceptComposition = !(pCase->dwFlags & EDIT_REFUSE);
+        fixture.pStore->m_pLastUpdated = NULL;
+        ZeroMemory(&edit, sizeof(edit));
+        edit.pTest = &test;
+        edit.pCase = pCase;
+        edit.lCompStart = edit.lCompEnd = -1;
+        Log_Reset();
+        if (pCase->dwFlags & EDIT_OTHER_CLIENT)
+            hr = RunSyncAs(&fixture, EditSession, &edit);
+        else
+            hr = Fixture_RunSync(&fixture, EditSession, &edit, TF_ES_SYNC | TF_ES_READWRITE);
+        ok_hr(hr, S_OK);
+        ok(edit.hr == pCase->hrExpected, "case %u: hr 0x%lx\n", i, edit.hr);
+        ok(!strcmp(Log_Get(), pCase->pszLog), "case %u: log '%s'\n", i, Log_Get());
+        ok(!wcscmp(fixture.pStore->Text(), pCase->pszResult), "case %u: text '%ls'\n", i, fixture.pStore->Text());
+        ok(edit.lCompStart == pCase->lCompStart && edit.lCompEnd == pCase->lCompEnd,
+           "case %u: composition [%ld,%ld]\n", i, edit.lCompStart, edit.lCompEnd);
+        ok((pView && fixture.pStore->m_pLastUpdated == pView) == pCase->fUpdatedOwn,
+           "case %u: last update on %p, composition %p\n", i, fixture.pStore->m_pLastUpdated, pView);
+        if (test.pComposition)
+        {
+            fixture.pStore->m_fAcceptComposition = TRUE;
+            Fixture_RunSync(&fixture, EndSession, &test, TF_ES_SYNC | TF_ES_READWRITE);
+            test.pComposition->Release();
+        }
+        if (pView)
+        {
+            pView->Release();
+            pView = NULL;
+        }
+        test.pSink->Release();
+        Fixture_Done(&fixture);
+    }
+}
+
 START_TEST(composition)
 {
     CoInitialize(NULL);
@@ -442,5 +606,6 @@ START_TEST(composition)
     TestTerminate();
     TestTerminateInSession();
     TestAfterPop();
+    TestUpdateOnEdit();
     CoUninitialize();
 }

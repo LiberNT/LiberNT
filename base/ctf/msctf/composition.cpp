@@ -10,12 +10,13 @@
 #include "composition.h"
 
 
-CComposition::CComposition(ITfContext *context, CRange *range, ITfCompositionSink *sink, REFCLSID clsidOwner)
+CComposition::CComposition(ITfContext *context, CRange *range, ITfCompositionSink *sink, REFCLSID clsidOwner, TfClientId tidOwner)
     : m_refs(1)
     , m_context(context)
     , m_range(range)
     , m_sink(sink)
     , m_clsidOwner(clsidOwner)
+    , m_tidOwner(tidOwner)
     , m_ended(FALSE)
 {
     m_context->AddRef();
