@@ -13,7 +13,6 @@
 #include "rtminiport.h"
 #include "rtstream.h"
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 /* MmGetPhysicalAddress is declared in ntddk.h (not wdm.h).
  * Provide a local declaration so portcls-based drivers can use it. */
@@ -432,5 +431,3 @@ void CAC97MiniportWaveRTStream::InterruptServiceRoutine()
     //
     UpdateLviCyclic();
 }
-
-#endif          // (NTDDI_VERSION >= NTDDI_VISTA)

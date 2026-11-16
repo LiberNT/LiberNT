@@ -468,9 +468,7 @@ Return Value:
             //
 
             if (FileInformationClass == FileNameInformation ||
-#if (NTDDI_VERSION >= NTDDI_VISTA)
                 FileInformationClass == FileNormalizedNameInformation ||
-#endif
                 FileInformationClass == FileAllInformation ) {
 
                 if (!FatAcquireExclusiveVcb( IrpContext, Vcb )) {
@@ -585,12 +583,10 @@ Return Value:
                 FatQueryNameInfo( IrpContext, Fcb, Ccb, FALSE, Buffer, &Length );
                 break;
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
             case FileNormalizedNameInformation:
 
                 FatQueryNameInfo( IrpContext, Fcb, Ccb, TRUE, Buffer, &Length );
                 break;
-#endif
 
             case FileAlternateNameInformation:
 

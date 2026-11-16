@@ -1165,7 +1165,6 @@ FORCEINLINE
 VOID
 ExpReleaseFastMutexState(IN OUT PFAST_MUTEX FastMutex)
 {
-#if (NTDDI_VERSION >= NTDDI_VISTA)
     LONG OldValue, NewValue;
 
     OldValue = InterlockedExchangeAdd(&FastMutex->Count, FM_LOCK_BIT);
@@ -1182,13 +1181,6 @@ ExpReleaseFastMutexState(IN OUT PFAST_MUTEX FastMutex)
             KeSetEventBoostPriority(&FastMutex->Event, NULL);
         }
     }
-#else
-
-    if (InterlockedIncrement(&FastMutex->Count) <= 0)
-    {
-        KeSetEventBoostPriority(&FastMutex->Event, NULL);
-    }
-#endif
 }
 
 FORCEINLINE
@@ -1203,13 +1195,8 @@ _ExAcquireFastMutexUnsafe(IN PFAST_MUTEX FastMutex)
            (Thread->Teb >= (PTEB)MM_SYSTEM_RANGE_START));
     ASSERT(FastMutex->Owner != Thread);
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
     if (!InterlockedBitTestAndReset(&FastMutex->Count, FM_LOCK_BIT_V))
-#else
-
-    if (InterlockedDecrement(&FastMutex->Count))
-#endif
     {
         KiAcquireFastMutex(FastMutex);
     }
@@ -1241,13 +1228,8 @@ _ExAcquireFastMutex(IN PFAST_MUTEX FastMutex)
 
     KeRaiseIrql(APC_LEVEL, &OldIrql);
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
     if (!InterlockedBitTestAndReset(&FastMutex->Count, FM_LOCK_BIT_V))
-#else
-
-    if (InterlockedDecrement(&FastMutex->Count))
-#endif
     {
         KiAcquireFastMutex(FastMutex);
     }

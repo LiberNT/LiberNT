@@ -215,11 +215,9 @@ Options_RunDLLCommon(HWND hWnd, HINSTANCE hInst, int fOptions, DWORD nCmdShow)
             break;
 
         case 1: // Taskbar settings
-#if (NTDDI_VERSION >= NTDDI_VISTA)
         case 3: // Start menu settings
         case 4: // Tray icon settings
         case 6: // Taskbar toolbars
-#endif
             PostMessage(GetShellWindow(), WM_PROGMAN_OPENSHELLSETTINGS, fOptions, 0);
             break;
 

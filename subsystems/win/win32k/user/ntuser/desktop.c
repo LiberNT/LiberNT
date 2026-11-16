@@ -3271,9 +3271,7 @@ NtUserSwitchDesktop(HDESK hdesk)
      * interactive window station: pulse the legacy (NT 3.5+)
      * event and send the desktop-switch notification (Vista+) */
     KePulseEvent(gpDisplaySession->DesktopSwitchEvent, EVENT_INCREMENT, FALSE);
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
     IntNotifyWinEvent(EVENT_SYSTEM_DESKTOPSWITCH, NULL, OBJID_WINDOW, CHILDID_SELF, 0);
-#endif
 
     TRACE("SwitchDesktop gpdeskInputDesktop 0x%p\n", gpdeskInputDesktop);
     if (pdeskPrevious != NULL)

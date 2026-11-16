@@ -859,12 +859,10 @@ Int64ToStr(
 {
     WCHAR szBuff[40];
     UINT ich = 0, ichValue;
-#if (WINVER >= _WIN32_WINNT_VISTA)
     BOOL bMinus = (llValue < 0);
 
     if (bMinus)
         llValue = -llValue;
-#endif
 
     if (cchValue <= 0)
         return E_FAIL;
@@ -875,10 +873,8 @@ Int64ToStr(
         llValue /= 10;
     } while (llValue != 0 && ich < _countof(szBuff) - 1);
 
-#if (WINVER >= _WIN32_WINNT_VISTA)
     if (bMinus && ich < _countof(szBuff))
         szBuff[ich++] = '-';
-#endif
 
     for (ichValue = 0; ich > 0 && ichValue < cchValue; ++ichValue)
     {

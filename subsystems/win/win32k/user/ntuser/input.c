@@ -11,11 +11,7 @@
 DBG_DEFAULT_CHANNEL(UserInput);
 
 /* LastRITEventTickCount update cycle has been adjusted from 60s to 1s since NT6 */
-#if (NTDDI_VERSION < NTDDI_VISTA)
-#define LAST_RIT_EVENT_UPDATE_INTERVAL 60000UL
-#else
 #define LAST_RIT_EVENT_UPDATE_INTERVAL 1000UL
-#endif
 
 #define MOUSE_INPUT_BUFFER_SIZE 64
 

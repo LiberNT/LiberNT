@@ -12,7 +12,6 @@
 
 #include "shared.h"
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 /*****************************************************************************
  * Constants
@@ -149,7 +148,6 @@ public:
     );
 };
 
-#endif          // (NTDDI_VERSION >= NTDDI_VISTA)
 
 #endif          // _RTMINIPORT_H_
 

@@ -152,9 +152,7 @@ ExFatQueryInformation(
             break;
 
         case FileNameInformation:
-#if (NTDDI_VERSION >= NTDDI_VISTA)
         case FileNormalizedNameInformation:
-#endif
             Status = ExFatQueryNameInformation(Fcb, Buffer, Length, &Written);
             break;
 

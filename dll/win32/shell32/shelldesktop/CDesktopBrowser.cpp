@@ -1369,10 +1369,8 @@ LRESULT CDesktopBrowser::OnShowOptionsDlg(UINT uMsg, WPARAM wParam, LPARAM lPara
     switch (wParam)
     {
         case 0:
-#if (NTDDI_VERSION >= NTDDI_VISTA)
         case 2:
         case 7:
-#endif
             ShowFolderOptionsDialog((UINT)(UINT_PTR)wParam, TRUE);
             break;
         case 1:

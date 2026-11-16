@@ -355,7 +355,6 @@ NTSTATUS GZCALL StartDevice
     //
     if (NT_SUCCESS (ntStatus))
     {
-#if (NTDDI_VERSION >= NTDDI_VISTA)
         ntStatus = InstallSubdevice (DeviceObject,
                                      Irp,
                                      L"Wave",
@@ -370,7 +369,6 @@ NTSTATUS GZCALL StartDevice
 
         if (!NT_SUCCESS (ntStatus))
         {
-#endif
             //
             // If creation of the RT port failed we can fall back to the WavePCI
             // or WaveCyc port of portcls. In this case, we try the WavePCI port.
@@ -402,9 +400,7 @@ NTSTATUS GZCALL StartDevice
 #endif
 
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
         }
-#endif
         // print error message.
         if (!NT_SUCCESS (ntStatus))
         {

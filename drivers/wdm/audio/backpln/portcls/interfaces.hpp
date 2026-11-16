@@ -671,7 +671,6 @@ DECLARE_INTERFACE_(IPortPinWavePci, IIrpTarget)
 typedef IPortPinWavePci *PPORTPINWAVEPCI;
 
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 /*****************************************************************************
  * IPortFilterWaveRT
@@ -737,7 +736,6 @@ typedef IPortPinWaveRT *PPORTPINWAVERT;
         IN PDEVICE_OBJECT DeviceObject)
 
 
-#endif
 
 /*****************************************************************************
  * IPortFilterWaveCyclic

@@ -13,7 +13,6 @@
 #include "rtminiport.h"
 #include "rtstream.h"
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 #ifdef _MSC_VER
 #pragma code_seg("PAGE")
@@ -396,7 +395,3 @@ CAC97MiniportWaveRT::InterruptServiceRoutine
 
     return STATUS_SUCCESS;
 }
-
-
-#endif
-

@@ -12,7 +12,6 @@
 
 #include "shared.h"
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 /* Forward-declare CMiniport so stream.h can reference it */
 #ifndef PPORT_
@@ -113,7 +112,6 @@ public:
     );
 };
 
-#endif          // (NTDDI_VERSION >= NTDDI_VISTA)
 
 #endif          // _RTSTREAM_H_
 

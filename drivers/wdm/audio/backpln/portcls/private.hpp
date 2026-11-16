@@ -153,7 +153,6 @@ GetDMusMiniport(
     IN PMINIPORTDMUS * Miniport,
     IN PMINIPORTMIDI * MidiMiniport);
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 NTSTATUS
 NewPortFilterWaveRT(
@@ -181,7 +180,6 @@ NewPortWaveRT(
     OUT PPORT* OutPort);
 
 
-#endif
 
 NTSTATUS
 NewPortFilterTopology(
