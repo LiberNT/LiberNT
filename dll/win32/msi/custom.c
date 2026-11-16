@@ -362,7 +362,11 @@ static UINT custom_get_process_return( HANDLE process )
     GetExitCodeProcess( process, &rc );
     TRACE( "exit code is %lu\n", rc );
     if (rc != 0)
+#ifdef __REACTOS__
+        return ERROR_INSTALL_FAILURE;
+#else
         return ERROR_FUNCTION_FAILED;
+#endif
     return ERROR_SUCCESS;
 }
 
