@@ -1404,6 +1404,26 @@ MiCreateImageControlArea(
 }
 
 static
+NTSTATUS
+MiCreateImageControlAreaWaiting(
+    _In_ PFILE_OBJECT FileObject,
+    _Out_ PMI_CONTROL_AREA *ControlOut)
+{
+    ULONG Attempts = 0;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    do
+    {
+        Status = MiCreateImageControlArea(FileObject, ControlOut);
+        ASSERT(NT_SUCCESS(Status) || *ControlOut == NULL);
+    } while (Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &Attempts)));
+
+    return Status;
+}
+
+static
 VOID
 NTAPI
 MiDeleteSection(
@@ -1677,7 +1697,7 @@ MiCreateSectionWithMode(
     }
     else if (AllocationAttributes & SEC_IMAGE)
     {
-        Status = MiCreateImageControlArea(File, &Control);
+        Status = MiCreateImageControlAreaWaiting(File, &Control);
         if (NT_SUCCESS(Status))
         {
             Status = MiValidateImageSigningPolicy(File);
