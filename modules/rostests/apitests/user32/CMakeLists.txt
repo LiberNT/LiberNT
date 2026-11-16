@@ -41,6 +41,7 @@ list(APPEND SOURCE
     DrawIconEx.c
     DrawText.c
     desktop.c
+    EditCompositionForm.c
     EmptyClipboard.c
     EnableScrollBar.c
     EnumDisplaySettings.c

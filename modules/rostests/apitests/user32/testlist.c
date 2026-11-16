@@ -38,6 +38,7 @@ extern void func_DpiVirtualization(void);
 extern void func_DrawIconEx(void);
 extern void func_DrawText(void);
 extern void func_desktop(void);
+extern void func_EditCompositionForm(void);
 extern void func_EmptyClipboard(void);
 extern void func_ClipboardAccess(void);
 extern void func_ClipboardData(void);
@@ -186,6 +187,7 @@ const struct test winetest_testlist[] =
     { "DrawIconEx", func_DrawIconEx },
     { "DrawText", func_DrawText },
     { "desktop", func_desktop },
+    { "EditCompositionForm", func_EditCompositionForm },
     { "EmptyClipboard", func_EmptyClipboard },
     { "ClipboardAccess", func_ClipboardAccess },
     { "ClipboardData", func_ClipboardData },
