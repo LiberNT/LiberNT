@@ -14759,6 +14759,9 @@ DxgkAdapterStart(
                     Adapter->IndependentVidPnVSyncControl =
                         DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_7) &&
                         Caps->MiscCaps.IndependentVidPnVSyncControl;
+                    Adapter->SupportContextlessPresent =
+                        DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_4) &&
+                        Caps->MiscCaps.SupportContextlessPresent;
                     Adapter->DisplayableSupport =
                         DxgkCapsCoreInterfaceVersionAtLeast(Adapter->MiniportContext->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_3_0) &&
                         Caps->MiscCaps.DisplayableSupport;

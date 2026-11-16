@@ -686,6 +686,16 @@ TestSourceFormatRank(VOID)
     ok_eq_ulong(DxgkVidPnCoreSourceFormatRank(0), 2UL);
 }
 
+static
+VOID
+DxgkPresentQueueTestContextless(VOID)
+{
+    ok_bool_true(DxgkPresentCoreContextless(TRUE, FALSE), "a contextless miniport flips without a context");
+    ok_bool_false(DxgkPresentCoreContextless(TRUE, TRUE), "a blt keeps the context whose DMA buffer it writes");
+    ok_bool_false(DxgkPresentCoreContextless(FALSE, FALSE), "a miniport without the cap flips through its context");
+    ok_bool_false(DxgkPresentCoreContextless(FALSE, TRUE), "a miniport without the cap blts through its context");
+}
+
 START_TEST(DxgkPresentQueue)
 {
     PVOID DeviceA = (PVOID)(ULONG_PTR)0x1000;
@@ -816,4 +826,5 @@ START_TEST(DxgkPresentQueue)
     ok_eq_ulong(Queue.Count, 0);
     ok_eq_long(InterlockedCompareExchange(&Queue.MatchOutsideLock, 0, 0), 0);
     ok_eq_long(InterlockedCompareExchange(&Queue.ReleaseInsideLock, 0, 0), 0);
+    DxgkPresentQueueTestContextless();
 }

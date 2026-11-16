@@ -948,6 +948,7 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     SupportMultiPlaneOverlay;
     UINT                        MaxOverlayPlanes;
     BOOLEAN                     IndependentVidPnVSyncControl;
+    BOOLEAN                     SupportContextlessPresent;
     BOOLEAN                     DisplayableSupport;
     ULONG                       DriverCapsWddmVersion;
     BOOLEAN                     SurpriseRemovalHandled;

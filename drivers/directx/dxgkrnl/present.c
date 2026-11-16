@@ -5536,9 +5536,16 @@ DxgkpBuildMmioFlip(
     {
         return STATUS_NOT_SUPPORTED;
     }
-    PresentContext = Entry->Context != NULL ? Entry->Context->hMiniportContext : Entry->Device->hMiniportDevice;
-    if (PresentContext == NULL || (Entry->Context == NULL && Adapter->SchedulingCaps.MultiEngineAware))
-        return STATUS_INVALID_HANDLE;
+    if (DxgkPresentCoreContextless(Adapter->SupportContextlessPresent, FALSE))
+    {
+        PresentContext = NULL;
+    }
+    else
+    {
+        PresentContext = Entry->Context != NULL ? Entry->Context->hMiniportContext : Entry->Device->hMiniportDevice;
+        if (PresentContext == NULL || (Entry->Context == NULL && Adapter->SchedulingCaps.MultiEngineAware))
+            return STATUS_INVALID_HANDLE;
+    }
 
     Status = DxgkVidPnAcquireScanoutLease(Adapter, Entry->Device, Entry->VidPnSourceId,
                  Entry->Window, Entry->CompositorGeneration, &ScanoutLease);
@@ -5602,6 +5609,7 @@ DxgkpBuildMmioFlip(
         Status = STATUS_DEVICE_REMOVED;
         goto Cleanup;
     }
+    ASSERT(PresentContext != NULL || Adapter->SupportContextlessPresent);
     Status = DXGK_CB_FULL(Adapter, DxgkDdiPresent)(PresentContext, &PresentArgs);
     if (NT_SUCCESS(Status) && PresentArgs.pDmaBuffer != NULL)
         Status = STATUS_INVALID_DEVICE_STATE;

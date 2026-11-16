@@ -541,6 +541,15 @@ DxgkPresentCoreCompleteUnsupportedOverlayCreate(
  */
 FORCEINLINE
 BOOLEAN
+DxgkPresentCoreContextless(
+    _In_ BOOLEAN SupportContextlessPresent,
+    _In_ BOOLEAN Blt)
+{
+    return SupportContextlessPresent && !Blt;
+}
+
+FORCEINLINE
+BOOLEAN
 DxgkPresentCoreMpoV1Supported(
     _In_ ULONG ConfiguredLevel,
     _In_ BOOLEAN HasMiniportCheck,
