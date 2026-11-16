@@ -2368,7 +2368,7 @@
 @ stdcall FsRtlPrepareToReuseEcp(ptr)
 @ stub -arch=win64 FsRtlQueryCachedVdl
 @ stub -arch=win64 FsRtlQueryInformationFile
-@ stub -arch=win64 FsRtlQueryKernelEaFile
+@ cdecl -arch=win64 FsRtlQueryKernelEaFile(ptr ptr long long ptr long ptr long ptr)
 @ stub -arch=win64 FsRtlQueryMaximumVirtualDiskNestingLevel
 @ stub -arch=win64 FsRtlRegisterFltMgrCalls
 @ stub -arch=win64 FsRtlRegisterMupCalls
@@ -2383,7 +2383,7 @@
 @ stub -arch=win64 FsRtlSendModernAppTermination
 @ stub -arch=win64 FsRtlSetDriverBacking
 @ stdcall FsRtlSetEcpListIntoIrp(ptr ptr)
-@ stub -arch=win64 FsRtlSetKernelEaFile
+@ cdecl -arch=win64 FsRtlSetKernelEaFile(ptr ptr long)
 @ stdcall FsRtlTeardownPerFileContexts(ptr)
 @ stub -arch=win64 FsRtlTryToAcquireHeaderMutex
 @ stub -arch=win64 FsRtlUpperOplockFsctrl

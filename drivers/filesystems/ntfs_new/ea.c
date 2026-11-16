@@ -61,6 +61,24 @@ NtfsUpperEaCharacter(_In_ UCHAR Character)
 
 static
 BOOLEAN
+NtfsIsKernelEaName(_In_reads_bytes_(NameLength) const UCHAR* Name,
+                   _In_ ULONG NameLength)
+{
+    static const UCHAR Prefix[] = "$KERNEL.";
+    ULONG Index;
+
+    if (NameLength < sizeof(Prefix) - 1)
+        return FALSE;
+    for (Index = 0; Index < sizeof(Prefix) - 1; Index++)
+    {
+        if (NtfsUpperEaCharacter(Name[Index]) != Prefix[Index])
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static
+BOOLEAN
 NtfsEaNamesEqual(_In_reads_bytes_(LeftLength) const UCHAR* Left,
                  _In_ UCHAR LeftLength,
                  _In_reads_bytes_(RightLength) const UCHAR* Right,
@@ -637,6 +655,7 @@ NtfsFsdSetEa(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     PUCHAR Input;
     ULONG EntryCount = 0;
     ULONG EntryIndex;
+    ULONG UpdateCount = 0;
     ULONG ErrorOffset = 0;
     ULONG InputLength;
     ULONG NameIndex;
@@ -756,38 +775,51 @@ NtfsFsdSetEa(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             }
         }
 
-        Updates[EntryIndex].Operation =
+        if (Entry->NextEntryOffset != 0)
+            Offset += Entry->NextEntryOffset;
+
+        /* A kernel EA changes only through IRP_MN_KERNEL_CALL; anyone else's request for it succeeds without effect */
+        if (IrpSp->MinorFunction != IRP_MN_KERNEL_CALL &&
+            NtfsIsKernelEaName((const UCHAR*)Entry->EaName, Entry->EaNameLength))
+        {
+            continue;
+        }
+
+        ASSERT(UpdateCount < EntryCount);
+        Updates[UpdateCount].Operation =
             Entry->EaValueLength == 0
                 ? NTFS_EA_UPDATE_REMOVE
                 : NTFS_EA_UPDATE_SET;
-        Updates[EntryIndex].Flags = Entry->Flags;
-        Updates[EntryIndex].NameLength =
+        Updates[UpdateCount].Flags = Entry->Flags;
+        Updates[UpdateCount].NameLength =
             Entry->EaNameLength;
-        Updates[EntryIndex].ValueLength =
+        Updates[UpdateCount].ValueLength =
             Entry->EaValueLength;
-        Updates[EntryIndex].Name =
+        Updates[UpdateCount].Name =
             (const UCHAR*)Entry->EaName;
-        Updates[EntryIndex].Value =
+        Updates[UpdateCount].Value =
             (const UCHAR*)Entry->EaName +
             Entry->EaNameLength + 1;
-
-        if (Entry->NextEntryOffset != 0)
-            Offset += Entry->NextEntryOffset;
+        UpdateCount++;
     }
 
-    KeEnterCriticalRegion();
-    ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
-    ResourceAcquired = TRUE;
-    NtfsAcquireMetadata(VolCB);
-    Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
-    if (!NT_SUCCESS(Status))
-        goto Done;
-
-    Status = NtfsFileRecordUpdateExtendedAttributes(
-        FileCB->FileRec,
-        Updates,
-        EntryCount);
-    if (NT_SUCCESS(Status))
+    Status = STATUS_SUCCESS;
+    if (UpdateCount != 0)
+    {
+        KeEnterCriticalRegion();
+        ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        ResourceAcquired = TRUE;
+        NtfsAcquireMetadata(VolCB);
+        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+    }
+    if (UpdateCount != 0 && NT_SUCCESS(Status))
+    {
+        Status = NtfsFileRecordUpdateExtendedAttributes(
+            FileCB->FileRec,
+            Updates,
+            UpdateCount);
+    }
+    if (UpdateCount != 0 && NT_SUCCESS(Status))
     {
         if (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY)
             InterlockedIncrement(&VolCB->DirGeneration);

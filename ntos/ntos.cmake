@@ -110,6 +110,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/exception.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fastpath.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/filesize.c
+    ${REACTOS_SOURCE_DIR}/ntos/fsrtl/kernelea.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsfilterctrl.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/fsinit.c
     ${REACTOS_SOURCE_DIR}/ntos/fsrtl/ftvolume.c

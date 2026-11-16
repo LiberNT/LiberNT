@@ -162,6 +162,7 @@ KMT_TESTFUNC Test_FsRtlMcb;
 KMT_TESTFUNC Test_FsRtlPerFileObjectContext;
 KMT_TESTFUNC Test_FsRtlQueryFileLock;
 KMT_TESTFUNC Test_FsRtlRemoveDotsFromPath;
+KMT_TESTFUNC Test_FsRtlKernelEa;
 KMT_TESTFUNC Test_FsRtlTunnel;
 #if defined(_M_IX86) || defined(_M_AMD64)
 KMT_TESTFUNC Test_AcpiPciLinkRouting;
@@ -588,6 +589,7 @@ const KMT_TEST TestList[] =
     { "FsRtlPerFileObjectContext",          Test_FsRtlPerFileObjectContext },
     { "FsRtlQueryFileLock",                 Test_FsRtlQueryFileLock },
     { "FsRtlRemoveDotsFromPath",            Test_FsRtlRemoveDotsFromPath },
+    { "FsRtlKernelEa",                      Test_FsRtlKernelEa },
     { "FsRtlTunnel",                        Test_FsRtlTunnel },
 #if defined(_M_IX86) || defined(_M_AMD64)
     { "AcpiPciLinkRouting",                 Test_AcpiPciLinkRouting },
