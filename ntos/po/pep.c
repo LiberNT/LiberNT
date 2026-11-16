@@ -227,6 +227,8 @@ typedef struct _PEP_WORK
     BOOLEAN NeedWork;
 } PEP_WORK, *PPEP_WORK;
 
+#include "pepcore.h"
+
 typedef struct _POP_PEP_PLUGIN
 {
     LIST_ENTRY ListEntry;
@@ -380,33 +382,38 @@ PoFxRegisterPluginEx(
     _In_ ULONGLONG Flags,
     _Inout_ PPEP_KERNEL_INFORMATION KernelInformation)
 {
+    PEP_INFORMATION Information;
     PPOP_PEP_PLUGIN Plugin;
     PLIST_ENTRY Entry;
+    ULONG InformationSize;
+    ULONG KernelSize;
     KIRQL OldIrql;
 
     PAGED_CODE();
 
     if ((PepInformation == NULL) || (KernelInformation == NULL))
         return STATUS_INVALID_PARAMETER;
-    if ((PepInformation->Version != PEP_INFORMATION_V3) ||
-        (PepInformation->Size < sizeof(PEP_INFORMATION)))
-    {
+    InformationSize = PopPepInformationSize(PepInformation->Version);
+    if ((InformationSize == 0) || (PepInformation->Size < InformationSize))
         return STATUS_INVALID_PEP_INFO_VERSION;
-    }
-    if ((KernelInformation->Version != PEP_KERNEL_INFORMATION_V3) ||
-        (KernelInformation->Size < sizeof(PEP_KERNEL_INFORMATION)) ||
-        ((PepInformation->AcceptDeviceNotification == NULL) &&
-         (PepInformation->AcceptProcessorNotification == NULL) &&
-         (PepInformation->AcceptAcpiNotification == NULL)))
+    RtlZeroMemory(&Information, sizeof(Information));
+    RtlCopyMemory(&Information, PepInformation, min((ULONG)PepInformation->Size, (ULONG)sizeof(Information)));
+    KernelSize = PopPepKernelInformationSize(KernelInformation->Version);
+    if ((KernelSize == 0) ||
+        (KernelInformation->Size < KernelSize) ||
+        ((Information.AcceptDeviceNotification == NULL) &&
+         (Information.AcceptProcessorNotification == NULL) &&
+         (Information.AcceptAcpiNotification == NULL)))
     {
         return STATUS_INVALID_PARAMETER;
     }
+    ASSERT(KernelSize >= FIELD_OFFSET(PEP_KERNEL_INFORMATION, RequestCommon));
 
     Plugin = ExAllocatePoolZero(NonPagedPool, sizeof(*Plugin), POP_PEP_TAG);
     if (Plugin == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
 
-    Plugin->Information = *PepInformation;
+    Plugin->Information = Information;
     Plugin->Flags = Flags;
     ExInitializeWorkItem(&Plugin->WorkItem, PopPepWorker, Plugin);
 
@@ -415,9 +422,9 @@ PoFxRegisterPluginEx(
     {
         PPOP_PEP_PLUGIN Other = CONTAINING_RECORD(Entry, POP_PEP_PLUGIN, ListEntry);
 
-        if ((Other->Information.AcceptDeviceNotification == PepInformation->AcceptDeviceNotification) &&
-            (Other->Information.AcceptProcessorNotification == PepInformation->AcceptProcessorNotification) &&
-            (Other->Information.AcceptAcpiNotification == PepInformation->AcceptAcpiNotification))
+        if ((Other->Information.AcceptDeviceNotification == Information.AcceptDeviceNotification) &&
+            (Other->Information.AcceptProcessorNotification == Information.AcceptProcessorNotification) &&
+            (Other->Information.AcceptAcpiNotification == Information.AcceptAcpiNotification))
         {
             KeReleaseSpinLock(&PopPepPluginLock, OldIrql);
             ExFreePoolWithTag(Plugin, POP_PEP_TAG);
@@ -437,7 +444,8 @@ PoFxRegisterPluginEx(
     KernelInformation->PlatformIdleVeto = PopPepIdleVeto;
     KernelInformation->UpdateProcessorIdleState = PopPepUpdateProcessorIdleState;
     KernelInformation->UpdatePlatformIdleState = PopPepUpdatePlatformIdleState;
-    KernelInformation->RequestCommon = PopPepRequestCommon;
+    if (KernelSize >= sizeof(PEP_KERNEL_INFORMATION))
+        KernelInformation->RequestCommon = PopPepRequestCommon;
     return STATUS_SUCCESS;
 }
 

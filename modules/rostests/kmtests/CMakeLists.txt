@@ -362,6 +362,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ob/ObWait.c
     smclib/SmcLib.c
     ntos_po/PoDisplayState.c
+    ntos_po/PoPepVersions.c
     ntos_po/PoSleepInformation.c
     ntos_po/PoBatteryState.c
     ntos_po/PoFxState.c
