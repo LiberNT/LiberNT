@@ -52,6 +52,7 @@ static BOOL      s_available;
 static BOOL      s_identityResolved;
 static TM_DXPROBE s_dxProbes[TM_MAX_GPUS];
 static volatile LONG s_dxProbeWorker;
+static BOOL s_dxProbeWanted;
 static double    s_qpcFrequency;
 
 static BOOL LoadD3DKMT(void)
@@ -948,6 +949,29 @@ void GpuInit(void)
     ZeroMemory(g.gpus, sizeof(g.gpus));
 }
 
+void GpuWantDirectX(void)
+{
+    LUID present[TM_MAX_GPUS];
+    BOOL probesQueued = FALSE;
+    int i;
+
+    if (s_dxProbeWanted)
+        return;
+    s_dxProbeWanted = TRUE;
+    for (i = 0; i < g.gpuCount; i++)
+        present[i] = g.gpus[i].luid;
+    for (i = 0; i < g.gpuCount; i++)
+    {
+        if (!g.gpus[i].directX[0] &&
+            TmDxProbeLookup(s_dxProbes, _countof(s_dxProbes), &present[i], present, g.gpuCount))
+        {
+            probesQueued = TRUE;
+        }
+    }
+    if (probesQueued)
+        StartDirectXProbes();
+}
+
 void GpuShutdown(void)
 {
     g.gpuCount = 0;
@@ -1013,7 +1037,7 @@ void GpuTick(void)
         CollectAdapter(gpu, adapters[i].hAdapter);
         if (!gpu->name[0])
             StringCchPrintfW(gpu->name, _countof(gpu->name), L"GPU %u", i);
-        if (!gpu->directX[0])
+        if (!gpu->directX[0] && s_dxProbeWanted)
         {
             TM_DXPROBE* probe = TmDxProbeLookup(s_dxProbes, _countof(s_dxProbes), &gpu->luid,
                                                 present, (int)enumeration.NumAdapters);
