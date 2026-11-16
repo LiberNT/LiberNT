@@ -26,6 +26,7 @@ extern void func_EngCreateSemaphore(void);
 extern void func_EngReleaseSemaphore(void);
 extern void func_EnumFontFamilies(void);
 extern void func_FontFolder(void);
+extern void func_FontLinkBaseline(void);
 extern void func_ExcludeClipRect(void);
 extern void func_ExtCreatePen(void);
 extern void func_ExtCreateRegion(void);
@@ -114,6 +115,7 @@ const struct test winetest_testlist[] =
     { "EngReleaseSemaphore", func_EngReleaseSemaphore },
     { "EnumFontFamilies", func_EnumFontFamilies },
     { "FontFolder", func_FontFolder },
+    { "FontLinkBaseline", func_FontLinkBaseline },
     { "ExcludeClipRect", func_ExcludeClipRect },
     { "ExtCreatePen", func_ExtCreatePen },
     { "ExtCreateRegion", func_ExtCreateRegion },
