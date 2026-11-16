@@ -299,12 +299,18 @@ if(DEFINED EFI_PLATFORM_ID)
     list(APPEND ISO_BOOT_OPTIONS ${ISO_BOOT_EFI_OPTIONS})
 endif()
 
-set(ISOHYBRID_DEPENDS)
-set(ISOHYBRID_BOOTCD_COMMAND)
-if(FREELDR_HAS_BIOS_BOOT)
-    set(ISOHYBRID_DEPENDS isombr native-isohybrid)
-    set(ISOHYBRID_BOOTCD_COMMAND
-        COMMAND native-isohybrid -b ${_isombr_file} -t 0x96 ${REACTOS_BINARY_DIR}/bootcd.iso)
+set(BOOTCD_HYBRID_DEPENDS)
+set(BOOTCD_HYBRID_COMMAND)
+if(FREELDR_HAS_BIOS_BOOT OR DEFINED EFI_PLATFORM_ID)
+    string(UUID _bootcd_disk NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a NAME "LiberNT boot CD" TYPE SHA1)
+    string(SUBSTRING "${_bootcd_disk}" 0 8 _bootcd_signature)
+    set(BOOTCD_HYBRID_DEPENDS native-mkdiskimg)
+    set(BOOTCD_HYBRID_COMMAND
+        COMMAND native-mkdiskimg -cd ${REACTOS_BINARY_DIR}/bootcd.iso -signature ${_bootcd_signature})
+    if(FREELDR_HAS_BIOS_BOOT)
+        list(APPEND BOOTCD_HYBRID_DEPENDS isombr)
+        list(APPEND BOOTCD_HYBRID_COMMAND -mbr ${_isombr_file})
+    endif()
 endif()
 
 
@@ -465,8 +471,8 @@ add_custom_target(bootcd
     COMMAND native-mkisofs -quiet -o ${REACTOS_BINARY_DIR}/bootcd.iso
         ${ISO_COMMON_OPTIONS} ${ISO_BOOT_OPTIONS} ${ISO_BOOT_FILES_OPTIONS} ${ISO_LAYOUT_OPTIONS}
         -path-list ${CMAKE_CURRENT_BINARY_DIR}/bootcd.effective.lst
-    ${ISOHYBRID_BOOTCD_COMMAND}
-    DEPENDS ${ISOHYBRID_DEPENDS} native-mkisofs ${_livecd_overlay_deps}
+    ${BOOTCD_HYBRID_COMMAND}
+    DEPENDS ${BOOTCD_HYBRID_DEPENDS} native-mkisofs ${_livecd_overlay_deps}
     VERBATIM)
 
 

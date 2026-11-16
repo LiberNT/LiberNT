@@ -19,9 +19,9 @@ setlocal enabledelayedexpansion
 set ISO_MANUFACTURER="LiberNT Project"& :: For both the publisher and the preparer
 set ISO_VOLNAME="ReactOS"&              :: For both the Volume ID and the Volume set ID
 
-:: Image names of the MKISOFS and ISOHYBRID tools
+:: Image names of the MKISOFS and MKDISKIMG tools
 set MKISOFS=MKISOFS.EXE
-set ISOHYBRID=ISOHYBRID.EXE
+set MKDISKIMG=MKDISKIMG.EXE
 
 
 ::
@@ -153,23 +153,23 @@ del "%TEMP%\bootfiles.sort"
 echo.
 
 
-:: Check whether ISOHYBRID is also available and if so, propose to post-process
+:: Check whether MKDISKIMG is also available and if so, propose to post-process
 :: the generated ISO image to allow hybrid booting as a CD-ROM or as a hard disk.
 set TOOL_PATH=
-for /f "delims=" %%f in ('WHERE "%TOOL_DIR%":%ISOHYBRID% 2^>NUL') do (
-    set "TOOL_PATH=%%f" & goto :isohybrid_found)
+for /f "delims=" %%f in ('WHERE "%TOOL_DIR%":%MKDISKIMG% 2^>NUL') do (
+    set "TOOL_PATH=%%f" & goto :mkdiskimg_found)
 if not defined TOOL_PATH (
-    for /f "delims=" %%f in ('WHERE %ISOHYBRID% 2^>NUL') do (
+    for /f "delims=" %%f in ('WHERE %MKDISKIMG% 2^>NUL') do (
         set "TOOL_PATH=%%f"
-        goto :isohybrid_found
+        goto :mkdiskimg_found
     )
     if not defined TOOL_PATH (
-        echo %ISOHYBRID% patching skipped.
+        echo %MKDISKIMG% patching skipped.
         goto :Success
     )
 )
-:isohybrid_found
-set "ISOHYBRID=%TOOL_PATH%"
+:mkdiskimg_found
+set "MKDISKIMG=%TOOL_PATH%"
 
 
 CHOICE /c YN /n /m "Do you want to post-process the ISO image to allow hybrid booting!\n!as a CD-ROM or as a hard disk [Y,N]? "
@@ -179,7 +179,7 @@ if %ERRORLEVEL% neq 1 goto :Success
 echo Patching the ISO image...
 
 :: NOTE: Convert forward to backslashes.
-"%ISOHYBRID%" -b %INPUT_DIR%\%isombr_file:/=\% -t 0x96 "%OUTPUT_ISO%"
+"%MKDISKIMG%" -cd "%OUTPUT_ISO%" -mbr %INPUT_DIR%\%isombr_file:/=\%
 echo.
 
 if errorlevel 1 (

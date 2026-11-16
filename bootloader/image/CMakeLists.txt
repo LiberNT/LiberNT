@@ -181,6 +181,8 @@ set(BCD_WINPE_ELEMENT
 
 function(bootloader_media _target _directory _image)
     bootloader_bcd_store(${_directory})
+    string(UUID _disk NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT ${_target}" TYPE SHA1)
+    string(SUBSTRING "${_disk}" 0 8 _signature)
 
     add_custom_target(${_target}
         COMMAND native-fatten ${_directory}/efisys.bin
@@ -210,7 +212,8 @@ function(bootloader_media _target _directory _image)
             -hide boot.catalog
             -duplicates-once -no-cache-inodes -graft-points
             -path-list ${_directory}/files.lst
-        DEPENDS native-fatten native-mkisofs native-wimage bootmgfw winload ${_directory}/BCD
+        COMMAND native-mkdiskimg -cd ${_image} -signature ${_signature}
+        DEPENDS native-fatten native-mkisofs native-mkdiskimg native-wimage bootmgfw winload ${_directory}/BCD
         VERBATIM)
 
     add_dependencies(${_target} livecd_hives livecd_files)
