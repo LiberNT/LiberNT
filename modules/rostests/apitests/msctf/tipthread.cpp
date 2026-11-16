@@ -23,7 +23,19 @@ struct THREAD_RESULT
     ULONG cDeactivateAfterDone;
 };
 
+#define NO_COINIT 0xffffffff
+
 static ULONG g_cExpectedActivations;
+static HANDLE g_hMtaStop;
+
+static DWORD WINAPI MtaThread(LPVOID pv)
+{
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    SetEvent((HANDLE)pv);
+    WaitForSingleObject(g_hMtaStop, INFINITE);
+    CoUninitialize();
+    return 0;
+}
 
 static void WaitForActivations(ULONG cActivate)
 {
@@ -42,7 +54,8 @@ static DWORD WINAPI SecondThread(LPVOID pv)
     TSF_FIXTURE fixture;
     HWND hwnd;
 
-    CoInitializeEx(NULL, pResult->dwCoInit);
+    if (pResult->dwCoInit != NO_COINIT)
+        CoInitializeEx(NULL, pResult->dwCoInit);
     hwnd = CreateWindowExW(0, L"EDIT", L"", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 0, 0, 200, 100, NULL, NULL,
                            GetModuleHandleW(NULL), NULL);
     if (hwnd)
@@ -70,7 +83,8 @@ static DWORD WINAPI SecondThread(LPVOID pv)
     if (hwnd)
         DestroyWindow(hwnd);
     pResult->cDeactivateAfterDone = g_pTip->cDeactivate;
-    CoUninitialize();
+    if (pResult->dwCoInit != NO_COINIT)
+        CoUninitialize();
     return 0;
 }
 
@@ -80,7 +94,7 @@ static void TestSecondThread(DWORD dwCoInit)
     ULONG cActivate = g_pTip->cActivate, cDeactivate = g_pTip->cDeactivate;
     HANDLE hThread;
 
-    winetest_push_context("STA");
+    winetest_push_context("%s", dwCoInit == NO_COINIT ? "no COM" : "STA");
     g_cExpectedActivations = cActivate + 1;
     hThread = CreateThread(NULL, 0, SecondThread, &result, 0, NULL);
     ok(hThread != NULL, "CreateThread failed with %lu\n", GetLastError());
@@ -144,6 +158,23 @@ START_TEST(tipthread)
     ok(g_pTip->pThreadMgr == fixture.pThreadMgr, "the text service is not on the first thread's manager\n");
 
     TestSecondThread(COINIT_APARTMENTTHREADED);
+    {
+        HANDLE hReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+        HANDLE hMta;
+
+        g_hMtaStop = CreateEventW(NULL, TRUE, FALSE, NULL);
+        hMta = CreateThread(NULL, 0, MtaThread, hReady, 0, NULL);
+        WaitForSingleObject(hReady, 5000);
+        TestSecondThread(NO_COINIT);
+        SetEvent(g_hMtaStop);
+        if (hMta)
+        {
+            WaitForSingleObject(hMta, 5000);
+            CloseHandle(hMta);
+        }
+        CloseHandle(hReady);
+        CloseHandle(g_hMtaStop);
+    }
 
     TestTip_Deactivate();
     Fixture_Done(&fixture);
