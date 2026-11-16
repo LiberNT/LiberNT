@@ -719,6 +719,14 @@ CmpSaveBootControlSet(
 
 VOID
 NTAPI
+CmpReadLastKnownGoodPolicy(VOID);
+
+NTSTATUS
+NTAPI
+CmpAcceptBoot(VOID);
+
+VOID
+NTAPI
 CmpAddToDelayedClose(
     _In_ PCM_KEY_CONTROL_BLOCK Kcb,
     _In_ BOOLEAN LockHeldExclusively);

@@ -90,6 +90,7 @@ extern void func_NtFilterToken(void);
 extern void func_NtFlushInstructionCache(void);
 extern void func_NtFreeVirtualMemory(void);
 extern void func_NtImpersonateAnonymousToken(void);
+extern void func_NtInitializeRegistry(void);
 extern void func_NtLoadUnloadKey(void);
 extern void func_NtMapViewOfSection(void);
 extern void func_NtMapViewOfSection_ImageZeroBits(void);
@@ -339,6 +340,7 @@ const struct test winetest_testlist[] =
     { "NtFlushInstructionCache",        func_NtFlushInstructionCache },
     { "NtFreeVirtualMemory",            func_NtFreeVirtualMemory },
     { "NtImpersonateAnonymousToken",    func_NtImpersonateAnonymousToken },
+    { "NtInitializeRegistry",           func_NtInitializeRegistry },
     { "NtLoadUnloadKey",                func_NtLoadUnloadKey },
     { "NtMapViewOfSection",             func_NtMapViewOfSection },
     { "NtMapViewOfSection_ImageZeroBits", func_NtMapViewOfSection_ImageZeroBits },

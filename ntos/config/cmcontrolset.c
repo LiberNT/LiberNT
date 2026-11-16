@@ -296,6 +296,53 @@ CmpReadSelectNumber(
     return *(PULONG)Partial->Data;
 }
 
+static BOOLEAN CmpLastKnownGoodEnabled;
+
+/* Last Known Good is off unless enabled when the session manager initializes the registry. */
+VOID
+NTAPI
+CmpReadLastKnownGoodPolicy(VOID)
+{
+    UNICODE_STRING Path = RTL_CONSTANT_STRING(
+        L"\\REGISTRY\\MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Configuration Manager\\LastKnownGood");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE KeyHandle;
+
+    PAGED_CODE();
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &Path,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&KeyHandle, KEY_READ, &ObjectAttributes))) return;
+
+    CmpLastKnownGoodEnabled = (CmpReadSelectNumber(KeyHandle, L"Enabled") == 1);
+    ZwClose(KeyHandle);
+}
+
+/* The boot was accepted: keep the control set it came up on as Last Known Good, when that is enabled. */
+NTSTATUS
+NTAPI
+CmpAcceptBoot(VOID)
+{
+    HANDLE KeyHandle;
+    ULONG Current;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (!CmpLastKnownGoodEnabled) return STATUS_SUCCESS;
+
+    Status = CmpOpenSelectKey(&KeyHandle);
+    if (!NT_SUCCESS(Status)) return Status;
+    Current = CmpReadSelectNumber(KeyHandle, L"Current");
+    ZwClose(KeyHandle);
+
+    if (Current == 0 || Current > 999) return STATUS_OBJECT_NAME_NOT_FOUND;
+    return CmpSaveBootControlSet((USHORT)Current);
+}
+
 /*
  * Said once the boot is far enough along to be trusted. The control set the
  * system came up on is copied whole, so that a later boot that goes wrong has

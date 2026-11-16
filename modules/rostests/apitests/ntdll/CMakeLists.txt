@@ -106,6 +106,7 @@ list(APPEND SOURCE
     NtFreeVirtualMemory.c
     NtGetCurrentProcessorNumberEx.c
     NtImpersonateAnonymousToken.c
+    NtInitializeRegistry.c
     NtLoadUnloadKey.c
     NtMapViewOfSection.c
     NtMapViewOfSection_ImageZeroBits.c

@@ -2580,6 +2580,23 @@ NtInitializeRegistry(
     PAGED_CODE();
 
     if (Flag > CM_BOOT_FLAG_MAX) return STATUS_INVALID_PARAMETER;
+
+    if (Flag >= CM_BOOT_FLAG_ACCEPTED)
+    {
+        BOOLEAN FirstAccept;
+
+        /* Windows 11 refuses a control set number with the accept flag. */
+        if (Flag != CM_BOOT_FLAG_ACCEPTED) return STATUS_INVALID_PARAMETER;
+
+        CmpLockRegistryExclusive();
+        FirstAccept = CmBootAcceptFirstTime;
+        CmBootAcceptFirstTime = FALSE;
+        CmpUnlockRegistry();
+
+        if (!FirstAccept) return STATUS_ACCESS_DENIED;
+        return CmpAcceptBoot();
+    }
+
     if (!CmFirstTime) return STATUS_ACCESS_DENIED;
 
     CmFirstTime = FALSE;
@@ -2587,17 +2604,12 @@ NtInitializeRegistry(
     if (Flag == CM_BOOT_FLAG_SETUP) CmpWasSetupBoot = TRUE;
 
     CmpInitializeHiveList();
+    CmpReadLastKnownGoodPolicy();
 
     CmpLockRegistryExclusive();
     CmpSetGlobalQuotaAllowed();
     CmpNoVolatileCreates = FALSE;
     CmpUnlockRegistry();
-
-    if (Flag >= CM_BOOT_FLAG_ACCEPTED && CmBootAcceptFirstTime)
-    {
-        CmBootAcceptFirstTime = FALSE;
-        Status = CmpSaveBootControlSet((USHORT)(Flag - CM_BOOT_FLAG_ACCEPTED));
-    }
 
     CmSetLazyFlushState(TRUE);
     CmpLockRegistry();
