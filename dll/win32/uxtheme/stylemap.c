@@ -31,6 +31,23 @@
 #define TMT_ENUM 200
 #define TMT_STOCKIMAGEFILE 3007
 
+#ifdef __REACTOS__
+/* Every name in these tables is ASCII */
+static int msstyles_ascii_compare(LPCWSTR first, LPCWSTR second)
+{
+    for (;;)
+    {
+        WCHAR a = *first++, b = *second++;
+
+        if (a >= 'a' && a <= 'z') a -= 'a' - 'A';
+        if (b >= 'a' && b <= 'z') b -= 'a' - 'A';
+        if (a != b || !a)
+            return (int)a - (int)b;
+    }
+}
+#define lstrcmpiW msstyles_ascii_compare
+#endif
+
 typedef struct _MSSTYLES_PROPERTY_MAP {
     WCHAR szPropertyName[24];
     WORD dwPrimitiveType;
@@ -1496,8 +1513,12 @@ BOOL MSSTYLES_LookupPartState(LPCWSTR pszClass, LPCWSTR pszPart, LPCWSTR pszStat
 static int __cdecl msstyles_property_map_compare(const void *a, const void *b)
 {
     const MSSTYLES_PROPERTY_MAP *a_prop = a, *b_prop = b;
+#ifdef __REACTOS__
+    return msstyles_ascii_compare(a_prop->szPropertyName, b_prop->szPropertyName);
+#else
     INT size = ARRAY_SIZE(a_prop->szPropertyName);
     return CompareStringOrdinal(a_prop->szPropertyName, size, b_prop->szPropertyName, size, TRUE) - CSTR_EQUAL;
+#endif
 }
 
 /**********************************************************************
