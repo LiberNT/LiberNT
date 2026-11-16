@@ -28,8 +28,8 @@ def body(source, name):
     return source[start + 1:end - 1]
 
 
-start = init_source.index('    /* Active means it can answer an IPI:')
-end = init_source.index('    /* Set the right wait IRQL */', start)
+start = init_source.index('    /* Active means it can answer an IPI')
+end = init_source.index('    Thread->WaitIrql = DISPATCH_LEVEL;', start)
 fixture = r'''
 #include <assert.h>
 #include <pthread.h>

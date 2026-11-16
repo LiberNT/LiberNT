@@ -12,6 +12,9 @@ parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 source = (pathlib.Path(args.root) / 'ntos/ke/amd64/kiinit.c').read_text()
+header = (pathlib.Path(args.root) / 'ntos/include/internal/ke.h').read_text()
+boot_marks = header[header.index('typedef enum _KI_BOOT_MARK'):]
+boot_marks = boot_marks[:boot_marks.index(';') + 1]
 
 
 def body(name):
@@ -54,6 +57,8 @@ typedef struct { ULONG Eax, Ebx, Ecx, Edx; } CPU_INFO;
 #define CONTAINING_RECORD(a, t, f) ((t *)((char *)(a) - offsetof(t, f)))
 #define ALIGN_DOWN_BY(v, a) ((ULONG64)(v) & ~((ULONG64)(a) - 1))
 #define KeMemoryBarrier() __sync_synchronize()
+#define X2APIC_BASE_MSR 0x1B
+#define X2APIC_EXTENDED 0x400ULL
 #define CHECK(x) do { if (!(x)) { printf("%s:%d: %s failed\n", Scenario, __LINE__, #x); exit(1); } } while (0)
 static const char *Scenario;
 static KIPCR P0, P1;
@@ -68,6 +73,9 @@ static ULONG64 BootCycles, KeFeatureBits, Cr4;
 static ULONG KeXStateLength = 64;
 static void *FrLdrDbgPrint;
 static jmp_buf Started;
+static BOOLEAN KiX2ApicMsrs;
+static ULONG64 ApicBase = X2APIC_EXTENDED;
+@BOOT_MARKS@
 /* Whatever runs while the processor is being set up may walk [0, KeNumberProcessors) */
 static void CheckPublished(void) {
     CCHAR i;
@@ -75,6 +83,9 @@ static void CheckPublished(void) {
         CHECK(KiProcessorBlock[(int)i] != NULL);
 }
 static ULONG64 __rdtsc(void) { return 1; }
+static ULONG64 __readmsr(ULONG Msr) { CHECK(Msr == X2APIC_BASE_MSR); return ApicBase; }
+static void KiAmd64BootMarkStart(PLOADER_PARAMETER_BLOCK LoaderBlock) { CHECK(LoaderBlock == KeLoaderBlock); }
+static void KiAmd64BootMark(ULONG Mark) { CHECK(Mark < BootMarkMaximum); CheckPublished(); }
 static ULONG64 __readcr4(void) { return Cr4; }
 static void __writecr4(ULONG64 Value) { Cr4 = Value; }
 static void KiInitializeP0BootStructures(PLOADER_PARAMETER_BLOCK LoaderBlock) {
@@ -105,6 +116,7 @@ int main(void) {
     if (setjmp(Started) == 0)
         KiSystemStartup(&Loader);
     CHECK(KeNumberProcessors == 1 && KiProcessorBlock[0] == &P0.Prcb && KeLoaderBlock == &Loader);
+    CHECK(KiX2ApicMsrs);
 
     Scenario = "application processor";
     P1.Prcb.Number = 1;
@@ -116,7 +128,7 @@ int main(void) {
     CHECK(KeNumberProcessors == 2 && KiProcessorBlock[1] == &P1.Prcb && KiProcessorBlock[0] == &P0.Prcb);
     return 0;
 }
-'''.replace('@STARTUP@', body('KiSystemStartup'))
+'''.replace('@BOOT_MARKS@', boot_marks).replace('@STARTUP@', body('KiSystemStartup'))
 
 with tempfile.TemporaryDirectory(prefix='ke-processor-number-') as tmp:
     path = pathlib.Path(tmp)

@@ -70,6 +70,8 @@ static PKPRCB KiFreezeHolder __attribute__((unused));
 static KIRQL KiOldIrql;
 static BOOLEAN KdEnteredDebugger, KdDebuggerEnabled = TRUE, KdIgnoreUmExceptions, KdAutoEnableOnEvent;
 static BOOLEAN KdpReportedFirstChance;
+static BOOLEAN KdpPrintDeferred;
+__attribute__((unused)) static void KdpShowPrintLog(void) {}
 static KPROCESSOR_MODE KdpReportedMode;
 static PVOID KdpTimeSlipEvent = &KdpTimeSlipEvent;
 static KDPC KdpTimeSlipDpc;

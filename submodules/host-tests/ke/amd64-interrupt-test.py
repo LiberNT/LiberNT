@@ -26,6 +26,16 @@ def body(name):
         b += 1
     return s[a + 1:b - 1]
 
+def static_function(name):
+    import re
+    match = re.search(r'(?ms)^static\n\w+\n' + name + r'\(.*?^\}\n', s)
+    if not match:
+        raise RuntimeError(name + ' not found')
+    return match.group(0)
+
+HELPERS = ['KiLockVectorOf', 'KiUnlockVector', 'KiIsUnexpectedHandler', 'KiChainHeadOf', 'KiClaimFreeVector',
+           'KiJoinChain', 'KiLeaveChain']
+
 fixture = r'''
 #define _XOPEN_SOURCE 700
 #include <assert.h>
@@ -40,6 +50,9 @@ typedef struct _KINTERRUPT {
     LIST_ENTRY InterruptListEntry; void (*DispatchAddress)(void); unsigned char DispatchCode[16];
 } KINTERRUPT, *PKINTERRUPT;
 #define ASSERT(x) assert(x)
+#define _In_
+#define _Inout_
+#define VOID void
 #define TRUE 1
 #define FALSE 0
 #define PASSIVE_LEVEL 0
@@ -71,6 +84,7 @@ static int IsListEmpty(PLIST_ENTRY H) { return H->Flink == H; }
 static void InsertTailList(PLIST_ENTRY H, PLIST_ENTRY E) { E->Blink=H->Blink; E->Flink=H; H->Blink->Flink=E; H->Blink=E; }
 static void RemoveEntryList(PLIST_ENTRY E) { E->Blink->Flink=E->Flink; E->Flink->Blink=E->Blink; }
 static PLIST_ENTRY RemoveTailList(PLIST_ENTRY H) { PLIST_ENTRY E=H->Blink; RemoveEntryList(E); return E; }
+@HELPERS@
 static BOOLEAN KeConnectInterrupt(PKINTERRUPT Interrupt) { @CONNECT@ }
 static BOOLEAN KeDisconnectInterrupt(PKINTERRUPT Interrupt) { @DISCONNECT@ }
 static void *RaceConnect(void *Context) { return (void *)(uintptr_t)KeConnectInterrupt(Context); }
@@ -114,7 +128,7 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
-'''.replace('@CONNECT@', body('KeConnectInterrupt')).replace('@DISCONNECT@', body('KeDisconnectInterrupt'))
+'''.replace('@HELPERS@', ''.join(static_function(name) for name in HELPERS)).replace('@CONNECT@', body('KeConnectInterrupt')).replace('@DISCONNECT@', body('KeDisconnectInterrupt'))
 with tempfile.TemporaryDirectory(prefix='ke-interrupt-') as d:
     path = pathlib.Path(d)
     (path / 'test.c').write_text(fixture)

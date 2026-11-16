@@ -52,6 +52,7 @@ fixture = r'''
 #define ASSERT(x) CHECK(x)
 typedef unsigned char BOOLEAN, UCHAR, KIRQL;
 typedef unsigned long ULONG;
+typedef long LONG;
 typedef uint64_t ULONGLONG, KSPIN_LOCK, *PKSPIN_LOCK;
 typedef int64_t LONGLONG;
 typedef union { LONGLONG QuadPart; struct { uint32_t LowPart; int32_t HighPart; }; } LARGE_INTEGER, *PLARGE_INTEGER;
@@ -118,6 +119,8 @@ static void KiRemoveEntryTimer(PKTIMER Timer) { (void)Timer; CHECK(0); }
 static ULONG KiComputeTimerTableIndex(ULONGLONG Due) { return (ULONG)(Due % TIMER_TABLE_SIZE); }
 static void KiAcquireDispatcherObject(void *Header) { (void)Header; }
 static void KxInsertTimer(PKTIMER Timer, ULONG Hand) { (void)Timer; (void)Hand; CHECK(0); }
+static volatile LONG KiClockStopCount;
+__attribute__((unused)) static LONG InterlockedIncrement(volatile LONG *Value) { return __atomic_add_fetch(Value, 1, __ATOMIC_SEQ_CST); }
 static ULONGLONG KiAdjustedIncrement(ULONG Increment) { @ADJUSTED@ }
 ULONGLONG KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem) { @TICK@ }
 void KeSetSystemTime(PLARGE_INTEGER NewSystemTime, PLARGE_INTEGER OldSystemTime, BOOLEAN FixInterruptTime, PLARGE_INTEGER HalTime) { @SET@ }

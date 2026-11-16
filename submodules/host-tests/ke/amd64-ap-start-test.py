@@ -16,6 +16,9 @@ root = pathlib.Path(args.root)
 init_source = (root / 'ntos/ke/amd64/krnlinit.c').read_text()
 freeze_source = (root / 'ntos/ke/amd64/freeze.c').read_text()
 mproc_source = (root / 'ntos/ke/amd64/mproc.c').read_text()
+header = (root / 'ntos/include/internal/ke.h').read_text()
+boot_marks = header[header.index('typedef enum _KI_BOOT_MARK'):]
+boot_marks = boot_marks[:boot_marks.index(';') + 1]
 
 
 def body(source, name):
@@ -70,6 +73,8 @@ static KIRQL Irql;
 static BOOLEAN InterruptsEnabled;
 static unsigned Yields, ThawAfter;
 static jmp_buf Idle;
+static BOOLEAN BootMarksStopped;
+@BOOT_MARKS@
 #define AP_ACTIVE() ((KeActiveProcessors & Cpus[1].SetMember) != 0)
 /* An active processor is sent IPIs: it has to be able to take them, and a frozen machine gets no new ones */
 static void CheckActive(void) {
@@ -79,6 +84,8 @@ static void CheckActive(void) {
     CHECK(KiFreezeOwner == NULL);
 }
 static PKPRCB KeGetCurrentPrcb(void) { return &Cpus[1]; }
+static void KiAmd64BootMark(ULONG Mark) { CHECK(Mark < BootMarkMaximum && !BootMarksStopped); }
+static void KiAmd64BootMarkStop(void) { BootMarksStopped = TRUE; }
 static PKTHREAD KeGetCurrentThread(void) { return &Thread1; }
 static void PoInitializePrcb(PKPRCB Prcb) { (void)Prcb; }
 static void KiSaveProcessorControlState(int *State) { (void)State; }
@@ -129,9 +136,11 @@ static void Run(const char *Name, PKPRCB FreezeOwner, unsigned Thaw) {
     Yields = 0;
     Irql = HIGH_LEVEL;
     InterruptsEnabled = FALSE;
+    BootMarksStopped = FALSE;
     if (setjmp(Idle) == 0)
         KiSystemStartupBootStack();
     CHECK(AP_ACTIVE() && Loader.Prcb == 0 && InterruptsEnabled && Irql == DISPATCH_LEVEL);
+    CHECK(BootMarksStopped);
 }
 int main(void) {
     Run("no freeze", NULL, 0);
@@ -148,7 +157,7 @@ for name, prototype in [('KiAcquireFreezeActiveSet', 'static BOOLEAN KiAcquireFr
     text = body(freeze_source, name)
     if text is not None:
         publish += prototype + ' {' + text + '}\n'
-fixture = fixture.replace('@PUBLISH@', publish)
+fixture = fixture.replace('@BOOT_MARKS@', boot_marks).replace('@PUBLISH@', publish)
 fixture = fixture.replace('@STARTUP@', body(init_source, 'KiSystemStartupBootStack'))
 
 startup = r'''
