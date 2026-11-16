@@ -33,6 +33,43 @@ static ULONG PnpcpuGetCurrentProcessorNumber(VOID)
 #endif
 }
 
+/* A mask without a group can only name a processor of group 0, so the processor is named by its group where groups exist */
+static
+VOID
+PnpcpuEnterProcessor(
+    _In_ ULONG ProcessorIndex,
+    _Out_ PGROUP_AFFINITY PreviousAffinity)
+{
+#ifdef _WIN64
+    PROCESSOR_NUMBER ProcessorNumber;
+    GROUP_AFFINITY Affinity;
+
+    RtlZeroMemory(&Affinity, sizeof(Affinity));
+    RtlZeroMemory(PreviousAffinity, sizeof(*PreviousAffinity));
+    if (!NT_SUCCESS(KeGetProcessorNumberFromIndex(ProcessorIndex, &ProcessorNumber)))
+        return;
+
+    Affinity.Group = ProcessorNumber.Group;
+    Affinity.Mask = (KAFFINITY)1 << ProcessorNumber.Number;
+    KeSetSystemGroupAffinityThread(&Affinity, PreviousAffinity);
+#else
+    RtlZeroMemory(PreviousAffinity, sizeof(*PreviousAffinity));
+    PreviousAffinity->Mask = KeSetSystemAffinityThreadEx((KAFFINITY)1 << ProcessorIndex);
+#endif
+}
+
+static
+VOID
+PnpcpuLeaveProcessor(
+    _In_ PGROUP_AFFINITY PreviousAffinity)
+{
+#ifdef _WIN64
+    KeRevertToUserGroupAffinityThread(PreviousAffinity);
+#else
+    KeRevertToUserAffinityThreadEx(PreviousAffinity->Mask);
+#endif
+}
+
 static ULONG PnpcpuQueryActiveProcessorCount(VOID)
 {
 #if (NTDDI_VERSION >= NTDDI_WIN7)
@@ -726,7 +763,8 @@ PnpcpuQueryProcessorFeatures(
 {
     int Registers[4];
     ULONG MaximumLeaf;
-    KAFFINITY PreviousAffinity = 0;
+    GROUP_AFFINITY PreviousAffinity = { 0 };
+    BOOLEAN Pinned = DeviceExtension->ProcessorNumberValid;
 
     DeviceExtension->MonitorMwaitSupported = FALSE;
     DeviceExtension->IntelEstSupported = FALSE;
@@ -735,8 +773,8 @@ PnpcpuQueryProcessorFeatures(
     DeviceExtension->MwaitSubstates = 0;
     DeviceExtension->HwpHighest = 0;
     DeviceExtension->HwpLowest = 0;
-    if (DeviceExtension->ProcessorNumberValid)
-        PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+    if (Pinned)
+        PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
     __cpuid(Registers, 0);
     MaximumLeaf = (ULONG)Registers[0];
     if (MaximumLeaf >= 1)
@@ -759,8 +797,8 @@ PnpcpuQueryProcessorFeatures(
             DeviceExtension->IntelHwpEppSupported = (Registers[0] & (1 << 10)) != 0;
         }
     }
-    if (DeviceExtension->ProcessorNumberValid)
-        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    if (Pinned)
+        PnpcpuLeaveProcessor(&PreviousAffinity);
 }
 
 static
@@ -796,18 +834,18 @@ VOID
 PnpcpuInitializeHwpPerformance(
     _Inout_ PPNPCPU_DEVICE_EXTENSION DeviceExtension)
 {
-    KAFFINITY PreviousAffinity;
+    GROUP_AFFINITY PreviousAffinity;
     ULONGLONG Capabilities;
 
     if (!DeviceExtension->IntelHwpSupported || !DeviceExtension->ProcessorNumberValid)
         return;
 
-    PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+    PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
     if (PnpcpuEnableHwpOnCurrentProcessor())
         Capabilities = __readmsr(PNPCPU_INTEL_HWP_CAPABILITIES_MSR);
     else
         Capabilities = 0;
-    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    PnpcpuLeaveProcessor(&PreviousAffinity);
 
     DeviceExtension->HwpHighest = (UCHAR)Capabilities;
     DeviceExtension->HwpLowest = (UCHAR)(Capabilities >> 24);
@@ -861,11 +899,13 @@ PnpcpuFindProcessorNumber(
     {
         for (Index = 0; Index < ActiveProcessors && Index < sizeof(KAFFINITY) * 8; Index++)
         {
-            KAFFINITY PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Index);
+            GROUP_AFFINITY PreviousAffinity;
             ULONG ApicId;
 
+            PnpcpuEnterProcessor(Index, &PreviousAffinity);
+
             ApicId = PnpcpuQueryCurrentApicId();
-            KeRevertToUserAffinityThreadEx(PreviousAffinity);
+            PnpcpuLeaveProcessor(&PreviousAffinity);
             if (ApicId == DeviceExtension->ApicId)
             {
                 DeviceExtension->ProcessorNumber = Index;
@@ -882,11 +922,13 @@ PnpcpuFindProcessorNumber(
     {
         for (Index = 0; Index < ActiveProcessors && Index < sizeof(KAFFINITY) * 8; Index++)
         {
-            KAFFINITY PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Index);
+            GROUP_AFFINITY PreviousAffinity;
             ULONGLONG Mpidr;
 
+            PnpcpuEnterProcessor(Index, &PreviousAffinity);
+
             Mpidr = PnpcpuQueryCurrentMpidr();
-            KeRevertToUserAffinityThreadEx(PreviousAffinity);
+            PnpcpuLeaveProcessor(&PreviousAffinity);
             if (Mpidr == DeviceExtension->Mpidr)
             {
                 DeviceExtension->ProcessorNumber = Index;
@@ -1299,15 +1341,15 @@ PnpcpuPowerSettingCallback(
     {
         ULONG EnergyPreference = *(PULONG)Value;
         ULONG HardwarePreference = (EnergyPreference * 255) / 100;
-        KAFFINITY PreviousAffinity;
+        GROUP_AFFINITY PreviousAffinity;
         ULONGLONG Request;
 
-        PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+        PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
         Request = __readmsr(PNPCPU_INTEL_HWP_REQUEST_MSR);
         Request &= ~(PNPCPU_INTEL_HWP_REQUEST_EPP_MASK | PNPCPU_INTEL_HWP_REQUEST_PACKAGE_CONTROL);
         Request |= (ULONGLONG)HardwarePreference << 24;
         __writemsr(PNPCPU_INTEL_HWP_REQUEST_MSR, Request);
-        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+        PnpcpuLeaveProcessor(&PreviousAffinity);
         DPRINT1("PNPCPU: CPU %lu HWP EPP policy=%lu hardware=%lu\n", DeviceExtension->ProcessorNumber, EnergyPreference, HardwarePreference);
         return STATUS_SUCCESS;
     }
@@ -1346,7 +1388,7 @@ PnpcpuPassiveCooling(
     _In_ ULONG Percentage)
 {
     PPNPCPU_DEVICE_EXTENSION DeviceExtension = Context;
-    KAFFINITY PreviousAffinity;
+    GROUP_AFFINITY PreviousAffinity;
     NTSTATUS Status;
 
     if (!DeviceExtension)
@@ -1356,9 +1398,9 @@ PnpcpuPassiveCooling(
     InterlockedExchange(&DeviceExtension->ThermalLimit, (LONG)Percentage);
     if (!DeviceExtension->Started || DeviceExtension->Removing || !DeviceExtension->PowerRegistered || !DeviceExtension->ProcessorNumberValid || DeviceExtension->ProcessorNumber >= sizeof(KAFFINITY) * 8)
         return;
-    PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+    PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
     Status = PnpcpuSetPerfLevel((UCHAR)Percentage);
-    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    PnpcpuLeaveProcessor(&PreviousAffinity);
     if (!NT_SUCCESS(Status))
         DPRINT1("PNPCPU: CPU %lu thermal limit %lu%% failed, status 0x%08lx\n", DeviceExtension->ProcessorNumber, Percentage, Status);
 }
@@ -1531,7 +1573,7 @@ PnpcpuRegisterPowerConfiguration(
 {
     UCHAR HandlerStorage[FIELD_OFFSET(PROCESSOR_STATE_HANDLER2, PerfLevel) + PNPCPU_MAX_PERF_STATES * sizeof(PROCESSOR_PERF_LEVEL)];
     PPROCESSOR_STATE_HANDLER2 Handler = (PPROCESSOR_STATE_HANDLER2)HandlerStorage;
-    KAFFINITY PreviousAffinity;
+    GROUP_AFFINITY PreviousAffinity;
     PVOID PreviousDevice;
     ULONG Index;
     NTSTATUS Status;
@@ -1556,7 +1598,7 @@ PnpcpuRegisterPowerConfiguration(
         for (Index = 0; Index < DeviceExtension->PerfStateCount; Index++)
             Handler->PerfLevel[Index].PercentFrequency = DeviceExtension->PerfStates[Index].Percentage;
     }
-    PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+    PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
     Status = PnpcpuEnableCppcConfiguration(DeviceExtension);
 #if defined(_M_IX86) || defined(_M_AMD64)
     if (NT_SUCCESS(Status))
@@ -1573,7 +1615,7 @@ PnpcpuRegisterPowerConfiguration(
         PnpcpuRestoreHwpConfiguration(DeviceExtension);
 #endif
     }
-    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    PnpcpuLeaveProcessor(&PreviousAffinity);
     if (!NT_SUCCESS(Status))
     {
         InterlockedCompareExchangePointer((PVOID volatile *)&PnpcpuProcessors[DeviceExtension->ProcessorNumber], NULL, DeviceExtension);
@@ -1605,7 +1647,7 @@ PnpcpuUnregisterPowerConfiguration(
 {
     UCHAR HandlerStorage[FIELD_OFFSET(PROCESSOR_STATE_HANDLER2, PerfLevel)];
     PPROCESSOR_STATE_HANDLER2 Handler = (PPROCESSOR_STATE_HANDLER2)HandlerStorage;
-    KAFFINITY PreviousAffinity;
+    GROUP_AFFINITY PreviousAffinity;
     NTSTATUS Status;
 
 #if defined(_M_IX86) || defined(_M_AMD64)
@@ -1620,13 +1662,13 @@ PnpcpuUnregisterPowerConfiguration(
     if (!DeviceExtension->PowerRegistered || !DeviceExtension->ProcessorNumberValid)
         return;
     RtlZeroMemory(HandlerStorage, sizeof(HandlerStorage));
-    PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << DeviceExtension->ProcessorNumber);
+    PnpcpuEnterProcessor(DeviceExtension->ProcessorNumber, &PreviousAffinity);
     Status = ZwPowerInformation(ProcessorStateHandler2, Handler, sizeof(HandlerStorage), NULL, 0);
     PnpcpuRestoreCppcConfiguration(DeviceExtension);
 #if defined(_M_IX86) || defined(_M_AMD64)
     PnpcpuRestoreHwpConfiguration(DeviceExtension);
 #endif
-    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    PnpcpuLeaveProcessor(&PreviousAffinity);
     if (!NT_SUCCESS(Status))
         DPRINT1("PNPCPU: CPU %lu power unregister failed, status 0x%08lx\n", DeviceExtension->ProcessorNumber, Status);
     InterlockedCompareExchangePointer((PVOID volatile *)&PnpcpuProcessors[DeviceExtension->ProcessorNumber], NULL, DeviceExtension);
