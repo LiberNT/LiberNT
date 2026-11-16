@@ -11,6 +11,7 @@ extern void func_CallbackNesting(void);
 extern void func_CharFuncs(void);
 extern void func_CloseWindow(void);
 extern void func_ComboBox(void);
+extern void func_ControlColorOtherThread(void);
 extern void func_CopyImage(void);
 extern void func_CopyImage_Icon(void);
 extern void func_CursorPresentation(void);
@@ -158,6 +159,7 @@ const struct test winetest_testlist[] =
     { "CharFuncs", func_CharFuncs },
     { "CloseWindow", func_CloseWindow },
     { "ComboBox", func_ComboBox },
+    { "ControlColorOtherThread", func_ControlColorOtherThread },
     { "CopyImage", func_CopyImage },
     { "CopyImage_Icon", func_CopyImage_Icon },
     { "CursorPresentation", func_CursorPresentation },
