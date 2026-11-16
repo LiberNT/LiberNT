@@ -189,6 +189,7 @@ extern BOOL g_bThemeHooksActive;
 void UXTHEME_InitSystem(HINSTANCE hInst);
 BOOL UXTHEME_IsAppThemed(void);
 void UXTHEME_ReloadTheme(BOOL load);
+void UXTHEME_LoadThemeIfChanged(void);
 BOOL CALLBACK UXTHEME_broadcast_theme_changed (HWND hWnd, LPARAM enable);
 
 /* No alpha blending */

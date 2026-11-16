@@ -146,7 +146,11 @@ static DWORD query_reg_path (HKEY hKey, LPCWSTR lpszValue,
  *
  * Set the current active theme from the registry
  */
+#ifdef __REACTOS__
+static void UXTHEME_LoadTheme(BOOL bKeepActive)
+#else
 static void UXTHEME_LoadTheme(void)
+#endif
 {
     HKEY hKey;
     DWORD buffsize;
@@ -178,6 +182,17 @@ static void UXTHEME_LoadTheme(void)
     else
         TRACE("Failed to open theme registry key\n");
 
+#ifdef __REACTOS__
+    if (bThemeActive && bKeepActive &&
+        MSSTYLES_IsActiveTheme(szCurrentTheme,
+                               szCurrentColor[0] ? szCurrentColor : NULL,
+                               szCurrentSize[0] ? szCurrentSize : NULL,
+                               szCurrentColor, ARRAY_SIZE(szCurrentColor),
+                               szCurrentSize, ARRAY_SIZE(szCurrentSize)))
+    {
+        return;
+    }
+#endif
     if(bThemeActive) {
         /* Make sure the theme requested is actually valid */
         hr = MSSTYLES_OpenThemeFile(szCurrentTheme,
@@ -540,7 +555,11 @@ void UXTHEME_InitSystem(HINSTANCE hInst)
     atDialogBrush        = GlobalAddAtomW(L"wine_dialog_brush");
     atDialogHook         = GlobalAddAtomW(L"uxtheme_dlg_hook");
 
+#ifdef __REACTOS__
+    UXTHEME_LoadTheme(FALSE);
+#else
     UXTHEME_LoadTheme();
+#endif
 #ifndef __REACTOS__
     ThemeHooksInstall();
 #endif
@@ -570,9 +589,14 @@ void UXTHEME_UninitSystem(void)
 void UXTHEME_ReloadTheme(BOOL load)
 {
     if (load)
-        UXTHEME_LoadTheme();
+        UXTHEME_LoadTheme(FALSE);
     else
         MSSTYLES_SetActiveTheme(NULL, FALSE);
+}
+
+void UXTHEME_LoadThemeIfChanged(void)
+{
+    UXTHEME_LoadTheme(TRUE);
 }
 #endif
 
