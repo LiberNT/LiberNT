@@ -6,7 +6,6 @@
 #endif
 #endif
 
-#ifndef SYSFUNCS_NT6_ONLY
     SVC_(AcceptConnectPort, 6)
     SVC_(AccessCheck, 8)
     SVC_(AccessCheckAndAuditAlarm, 11)
@@ -311,9 +310,7 @@
     SVC_(QueryPortInformationProcess, 0)
     SVC_(GetCurrentProcessorNumber, 0)
     SVC_(WaitForMultipleObjects32, 5)
-#endif // SYSFUNCS_NT6_ONLY
 
-#ifndef SYSFUNCS_NT5_ONLY
     SVC_(FlushProcessWriteBuffers, 0)
     SVC_(GetCurrentProcessorNumberEx, 1)
     SVC_(CreateUserProcess, 11)
@@ -452,4 +449,3 @@
     SVC_(Wow64GetNativeSystemInformation, 4)
     SVC_(Wow64IsProcessorFeaturePresent, 1)
 #endif
-#endif // SYSFUNCS_NT5_ONLY

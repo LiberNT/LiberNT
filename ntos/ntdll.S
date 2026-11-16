@@ -1,9 +1,6 @@
 
 #include <syscalls.inc>
 
-/* This file only has the NT5 syscalls */
-#define SYSFUNCS_NT5_ONLY
-
 #ifdef _M_ARM
 
     TEXTAREA

@@ -155,16 +155,10 @@ add_custom_target(nvs_check_standalone
 add_dependencies(ntoskrnl nvs_check_standalone)
 
 if(WOW64_I386_RUNTIME AND ARCH STREQUAL "i386")
-    set_source_files_properties(ntdll.S ntdll_nt6.S PROPERTIES COMPILE_DEFINITIONS WOW64_I386_RUNTIME)
+    set_source_files_properties(ntdll.S PROPERTIES COMPILE_DEFINITIONS WOW64_I386_RUNTIME)
 endif()
 
 add_asm_files(ntdllsys_asm ntdll.S)
 add_library(ntdllsys ${ntdllsys_asm})
 set_target_properties(ntdllsys PROPERTIES LINKER_LANGUAGE "C")
 add_dependencies(ntdllsys asm)
-
-# NT6 syscalls for ntdll_vista
-add_asm_files(ntdllsys_nt6_asm ntdll_nt6.S)
-add_library(ntdllsys_nt6 ${ntdllsys_nt6_asm})
-set_target_properties(ntdllsys_nt6 PROPERTIES LINKER_LANGUAGE "C")
-add_dependencies(ntdllsys_nt6 asm)
