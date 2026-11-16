@@ -239,7 +239,7 @@ PspCreateThread(
                             ObjectAttributes,
                             PreviousMode,
                             NULL,
-                            sizeof(ETHREAD),
+                            sizeof(ETHREAD) + KI_EEVDF_THREAD_EXTENSION,
                             0,
                             0,
                             (PVOID*)&Thread);
@@ -249,7 +249,7 @@ PspCreateThread(
         return Status;
     }
 
-    RtlZeroMemory(Thread, sizeof(ETHREAD));
+    RtlZeroMemory(Thread, sizeof(ETHREAD) + KI_EEVDF_THREAD_EXTENSION);
 
     InitializeListHead(&Thread->IrpList);
     InitializeListHead(&Thread->ActiveTimerListHead);

@@ -204,6 +204,11 @@ ExpReadLoadOptions(
         DPRINT("Boot without a graphical screen requested\n");
     }
 
+    if (ExpFindLoadOption(Options, "SCHEDULER=EEVDF") != NULL)
+    {
+        KeEnableEevdfScheduler();
+    }
+
     Value = ExpFindLoadOption(Options, "BURNMEMORY=");
     if (Value != NULL)
     {

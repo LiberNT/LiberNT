@@ -58,8 +58,7 @@ KiRelieveStarvedThread(
 {
     /* Take it out of the queue it is stuck in */
     KiAssertReadyQueue(Prcb, Priority);
-    if (RemoveEntryList(&Thread->WaitListEntry))
-        Prcb->ReadySummary ^= PRIORITY_MASK(Priority);
+    KiReadyQueueRemove(Prcb, Thread, Priority);
 
     Thread->PriorityDecrement = KI_STARVATION_PRIORITY - Thread->BasePriority;
     Thread->Priority = (SCHAR)KiApplyPriorityFloor(Thread,
@@ -99,6 +98,10 @@ KiScanReadyQueues(VOID)
     ULONG Processor, Scanned = 0, Step;
     KPRIORITY Priority;
     ULONG Relieved = 0;
+
+    /* Under the fair class no dynamic thread waits behind another for long, and lifting one would only reweight it */
+    if (KiEevdfEnabled)
+        return;
 
     TickNow = KeTickCount.LowPart;
 

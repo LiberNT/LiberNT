@@ -1207,6 +1207,9 @@ KiReadyQueueRemove(
     ASSERT(Thread->WaitListEntry.Flink->Blink == &Thread->WaitListEntry);
     ASSERT(Thread->WaitListEntry.Blink->Flink == &Thread->WaitListEntry);
 
+    if (KiEevdfEnabled)
+        KiEevdfUnlist(Prcb, Thread);
+
     if (RemoveEntryList(&Thread->WaitListEntry))
         Prcb->ReadySummary &= ~PRIORITY_MASK(Priority);
 
@@ -1250,6 +1253,9 @@ KxQueueReadyThread(
     Thread->WaitTime = KeTickCount.LowPart;
     KiReadyQueueInsert(Prcb, Thread, Thread->Priority, AtHead);
 
+    if (KiEevdfEnabled)
+        KiEevdfEnqueue(Prcb, Thread, TRUE);
+
     KiReleasePrcbLock(Prcb);
 }
 
@@ -1261,6 +1267,9 @@ KiSelectReadyThread(
 {
     ULONG Above, Highest;
     PKTHREAD Thread;
+
+    if (KiEevdfEnabled)
+        return KiEevdfSelectReadyThread(Priority, Prcb, NULL);
 
     if (Priority > HIGH_PRIORITY)
         return NULL;

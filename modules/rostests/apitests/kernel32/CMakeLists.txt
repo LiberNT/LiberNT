@@ -52,6 +52,7 @@ list(APPEND SOURCE
     DeviceIoControl.c
     EmulatedProcess.c
     dosdev.c
+    EevdfShares.c
     DateTimeFormatFlags.c
     EnumDateTimeFormats.c
     EnumSystemCodePages.c
