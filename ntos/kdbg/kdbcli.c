@@ -3623,20 +3623,23 @@ KdbpCliInterpretInitFile(VOID)
 
 static
 VOID
-KdbpReportFrozenProcessors(VOID)
+KdbpReportUnresponsiveProcessor(VOID)
 {
     ULONG Current = KeGetCurrentProcessorNumber();
     ULONG Processor;
+
+    if (KiBugCheckData[0] != CLOCK_WATCHDOG_TIMEOUT)
+        return;
 
     for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
     {
         PKPRCB Prcb = KiProcessorBlock[Processor];
 
-        if ((Processor == Current) || (Prcb == NULL))
+        if ((Processor == Current) || (Prcb == NULL) || ((ULONG_PTR)Prcb != KiBugCheckData[3]))
             continue;
 
         KdbpPagerReset();
-        KdbpPrint("\nProcessor %lu\n", Processor);
+        KdbpPrint("\nProcessor %lu stopped answering\n", Processor);
         KdbpBackTrace(&Prcb->ProcessorState.ContextFrame, KdbpScreenRows() - 5, FALSE);
     }
 }
@@ -3707,7 +3710,7 @@ KdbpReportStop(
         KdbpPagerReset();
         KdbpCmdAnalyze(1, NULL);
 
-        KdbpReportFrozenProcessors();
+        KdbpReportUnresponsiveProcessor();
 
         KdbpPagerReset();
         KdbpPrint("\n*** Fatal System Error: 0x%08lx (0x%p,0x%p,0x%p,0x%p)\n",
