@@ -426,6 +426,8 @@ typedef struct _USB_HUB_INFORMATION_EX {
   } u;
 } USB_HUB_INFORMATION_EX, *PUSB_HUB_INFORMATION_EX;
 
+C_ASSERT(sizeof(USB_HUB_INFORMATION_EX) == 77);
+
 #pragma warning(push)
 #pragma warning(disable:4201)
 typedef union _USB_PORT_PROPERTIES {

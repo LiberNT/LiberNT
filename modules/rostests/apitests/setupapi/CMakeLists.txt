@@ -32,6 +32,7 @@ list(APPEND SOURCE
     SetupInstallServicesFromInfSectionEx.c
     SoftwareComponent.c
     SysButtonDevices.c
+    UsbHubInformation.c
     UsbInterfaceIds.c
     testlist.c)
 

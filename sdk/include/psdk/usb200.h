@@ -443,8 +443,10 @@ typedef struct _USB_30_HUB_DESCRIPTOR {
   UCHAR  bHubControlCurrent;
   UCHAR  bHubHdrDecLat;
   USHORT wHubDelay;
-  UCHAR  DeviceRemovable[64];
+  USHORT DeviceRemovable;
 } USB_30_HUB_DESCRIPTOR, *PUSB_30_HUB_DESCRIPTOR;
+
+C_ASSERT(sizeof(USB_30_HUB_DESCRIPTOR) == 12);
 
 
 typedef union _USB_HUB_STATUS_AND_CHANGE {

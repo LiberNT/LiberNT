@@ -1000,6 +1000,62 @@ USBH_IoctlGetHubCapabilities(IN PUSBHUB_FDO_EXTENSION HubExtension,
     return STATUS_SUCCESS;
 }
 
+static
+NTSTATUS
+USBH_IoctlGetHubCapabilitiesEx(IN PUSBHUB_FDO_EXTENSION HubExtension,
+                               IN PIRP Irp)
+{
+    PIO_STACK_LOCATION IoStack;
+    PUSB_HUB_CAPABILITIES_EX Capabilities;
+    USB_HUB_CAP_FLAGS Flags;
+    BOOLEAN IsRoot;
+    BOOLEAN IsHighSpeed;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    IoStack = IoGetCurrentIrpStackLocation(Irp);
+    Capabilities = Irp->AssociatedIrp.SystemBuffer;
+
+    if (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(USB_HUB_CAPABILITIES_EX) ||
+        Capabilities == NULL)
+    {
+        USBH_CompleteIrp(Irp, STATUS_BUFFER_TOO_SMALL);
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    IsRoot = (HubExtension->LowerPDO == HubExtension->RootHubPdo);
+    IsHighSpeed = (HubExtension->HubFlags & USBHUB_FDO_FLAG_USB20_HUB) != 0;
+
+    Flags.ul = 0;
+    if (IsRoot)
+    {
+        Flags.HubIsRoot = 1;
+        Flags.HubIsHighSpeed = IsHighSpeed ||
+                               (HubExtension->HubDescriptor != NULL &&
+                                HubExtension->HubDescriptor->bDescriptorType == USB_30_HUB_DESCRIPTOR_TYPE);
+    }
+    else
+    {
+        BOOLEAN IsMultiTt = (HubExtension->HubFlags & USBHUB_FDO_FLAG_MULTIPLE_TTS) != 0;
+
+        ASSERT(!IsMultiTt || IsHighSpeed);
+        Flags.HubIsHighSpeedCapable = IsHighSpeed;
+        Flags.HubIsHighSpeed = IsHighSpeed;
+        Flags.HubIsMultiTtCapable = IsMultiTt;
+        Flags.HubIsMultiTt = IsMultiTt;
+        Flags.HubIsBusPowered = USBH_HubIsBusPowered(HubExtension->Common.SelfDevice,
+                                                     HubExtension->HubConfigDescriptor);
+    }
+    /* TODO: report HubIsArmedWakeOnConnect once the hub arms itself for wake on connect */
+
+    ASSERT(Flags.ReservedMBZ == 0);
+
+    Capabilities->CapabilityFlags = Flags;
+    Irp->IoStatus.Information = sizeof(USB_HUB_CAPABILITIES_EX);
+    USBH_CompleteIrp(Irp, STATUS_SUCCESS);
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 NTAPI
 USBH_IoctlGetHubInformationEx(IN PUSBHUB_FDO_EXTENSION HubExtension,
@@ -1722,6 +1778,16 @@ USBH_DeviceControl(IN PUSBHUB_FDO_EXTENSION HubExtension,
             if (!(HubExtension->HubFlags & USBHUB_FDO_FLAG_DEVICE_STOPPED))
             {
                 Status = USBH_IoctlGetHubCapabilities(HubExtension, Irp);
+                break;
+            }
+
+            USBH_CompleteIrp(Irp, Status);
+            break;
+
+        case IOCTL_USB_GET_HUB_CAPABILITIES_EX:
+            if (!(HubExtension->HubFlags & USBHUB_FDO_FLAG_DEVICE_STOPPED))
+            {
+                Status = USBH_IoctlGetHubCapabilitiesEx(HubExtension, Irp);
                 break;
             }
 
