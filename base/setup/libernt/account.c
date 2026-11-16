@@ -7,6 +7,7 @@
 
 #include "libernt.h"
 #include <tzlib.h>
+#include "tzdefault.h"
 
 #include "resource.h"
 
@@ -185,6 +186,43 @@ FindDefaultTimeZone(
     return (Match < 0) ? 0 : Match;
 }
 
+static ULONG
+GetRegionTimeZoneIndex(
+    _In_ PCWSTR LocaleId,
+    _In_ ULONG Fallback)
+{
+    LCID Lcid = (LCID)wcstoul(LocaleId, NULL, 16);
+    WCHAR Country[3];
+    WCHAR Path[MAX_PATH];
+    DWORD Index, Size = sizeof(Index), Type;
+    HKEY hKey;
+    ULONG i;
+
+    if (!GetLocaleInfoW(Lcid, LOCALE_SISO3166CTRYNAME | LOCALE_NOUSEROVERRIDE, Country, ARRAYSIZE(Country)))
+        return Fallback;
+
+    for (i = 0; i < ARRAYSIZE(RegionTimeZones); i++)
+    {
+        if (_wcsicmp(RegionTimeZones[i].Country, Country) != 0)
+            continue;
+        StringCchPrintfW(Path, ARRAYSIZE(Path),
+                         L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Time Zones\\%s",
+                         RegionTimeZones[i].TimeZone);
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, Path, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+        {
+            if (RegQueryValueExW(hKey, L"Index", NULL, &Type, (LPBYTE)&Index, &Size) == ERROR_SUCCESS &&
+                Type == REG_DWORD && Size == sizeof(Index))
+            {
+                Fallback = Index;
+            }
+            RegCloseKey(hKey);
+        }
+        break;
+    }
+
+    return Fallback;
+}
+
 static VOID
 UpdateAutoDaylight(
     _In_ HWND hwndDlg,
@@ -318,7 +356,9 @@ AccountPageProc(
                 qsort(TimeZones.Items, TimeZones.Count, sizeof(*TimeZones.Items), CompareTimeZoneItems);
             for (Index = 0; Index < TimeZones.Count; Index++)
                 SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_ADDSTRING, 0, (LPARAM)TimeZones.Items[Index].Description);
-            iItem = FindDefaultTimeZone(pSetupData->TimeZoneIndex);
+            iItem = FindDefaultTimeZone(pSetupData->bUnattend ? pSetupData->TimeZoneIndex :
+                                        GetRegionTimeZoneIndex(pSetupData->DefaultLanguage,
+                                                               pSetupData->TimeZoneIndex));
             SendDlgItemMessageW(hwndDlg, IDC_TIMEZONELIST, CB_SETCURSEL, iItem, 0);
             UpdateAutoDaylight(hwndDlg, pSetupData->AutoDaylight);
             if ((ULONG)iItem < TimeZones.Count)
