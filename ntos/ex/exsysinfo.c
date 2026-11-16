@@ -1344,6 +1344,30 @@ NtQuerySystemInformation(
                 *(PULONG)SystemInformation = (ULONG)MmNumberOfPhysicalPages;
                 break;
             }
+	    case SystemPhysicalMemoryInformation:
+            {
+                PSYSTEM_PHYSICAL_MEMORY_INFORMATION MemoryInfo =
+                    (PSYSTEM_PHYSICAL_MEMORY_INFORMATION)SystemInformation;
+
+                ResultLength = sizeof(SYSTEM_PHYSICAL_MEMORY_INFORMATION);
+                if (Length != ResultLength)
+                {
+                    Status = STATUS_INFO_LENGTH_MISMATCH;
+                    break;
+                }
+
+                MemoryInfo->TotalPhysicalBytes =
+                    (ULONGLONG)MmNumberOfPhysicalPages * PAGE_SIZE;
+
+                MemoryInfo->LowestPhysicalAddress =
+                    (ULONGLONG)MmLowestPhysicalPage * PAGE_SIZE;
+
+                MemoryInfo->HighestPhysicalAddress =
+                    (((ULONGLONG)MmHighestPhysicalPage + 1) * PAGE_SIZE) - 1;
+
+                Status = STATUS_SUCCESS;
+                break;
+            }
 
             case SystemDeviceInformation:
             {
