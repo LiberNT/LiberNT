@@ -18,6 +18,7 @@ list(APPEND SOURCE
     range.cpp
     textedit.cpp
     threadmgr.cpp
+    trackprop.cpp
     teststore.cpp
     testtip.cpp)
 

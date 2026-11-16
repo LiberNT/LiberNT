@@ -50,6 +50,14 @@ public:
     void AddRange(struct list *entry) { list_add_tail(&m_ranges, entry); }
     HRESULT CheckLock(TfEditCookie ec, BOOL fWrite);
     ITextStoreACP *TextStore() const { return m_pITextStoreACP; }
+    BOOL GetCompositionExtent(ULONG index, LONG *start, LONG *end) const
+    {
+        if (index >= m_cCompositions)
+            return FALSE;
+        *start = m_compositions[index]->Range()->Start();
+        *end = m_compositions[index]->Range()->End();
+        return TRUE;
+    }
     HRESULT ReplaceText(DWORD dwFlags, LONG start, LONG end, const WCHAR *text, LONG cch, TS_TEXTCHANGE *change);
     HRESULT OnCompositionUpdated(CComposition *composition);
     HRESULT OnCompositionEnded(CComposition *composition);
@@ -804,8 +812,25 @@ STDMETHODIMP CContext::TrackProperties(
     _In_ ULONG cAppProp,
     _Out_ ITfReadOnlyProperty **ppProperty)
 {
-    FIXME("STUB:(%p)\n", this);
-    return E_NOTIMPL;
+    TRACE("(%p) %p %lu %p %lu %p\n", this, prgProp, cProp, prgAppProp, cAppProp, ppProperty);
+
+    if (!ppProperty)
+        return E_INVALIDARG;
+    *ppProperty = NULL;
+    if ((cProp && !prgProp) || (cAppProp && !prgAppProp))
+        return E_INVALIDARG;
+
+    CTrackProperty *property = new(cicNoThrow) CTrackProperty(static_cast<ITfContext *>(this));
+    if (!property)
+        return E_OUTOFMEMORY;
+    HRESULT hr = property->Initialize(prgProp, cProp, prgAppProp, cAppProp);
+    if (FAILED(hr))
+    {
+        property->Release();
+        return hr;
+    }
+    *ppProperty = property;
+    return S_OK;
 }
 
 STDMETHODIMP CContext::EnumProperties(_Out_ IEnumTfProperties **ppEnum)
@@ -1859,6 +1884,11 @@ EXTERN_C HRESULT Context_CheckLock(ITfContext *context, TfEditCookie ec, BOOL fW
 EXTERN_C ITextStoreACP *Context_GetTextStore(ITfContext *context)
 {
     return static_cast<CContext *>(context)->TextStore();
+}
+
+EXTERN_C BOOL Context_GetCompositionExtent(ITfContext *context, ULONG index, LONG *start, LONG *end)
+{
+    return static_cast<CContext *>(context)->GetCompositionExtent(index, start, end);
 }
 
 EXTERN_C HRESULT Context_ReplaceText(ITfContext *context, DWORD dwFlags, LONG start, LONG end,

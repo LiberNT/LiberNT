@@ -68,6 +68,7 @@ HRESULT Context_Uninitialize(ITfContext *cxt);
 void Context_AddRange(ITfContext *context, struct list *entry);
 HRESULT Context_CheckLock(ITfContext *context, TfEditCookie ec, BOOL fWrite);
 ITextStoreACP *Context_GetTextStore(ITfContext *context);
+BOOL Context_GetCompositionExtent(ITfContext *context, ULONG index, LONG *start, LONG *end);
 HRESULT Context_ReplaceText(ITfContext *context, DWORD dwFlags, LONG start, LONG end,
                             const WCHAR *text, LONG cch, TS_TEXTCHANGE *change);
 void ThreadMgr_OnDocumentMgrDestruction(ITfThreadMgr *tm, ITfDocumentMgr *mgr);
