@@ -60,4 +60,38 @@ DxgkPostDisplayCoreFirmwareScanout(
     return DisplayOnlyDriver || !VidPnCommitted;
 }
 
+/* The firmware framebuffer ranges name a segment by its zero-based position, not by the segment id the other DDIs use. */
+FORCEINLINE
+USHORT
+DxgkPostDisplayCoreUefiRangeSegment(
+    _In_ ULONG SegmentId)
+{
+    ASSERT(SegmentId != 0);
+    ASSERT(SegmentId - 1 <= MAXUSHORT);
+    return (USHORT)(SegmentId - 1);
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreUefiRangeSegmentIndex(
+    _In_ USHORT DriverSegmentId,
+    _In_ ULONG SegmentCount,
+    _Out_ PULONG SegmentIndex)
+{
+    *SegmentIndex = 0;
+    if (DriverSegmentId >= SegmentCount)
+        return FALSE;
+    *SegmentIndex = DriverSegmentId;
+    return TRUE;
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreUefiUnblockDeferred(
+    _In_ KIRQL Irql)
+{
+    ASSERT(Irql <= DISPATCH_LEVEL);
+    return Irql > APC_LEVEL;
+}
+
 #endif /* _DXGK_POSTDISPLAY_CORE_H_ */

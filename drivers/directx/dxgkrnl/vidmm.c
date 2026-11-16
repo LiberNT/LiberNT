@@ -4915,7 +4915,7 @@ DxgkVidMmQueryUEFIFrameBufferRanges(
 
         RtlZeroMemory(&MemoryState, sizeof(MemoryState));
         RtlZeroMemory(Ranges, sizeof(Ranges));
-        MemoryState.DriverSegmentId          = (WORD)Seg->SegmentId;
+        MemoryState.DriverSegmentId          = DxgkPostDisplayCoreUefiRangeSegment(Seg->SegmentId);
         MemoryState.PhysicalAdapterIndex     = 0;
         MemoryState.NumUEFIFrameBufferRanges = Count;
         MemoryState.pMemoryRanges            = Ranges;

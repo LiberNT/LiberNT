@@ -6955,6 +6955,43 @@ DxgkCbIndicateConnectorChange(
     return Status;
 }
 
+typedef struct _DXGKP_UEFI_UNBLOCK_WORK
+{
+    WORK_QUEUE_ITEM         Item;
+    PDXGKRNL_ADAPTER        Adapter;
+    HANDLE                  DeviceHandle;
+    DXGK_SEGMENTMEMORYSTATE State;
+    DXGK_MEMORYRANGE        Ranges[DXGKP_MAX_UEFI_FB_RANGES];
+} DXGKP_UEFI_UNBLOCK_WORK, *PDXGKP_UEFI_UNBLOCK_WORK;
+
+static NTSTATUS
+APIENTRY
+DxgkCbUnblockUEFIFrameBufferRanges(
+    IN_CONST_HANDLE DeviceHandle,
+    IN_CONST_PDXGK_SEGMENTMEMORYSTATE SegmentMemoryState);
+
+static
+VOID
+NTAPI
+DxgkpUnblockUEFIFrameBufferRangesWorker(
+    _In_ PVOID Context)
+{
+    PDXGKP_UEFI_UNBLOCK_WORK Work = Context;
+    PDXGKRNL_ADAPTER Adapter;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Work != NULL);
+    ASSERT(Work->State.pMemoryRanges == (Work->State.NumUEFIFrameBufferRanges != 0 ? Work->Ranges : NULL));
+    Adapter = Work->Adapter;
+    Status = DxgkCbUnblockUEFIFrameBufferRanges(Work->DeviceHandle, &Work->State);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_WARN("DxgkCbUnblockUEFIFrameBufferRanges: deferred release on driver segment %u failed 0x%08lx\n",
+                     Work->State.DriverSegmentId, Status);
+    ExFreePoolWithTag(Work, TAG_DXGK_ADAPTER);
+    ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+}
+
 /*
  * DxgkCbUnblockUEFIFrameBufferRanges
  *
@@ -6977,6 +7014,7 @@ DxgkCbUnblockUEFIFrameBufferRanges(
     PDXGKRNL_SEGMENT  Segment;
     NTSTATUS          Status = STATUS_SUCCESS;
     UINT              Named, Blocked;
+    ULONG             SegmentIndex;
     ULONG             SegmentId;
     ULONGLONG         Released[DXGKP_MAX_UEFI_FB_RANGES];
     UINT              ReleasedCount = 0;
@@ -6999,15 +7037,45 @@ DxgkCbUnblockUEFIFrameBufferRanges(
         return STATUS_INVALID_PARAMETER;
     }
 
-    /* DriverSegmentId is the miniport's 1-based segment id. */
-    SegmentId = SegmentMemoryState->DriverSegmentId;
     if (Adapter->Segments == NULL ||
-        SegmentId == 0 || SegmentId > Adapter->SegmentCount)
+        !DxgkPostDisplayCoreUefiRangeSegmentIndex(SegmentMemoryState->DriverSegmentId, Adapter->SegmentCount, &SegmentIndex))
     {
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
         return STATUS_INVALID_PARAMETER;
     }
-    Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[SegmentId - 1];
+    Segment = &((PDXGKRNL_SEGMENT)Adapter->Segments)[SegmentIndex];
+    SegmentId = Segment->SegmentId;
+    ASSERT(SegmentId == SegmentIndex + 1);
+
+    if (DxgkPostDisplayCoreUefiUnblockDeferred(KeGetCurrentIrql()))
+    {
+        PDXGKP_UEFI_UNBLOCK_WORK Work;
+
+        if (SegmentMemoryState->NumUEFIFrameBufferRanges > DXGKP_MAX_UEFI_FB_RANGES)
+        {
+            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+            return STATUS_INVALID_PARAMETER;
+        }
+        Work = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Work), TAG_DXGK_ADAPTER);
+        if (Work == NULL)
+        {
+            ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        Work->Adapter = Adapter;
+        Work->DeviceHandle = (HANDLE)DeviceHandle;
+        Work->State = *SegmentMemoryState;
+        Work->State.pMemoryRanges = NULL;
+        if (SegmentMemoryState->NumUEFIFrameBufferRanges != 0)
+        {
+            RtlCopyMemory(Work->Ranges, SegmentMemoryState->pMemoryRanges,
+                          SegmentMemoryState->NumUEFIFrameBufferRanges * sizeof(DXGK_MEMORYRANGE));
+            Work->State.pMemoryRanges = Work->Ranges;
+        }
+        ExInitializeWorkItem(&Work->Item, DxgkpUnblockUEFIFrameBufferRangesWorker, Work);
+        ExQueueWorkItem(&Work->Item, DelayedWorkQueue);
+        return STATUS_SUCCESS;
+    }
 
     ExAcquireFastMutex(&Segment->Lock);
 
