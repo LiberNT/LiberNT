@@ -4274,6 +4274,11 @@ VidSchNotifyInterrupt(
             Adapter->NodeCount) ||
         NodeOrdinal >= DXGK_MAX_TRACKED_NODES)
         VidSchpBugCheckInvalidFence(Adapter, FenceId, 0);
+    if (Ctx != NULL && Ctx->Initialized && NodeOrdinal < Ctx->EngineCount &&
+        VidSchPolicyIgnoreEngineInterrupt(VidSchpReadState(&Ctx->Engines[NodeOrdinal]), VidSchEngineResetting))
+    {
+        return;
+    }
     LastSubmittedFence = (ULONG)InterlockedCompareExchange((volatile LONG *)&Adapter->NodeLastSubmittedFenceId[NodeOrdinal], 0, 0);
     if ((!PreemptionNotification && FenceId == 0) || LastSubmittedFence == 0 || (FenceId != 0 && !VidSchpFenceReached(LastSubmittedFence, FenceId)))
         VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
@@ -5143,35 +5148,6 @@ VidSchResetEngine(
         goto ResetFailed;
     }
     KmdCallAcquired = TRUE;
-
-    /*
-     * Ask for the engine back before taking it.  Preemption is the graceful
-     * half of the pair: a driver that can stop the current packet leaves the
-     * engine in a state it defined, where a reset leaves it in whatever state
-     * the hardware happened to be in.  Windows tries this first for that
-     * reason.
-     *
-     * A refusal is expected and costs nothing -- softgpu has no atomic
-     * cancellation primitive and says so rather than reporting a fence nothing
-     * preempted -- so the reset below runs either way.  What this buys is that
-     * a driver which *can* preempt gets the chance.
-     */
-    if (DXGK_CB_FULL(Adapter, DxgkDdiPreemptCommand) != NULL)
-    {
-        DXGKARG_PREEMPTCOMMAND PreemptArgs;
-        NTSTATUS PreemptStatus;
-
-        RtlZeroMemory(&PreemptArgs, sizeof(PreemptArgs));
-        PreemptArgs.NodeOrdinal = EngineOrdinal;
-        PreemptArgs.EngineOrdinal = 0;
-        PreemptArgs.PreemptionFenceId = (UINT)Engine->LastCompletedFence;
-
-        DxgkEnterSchedulerClass(Adapter);
-        PreemptStatus = DXGK_CB_FULL(Adapter, DxgkDdiPreemptCommand)(Adapter->MiniportDeviceContext, &PreemptArgs);
-        DxgkLeaveSchedulerClass(Adapter);
-        if (!NT_SUCCESS(PreemptStatus))
-            DXGKRNL_TRACE("TDR: preemption declined 0x%08lX, resetting engine %u\n", PreemptStatus, EngineOrdinal);
-    }
 
     RtlZeroMemory(&ResetArgs, sizeof(ResetArgs));
     ResetArgs.NodeOrdinal = EngineOrdinal;

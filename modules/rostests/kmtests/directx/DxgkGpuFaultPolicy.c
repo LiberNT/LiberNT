@@ -62,6 +62,16 @@ START_TEST(DxgkGpuFaultPolicy)
         "completion-DPC packet cleanup must be deferred");
 
     ok_bool_true(
+        VidSchPolicyIgnoreEngineInterrupt(6, 6),
+        "an engine being reset has its completion and preemption interrupts ignored");
+    ok_bool_false(
+        VidSchPolicyIgnoreEngineInterrupt(1, 6),
+        "a running engine's interrupts are processed");
+    ok_bool_false(
+        VidSchPolicyIgnoreEngineInterrupt(0, 6),
+        "an idle engine's interrupts are processed");
+
+    ok_bool_true(
         VidSchPolicyResubmissionAllowed(0, 0, 1),
         "an idle engine accepts a handed-back packet");
     ok_bool_true(

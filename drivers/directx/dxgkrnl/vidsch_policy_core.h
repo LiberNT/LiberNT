@@ -89,4 +89,14 @@ VidSchPolicyResubmissionAllowed(
     return EngineState == IdleState || EngineState == RunningState;
 }
 
+/* Between the reset snapshot and the end of DxgkDdiResetEngine, completion and preemption interrupts from the timed-out engine are ignored. */
+FORCEINLINE
+BOOLEAN
+VidSchPolicyIgnoreEngineInterrupt(
+    _In_ LONG EngineState,
+    _In_ LONG ResettingState)
+{
+    return EngineState == ResettingState;
+}
+
 #endif /* _VIDSCH_POLICY_CORE_H_ */
