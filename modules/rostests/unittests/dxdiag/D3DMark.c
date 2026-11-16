@@ -63,15 +63,15 @@ static VOID RasterizeTriangle(const D3DTEST_VERTEX *Triangle)
 
 static UINT Render(DWORD Elapsed)
 {
-    D3DTEST_VERTEX Vertices[D3DTEST_MAX_VERTEX_COUNT + 3];
+    D3DTEST_VERTEX Vertices[D3DTEST_MARK_VERTEX_COUNT + 3];
     UINT Count, i, OutOfView = 0, Mixed = 0;
 
     ZeroMemory(Painted, sizeof(Painted));
     ZeroMemory(PaintedRhw, sizeof(PaintedRhw));
     ZeroMemory(NearestRhw, sizeof(NearestRhw));
     Count = D3DTestBuildMark(Vertices, Elapsed, VIEW_WIDTH, VIEW_HEIGHT);
-    ok(Count > 0 && Count <= D3DTEST_MAX_VERTEX_COUNT && Count % 3 == 0, "%lu ms: %u vertices\n", Elapsed, Count);
-    if (Count == 0 || Count > D3DTEST_MAX_VERTEX_COUNT || Count % 3 != 0)
+    ok(Count > 0 && Count <= D3DTEST_MARK_VERTEX_COUNT && Count % 3 == 0, "%lu ms: %u vertices\n", Elapsed, Count);
+    if (Count == 0 || Count > D3DTEST_MARK_VERTEX_COUNT || Count % 3 != 0)
         return 0;
 
     for (i = 0; i < Count; ++i)
@@ -199,8 +199,45 @@ static VOID TestClipSpace(VOID)
     }
 }
 
+static VOID TestStatsOverlay(VOID)
+{
+    static const PCSTR Lines[] = { "FPS 1234.5", "MARK 99999", "CPU 100%", "GPU N/A" };
+    static const PCSTR Eight[] = { "8" };
+    D3DTEST_VERTEX Vertices[D3DTEST_HUD_VERTEX_COUNT];
+    RECT Rects[D3DTEST_HUD_VERTEX_COUNT / 6];
+    UINT Count, Vertex, Outside = 0, Bad = 0, i;
+
+    Count = D3DTestHudRects(Rects, ARRAYSIZE(Rects), Eight, 1, 600);
+    ok(Count == 12, "The 8 glyph and its backdrop take %u rectangles, expected 12\n", Count);
+    ok(Rects[0].left == 8 && Rects[0].top == 8 && Rects[0].right == 35 && Rects[0].bottom == 41,
+       "Backdrop of one glyph at scale 3 is %ld,%ld-%ld,%ld\n", Rects[0].left, Rects[0].top, Rects[0].right, Rects[0].bottom);
+
+    Count = D3DTestHudRects(Rects, ARRAYSIZE(Rects), Lines, ARRAYSIZE(Lines), 600);
+    ok(Count > ARRAYSIZE(Lines) && Count < ARRAYSIZE(Rects), "Overlay takes %u rectangles\n", Count);
+    for (i = 1; i < Count; ++i)
+    {
+        if (Rects[i].left < Rects[0].left || Rects[i].right > Rects[0].right || Rects[i].top < Rects[0].top ||
+            Rects[i].bottom > Rects[0].bottom || Rects[i].right <= Rects[i].left || Rects[i].bottom <= Rects[i].top)
+            Outside++;
+    }
+    ok(Outside == 0, "%u text rectangles fall outside the backdrop\n", Outside);
+    ok(Rects[0].right < VIEW_WIDTH * 2 && Rects[0].bottom < 600 / 2, "Overlay covers %ld x %ld\n", Rects[0].right, Rects[0].bottom);
+
+    Vertex = D3DTestBuildHud(Vertices, ARRAYSIZE(Vertices), Lines, ARRAYSIZE(Lines), 600);
+    ok(Vertex == Count * 6, "Overlay has %u vertices for %u rectangles\n", Vertex, Count);
+    for (i = 0; i < Vertex; ++i)
+    {
+        if (Vertices[i].z != 0.0f || Vertices[i].rhw != 1.0f ||
+            Vertices[i].color != (i < 6 ? D3DTEST_HUD_BACK_COLOR : D3DTEST_HUD_TEXT_COLOR))
+            Bad++;
+    }
+    ok(Bad == 0, "%u overlay vertices are not on the near plane in the overlay colours\n", Bad);
+    ok(D3DTestBuildHud(Vertices, 11, Lines, ARRAYSIZE(Lines), 600) == 6, "A short buffer must hold whole quads only\n");
+}
+
 START_TEST(D3DMark)
 {
+    TestStatsOverlay();
     TestClipSpace();
     TestFacingTheViewer();
     TestDrawOrder();

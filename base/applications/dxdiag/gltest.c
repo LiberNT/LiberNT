@@ -158,7 +158,7 @@ static BOOL GL1Render(GL_WINDOW *Window, PD3DTEST_RESULT Result)
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, Window->Width, Window->Height);
+        Count = D3DTestBuildScene(Vertices, Elapsed, Window->Width, Window->Height, Result);
         D3DTestToClipSpace(Clip, Vertices, Count, Window->Width, Window->Height);
         glClear(GL_COLOR_BUFFER_BIT);
         glDrawArrays(GL_TRIANGLES, 0, Count);
@@ -332,7 +332,7 @@ static BOOL GL3Render(GL_WINDOW *Window, GL3_STATE *State, PD3DTEST_RESULT Resul
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, Window->Width, Window->Height);
+        Count = D3DTestBuildScene(Vertices, Elapsed, Window->Width, Window->Height, Result);
         D3DTestToClipSpace(Clip, Vertices, Count, Window->Width, Window->Height);
         State->Functions.BufferData(GL_ARRAY_BUFFER, Count * sizeof(Clip[0]), Clip, GL_STREAM_DRAW);
         glClear(GL_COLOR_BUFFER_BIT);

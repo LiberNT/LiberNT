@@ -8,7 +8,11 @@
 #ifndef D3DMARK_H__
 #define D3DMARK_H__
 
-#define D3DTEST_MAX_VERTEX_COUNT 96
+#define D3DTEST_MARK_VERTEX_COUNT 96
+#define D3DTEST_HUD_VERTEX_COUNT 3072
+#define D3DTEST_MAX_VERTEX_COUNT (D3DTEST_MARK_VERTEX_COUNT + D3DTEST_HUD_VERTEX_COUNT)
+#define D3DTEST_HUD_TEXT_COLOR 0xffffffff
+#define D3DTEST_HUD_BACK_COLOR 0xff1c1c1c
 
 typedef struct
 {
@@ -26,6 +30,8 @@ typedef struct
 } D3DTEST_CLIP_VERTEX, *PD3DTEST_CLIP_VERTEX;
 
 UINT D3DTestBuildMark(PD3DTEST_VERTEX Vertices, DWORD Elapsed, UINT Width, UINT Height);
+UINT D3DTestHudRects(RECT *Rects, UINT Capacity, const PCSTR *Lines, UINT LineCount, UINT Height);
+UINT D3DTestBuildHud(PD3DTEST_VERTEX Vertices, UINT Capacity, const PCSTR *Lines, UINT LineCount, UINT Height);
 VOID D3DTestToClipSpace(PD3DTEST_CLIP_VERTEX Output, const D3DTEST_VERTEX *Input, UINT Count, UINT Width, UINT Height);
 
 #endif /* D3DMARK_H__ */

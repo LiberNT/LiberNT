@@ -99,14 +99,14 @@ BEGIN
     PUSHBUTTON "Włącz", IDC_BUTTON_D3D, 170, 128, 60, 14, WS_DISABLED
     PUSHBUTTON "Włącz", IDC_BUTTON_AGP, 170, 144, 60, 14, WS_DISABLED
     PUSHBUTTON "Testuj DirectDraw", IDC_BUTTON_TESTDD, 250, 112, 80, 14
-    PUSHBUTTON "OpenGL 1.1", IDC_BUTTON_TEST_GL1, 350, 112, 47, 14
-    PUSHBUTTON "OpenGL 3.3", IDC_BUTTON_TEST_GL3, 400, 112, 47, 14
     PUSHBUTTON "Direct3D 7", IDC_BUTTON_TEST_D3D7, 250, 128, 47, 14
     PUSHBUTTON "Direct3D 8", IDC_BUTTON_TEST_D3D8, 300, 128, 47, 14
     PUSHBUTTON "Direct3D 9", IDC_BUTTON_TEST_D3D9, 350, 128, 47, 14
     PUSHBUTTON "Direct3D 10", IDC_BUTTON_TEST_D3D10, 400, 128, 47, 14
     PUSHBUTTON "Direct3D 11", IDC_BUTTON_TEST_D3D11, 250, 144, 47, 14
     PUSHBUTTON "Direct3D 12", IDC_BUTTON_TEST_D3D12, 300, 144, 47, 14
+    PUSHBUTTON "OpenGL 1.1", IDC_BUTTON_TEST_GL1, 350, 144, 47, 14
+    PUSHBUTTON "OpenGL 3.3", IDC_BUTTON_TEST_GL3, 400, 144, 47, 14
     GROUPBOX "Uwagi", IDC_STATIC, 5, 170, 452, 50
     EDITTEXT IDC_TEXT_INFO, 15, 182, 432, 30, ES_LEFT | WS_BORDER | ES_READONLY | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
 END
@@ -246,18 +246,13 @@ BEGIN
     IDS_REG_SUCCESS "OK"
     IDS_REG_FAIL "Błąd"
     IDS_DDTEST_ERROR "Test nieudany!"
-    IDS_DDTEST_DESCRIPTION "Czy chcesz rozpocząć test interfejsu DirectDraw?"
-    IDS_DDPRIMARY_DESCRIPTION "Ten test wykorzysta DirectDraw do rysowania na powierzchni podstawowej. Narysowane zostaną czarne i białe prostokąty. Kontynuować?"
-    IDS_DDPRIMARY_RESULT "Czy było widać czarne i białe prostokąty?"
-    IDS_DDOFFSCREEN_DESCRIPTION "Ten test wykorzysta DirectDraw do rysowania przy użyciu bufora pozaekranowego. Narysowany zostanie poruszający się biały kwadrat. Kontynuować?"
-    IDS_DDOFFSCREEN_RESULT "Czy było widać poruszający się biały kwadrat?"
-    IDS_DDFULLSCREEN_DESCRIPTION "Ten test wykorzysta DirectDraw do rysowania w trybie pełnoekranowym. Narysowany zostanie poruszający się biały kwadrat. Kontynuować?"
-    IDS_DDFULLSCREEN_RESULT "Czy było widać poruszający się biały kwadrat, w trybie pełnoekranowym?"
     IDS_FORMAT_ADAPTER_MEM "%u MB"
     IDS_FORMAT_ADAPTER_MODE "%d x %d (%u bit)(%uHz)"
     IDS_OPTION_NO "Nie"
     IDS_D3DTEST_BENCHMARK "%s: %lu.%lu frames per second (%u frames in %lu ms)"
     IDS_D3DTEST_FAILED "%s: the test failed at %S (0x%08lX)"
+    IDS_DDTEST_WINDOWED "DirectDraw in a window"
+    IDS_DDTEST_FULLSCREEN "DirectDraw in full screen"
     IDS_OS_VERSION "%s %s (%d.%d, kompilacja %d)"
     IDS_DMUSIC_DESC "Opis"
     IDS_DMUSIC_TYPE "Typ"

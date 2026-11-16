@@ -61,7 +61,7 @@ BOOL D3D9Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result)
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, PresentParameters.BackBufferWidth, PresentParameters.BackBufferHeight);
+        Count = D3DTestBuildScene(Vertices, Elapsed, PresentParameters.BackBufferWidth, PresentParameters.BackBufferHeight, Result);
         if (FAILED(hr = IDirect3DDevice9_Clear(Device, 0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0)))
         {
             D3DTestFail(Result, "D3D9", "clear", hr);

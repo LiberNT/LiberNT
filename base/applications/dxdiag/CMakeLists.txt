@@ -12,7 +12,9 @@ list(APPEND SOURCE
     help.c
     dxdiag.c
     ddtest.c
+    d3dhud.c
     d3dmark.c
+    d3dstats.c
     d3dtest.c
     d3dtest7.c
     d3dtest8.c

@@ -94,14 +94,14 @@ BEGIN
     PUSHBUTTON "אפשר", IDC_BUTTON_D3D, 170, 128, 60, 14, WS_DISABLED
     PUSHBUTTON "אפשר", IDC_BUTTON_AGP, 170, 144, 60, 14, WS_DISABLED
     PUSHBUTTON "בדיקת DirectDraw", IDC_BUTTON_TESTDD, 250, 112, 80, 14
-    PUSHBUTTON "OpenGL 1.1", IDC_BUTTON_TEST_GL1, 350, 112, 47, 14
-    PUSHBUTTON "OpenGL 3.3", IDC_BUTTON_TEST_GL3, 400, 112, 47, 14
     PUSHBUTTON "Direct3D 7", IDC_BUTTON_TEST_D3D7, 250, 128, 47, 14
     PUSHBUTTON "Direct3D 8", IDC_BUTTON_TEST_D3D8, 300, 128, 47, 14
     PUSHBUTTON "Direct3D 9", IDC_BUTTON_TEST_D3D9, 350, 128, 47, 14
     PUSHBUTTON "Direct3D 10", IDC_BUTTON_TEST_D3D10, 400, 128, 47, 14
     PUSHBUTTON "Direct3D 11", IDC_BUTTON_TEST_D3D11, 250, 144, 47, 14
     PUSHBUTTON "Direct3D 12", IDC_BUTTON_TEST_D3D12, 300, 144, 47, 14
+    PUSHBUTTON "OpenGL 1.1", IDC_BUTTON_TEST_GL1, 350, 144, 47, 14
+    PUSHBUTTON "OpenGL 3.3", IDC_BUTTON_TEST_GL3, 400, 144, 47, 14
     GROUPBOX "הערות", IDC_STATIC, 5, 170, 452, 50
     EDITTEXT IDC_TEXT_INFO, 15, 182, 432, 30, ES_LEFT | WS_BORDER | ES_READONLY | WS_TABSTOP | ES_MULTILINE | ES_AUTOVSCROLL | WS_VSCROLL
 END
@@ -246,18 +246,13 @@ BEGIN
     IDS_REG_SUCCESS "אישור"
     IDS_REG_FAIL "שגיאה"
     IDS_DDTEST_ERROR "הבדיקה נכשלה!"
-    IDS_DDTEST_DESCRIPTION "פעולה זו תבדוק את DirectDraw בהתקן זה. האם להמשיך?"
-    IDS_DDPRIMARY_DESCRIPTION "הבדיקה הבאה תשתמש ב- DirectDraw כדי לצייר על המשטח הראשי במצב רגיל (לא מסך מלא). אתה אמור לראשות מלבנים שחורים ולבנים על המסך."
-    IDS_DDPRIMARY_RESULT "האם ראית מלבנים שחורים ולבנים לחילופין על המסך?"
-    IDS_DDOFFSCREEN_DESCRIPTION "הבדיקה הבאה תשתמש ב- DirectDraw כדי לצייר על המשטח מחוץ למסך במצב רגיל (לא מסך מלא). אתה אמור לראות תיבה לבנה קופצת."
-    IDS_DDOFFSCREEN_RESULT "האם ראית תיבה לבנה קופצת?"
-    IDS_DDFULLSCREEN_DESCRIPTION "הבדיקה הבאה תשתמש ב- DirectDraw כדי לצייר במצב מסך מלא. אתה אמור לראות תיבה לבנה קופצת."
-    IDS_DDFULLSCREEN_RESULT "האם ראית תיבה לבנה קופצת במסך מלא?"
     IDS_FORMAT_ADAPTER_MEM "%u MB"
     IDS_FORMAT_ADAPTER_MODE "%d x %d (%u bit)(%uHz)"
     IDS_OPTION_NO "לא"
     IDS_D3DTEST_BENCHMARK "%s: %lu.%lu frames per second (%u frames in %lu ms)"
     IDS_D3DTEST_FAILED "%s: the test failed at %S (0x%08lX)"
+    IDS_DDTEST_WINDOWED "DirectDraw in a window"
+    IDS_DDTEST_FULLSCREEN "DirectDraw in full screen"
     IDS_OS_VERSION "%s %s (%d.%d, Build %d)"
     IDS_DMUSIC_DESC "Description"
     IDS_DMUSIC_TYPE "Type"
