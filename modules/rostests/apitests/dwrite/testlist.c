@@ -7,6 +7,7 @@ extern void func_FontFallbackSource(void);
 extern void func_GlyphJustification(void);
 extern void func_GlyphRunSizes(void);
 extern void func_HasVariations(void);
+extern void func_RenderingModeTransform(void);
 extern void func_SystemFontFallback(void);
 extern void func_TrailingWhitespace(void);
 
@@ -18,6 +19,7 @@ const struct test winetest_testlist[] =
     { "GlyphJustification", func_GlyphJustification },
     { "GlyphRunSizes", func_GlyphRunSizes },
     { "HasVariations", func_HasVariations },
+    { "RenderingModeTransform", func_RenderingModeTransform },
     { "SystemFontFallback", func_SystemFontFallback },
     { "TrailingWhitespace", func_TrailingWhitespace },
 

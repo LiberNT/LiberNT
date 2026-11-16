@@ -1633,6 +1633,18 @@ static HRESULT WINAPI dwritefontface2_GetPaletteEntries(IDWriteFontFace5 *iface,
     return opentype_get_cpal_entries(get_fontface_cpal(fontface), palette_index, first_entry_index, entry_count, entries);
 }
 
+/* A transform renders the em at its largest singular value; translation does not count. */
+static float fontface_transform_scale(const DWRITE_MATRIX *m)
+{
+    float half, det;
+
+    if (!m)
+        return 1.0f;
+    half = (m->m11 * m->m11 + m->m12 * m->m12 + m->m21 * m->m21 + m->m22 * m->m22) / 2.0f;
+    det = m->m11 * m->m22 - m->m12 * m->m21;
+    return sqrtf(half + sqrtf(max(half * half - det * det, 0.0f)));
+}
+
 static HRESULT WINAPI dwritefontface2_GetRecommendedRenderingMode(IDWriteFontFace5 *iface, FLOAT emSize,
     FLOAT dpiX, FLOAT dpiY, DWRITE_MATRIX const *m, BOOL is_sideways, DWRITE_OUTLINE_THRESHOLD threshold,
     DWRITE_MEASURING_MODE measuringmode, IDWriteRenderingParams *params, DWRITE_RENDERING_MODE *renderingmode,
@@ -1645,13 +1657,11 @@ static HRESULT WINAPI dwritefontface2_GetRecommendedRenderingMode(IDWriteFontFac
     TRACE("%p, %.8e, %.8e, %.8e, %p, %d, %d, %d, %p, %p, %p.\n", iface, emSize, dpiX, dpiY, m, is_sideways, threshold,
         measuringmode, params, renderingmode, gridfitmode);
 
-    if (m && memcmp(m, &identity, sizeof(*m)))
-        FIXME("transform not supported %s\n", debugstr_matrix(m));
-
     if (is_sideways)
         FIXME("sideways mode not supported\n");
 
-    emSize *= max(dpiX, dpiY) / 96.0f;
+    /* FIXME: below the outline threshold a transformed run keeps its untransformed mode */
+    emSize *= max(dpiX, dpiY) / 96.0f * fontface_transform_scale(m);
 
     *renderingmode = DWRITE_RENDERING_MODE_DEFAULT;
     *gridfitmode = DWRITE_GRID_FIT_MODE_DEFAULT;
@@ -1832,13 +1842,11 @@ static HRESULT WINAPI dwritefontface3_GetRecommendedRenderingMode(IDWriteFontFac
     TRACE("%p, %.8e, %.8e, %.8e, %p, %d, %d, %d, %p, %p, %p.\n", iface, emSize, dpiX, dpiY, m, is_sideways, threshold,
         measuring_mode, params, rendering_mode, gridfit_mode);
 
-    if (m && memcmp(m, &identity, sizeof(*m)))
-        FIXME("transform not supported %s\n", debugstr_matrix(m));
-
     if (is_sideways)
         FIXME("sideways mode not supported\n");
 
-    emSize *= max(dpiX, dpiY) / 96.0f;
+    /* FIXME: below the outline threshold a transformed run keeps its untransformed mode */
+    emSize *= max(dpiX, dpiY) / 96.0f * fontface_transform_scale(m);
 
     *rendering_mode = DWRITE_RENDERING_MODE1_DEFAULT;
     *gridfit_mode = DWRITE_GRID_FIT_MODE_DEFAULT;
