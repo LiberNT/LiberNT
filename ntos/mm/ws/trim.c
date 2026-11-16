@@ -23,6 +23,8 @@ MiTrimPage(
     MI_PTE Pte = MiArchPteRead(Slot);
     PMI_PFN Entry;
     ULONG Frame;
+    ULONG Protection;
+    KIRQL OldIrql;
 
     if (!MiArchPteIsValid(Pte))
         return FALSE;
@@ -39,7 +41,11 @@ MiTrimPage(
 
     if (!Aggressive && MiArchPteIsAccessed(Pte))
     {
-        MiArchPteWrite(Slot, MiArchPteSetAccessed(Pte, FALSE));
+        while (!MiArchPteCompareExchange(Slot, Pte, MiArchPteSetAccessed(Pte, FALSE)))
+        {
+            Pte = MiArchPteRead(Slot);
+            MI_ASSERT(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
+        }
         MiArchTlbInvalidate(VirtualAddress, 1, TRUE);
         return FALSE;
     }
@@ -48,10 +54,13 @@ MiTrimPage(
         return MiTrimPrototypePage(Space, Vad, VirtualAddress, Slot, TableFrame);
 
     UNREFERENCED_PARAMETER(TableFrame);
+    OldIrql = MiPfnLock(&System->Pfn, Frame);
+    Protection = MiSoftProtection(Entry->OriginalPte);
+    MiPfnUnlock(&System->Pfn, Frame, OldIrql);
 
     for (;;)
     {
-        MI_PTE Transition = MiSoftMake(MiSoftTransition, MiSoftProtection(Entry->OriginalPte), Frame);
+        MI_PTE Transition = MiSoftMake(MiSoftTransition, Protection, Frame);
 
         MI_ASSERT(MiArchPteIsValid(Pte) && MiArchPteFrame(Pte) == Frame);
         if (MiArchPteCompareExchange(Slot, Pte, Transition))
@@ -158,31 +167,29 @@ MiTrimRange(
     _In_ ULONG64 End)
 {
     ULONG Trimmed = 0;
-    ULONG64 Va = Start;
+    PMI_VAD_NODE Node;
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
     MiPtFlushEmpty(Space);
 
-    while (Va < End)
+    for (Node = MiVadFirst(&Space->VadRoot); Node != NULL; Node = MiVadNext(Node))
     {
-        PMI_VAD Vad = MiVadLocate(Space, Va);
-        ULONG64 VadEnd;
+        PMI_VAD Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
+        ULONG64 Va = Node->StartingVpn << PAGE_SHIFT;
+        ULONG64 VadEnd = (Node->EndingVpn + 1) << PAGE_SHIFT;
 
-        if (Vad == NULL)
-        {
-            Va += PAGE_SIZE;
+        if (VadEnd <= Start)
             continue;
-        }
+        if (Va >= End)
+            break;
+        if (Va < Start)
+            Va = Start;
 
-        VadEnd = (Vad->Node.EndingVpn + 1) << PAGE_SHIFT;
         if (VadEnd > End)
             VadEnd = End;
 
         if (MI_VAD_IS_DIRECT(Vad))
-        {
-            Va = VadEnd;
             continue;
-        }
 
         while (Va < VadEnd)
         {
@@ -401,7 +408,7 @@ MiLockRangeAdd(
     return STATUS_SUCCESS;
 }
 
-VOID
+NTSTATUS
 MiLockRangeRemove(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 Start,
@@ -411,7 +418,13 @@ MiLockRangeRemove(
 
     MI_ASSERT(Start <= End && ((Start | End) & (PAGE_SIZE - 1)) == 0);
     MiAssertLockRangeState(Space);
+    if (Start == End)
+        return STATUS_SUCCESS;
     Index = MiLockRangeSearch(Space, Start);
+    if (Index < Space->LockRangeCount && Space->LockRanges[Index].Start < Start &&
+        Space->LockRanges[Index].End > End &&
+        !MiLockRangeReserve(Space, Space->LockRangeCount + 1))
+        return STATUS_INSUFFICIENT_RESOURCES;
     while (Index < Space->LockRangeCount && Space->LockRanges[Index].Start < End)
     {
         PMI_LOCK_RANGE Range = &Space->LockRanges[Index];
@@ -424,22 +437,13 @@ MiLockRangeRemove(
 
         if (Range->Start < Start && Range->End > End)
         {
-            if (!MiLockRangeReserve(Space, Space->LockRangeCount + 1))
-            {
-                MI_ASSERT(Space->LockedPages >= ((Space->LockRanges[Index].End - End) >> PAGE_SHIFT));
-                Space->LockedPages -= (Space->LockRanges[Index].End - End) >> PAGE_SHIFT;
-                Space->LockRanges[Index].End = Start;
-                MiAssertLockRangeState(Space);
-                return;
-            }
-
             RtlMoveMemory(&Space->LockRanges[Index + 1], &Space->LockRanges[Index],
                           (Space->LockRangeCount - Index) * sizeof(MI_LOCK_RANGE));
             Space->LockRangeCount++;
             Space->LockRanges[Index].End = Start;
             Space->LockRanges[Index + 1].Start = End;
             MiAssertLockRangeState(Space);
-            return;
+            return STATUS_SUCCESS;
         }
 
         if (Range->Start < Start)
@@ -453,7 +457,7 @@ MiLockRangeRemove(
         {
             Range->Start = End;
             MiAssertLockRangeState(Space);
-            return;
+            return STATUS_SUCCESS;
         }
 
         RtlMoveMemory(&Space->LockRanges[Index], &Space->LockRanges[Index + 1],
@@ -461,6 +465,7 @@ MiLockRangeRemove(
         Space->LockRangeCount--;
     }
     MiAssertLockRangeState(Space);
+    return STATUS_SUCCESS;
 }
 
 VOID
@@ -517,15 +522,13 @@ MiWritePageFileCluster(
 
     for (i = 0; i < Count; i++)
     {
-        PMI_PFN Entry = &System->Pfn.Pfn[Frames[i]];
-
         if (!NT_SUCCESS(Status))
         {
             if (MiPfnWriteComplete(&System->Pfn, Frames[i], 0, FALSE) || !Reused[i])
                 MiPageFileReleaseSlot(PageFile, Slots[i]);
         }
         else if (MiPfnWriteComplete(&System->Pfn, Frames[i],
-                                    MiSoftMake(MiSoftPageFile, MiSoftProtection(Entry->OriginalPte), Slots[i]), TRUE))
+                                    MiSoftMake(MiSoftPageFile, 0, Slots[i]), TRUE))
         {
             MiPageFileReleaseSlot(PageFile, Slots[i]);
         }
@@ -558,6 +561,8 @@ MiWriteModifiedPages(
         ULONG64 Slot;
         BOOLEAN Reused;
         NTSTATUS Status;
+        MI_PTE Original;
+        KIRQL OldIrql;
 
         if (Frame == MI_FRAME_INVALID)
             break;
@@ -566,8 +571,11 @@ MiWriteModifiedPages(
         MI_ASSERT(MiPfnTracked(&System->Pfn, Frame));
         Entry = &System->Pfn.Pfn[Frame];
         MI_ASSERT(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_IN_FLIGHT);
+        OldIrql = MiPfnLock(&System->Pfn, Frame);
+        Original = Entry->OriginalPte;
+        MiPfnUnlock(&System->Pfn, Frame, OldIrql);
 
-        if ((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE) && MiSoftKind(Entry->OriginalPte) == MiSoftSubsection)
+        if ((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE) && MiSoftKind(Original) == MiSoftSubsection)
         {
             Status = MiWritePrototypePage(System, Frame);
 
@@ -586,8 +594,8 @@ MiWriteModifiedPages(
             continue;
         }
 
-        Reused = (BOOLEAN)(MiSoftKind(Entry->OriginalPte) == MiSoftPageFile);
-        Slot = Reused ? MiSoftValue(Entry->OriginalPte) : MiPageFileReserveSlot(PageFile);
+        Reused = (BOOLEAN)(MiSoftKind(Original) == MiSoftPageFile);
+        Slot = Reused ? MiSoftValue(Original) : MiPageFileReserveSlot(PageFile);
         MI_ASSERT(!Reused || Slot != 0);
         if (Slot == 0)
         {

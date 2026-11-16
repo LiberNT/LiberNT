@@ -2159,9 +2159,60 @@ SectionPurgeFlushWriterNoCycle(void)
     WorldDestroy(&World);
 }
 
+static PMI_PTE SectionDirtySlot;
+
+static void
+SectionDirtyDuringPteUpdate(PMI_PTE Slot)
+{
+    if (Slot == SectionDirtySlot)
+    {
+        MI_PTE Pte = __atomic_load_n(Slot, __ATOMIC_SEQ_CST);
+
+        MachineBeforePteUpdate = NULL;
+        __atomic_store_n(Slot, MiArchPteSetDirty(Pte, TRUE), __ATOMIC_SEQ_CST);
+    }
+}
+
+static void
+SectionTrimConcurrentDirty(void)
+{
+    TEST_WORLD World;
+    TEST_FILE File;
+    MI_ADDRESS_SPACE Space;
+    PMI_SEGMENT Segment;
+    PMI_PTE Slot;
+    ULONG64 Base = 0;
+    ULONG Frame;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 256, 1, 1024);
+    FileCreate(&File, PAGE_SIZE);
+    SpaceCreate(&World, 0, &Space);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentDataFile, PAGE_SIZE, MI_PROT_READWRITE,
+                                     &TestFileOps, &File, NULL, 0, &Segment)));
+    CHECK(NT_SUCCESS(Map(&Space, Segment, &Base, 0, PAGE_SIZE, MI_PROT_READWRITE)));
+    UserRead64(&World, 0, Base, &Status);
+    CHECK(NT_SUCCESS(Status));
+    Slot = MiPtLookup(&Space, Base, NULL);
+    Frame = (ULONG)MiArchPteFrame(MiArchPteRead(Slot));
+    CHECK(!(MI_PFN_FLAGS(&World.PfnArray[Frame]) & MI_PFN_FLAG_MODIFIED));
+    SectionDirtySlot = Slot;
+    MachineBeforePteUpdate = SectionDirtyDuringPteUpdate;
+    CHECK(MiTrimAddressSpace(&Space, 1, TRUE) == 1);
+    CHECK(MachineBeforePteUpdate == NULL);
+    CHECK(MI_PFN_FLAGS(&World.PfnArray[Frame]) & MI_PFN_FLAG_MODIFIED);
+    CHECK(MiWriteModifiedPages(&World.System, 1) == 1);
+    SpaceDestroy(&World, 0, &Space);
+    MiSegmentDereference(Segment);
+    WorldExpectClean(&World, 256);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
 void
 TestSection(void)
 {
+    SectionTrimConcurrentDirty();
     SectionWriterAdmission();
     SectionVadCache();
     SectionConcurrentChurn();

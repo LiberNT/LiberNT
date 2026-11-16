@@ -1032,6 +1032,18 @@ VmLockRanges(void)
     WorldAttach(&World, 0, &Space);
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space.Lock);
+    for (i = 0; i < 7; i++)
+        CHECK(NT_SUCCESS(MiLockRangeAdd(&Space, 0x40000000ULL + 4 * i * PAGE_SIZE,
+                                      0x40000000ULL + (4 * i + 3) * PAGE_SIZE)));
+    MiLockRangeRemove(&Space, 0x40001000ULL, 0x40002000ULL);
+    CHECK(Space.LockRangeCount == Space.LockRangeCapacity);
+    MiHostFailAllocationSize = 2 * Space.LockRangeCapacity * sizeof(MI_LOCK_RANGE);
+    CHECK(MiLockRangeRemove(&Space, 0x40005000ULL, 0x40006000ULL) == STATUS_INSUFFICIENT_RESOURCES);
+    CHECK(MiHostFailAllocationSize == 0);
+    CHECK(Space.LockedPages == 20);
+    CHECK(MiLockRangeLocked(&Space, 0x40005000ULL, &Next));
+    CHECK(MiLockRangeLocked(&Space, 0x40006000ULL, &Next));
+    MiLockRangeReset(&Space);
     for (i = 0; i < 20; i++)
         CHECK(NT_SUCCESS(MiLockRangeAdd(&Space, 0x40000000ULL + 2 * i * PAGE_SIZE, 0x40000000ULL + (2 * i + 1) * PAGE_SIZE)));
     CHECK(Space.LockRangeCount == 20 && Space.LockedPages == 20);
@@ -1121,6 +1133,86 @@ VmLockRanges(void)
     CHECK(Space.LockRangeCount == 0 && Space.LockedPages == 0);
     CHECK(MiPtCheck(&Space) == 0 && World.Machine.StaleTlbUses == 0);
     ProcessDestroy(&World, &Child);
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
+static PMI_PTE VmDirtySlot;
+
+static void
+VmDirtyDuringPteUpdate(PMI_PTE Slot)
+{
+    if (Slot == VmDirtySlot)
+    {
+        MI_PTE Pte = __atomic_load_n(Slot, __ATOMIC_SEQ_CST);
+
+        MachineBeforePteUpdate = NULL;
+        __atomic_store_n(Slot, MiArchPteSetDirty(Pte, TRUE), __ATOMIC_SEQ_CST);
+    }
+}
+
+static void
+VmTrimConcurrentDirty(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    ULONG64 Base = 0;
+    PMI_PTE Slot;
+
+    WorldCreate(&World, 256, 1, 256);
+    ProcessCreate(&World, &Space);
+    WorldAttach(&World, 0, &Space);
+    CHECK(NT_SUCCESS(Alloc(&Space, &Base, PAGE_SIZE, MI_MEM_RESERVE | MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(NT_SUCCESS(UserWrite64(&World, 0, Base, 1)));
+    Slot = MiPtLookup(&Space, Base, NULL);
+    MiArchPteWrite(Slot, MiArchPteSetDirty(MiArchPteRead(Slot), FALSE));
+    VmDirtySlot = Slot;
+    MachineBeforePteUpdate = VmDirtyDuringPteUpdate;
+    CHECK(MiTrimAddressSpace(&Space, 1, FALSE) == 0);
+    CHECK(MachineBeforePteUpdate == NULL);
+    CHECK(MiArchPteIsDirty(MiArchPteRead(Slot)));
+    CHECK(MiTrimRange(&Space, 0x100000000ULL, 0x20000000000ULL) == 0);
+    WorldAttach(&World, 0, NULL);
+    ProcessDestroy(&World, &Space);
+    WorldExpectClean(&World, 256);
+    WorldDestroy(&World);
+}
+
+static void
+VmDecommitLockSplitFailure(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Space;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 Base = 0, Size = 28 * PAGE_SIZE, At, Length, Next;
+    ULONG i;
+
+    WorldCreate(&World, 256, 1, 256);
+    ProcessCreate(&World, &Space);
+    CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Space, &Base, &Size, MI_MEM_RESERVE | MI_MEM_COMMIT,
+                                             MI_PROT_READWRITE)));
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space.Lock);
+    for (i = 0; i < 7; i++)
+        CHECK(NT_SUCCESS(MiLockRangeAdd(&Space, Base + 4 * i * PAGE_SIZE,
+                                       Base + (4 * i + 3) * PAGE_SIZE)));
+    CHECK(NT_SUCCESS(MiLockRangeRemove(&Space, Base + PAGE_SIZE, Base + 2 * PAGE_SIZE)));
+    CHECK(Space.LockRangeCount == Space.LockRangeCapacity);
+    MI_RW_RELEASE_EXCLUSIVE(&Space.Lock);
+
+    At = Base + 5 * PAGE_SIZE;
+    Length = PAGE_SIZE;
+    MiHostFailAllocationSize = 2 * Space.LockRangeCapacity * sizeof(MI_LOCK_RANGE);
+    CHECK(MiFreeVirtualMemory(&Space, &At, &Length, MI_MEM_DECOMMIT) == STATUS_INSUFFICIENT_RESOURCES);
+    CHECK(MiHostFailAllocationSize == 0);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Space, At, &Info)) && Info.State == MI_MEM_COMMIT);
+    MI_RW_ACQUIRE_SHARED(&Space.Lock);
+    CHECK(Space.LockedPages == 20);
+    CHECK(MiLockRangeLocked(&Space, At, &Next));
+    CHECK(MiLockRangeLocked(&Space, At + PAGE_SIZE, &Next));
+    MI_RW_RELEASE_SHARED(&Space.Lock);
+    Size = 0;
+    CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Space, &Base, &Size, MI_MEM_RELEASE)));
     ProcessDestroy(&World, &Space);
     WorldExpectClean(&World, 256);
     WorldDestroy(&World);
@@ -1471,6 +1563,8 @@ TestVm(void)
     VmWorkingSetEx();
     VmWorkingSetList();
     VmLockRanges();
+    VmTrimConcurrentDirty();
+    VmDecommitLockSplitFailure();
     VmAllocationGranularity();
     VmQueryRuns();
 }

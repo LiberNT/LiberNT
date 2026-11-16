@@ -176,6 +176,8 @@ VOID MiPtFlushEmpty(_Inout_ PMI_ADDRESS_SPACE Space);
 VOID MiPtCacheEmpty(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG TableFrame, _In_ ULONG64 VirtualAddress);
 VOID MiPtWrite(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _Inout_ PMI_PTE Slot,
                _In_ ULONG TableFrame, _In_ MI_PTE Value);
+MI_PTE MiPtInvalidate(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _Inout_ PMI_PTE Slot,
+                      _In_ ULONG TableFrame, _In_ MI_PTE Value);
 ULONG64 MiPtSlotAddress(_In_ PMI_PTE Slot, _In_ ULONG TableFrame, _In_ ULONG64 VirtualAddress);
 ULONG64 MiPtNextTableBoundary(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress);
 BOOLEAN MiPtVirtualAddressFromSlot(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 SlotAddress,
@@ -700,7 +702,7 @@ ULONG MiTrimRange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Start, _In_ ULON
 BOOLEAN MiLockRangeLocked(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _Out_ PULONG64 Next);
 ULONG64 MiLockRangePages(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Start, _In_ ULONG64 End);
 NTSTATUS MiLockRangeAdd(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Start, _In_ ULONG64 End);
-VOID MiLockRangeRemove(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Start, _In_ ULONG64 End);
+NTSTATUS MiLockRangeRemove(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Start, _In_ ULONG64 End);
 VOID MiLockRangeReset(_Inout_ PMI_ADDRESS_SPACE Space);
 ULONG MiWriteModifiedPages(_Inout_ PMI_SYSTEM System, _In_ ULONG MaximumPages);
 

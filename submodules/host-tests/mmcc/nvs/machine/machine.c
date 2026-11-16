@@ -220,9 +220,13 @@ MiArchPteRead(_In_ PMI_PTE Slot)
     return __atomic_load_n(Slot, __ATOMIC_SEQ_CST);
 }
 
+_Thread_local void (*MachineBeforePteUpdate)(PMI_PTE Slot);
+
 BOOLEAN
 MiArchPteCompareExchange(_Inout_ PMI_PTE Slot, _In_ MI_PTE Expected, _In_ MI_PTE Value)
 {
+    if (MachineBeforePteUpdate != NULL)
+        MachineBeforePteUpdate(Slot);
     return __atomic_compare_exchange_n(Slot, &Expected, Value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 }
 
@@ -397,6 +401,9 @@ MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
     PMACHINE Machine = MachineCurrent;
     MI_PTE Old = __atomic_load_n(Slot, __ATOMIC_SEQ_CST);
     BOOLEAN Broke = FALSE;
+
+    if (MachineBeforePteUpdate != NULL)
+        MachineBeforePteUpdate(Slot);
 
     if (MiArchPteNeedsBreak(Old, Value))
     {

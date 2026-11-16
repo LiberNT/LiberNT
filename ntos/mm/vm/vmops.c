@@ -357,7 +357,12 @@ MiSetPrivatePageProtectionAt(
         }
 
         if (!(MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE))
+        {
+            KIRQL OldIrql = MiPfnLock(&System->Pfn, Frame);
+
             Entry->OriginalPte = MiSoftWithProtection(Entry->OriginalPte, Protection);
+            MiPfnUnlock(&System->Pfn, Frame, OldIrql);
+        }
 
         if (!MI_PROT_IS_ACCESSIBLE(Protection) || MI_PROT_IS_GUARD(Protection))
         {
@@ -1148,7 +1153,11 @@ MiFreePlaceholder(
     }
     else if (Vad->FromPlaceholder && Vad->Type == MiVadPrivate && Start == VadStart && End == VadEnd)
     {
-        MiLockRangeRemove(Space, Start, End);
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, Start, End)))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         Returned = MiDeleteRange(Space, Vad, Start, End, FALSE);
         Vad->CommitCharge -= Returned;
         MiReturnCommit(Space, Returned);
@@ -1207,8 +1216,12 @@ MiFreeVirtualMemory(
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return FreeType == MI_MEM_RELEASE ? STATUS_UNABLE_TO_FREE_VM : STATUS_UNABLE_TO_DECOMMIT_VM;
         }
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad))))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         *RegionSize = MI_VAD_END(Vad) - MI_VAD_START(Vad);
-        MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad));
         MiAweReleaseWindowLocked(Space, Vad);
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_SUCCESS;
@@ -1221,8 +1234,12 @@ MiFreeVirtualMemory(
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return FreeType == MI_MEM_RELEASE ? STATUS_UNABLE_TO_FREE_VM : STATUS_UNABLE_TO_DECOMMIT_VM;
         }
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad))))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         *RegionSize = MI_VAD_END(Vad) - MI_VAD_START(Vad);
-        MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad));
         MiRotateReleaseLocked(Space, Vad);
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_SUCCESS;
@@ -1240,8 +1257,12 @@ MiFreeVirtualMemory(
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return FreeType == MI_MEM_RELEASE ? STATUS_UNABLE_TO_FREE_VM : STATUS_UNABLE_TO_DECOMMIT_VM;
         }
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad))))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         *RegionSize = MI_VAD_END(Vad) - MI_VAD_START(Vad);
-        MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad));
         MiReleaseLargePagesLocked(Space, Vad);
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_SUCCESS;
@@ -1273,10 +1294,13 @@ MiFreeVirtualMemory(
         }
     }
 
-    MiLockRangeRemove(Space, Start, End);
-
     if (FreeType == MI_MEM_DECOMMIT)
     {
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, Start, End)))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         Returned = MiDeleteRange(Space, Vad, Start, End, TRUE);
         MI_ASSERT(Returned >= 0 && Returned <= Vad->CommitCharge);
         Vad->CommitCharge -= Returned;
@@ -1306,6 +1330,14 @@ MiFreeVirtualMemory(
         {
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             MI_FREE(Tail);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, Start, End)))
+        {
+            MiWriteWatchRelease(Tail);
+            MI_FREE(Tail);
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return STATUS_INSUFFICIENT_RESOURCES;
         }
 
@@ -1340,6 +1372,11 @@ MiFreeVirtualMemory(
     }
     else
     {
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, Start, End)))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         Returned = MiDeleteRange(Space, Vad, Start, End, FALSE);
         MI_ASSERT(Returned >= 0 && Returned <= Vad->CommitCharge);
         MI_ASSERT(Start != MI_VAD_START(Vad) || End != MI_VAD_END(Vad) || Returned == Vad->CommitCharge);
@@ -1889,6 +1926,7 @@ MiCleanAddressSpace(
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
     MiPtFlushEmpty(Space);
+    MiLockRangeReset(Space);
 
     while ((Node = MiVadFirst(&Space->VadRoot)) != NULL)
     {
@@ -1937,7 +1975,6 @@ MiCleanAddressSpace(
 
     MiAweDestroyPagesLocked(Space);
     MiVadFlushCache(Space);
-    MiLockRangeReset(Space);
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 }
 

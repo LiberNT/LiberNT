@@ -237,16 +237,20 @@ MiCloneReleaseMapping(PMI_ADDRESS_SPACE Space, PMI_CLONE_REF Ref, ULONG64 Va,
 {
     MI_PTE Pte = MiArchPteRead(Slot);
 
-    MiPtWrite(Space, Va, Slot, TableFrame, NewValue);
     if (MiArchPteIsValid(Pte))
     {
         ULONG Frame = (ULONG)MiArchPteFrame(Pte);
 
+        Pte = MiPtInvalidate(Space, Va, Slot, TableFrame, NewValue);
         MiArchTlbInvalidate(Va, 1, TRUE);
         if (MiArchPteIsDirty(Pte))
             MiPfnSetModified(&Space->System->Pfn, Frame);
         MiCloneDropShare(Ref->Page, Frame);
         MI_ATOMIC_ADD64(&Space->ResidentPages, -1);
+    }
+    else
+    {
+        MiPtWrite(Space, Va, Slot, TableFrame, NewValue);
     }
 }
 
@@ -275,7 +279,7 @@ MiCloneDeletePage(PMI_ADDRESS_SPACE Space, ULONG64 Va, PMI_PTE Slot, ULONG Table
     {
         ULONG Frame = (ULONG)MiArchPteFrame(Pte);
 
-        MiPtWrite(Space, Va, Slot, TableFrame, NewValue);
+        Pte = MiPtInvalidate(Space, Va, Slot, TableFrame, NewValue);
         if (MiArchPteIsDirty(Pte))
             MiPfnSetModified(&Space->System->Pfn, Frame);
         MI_ATOMIC_ADD64(&Space->ResidentPages, -1);

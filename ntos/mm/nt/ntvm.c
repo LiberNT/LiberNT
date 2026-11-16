@@ -1905,7 +1905,8 @@ MiLockUnlockVirtualMemory(
         }
 
         MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
-        MiLockRangeRemove(Space, Start, End);
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, Start, End)))
+            Status = STATUS_INSUFFICIENT_RESOURCES;
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     }
 

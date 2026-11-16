@@ -1599,8 +1599,7 @@ MiReleaseViewPageEx(
     Frame = (ULONG)MiArchPteFrame(Pte);
     Page = Vad->SegmentPageOffset + ((VirtualAddress - MI_VAD_START(Vad)) >> PAGE_SHIFT);
 
-    MiPtWrite(Space, VirtualAddress, Slot, TableFrame, NewValue);
-
+    Pte = MiPtInvalidate(Space, VirtualAddress, Slot, TableFrame, NewValue);
     if (MiArchPteIsDirty(Pte))
         MiPfnSetModified(&System->Pfn, Frame);
 
@@ -2179,7 +2178,6 @@ MiDetachMappedView(
     Space->TlbBatch->DeferTables = Deferred;
     MiTlbBatchEnd(Space, Owner);
     MiReturnCommit(Space, Vad->CommitCharge);
-    MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad));
     MiVadRemove(&Space->VadRoot, &Vad->Node);
 
     MiAdjustSegmentCount(&Segment->MappedViews, -1);
@@ -2416,6 +2414,11 @@ MiUnmapViewEx(
     }
     if (Vad != NULL && Vad->Type == MiVadLarge && Vad->Segment != NULL)
     {
+        if (!NT_SUCCESS(MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad))))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         Segment = MiReleaseLargePagesLocked(Space, Vad);
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         MiSegmentDereference(Segment);
@@ -2427,6 +2430,11 @@ MiUnmapViewEx(
         return STATUS_NOT_MAPPED_VIEW;
     }
 
+    if (!NT_SUCCESS(MiLockRangeRemove(Space, MI_VAD_START(Vad), MI_VAD_END(Vad))))
+    {
+        MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
     StartingVpn = Vad->Node.StartingVpn;
     EndingVpn = Vad->Node.EndingVpn;
     Segment = MiDetachMappedView(Space, Vad, TRUE);

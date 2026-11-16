@@ -14,6 +14,8 @@
 #define MACHINE_MAX_CPUS     8
 #define MACHINE_TLB_ENTRIES  64
 
+extern _Thread_local void (*MachineBeforePteUpdate)(PMI_PTE Slot);
+
 typedef enum _MACHINE_ACCESS
 {
     MachineRead = 0,

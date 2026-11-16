@@ -483,12 +483,17 @@ TestPfn(void)
 
     {
         ULONG Writing = MiPfnTakeModified(Db);
+        KIRQL OldIrql;
 
         CHECK(Writing != MI_FRAME_INVALID && (Db->Pfn[Writing].Flags & MI_PFN_FLAG_IN_FLIGHT));
         CHECK(MiPfnReactivate(Db, Writing, Db->Pfn[Writing].PteAddress));
+        OldIrql = MiPfnLock(Db, Writing);
+        Db->Pfn[Writing].OriginalPte = MiSoftWithProtection(Db->Pfn[Writing].OriginalPte, MI_PROT_READONLY);
+        MiPfnUnlock(Db, Writing, OldIrql);
         MiPfnWriteComplete(Db, Writing, MiSoftMake(MiSoftPageFile, MI_PROT_READWRITE, 99), TRUE);
         CHECK(Db->Pfn[Writing].State == MiPageActive);
         CHECK(MiSoftKind(Db->Pfn[Writing].OriginalPte) == MiSoftPageFile);
+        CHECK(MiSoftProtection(Db->Pfn[Writing].OriginalPte) == MI_PROT_READONLY);
         MiPfnShareDecrement(Db, Writing, FALSE);
         CHECK(Db->Pfn[Writing].State == MiPageStandby);
 

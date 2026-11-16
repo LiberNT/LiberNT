@@ -1606,7 +1606,7 @@ MiPfnWriteComplete(
     Deleted = (BOOLEAN)((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_DELETED) != 0);
 
     if (Success)
-        Entry->OriginalPte = NewOriginalPte;
+        Entry->OriginalPte = MiSoftWithProtection(NewOriginalPte, MiSoftProtection(Entry->OriginalPte));
     else
         MI_ATOMIC_OR8(&Entry->Flags, MI_PFN_FLAG_MODIFIED);
 

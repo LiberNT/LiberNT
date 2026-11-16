@@ -474,6 +474,42 @@ MiPtWrite(
     }
 }
 
+MI_PTE
+MiPtInvalidate(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 VirtualAddress,
+    _Inout_ PMI_PTE Slot,
+    _In_ ULONG TableFrame,
+    _In_ MI_PTE Value)
+{
+    PMI_PFN Table;
+    MI_PTE Old = MiArchPteRead(Slot);
+    ULONG64 Frame = MiArchPteFrame(Old);
+
+    MI_ASSERT(MiArchPteIsValid(Old) && !MiArchPteIsValid(Value));
+    UNREFERENCED_PARAMETER(Frame);
+    while (!MiArchPteCompareExchange(Slot, Old, Value))
+    {
+        Old = MiArchPteRead(Slot);
+        MI_ASSERT(MiArchPteIsValid(Old) && MiArchPteFrame(Old) == Frame);
+    }
+
+    if (Value != 0 || !MiPfnTracked(&Space->System->Pfn, TableFrame))
+        return Old;
+
+    Table = &Space->System->Pfn.Pfn[TableFrame];
+    MI_ASSERT(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PAGE_TABLE);
+    if (!(MI_PFN_FLAGS(Table) & MI_PFN_FLAG_PINNED))
+    {
+        LONG Previous = MI_ATOMIC_ADD32(&Table->UsedEntries, -1);
+
+        MI_ASSERT(Previous > 0 && (ULONG)Previous <= PAGE_SIZE / sizeof(MI_PTE));
+        if (Previous == 1 && (Space->TlbBatch == NULL || !Space->TlbBatch->DeferTables))
+            MiPtReleaseTable(Space, TableFrame, VirtualAddress);
+    }
+    return Old;
+}
+
 NTSTATUS
 MiPtPinRange(
     _Inout_ PMI_ADDRESS_SPACE Space,
