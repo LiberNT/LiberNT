@@ -26,6 +26,7 @@ struct d2d_effect_impl
 {
     ID2D1EffectImpl ID2D1EffectImpl_iface;
     LONG refcount;
+    void (*destroy)(struct d2d_effect_impl *effect);
 
     /* Followed by properties block, its size and format depends on particular effect. */
 };

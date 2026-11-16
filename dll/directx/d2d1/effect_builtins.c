@@ -55,7 +55,11 @@ static ULONG STDMETHODCALLTYPE d2d_effect_impl_Release(ID2D1EffectImpl *iface)
     LONG refcount = InterlockedDecrement(&effect->refcount);
 
     if (!refcount)
+    {
+        if (effect->destroy)
+            effect->destroy(effect);
         free(effect);
+    }
 
     return refcount;
 }
@@ -881,6 +885,109 @@ static HRESULT __stdcall scale_factory(IUnknown **effect)
     return d2d_effect_create_impl(effect, &properties, sizeof(properties));
 }
 
+static const WCHAR bitmap_source_description[] =
+L"<?xml version='1.0'?>                                                   \
+  <Effect>                                                                \
+    <Property name='DisplayName' type='string' value='Bitmap Source'/>    \
+    <Property name='Author'      type='string' value='LiberNT'/>          \
+    <Property name='Category'    type='string' value='Stub'/>             \
+    <Property name='Description' type='string' value='Bitmap Source'/>    \
+    <Inputs minimum='0' maximum='0' >                                     \
+    </Inputs>                                                             \
+    <Property name='WicBitmapSource' type='iunknown' />                   \
+    <Property name='Scale' type='vector2' />                              \
+    <Property name='InterpolationMode' type='enum' />                     \
+    <Property name='EnableDPICorrection' type='bool' />                   \
+    <Property name='AlphaMode' type='enum' />                             \
+    <Property name='Orientation' type='enum' />                           \
+  </Effect>";
+
+struct bitmap_source_properties
+{
+    IUnknown *wic_bitmap_source;
+    D2D_VECTOR_2F scale;
+    D2D1_BITMAPSOURCE_INTERPOLATION_MODE interpolation_mode;
+    BOOL enable_dpi_correction;
+    D2D1_BITMAPSOURCE_ALPHA_MODE alpha_mode;
+    D2D1_BITMAPSOURCE_ORIENTATION orientation;
+};
+
+static HRESULT __stdcall bitmap_source_wic_bitmap_source_set(IUnknown *iface, const BYTE *data, UINT32 data_size)
+{
+    struct d2d_effect_impl *effect = impl_from_ID2D1EffectImpl((ID2D1EffectImpl *)iface);
+    struct bitmap_source_properties *props = (struct bitmap_source_properties *)(effect + 1);
+    IUnknown *source;
+
+    if (data_size != sizeof(source))
+        return E_INVALIDARG;
+    memcpy(&source, data, sizeof(source));
+    if (source)
+        IUnknown_AddRef(source);
+    if (props->wic_bitmap_source)
+        IUnknown_Release(props->wic_bitmap_source);
+    props->wic_bitmap_source = source;
+    return S_OK;
+}
+
+static HRESULT __stdcall bitmap_source_wic_bitmap_source_get(const IUnknown *iface, BYTE *data,
+        UINT32 data_size, UINT32 *actual_size)
+{
+    struct d2d_effect_impl *effect = impl_from_ID2D1EffectImpl((ID2D1EffectImpl *)iface);
+    struct bitmap_source_properties *props = (struct bitmap_source_properties *)(effect + 1);
+
+    if (actual_size)
+        *actual_size = sizeof(props->wic_bitmap_source);
+    if (!data || !data_size)
+        return S_OK;
+    if (data_size < sizeof(props->wic_bitmap_source))
+        return E_NOT_SUFFICIENT_BUFFER;
+    /* TODO: INFO_NEEDED whether reading this property adds a reference to the source */
+    if (props->wic_bitmap_source)
+        IUnknown_AddRef(props->wic_bitmap_source);
+    memcpy(data, &props->wic_bitmap_source, sizeof(props->wic_bitmap_source));
+    return S_OK;
+}
+
+EFFECT_PROPERTY_RW(bitmap_source, scale, VECTOR2)
+EFFECT_PROPERTY_RW(bitmap_source, interpolation_mode, ENUM)
+EFFECT_PROPERTY_RW(bitmap_source, enable_dpi_correction, BOOL)
+EFFECT_PROPERTY_RW(bitmap_source, alpha_mode, ENUM)
+EFFECT_PROPERTY_RW(bitmap_source, orientation, ENUM)
+
+static const D2D1_PROPERTY_BINDING bitmap_source_bindings[] =
+{
+    { L"WicBitmapSource", BINDING_RW(bitmap_source, wic_bitmap_source) },
+    { L"Scale", BINDING_RW(bitmap_source, scale) },
+    { L"InterpolationMode", BINDING_RW(bitmap_source, interpolation_mode) },
+    { L"EnableDPICorrection", BINDING_RW(bitmap_source, enable_dpi_correction) },
+    { L"AlphaMode", BINDING_RW(bitmap_source, alpha_mode) },
+    { L"Orientation", BINDING_RW(bitmap_source, orientation) },
+};
+
+static void bitmap_source_destroy(struct d2d_effect_impl *effect)
+{
+    struct bitmap_source_properties *props = (struct bitmap_source_properties *)(effect + 1);
+
+    if (props->wic_bitmap_source)
+        IUnknown_Release(props->wic_bitmap_source);
+}
+
+static HRESULT __stdcall bitmap_source_factory(IUnknown **effect)
+{
+    static const struct bitmap_source_properties properties =
+    {
+        .scale = { 1.0f, 1.0f },
+        .interpolation_mode = D2D1_BITMAPSOURCE_INTERPOLATION_MODE_LINEAR,
+        .alpha_mode = D2D1_BITMAPSOURCE_ALPHA_MODE_PREMULTIPLIED,
+        .orientation = D2D1_BITMAPSOURCE_ORIENTATION_DEFAULT,
+    };
+    HRESULT hr = d2d_effect_create_impl(effect, &properties, sizeof(properties));
+
+    if (SUCCEEDED(hr))
+        impl_from_ID2D1EffectImpl((ID2D1EffectImpl *)*effect)->destroy = bitmap_source_destroy;
+    return hr;
+}
+
 void d2d_effects_init_builtins(struct d2d_factory *factory)
 {
     static const struct builtin_description
@@ -912,6 +1019,7 @@ void d2d_effects_init_builtins(struct d2d_factory *factory)
         { &CLSID_D2D1HueRotation, X2(hue_rotation) },
         { &CLSID_D2D1Saturation, X2(saturation) },
         { &CLSID_D2D1Scale, X2(scale) },
+        { &CLSID_D2D1BitmapSource, X2(bitmap_source) },
 #undef X2
 #undef X
     };
