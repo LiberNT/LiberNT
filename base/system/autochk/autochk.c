@@ -17,6 +17,7 @@
 #include <windef.h>
 #include <winbase.h>
 #include <ntddkbd.h>
+#include <winioctl.h>
 
 #define NTOS_MODE_USER
 #include <ndk/exfuncs.h>
@@ -381,6 +382,43 @@ ChkdskCallback(
     return TRUE;
 }
 
+static BOOLEAN
+IsVolumeDirty(
+    IN PUNICODE_STRING VolumePathU)
+{
+    NTSTATUS Status;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE VolumeHandle;
+    IO_STATUS_BLOCK IoStatusBlock;
+    ULONG VolumeState = 0;
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               VolumePathU,
+                               OBJ_CASE_INSENSITIVE,
+                               NULL,
+                               NULL);
+    Status = NtOpenFile(&VolumeHandle,
+                        SYNCHRONIZE | FILE_READ_ATTRIBUTES,
+                        &ObjectAttributes,
+                        &IoStatusBlock,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+    Status = NtFsControlFile(VolumeHandle,
+                             NULL,
+                             NULL,
+                             NULL,
+                             &IoStatusBlock,
+                             FSCTL_IS_VOLUME_DIRTY,
+                             NULL,
+                             0,
+                             &VolumeState,
+                             sizeof(VolumeState));
+    NtClose(VolumeHandle);
+    return NT_SUCCESS(Status) && (VolumeState & VOLUME_IS_DIRTY) != 0;
+}
+
 static NTSTATUS
 CheckVolume(
     IN PCWSTR VolumePath,
@@ -433,6 +471,12 @@ CheckVolume(
     }
     if (Count >= RTL_NUMBER_OF(FileSystems))
     {
+        /* A boot pass checks only volumes flagged dirty, so a clean volume has nothing to report */
+        if (CheckOnlyIfDirty && !IsVolumeDirty(&VolumePathU))
+        {
+            DPRINT1("File system %S has no checker; the volume is not dirty\n", FileSystem);
+            return STATUS_SUCCESS;
+        }
         DPRINT1("File system %S not supported\n", FileSystem);
         PrintString("  Unable to verify the volume. The %S file system is not supported.\r\n", FileSystem);
         Status = STATUS_DLL_NOT_FOUND;
