@@ -36,14 +36,6 @@ KeGetRecommendedSharedDataAlignment(VOID)
 }
 
 VOID
-__cdecl
-KeSaveStateForHibernate(_Out_ PKPROCESSOR_STATE ProcessorState)
-{
-    RtlCaptureContext(&ProcessorState->ContextFrame);
-    KiSaveProcessorControlState(ProcessorState);
-}
-
-VOID
 FASTCALL
 KeZeroPages(_Out_writes_bytes_(Size) PVOID Address, _In_ ULONG Size)
 {

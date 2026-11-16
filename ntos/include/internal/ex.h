@@ -12,6 +12,14 @@ extern "C"
 {
 #endif
 
+#ifndef ExArchPostHalInitSystemPhase0
+#define ExArchPostHalInitSystemPhase0() ((VOID)0)
+#endif
+
+#ifndef ExArchPostHalInitSystemPhase1
+#define ExArchPostHalInitSystemPhase1() ((VOID)0)
+#endif
+
 extern RTL_TIME_ZONE_INFORMATION ExpTimeZoneInfo;
 
 extern LARGE_INTEGER ExpTimeZoneBias;

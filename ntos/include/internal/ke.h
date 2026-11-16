@@ -29,6 +29,10 @@
 #define KiArchIdleProcessorNeedsWake(Prcb) ((VOID)(Prcb), TRUE)
 #endif
 
+#ifndef KiArchIdleLoopPollsForWork
+#define KiArchIdleLoopPollsForWork() TRUE
+#endif
+
 #ifndef KiArchPublishSystemCallStubs
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif
@@ -55,6 +59,12 @@
 
 #ifndef KiArchReportUnhandledKernelFault
 #define KiArchReportUnhandledKernelFault(TrapFrame) ((VOID)(TrapFrame))
+#endif
+
+#ifndef KiArchContinueExtendedState
+/* TODO: restore the extended processor state (CONTEXT_XSTATE) of the context */
+#define KiArchContinueExtendedState(SourceContext, ContextFlags, PreviousMode) \
+    ((VOID)(SourceContext), (VOID)(ContextFlags), (VOID)(PreviousMode), STATUS_SUCCESS)
 #endif
 
 #ifndef KI_CALLOUT_STACK_RESERVE
@@ -537,13 +547,6 @@ VOID
 NTAPI
 KeInitExceptions(VOID);
 
-NTSTATUS
-NTAPI
-KiContinueExtendedState(
-    _In_ PCONTEXT SourceContext,
-    _In_ ULONG ContextFlags,
-    _In_ KPROCESSOR_MODE PreviousMode);
-
 VOID
 NTAPI
 KiDispatchException(
@@ -776,12 +779,6 @@ VOID
 FASTCALL
 KiIpiSignalPacketDone(
     _In_ PKIPI_CONTEXT PacketContext);
-
-VOID
-FASTCALL
-KiIpiSignalPacketDoneAndStall(
-    _In_ PKIPI_CONTEXT PacketContext,
-    _In_ volatile PULONG ReverseStall);
 
 VOID
 NTAPI

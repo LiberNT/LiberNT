@@ -181,6 +181,20 @@ KiArm64IdleProcessorNeedsWake(
 }
 
 #define KiArchIdleProcessorNeedsWake(Prcb) KiArm64IdleProcessorNeedsWake(Prcb)
+#define KiArchIdleLoopPollsForWork() FALSE
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExArm64PostHalInitSystemPhase0(VOID);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+ExArm64PostHalInitSystemPhase1(VOID);
+
+#define ExArchPostHalInitSystemPhase0() ExArm64PostHalInitSystemPhase0()
+#define ExArchPostHalInitSystemPhase1() ExArm64PostHalInitSystemPhase1()
 
 /* ELR already points at the BRK instruction */
 #define KI_BREAKPOINT_PC_ADJUST 0

@@ -815,18 +815,3 @@ KeRaiseUserException(
 
     return (NTSTATUS)OldEip;
 }
-
-NTSTATUS
-NTAPI
-KiContinueExtendedState(
-    _In_ PCONTEXT SourceContext,
-    _In_ ULONG ContextFlags,
-    _In_ KPROCESSOR_MODE PreviousMode)
-{
-    UNREFERENCED_PARAMETER(SourceContext);
-    UNREFERENCED_PARAMETER(ContextFlags);
-    UNREFERENCED_PARAMETER(PreviousMode);
-
-    /* TODO: restore the extended processor state (CONTEXT_XSTATE) of the context */
-    return STATUS_SUCCESS;
-}

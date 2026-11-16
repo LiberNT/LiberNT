@@ -13,8 +13,6 @@
 #define NDEBUG
 #include <debug.h>
 
-#define ARM64_STUB() UNIMPLEMENTED_DBGBREAK()
-
 #define READ_SYSREG64(_var, _reg) ((_var) = ARM64_READ_SYSREG(_reg))
 #define WRITE_SYSREG64(_reg, _val) ARM64_WRITE_SYSREG(_reg, _val)
 
@@ -749,14 +747,6 @@ NTAPI
 KeSetDmaIoCoherency(_In_ ULONG Coherency)
 {
     KiDmaIoCoherency = Coherency;
-}
-
-VOID
-__cdecl
-KeSaveStateForHibernate(_In_ PKPROCESSOR_STATE State)
-{
-    UNREFERENCED_PARAMETER(State);
-    ARM64_STUB();
 }
 
 VOID

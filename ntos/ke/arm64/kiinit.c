@@ -604,8 +604,6 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
         KiReportCpuFeatures(Prcb);
 #endif
 
-        InitializeListHead(&KiProcessListHead);
-
         KeInitializeProcess(InitProcess,
                             0,
                             MAXULONG_PTR,

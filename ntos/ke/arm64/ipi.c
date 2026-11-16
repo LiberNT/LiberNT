@@ -66,23 +66,6 @@ KiArm64RequestIpiMask(
 }
 
 VOID
-NTAPI
-KiIpiGenericCallTarget(
-    _In_ PKIPI_CONTEXT PacketContext,
-    _In_ PVOID BroadcastFunction,
-    _In_ PVOID Argument,
-    _In_ PVOID Count)
-{
-    UNREFERENCED_PARAMETER(PacketContext);
-    UNREFERENCED_PARAMETER(Count);
-
-    if (BroadcastFunction != NULL)
-    {
-        ((PKIPI_BROADCAST_WORKER)BroadcastFunction)((ULONG_PTR)Argument);
-    }
-}
-
-VOID
 FASTCALL
 KiIpiSend(
     _In_ KAFFINITY TargetSet,
@@ -124,59 +107,6 @@ KiIpiSend(
     UNREFERENCED_PARAMETER(TargetSet);
     UNREFERENCED_PARAMETER(IpiRequest);
 #endif
-}
-
-/*
- * The KPRCB-packet IPI protocol (KiIpiSendPacket / KiIpiSignalPacketDone /
- * KiIpiSignalPacketDoneAndStall) is unused on ARM64: the generic ke/ipi.c that
- * drives it is excluded from the ARM64 build (ntos.cmake) in favour of this
- * file's self-contained KeIpiGenericCall. These remain only to satisfy the
- * internal prototypes. If a future shared path ever calls them, the warning
- * below makes the otherwise-silent no-op visible instead of dropping the work.
- */
-VOID
-NTAPI
-KiIpiSendPacket(
-    _In_ KAFFINITY TargetSet,
-    _In_ PKIPI_WORKER WorkerFunction,
-    _In_ PKIPI_BROADCAST_WORKER BroadcastFunction,
-    _In_ ULONG_PTR Context,
-    _Inout_ PULONG Count)
-{
-    UNREFERENCED_PARAMETER(TargetSet);
-    UNREFERENCED_PARAMETER(WorkerFunction);
-    UNREFERENCED_PARAMETER(BroadcastFunction);
-    UNREFERENCED_PARAMETER(Context);
-
-    DbgPrint("[arm64] KiIpiSendPacket called but unimplemented on ARM64; use "
-             "KeIpiGenericCall instead (packet IPI work dropped)\n");
-
-    if (Count != NULL)
-    {
-        *Count = 1;
-    }
-}
-
-VOID
-FASTCALL
-KiIpiSignalPacketDone(
-    _In_ PKIPI_CONTEXT PacketContext)
-{
-    UNREFERENCED_PARAMETER(PacketContext);
-}
-
-VOID
-FASTCALL
-KiIpiSignalPacketDoneAndStall(
-    _In_ PKIPI_CONTEXT PacketContext,
-    _Inout_ volatile PULONG ReverseStall)
-{
-    UNREFERENCED_PARAMETER(PacketContext);
-
-    if (ReverseStall != NULL)
-    {
-        *ReverseStall = 0;
-    }
 }
 
 BOOLEAN

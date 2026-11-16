@@ -1350,16 +1350,6 @@ KeSetDmaIoCoherency(
     KiDmaIoCoherency = Coherency;
 }
 
-VOID
-__cdecl
-KeSaveStateForHibernate(
-    _In_ PKPROCESSOR_STATE State)
-{
-    RtlCaptureContext(&State->ContextFrame);
-
-    KiSaveProcessorControlState(State);
-}
-
 CODE_SEG("INIT")
 VOID
 NTAPI

@@ -171,7 +171,6 @@ KiPpcSystemStartup(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     KiInitSystem();
 
     DirectoryTableBase = PpcBlock->PageTableRoot;
-    InitializeListHead(&KiProcessListHead);
     KeInitializeProcess(InitialProcess, 0, MAXULONG_PTR, &DirectoryTableBase, FALSE);
     InitialProcess->QuantumReset = MAXCHAR;
 

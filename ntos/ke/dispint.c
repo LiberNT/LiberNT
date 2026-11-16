@@ -48,7 +48,8 @@ KiSwitchFromDispatchInterrupt(
 
     NewThread = Prcb->NextThread;
     Prcb->NextThread = NULL;
-    InterlockedBitTestAndResetAffinity(&KiIdleSummary, Prcb->Number);
+    if (KiIdleSummary & Prcb->SetMember)
+        InterlockedBitTestAndResetAffinity(&KiIdleSummary, Prcb->Number);
     Prcb->CurrentThread = NewThread;
     NewThread->State = Running;
     OldThread->WaitReason = WrDispatchInt;

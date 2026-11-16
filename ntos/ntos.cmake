@@ -216,7 +216,6 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/kd64/kdlog.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/passint.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/procgrp.c
-    ${REACTOS_SOURCE_DIR}/ntos/ke/procinfo.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/smpdbg.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/apcobj.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/arcconfig.c
@@ -382,7 +381,6 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/usercall_asm.S
         ${REACTOS_SOURCE_DIR}/ntos/rtl/i386/prefetch.S)
     list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/ex/i386/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/interlck.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86.c
@@ -418,7 +416,6 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/trap.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/usercall_asm.S)
     list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/ex/amd64/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/amd64/kdx64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/context.c
@@ -503,7 +500,6 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/capture.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/riscv64/cmhardwr.c
-        ${REACTOS_SOURCE_DIR}/ntos/ex/riscv64/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/riscv64/kdsup.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/cache.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/console.c
@@ -541,7 +537,6 @@ elseif(ARCH STREQUAL "ppc")
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/usercall.S)
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/ppc/cmhardwr.c
-        ${REACTOS_SOURCE_DIR}/ntos/ex/ppc/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/ppc/ioaccess.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/ppc/kdsup.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/atomic64.c
@@ -577,7 +572,8 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c)
+        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/procinfo.c)
 endif()
 
 if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")

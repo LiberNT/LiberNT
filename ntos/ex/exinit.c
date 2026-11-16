@@ -71,21 +71,6 @@ ULONG NtInitialUserProcessBufferType = REG_SZ;
 #define EXP_SAFEBOOT_NETWORK  2
 #define EXP_SAFEBOOT_DSREPAIR 3
 
-/*
- * The first thing of its own the executive does on each processor, and the
- * last: an architecture may have work to do once the HAL has had its turn, and
- * every architecture is asked whether it has, so no caller has to know.
- */
-CODE_SEG("INIT")
-VOID
-NTAPI
-ExArchPostHalInitSystemPhase0(VOID);
-
-CODE_SEG("INIT")
-VOID
-NTAPI
-ExArchPostHalInitSystemPhase1(VOID);
-
 CODE_SEG("INIT")
 VOID
 NTAPI

@@ -9,7 +9,7 @@
 CODE_SEG("INIT")
 VOID
 NTAPI
-ExArchPostHalInitSystemPhase0(
+ExArm64PostHalInitSystemPhase0(
     VOID)
 {
     /*
@@ -24,7 +24,7 @@ ExArchPostHalInitSystemPhase0(
 CODE_SEG("INIT")
 VOID
 NTAPI
-ExArchPostHalInitSystemPhase1(
+ExArm64PostHalInitSystemPhase1(
     VOID)
 {
     KIRQL CurrentIrql;

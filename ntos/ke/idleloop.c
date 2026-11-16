@@ -7,16 +7,6 @@
 
 #include <ntoskrnl.h>
 
-static
-BOOLEAN
-KiIdleHasWork(
-    _In_ PKPRCB Prcb)
-{
-    return (BOOLEAN)((Prcb->DpcData[0].DpcQueueDepth != 0) ||
-                     (Prcb->TimerRequest != 0) ||
-                     (Prcb->DeferredReadyListHead.Next != NULL));
-}
-
 _Requires_lock_held_(Prcb->PrcbLock)
 static
 PKTHREAD
@@ -82,7 +72,7 @@ KiIdleSleep(
     Prcb->Sleeping = TRUE;
     KeMemoryBarrier();
 
-    if (KiIdleHasWork(Prcb) || (Prcb->DpcInterruptRequested != FALSE))
+    if (KiDpcWorkPending(Prcb) || (Prcb->DpcInterruptRequested != FALSE))
     {
         Prcb->Sleeping = FALSE;
         KiReleasePrcbLock(Prcb);
@@ -110,7 +100,7 @@ KiIdleLoop(VOID)
         YieldProcessor();
         _disable();
 
-        if (KiIdleHasWork(Prcb))
+        if (KiDpcWorkPending(Prcb))
         {
             HalClearSoftwareInterrupt(DISPATCH_LEVEL);
             KiRetireDpcList(Prcb);

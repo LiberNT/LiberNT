@@ -750,16 +750,6 @@ KeGetRecommendedSharedDataAlignment(VOID)
 }
 
 VOID
-__cdecl
-KeSaveStateForHibernate(
-    _In_ PKPROCESSOR_STATE State)
-{
-    RtlCaptureContext(&State->ContextFrame);
-
-    KiSaveProcessorControlState(State);
-}
-
-VOID
 NTAPI
 KeSetDmaIoCoherency(
     _In_ ULONG Coherency)

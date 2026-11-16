@@ -39,7 +39,7 @@ KiContinue(
     if (OldIrql < APC_LEVEL)
         KfRaiseIrql(APC_LEVEL);
 
-    Status = KiContinueExtendedState(SourceContext, Context->ContextFlags, Thread->PreviousMode);
+    Status = KiArchContinueExtendedState(SourceContext, Context->ContextFlags, Thread->PreviousMode);
     if (NT_SUCCESS(Status))
     {
         KeContextToTrapFrame(Context,

@@ -776,4 +776,13 @@ PoSetProcessorAggregatorParking(
     return STATUS_SUCCESS;
 }
 
+VOID
+__cdecl
+KeSaveStateForHibernate(
+    _Out_ PKPROCESSOR_STATE State)
+{
+    RtlCaptureContext(&State->ContextFrame);
+    KiSaveProcessorControlState(State);
+}
+
 /* EOF */

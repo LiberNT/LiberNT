@@ -441,7 +441,6 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
         MiInitializeKernelVaLayout(LoaderBlock);
         KiInitSystem();
 
-        InitializeListHead(&KiProcessListHead);
         PageDirectory[0] = 0;
         PageDirectory[1] = 0;
         KeInitializeProcess(InitProcess,

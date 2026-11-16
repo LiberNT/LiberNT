@@ -235,13 +235,6 @@ KfLowerIrql(
 }
 
 NTKERNELAPI
-KIRQL
-KxGetCurrentIrql(VOID)
-{
-    return KeGetCurrentIrql();
-}
-
-NTKERNELAPI
 VOID
 KxLowerIrql(
     _In_ KIRQL NewIrql)

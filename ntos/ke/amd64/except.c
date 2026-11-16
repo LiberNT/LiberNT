@@ -732,7 +732,7 @@ KiXmmExceptionHandler(
 
 NTSTATUS
 NTAPI
-KiContinueExtendedState(
+KiAmd64ContinueExtendedState(
     _In_ PCONTEXT SourceContext,
     _In_ ULONG ContextFlags,
     _In_ KPROCESSOR_MODE PreviousMode)

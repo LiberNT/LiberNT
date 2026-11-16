@@ -628,3 +628,11 @@ VOID
 KiAmd64PrepareInterruptDispatch(
     _Inout_ PKINTERRUPT Interrupt);
 #define KiArchPrepareInterruptDispatch(Interrupt) KiAmd64PrepareInterruptDispatch(Interrupt)
+
+NTSTATUS
+NTAPI
+KiAmd64ContinueExtendedState(
+    _In_ PCONTEXT SourceContext,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode);
+#define KiArchContinueExtendedState(SourceContext, ContextFlags, PreviousMode) KiAmd64ContinueExtendedState(SourceContext, ContextFlags, PreviousMode)

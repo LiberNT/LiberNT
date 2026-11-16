@@ -14,6 +14,7 @@
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiRiscvCallUserMode
 #define KiArchCallUserMode(Frame, Result, ResultLength) KiRiscvCallUserMode((Frame), (Result), (ResultLength))
+#define KiArchIdleLoopPollsForWork() FALSE
 
 NTSTATUS
 NTAPI

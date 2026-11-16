@@ -404,7 +404,6 @@ KiRiscvSystemStartup(
      * no ASID is allocated during boot-process adoption. */
     DirectoryTableBase[0] = RiscvBlock->PageTableRoot;
     DirectoryTableBase[1] = 0;
-    InitializeListHead(&KiProcessListHead);
     KeInitializeProcess(InitialProcess,
                         0,
                         MAXULONG_PTR,

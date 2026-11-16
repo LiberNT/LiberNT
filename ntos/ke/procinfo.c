@@ -12,8 +12,6 @@
 
 #define TAG_KTOPO 'opTK'
 
-#if defined(_M_AMD64) || defined(_M_IX86)
-
 /* ------------------------------------------------------------------ */
 /*  x86 / amd64: CPUID-based discovery                                 */
 /* ------------------------------------------------------------------ */
@@ -513,5 +511,3 @@ KiQueryProcessorDomains(
 
     ExFreePoolWithTag(Samples, TAG_KTOPO);
 }
-
-#endif
