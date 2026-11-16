@@ -1,0 +1,22 @@
+name: Delete closed pull request caches
+on:
+  # The base repository's token: a fork's pull_request token cannot delete caches. Nothing from the pull request is checked out or run.
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  delete-caches:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Delete the caches of the closed pull request
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CACHE_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+      run: |
+        gh cache list --repo "$GITHUB_REPOSITORY" --ref "$CACHE_REF" --limit 100 --json id --jq '.[].id' |
+        while read -r id; do
+          gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
+        done
