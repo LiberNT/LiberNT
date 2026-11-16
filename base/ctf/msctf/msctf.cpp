@@ -32,12 +32,17 @@ typedef struct
     ActivatedTextService *ats;
 } AtsEntry;
 
+/* Text services are activated per thread, on the thread manager of the calling thread */
+static struct list *current_textservices(UINT **ppActivated)
+{
+    ITfThreadMgrEx *tm = (ITfThreadMgrEx *)TlsGetValue(g_dwTLSIndex);
+    return tm ? ThreadMgr_GetTextServices(tm, ppActivated) : NULL;
+}
+
 static CookieInternal *cookies;
 static UINT id_last;
 static UINT array_size;
 
-static struct list AtsList = LIST_INIT(AtsList);
-static UINT activated = 0;
 
 TfClientId g_processId = 0;
 ITfCompartmentMgr *g_globalCompartmentMgr = NULL;
@@ -423,8 +428,12 @@ static HRESULT deactivate_given_ts(ActivatedTextService *actsvr)
 static void deactivate_remove_conflicting_ts(REFCLSID catid)
 {
     AtsEntry *ats, *cursor2;
+    struct list *list = current_textservices(NULL);
 
-    LIST_FOR_EACH_ENTRY_SAFE(ats, cursor2, &AtsList, AtsEntry, entry)
+    if (!list)
+        return;
+
+    LIST_FOR_EACH_ENTRY_SAFE(ats, cursor2, list, AtsEntry, entry)
     {
         if (catid == ats->ats->LanguageProfile.catid)
         {
@@ -501,10 +510,13 @@ HRESULT add_active_textservice(TF_LANGUAGEPROFILE *lp)
         return E_OUTOFMEMORY;
     }
 
-    entry->ats = actsvr;
-    list_add_head(&AtsList, &entry->entry);
+    UINT *pActivated;
+    struct list *list = ThreadMgr_GetTextServices(tm, &pActivated);
 
-    if (activated > 0)
+    entry->ats = actsvr;
+    list_add_head(list, &entry->entry);
+
+    if (*pActivated > 0)
         activate_given_ts(actsvr, tm);
 
     return S_OK;
@@ -514,8 +526,12 @@ EXTERN_C
 BOOL get_active_textservice(REFCLSID rclsid, TF_LANGUAGEPROFILE *profile)
 {
     AtsEntry *ats;
+    struct list *list = current_textservices(NULL);
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    if (!list)
+        return FALSE;
+
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         if (rclsid == ats->ats->LanguageProfile.clsid)
         {
@@ -531,8 +547,12 @@ EXTERN_C
 BOOL get_active_textservice_by_category(REFGUID catid, TF_LANGUAGEPROFILE *profile)
 {
     AtsEntry *ats;
+    struct list *list = current_textservices(NULL);
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    if (!list)
+        return FALSE;
+
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         if (catid == ats->ats->LanguageProfile.catid)
         {
@@ -548,10 +568,12 @@ HRESULT activate_textservices(ITfThreadMgrEx *tm)
 {
     HRESULT hr = S_OK;
     AtsEntry *ats;
+    UINT *pActivated;
+    struct list *list = ThreadMgr_GetTextServices(tm, &pActivated);
 
-    activated ++;
+    ++*pActivated;
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         hr = activate_given_ts(ats->ats, tm);
         if (FAILED(hr))
@@ -561,27 +583,47 @@ HRESULT activate_textservices(ITfThreadMgrEx *tm)
 }
 
 EXTERN_C
-HRESULT deactivate_textservices(void)
+HRESULT deactivate_textservices(ITfThreadMgrEx *tm)
 {
     AtsEntry *ats;
+    UINT *pActivated;
+    struct list *list = ThreadMgr_GetTextServices(tm, &pActivated);
 
-    if (activated > 0)
-        activated --;
+    if (*pActivated > 0)
+        --*pActivated;
 
-    if (activated == 0)
+    if (*pActivated == 0)
     {
-        LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+        LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
             deactivate_given_ts(ats->ats);
     }
     return S_OK;
 }
 
 EXTERN_C
+void free_textservices(struct list *list)
+{
+    AtsEntry *ats, *cursor2;
+
+    LIST_FOR_EACH_ENTRY_SAFE(ats, cursor2, list, AtsEntry, entry)
+    {
+        assert(!ats->ats->pITfTextInputProcessor);
+        list_remove(&ats->entry);
+        cicMemFree(ats->ats);
+        cicMemFree(ats);
+    }
+}
+
+EXTERN_C
 CLSID get_textservice_clsid(TfClientId tid)
 {
     AtsEntry *ats;
+    struct list *list = current_textservices(NULL);
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    if (!list)
+        return GUID_NULL;
+
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         if (ats->ats->tid == tid)
             return ats->ats->LanguageProfile.clsid;
@@ -593,11 +635,14 @@ EXTERN_C
 HRESULT get_textservice_sink(TfClientId tid, REFCLSID iid, IUnknown **sink)
 {
     AtsEntry *ats;
+    struct list *list = current_textservices(NULL);
 
     if (iid != IID_ITfKeyEventSink)
         return E_NOINTERFACE;
+    if (!list)
+        return E_FAIL;
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         if (ats->ats->tid == tid)
         {
@@ -613,11 +658,14 @@ EXTERN_C
 HRESULT set_textservice_sink(TfClientId tid, REFCLSID iid, IUnknown* sink)
 {
     AtsEntry *ats;
+    struct list *list = current_textservices(NULL);
 
     if (iid != IID_ITfKeyEventSink)
         return E_NOINTERFACE;
+    if (!list)
+        return E_FAIL;
 
-    LIST_FOR_EACH_ENTRY(ats, &AtsList, AtsEntry, entry)
+    LIST_FOR_EACH_ENTRY(ats, list, AtsEntry, entry)
     {
         if (ats->ats->tid == tid)
         {

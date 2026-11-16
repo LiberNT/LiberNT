@@ -87,6 +87,12 @@ public:
     STDMETHODIMP IsKeystrokeFeedEnabled(int *pfEnabled) override;
     STDMETHODIMP CallImm32HotkeyHandler(UINT vKey, LPARAM lParam, HRESULT *phrResult) override;
     void CleanupContextSinks(TfClientId tid);
+    struct list *TextServices(UINT **ppActivated)
+    {
+        if (ppActivated)
+            *ppActivated = &m_TextServicesActivated;
+        return &m_TextServices;
+    }
 
     // ** IUnknown methods **
     STDMETHODIMP QueryInterface(REFIID iid, LPVOID *ppvObject) override;
@@ -273,6 +279,10 @@ protected:
     struct list m_UIElementSink;
     struct list m_InputProcessorProfileActivationSink;
 
+    /* text services activated on this thread */
+    struct list m_TextServices;
+    UINT m_TextServicesActivated;
+
     struct FunctionProviderEntry
     {
         TfClientId tid;
@@ -423,6 +433,9 @@ CThreadMgr::CThreadMgr()
     list_init(&m_ThreadMgrEventSink);
     list_init(&m_UIElementSink);
     list_init(&m_InputProcessorProfileActivationSink);
+
+    list_init(&m_TextServices);
+    m_TextServicesActivated = 0;
 }
 
 CThreadMgr::~CThreadMgr()
@@ -477,6 +490,8 @@ CThreadMgr::~CThreadMgr()
         list_remove(cursor);
         cicMemFree(wnd);
     }
+
+    free_textservices(&m_TextServices);
 
     m_CompartmentMgr->Release();
 }
@@ -649,7 +664,7 @@ STDMETHODIMP CThreadMgr::Deactivate()
         CleanupContextSinks(0);
     }
 
-    deactivate_textservices();
+    deactivate_textservices(this);
     return S_OK;
 }
 
@@ -2067,4 +2082,10 @@ void ThreadMgr_CleanupContextSinks(ITfThreadMgrEx *iface, TfClientId tid)
 {
     CThreadMgr *This = static_cast<CThreadMgr *>(iface);
     This->CleanupContextSinks(tid);
+}
+
+struct list *ThreadMgr_GetTextServices(ITfThreadMgrEx *iface, UINT **ppActivated)
+{
+    CThreadMgr *This = static_cast<CThreadMgr *>(iface);
+    return This->TextServices(ppActivated);
 }
