@@ -156,10 +156,18 @@ MAKE_FUNCPTR(FT_Set_Pixel_Sizes);
 
 #define FaceFromObject(o) ((FT_Face)(ULONG_PTR)(o))
 
+/* A face keeps the size it was last scaled to: a hinted size runs the font's prep program on its first glyph only. */
 static FT_Size freetype_set_face_size(FT_Face face, float emsize)
 {
-    FT_Size size;
+    ULONG_PTR key = FT_IS_SCALABLE(face) ? (ULONG_PTR)(FT_F26Dot6)(emsize * 64.0f + 0.5f) : (ULONG_PTR)(FT_UInt)emsize;
+    FT_Size size = face->generic.data;
     FT_Error error;
+
+    if (size && (ULONG_PTR)size->generic.data == key)
+    {
+        pFT_Activate_Size(size);
+        return size;
+    }
 
     if (pFT_New_Size(face, &size)) return NULL;
 
@@ -175,6 +183,10 @@ static FT_Size freetype_set_face_size(FT_Face face, float emsize)
         return NULL;
     }
 
+    if (face->generic.data)
+        pFT_Done_Size(face->generic.data);
+    size->generic.data = (void *)key;
+    face->generic.data = size;
     return size;
 }
 
@@ -311,9 +323,8 @@ static NTSTATUS get_design_glyph_metrics(void *args)
 {
     struct get_design_glyph_metrics_params *params = args;
     FT_Face face = FaceFromObject(params->object);
-    FT_Size size;
 
-    if (!(size = freetype_set_face_size(face, params->upem)))
+    if (!freetype_set_face_size(face, params->upem))
         return STATUS_UNSUCCESSFUL;
 
     if (!pFT_Load_Glyph(face, params->glyph, FT_LOAD_NO_SCALE))
@@ -336,8 +347,6 @@ static NTSTATUS get_design_glyph_metrics(void *args)
                 params->metrics->advanceWidth += (params->upem + 49) / 50;
         }
     }
-
-    pFT_Done_Size(size);
 
     return STATUS_SUCCESS;
 }
@@ -547,9 +556,8 @@ static NTSTATUS get_glyph_outline(void *args)
 {
     struct get_glyph_outline_params *params = args;
     FT_Face face = FaceFromObject(params->object);
-    FT_Size size;
 
-    if (!(size = freetype_set_face_size(face, params->emsize)))
+    if (!freetype_set_face_size(face, params->emsize))
         return STATUS_UNSUCCESSFUL;
 
     if (!pFT_Load_Glyph(face, params->glyph, FT_LOAD_NO_BITMAP))
@@ -578,8 +586,6 @@ static NTSTATUS get_glyph_outline(void *args)
             params->outline->tags.count = ft_outline->n_points + ft_outline->n_contours * 2;
         }
     }
-
-    pFT_Done_Size(size);
 
     return STATUS_SUCCESS;
 }
@@ -659,11 +665,10 @@ static NTSTATUS get_glyph_bbox(void *args)
     FT_BBox bbox = { 0 };
     BOOL needs_transform;
     FT_Matrix m;
-    FT_Size size;
 
     SetRectEmpty(params->bbox);
 
-    if (!(size = freetype_set_face_size(face, params->emsize)))
+    if (!freetype_set_face_size(face, params->emsize))
         return STATUS_UNSUCCESSFUL;
 
     needs_transform = FT_IS_SCALABLE(face) && get_glyph_transform(params->simulations, &params->m, &m);
@@ -671,7 +676,6 @@ static NTSTATUS get_glyph_bbox(void *args)
     if (pFT_Load_Glyph(face, params->glyph, get_glyph_load_flags(params->gridfit, needs_transform)))
     {
         WARN("Failed to load glyph %u.\n", params->glyph);
-        pFT_Done_Size(size);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -688,7 +692,6 @@ static NTSTATUS get_glyph_bbox(void *args)
     translate_glyph(glyph, params->offset_x, params->offset_y);
     pFT_Glyph_Get_CBox(glyph, FT_GLYPH_BBOX_PIXELS, &bbox);
     pFT_Done_Glyph(glyph);
-    pFT_Done_Size(size);
 
     /* flip Y axis */
     SetRect(params->bbox, bbox.xMin, -bbox.yMax, bbox.xMax, -bbox.yMin);
@@ -800,12 +803,11 @@ static NTSTATUS get_glyph_bitmap(void *args)
     BOOL needs_transform;
     BOOL ret = FALSE;
     FT_Glyph glyph;
-    FT_Size size;
     FT_Matrix m;
 
     *params->is_1bpp = 0;
 
-    if (!(size = freetype_set_face_size(face, params->emsize)))
+    if (!freetype_set_face_size(face, params->emsize))
         return STATUS_UNSUCCESSFUL;
 
     needs_transform = FT_IS_SCALABLE(face) && get_glyph_transform(params->simulations, &params->m, &m);
@@ -833,8 +835,6 @@ static NTSTATUS get_glyph_bitmap(void *args)
         pFT_Done_Glyph(glyph);
     }
 
-    pFT_Done_Size(size);
-
     return ret;
 }
 
@@ -842,12 +842,11 @@ static NTSTATUS get_glyph_advance(void *args)
 {
     struct get_glyph_advance_params *params = args;
     FT_Face face = FaceFromObject(params->object);
-    FT_Size size;
 
     *params->advance = 0;
     *params->has_contours = FALSE;
 
-    if (!(size = freetype_set_face_size(face, params->emsize)))
+    if (!freetype_set_face_size(face, params->emsize))
         return STATUS_UNSUCCESSFUL;
 
     if (!pFT_Load_Glyph(face, params->glyph, params->mode == DWRITE_MEASURING_MODE_NATURAL ? FT_LOAD_NO_HINTING : FT_LOAD_NO_AUTOHINT))
@@ -855,8 +854,6 @@ static NTSTATUS get_glyph_advance(void *args)
         *params->advance = face->glyph->advance.x >> 6;
         *params->has_contours = freetype_glyph_has_contours(face);
     }
-
-    pFT_Done_Size(size);
 
     return STATUS_SUCCESS;
 }
