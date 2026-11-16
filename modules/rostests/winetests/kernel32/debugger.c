@@ -1247,6 +1247,13 @@ static void test_debug_loop_wow64(void)
         default:
             ok(0, "Unexpected event: %lu\n", ev.dwDebugEventCode);
             /* fall through */
+#ifdef __REACTOS__
+        /* The debuggee may still be loading when its window shows */
+        case LOAD_DLL_DEBUG_EVENT:
+            if (ev.dwDebugEventCode == LOAD_DLL_DEBUG_EVENT && ev.u.LoadDll.hFile) CloseHandle( ev.u.LoadDll.hFile );
+            /* fall through */
+        case CREATE_THREAD_DEBUG_EVENT:
+#endif
         case EXIT_THREAD_DEBUG_EVENT:
             ret = ContinueDebugEvent( ev.dwProcessId, ev.dwThreadId, DBG_CONTINUE );
             ok(ret, "ContinueDebugEvent failed, last error %#lx.\n", GetLastError());
