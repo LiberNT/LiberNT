@@ -17984,6 +17984,22 @@ DxgkpAddDeviceRegistered(
 
     InterlockedExchange(&Adapter->MiniportCallbacksValid, 1);
 
+    if (!MpCtx->UseDodLayout &&
+        DxgkCapsCoreInterfaceVersionAtLeast(MpCtx->InitData.s.Version, DXGK_CAPS_CORE_LEVEL_WDDM_2_2) &&
+        MpCtx->InitData.s.DxgkDdiExchangePreStartInfo != NULL)
+    {
+        DXGK_PRE_START_INFO PreStartInfo;
+        NTSTATUS PreStartStatus;
+
+        RtlZeroMemory(&PreStartInfo, sizeof(PreStartInfo));
+        PreStartStatus = MpCtx->InitData.s.DxgkDdiExchangePreStartInfo(Adapter->MiniportDeviceContext, &PreStartInfo);
+        /* TODO: keep the boot image on screen through DxgkDdiStartDevice when the driver reports SupportPreserveBootDisplay */
+        DPRINT1("DxgkpAddDevice: pre-start exchange 0x%08lX preserve-boot-display=%u uefi-fb-cpu-accessible=%u\n",
+                PreStartStatus,
+                (UINT)PreStartInfo.SupportPreserveBootDisplay,
+                (UINT)PreStartInfo.IsUEFIFrameBufferCpuAccessibleDuringStartup);
+    }
+
     DXGKRNL_TRACE("DxgkpAddDevice: MiniportDeviceContext = %p\n",
                   Adapter->MiniportDeviceContext);
 
