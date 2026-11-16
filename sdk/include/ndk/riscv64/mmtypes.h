@@ -126,7 +126,9 @@ typedef struct _MMPTE
         MMPTE_SUBSECTION Subsect;
         MMPTE_LIST List;
     } u;
-} MMPTE, *PMMPTE;
+} MMPTE, *PMMPTE,
+  MMPDE, *PMMPDE,
+  MMPPE, *PMMPPE;
 
 C_ASSERT(sizeof(HARDWARE_PTE) == sizeof(ULONG64));
 C_ASSERT(sizeof(MMPTE_SOFTWARE) == sizeof(ULONG64));

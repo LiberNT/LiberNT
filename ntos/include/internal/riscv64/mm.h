@@ -15,10 +15,6 @@ extern "C" {
 #define _MI_PAGING_LEVELS 3
 #define _MI_HAS_NO_EXECUTE 1
 
-/* All Sv39 levels share the page-table entry format. */
-typedef MMPTE MMPDE, *PMMPDE;
-typedef MMPTE MMPPE, *PMMPPE;
-
 /* Sv39 canonical halves. Keep a 64 KiB guard at the top of the user half. */
 #define MI_USER_PROBE_ADDRESS           ((PVOID)0x0000003FFFFF0000ULL)
 #define MI_DEFAULT_SYSTEM_RANGE_START   ((PVOID)0xFFFFFFC000000000ULL)
