@@ -375,45 +375,19 @@ KiDispatchInterrupt(VOID)
 {
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
     PKPRCB Prcb = &Pcr->PrcbData;
-    PVOID OldHandler;
-    PKTHREAD NewThread, OldThread;
+    PVOID ExceptionList;
 
     _disable();
 
-    if ((Prcb->DpcData[0].DpcQueueDepth) ||
-        (Prcb->TimerRequest) ||
-        (Prcb->DeferredReadyListHead.Next))
+    /* DPCs run on their own stack, outside the SEH chain of the interrupted code */
+    if (KiDpcWorkPending(Prcb))
     {
-        OldHandler = Pcr->NtTib.ExceptionList;
+        ExceptionList = Pcr->NtTib.ExceptionList;
         Pcr->NtTib.ExceptionList = EXCEPTION_CHAIN_END;
-
         KiRetireDpcListInDpcStack(Prcb, Prcb->DpcStack);
-
-        Pcr->NtTib.ExceptionList = OldHandler;
+        Pcr->NtTib.ExceptionList = ExceptionList;
     }
 
     _enable();
-
-    if (Prcb->QuantumEnd)
-    {
-        Prcb->QuantumEnd = FALSE;
-        KiQuantumEnd();
-    }
-    else if (Prcb->NextThread)
-    {
-        KiAcquirePrcbLock(Prcb);
-
-        OldThread = Prcb->CurrentThread;
-        NewThread = Prcb->NextThread;
-
-        Prcb->NextThread = NULL;
-        Prcb->CurrentThread = NewThread;
-
-        NewThread->State = Running;
-        OldThread->WaitReason = WrDispatchInt;
-
-        KxQueueReadyThread(OldThread, Prcb);
-
-        KiSwapContext(APC_LEVEL, OldThread);
-    }
+    KiFinishDispatchInterrupt(Prcb);
 }

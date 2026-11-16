@@ -562,6 +562,14 @@ KiDispatchExceptionToUser(
 VOID
 KiPrepareUserDebugData(VOID);
 
+BOOLEAN
+KiDpcWorkPending(
+    _In_ PKPRCB Prcb);
+
+VOID
+KiFinishDispatchInterrupt(
+    _Inout_ PKPRCB Prcb);
+
 VOID
 KiSetupUserCalloutFrame(
     _Out_ KI_USER_CALLOUT_FRAME *UserCalloutFrame,
