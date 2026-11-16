@@ -57,6 +57,7 @@ list(APPEND SOURCE
     ServiceArgs.c
     ServiceCrash.c
     ServiceEnv.c
+    ServiceRegistryState.c
     ServiceNetwork.c
     ServicePowerSetting.c
     StartServiceCtrlDispatcher.c

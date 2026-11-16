@@ -613,6 +613,20 @@ _Must_inspect_result_ SERVICE_STATUS_HANDLE WINAPI RegisterServiceCtrlHandlerExW
 BOOL WINAPI SetServiceObjectSecurity(_In_ SC_HANDLE, _In_ SECURITY_INFORMATION, _In_ PSECURITY_DESCRIPTOR);
 BOOL WINAPI SetServiceStatus(_In_ SERVICE_STATUS_HANDLE, _In_ LPSERVICE_STATUS);
 
+typedef enum SERVICE_REGISTRY_STATE_TYPE {
+  ServiceRegistryStateParameters = 0,
+  ServiceRegistryStatePersistent = 1,
+  MaxServiceRegistryStateType = 2
+} SERVICE_REGISTRY_STATE_TYPE;
+
+DWORD
+WINAPI
+GetServiceRegistryStateKey(
+  _In_ SERVICE_STATUS_HANDLE ServiceStatusHandle,
+  _In_ SERVICE_REGISTRY_STATE_TYPE StateType,
+  _In_ DWORD AccessMask,
+  _Out_ HKEY *ServiceStateKey);
+
 BOOL
 WINAPI
 StartServiceA(

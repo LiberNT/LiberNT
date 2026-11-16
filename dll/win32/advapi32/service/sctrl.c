@@ -852,6 +852,68 @@ RegisterServiceCtrlHandlerExW(LPCWSTR lpServiceName,
 
 
 /**********************************************************************
+ *  GetServiceRegistryStateKey
+ *
+ * Exported by ordinal only: sechost exports the name, as on Windows.
+ *
+ * @implemented
+ */
+DWORD
+WINAPI
+GetServiceRegistryStateKey(
+    _In_ SERVICE_STATUS_HANDLE ServiceStatusHandle,
+    _In_ SERVICE_REGISTRY_STATE_TYPE StateType,
+    _In_ DWORD AccessMask,
+    _Out_ HKEY *ServiceStateKey)
+{
+    static PCWSTR const Subkeys[MaxServiceRegistryStateType] = { L"Parameters", L"State" };
+    PACTIVE_SERVICE Service = NULL;
+    WCHAR KeyPath[MAX_PATH];
+    DWORD i;
+    LONG Error;
+    int Length;
+
+    TRACE("GetServiceRegistryStateKey(%p %d %lx %p)\n",
+          ServiceStatusHandle, StateType, AccessMask, ServiceStateKey);
+
+    if (ServiceStateKey == NULL || (ULONG)StateType >= MaxServiceRegistryStateType)
+        return ERROR_INVALID_PARAMETER;
+    *ServiceStateKey = NULL;
+
+    for (i = 0; lpActiveServices != NULL && i < dwActiveServiceCount; i++)
+    {
+        if (ServiceStatusHandle != NULL && lpActiveServices[i].hServiceStatus == ServiceStatusHandle)
+        {
+            Service = &lpActiveServices[i];
+            break;
+        }
+    }
+    if (Service == NULL)
+        return ERROR_INVALID_HANDLE;
+    ASSERT(Service->ServiceName.Buffer != NULL);
+
+    Length = _snwprintf(KeyPath, _countof(KeyPath), L"SYSTEM\\CurrentControlSet\\Services\\%.*s\\%s",
+                        (int)(Service->ServiceName.Length / sizeof(WCHAR)), Service->ServiceName.Buffer,
+                        Subkeys[StateType]);
+    if (Length < 0 || Length >= (int)_countof(KeyPath))
+        return ERROR_BUFFER_OVERFLOW;
+
+    if (StateType == ServiceRegistryStateParameters)
+    {
+        Error = RegOpenKeyExW(HKEY_LOCAL_MACHINE, KeyPath, 0, AccessMask, ServiceStateKey);
+    }
+    else
+    {
+        /* TODO: restrict write access to LocalSystem and the service SID, as documented for the persistent state */
+        Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE, KeyPath, 0, NULL, REG_OPTION_NON_VOLATILE,
+                                AccessMask, NULL, ServiceStateKey, NULL);
+    }
+    ASSERT(Error != ERROR_SUCCESS || *ServiceStateKey != NULL);
+    return (DWORD)Error;
+}
+
+
+/**********************************************************************
  *  I_ScIsSecurityProcess
  *
  * Undocumented

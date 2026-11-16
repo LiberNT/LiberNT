@@ -101,7 +101,7 @@
 @ stub GetServiceDirectory
 @ stdcall GetServiceDisplayNameW(ptr wstr ptr ptr) advapi32.GetServiceDisplayNameW
 @ stdcall GetServiceKeyNameW(long wstr ptr ptr) advapi32.GetServiceKeyNameW
-@ stub GetServiceRegistryStateKey
+@ stdcall GetServiceRegistryStateKey(ptr long long ptr) advapi32.#1000
 @ stub I_QueryTagInformation
 @ stub I_RegisterSvchostNotificationCallback
 @ stub I_ScBroadcastServiceControlMessage
