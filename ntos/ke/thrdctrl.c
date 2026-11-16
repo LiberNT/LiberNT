@@ -1299,7 +1299,7 @@ KeSetSystemAffinityThreadEx(
     KAFFINITY OldAffinity;
 
     ASSERT((Affinity & KeActiveProcessors) != 0);
-    ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
+    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
     OldIrql = KiAcquireDispatcherLock();
     KiAcquireThreadLock(Thread);
@@ -1337,7 +1337,7 @@ KeRevertToUserAffinityThreadEx(
     PKTHREAD Thread = KeGetCurrentThread();
     KIRQL OldIrql;
 
-    ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
+    ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
     OldIrql = KiAcquireDispatcherLock();
     KiAcquireThreadLock(Thread);

@@ -119,6 +119,57 @@ TestNestedAffinity(VOID)
 
 static
 VOID
+TestDeferredAffinity(VOID)
+{
+    KAFFINITY Active = KeQueryActiveProcessors();
+    KAFFINITY Old;
+    ULONG FirstCpu, SecondCpu, i;
+    KIRQL Irql;
+
+    FirstCpu = 0;
+    SecondCpu = 0;
+    for (i = 0; i < sizeof(KAFFINITY) * 8; i++)
+    {
+        if (Active & ((KAFFINITY)1 << i))
+        {
+            FirstCpu = i;
+            break;
+        }
+    }
+    for (i = FirstCpu + 1; i < sizeof(KAFFINITY) * 8; i++)
+    {
+        if (Active & ((KAFFINITY)1 << i))
+        {
+            SecondCpu = i;
+            break;
+        }
+    }
+    if (SecondCpu == 0)
+    {
+        skip(FALSE, "uniprocessor, deferred affinity not exercised\n");
+        return;
+    }
+
+    Old = KeSetSystemAffinityThreadEx((KAFFINITY)1 << FirstCpu);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), FirstCpu);
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    (VOID)KeSetSystemAffinityThreadEx((KAFFINITY)1 << SecondCpu);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), FirstCpu);
+    KeLowerIrql(Irql);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), SecondCpu);
+
+    KeRaiseIrql(DISPATCH_LEVEL, &Irql);
+    KeRevertToUserAffinityThreadEx((KAFFINITY)1 << FirstCpu);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), SecondCpu);
+    KeLowerIrql(Irql);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), FirstCpu);
+
+    KeRevertToUserAffinityThreadEx(Old);
+}
+
+static
+VOID
 TestProcessorRelationships(VOID)
 {
     static const LOGICAL_PROCESSOR_RELATIONSHIP Domains[] =
@@ -222,5 +273,6 @@ START_TEST(KeAffinityKM)
     TestProcessorCounts();
     TestAffinityPinning();
     TestNestedAffinity();
+    TestDeferredAffinity();
     TestProcessorRelationships();
 }
