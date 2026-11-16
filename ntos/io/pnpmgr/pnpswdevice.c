@@ -47,6 +47,7 @@ static const WCHAR PnpSwContainerId[] = L"{00000000-0000-0000-ffff-ffffffffffff}
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
+#if DBG
 static
 BOOLEAN
 PnpSwIsLockHeld(VOID)
@@ -54,6 +55,7 @@ PnpSwIsLockHeld(VOID)
     return ExIsResourceAcquiredExclusiveLite(&PnpSwDeviceLock) ||
            ExIsResourceAcquiredSharedLite(&PnpSwDeviceLock) != 0;
 }
+#endif
 
 static
 VOID

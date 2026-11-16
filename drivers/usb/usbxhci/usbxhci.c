@@ -29,12 +29,14 @@ static VOID XHCI_ReleaseSpinLock(_Inout_ PKSPIN_LOCK SpinLock, _In_ KIRQL OldIrq
         KeReleaseSpinLock(SpinLock, OldIrql);
 }
 
+#if DBG
 static inline BOOLEAN XHCI_IsLockIrql(VOID)
 {
     KIRQL Irql = KeGetCurrentIrql();
 
     return Irql == DISPATCH_LEVEL || Irql == HIGH_LEVEL;
 }
+#endif
 
 #undef KeAcquireSpinLock
 #undef KeReleaseSpinLock

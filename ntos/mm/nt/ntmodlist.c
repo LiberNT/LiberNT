@@ -26,12 +26,14 @@ MiModuleFromLink(
     return CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 }
 
+#if DBG
 static
 BOOLEAN
 MiOwnsSystemImages(VOID)
 {
     return (BOOLEAN)(MmSystemLoadLock.OwnerThread == KeGetCurrentThread());
 }
+#endif
 
 VOID
 MiLockSystemImages(VOID)
