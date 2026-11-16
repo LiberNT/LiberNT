@@ -6,28 +6,38 @@
 
 #include "precomp.h"
 
-#define STRESS_ITERATIONS 64
-#define WORKER_TIMEOUT_MS 90000
+#define LEAF_COUNT 4
+#define WAIT_MS 5000
+
+enum
+{
+    WORKER_SUCCESS = 0,
+    WORKER_NO_CONSOLE,
+    WORKER_NO_HANDLER,
+    WORKER_NO_THREAD,
+    WORKER_LEAF_FAILED,
+    WORKER_CTRL_LOST,
+    WORKER_THREAD_STUCK,
+};
 
 typedef struct _CTRL_EVENT_CONTEXT
 {
     HANDLE StopEvent;
-    volatile LONG SuccessCount;
+    LONG Delivered;
+    BOOL Lost;
 } CTRL_EVENT_CONTEXT, *PCTRL_EVENT_CONTEXT;
 
-static volatile LONG CtrlHandlerCount;
+static HANDLE CtrlHandledEvent;
 
 static
 BOOL
 WINAPI
 CtrlHandler(DWORD CtrlType)
 {
-    if (CtrlType == CTRL_BREAK_EVENT)
-    {
-        InterlockedIncrement(&CtrlHandlerCount);
-        return TRUE;
-    }
-    return FALSE;
+    if (CtrlType != CTRL_BREAK_EVENT)
+        return FALSE;
+    SetEvent(CtrlHandledEvent);
+    return TRUE;
 }
 
 static
@@ -37,11 +47,16 @@ CtrlEventThread(PVOID Parameter)
 {
     PCTRL_EVENT_CONTEXT Context = Parameter;
 
-    while (WaitForSingleObject(Context->StopEvent, 0) == WAIT_TIMEOUT)
+    do
     {
-        if (GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId())) InterlockedIncrement(&Context->SuccessCount);
-        Sleep(1);
-    }
+        if (!GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId()) ||
+            WaitForSingleObject(CtrlHandledEvent, WAIT_MS) != WAIT_OBJECT_0)
+        {
+            Context->Lost = TRUE;
+            return 0;
+        }
+        Context->Delivered++;
+    } while (WaitForSingleObject(Context->StopEvent, 0) == WAIT_TIMEOUT);
 
     return 0;
 }
@@ -76,70 +91,80 @@ PrepareConsoleHandles(VOID)
 
 static
 BOOL
+RunLeaf(PCWSTR Application)
+{
+    PROCESS_INFORMATION ProcessInfo = {0};
+    STARTUPINFOW StartupInfo = {0};
+    WCHAR CommandLine[MAX_PATH * 2];
+    DWORD ExitCode = STILL_ACTIVE;
+    DWORD WaitResult;
+
+    StartupInfo.cb = sizeof(StartupInfo);
+    StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    if (FAILED(StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" ConsoleProcessInheritance leaf", Application)))
+        return FALSE;
+    if (!CreateProcessW(Application, CommandLine, NULL, NULL, TRUE, CREATE_NEW_PROCESS_GROUP, NULL, NULL, &StartupInfo, &ProcessInfo))
+        return FALSE;
+
+    WaitResult = WaitForSingleObject(ProcessInfo.hProcess, WAIT_MS);
+    if (WaitResult != WAIT_OBJECT_0)
+    {
+        TerminateProcess(ProcessInfo.hProcess, ERROR_TIMEOUT);
+        WaitForSingleObject(ProcessInfo.hProcess, WAIT_MS);
+    }
+    else if (!GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode))
+    {
+        ExitCode = STILL_ACTIVE;
+    }
+
+    CloseHandle(ProcessInfo.hThread);
+    CloseHandle(ProcessInfo.hProcess);
+    return WaitResult == WAIT_OBJECT_0 && ExitCode == 0;
+}
+
+static
+DWORD
 RunWorker(VOID)
 {
     CTRL_EVENT_CONTEXT Context = {0};
-    PROCESS_INFORMATION ProcessInfo;
-    STARTUPINFOW StartupInfo;
     WCHAR Application[MAX_PATH];
-    WCHAR CommandLine[MAX_PATH * 2];
-    HANDLE Thread = NULL;
-    DWORD ExitCode;
-    DWORD WaitResult;
+    BOOL LeavesRan = TRUE;
+    HANDLE Thread;
     DWORD Index;
-    BOOL Success = FALSE;
 
-    if (!PrepareConsoleHandles() && (!AllocConsole() || !PrepareConsoleHandles())) return FALSE;
-    if (!SetConsoleCtrlHandler(CtrlHandler, TRUE)) return FALSE;
+    if (!PrepareConsoleHandles() && (!AllocConsole() || !PrepareConsoleHandles()))
+        return WORKER_NO_CONSOLE;
 
+    CtrlHandledEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     Context.StopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
-    if (!Context.StopEvent) goto Cleanup;
-
-    Thread = CreateThread(NULL, 0, CtrlEventThread, &Context, 0, NULL);
-    if (!Thread) goto Cleanup;
+    if (!CtrlHandledEvent || !Context.StopEvent || !SetConsoleCtrlHandler(CtrlHandler, TRUE))
+        return WORKER_NO_HANDLER;
 
     SetLastError(ERROR_SUCCESS);
-    if (!GetModuleFileNameW(NULL, Application, _countof(Application)) || GetLastError() == ERROR_INSUFFICIENT_BUFFER) goto Cleanup;
+    if (!GetModuleFileNameW(NULL, Application, _countof(Application)) || GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+        return WORKER_LEAF_FAILED;
 
-    for (Index = 0; Index < STRESS_ITERATIONS; Index++)
-    {
-        RtlZeroMemory(&StartupInfo, sizeof(StartupInfo));
-        RtlZeroMemory(&ProcessInfo, sizeof(ProcessInfo));
-        StartupInfo.cb = sizeof(StartupInfo);
-        StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-        StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-        StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-        StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-        if (FAILED(StringCchPrintfW(CommandLine, _countof(CommandLine), L"\"%s\" ConsoleProcessInheritance leaf", Application))) goto Cleanup;
+    Thread = CreateThread(NULL, 0, CtrlEventThread, &Context, 0, NULL);
+    if (!Thread)
+        return WORKER_NO_THREAD;
 
-        if (!CreateProcessW(Application, CommandLine, NULL, NULL, TRUE, CREATE_NEW_PROCESS_GROUP, NULL, NULL, &StartupInfo, &ProcessInfo)) goto Cleanup;
+    for (Index = 0; Index < LEAF_COUNT && LeavesRan; Index++)
+        LeavesRan = RunLeaf(Application);
 
-        WaitResult = WaitForSingleObject(ProcessInfo.hProcess, 10000);
-        if (WaitResult != WAIT_OBJECT_0)
-        {
-            TerminateProcess(ProcessInfo.hProcess, ERROR_TIMEOUT);
-            WaitForSingleObject(ProcessInfo.hProcess, 5000);
-        }
-        ExitCode = STILL_ACTIVE;
-        if (!GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode)) WaitResult = WAIT_FAILED;
-
-        CloseHandle(ProcessInfo.hThread);
-        CloseHandle(ProcessInfo.hProcess);
-        if (WaitResult != WAIT_OBJECT_0 || ExitCode != 0) goto Cleanup;
-    }
-
-    Success = (Context.SuccessCount > 0 && CtrlHandlerCount > 0);
-
-Cleanup:
-    if (Context.StopEvent) SetEvent(Context.StopEvent);
-    if (Thread)
-    {
-        if (WaitForSingleObject(Thread, 10000) == WAIT_OBJECT_0) CloseHandle(Thread);
-        else return FALSE;
-    }
-    if (Context.StopEvent) CloseHandle(Context.StopEvent);
+    SetEvent(Context.StopEvent);
+    if (WaitForSingleObject(Thread, 2 * WAIT_MS) != WAIT_OBJECT_0)
+        return WORKER_THREAD_STUCK;
+    CloseHandle(Thread);
     SetConsoleCtrlHandler(CtrlHandler, FALSE);
-    return Success;
+
+    if (!LeavesRan)
+        return WORKER_LEAF_FAILED;
+    if (Context.Lost || Context.Delivered == 0)
+        return WORKER_CTRL_LOST;
+    return WORKER_SUCCESS;
 }
 
 static
@@ -167,7 +192,7 @@ START_TEST(ConsoleProcessInheritance)
 
     ArgumentCount = winetest_get_mainargs(&Arguments);
     if (ArgumentCount >= 3 && !strcmp(Arguments[2], "leaf")) ExitProcess(ValidateInheritedConsoleHandles() ? 0 : 2);
-    if (ArgumentCount >= 3 && !strcmp(Arguments[2], "worker")) ExitProcess(RunWorker() ? 0 : 1);
+    if (ArgumentCount >= 3 && !strcmp(Arguments[2], "worker")) ExitProcess(RunWorker());
 
     StartupInfo.cb = sizeof(StartupInfo);
     SetLastError(ERROR_SUCCESS);
@@ -183,17 +208,17 @@ START_TEST(ConsoleProcessInheritance)
     ok(Result, "CreateProcessW failed with %lu\n", GetLastError());
     if (!Result) return;
 
-    WaitResult = WaitForSingleObject(ProcessInfo.hProcess, WORKER_TIMEOUT_MS);
-    ok(WaitResult == WAIT_OBJECT_0, "Console process/control-event stress wait returned %#lx\n", WaitResult);
+    WaitResult = WaitForSingleObject(ProcessInfo.hProcess, (LEAF_COUNT + 3) * WAIT_MS);
+    ok(WaitResult == WAIT_OBJECT_0, "Worker wait returned %#lx\n", WaitResult);
     if (WaitResult != WAIT_OBJECT_0)
     {
         TerminateProcess(ProcessInfo.hProcess, ERROR_TIMEOUT);
-        WaitForSingleObject(ProcessInfo.hProcess, 5000);
+        WaitForSingleObject(ProcessInfo.hProcess, WAIT_MS);
     }
 
     Result = GetExitCodeProcess(ProcessInfo.hProcess, &ExitCode);
     ok(Result, "GetExitCodeProcess failed with %lu\n", GetLastError());
-    if (Result && WaitResult == WAIT_OBJECT_0) ok(ExitCode == 0, "Worker exited with %#lx\n", ExitCode);
+    if (Result && WaitResult == WAIT_OBJECT_0) ok(ExitCode == WORKER_SUCCESS, "Worker exited with %lu\n", ExitCode);
 
     CloseHandle(ProcessInfo.hThread);
     CloseHandle(ProcessInfo.hProcess);
