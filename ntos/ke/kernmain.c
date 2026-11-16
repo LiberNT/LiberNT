@@ -586,4 +586,30 @@ KeExpandKernelStackAndCallout(
                                            NULL);
 }
 
+VOID
+NTAPI
+KiInitializeStartupThread(
+    _In_ PKPRCB Prcb,
+    _Out_ PKTHREAD Thread,
+    _Inout_ PKPROCESS Process,
+    _In_ PVOID Stack,
+    _In_opt_ PKSYSTEM_ROUTINE SystemRoutine,
+    _In_opt_ PKSTART_ROUTINE StartRoutine)
+{
+    ASSERT(Prcb == KeGetCurrentPrcb());
+    ASSERT(Stack != NULL);
+
+    KeInitializeThread(Process, Thread, SystemRoutine, StartRoutine, NULL, NULL, NULL, Stack);
+
+    Thread->NextProcessor = Prcb->Number;
+    Thread->IdealProcessor = Prcb->Number;
+    Thread->Priority = HIGH_PRIORITY;
+    Thread->State = Running;
+    if (KI_THREAD_HANDOFF_USES_RUNNING)
+        Thread->Running = TRUE;
+    KiThreadAffinityMask(Thread) = AFFINITY_MASK(Prcb->Number);
+    Thread->WaitIrql = DISPATCH_LEVEL;
+    InterlockedBitTestAndSetAffinity(&Process->ActiveProcessors, Prcb->Number);
+}
+
 /* EOF */

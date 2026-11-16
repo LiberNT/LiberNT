@@ -1109,6 +1109,22 @@ NTAPI
 KiInitSystem(VOID);
 
 VOID
+NTAPI
+KiInitializeStartupThread(
+    _In_ PKPRCB Prcb,
+    _Out_ PKTHREAD Thread,
+    _Inout_ PKPROCESS Process,
+    _In_ PVOID Stack,
+    _In_opt_ PKSYSTEM_ROUTINE SystemRoutine,
+    _In_opt_ PKSTART_ROUTINE StartRoutine);
+
+VOID
+NTAPI
+KiYieldStartupProcessor(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD StartupThread);
+
+VOID
 FASTCALL
 KiRunStackCallout(
     _In_ PVOID Context);

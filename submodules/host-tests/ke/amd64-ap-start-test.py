@@ -67,7 +67,7 @@ static KPROCESS Process;
 static KTHREAD Thread1;
 static LOADER_PARAMETER_BLOCK Loader, *KeLoaderBlock = &Loader;
 static PKPRCB KiFreezeOwner, KiFreezeActiveSetOwner __attribute__((unused));
-static KAFFINITY KeActiveProcessors, KiIdleSummary;
+static KAFFINITY KeActiveProcessors;
 static KSPIN_LOCK KiFreezeExecutionLock __attribute__((unused));
 static KIRQL Irql;
 static BOOLEAN InterruptsEnabled;
@@ -93,13 +93,11 @@ static void KiGetCacheInformation(void) {}
 static void KiInitSpinLocks(PKPRCB Prcb, ULONG Number) { (void)Prcb; (void)Number; }
 static void ExInitPoolLookasidePointers(void) {}
 static void KiInitializeKernel(PKPROCESS p, PKTHREAD t, PVOID s, PKPRCB r, PLOADER_PARAMETER_BLOCK l) { (void)p; (void)t; (void)s; (void)r; (void)l; CHECK(0); }
-static void KiInitializeHandBuiltThread(PKTHREAD t, PKPROCESS p, PVOID s) { (void)t; (void)p; (void)s; }
+static void KiInitializeStartupThread(PKPRCB r, PKTHREAD t, PKPROCESS p, PVOID s, PVOID sr, PVOID st) { (void)r; (void)t; (void)p; (void)s; (void)sr; (void)st; }
 static void KiCalculateCpuFrequency(PKPRCB Prcb) { (void)Prcb; }
 static KIRQL KfRaiseIrql(KIRQL New) { KIRQL Old = Irql; CheckActive(); Irql = New; return Old; }
+static void KiYieldStartupProcessor(PKPRCB Prcb, PKTHREAD t) { (void)Prcb; (void)t; KfRaiseIrql(DISPATCH_LEVEL); }
 static void KeLowerIrql(KIRQL New) { CheckActive(); Irql = New; }
-static void KeSetPriorityThread(PKTHREAD t, long p) { (void)t; (void)p; }
-static void KiAcquirePrcbLock(PKPRCB Prcb) { (void)Prcb; }
-static void KiReleasePrcbLock(PKPRCB Prcb) { (void)Prcb; }
 static void _enable(void) { CheckActive(); InterruptsEnabled = TRUE; }
 __attribute__((unused)) static BOOLEAN InterlockedBitTestAndSet64(PLONG64 Base, LONG64 Bit) { return (__sync_fetch_and_or(Base, 1LL << Bit) >> Bit) & 1; }
 __attribute__((unused)) static LONG64 InterlockedAnd64(PLONG64 Base, LONG64 Mask) { CheckActive(); return __sync_fetch_and_and(Base, Mask); }

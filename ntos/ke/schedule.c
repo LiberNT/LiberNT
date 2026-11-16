@@ -550,6 +550,24 @@ KiSelectNextThread(
     return Thread;
 }
 
+VOID
+NTAPI
+KiYieldStartupProcessor(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD StartupThread)
+{
+    ASSERT(Prcb == KeGetCurrentPrcb());
+    ASSERT(Prcb->IdleThread == StartupThread);
+
+    KfRaiseIrql(DISPATCH_LEVEL);
+    KeSetPriorityThread(StartupThread, 0);
+
+    KiAcquirePrcbLock(Prcb);
+    if (Prcb->NextThread == NULL)
+        KiMarkProcessorIdle(Prcb);
+    KiReleasePrcbLock(Prcb);
+}
+
 /*
  * Takes the highest-priority thread on another processor's ready queues that
  * may run on this one. An idle processor does this so that work queued while

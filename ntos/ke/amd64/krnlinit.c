@@ -81,27 +81,6 @@ KiCalculateCpuFrequency(
     DPRINT1("Sampling CPU frequency failed. Using average of %lu MHz\n", Prcb->MHz);
 }
 
-VOID
-NTAPI
-KiInitializeHandBuiltThread(
-    _Inout_ PKTHREAD Thread,
-    _Inout_ PKPROCESS Process,
-    _In_ PVOID Stack)
-{
-    PKPRCB Prcb = KeGetCurrentPrcb();
-
-    KeInitializeThread(Process, Thread, NULL, NULL, NULL, NULL, NULL, Stack);
-
-    Thread->NextProcessor = Prcb->Number;
-    Thread->IdealProcessor = Prcb->Number;
-    Thread->Priority = HIGH_PRIORITY;
-    Thread->State = Running;
-    Thread->Running = TRUE;
-    Thread->Affinity = (ULONG_PTR)1 << Prcb->Number;
-    Thread->WaitIrql = DISPATCH_LEVEL;
-    Process->ActiveProcessors |= (ULONG_PTR)1 << Prcb->Number;
-}
-
 CODE_SEG("INIT")
 DECLSPEC_NORETURN
 VOID
@@ -137,19 +116,13 @@ KiSystemStartupBootStack(VOID)
     if (Prcb->Number == 0)
         KiInitializeKernel(Process, Thread, KernelStack, Prcb, LoaderBlock);
     else
-        KiInitializeHandBuiltThread(Thread, Process, KernelStack);
+        KiInitializeStartupThread(Prcb, Thread, Process, KernelStack, NULL, NULL);
 
     KiCalculateCpuFrequency(Prcb);
     KiAmd64BootMark(BootMarkCpuFrequency);
 
-    KfRaiseIrql(DISPATCH_LEVEL);
-
     /* Dropping the startup thread to priority 0 lets the phase 1 thread run */
-    KeSetPriorityThread(Thread, 0);
-
-    KiAcquirePrcbLock(Prcb);
-    if (!Prcb->NextThread) KiIdleSummary |= (ULONG_PTR)1 << Prcb->Number;
-    KiReleasePrcbLock(Prcb);
+    KiYieldStartupProcessor(Prcb, Thread);
 
     /* Clearing the mailbox only says the processor exists; it cannot take an IPI yet */
     KfRaiseIrql(HIGH_LEVEL);
@@ -195,7 +168,7 @@ KiInitializeKernel(
     KeInitializeProcess(InitProcess, 0, MAXULONG_PTR, PageDirectory, FALSE);
     InitProcess->QuantumReset = MAXCHAR;
 
-    KiInitializeHandBuiltThread(InitThread, InitProcess, IdleStack);
+    KiInitializeStartupThread(Prcb, InitThread, InitProcess, IdleStack, NULL, NULL);
 
     KiAmd64BootMark(BootMarkExecutiveEntry);
     ExpInitializeExecutive(0, LoaderBlock);

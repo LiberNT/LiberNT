@@ -456,23 +456,8 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
         DPRINT1("Starting CPU#%u - you are brave\n", Number);
     }
 
-    KeInitializeThread(InitProcess,
-                       InitThread,
-                       NULL,
-                       NULL,
-                       NULL,
-                       NULL,
-                       NULL,
-                       IdleStack);
-    InitThread->NextProcessor = Number;
-    InitThread->Priority = HIGH_PRIORITY;
-    InitThread->State = Running;
-    InitThread->Affinity.Mask = 1 << Number;
-    InitThread->Affinity.Group = 0;
-    InitThread->WaitIrql = DISPATCH_LEVEL;
-    InitProcess->ActiveProcessors |= 1 << Number;
-
-    ((PETHREAD)InitThread)->Tcb.Process = InitProcess;
+    ASSERT(Prcb->Number == (UCHAR)Number);
+    KiInitializeStartupThread(Prcb, InitThread, InitProcess, IdleStack, NULL, NULL);
 
     SharedUserData->ProcessorFeatures[PF_FLOATING_POINT_PRECISION_ERRATA] = FALSE;
     SharedUserData->ProcessorFeatures[PF_MMX_INSTRUCTIONS_AVAILABLE] =
@@ -530,13 +515,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
         }
     }
 
-    KeRaiseIrql(DISPATCH_LEVEL, &DummyIrql);
-
-    KeSetPriorityThread(InitThread, 0);
-
-    KiAcquirePrcbLock(Prcb);
-    if (!Prcb->NextThread) KiIdleSummary |= 1 << Number;
-    KiReleasePrcbLock(Prcb);
+    KiYieldStartupProcessor(Prcb, InitThread);
 
     KeRaiseIrql(HIGH_LEVEL, &DummyIrql);
     LoaderBlock->Prcb = 0;

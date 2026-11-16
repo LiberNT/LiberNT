@@ -626,14 +626,13 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
         KiArm64WriteUserTtbr(UserRoot, KernelRoot, 0, TRUE);
     }
     /* quiet */
-    KeInitializeThread(InitProcess,
-                       InitThread,
-                       KiArm64SystemStartupWrapper,
-                       KiArm64IdleStartRoutine,
-                       NULL,
-                       NULL,
-                       NULL,
-                       IdleStack);
+    ASSERT(Prcb->Number == (UCHAR)Number);
+    KiInitializeStartupThread(Prcb,
+                              InitThread,
+                              InitProcess,
+                              IdleStack,
+                              KiArm64SystemStartupWrapper,
+                              KiArm64IdleStartRoutine);
 
     if ((IdleStack == KiArm64P0BootStack) && (KiArm64P0BootStackLimit != NULL))
     {
@@ -645,19 +644,6 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
         StackControl->StackBase = (ULONG_PTR)KiArm64P0BootStack;
         StackControl->ActualLimit = (ULONG_PTR)KiArm64P0BootStackLimit;
     }
-
-    InitThread->NextProcessor = Number;
-    InitThread->Priority = HIGH_PRIORITY;
-    InitThread->State = Running;
-    InitThread->Running = TRUE;
-    InitThread->Affinity = ((KAFFINITY)1 << Number);
-    InitThread->WaitIrql = DISPATCH_LEVEL;
-    InitProcess->ActiveProcessors |= ((KAFFINITY)1 << Number);
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
-    ((PETHREAD)InitThread)->Tcb.Process = InitProcess;
-#else
-    ((PETHREAD)InitThread)->ThreadsProcess = (PEPROCESS)InitProcess;
-#endif
     /* quiet */
 
     Prcb->CurrentThread = InitThread;
@@ -709,15 +695,7 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
         Thread = InitThread;
     }
 
-    KfRaiseIrql(DISPATCH_LEVEL);
-    KeSetPriorityThread(Thread, 0);
-
-    KiAcquirePrcbLock(Prcb);
-    if (Prcb->NextThread == NULL)
-    {
-        InterlockedOr64((PLONG64)&KiIdleSummary, (LONG64)((KAFFINITY)1 << Number));
-    }
-    KiReleasePrcbLock(Prcb);
+    KiYieldStartupProcessor(Prcb, Thread);
 
     if (Number != 0)
     {
