@@ -23,6 +23,7 @@
 #include <userenv.h>
 
 #define NTOS_MODE_USER
+#include <ndk/obfuncs.h>
 #include <ndk/rtlfuncs.h>
 
 #include <wine/debug.h>

@@ -9,6 +9,7 @@ list(APPEND SOURCE
     CopySid.c
     RedistributableFileOwner.c
     CreateProcessWithToken.c
+    CreateProcessWithTokenChild.c
     CreateService.c
     CryptCreateHash.c
     DuplicateTokenEx.c
