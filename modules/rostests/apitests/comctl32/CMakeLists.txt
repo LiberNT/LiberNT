@@ -5,6 +5,7 @@ list(APPEND SOURCE
     ClassModule.c
     EditImeContext.c
     imagelist.c
+    ListViewActivate.c
     ListViewGroups.c
     LoadIconWithScaleDown.c
     propsheet.c
