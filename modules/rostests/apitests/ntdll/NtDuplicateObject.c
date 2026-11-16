@@ -122,14 +122,18 @@ ExpectDuplicate(
     ACCESS_MASK ExpectedGranted)
 {
     OBJECT_BASIC_INFORMATION Basic;
-    HANDLE Handle = NULL;
+    HANDLE Handle = (HANDLE)(ULONG_PTR)0xdeadbeef;
     NTSTATUS Status;
 
     Status = NtDuplicateObject(NtCurrentProcess(), Source, NtCurrentProcess(),
                                &Handle, Desired, 0, 0);
     ok(Status == ExpectedStatus, "%s: Status = %lx, expected %lx\n",
        Name, Status, ExpectedStatus);
-    if (!NT_SUCCESS(Status)) return;
+    if (!NT_SUCCESS(Status))
+    {
+        ok(Handle == NULL, "%s: Handle = %p after a failed duplicate\n", Name, Handle);
+        return;
+    }
 
     Status = NtQueryObject(Handle, ObjectBasicInformation, &Basic, sizeof(Basic), NULL);
     ok_hex(Status, STATUS_SUCCESS);
@@ -159,6 +163,12 @@ TestDuplicateAccessMask(VOID)
     ExpectDuplicate("event undefined bit", Event, 0x0004, STATUS_SUCCESS, 0);
     ExpectDuplicate("event GENERIC_ALL", Event, GENERIC_ALL, STATUS_SUCCESS, EVENT_ALL_ACCESS);
     ExpectDuplicate("event MAXIMUM_ALLOWED", Event, MAXIMUM_ALLOWED, STATUS_SUCCESS, 0);
+    ExpectDuplicate("event reserved bits", Event, 0x00E00000, STATUS_ACCESS_DENIED, 0);
+    ExpectDuplicate("process all bits", NtCurrentProcess(), 0xFFFFFFFF, STATUS_ACCESS_DENIED, 0);
+    ExpectDuplicate("process reserved standard bits", NtCurrentProcess(), 0x00E00000, STATUS_ACCESS_DENIED, 0);
+    ExpectDuplicate("process reserved bits 26-27", NtCurrentProcess(), 0x0C000000, STATUS_ACCESS_DENIED, 0);
+    ExpectDuplicate("process MAXIMUM_ALLOWED", NtCurrentProcess(), MAXIMUM_ALLOWED, STATUS_SUCCESS, 0);
+    ExpectDuplicate("process specific bits", NtCurrentProcess(), 0x0000FFFF, STATUS_SUCCESS, 0x0000FFFF);
 
     NtClose(Event);
     NtClose(Mutant);

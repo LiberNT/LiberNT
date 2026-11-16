@@ -16,6 +16,7 @@ PHANDLE_TABLE ObpKernelHandleTable = NULL;
 /* The handle database grows in steps so a popular object does not reallocate
  * on every open. */
 #define OBP_HANDLE_DATABASE_STEP 4
+#define OBP_RESERVED_ACCESS_BITS 0x0CE00000UL
 
 /* PROCESS HANDLE TABLES ******************************************************/
 
@@ -2436,6 +2437,15 @@ ObDuplicateObject(
 
         ObDereferenceObject(Object);
         return STATUS_SUCCESS;
+    }
+
+    /* Reserved access bits refuse the duplicate before any type or privilege check */
+    if (!(Options & DUPLICATE_SAME_ACCESS) && (DesiredAccess & OBP_RESERVED_ACCESS_BITS) != 0)
+    {
+        if (Options & DUPLICATE_CLOSE_SOURCE)
+            ObpCloseSourceHandle(SourceProcess, SourceHandle, PreviousMode);
+        ObDereferenceObject(Object);
+        return STATUS_ACCESS_DENIED;
     }
 
     /* A handle the kernel asks for of its own goes in the kernel's table,
