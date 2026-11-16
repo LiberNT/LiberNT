@@ -81,6 +81,11 @@ FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreIsTransientStatus(_In_ NTSTATUS Status)
     return Status == STATUS_RETRY || Status == STATUS_INSUFFICIENT_RESOURCES || Status == STATUS_NO_MEMORY || Status == STATUS_DEVICE_NOT_READY || Status == STATUS_DEVICE_BUSY || Status == STATUS_IO_TIMEOUT;
 }
 
+FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreAwaitsEnumerationLocked(_In_ volatile const LONG *Enumerated)
+{
+    return *Enumerated == 0;
+}
+
 FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreShouldRetry(_In_ NTSTATUS Status, _In_ ULONG RetryCount)
 {
     return RetryCount < DXGK_HOTPLUG_MAX_TRANSIENT_RETRIES && DxgkHotPlugWorkCoreIsTransientStatus(Status);

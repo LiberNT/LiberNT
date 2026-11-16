@@ -2763,6 +2763,7 @@ DxgkpHotPlugRebuildWorker(
     LONG64 ObservedGeneration;
     LONG64 RetryGeneration = 0;
     ULONG RetryCount = 0;
+    BOOLEAN AwaitsEnumeration;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -2798,8 +2799,9 @@ DxgkpHotPlugRebuildWorker(
             RetryGeneration = ObservedGeneration;
             RetryCount = 0;
         }
+        AwaitsEnumeration = DxgkHotPlugWorkCoreAwaitsEnumerationLocked(&Adapter->ChildRelationsEnumerated);
         KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
-        Status = DxgkpVidPnRebuildForHotPlugGeneration(Adapter, ObservedGeneration);
+        Status = AwaitsEnumeration ? STATUS_SUCCESS : DxgkpVidPnRebuildForHotPlugGeneration(Adapter, ObservedGeneration);
         KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
         if (Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0)
         {
