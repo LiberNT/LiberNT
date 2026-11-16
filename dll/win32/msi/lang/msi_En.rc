@@ -223,3 +223,14 @@ STRINGTABLE
     IDS_TEMP_WRITEINIVALUES "File: [1],  Section: [2],  Key: [3], Value: [4]"
     IDS_TEMP_WRITEREGISTRYVALUES "Key: [1], Name: [2], Value: [3]"
 }
+
+#ifdef __REACTOS__
+STRINGTABLE
+{
+    IDS_BASIC_UI_TITLE "Windows Installer"
+    IDS_BASIC_UI_PREPARE "Preparing to install..."
+    IDS_BASIC_UI_PREPARE_REMOVE "Preparing to remove..."
+    IDS_BASIC_UI_CONFIGURE "Please wait while Windows configures %s"
+    IDS_BASIC_UI_CANCEL "Cancel"
+}
+#endif

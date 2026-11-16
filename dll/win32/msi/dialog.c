@@ -4430,6 +4430,179 @@ void msi_dialog_show_cancel( MSIPACKAGE *package, BOOL show )
     if (control && control->hwnd)
         ShowWindow( control->hwnd, show ? SW_SHOW : SW_HIDE );
 }
+
+struct basic_ui
+{
+    HWND hwnd;
+    BOOL named;
+    BOOL cancelled;
+    BOOL backwards;
+    ULONGLONG max;
+    ULONGLONG current;
+};
+
+static INT_PTR CALLBACK basic_ui_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
+{
+    struct basic_ui *ui = (struct basic_ui *)GetWindowLongPtrW( hwnd, DWLP_USER );
+
+    switch (msg)
+    {
+    case WM_INITDIALOG:
+        SetWindowLongPtrW( hwnd, DWLP_USER, lparam );
+        return TRUE;
+    case WM_COMMAND:
+        if (LOWORD(wparam) == IDCANCEL && ui)
+        {
+            ui->cancelled = TRUE;
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+
+static BOOL basic_ui_wanted( MSIPACKAGE *package )
+{
+    UINT level = package->ui_level & INSTALLUILEVEL_MASK;
+
+    if (level == INSTALLUILEVEL_BASIC)
+        return TRUE;
+    return level >= INSTALLUILEVEL_REDUCED && !TABLE_Exists( package->db, L"Dialog" );
+}
+
+static void basic_ui_set_string( HWND hwnd, int id, UINT string_id )
+{
+    WCHAR text[256];
+
+    if (LoadStringW( msi_hInstance, string_id, text, ARRAY_SIZE(text) ))
+    {
+        if (id) SetDlgItemTextW( hwnd, id, text );
+        else SetWindowTextW( hwnd, text );
+    }
+}
+
+void msi_basic_ui_start( MSIPACKAGE *package )
+{
+    struct basic_ui *ui;
+    WCHAR *remove;
+
+    if (package->basic_ui || !basic_ui_wanted( package ))
+        return;
+    if (!(ui = calloc( 1, sizeof(*ui) )))
+        return;
+    ui->hwnd = CreateDialogParamW( msi_hInstance, MAKEINTRESOURCEW(IDD_BASIC_UI), gUIhwnd, basic_ui_proc, (LPARAM)ui );
+    if (!ui->hwnd)
+    {
+        free( ui );
+        return;
+    }
+    remove = msi_dup_property( package->db, L"REMOVE" );
+    basic_ui_set_string( ui->hwnd, 0, IDS_BASIC_UI_TITLE );
+    basic_ui_set_string( ui->hwnd, IDC_BASIC_UI_TEXT,
+                         remove && !wcsicmp( remove, L"ALL" ) ? IDS_BASIC_UI_PREPARE_REMOVE : IDS_BASIC_UI_PREPARE );
+    basic_ui_set_string( ui->hwnd, IDCANCEL, IDS_BASIC_UI_CANCEL );
+    free( remove );
+    if (package->ui_level & INSTALLUILEVEL_HIDECANCEL)
+        ShowWindow( GetDlgItem( ui->hwnd, IDCANCEL ), SW_HIDE );
+    SendDlgItemMessageW( ui->hwnd, IDC_BASIC_UI_PROGRESS, PBM_SETRANGE, 0, MAKELPARAM(0, 100) );
+    ShowWindow( ui->hwnd, SW_SHOW );
+    package->basic_ui = ui;
+    process_pending_messages( ui->hwnd );
+}
+
+void msi_basic_ui_end( MSIPACKAGE *package )
+{
+    struct basic_ui *ui = package->basic_ui;
+
+    if (!ui)
+        return;
+    package->basic_ui = NULL;
+    DestroyWindow( ui->hwnd );
+    free( ui );
+}
+
+static void basic_ui_set_product( MSIPACKAGE *package, struct basic_ui *ui )
+{
+    WCHAR format[256], *name, *text;
+    int len;
+
+    ui->named = TRUE;
+    name = msi_dup_property( package->db, L"ProductName" );
+    if (!name)
+        return;
+    SetWindowTextW( ui->hwnd, name );
+    if (LoadStringW( msi_hInstance, IDS_BASIC_UI_CONFIGURE, format, ARRAY_SIZE(format) ))
+    {
+        len = wcslen( format ) + wcslen( name ) + 1;
+        if ((text = malloc( len * sizeof(WCHAR) )))
+        {
+            swprintf( text, len, format, name );
+            SetDlgItemTextW( ui->hwnd, IDC_BASIC_UI_TEXT, text );
+            free( text );
+        }
+    }
+    free( name );
+}
+
+static void basic_ui_progress( struct basic_ui *ui, MSIRECORD *record )
+{
+    HWND bar = GetDlgItem( ui->hwnd, IDC_BASIC_UI_PROGRESS );
+    ULONG value = MSI_RecordGetInteger( record, 2 );
+
+    switch (MSI_RecordGetInteger( record, 1 ))
+    {
+    case 0:
+        ui->max = value ? value : 1;
+        ui->backwards = MSI_RecordGetInteger( record, 3 ) == 1;
+        ui->current = ui->backwards ? ui->max : 0;
+        ShowWindow( bar, SW_SHOW );
+        break;
+    case 2:
+        if (ui->backwards) ui->current = value < ui->current ? ui->current - value : 0;
+        else ui->current = min( ui->current + value, ui->max );
+        break;
+    case 3:
+        ui->max += value;
+        break;
+    default:
+        return;
+    }
+    if (ui->max)
+        SendMessageW( bar, PBM_SETPOS, (WPARAM)(ui->current * 100 / ui->max), 0 );
+}
+
+INT msi_basic_ui_message( MSIPACKAGE *package, INSTALLMESSAGE type, MSIRECORD *record )
+{
+    struct basic_ui *ui = package->basic_ui;
+    WCHAR *text;
+
+    if (!ui)
+        return 0;
+    switch (type & 0xff000000)
+    {
+    case INSTALLMESSAGE_ACTIONSTART:
+        if (!ui->named)
+            basic_ui_set_product( package, ui );
+        text = NULL;
+        if (record && !MSI_RecordIsNull( record, 2 ))
+            deformat_string( package, MSI_RecordGetString( record, 2 ), &text );
+        SetDlgItemTextW( ui->hwnd, IDC_BASIC_UI_ACTION, text ? text : L"" );
+        free( text );
+        break;
+    case INSTALLMESSAGE_PROGRESS:
+        if (record)
+            basic_ui_progress( ui, record );
+        break;
+    case INSTALLMESSAGE_COMMONDATA:
+        if (record && MSI_RecordGetInteger( record, 1 ) == 2 && !(package->ui_level & INSTALLUILEVEL_HIDECANCEL))
+            ShowWindow( GetDlgItem( ui->hwnd, IDCANCEL ), MSI_RecordGetInteger( record, 2 ) ? SW_SHOW : SW_HIDE );
+        break;
+    default:
+        break;
+    }
+    process_pending_messages( ui->hwnd );
+    return ui->cancelled ? IDCANCEL : 0;
+}
 #endif
 
 /* end a modal dialog box */
