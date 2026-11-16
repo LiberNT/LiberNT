@@ -576,6 +576,22 @@ AlpcpFindPendingMessage(
     _In_ ULONG MessageId,
     _In_opt_ PCLIENT_ID ClientId);
 
+NTSTATUS
+NTAPI
+AlpcpCaptureValidHeader(
+    _In_ PPORT_MESSAGE UserMessage,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PPORT_MESSAGE Header,
+    _In_ BOOLEAN ExactLength);
+
+NTSTATUS
+NTAPI
+AlpcpDeliverCallbackMessage(
+    _In_ PALPC_PORT Port,
+    _In_ PKALPC_MESSAGE Callback,
+    _In_ PPORT_MESSAGE Header,
+    _In_ NTSTATUS MismatchStatus);
+
 PKALPC_MESSAGE
 NTAPI
 AlpcpFindPendingMessageForReply(

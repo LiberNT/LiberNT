@@ -20,44 +20,6 @@ AlpcpLegacyWaitMode(
 
 static
 NTSTATUS
-AlpcpCaptureLegacyHeader(
-    _In_ PPORT_MESSAGE UserMessage,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PPORT_MESSAGE Header)
-{
-    ULONG DataLength;
-    ULONG TotalLength;
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForRead(UserMessage, sizeof(*UserMessage), sizeof(ULONG));
-            *Header = *(volatile PORT_MESSAGE*)UserMessage;
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        *Header = *UserMessage;
-    }
-
-    DataLength = (USHORT)Header->u1.s1.DataLength;
-    TotalLength = (USHORT)Header->u1.s1.TotalLength;
-    if ((DataLength > MAXUSHORT - sizeof(PORT_MESSAGE)) ||
-        (DataLength + sizeof(PORT_MESSAGE) > TotalLength))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-    return STATUS_SUCCESS;
-}
-
-static
-NTSTATUS
 AlpcpVerifyDataInfo(
     _In_ PPORT_MESSAGE Header)
 {
@@ -176,62 +138,6 @@ AlpcpDeliverLegacyMessage(
 
 static
 NTSTATUS
-AlpcpDeliverLegacyCallback(
-    _In_ PALPC_PORT Port,
-    _In_ PKALPC_MESSAGE Callback,
-    _In_ PPORT_MESSAGE Header)
-{
-    PKALPC_MESSAGE Parent;
-    PALPC_PORT TargetPort;
-    PETHREAD TargetThread;
-    PETHREAD CurrentThread = PsGetCurrentThread();
-
-    AlpcpAcquirePortLock(Port);
-    Parent = AlpcpFindPendingMessageForReply(Port, Header->MessageId, &Header->ClientId);
-    if (!Parent ||
-        (Parent->ServerThread != CurrentThread) ||
-        (Parent->PortMessage.CallbackId != Header->CallbackId) ||
-        Parent->ActiveCallback ||
-        !Parent->WaitingThread)
-    {
-        AlpcpReleasePortLock(Port);
-        AlpcpFreeMessage(Callback);
-        return STATUS_REPLY_MESSAGE_MISMATCH;
-    }
-
-    TargetPort = Parent->SenderPort;
-    TargetThread = Parent->WaitingThread;
-    if (!TargetPort ||
-        (TargetPort->Flags & (ALPC_PORT_FLAG_CLOSED | ALPC_PORT_FLAG_DISCONNECTED)) ||
-        TargetThread->LpcExitThreadCalled)
-    {
-        AlpcpReleasePortLock(Port);
-        AlpcpFreeMessage(Callback);
-        return STATUS_PORT_DISCONNECTED;
-    }
-
-    Callback->State |= ALPC_MSG_STATE_CALLBACK;
-    Callback->OwnerPort = TargetPort;
-    Callback->QueuePort = TargetPort;
-    Callback->CallbackParent = Parent;
-    Callback->WaitingThread = CurrentThread;
-    Callback->ServerThread = TargetThread;
-    Callback->PortMessage.MessageId = Parent->PortMessage.MessageId;
-    Callback->PortMessage.CallbackId = AlpcpAllocateCallbackId();
-    Callback->PortMessage.ClientId = Parent->PortMessage.ClientId;
-    Callback->Sequence = TargetPort->SequenceNo++;
-
-    Parent->ActiveCallback = Callback;
-    AlpcpMakePending(TargetPort, Callback);
-    AlpcpSetThreadMessage(CurrentThread, Callback);
-    AlpcpSetThreadMessage(TargetThread, Callback);
-    AlpcpSignalWaiter(TargetThread);
-    AlpcpReleasePortLock(Port);
-    return STATUS_SUCCESS;
-}
-
-static
-NTSTATUS
 AlpcpFinishSynchronousRequest(
     _In_ PKALPC_MESSAGE RequestMessage,
     _In_opt_ PKALPC_MESSAGE ReceivedMessage,
@@ -317,7 +223,7 @@ AlpcpLegacyRequestWaitReply(
 
     if (PsGetCurrentThread()->LpcExitThreadCalled) return STATUS_THREAD_IS_TERMINATING;
 
-    Status = AlpcpCaptureLegacyHeader(LpcRequest, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(LpcRequest, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     MessageType = Header.u2.s2.Type & ~LPC_KERNELMODE_MESSAGE;
@@ -352,7 +258,11 @@ AlpcpLegacyRequestWaitReply(
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Callback)
-        Status = AlpcpDeliverLegacyCallback(Port, Message, &Header);
+    {
+        Status = AlpcpDeliverCallbackMessage(Port, Message, &Header, STATUS_REPLY_MESSAGE_MISMATCH);
+        if (!NT_SUCCESS(Status))
+            AlpcpFreeMessage(Message);
+    }
     else
         Status = AlpcpDeliverLegacyMessage(Port, Message, TRUE);
     if (!NT_SUCCESS(Status)) return Status;
@@ -456,7 +366,7 @@ AlpcpLegacyRequest(
     PKALPC_MESSAGE Message;
     ULONG MessageType;
 
-    Status = AlpcpCaptureLegacyHeader(LpcRequest, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(LpcRequest, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (Header.u2.s2.DataInfoOffset) return STATUS_INVALID_PARAMETER;
@@ -533,7 +443,7 @@ AlpcpLegacyReply(
     PVOID Buffer = NULL;
     ULONG CopyLength;
 
-    Status = AlpcpCaptureLegacyHeader(ReplyMessage, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(ReplyMessage, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     if (!Header.MessageId) return STATUS_INVALID_PARAMETER;
@@ -811,7 +721,7 @@ NtReplyWaitReplyPort(
 
     PAGED_CODE();
 
-    Status = AlpcpCaptureLegacyHeader(ReplyMessage, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(ReplyMessage, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = AlpcpReferencePortByHandle(PortHandle, 0, PreviousMode, &Port);
@@ -1654,7 +1564,7 @@ NtImpersonateClientOfPort(
 
     PAGED_CODE();
 
-    Status = AlpcpCaptureLegacyHeader(ClientMessage, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(ClientMessage, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = AlpcpReferencePortByHandle(PortHandle, PORT_ALL_ACCESS, PreviousMode, &Port);
@@ -1738,7 +1648,7 @@ AlpcpCopyRequestData(
 
     PAGED_CODE();
 
-    Status = AlpcpCaptureLegacyHeader(Message, PreviousMode, &Header);
+    Status = AlpcpCaptureValidHeader(Message, PreviousMode, &Header, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
     if (Header.u2.s2.DataInfoOffset == 0) return STATUS_INVALID_PARAMETER;
 

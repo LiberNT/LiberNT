@@ -18,12 +18,13 @@ typedef struct _ALPC_CONTEXT_ATTR32
 
 C_ASSERT(sizeof(ALPC_CONTEXT_ATTR32) == 0x14);
 
-static
 NTSTATUS
-AlpcpCaptureHeader(
+NTAPI
+AlpcpCaptureValidHeader(
     _In_ PPORT_MESSAGE UserMessage,
     _In_ KPROCESSOR_MODE PreviousMode,
-    _Out_ PPORT_MESSAGE Header)
+    _Out_ PPORT_MESSAGE Header,
+    _In_ BOOLEAN ExactLength)
 {
     ULONG DataLength;
     ULONG TotalLength;
@@ -49,7 +50,8 @@ AlpcpCaptureHeader(
     DataLength = (USHORT)Header->u1.s1.DataLength;
     TotalLength = (USHORT)Header->u1.s1.TotalLength;
     if ((DataLength > MAXUSHORT - sizeof(PORT_MESSAGE)) ||
-        (DataLength + sizeof(PORT_MESSAGE) != TotalLength))
+        (DataLength + sizeof(PORT_MESSAGE) > TotalLength) ||
+        (ExactLength && (DataLength + sizeof(PORT_MESSAGE) != TotalLength)))
     {
         return STATUS_INVALID_PARAMETER;
     }
@@ -266,12 +268,13 @@ AlpcpReplyToMessage(
     return STATUS_SUCCESS;
 }
 
-static
 NTSTATUS
+NTAPI
 AlpcpDeliverCallbackMessage(
     _In_ PALPC_PORT Port,
     _In_ PKALPC_MESSAGE Callback,
-    _In_ PPORT_MESSAGE Header)
+    _In_ PPORT_MESSAGE Header,
+    _In_ NTSTATUS MismatchStatus)
 {
     PKALPC_MESSAGE Parent;
     PALPC_PORT TargetPort;
@@ -287,7 +290,7 @@ AlpcpDeliverCallbackMessage(
         !Parent->WaitingThread)
     {
         AlpcpReleasePortLock(Port);
-        return STATUS_INVALID_MESSAGE;
+        return MismatchStatus;
     }
 
     TargetPort = Parent->SenderPort;
@@ -421,7 +424,7 @@ AlpcpQueueNewMessage(
 
     if (CallbackRequest)
     {
-        Status = AlpcpDeliverCallbackMessage(Port, Message, Header);
+        Status = AlpcpDeliverCallbackMessage(Port, Message, Header, STATUS_INVALID_MESSAGE);
         if (!NT_SUCCESS(Status))
         {
             AlpcpFreeMessage(Message);
@@ -698,7 +701,7 @@ AlpcpSendWaitReceivePort(
 
     if (SendMessage)
     {
-        Status = AlpcpCaptureHeader(SendMessage, PreviousMode, &Header);
+        Status = AlpcpCaptureValidHeader(SendMessage, PreviousMode, &Header, TRUE);
         if (!NT_SUCCESS(Status)) goto Exit;
 
         if ((Flags & ALPC_MSGFLG_REPLY_MESSAGE) && Header.MessageId)
