@@ -984,8 +984,7 @@ static void Test_QueryVideoMemoryInfo_HighPhysAdapterIndex(void)
  * the caller's pointer rather than copied, which is the whole point: a copy
  * would defeat having locked the surface at all.
  *
- * ReactOS gdi32 implements these exports through gdi32_vista and forwards them
- * to their win32k syscall slots.  Keep both the rejection checks and a complete
+ * Keep both the rejection checks and a complete
  * create/destroy round trip here so a broken export or syscall mapping cannot
  * turn the negative cases into vacuous coverage.
  */

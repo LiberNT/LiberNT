@@ -7,7 +7,7 @@
 
 add_library(amdgpio MODULE amdgpio.c amdgpio.rc)
 set_module_type(amdgpio kmdfdriver)
-target_link_libraries(amdgpio msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(amdgpio msgpioclxstub libcntpr ${PSEH_LIB})
 add_importlibs(amdgpio ntoskrnl hal)
 add_cd_file(TARGET amdgpio DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(amdgpio amdgpio.inf)

@@ -41,7 +41,7 @@ endif()
 
 set_module_type(gdi32_winetest win32cui)
 target_link_libraries(gdi32_winetest oldnames)
-add_importlibs(gdi32_winetest gdi32 gdi32_vista user32 setupapi advapi32 msvcrt kernel32 ntdll)
+add_importlibs(gdi32_winetest gdi32 user32 setupapi advapi32 msvcrt kernel32 ntdll)
 
 if(MSVC)
     add_importlibs(gdi32_winetest ntdll)

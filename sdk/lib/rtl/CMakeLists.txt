@@ -23,10 +23,6 @@ list(APPEND RTL_WINE_SOURCE
     timerqueue.c
     threadpool.c
 )
-list(APPEND RTL_WINE_SOURCE_VISTA
-    product.c
-    threadpool.c
-)
 set_source_files_properties(threadpool.c PROPERTIES
     COMPILE_DEFINITIONS __WINESRC__
     SKIP_PRECOMPILE_HEADERS ON)
@@ -38,6 +34,14 @@ endif()
 
 list(APPEND SOURCE
     ${RTL_WINE_SOURCE}
+    condvar.c
+    name.c
+    product.c
+    runonce.c
+    srw.c
+    utf8.c
+    utf8string.c
+    waitaddr.c
     wine_debug.c
     access.c
     acl.c
@@ -214,27 +218,3 @@ if(ARCH STREQUAL "arm64")
     target_compile_definitions(rtl_kernel_context PRIVATE RTL_KERNEL_CONTEXT)
     add_dependencies(rtl_kernel_context asm)
 endif()
-
-list(APPEND SOURCE_VISTA
-    ${RTL_WINE_SOURCE_VISTA}
-    condvar.c
-    locale.c
-    name.c
-    processor.c
-    runonce.c
-    slist.c
-    srw.c
-    threadpool.c
-    unicode_vista.c
-    utf8.c
-    utf8string.c
-    waitaddr.c)
-
-if(ARCH STREQUAL "riscv64")
-    list(REMOVE_ITEM SOURCE_VISTA slist.c)
-endif()
-
-add_library(rtl_vista ${SOURCE_VISTA})
-add_pch(rtl_vista rtl_vista.h SOURCE_VISTA)
-add_dependencies(rtl_vista psdk)
-target_link_libraries(rtl_vista PRIVATE pseh)

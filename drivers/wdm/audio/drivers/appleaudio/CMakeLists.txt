@@ -22,7 +22,7 @@ add_library(appleaudio MODULE
     appleaudio.rc)
 
 set_module_type(appleaudio kernelmodedriver)
-target_link_libraries(appleaudio applertkit fdtdrv ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(appleaudio applertkit fdtdrv libcntpr ${PSEH_LIB})
 add_importlibs(appleaudio ntoskrnl hal portcls)
 add_cd_file(TARGET appleaudio DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(appleaudio appleaudio.inf)

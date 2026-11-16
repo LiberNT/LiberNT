@@ -10,7 +10,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "srw/rtl_vista.h"
+#include "srw/rtl_native.h"
 
 #define SRW_MAX_THREADS 64
 

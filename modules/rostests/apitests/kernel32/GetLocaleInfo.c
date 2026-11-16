@@ -106,13 +106,8 @@ static void Test_GetLocaleInfoEx(void)
     pGetLocaleInfoEx = (FN_GetLocaleInfoEx*)GetProcAddress(hmodKernel32, "GetLocaleInfoEx");
     if (pGetLocaleInfoEx == NULL)
     {
-        hmodKernel32 = LoadLibraryW(L"kernel32_vista.dll");
-        pGetLocaleInfoEx = (FN_GetLocaleInfoEx*)GetProcAddress(hmodKernel32, "GetLocaleInfoEx");
-        if (pGetLocaleInfoEx == NULL)
-        {
-            skip("GetLocaleInfoEx not found in kernel32.dll\n");
-            return;
-        }
+        skip("GetLocaleInfoEx not found in kernel32.dll\n");
+        return;
     }
 
     // Test normal usage
@@ -187,8 +182,6 @@ static void Test_ConsoleFallbackName(void)
     WCHAR buffer[86];
     char bufferA[86];
     unsigned int i;
-    HMODULE hmodVista;
-    FN_GetLocaleInfoEx *pVistaGetLocaleInfoEx;
     int ret;
 
     for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)
@@ -241,22 +234,6 @@ static void Test_ConsoleFallbackName(void)
     ok(ret == 6 && !lstrcmpW(buffer, L"en-US"), "GetLocaleInfoW 0409 console fallback returned %d %S\n",
        ret, ret ? buffer : L"(none)");
 
-    hmodVista = LoadLibraryW(L"kernel32_vista.dll");
-    if (!hmodVista)
-    {
-        skip("kernel32_vista.dll not present\n");
-        return;
-    }
-    pVistaGetLocaleInfoEx = (FN_GetLocaleInfoEx*)GetProcAddress(hmodVista, "GetLocaleInfoEx");
-    ok(pVistaGetLocaleInfoEx != NULL, "kernel32_vista.dll has no GetLocaleInfoEx\n");
-    if (pVistaGetLocaleInfoEx)
-    {
-        memset(buffer, 0xcc, sizeof(buffer));
-        ret = pVistaGetLocaleInfoEx(L"ar-SA", LOCALE_SCONSOLEFALLBACKNAME, buffer, sizeof(buffer) / sizeof(buffer[0]));
-        ok(ret == 3 && !lstrcmpW(buffer, L"en"), "kernel32_vista GetLocaleInfoEx console fallback returned %d %S\n",
-           ret, ret ? buffer : L"(none)");
-    }
-    FreeLibrary(hmodVista);
 }
 
 static void Test_PersianCalendarType(void)

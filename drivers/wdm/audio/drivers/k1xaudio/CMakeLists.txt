@@ -18,7 +18,7 @@ add_library(k1xaudio MODULE
     k1xaudio.rc)
 
 set_module_type(k1xaudio kernelmodedriver)
-target_link_libraries(k1xaudio ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(k1xaudio libcntpr ${PSEH_LIB})
 add_importlibs(k1xaudio ntoskrnl hal portcls)
 add_cd_file(TARGET k1xaudio DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(k1xaudio k1xaudio.inf)

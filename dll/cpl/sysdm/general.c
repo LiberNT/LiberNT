@@ -28,12 +28,8 @@ typedef struct _IMGINFO
     INT iBits;
 } IMGINFO, *PIMGINFO;
 
-typedef ULONGLONG (WINAPI *PFGETTICKCOUNT64)(VOID);
-
 static PIMGINFO pImgInfo;
 static const BLENDFUNCTION BlendFunc = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-static HMODULE hKernel32Vista = NULL;
-static PFGETTICKCOUNT64 pGetTickCount64 = NULL;
 static WCHAR szUptimeFormat[64];
 
 VOID ShowLastWin32Error(HWND hWndOwner)
@@ -676,23 +672,6 @@ static VOID GetSystemRelease(HWND hwnd)
     AppendDlgItemText(hwnd, IDC_ROSBUILD, szText);
 }
 
-/**
- * @brief
- * An equivalent of GetTickCount64, implemented using QueryPerformanceCounter.
- *
- * @return
- * The number of milliseconds that have elapsed since the system was started.
- */
-static ULONGLONG GetTickCountQPC(VOID)
-{
-    LARGE_INTEGER Counter, Frequency;
-
-    QueryPerformanceCounter(&Counter);
-    QueryPerformanceFrequency(&Frequency);
-
-    return (Counter.QuadPart * 1000) / Frequency.QuadPart;
-}
-
 static VOID GetSystemUptime(HWND hwndDlg)
 {
     HWND hUptimeLabel;
@@ -706,15 +685,8 @@ static VOID GetSystemUptime(HWND hwndDlg)
         return;
     }
 
-    if (pGetTickCount64)
-    {
-        cMilliseconds = pGetTickCount64();
-    }
-    else
-    {
-        cMilliseconds = GetTickCountQPC();
-    }
-    
+    cMilliseconds = GetTickCount64();
+
     cSeconds = cMilliseconds / 1000;
     StringCchPrintfW(szBuf, _countof(szBuf), szUptimeFormat,
                      cSeconds / (60*60*24),     // Days
@@ -730,27 +702,10 @@ static VOID GetSystemUptime(HWND hwndDlg)
 
 static VOID InitSystemUptime(HWND hwndDlg)
 {
-    HMODULE hKernel32;
-
     /* Load time format string */
     if (LoadStringW(hApplet, IDS_UPTIME_FORMAT, szUptimeFormat, _countof(szUptimeFormat)) == 0)
     {
         return;
-    }
-
-    /* Load required DLLs */
-    hKernel32 = GetModuleHandleW(L"kernel32.dll");
-    if (hKernel32)
-    {
-        pGetTickCount64 = (PFGETTICKCOUNT64)GetProcAddress(hKernel32, "GetTickCount64");
-        if (!pGetTickCount64)
-        {
-            hKernel32Vista = LoadLibraryW(L"kernel32_vista.dll");
-            if (hKernel32Vista)
-            {
-                pGetTickCount64 = (PFGETTICKCOUNT64)GetProcAddress(hKernel32Vista, "GetTickCount64");
-            }
-        }
     }
 
     /* Show system uptime and set update timer */
@@ -786,11 +741,6 @@ INT_PTR CALLBACK GeneralPageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_DESTROY:
         {
             KillTimer(hwndDlg, ID_SYSUPTIME_UPDATE_TIMER);
-
-            if (hKernel32Vista)
-            {
-                FreeLibrary(hKernel32Vista);
-            }
 
             HeapFree(GetProcessHeap(), 0, pImgInfo);
             break;

@@ -21,7 +21,7 @@
 
 
 #ifdef __REACTOS__
-#include <rtl_vista.h>
+#include <rtl_native.h>
 #include <ndk/lpcfuncs.h>
 #define NDEBUG
 #include "wine/list.h"

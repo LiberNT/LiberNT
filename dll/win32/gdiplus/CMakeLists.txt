@@ -51,7 +51,7 @@ endif()
 set_module_type(gdiplus win32dll)
 target_link_libraries(gdiplus wine uuid)
 add_delay_importlibs(gdiplus mlang windowscodecs)
-add_importlibs(gdiplus msvcrt shlwapi oleaut32 ole32 user32 gdi32 kernel32 kernel32_vista ntdll ntdll_vista)
+add_importlibs(gdiplus msvcrt shlwapi oleaut32 ole32 user32 gdi32 kernel32 ntdll)
 
 add_cd_file(TARGET gdiplus DESTINATION reactos/system32 FOR all)
 

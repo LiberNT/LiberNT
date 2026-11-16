@@ -20,7 +20,7 @@ add_library(appleaopmic MODULE
     appleaopmic.rc)
 
 set_module_type(appleaopmic kernelmodedriver)
-target_link_libraries(appleaopmic applertkit fdtdrv ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(appleaopmic applertkit fdtdrv libcntpr ${PSEH_LIB})
 add_importlibs(appleaopmic ntoskrnl hal portcls)
 add_cd_file(TARGET appleaopmic DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(appleaopmic appleaopmic.inf)

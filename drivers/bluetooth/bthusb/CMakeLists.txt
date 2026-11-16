@@ -14,6 +14,6 @@ list(APPEND SOURCE
 
 add_library(bthusb MODULE ${SOURCE} bthusb.rc)
 set_module_type(bthusb kmdfdriver)
-target_link_libraries(bthusb rtkbtfw ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(bthusb rtkbtfw libcntpr ${PSEH_LIB})
 add_importlibs(bthusb ntoskrnl hal usbd)
 add_cd_file(TARGET bthusb DESTINATION reactos/system32/drivers NO_CAB FOR all)

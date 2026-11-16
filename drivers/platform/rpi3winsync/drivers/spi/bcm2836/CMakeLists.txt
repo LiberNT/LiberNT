@@ -11,7 +11,7 @@ target_include_directories(bcmspi BEFORE PRIVATE
     ${_rpi3winsync_root}/reactos-compat
     ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(bcmspi PRIVATE -Wno-unknown-pragmas -Wno-missing-braces -Wno-pragma-pack)
-target_link_libraries(bcmspi spbcxstubs ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(bcmspi spbcxstubs libcntpr ${PSEH_LIB})
 add_importlibs(bcmspi ntoskrnl hal)
 add_cd_file(TARGET bcmspi DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(bcmspi ${_rpi3winsync_root}/reactos-compat/spi/bcmspi.inf)

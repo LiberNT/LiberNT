@@ -60,12 +60,10 @@ NTSTATUS WINAPI RemapPredefinedHandleInternal(HKEY hkey, HKEY override);
 
 /* FUNCTIONS ****************************************************************/
 /* check if value type needs string conversion (Ansi<->Unicode) */
-#ifndef _ADVAPI32_VISTA_
 __inline static int is_string( DWORD type )
 {
     return (type == REG_SZ) || (type == REG_EXPAND_SZ) || (type == REG_MULTI_SZ);
 }
-#endif
 
 /************************************************************************
  *  RegInitDefaultHandles
@@ -329,7 +327,6 @@ OpenCurrentConfigKey (PHANDLE KeyHandle)
                      &Attributes);
 }
 
-#ifndef _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegDisablePredefinedCache
@@ -457,7 +454,6 @@ RegCloseKey(HKEY hKey)
   return ERROR_SUCCESS;
 }
 
-#endif // _ADVAPI32_VISTA_
 
 static NTSTATUS
 RegpCopyTree(IN HKEY hKeySrc,
@@ -817,7 +813,6 @@ Cleanup2:
     return ERROR_SUCCESS;
 }
 
-#ifndef _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegCopyTreeA
@@ -1749,7 +1744,6 @@ Cleanup:
 }
 #endif
 
-#endif // _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegDeleteTreeW
@@ -1872,7 +1866,6 @@ RegDeleteTreeA(IN HKEY hKey,
     return Ret;
 }
 
-#ifndef _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegDisableReflectionKey
@@ -2178,7 +2171,6 @@ RegGetValueA(HKEY hKey,
     return ret;
 }
 
-#endif // _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegSetKeyValueW
@@ -2249,7 +2241,6 @@ Cleanup:
     return Ret;
 }
 
-#ifndef _ADVAPI32_VISTA_
 
 /************************************************************************
  *  RegSetKeyValueA
@@ -5434,7 +5425,6 @@ RegUnLoadKeyW(HKEY hKey,
     return ERROR_SUCCESS;
 }
 
-#endif // _ADVAPI32_VISTA_
 
 /******************************************************************************
  * load_string [Internal]

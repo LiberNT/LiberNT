@@ -326,7 +326,7 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PFILE_OBJECT FileObject;
     PAFD_DEVICE_EXTENSION DeviceExt;
     PFILE_FULL_EA_INFORMATION EaInfo;
-    PAFD_CREATE_PACKET ConnectInfo = NULL;
+    PAFD_CREATE_PACKET_LEGACY ConnectInfo = NULL;
     //ULONG EaLength;
     PWCHAR EaInfoValue = NULL;
     //UINT Disposition;
@@ -346,8 +346,8 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     EaInfo = Irp->AssociatedIrp.SystemBuffer;
 
     if( EaInfo ) {
-        ConnectInfo = (PAFD_CREATE_PACKET)(EaInfo->EaName + EaInfo->EaNameLength + 1);
-        EaInfoValue = (PWCHAR)(((PCHAR)ConnectInfo) + sizeof(AFD_CREATE_PACKET));
+        ConnectInfo = (PAFD_CREATE_PACKET_LEGACY)(EaInfo->EaName + EaInfo->EaNameLength + 1);
+        EaInfoValue = (PWCHAR)(((PCHAR)ConnectInfo) + sizeof(AFD_CREATE_PACKET_LEGACY));
 
         //EaLength = sizeof(FILE_FULL_EA_INFORMATION) + EaInfo->EaNameLength + EaInfo->EaValueLength;
 
@@ -406,16 +406,16 @@ AfdCreateSocket(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     AFD_DbgPrint(MID_TRACE,("%p: Checking command channel\n", FCB));
 
     if( ConnectInfo ) {
-        PAFD_CREATE_PACKET_NT6 ConnectInfoNt6 = (PAFD_CREATE_PACKET_NT6)ConnectInfo;
+        PAFD_CREATE_PACKET NativeConnectInfo = (PAFD_CREATE_PACKET)ConnectInfo;
         PWCHAR TransportName = ConnectInfo->TransportName;
         ULONG SizeOfTransportName = ConnectInfo->SizeOfTransportName;
 
-        if (EaInfo->EaValueLength >= FIELD_OFFSET(AFD_CREATE_PACKET_NT6, TransportName) + sizeof(WCHAR) &&
-            ConnectInfoNt6->SizeOfTransportName ==
-            EaInfo->EaValueLength - FIELD_OFFSET(AFD_CREATE_PACKET_NT6, TransportName) - sizeof(WCHAR))
+        if (EaInfo->EaValueLength >= FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) + sizeof(WCHAR) &&
+            NativeConnectInfo->SizeOfTransportName ==
+            EaInfo->EaValueLength - FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) - sizeof(WCHAR))
         {
-            TransportName = ConnectInfoNt6->TransportName;
-            SizeOfTransportName = ConnectInfoNt6->SizeOfTransportName;
+            TransportName = NativeConnectInfo->TransportName;
+            SizeOfTransportName = NativeConnectInfo->SizeOfTransportName;
         }
 
         FCB->TdiDeviceName.Length = SizeOfTransportName;

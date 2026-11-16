@@ -448,14 +448,8 @@ START_TEST(GetFinalPathNameByHandle)
         GetProcAddress(hmodKernel32, "GetFinalPathNameByHandleW");
     if (pGetFinalPathNameByHandleW == NULL)
     {
-        hmodKernel32 = GetModuleHandleW(L"kernel32_vista.dll");
-        pGetFinalPathNameByHandleW = (FN_GetFinalPathNameByHandleW*)
-            GetProcAddress(hmodKernel32, "GetFinalPathNameByHandleW");
-        if (pGetFinalPathNameByHandleW == NULL)
-        {
-            skip("GetFinalPathNameByHandleW not available\n");
-            return;
-        }
+        skip("GetFinalPathNameByHandleW not available\n");
+        return;
     }
 
     Test_File();

@@ -14,7 +14,7 @@ target_compile_definitions(wificx PRIVATE
     NET_VERSION_MINOR=6
     WIFI_VERSION_MAJOR=1
     WIFI_VERSION_MINOR=2)
-target_link_libraries(wificx netadaptercxstub_2_6 ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(wificx netadaptercxstub_2_6 libcntpr ${PSEH_LIB})
 add_importlibs(wificx ndis ntoskrnl hal)
 add_cd_file(TARGET wificx DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_registry_inf(wificx_reg.inf)

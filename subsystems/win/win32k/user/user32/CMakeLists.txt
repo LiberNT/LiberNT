@@ -1,3 +1,5 @@
+add_subdirectory(modern)
+
 
 spec2def(user32.dll user32.spec ADD_IMPORTLIB)
 
@@ -120,10 +122,10 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
     target_compile_options(user32 PRIVATE -Xclang -fasync-exceptions)
 endif()
 if(NOT ARM64EC_RUNTIME)
-    target_link_libraries(user32 user32_vista_static user32_optional_vista user32_wsprintf wine ${PSEH_LIB})
+    target_link_libraries(user32 user32_modern user32_wine_modern user32_wsprintf wine ${PSEH_LIB})
     add_importlibs(user32 win32u)
 else()
-    target_link_libraries(user32 user32_vista_static user32_optional_vista user32_wsprintf wine win32ksys ${PSEH_LIB})
+    target_link_libraries(user32 user32_modern user32_wine_modern user32_wsprintf wine win32ksys ${PSEH_LIB})
 endif()
 add_dependencies(user32 asm)
 

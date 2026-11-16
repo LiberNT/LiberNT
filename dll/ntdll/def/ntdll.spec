@@ -750,7 +750,7 @@
 @ stdcall RtlComputeCrc32(long ptr long)
 @ stdcall RtlComputeImportTableHash(ptr ptr long)
 @ stdcall RtlComputePrivatizedDllName_U(ptr ptr ptr)
-@ stdcall -stub -version=0x600+ RtlConnectToSm(ptr ptr long ptr)
+@ stdcall -version=0x600+ RtlConnectToSm(ptr ptr long ptr) SmConnectToSm
 @ stdcall RtlConsoleMultiByteToUnicodeN(ptr long ptr ptr long ptr)
 @ stdcall RtlConvertExclusiveToShared(ptr)
 @ stdcall -version=0x600+ RtlConvertLCIDToString(long long long ptr long)
@@ -1264,7 +1264,7 @@
 @ stdcall RtlSeekMemoryStream(ptr int64 long ptr)
 @ stdcall RtlSelfRelativeToAbsoluteSD2(ptr ptr)
 @ stdcall RtlSelfRelativeToAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr)
-@ stdcall -stub -version=0x600+ RtlSendMsgToSm(ptr ptr)
+@ stdcall -version=0x600+ RtlSendMsgToSm(ptr ptr) SmSendMsgToSm
 @ stdcall RtlSetAllBits(ptr)
 @ stdcall RtlSetAttributesSecurityDescriptor(ptr long ptr)
 @ stdcall RtlSetBits(ptr long long)

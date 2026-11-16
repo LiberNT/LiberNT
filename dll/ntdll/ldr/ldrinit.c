@@ -20,6 +20,7 @@
 
 /* GLOBALS *******************************************************************/
 
+PVOID LdrpHeap;
 HANDLE ImageExecOptionsKey;
 HANDLE Wow64ExecOptionsKey;
 UNICODE_STRING ImageExecOptionsString = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options");

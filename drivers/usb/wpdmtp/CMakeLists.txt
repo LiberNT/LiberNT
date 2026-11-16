@@ -19,6 +19,6 @@ list(APPEND SOURCE
 
 add_library(wpdmtp MODULE ${SOURCE} wpdmtp.rc)
 set_module_type(wpdmtp kmdfdriver)
-target_link_libraries(wpdmtp ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(wpdmtp libcntpr ${PSEH_LIB})
 add_importlibs(wpdmtp ntoskrnl hal usbd)
 add_cd_file(TARGET wpdmtp DESTINATION reactos/system32/drivers NO_CAB FOR all)

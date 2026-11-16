@@ -7,7 +7,7 @@
 
 add_library(pl061gpio MODULE pl061gpio.c pl061gpio.rc)
 set_module_type(pl061gpio kmdfdriver)
-target_link_libraries(pl061gpio msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(pl061gpio msgpioclxstub libcntpr ${PSEH_LIB})
 add_importlibs(pl061gpio ntoskrnl hal)
 add_cd_file(TARGET pl061gpio DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(pl061gpio pl061gpio.inf)

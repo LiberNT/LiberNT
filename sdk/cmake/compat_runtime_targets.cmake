@@ -12,7 +12,6 @@ set(COMPAT_RUNTIME_MODULES
     activeds
     actxprxy
     advapi32
-    advapi32_vista
     advpack
     amstream
     apphelp
@@ -97,7 +96,6 @@ set(COMPAT_RUNTIME_MODULES
     fontsub
     fwpuclnt
     gdi32
-    gdi32_vista
     gdiplus
     getuname
     glu32
@@ -127,7 +125,6 @@ set(COMPAT_RUNTIME_MODULES
     jscript
     jsproxy
     kernel32
-    kernel32_vista
     kernelbase
     kernelbase_ros
     ksuser
@@ -220,7 +217,6 @@ set(COMPAT_RUNTIME_MODULES
     nfs41_np
     normaliz
     nsi
-    ntdll_vista
     ntdsapi
     ntlanman
     ntmarta
@@ -306,7 +302,6 @@ set(COMPAT_RUNTIME_MODULES
     url
     urlmon
     user32
-    user32_vista
     userenv
     usp10
     utildll

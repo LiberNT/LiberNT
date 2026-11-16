@@ -4,7 +4,7 @@
 
 add_library(brcml2intc MODULE brcml2intc.c brcml2intc.rc)
 set_module_type(brcml2intc kmdfdriver)
-target_link_libraries(brcml2intc msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(brcml2intc msgpioclxstub libcntpr ${PSEH_LIB})
 add_importlibs(brcml2intc ntoskrnl hal)
 add_cd_file(TARGET brcml2intc DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(brcml2intc brcml2intc.inf)

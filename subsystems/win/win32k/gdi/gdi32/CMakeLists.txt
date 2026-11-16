@@ -46,6 +46,12 @@ list(APPEND SOURCE
     objects/path.c
     include/precomp.h)
 
+add_library(gdi32_thunks STATIC
+    misc/dc_thunk.c
+    misc/d3dkmt_thunk.c)
+target_link_libraries(gdi32_thunks win32ksys)
+add_dependencies(gdi32_thunks psdk)
+
 add_library(gdi32 MODULE
     ${SOURCE}
     gdi32.rc
@@ -61,7 +67,7 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
 endif()
 
 target_link_libraries(gdi32
-    gdi32_vista_static
+    gdi32_thunks
     winegdi
     wine
     win32ksys

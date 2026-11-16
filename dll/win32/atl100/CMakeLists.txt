@@ -17,6 +17,6 @@ add_library(atl100 MODULE
 add_idl_reg_scripts(atl100 regtypelib ${REACTOS_SOURCE_DIR}/dll/win32/atl/atl_lib.idl)
 set_module_type(atl100 win32dll)
 target_link_libraries(atl100 uuid wine)
-add_importlibs(atl100 ole32 oleaut32 user32 gdi32 advapi32 advapi32_vista shlwapi msvcrt kernel32 ntdll)
+add_importlibs(atl100 ole32 oleaut32 user32 gdi32 advapi32 shlwapi msvcrt kernel32 ntdll)
 add_cd_file(TARGET atl100 DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(atl100) # CORE-5743: No ARRAY_SIZE macro

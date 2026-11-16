@@ -11,12 +11,10 @@ if(USE_DIBLIB)
 endif()
 
 add_subdirectory(gdi/gdi32)
-add_subdirectory(gdi/gdi32_vista)
 add_subdirectory(printing)
 add_subdirectory(reactx)
 add_subdirectory(user/imm32)
 add_subdirectory(user/user32)
-add_subdirectory(user/user32_vista)
 add_subdirectory(user/winsrv)
 add_subdirectory(win32u)
 

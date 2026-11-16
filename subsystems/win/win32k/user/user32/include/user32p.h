@@ -110,7 +110,6 @@ BOOL WINAPI MDIRedrawFrame(HWND hWnd, DWORD flags);
 BOOL FASTCALL MessageInit(VOID);
 VOID FASTCALL MessageCleanup(VOID);
 
-/* definitions for user32_vista/dpi.c */
 VOID WINAPI User32InitializeDpiAwareness(VOID);
 
 /* definitions for misc.c */

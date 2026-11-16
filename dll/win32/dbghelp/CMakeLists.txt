@@ -55,7 +55,7 @@ if(CMAKE_CROSSCOMPILING)
         target_link_libraries(dbghelp riscv64_rvuw)
     endif()
     add_delay_importlibs(dbghelp version)
-    add_importlibs(dbghelp psapi msvcrt kernel32_vista kernel32 ntdll)
+    add_importlibs(dbghelp psapi msvcrt kernel32 ntdll)
     add_cd_file(TARGET dbghelp DESTINATION reactos/system32 FOR all)
     set_wine_module(dbghelp)
 

@@ -120,7 +120,7 @@ endif()
 
 set_module_type(msvcr80 win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(msvcr80 crtmath dbgrpt vcruntime wine chkstk ${PSEH_LIB})
-add_importlibs(msvcr80 kernel32 kernel32_vista ntdll)
+add_importlibs(msvcr80 kernel32 ntdll)
 add_delay_importlibs(msvcr80 user32 advapi32)
 add_dependencies(msvcr80 psdk asm)
 add_cd_file(TARGET msvcr80 DESTINATION reactos/winsxs/${VC80_ASSEMBLY} FOR all)

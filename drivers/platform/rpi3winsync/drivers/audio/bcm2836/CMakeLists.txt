@@ -41,7 +41,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(rpiwav PRIVATE -fms-compatibility -D__GNUC__=4)
 endif()
 
-target_link_libraries(rpiwav ntoskrnl_vista stdunk libcntpr ${PSEH_LIB})
+target_link_libraries(rpiwav stdunk libcntpr ${PSEH_LIB})
 add_importlibs(rpiwav ntoskrnl hal portcls)
 
 add_cd_file(TARGET rpiwav DESTINATION reactos/system32/drivers FOR all)

@@ -33,7 +33,7 @@
 #include "wingdi.h"
 #include "winuser.h"
 #ifdef __REACTOS__
-#include <reactos/user32_vista.h>
+#include <reactos/user32_compat.h>
 #include <reactos/dwmframe.h>
 #endif
 #include "dwmapi.h"

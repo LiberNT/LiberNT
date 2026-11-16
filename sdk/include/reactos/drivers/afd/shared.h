@@ -18,14 +18,14 @@ typedef struct _AFD_WSABUF {
     PCHAR buf;
 } AFD_WSABUF, *PAFD_WSABUF;
 
-typedef struct _AFD_CREATE_PACKET {
+typedef struct _AFD_CREATE_PACKET_LEGACY {
     DWORD				EndpointFlags;
     DWORD				GroupID;
     DWORD				SizeOfTransportName;
     WCHAR				TransportName[1];
-} AFD_CREATE_PACKET, *PAFD_CREATE_PACKET;
+} AFD_CREATE_PACKET_LEGACY, *PAFD_CREATE_PACKET_LEGACY;
 
-typedef struct _AFD_CREATE_PACKET_NT6 {
+typedef struct _AFD_CREATE_PACKET {
     DWORD				EndpointFlags;
     DWORD				GroupID;
     DWORD				AddressFamily;
@@ -33,7 +33,7 @@ typedef struct _AFD_CREATE_PACKET_NT6 {
     DWORD				Protocol;
     DWORD				SizeOfTransportName;
     WCHAR				TransportName[1];
-} AFD_CREATE_PACKET_NT6, *PAFD_CREATE_PACKET_NT6;
+} AFD_CREATE_PACKET, *PAFD_CREATE_PACKET;
 
 typedef struct _AFD_INFO {
     ULONG			        InformationClass;

@@ -25,13 +25,8 @@ START_TEST(LocaleNameToLCID)
     pLocaleNameToLCID = (FN_LocaleNameToLCID*)GetProcAddress(hmodKernel32, "LocaleNameToLCID");
     if (pLocaleNameToLCID == NULL)
     {
-        hmodKernel32 = LoadLibraryW(L"kernel32_vista.dll");
-        pLocaleNameToLCID = (FN_LocaleNameToLCID*)GetProcAddress(hmodKernel32, "LocaleNameToLCID");
-        if (pLocaleNameToLCID == NULL)
-        {
-            skip("LocaleNameToLCID not found in kernel32.dll\n");
-            return;
-        }
+        skip("LocaleNameToLCID not found in kernel32.dll\n");
+        return;
     }
 
     lcid = pLocaleNameToLCID(L"en-US", 0);

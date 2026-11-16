@@ -55,6 +55,6 @@ add_library(urlmon MODULE
 set_module_type(urlmon win32dll)
 target_link_libraries(urlmon uuid wine ${PSEH_LIB} oldnames)
 add_delay_importlibs(urlmon advpack)
-add_importlibs(urlmon rpcrt4 ole32 oleaut32 shlwapi shell32 wininet user32 advapi32 iertutil kernel32_vista msvcrt kernel32 ntdll)
+add_importlibs(urlmon rpcrt4 ole32 oleaut32 shlwapi shell32 wininet user32 advapi32 iertutil msvcrt kernel32 ntdll)
 add_cd_file(TARGET urlmon DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(urlmon) # CORE-5743: No ARRAY_SIZE macro

@@ -308,10 +308,10 @@ LxAfdCreate(
     static const WCHAR Endpoint[] = L"\\Device\\Afd\\Endpoint";
     PCWSTR Transport = (Type == LX_SOCK_STREAM) ? L"\\Device\\Tcp" : L"\\Device\\Udp";
     ULONG TransportBytes = (ULONG)(wcslen(Transport) * sizeof(WCHAR));
-    ULONG ValueLength = FIELD_OFFSET(AFD_CREATE_PACKET_NT6, TransportName) + TransportBytes + sizeof(WCHAR);
+    ULONG ValueLength = FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) + TransportBytes + sizeof(WCHAR);
     ULONG EaLength = FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + AFD_PACKET_COMMAND_LENGTH + 1 + ValueLength;
     PFILE_FULL_EA_INFORMATION Ea;
-    PAFD_CREATE_PACKET_NT6 Packet;
+    PAFD_CREATE_PACKET Packet;
     OBJECT_ATTRIBUTES ObjectAttributes;
     UNICODE_STRING Name;
     IO_STATUS_BLOCK Iosb;
@@ -323,7 +323,7 @@ LxAfdCreate(
     Ea->EaNameLength = AFD_PACKET_COMMAND_LENGTH;
     Ea->EaValueLength = (USHORT)ValueLength;
     RtlCopyMemory(Ea->EaName, AfdCommand, AFD_PACKET_COMMAND_LENGTH + 1);
-    Packet = (PAFD_CREATE_PACKET_NT6)(Ea->EaName + AFD_PACKET_COMMAND_LENGTH + 1);
+    Packet = (PAFD_CREATE_PACKET)(Ea->EaName + AFD_PACKET_COMMAND_LENGTH + 1);
     Packet->EndpointFlags = (Type == LX_SOCK_STREAM) ? 0 : (AFD_ENDPOINT_CONNECTIONLESS | AFD_ENDPOINT_MESSAGE_ORIENTED);
     Packet->GroupID = 0;
     Packet->AddressFamily = LX_AF_INET;

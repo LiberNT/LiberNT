@@ -7,7 +7,7 @@
 
 add_library(vbthhci MODULE vbthhci.c vbthhci.rc)
 set_module_type(vbthhci kmdfdriver)
-target_link_libraries(vbthhci ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(vbthhci libcntpr ${PSEH_LIB})
 add_importlibs(vbthhci ntoskrnl hal)
 add_cd_file(TARGET vbthhci DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(vbthhci vbthhci.inf)

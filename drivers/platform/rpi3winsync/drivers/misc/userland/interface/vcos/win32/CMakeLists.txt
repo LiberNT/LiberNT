@@ -21,7 +21,6 @@ target_compile_options(vcos_win32_kern PRIVATE -Wno-unknown-pragmas -Wno-unused-
 
 target_link_libraries(vcos_win32_kern
     vcos_win32_kern_generic
-    ntoskrnl_vista
     libcntpr
     ${PSEH_LIB})
 add_importlibs(vcos_win32_kern ntoskrnl hal)

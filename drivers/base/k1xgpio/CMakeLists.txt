@@ -7,7 +7,7 @@
 
 add_library(k1xgpio MODULE k1xgpio.c k1xgpio.rc)
 set_module_type(k1xgpio kmdfdriver)
-target_link_libraries(k1xgpio msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(k1xgpio msgpioclxstub libcntpr ${PSEH_LIB})
 add_importlibs(k1xgpio ntoskrnl hal)
 add_cd_file(TARGET k1xgpio DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(k1xgpio k1xgpio.inf)

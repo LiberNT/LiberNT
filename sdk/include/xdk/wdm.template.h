@@ -93,13 +93,6 @@ $define(USHORT=USHORT)
 #define NTKERNELAPI
 #endif
 
-/* For statically-linked ntoskrnl_vista library */
-#if defined(NTKRNLVISTA)
-#define NTKRNLVISTAAPI
-#else
-#define NTKRNLVISTAAPI NTKERNELAPI
-#endif
-
 #if defined(_X86_) && !defined(_NTHAL_)
 #define _DECL_HAL_KE_IMPORT  DECLSPEC_IMPORT
 #elif defined(_X86_)

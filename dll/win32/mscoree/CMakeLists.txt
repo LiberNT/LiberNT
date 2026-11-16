@@ -19,6 +19,6 @@ set_source_files_properties(metahost.c PROPERTIES COMPILE_DEFINITIONS "INSTALL_D
 set_module_type(mscoree win32dll)
 add_idl_reg_scripts(mscoree registry mscoree_classes.idl)
 target_link_libraries(mscoree uuid wine wine_dll_canunload)
-add_importlibs(mscoree dbghelp advapi32 shell32 kernel32_vista ole32 oleaut32 shlwapi msvcrt kernel32 ntdll)
+add_importlibs(mscoree dbghelp advapi32 shell32 ole32 oleaut32 shlwapi msvcrt kernel32 ntdll)
 add_cd_file(TARGET mscoree DESTINATION reactos/system32 FOR all)
 set_wine_module_FIXME(mscoree) # CORE-5743: No CONST_VTABLE

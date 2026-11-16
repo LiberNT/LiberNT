@@ -30,7 +30,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         -Wno-unused-but-set-variable)
 endif()
 
-target_link_libraries(rpiq ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(rpiq libcntpr ${PSEH_LIB})
 add_importlibs(rpiq ntoskrnl hal)
 
 add_cd_file(TARGET rpiq DESTINATION reactos/system32/drivers FOR all)

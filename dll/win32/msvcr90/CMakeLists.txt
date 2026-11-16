@@ -120,7 +120,7 @@ endif()
 
 set_module_type(msvcr90 win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(msvcr90 crtmath dbgrpt vcruntime wine chkstk ${PSEH_LIB})
-add_importlibs(msvcr90 kernel32 kernel32_vista ntdll)
+add_importlibs(msvcr90 kernel32 ntdll)
 add_delay_importlibs(msvcr90 user32 advapi32)
 add_dependencies(msvcr90 psdk asm)
 add_cd_file(TARGET msvcr90 DESTINATION reactos/winsxs/${VC90_ASSEMBLY} FOR all)

@@ -15,7 +15,7 @@ add_library(vmbus MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/vmbus.def)
 
 set_module_type(vmbus kernelmodedriver)
-target_link_libraries(vmbus wdmguid ntoskrnl_vista)
+target_link_libraries(vmbus wdmguid)
 add_importlibs(vmbus ntoskrnl hal)
 add_cd_file(TARGET vmbus DESTINATION reactos/system32/drivers FOR all)
 add_driver_inf(vmbus vmbus.inf)

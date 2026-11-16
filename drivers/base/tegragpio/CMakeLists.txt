@@ -7,7 +7,7 @@
 
 add_library(tegragpio MODULE tegragpio.c tegragpio.rc)
 set_module_type(tegragpio kmdfdriver)
-target_link_libraries(tegragpio msgpioclxstub ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(tegragpio msgpioclxstub libcntpr ${PSEH_LIB})
 add_importlibs(tegragpio ntoskrnl hal)
 add_cd_file(TARGET tegragpio DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(tegragpio tegragpio.inf)

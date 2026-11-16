@@ -115,7 +115,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
         -Wno-void-pointer-to-int-cast)
 endif()
 
-target_link_libraries(netadaptercx ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(netadaptercx uuid libcntpr ${PSEH_LIB})
 add_importlibs(netadaptercx ndis ntoskrnl hal)
 add_cd_file(TARGET netadaptercx DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_registry_inf(netadaptercx_reg.inf)

@@ -69,7 +69,7 @@ WmiQueryTraceInformation(
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NTSTATUS
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTAPI
 EtwRegister(
   _In_ LPCGUID ProviderId,
@@ -79,7 +79,7 @@ EtwRegister(
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NTSTATUS
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTAPI
 EtwUnregister(
   _In_ REGHANDLE RegHandle);
@@ -112,7 +112,7 @@ EtwActivityIdControl(
 
 _IRQL_requires_max_(HIGH_LEVEL)
 NTSTATUS
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTAPI
 EtwWrite(
   _In_ REGHANDLE RegHandle,

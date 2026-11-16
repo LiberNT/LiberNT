@@ -15,7 +15,7 @@ list(APPEND SOURCE
 
 add_library(bcmpcibt MODULE ${SOURCE} bcmpcibt.rc)
 set_module_type(bcmpcibt kmdfdriver)
-target_link_libraries(bcmpcibt applertkit fdtdrv wdmguid ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(bcmpcibt applertkit fdtdrv wdmguid libcntpr ${PSEH_LIB})
 add_importlibs(bcmpcibt ntoskrnl hal)
 add_cd_file(TARGET bcmpcibt DESTINATION reactos/system32/drivers NO_CAB FOR all)
 add_driver_inf(bcmpcibt bcmpcibt.inf)

@@ -253,7 +253,7 @@ endif()
 target_compile_definitions(msvcrt PRIVATE _MSVCR_VER=0)
 set_module_type(msvcrt win32dll ENTRYPOINT DllMain 12)
 target_link_libraries(msvcrt msvcrt_static crtmath dbgrpt vcruntime wine chkstk ${PSEH_LIB})
-add_importlibs(msvcrt kernel32 kernel32_vista ntdll)
+add_importlibs(msvcrt kernel32 ntdll)
 add_delay_importlibs(msvcrt user32 advapi32)
 
 if(MSVC)

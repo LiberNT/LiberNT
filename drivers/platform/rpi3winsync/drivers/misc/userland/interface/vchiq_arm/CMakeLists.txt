@@ -23,7 +23,6 @@ target_compile_options(vchiq_arm_kern PRIVATE -Wno-unknown-pragmas -Wno-pragma-p
 
 target_link_libraries(vchiq_arm_kern
     vcos_win32_kern
-    ntoskrnl_vista
     libcntpr
     ${PSEH_LIB})
 add_importlibs(vchiq_arm_kern ntoskrnl hal)

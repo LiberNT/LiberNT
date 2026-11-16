@@ -176,38 +176,9 @@ FormatDateTime(time_t Time, PWSTR pBuf)
     GetTimeFormatW(LOCALE_SYSTEM_DEFAULT, 0, &SysTime, NULL, pBuf + i, BUFFER_SIZE - i);
 }
 
-ULONGLONG GetSecondsQPC(VOID)
-{
-    LARGE_INTEGER Counter, Frequency;
-
-    QueryPerformanceCounter(&Counter);
-    QueryPerformanceFrequency(&Frequency);
-
-    return Counter.QuadPart / Frequency.QuadPart;
-}
-
 ULONGLONG GetSeconds(VOID)
 {
-    ULONGLONG (WINAPI *pGetTickCount64)(VOID);
-    ULONGLONG Ticks64;
-    HMODULE hModule = GetModuleHandleW(L"kernel32.dll");
-
-    pGetTickCount64 = (PVOID)GetProcAddress(hModule, "GetTickCount64");
-    if (pGetTickCount64)
-        return pGetTickCount64() / 1000;
-
-    hModule = LoadLibraryW(L"kernel32_vista.dll");
-    if (!hModule)
-        return GetSecondsQPC();
-
-    pGetTickCount64 = (PVOID)GetProcAddress(hModule, "GetTickCount64");
-    if (pGetTickCount64)
-        Ticks64 = pGetTickCount64() / 1000;
-    else
-        Ticks64 = GetSecondsQPC();
-
-    FreeLibrary(hModule);
-    return Ticks64;
+    return GetTickCount64() / 1000;
 }
 
 /* Show usage */

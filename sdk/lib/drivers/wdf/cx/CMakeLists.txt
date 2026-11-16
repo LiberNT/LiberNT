@@ -37,7 +37,7 @@ function(add_wdfcx_library _target _source)
         ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf
         ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf/shared/inc/private/common
         ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf/kmdf/inc/private)
-    target_link_libraries(${_target} ntoskrnl_vista libcntpr ${PSEH_LIB})
+    target_link_libraries(${_target} libcntpr ${PSEH_LIB})
     add_importlibs(${_target} ntoskrnl hal)
     add_cd_file(TARGET ${_target} DESTINATION reactos/system32/drivers FOR all)
 endfunction()

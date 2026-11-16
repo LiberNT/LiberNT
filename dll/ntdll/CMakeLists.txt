@@ -1,6 +1,4 @@
 
-add_subdirectory(nt_0600)
-
 spec2def(ntdll.dll def/ntdll.spec ADD_IMPORTLIB)
 spec2def(ntdll_chpe.dll chpebridge.spec ADD_IMPORTLIB)
 
@@ -44,6 +42,7 @@ list(APPEND SOURCE
     ldr/ldrguard.c
     ldr/ldrimgidx.c
     ldr/ldrinit.c
+    ldr/ldrnotify.c
     ldr/ldrmui.c
     ldr/ldrpe.c
     ldr/ldrutils.c
@@ -146,7 +145,7 @@ endif()
 set_subsystem(ntdll console)
 ################# END  HACK #################
 
-target_link_libraries(ntdll ntdllsys ntdll_vista_static etwtrace csrlib rtl rtl_um rtl_vista libcntpr setjmp uuid symcrypt ${PSEH_LIB})
+target_link_libraries(ntdll ntdllsys smlib etwtrace csrlib rtl rtl_um libcntpr setjmp uuid symcrypt ${PSEH_LIB})
 if(MSVC AND ARCH STREQUAL "arm64")
     target_link_libraries(ntdll chkstk)
 endif()

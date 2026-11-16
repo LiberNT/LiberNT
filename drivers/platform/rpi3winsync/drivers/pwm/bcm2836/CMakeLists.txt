@@ -28,7 +28,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
         -Wno-unused-but-set-variable)
 endif()
 
-target_link_libraries(bcm2836pwm ntoskrnl_vista libcntpr ${PSEH_LIB})
+target_link_libraries(bcm2836pwm libcntpr ${PSEH_LIB})
 add_importlibs(bcm2836pwm ntoskrnl hal)
 
 add_cd_file(TARGET bcm2836pwm DESTINATION reactos/system32/drivers FOR all)

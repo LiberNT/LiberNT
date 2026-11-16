@@ -29,6 +29,6 @@ list(APPEND SOURCE
 
 add_library(bthmini MODULE ${SOURCE} bthmini.rc)
 set_module_type(bthmini kmdfdriver)
-target_link_libraries(bthmini wdmsec ntoskrnl_vista libcntpr rsna_supplicant ${PSEH_LIB})
+target_link_libraries(bthmini wdmsec libcntpr rsna_supplicant ${PSEH_LIB})
 add_importlibs(bthmini ntoskrnl hal cng)
 add_cd_file(TARGET bthmini DESTINATION reactos/system32/drivers NO_CAB FOR all)

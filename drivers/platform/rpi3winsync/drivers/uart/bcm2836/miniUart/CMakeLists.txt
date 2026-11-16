@@ -44,7 +44,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
         -Wno-microsoft-string-literal-from-predefined)
 endif()
 
-target_link_libraries(pi_miniuart ntoskrnl_vista rtlver libcntpr ${PSEH_LIB})
+target_link_libraries(pi_miniuart rtlver libcntpr ${PSEH_LIB})
 add_importlibs(pi_miniuart hal ntoskrnl wmilib)
 
 add_cd_file(TARGET pi_miniuart DESTINATION reactos/system32/drivers FOR all)

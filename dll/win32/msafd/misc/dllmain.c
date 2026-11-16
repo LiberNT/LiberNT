@@ -286,7 +286,12 @@ WSPSocket(int AddressFamily,
         goto ok;
 
     /* Packet Size */
-    SizeOfPacket = TransportName.Length + sizeof(AFD_CREATE_PACKET) + sizeof(WCHAR);
+    if (TransportName.Length > MAXUSHORT - FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) - sizeof(WCHAR))
+    {
+        Status = WSAENOBUFS;
+        goto error;
+    }
+    SizeOfPacket = FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) + TransportName.Length + sizeof(WCHAR);
 
     /* EA Size */
     SizeOfEA = SizeOfPacket + sizeof(FILE_FULL_EA_INFORMATION) + AFD_PACKET_COMMAND_LENGTH;
@@ -315,6 +320,9 @@ WSPSocket(int AddressFamily,
                    TransportName.Buffer,
                    TransportName.Length + sizeof(WCHAR));
     AfdPacket->GroupID = g;
+    AfdPacket->AddressFamily = AddressFamily;
+    AfdPacket->SocketType = SocketType;
+    AfdPacket->Protocol = Protocol;
 
     /* Set up Endpoint Flags */
     if ((Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) != 0)

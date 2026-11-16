@@ -98,21 +98,21 @@ $if (_WDMDDK_)
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoSetSystemWake(
   _Inout_ struct _IRP *Irp);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 BOOLEAN
 NTAPI
 PoGetSystemWake(
   _In_ struct _IRP *Irp);
 
 _IRQL_requires_max_(APC_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoRegisterPowerSettingCallback(
@@ -123,7 +123,7 @@ PoRegisterPowerSettingCallback(
   _Outptr_opt_ PVOID *Handle);
 
 _IRQL_requires_max_(APC_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoUnregisterPowerSettingCallback(
@@ -154,7 +154,7 @@ PoEndDeviceBusy(
   _Inout_ PULONG IdlePointer);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 BOOLEAN
 NTAPI
 PoQueryWatchdogTime(
@@ -247,7 +247,7 @@ PoDeleteThermalRequest(
 
 #if (NTDDI_VERSION >= NTDDI_WIN8)
 _IRQL_requires_max_(PASSIVE_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxRegisterDevice(
@@ -256,21 +256,21 @@ PoFxRegisterDevice(
     _Out_ POHANDLE *Handle);
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxUnregisterDevice(
     _In_ POHANDLE Handle);
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxStartDevicePowerManagement(
     _In_ POHANDLE Handle);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxActivateComponent(
@@ -279,14 +279,14 @@ PoFxActivateComponent(
     _In_ ULONG Flags);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxCompleteDevicePowerNotRequired(
     _In_ POHANDLE Handle);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxIdleComponent(
@@ -295,7 +295,7 @@ PoFxIdleComponent(
     _In_ ULONG Flags);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxCompleteIdleCondition(
@@ -303,7 +303,7 @@ PoFxCompleteIdleCondition(
     _In_ ULONG Component);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxCompleteIdleState(
@@ -311,7 +311,7 @@ PoFxCompleteIdleState(
     _In_ ULONG Component);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxSetComponentLatency(
@@ -320,7 +320,7 @@ PoFxSetComponentLatency(
     _In_ ULONGLONG Latency);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxSetComponentResidency(
@@ -329,7 +329,7 @@ PoFxSetComponentResidency(
     _In_ ULONGLONG Residency);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxSetDeviceIdleTimeout(
@@ -337,7 +337,7 @@ PoFxSetDeviceIdleTimeout(
     _In_ ULONGLONG IdleTimeout);
 
 _IRQL_requires_max_(APC_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxRegisterComponentPerfStates(
@@ -349,7 +349,7 @@ PoFxRegisterComponentPerfStates(
     _Out_opt_ PPO_FX_COMPONENT_PERF_INFO *OutputStateInfo);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxIssueComponentPerfStateChange(
@@ -360,7 +360,7 @@ PoFxIssueComponentPerfStateChange(
     _In_opt_ PVOID Context);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxQueryCurrentComponentPerfState(
@@ -371,14 +371,14 @@ PoFxQueryCurrentComponentPerfState(
     _Out_ PULONGLONG CurrentPerf);
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxRegisterCrashdumpDevice(
     _In_ POHANDLE Handle);
 
 _IRQL_requires_max_(HIGH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxPowerOnCrashdumpDevice(
@@ -386,14 +386,14 @@ PoFxPowerOnCrashdumpDevice(
     _In_opt_ PVOID Context);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxReportDevicePoweredOn(
     _In_ POHANDLE Handle);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 NTSTATUS
 NTAPI
 PoFxPowerControl(
@@ -409,7 +409,7 @@ PoFxPowerControl(
 
 #if (NTDDI_VERSION >= NTDDI_WIN10_RS5)
 _IRQL_requires_max_(DISPATCH_LEVEL)
-NTKRNLVISTAAPI
+NTKERNELAPI
 VOID
 NTAPI
 PoFxCompleteDirectedPowerDown(

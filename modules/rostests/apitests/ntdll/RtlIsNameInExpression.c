@@ -311,10 +311,5 @@ START_TEST(RtlIsNameInExpression)
 {
     HMODULE hdll = GetModuleHandleW(L"ntdll.dll");
     pRtlIsNameInExpression = (PVOID)GetProcAddress(hdll, "RtlIsNameInExpression");
-    if (!pRtlIsNameInExpression)
-    {
-        hdll = GetModuleHandleW(L"ntdll_vista.dll");
-        pRtlIsNameInExpression = (PVOID)GetProcAddress(hdll, "RtlIsNameInExpression");
-    }
     RtlIsNameInExpressionTest();
 }
