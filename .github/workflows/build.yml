@@ -148,11 +148,16 @@ jobs:
         [ "$BUILD_TYPE" = "release" ] && TYPE=-release || TYPE=
         echo "tag=${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}$TYPE-${GITHUB_SHA::11}" >> "$GITHUB_OUTPUT"
 
+    - name: Name bootcd.iso
+      run: |
+        ISO=${{steps.configure.outputs.outdir}}/bootcd.iso
+        if [ -f "$ISO" ]; then ln -f "$ISO" "${{steps.configure.outputs.outdir}}/bootcd-${{steps.images.outputs.tag}}.iso"; fi
+
     - name: Upload bootcd.iso
       uses: actions/upload-artifact@v7
       with:
-        name: bootcd-iso-${{steps.images.outputs.tag}}
-        path: ${{steps.configure.outputs.outdir}}/bootcd.iso
+        path: ${{steps.configure.outputs.outdir}}/bootcd-${{steps.images.outputs.tag}}.iso
+        archive: false
 
     - name: Upload LiberNT.img
       if: ${{ env.BUILD_TYPE == 'debug' }}
