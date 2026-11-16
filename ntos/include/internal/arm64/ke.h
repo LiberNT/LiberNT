@@ -1235,6 +1235,8 @@ VOID KiReportCpuFeatures(IN PKPRCB Prcb);
 #define KI_DPC_THREAD_ACTIVE               0x00010000L
 #define KI_DPC_THREAD_REQUESTED            0x00020000L
 
+#define KI_ARCH_DPC_REQUEST_STATE
+
 FORCEINLINE
 BOOLEAN
 KiIsDpcInterruptRequested(

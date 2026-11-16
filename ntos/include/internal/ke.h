@@ -67,6 +67,89 @@
     ((VOID)(SourceContext), (VOID)(ContextFlags), (VOID)(PreviousMode), STATUS_SUCCESS)
 #endif
 
+#ifndef KI_ARCH_DPC_REQUEST_STATE
+FORCEINLINE
+BOOLEAN
+KiIsDpcInterruptRequested(
+    _In_ PKPRCB Prcb)
+{
+    return (BOOLEAN)(Prcb->DpcInterruptRequested != FALSE);
+}
+
+FORCEINLINE
+VOID
+KiSetDpcInterruptRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcInterruptRequested = TRUE;
+}
+
+FORCEINLINE
+VOID
+KiClearDpcInterruptRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcInterruptRequested = FALSE;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcPresent(
+    _Inout_ PKPRCB Prcb)
+{
+    UNREFERENCED_PARAMETER(Prcb);
+}
+
+FORCEINLINE
+VOID
+KiClearDpcRequestState(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcInterruptRequested = FALSE;
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadActive(
+    _In_ PKPRCB Prcb)
+{
+    return (BOOLEAN)(Prcb->DpcThreadActive != FALSE);
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadRequested(
+    _In_ PKPRCB Prcb)
+{
+    return (BOOLEAN)(Prcb->DpcThreadRequested != FALSE);
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadActive(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadActive = TRUE;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadRequested = TRUE;
+}
+
+FORCEINLINE
+VOID
+KiClearDpcThreadState(
+    _Inout_ PKPRCB Prcb)
+{
+    Prcb->DpcThreadActive = FALSE;
+    Prcb->DpcThreadRequested = FALSE;
+}
+#endif
+
 #ifndef KI_CALLOUT_STACK_RESERVE
 #define KI_CALLOUT_STACK_RESERVE 0
 #endif
