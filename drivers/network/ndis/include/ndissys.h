@@ -28,7 +28,6 @@ NdisICurrentProcessorIndex(VOID)
     ULONG ProcessorIndex = KeGetCurrentProcessorNumber();
 #endif
 
-    ASSERT(ProcessorIndex < MAXIMUM_PROCESSORS);
     return ProcessorIndex;
 }
 

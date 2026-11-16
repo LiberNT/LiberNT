@@ -48,41 +48,38 @@ NdisAcquireReadWriteLock(
  *    NDIS 5.0
  */
 {
-  ULONG RefCount;
-  UCHAR ProcessorNumber;
-  volatile UCHAR BusyLoop;
+  ULONG RefCount, Cpu, Slot;
 
   ASSERT_IRQL(DISPATCH_LEVEL);
 
-  if (fWrite) {
+  KeRaiseIrql(DISPATCH_LEVEL, &LockState->OldIrql);
+  Cpu = NdisICurrentProcessorIndex();
+  if (fWrite || Cpu >= RTL_NUMBER_OF(Lock->RefCount)) {
     if (Lock->Context == PsGetCurrentThread()) {
+      KeLowerIrql(LockState->OldIrql);
       LockState->LockState = 2;
-    } else {
-      KeAcquireSpinLock(&Lock->SpinLock, &LockState->OldIrql);
-      /* Check if any other processor helds a shared lock. */
-      for (ProcessorNumber = KeNumberProcessors; ProcessorNumber--; ) {
-        if (ProcessorNumber != NdisICurrentProcessorIndex()) {
-          /* Wait till the shared lock is released. */
-          while (Lock->RefCount[ProcessorNumber].RefCount != 0) {
-            for (BusyLoop = 32; BusyLoop--; )
-              ;
-          }
-        }
-      }
-      Lock->Context = PsGetCurrentThread();
-      LockState->LockState = 4;
+      return;
     }
+
+    KeAcquireSpinLockAtDpcLevel(&Lock->SpinLock);
+    for (Slot = 0; Slot < RTL_NUMBER_OF(Lock->RefCount); Slot++) {
+      if (Slot != Cpu) {
+        while (ReadULongAcquire((volatile ULONG *)&Lock->RefCount[Slot].RefCount) != 0)
+          YieldProcessor();
+      }
+    }
+    Lock->Context = PsGetCurrentThread();
+    LockState->LockState = 4;
   } else {
-    KeRaiseIrql(DISPATCH_LEVEL, &LockState->OldIrql);
-    RefCount = InterlockedIncrement((PLONG)&Lock->RefCount[NdisICurrentProcessorIndex()].RefCount);
+    RefCount = InterlockedIncrement((PLONG)&Lock->RefCount[Cpu].RefCount);
     /* Racing with a exclusive write lock case. */
-    if (Lock->SpinLock != 0) {
+    if (ReadULongPtrAcquire(&Lock->SpinLock) != 0) {
       if (RefCount == 1) {
         if (Lock->Context != PsGetCurrentThread()) {
           /* Wait for the exclusive lock to be released. */
-          Lock->RefCount[NdisICurrentProcessorIndex()].RefCount--;
+          InterlockedDecrement((PLONG)&Lock->RefCount[Cpu].RefCount);
           KeAcquireSpinLockAtDpcLevel(&Lock->SpinLock);
-          Lock->RefCount[NdisICurrentProcessorIndex()].RefCount++;
+          InterlockedIncrement((PLONG)&Lock->RefCount[Cpu].RefCount);
           KeReleaseSpinLockFromDpcLevel(&Lock->SpinLock);
         }
       }
@@ -111,7 +108,7 @@ NdisReleaseReadWriteLock(
       return;
 
     case 3: /* Shared read lock */
-      Lock->RefCount[NdisICurrentProcessorIndex()].RefCount--;
+      InterlockedDecrement((PLONG)&Lock->RefCount[NdisICurrentProcessorIndex()].RefCount);
       LockState->LockState = -1;
       if (LockState->OldIrql < DISPATCH_LEVEL)
         KeLowerIrql(LockState->OldIrql);
