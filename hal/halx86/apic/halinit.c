@@ -47,7 +47,7 @@ HalpEnsureBootProcessorFirst(VOID)
         }
     }
 
-    i = min(HalpApicInfoTable.ProcessorCount, MAXIMUM_PROCESSORS - 1);
+    i = min(HalpApicInfoTable.ProcessorCount, KE_MAXIMUM_PROCESSORS - 1);
     while (i != 0)
     {
         HalpProcessorIdentity[i] = HalpProcessorIdentity[i - 1];
@@ -58,7 +58,7 @@ HalpEnsureBootProcessorFirst(VOID)
     HalpProcessorIdentity[0].ProcessorId = BootApicId;
     HalpProcessorIdentity[0].LapicId = (UCHAR)BootApicId;
     HalpProcessorIdentity[0].BSPCheck = TRUE;
-    if (HalpApicInfoTable.ProcessorCount < MAXIMUM_PROCESSORS)
+    if (HalpApicInfoTable.ProcessorCount < KE_MAXIMUM_PROCESSORS)
         HalpApicInfoTable.ProcessorCount++;
 }
 

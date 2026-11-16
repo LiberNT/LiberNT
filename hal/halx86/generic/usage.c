@@ -125,7 +125,7 @@ HalpBuildPartialFromIdt(IN ULONG Entry,
     RawDescriptor->u.Interrupt.Level = HalpIDTUsage[Entry].BusReleativeVector;
 
     /* Affinity is all the CPUs */
-    RawDescriptor->u.Interrupt.Affinity = HalpActiveProcessors;
+    RawDescriptor->u.Interrupt.Affinity = HalpActiveProcessors[0];
 
     /* The translated copy is identical */
     RtlCopyMemory(TranslatedDescriptor, RawDescriptor, sizeof(CM_PARTIAL_RESOURCE_DESCRIPTOR));

@@ -414,7 +414,7 @@ KdpInfoBuildSystem(VOID)
                   "processors=%lu\nmemory_mb=%lu\nuptime=%lu\n",
                   KERNEL_VERSION_STR, NtBuildLab, KERNEL_VERSION_COMMIT_HASH,
                   SharedUserData->NtMajorVersion, SharedUserData->NtMinorVersion, NtBuildNumber & 0xFFFF,
-                  KeProcessorArchitecture, (ULONG)KeNumberProcessors,
+                  KeProcessorArchitecture, KeProcessorCount,
                   (ULONG)(((ULONGLONG)MmNumberOfPhysicalPages * PAGE_SIZE) >> 20),
                   (ULONG)(KeQueryInterruptTime() / 10000000));
     if (KeBugCheckActive)

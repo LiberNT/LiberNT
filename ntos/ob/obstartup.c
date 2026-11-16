@@ -376,11 +376,11 @@ ObpBindPerProcessorLookasideLists(VOID)
     ULONG Index;
 
     Private = ExAllocatePoolWithTag(NonPagedPool,
-                                    2 * KeNumberProcessors *
+                                    2 * KeProcessorCount *
                                     sizeof(GENERAL_LOOKASIDE),
                                     'LLbO');
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+    for (Index = 0; Index < KeProcessorCount; Index++)
     {
         if (Private == NULL)
         {

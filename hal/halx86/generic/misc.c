@@ -255,7 +255,7 @@ HalGetProcessorIdByNtNumber(
     if (ProcessorId == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    if (ProcessorNumber >= MAXIMUM_PROCESSORS)
+    if (ProcessorNumber >= KE_MAXIMUM_PROCESSORS)
         return STATUS_INVALID_PARAMETER;
 
     *ProcessorId = ProcessorNumber;

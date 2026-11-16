@@ -66,8 +66,14 @@ HalInitializeProcessor(
     KeGetPcr()->StallScaleFactor = HalpStallScaleFactor;
 
     /* Update the interrupt affinity and processor mask */
-    InterlockedBitTestAndSetAffinity(&HalpActiveProcessors, ProcessorNumber);
-    InterlockedBitTestAndSetAffinity(&HalpDefaultInterruptAffinity, ProcessorNumber);
+    InterlockedBitTestAndSetAffinity(&HalpActiveProcessors[ProcessorNumber / HALP_SET_WORD_BITS],
+                                     ProcessorNumber % HALP_SET_WORD_BITS);
+
+    /* TODO: device interrupts are only routed to the first word of processors */
+    if (ProcessorNumber < HALP_SET_WORD_BITS)
+        InterlockedBitTestAndSetAffinity(&HalpDefaultInterruptAffinity, ProcessorNumber);
+    else
+        HalpProcessorsPastFirstWord = TRUE;
 
     if (ProcessorNumber == 0)
     {

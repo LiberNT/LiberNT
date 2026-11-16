@@ -32,40 +32,70 @@ KiStallEmptyYield(VOID)
 
 /* Processors with nothing to run. A bit here is a promise to whoever is
    looking for somewhere to put a thread, not a lock on the processor. */
-KAFFINITY KiIdleSummary;
+KAFFINITY KiIdleSummary[KE_MAXIMUM_GROUPS];
 
 /* Of the idle processors above, those whose physical core is wholly idle.
    Placing a thread on one of these costs no sibling any throughput. */
-KAFFINITY KiIdleSMTSummary;
+KAFFINITY KiIdleSMTSummary[KE_MAXIMUM_GROUPS];
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
 FORCEINLINE
-KAFFINITY
+BOOLEAN
 KiThreadRunnableSet(
-    _In_ PKTHREAD Thread)
+    _In_ PKTHREAD Thread,
+    _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *Affinity)
 {
-    KAFFINITY Affinity;
+    KI_PROCESSOR_SET NonParkedSet;
 
-    Affinity = KiThreadAffinityMask(Thread) & KeActiveProcessors;
+    if (!KiAndProcessorSets(Affinity, KiThreadAffinity(Thread), KeActiveProcessors.Bitmap))
+        return FALSE;
 
     /*
      * A parked processor is still active but should not be given work while
      * anything unparked can take it.
      */
-    if (Affinity & KiGetNonParkedProcessorSet())
-        Affinity &= KiGetNonParkedProcessorSet();
+    KiGetNonParkedProcessorSet(NonParkedSet);
+    if (KiAndProcessorSets(NonParkedSet, NonParkedSet, Affinity))
+        KiCopyProcessorSet(Affinity, NonParkedSet);
 
-    return Affinity;
+    return TRUE;
 }
 
 FORCEINLINE
 ULONG
 KiFirstSetProcessor(
-    _In_ KAFFINITY Set)
+    _In_ const KAFFINITY *Set)
 {
-    ASSERT(Set != 0);
-    return (ULONG)(UCHAR)RtlFindLeastSignificantBit((ULONGLONG)Set);
+    ULONG Number = 0;
+    BOOLEAN Found;
+
+    Found = KiFindProcessorInSet(Set, 0, &Number);
+    ASSERT(Found);
+    UNREFERENCED_PARAMETER(Found);
+    return Number;
+}
+
+FORCEINLINE
+BOOLEAN
+KiThreadMayRunElsewhere(
+    _In_ PKTHREAD Thread,
+    _In_ PKPRCB Prcb)
+{
+    const KAFFINITY *Affinity = KiThreadAffinity(Thread);
+    KAFFINITY Usable;
+    ULONG Word;
+
+    for (Word = 0; Word < KiProcessorSetWords; Word++)
+    {
+        Usable = Affinity[Word] & KeActiveProcessors.Bitmap[Word];
+        if (Word == KI_SET_WORD(Prcb->Number))
+            Usable &= ~KI_SET_BIT(Prcb->Number);
+        if (Usable != 0)
+            return TRUE;
+    }
+
+    return FALSE;
 }
 
 /*
@@ -107,20 +137,21 @@ VOID
 KiMarkProcessorIdle(
     _In_ PKPRCB Prcb)
 {
-    KAFFINITY Mask = AFFINITY_MASK(Prcb->Number);
+    ULONG Word = KI_SET_WORD(Prcb->Number);
+    KAFFINITY Mask = KI_SET_BIT(Prcb->Number);
     KAFFINITY Siblings = (KAFFINITY)Prcb->MultiThreadProcessorSet;
 
-    KiUpdateAffinitySummary(&KiIdleSummary, Mask, 0);
+    KiUpdateAffinitySummary(&KiIdleSummary[Word], Mask, 0);
 
     if ((Siblings == 0) || ((Siblings & ~Mask) == 0))
     {
         /* No siblings: the processor is a whole core on its own */
-        KiUpdateAffinitySummary(&KiIdleSMTSummary, Mask, 0);
+        KiUpdateAffinitySummary(&KiIdleSMTSummary[Word], Mask, 0);
         return;
     }
 
-    if ((Siblings & ~KiIdleSummary) == 0)
-        KiUpdateAffinitySummary(&KiIdleSMTSummary, Siblings, 0);
+    if ((Siblings & ~*(volatile KAFFINITY *)&KiIdleSummary[Word]) == 0)
+        KiUpdateAffinitySummary(&KiIdleSMTSummary[Word], Siblings, 0);
 }
 
 /*
@@ -133,11 +164,12 @@ VOID
 KiMarkProcessorBusy(
     _In_ PKPRCB Prcb)
 {
-    KAFFINITY Mask = AFFINITY_MASK(Prcb->Number);
+    ULONG Word = KI_SET_WORD(Prcb->Number);
+    KAFFINITY Mask = KI_SET_BIT(Prcb->Number);
     KAFFINITY Siblings = (KAFFINITY)Prcb->MultiThreadProcessorSet;
 
-    KiUpdateAffinitySummary(&KiIdleSummary, 0, Mask);
-    KiUpdateAffinitySummary(&KiIdleSMTSummary,
+    KiUpdateAffinitySummary(&KiIdleSummary[Word], 0, Mask);
+    KiUpdateAffinitySummary(&KiIdleSMTSummary[Word],
                             0,
                             (Siblings != 0) ? Siblings : Mask);
 }
@@ -211,23 +243,27 @@ KiApplyThreadAdjustment(
  * whole core is idle is preferred: its siblings are not paying for the choice.
  */
 static
-KAFFINITY
-KiProcessorsRunningDpcs(
-    _In_ KAFFINITY Set)
+BOOLEAN
+KiProcessorsNotRunningDpcs(
+    _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *Quiet,
+    _In_ const KAFFINITY *Set)
 {
-    KAFFINITY Busy = 0;
     ULONG Processor;
+    BOOLEAN Found, Any = FALSE;
 
-    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    KiClearProcessorSet(Quiet);
+    for (Found = KiFindProcessorInSet(Set, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(Set, Processor + 1, &Processor))
     {
-        if ((Set & AFFINITY_MASK(Processor)) &&
-            KiProcessorBlock[Processor]->DpcRoutineActive)
+        if (!KiProcessorBlock[Processor]->DpcRoutineActive)
         {
-            Busy |= AFFINITY_MASK(Processor);
+            KiAddProcessorToSet(Quiet, Processor);
+            Any = TRUE;
         }
     }
 
-    return Busy;
+    return Any;
 }
 
 static
@@ -235,58 +271,52 @@ ULONG
 KiSelectTargetProcessor(
     _In_ PKTHREAD Thread)
 {
-    KAFFINITY Affinity, IdleSet, QuietSet, IdleSmtSet;
-    KAFFINITY IdealMask;
+    KI_PROCESSOR_SET Affinity, IdleSet, Narrowed;
+    ULONG Ideal = Thread->IdealProcessor;
 
-    Affinity = KiThreadRunnableSet(Thread);
-    if (Affinity == 0)
+    if (!KiThreadRunnableSet(Thread, Affinity))
     {
         /* Nothing it may use is running: leave it where it last was */
         return Thread->NextProcessor;
     }
 
-    Affinity = KiHeteroPreferredProcessorSet(Thread, Affinity);
-    ASSERT(Affinity != 0);
+    KiHeteroPreferredProcessorSet(Thread, Affinity);
+    ASSERT(!KiIsProcessorSetEmpty(Affinity));
 
-    IdealMask = AFFINITY_MASK(Thread->IdealProcessor);
-
-    IdleSet = Affinity & KiIdleSummary;
-    if (IdleSet != 0)
+    if (KiAndProcessorSets(IdleSet, Affinity, KiIdleSummary))
     {
-        ULONG Current = KeGetCurrentProcessorNumber();
-        KAFFINITY CurrentMask = AFFINITY_MASK(Current);
+        ULONG Current = KeGetCurrentPrcb()->Number;
 
         /* An idle processor readying a thread from its own interrupt or DPC runs it next, without waking another */
-        if ((IdleSet & CurrentMask) &&
-            (!(IdleSet & KiHeteroPerformanceSet) || (CurrentMask & KiHeteroPerformanceSet)))
+        if (KiIsProcessorInSet(IdleSet, Current) &&
+            (!KiDoProcessorSetsIntersect(IdleSet, KiHeteroPerformanceSet) ||
+             KiIsProcessorInSet(KiHeteroPerformanceSet, Current)))
         {
             return Current;
         }
 
         /* A processor in the middle of a DPC is idle only in name: a thread sent there waits for the routine to end */
-        QuietSet = IdleSet & ~KiProcessorsRunningDpcs(IdleSet);
-        if (QuietSet != 0)
-            IdleSet = QuietSet;
+        if (KiProcessorsNotRunningDpcs(Narrowed, IdleSet))
+            KiCopyProcessorSet(IdleSet, Narrowed);
 
-        if (IdleSet & KiHeteroPerformanceSet)
-            IdleSet &= KiHeteroPerformanceSet;
+        if (KiAndProcessorSets(Narrowed, IdleSet, KiHeteroPerformanceSet))
+            KiCopyProcessorSet(IdleSet, Narrowed);
 
-        if (IdleSet & IdealMask)
-            return Thread->IdealProcessor;
+        if (KiIsProcessorInSet(IdleSet, Ideal))
+            return Ideal;
 
-        IdleSmtSet = IdleSet & *(volatile KAFFINITY *)&KiIdleSMTSummary;
-        if (IdleSmtSet != 0)
-            return KiFirstSetProcessor(IdleSmtSet);
+        if (KiAndProcessorSets(Narrowed, IdleSet, KiIdleSMTSummary))
+            return KiFirstSetProcessor(Narrowed);
 
         return KiFirstSetProcessor(IdleSet);
     }
 
     KiCheckProcessorUnpark(Thread);
 
-    if (Affinity & IdealMask)
-        return Thread->IdealProcessor;
+    if (KiIsProcessorInSet(Affinity, Ideal))
+        return Ideal;
 
-    return KiFindIdealProcessor(Affinity, (UCHAR)Thread->IdealProcessor);
+    return KiFindIdealProcessor(Affinity, Ideal);
 }
 
 static
@@ -295,16 +325,19 @@ KiCanStealToProcessor(
     _In_ PKTHREAD Thread,
     _In_ ULONG TargetCpu)
 {
-    KAFFINITY Affinity = KiThreadAffinityMask(Thread) & KeActiveProcessors;
-    KAFFINITY NonParkedSet = KiGetNonParkedProcessorSet();
+    KI_PROCESSOR_SET Affinity, Narrowed;
 
-    if (!(Affinity & AFFINITY_MASK(TargetCpu)) ||
-        !(KiHeteroPreferredProcessorSet(Thread, Affinity) & AFFINITY_MASK(TargetCpu)))
-    {
+    KiAndProcessorSets(Affinity, KiThreadAffinity(Thread), KeActiveProcessors.Bitmap);
+    if (!KiIsProcessorInSet(Affinity, TargetCpu))
         return FALSE;
-    }
 
-    return (NonParkedSet & AFFINITY_MASK(TargetCpu)) || !(Affinity & NonParkedSet);
+    KiCopyProcessorSet(Narrowed, Affinity);
+    KiHeteroPreferredProcessorSet(Thread, Narrowed);
+    if (!KiIsProcessorInSet(Narrowed, TargetCpu))
+        return FALSE;
+
+    KiGetNonParkedProcessorSet(Narrowed);
+    return KiIsProcessorInSet(Narrowed, TargetCpu) || !KiDoProcessorSetsIntersect(Affinity, Narrowed);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -336,7 +369,7 @@ KiQueueReadyThread(
         return;
     }
 
-    if ((KiThreadAffinityMask(Thread) & Prcb->SetMember) == 0)
+    if (!KiIsProcessorInSet(KiThreadAffinity(Thread), Prcb->Number))
     {
         /* It may not run here after all; let the deferred pass place it again */
         Thread->State = DeferredReady;
@@ -400,7 +433,7 @@ KiDeferredReadyThread(
     Priority = Thread->Priority;
 
     Processor = KiSelectTargetProcessor(Thread);
-    ASSERT(Processor < MAXIMUM_PROCESSORS);
+    ASSERT(Processor < KE_MAXIMUM_PROCESSORS);
     if ((Processor != Thread->NextProcessor) && KiDeferReadyWhileLeavingProcessor(Thread))
         return;
     Prcb = KiProcessorBlock[Processor];
@@ -436,7 +469,7 @@ KiDeferredReadyThread(
         (Priority > (KPRIORITY)Current->Priority) &&
         !Current->DeferPreemption &&
         !((Current == Prcb->IdleThread) && Prcb->DpcRoutineActive &&
-          (KiThreadAffinityMask(Thread) & KeActiveProcessors & ~Prcb->SetMember)))
+          KiThreadMayRunElsewhere(Thread, Prcb)))
     {
         if (Current != Prcb->IdleThread)
             Current->Preempted = TRUE;
@@ -582,16 +615,17 @@ KiStealReadyThread(
     _In_ KPRIORITY MinimumPriority)
 {
     ULONG Offset, Index;
-    KAFFINITY Self = AFFINITY_MASK(Prcb->Number);
+    ULONG Count = KeProcessorCount;
     ULONG Floor = ~(PRIORITY_MASK(MinimumPriority) - 1);
 
-    for (Offset = 1; Offset < (ULONG)KeNumberProcessors; Offset++)
+    /* TODO: search by topology distance and keep a summary of processors with queued work instead of visiting every one */
+    for (Offset = 1; Offset < Count; Offset++)
     {
         PKPRCB Remote;
         ULONG Summary;
         LONG Priority;
 
-        Index = (Prcb->Number + Offset) % (ULONG)KeNumberProcessors;
+        Index = (Prcb->Number + Offset) % Count;
         Remote = KiProcessorBlock[Index];
         if ((Remote == NULL) || ((ReadNoFence((PLONG)&Remote->ReadySummary) & Floor) == 0))
             continue;
@@ -613,7 +647,7 @@ KiStealReadyThread(
 
                 ASSERT(Thread->State == Ready);
                 ASSERT(Thread != Remote->IdleThread);
-                if ((KiThreadAffinityMask(Thread) & Self) == 0)
+                if (!KiIsProcessorInSet(KiThreadAffinity(Thread), Prcb->Number))
                     continue;
                 if (!KiCanStealToProcessor(Thread, Prcb->Number))
                     continue;
@@ -966,43 +1000,51 @@ KiSetPriorityThread(
  * the new set excludes is moved off it; one that is queued there is queued
  * again where it is allowed to be.
  *
- * Entered with the thread lock held at SYNCH_LEVEL. Answers the previous set.
+ * Entered with the thread lock held at SYNCH_LEVEL.
  */
-KAFFINITY
+VOID
 FASTCALL
 KiSetAffinityThread(
     _Inout_ PKTHREAD Thread,
-    _In_ KAFFINITY Affinity)
+    _In_ const KAFFINITY *Affinity)
 {
-    KAFFINITY OldAffinity = KiThreadAffinityMask(Thread);
+    KAFFINITY *Target = KiThreadAffinity(Thread);
+    KI_PROCESSOR_SET Usable;
     PKPRCB Prcb;
-    ULONG Processor;
+    ULONG Processor, Word;
+    BOOLEAN Found;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-    ASSERT((Affinity & KeActiveProcessors) != 0);
+    Found = KiAndProcessorSets(Usable, Affinity, KeActiveProcessors.Bitmap);
+    ASSERT(Found);
+    UNREFERENCED_PARAMETER(Found);
 
-    KiThreadAffinityMask(Thread) = Affinity;
+    /* A processor that reads the set without this lock tests one bit of it, and must never find the set empty */
+    for (Word = 0; Word < KiProcessorSetWords; Word++)
+        *(volatile KAFFINITY *)&Target[Word] = Target[Word] | Affinity[Word];
+    for (Word = 0; Word < KiProcessorSetWords; Word++)
+        *(volatile KAFFINITY *)&Target[Word] = Affinity[Word];
     Thread->AffinityVersion++;
 
     /*
      * Keep the ideal processor inside the new set; otherwise every placement
      * would start from a processor the thread may not use.
      */
-    if ((Affinity & AFFINITY_MASK(Thread->IdealProcessor)) == 0)
-        Thread->IdealProcessor = KiFirstSetProcessor(Affinity & KeActiveProcessors);
+    if (!KiIsProcessorInSet(Affinity, Thread->IdealProcessor))
+        Thread->IdealProcessor = KiFirstSetProcessor(Usable);
 
     switch (Thread->State)
     {
         case Ready:
         {
-            if (Affinity & AFFINITY_MASK(Thread->NextProcessor))
+            if (KiIsProcessorInSet(Affinity, Thread->NextProcessor))
                 break;
 
             Prcb = KiAcquireReadyThreadPrcb(Thread);
             if (Prcb == NULL)
                 break;
 
-            if (Affinity & Prcb->SetMember)
+            if (KiIsProcessorInSet(Affinity, Prcb->Number))
             {
                 KiReleasePrcbLock(Prcb);
                 break;
@@ -1022,7 +1064,7 @@ KiSetAffinityThread(
         case Standby:
         {
             Processor = Thread->NextProcessor;
-            if (Affinity & AFFINITY_MASK(Processor))
+            if (KiIsProcessorInSet(Affinity, Processor))
                 break;
 
             Prcb = KiProcessorBlock[Processor];
@@ -1044,7 +1086,7 @@ KiSetAffinityThread(
         case Running:
         {
             Processor = Thread->NextProcessor;
-            if (Affinity & AFFINITY_MASK(Processor))
+            if (KiIsProcessorInSet(Affinity, Processor))
                 break;
 
             /*
@@ -1068,8 +1110,6 @@ KiSetAffinityThread(
         default:
             break;
     }
-
-    return OldAffinity;
 }
 
 /*
@@ -1345,27 +1385,26 @@ KiQueueThreadForReaping(
 ULONG
 NTAPI
 KiFindIdealProcessor(
-    _In_ KAFFINITY ProcessorSet,
-    _In_ UCHAR OriginalIdealProcessor)
+    _In_ const KAFFINITY *ProcessorSet,
+    _In_ ULONG OriginalIdealProcessor)
 {
-    KAFFINITY Remaining = ProcessorSet;
     ULONG Best = OriginalIdealProcessor;
     ULONG BestSummary = MAXULONG;
     ULONG Processor;
+    BOOLEAN Found;
     PKPRCB Prcb;
     ULONG Summary;
 
-    if (ProcessorSet == 0)
+    if (KiIsProcessorSetEmpty(ProcessorSet))
         return OriginalIdealProcessor;
 
-    if ((ProcessorSet & AFFINITY_MASK(OriginalIdealProcessor)) == 0)
+    if (!KiIsProcessorInSet(ProcessorSet, OriginalIdealProcessor))
         Best = KiFirstSetProcessor(ProcessorSet);
 
-    while (Remaining != 0)
+    for (Found = KiFindProcessorInSet(ProcessorSet, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(ProcessorSet, Processor + 1, &Processor))
     {
-        Processor = KiFirstSetProcessor(Remaining);
-        Remaining &= ~AFFINITY_MASK(Processor);
-
         Prcb = KiProcessorBlock[Processor];
         if (Prcb == NULL)
             continue;
@@ -1400,13 +1439,12 @@ KiBalanceReadyQueues(
     _Inout_ PKPRCB Target,
     _In_ KI_BALANCE_REASON Reason)
 {
-    KAFFINITY Candidates;
     PKPRCB Source;
     PKTHREAD Thread;
     PLIST_ENTRY Entry;
     ULONG Processor;
     LONG Priority;
-    BOOLEAN Moved = FALSE;
+    BOOLEAN Found, Moved = FALSE;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
@@ -1414,14 +1452,12 @@ KiBalanceReadyQueues(
     if (Target->ReadySummary != 0)
         return FALSE;
 
-    Candidates = KeActiveProcessors & ~AFFINITY_MASK(Target->Number);
-    while (Candidates != 0)
+    for (Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, Processor + 1, &Processor))
     {
-        Processor = KiFirstSetProcessor(Candidates);
-        Candidates &= ~AFFINITY_MASK(Processor);
-
         Source = KiProcessorBlock[Processor];
-        if (Source == NULL)
+        if ((Source == NULL) || (Source == Target))
             continue;
 
         /* One queued thread is that processor's own next turn; leave it */
@@ -1443,7 +1479,7 @@ KiBalanceReadyQueues(
         Thread = CONTAINING_RECORD(Entry, KTHREAD, WaitListEntry);
 
         if ((Thread->State != Ready) ||
-            ((KiThreadAffinityMask(Thread) & Target->SetMember) == 0) ||
+            !KiIsProcessorInSet(KiThreadAffinity(Thread), Target->Number) ||
             !KiCanStealToProcessor(Thread, Target->Number) ||
             KiThreadLeavingProcessor(Thread))
         {

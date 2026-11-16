@@ -751,7 +751,10 @@ extern PADDRESS_USAGE HalpAddressUsageList;
 
 extern LARGE_INTEGER HalpPerfCounter;
 
-extern KAFFINITY HalpActiveProcessors;
+#define HALP_SET_WORD_BITS ((ULONG)(sizeof(KAFFINITY) * 8))
+
+extern KAFFINITY HalpActiveProcessors[KE_MAXIMUM_GROUPS];
+extern BOOLEAN HalpProcessorsPastFirstWord;
 
 extern BOOLEAN HalDisableFirmwareMapper;
 extern PWCHAR HalHardwareIdString;

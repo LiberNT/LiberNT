@@ -672,7 +672,8 @@ typedef struct _KPRCB
 {
     ULONG MxCsr;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
-    USHORT Number;
+    UCHAR LegacyNumber;
+    UCHAR ReservedMustBeZero;
 #else
     UCHAR Number;
     UCHAR NestingLevel;
@@ -684,8 +685,10 @@ typedef struct _KPRCB
     struct _KTHREAD *IdleThread;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR NestingLevel;
-    UCHAR Group;
-    UCHAR PrcbPad00[6];
+    UCHAR ClockOwner;
+    UCHAR PendingTickFlags;
+    UCHAR IdleState;
+    ULONG Number;
 #else
     UINT64 UserRsp;
 #endif
@@ -990,6 +993,14 @@ typedef struct _KPRCB
     PCONTEXT Context;
 #endif
 } KPRCB, *PKPRCB;
+
+/* TODO: GroupSetMember (0xC8), Group (0xD0) and GroupIndex (0xD1) are missing: this layout departs from Windows 11 at 0x38 */
+#if (NTDDI_VERSION >= NTDDI_LONGHORN)
+C_ASSERT(FIELD_OFFSET(KPRCB, LegacyNumber) == 0x004);
+C_ASSERT(FIELD_OFFSET(KPRCB, NestingLevel) == 0x020);
+C_ASSERT(FIELD_OFFSET(KPRCB, Number) == 0x024);
+C_ASSERT(FIELD_OFFSET(KPRCB, RspBase) == 0x028);
+#endif
 
 //
 // Processor Control Region

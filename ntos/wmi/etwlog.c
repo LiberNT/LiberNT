@@ -254,7 +254,7 @@ EtwpInitializeBuffer(
     RtlZeroMemory(Buffer, sizeof(*Buffer));
     Buffer->BufferSize = Logger->BufferSize;
     Buffer->CurrentOffset = sizeof(*Buffer);
-    Buffer->ClientContext.ProcessorNumber = (UCHAR)KeGetCurrentProcessorNumber();
+    Buffer->ClientContext.ProcessorNumber = (UCHAR)KeGetCurrentPrcb()->Number;
     Buffer->ClientContext.LoggerId = Logger->LoggerId;
     Buffer->State = EtwBufferStateGeneralLogging;
     Buffer->BufferType = BufferType;
@@ -650,7 +650,7 @@ EtwpBuildHeaderBuffer(
     LogHeader->VersionDetail.SubVersion = 1;
     LogHeader->VersionDetail.SubMinorVersion = 5;
     LogHeader->ProviderVersion = NtBuildNumber & 0xFFFF;
-    LogHeader->NumberOfProcessors = KeNumberProcessors;
+    LogHeader->NumberOfProcessors = KeProcessorCount;
     LogHeader->TimerResolution = KeMaximumIncrement;
     LogHeader->MaximumFileSize = Logger->MaximumFileSize;
     LogHeader->LogFileMode = Logger->LogFileMode & ~EVENT_TRACE_PERSIST_ON_HYBRID_SHUTDOWN;
@@ -961,7 +961,7 @@ EtwpStartLogger(
         Logger->BufferSizeKb = ETWP_MAX_BUFFER_SIZE;
     Logger->BufferSize = Logger->BufferSizeKb << 10;
 
-    MinimumBuffers = 2 * (ULONG)KeNumberProcessors;
+    MinimumBuffers = 2 * KeProcessorCount;
     Logger->MinimumBuffers = max(Info->MinimumBuffers, MinimumBuffers);
     Logger->MaximumBuffers = Info->MaximumBuffers ? Info->MaximumBuffers : MinimumBuffers + ETWP_EXTRA_BUFFERS;
     if (Logger->MaximumBuffers < Logger->MinimumBuffers)

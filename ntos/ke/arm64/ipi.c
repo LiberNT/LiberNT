@@ -264,7 +264,7 @@ KeIpiGenericCall(
 
     ASSERT(KiArm64IpiPacket.Function == NULL);
     ASSERT(KiArm64IpiPacket.TargetCount == 0);
-    Targets = KeActiveProcessors & ~KeGetCurrentPrcb()->SetMember;
+    Targets = KeActiveProcessors.Bitmap[0] & ~KeGetCurrentPrcb()->SetMember;
     TargetCount = 0;
     for (KAFFINITY Bit = Targets; Bit != 0; Bit &= (Bit - 1))
     {

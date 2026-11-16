@@ -55,9 +55,9 @@ KiRiscvInitializeBootPcr(
      * reserved from here onward; trap entry must restore it before C code. */
     __asm__ __volatile__("csrw sie, zero\n\tcsrw sscratch, %0\n\tmv gp, %0" :: "r"(Pcr) : "memory");
     KiProcessorBlock[0] = Prcb;
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     KeMemoryBarrier();
-    KeNumberProcessors = 1;
+    KiSetProcessorCount(1);
     return TRUE;
 }
 

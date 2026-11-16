@@ -173,7 +173,7 @@ ExpCurrentFreeList(VOID)
         return 0;
     }
 
-    return KeGetCurrentProcessorNumber() % ExpFreeListCount;
+    return KeGetCurrentPrcb()->Number % ExpFreeListCount;
 }
 
 static
@@ -952,7 +952,7 @@ ExpInitializeHandleTables(VOID)
 {
     ULONG Index;
 
-    ExpFreeListCount = KeNumberProcessors;
+    ExpFreeListCount = KeProcessorCount;
     if (ExpFreeListCount > EXP_HANDLE_MAX_FREE_LISTS)
     {
         ExpFreeListCount = EXP_HANDLE_MAX_FREE_LISTS;

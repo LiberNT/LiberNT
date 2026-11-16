@@ -7,6 +7,8 @@ import pathlib
 import subprocess
 import tempfile
 
+import ke_procset_fixture
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
@@ -168,9 +170,9 @@ static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner;
 typedef struct { int Valid; } KI_FREEZE_WAIT;
 static volatile LONG64 KiFreezeEpoch;
-static ULONG KeNumberProcessors = 2;
+@PROCSET@
+static ULONG KeProcessorCount = 2;
 static int Yields;
-static KAFFINITY KeActiveProcessors = 3;
 static PKPRCB KeGetCurrentPrcb(void) { return &Cpus[0]; }
 static PVOID InterlockedCompareExchangePointer(PVOID volatile *p, PVOID v, PVOID old) {
     return __sync_val_compare_and_swap(p,old,v);
@@ -187,8 +189,8 @@ static void KiSetFreezeFailure(void) { assert(!"a freeze failed"); }
 static BOOLEAN KiFreezeWaitExpired(KI_FREEZE_WAIT *Wait) { (void)Wait; return FALSE; }
 static BOOLEAN KiFreezeWaitFailed(PKPRCB Prcb, KI_FREEZE_WAIT *Wait) { (void)Prcb; (void)Wait; return FALSE; }
 static void KiFreezeIfRequested(void) { assert(0); }
-static void KiIpiSend(KAFFINITY targets, int type) {
-    assert(targets == 2 && type == IPI_FREEZE);
+static void KiIpiSendProcessor(ULONG number, int type) {
+    assert(number == 1 && type == IPI_FREEZE);
     Cpus[1].IpiFrozen = IPI_FROZEN_STATE_SAVING;
 }
 static void YieldProcessor(void) {
@@ -201,10 +203,11 @@ static void YieldProcessor(void) {
 }
 static BOOLEAN KiAcquireFreezeActiveSet(PKPRCB Prcb) { @ACQUIRE@ }
 static VOID KiReleaseFreezeActiveSet(PKPRCB Prcb, BOOLEAN Acquired) { @RELEASE@ }
-static KAFFINITY KiFreezeTargetSet(PKPRCB CurrentPrcb) { @TARGETS@ }
+static void KiFreezeTargetSet(PKPRCB CurrentPrcb, KAFFINITY *Targets) { @TARGETS@ }
 static void KxFreezeExecution(void) { @FREEZE@ }
 static void KxThawExecution(void) { @THAW@ }
 int main(void) {
+    KeActiveProcessors.Bitmap[0] = 3;
     assert(KiQueryFreezeEpoch() == 0 && !KiIsFreezeActive());
     KxFreezeExecution();
     assert(KiQueryFreezeEpoch() == 1 && KiIsFreezeActive());
@@ -214,8 +217,8 @@ int main(void) {
     assert(Cpus[1].IpiFrozen == IPI_FROZEN_STATE_RUNNING && Yields >= 16);
     assert(KiFreezeOwner == 0 && !KiIsFreezeActive());
     assert(KiQueryFreezeEpoch() == 1);
-    KeNumberProcessors = 1;
-    KeActiveProcessors = 1;
+    KeProcessorCount = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     Yields = 0;
     KxFreezeExecution();
     KxThawExecution();
@@ -225,6 +228,7 @@ int main(void) {
 '''
 for marker, name in [('NOTE', 'KiNoteFreezeEpoch'), ('EPOCH', 'KiQueryFreezeEpoch'), ('ACTIVE', 'KiIsFreezeActive'), ('ACQUIRE', 'KiAcquireFreezeActiveSet'), ('RELEASE', 'KiReleaseFreezeActiveSet'), ('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
     freeze = freeze.replace('@' + marker + '@', body('ntos/ke/amd64/freeze.c', name))
+freeze = freeze.replace('@PROCSET@', ke_procset_fixture.SHIM)
 
 startup = r'''
 #include <assert.h>
@@ -269,9 +273,16 @@ typedef struct { ULONG_PTR Prcb, Thread, KernelStack; } LOADER;
 #define RtlZeroMemory(d,n) memset(d,0,n)
 #define min(a,b) ((a)<(b)?(a):(b))
 static ULONG KeMaximumProcessors = 2, KeNumprocSpecified, KeBootprocSpecified, KeMaximumIncrement = 156250;
+#define KAFFINITY_EX_INITIALIZED_GROUPS 20
+#define MAXIMUM_PROC_PER_GROUP 64
+static ULONG KiMaximumGroupSize = MAXIMUM_PROC_PER_GROUP;
+static ULONG HalQueryMaximumProcessorCount(void) { return 2; }
+static void KeSetMaximumGroupSize(ULONG Size) { KiMaximumGroupSize = Size; }
 static LOADER Loader, *KeLoaderBlock = &Loader;
 static KPRCB *KiProcessorBlock[2];
-static ULONG64 KeActiveProcessors;
+typedef ULONG64 KAFFINITY;
+@PROCSET@
+static BOOLEAN MiAmd64PrepareProcessorTlb(ULONG Cpu) { (void)Cpu; return TRUE; }
 static int Mode, BugcheckCode;
 static ULONGLONG Clock;
 static jmp_buf FailStop;
@@ -306,7 +317,7 @@ static BOOLEAN HalStartNextProcessor(LOADER *l, PKPROCESSOR_STATE state) {
     if (Mode != 1) {
         if (Mode != 3) KiProcessorBlock[1] = (KPRCB *)l->Prcb;
         l->Prcb = 0;
-        if (Mode == 0) KeActiveProcessors |= 2;
+        if (Mode == 0) KeActiveProcessors.Bitmap[0] |= 2;
     }
     return TRUE;
 }
@@ -318,19 +329,19 @@ __attribute__((noreturn,unused)) static void KeBugCheckEx(ULONG code, ULONG_PTR 
 }
 static void KeStartAllProcessors(void) { @STARTUP@ }
 int main(void) {
-    Mode = 0; KeActiveProcessors = 1;
+    Mode = 0; KeActiveProcessors.Bitmap[0] = 1;
     KeStartAllProcessors();
-    assert(KeActiveProcessors == 3);
+    assert(KeActiveProcessors.Bitmap[0] == 3);
     for (Mode = 1; Mode <= 3; Mode++) {
         memset(&Loader, 0, sizeof(Loader));
         memset(KiProcessorBlock, 0, sizeof(KiProcessorBlock));
-        KeActiveProcessors = 1; Clock = 0; BugcheckCode = 0;
+        KeActiveProcessors.Bitmap[0] = 1; Clock = 0; BugcheckCode = 0;
         if (setjmp(FailStop) == 0) { KeStartAllProcessors(); assert(!"startup returned after timeout"); }
         assert(BugcheckCode == CLOCK_WATCHDOG_TIMEOUT);
     }
     return 0;
 }
-'''.replace('@STARTUP@', body('ntos/ke/amd64/mproc.c', 'KeStartAllProcessors'))
+'''.replace('@STARTUP@', body('ntos/ke/amd64/mproc.c', 'KeStartAllProcessors')).replace('@PROCSET@', ke_procset_fixture.SHIM)
 
 with tempfile.TemporaryDirectory(prefix='ke-amd64-smp-') as tmp:
     path = pathlib.Path(tmp)

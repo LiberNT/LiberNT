@@ -90,17 +90,17 @@ KiSwapProcess(
     _In_ PKPROCESS NewProcess,
     _In_ PKPROCESS OldProcess)
 {
-    KAFFINITY Self = ((PKIPCR)KeGetPcr())->Prcb.SetMember;
+    ULONG Self = ((PKIPCR)KeGetPcr())->Prcb.Number;
     BOOLEAN Changed = (BOOLEAN)(NewProcess != OldProcess);
 
     /* Join the new process before loading its tables, leave the old one only after */
     if (Changed)
-        InterlockedOr64((PLONG64)&NewProcess->ActiveProcessors, Self);
+        KiInterlockedAddProcessorToSet(KiProcessActiveProcessors(NewProcess), Self);
 
     __writecr3(NewProcess->DirectoryTableBase);
 
     if (Changed)
-        InterlockedAnd64((PLONG64)&OldProcess->ActiveProcessors, ~Self);
+        KiInterlockedRemoveProcessorFromSet(KiProcessActiveProcessors(OldProcess), Self);
 }
 
 NTSTATUS

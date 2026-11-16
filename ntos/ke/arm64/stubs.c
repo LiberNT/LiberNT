@@ -879,11 +879,11 @@ KeStartAllProcessors(
     {
         extern KSCHEDULER_SUBNODE KiNode0SubNode;
         ULONG HighestCpu;
-        KiNode0SubNode.Affinity = KeActiveProcessors;
-        KiNode0SubNode.SiblingMask = KeActiveProcessors;
-        KiNode0SubNode.NonParkedSet = KeActiveProcessors;
+        KiNode0SubNode.Affinity = KeActiveProcessors.Bitmap[0];
+        KiNode0SubNode.SiblingMask = KeActiveProcessors.Bitmap[0];
+        KiNode0SubNode.NonParkedSet = KeActiveProcessors.Bitmap[0];
         KiNode0SubNode.Lowest = 0;
-        if (BitScanReverseAffinity(&HighestCpu, KeActiveProcessors))
+        if (BitScanReverseAffinity(&HighestCpu, KeActiveProcessors.Bitmap[0]))
             KiNode0SubNode.Highest = HighestCpu;
     }
 

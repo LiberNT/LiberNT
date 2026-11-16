@@ -232,7 +232,7 @@ KiQueryProcessorTopology(
         PKI_RISCV_HART_TOPOLOGY Hart;
         PKPRCB Prcb = KiProcessorBlock[Number];
 
-        if ((Prcb == NULL) || !(KeActiveProcessors & AFFINITY_MASK(Number)))
+        if ((Prcb == NULL) || !(KeActiveProcessors.Bitmap[0] & AFFINITY_MASK(Number)))
             continue;
         Hart = KiRiscvLookupHart(CONTAINING_RECORD(Prcb, KPCR, Prcb)->HartId);
         if (Hart == NULL)

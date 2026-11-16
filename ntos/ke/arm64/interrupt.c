@@ -1002,7 +1002,7 @@ KiArm64ClockArmForIdle(
     {
         ASSERT(State == KI_ARM64_CLOCK_STATE(Cpu, KI_ARM64_CLOCK_RUNNING));
         ASSERT(TimerState->Owner);
-        if ((KeActiveProcessors & ~(KiIdleSummary | Prcb->SetMember)) != 0)
+        if ((KeActiveProcessors.Bitmap[0] & ~(KiIdleSummary[0] | Prcb->SetMember)) != 0)
             return;
         Previous = InterlockedCompareExchange(&KiArm64ClockOwnerState,
                                               KI_ARM64_CLOCK_STATE(Cpu, KI_ARM64_CLOCK_ARMING),

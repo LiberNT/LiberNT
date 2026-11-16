@@ -926,7 +926,7 @@ KdbpTestLanguage(VOID)
 
     KdbpTestExpression("$thread", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentThread);
     KdbpTestExpression("$proc", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentProcess);
-    KdbpTestExpression("$cpu", TRUE, KeGetCurrentProcessorNumber());
+    KdbpTestExpression("$cpu", TRUE, KeGetCurrentPrcb()->Number);
     KdbpTestExpression("$prcb", TRUE, (ULONGLONG)(ULONG_PTR)KeGetCurrentPrcb());
     if (KdbCurrentThread != NULL)
         KdbpTestExpression("$tid", TRUE, (ULONGLONG)(ULONG_PTR)KdbCurrentThread->Cid.UniqueThread);

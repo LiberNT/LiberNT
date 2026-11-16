@@ -40,6 +40,7 @@ typedef struct _APINFO
     DECLSPEC_ALIGN(16) UINT8 NmiStack[DOUBLE_FAULT_STACK_SIZE];
     KIPCR Pcr;
     ETHREAD Thread;
+    KI_THREAD_AFFINITY ThreadAffinity;
     KTSS64 Tss;
 } APINFO, *PAPINFO;
 
@@ -57,20 +58,29 @@ KeStartAllProcessors(VOID)
     KDESCRIPTOR Gdtr, Idtr;
     ULONG ProcessorCount;
     ULONG MaximumProcessors;
+    ULONG GroupSize = KiMaximumGroupSize;
     ULONG Index;
     ULONGLONG StartTime;
 
-    MaximumProcessors = KeMaximumProcessors;
+    MaximumProcessors = min(KeMaximumProcessors, HalQueryMaximumProcessorCount());
+    MaximumProcessors = min(MaximumProcessors, KAFFINITY_EX_INITIALIZED_GROUPS * MAXIMUM_PROC_PER_GROUP);
     if (KeNumprocSpecified)
         MaximumProcessors = min(MaximumProcessors, KeNumprocSpecified);
     if (KeBootprocSpecified)
         MaximumProcessors = min(MaximumProcessors, KeBootprocSpecified);
+
+    while (MaximumProcessors > GroupSize * KAFFINITY_EX_INITIALIZED_GROUPS)
+        GroupSize *= 2;
+    KeSetMaximumGroupSize(GroupSize);
 
     /* Start at 1, the boot processor is already running */
     for (ProcessorCount = 1; ProcessorCount < MaximumProcessors; ++ProcessorCount)
     {
         KernelStack = NULL;
         DPCStack = NULL;
+
+        if (!MiAmd64PrepareProcessorTlb(ProcessorCount))
+            break;
 
         APInfo = ExAllocatePoolZero(NonPagedPool, sizeof(*APInfo), TAG_KERNEL);
         if (!APInfo)
@@ -172,7 +182,7 @@ KeStartAllProcessors(VOID)
     StartTime = KeQueryInterruptTime();
     for (Index = 1; Index <= ProcessorCount; Index++)
     {
-        while ((KeActiveProcessors & AFFINITY_MASK(Index)) == 0)
+        while (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, Index))
         {
             if ((KeQueryInterruptTime() - StartTime) >= AP_START_WAIT_TIME)
             {

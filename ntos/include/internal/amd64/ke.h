@@ -380,7 +380,22 @@ KiAmd64QueryEffectiveMHz(
 
 VOID MiAmd64FlushTargets(_In_ ULONG64 Targets, _In_ ULONG64 Address, _In_ ULONG64 Pages);
 VOID MiAmd64ProcessTlbRequest(_In_ ULONG Source);
-VOID KiSendMemoryIpi(_In_ ULONG64 Targets);
+BOOLEAN MiAmd64PrepareProcessorTlb(_In_ ULONG Cpu);
+VOID KiSendMemoryIpi(_In_ ULONG Word, _In_ ULONG64 Targets);
+
+NTHALAPI ULONG NTAPI HalQueryMaximumProcessorCount(VOID);
+NTHALAPI VOID NTAPI HalpRequestIpi(_In_ ULONG Word, _In_ KAFFINITY TargetSet);
+NTHALAPI VOID NTAPI HalpSendNMI(_In_ ULONG Word, _In_ KAFFINITY TargetSet);
+NTHALAPI VOID NTAPI HalpSendSoftwareInterrupt(_In_ ULONG Word, _In_ KAFFINITY TargetSet, _In_ KIRQL Irql);
+
+#define KiArchMaximumProcessors() KE_MAXIMUM_PROCESSORS
+
+VOID
+FASTCALL
+KiIpiSendProcessor(
+    _In_ ULONG Number,
+    _In_ ULONG IpiRequest);
+#define KiIpiSendProcessor KiIpiSendProcessor
 ULONG64 KiQueryFreezeEpoch(VOID);
 BOOLEAN KiIsFreezeActive(VOID);
 

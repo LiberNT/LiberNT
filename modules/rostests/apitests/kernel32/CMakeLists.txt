@@ -54,6 +54,7 @@ list(APPEND SOURCE
     DeviceIoControl.c
     EmulatedProcess.c
     DispatcherStress.c
+    ProcessorGroups.c
     dosdev.c
     DateTimeFormatFlags.c
     EnumDateTimeFormats.c

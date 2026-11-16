@@ -97,6 +97,7 @@ KiScanReadyQueues(VOID)
     KIRQL OldIrql;
     ULONG TickNow;
     ULONG Processor, Scanned = 0, Step;
+    ULONG Count = KeProcessorCount;
     KPRIORITY Priority;
     ULONG Relieved = 0;
 
@@ -104,12 +105,12 @@ KiScanReadyQueues(VOID)
 
     /* Only processors that exist count towards a scan's share */
     for (Step = 0;
-         (Step < MAXIMUM_PROCESSORS) && (Scanned < KI_SCAN_PROCESSORS);
+         (Step < Count) && (Scanned < KI_SCAN_PROCESSORS);
          Step++)
     {
-        Processor = (KiReadyScanLast + Step) % MAXIMUM_PROCESSORS;
+        Processor = (KiReadyScanLast + Step) % Count;
 
-        if ((KeActiveProcessors & AFFINITY_MASK(Processor)) == 0)
+        if (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, Processor))
             continue;
 
         Prcb = KiProcessorBlock[Processor];
@@ -158,7 +159,7 @@ KiScanReadyQueues(VOID)
             if (Relieved >= KI_STARVATION_LIMIT)
             {
                 KeLowerIrql(OldIrql);
-                KiReadyScanLast = (Processor + 1) % MAXIMUM_PROCESSORS;
+                KiReadyScanLast = (Processor + 1) % Count;
                 return;
             }
         }
@@ -166,7 +167,7 @@ KiScanReadyQueues(VOID)
         KeLowerIrql(OldIrql);
     }
 
-    KiReadyScanLast = (KiReadyScanLast + Step) % MAXIMUM_PROCESSORS;
+    KiReadyScanLast = (KiReadyScanLast + Step) % Count;
 }
 
 /*

@@ -189,7 +189,7 @@ KiIdleLoop(VOID)
         NewThread = Prcb->NextThread;
         if (NewThread)
         {
-            InterlockedAnd((PLONG)&KiIdleSummary, ~Prcb->SetMember);
+            InterlockedAnd((PLONG)&KiIdleSummary[0], ~Prcb->SetMember);
             Prcb->NextThread = NULL;
             OldThread = Prcb->CurrentThread;
             Prcb->CurrentThread = NewThread;
@@ -201,7 +201,7 @@ KiIdleLoop(VOID)
                 KfLowerIrql(DISPATCH_LEVEL);
             continue;
         }
-        InterlockedOr((PLONG)&KiIdleSummary, Prcb->SetMember);
+        InterlockedOr((PLONG)&KiIdleSummary[0], Prcb->SetMember);
         KiReleasePrcbLock(Prcb);
 
         /* The decrementer and devices wake the processor; an interrupt taken

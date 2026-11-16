@@ -64,9 +64,9 @@ KiRiscvStartProcessor(KI_RISCV_AP *Ap)
     KiProcessorBlock[Prcb->Number] = Prcb;
     InterlockedOr64((PLONG64)&KiNode0.ProcessorMask, Prcb->SetMember);
     KiRiscvJoinSchedulerSubNode(Prcb);
-    InterlockedOr64((PLONG64)&KiIdleSummary, Prcb->SetMember);
-    KeNumberProcessors = Prcb->Number + 1;
-    InterlockedOr64((PLONG64)&KeActiveProcessors, Prcb->SetMember);
+    InterlockedOr64((PLONG64)&KiIdleSummary[0], Prcb->SetMember);
+    KiSetProcessorCount(Prcb->Number + 1);
+    InterlockedOr64((PLONG64)&KeActiveProcessors.Bitmap[0], Prcb->SetMember);
     /* Shootdowns target active processors only: drop whatever this hart
      * cached while it initialized outside that set. */
     KeFlushCurrentTb();
@@ -144,5 +144,5 @@ Failed:
         break;
     }
     DPRINT1("RISC-V: %u processors online, affinity %Ix\n",
-            (ULONG)(UCHAR)KeNumberProcessors, KeActiveProcessors);
+            (ULONG)(UCHAR)KeNumberProcessors, KeActiveProcessors.Bitmap[0]);
 }

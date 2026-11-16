@@ -65,13 +65,14 @@ typedef struct _KINTERRUPT {
 static struct { unsigned char _Op_push; unsigned char Pad[15]; } KiUnexpectedRange[256];
 #define KiUnexpectedRangeEnd (KiUnexpectedRange + 256)
 static PVOID Handlers[256];
-static int KeNumberProcessors = 4, Enable = 1, DisableCount, Race;
+static int KeProcessorCount = 4, Enable = 1, DisableCount, Race;
 static pthread_mutex_t Dispatcher = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t RaceBarrier;
 static void KiInterruptDispatch(void) {}
 static BOOLEAN KiConnectPassiveInterrupt(PKINTERRUPT I) { (void)I; abort(); }
 static BOOLEAN KiDisconnectPassiveInterrupt(PKINTERRUPT I) { (void)I; abort(); }
-static void KeSetSystemAffinityThread(uint64_t Affinity) { (void)Affinity; }
+typedef struct { uint64_t Mask; unsigned short Group; } GROUP_AFFINITY;
+static void KiSetSystemProcessorAffinityThread(unsigned Number, GROUP_AFFINITY *Previous) { assert(Number < (unsigned)KeProcessorCount); Previous->Mask = 0; Previous->Group = 0; }
 static void KeRevertToUserAffinityThread(void) {}
 static uint64_t KiVectorLock;
 static KIRQL KeRaiseIrqlToSynchLevel(void) { if (Race) pthread_barrier_wait(&RaceBarrier); return 0; }

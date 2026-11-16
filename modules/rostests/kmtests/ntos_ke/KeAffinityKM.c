@@ -14,7 +14,8 @@ VOID
 TestProcessorCounts(VOID)
 {
     KAFFINITY Active = 0;
-    ULONG Count, CountEx, Maximum;
+    ULONG Count, CountEx, Maximum, Total = 0;
+    USHORT Group, Groups = KeQueryActiveGroupCount();
     KAFFINITY Mask;
     ULONG i, Bits;
 
@@ -31,12 +32,15 @@ TestProcessorCounts(VOID)
 
     CountEx = KeQueryActiveProcessorCountEx(0);
     ok_eq_ulong(CountEx, Count);
+    for (Group = 0; Group < Groups; Group++)
+        Total += KeQueryActiveProcessorCountEx(Group);
     CountEx = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
-    ok_eq_ulong(CountEx, Count);
-    CountEx = KeQueryActiveProcessorCountEx(63);
+    ok_eq_ulong(CountEx, Total);
+    CountEx = KeQueryActiveProcessorCountEx(Groups);
     ok_eq_ulong(CountEx, 0UL);
 
     Maximum = KeQueryMaximumProcessorCount();
+    ok_eq_ulong(Maximum, KeQueryMaximumProcessorCountEx(0));
     ok(Maximum >= Count, "maximum %lu < active %lu\n", Maximum, Count);
 }
 
@@ -268,8 +272,35 @@ TestProcessorRelationships(VOID)
     }
 }
 
+#ifdef _WIN64
+static
+VOID
+TestActiveProcessorAffinity(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"KeQueryActiveProcessorAffinity");
+    ULONG (NTAPI *QueryAffinity)(PKAFFINITY_EX);
+    KAFFINITY_EX Affinity;
+    ULONG Count;
+    USHORT Group;
+
+    QueryAffinity = (PVOID)MmGetSystemRoutineAddress(&Name);
+    if (skip(QueryAffinity != NULL, "KeQueryActiveProcessorAffinity unavailable\n"))
+        return;
+
+    Count = QueryAffinity(&Affinity);
+    ok_eq_ulong(Count, KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS));
+    ok_eq_ulong(Affinity.Count, KeQueryActiveGroupCount());
+    ok(Affinity.Count <= Affinity.Size, "group count %u exceeds capacity %u\n", Affinity.Count, Affinity.Size);
+    for (Group = 0; Group < Affinity.Count && Group < RTL_NUMBER_OF(Affinity.StaticBitmap); Group++)
+        ok_eq_ulonglong(Affinity.StaticBitmap[Group], KeQueryGroupAffinity(Group));
+}
+#endif
+
 START_TEST(KeAffinityKM)
 {
+#ifdef _WIN64
+    TestActiveProcessorAffinity();
+#endif
     TestProcessorCounts();
     TestAffinityPinning();
     TestNestedAffinity();

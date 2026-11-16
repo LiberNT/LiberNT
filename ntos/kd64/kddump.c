@@ -1499,7 +1499,7 @@ static ULONG64 KdpMarkAnalysisPages(_Inout_ PRTL_BITMAP Bitmap)
         }
     }
 
-    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    for (Processor = 0; Processor < KeProcessorCount; Processor++)
     {
         Prcb = KiProcessorBlock[Processor];
         if (Prcb == NULL)

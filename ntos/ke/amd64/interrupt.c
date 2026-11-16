@@ -47,9 +47,10 @@ KIRQL
 KiLockVectorOf(
     _In_ PKINTERRUPT Interrupt)
 {
+    GROUP_AFFINITY Previous;
     KIRQL OldIrql;
 
-    KeSetSystemAffinityThread(1ULL << Interrupt->Number);
+    KiSetSystemProcessorAffinityThread(Interrupt->Number, &Previous);
     OldIrql = KeRaiseIrqlToSynchLevel();
     KiAcquireFlagLock(&KiVectorLock);
     return OldIrql;
@@ -143,7 +144,7 @@ KeConnectInterrupt(
     if (Interrupt->Irql == PASSIVE_LEVEL)
         return KiConnectPassiveInterrupt(Interrupt);
 
-    ASSERT(Interrupt->Number < KeNumberProcessors);
+    ASSERT(Interrupt->Number < KeProcessorCount);
     ASSERT(Interrupt->Irql <= HIGH_LEVEL);
     ASSERT(Interrupt->SynchronizeIrql >= Interrupt->Irql);
     ASSERT(Interrupt->Irql == (Interrupt->Vector >> 4));

@@ -527,7 +527,7 @@ NtSetInformationProcess(
 
             /* Nothing may be asked for outside what the machine has */
             if (Pointer == 0 ||
-                (Pointer & ~(ULONG_PTR)KeActiveProcessors) != 0)
+                (Pointer & ~KeQueryGroupAffinity(KeQueryPrimaryGroupProcess(&Process->Pcb))) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;

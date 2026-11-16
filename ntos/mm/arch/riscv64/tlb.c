@@ -19,7 +19,7 @@ VOID
 MiArchInvalidateTlbAll(MI_TLB_SCOPE Scope)
 {
     if (Scope == MiTlbAllProcessors && KeNumberProcessors > 1)
-        KiIpiSendTbFlush(KeActiveProcessors, NULL, 0);
+        KiIpiSendTbFlush(KeActiveProcessors.Bitmap[0], NULL, 0);
     else
         __asm__ __volatile__("sfence.vma zero, zero" ::: "memory");
 }
@@ -43,7 +43,7 @@ MiArchInvalidateTlbRange(PVOID BaseAddress, SIZE_T Size, MI_TLB_SCOPE Scope)
 
     if (Scope == MiTlbAllProcessors && KeNumberProcessors > 1)
     {
-        KiIpiSendTbFlush(KeActiveProcessors, (PVOID)Address, (ULONG)Pages);
+        KiIpiSendTbFlush(KeActiveProcessors.Bitmap[0], (PVOID)Address, (ULONG)Pages);
         return;
     }
 

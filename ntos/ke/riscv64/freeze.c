@@ -184,7 +184,7 @@ KxFreezeExecution(VOID)
         }
     }
 
-    KiIpiSend(KeActiveProcessors & ~CurrentPrcb->SetMember, IPI_FREEZE);
+    KiIpiSend(KeActiveProcessors.Bitmap[0] & ~CurrentPrcb->SetMember, IPI_FREEZE);
 
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {

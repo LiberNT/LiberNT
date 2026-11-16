@@ -622,7 +622,7 @@ KeRegisterProcessorChangeCallback(
     {
         RtlZeroMemory(&Context, sizeof(Context));
 
-        for (Started = 0; Started < (ULONG)KeNumberProcessors; Started++)
+        for (Started = 0; Started < KeProcessorCount; Started++)
         {
             Context.State = KeProcessorAddStartNotify;
             Context.Status = STATUS_SUCCESS;

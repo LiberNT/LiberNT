@@ -184,7 +184,7 @@ VOID NTAPI KdpLogWatchdogCheck(_In_ ULONGLONG CurrentInterruptTime)
     if (InterlockedCompareExchange(&KdpLogWatchdogState, 2, 1) != 1)
         return;
 
-    KeBugCheckEx(DPC_WATCHDOG_VIOLATION, KD_LOG_WATCHDOG_BUGCHECK_TYPE, (ULONG_PTR)(Elapsed / KD_LOG_WATCHDOG_100NS_PER_SECOND), (ULONG_PTR)(KdpLogWatchdogTimeout / KD_LOG_WATCHDOG_100NS_PER_SECOND), KeGetCurrentProcessorNumber());
+    KeBugCheckEx(DPC_WATCHDOG_VIOLATION, KD_LOG_WATCHDOG_BUGCHECK_TYPE, (ULONG_PTR)(Elapsed / KD_LOG_WATCHDOG_100NS_PER_SECOND), (ULONG_PTR)(KdpLogWatchdogTimeout / KD_LOG_WATCHDOG_100NS_PER_SECOND), KeGetCurrentPrcb()->Number);
 #else
     UNREFERENCED_PARAMETER(CurrentInterruptTime);
 #endif

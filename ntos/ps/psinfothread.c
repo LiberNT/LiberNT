@@ -295,7 +295,7 @@ NtQueryInformationThread(
             Basic.ExitStatus = Thread->ExitStatus;
             Basic.TebBaseAddress = Thread->Tcb.Teb;
             Basic.ClientId = Thread->Cid;
-            Basic.AffinityMask = KiThreadAffinityMask(&Thread->Tcb);
+            Basic.AffinityMask = KeQueryGroupAffinityThread(&Thread->Tcb, KeQueryPrimaryGroupThread(&Thread->Tcb));
             Basic.Priority = Thread->Tcb.Priority;
             Basic.BasePriority = KeQueryBasePriorityThread(&Thread->Tcb);
 
@@ -509,13 +509,8 @@ NtQueryInformationThread(
 
         case ThreadGroupInformation:
         case ThreadActualGroupAffinity:
-            /*
-             * This machine has one processor group, so the affinity a thread
-             * was given and the one it actually runs under are the same set
-             * named two ways.
-             */
-            RtlZeroMemory(&Affinity, sizeof(Affinity));
-            Affinity.Mask = KiThreadAffinityMask(&Thread->Tcb);
+            /* FIXME: the affinity a thread was given is reported as the one in force, which a system affinity region replaces */
+            KeQueryActualGroupAffinityThread(&Thread->Tcb, &Affinity);
 
             Status = PspReturnThreadInformation(ThreadInformation,
                                                 ThreadInformationLength,

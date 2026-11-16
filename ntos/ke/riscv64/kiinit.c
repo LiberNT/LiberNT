@@ -406,7 +406,7 @@ KiRiscvSystemStartup(
     DirectoryTableBase[1] = 0;
     KeInitializeProcess(InitialProcess,
                         0,
-                        MAXULONG_PTR,
+                        NULL,
                         DirectoryTableBase,
                         FALSE);
     InitialProcess->QuantumReset = MAXCHAR;
@@ -454,7 +454,7 @@ KiRiscvSystemStartup(
     KeSetPriorityThread(InitialThread, 0);
     KiAcquirePrcbLock(Prcb);
     if (Prcb->NextThread == NULL)
-        InterlockedOr64((PLONG64)&KiIdleSummary, Prcb->SetMember);
+        InterlockedOr64((PLONG64)&KiIdleSummary[0], Prcb->SetMember);
     KiReleasePrcbLock(Prcb);
 
     KfRaiseIrql(HIGH_LEVEL);

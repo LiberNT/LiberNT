@@ -161,7 +161,7 @@ VOID
 NTAPI
 KeFlushProcessTb(VOID)
 {
-    KiIpiSendTbFlush(KeActiveProcessors, NULL, 0);
+    KiIpiSendTbFlush(KeActiveProcessors.Bitmap[0], NULL, 0);
 }
 
 VOID

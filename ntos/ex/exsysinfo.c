@@ -197,8 +197,9 @@ ExpQueryBasicInformation(
     Basic->AllocationGranularity = MM_ALLOCATION_GRANULARITY;
     Basic->MinimumUserModeAddress = (ULONG_PTR)MM_LOWEST_USER_ADDRESS;
     Basic->MaximumUserModeAddress = (ULONG_PTR)MM_HIGHEST_USER_ADDRESS;
-    Basic->ActiveProcessorsAffinityMask = KeActiveProcessors;
-    Basic->NumberOfProcessors = (CCHAR)KeNumberProcessors;
+    /* Windows documents both as describing the caller's group */
+    Basic->ActiveProcessorsAffinityMask = KeQueryGroupAffinity(KeQueryPrimaryGroupThread(KeGetCurrentThread()));
+    Basic->NumberOfProcessors = (CCHAR)KeQueryActiveProcessorCountEx(KeQueryPrimaryGroupThread(KeGetCurrentThread()));
 
     return STATUS_SUCCESS;
 }
@@ -233,7 +234,7 @@ ExpQueryProcessorInformation(
         Processor->ProcessorArchitecture = (USHORT)KiEmulationProcessorArchitecture(PsGetCurrentProcess());
     Processor->ProcessorLevel = (USHORT)KeProcessorLevel;
     Processor->ProcessorRevision = (USHORT)KeProcessorRevision;
-    Processor->MaximumProcessors = (USHORT)KeNumberProcessors;
+    Processor->MaximumProcessors = (USHORT)KeProcessorCount;
     RtlCopyMemory(&Processor->ProcessorFeatureBits, &FeatureBits, sizeof(FeatureBits));
 
     return STATUS_SUCCESS;

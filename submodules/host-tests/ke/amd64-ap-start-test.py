@@ -8,6 +8,8 @@ import re
 import subprocess
 import tempfile
 
+import ke_procset_fixture
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
@@ -67,7 +69,8 @@ static KPROCESS Process;
 static KTHREAD Thread1;
 static LOADER_PARAMETER_BLOCK Loader, *KeLoaderBlock = &Loader;
 static PKPRCB KiFreezeOwner, KiFreezeActiveSetOwner __attribute__((unused));
-static KAFFINITY KeActiveProcessors;
+#define KI_SET_WORD_BITS 64
+@PROCSET@
 static KSPIN_LOCK KiFreezeExecutionLock __attribute__((unused));
 static KIRQL Irql;
 static BOOLEAN InterruptsEnabled;
@@ -75,7 +78,8 @@ static unsigned Yields, ThawAfter;
 static jmp_buf Idle;
 static BOOLEAN BootMarksStopped;
 @BOOT_MARKS@
-#define AP_ACTIVE() ((KeActiveProcessors & Cpus[1].SetMember) != 0)
+#define AP_ACTIVE() ((KeActiveProcessors.Bitmap[0] & Cpus[1].SetMember) != 0)
+static void KiActivateProcessor(PKPRCB Prcb) { KeActiveProcessors.Bitmap[0] |= Prcb->SetMember; }
 /* An active processor is sent IPIs: it has to be able to take them, and a frozen machine gets no new ones */
 static void CheckActive(void) {
     if (!AP_ACTIVE())
@@ -128,7 +132,7 @@ static void Run(const char *Name, PKPRCB FreezeOwner, unsigned Thaw) {
     Thread1.ApcState.Process = &Process;
     Loader.Thread = (ULONG_PTR)&Thread1;
     Loader.Prcb = (ULONG_PTR)&Cpus[1];
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     KiFreezeOwner = FreezeOwner;
     ThawAfter = Thaw;
     Yields = 0;
@@ -156,6 +160,7 @@ for name, prototype in [('KiAcquireFreezeActiveSet', 'static BOOLEAN KiAcquireFr
     if text is not None:
         publish += prototype + ' {' + text + '}\n'
 fixture = fixture.replace('@BOOT_MARKS@', boot_marks).replace('@PUBLISH@', publish)
+fixture = fixture.replace('@PROCSET@', ke_procset_fixture.SHIM)
 fixture = fixture.replace('@STARTUP@', body(init_source, 'KiSystemStartupBootStack'))
 
 startup = r'''
@@ -219,7 +224,16 @@ typedef struct _APINFO
 static ULONG KeMaximumProcessors = 3, KeNumprocSpecified, KeBootprocSpecified, KeMaximumIncrement = 156250;
 static LOADER_PARAMETER_BLOCK Loader, *KeLoaderBlock = &Loader;
 static PKPRCB KiProcessorBlock[MAXIMUM_PROCESSORS];
-static KAFFINITY KeActiveProcessors, Started;
+@PROCSET@
+#define KAFFINITY_EX_INITIALIZED_GROUPS 20
+#define MAXIMUM_PROC_PER_GROUP 64
+static ULONG KiMaximumGroupSize = 64, FirmwareProcessors = 3;
+static ULONG HalQueryMaximumProcessorCount(void) { return FirmwareProcessors; }
+static void KeSetMaximumGroupSize(ULONG Size) { KiMaximumGroupSize = Size; }
+static KAFFINITY Started;
+static ULONG TlbPrepared;
+/* The shootdown rows of a processor are there before it is started */
+static BOOLEAN MiAmd64PrepareProcessorTlb(ULONG Cpu) { TlbPrepared |= 1UL << Cpu; return TRUE; }
 static ULONGLONG Clock;
 static ULONG Mode, StopCode;
 static ULONG_PTR StopParameter[4];
@@ -253,6 +267,7 @@ static void KiInitializeProcessorBootStructures(ULONG Number, PKIPCR Pcr, PKGDTE
  */
 static BOOLEAN HalStartNextProcessor(LOADER_PARAMETER_BLOCK *Block, PKPROCESSOR_STATE State) {
     PKPRCB Prcb = (PKPRCB)Block->Prcb; (void)State;
+    CHECK(TlbPrepared & (1UL << Prcb->Number));
     Started |= Prcb->SetMember;
     if (Mode == 1) return TRUE;
     KiProcessorBlock[Prcb->Number] = Prcb;
@@ -261,7 +276,7 @@ static BOOLEAN HalStartNextProcessor(LOADER_PARAMETER_BLOCK *Block, PKPROCESSOR_
 }
 static void YieldProcessor(void) {
     if (++Yields > 100000) { printf("startup: mode %lu: the wait for the started processors never ended\n", Mode); exit(1); }
-    if (Yields == 3 && Mode == 0) KeActiveProcessors |= Started;
+    if (Yields == 3 && Mode == 0) KeActiveProcessors.Bitmap[0] |= Started;
 }
 /* A second of interrupt time goes by at each reading */
 __attribute__((unused)) static ULONGLONG KeQueryInterruptTime(void) { Clock += 10000000; return Clock; }
@@ -271,8 +286,8 @@ __attribute__((noreturn, unused)) static void KeBugCheckEx(ULONG Code, ULONG_PTR
 }
 static void KeStartAllProcessors(void) { @MPROC@ }
 static void Run(ULONG NewMode) {
-    Mode = NewMode; Yields = 0; Clock = 0; Started = 0; StopCode = 0;
-    KeActiveProcessors = 1;
+    Mode = NewMode; Yields = 0; Clock = 0; Started = 0; StopCode = 0; TlbPrepared = 0;
+    KeActiveProcessors.Bitmap[0] = 1;
     memset(&Loader, 0, sizeof(Loader));
     memset(KiProcessorBlock, 0, sizeof(KiProcessorBlock));
     if (setjmp(Stopped) == 0)
@@ -280,7 +295,7 @@ static void Run(ULONG NewMode) {
 }
 int main(void) {
     Run(0);
-    CHECK(StopCode == 0 && Started == 6 && KeActiveProcessors == 7);
+    CHECK(StopCode == 0 && Started == 6 && KeActiveProcessors.Bitmap[0] == 7);
     /* A processor that does not report in within 5 s is named in a CLOCK_WATCHDOG_TIMEOUT */
     Run(1);
     CHECK(StopCode == CLOCK_WATCHDOG_TIMEOUT && Started == 2);
@@ -290,9 +305,17 @@ int main(void) {
     CHECK(StopCode == CLOCK_WATCHDOG_TIMEOUT && Started == 6);
     CHECK(StopParameter[0] == 50000000 / KeMaximumIncrement && StopParameter[1] == 0);
     CHECK(StopParameter[2] == (ULONG_PTR)KiProcessorBlock[1] && StopParameter[2] != 0 && StopParameter[3] == 1);
+    KeMaximumProcessors = FirmwareProcessors = 64;
+    KiMaximumGroupSize = 2;
+    Run(1);
+    CHECK(KiMaximumGroupSize == 4 && StopCode == CLOCK_WATCHDOG_TIMEOUT);
+    KiMaximumGroupSize = 2;
+    KeNumprocSpecified = 32;
+    Run(1);
+    CHECK(KiMaximumGroupSize == 2 && StopCode == CLOCK_WATCHDOG_TIMEOUT);
     return 0;
 }
-'''.replace('@MPROC@', body(mproc_source, 'KeStartAllProcessors'))
+'''.replace('@MPROC@', body(mproc_source, 'KeStartAllProcessors')).replace('@PROCSET@', ke_procset_fixture.SHIM)
 startup = startup.replace('@DEFINES@', '\n'.join(re.findall(r'^#define AP_START_WAIT_TIME .*$', mproc_source, re.M)))
 
 with tempfile.TemporaryDirectory(prefix='ke-ap-start-') as tmp:

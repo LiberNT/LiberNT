@@ -213,7 +213,7 @@ SmpDbgSchedulerIpi(
     if (Counter == NULL)
         return;
 
-    SourceCpu = KeGetCurrentProcessorNumber();
+    SourceCpu = KeGetCurrentPrcb()->Number;
     InterlockedIncrement64((PLONG64)&Counter->SchedulerIpis);
     Counter->LastSourceCpu = SourceCpu;
     Counter->LastCause = Cause;
@@ -350,7 +350,7 @@ SmpDbgSnapshotThread(
         return;
 
     Snapshot->Thread = Thread;
-    Snapshot->Affinity = KiThreadAffinityMask(Thread);
+    Snapshot->Affinity = KiThreadAffinity(Thread)[0];
     Snapshot->Priority = Thread->Priority;
     Snapshot->State = Thread->State;
     Snapshot->IdealProcessor = Thread->IdealProcessor;
@@ -458,15 +458,15 @@ SmpDbgReporterThread(
         DbgPrint("SMPSTAT sample=%I64u elapsed_ms=%I64u active=0x%Ix idle=0x%Ix reportcpu=%lu thraff=0x%Ix sysaff=0x%Ix\n",
                  Sample,
                  (Now - LastTime) / 10000,
-                 (ULONG_PTR)KeActiveProcessors,
-                 (ULONG_PTR)KiIdleSummary,
-                 KeGetCurrentProcessorNumber(),
-                 (ULONG_PTR)KiThreadAffinityMask(KeGetCurrentThread()),
-                 PsInitialSystemProcess ? (ULONG_PTR)PsInitialSystemProcess->Pcb.Affinity : 0);
+                 (ULONG_PTR)KeActiveProcessors.Bitmap[0],
+                 (ULONG_PTR)KiIdleSummary[0],
+                 KeGetCurrentPrcb()->Number,
+                 (ULONG_PTR)KiThreadAffinity(KeGetCurrentThread())[0],
+                 PsInitialSystemProcess ? (ULONG_PTR)KiProcessAffinity(&PsInitialSystemProcess->Pcb)[0] : 0);
         LastTime = Now;
 
         for (Cpu = 0;
-             (Cpu < (ULONG)KeNumberProcessors) &&
+             (Cpu < KeProcessorCount) &&
              (Cpu < RTL_NUMBER_OF(SmpDbgCpu));
              Cpu++)
         {
@@ -634,7 +634,7 @@ SmpDbgSumContextSwitches(VOID)
     ULONG64 Sum = 0;
     ULONG Cpu;
 
-    for (Cpu = 0; (Cpu < (ULONG)KeNumberProcessors) && (Cpu < MAXIMUM_PROCESSORS); Cpu++)
+    for (Cpu = 0; Cpu < KeProcessorCount; Cpu++)
     {
         PKPRCB Prcb = KiProcessorBlock[Cpu];
 
@@ -653,7 +653,7 @@ SmpDbgThreadStateDump(VOID)
 
     DbgPrint("SMPWD ===== all-CPU-idle deadlock: thread state dump =====\n");
     DbgPrint("SMPWD idle=0x%Ix active=0x%Ix\n",
-             (ULONG_PTR)KiIdleSummary, (ULONG_PTR)KeActiveProcessors);
+             (ULONG_PTR)KiIdleSummary[0], (ULONG_PTR)KeActiveProcessors.Bitmap[0]);
 
     Process = PsGetNextProcess(NULL);
     while ((Process != NULL) && (ProcessCount++ < 128))
@@ -718,7 +718,7 @@ SmpDbgWatchdogThread(
     for (;;)
     {
         ULONG64 Current;
-        KAFFINITY Active, IdleOrSelf;
+        KI_PROCESSOR_SET IdleOrSelf;
 
         KeDelayExecutionThread(KernelMode, FALSE, &Delay);
         Current = SmpDbgSumContextSwitches();
@@ -726,9 +726,11 @@ SmpDbgWatchdogThread(
         /* Every CPU but this one idle, and context switches essentially
          * flat: user-mode retry storms keep switches moving but still leave
          * no runnable kernel work when the real wedge hits. */
-        Active = KeActiveProcessors;
-        IdleOrSelf = KiIdleSummary | AFFINITY_MASK(KeGetCurrentProcessorNumber());
-        if ((Active != 0) && ((IdleOrSelf & Active) == Active) && ((Current - Previous) < 256))
+        KiCopyProcessorSet(IdleOrSelf, KiIdleSummary);
+        KiAddProcessorToSet(IdleOrSelf, KeGetCurrentPrcb()->Number);
+        if (!KiIsProcessorSetEmpty(KeActiveProcessors.Bitmap) &&
+            KiIsProcessorSubset(KeActiveProcessors.Bitmap, IdleOrSelf) &&
+            ((Current - Previous) < 256))
         {
             Stalled++;
         }
@@ -743,8 +745,8 @@ SmpDbgWatchdogThread(
         {
             Dumped = TRUE;
             DbgPrint("SMPWD all CPUs idle ~%lds (idle=0x%Ix active=0x%Ix ctxsw=%I64u): dumping thread state\n",
-                     (long)Stalled * 2, (ULONG_PTR)KiIdleSummary,
-                     (ULONG_PTR)KeActiveProcessors, Current);
+                     (long)Stalled * 2, (ULONG_PTR)KiIdleSummary[0],
+                     (ULONG_PTR)KeActiveProcessors.Bitmap[0], Current);
             SmpDbgThreadStateDump();
         }
     }

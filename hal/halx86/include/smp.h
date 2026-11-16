@@ -60,6 +60,7 @@ ApicStartApplicationProcessor(
 VOID
 NTAPI
 HalpRequestIpi(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetProcessors);
 
 VOID
@@ -71,6 +72,7 @@ HalpBroadcastIpiSpecifyVector(
 VOID
 NTAPI
 HalpRequestIpiSpecifyVector(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet,
     _In_ UCHAR Vector);
 
@@ -80,12 +82,14 @@ NTHALAPI
 VOID
 NTAPI
 HalpSendNMI(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet);
 
 NTHALAPI
 VOID
 NTAPI
 HalpSendSoftwareInterrupt(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet,
     _In_ KIRQL Irql);
 

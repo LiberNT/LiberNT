@@ -1472,13 +1472,13 @@ PopQueryIdleness(VOID)
     /* A sample of a few clock ticks would only measure the tick: a caller that comes back sooner gets the previous figure */
     if (Now - PopIdlenessTime >= 10ULL * KeMaximumIncrement)
     {
-        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        for (Index = 0; Index < KeProcessorCount; Index++)
         {
             KiRefreshProcessorRunTime(KiProcessorBlock[Index]);
             IdleTicks += KiProcessorBlock[Index]->IdleThread->KernelTime;
         }
 
-        Elapsed = (Now - PopIdlenessTime) * (ULONG)KeNumberProcessors;
+        Elapsed = (Now - PopIdlenessTime) * KeProcessorCount;
         Idle = (IdleTicks - PopIdlenessIdleTicks) * KeMaximumIncrement;
         PopIdleness = (ULONG)(min(Idle, Elapsed) * 100 / Elapsed);
         PopIdlenessTime = Now;

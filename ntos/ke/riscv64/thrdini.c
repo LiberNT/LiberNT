@@ -358,7 +358,7 @@ KiIdleLoop(VOID)
         NewThread = Prcb->NextThread;
         if (NewThread)
         {
-            InterlockedAnd64((PLONG64)&KiIdleSummary, ~Prcb->SetMember);
+            InterlockedAnd64((PLONG64)&KiIdleSummary[0], ~Prcb->SetMember);
             Prcb->NextThread = NULL;
             OldThread = Prcb->CurrentThread;
             Prcb->CurrentThread = NewThread;
@@ -370,7 +370,7 @@ KiIdleLoop(VOID)
                 KfLowerIrql(DISPATCH_LEVEL);
             continue;
         }
-        InterlockedOr64((PLONG64)&KiIdleSummary, Prcb->SetMember);
+        InterlockedOr64((PLONG64)&KiIdleSummary[0], Prcb->SetMember);
         KiReleasePrcbLock(Prcb);
 
         /* Check work with SIE clear, then WFI before enabling it. A pending

@@ -751,7 +751,7 @@ PopSleepIpiWorker(
     LARGE_INTEGER SleepEnd;
     NTSTATUS Status;
 
-    if (KeGetCurrentProcessorNumber() == 0)
+    if (KeGetCurrentPrcb()->Number == 0)
     {
         PopReadRealTimeClock(&SleepStart);
         KiSuspendClockTime();
@@ -762,7 +762,7 @@ PopSleepIpiWorker(
                                    Call->SystemContext,
                                    Call->NumberProcessors,
                                    &Call->Number);
-    if (KeGetCurrentProcessorNumber() == 0)
+    if (KeGetCurrentPrcb()->Number == 0)
     {
         PopReadRealTimeClock(&SleepEnd);
         KiResumeClockTime((SleepEnd.QuadPart > SleepStart.QuadPart) ? SleepEnd.QuadPart - SleepStart.QuadPart : 0);
@@ -886,7 +886,7 @@ PopSleepSystem(
     Status = PopSleepSendDevices(PowerDevice, IRP_MN_SET_POWER, SystemState, SystemAction);
     if (NT_SUCCESS(Status))
     {
-        Call.NumberProcessors = KeNumberProcessors;
+        Call.NumberProcessors = KeProcessorCount;
         Call.Number = 0;
         Call.Status = STATUS_UNSUCCESSFUL;
         InterlockedExchange64(&PopLastSleepTime, (LONG64)KeQueryInterruptTime());

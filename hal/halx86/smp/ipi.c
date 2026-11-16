@@ -20,7 +20,7 @@ NTAPI
 HalRequestIpi(
     _In_ KAFFINITY TargetProcessors)
 {
-    HalpRequestIpi(TargetProcessors);
+    HalpRequestIpi(0, TargetProcessors);
 }
 
 #ifdef _M_AMD64
@@ -30,7 +30,7 @@ NTAPI
 HalSendNMI(
     _In_ KAFFINITY TargetSet)
 {
-    HalpSendNMI(TargetSet);
+    HalpSendNMI(0, TargetSet);
 }
 
 // See:
@@ -42,7 +42,7 @@ HalSendSoftwareInterrupt(
     _In_ KAFFINITY TargetSet,
     _In_ KIRQL Irql)
 {
-    HalpSendSoftwareInterrupt(TargetSet, Irql);
+    HalpSendSoftwareInterrupt(0, TargetSet, Irql);
 }
 
 #endif // _M_AMD64

@@ -22,7 +22,7 @@ KdbpProcessorArgument(
     _In_ PCHAR Argv[],
     _Out_ PULONG Number)
 {
-    ULONG_PTR Value = KeGetCurrentProcessorNumber();
+    ULONG_PTR Value = KeGetCurrentPrcb()->Number;
 
     if ((Argc > 1) && !KdbpGetHexNumber(Argv[1], &Value))
     {
@@ -30,7 +30,7 @@ KdbpProcessorArgument(
         return NULL;
     }
 
-    if ((Value >= (ULONG_PTR)(UCHAR)KeNumberProcessors) || (KiProcessorBlock[Value] == NULL))
+    if ((Value >= KeProcessorCount) || (KiProcessorBlock[Value] == NULL))
     {
         KdbpPrint("There is no processor %Iu\n", Value);
         return NULL;
@@ -105,7 +105,7 @@ KdbpIsInterruptObject(
     return (Interrupt->Type == InterruptObject) &&
            (Interrupt->Size == sizeof(KINTERRUPT)) &&
            (Interrupt->Vector == Vector) &&
-           ((ULONG)(UCHAR)Interrupt->Number < (ULONG)(UCHAR)KeNumberProcessors) &&
+           ((ULONG)(UCHAR)Interrupt->Number < KeProcessorCount) &&
            (Interrupt->Irql <= HIGH_LEVEL) &&
            (Interrupt->SynchronizeIrql >= Interrupt->Irql) &&
            (Interrupt->SynchronizeIrql <= HIGH_LEVEL);
@@ -455,7 +455,7 @@ KdbpCmdInterrupts(
         return TRUE;
     }
 
-    KdbpPrint("Interrupts connected on processor %lu\n", KeGetCurrentProcessorNumber());
+    KdbpPrint("Interrupts connected on processor %lu\n", KeGetCurrentPrcb()->Number);
 
     for (Vector = 0; (Vector < Limit) && !KdbpIsOutputAborted(); Vector++)
     {

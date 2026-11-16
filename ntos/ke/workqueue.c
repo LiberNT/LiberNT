@@ -401,7 +401,7 @@ KeInitializeQueue(
     InitializeListHead(&Queue->ThreadListHead);
 
     Queue->CurrentCount = 0;
-    Queue->MaximumCount = (Count != 0) ? Count : (ULONG)(CCHAR)KeNumberProcessors;
+    Queue->MaximumCount = (Count != 0) ? Count : KeProcessorCount;
 }
 
 /*

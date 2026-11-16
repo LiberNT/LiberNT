@@ -34,7 +34,7 @@ static
 ULONG
 ExpRundownSlotCount(VOID)
 {
-    return KeNumberProcessors;
+    return KeProcessorCount;
 }
 
 static
@@ -43,7 +43,7 @@ ExpRundownSlotStride(VOID)
 {
     ULONG Alignment;
 
-    if (KeNumberProcessors == 1)
+    if (KeProcessorCount == 1)
     {
         return sizeof(EX_RUNDOWN_REF);
     }
@@ -334,7 +334,7 @@ ExfAcquireRundownProtectionCacheAwareEx(
     PEX_RUNDOWN_REF RunRef;
 
     RunRef = ExGetRunRefForGivenProcessor(RunRefCacheAware,
-                                          KeGetCurrentProcessorNumber());
+                                          KeGetCurrentPrcb()->Number);
 
     return ExfAcquireRundownProtectionEx(RunRef, Count);
 }
@@ -356,7 +356,7 @@ ExfReleaseRundownProtectionCacheAwareEx(
     PEX_RUNDOWN_REF RunRef;
 
     RunRef = ExGetRunRefForGivenProcessor(RunRefCacheAware,
-                                          KeGetCurrentProcessorNumber());
+                                          KeGetCurrentPrcb()->Number);
 
     ExpReleaseRundown(RunRef, Count, TRUE);
 }

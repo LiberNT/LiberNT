@@ -606,7 +606,7 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
 
         KeInitializeProcess(InitProcess,
                             0,
-                            MAXULONG_PTR,
+                            NULL,
                             DirectoryTableBase,
                             FALSE);
         InitProcess->QuantumReset = MAXCHAR;
@@ -701,8 +701,8 @@ KiInitializeKernel(_Inout_ PKPROCESS InitProcess,
     {
         _disable();
         KeStartArm64ProcessorTimer();
-        InterlockedOr64((PLONG64)&KeActiveProcessors, (LONG64)((KAFFINITY)1 << Number));
-        KeNumberProcessors = (CCHAR)InterlockedIncrement((PLONG)&KiArm64OnlineProcessorCount);
+        InterlockedOr64((PLONG64)&KeActiveProcessors.Bitmap[0], (LONG64)((KAFFINITY)1 << Number));
+        KiSetProcessorCount((ULONG)InterlockedIncrement((PLONG)&KiArm64OnlineProcessorCount));
     }
 
     KfRaiseIrql(HIGH_LEVEL);
@@ -1480,8 +1480,8 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     if (ProcessorNumber == 0)
     {
-        KeActiveProcessors |= ProcessorMask;
-        KeNumberProcessors++;
+        KeActiveProcessors.Bitmap[0] |= ProcessorMask;
+        KiSetProcessorCount(KeProcessorCount + 1);
         KiArm64OnlineProcessorCount = 1;
     }
 

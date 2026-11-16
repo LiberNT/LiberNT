@@ -180,8 +180,8 @@ KdbpCmdVersion(
               NtMinorVersion,
               NtBuildNumber & 0xFFFF,
               (PVOID)(ULONG_PTR)KdVersionBlock.KernBase,
-              (ULONG)(UCHAR)KeNumberProcessors,
-              KeGetCurrentProcessorNumber());
+              KeProcessorCount,
+              KeGetCurrentPrcb()->Number);
     KdbpPrint("KD %u.%u, protocol %u, secondary %u, machine 0x%04x, flags 0x%04x, module list %p\n",
               KdVersionBlock.MajorVersion,
               KdVersionBlock.MinorVersion,

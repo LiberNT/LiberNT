@@ -352,7 +352,7 @@ HalpSleepAllocateProcessors(VOID)
     ULONG FpuSize;
     PUCHAR FpuArea;
 
-    HalpSleepProcessorCount = (ULONG)KeNumberProcessors;
+    HalpSleepProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
     HalpSleepProcessors = ExAllocatePoolZero(NonPagedPool,
                                              HalpSleepProcessorCount * sizeof(HALP_SLEEP_PROCESSOR),
                                              HALP_SLEEP_TAG);
@@ -655,7 +655,7 @@ HalpAcpiSleepHandler(
     _In_opt_ LONG volatile *Number)
 {
     PHALP_SLEEP_STATE State = Context;
-    ULONG Processor = KeGetCurrentProcessorNumber();
+    ULONG Processor = KeGetCurrentPrcb()->Number;
     PHALP_SLEEP_PROCESSOR Save;
     ULONG_PTR Flags;
     LONG Generation;

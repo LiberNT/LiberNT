@@ -329,7 +329,8 @@ KiParseProfileList(
     PKPROFILE Profile;
     PLIST_ENTRY Entry;
     ULONG_PTR Pc = KeGetTrapFramePc(TrapFrame);
-    KAFFINITY Current = AFFINITY_MASK(KeGetCurrentPrcb()->Number);
+    /* TODO: a profile's mask names processors of group 0 only */
+    KAFFINITY Current = (KiPrcbGroup(KeGetCurrentPrcb()) == 0) ? AFFINITY_MASK(KeGetCurrentPrcb()->Number) : 0;
     PULONG Bucket;
     SIZE_T Offset;
 

@@ -1324,7 +1324,7 @@ KeFlushEntireTb(
     OldIrql = KeRaiseIrqlToSynchLevel();
 
     /* FIXME: Use KiTbFlushTimeStamp to synchronize TB flush */
-    TargetAffinity = KeActiveProcessors;
+    TargetAffinity = KeActiveProcessors.Bitmap[0];
     TargetAffinity &= ~Prcb->SetMember;
 
     if (TargetAffinity)

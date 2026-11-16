@@ -575,7 +575,7 @@ CmpInitializeProcessorClockFromFirmware(
     Speed = CmpReadSmbiosProcessorMHz(LoaderBlock);
     if (Speed == 0) return;
 
-    for (Number = 0; Number < (ULONG)KeNumberProcessors; Number++)
+    for (Number = 0; Number < KeProcessorCount; Number++)
     {
         Prcb = KiProcessorBlock[Number];
         if ((Prcb != NULL) && (Prcb->MHz == 0))

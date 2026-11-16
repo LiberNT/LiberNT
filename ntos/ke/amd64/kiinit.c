@@ -91,8 +91,9 @@ KiInitializePcr(
     Pcr->Prcb.BuildType |= PRCB_BUILD_DEBUG;
 #endif
 
-    Pcr->Prcb.Number = (UCHAR)ProcessorNumber;
-    Pcr->Prcb.SetMember = 1ULL << ProcessorNumber;
+    Pcr->Prcb.Number = ProcessorNumber;
+    Pcr->Prcb.LegacyNumber = (UCHAR)KiLegacyProcessorNumber(ProcessorNumber);
+    Pcr->Prcb.SetMember = KI_SET_BIT(ProcessorNumber);
 
     Pcr->GdtBase = GdtBase;
     Pcr->IdtBase = IdtBase;
@@ -633,7 +634,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     FrLdrDbgPrint = LoaderBlock->u.I386.CommonDataArea;
 
-    if (KeNumberProcessors == 0)
+    if (KeProcessorCount == 0)
     {
         Cpu = 0;
 
@@ -652,11 +653,11 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     Pcr = CONTAINING_RECORD(LoaderBlock->Prcb, KIPCR, Prcb);
 
-    /* Publish the PRCB before counting it: every index below KeNumberProcessors must be valid */
+    /* Publish the PRCB before counting it: every index below KeProcessorCount must be valid */
     KiProcessorBlock[Cpu] = &Pcr->Prcb;
     KeMemoryBarrier();
-    if ((CCHAR)(Cpu + 1) > KeNumberProcessors)
-        KeNumberProcessors = (CCHAR)(Cpu + 1);
+    if (Cpu + 1 > KeProcessorCount)
+        KiSetProcessorCount(Cpu + 1);
 
     InitialThread = (PKTHREAD)LoaderBlock->Thread;
 
@@ -699,7 +700,7 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
         KiX2ApicMsrs = TRUE;
 
     if (Cpu == 0)
-        KeActiveProcessors |= 1ULL << Cpu;
+        KiActivateProcessor(&Pcr->Prcb);
 
     InterlockedAnd64((PLONG64)&KiFreezeExecutionLock, 0);
 

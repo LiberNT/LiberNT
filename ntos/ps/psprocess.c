@@ -142,6 +142,7 @@ PspAllocateProcess(
     POBJECT_NAME_INFORMATION AuditName = NULL;
     PEPROCESS Clone = NULL;
     ULONG AddressSpaceFlags = 0;
+    KI_PROCESSOR_SET Affinity;
     PEPROCESS Process;
     NTSTATUS Status;
     UCHAR Quantum;
@@ -156,13 +157,14 @@ PspAllocateProcess(
                             ObjectAttributes,
                             PreviousMode,
                             NULL,
-                            sizeof(EPROCESS),
+                            sizeof(EPROCESS) + KI_PROCESS_AFFINITY_EXTENSION,
                             0,
                             0,
                             (PVOID*)&Process);
     if (!NT_SUCCESS(Status)) return Status;
 
-    RtlZeroMemory(Process, sizeof(EPROCESS));
+    RtlZeroMemory(Process, sizeof(EPROCESS) + KI_PROCESS_AFFINITY_EXTENSION);
+    KiAttachProcessAffinity(&Process->Pcb, (PKI_PROCESS_AFFINITY)(Process + 1));
 
     InitializeListHead(&Process->ThreadListHead);
     InitializeListHead(&Process->JobLinks);
@@ -239,10 +241,14 @@ PspAllocateProcess(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    if (Parent != NULL)
+        KiAndProcessorSets(Affinity, KiProcessAffinity(&Parent->Pcb), KeActiveProcessors.Bitmap);
+    else
+        KiCopyProcessorSet(Affinity, KeActiveProcessors.Bitmap);
+
     KeInitializeProcess(&Process->Pcb,
                         PspPriorityTable[Process->PriorityClass],
-                        (Parent != NULL ? Parent->Pcb.Affinity : (KAFFINITY)-1) &
-                            KeActiveProcessors,
+                        Affinity,
                         DirectoryTableBase,
                         (BOOLEAN)((Process->DefaultHardErrorProcessing &
                                    SEM_NOALIGNMENTFAULTEXCEPT) != 0));

@@ -79,9 +79,9 @@ KiPpcInitializeBootPcr(
     /* Publish the PCR: SPRG0 for kernel code, SPRG1 for the vectors. */
     __asm__ __volatile__("mtsprg 0, %0\n\tmtsprg 1, %1" :: "r"(Pcr), "r"(Pcr->PhysicalAddress) : "memory");
     KiProcessorBlock[0] = &Pcr->Prcb;
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     KeMemoryBarrier();
-    KeNumberProcessors = 1;
+    KiSetProcessorCount(1);
     return TRUE;
 }
 

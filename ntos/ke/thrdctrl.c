@@ -21,11 +21,17 @@
 FORCEINLINE
 ULONG
 KiLowestSetProcessor(
-    _In_ KAFFINITY Set)
+    _In_ const KAFFINITY *Set)
 {
-    ASSERT(Set != 0);
-    return (ULONG)(UCHAR)RtlFindLeastSignificantBit((ULONGLONG)Set);
+    ULONG Number = 0;
+    BOOLEAN Found;
+
+    Found = KiFindProcessorInSet(Set, 0, &Number);
+    ASSERT(Found);
+    UNREFERENCED_PARAMETER(Found);
+    return Number;
 }
+
 
 /*
  * Arms the suspend APC if this is the first thing holding the thread. The
@@ -247,8 +253,9 @@ KeInitThread(
     Thread->PriorityDecrement = 0;
     KiSetThreadQuantum(Thread, Process->QuantumReset);
 
-    KiThreadAffinityMask(Thread) = Process->Affinity;
-    KiThreadUserAffinityMask(Thread) = Process->Affinity;
+    KiCopyProcessorSet(KiThreadAffinity(Thread), KiProcessAffinity(Process));
+    KiCopyProcessorSet(KiThreadUserAffinity(Thread), KiProcessAffinity(Process));
+    KiSetThreadPrimaryGroup(Thread, KiProcessPrimaryGroup(Process));
     Thread->IdealProcessor = 0;
     Thread->UserIdealProcessor = 0;
     Thread->NextProcessor = 0;
@@ -329,8 +336,9 @@ KeStartThread(
     KLOCK_QUEUE_HANDLE ProcessLock;
     PKPROCESS Process = Thread->ApcState.Process;
     PKNODE Node;
-    KAFFINITY Affinity;
-    ULONG Seed;
+    KI_PROCESSOR_SET Affinity, Narrowed;
+    USHORT Group;
+    ULONG Ideal;
 
     ASSERT(Thread->State == Initialized);
 
@@ -344,29 +352,35 @@ KeStartThread(
     Thread->DisableQuantum = Process->DisableQuantum;
     KiSetThreadQuantum(Thread, Process->QuantumReset);
 
-    KiThreadAffinityMask(Thread) = Process->Affinity;
-    KiThreadUserAffinityMask(Thread) = Process->Affinity;
+    Group = KiProcessPrimaryGroup(Process);
+    KiCopyProcessorSet(KiThreadAffinity(Thread), KiProcessAffinity(Process));
+    KiCopyProcessorSet(KiThreadUserAffinity(Thread), KiProcessAffinity(Process));
+    KiSetThreadPrimaryGroup(Thread, Group);
 
     /*
      * Threads of one process are spread over the processors of its node in
      * turn, so that a process which creates many threads does not start them
      * all on whichever processor happened to run the creator.
      */
-    Node = KeNodeBlock[Process->IdealNode];
-    Affinity = Process->Affinity & KeActiveProcessors;
-    if (Node != NULL)
-        Affinity &= Node->ProcessorMask;
-    if (Affinity == 0)
-        Affinity = Process->Affinity & KeActiveProcessors;
-
-    if (Affinity != 0)
+    if (KiAndProcessorSets(Affinity, KiProcessAffinity(Process), KeActiveProcessors.Bitmap))
     {
-        Seed = Process->ThreadSeed;
-        Thread->IdealProcessor =
-            KeFindNextRightSetAffinity((UCHAR)Seed, Affinity);
-        Process->ThreadSeed = (UCHAR)Thread->IdealProcessor;
-        Thread->UserIdealProcessor = Thread->IdealProcessor;
-        Thread->NextProcessor = Thread->IdealProcessor;
+        /* TODO: a node's processor mask describes only the first word of processors */
+        Node = KeNodeBlock[Process->IdealNode];
+        if ((KeNumberNodes > 1) && (Node != NULL) && ((Affinity[0] & Node->ProcessorMask) != 0))
+        {
+            KiClearProcessorSet(Narrowed);
+            Narrowed[0] = Affinity[0] & Node->ProcessorMask;
+            KiCopyProcessorSet(Affinity, Narrowed);
+        }
+
+        /* TODO: ThreadSeed holds only processor numbers below 256 */
+        if (!KiFindProcessorInSet(Affinity, (ULONG)Process->ThreadSeed + 1, &Ideal))
+            Ideal = KiLowestSetProcessor(Affinity);
+
+        Thread->IdealProcessor = Ideal;
+        Process->ThreadSeed = (UCHAR)Ideal;
+        Thread->UserIdealProcessor = Ideal;
+        Thread->NextProcessor = Ideal;
     }
 
     InsertTailList(&Process->ThreadListHead, &Thread->ThreadListEntry);
@@ -1255,24 +1269,133 @@ KeQueryRuntimeThread(
 }
 
 /* Affinity wins over CPU sets that share none of its processors */
-KAFFINITY
+VOID
 FASTCALL
 KiThreadCpuSetAffinity(
     _In_ PKTHREAD Thread,
-    _In_ KAFFINITY Affinity)
+    _In_ const KAFFINITY *Affinity,
+    _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *Effective)
 {
     PETHREAD Ethread = CONTAINING_RECORD(Thread, ETHREAD, Tcb);
     KAFFINITY Selected;
 
+    KiCopyProcessorSet(Effective, Affinity);
     if (Ethread->IndirectCpuSets)
-    {
-        return Affinity;
-    }
+        return;
 
     /* TODO: a thread that selected no CPU sets is not yet held to its process's default ones */
+    /* TODO: the selected CPU sets describe only the first word of processors */
     Selected = (KAFFINITY)Ethread->SelectedCpuSets;
+    if ((Affinity[0] & Selected) != 0)
+    {
+        KiClearProcessorSet(Effective);
+        Effective[0] = Affinity[0] & Selected;
+    }
+}
 
-    return ((Affinity & Selected) != 0) ? (Affinity & Selected) : Affinity;
+/* Entered with the thread lock held at SYNCH_LEVEL */
+VOID
+FASTCALL
+KiSetUserAffinityThread(
+    _Inout_ PKTHREAD Thread,
+    _In_ const KAFFINITY *Affinity)
+{
+    KI_PROCESSOR_SET Effective;
+
+    ASSERT(KiDoProcessorSetsIntersect(Affinity, KeActiveProcessors.Bitmap));
+
+    KiCopyProcessorSet(KiThreadUserAffinity(Thread), Affinity);
+    if (!Thread->SystemAffinityActive)
+    {
+        KiThreadCpuSetAffinity(Thread, Affinity, Effective);
+        KiSetAffinityThread(Thread, Effective);
+    }
+}
+
+USHORT
+NTAPI
+KeQueryPrimaryGroupThread(
+    _In_ PKTHREAD Thread)
+{
+    return KiThreadPrimaryGroup(Thread);
+}
+
+KAFFINITY
+NTAPI
+KeQueryGroupAffinityThread(
+    _In_ PKTHREAD Thread,
+    _In_ USHORT Group)
+{
+    return KiQueryGroupOfProcessorSet(KiThreadAffinity(Thread), Group);
+}
+
+/* The affinity in force names one group while a system affinity region lasts, which need not be the primary group */
+VOID
+NTAPI
+KeQueryActualGroupAffinityThread(
+    _In_ PKTHREAD Thread,
+    _Out_ PGROUP_AFFINITY Affinity)
+{
+    USHORT Groups = KeQueryMaximumGroupCount();
+    USHORT Group;
+
+    RtlZeroMemory(Affinity, sizeof(*Affinity));
+    Affinity->Group = KiThreadPrimaryGroup(Thread);
+    Affinity->Mask = KiQueryGroupOfProcessorSet(KiThreadAffinity(Thread), Affinity->Group);
+
+    for (Group = 0; (Affinity->Mask == 0) && (Group < Groups); Group++)
+    {
+        Affinity->Mask = KiQueryGroupOfProcessorSet(KiThreadAffinity(Thread), Group);
+        if (Affinity->Mask != 0)
+            Affinity->Group = Group;
+    }
+}
+
+/* Windows documents the group a thread is confined to this way as becoming its primary group */
+VOID
+NTAPI
+KeSetGroupAffinityThread(
+    _Inout_ PKTHREAD Thread,
+    _In_ USHORT Group,
+    _In_ KAFFINITY Affinity)
+{
+    KI_PROCESSOR_SET NewAffinity;
+    KIRQL OldIrql;
+
+    ASSERT_THREAD(Thread);
+
+    KiClearProcessorSet(NewAffinity);
+    KiAssignGroupOfProcessorSet(NewAffinity, Group, Affinity);
+
+    OldIrql = KiEnterDispatcher();
+    KiAcquireThreadLock(Thread);
+    KiSetThreadPrimaryGroup(Thread, Group);
+    KiSetUserAffinityThread(Thread, NewAffinity);
+    KiReleaseThreadLock(Thread);
+    KiExitDispatcher(OldIrql);
+}
+
+VOID
+NTAPI
+KiSetProcessorAffinityThread(
+    _Inout_ PKTHREAD Thread,
+    _In_ ULONG Number)
+{
+    KI_PROCESSOR_SET Affinity;
+    KIRQL OldIrql;
+
+    ASSERT_THREAD(Thread);
+    ASSERT(Number < KeProcessorCount);
+
+    KiClearProcessorSet(Affinity);
+    KiAddProcessorToSet(Affinity, Number);
+
+    OldIrql = KiEnterDispatcher();
+    KiAcquireThreadLock(Thread);
+    KiSetThreadPrimaryGroup(Thread, (USHORT)(Number / KiMaximumGroupSize));
+    KiSetUserAffinityThread(Thread, Affinity);
+    KiReleaseThreadLock(Thread);
+    KiExitDispatcher(OldIrql);
 }
 
 /*
@@ -1286,27 +1409,26 @@ KeSetAffinityThread(
     _Inout_ PKTHREAD Thread,
     _In_ KAFFINITY Affinity)
 {
+    KI_PROCESSOR_SET NewAffinity;
     KIRQL OldIrql;
     KAFFINITY OldAffinity;
+    USHORT Group;
 
     ASSERT_THREAD(Thread);
-    ASSERT((Affinity & KeActiveProcessors) != 0);
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
-    OldAffinity = KiThreadUserAffinityMask(Thread);
-    KiThreadUserAffinityMask(Thread) = Affinity;
+    /* Windows documents a mask without a group as naming processors of the thread's primary group */
+    Group = KiThreadPrimaryGroup(Thread);
+    KiClearProcessorSet(NewAffinity);
+    KiAssignGroupOfProcessorSet(NewAffinity, Group, Affinity);
 
-    if (Thread->SystemAffinityActive)
-    {
-        /* A system affinity region is in force; it wins until it ends */
-        OldAffinity = KiThreadAffinityMask(Thread);
-    }
-    else
-    {
-        KiSetAffinityThread(Thread, KiThreadCpuSetAffinity(Thread, Affinity));
-    }
+    /* A system affinity region in force wins until it ends, and is what the caller is told it replaced */
+    OldAffinity = KiQueryGroupOfProcessorSet(Thread->SystemAffinityActive ? KiThreadAffinity(Thread)
+                                                                          : KiThreadUserAffinity(Thread),
+                                             Group);
+    KiSetUserAffinityThread(Thread, NewAffinity);
 
     KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
@@ -1324,27 +1446,82 @@ NTAPI
 KeSetSystemAffinityThreadEx(
     _In_ KAFFINITY Affinity)
 {
-    PKTHREAD Thread = KeGetCurrentThread();
-    KIRQL OldIrql;
-    KAFFINITY OldAffinity;
+    GROUP_AFFINITY Previous;
 
-    ASSERT((Affinity & KeActiveProcessors) != 0);
+    /* FIXME: the documentation does not say what a mask naming no active processor does; here it changes nothing */
+    if ((Affinity & KeQueryGroupAffinity(0)) == 0)
+        return 0;
+
+    /* Windows documents this mask as naming processors of group 0 */
+    KiSetSystemGroupAffinityThread(0, Affinity, &Previous);
+    return Previous.Mask;
+}
+
+VOID
+NTAPI
+KiSetSystemGroupAffinityThread(
+    _In_ USHORT Group,
+    _In_ KAFFINITY Affinity,
+    _Out_ PGROUP_AFFINITY Previous)
+{
+    KI_PROCESSOR_SET NewAffinity;
+
+    KiClearProcessorSet(NewAffinity);
+    KiAssignGroupOfProcessorSet(NewAffinity, Group, Affinity);
+    KiSetSystemAffinityThread(NewAffinity, Previous);
+}
+
+VOID
+NTAPI
+KiSetSystemProcessorAffinityThread(
+    _In_ ULONG Number,
+    _Out_ PGROUP_AFFINITY Previous)
+{
+    KI_PROCESSOR_SET NewAffinity;
+
+    KiClearProcessorSet(NewAffinity);
+    KiAddProcessorToSet(NewAffinity, Number);
+    KiSetSystemAffinityThread(NewAffinity, Previous);
+}
+
+/* The region it replaced is answered the way the group interface names one, zeroed when there was none */
+VOID
+NTAPI
+KiSetSystemAffinityThread(
+    _In_ const KAFFINITY *NewAffinity,
+    _Out_ PGROUP_AFFINITY Previous)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+    USHORT Groups = KeQueryMaximumGroupCount();
+    KIRQL OldIrql;
+    USHORT Index;
+
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
+
+    RtlZeroMemory(Previous, sizeof(*Previous));
+    ASSERT(KiDoProcessorSetsIntersect(NewAffinity, KeActiveProcessors.Bitmap));
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
-    OldAffinity = Thread->SystemAffinityActive
-                      ? KiThreadAffinityMask(Thread)
-                      : 0;
+    if (Thread->SystemAffinityActive)
+    {
+        for (Index = 0; Index < Groups; Index++)
+        {
+            Previous->Mask = KiQueryGroupOfProcessorSet(KiThreadAffinity(Thread), Index);
+            if (Previous->Mask != 0)
+            {
+                Previous->Group = Index;
+                break;
+            }
+        }
+    }
 
     Thread->SystemAffinityActive = TRUE;
-    KiSetAffinityThread(Thread, Affinity);
+    KiSetAffinityThread(Thread, NewAffinity);
 
     KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
-
-    return OldAffinity;
 }
 
 VOID
@@ -1364,7 +1541,21 @@ NTAPI
 KeRevertToUserAffinityThreadEx(
     _In_ KAFFINITY Affinity)
 {
+    /* Windows documents this mask as naming processors of group 0; one that names no active processor ends the region */
+    if ((Affinity & KeQueryGroupAffinity(0)) == 0)
+        Affinity = 0;
+
+    KiRevertToUserGroupAffinityThread(0, Affinity);
+}
+
+VOID
+NTAPI
+KiRevertToUserGroupAffinityThread(
+    _In_ USHORT Group,
+    _In_ KAFFINITY Affinity)
+{
     PKTHREAD Thread = KeGetCurrentThread();
+    KI_PROCESSOR_SET NewAffinity;
     KIRQL OldIrql;
 
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
@@ -1374,14 +1565,16 @@ KeRevertToUserAffinityThreadEx(
 
     if (Affinity != 0)
     {
-        KiSetAffinityThread(Thread, Affinity);
+        KiClearProcessorSet(NewAffinity);
+        KiAssignGroupOfProcessorSet(NewAffinity, Group, Affinity);
+        ASSERT(KiDoProcessorSetsIntersect(NewAffinity, KeActiveProcessors.Bitmap));
+        KiSetAffinityThread(Thread, NewAffinity);
     }
     else
     {
         Thread->SystemAffinityActive = FALSE;
-        KiSetAffinityThread(Thread,
-                            KiThreadCpuSetAffinity(Thread,
-                                                   KiThreadUserAffinityMask(Thread)));
+        KiThreadCpuSetAffinity(Thread, KiThreadUserAffinity(Thread), NewAffinity);
+        KiSetAffinityThread(Thread, NewAffinity);
     }
 
     KiReleaseThreadLock(Thread);
@@ -1409,24 +1602,62 @@ KeSetIdealProcessorThread(
 {
     KIRQL OldIrql;
     UCHAR Previous;
+    ULONG Number;
 
     ASSERT_THREAD(Thread);
-    ASSERT(Processor < MAXIMUM_PROCESSORS);
+    ASSERT(Processor < KiMaximumGroupSize);
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
-    Previous = (UCHAR)Thread->UserIdealProcessor;
-    Thread->UserIdealProcessor = Processor;
+    /* A processor named without a group is one of the thread's primary group */
+    Number = (ULONG)KiThreadPrimaryGroup(Thread) * KiMaximumGroupSize + Processor;
+    ASSERT(Number < KE_MAXIMUM_PROCESSORS);
+    Previous = (UCHAR)(Thread->UserIdealProcessor % KiMaximumGroupSize);
+    Thread->UserIdealProcessor = Number;
 
     /* TODO: no layout-neutral flag records that the choice was explicit */
     if (!Thread->SystemAffinityActive)
-        Thread->IdealProcessor = Processor;
+        Thread->IdealProcessor = Number;
 
     KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
 
     return Previous;
+}
+
+/* Answers the previous preference, and STATUS_INVALID_PARAMETER for a processor that is not there */
+NTSTATUS
+NTAPI
+KeSetIdealProcessorThreadEx(
+    _Inout_ PKTHREAD Thread,
+    _In_ PPROCESSOR_NUMBER Processor,
+    _Out_ PPROCESSOR_NUMBER Previous)
+{
+    ULONG Number = KeGetProcessorIndexFromNumber(Processor);
+    KIRQL OldIrql;
+
+    ASSERT_THREAD(Thread);
+
+    if (Number == INVALID_PROCESSOR_INDEX)
+        return STATUS_INVALID_PARAMETER;
+
+    OldIrql = KiEnterDispatcher();
+    KiAcquireThreadLock(Thread);
+
+    Previous->Group = (USHORT)(Thread->UserIdealProcessor / KiMaximumGroupSize);
+    Previous->Number = (UCHAR)(Thread->UserIdealProcessor % KiMaximumGroupSize);
+    Previous->Reserved = 0;
+    Thread->UserIdealProcessor = Number;
+
+    /* FIXME: Windows documents the ideal processor as one of the primary group; whether naming another group moves the primary group is not established, and here it does not */
+    if (!Thread->SystemAffinityActive)
+        Thread->IdealProcessor = Number;
+
+    KiReleaseThreadLock(Thread);
+    KiExitDispatcher(OldIrql);
+
+    return STATUS_SUCCESS;
 }
 
 /*
@@ -1504,16 +1735,15 @@ KeFindNextRightSetAffinity(
     _In_ KAFFINITY Set)
 {
     KAFFINITY Above;
+    ULONG Bit;
 
     ASSERT(Set != 0);
 
     /* Everything strictly above Number; empty once Number is the top bit */
     Above = Set & ~((AFFINITY_MASK(Number) << 1) - 1);
 
-    if (Above != 0)
-        return (UCHAR)KiLowestSetProcessor(Above);
-
-    return (UCHAR)KiLowestSetProcessor(Set);
+    NT_VERIFY(BitScanForwardAffinity(&Bit, (Above != 0) ? Above : Set));
+    return (UCHAR)Bit;
 }
 
 /*

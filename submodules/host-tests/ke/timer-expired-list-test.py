@@ -37,7 +37,9 @@ static void TestPause(void) {
     while (!__atomic_load_n(&Attempted, __ATOMIC_ACQUIRE)) sched_yield();
     DoneDuringPause = AwaitFlag(&Done);
 }
-static ULONG KeGetCurrentProcessorNumber(void) { return 0; }
+static struct { ULONG Number; } TestPrcb;
+#define KeGetCurrentPrcb() (&TestPrcb)
+static ULONG KiLegacyProcessorNumber(ULONG Number) { return Number; }
 static void KiWaitTest(PVOID Object, LONG Increment) { (void)Object; (void)Increment; }
 static void KeQuerySystemTimePrecise(PLARGE_INTEGER Time) { *Time = ReadTime(&KiSystemTimeValue); }
 static BOOLEAN KeInsertQueueDpc(PKDPC Dpc, PVOID A, PVOID B) { (void)Dpc; (void)A; (void)B; CHECK(!"queued"); return TRUE; }

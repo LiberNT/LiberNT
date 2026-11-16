@@ -7,6 +7,8 @@ import pathlib
 import subprocess
 import tempfile
 
+import ke_procset_fixture
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
@@ -63,8 +65,8 @@ static PKPRCB KiProcessorBlock[2] = {&Cpus[0], &Cpus[1]}, KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner __attribute__((unused));
 typedef struct { int Valid; } KI_FREEZE_WAIT;
 static volatile LONG64 KiFreezeEpoch;
-static ULONG KeNumberProcessors = 2;
-static KAFFINITY KeActiveProcessors = 1;
+@PROCSET@
+static ULONG KeProcessorCount = 2;
 static KSPIN_LOCK KiFreezeExecutionLock __attribute__((unused));
 static _Thread_local unsigned CurrentCpu;
 static int Waiting, Done, GateEnabled, GateReached, GateRelease, FreezeDone, Requests, ReentryEnabled, AutoThaw, GatePhase;
@@ -117,8 +119,8 @@ static void KiFreezeIfRequested(void) {
         __atomic_store_n(&Cpus[CurrentCpu].IpiFrozen, IPI_FROZEN_STATE_RUNNING, __ATOMIC_RELEASE);
     }
 }
-static void KiIpiSend(KAFFINITY targets, int type) {
-    assert(targets == (CurrentCpu == 0 ? 2 : 1) && type == IPI_FREEZE);
+static void KiIpiSendProcessor(ULONG number, int type) {
+    assert(number == 1 - CurrentCpu && type == IPI_FREEZE);
     Requests++;
     if (CurrentCpu != 0 || __atomic_load_n(&GatePhase, __ATOMIC_ACQUIRE) != 2)
         Cpus[1 - CurrentCpu].IpiFrozen = IPI_FROZEN_STATE_FROZEN;
@@ -132,8 +134,9 @@ static void YieldProcessor(void) {
         Cpus[0].IpiFrozen = IPI_FROZEN_STATE_RUNNING;
     sched_yield();
 }
+static void KiActivateProcessor(PKPRCB Prcb) { __atomic_or_fetch(&KeActiveProcessors.Bitmap[0], Prcb->SetMember, __ATOMIC_RELEASE); }
 @HELPERS@
-static KAFFINITY KiFreezeTargetSet(PKPRCB CurrentPrcb) { @TARGETS@ }
+static void KiFreezeTargetSet(PKPRCB CurrentPrcb, KAFFINITY *Targets) { @TARGETS@ }
 static void KxFreezeExecution(void) { @FREEZE@ }
 static void KxThawExecution(void) { @THAW@ }
 static void *Publish(void *ignored) {
@@ -154,19 +157,20 @@ static void *Freeze(void *ignored) {
 }
 int main(void) {
     pthread_t thread, freezer;
+    KeActiveProcessors.Bitmap[0] = 1;
     KxFreezeExecution();
     assert(KiFreezeOwner == &Cpus[0]);
     assert(pthread_create(&thread, NULL, Publish, NULL) == 0);
     while (!__atomic_load_n(&Waiting, __ATOMIC_ACQUIRE) && !__atomic_load_n(&Done, __ATOMIC_ACQUIRE))
         sched_yield();
     assert(!__atomic_load_n(&Done, __ATOMIC_ACQUIRE));
-    assert((KeActiveProcessors & 2) == 0);
+    assert((KeActiveProcessors.Bitmap[0] & 2) == 0);
     KxThawExecution();
     assert(pthread_join(thread, NULL) == 0);
     assert(__atomic_load_n(&Done, __ATOMIC_ACQUIRE));
-    assert((KeActiveProcessors & 2) != 0 && KiFreezeOwner == NULL);
+    assert((KeActiveProcessors.Bitmap[0] & 2) != 0 && KiFreezeOwner == NULL);
 
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     Done = Waiting = GateReached = GateRelease = FreezeDone = Requests = 0;
     __atomic_store_n(&GateEnabled, 1, __ATOMIC_RELEASE);
     assert(pthread_create(&thread, NULL, Publish, NULL) == 0);
@@ -177,12 +181,12 @@ int main(void) {
     __atomic_store_n(&GateRelease, 1, __ATOMIC_RELEASE);
     assert(pthread_join(thread, NULL) == 0);
     assert(pthread_join(freezer, NULL) == 0);
-    assert(Requests == 1 && (KeActiveProcessors & 2) != 0);
+    assert(Requests == 1 && (KeActiveProcessors.Bitmap[0] & 2) != 0);
     assert(Cpus[1].IpiFrozen == IPI_FROZEN_STATE_FROZEN);
     KxThawExecution();
     assert(Cpus[1].IpiFrozen == IPI_FROZEN_STATE_RUNNING);
 
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     KiFreezeActiveSetOwner = &Cpus[0];
     KxFreezeExecution();
     assert(KiFreezeActiveSetOwner == &Cpus[0]);
@@ -190,7 +194,7 @@ int main(void) {
     assert(KiFreezeActiveSetOwner == &Cpus[0]);
     KiFreezeActiveSetOwner = NULL;
 
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     Done = Waiting = GateReached = GateRelease = FreezeDone = Requests = 0;
     __atomic_store_n(&ReentryEnabled, 1, __ATOMIC_RELEASE);
     __atomic_store_n(&AutoThaw, 1, __ATOMIC_RELEASE);
@@ -199,10 +203,10 @@ int main(void) {
     assert(pthread_create(&freezer, NULL, Freeze, NULL) == 0);
     assert(pthread_join(freezer, NULL) == 0);
     assert(pthread_join(thread, NULL) == 0);
-    assert(Requests == 1 && KeActiveProcessors == 3 && KiFreezeOwner == NULL);
+    assert(Requests == 1 && KeActiveProcessors.Bitmap[0] == 3 && KiFreezeOwner == NULL);
     assert(KiFreezeActiveSetOwner == NULL);
 
-    KeActiveProcessors = 1;
+    KeActiveProcessors.Bitmap[0] = 1;
     Done = Waiting = GateReached = GateRelease = FreezeDone = Requests = 0;
     __atomic_store_n(&GateEnabled, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&GatePhase, 2, __ATOMIC_RELEASE);
@@ -211,7 +215,7 @@ int main(void) {
     assert(pthread_create(&freezer, NULL, Freeze, NULL) == 0);
     assert(pthread_join(freezer, NULL) == 0);
     assert(pthread_join(thread, NULL) == 0);
-    assert(Requests == 2 && KeActiveProcessors == 3 && KiFreezeOwner == NULL);
+    assert(Requests == 2 && KeActiveProcessors.Bitmap[0] == 3 && KiFreezeOwner == NULL);
     assert(KiFreezeActiveSetOwner == NULL);
     return 0;
 }
@@ -224,6 +228,7 @@ for name, signature in [
 ]:
     if '\n' + name + '(' in freeze_source:
         helpers += signature + ' {' + body(freeze_source, name) + '}\n'
+fixture = fixture.replace('@PROCSET@', ke_procset_fixture.SHIM)
 fixture = fixture.replace('@HELPERS@', helpers)
 for marker, name in [('NOTE', 'KiNoteFreezeEpoch'), ('TARGETS', 'KiFreezeTargetSet'), ('FREEZE', 'KxFreezeExecution'), ('THAW', 'KxThawExecution')]:
     fixture = fixture.replace('@' + marker + '@', body(freeze_source, name))

@@ -37,8 +37,9 @@ USHORT
 NTAPI
 KeQueryActiveGroupCount(VOID)
 {
-    /* ReactOS models a single processor group. */
-    return 1;
+    ULONG Count = max(KeProcessorCount, 1);
+
+    return (USHORT)((Count + KiMaximumGroupSize - 1) / KiMaximumGroupSize);
 }
 
 /*
@@ -48,7 +49,9 @@ USHORT
 NTAPI
 KeQueryMaximumGroupCount(VOID)
 {
-    return 1;
+    ULONG Maximum = max(min(KeMaximumProcessors, KE_MAXIMUM_PROCESSORS), 1);
+
+    return (USHORT)((Maximum + KiMaximumGroupSize - 1) / KiMaximumGroupSize);
 }
 
 /*
@@ -59,15 +62,20 @@ NTAPI
 KeGetProcessorIndexFromNumber(
     _In_ PPROCESSOR_NUMBER ProcessorNumber)
 {
+    ULONG Index;
+
     if ((ProcessorNumber->Reserved != 0) ||
-        (ProcessorNumber->Group != 0) ||
-        (ProcessorNumber->Number >= (UCHAR)(sizeof(KAFFINITY) * 8)) ||
-        (ProcessorNumber->Number >= (UCHAR)KeNumberProcessors))
+        (ProcessorNumber->Group >= KeQueryActiveGroupCount()) ||
+        (ProcessorNumber->Number >= KiMaximumGroupSize))
     {
         return INVALID_PROCESSOR_INDEX;
     }
 
-    return ProcessorNumber->Number;
+    Index = (ULONG)ProcessorNumber->Group * KiMaximumGroupSize + ProcessorNumber->Number;
+    if (Index >= KeProcessorCount)
+        return INVALID_PROCESSOR_INDEX;
+
+    return Index;
 }
 
 /*
@@ -79,11 +87,11 @@ KeGetProcessorNumberFromIndex(
     _In_ ULONG ProcessorIndex,
     _Out_ PPROCESSOR_NUMBER ProcessorNumber)
 {
-    if (ProcessorIndex >= (ULONG)KeNumberProcessors)
+    if (ProcessorIndex >= KeProcessorCount)
         return STATUS_INVALID_PARAMETER;
 
-    ProcessorNumber->Group = 0;
-    ProcessorNumber->Number = (UCHAR)ProcessorIndex;
+    ProcessorNumber->Group = (USHORT)(ProcessorIndex / KiMaximumGroupSize);
+    ProcessorNumber->Number = (UCHAR)(ProcessorIndex % KiMaximumGroupSize);
     ProcessorNumber->Reserved = 0;
     return STATUS_SUCCESS;
 }
@@ -344,8 +352,11 @@ KeAddProcessorAffinityEx(
     _Inout_ PKAFFINITY_EX Affinity,
     _In_ ULONG ProcessorIndex)
 {
-    ULONG GroupNumber = ProcessorIndex / (sizeof(KAFFINITY) * 8);
-    ULONG Number = ProcessorIndex % (sizeof(KAFFINITY) * 8);
+    ULONG GroupNumber = ProcessorIndex / KiMaximumGroupSize;
+    ULONG Number = ProcessorIndex % KiMaximumGroupSize;
+
+    if (GroupNumber >= Affinity->Size)
+        return;
 
     KeAddGroupAffinityEx(Affinity, (USHORT)GroupNumber, (KAFFINITY)1 << Number);
 }
@@ -359,8 +370,11 @@ KeRemoveProcessorAffinityEx(
     _Inout_ PKAFFINITY_EX Affinity,
     _In_ ULONG ProcessorIndex)
 {
-    ULONG GroupNumber = ProcessorIndex / (sizeof(KAFFINITY) * 8);
-    ULONG Number = ProcessorIndex % (sizeof(KAFFINITY) * 8);
+    ULONG GroupNumber = ProcessorIndex / KiMaximumGroupSize;
+    ULONG Number = ProcessorIndex % KiMaximumGroupSize;
+
+    if (GroupNumber >= Affinity->Count)
+        return;
 
     KeRemoveGroupAffinityEx(Affinity, (USHORT)GroupNumber, (KAFFINITY)1 << Number);
 }
@@ -374,8 +388,8 @@ KeCheckProcessorAffinityEx(
     _In_ PKAFFINITY_EX Affinity,
     _In_ ULONG ProcessorIndex)
 {
-    ULONG GroupNumber = ProcessorIndex / (sizeof(KAFFINITY) * 8);
-    ULONG Number = ProcessorIndex % (sizeof(KAFFINITY) * 8);
+    ULONG GroupNumber = ProcessorIndex / KiMaximumGroupSize;
+    ULONG Number = ProcessorIndex % KiMaximumGroupSize;
 
     if (GroupNumber >= Affinity->Count)
         return FALSE;
@@ -1220,10 +1234,7 @@ NTAPI
 KeQueryGroupAffinity(
     _In_ USHORT GroupNumber)
 {
-    if (GroupNumber != 0)
-        return 0;
-
-    return KeActiveProcessors;
+    return KiQueryGroupOfProcessorSet(KeActiveProcessors.Bitmap, GroupNumber);
 }
 
 /*
@@ -1234,10 +1245,16 @@ NTAPI
 KeQueryActiveProcessorAffinity(
     _Out_ PKAFFINITY_EX Affinity)
 {
-    KeInitializeAffinityEx(Affinity);
-    Affinity->Bitmap[0] = KeActiveProcessors;
+    USHORT Groups = KeQueryActiveGroupCount();
+    USHORT Group;
 
-    return KeQueryActiveProcessorCount(NULL);
+    KeInitializeAffinityEx(Affinity);
+    ASSERT(Groups <= Affinity->Size);
+    for (Group = 0; (Group < Groups) && (Group < Affinity->Size); Group++)
+        Affinity->Bitmap[Group] = KeQueryGroupAffinity(Group);
+    Affinity->Count = max(Group, 1);
+
+    return KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 }
 
 /*
@@ -1249,19 +1266,25 @@ KeQueryActiveProcessorAffinity2(
     _Out_ PGROUP_AFFINITY GroupAffinities,
     _Inout_ PUSHORT Count)
 {
+    USHORT Groups = KeQueryActiveGroupCount();
+    USHORT Group;
+
     if (Count == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    if ((GroupAffinities == NULL) || (*Count < 1))
+    if ((GroupAffinities == NULL) || (*Count < Groups))
     {
-        *Count = 1;
+        *Count = Groups;
         return STATUS_BUFFER_TOO_SMALL;
     }
 
-    RtlZeroMemory(&GroupAffinities[0], sizeof(GROUP_AFFINITY));
-    GroupAffinities[0].Mask = KeActiveProcessors;
-    GroupAffinities[0].Group = 0;
-    *Count = 1;
+    RtlZeroMemory(GroupAffinities, Groups * sizeof(GROUP_AFFINITY));
+    for (Group = 0; Group < Groups; Group++)
+    {
+        GroupAffinities[Group].Mask = KeQueryGroupAffinity(Group);
+        GroupAffinities[Group].Group = Group;
+    }
+    *Count = Groups;
 
     return STATUS_SUCCESS;
 }
@@ -1292,18 +1315,19 @@ KeQueryNodeActiveAffinity(
     _Out_opt_ PUSHORT Count)
 {
     /* Node 0 owns every active processor; other nodes are empty. */
+    /* FIXME: a node of more than one group is reported as its part of group 0; KeQueryNodeActiveAffinity2 has all of it */
     if (Affinity != NULL)
     {
         RtlZeroMemory(Affinity, sizeof(*Affinity));
         if (NodeNumber == 0)
         {
-            Affinity->Mask = KeActiveProcessors;
+            Affinity->Mask = KeQueryGroupAffinity(0);
             Affinity->Group = 0;
         }
     }
 
     if (Count != NULL)
-        *Count = (NodeNumber == 0) ? (USHORT)KeQueryActiveProcessorCount(NULL) : 0;
+        *Count = (NodeNumber == 0) ? (USHORT)KeQueryActiveProcessorCountEx(0) : 0;
 }
 
 /*
@@ -1340,7 +1364,7 @@ KeQueryNodeActiveProcessorCount(
     if (NodeNumber != 0)
         return 0;
 
-    return (USHORT)KeQueryActiveProcessorCount(NULL);
+    return (USHORT)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 }
 
 /*
@@ -1365,7 +1389,7 @@ NTAPI
 KeQueryPrcbAddress(
     _In_ ULONG Number)
 {
-    if (Number >= (ULONG)KeNumberProcessors)
+    if (Number >= KeProcessorCount)
         return NULL;
 
     return KiProcessorBlock[Number];
@@ -1406,13 +1430,14 @@ KiCompleteProcessorDomains(
     _In_reads_opt_(PackageCount) PKAFFINITY Packages,
     _In_ ULONG PackageCount)
 {
-    KAFFINITY Active = KeActiveProcessors;
+    /* TODO: the domain records describe only the first word of processors */
+    KAFFINITY Active = KeActiveProcessors.Bitmap[0];
     PKPRCB Prcb;
     ULONG Index;
 
     if (KiProcessorDomains.Count[KiTopologyCore] == 0)
     {
-        for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
+        for (Index = 0; Index < min(KeProcessorCount, MAXIMUM_PROCESSORS); Index++)
         {
             Prcb = KiProcessorBlock[Index];
             if ((Prcb == NULL) || !(Active & Prcb->SetMember))
@@ -1578,7 +1603,7 @@ KiAppendCacheRecords(
             Record->Cache.CacheSize = Cache->Descriptor.Size;
             Record->Cache.Type = Cache->Descriptor.Type;
             Record->Cache.GroupCount = 1;
-            Record->Cache.GroupMask.Mask = Cache->ProcessorSet & KeActiveProcessors;
+            Record->Cache.GroupMask.Mask = Cache->ProcessorSet & KeActiveProcessors.Bitmap[0];
             Record->Cache.GroupMask.Group = 0;
         }
 
@@ -1627,8 +1652,11 @@ KiAppendGroupRecord(
     _Out_writes_bytes_opt_(_Inexpressible_("sized by the caller")) PUCHAR Buffer,
     _Inout_ PULONG Offset)
 {
-    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Group.GroupInfo) + sizeof(PROCESSOR_GROUP_INFO);
+    const USHORT Groups = KeQueryActiveGroupCount();
+    const ULONG Size = FIELD_OFFSET(SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, Group.GroupInfo) +
+                       Groups * sizeof(PROCESSOR_GROUP_INFO);
     PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Record;
+    USHORT Group;
 
     if (Buffer != NULL)
     {
@@ -1636,11 +1664,14 @@ KiAppendGroupRecord(
         RtlZeroMemory(Record, Size);
         Record->Relationship = RelationGroup;
         Record->Size = Size;
-        Record->Group.MaximumGroupCount = 1;
-        Record->Group.ActiveGroupCount = 1;
-        Record->Group.GroupInfo[0].MaximumProcessorCount = (UCHAR)KeQueryMaximumProcessorCount();
-        Record->Group.GroupInfo[0].ActiveProcessorCount = (UCHAR)KeQueryActiveProcessorCount(NULL);
-        Record->Group.GroupInfo[0].ActiveProcessorMask = KeActiveProcessors;
+        Record->Group.MaximumGroupCount = KeQueryMaximumGroupCount();
+        Record->Group.ActiveGroupCount = Groups;
+        for (Group = 0; Group < Groups; Group++)
+        {
+            Record->Group.GroupInfo[Group].MaximumProcessorCount = (UCHAR)KeQueryMaximumProcessorCountEx(Group);
+            Record->Group.GroupInfo[Group].ActiveProcessorCount = (UCHAR)KeQueryActiveProcessorCountEx(Group);
+            Record->Group.GroupInfo[Group].ActiveProcessorMask = KeQueryGroupAffinity(Group);
+        }
     }
 
     *Offset += Size;
@@ -1689,7 +1720,7 @@ KeQueryLogicalProcessorRelationship(
     _Out_writes_bytes_opt_(*Length) PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX Information,
     _Inout_ PULONG Length)
 {
-    KAFFINITY ActiveMask = KeActiveProcessors;
+    KAFFINITY ActiveMask = KeActiveProcessors.Bitmap[0];
     KAFFINITY Filter = ActiveMask;
     ULONG RequiredLength;
 
@@ -1732,17 +1763,20 @@ KeSetSystemGroupAffinityThread(
     _In_ PGROUP_AFFINITY Affinity,
     _Out_opt_ PGROUP_AFFINITY PreviousAffinity)
 {
-    KAFFINITY OldAffinity;
+    GROUP_AFFINITY Previous;
 
-    /* Only group 0 exists; apply the mask via the existing affinity path. */
-    OldAffinity = KeSetSystemAffinityThreadEx(Affinity->Mask);
+    RtlZeroMemory(&Previous, sizeof(Previous));
+
+    /* FIXME: the documentation does not say what a mask naming a processor that is not active does; here it changes nothing */
+    if ((Affinity->Group < KeQueryActiveGroupCount()) &&
+        (Affinity->Mask != 0) &&
+        ((Affinity->Mask & ~KeQueryGroupAffinity(Affinity->Group)) == 0))
+    {
+        KiSetSystemGroupAffinityThread(Affinity->Group, Affinity->Mask, &Previous);
+    }
 
     if (PreviousAffinity != NULL)
-    {
-        RtlZeroMemory(PreviousAffinity, sizeof(*PreviousAffinity));
-        PreviousAffinity->Mask = OldAffinity;
-        PreviousAffinity->Group = 0;
-    }
+        *PreviousAffinity = Previous;
 }
 
 /*
@@ -1753,7 +1787,16 @@ NTAPI
 KeRevertToUserGroupAffinityThread(
     _In_ PGROUP_AFFINITY PreviousAffinity)
 {
-    KeRevertToUserAffinityThreadEx(PreviousAffinity->Mask);
+    KAFFINITY Mask = PreviousAffinity->Mask;
+
+    /* A region that names no active processor is not restored: the thread goes back to its own affinity */
+    if ((PreviousAffinity->Group >= KeQueryActiveGroupCount()) ||
+        ((Mask & KeQueryGroupAffinity(PreviousAffinity->Group)) == 0))
+    {
+        Mask = 0;
+    }
+
+    KiRevertToUserGroupAffinityThread(PreviousAffinity->Group, Mask);
 }
 
 /*
@@ -1766,8 +1809,8 @@ KeSetSelectedCpuSetsThread(
     _In_ ULONG CpuSetCount,
     _In_reads_(CpuSetCount) PULONG64 CpuSetMasks)
 {
+    KI_PROCESSOR_SET Affinity;
     KAFFINITY Selected;
-    KAFFINITY Affinity;
     KIRQL OldIrql;
     ULONG i;
 
@@ -1777,7 +1820,7 @@ KeSetSelectedCpuSetsThread(
     if ((CpuSetCount != 0) && (CpuSetMasks == NULL))
         return STATUS_INVALID_PARAMETER;
 
-    /* Only group 0 exists, so no other group may carry a selection. */
+    /* TODO: a selection can only name processors of group 0 */
     for (i = 1; i < CpuSetCount; i++)
     {
         if (CpuSetMasks[i] != 0)
@@ -1785,15 +1828,19 @@ KeSetSelectedCpuSetsThread(
     }
 
     Selected = (CpuSetCount != 0) ? (KAFFINITY)CpuSetMasks[0] : 0;
-    if ((Selected & ~KeActiveProcessors) != 0)
+    if ((Selected & ~KeQueryGroupAffinity(0)) != 0)
         return STATUS_INVALID_PARAMETER;
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
-    Affinity = KiThreadUserAffinityMask(Thread);
-    if ((Affinity & Selected) != 0)
-        Affinity &= Selected;
+    KiCopyProcessorSet(Affinity, KiThreadUserAffinity(Thread));
+    if ((KiQueryGroupOfProcessorSet(Affinity, 0) & Selected) != 0)
+    {
+        Selected &= KiQueryGroupOfProcessorSet(Affinity, 0);
+        KiClearProcessorSet(Affinity);
+        KiAssignGroupOfProcessorSet(Affinity, 0, Selected);
+    }
 
     if (!Thread->SystemAffinityActive)
         KiSetAffinityThread(Thread, Affinity);
@@ -1845,13 +1892,12 @@ KeSetTargetProcessorDpcEx(
     _Inout_ PKDPC Dpc,
     _In_ PPROCESSOR_NUMBER ProcNumber)
 {
-    if ((ProcNumber->Group != 0) ||
-        (ProcNumber->Number >= (UCHAR)KeNumberProcessors))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
+    ULONG Index = KeGetProcessorIndexFromNumber(ProcNumber);
 
-    KeSetTargetProcessorDpc(Dpc, (CCHAR)ProcNumber->Number);
+    if ((Index == INVALID_PROCESSOR_INDEX) || (Dpc->DpcData != NULL))
+        return STATUS_INVALID_PARAMETER;
+
+    KiSetTargetProcessorDpc(Dpc, Index);
     return STATUS_SUCCESS;
 }
 

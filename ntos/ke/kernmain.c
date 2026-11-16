@@ -27,7 +27,7 @@ USHORT KeProcessorRevision;
 
 /* The processor blocks, indexed by processor number. An entry is written once,
    by the processor it belongs to, before that processor is announced. */
-PKPRCB KiProcessorBlock[MAXIMUM_PROCESSORS];
+PKPRCB KiProcessorBlock[KE_MAXIMUM_PROCESSORS];
 
 /* The system's memory nodes. A system that reports no topology still has one,
    so that everything which places work by node has somewhere to place it. */
@@ -39,6 +39,7 @@ UCHAR KeProcessNodeSeed;
 /* The first thread and process, built into the image because there is nothing
    to allocate them from until they are running. */
 ETHREAD KiInitialThread;
+static KI_THREAD_AFFINITY KiInitialThreadAffinity;
 EPROCESS KiInitialProcess;
 
 /* The dispatcher database lock, for the targets whose queued lock array is
@@ -596,8 +597,15 @@ KiInitializeStartupThread(
     _In_opt_ PKSYSTEM_ROUTINE SystemRoutine,
     _In_opt_ PKSTART_ROUTINE StartRoutine)
 {
+    PETHREAD EThread = CONTAINING_RECORD(Thread, ETHREAD, Tcb);
+
     ASSERT(Prcb == KeGetCurrentPrcb());
     ASSERT(Stack != NULL);
+
+    /* Where the affinity is kept beside the thread, a processor's startup thread carries it right after its ETHREAD */
+    KiAttachThreadAffinity(Thread,
+                           (EThread == &KiInitialThread) ? &KiInitialThreadAffinity
+                                                         : (PKI_THREAD_AFFINITY)(EThread + 1));
 
     KeInitializeThread(Process, Thread, SystemRoutine, StartRoutine, NULL, NULL, NULL, Stack);
 
@@ -607,9 +615,10 @@ KiInitializeStartupThread(
     Thread->State = Running;
     if (KI_THREAD_HANDOFF_USES_RUNNING)
         Thread->Running = TRUE;
-    KiThreadAffinityMask(Thread) = AFFINITY_MASK(Prcb->Number);
+    KiClearProcessorSet(KiThreadAffinity(Thread));
+    KiAddProcessorToSet(KiThreadAffinity(Thread), Prcb->Number);
     Thread->WaitIrql = DISPATCH_LEVEL;
-    InterlockedBitTestAndSetAffinity(&Process->ActiveProcessors, Prcb->Number);
+    KiInterlockedAddProcessorToSet(KiProcessActiveProcessors(Process), Prcb->Number);
 }
 
 /* EOF */

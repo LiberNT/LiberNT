@@ -171,7 +171,7 @@ KiPpcSystemStartup(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     KiInitSystem();
 
     DirectoryTableBase = PpcBlock->PageTableRoot;
-    KeInitializeProcess(InitialProcess, 0, MAXULONG_PTR, &DirectoryTableBase, FALSE);
+    KeInitializeProcess(InitialProcess, 0, NULL, &DirectoryTableBase, FALSE);
     InitialProcess->QuantumReset = MAXCHAR;
 
     KeInitializeThread(InitialProcess, InitialThread, NULL, NULL, NULL, NULL, NULL, (PVOID)LoaderBlock->KernelStack);
@@ -199,7 +199,7 @@ KiPpcSystemStartup(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     KeSetPriorityThread(InitialThread, 0);
     KiAcquirePrcbLock(Prcb);
     if (Prcb->NextThread == NULL)
-        InterlockedOr((PLONG)&KiIdleSummary, Prcb->SetMember);
+        InterlockedOr((PLONG)&KiIdleSummary[0], Prcb->SetMember);
     KiReleasePrcbLock(Prcb);
 
     KfRaiseIrql(HIGH_LEVEL);

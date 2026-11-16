@@ -203,6 +203,10 @@ typedef struct _KAFFINITY_EX
     };
 } KAFFINITY_EX;
 
+// Only a 64-bit KAFFINITY has more than one group, as on Windows
+#define KE_MAXIMUM_GROUPS ((sizeof(KAFFINITY) == 8) ? KAFFINITY_EX_STATIC_GROUPS : 1)
+#define KE_MAXIMUM_PROCESSORS (KE_MAXIMUM_GROUPS * MAXIMUM_PROC_PER_GROUP)
+
 typedef struct _KAFFINITY_ENUMERATION_CONTEXT
 {
     PKAFFINITY_EX Affinity;
@@ -1824,6 +1828,8 @@ C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x38);
 // Each layout defines the properties the kernel depends on:
 // KTHREAD_DISABLE_BOOST_BIT is the DisableBoost bit of ThreadFlags, and
 // KTHREAD_GROUP_AFFINITY marks Affinity/UserAffinity as GROUP_AFFINITY.
+// KTHREAD_AFFINITY_EX marks them as pointers to a KAFFINITY_EX, and
+// KPROCESS_AFFINITY_EX does the same for Affinity/ActiveProcessors of KPROCESS.
 //
 #ifdef KERNEL_LAYOUT_WIN11_ARM64
 
@@ -2181,6 +2187,7 @@ typedef struct _KTHREAD
 
 #define KTHREAD_DISABLE_BOOST_BIT 3
 #define KTHREAD_AUTO_ALIGNMENT_BIT 2
+#define KTHREAD_AFFINITY_EX
 
 typedef struct _KTHREAD
 {
@@ -2399,7 +2406,7 @@ typedef struct _KTHREAD
     };
     LONG QueuePriority;                                  // 0x21C
     struct _KPROCESS *Process;                           // 0x220
-    KAFFINITY UserAffinity;                              // 0x228 Win11 type: PKAFFINITY_EX
+    struct _KAFFINITY_EX *UserAffinity;                  // 0x228
     USHORT UserAffinityPrimaryGroup;                     // 0x230
     CHAR PreviousMode;                                   // 0x232
     CHAR BasePriority;                                   // 0x233
@@ -2408,7 +2415,7 @@ typedef struct _KTHREAD
     UCHAR AdjustReason;                                  // 0x236
     CHAR AdjustIncrement;                                // 0x237
     ULONG64 AffinityVersion;                             // 0x238
-    KAFFINITY Affinity;                                  // 0x240 Win11 type: PKAFFINITY_EX
+    struct _KAFFINITY_EX *Affinity;                      // 0x240
     USHORT AffinityPrimaryGroup;                         // 0x248
     UCHAR ApcStateIndex;                                 // 0x24A
     UCHAR WaitBlockCount;                                // 0x24B
@@ -3754,6 +3761,8 @@ typedef struct _KPROCESS
 //
 #elif defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
 
+#define KPROCESS_AFFINITY_EX
+
 typedef struct _KPROCESS
 {
     DISPATCHER_HEADER Header;                            // 0x000
@@ -3762,11 +3771,11 @@ typedef struct _KPROCESS
     LIST_ENTRY ThreadListHead;                           // 0x030
     KSPIN_LOCK ProcessLock;                              // 0x040 Win11: ULONG ProcessLock + ULONG ProcessTimerDelay
     ULONG64 DeepFreezeStartTime;                         // 0x048
-    KAFFINITY Affinity;                                  // 0x050 Win11 type: PKAFFINITY_EX
+    struct _KAFFINITY_EX *Affinity;                      // 0x050
     ULONG64 AutoBoostState[2];                           // 0x058 KAB_UM_PROCESS_CONTEXT
     LIST_ENTRY ReadyListHead;                            // 0x068
     SINGLE_LIST_ENTRY SwapListEntry;                     // 0x078
-    volatile KAFFINITY ActiveProcessors;                 // 0x080 Win11 type: PKAFFINITY_EX
+    struct _KAFFINITY_EX *volatile ActiveProcessors;     // 0x080
     union
     {
         struct

@@ -380,7 +380,7 @@ MiProcessTlbProcessors(
     PEPROCESS Process = Owner;
 
     KeMemoryBarrier();
-    return (ULONG64)*(volatile KAFFINITY *)&Process->Pcb.ActiveProcessors;
+    return (ULONG64)KiProcessActiveProcessors(&Process->Pcb)[0];
 }
 
 static

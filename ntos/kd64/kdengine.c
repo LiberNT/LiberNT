@@ -91,7 +91,7 @@ KdpSetCommonState(
     WaitStateChange->NewState = NewState;
     WaitStateChange->ProcessorLevel = KeProcessorLevel;
     WaitStateChange->Processor = (USHORT)KeGetCurrentPrcb()->Number;
-    WaitStateChange->NumberProcessors = (ULONG)(CCHAR)KeNumberProcessors;
+    WaitStateChange->NumberProcessors = KeProcessorCount;
     WaitStateChange->Thread = (ULONG64)(ULONG_PTR)KeGetCurrentThread();
     WaitStateChange->ProgramCounter = ProgramCounter;
 
