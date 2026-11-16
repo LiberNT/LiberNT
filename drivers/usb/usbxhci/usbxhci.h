@@ -215,7 +215,8 @@ typedef struct _XHCI_EXTENSION {
   KSPIN_LOCK CommandLock;
   KSPIN_LOCK EventRingLock;
   volatile LONG EventClaimTicket;
-  volatile LONG EventTicketOnCpu[MAXIMUM_PROCESSORS];
+  volatile LONG *EventTicketOnCpu;
+  ULONG EventTicketCpuCount;
   LIST_ENTRY DeferredTransferList;
   KSPIN_LOCK DeferredTransferLock;
     PHYSICAL_ADDRESS DeviceContextsPhysical;
