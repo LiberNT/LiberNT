@@ -494,6 +494,9 @@ struct wined3d_cs_blt_sub_resource
     uint32_t flags;
     struct wined3d_blt_fx fx;
     enum wined3d_texture_filter_type filter;
+#ifdef __REACTOS__
+    struct wined3d_swapchain *throttled_swapchain;
+#endif
 };
 
 struct wined3d_cs_update_sub_resource
@@ -2739,6 +2742,10 @@ static void wined3d_cs_exec_blt_sub_resource(struct wined3d_cs *cs, const void *
                 &op->dst_box, texture_from_resource(op->src_resource), op->src_sub_resource_idx,
                 &op->src_box, op->flags, &op->fx, op->filter)))
             FIXME("Blit failed.\n");
+#ifdef __REACTOS__
+        if (op->throttled_swapchain)
+            ReleaseSemaphore(op->throttled_swapchain->frame_latency_semaphore, 1, NULL);
+#endif
     }
 }
 
@@ -2748,6 +2755,19 @@ void wined3d_device_context_emit_blt_sub_resource(struct wined3d_device_context 
         unsigned int flags, const struct wined3d_blt_fx *fx, enum wined3d_texture_filter_type filter)
 {
     struct wined3d_cs_blt_sub_resource *op;
+#ifdef __REACTOS__
+    struct wined3d_swapchain *throttled_swapchain = NULL;
+
+    if (context == &context->device->cs->c && dst_resource->type == WINED3D_RTYPE_TEXTURE_2D)
+    {
+        struct wined3d_texture *dst_texture = texture_from_resource(dst_resource);
+        struct wined3d_swapchain *swapchain = dst_texture->swapchain;
+
+        if (swapchain && swapchain->front_buffer == dst_texture
+                && !(swapchain->state.desc.flags & WINED3D_SWAPCHAIN_FRAME_LATENCY_WAITABLE_OBJECT))
+            throttled_swapchain = swapchain;
+    }
+#endif
 
     /* If we are replacing the whole resource, the CS thread might discard and
      * rename the buffer object, in which case ours is no longer valid. */
@@ -2768,12 +2788,20 @@ void wined3d_device_context_emit_blt_sub_resource(struct wined3d_device_context 
     else
         memset(&op->fx, 0, sizeof(op->fx));
     op->filter = filter;
+#ifdef __REACTOS__
+    op->throttled_swapchain = throttled_swapchain;
+#endif
 
     wined3d_device_context_reference_resource(context, dst_resource);
     if (src_resource)
         wined3d_device_context_reference_resource(context, src_resource);
 
     wined3d_device_context_submit(context, WINED3D_CS_QUEUE_DEFAULT);
+#ifdef __REACTOS__
+    /* Front buffer updates count against the frame latency like presents */
+    if (throttled_swapchain)
+        WaitForSingleObject(throttled_swapchain->frame_latency_semaphore, INFINITE);
+#endif
     if (flags & WINED3D_BLT_SYNCHRONOUS)
         wined3d_device_context_finish(context, WINED3D_CS_QUEUE_DEFAULT);
 }
