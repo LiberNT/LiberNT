@@ -223,3 +223,29 @@ BEGIN
     IDS_TRAYCLOCK_NEWNOTIFICATIONS "%u 件の新しい通知"
     IDS_TRAYQUICKSETTINGS_TOOLTIP "クイック設定"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_SM2_SHUTDOWN "シャットダウン"
+    IDS_SM2_RESTART "再起動"
+    IDS_SM2_LOGOFF "ログオフ"
+    IDS_SM2_LOCK "ロック"
+    IDS_SM2_SLEEP "スリープ"
+    IDS_SM2_HIBERNATE "休止状態"
+    IDS_SM2_ERROR "操作を完了できませんでした (エラー %lu)。"
+    IDS_SM2_DOCUMENTS "ドキュメント"
+    IDS_SM2_PICTURES "ピクチャ"
+    IDS_SM2_MUSIC "ミュージック"
+    IDS_SM2_GAMES "ゲーム"
+    IDS_SM2_COMPUTER "コンピューター"
+    IDS_SM2_SETTINGS "設定"
+    IDS_SM2_DEVICES "デバイス"
+    IDS_SM2_ASSIST "ネットワーク アシスタンス"
+    IDS_SM2_ALLPROGRAMS "すべてのプログラム"
+    IDS_SM2_BACK "戻る"
+    IDS_SM2_NOMATCH "検索条件に一致する項目はありません。"
+    IDS_SM2_RENAME "名前の変更"
+    IDS_SM2_RENAME_FAILED "項目の名前を変更できませんでした。"
+    IDS_SM2_REMOVE "一覧から削除"
+    IDS_SM2_SEARCH "プログラムとファイルの検索"
+END

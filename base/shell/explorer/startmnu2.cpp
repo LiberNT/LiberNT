@@ -599,12 +599,25 @@ SM2Suspend(BOOL bHibernate)
     return ERROR_SUCCESS;
 }
 
+struct SM2Str
+{
+    WCHAR sz[128];
+
+    explicit SM2Str(UINT nId)
+    {
+        if (!LoadStringW(hExplorerInstance, nId, sz, _countof(sz)))
+            sz[0] = UNICODE_NULL;
+    }
+
+    operator LPCWSTR() const { return sz; }
+};
+
 static VOID
 SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
 {
     static BOOL bInProgress = FALSE;
     DWORD dwError = ERROR_SUCCESS;
-    LPCWSTR pszAction;
+    UINT nAction;
 
     /* ExitWindowsEx can pump messages while the shutdown request is pending. */
     if (bInProgress)
@@ -613,22 +626,22 @@ SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
     switch (nCmd)
     {
         case SM2F_SHUTDOWN:
-            pszAction = L"Shut down";
+            nAction = IDS_SM2_SHUTDOWN;
             break;
         case SM2F_RESTART:
-            pszAction = L"Restart";
+            nAction = IDS_SM2_RESTART;
             break;
         case SM2F_LOGOFF:
-            pszAction = L"Log off";
+            nAction = IDS_SM2_LOGOFF;
             break;
         case SM2F_LOCK:
-            pszAction = L"Lock";
+            nAction = IDS_SM2_LOCK;
             break;
         case SM2F_SLEEP:
-            pszAction = L"Sleep";
+            nAction = IDS_SM2_SLEEP;
             break;
         case SM2F_HIBERNATE:
-            pszAction = L"Hibernate";
+            nAction = IDS_SM2_HIBERNATE;
             break;
         default:
             return;
@@ -663,8 +676,8 @@ SM2DoShutdownCmd(HWND hwndOwner, int nCmd)
     {
         WCHAR szError[512];
         if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, 0, szError, _countof(szError), NULL))
-            StringCchPrintfW(szError, _countof(szError), L"The operation could not be completed (error %lu).", dwError);
-        ::MessageBoxW(hwndOwner, szError, pszAction, MB_OK | MB_ICONERROR);
+            StringCchPrintfW(szError, _countof(szError), SM2Str(IDS_SM2_ERROR), dwError);
+        ::MessageBoxW(hwndOwner, szError, SM2Str(nAction), MB_OK | MB_ICONERROR);
     }
     bInProgress = FALSE;
 }
@@ -750,22 +763,22 @@ SM2ExecRightCmd(int nCmd)
 
 struct SM2RIGHTDEF
 {
-    LPCWSTR pszLabel;
+    UINT nLabel;
     int nCmd;
 };
 
 static const SM2RIGHTDEF g_SM2RightDefs[] =
 {
-    { L"Documents",            SM2C_DOCUMENTS },
-    { L"Pictures",             SM2C_PICTURES },
-    { L"Music",                SM2C_MUSIC },
-    { NULL,                    SM2C_GAP },
-    { L"Games",                SM2C_GAMES },
-    { L"Computer",             SM2C_COMPUTER },
-    { NULL,                    SM2C_GAP },
-    { L"Settings",             SM2C_CONTROL },
-    { L"Devices",              SM2C_PRINTERS },
-    { L"Network Assistance",   SM2C_ASSIST },
+    { IDS_SM2_DOCUMENTS,       SM2C_DOCUMENTS },
+    { IDS_SM2_PICTURES,        SM2C_PICTURES },
+    { IDS_SM2_MUSIC,           SM2C_MUSIC },
+    { 0,                       SM2C_GAP },
+    { IDS_SM2_GAMES,           SM2C_GAMES },
+    { IDS_SM2_COMPUTER,        SM2C_COMPUTER },
+    { 0,                       SM2C_GAP },
+    { IDS_SM2_SETTINGS,        SM2C_CONTROL },
+    { IDS_SM2_DEVICES,         SM2C_PRINTERS },
+    { IDS_SM2_ASSIST,          SM2C_ASSIST },
 };
 
 struct SM2ROW
@@ -875,7 +888,7 @@ public:
     ULONGLONG m_AnimT0;
     BOOL m_bTracking;
 
-    struct FLYITEM { LPCWSTR pszLabel; int nCmd; };
+    struct FLYITEM { UINT nLabel; int nCmd; };
     static const FLYITEM c_Items[5];
     UINT m_Visible[5];
     UINT m_cItems;
@@ -973,7 +986,7 @@ public:
             RECT rcText = rcItem;
             rcText.left += Sc(12);
             SetTextColor(hdcMem, (int)i == m_iHot ? SM2_CLR_RIGHT_HOT_TEXT : SM2_CLR_RIGHT_TEXT);
-            DrawTextW(hdcMem, c_Items[m_Visible[i]].pszLabel, -1, &rcText,
+            DrawTextW(hdcMem, SM2Str(c_Items[m_Visible[i]].nLabel), -1, &rcText,
                       DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS);
         }
 
@@ -1098,11 +1111,11 @@ public:
 
 const CStartMenu2Flyout::FLYITEM CStartMenu2Flyout::c_Items[5] =
 {
-    { L"Sleep",     SM2F_SLEEP },
-    { L"Hibernate", SM2F_HIBERNATE },
-    { L"Restart",   SM2F_RESTART },
-    { L"Log off",   SM2F_LOGOFF },
-    { L"Lock",      SM2F_LOCK },
+    { IDS_SM2_SLEEP, SM2F_SLEEP },
+    { IDS_SM2_HIBERNATE, SM2F_HIBERNATE },
+    { IDS_SM2_RESTART, SM2F_RESTART },
+    { IDS_SM2_LOGOFF, SM2F_LOGOFF },
+    { IDS_SM2_LOCK, SM2F_LOCK },
 };
 
 class CStartMenu2Wnd :
@@ -1814,7 +1827,7 @@ public:
                             row.nType == SM2R_ALLPROGRAMS ? 0 : 1, SM2_CLR_TRI);
                     RECT rcText = { rc.left + Sc(28), rc.top, rc.right - Sc(4), rc.bottom };
                     DrawItemText(hdc,
-                                 row.nType == SM2R_ALLPROGRAMS ? L"All Programs" : L"Back",
+                                 SM2Str(row.nType == SM2R_ALLPROGRAMS ? IDS_SM2_ALLPROGRAMS : IDS_SM2_BACK),
                                  rcText, SM2Mix(SM2_CLR_LEFT_TEXT, SM2_CLR_LEFT_HOT_TEXT, alpha));
                     break;
                 }
@@ -1826,7 +1839,7 @@ public:
             RECT rcText = { m_rcList.left + Sc(8), m_rcList.top + Sc(4),
                             m_rcList.right, m_rcList.top + Sc(28) };
             SetTextColor(hdc, SM2_CLR_CUE);
-            DrawTextW(hdc, L"No items match your search.", -1, &rcText,
+            DrawTextW(hdc, SM2Str(IDS_SM2_NOMATCH), -1, &rcText,
                       DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         }
 
@@ -1887,17 +1900,17 @@ public:
                     }
                     else
                     {
-                        LPCWSTR psz = NULL;
+                        UINT nLabel = 0;
                         for (UINT j = 0; j < _countof(g_SM2RightDefs); j++)
                         {
                             if (g_SM2RightDefs[j].nCmd == row.nData)
                             {
-                                psz = g_SM2RightDefs[j].pszLabel;
+                                nLabel = g_SM2RightDefs[j].nLabel;
                                 break;
                             }
                         }
-                        if (psz)
-                            DrawItemText(hdc, psz, rcText, SM2Mix(SM2_CLR_RIGHT_TEXT, SM2_CLR_RIGHT_HOT_TEXT, alpha));
+                        if (nLabel)
+                            DrawItemText(hdc, SM2Str(nLabel), rcText, SM2Mix(SM2_CLR_RIGHT_TEXT, SM2_CLR_RIGHT_HOT_TEXT, alpha));
                     }
                     break;
                 }
@@ -1908,7 +1921,7 @@ public:
                     DeleteObject(hbr);
                     RECT rcText = rc;
                     SetTextColor(hdc, SM2_CLR_RIGHT_TEXT);
-                    DrawTextW(hdc, L"Shut down", -1, &rcText,
+                    DrawTextW(hdc, SM2Str(IDS_SM2_SHUTDOWN), -1, &rcText,
                               DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
                     break;
                 }
@@ -2496,8 +2509,8 @@ public:
         {
             WCHAR szError[512];
             if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, HRESULT_CODE(hr), 0, szError, _countof(szError), NULL))
-                StringCchCopyW(szError, _countof(szError), L"The item could not be renamed.");
-            MessageBoxW(szError, L"Rename", MB_OK | MB_ICONERROR);
+                StringCchCopyW(szError, _countof(szError), SM2Str(IDS_SM2_RENAME_FAILED));
+            MessageBoxW(szError, SM2Str(IDS_SM2_RENAME), MB_OK | MB_ICONERROR);
         }
         return hr;
     }
@@ -2557,7 +2570,7 @@ public:
             if (GetMenuItemCount(hMenu) > 0)
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(hMenu, MF_STRING, SM2_CONTEXT_REMOVE_RECENT,
-                        L"Remove from this list");
+                        SM2Str(IDS_SM2_REMOVE));
         }
 
         if (SUCCEEDED(hr) && GetMenuItemCount(hMenu) > 0)
@@ -2781,7 +2794,7 @@ public:
                         SetBkMode(hdc, TRANSPARENT);
                         SetTextColor(hdc, SM2_CLR_CUE);
                         HGDIOBJ hOld = SelectObject(hdc, pThis->m_hFontCue);
-                        DrawTextW(hdc, L"Search programs and files", -1, &rc,
+                        DrawTextW(hdc, SM2Str(IDS_SM2_SEARCH), -1, &rc,
                                   DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
                         SelectObject(hdc, hOld);
                         ::ReleaseDC(hWnd, hdc);
