@@ -69,6 +69,7 @@ KiUnlinkOneWaitBlock(
     RemoveEntryList(&WaitBlock->WaitListEntry);
     WaitBlock->WaitListEntry.Flink = NULL;
     WaitBlock->WaitListEntry.Blink = NULL;
+    WaitBlock->BlockState = WaitBlockInactive;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -76,7 +77,7 @@ KiUnlinkOneWaitBlock(
 /*
  * Takes every block this thread published out of the lists it sits on. The
  * thread's own timer stays in the timer table: cancelling it needs the table
- * lock, which KiUnlinkThread takes separately.
+ * lock, which KiEndThreadWait takes separately.
  */
 VOID
 FASTCALL
@@ -85,43 +86,83 @@ KiUnlinkWaitBlocks(
 {
     ULONG Count, Index;
 
+    PKWAIT_BLOCK WaitBlock;
+    PDISPATCHER_HEADER Object;
+
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(Thread->WaitRegister.State == KI_WAIT_ABORTED);
+
     Count = KiThreadWaitBlockCount(Thread);
     for (Index = 0; Index < Count; Index++)
     {
-        KiUnlinkOneWaitBlock(KiThreadWaitBlock(Thread, Index));
+        WaitBlock = KiThreadWaitBlock(Thread, Index);
+        Object = WaitBlock->Object;
+
+        /* A signaller that found the wait over takes the block off under the same lock, so the link is only looked at inside it */
+        KiAcquireDispatcherObject(Object);
+        KiUnlinkOneWaitBlock(WaitBlock);
+        KiReleaseDispatcherObject(Object);
     }
 }
 
-/*
- * Ends one thread's wait without yet making it runnable. The status accumulates
- * rather than replaces: a mutant satisfied while abandoned has already written
- * STATUS_ABANDONED into WaitStatus, and the wait index ORed in on top is what
- * turns it into STATUS_ABANDONED_WAIT_n.
- */
+/* Whoever ended the wait held one object at most, so the thread itself takes its leftover blocks off the others and disarms its timeout */
 VOID
 FASTCALL
-KiUnlinkThread(
-    _Inout_ PKTHREAD Thread,
-    _In_ LONG_PTR WaitStatus)
+KiEndThreadWait(
+    _Inout_ PKTHREAD Thread)
 {
-    PKTIMER Timer;
-    PKPRCB WaitPrcb;
+    PKTIMER Timer = &Thread->Timer;
 
-    ASSERT(Thread->State == Waiting || Thread->State == GateWait);
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
 
-    Thread->WaitStatus |= WaitStatus;
+    /* A signaller can be ending a wait still in progress at this very moment, so the register is only touched under the lock */
+    KiAcquireThreadLock(Thread);
+    ASSERT(Thread->WaitRegister.State != KI_WAIT_COMMITTED);
+    Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    KiReleaseThreadLock(Thread);
 
-    KiUnlinkWaitBlocks(Thread);
+    if (Thread->WaitBlockList != NULL)
+        KiUnlinkWaitBlocks(Thread);
 
     /*
      * Cancel the thread's own timeout. Inserted, not TimerActive, is the
      * question: a delay wait puts the timer block in the array itself and
      * leaves TimerActive clear, yet its timer is in the table all the same.
      */
-    Timer = &Thread->Timer;
     Thread->TimerActive = FALSE;
+    KiAcquireDispatcherObject(&Timer->Header);
     if (Timer->Header.Inserted)
         KxRemoveTreeTimer(Timer);
+    KiReleaseDispatcherObject(&Timer->Header);
+}
+
+/*
+ * Ends a wait and puts the thread back in the running population. The status
+ * accumulates rather than replaces: a mutant satisfied while abandoned has
+ * already written STATUS_ABANDONED into WaitStatus, and the wait index ORed in
+ * on top is what turns it into STATUS_ABANDONED_WAIT_n. A thread that belongs
+ * to a queue counts as active again from this moment, which pays back the
+ * decrement made when it stopped running.
+ *
+ * Entered with the thread lock held, which makes the caller the only one to end this wait.
+ */
+VOID
+FASTCALL
+KiUnwaitThread(
+    _Inout_ PKTHREAD Thread,
+    _In_ LONG_PTR WaitStatus,
+    _In_ KPRIORITY Increment)
+{
+    PKPRCB WaitPrcb;
+    PKQUEUE Queue;
+
+    ASSERT(Thread->ThreadLock != 0);
+    ASSERT(Thread->State == Waiting || Thread->State == GateWait);
+    ASSERT(Thread->WaitRegister.State == KI_WAIT_COMMITTED);
+
+    Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    Thread->WaitStatus |= WaitStatus;
 
     /*
      * WaitPrcb is the membership token for the processor's wait list. It was
@@ -142,23 +183,6 @@ KiUnlinkThread(
 
     Thread->WaitListEntry.Flink = NULL;
     Thread->WaitListEntry.Blink = NULL;
-}
-
-/*
- * Ends a wait and puts the thread back in the running population. A thread
- * that belongs to a queue counts as active again from this moment, which pays
- * back the decrement made when it stopped running.
- */
-VOID
-FASTCALL
-KiUnwaitThread(
-    _Inout_ PKTHREAD Thread,
-    _In_ LONG_PTR WaitStatus,
-    _In_ KPRIORITY Increment)
-{
-    PKQUEUE Queue;
-
-    KiUnlinkThread(Thread, WaitStatus);
 
     Queue = Thread->Queue;
     if (Queue != NULL)
@@ -170,12 +194,46 @@ KiUnwaitThread(
     KiReadyThread(Thread);
 }
 
+/* Answers a committed waiter with its lock held; a thread still setting its wait up is made to look again, and a block left by a finished wait just comes off */
+PKTHREAD
+FASTCALL
+KiLockCommittedWaiter(
+    _Inout_ PKWAIT_BLOCK WaitBlock)
+{
+    PKTHREAD Thread = WaitBlock->Thread;
+
+    ASSERT(((PDISPATCHER_HEADER)WaitBlock->Object)->Lock & KOBJECT_LOCK_BIT);
+    ASSERT(WaitBlock->WaitType != WaitDpc);
+
+    KiAcquireThreadLock(Thread);
+    if (Thread->WaitRegister.State == KI_WAIT_COMMITTED)
+        return Thread;
+
+    Thread->WaitRegister.State = KI_WAIT_ABORTED;
+    KiReleaseThreadLock(Thread);
+
+    KiUnlinkOneWaitBlock(WaitBlock);
+    return NULL;
+}
+
+VOID
+FASTCALL
+KiUnlinkWaitBlock(
+    _Inout_ PKWAIT_BLOCK WaitBlock)
+{
+    ASSERT(((PDISPATCHER_HEADER)WaitBlock->Object)->Lock & KOBJECT_LOCK_BIT);
+
+    KiUnlinkOneWaitBlock(WaitBlock);
+}
+
 /*
  * Hands a signalled object's state to whoever is waiting for it. A WaitAny
  * waiter consumes the state and is released on its own; a WaitAll waiter is
  * only told to re-examine its whole set, which it does with STATUS_KERNEL_APC
  * as the wake reason. The list is re-read from the head after each release
  * because satisfying a wait edits it.
+ *
+ * Entered with the object locked.
  */
 VOID
 FASTCALL
@@ -184,16 +242,16 @@ KiWaitTest(
     _In_ KPRIORITY Increment)
 {
     PDISPATCHER_HEADER Object = (PDISPATCHER_HEADER)ObjectPointer;
-    PLIST_ENTRY WaitEntry, WaitList;
+    PLIST_ENTRY WaitList = &Object->WaitListHead;
     PKWAIT_BLOCK WaitBlock;
     PKTHREAD WaitThread;
 
-    WaitList = &Object->WaitListHead;
-    WaitEntry = WaitList->Flink;
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(Object->Lock & KOBJECT_LOCK_BIT);
 
-    while ((Object->SignalState > 0) && (WaitEntry != WaitList))
+    while ((Object->SignalState > 0) && !IsListEmpty(WaitList))
     {
-        WaitBlock = CONTAINING_RECORD(WaitEntry, KWAIT_BLOCK, WaitListEntry);
+        WaitBlock = CONTAINING_RECORD(WaitList->Flink, KWAIT_BLOCK, WaitListEntry);
 
         /*
          * An I/O completion packet is not a thread: it is signalled in place
@@ -202,11 +260,12 @@ KiWaitTest(
         if (WaitBlock->WaitType == WaitDpc)
         {
             IopSignalWaitCompletionPacket(WaitBlock);
-            WaitEntry = WaitList->Flink;
             continue;
         }
 
-        WaitThread = WaitBlock->Thread;
+        WaitThread = KiLockCommittedWaiter(WaitBlock);
+        if (WaitThread == NULL)
+            continue;
 
         if (WaitBlock->WaitType == WaitAny)
         {
@@ -218,7 +277,8 @@ KiWaitTest(
             KiUnwaitThread(WaitThread, STATUS_KERNEL_APC, Increment);
         }
 
-        WaitEntry = WaitList->Flink;
+        KiReleaseThreadLock(WaitThread);
+        KiUnlinkOneWaitBlock(WaitBlock);
     }
 }
 
@@ -237,7 +297,6 @@ KiExitDispatcher(
     PKTHREAD Thread, NextThread;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-    ASSERT(((ULONG_PTR)Prcb->LockQueue[LockQueueDispatcherLock].Lock & KX_LOCK_QUEUE_OWNER) == 0);
 
     KiCheckDeferredReadyList(Prcb);
 

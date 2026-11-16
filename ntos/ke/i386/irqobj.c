@@ -210,14 +210,20 @@ KiRouteVector(
     KeRegisterInterruptHandler(Head->Vector, Head->DispatchCode);
 }
 
-/* The IDT is per processor: run on the target and hold the dispatcher lock while its vector changes */
+static KSPIN_LOCK KiVectorLock;
+
+/* The IDT is per processor: run on the target and keep every other change of a vector out while this one is made */
 static
 KIRQL
 KiLockVectorOf(
     _In_ PKINTERRUPT Interrupt)
 {
+    KIRQL OldIrql;
+
     KeSetSystemAffinityThread((KAFFINITY)1 << Interrupt->Number);
-    return KiAcquireDispatcherLock();
+    OldIrql = KeRaiseIrqlToSynchLevel();
+    KiAcquireFlagLock(&KiVectorLock);
+    return OldIrql;
 }
 
 static
@@ -225,7 +231,8 @@ VOID
 KiUnlockVector(
     _In_ KIRQL OldIrql)
 {
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseFlagLock(&KiVectorLock);
+    KeLowerIrql(OldIrql);
     KeRevertToUserAffinityThread();
 }
 

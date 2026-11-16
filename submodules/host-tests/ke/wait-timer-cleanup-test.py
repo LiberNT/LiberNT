@@ -15,25 +15,41 @@ src = kt.Sources(args.root)
 
 fixture = kt.PRELUDE + r'''
 #define Waiting 5
+#define DeferredReady 7
 #define GateWait 8
+#define WaitBlockInactive 5
+#define AdjustUnwait 1
+#define KI_WAIT_IN_PROGRESS 0
+#define KI_WAIT_COMMITTED 1
+#define KI_WAIT_ABORTED 2
+typedef char CHAR;
+typedef LONG KPRIORITY;
 struct _KTHREAD;
 typedef struct { int Unused; } KPRCB, *PKPRCB;
+typedef struct { LONG CurrentCount; } KQUEUE, *PKQUEUE;
 typedef struct { LIST_ENTRY WaitListEntry; struct _KTHREAD *Thread; PVOID Object; USHORT WaitKey; UCHAR WaitType, BlockState; } KWAIT_BLOCK, *PKWAIT_BLOCK;
 typedef struct _KTHREAD {
     UCHAR State; LONG_PTR WaitStatus; ULONG WaitBlockCount; BOOLEAN TimerActive;
     PKWAIT_BLOCK WaitBlockList; KWAIT_BLOCK WaitBlock[4]; KTIMER Timer; PKPRCB WaitPrcb; LIST_ENTRY WaitListEntry;
+    struct { UCHAR State; } WaitRegister; int ThreadLock; PKQUEUE Queue; CHAR AdjustIncrement; UCHAR AdjustReason;
 } KTHREAD, *PKTHREAD;
 static KPRCB Prcb;
 static LIST_ENTRY PrcbWaitList;
 static int WaitLockHeld;
+static KTHREAD Thread;
 static void KiAcquireWaitLock(PKPRCB P) { CHECK(P == &Prcb && !WaitLockHeld); WaitLockHeld = 1; }
 static void KiReleaseWaitLock(PKPRCB P) { CHECK(P == &Prcb && WaitLockHeld); WaitLockHeld = 0; }
+static void KiAcquireThreadLock(PKTHREAD T) { CHECK(!T->ThreadLock); T->ThreadLock = 1; }
+static void KiReleaseThreadLock(PKTHREAD T) { CHECK(T->ThreadLock); T->ThreadLock = 0; }
+static PKTHREAD KeGetCurrentThread(void) { return &Thread; }
+static void KiIncrementQueueCurrentCount(PKQUEUE Q) { Q->CurrentCount++; }
+/* Readying is the scheduler's business; here it is enough that the thread stops being a waiter */
+static void KiReadyThread(PKTHREAD T) { CHECK(T->ThreadLock); T->State = DeferredReady; }
 '''
 for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KxRemoveTreeTimer'), ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'),
-                   ('dispatch.c', 'KiUnlinkOneWaitBlock'), ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiUnlinkThread')]:
+                   ('dispatch.c', 'KiUnlinkOneWaitBlock'), ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiEndThreadWait'), ('dispatch.c', 'KiUnwaitThread')]:
     fixture += src.definition(file, name)
 fixture += r'''
-static KTHREAD Thread;
 static DISPATCHER_HEADER Object;
 static void Setup(const char *Name, BOOLEAN WithObject, BOOLEAN TimerInTable) {
     PKWAIT_BLOCK TimerBlock = &Thread.WaitBlock[TIMER_WAIT_BLOCK];
@@ -45,6 +61,7 @@ static void Setup(const char *Name, BOOLEAN WithObject, BOOLEAN TimerInTable) {
     InitializeListHead(&Object.WaitListHead);
     InitializeListHead(&PrcbWaitList);
     Thread.State = Waiting;
+    Thread.WaitRegister.State = KI_WAIT_COMMITTED;
     Thread.WaitPrcb = &Prcb;
     InsertTailList(&PrcbWaitList, &Thread.WaitListEntry);
     TimerBlock->Thread = &Thread;
@@ -78,11 +95,15 @@ static void CheckCleaned(void) {
     CHECK(!Thread.Timer.Header.Inserted && IsListEmpty(&KiTimerTableListHead[0].Entry));
     CHECK(Thread.WaitPrcb == NULL && IsListEmpty(&PrcbWaitList) && !WaitLockHeld);
 }
-/* The wait lists, the timer and the processor's wait list are left under the dispatcher lock the caller holds */
+/* Whoever ends the wait takes the thread off the processor's wait list under the thread lock; the thread itself then leaves its objects and its timer */
 static void Unlink(LONG_PTR Status) {
-    KIRQL Old = KiAcquireDispatcherLock();
-    KiUnlinkThread(&Thread, Status);
-    KiReleaseDispatcherLock(Old);
+    KIRQL Old = KiEnterDispatcher();
+    KiAcquireThreadLock(&Thread);
+    KiUnwaitThread(&Thread, Status, 0);
+    KiReleaseThreadLock(&Thread);
+    CHECK(Thread.State == DeferredReady && Thread.WaitRegister.State == KI_WAIT_ABORTED);
+    KiEndThreadWait(&Thread);
+    KiExitDispatcher(Old);
 }
 int main(void) {
     KIRQL Old;
@@ -102,9 +123,9 @@ int main(void) {
 
     /* A second pass over the same thread unlinks nothing twice */
     Scenario = "a second pass";
-    Old = KiAcquireDispatcherLock();
+    Old = KiEnterDispatcher();
     KiUnlinkWaitBlocks(&Thread);
-    KiReleaseDispatcherLock(Old);
+    KiExitDispatcher(Old);
     CHECK(IsListEmpty(&Thread.Timer.Header.WaitListHead) && IsListEmpty(&Object.WaitListHead));
     return 0;
 }

@@ -235,50 +235,10 @@ KiInsertTimerTable(
 }
 
 /*
- * Works out when a relative or absolute interval falls due and puts the timer
- * in the table for it. Answers FALSE when the moment has already passed, and
- * then the timer is left signalled rather than armed.
- *
- * Entered with the dispatcher database held.
- */
-BOOLEAN
-FASTCALL
-KiInsertTreeTimer(
-    _Inout_ PKTIMER Timer,
-    _In_ LARGE_INTEGER Interval)
-{
-    PKSPIN_LOCK_QUEUE LockQueue;
-    ULONG Hand;
-
-    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-
-    Timer->Header.Absolute = FALSE;
-    Timer->Period = 0;
-
-    if (!KiComputeDueTime(Timer, Interval, &Hand))
-        return FALSE;
-
-    /* Object lock first, bucket lock second, as every table path does */
-    KiAcquireDispatcherObject(&Timer->Header);
-    LockQueue = KiAcquireTimerLock(Hand);
-
-    if (KiInsertTimerTable(Timer, Hand))
-    {
-        /* Already due: take it straight back out and expire it */
-        KiCompleteTimer(Timer, LockQueue);
-        return TRUE;
-    }
-
-    KiReleaseTimerLock(LockQueue);
-    KiReleaseDispatcherObject(&Timer->Header);
-    return TRUE;
-}
-
-/*
  * The timer has come due: say so, release whoever was waiting for it, hand its
  * DPC to the processor, and arm it again if it is periodic.
  *
- * Entered with the dispatcher database held.
+ * Entered with the timer's object lock held.
  */
 VOID
 FASTCALL
@@ -289,6 +249,7 @@ KiSignalTimer(
     PKDPC Dpc = Timer->Dpc;
 
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(KiIsDispatcherObjectLocked(&Timer->Header));
 
     Timer->Header.Inserted = FALSE;
     Timer->Header.SignalState = 1;
@@ -320,8 +281,8 @@ KiSignalTimer(
 /*
  * Finishes a timer that was found to be due the moment it was armed.
  *
- * Entered with the dispatcher database, the timer object lock and the bucket's
- * table lock all held; the latter two are released here.
+ * Entered with the timer object lock and the bucket's table lock held; both
+ * are released here.
  */
 VOID
 FASTCALL
@@ -400,7 +361,8 @@ KeSetTimerEx(
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
     ASSERT(Period >= 0);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Timer->Header);
 
     WasInserted = Timer->Header.Inserted;
     if (WasInserted)
@@ -417,7 +379,8 @@ KeSetTimerEx(
     {
         /* The moment asked for has gone by: the timer is due at once */
         KiSignalTimer(Timer);
-        KiReleaseDispatcherLock(OldIrql);
+        KiReleaseDispatcherObject(&Timer->Header);
+        KiExitDispatcher(OldIrql);
         return WasInserted;
     }
 
@@ -425,10 +388,9 @@ KeSetTimerEx(
      * The object lock establishes the order the table insertion expects:
      * object first, bucket second. KxInsertTimer gives it back.
      */
-    KiAcquireDispatcherObject(&Timer->Header);
     KxInsertTimer(Timer, Hand);
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
     return WasInserted;
 }
 
@@ -460,7 +422,8 @@ KeCancelTimer(
     ASSERT_TIMER(Timer);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Timer->Header);
 
     WasInserted = Timer->Header.Inserted;
     if (WasInserted)
@@ -469,7 +432,8 @@ KeCancelTimer(
     Timer->Period = 0;
     Timer->Header.EncodedTolerableDelay = 0;
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Timer->Header);
+    KiExitDispatcher(OldIrql);
     return WasInserted;
 }
 
@@ -511,7 +475,8 @@ KeSetCoalescableTimer(
     if (TolerableDelay == 0)
         return KeSetTimerEx(Timer, DueTime, (LONG)Period, Dpc);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Timer->Header);
 
     WasInserted = Timer->Header.Inserted;
     if (WasInserted)
@@ -529,17 +494,17 @@ KeSetCoalescableTimer(
          */
         Timer->Header.EncodedTolerableDelay = 0;
         KiSignalTimer(Timer);
-        KiReleaseDispatcherLock(OldIrql);
+        KiReleaseDispatcherObject(&Timer->Header);
+        KiExitDispatcher(OldIrql);
         return WasInserted;
     }
 
     KiEncodeTolerableDelay(Timer, TolerableDelay);
     Hand = KiCoalesceDueTime(Timer, KiDecodeTolerableDelay(Timer));
 
-    KiAcquireDispatcherObject(&Timer->Header);
     KxInsertTimer(Timer, Hand);
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
     return WasInserted;
 }
 
@@ -553,87 +518,51 @@ KeReadStateTimer(
     return (BOOLEAN)(Timer->Header.SignalState != 0);
 }
 
-/*
- * Expires a list of timers that the table scan found due.
- *
- * Entered at SYNCH_LEVEL with the dispatcher database held; it is released
- * here, because a timer routine must not run under it. The first routines are
- * called directly rather than queued, once back at DISPATCH_LEVEL on the right
- * processor, since queueing them would only cost another round trip.
- */
+static
 VOID
-FASTCALL
-KiTimerListExpire(
-    _Inout_ PLIST_ENTRY ExpiredListHead,
-    _In_ KIRQL OldIrql)
+KiExpireTimer(
+    _Inout_ PKTIMER Timer,
+    _Inout_ PDPC_QUEUE_ENTRY DpcEntries,
+    _Inout_ PULONG DpcCount,
+    _In_ LARGE_INTEGER SystemTime)
 {
-    DPC_QUEUE_ENTRY DpcEntries[MAX_TIMER_DPCS];
-    LARGE_INTEGER SystemTime;
-    PLIST_ENTRY Entry;
-    PKTIMER Timer;
     PKDPC Dpc;
-    ULONG DpcCount = 0;
-    ULONG Index;
 
-    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+    ASSERT(KiIsDispatcherObjectLocked(&Timer->Header));
+    ASSERT(!Timer->Header.Inserted);
+    ASSERT(Timer->TimerListEntry.Flink == NULL && Timer->TimerListEntry.Blink == NULL);
+    ASSERT(*DpcCount <= MAX_TIMER_DPCS);
 
-    KeQuerySystemTimePrecise(&SystemTime);
+    Timer->Header.SignalState = 1;
 
-    while (!IsListEmpty(ExpiredListHead))
+    if (!IsListEmpty(&Timer->Header.WaitListHead))
+        KiWaitTest(Timer, KI_TIMER_BOOST);
+
+    if (Timer->Period != 0)
+        KiRearmPeriodicTimer(Timer);
+
+    Dpc = Timer->Dpc;
+    KiReleaseDispatcherObject(&Timer->Header);
+    if (Dpc == NULL)
+        return;
+
+    if (*DpcCount < MAX_TIMER_DPCS &&
+        Dpc->Type == DpcObject &&
+        (Dpc->Number == 0 ||
+         Dpc->Number == KI_DPC_TARGET_PROCESSOR_OFFSET + KeGetCurrentProcessorNumber()))
     {
-        Entry = RemoveHeadList(ExpiredListHead);
-        Timer = CONTAINING_RECORD(Entry, KTIMER, TimerListEntry);
-
-        Timer->TimerListEntry.Flink = NULL;
-        Timer->TimerListEntry.Blink = NULL;
-        Timer->Header.Inserted = FALSE;
-        Timer->Header.SignalState = 1;
-
-        if (!IsListEmpty(&Timer->Header.WaitListHead))
-            KiWaitTest(Timer, KI_TIMER_BOOST);
-
-        if (Timer->Period != 0)
-            KiRearmPeriodicTimer(Timer);
-
-        Dpc = Timer->Dpc;
-        if (Dpc == NULL)
-            continue;
-
-        if (DpcCount < MAX_TIMER_DPCS &&
-            Dpc->Type == DpcObject &&
-            (Dpc->Number == 0 ||
-             Dpc->Number == KI_DPC_TARGET_PROCESSOR_OFFSET + KeGetCurrentProcessorNumber()))
-        {
-            DpcEntries[DpcCount].Dpc = Dpc;
-            DpcEntries[DpcCount].Routine = Dpc->DeferredRoutine;
-            DpcEntries[DpcCount].Context = Dpc->DeferredContext;
-            DpcCount++;
-            continue;
-        }
-
-        /* More than fits on the stack: the rest go through the queue */
-        KeInsertQueueDpc(Dpc,
-                         UlongToPtr(SystemTime.LowPart),
-                         (PVOID)(ULONG_PTR)(LONG_PTR)SystemTime.HighPart);
+        DpcEntries[*DpcCount].Dpc = Dpc;
+        DpcEntries[*DpcCount].Routine = Dpc->DeferredRoutine;
+        DpcEntries[*DpcCount].Context = Dpc->DeferredContext;
+        (*DpcCount)++;
+        return;
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
-
-    /* A timer routine is a DPC routine and runs at DISPATCH_LEVEL like one */
-    KeLowerIrql(DISPATCH_LEVEL);
-
-    for (Index = 0; Index < DpcCount; Index++)
-    {
-        DpcEntries[Index].Dpc->ProcessorHistory |=
-            AFFINITY_MASK(KeGetCurrentProcessorNumber());
-
-        DpcEntries[Index].Routine(DpcEntries[Index].Dpc,
-                                  DpcEntries[Index].Context,
-                                  UlongToPtr(SystemTime.LowPart),
-                                  (PVOID)(ULONG_PTR)(LONG_PTR)SystemTime.HighPart);
-    }
-
-    KiExitDispatcher(OldIrql);
+    /* More than fits on the stack: the rest go through the queue */
+    KeInsertQueueDpc(Dpc,
+                     UlongToPtr(SystemTime.LowPart),
+                     (PVOID)(ULONG_PTR)(LONG_PTR)SystemTime.HighPart);
 }
 
 /*
@@ -653,22 +582,20 @@ KiTimerExpiration(
     _In_opt_ PVOID SystemArgument1,
     _In_opt_ PVOID SystemArgument2)
 {
+    DPC_QUEUE_ENTRY DpcEntries[MAX_TIMER_DPCS];
     PKSPIN_LOCK_QUEUE LockQueue;
     PKTIMER_TABLE_ENTRY TableEntry;
-    PLIST_ENTRY Entry;
     PKTIMER Timer;
-    LIST_ENTRY ExpiredList;
+    LARGE_INTEGER SystemTime;
     ULONGLONG InterruptTime;
+    ULONG Hand, Span, Index, Bucket;
+    ULONG DpcCount = 0;
+    KIRQL OldIrql;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
-    ULONG Hand, Span, Index, Bucket;
-    KIRQL OldIrql;
-
     UNREFERENCED_PARAMETER(Dpc);
     UNREFERENCED_PARAMETER(DeferredContext);
-
-    InitializeListHead(&ExpiredList);
 
     Hand = PtrToUlong(SystemArgument1) & (TIMER_TABLE_SIZE - 1);
     Span = PtrToUlong(SystemArgument2);
@@ -676,8 +603,9 @@ KiTimerExpiration(
         Span = TIMER_TABLE_SIZE - 1;
 
     InterruptTime = KiQueryInterruptTimePrecise(NULL, FALSE);
+    KeQuerySystemTimePrecise(&SystemTime);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
 
     for (Index = 0; Index <= Span; Index++)
     {
@@ -692,21 +620,47 @@ KiTimerExpiration(
 
         while (!IsListEmpty(&TableEntry->Entry))
         {
-            Entry = TableEntry->Entry.Flink;
-            Timer = CONTAINING_RECORD(Entry, KTIMER, TimerListEntry);
+            Timer = CONTAINING_RECORD(TableEntry->Entry.Flink, KTIMER, TimerListEntry);
 
             if (Timer->DueTime.QuadPart > InterruptTime)
                 break;
 
+            /* A timer is locked before its bucket, so from here it is only tried: its holder may be waiting for this bucket */
+            if (!KiTryAcquireDispatcherObject(&Timer->Header))
+            {
+                KiReleaseTimerLock(LockQueue);
+                YieldProcessor();
+                LockQueue = KiAcquireTimerLock(Bucket);
+                continue;
+            }
+
             KiRemoveEntryTimer(Timer);
             Timer->Header.Inserted = FALSE;
-            InsertTailList(&ExpiredList, &Timer->TimerListEntry);
+            KiReleaseTimerLock(LockQueue);
+
+            KiExpireTimer(Timer, DpcEntries, &DpcCount, SystemTime);
+
+            LockQueue = KiAcquireTimerLock(Bucket);
         }
 
         KiReleaseTimerLock(LockQueue);
     }
 
-    KiTimerListExpire(&ExpiredList, OldIrql);
+    /* A timer routine is a DPC routine and runs at DISPATCH_LEVEL like one */
+    KeLowerIrql(DISPATCH_LEVEL);
+
+    for (Index = 0; Index < DpcCount; Index++)
+    {
+        DpcEntries[Index].Dpc->ProcessorHistory |=
+            AFFINITY_MASK(KeGetCurrentProcessorNumber());
+
+        DpcEntries[Index].Routine(DpcEntries[Index].Dpc,
+                                  DpcEntries[Index].Context,
+                                  UlongToPtr(SystemTime.LowPart),
+                                  (PVOID)(ULONG_PTR)(LONG_PTR)SystemTime.HighPart);
+    }
+
+    KiExitDispatcher(OldIrql);
 }
 
 /*

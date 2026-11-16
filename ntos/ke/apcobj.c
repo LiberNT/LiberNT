@@ -224,7 +224,9 @@ KiInsertQueueApc(
     if (Apc->ApcStateIndex != Thread->ApcStateIndex)
         return;
 
-    KiAcquireDispatcherLockAtSynchLevel();
+
+    /* A thread about to wait looks for this APC under the same lock before it commits, so one of the two sees the other */
+    KiAcquireThreadLock(Thread);
 
     if (ApcMode == KernelMode)
     {
@@ -247,7 +249,7 @@ KiInsertQueueApc(
         KiUnwaitThread(Thread, STATUS_USER_APC, PriorityBoost);
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
+    KiReleaseThreadLock(Thread);
 
     KiRequestApcInterrupt(RequestInterrupt, (UCHAR)Thread->NextProcessor);
 }
@@ -319,7 +321,7 @@ KeRemoveQueueApc(
     ASSERT_APC(Apc);
 
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
-    KiAcquireDispatcherLockAtSynchLevel();
+    KiAcquireThreadLock(Thread);
 
     Inserted = Apc->Inserted;
     if (Inserted)
@@ -336,7 +338,7 @@ KeRemoveQueueApc(
         }
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
+    KiReleaseThreadLock(Thread);
     KiReleaseApcLockFromSynchLevel(&ApcLock);
     KiExitDispatcher(ApcLock.OldIrql);
 

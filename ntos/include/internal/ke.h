@@ -1077,9 +1077,8 @@ KiExitDispatcher(
 
 VOID
 FASTCALL
-KiUnlinkThread(
-    _In_ PKTHREAD Thread,
-    _In_ LONG_PTR WaitStatus);
+KiEndThreadWait(
+    _Inout_ PKTHREAD Thread);
 
 VOID
 FASTCALL
@@ -1098,6 +1097,16 @@ FASTCALL
 KiWaitTest(
     PVOID Object,
     KPRIORITY Increment);
+
+PKTHREAD
+FASTCALL
+KiLockCommittedWaiter(
+    _Inout_ PKWAIT_BLOCK WaitBlock);
+
+VOID
+FASTCALL
+KiUnlinkWaitBlock(
+    _Inout_ PKWAIT_BLOCK WaitBlock);
 
 BOOLEAN
 FASTCALL
@@ -1246,12 +1255,6 @@ KiInsertTimerTable(
     _In_ PKTIMER Timer,
     _In_ ULONG Hand);
 
-BOOLEAN
-FASTCALL
-KiInsertTreeTimer(
-    _In_ PKTIMER Timer,
-    _In_ LARGE_INTEGER Interval);
-
 VOID
 NTAPI
 KiTimerExpiration(
@@ -1259,12 +1262,6 @@ KiTimerExpiration(
     _In_ PVOID DeferredContext,
     _In_ PVOID SystemArgument1,
     _In_ PVOID SystemArgument2);
-
-VOID
-FASTCALL
-KiTimerListExpire(
-    _In_ PLIST_ENTRY ExpiredListHead,
-    _In_ KIRQL OldIrql);
 
 VOID
 FASTCALL

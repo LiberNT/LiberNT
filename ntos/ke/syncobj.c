@@ -26,7 +26,7 @@ KiCompleteSignalling(
 
     if (!Wait)
     {
-        KiReleaseDispatcherLock(OldIrql);
+        KiExitDispatcher(OldIrql);
         return;
     }
 
@@ -48,12 +48,6 @@ KiSignalWaiters(
 {
     if (IsListEmpty(&Object->WaitListHead))
         return;
-
-    if ((Object->Type & TIMER_OR_EVENT_TYPE) == EventNotificationObject)
-    {
-        KxUnwaitThread(Object, Increment);
-        return;
-    }
 
     KiWaitTest(Object, Increment);
 }
@@ -95,13 +89,15 @@ KeSetEvent(
     ASSERT_EVENT(Event);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Event->Header);
 
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 1;
 
     KiSignalWaiters(&Event->Header, Increment);
 
+    KiReleaseDispatcherObject(&Event->Header);
     KiCompleteSignalling(OldIrql, Wait);
     return PreviousState;
 }
@@ -124,7 +120,8 @@ KePulseEvent(
     ASSERT_EVENT(Event);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Event->Header);
 
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 1;
@@ -133,6 +130,7 @@ KePulseEvent(
 
     Event->Header.SignalState = 0;
 
+    KiReleaseDispatcherObject(&Event->Header);
     KiCompleteSignalling(OldIrql, Wait);
     return PreviousState;
 }
@@ -152,10 +150,12 @@ KeResetEvent(
     ASSERT_EVENT(Event);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Event->Header);
     PreviousState = Event->Header.SignalState;
     Event->Header.SignalState = 0;
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Event->Header);
+    KiExitDispatcher(OldIrql);
 
     return PreviousState;
 }
@@ -221,37 +221,48 @@ KeSetEventBoostPriority(
     ASSERT((Event->Header.Type & KOBJECT_TYPE_MASK) ==
            EventSynchronizationObject);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Event->Header);
 
-    if (IsListEmpty(&Event->Header.WaitListHead))
+    for (;;)
     {
-        Event->Header.SignalState = 1;
-        KiReleaseDispatcherLock(OldIrql);
-        return;
+        if (IsListEmpty(&Event->Header.WaitListHead))
+        {
+            Event->Header.SignalState = 1;
+            break;
+        }
+
+        WaitBlock = CONTAINING_RECORD(Event->Header.WaitListHead.Flink,
+                                      KWAIT_BLOCK,
+                                      WaitListEntry);
+
+        /*
+         * Only a thread waiting for this event alone can be handed it directly.
+         * Anything else goes through the ordinary satisfaction rules.
+         */
+        if (WaitBlock->WaitType != WaitAny)
+        {
+            Event->Header.SignalState = 1;
+            KiSignalWaiters(&Event->Header, EVENT_INCREMENT);
+            break;
+        }
+
+        /* A waiter that has not committed is sent to look again and finds what the loop leaves behind */
+        WaitThread = KiLockCommittedWaiter(WaitBlock);
+        if (WaitThread == NULL)
+            continue;
+
+        if (Thread != NULL)
+            *Thread = WaitThread;
+
+        KiUnwaitThread(WaitThread, STATUS_SUCCESS, EVENT_INCREMENT);
+        KiReleaseThreadLock(WaitThread);
+        KiUnlinkWaitBlock(WaitBlock);
+        break;
     }
 
-    WaitBlock = CONTAINING_RECORD(Event->Header.WaitListHead.Flink,
-                                  KWAIT_BLOCK,
-                                  WaitListEntry);
-
-    /*
-     * Only a thread waiting for this event alone can be handed it directly.
-     * Anything else goes through the ordinary satisfaction rules.
-     */
-    if (WaitBlock->WaitType != WaitAny)
-    {
-        Event->Header.SignalState = 1;
-        KiSignalWaiters(&Event->Header, EVENT_INCREMENT);
-        KiReleaseDispatcherLock(OldIrql);
-        return;
-    }
-
-    WaitThread = WaitBlock->Thread;
-    if (Thread != NULL)
-        *Thread = WaitThread;
-
-    KiUnwaitThread(WaitThread, STATUS_SUCCESS, EVENT_INCREMENT);
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Event->Header);
+    KiExitDispatcher(OldIrql);
 }
 
 /*
@@ -317,14 +328,16 @@ KeReleaseSemaphore(
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
     ASSERT(Adjustment > 0);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Semaphore->Header);
 
     PreviousState = Semaphore->Header.SignalState;
 
     /* Room is measured below the limit, so a count near the top of the range cannot wrap */
     if (Adjustment > Semaphore->Limit - PreviousState)
     {
-        KiReleaseDispatcherLock(OldIrql);
+        KiReleaseDispatcherObject(&Semaphore->Header);
+        KiExitDispatcher(OldIrql);
         ExRaiseStatus(STATUS_SEMAPHORE_LIMIT_EXCEEDED);
     }
 
@@ -339,6 +352,7 @@ KeReleaseSemaphore(
         KiWaitTest(Semaphore, Increment);
     }
 
+    KiReleaseDispatcherObject(&Semaphore->Header);
     KiCompleteSignalling(OldIrql, Wait);
     return PreviousState;
 }
@@ -367,9 +381,11 @@ KiAcquireMutantOwnership(
     _Inout_ PKMUTANT Mutant,
     _Inout_ PKTHREAD Thread)
 {
+    KiAcquireThreadLock(Thread);
     Mutant->OwnerThread = Thread;
     Thread->KernelApcDisable = Thread->KernelApcDisable - Mutant->ApcDisable;
     InsertTailList(&Thread->MutantListHead, &Mutant->MutantListEntry);
+    KiReleaseThreadLock(Thread);
 }
 
 /*
@@ -403,9 +419,9 @@ KeInitializeMutant(
     Thread = KeGetCurrentThread();
     Mutant->Header.SignalState = 0;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireMutantOwnership(Mutant, Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 }
 
 /*
@@ -453,7 +469,8 @@ KeReleaseMutant(
     ASSERT_MUTANT(Mutant);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Mutant->Header);
 
     PreviousState = Mutant->Header.SignalState;
 
@@ -464,7 +481,8 @@ KeReleaseMutant(
             NTSTATUS Status = Mutant->Abandoned ? STATUS_ABANDONED
                                                 : STATUS_MUTANT_NOT_OWNED;
 
-            KiReleaseDispatcherLock(OldIrql);
+            KiReleaseDispatcherObject(&Mutant->Header);
+            KiExitDispatcher(OldIrql);
             ExRaiseStatus(Status);
         }
 
@@ -479,6 +497,7 @@ KeReleaseMutant(
     /* Still held one level deep: nothing to hand on yet */
     if (Mutant->Header.SignalState <= 0)
     {
+        KiReleaseDispatcherObject(&Mutant->Header);
         KiCompleteSignalling(OldIrql, Wait);
         return PreviousState;
     }
@@ -487,16 +506,19 @@ KeReleaseMutant(
     {
         PKTHREAD Owner = Mutant->OwnerThread;
 
+        KiAcquireThreadLock(Owner);
         RemoveEntryList(&Mutant->MutantListEntry);
         Mutant->OwnerThread = NULL;
 
         /* Give back the APC exclusion the acquisition took out */
         Owner->KernelApcDisable = Owner->KernelApcDisable + Mutant->ApcDisable;
+        KiReleaseThreadLock(Owner);
     }
 
     if (!IsListEmpty(&Mutant->Header.WaitListHead))
         KiWaitTest(Mutant, Increment);
 
+    KiReleaseDispatcherObject(&Mutant->Header);
     KiCompleteSignalling(OldIrql, Wait);
     return PreviousState;
 }
@@ -556,28 +578,34 @@ KeSignalGateBoostPriority(
 
     ASSERT_GATE(Gate);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Gate->Header);
 
-    if (Gate->Header.SignalState != 0)
+    while (Gate->Header.SignalState == 0)
     {
-        KiReleaseDispatcherLock(OldIrql);
-        return;
+        if (IsListEmpty(&Gate->Header.WaitListHead))
+        {
+            Gate->Header.SignalState = 1;
+            break;
+        }
+
+        WaitBlock = CONTAINING_RECORD(Gate->Header.WaitListHead.Flink,
+                                      KWAIT_BLOCK,
+                                      WaitListEntry);
+
+        /* A waiter that has not committed is sent to look again and finds what the loop leaves behind */
+        WaitThread = KiLockCommittedWaiter(WaitBlock);
+        if (WaitThread == NULL)
+            continue;
+
+        KiUnwaitThread(WaitThread, STATUS_SUCCESS, EVENT_INCREMENT);
+        KiReleaseThreadLock(WaitThread);
+        KiUnlinkWaitBlock(WaitBlock);
+        break;
     }
 
-    if (IsListEmpty(&Gate->Header.WaitListHead))
-    {
-        Gate->Header.SignalState = 1;
-        KiReleaseDispatcherLock(OldIrql);
-        return;
-    }
-
-    WaitBlock = CONTAINING_RECORD(Gate->Header.WaitListHead.Flink,
-                                  KWAIT_BLOCK,
-                                  WaitListEntry);
-    WaitThread = WaitBlock->Thread;
-
-    KiUnwaitThread(WaitThread, STATUS_SUCCESS, EVENT_INCREMENT);
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Gate->Header);
+    KiExitDispatcher(OldIrql);
 }
 
 /*
@@ -602,17 +630,22 @@ KeWaitForGate(
 
     for (;;)
     {
-        Thread->WaitIrql = KiAcquireDispatcherLock();
+        Thread->WaitIrql = KiEnterDispatcher();
+
+        KiBeginThreadWait(Thread);
+        KiAcquireDispatcherObject(&Gate->Header);
 
         if (Gate->Header.SignalState != 0)
         {
             Gate->Header.SignalState = 0;
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Gate->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             return;
         }
 
         if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql))
         {
+            KiReleaseDispatcherObject(&Gate->Header);
             KxExitDispatcherForRetry(Thread);
             continue;
         }
@@ -634,11 +667,13 @@ KeWaitForGate(
         Thread->WaitTime = KeTickCount.LowPart;
         Swappable = KiCheckThreadStackSwap(Thread, WaitMode);
 
+        WaitBlock->BlockState = WaitBlockActive;
         InsertTailList(&Gate->Header.WaitListHead, &WaitBlock->WaitListEntry);
+        KiReleaseDispatcherObject(&Gate->Header);
 
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiUnlinkWaitBlocks(Thread);
+            KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
             continue;
@@ -648,6 +683,7 @@ KeWaitForGate(
          * GateWait rather than Waiting: it tells a debugger, and anything that
          * walks thread states, that this wait answers only to its gate.
          */
+        Thread->WaitRegister.State = KI_WAIT_COMMITTED;
         Thread->State = GateWait;
         KiAddThreadToWaitList(Thread, Swappable);
         KiSetThreadSwapBusy(Thread);
