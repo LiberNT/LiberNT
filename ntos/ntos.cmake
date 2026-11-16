@@ -573,7 +573,8 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/procinfo.c)
+        ${REACTOS_SOURCE_DIR}/ntos/ke/procinfo.c
+        ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86common.c)
 endif()
 
 if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")

@@ -78,44 +78,6 @@ KdpSetContextState(
 
 NTSTATUS
 NTAPI
-KdpSysReadMsr(
-    _In_ ULONG Msr,
-    _Out_ PULONGLONG MsrValue)
-{
-    _SEH2_TRY
-    {
-        *MsrValue = __readmsr(Msr);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return STATUS_NO_SUCH_DEVICE);
-    }
-    _SEH2_END;
-
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
-KdpSysWriteMsr(
-    _In_ ULONG Msr,
-    _In_ PULONGLONG MsrValue)
-{
-    _SEH2_TRY
-    {
-        __writemsr(Msr, *MsrValue);
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        _SEH2_YIELD(return STATUS_NO_SUCH_DEVICE);
-    }
-    _SEH2_END;
-
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
 KdpSysReadBusData(
     _In_ BUS_DATA_TYPE BusDataType,
     _In_ ULONG BusNumber,
@@ -372,24 +334,4 @@ KdpSysCheckLowMemory(
     _In_ ULONG Flags)
 {
     return STATUS_UNSUCCESSFUL;
-}
-
-NTSTATUS
-NTAPI
-KdpAllowDisable(VOID)
-{
-    ULONG i;
-
-    for (i = 0; i < KeNumberProcessors; i++)
-    {
-        PKPROCESSOR_STATE ProcessorState = &KiProcessorBlock[i]->ProcessorState;
-
-        /* If any processor breakpoints are active,
-         * we can't allow running without a debugger */
-        if (ProcessorState->SpecialRegisters.KernelDr7 & 0xFF)
-            return STATUS_ACCESS_DENIED;
-    }
-
-    /* No processor breakpoints, allow disabling the debugger */
-    return STATUS_SUCCESS;
 }
