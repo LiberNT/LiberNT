@@ -9,6 +9,7 @@ extern void func_keyroute(void);
 extern void func_langbar(void);
 extern void func_langbarmgr(void);
 extern void func_layouttip(void);
+extern void func_mtaproxy(void);
 extern void func_owner(void);
 extern void func_profilemgr(void);
 extern void func_profiles(void);
@@ -27,6 +28,7 @@ const struct test winetest_testlist[] =
     { "langbar", func_langbar },
     { "langbarmgr", func_langbarmgr },
     { "layouttip", func_layouttip },
+    { "mtaproxy", func_mtaproxy },
     { "owner", func_owner },
     { "profilemgr", func_profilemgr },
     { "profiles", func_profiles },

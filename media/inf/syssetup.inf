@@ -99,6 +99,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,adsnt.dll,1
 11,,atl.dll,1
 11,,actxprxy.dll,1
+11,,msctfp.dll,1
 11,,acppage.dll,1
 11,,amstream.dll,1
 11,,avifil32.dll,1

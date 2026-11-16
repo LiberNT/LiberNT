@@ -10,6 +10,7 @@ list(APPEND SOURCE
     langbar.cpp
     langbarmgr.cpp
     layouttip.cpp
+    mtaproxy.cpp
     owner.cpp
     profilemgr.cpp
     profiles.cpp
