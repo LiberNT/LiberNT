@@ -16,11 +16,12 @@ class CComposition final
     , public ITfCompositionView
 {
 public:
-    CComposition(ITfContext *context, CRange *range, ITfCompositionSink *sink, REFCLSID clsidOwner);
+    CComposition(ITfContext *context, CRange *range, ITfCompositionSink *sink, REFCLSID clsidOwner, TfClientId tidOwner);
 
     static CComposition *FromView(IUnknown *punk);
     CRange *Range() const { return m_range; }
     ITfCompositionSink *Sink() const { return m_sink; }
+    TfClientId Owner() const { return m_tidOwner; }
     BOOL IsActive() const { return !m_ended; }
     void MarkEnded();
 
@@ -43,6 +44,7 @@ private:
     CRange *m_range;
     ITfCompositionSink *m_sink;
     CLSID m_clsidOwner;
+    TfClientId m_tidOwner;
     BOOL m_ended;
 };
 

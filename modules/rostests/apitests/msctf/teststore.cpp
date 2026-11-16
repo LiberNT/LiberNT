@@ -31,6 +31,7 @@ CTestStore::CTestStore(LPCWSTR pszText)
     , m_dwDynamicFlags(0)
     , m_fAcceptComposition(TRUE)
     , m_fOwnerSink(TRUE)
+    , m_pLastUpdated(NULL)
     , m_lastSetTextFlags(0)
     , m_pendingLock(0)
     , m_cLockRequests(0)
@@ -85,6 +86,7 @@ STDMETHODIMP CTestStore::OnStartComposition(ITfCompositionView *pComposition, BO
 STDMETHODIMP CTestStore::OnUpdateComposition(ITfCompositionView *pComposition, ITfRange *pRangeNew)
 {
     Log_Add("update");
+    m_pLastUpdated = pComposition;
     return S_OK;
 }
 
