@@ -16,6 +16,7 @@ extern void func_property(void);
 extern void func_range(void);
 extern void func_textedit(void);
 extern void func_threadmgr(void);
+extern void func_trackprop(void);
 
 const struct test winetest_testlist[] =
 {
@@ -34,5 +35,6 @@ const struct test winetest_testlist[] =
     { "range", func_range },
     { "textedit", func_textedit },
     { "threadmgr", func_threadmgr },
+    { "trackprop", func_trackprop },
     { 0, 0 }
 };

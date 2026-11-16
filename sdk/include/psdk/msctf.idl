@@ -1765,6 +1765,31 @@ interface ITfProperty : ITfReadOnlyProperty
             [in] ITfRange *pRange);
 }
 
+typedef [uuid(d678c645-eb6a-45c9-b4ee-0f3e3a991348)] struct TF_PROPERTYVAL
+{
+    GUID guidId;
+    VARIANT varValue;
+} TF_PROPERTYVAL;
+
+[
+    object,
+    uuid(8ed8981b-7c10-4d7d-9fb3-ab72e9c75f72),
+    pointer_default(unique)
+]
+interface IEnumTfPropertyValue : IUnknown
+{
+    HRESULT Clone([out] IEnumTfPropertyValue **ppEnum);
+
+    HRESULT Next(
+            [in] ULONG ulCount,
+            [out, size_is(ulCount), length_is(*pcFetched)] TF_PROPERTYVAL *rgValues,
+            [out] ULONG *pcFetched);
+
+    HRESULT Reset();
+
+    HRESULT Skip([in] ULONG ulCount);
+}
+
 [
   object,
   uuid(bb08f7a9-607a-4384-8623-056892b64371),

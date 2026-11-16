@@ -45,8 +45,23 @@ void CProperty::RemoveSpan(ULONG index)
     --m_count;
 }
 
+void CProperty::RefreshComposing()
+{
+    VARIANT value;
+    LONG start, end;
+
+    while (m_count)
+        RemoveSpan(m_count - 1);
+    V_VT(&value) = VT_I4;
+    V_I4(&value) = TRUE;
+    for (ULONG i = 0; Context_GetCompositionExtent(m_context, i, &start, &end); ++i)
+        AddSpan(start, end, &value);
+}
+
 void CProperty::Compact()
 {
+    if (m_guid == GUID_PROP_COMPOSING)
+        RefreshComposing();
     for (ULONG i = m_count; i > 0; --i)
     {
         CRange *range = m_spans[i - 1].range;
@@ -566,6 +581,358 @@ STDMETHODIMP CAppProperty::GetValue(TfEditCookie ec, ITfRange *pRange, VARIANT *
 }
 
 STDMETHODIMP CAppProperty::GetContext(ITfContext **ppContext)
+{
+    if (!ppContext)
+        return E_INVALIDARG;
+    *ppContext = m_context;
+    m_context->AddRef();
+    return S_OK;
+}
+
+CEnumPropertyValue::CEnumPropertyValue()
+    : m_refs(1)
+    , m_values(NULL)
+    , m_count(0)
+    , m_capacity(0)
+    , m_index(0)
+{
+}
+
+CEnumPropertyValue::~CEnumPropertyValue()
+{
+    for (ULONG i = 0; i < m_count; ++i)
+        VariantClear(&m_values[i].varValue);
+    cicMemFree(m_values);
+}
+
+HRESULT CEnumPropertyValue::Add(REFGUID guid, const VARIANT *value)
+{
+    if (m_count == m_capacity)
+    {
+        ULONG capacity = m_capacity ? m_capacity * 2 : 4;
+        TF_PROPERTYVAL *values = static_cast<TF_PROPERTYVAL *>(cicMemReAlloc(m_values, capacity * sizeof(*values)));
+        if (!values)
+            return E_OUTOFMEMORY;
+        m_values = values;
+        m_capacity = capacity;
+    }
+    m_values[m_count].guidId = guid;
+    VariantInit(&m_values[m_count].varValue);
+    HRESULT hr = VariantCopy(&m_values[m_count].varValue, value);
+    if (FAILED(hr))
+        return hr;
+    ++m_count;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumPropertyValue::QueryInterface(REFIID riid, void **ppvObj)
+{
+    if (!ppvObj)
+        return E_POINTER;
+    *ppvObj = NULL;
+    if (riid != IID_IUnknown && riid != IID_IEnumTfPropertyValue)
+        return E_NOINTERFACE;
+    *ppvObj = static_cast<IEnumTfPropertyValue *>(this);
+    AddRef();
+    return S_OK;
+}
+
+STDMETHODIMP_(ULONG) CEnumPropertyValue::AddRef()
+{
+    return InterlockedIncrement(&m_refs);
+}
+
+STDMETHODIMP_(ULONG) CEnumPropertyValue::Release()
+{
+    ULONG refs = InterlockedDecrement(&m_refs);
+    if (!refs)
+        delete this;
+    return refs;
+}
+
+STDMETHODIMP CEnumPropertyValue::Clone(IEnumTfPropertyValue **ppEnum)
+{
+    if (!ppEnum)
+        return E_INVALIDARG;
+    *ppEnum = NULL;
+    CEnumPropertyValue *pEnum = new(cicNoThrow) CEnumPropertyValue();
+    if (!pEnum)
+        return E_OUTOFMEMORY;
+    for (ULONG i = 0; i < m_count; ++i)
+    {
+        HRESULT hr = pEnum->Add(m_values[i].guidId, &m_values[i].varValue);
+        if (FAILED(hr))
+        {
+            pEnum->Release();
+            return hr;
+        }
+    }
+    pEnum->m_index = m_index;
+    *ppEnum = pEnum;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumPropertyValue::Next(ULONG ulCount, TF_PROPERTYVAL *rgValues, ULONG *pcFetched)
+{
+    if (!rgValues || (ulCount > 1 && !pcFetched))
+        return E_INVALIDARG;
+    ULONG fetched = 0;
+    while (fetched < ulCount && m_index < m_count)
+    {
+        rgValues[fetched].guidId = m_values[m_index].guidId;
+        VariantInit(&rgValues[fetched].varValue);
+        HRESULT hr = VariantCopy(&rgValues[fetched].varValue, &m_values[m_index].varValue);
+        if (FAILED(hr))
+        {
+            while (fetched)
+                VariantClear(&rgValues[--fetched].varValue);
+            return hr;
+        }
+        ++fetched;
+        ++m_index;
+    }
+    if (pcFetched)
+        *pcFetched = fetched;
+    return (fetched == ulCount) ? S_OK : S_FALSE;
+}
+
+STDMETHODIMP CEnumPropertyValue::Reset()
+{
+    m_index = 0;
+    return S_OK;
+}
+
+STDMETHODIMP CEnumPropertyValue::Skip(ULONG ulCount)
+{
+    if (ulCount > m_count - m_index)
+    {
+        m_index = m_count;
+        return S_FALSE;
+    }
+    m_index += ulCount;
+    return S_OK;
+}
+
+CTrackProperty::CTrackProperty(ITfContext *context)
+    : m_refs(1)
+    , m_context(context)
+    , m_properties(NULL)
+    , m_guids(NULL)
+    , m_count(0)
+    , m_cProp(0)
+{
+    m_context->AddRef();
+}
+
+CTrackProperty::~CTrackProperty()
+{
+    for (ULONG i = 0; i < m_count; ++i)
+    {
+        if (m_properties[i])
+            m_properties[i]->Release();
+    }
+    cicMemFree(m_properties);
+    cicMemFree(m_guids);
+    m_context->Release();
+}
+
+HRESULT CTrackProperty::Initialize(const GUID **prgProp, ULONG cProp, const GUID **prgAppProp, ULONG cAppProp)
+{
+    ULONG count = cProp + cAppProp;
+
+    if (count < cProp)
+        return E_INVALIDARG;
+    if (!count)
+        return S_OK;
+    m_properties = static_cast<ITfReadOnlyProperty **>(cicMemAllocClear(count * sizeof(*m_properties)));
+    m_guids = static_cast<GUID *>(cicMemAlloc(count * sizeof(*m_guids)));
+    if (!m_properties || !m_guids)
+        return E_OUTOFMEMORY;
+
+    for (ULONG i = 0; i < count; ++i)
+    {
+        const GUID *guid = (i < cProp) ? prgProp[i] : prgAppProp[i - cProp];
+        if (!guid)
+            return E_INVALIDARG;
+        m_guids[i] = *guid;
+        ++m_count;
+        if (i < cProp)
+        {
+            ITfProperty *property = NULL;
+            if (SUCCEEDED(m_context->GetProperty(*guid, &property)))
+                m_properties[i] = property;
+        }
+        else
+        {
+            m_context->GetAppProperty(*guid, &m_properties[i]);
+        }
+    }
+    m_cProp = cProp;
+    return S_OK;
+}
+
+STDMETHODIMP CTrackProperty::QueryInterface(REFIID riid, void **ppvObj)
+{
+    if (!ppvObj)
+        return E_POINTER;
+    *ppvObj = NULL;
+    if (riid != IID_IUnknown && riid != IID_ITfReadOnlyProperty)
+        return E_NOINTERFACE;
+    *ppvObj = static_cast<ITfReadOnlyProperty *>(this);
+    AddRef();
+    return S_OK;
+}
+
+STDMETHODIMP_(ULONG) CTrackProperty::AddRef()
+{
+    return InterlockedIncrement(&m_refs);
+}
+
+STDMETHODIMP_(ULONG) CTrackProperty::Release()
+{
+    ULONG refs = InterlockedDecrement(&m_refs);
+    if (!refs)
+        delete this;
+    return refs;
+}
+
+STDMETHODIMP CTrackProperty::GetType(GUID *pguid)
+{
+    if (!pguid)
+        return E_INVALIDARG;
+    *pguid = GUID_NULL;
+    return E_NOTIMPL;
+}
+
+static HRESULT AddBoundary(LONG **bounds, ULONG *count, ULONG *capacity, LONG pos)
+{
+    ULONG i;
+
+    for (i = 0; i < *count && (*bounds)[i] < pos; ++i)
+        ;
+    if (i < *count && (*bounds)[i] == pos)
+        return S_OK;
+    if (*count == *capacity)
+    {
+        ULONG newCapacity = *capacity ? *capacity * 2 : 8;
+        LONG *newBounds = static_cast<LONG *>(cicMemReAlloc(*bounds, newCapacity * sizeof(**bounds)));
+        if (!newBounds)
+            return E_OUTOFMEMORY;
+        *bounds = newBounds;
+        *capacity = newCapacity;
+    }
+    MoveMemory(&(*bounds)[i + 1], &(*bounds)[i], (*count - i) * sizeof(**bounds));
+    (*bounds)[i] = pos;
+    ++*count;
+    return S_OK;
+}
+
+STDMETHODIMP CTrackProperty::EnumRanges(TfEditCookie ec, IEnumTfRanges **ppEnum, ITfRange *pTargetRange)
+{
+    if (!ppEnum)
+        return E_INVALIDARG;
+    *ppEnum = NULL;
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    CRange *target = CRange::FromRange(pTargetRange);
+    if (!target || target->Context() != m_context)
+        return E_INVALIDARG;
+
+    LONG *bounds = NULL;
+    ULONG count = 0, capacity = 0;
+    hr = AddBoundary(&bounds, &count, &capacity, target->Start());
+    if (SUCCEEDED(hr))
+        hr = AddBoundary(&bounds, &count, &capacity, target->End());
+    /* TODO: split the ranges where application properties change too */
+    for (ULONG i = 0; SUCCEEDED(hr) && i < m_cProp; ++i)
+    {
+        IEnumTfRanges *spans = NULL;
+        ITfRange *span;
+        if (!m_properties[i] || FAILED(m_properties[i]->EnumRanges(ec, &spans, pTargetRange)))
+            continue;
+        while (SUCCEEDED(hr) && spans->Next(1, &span, NULL) == S_OK)
+        {
+            CRange *range = CRange::FromRange(span);
+            if (range)
+                hr = AddBoundary(&bounds, &count, &capacity, range->Start());
+            if (range && SUCCEEDED(hr))
+                hr = AddBoundary(&bounds, &count, &capacity, range->End());
+            span->Release();
+        }
+        spans->Release();
+    }
+
+    CEnumRanges *pEnum = NULL;
+    if (SUCCEEDED(hr))
+    {
+        pEnum = new(cicNoThrow) CEnumRanges();
+        if (!pEnum)
+            hr = E_OUTOFMEMORY;
+    }
+    for (ULONG i = 1; SUCCEEDED(hr) && i < count; ++i)
+    {
+        ITfRange *range = NULL;
+        hr = Range_Constructor(m_context, bounds[i - 1], bounds[i], &range);
+        if (SUCCEEDED(hr))
+        {
+            hr = pEnum->Add(range);
+            range->Release();
+        }
+    }
+    cicMemFree(bounds);
+    if (FAILED(hr))
+    {
+        if (pEnum)
+            pEnum->Release();
+        return hr;
+    }
+    *ppEnum = pEnum;
+    return S_OK;
+}
+
+STDMETHODIMP CTrackProperty::GetValue(TfEditCookie ec, ITfRange *pRange, VARIANT *pvarValue)
+{
+    if (!pvarValue)
+        return E_INVALIDARG;
+    VariantInit(pvarValue);
+    HRESULT hr = Context_CheckLock(m_context, ec, FALSE);
+    if (FAILED(hr))
+        return hr;
+    CRange *range = CRange::FromRange(pRange);
+    if (!range || range->Context() != m_context)
+        return E_INVALIDARG;
+
+    CEnumPropertyValue *pEnum = new(cicNoThrow) CEnumPropertyValue();
+    if (!pEnum)
+        return E_OUTOFMEMORY;
+    for (ULONG i = 0; i < m_count; ++i)
+    {
+        VARIANT value;
+        VariantInit(&value);
+        if (m_properties[i])
+        {
+            hr = m_properties[i]->GetValue(ec, pRange, &value);
+            if (FAILED(hr))
+            {
+                pEnum->Release();
+                return hr;
+            }
+        }
+        hr = pEnum->Add(m_guids[i], &value);
+        VariantClear(&value);
+        if (FAILED(hr))
+        {
+            pEnum->Release();
+            return hr;
+        }
+    }
+    V_VT(pvarValue) = VT_UNKNOWN;
+    V_UNKNOWN(pvarValue) = static_cast<IEnumTfPropertyValue *>(pEnum);
+    return S_OK;
+}
+
+STDMETHODIMP CTrackProperty::GetContext(ITfContext **ppContext)
 {
     if (!ppContext)
         return E_INVALIDARG;

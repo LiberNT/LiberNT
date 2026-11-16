@@ -43,6 +43,7 @@ private:
     HRESULT AddSpan(LONG start, LONG end, const VARIANT *value);
     void RemoveSpan(ULONG index);
     void Compact();
+    void RefreshComposing();
 
     LONG m_refs;
     ITfContext *m_context;
@@ -97,4 +98,55 @@ private:
     LONG m_refs;
     ITfContext *m_context;
     GUID m_guid;
+};
+
+class CEnumPropertyValue final : public IEnumTfPropertyValue
+{
+public:
+    CEnumPropertyValue();
+    HRESULT Add(REFGUID guid, const VARIANT *value);
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override;
+    STDMETHODIMP_(ULONG) AddRef() override;
+    STDMETHODIMP_(ULONG) Release() override;
+
+    STDMETHODIMP Clone(IEnumTfPropertyValue **ppEnum) override;
+    STDMETHODIMP Next(ULONG ulCount, TF_PROPERTYVAL *rgValues, ULONG *pcFetched) override;
+    STDMETHODIMP Reset() override;
+    STDMETHODIMP Skip(ULONG ulCount) override;
+
+private:
+    ~CEnumPropertyValue();
+
+    LONG m_refs;
+    TF_PROPERTYVAL *m_values;
+    ULONG m_count;
+    ULONG m_capacity;
+    ULONG m_index;
+};
+
+class CTrackProperty final : public ITfReadOnlyProperty
+{
+public:
+    CTrackProperty(ITfContext *context);
+    HRESULT Initialize(const GUID **prgProp, ULONG cProp, const GUID **prgAppProp, ULONG cAppProp);
+
+    STDMETHODIMP QueryInterface(REFIID riid, void **ppvObj) override;
+    STDMETHODIMP_(ULONG) AddRef() override;
+    STDMETHODIMP_(ULONG) Release() override;
+
+    STDMETHODIMP GetType(GUID *pguid) override;
+    STDMETHODIMP EnumRanges(TfEditCookie ec, IEnumTfRanges **ppEnum, ITfRange *pTargetRange) override;
+    STDMETHODIMP GetValue(TfEditCookie ec, ITfRange *pRange, VARIANT *pvarValue) override;
+    STDMETHODIMP GetContext(ITfContext **ppContext) override;
+
+private:
+    ~CTrackProperty();
+
+    LONG m_refs;
+    ITfContext *m_context;
+    ITfReadOnlyProperty **m_properties;
+    GUID *m_guids;
+    ULONG m_count;
+    ULONG m_cProp;
 };
