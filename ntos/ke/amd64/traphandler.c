@@ -52,7 +52,7 @@ KiIpiInterruptHandler(VOID)
     KiSendEOI();
 
     if (SmpDbgEnabled)
-        SmpDbgIpi(KeGetCurrentProcessorNumber());
+        SmpDbgIpi(KeGetCurrentPrcb()->Number);
     KiIpiProcessRequests();
 
     KeLowerIrql(OldIrql);

@@ -1922,7 +1922,7 @@ NtSetInformationJobObject(
                  JOB_OBJECT_LIMIT_AFFINITY) != 0 &&
                 (Extended.BasicLimitInformation.Affinity == 0 ||
                  (Extended.BasicLimitInformation.Affinity &
-                  ~(ULONG_PTR)KeActiveProcessors) != 0))
+                  ~KeQueryGroupAffinity(0)) != 0))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;

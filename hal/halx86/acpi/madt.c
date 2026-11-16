@@ -42,7 +42,7 @@ HALP_APIC_INFO_TABLE HalpApicInfoTable;
 #define LAPIC_FLAG_ONLINE_CAPABLE   0x00000002
 // Bits 2-31 are reserved.
 
-static PROCESSOR_IDENTITY HalpStaticProcessorIdentity[MAXIMUM_PROCESSORS];
+static PROCESSOR_IDENTITY HalpStaticProcessorIdentity[KE_MAXIMUM_PROCESSORS];
 const PPROCESSOR_IDENTITY HalpProcessorIdentity = HalpStaticProcessorIdentity;
 
 #if 0

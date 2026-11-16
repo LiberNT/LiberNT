@@ -96,7 +96,8 @@ KiSystemStartupBootStack(VOID)
     KiAmd64BootMark(BootMarkBootStack);
 
     Prcb->ParentNode = KeNodeBlock[0];
-    Prcb->ParentNode->ProcessorMask |= Prcb->SetMember;
+    if (Prcb->Number < KI_SET_WORD_BITS)
+        Prcb->ParentNode->ProcessorMask |= Prcb->SetMember;
 
     PoInitializePrcb(Prcb);
     KiSaveProcessorControlState(&Prcb->ProcessorState);
@@ -165,7 +166,7 @@ KiInitializeKernel(
 
     KiInitSystem();
 
-    KeInitializeProcess(InitProcess, 0, MAXULONG_PTR, PageDirectory, FALSE);
+    KeInitializeProcess(InitProcess, 0, NULL, PageDirectory, FALSE);
     InitProcess->QuantumReset = MAXCHAR;
 
     KiInitializeStartupThread(Prcb, InitThread, InitProcess, IdleStack, NULL, NULL);

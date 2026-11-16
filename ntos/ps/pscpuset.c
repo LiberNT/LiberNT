@@ -57,7 +57,7 @@ PspCpuSetIdsToAffinity(
         Mask |= PSP_CPU_SET_MASK(Processor);
     }
 
-    if ((Mask & ~(KAFFINITY)KeActiveProcessors) != 0)
+    if ((Mask & ~KeQueryGroupAffinity(0)) != 0)
         return STATUS_INVALID_PARAMETER;
 
     *Affinity = Mask;
@@ -295,7 +295,7 @@ PspSetThreadCpuSets(
      * thread is bounded by the machine rather than by the process.
      */
     Allowed = (KAFFINITY)Process->AllowedCpuSets;
-    if (Allowed == 0) Allowed = (KAFFINITY)KeActiveProcessors;
+    if (Allowed == 0) Allowed = KeQueryGroupAffinity(0);
 
     if ((Affinity & ~Allowed) != 0) return STATUS_INVALID_PARAMETER;
 

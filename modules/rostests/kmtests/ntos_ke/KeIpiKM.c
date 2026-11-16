@@ -18,9 +18,13 @@ NTAPI
 IpiBroadcastWorker(
     _In_ ULONG_PTR Argument)
 {
+    PROCESSOR_NUMBER Processor;
+
+    KeGetCurrentProcessorNumberEx(&Processor);
     ok_eq_ulongptr(Argument, (ULONG_PTR)0x1BADD00D);
     InterlockedIncrement(&IpiCalls);
-    InterlockedOr64(&IpiMask, (LONG64)((KAFFINITY)1 << KeGetCurrentProcessorNumberEx(NULL)));
+    if (Processor.Group == 0)
+        InterlockedOr64(&IpiMask, (LONG64)(1ULL << Processor.Number));
     return 0x77;
 }
 
@@ -31,6 +35,7 @@ TestIpiGenericCall(VOID)
     ULONG_PTR Result;
     ULONG Round;
     ULONG Delivered = 0;
+    LONG Total = (LONG)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
     for (Round = 0; Round < 4; Round++)
     {
@@ -38,7 +43,7 @@ TestIpiGenericCall(VOID)
         IpiMask = 0;
         Result = KeIpiGenericCall(IpiBroadcastWorker, (ULONG_PTR)0x1BADD00D);
         ok_eq_ulongptr(Result, (ULONG_PTR)0x77);
-        ok_eq_long(IpiCalls, (LONG)KeNumberProcessors);
+        ok_eq_long(IpiCalls, Total);
         ok_eq_ulonglong((ULONGLONG)IpiMask, (ULONGLONG)KeQueryActiveProcessors());
     }
 
@@ -50,7 +55,7 @@ TestIpiGenericCall(VOID)
         IpiMask = 0;
         Result = KeIpiGenericCall(IpiBroadcastWorker, (ULONG_PTR)0x1BADD00D);
         if (Result == (ULONG_PTR)0x77 &&
-            IpiCalls == (LONG)KeNumberProcessors &&
+            IpiCalls == Total &&
             (ULONGLONG)IpiMask == (ULONGLONG)KeQueryActiveProcessors())
         {
             Delivered++;

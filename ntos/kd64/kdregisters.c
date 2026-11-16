@@ -50,7 +50,7 @@ KdpGetContext(
     _Inout_ PSTRING Data,
     _In_ PCONTEXT Context)
 {
-    if ((State->Processor >= (USHORT)(CCHAR)KeNumberProcessors) ||
+    if ((State->Processor >= KeProcessorCount) ||
         (Data->MaximumLength < sizeof(CONTEXT)))
     {
         State->ReturnStatus = STATUS_UNSUCCESSFUL;
@@ -79,7 +79,7 @@ KdpSetContext(
     _In_ PSTRING Data,
     _In_ PCONTEXT Context)
 {
-    if ((State->Processor >= (USHORT)(CCHAR)KeNumberProcessors) ||
+    if ((State->Processor >= KeProcessorCount) ||
         (Data->Length < sizeof(CONTEXT)))
     {
         State->ReturnStatus = STATUS_UNSUCCESSFUL;
@@ -106,7 +106,7 @@ KdpGetContextEx(
 {
     PDBGKD_CONTEXT_EX ContextEx = &State->u.ContextEx;
 
-    if ((State->Processor >= (USHORT)(CCHAR)KeNumberProcessors) ||
+    if ((State->Processor >= KeProcessorCount) ||
         (ContextEx->Offset > sizeof(CONTEXT)) ||
         (ContextEx->ByteCount > sizeof(CONTEXT) - ContextEx->Offset) ||
         (ContextEx->ByteCount > Data->MaximumLength))
@@ -138,7 +138,7 @@ KdpSetContextEx(
 {
     PDBGKD_CONTEXT_EX ContextEx = &State->u.ContextEx;
 
-    if ((State->Processor >= (USHORT)(CCHAR)KeNumberProcessors) ||
+    if ((State->Processor >= KeProcessorCount) ||
         (ContextEx->Offset > sizeof(CONTEXT)) ||
         (ContextEx->ByteCount > sizeof(CONTEXT) - ContextEx->Offset) ||
         (ContextEx->ByteCount > Data->Length))

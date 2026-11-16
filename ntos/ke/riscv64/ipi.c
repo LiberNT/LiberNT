@@ -20,7 +20,7 @@ static struct
 
 VOID FASTCALL KiIpiSend(KAFFINITY Targets, ULONG Request)
 {
-    KAFFINITY Remaining = Targets & KeActiveProcessors;
+    KAFFINITY Remaining = Targets & KeActiveProcessors.Bitmap[0];
     ULONG Number;
     Targets = Remaining;
     while (BitScanForwardAffinity(&Number, Remaining))
@@ -159,7 +159,7 @@ KeIpiGenericCall(PKIPI_BROADCAST_WORKER Function, ULONG_PTR Argument)
     }
 
     ASSERT(KiRiscvGenericCall.Arriving == 0 && KiRiscvGenericCall.Remaining == 0);
-    Targets = KeActiveProcessors & ~KeGetCurrentPrcb()->SetMember;
+    Targets = KeActiveProcessors.Bitmap[0] & ~KeGetCurrentPrcb()->SetMember;
     for (Bits = Targets; Bits; Bits &= Bits - 1) ++Count;
     ASSERT((Targets & KeGetCurrentPrcb()->SetMember) == 0);
     ASSERT((Targets == 0) == (Count == 0));

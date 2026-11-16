@@ -268,7 +268,7 @@ KdbpPseudoRegister(
 
     if (_stricmp(Name, "$cpu") == 0)
     {
-        *Value = KeGetCurrentProcessorNumber();
+        *Value = KeGetCurrentPrcb()->Number;
         return TRUE;
     }
 

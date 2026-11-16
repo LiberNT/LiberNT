@@ -66,8 +66,8 @@ static KTHREAD Thread0, Thread1;
 static LOADER_PARAMETER_BLOCK Loader;
 static PLOADER_PARAMETER_BLOCK KeLoaderBlock;
 static PKPRCB KiProcessorBlock[MAXIMUM_PROCESSORS];
-static CCHAR KeNumberProcessors;
-static KAFFINITY KeActiveProcessors;
+static ULONG KeProcessorCount;
+static KAFFINITY ActiveProcessors;
 static KSPIN_LOCK KiFreezeExecutionLock;
 static ULONG64 BootCycles, KeFeatureBits, Cr4;
 static ULONG KeXStateLength = 64;
@@ -76,11 +76,17 @@ static jmp_buf Started;
 static BOOLEAN KiX2ApicMsrs;
 static ULONG64 ApicBase = X2APIC_EXTENDED;
 @BOOT_MARKS@
-/* Whatever runs while the processor is being set up may walk [0, KeNumberProcessors) */
+/* Whatever runs while the processor is being set up may walk [0, KeProcessorCount) */
 static void CheckPublished(void) {
-    CCHAR i;
-    for (i = 0; i < KeNumberProcessors; i++)
-        CHECK(KiProcessorBlock[(int)i] != NULL);
+    ULONG i;
+    for (i = 0; i < KeProcessorCount; i++)
+        CHECK(KiProcessorBlock[i] != NULL);
+}
+static void KiSetProcessorCount(ULONG Count) { CHECK(KiProcessorBlock[Count - 1] != NULL); KeProcessorCount = Count; }
+/* A processor becomes active only once it is published and counted */
+static void KiActivateProcessor(PKPRCB Prcb) {
+    CHECK(Prcb->Number < KeProcessorCount && KiProcessorBlock[Prcb->Number] == Prcb);
+    ActiveProcessors |= 1ULL << Prcb->Number;
 }
 static ULONG64 __rdtsc(void) { return 1; }
 static ULONG64 __readmsr(ULONG Msr) { CHECK(Msr == X2APIC_BASE_MSR); return ApicBase; }
@@ -115,7 +121,8 @@ int main(void) {
     Loader.KernelStack = 0x10000;
     if (setjmp(Started) == 0)
         KiSystemStartup(&Loader);
-    CHECK(KeNumberProcessors == 1 && KiProcessorBlock[0] == &P0.Prcb && KeLoaderBlock == &Loader);
+    CHECK(KeProcessorCount == 1 && KiProcessorBlock[0] == &P0.Prcb && KeLoaderBlock == &Loader);
+    CHECK(ActiveProcessors == 1);
     CHECK(KiX2ApicMsrs);
 
     Scenario = "application processor";
@@ -125,7 +132,8 @@ int main(void) {
     Loader.Thread = (ULONG_PTR)&Thread1;
     if (setjmp(Started) == 0)
         KiSystemStartup(&Loader);
-    CHECK(KeNumberProcessors == 2 && KiProcessorBlock[1] == &P1.Prcb && KiProcessorBlock[0] == &P0.Prcb);
+    CHECK(KeProcessorCount == 2 && KiProcessorBlock[1] == &P1.Prcb && KiProcessorBlock[0] == &P0.Prcb);
+    CHECK(ActiveProcessors == 1);
     return 0;
 }
 '''.replace('@BOOT_MARKS@', boot_marks).replace('@STARTUP@', body('KiSystemStartup'))

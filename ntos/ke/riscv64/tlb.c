@@ -46,7 +46,7 @@ KiIpiSendTbFlush(KAFFINITY Targets, PVOID Address, ULONG Pages)
     ULONG Index;
     if (OldIrql < SYNCH_LEVEL) KfRaiseIrql(SYNCH_LEVEL);
     Self = KeGetCurrentPrcb()->SetMember;
-    Targets &= KeActiveProcessors;
+    Targets &= KeActiveProcessors.Bitmap[0];
     if (Targets & Self)
     {
         if (!Pages || Pages > FLUSH_MULTIPLE_MAXIMUM)
@@ -67,14 +67,14 @@ VOID NTAPI KeFlushProcessTb(VOID)
 {
     /* ASID zero: every context switch flushes before entering another root.
      * Broadcasting also covers a hart switching into this process now. */
-    KiIpiSendTbFlush(KeActiveProcessors, NULL, 0);
+    KiIpiSendTbFlush(KeActiveProcessors.Bitmap[0], NULL, 0);
 }
 
 VOID NTAPI KeFlushEntireTb(BOOLEAN Invalid, BOOLEAN AllProcessors)
 {
     UNREFERENCED_PARAMETER(Invalid);
     if (AllProcessors)
-        KiIpiSendTbFlush(KeActiveProcessors, NULL, 0);
+        KiIpiSendTbFlush(KeActiveProcessors.Bitmap[0], NULL, 0);
     else
         KeFlushCurrentTb();
 }

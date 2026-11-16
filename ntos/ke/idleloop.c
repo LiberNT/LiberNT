@@ -44,8 +44,8 @@ KiIdleRunThread(
 
     KfRaiseIrql(SYNCH_LEVEL);
 
-    if (KiIdleSummary & Prcb->SetMember)
-        InterlockedBitTestAndResetAffinity(&KiIdleSummary, Prcb->Number);
+    if (KiIsProcessorInSet(KiIdleSummary, Prcb->Number))
+        KiInterlockedRemoveProcessorFromSet(KiIdleSummary, Prcb->Number);
 
     Prcb->CurrentThread = NewThread;
     NewThread->State = Running;
@@ -65,8 +65,8 @@ VOID
 KiIdleSleep(
     _Inout_ PKPRCB Prcb)
 {
-    if (!(KiIdleSummary & Prcb->SetMember))
-        InterlockedBitTestAndSetAffinity(&KiIdleSummary, Prcb->Number);
+    if (!KiIsProcessorInSet(KiIdleSummary, Prcb->Number))
+        KiInterlockedAddProcessorToSet(KiIdleSummary, Prcb->Number);
 
     /* Advertise sleeping before the last look, so a waker either sees it or we see its work */
     Prcb->Sleeping = TRUE;

@@ -34,7 +34,7 @@ KdpControlSpaceAddress(
     *SourceLength = 0;
     *Scratch = 0;
 
-    if (Processor >= (ULONG)(CCHAR)KeNumberProcessors)
+    if (Processor >= KeProcessorCount)
         return STATUS_INVALID_PARAMETER;
 
     Prcb = KiProcessorBlock[Processor];
@@ -128,7 +128,7 @@ KdpSysWriteControlSpace(
     if (BaseAddress != AMD64_DEBUG_CONTROL_SPACE_KSPECIAL)
         return STATUS_INVALID_PARAMETER;
 
-    if (Processor >= (ULONG)(CCHAR)KeNumberProcessors)
+    if (Processor >= KeProcessorCount)
         return STATUS_INVALID_PARAMETER;
 
     Prcb = KiProcessorBlock[Processor];

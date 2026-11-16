@@ -204,6 +204,12 @@ ExpReadLoadOptions(
         DPRINT("Boot without a graphical screen requested\n");
     }
 
+    Value = ExpFindLoadOption(Options, "GROUPSIZE=");
+    if (Value != NULL)
+    {
+        KeSetMaximumGroupSize((ULONG)atol(Value));
+    }
+
     Value = ExpFindLoadOption(Options, "BURNMEMORY=");
     if (Value != NULL)
     {
@@ -1129,7 +1135,7 @@ Phase1InitializationDiscard(
     }
 
     KeStartAllProcessors();
-    KeMaximumProcessors = KeNumberProcessors;
+    KiCompleteProcessorNumbering();
 
     if (!HalAllProcessorsStarted())
     {

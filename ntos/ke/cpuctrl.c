@@ -13,13 +13,21 @@
 /* GLOBALS ********************************************************************/
 
 /* How many processors the system brought up, and which of them are running. */
+ULONG KeProcessorCount;
+KAFFINITY_EX KeActiveProcessors = { KAFFINITY_EX_STATIC_GROUPS, KAFFINITY_EX_STATIC_GROUPS };
+
+/* The count a caller from before processor groups is given: the processors of group 0 */
 volatile CCHAR KeNumberProcessors;
-KAFFINITY KeActiveProcessors;
+
+/* Only ever shrinks, so a set written under an older value stays whole under a newer one */
+ULONG KiProcessorSetWords = (KiArchMaximumProcessors() + KI_SET_WORD_BITS - 1) / KI_SET_WORD_BITS;
+
+ULONG KiMaximumGroupSize = MAXIMUM_PROC_PER_GROUP;
 
 /* The ceiling the boot options asked for, and whether they asked at all. The
    difference matters: a system told to use two of eight processors must not be
    mistaken for one that only has two. */
-ULONG KeMaximumProcessors = MAXIMUM_PROCESSORS;
+ULONG KeMaximumProcessors = KiArchMaximumProcessors();
 ULONG KeNumprocSpecified;
 ULONG KeBootprocSpecified;
 
@@ -30,10 +38,10 @@ ULONG KeBootprocSpecified;
  * processor is still running and still takes interrupts; what it stops getting
  * is new work, so that its package can reach a deeper idle state.
  */
-static KAFFINITY KiParkedProcessors;
+static KAFFINITY KiParkedProcessors[KE_MAXIMUM_GROUPS];
 
-KAFFINITY KiHeteroEfficientSet;
-KAFFINITY KiHeteroPerformanceSet;
+KAFFINITY KiHeteroEfficientSet[KE_MAXIMUM_GROUPS];
+KAFFINITY KiHeteroPerformanceSet[KE_MAXIMUM_GROUPS];
 
 #define KI_PARKING_PERIOD_MS 50
 #define KI_PARKING_CONTAIN_INTERVALS 6
@@ -68,9 +76,133 @@ static volatile LONG64 KiParkingHintHoldoff;
 static KI_PARKING_TIMER_MODE KiParkingTimerMode;
 static ULONG64 KiParkingSampleTime;
 static ULONG KiParkingQuietIntervals;
-static KAFFINITY KiAggregatorParkedSet;
-static KAFFINITY KiHeteroParkedSet;
-static KI_PARKING_SAMPLE KiParkingSamples[MAXIMUM_PROCESSORS];
+static KAFFINITY KiAggregatorParkedSet[KE_MAXIMUM_GROUPS];
+static KAFFINITY KiHeteroParkedSet[KE_MAXIMUM_GROUPS];
+static KI_PARKING_SAMPLE KiParkingSamples[KE_MAXIMUM_PROCESSORS];
+
+/* PRIVATE FUNCTIONS: NUMBERING ************************************************/
+
+VOID
+NTAPI
+KiSetProcessorCount(
+    _In_ ULONG Count)
+{
+    ASSERT((Count != 0) && (Count <= KE_MAXIMUM_PROCESSORS));
+    ASSERT(Count <= KiProcessorSetWords * KI_SET_WORD_BITS);
+
+    KeProcessorCount = Count;
+    KeNumberProcessors = (CCHAR)min(Count, KiMaximumGroupSize);
+}
+
+VOID
+NTAPI
+KiActivateProcessor(
+    _In_ PKPRCB Prcb)
+{
+    ASSERT(Prcb->Number < KeProcessorCount);
+    ASSERT(KiProcessorBlock[Prcb->Number] == Prcb);
+
+    KiInterlockedAddProcessorToSet(KeActiveProcessors.Bitmap, Prcb->Number);
+}
+
+/* The size has to be a power of two no larger than a group, as Windows documents for its groupsize boot option */
+CODE_SEG("INIT")
+VOID
+NTAPI
+KeSetMaximumGroupSize(
+    _In_ ULONG GroupSize)
+{
+    ASSERT(KeProcessorCount == 1);
+
+    if ((GroupSize == 0) || (GroupSize > MAXIMUM_PROC_PER_GROUP) || ((GroupSize & (GroupSize - 1)) != 0))
+    {
+        DPRINT1("Ignoring a processor group size of %lu\n", GroupSize);
+        return;
+    }
+
+    /* An architecture that keeps its processors in one word has one group */
+    if (KiArchMaximumProcessors() <= MAXIMUM_PROC_PER_GROUP)
+        return;
+
+    KiMaximumGroupSize = GroupSize;
+    KiSetProcessorCount(KeProcessorCount);
+}
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+KiCompleteProcessorNumbering(VOID)
+{
+    ULONG Words = (KeProcessorCount + KI_SET_WORD_BITS - 1) / KI_SET_WORD_BITS;
+
+    ASSERT((Words != 0) && (Words <= KiProcessorSetWords));
+
+    KeMaximumProcessors = KeProcessorCount;
+    KiProcessorSetWords = Words;
+}
+
+/* A group is a run of KiMaximumGroupSize processor numbers, which starts inside a word when that size is below a word */
+KAFFINITY
+NTAPI
+KiQueryGroupOfProcessorSet(
+    _In_ const volatile KAFFINITY *Set,
+    _In_ USHORT Group)
+{
+    ULONG First = (ULONG)Group * KiMaximumGroupSize;
+    ULONG Word = KI_SET_WORD(First);
+    ULONG Shift = First % KI_SET_WORD_BITS;
+    KAFFINITY Mask;
+
+    ASSERT(KiMaximumGroupSize <= KI_SET_WORD_BITS);
+    if (Word >= KiProcessorSetWords)
+        return 0;
+
+    Mask = Set[Word] >> Shift;
+    if ((Shift + KiMaximumGroupSize > KI_SET_WORD_BITS) && (Word + 1 < KiProcessorSetWords))
+        Mask |= Set[Word + 1] << (KI_SET_WORD_BITS - Shift);
+
+    if (KiMaximumGroupSize < KI_SET_WORD_BITS)
+        Mask &= AFFINITY_MASK(KiMaximumGroupSize) - 1;
+
+    return Mask;
+}
+
+VOID
+NTAPI
+KiAssignGroupOfProcessorSet(
+    _Inout_ KAFFINITY *Set,
+    _In_ USHORT Group,
+    _In_ KAFFINITY Mask)
+{
+    ULONG First = (ULONG)Group * KiMaximumGroupSize;
+    ULONG Word = KI_SET_WORD(First);
+    ULONG Shift = First % KI_SET_WORD_BITS;
+    KAFFINITY GroupBits = (KAFFINITY)-1;
+
+    ASSERT(KiMaximumGroupSize <= KI_SET_WORD_BITS);
+    if (Word >= KiProcessorSetWords)
+        return;
+
+    if (KiMaximumGroupSize < KI_SET_WORD_BITS)
+        GroupBits = AFFINITY_MASK(KiMaximumGroupSize) - 1;
+
+    Mask &= GroupBits;
+    Set[Word] = (Set[Word] & ~(GroupBits << Shift)) | (Mask << Shift);
+    if ((Shift + KiMaximumGroupSize > KI_SET_WORD_BITS) && (Word + 1 < KiProcessorSetWords))
+    {
+        Set[Word + 1] = (Set[Word + 1] & ~(GroupBits >> (KI_SET_WORD_BITS - Shift))) |
+                        (Mask >> (KI_SET_WORD_BITS - Shift));
+    }
+}
+
+/* Windows documents the legacy number outside group 0 only as being below the processor count of group 0 */
+ULONG
+NTAPI
+KiLegacyProcessorNumber(
+    _In_ ULONG Number)
+{
+    return Number % KiMaximumGroupSize;
+}
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
@@ -83,7 +215,7 @@ KAFFINITY
 NTAPI
 KeQueryActiveProcessors(VOID)
 {
-    return KeActiveProcessors;
+    return KiQueryGroupOfProcessorSet(KeActiveProcessors.Bitmap, 0);
 }
 
 /*
@@ -121,7 +253,7 @@ KeQueryActiveProcessorCountEx(
  * How many processors are running, and which ones.
  *
  * This is the form from before processor groups existed, so the mask it hands
- * back can only describe one group. It describes the group the caller is in,
+ * back can only describe one group. Windows documents that group as group 0,
  * which on a machine with one group is every processor there is.
  *
  * sdk/include/xdk/kefuncs.h declares it only under SINGLE_GROUP_LEGACY_API,
@@ -138,16 +270,7 @@ NTAPI
 KeQueryActiveProcessorCount(
     _Out_opt_ PKAFFINITY ActiveProcessors)
 {
-    PROCESSOR_NUMBER Processor;
-    KAFFINITY Active;
-
-    KeGetCurrentProcessorNumberEx(&Processor);
-
-    /* A processor whose group the topology does not know answers for group 0 */
-    if (Processor.Group >= KeQueryActiveGroupCount())
-        Processor.Group = 0;
-
-    Active = KeQueryGroupAffinity(Processor.Group);
+    KAFFINITY Active = KeQueryGroupAffinity(0);
 
     if (ActiveProcessors != NULL)
         *ActiveProcessors = Active;
@@ -226,17 +349,24 @@ NTAPI
 KeQueryMaximumProcessorCountEx(
     _In_ USHORT GroupNumber)
 {
-    if ((GroupNumber != ALL_PROCESSOR_GROUPS) && (GroupNumber != 0))
+    ULONG Maximum = min(KeMaximumProcessors, KE_MAXIMUM_PROCESSORS);
+    ULONG First;
+
+    if (GroupNumber == ALL_PROCESSOR_GROUPS)
+        return Maximum;
+
+    First = (ULONG)GroupNumber * KiMaximumGroupSize;
+    if (First >= Maximum)
         return 0;
 
-    return min(KeMaximumProcessors, MAXIMUM_PROCESSORS);
+    return min(Maximum - First, KiMaximumGroupSize);
 }
 
 ULONG
 NTAPI
 KeQueryMaximumProcessorCount(VOID)
 {
-    return KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    return KeQueryMaximumProcessorCountEx(0);
 }
 
 /*
@@ -253,7 +383,7 @@ KeGetCurrentProcessorNumberEx(
     if (ProcNumber != NULL)
     {
         ProcNumber->Group = KiPrcbGroup(Prcb);
-        ProcNumber->Number = (UCHAR)Prcb->Number;
+        ProcNumber->Number = (UCHAR)(Prcb->Number % KiMaximumGroupSize);
         ProcNumber->Reserved = 0;
     }
 
@@ -302,11 +432,12 @@ NtGetCurrentProcessorNumberEx(
  * processor a thread may use is parked the set is empty, and the caller falls
  * back to using them anyway: parking must never stop a thread running.
  */
-KAFFINITY
+VOID
 FASTCALL
-KiGetNonParkedProcessorSet(VOID)
+KiGetNonParkedProcessorSet(
+    _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *NonParkedSet)
 {
-    return KeActiveProcessors & ~KiParkedProcessors;
+    KiSubtractProcessorSets(NonParkedSet, KeActiveProcessors.Bitmap, KiParkedProcessors);
 }
 
 BOOLEAN
@@ -314,22 +445,7 @@ FASTCALL
 KiIsProcessorParked(
     _In_ PKPRCB Prcb)
 {
-    return (KiParkedProcessors & AFFINITY_MASK(Prcb->Number)) != 0;
-}
-
-static
-ULONG
-KiCountProcessorSet(
-    _In_ KAFFINITY ProcessorSet)
-{
-    ULONG Count = 0;
-
-    while (ProcessorSet)
-    {
-        ProcessorSet &= ProcessorSet - 1;
-        Count++;
-    }
-    return Count;
+    return KiIsProcessorInSet(KiParkedProcessors, Prcb->Number);
 }
 
 static
@@ -381,22 +497,24 @@ KiThreadPrefersEfficiency(
     return FALSE;
 }
 
-KAFFINITY
+VOID
 FASTCALL
 KiHeteroPreferredProcessorSet(
     _In_ PKTHREAD Thread,
-    _In_ KAFFINITY ProcessorSet)
+    _Inout_ KAFFINITY *ProcessorSet)
 {
-    KAFFINITY EfficientSet = *(volatile KAFFINITY *)&KiHeteroEfficientSet;
+    KI_PROCESSOR_SET EfficientSet;
 
-    if (!(ProcessorSet & EfficientSet) || !(ProcessorSet & ~EfficientSet))
-        return ProcessorSet;
+    if (!KiAndProcessorSets(EfficientSet, ProcessorSet, KiHeteroEfficientSet) ||
+        KiAreProcessorSetsEqual(EfficientSet, ProcessorSet))
+    {
+        return;
+    }
 
     if (!KiThreadPrefersEfficiency(Thread))
-        return ProcessorSet;
+        return;
 
-    ASSERT((ProcessorSet & EfficientSet) != 0);
-    return ProcessorSet & EfficientSet;
+    KiCopyProcessorSet(ProcessorSet, EfficientSet);
 }
 
 BOOLEAN
@@ -405,28 +523,30 @@ KiShouldVacateProcessor(
     _In_ PKTHREAD Thread,
     _In_ PKPRCB Prcb)
 {
-    KAFFINITY Allowed, EfficientSet, IdleSet, NonParkedSet;
+    KI_PROCESSOR_SET Allowed, EfficientSet, NonParkedSet;
+    BOOLEAN AnyAllowed;
 
     ASSERT(Thread != Prcb->IdleThread);
-    ASSERT(Prcb->SetMember == AFFINITY_MASK(Prcb->Number));
 #ifdef CONFIG_SMP
     ASSERT(Prcb->PrcbLock != 0);
 #endif
 
-    NonParkedSet = KiGetNonParkedProcessorSet();
-    Allowed = KiThreadAffinityMask(Thread) & NonParkedSet;
-    if (!(NonParkedSet & Prcb->SetMember))
-        return Allowed != 0;
+    KiGetNonParkedProcessorSet(NonParkedSet);
+    AnyAllowed = KiAndProcessorSets(Allowed, KiThreadAffinity(Thread), NonParkedSet);
+    if (!KiIsProcessorInSet(NonParkedSet, Prcb->Number))
+        return AnyAllowed;
 
-    EfficientSet = *(volatile KAFFINITY *)&KiHeteroEfficientSet & Allowed;
-    if ((EfficientSet == 0) || (EfficientSet == Allowed))
+    if (!KiAndProcessorSets(EfficientSet, KiHeteroEfficientSet, Allowed) ||
+        KiAreProcessorSetsEqual(EfficientSet, Allowed))
+    {
         return FALSE;
+    }
 
-    if (!(EfficientSet & Prcb->SetMember))
+    if (!KiIsProcessorInSet(EfficientSet, Prcb->Number))
         return KiThreadPrefersEfficiency(Thread);
 
-    IdleSet = *(volatile KAFFINITY *)&KiIdleSummary;
-    return (Allowed & ~EfficientSet & IdleSet) && !KiThreadPrefersEfficiency(Thread);
+    KiSubtractProcessorSets(Allowed, Allowed, EfficientSet);
+    return KiDoProcessorSetsIntersect(Allowed, KiIdleSummary) && !KiThreadPrefersEfficiency(Thread);
 }
 
 VOID
@@ -434,16 +554,16 @@ FASTCALL
 KiCheckProcessorUnpark(
     _In_ PKTHREAD Thread)
 {
-    KAFFINITY Affinity, NonParkedSet;
+    KI_PROCESSOR_SET Affinity, NonParkedSet;
 
     if (!*(volatile LONG *)&KiParkingContained)
         return;
 
-    Affinity = KiThreadAffinityMask(Thread) & KeActiveProcessors;
-    NonParkedSet = KiGetNonParkedProcessorSet();
-    if (!(Affinity & NonParkedSet) ||
-        !(Affinity & *(volatile KAFFINITY *)&KiHeteroParkedSet) ||
-        (Affinity & NonParkedSet & *(volatile KAFFINITY *)&KiIdleSummary) ||
+    KiAndProcessorSets(Affinity, KiThreadAffinity(Thread), KeActiveProcessors.Bitmap);
+    KiGetNonParkedProcessorSet(NonParkedSet);
+    if (!KiAndProcessorSets(NonParkedSet, NonParkedSet, Affinity) ||
+        !KiDoProcessorSetsIntersect(Affinity, KiHeteroParkedSet) ||
+        KiDoProcessorSetsIntersect(NonParkedSet, KiIdleSummary) ||
         ((LONG64)KeQueryInterruptTime() < InterlockedCompareExchange64(&KiParkingHintHoldoff, 0, 0)) ||
         KiThreadPrefersEfficiency(Thread))
     {
@@ -458,51 +578,62 @@ static
 VOID
 KiPublishParkedProcessors(VOID)
 {
-    KAFFINITY ActiveSet = KeActiveProcessors;
-    KAFFINITY ParkedSet, NonParkedSet, OldNonParkedSet, InterruptSet, Remaining;
-    ULONG Processor;
+    const KAFFINITY *ActiveSet = KeActiveProcessors.Bitmap;
+    KI_PROCESSOR_SET ParkedSet, NonParkedSet, InterruptSet;
+    KAFFINITY OldParked;
+    ULONG Processor, Word;
+    BOOLEAN Found;
     PKPRCB Prcb;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     ASSERT(KiParkingLockOwner == KeGetCurrentPrcb());
-    ASSERT((KiHeteroParkedSet & ~KiHeteroPerformanceSet) == 0);
+    ASSERT(KiIsProcessorSubset(KiHeteroParkedSet, KiHeteroPerformanceSet));
 
-    ParkedSet = (KiAggregatorParkedSet | KiHeteroParkedSet) & ActiveSet;
-    if (ParkedSet == ActiveSet)
-        ParkedSet = KiAggregatorParkedSet & ActiveSet;
-    NonParkedSet = ActiveSet & ~ParkedSet;
-    ASSERT(NonParkedSet != 0);
+    KiOrProcessorSets(ParkedSet, KiAggregatorParkedSet, KiHeteroParkedSet);
+    KiAndProcessorSets(ParkedSet, ParkedSet, ActiveSet);
+    if (KiAreProcessorSetsEqual(ParkedSet, ActiveSet))
+        KiAndProcessorSets(ParkedSet, KiAggregatorParkedSet, ActiveSet);
+    Found = KiSubtractProcessorSets(NonParkedSet, ActiveSet, ParkedSet);
+    ASSERT(Found);
 
-    Remaining = ActiveSet;
-    while (BitScanForwardAffinity(&Processor, Remaining))
+    for (Found = KiFindProcessorInSet(ActiveSet, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(ActiveSet, Processor + 1, &Processor))
     {
-        Remaining &= ~AFFINITY_MASK(Processor);
         Prcb = KiProcessorBlock[Processor];
         ASSERT((Prcb != NULL) && (Prcb->Number == Processor));
-        Prcb->PowerState.Parked = (ParkedSet & AFFINITY_MASK(Processor)) ? 1 : 0;
+        Prcb->PowerState.Parked = KiIsProcessorInSet(ParkedSet, Processor) ? 1 : 0;
     }
 
-    OldNonParkedSet = ActiveSet & ~(KAFFINITY)(ULONG_PTR)InterlockedExchangePointer((PVOID volatile *)&KiParkedProcessors,
-                                                                                    (PVOID)(ULONG_PTR)ParkedSet);
+    for (Word = 0; Word < KiProcessorSetWords; Word++)
+    {
+        OldParked = (KAFFINITY)(ULONG_PTR)InterlockedExchangePointer((PVOID volatile *)&KiParkedProcessors[Word],
+                                                                     (PVOID)(ULONG_PTR)ParkedSet[Word]);
+        InterruptSet[Word] = NonParkedSet[Word] & OldParked;
+    }
     MmWriteableSharedUserData->UnparkedProcessorCount = (USHORT)KiCountProcessorSet(NonParkedSet);
-    ASSERT(KiGetNonParkedProcessorSet() == NonParkedSet);
 
-    InterruptSet = NonParkedSet & ~OldNonParkedSet & ~KeGetCurrentPrcb()->SetMember;
-    if (InterruptSet != 0)
-        KiIpiSend(InterruptSet, IPI_DPC);
+    KiRemoveProcessorFromSet(InterruptSet, KeGetCurrentPrcb()->Number);
+    for (Found = KiFindProcessorInSet(InterruptSet, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(InterruptSet, Processor + 1, &Processor))
+    {
+        KiIpiSendProcessor(Processor, IPI_DPC);
+    }
 }
 
 static
 VOID
 KiParkingResetSamples(VOID)
 {
-    KAFFINITY Remaining = KeActiveProcessors;
     ULONG Processor;
+    BOOLEAN Found;
     PKPRCB Prcb;
 
-    while (BitScanForwardAffinity(&Processor, Remaining))
+    for (Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, Processor + 1, &Processor))
     {
-        Remaining &= ~AFFINITY_MASK(Processor);
         Prcb = KiProcessorBlock[Processor];
         ASSERT((Prcb != NULL) && (Prcb->IdleThread != NULL));
         KiParkingSamples[Processor].CycleTime = *(volatile ULONG64 *)&Prcb->CycleTime;
@@ -516,16 +647,17 @@ KiParkingSampleLoad(
     _Out_ PULONG EfficientBusy,
     _Out_ PULONG PerformanceBusy)
 {
-    KAFFINITY Remaining = KeActiveProcessors;
     ULONG64 CycleTime, IdleCycleTime, Cycles, IdleCycles;
     ULONG Processor, BusyPercent;
+    BOOLEAN Found;
     PKPRCB Prcb;
 
     *EfficientBusy = 0;
     *PerformanceBusy = 0;
-    while (BitScanForwardAffinity(&Processor, Remaining))
+    for (Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(KeActiveProcessors.Bitmap, Processor + 1, &Processor))
     {
-        Remaining &= ~AFFINITY_MASK(Processor);
         Prcb = KiProcessorBlock[Processor];
         ASSERT((Prcb != NULL) && (Prcb->IdleThread != NULL));
         CycleTime = *(volatile ULONG64 *)&Prcb->CycleTime;
@@ -536,7 +668,7 @@ KiParkingSampleLoad(
         KiParkingSamples[Processor].IdleCycleTime = IdleCycleTime;
         BusyPercent = ((Cycles != 0) && (IdleCycles < Cycles)) ? (ULONG)(((Cycles - IdleCycles) * 100) / Cycles) : 0;
         ASSERT(BusyPercent <= 100);
-        if (KiHeteroEfficientSet & AFFINITY_MASK(Processor))
+        if (KiIsProcessorInSet(KiHeteroEfficientSet, Processor))
             *EfficientBusy += BusyPercent;
         else
             *PerformanceBusy += BusyPercent;
@@ -579,6 +711,7 @@ KiParkingDpcRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     ULONG EfficientBusy, PerformanceBusy, EfficientCapacity;
+    KI_PROCESSOR_SET EfficientSet;
     ULONG64 Now;
 
     UNREFERENCED_PARAMETER(DeferredContext);
@@ -586,14 +719,13 @@ KiParkingDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     ASSERT((Dpc == &KiParkingUnparkDpc) || (Dpc == &KiParkingTimerDpc));
-    ASSERT(KiHeteroEfficientSet != 0);
-
-    EfficientCapacity = KiCountProcessorSet(KiHeteroEfficientSet & KeActiveProcessors) * 100;
+    KiAndProcessorSets(EfficientSet, KiHeteroEfficientSet, KeActiveProcessors.Bitmap);
+    EfficientCapacity = KiCountProcessorSet(EfficientSet) * 100;
     ASSERT(EfficientCapacity != 0);
 
     KiAcquireParkingLock();
     Now = KeQueryInterruptTime();
-    ASSERT(((KiParkingContained != 0) == (KiHeteroParkedSet != 0)));
+    ASSERT(((KiParkingContained != 0) == !KiIsProcessorSetEmpty(KiHeteroParkedSet)));
     ASSERT((KiParkingTimerMode != KiParkingTimerSampling) || !KiParkingContained);
     ASSERT((KiParkingTimerMode != KiParkingTimerChecking) || KiParkingContained);
 
@@ -615,9 +747,9 @@ KiParkingDpcRoutine(
             KiParkingTimerMode = KiParkingTimerIdle;
             if (EfficientBusy * 100 >= EfficientCapacity * KI_PARKING_UNPARK_PERCENT)
             {
-                DPRINT1("Unparking performance processors 0x%Ix: efficiency processors are %lu%% busy\n",
-                        KiHeteroParkedSet, EfficientBusy * 100 / EfficientCapacity);
-                KiHeteroParkedSet = 0;
+                DPRINT1("Unparking %lu performance processors: efficiency processors are %lu%% busy\n",
+                        KiCountProcessorSet(KiHeteroParkedSet), EfficientBusy * 100 / EfficientCapacity);
+                KiClearProcessorSet(KiHeteroParkedSet);
                 InterlockedExchange(&KiParkingContained, 0);
                 KiPublishParkedProcessors();
                 KiArmParkingTimer(KiParkingTimerSampling, Now);
@@ -643,13 +775,13 @@ KiParkingDpcRoutine(
 
             if (KiParkingQuietIntervals >= KI_PARKING_CONTAIN_INTERVALS)
             {
-                DPRINT1("Parking performance processors 0x%Ix: projected load %lu%% of the efficiency processors\n",
-                        KiHeteroPerformanceSet,
+                DPRINT1("Parking %lu performance processors: projected load %lu%% of the efficiency processors\n",
+                        KiCountProcessorSet(KiHeteroPerformanceSet),
                         (EfficientBusy + KI_PARKING_PERFORMANCE_SCALE * PerformanceBusy) * 100 / EfficientCapacity);
                 KeCancelTimer(&KiParkingTimer);
                 KiParkingTimerMode = KiParkingTimerIdle;
                 KiParkingQuietIntervals = 0;
-                KiHeteroParkedSet = KiHeteroPerformanceSet & KeActiveProcessors;
+                KiAndProcessorSets(KiHeteroParkedSet, KiHeteroPerformanceSet, KeActiveProcessors.Bitmap);
                 InterlockedExchange(&KiParkingContained, 1);
                 KiPublishParkedProcessors();
             }
@@ -663,27 +795,27 @@ VOID
 NTAPI
 KiInitializeProcessorEfficiency(VOID)
 {
-    UCHAR Classes[MAXIMUM_PROCESSORS];
-    KAFFINITY ActiveSet = KeActiveProcessors;
-    KAFFINITY EfficientSet = 0;
-    KAFFINITY Remaining;
+    UCHAR Classes[KE_MAXIMUM_PROCESSORS];
+    const KAFFINITY *ActiveSet = KeActiveProcessors.Bitmap;
+    KI_PROCESSOR_SET EfficientSet, PerformanceSet;
     UCHAR LowestClass = MAXUCHAR;
     UCHAR HighestClass = 0;
     ULONG Processor;
+    BOOLEAN Found;
     PKPRCB Prcb;
     KIRQL OldIrql;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
-    ASSERT(ActiveSet != 0);
-    ASSERT((KiHeteroEfficientSet == 0) && (KiHeteroPerformanceSet == 0));
+    ASSERT(!KiIsProcessorSetEmpty(ActiveSet));
+    ASSERT(KiIsProcessorSetEmpty(KiHeteroEfficientSet) && KiIsProcessorSetEmpty(KiHeteroPerformanceSet));
 
     RtlZeroMemory(Classes, sizeof(Classes));
     KiQueryProcessorEfficiencyClasses(Classes);
 
-    Remaining = ActiveSet;
-    while (BitScanForwardAffinity(&Processor, Remaining))
+    for (Found = KiFindProcessorInSet(ActiveSet, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(ActiveSet, Processor + 1, &Processor))
     {
-        Remaining &= ~AFFINITY_MASK(Processor);
         Prcb = KiProcessorBlock[Processor];
         ASSERT((Prcb != NULL) && (Prcb->Number == Processor));
         ASSERT(Prcb->PowerState.Parked == 0);
@@ -691,7 +823,8 @@ KiInitializeProcessorEfficiency(VOID)
         LowestClass = min(LowestClass, Classes[Processor]);
         HighestClass = max(HighestClass, Classes[Processor]);
     }
-    MmWriteableSharedUserData->UnparkedProcessorCount = (USHORT)KiCountProcessorSet(ActiveSet & ~KiParkedProcessors);
+    KiGetNonParkedProcessorSet(PerformanceSet);
+    MmWriteableSharedUserData->UnparkedProcessorCount = (USHORT)KiCountProcessorSet(PerformanceSet);
 
     if (LowestClass == HighestClass)
     {
@@ -699,24 +832,26 @@ KiInitializeProcessorEfficiency(VOID)
         return;
     }
 
-    Remaining = ActiveSet;
-    while (BitScanForwardAffinity(&Processor, Remaining))
+    KiClearProcessorSet(EfficientSet);
+    for (Found = KiFindProcessorInSet(ActiveSet, 0, &Processor);
+         Found;
+         Found = KiFindProcessorInSet(ActiveSet, Processor + 1, &Processor))
     {
-        Remaining &= ~AFFINITY_MASK(Processor);
         if (Classes[Processor] == LowestClass)
-            EfficientSet |= AFFINITY_MASK(Processor);
+            KiAddProcessorToSet(EfficientSet, Processor);
     }
-    ASSERT((EfficientSet != 0) && ((ActiveSet & ~EfficientSet) != 0));
+    Found = KiSubtractProcessorSets(PerformanceSet, ActiveSet, EfficientSet);
+    ASSERT(Found && !KiIsProcessorSetEmpty(EfficientSet));
 
     KeInitializeDpc(&KiParkingTimerDpc, KiParkingDpcRoutine, NULL);
     KeInitializeDpc(&KiParkingUnparkDpc, KiParkingDpcRoutine, NULL);
     KeInitializeTimerEx(&KiParkingTimer, NotificationTimer);
 
-    KiHeteroPerformanceSet = ActiveSet & ~EfficientSet;
+    KiCopyProcessorSet(KiHeteroPerformanceSet, PerformanceSet);
     KeMemoryBarrier();
-    KiHeteroEfficientSet = EfficientSet;
-    DPRINT1("Processor efficiency classes %u to %u: efficiency processors 0x%Ix, performance processors 0x%Ix\n",
-            LowestClass, HighestClass, EfficientSet, KiHeteroPerformanceSet);
+    KiCopyProcessorSet(KiHeteroEfficientSet, EfficientSet);
+    DPRINT1("Processor efficiency classes %u to %u: %lu efficiency processors, %lu performance processors\n",
+            LowestClass, HighestClass, KiCountProcessorSet(EfficientSet), KiCountProcessorSet(PerformanceSet));
 
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     KiAcquireParkingLock();
@@ -739,14 +874,14 @@ PoSetProcessorAggregatorParking(
     _In_ ULONG RequestedParkedProcessors,
     _Out_ PULONG ParkedProcessors)
 {
-    KAFFINITY Active, Park = 0;
+    KI_PROCESSOR_SET Park;
     ULONG Count, Available, Index;
     KIRQL OldIrql;
 
     if (ParkedProcessors == NULL)
         return STATUS_INVALID_PARAMETER;
 
-    Active = KeActiveProcessors;
+    KiClearProcessorSet(Park);
     Available = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
     /* One processor always has to be left to run things */
@@ -754,20 +889,20 @@ PoSetProcessorAggregatorParking(
         RequestedParkedProcessors = Available - 1;
 
     Count = 0;
-    Index = MAXIMUM_PROCESSORS;
+    Index = KeProcessorCount;
     while ((Index > 0) && (Count < RequestedParkedProcessors))
     {
         Index--;
-        if ((Active & AFFINITY_MASK(Index)) == 0)
+        if (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, Index))
             continue;
 
-        Park |= AFFINITY_MASK(Index);
+        KiAddProcessorToSet(Park, Index);
         Count++;
     }
 
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     KiAcquireParkingLock();
-    KiAggregatorParkedSet = Park;
+    KiCopyProcessorSet(KiAggregatorParkedSet, Park);
     KiPublishParkedProcessors();
     KiReleaseParkingLock();
     KeLowerIrql(OldIrql);

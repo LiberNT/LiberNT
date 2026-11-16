@@ -51,7 +51,7 @@ BOOLEAN KiRelaxedTiming;
 LONG KiTickOffset;
 
 /* What is left of the default period on each processor before its run time is charged again */
-static LONG KiRunTimeOffset[MAXIMUM_PROCESSORS];
+static LONG KiRunTimeOffset[KE_MAXIMUM_PROCESSORS];
 
 /* Where in a default-length tick the clock currently stands, so that a timer
    rounded to the default resolution lands on the same boundary as the tick. */
@@ -102,7 +102,7 @@ static volatile ULONG KiTickSnapshotIncrement;
 static BOOLEAN KiInterruptTimeFrozen;
 
 static volatile LONG KiClockStopCount;
-static LONG KiClockStopSeen[MAXIMUM_PROCESSORS];
+static LONG KiClockStopSeen[KE_MAXIMUM_PROCESSORS];
 
 /* The bucket of the timer table the clock has checked up to. */
 static ULONG KiTimerScanHand;
@@ -311,7 +311,6 @@ KiCheckClockWatchdog(
     _In_ ULONG Ticks)
 {
     PKPRCB OwnerPrcb = KiClockOwnerPrcb;
-    KAFFINITY Watchers;
     ULONG Number;
     LONG Stops;
 
@@ -325,7 +324,7 @@ KiCheckClockWatchdog(
 
     /* The first tick after the machine was stopped measures the stop, not a silent processor */
     Stops = ReadAcquire(&KiClockStopCount);
-    ASSERT(Prcb->Number < MAXIMUM_PROCESSORS);
+    ASSERT(Prcb->Number < KE_MAXIMUM_PROCESSORS);
     if (KiClockStopSeen[Prcb->Number] != Stops)
     {
         KiClockStopSeen[Prcb->Number] = Stops;
@@ -334,12 +333,12 @@ KiCheckClockWatchdog(
 
     if (Prcb == OwnerPrcb)
     {
-        for (Number = 0; Number < (ULONG)(UCHAR)KeNumberProcessors; Number++)
+        for (Number = 0; Number < KeProcessorCount; Number++)
         {
             PKPRCB TargetPrcb = KiProcessorBlock[Number];
 
             if ((TargetPrcb != NULL) && (TargetPrcb != Prcb) &&
-                (KeActiveProcessors & TargetPrcb->SetMember) &&
+                KiIsProcessorInSet(KeActiveProcessors.Bitmap, Number) &&
                 !KiClockTickSuspended(TargetPrcb))
             {
                 KiCountClockKeepAlive(TargetPrcb, Ticks);
@@ -350,8 +349,16 @@ KiCheckClockWatchdog(
     }
 
     /* The lowest of the other active processors watches the one that owns the clock */
-    Watchers = KeActiveProcessors & ~OwnerPrcb->SetMember;
-    if ((Watchers & (~Watchers + 1)) == Prcb->SetMember)
+    if (!KiFindProcessorInSet(KeActiveProcessors.Bitmap, 0, &Number))
+        return;
+
+    if ((Number == OwnerPrcb->Number) &&
+        !KiFindProcessorInSet(KeActiveProcessors.Bitmap, Number + 1, &Number))
+    {
+        return;
+    }
+
+    if (Number == Prcb->Number)
         KiCountClockKeepAlive(OwnerPrcb, Ticks);
 }
 
@@ -399,7 +406,7 @@ KeSetTimeIncrement(
     KeTimeIncrement = MaxIncrement;
     KeTimeAdjustment = MaxIncrement;
     KiTickOffset = (LONG)MaxIncrement;
-    for (Index = 0; Index < MAXIMUM_PROCESSORS; Index++)
+    for (Index = 0; Index < KE_MAXIMUM_PROCESSORS; Index++)
         KiRunTimeOffset[Index] = (LONG)MaxIncrement;
 }
 

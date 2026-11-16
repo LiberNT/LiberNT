@@ -215,7 +215,7 @@ KiArm64IdleDispatchNextThread(_In_ PKPRCB Prcb, _In_ BOOLEAN AdvertiseIdle)
     if (!Prcb->NextThread)
     {
         if (AdvertiseIdle)
-            InterlockedOr64((PLONG64)&KiIdleSummary, (LONG64)Prcb->SetMember);
+            InterlockedOr64((PLONG64)&KiIdleSummary[0], (LONG64)Prcb->SetMember);
         KiReleasePrcbLock(Prcb);
         return FALSE;
     }
@@ -232,7 +232,7 @@ KiArm64IdleDispatchNextThread(_In_ PKPRCB Prcb, _In_ BOOLEAN AdvertiseIdle)
         KiSetDpcInterruptRequested(Prcb);
         HalRequestSoftwareInterrupt(DISPATCH_LEVEL);
     }
-    InterlockedAnd64((PLONG64)&KiIdleSummary, (LONG64)~Prcb->SetMember);
+    InterlockedAnd64((PLONG64)&KiIdleSummary[0], (LONG64)~Prcb->SetMember);
 
     Prcb->NextThread = NULL;
     Prcb->CurrentThread = NewThread;
@@ -580,7 +580,7 @@ KiDispatchInterrupt(VOID)
         {
             /* Idle thread is never on a ready list; abandon it instead of queueing
              * it through KxQueueReadyThread, which would corrupt the lists. */
-            InterlockedAnd64((PLONG64)&KiIdleSummary, (LONG64)~Prcb->SetMember);
+            InterlockedAnd64((PLONG64)&KiIdleSummary[0], (LONG64)~Prcb->SetMember);
             Prcb->NextThread = NULL;
             Prcb->CurrentThread = NewThread;
             NewThread->State = Running;

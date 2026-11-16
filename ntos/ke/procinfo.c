@@ -332,16 +332,17 @@ KipSampleActiveProcessors(
     _Out_writes_all_(ProcessorCount) PKIP_CPU_SAMPLE Samples,
     _In_ ULONG ProcessorCount)
 {
+    GROUP_AFFINITY Previous;
     ULONG i;
 
     RtlZeroMemory(Samples, ProcessorCount * sizeof(*Samples));
 
     for (i = 0; i < ProcessorCount; i++)
     {
-        if (!(KeActiveProcessors & AFFINITY_MASK(i)))
+        if (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, i))
             continue;
 
-        KeSetSystemAffinityThread(AFFINITY_MASK(i));
+        KiSetSystemProcessorAffinityThread(i, &Previous);
         KipSampleCurrentProcessor(&Samples[i]);
     }
     KeRevertToUserAffinityThread();
@@ -360,7 +361,8 @@ KiQueryProcessorTopology(
     PKIP_CPU_SAMPLE Samples;
     PKIP_CACHE_KEY Keys;
     ULONG PackageIds[MAXIMUM_PROCESSORS];
-    ULONG ProcessorCount = (ULONG)KeNumberProcessors;
+    /* TODO: the cache and package records describe only the first word of processors */
+    ULONG ProcessorCount = min(KeProcessorCount, MAXIMUM_PROCESSORS);
     ULONG Records_ = 0, Sets_ = 0;
     ULONG i, c, r, p;
 
@@ -458,7 +460,8 @@ KiQueryProcessorDomains(
 {
     PKIP_CPU_SAMPLE Samples;
     PKIP_CACHE_KEY Keys;
-    ULONG ProcessorCount = (ULONG)KeNumberProcessors;
+    /* TODO: the domain records describe only the first word of processors */
+    ULONG ProcessorCount = min(KeProcessorCount, MAXIMUM_PROCESSORS);
     ULONG Shifts[KiTopologyLevels];
     ULONG Level, i, d;
 

@@ -181,6 +181,29 @@ KiLinkProcess(
     if (OldIrql < SYNCH_LEVEL) KeLowerIrql(OldIrql);
 }
 
+static KI_PROCESS_AFFINITY KiInitialProcessAffinity;
+static volatile LONG KiPrimaryGroupSeed;
+
+/* The primary group only says which group a mask given without one names; it does not decide where threads run */
+static
+USHORT
+KiSelectPrimaryGroup(
+    _In_ const KAFFINITY *Affinity)
+{
+    USHORT Groups = KeQueryActiveGroupCount();
+    USHORT First = (USHORT)((ULONG)InterlockedIncrement(&KiPrimaryGroupSeed) % Groups);
+    USHORT Offset, Group;
+
+    for (Offset = 0; Offset < Groups; Offset++)
+    {
+        Group = (USHORT)((First + Offset) % Groups);
+        if ((KiQueryGroupOfProcessorSet(Affinity, Group) & KeQueryGroupAffinity(Group)) != 0)
+            return Group;
+    }
+
+    return 0;
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -193,10 +216,15 @@ NTAPI
 KeInitializeProcess(
     _Out_ struct _KPROCESS *Process,
     _In_ KPRIORITY Priority,
-    _In_ KAFFINITY Affinity,
+    _In_opt_ const KAFFINITY *Affinity,
     _In_ PULONG_PTR DirectoryTableBase,
     _In_ BOOLEAN Enable)
 {
+    ULONG Word;
+
+    if (Process == &KiInitialProcess.Pcb)
+        KiAttachProcessAffinity(Process, &KiInitialProcessAffinity);
+
     Process->Header.Type = ProcessObject;
     Process->Header.Signalling = FALSE;
     Process->Header.Size = sizeof(KPROCESS) / sizeof(LONG);
@@ -212,8 +240,13 @@ KeInitializeProcess(
 
     KeInitializeSpinLock(&Process->ProcessLock);
 
-    Process->Affinity = Affinity;
-    Process->ActiveProcessors = 0;
+    /* No set means every processor, those not started yet included */
+    for (Word = 0; Word < KiProcessorSetWords; Word++)
+    {
+        KiProcessAffinity(Process)[Word] = (Affinity != NULL) ? Affinity[Word] : (KAFFINITY)-1;
+        KiProcessActiveProcessors(Process)[Word] = 0;
+    }
+    KiSetProcessPrimaryGroup(Process, KiSelectPrimaryGroup(KiProcessAffinity(Process)));
     Process->BasePriority = (SCHAR)Priority;
     Process->QuantumReset = 6;
     Process->ThreadSeed = 0;
@@ -386,6 +419,23 @@ KeSetQuantumProcess(
     KiReleaseProcessLock(&ProcessLock);
 }
 
+USHORT
+NTAPI
+KeQueryPrimaryGroupProcess(
+    _In_ PKPROCESS Process)
+{
+    return KiProcessPrimaryGroup(Process);
+}
+
+KAFFINITY
+NTAPI
+KeQueryGroupAffinityProcess(
+    _In_ PKPROCESS Process,
+    _In_ USHORT Group)
+{
+    return KiQueryGroupOfProcessorSet(KiProcessAffinity(Process), Group);
+}
+
 /*
  * Confines a process, and every thread it owns, to a set of processors.
  * Answers the previous set.
@@ -397,18 +447,24 @@ KeSetAffinityProcess(
     _In_ KAFFINITY Affinity)
 {
     KLOCK_QUEUE_HANDLE ProcessLock;
+    KI_PROCESSOR_SET NewAffinity;
     KAFFINITY OldAffinity;
     PKTHREAD Thread;
     PLIST_ENTRY Entry;
+    USHORT Group;
 
     ASSERT_PROCESS(Process);
-    ASSERT((Affinity & KeActiveProcessors) != 0);
 
     KiAcquireProcessLockRaiseToSynch(Process, &ProcessLock);
 
-    OldAffinity = Process->Affinity;
-    Process->Affinity = Affinity;
+    /* Windows documents a mask without a group as naming processors of the process's primary group */
+    Group = KiProcessPrimaryGroup(Process);
+    KiClearProcessorSet(NewAffinity);
+    KiAssignGroupOfProcessorSet(NewAffinity, Group, Affinity);
+    ASSERT(KiDoProcessorSetsIntersect(NewAffinity, KeActiveProcessors.Bitmap));
 
+    OldAffinity = KiQueryGroupOfProcessorSet(KiProcessAffinity(Process), Group);
+    KiCopyProcessorSet(KiProcessAffinity(Process), NewAffinity);
 
     for (Entry = Process->ThreadListHead.Flink;
          Entry != &Process->ThreadListHead;
@@ -417,9 +473,8 @@ KeSetAffinityProcess(
         Thread = CONTAINING_RECORD(Entry, KTHREAD, ThreadListEntry);
 
         KiAcquireThreadLock(Thread);
-        KiThreadUserAffinityMask(Thread) = Affinity;
-        if (!Thread->SystemAffinityActive)
-            KiSetAffinityThread(Thread, KiThreadCpuSetAffinity(Thread, Affinity));
+        KiSetThreadPrimaryGroup(Thread, Group);
+        KiSetUserAffinityThread(Thread, NewAffinity);
         KiReleaseThreadLock(Thread);
     }
 
@@ -897,7 +952,7 @@ KiExpandInitialProcessAffinities(VOID)
          Entry = Entry->Flink)
     {
         Process = CONTAINING_RECORD(Entry, KPROCESS, ProcessListEntry);
-        Process->Affinity = KeActiveProcessors;
+        KiCopyProcessorSet(KiProcessAffinity(Process), KeActiveProcessors.Bitmap);
     }
 
     KiReleaseFlagLock(&KiProcessListLock);

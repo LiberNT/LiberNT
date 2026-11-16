@@ -370,7 +370,7 @@ KxFreezeExecution(
     }
 
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
-    KiFreezeTargetSet = KeActiveProcessors & ~CurrentPrcb->SetMember;
+    KiFreezeTargetSet = KeActiveProcessors.Bitmap[0] & ~CurrentPrcb->SetMember;
 
     for (ULONG i = 0; i < KeNumberProcessors; i++)
     {

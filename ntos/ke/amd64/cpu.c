@@ -84,7 +84,7 @@ static struct
     ULONG64 Aperf;
     ULONG64 Mperf;
     ULONG Mhz;
-} KiAmd64ClockSample[MAXIMUM_PROCESSORS];
+} KiAmd64ClockSample[KE_MAXIMUM_PROCESSORS];
 
 static LONG KiAmd64AperfMperfState;
 
@@ -97,7 +97,7 @@ KiAmd64QueryEffectiveMHz(
     ULONG64 Aperf, Mperf, DeltaAperf, DeltaMperf;
     ULONG BaseMhz, Mhz;
 
-    if (ProcessorNumber >= MAXIMUM_PROCESSORS)
+    if (ProcessorNumber >= KE_MAXIMUM_PROCESSORS)
     {
         return 0;
     }
@@ -812,8 +812,8 @@ CODE_SEG("INIT")
 VOID
 NTAPI
 KiQueryProcessorEfficiencyClasses(
-    _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
+    _Out_writes_all_(KE_MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
 {
     /* TODO: report the core types of hybrid processors as efficiency classes */
-    RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+    RtlZeroMemory(EfficiencyClasses, KE_MAXIMUM_PROCESSORS);
 }

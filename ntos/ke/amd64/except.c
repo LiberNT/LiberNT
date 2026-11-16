@@ -620,7 +620,7 @@ KiMcheckAbortHandler(
 
     BankCount = (ULONG)(__readmsr(MSR_MCG_CAP) & 0xFF);
     DbgPrint("Machine check on processor %lu, global status 0x%I64x\n",
-             KeGetCurrentProcessorNumber(),
+             KeGetCurrentPrcb()->Number,
              __readmsr(MSR_MCG_STATUS));
 
     for (Bank = 0; Bank < BankCount; Bank++)

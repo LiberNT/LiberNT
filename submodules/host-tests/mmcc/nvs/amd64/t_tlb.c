@@ -18,14 +18,16 @@ typedef struct _TEST_CPU
     ULONG64 Cr3, Cr4;
     ULONG64 PageFlushes, FullFlushes, NonGlobalFlushes, Cr3Writes, Cr4Writes, Invpcids, NonGlobalInvpcids, CpuidCalls;
     ULONG64 Pages[8];
-    ULONG64 Pending;
+    ULONG64 Pending[KE_MAXIMUM_PROCESSORS / 64];
     BOOLEAN Enabled;
     KIRQL Irql;
 } TEST_CPU;
 
-static TEST_CPU Cpus[MAXIMUM_PROCESSORS];
+static TEST_CPU Cpus[KE_MAXIMUM_PROCESSORS];
 static _Thread_local ULONG CurrentCpu;
-static ULONG64 ActiveCpus;
+static ULONG64 ActiveSet[KE_MAXIMUM_PROCESSORS / 64];
+static ULONG TlbWords = 1;
+#define ActiveCpus ActiveSet[0]
 static ULONG Checks, Failures, Finished;
 static ULONG64 Ipis;
 static ULONG DelayWait, DelayPolls, DelayReturned;
@@ -70,7 +72,9 @@ VOID MiAmd64TlbWatchdogBugcheck(ULONG64 Frequency, ULONG64 Now, ULONG64 Baseline
 #define CHECK(e) do { __atomic_fetch_add(&Checks, 1, __ATOMIC_RELAXED); if (!(e)) { if (__atomic_fetch_add(&Failures, 1, __ATOMIC_RELAXED) < 20) fprintf(stderr, "cpu%u %u: %s\n", CurrentCpu, __LINE__, #e); } } while (0)
 
 ULONG MiAmd64TlbCpu(VOID) { return CurrentCpu; }
-ULONG64 MiAmd64TlbActiveCpus(VOID) { return ActiveCpus; }
+ULONG MiAmd64TlbWords(VOID) { return TlbWords; }
+ULONG64 MiAmd64TlbActiveCpus(ULONG Word) { return ActiveSet[Word]; }
+PVOID MiAmd64TlbAllocate(SIZE_T Size) { return calloc(1, Size); }
 ULONG64 MiAmd64TlbReadCr3(VOID) { return Cpus[CurrentCpu].Cr3; }
 ULONG64 MiAmd64TlbReadCr4(VOID) { return Cpus[CurrentCpu].Cr4; }
 
@@ -188,6 +192,17 @@ VOID MiAmd64TlbLowerIrql(KIRQL Previous)
     Cpus[CurrentCpu].Irql = Previous;
 }
 
+BOOLEAN MiAmd64TlbPreemptibleWait(KIRQL Previous)
+{
+    return Previous < 2 && Cpus[CurrentCpu].Enabled;
+}
+
+VOID MiAmd64TlbLowerForWait(VOID)
+{
+    CHECK(Cpus[CurrentCpu].Irql >= 2);
+    Cpus[CurrentCpu].Irql = 1;
+}
+
 VOID MiAmd64TlbPause(VOID)
 {
     if (__atomic_load_n(&DelayWait, __ATOMIC_RELAXED))
@@ -195,16 +210,17 @@ VOID MiAmd64TlbPause(VOID)
     sched_yield();
 }
 
-VOID KiSendMemoryIpi(ULONG64 Targets)
+VOID KiSendMemoryIpi(ULONG Word, ULONG64 Targets)
 {
     ULONG Target;
-    CHECK((Targets & (1ULL << CurrentCpu)) == 0);
-    CHECK((Targets & ~ActiveCpus) == 0);
+    CHECK(Word < TlbWords);
+    CHECK(Word != CurrentCpu / 64 || (Targets & (1ULL << (CurrentCpu % 64))) == 0);
+    CHECK((Targets & ~ActiveSet[Word]) == 0);
     __atomic_fetch_add(&Ipis, 1, __ATOMIC_RELAXED);
     while (Targets)
     {
-        Target = (ULONG)__builtin_ctzll(Targets);
-        __atomic_fetch_or(&Cpus[Target].Pending, 1ULL << CurrentCpu, __ATOMIC_RELEASE);
+        Target = Word * 64 + (ULONG)__builtin_ctzll(Targets);
+        __atomic_fetch_or(&Cpus[Target].Pending[CurrentCpu / 64], 1ULL << (CurrentCpu % 64), __ATOMIC_RELEASE);
         Targets &= Targets - 1;
     }
 }
@@ -212,6 +228,7 @@ VOID KiSendMemoryIpi(ULONG64 Targets)
 VOID MiAmd64TlbPoll(VOID)
 {
     ULONG64 Sources;
+    ULONG Word;
 
     if (WatchdogMode != 0)
     {
@@ -239,11 +256,14 @@ VOID MiAmd64TlbPoll(VOID)
             CurrentCpu = 0;
         }
     }
-    Sources = __atomic_exchange_n(&Cpus[CurrentCpu].Pending, 0, __ATOMIC_ACQUIRE);
-    while (Sources)
+    for (Word = 0; Word < TlbWords; Word++)
     {
-        MiAmd64ProcessTlbRequest((ULONG)__builtin_ctzll(Sources));
-        Sources &= Sources - 1;
+        Sources = __atomic_exchange_n(&Cpus[CurrentCpu].Pending[Word], 0, __ATOMIC_ACQUIRE);
+        while (Sources)
+        {
+            MiAmd64ProcessTlbRequest(Word * 64 + (ULONG)__builtin_ctzll(Sources));
+            Sources &= Sources - 1;
+        }
     }
 }
 
@@ -398,9 +418,10 @@ static VOID SmpCase(ULONG Count)
         CurrentCpu = Cpu;
         CHECK(Pages == BeforePages[Cpu] + Count * 1994 + 30);
         CHECK(Full == BeforeFull[Cpu] + Count * 39 * (Cpu % 4 >= 2 ? 2 : 1));
-        CHECK(Cpus[Cpu].Pending == 0);
+        CHECK(Cpus[Cpu].Pending[0] == 0);
         for (Source = 0; Source < Count; Source++)
-            MiAmd64ProcessTlbRequest(Source);
+            if (Source != Cpu)
+                MiAmd64ProcessTlbRequest(Source);
         CHECK(Cpus[Cpu].PageFlushes == Pages && Cpus[Cpu].FullFlushes == Full);
     }
 }
@@ -428,7 +449,7 @@ static VOID TargetCase(VOID)
     for (Cpu = 0; Cpu < 4; Cpu++)
     {
         SeedCpu(Cpu);
-        Cpus[Cpu].Pending = 0;
+        Cpus[Cpu].Pending[0] = 0;
         Pages[Cpu] = Cpus[Cpu].PageFlushes;
         Full[Cpu] = Cpus[Cpu].FullFlushes;
     }
@@ -437,7 +458,7 @@ static VOID TargetCase(VOID)
     MiArchTlbInvalidateProcessors(0x7ff00000ULL, 2, 1ULL << 2);
     CHECK(Ipis == Before + 1);
     CHECK(Cpus[0].PageFlushes == Pages[0] + 2);
-    CHECK(Cpus[1].Pending == 0 && Cpus[3].Pending == 0);
+    CHECK(Cpus[1].Pending[0] == 0 && Cpus[3].Pending[0] == 0);
     MiArchTlbInvalidateProcessors(0x7ff00000ULL, 0, 1ULL << 2);
     CHECK(Ipis == Before + 1);
     MiArchTlbInvalidateProcessors(0x7ff00000ULL, 1, 1ULL << 0);
@@ -469,7 +490,7 @@ static VOID DelayedTargetCase(VOID)
     ActiveCpus = 3;
     SeedCpu(0);
     SeedCpu(1);
-    Cpus[0].Pending = Cpus[1].Pending = 0;
+    Cpus[0].Pending[0] = Cpus[1].Pending[0] = 0;
     BeforePages = Cpus[1].PageFlushes;
     DelayPolls = DelayReturned = 0;
     __atomic_store_n(&DelayWait, 1, __ATOMIC_RELEASE);
@@ -505,7 +526,7 @@ static VOID WatchdogCases(VOID)
         WatchdogPolls = WatchdogBugchecks = WatchdogInjected = WatchdogEpochReads = 0;
         WatchdogTime = WatchdogEpoch = 0;
         WatchdogFrequency = WatchdogNow = WatchdogBaseline = 0;
-        Cpus[0].Pending = Cpus[1].Pending = Cpus[2].Pending = 0;
+        Cpus[0].Pending[0] = Cpus[1].Pending[0] = Cpus[2].Pending[0] = 0;
         CurrentCpu = 0;
         if (setjmp(WatchdogJump) == 0)
         {
@@ -520,7 +541,7 @@ static VOID WatchdogCases(VOID)
             CHECK(WatchdogNow - WatchdogBaseline >= 10);
             CurrentCpu = 1;
             MiAmd64TlbPoll();
-            CHECK(Cpus[0].Irql == 12);
+            CHECK(Cpus[0].Irql == 1);
             Cpus[0].Irql = 0;
         }
         if (Mode == 8)
@@ -532,8 +553,78 @@ static VOID WatchdogCases(VOID)
         WatchdogMode = 0;
     }
 }
+#define WIDE_CPUS 70
+#define WIDE_ROUNDS 20
+
+static VOID *WideWorker(PVOID Argument)
+{
+    ULONG Round;
+    CurrentCpu = (ULONG)(ULONG_PTR)Argument;
+    for (Round = 0; Round < WIDE_ROUNDS; Round++)
+    {
+        MiArchInvalidateTlbRange((PVOID)(ULONG_PTR)(0xffff800000000000ULL + Round * PAGE_SIZE), PAGE_SIZE,
+                                MiTlbAllProcessors);
+        MiAmd64TlbPoll();
+    }
+    __atomic_fetch_add(&Finished, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&Finished, __ATOMIC_ACQUIRE) != WIDE_CPUS)
+    {
+        MiAmd64TlbPoll();
+        sched_yield();
+    }
+    MiAmd64TlbPoll();
+    return NULL;
+}
+
+static VOID WideCase(VOID)
+{
+    pthread_t Threads[WIDE_CPUS];
+    ULONG64 Pages[WIDE_CPUS], Before = Ipis;
+    ULONG Cpu;
+
+    TlbWords = 2;
+    ActiveSet[0] = ~0ULL;
+    ActiveSet[1] = (1ULL << (WIDE_CPUS - 64)) - 1;
+    Finished = 0;
+    for (Cpu = 0; Cpu < WIDE_CPUS; Cpu++)
+    {
+        SeedCpu(Cpu);
+        Cpus[Cpu].Pending[0] = Cpus[Cpu].Pending[1] = 0;
+        Pages[Cpu] = Cpus[Cpu].PageFlushes;
+    }
+    for (Cpu = 0; Cpu < WIDE_CPUS; Cpu++)
+        CHECK(pthread_create(&Threads[Cpu], NULL, WideWorker, (PVOID)(ULONG_PTR)Cpu) == 0);
+    for (Cpu = 0; Cpu < WIDE_CPUS; Cpu++)
+        CHECK(pthread_join(Threads[Cpu], NULL) == 0);
+    for (Cpu = 0; Cpu < WIDE_CPUS; Cpu++)
+    {
+        CurrentCpu = Cpu;
+        CHECK(Cpus[Cpu].PageFlushes == Pages[Cpu] + WIDE_CPUS * WIDE_ROUNDS);
+        CHECK(Cpus[Cpu].Pending[0] == 0 && Cpus[Cpu].Pending[1] == 0);
+    }
+    CHECK(Ipis == Before + 2ULL * WIDE_CPUS * WIDE_ROUNDS);
+
+    CurrentCpu = 0;
+    Finished = 0;
+    for (Cpu = 1; Cpu < WIDE_CPUS; Cpu++)
+        CHECK(pthread_create(&Threads[Cpu], NULL, TargetPoller, (PVOID)(ULONG_PTR)Cpu) == 0);
+    MiArchTlbInvalidateProcessors(0x7ff00000ULL, 1, 1ULL << 2);
+    __atomic_store_n(&Finished, 1, __ATOMIC_RELEASE);
+    for (Cpu = 1; Cpu < WIDE_CPUS; Cpu++)
+        CHECK(pthread_join(Threads[Cpu], NULL) == 0);
+    CHECK(Cpus[0].PageFlushes == Pages[0] + WIDE_CPUS * WIDE_ROUNDS + 1);
+    CHECK(Cpus[2].PageFlushes == Pages[2] + WIDE_CPUS * WIDE_ROUNDS + 1);
+
+    TlbWords = 1;
+    ActiveSet[1] = 0;
+}
+
 int main(void)
 {
+    ULONG Cpu;
+
+    for (Cpu = 0; Cpu < KE_MAXIMUM_PROCESSORS; Cpu++)
+        CHECK(MiAmd64PrepareProcessorTlb(Cpu));
     CHECK(MiAmd64SelfMapSlotAddress(0, 0) == 0xfffff68000000000ULL);
     CHECK(MiAmd64SelfMapSlotAddress(0, 1) == 0xfffff6fb40000000ULL);
     CHECK(MiAmd64SelfMapSlotAddress(0, 2) == 0xfffff6fb7da00000ULL);
@@ -545,6 +636,7 @@ int main(void)
     SmpCase(2);
     SmpCase(4);
     SmpCase(8);
+    WideCase();
     printf("AMD64 TLB: %u checks, %u failures, %llu IPI batches\n", Checks, Failures, Ipis);
     return Failures != 0;
 }

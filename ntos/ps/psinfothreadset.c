@@ -495,14 +495,15 @@ NtSetInformationThread(
             if (!NT_SUCCESS(Status)) break;
 
             /* Bits naming processors the machine lacks are dropped: an all-ones mask means every processor */
-            Pointer &= (ULONG_PTR)KeActiveProcessors;
+            Pointer &= KeQueryGroupAffinity(KeQueryPrimaryGroupThread(&Thread->Tcb));
 
             /*
              * A thread may only be narrowed to processors its process is
              * already allowed to run on.
              */
             if (Pointer == 0 ||
-                (Pointer & ~THREAD_TO_PROCESS(Thread)->Pcb.Affinity) != 0)
+                (Pointer & ~KeQueryGroupAffinityProcess(&THREAD_TO_PROCESS(Thread)->Pcb,
+                                                        KeQueryPrimaryGroupThread(&Thread->Tcb))) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
@@ -520,8 +521,7 @@ NtSetInformationThread(
                                                     sizeof(Affinity));
             if (!NT_SUCCESS(Status)) break;
 
-            /* This machine has one group, so no other one may be named */
-            if (Affinity.Group != 0)
+            if (Affinity.Group >= KeQueryActiveGroupCount())
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
@@ -535,15 +535,15 @@ NtSetInformationThread(
                 break;
             }
 
-            if (Affinity.Mask == 0 ||
+            if ((Affinity.Mask & KeQueryGroupAffinity(Affinity.Group)) == 0 ||
                 (Affinity.Mask &
-                 ~THREAD_TO_PROCESS(Thread)->Pcb.Affinity) != 0)
+                 ~KeQueryGroupAffinityProcess(&THREAD_TO_PROCESS(Thread)->Pcb, Affinity.Group)) != 0)
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
             }
 
-            KeSetAffinityThread(&Thread->Tcb, Affinity.Mask);
+            KeSetGroupAffinityThread(&Thread->Tcb, Affinity.Group, Affinity.Mask);
             Status = STATUS_SUCCESS;
             break;
 
@@ -555,7 +555,7 @@ NtSetInformationThread(
                                                     sizeof(Value));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Value >= MAXIMUM_PROCESSORS)
+            if (Value >= KeQueryMaximumProcessorCountEx(KeQueryPrimaryGroupThread(&Thread->Tcb)))
             {
                 Status = STATUS_INVALID_PARAMETER;
                 break;
@@ -573,17 +573,8 @@ NtSetInformationThread(
                                                     sizeof(Processor));
             if (!NT_SUCCESS(Status)) break;
 
-            if (Processor.Group != 0 ||
-                Processor.Reserved != 0 ||
-                Processor.Number >= (UCHAR)KeNumberProcessors)
-            {
-                Status = STATUS_INVALID_PARAMETER;
-                break;
-            }
-
-            Processor.Number = KeSetIdealProcessorThread((PKTHREAD)&Thread->Tcb,
-                                                         Processor.Number);
-            Status = STATUS_SUCCESS;
+            Status = KeSetIdealProcessorThreadEx(&Thread->Tcb, &Processor, &Processor);
+            if (!NT_SUCCESS(Status)) break;
 
             /* The caller's record is given back holding the previous choice */
             _SEH2_TRY

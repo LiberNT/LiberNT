@@ -25,6 +25,8 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_interrupt COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-interrupt-test.py
             --source ${REACTOS_HOST_SOURCE_ROOT}/ntos/ke/amd64/interrupt.c --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.amd64_hal_ipi_abi COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-hal-ipi-abi-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.amd64_smp COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/amd64-smp-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.bugcheck_freeze_failure COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/bugcheck-freeze-failure-test.py
@@ -82,6 +84,8 @@ if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME ke.dispatcher_smp COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dispatcher-smp-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
         add_test(NAME ke.dpc_barrier COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/dpc-barrier-test.py
+            --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
+        add_test(NAME ke.group_affinity_index COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/group-affinity-index-test.py
             --root ${REACTOS_HOST_SOURCE_ROOT} --cc ${CMAKE_C_COMPILER})
     endif()
     find_program(KE_ARM64_CLANG NAMES clang)

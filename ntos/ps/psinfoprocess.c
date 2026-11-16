@@ -846,7 +846,7 @@ NtQueryInformationProcess(
         case ProcessBasicInformation:
             Basic.ExitStatus = Process->ExitStatus;
             Basic.PebBaseAddress = Process->Peb;
-            Basic.AffinityMask = Process->Pcb.Affinity;
+            Basic.AffinityMask = KeQueryGroupAffinityProcess(&Process->Pcb, KeQueryPrimaryGroupProcess(&Process->Pcb));
             Basic.BasePriority = Process->Pcb.BasePriority;
             Basic.UniqueProcessId = (ULONG_PTR)Process->UniqueProcessId;
             Basic.InheritedFromUniqueProcessId =
@@ -1098,7 +1098,7 @@ NtQueryInformationProcess(
             break;
 
         case ProcessAffinityMask:
-            Pointer = Process->Pcb.Affinity;
+            Pointer = KeQueryGroupAffinityProcess(&Process->Pcb, KeQueryPrimaryGroupProcess(&Process->Pcb));
 
             Status = PspReturnInformation(ProcessInformation,
                                           ProcessInformationLength,

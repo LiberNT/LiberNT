@@ -115,7 +115,7 @@ KiInitMachineDependent(VOID)
 
     KiRestoreFastSyscallReturnState();
 
-    i = KeActiveProcessors;
+    i = KeActiveProcessors.Bitmap[0];
     for (Affinity = 1; i; Affinity <<= 1)
     {
         if (i & Affinity)
@@ -425,7 +425,7 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
         PageDirectory[1] = 0;
         KeInitializeProcess(InitProcess,
                             0,
-                            MAXULONG_PTR,
+                            NULL,
                             PageDirectory,
                             FALSE);
         InitProcess->QuantumReset = MAXCHAR;
@@ -675,8 +675,8 @@ AppCpuInit:
 
     HalInitializeProcessor(Cpu, KeLoaderBlock);
 
-    KeActiveProcessors |= __readfsdword(KPCR_SET_MEMBER);
-    KeNumberProcessors++;
+    KeActiveProcessors.Bitmap[0] |= __readfsdword(KPCR_SET_MEMBER);
+    KiSetProcessorCount(KeProcessorCount + 1);
 
     if (!Cpu)
     {

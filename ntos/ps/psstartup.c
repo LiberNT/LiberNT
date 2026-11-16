@@ -282,13 +282,14 @@ PspBuildSystemProcess(VOID)
                             NULL,
                             KernelMode,
                             NULL,
-                            sizeof(EPROCESS),
+                            sizeof(EPROCESS) + KI_PROCESS_AFFINITY_EXTENSION,
                             0,
                             0,
                             (PVOID*)&Process);
     if (!NT_SUCCESS(Status)) return FALSE;
 
-    RtlZeroMemory(Process, sizeof(EPROCESS));
+    RtlZeroMemory(Process, sizeof(EPROCESS) + KI_PROCESS_AFFINITY_EXTENSION);
+    KiAttachProcessAffinity(&Process->Pcb, (PKI_PROCESS_AFFINITY)(Process + 1));
 
     InitializeListHead(&Process->ThreadListHead);
     InitializeListHead(&Process->JobLinks);
@@ -309,7 +310,7 @@ PspBuildSystemProcess(VOID)
 
     KeInitializeProcess(&Process->Pcb,
                         PROCESS_PRIORITY_NORMAL,
-                        (KAFFINITY)-1,
+                        NULL,
                         DirectoryTableBase,
                         FALSE);
     Process->Pcb.QuantumReset = 6;

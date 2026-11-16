@@ -637,7 +637,7 @@ ExpQueryLogicalProcessorInformation(
 
     if (PackageCount == 0)
     {
-        Packages[0] = KeActiveProcessors;
+        Packages[0] = KeActiveProcessors.Bitmap[0];
         PackageCount = 1;
     }
 
@@ -903,10 +903,7 @@ ExpQueryCpuSetInformation(
         ObDereferenceObject(Process);
     }
 
-    for (Index = 0; Index < (ULONG)KeNumberProcessors; Index++)
-    {
-        if (KeActiveProcessors & AFFINITY_MASK(Index)) Count++;
-    }
+    Count = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 
     Needed = Count * (ULONG)sizeof(SYSTEM_CPU_SET_INFORMATION);
 
@@ -945,23 +942,32 @@ ExpQueryCpuSetInformation(
 
     _SEH2_TRY
     {
-        for (Index = 0; (Index < (ULONG)KeNumberProcessors) && (Written < Count); Index++)
+        for (Index = 0; (Index < KeProcessorCount) && (Written < Count); Index++)
         {
             PSYSTEM_CPU_SET_INFORMATION Record = &Records[Written];
             PKPRCB Prcb = KiProcessorBlock[Index];
 
-            if (!(KeActiveProcessors & AFFINITY_MASK(Index))) continue;
+            if (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, Index)) continue;
 
             RtlZeroMemory(Record, sizeof(*Record));
             Record->Size = sizeof(*Record);
             Record->Type = CpuSetInformation;
             Record->CpuSet.Id = 0x100 + Index;
-            Record->CpuSet.Group = 0;
-            Record->CpuSet.LogicalProcessorIndex = (UCHAR)Index;
-            Record->CpuSet.CoreIndex = ExpCoreIndex(Index, Cores, CoresLength);
-            Record->CpuSet.LastLevelCacheIndex =
-                ExpLastLevelCacheIndex(Index, Caches, (Caches != NULL) ? CacheCount : 0);
-            Record->CpuSet.NumaNodeIndex = ExpProcessorNode(Index);
+            Record->CpuSet.Group = (USHORT)(Index / KiMaximumGroupSize);
+            Record->CpuSet.LogicalProcessorIndex = (UCHAR)(Index % KiMaximumGroupSize);
+            if (Index < MAXIMUM_PROCESSORS)
+            {
+                Record->CpuSet.CoreIndex = ExpCoreIndex(Index, Cores, CoresLength);
+                Record->CpuSet.LastLevelCacheIndex =
+                    ExpLastLevelCacheIndex(Index, Caches, (Caches != NULL) ? CacheCount : 0);
+                Record->CpuSet.NumaNodeIndex = ExpProcessorNode(Index);
+            }
+            else
+            {
+                /* TODO: the topology records describe only the first word of processors; past it each processor is its own core and cache */
+                Record->CpuSet.CoreIndex = Record->CpuSet.LogicalProcessorIndex;
+                Record->CpuSet.LastLevelCacheIndex = Record->CpuSet.LogicalProcessorIndex;
+            }
             Record->CpuSet.EfficiencyClass = Prcb->PowerState.ArchitecturalEfficiencyClass;
             Record->CpuSet.AllFlags = Prcb->PowerState.Parked ? SYSTEM_CPU_SET_INFORMATION_PARKED : 0;
             Written++;

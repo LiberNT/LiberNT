@@ -727,11 +727,11 @@ static
 VOID
 KiReportFrozenProcessors(VOID)
 {
-    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG Current = KeGetCurrentPrcb()->Number;
     ULONG Processor;
     CHAR Title[48];
 
-    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    for (Processor = 0; Processor < KeProcessorCount; Processor++)
     {
         PKPRCB Prcb = KiProcessorBlock[Processor];
 
@@ -819,7 +819,7 @@ KiReportBugCheck(
               SharedUserData->NtMajorVersion,
               SharedUserData->NtMinorVersion,
               NtBuildNumber & 0xFFFF,
-              (int)(CCHAR)KeNumberProcessors);
+              (int)KeProcessorCount);
     KiDisplayAndLogBugCheckString(Line);
 
     /* The architecture layer knows how to say what its registers held */
@@ -1510,7 +1510,7 @@ KeInitializeCrashDumpHeader(
             Header->MachineImageType = 0;
             break;
     }
-    Header->NumberProcessors = (ULONG)(CCHAR)KeNumberProcessors;
+    Header->NumberProcessors = KeProcessorCount;
 
     Header->BugCheckCode = (ULONG)KiBugCheckData[0];
     Header->BugCheckParameter1 = KiBugCheckData[1];

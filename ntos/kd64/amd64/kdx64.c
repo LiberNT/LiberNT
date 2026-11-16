@@ -61,7 +61,7 @@ KdpGetStateChange(
             Context->EFlags &= ~EFLAGS_TF;
         }
 
-        for (i = 0; i < KeNumberProcessors; i++)
+        for (i = 0; i < KeProcessorCount; i++)
         {
             Prcb = KiProcessorBlock[i];
             Prcb->ProcessorState.SpecialRegisters.KernelDr7 =

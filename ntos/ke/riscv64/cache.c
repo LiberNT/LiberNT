@@ -38,7 +38,7 @@ KeSweepICache(
     KIRQL OldIrql = KeGetCurrentIrql();
     KAFFINITY Targets;
     if (OldIrql < SYNCH_LEVEL) KfRaiseIrql(SYNCH_LEVEL);
-    Targets = KeActiveProcessors & ~KeGetCurrentPrcb()->SetMember;
+    Targets = KeActiveProcessors.Bitmap[0] & ~KeGetCurrentPrcb()->SetMember;
     __asm__ __volatile__("fence rw, rw\n\tfence.i" ::: "memory");
     Targets = KiRiscvDeferSleepingFences(Targets, KI_RISCV_FENCE_ICACHE);
     if (Targets) HalpRiscvRemoteFence(Targets, NULL, 0, TRUE);

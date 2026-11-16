@@ -39,6 +39,7 @@ typedef unsigned char BOOLEAN;
 #define MI_ASSERT(e) assert(e)
 typedef struct { ULONG64 Address, Pages, Published, Completed; } MI_AMD64_TLB_MESSAGE;
 static MI_AMD64_TLB_MESSAGE MiAmd64TlbMessages[2][2];
+static MI_AMD64_TLB_MESSAGE *MiAmd64TlbMessage(ULONG Target, ULONG Source) { return &MiAmd64TlbMessages[Target][Source]; }
 static int Mode, InHook, Injected, Flushes, Mixed;
 static void MiAmd64ProcessTlbRequest(ULONG Source);
 static MI_AMD64_TLB_MESSAGE *Slot(void) { return &MiAmd64TlbMessages[0][1]; }

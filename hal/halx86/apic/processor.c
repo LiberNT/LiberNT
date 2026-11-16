@@ -12,7 +12,8 @@
 #define NDEBUG
 #include <debug.h>
 
-KAFFINITY HalpActiveProcessors;
+KAFFINITY HalpActiveProcessors[KE_MAXIMUM_GROUPS];
+BOOLEAN HalpProcessorsPastFirstWord;
 KAFFINITY HalpDefaultInterruptAffinity;
 
 extern HALP_APIC_INFO_TABLE HalpApicInfoTable;

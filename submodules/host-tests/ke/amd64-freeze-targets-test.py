@@ -7,6 +7,8 @@ import pathlib
 import subprocess
 import tempfile
 
+import ke_procset_fixture
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--root', required=True)
 parser.add_argument('--cc', required=True)
@@ -57,8 +59,9 @@ static const char *Scenario;
 static KPRCB Cpus[3];
 static PKPRCB KiProcessorBlock[MAXIMUM_PROCESSORS], KiFreezeOwner;
 static PKPRCB KiFreezeActiveSetOwner __attribute__((unused));
-static ULONG KeNumberProcessors;
-static KAFFINITY KeActiveProcessors, Signalled;
+@PROCSET@
+static ULONG KeProcessorCount;
+static KAFFINITY Signalled;
 static unsigned Yields;
 static jmp_buf Stuck;
 static PKPRCB KeGetCurrentPrcb(void) { return &Cpus[0]; }
@@ -66,12 +69,13 @@ static PVOID InterlockedCompareExchangePointer(PVOID volatile *p, PVOID v, PVOID
 static PVOID InterlockedExchangePointer(PVOID volatile *p, PVOID v) { return __sync_lock_test_and_set(p, v); }
 static void KiFreezeIfRequested(void) { CHECK(!"the owner was taken"); }
 /* An active processor answers the NMI at once */
-static void KiIpiSend(KAFFINITY Targets, ULONG Request) {
+static void KiIpiSendProcessor(ULONG Number, ULONG Request) {
+    KAFFINITY Targets = 1ULL << Number;
     ULONG i;
     CHECK(Request == IPI_FREEZE && (Signalled & Targets) == 0);
     Signalled |= Targets;
     for (i = 0; i < 3; i++)
-        if ((Targets & Cpus[i].SetMember) && (KeActiveProcessors & Cpus[i].SetMember) &&
+        if ((Targets & Cpus[i].SetMember) && (KeActiveProcessors.Bitmap[0] & Cpus[i].SetMember) &&
             Cpus[i].IpiFrozen == IPI_FROZEN_STATE_TARGET_FREEZE)
             Cpus[i].IpiFrozen = IPI_FROZEN_STATE_FROZEN;
 }
@@ -108,8 +112,8 @@ static void Reset(const char *Name, KAFFINITY Active, int Published) {
         if (i < (ULONG)Published)
             KiProcessorBlock[i] = &Cpus[i];
     }
-    KeNumberProcessors = 3;
-    KeActiveProcessors = Active;
+    KeProcessorCount = 3;
+    KeActiveProcessors.Bitmap[0] = Active;
     KiFreezeOwner = NULL;
     Signalled = 0;
     Yields = 0;
@@ -147,10 +151,11 @@ int main(void) {
 helpers = ''
 for name, prototype in [('KiAcquireFreezeActiveSet', 'static BOOLEAN KiAcquireFreezeActiveSet(PKPRCB Prcb)'),
                         ('KiReleaseFreezeActiveSet', 'static void KiReleaseFreezeActiveSet(PKPRCB Prcb, BOOLEAN Acquired)'),
-                        ('KiFreezeTargetSet', 'static KAFFINITY KiFreezeTargetSet(PKPRCB CurrentPrcb)')]:
+                        ('KiFreezeTargetSet', 'static void KiFreezeTargetSet(PKPRCB CurrentPrcb, KAFFINITY *Targets)')]:
     text = body(name)
     if text is not None:
         helpers += prototype + ' {' + text + '}\n'
+fixture = fixture.replace('@PROCSET@', ke_procset_fixture.SHIM)
 fixture = fixture.replace('@TARGETS@', helpers)
 fixture = fixture.replace('@FREEZE@', body('KxFreezeExecution'))
 fixture = fixture.replace('@THAW@', body('KxThawExecution'))

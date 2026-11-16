@@ -1366,7 +1366,7 @@ KdbpThreadContext(
     if (Thread == KdbOriginalThread)
         return KdbCurrentTrapFrame;
 
-    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    for (Processor = 0; Processor < KeProcessorCount; Processor++)
     {
         PKPRCB Prcb = KiProcessorBlock[Processor];
 
@@ -2337,14 +2337,14 @@ KdbpCmdProcessor(
     ULONG Argc,
     PCHAR Argv[])
 {
-    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG Current = KeGetCurrentPrcb()->Number;
     ULONG_PTR Number;
     ULONG Processor;
     PKPRCB Prcb;
 
     if (Argc < 2)
     {
-        for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+        for (Processor = 0; Processor < KeProcessorCount; Processor++)
         {
             Prcb = KiProcessorBlock[Processor];
             if (Prcb == NULL)
@@ -2372,7 +2372,7 @@ KdbpCmdProcessor(
         return TRUE;
     }
 
-    if ((Number >= (ULONG)(UCHAR)KeNumberProcessors) || (KiProcessorBlock[Number] == NULL))
+    if ((Number >= KeProcessorCount) || (KiProcessorBlock[Number] == NULL))
     {
         KdbpPrint("There is no processor %Iu\n", Number);
         return TRUE;
@@ -3582,13 +3582,13 @@ static
 VOID
 KdbpReportUnresponsiveProcessor(VOID)
 {
-    ULONG Current = KeGetCurrentProcessorNumber();
+    ULONG Current = KeGetCurrentPrcb()->Number;
     ULONG Processor;
 
     if (KiBugCheckData[0] != CLOCK_WATCHDOG_TIMEOUT)
         return;
 
-    for (Processor = 0; Processor < (ULONG)(UCHAR)KeNumberProcessors; Processor++)
+    for (Processor = 0; Processor < KeProcessorCount; Processor++)
     {
         PKPRCB Prcb = KiProcessorBlock[Processor];
 

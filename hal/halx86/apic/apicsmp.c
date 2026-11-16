@@ -214,22 +214,28 @@ HalpBroadcastIpiSpecifyVector(
      * whole identifier there, which is what the mode is for. */
     if (HalpX2ApicMode)
     {
-        KAFFINITY Remaining = HalpActiveProcessors;
-        KAFFINITY Self = KeGetCurrentPrcb()->SetMember;
-        ULONG ProcessorIndex;
+        ULONG Self = KeGetCurrentPrcb()->Number;
+        KAFFINITY Remaining;
+        ULONG Word, Bit;
 
-        if (!IncludeSelf)
-            Remaining &= ~Self;
-        while (Remaining != 0)
+        for (Word = 0; Word < KE_MAXIMUM_GROUPS; Word++)
         {
-            NT_VERIFY(BitScanForwardAffinity(&ProcessorIndex, Remaining) != 0);
-            Remaining &= ~AFFINITY_MASK(ProcessorIndex);
-            ApicRequestGlobalInterrupt(HalpProcessorIdentity[ProcessorIndex].LapicId,
-                                       Vector,
-                                       APIC_MT_Fixed,
-                                       APIC_TGM_Edge,
-                                       APIC_DSH_Destination);
+            Remaining = HalpActiveProcessors[Word];
+            if (!IncludeSelf && (Word == Self / HALP_SET_WORD_BITS))
+                Remaining &= ~AFFINITY_MASK(Self % HALP_SET_WORD_BITS);
+
+            while (BitScanForwardAffinity(&Bit, Remaining))
+            {
+                Remaining &= ~AFFINITY_MASK(Bit);
+
+                ApicRequestGlobalInterrupt(HalpProcessorIdentity[Word * HALP_SET_WORD_BITS + Bit].LapicId,
+                                           Vector,
+                                           APIC_MT_Fixed,
+                                           APIC_TGM_Edge,
+                                           APIC_DSH_Destination);
+            }
         }
+
         return;
     }
 
@@ -252,31 +258,41 @@ HalpBroadcastIpiSpecifyVector(
 VOID
 NTAPI
 HalpRequestIpiSpecifyVector(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet,
     _In_ UCHAR Vector)
 {
-    KAFFINITY ActiveProcessors = HalpActiveProcessors;
+    ULONG Self = KeGetCurrentPrcb()->Number;
+    KAFFINITY ActiveProcessors, SelfMember;
     KAFFINITY RemainingSet, SetMember;
     ULONG ProcessorIndex;
     ULONG LApicId;
 
+    ASSERT(Word < KE_MAXIMUM_GROUPS);
+    ActiveProcessors = HalpActiveProcessors[Word];
+    SelfMember = (Word == Self / HALP_SET_WORD_BITS) ? AFFINITY_MASK(Self % HALP_SET_WORD_BITS) : 0;
+
     /* Sanitize the target set */
     TargetSet &= ActiveProcessors;
 
-    /* Check if all processors are requested */
-    if (TargetSet == ActiveProcessors)
+    /* A shorthand names every processor there is, so it stands for this set only while one word holds them all */
+    if (!HalpProcessorsPastFirstWord)
     {
-        /* Send an IPI to all processors, including this processor */
-        HalpBroadcastIpiSpecifyVector(Vector, TRUE);
-        return;
-    }
+        /* Check if all processors are requested */
+        if (TargetSet == ActiveProcessors)
+        {
+            /* Send an IPI to all processors, including this processor */
+            HalpBroadcastIpiSpecifyVector(Vector, TRUE);
+            return;
+        }
 
-    /* Check if all processors except the current one are requested */
-    if (TargetSet == (ActiveProcessors & ~KeGetCurrentPrcb()->SetMember))
-    {
-        /* Send an IPI to all processors, excluding this processor */
-        HalpBroadcastIpiSpecifyVector(Vector, FALSE);
-        return;
+        /* Check if all processors except the current one are requested */
+        if (TargetSet == (ActiveProcessors & ~SelfMember))
+        {
+            /* Send an IPI to all processors, excluding this processor */
+            HalpBroadcastIpiSpecifyVector(Vector, FALSE);
+            return;
+        }
     }
 
     /* Loop while we have more processors */
@@ -284,9 +300,9 @@ HalpRequestIpiSpecifyVector(
     while (RemainingSet != 0)
     {
         NT_VERIFY(BitScanForwardAffinity(&ProcessorIndex, RemainingSet) != 0);
-        ASSERT(ProcessorIndex < KeNumberProcessors);
         SetMember = AFFINITY_MASK(ProcessorIndex);
         RemainingSet &= ~SetMember;
+        ProcessorIndex += Word * HALP_SET_WORD_BITS;
 
         /* Send the interrupt to the target processor */
         LApicId = HalpProcessorIdentity[ProcessorIndex].LapicId;
@@ -306,10 +322,11 @@ HalpRequestIpiSpecifyVector(
 VOID
 NTAPI
 HalpRequestIpi(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet)
 {
     /* Request the IPI vector */
-    HalpRequestIpiSpecifyVector(TargetSet, APIC_IPI_VECTOR);
+    HalpRequestIpiSpecifyVector(Word, TargetSet, APIC_IPI_VECTOR);
 }
 
 #ifdef _M_AMD64
@@ -323,6 +340,7 @@ HalpRequestIpi(
 VOID
 NTAPI
 HalpSendSoftwareInterrupt(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet,
     _In_ KIRQL Irql)
 {
@@ -344,7 +362,7 @@ HalpSendSoftwareInterrupt(
     }
 
     /* Request the IPI with the specified vector */
-    HalpRequestIpiSpecifyVector(TargetSet, Vector);
+    HalpRequestIpiSpecifyVector(Word, TargetSet, Vector);
 }
 
 /*!
@@ -355,23 +373,25 @@ HalpSendSoftwareInterrupt(
 VOID
 NTAPI
 HalpSendNMI(
+    _In_ ULONG Word,
     _In_ KAFFINITY TargetSet)
 {
+    ULONG Self = KeGetCurrentPrcb()->Number;
     KAFFINITY RemainingSet, SetMember;
     ULONG ProcessorIndex;
     ULONG LApicId;
 
     /* Make sure we do not send an NMI to ourselves */
-    ASSERT((TargetSet & KeGetCurrentPrcb()->SetMember) == 0);
+    ASSERT((Word != Self / HALP_SET_WORD_BITS) || ((TargetSet & AFFINITY_MASK(Self % HALP_SET_WORD_BITS)) == 0));
 
     /* Loop while we have more processors */
     RemainingSet = TargetSet;
     while (RemainingSet != 0)
     {
         NT_VERIFY(BitScanForwardAffinity(&ProcessorIndex, RemainingSet) != 0);
-        ASSERT(ProcessorIndex < KeNumberProcessors);
         SetMember = AFFINITY_MASK(ProcessorIndex);
         RemainingSet &= ~SetMember;
+        ProcessorIndex += Word * HALP_SET_WORD_BITS;
 
         /* Send and NMI to the target processor */
         LApicId = HalpProcessorIdentity[ProcessorIndex].LapicId;

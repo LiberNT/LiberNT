@@ -12,11 +12,14 @@
 #include <mm/include/mienv.h>
 
 #define MAXIMUM_PROCESSORS 64
+#define KE_MAXIMUM_PROCESSORS 256
 #define NTAPI
 
 extern volatile LONG KiTbFlushTimeStamp;
 ULONG MiAmd64TlbCpu(VOID);
-ULONG64 MiAmd64TlbActiveCpus(VOID);
+ULONG MiAmd64TlbWords(VOID);
+ULONG64 MiAmd64TlbActiveCpus(ULONG Word);
+PVOID MiAmd64TlbAllocate(SIZE_T Size);
 ULONG64 MiAmd64TlbReadCr3(VOID);
 ULONG64 MiAmd64TlbReadCr4(VOID);
 VOID MiAmd64TlbWriteCr3(ULONG64 Value);
@@ -33,6 +36,8 @@ BOOLEAN MiAmd64TlbDisableInterrupts(VOID);
 VOID MiAmd64TlbRestoreInterrupts(BOOLEAN Enabled);
 KIRQL MiAmd64TlbRaiseIrql(VOID);
 VOID MiAmd64TlbLowerIrql(KIRQL Previous);
+BOOLEAN MiAmd64TlbPreemptibleWait(KIRQL Previous);
+VOID MiAmd64TlbLowerForWait(VOID);
 VOID MiAmd64TlbPoll(VOID);
 VOID MiAmd64TlbInvpcid(VOID);
 VOID MiAmd64TlbInvpcidNonGlobal(VOID);

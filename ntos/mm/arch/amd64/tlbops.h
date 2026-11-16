@@ -15,8 +15,10 @@ void __cdecl _invpcid(unsigned int Type, void *Descriptor);
 #pragma intrinsic(_invpcid)
 #endif
 
-FORCEINLINE ULONG MiAmd64TlbCpu(VOID) { return KeGetCurrentProcessorNumber(); }
-FORCEINLINE ULONG64 MiAmd64TlbActiveCpus(VOID) { return (ULONG64)KeActiveProcessors; }
+FORCEINLINE ULONG MiAmd64TlbCpu(VOID) { return KeGetCurrentPrcb()->Number; }
+FORCEINLINE ULONG MiAmd64TlbWords(VOID) { return KiProcessorSetWords; }
+FORCEINLINE ULONG64 MiAmd64TlbActiveCpus(ULONG Word) { return (ULONG64)KeActiveProcessors.Bitmap[Word]; }
+FORCEINLINE PVOID MiAmd64TlbAllocate(SIZE_T Size) { return ExAllocatePoolZero(NonPagedPoolNx, Size, 'blTM'); }
 FORCEINLINE ULONG64 MiAmd64TlbReadCr3(VOID) { return __readcr3(); }
 FORCEINLINE ULONG64 MiAmd64TlbReadCr4(VOID) { return __readcr4(); }
 FORCEINLINE VOID MiAmd64TlbWriteCr3(ULONG64 Value) { __writecr3(Value); }

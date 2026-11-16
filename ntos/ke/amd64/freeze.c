@@ -208,9 +208,10 @@ KiFreezeWaitForThaw(
             }
         }
 
-        for (ULONG Source = 0; Source < KeNumberProcessors; Source++)
+        for (ULONG Source = 0; Source < KeProcessorCount; Source++)
         {
-            MiAmd64ProcessTlbRequest(Source);
+            if (Source != CurrentPrcb->Number)
+                MiAmd64ProcessTlbRequest(Source);
         }
 
         YieldProcessor();
@@ -342,7 +343,7 @@ KiPublishActiveProcessor(
                                               NULL,
                                               NULL) == NULL)
         {
-            KeActiveProcessors |= Prcb->SetMember;
+            KiActivateProcessor(Prcb);
             KiReleaseFreezeActiveSet(Prcb, Acquired);
             break;
         }
@@ -354,27 +355,26 @@ KiPublishActiveProcessor(
 
 /* Mark, send to and wait for one snapshot of the published, active processors */
 static
-KAFFINITY
+VOID
 KiFreezeTargetSet(
-    _In_ PKPRCB CurrentPrcb)
+    _In_ PKPRCB CurrentPrcb,
+    _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *Targets)
 {
-    KAFFINITY Targets = 0;
     ULONG Index;
     PKPRCB TargetPrcb;
 
-    for (Index = 0; Index < KeNumberProcessors && Index < MAXIMUM_PROCESSORS; Index++)
+    KiClearProcessorSet(Targets);
+    for (Index = 0; Index < KeProcessorCount; Index++)
     {
         TargetPrcb = KiProcessorBlock[Index];
         if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
             continue;
 
-        if ((KeActiveProcessors & TargetPrcb->SetMember) == 0)
+        if (!KiIsProcessorInSet(KeActiveProcessors.Bitmap, Index))
             continue;
 
-        Targets |= TargetPrcb->SetMember;
+        KiAddProcessorToSet(Targets, Index);
     }
-
-    return Targets;
 }
 
 VOID
@@ -384,7 +384,7 @@ KxFreezeExecution(VOID)
     PKPRCB CurrentPrcb = KeGetCurrentPrcb();
     BOOLEAN ReacquireActiveSet = FALSE;
     BOOLEAN Acquired;
-    KAFFINITY Targets;
+    KI_PROCESSOR_SET Targets;
     KI_FREEZE_WAIT Wait = {0};
 
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
@@ -434,17 +434,17 @@ KxFreezeExecution(VOID)
     Acquired = KiAcquireFreezeActiveSet(CurrentPrcb);
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
         return;
-    Targets = KiFreezeTargetSet(CurrentPrcb);
+    KiFreezeTargetSet(CurrentPrcb, Targets);
     Wait.Valid = FALSE;
     KiReleaseFreezeActiveSet(CurrentPrcb, Acquired && !ReacquireActiveSet);
 
     /* Mark exactly the snapshot */
-    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
+    for (ULONG i = 0; i < KeProcessorCount; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
         if (KiFreezeFailureRequiresReturn(CurrentPrcb))
             return;
-        if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
+        if (TargetPrcb == NULL || !KiIsProcessorInSet(Targets, i))
             continue;
 
         /* Only the active processor may change another processor's IpiFrozen */
@@ -460,14 +460,17 @@ KxFreezeExecution(VOID)
         return;
 
     /* Send the freeze IPI to exactly the same set */
-    if (Targets != 0)
-        KiIpiSend(Targets, IPI_FREEZE);
+    for (ULONG i = 0; i < KeProcessorCount; i++)
+    {
+        if (KiIsProcessorInSet(Targets, i))
+            KiIpiSendProcessor(i, IPI_FREEZE);
+    }
 
     /* Wait for exactly the same set to be frozen */
-    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
+    for (ULONG i = 0; i < KeProcessorCount; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
-        if (TargetPrcb == NULL || (Targets & TargetPrcb->SetMember) == 0)
+        if (TargetPrcb == NULL || !KiIsProcessorInSet(Targets, i))
             continue;
 
         while (TargetPrcb->IpiFrozen != IPI_FROZEN_STATE_FROZEN)
@@ -478,11 +481,11 @@ KxFreezeExecution(VOID)
                 return;
 
             /* The processor that owns the stop never freezes: leave the machine to it now rather than after the watchdog */
-            for (ULONG j = i; j < KeNumberProcessors && j < MAXIMUM_PROCESSORS && !StopOwnerPending; j++)
+            for (ULONG j = i; j < KeProcessorCount && !StopOwnerPending; j++)
             {
                 PKPRCB PendingPrcb = KiProcessorBlock[j];
 
-                StopOwnerPending = PendingPrcb != NULL && (Targets & PendingPrcb->SetMember) != 0 &&
+                StopOwnerPending = PendingPrcb != NULL && KiIsProcessorInSet(Targets, j) &&
                                    KiIsBugCheckEntryOwner(PendingPrcb);
             }
 
@@ -519,7 +522,7 @@ KxThawExecution(VOID)
     ASSERT(CurrentPrcb->IpiFrozen & IPI_FROZEN_FLAG_ACTIVE);
 
     /* Thaw the marked set, not whatever KeNumberProcessors says now */
-    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
+    for (ULONG i = 0; i < KeProcessorCount; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
         if (KiFreezeFailureRequiresReturn(CurrentPrcb))
@@ -535,7 +538,7 @@ KxThawExecution(VOID)
         TargetPrcb->IpiFrozen = IPI_FROZEN_STATE_THAW;
     }
 
-    for (ULONG i = 0; i < KeNumberProcessors && i < MAXIMUM_PROCESSORS; i++)
+    for (ULONG i = 0; i < KeProcessorCount; i++)
     {
         PKPRCB TargetPrcb = KiProcessorBlock[i];
         if (TargetPrcb == NULL || TargetPrcb == CurrentPrcb)
@@ -573,7 +576,7 @@ KxSwitchKdProcessor(
     if (KiFreezeFailureRequiresReturn(CurrentPrcb))
         return ContinueSuccess;
 
-    ASSERT(ProcessorIndex < KeNumberProcessors);
+    ASSERT(ProcessorIndex < KeProcessorCount);
 
     ASSERT(CurrentPrcb->IpiFrozen & IPI_FROZEN_FLAG_ACTIVE);
     CurrentPrcb->IpiFrozen &= ~IPI_FROZEN_FLAG_ACTIVE;
@@ -596,7 +599,7 @@ KxSwitchKdProcessor(
 
     if (CurrentPrcb->IpiFrozen == IPI_FROZEN_STATE_THAW)
     {
-        KdpDprintf("[%u] KxSwitchKdProcessor: ContinueSuccess\n", KeGetCurrentProcessorNumber());
+        KdpDprintf("[%u] KxSwitchKdProcessor: ContinueSuccess\n", KeGetCurrentPrcb()->Number);
         CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
         return ContinueSuccess;
     }

@@ -658,7 +658,7 @@ static
 VOID
 KiArm64SeedActiveProcessorNodeMasks(VOID)
 {
-    KAFFINITY ActiveMask = KeActiveProcessors;
+    KAFFINITY ActiveMask = KeActiveProcessors.Bitmap[0];
     ULONG Cpu;
 
     if (ActiveMask == 0)
@@ -843,7 +843,7 @@ VOID
 NTAPI
 KiArm64FinalizeNumaTopology(VOID)
 {
-    KAFFINITY ActiveMask = KeActiveProcessors;
+    KAFFINITY ActiveMask = KeActiveProcessors.Bitmap[0];
     ULONG Cpu;
 
     if (!KiArm64NumaDiscovered)
@@ -930,7 +930,7 @@ static
 KAFFINITY
 KiArm64ActiveProcessorMask(VOID)
 {
-    KAFFINITY ActiveMask = KeActiveProcessors;
+    KAFFINITY ActiveMask = KeActiveProcessors.Bitmap[0];
 
     return (ActiveMask != 0) ? ActiveMask : (KAFFINITY)1;
 }
@@ -1501,7 +1501,7 @@ KiQueryProcessorEfficiencyClasses(
 {
     ULONG64 DeviceTreeMpidrs[MAXIMUM_PROCESSORS];
     ULONG DeviceTreeCapacities[MAXIMUM_PROCESSORS];
-    KAFFINITY Remaining = KeActiveProcessors;
+    KAFFINITY Remaining = KeActiveProcessors.Bitmap[0];
     ULONG DeviceTreeCount, Processor, Index;
     BOOLEAN HaveDeviceTree;
 
