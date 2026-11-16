@@ -19,6 +19,7 @@ extern void func_InterruptAffinityPolicy(void);
 extern void func_SetupDiGetActualModelsSection(void);
 extern void func_InvalidDeviceInfoSet(void);
 extern void func_LegacyDeviceParent(void);
+extern void func_NetInterfaceNames(void);
 extern void func_NewDeviceInstall(void);
 extern void func_ParentIdPrefix(void);
 extern void func_PciBridgeWindows(void);
@@ -53,6 +54,7 @@ const struct test winetest_testlist[] =
     { "SetupDiGetActualModelsSection", func_SetupDiGetActualModelsSection },
     { "InvalidDeviceInfoSet", func_InvalidDeviceInfoSet },
     { "LegacyDeviceParent", func_LegacyDeviceParent },
+    { "NetInterfaceNames", func_NetInterfaceNames },
     { "NewDeviceInstall", func_NewDeviceInstall },
     { "ParentIdPrefix", func_ParentIdPrefix },
     { "PciBridgeWindows", func_PciBridgeWindows },

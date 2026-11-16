@@ -3071,7 +3071,7 @@ NdisIAddDevice(
 
   RtlZeroMemory(QueryTable, sizeof(QueryTable));
   RtlInitUnicodeString(&ExportName, NULL);
-  QueryTable[0].Flags = RTL_QUERY_REGISTRY_REQUIRED | RTL_QUERY_REGISTRY_DIRECT;
+  QueryTable[0].Flags = RTL_QUERY_REGISTRY_REQUIRED | RTL_QUERY_REGISTRY_DIRECT | RTL_QUERY_REGISTRY_NOEXPAND;
   QueryTable[0].Name = L"Export";
   QueryTable[0].EntryContext = &ExportName;
 
@@ -3083,6 +3083,7 @@ NdisIAddDevice(
       NDIS_DbgPrint(MIN_TRACE, ("Can't get miniport device name. (%x)\n", Status));
       return Status;
     }
+  NdisKeepFirstMultiSzString(&ExportName);
 
   /*
    * Create the device object.

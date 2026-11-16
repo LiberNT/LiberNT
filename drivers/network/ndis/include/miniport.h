@@ -253,4 +253,27 @@ MiniWorkItemComplete(
     PLOGICAL_ADAPTER     Adapter,
     NDIS_WORK_ITEM_TYPE  WorkItemType);
 
+FORCEINLINE
+VOID
+NdisKeepFirstMultiSzString(
+    _Inout_ PUNICODE_STRING String)
+{
+    USHORT Index;
+
+    ASSERT(String->Buffer != NULL || String->Length == 0);
+    ASSERT((String->Length % sizeof(WCHAR)) == 0);
+    ASSERT(String->Length <= String->MaximumLength);
+
+    for (Index = 0; Index < String->Length / sizeof(WCHAR); Index++)
+    {
+        if (String->Buffer[Index] == UNICODE_NULL)
+        {
+            String->Length = (USHORT)(Index * sizeof(WCHAR));
+            break;
+        }
+    }
+
+    ASSERT(String->Length == 0 || String->Buffer[String->Length / sizeof(WCHAR) - 1] != UNICODE_NULL);
+}
+
 /* EOF */

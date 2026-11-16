@@ -400,13 +400,16 @@ Ndis6ReadExportName(
         LinkageKeyName, sizeof(LinkageKeyName));
 
     RtlZeroMemory(QueryTable, sizeof(QueryTable));
-    QueryTable[0].Flags        = RTL_QUERY_REGISTRY_REQUIRED | RTL_QUERY_REGISTRY_DIRECT;
+    QueryTable[0].Flags        = RTL_QUERY_REGISTRY_REQUIRED | RTL_QUERY_REGISTRY_DIRECT |
+                                 RTL_QUERY_REGISTRY_NOEXPAND;
     QueryTable[0].Name         = L"Export";
     QueryTable[0].EntryContext = ExportName;
 
     Status = RtlQueryRegistryValues(RTL_REGISTRY_CONTROL, LinkageKeyBuffer,
                                     QueryTable, NULL, NULL);
     ExFreePoolWithTag(LinkageKeyBuffer, NDIS6_ADAPTER_TAG);
+    if (NT_SUCCESS(Status))
+        NdisKeepFirstMultiSzString(ExportName);
     return Status;
 }
 
