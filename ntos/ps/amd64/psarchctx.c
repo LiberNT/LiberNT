@@ -226,7 +226,7 @@ PspArchManagesExecutableWrites(VOID)
 
 VOID
 NTAPI
-PspArchInitializeUserThreadStartup(
+PspAmd64InitializeUserThreadStartup(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame)
 {
@@ -510,7 +510,7 @@ PspArchCopyWow64DebugRegisters(
 
 NTSTATUS
 NTAPI
-PspArchCaptureXStateContext(
+PspAmd64CaptureXStateContext(
     _In_ PCONTEXT Context,
     _In_ ULONG ContextFlags,
     _In_ KPROCESSOR_MODE PreviousMode,
@@ -626,7 +626,7 @@ PspArchTransferXState(
 
 NTSTATUS
 NTAPI
-PspArchCompleteXStateContext(
+PspAmd64CompleteXStateContext(
     _In_opt_ PVOID XState,
     _In_ BOOLEAN CopyOut)
 {

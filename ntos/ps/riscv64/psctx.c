@@ -139,36 +139,6 @@ PspArchCopyWow64DebugRegisters(
 
 NTSTATUS
 NTAPI
-PspArchCaptureXStateContext(
-    _In_ PCONTEXT Context,
-    _In_ ULONG ContextFlags,
-    _In_ KPROCESSOR_MODE PreviousMode,
-    _In_ BOOLEAN SetContext,
-    _Out_ PVOID *XState)
-{
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(ContextFlags);
-    UNREFERENCED_PARAMETER(PreviousMode);
-    UNREFERENCED_PARAMETER(SetContext);
-
-    /* TODO: capture the extended processor state (CONTEXT_XSTATE) of the context */
-    *XState = NULL;
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
-PspArchCompleteXStateContext(
-    _In_opt_ PVOID XState,
-    _In_ BOOLEAN CopyOut)
-{
-    UNREFERENCED_PARAMETER(XState);
-    UNREFERENCED_PARAMETER(CopyOut);
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
 PspArchSetInstrumentationCallback(
     _In_ PEPROCESS Process,
     _In_reads_bytes_(Length) PVOID Information,
@@ -190,16 +160,3 @@ PspArchManagesExecutableWrites(VOID)
     return FALSE;
 }
 
-VOID
-NTAPI
-PspArchInitializeUserThreadStartup(
-    _In_ PKEXCEPTION_FRAME ExceptionFrame,
-    _Inout_ PKTRAP_FRAME TrapFrame)
-{
-    KiInitializeUserApc(ExceptionFrame,
-                        TrapFrame,
-                        PspSystemDllEntryPoint,
-                        NULL,
-                        PspSystemDllBase,
-                        NULL);
-}

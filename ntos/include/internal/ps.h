@@ -265,20 +265,40 @@ PsArchInitializeUserThreadContext(
     _In_opt_ PVOID Argument,
     _In_ PVOID StackBase);
 
+#ifndef PspArchCaptureXStateContext
+#define PspArchCaptureXStateContext PspCaptureNoXStateContext
+#define PspArchCompleteXStateContext PspCompleteNoXStateContext
+
+FORCEINLINE
 NTSTATUS
-NTAPI
-PspArchCaptureXStateContext(
+PspCaptureNoXStateContext(
     _In_ PCONTEXT Context,
     _In_ ULONG ContextFlags,
     _In_ KPROCESSOR_MODE PreviousMode,
     _In_ BOOLEAN SetContext,
-    _Out_ PVOID *XState);
+    _Out_ PVOID *XState)
+{
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(ContextFlags);
+    UNREFERENCED_PARAMETER(PreviousMode);
+    UNREFERENCED_PARAMETER(SetContext);
 
+    /* TODO: capture the extended processor state (CONTEXT_XSTATE) of the context */
+    *XState = NULL;
+    return STATUS_SUCCESS;
+}
+
+FORCEINLINE
 NTSTATUS
-NTAPI
-PspArchCompleteXStateContext(
+PspCompleteNoXStateContext(
     _In_opt_ PVOID XState,
-    _In_ BOOLEAN CopyOut);
+    _In_ BOOLEAN CopyOut)
+{
+    UNREFERENCED_PARAMETER(XState);
+    UNREFERENCED_PARAMETER(CopyOut);
+    return STATUS_SUCCESS;
+}
+#endif
 
 NTSTATUS
 NTAPI
@@ -294,11 +314,23 @@ PspArchCopyWow64DebugRegisters(
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext);
 
+#ifndef PspArchInitializeUserThreadStartup
+#define PspArchInitializeUserThreadStartup PspStartUserThreadAtSystemDll
+
+FORCEINLINE
 VOID
-NTAPI
-PspArchInitializeUserThreadStartup(
+PspStartUserThreadAtSystemDll(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
-    _Inout_ PKTRAP_FRAME TrapFrame);
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    KiInitializeUserApc(ExceptionFrame,
+                        TrapFrame,
+                        PspSystemDllEntryPoint,
+                        NULL,
+                        PspSystemDllBase,
+                        NULL);
+}
+#endif
 
 BOOLEAN
 NTAPI

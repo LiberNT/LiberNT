@@ -636,3 +636,27 @@ KiAmd64ContinueExtendedState(
     _In_ ULONG ContextFlags,
     _In_ KPROCESSOR_MODE PreviousMode);
 #define KiArchContinueExtendedState(SourceContext, ContextFlags, PreviousMode) KiAmd64ContinueExtendedState(SourceContext, ContextFlags, PreviousMode)
+
+NTSTATUS
+NTAPI
+PspAmd64CaptureXStateContext(
+    _In_ PCONTEXT Context,
+    _In_ ULONG ContextFlags,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _In_ BOOLEAN SetContext,
+    _Out_ PVOID *XState);
+#define PspArchCaptureXStateContext PspAmd64CaptureXStateContext
+
+NTSTATUS
+NTAPI
+PspAmd64CompleteXStateContext(
+    _In_opt_ PVOID XState,
+    _In_ BOOLEAN CopyOut);
+#define PspArchCompleteXStateContext PspAmd64CompleteXStateContext
+
+VOID
+NTAPI
+PspAmd64InitializeUserThreadStartup(
+    _In_ PKEXCEPTION_FRAME ExceptionFrame,
+    _Inout_ PKTRAP_FRAME TrapFrame);
+#define PspArchInitializeUserThreadStartup PspAmd64InitializeUserThreadStartup
