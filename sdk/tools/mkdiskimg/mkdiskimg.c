@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Disk Image Creator
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Assembles a bootable MBR disk image from partition images
+ * PURPOSE:     Assembles bootable disk images and makes El Torito CD images bootable from a disk
  * COPYRIGHT:   Copyright 2026 Ahmed Arif <arif.img@outlook.com>
  */
 
@@ -35,8 +35,10 @@
 #define FAT_BPB_RESERVED_SECTORS_OFFSET 14
 #define FAT_BPB_NUMBER_OF_FATS_OFFSET 16
 #define FAT32_MEDIA_DESCRIPTOR_OFFSET 21
+#define FAT_BPB_TOTAL_SECTORS16_OFFSET 19
 #define FAT_BPB_SECTORS_PER_FAT16_OFFSET 22
 #define FAT32_HIDDEN_SECTORS_OFFSET 28
+#define FAT_BPB_TOTAL_SECTORS32_OFFSET 32
 #define FAT32_SECTORS_PER_FAT_OFFSET 36
 #define FAT32_BACKUP_BOOT_SECTOR_OFFSET 50
 #define FAT16_BOOT_DRIVE_OFFSET 36
@@ -57,6 +59,39 @@
 #define EXFAT_BOOT_CHECKSUM_SECTOR 11
 #define EXFAT_BACKUP_BOOT_SECTOR 12
 #define EXFAT_BOOT_REGION_SECTORS 24
+
+#define CD_SECTOR_SIZE 2048
+#define CD_FIRST_DESCRIPTOR 16
+#define CD_MAX_DESCRIPTORS 64
+#define CD_STANDARD_ID_OFFSET 1
+#define CD_DESCRIPTOR_BOOT 0x00
+#define CD_DESCRIPTOR_PRIMARY 0x01
+#define CD_DESCRIPTOR_TERMINATOR 0xFF
+#define CD_VOLUME_SIZE_OFFSET 80
+#define CD_BLOCK_SIZE_OFFSET 128
+#define CD_BOOT_SYSTEM_OFFSET 7
+
+#define ELTORITO_SYSTEM_ID "EL TORITO SPECIFICATION"
+#define ELTORITO_CATALOG_OFFSET 71
+#define ELTORITO_RECORD_SIZE 32
+#define ELTORITO_VALIDATION_HEADER 0x01
+#define ELTORITO_KEY_OFFSET 30
+#define ELTORITO_SECTION_HEADER 0x90
+#define ELTORITO_FINAL_SECTION_HEADER 0x91
+#define ELTORITO_EXTENSION 0x44
+#define ELTORITO_BOOTABLE 0x88
+#define ELTORITO_EMULATION_MASK 0x0F
+#define ELTORITO_NO_EMULATION 0x00
+#define ELTORITO_LOAD_RBA_OFFSET 8
+#define ELTORITO_PLATFORM_X86 0x00
+#define ELTORITO_PLATFORM_EFI 0xEF
+
+#define HYBRID_BOOT_CODE_SIZE 432
+#define HYBRID_SIGNATURE_OFFSET 64
+#define HYBRID_SIGNATURE 0x7078C0FBU
+
+#define MBR_TYPE_EFI_SYSTEM 0xEF
+#define MBR_TYPE_ISO9660 0x96
 
 /* Fixed disk media descriptor (0xF8) vs removable (0xF0) */
 #define MEDIA_DESCRIPTOR_FIXED 0xF8
@@ -124,6 +159,12 @@ typedef struct _RAW_BLOB
     long Size;
 } RAW_BLOB;
 
+typedef struct _CD_BOOT_IMAGE
+{
+    int Found;
+    unsigned int Sector;
+} CD_BOOT_IMAGE;
+
 #pragma pack(push, 1)
 typedef struct _PARTITION_ENTRY
 {
@@ -160,6 +201,10 @@ static void print_usage(const char* name)
     printf("  -format <raw|vhd|vhdx> Output container format (default: raw)\n");
     printf("  -vhd                Shorthand for -format vhd\n");
     printf("  -vhdx               Shorthand for -format vhdx (Hyper-V Generation 2 takes no VHD)\n");
+    printf("\nUsage: %s -cd <image.iso> [-mbr <isombr.bin>] [-signature <hex>]\n\n", name);
+    printf("  -cd <image.iso>     Make an El Torito CD image bootable from a disk, in place: the MBR gets\n");
+    printf("                      an EFI system partition over the EFI boot image and, with -mbr, the\n");
+    printf("                      boot code that starts the BIOS boot image\n");
 }
 
 static int buffer_is_zero(const unsigned char* data, size_t size);
@@ -1259,9 +1304,245 @@ cleanup:
     return ret;
 }
 
+static int read_cd_sector(FILE* file, unsigned long long sector, unsigned char buffer[CD_SECTOR_SIZE])
+{
+    if (sector > (unsigned long long)LONG_MAX / CD_SECTOR_SIZE ||
+        fseek(file, (long)(sector * CD_SECTOR_SIZE), SEEK_SET) != 0)
+    {
+        return -1;
+    }
+    return fread(buffer, 1, CD_SECTOR_SIZE, file) == CD_SECTOR_SIZE ? 0 : -1;
+}
+
+static void note_boot_image(const unsigned char* record, unsigned char platform, CD_BOOT_IMAGE* bios, CD_BOOT_IMAGE* efi)
+{
+    CD_BOOT_IMAGE* image;
+
+    if (record[0] != ELTORITO_BOOTABLE || (record[1] & ELTORITO_EMULATION_MASK) != ELTORITO_NO_EMULATION)
+        return;
+
+    if (platform == ELTORITO_PLATFORM_X86)
+        image = bios;
+    else if (platform == ELTORITO_PLATFORM_EFI)
+        image = efi;
+    else
+        return;
+
+    if (!image->Found)
+    {
+        image->Found = 1;
+        image->Sector = read_le32(record + ELTORITO_LOAD_RBA_OFFSET);
+    }
+}
+
+static int read_boot_catalog(FILE* file, unsigned int catalog_sector, CD_BOOT_IMAGE* bios, CD_BOOT_IMAGE* efi)
+{
+    unsigned char catalog[CD_SECTOR_SIZE];
+    unsigned int sum = 0;
+    unsigned int count;
+    unsigned char platform;
+    size_t position;
+    int final_header = 0;
+
+    if (read_cd_sector(file, catalog_sector, catalog) != 0 ||
+        catalog[0] != ELTORITO_VALIDATION_HEADER ||
+        catalog[ELTORITO_KEY_OFFSET] != 0x55 ||
+        catalog[ELTORITO_KEY_OFFSET + 1] != 0xAA)
+    {
+        return -1;
+    }
+    for (position = 0; position < ELTORITO_RECORD_SIZE; position += 2)
+        sum += read_le16(catalog + position);
+    if ((sum & 0xFFFF) != 0)
+        return -1;
+
+    note_boot_image(catalog + ELTORITO_RECORD_SIZE, catalog[1], bios, efi);
+
+    for (position = 2 * ELTORITO_RECORD_SIZE;
+         !final_header && position + ELTORITO_RECORD_SIZE <= sizeof(catalog) &&
+         (catalog[position] == ELTORITO_SECTION_HEADER || catalog[position] == ELTORITO_FINAL_SECTION_HEADER);)
+    {
+        final_header = catalog[position] == ELTORITO_FINAL_SECTION_HEADER;
+        platform = catalog[position + 1];
+        count = read_le16(catalog + position + 2);
+        position += ELTORITO_RECORD_SIZE;
+
+        for (; count != 0 && position + ELTORITO_RECORD_SIZE <= sizeof(catalog); count--)
+        {
+            note_boot_image(catalog + position, platform, bios, efi);
+            position += ELTORITO_RECORD_SIZE;
+            while (position + ELTORITO_RECORD_SIZE <= sizeof(catalog) && catalog[position] == ELTORITO_EXTENSION)
+                position += ELTORITO_RECORD_SIZE;
+        }
+    }
+    return 0;
+}
+
+static int make_hybrid_cd(const char* image_path, const char* mbr_path)
+{
+    FILE* image = NULL;
+    unsigned char* boot_code = NULL;
+    unsigned char sector[CD_SECTOR_SIZE];
+    unsigned char mbr_sector[SECTOR_SIZE];
+    unsigned long long volume_sectors = 0;
+    unsigned long long esp_start = 0, esp_sectors = 0;
+    unsigned int catalog_sector = 0;
+    unsigned int bytes_per_sector, fat_sectors;
+    unsigned int index;
+    CD_BOOT_IMAGE bios = {0, 0}, efi = {0, 0};
+    PARTITION_ENTRY* entry = (PARTITION_ENTRY*)(mbr_sector + MBR_PARTITION_TABLE_OFFSET);
+    long boot_code_size = 0;
+    int ret = 1;
+
+    image = fopen(image_path, "r+b");
+    if (!image)
+    {
+        fprintf(stderr, "Error: Cannot open CD image '%s'.\n", image_path);
+        goto cleanup;
+    }
+
+    for (index = 0; index < CD_MAX_DESCRIPTORS; index++)
+    {
+        if (read_cd_sector(image, CD_FIRST_DESCRIPTOR + index, sector) != 0 ||
+            memcmp(sector + CD_STANDARD_ID_OFFSET, "CD001", 5) != 0)
+        {
+            fprintf(stderr, "Error: '%s' is not an ISO 9660 image.\n", image_path);
+            goto cleanup;
+        }
+        if (sector[0] == CD_DESCRIPTOR_TERMINATOR)
+            break;
+        if (sector[0] == CD_DESCRIPTOR_PRIMARY && volume_sectors == 0)
+        {
+            if (read_le16(sector + CD_BLOCK_SIZE_OFFSET) != CD_SECTOR_SIZE)
+            {
+                fprintf(stderr, "Error: '%s' does not use %d-byte logical blocks.\n", image_path, CD_SECTOR_SIZE);
+                goto cleanup;
+            }
+            volume_sectors = (unsigned long long)read_le32(sector + CD_VOLUME_SIZE_OFFSET) * (CD_SECTOR_SIZE / SECTOR_SIZE);
+        }
+        else if (sector[0] == CD_DESCRIPTOR_BOOT &&
+                 memcmp(sector + CD_BOOT_SYSTEM_OFFSET, ELTORITO_SYSTEM_ID, sizeof(ELTORITO_SYSTEM_ID) - 1) == 0)
+        {
+            catalog_sector = read_le32(sector + ELTORITO_CATALOG_OFFSET);
+        }
+    }
+
+    if (volume_sectors == 0 || catalog_sector == 0 ||
+        read_boot_catalog(image, catalog_sector, &bios, &efi) != 0)
+    {
+        fprintf(stderr, "Error: '%s' has no valid El Torito boot catalog.\n", image_path);
+        goto cleanup;
+    }
+    if (!efi.Found && !mbr_path)
+    {
+        fprintf(stderr, "Error: '%s' has no EFI boot image and no -mbr was given.\n", image_path);
+        goto cleanup;
+    }
+
+    memset(mbr_sector, 0, sizeof(mbr_sector));
+
+    if (mbr_path)
+    {
+        if (!bios.Found)
+        {
+            fprintf(stderr, "Error: -mbr needs a BIOS boot image in '%s'.\n", image_path);
+            goto cleanup;
+        }
+        if (read_whole_file(mbr_path, &boot_code, &boot_code_size) != 0 ||
+            boot_code_size <= 0 || boot_code_size > HYBRID_BOOT_CODE_SIZE)
+        {
+            fprintf(stderr, "Error: '%s' must hold 1 to %d bytes of boot code.\n", mbr_path, HYBRID_BOOT_CODE_SIZE);
+            goto cleanup;
+        }
+        if (read_cd_sector(image, bios.Sector, sector) != 0 ||
+            read_le32(sector + HYBRID_SIGNATURE_OFFSET) != HYBRID_SIGNATURE)
+        {
+            fprintf(stderr, "Error: The BIOS boot image of '%s' cannot start from a disk.\n", image_path);
+            goto cleanup;
+        }
+        memcpy(mbr_sector, boot_code, (size_t)boot_code_size);
+        write_le64(mbr_sector + HYBRID_BOOT_CODE_SIZE, (unsigned long long)bios.Sector * (CD_SECTOR_SIZE / SECTOR_SIZE));
+    }
+
+    if (efi.Found)
+    {
+        if (read_cd_sector(image, efi.Sector, sector) != 0 ||
+            sector[MBR_SIGNATURE_OFFSET] != 0x55 || sector[MBR_SIGNATURE_OFFSET + 1] != 0xAA)
+        {
+            fprintf(stderr, "Error: The EFI boot image of '%s' is not a FAT volume.\n", image_path);
+            goto cleanup;
+        }
+        bytes_per_sector = read_le16(sector + FAT_BPB_BYTES_PER_SECTOR_OFFSET);
+        fat_sectors = read_le16(sector + FAT_BPB_TOTAL_SECTORS16_OFFSET);
+        if (fat_sectors == 0)
+            fat_sectors = read_le32(sector + FAT_BPB_TOTAL_SECTORS32_OFFSET);
+        if (bytes_per_sector < SECTOR_SIZE || bytes_per_sector > 4096 ||
+            (bytes_per_sector & (bytes_per_sector - 1)) != 0 || fat_sectors == 0)
+        {
+            fprintf(stderr, "Error: The EFI boot image of '%s' has an invalid FAT boot sector.\n", image_path);
+            goto cleanup;
+        }
+        esp_start = (unsigned long long)efi.Sector * (CD_SECTOR_SIZE / SECTOR_SIZE);
+        esp_sectors = (unsigned long long)fat_sectors * (bytes_per_sector / SECTOR_SIZE);
+        if (esp_start + esp_sectors > volume_sectors || esp_start + esp_sectors > 0xFFFFFFFFULL)
+        {
+            fprintf(stderr, "Error: The EFI boot image of '%s' lies outside the MBR-addressable volume.\n", image_path);
+            goto cleanup;
+        }
+
+        entry->Status = mbr_path ? 0x80 : 0;
+        entry->Type = MBR_TYPE_EFI_SYSTEM;
+        entry->LBAStart = (unsigned int)esp_start;
+        entry->LBASize = (unsigned int)esp_sectors;
+        write_chs(entry->LBAStart, entry->CHSFirst);
+        write_chs(entry->LBAStart + entry->LBASize - 1, entry->CHSLast);
+    }
+    else
+    {
+        if (volume_sectors > 0xFFFFFFFFULL)
+        {
+            fprintf(stderr, "Error: '%s' is too large for an MBR partition.\n", image_path);
+            goto cleanup;
+        }
+        entry->Status = 0x80;
+        entry->Type = MBR_TYPE_ISO9660;
+        entry->LBAStart = 0;
+        entry->LBASize = (unsigned int)volume_sectors;
+        write_chs(0, entry->CHSFirst);
+        write_chs(entry->LBASize - 1, entry->CHSLast);
+    }
+
+    write_le32(mbr_sector + MBR_BOOT_CODE_SIZE, disk_signature);
+    mbr_sector[MBR_SIGNATURE_OFFSET] = 0x55;
+    mbr_sector[MBR_SIGNATURE_OFFSET + 1] = 0xAA;
+
+    if (write_data_at(image, 0, mbr_sector, sizeof(mbr_sector)) != 0 || fflush(image) != 0)
+    {
+        fprintf(stderr, "Error: Cannot write the MBR of '%s'.\n", image_path);
+        goto cleanup;
+    }
+
+    printf("Made '%s' bootable from a disk (%s%s%s)\n",
+           image_path,
+           mbr_path ? "BIOS" : "",
+           mbr_path && efi.Found ? " and " : "",
+           efi.Found ? "EFI system partition" : "");
+    ret = 0;
+
+cleanup:
+    if (image && fclose(image) != 0 && ret == 0)
+    {
+        fprintf(stderr, "Error: Cannot close '%s'.\n", image_path);
+        ret = 1;
+    }
+    free(boot_code);
+    return ret;
+}
+
 int main(int argc, char* argv[])
 {
     const char* output_path = NULL;
+    const char* cd_path = NULL;
     const char* mbr_path = NULL;
     PARTITION_INPUT partitions[MAX_MBR_PARTITIONS];
     unsigned int partition_count = 0;
@@ -1290,6 +1571,10 @@ int main(int argc, char* argv[])
         if (strcmp(argv[i], "-o") == 0 && i + 1 < argc)
         {
             output_path = argv[++i];
+        }
+        else if (strcmp(argv[i], "-cd") == 0 && i + 1 < argc)
+        {
+            cd_path = argv[++i];
         }
         else if (strcmp(argv[i], "-mbr") == 0 && i + 1 < argc)
         {
@@ -1470,6 +1755,17 @@ int main(int argc, char* argv[])
             print_usage(argv[0]);
             goto cleanup;
         }
+    }
+
+    if (cd_path)
+    {
+        if (output_path || partition_count != 0 || blob_count != 0 || gpt || output_format != OUTPUT_FORMAT_RAW)
+        {
+            fprintf(stderr, "Error: -cd only combines with -mbr and -signature.\n");
+            goto cleanup;
+        }
+        ret = make_hybrid_cd(cd_path, mbr_path);
+        goto cleanup;
     }
 
     if (!output_path || partition_count == 0)
