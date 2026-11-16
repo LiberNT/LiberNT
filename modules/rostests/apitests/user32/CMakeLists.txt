@@ -14,6 +14,7 @@ list(APPEND SOURCE
     ClipboardData.c
     FrameMetrics.c
     ComboBox.c
+    ControlColorOtherThread.c
     CopyImage.c
     CopyImage_Icon.c
     CursorPresentation.c
