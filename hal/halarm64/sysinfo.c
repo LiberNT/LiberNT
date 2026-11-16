@@ -201,37 +201,6 @@ HalConvertDeviceIdtToIrql(
 
 NTSTATUS
 NTAPI
-HalGetInterruptTargetInformation(
-    _Inout_ PHAL_INTERRUPT_TARGET_INFORMATION TargetInformation)
-{
-    KAFFINITY Mask;
-    ULONG ProcessorNumber;
-
-    if (TargetInformation == NULL ||
-        TargetInformation->Version != HAL_INTERRUPT_TARGET_INFORMATION_VERSION)
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    Mask = TargetInformation->TargetProcessors;
-    if (Mask == 0)
-        Mask = KeQueryActiveProcessors();
-
-    ProcessorNumber = 0;
-    while ((Mask & 1) == 0)
-    {
-        Mask >>= 1;
-        ProcessorNumber++;
-    }
-
-    TargetInformation->ProcessorNumber = ProcessorNumber;
-    TargetInformation->TargetProcessors = ((KAFFINITY)1 << ProcessorNumber);
-    TargetInformation->DestinationId = ProcessorNumber;
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
 HalGetMessageRoutingInfo(
     _Inout_ PHAL_MESSAGE_ROUTING_INFO RoutingInfo)
 {
