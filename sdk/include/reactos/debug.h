@@ -121,13 +121,23 @@ RtlAssert(
 
     #define ERR_(ch, fmt, ...)    DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_ERROR_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define WARN_(ch, fmt, ...)   DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_WARNING_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
+#if DBG
     #define TRACE_(ch, fmt, ...)  DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_TRACE_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define INFO_(ch, fmt, ...)   DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_INFO_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
+#else
+    #define TRACE_(ch, fmt, ...)  ((void)(0 ? DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_TRACE_LEVEL, fmt, ##__VA_ARGS__) : 0))
+    #define INFO_(ch, fmt, ...)   ((void)(0 ? DbgPrintEx(DPFLTR_##ch##_ID, DPFLTR_INFO_LEVEL, fmt, ##__VA_ARGS__) : 0))
+#endif
 
     #define ERR__(ch, fmt, ...)    DbgPrintEx(ch, DPFLTR_ERROR_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define WARN__(ch, fmt, ...)   DbgPrintEx(ch, DPFLTR_WARNING_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
+#if DBG
     #define TRACE__(ch, fmt, ...)  DbgPrintEx(ch, DPFLTR_TRACE_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
     #define INFO__(ch, fmt, ...)   DbgPrintEx(ch, DPFLTR_INFO_LEVEL, "(%s:%d) " fmt, __RELFILE__, __LINE__, ##__VA_ARGS__)
+#else
+    #define TRACE__(ch, fmt, ...)  ((void)(0 ? DbgPrintEx(ch, DPFLTR_TRACE_LEVEL, fmt, ##__VA_ARGS__) : 0))
+    #define INFO__(ch, fmt, ...)   ((void)(0 ? DbgPrintEx(ch, DPFLTR_INFO_LEVEL, fmt, ##__VA_ARGS__) : 0))
+#endif
 
 /******************************************************************************/
 /*
