@@ -14,6 +14,8 @@
 
 #define SMBIOS_OEM_STRINGS 11
 #define SMBIOS_END_OF_TABLE 127
+#define APP_DRIVE_WAIT_MS (60 * 1000)
+#define APP_DRIVE_POLL_MS 100
 
 static const CHAR TestRunString[] = "libernt.applaunch";
 
@@ -126,6 +128,22 @@ FindAppDrive(PWSTR Drive)
 }
 
 static BOOL
+WaitForAppDrive(PWSTR Drive)
+{
+    ULONGLONG Deadline = GetTickCount64() + APP_DRIVE_WAIT_MS;
+
+    /* Logon can come before the application disk has a drive letter */
+    while (!FindAppDrive(Drive))
+    {
+        if (GetTickCount64() >= Deadline)
+            return FALSE;
+        Sleep(APP_DRIVE_POLL_MS);
+    }
+
+    return TRUE;
+}
+
+static BOOL
 GetDesktop(PCWSTR Variable, PWSTR Desktop, SIZE_T Size)
 {
     DWORD Length;
@@ -230,7 +248,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCm
 
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
 
-    if (FindAppDrive(Drive))
+    if (WaitForAppDrive(Drive))
     {
         Say(L"APPLAUNCH_BEGIN %s", Drive);
         CopyShortcuts(Drive);
