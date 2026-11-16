@@ -101,4 +101,9 @@ START_TEST(DxgkVsyncPower)
         ok(Due != 0 && Due <= 160000ULL && (Now + Due - 1600ULL) % 160000ULL == 0,
            "resume at %I64u is due in %I64u, off the phase\n", Now, Due);
     }
+
+    ok_bool_false(DxgkVsyncPowerCoreDeferStartEnable(STATUS_SUCCESS), "an interrupt turned on at start is not retried");
+    ok_bool_false(DxgkVsyncPowerCoreDeferStartEnable(STATUS_NOT_SUPPORTED), "a miniport without vsync control is never asked again");
+    ok_bool_true(DxgkVsyncPowerCoreDeferStartEnable(STATUS_UNSUCCESSFUL), "a refusal before a mode is set waits for the first vsync demand");
+    ok_bool_true(DxgkVsyncPowerCoreDeferStartEnable(STATUS_DELETE_PENDING), "an interrupted start is retried on demand");
 }

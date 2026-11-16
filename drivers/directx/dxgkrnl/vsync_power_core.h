@@ -46,6 +46,14 @@ DxgkVsyncPowerCorePulse(
 
 FORCEINLINE
 BOOLEAN
+DxgkVsyncPowerCoreDeferStartEnable(
+    _In_ NTSTATUS StartStatus)
+{
+    return !NT_SUCCESS(StartStatus) && StartStatus != STATUS_NOT_SUPPORTED;
+}
+
+FORCEINLINE
+BOOLEAN
 DxgkVsyncPowerCoreDemand(
     _Inout_ PDXGK_VSYNC_POWER_CORE Core)
 {

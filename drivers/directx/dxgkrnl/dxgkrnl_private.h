@@ -918,6 +918,7 @@ struct _DXGKRNL_ADAPTER
     /* Adapter-wide counters answered by D3DKMTQueryStatistics(ADAPTER). */
     volatile LONG               TdrDetectedCount;
     volatile LONG               VsyncInterruptEnabled;
+    volatile LONG               VsyncEnableDeferred;
     DXGK_VSYNC_POWER_CORE       VsyncPower;
     KMUTEX                      VsyncControlMutex;
     WORK_QUEUE_ITEM             VsyncPowerWorkItem;

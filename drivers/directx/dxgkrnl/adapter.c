@@ -14040,6 +14040,16 @@ DxgkVsyncPowerDemand(
     PAGED_CODE();
     ASSERT(Adapter != NULL);
 
+    if (InterlockedCompareExchange(&Adapter->VsyncEnableDeferred, 0, 0) != 0)
+    {
+        Status = DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
+        DXGKRNL_TRACE("DxgkVsyncPowerDemand: deferred CRTC_VSYNC enable -> 0x%08lX\n", Status);
+        if (NT_SUCCESS(Status))
+        {
+            ASSERT(InterlockedCompareExchange(&Adapter->VsyncInterruptEnabled, 0, 0) != 0);
+            InterlockedExchange(&Adapter->VsyncEnableDeferred, 0);
+        }
+    }
     if (!DxgkVsyncPowerCoreDemand(&Adapter->VsyncPower))
         return;
     KeWaitForSingleObject(&Adapter->VsyncControlMutex, Executive, KernelMode, FALSE, NULL);
@@ -15052,10 +15062,9 @@ DxgkAdapterStart(
         NTSTATUS VsyncStatus = DxgkpSetVsyncInterruptState(Adapter, DXGK_VSYNC_ENABLE);
 
         DXGKRNL_TRACE("DxgkAdapterStart: CRTC_VSYNC enable -> 0x%08lX\n", VsyncStatus);
+        InterlockedExchange(&Adapter->VsyncEnableDeferred, DxgkVsyncPowerCoreDeferStartEnable(VsyncStatus) ? 1 : 0);
         if (NT_SUCCESS(VsyncStatus))
             Progress.VsyncEnabled = TRUE;
-        else if (VsyncStatus != STATUS_NOT_SUPPORTED)
-            DXGKRNL_ERR("DxgkAdapterStart: miniport refused the vsync interrupt 0x%08lX\n", VsyncStatus);
     }
 
     /* Enable the GUID_DISPLAY_DEVICE_ARRIVAL device interface.
@@ -15899,6 +15908,7 @@ DxgkpAdapterStopInternal(
      * stops referencing the PoFx handle it was given at start. */
     DxgkpStopRuntimePowerManagement(Adapter);
 
+    InterlockedExchange(&Adapter->VsyncEnableDeferred, 0);
     VsyncStatus =
         DxgkpSetVsyncInterruptState(
             Adapter,
