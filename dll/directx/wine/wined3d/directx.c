@@ -1837,6 +1837,39 @@ HRESULT wined3d_output_get_gamma_ramp(struct wined3d_output *output, struct wine
     return WINED3D_OK;
 }
 
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+static void wined3d_adapter_apply_wddm_identifier(struct wined3d_adapter *adapter,
+        struct wined3d_adapter_identifier *identifier)
+{
+    struct wined3d_adapter_identifier *cached = &adapter->wddm_identifier;
+
+    if (!adapter->wddm_identifier_queried)
+    {
+        cached->driver = adapter->wddm_driver;
+        cached->driver_size = ARRAY_SIZE(adapter->wddm_driver);
+        cached->description = adapter->wddm_description;
+        cached->description_size = ARRAY_SIZE(adapter->wddm_description);
+        wined3d_copy_name(cached->driver, adapter->driver_info.name, cached->driver_size);
+        wined3d_copy_name(cached->description, adapter->driver_info.description, cached->description_size);
+        cached->driver_version = identifier->driver_version;
+        cached->vendor_id = identifier->vendor_id;
+        cached->device_id = identifier->device_id;
+        cached->subsystem_id = identifier->subsystem_id;
+        cached->revision = identifier->revision;
+        wined3d_get_wddm_adapter_identifier(adapter->kmt_adapter, cached);
+        adapter->wddm_identifier_queried = TRUE;
+    }
+
+    wined3d_copy_name(identifier->driver, cached->driver, identifier->driver_size);
+    wined3d_copy_name(identifier->description, cached->description, identifier->description_size);
+    identifier->driver_version = cached->driver_version;
+    identifier->vendor_id = cached->vendor_id;
+    identifier->device_id = cached->device_id;
+    identifier->subsystem_id = cached->subsystem_id;
+    identifier->revision = cached->revision;
+}
+#endif
+
 HRESULT CDECL wined3d_adapter_get_identifier(const struct wined3d_adapter *adapter,
         uint32_t flags, struct wined3d_adapter_identifier *identifier)
 {
@@ -1861,7 +1894,7 @@ HRESULT CDECL wined3d_adapter_get_identifier(const struct wined3d_adapter *adapt
     identifier->video_memory = min(~(SIZE_T)0, adapter->driver_info.vram_bytes);
     identifier->shared_system_memory = min(~(SIZE_T)0, adapter->driver_info.sysmem_bytes);
 #if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
-    wined3d_get_wddm_adapter_identifier(adapter->kmt_adapter, identifier);
+    wined3d_adapter_apply_wddm_identifier((struct wined3d_adapter *)adapter, identifier);
 #endif
 
     wined3d_mutex_unlock();

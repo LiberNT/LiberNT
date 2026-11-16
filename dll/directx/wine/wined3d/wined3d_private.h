@@ -2608,6 +2608,12 @@ struct wined3d_adapter
     struct wined3d_output *outputs;
     SIZE_T output_count, outputs_size;
     D3DKMT_HANDLE kmt_adapter;
+#if defined(__REACTOS__) && defined(REACTOS_WINE_WDDM)
+    struct wined3d_adapter_identifier wddm_identifier;
+    char wddm_driver[512];
+    char wddm_description[512];
+    BOOL wddm_identifier_queried;
+#endif
     UINT64 vram_bytes_used;
     GUID driver_uuid;
     GUID device_uuid;
