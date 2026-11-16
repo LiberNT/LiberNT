@@ -175,7 +175,7 @@ void CCompositionWindow::Update(HIMC hIMC)
     ::SelectObject(hDC, hOldFont);
     ::ReleaseDC(m_hWnd, hDC);
 
-    ::SetWindowPos(m_hWnd, HWND_TOPMOST, pt.x, pt.y, size.cx + 1, size.cy + 1, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    ::SetWindowPos(m_hWnd, HWND_TOPMOST, pt.x, pt.y, size.cx + 1, size.cy + 2, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     ::InvalidateRect(m_hWnd, NULL, TRUE);
 }
 
@@ -206,23 +206,18 @@ void CCompositionWindow::Paint(HDC hDC)
 
         SIZE size;
         ::GetTextExtentPoint32W(hDC, m_pszText + start, end - start, &size);
-        RECT rcSeg = { x, y, x + size.cx, baseline };
         BYTE bAttr = m_pAttr[start];
-        if (bAttr == ATTR_TARGET_CONVERTED || bAttr == ATTR_TARGET_NOTCONVERTED)
-        {
-            ::FillRect(hDC, &rcSeg, ::GetSysColorBrush(COLOR_HIGHLIGHT));
-            ::SetTextColor(hDC, ::GetSysColor(COLOR_HIGHLIGHTTEXT));
-        }
-        else
-        {
-            ::SetTextColor(hDC, ::GetSysColor(COLOR_WINDOWTEXT));
-        }
+        BOOL bTarget = (bAttr == ATTR_TARGET_CONVERTED || bAttr == ATTR_TARGET_NOTCONVERTED);
         ::ExtTextOutW(hDC, x, y, 0, NULL, m_pszText + start, end - start, NULL);
 
-        HPEN hPen = ::CreatePen((bAttr == ATTR_INPUT) ? PS_DOT : PS_SOLID, 1, ::GetSysColor(COLOR_WINDOWTEXT));
+        /* FIXME: The line style and colors of the text service's display attributes are not used */
+        HPEN hPen = ::CreatePen(bTarget ? PS_SOLID : PS_DOT, 1, ::GetSysColor(COLOR_WINDOWTEXT));
         HGDIOBJ hOldPen = ::SelectObject(hDC, hPen);
-        ::MoveToEx(hDC, x + 1, baseline, NULL);
-        ::LineTo(hDC, x + size.cx - 1, baseline);
+        for (INT yLine = bTarget ? baseline - 1 : baseline; yLine <= baseline; ++yLine)
+        {
+            ::MoveToEx(hDC, x + 1, yLine, NULL);
+            ::LineTo(hDC, x + size.cx - 1, yLine);
+        }
         ::SelectObject(hDC, hOldPen);
         ::DeleteObject(hPen);
 
