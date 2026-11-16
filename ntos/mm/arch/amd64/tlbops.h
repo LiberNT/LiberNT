@@ -69,6 +69,21 @@ MiAmd64TlbRaiseIrql(VOID)
 FORCEINLINE VOID MiAmd64TlbLowerIrql(KIRQL Previous) { KeLowerIrql(Previous); }
 
 FORCEINLINE
+BOOLEAN
+MiAmd64TlbPreemptibleWait(KIRQL Previous)
+{
+    return Previous < DISPATCH_LEVEL && (__readeflags() & (1ULL << 9)) != 0;
+}
+
+FORCEINLINE
+VOID
+MiAmd64TlbLowerForWait(VOID)
+{
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    KeLowerIrql(APC_LEVEL);
+}
+
+FORCEINLINE
 VOID
 MiAmd64TlbPoll(VOID)
 {

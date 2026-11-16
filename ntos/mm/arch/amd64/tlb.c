@@ -34,6 +34,7 @@ typedef struct MI_CACHE_ALIGNED _MI_AMD64_TLB_MESSAGE
 } MI_AMD64_TLB_MESSAGE;
 
 static MI_AMD64_TLB_MESSAGE MiAmd64TlbMessages[MAXIMUM_PROCESSORS][MAXIMUM_PROCESSORS];
+static ULONG64 MiAmd64TlbGeneration[MAXIMUM_PROCESSORS];
 static ULONG MiAmd64TlbFeatures[MAXIMUM_PROCESSORS];
 volatile LONG KiTbFlushTimeStamp;
 typedef struct _MI_AMD64_TLB_WATCHDOG
@@ -184,69 +185,41 @@ MiAmd64ProcessTlbRequest(ULONG Source)
     MiAmd64TlbRestoreInterrupts(Enabled);
 }
 
-VOID
-MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
+static
+ULONG64
+MiAmd64TlbPending(ULONG Source, ULONG64 Remaining, ULONG64 Generation)
 {
-    KIRQL Previous = MiAmd64TlbRaiseIrql();
-    ULONG Cpu = MiAmd64TlbCpu(), Target;
-    ULONG64 Remaining, Remote, Frequency = 0, Now = 0;
-    MI_AMD64_TLB_WATCHDOG Watchdog = {0};
+    ULONG64 Remote;
+    ULONG Target;
 
-    MI_ASSERT(Cpu < MAXIMUM_PROCESSORS);
-    Targets &= MiAmd64TlbActiveCpus() | (1ULL << Cpu);
-    Address &= ~((ULONG64)PAGE_SIZE - 1);
-    if (Pages > MI_AMD64_TLB_USER_RANGE_LIMIT && Address < MI_AMD64_USER_END &&
-        Pages - 1 < ((MI_AMD64_USER_END - Address) >> PAGE_SHIFT))
-        Pages = MI_AMD64_TLB_NON_GLOBAL;
-    else if (Pages > MI_AMD64_TLB_RANGE_LIMIT ||
-             !MiAmd64CanonicalAddress(Address) ||
-             (Pages != 0 && (Pages - 1 > (~Address >> PAGE_SHIFT) ||
-                            !MiAmd64CanonicalAddress(Address + ((Pages - 1) << PAGE_SHIFT)))))
-        Pages = 0;
-    Remote = Targets & ~(1ULL << Cpu);
-    for (Remaining = Remote; Remaining != 0; Remaining &= Remaining - 1)
+    for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
     {
         MI_AMD64_TLB_MESSAGE *Message;
-        ULONG64 Published;
-
-        Target = MI_AMD64_CTZ64(Remaining);
+        Target = MI_AMD64_CTZ64(Remote);
         MI_ASSERT(Target < MAXIMUM_PROCESSORS);
-        Message = &MiAmd64TlbMessages[Target][Cpu];
-        Published = MI_AMD64_READ_NOFENCE64(&Message->Published);
-        MI_ASSERT(Published == MI_AMD64_READ_ACQUIRE64(&Message->Completed));
-        MI_AMD64_WRITE_RELEASE64(&Message->Address, Address);
-        MI_AMD64_WRITE_RELEASE64(&Message->Pages, Pages);
-        MI_AMD64_WRITE_RELEASE64(&Message->Published, Published + 1);
+        Message = &MiAmd64TlbMessages[Target][Source];
+        if ((LONG64)(MI_AMD64_READ_ACQUIRE64(&Message->Completed) - Generation) >= 0)
+            Remaining &= ~(1ULL << Target);
     }
-    if (Remote != 0)
-        KiSendMemoryIpi(Remote);
-    if (Targets & (1ULL << Cpu))
-        MiAmd64FlushLocal(Address, Pages);
-    Remaining = Remote;
+    return Remaining;
+}
+
+static
+VOID
+MiAmd64TlbWaitCompleted(ULONG Source, ULONG64 Remaining, ULONG64 Generation)
+{
+    ULONG64 Frequency = 0, Now = 0;
+    MI_AMD64_TLB_WATCHDOG Watchdog = {0};
+
+    MI_ASSERT(Source < MAXIMUM_PROCESSORS);
     while (Remaining != 0)
     {
-        for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
-        {
-            MI_AMD64_TLB_MESSAGE *Message;
-            Target = MI_AMD64_CTZ64(Remote);
-            Message = &MiAmd64TlbMessages[Target][Cpu];
-            if (MI_AMD64_READ_ACQUIRE64(&Message->Completed) ==
-                MI_AMD64_READ_NOFENCE64(&Message->Published))
-                Remaining &= ~(1ULL << Target);
-        }
+        Remaining = MiAmd64TlbPending(Source, Remaining, Generation);
         if (Remaining != 0)
         {
             if (MiAmd64TlbWatchdogExpired(&Watchdog, Remaining, &Frequency, &Now))
             {
-                for (Remote = Remaining; Remote != 0; Remote &= Remote - 1)
-                {
-                    MI_AMD64_TLB_MESSAGE *Message;
-                    Target = MI_AMD64_CTZ64(Remote);
-                    Message = &MiAmd64TlbMessages[Target][Cpu];
-                    if (MI_AMD64_READ_ACQUIRE64(&Message->Completed) ==
-                        MI_AMD64_READ_NOFENCE64(&Message->Published))
-                        Remaining &= ~(1ULL << Target);
-                }
+                Remaining = MiAmd64TlbPending(Source, Remaining, Generation);
                 if (Remaining == Watchdog.Remaining &&
                     MiAmd64TlbWatchdogEnabled() &&
                     !MiAmd64TlbWatchdogFreezeActive() &&
@@ -259,26 +232,79 @@ MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
             MiAmd64TlbPause();
         }
     }
+}
+
+static
+VOID
+MiAmd64ShootDown(ULONG64 Targets, BOOLEAN IncludeSelf, ULONG64 Address, ULONG64 Pages)
+{
+    KIRQL Previous = MiAmd64TlbRaiseIrql();
+    ULONG Cpu = MiAmd64TlbCpu(), Target;
+    ULONG64 Remaining, Remote, Generation = 0;
+
+    MI_ASSERT(Cpu < MAXIMUM_PROCESSORS);
+    if (IncludeSelf)
+        Targets |= 1ULL << Cpu;
+    Targets &= MiAmd64TlbActiveCpus() | (1ULL << Cpu);
+    Address &= ~((ULONG64)PAGE_SIZE - 1);
+    if (Pages > MI_AMD64_TLB_USER_RANGE_LIMIT && Address < MI_AMD64_USER_END &&
+        Pages - 1 < ((MI_AMD64_USER_END - Address) >> PAGE_SHIFT))
+        Pages = MI_AMD64_TLB_NON_GLOBAL;
+    else if (Pages > MI_AMD64_TLB_RANGE_LIMIT ||
+             !MiAmd64CanonicalAddress(Address) ||
+             (Pages != 0 && (Pages - 1 > (~Address >> PAGE_SHIFT) ||
+                            !MiAmd64CanonicalAddress(Address + ((Pages - 1) << PAGE_SHIFT)))))
+        Pages = 0;
+    Remote = Targets & ~(1ULL << Cpu);
+    if (Remote != 0)
+    {
+        Generation = MiAmd64TlbGeneration[Cpu] + 1;
+        MI_ASSERT(Generation != 0);
+        MiAmd64TlbGeneration[Cpu] = Generation;
+    }
+    for (Remaining = Remote; Remaining != 0; Remaining &= Remaining - 1)
+    {
+        MI_AMD64_TLB_MESSAGE *Message;
+        ULONG64 Published;
+
+        Target = MI_AMD64_CTZ64(Remaining);
+        MI_ASSERT(Target < MAXIMUM_PROCESSORS);
+        Message = &MiAmd64TlbMessages[Target][Cpu];
+        Published = MI_AMD64_READ_NOFENCE64(&Message->Published);
+        MiAmd64TlbWaitCompleted(Cpu, 1ULL << Target, Published);
+        MI_ASSERT(Published == MI_AMD64_READ_ACQUIRE64(&Message->Completed));
+        MI_ASSERT((LONG64)(Generation - Published) > 0);
+        MI_AMD64_WRITE_RELEASE64(&Message->Address, Address);
+        MI_AMD64_WRITE_RELEASE64(&Message->Pages, Pages);
+        MI_AMD64_WRITE_RELEASE64(&Message->Published, Generation);
+    }
+    if (Remote != 0)
+        KiSendMemoryIpi(Remote);
+    if (Targets & (1ULL << Cpu))
+        MiAmd64FlushLocal(Address, Pages);
+    if (Remote != 0 && MiAmd64TlbPreemptibleWait(Previous))
+        MiAmd64TlbLowerForWait();
+    MiAmd64TlbWaitCompleted(Cpu, Remote, Generation);
     MiAmd64TlbLowerIrql(Previous);
+}
+
+VOID
+MiAmd64FlushTargets(ULONG64 Targets, ULONG64 Address, ULONG64 Pages)
+{
+    MiAmd64ShootDown(Targets, FALSE, Address, Pages);
 }
 
 VOID
 MiArchInvalidateTlbRange(PVOID BaseAddress, SIZE_T Size, MI_TLB_SCOPE Scope)
 {
     ULONG64 Address = (ULONG_PTR)BaseAddress;
-    ULONG64 Pages, Targets;
-    KIRQL Previous;
+    ULONG64 Pages;
 
     if (Size == 0)
         return;
     Pages = ((Size - 1) >> PAGE_SHIFT) + 1;
     Pages += (((Size - 1) & (PAGE_SIZE - 1)) + (Address & (PAGE_SIZE - 1))) >> PAGE_SHIFT;
-    Previous = MiAmd64TlbRaiseIrql();
-    Targets = 1ULL << MiAmd64TlbCpu();
-    if (Scope == MiTlbAllProcessors)
-        Targets |= MiAmd64TlbActiveCpus();
-    MiAmd64FlushTargets(Targets, Address, Pages);
-    MiAmd64TlbLowerIrql(Previous);
+    MiAmd64ShootDown(Scope == MiTlbAllProcessors ? MiAmd64TlbActiveCpus() : 0, TRUE, Address, Pages);
 }
 
 VOID
@@ -290,12 +316,7 @@ MiArchInvalidateTlbSingle(PVOID Address, MI_TLB_SCOPE Scope)
 VOID
 MiArchInvalidateTlbAll(MI_TLB_SCOPE Scope)
 {
-    KIRQL Previous = MiAmd64TlbRaiseIrql();
-    ULONG64 Targets = 1ULL << MiAmd64TlbCpu();
-    if (Scope == MiTlbAllProcessors)
-        Targets |= MiAmd64TlbActiveCpus();
-    MiAmd64FlushTargets(Targets, 0, 0);
-    MiAmd64TlbLowerIrql(Previous);
+    MiAmd64ShootDown(Scope == MiTlbAllProcessors ? MiAmd64TlbActiveCpus() : 0, TRUE, 0, 0);
 }
 
 VOID
@@ -328,15 +349,11 @@ MiArchTlbInvalidate(ULONG64 VirtualAddress, ULONG64 PageCount, BOOLEAN AllProces
 VOID
 MiArchTlbInvalidateProcessors(ULONG64 VirtualAddress, ULONG64 PageCount, ULONG64 Processors)
 {
-    KIRQL Previous;
-
     if (PageCount == 0)
         return;
     if (PageCount > ((SIZE_T)-1 >> PAGE_SHIFT))
         PageCount = 0;
-    Previous = MiAmd64TlbRaiseIrql();
-    MiAmd64FlushTargets(Processors | (1ULL << MiAmd64TlbCpu()), VirtualAddress, PageCount);
-    MiAmd64TlbLowerIrql(Previous);
+    MiAmd64ShootDown(Processors, TRUE, VirtualAddress, PageCount);
 }
 
 VOID
