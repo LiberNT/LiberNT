@@ -9,7 +9,7 @@
 #include <aclapi.h>
 #include <sddl.h>
 
-static const WCHAR *Redistributables[] = { L"vulkan-1.dll", L"d3dcompiler_43.dll" };
+static const WCHAR *Redistributables[] = { L"vulkan-1.dll", L"d3dcompiler_43.dll", L"atl100.dll" };
 
 static void
 CheckFile(const WCHAR *Directory, const WCHAR *Name, PSID TrustedInstaller)
