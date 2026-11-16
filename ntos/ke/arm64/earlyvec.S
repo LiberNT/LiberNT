@@ -1,5 +1,6 @@
 #include <asm.h>
 #include <ksarm64.h>
+#include "trapstate.inc"
 
     .text
     .align 4
@@ -8,25 +9,6 @@
     .extern KiArm64HandleSynchronousException
     .extern KiArm64BugCheckEntry
     .extern KiTrapReturn
-
-.equ ARM64_EARLY_STATE_VECTORID,      0x0
-.equ ARM64_EARLY_STATE_ESR,           0x8
-.equ ARM64_EARLY_STATE_FAR,           0x10
-.equ ARM64_EARLY_STATE_ELR,           0x18
-.equ ARM64_EARLY_STATE_SPSR,          0x20
-.equ ARM64_EARLY_STATE_REGS,          0x28
-.equ ARM64_EARLY_STATE_REG_SP,        0x120
-.equ ARM64_EARLY_STATE_REG_PC,        0x128
-.equ ARM64_EARLY_STATE_REG_PSTATE,    0x130
-.equ ARM64_EARLY_STATE_TRAP_PTR,      0x138
-.equ ARM64_EARLY_STATE_EXC_PTR,       0x140
-.equ ARM64_EARLY_STATE_EXC_FRAME,     0x148
-.equ ARM64_EARLY_STATE_TRAP_FRAME,    0x210
-.equ ARM64_EARLY_STATE_VFP,           0x360
-.equ ARM64_EARLY_STATE_FPCR,          0x368
-.equ ARM64_EARLY_STATE_FPSR,          0x36C
-.equ ARM64_EARLY_STATE_NEON,          0x370
-.equ ARM64_EARLY_STATE_SIZE,          0x580
 
 /* Keep the Windows ARM64 16-byte red zone below the interrupted SP untouched. */
 .equ ARM64_EARLY_ENTRY_FRAME_SIZE,    0x20
@@ -37,23 +19,7 @@
     str w9, [sp, #ARM64_EARLY_STATE_FPCR]
     mrs x9, fpsr
     str w9, [sp, #ARM64_EARLY_STATE_FPSR]
-    add x9, sp, #ARM64_EARLY_STATE_NEON
-    stp q0, q1, [x9, #0x000]
-    stp q2, q3, [x9, #0x020]
-    stp q4, q5, [x9, #0x040]
-    stp q6, q7, [x9, #0x060]
-    stp q8, q9, [x9, #0x080]
-    stp q10, q11, [x9, #0x0A0]
-    stp q12, q13, [x9, #0x0C0]
-    stp q14, q15, [x9, #0x0E0]
-    stp q16, q17, [x9, #0x100]
-    stp q18, q19, [x9, #0x120]
-    stp q20, q21, [x9, #0x140]
-    stp q22, q23, [x9, #0x160]
-    stp q24, q25, [x9, #0x180]
-    stp q26, q27, [x9, #0x1A0]
-    stp q28, q29, [x9, #0x1C0]
-    stp q30, q31, [x9, #0x1E0]
+    ARM64_SAVE_NEON sp, ARM64_EARLY_STATE_NEON
 .endm
 
 /*
