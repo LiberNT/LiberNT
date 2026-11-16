@@ -382,7 +382,6 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/usercall_asm.S
         ${REACTOS_SOURCE_DIR}/ntos/rtl/i386/prefetch.S)
     list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/i386/interlck.c
@@ -391,11 +390,6 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/exp.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/ipi.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/irqobj.c
@@ -424,25 +418,18 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/trap.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/usercall_asm.S)
     list(APPEND SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/amd64/exinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/zeropage.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/amd64/kdx64.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/except.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/interrupt.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/ipi.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/irql.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/krnlinit.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/stackwalk.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/thrdini.c
     ${REACTOS_SOURCE_DIR}/ntos/ps/amd64/psarchctx.c
@@ -483,9 +470,6 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/hypervisor.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/exceptinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/exp.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/floatstubs.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/freeze.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/interrupt.c
@@ -496,7 +480,6 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/smpdbg.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/stubs.c
-        ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/thrdini.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/topology.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/trapc.c
@@ -583,22 +566,34 @@ elseif(ARCH STREQUAL "ppc")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/ppc/rtlexcpt.c)
 endif()
 
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c)
+endif()
+
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c)
+endif()
+
+if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c)
+endif()
+
 if(NOT _WINKD_)
 if(KDBG)
     add_definitions(-DKDBG)
 endif()
 
-    if(ARCH STREQUAL "i386")
+    if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/i386/kdserial.c)
         if(KDBG)
-            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/kdbregs.c)
-        endif()
-    elseif(ARCH STREQUAL "amd64")
-        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/i386/kdserial.c)
-        if(KDBG)
-            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/amd64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/amd64/kdbregs.c)
+            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/${ARCH}/kdb_help.S)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/i386/i386-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/${ARCH}/kdbregs.c)
         endif()
     elseif(ARCH STREQUAL "arm64")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/arm64/kdserial.c)
