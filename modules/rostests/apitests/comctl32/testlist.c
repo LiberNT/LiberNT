@@ -5,6 +5,7 @@ extern void func_buttonv6(void);
 extern void func_ClassModule(void);
 extern void func_EditImeContext(void);
 extern void func_ImageListApi(void);
+extern void func_ListViewActivate(void);
 extern void func_ListViewGroups(void);
 extern void func_LoadIconWithScaleDown(void);
 extern void func_propsheetv6(void);
@@ -24,6 +25,7 @@ const struct test winetest_testlist[] =
     { "ClassModule", func_ClassModule },
     { "EditImeContext", func_EditImeContext },
     { "ImageListApi", func_ImageListApi },
+    { "ListViewActivate", func_ListViewActivate },
     { "ListViewGroups", func_ListViewGroups },
     { "LoadIconWithScaleDown", func_LoadIconWithScaleDown },
     { "propsheetv6", func_propsheetv6 },
