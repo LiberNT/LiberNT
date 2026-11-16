@@ -203,7 +203,7 @@ static const union cptable *get_codepage_table( unsigned int codepage )
 #endif // !__REACTOS__
 
 #if (WINVER >= 0x0600)
-#if 0 // See kernel32_vista
+#if 0
 /* Charset to codepage map, sorted by name. */
 static const struct charset_entry
 {
@@ -294,7 +294,7 @@ static UINT find_charset( const WCHAR *name )
     if (entry) return entry->codepage;
     return 0;
 }
-#endif // 0 See kernel32_vista
+#endif
 #endif // (WINVER >= 0x0600)
 
 static LANGID get_default_sublang( LANGID lang )
@@ -318,7 +318,7 @@ static LANGID get_default_sublang( LANGID lang )
 }
 
 #if (WINVER >= 0x0600)
-#if 0 // See kernel32_vista
+#if 0
 /***********************************************************************
  *           find_locale_id_callback
  */
@@ -403,7 +403,7 @@ done:
     }
     return (data->matches < 4);  /* no need to continue for perfect match */
 }
-#endif // 0 See kernel32_vista
+#endif
 
 /***********************************************************************
  *		parse_locale_name
@@ -412,7 +412,7 @@ done:
  * Unix format is: lang[_country][.charset][@modifier]
  * Windows format is: lang[-script][-country][_modifier]
  */
-#if 0 // See kernel32_vista
+#if 0
 static void parse_locale_name( const WCHAR *str, struct locale_name *name )
 {
     static const WCHAR sepW[] = {'-','_','.','@',0};
@@ -513,7 +513,7 @@ done:
     EnumResourceLanguagesW( kernel32_handle, (LPCWSTR)RT_STRING, (LPCWSTR)LOCALE_ILANGUAGE,
                             find_locale_id_callback, (LPARAM)name );
 }
-#endif // 0 See kernel32_vista
+#endif
 #endif // (WINVER >= 0x0600)
 
 

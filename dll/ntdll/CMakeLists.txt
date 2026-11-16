@@ -149,9 +149,7 @@ target_link_libraries(ntdll ntdllsys smlib etwtrace csrlib rtl rtl_um libcntpr s
 if(MSVC AND ARCH STREQUAL "arm64")
     target_link_libraries(ntdll chkstk)
 endif()
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
-    target_link_libraries(ntdll cryptlib)
-endif()
+target_link_libraries(ntdll cryptlib)
 
 if (STACK_PROTECTOR)
     target_link_libraries(ntdll gcc_ssp_nt)

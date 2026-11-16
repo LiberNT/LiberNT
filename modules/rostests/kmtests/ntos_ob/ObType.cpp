@@ -94,7 +94,7 @@ OpenProc(
 static
 NTSTATUS
 NTAPI
-OpenProc_NT6(
+OpenProcWithAccessMode(
     _In_ OB_OPEN_REASON OpenReason,
     _In_ KPROCESSOR_MODE AccessMode,
     _In_opt_ PEPROCESS Process,
@@ -250,7 +250,7 @@ struct TObCallbackSetter
     {
         using OPEN_PROCEDURE = decltype(TypeInitializer.OpenProcedure);
         SetCommonCallbacks(TypeInitializer);
-        TypeInitializer.OpenProcedure = (OPEN_PROCEDURE)OpenProc_NT6;
+        TypeInitializer.OpenProcedure = (OPEN_PROCEDURE)OpenProcWithAccessMode;
         TypeInitializer.CloseProcedure = CloseProc;
         TypeInitializer.ParseProcedure = ParseProc;
     }
@@ -282,7 +282,7 @@ struct TObCallbackSetter<NTDDI_WIN11_GE>
         Initializer& TypeInitializer)
     {
         SetCommonCallbacks(TypeInitializer);
-        TypeInitializer.OpenProcedure = OpenProc_NT6;
+        TypeInitializer.OpenProcedure = OpenProcWithAccessMode;
         TypeInitializer.CloseProcedure = CloseProc_NT10;
         TypeInitializer.UseExtendedParameters = TRUE;
         TypeInitializer.ParseProcedureEx = ParseProcEx;

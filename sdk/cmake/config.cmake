@@ -356,7 +356,10 @@ set(USE_DUMMY_PSEH FALSE CACHE BOOL
 "Whether to disable PSEH support.")
 
 set(REACTOS_TARGET_NT "0xA00" CACHE STRING
-"Target NT version (e.g. 0x502, 0x600, 0x601, 0xA00)")
+"Target NT version (0xA00 or later)")
+if(REACTOS_TARGET_NT LESS 0xA00)
+    message(FATAL_ERROR "LiberNT requires NT 10 or later")
+endif()
 
 set(REACTOS_GRAPHICS_DRIVER_MODEL "WDDM" CACHE STRING
 "Display driver model to build. Specify XPDM or WDDM.")

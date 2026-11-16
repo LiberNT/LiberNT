@@ -11,16 +11,6 @@ list(APPEND SOURCE
     io64_compat.c
     ftelli64_compat.c)
 
-if(DLL_EXPORT_VERSION LESS 0x600)
-    list(APPEND SOURCE
-        condvar_compat.c
-        fseeki64_compat.c
-        mbsrtowcs_compat.c
-        rand_s.c
-        snprintf_compat.c
-        strnlen_compat.c
-        wchar_compat.c)
-endif()
 
 add_library(stdc++compat ${SOURCE})
 set_target_cpp_properties(stdc++compat WITH_EXCEPTIONS)

@@ -59,9 +59,7 @@ add_library(ws2_32 MODULE
 
 set_module_type(ws2_32 win32dll)
 target_link_libraries(ws2_32 ${PSEH_LIB})
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
-    target_link_libraries(ws2_32 ws2help_static)
-endif()
+target_link_libraries(ws2_32 ws2help_static)
 add_importlibs(ws2_32 advapi32 ws2help msvcrt kernel32 ntdll)
 add_delay_importlibs(ws2_32 user32)
 add_pch(ws2_32 inc/ws2_32.h SOURCE)

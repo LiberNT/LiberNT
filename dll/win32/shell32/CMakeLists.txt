@@ -111,7 +111,7 @@ list(APPEND WINE_SOURCE
 list(APPEND PCH_SKIP_SOURCE
     ${WINE_SOURCE}
     network_address.c
-    vista.c
+    regmui.c
     ${CMAKE_CURRENT_BINARY_DIR}/shell32_stubs.c)
 
 file(GLOB_RECURSE shell32_rc_deps res/*.*)
@@ -176,9 +176,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(shell32 PRIVATE -Wno-single-bit-bitfield-constant-conversion)
 endif()
 target_link_libraries(shell32 shellmenu shelldesktop shell32_shared wine uuid recyclebin cpprt atl_classes oldnames)
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0x600)
-    target_link_libraries(shell32 evalcmd)
-endif()
+target_link_libraries(shell32 evalcmd)
 add_delay_importlibs(shell32 powrprof shdocvw devmgr winspool.drv winmm mpr uxtheme ole32 oleaut32 userenv explorerframe version fmifs netapi32 secur32 gdiplus iphlpapi propsys oleacc)
 add_importlibs(shell32 windows.storage advapi32 gdi32 user32 comctl32 comdlg32 shlwapi shcore msvcrt kernel32 ntdll)
 add_dependencies(shell32 stdole2) # shell32_shldisp.tlb needs stdole2.tlb

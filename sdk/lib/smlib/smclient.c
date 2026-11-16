@@ -125,13 +125,6 @@ SmConnectToSm(
     {
         DPRINT1("SmConnectToSm: Connect to Sm failed %lx\n", Status);
     }
-#if (NTDDI_VERSION < NTDDI_VISTA)
-    else
-    {
-        /* Treat a warning or informational status as success */
-        Status = STATUS_SUCCESS;
-    }
-#endif
 
     /* Return if the connection was successful or not */
     return Status;

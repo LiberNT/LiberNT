@@ -2,7 +2,7 @@
  * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS system libraries
  * FILE:            dll/win32/kernel32/client/utils_shared.c
- * PURPOSE:         Utility functions shared with kernel32_vista
+ * PURPOSE:         Utility functions
  * PROGRAMMER:      Thomas Faber
 */
 

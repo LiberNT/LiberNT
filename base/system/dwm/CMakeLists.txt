@@ -1,12 +1,10 @@
 
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0xA00)
-    generate_import_lib(
-        libdwmwindowmanager
-        api-ms-win-composition-windowmanager-l1-1-0.dll
-        dwmwindowmanager.spec
-        ""
-        "")
-endif()
+generate_import_lib(
+    libdwmwindowmanager
+    api-ms-win-composition-windowmanager-l1-1-0.dll
+    dwmwindowmanager.spec
+    ""
+    "")
 
 add_executable(dwm main.c dwm.rc)
 set_module_type(dwm win32gui UNICODE)
@@ -17,10 +15,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         -Wl,--minor-subsystem-version,0)
 endif()
 target_link_libraries(dwm uuid)
-if(DLL_EXPORT_VERSION GREATER_EQUAL 0xA00)
-    target_link_libraries(dwm libdwmwindowmanager)
-    add_importlibs(dwm dwmcore advapi32 user32 gdi32 msvcrt kernel32 ntdll)
-else()
-    add_importlibs(dwm udwm dwmcore advapi32 user32 gdi32 msvcrt kernel32 ntdll)
-endif()
+target_link_libraries(dwm libdwmwindowmanager)
+add_importlibs(dwm dwmcore advapi32 user32 gdi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET dwm DESTINATION reactos/system32 FOR all)

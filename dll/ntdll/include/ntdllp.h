@@ -392,8 +392,6 @@ LdrpGuardInvalidateModuleCache(VOID);
 BOOLEAN
 LdrpGuardDynamicTargetIsExecutable(_In_ PVOID Target);
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA)
-
 VOID
 NTAPI
 LdrpSendDllNotifications(
@@ -406,8 +404,6 @@ VOID
 NTAPI
 LdrpSetDllNotificationDispatcher(
     _In_opt_ PLDRP_DLL_NOTIFICATION_DISPATCHER Dispatcher);
-
-#endif /* (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA) */
 
 /* path.c */
 BOOLEAN
