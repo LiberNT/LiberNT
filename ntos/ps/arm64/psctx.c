@@ -243,20 +243,6 @@ PspArchCopyLiveWow64Context(
 
 NTSTATUS
 NTAPI
-PspArchCopyWow64DebugRegisters(
-    _In_ PETHREAD Thread,
-    _Inout_ PWOW64_CONTEXT Context,
-    _In_ BOOLEAN SetContext)
-{
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(SetContext);
-
-    return STATUS_SUCCESS;
-}
-
-NTSTATUS
-NTAPI
 PspArchSetInstrumentationCallback(
     _In_ PEPROCESS Process,
     _In_reads_bytes_(Length) PVOID Information,

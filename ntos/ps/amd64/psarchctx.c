@@ -468,7 +468,7 @@ PspArchCopyLiveWow64Context(
 /* A 32-bit thread's debug registers are the processor's own, which its native state holds */
 NTSTATUS
 NTAPI
-PspArchCopyWow64DebugRegisters(
+PspAmd64CopyWow64DebugRegisters(
     _In_ PETHREAD Thread,
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext)

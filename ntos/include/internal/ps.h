@@ -307,12 +307,22 @@ PspArchCopyLiveWow64Context(
     _Inout_ PWOW64_CONTEXT Context,
     _In_ BOOLEAN SetContext);
 
+#ifndef PspArchCopyWow64DebugRegisters
+#define PspArchCopyWow64DebugRegisters PspCopyNoWow64DebugRegisters
+
+FORCEINLINE
 NTSTATUS
-NTAPI
-PspArchCopyWow64DebugRegisters(
+PspCopyNoWow64DebugRegisters(
     _In_ PETHREAD Thread,
     _Inout_ PWOW64_CONTEXT Context,
-    _In_ BOOLEAN SetContext);
+    _In_ BOOLEAN SetContext)
+{
+    UNREFERENCED_PARAMETER(Thread);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(SetContext);
+    return STATUS_SUCCESS;
+}
+#endif
 
 #ifndef PspArchInitializeUserThreadStartup
 #define PspArchInitializeUserThreadStartup PspStartUserThreadAtSystemDll

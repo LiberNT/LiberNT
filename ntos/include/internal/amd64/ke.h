@@ -579,3 +579,11 @@ PspAmd64InitializeUserThreadStartup(
     _In_ PKEXCEPTION_FRAME ExceptionFrame,
     _Inout_ PKTRAP_FRAME TrapFrame);
 #define PspArchInitializeUserThreadStartup PspAmd64InitializeUserThreadStartup
+
+NTSTATUS
+NTAPI
+PspAmd64CopyWow64DebugRegisters(
+    _In_ PETHREAD Thread,
+    _Inout_ PWOW64_CONTEXT Context,
+    _In_ BOOLEAN SetContext);
+#define PspArchCopyWow64DebugRegisters PspAmd64CopyWow64DebugRegisters
