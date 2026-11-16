@@ -5068,6 +5068,7 @@ DxgkGpuVaInvalidateAllocation(
     _In_ PDXGKVMM_ALLOCATION LogicalAllocation)
 {
     BOOLEAN ReleaseMapRanges = FALSE;
+    PVOID OrphanOwner;
     PLIST_ENTRY Entry;
 
     PAGED_CODE();
@@ -5075,6 +5076,8 @@ DxgkGpuVaInvalidateAllocation(
     if (Adapter == NULL || Process == NULL || Process->Adapter != Adapter || LogicalAllocation == NULL)
         return;
 
+    OrphanOwner = DxgkGpuVaCoreOrphanOwner(LogicalAllocation, LogicalAllocation->ContextAllocation,
+                                           LogicalAllocation->Device, Process);
     ExAcquireFastMutex(&Process->GpuVaLock);
     for (Entry = Process->GpuVaRangeList.Flink; Entry != &Process->GpuVaRangeList; Entry = Entry->Flink)
     {
@@ -5087,7 +5090,7 @@ DxgkGpuVaInvalidateAllocation(
         ReleaseMapRanges |= Range->MapAllocated;
         if (Range->MapAllocated)
         {
-            Range->OrphanOwner = LogicalAllocation->Device != NULL ? (PVOID)LogicalAllocation->Device : (PVOID)Process;
+            Range->OrphanOwner = OrphanOwner;
             Range->OrphanTime = KeQueryInterruptTime();
         }
         Range->State = GpuVaStateReserved;
@@ -5100,7 +5103,7 @@ DxgkGpuVaInvalidateAllocation(
         Range->DriverProtection = 0;
     }
     if (ReleaseMapRanges)
-        GpuVaReleaseMapReservations(Process, NULL);
+        GpuVaReleaseMapReservations(Process, OrphanOwner == (PVOID)LogicalAllocation ? OrphanOwner : NULL);
     KeMemoryBarrier();
     ExReleaseFastMutex(&Process->GpuVaLock);
 }

@@ -57,6 +57,22 @@ BOOLEAN DxgkGpuVaCoreRangeEnd(_In_ ULONGLONG Address, _In_ ULONGLONG Size, _Out_
 BOOLEAN DxgkGpuVaCoreRangesOverlap(_In_ ULONGLONG StartA, _In_ ULONGLONG SizeA, _In_ ULONGLONG StartB, _In_ ULONGLONG SizeB);
 BOOLEAN DxgkGpuVaCoreRangeContains(_In_ ULONGLONG OuterStart, _In_ ULONGLONG OuterSize, _In_ ULONGLONG InnerStart, _In_ ULONGLONG InnerSize);
 BOOLEAN DxgkGpuVaCoreIsPageAligned(_In_ ULONGLONG Value);
+
+FORCEINLINE
+PVOID
+DxgkGpuVaCoreOrphanOwner(
+    _In_ PVOID Allocation,
+    _In_ BOOLEAN ContextAllocation,
+    _In_opt_ PVOID Device,
+    _In_ PVOID Process)
+{
+    ASSERT(Allocation != NULL);
+    ASSERT(Process != NULL);
+
+    if (ContextAllocation)
+        return Allocation;
+    return Device != NULL ? Device : Process;
+}
 BOOLEAN DxgkGpuVaCorePageCount(_In_ ULONGLONG Address, _In_ ULONGLONG Size, _Out_ PULONGLONG PageCount);
 
 BOOLEAN DxgkGpuVaCoreAllocationMapChunk(

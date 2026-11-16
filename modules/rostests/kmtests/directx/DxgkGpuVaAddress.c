@@ -242,6 +242,22 @@ static VOID TestProcessKind(VOID)
     ok_bool_false(GdiProcess, "an application process is not the GDI process");
 }
 
+static
+VOID
+TestOrphanOwner(VOID)
+{
+    PVOID Allocation = (PVOID)(ULONG_PTR)0x1000;
+    PVOID Device = (PVOID)(ULONG_PTR)0x2000;
+    PVOID Process = (PVOID)(ULONG_PTR)0x3000;
+
+    ok(DxgkGpuVaCoreOrphanOwner(Allocation, TRUE, Device, Process) == Allocation,
+       "a context allocation's VA has no explicit free and goes with the allocation\n");
+    ok(DxgkGpuVaCoreOrphanOwner(Allocation, FALSE, Device, Process) == Device,
+       "a device allocation's VA waits for its device or for the UMD's own free\n");
+    ok(DxgkGpuVaCoreOrphanOwner(Allocation, FALSE, NULL, Process) == Process,
+       "an allocation without a device leaves its VA to the process\n");
+}
+
 START_TEST(DxgkGpuVaAddress)
 {
     TestAlignUp();
@@ -252,6 +268,7 @@ START_TEST(DxgkGpuVaAddress)
     TestFencePagePieces();
     TestAllocationRepeatMapping();
     TestProcessKind();
+    TestOrphanOwner();
 }
 
 /* EOF */
