@@ -248,6 +248,60 @@ TestDirty(void)
     free(Data);
 }
 
+static
+void
+TestBcbKindOrder(void)
+{
+    TEST_FILE File;
+    CC_CACHE Cache;
+    CC_MAP Map;
+    PCC_BCB Pinned[4], Mapped, Inner, Again;
+    PLIST_ENTRY Entry;
+    BOOLEAN Created, SeenPinned = FALSE;
+    ULONG Index;
+
+    FileCreate(&File, 8 * MB);
+    CHECK(CcCacheInitialize(&Cache, 64, 10000) == STATUS_SUCCESS);
+    CcMapInitialize(&Map, &Cache, &File.Ops, &File, File.Size, File.Size, File.Size);
+
+    for (Index = 0; Index < 4; Index++)
+    {
+        CHECK(CcBcbAcquire(&Map, Index * PAGE_SIZE + 64, 32, TRUE, FALSE, &Pinned[Index], &Created) == STATUS_SUCCESS &&
+              Created);
+        CHECK(CcBcbMakeResident(Pinned[Index], FALSE) == STATUS_SUCCESS);
+        CcBcbPin(Pinned[Index]);
+        CHECK(CcBcbSetDirty(Pinned[Index], 0) == STATUS_SUCCESS);
+        CcBcbUnpin(Pinned[Index]);
+        CcBcbDereference(Pinned[Index]);
+    }
+
+    CHECK(CcBcbAcquire(&Map, 64, 32, FALSE, FALSE, &Mapped, &Created) == STATUS_SUCCESS && Created);
+    CHECK(Mapped != Pinned[0] && !Mapped->Pinned && Map.BcbList.Flink == &Mapped->Link);
+    CHECK(CcBcbAcquire(&Map, 80, 8, FALSE, FALSE, &Inner, &Created) == STATUS_SUCCESS && !Created && Inner == Mapped);
+    CHECK(CcBcbAcquire(&Map, 3 * PAGE_SIZE + 64, 32, TRUE, TRUE, &Again, &Created) == STATUS_SUCCESS &&
+          Again == Pinned[3]);
+
+    for (Entry = Map.BcbList.Flink; Entry != &Map.BcbList; Entry = Entry->Flink)
+    {
+        PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
+
+        CHECK(!SeenPinned || Bcb->Pinned);
+        SeenPinned |= Bcb->Pinned;
+    }
+
+    CcBcbDereference(Again);
+    CcBcbDereference(Inner);
+    CcBcbDereference(Mapped);
+    CHECK(CcDirtyFlush(&Map, 0, (ULONG64)-1, 100, NULL) == STATUS_SUCCESS);
+    CHECK(!CcBcbCompleteFlush(&Map, 0, (ULONG64)-1, CcBcbBeginFlush(&Map)));
+    CHECK(IsListEmpty(&Map.BcbList));
+
+    CHECK(CcMapUninitialize(&Map));
+    CHECK(File.MappedViews == 0 && File.Errors == 0);
+    CcCacheUninitialize(&Cache);
+    FileDestroy(&File);
+}
+
 void
 TestBcb(void)
 {
@@ -353,6 +407,8 @@ TestBcb(void)
     CHECK(File.MappedViews == 0 && File.Errors == 0);
     CcCacheUninitialize(&Cache);
     FileDestroy(&File);
+
+    TestBcbKindOrder();
 }
 
 void

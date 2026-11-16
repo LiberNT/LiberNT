@@ -30,12 +30,18 @@ CcBcbFind(
         CC_ASSERT(Bcb->ReferenceCount != 0 || Bcb->Dirty);
         CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
         CC_ASSERT(Bcb->PinCount == 0 || Bcb->Pinned);
+        CC_ASSERT(Bcb->Pinned || !Bcb->Dirty);
 
-        if (Bcb->Pinned == Pinned && Bcb->FileOffset <= FileOffset &&
-            Bcb->BeyondLastByte >= FileOffset + Length)
+        if (Bcb->Pinned != Pinned)
         {
-            return Bcb;
+            /* Mapped BCBs are kept ahead of every pinned one, so a mapped lookup ends at the first pinned BCB */
+            if (!Pinned)
+                break;
+            continue;
         }
+
+        if (Bcb->FileOffset <= FileOffset && Bcb->BeyondLastByte >= FileOffset + Length)
+            return Bcb;
     }
 
     return NULL;
@@ -166,8 +172,10 @@ CcBcbAcquire(
         CC_ASSERT(Existing->ReferenceCount < 0x7fffffffL);
         Existing->ReferenceCount++;
     }
-    else
+    else if (Pinned)
         InsertTailList(&Map->BcbList, &Bcb->Link);
+    else
+        InsertHeadList(&Map->BcbList, &Bcb->Link);
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
 
     if (Existing != NULL)
