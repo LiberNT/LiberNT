@@ -7,6 +7,8 @@
 
 #include <kmt_test.h>
 #include <windef.h>
+#undef DXGKDDI_INTERFACE_VERSION
+#define DXGKDDI_INTERFACE_VERSION 0x11007
 #include "child_core.h"
 
 START_TEST(DxgkChildDescriptor)
@@ -43,4 +45,32 @@ START_TEST(DxgkChildDescriptor)
     ok_eq_ulong(Children[1].ChildUid, 0x31003UL);
 
     ok_eq_long(Children[3].ChildDeviceType, TypeIntegratedDisplay);
+}
+
+START_TEST(DxgkDisplayDetectControl)
+{
+    DXGK_CHILD_DESCRIPTOR Children[3];
+    DXGKARG_DISPLAYDETECTCONTROL Args;
+    UINT Raw;
+
+    C_ASSERT(sizeof(DXGKARG_DISPLAYDETECTCONTROL) == sizeof(UINT));
+
+    Args = DxgkChildMakeDisplayDetectControl(DXGK_DDCT_ENABLEHPD, D3DDDI_ID_ALL, FALSE);
+    RtlCopyMemory(&Raw, &Args, sizeof(Raw));
+    ok_eq_hex(Raw, 0x03FFFFFDU);
+    Args = DxgkChildMakeDisplayDetectControl(DXGK_DDCT_DISABLEHPD, D3DDDI_ID_ALL, FALSE);
+    RtlCopyMemory(&Raw, &Args, sizeof(Raw));
+    ok_eq_hex(Raw, 0x04FFFFFDU);
+    Args = DxgkChildMakeDisplayDetectControl(DXGK_DDCT_POLLONE, 0x104, TRUE);
+    RtlCopyMemory(&Raw, &Args, sizeof(Raw));
+    ok_eq_hex(Raw, 0x11000104U);
+
+    RtlZeroMemory(Children, sizeof(Children));
+    ok_eq_bool(DxgkChildHasVideoOutput(Children, RTL_NUMBER_OF(Children)), FALSE);
+    Children[0].ChildDeviceType = TypeOther;
+    Children[2].ChildDeviceType = TypeVideoOutput;
+    ok_eq_bool(DxgkChildHasVideoOutput(Children, RTL_NUMBER_OF(Children)), FALSE);
+    Children[1].ChildDeviceType = TypeVideoOutput;
+    ok_eq_bool(DxgkChildHasVideoOutput(Children, RTL_NUMBER_OF(Children)), TRUE);
+    ok_eq_bool(DxgkChildHasVideoOutput(Children, 1), FALSE);
 }

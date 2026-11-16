@@ -14592,6 +14592,8 @@ DxgkAdapterStart(
     Status = DxgkPnpCacheInitialChildRelations(Adapter);
     DxgkpEnablePeriodicInterruptHandoff(Adapter);
     DxgkEndKmdExclusive(Adapter, TRUE);
+    if (NT_SUCCESS(Status))
+        Status = DxgkPnpEnableHotPlugDetection(Adapter);
     DxgkUnblockInterruptCallbacks(Adapter);
     DxgkReleaseLevel3Transition(Adapter);
     if (!NT_SUCCESS(Status))
@@ -15169,12 +15171,15 @@ DxgkAdapterStart(
     Status = STATUS_SUCCESS;
     DxgkpCompleteAdapterStart(Adapter, StartGeneration, Status, TRUE);
 
-    /* A link that failed to train during the initial commit could not be
-     * retried while the adapter was still starting. */
+    /* A link that failed to train during the initial commit, or a connector
+     * change the driver indicated, could not be handled while the adapter
+     * was still starting. */
     if (InterlockedExchange(&Adapter->LinkRetrainPending, 0) != 0)
         (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
     return Status;
 
+    if (InterlockedCompareExchange(&Adapter->ConnectorChangePending, 0, 0) != 0)
+        (VOID)DxgkVidPnQueueConnectionChangeDrain(Adapter);
 StartRollback:
     /* Runtime power management is brought up before the last few start steps,
      * so a rollback has to retire it; otherwise PoFx keeps a registration
@@ -15219,6 +15224,7 @@ DxgkpStopMiniportForTeardown(
 
     Status = Adapter->MiniportContext->InitData.s.DxgkDdiStopDevice(Adapter->MiniportDeviceContext);
     if (NT_SUCCESS(Status))
+    DxgkPnpDisableHotPlugDetection(Adapter);
     {
         Adapter->MiniportDeviceStopped = TRUE;
         InterlockedExchange(&Adapter->TdrOwnershipUncertain, 0);

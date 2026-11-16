@@ -14,3 +14,14 @@ VOID
 DxgkChildNormalizeDescriptors(
     _Inout_updates_(Count) PDXGK_CHILD_DESCRIPTOR Children,
     _In_ ULONG Count);
+
+BOOLEAN
+DxgkChildHasVideoOutput(
+    _In_reads_(Count) const DXGK_CHILD_DESCRIPTOR *Children,
+    _In_ ULONG Count);
+
+DXGKARG_DISPLAYDETECTCONTROL
+DxgkChildMakeDisplayDetectControl(
+    _In_ DXGK_DISPLAYDETECTCONTROLTYPE Type,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ BOOLEAN NonDestructiveOnly);

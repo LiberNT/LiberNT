@@ -1201,6 +1201,7 @@ struct _DXGKRNL_ADAPTER
     volatile LONG               HotPlugWorkActive;
     WORK_QUEUE_ITEM             HotPlugWorkItem;
     volatile LONG               ConnectorChangePending;
+    BOOLEAN                     HotPlugDetectEnabled;
 
     /*
      * Link re-training after SetTimingsFromVidPn reports

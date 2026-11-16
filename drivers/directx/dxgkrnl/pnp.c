@@ -1425,6 +1425,83 @@ DxgkPnpCacheInitialChildRelations(
     return Status;
 }
 
+static NTSTATUS
+DxgkpCallDisplayDetectControl(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl,
+    _In_ DXGK_DISPLAYDETECTCONTROLTYPE Type)
+{
+    DXGKARG_DISPLAYDETECTCONTROL Args;
+    NTSTATUS Status;
+
+    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread());
+    Args = DxgkChildMakeDisplayDetectControl(Type, D3DDDI_ID_ALL, FALSE);
+    _SEH2_TRY
+    {
+        Status = DisplayDetectControl(Adapter->MiniportDeviceContext, &Args);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    DXGKRNL_TRACE("DxgkDdiDisplayDetectControl: adapter %p type %u -> 0x%08lX\n",
+                  Adapter, (UINT)Type, Status);
+    return Status;
+}
+
+NTSTATUS
+DxgkPnpEnableHotPlugDetection(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl;
+    BOOLEAN HasVideoOutput;
+    KIRQL OldIrql;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter->State == DxgkAdapterStateStarting);
+    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread());
+    ASSERT(!Adapter->HotPlugDetectEnabled);
+    DisplayDetectControl = DXGK_CB_FULL(Adapter, DxgkDdiDisplayDetectControl);
+    if (DisplayDetectControl == NULL)
+        return STATUS_SUCCESS;
+    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+    HasVideoOutput = Adapter->ChildDescriptors != NULL &&
+                     DxgkChildHasVideoOutput(Adapter->ChildDescriptors, Adapter->NumberOfChildren + 1);
+    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    if (!HasVideoOutput)
+        return STATUS_SUCCESS;
+    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_ENABLEHPD);
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_ERR("DxgkPnpEnableHotPlugDetection: adapter %p refused to enable hot-plug detection 0x%08lX\n",
+                    Adapter, Status);
+        return Status;
+    }
+    Adapter->HotPlugDetectEnabled = TRUE;
+    return STATUS_SUCCESS;
+}
+
+VOID
+DxgkPnpDisableHotPlugDetection(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKDDI_DISPLAYDETECTCONTROL DisplayDetectControl;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread());
+    if (!Adapter->HotPlugDetectEnabled)
+        return;
+    Adapter->HotPlugDetectEnabled = FALSE;
+    DisplayDetectControl = DXGK_CB_FULL(Adapter, DxgkDdiDisplayDetectControl);
+    ASSERT(DisplayDetectControl != NULL);
+    Status = DxgkpCallDisplayDetectControl(Adapter, DisplayDetectControl, DXGK_DDCT_DISABLEHPD);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_WARN("DxgkPnpDisableHotPlugDetection: adapter %p failed 0x%08lX\n", Adapter, Status);
+}
+
 /*
  * DxgkpQueryBusRelations
  *

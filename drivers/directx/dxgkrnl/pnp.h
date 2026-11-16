@@ -180,6 +180,14 @@ NTSTATUS
 DxgkPnpCacheInitialChildRelations(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+NTSTATUS
+DxgkPnpEnableHotPlugDetection(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+VOID
+DxgkPnpDisableHotPlugDetection(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 /*
  * DxgkpPollDisplayChildrenRequest
  *   Execute or enqueue the D3DKMT connector-poll contract for one adapter or
