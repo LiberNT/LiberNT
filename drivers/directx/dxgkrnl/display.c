@@ -2942,8 +2942,7 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
             /* The driver queued connection changes.  The rebuild worker
              * drains them through DxgkDdiQueryConnectionChange only when
              * this is set; otherwise it rebuilds from stale state. */
-            InterlockedExchange(&Adapter->ConnectorChangePending, 1);
-            (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
+            (VOID)DxgkVidPnQueueConnectionChangeDrain(Adapter);
         }
 
         {

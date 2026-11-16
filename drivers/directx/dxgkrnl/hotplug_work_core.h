@@ -38,6 +38,12 @@ FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreCompleteLocked(_In_ volatile const LONG64
     return TRUE;
 }
 
+FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreNeedsRebuildLocked(_In_ volatile const LONG64 *Generation, _In_ LONG64 RebuiltGeneration)
+{
+    ASSERT(*Generation >= RebuiltGeneration);
+    return *Generation != RebuiltGeneration;
+}
+
 FORCEINLINE LONG64 DxgkHotPlugWorkCoreBeginEnumerationEpochLocked(_Inout_ volatile LONG64 *Epoch, _Inout_ volatile LONG *Enumerated)
 {
     LONG64 NextEpoch = InterlockedIncrement64(Epoch);

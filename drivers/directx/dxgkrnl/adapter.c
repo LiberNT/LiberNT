@@ -6937,8 +6937,7 @@ DxgkCbIndicateConnectorChange(
         ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
         return STATUS_SUCCESS;
     }
-    InterlockedExchange(&Adapter->ConnectorChangePending, 1);
-    Status = DxgkVidPnQueueHotPlugRebuild(Adapter);
+    Status = DxgkVidPnQueueConnectionChangeDrain(Adapter);
     if (Status == STATUS_DELETE_PENDING && Adapter->State == DxgkAdapterStateStarting)
         Status = STATUS_SUCCESS;
     ExReleaseRundownProtection(&Adapter->ReverseCallbackRundownRef);
@@ -17826,6 +17825,7 @@ DxgkpAddDeviceRegistered(
     KeInitializeEvent(&Adapter->SubmitDmaReservationsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->PresentQueueCallsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->PresentStopEvent, NotificationEvent, TRUE);
+    Adapter->HotPlugRebuiltGeneration = 0;
     KeInitializeEvent(&Adapter->VidMmBackingsDrainedEvent, NotificationEvent, TRUE);
     KeInitializeEvent(&Adapter->VidMmDestroyWorkersDrainedEvent, NotificationEvent, TRUE);
 

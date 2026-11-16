@@ -2606,6 +2606,8 @@ DxgkpDrainConnectionChanges(
     BOOLEAN Changed;
     BOOLEAN AnyChanged = FALSE;
     BOOLEAN RearmVsync = FALSE;
+    BOOLEAN LinkFailed = FALSE;
+    KIRQL OldIrql;
     ULONG Count;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -2658,6 +2660,7 @@ DxgkpDrainConnectionChanges(
                  * documented response; a failure on that commit's own
                  * SetTimingsFromVidPn result is retried there, bounded. */
                 DxgkpSetLinkConfiguring(Adapter, Args.ConnectionChange.TargetId, FALSE);
+                LinkFailed = TRUE;
                 DXGKRNL_WARN("CONNECTOR_CHANGE: adapter %p target %u link "
                              "training failed; the rebuild retries with "
                              "re-enumerated timings\n",
@@ -2731,6 +2734,12 @@ DxgkpDrainConnectionChanges(
         }
     }
     DxgkEndKmdTransaction(Adapter);
+    if (LinkFailed)
+    {
+        KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+        (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
+        KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    }
     if (RearmVsync)
     {
         Status = DxgkRearmVsyncInterrupt(Adapter);
@@ -2773,6 +2782,17 @@ DxgkpHotPlugRebuildWorker(
             break;
         }
         ObservedGeneration = Adapter->HotPlugGeneration;
+        if (!DxgkHotPlugWorkCoreNeedsRebuildLocked(&Adapter->HotPlugGeneration, Adapter->HotPlugRebuiltGeneration))
+        {
+            if (InterlockedCompareExchange(&Adapter->ConnectorChangePending, 0, 0) != 0 ||
+                !DxgkHotPlugWorkCoreCompleteLocked(&Adapter->HotPlugGeneration, &Adapter->HotPlugWorkActive, ObservedGeneration, TRUE))
+            {
+                KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+                continue;
+            }
+            KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+            break;
+        }
         if (RetryGeneration != ObservedGeneration)
         {
             RetryGeneration = ObservedGeneration;
@@ -2812,7 +2832,10 @@ DxgkpHotPlugRebuildWorker(
         }
         if (!NT_SUCCESS(Status))
             DXGKRNL_ERR("DxgkpHotPlugRebuildWorker: adapter %p generation %I64d rebuild retired after %lu retries with 0x%08lX\n", Adapter, ObservedGeneration, RetryCount, Status);
-        if (!DxgkHotPlugWorkCoreCompleteLocked(&Adapter->HotPlugGeneration, &Adapter->HotPlugWorkActive, ObservedGeneration, TRUE))
+        ASSERT(Adapter->HotPlugRebuiltGeneration < ObservedGeneration);
+        Adapter->HotPlugRebuiltGeneration = ObservedGeneration;
+        if (InterlockedCompareExchange(&Adapter->ConnectorChangePending, 0, 0) != 0 ||
+            !DxgkHotPlugWorkCoreCompleteLocked(&Adapter->HotPlugGeneration, &Adapter->HotPlugWorkActive, ObservedGeneration, TRUE))
         {
             KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
             continue;
@@ -2831,9 +2854,10 @@ DxgkVidPnInitializeHotPlugWorker(
         ExInitializeWorkItem(&Adapter->HotPlugWorkItem, DxgkpHotPlugRebuildWorker, Adapter);
 }
 
-NTSTATUS
-DxgkVidPnQueueHotPlugRebuild(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+static NTSTATUS
+DxgkpQueueHotPlugWork(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN Rebuild)
 {
     KIRQL OldIrql;
 
@@ -2841,9 +2865,12 @@ DxgkVidPnQueueHotPlugRebuild(
         return STATUS_INVALID_PARAMETER;
     if (Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0)
         return STATUS_DELETE_PENDING;
-    KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
-    (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
-    KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    if (Rebuild)
+    {
+        KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
+        (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
+        KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    }
     if (!ExAcquireRundownProtection(&Adapter->RundownRef))
         return STATUS_DELETE_PENDING;
     if (Adapter->State != DxgkAdapterStateStarted || InterlockedCompareExchange(&Adapter->RundownStarted, 0, 0) != 0)
@@ -2867,6 +2894,23 @@ DxgkVidPnQueueHotPlugRebuild(
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
     ExQueueWorkItem(&Adapter->HotPlugWorkItem, DelayedWorkQueue);
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DxgkVidPnQueueHotPlugRebuild(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    return DxgkpQueueHotPlugWork(Adapter, TRUE);
+}
+
+NTSTATUS
+DxgkVidPnQueueConnectionChangeDrain(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    if (Adapter == NULL)
+        return STATUS_INVALID_PARAMETER;
+    InterlockedExchange(&Adapter->ConnectorChangePending, 1);
+    return DxgkpQueueHotPlugWork(Adapter, FALSE);
 }
 
 static BOOLEAN

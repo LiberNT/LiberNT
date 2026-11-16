@@ -1197,6 +1197,7 @@ struct _DXGKRNL_ADAPTER
     struct _DXGKP_DISPLAY_MODE_CACHE *DisplayModeCache;
     ULONG                       DisplayModeGeneration;
     DECLSPEC_ALIGN(8) volatile LONG64 HotPlugGeneration;
+    LONG64                      HotPlugRebuiltGeneration;
     volatile LONG               HotPlugWorkActive;
     WORK_QUEUE_ITEM             HotPlugWorkItem;
     volatile LONG               ConnectorChangePending;
@@ -3779,6 +3780,10 @@ VOID
 DxgkVidPnQueryFirmwareTiming(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DKMDT_HVIDPN hVidPn);
+NTSTATUS
+DxgkVidPnQueueConnectionChangeDrain(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 
 /* adapter.c: IRP_MN_QUERY_INTERFACE offered to DxgkDdiQueryInterface. */
 NTSTATUS

@@ -25,6 +25,22 @@ static VOID DxgkHotPlugWorkTestCoalescing(VOID)
     ok_eq_long(Active, 0);
 }
 
+static VOID DxgkHotPlugWorkTestDrainWithoutRebuild(VOID)
+{
+    volatile LONG64 Generation = 0;
+    volatile LONG Active = 0;
+    LONG64 Rebuilt = 0;
+
+    ok_bool_false(DxgkHotPlugWorkCoreNeedsRebuildLocked(&Generation, Rebuilt), "a connection-change drain alone needs no rebuild");
+    ok_bool_true(DxgkHotPlugWorkCoreTryActivateLocked(&Active), "a drain request activates the worker");
+    ok_bool_true(DxgkHotPlugWorkCoreCompleteLocked(&Generation, &Active, Generation, TRUE), "the drain retires without a new generation");
+    ok_eq_long(Active, 0);
+    { LONGLONG Observed = DxgkHotPlugWorkCorePublishLocked(&Generation); ok_eq_longlong(Observed, 1); }
+    ok_bool_true(DxgkHotPlugWorkCoreNeedsRebuildLocked(&Generation, Rebuilt), "a topology change needs a rebuild");
+    Rebuilt = Generation;
+    ok_bool_false(DxgkHotPlugWorkCoreNeedsRebuildLocked(&Generation, Rebuilt), "a rebuilt generation is not rebuilt again");
+}
+
 static VOID DxgkHotPlugWorkTestLifecycleClose(VOID)
 {
     volatile LONG64 Generation = 7;
@@ -99,6 +115,7 @@ static VOID DxgkHotPlugWorkTestBoundedRetry(VOID)
 START_TEST(DxgkHotPlugWork)
 {
     DxgkHotPlugWorkTestCoalescing();
+    DxgkHotPlugWorkTestDrainWithoutRebuild();
     DxgkHotPlugWorkTestLifecycleClose();
     DxgkHotPlugWorkTestEnumerationEpoch();
     DxgkHotPlugWorkTestZeroPresentEnumeration();
