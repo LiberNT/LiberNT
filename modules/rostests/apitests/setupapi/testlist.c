@@ -23,6 +23,7 @@ extern void func_NetInterfaceNames(void);
 extern void func_NewDeviceInstall(void);
 extern void func_ParentIdPrefix(void);
 extern void func_PciBridgeWindows(void);
+extern void func_PciDebuggerDevice(void);
 extern void func_PciDeviceIds(void);
 extern void func_ProcessorDeviceIds(void);
 extern void func_SetupInstallServicesFromInfSectionEx(void);
@@ -58,6 +59,7 @@ const struct test winetest_testlist[] =
     { "NewDeviceInstall", func_NewDeviceInstall },
     { "ParentIdPrefix", func_ParentIdPrefix },
     { "PciBridgeWindows", func_PciBridgeWindows },
+    { "PciDebuggerDevice", func_PciDebuggerDevice },
     { "PciDeviceIds", func_PciDeviceIds },
     { "ProcessorDeviceIds", func_ProcessorDeviceIds },
     { "SetupInstallServicesFromInfSectionEx", func_SetupInstallServicesFromInfSectionEx},

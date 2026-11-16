@@ -80,14 +80,27 @@ extern "C" {
 #define CM_PROB_SETPROPERTIES_FAILED        0x00000032
 #define CM_PROB_WAITING_ON_DEPENDENCY       0x00000033
 #define CM_PROB_UNSIGNED_DRIVER             0x00000034
+#define CM_PROB_USED_BY_DEBUGGER            0x00000035
+#define CM_PROB_DEVICE_RESET                0x00000036
+#define CM_PROB_CONSOLE_LOCKED              0x00000037
+#define CM_PROB_NEED_CLASS_CONFIG           0x00000038
 
 #define NUM_CM_PROB_V1                      0x00000025
 #define NUM_CM_PROB_V2                      0x00000032
 #define NUM_CM_PROB_V3                      0x00000033
 #define NUM_CM_PROB_V4                      0x00000034
 #define NUM_CM_PROB_V5                      0x00000035
+#define NUM_CM_PROB_V6                      0x00000036
+#define NUM_CM_PROB_V7                      0x00000037
+#define NUM_CM_PROB_V8                      0x00000039
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS3)
+#define NUM_CM_PROB NUM_CM_PROB_V8
+#elif (NTDDI_VERSION >= NTDDI_WINTHRESHOLD)
+#define NUM_CM_PROB NUM_CM_PROB_V7
+#elif (NTDDI_VERSION >= NTDDI_WINBLUE)
+#define NUM_CM_PROB NUM_CM_PROB_V6
+#elif (NTDDI_VERSION >= NTDDI_WIN7)
 #define NUM_CM_PROB NUM_CM_PROB_V5
 #elif (NTDDI_VERSION >= NTDDI_WS08)
 #define NUM_CM_PROB NUM_CM_PROB_V4

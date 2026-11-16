@@ -334,7 +334,7 @@ DeviceProblemWizardW(IN HWND hWndParent  OPTIONAL,
 }
 
 
-static const UINT ProblemStringId[NUM_CM_PROB] =
+static const UINT ProblemStringId[] =
 {
     IDS_DEV_NO_PROBLEM,
     IDS_DEV_DEVLOADER_FAILED,

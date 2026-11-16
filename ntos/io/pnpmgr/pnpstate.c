@@ -8,6 +8,7 @@
 #include <ntoskrnl.h>
 #include "../ioint.h"
 #include <umpnpmgr/sysguid.h>
+#include <wdmguid.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -867,6 +868,69 @@ PiStackHoldsListedDriver(
 }
 #endif
 
+/* The HAL records the PCI functions the kernel debugger took for this boot under the volatile PCI\Debug key */
+static
+BOOLEAN
+PiIsKernelDebuggerDevice(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ HANDLE InstanceKey)
+{
+    UNICODE_STRING DebugKeyName =
+        RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\PCI\\Debug");
+    struct
+    {
+        KEY_BASIC_INFORMATION Information;
+        WCHAR Name[16];
+    } Entry;
+    UNICODE_STRING EntryName;
+    PCI_SLOT_NUMBER Slot;
+    HANDLE DebugKey;
+    HANDLE EntryKey;
+    BOOLEAN Found = FALSE;
+    NTSTATUS Status;
+    ULONG ResultLength;
+    ULONG Address;
+    ULONG Index;
+    GUID BusType;
+
+    PAGED_CODE();
+    ASSERT(InstanceKey != NULL);
+
+    if (!NT_SUCCESS(PnpBusTypeGuidGet(DeviceNode->ChildBusTypeIndex, &BusType)) ||
+        !IsEqualGUID(&BusType, &GUID_BUS_TYPE_PCI))
+    {
+        return FALSE;
+    }
+
+    Address = PiGetDwordValue(InstanceKey, L"Address", MAXULONG);
+    if (Address == MAXULONG) return FALSE;
+
+    if (!NT_SUCCESS(IopOpenRegistryKeyEx(&DebugKey, NULL, &DebugKeyName, KEY_READ))) return FALSE;
+
+    /* FIXME: the HAL's record names no PCI segment, so the same bus and slot on another segment also matches */
+    for (Index = 0; !Found; Index++)
+    {
+        Status = ZwEnumerateKey(DebugKey, Index, KeyBasicInformation, &Entry, sizeof(Entry), &ResultLength);
+        if (Status == STATUS_BUFFER_OVERFLOW || Status == STATUS_BUFFER_TOO_SMALL) continue;
+        if (!NT_SUCCESS(Status)) break;
+
+        ASSERT(Entry.Information.NameLength <= sizeof(Entry) - FIELD_OFFSET(KEY_BASIC_INFORMATION, Name));
+        EntryName.Buffer = Entry.Information.Name;
+        EntryName.Length = (USHORT)Entry.Information.NameLength;
+        EntryName.MaximumLength = EntryName.Length;
+        if (!NT_SUCCESS(IopOpenRegistryKeyEx(&EntryKey, DebugKey, &EntryName, KEY_READ))) continue;
+
+        Slot.u.AsULONG = PiGetDwordValue(EntryKey, L"Slot", MAXULONG);
+        Found = (PiGetDwordValue(EntryKey, L"Bus", MAXULONG) == DeviceNode->ChildBusNumber) &&
+                (Slot.u.AsULONG != MAXULONG) &&
+                (Address == (((ULONG)Slot.u.bits.DeviceNumber << 16) | Slot.u.bits.FunctionNumber));
+        ZwClose(EntryKey);
+    }
+
+    ZwClose(DebugKey);
+    return Found;
+}
+
 static
 NTSTATUS
 PiAttachDeviceDrivers(
@@ -885,6 +949,14 @@ PiAttachDeviceDrivers(
     PAGED_CODE();
 
     *NullDriver = FALSE;
+
+    /* The kernel debugger keeps its device for the whole boot: no driver is added and the device reports code 53 */
+    if (PiIsKernelDebuggerDevice(DeviceNode, InstanceKey))
+    {
+        ASSERT(DeviceNode->PhysicalDeviceObject != NULL);
+        PiSetDevNodeProblem(DeviceNode, CM_PROB_USED_BY_DEBUGGER);
+        return STATUS_SUCCESS;
+    }
 
     RtlZeroMemory(&List, sizeof(List));
     List.FunctionIndex = MAXULONG;

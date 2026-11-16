@@ -35,12 +35,10 @@ FdoLocateChildDevice(
         CurrentDevice = CONTAINING_RECORD(CurrentEntry, PCI_DEVICE, ListEntry);
 
         /* If both vendor ID and device ID match, it is the same device */
-        /* The debugger's device is kept under substitute IDs, so its slot alone identifies it */
         if ((CurrentDevice->BusNumber == BusNumber) &&
             (SlotNumber.u.AsULONG == CurrentDevice->SlotNumber.u.AsULONG) &&
-            (CurrentDevice->IsDebuggingDevice ||
-             ((PciConfig->VendorID == CurrentDevice->PciConfig.VendorID) &&
-              (PciConfig->DeviceID == CurrentDevice->PciConfig.DeviceID))))
+            (PciConfig->VendorID == CurrentDevice->PciConfig.VendorID) &&
+            (PciConfig->DeviceID == CurrentDevice->PciConfig.DeviceID))
         {
             *Device = CurrentDevice;
             DPRINT("Done\n");
@@ -168,28 +166,7 @@ FdoEnumerateDevices(
                 Device->Segment = DeviceExtension->BusSegment;
 
                 if (PciIsDeviceDebugging(Bus, SlotNumber))
-                {
                     Device->IsDebuggingDevice = TRUE;
-
-                    /*
-                     * ReactOS-specific: apply a hack
-                     * to prevent driver installation for the debugging device.
-                     * NOTE: Nothing to do for IEEE 1394 devices; NT5.1 and NT5.2
-                     * support IEEE 1394 debugging.
-                     *
-                     * FIXME: We should set the device problem code
-                     * CM_PROB_USED_BY_DEBUGGER instead.
-                     */
-                    if (PciConfig.BaseClass != PCI_CLASS_SERIAL_BUS_CTLR ||
-                        PciConfig.SubClass != PCI_SUBCLASS_SB_IEEE1394)
-                    {
-                        PciConfig.VendorID = 0xDEAD;
-                        PciConfig.DeviceID = 0xBEEF;
-                        PciConfig.BaseClass = PCI_CLASS_NOT_DEFINED;
-                        PciConfig.SubClass = 0;
-                        PciConfig.ProgIf = 0;
-                    }
-                }
 
                 RtlCopyMemory(&Device->SlotNumber,
                               &SlotNumber,
