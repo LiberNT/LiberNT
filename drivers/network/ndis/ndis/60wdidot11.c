@@ -7,6 +7,7 @@
 
 #include "ndis6_wdi.h"
 #include "ndis6_rnr.h"
+#include "ndis6_wdi_caps.h"
 
 #define NDIS6_WDI_BSS_LIFETIME      (120ULL * 10000000ULL)
 #define NDIS6_WDI_BEACON_PERIOD     100
@@ -539,6 +540,8 @@ Ndis6WdiDot11ParseCapabilities(
 
     if (Ndis6WdiTlvFind(Tlvs, Length, WDI_TLV_STATION_ATTRIBUTES, &Container))
     {
+        if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_STATION_CAPABILITIES, &Tlv))
+            Wdi->BssListCached = Ndis6WdiStationCapsBssListCached(Tlv.Value, Tlv.Length);
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_UNICAST_ALGORITHM_LIST, &Tlv))
             Wdi->UnicastPairCount = Ndis6WdiParsePairs(&Tlv, Wdi->UnicastPairs);
         if (Ndis6WdiTlvFind(Container.Value, Container.Length, WDI_TLV_MULTICAST_DATA_ALGORITHM_LIST, &Tlv))
@@ -1268,6 +1271,39 @@ Ndis6WdiSet(
 
 static
 NDIS_STATUS
+Ndis6WdiJobEnumBssList(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ PNDIS_OID_REQUEST Request)
+{
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+    NDIS_STATUS Status;
+    ULONG Written;
+    ULONG Needed;
+
+    ASSERT(Wdi->BssListCached);
+    ASSERT(Request->RequestType == NdisRequestMethod);
+
+    Ndis6WdiTlvInit(&Tlvs);
+    Ndis6WdiTlvAdd(&Tlvs, WDI_TLV_SSID, NULL, 0);
+    Status = Ndis6WdiProperty(Wdi, WDI_GET_BSS_ENTRY_LIST, Wdi->PortId, &Tlvs, NULL, NULL);
+    Ndis6WdiTlvFree(&Tlvs);
+    if (Status != NDIS_STATUS_SUCCESS)
+        DbgPrint("WDI: BSS list cache query failed 0x%08lx\n", Status);
+    Ndis6WdiWaitForQueuedIndications(Wdi);
+
+    Status = Ndis6WdiBuildBssList(Wdi,
+                                  Request->DATA.METHOD_INFORMATION.InformationBuffer,
+                                  Request->DATA.METHOD_INFORMATION.OutputBufferLength,
+                                  &Written,
+                                  &Needed);
+    Request->DATA.METHOD_INFORMATION.BytesWritten = Written;
+    Request->DATA.METHOD_INFORMATION.BytesNeeded = Needed;
+    Request->DATA.METHOD_INFORMATION.BytesRead = Request->DATA.METHOD_INFORMATION.InputBufferLength;
+    return Status;
+}
+
+static
+NDIS_STATUS
 Ndis6WdiMethod(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _In_ PNDIS_OID_REQUEST Request,
@@ -1290,6 +1326,11 @@ Ndis6WdiMethod(
             ULONG Needed;
             NDIS_STATUS Status;
 
+            if (Wdi->BssListCached)
+            {
+                *Queue = TRUE;
+                return NDIS_STATUS_PENDING;
+            }
             Status = Ndis6WdiBuildBssList(Wdi,
                                           Request->DATA.METHOD_INFORMATION.InformationBuffer,
                                           Request->DATA.METHOD_INFORMATION.OutputBufferLength,
@@ -3021,6 +3062,9 @@ Ndis6WdiDot11RunJob(
     {
         case OID_DOT11_SCAN_REQUEST:
             Status = Ndis6WdiJobScan(Wdi, Request);
+            break;
+        case OID_DOT11_ENUM_BSS_LIST:
+            Status = Ndis6WdiJobEnumBssList(Wdi, Request);
             break;
         case OID_DOT11_CONNECT_REQUEST:
             Status = Ndis6WdiJobConnect(Wdi, Request);

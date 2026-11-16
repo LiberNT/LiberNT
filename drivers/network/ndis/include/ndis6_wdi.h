@@ -395,6 +395,9 @@ struct _NDIS6_WDI_ADAPTER
     KEVENT IndicationEvent;
     PKTHREAD IndicationThread;
     volatile LONG IndicationStop;
+    LONG64 IndicationsQueued;
+    volatile LONG64 IndicationsProcessed;
+    KEVENT IndicationProcessedEvent;
 
     UCHAR PermanentAddress[6];
     UCHAR CurrentAddress[6];
@@ -405,6 +408,7 @@ struct _NDIS6_WDI_ADAPTER
     ULONG MaxRxRateKbps;
     BOOLEAN HardwareRadioOn;
     BOOLEAN SoftwareRadioOn;
+    BOOLEAN BssListCached;
     BOOLEAN BssTransitionSupported;
     WDI_TXRX_CAPABILITIES TxRxCaps;
     UCHAR MaxNumPeers;
@@ -492,6 +496,7 @@ Ndis6WdiTask(
     _In_opt_ PVOID Context);
 
 BOOLEAN Ndis6WdiAbortTask(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ ULONG MessageId);
+VOID Ndis6WdiWaitForQueuedIndications(_In_ PNDIS6_WDI_ADAPTER Wdi);
 
 VOID Ndis6WdiIndicateStatusUp(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ NDIS_STATUS Code, _In_reads_bytes_(Length) PVOID Buffer, _In_ ULONG Length);
 VOID Ndis6WdiIndicateLinkState(_In_ PNDIS6_WDI_ADAPTER Wdi, _In_ BOOLEAN Connected);

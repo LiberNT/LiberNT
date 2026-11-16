@@ -132,6 +132,7 @@ list(APPEND KMTEST_DRV_SOURCE
     hdaudbus/HdAudBusInterface.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
+    ndis/NdisWdiStationCaps.c
     ndis/NdisProcessorGroup.c
     ndis/NdisLegacyHelpers.c
     ndis/NdisMiniportCharacteristics.c

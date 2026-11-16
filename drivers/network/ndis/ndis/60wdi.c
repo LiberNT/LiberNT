@@ -955,8 +955,35 @@ Ndis6WdiQueueIndication(
 
     KeAcquireSpinLock(&Wdi->IndicationLock, &OldIrql);
     InsertTailList(&Wdi->IndicationList, &Item->Link);
+    Wdi->IndicationsQueued++;
     KeReleaseSpinLock(&Wdi->IndicationLock, OldIrql);
     KeSetEvent(&Wdi->IndicationEvent, IO_NO_INCREMENT, FALSE);
+}
+
+VOID
+Ndis6WdiWaitForQueuedIndications(
+    _In_ PNDIS6_WDI_ADAPTER Wdi)
+{
+    LARGE_INTEGER Timeout;
+    LONG64 Target;
+    KIRQL OldIrql;
+    ULONG Round;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(KeGetCurrentThread() != Wdi->IndicationThread);
+
+    KeAcquireSpinLock(&Wdi->IndicationLock, &OldIrql);
+    Target = Wdi->IndicationsQueued;
+    KeReleaseSpinLock(&Wdi->IndicationLock, OldIrql);
+
+    Timeout.QuadPart = -100LL * 10000;
+    for (Round = 0; Round < 20; Round++)
+    {
+        if (InterlockedCompareExchange64(&Wdi->IndicationsProcessed, 0, 0) >= Target || Wdi->IndicationStop)
+            return;
+        KeWaitForSingleObject(&Wdi->IndicationProcessedEvent, Executive, KernelMode, FALSE, &Timeout);
+    }
+    DbgPrint("WDI: indications queued before %I64d were not processed in time\n", Target);
 }
 
 BOOLEAN
@@ -1025,6 +1052,8 @@ Ndis6WdiIndicationThread(
             Item = CONTAINING_RECORD(Entry, NDIS6_WDI_INDICATION, Link);
             Ndis6WdiProcessIndication(Wdi, Item);
             ExFreePoolWithTag(Item, NDIS6_WDI_TAG);
+            InterlockedIncrement64(&Wdi->IndicationsProcessed);
+            KeSetEvent(&Wdi->IndicationProcessedEvent, IO_NO_INCREMENT, FALSE);
         }
 
         if (Wdi->IndicationStop)
@@ -1525,6 +1554,7 @@ Ndis6WdiStartCore(
     KeInitializeSpinLock(&Wdi->IndicationLock);
     InitializeListHead(&Wdi->IndicationList);
     KeInitializeEvent(&Wdi->IndicationEvent, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Wdi->IndicationProcessedEvent, SynchronizationEvent, FALSE);
     KeInitializeSpinLock(&Wdi->StateLock);
     InitializeListHead(&Wdi->BssList);
     KeInitializeSpinLock(&Wdi->TxLock);

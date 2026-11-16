@@ -372,6 +372,7 @@ KMT_TESTFUNC Test_MmUserLayout;
 KMT_TESTFUNC Test_MmLoaderBlock;
 KMT_TESTFUNC Test_NdisIfProvider;
 KMT_TESTFUNC Test_NdisRwLock;
+KMT_TESTFUNC Test_NdisWdiStationCaps;
 KMT_TESTFUNC Test_NdisProcessorGroup;
 KMT_TESTFUNC Test_NdisLegacyHelpers;
 KMT_TESTFUNC Test_NdisMiniportCharacteristics;
@@ -825,6 +826,7 @@ const KMT_TEST TestList[] =
     { "MonitorBrightnessKey",               Test_MonitorBrightnessKey },
     { "NdisIfProvider",                     Test_NdisIfProvider },
     { "NdisRwLock",                         Test_NdisRwLock },
+    { "NdisWdiStationCaps",                 Test_NdisWdiStationCaps },
     { "NdisProcessorGroup",                 Test_NdisProcessorGroup },
     { "NdisLegacyHelpers",                  Test_NdisLegacyHelpers },
     { "NdisMiniportCharacteristics",        Test_NdisMiniportCharacteristics },
