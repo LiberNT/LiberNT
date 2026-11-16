@@ -88,6 +88,7 @@ extern void func_Thumbnails(void);
 extern void func_ShellItemProperties(void);
 extern void func_SearchFolder(void);
 extern void func_RecentDocs(void);
+extern void func_RunFileDlg(void);
 extern void func_PreviewHandler(void);
 
 const struct test winetest_testlist[] =
@@ -97,6 +98,7 @@ const struct test winetest_testlist[] =
     { "ShellItemProperties", func_ShellItemProperties },
     { "SearchFolder", func_SearchFolder },
     { "RecentDocs", func_RecentDocs },
+    { "RunFileDlg", func_RunFileDlg },
     { "PreviewHandler", func_PreviewHandler },
     { "WindowPropertyStore", func_WindowPropertyStore },
     { "StartMenuPin", func_StartMenuPin },

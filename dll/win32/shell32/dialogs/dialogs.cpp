@@ -499,6 +499,7 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
         case WM_INITDIALOG:
             prfdp = (RUNFILEDLGPARAMS *)lParam;
             SetWindowLongPtrW(hwnd, DWLP_USER, (LONG_PTR)prfdp);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) | WS_EX_APPWINDOW);
 
             if (prfdp->lpstrTitle)
                 SetWindowTextW(hwnd, prfdp->lpstrTitle);
