@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Injected touch contacts tap and pan a list view with one or two fingers
+ * PURPOSE:     Injected touch contacts tap, double tap and pan a list view with one or two fingers
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -12,6 +12,27 @@
 #define ROWS 300
 #define SLIDE_STEPS 12
 #define SLIDE_STEP_PIXELS 25
+#define DOUBLE_TAP_TOLERANCE 17
+
+static LONG Activations;
+static LONG LastActivated;
+
+static
+LRESULT
+CALLBACK
+ParentProc(
+    _In_ HWND hWnd,
+    _In_ UINT Msg,
+    _In_ WPARAM wParam,
+    _In_ LPARAM lParam)
+{
+    if (Msg == WM_NOTIFY && ((NMHDR *)lParam)->code == LVN_ITEMACTIVATE)
+    {
+        Activations++;
+        LastActivated = ((NMITEMACTIVATE *)lParam)->iItem;
+    }
+    return DefWindowProcW(hWnd, Msg, wParam, lParam);
+}
 
 static
 VOID
@@ -137,8 +158,50 @@ Tap(
     ok_long((LONG)SendMessageW(List, LVM_GETTOPINDEX, 0, 0), 0);
 }
 
+static
+VOID
+TapAt(
+    _In_ LONG X,
+    _In_ LONG Y)
+{
+    ok(Inject(1, X, Y, POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT), "Tap down: error %lu\n", GetLastError());
+    Pump(40);
+    ok(Inject(1, X, Y, POINTER_FLAG_UP), "Tap up: error %lu\n", GetLastError());
+}
+
+static
+VOID
+DoubleTap(
+    _In_ HWND List,
+    _In_ LONG Dx,
+    _In_ LONG Dy,
+    _In_ LONG ExpectedActivations)
+{
+    RECT Item = { LVIR_LABEL };
+    LONG X, Y;
+
+    Pump(GetDoubleClickTime() + 300);
+    ok(SendMessageW(List, LVM_GETITEMRECT, 3, (LPARAM)&Item), "LVM_GETITEMRECT failed\n");
+    MapWindowPoints(List, NULL, (POINT *)&Item, 2);
+    X = Item.left + 10;
+    Y = (Item.top + Item.bottom) / 2;
+    Activations = 0;
+    LastActivated = -1;
+    TapAt(X, Y);
+    Pump(120);
+    TapAt(X + Dx, Y + Dy);
+    Pump(500);
+
+    ok(Activations == ExpectedActivations, "Second tap %ld,%ld away: %ld activations, expected %ld\n",
+       Dx, Dy, Activations, ExpectedActivations);
+    if (ExpectedActivations)
+        ok(LastActivated == 3, "Second tap %ld,%ld away activated item %ld\n", Dx, Dy, LastActivated);
+}
+
 START_TEST(InjectTouchInput)
 {
+    WNDCLASSW Class = { 0 };
+    RECT Row = { LVIR_BOUNDS };
     INITCOMMONCONTROLSEX Controls = { sizeof(Controls), ICC_LISTVIEW_CLASSES };
     LVCOLUMNW Column = { LVCF_TEXT | LVCF_WIDTH };
     LVITEMW Item = { LVIF_TEXT };
@@ -168,12 +231,15 @@ START_TEST(InjectTouchInput)
     ok_err(ERROR_INVALID_PARAMETER);
 
     InitCommonControlsEx(&Controls);
-    Window = CreateWindowExW(WS_EX_TOPMOST, WC_STATICW, L"InjectTouchInput", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                             20, 20, 460, 620, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    Class.lpfnWndProc = ParentProc;
+    Class.hInstance = GetModuleHandleW(NULL);
+    Class.lpszClassName = L"InjectTouchInputParent";
+    ok(RegisterClassW(&Class) != 0, "RegisterClassW failed with %lu\n", GetLastError());
+    Window = CreateWindowExW(WS_EX_TOPMOST, Class.lpszClassName, L"InjectTouchInput", WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                             20, 20, 460, 620, NULL, NULL, Class.hInstance, NULL);
     ok(Window != NULL, "CreateWindowExW failed with %lu\n", GetLastError());
     if (!Window)
         return;
-    SetWindowLongPtrW(Window, GWLP_WNDPROC, (LONG_PTR)DefWindowProcW);
     List = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"", WS_CHILD | WS_VISIBLE | LVS_REPORT,
                            0, 0, 440, 570, Window, NULL, GetModuleHandleW(NULL), NULL);
     ok(List != NULL, "Creating the list view failed with %lu\n", GetLastError());
@@ -196,8 +262,17 @@ START_TEST(InjectTouchInput)
     Pump(500);
 
     Tap(List);
+    DoubleTap(List, DOUBLE_TAP_TOLERANCE, 0, 1);
+    DoubleTap(List, DOUBLE_TAP_TOLERANCE + 1, 0, 0);
+    DoubleTap(List, DOUBLE_TAP_TOLERANCE, DOUBLE_TAP_TOLERANCE, 1);
+    SendMessageW(List, LVM_GETITEMRECT, 3, (LPARAM)&Row);
+    if (Row.bottom - Row.top <= DOUBLE_TAP_TOLERANCE)
+        DoubleTap(List, 0, Row.bottom - Row.top, 1);
+    else
+        skip("Rows of %ld pixels are taller than the double tap tolerance\n", Row.bottom - Row.top);
     Slide(List, 1);
     Slide(List, 2);
 
     DestroyWindow(Window);
+    UnregisterClassW(Class.lpszClassName, Class.hInstance);
 }

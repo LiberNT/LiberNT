@@ -15,6 +15,7 @@
 #define POINTER_TOUCH_EXTRA_ID_MASK 0x7F
 #define POINTER_HOLD_TIME 500
 #define POINTER_HOLD_TOLERANCE 10
+#define POINTER_DOUBLE_TAP_TOLERANCE 17
 
 enum
 {
@@ -89,6 +90,9 @@ static POINTER_ROUTE gTouchRoutes[POINTER_TOUCH_ID_COUNT];
 static ULONG gTouchNextId;
 static ULONG gTouchContacts;
 static BOOLEAN gTouchPrimaryClaimed;
+static HWND gLastTapWindow;
+static POINT gLastTapPoint;
+static DWORD gLastTapTime;
 
 static
 PPOINTER_ROUTE
@@ -613,6 +617,32 @@ PointerPan(
     }
 }
 
+static
+POINT
+PointerTapPoint(
+    _In_ PWND Wnd,
+    _In_ POINT Pt,
+    _In_ DWORD Time)
+{
+    ULONG Dpi = (gpsi && gpsi->dmLogPixels) ? gpsi->dmLogPixels : 96;
+    LONG Tolerance = (LONG)((POINTER_DOUBLE_TAP_TOLERANCE * Dpi + 48) / 96);
+    HWND hwnd = UserHMGetHandle(Wnd);
+
+    ASSERT(Tolerance > 0);
+    ASSERT(UserIsEnteredExclusive());
+
+    /* A second tap near the first one in the same window lands where the first one did, so it makes a double click */
+    if (gLastTapWindow == hwnd && (Time - gLastTapTime) < (ULONG)gspv.iDblClickTime &&
+        abs(Pt.x - gLastTapPoint.x) <= Tolerance && abs(Pt.y - gLastTapPoint.y) <= Tolerance)
+    {
+        Pt = gLastTapPoint;
+    }
+    gLastTapWindow = hwnd;
+    gLastTapPoint = Pt;
+    gLastTapTime = Time;
+    return Pt;
+}
+
 VOID
 FASTCALL
 PointerDefWindowProc(
@@ -675,8 +705,18 @@ PointerDefWindowProc(
     switch (Route->PromotionState)
     {
         case PointerPromotionPending:
-            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN, 0, PointerId);
-            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP, 0, PointerId);
+            if (Held)
+            {
+                gLastTapWindow = NULL;
+                PointerSendMouse(Route->DownPoint, MOUSEEVENTF_RIGHTDOWN, 0, PointerId);
+                PointerSendMouse(Route->DownPoint, MOUSEEVENTF_RIGHTUP, 0, PointerId);
+            }
+            else
+            {
+                Pt = PointerTapPoint(Wnd, Route->DownPoint, Route->DownTime);
+                PointerSendMouse(Pt, MOUSEEVENTF_LEFTDOWN, 0, PointerId);
+                PointerSendMouse(Pt, MOUSEEVENTF_LEFTUP, 0, PointerId);
+            }
             break;
         case PointerPromotionLeftDrag:
             PointerSendMouse(Pt, MOUSEEVENTF_LEFTUP, 0, PointerId);
