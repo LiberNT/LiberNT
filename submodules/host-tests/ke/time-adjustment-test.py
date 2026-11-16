@@ -32,7 +32,7 @@ static void KiRearmPeriodicTimer(PKTIMER Timer) { (void)Timer; CHECK(!"periodic"
 static void KeQuerySystemTimePrecise(PLARGE_INTEGER Time) { *Time = ReadTime(&KiSystemTimeValue); }
 static BOOLEAN KeInsertQueueDpc(PKDPC Dpc, PVOID A, PVOID B) { (void)Dpc; (void)A; (void)B; return TRUE; }
 '''
-for file, name in [('ke_x.h', 'KiRemoveEntryTimer'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiSignalTimer'),
+for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KiRemoveEntryTimer'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiSignalTimer'),
                    ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ke_x.h', 'KxRemoveTreeTimer'),
                    ('ktimer.c', 'KeCancelTimer')]:
     fixture += src.definition(file, name)

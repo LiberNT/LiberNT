@@ -87,11 +87,11 @@ PRELUDE = r'''
 #define ASSERT_IRQL_LESS_OR_EQUAL(x) ((void)0)
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define Int32x32To64(a, b) ((LONGLONG)(int32_t)(a) * (LONGLONG)(int32_t)(b))
-typedef unsigned char BOOLEAN, UCHAR, KIRQL, KPROCESSOR_MODE;
+typedef unsigned char BOOLEAN, *PBOOLEAN, UCHAR, KIRQL, KPROCESSOR_MODE;
 typedef unsigned short USHORT;
 typedef unsigned long ULONG, *PULONG;
 typedef long LONG;
-typedef uint64_t ULONGLONG, ULONG_PTR, KSPIN_LOCK, *PKSPIN_LOCK;
+typedef uint64_t ULONGLONG, *PULONGLONG, ULONG_PTR, KSPIN_LOCK, *PKSPIN_LOCK;
 typedef int64_t LONGLONG, LONG_PTR;
 typedef void *PVOID;
 typedef union { LONGLONG QuadPart; struct { uint32_t LowPart; int32_t HighPart; }; } LARGE_INTEGER, *PLARGE_INTEGER;

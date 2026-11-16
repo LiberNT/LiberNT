@@ -38,8 +38,8 @@ static void KiWaitTest(PVOID Object, LONG Increment) { (void)Object; (void)Incre
 static void KiRearmPeriodicTimer(PKTIMER Timer) { (void)Timer; CHECK(!"periodic"); }
 static BOOLEAN KeInsertQueueDpc(PKDPC Dpc, PVOID A, PVOID B) { (void)Dpc; (void)A; (void)B; return TRUE; }
 '''
-for file, name in [('ke_x.h', 'KiRemoveEntryTimer'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiSignalTimer'),
-                   ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ke_x.h', 'KiComputeDueTime'), ('ke_x.h', 'KiRoundToDefaultTimerResolution'),
+for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KiRemoveEntryTimer'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiSignalTimer'),
+                   ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ke_x.h', 'KiDueTimeToDeadline'), ('ke_x.h', 'KiComputeDueTime'), ('ke_x.h', 'KiRoundToDefaultTimerResolution'),
                    ('ke_x.h', 'KxSetTimerForThreadWait'), ('ke_x.h', 'KxInsertThreadWaitTimer'),
                    ('waitobj.c', 'KiArmThreadWaitTimer'), ('clockint.c', 'KeSetSystemTime')]:
     fixture += src.definition(file, name)

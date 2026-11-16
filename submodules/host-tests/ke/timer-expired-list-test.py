@@ -43,7 +43,7 @@ static void KeQuerySystemTimePrecise(PLARGE_INTEGER Time) { *Time = ReadTime(&Ki
 static BOOLEAN KeInsertQueueDpc(PKDPC Dpc, PVOID A, PVOID B) { (void)Dpc; (void)A; (void)B; CHECK(!"queued"); return TRUE; }
 static void Routine(PKDPC Dpc, PVOID Context, PVOID A, PVOID B) { (void)Dpc; (void)Context; (void)A; (void)B; Routines++; }
 '''
-for file, name in [('ke_x.h', 'KiRemoveEntryTimer'), ('ke_x.h', 'KiComputeDueTime'), ('ke_x.h', 'KiRoundToDefaultTimerResolution'),
+for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KiRemoveEntryTimer'), ('ke_x.h', 'KiDueTimeToDeadline'), ('ke_x.h', 'KiComputeDueTime'), ('ke_x.h', 'KiRoundToDefaultTimerResolution'),
                    ('ke_x.h', 'KxRemoveTreeTimer'), ('ktimer.c', 'KiDecodeTolerableDelay'), ('ktimer.c', 'KiCoalesceDueTime'),
                    ('ktimer.c', 'KiPeriodToInterval'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiRearmPeriodicTimer')]:
     fixture += src.definition(file, name)

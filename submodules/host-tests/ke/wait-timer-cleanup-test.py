@@ -29,7 +29,7 @@ static int WaitLockHeld;
 static void KiAcquireWaitLock(PKPRCB P) { CHECK(P == &Prcb && !WaitLockHeld); WaitLockHeld = 1; }
 static void KiReleaseWaitLock(PKPRCB P) { CHECK(P == &Prcb && WaitLockHeld); WaitLockHeld = 0; }
 '''
-for file, name in [('ke_x.h', 'KxRemoveTreeTimer'), ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'),
+for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KxRemoveTreeTimer'), ('dispatch.c', 'KiThreadWaitBlock'), ('dispatch.c', 'KiThreadWaitBlockCount'),
                    ('dispatch.c', 'KiUnlinkOneWaitBlock'), ('dispatch.c', 'KiUnlinkWaitBlocks'), ('dispatch.c', 'KiUnlinkThread')]:
     fixture += src.definition(file, name)
 fixture += r'''
