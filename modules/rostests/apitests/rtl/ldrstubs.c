@@ -51,3 +51,13 @@ RtlpGetThreadUILanguage(VOID)
 {
     return 0;
 }
+
+BOOLEAN
+LdrpFindImageByAddress(
+    _In_ PVOID Address,
+    _Out_ PLDR_DATA_TABLE_ENTRY *Entry)
+{
+    UNREFERENCED_PARAMETER(Address);
+    *Entry = NULL;
+    return FALSE;
+}
