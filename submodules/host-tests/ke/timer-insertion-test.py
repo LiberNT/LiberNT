@@ -17,8 +17,14 @@ fixture = kt.PRELUDE + r'''
 typedef struct { int SetTimerResolution; } EPROCESS, *PEPROCESS;
 struct _KTHREAD;
 typedef struct { LIST_ENTRY WaitListEntry; struct _KTHREAD *Thread; PVOID Object; USHORT WaitKey; UCHAR WaitType, BlockState; } KWAIT_BLOCK, *PKWAIT_BLOCK;
-typedef struct _KTHREAD { KTIMER Timer; KWAIT_BLOCK WaitBlock[4]; struct { PEPROCESS Process; } ApcState; } KTHREAD, *PKTHREAD;
+typedef struct _KTHREAD { KTIMER Timer; KWAIT_BLOCK WaitBlock[4]; struct { PEPROCESS Process; } ApcState; BOOLEAN TimerActive; } KTHREAD, *PKTHREAD;
 #define KxPublishTimerWaitBlock() InsertTailList(&Timer->Header.WaitListHead, &TimerBlock->WaitListEntry)
+/* A timeout already due takes its block back off the timer under the timer's own lock */
+static void KiUnlinkWaitBlock(PKWAIT_BLOCK WaitBlock) {
+    CHECK(ObjectLocks > 0);
+    RemoveEntryList(&WaitBlock->WaitListEntry);
+    WaitBlock->WaitListEntry.Flink = WaitBlock->WaitListEntry.Blink = NULL;
+}
 static EPROCESS Process;
 static KTHREAD Waiter;
 static PKTHREAD KeGetCurrentThread(void) { return &Waiter; }
@@ -41,21 +47,22 @@ static BOOLEAN KeInsertQueueDpc(PKDPC Dpc, PVOID A, PVOID B) { (void)Dpc; (void)
 for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KiRemoveEntryTimer'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiSignalTimer'),
                    ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ke_x.h', 'KiDueTimeToDeadline'), ('ke_x.h', 'KiComputeDueTime'), ('ke_x.h', 'KiRoundToDefaultTimerResolution'),
                    ('ke_x.h', 'KxSetTimerForThreadWait'), ('ke_x.h', 'KxInsertThreadWaitTimer'),
-                   ('waitobj.c', 'KiArmThreadWaitTimer'), ('clockint.c', 'KeSetSystemTime')]:
+                   ('waitobj.c', 'KiArmThreadWaitTimer')]:
     fixture += src.definition(file, name)
+fixture += src.system_time_setter()
 fixture += r'''
 static LARGE_INTEGER Interval, Due;
 static BOOLEAN Armed;
 static int ArmBucketWithObject, ArmObjectLocks;
-/* A wait arms its timer with the dispatcher database held, as KeWaitForSingleObject does */
+/* A wait arms its timer inside the dispatcher, as KeWaitForSingleObject does */
 static void *Wait(void *Unused) {
     KIRQL Old;
     (void)Unused;
-    Old = KiAcquireDispatcherLock();
+    Old = KiEnterDispatcher();
     Armed = KiArmThreadWaitTimer(&Waiter, &Interval, KernelMode, &Due);
     ArmBucketWithObject = BucketWithObject;
     ArmObjectLocks = ObjectLocks;
-    KiReleaseDispatcherLock(Old);
+    KiExitDispatcher(Old);
     return NULL;
 }
 static void *MoveClock(void *Unused) {
@@ -99,9 +106,9 @@ int main(void) {
 
     Reset("a relative wait does not move with the clock");
     Interval.QuadPart = -500;
-    Old = KiAcquireDispatcherLock();
+    Old = KiEnterDispatcher();
     Armed = KiArmThreadWaitTimer(&Waiter, &Interval, KernelMode, &Due);
-    KiReleaseDispatcherLock(Old);
+    KiExitDispatcher(Old);
     CHECK(Armed && !Waiter.Timer.Header.Absolute && Waiter.Timer.DueTime.QuadPart == 600);
     {
         LARGE_INTEGER Now, Previous;
@@ -113,9 +120,9 @@ int main(void) {
     Reset("an absolute deadline already passed");
     SetClock(400, 100);
     Interval.QuadPart = 50;
-    Old = KiAcquireDispatcherLock();
+    Old = KiEnterDispatcher();
     Armed = KiArmThreadWaitTimer(&Waiter, &Interval, KernelMode, &Due);
-    KiReleaseDispatcherLock(Old);
+    KiExitDispatcher(Old);
     CHECK(!Armed && !Waiter.Timer.Header.Inserted);
     CHECK(IsListEmpty(&Waiter.Timer.Header.WaitListHead) && IsListEmpty(&KiTimerTableListHead[0].Entry));
 
@@ -124,13 +131,13 @@ int main(void) {
         LARGE_INTEGER Relative;
         ULONG Hand;
         Relative.QuadPart = -500;
-        Old = KiAcquireDispatcherLock();
+        Old = KiEnterDispatcher();
         CHECK(KiComputeDueTime(&Waiter.Timer, Relative, &Hand) && Waiter.Timer.Header.Inserted);
         Waiter.Timer.Header.Inserted = FALSE;
         KiAcquireDispatcherObject(&Waiter.Timer.Header);
         KxInsertTimer(&Waiter.Timer, Hand);
         CHECK(BucketWithObject && ObjectLocks == 0);
-        KiReleaseDispatcherLock(Old);
+        KiExitDispatcher(Old);
         CHECK(!Waiter.Timer.Header.Inserted && IsListEmpty(&KiTimerTableListHead[0].Entry));
     }
 
@@ -142,7 +149,7 @@ int main(void) {
         PKSPIN_LOCK_QUEUE Queue;
         ULONGLONG Previous = 0;
         ULONG i;
-        Old = KiAcquireDispatcherLock();
+        Old = KiEnterDispatcher();
         for (i = 0; i < 3; i++) {
             InitTimer(&Timers[i]);
             Timers[i].DueTime.QuadPart = DueTimes[i];
@@ -151,7 +158,7 @@ int main(void) {
             CHECK(!KiInsertTimerTable(&Timers[i], 0));
             KiReleaseTimerLock(Queue);
         }
-        KiReleaseDispatcherLock(Old);
+        KiExitDispatcher(Old);
         for (Entry = KiTimerTableListHead[0].Entry.Flink, i = 0; Entry != &KiTimerTableListHead[0].Entry; Entry = Entry->Flink, i++) {
             PKTIMER Timer = CONTAINING_RECORD(Entry, KTIMER, TimerListEntry);
             CHECK(Timer->DueTime.QuadPart > Previous);

@@ -31,7 +31,7 @@ KiQueueHasRoom(
  * one: its stack and its share of the caches are the warmest, and for a work
  * queue that is worth more than fairness between its own threads.
  *
- * Entered with the dispatcher database held.
+ * Entered with the queue's object lock held.
  */
 static
 BOOLEAN
@@ -39,46 +39,56 @@ KiHandQueueEntryToWaiter(
     _Inout_ PKQUEUE Queue,
     _In_opt_ PLIST_ENTRY Entry)
 {
-    PKWAIT_BLOCK WaitBlock = NULL;
+    PKWAIT_BLOCK WaitBlock;
     PLIST_ENTRY WaitEntry;
     PKTHREAD Thread;
+
+    ASSERT(Queue->Header.Lock & KOBJECT_LOCK_BIT);
 
     if (!KiQueueHasRoom(Queue))
         return FALSE;
 
-    /*
-     * A thread that waited on the queue as an ordinary dispatcher object is
-     * not here to take work, so it is left to the usual satisfaction rules.
-     */
-    for (WaitEntry = Queue->Header.WaitListHead.Blink;
-         WaitEntry != &Queue->Header.WaitListHead;
-         WaitEntry = WaitEntry->Blink)
-    {
-        PKWAIT_BLOCK Candidate = CONTAINING_RECORD(WaitEntry,
-                                                   KWAIT_BLOCK,
-                                                   WaitListEntry);
-
-        if (Candidate->WaitType == WaitDequeue)
-        {
-            WaitBlock = Candidate;
-            break;
-        }
-    }
-
-    if (WaitBlock == NULL)
+    if ((Entry == NULL) && IsListEmpty(&Queue->EntryListHead))
         return FALSE;
+
+    for (;;)
+    {
+        WaitBlock = NULL;
+
+        /*
+         * A thread that waited on the queue as an ordinary dispatcher object is
+         * not here to take work, so it is left to the usual satisfaction rules.
+         */
+        for (WaitEntry = Queue->Header.WaitListHead.Blink;
+             WaitEntry != &Queue->Header.WaitListHead;
+             WaitEntry = WaitEntry->Blink)
+        {
+            PKWAIT_BLOCK Candidate = CONTAINING_RECORD(WaitEntry,
+                                                       KWAIT_BLOCK,
+                                                       WaitListEntry);
+
+            if (Candidate->WaitType == WaitDequeue)
+            {
+                WaitBlock = Candidate;
+                break;
+            }
+        }
+
+        if (WaitBlock == NULL)
+            return FALSE;
+
+        /* A thread that has not committed comes back and takes the entry from the queue itself */
+        Thread = KiLockCommittedWaiter(WaitBlock);
+        if (Thread != NULL)
+            break;
+    }
 
     if (Entry == NULL)
     {
-        if (IsListEmpty(&Queue->EntryListHead))
-            return FALSE;
-
         Entry = RemoveHeadList(&Queue->EntryListHead);
         Entry->Flink = NULL;
         Queue->Header.SignalState--;
     }
-
-    Thread = WaitBlock->Thread;
 
     /*
      * The entry itself is the wait status. That is what makes KeRemoveQueue
@@ -86,7 +96,27 @@ KiHandQueueEntryToWaiter(
      * tell the two apart by value.
      */
     KiUnwaitThread(Thread, (LONG_PTR)Entry, 0);
+    KiReleaseThreadLock(Thread);
+    KiUnlinkWaitBlock(WaitBlock);
     return TRUE;
+}
+
+static
+NTSTATUS
+KiCancelDequeueWait(
+    _Inout_ PKQUEUE Queue,
+    _Inout_ PKTHREAD Thread,
+    _In_ NTSTATUS Status)
+{
+    KiEndThreadWait(Thread);
+    Thread->WaitBlockList = NULL;
+    KiAcquireDispatcherObject(&Queue->Header);
+    if (Queue->Header.Abandoned)
+        Status = STATUS_ABANDONED;
+    else
+        KiIncrementQueueCurrentCount(Queue);
+    KiReleaseDispatcherObject(&Queue->Header);
+    return Status;
 }
 
 /*
@@ -133,24 +163,16 @@ KiDequeueOrWait(
         }
         else
         {
-            Thread->WaitIrql = KiAcquireDispatcherLock();
+            Thread->WaitIrql = KiEnterDispatcher();
         }
 
-        if (Queue->Header.Abandoned)
-        {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
-            *Status = STATUS_ABANDONED;
-            return NULL;
-        }
-
-        PreviousQueue = Thread->Queue;
-        if (PreviousQueue != Queue)
+        if (Thread->Queue != Queue)
         {
             /* A thread not yet serving this queue takes a pending APC before work and stays where it was */
             WaitCheck = KiCheckAlertability(Thread, Alertable, WaitMode);
             if (WaitCheck != STATUS_WAIT_0)
             {
-                KiReleaseDispatcherLock(Thread->WaitIrql);
+                KiExitDispatcher(Thread->WaitIrql);
                 *Status = WaitCheck;
                 return NULL;
             }
@@ -160,20 +182,42 @@ KiDequeueOrWait(
              * thread it was counting is gone and one of its waiters may now
              * be allowed through.
              */
+            PreviousQueue = KiLockThreadQueue(Thread);
             if (PreviousQueue != NULL)
             {
+                KiAcquireThreadLock(Thread);
                 RemoveEntryList(&Thread->QueueListEntry);
-                KiActivateWaiterQueue(PreviousQueue);
-            }
+                Thread->Queue = NULL;
+                KiReleaseThreadLock(Thread);
 
+                KiActivateWaiterQueue(PreviousQueue);
+                KiReleaseDispatcherObject(&PreviousQueue->Header);
+            }
+        }
+
+        KiAcquireDispatcherObject(&Queue->Header);
+        if (Queue->Header.Abandoned)
+        {
+            KiReleaseDispatcherObject(&Queue->Header);
+            KiExitDispatcher(Thread->WaitIrql);
+            *Status = STATUS_ABANDONED;
+            return NULL;
+        }
+
+        if (Thread->Queue != Queue)
+        {
+            KiAcquireThreadLock(Thread);
             InsertTailList(&Queue->ThreadListHead, &Thread->QueueListEntry);
             Thread->Queue = Queue;
+            KiReleaseThreadLock(Thread);
         }
         else
         {
             /* Looking for work is not doing work: stop counting until we have it */
             KiDecrementQueueCurrentCount(Queue);
         }
+
+        KiBeginThreadWait(Thread);
 
         if ((Queue->Header.SignalState > 0) &&
             !IsListEmpty(&Queue->EntryListHead) &&
@@ -183,7 +227,8 @@ KiDequeueOrWait(
             Entry->Flink = NULL;
             Queue->Header.SignalState--;
             KiIncrementQueueCurrentCount(Queue);
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Queue->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             return Entry;
         }
 
@@ -191,7 +236,8 @@ KiDequeueOrWait(
         if (WaitCheck != STATUS_WAIT_0)
         {
             KiIncrementQueueCurrentCount(Queue);
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Queue->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             *Status = WaitCheck;
             return NULL;
         }
@@ -199,7 +245,8 @@ KiDequeueOrWait(
         if ((Timeout != NULL) && (Timeout->QuadPart == 0))
         {
             KiIncrementQueueCurrentCount(Queue);
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Queue->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             *Status = STATUS_TIMEOUT;
             return NULL;
         }
@@ -207,6 +254,7 @@ KiDequeueOrWait(
         if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql))
         {
             KiIncrementQueueCurrentCount(Queue);
+            KiReleaseDispatcherObject(&Queue->Header);
             KxExitDispatcherForRetry(Thread);
             continue;
         }
@@ -221,21 +269,27 @@ KiDequeueOrWait(
         WaitBlock->WaitListEntry.Blink = NULL;
         TimerBlock->WaitListEntry.Flink = NULL;
         TimerBlock->WaitListEntry.Blink = NULL;
+        KxChainSingleOnly();
+
+        WaitBlock->BlockState = WaitBlockActive;
+        InsertTailList(&Queue->Header.WaitListHead, &WaitBlock->WaitListEntry);
+        KiReleaseDispatcherObject(&Queue->Header);
 
         if (Timeout != NULL)
         {
             KxChainSingleWithTimer();
 
+            KiAcquireDispatcherObject(&Timer->Header);
+            ASSERT(!Timer->Header.Inserted);
             KxSetTimerForThreadWait(Timer, *Timeout, WaitMode, &Hand);
             DueTime.QuadPart = Timer->DueTime.QuadPart;
 
             if (Timer->DueTime.QuadPart == 0)
             {
+                KiReleaseDispatcherObject(&Timer->Header);
                 Thread->TimerActive = FALSE;
-                Thread->WaitBlockList = NULL;
-                KiIncrementQueueCurrentCount(Queue);
-                KiReleaseDispatcherLock(Thread->WaitIrql);
-                *Status = STATUS_TIMEOUT;
+                *Status = KiCancelDequeueWait(Queue, Thread, STATUS_TIMEOUT);
+                KiExitDispatcher(Thread->WaitIrql);
                 return NULL;
             }
 
@@ -244,7 +298,6 @@ KiDequeueOrWait(
             TimerBlock->WaitKey = (USHORT)STATUS_TIMEOUT;
             TimerBlock->WaitType = WaitAny;
 
-            KiAcquireDispatcherObject(&Timer->Header);
             Timer->Header.SignalState = FALSE;
             Timer->Header.Inserted = TRUE;
             Timer->TimerListEntry.Flink = NULL;
@@ -252,19 +305,15 @@ KiDequeueOrWait(
             KxPublishTimerWaitBlock();
             if (!KxInsertThreadWaitTimer(Timer, Hand))
             {
+                KiAcquireDispatcherObject(&Timer->Header);
                 ASSERT(TimerBlock->WaitListEntry.Flink != NULL);
-                RemoveEntryList(&TimerBlock->WaitListEntry);
+                KiUnlinkWaitBlock(TimerBlock);
+                KiReleaseDispatcherObject(&Timer->Header);
                 Thread->TimerActive = FALSE;
-                Thread->WaitBlockList = NULL;
-                KiIncrementQueueCurrentCount(Queue);
-                KiReleaseDispatcherLock(Thread->WaitIrql);
-                *Status = STATUS_TIMEOUT;
+                *Status = KiCancelDequeueWait(Queue, Thread, STATUS_TIMEOUT);
+                KiExitDispatcher(Thread->WaitIrql);
                 return NULL;
             }
-        }
-        else
-        {
-            KxChainSingleOnly();
         }
 
         Thread->Alertable = Alertable;
@@ -274,18 +323,22 @@ KiDequeueOrWait(
         Thread->WaitTime = KeTickCount.LowPart;
         Swappable = KiCheckThreadStackSwap(Thread, WaitMode);
 
-        InsertTailList(&Queue->Header.WaitListHead, &WaitBlock->WaitListEntry);
-
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiUnlinkWaitBlocks(Thread);
-            Thread->TimerActive = FALSE;
-            if (Timer->Header.Inserted)
-                KxRemoveTreeTimer(Timer);
-
-            Thread->WaitBlockList = NULL;
-            KiIncrementQueueCurrentCount(Queue);
+            WaitCheck = KiCancelDequeueWait(Queue, Thread, STATUS_KERNEL_APC);
+            if (WaitCheck == STATUS_ABANDONED)
+            {
+                KiExitDispatcher(Thread->WaitIrql);
+                *Status = WaitCheck;
+                return NULL;
+            }
             KxExitDispatcherForRetry(Thread);
+            if ((Timeout != NULL) && (DueTime.QuadPart != 0))
+            {
+                Timeout = KiRecalculateDueTime(OriginalDueTime,
+                                               &DueTime,
+                                               &NewDueTime);
+            }
             continue;
         }
 
@@ -355,7 +408,7 @@ KeInitializeQueue(
  * Adds work to a queue. Where a thread is already parked on it and the queue
  * has room, the entry is handed over directly rather than queued and dequeued.
  *
- * Entered with the dispatcher database held. Answers the number of entries
+ * Entered with the queue's object lock held. Answers the number of entries
  * that were waiting before this one.
  */
 LONG
@@ -369,6 +422,7 @@ KiInsertQueue(
 
     ASSERT_QUEUE(Queue);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(Queue->Header.Lock & KOBJECT_LOCK_BIT);
 
     PreviousState = Queue->Header.SignalState;
 
@@ -401,9 +455,11 @@ KeInsertQueue(
     ASSERT_QUEUE(Queue);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Queue->Header);
     PreviousState = KiInsertQueue(Queue, Entry, FALSE);
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Queue->Header);
+    KiExitDispatcher(OldIrql);
 
     return PreviousState;
 }
@@ -425,9 +481,11 @@ KeInsertHeadQueue(
     ASSERT_QUEUE(Queue);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Queue->Header);
     PreviousState = KiInsertQueue(Queue, Entry, TRUE);
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Queue->Header);
+    KiExitDispatcher(OldIrql);
 
     return PreviousState;
 }
@@ -505,7 +563,8 @@ KeRemoveQueueEx(
     if (Removed == Count)
         return Removed;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Queue->Header);
 
     while ((Removed < Count) && (Queue->Header.SignalState > 0) &&
            !IsListEmpty(&Queue->EntryListHead))
@@ -516,7 +575,8 @@ KeRemoveQueueEx(
         Queue->Header.SignalState--;
     }
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Queue->Header);
+    KiExitDispatcher(OldIrql);
     return Removed;
 }
 
@@ -555,7 +615,8 @@ KeRundownQueue(
     ASSERT_QUEUE(Queue);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Queue->Header);
 
     if (!IsListEmpty(&Queue->EntryListHead))
     {
@@ -583,31 +644,43 @@ KeRundownQueue(
         if (WaitBlock->WaitType == WaitDpc)
         {
             IopSignalWaitCompletionPacket(WaitBlock);
+            continue;
         }
-        else if (WaitBlock->WaitType == WaitDequeue)
+
+        Thread = KiLockCommittedWaiter(WaitBlock);
+        if (Thread == NULL)
+            continue;
+
+        if (WaitBlock->WaitType == WaitDequeue)
         {
-            KiUnwaitThread(WaitBlock->Thread, STATUS_ABANDONED, 0);
+            KiUnwaitThread(Thread, STATUS_ABANDONED, 0);
         }
         else if (WaitBlock->WaitType == WaitAny)
         {
-            KiUnwaitThread(WaitBlock->Thread, WaitBlock->WaitKey, 0);
+            KiUnwaitThread(Thread, WaitBlock->WaitKey, 0);
         }
         else
         {
-            KiUnwaitThread(WaitBlock->Thread, STATUS_KERNEL_APC, 0);
+            KiUnwaitThread(Thread, STATUS_KERNEL_APC, 0);
         }
+
+        KiReleaseThreadLock(Thread);
+        KiUnlinkWaitBlock(WaitBlock);
     }
 
     while (!IsListEmpty(&Queue->ThreadListHead))
     {
         Entry = RemoveHeadList(&Queue->ThreadListHead);
         Thread = CONTAINING_RECORD(Entry, KTHREAD, QueueListEntry);
+        KiAcquireThreadLock(Thread);
         Thread->Queue = NULL;
+        KiReleaseThreadLock(Thread);
     }
 
     Queue->CurrentCount = 0;
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseDispatcherObject(&Queue->Header);
+    KiExitDispatcher(OldIrql);
     return FirstEntry;
 }
 
@@ -615,7 +688,7 @@ KeRundownQueue(
  * Called when a thread the queue was counting stops running for a reason of
  * its own. One fewer thread is at the work, so one more may be let through.
  *
- * Entered with the dispatcher database held.
+ * Entered with the queue's object lock held.
  */
 VOID
 FASTCALL
@@ -624,6 +697,7 @@ KiActivateWaiterQueue(
 {
     ASSERT_QUEUE(Queue);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+    ASSERT(Queue->Header.Lock & KOBJECT_LOCK_BIT);
 
     KiDecrementQueueCurrentCount(Queue);
 

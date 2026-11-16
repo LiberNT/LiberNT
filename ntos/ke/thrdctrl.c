@@ -61,11 +61,11 @@ KiReleaseThreadSuspension(
 
     /* Callers hold the APC lock at SYNCH_LEVEL, so the event is signalled the
      * way the dispatcher does it and the caller leaves the dispatcher */
-    KiAcquireDispatcherLockAtSynchLevel();
+    KiAcquireDispatcherObject(&Thread->SuspendEvent.Header);
     Thread->SuspendEvent.Header.SignalState = 1;
     if (!IsListEmpty(&Thread->SuspendEvent.Header.WaitListHead))
         KiWaitTest(&Thread->SuspendEvent, KI_RESUME_BOOST);
-    KiReleaseDispatcherLockFromSynchLevel();
+    KiReleaseDispatcherObject(&Thread->SuspendEvent.Header);
 }
 
 /*
@@ -395,25 +395,34 @@ KeTerminateThread(
     KeEnterCriticalRegion();
 
     KiAcquireProcessLockRaiseToSynch(Process, &ProcessLock);
-    KiAcquireDispatcherLockAtSynchLevel();
 
     RemoveEntryList(&Thread->ThreadListEntry);
     InterlockedDecrement((PLONG)&Process->StackCount);
 
     /* A thread leaving a queue no longer counts against it, so a waiter may take its place */
-    if (Thread->Queue != NULL)
     {
-        RemoveEntryList(&Thread->QueueListEntry);
-        KiActivateWaiterQueue(Thread->Queue);
-        Thread->Queue = NULL;
+        PKQUEUE Queue = KiLockThreadQueue(Thread);
+
+        if (Queue != NULL)
+        {
+            KiAcquireThreadLock(Thread);
+            RemoveEntryList(&Thread->QueueListEntry);
+            Thread->Queue = NULL;
+            KiReleaseThreadLock(Thread);
+
+            KiActivateWaiterQueue(Queue);
+            KiReleaseDispatcherObject(&Queue->Header);
+        }
     }
 
     /* A waiter released below may query the thread before the switch that would otherwise charge its last cycles */
     KiChargeThreadCycleTime(KeGetCurrentPrcb(), Thread);
 
+    KiAcquireDispatcherObject(&Thread->Header);
     Thread->Header.SignalState = TRUE;
     if (!IsListEmpty(&Thread->Header.WaitListHead))
         KxUnwaitThread(&Thread->Header, Increment);
+    KiReleaseDispatcherObject(&Thread->Header);
 
     Thread->State = Terminated;
     Thread->WaitIrql = ProcessLock.OldIrql;
@@ -450,12 +459,25 @@ KeRundownThread(VOID)
     if (IsListEmpty(&Thread->MutantListHead))
         return;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
 
-    while (!IsListEmpty(&Thread->MutantListHead))
+    for (;;)
     {
+        KiAcquireThreadLock(Thread);
         Entry = Thread->MutantListHead.Flink;
+        KiReleaseThreadLock(Thread);
+        if (Entry == &Thread->MutantListHead)
+            break;
+
         Mutant = CONTAINING_RECORD(Entry, KMUTANT, MutantListEntry);
+        KiAcquireDispatcherObject(&Mutant->Header);
+
+        /* Someone releasing it as abandoned on this thread's behalf can have taken it off the list first */
+        if (Mutant->OwnerThread != Thread)
+        {
+            KiReleaseDispatcherObject(&Mutant->Header);
+            continue;
+        }
 
         /*
          * A mutant that keeps APCs out cannot be abandoned: the thread was
@@ -471,16 +493,20 @@ KeRundownThread(VOID)
                          0);
         }
 
+        KiAcquireThreadLock(Thread);
         RemoveEntryList(Entry);
+        KiReleaseThreadLock(Thread);
         Mutant->OwnerThread = NULL;
         Mutant->Abandoned = TRUE;
         Mutant->Header.SignalState = 1;
 
         if (!IsListEmpty(&Mutant->Header.WaitListHead))
             KiWaitTest(Mutant, MUTANT_INCREMENT);
+
+        KiReleaseDispatcherObject(&Mutant->Header);
     }
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 }
 
 /* PUBLIC FUNCTIONS: SUSPENSION ************************************************/
@@ -744,7 +770,9 @@ KeAlertThread(
     ASSERT((AlertMode == KernelMode) || (AlertMode == UserMode));
 
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
-    KiAcquireDispatcherLockAtSynchLevel();
+
+    /* The thread takes an alert back under its own lock when it starts a wait, so the flag is only looked at inside it */
+    KiAcquireThreadLock(Thread);
 
     PreviousState = Thread->Alerted[(UCHAR)AlertMode];
 
@@ -762,7 +790,7 @@ KeAlertThread(
         }
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
+    KiReleaseThreadLock(Thread);
     KiReleaseApcLockFromSynchLevel(&ApcLock);
     KiExitDispatcher(ApcLock.OldIrql);
 
@@ -784,8 +812,8 @@ KeAlertResumeThread(
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
-    KiAcquireDispatcherLockAtSynchLevel();
 
+    KiAcquireThreadLock(Thread);
     if (!Thread->Alerted[KernelMode])
     {
         if ((Thread->State == Waiting) && Thread->Alertable)
@@ -793,8 +821,8 @@ KeAlertResumeThread(
         else
             Thread->Alerted[KernelMode] = TRUE;
     }
+    KiReleaseThreadLock(Thread);
 
-    KiReleaseDispatcherLockFromSynchLevel();
 
     PreviousCount = (ULONG)(UCHAR)Thread->SuspendCount;
     if (PreviousCount != 0)
@@ -826,6 +854,7 @@ KeTestAlertThread(
     ASSERT((AlertMode == KernelMode) || (AlertMode == UserMode));
 
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
+    KiAcquireThreadLock(Thread);
 
     PreviousState = Thread->Alerted[(UCHAR)AlertMode];
     if (PreviousState)
@@ -838,6 +867,7 @@ KeTestAlertThread(
         Thread->ApcState.UserApcPending = TRUE;
     }
 
+    KiReleaseThreadLock(Thread);
     KiReleaseApcLock(&ApcLock);
     return PreviousState;
 }
@@ -870,8 +900,8 @@ KeAlertThreadByThreadId(
     BOOLEAN Woken = FALSE;
 
     KiAcquireApcLockRaiseToSynch(Thread, &ApcLock);
-    KiAcquireDispatcherLockAtSynchLevel();
 
+    KiAcquireThreadLock(Thread);
     if ((Thread->State == Waiting) &&
         (Thread->WaitReason == WrAlertByThreadId))
     {
@@ -883,8 +913,8 @@ KeAlertThreadByThreadId(
         InterlockedBitTestAndSet((PLONG)&Thread->ThreadFlags,
                                  KTHREAD_ALERTED_BY_THREAD_ID_BIT);
     }
+    KiReleaseThreadLock(Thread);
 
-    KiReleaseDispatcherLockFromSynchLevel();
     KiReleaseApcLockFromSynchLevel(&ApcLock);
     KiExitDispatcher(ApcLock.OldIrql);
 
@@ -904,9 +934,9 @@ KeReadyThread(
 {
     KIRQL OldIrql;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiReadyThread(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 }
 
 /*
@@ -941,7 +971,7 @@ KeSetPriorityThread(
     ASSERT((Priority >= LOW_PRIORITY) && (Priority <= HIGH_PRIORITY));
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     OldPriority = Thread->Priority;
@@ -954,7 +984,7 @@ KeSetPriorityThread(
     KiSetPriorityThread(Thread, Priority);
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return OldPriority;
 }
@@ -980,7 +1010,7 @@ KeSetBasePriorityThread(
     ASSERT_THREAD(Thread);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     Process = Thread->ApcState.Process;
@@ -1022,7 +1052,7 @@ KeSetBasePriorityThread(
     KiSetPriorityThread(Thread, NewBase);
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return OldIncrement;
 }
@@ -1043,7 +1073,7 @@ KeSetActualBasePriorityThread(
     ASSERT_THREAD(Thread);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     OldBase = Thread->BasePriority;
@@ -1056,7 +1086,7 @@ KeSetActualBasePriorityThread(
     KiSetPriorityThread(Thread, NewBase);
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return OldBase;
 }
@@ -1077,7 +1107,7 @@ KeBoostPriorityThread(
 
     ASSERT_THREAD(Thread);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     /* Real-time threads are not boosted: their priority is the caller's word */
@@ -1098,7 +1128,7 @@ KeBoostPriorityThread(
     }
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 }
 
 KPRIORITY
@@ -1125,7 +1155,7 @@ KeQueryBasePriorityThread(
 
     ASSERT_THREAD(Thread);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     if (Thread->Saturation != 0)
@@ -1139,7 +1169,7 @@ KeQueryBasePriorityThread(
     }
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return Increment;
 }
@@ -1163,7 +1193,7 @@ KeExchangePriorityFloorThread(
 
     ASSERT_THREAD(Thread);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     Previous = *StoredFloor;
@@ -1179,7 +1209,7 @@ KeExchangePriorityFloorThread(
     }
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return Previous;
 }
@@ -1198,11 +1228,11 @@ KeQueryEffectivePriorityThread(
 
     ASSERT_THREAD(Thread);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
     Priority = KiApplyPriorityFloor(Thread, Thread->Priority);
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return Priority;
 }
@@ -1262,7 +1292,7 @@ KeSetAffinityThread(
     ASSERT_THREAD(Thread);
     ASSERT((Affinity & KeActiveProcessors) != 0);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     OldAffinity = KiThreadUserAffinityMask(Thread);
@@ -1279,7 +1309,7 @@ KeSetAffinityThread(
     }
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return OldAffinity;
 }
@@ -1301,7 +1331,7 @@ KeSetSystemAffinityThreadEx(
     ASSERT((Affinity & KeActiveProcessors) != 0);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     OldAffinity = Thread->SystemAffinityActive
@@ -1312,7 +1342,7 @@ KeSetSystemAffinityThreadEx(
     KiSetAffinityThread(Thread, Affinity);
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return OldAffinity;
 }
@@ -1339,7 +1369,7 @@ KeRevertToUserAffinityThreadEx(
 
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     if (Affinity != 0)
@@ -1355,7 +1385,7 @@ KeRevertToUserAffinityThreadEx(
     }
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 }
 
 VOID
@@ -1383,7 +1413,7 @@ KeSetIdealProcessorThread(
     ASSERT_THREAD(Thread);
     ASSERT(Processor < MAXIMUM_PROCESSORS);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     Previous = (UCHAR)Thread->UserIdealProcessor;
@@ -1394,7 +1424,7 @@ KeSetIdealProcessorThread(
         Thread->IdealProcessor = Processor;
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return Previous;
 }

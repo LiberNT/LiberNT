@@ -36,40 +36,81 @@ KiIsObjectSignalled(
  * Windows reports the exhaustion to the caller as an exception rather than a
  * status, because by then the thread's own recursion bookkeeping is wrong.
  */
+/* The list of mutants a thread holds is edited under that thread's lock, by whoever gives it one */
 FORCEINLINE
 VOID
-KiCheckMutantLimit(
+KiSatisfyOwnWait(
+    _Inout_ PKMUTANT Object,
+    _Inout_ PKTHREAD Thread)
+{
+    if ((Object->Header.Type & KOBJECT_TYPE_MASK) != MutantObject)
+    {
+        KiSatisfyNonMutantWait(Object);
+        return;
+    }
+
+    KiAcquireThreadLock(Thread);
+    KiSatisfyMutantWait(Object, Thread);
+    KiReleaseThreadLock(Thread);
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsMutantAtLimit(
     _In_ PKMUTANT Object,
     _In_ PKTHREAD Thread)
 {
-    if ((Object->Header.Type & KOBJECT_TYPE_MASK) != MutantObject)
-        return;
+    return ((Object->Header.Type & KOBJECT_TYPE_MASK) == MutantObject) &&
+           (Object->OwnerThread == Thread) &&
+           (Object->Header.SignalState == MINLONG);
+}
 
-    if ((Object->OwnerThread == Thread) &&
-        (Object->Header.SignalState == MINLONG))
+/* Several objects are only ever held together in address order, each once however often the caller named it */
+static
+VOID
+KiLockWaitObjects(
+    _In_reads_(Count) PVOID Object[],
+    _In_ ULONG Count)
+{
+    ULONG_PTR Last = 0, Next;
+    ULONG Index;
+
+    for (;;)
     {
-        KiReleaseDispatcherLock(Thread->WaitIrql);
-        ExRaiseStatus(STATUS_MUTANT_LIMIT_EXCEEDED);
+        Next = 0;
+        for (Index = 0; Index < Count; Index++)
+        {
+            if (((ULONG_PTR)Object[Index] > Last) && ((Next == 0) || ((ULONG_PTR)Object[Index] < Next)))
+                Next = (ULONG_PTR)Object[Index];
+        }
+
+        if (Next == 0)
+            break;
+
+        KiAcquireDispatcherObject((PDISPATCHER_HEADER)Next);
+        Last = Next;
     }
 }
 
-/*
- * Gives back everything a wait that never got published had taken: the blocks
- * come off the object lists and the timeout is disarmed. Called with the
- * dispatcher database lock still held.
- */
 static
 VOID
-KiAbandonThreadWait(
-    _Inout_ PKTHREAD Thread)
+KiUnlockWaitObjects(
+    _In_reads_(Count) PVOID Object[],
+    _In_ ULONG Count)
 {
-    PKTIMER Timer = &Thread->Timer;
+    ULONG Index, Earlier;
 
-    KiUnlinkWaitBlocks(Thread);
+    for (Index = 0; Index < Count; Index++)
+    {
+        for (Earlier = 0; Earlier < Index; Earlier++)
+        {
+            if (Object[Earlier] == Object[Index])
+                break;
+        }
 
-    Thread->TimerActive = FALSE;
-    if (Timer->Header.Inserted)
-        KxRemoveTreeTimer(Timer);
+        if (Earlier == Index)
+            KiReleaseDispatcherObject((PDISPATCHER_HEADER)Object[Index]);
+    }
 }
 
 /*
@@ -89,18 +130,24 @@ KiArmThreadWaitTimer(
     PKWAIT_BLOCK TimerBlock = &Thread->WaitBlock[TIMER_WAIT_BLOCK];
     ULONG Hand;
 
+    KiAcquireDispatcherObject(&Timer->Header);
+    ASSERT(!Timer->Header.Inserted);
+
     KxSetTimerForThreadWait(Timer, *Interval, WaitMode, &Hand);
     DueTime->QuadPart = Timer->DueTime.QuadPart;
 
     if (Timer->DueTime.QuadPart == 0)
+    {
+        KiReleaseDispatcherObject(&Timer->Header);
+        Thread->TimerActive = FALSE;
         return FALSE;
+    }
 
     TimerBlock->Thread = Thread;
     TimerBlock->Object = Timer;
     TimerBlock->WaitKey = (USHORT)STATUS_TIMEOUT;
     TimerBlock->WaitType = WaitAny;
 
-    KiAcquireDispatcherObject(&Timer->Header);
     Timer->Header.SignalState = FALSE;
     Timer->Header.Inserted = TRUE;
     Timer->TimerListEntry.Flink = NULL;
@@ -110,10 +157,11 @@ KiArmThreadWaitTimer(
     /* Hands the timer to its table bucket and drops the object lock */
     if (!KxInsertThreadWaitTimer(Timer, Hand))
     {
+        KiAcquireDispatcherObject(&Timer->Header);
         ASSERT(TimerBlock->WaitListEntry.Flink != NULL);
-        RemoveEntryList(&TimerBlock->WaitListEntry);
-        TimerBlock->WaitListEntry.Flink = NULL;
-        TimerBlock->WaitListEntry.Blink = NULL;
+        KiUnlinkWaitBlock(TimerBlock);
+        KiReleaseDispatcherObject(&Timer->Header);
+        Thread->TimerActive = FALSE;
         return FALSE;
     }
 
@@ -121,8 +169,8 @@ KiArmThreadWaitTimer(
 }
 
 /*
- * Links one wait block onto the object it watches. The dispatcher database lock
- * covers the list, so no object lock is taken here.
+ * Links one wait block onto the object it watches. Entered with the object
+ * locked: the same hold found it closed, so no signal falls between the two.
  */
 FORCEINLINE
 VOID
@@ -130,6 +178,9 @@ KiPublishWaitBlock(
     _Inout_ PKWAIT_BLOCK WaitBlock,
     _In_ PDISPATCHER_HEADER Object)
 {
+    ASSERT(Object->Lock & KOBJECT_LOCK_BIT);
+
+    WaitBlock->BlockState = WaitBlockActive;
     InsertTailList(&Object->WaitListHead, &WaitBlock->WaitListEntry);
 }
 
@@ -178,31 +229,41 @@ KeWaitForSingleObject(
         }
         else
         {
-            Thread->WaitIrql = KiAcquireDispatcherLock();
+            Thread->WaitIrql = KiEnterDispatcher();
         }
 
         Status = KiCheckAlertability(Thread, Alertable, WaitMode);
         if (Status != STATUS_WAIT_0)
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return Status;
         }
 
-        KiCheckMutantLimit(Object, Thread);
+        KiBeginThreadWait(Thread);
+        KiAcquireDispatcherObject(&Object->Header);
+
+        if (KiIsMutantAtLimit(Object, Thread))
+        {
+            KiReleaseDispatcherObject(&Object->Header);
+            KiExitDispatcher(Thread->WaitIrql);
+            ExRaiseStatus(STATUS_MUTANT_LIMIT_EXCEEDED);
+        }
 
         if (KiIsObjectSignalled(Object, Thread))
         {
             Thread->WaitStatus = STATUS_SUCCESS;
-            KiSatisfyObjectWait(Object, Thread);
+            KiSatisfyOwnWait(Object, Thread);
             Status = (NTSTATUS)(Thread->WaitStatus | STATUS_WAIT_0);
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Object->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             return Status;
         }
 
         /* A caller that cannot block gets the answer it can have */
         if ((Timeout != NULL) && (Timeout->QuadPart == 0))
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiReleaseDispatcherObject(&Object->Header);
+            KiExitDispatcher(Thread->WaitIrql);
             return STATUS_TIMEOUT;
         }
 
@@ -213,6 +274,7 @@ KeWaitForSingleObject(
          */
         if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql))
         {
+            KiReleaseDispatcherObject(&Object->Header);
             KxExitDispatcherForRetry(Thread);
             continue;
         }
@@ -227,21 +289,21 @@ KeWaitForSingleObject(
         WaitBlock->WaitListEntry.Blink = NULL;
         TimerBlock->WaitListEntry.Flink = NULL;
         TimerBlock->WaitListEntry.Blink = NULL;
+        KxChainSingleOnly();
+
+        KiPublishWaitBlock(WaitBlock, &Object->Header);
+        KiReleaseDispatcherObject(&Object->Header);
 
         if (Timeout != NULL)
         {
             KxChainSingleWithTimer();
             if (!KiArmThreadWaitTimer(Thread, Timeout, WaitMode, &DueTime))
             {
-                Thread->TimerActive = FALSE;
+                KiEndThreadWait(Thread);
                 Thread->WaitBlockList = NULL;
-                KiReleaseDispatcherLock(Thread->WaitIrql);
+                KiExitDispatcher(Thread->WaitIrql);
                 return STATUS_TIMEOUT;
             }
-        }
-        else
-        {
-            KxChainSingleOnly();
         }
 
         Thread->Alertable = Alertable;
@@ -251,13 +313,18 @@ KeWaitForSingleObject(
         Thread->WaitTime = KeTickCount.LowPart;
         Swappable = KiCheckThreadStackSwap(Thread, WaitMode);
 
-        KiPublishWaitBlock(WaitBlock, &Object->Header);
-
+        /* A signal that reached the block before this point has ended the wait already, and the object is looked at again */
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiAbandonThreadWait(Thread);
+            KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            if ((Timeout != NULL) && (DueTime.QuadPart != 0))
+            {
+                Timeout = KiRecalculateDueTime(OriginalDueTime,
+                                               &DueTime,
+                                               &NewDueTime);
+            }
             continue;
         }
 
@@ -306,7 +373,7 @@ KeWaitForMultipleObjects(
     PKWAIT_BLOCK TimerBlock = &Thread->WaitBlock[TIMER_WAIT_BLOCK];
     PLARGE_INTEGER OriginalDueTime = Timeout;
     LARGE_INTEGER DueTime, NewDueTime;
-    BOOLEAN Swappable, AllSignalled;
+    BOOLEAN Swappable, AllSignalled, Poll;
     NTSTATUS Status;
     LONG_PTR WaitStatus;
     ULONG Index;
@@ -344,79 +411,28 @@ KeWaitForMultipleObjects(
         }
         else
         {
-            Thread->WaitIrql = KiAcquireDispatcherLock();
+            Thread->WaitIrql = KiEnterDispatcher();
         }
 
         Status = KiCheckAlertability(Thread, Alertable, WaitMode);
         if (Status != STATUS_WAIT_0)
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return Status;
         }
 
-        for (Index = 0; Index < Count; Index++)
-        {
-            KiCheckMutantLimit((PKMUTANT)Object[Index], Thread);
-        }
+        KiBeginThreadWait(Thread);
 
-        if (WaitType == WaitAny)
-        {
-            for (Index = 0; Index < Count; Index++)
-            {
-                CurrentObject = (PKMUTANT)Object[Index];
-                if (!KiIsObjectSignalled(CurrentObject, Thread))
-                    continue;
-
-                Thread->WaitStatus = STATUS_SUCCESS;
-                KiSatisfyObjectWait(CurrentObject, Thread);
-                Status = (NTSTATUS)(Thread->WaitStatus |
-                                    (LONG_PTR)(STATUS_WAIT_0 + Index));
-                KiReleaseDispatcherLock(Thread->WaitIrql);
-                return Status;
-            }
-        }
-        else
-        {
-            AllSignalled = TRUE;
-            for (Index = 0; Index < Count; Index++)
-            {
-                if (!KiIsObjectSignalled((PKMUTANT)Object[Index], Thread))
-                {
-                    AllSignalled = FALSE;
-                    break;
-                }
-            }
-
-            if (AllSignalled)
-            {
-                Thread->WaitStatus = STATUS_WAIT_0;
-                for (Index = 0; Index < Count; Index++)
-                {
-                    KiSatisfyObjectWait((PKMUTANT)Object[Index], Thread);
-                }
-                Status = (NTSTATUS)(Thread->WaitStatus | STATUS_WAIT_0);
-                KiReleaseDispatcherLock(Thread->WaitIrql);
-                return Status;
-            }
-        }
-
-        if ((Timeout != NULL) && (Timeout->QuadPart == 0))
-        {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
-            return STATUS_TIMEOUT;
-        }
-
-        if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql))
-        {
-            KxExitDispatcherForRetry(Thread);
-            continue;
-        }
+        Poll = (BOOLEAN)((Timeout != NULL) && (Timeout->QuadPart == 0));
 
         Thread->WaitBlockList = WaitBlockArray;
         Thread->WaitStatus = STATUS_WAIT_0;
+        Thread->WaitBlockCount = 0;
+        Thread->TimerActive = FALSE;
+        TimerBlock->WaitListEntry.Flink = NULL;
+        TimerBlock->WaitListEntry.Blink = NULL;
 
-        Index = 0;
-        do
+        for (Index = 0; Index < Count; Index++)
         {
             WaitBlock = &WaitBlockArray[Index];
             WaitBlock->Thread = Thread;
@@ -426,22 +442,108 @@ KeWaitForMultipleObjects(
             WaitBlock->WaitListEntry.Flink = NULL;
             WaitBlock->WaitListEntry.Blink = NULL;
             KxChainNextBlock(WaitBlockArray, Index);
-            Index++;
-        } while (Index < Count);
+        }
 
-        KxChainLastBlock(WaitBlockArray, Count);
+        if (WaitType == WaitAny)
+        {
+            /* Each object is looked at and, if closed, waited on under one hold of its lock; the ones before it already carry a block */
+            for (Index = 0; Index < Count; Index++)
+            {
+                CurrentObject = (PKMUTANT)Object[Index];
+                KiAcquireDispatcherObject(&CurrentObject->Header);
 
-        TimerBlock->WaitListEntry.Flink = NULL;
-        TimerBlock->WaitListEntry.Blink = NULL;
+                if (KiIsMutantAtLimit(CurrentObject, Thread))
+                {
+                    KiReleaseDispatcherObject(&CurrentObject->Header);
+                    KiEndThreadWait(Thread);
+                    Thread->WaitBlockList = NULL;
+                    KiExitDispatcher(Thread->WaitIrql);
+                    ExRaiseStatus(STATUS_MUTANT_LIMIT_EXCEEDED);
+                }
+
+                if (KiIsObjectSignalled(CurrentObject, Thread))
+                {
+                    Thread->WaitStatus = STATUS_SUCCESS;
+                    KiSatisfyOwnWait(CurrentObject, Thread);
+                    Status = (NTSTATUS)(Thread->WaitStatus |
+                                        (LONG_PTR)(STATUS_WAIT_0 + Index));
+                    KiReleaseDispatcherObject(&CurrentObject->Header);
+                    KiEndThreadWait(Thread);
+                    Thread->WaitBlockList = NULL;
+                    KiExitDispatcher(Thread->WaitIrql);
+                    return Status;
+                }
+
+                if (!Poll)
+                {
+                    KiPublishWaitBlock(&WaitBlockArray[Index], &CurrentObject->Header);
+                    Thread->WaitBlockCount = (UCHAR)(Index + 1);
+                }
+
+                KiReleaseDispatcherObject(&CurrentObject->Header);
+            }
+        }
+        else
+        {
+            KiLockWaitObjects(Object, Count);
+
+            AllSignalled = TRUE;
+            for (Index = 0; Index < Count; Index++)
+            {
+                if (KiIsMutantAtLimit((PKMUTANT)Object[Index], Thread))
+                {
+                    KiUnlockWaitObjects(Object, Count);
+                    Thread->WaitBlockList = NULL;
+                    KiExitDispatcher(Thread->WaitIrql);
+                    ExRaiseStatus(STATUS_MUTANT_LIMIT_EXCEEDED);
+                }
+
+                if (!KiIsObjectSignalled((PKMUTANT)Object[Index], Thread))
+                    AllSignalled = FALSE;
+            }
+
+            if (AllSignalled)
+            {
+                Thread->WaitStatus = STATUS_WAIT_0;
+                for (Index = 0; Index < Count; Index++)
+                {
+                    KiSatisfyOwnWait((PKMUTANT)Object[Index], Thread);
+                }
+                Status = (NTSTATUS)(Thread->WaitStatus | STATUS_WAIT_0);
+                KiUnlockWaitObjects(Object, Count);
+                Thread->WaitBlockList = NULL;
+                KiExitDispatcher(Thread->WaitIrql);
+                return Status;
+            }
+
+            if (!Poll)
+            {
+                for (Index = 0; Index < Count; Index++)
+                {
+                    KiPublishWaitBlock(&WaitBlockArray[Index],
+                                       (PDISPATCHER_HEADER)Object[Index]);
+                }
+                Thread->WaitBlockCount = (UCHAR)Count;
+            }
+
+            KiUnlockWaitObjects(Object, Count);
+        }
+
+        if (Poll)
+        {
+            Thread->WaitBlockList = NULL;
+            KiExitDispatcher(Thread->WaitIrql);
+            return STATUS_TIMEOUT;
+        }
 
         if (Timeout != NULL)
         {
             KxChainTimerToArray(WaitBlockArray);
             if (!KiArmThreadWaitTimer(Thread, Timeout, WaitMode, &DueTime))
             {
-                Thread->TimerActive = FALSE;
+                KiEndThreadWait(Thread);
                 Thread->WaitBlockList = NULL;
-                KiReleaseDispatcherLock(Thread->WaitIrql);
+                KiExitDispatcher(Thread->WaitIrql);
                 return STATUS_TIMEOUT;
             }
         }
@@ -453,17 +555,17 @@ KeWaitForMultipleObjects(
         Thread->WaitTime = KeTickCount.LowPart;
         Swappable = KiCheckThreadStackSwap(Thread, WaitMode);
 
-        for (Index = 0; Index < Count; Index++)
-        {
-            KiPublishWaitBlock(&WaitBlockArray[Index],
-                               (PDISPATCHER_HEADER)Object[Index]);
-        }
-
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiAbandonThreadWait(Thread);
+            KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            if ((Timeout != NULL) && (DueTime.QuadPart != 0))
+            {
+                Timeout = KiRecalculateDueTime(OriginalDueTime,
+                                               &DueTime,
+                                               &NewDueTime);
+            }
             continue;
         }
 
@@ -515,13 +617,13 @@ KeDelayExecutionThread(
         }
         else
         {
-            Thread->WaitIrql = KiAcquireDispatcherLock();
+            Thread->WaitIrql = KiEnterDispatcher();
         }
 
         Status = KiCheckAlertability(Thread, Alertable, WaitMode);
         if (Status != STATUS_WAIT_0)
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return Status;
         }
 
@@ -530,6 +632,8 @@ KeDelayExecutionThread(
             KxExitDispatcherForRetry(Thread);
             continue;
         }
+
+        KiBeginThreadWait(Thread);
 
         Thread->WaitBlockList = TimerBlock;
         Thread->WaitStatus = STATUS_SUCCESS;
@@ -543,7 +647,7 @@ KeDelayExecutionThread(
             /* Nothing left to wait for; give the processor up and come back */
             Thread->TimerActive = FALSE;
             Thread->WaitBlockList = NULL;
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             KiYieldDelayExecution();
             return STATUS_SUCCESS;
         }
@@ -557,9 +661,10 @@ KeDelayExecutionThread(
 
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiAbandonThreadWait(Thread);
+            KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            Interval = KiRecalculateDueTime(OriginalDueTime, &DueTime, &NewDueTime);
             continue;
         }
 
@@ -606,7 +711,7 @@ KeWaitForAlertByThreadId(
 
     for (;;)
     {
-        Thread->WaitIrql = KiAcquireDispatcherLock();
+        Thread->WaitIrql = KiEnterDispatcher();
 
         /*
          * An alert that arrived before the wait is held in the thread flags.
@@ -615,20 +720,20 @@ KeWaitForAlertByThreadId(
         if (InterlockedBitTestAndReset((PLONG)&Thread->ThreadFlags,
                                        KTHREAD_ALERTED_BY_THREAD_ID_BIT))
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return STATUS_ALERTED;
         }
 
         Status = KiCheckAlertability(Thread, FALSE, WaitMode);
         if (Status != STATUS_WAIT_0)
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return Status;
         }
 
         if ((Timeout != NULL) && (Timeout->QuadPart == 0))
         {
-            KiReleaseDispatcherLock(Thread->WaitIrql);
+            KiExitDispatcher(Thread->WaitIrql);
             return STATUS_TIMEOUT;
         }
 
@@ -638,8 +743,11 @@ KeWaitForAlertByThreadId(
             continue;
         }
 
+        KiBeginThreadWait(Thread);
+
         Thread->WaitBlockList = TimerBlock;
         Thread->WaitStatus = STATUS_SUCCESS;
+        TimerBlock->Object = &Thread->Timer;
         TimerBlock->WaitListEntry.Flink = NULL;
         TimerBlock->WaitListEntry.Blink = NULL;
 
@@ -651,7 +759,7 @@ KeWaitForAlertByThreadId(
             {
                 Thread->TimerActive = FALSE;
                 Thread->WaitBlockList = NULL;
-                KiReleaseDispatcherLock(Thread->WaitIrql);
+                KiExitDispatcher(Thread->WaitIrql);
                 return STATUS_TIMEOUT;
             }
         }
@@ -665,10 +773,28 @@ KeWaitForAlertByThreadId(
 
         if (!KxTryBeginThreadWait(Thread))
         {
-            KiAbandonThreadWait(Thread);
+            KiEndThreadWait(Thread);
             Thread->WaitBlockList = NULL;
             KxExitDispatcherForRetry(Thread);
+            if ((Timeout != NULL) && (DueTime.QuadPart != 0))
+            {
+                Timeout = KiRecalculateDueTime(OriginalDueTime,
+                                               &DueTime,
+                                               &NewDueTime);
+            }
             continue;
+        }
+
+        /* An alert sent since the look above was left in the flags under this lock, because the thread was not waiting yet */
+        if (InterlockedBitTestAndReset((PLONG)&Thread->ThreadFlags,
+                                       KTHREAD_ALERTED_BY_THREAD_ID_BIT))
+        {
+            Thread->WaitRegister.State = KI_WAIT_ABORTED;
+            KiReleaseThreadLock(Thread);
+            KiEndThreadWait(Thread);
+            Thread->WaitBlockList = NULL;
+            KiExitDispatcher(Thread->WaitIrql);
+            return STATUS_ALERTED;
         }
 
         KxCommitThreadWait(Thread, Swappable);

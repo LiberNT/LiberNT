@@ -13,10 +13,10 @@ parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 src = kt.Sources(args.root)
 
-expire = src.definition('ktimer.c', 'KiTimerListExpire')
-needle = '        Timer->Header.Inserted = FALSE;\n        Timer->Header.SignalState = 1;\n'
+expire = src.definition('ktimer.c', 'KiExpireTimer')
+needle = '    Timer->Header.SignalState = 1;\n'
 assert expire.count(needle) == 1
-expire = expire.replace(needle, '        TestPause();\n' + needle)
+expire = expire.replace(needle, '    TestPause();\n' + needle)
 
 fixture = kt.PRELUDE + r'''
 #define MAX_TIMER_DPCS 16
@@ -27,7 +27,7 @@ fixture = kt.PRELUDE + r'''
 #define PtrToUlong(p) ((ULONG)(ULONG_PTR)(p))
 #define AFFINITY_MASK(n) ((ULONG)1 << (n))
 typedef void (*PKDEFERRED_ROUTINE)(PKDPC, PVOID, PVOID, PVOID);
-typedef struct { PKDPC Dpc; PKDEFERRED_ROUTINE Routine; PVOID Context; } DPC_QUEUE_ENTRY;
+typedef struct { PKDPC Dpc; PKDEFERRED_ROUTINE Routine; PVOID Context; } DPC_QUEUE_ENTRY, *PDPC_QUEUE_ENTRY;
 static volatile int PauseExpiry, Paused, Attempted, Done, DoneDuringPause;
 static int Routines;
 static BOOLEAN CancelResult, ResetResult;
@@ -48,7 +48,29 @@ for file, name in [('ke_x.h', 'KiUnlinkTimerFromTable'), ('ke_x.h', 'KiRemoveEnt
                    ('ktimer.c', 'KiPeriodToInterval'), ('ktimer.c', 'KiInsertTimerTable'), ('ktimer.c', 'KiRearmPeriodicTimer')]:
     fixture += src.definition(file, name)
 fixture += expire
-for file, name in [('ktimer.c', 'KiTimerExpiration'), ('ktimer.c', 'KeCancelTimer'), ('ktimer.c', 'KiSignalTimer'),
+scan = src.definition('ktimer.c', 'KiTimerExpiration')
+needle = '            if (!KiTryAcquireDispatcherObject(&Timer->Header))\n'
+assert scan.count(needle) == 1
+scan = scan.replace(needle, '            BeforeTry();\n            if (!CountedTry(&Timer->Header))\n')
+fixture += r'''
+static volatile int PauseTry, SetterAtBucket, TryFailures;
+static __thread int IsSetter;
+static void SetterHook(void) { if (IsSetter && ObjectLocks > 0) __atomic_store_n(&SetterAtBucket, 1, __ATOMIC_RELEASE); }
+/* The scan holds the bucket until the setter, holding the timer, is asking for that same bucket */
+static void BeforeTry(void) {
+    if (!__atomic_load_n(&PauseTry, __ATOMIC_ACQUIRE)) return;
+    __atomic_store_n(&PauseTry, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&Paused, 1, __ATOMIC_RELEASE);
+    CHECK(AwaitFlag(&SetterAtBucket));
+}
+static BOOLEAN CountedTry(PDISPATCHER_HEADER Header) {
+    if (KiTryAcquireDispatcherObject(Header)) return TRUE;
+    __atomic_add_fetch(&TryFailures, 1, __ATOMIC_SEQ_CST);
+    return FALSE;
+}
+'''
+fixture += scan
+for file, name in [('ktimer.c', 'KeCancelTimer'), ('ktimer.c', 'KiSignalTimer'),
                    ('ktimer.c', 'KiCompleteTimer'), ('ke_x.h', 'KxInsertTimer'), ('ktimer.c', 'KeSetTimerEx')]:
     fixture += src.definition(file, name)
 fixture += r'''
@@ -58,7 +80,7 @@ static void *Expire(void *Unused) {
     (void)Unused;
     Irql = DISPATCH_LEVEL;
     KiTimerExpiration(NULL, NULL, UlongToPtr(0), UlongToPtr(0));
-    CHECK(Irql == DISPATCH_LEVEL && !DispatcherHeld);
+    CHECK(Irql == DISPATCH_LEVEL && !ObjectLocks);
     return NULL;
 }
 static void *Cancel(void *Unused) {
@@ -72,6 +94,7 @@ static void *Cancel(void *Unused) {
 static void *ResetTimer(void *Unused) {
     LARGE_INTEGER Due;
     (void)Unused;
+    IsSetter = 1;
     while (!__atomic_load_n(&Paused, __ATOMIC_ACQUIRE)) sched_yield();
     __atomic_store_n(&Attempted, 1, __ATOMIC_RELEASE);
     Due.QuadPart = -500;
@@ -139,6 +162,24 @@ int main(void) {
     }
     CHECK(Paused && !DoneDuringPause && Done);
     CHECK(ResetResult == FALSE && Routines == 1);
+    CHECK(Timer.Header.Inserted && Timer.Header.SignalState == 0 && Timer.DueTime.QuadPart == 600);
+    CHECK(KiTimerTableListHead[0].Entry.Flink == &Timer.TimerListEntry);
+
+    /* The scan finds the due timer held by a reset that waits for the scan's bucket: it lets the bucket go instead of waiting, and the reset wins */
+    Arm("a reset holding the timer while the scan holds its bucket", 0, 0);
+    BucketHook = SetterHook;
+    PauseTry = 1;
+    {
+        pthread_t ResetThread;
+        CHECK(pthread_create(&ExpireThread, NULL, Expire, NULL) == 0);
+        CHECK(pthread_create(&ResetThread, NULL, ResetTimer, NULL) == 0);
+        __atomic_store_n(&Attempted, 1, __ATOMIC_RELEASE);
+        CHECK(pthread_join(ExpireThread, NULL) == 0);
+        CHECK(pthread_join(ResetThread, NULL) == 0);
+    }
+    BucketHook = NULL;
+    CHECK(Paused && SetterAtBucket && TryFailures >= 1 && Done);
+    CHECK(ResetResult == TRUE && Routines == 0);
     CHECK(Timer.Header.Inserted && Timer.Header.SignalState == 0 && Timer.DueTime.QuadPart == 600);
     CHECK(KiTimerTableListHead[0].Entry.Flink == &Timer.TimerListEntry);
     return 0;
