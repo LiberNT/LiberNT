@@ -2881,7 +2881,6 @@ BasepCaptureExtendedAttributes(
         else if (Attribute->Attribute == PROC_THREAD_ATTRIBUTE_HANDLE_LIST)
         {
             SIZE_T ListSize;
-            SIZE_T HandleIndex;
 
             if (!InheritHandles)
             {
@@ -2899,19 +2898,6 @@ BasepCaptureExtendedAttributes(
 
             RtlCopyMemory(*HandleList, Attribute->Value, ListSize);
             *HandleCount = ListSize / sizeof(HANDLE);
-            for (HandleIndex = 0; HandleIndex < *HandleCount; HandleIndex++)
-            {
-                DWORD HandleFlags;
-
-                if (!GetHandleInformation((*HandleList)[HandleIndex], &HandleFlags) || !(HandleFlags & HANDLE_FLAG_INHERIT))
-                {
-                    RtlFreeHeap(RtlGetProcessHeap(), 0, *HandleList);
-                    *HandleList = NULL;
-                    *HandleCount = 0;
-                    SetLastError(ERROR_INVALID_PARAMETER);
-                    return FALSE;
-                }
-            }
         }
     }
 

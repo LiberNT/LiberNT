@@ -1588,6 +1588,35 @@ ObClearProcessHandleTable(
     ObDereferenceProcessHandleTable(Process);
 }
 
+static
+BOOLEAN
+ObpHandleListInheritable(
+    _In_ PHANDLE_TABLE ParentTable,
+    _In_reads_(HandleCount) const HANDLE *HandleList,
+    _In_ SIZE_T HandleCount)
+{
+    PHANDLE_TABLE_ENTRY HandleEntry;
+    BOOLEAN Inheritable = TRUE;
+    SIZE_T Index;
+
+    PAGED_CODE();
+
+    KeEnterCriticalRegion();
+    for (Index = 0; Inheritable && Index < HandleCount; Index++)
+    {
+        HandleEntry = ExMapHandleToPointer(ParentTable, HandleList[Index]);
+        Inheritable = FALSE;
+        if (HandleEntry != NULL)
+        {
+            Inheritable = (HandleEntry->ObAttributes & OBJ_INHERIT) != 0;
+            ExUnlockHandleTableEntry(ParentTable, HandleEntry);
+        }
+    }
+    KeLeaveCriticalRegion();
+
+    return Inheritable;
+}
+
 NTSTATUS
 NTAPI
 ObInitProcess(
@@ -1613,6 +1642,12 @@ ObInitProcess(
 
     ParentTable = ObReferenceProcessHandleTable(Parent);
     if (ParentTable == NULL) return STATUS_PROCESS_IS_TERMINATING;
+
+    if (HandleList != NULL && !ObpHandleListInheritable(ParentTable, HandleList, HandleCount))
+    {
+        ObDereferenceProcessHandleTable(Parent);
+        return STATUS_INVALID_PARAMETER;
+    }
 
     /* Every inheritable handle comes across first. The parent's table stays
      * referenced until the new one is finished with, because the filter and

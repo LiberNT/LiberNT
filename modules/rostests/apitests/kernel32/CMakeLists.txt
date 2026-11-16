@@ -140,6 +140,7 @@ list(APPEND SOURCE
     Pipes.c
     PackageIdentity.c
     PackageNames.c
+    ParentHandleList.c
     PixeloramaCompat.c
     ProcessAffinityUpdateMode.c
     ProcessPreferredUILanguages.c
