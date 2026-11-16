@@ -301,13 +301,40 @@ static LRESULT CALLBACK SearchEditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     return CallWindowProcW(sb ? sb->editProc : DefWindowProcW, h, msg, wp, lp);
 }
 
-static void SearchLayout(SearchBox* sb)
+static void SearchEditRect(SearchBox* sb, RECT* r)
 {
     RECT rc;
     GetClientRect(sb->hwnd, &rc);
     int h = S(16);
-    MoveWindow(sb->edit, rc.left + S(30), rc.top + ((rc.bottom - rc.top) - h) / 2,
-               rc.right - rc.left - S(40), h, TRUE);
+    r->left = rc.left + S(30);
+    r->top = rc.top + ((rc.bottom - rc.top) - h) / 2;
+    r->right = r->left + rc.right - rc.left - S(40);
+    r->bottom = r->top + h;
+}
+
+static void SearchLayout(SearchBox* sb)
+{
+    RECT r;
+    if (!sb->edit)
+        return;
+    SearchEditRect(sb, &r);
+    MoveWindow(sb->edit, r.left, r.top, r.right - r.left, r.bottom - r.top, TRUE);
+}
+
+static void SearchCreateEdit(SearchBox* sb)
+{
+    if (sb->edit)
+        return;
+    sb->edit = CreateWindowExW(0, L"EDIT", L"",
+                               WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+                               0, 0, 10, 10, sb->hwnd, (HMENU)(INT_PTR)1,
+                               g_app.hInst, NULL);
+    if (!sb->edit)
+        return;
+    sb->editProc = (WNDPROC)SetWindowLongPtrW(sb->edit, GWLP_WNDPROC,
+                                              (LONG_PTR)SearchEditProc);
+    SendMessageW(sb->edit, WM_SETFONT, (WPARAM)g_t.fBody, 0);
+    SearchLayout(sb);
 }
 
 static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -327,14 +354,6 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return TRUE;
     }
     case WM_CREATE:
-        sb->edit = CreateWindowExW(0, L"EDIT", L"",
-                                   WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-                                   0, 0, 10, 10, hwnd, (HMENU)(INT_PTR)1,
-                                   g_app.hInst, NULL);
-        sb->editProc = (WNDPROC)SetWindowLongPtrW(sb->edit, GWLP_WNDPROC,
-                                                  (LONG_PTR)SearchEditProc);
-        SendMessageW(sb->edit, WM_SETFONT, (WPARAM)g_t.fBody, 0);
-        SearchLayout(sb);
         return 0;
 
     case WM_NCDESTROY:
@@ -347,7 +366,8 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
 
     case WM_APP_THEMECHG:
-        SendMessageW(sb->edit, WM_SETFONT, (WPARAM)g_t.fBody, 0);
+        if (sb->edit)
+            SendMessageW(sb->edit, WM_SETFONT, (WPARAM)g_t.fBody, 0);
         InvalidateRect(hwnd, NULL, TRUE);
         return 0;
 
@@ -370,7 +390,9 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     }
 
     case WM_LBUTTONDOWN:
-        SetFocus(sb->edit);
+        SearchCreateEdit(sb);
+        if (sb->edit)
+            SetFocus(sb->edit);
         return 0;
 
     case WM_ERASEBKGND:
@@ -398,6 +420,18 @@ static LRESULT CALLBACK SearchProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
         RECT gr = { rc.left + S(8), rc.top + S(8), rc.left + S(24), rc.bottom - S(8) };
         DrawGlyph(dc, gr, IC_SEARCH, g_t.textSec);
+
+        if (!sb->edit && sb->placeholder[0])
+        {
+            RECT er;
+            SearchEditRect(sb, &er);
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, g_t.textSec);
+            HGDIOBJ old = SelectObject(dc, g_t.fBody);
+            DrawTextW(dc, sb->placeholder, -1, &er,
+                      DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+            SelectObject(dc, old);
+        }
 
         bp.End();
         EndPaint(hwnd, &ps);
@@ -432,6 +466,13 @@ void Search_GetText(HWND h, WCHAR* buf, int cch)
         GetWindowTextW(sb->edit, buf, cch);
 }
 
+void Search_CreateEdit(HWND h)
+{
+    SearchBox* sb = (SearchBox*)GetWindowLongPtrW(h, GWLP_USERDATA);
+    if (sb)
+        SearchCreateEdit(sb);
+}
+
 void Search_Clear(HWND h)
 {
     SearchBox* sb = (SearchBox*)GetWindowLongPtrW(h, GWLP_USERDATA);
@@ -453,6 +494,9 @@ void Search_SetPlaceholder(HWND h, const WCHAR* placeholder)
 void Search_Focus(HWND h)
 {
     SearchBox* sb = (SearchBox*)GetWindowLongPtrW(h, GWLP_USERDATA);
-    if (sb && sb->edit)
+    if (!sb)
+        return;
+    SearchCreateEdit(sb);
+    if (sb->edit)
         SetFocus(sb->edit);
 }

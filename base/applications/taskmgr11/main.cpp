@@ -14,8 +14,10 @@
 #define TIMER_TICK 1
 
 AppState g_app;
+static void EnableDebugPrivilege(void);
 
 static ULONG_PTR s_gdiplusToken;
+static BOOL s_comInitialized;
 
 /* pages */
 static Page* s_pages[PG_COUNT];
@@ -850,6 +852,15 @@ static LRESULT CALLBACK FrameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             DoTick(hwnd);
         return 0;
 
+    case WM_APP_INITDATA:
+        Search_CreateEdit(s_search);
+        EnableDebugPrivilege();
+        s_comInitialized = SUCCEEDED(CoInitialize(NULL));
+        Data::InitDeferred();
+        DoTick(hwnd);
+        RearmTimer(hwnd);
+        return 0;
+
     case WM_APP_SEARCH:
     {
         WCHAR text[128];
@@ -971,7 +982,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
 
     /* Match Windows Task Manager's process priority. */
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-    EnableDebugPrivilege();
 
     /* dpi awareness (dynamic; ancient user32 may lack it) */
     {
@@ -984,7 +994,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
         if (g_app.dpi < 96) g_app.dpi = 96;
     }
 
-    CoInitialize(NULL);
     INITCOMMONCONTROLSEX icc = { sizeof(icc), ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icc);
 
@@ -1053,9 +1062,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
 
     ShowWindow(g_app.hFrame, (nCmdShow == SW_SHOWDEFAULT) ? SW_SHOW : nCmdShow);
     UpdateWindow(g_app.hFrame);
-
-    DoTick(g_app.hFrame);
-    RearmTimer(g_app.hFrame);
+    PostMessageW(g_app.hFrame, WM_APP_INITDATA, 0, 0);
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0))
@@ -1085,7 +1092,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPWSTR lpCmdLine, int 
     Data::Shutdown();
     Theme_Free();
     Gdiplus::GdiplusShutdown(s_gdiplusToken);
-    CoUninitialize();
+    if (s_comInitialized)
+        CoUninitialize();
     if (mutex) CloseHandle(mutex);
     return (int)msg.wParam;
 }
