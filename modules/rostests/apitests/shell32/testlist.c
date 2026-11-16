@@ -60,6 +60,7 @@ extern void func_She(void);
 extern void func_ShellExec_RunDLL(void);
 extern void func_ShellExecCmdLine(void);
 extern void func_ShellExecuteEx(void);
+extern void func_ShellExecuteSlash(void);
 extern void func_ShellExecuteLink(void);
 extern void func_ShellExecuteW(void);
 extern void func_ShellHook(void);
@@ -159,6 +160,7 @@ const struct test winetest_testlist[] =
     //{ "ShellExec_RunDLL", func_ShellExec_RunDLL }, Broke on Windows
     //{ "ShellExecCmdLine", func_ShellExecCmdLine }, Broke on Windows
     { "ShellExecuteEx", func_ShellExecuteEx }, // Mostly broken on Windows, only simple tests enabled
+    { "ShellExecuteSlash", func_ShellExecuteSlash },
     { "ShellExecuteLink", func_ShellExecuteLink },
     //{ "ShellExecuteW", func_ShellExecuteW }, Broke on Windows
     { "ShellHook", func_ShellHook },
