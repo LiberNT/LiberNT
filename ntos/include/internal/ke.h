@@ -71,6 +71,10 @@
 #define KI_CALLOUT_RETURN_STACK(Frame) (Frame)
 #endif
 
+#ifndef KiArchPrepareInterruptDispatch
+#define KiArchPrepareInterruptDispatch(Interrupt) ((VOID)(Interrupt))
+#endif
+
 #ifndef KiArchCalloutSaveUserState
 #define KiArchCalloutSaveUserState(Thread) ((VOID)(Thread), (ULONG_PTR)0)
 #define KiArchCalloutRestoreUserState(Thread, State) ((VOID)(Thread), (VOID)(State))

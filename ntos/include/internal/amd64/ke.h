@@ -623,3 +623,8 @@ KiAmd64PrepareUserBreakpoint(
     _Inout_ PEXCEPTION_RECORD ExceptionRecord,
     _Inout_ PKTRAP_FRAME TrapFrame);
 #define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiAmd64PrepareUserBreakpoint(ExceptionRecord, TrapFrame)
+
+VOID
+KiAmd64PrepareInterruptDispatch(
+    _Inout_ PKINTERRUPT Interrupt);
+#define KiArchPrepareInterruptDispatch(Interrupt) KiAmd64PrepareInterruptDispatch(Interrupt)

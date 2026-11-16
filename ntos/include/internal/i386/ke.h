@@ -191,6 +191,11 @@ typedef struct _KI_USER_CALLOUT_FRAME32
 C_ASSERT(sizeof(KI_USER_CALLOUT_FRAME32) == 24);
 
 #define KI_USER_CALLOUT_FRAME KI_USER_CALLOUT_FRAME32
+
+VOID
+KiI386PrepareInterruptDispatch(
+    _Inout_ PKINTERRUPT Interrupt);
+#define KiArchPrepareInterruptDispatch(Interrupt) KiI386PrepareInterruptDispatch(Interrupt)
 #define KI_CALLOUT_RESULT(Frame) ((Frame)->Result)
 #define KI_CALLOUT_RESULT_LENGTH(Frame) ((Frame)->ResultLength)
 #define KI_CALLOUT_RETURN_STACK(Frame) (&(Frame)->Edi)

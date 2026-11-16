@@ -1939,45 +1939,6 @@ KiArm64SynchronizeInterruptChain(_In_ PKINTERRUPT Interrupt, _In_ BOOLEAN Connec
     KfLowerIrql(OldIrql);
 }
 
-VOID
-NTAPI
-KeInitializeInterrupt(IN PKINTERRUPT Interrupt,
-                      IN PKSERVICE_ROUTINE ServiceRoutine,
-                      IN PVOID ServiceContext,
-                      IN PKSPIN_LOCK SpinLock,
-                      IN ULONG Vector,
-                      IN KIRQL Irql,
-                      IN KIRQL SynchronizeIrql,
-                      IN KINTERRUPT_MODE InterruptMode,
-                      IN BOOLEAN ShareVector,
-                      IN CHAR ProcessorNumber,
-                      IN BOOLEAN FloatingSave)
-{
-    Interrupt->Type = InterruptObject;
-    Interrupt->Size = sizeof(KINTERRUPT);
-    if (!SpinLock) SpinLock = &Interrupt->SpinLock;
-    KeInitializeSpinLock(&Interrupt->SpinLock);
-
-    Interrupt->ServiceRoutine = ServiceRoutine;
-    Interrupt->ServiceContext = ServiceContext;
-    Interrupt->ActualLock = SpinLock;
-    Interrupt->Vector = Vector;
-    Interrupt->Irql = Irql;
-    Interrupt->SynchronizeIrql = SynchronizeIrql;
-    Interrupt->Mode = InterruptMode;
-    Interrupt->ShareVector = ShareVector;
-    Interrupt->Number = ProcessorNumber;
-    Interrupt->FloatingSave = FloatingSave;
-
-    Interrupt->TickCount = 0;
-    Interrupt->Connected = FALSE;
-    Interrupt->ServiceCount = 0;
-    Interrupt->DispatchCount = 0;
-    Interrupt->DispatchAddress = NULL;
-
-    InitializeListHead(&Interrupt->InterruptListEntry);
-}
-
 static
 BOOLEAN
 KiArm64ConnectInterrupt(IN PKINTERRUPT Interrupt)
@@ -2103,24 +2064,6 @@ Done:
     if (Connected) KiArm64WaitForForeignDispatch();
     if (RestoreAffinity) KeRevertToUserAffinityThreadEx(PreviousAffinity);
     return Connected;
-}
-
-BOOLEAN
-NTAPI
-KeSynchronizeExecution(IN OUT PKINTERRUPT Interrupt,
-                       IN PKSYNCHRONIZE_ROUTINE SynchronizeRoutine,
-                       IN PVOID SynchronizeContext OPTIONAL)
-{
-    BOOLEAN Success;
-    KIRQL OldIrql;
-    if (Interrupt->Irql == PASSIVE_LEVEL)
-        return KiSynchronizePassiveInterrupt(Interrupt, SynchronizeRoutine, SynchronizeContext);
-    OldIrql = KfRaiseIrql(Interrupt->SynchronizeIrql);
-    KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
-    Success = SynchronizeRoutine(SynchronizeContext);
-    KeReleaseSpinLockFromDpcLevel(Interrupt->ActualLock);
-    KeLowerIrql(OldIrql);
-    return Success;
 }
 
 /* Legacy alias retained for parity with other arches */
