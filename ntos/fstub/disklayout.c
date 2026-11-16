@@ -104,6 +104,7 @@ FstubDetectPartitionStyle(
         }
 
         *PartitionStyle = PARTITION_STYLE_MBR;
+        if (!Protective) return STATUS_SUCCESS;
     }
 
     if (NT_SUCCESS(FstubReadHeaderEFI(Disk, FALSE, &Header)) ||
