@@ -487,6 +487,16 @@ DxgkGpuVaCoreUsesPagingProcessVa(
            AdapterUpdateMode == DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL;
 }
 
+/* A GPU_PHYSICAL adapter runs paging buffers by their address in the paging process; only that process's own initialization is completed with the CPU */
+BOOLEAN
+DxgkGpuVaCorePagingBufferReachable(
+    _In_ ULONG AdapterUpdateMode,
+    _In_ BOOLEAN PagingProcessInit,
+    _In_ BOOLEAN BufferHasPagingVa)
+{
+    return AdapterUpdateMode != DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL || PagingProcessInit || BufferHasPagingVa;
+}
+
 /* An update described before placement lands where the table will not be. */
 DXGK_GPUVA_TABLE_SNAPSHOT
 DxgkGpuVaCoreTableSnapshot(

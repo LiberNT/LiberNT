@@ -163,6 +163,12 @@ BOOLEAN
 DxgkGpuVaCoreUsesPagingProcessVa(
     _In_ ULONG AdapterUpdateMode);
 
+BOOLEAN
+DxgkGpuVaCorePagingBufferReachable(
+    _In_ ULONG AdapterUpdateMode,
+    _In_ BOOLEAN PagingProcessInit,
+    _In_ BOOLEAN BufferHasPagingVa);
+
 VOID
 DxgkGpuVaCoreProcessKind(
     _In_ BOOLEAN PagingProcess,

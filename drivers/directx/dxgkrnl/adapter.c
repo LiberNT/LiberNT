@@ -13691,10 +13691,7 @@ DxgkpCompleteAdapterStart(
     KeReleaseMutex(&Adapter->AdapterMutex, FALSE);
     DxgkpCompletePostDisplayHandoff(Adapter, Status, Restartable);
     if (QueueHotPlug)
-    {
-        (VOID)DxgkGpuVaInitializePageTablePool(Adapter);
         (VOID)DxgkVidPnQueueHotPlugRebuild(Adapter);
-    }
 }
 
 typedef struct _DXGKP_ADAPTER_START_PROGRESS
@@ -15118,6 +15115,7 @@ DxgkAdapterStart(
     {
         InterlockedExchange(&Adapter->SubmitDmaStopping, 0);
         InterlockedExchange(&Adapter->VidSchStopping, 0);
+        (VOID)DxgkGpuVaInitializePageTablePool(Adapter);
     }
     if (DxgkAdapterStartRoleRequiresDisplayPipeline(Role))
         DxgkPresentResume(Adapter);

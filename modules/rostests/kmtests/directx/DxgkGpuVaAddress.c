@@ -242,6 +242,16 @@ static VOID TestProcessKind(VOID)
     ok_bool_false(GdiProcess, "an application process is not the GDI process");
 }
 
+static VOID TestPagingBufferReachable(VOID)
+{
+    ok_bool_true(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_CPU_VIRTUAL, FALSE, FALSE), "CPU-written tables place no demand on the paging buffer");
+    ok_bool_true(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_GPU_VIRTUAL, FALSE, FALSE), "GPU_VIRTUAL tables can still be written with the CPU");
+    ok_bool_false(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL, FALSE, FALSE), "a GPU_PHYSICAL adapter cannot run a paging buffer that has no address in the paging process");
+    ok_bool_true(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL, TRUE, FALSE), "the paging process's own initialization is completed with the CPU");
+    ok_bool_true(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL, FALSE, TRUE), "a buffer mapped in the paging process runs there");
+    ok_bool_true(DxgkGpuVaCorePagingBufferReachable(DXGK_GPUVA_CORE_UPDATE_GPU_PHYSICAL, TRUE, TRUE), "a mapped buffer during initialization");
+}
+
 static
 VOID
 TestOrphanOwner(VOID)
@@ -295,6 +305,7 @@ START_TEST(DxgkGpuVaAddress)
     TestFencePagePieces();
     TestAllocationRepeatMapping();
     TestProcessKind();
+    TestPagingBufferReachable();
     TestOrphanOwner();
     TestOrphanReleasable();
 }

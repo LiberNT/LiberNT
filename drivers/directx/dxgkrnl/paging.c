@@ -21,6 +21,7 @@
 
 #include "dxgkrnl_private.h"
 #include "paging_core.h"
+#include "gpuva_core.h"
 #include "vidmm.h"
 #include "vidsch.h"
 
@@ -888,6 +889,7 @@ DxgkPagingExecuteBatch(
         LifetimeAllocationReferences;
     TrackArgs.LifetimeAllocationReferenceCount =
         LifetimeAllocationReferenceCount;
+    ASSERT(!Adapter->GpuMmuCapsValid || DxgkGpuVaCorePagingBufferReachable(Adapter->GpuMmuCaps.PageTableUpdateMode, Adapter->PagingProcessInitializing, DmaBuffer->GpuVirtualAddress != 0));
     Status = VidSchSubmitCommandTracked(Adapter,
                                         DxgkpPagingNode(Adapter, Operations[0].NodeOrdinal),
                                         Operations[0].EngineOrdinal,
@@ -1169,6 +1171,7 @@ DxgkPagingExecute(
         {
             RtlZeroMemory(&TrackArgs, sizeof(TrackArgs));
             TrackArgs.Device = Device;
+            ASSERT(!Adapter->GpuMmuCapsValid || DxgkGpuVaCorePagingBufferReachable(Adapter->GpuMmuCaps.PageTableUpdateMode, Adapter->PagingProcessInitializing, PendingBuffer->GpuVirtualAddress != 0));
             Status = VidSchSubmitCommandTracked(Adapter, DxgkpPagingNode(Adapter, Op->NodeOrdinal), Op->EngineOrdinal, PendingBuffer, PendingBuffer->PrivateData, PendingBuffer->PrivateDataSize, NULL, 0, NULL, 0, Adapter->SchedulingCaps.MultiEngineAware ? NULL : Op->hMiniportDevice, Adapter->SchedulingCaps.MultiEngineAware ? Adapter->PagingSystemContext->hMiniportContext : NULL, 0, &TrackArgs, VIDSCH_SUBMITFLAG_PAGING, 0, &LastFenceId);
             if (!NT_SUCCESS(Status))
                 goto Cleanup;
@@ -1200,6 +1203,7 @@ DxgkPagingExecute(
     TrackArgs.Device = Device;
     TrackArgs.hSignalSyncObject = hSignalSyncObject;
     TrackArgs.SignalFenceValue = SignalFenceValue;
+    ASSERT(!Adapter->GpuMmuCapsValid || DxgkGpuVaCorePagingBufferReachable(Adapter->GpuMmuCaps.PageTableUpdateMode, Adapter->PagingProcessInitializing, PendingBuffer->GpuVirtualAddress != 0));
     Status = VidSchSubmitCommandTracked(Adapter, DxgkpPagingNode(Adapter, Op->NodeOrdinal), Op->EngineOrdinal, PendingBuffer, PendingBuffer->PrivateData, PendingBuffer->PrivateDataSize, NULL, 0, NULL, 0, Adapter->SchedulingCaps.MultiEngineAware ? NULL : Op->hMiniportDevice, Adapter->SchedulingCaps.MultiEngineAware ? Adapter->PagingSystemContext->hMiniportContext : NULL, 0, &TrackArgs, VIDSCH_SUBMITFLAG_PAGING, 0, &LastFenceId);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
