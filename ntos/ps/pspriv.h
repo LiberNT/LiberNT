@@ -91,6 +91,21 @@ PspCreateImageProcess(
     _In_opt_ const HANDLE *HandleList,
     _In_ SIZE_T HandleCount);
 
+typedef NTSTATUS (NTAPI *PPSP_LOOKUP_BY_ID)(
+    _In_ PCLIENT_ID ClientId,
+    _Out_ PVOID *Object);
+
+NTSTATUS
+NTAPI
+PspOpenObjectByIdOrName(
+    _Out_ PHANDLE ObjectHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ PCLIENT_ID ClientId,
+    _In_ POBJECT_TYPE ObjectType,
+    _In_ ACCESS_MASK AllAccess,
+    _In_ PPSP_LOOKUP_BY_ID Lookup);
+
 NTSTATUS
 NTAPI
 PspCreateOpenAccessState(

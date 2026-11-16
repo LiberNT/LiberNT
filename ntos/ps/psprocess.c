@@ -1121,6 +1121,31 @@ NtCreateProcess(
                              0);
 }
 
+static
+NTSTATUS
+NTAPI
+PspLookupProcessToOpen(
+    _In_ PCLIENT_ID ClientId,
+    _Out_ PVOID *Object)
+{
+    PEPROCESS Process;
+    PETHREAD Thread;
+    NTSTATUS Status;
+
+    if (ClientId->UniqueThread != NULL)
+    {
+        Status = PsLookupProcessThreadByCid(ClientId, &Process, &Thread);
+        if (NT_SUCCESS(Status)) ObDereferenceObject(Thread);
+    }
+    else
+    {
+        Status = PsLookupProcessByProcessId(ClientId->UniqueProcess, &Process);
+    }
+
+    if (NT_SUCCESS(Status)) *Object = Process;
+    return Status;
+}
+
 /*
  * Opens a process by identifier or by name, never by both. A thread
  * identifier may be given with the process it belongs to, and the two have
@@ -1134,131 +1159,13 @@ NtOpenProcess(
     _In_ POBJECT_ATTRIBUTES ObjectAttributes,
     _In_opt_ PCLIENT_ID ClientId)
 {
-    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
-    CLIENT_ID SafeCid = { NULL, NULL };
-    BOOLEAN HasCid = FALSE;
-    BOOLEAN HasName = FALSE;
-    PUNICODE_STRING ObjectName;
-    ULONG Attributes = 0;
-    ACCESS_STATE AccessState;
-    AUX_ACCESS_DATA AuxData;
-    PEPROCESS Process;
-    PETHREAD Thread;
-    HANDLE Handle;
-    NTSTATUS Status;
-
     PAGED_CODE();
 
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            ProbeForWriteHandle(ProcessHandle);
-            if (ClientId != NULL)
-            {
-                ProbeForRead(ClientId, sizeof(CLIENT_ID), sizeof(ULONG));
-                SafeCid = *ClientId;
-                HasCid = TRUE;
-            }
-
-            /* The attributes are not optional: a NULL pointer faults like any other bad one */
-            ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
-            ObjectName = ObjectAttributes->ObjectName;
-            Attributes = ObjectAttributes->Attributes;
-            if (ObjectName != NULL)
-            {
-                ProbeForRead(ObjectName, sizeof(UNICODE_STRING), sizeof(ULONG));
-                HasName = (ObjectName->Length != 0);
-            }
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            _SEH2_YIELD(return _SEH2_GetExceptionCode());
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        if (ClientId != NULL)
-        {
-            SafeCid = *ClientId;
-            HasCid = TRUE;
-        }
-
-        HasName = (ObjectAttributes != NULL &&
-                   ObjectAttributes->ObjectName != NULL &&
-                   ObjectAttributes->ObjectName->Length != 0);
-        if (ObjectAttributes != NULL) Attributes = ObjectAttributes->Attributes;
-    }
-
-    if (HasCid == HasName) return STATUS_INVALID_PARAMETER_MIX;
-
-    Status = PspCreateOpenAccessState(&AccessState,
-                                      &AuxData,
-                                      DesiredAccess,
-                                      PsProcessType,
-                                      PROCESS_ALL_ACCESS,
-                                      PreviousMode);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    if (HasCid)
-    {
-        if (SafeCid.UniqueThread != NULL)
-        {
-            Status = PsLookupProcessThreadByCid(&SafeCid, &Process, &Thread);
-            if (NT_SUCCESS(Status)) ObDereferenceObject(Thread);
-        }
-        else
-        {
-            Status = PsLookupProcessByProcessId(SafeCid.UniqueProcess, &Process);
-        }
-
-        if (!NT_SUCCESS(Status))
-        {
-            SeDeleteAccessState(&AccessState);
-            return Status;
-        }
-
-        Status = ObOpenObjectByPointer(Process,
-                                       Attributes,
-                                       &AccessState,
-                                       0,
-                                       PsProcessType,
-                                       PreviousMode,
-                                       &Handle);
-        ObDereferenceObject(Process);
-    }
-    else
-    {
-        Status = ObOpenObjectByName(ObjectAttributes,
-                                    PsProcessType,
-                                    PreviousMode,
-                                    &AccessState,
-                                    0,
-                                    NULL,
-                                    &Handle);
-    }
-
-    SeDeleteAccessState(&AccessState);
-
-    if (!NT_SUCCESS(Status)) return Status;
-
-    if (PreviousMode != KernelMode)
-    {
-        _SEH2_TRY
-        {
-            *ProcessHandle = Handle;
-        }
-        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-        {
-            Status = _SEH2_GetExceptionCode();
-        }
-        _SEH2_END;
-    }
-    else
-    {
-        *ProcessHandle = Handle;
-    }
-
-    return Status;
+    return PspOpenObjectByIdOrName(ProcessHandle,
+                                   DesiredAccess,
+                                   ObjectAttributes,
+                                   ClientId,
+                                   PsProcessType,
+                                   PROCESS_ALL_ACCESS,
+                                   PspLookupProcessToOpen);
 }

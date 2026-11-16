@@ -947,3 +947,134 @@ PspCreateOpenAccessState(
 
     return STATUS_SUCCESS;
 }
+
+NTSTATUS
+NTAPI
+PspOpenObjectByIdOrName(
+    _Out_ PHANDLE ObjectHandle,
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_opt_ PCLIENT_ID ClientId,
+    _In_ POBJECT_TYPE ObjectType,
+    _In_ ACCESS_MASK AllAccess,
+    _In_ PPSP_LOOKUP_BY_ID Lookup)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    CLIENT_ID SafeCid = { NULL, NULL };
+    BOOLEAN HasCid = FALSE;
+    BOOLEAN HasName = FALSE;
+    PUNICODE_STRING ObjectName;
+    ULONG Attributes = 0;
+    ACCESS_STATE AccessState;
+    AUX_ACCESS_DATA AuxData;
+    PVOID Object;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            ProbeForWriteHandle(ObjectHandle);
+            if (ClientId != NULL)
+            {
+                ProbeForRead(ClientId, sizeof(CLIENT_ID), sizeof(ULONG));
+                SafeCid = *ClientId;
+                HasCid = TRUE;
+            }
+
+            /* The attributes are not optional: a NULL pointer faults like any other bad one */
+            ProbeForRead(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES), sizeof(ULONG));
+            ObjectName = ObjectAttributes->ObjectName;
+            Attributes = ObjectAttributes->Attributes;
+            if (ObjectName != NULL)
+            {
+                ProbeForRead(ObjectName, sizeof(UNICODE_STRING), sizeof(ULONG));
+                HasName = (ObjectName->Length != 0);
+            }
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            _SEH2_YIELD(return _SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+    else
+    {
+        if (ClientId != NULL)
+        {
+            SafeCid = *ClientId;
+            HasCid = TRUE;
+        }
+
+        HasName = (ObjectAttributes != NULL &&
+                   ObjectAttributes->ObjectName != NULL &&
+                   ObjectAttributes->ObjectName->Length != 0);
+        if (ObjectAttributes != NULL) Attributes = ObjectAttributes->Attributes;
+    }
+
+    if (HasCid == HasName) return STATUS_INVALID_PARAMETER_MIX;
+
+    Status = PspCreateOpenAccessState(&AccessState,
+                                      &AuxData,
+                                      DesiredAccess,
+                                      ObjectType,
+                                      AllAccess,
+                                      PreviousMode);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (HasCid)
+    {
+        Status = Lookup(&SafeCid, &Object);
+
+        if (!NT_SUCCESS(Status))
+        {
+            SeDeleteAccessState(&AccessState);
+            return Status;
+        }
+
+        Status = ObOpenObjectByPointer(Object,
+                                       Attributes,
+                                       &AccessState,
+                                       0,
+                                       ObjectType,
+                                       PreviousMode,
+                                       &Handle);
+        ObDereferenceObject(Object);
+    }
+    else
+    {
+        Status = ObOpenObjectByName(ObjectAttributes,
+                                    ObjectType,
+                                    PreviousMode,
+                                    &AccessState,
+                                    0,
+                                    NULL,
+                                    &Handle);
+    }
+
+    SeDeleteAccessState(&AccessState);
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    if (PreviousMode != KernelMode)
+    {
+        _SEH2_TRY
+        {
+            *ObjectHandle = Handle;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            Status = _SEH2_GetExceptionCode();
+        }
+        _SEH2_END;
+    }
+    else
+    {
+        *ObjectHandle = Handle;
+    }
+
+    return Status;
+}
