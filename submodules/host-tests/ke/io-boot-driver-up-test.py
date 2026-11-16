@@ -14,7 +14,7 @@ args = parser.parse_args()
 root = pathlib.Path(args.root)
 sources = {
     'drvinit.c': (root / 'ntos/io/iomgr/drvinit.c').read_text(),
-    'ntsysldr.c': (root / 'ntos/mm/nt/ntsysldr.c').read_text(),
+    'ntimgload.c': (root / 'ntos/mm/nt/ntimgload.c').read_text(),
 }
 
 
@@ -108,8 +108,8 @@ static void KeBugCheckEx(ULONG Code, ULONG_PTR P1, ULONG_PTR P2, ULONG_PTR P3, U
     longjmp(Stopped, 1);
 }
 '''
-fixture += definition('ntsysldr.c', 'MiVerifyImageIsOkForMpUse')
-fixture += definition('ntsysldr.c', 'MmVerifyImageIsOkForMpUse')
+fixture += definition('ntimgload.c', 'MiImageRunsOnThisSystem')
+fixture += definition('ntimgload.c', 'MmVerifyImageIsOkForMpUse')
 fixture += definition('drvinit.c', 'IopInitializeBootDrivers')
 fixture += r'''
 static void Boot(const char *Name, CCHAR Processors, USHORT Characteristics) {

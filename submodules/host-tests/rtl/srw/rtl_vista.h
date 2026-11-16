@@ -39,6 +39,7 @@ typedef LONG NTSTATUS;
 #define CONTAINING_RECORD(a, t, f) ((t *)((char *)(a) - offsetof(t, f)))
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 #endif
 #define STATUS_RESOURCE_NOT_OWNED ((NTSTATUS)0xC0000264)
 
@@ -117,6 +118,14 @@ static inline LONG InterlockedExchange(LONG volatile *Target, LONG New)
 static inline SIZE_T InterlockedExchangeAddSizeT(PVOID volatile *Target, SIZE_T Value)
 {
     return __atomic_fetch_add((SIZE_T volatile *)Target, Value, __ATOMIC_SEQ_CST);
+}
+static inline LONG InterlockedOr(LONG volatile *Target, LONG Value)
+{
+    return __atomic_fetch_or(Target, Value, __ATOMIC_SEQ_CST);
+}
+static inline LONG64 InterlockedOr64(LONG64 volatile *Target, LONG64 Value)
+{
+    return __atomic_fetch_or(Target, Value, __ATOMIC_SEQ_CST);
 }
 static inline LONG InterlockedDecrement(LONG volatile *Target)
 {

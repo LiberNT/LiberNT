@@ -11,7 +11,7 @@ target_include_directories(fsrtl_expression PRIVATE
     include
     ${REACTOS_HOST_SOURCE_ROOT}/modules/rostests/kmtests/ntos_fsrtl)
 target_compile_features(fsrtl_expression PRIVATE c_std_11)
-target_compile_options(fsrtl_expression PRIVATE -fshort-wchar -Wall -Werror -Wno-unused-function -g
+target_compile_options(fsrtl_expression PRIVATE -fshort-wchar -Wall -Werror -Wno-unused-function -Wno-multichar -g
     -O1 -fsanitize=address,undefined -fno-omit-frame-pointer)
 target_link_options(fsrtl_expression PRIVATE -fsanitize=address,undefined)
 add_test(NAME fsrtl_expression COMMAND fsrtl_expression)
