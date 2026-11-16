@@ -6,6 +6,7 @@ extern void func_filesource(void);
 extern void func_installend(void);
 extern void func_msgbox(void);
 extern void func_reboot(void);
+extern void func_uiphase(void);
 
 const struct test winetest_testlist[] =
 {
@@ -14,5 +15,6 @@ const struct test winetest_testlist[] =
     { "installend", func_installend },
     { "msgbox", func_msgbox },
     { "reboot", func_reboot },
+    { "uiphase", func_uiphase },
     { 0, 0 }
 };

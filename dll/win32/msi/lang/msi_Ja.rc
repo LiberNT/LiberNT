@@ -173,5 +173,6 @@ STRINGTABLE
     IDS_BASIC_UI_PREPARE_REMOVE "削除の準備中..."
     IDS_BASIC_UI_CONFIGURE "Windows に %s を設定しています。しばらくお待ちください。"
     IDS_BASIC_UI_CANCEL "キャンセル"
+    IDS_BASIC_UI_GATHER "必要な情報を集めています..."
 }
 #endif

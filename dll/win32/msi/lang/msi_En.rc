@@ -232,5 +232,6 @@ STRINGTABLE
     IDS_BASIC_UI_PREPARE_REMOVE "Preparing to remove..."
     IDS_BASIC_UI_CONFIGURE "Please wait while Windows configures %s"
     IDS_BASIC_UI_CANCEL "Cancel"
+    IDS_BASIC_UI_GATHER "Gathering required information..."
 }
 #endif
