@@ -97,6 +97,41 @@ typedef struct
 
 typedef struct
 {
+    POINTER_INPUT_TYPE pointerType;
+    UINT32 pointerId;
+    UINT32 frameId;
+    POINTER_FLAGS pointerFlags;
+    UINT32 sourceDevice;
+    UINT32 hwndTarget;
+    POINT ptPixelLocation;
+    POINT ptHimetricLocation;
+    POINT ptPixelLocationRaw;
+    POINT ptHimetricLocationRaw;
+    DWORD dwTime;
+    UINT32 historyCount;
+    INT32 InputData;
+    DWORD dwKeyStates;
+    UINT64 PerformanceCount;
+    POINTER_BUTTON_CHANGE_TYPE ButtonChangeType;
+} POINTER_INFO32;
+
+typedef struct
+{
+    POINTER_INFO32 pointerInfo;
+    TOUCH_FLAGS touchFlags;
+    UINT32 touchMask;
+    RECT rcContact;
+    RECT rcContactRaw;
+    UINT32 orientation;
+    UINT32 pressure;
+} POINTER_TOUCH_INFO32;
+
+C_ASSERT(FIELD_OFFSET(POINTER_INFO32, PerformanceCount) == 72);
+C_ASSERT(sizeof(POINTER_INFO32) == 88);
+C_ASSERT(sizeof(POINTER_TOUCH_INFO32) == 136);
+
+typedef struct
+{
     USHORT usUsagePage;
     USHORT usUsage;
     DWORD dwFlags;
@@ -3744,6 +3779,48 @@ NTSTATUS WINAPI wow64_NtUserInitializeTouchInjection( UINT *args )
     UINT mode = get_ulong( &args );
 
     return NtUserInitializeTouchInjection( max_count, mode );
+}
+
+NTSTATUS WINAPI wow64_NtUserInjectTouchInput( UINT *args )
+{
+    UINT count = get_ulong( &args );
+    const POINTER_TOUCH_INFO32 *contacts32 = get_ptr( &args );
+    POINTER_TOUCH_INFO *contacts = NULL;
+    UINT i;
+
+    if (count && count <= MAX_TOUCH_COUNT && contacts32 && (contacts = Wow64AllocateTemp( count * sizeof(*contacts) )))
+    {
+        for (i = 0; i < count; i++)
+        {
+            const POINTER_INFO32 *info32 = &contacts32[i].pointerInfo;
+            POINTER_INFO *info = &contacts[i].pointerInfo;
+
+            info->pointerType = info32->pointerType;
+            info->pointerId = info32->pointerId;
+            info->frameId = info32->frameId;
+            info->pointerFlags = info32->pointerFlags;
+            info->sourceDevice = LongToHandle( info32->sourceDevice );
+            info->hwndTarget = LongToHandle( info32->hwndTarget );
+            info->ptPixelLocation = info32->ptPixelLocation;
+            info->ptHimetricLocation = info32->ptHimetricLocation;
+            info->ptPixelLocationRaw = info32->ptPixelLocationRaw;
+            info->ptHimetricLocationRaw = info32->ptHimetricLocationRaw;
+            info->dwTime = info32->dwTime;
+            info->historyCount = info32->historyCount;
+            info->InputData = info32->InputData;
+            info->dwKeyStates = info32->dwKeyStates;
+            info->PerformanceCount = info32->PerformanceCount;
+            info->ButtonChangeType = info32->ButtonChangeType;
+            contacts[i].touchFlags = contacts32[i].touchFlags;
+            contacts[i].touchMask = contacts32[i].touchMask;
+            contacts[i].rcContact = contacts32[i].rcContact;
+            contacts[i].rcContactRaw = contacts32[i].rcContactRaw;
+            contacts[i].orientation = contacts32[i].orientation;
+            contacts[i].pressure = contacts32[i].pressure;
+        }
+    }
+
+    return NtUserInjectTouchInput( count, contacts );
 }
 
 NTSTATUS WINAPI wow64_NtUserInternalGetWindowIcon( UINT *args )

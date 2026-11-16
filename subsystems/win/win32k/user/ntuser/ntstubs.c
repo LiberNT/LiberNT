@@ -1045,6 +1045,70 @@ NtUserIsMouseInPointerEnabled(VOID)
 
 BOOL
 APIENTRY
+NtUserInitializeTouchInjection(
+    _In_ UINT32 MaxCount,
+    _In_ DWORD Mode)
+{
+    PPROCESSINFO ppi;
+    BOOL Ret;
+
+    UserEnterExclusive();
+    ppi = PsGetCurrentProcessWin32Process();
+    ASSERT(ppi != NULL);
+    Ret = PointerInitializeTouchInjection(ppi, MaxCount, Mode);
+    UserLeave();
+
+    return Ret;
+}
+
+BOOL
+APIENTRY
+NtUserInjectTouchInput(
+    _In_ UINT32 Count,
+    _In_reads_(Count) const POINTER_TOUCH_INFO *Contacts)
+{
+    POINTER_TOUCH_INFO *Captured;
+    PPROCESSINFO ppi;
+    BOOL Ret;
+
+    if (Count == 0 || Count > MAX_TOUCH_COUNT || Contacts == NULL)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    Captured = ExAllocatePoolWithTag(PagedPool, Count * sizeof(*Captured), USERTAG_HIDDATA);
+    if (!Captured)
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    _SEH2_TRY
+    {
+        ProbeForRead(Contacts, Count * sizeof(*Captured), sizeof(ULONG));
+        RtlCopyMemory(Captured, Contacts, Count * sizeof(*Captured));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        ExFreePoolWithTag(Captured, USERTAG_HIDDATA);
+        EngSetLastError(ERROR_NOACCESS);
+        _SEH2_YIELD(return FALSE);
+    }
+    _SEH2_END;
+
+    UserEnterExclusive();
+    ppi = PsGetCurrentProcessWin32Process();
+    ASSERT(ppi != NULL);
+    Ret = PointerInjectTouchInput(ppi, Count, Captured);
+    UserLeave();
+
+    ExFreePoolWithTag(Captured, USERTAG_HIDDATA);
+    return Ret;
+}
+
+BOOL
+APIENTRY
 NtUserGetPointerDeviceRects(
     _In_opt_ HANDLE hDevice,
     _Out_ PRECT prcPointerDevice,
