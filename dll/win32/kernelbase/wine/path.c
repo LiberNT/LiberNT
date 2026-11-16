@@ -37,12 +37,7 @@
 #include "wine/debug.h"
 #include "wine/heap.h"
 
-#ifndef STATIC_PATHCCH
 WINE_DEFAULT_DEBUG_CHANNEL(path);
-#else
-#undef TRACE
-#define TRACE(...)
-#endif /* !STATIC_PATHCCH */
 
 #ifdef __REACTOS__
 
@@ -51,19 +46,8 @@ WINE_DEFAULT_DEBUG_CHANNEL(path);
 #undef SIZE_T
 #define SIZE_T size_t
 
-#if (_WIN32_WINNT < _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION < _WIN32_WINNT_VISTA)
-/* wcsnlen is an NT6+ function. To cover all cases, use a private implementation */
-static inline size_t compat_wcsnlen(const wchar_t* str, size_t size)
-{
-    StringCchLengthW(str, size, &size);
-    return size;
-}
-#define wcsnlen compat_wcsnlen
-#endif /* _WIN32_WINNT || DLL_EXPORT_VERSION */
-
 #endif /* __REACTOS__ */
 
-#ifndef STATIC_PATHCCH
 
 static const char hexDigits[] = "0123456789ABCDEF";
 
@@ -157,19 +141,16 @@ static BOOL is_drive_specA( const char *str )
     return isalpha( str[0] ) && str[1] == ':';
 }
 
-#endif // !STATIC_PATHCCH
 
 static BOOL is_drive_spec( const WCHAR *str )
 {
     return isalpha( str[0] ) && str[1] == ':';
 }
 
-#ifndef STATIC_PATHCCH
 static BOOL is_escaped_drive_spec( const WCHAR *str )
 {
     return isalpha( str[0] ) && (str[1] == ':' || str[1] == '|');
 }
-#endif // !STATIC_PATHCCH
 
 static BOOL is_prefixed_unc(const WCHAR *string)
 {
@@ -976,7 +957,6 @@ BOOL WINAPI PathIsUNCEx(const WCHAR *path, const WCHAR **server)
     return !!result;
 }
 
-#ifndef STATIC_PATHCCH
 /* Other functions not part of the PathCch library */
 
 BOOL WINAPI PathIsUNCA(const char *path)
@@ -5458,5 +5438,3 @@ BOOL WINAPI IsInternetESCEnabled(void)
     return FALSE;
 #endif
 }
-
-#endif // !STATIC_PATHCCH

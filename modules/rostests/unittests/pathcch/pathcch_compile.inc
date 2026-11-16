@@ -3,11 +3,6 @@
  * LICENSE:     LGPL-2.0-or-later (https://spdx.org/licenses/LGPL-2.0-or-later)
  * PURPOSE:     C/C++ compilation tests
  * COPYRIGHT:   Copyright 2025 Hermès Bélusca-Maïto <hermes.belusca-maito@reactos.org>
- *
- * REMARKS:
- * The purpose of these tests is to verify that the PathCch* functions can
- * be used either via static linking, or dynamic linking, in both C and C++
- * languages. Thus, only minimal testing of functionality is done here.
  */
 
 #ifdef __cplusplus

@@ -284,7 +284,7 @@ static const CATEGORY_RULE Rules[] =
     { "msvcrtd_winetest", "*", "core:crt" },
     { "pathcch_dyn1_unittest", "*", "core:crt" },
     { "pathcch_dyn2_unittest", "*", "core:crt" },
-    { "pathcch_static_unittest", "*", "core:crt" },
+    { "pathcch_unittest", "*", "core:crt" },
     { "ucrtbase_apitest", "*", "core:crt" },
     { "ucrtbase_winetest", "*", "core:crt" },
     { "dbgeng_winetest", "*", "core:debug" },
