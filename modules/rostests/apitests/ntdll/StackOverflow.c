@@ -83,14 +83,10 @@ START_TEST(StackOverflow)
     /* Check TEB attributes */
     ok_ptr(NtCurrentTeb()->DeallocationStack, StackAllocationBase);
     ok_ptr(NtCurrentTeb()->NtTib.StackBase, (PVOID)((ULONG_PTR)MemoryBasicInfo.BaseAddress + MemoryBasicInfo.RegionSize));
-#ifdef _WIN64
-    ok_ptr(NtCurrentTeb()->NtTib.StackLimit, (PVOID)((ULONG_PTR)MemoryBasicInfo.BaseAddress - 4 * PAGE_SIZE));
-#else
     ok(((ULONG_PTR)NtCurrentTeb()->NtTib.StackLimit & (PAGE_SIZE - 1)) == 0 &&
        (ULONG_PTR)NtCurrentTeb()->NtTib.StackLimit < (ULONG_PTR)MemoryBasicInfo.BaseAddress,
        "StackLimit %p is not a page boundary below %p\n",
        NtCurrentTeb()->NtTib.StackLimit, MemoryBasicInfo.BaseAddress);
-#endif
     trace("Guaranteed stack size is %lu.\n", NtCurrentTeb()->GuaranteedStackBytes);
 
     /* Get its size */
@@ -122,11 +118,7 @@ START_TEST(StackOverflow)
     ok_ptr(MemoryBasicInfo.BaseAddress, NtCurrentTeb()->NtTib.StackLimit);
     ok_ptr(MemoryBasicInfo.AllocationBase, StackAllocationBase);
     ok_long(MemoryBasicInfo.AllocationProtect, PAGE_READWRITE);
-#ifdef _WIN64
-    ok_long(MemoryBasicInfo.RegionSize, 5 * PAGE_SIZE);
-#else
     ok_long(MemoryBasicInfo.RegionSize, (ULONG_PTR)NtCurrentTeb()->NtTib.StackBase - (ULONG_PTR)NtCurrentTeb()->NtTib.StackLimit);
-#endif
     ok_long(MemoryBasicInfo.State, MEM_COMMIT);
     ok_long(MemoryBasicInfo.Protect, PAGE_READWRITE);
     ok_long(MemoryBasicInfo.Type, MEM_PRIVATE);
